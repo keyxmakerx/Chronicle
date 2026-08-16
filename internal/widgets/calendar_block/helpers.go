@@ -32,8 +32,15 @@ import (
 //	--axis    the event axis. The marks layer is the ONLY layer that may read it
 //	          and it is FORBIDDEN from referencing --accent.
 //	--cal     calendar identity (the Nameplate dot, the mini rail).
-//	--bandhue the era tint, driven by the ERA and never hardcoded per calendar
+//	--erahue  the era tint, driven by the ERA and never hardcoded per calendar
 //	          (calendar-v4.html:1566 hardcodes Harptos and is a known defect).
+//	          IT IS --erahue AND NOT --bandhue. The era's channel used to be
+//	          stamped on the caption row above each week as --bandhue; that row
+//	          was deleted at C-CALV4-TILES §3 and the channel moved onto each
+//	          DAY CELL as --erahue, where §ANSWERED turns it into the cell's own
+//	          fill. `--bandhue` no longer exists in either stylesheet. The Go
+//	          field is still called EraBand.BandHue, and that mismatch is the
+//	          reason this line says so out loud.
 //
 // None of the three is @property-registered as animatable. That is a recorded
 // REFUSAL (canon A7), not an omission.
@@ -136,8 +143,8 @@ func blockStyle(d BlockData) string {
 }
 
 // NOTE ON THE WEEK-NUMBER GUTTER. It is column 1 of the SAME grid and every row
-// is a subgrid across it, so header / era band / cells / intercalary can never
-// drift out of alignment. Its WIDTH is not decided here: the mockup drops the
+// is a subgrid across it, so header / cells / intercalary can never drift out of
+// alignment. Its WIDTH is not decided here: the mockup drops the
 // gutter below 481px of host, and that is a host measurement the producer cannot
 // make. The Block emits `data-weeknums` (the viewer's layer choice, a fact) and
 // the stylesheet opens the track only where it fits — see §GUTTER in
@@ -149,25 +156,11 @@ func blockStyle(d BlockData) string {
 // remove, and "does a week number mean anything on this calendar" is a producer
 // decision expressed by enabling the layer.
 
-// bandStyle places one era band inside its week row's subgrid.
-//
-// StartCol is 1-based within the week; +1 steps over the gutter track.
-func bandStyle(b EraBand) string {
-	start := b.StartCol
-	if start < 1 {
-		start = 1
-	}
-	span := b.Span
-	if span < 1 {
-		span = 1
-	}
-	return fmt.Sprintf("grid-column:%d/span %d;--bandhue:%s", start+1, span, bandToken(b.BandHue))
-}
-
-// halfRuleStyle places the five-column ruler at the half boundary.
-func halfRuleStyle(col int) string {
-	return fmt.Sprintf("grid-column:%d/span 1", col+1)
-}
+// bandStyle and halfRuleStyle WERE HERE and are deleted with the band row
+// (C-CALV4-TILES §3). Both placed an element in a grid the renderer no longer
+// emits; the `unused` lint has no _test.go exclusion, so a helper kept "in case"
+// reds the build. `bandToken` stays — cellEraToken still resolves the era's hue
+// through the same allowlist, and that hue is now the era's only surface.
 
 // axisStyle is the only style a mark ever carries.
 func axisStyle(a string) string { return "--axis:" + axisToken(a) }
@@ -401,6 +394,111 @@ func moonsFor(c DayCell) []MoonDisc {
 		return c.Moons
 	}
 	return c.Moons[:moonCap]
+}
+
+// moonDiscClass is the resting/expanded split, and it is the whole of
+// C-CALV4-SPEC §4 expressed in one class.
+//
+// THE PRIMARY BODY IS ALWAYS SILHOUETTED (spec §4, first bullet: "visible at
+// rest, not hover-gated"). Index 0 therefore keeps the bare `.ph` and is
+// painted at every column width the grid can produce. Every LATER body is
+// `.ph.phx` — the same disc, hidden at rest and revealed by the cluster's
+// :hover / :focus-visible rules, which is the "expands to show up to three"
+// half of the same bullet.
+//
+// WHICH BODY IS PRIMARY IS THE PRODUCER'S ORDER, not a new decision here.
+// DayCell.Moons already arrives ordered and moonsFor already caps it at
+// moonCap; taking index 0 adds no second opinion about which moon matters.
+func moonDiscClass(md MoonDisc, i int) string {
+	cls := moonWaneClass(md)
+	if i > 0 {
+		cls += " phx"
+	}
+	return cls
+}
+
+// moonPlusNeeded answers whether the hover expansion ends in a `+`.
+//
+// IT READS MoonsDeclared, NOT len(c.Moons), for the reason data.go states about
+// the Nameplate chip: the per-cell slice is already capped at moonCap, so
+// deriving "are there more" from it would put moonCap's arithmetic in a second
+// place and answer `false` for every calendar. The declared total is the only
+// figure that knows a fourth body exists.
+//
+// THIS IS A NARROWING OF MN-G4, NOT ITS DELETION, and it is the operator's own
+// 2026-08-15 answer to their own open question (C-CALV4-SPEC §4: "Hover →
+// expands to show up to three, with a `+` if the calendar has more"). MN-G4's
+// argument was NOISE — "a marker repeated in every cell was the noisiest thing
+// on the surface" — and that argument is about the RESTING month, where thirty
+// `+1`s appeared at once. At rest this cell now shows ONE silhouette and no
+// `+` at all, so the resting month is quieter than the one MN-G4 was written
+// against, not noisier; the `+` exists only inside the single hovered cell.
+// The resting ban is still enforced, by TestMoonPanel_NoCellCarriesAPlusAboutMoons
+// and by the browser probe, which measures it painted rather than trusting the
+// class.
+func moonPlusNeeded(d BlockData) bool {
+	return hasLayer(d.Layers, "moons") && d.Month.MoonsDeclared > moonCap
+}
+
+// cellEraToken is the era's hue for ONE day cell, or "" when no era covers it.
+//
+// ERAS ARE A BACKGROUND TINT ON THE CELL FILL (C-CALV4-SPEC §1's open question,
+// closed by the operator on 2026-08-15). The reasoning is recorded in the spec
+// and is a constraint rather than a taste: the cell edge already carries two
+// meanings — gold means SELECTED, and the raised "pop" is itself an edge
+// treatment — so a third edge meaning would make all three ambiguous. A
+// low-chroma background wash reads as GROUPING, which is what an era is.
+//
+// IT READS THE SAME EraBand THE BAND ROW DRAWS, rather than a new field, so the
+// tint and the band above it can never disagree about where an era starts. The
+// band's own geometry is the source: StartCol is 1-based within the week and
+// Span is a column count, exactly as bandStyle consumes them, and the same
+// defensive clamps are applied here so a producer's zero cannot mean two
+// different columns in two files.
+//
+// THE HUE GOES THROUGH bandToken, the SAME allowlist the band uses. A raw
+// colour must never reach a style attribute (identity_triple_test.go's rule for
+// --cal, applied to the same class of channel).
+func cellEraToken(row WeekRow, c DayCell) string {
+	if c.Day <= 0 {
+		return ""
+	}
+	for _, b := range row.Bands {
+		start := b.StartCol
+		if start < 1 {
+			start = 1
+		}
+		span := b.Span
+		if span < 1 {
+			span = 1
+		}
+		if c.Col >= start && c.Col < start+span {
+			return bandToken(b.BandHue)
+		}
+	}
+	return ""
+}
+
+// cellStyle composes the two custom properties a day cell can carry: its datum
+// hue (--axis, unchanged) and its era hue (--erahue).
+//
+// ONE STYLE ATTRIBUTE, NOT TWO. templ renders one `style` per element, so the
+// era tint could not be added as a second attribute without silently dropping
+// whichever came last — the kind of defect that renders correctly on every
+// fixture that happens to set only one of the two.
+func cellStyle(d BlockData, row WeekRow, c DayCell) string {
+	parts := make([]string, 0, 2)
+	if a := cellAxis(c); a != "" {
+		parts = append(parts, "--axis:"+axisToken(a))
+	}
+	// Gated on the eras LAYER, like every other layer-owned surface: a viewer
+	// who switched eras off must not get the tint either.
+	if hasLayer(d.Layers, "eras") {
+		if e := cellEraToken(row, c); e != "" {
+			parts = append(parts, "--erahue:"+e)
+		}
+	}
+	return strings.Join(parts, ";")
 }
 
 // moonStyle derives the terminator geometry for one disc.
@@ -668,9 +766,13 @@ func cellClass(c DayCell, week int) string {
 	if c.Half {
 		cls = append(cls, "half")
 	}
-	if week > 0 && c.Col == week {
-		cls = append(cls, "lastcol")
-	}
+	// `lastcol` IS GONE (C-CALV4-TILES §1). Its only consumer was
+	// `.cell.lastcol { border-right: 0 }`, which suppressed the shared
+	// right-hand hairline on the month's last column so the grid did not draw a
+	// rule against its own edge. The tile replaced that hairline with a rounded
+	// fill inset inside each cell, so there is nothing left to suppress — and a
+	// class stamped on every tenth cell with no rule behind it is a marker the
+	// next reader has to chase before finding out it does nothing.
 	// Fogged is wave-1-dead by ruling: there is no queryable knowledge horizon
 	// on main, so producers leave it false and the .cell.fog rule ships unused.
 	// The branch stays so W-F does not have to re-touch every cell.
@@ -690,25 +792,10 @@ func weekdayClass(w Weekday) string {
 	return ""
 }
 
-func bandClass(b EraBand) string {
-	cls := []string{"band"}
-	if b.Edge {
-		cls = append(cls, "edge")
-	}
-	// The mockup DECLARES .band.half and never applies it to a band. Wave 1
-	// applies it (see instrument.templ's .halfrule note) — a ramp step that
-	// stops at the era band is a visible seam.
-	if b.Half {
-		cls = append(cls, "half")
-	}
-	if b.OpenLeft {
-		cls = append(cls, "contL")
-	}
-	if b.OpenRight {
-		cls = append(cls, "contR")
-	}
-	return strings.Join(cls, " ")
-}
+// bandClass WAS HERE and is deleted with the band row (C-CALV4-TILES §3). It
+// classed an element nothing emits any more. EraBand.Edge / .Half / .OpenLeft /
+// .OpenRight stay on the struct — they are the producer's month geometry, and
+// the pin is a shape pin — but no renderer reads them today.
 
 // weekLabel is the gutter's week number. It is a POSITION in the month, not a
 // date, so it carries no data-day.
@@ -720,10 +807,18 @@ func weekLabel(r WeekRow) string {
 //
 // Three unrelated conditions, three distinct marks, one printed legend:
 //
-//	dogear   a filled gold notch, top-right  — a dm_only event is on this day
-//	audmark  a gold DIAMOND, bottom-right    — a restricted audience is on this day
-//	                                           (never a circle: circles are moons, L22)
-//	fog      a flat surface step             — past the knowledge horizon
+//	dogear   a folded gold corner, bottom-right — a dm_only event is on this day
+//	audmark  a gold DIAMOND, beside the fold    — a restricted audience is on this day
+//	                                              (never a circle: circles are moons, L22)
+//	fog      a flat surface step                — past the knowledge horizon
+//
+// THE FOLD USED TO BE TOP-RIGHT AND MOVED TO THE FOURTH CORNER. C-CALV4-SPEC §4
+// makes the primary moon silhouette unconditional and the sheet's whole density
+// ladder is read off the top-right corner being free, so the two marks were
+// occupying one corner: the crease ran through the middle of the disc and the
+// fold's 20×20 box — 2½ times its ink, and above `.dsel` on purpose — won the
+// hit test and consumed the tap. The reasoning is in calendar-block.css beside
+// the rule; cell_probe_test.go measures the separation rather than asserting it.
 //
 // Both gold marks are GM/co-DM only, and they are absent rather than greyed for
 // everyone else. For a player the producer leaves AudienceMark nil and the mark
@@ -1006,10 +1101,25 @@ func ledgerDocked(d BlockData) bool {
 //     says so as well, and TestCSS_AnswerLadderChangesNothingButVisibility
 //     pins it so a future hand cannot un-scope it by "tidying".
 //
-//  2. reveal — this day's head-context line and its "nothing on this day"
-//     line, which are rendered for every day and hidden until chosen. CSS
-//     cannot compute "3 Deepwinter · 1 event", so the server renders all of
+//  2. reveal — this day's head-context line, its DAY PANEL and its "nothing on
+//     this day" line, which are rendered for every day and hidden until chosen.
+//     CSS cannot compute "3 Deepwinter · 1 event", so the server renders all of
 //     them and the ladder picks one.
+//
+//     THE THIRD SURFACE IS STAGE 3'S, AND IT IS A WIDENING — SAID OUT LOUD.
+//     `.ldp.lday` joins `.lctx` and `.lzero.lday` in this rule and in the guard
+//     that polices it (TestCSS_AnswerLadderChangesNothingButVisibility). Two
+//     things make it a widening of exactly one surface rather than of the rule:
+//     the guard names the third selector EXPLICITLY rather than loosening its
+//     match, so a fourth still fails; and `.ldp` is a token nothing else in the
+//     Block carries, which is the lock TestLedger_RowCarriesNoRevealToken exists
+//     to keep (the row wearing a reveal token is what shipped once already).
+//
+//     It is also the extension almanacAnchorDay BOOKED rather than approximated:
+//     "the retarget is one ladder extension away for whichever slice pays for
+//     it". This slice pays for it, for the Ledger — and the cost it quoted is
+//     why the panel prints ONE folded moon line per day rather than one row per
+//     moon per day.
 //
 //     IT NAMES ITS TWO SURFACES AND REVERTS RATHER THAN SETTING A BOX, and
 //     both halves of that are a fix, not a style. The rule was first written
@@ -1054,8 +1164,9 @@ func answerLadderCSS() string {
 			k, k)
 		fmt.Fprintf(&b,
 			".cal-block-host .block:has(.daypick[data-day-pick=\"%s\"]:checked) .lhead .lctx[data-lday=\"%s\"],\n"+
+				".cal-block-host .block:has(.daypick[data-day-pick=\"%s\"]:checked) .ldp.lday[data-lday=\"%s\"],\n"+
 				".cal-block-host .block:has(.daypick[data-day-pick=\"%s\"]:checked) .lzero.lday[data-lday=\"%s\"] { display: revert }\n",
-			k, k, k, k)
+			k, k, k, k, k, k)
 		fmt.Fprintf(&b,
 			".cal-block-host .block:has(.grid [data-day-ord=\"%s\"]:is(:hover, :focus-within)) .lrows .lrow[data-lday=\"%s\"],\n"+
 				".cal-block-host .block:has(.lrows .lrow[data-lday=\"%s\"]:is(:hover, :focus-within)) .grid [data-day-ord=\"%s\"] { --answer: 1 }\n",
@@ -1114,14 +1225,59 @@ type ledgerLine struct {
 	Mark Mark
 }
 
-// ledgerContext is one day's head line and, when the day is empty, its own
-// "nothing here" line. Both are rendered for EVERY selectable day and revealed
-// by the ladder, because CSS cannot compute "3 Deepwinter · 1 event".
+// ledgerContext is one day's head line, its DAY PANEL, and — when the day is
+// empty — its own "nothing here" line. All three are rendered for EVERY
+// selectable day and revealed by the ladder, because CSS cannot compute
+// "3 Deepwinter · 1 event".
 type ledgerContext struct {
 	Ord   string
 	Label string // "3 Deepwinter" / the intercalary day's own name
 	Text  string // the head line: Label + " · N events"
 	Empty bool   // this day carries no marks, so it needs a .lzero of its own
+
+	// ── STAGE 3: the day panel's three added facts ──────────────────────────
+
+	// Key is the ANSWER key (dayKey / intercalaryKey) — the SAME namespace the
+	// grid cell, the Ledger row and the day card's payload use. The panel's
+	// create door names its own day with it rather than relying on whatever day
+	// the card was last opened on, which is the difference between creating on
+	// the day the viewer is looking at and creating on a stale one.
+	Key string
+
+	// Date is the panel's header line: the day plus the month's resolved YEAR
+	// ("4 Deepwinter, 1492"). It is deliberately NOT BlockData.DateLabel, which
+	// is the producer's era-aware formatting of TODAY and says nothing about a
+	// day the viewer chose; and it is deliberately not era-qualified, because
+	// this widget has no era geometry and the Ledger's own promise is that it
+	// "works before eras are defined". Ordinal day + month name + the year the
+	// month was resolved for are three facts already on MonthGeometry.
+	Date string
+
+	// Weekday is the day's weekday NAME. EMPTY for an intercalary day, which
+	// sits outside every tenday by construction, and empty when the calendar
+	// declares no weekday names — in both cases the sub-line drops rather than
+	// printing a blank.
+	Weekday string
+
+	// Moon is the day's phase line, one segment per DECLARED body. Empty when
+	// the calendar declares no moons, when the Almanac register was not built
+	// for this render (it is gated on the Shelf and the sky), and for every
+	// intercalary day — the register is indexed by ordinal day of the RENDERED
+	// month, so Midwinter 1 would silently read Deepwinter 1's illumination.
+	// Wrong is worse than absent.
+	Moon string
+
+	// RealDate is the Gregorian date this day falls on, already formatted by the
+	// producer (DayCell.RealDate). Empty when the campaign's calendar carries no
+	// real-date anchor — which is every calendar until an owner sets one, so the
+	// panel drops the line rather than printing a placeholder.
+	//
+	// IT IS THE DAY PANEL'S LINE AND NOT THE GRID CELL'S. At 34px of column the
+	// cell has room for a numeral, a moon and up to three marks, and a
+	// fifteen-character date is not among the things that fit; in the panel it
+	// sits under a date the viewer just chose and answers the one question a GM
+	// scheduling a session is asking — which real weekend is that.
+	RealDate string
 }
 
 // ledgerView is everything Zone C draws, computed once per render.
@@ -1184,7 +1340,8 @@ func newLedgerView(d BlockData) ledgerView {
 	// control, so a context for it could never be revealed — emitting one would
 	// be dead markup on every render of a long month.
 	for day := 1; day <= d.Month.Days; day++ {
-		if _, ok := cells[day]; !ok || !dayAnswers(day) {
+		c, ok := cells[day]
+		if !ok || !dayAnswers(day) {
 			continue
 		}
 		ord := dayOrdKey(day)
@@ -1193,6 +1350,17 @@ func newLedgerView(d BlockData) ledgerView {
 			Ord: ord, Label: label,
 			Text:  label + " · " + eventCountLabel(perDay[ord]),
 			Empty: perDay[ord] == 0,
+			// The three panel facts. All three come from the SAME cell walk the
+			// rows come from, which is the whole reason this function exists —
+			// a second pass over the month is the two-computations defect.
+			Key:     dayKey(d.CalendarSlug, day),
+			Date:    ledgerDateLine(d, label),
+			Weekday: ledgerWeekdayName(d.Month, c),
+			Moon:    ledgerMoonLine(d, day),
+			// Off the SAME cell the rows came from — no second walk, and no
+			// arithmetic here: the producer already resolved it or already
+			// declined to (C-CALV4-ANCHOR).
+			RealDate: c.RealDate,
 		})
 	}
 	for _, ic := range d.Month.Intercalary {
@@ -1208,10 +1376,93 @@ func newLedgerView(d BlockData) ledgerView {
 			Ord: ord, Label: label,
 			Text:  label + " · " + eventCountLabel(perDay[ord]),
 			Empty: perDay[ord] == 0,
+			Key:   intercalaryKey(d.CalendarSlug, ic.Day),
+			Date:  ledgerDateLine(d, label),
+			// NO WEEKDAY AND NO MOON, and both absences are the same fact stated
+			// twice: an intercalary day is outside every tenday and outside the
+			// Almanac register's ordinal index. Printing either would be printing
+			// the neighbouring ordinary day's answer under this day's name.
 		})
 	}
 	return v
 }
+
+// ledgerDateLine is the day panel's header — the reference's `4 June, 735`.
+//
+// THE YEAR IS MonthGeometry.Year AND NOTHING IS INFERRED FROM IT. That field is
+// "one month, already resolved for a specific year" (data.go), so it is a fact
+// the producer already committed to; the era, the epoch and the reckoning are
+// NOT derivable here and are not printed. A calendar in the FAULT case — no
+// eras, dates cannot resolve — still gets a correct line, which is the same
+// promise ledgerZeroAll's second sentence makes.
+//
+// A zero year drops the segment rather than printing ", 0".
+func ledgerDateLine(d BlockData, label string) string {
+	if d.Month.Year == 0 {
+		return label
+	}
+	return label + ", " + intText(d.Month.Year)
+}
+
+// ledgerWeekdayName is the day panel's muted sub-line.
+//
+// It reads the CELL's own column against the month's declared weekday names —
+// never `day % 7`, never `day % len(Weekdays)`. The lead offset, the five-column
+// rule and any producer-side irregularity are already resolved into DayCell.Col
+// by buildMonthGeometry, and re-deriving the weekday from the ordinal would be a
+// second computation of a number the geometry already carries (and would be
+// wrong the moment a month does not begin on column 1).
+//
+// Empty when the calendar declares no weekday names or the column is out of
+// range, so the sub-line drops rather than printing a blank.
+func ledgerWeekdayName(m MonthGeometry, c DayCell) string {
+	if c.Col < 1 || c.Col > len(m.Weekdays) {
+		return ""
+	}
+	return m.Weekdays[c.Col-1].Name
+}
+
+// ledgerMoonLine is the day panel's phase readout — the reference's moon glyph,
+// as the word and the percentage rather than as a second disc.
+//
+// EVERY DECLARED BODY, NOT ONE (stage 2's ruling, one surface down). The
+// reference sky has one moon because Earth has one; Harptos declares four, and a
+// panel that printed "the moon" would be the grid's three-moon ceiling defect
+// again — a body configured in the database and drawn nowhere.
+//
+// IT IS THE ALMANAC'S OWN ARITHMETIC, REUSED, not a second derivation:
+// almanacDayAt + almanacIllumPct are the functions the Tonight readout and the
+// Month lane already share, so the panel and the Almanac cannot disagree about
+// what a day's illumination is. The register is UNCAPPED, so a body past the
+// grid's moonCap appears here too.
+//
+// ACHROMATIC BY LAW. This returns text; the sheet inks it --text-muted and the
+// sky may never borrow the event colour axis (moongraph_test, almanac_test).
+//
+// Empty when the calendar declares no moons or the register was not built for
+// this render — the Almanac's build gate names the Shelf and the sky, so a Block
+// with neither carries no register and the panel simply omits the row.
+func ledgerMoonLine(d BlockData, day int) string {
+	var parts []string
+	for _, m := range d.Month.Almanac {
+		a, ok := almanacDayAt(m, day)
+		if !ok {
+			continue
+		}
+		parts = append(parts, m.Name+" "+strconv.Itoa(almanacIllumPct(a))+"% "+a.Phase)
+	}
+	return strings.Join(parts, " · ")
+}
+
+// ledgerCanCreate reports whether the day panel draws the create door.
+//
+// TWO FACTS, AND BOTH ARE THE PRODUCER'S. LedgerStub.CanCreate is the viewer's
+// authoring floor AND the host's statement that a day-card editor is mounted on
+// this page (data.go); ledgerDocked is the zone gate every other day-selection
+// control already rides. A door in a Ledger with no editor behind it is a
+// control that silently does nothing, which is the one thing this component's
+// honesty idiom refuses harder than an absence.
+func ledgerCanCreate(d BlockData) bool { return d.Ledger.CanCreate && ledgerDocked(d) }
 
 // ledgerZeroAll is the UNSELECTED empty state. Its second sentence is
 // load-bearing and not decoration: it is the reason the Ledger renders in the
@@ -2031,6 +2282,41 @@ func buildLegend(d BlockData) []legendEntry {
 	}
 	return out
 }
+
+// legendPinID is the id of the legend's ONE disclosure control (C-CALV4-TILES
+// §9.4). The tab's <label for> addresses it; the stylesheet reads it back with
+// :has().
+//
+// A PURE FUNCTION OF THE DATA, for the reason tieGroupName and dayPickGroupName
+// are: two Blocks on one page must not share one piece of state, and the SAME
+// Block re-rendered by an HTMX binding swap must keep the state the viewer just
+// chose. `label[for]` resolves to the FIRST matching id in the DOCUMENT, so a
+// constant id would mean every legend on a Bench opened the first Block's.
+//
+// There is exactly one control, so there is no per-option key and no group: a
+// checkbox can be un-checked by re-pressing it, which is why this is a checkbox
+// and not the radio-plus-explicit-`none` construction the moon panel needs.
+func legendPinID(d BlockData) string {
+	return "legend-" + domToken(d.CalendarSlug) + "-" + domToken(d.Viewer.HostEntity)
+}
+
+// legendTabLabel is the closed tab's whole copy, and it is deliberately about
+// COLOUR (C-CALV4-TILES §9.2/§9.4).
+//
+// Shape stopped carrying the type when the runes landed: the glyph is chosen by
+// :nth-child() — position in the day — so no rune means anything, and a legend
+// that said "this mark means Quest" would be teaching a mapping the grid does
+// not implement.
+//
+// AND THE SWATCH IS A SOLID COLOUR CHIP, so "Colour key" is the literal truth
+// rather than a near-enough label. It used to carry a --dash stroke too, but
+// `.cal-block-host .legend .lr` is three classes and re-declared `--dash: 100%`
+// over the two-class `.pN` rules that hold the real values — every patterned
+// swatch resolved to a solid bar anyway. Those rules are deleted rather than
+// re-specified: the operator's ruling is that colour determines the type, and
+// restoring a stroke vocabulary here would teach a channel the narrow grid
+// stopped painting in the same pass. See TestCSS_TheLegendSwatchIsSolidOnPurpose.
+func legendTabLabel() string { return "Colour key" }
 
 // legendSwatchStyle carries the entry's own hue, exactly as every other mark
 // surface does. --axis is the mark's channel and it is FORBIDDEN from

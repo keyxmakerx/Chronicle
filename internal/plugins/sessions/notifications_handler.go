@@ -104,6 +104,8 @@ func notificationMessage(n Notification) string {
 		return "New scheduling proposal"
 	case NotifProposalResponse:
 		return "A player responded to your proposal"
+	case NotifAvailabilityNudge:
+		return "Your group needs your availability"
 	default:
 		return "Notification"
 	}

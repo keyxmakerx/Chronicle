@@ -3,13 +3,23 @@
 // C-CALV4-MOONS [MN-4] / [MN-G1] / [MN-G2]. The operator has said it three
 // times: "The moons should be in the skypane but it's like the sun, and not
 // interactable." The shipped band disagreed with them in HTML — block.templ
-// puts the disc cluster `.skdiscs` inside `summary.skyhdr`, and a <summary> is
+// puts the moon cluster inside `summary.skyhdr`, and a <summary> is
 // a click target over its entire box, so every band moon was a hit target that
 // toggled the pane. The scenery was a control.
 //
+// THE CLUSTER IS `.skscene` SINCE C-CALV4-SKY-CHEST STAGE 2, and the rename is
+// the point rather than a tidy-up: `.skdiscs` was a FLEX ITEM of the lid — a
+// permanent slot beside the clock — and `.skscene` is out-of-flow scenery
+// painted onto the sky. THIS FILE'S TWO CLAIMS ARE UNCHANGED IN SUBSTANCE and
+// they are the reason the spacer stopped being a hit island in that stage: at
+// C1 the scenery sits directly over `.sksp`'s box, `pointer-events: none` on
+// the moons only makes the hit fall THROUGH to whatever is beneath, and a live
+// spacer beneath a moon is a clickable moon. MN-G1 is asserted here exactly as
+// the operator wrote it; the sheet moved to keep it true.
+//
 // TWO CLAIMS, AND THE SECOND IS WHY THIS FILE IS NOT JUST A GREP.
 //
-//	MN-G1  no element in `.skdiscs` or its subtree is a click target: the
+//	MN-G1  no element in `.skscene` or its subtree is a click target: the
 //	       subtree carries no <a>/<button>/<label>/<input>/[role=button]/
 //	       [tabindex]/onclick/[data-cal-*], AND a real hit test at each disc's
 //	       painted centre resolves to a node whose nearest interactive
@@ -90,7 +100,7 @@ const skySceneryScript = `function(){
   var root = document.querySelector('.probe-host');
   var sky  = root.querySelector('details.skygrow');
   var band = sky.querySelector('summary.skyhdr');
-  var cluster = sky.querySelector('.skdiscs');
+  var cluster = sky.querySelector('.skscene');
   var caret = sky.querySelector('.skcaret');
   var r1 = function(v){ return Math.round(v * 10) / 10; };
   var desc = function(el){
@@ -114,7 +124,7 @@ const skySceneryScript = `function(){
     });
   }
   var discs = [];
-  [].slice.call(sky.querySelectorAll('.skdiscs .ph')).forEach(function(d){
+  [].slice.call(sky.querySelectorAll('.skscene .ph')).forEach(function(d){
     var r = d.getBoundingClientRect();
     var entry = { w: r1(r.width), h: r1(r.height), hit: '', interactive: '', openAfterClick: false };
     if (r.width > 0 && r.height > 0) {
@@ -236,7 +246,7 @@ func TestSkySceneryProbe_TheBandsMoonsAreNotAControl(t *testing.T) {
 
 			// ── MN-G1, the declared half ────────────────────────────────────
 			if len(r.Forbidden) > 0 {
-				t.Errorf("`.skdiscs` declares interactive descendants %v — the band's "+
+				t.Errorf("`.skscene` declares interactive descendants %v — the band's "+
 					"moons are scenery, like the sun ([MN-4]); they report the sky by "+
 					"being legible, not by being pressable", r.Forbidden)
 			}
@@ -290,14 +300,14 @@ func TestSkySceneryProbe_TheBandsMoonsAreNotAControl(t *testing.T) {
 // is the part that never needs one.
 func TestSkyScenery_TheClusterCarriesNoActionHookInTheMarkup(t *testing.T) {
 	body := flatten(render(t, fxSky(t, true)))
-	start := strings.Index(body, `<span class="skdiscs">`)
+	start := strings.Index(body, `<span class="skscene">`)
 	if start < 0 {
-		t.Fatal("no `.skdiscs` in the seated Block's markup — the band lost its moons")
+		t.Fatal("no `.skscene` in the seated Block's markup — the band lost its moons")
 	}
 	rest := body[start:]
 	end := strings.Index(rest, `</span><span class="sksp">`)
 	if end < 0 {
-		t.Fatal("could not bound the `.skdiscs` subtree — the band's markup changed shape")
+		t.Fatal("could not bound the `.skscene` subtree — the band's markup changed shape")
 	}
 	subtree := rest[:end]
 	for _, bad := range []string{"<a ", "<button", "<label", "<input", `role="button"`, "tabindex", "onclick", "data-cal-"} {

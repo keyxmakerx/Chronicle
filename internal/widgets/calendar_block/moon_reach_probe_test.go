@@ -132,6 +132,55 @@ type mrReading struct {
 	DiscW    float64 `json:"discW"`
 	DiscH    float64 `json:"discH"`
 
+	// ── THE RESTING CENSUS, WALKED OVER EVERY DATED CELL IN THE MONTH ──────
+	//
+	// The fields above describe ONE cell — the first that carries moons — and
+	// that was enough while the row was an all-or-nothing ornament gated well
+	// clear of the date. It is not enough now. The silhouette rests 4px from
+	// the cell's right edge and the date rests at its left, so whether the two
+	// collide depends on HOW WIDE THE DATE'S INK IS, and that varies across the
+	// month: "3" is half the width of "30". A probe that measured day 3 and
+	// declared the month clear would miss every two-digit day in it, which is
+	// two thirds of a Harptos month.
+	Cells        int     `json:"cells"`        // dated cells carrying a moon row
+	RestDiscsMin int     `json:"restDiscsMin"` // fewest discs painted in any cell
+	RestDiscsMax int     `json:"restDiscsMax"` // most discs painted in any cell
+	RestPlus     int     `json:"restPlus"`     // cells painting a `+` AT REST — must be 0
+	WorstOverlap float64 `json:"worstOverlap"` // px², the worst date-ink collision
+	WorstDay     string  `json:"worstDay"`     // which day produced it
+	WorstNumW    float64 `json:"worstNumW"`    // the widest date ink in the month
+	WorstSpill   float64 `json:"worstSpill"`
+
+	// ── THE EXPANSION, MEASURED THROUGH ITS OWN RULE ───────────────────────
+	//
+	// Driven by :focus-visible, not by a synthesised hover — the two are the
+	// SAME declaration block in the sheet, and focus is the half a script can
+	// honestly drive. It is measured on the WIDEST-DATE cell in the month, so
+	// the expansion is judged against the worst collision it can have rather
+	// than the first one it meets.
+	ExpFocusOK bool    `json:"expFocusOK"` // :focus-visible really matched
+	ExpDiscs   int     `json:"expDiscs"`
+	ExpPlus    bool    `json:"expPlus"`
+	ExpRowW    float64 `json:"expRowW"`
+	ExpOverlap float64 `json:"expOverlap"`
+	ExpSpill   float64 `json:"expSpill"`
+
+	// ── THE SECOND TARGET (C-CALV4-SPEC §4, operator's answer 2) ───────────
+	//
+	// "Clicking the hovered silhouette opens the moon section; clicking
+	// anywhere else in the cell opens the Ledger. Two targets, one cell,
+	// cleanly separated." The moon half is measured above. This is the OTHER
+	// half, and without it the probe would prove the moon target works while
+	// saying nothing about whether it swallowed the day.
+	//
+	// Hit-tested at a point deliberately AWAY from the moon — low and to the
+	// left, where the date and the event marks live — then really clicked, and
+	// the day's own radio read back. A moon control that had grown over the
+	// cell would resolve here and leave DselChecks false.
+	DselHit    string `json:"dselHit"`    // what a tap in the cell body resolves to
+	DselChecks bool   `json:"dselChecks"` // …and it really selects the day
+	MoonStole  bool   `json:"moonStole"`  // the moon control answered instead
+
 	// the opener, and whether a pointer landing on its painted centre reaches it
 	CtlW  float64 `json:"ctlW"`
 	CtlH  float64 `json:"ctlH"`
@@ -189,7 +238,11 @@ function(root){
     rowShown: false, rowW: 0, rowH: 0, discs: 0, discW: 0, discH: 0,
     ctlW: 0, ctlH: 0, hit: '', hitOK: false,
     padW: 0, padH: 0, padSteal: 0, padHit: false,
-    numBox: '', rowBox: '', overlap: 0, spill: 0, opensPanel: false
+    numBox: '', rowBox: '', overlap: 0, spill: 0, opensPanel: false,
+    cells: 0, restDiscsMin: 0, restDiscsMax: 0, restPlus: 0,
+    worstOverlap: 0, worstDay: '', worstNumW: 0, worstSpill: 0,
+    expFocusOK: false, expDiscs: 0, expPlus: false, expRowW: 0,
+    expOverlap: 0, expSpill: 0
   };
   if (!cell) return out;
   var cs = getComputedStyle(cell);
@@ -243,6 +296,162 @@ function(root){
     var xo = Math.max(0, cb.l - rb.l) + Math.max(0, rb.r - cb.r);
     var yo = Math.max(0, cb.t - rb.t) + Math.max(0, rb.b - cb.b);
     out.spill = r1(Math.max(xo, yo));
+  }
+
+  // ── THE RESTING CENSUS, OVER EVERY DATED CELL IN THE MONTH ─────────────
+  //
+  // WHY EVERY CELL AND NOT THE FIRST. The silhouette rests 4px from the cell's
+  // right edge and the date rests at its left, so whether they collide depends
+  // on how wide the DATE'S INK is — and "3" is half the width of "30". The
+  // single-cell measurement above would clear a month whose two-digit days all
+  // collide, which is two thirds of a Harptos month. The widest date in the
+  // month is also the cell the expansion is measured on, below.
+  var numInk = function(cl){
+    var named = cl.querySelector('.cnamed'), under = cl.querySelector('.cunder');
+    var n = null;
+    if (named && vis(box(named))) n = named.querySelector('.dn');
+    else if (under) n = under.querySelector('.dn');
+    if (!n) return null;
+    var rg = document.createRange();
+    rg.selectNodeContents(n);
+    var rr = rg.getBoundingClientRect();
+    return { l: rr.left, t: rr.top, w: rr.width, h: rr.height, r: rr.right, b: rr.bottom };
+  };
+  var rectOverlap = function(a, b){
+    if (!vis(a) || !vis(b)) return 0;
+    var ow = Math.max(0, Math.min(a.r, b.r) - Math.max(a.l, b.l));
+    var oh = Math.max(0, Math.min(a.b, b.b) - Math.max(a.t, b.t));
+    return ow * oh;
+  };
+  var spillOf = function(inner, outer){
+    var sx = Math.max(0, outer.l - inner.l) + Math.max(0, inner.r - outer.r);
+    var sy = Math.max(0, outer.t - inner.t) + Math.max(0, inner.b - outer.b);
+    return Math.max(sx, sy);
+  };
+  var dated = [].slice.call(root.querySelectorAll('.cell[data-day]'));
+  var lo = -1, hi = 0, plusRest = 0, worstOv = 0, worstDay = '', worstNumW = 0;
+  var worstSp = 0, seen = 0, widestCell = null, widestW = -1;
+  for (var k = 0; k < dated.length; k++) {
+    var cl = dated[k];
+    var rw = cl.querySelector('.phrow');
+    if (!rw) continue;
+    seen++;
+    var rwb = box(rw);
+    var painted = [].slice.call(rw.querySelectorAll('.ph')).filter(function(d){ return vis(box(d)) });
+    if (lo < 0 || painted.length < lo) lo = painted.length;
+    if (painted.length > hi) hi = painted.length;
+    var plg = rw.querySelector('.phplus');
+    if (plg && vis(box(plg))) plusRest++;
+    var nbk = numInk(cl);
+    if (nbk && nbk.w > worstNumW) worstNumW = r1(nbk.w);
+    if (nbk && nbk.w > widestW) { widestW = nbk.w; widestCell = cl }
+    if (vis(rwb)) {
+      var ovk = rectOverlap(nbk, rwb);
+      if (ovk > worstOv) { worstOv = ovk; worstDay = cl.getAttribute('data-day-ord') || '?' }
+      var spk = spillOf(rwb, box(cl));
+      if (spk > worstSp) worstSp = spk;
+    }
+  }
+  out.cells = seen;
+  out.restDiscsMin = (lo < 0) ? 0 : lo;
+  out.restDiscsMax = hi;
+  out.restPlus = plusRest;
+  out.worstOverlap = r1(worstOv);
+  out.worstDay = worstDay;
+  out.worstNumW = worstNumW;
+  out.worstSpill = r1(worstSp);
+
+  // ── THE EXPANSION, MEASURED THROUGH ITS OWN RULE ───────────────────────
+  //
+  // NO HOVER IS SYNTHESISED HERE EITHER. The sheet gives the expansion two
+  // triggers in ONE declaration block — .phctl:hover and the cluster radio's
+  // :focus-visible — and focus is the half a script can drive honestly. So
+  // this measures the real rule through its real selector, and it doubles as
+  // the keyboard arm's own test: a change that broke focus expansion but left
+  // hover working would redden here.
+  //
+  // ON THE WIDEST-DATE CELL, so the expansion is judged against the worst
+  // collision it can have rather than the first one it meets.
+  if (widestCell) {
+    var wrow = widestCell.querySelector('.phrow');
+    var radio = widestCell.querySelector('.moonpick');
+    if (wrow && radio) {
+      radio.focus();
+      out.expFocusOK = radio.matches(':focus-visible');
+      var eb = box(wrow);
+      out.expDiscs = [].slice.call(wrow.querySelectorAll('.ph')).filter(function(d){ return vis(box(d)) }).length;
+      var epg = wrow.querySelector('.phplus');
+      out.expPlus = !!(epg && vis(box(epg)));
+      if (vis(eb)) {
+        out.expRowW = r1(eb.w);
+        out.expOverlap = r1(rectOverlap(numInk(widestCell), eb));
+        out.expSpill = r1(spillOf(eb, box(widestCell)));
+      }
+      radio.blur();
+    }
+  }
+
+  return out;
+}`
+
+// moonReachOpenScript is the SECOND phase, and splitting it out of the first is
+// a correctness fix rather than tidiness.
+//
+// CHROMIUM'S :focus-visible IS STATEFUL ACROSS THE WHOLE DOCUMENT. The heuristic
+// asks whether the most recent interaction was a POINTER one, so the moment any
+// host's opener is `click()`ed, every LATER host's programmatic `.focus()` stops
+// matching :focus-visible — and the expansion measured through it silently reads
+// as "no expansion". Run as one pass this reported a working expansion for host
+// 0 and a broken one for the other nineteen, which is indistinguishable from the
+// rule being missing.
+//
+// So: every host's geometry (including the focus-driven expansion) is measured
+// first, across the whole page, and only then does any host get clicked.
+const moonReachOpenScript = `
+function(root, out){
+  var r1 = function(v){ return Math.round(v * 100) / 100 };
+  var box = function(el){
+    if (!el) return null;
+    var r = el.getBoundingClientRect();
+    return { l: r.left, t: r.top, w: r.width, h: r.height, r: r.right, b: r.bottom };
+  };
+  var vis = function(b){ return !!b && b.w > 0 && b.h > 0 };
+  var desc = function(el){
+    if (!el) return '';
+    var c = (el.getAttribute && el.getAttribute('class')) || '';
+    return el.tagName.toLowerCase() + (c ? '.' + c.trim().split(/\s+/).join('.') : '');
+  };
+  var cell = null, cells = [].slice.call(root.querySelectorAll('.cell[data-day]'));
+  for (var i = 0; i < cells.length; i++) {
+    if (cells[i].querySelector('.phrow') || cells[i].querySelector('.moonpick')) { cell = cells[i]; break }
+  }
+  if (!cell) return out;
+
+  // ── THE SECOND TARGET, TAPPED BEFORE THE FIRST ─────────────────────────
+  //
+  // The day-selection half of C-CALV4-SPEC §4's "two targets, one cell,
+  // cleanly separated", and it is measured FIRST because the moon tap below
+  // opens a panel over the row and would change what a later hit test lands on.
+  //
+  // THE POINT IS CHOSEN AWAY FROM THE MOON ON PURPOSE: 30% across and 70% down,
+  // which is the cell body where the date and the event marks live and where a
+  // reader aiming at "this day" actually presses. A moon control that had been
+  // grown until it covered the cell — the obvious way to chase the 44px touch
+  // floor — resolves here and leaves dselChecks false.
+  var dsel = cell.querySelector('.dsel');
+  var dpick = cell.querySelector('.daypick');
+  if (dsel && dpick) {
+    cell.scrollIntoView({ block: 'center', inline: 'center' });
+    var dcb = box(cell);
+    var dp = document.elementFromPoint(dcb.l + dcb.w * 0.3, dcb.t + dcb.h * 0.7);
+    out.dselHit = desc(dp);
+    var mctl = cell.querySelector('.phctl');
+    out.moonStole = !!(dp && mctl && (dp === mctl || mctl.contains(dp)));
+    if (dp) {
+      dp.click();
+      out.dselChecks = !!dpick.checked;
+      dpick.checked = false;
+    }
   }
 
   // THE OPENER, AS A HIT TEST. elementFromPoint at the painted centre, then a
@@ -376,9 +585,17 @@ func mrRun(t *testing.T, chrome string, cases []mrCase, extraFlags ...string) []
 		`html,body{margin:0;background:#fff}` +
 		`.probe-host{display:block;margin:24px}` +
 		css + `</style></head><body>` + boxes.String() +
+		// TWO PASSES OVER THE WHOLE PAGE, AND THE ORDER IS LOAD-BEARING.
+		// Chromium's :focus-visible heuristic is document-wide state: once any
+		// host has been click()ed, programmatic focus stops matching it
+		// everywhere. So every host's geometry — including the focus-driven
+		// expansion — is measured first, and only then is anything clicked.
 		`<script>document.addEventListener('DOMContentLoaded',function(){` +
-		`var read=` + moonReachScript + `;` +
-		`var out=[].slice.call(document.querySelectorAll('.probe-host')).map(read);` +
+		`var geom=` + moonReachScript + `;` +
+		`var open=` + moonReachOpenScript + `;` +
+		`var hosts=[].slice.call(document.querySelectorAll('.probe-host'));` +
+		`var out=hosts.map(geom);` +
+		`hosts.forEach(function(h,i){open(h,out[i])});` +
 		`out.forEach(function(o){o.coarse=matchMedia('(pointer: coarse)').matches});` +
 		`document.body.setAttribute('data-probe', JSON.stringify(out));});</script>` +
 		`</body></html>`
@@ -501,17 +718,26 @@ func TestMoonReachProbe_TheDiscsAreOnTheScreenAtAPhoneWidth(t *testing.T) {
 	readings := mrRun(t, chrome, cases)
 
 	t.Log("─── THE CENSUS ──────────────────────────────────────────────────────────────")
-	t.Logf("%-9s %-28s %-6s %-8s %-10s %-7s %-13s %-6s",
-		"viewport", "arm", "host", "column", "density", "discs", "disc row", "opens")
+	t.Log("rest = discs painted with nothing pointed at or focused, across EVERY dated")
+	t.Log("cell in the month.  exp = the same row with its radio :focus-visible, on the")
+	t.Log("cell carrying the month's WIDEST date ink.  ink = that widest date, in px.")
+	t.Logf("%-9s %-28s %-6s %-8s %-10s %-6s %-5s %-6s %-11s %-6s",
+		"viewport", "arm", "host", "column", "density", "rest", "ink", "rest+",
+		"exp (discs/+)", "opens")
 	for i, c := range cases {
 		r := readings[i]
 		density := "underline"
 		if r.NamedShown {
 			density = "NAMED"
 		}
-		t.Logf("%-9s %-28s %-6.0f %-8.1f %-10s %-7d %-13s %-6v",
+		rest := fmt.Sprintf("%d", r.RestDiscsMax)
+		if r.RestDiscsMin != r.RestDiscsMax {
+			rest = fmt.Sprintf("%d–%d", r.RestDiscsMin, r.RestDiscsMax)
+		}
+		t.Logf("%-9s %-28s %-6.0f %-8.1f %-10s %-6s %-5.1f %-6d %-11s %-6v",
 			fmt.Sprintf("%dpx", c.viewport), c.label, r.Host, r.ColumnW, density,
-			r.Discs, fmt.Sprintf("%.1f×%.1f", r.RowW, r.RowH), r.OpensPanel)
+			rest, r.WorstNumW, r.RestPlus,
+			fmt.Sprintf("%d/%v w=%.1f", r.ExpDiscs, r.ExpPlus, r.ExpRowW), r.OpensPanel)
 	}
 	t.Log("─────────────────────────────────────────────────────────────────────────────")
 
@@ -525,38 +751,37 @@ func TestMoonReachProbe_TheDiscsAreOnTheScreenAtAPhoneWidth(t *testing.T) {
 					r.Host)
 			}
 
-			// ── the discs are on the screen, or honestly are not ─────────────
+			// ── THE PRIMARY SILHOUETTE IS ON THE SCREEN. ALWAYS. ────────────
 			//
-			// THE BOUNDARY IS THE ASSERTION, in both directions. Above the disc
-			// row's own threshold the moons must be painted; below it they must
-			// be gone, because a 35px row in a 30px cell is the overflow the
-			// density query exists to prevent. A test that only asserted the
-			// first half would pass on a deleted query.
-			wantRow := r.ColumnW >= MoonRowColWidthMin
+			// NO THRESHOLD APPEARS IN THIS ASSERTION, and that is the whole
+			// point of it. The version this replaces said `wantRow := r.ColumnW
+			// >= MoonRowColWidthMin` and then checked the CSS against it, which
+			// is a tautology dressed as a measurement: it asks "does the
+			// stylesheet agree with the Go constant", so moving the constant
+			// moves the test with it and the operator's ten-day phone stayed
+			// invisible through twenty green runs.
+			//
+			// C-CALV4-SPEC §4 makes the claim unconditional — "The primary moon
+			// is ALWAYS silhouetted in the cell — visible at rest, not
+			// hover-gated" — so the assertion is unconditional too. Every case,
+			// every viewport, both week lengths.
 			if !r.RowShown {
-				if wantRow {
-					t.Errorf("host %.0fpx · column %.1fpx: the moon row is NOT PAINTED at a column "+
-						"WIDE ENOUGH for it (threshold %.0fpx). The data carries three drawn moons "+
-						"and the operator sees none — this is the shipped defect: `.phrow` lived "+
-						"inside `.cnamed` and was promoted only by the 84px NAMED-event query, and "+
-						"a real day cell reaches 84px at almost no viewport",
-						r.Host, r.ColumnW, MoonRowColWidthMin)
-				} else {
-					t.Logf("host %.0fpx · column %.1fpx: below the %.0fpx threshold, so the cell "+
-						"DEGRADES to the underline alone. Three discs measure 35.0px and would "+
-						"not fit; this is the query doing its job, not the defect.",
-						r.Host, r.ColumnW, MoonRowColWidthMin)
-				}
-				return
+				t.Fatalf("host %.0fpx · column %.1fpx (%s): NO MOON ROW IS PAINTED. The primary "+
+					"silhouette is always visible by spec — there is no width at which this "+
+					"cell is allowed to show nothing. This is the shipped defect: a single "+
+					"40px query gated all three discs together, and a ten-day week measures "+
+					"30.0px on a phone", r.Host, r.ColumnW, c.label)
 			}
-			if !wantRow {
-				t.Errorf("host %.0fpx: the moon row is painted in a %.1fpx column, under the "+
-					"%.0fpx threshold. Three discs need 35.0px and this cell cannot give it — "+
-					"the row is overflowing something", r.Host, r.ColumnW, MoonRowColWidthMin)
+			if r.Cells == 0 {
+				t.Fatalf("host %.0fpx: the month walk found no dated cell carrying a moon row — "+
+					"the census below would be vacuous", r.Host)
 			}
-			if r.Discs != moonCap {
-				t.Errorf("host %.0fpx: %d discs painted, want %d. [MN-1] is signed at three",
-					r.Host, r.Discs, moonCap)
+			if r.RestDiscsMin != 1 || r.RestDiscsMax != 1 {
+				t.Errorf("host %.0fpx · column %.1fpx: cells paint %d–%d discs AT REST across "+
+					"%d dated cells; the spec's resting state is EXACTLY ONE — the primary "+
+					"silhouette. Three at rest is what this slice replaced (it did not fit a "+
+					"ten-day column); zero is the defect it fixed",
+					r.Host, r.ColumnW, r.RestDiscsMin, r.RestDiscsMax, r.Cells)
 			}
 			if r.DiscW <= 0 || r.DiscH <= 0 {
 				t.Errorf("host %.0fpx: a disc lays out at %.1f×%.1f. sky_disc_paint_probe "+
@@ -565,18 +790,103 @@ func TestMoonReachProbe_TheDiscsAreOnTheScreenAtAPhoneWidth(t *testing.T) {
 					r.Host, r.DiscW, r.DiscH)
 			}
 
-			// ── and they are not sitting on the day numeral ──────────────────
-			if r.Overlap > 0 {
-				t.Errorf("host %.0fpx · column %.1fpx: the disc row (%s) overlaps the day "+
-					"numeral's INK (%s) by %.0fpx². Discs over the date is not a denser cell, "+
-					"it is an unreadable one — this is the boundary the threshold has to respect",
-					r.Host, r.ColumnW, r.RowBox, r.NumBox, r.Overlap)
+			// ── MN-G4 AT REST: no cell says anything about the ceiling ──────
+			//
+			// The `+` is narrowed by C-CALV4-SPEC §4, not deleted, and this is
+			// the half that survives verbatim: MN-G4's argument was that "a
+			// marker repeated in every cell was the noisiest thing on the
+			// surface", and that is an argument about the RESTING month. It is
+			// measured PAINTED here rather than grepped out of the markup,
+			// because the `+` is now in the DOM at every width and only the
+			// cascade keeps it out of sight.
+			if r.RestPlus != 0 {
+				t.Errorf("host %.0fpx: %d of %d cells paint a `+` AT REST. MN-G4 holds where "+
+					"its own argument applies — thirty ceiling markers at once is the noise it "+
+					"was written against. The `+` belongs to the hovered/focused cell alone",
+					r.Host, r.RestPlus, r.Cells)
 			}
-			if r.Spill > 0.5 {
-				t.Errorf("host %.0fpx · column %.1fpx: the disc row hangs %.1fpx outside its "+
-					"own cell (row %s). The density query exists so a cramped cell DEGRADES "+
-					"instead of overflowing; a threshold low enough to spill has replaced one "+
-					"defect with another", r.Host, r.ColumnW, r.Spill, r.RowBox)
+
+			// ── and nothing is sitting on the date, in ANY cell ─────────────
+			//
+			// WALKED OVER THE WHOLE MONTH, not over the first cell that carries
+			// moons. The silhouette rests at the cell's right and the date at
+			// its left, so the collision depends on the date's INK WIDTH — "3"
+			// is half of "30". Measuring one cell would clear a month whose
+			// every two-digit day collides.
+			if r.WorstOverlap > 0 {
+				t.Errorf("host %.0fpx · column %.1fpx: the resting silhouette overlaps the date's "+
+					"INK by %.0fpx² on day %q (widest date in the month: %.1fpx). A moon over the "+
+					"date is not a denser cell, it is an unreadable one — and it is the two-digit "+
+					"days that collide first, which is why this walks all %d of them",
+					r.Host, r.ColumnW, r.WorstOverlap, r.WorstDay, r.WorstNumW, r.Cells)
+			}
+			if r.WorstSpill > 0.5 {
+				t.Errorf("host %.0fpx · column %.1fpx: the silhouette hangs %.1fpx outside its "+
+					"own cell. A mark that overflows its day is worse than one that degrades",
+					r.Host, r.ColumnW, r.WorstSpill)
+			}
+
+			// ── THE EXPANSION, AND ITS OWN THRESHOLD ────────────────────────
+			//
+			// This one IS expressed against a constant, and legitimately so:
+			// unlike the silhouette there IS a width at which the expansion
+			// must not happen, so there is a real boundary to assert in both
+			// directions. What keeps it from being the old tautology is that
+			// the silhouette assertion above holds unconditionally — a future
+			// hand who raises MoonExpandColWidthMin to 500 still cannot make
+			// the operator's phone show nothing.
+			if !r.ExpFocusOK {
+				t.Fatalf("host %.0fpx: focusing the cluster's radio did not match "+
+					":focus-visible, so the expansion below was never actually triggered and "+
+					"every number in it is meaningless", r.Host)
+			}
+			// THE `+` IS CONDITIONAL ON THE DATA, so the expectation is read
+			// from the fixture rather than assumed. The ten-day Harptos fixture
+			// declares four moons against a grid ceiling of three and MUST show
+			// one; the seven-day fixture declares exactly three and must NOT —
+			// a `+` there would be a ceiling marker about a ceiling nothing has
+			// hit. Asserting `+` unconditionally reddened every seven-day row in
+			// this census about correct behaviour.
+			wantExpand := r.ColumnW >= MoonExpandColWidthMin
+			wantPlus := c.data.Month.MoonsDeclared > moonCap
+			if wantExpand {
+				if r.ExpDiscs != moonCap {
+					t.Errorf("host %.0fpx · column %.1fpx: the expansion paints %d discs, want "+
+						"%d. [MN-1] is signed at three and C-CALV4-SPEC §4 keeps it there — "+
+						"\"expands to show up to three\"",
+						r.Host, r.ColumnW, r.ExpDiscs, moonCap)
+				}
+				if r.ExpPlus != wantPlus {
+					t.Errorf("host %.0fpx · column %.1fpx: the expansion paints `+`=%v, want %v. "+
+						"This fixture declares %d moons against a grid ceiling of %d. "+
+						"C-CALV4-SPEC §4: \"with a `+` if the calendar has more\" — and only "+
+						"if it has more",
+						r.Host, r.ColumnW, r.ExpPlus, wantPlus,
+						c.data.Month.MoonsDeclared, moonCap)
+				}
+				if r.ExpOverlap > 0 {
+					t.Errorf("host %.0fpx · column %.1fpx: the EXPANDED row overlaps the date's "+
+						"ink by %.0fpx² (row %.1fpx wide). The expansion threshold exists "+
+						"precisely so this cannot happen — %.0fpx is too low",
+						r.Host, r.ColumnW, r.ExpOverlap, r.ExpRowW, MoonExpandColWidthMin)
+				}
+				if r.ExpSpill > 0.5 {
+					t.Errorf("host %.0fpx · column %.1fpx: the EXPANDED row hangs %.1fpx outside "+
+						"its cell (row %.1fpx wide). %.0fpx is too low a threshold",
+						r.Host, r.ColumnW, r.ExpSpill, r.ExpRowW, MoonExpandColWidthMin)
+				}
+			} else {
+				if r.ExpDiscs != 1 {
+					t.Errorf("host %.0fpx · column %.1fpx: the cluster expanded to %d discs in a "+
+						"column UNDER the %.0fpx expansion threshold. Below it the silhouette "+
+						"stays alone and the moon SECTION carries the detail — expanding here "+
+						"puts three discs and a `+` across the date",
+						r.Host, r.ColumnW, r.ExpDiscs, MoonExpandColWidthMin)
+				}
+				if r.ExpPlus {
+					t.Errorf("host %.0fpx · column %.1fpx: a `+` painted below the expansion "+
+						"threshold", r.Host, r.ColumnW)
+				}
 			}
 
 			// ── the opener works, without a hover ────────────────────────────
@@ -640,26 +950,52 @@ func TestMoonReachProbe_TheDiscsAreOnTheScreenAtAPhoneWidth(t *testing.T) {
 	// Everything above is expressed in thresholds and columns, and a threshold
 	// can be moved in good faith by someone who never sees this file's point.
 	// This last loop states the case that started the work in the words it was
-	// reported in: a real-world (seven-day) calendar, on a phone, with moons in
-	// the data — is there a moon on the screen? If a future change makes that
-	// false again it reddens here, whatever the arithmetic says.
+	// reported in: a phone, a calendar with moons in the data — is there a moon
+	// on the screen? If a future change makes that false again it reddens here,
+	// whatever the arithmetic says.
+	//
+	// ── AND IT NOW COVERS THE TEN-DAY WEEK, WHICH IS THE REAL DEFECT ────────
+	//
+	// THE GAP THIS CLOSES, precisely. The census has carried ten-day rows since
+	// it was written, so "the probe only tests a seven-day week" is not quite
+	// what was wrong. What was wrong is subtler and worse: every ten-day
+	// assertion was expressed as `wantRow := r.ColumnW >= MoonRowColWidthMin`,
+	// which asks whether the STYLESHEET AGREES WITH THE GO CONSTANT — a
+	// tautology that is satisfied just as well by "the constant is 40, the
+	// column is 33, so painting nothing is correct". And the ONE assertion in
+	// the file that was not a tautology — this loop, the operator's own
+	// sentence — filtered `c.weekLen != 7` and threw the ten-day rows away.
+	//
+	// So the ten-day case was measured, logged, and never judged. Twenty green
+	// runs reported "0 discs" for the operator's own calendar at every phone
+	// width, in a passing test, in a table nobody had a reason to read. The
+	// operator's calendar is Harptos: TEN days to the week.
+	//
+	// Both week lengths are now asserted by the same unconditional claim, and
+	// the ten-day arm is the one that fails without this slice's CSS.
 	phones := map[int]bool{360: true, 390: true, 430: true}
-	checked := 0
+	weeks := map[int]bool{7: true, 10: true}
+	checked := map[int]int{}
 	for i, c := range cases {
-		if !phones[c.viewport] || c.weekLen != 7 {
+		if !phones[c.viewport] || !weeks[c.weekLen] {
 			continue
 		}
-		checked++
-		if r := readings[i]; !r.RowShown || r.Discs != moonCap {
-			t.Errorf("A %dpx PHONE, a seven-day calendar, three moons in the data: %d discs "+
-				"painted (row %.1f×%.1f, column %.1fpx). This is the observation the whole "+
-				"fix answers — \"I don't see the real moon on the real calendar\"",
-				c.viewport, r.Discs, r.RowW, r.RowH, r.ColumnW)
+		checked[c.weekLen]++
+		r := readings[i]
+		if !r.RowShown || r.RestDiscsMin != 1 || r.RestDiscsMax != 1 {
+			t.Errorf("A %dpx PHONE, a %d-DAY WEEK, moons in the data: %d–%d discs painted at "+
+				"rest across %d cells (column %.1fpx). This is the observation the whole fix "+
+				"answers — \"I don't see the real moon on the real calendar\". A ten-day week "+
+				"is the operator's OWN calendar (Harptos) and its column is %.1fpx here",
+				c.viewport, c.weekLen, r.RestDiscsMin, r.RestDiscsMax, r.Cells, r.ColumnW,
+				r.ColumnW)
 		}
 	}
-	if checked != len(phones) {
-		t.Errorf("the census covered %d of the %d phone widths for a seven-day week — the "+
-			"operator's own case has fallen out of the table", checked, len(phones))
+	for wl := range weeks {
+		if checked[wl] != len(phones) {
+			t.Errorf("the census covered %d of the %d phone widths for a %d-day week — the "+
+				"operator's own case has fallen out of the table", checked[wl], len(phones), wl)
+		}
 	}
 }
 
@@ -778,6 +1114,41 @@ func TestMoonReachProbe_TheOpenerOnATouchDevice(t *testing.T) {
 				"pointer's painted box (%.1f×%.1f) — the pad has gone backwards",
 				c.viewport, c.label, r.PadW, r.PadH, f.CtlW, f.CtlH)
 		}
+	}
+
+	// ── THE SECOND TARGET, BY THUMB ─────────────────────────────────────────
+	//
+	// C-CALV4-SPEC §4, the operator's own answer 2: "Clicking the hovered
+	// silhouette opens the moon section; clicking anywhere else in the cell
+	// opens the Ledger. Two targets, one cell, cleanly separated."
+	//
+	// Everything above proves the FIRST target works by tap. This proves the
+	// second one still does, and that is not a formality — the obvious way to
+	// chase the unmet 44px floor is to grow the moon pad until it covers the
+	// cell, and that would silently turn every tap on a day into a tap on its
+	// moon. Asserted on the COARSE arm because that is where it would bite.
+	tapped := 0
+	for i, c := range cases {
+		r := coarse[i]
+		if r.DselHit == "" {
+			continue // this Block has no docked Ledger, so it emits no day pick
+		}
+		tapped++
+		if r.MoonStole {
+			t.Errorf("%dpx %s: a tap in the CELL BODY resolved to the moon control (%q). The "+
+				"two targets have stopped being separate — every tap meant for a day now "+
+				"opens that day's moon panel instead", c.viewport, c.label, r.DselHit)
+		}
+		if !r.DselChecks {
+			t.Errorf("%dpx %s: a tap in the cell body resolved to %q and did NOT select the "+
+				"day. The Ledger answers the day pick, so a cell body that does not select "+
+				"is a cell whose Ledger cannot be opened by thumb",
+				c.viewport, c.label, r.DselHit)
+		}
+	}
+	if tapped == 0 {
+		t.Error("no case in the census carried a day-selection target, so the second half of " +
+			"the two-target rule was never exercised — the guard would pass vacuously")
 	}
 	if math.IsInf(worstBlock, 1) {
 		t.Fatal("no opener was rendered in any arm — the census measured nothing")

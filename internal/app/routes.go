@@ -642,8 +642,14 @@ func (a *calendarAvailabilityAdapter) ExceptionDates(ctx context.Context, campai
 // scheduler's own "Out this week" button loops over client-side
 // (static/js/availability.js fireOutWeek). Reusing it means the per-user
 // exception cap (C-SCHED-P2 0d) is re-checked on every day for free.
-func (a *calendarAvailabilityAdapter) MarkDaysUnavailable(ctx context.Context, campaignID, userID string, dates []string) error {
-	tz := a.userTZ(ctx, userID)
+// It returns THE DATES IT ACTUALLY WROTE alongside any error. There is no
+// transaction spanning the week, so a failure part-way (the per-user exception
+// cap, a transient DB error) leaves the earlier days committed; returning the
+// prefix lets the caller tell the member which days really changed instead of
+// reporting all-or-nothing at a member who is half-blocked.
+func (a *calendarAvailabilityAdapter) MarkDaysUnavailable(ctx context.Context, campaignID, userID string, dates []string) ([]string, error) {
+	tz := a.userTZ(ctx, campaignID, userID)
+	written := make([]string, 0, len(dates))
 	for _, d := range dates {
 		req := sessions.ReplaceDayExceptionsRequest{
 			OnDate: d,
@@ -651,10 +657,11 @@ func (a *calendarAvailabilityAdapter) MarkDaysUnavailable(ctx context.Context, c
 			Blocks: []sessions.ExceptionBlockDTO{{StartMinute: 0, EndMinute: 1440, State: "unavailable"}},
 		}
 		if err := a.svc.ReplaceMyDayExceptions(ctx, campaignID, userID, req); err != nil {
-			return err
+			return written, err
 		}
+		written = append(written, d)
 	}
-	return nil
+	return written, nil
 }
 
 // OfferAvailableWindows records TEMPORARY availability a member offered from an
@@ -676,21 +683,52 @@ func (a *calendarAvailabilityAdapter) OfferAvailableWindows(ctx context.Context,
 			EndMinute:   w.EndMinute,
 		})
 	}
-	return a.svc.AddMyAvailableWindows(ctx, campaignID, userID, a.userTZ(ctx, userID), out)
+	return a.svc.AddMyAvailableWindows(ctx, campaignID, userID, a.userTZ(ctx, campaignID, userID), out)
 }
 
-// userTZ resolves the member's stored IANA zone, defaulting to UTC. Timezone is
-// a user-account concern, so it is resolved here rather than plumbed through
-// the calendar's interface.
-func (a *calendarAvailabilityAdapter) userTZ(ctx context.Context, userID string) string {
+// MemberZone resolves the member's own IANA zone, or "" when they have set none
+// anywhere. See calendar.AvailabilityExceptionWriter.MemberZone — empty is a
+// state, and the caller decides what to do about it.
+func (a *calendarAvailabilityAdapter) MemberZone(ctx context.Context, campaignID, userID string) string {
+	return a.memberZone(ctx, campaignID, userID)
+}
+
+// memberZone reads BOTH places a member can set a zone, availability page first.
+//
+// THE DEFECT THIS ORDER PREVENTS: the availability page's control is labelled
+// "Your timezone" and saving writes member_availability.tz and nothing else —
+// it never calls PUT /account/timezone, the only writer of users.timezone. So a
+// player who set their zone, painted their week and saved still had
+// users.timezone NULL, and everything downstream of this adapter treated them
+// as UTC: their emailed "out this week" resolved the wrong week, and their
+// offered windows were stamped UTC over New York hours.
+func (a *calendarAvailabilityAdapter) memberZone(ctx context.Context, campaignID, userID string) string {
+	if a.svc != nil && campaignID != "" {
+		if zones, err := a.svc.CampaignMemberZones(ctx, campaignID); err == nil {
+			if tz := zones[userID]; tz != "" {
+				return tz
+			}
+		}
+	}
 	if a.authSvc == nil {
-		return "UTC"
+		return ""
 	}
 	u, err := a.authSvc.GetUser(ctx, userID)
 	if err != nil || u == nil || u.Timezone == nil || *u.Timezone == "" {
-		return "UTC"
+		return ""
 	}
 	return *u.Timezone
+}
+
+// userTZ is memberZone with the UTC fallback the WRITE paths need: a stored row
+// must carry some zone, and UTC is the only defensible one when the member has
+// named none. The read paths use memberZone directly so they can DISCLOSE the
+// absence instead of laundering it into a fact.
+func (a *calendarAvailabilityAdapter) userTZ(ctx context.Context, campaignID, userID string) string {
+	if tz := a.memberZone(ctx, campaignID, userID); tz != "" {
+		return tz
+	}
+	return "UTC"
 }
 
 // calendarBenchScheduleAdapter wraps the sessions plugin's availability handler

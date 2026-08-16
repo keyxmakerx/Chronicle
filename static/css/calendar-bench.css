@@ -1617,8 +1617,10 @@
      `content-visibility`, named and argued in its own block below, and it is
      the difference between the close being seen and the close being a cut.
      A NINTH still needs a signature. The seven: grid-template-rows (the pane's
-     box) · opacity (its content) · inline-size and block-size (the discs) ·
-     gap (the cluster) · --seal-solid and --seal-fade (the C3 mask). The
+     box) · opacity (its content) · inline-size and block-size (the moons —
+     and, since C-CALV4-SKY-CHEST stage 2, block-size also on the LID, which is
+     how the chest opens without a `transform`) · gap (the scenery cluster) ·
+     --seal-solid and --seal-fade (the C3 mask). The
      mock's `width`/`height` are re-expressed as the house's logical
      properties, the same substitution [ER-6] made for the morph. `transform`
      is REFUSED, including `scale`, exactly as it is under the morph — and
@@ -1708,12 +1710,35 @@
     transition:
       opacity var(--sky-phase-reveal-open) var(--disc-ease) var(--sky-phase-box-open);
   }
+  /* ── THE LID, AND WHY IT IS NOT A `transform` ─────────────────────────
+     C-CALV4-SKY-CHEST stage 2. The chest opens by the LID GIVING UP ITS OWN
+     HEIGHT: `block-size` runs --bandh → --lidh, and everything below the lid —
+     the pane, its head, its trio — rises by exactly those pixels while the
+     pane's own row resolves 0fr → 1fr and its contents fade in. That rise is
+     what a `transform: translateY` on the band would otherwise have bought,
+     and [SKY-3] refuses `transform` BY NAME.
+
+     IT BUYS NOTHING NEW. `block-size` is already on the BASE allowlist (the
+     day card and the theater both transition it), so the sky's signed eight
+     are unchanged and there is no ninth. The timing is the pane's own, phase
+     for phase: the box resolves first on the way in (--sky-phase-box-open,
+     no delay) and last on the way out (--sky-phase-box-close, after the
+     reveal's 24ms), so the lid and the pane are one movement rather than two
+     that happen to overlap. No new token, no third total. */
+  .cal-bench .cal-block-host .skygrow > summary.skyhdr {
+    transition:
+      block-size var(--sky-phase-box-close) var(--disc-ease)
+        var(--sky-phase-reveal-close);
+  }
+  .cal-bench .cal-block-host .skygrow[open] > summary.skyhdr {
+    transition: block-size var(--sky-phase-box-open) var(--disc-ease) 0ms;
+  }
   .cal-bench .cal-block-host .skygrow .skb {
     transition:
       inline-size var(--disc-close) var(--disc-ease),
       block-size var(--disc-close) var(--disc-ease);
   }
-  .cal-bench .cal-block-host .skygrow .skdiscs {
+  .cal-bench .cal-block-host .skygrow .skscene {
     transition: gap var(--disc-close) var(--disc-ease);
   }
   .cal-bench .cal-block-host .skygrow {
@@ -1722,7 +1747,7 @@
       --seal-fade var(--disc-close) var(--disc-ease);
   }
   .cal-bench .cal-block-host .skygrow[open] .skb,
-  .cal-bench .cal-block-host .skygrow[open] .skdiscs,
+  .cal-bench .cal-block-host .skygrow[open] .skscene,
   .cal-bench .cal-block-host .skygrow[open] {
     transition-duration: var(--disc-open);
   }
@@ -1885,11 +1910,40 @@
   position: relative;
   display: block;
   isolation: isolate;
-  /* the four density properties */
+  /* THE DENSITY PROPERTIES. FIVE, not four, since C-CALV4-SKY-CHEST stage 2 —
+     stated here rather than left for a reader to count, because the count is
+     the whole promise of [SKY-8] ("the two densities are custom properties and
+     a justification, never a second component"). The fifth is --lidh, the OPEN
+     height of the lid; it buys no breakpoint, no template branch and no second
+     open/closed default, so the promise the count stands for is intact. */
   --bandh: 32px;
+  --lidh: 22px;
   --dsz0: 11px;
   --dsz: 11px;
   --dgap: 4px;
+  /* THE SCENERY'S SEAT AT THE SEAL. The moons are painted onto the sky, and at
+     C3 the sky only reaches --seal-solid (210px) in from the trailing edge —
+     everything further out is masked to nothing. So the cluster is anchored to
+     the TRAILING edge here and lands inside that reach, clear of the clock;
+     at C1 the sky reaches everywhere and the anchor flips to the leading edge.
+     It is NOT expressed against --seal-solid, deliberately: that length sweeps
+     to 100% on open, and an inset derived from it would drag the moons
+     sideways across the band on every open — layout-induced travel of exactly
+     the kind sky_measure_probe exists to catch.
+
+     THE SEAL IS TIGHT AND THE ARITHMETIC IS STATED RATHER THAN DISCOVERED
+     LATER. At a 358px column the band is ~336px wide, the sky's solid reach is
+     210px of that, and the lid's three facts measure ~142px from the trailing
+     edge — so the scenery has about 68px of sealed sky to sit in. The Harptos
+     fixture's four 11px moons and three 4px gaps take 56px, leaving 12px of
+     slack, MEASURED as 8.1px of clearance from the clock and 4.0px of seal
+     headroom. A calendar declaring five or more moons, or a season word much
+     longer than "LONG NIGHT", spends that slack. sky_measure_probe asserts
+     BOTH ends of it, so the failure is a red test with the two numbers in it
+     rather than a moon drawn on page white; there is no automatic reflow here
+     and adding one would put the moon count back into the lid's layout, which
+     is the slot this stage removed. */
+  --orb-seat: auto 150px;
   /* the mask's two lengths at seal density */
   --seal-solid: 210px;
   --seal-fade: 96px;
@@ -1941,10 +1995,23 @@
   border-bottom: 0;
 }
 
-/* ── THE BAND (the closed state) ──────────────────────────────────────────
+/* ── THE LID (the closed state) ───────────────────────────────────────────
    A <summary>: real disclosure semantics, keyboard-reachable, the full width of
    the Block. It is styled as the BAND and NOT as a button — no border, no
-   radius, no fill of its own, no shadow, no hover lift. */
+   radius, no fill of its own, no shadow, no hover lift.
+
+   IT IS A LID NOW, WHICH IS A NAME AND ALSO A GEOMETRY (C-CALV4-SKY-CHEST
+   stage 2). Closed, it is the whole surface: painted sky, moons in that sky,
+   the in-world clock, the season word, the caret. Open, its own block-size
+   COLLAPSES — see the [open] rule below — and that collapse is the entire
+   reason this surface needs no `transform`: everything under the lid rises by
+   exactly the pixels the lid gives up, so the pane's contents fade UP rather
+   than fading in place. [SKY-3] refuses `transform` by name and the refusal
+   costs nothing here.
+
+   `position: relative` arrives from `.skygrow > *` above and is load-bearing
+   rather than incidental: the scenery is absolutely positioned against this
+   box. */
 .cal-bench .cal-block-host .skygrow > summary.skyhdr {
   display: flex;
   align-items: center;
@@ -1959,21 +2026,43 @@
      partway across and content packed left would fall off it. */
   justify-content: flex-end;
 }
-/* ── THE DISCS ARE WEATHER, NOT A CONTROL (C-CALV4-MOONS [MN-4], MN-G1) ────
+/* THE LID COLLAPSES. Not to nothing: the clock, the season word and the caret
+   stay legible and stay centred in what is left, because a lid that erased its
+   own facts on the way open would make the chest's contents cost the reader the
+   header they were reading. 32→22px at the seal, 40→28px at the horizon line —
+   ten and twelve pixels of rise, which is the same order as the pane's own
+   reveal and enough to read as movement without a single moved pixel of
+   `transform`. */
+.cal-bench .cal-block-host .skygrow[open] > summary.skyhdr {
+  block-size: var(--lidh);
+}
+/* ── THE MOONS ARE WEATHER, NOT A CONTROL (C-CALV4-MOONS [MN-4], MN-G1) ────
    The operator has corrected this three times: "The moons should be in the
-   skypane but it's like the sun, and not interactable." The band's opening is
-   THE BAND's affordance, not the moons' — the caret is the control and the
-   discs are the scenery it reports.
+   skypane but it's like the sun, and not interactable." The lid's opening is
+   THE LID's affordance, not the moons' — the caret is the control and the
+   moons are the scenery it reports.
 
    A <summary> is a click target over its entire box and over every descendant,
-   so while `.skdiscs` sits inside `summary.skyhdr` (block.templ:157) each moon
+   so while `.skscene` sits inside `summary.skyhdr` (block.templ) each moon
    is a hit target that toggles the pane. `pointer-events: none` ON THE CLUSTER
    ALONE DOES NOT FIX IT and was measured not to: with the cluster transparent
    the hit test simply falls through to the summary underneath, which is still
    the summary, and the click still toggles. So the summary yields the hit path
-   and hands it back to the three things that ARE the band's control surface —
-   the spacer (which is the band's whole empty middle at C1), the clock, the
-   season word and the caret.
+   and hands it back to the things that ARE the lid's control surface.
+
+   THE SPACER LEAVES THAT LIST — C-CALV4-SKY-CHEST stage 2, and it is a
+   deliberate narrowing rather than an oversight. `.sksp` was on it because it
+   was "the band's whole empty middle at C1"; the middle is no longer empty,
+   it is the sky the moons are painted into, and the scenery sits directly over
+   the spacer's box at that density. `pointer-events` resolves by hit test, not
+   by intent: a click on the moon falls through the (inert) scenery to whatever
+   is beneath it, so leaving the spacer live would have made every C1 moon a
+   click target again — the exact conflation the operator corrected three
+   times. The lid's control surface is therefore the clock, the season word and
+   the caret, which is what it already was at C3 (where `.sksp` is
+   `display: none`). The cost is real and is stated: the clickable strip at C1
+   shrinks from the whole band to those three boxes plus native keyboard
+   operation. It is the smaller of the two costs on offer.
 
    WHY NOT MOVE THE CLUSTER OUT OF THE <summary> IN THE DOM, which is the
    obvious fix: a non-summary child of <details> lives inside
@@ -1997,7 +2086,6 @@
 .cal-bench .cal-block-host .skygrow > summary.skyhdr {
   pointer-events: none;
 }
-.cal-bench .cal-block-host .skygrow > summary.skyhdr > .sksp,
 .cal-bench .cal-block-host .skygrow > summary.skyhdr > .sktime,
 .cal-bench .cal-block-host .skygrow > summary.skyhdr > .skseason,
 .cal-bench .cal-block-host .skygrow > summary.skyhdr > .skcaret {
@@ -2014,20 +2102,40 @@
   outline-offset: -2px;
 }
 
-/* fact 1 · THE PHASE DISCS. The cluster is TOP-ANCHORED rather than centred:
-   the margin is computed from the CLOSED diameter, so at rest the discs sit on
-   the strip's midline and when they grow they grow DOWNWARD, through the
-   horizon and onto the pane's own paper. A third of each disc ends below the
-   horizon line at BOTH densities, from the same anchor. The disc itself is the
-   Block's own `.ph` — the house's greyscale identity idiom, shape and fill and
-   never hue — sized here and never restyled. */
-.cal-bench .cal-block-host .skygrow .skdiscs {
+/* ── THE SCENERY · THE MOONS PAINTED INTO THE SKY ─────────────────────────
+   C-CALV4-SKY-CHEST stage 2. `.skdiscs` was a FLEX ITEM of the lid: it took
+   inline space beside the clock, its width grew with the moon count, and it
+   read as a fact-slot rather than as sky. `.skscene` is OUT OF FLOW — it
+   reserves nothing, pushes nothing and cannot travel — and it is painted onto
+   the one field, behind the lid's facts, exactly as the sun's own gradient is.
+
+   THE VERTICAL ANCHOR IS BYTE-FOR-BYTE THE OLD ONE, restated as an inset
+   because the box no longer has a margin to be pushed by: TOP-ANCHORED at
+   (closed band − closed diameter) / 2, so at rest the moons sit on the strip's
+   midline and when they grow they grow DOWNWARD, through the horizon and onto
+   the pane's own paper. The disc itself is the Block's own `.ph` — the house's
+   greyscale identity idiom, shape and fill and never hue — sized here and
+   never restyled. ACHROMATIC BY LAW: nothing here names --accent or --axis.
+
+   `z-index: -1` PUTS IT BEHIND THE LID'S TEXT, inside the summary's own
+   stacking context (which `.skygrow > *` opens with z-index: 2). It stays
+   above the sky field, which is painted by `.skygrow::before` at z-index 0 in
+   the OUTER context, so the moons are on the sky and under the clock — which
+   is where a moon is.
+
+   INERT, DECLARED RATHER THAN INHERITED. The summary is already
+   `pointer-events: none`, so this line changes no hit test today; it is here
+   so that restoring the summary's own hit path — the one obvious future
+   "fix" — cannot silently make the moons pressable again. */
+.cal-bench .cal-block-host .skygrow .skscene {
+  position: absolute;
+  inset-block-start: calc((var(--bandh) - var(--dsz0)) / 2);
+  inset-inline: var(--orb-seat);
+  z-index: -1;
   display: flex;
   align-items: flex-start;
-  align-self: flex-start;
   gap: var(--dgap);
-  flex: none;
-  margin-block-start: calc((var(--bandh) - var(--dsz0)) / 2);
+  pointer-events: none;
 }
 .cal-bench .cal-block-host .skygrow .skb {
   position: relative;
@@ -2047,7 +2155,7 @@
 
      WHY THE ALMANAC'S COPY OF THE SAME IDIOM WORKS AND THIS ONE DID NOT: in
      `.phrow` the `.ph` is a FLEX ITEM and the flex container blockifies it for
-     free. Here `.skdiscs` is the flex container and `.skb` is its item, so the
+     free. Here `.skscene` is the flex container and `.skb` is its item, so the
      `.ph` one level further down is an ordinary inline child of a block and
      nothing blockifies it. Sizing it in this sheet without saying so was the
      seam between calendar-block.css (which declares the idiom) and this file
@@ -2066,21 +2174,32 @@
 
 /* THE SPACER SITS AHEAD OF THE TIME. Measured: with the clock left-packed
    behind a growing cluster it travelled 65px sideways on every open and close —
-   layout-induced travel, invisible to a walk of `transition-property`. */
+   layout-induced travel, invisible to a walk of `transition-property`. The
+   cluster is out of flow since C-CALV4-SKY-CHEST stage 2 and can no longer
+   push anything, so the ORIGINAL defect is gone at the root; the spacer stays
+   because it is what right-packs the lid's three facts at C1, and deleting it
+   would left-pack the clock against the moons in one step. It is no longer a
+   hit island — see the pointer-events block above. */
 .cal-bench .cal-block-host .skygrow .sksp {
   flex: 1;
   min-inline-size: 4px;
   display: none;
 }
-/* fact 2 · THE IN-WORLD TIME, as of render. It does not tick. */
+/* fact 2 · THE IN-WORLD TIME, as of render. It does not tick.
+   IT IS THE LID'S TITLE and takes the display face stage 1 introduced, on the
+   reference bar's own arrangement: a serif date block over a muted, tracked
+   sub-line. There is exactly one gold thing per view and this is not it — the
+   clock takes the face, never the accent. */
 .cal-bench .cal-block-host .skygrow .sktime {
   flex: none;
+  font-family: var(--font-display);
   font-weight: 600;
-  font-size: 12px;
+  font-size: 13px;
   line-height: 1;
   font-variant-numeric: tabular-nums;
 }
-/* fact 3 · THE SEASON WORD, quieter than the clock and still real text. */
+/* fact 3 · THE SEASON WORD, quieter than the clock and still real text — the
+   reference's `Thursday · Summer` line, muted and tracked under the date. */
 .cal-bench .cal-block-host .skygrow .skseason {
   flex: none;
   font-weight: 650;
@@ -2088,6 +2207,7 @@
   line-height: 1;
   letter-spacing: .07em;
   text-transform: uppercase;
+  opacity: .78;
 }
 
 /* THE AFFORDANCE MARK — not one of the three facts, and deliberately the
@@ -2286,17 +2406,24 @@
 }
 
 /* ── C1 "THE HORIZON LINE" — the Block's OWN existing boundary, no fifth
-   number ([SKY-8]). Four custom properties and a justification. ───────── */
+   BREAKPOINT ([SKY-8]). Five custom properties and a justification: --lidh
+   joined the four when the band became a chest lid, and --orb-seat is the
+   scenery's anchor flipping edges because the sky's own reach does. Neither
+   buys a number the Block did not already have. ────────────────────────── */
 @container cal-block (min-width: 481px) {
   .cal-bench .cal-block-host .skygrow {
     --bandh: 40px;
+    --lidh: 28px;
     --dsz0: 13px;
     --dsz: 13px;
     --dgap: 5px;
     /* C1: the sky reaches everywhere, so the mask is a no-op and the seal's
-       two lengths rest at their registered initial values. */
+       two lengths rest at their registered initial values — and the scenery
+       can therefore be anchored to the LEADING edge, on the reference bar's
+       own arrangement (sky panel first, date block after it). */
     --seal-solid: 100%;
     --seal-fade: 0px;
+    --orb-seat: 12px auto;
     --sky-rise: 7px;
     --sky-bleed: 10px;
   }
@@ -2309,7 +2436,7 @@
     display: block;
   }
   .cal-bench .cal-block-host .skygrow .sktime {
-    font-size: 12.5px;
+    font-size: 14px;
   }
   .cal-bench .cal-block-host .skygrow .skseason {
     font-size: 10px;

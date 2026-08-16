@@ -89,13 +89,147 @@ PKG_CALENDAR_BLOCK="./internal/widgets/calendar_block/"
 # TestMoonReachProbe_* are that regression's own guards, added by the fix: the
 # first measures whether the discs are on the screen at real viewport widths,
 # the second drives a genuinely coarse pointer and measures the touch target.
+#
+# THE LEDGER DAY-PANEL PAIR WERE UNREGISTERED FROM THE DAY THEY LANDED (stage 3,
+# 3a23667b) and the census caught them — which is the census doing its job and
+# also the reason it exists: they drove a browser, asserted on what they
+# measured, and CI ran neither. Note what an unregistered probe costs: the guard
+# aborts on the census BEFORE running a single probe, so one forgotten name
+# takes down the whole file's coverage, not just its own.
+#
+# TestCellProbe_* are C-CALV4-SPEC §1's own guards, added with the day cell's
+# corner fixes: the first measures that each corner PAINTS and that the moon and
+# the GM fold do not share one, the second that the era tint carries the era and
+# keeps the cell above its ground in both themes. Both replace string assertions
+# that were green while the surface they described was blank.
+#
+# TestCellProbe_TheTileRuleIsTheQuietestRuleInTheGrid is the third, and it was
+# added because the SECOND one's shape was the lesson and nobody applied it: the
+# era tint got a floor AND a ceiling, and in the same change the tile's own 1px
+# edge shipped at --rule-structural with neither — 36.1 from the ground on light
+# and 39.7 on dark, the loudest step in a grid whose stated purpose that change
+# was to soften. It bands the tile edge in both themes and asserts the loudness
+# ORDER of the grid's three rules. A step with a floor and no ceiling is how the
+# last two loud things shipped.
+#
+# TestTilePaintProbe_TheTileIsOnTheScreen is the fourth, and it exists because
+# the THIRD one passed on a grid that was drawing nothing. A stray `*/` orphaned
+# a comment paragraph, the orphan parsed as a selector prelude and swallowed
+# `.cal-block-host .cell` whole; `isolation: isolate` went with it, the
+# z-index:-1 tile fell behind the grid ground, `container-type` reverted to
+# `normal` and every @container query died — the moon silhouette off at every
+# width, thirty day cells painting flat ground. The edge probe reported a
+# healthy band throughout, because getComputedStyle answers what the CASCADE
+# resolved and not what the compositor DREW, and its one plausible reading came
+# from `.interc`, the single surface still painting. This one decodes a PNG:
+# three flat runs through a tile's top edge, and the gutter's ground between two
+# neighbours. Proven red against exactly that regression before it was
+# registered here.
+#
+# TestLegendProbe_TheTabOpensByKeyboardAndByTouch is C-CALV4-TILES §9.4's guard.
+# The legend became a disclosure and the stylesheet can be RIGHT while the
+# control is unreachable: :focus-within instead of :focus-visible reads
+# identically in review and leaves a touch device unable to CLOSE the tab, an
+# ungated hover branch reads identically and is the whole affordance on a mouse
+# and none of it on a thumb, and a 22px tab reads identically and is half the
+# 44px floor. It drives a real Chromium twice — fine pointer and a genuinely
+# coarse one — and measures rest, keyboard focus, one tap, the tap back and the
+# target. Proven red by both substitutions before registration.
+#
+# TestAvailabilityProbe_TheStripPaintsNothingOnCurrentData is §9.5's. The
+# availability strip ships COMPLETE and DORMANT, and "it paints nothing" is a
+# statement about pixels that getComputedStyle cannot answer — the same gap that
+# let a grid painting nothing pass three edge probes. It screenshots the Block
+# with and without the strip and requires them byte-identical, and it carries its
+# own SENTINEL: the same host is also shot with the strip's box deliberately
+# filled, so a comparator that could never fail is caught before its clean
+# reading is believed.
+#
+# TestRuneInkChannels_ChromaSurvivesTheDeepening guards the channel the rune ink
+# nearly threw away. §9.2 made COLOUR the only thing separating event types below
+# 84px of column, and the first build deepened the axis with a CONSTANT chroma —
+# `oklch(from var(--axis) 0.36 0.10 h)` — so only the HUE survived. --axis is not
+# one of six curated tokens: it is EventCategories[].Color out of the database,
+# edited by a bare <input type="color">. Measured consequences: --ev-social
+# (c 0.17) and --ev-session (c 0.04) share a hue and inked 6/255 apart, i.e. one
+# colour; #888888 inked rgb(235,130,125) on dark, a grey category painting a RED
+# rune 3/255 from a vivid red one. The probe paints adversarial axis values
+# through the SHIPPED rule — never a re-typed copy of the expression — and reads
+# the result back, because relative colour syntax is resolved by the engine and
+# getComputedStyle hands back an unresolved wide-gamut value. Proven red against
+# the constant-chroma recipe on all four arms before registration.
+#
+# TestRuneInkChannels_TheChipTintCarriesItsOwnHue is the same defect one surface
+# over, and it PREDATES the rune work. `.chip` filled with
+# `color-mix(in oklch, var(--surface-card) 90%, var(--axis))`, and that
+# interpolates the HUE ANGLE — the light theme's card is `oklch(1 0 0)`, white
+# written with an explicit hue of ZERO, so every type was dragged toward 0° and a
+# blue, a red and a green event all painted pale PINK 4/255 apart, on the largest
+# colour surface a wide cell has. Invisible while the cell had a white ground;
+# the gapped tile gave the chip a coloured surround and the pink stopped hiding.
+# Fixed by mixing in sRGB, which has no hue channel to wrap. Proven red.
+#
+# TestDefaultCategories_NoneCollidesWithTheGMGold guards the six colours EVERY NEW
+# CALENDAR is seeded with, measured through the surface that renders them. Below
+# 84px of column the rune's shape is decorative (the glyph comes from position in
+# the day, not type), so colour is the only channel separating event types — and a
+# GM-only day strikes every rune gold, putting a seventh competitor in that space.
+# The shipped Holiday default inked 28/255 from that gold, i.e. one colour at
+# 9x12px. It reads DefaultEventCategories() itself so it cannot drift from what
+# ships, and produces the gold via the shipped `:has(> .dogear)` rule rather than
+# restating the expression.
+#
+# IT WAS ADDED WITHOUT BEING REGISTERED HERE, AND THIS GUARD CAUGHT THAT — the
+# census aborted with "a browser probe exists that this guard does not run",
+# which is exactly its job. An unregistered probe self-skips under -short and
+# reads as coverage while being none.
+#
+# TestRuneProbe_* are C-CALV4-TILES §9.1/§9.2/§9.3's, four of them, and each
+# measures something no string in this repo can see:
+#
+#   · TheExpansionGrowsRightward — the moon cluster is a flex row that grows
+#     from one disc to four on focus or hover. Anchored RIGHT it grew LEFTWARD
+#     and displaced the primary disc, the one already under the pointer, by
+#     35.05px. That is displacement without a transition, which is precisely
+#     what TestCSS_NoMotionAtAll cannot see: it greps for the word. The probe
+#     re-anchors the same cluster to its old edge in the same pass as a
+#     CONTROL, so 0.00px on the new anchor is a number with something to be
+#     better than rather than the reading a broken expansion also gives.
+#   · TheDensityRuling — at ≥84px of column the cell draws event-NAME chips and
+#     NO runes; below it the runes replace the underline bars. The gate is
+#     `.cunder`'s own `display: none`, which is invisible to every string
+#     assertion here AND to getComputedStyle on the element itself, which
+#     cheerfully reports a 9px inline-size for a box that does not exist.
+#   · TheRuneInkIsNotTheRawPalette — the ink is `oklch(from var(--axis) …)`, a
+#     colour the sheet never writes down. Both failure modes are silent: an
+#     unresolved --runeink falls back to structural grey and draws a plausible
+#     month, an undeepened one draws a plausible coloured month, and neither
+#     changes a rect, a mask or a class.
+#   · TheRunesAreOnTheScreen — the pixel arm, and the reason is the one
+#     TestTilePaintProbe above was added for. A masked element can resolve its
+#     ink perfectly and have the mask clip the glyph to no coverage at all; the
+#     computed reading is identical to a working one. This one decodes a PNG.
 PROBES_CALENDAR_BLOCK="TestProbe_ContainerQuerySizingInRealBrowser \
 TestProbe_ShelfGeometryIsInvariant \
 TestProbe_StdTierFilledShelfDoesNotCollideWithTheFilledLedger \
 TestProbe_LedgerHeightIsInvariantUnderSelection \
 TestProbe_StdTierFilledLedgerDoesNotCollide \
+TestProbe_AtThePhoneWidthTheLedgerStillSitsBelowTheMonth \
+TestProbe_DayPanelAppearsOnTapAndCostsTheLedgerNothing \
+TestCellProbe_EveryCornerPaintsAndNoTwoShareOne \
+TestCellProbe_TheEraTintCarriesTheEraAndKeepsThePop \
+TestCellProbe_TheTileRuleIsTheQuietestRuleInTheGrid \
+TestTilePaintProbe_TheTileIsOnTheScreen \
+TestRuneProbe_TheExpansionGrowsRightward \
+TestRuneProbe_TheDensityRuling \
+TestRuneProbe_TheRuneInkIsNotTheRawPalette \
+TestRuneProbe_TheRunesAreOnTheScreen \
+TestRuneInkChannels_ChromaSurvivesTheDeepening \
+TestRuneInkChannels_TheChipTintCarriesItsOwnHue \
 TestMoonReachProbe_TheDiscsAreOnTheScreenAtAPhoneWidth \
 TestMoonReachProbe_TheOpenerOnATouchDevice \
+TestLegendProbe_TheTabOpensByKeyboardAndByTouch \
+TestAvailabilityProbe_TheStripPaintsNothingOnCurrentData \
 TestMoonPanelProbe_TheFoldCostsNothingAndObeysTheRegister \
 TestMoonPanelProbe_ReducedMotionIsInstantAndComplete \
 TestSkyMeasureProbe_TheThreeCounts \
@@ -153,7 +287,8 @@ TestBuilderProbe_TheLadderActuallyRuns \
 TestBuilderProbe_NarrowLaneHoldsItsGate \
 TestDaycardLedgerDoor_ItOnlyRendersWhereItDoesSomething \
 TestYearProbe_BenchDateVerbRow \
-TestYearProbe_V2GMConsole"
+TestYearProbe_V2GMConsole \
+TestDefaultCategories_NoneCollidesWithTheGMGold"
 
 # Needs the Tailwind CLI on top of the browser.
 PROBES_CALENDAR_TAILWIND="TestProbe_MobileBreakpointSwapInRealBrowser"

@@ -196,9 +196,14 @@
   --m-travel: 3px;
   --m-travel-fine: 2px;
 
-  /* channel defaults, so a card whose producer omits one still renders */
+  /* channel defaults, so a card whose producer omits one still renders.
+     --bandhue IS DELETED HERE TOO (C-CALV4-TILES §6). CHECKED FIRST, because a
+     copy in a different surface can have a consumer of its own: it does not —
+     `grep -rn 'var(--bandhue)' .` over the whole tree returns nothing, in this
+     sheet or anywhere else. It was the era caption row's channel, the row is
+     gone, and a declared-but-unread custom property reads as a live channel to
+     the next hand. */
   --axis: var(--rule-structural-strong);
-  --bandhue: var(--rule-structural);
 
   display: block;
   font-family: "Inter", ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;

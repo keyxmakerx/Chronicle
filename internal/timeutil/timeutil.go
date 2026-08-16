@@ -117,3 +117,50 @@ func (d CivilDate) AddDays(n int) CivilDate {
 func (d CivilDate) midnightUTC() time.Time {
 	return time.Date(d.Year, d.Month, d.Day, 0, 0, 0, 0, time.UTC)
 }
+
+// StartOfCivilDay returns the FIRST REAL INSTANT of civil date d in loc.
+//
+// THE DEFECT IT PREVENTS: `time.Date(y, m, d, 0, 0, 0, 0, loc)` is NOT the
+// start of the day in every zone. Where the DST jump lands ON midnight — the
+// clocks go 00:00 → 01:00, as they do in America/Havana (2026-03-08),
+// America/Santiago (2026-09-06) and Atlantic/Azores (2026-03-28) — local 00:00
+// does not exist, and Go normalises the nonexistent wall clock BACKWARDS to
+// 23:00 on the PREVIOUS day. Any caller that used the naive expression as a
+// day BOUNDARY therefore received a boundary at or BEFORE the instant it was
+// already holding.
+//
+// That is exactly how the availability overlay's splitToViewerDays became a
+// non-terminating ALLOCATING loop: its only advance was `cur = segEnd`, and
+// segEnd came back equal to cur. One authenticated GET with `?tz=America/Havana`
+// on the transition week took the whole self-hosted instance to OOM, and the
+// same thing fired by accident for any Cuban/Chilean/Azorean viewer whose
+// stored profile zone drove the projection. Every new "end of the local day"
+// computation must come through here.
+//
+// The returned instant is always ON d in loc, and is always the earliest such
+// instant, so it is a strictly-increasing function of the civil date — which is
+// the property a splitting loop needs to terminate.
+func StartOfCivilDay(loc *time.Location, d CivilDate) time.Time {
+	if loc == nil {
+		loc = time.UTC
+	}
+	naive := time.Date(d.Year, d.Month, d.Day, 0, 0, 0, 0, loc)
+	if y, m, dd := naive.Date(); y == d.Year && m == d.Month && dd == d.Day {
+		return naive
+	}
+	// Local midnight does not exist on this date. `naive` normalised backwards
+	// into the previous local day, so the real start of d is the transition
+	// instant — the first instant whose LOCAL date is d. Zone transitions land
+	// on whole minutes, so stepping a minute at a time from the normalised
+	// instant finds it exactly; the largest jump in the IANA database is two
+	// hours, so this settles in <=120 steps. The 24h ceiling is an absolute
+	// bound, present so a future tzdata oddity degrades to a wrong-but-finite
+	// answer rather than to the unbounded loop this function exists to kill.
+	for i := 1; i <= 24*60; i++ {
+		t := naive.Add(time.Duration(i) * time.Minute)
+		if y, m, dd := t.Date(); y == d.Year && m == d.Month && dd == d.Day {
+			return t
+		}
+	}
+	return naive.Add(24 * time.Hour)
+}

@@ -95,8 +95,35 @@ export function buildBenchFixture(opts) {
     5: dayCell(5, 'harptos-5', '5'),
   };
 
+  // THE LEDGER'S DAY PANELS, mirroring internal/widgets/calendar_block/
+  // ledger.templ (calendar-v4 refinement stage 3). One per selectable day,
+  // FIRST in the scroller, sticky. In a browser the sheet hides all of them and
+  // the generated ladder reveals the chosen one; that is pure CSS, so in this
+  // DOM they are simply all present — which is the right shape for testing the
+  // module, because the module must resolve the day from the DOOR and never
+  // from "the one that happens to be visible".
+  //
+  // THE DOOR IS GATED ON `canEdit` EXACTLY AS THE CARD'S IS, because
+  // LedgerStub.CanCreate and DayCardMount.CanCreate are filled from ONE
+  // predicate (bench.go). The fixture REPRODUCES the producer's gate rather
+  // than simulating it, so a player fixture genuinely has no door to find.
+  const canEditDoors = opts.canEdit !== false;
+  function dayPanel(key, ord, date) {
+    const row = el('div', { class: 'ldpr' }, [
+      el('span', { class: 'ldd' }, [el('span', { class: 'ldn' }, [], date)]),
+      el('span', { class: 'sp' }),
+      ...(canEditDoors ? [el('button', {
+        type: 'button', class: 'ldnew', 'data-dc-new': '', 'data-day': key,
+      }, [], '+ New event')] : []),
+    ]);
+    return el('div', { class: 'ldp lday', 'data-lday': ord }, [row]);
+  }
+
   const ledger = el('div', { class: 'ledger', 'data-zone': 'ledger' }, [
     el('div', { class: 'lrows' }, [
+      dayPanel('harptos-3', '3', '3 Deepwinter, 1523'),
+      dayPanel('harptos-4', '4', '4 Deepwinter, 1523'),
+      dayPanel('harptos-5', '5', '5 Deepwinter, 1523'),
       ledgerRow('harptos-3', '3', 'ev-1', 'Council of Wards'),
       ledgerRow('harptos-3', '3', 'ev-2', 'Barrow scouting'),
       ledgerRow('harptos-5', '5', 'ev-3', 'Caravan due'),

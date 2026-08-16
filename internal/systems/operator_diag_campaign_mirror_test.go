@@ -65,9 +65,18 @@ func mirroredRules() []mirroredRule {
 		// "shelf shown, sky on" and `true, false` is the real-world Block's
 		// "shelf hidden, no sky". Pinning the whole call rather than the two
 		// booleans is what makes a signature change fail this test too.
-		{"bench.go", `if b := h.benchBlock(ctx, spine, primary, viewer, activeID, false, true, layerPrefs, in.View); b != nil {`,
+		//
+		// AND IT DID, EXACTLY AS DESIGNED (calendar-v4 refinement stage 3). The
+		// Ledger day panel's create door needs the viewer's authoring floor at
+		// the projection, so `canCreate` joins the signature as a TENTH argument
+		// AFTER `view`. The two seat booleans are BYTE-UNCHANGED in both calls
+		// and [SKY-1] is untouched; what changed is the tail. The pin is updated
+		// to the new literal rather than shortened to the prefix, because a pin
+		// that stopped covering the whole call would stop failing on the next
+		// signature change — which is the sentence directly above.
+		{"bench.go", `if b := h.benchBlock(ctx, spine, primary, viewer, activeID, false, true, layerPrefs, in.View, in.CanCreateEvents); b != nil {`,
 			"mirrorSeatRender(PRIMARY) — SkyOn=true, ShelfHidden=false ([SKY-1])"},
-		{"bench.go", `if b := h.benchBlock(ctx, spine, realWorld, viewer, activeID, true, false, layerPrefs, BlockDate{}); b != nil {`,
+		{"bench.go", `if b := h.benchBlock(ctx, spine, realWorld, viewer, activeID, true, false, layerPrefs, BlockDate{}, in.CanCreateEvents); b != nil {`,
 			"mirrorSeatRender(REAL-WORLD) — SkyOn=false, ShelfHidden=true ([SKY-1]). If this ever becomes `false, true`, [SKY-1] has been AMENDED and the trace's central claim about the real-world Block is wrong"},
 
 		// --- the Almanac gate → mirrorAlmanacBuilt -----------------------------

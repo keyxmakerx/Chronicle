@@ -114,6 +114,19 @@
       '.avail-chip .dot{width:9px;height:9px;border-radius:999px}' +
       '.avail-legend{display:inline-flex;align-items:center;gap:6px 12px;font:600 11.5px/1 inherit;color:var(--color-text-secondary,#6b7280);flex-wrap:wrap}' +
       '.avail-note{font-size:12.5px;color:var(--color-text-secondary,#6b7280);margin:10px 2px 0}' +
+      // Alternating weeks + the answered banner (C-RSVP-P9). A cell that is
+      // painted on the EVERY-WEEK layer shows through as a hatch while an
+      // alternating track is being edited, so a member can see what is already
+      // in force underneath instead of painting blind over it.
+      '.avail-cell[data-base="1"]:not([data-state])' +
+      '{background:repeating-linear-gradient(135deg,rgba(34,163,90,.16) 0 3px,transparent 3px 6px)}' +
+      '.avail-unanswered{display:flex;align-items:flex-start;gap:9px;margin:0 0 12px;padding:10px 12px;' +
+      'border:1px solid var(--gold,#d69e0a);border-radius:10px;' +
+      'background:color-mix(in srgb,var(--gold,#d69e0a) 10%,transparent);' +
+      'font-size:12.5px;color:var(--color-text-body,#374151)}' +
+      '.avail-unanswered b{color:var(--color-text-primary,#111)}' +
+      '.avail-silent{font:600 10.5px/1 inherit;color:var(--gold,#d69e0a);' +
+      'border:1px solid var(--gold,#d69e0a);border-radius:999px;padding:3px 7px;white-space:nowrap}' +
       // "Out this week" quick action (C-SCHED-OUT-THIS-WEEK): a one-click week
       // mark-out + the 7-day strip that repaints to show it. Sits in the normal
       // toolbar flow (always visible at rest, no hover-reveal) so it reads on
@@ -178,6 +191,16 @@
     this.commonTZ = loadCommonTZ(root);
     this.live = $('[data-avail-live]', root);
     // grid[displayCol 0..6][hour 0..23] = '' | 'available' | 'preferred'
+    //
+    // THREE LAYERS, ONE VISIBLE (C-RSVP-P9). grids[0] is the every-week
+    // pattern; grids[1] and grids[2] are the two alternating tracks. `grid`
+    // always points AT the layer currently being edited, so every existing
+    // paint/read path below keeps working unchanged and only the track switch
+    // has to know layers exist.
+    this.grids = [[], [], []];
+    this.cadence = 0;
+    this.cadenceLabels = { 1: '', 2: '' };   // YYYY-MM-DD, filled by loadMine
+    this.answered = true;                    // until told otherwise; see loadMine
     this.grid = [];
     this.tool = STATE_AVAIL;
     this.painting = false;
@@ -250,7 +273,22 @@
     var self = this;
     var panel = $('[data-avail-panel="mine"]', this.root);
     panel.innerHTML = '';
-    this.grid = this.emptyGrid();
+    this.grids = [this.emptyGrid(), this.emptyGrid(), this.emptyGrid()];
+    this.cadence = 0;
+    this.grid = this.grids[0];
+
+    // "You have not answered yet" banner. Hidden until loadMine says so, and
+    // it is a BANNER rather than an empty grid because an empty grid is exactly
+    // what a member who answered "never free" also sees.
+    var unanswered = el('div', 'avail-unanswered');
+    unanswered.setAttribute('data-avail-unanswered', '');
+    unanswered.style.display = 'none';
+    unanswered.innerHTML = '<i class="fa-solid fa-circle-exclamation" style="margin-top:1px"></i>' +
+      '<span><b>You have not set your availability yet.</b> Until you save once, ' +
+      'the group\'s heatmap counts you as unavailable at every hour — which is not ' +
+      'the same as you saying so. Paint the hours you can play and press Save. ' +
+      'Saving an empty grid is a real answer too: it says "none of these times".</span>';
+    panel.appendChild(unanswered);
 
     // Toolbar: timezone + paint tool + save.
     var bar = el('div', 'avail-toolbar');
@@ -278,6 +316,17 @@
       seg.appendChild(b);
     });
     bar.appendChild(seg);
+
+    // Week cadence. Named by REAL DATES, never "odd/even" — the member is
+    // choosing between two weeks they can find on a calendar. The two date
+    // labels arrive from the server (availability_cadence.go) so the client
+    // never re-derives which week is which track and cannot disagree with the
+    // projection that reads the same rule.
+    var cad = el('div', 'avail-seg'); cad.setAttribute('role', 'group');
+    cad.setAttribute('aria-label', 'Which weeks this applies to');
+    cad.setAttribute('data-avail-cadence', '');
+    bar.appendChild(cad);
+    this.renderCadencePicker(cad);
 
     var save = el('button', 'btn-primary text-sm'); save.type = 'button';
     save.innerHTML = '<i class="fa-solid fa-floppy-disk mr-1"></i> Save';
@@ -313,15 +362,83 @@
     var gridScroll = el('div', 'avail-scroll'); gridScroll.appendChild(grid);
     panel.appendChild(gridScroll);
 
-    var note = el('p', 'avail-note');
-    note.textContent = 'Click or drag to paint the hours you can play. This repeats every week. Times are in your timezone.';
+    var note = el('p', 'avail-note'); note.setAttribute('data-avail-note', '');
     panel.appendChild(note);
+    this.updateCadenceNote();
 
     // One-off exceptions (C-SCHED-P2 0c) live below the recurring grid.
     var excHost = el('div'); excHost.setAttribute('data-exc-host', ''); excHost.style.marginTop = '18px';
     panel.appendChild(excHost);
 
     this.loadMine(status);
+  };
+
+  // prettyDate turns YYYY-MM-DD into "16 Aug" for a label. Parsed as UTC via
+  // parseISO so the label never slips a day for a member west of Greenwich.
+  function prettyDate(iso) {
+    if (!iso) return '';
+    var d = parseISO(iso);
+    var MON = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+    return d.getUTCDate() + ' ' + MON[d.getUTCMonth()];
+  }
+
+  // renderCadencePicker draws the three-way track switch. Called again after
+  // loadMine, because the two alternating labels are real dates that only exist
+  // once the server has answered — before then the picker would have to invent
+  // them, and an invented date on a scheduling control is worse than a delay.
+  AvailabilityApp.prototype.renderCadencePicker = function (host) {
+    var self = this;
+    host.innerHTML = '';
+    var opts = [[0, 'Every week']];
+    if (this.cadenceLabels[1] && this.cadenceLabels[2]) {
+      opts.push([1, 'Week of ' + prettyDate(this.cadenceLabels[1])]);
+      opts.push([2, 'Week of ' + prettyDate(this.cadenceLabels[2])]);
+    }
+    opts.forEach(function (o) {
+      var b = el('button'); b.type = 'button'; b.textContent = o[1];
+      b.setAttribute('aria-pressed', o[0] === self.cadence ? 'true' : 'false');
+      b.addEventListener('click', function () { self.setCadence(o[0]); });
+      host.appendChild(b);
+    });
+  };
+
+  // setCadence switches which layer is being edited and repaints every cell
+  // from it. The layers are independent: nothing is copied between them, so
+  // switching track can never silently rewrite the pattern you just left.
+  AvailabilityApp.prototype.setCadence = function (which) {
+    if (which === this.cadence) return;
+    this.cadence = which;
+    this.grid = this.grids[which];
+    for (var col = 0; col < 7; col++) {
+      for (var h = 0; h < HOURS; h++) {
+        var cell = this.cellAt(col, h);
+        if (!cell) continue;
+        this.setCell(cell, this.grid[col][h]);
+        // Show the every-week layer as a hatch underneath an alternating
+        // track, so "I already said I'm free every Monday" stays visible while
+        // you edit the fortnightly one.
+        if (which !== 0 && this.grids[0][col][h]) cell.setAttribute('data-base', '1');
+        else cell.removeAttribute('data-base');
+      }
+    }
+    var host = $('[data-avail-cadence]', this.root);
+    if (host) this.renderCadencePicker(host);
+    this.updateCadenceNote();
+    this.announce(which === 0 ? 'Editing every week' : 'Editing alternating weeks');
+  };
+
+  AvailabilityApp.prototype.updateCadenceNote = function () {
+    var note = $('[data-avail-note]', this.root);
+    if (!note) return;
+    if (this.cadence === 0) {
+      note.textContent = 'Click or drag to paint the hours you can play. This repeats every week. ' +
+        'Times are in your timezone.';
+      return;
+    }
+    var label = prettyDate(this.cadenceLabels[this.cadence]);
+    note.textContent = 'These hours apply on alternating weeks only — the week of ' + label +
+      ', then every second week after it. Hatched cells are hours you already gave on the ' +
+      '"every week" tab; they stay in force and do not need repainting here.';
   };
 
   AvailabilityApp.prototype.cellAt = function (col, hour) {
@@ -358,30 +475,70 @@
       .then(function (data) {
         if (!data) { status.textContent = ''; return; }
         if (data.tz) { self.tz = data.tz; var sel = $('.avail-toolbar select', self.root); if (sel) sel.value = data.tz; }
+
+        // Blocks are distributed into their own cadence LAYER. A block with no
+        // weekCadence (or 0) is an every-week block, which is what every block
+        // written before this feature existed is.
         (data.blocks || []).forEach(function (b) {
           var col = DISPLAY_DOW.indexOf(b.dayOfWeek);
           if (col < 0) return;
+          var layer = self.grids[b.weekCadence === 1 || b.weekCadence === 2 ? b.weekCadence : 0];
           for (var h = Math.floor(b.startMinute / 60); h < Math.ceil(b.endMinute / 60) && h < HOURS; h++) {
-            var cell = self.cellAt(col, h); if (cell) self.setCell(cell, b.state);
+            if (h < HOURS) layer[col][h] = b.state;
           }
         });
+        // Paint whichever layer is on screen (always 0 on a fresh render).
+        for (var c2 = 0; c2 < 7; c2++) {
+          for (var h2 = 0; h2 < HOURS; h2++) {
+            var cl = self.cellAt(c2, h2);
+            if (cl) self.setCell(cl, self.grids[self.cadence][c2][h2]);
+          }
+        }
+
+        self.cadenceLabels[1] = data.weekALabel || '';
+        self.cadenceLabels[2] = data.weekBLabel || '';
+        var cadHost = $('[data-avail-cadence]', self.root);
+        if (cadHost) self.renderCadencePicker(cadHost);
+        self.updateCadenceNote();
+
+        self.answered = data.answered === true;
+        self.showAnsweredBanner();
+
         status.textContent = '';
         self.renderExceptions();
       })
       .catch(function () { status.textContent = 'Could not load your availability.'; });
   };
 
-  // Convert the painted grid into merged contiguous blocks (per day + state).
+  // showAnsweredBanner reveals or hides the "you have not answered" notice.
+  AvailabilityApp.prototype.showAnsweredBanner = function () {
+    var b = $('[data-avail-unanswered]', this.root);
+    if (!b) return;
+    b.style.display = this.answered ? 'none' : 'flex';
+  };
+
+  // Convert the painted grids into merged contiguous blocks (per day + state +
+  // cadence). ALL THREE LAYERS are emitted, not just the visible one: the save
+  // is a replace-all, so omitting a layer that happens to be off screen would
+  // delete it.
   AvailabilityApp.prototype.gridToBlocks = function () {
     var blocks = [];
-    for (var col = 0; col < 7; col++) {
-      var dow = DISPLAY_DOW[col];
-      var run = null;
-      for (var h = 0; h <= HOURS; h++) {
-        var st = h < HOURS ? this.grid[col][h] : '';
-        if (run && run.state === st) { run.end = h + 1; continue; }
-        if (run) { blocks.push({ dayOfWeek: dow, startMinute: run.start * 60, endMinute: run.end * 60, state: run.state }); }
-        run = st ? { state: st, start: h, end: h + 1 } : null;
+    for (var layer = 0; layer < 3; layer++) {
+      var g = this.grids[layer];
+      for (var col = 0; col < 7; col++) {
+        var dow = DISPLAY_DOW[col];
+        var run = null;
+        for (var h = 0; h <= HOURS; h++) {
+          var st = h < HOURS ? g[col][h] : '';
+          if (run && run.state === st) { run.end = h + 1; continue; }
+          if (run) {
+            blocks.push({
+              dayOfWeek: dow, startMinute: run.start * 60, endMinute: run.end * 60,
+              state: run.state, weekCadence: layer
+            });
+          }
+          run = st ? { state: st, start: h, end: h + 1 } : null;
+        }
       }
     }
     return blocks;
@@ -396,7 +553,14 @@
       body: { tz: this.tz, blocks: this.gridToBlocks() }
     }).then(function (r) {
       btn.disabled = false;
-      if (r.ok) { status.textContent = 'Saved.'; self.announce('Availability saved'); self.overlayData = null; }
+      if (r.ok) {
+        status.textContent = 'Saved.'; self.announce('Availability saved'); self.overlayData = null;
+        // A successful save IS the answer — including an empty one. Clearing
+        // the banner here (rather than on next load) is what makes "I said
+        // none of these times" land as a statement instead of continued
+        // silence.
+        self.answered = true; self.showAnsweredBanner();
+      }
       else { r.json().then(function (j) { status.textContent = (j && j.error) || 'Save failed.'; }).catch(function () { status.textContent = 'Save failed.'; }); }
     }).catch(function () { btn.disabled = false; status.textContent = 'Save failed.'; });
   };
@@ -563,6 +727,16 @@
       var role = m.role || '';
       if (m.isCoDm) role = role ? role + ' · co-DM' : 'co-DM';
       var name = el('span'); name.textContent = m.name + (role ? ' (' + role + ')' : ''); b.appendChild(name);
+      // "Not answered" is a DIFFERENT fact from "no hours painted", and the
+      // chip is where the Director looks. Without this badge an empty lane
+      // reads as a considered "I can never play", and a week nobody has
+      // answered reads as a week nobody can make (C-RSVP-P9).
+      if (m.hasAnswered === false) {
+        var badge = el('span', 'avail-silent'); badge.textContent = 'not answered';
+        badge.title = m.name + ' has never saved an availability pattern, so the heatmap ' +
+          'is counting them as unavailable by default rather than by their own answer.';
+        b.appendChild(badge);
+      }
       b.addEventListener('click', function () {
         self.excluded[m.userId] = !self.excluded[m.userId];
         b.setAttribute('aria-pressed', self.excluded[m.userId] ? 'false' : 'true');
@@ -570,6 +744,40 @@
       });
       wrap.appendChild(b);
     });
+    self.renderNudge(wrap);
+  };
+
+  // renderNudge appends the Director's "ask the silent ones" button, and only
+  // when there IS somebody silent — a button that is always there and usually
+  // does nothing teaches people to stop reading it.
+  //
+  // No timer anywhere: this sends on the press, to the bell in the top-right.
+  AvailabilityApp.prototype.renderNudge = function (wrap) {
+    var self = this;
+    var silent = (this.overlayData.members || []).filter(function (m) { return m.hasAnswered === false; });
+    if (!this.canDetail || !silent.length) return;
+
+    var b = el('button', 'avail-chip'); b.type = 'button';
+    b.style.borderColor = 'var(--gold,#d69e0a)';
+    b.innerHTML = '<i class="fa-solid fa-bell"></i>';
+    var lbl = el('span');
+    lbl.textContent = 'Ask the ' + silent.length + ' who have not answered';
+    b.appendChild(lbl);
+    b.addEventListener('click', function () {
+      b.disabled = true; lbl.textContent = 'Sending…';
+      Chronicle.apiFetch('/campaigns/' + self.campaignID + '/availability/nudge', { method: 'POST' })
+        .then(function (r) { return r.ok ? r.json() : null; })
+        .then(function (res) {
+          if (!res) { lbl.textContent = 'Could not send'; return; }
+          var n = (res.notified || []).length;
+          // Names, not just a count: the Director is about to be asked "did you
+          // ping me?" and a bare "3 sent" cannot answer that.
+          lbl.textContent = n ? 'Asked ' + res.notified.join(', ') : 'Nobody to ask';
+          self.announce(n ? 'Nudged ' + n + ' members' : 'Everyone has already answered');
+        })
+        .catch(function () { b.disabled = false; lbl.textContent = 'Could not send'; });
+    });
+    wrap.appendChild(b);
   };
 
   // Count free/prefer for one hour cell, honoring chip exclusions when we have

@@ -69,6 +69,34 @@ templ App(title string) {
 				<!-- Flash messages -->
 				@FlashMessages()
 
+				<!-- Player call-to-action (C-RSVP-P10).
+				     One banner for the one thing a player is expected to ACT on:
+				     an unanswered RSVP, or the timezone we would otherwise guess
+				     at. Server-rendered and POLLED on the same 60s cadence as the
+				     bell badge, and — like the badge — an empty body is the
+				     "nothing to say" answer, so the strip collapses to nothing.
+
+				     It sits OUTSIDE #main-content deliberately. That is the
+				     boosted swap target, so a banner inside it would be thrown
+				     away and re-fetched on every sidebar navigation, flashing
+				     once per page change. Here it survives navigation and the
+				     poll owns its lifetime.
+
+				     Behaviour lives in the callout widget, never an inline
+				     <script>: boot.js sets htmx.config.allowScriptTags = false,
+				     which REMOVES script tags from swapped fragments rather than
+				     declining to run them. -->
+				if IsAuthenticated(ctx) {
+					<div
+						class="cta-host"
+						data-widget="callout"
+						data-csrf={ GetCSRFToken(ctx) }
+						hx-get="/notifications/call-to-action"
+						hx-trigger="load, every 60s"
+						hx-swap="innerHTML"
+					></div>
+				}
+
 				<!-- Page content (scrollable) -->
 				<main class="flex-1 overflow-y-auto px-3 py-3 md:px-5 md:py-4 bg-surface" id="main-content">
 					{ children... }

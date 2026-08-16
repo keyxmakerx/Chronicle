@@ -3,6 +3,7 @@ package sessions
 import (
 	"context"
 	"fmt"
+	"sort"
 	"time"
 
 	"github.com/keyxmakerx/chronicle/internal/apperror"
@@ -57,8 +58,31 @@ func (s *sessionService) GetMyAvailability(ctx context.Context, campaignID, user
 			StartMinute: b.StartMinute,
 			EndMinute:   b.EndMinute,
 			State:       b.State,
+			WeekCadence: b.WeekCadence,
 		})
 	}
+
+	// Answered is read from the status store, NOT inferred from len(blocks):
+	// saving an empty grid is a real answer ("never free"), and inferring would
+	// report that member as silent forever.
+	answered, err := s.repo.ListAnsweredUserIDs(ctx, campaignID)
+	if err != nil {
+		return nil, apperror.NewInternal(fmt.Errorf("loading availability answers: %w", err))
+	}
+	_, resp.Answered = answered[userID]
+
+	// The two alternating tracks are labelled by the next real Sunday that
+	// starts each one, so the picker offers dates rather than a convention.
+	//
+	// "Today" is resolved in the MEMBER'S OWN zone, not UTC. A member in UTC+13
+	// on a Sunday morning is still on Saturday by UTC, so a UTC "today" would
+	// hand them the previous week's Sunday and quietly swap which track their
+	// picker calls A — they would choose a date and get the other fortnight.
+	loc := timeutil.LoadLocation(resp.TZ) // falls back to UTC on empty/unknown
+	now := time.Now().In(loc)
+	today := timeutil.CivilDate{Year: now.Year(), Month: now.Month(), Day: now.Day()}
+	resp.WeekALabel = CadenceLabel(CadenceWeekA, today).String()
+	resp.WeekBLabel = CadenceLabel(CadenceWeekB, today).String()
 	return resp, nil
 }
 
@@ -72,9 +96,12 @@ func (s *sessionService) SaveMyAvailability(ctx context.Context, campaignID, use
 		return apperror.NewBadRequest("too many availability blocks")
 	}
 
-	// Validate + dedupe by (day, start, end); the unique key forbids exact
-	// duplicates, and deduping lets last-state-wins for an overlapping repaint.
-	seen := make(map[[3]int]int, len(req.Blocks))
+	// Validate + dedupe by (day, start, end, cadence); the unique key forbids
+	// exact duplicates, and deduping lets last-state-wins for an overlapping
+	// repaint. CADENCE IS PART OF THE KEY — the same Monday evening on week A
+	// and on week B are two different blocks, and collapsing them into one
+	// would silently discard whichever the client sent second.
+	seen := make(map[[4]int]int, len(req.Blocks))
 	blocks := make([]AvailabilityBlock, 0, len(req.Blocks))
 	for _, b := range req.Blocks {
 		if err := validateBlockRange(b.DayOfWeek, b.StartMinute, b.EndMinute); err != nil {
@@ -84,7 +111,10 @@ func (s *sessionService) SaveMyAvailability(ctx context.Context, campaignID, use
 		if err != nil {
 			return err
 		}
-		key := [3]int{b.DayOfWeek, b.StartMinute, b.EndMinute}
+		if !ValidWeekCadence(b.WeekCadence) {
+			return apperror.NewBadRequest("unknown week cadence")
+		}
+		key := [4]int{b.DayOfWeek, b.StartMinute, b.EndMinute, b.WeekCadence}
 		if idx, ok := seen[key]; ok {
 			blocks[idx].State = st // last write wins on an exact overlap
 			continue
@@ -96,13 +126,79 @@ func (s *sessionService) SaveMyAvailability(ctx context.Context, campaignID, use
 			EndMinute:   b.EndMinute,
 			State:       st,
 			TZ:          req.TZ,
+			WeekCadence: b.WeekCadence,
 		})
 	}
 
-	if err := s.repo.ReplaceUserAvailability(ctx, campaignID, userID, blocks); err != nil {
+	// The zone rides separately so an EMPTY grid still records WHO answered and
+	// in what zone — that is the save that makes "never free" a stated answer
+	// instead of continued silence.
+	if err := s.repo.ReplaceUserAvailability(ctx, campaignID, userID, req.TZ, blocks); err != nil {
 		return apperror.NewInternal(fmt.Errorf("saving availability: %w", err))
 	}
 	return nil
+}
+
+// AvailabilityAnswerStatuses reports, for each member the caller supplies,
+// whether they have answered the availability question and when.
+//
+// The roster is supplied by the handler (same shape as BuildOverlay's) so this
+// stays free of the campaigns import; order is preserved so the Director's list
+// matches every other roster in the product.
+func (s *sessionService) AvailabilityAnswerStatuses(ctx context.Context, campaignID string, members []overlayMemberInput) ([]AvailabilityAnswerStatus, error) {
+	answered, err := s.repo.ListAnsweredUserIDs(ctx, campaignID)
+	if err != nil {
+		return nil, apperror.NewInternal(fmt.Errorf("loading availability answers: %w", err))
+	}
+	out := make([]AvailabilityAnswerStatus, 0, len(members))
+	for _, m := range members {
+		row := AvailabilityAnswerStatus{UserID: m.UserID, Name: m.Name}
+		if at, ok := answered[m.UserID]; ok {
+			row.Answered = true
+			row.AnsweredAt = at.UTC().Format(time.RFC3339)
+		}
+		out = append(out, row)
+	}
+	return out, nil
+}
+
+// NudgeUnansweredAvailability writes a bell notification to every supplied
+// member who has NOT answered, and reports who was asked.
+//
+// NO TIMER, ON PURPOSE. There is no scheduled-job runner in this product, and
+// inventing one to power a reminder would be a large piece of infrastructure
+// justified by a small feature. The Director presses this when it is useful to
+// press — which also means nobody is ever nudged by a machine on a schedule
+// they did not agree to.
+//
+// Members who have already answered are counted, not messaged: a nudge that
+// pinged everyone would train the whole table to ignore the bell.
+func (s *sessionService) NudgeUnansweredAvailability(ctx context.Context, campaignID, link string, members []overlayMemberInput) (*NudgeResult, error) {
+	answered, err := s.repo.ListAnsweredUserIDs(ctx, campaignID)
+	if err != nil {
+		return nil, apperror.NewInternal(fmt.Errorf("loading availability answers: %w", err))
+	}
+	res := &NudgeResult{Notified: []string{}}
+	var ids []string
+	for _, m := range members {
+		if m.UserID == "" {
+			continue
+		}
+		if _, ok := answered[m.UserID]; ok {
+			res.Skipped++
+			continue
+		}
+		ids = append(ids, m.UserID)
+		res.Notified = append(res.Notified, m.Name)
+	}
+	if len(ids) == 0 {
+		return res, nil
+	}
+	const msg = "Your group needs your availability — set the times you can play"
+	if err := s.NotifyUsers(ctx, ids, campaignID, NotifAvailabilityNudge, msg, link); err != nil {
+		return nil, err
+	}
+	return res, nil
 }
 
 // ListMyExceptions returns the current user's per-date overrides.
@@ -114,7 +210,28 @@ func (s *sessionService) ListMyExceptions(ctx context.Context, campaignID, userI
 	return excs, nil
 }
 
-// AddMyException validates and stores a per-date override for the current user.
+// AddMyException marks ONE window of a date with an explicit state, KEEPING
+// the rest of that date as it already was.
+//
+// THE DEFECT THIS SHAPE EXISTS TO PREVENT: it used to insert a single row via
+// repo.AddException. Because exception rows fully REPLACE the recurring pattern
+// for their date (effectiveBlocks, availability_overlay.go), that one row became
+// the member's ENTIRE day. A member whose recurring Tuesday was 09:00–23:00 and
+// who posted "I'm ALSO free 07:00–08:00" came out of it available for one hour
+// at 7am and busy every evening — measured against MariaDB as free at 07:00 = 1,
+// free at 20:00 = 0. Their own grid still showed 09:00–23:00 for Tuesdays, so
+// nothing on any screen told them, and the Director's overlay and the derived
+// best-window silently lost fourteen hours.
+//
+// The compose-the-day rule that closes this was written for the RSVP-offer path
+// (AddMyAvailableWindows) and for the client-side day editor, but never applied
+// to this endpoint — which is a documented Player+ route. It is applied here
+// now, including the zone rule: the day is written in the zone its own rows were
+// authored in and the incoming window is converted, never the other way round.
+//
+// The per-user cap and the date bound are re-checked by ReplaceMyDayExceptions,
+// which owns the accounting for a whole-day write; the date bound is also
+// checked up front so a malformed date is refused before any repo read.
 func (s *sessionService) AddMyException(ctx context.Context, campaignID, userID string, req AddExceptionRequest) error {
 	if _, err := validateExceptionDate(req.OnDate); err != nil {
 		return err
@@ -125,31 +242,44 @@ func (s *sessionService) AddMyException(ctx context.Context, campaignID, userID 
 	if err := validateMinuteRange(req.StartMinute, req.EndMinute); err != nil {
 		return err
 	}
-	if _, err := validateExceptionState(req.State); err != nil {
+	state, err := validateExceptionState(req.State)
+	if err != nil {
 		return err
 	}
-	// Per-user cap (0d): reject once the member is already at the ceiling. The
-	// underlying add upserts on the unique block key, so a repaint of an
-	// existing block doesn't grow the count — only genuinely new rows do.
-	count, err := s.repo.CountUserExceptions(ctx, campaignID, userID)
+
+	recurring, err := s.repo.ListUserAvailability(ctx, campaignID, userID)
 	if err != nil {
-		return apperror.NewInternal(fmt.Errorf("counting exceptions: %w", err))
+		return apperror.NewInternal(fmt.Errorf("loading availability: %w", err))
 	}
-	if count >= maxExceptionsPerUser {
-		return apperror.NewBadRequest("too many availability exceptions; delete some before adding more")
+	existing, err := s.repo.ListUserExceptions(ctx, campaignID, userID)
+	if err != nil {
+		return apperror.NewInternal(fmt.Errorf("loading exceptions: %w", err))
 	}
-	exc := &AvailabilityException{
-		ID:          generateUUID(),
-		CampaignID:  campaignID,
-		UserID:      userID,
-		OnDate:      req.OnDate,
-		StartMinute: req.StartMinute,
-		EndMinute:   req.EndMinute,
-		State:       req.State,
-		TZ:          req.TZ,
+
+	days, order, err := resolveOfferedDays(
+		[]AvailabilityWindowDTO{{OnDate: req.OnDate, StartMinute: req.StartMinute, EndMinute: req.EndMinute}},
+		req.TZ, recurring, existing)
+	if err != nil {
+		return err
 	}
-	if err := s.repo.AddException(ctx, exc); err != nil {
-		return apperror.NewInternal(fmt.Errorf("adding exception: %w", err))
+
+	for _, date := range order {
+		d := days[date]
+		// keepPreferred is FALSE here, unlike the RSVP offer: this is the member
+		// stating what a window IS ("I'm busy 19:00–20:00"), so it outranks an
+		// earlier preference. An offer is a generic "I could also do this" and
+		// must not downgrade one.
+		blocks, err := composeDayWithState(date, d.windows, state, false, recurring, existing)
+		if err != nil {
+			return err
+		}
+		if err := s.ReplaceMyDayExceptions(ctx, campaignID, userID, ReplaceDayExceptionsRequest{
+			OnDate: date,
+			TZ:     d.tz,
+			Blocks: blocks,
+		}); err != nil {
+			return err
+		}
 	}
 	return nil
 }
@@ -248,6 +378,19 @@ func (s *sessionService) BuildOverlay(ctx context.Context, campaignID string, me
 		return nil, apperror.NewInternal(fmt.Errorf("loading campaign exceptions: %w", err))
 	}
 
+	// Answered-or-not is stamped onto the roster HERE rather than by the
+	// handler, because the handler has no business reaching the status store and
+	// the pure builder has no business querying anything. The roster is a value
+	// copy, so mutating it cannot leak back to the caller's slice contents.
+	answered, err := s.repo.ListAnsweredUserIDs(ctx, campaignID)
+	if err != nil {
+		return nil, apperror.NewInternal(fmt.Errorf("loading availability answers: %w", err))
+	}
+	members = append([]overlayMemberInput(nil), members...)
+	for i := range members {
+		_, members[i].HasAnswered = answered[members[i].UserID]
+	}
+
 	availByUser := make(map[string][]AvailabilityBlock)
 	for _, b := range blocks {
 		availByUser[b.UserID] = append(availByUser[b.UserID], b)
@@ -260,6 +403,40 @@ func (s *sessionService) BuildOverlay(ctx context.Context, campaignID string, me
 	viewerLoc := timeutil.LoadLocation(viewerTZ)
 	overlay := buildWeekOverlay(members, availByUser, excByUser, start, viewerLoc, viewerTZ, includeDetail)
 	return &overlay, nil
+}
+
+// CampaignMemberZones returns the IANA zone each member set for THEMSELVES on
+// the availability page, keyed by user id. Members who never painted a grid are
+// absent from the map — absence is "not set here", never a UTC guess.
+//
+// WHY THIS EXISTS: the availability page's control is literally labelled "Your
+// timezone", and saving writes it into member_availability.tz and NOWHERE ELSE
+// (static/js/availability.js sends {tz, blocks} to PUT /availability/mine; the
+// only writer of users.timezone is PUT /account/timezone, which that page never
+// calls). Every surface that reported a member's zone read users.timezone only,
+// so a player who set the control, painted their week and saved was still shown
+// as "zone not set" on the Director's Bench — with a repair chip inviting the
+// Director to chase them about it, forever, no matter how many times they set
+// it. The two columns are two different questions and the product asks the
+// wrong one.
+//
+// ONE READ FOR THE WHOLE ROSTER. The overlay renders per member; asking per
+// member would turn a roster render into an N+1 (WG-4).
+func (s *sessionService) CampaignMemberZones(ctx context.Context, campaignID string) (map[string]string, error) {
+	blocks, err := s.repo.ListCampaignAvailability(ctx, campaignID)
+	if err != nil {
+		return nil, apperror.NewInternal(fmt.Errorf("loading campaign availability: %w", err))
+	}
+	out := make(map[string]string, len(blocks))
+	for _, b := range blocks {
+		if _, seen := out[b.UserID]; seen {
+			continue
+		}
+		if timeutil.IsValidLocation(b.TZ) {
+			out[b.UserID] = b.TZ
+		}
+	}
+	return out, nil
 }
 
 // --- Temporary offered availability (C-CAL-RSVP-P2) ---
@@ -283,6 +460,23 @@ const maxOfferedWindows = 8
 // (C-SCHED-P2 0c), enforced server-side because this write arrives from an email
 // link with no editor in front of it.
 //
+// THE SECOND TRAP: THE ZONE. A composed day is written back through
+// ReplaceMyDayExceptions, which stamps ONE zone on every row it writes. The
+// caller's zone is the OFFER's zone (users.timezone — "UTC" whenever the member
+// never set an account zone, which is the default), while the minutes already
+// on the canvas were authored in the member's OWN zone — the one the
+// availability page's "Your timezone" dropdown writes into member_availability.tz
+// and nowhere else. Writing the composed day in the caller's zone therefore
+// RELABELS the member's existing hours: same minute numbers, different zone, so
+// their stated evening silently moves in real time (four hours, for a New York
+// member with no account zone) in the Director's overlay and in the derived
+// best-window, with no edit by them and no signal that it happened.
+//
+// So the day is composed and written in the zone its SOURCE ROWS were authored
+// in, and it is the OFFER — a fresh input, the only thing here that is not
+// already stored data — that gets CONVERTED. Stored minutes are never
+// renumbered and never relabelled.
+//
 // SELF-WRITE ONLY: userID is supplied by the caller from a session or a redeemed
 // token, and every read/write below is scoped to (campaign, user).
 func (s *sessionService) AddMyAvailableWindows(ctx context.Context, campaignID, userID, tz string, windows []AvailabilityWindowDTO) error {
@@ -295,11 +489,6 @@ func (s *sessionService) AddMyAvailableWindows(ctx context.Context, campaignID, 
 	if !timeutil.IsValidLocation(tz) {
 		return apperror.NewBadRequest("a valid IANA timezone is required")
 	}
-
-	// Group by date so each day is composed and written exactly once, even when
-	// the member offers two windows on the same day.
-	byDate := make(map[string][]AvailabilityWindowDTO, len(windows))
-	order := make([]string, 0, len(windows))
 	for _, w := range windows {
 		if _, err := validateExceptionDate(w.OnDate); err != nil {
 			return err
@@ -307,10 +496,6 @@ func (s *sessionService) AddMyAvailableWindows(ctx context.Context, campaignID, 
 		if err := validateMinuteRange(w.StartMinute, w.EndMinute); err != nil {
 			return err
 		}
-		if _, seen := byDate[w.OnDate]; !seen {
-			order = append(order, w.OnDate)
-		}
-		byDate[w.OnDate] = append(byDate[w.OnDate], w)
 	}
 
 	recurring, err := s.repo.ListUserAvailability(ctx, campaignID, userID)
@@ -322,20 +507,151 @@ func (s *sessionService) AddMyAvailableWindows(ctx context.Context, campaignID, 
 		return apperror.NewInternal(fmt.Errorf("loading exceptions: %w", err))
 	}
 
+	days, order, err := resolveOfferedDays(windows, tz, recurring, existing)
+	if err != nil {
+		return err
+	}
+
 	for _, date := range order {
-		day, err := composeOfferedDay(date, byDate[date], recurring, existing)
+		d := days[date]
+		blocks, err := composeOfferedDay(date, d.windows, recurring, existing)
 		if err != nil {
 			return err
 		}
 		if err := s.ReplaceMyDayExceptions(ctx, campaignID, userID, ReplaceDayExceptionsRequest{
 			OnDate: date,
-			TZ:     tz,
-			Blocks: day,
+			TZ:     d.tz,
+			Blocks: blocks,
 		}); err != nil {
 			return err
 		}
 	}
 	return nil
+}
+
+// offeredDay is one date's worth of offered windows, already expressed in the
+// zone that date's composed rows will be written in.
+type offeredDay struct {
+	tz      string
+	windows []AvailabilityWindowDTO
+}
+
+// authoredZone reports the zone the member's OWN availability rows are stored
+// in, or "" when they have none. The recurring pattern wins: it is what the
+// availability page's "Your timezone" control writes, and it is the only zone
+// the member ever chose explicitly. Exception rows are the fallback because
+// some of them are written by machinery (the RSVP "Out this week" action)
+// carrying users.timezone rather than a member choice.
+func authoredZone(recurring []AvailabilityBlock, existing []AvailabilityException) string {
+	for _, b := range recurring {
+		if timeutil.IsValidLocation(b.TZ) {
+			return b.TZ
+		}
+	}
+	for _, e := range existing {
+		if timeutil.IsValidLocation(e.TZ) {
+			return e.TZ
+		}
+	}
+	return ""
+}
+
+// resolveOfferedDays converts offered windows out of the offer's zone and into
+// the zone each affected day must be written in, returning the per-date windows
+// plus a stable date order.
+//
+// The target zone for a date is that date's EXISTING exception rows' zone when
+// it has any — those rows are the day (they replace the recurring pattern), so
+// the day is already expressed in their zone and must stay that way — otherwise
+// the member's pattern zone, otherwise the offer's own zone (nothing stored to
+// preserve).
+//
+// The zone therefore depends on the date and the date depends on the zone, so
+// the resolution runs as a small bounded fixed point rather than a single pass:
+// project the offer with the pattern zone, and where a resolved date turns out
+// to be authored in some other zone, re-project with that zone and take the
+// dates that projection lands on. maxZoneRounds bounds it because an unbounded
+// loop here would be the same class of defect as the overlay's split loop.
+func resolveOfferedDays(windows []AvailabilityWindowDTO, offerTZ string,
+	recurring []AvailabilityBlock, existing []AvailabilityException) (map[string]offeredDay, []string, error) {
+
+	const maxZoneRounds = 4
+
+	patternTZ := authoredZone(recurring, existing)
+	if patternTZ == "" {
+		patternTZ = offerTZ
+	}
+
+	// dayTZ[date] = the zone that date's existing exception rows carry.
+	dayTZ := make(map[string]string, len(existing))
+	for _, e := range existing {
+		if dayTZ[e.OnDate] == "" && timeutil.IsValidLocation(e.TZ) {
+			dayTZ[e.OnDate] = e.TZ
+		}
+	}
+
+	offerLoc := timeutil.LoadLocation(offerTZ)
+
+	out := make(map[string]offeredDay, len(windows))
+	var order []string
+	pending := []string{patternTZ}
+	tried := map[string]bool{}
+
+	for round := 0; round < maxZoneRounds && len(pending) > 0; round++ {
+		zone := pending[0]
+		pending = pending[1:]
+		if tried[zone] {
+			continue
+		}
+		tried[zone] = true
+		loc := timeutil.LoadLocation(zone)
+
+		for _, w := range windows {
+			d, err := timeutil.ParseCivilDate(w.OnDate)
+			if err != nil {
+				return nil, nil, apperror.NewBadRequest("onDate must be YYYY-MM-DD")
+			}
+			start := timeutil.WallClockInstant(offerLoc, d.Year, d.Month, d.Day, w.StartMinute)
+			end := timeutil.WallClockInstant(offerLoc, d.Year, d.Month, d.Day, w.EndMinute)
+			for _, seg := range splitToViewerDays(start, end, loc) {
+				want := dayTZ[seg.date]
+				if want == "" {
+					want = patternTZ
+				}
+				if want != zone {
+					// This date is authored in another zone; re-project the
+					// whole offer there in a later round.
+					if !tried[want] {
+						pending = append(pending, want)
+					}
+					continue
+				}
+				if _, seen := out[seg.date]; !seen {
+					out[seg.date] = offeredDay{tz: zone}
+					order = append(order, seg.date)
+				}
+				od := out[seg.date]
+				od.windows = append(od.windows, AvailabilityWindowDTO{
+					OnDate: seg.date, StartMinute: seg.startMin, EndMinute: seg.endMin,
+				})
+				out[seg.date] = od
+			}
+		}
+	}
+
+	if len(order) == 0 {
+		return nil, nil, apperror.NewValidation("at least one time window is required")
+	}
+	// Converting across zones can push a window onto a date outside the ±1y
+	// exception window the direct writes are bounded to; re-check every
+	// RESOLVED date so the bound cannot be sidestepped by choosing a zone.
+	for _, date := range order {
+		if _, err := validateExceptionDate(date); err != nil {
+			return nil, nil, err
+		}
+	}
+	sort.Strings(order)
+	return out, order, nil
 }
 
 // composeOfferedDay builds the full replacement block set for one date: the
@@ -349,6 +665,18 @@ func (s *sessionService) AddMyAvailableWindows(ctx context.Context, campaignID, 
 // generic offer — while an `unavailable` minute IS overwritten, since the member
 // is now explicitly saying they could make that time.
 func composeOfferedDay(date string, offers []AvailabilityWindowDTO,
+	recurring []AvailabilityBlock, existing []AvailabilityException) ([]ExceptionBlockDTO, error) {
+	return composeDayWithState(date, offers, AvailAvailable, true, recurring, existing)
+}
+
+// composeDayWithState is composeOfferedDay generalised over the state being
+// painted, so the "mark this window" endpoint (AddMyException) shares the exact
+// same day-composition rule instead of writing a bare row that erases the day.
+//
+// keepPreferred is the one behavioural difference between the two callers: a
+// generic offer must not downgrade an explicit preference, while a member
+// stating "I'm busy 19:00–20:00" must be able to overwrite one.
+func composeDayWithState(date string, windows []AvailabilityWindowDTO, state string, keepPreferred bool,
 	recurring []AvailabilityBlock, existing []AvailabilityException) ([]ExceptionBlockDTO, error) {
 
 	canvas := make([]string, timeutil.MinutesPerDay)
@@ -376,8 +704,8 @@ func composeOfferedDay(date string, offers []AvailabilityWindowDTO,
 		}
 	}
 
-	for _, w := range offers {
-		paint(canvas, w.StartMinute, w.EndMinute, AvailAvailable, true)
+	for _, w := range windows {
+		paint(canvas, w.StartMinute, w.EndMinute, state, keepPreferred)
 	}
 
 	blocks := runsToBlocks(canvas)

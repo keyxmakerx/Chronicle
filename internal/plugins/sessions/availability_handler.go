@@ -3,6 +3,7 @@ package sessions
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"sort"
 	"time"
@@ -113,6 +114,65 @@ func (h *Handler) GetOverlayAPI(c echo.Context) error {
 	return c.JSON(http.StatusOK, overlay)
 }
 
+// NudgeAvailabilityAPI asks every member who has never answered to set their
+// availability, via the bell in the top-right.
+// POST /campaigns/:id/availability/nudge
+//
+// OWNER / CO-DM ONLY, enforced here by role rather than by route — the same rule
+// the overlay's detail gate follows (design §5 / Q1). It has to be gated: this
+// is the one availability action that writes into other people's notification
+// lists, so an ungated version would be a campaign-wide broadcast handed to
+// anybody who could reach the URL.
+func (h *Handler) NudgeAvailabilityAPI(c echo.Context) error {
+	cc := campaigns.GetCampaignContext(c)
+	if cc.MemberRole < campaigns.RoleOwner && !cc.IsDmGranted {
+		return c.JSON(http.StatusForbidden, map[string]string{"error": "only the Director can send this"})
+	}
+	ctx := c.Request().Context()
+	link := fmt.Sprintf("/campaigns/%s/availability", cc.Campaign.ID)
+	res, err := h.svc.NudgeUnansweredAvailability(ctx, cc.Campaign.ID, link, h.overlayMembers(ctx, cc.Campaign.ID))
+	if err != nil {
+		return c.JSON(apperror.SafeCode(err), map[string]string{"error": apperror.SafeMessage(err)})
+	}
+	return c.JSON(http.StatusOK, res)
+}
+
+// AvailabilityAnswersAPI lists who has answered and who has not.
+// GET /campaigns/:id/availability/answers
+//
+// Party-visible, for the same reason RosterEntry.HasAnswered is: it says who has
+// spoken, never what they said.
+func (h *Handler) AvailabilityAnswersAPI(c echo.Context) error {
+	ctx := c.Request().Context()
+	cc := campaigns.GetCampaignContext(c)
+	rows, err := h.svc.AvailabilityAnswerStatuses(ctx, cc.Campaign.ID, h.overlayMembers(ctx, cc.Campaign.ID))
+	if err != nil {
+		return c.JSON(apperror.SafeCode(err), map[string]string{"error": apperror.SafeMessage(err)})
+	}
+	return c.JSON(http.StatusOK, map[string]any{"members": rows})
+}
+
+// availabilityAnswerStamped fills HasAnswered on a roster the caller already
+// built. BuildOverlay does its own stamping internally, so this exists for the
+// paths that need the roster WITHOUT an overlay — chiefly CampaignRoster, whose
+// consumers render a member list and would otherwise have to guess.
+//
+// A failure degrades to "nobody has answered" rather than failing the render,
+// and that direction is chosen with eyes open: it can under-report an answer
+// (visible, correctable, and the Director can just look at the grid), where the
+// opposite would report silence as an answer and quietly restore the exact
+// ambiguity this feature exists to remove.
+func (h *Handler) availabilityAnswerStamped(ctx context.Context, campaignID string, in []overlayMemberInput) []overlayMemberInput {
+	rows, err := h.svc.AvailabilityAnswerStatuses(ctx, campaignID, in)
+	if err != nil || len(rows) != len(in) {
+		return in
+	}
+	for i := range in {
+		in[i].HasAnswered = rows[i].Answered
+	}
+	return in
+}
+
 // --- the cross-plugin read seam (C-CALV4-RSVP-P8 §5) ------------------------
 //
 // The calendar's Bench RSVP panel prints the same availability this plugin
@@ -149,22 +209,28 @@ type RosterEntry struct {
 	// TZ is the stored IANA zone, EMPTY when unset. Empty is a state, not a
 	// default: see OverlayMember.TZ.
 	TZ string
+	// HasAnswered is whether this member has ever saved an availability pattern
+	// (C-RSVP-P9). Party-visible by the same rule as name/role/zone: knowing
+	// that somebody has not answered yet is not knowing anything about WHEN
+	// they are free, which is the fact the lanes gate protects.
+	HasAnswered bool
 }
 
 // CampaignRoster returns the overlay roster in its stable render order, with
 // roles, co-DM grants and zones resolved from their truth sources. Availability
 // is deliberately not included — see RosterEntry.
 func (h *Handler) CampaignRoster(ctx context.Context, campaignID string) []RosterEntry {
-	in := h.overlayMembers(ctx, campaignID)
+	in := h.availabilityAnswerStamped(ctx, campaignID, h.overlayMembers(ctx, campaignID))
 	out := make([]RosterEntry, 0, len(in))
 	for _, m := range in {
 		out = append(out, RosterEntry{
-			UserID:  m.UserID,
-			Name:    m.Name,
-			Role:    m.RoleLabel,
-			IsOwner: m.IsOwner,
-			IsCoDM:  m.IsCoDM,
-			TZ:      m.TZ,
+			UserID:      m.UserID,
+			Name:        m.Name,
+			Role:        m.RoleLabel,
+			IsOwner:     m.IsOwner,
+			IsCoDM:      m.IsCoDM,
+			TZ:          m.TZ,
+			HasAnswered: m.HasAnswered,
 		})
 	}
 	return out
@@ -263,6 +329,17 @@ func (h *Handler) resolveViewerTZ(c echo.Context, userID string) string {
 	if tz := c.QueryParam("tz"); timeutil.IsValidLocation(tz) {
 		return tz
 	}
+	// The zone the viewer set for THEMSELVES on this campaign's availability
+	// page comes first: for most players it is the only zone they ever set, so
+	// reading users.timezone alone rendered their own heatmap in UTC while their
+	// blocks were stored in their real zone.
+	if cc := campaigns.GetCampaignContext(c); cc != nil && cc.Campaign != nil && userID != "" {
+		if zones, err := h.svc.CampaignMemberZones(c.Request().Context(), cc.Campaign.ID); err == nil {
+			if tz := zones[userID]; tz != "" {
+				return tz
+			}
+		}
+	}
 	if tz := h.storedTZ(c.Request().Context(), userID); tz != "" {
 		return tz
 	}
@@ -282,6 +359,26 @@ func (h *Handler) storedTZ(ctx context.Context, userID string) string {
 		return ""
 	}
 	return *u.Timezone
+}
+
+// memberZone resolves the zone a member is REPORTED to be in, from both places
+// the product lets them set one:
+//
+//  1. member_availability.tz — what the availability page's control, labelled
+//     "Your timezone", writes. It is the only zone most players ever set,
+//     because that page never calls PUT /account/timezone.
+//  2. users.timezone — the account setting.
+//
+// Empty means genuinely not set anywhere, and stays a first-class state: the
+// callers that print a per-member CLOCK print a "zone not set" repair rather
+// than a UTC guess (ADR-048 §18). Reading only (2) is what made the Bench show
+// "zone not set" beside a player who HAD set their zone, permanently, with a
+// chip inviting the Director to chase them for it.
+func (h *Handler) memberZone(ctx context.Context, availabilityZones map[string]string, userID string) string {
+	if tz := availabilityZones[userID]; tz != "" {
+		return tz
+	}
+	return h.storedTZ(ctx, userID)
 }
 
 // dmGrantSet reads the campaign's co-DM grant list ONCE and returns it as a set.
@@ -327,6 +424,12 @@ func (h *Handler) overlayMembers(ctx context.Context, campaignID string) []overl
 		return nil
 	}
 	grants := h.dmGrantSet(ctx, campaignID)
+	// ONE read for every member's own zone, then a per-member account-zone read
+	// only for the members that read did not answer (WG-4's one-read rule).
+	zones, err := h.svc.CampaignMemberZones(ctx, campaignID)
+	if err != nil {
+		zones = nil // degrade to the account zone; never fail a roster render on it
+	}
 	out := make([]overlayMemberInput, 0, len(members))
 	for _, m := range members {
 		out = append(out, overlayMemberInput{
@@ -336,7 +439,7 @@ func (h *Handler) overlayMembers(ctx context.Context, campaignID string) []overl
 			IsOwner:   m.Role >= campaigns.RoleOwner,
 			RoleLabel: m.Role.DisplayName(),
 			IsCoDM:    grants[m.UserID],
-			TZ:        h.storedTZ(ctx, m.UserID),
+			TZ:        h.memberZone(ctx, zones, m.UserID),
 		})
 	}
 	sort.SliceStable(out, func(i, j int) bool {

@@ -196,8 +196,12 @@ func proposalTokenHandler(applied *bool, members []campaigns.CampaignMember) *Ha
 		findProposalTokenFn: func(_ context.Context, _ string) (*SlotProposalToken, error) {
 			return &SlotProposalToken{Token: "tok", OptionID: "o1", UserID: "u1", Response: ResponseYes, ExpiresAt: future}, nil
 		},
-		findOptionFn:       func(_ context.Context, _ string) (*SlotProposalOption, error) { return &SlotProposalOption{ID: "o1", ProposalID: "p1", StartsAtUTC: time.Now().UTC(), EndsAtUTC: time.Now().UTC().Add(time.Hour)}, nil },
-		findProposalByIDFn: func(_ context.Context, _ string) (*SlotProposal, error) { return &SlotProposal{ID: "p1", CampaignID: "c1", Title: "Game", Status: ProposalOpen}, nil },
+		findOptionFn: func(_ context.Context, _ string) (*SlotProposalOption, error) {
+			return &SlotProposalOption{ID: "o1", ProposalID: "p1", StartsAtUTC: time.Now().UTC(), EndsAtUTC: time.Now().UTC().Add(time.Hour)}, nil
+		},
+		findProposalByIDFn: func(_ context.Context, _ string) (*SlotProposal, error) {
+			return &SlotProposal{ID: "p1", CampaignID: "c1", Title: "Game", Status: ProposalOpen}, nil
+		},
 		upsertProposalResponseFn: func(_ context.Context, _ *SlotProposalResponse) error { *applied = true; return nil },
 		markProposalTokenUsedFn:  func(_ context.Context, _ string) error { return nil },
 	}
@@ -271,11 +275,25 @@ func TestRSVPToken_GetDoesNotApply(t *testing.T) {
 	future := time.Now().UTC().Add(time.Hour)
 	applied := false
 	repo := &mockSessionRepo{
-		findRSVPTokenFn:        func(_ context.Context, _ string) (*RSVPToken, error) { return &RSVPToken{Token: "rt", SessionID: "s1", UserID: "u1", Action: RSVPAccepted, ExpiresAt: future}, nil },
+		findRSVPTokenFn: func(_ context.Context, _ string) (*RSVPToken, error) {
+			return &RSVPToken{Token: "rt", SessionID: "s1", UserID: "u1", Action: RSVPAccepted, ExpiresAt: future}, nil
+		},
 		updateAttendeeStatusFn: func(_ context.Context, _, _, _ string) error { applied = true; return nil },
 		markRSVPTokenUsedFn:    func(_ context.Context, _ string) error { return nil },
+		// FIXTURE GROWN, ASSERTIONS UNCHANGED. Both /rsvp/:token halves now
+		// re-check that the token's user is still on the roster (a link cannot
+		// outlive the access that justified it), which needs the token's session
+		// to resolve a campaign and a member lister to check it against. Without
+		// these the handler correctly fails closed and this test would be
+		// measuring the refusal, not the GET/POST split it exists to pin.
+		findByIDFn: func(_ context.Context, id string) (*Session, error) {
+			return &Session{ID: id, CampaignID: "camp-1"}, nil
+		},
 	}
-	h := &Handler{svc: NewSessionService(repo, nil)}
+	h := &Handler{
+		svc:          NewSessionService(repo, nil),
+		memberLister: &stubMemberLister{members: []campaigns.CampaignMember{{UserID: "u1"}}},
+	}
 
 	e := echo.New()
 	req := httptest.NewRequest(http.MethodGet, "/rsvp/rt", nil)
@@ -346,5 +364,48 @@ func TestRSVPEmail_EscapesSessionName(t *testing.T) {
 	}
 	if !strings.Contains(mailer.lastHTML, "&lt;img") {
 		t.Error("session name should be HTML-escaped")
+	}
+}
+
+// TestProposalEmail_NeverPrintsABlankZone pins the fix to a narrow but real
+// dishonesty: sendProposalEmail resolved the member's zone with only a nil
+// check, so a users.timezone stored as ” (not NULL) produced memberTZ="" and
+// the email printed "times in " with nothing after it, plus "Times shown in ."
+// in the plain body — while renderLocalSlotForTZ fell back to UTC for the actual
+// clock values and the confirm page the member lands on said UTC. Two surfaces
+// disagreeing about the same slot, one of them naming no zone at all.
+//
+// The zone now comes through tokenUserTZ, which is the same resolution the
+// confirm page uses and already rejects the empty string.
+func TestProposalEmail_NeverPrintsABlankZone(t *testing.T) {
+	for _, tc := range []struct {
+		name   string
+		stored string
+		wantTZ string
+	}{
+		{"empty string in the column", "", "UTC"},
+		{"a real zone", "America/New_York", "America/New_York"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			mailer := &captureMailer{}
+			repo := &mockSessionRepo{
+				createProposalTokenFn: func(_ context.Context, _ *SlotProposalToken) error { return nil },
+			}
+			h := &Handler{svc: NewSessionService(repo, nil), mailer: mailer,
+				userDir: &stubUserDir{tz: tc.stored}, baseURL: "https://x.test"}
+
+			proposal := &SlotProposal{ID: "p1", Title: "Session times"}
+			options := []ProposalOptionView{{Option: SlotProposalOption{ID: "o1",
+				StartsAtUTC: time.Now().UTC(), EndsAtUTC: time.Now().UTC().Add(time.Hour)}}}
+			h.sendProposalEmail(context.Background(), "c1", "Vale of Ash", proposal, options,
+				campaigns.CampaignMember{UserID: "u1", Email: "a@b.test"})
+
+			if strings.Contains(mailer.lastHTML, "times in </p>") {
+				t.Errorf("the email header printed a blank zone; html=%s", mailer.lastHTML)
+			}
+			if !strings.Contains(mailer.lastHTML, "times in "+tc.wantTZ) {
+				t.Errorf("the email header does not name %q; html=%s", tc.wantTZ, mailer.lastHTML)
+			}
+		})
 	}
 }

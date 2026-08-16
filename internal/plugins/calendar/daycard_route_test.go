@@ -123,11 +123,11 @@ func TestGetEvent_ReturnsTheEditorsFieldsAndNothingElse(t *testing.T) {
 	// the wire that the type does not declare — a raw Event marshalled by mistake,
 	// say. Neither subsumes the other.
 	wantRecord := []string{
-		"all_day", "calendar_id", "category", "day", "description", "description_html",
-		"end_day", "end_hour", "end_minute", "end_month", "end_year", "entity_id",
-		"id", "is_recurring", "month", "name", "recurrence_interval",
-		"recurrence_type", "start_hour", "start_minute", "visibility",
-		"visibility_rules", "year",
+		"all_day", "calendar_id", "category", "collect_rsvps", "day", "description",
+		"description_html", "end_day", "end_hour", "end_minute", "end_month",
+		"end_year", "entity_id", "id", "is_recurring", "month", "name",
+		"recurrence_interval", "recurrence_type", "start_hour", "start_minute",
+		"visibility", "visibility_rules", "year",
 	}
 	declared := jsonKeySet(t, eventEditorRecord{})
 	if got := sortedKeys(declared); !equalStrings(got, wantRecord) {
@@ -146,10 +146,25 @@ func TestGetEvent_ReturnsTheEditorsFieldsAndNothingElse(t *testing.T) {
 	// The named refusals stay under the reflection assertion rather than instead
 	// of it. They cost nothing, and each one names a thing somebody genuinely
 	// reached for: no campaign data, no member list, no roster, no calendar
-	// structure, no authorship, no timestamps, no collect_rsvps.
+	// structure, no authorship, no timestamps.
+	//
+	// `collect_rsvps` LEFT THIS LIST (C-RSVP-P10, 2026-08-16) and the reason is
+	// not that the refusal was wrong in spirit — it is that this key was never
+	// an instance of it. The list refuses data about OTHER things (the campaign,
+	// the roster, the calendar's structure, who wrote the row); collect_rsvps is
+	// this event's own state, authored from this very editor through its own
+	// shipped endpoint. Withholding it did not keep the record narrow, it made
+	// the editor unable to round-trip a control it renders: the box painted
+	// UNCHECKED for an event whose collection was already ON, so there was no
+	// gesture that could turn it back OFF, and the hint under it described a
+	// first invitation for a party that had already been invited. The same
+	// argument DC2-RECUR-DATALOSS made for is_recurring, one field over.
+	//
+	// It is Scribe-gated, which is asserted separately below — a Player still
+	// gets no key at all.
 	for _, bad := range []string{
 		"campaign_id", "members", "roster", "months", "weekdays", "moons",
-		"created_by", "created_at", "updated_at", "collect_rsvps",
+		"created_by", "created_at", "updated_at",
 		"entity_name", "entity_icon", "entity_color", "color", "icon",
 	} {
 		if declared[bad] {
@@ -504,5 +519,84 @@ func TestGetEvent_TheRecordTypeHasExactlyOneProducer(t *testing.T) {
 			t.Errorf("%s references eventEditorRecord — this route adds no field to any "+
 				"export or module-API DTO", f)
 		}
+	}
+}
+
+// ── C-RSVP-P10: the arming state has to survive the round trip ──────────────
+//
+// THE GAP THIS CLOSES IS BETWEEN TWO PASSING SUITES, WHICH IS WHY IT IS HERE
+// AND NOT IN EITHER OF THEM. `collect_rsvps` was pinned twice, in opposite
+// directions, by tests that never saw each other:
+//
+//   - this file asserted the key must be ABSENT from the response;
+//   - test/js/daycard_rsvp_collect.test.mjs built a fixture event that CARRIED
+//     it and asserted the checkbox follows it.
+//
+// Both were green for the whole of the feature's life, and the product shipped
+// a checkbox that rendered UNCHECKED for an event whose RSVP collection was
+// already ON — which left the GM no gesture to turn it off, because you cannot
+// uncheck a box that is already drawn unchecked.
+//
+// The lesson is the same one the week/day-view revert taught: a test that feeds
+// a hand-built fixture never discovers that the producer does not build it. So
+// this asserts the SERVER's own record, for the same event state the JS test
+// hands its widget.
+
+func TestGetEvent_CarriesTheRSVPArmingStateToItsOwnEditor(t *testing.T) {
+	for _, tc := range []struct {
+		name  string
+		armed bool
+	}{
+		{"armed", true},
+		{"not armed", false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			evt := dayCardRouteEvent("everyone", nil)
+			evt.CollectRSVPs = tc.armed
+			h := dayCardRouteHandler(dayCardRouteCal("everyone"), evt)
+
+			rec, err := serveGetEvent(h, campaigns.RoleScribe, "u-1", "cal-1", "ev-1")
+			if err != nil {
+				t.Fatalf("GetEventAPI: %v", err)
+			}
+			if rec.Code != http.StatusOK {
+				t.Fatalf("status = %d, want 200", rec.Code)
+			}
+			var body map[string]any
+			if err := json.Unmarshal(rec.Body.Bytes(), &body); err != nil {
+				t.Fatalf("response is not JSON: %v", err)
+			}
+			got, ok := body["collect_rsvps"]
+			if !ok {
+				t.Fatalf("a Scribe's record has no collect_rsvps key — the day card's "+
+					"checkbox paints from this and would render unchecked for an event "+
+					"whose collection is %v, leaving no way to turn it off", tc.armed)
+			}
+			if got != tc.armed {
+				t.Errorf("collect_rsvps = %v, want %v", got, tc.armed)
+			}
+		})
+	}
+}
+
+// A Player never sees the key at all. The control is Scribe-gated in the
+// producer (daycard.templ's CanCollectRSVPs), so shipping the state to a
+// Player would be telling them something no surface of theirs can act on.
+func TestGetEvent_RSVPArmingStateIsScribeGated(t *testing.T) {
+	evt := dayCardRouteEvent("everyone", nil)
+	evt.CollectRSVPs = true
+	h := dayCardRouteHandler(dayCardRouteCal("everyone"), evt)
+
+	rec, err := serveGetEvent(h, campaigns.RolePlayer, "u-1", "cal-1", "ev-1")
+	if err != nil {
+		t.Fatalf("GetEventAPI: %v", err)
+	}
+	var body map[string]any
+	if err := json.Unmarshal(rec.Body.Bytes(), &body); err != nil {
+		t.Fatalf("response is not JSON: %v", err)
+	}
+	if _, ok := body["collect_rsvps"]; ok {
+		t.Error("a Player's record carries collect_rsvps; it is gated with visibility " +
+			"and visibility_rules and must travel with them")
 	}
 }

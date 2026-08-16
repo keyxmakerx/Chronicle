@@ -162,6 +162,81 @@ func TestBlockHalfRuleIsScopedToTenDayWeeks(t *testing.T) {
 	}
 }
 
+// TestBlockHalfRuleNeverLandsOnTheLastColumn closes a LATENT edge case that the
+// tile construction opened and then removed the safety net for.
+//
+// WHAT USED TO CATCH IT. `.cal-block-host .cell.lastcol { border-right: 0 }`
+// cancelled the five-column rule on a cell that was both `half` and last. That
+// rule existed for the RULED treatment's shared hairline, it cancelled nothing
+// once the hairline went, and C-CALV4-TILES deleted it — correctly: a CSS rule
+// that cancels nothing is a rule the next hand has to reason about.
+//
+// WHY IT STILL MATTERS. Deleting it also deleted the only thing that would have
+// contained the collision if it ever became reachable. The five-column rule is
+// drawn in the 3px gutter BETWEEN two tiles; on the last column there is no
+// gutter, so a strong rule would hang off the grid's outer edge with nothing to
+// sit in — and it would be a producer bug rendered by correct CSS.
+//
+// The live producer cannot produce it: blockIsHalfCol is true only for weekLen
+// == blockHalfRuleWeekLen (10) at col == weekLen/2 (5), and 5 is not 10. But
+// NOTHING ASSERTED THAT IT STAYS THAT WAY. Widening the constant to "any even
+// week" — the obvious generalisation, and the one blockHalfRuleWeekLen's own
+// comment says was refused — leaves weekLen/2 safe, while a rule of the shape
+// `col == weekLen` or an off-by-one on a 2-day week does not.
+//
+// THIS IS A PRODUCER-SIDE TEST AND NOT A CSS BAND-AID, deliberately. Re-adding
+// a `.lastcol` cancel would make the wrong flag paint correctly, which is how a
+// producer defect becomes invisible instead of impossible.
+func TestBlockHalfRuleNeverLandsOnTheLastColumn(t *testing.T) {
+	// Every week length a calendar could plausibly declare, plus the degenerate
+	// ones: a 1-day week is where `col == weekLen` and `col == weekLen/2` are
+	// most likely to collide under a careless rewrite.
+	for weekLen := 1; weekLen <= 20; weekLen++ {
+		if !blockIsHalfCol(weekLen, weekLen) {
+			continue
+		}
+		t.Errorf("blockIsHalfCol(%d, %d) is true: the LAST column of a %d-day week carries "+
+			"the five-column rule. That rule is drawn in the gutter BETWEEN two tiles and "+
+			"the last column has no gutter, so it would hang off the grid's outer edge. "+
+			"`.cell.lastcol` used to cancel exactly this and was deleted with the ruled "+
+			"treatment it belonged to; this test is what replaced it, on the producer side, "+
+			"because the fix for a wrong flag is not to paint it correctly",
+			weekLen, weekLen, weekLen)
+	}
+	// And the same claim through the surface that actually stamps the flag, so a
+	// header row that derived Half some other way could not slip past.
+	//
+	// ANCHORED AGAINST VACUITY FIRST. An absence-only sweep passes on a
+	// blockWeekdays that stopped setting Half at all, and it passes on a helper
+	// whose week length never reaches the sweep's values — both of which would
+	// read as "no collision" while proving nothing.
+	if ten := blockWeekdays(blockCalWithWeekLen(10)); len(ten) != 10 || !ten[4].Half {
+		t.Fatalf("blockWeekdays(10 weekdays) produced %d headers with Half at 5 = %v — the "+
+			"sweep below is vacuous unless this positive case holds", len(ten),
+			len(ten) == 10 && ten[4].Half)
+	}
+	for weekLen := 1; weekLen <= 20; weekLen++ {
+		wds := blockWeekdays(blockCalWithWeekLen(weekLen))
+		if len(wds) == 0 {
+			continue
+		}
+		if wds[len(wds)-1].Half {
+			t.Errorf("the last weekday header of a %d-day week carries Half — same collision, "+
+				"reached through blockWeekdays rather than through blockIsHalfCol", weekLen)
+		}
+	}
+}
+
+// blockCalWithWeekLen is a minimal calendar declaring exactly n weekdays, for
+// the sweep above. Names are irrelevant to Half; only the COUNT is.
+func blockCalWithWeekLen(n int) *Calendar {
+	cal := &Calendar{}
+	for i := 0; i < n; i++ {
+		cal.Weekdays = append(cal.Weekdays, Weekday{Name: fmt.Sprintf("d%d", i+1)})
+	}
+	return cal
+}
+
 func TestBlockRowCountFoldsInTheLead(t *testing.T) {
 	// 30 days, ten-day weeks, no lead → exactly 3 rows.
 	if got := blockRowCount(0, 30, 10); got != 3 {

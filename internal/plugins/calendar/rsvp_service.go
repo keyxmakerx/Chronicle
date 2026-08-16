@@ -40,8 +40,10 @@ type RSVPService interface {
 	// Summary builds the counts (+ optional per-person detail) for one event.
 	Summary(ctx context.Context, evt *Event, userID string, role int, includeDetail bool) (*EventRSVPSummary, error)
 
-	// SetCollection flips the per-event opt-in (Scribe+ at the route).
-	SetCollection(ctx context.Context, eventID string, enabled bool) error
+	// SetCollection flips the per-event opt-in (Scribe+ at the route) and
+	// reports whether THIS call caused the change — the invite fan-out rides
+	// that signal, so it has to come from the write.
+	SetCollection(ctx context.Context, eventID string, enabled bool) (changed bool, err error)
 
 	// MintActionTokens creates one single-use link per emailed action for a
 	// recipient, returned as action → token.
@@ -321,12 +323,13 @@ func (s *rsvpService) AnswersByUser(ctx context.Context, evt *Event, userID stri
 	return out, nil
 }
 
-// SetCollection flips the per-event opt-in.
-func (s *rsvpService) SetCollection(ctx context.Context, eventID string, enabled bool) error {
-	if err := s.repo.SetCollectRSVPs(ctx, eventID, enabled); err != nil {
-		return apperror.NewInternal(err)
+// SetCollection flips the per-event opt-in, reporting whether it changed.
+func (s *rsvpService) SetCollection(ctx context.Context, eventID string, enabled bool) (bool, error) {
+	changed, err := s.repo.SetCollectRSVPs(ctx, eventID, enabled)
+	if err != nil {
+		return false, apperror.NewInternal(err)
 	}
-	return nil
+	return changed, nil
 }
 
 // normalizeRSVPNote trims, length-checks, and nils-out an empty note. Returning
@@ -523,14 +526,33 @@ func (s *rsvpService) ApplyToken(ctx context.Context, token string) (*EventRSVPT
 // of redemption — exactly what the scheduler's own "Out this week" button means
 // (static/js/availability.js mondayOf(todayUTC())).
 //
-// The caller SHOWS the resolved week back to the member, so the action can never
-// silently block a week they didn't intend.
-func rsvpWeekDates(cal *Calendar, evt *Event, now time.Time) (monday string, dates []string) {
-	anchor := now.UTC()
-	if cal != nil && evt != nil && cal.UsesRealTime() {
-		anchor = time.Date(evt.Year, time.Month(evt.Month), evt.Day, 0, 0, 0, 0, time.UTC)
+// THE WEEK IS RESOLVED IN memberTZ, NOT IN UTC. "This week" is a claim about the
+// member's own calendar, and the emailed link is a one-tap action with no week
+// picker, so a UTC anchor blocked the wrong week for anyone far enough from
+// Greenwich: a Pacific/Auckland player tapping it over Monday breakfast
+// (2026-08-17 08:30 local = 2026-08-16 20:30 UTC) got 2026-08-10..2026-08-16 —
+// the week that had already ended — and stayed fully available for the week they
+// meant. Mirror image for Pacific/Pago_Pago late on a Sunday. Seven exception
+// rows landed on days they never intended and the days they did intend stayed
+// open in the Director's overlay.
+//
+// memberTZ may be empty (the member has set no zone anywhere), in which case UTC
+// is the only available reading and the caller — which always NAMES the resolved
+// week back to the member — is what keeps that honest.
+func rsvpWeekDates(cal *Calendar, evt *Event, now time.Time, memberTZ string) (monday string, dates []string) {
+	loc := time.UTC
+	if memberTZ != "" {
+		if l, err := time.LoadLocation(memberTZ); err == nil {
+			loc = l
+		}
 	}
-	anchor = time.Date(anchor.Year(), anchor.Month(), anchor.Day(), 0, 0, 0, 0, time.UTC)
+	anchor := now.In(loc)
+	if cal != nil && evt != nil && cal.UsesRealTime() {
+		// A real-time calendar's Y/M/D is already a civil date; it carries no
+		// zone, so it is read as one directly rather than converted.
+		anchor = time.Date(evt.Year, time.Month(evt.Month), evt.Day, 0, 0, 0, 0, loc)
+	}
+	anchor = time.Date(anchor.Year(), anchor.Month(), anchor.Day(), 0, 0, 0, 0, loc)
 	// (weekday + 6) % 7 = days since Monday, mirroring availability.js mondayOf.
 	off := (int(anchor.Weekday()) + 6) % 7
 	start := anchor.AddDate(0, 0, -off)

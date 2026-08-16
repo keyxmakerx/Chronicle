@@ -36,7 +36,7 @@ func TestSaveMyAvailability_ConvertsAndDedupes(t *testing.T) {
 	var saved []AvailabilityBlock
 	var savedTZ string
 	repo := &mockSessionRepo{
-		replaceUserAvailabilityFn: func(_ context.Context, campaignID, userID string, blocks []AvailabilityBlock) error {
+		replaceUserAvailabilityFn: func(_ context.Context, campaignID, userID, _ string, blocks []AvailabilityBlock) error {
 			if campaignID != "camp-1" || userID != "u1" {
 				t.Errorf("wrong scope: %s / %s", campaignID, userID)
 			}
@@ -102,14 +102,31 @@ func TestAddMyException_InvalidDate(t *testing.T) {
 	assertAppError(t, err, 400)
 }
 
+// RE-POINTED, NOT WEAKENED. This used to assert that AddMyException reached
+// repo.AddException — a single-row insert. That was the defect: exception rows
+// REPLACE the recurring pattern for their date, so the one row inserted became
+// the member's whole day and silently deleted the rest of it. AddMyException now
+// composes the day and writes it atomically through ReplaceDayExceptions, so the
+// same scope assertions (campaign, user, date) are made against that call
+// instead. The write path changed; nothing it checks was dropped.
 func TestAddMyException_Valid(t *testing.T) {
 	called := false
 	repo := &mockSessionRepo{
-		addExceptionFn: func(_ context.Context, e *AvailabilityException) error {
+		replaceDayExceptionsFn: func(_ context.Context, campaignID, userID, onDate string, excs []AvailabilityException) error {
 			called = true
-			if e.CampaignID != "camp-1" || e.UserID != "u1" || e.OnDate != "2026-07-16" {
-				t.Errorf("exception scope/date wrong: %+v", e)
+			if campaignID != "camp-1" || userID != "u1" || onDate != "2026-07-16" {
+				t.Errorf("exception scope/date wrong: campaign=%q user=%q date=%q", campaignID, userID, onDate)
 			}
+			for _, e := range excs {
+				if e.TZ != "America/New_York" {
+					t.Errorf("row written in %q, want the requested America/New_York: %+v", e.TZ, e)
+				}
+			}
+			return nil
+		},
+		addExceptionFn: func(_ context.Context, e *AvailabilityException) error {
+			t.Errorf("AddMyException took the single-row insert path again (%+v) — "+
+				"that path erases the rest of the member's day", e)
 			return nil
 		},
 	}
@@ -121,7 +138,7 @@ func TestAddMyException_Valid(t *testing.T) {
 		t.Fatalf("unexpected error: %v", err)
 	}
 	if !called {
-		t.Error("expected AddException to be called")
+		t.Error("expected the composed day to be written through ReplaceDayExceptions")
 	}
 }
 

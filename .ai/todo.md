@@ -9,6 +9,357 @@
 <!-- Legend: [ ] Not started  [~] In progress  [x] Complete  [!] Blocked      -->
 <!-- ====================================================================== -->
 
+## 0-rsvp. The product asks instead of guessing (C-RSVP-P10, 2026-08-16)
+
+- [x] **One call-to-action banner** for the player, polled like the bell badge:
+  an unanswered RSVP, or the timezone ask. State, not an event; empty body means
+  empty banner; never fails the poll.
+- [x] **The timezone ask** — the server never guesses; the widget offers the
+  browser's zone and `PUT /account/timezone` (already existed) accepts it.
+  Dismissal per kind, tab-scoped.
+- [x] **One entrance animation**, held to the shell's global reduced-motion law.
+- [x] **DEFECT: RSVP collection could be armed and never disarmed.**
+  `collect_rsvps` was missing from the editor record, so the day card's checkbox
+  always rendered unchecked. Fixed and pinned across both halves.
+
+- [ ] **BOOKED, needs the operator's call — a co-DM cannot arm RSVP
+  collection.** `RequireRole` compares raw `MemberRole` and never the DM grant,
+  so a DM-granted Player is refused at
+  `PUT .../events/:eid/rsvp-collection`. This is arguably the WG-4 mistake in a
+  new place, but the change WIDENS a write permission, so it is not a silent
+  fix. Decide whether a co-DM should be able to arm RSVPs.
+
+**Recommended on a live client (cannot be unit-tested):** confirm the banner
+appears for a player with an unanswered RSVP and clears when they answer;
+confirm the timezone banner offers the right zone and that accepting it makes
+the Bench's "zone not set" badge go away; confirm the banner does NOT flash on
+every sidebar navigation (it sits outside the boosted swap target); confirm the
+day card's Collect RSVPs checkbox now renders CHECKED for an armed event and can
+be turned off.
+
+## 0-rsvp. RSVP expanded for real situations (C-RSVP-P9, 2026-08-16)
+
+C-RSVP-ROBUST fixed defects; it added no capability. Asked whether the system had
+been expanded, the honest answer was no. These three close that.
+
+- [x] **"Has not answered" is a state.** `member_availability_status`
+  (sessions migration 005), stamped in the same transaction as the block
+  replace. Not derivable from row counts — an EMPTY save is a real answer, and a
+  derived flag would call that member silent forever. Surfaced as a banner on
+  the member's own grid and a gold badge on the Director's roster chip.
+- [x] **Alternating weeks.** `week_parity` (0 every week / 1 / 2), mapped onto
+  real dates from a fixed global epoch. Unique key re-cut to include it. The
+  picker names two dated Sundays, never "odd"/"even".
+- [x] **Nudge the silent ones.** `POST /availability/nudge`, Owner/co-DM,
+  reports names back. A button, never a timer — there is no scheduled-job runner
+  and one was not invented for this.
+
+**Recommended on a live client (cannot be unit-tested):** confirm the unanswered
+banner appears for a player who has never saved and clears the moment they save
+an EMPTY grid; confirm the Director's chip badge and the nudge button appear only
+while somebody is actually silent, and that the nudge lands in the top-right
+bell; paint an alternating-week pattern and confirm the heatmap shows it on
+alternate weeks with the hatch showing the every-week layer underneath.
+
+## 0-rsvp. RSVP + availability made runnable (C-RSVP-ROBUST, 2026-08-16)
+
+Twelve defects in the RSVP and availability systems. Every fix carries a guard
+proved RED before green. Detail: `internal/plugins/sessions/.ai.md` and
+`internal/plugins/calendar/.ai.md`.
+
+### [x] Done
+
+- **The overlay could not RETURN in the DST-midnight zones**, and the goroutine
+  allocated until the OOM killer took the instance (41 MB → 2.6 GB in ten
+  seconds, measured live, and it kept going after the client disconnected). One
+  authenticated GET with `?tz=America/Havana`, or a Cuban/Chilean/Azorean
+  viewer's own profile zone twice a year. Fixed with `timeutil.StartOfCivilDay`
+  plus a hard fuse in the split loop.
+- **A member's timezone lives in two columns and the product read one.**
+  `member_availability.tz` is what the "Your timezone" control writes; nothing
+  read it. `CampaignMemberZones` (one read per roster) is now the first source,
+  reaching the calendar through `AvailabilityExceptionWriter.MemberZone`.
+- **Offered windows relabelled the member's existing hours** into the caller's
+  zone — a four-hour real-time move with no edit by them. The day is now written
+  in the zone its source rows were authored in; the OFFER is converted.
+- **`POST /availability/exceptions` deleted the rest of the member's day.**
+  "I'm ALSO free 07:00–08:00" left them busy every evening. It composes now.
+- **`/rsvp/:token`**: membership re-checked on both halves; genuinely single-use
+  (consume-before-apply + `used_at IS NULL`); `UpdateAttendeeStatus` is an upsert,
+  ending the same-second "attendee not found" 404 and the late joiner who had no
+  RSVP control at all.
+- **"Out this week" resolved the week in UTC** — a whole week wrong for Auckland
+  and Pago Pago. It resolves in the member's zone and names it.
+- **The emailed suggest form named no zone**; it does now, including the no-zone
+  case, which names UTC and where to fix it.
+- **Arming Collect RSVPs claimed `emailed:true` while the shared 24h floor
+  suppressed every send.** `planInviteFanOut` reports what will really happen and
+  names the reason when it is nothing; the arming transition is now the write's
+  own answer, so two Scribes cannot double-mail the roster.
+- **Closing collection turned every live link into "RSVP Failed"**, including for
+  a member who had answered yes. `collect_rsvps` is out of the reassurance gate;
+  the visibility gate is untouched and pinned in both leak directions.
+
+### [ ] Open — booked here rather than dropped
+
+- **An RSVP note cannot be cleared once written.** `normalizeRSVPNote` maps "" to
+  nil and `UpsertRSVP`'s `COALESCE(VALUES(note), note)` then preserves, while
+  `SuggestTime` refuses an empty note by design — so there is no write path that
+  could clear the column. Needs a control that does not exist plus a decision
+  about whether answering "Going" should clear a note left with an earlier
+  "maybe". Probe kept in `internal/plugins/calendar/zz_scout_probe_test.go`.
+- **`overlayMembers` still issues one `GetUser` per member who has NOT set an
+  availability-page zone.** The campaign-wide zone read removed the N+1 for
+  everyone who has; eliminating it entirely needs a batch user lookup that
+  `auth.AuthService` does not expose. Correctness is unaffected.
+- **Recommended on a live client** (cannot be unit-tested): open the Bench during
+  a spring-forward week with a profile zone of America/Havana and confirm the
+  page renders; confirm a player who sets only the availability page's "Your
+  timezone" gets a clock on the Bench instead of a repair chip; confirm a member
+  who joined after a session was created sees RSVP buttons on it.
+
+## 0-rsvp. The availability engine could kill the server (2026-08-16)
+
+An overnight hardening pass. Twelve defects found by audit, five critical. What
+landed is below; what did NOT land is in `0-notready` beneath it.
+
+### [x] Done — the one that mattered most
+
+- **A DENIAL OF SERVICE, FIXED.** `splitToViewerDays` could never terminate when
+  the viewer's timezone has no local midnight on a DST spring-forward day:
+  `time.Date` normalises 00:00 BACKWARDS into the previous local day, so the
+  "next midnight" sat behind the cursor and the loop appended a segment forever.
+  **Measured live at 41 MB → 2.6 GB RSS in ten seconds, still climbing, and it
+  does not stop when the client disconnects** — one authenticated GET OOM-kills
+  the server. Reachable deliberately (`?tz=` is caller-supplied on the overlay
+  API) and by accident twice a year for any Cuban or Chilean director.
+- **The fix is an INVARIANT, not a zone list.** `timeutil.StartOfCivilDay`
+  returns the first REAL instant of a civil date; the loop is bounded; and there
+  is an explicit advance guard. **This distinction was load-bearing:** the audit
+  named `America/Havana` and `America/Santiago`; an independent sweep of all 497
+  tzdata zones × 2025–2027 found **`Atlantic/Azores` as well**. A fix validated
+  against the two-zone report would have passed review and still hung.
+  Re-swept after the fix: **544,215 (zone, day) pairs, 0 wrong; no
+  non-termination anywhere; worst iteration count 4.**
+- **"Out this week" from an emailed link now uses the member's own zone.** It
+  resolved in UTC, so a Pacific/Auckland player tapping it on Monday morning
+  blocked *the week that had already ended*, from a one-tap link with no undo.
+- Plus: exception-compose no longer erases the rest of a member's day, offered
+  windows keep the zone they were authored in, session RSVP tokens are
+  single-use and re-check membership, a member who joins after a session was
+  created can now RSVP, and pressing Going twice no longer answers "attendee not
+  found".
+
+### [ ] Open
+
+- **The overlay-level DST guard is weaker than its name.**
+  `TestOverlay_TerminatesInMidnightJumpZones` does NOT fail when
+  `StartOfCivilDay` is reverted to the defective expression — the loop's
+  belt-and-braces advance guard holds it green. The fix IS guarded, but at the
+  `internal/timeutil` layer (three tests there fail correctly on revert).
+  Verified by reverting the helper and running both. Worth either strengthening
+  the overlay test or renaming it to what it actually proves.
+- **`make test-int-local` exits 1 — PRE-EXISTING, not from this pass.**
+  `internal/plugins/entities` and `internal/plugins/timeline` fail with
+  `Error 1046 (3D000): No database selected`. The documented integration command
+  has been red, and was masked for as long as the tests were skipping.
+- **The row-level guards skip under `make test`.** All five `TestDB_*` need
+  `CHRONICLE_TEST_DB_DSN`, which only `make test-int-local` sets. A run using
+  the documented default reports success having executed none of them.
+
+## 0-notready. The v4 week/day views and GM console did NOT ship (2026-08-16)
+
+Built overnight, **preserved in history and reverted off the branch tip.**
+Recover with a revert of the revert. Four adversarial provers found:
+
+- **CRITICAL:** the week view's hour grid is a second horizontal scroll
+  container (`overflow-y: auto` + `overflow-x: visible` computes overflow-x to
+  auto). Scrolling sideways **erases the timed-event grid**; at 390px it reaches
+  zero visible.
+- **SERIOUS:** the phone GM console renders 0 of 4 sheet buttons inside the
+  viewport.
+- **HIGH:** six feature losses against the V2 views — one calendar per campaign
+  instead of all, no event descriptions in the day view, no event detail or RSVP
+  from the surface, a co-DM loses Set time/Set date.
+- **HIGH, and the lesson:** BOTH features can be UNPLUGGED and the whole suite
+  stays green — 25 Go tests, a Chromium probe and 16 JS tests all feed
+  hand-built fixtures instead of going through the page builder. **Nothing
+  covered the seam that mounts them.**
+
+**This costs nothing today** because the V2 shell is not being deleted, so its
+week view, day view and GM console still work.
+
+## 0-anchor. Fantasy days now have real dates (2026-08-16)
+
+C-CALV4-ANCHOR, migration 018. The prerequisite `C-CALV4-TILES` §8.6 booked, and
+the reason the availability strip shipped dormant.
+
+### [x] Done
+
+- **One anchor per calendar** — an in-world y/m/d plus the real date it equals.
+  `Calendar.AbsoluteDay` already did the counting; this is what it counts from.
+- **The NAMED date is stored, not a day count.** A stored count survives a
+  structure edit by holding the count fixed and sliding the in-world date the
+  anchor names; the named day is what an owner means.
+- **`Validate` runs against the calendar it is stored on** — the only place a
+  phantom in-world date is catchable, because `AbsoluteDay` returns a number for
+  month 14 day 40 quite happily and mis-dates everything else forever.
+- **All four columns or none**, enforced at the struct, on read, and in the form
+  parser; all four empty is the CLEAR.
+- **`FromAbsoluteDay`**, the exported inverse — bounded correction loop, reports
+  rather than approximating. Moon phases, seasons and eras all compute forward
+  today; this is the "which day is index N" they could not ask.
+- **Surfaced** as `Sat 3 Oct 2026` in the Ledger day panel (`.ldrd`), sharing the
+  moon line's type. Not in the grid cell — 34px has no room.
+- **Settings → Real dates**, fantasy-only, Owner-only, with the consequence
+  stated back on the page and a one-click "use today and the calendar's current
+  day". Audited with its values (`calendar.anchor_set`).
+- **Un-anchored emits nothing**, asserted over a whole rendered month — every
+  calendar in the product is un-anchored today, so this is the common path.
+
+### [ ] Open — booked here rather than dropped
+
+- **The availability lanes are still not wired.** The strip's CSS and markup ship
+  complete; what is missing is the join. `DayCell` needs an availability field,
+  `block_projection.go` needs to fetch `member_availability` +
+  `availability_exceptions` through the sessions service interface (never the
+  repo — rule 8), and the recurring pattern is keyed to a Gregorian
+  `day_of_week`, which the anchor now makes derivable. **This is the next
+  slice.**
+- **Nothing re-dates when an anchor changes.** Moving it by a day moves every
+  session, every availability lookup and every "next game is on…" at once, with
+  nothing on screen to say why. The audit entry carries the values so it is at
+  least diagnosable; a confirmation step naming the consequence is not built.
+- **The Bench's `/schedule` panel still frames itself in real weeks only.** It is
+  correct — it is a real-world surface — but with an anchor set it could now name
+  the in-world date beside "week of 20 Jul 2026", and does not.
+- **`TestBenchRoute_SnapshotIsUnmoved` was re-pointed** (727 → 728). It shipped as
+  a bare total-line pin guarding a slice that had already landed, so it fired on
+  any future route anywhere. It now also asserts the V2 shell's six routes BY
+  PATH, which is what the count was standing in for and cannot be satisfied by an
+  unrelated addition.
+
+## 0-runes. The four corners, the runes, and three dead colour channels (2026-08-16)
+
+C-CALV4-TILES §9/§10. Built in two lanes with an adversarial prover that decodes
+PIXELS — every failure in this arc has been a thing that computed correctly and
+painted nothing.
+
+### [x] Done
+
+- **The corners swapped.** Moon top-LEFT, date top-right. This closes
+  0-tiles' last open item: the cluster grows rightward now, so the disc under
+  the pointer moves **0.00px** (a control arm re-anchoring it to the old edge in
+  the same pass still measures **35.05px**, so 0.00 has something to be better
+  than). Displacement without a transition is exactly what a `transition`-grep
+  cannot see.
+- **`today` is INK, not a stamp** — weight and colour, no width/height/radius/
+  shadow anywhere. FOUR disc-sizing rules deleted, not the three §9.1 counted;
+  the fourth only renders at a column width no phone produces.
+- **32 pooled rune glyphs**, chosen by `:nth-child()` × `p1..p8`, drawn as
+  `mask-image` + `background-color` (a data-URI SVG used as `background-image`
+  is an independent document and cannot see the host's `color`). Runes are the
+  NARROW form and event names the WIDE one: 115.4px column → 10 chips / **0**
+  runes; 34.0px → 11 runes at 9×12 / **0** chips. Rune × numeral overlap
+  0.00px² and spill 0.00px across 51 host widths, 280→480px.
+- **The rune ink keeps the operator's chroma.** The first build wrote a constant
+  `c`, so hue was the only surviving channel at exactly the density where the
+  glyph had become decorative. `--axis` is `EventCategories[].Color` behind a
+  bare `<input type="color">`: two types separated by saturation inked **6/255**
+  apart, and `#888888` inked a RED rune 3/255 from a vivid red one. Scaled now
+  (41/64, 53/87), guarded, proven red.
+- **The legend is a disclosure and a COLOUR key**, reachable by touch AND
+  keyboard — tab **91.70×44.00px** under a coarse pointer, the 44px floor met
+  rather than reported. `:focus-visible`, not `:focus-within`: under the latter
+  a second tap cannot CLOSE it.
+- **The legend's dead pattern swatches are deleted.** `.legend .lr` is three
+  classes and re-declared `--dash: 100%`, outranking the two-class `.pN` rules —
+  eight patterns, at most three appearances. Pre-existing.
+- **The chip tint paints its own hue again.** `color-mix(in oklch, …)`
+  interpolates the HUE ANGLE and light's `--surface-card` is `oklch(1 0 0)`,
+  white with an *explicit* hue of zero — a blue, a red and a green event all
+  filled pale PINK, 3–4/255 apart. Pre-existing; invisible until the gapped tile
+  gave the chip a coloured surround. sRGB now: 12–18/255.
+- **The availability strip ships COMPLETE and DORMANT** — **0** painted lane
+  pixels across 66 renders, each with a force-filled sentinel so a comparator
+  that could never fail is caught before its clean reading is believed.
+
+### [ ] Open — booked here rather than dropped
+
+- [x] ~~**The GM strike and a gold category collide.**~~ CLOSED 2026-08-16 by
+  operator ruling: gold means GM, so the CATEGORY moved. `Holiday` is
+  `#84cc16` (lime-500), picked by sweeping the whole hue circle through the
+  shipped rune-ink recipe in both themes and scoring against the gold AND the
+  five other defaults. Holiday vs GM-gold **28 → 75/255**; worst pair of the six
+  **29 → 43/255**, and no longer a Holiday pair. Checked on the chip surface too
+  (unchanged at 8/255 — the chip's identity is its full-strength rail, not the
+  faint wash). Existing calendars keep their amber: seeding new ones is a
+  default, rewriting live rows would overwrite a colour an owner may have picked
+  on purpose. Pinned by `TestDefaultCategories_NoneCollidesWithTheGMGold`.
+- **Lightness is still normalised** and that is what makes a rune an ink, so two
+  types differing mainly in lightness still converge — the shipped defaults'
+  closest pair goes 80/255 raw → **29/255**. Two achromatic picks ink
+  identically.
+- **The pattern channel has no key surface anywhere.** It paints on
+  `.lrow .rail` and `.chip .rail`; nothing says what a dash means. Older than
+  this pass — the legend key never worked — but now written down.
+- **Eight of the 32 glyphs are unreachable.** `underlineCap` is 3, so the
+  `:nth-child(4)` family cannot match. Shipped anyway so the first fourth
+  segment ever emitted finds a glyph rather than a solid 9×12 slab; raising the
+  cap changes `underlineRestAt`'s neutral-overflow contract.
+- **The strip stays dormant** until the fantasy↔real date anchor (§8.6) is
+  answered: `DayCell` has no availability field and the windows live in the
+  sessions plugin keyed to REAL dates.
+
+## 0-tiles. The day cell became a tile, and the era went soft (2026-08-15)
+
+C-CALV4-TILES. Dispatch: `Cordinator/dispatches/chronicle/C-CALV4-TILES.md`;
+the reference measured in `C-CALV4-TILE-RECIPE.md`.
+
+### [x] Done
+
+- **The tile.** `.cell::before`, inset 1.5px, `--r-ctl` 6px radius, `z-index:-1`
+  inside `isolation: isolate`. 3px of grid ground between neighbours on both
+  axes, measured in paint. The container-query subject GAINED a pixel (33.0 →
+  34.0 at a 366px ten-day host) instead of losing four, which is what a real
+  `column-gap` would have cost — and 29.0px is under the 30px moon floor.
+- **The era band rows are gone** — `bandRow`, `.bl`, `.sfx`, `.halfrule`, every
+  `.band*` rule, `bandStyle`/`bandClass`/`halfRuleStyle`, `--bandhue`.
+  `EraBand` the DATA stays: `cellStyle` reads `row.Bands` for the tint.
+- **The five-column rule survives** on `.cell.half`'s own border-right, drawn in
+  the gutter. Two owners now, asserted to be exactly two.
+- **The tint went soft** — chroma 0.022 → 0.010 (light), 0.030 → 0.012 (dark);
+  measured separation 11/255 light, 10/255 dark.
+- **Selection stopped eating the tint.** The `background:` shorthand was
+  replacing the fill chain; selection moved onto the tile and now lifts from
+  `--cellbase`, so a selected day keeps its era hue. Guarded.
+- **Two bands where there were two floors**: the era separation [4,12] and the
+  tile rule [8,32] from the ground, both in a real engine, both themes.
+- **A painted-pixel probe** (`tile_paint_probe_test.go`), because the tile-rule
+  probe passed on a grid drawing nothing. Decodes the PNG; proven red first.
+- **The era editor tells the truth** — a live preview of the tint the grid will
+  actually paint, both themes, plus a test that reads the L/C constants back out
+  of `calendar-block.css` so the mirror cannot drift.
+
+### [ ] Open — booked here rather than dropped
+
+- **The era colour has no legend naming the era.** The deleted band row was the
+  only surface that named the era PER WEEK ROW; the Nameplate badge carries
+  `BlockData.EraLabel` (a different field, "RoW" against "Reckoning of Wards" in
+  the fixture) and names one era for the whole calendar. A month spanning two
+  eras now shows two tint groups and names neither. `EraBand.Label` and
+  `.Suffix` have zero readers and are kept for this.
+- **`calendar_eras.color` is `VARCHAR(20)` with zero headroom** —
+  `oklch(0.55 0.12 200)` is exactly 20 characters. Nothing today writes longer,
+  but `oklch(… / 60%)` or a `deg` suffix truncates silently. Needs a migration
+  before anyone widens the accepted colour syntax.
+- **From the reference, not in the operator's four asks:** past-day dimming, a
+  weather glyph + temperature in the cell's bottom-left, a gold weekday header
+  on bare ground.
+- [x] ~~**Hover still moves the thing you pointed at**~~ — CLOSED by 0-runes'
+  corner swap (2026-08-16). The cluster is anchored LEFT and grows rightward;
+  measured 0.00px against a 35.05px control arm.
+
 ## 0-integration. The four moon stages integrated (2026-08-11)
 
 ### [x] Done
@@ -766,8 +1117,41 @@ is carried, not closed, and the first row is the one the rest hang off.
       it, but build the replacements first"*). **What is outstanding is order,
       not outcome — this row reads "when", never "whether".**
 
+      **THE GATE WAS UNDER-COUNTED, AND THAT IS THE HEADLINE (2026-08-16).**
+      A sweep for "is there a third prerequisite nobody wrote down" found
+      **SEVEN** things that die with the shell, not the two this gate lists.
+      Reproduced from source, each with its only live host:
+
+      1. **The V2 LEDGER / "Timeline" view** — the calendar's FOURTH V2 view
+         (`calendar_v2_ledger.go`, `ledgerView` at calendar_v2.templ:1066,
+         `case "ledger"` in ShowV2). No v4 home. **This is a third
+         prerequisite, not a footnote.**
+      2. **ACTIVE-CALENDAR SWITCHING.** `POST /calendar/v2/switch` is already
+         in the removal arithmetic as −1 "no live consumer", but the
+         CONSEQUENCE is recorded nowhere: `SwitchActiveCalendar` becomes
+         unreachable from any UI, so **an owner with 2+ calendars can never
+         change which one is active again** — and the world-state PUT's
+         no-`?calendarId=` branch resolves exactly that per-user active
+         calendar. A one-way trap.
+      3. **The real-time LIVE WALL CLOCK** (C-REAL-CALENDAR-P3) and the
+         viewer-zone EVENT-TIME HINTS — both driven from
+         `calendar_v2_shell.js`, whose only live host is the shell.
+      4. **Create-entity-from-event** — the route survives, its only UI
+         (`event_grid.js` `[data-action-create-entity]`) does not.
+      5. **Event↔entity MULTI-TIE UI** and its three routes — already booked
+         under [ER-4], so a known loss rather than a hidden one.
+      6. **Drag-to-MOVE an event to another day** — the Bench's day card has
+         drag-CREATE only.
+      7. **Four smaller V2-only affordances, none booked:** the `?` shortcuts
+         modal, event quick-peek, the day-detail popover, and quick-edit.
+
+      **NOT an orphan, worth knowing:** `cal-almanac.js` and the sky engine
+      SURVIVE — three entity blocks still load them. The engine is off the
+      Bench by deliberate refusal ([SKY-13]), not by absence.
+
       **ENTRY CONDITION, ALL FOUR BOXES, not partially satisfiable.**
-      **AS OF 2026-08-08 THE GATE READS ONE OF FOUR:**
+      **AS OF 2026-08-16 THE GATE READS TWO OF FOUR — and the four boxes are
+      themselves incomplete, see above:**
       - [ ] `C-CALV4-WEEKDAY-VIEWS` MERGED — v4 has a week and a day view, or
             the slice records the signed decision that it will not.
             **NOT MET, NOT STARTED.** R2-4 sharpened this one rather than
@@ -778,7 +1162,10 @@ is carried, not closed, and the first row is the one the rest hang off.
       - [ ] `C-CALV4-GM-CONSOLE` MERGED — the GM world-state console has a v4
             home. **NOT MET, NOT STARTED.** A REHOUSING job, not a backend one:
             `PUT /calendar/world-state` survives any sunset
-      - [ ] R2-5 (`C-CALV4-SKY`) MERGED — the sky header ships.
+      - [x] **R2-5 (`C-CALV4-SKY`) MERGED — MET as of 2026-08-16.** Verified
+            on `origin/main` (PR #588 and everything up to #593 have landed;
+            `git log origin/main` carries the sky stages). The box ticked
+            itself exactly as this row predicted.
             **NOT MET — AND NOT FOR A BUILD REASON.** The sky SHIPPED
             2026-08-08, fix round included, and is on
             `claude/coordinator-handoff-stage-3-3d3s4w`. **This box says MERGED
@@ -3908,3 +4295,55 @@ dispatch does not go looking for a backlog entry that should not exist:**
   item and is already booked above as **`C-CALV4-MONTHLY-INTERVAL-CONTROL`**.
   Do not re-create the engine booking from the dispatch text.
 
+
+### calendar-v4 refinement — found by FILMING it, stage 4 (2026-08-14)
+
+Two items, both **measured in a real headless Chromium over production markup**
+(`templ Block(BlockData)` from the package's own `fxSky` fixture, seated in
+`.cal-bench > .bsurf`, both shipped stylesheets, 1280x800 dpr2). Neither is a
+reading of the source and neither was fixed in that stage, which only films.
+
+- [ ] **`C-CALV4-SKY-PHASE-WORD-CLASH` — the sky pane's phase words are drawn
+  inside a moon disc.** `block.templ`'s `skyTonight` emits the phase word as
+  `<span class="ph">`, and `calendar-block.css:1184` styles `.cal-block-host
+  .ph` as the per-day moon DISC primitive — 10px square, `overflow: hidden`,
+  pill radius, `--surface-card` ground, a 1px inset ring, plus a `::before`
+  that fills the right half with `--rule-structural-strong`. The bench sheet's
+  own `.cal-bench .cal-block-host .skygrow .skyrow .ph` (calendar-bench.css:
+  2380) sets `flex/overflow/white-space/text-overflow` and resets **none** of
+  that paint. MEASURED, dark, 1280x800: the word "waxing gibbous" computes
+  `909 x 10px`, `overflow: hidden`, `border-radius: 9999px`,
+  `background: oklch(0.19 0.008 78)`, `box-shadow: … 1px inset`,
+  `::before { clip-path: inset(0 0 0 50%) }`. All four Tonight rows.
+  **NOT CAUSED BY THIS ARC** — re-rendered against `b9f248da` (the commit
+  before stage 1) the geometry is identical to the pixel; only the colour moved
+  with the palette. The fix is a reset on the bench rule, or a rename of one of
+  the two `.ph` uses. Evidence: `X1-phase-word-collision.png`,
+  `R4-chest-open-{desktop,phone}.png`.
+
+- [ ] **`C-CALV4-CELL-DISC-INVERTS-WHEN-CHOSEN` — on the chosen day the moon
+  discs read as holes, not rings.** Stage 1 gave the selected cell
+  `background: color-mix(in oklch, var(--surface-card) 92%, var(--gold))`
+  (calendar-block.css:982). MEASURED: chosen cell ground
+  `oklch(0.24 0.01776 78.8)`, plain cell ground transparent over the card, and
+  `.ph`'s own ground `oklch(0.19 0.008 78)` in BOTH. So the disc is 0.05 L
+  darker than the cell it sits on only when that cell is chosen, and the mark
+  inverts its read on the one cell a reader is looking at. Cosmetic, one
+  token deep, and a deliberate decision either way — booked rather than
+  silently "fixed", because the discs are on the marks layer (canon A7) and
+  the obvious repair is to paint them from the cell's own ground.
+  Evidence: `R5-cell-zoom.png` (chosen cell beside a plain one, at 8x).
+
+**And one correction to a stated constraint, recorded so the next brief does
+not repeat it.** "ZERO MOTION in `calendar-block.css` — the grid does not
+animate; hover/selection change INSTANTLY" is **false against the shipped
+sheet, and `TestCSS_NoMotionAtAll` does not assert it.** That test is an
+ALLOWLIST (css_contract_test.go:112-160): refusals, then "everything that moves
+lives inside the one `prefers-reduced-motion: no-preference` block", then a
+property allowlist, then a keyframes allowlist. §MOTION in calendar-block.css:
+3074 declares a four-item budget and names it a budget. MEASURED: one tap on a
+day cell starts **four** transitions — `background-color` on `.cell` (150ms),
+`background-color` on the matching `.lrow` (150ms), `transform` on that row's
+`.rail` (150ms), and the `m-latch` clip-path animation on `.cell::after`
+(100ms). The Ledger's CONTENT is complete in frame 0; it is the COLOUR that
+takes 150ms. Evidence: `C3-day-selection-sheet.png`.

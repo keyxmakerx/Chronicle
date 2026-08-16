@@ -137,6 +137,15 @@ always_allowed_prefixes=(
   # item that links to it. Substituting a non-colliding slug would leave the test
   # asserting nothing about the case it is named for.
   "internal/systems/operator_diag_campaign_test.go"
+  # The sessions plugin's real-MariaDB test harness. sessions/migrations/001
+  # carries `FOREIGN KEY (calendar_id) REFERENCES calendars(id)`, so a sessions
+  # row-level test cannot get a schema at all without the CALENDAR plugin's
+  # migrations applied first. It loads them OFF DISK with os.DirFS precisely to
+  # avoid the import edge — internal/wire/plugin_import_guard_test.go forbids a
+  # sessions→calendar import outright — so the slug here names a migrations
+  # DIRECTORY in a test fixture, not a runtime dependency. Substituting a
+  # non-colliding name would simply fail to find the migrations.
+  "internal/plugins/sessions/dbtest_support_test.go"
 )
 
 # ---------------------------------------------------------------------------

@@ -147,6 +147,16 @@ templ Stylesheet() {
 // There is no sunrise and no sunset here in any form: not a tick, not a chip,
 // not a "needs backend" note, not a 06:00/18:00 default.
 //
+// AMENDED — C-CALV4-SKY-CHEST stage 2. The first of the three facts is no
+// longer a SEATED fact. The band is a chest LID: the sky is painted on it, the
+// moons are painted INTO that sky as scenery, and the lid's own content row
+// carries the in-world clock, the season word and the caret. The count is
+// unchanged — the phases are still stated, in the accessible name, in the
+// scenery's per-body `title`, and as running text in the pane's Tonight
+// panel — but the moons no longer occupy a slot in the row, which is the thing
+// the operator called redundant. Nothing about the fact's ABSENCE rule moves:
+// a calendar with no declared moons paints no scenery at all.
+//
 // COMPACT IS THE RESTING STATE. The header is NOT a fifth Bench section
 // ([SKY-10]): it takes no row in the section store, no toggle route and no
 // migration, and it defaults CLOSED at every width for every viewer and
@@ -155,8 +165,32 @@ templ skyHeader(d BlockData) {
 	{{ anchor := almanacAnchorDay(d) }}
 	<details class="skygrow" data-cal-sky style={ skyStyle(d) }>
 		<summary class="skyhdr" aria-label={ skyLabel(d) }>
+			// THE MOONS ARE PAINTED INTO THE SKY, NOT SEATED IN THE LID.
+			// C-CALV4-SKY-CHEST stage 2, on the operator's decision: "it'll be
+			// in the skypane animated plus we have the like menu for the moons
+			// and such anyways". The `.skdiscs` cluster this replaces was a
+			// PERMANENT SLOT in the lid's own flex row — it reserved inline
+			// space beside the clock at every width, and its width grew with
+			// the moon count. `.skscene` reserves nothing: it is absolutely
+			// positioned scenery painted onto the sky field, behind the lid's
+			// facts, inert, and it grows with the pane exactly as before.
+			//
+			// IT CANNOT LEAVE THE <summary>, AND THAT IS MEASURED RATHER THAN
+			// PREFERRED. A non-summary child of <details> lives inside
+			// `::details-content`, which the UA hides while the band is CLOSED
+			// — and closed is the resting state the whole surface is designed
+			// around, so scenery parked there would simply not exist until a
+			// reader opened the chest. What the moons leave is the lid's
+			// CONTENT ROW, which is the slot the operator called redundant.
+			//
+			// EVERY DECLARED BODY IS PAINTED, not one. The reference sky
+			// carries a single celestial body because Earth has one moon; the
+			// register is the only source ([SKY-7]) and a Harptos sky has
+			// three. The cluster's `gap` is what spaces them and is one of the
+			// signed eight transitioned properties, so painting a single body
+			// would also have retired a property from a signed list.
 			if skyDiscsReachable(d) {
-				<span class="skdiscs">
+				<span class="skscene">
 					for _, m := range d.Month.Almanac {
 						{{ a, ok := almanacDayAt(m, anchor) }}
 						if ok {
@@ -176,7 +210,9 @@ templ skyHeader(d BlockData) {
 			// behind a growing disc cluster the clock slid 65px sideways on
 			// every open and close — travel that is invisible to a walk of
 			// `transition-property`, which is why the mock's own round 3
-			// caught it with a probe and moved the spacer.
+			// caught it with a probe and moved the spacer. The cluster is out
+			// of flow now and can no longer push anything, but the spacer is
+			// what right-packs the lid's three facts at C1 and it stays.
 			<span class="sksp"></span>
 			if d.SkyClock != "" {
 				<span class="sktime">{ d.SkyClock }</span>

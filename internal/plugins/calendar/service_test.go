@@ -85,6 +85,13 @@ type mockCalendarRepo struct {
 	getMoonPhasesFn              func(ctx context.Context, calendarID string) (map[int][]MoonPhaseVocab, error)
 	getSpecialDaysFn             func(ctx context.Context, calendarID string, year, month, day int) ([]SpecialDay, error)
 	setMoodTintFn                func(ctx context.Context, calendarID string, color *string, intensity *float64) error
+	// C-CALV4-ANCHOR. anchorWrites and lastAnchor are recorded unconditionally
+	// by the mock, with or without a stub: "wrote the wrong anchor" and
+	// "silently wrote nothing" are the two failures worth catching, and a
+	// nil-valued call looks exactly like no call unless the mock counts.
+	setRealDateAnchorFn func(ctx context.Context, calendarID string, a *RealDateAnchor) error
+	anchorWrites        int
+	lastAnchor          *RealDateAnchor
 }
 
 func (m *mockCalendarRepo) Create(ctx context.Context, cal *Calendar) error {

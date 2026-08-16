@@ -139,6 +139,7 @@ GET	/armory/shops/:eid/transactions	internal/plugins/armory/routes.go
 GET	/armory/transactions	internal/plugins/armory/routes.go
 GET	/autopin-banner	internal/plugins/foundry_vtt/routes.go
 GET	/availability	internal/plugins/sessions/routes.go
+GET	/availability/answers	internal/plugins/sessions/routes.go
 GET	/availability/exceptions	internal/plugins/sessions/routes.go
 GET	/availability/mine	internal/plugins/sessions/routes.go
 GET	/availability/overlay	internal/plugins/sessions/routes.go
@@ -340,6 +341,7 @@ GET	/notes/:noteId/versions/:vid	internal/widgets/notes/routes.go
 GET	/notes/members	internal/widgets/notes/routes.go
 GET	/notifications	internal/plugins/sessions/routes.go
 GET	/notifications/badge	internal/plugins/sessions/routes.go
+GET	/notifications/call-to-action	internal/plugins/sessions/routes.go
 GET	/npcs	internal/plugins/npcs/routes.go
 GET	/npcs/count	internal/plugins/npcs/routes.go
 GET	/owner-dashboard-layout	internal/plugins/campaigns/routes.go
@@ -448,6 +450,7 @@ POST	/armory/purchase	internal/plugins/armory/routes.go
 POST	/armory/transactions	internal/plugins/armory/routes.go
 POST	/autopin-banner/dismiss	internal/plugins/foundry_vtt/routes.go
 POST	/availability/exceptions	internal/plugins/sessions/routes.go
+POST	/availability/nudge	internal/plugins/sessions/routes.go
 POST	/backdrop	internal/plugins/campaigns/routes.go
 POST	/bindings	internal/plugins/widgetbindings/routes.go
 POST	/bindings/create	internal/plugins/widgetbindings/routes.go
@@ -626,6 +629,7 @@ PUT	/calendar/settings	internal/plugins/syncapi/routes.go
 PUT	/calendar/weather	internal/plugins/syncapi/routes.go
 PUT	/calendar/weekdays	internal/plugins/syncapi/routes.go
 PUT	/calendar/world-state	internal/plugins/calendar/routes.go
+PUT	/calendars/:calId/anchor	internal/plugins/calendar/routes.go
 PUT	/calendars/:calId/cycles	internal/plugins/calendar/routes.go
 PUT	/calendars/:calId/eras	internal/plugins/calendar/routes.go
 PUT	/calendars/:calId/event-categories	internal/plugins/calendar/routes.go

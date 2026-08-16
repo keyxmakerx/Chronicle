@@ -147,6 +147,77 @@ func (h *RSVPHandler) fanOutInvites(ctx context.Context, campaignID, campaignNam
 	}
 }
 
+// invitePlan is what a fan-out started RIGHT NOW would actually do.
+//
+// It exists because the arming endpoint answers the operator before the
+// (backgrounded) fan-out has sent anything, and it was answering `emailed:true`
+// on the strength of "SMTP is configured" alone — never consulting the 24h
+// per-recipient floor two files over. The floor reads the SAME
+// calendar_schedule_asks log the "Ask availability" control writes, so a
+// Director who asked the roster in the morning and armed Collect RSVPs that
+// afternoon sent ZERO emails while being told the party had been invited. That
+// is verbatim the failure [GR-10] was written to close, reopened one file over
+// by [GR-6]: the operator reads "the party has been invited" and stops
+// checking, and finds out on game night.
+type invitePlan struct {
+	// Visible is how many members may see the event; all of them get the
+	// in-app bell, which is never rate-limited.
+	Visible int
+	// WillEmail is how many of those will actually be sent an email now:
+	// addressable, and outside the floor.
+	WillEmail int
+	// SkippedByFloor is how many were passed over because they were mailed
+	// inside the last 24 hours.
+	SkippedByFloor int
+	// NoAddress is how many have no email address on file.
+	NoAddress int
+}
+
+// planInviteFanOut computes an invitePlan without sending anything.
+//
+// It reads through the SAME two decisions the fan-out itself uses —
+// memberMaySeeEvent and RecentlyAskedRecipients — so the report and the send
+// cannot disagree about who is in scope. TestInvitePlan_MatchesWhatTheFanOutSends
+// pins that they agree, because two readings of one rule is precisely the shape
+// that drifts.
+func (h *RSVPHandler) planInviteFanOut(ctx context.Context, campaignID string, evt *Event, mailOK bool) invitePlan {
+	var plan invitePlan
+	if h.members == nil {
+		return plan
+	}
+	members, err := h.members.ListMembers(ctx, campaignID)
+	if err != nil {
+		return plan
+	}
+	var skip map[string]bool
+	if mailOK {
+		// Same degradation as the fan-out: an unreadable floor means nobody is
+		// skipped, which over-reports mail rather than under-reporting it — and
+		// the fan-out will genuinely try to send in that case.
+		if s, err := h.svc.RecentlyAskedRecipients(ctx, campaignID); err == nil {
+			skip = s
+		}
+	}
+	for _, m := range members {
+		if !h.memberMaySeeEvent(ctx, campaignID, m, evt) {
+			continue
+		}
+		plan.Visible++
+		if !mailOK {
+			continue
+		}
+		switch {
+		case m.Email == "":
+			plan.NoAddress++
+		case skip[m.UserID]:
+			plan.SkippedByFloor++
+		default:
+			plan.WillEmail++
+		}
+	}
+	return plan
+}
+
 // memberMaySeeEvent is THE per-recipient visibility gate, and there is exactly
 // one of it.
 //
@@ -341,6 +412,7 @@ textarea{margin-bottom:1rem}
 .wrow label,.notelabel{display:block;font-size:.78rem;font-weight:600;color:#52525b;margin-bottom:.3rem}
 .wgrid{display:grid;grid-template-columns:1.4fr 1fr 1fr;gap:.4rem}
 .prob{color:#b91c1c;font-weight:600}
+.tznote{font-size:.82rem;color:#52525b;background:#f4f4f5;border-radius:8px;padding:.5rem .65rem;margin-bottom:1rem}
 a{color:#4f46e5}
 @media (max-width:420px){.wgrid{grid-template-columns:1fr}}
 button{font:inherit;font-weight:600;padding:.65rem 1.6rem;border:0;border-radius:8px;background:#6366f1;color:#fff;cursor:pointer}</style>
@@ -421,8 +493,24 @@ const rsvpSuggestFormRows = 3
 // dead-ending on the failure page, because the token that carried it is
 // deliberately still unspent — the member fixes the row and sends it again.
 //
+// THE FORM MUST NAME THE ZONE IT WILL BE READ IN. It used to render three bare
+// date+from+to rows with no zone label, no hidden zone field and no JavaScript,
+// and the server stamped the resulting minute numbers with the member's stored
+// zone — "UTC" whenever they had never set one, which is the default. So a New
+// York player typing "Sat 18:00–22:00" had it stored as 18:00–22:00 UTC =
+// 14:00–18:00 their time, and the Director's overlay and the computed
+// best-window then claimed they had offered a weekday-afternoon slot they
+// cannot make. The confirmation page told them their times "were added to your
+// availability" without ever naming a zone, so neither party could notice.
+//
+// memberTZ is what the offer WILL be read in ("" when the member has set none
+// anywhere, which is disclosed as the UTC fallback plus where to fix it). The
+// page states it; it does not offer a picker, because this is a logged-out
+// landing page with no JavaScript and the durable fix is the member setting
+// their zone once, not per-email.
+//
 // Same GET-renders / POST-applies split as the confirm page.
-func rsvpSuggestPage(detail, actionURL, csrfToken, errMsg string) string {
+func rsvpSuggestPage(detail, actionURL, csrfToken, errMsg, memberTZ string) string {
 	var rows strings.Builder
 	for i := 0; i < rsvpSuggestFormRows; i++ {
 		idx := fmt.Sprint(i)
@@ -451,6 +539,7 @@ func rsvpSuggestPage(detail, actionURL, csrfToken, errMsg string) string {
 		`<div class="dot"></div><h1>When could you make it?</h1>`+
 			`<p>`+escapeAttr(detail)+`<br>Add any times that would work — they'll be added to your `+
 			`availability so the organiser can see them on the schedule.</p>`+
+			`<p class="tznote">`+escapeAttr(suggestZoneLine(memberTZ))+`</p>`+
 			problem+
 			`<form method="POST" action="`+escapeAttr(actionURL)+`">`+
 			`<input type="hidden" name="csrf_token" value="`+escapeAttr(csrfToken)+`">`+
@@ -459,6 +548,19 @@ func rsvpSuggestPage(detail, actionURL, csrfToken, errMsg string) string {
 			`<textarea id="note" name="note" rows="3" maxlength="`+fmt.Sprint(maxRSVPNoteLen)+
 			`" placeholder="e.g. any evening after 8pm, or Sunday afternoon"></textarea>`+
 			`<button type="submit">Send</button></form>`)
+}
+
+// suggestZoneLine states the zone the typed times will be read in.
+//
+// When the member has no zone set anywhere it names the UTC fallback AND where
+// to change it, because "times are in UTC" alone leaves a member who does not
+// live in UTC with a correct sentence and no way to act on it.
+func suggestZoneLine(memberTZ string) string {
+	if memberTZ == "" {
+		return "Times are read as UTC — you haven't set a timezone yet. " +
+			"Set one on the availability page in Chronicle and these will use it."
+	}
+	return "Times are read in your timezone: " + memberTZ + "."
 }
 
 // --- the schedule ask (C-CALV4-RSVP-P8B) ------------------------------------

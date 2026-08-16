@@ -44,6 +44,12 @@ func RegisterRoutes(e *echo.Echo, h *Handler,
 	cg.GET("/availability/mine", h.GetMyAvailabilityAPI, campaigns.RequireRole(campaigns.RolePlayer))
 	cg.PUT("/availability/mine", h.SaveMyAvailabilityAPI, campaigns.RequireRole(campaigns.RolePlayer))
 	cg.GET("/availability/overlay", h.GetOverlayAPI, campaigns.RequireRole(campaigns.RolePlayer))
+	// Answers is Player+ (it says who has spoken, never what they said); the
+	// nudge is Player+ ON THE ROUTE and Owner/co-DM IN THE HANDLER, following
+	// this group's stated rule that entitlement is decided by role in a handler
+	// rather than encoded in a route (see the comment above).
+	cg.GET("/availability/answers", h.AvailabilityAnswersAPI, campaigns.RequireRole(campaigns.RolePlayer))
+	cg.POST("/availability/nudge", h.NudgeAvailabilityAPI, campaigns.RequireRole(campaigns.RolePlayer))
 	cg.GET("/availability/exceptions", h.ListMyExceptionsAPI, campaigns.RequireRole(campaigns.RolePlayer))
 	cg.POST("/availability/exceptions", h.AddExceptionAPI, campaigns.RequireRole(campaigns.RolePlayer))
 	cg.PUT("/availability/exceptions", h.ReplaceDayExceptionsAPI, campaigns.RequireRole(campaigns.RolePlayer))
@@ -92,6 +98,11 @@ func RegisterRoutes(e *echo.Echo, h *Handler,
 	ng := e.Group("", auth.RequireAuth(authSvc))
 	ng.GET("/notifications", h.ListNotificationsAPI)
 	ng.GET("/notifications/badge", h.NotificationBadgeAPI)
+	// The player call-to-action banner (C-RSVP-P10). Same group, same
+	// caller-scoping and same empty-body-means-empty contract as the badge
+	// beside it — it is the badge's louder sibling for the one thing a player
+	// is expected to ACT on rather than merely read.
+	ng.GET("/notifications/call-to-action", h.CalloutAPI)
 	ng.POST("/notifications/:nid/read", h.MarkNotificationReadAPI)
 	ng.POST("/notifications/read-all", h.MarkAllNotificationsReadAPI)
 }

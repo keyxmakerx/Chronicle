@@ -34,6 +34,12 @@ const (
 	// plugin-name literal outside that plugin's own directory fails the
 	// plugin-isolation guard (T-B2 / M-B2.1), and this file lives in sessions.
 	NotifCalendarRSVP = "event_rsvp"
+	// NotifAvailabilityNudge is the Director asking a member who has never
+	// answered to set their availability (C-RSVP-P9). It is sent ONLY on an
+	// explicit press — there is no scheduled-job runner in this product, and a
+	// reminder that fires on a timer nobody agreed to is a different feature
+	// with different consent.
+	NotifAvailabilityNudge = "availability_nudge"
 )
 
 // maxProposalOptions caps a proposal at 5 candidate slots (design: 1..5).

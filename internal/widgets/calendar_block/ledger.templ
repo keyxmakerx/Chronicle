@@ -116,6 +116,20 @@ templ ledgerHead(d BlockData, v ledgerView) {
 // Upcoming panel — this slice ships its CSS and does not use it.
 templ ledgerRows(d BlockData, v ledgerView) {
 	<div class="lrows">
+		// THE DAY PANEL IS THE FIRST THING IN THE SCROLLER AND IT STICKS THERE.
+		//
+		// It is inside `.lrows` rather than between the head and the rows, and
+		// that placement is a MEASUREMENT rather than a preference. The Ledger's
+		// box is flex-determined at both tiers and `.lrows` carries the floor
+		// that makes "nothing reflows" true (176px at full); a panel that
+		// appeared BETWEEN them on selection would spend that floor's height out
+		// of a box that has none to give, which is the CTS-8 collision one zone
+		// up. Inside the scroller it costs the Ledger's own geometry exactly
+		// nothing, and `position: sticky` — `.lband`'s idiom, already Zone C
+		// vocabulary — keeps it on screen while the day's events scroll under it.
+		for _, c := range v.Ctx {
+			@ledgerDayPanel(d, c)
+		}
 		if v.Zero {
 			<div class="lzero lzero-all">
 				{ ledgerZeroAll(d) }
@@ -130,6 +144,82 @@ templ ledgerRows(d BlockData, v ledgerView) {
 			if c.Empty {
 				<div class="lzero lday" data-lday={ c.Ord }>{ ledgerZeroDay(c) }</div>
 			}
+		}
+	</div>
+}
+
+// ledgerDayPanel is the chosen day's header — the reference's TODAY panel,
+// finished INSIDE the Ledger rather than beside it.
+//
+// THERE IS STILL NO DRAWER AND THERE IS STILL NO SIDE PANEL. This file's header
+// states the design the operator signed — "the panel is already there; choosing
+// a day changes what it says" — and this is that sentence's last unwritten
+// clause: until now what changed was the list and one muted line in the head.
+// The panel is one more surface in the SAME docked column, rendered on every
+// render and revealed by the same ladder, so it still appears from nowhere and
+// still reflows nothing outside `.lrows`.
+//
+// FOUR THINGS, IN THE REFERENCE'S OWN ORDER:
+//
+//	the DATE       `4 Deepwinter, 1492`  — display face, the panel's header
+//	the WEEKDAY    `Firstday`            — muted sub-line; drops when absent
+//	the MOON       `Selûne 68% waxing gibbous · …` — every DECLARED body
+//	the DOOR       `+ New event`         — gated, and the day card's own control
+//
+// THE DOOR IS THE DAY CARD'S CONTROL, NOT A SECOND ONE. It carries
+// `data-dc-new`, the handle daycard.templ's `+ New event` carries and
+// calendar_daycard.js's delegated listener already reads, so there is one
+// create path, one route and one editor — and the SAME markup-level gate, since
+// `LedgerStub.CanCreate` is filled from the very predicate `DayCardMount
+// .CanCreate` is (bench.go). Permission is ABSENCE here too: a viewer below the
+// floor gets no button, no disabled state and no title explaining one.
+//
+// IT NAMES ITS OWN DAY. `data-day` in the ANSWER key namespace, so the module
+// resolves the day from the BUTTON rather than from whatever day the card was
+// last opened on. Without it the door would create against a stale key the
+// moment the viewer chose a second day by keyboard, which is the quiet
+// wrong-day bug that reads as intentional in review.
+//
+// TAP IS PRIMARY. Nothing in this panel is reachable only by hovering: it is
+// revealed by the day's RADIO — set by tapping the stretched `.dsel` label or
+// by keyboard — the door is a real <button>, and the moon line is running text.
+// The only hover in the whole zone is the pre-existing `--answer` emphasis,
+// which carries no information of its own.
+templ ledgerDayPanel(d BlockData, c ledgerContext) {
+	<div class="ldp lday" data-lday={ c.Ord }>
+		<div class="ldpr">
+			<span class="ldd">
+				<span class="ldn">{ c.Date }</span>
+				if c.Weekday != "" {
+					<span class="lds">{ c.Weekday }</span>
+				}
+			</span>
+			<span class="sp"></span>
+			if ledgerCanCreate(d) {
+				<button
+					type="button"
+					class="ldnew"
+					data-dc-new
+					data-day={ c.Key }
+				>+ New event</button>
+			}
+		</div>
+		if c.RealDate != "" {
+			// C-CALV4-ANCHOR. Dropped entirely when the calendar carries no
+			// anchor — which is every calendar until an owner sets one — rather
+			// than printed as a placeholder or an em dash. The whole reason the
+			// mapping refuses instead of guessing is so this line is either a
+			// fact or absent.
+			<span class="ldrd">
+				<i class="ldrdg" aria-hidden="true">⌛</i>
+				{ c.RealDate }
+			</span>
+		}
+		if c.Moon != "" {
+			<span class="ldm">
+				<i class="ldmg" aria-hidden="true">☾</i>
+				{ c.Moon }
+			</span>
 		}
 	</div>
 }

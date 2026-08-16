@@ -397,10 +397,10 @@ func TestSeam_FootTotalEqualsTheDayCellTotal(t *testing.T) {
 // marker its surface carries. A key with no marker here would be a layer that
 // gates nothing — the set-and-ignored defect class this file exists to kill.
 //
-// The halfrule ruler and the .band.half class are NOT in this table: both are
-// month GEOMETRY (the producer's Weekday/DayCell/EraBand Half flags), not a
-// layer, and gating geometry on a layer key would let a viewer preference
-// break the five-column counting aid.
+// The five-column rule (`.cell.half`, `.hd b.half`) is NOT in this table: it is
+// month GEOMETRY (the producer's Weekday/DayCell Half flags), not a layer, and
+// gating geometry on a layer key would let a viewer preference break the
+// counting aid.
 var seamLayerSurfaces = []struct {
 	key    string
 	marker string
@@ -411,8 +411,15 @@ var seamLayerSurfaces = []struct {
 	// would assert which of the two shipped rather than that the LAYER
 	// rendered. Both halves of this table's contract stay exactly as strong —
 	// any cluster at all fails the absence check.
-	{"moons", `class="phrow`},        // the per-cell moon discs (the moongraph is the CURVE, a separate key)
-	{"eras", `class="bands"`},        // the era band row
+	{"moons", `class="phrow`}, // the per-cell moon discs (the moongraph is the CURVE, a separate key)
+	// THE ERAS MARKER IS THE PER-CELL TINT SINCE C-CALV4-TILES §3. It was
+	// `class="bands"` — the full-width era caption row — and that row is
+	// deleted: the operator's instruction was that the era be "a color of the
+	// dates background and that's it". `--erahue:` is the custom property the
+	// renderer stamps on every day an era covers, and it is a STRICTLY stronger
+	// marker than the row was, because it is emitted per DAY rather than per
+	// week row and it is the property the tint actually reads.
+	{"eras", `--erahue:`},            // the per-cell era tint
 	{"weeknums", `data-weeknums`},    // the grid states the layer; the gutter labels it
 	{"ledger", `data-zone="ledger"`}, // zone C
 	{"moongraph", `data-layer="moongraph"`},

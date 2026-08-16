@@ -447,38 +447,77 @@ func TestCSS_NoLiteralWeekLength(t *testing.T) {
 	}
 }
 
-// TestCSS_BandHalfDrawsNoRightEdge. EraBand.Half means the half column lands
-// INSIDE this band (r51, data.go) — but a band is one grid item spanning many
-// columns, so its own border-right lands at the band's edge, wherever that
-// happens to be, never reliably at the half column. Only the dedicated
-// .halfrule ruler may draw the five-column rule across the band row (P5 §3.5);
-// the half class on a band is a semantic marker and draws nothing.
-func TestCSS_BandHalfDrawsNoRightEdge(t *testing.T) {
+// TestCSS_TheFiveColumnRuleHasExactlyTwoOwners.
+//
+// RE-POINTED FROM TestCSS_BandHalfDrawsNoRightEdge (C-CALV4-TILES §3), and the
+// claim it makes is the same one, one construction later. That test said: an
+// era band is ONE grid item spanning many columns, so `.band.half`'s own
+// border-right lands at the band's right edge — column 10 on a full-width band,
+// column 7 on the Harptos row-1 split — never reliably at the counting
+// boundary; therefore only the dedicated `.halfrule` ruler may draw the rule
+// across the band row.
+//
+// The band row is deleted, so the spanning item is gone, and with it both the
+// problem and the ruler that solved it. Every row of the grid is now one item
+// per column, which puts the rule back where it can simply be a border: on
+// `.cell.half` and on the weekday header's `b.half`. Exactly two owners, at
+// --rule-structural-strong — which is now a much CLEARER step above the tile's
+// own edge than it was, because the tile edge stopped borrowing
+// --rule-structural and became the derived --tile-rule. Measured from the grid
+// ground: 61.2 vs 16.3 on light, 66.7 vs 28.1 on dark. That step IS the
+// counting aid, and TestCellProbe_TheTileRuleIsTheQuietestRuleInTheGrid asserts
+// it in a real engine rather than inferring it from the ramp's token order.
+//
+// THE ABSENCES ARE ASSERTED TOO. A `.halfrule` rule left behind would style an
+// element nothing emits, and a THIRD owner would double-draw the boundary at a
+// width where both happen to be visible.
+func TestCSS_TheFiveColumnRuleHasExactlyTwoOwners(t *testing.T) {
 	code := stripComments(blockCSS(t))
 	blockRe := regexp.MustCompile(`(?s)([^;{}]*)\{([^}]*)\}`)
 	// The border shorthand sets all four sides, so it would smuggle the right
 	// edge back in without the literal "border-right" ever appearing.
 	borderShorthand := regexp.MustCompile(`(^|[;\s])border\s*:`)
-	sawRuler := false
+
+	var owners []string
 	for _, m := range blockRe.FindAllStringSubmatch(code, -1) {
 		sel, body := strings.TrimSpace(m[1]), m[2]
 		if strings.Contains(sel, ".halfrule") {
-			// The ruler element is the ONE place the rule may be drawn — and
-			// must keep being drawn, or deleting it becomes the next "fix".
-			if strings.Contains(body, "border-right: 1px solid var(--rule-structural-strong)") {
-				sawRuler = true
-			}
+			t.Errorf("%q styles the deleted five-column ruler. `.halfrule` existed only "+
+				"inside the era band row; that row is gone and nothing emits the element, "+
+				"so this rule can never match — and there is no unused-selector guard in "+
+				"this package, so it would pass CI forever", sel)
+		}
+		if strings.Contains(sel, ".band") && !strings.Contains(sel, ".lband") {
+			t.Errorf("%q styles the deleted era band row (C-CALV4-TILES §3) — the era is a "+
+				"tint on the day cells and nothing else", sel)
+		}
+		if !strings.Contains(sel, ".half") {
 			continue
 		}
-		if strings.Contains(sel, ".band") && strings.Contains(sel, ".half") &&
-			(strings.Contains(body, "border-right") || borderShorthand.MatchString(body)) {
-			t.Errorf("%q draws a border on the band's own edge — the half class marks the band, "+
-				"it draws nothing; the .halfrule ruler owns the rule at the half column", sel)
+		if strings.Contains(body, "border-right: 1px solid var(--rule-structural-strong)") {
+			owners = append(owners, sel)
+			continue
+		}
+		if strings.Contains(body, "border-right") || borderShorthand.MatchString(body) {
+			t.Errorf("%q draws a right edge that is NOT the five-column rule's strong step. "+
+				"The rule reads as a counting aid only because it is a full ramp step above "+
+				"its neighbours; a second, weaker right edge on a .half selector is a "+
+				"boundary drawn twice at two strengths", sel)
 		}
 	}
-	if !sawRuler {
-		t.Error("the .halfrule ruler lost its structural border-right — it is the only element " +
-			"that draws the five-column rule across the band row")
+
+	if len(owners) != 1 {
+		t.Fatalf("the five-column rule is declared in %d places (%v); it is declared once, "+
+			"for both of its owners, so the cell and the header can never disagree about "+
+			"where the boundary is", len(owners), owners)
+	}
+	flat := strings.Join(strings.Fields(owners[0]), " ")
+	for _, want := range []string{".cal-block-host .cell.half", ".cal-block-host .grid .hd b.half"} {
+		if !strings.Contains(flat, want) {
+			t.Errorf("%q is not one of the five-column rule's owners (%q). The ramp step must "+
+				"reach the day cells AND the weekday header — a step that stops at one of "+
+				"them is a visible seam", want, flat)
+		}
 	}
 }
 
@@ -497,21 +536,25 @@ func TestCSS_SizingIsContainerQueries(t *testing.T) {
 		"@container cal-block (min-width: 240px) and (max-width: 299.98px)", // mini
 		"@container cal-block (max-width: 239.98px)",                        // sub-mini
 		"@container cal-cell (min-width: 84px)",                             // density
-		"@container cal-cell (min-width: 40px)",                             // the moon row's own
+		"@container cal-cell (min-width: 30px)",                             // the silhouette
+		"@container cal-cell (min-width: 35px)",                             // the date's full size
+		"@container cal-cell (min-width: 75px)",                             // the moon expansion
 	} {
 		if !strings.Contains(code, want) {
 			t.Errorf("the stylesheet is missing %q", want)
 		}
 	}
-	// BOTH CELL THRESHOLDS ARE READ OUT OF GO, so the sheet and sizing.go cannot
-	// drift the way they could while the discs shared the named row's query and
-	// nothing named the number twice.
+	// ALL FOUR CELL THRESHOLDS ARE READ OUT OF GO, so the sheet and sizing.go
+	// cannot drift the way they could while the discs shared the named row's
+	// query and nothing named the number twice.
 	for _, pin := range []struct {
 		px   float64
 		what string
 	}{
 		{NamedColWidthMin, "the named-event density flip"},
-		{MoonRowColWidthMin, "the moon row's own promotion"},
+		{MoonSilhouetteColWidthMin, "the always-visible primary silhouette"},
+		{CellCompactColWidthMin, "the date's full type size"},
+		{MoonExpandColWidthMin, "the moon cluster's hover/focus expansion"},
 	} {
 		q := fmt.Sprintf("@container cal-cell (min-width: %gpx)", pin.px)
 		if !strings.Contains(code, q) {
@@ -519,11 +562,56 @@ func TestCSS_SizingIsContainerQueries(t *testing.T) {
 				"the same contract written in two languages", pin.what, pin.px, q)
 		}
 	}
-	if NamedColWidthMin <= MoonRowColWidthMin {
-		t.Errorf("the moon row's threshold (%g) must stay BELOW the named row's (%g). They "+
-			"exist as two numbers precisely because three 10px discs cost less width than an "+
-			"event name; collapsing them is the defect the split was made to fix",
-			MoonRowColWidthMin, NamedColWidthMin)
+	// ── THE LADDER IS ORDERED, AND EACH RUNG ANSWERS A DIFFERENT QUESTION ───
+	//
+	// silhouette < date < expansion < names. Collapsing any adjacent pair is
+	// the category error the original single 40px query WAS: one disc, a date,
+	// three discs and an event name cost wildly different amounts of width, and
+	// gating two of them together means the cheaper one is refused at widths it
+	// would fit in — which is how the operator's ten-day phone drew nothing.
+	for _, ord := range []struct {
+		lo, hi     float64
+		loN, hiN   string
+		collapsing string
+	}{
+		{MoonSilhouetteColWidthMin, CellCompactColWidthMin,
+			"the silhouette", "the date's full size",
+			"one 8px disc costs less than a 12px date plus a 10px disc"},
+		{CellCompactColWidthMin, MoonExpandColWidthMin,
+			"the date's full size", "the expansion",
+			"a 45px expanded row costs far more than a 16.7px date"},
+		{MoonExpandColWidthMin, NamedColWidthMin,
+			"the expansion", "the named-event flip",
+			"three discs and a `+` cost less than an event NAME"},
+	} {
+		if ord.lo >= ord.hi {
+			t.Errorf("%s (%g) must stay BELOW %s (%g). They are separate numbers because %s; "+
+				"collapsing them is the defect the split was made to fix",
+				ord.loN, ord.lo, ord.hiN, ord.hi, ord.collapsing)
+		}
+	}
+	// ── THE 40px QUERY IS ASSERTED ABSENT: IT IS THE SHIPPED DEFECT ─────────
+	//
+	// It gated all three discs together, and the operator's ten-day Harptos
+	// column measures 30.0px on a 360px phone, 33.0px at 390px and 37.0px at
+	// 430px — all three under 40. That one query is exactly why the moons were
+	// invisible on the only calendar they use.
+	if strings.Contains(code, "@container cal-cell (min-width: 40px)") {
+		t.Error("the sheet still carries `@container cal-cell (min-width: 40px)` — the " +
+			"single all-or-nothing moon query. A ten-day week measures 30.0px on a phone, " +
+			"so that query is what made the operator's own calendar draw no moons at all")
+	}
+	// ── AND THE SILHOUETTE'S THRESHOLD IS TIED TO THE GRID'S OWN FLOOR ──────
+	//
+	// MoonSilhouetteColWidthMin is the std tier's column floor, not a taste. If
+	// a future change lowers `.grid`'s min-width, a column can become narrower
+	// than the silhouette plus the date — which is a moon lying ACROSS a date
+	// rather than a missing moon, and that is the worse of the two defects.
+	if !strings.Contains(code, "min-width: calc(var(--week-len) * 30px)") {
+		t.Errorf("the grid no longer declares the 30px-per-column floor that "+
+			"MoonSilhouetteColWidthMin (%g) is read off. Lower it and a column can be "+
+			"narrower than the silhouette plus the date",
+			MoonSilhouetteColWidthMin)
 	}
 	// std is the BASELINE rather than a query, so a Block rendered before its
 	// container is measured degrades to the middle class, not the widest.
@@ -580,7 +668,17 @@ func TestCSS_D3_RingIsCarriedInsideBoxShadow(t *testing.T) {
 	if !strings.Contains(flat, ".surf.act:active { background: color-mix(in oklch, var(--surface-card) 88%, var(--text-primary)); box-shadow: none;") {
 		t.Error("press must RETURN the shadow to none — elevation decreases under the finger")
 	}
-	if !strings.Contains(flat, ".surf.sel:hover { border-color: var(--accent); background: color-mix(in oklch, var(--surface-card) 96%, var(--accent)); box-shadow: inset 0 0 0 1.5px var(--accent);") {
+	// `in srgb`, NOT `in oklch`, AND THE SPACE IS THE POINT OF THE CHANGE.
+	// `color-mix(in oklch, …)` interpolates the HUE ANGLE, and this sheet's
+	// light `--surface-card` is `oklch(1 0 0)` — white carrying an EXPLICIT hue
+	// of zero. Mixing a blue accent into it therefore dragged the result toward
+	// 0° and washed the selected surface PINK: measured rgb(253,247,249)
+	// against sRGB's rgb(248,249,253). `.chip` had the same defect far more
+	// visibly and both moved together; the two `--text-primary` mixes above
+	// stayed in OKLCH because that token is near-achromatic and the spaces land
+	// 2/255 apart there. Do not "restore" this to oklch for consistency — the
+	// inconsistency is deliberate and the reason is written at `.chip`.
+	if !strings.Contains(flat, ".surf.sel:hover { border-color: var(--accent); background: color-mix(in srgb, var(--surface-card) 96%, var(--accent)); box-shadow: inset 0 0 0 1.5px var(--accent);") {
 		t.Error("selection must be an inset ring with NO outer shadow — identity, not elevation")
 	}
 }
@@ -590,13 +688,37 @@ func TestCSS_D3_RingIsCarriedInsideBoxShadow(t *testing.T) {
 // TestCSS_EightLockedPatterns. Every one of the eight must resolve with the hue
 // removed; p7 and p8 are unassigned headroom and must still be defined, or the
 // next axis to need one silently renders as p1.
+//
+// ── REWRITTEN FOR THE RUNES, BECAUSE THE DIRECTION CHANGED (C-CALV4-TILES §9.2)
+//
+// This test used to demand that `.ulseg` carry a stroke on BOTH mark
+// orientations — `.rail.p5` and `.ulseg.p5`, `.rail.p7` and `.ulseg.p7` — and
+// that `.ulseg` share `.rail`'s solid p1 baseline. The grid's underline segment
+// is now a MASKED RUNE: `p1..p8` selects a GLYPH there rather than a stroke, so
+// those four assertions were pinning a construction the dispatch retired.
+//
+// THE ASSERTION IS NOT WEAKENED, IT IS RE-POINTED. What the old arms protected
+// was "colour is never the only channel", and that is asserted here in full
+// against the FOUR surfaces that still stroke — plus, for `.ulseg`, the stronger
+// claim that its pattern class still selects something. A pattern class that
+// stopped selecting anything on the rune would leave every mark in the grid
+// wearing the same glyph, which is the failure this file exists to catch, and it
+// would be invisible: a masked box still paints.
+//
+// WHAT THE CHANGE COSTS is written down beside the rules in §MARKS rather than
+// argued here: a rune chosen by POSITION no longer separates two event types for
+// a viewer who cannot separate the hues. The type survives in the legend, the
+// Ledger and the named cell's chip. That is the operator's call, recorded.
 func TestCSS_EightLockedPatterns(t *testing.T) {
 	code := stripComments(blockCSS(t))
-	// p1 is the bare `background-color: var(--axis)` case on .rail/.ulseg.
-	if !strings.Contains(code, ".ulseg {\n  --dash: 100%;\n  --gap: 0px;\n  background-color: var(--axis);") &&
-		!strings.Contains(regexp.MustCompile(`\s+`).ReplaceAllString(code, " "),
-			".ulseg { --dash: 100%; --gap: 0px; background-color: var(--axis);") {
-		t.Error("p1 (solid) is the unclassed baseline on .rail/.ulseg and must set --dash/--gap")
+	flat := regexp.MustCompile(`\s+`).ReplaceAllString(code, " ")
+
+	// p1 is the bare `background-color: var(--axis)` case, and it is `.rail`'s
+	// alone now. `.ulseg` must NOT be back on this rule: it would restore an
+	// --axis fill under the mask and print the raw palette at letterform size,
+	// which is the "primary crayon" the rune ink exists to replace.
+	if !strings.Contains(flat, ".cal-block-host .rail { --dash: 100%; --gap: 0px; background-color: var(--axis); }") {
+		t.Error("p1 (solid) is the unclassed baseline on .rail and must set --dash/--gap")
 	}
 	for _, p := range []string{"p2", "p3", "p4", "p5", "p6", "p7", "p8"} {
 		if !strings.Contains(code, "."+p) {
@@ -611,10 +733,149 @@ func TestCSS_EightLockedPatterns(t *testing.T) {
 		}
 	}
 	// p5 and p7 split the cross axis / notch the main axis rather than dashing.
-	for _, want := range []string{".rail.p5", ".ulseg.p5", ".rail.p7", ".ulseg.p7"} {
+	// On `.rail`, which is the orientation that still strokes.
+	for _, want := range []string{".rail.p5", ".rail.p7"} {
 		if !strings.Contains(code, want) {
-			t.Errorf("%s must be defined on both mark orientations", want)
+			t.Errorf("%s must be defined — p5 and p7 do not dash, they split and notch", want)
 		}
+	}
+	// AND `.ulseg` MUST NO LONGER STROKE. A surviving `.ulseg.pN` gradient would
+	// not fail visibly: the mask clips it to the glyph, so the rune would keep
+	// its shape and quietly wear the raw --ev-* palette instead of the deepened
+	// ink, in one theme or both.
+	if regexp.MustCompile(`\.ulseg\.p[1-8]`).MatchString(code) {
+		t.Error("`.ulseg.pN` still carries a stroke rule. The grid's underline segment is a " +
+			"MASKED RUNE since C-CALV4-TILES §9.2 — the pattern class selects a GLYPH there, " +
+			"not a dash. A leftover gradient is clipped to the glyph by the mask and paints " +
+			"the raw event palette at letterform size, which is exactly the read the deepened " +
+			"rune ink was introduced to fix")
+	}
+	// …and every pattern class must still SELECT a rune, or the channel is
+	// severed at the other end: eight event types, one glyph.
+	for _, p := range []string{"p1", "p2", "p3", "p4", "p5", "p6", "p7", "p8"} {
+		if !strings.Contains(flat, ".ulseg:nth-child(1)."+p+" {") {
+			t.Errorf("no rune glyph is selected by .%s. The pattern class is the rune's SHAPE "+
+				"channel now; a class that selects nothing leaves that mark unmasked and it "+
+				"paints as a solid slab", p)
+		}
+	}
+}
+
+// TestCSS_TheLegendSwatchIsSolidOnPurpose guards a rule that spent months
+// LOOKING like a pattern key and painting solid bars.
+//
+// THE DEFECT, MEASURED. `.cal-block-host .legend .lr` is THREE classes and
+// re-declared `--dash: 100%; --gap: 0px`; `.cal-block-host .p2` is TWO and
+// declares 4px/2px. The swatch's own rule therefore outranked the pattern it
+// existed to display, so all five --dash swatches resolved --dash to 100% and
+// painted an identical solid bar — while `.lr.p5` and `.lr.p7`, whose gradients
+// are hand-written and never mention --dash, went on painting. Eight patterns,
+// at most three appearances, and nothing in the file reading wrong.
+//
+// The repair was to DELETE the dead rules rather than re-specify them: the
+// operator's ruling for §9.2 is "just have the colors determine what kind of
+// event", so this zone teaches hue → type and nothing else. Restoring a stroke
+// vocabulary here would have made the legend teach a channel the narrow grid
+// stopped painting in the same pass.
+//
+// SO THIS TEST PINS AN ABSENCE, and an absence needs a reason written next to
+// it or the next hand "fixes" it back. Note the neighbouring construction on
+// `.rail` is safe only by SOURCE ORDER — `.cal-block-host .rail` and
+// `.cal-block-host .p2` tie at two classes and .p2 comes later — so this is a
+// trap the sheet has twice and survives once.
+func TestCSS_TheLegendSwatchIsSolidOnPurpose(t *testing.T) {
+	code := stripComments(blockCSS(t))
+
+	// 1. No stroke rules on the swatch, in either spelling.
+	if m := regexp.MustCompile(`\.legend\s+\.lr\.p[1-8]`).FindString(code); m != "" {
+		t.Errorf("`%s` is back. The legend swatch is a SOLID COLOUR CHIP: it is the key for "+
+			"hue → event type, which is the only type channel the grid paints below 84px of "+
+			"column. A pattern here either loses the cascade and paints solid anyway (which "+
+			"is the defect this test was written for) or teaches a vocabulary the narrow grid "+
+			"no longer has", m)
+	}
+
+	// 2. And the swatch must not re-declare the pattern tokens. This is the
+	//    actual mechanism: a --dash of its own is what silently defeated
+	//    `.p2`..`.p8`, and it would do it again to any rule added later.
+	body := cssRuleBody(code, ".cal-block-host .legend .lr")
+	if body == "" {
+		t.Fatal("`.cal-block-host .legend .lr` is gone entirely — the legend has no swatch, so " +
+			"the zone names event types without showing the colour it is keying")
+	}
+	for _, tok := range []string{"--dash", "--gap"} {
+		if strings.Contains(body, tok) {
+			t.Errorf("`.legend .lr` declares %s. At three classes it outranks the two-class "+
+				"`.cal-block-host .pN` rules that carry the real values, so every pattern that "+
+				"reads that token resolves to this one's value instead. That is how five "+
+				"swatches came to paint identical solid bars while the file looked correct",
+				tok)
+		}
+	}
+	// 3. It still paints the type's hue — a key that shows no colour is not a
+	//    key. This is the half of the claim an absence test cannot make.
+	if !strings.Contains(body, "var(--axis)") {
+		t.Error("`.legend .lr` no longer fills with var(--axis). Solid was the ruling; " +
+			"colourless was not")
+	}
+}
+
+// TestCSS_ThePooledAlphabet is C-CALV4-TILES §9.2's "32 glyphs pooled from four
+// alphabets, chosen by :nth-child()", asserted as the grid the rules form.
+//
+// FOUR POSITIONS × EIGHT PATTERNS, AND EVERY CELL OF IT FILLED. A hole in the
+// grid is the one failure mode that looks like a working build: the mark simply
+// gets no mask and paints its whole 9×12 box in the type's ink, which reads as a
+// deliberate solid mark rather than as a missing rule.
+//
+// `:nth-child(4)` IS HEADROOM TODAY AND THE TEST SAYS SO OUT LOUD. underlineCap
+// is 3, so a day never emits a fourth segment and those eight rules cannot fire.
+// They are asserted anyway for exactly the reason p7 and p8 are: the first
+// fourth segment ever emitted must find a glyph waiting, not a slab. If the cap
+// moves, this test is already pinning the surface that has to be there.
+func TestCSS_ThePooledAlphabet(t *testing.T) {
+	if underlineCap != 3 {
+		t.Logf("underlineCap is %d — :nth-child(1..%d) are now reachable; the pool covers 4",
+			underlineCap, underlineCap)
+	}
+	if underlineCap > 4 {
+		t.Errorf("underlineCap is %d and the pooled alphabet only indexes four positions. "+
+			"A fifth segment matches no :nth-child() rule, gets no mask and paints as a solid "+
+			"slab — raise the pool with the cap", underlineCap)
+	}
+	code := stripComments(blockCSS(t))
+	flat := regexp.MustCompile(`\s+`).ReplaceAllString(code, " ")
+	missing := 0
+	for pos := 1; pos <= 4; pos++ {
+		for p := 1; p <= 8; p++ {
+			sel := fmt.Sprintf(".ulseg:nth-child(%d).p%d {", pos, p)
+			if !strings.Contains(flat, sel) {
+				missing++
+				t.Errorf("no glyph for position %d, pattern p%d (%s). The pool is 4×8 and a hole "+
+					"in it paints an unmasked slab", pos, p, sel)
+			}
+		}
+	}
+	if missing == 0 {
+		t.Logf("32/32 glyphs present; positions 1-%d reachable at underlineCap=%d",
+			underlineCap, underlineCap)
+	}
+	// BOTH PROPERTIES ON EVERY RULE. `-webkit-mask-image` is still the only one
+	// some shipping WebKit builds honour, and a rule that resolves to no mask
+	// does not fail visibly — the element fills its box.
+	unpref := strings.Count(flat, " mask-image: url(")
+	pref := strings.Count(flat, "-webkit-mask-image: url(")
+	if unpref != pref {
+		t.Errorf("%d unprefixed mask-image declarations against %d -webkit- ones. Every glyph "+
+			"must carry both; a mask that does not resolve paints the whole box", unpref, pref)
+	}
+	// THE OVERFLOW MARK IS NOT ONE OF THE 32. `.rest` carries no pattern class,
+	// so it matches nothing in the pool and would paint unmasked without a rule
+	// of its own.
+	if !strings.Contains(flat, ".cal-block-host .cell .ulseg.rest {") {
+		t.Error("`.ulseg.rest` has no rule. It is the neutral overflow segment " +
+			"(underlineRestAt) and carries NO pattern class, so it matches none of the 32 " +
+			"glyphs — unstyled it paints as a solid slab among letterforms")
 	}
 }
 
@@ -641,7 +902,7 @@ func TestCSS_ChannelDiscipline(t *testing.T) {
 	// …and none of the three inherited colour channels is @property-registered
 	// as animatable. That is a recorded REFUSAL, not an omission.
 	if strings.Contains(code, "@property") {
-		t.Error("canon A7 is a REFUSAL: --axis / --cal / --bandhue are never @property-registered " +
+		t.Error("canon A7 is a REFUSAL: --axis / --cal / --erahue are never @property-registered " +
 			"as animatable colours. Interpolating one is a per-frame style recalculation across " +
 			"up to 900 gradient-backed nodes.")
 	}
@@ -870,17 +1131,37 @@ func TestCSS_AnswerLadderChangesNothingButVisibility(t *testing.T) {
 					"emits the SAME row primitive, and choosing a day then reflows the Block.", sel)
 			}
 			// A reveal names its surfaces. `.lrow` is never one of them.
+			//
+			// WIDENED BY ONE, EXPLICITLY, AT STAGE 3. `.ldp.lday[` — the
+			// Ledger's day panel — is the third surface that is display:none
+			// at rest, and it is added HERE, BY NAME, rather than by relaxing
+			// the match. That distinction is the whole guard: the list is an
+			// allowlist of specific tokens, so a FOURTH surface still fails
+			// this test and has to be argued for, exactly as this one was
+			// (helpers.go, answerLadderCSS rule 2). A loosened predicate —
+			// "any selector carrying .lday" — would have let the row back in
+			// the moment anyone re-added the token to ledgerRowClass, which is
+			// the defect TestLedger_RowCarriesNoRevealToken exists to lock
+			// from the other side.
+			revealSurfaces := []string{".lctx[", ".lzero.lday[", ".ldp.lday["}
 			if prop == "display" && val != "none" {
 				for _, part := range strings.Split(sel, ",") {
 					part = strings.TrimSpace(part)
 					if part == "" {
 						continue
 					}
-					if !strings.Contains(part, ".lctx[") && !strings.Contains(part, ".lzero.lday[") {
-						t.Errorf("a ladder reveal rule targets %q — a reveal may only name the two "+
-							"surfaces that are display:none at rest (.lhead .lctx and .lzero.lday). "+
-							"Anything wider reaches the Ledger row, which is visible at rest and is "+
-							"filtered by attribute, never revealed by class.", part)
+					named := false
+					for _, s := range revealSurfaces {
+						if strings.Contains(part, s) {
+							named = true
+							break
+						}
+					}
+					if !named {
+						t.Errorf("a ladder reveal rule targets %q — a reveal may only name the three "+
+							"surfaces that are display:none at rest (%v). Anything wider reaches the "+
+							"Ledger row, which is visible at rest and is filtered by attribute, never "+
+							"revealed by class.", part, revealSurfaces)
 					}
 				}
 			}

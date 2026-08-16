@@ -24,7 +24,7 @@ struct.**
 │                                             │              │
 │ B  INSTRUMENT   the month                   │   docked,    │
 │    ten-day weeks native                     │   never a    │
-│    era bands per week row                   │   drawer     │
+│    the era as a soft cell tint              │   drawer     │
 │    intercalary row (full tier)              │              │
 ├─────────────────────────────────────────────┴──────────────┤
 │ D  SHELF                                                    │
@@ -48,7 +48,7 @@ the wrong density after any swap.
 |---|---|---|
 | ≥ 900 | `full` | Ledger docks beside the month; intercalary row; wide sync string; 3-letter weekdays |
 | ≥ 300 | `std` | Ledger docks below; compact sync string; 2-letter weekdays |
-| ≥ 240 | `mini` | no header, no bands, no Ledger; a foot line instead |
+| ≥ 240 | `mini` | no header, no Ledger; a foot line instead |
 | < 240 | `submini` | the grid is dropped honestly for a thirty-tick month rule |
 
 | measured column | density |

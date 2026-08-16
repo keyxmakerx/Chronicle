@@ -104,8 +104,24 @@ type Calendar struct {
 	// is P2 (RC-4). Read/written by the repository; consumed server-side only.
 	TracksRealTime bool    `json:"-"`
 	RealTimeZone   *string `json:"-"`
-	CreatedAt      time.Time `json:"created_at"`
-	UpdatedAt      time.Time `json:"updated_at"`
+	// The real-date anchor (C-CALV4-ANCHOR, migration 018): one in-world date
+	// and the Gregorian date it equals, from which every other day follows by
+	// AbsoluteDay arithmetic. See real_date_anchor.go for the whole idea and
+	// for why the NAMED date is stored rather than a day count.
+	//
+	// ALL FOUR OR NONE — a partial anchor maps nothing, so HasRealAnchor()
+	// requires the set and the service refuses to write a subset.
+	//
+	// Serialized, unlike the real-time pair above: this is a fact about the
+	// world the owner authored, and the Foundry module and the export both have
+	// a legitimate need to know which real date a session lands on. It carries
+	// no zone and no time — see real_date_anchor.go on why that is deliberate.
+	AnchorYear     *int       `json:"anchor_year,omitempty"`
+	AnchorMonth    *int       `json:"anchor_month,omitempty"`
+	AnchorDay      *int       `json:"anchor_day,omitempty"`
+	AnchorRealDate *time.Time `json:"anchor_real_date,omitempty"`
+	CreatedAt      time.Time  `json:"created_at"`
+	UpdatedAt      time.Time  `json:"updated_at"`
 
 	// Eager-loaded sub-resources (populated by service, not by every query).
 	Months          []Month         `json:"months,omitempty"`
@@ -1263,7 +1279,37 @@ type FestivalInput struct {
 // for new calendars. Provides a sensible starting point for TTRPG campaigns.
 func DefaultEventCategories() []EventCategoryInput {
 	return []EventCategoryInput{
-		{Slug: "holiday", Name: "Holiday", Icon: "⭐", Color: "#f59e0b", SortOrder: 0},
+		// HOLIDAY IS NOT AMBER, AND THAT IS A RULING RATHER THAN A PREFERENCE
+		// (C-CALV4-RUNES §10.3, operator-decided 2026-08-16).
+		//
+		// GOLD MEANS "GM ONLY" ACROSS THE PRODUCT. Below 84px of column the
+		// calendar draws no event names and the glyph is chosen by position in
+		// the day, so COLOUR is the only channel telling event types apart —
+		// and a GM-only day strikes ALL its runes gold. Amber `#f59e0b` inked
+		// 28/255 from that gold, which at 9x12px is the same colour: a Holiday
+		// and a GM-only day were indistinguishable on a phone. Both are gold BY
+		// HUE, so no lightness or chroma treatment could separate them; one of
+		// the two had to move, and gold's meaning is load-bearing everywhere
+		// else.
+		//
+		// LIME WAS MEASURED, NOT PICKED. Every hue on the circle was painted
+		// through the shipped rune-ink recipe in both themes and scored against
+		// the GM gold AND the five other defaults; 115-135 deg is the optimum
+		// region and `#84cc16` is the Tailwind-500 member of it, so it sits in
+		// the same family as its five neighbours. The change is a strict
+		// improvement on both counts:
+		//
+		//	Holiday vs GM-gold      28 -> 75 / 255
+		//	worst pair of the six   29 -> 43 / 255   (and no longer a Holiday pair)
+		//
+		// Pinned by TestDefaultCategories_NoneCollidesWithTheGMGold.
+		//
+		// EXISTING CALENDARS KEEP THEIR AMBER. This seeds NEW calendars only —
+		// a data fix would rewrite a colour an owner may have chosen on purpose,
+		// and the product cannot tell "left at the default" from "picked exactly
+		// this". Changing it on an existing campaign is one colour picker in
+		// settings -> Categories.
+		{Slug: "holiday", Name: "Holiday", Icon: "⭐", Color: "#84cc16", SortOrder: 0},
 		{Slug: "battle", Name: "Battle", Icon: "⚔", Color: "#ef4444", SortOrder: 1},
 		{Slug: "quest", Name: "Quest", Icon: "❗", Color: "#8b5cf6", SortOrder: 2},
 		{Slug: "birthday", Name: "Birthday", Icon: "🎂", Color: "#ec4899", SortOrder: 3},

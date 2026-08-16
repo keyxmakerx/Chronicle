@@ -88,6 +88,20 @@ func (m *mockCalendarRepo) SetMoodTint(ctx context.Context, calendarID string, c
 	return nil
 }
 
+// setRealDateAnchorFn / lastAnchor record the anchor write (C-CALV4-ANCHOR).
+// BOTH the value and the fact that a write happened are recorded, because the
+// two failures the service tests care about are "wrote the wrong anchor" and
+// "silently wrote nothing", and a nil-valued call is indistinguishable from no
+// call unless the mock counts.
+func (m *mockCalendarRepo) SetRealDateAnchor(ctx context.Context, calendarID string, a *RealDateAnchor) error {
+	m.anchorWrites++
+	m.lastAnchor = a
+	if m.setRealDateAnchorFn != nil {
+		return m.setRealDateAnchorFn(ctx, calendarID, a)
+	}
+	return nil
+}
+
 // sampleSeedCalendar builds a small calendar with two moons + a season for
 // the seed tests. 12 months × 30 days, 24h day.
 func sampleSeedCalendar() *Calendar {

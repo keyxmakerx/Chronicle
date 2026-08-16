@@ -698,12 +698,16 @@ func TestBuilderPreview_SaysWhatItDoesNotDraw(t *testing.T) {
 				"the disclosure must name only the absences that are still true", gone)
 		}
 	}
-	// And the bands must actually be PAINTED, not merely permitted: the layer
-	// gate lives in the Block's own bandRow, so this reads the rendered markup
+	// And the era must actually be PAINTED, not merely permitted: the layer gate
+	// lives in the Block's own cellStyle, so this reads the rendered markup
 	// rather than the layer list.
-	if !strings.Contains(html, `class="bands"`) {
-		t.Error("the eras layer is on and the band data is present, but no band row was " +
-			"painted — the note now promises bands the preview does not draw")
+	//
+	// THE MARKER MOVED WITH THE SURFACE (C-CALV4-TILES §3). It was `class="bands"`,
+	// the era caption row; that row is deleted and the era is now a tint on the
+	// day cells, stamped as `--erahue`. Same claim, current surface.
+	if !strings.Contains(html, `--erahue:`) {
+		t.Error("the eras layer is on and the era data is present, but no day cell was " +
+			"tinted — the note now promises eras the preview does not draw")
 	}
 
 	// The identity line no longer claims paint it does not produce.

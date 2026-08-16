@@ -62,13 +62,28 @@ type probeReading struct {
 	GridShown   bool    `json:"gridShown"`
 	TickShown   bool    `json:"tickShown"`
 	HeaderShown bool    `json:"headerShown"`
-	BandsShown  bool    `json:"bandsShown"`
 	SyncFull    bool    `json:"syncFull"`
 	SyncCompact bool    `json:"syncCompact"`
 	SyncShown   bool    `json:"syncShown"`
-	HalfRules   int     `json:"halfRules"`
 	DataDays    int     `json:"dataDays"`
 	BlockHeight float64 `json:"blockHeight"`
+
+	// ── THE TILE (C-CALV4-TILES §1) ────────────────────────────────────────
+	//
+	// These four replace `bandsShown` and `halfRules`, which measured the era
+	// caption row and the ruler that lived inside it. Both are deleted; the
+	// separation they used to sit above is now a rounded fill drawn INSIDE each
+	// cell, and what has to be measured is that the fill is inset — because an
+	// inset of zero is a build where every tile touches its neighbour and the
+	// micro-separation the operator asked for is simply absent, with nothing in
+	// the markup or the source text different.
+	TileInsetT  float64 `json:"tileInsetT"`
+	TileRadius  string  `json:"tileRadius"`
+	TileZ       string  `json:"tileZ"`
+	TileGapX    float64 `json:"tileGapX"`   // measured ground between two adjacent tiles
+	CellPaints  bool    `json:"cellPaints"` // the cell's OWN background — must be none
+	HalfCells   int     `json:"halfCells"`  // the five-column rule's cell-side owner
+	HalfHeaders int     `json:"halfHeaders"`
 }
 
 func TestProbe_ContainerQuerySizingInRealBrowser(t *testing.T) {
@@ -172,8 +187,8 @@ func TestProbe_ContainerQuerySizingInRealBrowser(t *testing.T) {
 				if !r.GridShown || r.TickShown {
 					t.Error("mini keeps the grid and does not fall back to the tick rule")
 				}
-				if r.HeaderShown || r.BandsShown {
-					t.Error("mini drops the weekday header and the era bands: neither fits")
+				if r.HeaderShown {
+					t.Error("mini drops the weekday header: it does not fit")
 				}
 				if math.Abs(r.BlockHeight-180) > 1 {
 					t.Errorf("the mini Block measures %.1fpx tall; declared 180px", r.BlockHeight)
@@ -187,12 +202,72 @@ func TestProbe_ContainerQuerySizingInRealBrowser(t *testing.T) {
 				}
 			}
 
+			// ── THE TILE, AT EVERY SIZE THAT DRAWS A GRID ────────────────────
+			//
+			// REPLACES the `bandsShown` / `halfRules` arms (C-CALV4-TILES §1/§3).
+			// Those measured the era caption row and the ruler inside it; both
+			// are deleted. What has to be measured now is that the cell's
+			// separation is a fill drawn INSIDE its box with real ground around
+			// it — because the failure mode is silent in every other test in
+			// this package: a zero inset, or a background left on `.cell`,
+			// renders a grid that looks entirely reasonable and has none of the
+			// micro-separation the whole slice exists to add.
+			if h.wantTier != TierSubmini {
+				t.Logf("tile: inset %.2fpx · radius %s · z-index %s · ground between two "+
+					"tiles %.2fpx · cell paints its own box: %v · five-column rule on %d "+
+					"cells / %d header cells",
+					r.TileInsetT, r.TileRadius, r.TileZ, r.TileGapX, r.CellPaints,
+					r.HalfCells, r.HalfHeaders)
+
+				if r.TileInsetT != 1.5 {
+					t.Errorf("the tile insets %.2fpx from the cell's padding box; the recipe "+
+						"is 1.5px on each of two neighbours, which is the reference's measured "+
+						"3px of ground between two cells", r.TileInsetT)
+				}
+				if r.TileRadius != "6px" {
+					t.Errorf("the tile's corner radius is %q; --r-ctl is 6px and the reference "+
+						"measures ~6px. A radius that resolved to 0 would make the tile a "+
+						"rectangle nobody could tell from the ruled grid it replaced",
+						r.TileRadius)
+				}
+				if r.TileZ != "-1" {
+					t.Errorf("the tile's z-index is %q, not -1 — it must paint behind the "+
+						"cell's own content and in front of the grid's ground", r.TileZ)
+				}
+				if r.CellPaints {
+					t.Error("`.cell` paints its own box. Its box IS the grid track, so any fill " +
+						"there covers the 1.5px the tile insets and closes the gutter — the " +
+						"ground stops showing and the tiles read as one continuous surface")
+				}
+				if r.TileGapX < 2.9 || r.TileGapX > 3.1 {
+					t.Errorf("%.2fpx of ground between two adjacent tiles; the reference "+
+						"measures 3px and that gap is the micro-separation itself. Measured "+
+						"between two cells that are actually side by side, so a wrong inset, "+
+						"a stray padding and a re-introduced margin all land here",
+						r.TileGapX)
+				}
+			}
+
 			// ── invariants that hold at every size ───────────────────────────
-			if h.wantTier != TierSubmini && r.HalfRules != len(h.data.Month.Rows) && halfColumn(h.data.Month) > 0 {
-				// (the ruler lives in the band row, which mini drops)
-				if h.wantTier != TierMini {
-					t.Errorf("%d five-column rulers rendered; want one per week row (%d)",
-						r.HalfRules, len(h.data.Month.Rows))
+			//
+			// THE FIVE-COLUMN RULE'S OWNERS, re-pointed off `.halfrule` (which
+			// died with the band row) onto the two elements that draw it now.
+			// The cells carry it at every tier that draws a grid; the header
+			// carries it only where the header itself is drawn.
+			if h.wantTier != TierSubmini && halfColumn(h.data.Month) > 0 {
+				if r.HalfCells != len(h.data.Month.Rows) {
+					t.Errorf("%d cells carry the five-column rule; want one per week row (%d)",
+						r.HalfCells, len(h.data.Month.Rows))
+				}
+				wantHeaders := 0
+				if r.HeaderShown {
+					wantHeaders = 1
+				}
+				if r.HalfHeaders != wantHeaders {
+					t.Errorf("%d weekday-header cells carry the five-column rule; want %d "+
+						"(the header is %v at this tier). A ramp step that reaches the cells "+
+						"and stops at the header is a visible seam",
+						r.HalfHeaders, wantHeaders, r.HeaderShown)
 				}
 			}
 			wantDays := h.data.Month.Days + len(h.data.Month.Intercalary)
@@ -238,6 +313,39 @@ function(root){
          - parseFloat(cs.borderLeftWidth) - parseFloat(cs.borderRightWidth)
          - parseFloat(cs.paddingLeft) - parseFloat(cs.paddingRight);
   }
+
+  // ── THE TILE, READ OFF THE LIVE PSEUDO-ELEMENT ────────────────────────
+  // getComputedStyle(el, '::before') resolves an absolutely-positioned
+  // pseudo's offsets to USED pixels, so this is the laid-out tile and not
+  // the declaration. The gap is then computed between two REAL adjacent
+  // cells rather than doubled from one inset, because that is the number a
+  // reader actually sees and it is the one a stray padding would change.
+  var tileT = -1, tileRad = '', tileZ = '', gapX = -1, cellPaints = false;
+  if (cell) {
+    var ps = getComputedStyle(cell, '::before');
+    tileT = parseFloat(ps.top);
+    tileRad = ps.borderTopLeftRadius;
+    tileZ = ps.zIndex;
+    var ccs = getComputedStyle(cell);
+    cellPaints = ccs.backgroundColor !== 'rgba(0, 0, 0, 0)' || ccs.backgroundImage !== 'none';
+
+    var row = cell.closest('.wk');
+    var sibs = row ? [].slice.call(row.querySelectorAll('.cell')) : [];
+    for (var i = 0; i + 1 < sibs.length && gapX < 0; i++) {
+      // skip the five-column boundary: its strong rule sits in the gutter on
+      // purpose and widens it, so measuring there would report the exception.
+      if (sibs[i].classList.contains('half')) continue;
+      var a = sibs[i], b = sibs[i + 1];
+      var ar = a.getBoundingClientRect(), br = b.getBoundingClientRect();
+      var as = getComputedStyle(a), bs = getComputedStyle(b);
+      var ap = getComputedStyle(a, '::before'), bp = getComputedStyle(b, '::before');
+      if (br.left < ar.right - 0.5) continue; // not laid out side by side
+      var aRight = ar.right - parseFloat(as.borderRightWidth) - parseFloat(ap.right);
+      var bLeft  = br.left  + parseFloat(bs.borderLeftWidth)  + parseFloat(bp.left);
+      gapX = Math.round((bLeft - aRight) * 100) / 100;
+    }
+  }
+
   return {
     host: Math.round(w(root)),
     blockWidth: w(block),
@@ -254,11 +362,16 @@ function(root){
     gridShown: vis(root.querySelector('.grid')),
     tickShown: vis(root.querySelector('.tickstrip')),
     headerShown: vis(root.querySelector('.hd')),
-    bandsShown: vis(root.querySelector('.bands')),
     syncFull: vis(root.querySelector('.sync-full')),
     syncCompact: vis(root.querySelector('.sync-compact')),
     syncShown: vis(root.querySelector('.sync')),
-    halfRules: [].slice.call(root.querySelectorAll('.halfrule')).filter(vis).length,
+    tileInsetT: tileT,
+    tileRadius: tileRad,
+    tileZ: tileZ,
+    tileGapX: gapX,
+    cellPaints: cellPaints,
+    halfCells: [].slice.call(root.querySelectorAll('.cell.half')).filter(vis).length,
+    halfHeaders: [].slice.call(root.querySelectorAll('.hd b.half')).filter(vis).length,
     dataDays: root.querySelectorAll('[data-day]').length
   };
 }`

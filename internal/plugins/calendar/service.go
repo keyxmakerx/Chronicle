@@ -92,6 +92,9 @@ type CalendarService interface {
 	SetMoons(ctx context.Context, calendarID string, moons []MoonInput) error
 	SetSeasons(ctx context.Context, calendarID string, seasons []Season) error
 	SetEras(ctx context.Context, calendarID string, eras []EraInput) error
+	// SetRealDateAnchor pins one in-world date to one real date, or clears the
+	// pin when a is nil (C-CALV4-ANCHOR). See real_date_anchor.go.
+	SetRealDateAnchor(ctx context.Context, calendarID string, a *RealDateAnchor) error
 	// Per-era CRUD (V2 Wave 0 PR 2). Complements SetEras bulk-replace
 	// for AI Workspace Wave 3 + per-card-edit Wave 1 use cases. All
 	// three publish `structure.updated`.
@@ -1559,6 +1562,49 @@ func (s *calendarService) SetEras(ctx context.Context, calendarID string, eras [
 	}
 	s.publishStructureUpdated(ctx, calendarID)
 	return nil
+}
+
+// SetRealDateAnchor stores (or clears) the calendar's real-date anchor.
+//
+// THE ANCHOR IS VALIDATED AGAINST THE CALENDAR IT IS BEING STORED ON, which is
+// why this loads the calendar first rather than trusting the request. "Month 14
+// day 40" is a perfectly good pair of integers and a nonsense in-world date;
+// the arithmetic downstream NEVER FAILS on it — AbsoluteDay returns a number
+// quite happily — so an anchor on a day the calendar does not have would map
+// every other day off by however far the phantom overshoots, silently and
+// permanently. This is the only place that can catch it.
+//
+// IT DOES NOT PUBLISH calendar.structure.updated. That signal means the shape
+// of the calendar changed and it makes the Foundry module re-run its structure
+// comparison and badge a mismatch (see the module's CLAUDE.md). The anchor
+// changes no month, no weekday and no leap rule — the in-world calendar is
+// identical before and after — so publishing would badge a mismatch that does
+// not exist. What it does change is which REAL date each day falls on, and no
+// consumer subscribes to that yet.
+func (s *calendarService) SetRealDateAnchor(ctx context.Context, calendarID string, a *RealDateAnchor) error {
+	if a != nil {
+		cal, err := s.repo.GetByID(ctx, calendarID)
+		if err != nil {
+			return err
+		}
+		if cal == nil {
+			return apperror.NewNotFound("calendar")
+		}
+		// The structure sub-resources are eager-loaded separately from the row,
+		// and Validate reads Months — without this the check would see a
+		// month-less calendar and refuse every anchor.
+		if len(cal.Months) == 0 {
+			months, err := s.repo.GetMonths(ctx, calendarID)
+			if err != nil {
+				return err
+			}
+			cal.Months = months
+		}
+		if err := a.Validate(cal); err != nil {
+			return apperror.NewValidation(err.Error())
+		}
+	}
+	return s.repo.SetRealDateAnchor(ctx, calendarID, a)
 }
 
 // validateEraInput runs the same validation rules SetEras applies per row.

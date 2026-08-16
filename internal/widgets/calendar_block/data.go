@@ -12,6 +12,13 @@
 // precedent). Changing a field name or type is a STOP-AND-FLAG, not a
 // judgement call: it desynchronises a parallel chat you cannot see.
 //
+// AMENDED r55 (2026-08-14, calendar-v4 refinement stage 3). One additive field
+// for the Ledger's day panel: LedgerStub.CanCreate — the create door's gate,
+// which is the viewer's authoring floor AND the host's "an editor is mounted
+// here", neither of them derivable inside a plugin-agnostic widget. Same shape
+// as r54's PersistURL: producer-built, zero value means the affordance is
+// absent. Nothing renamed, nothing retyped.
+//
 // AMENDED r54 (2026-07-28). One field for the wave-3 switchboard (W-F):
 // LayerState.PersistURL — the campaign-scoped endpoint the switchboard posts a
 // layer choice to, built by the producer (the widget has no router and renders
@@ -254,8 +261,30 @@ type WeekRow struct {
 }
 
 type EraBand struct {
+	// Label HAS ZERO READERS IN THIS WIDGET, and that is not an oversight —
+	// read this before wiring anything to it.
+	//
+	// Its only reader was `bandRow` in instrument.templ, the 16px era caption
+	// row above each week. C-CALV4-TILES §3 DELETED THAT ROW (last present at
+	// 3278f054; the deletion is part of the C-CALV4-TILES change itself, not of
+	// an earlier commit), because the operator asked for the era to be "a color
+	// of the dates background and that's it". Nothing has rendered this string
+	// since. `Suffix` — the season, printed on row 0 of the same row — is in
+	// exactly the same position and for the same reason.
+	//
+	// THE FIELDS STAY, deliberately, on two grounds: the producer-side pin
+	// (block_geometry_test.go) asserts what the producer puts here, and a
+	// LEGEND naming each era beside its colour is the obvious next surface —
+	// booked in C-CALV4-TILES §7 as a real, unbuilt gap, because the era's
+	// colour currently has nothing anywhere that names it.
+	//
+	// WHAT THE ERA STILL RENDERS AS TEXT IS `BlockData.EraLabel`, A DIFFERENT
+	// FIELD, on the Nameplate. The two are not the same string and are not kept
+	// in step: in this package's own fixture they read "Reckoning of Wards" /
+	// "Age of the Emberfall" here and "RoW" there. Do not treat the badge as
+	// this field's surface.
 	Label     string
-	Suffix    string // the season, folded in as a suffix on row 0 ONLY (§9 dev 3)
+	Suffix    string // the season, row 0 ONLY (§9 dev 3) — unread, see Label
 	StartCol  int    // 1-based, relative to the week gutter
 	Span      int
 	BandHue   string // --bandhue; driven by the ERA, never hardcoded per calendar
@@ -277,6 +306,21 @@ type DayCell struct {
 	Intercalary bool
 	Moons       []MoonDisc
 	Marks       []Mark
+	// RealDate is the Gregorian date this in-world day falls on, ALREADY
+	// FORMATTED for display ("Sat 3 Oct 2026"). Empty when the campaign's
+	// calendar carries no real-date anchor, which is every calendar until an
+	// owner sets one — so the empty string is the common case and every reader
+	// must treat it as "not known", never as "today".
+	//
+	// A STRING, AND FORMATTED BY THE PRODUCER, because this widget has no
+	// calendar model and must not grow one. The mapping needs the month table,
+	// the leap rule and the stored anchor (calendar.RealDateFor); re-deriving
+	// any of that here would be a second implementation of the one piece of
+	// arithmetic in this feature that must not drift.
+	//
+	// PRESENTATION ONLY — nothing keys off it. When availability lands it will
+	// arrive as its own structured field; a display label is not a join key.
+	RealDate string
 	// MoreCount is OVERLAPPING, not additive: Marks holds the FULL viewer-visible
 	// list for the day, and MoreCount is how many of those are not drawn as
 	// chips. The day's event total is len(Marks) — NEVER len(Marks)+MoreCount.
@@ -448,6 +492,30 @@ type LayerState struct {
 type LedgerStub struct {
 	NeedsBackend bool
 	Hidden       bool // the real-world Block on the Bench renders with noShelf
+
+	// CanCreate gates the day panel's `+ New event` door, and it is ONE FIELD
+	// carrying TWO producer facts because both must hold and neither is
+	// derivable here:
+	//
+	//  1. the VIEWER's authoring floor — the create route's RoleScribe, read
+	//     off cc.MemberRole. It is NOT ViewerContext.IsGM and must never be
+	//     confused with it: IsGM is the VISIBILITY role, under which a
+	//     DM-granted player reads as Owner while the create route still
+	//     refuses them (bench.go's benchInput says so in full);
+	//  2. the HOST's statement that a day-card EDITOR is mounted on this page.
+	//     The door has no write path of its own — it opens the editor the day
+	//     card already ships, which is mounted by bench.templ alone. A Block
+	//     rendered anywhere else (the entity embed, a widget binding) can still
+	//     dock the Ledger through a stored layer preference, and a door there
+	//     would be a control that silently does nothing.
+	//
+	// ZERO VALUE IS NO DOOR, exactly as BlockRequest.SkyOn's is no sky and
+	// LayerState.PersistURL's is no switchboard: the one host that wants it says
+	// so, and every other caller is correct by default.
+	//
+	// AMENDED r55 (2026-08-14, calendar-v4 refinement stage 3). Additive only —
+	// no field renamed, no type changed.
+	CanCreate bool
 }
 
 type ShelfStub struct {

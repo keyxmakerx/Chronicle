@@ -7,6 +7,8 @@ package calendar
 import (
 	"encoding/json"
 	"fmt"
+	"time"
+
 	"github.com/keyxmakerx/chronicle/internal/plugins/campaigns"
 	"github.com/keyxmakerx/chronicle/internal/templates/layouts"
 	"github.com/keyxmakerx/chronicle/internal/timeutil"
@@ -62,6 +64,9 @@ templ CalendarSettingsPage(cc *campaigns.CampaignContext, cal *Calendar, csrfTok
 				@settingsTab("seasons", "fa-solid fa-leaf", "Seasons")
 				if !cal.IsRealLife() {
 					@settingsTab("eras", "fa-solid fa-landmark", "Eras")
+					// C-CALV4-ANCHOR. Fantasy only: a real-life calendar's days
+					// ARE real dates, so there is nothing to pin.
+					@settingsTab("anchor", "fa-solid fa-anchor", "Real dates")
 				}
 				@settingsTab("categories", "fa-solid fa-tag", "Categories")
 				if !cal.IsRealLife() {
@@ -106,6 +111,11 @@ templ CalendarSettingsPage(cc *campaigns.CampaignContext, cal *Calendar, csrfTok
 					<div x-show="tab === 'eras'" x-cloak class="h-full overflow-y-auto">
 						<div class="max-w-3xl mx-auto px-6 py-6">
 							@erasSettingsTab(cc, cal, csrfToken)
+						</div>
+					</div>
+					<div x-show="tab === 'anchor'" x-cloak class="h-full overflow-y-auto">
+						<div class="max-w-3xl mx-auto px-6 py-6">
+							@anchorSettingsTab(cc, cal, csrfToken)
 						</div>
 					</div>
 				}
@@ -679,7 +689,19 @@ templ erasSettingsTab(cc *campaigns.CampaignContext, cal *Calendar, csrfToken st
 					<div class="card p-3 space-y-2">
 						<div class="flex items-center justify-between">
 							<div class="flex items-center gap-2">
-								<span class="w-3 h-3 rounded-full" :style="'background:' + e.color"></span>
+								// THIS DOT IS THE PICK, NOT THE PAINT, AND IT NOW SAYS SO.
+								// The painted tint is by construction nearly the colour of the day
+								// beside it — that is what the fixed softness buys — so at 12px it
+								// would read as an empty circle and the card would lose the only
+								// at-a-glance marker that tells two eras apart. The honest preview
+								// is the labelled strip below, which has room to show the tint at
+								// size on its own grid ground; this dot keeps the author's own
+								// colour and names itself in `title` so the two cannot be confused.
+								<span
+									class="w-3 h-3 rounded-full"
+									:style="'background:' + e.color"
+									title="The colour you picked. The calendar paints its hue only — see the preview below."
+								></span>
 								<span class="text-sm font-medium text-fg" x-text="e.name || 'Unnamed Era'"></span>
 								<span class="text-xs text-fg-muted" x-text="e.end_year ? e.start_year + ' – ' + e.end_year : e.start_year + ' – present'"></span>
 							</div>
@@ -706,6 +728,56 @@ templ erasSettingsTab(cc *campaigns.CampaignContext, cal *Calendar, csrfToken st
 								<input type="color" x-model="e.color" class="input w-full h-[34px]"/>
 							</div>
 						</div>
+						// THE PREVIEW IS THE PRODUCT'S OWN FORMULA, NOT A LIKENESS OF IT.
+						// The grid never paints the picked colour. It paints
+						// `oklch(from <colour> L C h)` — the author's HUE at a pinned lightness
+						// and chroma (static/css/calendar-block.css §ERAS) — so a saturated pick
+						// and a pale one of the same hue land on the SAME cell. Measured in
+						// Chromium 141: #1d4ed8 paints rgb(248,252,255) and #c7d2fe paints
+						// rgb(249,251,255), one channel apart. A grey is worse than flat, not
+						// safer: #808080 carries no hue worth having but is not hueless either,
+						// and comes out at h 23.6° — rgb(255,249,249), a faint pink. The pinning
+						// is deliberate and stays: it is what stops an author making the grid
+						// shout. What was missing is that nothing told the author, who could
+						// learn any of it only by saving and looking.
+						// These swatches therefore evaluate the SAME relative-colour expression the
+						// stylesheet does, each on its own theme's grid ground and beside an
+						// untinted day — the softness is the thing being shown, and softness is
+						// only legible against what it sits next to. The FILL is previewed and not
+						// the tile's 1px rule: this editor may not invent a value the grid derives.
+						//
+						// THE NUMBERS ARE MIRRORED, AND THE MIRROR IS PINNED. CSS cannot hand its
+						// constants to a template, so eraTintLightLC / eraTintDarkLC restate them
+						// and TestErasEditor_TintPreviewMatchesTheStylesheet reads them back out of
+						// the sheet. A change on either side reds CI instead of shipping a preview
+						// that has quietly stopped being true.
+						<div class="flex items-center gap-4 flex-wrap">
+							<span class="text-[10px] text-fg-secondary">On the calendar</span>
+							<div class="flex items-center gap-1.5">
+								<span class="text-[10px] text-fg-muted">Light</span>
+								<span class="inline-flex gap-[3px] rounded p-[3px]" :style="'background:' + eraGround('light')">
+									<span class="w-8 h-5 rounded-[6px]" :style="'background:' + eraTint(e.color, 'light')" title="A day inside this era"></span>
+									<span class="w-8 h-5 rounded-[6px]" :style="'background:' + eraPlain('light')" title="A day in no era"></span>
+								</span>
+							</div>
+							<div class="flex items-center gap-1.5">
+								<span class="text-[10px] text-fg-muted">Dark</span>
+								<span class="inline-flex gap-[3px] rounded p-[3px]" :style="'background:' + eraGround('dark')">
+									<span class="w-8 h-5 rounded-[6px]" :style="'background:' + eraTint(e.color, 'dark')" title="A day inside this era"></span>
+									<span class="w-8 h-5 rounded-[6px]" :style="'background:' + eraPlain('dark')" title="A day in no era"></span>
+								</span>
+							</div>
+							<div class="flex items-center gap-1.5">
+								<span class="text-[10px] text-fg-muted">Chosen</span>
+								<span class="w-5 h-5 rounded border border-edge" :style="'background:' + e.color"></span>
+							</div>
+						</div>
+						<p class="text-[10px] text-fg-muted">
+							The calendar takes only this colour's <strong class="text-fg-secondary">hue</strong>, at a fixed lightness
+							and chroma, so eras stay readable behind the dates. Two colours of the same hue paint the same day
+							however bright or pale you pick, and a grey has no real hue to take — it tints faintly and
+							arbitrarily rather than staying grey.
+						</p>
 						<div>
 							<label class="block text-[10px] text-fg-secondary mb-0.5">Description</label>
 							<input type="text" x-model="e.description" class="input text-sm w-full" placeholder="Optional description"/>
@@ -746,6 +818,150 @@ templ erasSettingsTab(cc *campaigns.CampaignContext, cal *Calendar, csrfToken st
 					<span x-show="!saving">Save All Eras</span>
 					<span x-show="saving">Saving...</span>
 				</button>
+			</div>
+		</div>
+	</div>
+}
+
+// anchorSettingsTab pins one in-world date to one real date (C-CALV4-ANCHOR).
+//
+// FANTASY ONLY. A real-life calendar's days ARE real dates; there is nothing to
+// pin and a form offering to pin them would imply otherwise.
+templ anchorSettingsTab(cc *campaigns.CampaignContext, cal *Calendar, csrfToken string) {
+	{{ ay, am, ad, ar := anchorFieldValues(cal) }}
+	{{ todayLine := anchorTodayLine(cal, time.Now()) }}
+	{{ currentLine := anchorCurrentDayLine(cal) }}
+	<div class="space-y-4">
+		<div>
+			<h2 class="text-lg font-semibold text-fg mb-1">Real-world anchor</h2>
+			<p class="text-sm text-fg-secondary">
+				Pin one day of your world to one real date. Every other day follows by counting,
+				so Chronicle can answer <em>"when is our next session, in-world"</em> and line your
+				players' availability up against the calendar you actually play on.
+			</p>
+		</div>
+		// THE STATE IS STATED BEFORE THE FORM, not after it. Unanchored is a
+		// real and common state — every existing calendar is one — and an owner
+		// arriving here needs to know which they are looking at before they
+		// start typing into fields that may already hold something.
+		if todayLine != "" {
+			<div class="card p-3 border-l-2 border-accent space-y-1">
+				<p class="text-sm text-fg">{ todayLine }</p>
+				if currentLine != "" {
+					<p class="text-sm text-fg-secondary">{ currentLine }</p>
+				}
+			</div>
+		} else {
+			<div class="card p-3 border-l-2 border-edge">
+				<p class="text-sm text-fg-secondary">
+					This calendar has no anchor, so its days have no real dates. Nothing is
+					broken — the calendar works exactly as it does now — but availability and
+					session scheduling cannot line up against it until one is set.
+				</p>
+			</div>
+		}
+		<div x-data={ fmt.Sprintf(`{ saving: false, saved: false, error: '',
+			y: %s, m: %s, d: %s, real: %s,
+			useToday() {
+				const t = new Date();
+				const p = n => String(n).padStart(2, '0');
+				this.real = t.getFullYear() + '-' + p(t.getMonth() + 1) + '-' + p(t.getDate());
+				this.y = %s; this.m = %s; this.d = %s;
+			} }`,
+			jsStr(ay), jsStr(am), jsStr(ad), jsStr(ar),
+			jsStr(fmt.Sprint(cal.CurrentYear)), jsStr(fmt.Sprint(cal.CurrentMonth)), jsStr(fmt.Sprint(cal.CurrentDay))) }>
+			<div class="card p-4 space-y-3">
+				<div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+					<div>
+						<label class="block text-xs font-medium text-fg-secondary mb-1.5">In your world</label>
+						<div class="grid grid-cols-3 gap-2">
+							<div>
+								<label class="block text-[10px] text-fg-muted mb-0.5">Year</label>
+								<input type="number" x-model="y" class="input text-sm w-full" placeholder="1492"/>
+							</div>
+							<div>
+								<label class="block text-[10px] text-fg-muted mb-0.5">Month</label>
+								<select x-model="m" class="input text-sm w-full">
+									<option value="">—</option>
+									for i, mo := range cal.Months {
+										<option value={ fmt.Sprint(i + 1) }>{ fmt.Sprintf("%d · %s", i+1, mo.Name) }</option>
+									}
+								</select>
+							</div>
+							<div>
+								<label class="block text-[10px] text-fg-muted mb-0.5">Day</label>
+								<input type="number" x-model="d" class="input text-sm w-full" placeholder="14"/>
+							</div>
+						</div>
+					</div>
+					<div>
+						<label class="block text-xs font-medium text-fg-secondary mb-1.5">was this real date</label>
+						<input type="date" x-model="real" class="input text-sm w-full"/>
+						// THE CONVENIENCE BUTTON STATES ITS ASSUMPTION, because the
+						// assumption is usually FALSE. It fills in today's real date
+						// beside the calendar's CURRENT in-world day, which is only a
+						// correct anchor if the campaign's clock happens to be standing
+						// on today — and a GM advances the in-world calendar in bursts
+						// during play, so it drifts weeks either way. Offered unlabelled
+						// it is a plausible, confident, wrong anchor presented as the
+						// easy option, which is the exact failure this whole feature
+						// refuses everywhere else.
+						//
+						// It is kept rather than removed because it IS right for the
+						// common starting case — a GM setting this up mid-session, with
+						// the calendar on the day they are playing — and because it
+						// fills two fields the reader can then check against the
+						// resolved line above before saving.
+						<button type="button" class="text-xs text-accent hover:underline mt-1.5" @click="useToday()">
+							<i class="fa-solid fa-wand-magic-sparkles mr-1"></i>
+							Fill in today + the calendar's current day
+						</button>
+						<p class="text-[10px] text-fg-muted mt-1 leading-snug">
+							Only correct if your campaign is <em>standing on</em> today. If you have
+							advanced the in-world date ahead of real life, use a day you know the
+							real date of instead — a past session is the safest choice.
+						</p>
+					</div>
+				</div>
+				<p class="text-[11px] text-fg-muted">
+					The <strong class="text-fg-secondary">named day</strong> is what is stored, not a day count —
+					so if you later correct a month's length, this day keeps its real date and the days
+					around it re-flow. Clearing all four fields removes the anchor.
+				</p>
+				<div class="flex items-center justify-end gap-2">
+					<span x-show="saved" x-transition class="text-xs text-green-500">Saved — reload to see what it resolves to</span>
+					<span x-show="error" x-transition class="text-xs text-red-500" x-text="error"></span>
+					<button
+						type="button"
+						class="btn-secondary text-sm"
+						:disabled="saving"
+						@click="y = ''; m = ''; d = ''; real = ''"
+					>Clear</button>
+					<button
+						type="button"
+						class="btn-primary text-sm"
+						:disabled="saving"
+						@click={ fmt.Sprintf(`
+							saving = true; saved = false; error = '';
+							Chronicle.apiFetch('/campaigns/%s/calendars/%s/anchor', {
+								method: 'PUT',
+								body: { anchor_year: String(y), anchor_month: String(m),
+								        anchor_day: String(d), anchor_real_date: String(real) }
+							}).then(async r => {
+								if (!r.ok) {
+									const b = await r.json().catch(() => ({}));
+									throw new Error(b.message || 'Save failed');
+								}
+								saved = true;
+							})
+							.catch(e => { error = e.message; })
+							.finally(() => { saving = false; })
+						`, cc.Campaign.ID, cal.ID) }
+					>
+						<span x-show="!saving">Save anchor</span>
+						<span x-show="saving">Saving...</span>
+					</button>
+				</div>
 			</div>
 		</div>
 	</div>
@@ -858,7 +1074,40 @@ func seasonsData(seasons []Season) string {
 	return fmt.Sprintf("{ seasons: %s, saving: false, saved: false, error: '' }", string(b))
 }
 
+// THE DAY GRID PAINTS AN ERA AS HUE ONLY, and these are that formula's
+// numbers. `oklch(from var(--erahue) L C h)` keeps the author's hue and pins
+// lightness and chroma per theme (static/css/calendar-block.css §ERAS), which
+// is what guarantees no era can make the grid shout — and also why the swatch
+// in the picker is not the colour the calendar draws.
+//
+// They are MIRRORED here rather than shared, because a stylesheet cannot hand
+// a constant to a template and this page does not load the Block's sheet at
+// all (it is the app's Tailwind surface). That mirror is the one thing in this
+// preview that can drift, so it is pinned in both directions by
+// TestErasEditor_TintPreviewMatchesTheStylesheet: change the sheet without
+// changing these and CI reds, rather than the editor quietly advertising a
+// tint the grid stopped painting.
+const (
+	// eraTintLightLC / eraTintDarkLC are the `L C` pair each theme pins, in the
+	// order the relative-colour expression takes them.
+	eraTintLightLC = "0.99 0.010"
+	eraTintDarkLC  = "0.27 0.012"
+	// The ground a day sits on and the fill an UNTINTED day takes, per theme —
+	// the Block's own --surface-inset / --surface-card, restated as literals
+	// because the preview must show the GRID's colours whichever theme the
+	// settings page itself happens to be in.
+	eraPreviewLightGround = "oklch(0.965 0.003 260)" // --surface-inset, light
+	eraPreviewLightPlain  = "oklch(1 0 0)"           // --surface-card,  light
+	eraPreviewDarkGround  = "oklch(0.215 0.012 265)" // --surface-card,  dark
+	eraPreviewDarkPlain   = "oklch(0.255 0.013 265)" // --surface-inset, dark
+)
+
 // erasData returns the Alpine.js x-data JSON for the eras list.
+//
+// It carries three methods as well as the list. They exist so the tint formula
+// appears ONCE per page instead of once per swatch: four call sites restating
+// `oklch(from … 0.99 0.010 h)` would be four places for it to go stale, and the
+// point of the preview is that it cannot disagree with the grid.
 func erasData(eras []Era) string {
 	type eItem struct {
 		Name        string `json:"name"`
@@ -879,7 +1128,18 @@ func erasData(eras []Era) string {
 		}
 	}
 	b, _ := json.Marshal(items)
-	return fmt.Sprintf("{ eras: %s, saving: false, saved: false, error: '' }", string(b))
+	// `c || ''` rather than a substituted default: an era row whose colour is
+	// missing must preview as NOTHING, because an invalid value is dropped by
+	// the style binding and an empty swatch is the truth. Standing in a default
+	// hex here would paint a colour this era does not have.
+	return fmt.Sprintf(`{ eras: %s, saving: false, saved: false, error: '',
+		eraTint(c, theme) { return 'oklch(from ' + (c || '') + ' ' + (theme === 'dark' ? '%s' : '%s') + ' h)' },
+		eraPlain(theme) { return theme === 'dark' ? '%s' : '%s' },
+		eraGround(theme) { return theme === 'dark' ? '%s' : '%s' } }`,
+		string(b),
+		eraTintDarkLC, eraTintLightLC,
+		eraPreviewDarkPlain, eraPreviewLightPlain,
+		eraPreviewDarkGround, eraPreviewLightGround)
 }
 
 // categoriesSettingsTab renders the event categories management UI.
@@ -985,4 +1245,74 @@ func categoriesData(cats []EventCategory) string {
 func jsStr(s string) string {
 	b, _ := json.Marshal(s)
 	return string(b)
+}
+
+// --- C-CALV4-ANCHOR: the real-date anchor editor ---
+
+// anchorFieldValues returns the four form values, empty when unanchored.
+//
+// Strings, not ints, all the way to the input — for the reason anchorRequest
+// gives: an empty `<input type="number">` binds as 0, and 0 is a real-looking
+// year, so a cleared field and a typed zero would arrive identical.
+func anchorFieldValues(cal *Calendar) (year, month, day, real string) {
+	if !cal.HasRealAnchor() {
+		return "", "", "", ""
+	}
+	return fmt.Sprint(*cal.AnchorYear), fmt.Sprint(*cal.AnchorMonth), fmt.Sprint(*cal.AnchorDay),
+		cal.AnchorRealDate.UTC().Format("2006-01-02")
+}
+
+// anchorInWorldLabel renders an in-world date the way the product speaks it —
+// "Marpenoth 14, 1492" — rather than as three numbers.
+//
+// A month index outside the calendar prints as a bare number instead of
+// panicking or inventing a name: this is a display helper, and the place that
+// refuses an out-of-range month is RealDateAnchor.Validate, once, at the write.
+func anchorInWorldLabel(cal *Calendar, year, month, day int) string {
+	if month >= 1 && month <= len(cal.Months) {
+		return fmt.Sprintf("%s %d, %d", cal.Months[month-1].Name, day, year)
+	}
+	return fmt.Sprintf("%d-%d-%d", year, month, day)
+}
+
+// anchorTodayLine is the consequence, computed on the server and shown back.
+//
+// THE ERAS EDITOR'S LESSON, APPLIED. That editor shipped a colour picker whose
+// painted result was nothing like the pick, and "what was missing is that
+// nothing told the author, who could learn any of it only by saving and
+// looking". An anchor has the same shape of failure and a worse blast radius:
+// it is four numbers whose only visible consequence is which real day every
+// session lands on. So the form states what it currently resolves to.
+//
+// COMPUTED IN GO, NOT MIRRORED INTO JAVASCRIPT. The alternative was a live
+// preview that updates as the owner types, which needs AbsoluteDay, the leap
+// rule and the month table re-implemented in the browser — a second
+// implementation of the one piece of arithmetic in this feature that must not
+// drift. Save-then-see costs a round trip and cannot be wrong.
+//
+// Returns "" when the calendar is unanchored, which the template renders as the
+// empty state rather than as a sentence about nothing.
+func anchorTodayLine(cal *Calendar, now time.Time) string {
+	y, m, d, ok := cal.InWorldDateFor(now)
+	if !ok {
+		return ""
+	}
+	return fmt.Sprintf("Today, %s, is %s in your world.",
+		now.Format("2 January 2006"), anchorInWorldLabel(cal, y, m, d))
+}
+
+// anchorCurrentDayLine is the same fact from the other end: the day the
+// campaign is standing on, and the real date it falls on.
+//
+// BOTH DIRECTIONS ARE SHOWN because an owner checking an anchor checks it
+// against whichever they know. One line would make them do the other conversion
+// in their head, which is the arithmetic they came here to avoid.
+func anchorCurrentDayLine(cal *Calendar) string {
+	rd, ok := cal.RealDateFor(cal.CurrentYear, cal.CurrentMonth, cal.CurrentDay)
+	if !ok {
+		return ""
+	}
+	return fmt.Sprintf("The calendar's current day, %s, falls on %s.",
+		anchorInWorldLabel(cal, cal.CurrentYear, cal.CurrentMonth, cal.CurrentDay),
+		rd.Format("Monday 2 January 2006"))
 }

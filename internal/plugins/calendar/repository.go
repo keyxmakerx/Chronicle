@@ -199,6 +199,15 @@ type CalendarRepository interface {
 	GetMoonPhasesForCalendar(ctx context.Context, calendarID string) (map[int][]MoonPhaseVocab, error)
 	GetSpecialDays(ctx context.Context, calendarID string, year, month, day int) ([]SpecialDay, error)
 	SetMoodTint(ctx context.Context, calendarID string, color *string, intensity *float64) error
+	// SetRealDateAnchor writes migration 018's four anchor columns as ONE
+	// value: pass a fully-populated anchor to set it, or nil to clear it.
+	//
+	// The signature is deliberately not four pointers. A partial anchor maps
+	// nothing (real_date_anchor.go), so "three of the four" must be
+	// unrepresentable at the boundary rather than validated behind it — the
+	// column-level shape is the one that lets a caller write a half-anchor by
+	// forgetting an argument.
+	SetRealDateAnchor(ctx context.Context, calendarID string, a *RealDateAnchor) error
 }
 
 // calendarRepo is the MariaDB implementation of CalendarRepository.
@@ -214,13 +223,17 @@ func NewCalendarRepository(db *sql.DB) CalendarRepository {
 // calendarCols is the column list for calendar queries. mood_tint_* are the
 // persisted live-mood columns added in migration 008
 // (C-CAL-WORLDSTATE-SERVER-MODEL); appended last so the column order of the
-// pre-008 prefix is unchanged.
+// pre-008 prefix is unchanged. The anchor_* four are migration 018's
+// (C-CALV4-ANCHOR) and follow the same rule — appended, never interleaved,
+// because scanCalendar reads this list POSITIONALLY and inserting a column
+// mid-list silently shifts every field after it into the wrong destination.
 const calendarCols = `id, campaign_id, mode, name, description, epoch_name, current_year,
         current_month, current_day, hours_per_day, minutes_per_hour, seconds_per_minute,
         current_hour, current_minute, leap_year_every, leap_year_offset,
         sort_order, is_default, created_at, updated_at,
         mood_tint_color, mood_tint_intensity, visibility, visibility_rules,
-        tracks_real_time, real_time_zone`
+        tracks_real_time, real_time_zone,
+        anchor_year, anchor_month, anchor_day, anchor_real_date`
 
 // scanCalendar reads a row into a Calendar struct.
 func scanCalendar(scanner interface{ Scan(...any) error }) (*Calendar, error) {
@@ -235,7 +248,8 @@ func scanCalendar(scanner interface{ Scan(...any) error }) (*Calendar, error) {
 		&cal.CreatedAt, &cal.UpdatedAt,
 		&cal.MoodTintColor, &cal.MoodTintIntensity,
 		&cal.Visibility, &cal.VisibilityRules,
-		&cal.TracksRealTime, &cal.RealTimeZone)
+		&cal.TracksRealTime, &cal.RealTimeZone,
+		&cal.AnchorYear, &cal.AnchorMonth, &cal.AnchorDay, &cal.AnchorRealDate)
 	if err == sql.ErrNoRows {
 		return nil, nil
 	}
