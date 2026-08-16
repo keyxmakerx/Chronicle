@@ -90,8 +90,41 @@ else
     --pid-file="${PIDFILE}" \
     >"${ERRLOG}" 2>&1 &
 
-  for _ in $(seq 1 40); do running && break; sleep 0.5; done
-  running || { tail -5 "${ERRLOG}" >&2; die "server did not come up — see ${ERRLOG}"; }
+  # ── THE WAIT IS 120s, NOT 20s, AND THE DIFFERENCE IS A REAL FALSE ALARM ────
+  #
+  # This loop was `seq 1 40` × 0.5s. A COLD InnoDB start here takes ~24 seconds —
+  # measured: server launched 05:46:35, "ready for connections" 05:46:59 — so the
+  # loop expired FOUR SECONDS BEFORE the server was ready and the script exited
+  # non-zero while mariadbd sat happily listening on the port.
+  #
+  # THAT FAILURE MODE IS WORSE THAN A SLOW START. Every integration test in this
+  # repo SKIPS when it cannot reach a database, and a skipped test reports as a
+  # passing package. So a false "did not come up" does not stop anyone — it
+  # quietly converts the entire integration suite into green nothing, which is
+  # the exact "a skipped run is NOT a pass" trap the browser probes have their
+  # own census to prevent.
+  #
+  # The budget is generous on purpose: this waits on a first-run buffer-pool
+  # load, which varies with disk and with how much the container is doing. Being
+  # slow costs seconds; being wrong costs a suite.
+  # NOT `local` — this block runs at top level, not inside a function, and `local`
+  # there is a RUNTIME error that `bash -n` does not catch.
+  waited=0
+  for _ in $(seq 1 240); do
+    running && break
+    sleep 0.5
+    waited=$((waited + 1))
+    # Say something at 20s so a genuinely stuck start is distinguishable from a
+    # slow one WHILE it is happening, rather than only in the post-mortem.
+    [ "${waited}" -eq 40 ] && echo "still waiting for mariadbd (cold InnoDB start can take ~30s) ..." >&2
+  done
+  if ! running; then
+    tail -8 "${ERRLOG}" >&2
+    die "server did not come up after $((waited / 2))s — see ${ERRLOG}. If that log ends in
+'ready for connections', the server IS up and this probe is what failed: check that
+${SOCKET} is writable and that the mysql client can reach it."
+  fi
+  [ "${waited}" -gt 40 ] && echo "mariadbd ready after $((waited / 2))s" >&2
   echo "started MariaDB $(mysql --socket="${SOCKET}" -uroot -sN -e 'SELECT VERSION()')"
 fi
 
