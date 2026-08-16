@@ -20,6 +20,37 @@ If you're an AI session looking for "what shipped last week", read the Cordinato
 
 ## For AI sessions
 
+### The product asks instead of guessing (C-RSVP-P10, 2026-08-16)
+
+Branch `claude/coordinator-handoff-stage-3-3d3s4w`. Two operator asks that
+turned out to be one surface, plus a live defect found while scouting for them.
+Full detail in `internal/plugins/sessions/.ai.md` → "C-RSVP-P10" and
+`internal/plugins/calendar/.ai.md` → same.
+
+**One banner, not two.** `GET /notifications/call-to-action` returns the one
+thing a player must ACT on — an unanswered RSVP, or the timezone Chronicle would
+otherwise silently guess — or an empty body. Polled on the bell's 60s cadence
+into a host that collapses when empty. It is STATE, not an event: a player is
+never looking at the page in the second the GM arms RSVPs, so a fire-once toast
+would be seen by nobody. An RSVP outranks the timezone ask because it is
+time-limited; the zone is wrong every day but keeps until tomorrow.
+
+**The server never guesses the zone.** The accept button ships `hidden`; the
+widget fills in the browser's zone and reveals it, and a browser that will not
+report one leaves `/account` as the whole offer. Dismissal is per kind and
+lasts the tab — there is no user-preferences table (refused three times), and
+that constraint is the right answer anyway, since a permanent dismissal would
+let a player read UTC times forever.
+
+**RSVP collection could be armed and never disarmed.** `GET .../events/:eid`
+omitted `collect_rsvps`, so the day card's checkbox rendered UNCHECKED for an
+event whose collection was already ON — and an unchecked box offers no uncheck
+gesture. Both halves were pinned in opposite directions by tests that never saw
+each other (Go asserted the key must be absent; the JS test fed a fixture that
+carried it), and both were green for the feature's whole life. The same failure
+mode as the reverted week/day views. Fixed, Scribe-gated, and now pinned by a
+test that reads BOTH sides.
+
 ### RSVP expanded, not just hardened (C-RSVP-P9, 2026-08-16)
 
 Branch `claude/coordinator-handoff-stage-3-3d3s4w`. C-RSVP-ROBUST (below) fixed

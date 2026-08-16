@@ -9,6 +9,34 @@
 <!-- Legend: [ ] Not started  [~] In progress  [x] Complete  [!] Blocked      -->
 <!-- ====================================================================== -->
 
+## 0-rsvp. The product asks instead of guessing (C-RSVP-P10, 2026-08-16)
+
+- [x] **One call-to-action banner** for the player, polled like the bell badge:
+  an unanswered RSVP, or the timezone ask. State, not an event; empty body means
+  empty banner; never fails the poll.
+- [x] **The timezone ask** — the server never guesses; the widget offers the
+  browser's zone and `PUT /account/timezone` (already existed) accepts it.
+  Dismissal per kind, tab-scoped.
+- [x] **One entrance animation**, held to the shell's global reduced-motion law.
+- [x] **DEFECT: RSVP collection could be armed and never disarmed.**
+  `collect_rsvps` was missing from the editor record, so the day card's checkbox
+  always rendered unchecked. Fixed and pinned across both halves.
+
+- [ ] **BOOKED, needs the operator's call — a co-DM cannot arm RSVP
+  collection.** `RequireRole` compares raw `MemberRole` and never the DM grant,
+  so a DM-granted Player is refused at
+  `PUT .../events/:eid/rsvp-collection`. This is arguably the WG-4 mistake in a
+  new place, but the change WIDENS a write permission, so it is not a silent
+  fix. Decide whether a co-DM should be able to arm RSVPs.
+
+**Recommended on a live client (cannot be unit-tested):** confirm the banner
+appears for a player with an unanswered RSVP and clears when they answer;
+confirm the timezone banner offers the right zone and that accepting it makes
+the Bench's "zone not set" badge go away; confirm the banner does NOT flash on
+every sidebar navigation (it sits outside the boosted swap target); confirm the
+day card's Collect RSVPs checkbox now renders CHECKED for an armed event and can
+be turned off.
+
 ## 0-rsvp. RSVP expanded for real situations (C-RSVP-P9, 2026-08-16)
 
 C-RSVP-ROBUST fixed defects; it added no capability. Asked whether the system had

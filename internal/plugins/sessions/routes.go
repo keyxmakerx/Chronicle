@@ -98,6 +98,11 @@ func RegisterRoutes(e *echo.Echo, h *Handler,
 	ng := e.Group("", auth.RequireAuth(authSvc))
 	ng.GET("/notifications", h.ListNotificationsAPI)
 	ng.GET("/notifications/badge", h.NotificationBadgeAPI)
+	// The player call-to-action banner (C-RSVP-P10). Same group, same
+	// caller-scoping and same empty-body-means-empty contract as the badge
+	// beside it — it is the badge's louder sibling for the one thing a player
+	// is expected to ACT on rather than merely read.
+	ng.GET("/notifications/call-to-action", h.CalloutAPI)
 	ng.POST("/notifications/:nid/read", h.MarkNotificationReadAPI)
 	ng.POST("/notifications/read-all", h.MarkAllNotificationsReadAPI)
 }

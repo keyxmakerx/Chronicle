@@ -341,6 +341,7 @@ GET	/notes/:noteId/versions/:vid	internal/widgets/notes/routes.go
 GET	/notes/members	internal/widgets/notes/routes.go
 GET	/notifications	internal/plugins/sessions/routes.go
 GET	/notifications/badge	internal/plugins/sessions/routes.go
+GET	/notifications/call-to-action	internal/plugins/sessions/routes.go
 GET	/npcs	internal/plugins/npcs/routes.go
 GET	/npcs/count	internal/plugins/npcs/routes.go
 GET	/owner-dashboard-layout	internal/plugins/campaigns/routes.go

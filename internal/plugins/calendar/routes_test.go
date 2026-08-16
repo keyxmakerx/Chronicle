@@ -255,8 +255,19 @@ func TestBenchRoute_IsRegisteredOnThePublicGroupWithViewAccess(t *testing.T) {
 //	    (TestNudge_IsRefusedToAPlainPlayer / _IsAllowedToTheOwnerAndToACoDM).
 //	No calendar route changed, and no auth surface widened: the only new write
 //	is narrower than the group it sits in.
+//
+//	730 → 731 (2026-08-16, C-RSVP-P10): GET /notifications/call-to-action, on
+//	the sessions plugin's plain authenticated group beside /notifications/badge,
+//	scoped to the caller like every route on it. It is a READ that returns the
+//	one thing the calling player is expected to act on — an unanswered RSVP, or
+//	the timezone the product would otherwise guess. It reads only that player's
+//	own notification rows and their own account zone, so it can disclose nothing
+//	they could not already see; and it returns an EMPTY BODY rather than an
+//	error on every failure path, because it is polled once a minute on every
+//	page and a 500 here would be an error toast a minute, forever. No calendar
+//	route changed.
 func TestBenchRoute_SnapshotIsUnmoved(t *testing.T) {
-	const wantLines = 730
+	const wantLines = 731
 	raw, err := os.ReadFile(filepath.Join("..", "..", "wire", "routes_snapshot.txt"))
 	if err != nil {
 		t.Fatalf("reading the wire snapshot: %v", err)

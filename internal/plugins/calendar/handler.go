@@ -714,6 +714,30 @@ type eventEditorRecord struct {
 	Category        *string `json:"category,omitempty"`
 	Visibility      string  `json:"visibility,omitempty"`
 	VisibilityRules *string `json:"visibility_rules,omitempty"`
+	// CollectRSVPs is the per-event RSVP opt-in, and it rides for the SAME
+	// reason is_recurring does below: THE EDITOR MUST ROUND-TRIP WHAT IT SHOWS.
+	//
+	// THE DEFECT THIS CLOSES — RSVPs COULD BE ARMED AND NEVER DISARMED. The day
+	// card renders a "Collect RSVPs" checkbox for Scribe+ and paints it with
+	// `rec.collect_rsvps` (calendar_daycard.js edRsvpPaint). This record did not
+	// carry the key, so the box rendered UNCHECKED on every open, including for
+	// an event whose collection was already ON. An unchecked box offers no
+	// "uncheck" gesture, so there was no path from the day card back to OFF —
+	// and the hint underneath told the GM "Emails the party once, and opens
+	// answers in-app" about an event that had already emailed the party.
+	//
+	// BOTH HALVES WERE PINNED, IN OPPOSITE DIRECTIONS, AND BOTH WERE GREEN.
+	// daycard_route_test.go asserted the key must be ABSENT; the JS test
+	// test/js/daycard_rsvp_collect.test.mjs fed a hand-built fixture that
+	// CARRIED it and asserted the box follows it. Neither test ever saw the
+	// other side, so the product broke in the gap between two passing suites.
+	//
+	// It is a *bool so the key is absent entirely below Scribe — the same
+	// audience discipline as the two fields above, in the shape that lets an
+	// explicit `false` still reach the one audience that may author it. This is
+	// the event's OWN state, not data about campaigns/rosters/months, so it does
+	// not reopen the "general-purpose event API" that record refuses to become.
+	CollectRSVPs *bool `json:"collect_rsvps,omitempty"`
 	// RECURRENCE RIDES BECAUSE THE EDITOR MUST SEND IT BACK, and this is the
 	// R2 fix-forward (DC2-RECUR-DATALOSS): the record shipped without it and
 	// the editor therefore could not round-trip it even in principle.
@@ -766,6 +790,10 @@ func newEventEditorRecord(e Event, canAuthor bool) eventEditorRecord {
 	if canAuthor {
 		rec.Visibility = e.Visibility
 		rec.VisibilityRules = e.VisibilityRules
+		// Copied into a local so the pointer cannot alias the loop/parameter
+		// variable if this function is ever called in a range.
+		collect := e.CollectRSVPs
+		rec.CollectRSVPs = &collect
 	}
 	return rec
 }
