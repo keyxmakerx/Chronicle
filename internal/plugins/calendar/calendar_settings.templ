@@ -897,10 +897,30 @@ templ anchorSettingsTab(cc *campaigns.CampaignContext, cal *Calendar, csrfToken 
 					<div>
 						<label class="block text-xs font-medium text-fg-secondary mb-1.5">was this real date</label>
 						<input type="date" x-model="real" class="input text-sm w-full"/>
+						// THE CONVENIENCE BUTTON STATES ITS ASSUMPTION, because the
+						// assumption is usually FALSE. It fills in today's real date
+						// beside the calendar's CURRENT in-world day, which is only a
+						// correct anchor if the campaign's clock happens to be standing
+						// on today — and a GM advances the in-world calendar in bursts
+						// during play, so it drifts weeks either way. Offered unlabelled
+						// it is a plausible, confident, wrong anchor presented as the
+						// easy option, which is the exact failure this whole feature
+						// refuses everywhere else.
+						//
+						// It is kept rather than removed because it IS right for the
+						// common starting case — a GM setting this up mid-session, with
+						// the calendar on the day they are playing — and because it
+						// fills two fields the reader can then check against the
+						// resolved line above before saving.
 						<button type="button" class="text-xs text-accent hover:underline mt-1.5" @click="useToday()">
 							<i class="fa-solid fa-wand-magic-sparkles mr-1"></i>
-							Use today, and the calendar's current day
+							Fill in today + the calendar's current day
 						</button>
+						<p class="text-[10px] text-fg-muted mt-1 leading-snug">
+							Only correct if your campaign is <em>standing on</em> today. If you have
+							advanced the in-world date ahead of real life, use a day you know the
+							real date of instead — a past session is the safest choice.
+						</p>
 					</div>
 				</div>
 				<p class="text-[11px] text-fg-muted">
