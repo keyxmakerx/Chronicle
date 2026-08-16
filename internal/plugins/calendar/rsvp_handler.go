@@ -68,6 +68,12 @@ type AvailabilityExceptionWriter interface {
 	// day around the offer, so saying "I could also do Tuesday evening" can never
 	// leave the member less available than before.
 	OfferAvailableWindows(ctx context.Context, campaignID, userID string, windows []RSVPAvailabilityWindow) error
+	// MemberZone returns the member's own IANA zone — the one they set on the
+	// availability page, else their account zone — or "" when they have set
+	// none anywhere. EMPTY IS A STATE, never a UTC default: the callers here
+	// use it to decide what they can honestly tell the member, and a guessed
+	// zone is what turns "out this week" into the wrong week.
+	MemberZone(ctx context.Context, campaignID, userID string) string
 }
 
 // RSVPMemberDirectory is the campaigns read the RSVP flows need: the roster (for
@@ -776,9 +782,16 @@ func (h *RSVPHandler) RedeemEventRSVPToken(c echo.Context) error {
 
 	msg := fmt.Sprintf("You're responding %q to %s. Tap below to confirm.", rsvpActionLabel(tok.Action), detail)
 	if tok.Action == RSVPActionOutWeek {
-		_, dates := rsvpWeekDates(cal, evt, nowUTC())
-		msg = fmt.Sprintf("This declines %s and marks you unavailable for the whole week of %s "+
-			"(days you've already customised are left alone). Tap below to confirm.", detail, dates[0])
+		// The confirm page must name the SAME week the apply will write, in the
+		// same zone, or the preview is a different claim from the action.
+		memberTZ := ""
+		if h.availability != nil {
+			memberTZ = h.availability.MemberZone(ctx, cal.CampaignID, tok.UserID)
+		}
+		_, dates := rsvpWeekDates(cal, evt, nowUTC(), memberTZ)
+		msg = fmt.Sprintf("This declines %s and marks you unavailable for the whole week of %s%s "+
+			"(days you've already customised are left alone). Tap below to confirm.",
+			detail, dates[0], weekZoneSuffix(memberTZ))
 	}
 	return c.HTML(http.StatusOK, rsvpConfirmPage("Confirm your response", msg, action,
 		"Confirm — "+rsvpActionLabel(tok.Action), csrf))
@@ -977,11 +990,14 @@ func (h *RSVPHandler) memberRole(ctx context.Context, campaignID, userID string)
 // hand-authored day is never overwritten. The resolved week is always named in
 // the result so the action can't silently block a week they didn't expect.
 func (h *RSVPHandler) applyOutThisWeek(ctx context.Context, cal *Calendar, evt *Event, userID string) string {
-	weekStart, dates := rsvpWeekDates(cal, evt, nowUTC())
 	base := fmt.Sprintf("You're marked as not attending %q.", trimForDisplay(evt.Name, 80))
 	if h.availability == nil {
 		return base + " (Scheduler availability isn't available on this instance, so only the RSVP was recorded.)"
 	}
+	// The week is the MEMBER'S week — see rsvpWeekDates. "" means they have set
+	// no zone anywhere, which falls back to UTC and is disclosed below.
+	memberTZ := h.availability.MemberZone(ctx, cal.CampaignID, userID)
+	weekStart, dates := rsvpWeekDates(cal, evt, nowUTC(), memberTZ)
 
 	existing, err := h.availability.ExceptionDates(ctx, cal.CampaignID, userID)
 	if err != nil {
@@ -1011,12 +1027,24 @@ func (h *RSVPHandler) applyOutThisWeek(ctx context.Context, cal *Calendar, evt *
 		}
 	}
 
-	msg := fmt.Sprintf("%s You're marked unavailable for %d of the 7 days in the week of %s.",
-		base, len(toWrite), weekStart)
+	msg := fmt.Sprintf("%s You're marked unavailable for %d of the 7 days in the week of %s%s.",
+		base, len(toWrite), weekStart, weekZoneSuffix(memberTZ))
 	if skipped > 0 {
 		msg += fmt.Sprintf(" %d day(s) already had your own custom availability and were left alone.", skipped)
 	}
 	return msg
+}
+
+// weekZoneSuffix names the zone the week was resolved in, so the member can spot
+// a wrong week rather than only a wrong-looking one. When they have set no zone
+// anywhere it says so and names the fallback, because "week of 2026-08-10" reads
+// as a fact and the member has no other way to learn it was a UTC reading of
+// their Monday morning.
+func weekZoneSuffix(memberTZ string) string {
+	if memberTZ == "" {
+		return " (UTC — you haven't set a timezone, so set one on the availability page if that's the wrong week)"
+	}
+	return " (" + memberTZ + ")"
 }
 
 // applySuggestion is the shared "I can't make that — here's what would work"

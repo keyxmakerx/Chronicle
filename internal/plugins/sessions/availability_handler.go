@@ -263,6 +263,17 @@ func (h *Handler) resolveViewerTZ(c echo.Context, userID string) string {
 	if tz := c.QueryParam("tz"); timeutil.IsValidLocation(tz) {
 		return tz
 	}
+	// The zone the viewer set for THEMSELVES on this campaign's availability
+	// page comes first: for most players it is the only zone they ever set, so
+	// reading users.timezone alone rendered their own heatmap in UTC while their
+	// blocks were stored in their real zone.
+	if cc := campaigns.GetCampaignContext(c); cc != nil && cc.Campaign != nil && userID != "" {
+		if zones, err := h.svc.CampaignMemberZones(c.Request().Context(), cc.Campaign.ID); err == nil {
+			if tz := zones[userID]; tz != "" {
+				return tz
+			}
+		}
+	}
 	if tz := h.storedTZ(c.Request().Context(), userID); tz != "" {
 		return tz
 	}
@@ -282,6 +293,26 @@ func (h *Handler) storedTZ(ctx context.Context, userID string) string {
 		return ""
 	}
 	return *u.Timezone
+}
+
+// memberZone resolves the zone a member is REPORTED to be in, from both places
+// the product lets them set one:
+//
+//  1. member_availability.tz — what the availability page's control, labelled
+//     "Your timezone", writes. It is the only zone most players ever set,
+//     because that page never calls PUT /account/timezone.
+//  2. users.timezone — the account setting.
+//
+// Empty means genuinely not set anywhere, and stays a first-class state: the
+// callers that print a per-member CLOCK print a "zone not set" repair rather
+// than a UTC guess (ADR-048 §18). Reading only (2) is what made the Bench show
+// "zone not set" beside a player who HAD set their zone, permanently, with a
+// chip inviting the Director to chase them for it.
+func (h *Handler) memberZone(ctx context.Context, availabilityZones map[string]string, userID string) string {
+	if tz := availabilityZones[userID]; tz != "" {
+		return tz
+	}
+	return h.storedTZ(ctx, userID)
 }
 
 // dmGrantSet reads the campaign's co-DM grant list ONCE and returns it as a set.
@@ -327,6 +358,12 @@ func (h *Handler) overlayMembers(ctx context.Context, campaignID string) []overl
 		return nil
 	}
 	grants := h.dmGrantSet(ctx, campaignID)
+	// ONE read for every member's own zone, then a per-member account-zone read
+	// only for the members that read did not answer (WG-4's one-read rule).
+	zones, err := h.svc.CampaignMemberZones(ctx, campaignID)
+	if err != nil {
+		zones = nil // degrade to the account zone; never fail a roster render on it
+	}
 	out := make([]overlayMemberInput, 0, len(members))
 	for _, m := range members {
 		out = append(out, overlayMemberInput{
@@ -336,7 +373,7 @@ func (h *Handler) overlayMembers(ctx context.Context, campaignID string) []overl
 			IsOwner:   m.Role >= campaigns.RoleOwner,
 			RoleLabel: m.Role.DisplayName(),
 			IsCoDM:    grants[m.UserID],
-			TZ:        h.storedTZ(ctx, m.UserID),
+			TZ:        h.memberZone(ctx, zones, m.UserID),
 		})
 	}
 	sort.SliceStable(out, func(i, j int) bool {

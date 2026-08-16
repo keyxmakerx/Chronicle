@@ -274,8 +274,20 @@ func TestRSVPToken_GetDoesNotApply(t *testing.T) {
 		findRSVPTokenFn:        func(_ context.Context, _ string) (*RSVPToken, error) { return &RSVPToken{Token: "rt", SessionID: "s1", UserID: "u1", Action: RSVPAccepted, ExpiresAt: future}, nil },
 		updateAttendeeStatusFn: func(_ context.Context, _, _, _ string) error { applied = true; return nil },
 		markRSVPTokenUsedFn:    func(_ context.Context, _ string) error { return nil },
+		// FIXTURE GROWN, ASSERTIONS UNCHANGED. Both /rsvp/:token halves now
+		// re-check that the token's user is still on the roster (a link cannot
+		// outlive the access that justified it), which needs the token's session
+		// to resolve a campaign and a member lister to check it against. Without
+		// these the handler correctly fails closed and this test would be
+		// measuring the refusal, not the GET/POST split it exists to pin.
+		findByIDFn: func(_ context.Context, id string) (*Session, error) {
+			return &Session{ID: id, CampaignID: "camp-1"}, nil
+		},
 	}
-	h := &Handler{svc: NewSessionService(repo, nil)}
+	h := &Handler{
+		svc:          NewSessionService(repo, nil),
+		memberLister: &stubMemberLister{members: []campaigns.CampaignMember{{UserID: "u1"}}},
+	}
 
 	e := echo.New()
 	req := httptest.NewRequest(http.MethodGet, "/rsvp/rt", nil)

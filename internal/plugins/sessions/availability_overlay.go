@@ -196,10 +196,30 @@ func effectiveBlocks(userID string, realDate timeutil.CivilDate,
 	return out
 }
 
+// maxViewerSegs bounds splitToViewerDays' output. A single availability block
+// spans at most one civil day (minute windows are validated into [0,1440]) and
+// the widest real zone spread is 26h (UTC+14 vs UTC-12), so a block can touch
+// at most three viewer-local dates. Eight is generous headroom.
+//
+// It is not an optimisation, it is a fuse. This loop used to run unbounded, and
+// an unbounded loop that APPENDS is not a spin — it is an allocation storm that
+// OOM-kills the whole self-hosted instance, taking the calendar, maps, entities
+// and Foundry sync with it, from one authenticated GET. The zone arithmetic
+// below is now correct; this exists so that if it is ever wrong again the blast
+// radius is a short segment list, not the process.
+const maxViewerSegs = 8
+
 // splitToViewerDays converts a [start,end) instant range into the viewer zone
 // and yields one segment per viewer-local calendar date it spans, so a block
 // that crosses local midnight is placed on both days. End-of-day is reported as
 // minute 1440, wall-clock-correct across DST transitions.
+//
+// THE BOUNDARY IS timeutil.StartOfCivilDay, NEVER time.Date(y,mo,d,0,0,0,0,loc).
+// In a zone whose DST jump lands on midnight (America/Havana, America/Santiago,
+// Atlantic/Azores) local 00:00 does not exist and Go normalises it backwards
+// into the previous day, so the naive expression returned a "next midnight"
+// that was EARLIER than the instant the loop was already holding — cur never
+// advanced. See StartOfCivilDay's comment for the full mechanism.
 func splitToViewerDays(start, end time.Time, loc *time.Location) []viewerSeg {
 	var out []viewerSeg
 	if !end.After(start) {
@@ -207,13 +227,14 @@ func splitToViewerDays(start, end time.Time, loc *time.Location) []viewerSeg {
 	}
 	le := end.In(loc)
 	cur := start.In(loc)
-	for cur.Before(le) {
+	for i := 0; i < maxViewerSegs && cur.Before(le); i++ {
 		y, mo, d := cur.Date()
-		nextMidnight := time.Date(y, mo, d, 0, 0, 0, 0, loc).AddDate(0, 0, 1)
+		// First real instant of the NEXT viewer-local civil day.
+		nextDayStart := timeutil.StartOfCivilDay(loc, timeutil.CivilDate{Year: y, Month: mo, Day: d}.AddDays(1))
 		segEnd := le
 		endMin := le.Hour()*60 + le.Minute()
-		if !nextMidnight.After(le) {
-			segEnd = nextMidnight
+		if !nextDayStart.After(le) {
+			segEnd = nextDayStart
 			endMin = timeutil.MinutesPerDay // 1440 — end of this local day
 		}
 		startMin := cur.Hour()*60 + cur.Minute()
@@ -223,6 +244,12 @@ func splitToViewerDays(start, end time.Time, loc *time.Location) []viewerSeg {
 				startMin: startMin,
 				endMin:   endMin,
 			})
+		}
+		if !segEnd.After(cur) {
+			// Belt-and-braces: a boundary that did not move past cur would spin
+			// forever. Stopping loses at most the tail of one member's block on
+			// one day; not stopping loses the server.
+			break
 		}
 		cur = segEnd
 	}

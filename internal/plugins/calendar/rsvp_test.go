@@ -186,6 +186,7 @@ type mockAvailability struct {
 	forUser  string
 	offered  []RSVPAvailabilityWindow
 	offerErr error
+	zone     string
 }
 
 func (m *mockAvailability) OfferAvailableWindows(_ context.Context, _, userID string, w []RSVPAvailabilityWindow) error {
@@ -205,6 +206,11 @@ func (m *mockAvailability) MarkDaysUnavailable(_ context.Context, _, userID stri
 	m.written = append(m.written, dates...)
 	return nil
 }
+
+// zone is the member's own IANA zone, "" meaning they have set none anywhere —
+// which is the default for this mock and keeps every pre-existing case on the
+// UTC reading it was written against.
+func (m *mockAvailability) MemberZone(_ context.Context, _, _ string) string { return m.zone }
 
 // --- fixtures ---
 
@@ -495,7 +501,7 @@ func TestRSVPWeekDates(t *testing.T) {
 	// week is derivable — here, an event two weeks out.
 	evtFuture := testEvent(func(e *Event) { e.Year, e.Month, e.Day = 2026, 8, 12 }) // Wed 2026-08-12
 
-	monday, dates := rsvpWeekDates(realTime, evtFuture, now)
+	monday, dates := rsvpWeekDates(realTime, evtFuture, now, "UTC")
 	if monday != "2026-08-10" {
 		t.Errorf("real-time calendar must use the EVENT's week; monday = %q, want 2026-08-10", monday)
 	}
@@ -507,7 +513,7 @@ func TestRSVPWeekDates(t *testing.T) {
 	// containing the redemption moment — the scheduler's own "out this week"
 	// meaning. The user is always TOLD which week, so this can't silently
 	// block the wrong one.
-	fantasyMonday, fantasyDates := rsvpWeekDates(testCalendar(nil), evtFuture, now)
+	fantasyMonday, fantasyDates := rsvpWeekDates(testCalendar(nil), evtFuture, now, "UTC")
 	if fantasyMonday != "2026-07-27" {
 		t.Errorf("fantasy calendar must fall back to the current week; monday = %q, want 2026-07-27", fantasyMonday)
 	}

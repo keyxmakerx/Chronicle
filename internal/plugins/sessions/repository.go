@@ -296,18 +296,43 @@ func (r *sessionRepository) AddAttendee(ctx context.Context, sessionID, userID, 
 	return nil
 }
 
-// UpdateAttendeeStatus updates a user's RSVP status.
+// UpdateAttendeeStatus records a user's RSVP status, CREATING the attendee row
+// if they do not have one yet.
+//
+// IT IS AN UPSERT, AND BOTH HALVES OF THAT ARE FIXES.
+//
+// 1. It used to be a bare UPDATE whose RowsAffected==0 was reported as
+//    "attendee not found". MySQL/MariaDB's RowsAffected counts CHANGED rows,
+//    not MATCHED rows (the driver is not opened with clientFoundRows), and
+//    responded_at = NOW() has one-second resolution — so re-submitting the SAME
+//    status within one second changed nothing and the endpoint answered 404
+//    about a row sitting right there. Reachable by double-tapping the Going
+//    button, by double-submitting the emailed confirm form (where it renders as
+//    "RSVP Failed — attendee not found"), and by any client retry. Confirmed
+//    against MariaDB. Timing-dependent by construction, which is worse than
+//    deterministic: it gets reported as "the RSVP thing is flaky" and never
+//    reproduced on demand.
+//
+// 2. InviteAll runs only at session-creation time and no route adds an attendee
+//    afterwards, so a member who joined the campaign after a session existed had
+//    no row, no RSVP control on the page, and a 404 if they posted anyway — with
+//    no Director-side action to fix it either. The only escape was deleting and
+//    recreating the session, losing its notes, recap and entity links. Creating
+//    the row on RSVP is what makes a late joiner a first-class attendee.
+//
+// MEMBERSHIP IS THE CALLER'S TO ENFORCE, and both callers do: the in-app route
+// rides campaigns.RequireRole(RolePlayer), and the emailed-token path rechecks
+// the roster in the handler (isCampaignMember) exactly as the proposal and
+// calendar-RSVP token paths do. This method must never be reachable from a path
+// that has not established membership, or it will mint attendee rows for
+// non-members.
 func (r *sessionRepository) UpdateAttendeeStatus(ctx context.Context, sessionID, userID, status string) error {
-	query := `UPDATE session_attendees SET status = ?, responded_at = NOW()
-	          WHERE session_id = ? AND user_id = ?`
+	query := `INSERT INTO session_attendees (session_id, user_id, status, responded_at)
+	          VALUES (?, ?, ?, NOW())
+	          ON DUPLICATE KEY UPDATE status = VALUES(status), responded_at = NOW()`
 
-	result, err := r.db.ExecContext(ctx, query, status, sessionID, userID)
-	if err != nil {
+	if _, err := r.db.ExecContext(ctx, query, sessionID, userID, status); err != nil {
 		return fmt.Errorf("updating attendee status: %w", err)
-	}
-	n, _ := result.RowsAffected()
-	if n == 0 {
-		return apperror.NewNotFound("attendee not found")
 	}
 	return nil
 }
@@ -493,12 +518,36 @@ func (r *sessionRepository) FindRSVPToken(ctx context.Context, tokenStr string) 
 	return t, nil
 }
 
-// MarkRSVPTokenUsed marks an RSVP token as used so it can't be reused.
+// ErrRSVPTokenSpent is returned by MarkRSVPTokenUsed when the token had already
+// been consumed — i.e. this caller LOST the race for a single-use link. It is a
+// normal outcome, not an internal error: the winner already applied the action.
+var ErrRSVPTokenSpent = apperror.NewBadRequest("this RSVP link has already been used")
+
+// MarkRSVPTokenUsed consumes an RSVP token.
+//
+// The `used_at IS NULL` predicate is what makes consumption ATOMIC: two
+// concurrent POSTs of the same emailed link race on this one UPDATE and exactly
+// one sees a non-zero RowsAffected. Without it — as this was written — both
+// submissions validated, both applied, and neither caller could tell, because
+// consuming an already-spent token returned nil. The single-use promise the
+// email makes ("These links expire in 7 days") was not enforced at all, and
+// used_at was overwritten so the audit of when the link was really spent was
+// lost too. The calendar plugin's twin (calendar/rsvp_repository.go) already had
+// both halves; this is the same shape.
 func (r *sessionRepository) MarkRSVPTokenUsed(ctx context.Context, tokenStr string) error {
-	_, err := r.db.ExecContext(ctx,
-		`UPDATE session_rsvp_tokens SET used_at = NOW() WHERE token = ?`, tokenStr)
+	res, err := r.db.ExecContext(ctx,
+		`UPDATE session_rsvp_tokens SET used_at = NOW() WHERE token = ? AND used_at IS NULL`, tokenStr)
 	if err != nil {
 		return fmt.Errorf("marking rsvp token used: %w", err)
+	}
+	n, err := res.RowsAffected()
+	if err != nil {
+		// The driver can't report; the UPDATE itself succeeded, so don't fail a
+		// redemption on a diagnostic gap.
+		return nil
+	}
+	if n == 0 {
+		return ErrRSVPTokenSpent
 	}
 	return nil
 }

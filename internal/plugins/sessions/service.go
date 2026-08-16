@@ -3,6 +3,7 @@ package sessions
 import (
 	"context"
 	"crypto/rand"
+	"errors"
 	"fmt"
 	"time"
 
@@ -62,6 +63,9 @@ type SessionService interface {
 	// hours (C-CAL-RSVP-P2).
 	AddMyAvailableWindows(ctx context.Context, campaignID, userID, tz string, windows []AvailabilityWindowDTO) error
 	DeleteMyException(ctx context.Context, campaignID, userID, exceptionID string) error
+	// CampaignMemberZones returns the zone each member set on the availability
+	// page (member_availability.tz), keyed by user id. Absent = not set there.
+	CampaignMemberZones(ctx context.Context, campaignID string) (map[string]string, error)
 	BuildOverlay(ctx context.Context, campaignID string, members []overlayMemberInput, weekStart, viewerTZ string, includeDetail bool) (*WeekOverlay, error)
 
 	// Slot proposals + responses (C-SCHED-P2). See proposals_service.go.
@@ -478,19 +482,33 @@ func (s *sessionService) ValidateRSVPToken(ctx context.Context, tokenStr string)
 	return token, nil
 }
 
-// ApplyRSVPToken validates then applies an RSVP token, updating the user's
-// attendance and consuming the token. State-changing, so it only runs from the
-// POST route (C-SCHED-P3 0b — no GET-driven auto-RSVP from link prefetchers).
+// ApplyRSVPToken validates, CONSUMES, then applies an RSVP token. State-changing,
+// so it only runs from the POST route (C-SCHED-P3 0b — no GET-driven auto-RSVP
+// from link prefetchers).
+//
+// THE ORDER IS THE POINT. It used to apply first and consume afterwards, with a
+// consume that could not report having consumed nothing — so two submissions of
+// one single-use link both validated, both applied, and neither knew it had
+// lost. Consuming FIRST makes the atomic `used_at IS NULL` UPDATE the gate: the
+// loser is refused before it can write anything.
+//
+// Consuming first also means a failure BETWEEN the two steps burns the link
+// without recording the RSVP. That trade is deliberate and it is the right way
+// round: the member is shown the "already used" page and can still answer in
+// the app, whereas the other order lets a link be replayed indefinitely.
 func (s *sessionService) ApplyRSVPToken(ctx context.Context, tokenStr string) (*RSVPToken, error) {
 	token, err := s.ValidateRSVPToken(ctx, tokenStr)
 	if err != nil {
 		return nil, err
 	}
+	if err := s.repo.MarkRSVPTokenUsed(ctx, tokenStr); err != nil {
+		if errors.Is(err, ErrRSVPTokenSpent) {
+			return nil, err // lost the race; the winner already applied it
+		}
+		return nil, apperror.NewInternal(fmt.Errorf("marking token used: %w", err))
+	}
 	if err := s.repo.UpdateAttendeeStatus(ctx, token.SessionID, token.UserID, token.Action); err != nil {
 		return nil, err
-	}
-	if err := s.repo.MarkRSVPTokenUsed(ctx, tokenStr); err != nil {
-		return nil, apperror.NewInternal(fmt.Errorf("marking token used: %w", err))
 	}
 	return token, nil
 }

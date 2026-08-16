@@ -598,55 +598,69 @@ templ AttendeeList(cc *campaigns.CampaignContext, sessionID string, attendees []
 				{ fmt.Sprintf("%d going · %d invited", countAccepted(attendees), len(attendees)) }
 			</p>
 		}
-		<!-- Current user RSVP controls -->
-		for _, a := range attendees {
-			if a.UserID == currentUserID {
-				<div class="mt-4 pt-4 border-t border-edge">
-					<p class="text-sm font-semibold text-fg mb-2">
-						<i class="fa-solid fa-envelope-open-text mr-1 text-accent"></i> RSVP
-					</p>
-					<div class="flex gap-2">
-						<button
-							class={ "text-sm px-3 py-1.5 rounded-md transition-colors inline-flex items-center gap-1",
-								templ.KV("bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400 font-medium ring-1 ring-green-300 dark:ring-green-700", a.Status == RSVPAccepted),
-								templ.KV("bg-surface-secondary text-fg-secondary hover:bg-green-50 dark:hover:bg-green-900/20", a.Status != RSVPAccepted) }
-							hx-post={ fmt.Sprintf("/campaigns/%s/sessions/%s/rsvp", cc.Campaign.ID, sessionID) }
-							hx-headers={ fmt.Sprintf(`{"Content-Type":"application/json","X-CSRF-Token":"%s"}`, csrfToken) }
-							hx-vals='{"status":"accepted"}'
-							hx-target="#attendee-list"
-							hx-swap="innerHTML"
-						>
-							<i class="fa-solid fa-check"></i> Going
-						</button>
-						<button
-							class={ "text-sm px-3 py-1.5 rounded-md transition-colors inline-flex items-center gap-1",
-								templ.KV("bg-yellow-100 dark:bg-yellow-900/30 text-yellow-700 dark:text-yellow-400 font-medium ring-1 ring-yellow-300 dark:ring-yellow-700", a.Status == RSVPTentative),
-								templ.KV("bg-surface-secondary text-fg-secondary hover:bg-yellow-50 dark:hover:bg-yellow-900/20", a.Status != RSVPTentative) }
-							hx-post={ fmt.Sprintf("/campaigns/%s/sessions/%s/rsvp", cc.Campaign.ID, sessionID) }
-							hx-headers={ fmt.Sprintf(`{"Content-Type":"application/json","X-CSRF-Token":"%s"}`, csrfToken) }
-							hx-vals='{"status":"tentative"}'
-							hx-target="#attendee-list"
-							hx-swap="innerHTML"
-						>
-							<i class="fa-solid fa-question"></i> Maybe
-						</button>
-						<button
-							class={ "text-sm px-3 py-1.5 rounded-md transition-colors inline-flex items-center gap-1",
-								templ.KV("bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-400 font-medium ring-1 ring-red-300 dark:ring-red-700", a.Status == RSVPDeclined),
-								templ.KV("bg-surface-secondary text-fg-secondary hover:bg-red-50 dark:hover:bg-red-900/20", a.Status != RSVPDeclined) }
-							hx-post={ fmt.Sprintf("/campaigns/%s/sessions/%s/rsvp", cc.Campaign.ID, sessionID) }
-							hx-headers={ fmt.Sprintf(`{"Content-Type":"application/json","X-CSRF-Token":"%s"}`, csrfToken) }
-							hx-vals='{"status":"declined"}'
-							hx-target="#attendee-list"
-							hx-swap="innerHTML"
-						>
-							<i class="fa-solid fa-xmark"></i> Can't
-						</button>
-					</div>
-				</div>
-			}
-		}
 	}
+	<!-- Current user RSVP controls.
+	     THESE RENDER FOR EVERY MEMBER, not only for members who already hold a
+	     session_attendees row. InviteAll runs at session-creation time only and
+	     no route adds an attendee afterwards, so a player who joined the
+	     campaign after a session existed used to see the attendee list, see the
+	     "3 going · 4 invited" line, and find NO RSVP buttons anywhere — with no
+	     Director-side invite action either. They were also inside the
+	     `len(attendees) == 0` else-branch, so a session with no attendees at all
+	     showed nobody any controls. The RSVP endpoint upserts, so a member with
+	     no row is a first-class responder. -->
+	if cc.IsMember && currentUserID != "" {
+		@rsvpControls(cc, sessionID, csrfToken, myRSVPStatus(attendees, currentUserID))
+	}
+}
+
+// rsvpControls renders the Going / Maybe / Can't buttons for the current member.
+// myStatus is "" when they have no attendee row yet, which highlights nothing —
+// the honest rendering of "you have not answered".
+templ rsvpControls(cc *campaigns.CampaignContext, sessionID, csrfToken, myStatus string) {
+	<div class="mt-4 pt-4 border-t border-edge">
+		<p class="text-sm font-semibold text-fg mb-2">
+			<i class="fa-solid fa-envelope-open-text mr-1 text-accent"></i> RSVP
+		</p>
+		<div class="flex gap-2">
+			<button
+				class={ "text-sm px-3 py-1.5 rounded-md transition-colors inline-flex items-center gap-1",
+					templ.KV("bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400 font-medium ring-1 ring-green-300 dark:ring-green-700", myStatus == RSVPAccepted),
+					templ.KV("bg-surface-secondary text-fg-secondary hover:bg-green-50 dark:hover:bg-green-900/20", myStatus != RSVPAccepted) }
+				hx-post={ fmt.Sprintf("/campaigns/%s/sessions/%s/rsvp", cc.Campaign.ID, sessionID) }
+				hx-headers={ fmt.Sprintf(`{"Content-Type":"application/json","X-CSRF-Token":"%s"}`, csrfToken) }
+				hx-vals='{"status":"accepted"}'
+				hx-target="#attendee-list"
+				hx-swap="innerHTML"
+			>
+				<i class="fa-solid fa-check"></i> Going
+			</button>
+			<button
+				class={ "text-sm px-3 py-1.5 rounded-md transition-colors inline-flex items-center gap-1",
+					templ.KV("bg-yellow-100 dark:bg-yellow-900/30 text-yellow-700 dark:text-yellow-400 font-medium ring-1 ring-yellow-300 dark:ring-yellow-700", myStatus == RSVPTentative),
+					templ.KV("bg-surface-secondary text-fg-secondary hover:bg-yellow-50 dark:hover:bg-yellow-900/20", myStatus != RSVPTentative) }
+				hx-post={ fmt.Sprintf("/campaigns/%s/sessions/%s/rsvp", cc.Campaign.ID, sessionID) }
+				hx-headers={ fmt.Sprintf(`{"Content-Type":"application/json","X-CSRF-Token":"%s"}`, csrfToken) }
+				hx-vals='{"status":"tentative"}'
+				hx-target="#attendee-list"
+				hx-swap="innerHTML"
+			>
+				<i class="fa-solid fa-question"></i> Maybe
+			</button>
+			<button
+				class={ "text-sm px-3 py-1.5 rounded-md transition-colors inline-flex items-center gap-1",
+					templ.KV("bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-400 font-medium ring-1 ring-red-300 dark:ring-red-700", myStatus == RSVPDeclined),
+					templ.KV("bg-surface-secondary text-fg-secondary hover:bg-red-50 dark:hover:bg-red-900/20", myStatus != RSVPDeclined) }
+				hx-post={ fmt.Sprintf("/campaigns/%s/sessions/%s/rsvp", cc.Campaign.ID, sessionID) }
+				hx-headers={ fmt.Sprintf(`{"Content-Type":"application/json","X-CSRF-Token":"%s"}`, csrfToken) }
+				hx-vals='{"status":"declined"}'
+				hx-target="#attendee-list"
+				hx-swap="innerHTML"
+			>
+				<i class="fa-solid fa-xmark"></i> Can't
+			</button>
+		</div>
+	</div>
 }
 
 // rsvpBadge renders a small RSVP status indicator.
@@ -686,6 +700,22 @@ templ userRSVPBadge(attendees []Attendee, userID string) {
 			}
 		}
 	}
+}
+
+// myRSVPStatus returns the current user's stored RSVP status, or "" when they
+// hold no attendee row for this session yet. "" is a real state — "you have not
+// answered" — and is deliberately not collapsed into "invited": a member who
+// joined the campaign after the session was created was never invited to it.
+func myRSVPStatus(attendees []Attendee, userID string) string {
+	if userID == "" {
+		return ""
+	}
+	for _, a := range attendees {
+		if a.UserID == userID {
+			return a.Status
+		}
+	}
+	return ""
 }
 
 // countAccepted returns the number of attendees with "accepted" status.

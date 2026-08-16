@@ -505,6 +505,10 @@ func (h *Handler) RedeemRSVPToken(c echo.Context) error {
 		msg := apperror.UserMessage(err, "This RSVP link is invalid or has expired.")
 		return c.HTML(http.StatusOK, rsvpResultHTML("RSVP Failed", msg, false))
 	}
+	if !h.tokenUserStillBelongs(c.Request().Context(), token) {
+		return c.HTML(http.StatusOK, rsvpResultHTML("RSVP Failed",
+			"You're no longer a member of this campaign, so this link can't be used.", false))
+	}
 	label := rsvpActionLabel(token.Action)
 	return c.HTML(http.StatusOK, tokenConfirmHTML("Confirm Your RSVP",
 		fmt.Sprintf("You're responding %q. Tap below to confirm.", label),
@@ -517,6 +521,23 @@ func (h *Handler) ApplyRSVPToken(c echo.Context) error {
 	tokenStr := c.Param("token")
 	if tokenStr == "" {
 		return c.HTML(http.StatusBadRequest, rsvpResultHTML("Invalid Link", "This RSVP link is invalid.", false))
+	}
+	// A LINK CANNOT OUTLIVE THE ACCESS THAT JUSTIFIED IT. The token is resolved
+	// and the roster re-checked BEFORE anything is applied, exactly as
+	// /proposals/respond/:token and /calendar-rsvp/:token already do. Without
+	// this, a player removed from the campaign kept a working "Going" link for
+	// the token's full 7-day life: ApplyRSVPToken wrote `accepted` into
+	// session_attendees for a campaign they were no longer part of, the
+	// Director's "3/5 going" counted a non-member, and the attendee list
+	// (INNER JOIN users) rendered their name to the party.
+	preToken, err := h.svc.ValidateRSVPToken(c.Request().Context(), tokenStr)
+	if err != nil {
+		msg := apperror.UserMessage(err, "This RSVP link is invalid or has expired.")
+		return c.HTML(http.StatusOK, rsvpResultHTML("RSVP Failed", msg, false))
+	}
+	if !h.tokenUserStillBelongs(c.Request().Context(), preToken) {
+		return c.HTML(http.StatusOK, rsvpResultHTML("RSVP Failed",
+			"You're no longer a member of this campaign, so this link can't be used.", false))
 	}
 	token, err := h.svc.ApplyRSVPToken(c.Request().Context(), tokenStr)
 	if err != nil {
@@ -546,6 +567,24 @@ func rsvpActionLabel(action string) string {
 	default:
 		return "Going"
 	}
+}
+
+// tokenUserStillBelongs reports whether an RSVP token's user is STILL a member
+// of the campaign the token's session belongs to.
+//
+// FAIL-CLOSED throughout: a missing session, a lookup error, a nil member lister
+// — all deny. The campaign is derived from the token's own session, never from a
+// URL, because the token is the credential and there is no campaign in the path
+// on the public /rsvp/:token route.
+func (h *Handler) tokenUserStillBelongs(ctx context.Context, token *RSVPToken) bool {
+	if token == nil {
+		return false
+	}
+	session, err := h.svc.GetSession(ctx, token.SessionID)
+	if err != nil || session == nil {
+		return false
+	}
+	return h.isCampaignMember(ctx, session.CampaignID, token.UserID)
 }
 
 // isCampaignMember reports whether userID is currently a member of campaignID.
