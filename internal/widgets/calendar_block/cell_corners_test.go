@@ -220,23 +220,37 @@ func TestCell_OutOfRangeCellsCarryNoEra(t *testing.T) {
 
 // ── §1 · THE CORNER ARCHITECTURE ────────────────────────────────────────────
 
-// TestCell_NothingIsCentred is C-CALV4-SPEC §1's last sentence, asserted.
+// TestCell_TheDateHoldsTheTopRightCorner is C-CALV4-SPEC §1's last sentence,
+// re-pointed at the corner the date now holds (C-CALV4-TILES §9.1).
 //
 // "The corners are the information architecture: date in one, ambient marks in
 // another, event marks in a third. Keep them in corners; do not centre
 // anything."
 //
-// THE DATE IS THE ONE THAT MOVED, and it is load-bearing rather than cosmetic:
-// a centred numeral owns the middle of the cell's top line, which is why the
-// shipped sheet needed TWO anchors for the moon row (`top: 26px` at underline
-// density, `top: 5px` at named). With the date in the top-LEFT corner the
-// top-RIGHT corner is free at every width, the moon row has one anchor, and the
-// silhouette can be promoted down to the narrowest column the grid produces.
-// Re-centre the date and that promotion puts a moon across it.
-func TestCell_NothingIsCentred(t *testing.T) {
+// ── REWRITTEN BECAUSE THE TWO TOP CORNERS SWAPPED, NOT BECAUSE IT FAILED ────
+// This test was TestCell_NothingIsCentred and its last arm asserted
+// `strings.Contains(css, "text-align: left")` over the WHOLE stylesheet, with
+// the message "the date's corner is the top-LEFT one". Two things were wrong
+// with keeping it: the date's corner is the top-RIGHT one now, and the arm was
+// never about the date in the first place — it matched any `text-align: left`
+// anywhere in a 5,000-line sheet, and it passes today, unchanged, on a rule
+// belonging to the Ledger. A whole-file substring is not an assertion about one
+// element.
+//
+// SO THE ARM IS NARROWED TO `.dn`'S OWN RULE and pointed at `right`. Narrowing
+// it is not a weakening: it went from matching anything to matching the thing.
+//
+// WHY THE DATE MOVED. The moon cluster expands on hover; anchored right it grew
+// LEFTWARD and displaced the primary disc — the one under the pointer — by
+// 35.05px, in a sheet whose motion budget is zero. Anchored left it grows into
+// the middle and the disc moves 0.00px, which is measured in a browser by
+// TestRuneProbe_TheExpansionGrowsRightward. The date took the corner the moon
+// vacated. Both are still corners; nothing is centred that was not already.
+func TestCell_TheDateHoldsTheTopRightCorner(t *testing.T) {
 	css := stripComments(blockCSS(t))
 
 	ruleRe := regexp.MustCompile(`(?s)([^{}]*)\{([^}]*)\}`)
+	seenAlign, seenJustify := false, false
 	for _, m := range ruleRe.FindAllStringSubmatch(css, -1) {
 		sel := strings.TrimSpace(m[1])
 		body := m[2]
@@ -251,10 +265,111 @@ func TestCell_NothingIsCentred(t *testing.T) {
 		if strings.Contains(body, "justify-content: center") {
 			t.Errorf("%q centres the day numeral's flex box — same rule, other property", sel)
 		}
+		if strings.Contains(body, "text-align: left") {
+			t.Errorf("%q left-aligns the day numeral. The top-LEFT corner belongs to the moon "+
+				"cluster since C-CALV4-TILES §9.1, and the cluster's box is only as wide as "+
+				"the discs it is currently showing — so a left-aligned date does not look "+
+				"wrong until the cluster expands under a pointer and prints through it", sel)
+		}
+		if strings.Contains(body, "text-align: right") {
+			seenAlign = true
+		}
+		if strings.Contains(body, "justify-content: flex-end") {
+			seenJustify = true
+		}
 	}
-	if !strings.Contains(css, "text-align: left") {
-		t.Error("the day numeral is not left-aligned anywhere — the date's corner is the " +
-			"top-LEFT one, and it is what frees the top-right for the moon")
+	if !seenAlign {
+		t.Error("no `.dn` rule right-aligns the day numeral. The date holds the TOP-RIGHT " +
+			"corner (C-CALV4-TILES §9.1) and `.dn` is a full-width block — without the " +
+			"alignment the digits sit under the moon cluster at every width")
+	}
+	if !seenJustify {
+		t.Error("no `.dnw` rule sets `justify-content: flex-end`. `.dnw` is the underline " +
+			"density's numeral wrapper and it is a FLEX box, so `text-align` does not place " +
+			"its children — the narrow cell's date would stay at the left while the named " +
+			"cell's moved")
+	}
+	// THE NAMED CELL'S NUMERAL IS THE ONE THAT WAS EXPLICITLY LEFT. It lives in
+	// an 84px block with its own `text-align`, so the baseline above does not
+	// reach it and a rewrite that missed it would move the date at three
+	// densities out of four — the state hardest to notice, because the named
+	// cell is the one nobody's phone renders.
+	namedRe := regexp.MustCompile(`(?s)\.cal-block-host \.cell > \.cnamed > \.dn \{([^}]*)\}`)
+	nm := namedRe.FindStringSubmatch(css)
+	if nm == nil {
+		t.Fatal("no `.cell > .cnamed > .dn` rule — the named cell's numeral has no alignment " +
+			"of its own and this arm is vacuous")
+	}
+	if !strings.Contains(nm[1], "text-align: right") {
+		t.Errorf("the NAMED cell's numeral is not right-aligned (%q). It is the one density "+
+			"where the moon cluster and a 13px date have room to be in the same corner "+
+			"together, so it is the one that must not be missed", strings.TrimSpace(nm[1]))
+	}
+}
+
+// TestCell_TodayIsInkAndNotADisc is C-CALV4-TILES §9.1's other half.
+//
+// The filled stamp read as a REDACTION over the numeral — the operator's words
+// were "a weird blacked out date" — so the disc goes and the numeral itself
+// inks in --today-ink at weight 750.
+//
+// THE ABSENCES ARE THE POINT, and there are four of them. The fill, the radius
+// and the reversed-out `--today-ink-on` are what MADE it a disc; the three
+// sizing steps (base, the 35px rung, the mini tier) and the named cell's 22px
+// existed only to size one. Any of them coming back re-creates a box around the
+// date without the rule that draws it having to say so.
+func TestCell_TodayIsInkAndNotADisc(t *testing.T) {
+	css := stripComments(blockCSS(t))
+	todayRe := regexp.MustCompile(`(?s)\.cal-block-host \.cell \.today \{([^}]*)\}`)
+	m := todayRe.FindStringSubmatch(css)
+	if m == nil {
+		t.Fatal("there is no `.cal-block-host .cell .today` rule — today is not marked at all")
+	}
+	body := m[1]
+
+	for _, want := range []struct{ decl, why string }{
+		{"background: transparent",
+			"the filled disc is what read as a redaction; the stamp is ink now"},
+		{"box-shadow: none",
+			"a ring is the other way to draw a box around the numeral, and an 18px ring " +
+				"crowds the moon on a 34px cell and rides the tile's corner"},
+		{"color: var(--today-ink)",
+			"the numeral itself carries the mark — --today-ink, never --accent, which is " +
+				"chrome-only and must not land on a data cell"},
+		{"font-weight: 750",
+			"weight is the second channel, so today survives a greyscale render and a " +
+				"viewer who cannot separate the two inks"},
+	} {
+		if !strings.Contains(body, want.decl) {
+			t.Errorf("`.cell .today` is missing %q — %s", want.decl, want.why)
+		}
+	}
+	for _, dead := range []string{"var(--today-ink-on)", "border-radius", "width:", "height:"} {
+		if strings.Contains(body, dead) {
+			t.Errorf("`.cell .today` still declares %q. That is the DISC: a reversed-out ink "+
+				"needs a fill to reverse out of, and a width or a radius needs a box to apply "+
+				"to. C-CALV4-TILES §9.1 removed the box", dead)
+		}
+	}
+
+	// AND NO OTHER RULE IN THE SHEET SIZES IT. Three did — the base, the 35px
+	// rung and the mini tier — plus the named cell's 22px, which §9.1 did not
+	// count and which is the one a rewrite most easily leaves behind, because it
+	// only renders at a width no phone produces.
+	ruleRe := regexp.MustCompile(`(?s)([^{}]*)\{([^}]*)\}`)
+	sizer := regexp.MustCompile(`(?m)(^|;|\s)(width|height|font-size)\s*:`)
+	for _, r := range ruleRe.FindAllStringSubmatch(css, -1) {
+		sel := strings.TrimSpace(r[1])
+		if !strings.Contains(sel, ".today") {
+			continue
+		}
+		if sizer.MatchString(r[2]) {
+			t.Errorf("%q still sizes the today stamp (%q). Every one of those steps existed "+
+				"to hold a filled circle at a legible diameter; today is the numeral now, so "+
+				"it is already the size of the date it replaces and a size here makes today's "+
+				"digits a different size from every other day's",
+				sel, strings.TrimSpace(r[2]))
+		}
 	}
 }
 

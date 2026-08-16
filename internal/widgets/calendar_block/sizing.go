@@ -118,17 +118,26 @@ const MoonSilhouetteColWidthMin = 30.0
 //
 // Every figure there is measured in the browser rather than assumed. The date's
 // ink is 16.7px — two digits at 12px/600 — and NOT the ~14px an earlier pass of
-// this very file guessed; the today STAMP was wider still at the 18px it used to
-// be, which is how the first build of this cell put a moon across day 14 while
-// day 3 looked fine. The census leaves a clean gap around 35.7: 33.0px (ten-day
-// at a 390px phone) is the widest column that cannot afford both and 37.0px
-// (ten-day at 430px) the narrowest that can, so 35 is that gap's midpoint — the
-// same method the retired 40px number was derived by.
+// this very file guessed. The census leaves a clean gap around 35.7: 33.0px
+// (ten-day at a 390px phone) is the widest column that cannot afford both and
+// 37.0px (ten-day at 430px) the narrowest that can, so 35 is that gap's midpoint
+// — the same method the retired 40px number was derived by.
+//
+// THE TODAY STAMP WAS A TERM IN THIS ARITHMETIC AND IS NOT ANY MORE
+// (C-CALV4-TILES §9.1). It was a FILLED DISC, 18.0px against two digits' ~13px —
+// the widest thing a date could be, which is how the first build of this cell
+// put a moon across day 14 while day 3 looked fine, and why three stamp
+// diameters (13 / 14 / 22px) used to step with the column. Today is now the
+// NUMERAL ITSELF in --today-ink at weight 750: the disc read as a redaction over
+// the date, and an inked numeral is exactly as wide as the same numeral in body
+// ink. So today widens nothing, all three diameters are deleted from the
+// stylesheet, and 16.7px is the whole of the date's inline cost at every
+// density. The 35.7 above does not move — it never counted the stamp.
 //
 // BELOW IT THE DATE STEPS DOWN, NOT THE MOON, and that ordering is the spec's
 // rather than a convenience: C-CALV4-SPEC §4 makes the silhouette
-// unconditional, so at 30–33px it is the date's type size that yields (10px,
-// with a 13px today stamp). The mini tier already sets that precedent at 11px.
+// unconditional, so at 30–33px it is the date's type size that yields (10px).
+// The mini tier already sets that precedent at 11px.
 const CellCompactColWidthMin = 35.0
 
 // MoonExpandColWidthMin is the width the HOVER/FOCUS EXPANSION needs — up to

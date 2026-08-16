@@ -206,25 +206,52 @@ templ dayCell(d BlockData, row WeekRow, c DayCell) {
 	</div>
 }
 
-// availabilitySlot is STEP THREE'S FLOOR, RESERVED AND NOT BUILT.
+// availabilitySlot is the availability strip's box: BUILT, AND DORMANT UNTIL
+// DATA ARRIVES (C-CALV4-TILES §8.4 / §8.9 / §9.5).
 //
-// C-CALV4-SPEC §6 puts an availability strip along the cell's bottom edge —
-// one segment per player on desktop, collapsing to a single state-coloured dot
-// on a phone, with the Ledger naming who. That is step THREE of five and is
-// explicitly not this slice's to build.
+// The strip is a TIME AXIS FOR THE DAY, not a roster: its width is the day, a
+// span's left edge says when a window opens and its right edge when it closes,
+// one lane per player under one accent lane carrying the overlap. All of that
+// is now in the stylesheet, complete, and NONE of it can paint — see below.
 //
-// WHAT IS BUILT HERE IS THE SPACE, AND ONLY THE SPACE. The element is empty,
+// WHAT IS EMITTED HERE IS THE BOX, AND ONLY THE BOX. The element is empty,
 // `aria-hidden`, carries no owner hue and no data. What it does is hold
 // `--avail-h` of the cell's bottom edge out of every other mark's reach: the
 // underline cluster is anchored ABOVE it and the moon silhouette sits in the
-// opposite corner, so when step three fills this box it changes one element's
-// contents and relayouts nothing. Reserving it now is the whole point —
+// opposite corner, so when the wiring dispatch fills this box it changes one
+// element's contents and relayouts nothing. Reserving it is the whole point —
 // discovering the strip has nowhere to go is a relayout of the cell, which is
 // a second pass over every geometric assertion in this package.
 //
 // IT IS DELIBERATELY NOT GATED ON DATA. A slot that appeared only for days with
 // RSVPs would move the underline on some days and not others, which is the
 // reflow the reservation exists to prevent.
+//
+// THE LANES ARE NOT EMITTED, AND THAT IS THE HONEST HALF OF "BUILT". `DayCell`
+// carries no availability field and `block_projection.go` fetches none; the
+// windows live in the sessions plugin's `availability_exceptions`, keyed to REAL
+// dates, and §8.6's blocker stands — nothing maps a Harptos day to a real date,
+// so on the operator's own calendar there is nothing to draw. A lane rendered
+// anyway would be a fabricated figure on screen and this package does not draw
+// those. Adding the field is a `data.go` change and therefore a stop-and-flag;
+// it belongs to the wiring dispatch, with the fantasy-date anchor.
+//
+// THE SHAPE THAT DISPATCH MUST EMIT, so it is not re-derived from the CSS. The
+// LANE is the track and the inner <i> is the window; --m0/--m1 ride the window,
+// --who rides the lane:
+//
+//	<span class="avail" aria-hidden="true">
+//	  <i class="lane all"><i style="--m0:41.6%;--m1:75%"></i></i>
+//	  <i class="lane" style="--who:var(--own-nissa)"><i style="--m0:…;--m1:…"></i></i>
+//	  …one per player, in declaration order…
+//	</span>
+//
+// …and the CELL takes `rsvp` beside its other classes. `--m0`/`--m1` are
+// PERCENTAGES OF THE DAY, the same contract /schedule's `.sc-off` already ships
+// (calendar-schedule.css:895) — one span primitive in the product, not two, as
+// C-CALV4-DRAG-RESCHEDULE.md:172 asks. The overlap lane takes `none` when nobody
+// overlaps: the lane stays and its window goes, because a missing lane reads as
+// "no data" and an empty one as "no window".
 templ availabilitySlot() {
 	<span class="avail" aria-hidden="true"></span>
 }

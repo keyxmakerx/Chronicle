@@ -9,6 +9,74 @@
 <!-- Legend: [ ] Not started  [~] In progress  [x] Complete  [!] Blocked      -->
 <!-- ====================================================================== -->
 
+## 0-runes. The four corners, the runes, and three dead colour channels (2026-08-16)
+
+C-CALV4-TILES §9/§10. Built in two lanes with an adversarial prover that decodes
+PIXELS — every failure in this arc has been a thing that computed correctly and
+painted nothing.
+
+### [x] Done
+
+- **The corners swapped.** Moon top-LEFT, date top-right. This closes
+  0-tiles' last open item: the cluster grows rightward now, so the disc under
+  the pointer moves **0.00px** (a control arm re-anchoring it to the old edge in
+  the same pass still measures **35.05px**, so 0.00 has something to be better
+  than). Displacement without a transition is exactly what a `transition`-grep
+  cannot see.
+- **`today` is INK, not a stamp** — weight and colour, no width/height/radius/
+  shadow anywhere. FOUR disc-sizing rules deleted, not the three §9.1 counted;
+  the fourth only renders at a column width no phone produces.
+- **32 pooled rune glyphs**, chosen by `:nth-child()` × `p1..p8`, drawn as
+  `mask-image` + `background-color` (a data-URI SVG used as `background-image`
+  is an independent document and cannot see the host's `color`). Runes are the
+  NARROW form and event names the WIDE one: 115.4px column → 10 chips / **0**
+  runes; 34.0px → 11 runes at 9×12 / **0** chips. Rune × numeral overlap
+  0.00px² and spill 0.00px across 51 host widths, 280→480px.
+- **The rune ink keeps the operator's chroma.** The first build wrote a constant
+  `c`, so hue was the only surviving channel at exactly the density where the
+  glyph had become decorative. `--axis` is `EventCategories[].Color` behind a
+  bare `<input type="color">`: two types separated by saturation inked **6/255**
+  apart, and `#888888` inked a RED rune 3/255 from a vivid red one. Scaled now
+  (41/64, 53/87), guarded, proven red.
+- **The legend is a disclosure and a COLOUR key**, reachable by touch AND
+  keyboard — tab **91.70×44.00px** under a coarse pointer, the 44px floor met
+  rather than reported. `:focus-visible`, not `:focus-within`: under the latter
+  a second tap cannot CLOSE it.
+- **The legend's dead pattern swatches are deleted.** `.legend .lr` is three
+  classes and re-declared `--dash: 100%`, outranking the two-class `.pN` rules —
+  eight patterns, at most three appearances. Pre-existing.
+- **The chip tint paints its own hue again.** `color-mix(in oklch, …)`
+  interpolates the HUE ANGLE and light's `--surface-card` is `oklch(1 0 0)`,
+  white with an *explicit* hue of zero — a blue, a red and a green event all
+  filled pale PINK, 3–4/255 apart. Pre-existing; invisible until the gapped tile
+  gave the chip a coloured surround. sRGB now: 12–18/255.
+- **The availability strip ships COMPLETE and DORMANT** — **0** painted lane
+  pixels across 66 renders, each with a force-filled sentinel so a comparator
+  that could never fail is caught before its clean reading is believed.
+
+### [ ] Open — booked here rather than dropped
+
+- **The GM strike and a gold category collide.** Permission ink is
+  `rgb(110,76,0)` on light; the shipped `Holiday` default (`#f59e0b`) inks
+  **28/255** from it, and both are gold *by hue*, so no chroma treatment
+  separates them — a GM-only day and a Holiday wear the same colour below 84px.
+  Fix is either moving permission off gold or the default off amber: a decision
+  about what the product means, not a cascade bug.
+- **Lightness is still normalised** and that is what makes a rune an ink, so two
+  types differing mainly in lightness still converge — the shipped defaults'
+  closest pair goes 80/255 raw → **29/255**. Two achromatic picks ink
+  identically.
+- **The pattern channel has no key surface anywhere.** It paints on
+  `.lrow .rail` and `.chip .rail`; nothing says what a dash means. Older than
+  this pass — the legend key never worked — but now written down.
+- **Eight of the 32 glyphs are unreachable.** `underlineCap` is 3, so the
+  `:nth-child(4)` family cannot match. Shipped anyway so the first fourth
+  segment ever emitted finds a glyph rather than a solid 9×12 slab; raising the
+  cap changes `underlineRestAt`'s neutral-overflow contract.
+- **The strip stays dormant** until the fantasy↔real date anchor (§8.6) is
+  answered: `DayCell` has no availability field and the windows live in the
+  sessions plugin keyed to REAL dates.
+
 ## 0-tiles. The day cell became a tile, and the era went soft (2026-08-15)
 
 C-CALV4-TILES. Dispatch: `Cordinator/dispatches/chronicle/C-CALV4-TILES.md`;
@@ -54,9 +122,9 @@ the reference measured in `C-CALV4-TILE-RECIPE.md`.
 - **From the reference, not in the operator's four asks:** past-day dimming, a
   weather glyph + temperature in the cell's bottom-left, a gold weekday header
   on bare ground.
-- **Hover still moves the thing you pointed at** — the moon cluster is anchored
-  right and grows leftward, so the primary silhouette slides 35.05px away from
-  the pointer at a 900px host. Operator's call, unanswered.
+- [x] ~~**Hover still moves the thing you pointed at**~~ — CLOSED by 0-runes'
+  corner swap (2026-08-16). The cluster is anchored LEFT and grows rightward;
+  measured 0.00px against a 35.05px control arm.
 
 ## 0-integration. The four moon stages integrated (2026-08-11)
 

@@ -668,7 +668,17 @@ func TestCSS_D3_RingIsCarriedInsideBoxShadow(t *testing.T) {
 	if !strings.Contains(flat, ".surf.act:active { background: color-mix(in oklch, var(--surface-card) 88%, var(--text-primary)); box-shadow: none;") {
 		t.Error("press must RETURN the shadow to none — elevation decreases under the finger")
 	}
-	if !strings.Contains(flat, ".surf.sel:hover { border-color: var(--accent); background: color-mix(in oklch, var(--surface-card) 96%, var(--accent)); box-shadow: inset 0 0 0 1.5px var(--accent);") {
+	// `in srgb`, NOT `in oklch`, AND THE SPACE IS THE POINT OF THE CHANGE.
+	// `color-mix(in oklch, …)` interpolates the HUE ANGLE, and this sheet's
+	// light `--surface-card` is `oklch(1 0 0)` — white carrying an EXPLICIT hue
+	// of zero. Mixing a blue accent into it therefore dragged the result toward
+	// 0° and washed the selected surface PINK: measured rgb(253,247,249)
+	// against sRGB's rgb(248,249,253). `.chip` had the same defect far more
+	// visibly and both moved together; the two `--text-primary` mixes above
+	// stayed in OKLCH because that token is near-achromatic and the spaces land
+	// 2/255 apart there. Do not "restore" this to oklch for consistency — the
+	// inconsistency is deliberate and the reason is written at `.chip`.
+	if !strings.Contains(flat, ".surf.sel:hover { border-color: var(--accent); background: color-mix(in srgb, var(--surface-card) 96%, var(--accent)); box-shadow: inset 0 0 0 1.5px var(--accent);") {
 		t.Error("selection must be an inset ring with NO outer shadow — identity, not elevation")
 	}
 }
@@ -678,13 +688,37 @@ func TestCSS_D3_RingIsCarriedInsideBoxShadow(t *testing.T) {
 // TestCSS_EightLockedPatterns. Every one of the eight must resolve with the hue
 // removed; p7 and p8 are unassigned headroom and must still be defined, or the
 // next axis to need one silently renders as p1.
+//
+// ── REWRITTEN FOR THE RUNES, BECAUSE THE DIRECTION CHANGED (C-CALV4-TILES §9.2)
+//
+// This test used to demand that `.ulseg` carry a stroke on BOTH mark
+// orientations — `.rail.p5` and `.ulseg.p5`, `.rail.p7` and `.ulseg.p7` — and
+// that `.ulseg` share `.rail`'s solid p1 baseline. The grid's underline segment
+// is now a MASKED RUNE: `p1..p8` selects a GLYPH there rather than a stroke, so
+// those four assertions were pinning a construction the dispatch retired.
+//
+// THE ASSERTION IS NOT WEAKENED, IT IS RE-POINTED. What the old arms protected
+// was "colour is never the only channel", and that is asserted here in full
+// against the FOUR surfaces that still stroke — plus, for `.ulseg`, the stronger
+// claim that its pattern class still selects something. A pattern class that
+// stopped selecting anything on the rune would leave every mark in the grid
+// wearing the same glyph, which is the failure this file exists to catch, and it
+// would be invisible: a masked box still paints.
+//
+// WHAT THE CHANGE COSTS is written down beside the rules in §MARKS rather than
+// argued here: a rune chosen by POSITION no longer separates two event types for
+// a viewer who cannot separate the hues. The type survives in the legend, the
+// Ledger and the named cell's chip. That is the operator's call, recorded.
 func TestCSS_EightLockedPatterns(t *testing.T) {
 	code := stripComments(blockCSS(t))
-	// p1 is the bare `background-color: var(--axis)` case on .rail/.ulseg.
-	if !strings.Contains(code, ".ulseg {\n  --dash: 100%;\n  --gap: 0px;\n  background-color: var(--axis);") &&
-		!strings.Contains(regexp.MustCompile(`\s+`).ReplaceAllString(code, " "),
-			".ulseg { --dash: 100%; --gap: 0px; background-color: var(--axis);") {
-		t.Error("p1 (solid) is the unclassed baseline on .rail/.ulseg and must set --dash/--gap")
+	flat := regexp.MustCompile(`\s+`).ReplaceAllString(code, " ")
+
+	// p1 is the bare `background-color: var(--axis)` case, and it is `.rail`'s
+	// alone now. `.ulseg` must NOT be back on this rule: it would restore an
+	// --axis fill under the mask and print the raw palette at letterform size,
+	// which is the "primary crayon" the rune ink exists to replace.
+	if !strings.Contains(flat, ".cal-block-host .rail { --dash: 100%; --gap: 0px; background-color: var(--axis); }") {
+		t.Error("p1 (solid) is the unclassed baseline on .rail and must set --dash/--gap")
 	}
 	for _, p := range []string{"p2", "p3", "p4", "p5", "p6", "p7", "p8"} {
 		if !strings.Contains(code, "."+p) {
@@ -699,10 +733,149 @@ func TestCSS_EightLockedPatterns(t *testing.T) {
 		}
 	}
 	// p5 and p7 split the cross axis / notch the main axis rather than dashing.
-	for _, want := range []string{".rail.p5", ".ulseg.p5", ".rail.p7", ".ulseg.p7"} {
+	// On `.rail`, which is the orientation that still strokes.
+	for _, want := range []string{".rail.p5", ".rail.p7"} {
 		if !strings.Contains(code, want) {
-			t.Errorf("%s must be defined on both mark orientations", want)
+			t.Errorf("%s must be defined — p5 and p7 do not dash, they split and notch", want)
 		}
+	}
+	// AND `.ulseg` MUST NO LONGER STROKE. A surviving `.ulseg.pN` gradient would
+	// not fail visibly: the mask clips it to the glyph, so the rune would keep
+	// its shape and quietly wear the raw --ev-* palette instead of the deepened
+	// ink, in one theme or both.
+	if regexp.MustCompile(`\.ulseg\.p[1-8]`).MatchString(code) {
+		t.Error("`.ulseg.pN` still carries a stroke rule. The grid's underline segment is a " +
+			"MASKED RUNE since C-CALV4-TILES §9.2 — the pattern class selects a GLYPH there, " +
+			"not a dash. A leftover gradient is clipped to the glyph by the mask and paints " +
+			"the raw event palette at letterform size, which is exactly the read the deepened " +
+			"rune ink was introduced to fix")
+	}
+	// …and every pattern class must still SELECT a rune, or the channel is
+	// severed at the other end: eight event types, one glyph.
+	for _, p := range []string{"p1", "p2", "p3", "p4", "p5", "p6", "p7", "p8"} {
+		if !strings.Contains(flat, ".ulseg:nth-child(1)."+p+" {") {
+			t.Errorf("no rune glyph is selected by .%s. The pattern class is the rune's SHAPE "+
+				"channel now; a class that selects nothing leaves that mark unmasked and it "+
+				"paints as a solid slab", p)
+		}
+	}
+}
+
+// TestCSS_TheLegendSwatchIsSolidOnPurpose guards a rule that spent months
+// LOOKING like a pattern key and painting solid bars.
+//
+// THE DEFECT, MEASURED. `.cal-block-host .legend .lr` is THREE classes and
+// re-declared `--dash: 100%; --gap: 0px`; `.cal-block-host .p2` is TWO and
+// declares 4px/2px. The swatch's own rule therefore outranked the pattern it
+// existed to display, so all five --dash swatches resolved --dash to 100% and
+// painted an identical solid bar — while `.lr.p5` and `.lr.p7`, whose gradients
+// are hand-written and never mention --dash, went on painting. Eight patterns,
+// at most three appearances, and nothing in the file reading wrong.
+//
+// The repair was to DELETE the dead rules rather than re-specify them: the
+// operator's ruling for §9.2 is "just have the colors determine what kind of
+// event", so this zone teaches hue → type and nothing else. Restoring a stroke
+// vocabulary here would have made the legend teach a channel the narrow grid
+// stopped painting in the same pass.
+//
+// SO THIS TEST PINS AN ABSENCE, and an absence needs a reason written next to
+// it or the next hand "fixes" it back. Note the neighbouring construction on
+// `.rail` is safe only by SOURCE ORDER — `.cal-block-host .rail` and
+// `.cal-block-host .p2` tie at two classes and .p2 comes later — so this is a
+// trap the sheet has twice and survives once.
+func TestCSS_TheLegendSwatchIsSolidOnPurpose(t *testing.T) {
+	code := stripComments(blockCSS(t))
+
+	// 1. No stroke rules on the swatch, in either spelling.
+	if m := regexp.MustCompile(`\.legend\s+\.lr\.p[1-8]`).FindString(code); m != "" {
+		t.Errorf("`%s` is back. The legend swatch is a SOLID COLOUR CHIP: it is the key for "+
+			"hue → event type, which is the only type channel the grid paints below 84px of "+
+			"column. A pattern here either loses the cascade and paints solid anyway (which "+
+			"is the defect this test was written for) or teaches a vocabulary the narrow grid "+
+			"no longer has", m)
+	}
+
+	// 2. And the swatch must not re-declare the pattern tokens. This is the
+	//    actual mechanism: a --dash of its own is what silently defeated
+	//    `.p2`..`.p8`, and it would do it again to any rule added later.
+	body := cssRuleBody(code, ".cal-block-host .legend .lr")
+	if body == "" {
+		t.Fatal("`.cal-block-host .legend .lr` is gone entirely — the legend has no swatch, so " +
+			"the zone names event types without showing the colour it is keying")
+	}
+	for _, tok := range []string{"--dash", "--gap"} {
+		if strings.Contains(body, tok) {
+			t.Errorf("`.legend .lr` declares %s. At three classes it outranks the two-class "+
+				"`.cal-block-host .pN` rules that carry the real values, so every pattern that "+
+				"reads that token resolves to this one's value instead. That is how five "+
+				"swatches came to paint identical solid bars while the file looked correct",
+				tok)
+		}
+	}
+	// 3. It still paints the type's hue — a key that shows no colour is not a
+	//    key. This is the half of the claim an absence test cannot make.
+	if !strings.Contains(body, "var(--axis)") {
+		t.Error("`.legend .lr` no longer fills with var(--axis). Solid was the ruling; " +
+			"colourless was not")
+	}
+}
+
+// TestCSS_ThePooledAlphabet is C-CALV4-TILES §9.2's "32 glyphs pooled from four
+// alphabets, chosen by :nth-child()", asserted as the grid the rules form.
+//
+// FOUR POSITIONS × EIGHT PATTERNS, AND EVERY CELL OF IT FILLED. A hole in the
+// grid is the one failure mode that looks like a working build: the mark simply
+// gets no mask and paints its whole 9×12 box in the type's ink, which reads as a
+// deliberate solid mark rather than as a missing rule.
+//
+// `:nth-child(4)` IS HEADROOM TODAY AND THE TEST SAYS SO OUT LOUD. underlineCap
+// is 3, so a day never emits a fourth segment and those eight rules cannot fire.
+// They are asserted anyway for exactly the reason p7 and p8 are: the first
+// fourth segment ever emitted must find a glyph waiting, not a slab. If the cap
+// moves, this test is already pinning the surface that has to be there.
+func TestCSS_ThePooledAlphabet(t *testing.T) {
+	if underlineCap != 3 {
+		t.Logf("underlineCap is %d — :nth-child(1..%d) are now reachable; the pool covers 4",
+			underlineCap, underlineCap)
+	}
+	if underlineCap > 4 {
+		t.Errorf("underlineCap is %d and the pooled alphabet only indexes four positions. "+
+			"A fifth segment matches no :nth-child() rule, gets no mask and paints as a solid "+
+			"slab — raise the pool with the cap", underlineCap)
+	}
+	code := stripComments(blockCSS(t))
+	flat := regexp.MustCompile(`\s+`).ReplaceAllString(code, " ")
+	missing := 0
+	for pos := 1; pos <= 4; pos++ {
+		for p := 1; p <= 8; p++ {
+			sel := fmt.Sprintf(".ulseg:nth-child(%d).p%d {", pos, p)
+			if !strings.Contains(flat, sel) {
+				missing++
+				t.Errorf("no glyph for position %d, pattern p%d (%s). The pool is 4×8 and a hole "+
+					"in it paints an unmasked slab", pos, p, sel)
+			}
+		}
+	}
+	if missing == 0 {
+		t.Logf("32/32 glyphs present; positions 1-%d reachable at underlineCap=%d",
+			underlineCap, underlineCap)
+	}
+	// BOTH PROPERTIES ON EVERY RULE. `-webkit-mask-image` is still the only one
+	// some shipping WebKit builds honour, and a rule that resolves to no mask
+	// does not fail visibly — the element fills its box.
+	unpref := strings.Count(flat, " mask-image: url(")
+	pref := strings.Count(flat, "-webkit-mask-image: url(")
+	if unpref != pref {
+		t.Errorf("%d unprefixed mask-image declarations against %d -webkit- ones. Every glyph "+
+			"must carry both; a mask that does not resolve paints the whole box", unpref, pref)
+	}
+	// THE OVERFLOW MARK IS NOT ONE OF THE 32. `.rest` carries no pattern class,
+	// so it matches nothing in the pool and would paint unmasked without a rule
+	// of its own.
+	if !strings.Contains(flat, ".cal-block-host .cell .ulseg.rest {") {
+		t.Error("`.ulseg.rest` has no rule. It is the neutral overflow segment " +
+			"(underlineRestAt) and carries NO pattern class, so it matches none of the 32 " +
+			"glyphs — unstyled it paints as a solid slab among letterforms")
 	}
 }
 

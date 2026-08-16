@@ -138,14 +138,21 @@ type cpReading struct {
 	AvailInked  int     `json:"availInked"`  // must be 0: it is a reservation
 
 	// ── THE FOURTH CORNER, AND THE SILHOUETTE IT USED TO EAT ──────────────
-	DogearCells  int     `json:"dogearCells"`
-	DogearOnRow  float64 `json:"dogearOnRow"`  // worst dogear × moon-row intersection, px²
-	DogearOnUl   float64 `json:"dogearOnUl"`   // worst dogear × event-mark intersection, px²
-	DogearOnAud  float64 `json:"dogearOnAud"`  // worst dogear × audience-diamond intersection
-	AudPaired    int     `json:"audPaired"`    // fold cells the DATA also gave a diamond
-	AudTested    int     `json:"audTested"`    // fold cells a diamond was measured on
-	DiscHits     int     `json:"discHits"`     // dm_only cells whose disc resolves to the control
-	DiscHitFirst string  `json:"discHitFirst"` // …and what the first one resolved to
+	DogearCells int `json:"dogearCells"`
+	// DogearPainted counts the folds that HAVE A RECT, which since
+	// C-CALV4-TILES §9.1 is a different number from DogearCells at narrow
+	// density: the element stays in the markup as the datum `:has(> .dogear)`
+	// reads to strike that day's runes in gold, and its own ink is off. The two
+	// counts have to be kept apart or the collision arms below start passing
+	// because there is nothing to collide with.
+	DogearPainted int     `json:"dogearPainted"`
+	DogearOnRow   float64 `json:"dogearOnRow"`  // worst dogear × moon-row intersection, px²
+	DogearOnUl    float64 `json:"dogearOnUl"`   // worst dogear × event-mark intersection, px²
+	DogearOnAud   float64 `json:"dogearOnAud"`  // worst dogear × audience-diamond intersection
+	AudPaired     int     `json:"audPaired"`    // fold cells the DATA also gave a diamond
+	AudTested     int     `json:"audTested"`    // fold cells a diamond was measured on
+	DiscHits      int     `json:"discHits"`     // dm_only cells whose disc resolves to the control
+	DiscHitFirst  string  `json:"discHitFirst"` // …and what the first one resolved to
 
 	// ── THE HOVER WASH, AS A LAYER ────────────────────────────────────────
 	HoverDeclaresColour bool     `json:"hoverDeclaresColour"`
@@ -268,7 +275,7 @@ function(host){
     markCells: 0, ulMinW: -1, ulMaxW: 0, segMinW: -1, segsMeasured: 0, segsInked: 0,
     ulSpill: 0, ulClearance: 1e9,
     availCells: 0, datedCells: 0, availH: 0, availBottom: 0, availWidth: 2, availInked: 0,
-    dogearCells: 0, dogearOnRow: 0, dogearOnUl: 0, dogearOnAud: 0,
+    dogearCells: 0, dogearPainted: 0, dogearOnRow: 0, dogearOnUl: 0, dogearOnAud: 0,
     audPaired: 0, audTested: 0,
     discHits: 0, discHitFirst: '',
     hoverDeclaresColour: false, hoverRule: '', hoveredOnEra: '',
@@ -421,6 +428,7 @@ function(host){
     if (dg) {
       out.dogearCells++;
       var db = box(dg);
+      if (vis(db)) out.dogearPainted++;
       out.dogearOnRow = Math.max(out.dogearOnRow, r2(area(db, box(cell.querySelector('.phrow')))));
       out.dogearOnUl = Math.max(out.dogearOnUl, r2(area(db, ub)));
 
@@ -653,56 +661,76 @@ func TestCellProbe_EveryCornerPaintsAndNoTwoShareOne(t *testing.T) {
 			t.Logf("host %.1fpx · column %.1fpx · %d dated cells · density %s",
 				r.Host, r.ColumnW, r.DatedCells, cpDensity(r))
 
-			// ── THE THIRD CORNER PAINTS ──────────────────────────────────
+			// ── THE EVENT MARKS PAINT, WHEREVER THE DENSITY PUTS THEM ────
 			//
-			// WHICH MARK holds the corner depends on the density: the strip
-			// below 84px of column, named chips above it. Both are asserted;
-			// neither arm is allowed to be vacuous, which is what the Fatal on
-			// an empty subject is for.
+			// WHICH MARK the cell draws depends on the density, and since
+			// C-CALV4-TILES §9.2/§9.3 so does WHERE: named chips at 84px of
+			// column and up, and below that a block of masked RUNES in the
+			// cell's middle rather than a bar in the bottom-left corner. Both
+			// arms are asserted; neither is allowed to be vacuous, which is what
+			// the Fatal on an empty subject is for.
+			//
+			// THE GEOMETRY PINS MOVED WITH THE MARK AND THE CLAIMS DID NOT. This
+			// block used to say "the corner C-CALV4-SPEC §1 gives to event
+			// marks"; the marks are in the middle now (§9.1 spends the corners on
+			// the moon, the date and the availability strip, and a 34px cell has
+			// no fourth). What it asserts is unchanged and is the reason the file
+			// exists: a rect with area, a segment with area, ink in every one,
+			// no spill, and clearance above the reserved floor. The block's
+			// PLACEMENT — that it is centred, clears the numeral and does not
+			// leave the cell — is measured next door in rune_probe_test.go,
+			// which also proves the ruling that decides which arm runs here.
 			if !r.UnderShown {
-				t.Logf("named density: the third corner is drawn by chips — %d cells carry one",
+				t.Logf("named density: the event marks are drawn by chips — %d cells carry one",
 					r.ChipCells)
 				if r.ChipCells == 0 {
 					t.Fatal("`.cunder` is hidden and no cell carries a named chip either, so " +
-						"the third corner is drawing NOTHING at this width and the strip arm " +
+						"the cell is drawing NO event mark at this width and the rune arm " +
 						"below would skip it in silence")
 				}
 			}
 			if r.UnderShown {
 				if r.MarkCells == 0 {
-					t.Fatal("no cell carries an event-mark strip — the fixture has marks on " +
+					t.Fatal("no cell carries an event-mark block — the fixture has marks on " +
 						"eight days, so this probe has no subject and every assertion below " +
 						"is vacuous")
 				}
-				t.Logf("event marks: %d cells · strip %.2f–%.2fpx · narrowest segment %.2fpx · "+
-					"%d/%d segments inked · clearance above the reserved floor %.2fpx",
+				t.Logf("event marks: %d cells · block %.2f–%.2fpx · narrowest rune %.2fpx · "+
+					"%d/%d runes inked · clearance above the reserved floor %.2fpx",
 					r.MarkCells, r.UlMinW, r.UlMaxW, r.SegMinW, r.SegsInked, r.SegsMeasured,
 					r.UlClearance)
 				if r.UlMinW <= 0 {
-					t.Errorf("the event-mark strip is %.2fpx wide on some cell. This is the "+
-						"corner C-CALV4-SPEC §1 gives to event marks and it is the cell's most "+
-						"important content; a box with no width paints nothing and no string "+
+					t.Errorf("the event-mark block is %.2fpx wide on some cell. It is the "+
+						"cell's most important content at the only width the operator's own "+
+						"calendar produces; a box with no width paints nothing and no string "+
 						"assertion about its anchor can tell", r.UlMinW)
 				}
 				if r.SegMinW <= 0 {
-					t.Errorf("an event-mark SEGMENT measures %.2fpx. `flex: 1` over "+
-						"`flex-basis: 0` with empty content distributes nothing when the row "+
-						"itself has no width", r.SegMinW)
+					t.Errorf("an event RUNE measures %.2fpx. It is `flex: 0 0 auto` at an "+
+						"explicit `inline-size` now rather than a `flex: 1` share of a row, so "+
+						"a zero here means the declaration is gone, not that the row starved "+
+						"it", r.SegMinW)
 				}
 				if r.SegsInked != r.SegsMeasured {
-					t.Errorf("%d of %d event-mark segments carry no ink. A rect with area and "+
-						"a transparent fill is still an empty corner",
+					t.Errorf("%d of %d event runes carry no ink. A rect with area and a "+
+						"transparent fill is still an empty middle",
 						r.SegsMeasured-r.SegsInked, r.SegsMeasured)
 				}
 				if r.UlSpill > 0.01 {
-					t.Errorf("the event-mark strip leaves its own cell by %.2fpx — a mark on "+
+					t.Errorf("the event-mark block leaves its own cell by %.2fpx — a mark on "+
 						"the wrong day is worse than no mark", r.UlSpill)
 				}
 				// ── AND IT CLEARS THE FLOOR RESERVED UNDER IT ────────────
+				//
+				// The rune block's own lift is written as
+				// `calc(var(--avail-h) + …)`, measured off the strip's token so
+				// the two cannot drift; this is the arm that would notice if
+				// somebody replaced that expression with a literal and then
+				// moved the token.
 				if r.UlClearance < 0 {
-					t.Errorf("the event-mark strip overlaps the reserved availability slot by "+
-						"%.2fpx. The whole value of reserving the bottom edge now is that step "+
-						"three fills it and relayouts nothing", -r.UlClearance)
+					t.Errorf("the event-mark block overlaps the reserved availability slot by "+
+						"%.2fpx. The whole value of reserving the bottom edge is that the "+
+						"wiring dispatch fills it and relayouts nothing", -r.UlClearance)
 				}
 			}
 			if r.AvailCells != r.DatedCells {
@@ -725,16 +753,61 @@ func TestCellProbe_EveryCornerPaintsAndNoTwoShareOne(t *testing.T) {
 					r.AvailInked)
 			}
 
-			// ── THE FOURTH CORNER DOES NOT SHARE THE AMBIENT ONE ─────────
+			// ── THE FOURTH CORNER: WHO HOLDS IT, AND AT WHICH DENSITY ────
+			//
+			// RE-POINTED, NOT RELAXED (C-CALV4-TILES §9.1). Permission is
+			// `dm_only` on the EVENTS of a day, so it rides with the mark that
+			// shows them: below 84px of column the runes are struck in gold and
+			// the fold's own ink is off; at 84px and up there are no runes and
+			// the fold plus the audience diamond are the permission channel,
+			// exactly as before.
+			//
+			// THE ELEMENT NEVER LEAVES THE MARKUP, and that is why the counts
+			// below are two numbers rather than one. `.cell:has(> .dogear)` is
+			// what strikes the runes gold, so the fold IS the datum — delete it
+			// from `gmMarks` and the gold goes with it, silently, because a cell
+			// with no fold simply inks its runes in the type colour and still
+			// looks like a working build.
+			//
+			// AND THE COLLISION ARMS ARE NOT ALLOWED TO GO VACUOUS. An invisible
+			// element intersects nothing, so "no overlap" would become free at
+			// narrow density the moment the ink went off — which is precisely
+			// how an arm stops being evidence. The density each claim belongs to
+			// is asserted first.
 			if r.DogearCells == 0 {
 				t.Fatal("no cell carries the GM fold — the GM fixture has three dm_only days, " +
 					"so the collision arm below would pass vacuously")
 			}
-			t.Logf("GM fold: %d cells · overlap with the moon row %.2fpx², with the event "+
-				"marks %.2fpx², with the audience diamond %.2fpx² (%d cells measured, %d of "+
-				"them paired by the data) · disc hit %d/%d (%s)",
-				r.DogearCells, r.DogearOnRow, r.DogearOnUl, r.DogearOnAud,
+			t.Logf("GM fold: %d cells carry the datum, %d paint · overlap with the moon row "+
+				"%.2fpx², with the event marks %.2fpx², with the audience diamond %.2fpx² "+
+				"(%d cells measured, %d of them paired by the data) · disc hit %d/%d (%s)",
+				r.DogearCells, r.DogearPainted, r.DogearOnRow, r.DogearOnUl, r.DogearOnAud,
 				r.AudTested, r.AudPaired, r.DiscHits, r.DogearCells, r.DiscHitFirst)
+			if r.NamedShown {
+				if r.DogearPainted != r.DogearCells {
+					t.Errorf("%d of %d GM folds paint at NAMED density. There are no runes here "+
+						"(§9.3 — the cell draws event-NAME chips), so the fold and the audience "+
+						"diamond are the only permission marks the widest cell has; dropping "+
+						"them here deletes the channel at the width a GM is most likely to be "+
+						"reading the month at", r.DogearPainted, r.DogearCells)
+				}
+			} else {
+				if r.DogearPainted != 0 {
+					t.Errorf("%d GM folds paint at NARROW density. Permission rides with the "+
+						"runes here (§8.1/§9.2) and they are already struck in gold — a second "+
+						"gold mark for one fact is one too many, and it re-occupies the bottom "+
+						"corner the availability strip is meant to have to itself",
+						r.DogearPainted)
+				}
+				// …AND THE DATUM MUST STILL BE THERE, or the gold has nothing to
+				// key on. This is the arm that fails if a later hand "tidies"
+				// the invisible element out of gmMarks.
+				if r.MarkCells > 0 && r.DogearCells == 0 {
+					t.Error("no `.dogear` in the markup at narrow density. It is the datum " +
+						"`.cell:has(> .dogear) .ulseg` reads to strike a GM-only day's runes " +
+						"in gold; without it every day inks the same and nothing says so")
+				}
+			}
 			if r.NamedShown && r.AudTested == 0 {
 				t.Error("the audience diamond is drawn at this density and no fold cell could " +
 					"be measured against one, injected or otherwise — the two-gold-marks arm " +

@@ -125,6 +125,75 @@ PKG_CALENDAR_BLOCK="./internal/widgets/calendar_block/"
 # three flat runs through a tile's top edge, and the gutter's ground between two
 # neighbours. Proven red against exactly that regression before it was
 # registered here.
+#
+# TestLegendProbe_TheTabOpensByKeyboardAndByTouch is C-CALV4-TILES §9.4's guard.
+# The legend became a disclosure and the stylesheet can be RIGHT while the
+# control is unreachable: :focus-within instead of :focus-visible reads
+# identically in review and leaves a touch device unable to CLOSE the tab, an
+# ungated hover branch reads identically and is the whole affordance on a mouse
+# and none of it on a thumb, and a 22px tab reads identically and is half the
+# 44px floor. It drives a real Chromium twice — fine pointer and a genuinely
+# coarse one — and measures rest, keyboard focus, one tap, the tap back and the
+# target. Proven red by both substitutions before registration.
+#
+# TestAvailabilityProbe_TheStripPaintsNothingOnCurrentData is §9.5's. The
+# availability strip ships COMPLETE and DORMANT, and "it paints nothing" is a
+# statement about pixels that getComputedStyle cannot answer — the same gap that
+# let a grid painting nothing pass three edge probes. It screenshots the Block
+# with and without the strip and requires them byte-identical, and it carries its
+# own SENTINEL: the same host is also shot with the strip's box deliberately
+# filled, so a comparator that could never fail is caught before its clean
+# reading is believed.
+#
+# TestRuneInkChannels_ChromaSurvivesTheDeepening guards the channel the rune ink
+# nearly threw away. §9.2 made COLOUR the only thing separating event types below
+# 84px of column, and the first build deepened the axis with a CONSTANT chroma —
+# `oklch(from var(--axis) 0.36 0.10 h)` — so only the HUE survived. --axis is not
+# one of six curated tokens: it is EventCategories[].Color out of the database,
+# edited by a bare <input type="color">. Measured consequences: --ev-social
+# (c 0.17) and --ev-session (c 0.04) share a hue and inked 6/255 apart, i.e. one
+# colour; #888888 inked rgb(235,130,125) on dark, a grey category painting a RED
+# rune 3/255 from a vivid red one. The probe paints adversarial axis values
+# through the SHIPPED rule — never a re-typed copy of the expression — and reads
+# the result back, because relative colour syntax is resolved by the engine and
+# getComputedStyle hands back an unresolved wide-gamut value. Proven red against
+# the constant-chroma recipe on all four arms before registration.
+#
+# TestRuneInkChannels_TheChipTintCarriesItsOwnHue is the same defect one surface
+# over, and it PREDATES the rune work. `.chip` filled with
+# `color-mix(in oklch, var(--surface-card) 90%, var(--axis))`, and that
+# interpolates the HUE ANGLE — the light theme's card is `oklch(1 0 0)`, white
+# written with an explicit hue of ZERO, so every type was dragged toward 0° and a
+# blue, a red and a green event all painted pale PINK 4/255 apart, on the largest
+# colour surface a wide cell has. Invisible while the cell had a white ground;
+# the gapped tile gave the chip a coloured surround and the pink stopped hiding.
+# Fixed by mixing in sRGB, which has no hue channel to wrap. Proven red.
+#
+# TestRuneProbe_* are C-CALV4-TILES §9.1/§9.2/§9.3's, four of them, and each
+# measures something no string in this repo can see:
+#
+#   · TheExpansionGrowsRightward — the moon cluster is a flex row that grows
+#     from one disc to four on focus or hover. Anchored RIGHT it grew LEFTWARD
+#     and displaced the primary disc, the one already under the pointer, by
+#     35.05px. That is displacement without a transition, which is precisely
+#     what TestCSS_NoMotionAtAll cannot see: it greps for the word. The probe
+#     re-anchors the same cluster to its old edge in the same pass as a
+#     CONTROL, so 0.00px on the new anchor is a number with something to be
+#     better than rather than the reading a broken expansion also gives.
+#   · TheDensityRuling — at ≥84px of column the cell draws event-NAME chips and
+#     NO runes; below it the runes replace the underline bars. The gate is
+#     `.cunder`'s own `display: none`, which is invisible to every string
+#     assertion here AND to getComputedStyle on the element itself, which
+#     cheerfully reports a 9px inline-size for a box that does not exist.
+#   · TheRuneInkIsNotTheRawPalette — the ink is `oklch(from var(--axis) …)`, a
+#     colour the sheet never writes down. Both failure modes are silent: an
+#     unresolved --runeink falls back to structural grey and draws a plausible
+#     month, an undeepened one draws a plausible coloured month, and neither
+#     changes a rect, a mask or a class.
+#   · TheRunesAreOnTheScreen — the pixel arm, and the reason is the one
+#     TestTilePaintProbe above was added for. A masked element can resolve its
+#     ink perfectly and have the mask clip the glyph to no coverage at all; the
+#     computed reading is identical to a working one. This one decodes a PNG.
 PROBES_CALENDAR_BLOCK="TestProbe_ContainerQuerySizingInRealBrowser \
 TestProbe_ShelfGeometryIsInvariant \
 TestProbe_StdTierFilledShelfDoesNotCollideWithTheFilledLedger \
@@ -136,8 +205,16 @@ TestCellProbe_EveryCornerPaintsAndNoTwoShareOne \
 TestCellProbe_TheEraTintCarriesTheEraAndKeepsThePop \
 TestCellProbe_TheTileRuleIsTheQuietestRuleInTheGrid \
 TestTilePaintProbe_TheTileIsOnTheScreen \
+TestRuneProbe_TheExpansionGrowsRightward \
+TestRuneProbe_TheDensityRuling \
+TestRuneProbe_TheRuneInkIsNotTheRawPalette \
+TestRuneProbe_TheRunesAreOnTheScreen \
+TestRuneInkChannels_ChromaSurvivesTheDeepening \
+TestRuneInkChannels_TheChipTintCarriesItsOwnHue \
 TestMoonReachProbe_TheDiscsAreOnTheScreenAtAPhoneWidth \
 TestMoonReachProbe_TheOpenerOnATouchDevice \
+TestLegendProbe_TheTabOpensByKeyboardAndByTouch \
+TestAvailabilityProbe_TheStripPaintsNothingOnCurrentData \
 TestMoonPanelProbe_TheFoldCostsNothingAndObeysTheRegister \
 TestMoonPanelProbe_ReducedMotionIsInstantAndComplete \
 TestSkyMeasureProbe_TheThreeCounts \

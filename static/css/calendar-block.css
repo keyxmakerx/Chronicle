@@ -269,10 +269,18 @@
   background: color-mix(in oklch, var(--surface-card) 88%, var(--text-primary));
   box-shadow: none;
 }
+/* sRGB, for the reason spelled out at `.chip`: mixing the light theme's
+   `oklch(1 0 0)` card with a HUED colour in OKLCH interpolates the hue angle
+   away from the explicit 0 that white carries, so a BLUE accent washed the
+   selected surface PINK — measured rgb(253,247,249) against sRGB's
+   rgb(248,249,253). The two `--text-primary` mixes above are left in OKLCH
+   deliberately: that token is near-achromatic in both themes, the two spaces
+   land 2/255 apart there, and changing a mix that is already correct is churn.
+   The wash rules mix with `transparent`, which has no hue to drag. */
 .cal-block-host .surf.sel,
 .cal-block-host .surf.sel:hover {
   border-color: var(--accent);
-  background: color-mix(in oklch, var(--surface-card) 96%, var(--accent));
+  background: color-mix(in srgb, var(--surface-card) 96%, var(--accent));
   box-shadow: inset 0 0 0 1.5px var(--accent);
 }
 /* the page's most numerous hover targets get wash only, NO shadow */
@@ -449,14 +457,49 @@
 
    --dash / --gap are the greyscale identity channel. Guard B1: they are never
    animated and never transitioned.
+
+   ── THE STROKE PATTERNS NO LONGER INK `.ulseg`, AND THE CLASS STILL MATTERS ──
+   C-CALV4-TILES §9.2 turns the grid's underline segment into a MASKED RUNE, so
+   `p1..p8` stopped being a stroke there and became the GLYPH SELECTOR: the rune
+   block picks one of 32 pooled marks from `:nth-child()` × the pattern class
+   (§RUNES). Every `.ulseg.pN` stroke rule below is therefore deleted rather than
+   left to be overridden — the sheet has no unused-property guard, and a stroke
+   rule that never wins reads like a live channel to the next hand.
+
+   WHICH CHANNEL EACH PATTERN NOW SERVES — two surfaces paint it, two do not,
+   and the difference was MEASURED rather than read off the selectors:
+
+     · `.chip .rail`   the NAMED cell's 3px rail, ≥84px of column — the density
+                       that draws no runes at all, so this is where the locked
+                       greyscale identity survives IN THE GRID. PAINTS p1–p4.
+     · `.lrow .rail`   the docked Ledger's per-event rail. PAINTS p1–p4 at both
+                       densities, with real gradients along the axis.
+     · `.np .dot`      the Nameplate's per-calendar dot. NOT a pattern consumer
+                       in practice: every fixture renders it p1, and it carries
+                       no --dash/--gap of its own.
+     · `.legend .lr`   the legend swatch. DELIBERATELY SOLID as of this pass —
+                       see the rule for why it never worked and why restoring it
+                       would have been the wrong repair.
+     · `.cell .ulseg`  the rune's SHAPE, by class name only — no stroke.
+
+   SO THE PATTERN CHANNEL HAS NO KEY SURFACE. It paints in the Ledger and on the
+   wide cell's chip and nothing anywhere tells a reader what a dash means. That
+   predates this pass; what is new is that it is written down.
+
+   WHAT THIS COSTS, RECORDED RATHER THAN ABSORBED. `blockMarkFor` locks hue and
+   pattern to one key so "a viewer who cannot separate the hues can still
+   separate the marks", and a rune chosen by POSITION retires that guarantee at
+   narrow density. The type is still named in the legend, in the Ledger and on
+   the wide cell's chip: lost from the mark, not from the product. It is the
+   operator's call (§9.2) and it is written here so the next reader does not
+   rediscover it as a bug.
    ═══════════════════════════════════════════════════════════════════════════ */
-.cal-block-host .rail,
-.cal-block-host .ulseg {
+.cal-block-host .rail {
   --dash: 100%;
   --gap: 0px;
   background-color: var(--axis);
 }
-/* main-axis dashes: rails run vertically, underline segments horizontally */
+/* main-axis dashes: rails run vertically */
 .cal-block-host .rail.p2,
 .cal-block-host .rail.p3,
 .cal-block-host .rail.p4,
@@ -464,15 +507,6 @@
 .cal-block-host .rail.p8 {
   background-color: transparent;
   background-image: repeating-linear-gradient(to bottom, var(--axis) 0 var(--dash),
-      transparent var(--dash) calc(var(--dash) + var(--gap)));
-}
-.cal-block-host .ulseg.p2,
-.cal-block-host .ulseg.p3,
-.cal-block-host .ulseg.p4,
-.cal-block-host .ulseg.p6,
-.cal-block-host .ulseg.p8 {
-  background-color: transparent;
-  background-image: repeating-linear-gradient(to right, var(--axis) 0 var(--dash),
       transparent var(--dash) calc(var(--dash) + var(--gap)));
 }
 .cal-block-host .p2 { --dash: 4px; --gap: 2px }
@@ -486,21 +520,10 @@
   background-image: linear-gradient(to right,
       var(--axis) 0 1px, transparent 1px 2px, var(--axis) 2px 3px);
 }
-.cal-block-host .ulseg.p5 {
-  background-color: transparent;
-  background-image: linear-gradient(to bottom,
-      var(--axis) 0 1px, transparent 1px 2px, var(--axis) 2px 3px);
-}
 /* p7 solid with a 1px centre notch on the main axis */
 .cal-block-host .rail.p7 {
   background-color: transparent;
   background-image: linear-gradient(to bottom,
-      var(--axis) 0 calc(50% - .5px), transparent calc(50% - .5px) calc(50% + .5px),
-      var(--axis) calc(50% + .5px) 100%);
-}
-.cal-block-host .ulseg.p7 {
-  background-color: transparent;
-  background-image: linear-gradient(to right,
       var(--axis) 0 calc(50% - .5px), transparent calc(50% - .5px) calc(50% + .5px),
       var(--axis) calc(50% + .5px) 100%);
 }
@@ -1036,62 +1059,94 @@
    not centre anything."
 
        ┌──────────────┐
-       │ 17        ◗  │   top-left  DATE      · top-right AMBIENT (the moon)
+       │ ◗         17 │   top-left  AMBIENT (the moon)  · top-right DATE
+       │      ᛉᚦ      │   the middle: the RUNES (§RUNES, narrow density only)
        │              │
-       │ ▄▄▄          │   bottom-left EVENT MARKS (the underline cluster)
-       │══════════════│   bottom EDGE, reserved: availability (step three)
+       │══════════════│   bottom EDGE: the availability strip, alone
        └──────────────┘
 
-   THE NUMERAL WAS CENTRED AND IS NOW TOP-LEFT, and that is not only the spec
-   being followed — it is what makes the always-visible moon possible at all.
-   A centred numeral owns the middle of the top line, which is why the shipped
-   sheet had to drop the disc row to `top: 26px` at underline density and
-   restore it to `top: 5px` at named density: two anchors, one for each side of
-   a threshold. With the date in the top-LEFT corner the top-RIGHT corner is
-   free at EVERY width, so the moon has ONE anchor and the density query no
-   longer has to move it. One fewer moving part, and the reason the silhouette
-   can be promoted all the way down to the narrowest column the grid produces. */
+   THE TWO TOP CORNERS SWAPPED (C-CALV4-TILES §9.1), and the reason is the
+   HOVER EXPANSION rather than taste. The moon cluster grows from one disc to
+   three plus a `+` on hover; anchored to the RIGHT it grew leftward, so the
+   primary disc — the one already under the pointer — was displaced 35.05px the
+   instant the pointer arrived, in a sheet whose whole §MOTION budget is zero.
+   Anchored to the LEFT the row grows RIGHTWARD into empty middle and the disc
+   under the pointer moves 0.00px. That was an open question at §8.1 and it is
+   closed by moving the anchor rather than by adding a rule.
+
+   Both anchors are still CORNERS and nothing is centred, so §1's ruling is
+   untouched; what moved is which corner holds which mark. The rune block IS in
+   the middle, and that is the one deliberate exception: it is the cell's
+   CONTENT, not one of the three corner marks, and §9.1 puts it there because a
+   34px cell has no fourth corner to spend.
+
+   THE MOON'S ANCHOR IS STILL SINGLE. The shipped sheet needed two (`top: 26px`
+   at underline density, `top: 5px` at named) because a CENTRED numeral owned
+   the top line; the date has been in a corner since, and swapping which corner
+   does not give the anchor back its second value. */
 .cal-block-host .cell .dn {
   font-weight: 600;
   font-size: 10px;
   line-height: 1;
   color: var(--text-body);
   display: block;
-  text-align: left;
+  text-align: right;
 }
 .cal-block-host .cell .dnw {
   display: flex;
-  justify-content: flex-start;
+  justify-content: flex-end;
   align-items: center;
 }
-/* TODAY is a non-accent ink stamp. The campaign accent is chrome-only; calv3
-   put a filled accent-indigo today pill on a DATA cell. */
-/* TODAY is a non-accent ink stamp, and it is THE WIDEST THING A DATE CAN BE —
-   which is why it, and not the digits, sets the corner architecture's inline
-   budget. Two digits at 12px measure ~13px; this stamp measured 18.0px, and in
-   a 30px ten-day column an 18px stamp plus a 12px moon-and-inset leaves nothing
-   between them. The probe caught it by walking EVERY dated cell rather than the
-   first one: day 3 cleared and day 14 — the fixture's today — overlapped by
-   32px².
+/* TODAY IS INK, NOT A DISC (C-CALV4-TILES §9.1). The filled stamp read as a
+   REDACTION over the numeral — the operator's own words were "a weird blacked
+   out date" — so the fill, the radius and the reversed-out ink all go, and what
+   is left is the numeral itself in --today-ink at weight 750. The campaign
+   accent stays chrome-only either way; that part never changed.
 
-   The stamp therefore steps with the column, exactly as the disc diameter does:
-   13px here, 14px from CellCompactColWidthMin up, and the signed 22px once the
-   cell is wide enough to carry event NAMES (§DENSITY's 84px block, unchanged).
-   Every size is measured rather than chosen; sizing.go carries the arithmetic. */
+   THE ARITHMETIC THIS RULE USED TO CARRY IS GONE WITH THE DISC. It said the
+   stamp was THE WIDEST THING A DATE CAN BE — 18.0px against two digits' ~13px —
+   and that it therefore, not the digits, set the corner architecture's inline
+   budget and had to step with the column (13px here, 14px from
+   CellCompactColWidthMin, 22px at named density). A numeral inked differently is
+   the same width as the same numeral in body ink, so there is no stamp to size,
+   nothing to step, and three sizing rules elsewhere in this sheet went with it.
+   `width`/`height`/`font-size` are AUTO by omission and must stay that way: any
+   value here re-creates a box around the date. sizing.go's own note about the
+   18px stamp is history now and is marked as such there.
+
+   `display: inline` rather than the old `inline-grid`, so the numeral sits on
+   the date's own baseline instead of in a centred box of its own. */
 .cal-block-host .cell .today {
-  display: inline-grid;
-  place-items: center;
-  border-radius: var(--r-full);
-  background: var(--today-ink);
-  color: var(--today-ink-on);
-  font-weight: 650;
-  width: 13px;
-  height: 13px;
-  font-size: 9px;
+  display: inline;
+  background: transparent;
+  box-shadow: none;
+  color: var(--today-ink);
+  font-weight: 750;
 }
 
 /* NAMED chip: a 3px patterned rail, a non-colour token, and a label. A glyph
-   WITH a label is legible; a glyph INSTEAD of a label is a rebus. */
+   WITH a label is legible; a glyph INSTEAD of a label is a rebus.
+
+   THE TINT MIXES IN sRGB, NOT OKLCH, AND THAT IS A DEFECT FIX. `color-mix(in
+   oklch, …)` INTERPOLATES THE HUE ANGLE, and the light theme's --surface-card
+   is `oklch(1 0 0)` — white written with an explicit hue of ZERO. So every mix
+   dragged the result 10% of the way from 0° toward the type's hue and landed in
+   the reds: a BLUE event painted `rgb(250,236,242)`, a RED event
+   `rgb(254,237,241)` and a GREEN event `rgb(252,240,241)` — three pale PINKS,
+   4/255 apart, on the largest colour surface a wide cell has. Dark was the same
+   failure mirrored: card hue 265 pulled a red event's chip to hue 241, still
+   blue. Measured by decoding the painted pixel, both themes.
+
+   That is not a nicety. §9.2's ruling — the operator's own words, "just have
+   the colors determine what kind of event" — makes hue the type channel, and
+   this rule was rendering the wrong hue AND carrying essentially no separation
+   between types. sRGB has no hue channel to wrap, so 90% white + 10% blue is a
+   pale blue: measured `rgb(233,241,251)` / `rgb(251,236,236)` / `rgb(238,246,239)`,
+   12–18/255 apart, each in its own type's colour.
+
+   THE BUG PREDATES THIS PASS (it is at HEAD, line 1105) and was invisible while
+   the cell had a white ground. The gapped tile and the era tint gave the chip a
+   coloured surround to sit against, and the pink stopped hiding. */
 .cal-block-host .chip {
   display: flex;
   align-items: center;
@@ -1102,7 +1157,7 @@
   padding-right: 4px;
   overflow: hidden;
   border: 0;
-  background: color-mix(in oklch, var(--surface-card) 90%, var(--axis));
+  background: color-mix(in srgb, var(--surface-card) 90%, var(--axis));
 }
 .cal-block-host .chip .rail {
   width: 3px;
@@ -1188,24 +1243,496 @@
      placeholder is a feature nobody built, and the operator would read it as
      one. Step three paints the segments here. */
 }
+
+/* ── THE AVAILABILITY STRIP — BUILT, AND DORMANT UNTIL DATA ARRIVES ────────
+   C-CALV4-TILES §8.4 / §8.9 / §9.5. The operator's own correction, verbatim:
+   "the RSVP markers were at the bottom and they depicted on each day how much
+   availability they had. yellow, only 12-6, then only from half way into 3/4 of
+   the bottom horizontal row is filled".
+
+   SO THE STRIP'S WIDTH IS THE DAY. It is a TIME AXIS, not a roster: a span's
+   left edge says when a player becomes free and its right edge when they stop,
+   so POSITION carries when and LENGTH carries how long, and the eye reads both
+   without a legend. That is strictly better than per-player segments at a 34px
+   cell, where four players get ~7px each and neither position nor length means
+   anything.
+
+   IT PAINTS NOTHING TODAY, AND EVERY RULE BELOW IS WRITTEN SO IT CANNOT.
+   `DayCell` has no availability field, `block_projection.go` fetches none, and
+   the windows live in the sessions plugin's `availability_exceptions` keyed to
+   REAL dates — §8.6's fantasy-date blocker is unresolved. Three separate things
+   hold the dormancy, deliberately, because one would be an accident:
+
+     · the geometry switch is on `.cell.rsvp`, a class NO markup in this package
+       emits, so the reservation above renders byte-identically to what it has
+       rendered since wave 1 — an empty 4px box on the cell's inner bottom edge,
+       measured by cell_probe_test.go and unmoved by this change;
+     · `.lane` matches no element, because availabilitySlot emits no children;
+     · --m0/--m1 CARRY NO FALLBACK, which is a deliberate deviation from
+       /schedule's `.sc-off` (`var(--m0, 0%)` / `var(--m1, 100%)`). /schedule can
+       afford defaults because it always computes the pair; here a defaulted span
+       would paint a FULL-DAY bar out of no data at all — a fabricated figure,
+       which is the one thing this surface must never draw. Unset, the
+       declaration is invalid at computed-value time, `left`/`right` fall back to
+       `auto`, and the span has no width to fill.
+
+   THE SPAN CONTRACT IS OTHERWISE /schedule's, unchanged: --m0/--m1 as
+   percentages of the day, computed server-side. One span primitive in the
+   product, not two (C-CALV4-DRAG-RESCHEDULE.md:172).
+
+   NO GUTTER BETWEEN LANES. The operator: "no space between them because they
+   are colored." Correct — a 1px rule between two lanes is a separator doing a
+   job the hue already does, and it spends a quarter of a 12px strip on nothing.
+   Flush also makes the lanes read as ONE block of time sliced by who, which is
+   what they are.
+
+   IT STAYS pointer-events: none. §8.7: a 3px lane is not a control and a 4px hit
+   area against a 44px floor is not one either. /schedule solved the identical
+   problem by making the CELL the target and the lozenge a MARK; the day cell is
+   already that target, tapping it already opens the Ledger, and the availability
+   detail lands there. A third hit region inside one cell is what the two-target
+   rule refuses.
+
+   WHAT THE WIRING DISPATCH STILL OWES, named rather than discovered later: a
+   filled strip is 4px + 3px per player and grows UPWARD from the cell's inner
+   bottom edge, so between 75px and 84px of column it reaches the underline
+   cluster's 6px anchor. §9.2's rune block already answers that — a day with
+   RSVPs lifts by `calc(var(--avail-h) + 14px)`, measured off this strip's own
+   token so the two cannot drift — and that lift is the runes' rule, not this
+   one. Nothing collides today because nothing paints. */
+.cal-block-host .cell.rsvp .avail {
+  /* INSET TO THE TILE'S INNER EDGE. The tile is `inset: 1.5px` plus its own 1px
+     rule, so 2.5px is exactly where the fill starts; a strip at the cell's own
+     edge would run over the tile's border and into the 3px gutter. */
+  inset: auto 2.5px 2.5px;
+  height: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+  /* 3px against the tile's 6px --r-ctl less the 2.5px inset: the strip's corner
+     stays inside the tile's curve rather than cutting across it. */
+  border-radius: 0 0 3px 3px;
+  overflow: hidden;
+}
+/* one player's track: the faint full-day rule their window is measured against.
+   THE TRACK IS SQUARE. A pill track between two flush neighbours prints a light
+   notch at each end, which reads as exactly the gutter the operator removed. */
+.cal-block-host .cell .lane {
+  position: relative;
+  height: 3px;
+  border-radius: 0;
+  background: color-mix(in oklch, transparent 88%, var(--text-primary));
+}
+/* their window, positioned on the day. The span keeps its radius — it is the
+   datum, not the track, and a rounded datum on a square track reads as a mark
+   rather than as a segment of the rule. */
+.cal-block-host .cell .lane > i {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: var(--m0);
+  right: calc(100% - var(--m1));
+  border-radius: var(--r-full);
+  background: var(--who);
+}
+/* THE OVERLAP: the one span everybody shares, drawn once, on top, in the accent
+   — because it is the tool talking, not a person. "When can we all play" is the
+   only question this surface exists to answer, so the intersection is DRAWN
+   rather than left to be eyeballed; everything under it is the working.
+
+   --accent is legal here and canon A7 is intact: A7 keeps the accent off the
+   EVENT axis (--axis), and TestCSS_ChannelDiscipline enforces that against the
+   marks layer by name (.rail, .ulseg, .chip, .tick i, .ph). An overlap window is
+   not an event and carries no type. */
+.cal-block-host .cell .lane.all {
+  height: 4px;
+  background: color-mix(in oklch, transparent 92%, var(--text-primary));
+}
+.cal-block-host .cell .lane.all > i {
+  background: var(--accent);
+  box-shadow: 0 0 0 0.5px color-mix(in oklch, var(--accent) 40%, transparent);
+}
+/* NOBODY OVERLAPS: the lane stays, empty, rather than vanishing. A missing lane
+   reads as "no data" and an empty one reads as "no window", and those are
+   different answers. */
+.cal-block-host .cell .lane.all.none > i {
+  display: none;
+}
+/* BELOW 75px THE PLAYER LANES DROP AND THE OVERLAP ALONE SURVIVES. Three 3px
+   lanes plus the overlap need the 85px cell; at 34px the overlap is the one line
+   a GM can act on. Written as the ladder's existing 75px min-width rung — the
+   one the moon cluster's expansion already takes, further down — rather than as
+   a new max-width twin, so the boundary is spelled ONCE in this sheet instead of
+   twice at two strengths. (The rung's own at-rule text is deliberately not
+   quoted here: several guards split this sheet at the FIRST occurrence of an
+   at-rule's text and do not skip comments.) */
+.cal-block-host .cell .lane:not(.all) {
+  display: none;
+}
+
+/* ═══ §RUNES — the narrow cell's event marks (C-CALV4-TILES §9.2/§9.3) ══════
+   The underline cluster in the third corner BECOMES A BLOCK OF CARVED RUNES in
+   the cell's empty middle. Same element (`.ul` / `.ulseg`), same markup, same
+   `p1..p8` classes; what changes is the box they are laid out in and what paints
+   inside it.
+
+   WHERE IT IS EMITTED, AND WHY NOTHING MOVED IN THE MARKUP. §9.3 rules that
+   runes are the NARROW form — at named density (≥84px of column) the cell keeps
+   its event-NAME chips and draws no runes, because a name beats a rune wherever
+   there is room for one. `.ul` already lives inside `.cunder`, and `.cunder` is
+   exactly the narrow subtree: `display: block` below 84px, `display: none` at or
+   above it, with `.cnamed` the mirror image. So the ruling is enforced by the
+   subtree the element was already in, and moving it to the cell would have had
+   to re-derive that gate as a second container query. `display: none` removes
+   the whole subtree, so a rune block inside `.cunder` genuinely does not exist
+   at named density — not merely invisible, not painting, not measurable.
+   Measured on both sides of the flip by TestRuneProbe_TheDensityRuling.
+
+   (`.ul` is positioned against `.cell`, not against `.cunder`, and `.cunder`'s
+   `overflow: hidden` does not clip it: the clip applies to descendants whose
+   containing block is inside the overflow box, and this one's is the cell.)
+
+   PLACEMENT AND THE LIFT. The block sits low in the empty middle. A day with
+   RSVPs lifts it by `calc(var(--avail-h) + 14px)` — measured off the strip's OWN
+   token, so the strip's height and the runes' clearance cannot drift apart — and
+   below 75px the lift shrinks to +6px, because the strip there is one lane and
+   not four and the full lift pushed a two-row rune block into the date's line
+   (measured during design: block top at 8px against a numeral occupying 3–15px).
+   Both lift rules are DORMANT: no markup in this package emits `.cell.rsvp`, for
+   the same fantasy-date reason the strip itself is dormant (§8.6). */
 .cal-block-host .ul {
   position: absolute;
-  left: 4px;
-  right: auto;
-  inline-size: min(60%, 26px, 100% - 17px);
-  bottom: calc(var(--avail-h) + 2px);
-  height: 3px;
+  left: 3px;
+  right: 3px;
+  top: auto;
+  bottom: 8px;
+  inline-size: auto;
+  height: auto;
   display: flex;
-  gap: 1px;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
+  /* THE PHONE FORM IS THE BASELINE and the 75px rung promotes it, rather than a
+     `max-width: 74.99px` twin: a 34px cell has 28px of usable width and 22px
+     inside this block's own 3px insets, while three 9px runes and their gaps
+     measure 31px — so below the expansion threshold they WRAP, two up and one
+     under, still one object and still centred. (§9.2 states the same arithmetic
+     for FOUR runes at 42px, which is the pool's `:nth-child(4)` headroom rather
+     than a day this Block can render: `underlineCap` is 3.) Writing the boundary
+     as the ladder's existing min-width rung spells 75 once in this sheet instead
+     of twice at two strengths, which is the convention the availability strip's
+     lanes already follow a few rules up. */
+  max-inline-size: 22px;
+  margin-inline: auto;
+  background: none;
+  border: 0;
+  padding: 0;
+  pointer-events: none;
 }
-.cal-block-host .ulseg {
-  flex: 1;
-  border-radius: var(--r-full);
+/* THE LIFT, at the phone's value. Below 75px the strip is ONE lane, not four,
+   and a lift sized for four pushed a two-row rune block into the date's line.
+   The 75px rung restores the full `+ 14px`. */
+.cal-block-host .cell.rsvp .ul {
+  bottom: calc(var(--avail-h) + 6px);
+}
+/* ── ONE RUNE ──────────────────────────────────────────────────────────────
+   THE GLYPH IS A MASK AND THE PAINT IS `background-color`. MEASURED during
+   design: a data-URI SVG used as `background-image` is an INDEPENDENT DOCUMENT
+   and cannot see the host element's `color`, so `stroke='currentColor'` inside
+   one resolves to the SVG's own initial black no matter what the cascade says —
+   every rune rendered black while `getComputedStyle().color` correctly reported
+   the event's hue. Masking inverts the relationship: the SVG supplies only the
+   SHAPE, `background-color` supplies the paint, and the type's hue reaches the
+   glyph through a property CSS actually controls. Both the `-webkit-` and the
+   unprefixed properties are written, because the prefixed pair is still the only
+   one some shipping WebKit builds honour.
+
+   ── THE INK ───────────────────────────────────────────────────────────────
+   THE EVENT PALETTE IS NOT RUNE INK. The six --ev-* tokens sit at L 0.55–0.75,
+   C 0.13–0.19: correct for a 3px bar or an 18px chip, where the mark is small
+   and has to shout, and primary-crayon when the same value is rendered as a
+   13px LETTERFORM. So the rune DEEPENS ITS OWN AXIS rather than using it raw —
+   relative colour syntax replaces `l` with an ink value while keeping the `h`
+   AND the `c` that tell two event types apart. The direction inverts with the
+   theme for the same reason the tile's edge does: on light you go down away from
+   the ground, on dark you go up. Dark lands near 0.13 and not the 0.075 an
+   earlier pass tried — that came out chalky pastel, which is the same failure
+   from the other side. The palette itself is untouched; every other surface
+   keeps it.
+
+   CHROMA IS SCALED, NOT REPLACED, AND THAT IS A DEFECT FIX. The first build
+   wrote `oklch(from var(--axis) 0.36 0.10 h)` — a constant `c`, so HUE was the
+   only surviving channel. `--axis` is not one of six curated tokens: it is
+   EventCategories[].Color verbatim (block_projection.go), and that is a bare
+   `<input type="color">` in the settings tab, so it is any sRGB value an
+   operator picks. Three measured consequences, all of them the tool losing a
+   distinction its own data carries:
+
+     · two types separated by SATURATION collapse. This sheet's own palette does
+       it — --ev-social (c 0.17) and --ev-session (c 0.04) share hue 255–258 and
+       were told apart by chroma alone; forced to a constant they painted 6/255
+       apart in both themes, which at 9×12px is one colour.
+     · an ACHROMATIC category acquires a hue it does not have. OKLCH gives grey
+       a powerless `h`, so #888888 and #ffffff both inked rgb(235,130,125) on
+       dark — a grey category painting a RED rune, and indistinguishable from a
+       vivid red one (3/255).
+     · the six SHIPPED defaults (model.go DefaultEventCategories) lost most of
+       their separation: minimum pairwise distance fell from 80/255 raw to
+       32/255 light and 48/255 dark.
+
+   Scaling keeps the ratio the operator chose. `calc(c * 0.62)` lands the sheet's
+   own palette (c 0.13–0.19) on 0.081–0.118, i.e. straddling the 0.10 the design
+   was tuned at, so nothing curated shifts perceptibly — while a near-grey stays
+   near-grey and a vivid pick stays vivid. There is no floor and no cap: a floor
+   would re-invent a hue for grey, and a cap would flatten exactly the operator
+   choice this is here to preserve. MEASURED after the change, decoded pixels,
+   both themes: social/session 6 → 41 (light) and 6 → 64 (dark); grey vs vivid
+   red 2 → 53 and 3 → 87; #888888 now inks rgb(61,61,61) / rgb(164,164,164)
+   instead of a red.
+
+   TWO THINGS THIS DOES NOT FIX, recorded so the next reader does not have to
+   re-measure to find them:
+
+     · LIGHTNESS IS STILL NORMALIZED, and that is the point of an ink — a rune
+       has to sit at reading weight against the tile or it is not legible. So
+       two types differing mainly in LIGHTNESS still converge: the six shipped
+       defaults' closest pair (Holiday #f59e0b / Battle #ef4444, 70° vs 27°)
+       goes 80/255 raw → 29/255 as ink, essentially unchanged by this fix,
+       because what separated them was never chroma. Two achromatic picks
+       (#888888 and #ffffff) ink IDENTICALLY, 0/255, for the same reason.
+     · THE GM STRIKE AND A GOLD CATEGORY STILL COLLIDE. Permission ink is
+       `oklch(from var(--gold) 0.44 0.11 h)` = rgb(110,76,0) on light; the
+       shipped "Holiday" default inks 28/255 away from it. Both are gold by
+       HUE, so no chroma treatment separates them. A GM day and a Holiday
+       therefore wear the same colour below 84px, in a sheet whose own §RUNES
+       note says two gold marks for one fact is one too many. Fixing it means
+       either moving the permission channel off gold or moving the shipped
+       default off amber — a decision about what the product means, not a
+       cascade bug, so it is booked for the operator rather than guessed here.
+
+   --runeink IS DECLARED ON THE GLYPH AND NEVER ON AN ANCESTOR, and that is a
+   defect fix rather than a style. A custom property inherits its COMPUTED value,
+   and `oklch(from var(--axis) …)` computes where it is declared: put it on
+   `.cell` — where `--axis` is only set on cells that carry a mark — and every
+   cell without one computes the guaranteed-invalid value and hands it down to
+   every child. The whole grid inked structural grey and the expression looked
+   correct in the file. It goes on `.ulseg`, which is the element that has an
+   `--axis` because the renderer stamped one on it. */
+.cal-block-host .cell .ulseg {
+  flex: 0 0 auto;
+  inline-size: 9px;
+  height: 12px;
+  border-radius: 0;
   min-width: 0;
-}
-.cal-block-host .ulseg.rest {
-  background-color: var(--own-none);
+  background-color: var(--runeink, var(--rule-structural-strong));
   background-image: none;
+  opacity: 1;
+  -webkit-mask-repeat: no-repeat;
+  mask-repeat: no-repeat;
+  -webkit-mask-position: center;
+  mask-position: center;
+  -webkit-mask-size: contain;
+  mask-size: contain;
+}
+.cal-block-host .cell .ulseg {
+  --runeink: oklch(from var(--axis, oklch(0.55 0.02 265)) 0.36 calc(c * 0.62) h);
+}
+.dark .cal-block-host .cell .ulseg {
+  --runeink: oklch(from var(--axis, oklch(0.55 0.02 265)) 0.72 calc(c * 0.8) h);
+}
+/* GM-ONLY DAYS ARE STRUCK IN GOLD, and permission rides WITH the marks instead
+   of taking a corner of its own (§8.1). `:has(> .dogear)` reads the fold's
+   PRESENCE in the markup; the fold's own ink is switched off below 84px beside
+   its rule, so the datum survives and the second gold mark does not. Deepened
+   the same way as the type inks, so gold sits in the same ink family rather than
+   glowing out of the grid. */
+.cal-block-host .cell:has(> .dogear) .ulseg {
+  --runeink: oklch(from var(--gold) 0.44 0.11 h);
+}
+.dark .cal-block-host .cell:has(> .dogear) .ulseg {
+  --runeink: oklch(from var(--gold) 0.82 0.10 h);
+}
+/* THE OVERFLOW MARK IS NOT A RUNE, and it must not be a blank either. A fourth
+   event turns the third segment neutral (underlineRestAt), and `.rest` carries
+   NO pattern class — so it matches none of the 32 glyph rules below and, left
+   alone, would paint as a solid 9×12 slab among letterforms. It gets a mark of
+   its own: a vertical three-dot tally, which is not a member of any of the four
+   alphabets, in the neutral owner token the bar already used. The exact count
+   stays in the Ledger, exactly as it did when this was a bar. */
+/* THE `.dark` ARM IS NOT A COPY, IT IS A SPECIFICITY FIX, and it was found by
+   measurement rather than by reading. `.dark .cal-block-host .cell:has(>
+   .dogear) .ulseg` carries one class more than this rule does, so on DARK the
+   gold branch outranked the neutral one and a GM-only day's overflow tally inked
+   gold while the same tally on LIGHT inked neutral — one mark, two meanings,
+   split by theme. The tally is not a type and not a permission: it says "there
+   are more", and the exact count is in the Ledger. Neutral in both. */
+.cal-block-host .cell .ulseg.rest,
+.dark .cal-block-host .cell .ulseg.rest {
+  --runeink: var(--own-none);
+  background-image: none;
+  -webkit-mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 13 24' fill='%23000'%3E%3Ccircle cx='6.5' cy='7' r='1.5'/%3E%3Ccircle cx='6.5' cy='12' r='1.5'/%3E%3Ccircle cx='6.5' cy='17' r='1.5'/%3E%3C/svg%3E");
+  mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 13 24' fill='%23000'%3E%3Ccircle cx='6.5' cy='7' r='1.5'/%3E%3Ccircle cx='6.5' cy='12' r='1.5'/%3E%3Ccircle cx='6.5' cy='17' r='1.5'/%3E%3C/svg%3E");
+}
+
+/* ── THE ALPHABET: 32 POOLED GLYPHS, CHOSEN BY POSITION ────────────────────
+   The operator: "could we just mix all those up and just have the colors
+   determine what kind of event?" So all four alphabets — bind-runes, wedge-cut,
+   sigils, angular — are POOLED, and the glyph a mark wears is chosen by ITS
+   POSITION IN THE DAY (`:nth-child()`), not by its type. A day with four events
+   shows four different runes; a type appearing in two slots wears two different
+   shapes. Deterministic, pure CSS, and it needs no data the Block does not have:
+   `p1..p8` is already a per-event-type class, so the pool is indexed by the two
+   things already in the markup.
+
+   CARVED MEANS STRAIGHT. Real runes were cut into wood and bone, so they are
+   made of straight strokes meeting at angles, with no curves and no horizontal
+   strokes along the grain. Every glyph obeys that, and it is what makes 32
+   arbitrary marks read as ONE alphabet rather than 32 icons. Drawn as inline
+   SVG rather than typed: the Unicode runic block (U+16A0–16FF) has patchy font
+   coverage and renders as tofu on plenty of systems, and typing it would put the
+   STROKE WEIGHT in the font's hands — the fault that killed three earlier
+   ornament rounds.
+
+   `:nth-child(4)` IS HEADROOM AND CANNOT MATCH TODAY. `underlineCap` is 3
+   (helpers.go), so a day never emits a fourth segment: eight of these 32 rules —
+   the angular family — are unreachable until that cap moves. They are written
+   anyway for the same reason p7 and p8 are defined with no axis assigned to
+   them: without the rule, the first fourth segment ever emitted matches no mask
+   at all and paints as a solid 9×12 slab, which looks like a working build.
+   Pinned by TestCSS_ThePooledAlphabet.
+
+   BOTH THE PREFIXED AND THE UNPREFIXED PROPERTY, on every rule. `mask-image` is
+   unprefixed everywhere current, and `-webkit-mask-image` is still the only one
+   some shipping WebKit builds honour; a glyph that resolves to no mask does not
+   fail visibly, it fills its whole box. */
+.cal-block-host .cell .ul .ulseg:nth-child(1).p1 { /* bind·p1 */
+  -webkit-mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 13 24' fill='none' stroke='%23000' stroke-width='1.25' stroke-linecap='square' stroke-linejoin='miter'%3E%3Cpath d='M6 2.6V21.4'/%3E%3Cpath d='M6 7.4l4.2-4.2'/%3E%3Cpath d='M6 12.2l4.2-4.2'/%3E%3Cpath d='M6 16.4l-4.2 4.2'/%3E%3Cpath d='M6 18.8l2.4 2.4'/%3E%3C/svg%3E");
+  mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 13 24' fill='none' stroke='%23000' stroke-width='1.25' stroke-linecap='square' stroke-linejoin='miter'%3E%3Cpath d='M6 2.6V21.4'/%3E%3Cpath d='M6 7.4l4.2-4.2'/%3E%3Cpath d='M6 12.2l4.2-4.2'/%3E%3Cpath d='M6 16.4l-4.2 4.2'/%3E%3Cpath d='M6 18.8l2.4 2.4'/%3E%3C/svg%3E");
+}
+.cal-block-host .cell .ul .ulseg:nth-child(1).p2 { /* bind·p2 */
+  -webkit-mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 13 24' fill='none' stroke='%23000' stroke-width='1.25' stroke-linecap='square' stroke-linejoin='miter'%3E%3Cpath d='M6 2.6V21.4'/%3E%3Cpath d='M1.8 11l8.4-8.4'/%3E%3Cpath d='M1.8 20.6l8.4-8.4'/%3E%3Cpath d='M6 11.6l-2.4 2.4'/%3E%3Cpath d='M6 20.6l2.4-2.4'/%3E%3C/svg%3E");
+  mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 13 24' fill='none' stroke='%23000' stroke-width='1.25' stroke-linecap='square' stroke-linejoin='miter'%3E%3Cpath d='M6 2.6V21.4'/%3E%3Cpath d='M1.8 11l8.4-8.4'/%3E%3Cpath d='M1.8 20.6l8.4-8.4'/%3E%3Cpath d='M6 11.6l-2.4 2.4'/%3E%3Cpath d='M6 20.6l2.4-2.4'/%3E%3C/svg%3E");
+}
+.cal-block-host .cell .ul .ulseg:nth-child(1).p3 { /* bind·p3 */
+  -webkit-mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 13 24' fill='none' stroke='%23000' stroke-width='1.25' stroke-linecap='square' stroke-linejoin='miter'%3E%3Cpath d='M6 2.6V21.4'/%3E%3Cpath d='M3 5.6H9.6'/%3E%3Cpath d='M3.6 10.4H9'/%3E%3Cpath d='M4.2 15.2H8.4'/%3E%3Cpath d='M6 20.6l4.2-4.2'/%3E%3C/svg%3E");
+  mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 13 24' fill='none' stroke='%23000' stroke-width='1.25' stroke-linecap='square' stroke-linejoin='miter'%3E%3Cpath d='M6 2.6V21.4'/%3E%3Cpath d='M3 5.6H9.6'/%3E%3Cpath d='M3.6 10.4H9'/%3E%3Cpath d='M4.2 15.2H8.4'/%3E%3Cpath d='M6 20.6l4.2-4.2'/%3E%3C/svg%3E");
+}
+.cal-block-host .cell .ul .ulseg:nth-child(1).p4 { /* bind·p4 */
+  -webkit-mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 13 24' fill='none' stroke='%23000' stroke-width='1.25' stroke-linecap='square' stroke-linejoin='miter'%3E%3Cpath d='M6 2.6V21.4'/%3E%3Cpath d='M6 6.8l4.2-4.2'/%3E%3Cpath d='M6 6.8l-4.2-4.2'/%3E%3Cpath d='M3.3 11H8.7'/%3E%3Cpath d='M6 14.6l4.2 4.2'/%3E%3Cpath d='M6 19l-2.4 2.4'/%3E%3C/svg%3E");
+  mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 13 24' fill='none' stroke='%23000' stroke-width='1.25' stroke-linecap='square' stroke-linejoin='miter'%3E%3Cpath d='M6 2.6V21.4'/%3E%3Cpath d='M6 6.8l4.2-4.2'/%3E%3Cpath d='M6 6.8l-4.2-4.2'/%3E%3Cpath d='M3.3 11H8.7'/%3E%3Cpath d='M6 14.6l4.2 4.2'/%3E%3Cpath d='M6 19l-2.4 2.4'/%3E%3C/svg%3E");
+}
+.cal-block-host .cell .ul .ulseg:nth-child(1).p5 { /* bind·p5 */
+  -webkit-mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 13 24' fill='none' stroke='%23000' stroke-width='1.25' stroke-linecap='square' stroke-linejoin='miter'%3E%3Cpath d='M6 2.6V21.4'/%3E%3Cpath d='M6 6.2l2.4-2.4'/%3E%3Cpath d='M6 9.8l-2.4-2.4'/%3E%3Cpath d='M6 13.4l2.4-2.4'/%3E%3Cpath d='M6 17l-2.4-2.4'/%3E%3Cpath d='M6 20.6l4.2-4.2'/%3E%3C/svg%3E");
+  mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 13 24' fill='none' stroke='%23000' stroke-width='1.25' stroke-linecap='square' stroke-linejoin='miter'%3E%3Cpath d='M6 2.6V21.4'/%3E%3Cpath d='M6 6.2l2.4-2.4'/%3E%3Cpath d='M6 9.8l-2.4-2.4'/%3E%3Cpath d='M6 13.4l2.4-2.4'/%3E%3Cpath d='M6 17l-2.4-2.4'/%3E%3Cpath d='M6 20.6l4.2-4.2'/%3E%3C/svg%3E");
+}
+.cal-block-host .cell .ul .ulseg:nth-child(1).p6 { /* bind·p6 */
+  -webkit-mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 13 24' fill='none' stroke='%23000' stroke-width='1.25' stroke-linecap='square' stroke-linejoin='miter'%3E%3Cpath d='M6 2.6V21.4'/%3E%3Cpath d='M6 5.4L7.9 8L6 10.6L4.1 8Z' fill='%23000' stroke='none'/%3E%3Cpath d='M6 13.4l4.2 4.2'/%3E%3Cpath d='M6 18.2l-2.4-2.4'/%3E%3Cpath d='M3.6 20.6H8.4'/%3E%3C/svg%3E");
+  mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 13 24' fill='none' stroke='%23000' stroke-width='1.25' stroke-linecap='square' stroke-linejoin='miter'%3E%3Cpath d='M6 2.6V21.4'/%3E%3Cpath d='M6 5.4L7.9 8L6 10.6L4.1 8Z' fill='%23000' stroke='none'/%3E%3Cpath d='M6 13.4l4.2 4.2'/%3E%3Cpath d='M6 18.2l-2.4-2.4'/%3E%3Cpath d='M3.6 20.6H8.4'/%3E%3C/svg%3E");
+}
+.cal-block-host .cell .ul .ulseg:nth-child(1).p7 { /* bind·p7 */
+  -webkit-mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 13 24' fill='none' stroke='%23000' stroke-width='1.25' stroke-linecap='square' stroke-linejoin='miter'%3E%3Cpath d='M6 2.6V21.4'/%3E%3Cpath d='M6 5L10.2 9.2V14'/%3E%3Cpath d='M6 14H10.2'/%3E%3Cpath d='M1.8 12.8L6 8.6'/%3E%3Cpath d='M6 17.2l-4.2 4.2'/%3E%3C/svg%3E");
+  mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 13 24' fill='none' stroke='%23000' stroke-width='1.25' stroke-linecap='square' stroke-linejoin='miter'%3E%3Cpath d='M6 2.6V21.4'/%3E%3Cpath d='M6 5L10.2 9.2V14'/%3E%3Cpath d='M6 14H10.2'/%3E%3Cpath d='M1.8 12.8L6 8.6'/%3E%3Cpath d='M6 17.2l-4.2 4.2'/%3E%3C/svg%3E");
+}
+.cal-block-host .cell .ul .ulseg:nth-child(1).p8 { /* bind·p8 */
+  -webkit-mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 13 24' fill='none' stroke='%23000' stroke-width='1.25' stroke-linecap='square' stroke-linejoin='miter'%3E%3Cpath d='M6 2.6V21.4'/%3E%3Cpath d='M6 5l2.4-2.4'/%3E%3Cpath d='M6 8L10.2 12.2L1.8 20.6'/%3E%3Cpath d='M6 11.6l-4.2-4.2'/%3E%3Cpath d='M6 18.8l2.4 2.4'/%3E%3C/svg%3E");
+  mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 13 24' fill='none' stroke='%23000' stroke-width='1.25' stroke-linecap='square' stroke-linejoin='miter'%3E%3Cpath d='M6 2.6V21.4'/%3E%3Cpath d='M6 5l2.4-2.4'/%3E%3Cpath d='M6 8L10.2 12.2L1.8 20.6'/%3E%3Cpath d='M6 11.6l-4.2-4.2'/%3E%3Cpath d='M6 18.8l2.4 2.4'/%3E%3C/svg%3E");
+}
+.cal-block-host .cell .ul .ulseg:nth-child(2).p1 { /* wedge·p1 */
+  -webkit-mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 13 24' fill='none' stroke='%23000' stroke-width='1.25' stroke-linecap='butt' stroke-linejoin='miter'%3E%3Cpath d='M4 3V21 M2.6 3H5.4 M2.6 21H5.4 M4 5.6L9.4 11 M8.55 11.85L10.25 10.15 M4 13L9.4 18.4 M8.55 19.25L10.25 17.55'/%3E%3C/svg%3E");
+  mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 13 24' fill='none' stroke='%23000' stroke-width='1.25' stroke-linecap='butt' stroke-linejoin='miter'%3E%3Cpath d='M4 3V21 M2.6 3H5.4 M2.6 21H5.4 M4 5.6L9.4 11 M8.55 11.85L10.25 10.15 M4 13L9.4 18.4 M8.55 19.25L10.25 17.55'/%3E%3C/svg%3E");
+}
+.cal-block-host .cell .ul .ulseg:nth-child(2).p2 { /* wedge·p2 */
+  -webkit-mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 13 24' fill='none' stroke='%23000' stroke-width='1.25' stroke-linecap='butt' stroke-linejoin='miter'%3E%3Cpath d='M4 3V21 M2.6 3H5.4 M2.6 21H5.4 M4 12L9.4 6.6 M8.55 5.75L10.25 7.45 M4 12L9.4 17.4 M8.55 18.25L10.25 16.55'/%3E%3C/svg%3E");
+  mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 13 24' fill='none' stroke='%23000' stroke-width='1.25' stroke-linecap='butt' stroke-linejoin='miter'%3E%3Cpath d='M4 3V21 M2.6 3H5.4 M2.6 21H5.4 M4 12L9.4 6.6 M8.55 5.75L10.25 7.45 M4 12L9.4 17.4 M8.55 18.25L10.25 16.55'/%3E%3C/svg%3E");
+}
+.cal-block-host .cell .ul .ulseg:nth-child(2).p3 { /* wedge·p3 */
+  -webkit-mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 13 24' fill='none' stroke='%23000' stroke-width='1.25' stroke-linecap='butt' stroke-linejoin='miter'%3E%3Cpath d='M4 3V21 M2.6 3H5.4 M2.6 21H5.4 M4 8H10.6 M10.6 6.8V9.2 M4 16H10.6 M10.6 14.8V17.2'/%3E%3C/svg%3E");
+  mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 13 24' fill='none' stroke='%23000' stroke-width='1.25' stroke-linecap='butt' stroke-linejoin='miter'%3E%3Cpath d='M4 3V21 M2.6 3H5.4 M2.6 21H5.4 M4 8H10.6 M10.6 6.8V9.2 M4 16H10.6 M10.6 14.8V17.2'/%3E%3C/svg%3E");
+}
+.cal-block-host .cell .ul .ulseg:nth-child(2).p4 { /* wedge·p4 */
+  -webkit-mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 13 24' fill='none' stroke='%23000' stroke-width='1.25' stroke-linecap='butt' stroke-linejoin='miter'%3E%3Cpath d='M4 3V21 M2.6 3H5.4 M2.6 21H5.4 M4 6H9.4 M9.4 4.8V7.2 M4 15.4H7.6'/%3E%3Cpath fill='%23000' stroke='none' d='M9.1 11.8L11.2 15.4L9.1 19L7 15.4Z'/%3E%3C/svg%3E");
+  mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 13 24' fill='none' stroke='%23000' stroke-width='1.25' stroke-linecap='butt' stroke-linejoin='miter'%3E%3Cpath d='M4 3V21 M2.6 3H5.4 M2.6 21H5.4 M4 6H9.4 M9.4 4.8V7.2 M4 15.4H7.6'/%3E%3Cpath fill='%23000' stroke='none' d='M9.1 11.8L11.2 15.4L9.1 19L7 15.4Z'/%3E%3C/svg%3E");
+}
+.cal-block-host .cell .ul .ulseg:nth-child(2).p5 { /* wedge·p5 */
+  -webkit-mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 13 24' fill='none' stroke='%23000' stroke-width='1.25' stroke-linecap='butt' stroke-linejoin='miter'%3E%3Cpath d='M4 3V21 M2.6 3H5.4 M2.6 21H5.4 M9.4 6V18 M8.1 6H10.7 M8.1 18H10.7 M4 12H9.4'/%3E%3C/svg%3E");
+  mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 13 24' fill='none' stroke='%23000' stroke-width='1.25' stroke-linecap='butt' stroke-linejoin='miter'%3E%3Cpath d='M4 3V21 M2.6 3H5.4 M2.6 21H5.4 M9.4 6V18 M8.1 6H10.7 M8.1 18H10.7 M4 12H9.4'/%3E%3C/svg%3E");
+}
+.cal-block-host .cell .ul .ulseg:nth-child(2).p6 { /* wedge·p6 */
+  -webkit-mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 13 24' fill='none' stroke='%23000' stroke-width='1.25' stroke-linecap='butt' stroke-linejoin='miter'%3E%3Cpath d='M4 3V21 M2.6 3H5.4 M2.6 21H5.4 M4 4.6L9 9.6L4 14.6 M4 17.5H10.6 M10.6 16.3V18.7'/%3E%3C/svg%3E");
+  mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 13 24' fill='none' stroke='%23000' stroke-width='1.25' stroke-linecap='butt' stroke-linejoin='miter'%3E%3Cpath d='M4 3V21 M2.6 3H5.4 M2.6 21H5.4 M4 4.6L9 9.6L4 14.6 M4 17.5H10.6 M10.6 16.3V18.7'/%3E%3C/svg%3E");
+}
+.cal-block-host .cell .ul .ulseg:nth-child(2).p7 { /* wedge·p7 */
+  -webkit-mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 13 24' fill='none' stroke='%23000' stroke-width='1.25' stroke-linecap='butt' stroke-linejoin='miter'%3E%3Cpath d='M4 3V21 M2.6 3H5.4 M2.6 21H5.4 M2.8 16.4L10.4 8.8 M9.55 7.95L11.25 9.65 M2.8 7.6L10.4 15.2 M9.55 16.05L11.25 14.35'/%3E%3C/svg%3E");
+  mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 13 24' fill='none' stroke='%23000' stroke-width='1.25' stroke-linecap='butt' stroke-linejoin='miter'%3E%3Cpath d='M4 3V21 M2.6 3H5.4 M2.6 21H5.4 M2.8 16.4L10.4 8.8 M9.55 7.95L11.25 9.65 M2.8 7.6L10.4 15.2 M9.55 16.05L11.25 14.35'/%3E%3C/svg%3E");
+}
+.cal-block-host .cell .ul .ulseg:nth-child(2).p8 { /* wedge·p8 */
+  -webkit-mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 13 24' fill='none' stroke='%23000' stroke-width='1.25' stroke-linecap='butt' stroke-linejoin='miter'%3E%3Cpath d='M4 3V16 M2.6 3H5.4 M4 9H10.6 M10.6 7.8V10.2 M4 16L8.6 20.6 M7.75 21.45L9.45 19.75'/%3E%3C/svg%3E");
+  mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 13 24' fill='none' stroke='%23000' stroke-width='1.25' stroke-linecap='butt' stroke-linejoin='miter'%3E%3Cpath d='M4 3V16 M2.6 3H5.4 M4 9H10.6 M10.6 7.8V10.2 M4 16L8.6 20.6 M7.75 21.45L9.45 19.75'/%3E%3C/svg%3E");
+}
+.cal-block-host .cell .ul .ulseg:nth-child(3).p1 { /* sigil·p1 */
+  -webkit-mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 13 24' fill='none' stroke='%23000' stroke-width='1.25' stroke-linecap='square' stroke-linejoin='miter'%3E%3Ccircle cx='3.6' cy='5.4' r='2.1'/%3E%3Cpath d='M3.6 7.5V21.4M3.6 14L9.8 7.8M9.8 7.8V10M3.6 17.6H8M8 17.6V15.4M3.6 21.4H9.8'/%3E%3C/svg%3E");
+  mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 13 24' fill='none' stroke='%23000' stroke-width='1.25' stroke-linecap='square' stroke-linejoin='miter'%3E%3Ccircle cx='3.6' cy='5.4' r='2.1'/%3E%3Cpath d='M3.6 7.5V21.4M3.6 14L9.8 7.8M9.8 7.8V10M3.6 17.6H8M8 17.6V15.4M3.6 21.4H9.8'/%3E%3C/svg%3E");
+}
+.cal-block-host .cell .ul .ulseg:nth-child(3).p2 { /* sigil·p2 */
+  -webkit-mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 13 24' fill='none' stroke='%23000' stroke-width='1.25' stroke-linecap='square' stroke-linejoin='miter'%3E%3Ccircle cx='3.6' cy='19' r='2'/%3E%3Cpath d='M3.6 2.8V17M3.6 2.8H10.2M10.2 2.8V5M3.6 9.8L9.6 15.8M9.6 15.8V13.6'/%3E%3C/svg%3E");
+  mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 13 24' fill='none' stroke='%23000' stroke-width='1.25' stroke-linecap='square' stroke-linejoin='miter'%3E%3Ccircle cx='3.6' cy='19' r='2'/%3E%3Cpath d='M3.6 2.8V17M3.6 2.8H10.2M10.2 2.8V5M3.6 9.8L9.6 15.8M9.6 15.8V13.6'/%3E%3C/svg%3E");
+}
+.cal-block-host .cell .ul .ulseg:nth-child(3).p3 { /* sigil·p3 */
+  -webkit-mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 13 24' fill='none' stroke='%23000' stroke-width='1.25' stroke-linecap='square' stroke-linejoin='miter'%3E%3Cpath d='M3.6 2.8V21.4M3.6 12H11M8.4 7A2.8 5 0 0 1 8.4 17M3.6 5.4L1.8 7.2M3.6 17.2L7 20.8M7 20.8V18.6'/%3E%3C/svg%3E");
+  mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 13 24' fill='none' stroke='%23000' stroke-width='1.25' stroke-linecap='square' stroke-linejoin='miter'%3E%3Cpath d='M3.6 2.8V21.4M3.6 12H11M8.4 7A2.8 5 0 0 1 8.4 17M3.6 5.4L1.8 7.2M3.6 17.2L7 20.8M7 20.8V18.6'/%3E%3C/svg%3E");
+}
+.cal-block-host .cell .ul .ulseg:nth-child(3).p4 { /* sigil·p4 */
+  -webkit-mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 13 24' fill='none' stroke='%23000' stroke-width='1.25' stroke-linecap='square' stroke-linejoin='miter'%3E%3Cpath fill='%23000' stroke='none' d='M3.6 8.6L5.5 12L3.6 15.4L1.7 12Z'/%3E%3Cpath d='M3.6 2.8V21.4M5.5 12H10.4M10.4 12V14.2M3.6 8.6L9.4 2.8M3.6 21.4L1.8 19.6'/%3E%3C/svg%3E");
+  mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 13 24' fill='none' stroke='%23000' stroke-width='1.25' stroke-linecap='square' stroke-linejoin='miter'%3E%3Cpath fill='%23000' stroke='none' d='M3.6 8.6L5.5 12L3.6 15.4L1.7 12Z'/%3E%3Cpath d='M3.6 2.8V21.4M5.5 12H10.4M10.4 12V14.2M3.6 8.6L9.4 2.8M3.6 21.4L1.8 19.6'/%3E%3C/svg%3E");
+}
+.cal-block-host .cell .ul .ulseg:nth-child(3).p5 { /* sigil·p5 */
+  -webkit-mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 13 24' fill='none' stroke='%23000' stroke-width='1.25' stroke-linecap='square' stroke-linejoin='miter'%3E%3Ccircle cx='8.6' cy='12' r='2.4'/%3E%3Cpath d='M3.6 2.8V21.4M3.6 2.8H8.6M8.6 2.8V9.6M3.6 12H6.2M3.6 21.4H9.8'/%3E%3C/svg%3E");
+  mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 13 24' fill='none' stroke='%23000' stroke-width='1.25' stroke-linecap='square' stroke-linejoin='miter'%3E%3Ccircle cx='8.6' cy='12' r='2.4'/%3E%3Cpath d='M3.6 2.8V21.4M3.6 2.8H8.6M8.6 2.8V9.6M3.6 12H6.2M3.6 21.4H9.8'/%3E%3C/svg%3E");
+}
+.cal-block-host .cell .ul .ulseg:nth-child(3).p6 { /* sigil·p6 */
+  -webkit-mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 13 24' fill='none' stroke='%23000' stroke-width='1.25' stroke-linecap='square' stroke-linejoin='miter'%3E%3Cpath d='M3.6 4.6V21.4M3.6 4.6A6.4 6.4 0 0 1 10 11M10 11V13.2M3.6 12L1.8 13.8M3.6 15L9.4 20.8M9.4 20.8V18.6'/%3E%3C/svg%3E");
+  mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 13 24' fill='none' stroke='%23000' stroke-width='1.25' stroke-linecap='square' stroke-linejoin='miter'%3E%3Cpath d='M3.6 4.6V21.4M3.6 4.6A6.4 6.4 0 0 1 10 11M10 11V13.2M3.6 12L1.8 13.8M3.6 15L9.4 20.8M9.4 20.8V18.6'/%3E%3C/svg%3E");
+}
+.cal-block-host .cell .ul .ulseg:nth-child(3).p7 { /* sigil·p7 */
+  -webkit-mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 13 24' fill='none' stroke='%23000' stroke-width='1.25' stroke-linecap='square' stroke-linejoin='miter'%3E%3Cpath d='M3.6 2.8V21.4M8.2 3.2L10.6 6.4L8.2 9.6L5.8 6.4ZM3.6 6.4H5.8M3.6 12.4H11M3.6 14L9.8 20.4M9.8 20.4V18.2'/%3E%3C/svg%3E");
+  mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 13 24' fill='none' stroke='%23000' stroke-width='1.25' stroke-linecap='square' stroke-linejoin='miter'%3E%3Cpath d='M3.6 2.8V21.4M8.2 3.2L10.6 6.4L8.2 9.6L5.8 6.4ZM3.6 6.4H5.8M3.6 12.4H11M3.6 14L9.8 20.4M9.8 20.4V18.2'/%3E%3C/svg%3E");
+}
+.cal-block-host .cell .ul .ulseg:nth-child(3).p8 { /* sigil·p8 */
+  -webkit-mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 13 24' fill='none' stroke='%23000' stroke-width='1.25' stroke-linecap='square' stroke-linejoin='miter'%3E%3Ccircle cx='9.2' cy='8' r='1.7'/%3E%3Cpath d='M3.6 2.8V21.4M1.8 3.6H3.6M1.8 11.2H3.6M3.6 13.6L8 9.2M3.6 16.4L8.6 21.4'/%3E%3C/svg%3E");
+  mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 13 24' fill='none' stroke='%23000' stroke-width='1.25' stroke-linecap='square' stroke-linejoin='miter'%3E%3Ccircle cx='9.2' cy='8' r='1.7'/%3E%3Cpath d='M3.6 2.8V21.4M1.8 3.6H3.6M1.8 11.2H3.6M3.6 13.6L8 9.2M3.6 16.4L8.6 21.4'/%3E%3C/svg%3E");
+}
+.cal-block-host .cell .ul .ulseg:nth-child(4).p1 { /* cirth·p1 */
+  -webkit-mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 13 24' fill='none' stroke='%23000' stroke-width='1.25' stroke-linecap='square' stroke-linejoin='miter'%3E%3Cpath d='M3.3 2.9V21.1M2.2 4L3.3 2.9M2.2 20L3.3 21.1'/%3E%3Cpath d='M3.3 12H5.9M5.9 8.4H10.6V15.6H5.9Z'/%3E%3C/svg%3E");
+  mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 13 24' fill='none' stroke='%23000' stroke-width='1.25' stroke-linecap='square' stroke-linejoin='miter'%3E%3Cpath d='M3.3 2.9V21.1M2.2 4L3.3 2.9M2.2 20L3.3 21.1'/%3E%3Cpath d='M3.3 12H5.9M5.9 8.4H10.6V15.6H5.9Z'/%3E%3C/svg%3E");
+}
+.cal-block-host .cell .ul .ulseg:nth-child(4).p2 { /* cirth·p2 */
+  -webkit-mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 13 24' fill='none' stroke='%23000' stroke-width='1.25' stroke-linecap='square' stroke-linejoin='miter'%3E%3Cpath d='M3.3 2.9V21.1M2.2 4L3.3 2.9M2.2 20L3.3 21.1'/%3E%3Cpath d='M3.3 4.4H10.6L3.3 11.7M3.3 17.4H9.4V20.2'/%3E%3C/svg%3E");
+  mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 13 24' fill='none' stroke='%23000' stroke-width='1.25' stroke-linecap='square' stroke-linejoin='miter'%3E%3Cpath d='M3.3 2.9V21.1M2.2 4L3.3 2.9M2.2 20L3.3 21.1'/%3E%3Cpath d='M3.3 4.4H10.6L3.3 11.7M3.3 17.4H9.4V20.2'/%3E%3C/svg%3E");
+}
+.cal-block-host .cell .ul .ulseg:nth-child(4).p3 { /* cirth·p3 */
+  -webkit-mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 13 24' fill='none' stroke='%23000' stroke-width='1.25' stroke-linecap='square' stroke-linejoin='miter'%3E%3Cpath d='M3.3 2.9V21.1M2.2 4L3.3 2.9M2.2 20L3.3 21.1'/%3E%3Cpath d='M3.3 8L7.9 3.4M3.3 10.9H5.7L10.6 15.8H3.3'/%3E%3C/svg%3E");
+  mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 13 24' fill='none' stroke='%23000' stroke-width='1.25' stroke-linecap='square' stroke-linejoin='miter'%3E%3Cpath d='M3.3 2.9V21.1M2.2 4L3.3 2.9M2.2 20L3.3 21.1'/%3E%3Cpath d='M3.3 8L7.9 3.4M3.3 10.9H5.7L10.6 15.8H3.3'/%3E%3C/svg%3E");
+}
+.cal-block-host .cell .ul .ulseg:nth-child(4).p4 { /* cirth·p4 */
+  -webkit-mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 13 24' fill='none' stroke='%23000' stroke-width='1.25' stroke-linecap='square' stroke-linejoin='miter'%3E%3Cpath d='M3.3 2.9V21.1M2.2 4L3.3 2.9M2.2 20L3.3 21.1'/%3E%3Cpath d='M3.3 12H6.7M3.3 7.4L7.4 3.3M3.3 16.6L7.4 20.7'/%3E%3Cpath fill='%23000' stroke='none' d='M8.6 9.7L10.5 12L8.6 14.3L6.7 12Z'/%3E%3C/svg%3E");
+  mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 13 24' fill='none' stroke='%23000' stroke-width='1.25' stroke-linecap='square' stroke-linejoin='miter'%3E%3Cpath d='M3.3 2.9V21.1M2.2 4L3.3 2.9M2.2 20L3.3 21.1'/%3E%3Cpath d='M3.3 12H6.7M3.3 7.4L7.4 3.3M3.3 16.6L7.4 20.7'/%3E%3Cpath fill='%23000' stroke='none' d='M8.6 9.7L10.5 12L8.6 14.3L6.7 12Z'/%3E%3C/svg%3E");
+}
+.cal-block-host .cell .ul .ulseg:nth-child(4).p5 { /* cirth·p5 */
+  -webkit-mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 13 24' fill='none' stroke='%23000' stroke-width='1.25' stroke-linecap='square' stroke-linejoin='miter'%3E%3Cpath d='M3.3 2.9V21.1M2.2 4L3.3 2.9M2.2 20L3.3 21.1'/%3E%3Cpath d='M3.3 9.6L6.9 6L10.5 9.6M3.3 13.4H7.5L10.6 16.5V19.9H3.3'/%3E%3C/svg%3E");
+  mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 13 24' fill='none' stroke='%23000' stroke-width='1.25' stroke-linecap='square' stroke-linejoin='miter'%3E%3Cpath d='M3.3 2.9V21.1M2.2 4L3.3 2.9M2.2 20L3.3 21.1'/%3E%3Cpath d='M3.3 9.6L6.9 6L10.5 9.6M3.3 13.4H7.5L10.6 16.5V19.9H3.3'/%3E%3C/svg%3E");
+}
+.cal-block-host .cell .ul .ulseg:nth-child(4).p6 { /* cirth·p6 */
+  -webkit-mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 13 24' fill='none' stroke='%23000' stroke-width='1.25' stroke-linecap='square' stroke-linejoin='miter'%3E%3Cpath d='M3.3 2.9V21.1M2.2 4L3.3 2.9M2.2 20L3.3 21.1'/%3E%3Cpath d='M3.3 5H7.2V10.4H10.6V16.6H6.9'/%3E%3C/svg%3E");
+  mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 13 24' fill='none' stroke='%23000' stroke-width='1.25' stroke-linecap='square' stroke-linejoin='miter'%3E%3Cpath d='M3.3 2.9V21.1M2.2 4L3.3 2.9M2.2 20L3.3 21.1'/%3E%3Cpath d='M3.3 5H7.2V10.4H10.6V16.6H6.9'/%3E%3C/svg%3E");
+}
+.cal-block-host .cell .ul .ulseg:nth-child(4).p7 { /* cirth·p7 */
+  -webkit-mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 13 24' fill='none' stroke='%23000' stroke-width='1.25' stroke-linecap='square' stroke-linejoin='miter'%3E%3Cpath d='M3.3 2.9V21.1M2.2 4L3.3 2.9M2.2 20L3.3 21.1'/%3E%3Cpath d='M3.3 8.2L7.6 12.5L3.3 16.8M7.6 12.5H10.5M10.5 6.6V18.6'/%3E%3C/svg%3E");
+  mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 13 24' fill='none' stroke='%23000' stroke-width='1.25' stroke-linecap='square' stroke-linejoin='miter'%3E%3Cpath d='M3.3 2.9V21.1M2.2 4L3.3 2.9M2.2 20L3.3 21.1'/%3E%3Cpath d='M3.3 8.2L7.6 12.5L3.3 16.8M7.6 12.5H10.5M10.5 6.6V18.6'/%3E%3C/svg%3E");
+}
+.cal-block-host .cell .ul .ulseg:nth-child(4).p8 { /* cirth·p8 */
+  -webkit-mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 13 24' fill='none' stroke='%23000' stroke-width='1.25' stroke-linecap='square' stroke-linejoin='miter'%3E%3Cpath d='M3.3 2.9V21.1M2.2 4L3.3 2.9M2.2 20L3.3 21.1'/%3E%3Cpath d='M10.6 5.2V19.2M3.3 5.2H10.6M3.3 19.2H10.6M3.3 8.9L10.6 16.2'/%3E%3C/svg%3E");
+  mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 13 24' fill='none' stroke='%23000' stroke-width='1.25' stroke-linecap='square' stroke-linejoin='miter'%3E%3Cpath d='M3.3 2.9V21.1M2.2 4L3.3 2.9M2.2 20L3.3 21.1'/%3E%3Cpath d='M10.6 5.2V19.2M3.3 5.2H10.6M3.3 19.2H10.6M3.3 8.9L10.6 16.2'/%3E%3C/svg%3E");
 }
 
 /* three unrelated conditions, three distinct marks, one printed legend */
@@ -1242,13 +1769,36 @@
    strip stays clear of gold. Its box is now its INK (11×11 contains the 7px
    flap and the 7.78px crease) instead of a 20×20 dead zone, and at the narrowest
    column the grid produces — 33px — the crease clears the event-mark cluster's
-   right edge by 3.2px. */
+   right edge by 3.2px.
+
+   ── AND BELOW 84px IT STOPS PAINTING (C-CALV4-TILES §8.1 / §9.2) ───────────
+   Permission is `dm_only` on the EVENTS of that day, not on the day, so it
+   belongs on the mark that shows the events — and at narrow density that mark
+   is now the rune, struck in gold by `:has(> .dogear)` up in §RUNES. Two gold
+   marks for one fact is one too many, and dropping the fold empties the bottom
+   edge for the availability strip, which is what §8.1 asks for.
+
+   IT STAYS IN THE MARKUP AND ONLY LOSES ITS INK, because it is the DATUM the
+   `:has()` reads. Deleting the element from `gmMarks` would delete the gold
+   runes with it — silently, since a cell with no fold simply inks its runes in
+   the type colour and still looks like a working build.
+
+   THE FOLD SURVIVES AT NAMED DENSITY, restored in §DENSITY's 84px block, and
+   that is not an oversight to be tidied away later. §9.3 rules that runes are
+   the NARROW form: at 84px and up the cell draws event-NAME CHIPS and no runes
+   at all, and a chip carries no gold. Retiring the fold there too would delete
+   the permission channel from the widest cells — the one width where a GM is
+   most likely to be reading the month — in exchange for a corner nothing else
+   wants. So the substitution happens exactly where the substitute exists. */
 .cal-block-host .dogear {
   position: absolute;
   right: 0;
   bottom: var(--avail-h);
   width: 11px;
   height: 11px;
+}
+.cal-block-host .cell .dogear {
+  display: none;
 }
 .cal-block-host .dogear::after {
   content: "";
@@ -1324,15 +1874,32 @@
    primary moon at 360px, 390px and 430px. The promotion itself is in §DENSITY,
    with the measurements it is read off.
 
-   THE ANCHOR IS TOP-RIGHT AT EVERY DENSITY, and it no longer moves. The shipped
-   sheet had two anchors — `top: 26px` at underline density and `top: 5px` at
-   named — because a CENTRED numeral owned the top line. The numeral is now
-   top-left (see .dn), so the top-right corner is free at every width and the
-   density query has one less thing to change. */
+   THE ANCHOR IS TOP-LEFT AT EVERY DENSITY, and it moved there to make the
+   expansion cost nothing (C-CALV4-TILES §9.1). The cluster is a flex row that
+   grows from one disc to three plus a `+` on hover or focus. Anchored to the
+   RIGHT it grew LEFTWARD, so the primary silhouette — the disc the pointer is
+   already on — was displaced 35.05px at the moment of arrival. Nothing in this
+   sheet may move, and a hover that shifts the thing you are pointing at is that
+   rule broken through the back door of a flex direction. Anchored to the LEFT
+   the row grows rightward into the middle and the primary disc moves 0.00px,
+   measured in a real engine by TestRuneProbe_TheExpansionGrowsRightward.
+
+   IT IS STILL ONE ANCHOR. The shipped sheet had two — `top: 26px` at underline
+   density and `top: 5px` at named — because a CENTRED numeral owned the top
+   line; the date has been in a corner since, and swapping which corner does not
+   give the anchor its second value back. Only the 5px line the named cell's
+   taller padding puts it on survives, in §DENSITY.
+
+   `right: auto` IS WRITTEN OUT rather than left to the initial value, because
+   `right: 4px` is what this rule said one change ago and an absolutely
+   positioned box with both offsets set is stretched, not anchored — the row
+   would span the cell and the discs would sit at its left with the box's own
+   hover pad reaching the far edge. */
 .cal-block-host .phrow {
   position: absolute;
   top: 4px;
-  right: 4px;
+  left: 4px;
+  right: auto;
   display: none;
   gap: 2.5px;
   align-items: center;
@@ -1512,7 +2079,17 @@
    type's channel and the p1..p8 class carries its locked stroke, because colour
    is never load-bearing and the pair must still resolve in greyscale. Guard B1:
    --dash and --gap are the identity channel and are NEVER animated — the swatch
-   is a static stroke. */
+   is a static stroke.
+
+   IT IS A DISCLOSURE SINCE C-CALV4-TILES §9.4: a tab at rest, resolving on
+   hover, on keyboard focus and on a tap. The zone's CONTENT is unchanged — same
+   entries, same swatches, same counts, same single pass — because "how it
+   opens" and "what it says" are two changes and only one of them was asked for.
+
+   AND IT IS A COLOUR KEY. §9.2 made the rune decorative: the glyph is chosen by
+   :nth-child(), so no shape carries a type and the key may not imply one does.
+   The swatch states the two channels that ARE load-bearing — hue and the locked
+   dash — and the tab's copy names the first of them. */
 .cal-block-host .legend {
   display: flex;
   flex-wrap: wrap;
@@ -1525,44 +2102,119 @@
   font-size: 11px;
   line-height: 1.35;
 }
+/* THE TAB AT REST. It is a <label> for the clipped checkbox beside it, which is
+   this package's one disclosure idiom (the moon panel, the day pick, the tie
+   toggle and the Shelf's tabs are all the same construction) and not a
+   preference: boot.js:163 sets `htmx.config.allowScriptTags = false`, so a
+   <script> inside an HTMX-swapped fragment never runs and a JS disclosure would
+   die silently after the first binding swap. */
+.cal-block-host .legend .legtab {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  min-block-size: 22px;
+  padding: 2px 8px;
+  border: 1px solid var(--rule-hairline);
+  border-radius: var(--r-ctl);
+  color: var(--text-muted);
+  cursor: pointer;
+}
+.cal-block-host .legend .legtab:hover {
+  color: var(--text-body);
+}
+/* The focus ring is borrowed from the input by its label, because the element
+   the keyboard actually lands on is the clipped one — dayPick's construction.
+   --accent is the SELECTED channel (canon A7) and this is chrome, not a mark. */
+.cal-block-host .legend > .legpin:focus-visible + .legtab {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+/* CLOSED AT REST. `display` and nothing else: the zone must not animate open —
+   the month grid never moves, and a legend that grew would push the moongraph
+   zone under it on every hover. */
+.cal-block-host .legend > .legbody {
+  display: none;
+  flex: 1 1 auto;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 12px;
+  min-width: 0;
+}
+/* HOVER IS GATED ON THERE BEING ONE. A phone has no pointer to rest on the tab,
+   so an ungated hover branch would be the whole affordance on a mouse and none
+   of it on a thumb — which is exactly how a disclosure strands a phone. */
+@media (hover: hover) {
+  .cal-block-host .legend:hover > .legbody {
+    display: flex;
+  }
+}
+/* THE KEYBOARD AND THE THUMB, and they are two rules for one reason.
+
+   :focus-visible RATHER THAN :focus-within, deliberately, and the defect it
+   avoids is specific: clicking a <label> focuses its input, so under
+   :focus-within a tap would check the box (open), and the second tap would
+   un-check it while the box still held focus — leaving the zone open. The tab
+   would then be a control that visibly does nothing on every press after the
+   first, which is the failure the tie toggle's guard exists to name.
+   :focus-visible does not match a pointer press, so the checked state is the
+   only thing a tap changes and the tab closes on the second one.
+
+   :checked is the PIN. It survives the pointer leaving, which is what makes the
+   zone readable on a touch device at all, and a checkbox — unlike the moon
+   panel's radio group — can be un-checked by pressing it again, so no explicit
+   `none` option is needed. */
+.cal-block-host .legend:has(> .legpin:focus-visible) > .legbody,
+.cal-block-host .legend:has(> .legpin:checked) > .legbody {
+  display: flex;
+}
+/* THE SWITCHBOARD'S PREVIEW OPENS IT TOO. Pointing at a layer row lights the
+   section it controls (see §the hover preview); with the legend collapsed the
+   preview would light a 22px tab and teach nothing about what the key is for. */
+.cal-block-host:has(.layerrow[data-layer-pick="legend"]:hover) .legend > .legbody {
+  display: flex;
+}
+/* The legend tab's coarse-pointer target is declared in the sheet's ONE
+   coarse-pointer media block, beside the moon cluster's — see §THE CLUSTER AS A
+   CONTROL. A second block for the same condition is a condition spelled twice,
+   and TestMoonPanelCSS_CoarsePointerHasNoHoverAndABiggerTarget splits the sheet
+   at the FIRST occurrence of that at-rule's text — including one inside a
+   comment, which is how this note itself broke the test once. */
 .cal-block-host .legend i {
   display: inline-flex;
   align-items: center;
   gap: 5px;
   font-style: normal;
 }
-/* The swatch reuses the .ulseg ORIENTATION (horizontal) and the SAME --dash /
-   --gap tokens the .p2..p8 classes already declare — it is the underline mark
-   at legend size, not a second pattern vocabulary. A parallel set of stroke
-   rules is exactly how a legend starts disagreeing with the marks it labels. */
+/* THE SWATCH IS A SOLID COLOUR CHIP, AND THAT IS THE WHOLE KEY. The operator's
+   ruling for §9.2 was "just have the colors determine what kind of event", so
+   what this zone teaches is hue → type. One channel, taught once.
+
+   IT USED TO CLAIM MORE THAN IT DREW. Until this pass the swatch carried five
+   `--dash`-driven stroke rules (p2/p3/p4/p6/p8) plus hand-written gradients for
+   p5 and p7, and the comment here called it "the underline mark at legend size".
+   It was not. `.cal-block-host .legend .lr` is THREE classes and re-declares
+   `--dash: 100%; --gap: 0px`; `.cal-block-host .p2` is TWO and declares 4px/2px.
+   The swatch's own rule outranked the pattern it was supposed to be showing, so
+   every --dash swatch resolved --dash to 100% and painted a solid bar — measured
+   on all four of p1–p4, identical. Eight patterns, at most three appearances.
+   The same construction is safe on `.rail` ONLY by source order: there
+   `.cal-block-host .rail` and `.cal-block-host .p2` tie at two classes and .p2
+   comes later in the file. A tie broken by line number is not a design.
+
+   So the dead rules are deleted rather than re-specified. Re-specifying would
+   have restored a pattern vocabulary to the one surface the operator asked to
+   be a colour key, and a legend that teaches a channel the narrow grid no longer
+   paints is worse than one that teaches only what is there. The consequence is
+   booked, not hidden: the eight locked --dash patterns still paint on `.rail`
+   in the Ledger and on the wide cell's chip, and after this they have NO key
+   surface anywhere. That gap is older than this pass — the key never worked —
+   but it is now a deliberate absence instead of an accidental one. */
 .cal-block-host .legend .lr {
   flex: none;
   width: 12px;
   height: 3px;
   border-radius: var(--r-full);
-  --dash: 100%;
-  --gap: 0px;
   background-color: var(--axis);
-}
-.cal-block-host .legend .lr.p2,
-.cal-block-host .legend .lr.p3,
-.cal-block-host .legend .lr.p4,
-.cal-block-host .legend .lr.p6,
-.cal-block-host .legend .lr.p8 {
-  background-color: transparent;
-  background-image: repeating-linear-gradient(to right, var(--axis) 0 var(--dash),
-      transparent var(--dash) calc(var(--dash) + var(--gap)));
-}
-.cal-block-host .legend .lr.p5 {
-  background-color: transparent;
-  background-image: linear-gradient(to bottom,
-      var(--axis) 0 1px, transparent 1px 2px, var(--axis) 2px 3px);
-}
-.cal-block-host .legend .lr.p7 {
-  background-color: transparent;
-  background-image: linear-gradient(to right,
-      var(--axis) 0 calc(50% - .5px), transparent calc(50% - .5px) calc(50% + .5px),
-      var(--axis) calc(50% + .5px) 100%);
 }
 .cal-block-host .legend .n {
   font-weight: 500;
@@ -2946,7 +3598,12 @@
   .cal-block-host .cell .phrow { --phsize: 10px }
   .cal-block-host .cell > .cunder { padding: 3px 3px 0 }
   .cal-block-host .cell .dn { font-size: 12px }
-  .cal-block-host .cell .today { width: 14px; height: 14px; font-size: 10px }
+  /* THE TODAY STAMP'S 14px STEP IS DELETED WITH THE DISC (§9.1). It sized a
+     filled circle around the numeral; today is now the numeral itself in
+     --today-ink, so it is exactly as wide as the `.dn` above and steps with it.
+     Nothing replaces this line — a `font-size` here would make today's digits a
+     different size from every other day's, which is the redaction read arriving
+     in the other channel. */
 }
 
 @container cal-cell (min-width: 75px) {
@@ -2960,6 +3617,36 @@
   .cal-block-host .cell > .moonpick:focus-visible + .phctl .phx { display: block }
   .cal-block-host .cell .phctl:hover .phplus,
   .cal-block-host .cell > .moonpick:focus-visible + .phctl .phplus { display: flex }
+
+  /* THE AVAILABILITY STRIP'S PLAYER LANES, restored at the same rung. Below it
+     the strip is the overlap alone (§8.9): three 3px lanes plus the overlap need
+     the 85px cell, and at 34px the overlap is the one line a GM can act on. The
+     boundary is the ladder's existing 75px and is not re-declared as a
+     `max-width: 74px` twin. Inert until a cell carries `rsvp`. */
+  .cal-block-host .cell .lane:not(.all) { display: block }
+
+  /* ── THE RUNES GET THEIR DESKTOP SIZE AT THE SAME RUNG (§9.2) ────────────
+     75px of column holds three 13px runes and their gaps with room to spare, so
+     they stay on ONE LINE and the block reads as a word rather than as a stack.
+     Below this the baseline wraps them 2×2 inside a 22px box, because four 9px
+     runes in a row are 42px against a 34px cell's 28px of usable width.
+
+     `max-inline-size: none` is REQUIRED, not tidiness: the baseline caps the
+     block at 22px and centres it with `margin-inline: auto`, and a 22px cap over
+     three 13px runes would wrap them here too — silently, since a wrapped block
+     still looks like a block.
+
+     AND THE LIFT REACHES ITS FULL VALUE. Below this rung the availability strip
+     is one lane; here it is the overlap plus one per player, so the runes clear
+     `--avail-h + 14px` instead of `+ 6px`. Both are measured off the strip's own
+     token, so the two cannot drift. Inert until a cell carries `rsvp`. */
+  .cal-block-host .cell .ulseg { inline-size: 13px; height: 17px }
+  .cal-block-host .cell .ul {
+    gap: 4px;
+    flex-wrap: nowrap;
+    max-inline-size: none;
+  }
+  .cal-block-host .cell.rsvp .ul { bottom: calc(var(--avail-h) + 14px) }
 }
 
 @container cal-cell (min-width: 84px) {
@@ -2969,23 +3656,36 @@
     overflow: hidden;
     padding: 6px 4px 5px;
   }
+  /* AND THIS IS WHERE §9.3's DENSITY RULING IS ENFORCED, by the one declaration
+     that was already here. A name beats a rune wherever there is room for one,
+     so the named cell keeps its chips and draws NO runes — and `.ul` lives
+     inside this subtree, so `display: none` removes the rune block outright
+     rather than hiding it. Nothing in §RUNES has to know the threshold. */
   .cal-block-host .cell > .cunder { display: none }
   .cal-block-host .cell > .cnamed > .dn {
     font-size: 13px;
-    text-align: left;
+    /* THE DATE IS RIGHT-ALIGNED HERE TOO (§9.1). This block is `padding: 6px 4px
+       5px` over an 84px box, so a `text-align: left` inherited from nowhere
+       would leave the named cell's numeral in the corner the moon now holds —
+       the one width where the two would actually have room to collide. */
+    text-align: right;
   }
-  .cal-block-host .cell > .cnamed .today {
-    width: 22px;
-    height: 22px;
-    font-size: 13px;
-  }
-  /* THE SIGNED CORNER, AND IT IS NOW THE ONLY CORNER. cells-zoom.png puts the
-     discs at the top-right of the cell; that anchor used to be restored HERE
-     and undone at the underline density, because a centred numeral owned the
-     top line. The numeral is top-left at both densities now, so the row never
-     moves and this block no longer has an anchor to restore — only the 5px
-     line the named cell's taller padding puts it on. */
+  /* `> .cnamed .today` IS DELETED, and it was the FOURTH disc-sizing rule, not
+     the third §9.1 counted. It set 22px × 22px at font-size 13px — the signed
+     stamp diameter — and every part of it existed to size a filled circle. With
+     today drawn as ink the numeral is already 13px from the rule above, so the
+     whole block reduced to a restatement of its neighbour and is gone rather
+     than left as a size nobody applies. */
+
+  /* THE SIGNED CORNER MOVED TO THE OTHER SIDE (§9.1) but this block still only
+     restores the 5px LINE, not an anchor: `left: 4px` holds at every density
+     and the named cell's taller padding is the only thing that changes here. */
   .cal-block-host .cell .phrow { top: 5px }
+  /* THE TWO GOLD PERMISSION MARKS ARE THE NAMED CELL'S, and only the named
+     cell's. At narrow density the runes carry gold and the fold's ink is off
+     (see .dogear); at 84px and up there are no runes, so the fold and the
+     audience diamond are the permission channel exactly as they have been. */
+  .cal-block-host .cell .dogear { display: block }
   .cal-block-host .cell .audmark { display: block }
 }
 
@@ -3293,19 +3993,49 @@
     padding: 1px 1px 0;
   }
   .cal-block-host .cell .dn { font-size: 11px }
-  /* 13px, NOT 16px, and it is the corner architecture rather than a tidy-up: at
-     this tier the grid's column floor drops to 24px, so a SEVEN-day month can
-     still clear the 30px silhouette threshold (up to 40.4px of column) while
-     carrying a today stamp — and a 16px stamp against this tier's 1px inline
-     padding would put the stamp under the moon. It matches the narrow baseline
-     stamp above rather than declaring a third size. */
-  .cal-block-host .cell .today { width: 13px; height: 13px; font-size: 9px }
-  .cal-block-host .cell .dogear { display: none }
-  /* `inline-size: auto` is REQUIRED here, not tidiness: the baseline now gives
-     the strip a real width, and left + right + width is over-constrained — the
-     browser would drop `right` and this tier would silently keep the corner
-     cluster instead of the full-width bar it asks for. */
-  .cal-block-host .ul { height: 2px; left: 1px; right: 1px; inline-size: auto }
+  /* THE TODAY STAMP'S THIRD SIZE IS DELETED WITH THE DISC (§9.1). It read
+     `width: 13px; height: 13px; font-size: 9px` and the whole of it existed to
+     hold a 13px filled circle clear of the moon at this tier's 1px inline
+     padding. Today is ink now: the numeral is the 11px above, the same as every
+     other day's, and there is no box to hold clear of anything.
+
+     `.dogear`'s `display: none` IS ALSO DELETED, and for the stronger reason
+     that it can no longer be the rule that decides. The fold is hidden
+     unconditionally below 84px of column beside its own rule (§9.1 — the runes
+     carry gold at narrow density), and this tier's grid floor is 24px a column,
+     which tops out around 40px for a seven-day month. A tier that cannot reach
+     84px has nothing to say about a threshold at 84px. */
+
+  /* ── THE RUNES AT MINI, MEASURED AGAINST A 26px CELL ─────────────────────
+     THE BASELINE'S BLOCK DOES NOT FIT HERE AND WOULD LAND ON THE DATE. This
+     tier forces `.cunder` to 26px with 1px of padding, so the numeral's ink
+     occupies roughly y=1–12; a 12px rune at the baseline's `bottom: 8px` would
+     start at y=6 and print through it. The band actually free is y=13–22 — from
+     the numeral's foot to the availability reservation — which is 9px.
+
+     So the rune steps down rather than the block moving: 6×9 at `bottom:
+     var(--avail-h)`, sitting on the reservation exactly as the bar it replaces
+     did. `flex-wrap: nowrap` because `.ul` is anchored by its BOTTOM and grows
+     upward — a wrapped second row here would climb into the date, which is the
+     collision the size step exists to avoid. Three 6px runes and two 1px gaps
+     are 20px inside a 22px box at this tier's narrowest 24px column.
+
+     THIS TIER KEEPS THE RUNE VOCABULARY RATHER THAN THE OLD BAR, and that is a
+     choice with a cost: 6px is small for a letterform. The alternative was to
+     keep `.ulseg`'s eight stroke patterns alive for this tier alone — one mark
+     drawn two different ways in one product, which is the thing the legend's own
+     rule already argues against, to serve a 240–299px host that has already
+     given up the weekday header, the era bands, the GM fold and the event names.
+     Measured at this tier by TestRuneProbe_TheDensityRuling. */
+  .cal-block-host .cell .ulseg { inline-size: 6px; height: 9px }
+  .cal-block-host .cell .ul {
+    left: 1px;
+    right: 1px;
+    bottom: var(--avail-h);
+    gap: 1px;
+    flex-wrap: nowrap;
+    max-inline-size: none;
+  }
 
   .cal-block-host .minirail { display: block }
   .cal-block-host .foot { display: flex }
@@ -4244,6 +4974,17 @@
     position: absolute;
     inset-block: -7px;
     inset-inline: max(-7px, (100% - 100cqi) / 2);
+  }
+  /* THE LEGEND'S TAB GETS A REAL TARGET (C-CALV4-TILES §9.4). The 44px floor
+     this spec's own defect list cites, met on the axis that can afford it: the
+     tab grows DOWNWARD into the legend zone's own space rather than taking a
+     transparent overhang like the cluster above it. An overhang here would
+     reach UP into the month's last week row and swallow taps meant for a day
+     cell — the cluster can afford one because its overhang stays inside its own
+     cell, and this one would not. */
+  .cal-block-host .legend .legtab {
+    min-block-size: 44px;
+    padding-inline: 12px;
   }
 }
 

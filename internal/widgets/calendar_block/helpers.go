@@ -2267,6 +2267,41 @@ func buildLegend(d BlockData) []legendEntry {
 	return out
 }
 
+// legendPinID is the id of the legend's ONE disclosure control (C-CALV4-TILES
+// §9.4). The tab's <label for> addresses it; the stylesheet reads it back with
+// :has().
+//
+// A PURE FUNCTION OF THE DATA, for the reason tieGroupName and dayPickGroupName
+// are: two Blocks on one page must not share one piece of state, and the SAME
+// Block re-rendered by an HTMX binding swap must keep the state the viewer just
+// chose. `label[for]` resolves to the FIRST matching id in the DOCUMENT, so a
+// constant id would mean every legend on a Bench opened the first Block's.
+//
+// There is exactly one control, so there is no per-option key and no group: a
+// checkbox can be un-checked by re-pressing it, which is why this is a checkbox
+// and not the radio-plus-explicit-`none` construction the moon panel needs.
+func legendPinID(d BlockData) string {
+	return "legend-" + domToken(d.CalendarSlug) + "-" + domToken(d.Viewer.HostEntity)
+}
+
+// legendTabLabel is the closed tab's whole copy, and it is deliberately about
+// COLOUR (C-CALV4-TILES §9.2/§9.4).
+//
+// Shape stopped carrying the type when the runes landed: the glyph is chosen by
+// :nth-child() — position in the day — so no rune means anything, and a legend
+// that said "this mark means Quest" would be teaching a mapping the grid does
+// not implement.
+//
+// AND THE SWATCH IS A SOLID COLOUR CHIP, so "Colour key" is the literal truth
+// rather than a near-enough label. It used to carry a --dash stroke too, but
+// `.cal-block-host .legend .lr` is three classes and re-declared `--dash: 100%`
+// over the two-class `.pN` rules that hold the real values — every patterned
+// swatch resolved to a solid bar anyway. Those rules are deleted rather than
+// re-specified: the operator's ruling is that colour determines the type, and
+// restoring a stroke vocabulary here would teach a channel the narrow grid
+// stopped painting in the same pass. See TestCSS_TheLegendSwatchIsSolidOnPurpose.
+func legendTabLabel() string { return "Colour key" }
+
 // legendSwatchStyle carries the entry's own hue, exactly as every other mark
 // surface does. --axis is the mark's channel and it is FORBIDDEN from
 // referencing --accent.

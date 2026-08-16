@@ -20,6 +20,67 @@ If you're an AI session looking for "what shipped last week", read the Cordinato
 
 ## For AI sessions
 
+### calendar-v4 — the cell's four corners, the runes, and three colour channels that were not carrying colour (2026-08-16)
+
+Branch `claude/coordinator-handoff-stage-3-3d3s4w`. C-CALV4-TILES §9, built in
+two lanes with an adversarial prover that decodes PIXELS — every failure in this
+arc so far has been a thing that computed correctly and painted nothing.
+
+**The corner architecture moved and today stopped being a stamp.** The moon
+cluster takes the top LEFT and the date the top right, which fixes a defect a
+`transition`-grep cannot see: the cluster is a flex row that grows from one disc
+to four on hover, and anchored RIGHT it grew leftward and displaced the disc
+already under the pointer by **35.05px** — displacement without a transition.
+Measured **0.00px** on the new anchor, against a control arm re-anchoring the
+same cluster to its old edge in the same pass, so 0.00 has something to be
+better than. `.today` is now ink (weight + colour) rather than a filled disc;
+four disc-sizing rules were deleted, not the three §9.1 counted — the fourth
+only renders at a column width no phone produces.
+
+**Runes are the narrow form, names are the wide form.** 32 glyphs pooled from
+four alphabets, chosen by `:nth-child()` × the `p1..p8` class, painted as
+`mask-image` + `background-color` (a data-URI SVG used as `background-image` is
+an independent document and cannot see the host's `color` — every rune rendered
+black during design). Measured: 115.4px column → 10 chips and **0** rune boxes;
+34.0px → 11 runes at 9×12 and **0** chips; rune × numeral overlap 0.00px² and
+spill 0.00px across 51 host widths.
+
+**Three colour channels were measurably not carrying colour**, and only one was
+new:
+
+1. **The rune ink discarded chroma.** `oklch(from var(--axis) 0.36 0.10 h)` kept
+   the hue and overwrote `c` with a constant — at exactly the density where the
+   glyph became decorative and hue was the whole type channel. `--axis` is
+   `EventCategories[].Color` out of the database behind a bare
+   `<input type="color">`: two types separated by saturation collapsed
+   (`--ev-social` c 0.17 vs `--ev-session` c 0.04 → **6/255**), and an
+   achromatic category acquired a hue (`#888888` → a RED rune, 3/255 from a
+   vivid red one). Chroma is now SCALED, not replaced: 41/64 and 53/87.
+2. **The legend's pattern swatches never painted.** `.legend .lr` is three
+   classes and re-declared `--dash: 100%`; `.cal-block-host .p2` is two. Eight
+   patterns, at most three appearances — pre-existing. The dead rules were
+   DELETED rather than re-specified, because the legend is a **colour** key now.
+3. **The chip tint was painting the wrong hue.** `color-mix(in oklch, …)`
+   interpolates the HUE ANGLE and the light theme's `--surface-card` is
+   `oklch(1 0 0)` — white with an *explicit* hue of zero — so a blue, a red and
+   a green event all filled pale **PINK**, 3–4/255 apart, on the largest colour
+   surface a wide cell has. Also pre-existing; invisible until the gapped tile
+   gave the chip a coloured surround. Mixed in sRGB now: 12–18/255.
+
+The legend became a disclosure reachable by touch AND keyboard (tab measured
+**91.70×44.00px** under a coarse pointer — the 44px floor met, not reported),
+and the availability strip ships COMPLETE and DORMANT: **0 painted lane pixels**
+across 66 renders, each carrying a force-filled sentinel so a comparator that
+could never fail is caught before its clean reading is believed.
+
+**Booked, not built:** the GM-gold permission ink and the shipped `Holiday`
+default (`#f59e0b`) ink **28/255** apart and are both gold *by hue*, so a GM-only
+day and a Holiday wear the same colour below 84px — the fix is a decision about
+what the product means. Lightness is still normalised, so two types differing
+mainly in lightness still converge (shipped defaults' closest pair: 80/255 raw →
+29/255 as ink). The pattern channel now has no key surface anywhere. The strip
+waits on §8.6's fantasy↔real date anchor.
+
 ### calendar-v4 — the day cell became a TILE, and the era stopped shouting (2026-08-15)
 
 Branch `claude/coordinator-handoff-stage-3-3d3s4w`. C-CALV4-TILES, driven by the
