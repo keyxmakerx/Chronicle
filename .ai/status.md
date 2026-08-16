@@ -125,10 +125,11 @@ and the availability strip ships COMPLETE and DORMANT: **0 painted lane pixels**
 across 66 renders, each carrying a force-filled sentinel so a comparator that
 could never fail is caught before its clean reading is believed.
 
-**Booked, not built:** the GM-gold permission ink and the shipped `Holiday`
-default (`#f59e0b`) ink **28/255** apart and are both gold *by hue*, so a GM-only
-day and a Holiday wear the same colour below 84px — the fix is a decision about
-what the product means. Lightness is still normalised, so two types differing
+**Since resolved (2026-08-16):** the GM-gold / `Holiday` collision was the
+operator's call and they made it — gold means GM, so the category moved to
+`#84cc16` (lime-500), chosen by sweeping the whole hue circle through the shipped
+ink recipe. 28 → **75/255** from the gold, and the worst pair among the six
+defaults improved 29 → **43/255** as a side effect. Lightness is still normalised, so two types differing
 mainly in lightness still converge (shipped defaults' closest pair: 80/255 raw →
 29/255 as ink). The pattern channel now has no key surface anywhere. The strip
 waits on §8.6's fantasy↔real date anchor.

@@ -106,12 +106,16 @@ painted nothing.
 
 ### [ ] Open — booked here rather than dropped
 
-- **The GM strike and a gold category collide.** Permission ink is
-  `rgb(110,76,0)` on light; the shipped `Holiday` default (`#f59e0b`) inks
-  **28/255** from it, and both are gold *by hue*, so no chroma treatment
-  separates them — a GM-only day and a Holiday wear the same colour below 84px.
-  Fix is either moving permission off gold or the default off amber: a decision
-  about what the product means, not a cascade bug.
+- [x] ~~**The GM strike and a gold category collide.**~~ CLOSED 2026-08-16 by
+  operator ruling: gold means GM, so the CATEGORY moved. `Holiday` is
+  `#84cc16` (lime-500), picked by sweeping the whole hue circle through the
+  shipped rune-ink recipe in both themes and scoring against the gold AND the
+  five other defaults. Holiday vs GM-gold **28 → 75/255**; worst pair of the six
+  **29 → 43/255**, and no longer a Holiday pair. Checked on the chip surface too
+  (unchanged at 8/255 — the chip's identity is its full-strength rail, not the
+  faint wash). Existing calendars keep their amber: seeding new ones is a
+  default, rewriting live rows would overwrite a colour an owner may have picked
+  on purpose. Pinned by `TestDefaultCategories_NoneCollidesWithTheGMGold`.
 - **Lightness is still normalised** and that is what makes a rune an ink, so two
   types differing mainly in lightness still converge — the shipped defaults'
   closest pair goes 80/255 raw → **29/255**. Two achromatic picks ink
