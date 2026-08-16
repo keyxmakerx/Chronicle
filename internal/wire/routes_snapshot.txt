@@ -139,6 +139,7 @@ GET	/armory/shops/:eid/transactions	internal/plugins/armory/routes.go
 GET	/armory/transactions	internal/plugins/armory/routes.go
 GET	/autopin-banner	internal/plugins/foundry_vtt/routes.go
 GET	/availability	internal/plugins/sessions/routes.go
+GET	/availability/answers	internal/plugins/sessions/routes.go
 GET	/availability/exceptions	internal/plugins/sessions/routes.go
 GET	/availability/mine	internal/plugins/sessions/routes.go
 GET	/availability/overlay	internal/plugins/sessions/routes.go
@@ -448,6 +449,7 @@ POST	/armory/purchase	internal/plugins/armory/routes.go
 POST	/armory/transactions	internal/plugins/armory/routes.go
 POST	/autopin-banner/dismiss	internal/plugins/foundry_vtt/routes.go
 POST	/availability/exceptions	internal/plugins/sessions/routes.go
+POST	/availability/nudge	internal/plugins/sessions/routes.go
 POST	/backdrop	internal/plugins/campaigns/routes.go
 POST	/bindings	internal/plugins/widgetbindings/routes.go
 POST	/bindings/create	internal/plugins/widgetbindings/routes.go

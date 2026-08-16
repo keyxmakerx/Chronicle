@@ -44,6 +44,12 @@ func RegisterRoutes(e *echo.Echo, h *Handler,
 	cg.GET("/availability/mine", h.GetMyAvailabilityAPI, campaigns.RequireRole(campaigns.RolePlayer))
 	cg.PUT("/availability/mine", h.SaveMyAvailabilityAPI, campaigns.RequireRole(campaigns.RolePlayer))
 	cg.GET("/availability/overlay", h.GetOverlayAPI, campaigns.RequireRole(campaigns.RolePlayer))
+	// Answers is Player+ (it says who has spoken, never what they said); the
+	// nudge is Player+ ON THE ROUTE and Owner/co-DM IN THE HANDLER, following
+	// this group's stated rule that entitlement is decided by role in a handler
+	// rather than encoded in a route (see the comment above).
+	cg.GET("/availability/answers", h.AvailabilityAnswersAPI, campaigns.RequireRole(campaigns.RolePlayer))
+	cg.POST("/availability/nudge", h.NudgeAvailabilityAPI, campaigns.RequireRole(campaigns.RolePlayer))
 	cg.GET("/availability/exceptions", h.ListMyExceptionsAPI, campaigns.RequireRole(campaigns.RolePlayer))
 	cg.POST("/availability/exceptions", h.AddExceptionAPI, campaigns.RequireRole(campaigns.RolePlayer))
 	cg.PUT("/availability/exceptions", h.ReplaceDayExceptionsAPI, campaigns.RequireRole(campaigns.RolePlayer))

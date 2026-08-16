@@ -42,7 +42,11 @@ type SessionRepository interface {
 	// availability_exceptions) — see availability_repository.go.
 	ListUserAvailability(ctx context.Context, campaignID, userID string) ([]AvailabilityBlock, error)
 	ListCampaignAvailability(ctx context.Context, campaignID string) ([]AvailabilityBlock, error)
-	ReplaceUserAvailability(ctx context.Context, campaignID, userID string, blocks []AvailabilityBlock) error
+	ReplaceUserAvailability(ctx context.Context, campaignID, userID, tz string, blocks []AvailabilityBlock) error
+	// ListAnsweredUserIDs is the answered-or-not store (C-RSVP-P9): who has
+	// saved a pattern at all, keyed by user id. Absence of blocks means
+	// "unavailable", so without this the roster cannot tell silence from a "no".
+	ListAnsweredUserIDs(ctx context.Context, campaignID string) (map[string]time.Time, error)
 	ListUserExceptions(ctx context.Context, campaignID, userID string) ([]AvailabilityException, error)
 	ListCampaignExceptionsInRange(ctx context.Context, campaignID, startDate, endDate string) ([]AvailabilityException, error)
 	AddException(ctx context.Context, e *AvailabilityException) error

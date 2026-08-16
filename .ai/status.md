@@ -20,6 +20,40 @@ If you're an AI session looking for "what shipped last week", read the Cordinato
 
 ## For AI sessions
 
+### RSVP expanded, not just hardened (C-RSVP-P9, 2026-08-16)
+
+Branch `claude/coordinator-handoff-stage-3-3d3s4w`. C-RSVP-ROBUST (below) fixed
+twelve defects but added no capability; the operator asked whether the system had
+been **expanded for better situations**, and it had not. This is the expansion.
+Full detail in `internal/plugins/sessions/.ai.md` → "C-RSVP-P9".
+
+**Silence stopped counting as a "no".** Absence of `member_availability` rows has
+always meant *unavailable*, so a member who had never opened the page was
+indistinguishable from one who is genuinely never free — the Director could not
+tell "nobody is free Tuesday" from "nobody has answered". `member_availability_
+status` (sessions migration 005) now records that a member ANSWERED, stamped in
+the same transaction as their blocks. It is a table and not a `COUNT(*)` because
+saving an EMPTY grid is a real answer, and a derived flag would call that member
+silent forever.
+
+**Alternating weeks exist.** `week_parity` on `member_availability` — 0 every
+week (the DEFAULT, so every pre-005 row keeps its meaning), 1 and 2 the two
+tracks, mapped onto real dates from a fixed global epoch so two members can never
+disagree about which track a week is. The unique key was re-cut to include it.
+The UI never says "odd"/"even": it offers *Every week* and two dated Sundays that
+the server derives.
+
+**The nudge is a button, never a timer.** `POST /availability/nudge` bells the
+members who have not answered and names them back. There is no scheduled-job
+runner in this product and one was not invented for a reminder — that would be
+infrastructure justified by a nicety, and would message people on a schedule they
+never agreed to.
+
+Pinned by `availability_cadence_test.go` and `availability_cadence_int_test.go`
+(the latter against a real MariaDB: the DEFAULT-0 promise, the re-cut unique key,
+the ON DUPLICATE stamp, campaign scoping, FK cascade, and a fortnightly block
+projecting end to end).
+
 ### RSVP + availability made runnable (C-RSVP-ROBUST, 2026-08-16)
 
 Branch `claude/coordinator-handoff-stage-3-3d3s4w`. Twelve defects across

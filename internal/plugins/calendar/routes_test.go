@@ -240,8 +240,23 @@ func TestBenchRoute_IsRegisteredOnThePublicGroupWithViewAccess(t *testing.T) {
 //	727 → 728 (2026-08-16, C-CALV4-ANCHOR): PUT /calendars/:calId/anchor, the
 //	real-date anchor's owner-only write. Owner-gated like every other structural
 //	write on that page; no auth surface widened.
+//
+//	728 → 730 (2026-08-16, C-RSVP-P9): two sessions-plugin routes, neither on
+//	the calendar's own surface —
+//	  GET  /campaigns/:id/availability/answers  (Player+) reports WHO has
+//	    answered the availability question, never what they answered. It is
+//	    party-visible by the same rule as a member's name, role and zone; it
+//	    exposes no availability hours, so no gated fact crosses.
+//	  POST /campaigns/:id/availability/nudge    (Player+ on the ROUTE,
+//	    Owner/co-DM enforced IN THE HANDLER, following that group's stated rule
+//	    that entitlement is decided by role in a handler rather than encoded in
+//	    a route). It writes bell notifications to OTHER members, which is why it
+//	    is gated at all and why the gate carries its own tests
+//	    (TestNudge_IsRefusedToAPlainPlayer / _IsAllowedToTheOwnerAndToACoDM).
+//	No calendar route changed, and no auth surface widened: the only new write
+//	is narrower than the group it sits in.
 func TestBenchRoute_SnapshotIsUnmoved(t *testing.T) {
-	const wantLines = 728
+	const wantLines = 730
 	raw, err := os.ReadFile(filepath.Join("..", "..", "wire", "routes_snapshot.txt"))
 	if err != nil {
 		t.Fatalf("reading the wire snapshot: %v", err)

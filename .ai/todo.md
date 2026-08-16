@@ -9,6 +9,30 @@
 <!-- Legend: [ ] Not started  [~] In progress  [x] Complete  [!] Blocked      -->
 <!-- ====================================================================== -->
 
+## 0-rsvp. RSVP expanded for real situations (C-RSVP-P9, 2026-08-16)
+
+C-RSVP-ROBUST fixed defects; it added no capability. Asked whether the system had
+been expanded, the honest answer was no. These three close that.
+
+- [x] **"Has not answered" is a state.** `member_availability_status`
+  (sessions migration 005), stamped in the same transaction as the block
+  replace. Not derivable from row counts — an EMPTY save is a real answer, and a
+  derived flag would call that member silent forever. Surfaced as a banner on
+  the member's own grid and a gold badge on the Director's roster chip.
+- [x] **Alternating weeks.** `week_parity` (0 every week / 1 / 2), mapped onto
+  real dates from a fixed global epoch. Unique key re-cut to include it. The
+  picker names two dated Sundays, never "odd"/"even".
+- [x] **Nudge the silent ones.** `POST /availability/nudge`, Owner/co-DM,
+  reports names back. A button, never a timer — there is no scheduled-job runner
+  and one was not invented for this.
+
+**Recommended on a live client (cannot be unit-tested):** confirm the unanswered
+banner appears for a player who has never saved and clears the moment they save
+an EMPTY grid; confirm the Director's chip badge and the nudge button appear only
+while somebody is actually silent, and that the nudge lands in the top-right
+bell; paint an alternating-week pattern and confirm the heatmap shows it on
+alternate weeks with the hatch showing the every-week layer underneath.
+
 ## 0-rsvp. RSVP + availability made runnable (C-RSVP-ROBUST, 2026-08-16)
 
 Twelve defects in the RSVP and availability systems. Every fix carries a guard

@@ -24,7 +24,27 @@ type AvailabilityBlock struct {
 	EndMinute   int
 	State       string // available | preferred
 	TZ          string // IANA zone the wall-clock is in
+	// WeekCadence is CadenceEveryWeek / CadenceWeekA / CadenceWeekB
+	// (availability_cadence.go). Zero means every week, which is what every
+	// block written before C-RSVP-P9 meant and still means.
+	WeekCadence int
 	UpdatedAt   time.Time
+}
+
+// MemberAvailabilityStatus records that a member ANSWERED the availability
+// question for a campaign — not what they answered.
+//
+// It exists because absence of AvailabilityBlock rows means "unavailable", so
+// without this a member who never opened the page and a member who is genuinely
+// never free are the same row-count: zero. They are not the same fact, and the
+// difference is the one the Director actually needs when a week looks empty.
+// Answering with an EMPTY grid writes a row here, which is why this cannot be
+// derived from the block tables.
+type MemberAvailabilityStatus struct {
+	CampaignID string
+	UserID     string
+	AnsweredAt time.Time
+	TZ         string
 }
 
 // AvailabilityException overrides the recurring pattern for one real-world
@@ -60,6 +80,10 @@ type AvailabilityBlockDTO struct {
 	StartMinute int    `json:"startMinute"` // minutes from local midnight
 	EndMinute   int    `json:"endMinute"`
 	State       string `json:"state"` // available | preferred
+	// WeekCadence is 0 every week / 1 week A / 2 week B. Omitted by a client
+	// that predates alternating weeks, which decodes to 0 — every week — so an
+	// old client keeps working and keeps meaning what it always meant.
+	WeekCadence int `json:"weekCadence"`
 }
 
 // MyAvailabilityResponse is the current user's own recurring pattern, returned
@@ -67,6 +91,32 @@ type AvailabilityBlockDTO struct {
 type MyAvailabilityResponse struct {
 	TZ     string                 `json:"tz"`
 	Blocks []AvailabilityBlockDTO `json:"blocks"`
+	// Answered is false until the member has saved once. The grid uses it to
+	// tell "you have not answered yet" apart from "you answered: never free",
+	// which look identical in Blocks (both empty).
+	Answered bool `json:"answered"`
+	// WeekALabel/WeekBLabel are the YYYY-MM-DD Sundays that start the next week
+	// of each alternating track, so the picker can offer two dates the member
+	// can find on a calendar instead of the words "odd" and "even".
+	WeekALabel string `json:"weekALabel"`
+	WeekBLabel string `json:"weekBLabel"`
+}
+
+// AvailabilityAnswerStatus is one member's answered-or-not state, as the
+// Director's roster and the nudge action both need it.
+type AvailabilityAnswerStatus struct {
+	UserID     string `json:"userId"`
+	Name       string `json:"name"`
+	Answered   bool   `json:"answered"`
+	AnsweredAt string `json:"answeredAt,omitempty"` // RFC3339, empty when never
+}
+
+// NudgeResult reports what a nudge actually did — how many members were asked,
+// and who. Returned so the Director sees the outcome rather than a silent
+// success that may have notified nobody.
+type NudgeResult struct {
+	Notified []string `json:"notified"` // display names, in roster order
+	Skipped  int      `json:"skipped"`  // members who had already answered
 }
 
 // AddExceptionRequest adds a per-date override to the current user's pattern.
@@ -177,6 +227,14 @@ type OverlayMember struct {
 	// membership would create a second copy that can go stale.
 	TZ    string        `json:"tz,omitempty"`
 	Lanes []LaneSegment `json:"lanes,omitempty"`
+	// HasAnswered separates "answered: never free" from "has not answered".
+	//
+	// Empty Lanes used to mean both at once, and the heatmap presented the pair
+	// identically — as unavailability. So a week that was actually unanswered
+	// read as a week nobody could make, and the Director planned around a fact
+	// nobody had stated. This is the field that stops the aggregate from
+	// speaking for people who have not spoken.
+	HasAnswered bool `json:"hasAnswered"`
 }
 
 // LaneSegment is one contiguous availability run for a member on one column,
@@ -208,6 +266,9 @@ type overlayMemberInput struct {
 	IsCoDM    bool
 	// TZ is the member's stored IANA zone, "" when unset (see OverlayMember.TZ).
 	TZ string
+	// HasAnswered is the answered-or-not fact, resolved by the handler from the
+	// status store and carried through so the pure builder stays store-free.
+	HasAnswered bool
 }
 
 // availabilityPalette is a colorblind-friendly (CVD-checked) set of lane

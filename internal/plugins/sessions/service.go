@@ -67,6 +67,15 @@ type SessionService interface {
 	// page (member_availability.tz), keyed by user id. Absent = not set there.
 	CampaignMemberZones(ctx context.Context, campaignID string) (map[string]string, error)
 	BuildOverlay(ctx context.Context, campaignID string, members []overlayMemberInput, weekStart, viewerTZ string, includeDetail bool) (*WeekOverlay, error)
+	// AvailabilityAnswerStatuses / NudgeUnansweredAvailability are the
+	// answered-or-not pair (C-RSVP-P9). Zero availability rows has always meant
+	// "unavailable", so a member who never opened the page was indistinguishable
+	// from one who is genuinely never free; these two report the difference and
+	// let the Director ask the silent ones, on an explicit press rather than a
+	// timer (no scheduled-job runner exists, and inventing one for a reminder
+	// would be infrastructure justified by a nicety).
+	AvailabilityAnswerStatuses(ctx context.Context, campaignID string, members []overlayMemberInput) ([]AvailabilityAnswerStatus, error)
+	NudgeUnansweredAvailability(ctx context.Context, campaignID, link string, members []overlayMemberInput) (*NudgeResult, error)
 
 	// Slot proposals + responses (C-SCHED-P2). See proposals_service.go.
 	CreateProposal(ctx context.Context, campaignID, createdBy string, req CreateProposalRequest) (*SlotProposal, error)

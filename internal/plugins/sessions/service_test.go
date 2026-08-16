@@ -38,7 +38,8 @@ type mockSessionRepo struct {
 	// Availability (C-SCHED-P1).
 	listUserAvailabilityFn          func(ctx context.Context, campaignID, userID string) ([]AvailabilityBlock, error)
 	listCampaignAvailabilityFn      func(ctx context.Context, campaignID string) ([]AvailabilityBlock, error)
-	replaceUserAvailabilityFn       func(ctx context.Context, campaignID, userID string, blocks []AvailabilityBlock) error
+	replaceUserAvailabilityFn       func(ctx context.Context, campaignID, userID, tz string, blocks []AvailabilityBlock) error
+	listAnsweredUserIDsFn           func(ctx context.Context, campaignID string) (map[string]time.Time, error)
 	listUserExceptionsFn            func(ctx context.Context, campaignID, userID string) ([]AvailabilityException, error)
 	listCampaignExceptionsRangeFn   func(ctx context.Context, campaignID, startDate, endDate string) ([]AvailabilityException, error)
 	addExceptionFn                  func(ctx context.Context, e *AvailabilityException) error
@@ -207,11 +208,18 @@ func (m *mockSessionRepo) ListCampaignAvailability(ctx context.Context, campaign
 	return nil, nil
 }
 
-func (m *mockSessionRepo) ReplaceUserAvailability(ctx context.Context, campaignID, userID string, blocks []AvailabilityBlock) error {
+func (m *mockSessionRepo) ReplaceUserAvailability(ctx context.Context, campaignID, userID, tz string, blocks []AvailabilityBlock) error {
 	if m.replaceUserAvailabilityFn != nil {
-		return m.replaceUserAvailabilityFn(ctx, campaignID, userID, blocks)
+		return m.replaceUserAvailabilityFn(ctx, campaignID, userID, tz, blocks)
 	}
 	return nil
+}
+
+func (m *mockSessionRepo) ListAnsweredUserIDs(ctx context.Context, campaignID string) (map[string]time.Time, error) {
+	if m.listAnsweredUserIDsFn != nil {
+		return m.listAnsweredUserIDsFn(ctx, campaignID)
+	}
+	return map[string]time.Time{}, nil
 }
 
 func (m *mockSessionRepo) ListUserExceptions(ctx context.Context, campaignID, userID string) ([]AvailabilityException, error) {

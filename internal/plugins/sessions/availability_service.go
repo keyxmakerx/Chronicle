@@ -58,8 +58,31 @@ func (s *sessionService) GetMyAvailability(ctx context.Context, campaignID, user
 			StartMinute: b.StartMinute,
 			EndMinute:   b.EndMinute,
 			State:       b.State,
+			WeekCadence: b.WeekCadence,
 		})
 	}
+
+	// Answered is read from the status store, NOT inferred from len(blocks):
+	// saving an empty grid is a real answer ("never free"), and inferring would
+	// report that member as silent forever.
+	answered, err := s.repo.ListAnsweredUserIDs(ctx, campaignID)
+	if err != nil {
+		return nil, apperror.NewInternal(fmt.Errorf("loading availability answers: %w", err))
+	}
+	_, resp.Answered = answered[userID]
+
+	// The two alternating tracks are labelled by the next real Sunday that
+	// starts each one, so the picker offers dates rather than a convention.
+	//
+	// "Today" is resolved in the MEMBER'S OWN zone, not UTC. A member in UTC+13
+	// on a Sunday morning is still on Saturday by UTC, so a UTC "today" would
+	// hand them the previous week's Sunday and quietly swap which track their
+	// picker calls A — they would choose a date and get the other fortnight.
+	loc := timeutil.LoadLocation(resp.TZ) // falls back to UTC on empty/unknown
+	now := time.Now().In(loc)
+	today := timeutil.CivilDate{Year: now.Year(), Month: now.Month(), Day: now.Day()}
+	resp.WeekALabel = CadenceLabel(CadenceWeekA, today).String()
+	resp.WeekBLabel = CadenceLabel(CadenceWeekB, today).String()
 	return resp, nil
 }
 
@@ -73,9 +96,12 @@ func (s *sessionService) SaveMyAvailability(ctx context.Context, campaignID, use
 		return apperror.NewBadRequest("too many availability blocks")
 	}
 
-	// Validate + dedupe by (day, start, end); the unique key forbids exact
-	// duplicates, and deduping lets last-state-wins for an overlapping repaint.
-	seen := make(map[[3]int]int, len(req.Blocks))
+	// Validate + dedupe by (day, start, end, cadence); the unique key forbids
+	// exact duplicates, and deduping lets last-state-wins for an overlapping
+	// repaint. CADENCE IS PART OF THE KEY — the same Monday evening on week A
+	// and on week B are two different blocks, and collapsing them into one
+	// would silently discard whichever the client sent second.
+	seen := make(map[[4]int]int, len(req.Blocks))
 	blocks := make([]AvailabilityBlock, 0, len(req.Blocks))
 	for _, b := range req.Blocks {
 		if err := validateBlockRange(b.DayOfWeek, b.StartMinute, b.EndMinute); err != nil {
@@ -85,7 +111,10 @@ func (s *sessionService) SaveMyAvailability(ctx context.Context, campaignID, use
 		if err != nil {
 			return err
 		}
-		key := [3]int{b.DayOfWeek, b.StartMinute, b.EndMinute}
+		if !ValidWeekCadence(b.WeekCadence) {
+			return apperror.NewBadRequest("unknown week cadence")
+		}
+		key := [4]int{b.DayOfWeek, b.StartMinute, b.EndMinute, b.WeekCadence}
 		if idx, ok := seen[key]; ok {
 			blocks[idx].State = st // last write wins on an exact overlap
 			continue
@@ -97,13 +126,79 @@ func (s *sessionService) SaveMyAvailability(ctx context.Context, campaignID, use
 			EndMinute:   b.EndMinute,
 			State:       st,
 			TZ:          req.TZ,
+			WeekCadence: b.WeekCadence,
 		})
 	}
 
-	if err := s.repo.ReplaceUserAvailability(ctx, campaignID, userID, blocks); err != nil {
+	// The zone rides separately so an EMPTY grid still records WHO answered and
+	// in what zone — that is the save that makes "never free" a stated answer
+	// instead of continued silence.
+	if err := s.repo.ReplaceUserAvailability(ctx, campaignID, userID, req.TZ, blocks); err != nil {
 		return apperror.NewInternal(fmt.Errorf("saving availability: %w", err))
 	}
 	return nil
+}
+
+// AvailabilityAnswerStatuses reports, for each member the caller supplies,
+// whether they have answered the availability question and when.
+//
+// The roster is supplied by the handler (same shape as BuildOverlay's) so this
+// stays free of the campaigns import; order is preserved so the Director's list
+// matches every other roster in the product.
+func (s *sessionService) AvailabilityAnswerStatuses(ctx context.Context, campaignID string, members []overlayMemberInput) ([]AvailabilityAnswerStatus, error) {
+	answered, err := s.repo.ListAnsweredUserIDs(ctx, campaignID)
+	if err != nil {
+		return nil, apperror.NewInternal(fmt.Errorf("loading availability answers: %w", err))
+	}
+	out := make([]AvailabilityAnswerStatus, 0, len(members))
+	for _, m := range members {
+		row := AvailabilityAnswerStatus{UserID: m.UserID, Name: m.Name}
+		if at, ok := answered[m.UserID]; ok {
+			row.Answered = true
+			row.AnsweredAt = at.UTC().Format(time.RFC3339)
+		}
+		out = append(out, row)
+	}
+	return out, nil
+}
+
+// NudgeUnansweredAvailability writes a bell notification to every supplied
+// member who has NOT answered, and reports who was asked.
+//
+// NO TIMER, ON PURPOSE. There is no scheduled-job runner in this product, and
+// inventing one to power a reminder would be a large piece of infrastructure
+// justified by a small feature. The Director presses this when it is useful to
+// press — which also means nobody is ever nudged by a machine on a schedule
+// they did not agree to.
+//
+// Members who have already answered are counted, not messaged: a nudge that
+// pinged everyone would train the whole table to ignore the bell.
+func (s *sessionService) NudgeUnansweredAvailability(ctx context.Context, campaignID, link string, members []overlayMemberInput) (*NudgeResult, error) {
+	answered, err := s.repo.ListAnsweredUserIDs(ctx, campaignID)
+	if err != nil {
+		return nil, apperror.NewInternal(fmt.Errorf("loading availability answers: %w", err))
+	}
+	res := &NudgeResult{Notified: []string{}}
+	var ids []string
+	for _, m := range members {
+		if m.UserID == "" {
+			continue
+		}
+		if _, ok := answered[m.UserID]; ok {
+			res.Skipped++
+			continue
+		}
+		ids = append(ids, m.UserID)
+		res.Notified = append(res.Notified, m.Name)
+	}
+	if len(ids) == 0 {
+		return res, nil
+	}
+	const msg = "Your group needs your availability — set the times you can play"
+	if err := s.NotifyUsers(ctx, ids, campaignID, NotifAvailabilityNudge, msg, link); err != nil {
+		return nil, err
+	}
+	return res, nil
 }
 
 // ListMyExceptions returns the current user's per-date overrides.
@@ -281,6 +376,19 @@ func (s *sessionService) BuildOverlay(ctx context.Context, campaignID string, me
 		start.AddDays(-2).String(), start.AddDays(8).String())
 	if err != nil {
 		return nil, apperror.NewInternal(fmt.Errorf("loading campaign exceptions: %w", err))
+	}
+
+	// Answered-or-not is stamped onto the roster HERE rather than by the
+	// handler, because the handler has no business reaching the status store and
+	// the pure builder has no business querying anything. The roster is a value
+	// copy, so mutating it cannot leak back to the caller's slice contents.
+	answered, err := s.repo.ListAnsweredUserIDs(ctx, campaignID)
+	if err != nil {
+		return nil, apperror.NewInternal(fmt.Errorf("loading availability answers: %w", err))
+	}
+	members = append([]overlayMemberInput(nil), members...)
+	for i := range members {
+		_, members[i].HasAnswered = answered[members[i].UserID]
 	}
 
 	availByUser := make(map[string][]AvailabilityBlock)

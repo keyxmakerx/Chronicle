@@ -36,7 +36,7 @@ func TestSaveMyAvailability_ConvertsAndDedupes(t *testing.T) {
 	var saved []AvailabilityBlock
 	var savedTZ string
 	repo := &mockSessionRepo{
-		replaceUserAvailabilityFn: func(_ context.Context, campaignID, userID string, blocks []AvailabilityBlock) error {
+		replaceUserAvailabilityFn: func(_ context.Context, campaignID, userID, _ string, blocks []AvailabilityBlock) error {
 			if campaignID != "camp-1" || userID != "u1" {
 				t.Errorf("wrong scope: %s / %s", campaignID, userID)
 			}

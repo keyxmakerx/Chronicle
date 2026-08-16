@@ -3,6 +3,7 @@ package sessions
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"sort"
 	"time"
@@ -113,6 +114,65 @@ func (h *Handler) GetOverlayAPI(c echo.Context) error {
 	return c.JSON(http.StatusOK, overlay)
 }
 
+// NudgeAvailabilityAPI asks every member who has never answered to set their
+// availability, via the bell in the top-right.
+// POST /campaigns/:id/availability/nudge
+//
+// OWNER / CO-DM ONLY, enforced here by role rather than by route — the same rule
+// the overlay's detail gate follows (design §5 / Q1). It has to be gated: this
+// is the one availability action that writes into other people's notification
+// lists, so an ungated version would be a campaign-wide broadcast handed to
+// anybody who could reach the URL.
+func (h *Handler) NudgeAvailabilityAPI(c echo.Context) error {
+	cc := campaigns.GetCampaignContext(c)
+	if cc.MemberRole < campaigns.RoleOwner && !cc.IsDmGranted {
+		return c.JSON(http.StatusForbidden, map[string]string{"error": "only the Director can send this"})
+	}
+	ctx := c.Request().Context()
+	link := fmt.Sprintf("/campaigns/%s/availability", cc.Campaign.ID)
+	res, err := h.svc.NudgeUnansweredAvailability(ctx, cc.Campaign.ID, link, h.overlayMembers(ctx, cc.Campaign.ID))
+	if err != nil {
+		return c.JSON(apperror.SafeCode(err), map[string]string{"error": apperror.SafeMessage(err)})
+	}
+	return c.JSON(http.StatusOK, res)
+}
+
+// AvailabilityAnswersAPI lists who has answered and who has not.
+// GET /campaigns/:id/availability/answers
+//
+// Party-visible, for the same reason RosterEntry.HasAnswered is: it says who has
+// spoken, never what they said.
+func (h *Handler) AvailabilityAnswersAPI(c echo.Context) error {
+	ctx := c.Request().Context()
+	cc := campaigns.GetCampaignContext(c)
+	rows, err := h.svc.AvailabilityAnswerStatuses(ctx, cc.Campaign.ID, h.overlayMembers(ctx, cc.Campaign.ID))
+	if err != nil {
+		return c.JSON(apperror.SafeCode(err), map[string]string{"error": apperror.SafeMessage(err)})
+	}
+	return c.JSON(http.StatusOK, map[string]any{"members": rows})
+}
+
+// availabilityAnswerStamped fills HasAnswered on a roster the caller already
+// built. BuildOverlay does its own stamping internally, so this exists for the
+// paths that need the roster WITHOUT an overlay — chiefly CampaignRoster, whose
+// consumers render a member list and would otherwise have to guess.
+//
+// A failure degrades to "nobody has answered" rather than failing the render,
+// and that direction is chosen with eyes open: it can under-report an answer
+// (visible, correctable, and the Director can just look at the grid), where the
+// opposite would report silence as an answer and quietly restore the exact
+// ambiguity this feature exists to remove.
+func (h *Handler) availabilityAnswerStamped(ctx context.Context, campaignID string, in []overlayMemberInput) []overlayMemberInput {
+	rows, err := h.svc.AvailabilityAnswerStatuses(ctx, campaignID, in)
+	if err != nil || len(rows) != len(in) {
+		return in
+	}
+	for i := range in {
+		in[i].HasAnswered = rows[i].Answered
+	}
+	return in
+}
+
 // --- the cross-plugin read seam (C-CALV4-RSVP-P8 §5) ------------------------
 //
 // The calendar's Bench RSVP panel prints the same availability this plugin
@@ -149,22 +209,28 @@ type RosterEntry struct {
 	// TZ is the stored IANA zone, EMPTY when unset. Empty is a state, not a
 	// default: see OverlayMember.TZ.
 	TZ string
+	// HasAnswered is whether this member has ever saved an availability pattern
+	// (C-RSVP-P9). Party-visible by the same rule as name/role/zone: knowing
+	// that somebody has not answered yet is not knowing anything about WHEN
+	// they are free, which is the fact the lanes gate protects.
+	HasAnswered bool
 }
 
 // CampaignRoster returns the overlay roster in its stable render order, with
 // roles, co-DM grants and zones resolved from their truth sources. Availability
 // is deliberately not included — see RosterEntry.
 func (h *Handler) CampaignRoster(ctx context.Context, campaignID string) []RosterEntry {
-	in := h.overlayMembers(ctx, campaignID)
+	in := h.availabilityAnswerStamped(ctx, campaignID, h.overlayMembers(ctx, campaignID))
 	out := make([]RosterEntry, 0, len(in))
 	for _, m := range in {
 		out = append(out, RosterEntry{
-			UserID:  m.UserID,
-			Name:    m.Name,
-			Role:    m.RoleLabel,
-			IsOwner: m.IsOwner,
-			IsCoDM:  m.IsCoDM,
-			TZ:      m.TZ,
+			UserID:      m.UserID,
+			Name:        m.Name,
+			Role:        m.RoleLabel,
+			IsOwner:     m.IsOwner,
+			IsCoDM:      m.IsCoDM,
+			TZ:          m.TZ,
+			HasAnswered: m.HasAnswered,
 		})
 	}
 	return out

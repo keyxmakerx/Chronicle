@@ -160,6 +160,9 @@ func buildWeekOverlay(
 				IsCoDM: m.IsCoDM,
 				TZ:     m.TZ,
 				Lanes:  lanes,
+				// Empty Lanes is ambiguous on its own — "never free" and "never
+				// asked" both render as nothing. This is what tells them apart.
+				HasAnswered: m.HasAnswered,
 			})
 		}
 	}
@@ -189,7 +192,11 @@ func effectiveBlocks(userID string, realDate timeutil.CivilDate,
 	wd := int(realDate.Weekday())
 	var out []effBlock
 	for _, b := range availByUser[userID] {
-		if b.DayOfWeek == wd {
+		// Cadence is checked against the REAL DATE, not the weekday: an
+		// alternating block is in force on half the Mondays, and which half is
+		// a fact about the date. cadenceApplies treats 0 (and anything
+		// unrecognised) as every week, so pre-cadence rows are unaffected.
+		if b.DayOfWeek == wd && cadenceApplies(b.WeekCadence, realDate) {
 			out = append(out, effBlock{b.StartMinute, b.EndMinute, b.State, b.TZ})
 		}
 	}
