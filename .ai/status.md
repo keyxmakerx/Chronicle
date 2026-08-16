@@ -20,62 +20,6 @@ If you're an AI session looking for "what shipped last week", read the Cordinato
 
 ## For AI sessions
 
-### The v4 WEEK and DAY views (C-CALV4-WEEKDAY-VIEWS, 2026-08-16)
-
-Branch `claude/coordinator-handoff-stage-3-3d3s4w`. **One of the two remaining
-gate boxes on `C-CALV4-SHELL-REMOVAL` is now MET, and a live feature loss is
-closed.** `/calendars/:calId/week` and `/day` had 301'd to the Bench's MONTH
-since R2-4, because the only week and day views in the product lived inside the
-V2 shell. They now serve a week and a day.
-
-**THE SEAT IS A QUERY PARAM, NOT A ROUTE.** `?view=week|day` plus `?d=<day>` on
-the EXISTING `GET /campaigns/:id/apps/calendar`, joining `?y=`/`?m=` — the same
-family [GR-1] signed. `internal/wire/routes_snapshot.txt` is **byte-identical at
-727 lines**, so `C-CALV4-SHELL-REMOVAL`'s pre-computed **727 → 722** arithmetic
-is untouched and needs no revision. `/schedule` was NOT declared the week view's
-successor — it is a REAL-WORLD availability matrix keyed to a wall clock, and
-the standing STOP-AND-FLAG (4) in `.ai/todo.md` is answered **no**, in writing,
-in `bench_weekday.go`'s header.
-
-**V2's FOUR SEVENS ARE NOT PORTED.** The worst was `v2Step`'s `day += 7 * dir`:
-the grid drew `len(cal.Weekdays)` columns and Next moved seven, so on a ten-day
-calendar consecutive "weeks" overlapped by three days, every time, and nothing
-in the tree said so. The v4 column count and the v4 nav step are the same
-expression. The window is also **ALIGNED** rather than V2-centred, so a day sits
-in the same column here as in the month grid.
-
-**TWO V2 GAPS CLOSED, not ported.** Multi-day events were invisible in V2's week
-AND day views — a three-day festival appeared nowhere — and are now drawn on
-every day they span with correct hour extents. V2's day view had no today
-marker, no rest-day signal and no celestial/era/season readout at all; the v4
-one carries all four.
-
-**NO PINNED-STRUCT AMENDMENT WAS NEEDED.** The scout expected numeric hours on
-`calblock.Mark` (a `data.go` STOP-AND-FLAG). The hour axis is a PLUGIN surface,
-so the producer holds the `Event` beside the `Mark` and reads
-`StartHour`/`EndHour` directly. `internal/widgets/calendar_block/data.go` is
-untouched.
-
-**THE DAY CARD OPENS ON A WEEK COLUMN WITH ZERO JS CHANGES.** The columns and
-chips carry `data-day` + `data-day-ord` inside the existing `[data-bench-block]`
-wrapper — `calendar_daycard.js`'s own trigger — and `dayCardPayloadJSON` emits
-the WEEK's days for a Block that is drawing one. Keys are widened to
-`<slug>-<y>-<m>-<d>` because a week window can hold the same ordinal twice
-(one-day intercalary months).
-
-**WHAT WAS DELIBERATELY DROPPED, and it is listed rather than silently omitted:**
-drag-to-reschedule (V2's discarded the hour — shipping it would port a lie),
-`data-cell-hour` (emitted by V2, read by nothing), drag-to-create and the `n`
-shortcut (both dead in V2's week view), the day mini-popover (month-only in V2),
-and `DensityDetailed`'s inline `DescriptionHTML` ([DC-1]'s payload law forbids
-prose in a per-day payload). The two cutover tests were **inverted, not
-deleted** — the negative "a week segment reappeared" is now a positive parse for
-`view=week`, and `assertMovedPermanently` was NOT loosened for its other four
-callers.
-
-Full detail in `internal/plugins/calendar/bench_weekday.go`'s header and
-`bench_weekday_test.go`.
-
 ### RSVP + availability made runnable (C-RSVP-ROBUST, 2026-08-16)
 
 Branch `claude/coordinator-handoff-stage-3-3d3s4w`. Twelve defects across
@@ -1246,8 +1190,8 @@ third box is the interesting one:
 |---|---|
 | every door swept by R2-4 | **MET.** Done, and held by `TestSunset_NoLiveDoorRemains`, which fails CI on a new one |
 | R2-5 (`C-CALV4-SKY`) MERGED | **NOT MET — and not for a build reason.** The sky *shipped*, fix round included. The box says MERGED and PR #588 is open, so this reads NOT MET until it lands. Do not tick it from the branch |
-| `C-CALV4-WEEKDAY-VIEWS` MERGED | **BUILT 2026-08-16, on branch — reads NOT MET until it lands, on the same rule R2-5 is held to.** `/calendars/:calId/week` and `/day` now 301 to `?view=week|day` on the Bench and SERVE. Zero routes added, so the 727 → 722 arithmetic below is untouched |
-| `C-CALV4-GM-CONSOLE` MERGED | **BUILT 2026-08-16, on branch — reads NOT MET until it lands**, on the same rule R2-5 and WEEKDAY-VIEWS are held to. The console is rehoused onto the Bench as a GM-gated fixed pull-out (`bench_gmconsole.templ` / `.go`, §GM CONSOLE in `calendar-bench.css`), driven by the same `gm_panel.js` — which now reads its endpoint off its OWN mount and rides `pluginBodyScripts`. Zero routes, zero capabilities, zero migrations: the arithmetic below is untouched. **Twelve of thirteen control families moved; Pause did not** (it drives the sky engine [SKY-13] refused on the Bench) |
+| `C-CALV4-WEEKDAY-VIEWS` MERGED | **NOT MET, not started.** A prerequisite, not a booking — and R2-4 made it sharper, because `/calendars/:calId/week` and `/day` now 301 to a month |
+| `C-CALV4-GM-CONSOLE` MERGED | **NOT MET, not started.** A rehousing job, not a backend one: `PUT /calendar/world-state` survives any sunset |
 
 Arithmetic for that slice, pre-computed so it never regenerates until green:
 **727 → 722**. State removals and additions separately — a net count hides a
@@ -1269,10 +1213,8 @@ tonight's celestial register — on the Bench's Primary Block; and **expand any
 entity page's calendar embed into a full-tier surface over the page they are
 on**, without navigating anywhere and without changing what the embed looks like
 tomorrow. **What V2 still
-solely owns:** the GM world-state console. The week view and the day view were
-V2's alone until 2026-08-16 and are now the Bench's under `?view=week|day` (see
-the C-CALV4-WEEKDAY-VIEWS entry at the top of this section) — so of the gate's
-four boxes, two are done and the console is the last build.
+solely owns:** the week view, the day view, and the GM world-state console. All
+three are the gate above, and all three are why the shell is still standing.
 
 ### A real MariaDB was available the whole time (2026-08-08)
 
@@ -1437,11 +1379,8 @@ still reachable by URL — just not by click.
 replacements first", 2026-08-07) and belongs to **`C-CALV4-SHELL-REMOVAL`**,
 behind four boxes: `C-CALV4-WEEKDAY-VIEWS` merged · `C-CALV4-GM-CONSOLE` merged ·
 R2-5 merged · every door swept by R2-4 (done). **As of 2026-08-08 exactly ONE is
-met** — the door sweep. (**2026-08-16:** WEEKDAY-VIEWS is BUILT and on branch,
-and `C-CALV4-GM-CONSOLE` — which was the last unbuilt box — is BUILT and on
-branch too; both read met the day they land.) R2-5 shipped but PR #588 is open,
-and that box says MERGED, so it does not tick from the branch. **Nothing in the
-gate is now unbuilt; what remains is landing.** The
+met** — the door sweep. R2-5 shipped but PR #588 is open, and that box says
+MERGED, so it does not tick from the branch; the other two are unstarted. The
 per-box state is tabulated in the round-2 close-out entry at the top of this
 section. The pre-computed arithmetic for
 that slice is **727 → 722**. See `.ai/todo.md` §0b and
@@ -1462,13 +1401,10 @@ carried two real member names. `benchRsvpResolve` now skips the roster below
 
 **Eight tests inverted, none softened, none deleted.** Seven were predicted by
 the dispatch; the eighth (`TestCreateCalendar_RealLifeRedirectsToV2`) pinned a
-door the dispatch moves by name. **A stated feature loss rode with them:**
-`/calendars/:calId/week` and `/day` landed on a month, because the only week and
-day views in the product lived inside the shell. **CLOSED 2026-08-16 by
-`C-CALV4-WEEKDAY-VIEWS`** — both redirects now carry `?view=week|day` (and the
-V2 `?year=&month=&day=` cursor, translated) onto a Bench that serves them, and
-the two cutover tests that recorded the loss as a NEGATIVE assertion were
-inverted into positive parses rather than deleted.
+door the dispatch moves by name. **A stated feature loss rides with them:**
+`/calendars/:calId/week` and `/day` now land on a month, because the only week
+and day views in the product live inside the shell — that is what
+`C-CALV4-WEEKDAY-VIEWS` exists to fix, and it is a PREREQUISITE of the removal.
 
 ### calendar-v4 R2-3 — C-CALV4-THEATER: stopped, re-signed, SHIPPED (2026-08-08)
 

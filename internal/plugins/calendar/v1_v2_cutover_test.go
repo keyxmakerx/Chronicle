@@ -11,7 +11,6 @@ import (
 	"context"
 	"net/http"
 	"net/http/httptest"
-	"net/url"
 	"strings"
 	"testing"
 
@@ -49,14 +48,6 @@ func ownerCtx(t *testing.T, calID string) (echo.Context, *httptest.ResponseRecor
 }
 
 // assertMovedPermanently fails unless the recorder holds a 301 to want.
-//
-// IT STILL ASSERTS EXACT EQUALITY AND IT WAS NOT LOOSENED. C-CALV4-WEEKDAY-VIEWS
-// gave the week and day redirects a query string, which this helper cannot
-// express — and the fix was a SECOND helper for those two callers
-// (assertMovedPermanentlyToView), not a prefix match here. Four callers
-// (ShowRedirectsToTheBench, ShowRedirectNoCalId, IndexWithCalendars,
-// LegacyRedirect) must keep asserting the BARE Bench URL: relaxing this one
-// would have quietly stopped all four from noticing a stray parameter.
 func assertMovedPermanently(t *testing.T, rec *httptest.ResponseRecorder, want string) {
 	t.Helper()
 	if rec.Code != http.StatusMovedPermanently {
@@ -64,47 +55,6 @@ func assertMovedPermanently(t *testing.T, rec *httptest.ResponseRecorder, want s
 	}
 	if loc := rec.Header().Get("Location"); loc != want {
 		t.Errorf("Location=%q want %q", loc, want)
-	}
-}
-
-// assertMovedPermanentlyToView is the week/day pair's helper: a 301 to the Bench
-// path carrying the view (and any cursor) the caller asked for.
-//
-// IT PARSES RATHER THAN SUBSTRING-MATCHES, and that is the whole reason it
-// exists rather than a `strings.Contains(loc, "week")`. The tests below used to
-// assert the ABSENCE of the segment with Contains, and the day one in particular
-// was a trap waiting to spring: "day" is a substring of "today", of "monday",
-// and of any campaign id containing those letters, so the negative form would
-// have gone red on a target that was perfectly correct. Parsing asks the
-// question the assertion actually means — "does the Bench receive view=day" —
-// and cannot be fooled by a neighbouring word.
-func assertMovedPermanentlyToView(t *testing.T, rec *httptest.ResponseRecorder, wantPath string, wantQuery map[string]string) {
-	t.Helper()
-	if rec.Code != http.StatusMovedPermanently {
-		t.Fatalf("status=%d want 301", rec.Code)
-	}
-	loc := rec.Header().Get("Location")
-	u, err := url.Parse(loc)
-	if err != nil {
-		t.Fatalf("Location=%q is not a URL: %v", loc, err)
-	}
-	if u.Path != wantPath {
-		t.Errorf("Location path=%q want %q (full: %q)", u.Path, wantPath, loc)
-	}
-	q := u.Query()
-	for k, want := range wantQuery {
-		if got := q.Get(k); got != want {
-			t.Errorf("Location %s=%q want %q (full: %q)", k, got, want, loc)
-		}
-	}
-	// The Bench honours a closed set of parameters; a redirect that invented a
-	// sixth would be a promise the handler does not keep.
-	for k := range q {
-		switch k {
-		case "view", "y", "m", "d", "sort":
-		default:
-			t.Errorf("Location carries %q, which /apps/calendar does not read (full: %q)", k, loc)
-		}
 	}
 }
 
@@ -126,93 +76,49 @@ func TestCutover_ShowRedirectsToTheBench(t *testing.T) {
 	assertMovedPermanently(t, rec, "/campaigns/camp-1/apps/calendar")
 }
 
-// INVERTED A SECOND TIME, BY C-CALV4-WEEKDAY-VIEWS — AND THIS ONE INVERTS THE
-// SIGN OF THE ASSERTION, so read the history before touching it.
+// INVERTED BY C-CALV4-V2SUNSET R2-4 ([VS-9] SIGNED) — AND THE COMMENT MUST SAY
+// WHY THE WEEK SEGMENT VANISHES, because a feature loss must not hide inside a
+// green test.
 //
-//	V1 cutover       : asserted "/campaigns/camp-1/calendar/v2/cal-1/week".
-//	V2SUNSET R2-4    : asserted the bare Bench AND asserted the week segment was
-//	                   GONE, because v4 had no week view. That negative was the
-//	                   RECORD OF A LIVE FEATURE LOSS, deliberately left where a
-//	                   reader would trip over it, and its own message said "if v4
-//	                   grew a week view, re-point this redirect at it and say so".
-//	THIS SLICE       : v4 grew one. So the negative is RE-POINTED, never deleted:
-//	                   where it demanded the week's ABSENCE it now demands its
-//	                   PRESENCE, on the Bench's own `?view=` cursor.
+// This asserted "/campaigns/camp-1/calendar/v2/cal-1/week". THE NEW CLAIM: it
+// lands on the Bench, which is a MONTH.
 //
-// THE NEW CLAIM: a /week bookmark reaches a WEEK. The Bench serves it off the
-// same route under `?view=week` (bench_weekday.go), so no route was added and
-// internal/wire/routes_snapshot.txt is byte-identical.
+// THE SEGMENT DOES NOT MOVE — IT HAS NOWHERE TO GO. The V2 shell's
+// `case "week", "day"` (handler_v2.go) is the ONLY week view in the product.
+// v4 has none: the Block is a month, the Shelf's tabs are Month / Upcoming /
+// Filters / Almanac, and /schedule is a scheduling surface rather than a
+// calendar week. So a /week bookmark now resolves to a month grid.
 //
-// IT PARSES INSTEAD OF SUBSTRING-MATCHING (see assertMovedPermanentlyToView):
-// the old form asked whether the string contained "week", and the inverted form
-// of that question would pass on any target that merely mentioned one.
-//
-// assertMovedPermanently IS NOT USED HERE and was NOT loosened to fit. It
-// asserts exact equality for its other four callers, which must keep proving
-// the BARE Bench URL.
-func TestCutover_WeekRedirectsToTheBenchWeekView(t *testing.T) {
+// THIS IS [VS-1]'s FIRST GAP, AND IT IS A PREREQUISITE, NOT A BOOKING.
+// C-CALV4-WEEKDAY-VIEWS must MERGE before C-CALV4-SHELL-REMOVAL may start —
+// deleting the shell today would delete the only week and day views that exist.
+// When that slice lands, this test inverts once more, back toward a week.
+func TestCutover_WeekRedirectsToTheBenchAndLosesTheWeek(t *testing.T) {
 	h := NewHandler(&cutoverStub{})
 	c, rec := ownerCtx(t, "cal-1")
 	if err := h.RedirectWeekV2(c); err != nil {
 		t.Fatalf("RedirectWeekV2: %v", err)
 	}
-	assertMovedPermanentlyToView(t, rec, "/campaigns/camp-1/apps/calendar",
-		map[string]string{"view": "week"})
+	assertMovedPermanently(t, rec, "/campaigns/camp-1/apps/calendar")
+	if strings.Contains(rec.Header().Get("Location"), "week") {
+		t.Error("a week segment reappeared — if v4 grew a week view, re-point this redirect at " +
+			"it and say so, rather than letting the segment ride to a page that ignores it")
+	}
 }
 
-// The DAY twin, inverted for the same reason and on the same evidence.
-//
-// AND THE SUBSTRING TRAP IS THE REASON THIS ONE PARSES RATHER THAN MATCHING A
-// DIFFERENT STRING. The retired assertion was
-// `!strings.Contains(Location, "day")`, which happened to hold only because
-// "/campaigns/camp-1/apps/calendar" contains no "day". Any target carrying
-// "today", a campaign id with "day" in it, or a parameter spelled that way would
-// have failed a correct redirect. The question the assertion means is "does the
-// Bench receive view=day", and that is a parse.
-func TestCutover_DayRedirectsToTheBenchDayView(t *testing.T) {
+// INVERTED BY C-CALV4-V2SUNSET R2-4 ([VS-9] SIGNED), same claim and same reason
+// as the week above: the DAY view exists only inside the V2 shell, v4 has no
+// replacement, and C-CALV4-WEEKDAY-VIEWS is the prerequisite slice that builds
+// one. A /day bookmark lands on the Bench's month.
+func TestCutover_DayRedirectsToTheBenchAndLosesTheDay(t *testing.T) {
 	h := NewHandler(&cutoverStub{})
 	c, rec := ownerCtx(t, "cal-1")
 	if err := h.RedirectDayV2(c); err != nil {
 		t.Fatalf("RedirectDayV2: %v", err)
 	}
-	assertMovedPermanentlyToView(t, rec, "/campaigns/camp-1/apps/calendar",
-		map[string]string{"view": "day"})
-}
-
-// TestCutover_WeekDayRedirectsCarryTheV2Cursor — the half of the reconnection a
-// view key alone would not have bought.
-//
-// The V2 shell's week and day routes read `?year=&month=&day=` and the Bench
-// reads `?y=&m=&d=`. A permanent redirect that dropped a cursor it CAN honour
-// would send every bookmarked week to the calendar's current date, which is the
-// same silent reduction the :calId drop already is — one is unavoidable (the
-// Bench cannot select a calendar), this one is not.
-func TestCutover_WeekDayRedirectsCarryTheV2Cursor(t *testing.T) {
-	for _, tc := range []struct {
-		name string
-		call func(*Handler, echo.Context) error
-		view string
-	}{
-		{"week", (*Handler).RedirectWeekV2, "week"},
-		{"day", (*Handler).RedirectDayV2, "day"},
-	} {
-		t.Run(tc.name, func(t *testing.T) {
-			h := NewHandler(&cutoverStub{})
-			e := echo.New()
-			req := httptest.NewRequest(http.MethodGet, "/?year=1492&month=6&day=17", nil)
-			rec := httptest.NewRecorder()
-			c := e.NewContext(req, rec)
-			c.Set("campaign_context", &campaigns.CampaignContext{
-				Campaign: &campaigns.Campaign{ID: "camp-1"}, MemberRole: campaigns.RoleOwner,
-			})
-			c.SetParamNames("calId")
-			c.SetParamValues("cal-1")
-			if err := tc.call(h, c); err != nil {
-				t.Fatalf("redirect: %v", err)
-			}
-			assertMovedPermanentlyToView(t, rec, "/campaigns/camp-1/apps/calendar",
-				map[string]string{"view": tc.view, "y": "1492", "m": "6", "d": "17"})
-		})
+	assertMovedPermanently(t, rec, "/campaigns/camp-1/apps/calendar")
+	if strings.Contains(rec.Header().Get("Location"), "day") {
+		t.Error("a day segment reappeared — see the week test's reasoning")
 	}
 }
 

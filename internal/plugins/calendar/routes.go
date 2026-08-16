@@ -271,14 +271,6 @@ func RegisterRoutes(e *echo.Echo, h *Handler, campaignSvc campaigns.CampaignServ
 	pub.GET("/calendars/:calId", h.RedirectShowV2, campaigns.RequireViewAccess())
 	pub.GET("/calendars/:calId/embed", h.EmbedCalendar, campaigns.RequireViewAccess())   // PRESERVE: no V2 embed
 	pub.GET("/calendars/:calId/timeline", h.ShowTimeline, campaigns.RequireViewAccess()) // PRESERVE: Timeline V2 deferred
-	// THE WEEK AND DAY REDIRECTS NOW SERVE A WEEK AND A DAY
-	// (C-CALV4-WEEKDAY-VIEWS). They 301 to the Bench carrying `?view=week|day`
-	// and the V2 cursor translated to `?y=&m=&d=`; the Bench renders both off
-	// this same existing route, so NO route was added and
-	// internal/wire/routes_snapshot.txt is byte-identical. Until this slice they
-	// landed on a MONTH, which was a live feature loss recorded here and in
-	// v2CalendarRedirect's own comment — both rewritten rather than left
-	// describing a state that no longer holds.
 	pub.GET("/calendars/:calId/week", h.RedirectWeekV2, campaigns.RequireViewAccess())
 	pub.GET("/calendars/:calId/day", h.RedirectDayV2, campaigns.RequireViewAccess())
 	pub.GET("/calendars/:calId/upcoming", h.UpcomingEventsFragment, campaigns.RequireViewAccess()) // PRESERVE: fragment loader

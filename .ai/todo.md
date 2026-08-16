@@ -996,29 +996,16 @@ is carried, not closed, and the first row is the one the rest hang off.
 
       **ENTRY CONDITION, ALL FOUR BOXES, not partially satisfiable.**
       **AS OF 2026-08-08 THE GATE READS ONE OF FOUR:**
-      - [x] `C-CALV4-WEEKDAY-VIEWS` MERGED — v4 has a week and a day view, or
+      - [ ] `C-CALV4-WEEKDAY-VIEWS` MERGED — v4 has a week and a day view, or
             the slice records the signed decision that it will not.
-            **BUILT 2026-08-16; reads MET the day it lands.** v4 HAS both, on
-            the Bench under `?view=week|day` — zero routes added, so the
-            727 → 722 arithmetic is untouched. The loss R2-4 sharpened is
-            closed: `/calendars/:calId/week` and `/day` used to 301 to the
+            **NOT MET, NOT STARTED.** R2-4 sharpened this one rather than
+            advancing it: `/calendars/:calId/week` and `/day` now 301 to the
             Bench's MONTH, so the loss is live in the product today and pinned
             by `TestCutover_WeekRedirectsToTheBenchAndLosesTheWeek` + its day
             twin — both of which invert back when this lands
       - [ ] `C-CALV4-GM-CONSOLE` MERGED — the GM world-state console has a v4
-            home. **BUILT 2026-08-16; reads MET the day it lands.** A REHOUSING
-            job, not a backend one: `PUT /calendar/world-state` survives any
-            sunset, and no route, capability or migration was added — so the
-            728 → 723 arithmetic is untouched. The console is a GM-gated
-            fixed-position pull-out mounted once inside `.cal-bench`, beside
-            the day card (`bench_gmconsole.templ` / `bench_gmconsole.go`,
-            §GM CONSOLE in `calendar-bench.css`), driven by the SAME
-            `gm_panel.js` the V2 console uses — which now reads its endpoint,
-            calendar and CSRF token off its OWN mount and rides
-            `pluginBodyScripts`. **Twelve of the thirteen control families
-            moved; PAUSE did not**, and its absence is asserted rather than
-            assumed (`TestBenchGMConsole_PauseIsAbsentBecauseTheEngineIs`) —
-            it drives the sky engine, which [SKY-13] refused on the Bench
+            home. **NOT MET, NOT STARTED.** A REHOUSING job, not a backend one:
+            `PUT /calendar/world-state` survives any sunset
       - [ ] R2-5 (`C-CALV4-SKY`) MERGED — the sky header ships.
             **NOT MET — AND NOT FOR A BUILD REASON.** The sky SHIPPED
             2026-08-08, fix round included, and is on
@@ -1045,77 +1032,17 @@ is carried, not closed, and the first row is the one the rest hang off.
       `/calendar/v2` URLs. It costs that slice one redirect and buys back the
       whole egress population (see the egress row below).
 
-- [x] **`C-CALV4-WEEKDAY-VIEWS` — a v4 week view and day view. A PREREQUISITE,
-      not a booking. BUILT 2026-08-16.** They lived in exactly one place in the
-      product (`handler_v2.go`'s `case "week", "day"`) and now live on the Bench
-      under `?view=week|day` + `?d=`, on the EXISTING `/apps/calendar` route —
-      no route added, `routes_snapshot.txt` byte-identical. The two cutover
-      tests INVERTED as predicted: `TestCutover_WeekRedirectsToTheBenchWeekView`
-      and its day twin now assert the view SURVIVES, by PARSING the Location
-      rather than substring-matching it (the old `Contains(loc, "day")` would
-      have tripped on "today"). `assertMovedPermanently` was NOT loosened — a
-      second helper serves the two callers with a query string.
-      **Dropped deliberately, and listed rather than omitted:** V2's
-      drag-to-reschedule (it discarded the hour), `data-cell-hour` (read by
-      nothing), drag-to-create, the `n` shortcut and the day mini-popover (all
-      three silently dead in V2's week view), and `DensityDetailed`'s inline
-      `DescriptionHTML` ([DC-1] forbids prose in a per-day payload).
-      **Still open, booked here rather than built:** an HOUR-AWARE reschedule.
-      Nothing in the tree reads `data-cell-hour`; a drop control on the hour
-      axis needs `start_hour`/`start_minute` on the PUT, and the day card's
-      editor is the only shipped write path that already binds them. Shipping
-      V2's day-level move dressed as an hour-level one is what this slice
-      refused.
-- [x] **`C-CALV4-GM-CONSOLE` — a v4 home for the GM world-state console. A
-      PREREQUISITE, not a booking. BUILT 2026-08-16.** `calendar_v2_gmpanel.templ`
-      + `gm_panel.js`, whose only mount was `calendar_v2.templ:152`, gated on
-      `CanControlWorldState`. It writes through `PUT /calendar/world-state`,
-      which survives any sunset, so this was a REHOUSING job rather than a
-      backend one — and nothing about the endpoint, its capability gate or the
-      wire changed.
-
-      **The seat.** A GM-gated tab pinned bottom-right, mounted ONCE as a
-      sibling of `[data-bench-surface]` inside `.cal-bench` — the same seat
-      `dayCardScaffold` takes, for the same three reasons ([DC-3]). NOT a fifth
-      `benchSectionKeys` entry: a `<details>` in the page flow REFLOWS and the
-      Weather sheet is 49 tiles, the section store defaults every key CLOSED at
-      every width ([BR2-4]), and the sky header already refused to be a fifth
-      key by name one slice ago ([SKY-10]).
-
-      **`position: fixed`, not the top layer.** The theater's `showModal()` is
-      wrong here (it makes the page inert, and the console's job is to change
-      the world while the GM watches the calendar under it); `popover="manual"`
-      would avoid that but buys nothing `position: fixed` does not already have
-      on this page — the day card's own sheet documents the fixed fallback and
-      `.cal-daycard-drag` is already a page-level fixed overlay from this exact
-      region — while costing a `showPopover()` branch in a driver shared with
-      the V2 console, where the card is not a popover and the call would throw.
-
-      **The floor that had to be picked.** The V2 console gated Set time / Set
-      date on `CanControlWorldState`; the Bench's own date-verb row gates Set
-      date on the stricter **Owner** floor ([GR-SIGN-A](b)). Rehousing put both
-      on ONE page, so the console took the STRICTER of the two shipped floors
-      for the absolute setters and kept the step verbs on the capability — the
-      same "step vs set" split [GR-SIGN-A](b) drew. **A co-DM therefore loses
-      Set time and Set date relative to the V2 page** (they can still reach any
-      time by stepping) and no SERVER floor moved in either direction.
-      `TestBenchGMConsole_SetDateFloorAgreesWithTheVerbRow` fails if the two
-      controls ever answer differently again.
-
-      **Motion: none.** `gm_panel.css` is welded to the skypane and full of
-      transitions; the Bench's rules are a motion-free §GM CONSOLE section
-      INSIDE `calendar-bench.css`, so the signed disclosure register's only
-      enforcement (`TestBenchCSS_NoMotionAtAll`) reads them. A second sheet
-      would have kept that guard green while defeating it — the laundering
-      [DC-6] refuses by name. A third carve-out on the register is an operator
-      signature, so none was taken.
-
-      **What it cost the producer: nothing.** `benchInput` already carried
-      `CanControlWorldState` and `CanAuthorDmOnly`. `buildBench` still never
-      calls `BuildWorldStateSeed` — the markup declares `data-gm-standalone`
-      and the driver GETs the seed from the same URL it PUTs to, on FIRST OPEN
-      only, which is the already-public Player+ read returning the identical
-      seed the PUT echoes back.
+- [ ] **`C-CALV4-WEEKDAY-VIEWS` — a v4 week view and day view. A PREREQUISITE,
+      not a booking.** They exist in exactly one place in the product:
+      `handler_v2.go`'s `case "week", "day"`. Since R2-4,
+      `/calendars/:calId/week` and `/day` 301 to the Bench's MONTH — a stated
+      feature loss, pinned by `TestCutover_WeekRedirectsToTheBenchAndLosesTheWeek`
+      and its day twin, both of which invert back when this lands.
+- [ ] **`C-CALV4-GM-CONSOLE` — a v4 home for the GM world-state console. A
+      PREREQUISITE, not a booking.** `calendar_v2_gmpanel.templ` + `gm_panel.js`,
+      only mount `calendar_v2.templ:152`, gated on `CanControlWorldState`. It
+      writes through `PUT /calendar/world-state`, which survives any sunset, so
+      this is a REHOUSING job rather than a backend one.
 - [ ] **The sky strip gets NO replacement slice. R2-5 IS the replacement**, and
       it is already signed. **Two prerequisites get new slices and the third is
       already covered — never three. Do not book a fourth.**
@@ -1309,11 +1236,12 @@ single row.
       more than one calendar a GM has **no way to click through**. The row
       *"becomes a door again in `C-CALV4-BENCH-CALID`"* — that slice is now the
       one holding this.
-- [x] **`/calendars/:calId/week` and `/day` bookmarks landed on a MONTH grid.
-      CLOSED 2026-08-16 by `C-CALV4-WEEKDAY-VIEWS`.** Both now 301 to
-      `?view=week|day` on the Bench, carrying the V2 `?year=&month=&day=` cursor
-      translated to `?y=&m=&d=` — so a bookmark to a specific week keeps its
-      week. Box 1 of the four-box entry condition is satisfied.
+- [ ] **`/calendars/:calId/week` and `/day` bookmarks land on a MONTH grid.**
+      Week and day views exist in exactly one place in the product (`ShowV2`'s
+      `case "week", "day"`) and v4 has no replacement.
+      **`C-CALV4-WEEKDAY-VIEWS` must MERGE before shell removal** — it is
+      already box 1 of the four-box entry condition above, and this row is the
+      reminder that the loss is live *today*, not at removal time.
 - [ ] **Post-create landing for a real-life calendar is measurably poorer.** The
       world-state features live on the V2 shell, and the create flow now lands
       on the Bench.
@@ -1611,50 +1539,14 @@ what made it a three-day slice rather than a rewrite.
   newer: an annual festival is exactly the thing an operator eventually wants to
   end.
 
-- [ ] **`C-CALV4-DATEVERB-RELOCATE`** — **still open, and now it is a
-  DE-DUPLICATION rather than a relocation.** `C-CALV4-GM-CONSOLE` landed
-  2026-08-16 and did NOT take a fifth Bench section, so the nameplate row stays
-  where it is; but the page now carries the two date verbs TWICE — the
-  nameplate's `±1 day` / Set date and the console's five step verbs + Time
-  sheet. They agree (same endpoint, same payloads, same two floors, pinned by
-  `TestBenchGMConsole_SetDateFloorAgreesWithTheVerbRow`), so this is redundancy
-  and not a defect, and collapsing it is a DESIGN call about which surface a GM
-  reaches for — not a fix. Whoever takes it should note the nameplate row is
-  visible without opening anything, which is the one thing the console is not.
-
-  Of the [GC-3] triage's remaining EIGHT, **seven are rehoused** (weather today,
-  world/celestial trigger with `dm_only`, clear one, clear all, mood tint, reset
-  sky, and the world-state READ — now a lazy first-open GET rather than a
-  producer field). **PAUSE is not**, and is booked separately below.
-  **Weather-for-a-day is not**, and never was the console's: `weatherDate` is
-  the event drawer's path and the console has never sent it.
-
-- [ ] **`C-CALV4-GM-CONSOLE-PAUSE` — the one control the rehousing could not
-  move.** `data-gm-pause` calls `window.__calTimeControl.setPaused`, falling
-  back to `window.CalParticleEngine.setPaused`; both are defined by
-  `static/js/cal-almanac.js`, which the Bench does not load because **[SKY-13]
-  refused the sky engine there BY ARGUMENT** ("the sky header is server markup,
-  custom properties and a native `<details>` — no canvas, no rAF, NO
-  JAVASCRIPT"). Rendered on the Bench it would press, flip its own
-  `aria-pressed`, and freeze nothing, so it is ABSENT and
-  `TestBenchGMConsole_PauseIsAbsentBecauseTheEngineIs` keeps it that way.
-  **Bringing it back means bringing the engine to the Bench, which reverses a
-  signed decision and is an OPERATOR SIGNATURE, not a dev call.** There is
-  nothing to fix until someone takes it.
-
-- [ ] **`C-CALV4-REALTIME-DATE-ABSENCE` — six date controls render on a calendar
-  that refuses all six, on TWO surfaces.** `guardManualDateChange`
-  (`worldstate_service.go`) rejects `advance` and `time` on a calendar that
-  tracks real time, while weather / celestial / mood stay authorable (RC-5). The
-  Bench's date-verb row has always rendered unconditionally, and the rehoused
-  console now does too — deliberately, because hiding one while showing the
-  other would ship the inconsistency `C-CALV4-GM-CONSOLE`'s floor decision
-  exists to remove. The server answers a named validation error the driver
-  surfaces, so nothing is silent; it is still a control that cannot work.
-  **Close it for BOTH surfaces in one slice** (`benchDateVerbs` and
-  `benchGMConsole` both already have the `*Calendar`, so it is
-  `cal.UsesRealTime()` in two producers and one shared line of copy), or the
-  next hand will close it for one and re-open the fork.
+- [ ] **`C-CALV4-DATEVERB-RELOCATE`** — if `C-CALV4-GM-CONSOLE` [GC-1] is later
+  signed for a fifth Bench section, moving the two date verbs into it is
+  GM-CONSOLE's move to make, not a re-litigation. The nameplate row was chosen
+  precisely because it is severable. GM-CONSOLE's [GC-3] triage marks the
+  *advance* and *set-date* families **ALREADY LANDED** and keeps the remaining
+  EIGHT (weather today, weather for a day, world/celestial trigger with
+  `dm_only`, clear one, clear all, mood tint, reset sky, pause, and the
+  world-state READ that has no data path to the Bench at all).
 
 Carried out of R2-2a, not closed:
 
@@ -4193,18 +4085,11 @@ NOT take, each with the reason it was left.
   product question and it costs a fifth `benchSectionKeys` entry. Not a defect;
   recorded so the next hand does not read the URL param as an oversight.
 
-- [x] **STOP-AND-FLAG (4) — whether `/schedule` is the declared successor to
+- [ ] **STOP-AND-FLAG (4) — whether `/schedule` is the declared successor to
   V2's week view**, and the day card the successor to the day view **for lists
-  but not for hours**. **ANSWERED 2026-08-16 by `C-CALV4-WEEKDAY-VIEWS`, and
-  the answer is NO** — stated in `bench_weekday.go`'s header so it is written
-  down where the next hand will read it rather than left to the deletion.
-  `/schedule` is a REAL-WORLD availability matrix (ISO dates, `time.Format`
-  weekday names, hour columns keyed to a wall clock); calling it the in-world
-  week's successor is a category error, and the two `repeat(7, …)` tracks the
-  Bench sheet legitimately carries for that surface are the same distinction in
-  CSS. The day card remains the successor to the day view **for lists**; the
-  HOURS are what the new day view exists for, which is why it is a separate
-  surface rather than a second list.
+  but not for hours**. Belongs to `C-CALV4-WEEKDAY-VIEWS` and to the V2
+  deletion ticket, **not** to GAMEREADY. Decide it explicitly there rather than
+  letting the deletion answer it by omission.
 
 - [ ] **STOP-AND-FLAG (5) — the Bench cannot switch which calendar it shows,
   and `Set active` is DEAD CODE. Re-measured and CONFIRMED at close-out:**
