@@ -1,0 +1,4 @@
+-- 006_calv5_clear_availability (down) — CALV5-PLACEHOLDER
+--
+-- Intentionally empty: deleted answers cannot be reconstructed. Rolling back
+-- past this point means restoring the pre-wipe backup.

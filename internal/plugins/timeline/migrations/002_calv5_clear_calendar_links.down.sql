@@ -1,0 +1,5 @@
+-- 002_calv5_clear_calendar_links (down) — CALV5-PLACEHOLDER
+--
+-- Intentionally empty: the rows this deleted referenced calendar events that
+-- migration 019 dropped, so there is nothing coherent to restore them to.
+-- Rolling back past this point means restoring the pre-wipe backup.

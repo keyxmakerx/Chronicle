@@ -1,0 +1,11 @@
+-- 019_calv5_clean_slate (down) — CALV5-PLACEHOLDER
+--
+-- Intentionally empty.
+--
+-- The up migration drops tables whose data the operator chose not to preserve.
+-- A down migration cannot restore dropped rows, and re-creating the empty
+-- shells would be worse than nothing: it would let a rollback report success
+-- while every calendar in the instance had silently become empty.
+--
+-- Rolling back past this point means restoring the database backup taken
+-- before the wipe.
