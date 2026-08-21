@@ -52,7 +52,16 @@ var contractGoverned = map[string]string{
 	"entities.UpdateEntityInput":        "PUT /entities/:eid and the syncapi twin — every sync push un-parented the entity; {name} alone un-privated it",
 	"timeline.UpdateTimelineEventInput": "PUT .../standalone-events/:eid — a rename cleared eight fields, including per-player visibility rules",
 	"maps.UpdateMarkerInput":            "PUT .../markers/:mkid — an edit or a drag cleared pin_category, visibility_rules and the Foundry pairing key",
-	"calendar.UpdateEventInput":         "PUT .../calendar/events/:eid — Foundry's five-key push turned off recurrence, all-day and the entity link",
+	// CALV5-PLACEHOLDER: "calendar.UpdateEventInput" was listed here —
+	// "PUT .../calendar/events/:eid — Foundry's five-key push turned off
+	// recurrence, all-day and the entity link".
+	//
+	// That is a REAL incident, not a hypothetical: the Foundry module sends a
+	// narrow body on a rename, and a value-typed input read every absent field
+	// as a zero and wrote it. V5's event update input must be presence-aware
+	// from its first commit, and this line must come back with it — the module
+	// still sends narrow bodies (its own contract pins them), so the defect is
+	// waiting for any successor that forgets.
 }
 
 // governedFieldExceptions are value-typed fields deliberately left on a
@@ -84,9 +93,12 @@ var notYetSwept = map[string]bool{
 	"maps.UpdateLayerInput":                  true,
 	"maps.UpdateMapInput":                    true,
 	"campaigns.UpdateCampaignInput":          true,
-	"calendar.UpdateEventVisibilityInput":    true,
-	"calendar.UpdateCalendarVisibilityInput": true,
-	"calendar.UpdateCalendarInput":           true,
+	// CALV5-PLACEHOLDER: three calendar inputs sat on this not-yet-swept
+	// allowlist — UpdateEventVisibilityInput, UpdateCalendarVisibilityInput and
+	// UpdateCalendarInput. They are removed because the types are gone, not
+	// because they were swept. V5's equivalents start ON the contract rather
+	// than on this list: the allowlist is a ratchet, and re-entering a rebuilt
+	// type here would loosen it.
 }
 
 type inputStruct struct {

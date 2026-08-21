@@ -47,7 +47,7 @@ import (
 	"github.com/keyxmakerx/chronicle/internal/plugins/timeline"
 	"github.com/keyxmakerx/chronicle/internal/plugins/widgetbindings"
 	"github.com/keyxmakerx/chronicle/internal/systems"
-	"github.com/keyxmakerx/chronicle/internal/templates/demo"
+	"github.com/keyxmakerx/chronicle/internal/templates/components"
 	"github.com/keyxmakerx/chronicle/internal/templates/layouts"
 	"github.com/keyxmakerx/chronicle/internal/templates/pages"
 	ws "github.com/keyxmakerx/chronicle/internal/websocket"
@@ -461,520 +461,26 @@ func (a *entityCampaignCheckerAdapter) EntityBelongsToCampaign(ctx context.Conte
 	return entity.CampaignID == campaignID, nil
 }
 
-// calendarListerAdapter wraps calendar.CalendarService to implement the
-// timeline.CalendarLister interface. Returns available calendars for the
-// timeline create form's calendar selector dropdown.
-type calendarListerAdapter struct {
-	svc calendar.CalendarService
-}
-
-// ListCalendars returns all calendars for a campaign as lightweight refs
-// for the timeline create form's calendar selector dropdown.
-func (a *calendarListerAdapter) ListCalendars(ctx context.Context, campaignID string) ([]timeline.CalendarRef, error) {
-	cals, err := a.svc.ListCalendars(ctx, campaignID)
-	if err != nil {
-		return nil, err
-	}
-	refs := make([]timeline.CalendarRef, len(cals))
-	for i, cal := range cals {
-		refs[i] = timeline.CalendarRef{ID: cal.ID, Name: cal.Name}
-	}
-	return refs, nil
-}
-
-// timelineForCalendarAdapter wraps timeline.TimelineService to implement the
-// calendar.TimelineLister interface — the reverse-direction cross-plugin read
-// the Calendars dashboard's associations panel needs (C-APPS-CAL-DASH-W1). The
-// calendar plugin never imports the timeline repo; it reaches the timeline
-// service through this adapter at the app boundary (plugin-isolation rule).
-type timelineForCalendarAdapter struct {
-	svc timeline.TimelineService
-}
-
-// ListTimelinesForCalendar returns the timelines bound to a calendar as the
-// calendar plugin's lightweight TimelineRef projection.
-// The (role, userID) pair is request-derived on every caller of this adapter,
-// so it becomes a RequestViewer — never a system one (C-AUTHZ-EMPTY-USERID).
-func (a *timelineForCalendarAdapter) ListTimelinesForCalendar(ctx context.Context, calendarID string, role int, userID string) ([]calendar.TimelineRef, error) {
-	tls, err := a.svc.ListTimelinesForCalendar(ctx, calendarID, permissions.RequestViewer(role, userID))
-	if err != nil {
-		return nil, err
-	}
-	refs := make([]calendar.TimelineRef, 0, len(tls))
-	for _, t := range tls {
-		refs = append(refs, calendar.TimelineRef{
-			ID: t.ID, Name: t.Name, Color: t.Color, Icon: t.Icon,
-			Visibility: t.Visibility, EventCount: t.EventCount,
-		})
-	}
-	return refs, nil
-}
-
-// calendarSyncLinkAdapter wraps syncapi.SyncAPIService to implement the
-// calendar.SyncLinkProbe interface — the read behind the calendar-v4 Block's
-// sync pill (C-CALV4-SPINE-P2). The calendar plugin never imports syncapi
-// (TestPluginImportGuard); it reaches it through this adapter at the app
-// boundary (plugin-isolation rule 8).
+// CALV5-PLACEHOLDER: ten cross-plugin bridge adapters stood here, wiring the
+// calendar to the rest of Chronicle in both directions:
 //
-// The pill's numerator is DEFINED, not queried (coordinator ruling COMMON
-// §6.3): sync_mappings has no calendar type and every syncapi calendar endpoint
-// resolves the campaign default, so "connected" is a CAMPAIGN fact. The
-// campaign-scoped fact that exists is the calendar date beacon — the row a
-// Bearer-authed module writes when it reads GET /calendar/date, plus the
-// applied date it confirms afterwards. That is the honest source for
-// "connected", "pushed Nm ago" and "drifted".
-type calendarSyncLinkAdapter struct {
-	svc syncapi.SyncAPIService
-}
-
-// CampaignSyncSnapshot reports whether a module has ever talked to this
-// campaign and what date it last applied. A missing beacon is "not connected",
-// not an error — most campaigns have no module attached.
-func (a *calendarSyncLinkAdapter) CampaignSyncSnapshot(ctx context.Context, campaignID string) (calendar.BlockSyncSnapshot, error) {
-	b, err := a.svc.GetCalendarDateBeacon(ctx, campaignID)
-	if err != nil || b == nil {
-		return calendar.BlockSyncSnapshot{}, err
-	}
-	snap := calendar.BlockSyncSnapshot{
-		Connected: true,
-		// The beacon is written by the Foundry-facing sync API; it is the only
-		// transport that writes it today, so naming it here is a fact rather
-		// than a guess. A second transport would carry its own label.
-		Transport:    "Foundry",
-		LastSeen:     b.ServedAt,
-		AppliedYear:  b.AppliedYear,
-		AppliedMonth: b.AppliedMonth,
-		AppliedDay:   b.AppliedDay,
-	}
-	return snap, nil
-}
-
-// calendarEntityCreatorAdapter wraps entities.EntityService to implement the
-// calendar.EntityCreator interface — the cross-plugin write the event drawer's
-// "create entity from event" action needs (C-CAL-EDITOR-EXPANSION PR1). The
-// calendar plugin never imports the entities repo; it reaches the entities
-// service through this adapter at the app boundary (plugin-isolation rule 8).
-type calendarEntityCreatorAdapter struct {
-	svc entities.EntityService
-}
-
-// ListEntityTypes projects the campaign's entity types into the calendar
-// plugin's lightweight EntityTypeRef for the create-entity picker.
-func (a *calendarEntityCreatorAdapter) ListEntityTypes(ctx context.Context, campaignID string) ([]calendar.EntityTypeRef, error) {
-	ts, err := a.svc.GetEntityTypes(ctx, campaignID)
-	if err != nil {
-		return nil, err
-	}
-	refs := make([]calendar.EntityTypeRef, 0, len(ts))
-	for _, t := range ts {
-		refs = append(refs, calendar.EntityTypeRef{ID: t.ID, Name: t.Name, Slug: t.Slug})
-	}
-	return refs, nil
-}
-
-// CreateEntity creates a campaign entity of the given type via the entities
-// service's own creation policy (which validates the type belongs to the
-// campaign) and returns its id.
-func (a *calendarEntityCreatorAdapter) CreateEntity(ctx context.Context, campaignID, userID string, typeID int, name string) (string, error) {
-	ent, err := a.svc.Create(ctx, campaignID, userID, entities.CreateEntityInput{Name: name, EntityTypeID: typeID})
-	if err != nil {
-		return "", err
-	}
-	return ent.ID, nil
-}
-
-// --- C-CAL-RSVP-P1 cross-plugin adapters ---
+//   toward the calendar — timelineForCalendarAdapter, calendarSyncLinkAdapter,
+//   calendarEntityCreatorAdapter, calendarRSVPNotifierAdapter,
+//   calendarAvailabilityAdapter (member zones, exception dates, offered
+//   windows), calendarBenchScheduleAdapter, calendarOwnWeekAdapter;
 //
-// The calendar plugin declares narrow interfaces for what event RSVPs need from
-// other plugins; these adapters bind them to the concrete services here at the
-// app boundary (rule 8). The calendar package gains no import edge into
-// sessions — which internal/wire/plugin_import_guard_test.go forbids — and each
-// seam is nil-safe on the calendar side, so an instance with no SMTP and no
-// scheduler still does in-app RSVP.
-
-// calendarRSVPNotifierAdapter wraps the sessions notifications service to
-// implement calendar.RSVPNotifier. The notification TYPE constant belongs to
-// the store's owner, so it is supplied HERE rather than by the calendar.
-type calendarRSVPNotifierAdapter struct {
-	svc sessions.SessionService
-}
-
-// NotifyRSVP writes one bell notification per recipient.
-func (a *calendarRSVPNotifierAdapter) NotifyRSVP(ctx context.Context, userIDs []string, campaignID, message, link string) error {
-	return a.svc.NotifyUsers(ctx, userIDs, campaignID, sessions.NotifCalendarRSVP, message, link)
-}
-
-// calendarAvailabilityAdapter wraps the sessions availability service to
-// implement calendar.AvailabilityExceptionWriter — the scheduler write behind
-// the emailed "Out this week" action.
+//   away from it — calendarListerAdapter, calendarEventListerAdapter and
+//   calendarEraListerAdapter, which fed timeline its CalendarRef /
+//   CalendarEventRef / CalendarEra.
 //
-// SELF-WRITE ONLY. Both methods take the userID the calendar resolved from a
-// redeemed token or an authenticated session and pass it straight through to
-// the sessions "…My…" methods, which scope every row to (campaign, user). There
-// is no code path by which one member's click writes another member's
-// availability.
-type calendarAvailabilityAdapter struct {
-	svc     sessions.SessionService
-	authSvc auth.AuthService
-}
-
-// ExceptionDates returns the dates on which the member already has ANY
-// availability exception, so the caller can skip hand-authored days.
-func (a *calendarAvailabilityAdapter) ExceptionDates(ctx context.Context, campaignID, userID string) ([]string, error) {
-	excs, err := a.svc.ListMyExceptions(ctx, campaignID, userID)
-	if err != nil {
-		return nil, err
-	}
-	out := make([]string, 0, len(excs))
-	seen := make(map[string]bool, len(excs))
-	for _, e := range excs {
-		if seen[e.OnDate] {
-			continue
-		}
-		seen[e.OnDate] = true
-		out = append(out, e.OnDate)
-	}
-	return out, nil
-}
-
-// MarkDaysUnavailable writes one full-day (0–1440) 'unavailable' exception per
-// date, one ReplaceMyDayExceptions call each — the same per-date endpoint the
-// scheduler's own "Out this week" button loops over client-side
-// (static/js/availability.js fireOutWeek). Reusing it means the per-user
-// exception cap (C-SCHED-P2 0d) is re-checked on every day for free.
-// It returns THE DATES IT ACTUALLY WROTE alongside any error. There is no
-// transaction spanning the week, so a failure part-way (the per-user exception
-// cap, a transient DB error) leaves the earlier days committed; returning the
-// prefix lets the caller tell the member which days really changed instead of
-// reporting all-or-nothing at a member who is half-blocked.
-func (a *calendarAvailabilityAdapter) MarkDaysUnavailable(ctx context.Context, campaignID, userID string, dates []string) ([]string, error) {
-	tz := a.userTZ(ctx, campaignID, userID)
-	written := make([]string, 0, len(dates))
-	for _, d := range dates {
-		req := sessions.ReplaceDayExceptionsRequest{
-			OnDate: d,
-			TZ:     tz,
-			Blocks: []sessions.ExceptionBlockDTO{{StartMinute: 0, EndMinute: 1440, State: "unavailable"}},
-		}
-		if err := a.svc.ReplaceMyDayExceptions(ctx, campaignID, userID, req); err != nil {
-			return written, err
-		}
-		written = append(written, d)
-	}
-	return written, nil
-}
-
-// OfferAvailableWindows records TEMPORARY availability a member offered from an
-// RSVP surface (C-CAL-RSVP-P2).
+// The outward three are simply not wired now; timeline already treats those
+// interfaces as optional and nil-guards them (service.go's calEras returns
+// nil, nil when unset), which is why timeline still builds and runs.
 //
-// Delegates to the sessions service rather than looping ReplaceMyDayExceptions
-// here, because the composition rule — exceptions REPLACE a date, so an offer
-// must be merged onto the member's existing effective day or it silently erases
-// their usual hours — is the scheduler's own invariant and belongs with it.
-func (a *calendarAvailabilityAdapter) OfferAvailableWindows(ctx context.Context, campaignID, userID string, windows []calendar.RSVPAvailabilityWindow) error {
-	if len(windows) == 0 {
-		return nil
-	}
-	out := make([]sessions.AvailabilityWindowDTO, 0, len(windows))
-	for _, w := range windows {
-		out = append(out, sessions.AvailabilityWindowDTO{
-			OnDate:      w.OnDate,
-			StartMinute: w.StartMinute,
-			EndMinute:   w.EndMinute,
-		})
-	}
-	return a.svc.AddMyAvailableWindows(ctx, campaignID, userID, a.userTZ(ctx, campaignID, userID), out)
-}
-
-// MemberZone resolves the member's own IANA zone, or "" when they have set none
-// anywhere. See calendar.AvailabilityExceptionWriter.MemberZone — empty is a
-// state, and the caller decides what to do about it.
-func (a *calendarAvailabilityAdapter) MemberZone(ctx context.Context, campaignID, userID string) string {
-	return a.memberZone(ctx, campaignID, userID)
-}
-
-// memberZone reads BOTH places a member can set a zone, availability page first.
-//
-// THE DEFECT THIS ORDER PREVENTS: the availability page's control is labelled
-// "Your timezone" and saving writes member_availability.tz and nothing else —
-// it never calls PUT /account/timezone, the only writer of users.timezone. So a
-// player who set their zone, painted their week and saved still had
-// users.timezone NULL, and everything downstream of this adapter treated them
-// as UTC: their emailed "out this week" resolved the wrong week, and their
-// offered windows were stamped UTC over New York hours.
-func (a *calendarAvailabilityAdapter) memberZone(ctx context.Context, campaignID, userID string) string {
-	if a.svc != nil && campaignID != "" {
-		if zones, err := a.svc.CampaignMemberZones(ctx, campaignID); err == nil {
-			if tz := zones[userID]; tz != "" {
-				return tz
-			}
-		}
-	}
-	if a.authSvc == nil {
-		return ""
-	}
-	u, err := a.authSvc.GetUser(ctx, userID)
-	if err != nil || u == nil || u.Timezone == nil || *u.Timezone == "" {
-		return ""
-	}
-	return *u.Timezone
-}
-
-// userTZ is memberZone with the UTC fallback the WRITE paths need: a stored row
-// must carry some zone, and UTC is the only defensible one when the member has
-// named none. The read paths use memberZone directly so they can DISCLOSE the
-// absence instead of laundering it into a fact.
-func (a *calendarAvailabilityAdapter) userTZ(ctx context.Context, campaignID, userID string) string {
-	if tz := a.memberZone(ctx, campaignID, userID); tz != "" {
-		return tz
-	}
-	return "UTC"
-}
-
-// calendarBenchScheduleAdapter wraps the sessions plugin's availability handler
-// to implement calendar.BenchScheduleReader — the READ seam behind the Bench's
-// RSVP panel (C-CALV4-RSVP-P8).
-//
-// It maps sessions' own types onto the calendar's narrow DTOs rather than
-// sharing a type, because the wire contract
-// (internal/wire/plugin_import_guard_test.go) forbids a compile-time edge
-// between the two plugins outright. That is the same shape
-// calendarAvailabilityAdapter already uses for the WRITE direction.
-//
-// PERMISSION PASSES STRAIGHT THROUGH AND IS NEVER WIDENED HERE. includeDetail
-// arrives from the calendar handler, which derived it from the viewer's role,
-// and is handed to the same CampaignWeekOverlay the /availability/overlay
-// endpoint calls — so the Bench and the scheduler page cannot disagree about
-// who may see whose lanes.
-type calendarBenchScheduleAdapter struct {
-	sessions *sessions.Handler
-}
-
-// BenchRoster returns the party-visible roster: every member, in the overlay's
-// stable order, with role, co-DM grant and stored zone resolved.
-func (a *calendarBenchScheduleAdapter) BenchRoster(ctx context.Context, campaignID string) ([]calendar.BenchRosterMember, error) {
-	if a.sessions == nil {
-		return nil, nil
-	}
-	in := a.sessions.CampaignRoster(ctx, campaignID)
-	out := make([]calendar.BenchRosterMember, 0, len(in))
-	for _, m := range in {
-		out = append(out, calendar.BenchRosterMember{
-			UserID: m.UserID, Name: m.Name, Role: m.Role,
-			IsOwner: m.IsOwner, IsCoDM: m.IsCoDM, TZ: m.TZ,
-		})
-	}
-	return out, nil
-}
-
-// BenchAvailability narrows the week overlay to the three things the panel
-// prints: the per-hour free counts (the density row and the derived window),
-// how many members have entered anything (the window's quorum), and — only when
-// the caller is entitled to it — a per-member, per-day free flag for the lanes.
-//
-// The lane map is built ONLY from overlay.Members, which BuildOverlay leaves
-// empty unless includeDetail is true. So a player's returned value carries no
-// member lane data at all: the absence is in the payload, not in a template
-// branch downstream (§4).
-func (a *calendarBenchScheduleAdapter) BenchAvailability(ctx context.Context, campaignID, weekStart,
-	viewerTZ string, includeDetail bool) (*calendar.BenchAvailability, error) {
-	if a.sessions == nil {
-		return nil, nil
-	}
-	ov, err := a.sessions.CampaignWeekOverlay(ctx, campaignID, weekStart, viewerTZ, includeDetail)
-	if err != nil || ov == nil {
-		return nil, err
-	}
-	out := &calendar.BenchAvailability{WeekStart: ov.WeekStart}
-	for _, d := range ov.Days {
-		free := make([]int, len(d.Hours))
-		prefer := make([]int, len(d.Hours))
-		for h, cell := range d.Hours {
-			free[h] = cell.Free
-			// PREFER IS AN AGGREGATE, exactly as Free is — a count with no
-			// identity in it — so it crosses this seam at every role. It is the
-			// /schedule Verdict's second ranking key (C-CALV4-RSVP-P8 Part B).
-			prefer[h] = cell.Prefer
-		}
-		out.Days = append(out.Days, calendar.BenchAvailabilityDay{
-			Date: d.Date, Free: free, Prefer: prefer,
-		})
-	}
-	// WithPattern is an AGGREGATE — a count with no identity in it — so it is
-	// safe at every role. Derived from the per-hour counts rather than from the
-	// roster, because a member with a saved pattern that never overlaps this
-	// week genuinely has nothing to rank.
-	seen := 0
-	for _, d := range out.Days {
-		for _, n := range d.Free {
-			if n > seen {
-				seen = n
-			}
-		}
-	}
-	out.WithPattern = seen
-	// ONE GATE, TWO PROJECTIONS. FreeDays (the Bench's seven booleans) and Lanes
-	// (the /schedule Matrix's minute-accurate runs) are built from the same
-	// overlay.Members inside the same `includeDetail` branch, so a viewer can
-	// never receive one without the other and a player receives neither. The
-	// absence is in the payload, not in a template downstream (§4).
-	if includeDetail && len(ov.Members) > 0 {
-		out.FreeDays = make(map[string][]bool, len(ov.Members))
-		out.Lanes = make(map[string][]calendar.BenchLaneSegment, len(ov.Members))
-		for _, m := range ov.Members {
-			days := make([]bool, len(out.Days))
-			lanes := make([]calendar.BenchLaneSegment, 0, len(m.Lanes))
-			for _, seg := range m.Lanes {
-				if seg.DayIndex >= 0 && seg.DayIndex < len(days) {
-					days[seg.DayIndex] = true
-				}
-				lanes = append(lanes, calendar.BenchLaneSegment{
-					DayIndex:    seg.DayIndex,
-					StartMinute: seg.StartMinute,
-					EndMinute:   seg.EndMinute,
-					State:       seg.State,
-				})
-			}
-			out.FreeDays[m.UserID] = days
-			out.Lanes[m.UserID] = lanes
-		}
-	}
-	return out, nil
-}
-
-// calendarOwnWeekAdapter implements calendar.ScheduleOwnWeekReader — the
-// /schedule Painter's read of the VIEWER'S OWN composed week
-// (C-CALV4-RSVP-P8 Part B).
-//
-// ── WHY includeDetail IS TRUE HERE, AND WHY THAT IS NOT AN ESCALATION ──────
-//
-// CampaignWeekOverlay's detail flag decides whether overlay.Members is
-// populated at all; there is no narrower read that composes a member's
-// recurring pattern with their date exceptions for one week, which is exactly
-// what a member has to see in order to edit it. So the overlay is asked for
-// detail and this adapter then returns ONE member's lanes — the one whose id it
-// was given — and discards the rest before returning.
-//
-// That is safe because of where the id comes from: the calendar handler passes
-// auth.GetUserID(c), the /schedule route accepts no identity parameter of any
-// kind, and this adapter is reachable from nowhere else. A member reading back
-// their own saved availability is the same permission
-// GET /campaigns/:id/availability/mine already grants every Player+.
-//
-// THE FILTER IS THE GATE, so it is written as a single early-continue with no
-// second branch that could ever append a foreign row.
-type calendarOwnWeekAdapter struct {
-	sessions *sessions.Handler
-}
-
-// OwnWeekLanes returns only userID's own lane segments for the week.
-func (a *calendarOwnWeekAdapter) OwnWeekLanes(ctx context.Context, campaignID, userID,
-	weekStart, viewerTZ string) ([]calendar.BenchLaneSegment, error) {
-	if a.sessions == nil || userID == "" {
-		return nil, nil
-	}
-	ov, err := a.sessions.CampaignWeekOverlay(ctx, campaignID, weekStart, viewerTZ, true)
-	if err != nil || ov == nil {
-		return nil, err
-	}
-	for _, m := range ov.Members {
-		if m.UserID != userID {
-			continue
-		}
-		out := make([]calendar.BenchLaneSegment, 0, len(m.Lanes))
-		for _, seg := range m.Lanes {
-			out = append(out, calendar.BenchLaneSegment{
-				DayIndex:    seg.DayIndex,
-				StartMinute: seg.StartMinute,
-				EndMinute:   seg.EndMinute,
-				State:       seg.State,
-			})
-		}
-		return out, nil
-	}
-	return nil, nil
-}
-
-// calendarEventListerAdapter wraps calendar.CalendarService to implement the
-// timeline.CalendarEventLister interface. Lists all calendar events for the
-// event picker when linking events to a timeline.
-type calendarEventListerAdapter struct {
-	svc calendar.CalendarService
-}
-
-// ListEventsForCalendar returns all events for a calendar as lightweight refs.
-func (a *calendarEventListerAdapter) ListEventsForCalendar(ctx context.Context, calendarID string, role int) ([]timeline.CalendarEventRef, error) {
-	cal, err := a.svc.GetCalendarByID(ctx, calendarID)
-	if err != nil {
-		return nil, err
-	}
-	if cal == nil {
-		return nil, nil
-	}
-
-	// Use ListAllEvents for owner-level access (gets all events regardless of visibility).
-	// For non-owners, use ListEventsForYear across a broad range.
-	// ListAllEvents returns all events with owner visibility.
-	events, err := a.svc.ListAllEvents(ctx, calendarID)
-	if err != nil {
-		return nil, err
-	}
-
-	refs := make([]timeline.CalendarEventRef, 0, len(events))
-	for _, ev := range events {
-		// Apply role-based visibility filter (dm_only = Owner only).
-		if !permissions.CanSeeDmOnly(role) && ev.Visibility == "dm_only" {
-			continue
-		}
-		refs = append(refs, timeline.CalendarEventRef{
-			ID:         ev.ID,
-			Name:       ev.Name,
-			Year:       ev.Year,
-			Month:      ev.Month,
-			Day:        ev.Day,
-			Category:   ev.Category,
-			Visibility: ev.Visibility,
-			EntityID:   ev.EntityID,
-			EntityName: ev.EntityName,
-			EntityIcon: ev.EntityIcon,
-		})
-	}
-	return refs, nil
-}
-
-// calendarEraListerAdapter wraps calendar.CalendarService to implement the
-// timeline.CalendarEraLister interface. Returns calendar eras for the D3
-// visualization background bands.
-type calendarEraListerAdapter struct {
-	svc calendar.CalendarService
-}
-
-// ListEras returns all eras for a calendar as lightweight refs for the timeline viz.
-// Uses GetCalendarByID which loads all sub-resources including eras.
-func (a *calendarEraListerAdapter) ListEras(ctx context.Context, calendarID string) ([]timeline.CalendarEra, error) {
-	cal, err := a.svc.GetCalendarByID(ctx, calendarID)
-	if err != nil {
-		return nil, err
-	}
-	if cal == nil {
-		return nil, nil
-	}
-
-	refs := make([]timeline.CalendarEra, 0, len(cal.Eras))
-	for _, e := range cal.Eras {
-		refs = append(refs, timeline.CalendarEra{
-			Name:      e.Name,
-			StartYear: e.StartYear,
-			EndYear:   e.EndYear,
-			Color:     e.Color,
-		})
-	}
-	return refs, nil
-}
-
-// wsSessionAuthAdapter wraps auth.AuthService to implement the
-// websocket.SessionAuthenticator interface. Extracts the session cookie
-// from the raw HTTP request and validates it.
+// V5 re-implements these against its own service. NOTE the shape they had:
+// every one of them was a NARROW interface owned by the CONSUMING plugin, not
+// a shared type — that is Chronicle rule 8 working, and it is the reason this
+// deletion was surgical rather than a cascade.
 type wsSessionAuthAdapter struct {
 	svc auth.AuthService
 }
@@ -1018,78 +524,41 @@ func (a *wsCampaignRoleAdapter) IsUserDmGranted(ctx context.Context, campaignID,
 	return a.svc.IsUserDmGranted(ctx, campaignID, userID)
 }
 
-// calendarEventPublisherAdapter bridges the websocket.EventBus to the
-// calendar.CalendarEventPublisher interface.
-type calendarEventPublisherAdapter struct {
-	bus ws.EventBus
-}
-
-// PublishCalendarEvent translates calendar domain events into WebSocket messages.
+// CALV5-PLACEHOLDER: calendarEventPublisherAdapter stood here — the bridge
+// from the calendar's PublishCalendarEvent to the websocket bus. Deleted with
+// the plugin; nothing publishes calendar events now.
 //
-// Internal eventType strings now match the public ws.MessageType values
-// 1:1 (C-CAL-WS-DOTTED, 2026-05-19). Earlier emitters used short forms
-// like "season.changed" and this adapter mapped them to the dotted public
-// names; the indirection is gone now so service.go publishes the same
-// string the bus broadcasts. Event-CRUD and date.advanced events keep
-// their short internal form because they weren't in the C-CAL-WS-DOTTED
-// scope — leaving them alone avoids touching consumers (test fixtures
-// and any future Foundry sync code) that already see the dotted public
-// names through the bus layer.
-func (a *calendarEventPublisherAdapter) PublishCalendarEvent(eventType, campaignID, resourceID string, payload any) {
-	if campaignID == "" {
-		return
-	}
-	var msgType ws.MessageType
-	// requiresDM marks the message DM-audience-only at the hub. Only the
-	// world-state DM copy sets it today (C-CAL-WORLDSTATE-WIRE): the calendar
-	// service publishes the same public type twice — a player-safe payload
-	// under the plain name and, when the date carries dm_only celestial
-	// events, a full one under the internal ".dm" name. Both translate to the
-	// same ws.MessageType; only the audience flag differs.
-	requiresDM := false
-	switch eventType {
-	case "event.created":
-		msgType = ws.MsgCalendarEventCreated
-	case "event.updated":
-		msgType = ws.MsgCalendarEventUpdated
-	case "event.deleted":
-		msgType = ws.MsgCalendarEventDeleted
-	case "date.advanced":
-		msgType = ws.MsgCalendarDateAdvanced
-	case "calendar.weather.changed":
-		msgType = ws.MsgCalendarWeatherChanged
-	case "calendar.structure.updated":
-		msgType = ws.MsgCalendarStructureUpdated
-	case "calendar.season.changed":
-		msgType = ws.MsgCalendarSeasonChanged
-	case "calendar.era.changed":
-		msgType = ws.MsgCalendarEraChanged
-	case "calendar.moon.phase_changed":
-		msgType = ws.MsgCalendarMoonPhaseChanged
-	case "calendar.cycle.changed":
-		msgType = ws.MsgCalendarCycleChanged
-	case "calendar.festival.changed":
-		msgType = ws.MsgCalendarFestivalChanged
-	// C-CAL-WORLDSTATE-WIRE (2026-07-26): both of these had live emitters —
-	// worldstate_service.go's SetWorldState and service.go's SetWeatherZones —
-	// but no case here, so every one of them fell into `default: return`.
-	// They were publisher-side dead letters: the GM's meteors, eclipses and
-	// weather-zone edits had never once reached a WebSocket client. The
-	// regression pin is TestCalendarPublisherAdapter_* in routes_calendar_ws_test.go.
-	case calendar.EventWorldStateChanged:
-		msgType = ws.MsgCalendarWorldstateChanged
-	case calendar.EventWorldStateChangedDM:
-		msgType = ws.MsgCalendarWorldstateChanged
-		requiresDM = true
-	case "calendar.weather.zones.changed":
-		msgType = ws.MsgCalendarWeatherZonesChanged
-	default:
-		return
-	}
-	msg := ws.NewMessage(msgType, campaignID, resourceID, payload)
-	msg.RequiresDM = requiresDM
-	a.bus.Publish(msg)
-}
+// READ THIS BEFORE REBUILDING IT (V5). Its failure mode is silent and it has
+// already happened once: the switch ended in `default: return`, so an emitter
+// whose event type had no case here published into nothing. Two live emitters
+// — worldstate SetWorldState and SetWeatherZones — were dead letters for
+// months: the GM's meteors, eclipses and weather-zone edits never once reached
+// a client, and nothing anywhere reported it. The Foundry module's own docs
+// carried "blocked on Chronicle" for a gap that had been fixed 26 days
+// earlier, because nobody could see the wire.
+//
+// The mapping it carried, so V5 has the checklist rather than rediscovering it:
+//   "event.created"                            -> ws.MsgCalendarEventCreated
+//   "event.updated"                            -> ws.MsgCalendarEventUpdated
+//   "event.deleted"                            -> ws.MsgCalendarEventDeleted
+//   "date.advanced"                            -> ws.MsgCalendarDateAdvanced
+//   "calendar.weather.changed"                 -> ws.MsgCalendarWeatherChanged
+//   "calendar.structure.updated"               -> ws.MsgCalendarStructureUpdated
+//   "calendar.season.changed"                  -> ws.MsgCalendarSeasonChanged
+//   "calendar.era.changed"                     -> ws.MsgCalendarEraChanged
+//   "calendar.moon.phase_changed"              -> ws.MsgCalendarMoonPhaseChanged
+//   "calendar.cycle.changed"                   -> ws.MsgCalendarCycleChanged
+//   "calendar.festival.changed"                -> ws.MsgCalendarFestivalChanged
+//   calendar.EventWorldStateChanged            -> ws.MsgCalendarWorldstateChanged
+//   calendar.EventWorldStateChangedDM          -> ws.MsgCalendarWorldstateChanged
+//   "calendar.weather.zones.changed"           -> ws.MsgCalendarWeatherZonesChanged
+//   (calendar.worldstate.changed also had a DM-gated twin that set
+//   RequiresDM = true — the dm_only worldstate payload must never reach a
+//   player's socket.)
+//
+// Rebuild it WITH a test that walks every emitter's event type and asserts a
+// case exists — routes_calendar_ws_test.go was that test, and it is deleted
+// with the adapter. A publisher without that test is how this bug returns.
 
 // entityEventPublisherAdapter bridges the websocket.EventBus to the
 // entities.EntityEventPublisher interface.
@@ -2805,54 +2274,23 @@ func (a *App) RegisterRoutes() {
 		slog.Warn("syncapi plugin degraded — routes not registered")
 	}
 
-	// Calendar plugin: custom fantasy calendar with months, moons, events.
-	// Created early so the sync API can reference calendarService.
-	// Service is always created (other plugins reference it), but routes
-	// are only registered if the calendar schema is healthy.
-	calendarRepo := calendar.NewCalendarRepository(a.DB)
-	calendarService := calendar.NewCalendarService(calendarRepo)
-	calendarHandler := calendar.NewHandler(calendarService)
-	calendarHandler.SetAddonService(addonService)
-	// "Create entity from event" drawer action (C-CAL-EDITOR-EXPANSION PR1) —
-	// the cross-plugin write seam over the entities service (rule 8).
-	calendarHandler.SetEntityCreator(&calendarEntityCreatorAdapter{svc: entityService})
-
-	// Event RSVPs (C-CAL-RSVP-P1). Its own repo/service/handler triple so the
-	// RSVP lane stays disjoint from the calendar aggregate's shared interfaces.
-	// The mail sender is available here; the two sessions-backed seams (bell
-	// notifications, scheduler availability) are wired further down, after the
-	// sessions service exists — the SetX pattern SetTimelineLister already uses.
-	calendarRSVPService := calendar.NewRSVPService(calendar.NewRSVPRepository(a.DB), calendarRepo)
-	calendarRSVPHandler := calendar.NewRSVPHandler(calendarRSVPService)
-	calendarRSVPHandler.SetMemberDirectory(campaignService)
-	calendarRSVPHandler.SetMailSender(smtpService, a.Config.BaseURL)
-	// The Bench RSVP panel reads answers through the SAME service the RSVP
-	// routes write through (C-CALV4-RSVP-P8 §6): one arithmetic, not a Bench one
-	// and an API one. Hoisted to a variable for exactly that reason.
-	calendarHandler.SetRSVPReader(calendarRSVPService)
-	// The Bench's ONE email question: is a mail server configured on this
-	// instance (C-CALV4-RSVP-P8B §8). The concrete smtp service satisfies the
-	// calendar-declared MailStatusReader exactly as it already satisfies
-	// MailSender, so this adds no plugin edge — the interface is declared on the
-	// consuming side (house rule 8). Nil-safe: without it the panel renders its
-	// ask control live and the endpoint's own refusal is the backstop.
-	calendarHandler.SetMailStatus(smtpService)
-
-	// NW-2.2 Chunk F: register calendar in the App's metadata registry +
-	// expose its embedded static assets for serving at /static/plugins/calendar/.
-	// echo.MustSubFS strips the leading "static" dir from the embed so
-	// /static/plugins/calendar/js/calendar_widget.js maps cleanly. Per
-	// cordinator/decisions/2026-05-25-plugin-static-assets.md.
+	// CALV5-PLACEHOLDER: the calendar plugin's construction stood here —
+	// repository, service, handler, the RSVP repo/service/handler triple, the
+	// entity-creator seam, the RSVP reader, and the plugin registration's
+	// StaticFS mount for /static/plugins/calendar/.
+	//
+	// The plugin is still REGISTERED, with no service and no static FS: the
+	// addon row, its health key and its seat in the plugin list are what the
+	// campaign settings page, the addon gate and the operator diagnostics read,
+	// and dropping the registration would make a rebuilt calendar look like an
+	// uninstalled one. It reports degraded, which is true.
 	a.registerPlugin(PluginRegistration{
 		Slug: calendar.PluginSlug,
 		HealthCheck: func() error {
-			if a.PluginHealth != nil && !a.PluginHealth.IsHealthy(calendar.PluginHealthKey) {
-				return errors.New("calendar schema unhealthy")
-			}
-			return nil
+			return errors.New("calendar is being rebuilt (V5) — no routes registered")
 		},
-		StaticFS: echo.MustSubFS(calendar.StaticAssetsFS, "static"),
 	})
+
 	// Finding 4 (M-B2.1): plugin body scripts contributed by plugins at registration
 	// time so base.templ no longer hardcodes plugin asset paths. The calendar widget
 	// is the first contributor; future plugins append to this slice. Injected into
@@ -2896,36 +2334,47 @@ func (a *App) RegisterRoutes() {
 	// on anything above it and, like the Bench drivers, returns immediately when
 	// its mount (`[data-cast-peek]`) is absent, which on this registry is every
 	// page but one.
+	// CALV5-PLACEHOLDER: five calendar scripts loaded on EVERY page from here —
+	// calendar_widget.js, cal_visibility.js, calendar_permissions.js,
+	// calendar_daycard.js and calendar_theater.js. Their files are deleted, and
+	// leaving the paths would 404 on every page load in the product.
+	//
+	// Worth carrying into V5: calendar_theater.js was already dead weight before
+	// this — shipped to every page with the addon enabled, hunting a DOM hook no
+	// live template emitted, for a feature that had no route at all. One widget
+	// with one mount is partly a fix for exactly that.
 	pluginBodyScripts := []string{
-		"/static/plugins/" + calendar.PluginSlug + "/js/calendar_widget.js",
-		"/static/plugins/" + calendar.PluginSlug + "/js/cal_visibility.js",
-		"/static/plugins/" + calendar.PluginSlug + "/js/calendar_permissions.js",
-		"/static/plugins/" + calendar.PluginSlug + "/js/calendar_daycard.js",
-		"/static/plugins/" + calendar.PluginSlug + "/js/calendar_theater.js",
 		"/static/plugins/" + entities.PluginSlug + "/js/characters.js",
 	}
 
-	if a.PluginHealth.IsHealthy("calendar") {
-		calendar.RegisterRoutes(e, calendarHandler, campaignService, authService, addonService)
-		// RSVP surface rides the same health gate: its tables ship in the
-		// calendar plugin's own migration chain (013), so a degraded calendar
-		// schema means these routes must not be registered either.
-		calendar.RegisterRSVPRoutes(e, calendarRSVPHandler, campaignService, authService, addonService)
-
-		// C-CALENDAR-ENDPOINTS: public Foundry-facing calendar API
-		// gated by the same per-campaign signed token foundry_vtt
-		// uses for the manifest endpoint. fvttService satisfies
-		// the calendar.TokenVerifier interface so the calendar
-		// plugin has no compile-time edge into foundry_vtt.
-		// Skipped if foundry_vtt is degraded — the token verifier
-		// wouldn't exist.
-		if a.PluginHealth.IsHealthy(foundry_vtt.PluginHealthKey) {
-			calendarAPIHandler := calendar.NewAPIHandler(calendarService, fvttService)
-			calendar.RegisterPublicAPIRoutes(e, calendarAPIHandler, middleware.RateLimit(300, time.Minute))
-		}
-	} else {
-		slog.Warn("calendar plugin degraded — routes not registered")
+	// CALV5-PLACEHOLDER: one route survives the deletion — the seat the sidebar,
+	// the campaign dashboard blocks and the Extensions hub all link to
+	// (/campaigns/:id/apps/calendar, layouts.AddonSidebarPath("calendar")).
+	//
+	// It exists so those links do not 404. A 404 on a nav item the product still
+	// shows reads as a broken install; this reads as what it is. The legacy
+	// /calendars and /calendar paths land here too — they used to redirect to
+	// this one, and an old bookmark deserves the same answer.
+	calendarRebuildGroup := e.Group("/campaigns/:id",
+		auth.RequireAuth(authService),
+		campaigns.RequireCampaignAccess(campaignService),
+	)
+	calendarRebuildNotice := func(c echo.Context) error {
+		return middleware.Render(c, http.StatusOK, components.FeatureRebuilding("The calendar"))
 	}
+	calendarRebuildGroup.GET("/apps/calendar", calendarRebuildNotice)
+	calendarRebuildGroup.GET("/calendar", calendarRebuildNotice)
+	calendarRebuildGroup.GET("/calendars", calendarRebuildNotice)
+
+	// CALV5-PLACEHOLDER: calendar.RegisterRoutes, calendar.RegisterRSVPRoutes
+	// and the public Foundry-facing calendar API (calendar.NewAPIHandler +
+	// RegisterPublicAPIRoutes, token-verified through fvttService, rate limited
+	// 300/min) were registered here behind the schema health gate.
+	//
+	// NOTE FOR V5: that public API is a SECOND calendar REST surface, separate
+	// from syncapi's. Both served Foundry and they overlapped. Rebuild one, not
+	// two — syncapi's is the newer and the one the module's contract documents.
+
 
 	// Bestiary plugin: community creature sharing with ratings, favorites, import.
 	bestiaryRepo := bestiary.NewBestiaryRepository(a.DB)
@@ -2968,26 +2417,12 @@ func (a *App) RegisterRoutes() {
 	sessionsHandler := sessions.NewHandler(sessionsService)
 	sessionsHandler.SetMemberLister(campaignService)
 	sessionsHandler.SetMailSender(smtpService, a.Config.BaseURL)
-	// C-CAL-RSVP-P1: the two calendar-RSVP seams that need the sessions service.
-	// Wired here (post-construction setters) because the calendar plugin is
-	// constructed earlier — the same ordering constraint SetTimelineLister
-	// solves below. Both are nil-safe on the calendar side, so wiring them
-	// behind the sessions health gate would also have been correct; they are
-	// wired unconditionally because the notifications + availability tables are
-	// core-adjacent and a degraded sessions schema surfaces as a logged warning
-	// on use rather than a silently missing feature.
-	calendarRSVPHandler.SetRSVPNotifier(&calendarRSVPNotifierAdapter{svc: sessionsService})
-	calendarRSVPHandler.SetAvailabilityWriter(&calendarAvailabilityAdapter{svc: sessionsService, authSvc: authService})
-	// The Bench RSVP panel's READ seam (C-CALV4-RSVP-P8). Wired here for the
-	// same ordering reason as the two above — the calendar handler is
-	// constructed earlier — and nil-safe on the calendar side, so a degraded
-	// sessions schema costs the panel its body and nothing else on the page.
-	calendarHandler.SetScheduleReader(&calendarBenchScheduleAdapter{sessions: sessionsHandler})
-	// The /schedule Painter's own read (C-CALV4-RSVP-P8 Part B): the VIEWER'S
-	// OWN composed week. A separate seam from the one above because it answers a
-	// different permission question — "may I read back what I saved" — and the
-	// adapter enforces that by returning only the named member's lanes.
-	calendarHandler.SetOwnWeekReader(&calendarOwnWeekAdapter{sessions: sessionsHandler})
+	// CALV5-PLACEHOLDER: four post-construction setter seams stood here, wired
+	// after the sessions service existed — SetRSVPNotifier, SetAvailabilityWriter
+	// (member zones + exception dates), SetScheduleReader and SetOwnWeekReader.
+	// All four were nil-safe on the calendar side, which is the pattern V5 should
+	// keep: a degraded neighbour must never take the calendar down with it.
+
 	if a.PluginHealth.IsHealthy("sessions") {
 		sessions.RegisterRoutes(e, sessionsHandler, campaignService, authService, addonService)
 	} else {
@@ -2996,7 +2431,10 @@ func (a *App) RegisterRoutes() {
 
 	// Timeline plugin: interactive visual timelines with zoom levels and entity grouping.
 	timelineRepo := timeline.NewTimelineRepository(a.DB)
-	timelineSvc := timeline.NewTimelineService(timelineRepo, &calendarListerAdapter{svc: calendarService}, &calendarEventListerAdapter{svc: calendarService}, &calendarEraListerAdapter{svc: calendarService})
+	// CALV5-PLACEHOLDER: took &calendarListerAdapter{}, &calendarEventListerAdapter{}
+	// and &calendarEraListerAdapter{} as its 2nd-4th arguments. Timeline nil-guards
+	// all three, so it runs on standalone events alone until V5 re-wires them.
+	timelineSvc := timeline.NewTimelineService(timelineRepo, nil, nil, nil)
 	timelineHandler := timeline.NewHandler(timelineSvc)
 	timelineHandler.SetMemberLister(campaignService)
 	if a.PluginHealth.IsHealthy("timeline") {
@@ -3152,46 +2590,23 @@ func (a *App) RegisterRoutes() {
 
 	// Wire audit logging into mutation handlers so CRUD actions are recorded.
 	entityHandler.SetAuditService(auditService)
-	calendarHandler.SetAuditService(auditService)
-	// Wave 1.6.5: wire campaign tier vocabulary into the V2 calendar
-	// shell so EventCard + MultiDayRibbon render campaign-aware tier
-	// labels + colors. CampaignService satisfies the narrow
-	// TierDefinitionsLister interface via its existing
-	// GetEventTierDefinitions method.
-	calendarHandler.SetTierDefinitionsLister(campaignService)
-	// C-EXT-HUB Phase 2: register the calendar inline dashboard with
-	// the Extensions hub. Mirrors ai_workspace.SettingsTabFactory at
-	// the campaignHandler.RegisterSettingsTab call below. Per-request
-	// data load lives inside the factory closure (see
-	// internal/plugins/calendar/extension_dashboard.go).
-	campaignHandler.RegisterExtensionDashboard(calendarHandler.ExtensionDashboardFactory())
-	// Calendars dashboard (E1 W1): inject the cross-plugin timeline read so the
-	// associations panel can list timelines bound to a calendar.
-	calendarHandler.SetTimelineLister(&timelineForCalendarAdapter{svc: timelineSvc})
-
-	// calendar-v4 Block spine (C-CALV4-SPINE-P2). INJECTOR WIRING ONLY — this
-	// slice adds no route, and internal/wire/routes_snapshot.txt stays
-	// byte-identical across the whole wave (COMMON §5 rule 1).
+	// CALV5-PLACEHOLDER: the calendar's remaining wiring stood here —
+	// SetAuditService, SetTierDefinitionsLister (campaign tier vocabulary for
+	// the V2 shell's event cards), RegisterExtensionDashboard (its card in the
+	// Extensions hub), SetTimelineLister, and the calendar-v4 BLOCK SPINE:
 	//
-	// Its repository is a NARROW read surface over the same *sql.DB rather than
-	// the 60-method CalendarRepository, so the hand-written mockCalendarRepo in
-	// the plugin's tests never has to grow. Two seams are installed
-	// post-construction, the SetTimelineLister idiom above:
-	//   - RealTimeSeam, reached by assertion because the exported
-	//     ApplyRealTime lives on *calendarService and NOT on the
-	//     CalendarService interface (adding it there would reshape the mock);
-	//   - SyncLinkProbe, the adapter over the campaign date beacon.
-	// The spine is installed as a package-level provider because this file
-	// belongs to exactly one calendar-v4 slice for the whole wave, and the
-	// surfaces that consume it (entity-page hosting, the Bench) land afterwards
-	// and must not need to re-edit it — the same idiom
-	// systems.SetSyncMappingProvider uses above.
-	calendarBlockSpine := calendar.NewBlockService(calendar.NewBlockRepository(a.DB))
-	if rt, ok := calendarService.(calendar.RealTimeSeam); ok {
-		calendarBlockSpine.SetRealTimeSeam(rt)
-	}
-	calendarBlockSpine.SetSyncLinkProbe(&calendarSyncLinkAdapter{svc: syncService})
-	calendar.InstallBlockSpine(calendarBlockSpine)
+	//   calendarBlockSpine := calendar.NewBlockService(calendar.NewBlockRepository(a.DB))
+	//   + RealTimeSeam (reached by type assertion, because ApplyRealTime lived
+	//     on *calendarService and deliberately NOT on the CalendarService
+	//     interface — putting it there would have reshaped the hand-written mock)
+	//   + SyncLinkProbe over the campaign date beacon
+	//   + calendar.InstallBlockSpine(...) as a package-level provider
+	//
+	// V5 NOTE: the spine's repository was a NARROW read surface over the same
+	// *sql.DB rather than the 60-method CalendarRepository, specifically so the
+	// mock never had to grow. That instinct was right and is worth keeping — the
+	// 60-method interface everyone routed around is one of the reasons the old
+	// plugin became hard to change.
 
 	// Wire the PER-CAMPAIGN read window into the operator diagnostics, so the
 	// catalog can answer "why does MY campaign look like this?" and not only
@@ -3233,7 +2648,8 @@ func (a *App) RegisterRoutes() {
 	entityHandler.SetTagFetcher(tagFetcherAdapter)
 	entityHandler.SetTimelineSearcher(timelineSvc)
 	entityHandler.SetMapSearcher(mapsService)
-	entityHandler.SetCalendarSearcher(calendarService)
+	// CALV5-PLACEHOLDER: entityHandler.SetCalendarSearcher(calendarService) — the
+	// calendar's rows in global entity search. Nil-safe; search simply returns none.
 	entityHandler.SetSessionSearcher(sessionsService)
 	entityHandler.SetSystemSearcher(systems.NewSystemSearchAdapter(addonService))
 	entityHandler.SetMemberLister(campaignService)
@@ -3252,10 +2668,15 @@ func (a *App) RegisterRoutes() {
 	// chain (own binding → entity-type template → default = today's behavior).
 	// P1 registers calendar; maps/timeline/worldstate fold in later (P2/P3).
 	widgetRegistry := widgetbindings.NewRegistry()
-	widgetRegistry.Register(calendar.NewCalendarWidgetType(calendarService))
-	// P2: worldstate (instance = a calendar id, a view over the clock) +
-	// timeline (instance = a timeline record) register as widget types.
-	widgetRegistry.Register(calendar.NewWorldStateWidgetType(calendarService))
+	// CALV5-PLACEHOLDER: the calendar and worldstate widget types registered
+	// here. They are deliberately NOT registered while the calendar is rebuilt,
+	// and that is SAFE for saved bindings: service.Sweep skips widget types it
+	// does not know ("unknown widget type (e.g. addon removed) — leave it be"),
+	// so a GM's existing entity→calendar bindings survive the blackout untouched
+	// and resolve again the moment V5 registers the types. Deleting the rows, or
+	// registering a type whose InstanceExists answered false, would have swept
+	// them permanently.
+	// P2: timeline (instance = a timeline record) registers as a widget type.
 	widgetRegistry.Register(timeline.NewTimelineWidgetType(timelineSvc))
 	// P3a: maps registers (instance = a map id; no campaign default — the
 	// legacy entity.map_id fallback lives in the map_editor closure).
@@ -3266,11 +2687,6 @@ func (a *App) RegisterRoutes() {
 	// bindings are swept promptly (render-time guard + Sweep are the backstop).
 	// Reached via a type assertion so the CalendarService/TimelineService
 	// interfaces stay unchanged.
-	if c, ok := calendarService.(interface {
-		SetBindingCleaner(calendar.BindingCleaner)
-	}); ok {
-		c.SetBindingCleaner(widgetBindingSvc)
-	}
 	if t, ok := timelineSvc.(interface {
 		SetBindingCleaner(timeline.BindingCleaner)
 	}); ok {
@@ -3346,7 +2762,8 @@ func (a *App) RegisterRoutes() {
 			{Key: "limit", Label: "Events to show", Type: "number", Min: entities.IntPtr(1), Max: entities.IntPtr(20), Default: 5},
 		},
 	}, func(ctx entities.BlockRenderContext) templ.Component {
-		return calendar.BlockUpcomingEvents(ctx.CC, entities.BlockConfigLimit(ctx.Block.Config, "limit", 5))
+		// CALV5-PLACEHOLDER: was calendar.BlockUpcomingEvents(ctx.CC, limit).
+		return components.FeatureRebuildingBlock("The calendar")
 	})
 	// entity_calendar — the entity-PAGE calendar embed (C-CAL-ENTITY-PAGE-EMBED,
 	// Phase 6). Template context + REAL renderer (the closure captures
@@ -3365,7 +2782,11 @@ func (a *App) RegisterRoutes() {
 		// (campaign default calendar = today's behavior). EntityCalendarBlock
 		// renders the friendly not-found state itself when context is missing;
 		// unbound entities render exactly as before (#411–#420 unchanged).
-		return renderBoundBlock(calendar.WidgetTypeCalendar, rc, "")
+		// CALV5-PLACEHOLDER: was renderBoundBlock(calendar.WidgetTypeCalendar, rc, "").
+		// Explicit rather than left to renderBoundBlock, which returns
+		// templ.NopComponent for an unregistered widget type — an invisible gap
+		// in the owner's entity layout, which reads as "my layout got edited".
+		return components.FeatureRebuildingBlock("The calendar")
 	})
 
 	// entity_worldstate — the entity-PAGE worldState timepiece embed
@@ -3388,7 +2809,8 @@ func (a *App) RegisterRoutes() {
 		// + render via the framework seam (C-WIDGET-BINDING-P4b). Empty/unbound →
 		// today's behavior (campaign default calendar). On the campaign-dashboard
 		// context rc.Entity is nil → no host → default + no affordance (P3b).
-		return renderBoundBlock(calendar.WidgetTypeWorldstate, rc, "")
+		// CALV5-PLACEHOLDER: was renderBoundBlock(calendar.WidgetTypeWorldstate, rc, "").
+		return components.FeatureRebuildingBlock("The world state")
 	})
 
 	// skybox — the ambient SKY-ONLY block (C-SKYBOX-WIDGET): no hourglass, no
@@ -3405,7 +2827,9 @@ func (a *App) RegisterRoutes() {
 		if rc.Entity != nil {
 			entityID = rc.Entity.ID
 		}
-		return calendar.EntitySkyboxBlock(calendarService, rc.CC, entityID, rc.UserID)
+		// CALV5-PLACEHOLDER: was calendar.EntitySkyboxBlock(calendarService, ...).
+		_ = entityID
+		return components.FeatureRebuildingBlock("The sky")
 	})
 
 	// Timeline plugin blocks (requires "timeline" addon).
@@ -3683,26 +3107,21 @@ func (a *App) RegisterRoutes() {
 		},
 	)
 
+	// CALV5-PLACEHOLDER: both closures read through calendarService
+	// (GetCalendar, then ListUpcomingEvents) and marshalled the result for WASM
+	// extensions. They now fail loudly instead.
+	//
+	// The adapter stays WIRED rather than nil: a WASM plugin calling
+	// get_calendar gets an error it can report, where an unwired host function
+	// would trap or hand back a null the plugin would read as "no calendar
+	// configured" — the same lie the 503 above exists to avoid, one layer in.
+	errCalendarRebuilding := errors.New("calendar is being rebuilt (V5) and is unavailable to extensions")
 	wasmCalendarReader := extensions.NewWASMCalendarAdapter(
-		// get_calendar: returns calendar config JSON.
 		func(ctx context.Context, campaignID string) (json.RawMessage, error) {
-			cal, err := calendarService.GetCalendar(ctx, campaignID)
-			if err != nil {
-				return nil, err
-			}
-			return json.Marshal(cal)
+			return nil, errCalendarRebuilding
 		},
-		// list_events: returns upcoming calendar events as JSON.
 		func(ctx context.Context, campaignID string, limit int) (json.RawMessage, error) {
-			cal, err := calendarService.GetCalendar(ctx, campaignID)
-			if err != nil {
-				return nil, err
-			}
-			events, err := calendarService.ListUpcomingEvents(ctx, cal.ID, limit, int(campaigns.RoleOwner), "")
-			if err != nil {
-				return nil, err
-			}
-			return json.Marshal(events)
+			return nil, errCalendarRebuilding
 		},
 	)
 
@@ -3732,22 +3151,11 @@ func (a *App) RegisterRoutes() {
 		},
 	))
 
+	// CALV5-PLACEHOLDER: create_event unmarshalled a calendar.CreateEventInput
+	// and delegated to calendarService.CreateEvent. Same reasoning as the reader.
 	wasmHostEnv.SetCalendarWriter(extensions.NewWASMCalendarWriteAdapter(
-		// create_event: unmarshal JSON input and delegate to calendar service.
 		func(ctx context.Context, campaignID string, input json.RawMessage) (json.RawMessage, error) {
-			cal, err := calendarService.GetCalendar(ctx, campaignID)
-			if err != nil {
-				return nil, fmt.Errorf("getting calendar: %w", err)
-			}
-			var eventInput calendar.CreateEventInput
-			if err := json.Unmarshal(input, &eventInput); err != nil {
-				return nil, fmt.Errorf("invalid event input: %w", err)
-			}
-			event, err := calendarService.CreateEvent(ctx, cal.ID, eventInput)
-			if err != nil {
-				return nil, err
-			}
-			return json.Marshal(event)
+			return nil, errCalendarRebuilding
 		},
 	))
 
@@ -3879,36 +3287,16 @@ func (a *App) RegisterRoutes() {
 		return c.Redirect(http.StatusSeeOther, "/campaigns")
 	}, auth.RequireAuth(authService))
 
-	// Candidate calendar designs for the V2 plugin port. Per the
-	// operator's page-separation directive (2026-06-03): each design
-	// lives on its OWN isolated route loading ONLY its own CSS+JS, so a
-	// bug in one design can never affect another. `/demo/calendar` is a
-	// tiny plain-link index (no design assets); each design is a sibling
-	// route. Designs 2 (Linear) + 3 (Compact) get their own routes when
-	// they ship. Mock data only (no backend); operator selects the
-	// winning design, the real plugin port follows. Auth-gated; exposes
-	// no campaign data. Dispatches:
-	// dispatches/chronicle/C-CAL-SHOWCASE-DESIGN-1-ALMANAC.md +
-	// dispatches/chronicle/C-CAL-SHOWCASE-DESIGN-2-LINEAR.md.
-	e.GET("/demo/calendar", func(c echo.Context) error {
-		return middleware.Render(c, http.StatusOK, demo.DemoCalendarIndex())
-	}, auth.RequireAuth(authService))
-	e.GET("/demo/calendar/almanac", func(c echo.Context) error {
-		return middleware.Render(c, http.StatusOK, demo.DemoCalendarAlmanac())
-	}, auth.RequireAuth(authService))
-	// Timeline showcase (C-TIMELINE-V2-DESIGN-1-TUNER). Own isolated
-	// route per the page-separation directive; loads only its own
-	// CSS+JS. Lead of two candidate timeline designs (Ledger alternate).
-	e.GET("/demo/timeline/tuner", func(c echo.Context) error {
-		return middleware.Render(c, http.StatusOK, demo.DemoTimelineTuner())
-	}, auth.RequireAuth(authService))
-	// Ledger timeline showcase (Timeline V2 arc W0, cordinator#36): the flat
-	// record-keeping alternate to the Tuner — the second of the two candidate
-	// designs the index has promised since the timeline showcase shipped.
-	// Same isolation rules: own route, own self-contained CSS, mock data only.
-	e.GET("/demo/timeline/ledger", func(c echo.Context) error {
-		return middleware.Render(c, http.StatusOK, demo.DemoTimelineLedger())
-	}, auth.RequireAuth(authService))
+	// CALV5-PLACEHOLDER: four auth-gated demo routes stood here —
+	// /demo/calendar, /demo/calendar/almanac, /demo/timeline/tuner and
+	// /demo/timeline/ledger — mock-data design showcases for calendar V2 and
+	// Timeline V2. Nothing ever shipped from the timeline pair: three months
+	// on, the production timeline was still V1.
+	//
+	// The whole internal/templates/demo package went with them. V5's design is
+	// signed as renders instead (cordinator/mockups/calendar-v5/), which is the
+	// point: a design that lives on a route has to be maintained, and these
+	// were not.
 
 	// --- Layout Data Injector ---
 	// Registers the callback that copies auth/campaign data from Echo's
@@ -4225,7 +3613,6 @@ func (a *App) RegisterRoutes() {
 
 	entityService.SetEventPublisher(&entityEventPublisherAdapter{bus: wsEventBus})
 	entityService.SetSidebarAutoAdder(&sidebarAutoAdderAdapter{campaignService: campaignService})
-	calendarService.SetEventPublisher(&calendarEventPublisherAdapter{bus: wsEventBus})
 	noteSvc.SetEventPublisher(&noteEventPublisherAdapter{bus: wsEventBus})
 
 	// Late-bind the entity_notes notifier now that wsEventBus exists.
