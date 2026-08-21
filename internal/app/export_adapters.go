@@ -15,7 +15,6 @@ import (
 	"github.com/keyxmakerx/chronicle/internal/patch"
 	"github.com/keyxmakerx/chronicle/internal/permissions"
 	"github.com/keyxmakerx/chronicle/internal/plugins/addons"
-	"github.com/keyxmakerx/chronicle/internal/plugins/calendar"
 	"github.com/keyxmakerx/chronicle/internal/plugins/campaigns"
 	"github.com/keyxmakerx/chronicle/internal/plugins/entities"
 	"github.com/keyxmakerx/chronicle/internal/plugins/maps"
@@ -241,102 +240,16 @@ func (a *entityExportAdapter) ExportEntities(ctx context.Context, campaignID str
 
 // --- Calendar Export Adapter ---
 
-// calendarExportAdapter implements campaigns.CalendarExporter.
-type calendarExportAdapter struct {
-	svc calendar.CalendarService
-}
-
-// ExportCalendar gathers calendar data for a campaign export.
-func (a *calendarExportAdapter) ExportCalendar(ctx context.Context, campaignID string, entitySlugLookup func(string) string) (*campaigns.ExportCalendarData, error) {
-	cal, err := a.svc.GetCalendar(ctx, campaignID)
-	if err != nil {
-		return nil, err
-	}
-
-	data := &campaigns.ExportCalendarData{
-		Name:             cal.Name,
-		Description:      cal.Description,
-		Mode:             cal.Mode,
-		EpochName:        cal.EpochName,
-		CurrentYear:      cal.CurrentYear,
-		CurrentMonth:     cal.CurrentMonth,
-		CurrentDay:       cal.CurrentDay,
-		CurrentHour:      cal.CurrentHour,
-		CurrentMinute:    cal.CurrentMinute,
-		HoursPerDay:      cal.HoursPerDay,
-		MinutesPerHour:   cal.MinutesPerHour,
-		SecondsPerMinute: cal.SecondsPerMinute,
-		LeapYearEvery:    cal.LeapYearEvery,
-		LeapYearOffset:   cal.LeapYearOffset,
-	}
-
-	for _, m := range cal.Months {
-		data.Months = append(data.Months, campaigns.ExportCalendarMonth{
-			Name: m.Name, Days: m.Days, SortOrder: m.SortOrder,
-			IsIntercalary: m.IsIntercalary, LeapYearDays: m.LeapYearDays,
-		})
-	}
-	for _, w := range cal.Weekdays {
-		data.Weekdays = append(data.Weekdays, campaigns.ExportCalendarWeekday{
-			Name: w.Name, SortOrder: w.SortOrder,
-		})
-	}
-	for _, m := range cal.Moons {
-		data.Moons = append(data.Moons, campaigns.ExportCalendarMoon{
-			Name: m.Name, CycleDays: m.CycleDays, PhaseOffset: m.PhaseOffset, Color: m.Color,
-		})
-	}
-	for _, s := range cal.Seasons {
-		data.Seasons = append(data.Seasons, campaigns.ExportCalendarSeason{
-			Name: s.Name, StartMonth: s.StartMonth, StartDay: s.StartDay,
-			EndMonth: s.EndMonth, EndDay: s.EndDay, Description: s.Description,
-			Color: s.Color, WeatherEffect: s.WeatherEffect,
-		})
-	}
-	for _, e := range cal.Eras {
-		data.Eras = append(data.Eras, campaigns.ExportCalendarEra{
-			Name: e.Name, StartYear: e.StartYear, EndYear: e.EndYear,
-			Description: e.Description, Color: e.Color, SortOrder: e.SortOrder,
-		})
-	}
-
-	// Event categories.
-	cats, err := a.svc.GetEventCategories(ctx, cal.ID)
-	if err == nil {
-		for _, c := range cats {
-			data.EventCategories = append(data.EventCategories, campaigns.ExportEventCategory{
-				Slug: c.Slug, Name: c.Name, Icon: c.Icon, Color: c.Color, SortOrder: c.SortOrder,
-			})
-		}
-	}
-
-	// Events (all, including DM-only).
-	events, err := a.svc.ListAllEvents(ctx, cal.ID)
-	if err == nil {
-		for _, evt := range events {
-			var entitySlug *string
-			if evt.EntityID != nil {
-				s := entitySlugLookup(*evt.EntityID)
-				if s != "" {
-					entitySlug = &s
-				}
-			}
-			data.Events = append(data.Events, campaigns.ExportCalendarEvent{
-				Name: evt.Name, Description: evt.Description, DescriptionHTML: evt.DescriptionHTML,
-				EntitySlug: entitySlug, Year: evt.Year, Month: evt.Month, Day: evt.Day,
-				StartHour: evt.StartHour, StartMinute: evt.StartMinute,
-				EndYear: evt.EndYear, EndMonth: evt.EndMonth, EndDay: evt.EndDay,
-				EndHour: evt.EndHour, EndMinute: evt.EndMinute,
-				IsRecurring: evt.IsRecurring, RecurrenceType: evt.RecurrenceType,
-				Visibility: evt.Visibility, Category: evt.Category,
-			})
-		}
-	}
-
-	return data, nil
-}
-
-// --- Timeline Export Adapter ---
+// CALV5-PLACEHOLDER: calendarExportAdapter (campaigns.CalendarExporter) stood
+// here — it walked the campaign's calendar, months, weekdays, moons, seasons,
+// eras, categories and events into campaigns.ExportCalendarData, resolving
+// entity ties to slugs so an import could re-link them.
+//
+// The calendar is being rebuilt (V5) and its tables are dropped. The exporter
+// is simply NOT WIRED (routes.go), and ExportImportService already treats an
+// unwired adapter as "no calendar section" — so a backup taken during the
+// rebuild is internally consistent rather than carrying an empty calendar.
+// V5 restores the adapter and the SetCalendarExporter call together.
 
 // timelineExportAdapter implements campaigns.TimelineExporter.
 type timelineExportAdapter struct {
@@ -1085,138 +998,15 @@ func (a *entityImportAdapter) ImportEntities(ctx context.Context, campaignID, us
 	return idMap, nil
 }
 
-// calendarImportAdapter implements campaigns.CalendarImporter.
-type calendarImportAdapter struct {
-	svc calendar.CalendarService
-}
-
-// ImportCalendar creates a calendar from import data.
-func (a *calendarImportAdapter) ImportCalendar(ctx context.Context, campaignID string, data *campaigns.ExportCalendarData, idMap *campaigns.IDMap, report *campaigns.ImportReport) error {
-	// Convert to calendar import format.
-	months := make([]calendar.MonthInput, len(data.Months))
-	for i, m := range data.Months {
-		months[i] = calendar.MonthInput{
-			Name: m.Name, Days: m.Days, SortOrder: m.SortOrder,
-			IsIntercalary: m.IsIntercalary, LeapYearDays: m.LeapYearDays,
-		}
-	}
-
-	weekdays := make([]calendar.WeekdayInput, len(data.Weekdays))
-	for i, w := range data.Weekdays {
-		weekdays[i] = calendar.WeekdayInput{Name: w.Name, SortOrder: w.SortOrder}
-	}
-
-	// Create the calendar.
-	cal, err := a.svc.CreateCalendar(ctx, campaignID, calendar.CreateCalendarInput{
-		Name:             data.Name,
-		Mode:             data.Mode,
-		HoursPerDay:      data.HoursPerDay,
-		MinutesPerHour:   data.MinutesPerHour,
-		SecondsPerMinute: data.SecondsPerMinute,
-	})
-	if err != nil {
-		return err
-	}
-
-	idMap.CalendarID = cal.ID
-
-	// Set sub-resources.
-	if len(months) > 0 {
-		// The month-edit impact ([GR-18]) is discarded here deliberately: this
-		// is an IMPORT into a calendar this adapter has just created, so there
-		// are no pre-existing events for a month edit to re-date, and there is
-		// no operator standing in front of this path to warn.
-		_, _ = a.svc.SetMonths(ctx, cal.ID, months)
-	}
-	if len(weekdays) > 0 {
-		_ = a.svc.SetWeekdays(ctx, cal.ID, weekdays)
-	}
-
-	// Moons.
-	if len(data.Moons) > 0 {
-		moons := make([]calendar.MoonInput, len(data.Moons))
-		for i, m := range data.Moons {
-			moons[i] = calendar.MoonInput{
-				Name: m.Name, CycleDays: m.CycleDays, PhaseOffset: m.PhaseOffset, Color: m.Color,
-			}
-		}
-		_ = a.svc.SetMoons(ctx, cal.ID, moons)
-	}
-
-	// Eras.
-	if len(data.Eras) > 0 {
-		eras := make([]calendar.EraInput, len(data.Eras))
-		for i, e := range data.Eras {
-			eras[i] = calendar.EraInput{
-				Name: e.Name, StartYear: e.StartYear, EndYear: e.EndYear,
-				Description: e.Description, Color: e.Color, SortOrder: e.SortOrder,
-			}
-		}
-		_ = a.svc.SetEras(ctx, cal.ID, eras)
-	}
-
-	// Event categories.
-	if len(data.EventCategories) > 0 {
-		cats := make([]calendar.EventCategoryInput, len(data.EventCategories))
-		for i, c := range data.EventCategories {
-			cats[i] = calendar.EventCategoryInput{
-				Slug: c.Slug, Name: c.Name, Icon: c.Icon, Color: c.Color, SortOrder: c.SortOrder,
-			}
-		}
-		_ = a.svc.SetEventCategories(ctx, cal.ID, cats)
-	}
-
-	// Set current date (via UpdateCalendar).
-	_ = a.svc.UpdateCalendar(ctx, cal.ID, calendar.UpdateCalendarInput{
-		Name:             data.Name,
-		Description:      data.Description,
-		EpochName:        data.EpochName,
-		CurrentYear:      data.CurrentYear,
-		CurrentMonth:     data.CurrentMonth,
-		CurrentDay:       data.CurrentDay,
-		HoursPerDay:      data.HoursPerDay,
-		MinutesPerHour:   data.MinutesPerHour,
-		SecondsPerMinute: data.SecondsPerMinute,
-		LeapYearEvery:    data.LeapYearEvery,
-		LeapYearOffset:   data.LeapYearOffset,
-	})
-
-	// Create events.
-	for _, evt := range data.Events {
-		var entityID *string
-		if evt.EntitySlug != nil {
-			if id, ok := idMap.EntitySlugToID[*evt.EntitySlug]; ok {
-				entityID = &id
-			}
-		}
-		_, err := a.svc.CreateEvent(ctx, cal.ID, calendar.CreateEventInput{
-			Name:            evt.Name,
-			Description:     evt.Description,
-			DescriptionHTML: evt.DescriptionHTML,
-			EntityID:        entityID,
-			Year:            evt.Year,
-			Month:           evt.Month,
-			Day:             evt.Day,
-			StartHour:       evt.StartHour,
-			StartMinute:     evt.StartMinute,
-			EndYear:         evt.EndYear,
-			EndMonth:        evt.EndMonth,
-			EndDay:          evt.EndDay,
-			EndHour:         evt.EndHour,
-			EndMinute:       evt.EndMinute,
-			IsRecurring:     evt.IsRecurring,
-			RecurrenceType:  evt.RecurrenceType,
-			Visibility:      evt.Visibility,
-			Category:        evt.Category,
-		})
-		if err != nil {
-			slog.Warn("import: create calendar event failed", slog.String("name", evt.Name), slog.Any("error", err))
-			report.Fail(campaigns.SectionCalendar, "calendar event", evt.Name, apperror.SafeMessage(err))
-		}
-	}
-
-	return nil
-}
+// CALV5-PLACEHOLDER: calendarImportAdapter (campaigns.CalendarImporter) stood
+// here — the inverse of the exporter above, rebuilding a calendar and its
+// sub-resources from ExportCalendarData and re-linking entity ties through the
+// IDMap.
+//
+// It is unwired for the same reason. NOTE FOR V5: a backup taken BEFORE the
+// rebuild still carries a Calendar section in its JSON; importing one while
+// this adapter is missing silently drops that section. If pre-V5 backups must
+// restore their calendars, this adapter is what has to come back first.
 
 // sessionImportAdapter implements campaigns.SessionImporter.
 type sessionImportAdapter struct {

@@ -4,7 +4,6 @@ import (
 	"context"
 
 	"github.com/keyxmakerx/chronicle/internal/permissions"
-	"github.com/keyxmakerx/chronicle/internal/plugins/calendar"
 	"github.com/keyxmakerx/chronicle/internal/plugins/entities"
 	"github.com/keyxmakerx/chronicle/internal/plugins/sessions"
 	"github.com/keyxmakerx/chronicle/internal/plugins/timeline"
@@ -34,15 +33,13 @@ type NoteLister interface {
 	ListByUserAndCampaign(ctx context.Context, userID, campaignID string) ([]notes.Note, error)
 }
 
-// CalendarLister loads the calendar configuration (Months / Eras
-// needed for human-readable date labels) and every event on it.
-// ListAllEventsForCalendar intentionally bypasses role-filtering —
-// the aiexport renderer applies the privacy filter itself so it
-// can choose between Owner-view / Safe / Everything modes.
-type CalendarLister interface {
-	GetCalendar(ctx context.Context, campaignID string) (*calendar.Calendar, error)
-	ListAllEventsForCalendar(ctx context.Context, calendarID string) ([]calendar.Event, error)
-}
+// CALV5-PLACEHOLDER: CalendarLister stood here — GetCalendar +
+// ListAllEventsForCalendar, returning calendar.Calendar / calendar.Event so
+// the renderer could label events with their in-world month and era names.
+// The calendar plugin is being rebuilt (V5) and its tables are dropped, so
+// there is nothing to list. V5 restores this interface and re-wires
+// Service.Calendar; the CategoryCalendarEvents case in service.go says so in
+// the export itself rather than emitting an empty section.
 
 // SessionLister loads sessions + their nested joins. Attendees +
 // SessionEntity slices are fetched per-session; v1 accepts the N+1

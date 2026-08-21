@@ -75,7 +75,7 @@ func TestGenerate_BadEntityHTML_SkipsFieldNotExport(t *testing.T) {
 			},
 			types: []entities.EntityType{{ID: 1, Name: "Character", NamePlural: "Characters"}},
 		},
-		&stubNoteLister{}, &stubCalendarLister{}, &stubSessionLister{}, &stubTimelineLister{},
+		&stubNoteLister{}, &stubSessionLister{}, &stubTimelineLister{},
 		&stubRelationLister{}, &stubTagLister{},
 	)
 
@@ -107,7 +107,7 @@ func TestGenerate_CategoryListerError_SkipsSectionNotExport(t *testing.T) {
 	svc := NewService(
 		errEntityLister{types: []entities.EntityType{{ID: 1, Name: "Character"}}},
 		&stubNoteLister{list: []notes.Note{{ID: "n1", Title: "Survives", EntryHTML: sp("<p>note body</p>")}}},
-		&stubCalendarLister{}, &stubSessionLister{}, &stubTimelineLister{},
+		&stubSessionLister{}, &stubTimelineLister{},
 		&stubRelationLister{}, &stubTagLister{},
 	)
 
@@ -128,7 +128,7 @@ func TestGenerate_CategoryListerError_SkipsSectionNotExport(t *testing.T) {
 func TestListAllEntities_PagesPastClamp(t *testing.T) {
 	svc := NewService(
 		&pagingEntityLister{total: 130, types: []entities.EntityType{{ID: 1, Name: "Character"}}},
-		nil, nil, nil, nil, nil, nil,
+		nil, nil, nil, nil, nil,
 	)
 	all, err := svc.listAllEntities(context.Background(), "camp-1", 3, "owner-1")
 	if err != nil {

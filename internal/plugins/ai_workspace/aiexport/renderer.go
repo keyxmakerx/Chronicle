@@ -9,7 +9,6 @@ import (
 	"time"
 
 	"github.com/keyxmakerx/chronicle/internal/permissions"
-	"github.com/keyxmakerx/chronicle/internal/plugins/calendar"
 	"github.com/keyxmakerx/chronicle/internal/plugins/entities"
 	"github.com/keyxmakerx/chronicle/internal/plugins/sessions"
 	"github.com/keyxmakerx/chronicle/internal/plugins/timeline"
@@ -401,149 +400,23 @@ func renderNoteTree(
 // ----------------------------------------------------------------------------
 // Calendar events
 // ----------------------------------------------------------------------------
-
-// RenderCalendarEvents groups events by their calendar month using
-// the calendar's own month-name labels (e.g. "Highsummer 1247 AR" not
-// "Month 4, Year 1247"). The era is appended via the matching Era
-// row when one exists for the year.
 //
-// Privacy filter: caller filters by PrivacyMode-derived role at the
-// listing layer when possible; this renderer additionally drops
-// Visibility=="dm_only" events in Safe mode as a defense-in-depth
-// belt-and-suspenders (in case ListAllEventsForCalendar bypassed
-// role filtering, which it does — by design).
-func RenderCalendarEvents(
-	ctx context.Context,
-	cal *calendar.Calendar,
-	events []calendar.Event,
-	opts Options,
-) (string, error) {
-	if cal == nil || len(events) == 0 {
-		return "", nil
-	}
-
-	monthName := func(month int) string {
-		if month < 1 || month > len(cal.Months) {
-			return fmt.Sprintf("Month %d", month)
-		}
-		return cal.Months[month-1].Name
-	}
-
-	eraFor := func(year int) string {
-		// Eras sorted by start year; pick the matching one. Era.EndYear
-		// nil = ongoing.
-		for _, era := range cal.Eras {
-			if year >= era.StartYear && (era.EndYear == nil || year <= *era.EndYear) {
-				return era.Name
-			}
-		}
-		return ""
-	}
-
-	// Filter + group by (year, month). Sort keys for determinism.
-	type ymKey struct{ Year, Month int }
-	groups := make(map[ymKey][]calendar.Event)
-	for _, e := range events {
-		if opts.Privacy == PrivacyModeSafe && e.Visibility == "dm_only" {
-			continue
-		}
-		k := ymKey{e.Year, e.Month}
-		groups[k] = append(groups[k], e)
-	}
-	if len(groups) == 0 {
-		return "", nil
-	}
-	keys := make([]ymKey, 0, len(groups))
-	for k := range groups {
-		keys = append(keys, k)
-	}
-	sort.Slice(keys, func(i, j int) bool {
-		if keys[i].Year != keys[j].Year {
-			return keys[i].Year < keys[j].Year
-		}
-		return keys[i].Month < keys[j].Month
-	})
-
-	var b strings.Builder
-	b.WriteString("# Calendar Events\n\n")
-	fmt.Fprintf(&b, "*Calendar: **%s**", cal.Name)
-	if cal.EpochName != nil && *cal.EpochName != "" {
-		fmt.Fprintf(&b, " · Epoch: %s", *cal.EpochName)
-	}
-	b.WriteString("*\n\n")
-
-	for _, k := range keys {
-		bucket := groups[k]
-		sort.SliceStable(bucket, func(i, j int) bool {
-			if bucket[i].Day != bucket[j].Day {
-				return bucket[i].Day < bucket[j].Day
-			}
-			return bucket[i].Name < bucket[j].Name
-		})
-
-		era := eraFor(k.Year)
-		if era != "" {
-			fmt.Fprintf(&b, "## %s %d %s\n\n", monthName(k.Month), k.Year, era)
-		} else {
-			fmt.Fprintf(&b, "## %s %d\n\n", monthName(k.Month), k.Year)
-		}
-
-		for _, e := range bucket {
-			if err := renderCalendarEvent(&b, &e, opts); err != nil {
-				return "", err
-			}
-		}
-	}
-	return b.String(), nil
-}
-
-func renderCalendarEvent(b *strings.Builder, e *calendar.Event, opts Options) error {
-	fmt.Fprintf(b, "### Day %d — %s {#%s}\n\n", e.Day, e.Name, slugify(e.Name))
-
-	meta := []string{}
-	if e.StartHour != nil && e.StartMinute != nil {
-		meta = append(meta, fmt.Sprintf("Time: %02d:%02d", *e.StartHour, *e.StartMinute))
-	}
-	if e.IsRecurring {
-		t := "recurring"
-		if e.RecurrenceType != nil && *e.RecurrenceType != "" {
-			t = *e.RecurrenceType
-		}
-		meta = append(meta, "Recurrence: "+t)
-	}
-	if e.Visibility == "dm_only" {
-		meta = append(meta, "_GM-only_")
-	}
-	if len(meta) > 0 {
-		b.WriteString(strings.Join(meta, " · "))
-		b.WriteString("\n\n")
-	}
-
-	body, err := htmlToMarkdown(e.DescriptionHTML)
-	body = bodyOrSkip("calendar event", e.Name, body, err)
-	if body != "" {
-		b.WriteString(body)
-		b.WriteString("\n\n")
-	}
-	return nil
-}
+// CALV5-PLACEHOLDER: RenderCalendarEvents + renderCalendarEvent stood here.
+// They grouped calendar.Event rows by in-world month, labelled each group with
+// the calendar's own month name and matching era ("Highsummer 1247 AR", never
+// "Month 4, Year 1247"), and dropped dm_only events in Safe mode as
+// defence-in-depth because ListAllEventsForCalendar deliberately bypassed role
+// filtering.
+//
+// The calendar is being rebuilt (V5) and its tables are dropped, so there is
+// nothing to render; service.go's CategoryCalendarEvents says so in the export.
+// When V5 restores this, KEEP the Safe-mode dm_only drop: the listing layer it
+// defended against is exactly the kind of bypass that gets rebuilt too.
 
 // ----------------------------------------------------------------------------
 // Sessions
 // ----------------------------------------------------------------------------
 
-// RenderSessions renders the Sessions section. The caller fetches
-// attendees + linked entities per session (N+1 acceptable; sessions
-// are typically 10-50 per campaign).
-//
-// GM notes (sessions.Session.Notes / NotesHTML) are JSON-omitted from
-// syncapi paths but ARE the owner's own GM-side intel. v1 includes
-// them ONLY when opts.IncludeSessionGMNotes is true AND privacy is
-// Permitted/Everything. Safe mode never includes them regardless of
-// the IncludeSessionGMNotes flag.
-//
-// Recap (sessions.Session.Recap / RecapHTML) is always included —
-// it's player-facing content per the field comment.
 func RenderSessions(
 	ctx context.Context,
 	list []sessions.Session,

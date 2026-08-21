@@ -3206,8 +3206,8 @@ func (a *App) RegisterRoutes() {
 	systems.SetCampaignDiagProvider(campaignDiagAdapter{
 		campaigns: campaignService,
 		addons:    addonService,
-		calendars: calendarService,
-		entities:  entityService,
+		// CALV5-PLACEHOLDER: `calendars: calendarService,` was here.
+		entities: entityService,
 		routes: func() []systems.RouteFact {
 			live := e.Routes()
 			out := make([]systems.RouteFact, 0, len(live))
@@ -3552,10 +3552,11 @@ func (a *App) RegisterRoutes() {
 	//
 	// D4=(c) lossless backup carve-out preserved — no edits to
 	// internal/app/export_adapters.go or the restore pipeline.
+	// CALV5-PLACEHOLDER: calendarService was the third argument (aiexport's
+	// CalendarLister). Restored when V5 lands.
 	aiWorkspaceRenderer := aiexport.NewService(
 		entityService,
 		noteSvc,
-		calendarService,
 		sessionsService,
 		timelineSvc,
 		relService,
@@ -3600,7 +3601,6 @@ func (a *App) RegisterRoutes() {
 	// --- Campaign Export/Import ---
 	exportSvc := campaigns.NewExportImportService(campaignService)
 	exportSvc.SetEntityExporter(&entityExportAdapter{entitySvc: entityService, tagSvc: tagService, relationSvc: relService})
-	exportSvc.SetCalendarExporter(&calendarExportAdapter{svc: calendarService})
 	exportSvc.SetTimelineExporter(&timelineExportAdapter{svc: timelineSvc})
 	exportSvc.SetSessionExporter(&sessionExportAdapter{svc: sessionsService})
 	exportSvc.SetMapExporter(&mapExportAdapter{mapSvc: mapsService, drawingSvc: drawingService})
@@ -3609,7 +3609,6 @@ func (a *App) RegisterRoutes() {
 	exportSvc.SetMediaExporter(&mediaExportAdapter{svc: mediaService})
 	exportSvc.SetMediaBundler(&mediaBundleAdapter{svc: mediaService})
 	exportSvc.SetEntityImporter(&entityImportAdapter{entitySvc: entityService, tagSvc: tagService, relationSvc: relService})
-	exportSvc.SetCalendarImporter(&calendarImportAdapter{svc: calendarService})
 	exportSvc.SetTimelineImporter(&timelineImportAdapter{svc: timelineSvc})
 	exportSvc.SetSessionImporter(&sessionImportAdapter{svc: sessionsService})
 	exportSvc.SetMapImporter(&mapImportAdapter{mapSvc: mapsService, drawingSvc: drawingService})

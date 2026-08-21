@@ -36,8 +36,8 @@ import (
 type campaignDiagAdapter struct {
 	campaigns campaigns.CampaignService
 	addons    addons.AddonService
-	calendars calendar.CalendarService
-	entities  entities.EntityService
+	// CALV5-PLACEHOLDER: `calendars calendar.CalendarService` was here.
+	entities entities.EntityService
 
 	// routes returns the LIVE Echo route table, supplied as a closure so this
 	// file never imports Echo (CLAUDE.md: no Echo types outside handler files).
@@ -84,28 +84,32 @@ func (a campaignDiagAdapter) CalendarFacts(ctx context.Context, campaignID, user
 	}
 	out.Found = true
 	out.CampaignName = camp.Name
+	_ = userID
 
+	// The addon row is still readable and still gates the (absent) routes, so
+	// it is still worth reporting — a disabled addon and a rebuilt plugin are
+	// different answers to "why is there no calendar".
 	a.fillCalendarAddon(ctx, campaignID, &out)
-	spine := calendar.BlockSpine()
-	out.SpineInstalled = spine != nil
 
-	a.fillViewer(ctx, campaignID, userID, &out)
-	a.fillCalendarLists(ctx, campaignID, spine, &out)
-	a.fillViewerPrefs(ctx, campaignID, userID, &out)
-
-	// The campaign DEFAULT calendar — what GetCalendar resolves, which is what
-	// the Foundry sync API and every default-calendar surface are served. It is
-	// deliberately a separate read from the list: the default is a property of
-	// the row, and a list that happens to be ordered by it is not the same fact.
-	if def, derr := a.calendars.GetCalendar(ctx, campaignID); derr != nil {
-		out.DefaultNote = derr.Error()
-	} else if def != nil {
-		out.DefaultID = def.ID
-	}
+	// CALV5-PLACEHOLDER: everything else this method read is gone with the
+	// plugin — BlockSpine(), the owner/player list split (ListCalendars vs
+	// ListVisibleCalendars), the spine's EagerLoadCalendars hydration, the
+	// stored-vs-drawn moon counts, calendar_active, the campaign default, and
+	// the viewer's stored Bench sections + Block layers.
+	//
+	// It reports that as a NOTE rather than returning a zero-valued struct,
+	// because this file's own rule is that "no moons" and "nobody could read
+	// the moons table" must never render the same. "The calendar is being
+	// rebuilt" is a third answer again, and the operator asking `calendar.render`
+	// why the page looks empty deserves it in one line.
+	out.Notes = append(out.Notes,
+		"The calendar plugin is being rebuilt (V5). Its tables are dropped and its "+
+			"render path does not exist, so there is nothing to trace: no spine, no "+
+			"calendars, no active/default pointers, no stored sections or layers. "+
+			"This is expected during the rebuild — it is not a degraded plugin.")
 	return out, nil
 }
 
-// fillCalendarAddon records the gate that can make every line below moot.
 func (a campaignDiagAdapter) fillCalendarAddon(ctx context.Context, campaignID string, out *systems.CampaignCalendarFacts) {
 	if a.addons == nil {
 		out.AddonNote = "the addons service is not wired into this adapter"
@@ -123,197 +127,12 @@ func (a campaignDiagAdapter) fillCalendarAddon(ctx context.Context, campaignID s
 // numbers and the page reads both: RequireRole compares the MEMBERSHIP role,
 // while cc.VisibilityRole() promotes a DM-grantee to Owner. Reporting one of
 // them would make half the gate traces wrong.
-func (a campaignDiagAdapter) fillViewer(ctx context.Context, campaignID, userID string, out *systems.CampaignCalendarFacts) {
-	if strings.TrimSpace(userID) == "" {
-		out.ListVia = "ListCalendars — the OWNER branch (no viewer supplied)"
-		return
-	}
-	out.Viewer.Supplied = true
-	out.Viewer.UserID = userID
+// CALV5-PLACEHOLDER: fillViewer / fillCalendarLists / hydrateForDiag /
+// fillStoredMoonCount / fillViewerPrefs stood here. They reproduced the Bench's
+// own loaders on purpose — a diagnostic that hydrated through the 60-method
+// service instead would have reported zero moons on exactly the calendar the
+// operator was asking about. V5 rebuilds them against its own producer.
 
-	m, err := a.campaigns.GetMember(ctx, campaignID, userID)
-	switch {
-	case err != nil && apperror.SafeCode(err) == 404:
-		out.Viewer.Note = "no `campaign_members` row for this user in this campaign"
-	case err != nil:
-		out.Viewer.Note = "membership read failed: " + err.Error()
-	case m != nil:
-		out.Viewer.Found = true
-		out.Viewer.MemberRole = int(m.Role)
-	}
-
-	if granted, gerr := a.campaigns.IsUserDmGranted(ctx, campaignID, userID); gerr != nil {
-		out.Notes = append(out.Notes, "DM-grant read failed ("+gerr.Error()+"), so the visibility role below assumes NO grant")
-	} else {
-		out.Viewer.DmGranted = granted
-	}
-
-	// cc.VisibilityRole(): RoleOwner for a DM-grantee, else the membership role.
-	out.Viewer.Role = out.Viewer.MemberRole
-	if out.Viewer.DmGranted {
-		out.Viewer.Role = int(campaigns.RoleOwner)
-	}
-
-	if out.Viewer.MemberRole >= int(campaigns.RoleOwner) {
-		out.ListVia = "ListCalendars — the OWNER branch (every calendar, unfiltered)"
-	} else {
-		out.ListVia = fmt.Sprintf("ListVisibleCalendars(role=%d) — the non-owner branch (per-calendar visibility applied)", out.Viewer.Role)
-	}
-}
-
-// fillCalendarLists loads both the full campaign list and the viewer's filtered
-// one, hydrated through the spine exactly as benchHydrate does.
-func (a campaignDiagAdapter) fillCalendarLists(ctx context.Context, campaignID string, spine *calendar.BlockService, out *systems.CampaignCalendarFacts) {
-	all, err := a.calendars.ListCalendars(ctx, campaignID)
-	if err != nil {
-		out.ListErr = err.Error()
-		return
-	}
-	out.All = a.hydrateForDiag(ctx, spine, all, out)
-
-	if !out.Viewer.Supplied {
-		return
-	}
-	// Visible is ALWAYS populated once a viewer was named, including for an
-	// owner (whose list is the full one, by the owner branch of buildBench).
-	// The renderer reads a nil Visible as "this viewer's list was not
-	// resolved" and prints a caveat, so leaving it nil for the owner — where
-	// the full list IS the right answer — would raise a warning about a
-	// correct result. An empty non-nil slice keeps "the viewer sees nothing"
-	// distinguishable from "we did not look".
-	if out.Viewer.MemberRole >= int(campaigns.RoleOwner) {
-		out.Visible = nonNil(out.All)
-		return
-	}
-	vis, verr := a.calendars.ListVisibleCalendars(ctx, campaignID, out.Viewer.Role, out.Viewer.UserID)
-	if verr != nil {
-		out.Notes = append(out.Notes, "the viewer's visible-calendar list failed ("+verr.Error()+")")
-		return // Visible stays nil — the renderer says so rather than guessing
-	}
-	out.Visible = nonNil(a.hydrateForDiag(ctx, spine, vis, out))
-}
-
-// nonNil guarantees a non-nil slice, so "resolved to nothing" and "not
-// resolved" stay distinguishable across the seam.
-func nonNil(xs []systems.DiagCalendar) []systems.DiagCalendar {
-	if xs == nil {
-		return []systems.DiagCalendar{}
-	}
-	return xs
-}
-
-// hydrateForDiag turns the plugin's calendars into the diagnostic's flat rows.
-//
-// The moon counts are read TWICE ON PURPOSE. MoonsRendered comes from the spine
-// (post-fallback: what the Block actually draws) and MoonRowsStored from the
-// calendar service's own eager load (pre-fallback: what Settings → Moons can
-// edit). Since 2026-08-11 those are different numbers on a real-world calendar,
-// and the difference is the answer to "where is my moon" — a single count would
-// have to pick one and would mislead whichever way it picked.
-func (a campaignDiagAdapter) hydrateForDiag(ctx context.Context, spine *calendar.BlockService, cals []calendar.Calendar, out *systems.CampaignCalendarFacts) []systems.DiagCalendar {
-	if len(cals) == 0 {
-		return nil
-	}
-	hydrated := map[string]*calendar.Calendar{}
-	if spine != nil {
-		ids := make([]string, 0, len(cals))
-		for i := range cals {
-			ids = append(ids, cals[i].ID)
-		}
-		full, err := spine.EagerLoadCalendars(ctx, ids)
-		if err != nil {
-			out.Notes = append(out.Notes, "the Block spine's batched hydration failed ("+err.Error()+"), so the per-calendar counts below are from the shallow list and the RENDERED moon count is unknown")
-		} else {
-			hydrated = full
-		}
-	}
-
-	rows := make([]systems.DiagCalendar, 0, len(cals))
-	for i := range cals {
-		src := &cals[i]
-		if h := hydrated[src.ID]; h != nil {
-			src = h
-		}
-		row := systems.DiagCalendar{
-			ID:             src.ID,
-			Name:           src.Name,
-			Mode:           src.Mode,
-			IsDefault:      src.IsDefault,
-			TracksRealTime: src.TracksRealTime,
-			Visibility:     src.Visibility,
-			Months:         len(src.Months),
-			Weekdays:       len(src.Weekdays),
-			Seasons:        len(src.Seasons),
-			Eras:           len(src.Eras),
-			Cycles:         len(src.Cycles),
-			Festivals:      len(src.Festivals),
-			MoonsRendered:  len(src.Moons),
-		}
-		if src.RealTimeZone != nil {
-			row.RealTimeZone = *src.RealTimeZone
-		}
-		for _, m := range src.Moons {
-			row.MoonNames = append(row.MoonNames, m.Name)
-			// The synthesized real Moon keeps ID 0 precisely so it cannot be
-			// mistaken for a row (moon_fallback.go states that invariant); a
-			// stored row's id is AUTO_INCREMENT and never 0.
-			if m.ID == 0 {
-				row.SynthesizedMoon = true
-			}
-		}
-		a.fillStoredMoonCount(ctx, &row)
-		rows = append(rows, row)
-	}
-	return rows
-}
-
-// fillStoredMoonCount reads the `calendar_moons` row count through the calendar
-// service, which applies no fallback. A failure is recorded, never defaulted to
-// zero: "no rows" is the finding this diagnostic exists to report, so a read
-// failure that looked like it would be the worst possible lie here.
-func (a campaignDiagAdapter) fillStoredMoonCount(ctx context.Context, row *systems.DiagCalendar) {
-	stored, err := a.calendars.GetCalendarByID(ctx, row.ID)
-	switch {
-	case err != nil:
-		row.StoredCountNote = "the stored-row read failed: " + err.Error()
-	case stored == nil:
-		row.StoredCountNote = "the calendar row disappeared between the list and the read"
-	default:
-		row.MoonRowsStored = len(stored.Moons)
-	}
-}
-
-// fillViewerPrefs reads the two per-(user, campaign) preference rows that decide
-// what the page discloses. BOTH distinguish nil from empty, and both mean
-// something different by it, so the nil case is reported as its own state.
-func (a campaignDiagAdapter) fillViewerPrefs(ctx context.Context, campaignID, userID string, out *systems.CampaignCalendarFacts) {
-	if strings.TrimSpace(userID) == "" {
-		return
-	}
-	if stored, err := a.calendars.GetBenchSections(ctx, userID, campaignID); err != nil {
-		out.SectionsNote = "the disclosure-preference read failed (" + err.Error() + "). The page ITSELF degrades to the ruled default when this happens, so the states below are what a viewer would see — but they are not evidence of a stored choice."
-		out.SectionsNeverChosen = true
-	} else {
-		out.SectionsStored = stored
-		out.SectionsNeverChosen = stored == nil
-	}
-	if layers, err := a.calendars.GetBlockLayers(ctx, userID, campaignID); err != nil {
-		out.LayersNote = "the layer-preference read failed (" + err.Error() + ")"
-		out.LayersNeverChosen = true
-	} else {
-		out.LayersStored = layers
-		out.LayersNeverChosen = layers == nil
-	}
-	if active, err := a.calendars.GetActiveCalendar(ctx, userID, campaignID); err != nil {
-		out.ActiveNote = err.Error()
-	} else if active != nil {
-		out.ActiveID = active.ID
-	}
-}
-
-// ── campaign.surfaces ───────────────────────────────────────────────────────
-
-// SurfaceFacts reads the live route table plus the campaign's nav config.
 func (a campaignDiagAdapter) SurfaceFacts(ctx context.Context, campaignID string) (systems.CampaignSurfaceFacts, error) {
 	out := systems.CampaignSurfaceFacts{CampaignID: campaignID, SidebarCalendarPath: a.sidebarCalendarPath}
 	camp, err := a.campaigns.GetByID(ctx, campaignID)

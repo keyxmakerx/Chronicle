@@ -21,7 +21,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/keyxmakerx/chronicle/internal/plugins/calendar"
 	"github.com/keyxmakerx/chronicle/internal/plugins/entities"
 	"github.com/keyxmakerx/chronicle/internal/plugins/sessions"
 	"github.com/keyxmakerx/chronicle/internal/plugins/timeline"
@@ -74,7 +73,6 @@ func TestRenderers_FunnelThroughHtmlToMarkdown(t *testing.T) {
 	required := []string{
 		"renderEntity",
 		"renderNoteTree",
-		"renderCalendarEvent",
 		"renderSession",
 		"renderTimeline",
 	}
@@ -239,39 +237,14 @@ func TestRenderNotes_FolderHierarchyAndScriptStripped(t *testing.T) {
 	}
 }
 
-func TestRenderCalendarEvents_MonthNamesAndSafeFilter(t *testing.T) {
-	ctx := context.Background()
-	cal := &calendar.Calendar{
-		ID: "cal1", Name: "Ashfall Reckoning", EpochName: sp("Coral Age"),
-		Months: []calendar.Month{
-			{Name: "Highsummer", Days: 30, SortOrder: 1},
-			{Name: "Stormfall", Days: 30, SortOrder: 2},
-		},
-		Eras: []calendar.Era{
-			{Name: "AR", StartYear: 1, EndYear: nil},
-		},
-	}
-	events := []calendar.Event{
-		{ID: "e1", Name: "The Glasswater Tide", Year: 1247, Month: 1, Day: 4,
-			DescriptionHTML: sp(polluted), Visibility: "everyone"},
-		{ID: "e2", Name: "Hidden Council", Year: 1247, Month: 1, Day: 10,
-			DescriptionHTML: sp("<p>Secret meeting.</p>"), Visibility: "dm_only"},
-	}
-	got, err := RenderCalendarEvents(ctx, cal, events, Options{Privacy: PrivacyModeSafe})
-	if err != nil {
-		t.Fatalf("RenderCalendarEvents: %v", err)
-	}
-	assertClean(t, "RenderCalendarEvents", got)
-	if !strings.Contains(got, "Highsummer 1247 AR") {
-		t.Errorf("expected human-readable month/year/era heading:\n%s", got)
-	}
-	if !strings.Contains(got, "The Glasswater Tide") {
-		t.Errorf("expected event title in output:\n%s", got)
-	}
-	if strings.Contains(got, "Hidden Council") {
-		t.Errorf("Safe mode leaked dm_only event:\n%s", got)
-	}
-}
+// CALV5-PLACEHOLDER: TestRenderCalendarEvents_MonthNamesAndSafeFilter stood
+// here. It pinned two things worth restoring WITH the renderer (V5):
+//   1. events are labelled with the calendar's own month name + era
+//      ("Highsummer 1247 AR"), never "Month 4, Year 1247"; and
+//   2. Safe mode drops Visibility=="dm_only" events even though the listing
+//      layer deliberately bypasses role filtering — defence in depth, and the
+//      only thing standing between a GM-only event and an exported document.
+// Restore the test in the same change as the renderer, not after it.
 
 func TestRenderSessions_GMNotesGated(t *testing.T) {
 	ctx := context.Background()
