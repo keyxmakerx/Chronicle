@@ -13,6 +13,7 @@
 package campaigns
 
 import (
+	"github.com/keyxmakerx/chronicle/internal/templates/components"
 	"fmt"
 	"strconv"
 	"github.com/keyxmakerx/chronicle/internal/sanitize"
@@ -285,34 +286,16 @@ templ dashPinnedPages(cc *CampaignContext, config map[string]any) {
 // Config: limit (int, default 5). Uses HTMX to fetch from the calendar plugin.
 // Mounts the calendar-widget JS for interactive features (quick-add, event detail).
 templ dashCalendarPreview(cc *CampaignContext, config map[string]any) {
-	<div
-		data-widget="calendar-widget"
-		data-campaign-id={ cc.Campaign.ID }
-		data-limit={ fmt.Sprintf("%d", dashCalendarLimit(config)) }
-	>
-		<div class="flex items-center justify-between mb-3">
-			<h2 class="text-sm font-semibold text-fg-secondary uppercase tracking-wider">
-				<i class="fa-solid fa-calendar-days mr-1.5"></i>Upcoming Events
-			</h2>
-			// C-CALV4-V2SUNSET R2-4 ([VS-2] SIGNED): the Bench, not the shell. A
-			// cross-plugin edit, and deliberately the SMALLEST kind — an href
-			// string inside this plugin's own template, no new import.
-			<a
-				href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/apps/calendar", cc.Campaign.ID)) }
-				class="text-xs text-accent hover:underline"
-			>
-				View calendar
-			</a>
-		</div>
-		<div
-			hx-get={ fmt.Sprintf("/campaigns/%s/calendars/upcoming?limit=%d", cc.Campaign.ID, dashCalendarLimit(config)) }
-			hx-trigger="intersect once"
-			hx-swap="innerHTML"
-			class="card divide-y divide-edge min-h-[60px]"
-		>
-			<div class="px-4 py-3 text-sm text-fg-muted">Loading...</div>
-		</div>
-	</div>
+	// CALV5-PLACEHOLDER: this block mounted the calendar-widget mount and
+	// HTMX-fetched /campaigns/:id/calendars/upcoming on intersect.
+	//
+	// Both are gone with the plugin, and left alone this card would have been
+	// the worst kind of broken: an empty div with a permanent "Loading..." —
+	// boot.js returns SILENTLY when a widget name is not in the registry, and
+	// the hx-get would 404 into a swap that never happens. No console error, no
+	// failed-looking page, just a card that spins forever.
+	_ = config
+	@components.FeatureRebuildingBlock("The calendar")
 }
 
 // dashCalendarLimit extracts the event limit from block config (default 5).

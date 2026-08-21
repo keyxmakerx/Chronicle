@@ -28,18 +28,7 @@
 # #main-content and whether its module re-inits on htmx:afterSettle. Neither is
 # assumed here — this guard stops the bleeding, the sweep does the diagnosis.
 
-2 internal/plugins/calendar/app_dashboard.templ
-3 internal/plugins/calendar/calendar_v2.templ
-3 internal/plugins/calendar/calendar_v2_sky_strip.templ
-3 internal/plugins/calendar/calendar_v2_worldstate.templ
-1 internal/plugins/calendar/entity_calendar_block.templ
-3 internal/plugins/calendar/entity_skybox_block.templ
-3 internal/plugins/calendar/entity_worldstate_block.templ
-1 internal/plugins/calendar/schedule.templ
-1 internal/plugins/calendar/subresource_v2.templ
 1 internal/plugins/designlab/design_lab.templ
 3 internal/plugins/maps/maps.templ
 1 internal/plugins/sessions/availability.templ
 1 internal/plugins/timeline/timeline.templ
-1 internal/templates/demo/calendar.templ
-1 internal/templates/demo/calendar_timeline_tuner.templ

@@ -34,14 +34,21 @@ func TestCategoryDashboard_CalendarBlockRenders(t *testing.T) {
 		t.Fatalf("block type = %q, want calendar_preview", got)
 	}
 
-	// 2) Render: the custom dashboard must show the calendar card's header.
+	// 2) Render: the custom dashboard must show the calendar card.
+	//
+	// CALV5-PLACEHOLDER: this asserted the card's own header ("Upcoming
+	// Events"). While the calendar is rebuilt the block renders the shared
+	// rebuild notice, so the marker moves — but the THING BEING TESTED does
+	// not: that a custom dashboard renders its configured calendar block
+	// instead of silently falling back to the default dashboard. Restore the
+	// header assertion when V5 restores the card.
 	cc := &campaigns.CampaignContext{Campaign: &campaigns.Campaign{ID: "camp-1", Name: "C"}, MemberRole: campaigns.RoleOwner}
 	var buf bytes.Buffer
 	if err := CategoryDashboardContent(cc, et, nil, nil, 0, ListOptions{}, "", nil).Render(context.Background(), &buf); err != nil {
 		t.Fatalf("render: %v", err)
 	}
 	html := buf.String()
-	if !strings.Contains(html, "Upcoming Events") {
-		t.Errorf("calendar block did not render its header; custom dashboard likely fell back to default.\nHTML:\n%s", html)
+	if !strings.Contains(html, "is being rebuilt") {
+		t.Errorf("calendar block did not render at all; custom dashboard likely fell back to default.\nHTML:\n%s", html)
 	}
 }
