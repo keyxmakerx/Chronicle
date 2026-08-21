@@ -3072,7 +3072,9 @@ func (a *App) RegisterRoutes() {
 	// sync (C-PERM-W1-TAG-GRANTS), reusing the entities glance adapter.
 	syncAPIHandler.SetTagGrantLister(tagFetcherAdapter)
 	syncAPIHandler.SetSystemEnabler(addonService)
-	calendarAPIHandler := syncapi.NewCalendarAPIHandler(syncService, calendarService)
+	// CALV5-PLACEHOLDER: took (syncService, calendarService). The handler holds
+	// the calendar routes open with a 503 while the plugin is rebuilt (V5).
+	calendarAPIHandler := syncapi.NewCalendarAPIHandler()
 	mediaAPIHandler := syncapi.NewMediaAPIHandler(syncService, mediaService)
 	if urlSigner != nil {
 		mediaAPIHandler.SetURLSigner(urlSigner)
