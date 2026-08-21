@@ -100,12 +100,31 @@ func TestEventCountVisibility_MatchesListFilters(t *testing.T) {
 	for _, fn := range []string{"List", "ListByCalendar"} {
 		body := flatten(funcSource(t, "repository.go", fn))
 		for _, want := range []string{
-			"JOIN calendar_events ce ON ce.id = tel.event_id",
-			`linkedEventVisFilter := "AND ce.visibility = 'everyone' AND COALESCE(NULLIF(tel.visibility_override, ''), ce.visibility) = 'everyone'"`,
 			`standaloneVisFilter := "AND te.visibility = 'everyone'"`,
 		} {
 			if !strings.Contains(body, flatten(want)) {
-				t.Errorf("%s: EventCount subquery missing %q — the count can silently drift from ListEventLinks/ListStandaloneEvents again", fn, want)
+				t.Errorf("%s: EventCount subquery missing %q — the count can silently drift from ListStandaloneEvents again", fn, want)
+			}
+		}
+
+		// CALV5-PLACEHOLDER: while the calendar is rebuilt (V5) its tables are
+		// dropped, so the linked half of this count is GONE — the JOIN on
+		// calendar_events would fail at runtime, not compile time. This asserts
+		// the dark state deliberately: the moment V5 re-introduces the join,
+		// this fails and whoever does it must restore the LINKED VISIBILITY
+		// FRAGMENT in the same change.
+		//
+		// Restoring the JOIN without it re-opens the exact oracle this test was
+		// written for (C-CALV4-TIEFIX-PB Bug 2 + C-CALV4-SEAM-P5 §7): a player
+		// reads "12 events" while the rows return 9, the difference being a
+		// count of events they are not allowed to see. V5 must bring back BOTH,
+		// and through a calendar service interface rather than a cross-plugin
+		// JOIN (Chronicle rule 8).
+		if strings.Contains(body, flatten("JOIN calendar_events")) {
+			if !strings.Contains(body, flatten(`COALESCE(NULLIF(tel.visibility_override, ''), ce.visibility) = 'everyone'`)) {
+				t.Errorf("%s: the linked-event count is back WITHOUT its visibility fragment — "+
+					"that is the counting oracle this test exists for. Restore the filter, or "+
+					"read links through the calendar service instead of joining its table.", fn)
 			}
 		}
 		// Both filters must be CLEARED (not just declared) for a DM-capable

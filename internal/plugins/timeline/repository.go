@@ -89,9 +89,10 @@ func (r *timelineRepo) Create(ctx context.Context, t *Timeline) error {
 func (r *timelineRepo) GetByID(ctx context.Context, id string) (*Timeline, error) {
 	t := &Timeline{}
 	err := r.db.QueryRowContext(ctx,
-		`SELECT `+timelineCols+`, COALESCE(c.name, '')
+		// CALV5-PLACEHOLDER: was `, COALESCE(c.name, '')` + `LEFT JOIN calendars c
+		// ON c.id = t.calendar_id`. V5 re-joins the calendar name here.
+		`SELECT `+timelineCols+`, ''
 		 FROM timelines t
-		 LEFT JOIN calendars c ON c.id = t.calendar_id
 		 WHERE t.id = ?`, id,
 	).Scan(
 		&t.ID, &t.CampaignID, &t.CalendarID, &t.Name, &t.Description,
@@ -135,25 +136,22 @@ func (r *timelineRepo) GetByID(ctx context.Context, id string) (*Timeline, error
 // the oracle — only the dm_only deltas (event visibility + link override)
 // are closed.
 func (r *timelineRepo) List(ctx context.Context, campaignID string, role int) ([]Timeline, error) {
+	// CALV5-PLACEHOLDER: linkedEventVisFilter (the `ce.visibility` +
+	// visibility_override fragment) went with the calendar_events join; V5
+	// restores it alongside the linked-event count.
 	visFilter := "AND t.visibility = 'everyone'"
-	linkedEventVisFilter := "AND ce.visibility = 'everyone' AND COALESCE(NULLIF(tel.visibility_override, ''), ce.visibility) = 'everyone'"
 	standaloneVisFilter := "AND te.visibility = 'everyone'"
 	if permissions.CanSeeDmOnly(role) {
 		visFilter = ""
-		linkedEventVisFilter = ""
 		standaloneVisFilter = ""
 	}
 
 	query := fmt.Sprintf(`
-		SELECT `+timelineCols+`, COALESCE(c.name, ''),
-		       (SELECT COUNT(*) FROM timeline_event_links tel
-		          JOIN calendar_events ce ON ce.id = tel.event_id
-		          WHERE tel.timeline_id = t.id %s) +
+		SELECT `+timelineCols+`, '',
 		       (SELECT COUNT(*) FROM timeline_events te WHERE te.timeline_id = t.id %s)
 		FROM timelines t
-		LEFT JOIN calendars c ON c.id = t.calendar_id
 		WHERE t.campaign_id = ? %s
-		ORDER BY t.sort_order, t.name`, linkedEventVisFilter, standaloneVisFilter, visFilter)
+		ORDER BY t.sort_order, t.name`, standaloneVisFilter, visFilter)
 
 	rows, err := r.db.QueryContext(ctx, query, campaignID)
 	if err != nil {
@@ -187,25 +185,22 @@ func (r *timelineRepo) List(ctx context.Context, campaignID string, role int) ([
 // function's doc comment for the full rationale and the residual
 // visibility_rules gap that is NOT closed by this change.
 func (r *timelineRepo) ListByCalendar(ctx context.Context, calendarID string, role int) ([]Timeline, error) {
+	// CALV5-PLACEHOLDER: linkedEventVisFilter (the `ce.visibility` +
+	// visibility_override fragment) went with the calendar_events join; V5
+	// restores it alongside the linked-event count.
 	visFilter := "AND t.visibility = 'everyone'"
-	linkedEventVisFilter := "AND ce.visibility = 'everyone' AND COALESCE(NULLIF(tel.visibility_override, ''), ce.visibility) = 'everyone'"
 	standaloneVisFilter := "AND te.visibility = 'everyone'"
 	if permissions.CanSeeDmOnly(role) {
 		visFilter = ""
-		linkedEventVisFilter = ""
 		standaloneVisFilter = ""
 	}
 
 	query := fmt.Sprintf(`
-		SELECT `+timelineCols+`, COALESCE(c.name, ''),
-		       (SELECT COUNT(*) FROM timeline_event_links tel
-		          JOIN calendar_events ce ON ce.id = tel.event_id
-		          WHERE tel.timeline_id = t.id %s) +
+		SELECT `+timelineCols+`, '',
 		       (SELECT COUNT(*) FROM timeline_events te WHERE te.timeline_id = t.id %s)
 		FROM timelines t
-		LEFT JOIN calendars c ON c.id = t.calendar_id
 		WHERE t.calendar_id = ? %s
-		ORDER BY t.sort_order, t.name`, linkedEventVisFilter, standaloneVisFilter, visFilter)
+		ORDER BY t.sort_order, t.name`, standaloneVisFilter, visFilter)
 
 	rows, err := r.db.QueryContext(ctx, query, calendarID)
 	if err != nil {
@@ -259,9 +254,8 @@ func (r *timelineRepo) Search(ctx context.Context, campaignID, query string, rol
 	}
 
 	q := fmt.Sprintf(`
-		SELECT `+timelineCols+`, COALESCE(c.name, '')
+		SELECT `+timelineCols+`, ''
 		FROM timelines t
-		LEFT JOIN calendars c ON c.id = t.calendar_id
 		WHERE t.campaign_id = ? AND t.name LIKE ? %s
 		ORDER BY t.name
 		LIMIT 10`, visFilter)
@@ -291,36 +285,33 @@ func (r *timelineRepo) Search(ctx context.Context, campaignID, query string, rol
 
 // --- Event Links ---
 
-// eventLinkCols is the column list for event link queries with joined calendar event data.
-const eventLinkCols = `tel.id, tel.timeline_id, tel.event_id, tel.display_order,
-       tel.visibility_override, tel.visibility_rules, tel.label, tel.color_override,
-       tel.created_at,
-       ce.name, ce.description, ce.year, ce.month, ce.day,
-       ce.end_year, ce.end_month, ce.end_day,
-       ce.category, ce.visibility, ce.entity_id,
-       COALESCE(ent.name, ''), COALESCE(et.icon, '')`
+// CALV5-PLACEHOLDER: the event-link read path is dark while the calendar is
+// rebuilt (V5). What stood here: eventLinkCols / eventLinkJoins / scanEventLink
+// and a ListEventLinks that SELECTed ce.name, ce.year, ce.month, ce.day,
+// ce.category, ce.visibility and ce.entity_id through
+// `JOIN calendar_events ce ON ce.id = tel.event_id`, ordered by the event's
+// in-world date and role-filtered on ce.visibility (folding in
+// tel.visibility_override via EffectiveVisibility).
+//
+// It is dark rather than merely empty because that JOIN was a direct read of
+// another plugin's table — Chronicle rule 8 — and the calendar tables are
+// dropped, so the query would fail at RUNTIME (not compile time) with the
+// caller free to swallow it. Returning no links, honestly, is the safe state.
+//
+// V5 restores this through a calendar SERVICE INTERFACE, never a JOIN: the
+// calendar plugin exposes "events by id, role-filtered" and this repository
+// asks for them. Until then timeline shows standalone events only and says so.
 
-// eventLinkJoins is the JOIN clause for event link queries.
-const eventLinkJoins = `JOIN calendar_events ce ON ce.id = tel.event_id
-     LEFT JOIN entities ent ON ent.id = ce.entity_id
-     LEFT JOIN entity_types et ON et.id = ent.entity_type_id`
-
-// scanEventLink reads a row into an EventLink struct.
-func scanEventLink(scanner interface{ Scan(...any) error }) (*EventLink, error) {
-	el := &EventLink{}
-	err := scanner.Scan(
-		&el.ID, &el.TimelineID, &el.EventID, &el.DisplayOrder,
-		&el.VisibilityOverride, &el.VisibilityRules, &el.Label, &el.ColorOverride,
-		&el.CreatedAt,
-		&el.EventName, &el.EventDescription, &el.EventYear, &el.EventMonth, &el.EventDay,
-		&el.EventEndYear, &el.EventEndMonth, &el.EventEndDay,
-		&el.EventCategory, &el.EventVisibility, &el.EventEntityID,
-		&el.EventEntityName, &el.EventEntityIcon,
-	)
-	if err == sql.ErrNoRows {
-		return nil, nil
-	}
-	return el, err
+// ListEventLinks returns the timeline's calendar-event links.
+//
+// CALV5-PLACEHOLDER: always returns none — see the note above. The signature,
+// the role parameter and every caller are left intact so V5 re-attaches here
+// without touching the service or the handler.
+func (r *timelineRepo) ListEventLinks(ctx context.Context, timelineID string, role int) ([]EventLink, error) {
+	_ = ctx
+	_ = timelineID
+	_ = role
+	return nil, nil
 }
 
 // LinkEvent inserts a new event link.
@@ -348,38 +339,6 @@ func (r *timelineRepo) UnlinkEvent(ctx context.Context, timelineID, eventID stri
 		timelineID, eventID,
 	)
 	return err
-}
-
-// ListEventLinks returns all event links for a timeline with calendar event data joined.
-// Filtered by role-based visibility on the underlying calendar event.
-func (r *timelineRepo) ListEventLinks(ctx context.Context, timelineID string, role int) ([]EventLink, error) {
-	visFilter := "AND ce.visibility = 'everyone'"
-	if permissions.CanSeeDmOnly(role) {
-		visFilter = ""
-	}
-
-	query := fmt.Sprintf(`
-		SELECT `+eventLinkCols+`
-		FROM timeline_event_links tel
-		`+eventLinkJoins+`
-		WHERE tel.timeline_id = ? %s
-		ORDER BY ce.year, ce.month, ce.day, tel.display_order`, visFilter)
-
-	rows, err := r.db.QueryContext(ctx, query, timelineID)
-	if err != nil {
-		return nil, fmt.Errorf("list event links: %w", err)
-	}
-	defer rows.Close()
-
-	var result []EventLink
-	for rows.Next() {
-		el, err := scanEventLink(rows)
-		if err != nil {
-			return nil, fmt.Errorf("scan event link: %w", err)
-		}
-		result = append(result, *el)
-	}
-	return result, rows.Err()
 }
 
 // CountEvents returns the number of events linked to a timeline.
