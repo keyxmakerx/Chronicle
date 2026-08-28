@@ -68,7 +68,7 @@ func main() {
 	// internal/database/migrate_state.go.
 	backupRequired := strings.EqualFold(getEnvDefault("BACKUP_REQUIRED", ""), "1") ||
 		strings.EqualFold(getEnvDefault("BACKUP_REQUIRED", ""), "true")
-	if err := database.MigrateWithBackup(db, cfg.Database.DSN(), "db/migrations", database.HealthCheckConfig{
+	backupCfg := database.HealthCheckConfig{
 		BackupDir:      cfg.BackupDir,
 		BackupRequired: backupRequired,
 		MediaPath:      cfg.Upload.MediaPath,
@@ -77,7 +77,9 @@ func main() {
 		DBHost:         cfg.Database.Host,
 		DBUser:         cfg.Database.User,
 		DBPassword:     cfg.Database.Password,
-	}); err != nil {
+	}
+	coreBackedUp, err := database.MigrateWithBackup(db, cfg.Database.DSN(), "db/migrations", backupCfg)
+	if err != nil {
 		fatalBoot("failed to run migrations", err)
 	}
 
@@ -122,6 +124,35 @@ func main() {
 	}
 	pluginHealth := database.NewPluginHealthRegistry()
 	pluginSchemas := registeredPlugins()
+
+	// Pre-PLUGIN-migration backup. MigrateWithBackup above guards only CORE
+	// migrations; a release shipping destructive plugin migrations and no core
+	// ones (the CALV5 calendar wipe is exactly that shape) used to reach this
+	// point with no automatic backup at all — while the wipe's down files told
+	// the operator that recovery is "restoring the backup taken before the
+	// wipe". Detect pending plugin migrations the same way the runner will,
+	// and back up under the same BACKUP_REQUIRED semantics as the core gate.
+	// Skipped when the core path already captured a snapshot this boot.
+	pendingPlugins, pendErr := database.PendingPluginMigrations(db, pluginSchemas)
+	if pendErr != nil {
+		// If the tracking state cannot be read, the safe assumption is that
+		// something is pending: fail toward taking a backup, never away.
+		slog.Warn("could not determine pending plugin migrations; assuming some are pending",
+			slog.Any("error", pendErr))
+		pendingPlugins = []string{"(undetermined)"}
+	}
+	if len(pendingPlugins) > 0 && !coreBackedUp {
+		slog.Info("pending plugin migration(s) detected — backing up before applying",
+			slog.String("plugins", strings.Join(pendingPlugins, ", ")))
+		if backupErr := database.PreMigrationBackup(db, backupCfg); backupErr != nil {
+			if backupRequired {
+				fatalBoot("pre-plugin-migration backup failed and BACKUP_REQUIRED=1; refusing to apply plugin migrations", backupErr)
+			}
+			slog.Warn("pre-plugin-migration backup failed (non-fatal in default mode); plugin migrations will still apply",
+				slog.Any("error", backupErr))
+		}
+	}
+
 	pluginResults := database.RunPluginMigrations(db, pluginSchemas)
 	for _, r := range pluginResults {
 		pluginHealth.Register(r.Slug, r.Healthy, r.Error, r.Version, r.LatestVersion)

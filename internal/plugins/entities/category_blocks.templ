@@ -8,6 +8,7 @@
 package entities
 
 import (
+	"github.com/keyxmakerx/chronicle/internal/templates/components"
 	"fmt"
 	"sort"
 	"time"
@@ -296,33 +297,14 @@ func catRelativeTime(t time.Time) string {
 // Uses the same HTMX lazy-load pattern as the campaign dashboard calendar block.
 // Mounts calendar-widget JS for interactive features.
 templ catCalendarPreview(cc *campaigns.CampaignContext, config map[string]any) {
-	<div
-		data-widget="calendar-widget"
-		data-campaign-id={ cc.Campaign.ID }
-		data-limit={ fmt.Sprintf("%d", catCalendarLimit(config)) }
-	>
-		<div class="flex items-center justify-between mb-3">
-			<h2 class="text-sm font-semibold text-fg-secondary uppercase tracking-wider">
-				<i class="fa-solid fa-calendar-days mr-1.5"></i>Upcoming Events
-			</h2>
-			// C-CALV4-V2SUNSET R2-4 ([VS-2] SIGNED): the Bench, not the shell.
-			// Cross-plugin href edit only — no new import (§12's guard).
-			<a
-				href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/apps/calendar", cc.Campaign.ID)) }
-				class="text-xs text-accent hover:underline"
-			>
-				View calendar
-			</a>
-		</div>
-		<div
-			hx-get={ fmt.Sprintf("/campaigns/%s/calendars/upcoming?limit=%d", cc.Campaign.ID, catCalendarLimit(config)) }
-			hx-trigger="intersect once"
-			hx-swap="innerHTML"
-			class="card divide-y divide-edge min-h-[60px]"
-		>
-			<div class="px-4 py-3 text-sm text-fg-muted">Loading...</div>
-		</div>
-	</div>
+	// CALV5-PLACEHOLDER: mounted the calendar-widget mount and HTMX-fetched
+	// the calendar plugin's upcoming-events fragment. Same reasoning as
+	// campaigns/dashboard_blocks.templ's dashCalendarPreview: an unregistered
+	// widget mount is a permanently empty div that boot.js fails silently on,
+	// and the fragment route no longer exists.
+	_ = cc
+	_ = config
+	@components.FeatureRebuildingBlock("The calendar")
 }
 
 // catTimelinePreview renders a timeline summary card for category dashboards.

@@ -25,7 +25,7 @@ const orderParseRuns = 100
 // Elven card, it carries two moons and three seasons, and all three seasons
 // declare dayStart 0.
 func TestParseCalendaria_ElvenPresetOrderIsDeterministic(t *testing.T) {
-	raw, err := builderPresetFS.ReadFile("presets/elven.json")
+	raw, err := presetFS.ReadFile("presets/elven.json")
 	if err != nil {
 		t.Fatalf("read embedded elven preset: %v", err)
 	}

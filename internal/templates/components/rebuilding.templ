@@ -1,0 +1,56 @@
+package components
+
+// CALV5-PLACEHOLDER: this file exists only while the calendar is rebuilt (V5)
+// and is deleted with the last placeholder that uses it.
+//
+// It is a SIBLING of PluginUnavailable rather than a reuse of it, deliberately.
+// That component says the feature "encountered a database error" and tells the
+// reader to contact their server administrator — true for a failed migration,
+// false here, and on a self-hosted instance the administrator is usually the
+// person reading it. A rebuild is a planned absence, and saying so is the whole
+// job of these two.
+//
+// Neither renders anything that could be mistaken for data: no empty grid, no
+// zeroed counts, no disabled controls implying something is coming back this
+// minute. Chronicle's own convention — a "needs backend" chip rather than a
+// fabricated number — is the same instinct.
+
+// FeatureRebuilding is the full-surface notice: the feature's own page.
+templ FeatureRebuilding(featureName string) {
+	<div class="flex flex-col items-center justify-center py-20 px-6">
+		<div class="max-w-md w-full bg-surface-raised border border-border rounded-lg p-8 text-center">
+			<div class="text-4xl mb-4">
+				<i class="fa-solid fa-screwdriver-wrench text-fg-muted"></i>
+			</div>
+			<h2 class="text-xl font-semibold text-fg mb-2">
+				{ featureName } is being rebuilt
+			</h2>
+			<p class="text-sm text-fg-secondary mb-2">
+				This feature is being rewritten from scratch. It is deliberately
+				switched off in the meantime — nothing is broken and nothing is
+				waiting on you.
+			</p>
+			<p class="text-sm text-fg-muted">
+				Everything else in your campaign works normally.
+			</p>
+		</div>
+	</div>
+}
+
+// FeatureRebuildingBlock is the compact variant for a slot inside another page
+// — an entity block, a dashboard block, a bound widget host.
+//
+// It keeps the slot occupied ON PURPOSE. An entity layout that quietly dropped
+// its calendar block would look to the owner like their layout had been edited,
+// and rebuilding the layout by hand is work they would have to undo later.
+templ FeatureRebuildingBlock(featureName string) {
+	<div class="border border-dashed border-border rounded-lg p-6 text-center">
+		<i class="fa-solid fa-screwdriver-wrench text-fg-muted mb-2"></i>
+		<p class="text-sm text-fg-secondary">
+			{ featureName } is being rebuilt.
+		</p>
+		<p class="text-xs text-fg-muted mt-1">
+			This block keeps its place in your layout and will fill in again when the rebuild lands.
+		</p>
+	</div>
+}

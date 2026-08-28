@@ -52,7 +52,21 @@ var contractGoverned = map[string]string{
 	"entities.UpdateEntityInput":        "PUT /entities/:eid and the syncapi twin — every sync push un-parented the entity; {name} alone un-privated it",
 	"timeline.UpdateTimelineEventInput": "PUT .../standalone-events/:eid — a rename cleared eight fields, including per-player visibility rules",
 	"maps.UpdateMarkerInput":            "PUT .../markers/:mkid — an edit or a drag cleared pin_category, visibility_rules and the Foundry pairing key",
-	"calendar.UpdateEventInput":         "PUT .../calendar/events/:eid — Foundry's five-key push turned off recurrence, all-day and the entity link",
+	// CALV5 SALVAGE: restored with the domain layer (2026-08-21). It is on the
+	// GOVERNED list, not the allowlist, because the recovered type is already
+	// presence-aware — the sweep that fixed it survived in the recovered file.
+	"calendar.UpdateEventInput": "PUT .../calendar/events/:eid — Foundry's five-key push turned off recurrence, all-day and the entity link",
+
+	// Original note, kept because the incident is the reason the entry exists:
+	// "PUT .../calendar/events/:eid — Foundry's five-key push turned off
+	// recurrence, all-day and the entity link".
+	//
+	// That is a REAL incident, not a hypothetical: the Foundry module sends a
+	// narrow body on a rename, and a value-typed input read every absent field
+	// as a zero and wrote it. V5's event update input must be presence-aware
+	// from its first commit, and this line must come back with it — the module
+	// still sends narrow bodies (its own contract pins them), so the defect is
+	// waiting for any successor that forgets.
 }
 
 // governedFieldExceptions are value-typed fields deliberately left on a
@@ -84,6 +98,16 @@ var notYetSwept = map[string]bool{
 	"maps.UpdateLayerInput":                  true,
 	"maps.UpdateMapInput":                    true,
 	"campaigns.UpdateCampaignInput":          true,
+	// CALV5 SALVAGE: these three came back with the recovered domain layer and
+	// are listed again because they were never swept — pretending otherwise
+	// would make this test lie. They are the ORIGINAL types recovered verbatim,
+	// not V5 rewrites, so restoring the status quo is the honest entry.
+	//
+	// BUT NOTE THE OPPORTUNITY, because it will not come again this cheaply:
+	// they currently have NO handler, NO service and NO repository — nothing
+	// calls them. Sweeping them to patch.Field is therefore risk-free right
+	// now, where doing it later means touching live write paths. V5 should
+	// sweep them before giving them a handler, and delete these three lines.
 	"calendar.UpdateEventVisibilityInput":    true,
 	"calendar.UpdateCalendarVisibilityInput": true,
 	"calendar.UpdateCalendarInput":           true,

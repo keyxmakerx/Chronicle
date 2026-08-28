@@ -95,7 +95,10 @@ func DBMigrationVersion(db *sql.DB) (version uint, dirty bool, err error) {
 //
 // It replaces the previous unconditional "PreMigrationBackup then RunMigrations"
 // boot sequence.
-func MigrateWithBackup(db *sql.DB, dsn, migrationsPath string, cfg HealthCheckConfig) error {
+// The bool reports whether a backup was actually captured on this call, so
+// the plugin-migration backup gate in main.go can skip a redundant second
+// snapshot when the core path already took one this boot.
+func MigrateWithBackup(db *sql.DB, dsn, migrationsPath string, cfg HealthCheckConfig) (bool, error) {
 	dbVer, dbDirty, verErr := DBMigrationVersion(db)
 	if verErr != nil {
 		// schema_migrations likely doesn't exist yet (brand-new DB). Treat as
@@ -107,7 +110,7 @@ func MigrateWithBackup(db *sql.DB, dsn, migrationsPath string, cfg HealthCheckCo
 
 	srcMax, srcErr := HighestSourceVersion(migrationsPath)
 	if srcErr != nil {
-		return fmt.Errorf("scanning migration source %q: %w", migrationsPath, srcErr)
+		return false, fmt.Errorf("scanning migration source %q: %w", migrationsPath, srcErr)
 	}
 
 	switch {
@@ -119,12 +122,12 @@ func MigrateWithBackup(db *sql.DB, dsn, migrationsPath string, cfg HealthCheckCo
 			slog.String("effect", fmt.Sprintf("features added after migration %d are unavailable until you deploy a build that includes them", srcMax)),
 			slog.String("action", "to move forward deploy the newer image; to stay on this version intentionally, ignore this warning"),
 		)
-		return nil
+		return false, nil
 
 	case dbVer == srcMax && !dbDirty:
 		slog.Info("database schema is up to date — no pending migrations",
 			slog.Uint64("version", uint64(dbVer)))
-		return nil
+		return false, nil
 	}
 
 	// A migration is pending (or the DB is dirty and needs the recovery path).
@@ -134,13 +137,17 @@ func MigrateWithBackup(db *sql.DB, dsn, migrationsPath string, cfg HealthCheckCo
 		slog.Uint64("to_version", uint64(srcMax)),
 		slog.Bool("dirty", dbDirty),
 	)
+	backedUp := true
 	if backupErr := PreMigrationBackup(db, cfg); backupErr != nil {
 		if cfg.BackupRequired {
-			return fmt.Errorf("pre-migration backup failed and BACKUP_REQUIRED=1; refusing to apply migrations: %w", backupErr)
+			return false, fmt.Errorf("pre-migration backup failed and BACKUP_REQUIRED=1; refusing to apply migrations: %w", backupErr)
 		}
+		// No snapshot exists from this boot: report false so the plugin gate
+		// can still try, rather than believing a backup that failed.
+		backedUp = false
 		slog.Warn("pre-migration backup failed (non-fatal in default mode); migrations will still apply",
 			slog.Any("error", backupErr))
 	}
 
-	return RunMigrations(db, dsn, migrationsPath)
+	return backedUp, RunMigrations(db, dsn, migrationsPath)
 }

@@ -5,7 +5,6 @@ internal/plugins/audit/service.go	sanitize_calls=0	html_params=-	html_struct_fie
 internal/plugins/auth/service.go	sanitize_calls=0	html_params=-	html_struct_fields=-
 internal/plugins/backup/service.go	sanitize_calls=0	html_params=-	html_struct_fields=-
 internal/plugins/bestiary/service.go	sanitize_calls=0	html_params=-	html_struct_fields=-
-internal/plugins/calendar/service.go	sanitize_calls=2	html_params=-	html_struct_fields=DescriptionHTML
 internal/plugins/campaigns/service.go	sanitize_calls=1	html_params=-	html_struct_fields=-
 internal/plugins/entities/service.go	sanitize_calls=4	html_params=entryHTML,notesHTML	html_struct_fields=EntryHTML,PlayerNotesHTML
 internal/plugins/foundry_vtt/service.go	sanitize_calls=0	html_params=-	html_struct_fields=-

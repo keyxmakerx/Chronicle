@@ -209,34 +209,17 @@ PKG_CALENDAR_BLOCK="./internal/widgets/calendar_block/"
 #     TestTilePaintProbe above was added for. A masked element can resolve its
 #     ink perfectly and have the mask clip the glyph to no coverage at all; the
 #     computed reading is identical to a working one. This one decodes a PNG.
-PROBES_CALENDAR_BLOCK="TestProbe_ContainerQuerySizingInRealBrowser \
-TestProbe_ShelfGeometryIsInvariant \
-TestProbe_StdTierFilledShelfDoesNotCollideWithTheFilledLedger \
-TestProbe_LedgerHeightIsInvariantUnderSelection \
-TestProbe_StdTierFilledLedgerDoesNotCollide \
-TestProbe_AtThePhoneWidthTheLedgerStillSitsBelowTheMonth \
-TestProbe_DayPanelAppearsOnTapAndCostsTheLedgerNothing \
-TestCellProbe_EveryCornerPaintsAndNoTwoShareOne \
-TestCellProbe_TheEraTintCarriesTheEraAndKeepsThePop \
-TestCellProbe_TheTileRuleIsTheQuietestRuleInTheGrid \
-TestTilePaintProbe_TheTileIsOnTheScreen \
-TestRuneProbe_TheExpansionGrowsRightward \
-TestRuneProbe_TheDensityRuling \
-TestRuneProbe_TheRuneInkIsNotTheRawPalette \
-TestRuneProbe_TheRunesAreOnTheScreen \
-TestRuneInkChannels_ChromaSurvivesTheDeepening \
-TestRuneInkChannels_TheChipTintCarriesItsOwnHue \
-TestMoonReachProbe_TheDiscsAreOnTheScreenAtAPhoneWidth \
-TestMoonReachProbe_TheOpenerOnATouchDevice \
-TestLegendProbe_TheTabOpensByKeyboardAndByTouch \
-TestAvailabilityProbe_TheStripPaintsNothingOnCurrentData \
-TestMoonPanelProbe_TheFoldCostsNothingAndObeysTheRegister \
-TestMoonPanelProbe_ReducedMotionIsInstantAndComplete \
-TestSkyMeasureProbe_TheThreeCounts \
-TestSkyPaneProbe_TheStillsTwoShapes \
-TestSkyDiscPaintProbe_TheDiscsAreInkAndNotOnlyWrappers \
-TestSkySceneryProbe_TheBandsMoonsAreNotAControl \
-TestSkyCloseProbe_TheCloseRendersFrames"
+# CALV5-PLACEHOLDER: this census named ~30 browser probes, every one of them
+# in the calendar plugin or the calendar_block widget. All are deleted with
+# those packages, so the list is empty rather than a demand for probes that
+# cannot exist.
+#
+# THE CENSUS ITSELF IS THE LESSON, and V5 should rebuild it: the list was
+# assembled by ENUMERATING the tree, not from memory, precisely because
+# registering probes by name left it incomplete every time — each lane added
+# its own and registered it or did not, and an unregistered probe is one
+# nothing makes run. Re-census when V5 has probes; do not hand-list them.
+PROBES_CALENDAR_BLOCK=""
 
 PKG_CALENDAR="./internal/plugins/calendar/"
 # C-CALV4-MOBILE registers its six phone probes here. Every one of them is
@@ -274,24 +257,16 @@ PKG_CALENDAR="./internal/plugins/calendar/"
 # browser probe and forgetting this file is the mistake that produced the gap in
 # the first place, and asking the next person to remember is how it recurs. The
 # check is source-only, so it fires on a machine with no browser too.
-PROBES_CALENDAR="TestDayCardReducedMotionAnchorsToItsDay \
-TestDayCardMorphInterpolates \
-TestMobileProbe_TheLedgerShowsThreeRowsOnAPhone \
-TestMobileProbe_TheSheetStaysReachableWhenTheViewportShrinks \
-TestMobileProbe_ThePageIsLockedBehindASheetAndReleasedOnEveryExit \
-TestMobileProbe_TheScrollerCensusAndTheLongWeek \
-TestMobileProbe_TheRSVPOverviewAndTheScheduleFitThePhone \
-TestMobileProbe_TheTapFloorAtAPhoneWidth \
-TestBuilderProbe_TheMonthDidNotMove \
-TestBuilderProbe_TheLadderActuallyRuns \
-TestBuilderProbe_NarrowLaneHoldsItsGate \
-TestDaycardLedgerDoor_ItOnlyRendersWhereItDoesSomething \
-TestYearProbe_BenchDateVerbRow \
-TestYearProbe_V2GMConsole \
-TestDefaultCategories_NoneCollidesWithTheGMGold"
+# CALV5-PLACEHOLDER: emptied with the plugin — see the note above.
+PROBES_CALENDAR=""
 
 # Needs the Tailwind CLI on top of the browser.
-PROBES_CALENDAR_TAILWIND="TestProbe_MobileBreakpointSwapInRealBrowser"
+# CALV5-PLACEHOLDER: was TestProbe_MobileBreakpointSwapInRealBrowser, the probe
+# that proved the phone breakpoint actually swapped the assembly in a real
+# browser (and that Tailwind had generated the class it depended on). Deleted
+# with the plugin. V5's mobile lane needs its own — a breakpoint is exactly the
+# kind of claim no string assertion can check.
+PROBES_CALENDAR_TAILWIND=""
 
 # --- the census --------------------------------------------------------------
 #
@@ -490,12 +465,28 @@ probe_fail_region() {
 # again. Source-only, so it runs on a machine with no browser, next to the
 # census.
 marker_check() {
-  local src="internal/plugins/calendar/mobile_probe_test.go"
-  if [[ ! -f "${src}" ]]; then
-    echo "check-browser-probes: ${src} is gone, so the harness-marker pairing cannot" >&2
-    echo "  be checked. The FAILED branch below would report a dead browser child as" >&2
-    echo "  a rendering regression. Re-point marker_check at the rig's new home." >&2
-    return 1
+  # CALV5-PLACEHOLDER: this pointed at
+  # internal/plugins/calendar/mobile_probe_test.go, the only browser-probe rig
+  # in the tree. It was deleted with the calendar plugin, so the guard was
+  # failing its own self-test and reporting itself broken.
+  #
+  # It now locates the rig by its MARKER rather than by a hard-coded path, and
+  # passes cleanly when the tree has no rig at all — which is true today and
+  # is not a defect. When V5 lands its probes, this starts checking them with
+  # no edit needed.
+  #
+  # The lesson this whole guard encodes is worth re-reading before writing
+  # those probes: every browser probe in this repo was a SILENT PASS twice
+  # over — skipped by -short in CI, then skipped again with no Chromium
+  # present, and a skip reports inside an `ok` package line. A test that
+  # cannot run still reads as coverage, which is worse than having none.
+  local src
+  src="$(grep -rl -- "${HARNESS_MARKER}" --include='*_test.go' internal/ 2>/dev/null | head -1)"
+  if [[ -z "${src}" ]]; then
+    echo "check-browser-probes: no browser-probe rig in the tree (the calendar's was" >&2
+    echo "  deleted with the plugin; V5 has not landed its own yet). Nothing to pair," >&2
+    echo "  so the marker check passes — it re-arms automatically when a rig appears." >&2
+    return 0
   fi
   if ! grep -q -- "${HARNESS_MARKER}" "${src}"; then
     echo "check-browser-probes: ${src} no longer contains \"${HARNESS_MARKER}\"." >&2
@@ -739,6 +730,19 @@ run_group() {
   local pkg="$1"; shift
   local names="$*"
   local pattern
+  # CALV5-PLACEHOLDER: a group whose probe list is empty, or whose package no
+  # longer exists, is skipped instead of driven. Both are true of the calendar
+  # groups while it is rebuilt, and `go test` on a missing directory exits 1 —
+  # which this guard would otherwise report as UNCLEAN, i.e. as a rendering
+  # regression in a package that is not there. A guard that cries wolf about a
+  # deleted directory is the same failure it exists to prevent, one level up.
+  if [[ -z "${names// /}" ]]; then
+    return 0
+  fi
+  if [[ ! -d "${pkg#./}" ]]; then
+    echo "check-browser-probes: ${pkg} does not exist — skipping its group." >&2
+    return 0
+  fi
   pattern="$(echo "${names}" | tr -s ' ' '|')"
   # NOT -short: skipping under it is exactly how these probes stayed unmeasured.
   # -count=1 so a cached PASS from a previous tree can never stand in for a run.

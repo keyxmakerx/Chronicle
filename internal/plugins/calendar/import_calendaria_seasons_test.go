@@ -56,7 +56,7 @@ func assertSeasonRanges(t *testing.T, got, want []seasonRange) {
 // covering one of eight months and leaving the other seven seasonless. The
 // three ranges below tile the year exactly once.
 func TestParseCalendaria_ElvenPresetSeasonsUseMonthRange(t *testing.T) {
-	raw, err := builderPresetFS.ReadFile("presets/elven.json")
+	raw, err := presetFS.ReadFile("presets/elven.json")
 	if err != nil {
 		t.Fatalf("read embedded elven preset: %v", err)
 	}

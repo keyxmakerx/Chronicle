@@ -134,7 +134,7 @@ test-cover: ## Run tests with coverage report
 	go tool cover -html=coverage.out -o coverage.html
 
 .PHONY: test-js
-test-js: ## Run JS runtime tests (cal-almanac world-state spine, node --test)
+test-js: ## Run JS runtime tests (sidebar, availability, widgets — node --test)
 	node --test test/js/*.test.mjs
 
 # --- Linting & Security ---

@@ -1187,11 +1187,17 @@ func writeConfigLayouts(b *strings.Builder, f CampaignConfigFacts) {
 		// consumer of a signature that names ONE band on ONE Block. The
 		// distinction the reader needs is between the two THINGS, and it can
 		// be drawn without the selector.
-		"skybox":            "the LEGACY skybox widget — a canvas/particle engine, and the surface that genuinely DOES render the synthesized real Moon (it runs the world-state pipeline). This is NOT the v4 sky band on the Bench, which is a native server-rendered disclosure with no JavaScript at all: two different things, one nickname.",
-		"entity_worldstate": "the world-state band — also runs the world-state pipeline, so it too shows the real Moon.",
-		"entity_calendar":   "a calendar Block embedded on an entity page. The one surface where a calendar Block and the real-Moon pipeline appear together.",
-		"calendar_full":     "a full calendar block.",
-		blockTypeCalendar:   "a calendar block.",
+		// CALV5-PLACEHOLDER: the four calendar-family descriptions below are
+		// rebuild-era truth. The world-state pipeline (cal-almanac.js) was
+		// deleted with the v4 calendar; every one of these placements renders
+		// the "being rebuilt" notice today. The bindings themselves are kept
+		// on purpose (Sweep skips unknown types), so a placed block is a fact
+		// worth reporting — what it renders is not what it used to.
+		"skybox":            "the LEGACY skybox widget placement. Its canvas/particle engine and the world-state pipeline behind it were deleted in the CALV5 clean slate, so this placement renders the calendar-rebuilding notice today; the binding is kept so V5 can reclaim the seat. (Historically this was the surface that rendered the synthesized real Moon — distinct from the v4 sky band on the Bench, which was server-rendered with no JavaScript.)",
+		"entity_worldstate": "the world-state band placement — its pipeline was deleted in the CALV5 clean slate; renders the rebuilding notice until V5.",
+		"entity_calendar":   "a calendar Block embedded on an entity page — renders the rebuilding notice until V5.",
+		"calendar_full":     "a full calendar block — renders the rebuilding notice until V5.",
+		blockTypeCalendar:   "a calendar block — renders the rebuilding notice until V5.",
 	}
 
 	for _, l := range f.Layouts {

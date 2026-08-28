@@ -21,7 +21,6 @@
 package syncapi
 
 import (
-	"github.com/keyxmakerx/chronicle/internal/plugins/calendar"
 	"github.com/keyxmakerx/chronicle/internal/plugins/campaigns"
 	"github.com/keyxmakerx/chronicle/internal/plugins/entities"
 	"github.com/keyxmakerx/chronicle/internal/sanitize"
@@ -66,23 +65,16 @@ func sanitizeNotesHTMLForEgress(ns []notes.Note) {
 	}
 }
 
-// sanitizeCalendarEventHTMLForEgress re-sanitizes the
-// DescriptionHTML field on a calendar event response copy. Safe on
-// nil.
-func sanitizeCalendarEventHTMLForEgress(e *calendar.Event) {
-	if e == nil {
-		return
-	}
-	e.DescriptionHTML = sanitize.HTMLPtr(e.DescriptionHTML)
-}
-
-// sanitizeCalendarEventsHTMLForEgress applies the per-event variant
-// to every element of a fresh slice (e.g. ListEvents output).
-func sanitizeCalendarEventsHTMLForEgress(es []calendar.Event) {
-	for i := range es {
-		sanitizeCalendarEventHTMLForEgress(&es[i])
-	}
-}
+// CALV5-PLACEHOLDER: sanitizeCalendarEventHTMLForEgress and its slice variant
+// stood here. They re-sanitized Event.DescriptionHTML on the response copy
+// before it left for Foundry (C-SEC-CHUNK-6-AMENDED: every /api/v1/* GET that
+// emits HTML re-sanitizes at the edge, because stored HTML is only as trusted
+// as the day it was stored).
+//
+// The calendar routes emit no HTML while the calendar is rebuilt (V5) — they
+// answer 503. RESTORE THESE WITH THE HANDLERS, in the same change: the pin in
+// egress_sanitize_test.go fires the moment GetEvent/ListEvents stop being
+// placeholders, and it is there to make that impossible to forget.
 
 // --- Inline-secret redaction (P0: DM-secret egress) ---
 //

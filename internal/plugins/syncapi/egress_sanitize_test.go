@@ -16,7 +16,6 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/keyxmakerx/chronicle/internal/plugins/calendar"
 	"github.com/keyxmakerx/chronicle/internal/plugins/campaigns"
 	"github.com/keyxmakerx/chronicle/internal/plugins/entities"
 	"github.com/keyxmakerx/chronicle/internal/widgets/notes"
@@ -155,39 +154,11 @@ func TestSanitizeNoteHTMLForEgress_NilSafe(t *testing.T) {
 }
 
 // --- calendar event ---
-
-// TestSanitizeCalendarEventHTMLForEgress_StripsScript covers GetEvent.
-func TestSanitizeCalendarEventHTMLForEgress_StripsScript(t *testing.T) {
-	e := &calendar.Event{
-		ID:              "evt-1",
-		DescriptionHTML: sptr(polluted),
-	}
-	sanitizeCalendarEventHTMLForEgress(e)
-	assertCleaned(t, "event.DescriptionHTML", *e.DescriptionHTML)
-	assertCleaned(t, "event marshaled", e)
-}
-
-// TestSanitizeCalendarEventsHTMLForEgress_StripsScript covers
-// ListEvents.
-func TestSanitizeCalendarEventsHTMLForEgress_StripsScript(t *testing.T) {
-	es := []calendar.Event{
-		{ID: "a", DescriptionHTML: sptr(polluted)},
-		{ID: "b", DescriptionHTML: sptr(polluted)},
-	}
-	sanitizeCalendarEventsHTMLForEgress(es)
-	assertCleaned(t, "events[0]", es[0])
-	assertCleaned(t, "events[1]", es[1])
-}
-
-func TestSanitizeCalendarEventHTMLForEgress_NilSafe(t *testing.T) {
-	sanitizeCalendarEventHTMLForEgress(nil) // must not panic
-
-	e := &calendar.Event{ID: "evt-1"}
-	sanitizeCalendarEventHTMLForEgress(e)
-	if e.DescriptionHTML != nil {
-		t.Errorf("nil DescriptionHTML mutated to %v", e.DescriptionHTML)
-	}
-}
+//
+// CALV5-PLACEHOLDER: three direct-call tests stood here — strips <script> on a
+// single event, on a slice (ListEvents), and nil-safety. They come back WITH
+// the sanitizers and the handlers; TestEgressSanitize_HandlersInvokeHelpers
+// below fires the moment the handlers stop being placeholders.
 
 // --- inline-secret redaction (P0: DM-secret egress) ---
 
@@ -401,9 +372,26 @@ func TestEgressSanitize_HandlersInvokeHelpers(t *testing.T) {
 		{"api_handler.go", "ListEntities", "stripEntitiesSecretsForEgress"},
 		{"note_api_handler.go", "GetNote", "sanitizeNoteHTMLForEgress"},
 		{"note_api_handler.go", "ListNotes", "sanitizeNotesHTMLForEgress"},
-		{"calendar_api_handler.go", "GetEvent", "sanitizeCalendarEventHTMLForEgress"},
-		{"calendar_api_handler.go", "ListEvents", "sanitizeCalendarEventsHTMLForEgress"},
 	}
+	// CALV5-PLACEHOLDER: the two calendar cases —
+	//   {"calendar_api_handler.go", "GetEvent",   "sanitizeCalendarEventHTMLForEgress"}
+	//   {"calendar_api_handler.go", "ListEvents", "sanitizeCalendarEventsHTMLForEgress"}
+	// — are lifted out while those handlers answer 503 and emit no HTML. The
+	// sub-test below pins that placeholder state so the pair comes BACK the
+	// moment real handlers do: restoring an HTML-emitting calendar read without
+	// its egress sanitizer is exactly the regression this table exists to stop.
+	t.Run("calendar handlers are still placeholders", func(t *testing.T) {
+		for _, fn := range []string{"GetEvent", "ListEvents"} {
+			body := readHandlerBody(t, "calendar_api_handler.go", fn)
+			if !strings.Contains(body, "calendarRebuilding(") {
+				t.Errorf("calendar_api_handler.go::%s is no longer a rebuild placeholder — "+
+					"restore its egress sanitizer (sanitizeCalendarEventHTMLForEgress / "+
+					"sanitizeCalendarEventsHTMLForEgress) and its row in the case table above, "+
+					"in this same change. Body:\n%s", fn, body)
+			}
+		}
+	})
+
 	for _, tc := range cases {
 		t.Run(tc.fn, func(t *testing.T) {
 			body := readHandlerBody(t, tc.file, tc.fn)

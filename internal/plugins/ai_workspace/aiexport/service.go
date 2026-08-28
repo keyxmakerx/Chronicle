@@ -22,7 +22,6 @@ import (
 type Service struct {
 	Entities  EntityLister
 	Notes     NoteLister
-	Calendar  CalendarLister
 	Sessions  SessionLister
 	Timelines TimelineLister
 	Relations RelationLister
@@ -35,7 +34,6 @@ type Service struct {
 func NewService(
 	ents EntityLister,
 	notes NoteLister,
-	cal CalendarLister,
 	sess SessionLister,
 	tl TimelineLister,
 	rel RelationLister,
@@ -44,7 +42,6 @@ func NewService(
 	return &Service{
 		Entities:  ents,
 		Notes:     notes,
-		Calendar:  cal,
 		Sessions:  sess,
 		Timelines: tl,
 		Relations: rel,
@@ -173,19 +170,15 @@ func (s *Service) renderCategory(
 		return RenderNotes(ctx, list, opts)
 
 	case CategoryCalendarEvents:
-		if s.Calendar == nil {
-			return "", fmt.Errorf("calendar lister not wired")
-		}
-		cal, err := s.Calendar.GetCalendar(ctx, campaignID)
-		if err != nil || cal == nil {
-			// Calendar addon disabled or no calendar yet: skip gracefully.
-			return "", nil //nolint:nilerr // intentional skip on missing calendar
-		}
-		events, err := s.Calendar.ListAllEventsForCalendar(ctx, cal.ID)
-		if err != nil {
-			return "", err
-		}
-		return RenderCalendarEvents(ctx, cal, events, opts)
+		// CALV5-PLACEHOLDER: this case loaded the campaign's calendar and every
+		// event on it, then grouped them by in-world month (RenderCalendarEvents).
+		// The calendar is being rebuilt (V5) and its tables are dropped.
+		//
+		// It says so instead of returning "" — an empty section reads as "this
+		// campaign has no events", which is a different and false statement, and
+		// the operator would carry it into whatever they paste the export into.
+		return "# Calendar Events\n\n_The calendar is being rebuilt (V5). No calendar" +
+			" events are available for export._\n\n", nil
 
 	case CategorySessions:
 		if s.Sessions == nil {

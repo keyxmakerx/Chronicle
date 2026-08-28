@@ -1,0 +1,15 @@
+-- 019_calv5_clean_slate (down) — CALV5-PLACEHOLDER
+--
+-- Intentionally empty.
+--
+-- The up migration drops or empties tables whose data the operator chose not
+-- to preserve. A down migration cannot restore deleted rows, and re-creating
+-- the empty shells would be worse than nothing: it would let a rollback
+-- report success while every calendar in the instance had silently become
+-- empty.
+--
+-- Rolling back past this point means restoring the database backup taken
+-- before the wipe. That backup is no longer only a runbook step: the boot
+-- captures one automatically whenever a plugin migration is pending
+-- (cmd/server/main.go's pre-plugin-migration backup gate, sharing the core
+-- gate's BACKUP_REQUIRED semantics).
