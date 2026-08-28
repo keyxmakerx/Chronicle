@@ -12,9 +12,13 @@
 # restore.sh can validate that the artifacts were produced from a
 # consistent snapshot.
 #
-# Distinct from the in-process pre-migration backup
-# (internal/database/healthcheck.go PreMigrationBackup) — that one fires
-# automatically on every boot before migrations run, gated by BACKUP_DIR.
+# Distinct from the in-process pre-migration backup (PreMigrationBackup,
+# internal/database/pre_migration_backup.go) — that one fires automatically
+# on a boot that has a PENDING migration to apply, core or plugin (two
+# gates: MigrateWithBackup for db/migrations, and main.go's
+# pre-plugin-migration gate over database.PendingPluginMigrations), and is
+# skipped on the ordinary restart where nothing is pending. It writes into
+# BACKUP_DIR; BACKUP_REQUIRED=1 makes its failure abort the boot.
 # This script is the operator-driven complete snapshot, suitable for cron
 # and for pre-upgrade safety. Both write into $BACKUP_DIR; this script
 # does not touch chronicle_pre_migrate_* files (those have their own

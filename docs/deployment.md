@@ -140,7 +140,7 @@ Every env var Chronicle reads. **Bold = required in production.**
 | `MEDIA_SERVE_RATE_LIMIT` | `300` | Requests/min/IP for `GET /media/:id`. |
 | `BACKUP_DIR` | `/app/data/backups` | Where backups land. Defaults to the persistent `/app/data` volume so a fresh deploy works without operator setup. Override only if you mount backups on a different path. Setting it explicitly to empty is unsupported (the admin UI will surface a "not configured" error and the in-process pre-migration backup will be skipped). |
 | `BACKUP_RETENTION_DAYS` | `7` | Used by `scripts/backup.sh`. The in-process rotator uses a separate hardcoded 7d for `chronicle_pre_migrate_*` artifacts. |
-| `BACKUP_REQUIRED` | `0` | When `1` or `true`, the in-process pre-migration capture is mandatory: any failure (mysqldump missing, dump zero bytes, manifest write fails) aborts startup before migrations apply. Use in production. The default fail-open behavior (warn + proceed) preserves the legacy semantics for development setups that don't have `mariadb-client` installed. |
+| `BACKUP_REQUIRED` | `0` | When `1` or `true`, the in-process pre-migration capture is mandatory: any failure (mysqldump missing, dump zero bytes, manifest write fails) aborts startup before migrations apply. This covers BOTH gates — pending core migrations (`MigrateWithBackup`) and pending plugin migrations (`main.go`'s gate over `PendingPluginMigrations`); before the plugin gate existed, a release shipping only plugin migrations silently bypassed this variable entirely. Use in production. The default fail-open behavior (warn + proceed) preserves the legacy semantics for development setups that don't have `mariadb-client` installed. |
 | `BACKUP_SCRIPT_PATH` | `/app/scripts/backup.sh` | Used by the admin "Run backup" button. |
 | `RESTORE_SCRIPT_PATH` | `/app/scripts/restore.sh` | Used by the admin restore page. |
 | `CHRONICLE_VERSION` | (empty, except on tag builds) | Names the build explicitly. Read by `GET /api/version` (highest precedence, then the VCS revision compiled into the binary, then the main module version, then `unknown`), by the `host.build` admin diagnostic, and stamped into the pre-migration manifest's `chronicle_version=` line. CI passes it as a Docker build arg **only for `v*` tag builds**, where it is the tag name — a `main`-branch push leaves it empty on purpose, because that build's metadata version is the literal `latest`, which is a tag and not a version. Empty is the normal case and is not a gap: the binary now carries its own commit SHA (Dockerfile stage 2 installs `git` so the Go toolchain stamps `vcs.revision`), and `/api/version` falls through to it. Set it yourself only if you want a human-chosen name in that field. Historical note: before this, the variable was set by nothing anywhere, so `GET /api/version` returned the literal string `unknown` on every image ever shipped. |
@@ -203,7 +203,11 @@ internally consistent and truthful, and the running container had been created
 from an entirely different image. An image label is a claim made by whoever
 last wrote that tag. It is never a claim about a process.
 
-In step 4 you should see, in order:
+In step 4 you should see, in order (the backup lines appear only when the
+release actually ships pending migrations — an upgrade with none skips the
+backup by design, logging `no pending migrations` instead; a release shipping
+only PLUGIN migrations logs `pending plugin migration(s) detected — backing up
+before applying` between the health checks and the plugin migrations):
 
 ```
 creating pre-migration backup file=/app/data/backups/chronicle_pre_migrate_<TS>.sql.gz
