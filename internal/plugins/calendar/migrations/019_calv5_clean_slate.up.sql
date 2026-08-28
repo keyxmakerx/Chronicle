@@ -16,6 +16,36 @@
 -- Every statement is IF EXISTS so re-running is a no-op, and the order is
 -- children before parents so foreign keys never block a drop.
 --
+-- TWO TABLES SURVIVE AS EMPTY STUBS, AND THAT IS NOT AN OVERSIGHT.
+-- `calendars` and `calendar_events` are the targets of three foreign keys
+-- declared by OTHER plugins, whose migrations are immutable and cannot be
+-- edited to drop them:
+--
+--     sessions/001            fk_sessions_calendar  -> calendars(id)
+--     timeline/001            fk_timelines_calendar -> calendars(id)
+--     timeline/001            fk_tel_event          -> calendar_events(id)
+--
+-- The calendar plugin's migrations run BEFORE both of those plugins', so on a
+-- FRESH database dropping these two tables makes sessions/001 and timeline/001
+-- fail on their first statement with errno 150. Both plugins then sit DEGRADED
+-- at version 0 and the features are dead on every new install — the exact
+-- shape of the foundry_vtt bug the fresh-DB replay job was built to catch, and
+-- the job caught this one before it shipped. On an EXISTING database the same
+-- constraints point the other way: MariaDB refuses to DROP a table that is
+-- still an FK parent, so the drop fails mid-migration with DDL already
+-- committed and no rollback.
+--
+-- So these two are EMPTIED, not dropped. The deletes do the decoupling work
+-- for free: `calendar_events` cascades `timeline_event_links` away, and
+-- `calendars` sets `sessions.calendar_id` and `timelines.calendar_id` to NULL.
+-- Their own outbound FKs point only at core tables that survive (campaigns,
+-- entities), so emptying them is safe in either direction.
+--
+-- V5 owns their final shape. It may reuse them, or drop them in 020+ once it
+-- has also given sessions and timeline migrations that remove the three
+-- constraints above. Dropping them before that is what this comment exists to
+-- prevent; `clean_slate_test.go` enforces it.
+--
 -- V5 ships its own numbered migrations from 020 onward in this same directory,
 -- so the plugin's lineage stays unbroken.
 
@@ -45,8 +75,10 @@ DROP TABLE IF EXISTS calendar_weather;
 -- once wiped as a side effect. V5 must not rebuild it that way.
 DROP TABLE IF EXISTS calendar_active;
 
--- Events and sub-resources.
-DROP TABLE IF EXISTS calendar_events;
+-- Events and sub-resources. `calendar_events` is EMPTIED, not dropped: it is
+-- the parent of timeline/001's fk_tel_event. Deleting its rows cascades every
+-- timeline_event_links row away, which is the decoupling timeline/002 asks for.
+DELETE FROM calendar_events;
 DROP TABLE IF EXISTS calendar_event_categories;
 DROP TABLE IF EXISTS calendar_eras;
 DROP TABLE IF EXISTS calendar_seasons;
@@ -54,5 +86,7 @@ DROP TABLE IF EXISTS calendar_moons;
 DROP TABLE IF EXISTS calendar_weekdays;
 DROP TABLE IF EXISTS calendar_months;
 
--- The root, last.
-DROP TABLE IF EXISTS calendars;
+-- The root, last. EMPTIED, not dropped: it is the parent of
+-- fk_sessions_calendar and fk_timelines_calendar, both ON DELETE SET NULL, so
+-- this one statement also nulls sessions.calendar_id and timelines.calendar_id.
+DELETE FROM calendars;
