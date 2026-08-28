@@ -1,6 +1,6 @@
 -- 019_calv5_clean_slate — CALV5-PLACEHOLDER
 --
--- Drops every table the calendar plugin created in 001-018. The operator ruled
+-- Drops or empties every table the calendar plugin created in 001-018. The operator ruled
 -- on 2026-08-21 that no old calendar data is preserved: V5 is built on a clean
 -- slate rather than migrated onto.
 --
@@ -13,8 +13,12 @@
 -- 019 removes it. That is wasteful and it is correct; the alternative is
 -- editing history, which is the thing that breaks instances.
 --
--- Every statement is IF EXISTS so re-running is a no-op, and the order is
--- children before parents so foreign keys never block a drop.
+-- Every DROP is IF EXISTS and both DELETEs are no-ops on already-empty
+-- tables, so re-running is safe. The drops are ordered children before
+-- parents, which settles the calendar's OWN foreign keys; the three INBOUND
+-- ones (below) are settled by emptying their parents instead of dropping
+-- them — ordering alone cannot, since those constraints belong to plugins
+-- that migrate later.
 --
 -- TWO TABLES SURVIVE AS EMPTY STUBS, AND THAT IS NOT AN OVERSIGHT.
 -- `calendars` and `calendar_events` are the targets of three foreign keys
@@ -38,8 +42,11 @@
 -- So these two are EMPTIED, not dropped. The deletes do the decoupling work
 -- for free: `calendar_events` cascades `timeline_event_links` away, and
 -- `calendars` sets `sessions.calendar_id` and `timelines.calendar_id` to NULL.
--- Their own outbound FKs point only at core tables that survive (campaigns,
--- entities), so emptying them is safe in either direction.
+-- Their own outbound FKs: calendars points only at campaigns;
+-- calendar_events points at calendars (both survive) and at entities. So
+-- emptying them is safe in either direction — and the order below matters:
+-- calendar_events is emptied BEFORE calendars, so the calendars delete's
+-- cascade finds calendar_events already empty.
 --
 -- V5 owns their final shape. It may reuse them, or drop them in 020+ once it
 -- has also given sessions and timeline migrations that remove the three

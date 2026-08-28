@@ -166,8 +166,8 @@ test('accepting PUTs the zone the browser reported, to the account endpoint', as
   assert.equal(fetches[0].init.method, 'PUT');
   // Field-by-field, not deepEqual: the body literal is constructed INSIDE the
   // vm realm, so it carries the sandbox's Object.prototype and deepStrictEqual
-  // rejects it as not reference-equal (the same realm trap harness.mjs documents
-  // for arrays).
+  // rejects it as not reference-equal (the cross-realm trap: a vm's Object and
+  // Array prototypes are never reference-equal to the host's).
   assert.equal(fetches[0].init.body.timezone, 'Asia/Tokyo');
   assert.deepEqual(Object.keys(fetches[0].init.body), ['timezone'],
     'the PUT must send only the field it means to change');

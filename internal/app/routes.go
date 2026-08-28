@@ -2793,7 +2793,10 @@ func (a *App) RegisterRoutes() {
 	// (C-CAL-WORLDSTATE-WIDGETS, Phase 6 widgetization). The "mini shelf
 	// view": the hourglass-on-shelf over a compact sky band, painted by the
 	// shared engine from the #401 seed and driven live by the worldState
-	// provider singleton (widgets/worldstate_provider.js). Completes "all
+	// provider singleton — historical: the engine, the provider
+	// (widgets/worldstate_provider.js) and the skybox/worldstate widget shims
+	// were all deleted in the CALV5 clean slate; this block renders the
+	// rebuilding notice below. Completed "all
 	// three views entity-able" (calendar #411/#413, timeline Tuner #414,
 	// worldstate here). Singleton — like entity_calendar it binds the
 	// engine's fixed #cal-v2-worldstate id, so one worldState surface per

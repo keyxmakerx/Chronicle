@@ -36,7 +36,7 @@ a Plugin, System, or Widget:
 
 | Tier | Location | What It Is | Examples |
 |------|----------|-----------|---------|
-| **Plugin** | `internal/plugins/<name>/` | Feature app with handler/service/repo/templates | auth, campaigns, entities, calendar, maps |
+| **Plugin** | `internal/plugins/<name>/` | Feature app with handler/service/repo/templates | auth, campaigns, entities, maps, sessions (calendar is mid-rebuild: domain layer + migrations only until V5) |
 | **System** | External repos via package manager | Game system content pack (reference data, tooltips) | Installed via Admin > Packages |
 | **Widget** | `internal/widgets/<name>/` | Reusable UI building block (mounts to DOM) | editor, title, tags, attributes, mentions |
 

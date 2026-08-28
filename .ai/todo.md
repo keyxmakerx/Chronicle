@@ -1145,9 +1145,15 @@ is carried, not closed, and the first row is the one the rest hang off.
       7. **Four smaller V2-only affordances, none booked:** the `?` shortcuts
          modal, event quick-peek, the day-detail popover, and quick-edit.
 
-      **NOT an orphan, worth knowing:** `cal-almanac.js` and the sky engine
+      **SUPERSEDED 2026-08-28 (CALV5):** `cal-almanac.js` and the sky engine
+      were DELETED in the clean-slate demolition — nothing loads them; the
+      entity blocks render the rebuilding notice. Recovery pointers live in
+      `cordinator/plans/2026-08-21-calendar-v5-salvage-manifest.md` §6
+      (`git show origin/main:static/js/cal-almanac.js` + its tests). The
+      sentence below is kept as the historical position it was:
+      ~~NOT an orphan, worth knowing: cal-almanac.js and the sky engine
       SURVIVE — three entity blocks still load them. The engine is off the
-      Bench by deliberate refusal ([SKY-13]), not by absence.
+      Bench by deliberate refusal ([SKY-13]), not by absence.~~
 
       **ENTRY CONDITION, ALL FOUR BOXES, not partially satisfiable.**
       **AS OF 2026-08-16 THE GATE READS TWO OF FOUR — and the four boxes are

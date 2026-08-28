@@ -20,6 +20,48 @@ If you're an AI session looking for "what shipped last week", read the Cordinato
 
 ## For AI sessions
 
+### CALENDAR V5 CLEAN SLATE — read this before touching anything calendar-shaped (2026-08-28)
+
+Branch `claude/calendar-system-review-bprsvh`, PR #595, **gated: DO NOT MERGE
+until the operator has a verified backup and is at the console.** The v4
+calendar was demolished on the operator's explicit clean-slate ruling: plugin
+UI/handlers/routes deleted, 34 syncapi routes answer `503 calendar_rebuilding`,
+five user-facing seats render `components.FeatureRebuilding`, and the domain
+layer (model/import/export/presets, 4,278 lines) was recovered verbatim.
+Migrations `calendar/019` + `timeline/002` + `sessions/006` wipe the data —
+**one-way; all three down files are deliberately empty.**
+
+What CI's fresh-DB replay caught after the PR opened, both fixed on-branch:
+019 originally DROPPED `calendars`/`calendar_events` while sessions/001 and
+timeline/001 still declare FKs to them (errno 150, both plugins dead at v0 on
+a fresh install) — 019 now EMPTIES those two, guarded by
+`calendar/clean_slate_test.go` which derives the protected set from sibling
+SQL and honours later `DROP FOREIGN KEY` releases. And 49 JS tests read
+deleted files while five orphaned engine assets (`cal-almanac.js` + friends,
+392 KB) kept 15 more green against code nothing loads — all removed, plus the
+`skybox`/`worldstate`/`worldstate_provider` widget shims found by the
+follow-up audit. JS suite: 97 tests, all against live code.
+
+**Backup gate (new, this branch):** `MigrateWithBackup` only ever backed up
+for pending CORE migrations; a destructive plugin-only release took no backup
+at all. `cmd/server/main.go` now detects pending PLUGIN migrations
+(`database.PendingPluginMigrations`) and runs `PreMigrationBackup` under the
+same `BACKUP_REQUIRED` semantics, skipping only when the core path already
+snapshotted this boot. Pinned by
+`TestPluginMigration_PendingDetectionForBackupGate` (real-DB, CI replay job).
+
+**Deploy runbook:** back up manually anyway; set `BACKUP_REQUIRED=1`; deploy
+only builds at/after the FK fix (`1bda7d6`) — the intermediate `bfcaf24`
+build's 019 drops the FK parents and a persistent DB that ever booted it
+records version 19 and skips the corrected text forever. Then watch the boot
+log for 019/002/006 and walk the three click-paths in PR #595.
+
+The rebuild to-do list is the 67 `CALV5-PLACEHOLDER:` tags (grep them). V5
+design: `cordinator/plans/2026-08-21-calendar-v5-design-brief.md`; salvage
+doctrine + CI post-mortem: `...-calendar-v5-salvage-manifest.md` §6.
+Migration `020_calv5_schema` stays unwritten until 019 has run on the real DB.
+
+
 ### The product asks instead of guessing (C-RSVP-P10, 2026-08-16)
 
 Branch `claude/coordinator-handoff-stage-3-3d3s4w`. Two operator asks that

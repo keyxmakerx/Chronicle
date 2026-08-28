@@ -680,8 +680,18 @@ func TestCampaignConfig_PlacedSkyboxIsNamedAndDistinguished(t *testing.T) {
 		if !strings.Contains(got, "`skybox` ×2") {
 			t.Errorf("duplicates must be counted, not collapsed:\n%s", got)
 		}
-		if !strings.Contains(got, "LEGACY skybox widget") || !strings.Contains(got, "NOT the v4 sky band") {
+		// CALV5 rewording: the distinction between the two things nicknamed
+		// "skybox" survives (that is this test's whole point), but the text
+		// now also says the widget's engine was deleted and the placement
+		// renders the rebuilding notice — a diagnostic asserting the old
+		// "genuinely DOES render the Moon" claim would be lying to the
+		// operator about a dead pipeline.
+		if !strings.Contains(got, "LEGACY skybox widget") || !strings.Contains(got, "distinct from the v4 sky band") {
 			t.Errorf("the two things called skybox must be distinguished:\n%s", got)
+		}
+		if !strings.Contains(got, "rebuilding notice") {
+			t.Errorf("the placement must say what it renders TODAY (the rebuilding notice), "+
+				"not what the deleted engine used to render:\n%s", got)
 		}
 		if !strings.Contains(got, "no migration seeds one") {
 			t.Errorf("the 'it can only be hand-placed' claim must be stated:\n%s", got)

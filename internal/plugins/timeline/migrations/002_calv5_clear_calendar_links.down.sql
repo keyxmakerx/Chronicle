@@ -1,5 +1,9 @@
 -- 002_calv5_clear_calendar_links (down) — CALV5-PLACEHOLDER
 --
 -- Intentionally empty: the rows this deleted referenced calendar events that
--- migration 019 dropped, so there is nothing coherent to restore them to.
--- Rolling back past this point means restoring the pre-wipe backup.
+-- migration 019 wiped (the calendar_events table survives as an emptied FK
+-- stub — see 019's header), so there is nothing coherent to restore them to.
+-- Rolling back past this point means restoring the pre-wipe backup, which
+-- the boot now captures automatically before any pending plugin migration
+-- (cmd/server/main.go's pre-plugin-migration backup gate; BACKUP_REQUIRED=1
+-- makes a failed backup abort the boot instead of proceeding).
