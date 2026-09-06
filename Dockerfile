@@ -22,7 +22,7 @@ WORKDIR /src
 RUN tailwindcss -i static/css/input.css -o static/css/app.css --minify
 
 # --- Stage 2: Go Build ---
-FROM golang:1.24-alpine AS builder
+FROM golang:1.27-alpine AS builder
 
 # Install templ CLI for generating Go code from .templ files. Pin to the
 # runtime version in go.mod — `@latest` drifts ahead and emits symbols
