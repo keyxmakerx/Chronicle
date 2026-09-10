@@ -1493,10 +1493,7 @@ func (h *Handler) UpdateRole(c echo.Context) error {
 
 	role := RoleFromString(req.Role)
 	if err := h.service.UpdateMemberRole(c.Request().Context(), cc.Campaign.ID, targetUserID, role); err != nil {
-		members, _ := h.service.ListMembers(c.Request().Context(), cc.Campaign.ID)
-		csrfToken := middleware.GetCSRFToken(c)
-		errMsg := apperror.UserMessage(err, "failed to update role")
-		return middleware.Render(c, http.StatusOK, MemberListComponent(cc, members, csrfToken, errMsg))
+		return err
 	}
 
 	h.logAudit(c, cc.Campaign.ID, "member.role_changed", map[string]any{
@@ -1504,13 +1501,14 @@ func (h *Handler) UpdateRole(c echo.Context) error {
 		"new_role":       req.Role,
 	})
 
-	members, _ := h.service.ListMembers(c.Request().Context(), cc.Campaign.ID)
-	csrfToken := middleware.GetCSRFToken(c)
-
+	// HTML GET /members redirects to Settings > People; land the write
+	// there too so the role select the operator just used stays on screen.
+	peopleURL := fmt.Sprintf("/campaigns/%s/settings?tab=people", cc.Campaign.ID)
 	if middleware.IsHTMX(c) {
-		return middleware.Render(c, http.StatusOK, MemberListComponent(cc, members, csrfToken, ""))
+		c.Response().Header().Set("HX-Redirect", peopleURL)
+		return c.NoContent(http.StatusNoContent)
 	}
-	return c.Redirect(http.StatusSeeOther, "/campaigns/"+cc.Campaign.ID+"/members")
+	return c.Redirect(http.StatusSeeOther, peopleURL)
 }
 
 // UpdateMemberCharacterAPI sets a member's character entity assignment.

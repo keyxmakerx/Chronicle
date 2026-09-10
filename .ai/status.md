@@ -20,6 +20,14 @@ If you're an AI session looking for "what shipped last week", read the Cordinato
 
 ## For AI sessions
 
+### Settings > People had no role dropdown (2026-09-10)
+
+`GET /campaigns/:id/members` redirects HTML to Settings > People, but that
+tab rendered a static PLAYER/SCRIBE badge. The Player ↔ Scribe `<select>`
+only lived on the now-unreachable members page, so owners could not promote
+a member. The select is now on each non-owner row in `settingsPeopleTab`;
+`UpdateRole` lands back on `?tab=people`.
+
 ### CI drove the runner image's Chromium, not the one it pinned (2026-09-06)
 
 Branch `claude/dependabot-setup` (PR #599). `main` at eb977162, unchanged

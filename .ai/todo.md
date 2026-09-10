@@ -9,6 +9,12 @@
 <!-- Legend: [ ] Not started  [~] In progress  [x] Complete  [!] Blocked      -->
 <!-- ====================================================================== -->
 
+## 0. Settings People tab: promote to Scribe (2026-09-10)
+
+- [x] **Role select on Settings > People.** `GET /members` redirects HTML
+  here, but the tab had no Player ↔ Scribe control. Added the select on
+  each non-owner row; `UpdateRole` redirects back to `?tab=people`.
+
 ## 0-rsvp. The product asks instead of guessing (C-RSVP-P10, 2026-08-16)
 
 - [x] **One call-to-action banner** for the player, polled like the bell badge:

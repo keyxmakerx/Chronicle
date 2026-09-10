@@ -576,13 +576,28 @@ templ settingsPeopleTab(cc *CampaignContext, members []CampaignMember, transfer 
 							</span>
 							<span class="text-xs text-fg-muted">{ m.Email }</span>
 						</div>
-						<span class={ "text-[10px] font-medium uppercase px-2 py-0.5 rounded-full",
-							templ.KV("bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400", m.Role == RoleOwner),
-							templ.KV("bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400", m.Role == RoleScribe),
-							templ.KV("bg-surface-alt text-fg-muted", m.Role == RolePlayer) }>
-							{ m.Role.DisplayName() }
-						</span>
-						if m.Role != RoleOwner {
+						if m.Role == RoleOwner {
+							<span class="text-[10px] font-medium uppercase px-2 py-0.5 rounded-full bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400">
+								{ m.Role.DisplayName() }
+							</span>
+						} else {
+							// GET /members redirects here, so this select is the only
+							// HTML surface that can change Player ↔ Scribe.
+							<form
+								method="POST"
+								action={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/members/%s/role", cc.Campaign.ID, m.UserID)) }
+								hx-put={ fmt.Sprintf("/campaigns/%s/members/%s/role", cc.Campaign.ID, m.UserID) }
+								hx-trigger="change"
+								hx-swap="none"
+								class="shrink-0"
+							>
+								<input type="hidden" name="_method" value="PUT"/>
+								<input type="hidden" name="csrf_token" value={ csrfToken }/>
+								<select name="role" class="input text-xs py-1 w-28" title="Change role">
+									<option value="player" selected?={ m.Role == RolePlayer }>Player</option>
+									<option value="scribe" selected?={ m.Role == RoleScribe }>Scribe</option>
+								</select>
+							</form>
 							<form method="POST" hx-delete={ fmt.Sprintf("/campaigns/%s/members/%s", cc.Campaign.ID, m.UserID) } hx-confirm={ fmt.Sprintf("Remove %s from the campaign?", m.DisplayName) }>
 								<input type="hidden" name="csrf_token" value={ csrfToken }/>
 								<button type="submit" class="text-fg-muted hover:text-red-400 transition-colors p-1" title="Remove">
