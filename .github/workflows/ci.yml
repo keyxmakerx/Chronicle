@@ -33,13 +33,13 @@ jobs:
     name: Build & Test
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
         # Full history required by the plugin-isolation guard's diff-base lookup
         # (it diffs origin/<base>...HEAD; a shallow clone breaks that).
         with:
           fetch-depth: 0
 
-      - uses: actions/setup-go@v6
+      - uses: actions/setup-go@v7
         with:
           go-version: '1.27'
 
@@ -170,7 +170,7 @@ jobs:
         run: ./tools/test-restore-drill.sh
 
       - name: Set up Node
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v7
         with:
           node-version: '20'
 
@@ -230,9 +230,9 @@ jobs:
           --health-timeout=5s
           --health-retries=20
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
 
-      - uses: actions/setup-go@v6
+      - uses: actions/setup-go@v7
         with:
           go-version: '1.27'
 
@@ -298,13 +298,13 @@ jobs:
       PLAYWRIGHT_BROWSERS_PATH: /opt/pw-browsers
       BROWSER_PROBES_REQUIRED: '1'
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
 
-      - uses: actions/setup-go@v6
+      - uses: actions/setup-go@v7
         with:
           go-version: '1.27'
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v7
         with:
           node-version: '20'
 
@@ -394,9 +394,9 @@ jobs:
     name: Lint
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
 
-      - uses: actions/setup-go@v6
+      - uses: actions/setup-go@v7
         with:
           go-version: '1.27'
 
@@ -417,7 +417,7 @@ jobs:
         # compile the workflow AT ALL: every push to this branch produced a
         # run with zero jobs that failed instantly, and no job in any of the
         # six jobs ever executed. CI was silently off, not passing. Restored.
-        uses: golangci/golangci-lint-action@v7
+        uses: golangci/golangci-lint-action@v9
         with:
           # Pinned: v2.5.0's release binary was built with go1.25.1, and
           # golangci-lint refuses to run at all against a module whose `go`
@@ -439,9 +439,9 @@ jobs:
     name: Security Scan
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
 
-      - uses: actions/setup-go@v6
+      - uses: actions/setup-go@v7
         with:
           go-version: '1.27'
 
@@ -476,7 +476,7 @@ jobs:
     # Only push images on main branch pushes, tags, or manual dispatch — not PRs.
     if: github.event_name == 'push' || github.event_name == 'workflow_dispatch'
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
 
       - name: Log in to GitHub Container Registry
         uses: docker/login-action@v4
