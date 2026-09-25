@@ -7,7 +7,7 @@
 # ============================================================================
 
 # --- Stage 1: Tailwind CSS ---
-FROM alpine:3.20 AS tailwind
+FROM alpine:3.24 AS tailwind
 
 # The standalone Tailwind CLI is a glibc binary; install compat layer for Alpine.
 RUN apk add --no-cache libc6-compat \
@@ -57,7 +57,7 @@ RUN templ generate
 RUN CGO_ENABLED=0 GOOS=linux go build -o /chronicle ./cmd/server
 
 # --- Stage 3: Runtime ---
-FROM alpine:3.20
+FROM alpine:3.24
 
 # Install CA certificates for HTTPS calls, timezone data, su-exec for
 # dropping privileges in the entrypoint, and the backup-toolchain
