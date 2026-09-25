@@ -62,7 +62,7 @@ templ EntityCreateFormComponent(cc *campaigns.CampaignContext, entityTypes []Ent
 			<input type="hidden" name="csrf_token" value={ csrfToken }/>
 
 			if errMsg != "" {
-				<div class="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-md text-sm" role="alert">
+				<div class="alert-error" role="alert">
 					{ errMsg }
 				</div>
 			}
@@ -213,7 +213,7 @@ templ EntityEditFormComponent(cc *campaigns.CampaignContext, entity *Entity, ent
 			<input type="hidden" name="csrf_token" value={ csrfToken }/>
 
 			if errMsg != "" {
-				<div class="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-md text-sm" role="alert">
+				<div class="alert-error" role="alert">
 					{ errMsg }
 				</div>
 			}
