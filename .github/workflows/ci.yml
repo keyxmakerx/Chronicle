@@ -284,6 +284,14 @@ jobs:
         with:
           go-version: '1.27'
 
+      - name: Install templ
+        # govulncheck compiles every package, and Templ components exist only
+        # once generated.
+        run: go install github.com/a-h/templ/cmd/templ@v0.3.1001
+
+      - name: Generate templ files
+        run: templ generate
+
       - name: Install govulncheck
         # Pinned so @latest can't drift ahead of this job's go-version and
         # require a newer toolchain than is installed. Bump this pin together
