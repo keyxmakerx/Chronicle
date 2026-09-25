@@ -221,3 +221,17 @@ test('without reduced motion, the bump animation class is applied on a repeat', 
   assert.ok(badge.classList.contains('chronicle-toast-badge-bump'),
     'a repeat without reduced motion must apply the bump animation class');
 });
+
+test('a repeat that lands while a closed toast fades out gets its own toast', () => {
+  const { Chronicle, container, advance } = boot();
+
+  Chronicle.notify('Kaelen Duskwood saved', 'success');
+  const first = container().children[0];
+  const closeBtn = first.children.find((c) => c.tagName === 'button');
+  closeBtn._listeners.click.forEach((fn) => fn());
+  Chronicle.notify('Kaelen Duskwood saved', 'success'); // during the fade-out
+
+  advance(300); // the fade-out removes the closed toast
+  assert.equal(container().children.length, 1, 'the repeat must still be on screen');
+  assert.notEqual(container().children[0], first, 'the repeat must not reuse the toast being closed');
+});

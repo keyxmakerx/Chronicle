@@ -41,7 +41,8 @@
   function findActiveToast(message, type) {
     for (var i = 0; i < toasts.length; i++) {
       var t = toasts[i];
-      if (t.message === message && t.type === type && t.el.parentNode) return t;
+      // A toast mid fade-out is on its way off screen; a repeat gets a new one.
+      if (t.message === message && t.type === type && t.el.parentNode && !t.el.dataset.dismissing) return t;
     }
     return null;
   }
@@ -269,7 +270,8 @@
    */
   function dismissToast(toast, id) {
     // Avoid double-dismiss.
-    if (!toast.parentNode) return;
+    if (!toast.parentNode || toast.dataset.dismissing) return;
+    toast.dataset.dismissing = 'true';
 
     toast.style.transform = 'translateX(100%)';
     toast.style.opacity = '0';
