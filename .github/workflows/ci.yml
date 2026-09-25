@@ -300,11 +300,7 @@ jobs:
         run: go install golang.org/x/vuln/cmd/govulncheck@v1.8.0
 
       - name: Run govulncheck
-        # continue-on-error: vuln.go.dev is not reachable from every CI
-        # environment. Do not flip this to blocking without a real clean run's
-        # output in hand from an environment that can reach it — an
-        # unverified "clean" is worse than a known gap.
-        continue-on-error: true
+        # Blocking: a known vulnerability in code Chronicle calls fails CI.
         run: govulncheck ./...
 
   # --- Docker Build & Push to GHCR ---
