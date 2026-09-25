@@ -74,6 +74,22 @@ func systemOptionsJSON(opts []SystemOption) string {
 	return string(b)
 }
 
+// settingsTabIDsJSON serializes the visible tab IDs, in order, for the
+// tab bar's arrow-key navigation: moveTab (Alpine, on the page's
+// x-data) needs the ordered ID list to compute "next"/"previous"
+// without re-deriving it from the DOM.
+func settingsTabIDsJSON(tabs []SettingsTab) string {
+	ids := make([]string, len(tabs))
+	for i, t := range tabs {
+		ids[i] = t.ID
+	}
+	b, err := json.Marshal(ids)
+	if err != nil {
+		return "[]"
+	}
+	return string(b)
+}
+
 // CampaignSettingsPage renders the tabbed campaign settings hub.
 //
 // Tab list is built by the Handler (see settings_tabs.go) and passed
@@ -85,7 +101,23 @@ func systemOptionsJSON(opts []SystemOption) string {
 // inside each tab's own Content closure.
 templ CampaignSettingsPage(cc *CampaignContext, transfer *OwnershipTransfer, csrfToken, errMsg, activeTab string, tabs []SettingsTab) {
 	@layouts.App(cc.Campaign.Name + " - Settings") {
-		<div class="max-w-4xl mx-auto" x-data={ fmt.Sprintf("{ tab: '%s' }", jsEsc(activeTab)) }>
+		<div
+			class="max-w-4xl mx-auto"
+			x-data={ fmt.Sprintf(`{
+				tab: '%s',
+				ids: %s,
+				activate(id) {
+					this.tab = id;
+					history.replaceState(null, '', '?tab=' + id);
+				},
+				moveTab(dir) {
+					var i = this.ids.indexOf(this.tab);
+					var next = this.ids[(i + dir + this.ids.length) %% this.ids.length];
+					this.activate(next);
+					this.$nextTick(function() { document.getElementById(next + '-tab').focus(); });
+				}
+			}`, jsEsc(activeTab), settingsTabIDsJSON(tabs)) }
+		>
 			<div class="flex items-center justify-between mb-4">
 				<div>
 					<h1 class="text-2xl font-bold text-fg">Campaign Settings</h1>
@@ -105,15 +137,26 @@ templ CampaignSettingsPage(cc *CampaignContext, transfer *OwnershipTransfer, csr
 					</form>
 				</div>
 			}
-			// Tab bar.
-			<div class="flex gap-0 border-b border-edge mb-6 overflow-x-auto">
+			// Tab bar. role="tablist"/"tab" + aria-selected/aria-controls
+			// give a screen reader a real tab group instead of four
+			// unrelated buttons; roving tabindex (bound in
+			// settingsTabButton) makes only the active tab a Tab-key
+			// stop, matching the arrow-key pattern below.
+			<div class="flex gap-0 border-b border-edge mb-6 overflow-x-auto" role="tablist" aria-label="Campaign settings">
 				for _, t := range tabs {
 					@settingsTabButton(t)
 				}
 			</div>
 			// Tab content.
 			for _, t := range tabs {
-				<div x-show={ fmt.Sprintf("tab === '%s'", t.ID) } x-cloak>
+				<div
+					id={ t.ID + "-panel" }
+					role="tabpanel"
+					aria-labelledby={ t.ID + "-tab" }
+					tabindex="0"
+					x-show={ fmt.Sprintf("tab === '%s'", t.ID) }
+					x-cloak
+				>
 					@t.Content
 				</div>
 			}
@@ -124,9 +167,22 @@ templ CampaignSettingsPage(cc *CampaignContext, transfer *OwnershipTransfer, csr
 // settingsTabButton renders one tab-bar <button>. Splitting this out
 // keeps the per-tab Alpine/HTMX wiring readable + lets the templ
 // generator inline the same JS for every iteration.
+//
+// Left/Right move focus + selection between tabs (moveTab, defined on
+// the page's x-data); only the active tab carries tabindex="0" so a
+// plain Tab keypress lands on it directly rather than stepping through
+// every tab first — the pattern Chronicle already uses for role=tab
+// elsewhere, extended here with the arrow-key movement it lacked.
 templ settingsTabButton(t SettingsTab) {
 	<button
-		@click={ fmt.Sprintf("tab = '%s'; history.replaceState(null, '', '?tab=%s')", t.ID, t.ID) }
+		id={ t.ID + "-tab" }
+		role="tab"
+		aria-controls={ t.ID + "-panel" }
+		@click={ fmt.Sprintf("activate('%s')", t.ID) }
+		@keydown.right.prevent="moveTab(1)"
+		@keydown.left.prevent="moveTab(-1)"
+		:aria-selected={ fmt.Sprintf("tab === '%s' ? 'true' : 'false'", t.ID) }
+		:tabindex={ fmt.Sprintf("tab === '%s' ? '0' : '-1'", t.ID) }
 		:class={ fmt.Sprintf("tab === '%s' ? 'border-b-2 border-accent text-accent font-medium' : 'text-fg-muted hover:text-fg'", t.ID) }
 		class="px-4 py-2.5 text-sm transition-colors whitespace-nowrap"
 	>
