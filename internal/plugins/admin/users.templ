@@ -3,6 +3,7 @@ package admin
 import (
 	"fmt"
 	"github.com/keyxmakerx/chronicle/internal/plugins/auth"
+	"github.com/keyxmakerx/chronicle/internal/templates/components"
 	"github.com/keyxmakerx/chronicle/internal/templates/layouts"
 )
 
@@ -103,34 +104,12 @@ templ AdminUsersPage(users []auth.User, total, page, perPage int, csrfToken stri
 					</tbody>
 				</table>
 			</div>
-			<!-- Pagination -->
-			if total > perPage {
-				<div class="flex justify-center items-center gap-4 mt-6">
-					if page > 1 {
-						<a
-							href={ templ.SafeURL(fmt.Sprintf("/admin/users?page=%d", page-1)) }
-							class="btn-secondary text-sm"
-						>
-							Previous
-						</a>
-					} else {
-						<span class="btn text-sm text-fg-muted cursor-not-allowed opacity-50">Previous</span>
-					}
-					<span class="text-sm text-fg-secondary">
-						Page { fmt.Sprintf("%d", page) } of { fmt.Sprintf("%d", (total+perPage-1)/perPage) }
-					</span>
-					if page*perPage < total {
-						<a
-							href={ templ.SafeURL(fmt.Sprintf("/admin/users?page=%d", page+1)) }
-							class="btn-secondary text-sm"
-						>
-							Next
-						</a>
-					} else {
-						<span class="btn text-sm text-fg-muted cursor-not-allowed opacity-50">Next</span>
-					}
-				</div>
-			}
+			@components.Pagination(components.PaginationData{
+				CurrentPage: page,
+				PerPage:     perPage,
+				Total:       total,
+				BaseURL:     "/admin/users",
+			})
 		</div>
 	}
 }
