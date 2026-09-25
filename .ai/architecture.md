@@ -14,56 +14,37 @@ System or Widget (see root `CLAUDE.md` for what each tier is).
 ## Three-Tier Extension Architecture
 
 ```
-┌──────────────────────────────────────────────────────────────┐
-│                         CHRONICLE                             │
-│                                                               │
-│  ┌──────────────────────────────────────────────────────┐    │
-│  │  CORE (always present)                                │    │
-│  │  app/  config/  database/  middleware/  apperror/      │    │
-│  └──────────────────────────────────────────────────────┘    │
-│                                                               │
-│  ┌──────────────────────────────────────────────────────┐    │
-│  │  PLUGINS -- Feature Applications (24)                  │    │
-│  │  auth/  campaigns/  entities/  calendar/  maps/        │    │
-│  │  admin/  addons/  syncapi/  media/  audit/             │    │
-│  │  settings/  timeline/  sessions/  packages/            │    │
-│  │  smtp/  armory/  bestiary/  designlab/  npcs/          │    │
-│  │  ai_workspace/  backup/  foundry_vtt/  restore/        │    │
-│  │  widgetbindings/                                       │    │
-│  └──────────────────────────────────────────────────────┘    │
-│                                                               │
-│  ┌──────────────────────────────────────────────────────┐    │
-│  │  SYSTEMS -- External packages via package manager       │    │
-│  │  (generic loader + GenericTooltipRenderer)              │    │
-│  └──────────────────────────────────────────────────────┘    │
-│                                                               │
-│  ┌──────────────────────────────────────────────────────┐    │
-│  │  WIDGETS -- Reusable UI Building Blocks                │    │
-│  │  editor/  title/  tags/  attributes/  mentions/        │    │
-│  │  notes/  relations/  posts/  entity_notes/              │    │
-│  └──────────────────────────────────────────────────────┘    │
-│                                                               │
-│  ┌──────────────────────────────────────────────────────┐    │
-│  │  TEMPLATES -- Shared Templ Layouts & Components        │    │
-│  │  layouts/  components/  pages/                         │    │
-│  └──────────────────────────────────────────────────────┘    │
-└──────────────────────────────────────────────────────────────┘
+CHRONICLE
+  CORE (always present): app/ config/ database/ middleware/ apperror/
+
+  PLUGINS -- Feature Applications (24): auth/ campaigns/ entities/
+    calendar/ maps/ admin/ addons/ syncapi/ media/ audit/ settings/
+    timeline/ sessions/ packages/ smtp/ armory/ bestiary/ designlab/
+    npcs/ ai_workspace/ backup/ foundry_vtt/ restore/ widgetbindings/
+
+  SYSTEMS -- External packages via package manager (generic loader +
+    GenericTooltipRenderer)
+
+  WIDGETS -- Reusable UI Building Blocks: editor/ title/ tags/
+    attributes/ mentions/ notes/ relations/ posts/ entity_notes/
+
+  TEMPLATES -- Shared Templ Layouts & Components: layouts/ components/
+    pages/
 ```
 
 ### Tier Definitions
 
 | Tier | What It Is | Has Backend? | Has Frontend? | Can Disable? |
 |------|-----------|-------------|--------------|-------------|
-| **Plugin** | Self-contained feature app with handler/service/repo/templates | Yes | Yes | Core: no. Optional: per-campaign |
-| **System** | Game system content pack. Reference data, tooltips, dedicated pages | Yes (data serving) | Yes (tooltips, pages) | Per-campaign |
-| **Widget** | Reusable UI block. Mounts to DOM element, fetches own data | Minimal (API endpoints) | Primarily | Always available |
+| **Plugin** | Self-contained feature app: handler/service/repo/templates | Yes | Yes | Core: no. Optional: per-campaign |
+| **System** | Game system content pack: reference data, tooltips, pages | Yes (data serving) | Yes (tooltips, pages) | Per-campaign |
+| **Widget** | Reusable UI block: mounts to a DOM element, fetches own data | Minimal (API endpoints) | Primarily | Always available |
 
 `calendar` is the one exception to the plugin shape above: its UI, routes and
-handler were deleted for a ground-up rebuild (V5, #741). Only its domain layer
-(`model.go`, `calendar.go`, import/export, presets) and migrations remain.
-`syncapi`'s calendar routes stay registered and answer `503
-calendar_rebuilding` (see `.ai/plugin-development.md`); re-wiring points in
-other plugins are tagged `CALV5-PLACEHOLDER:`.
+handler were deleted for a ground-up rebuild (V5, #741); only its domain
+layer and migrations remain. `syncapi`'s calendar routes answer `503
+calendar_rebuilding` (`.ai/plugin-development.md`); re-wiring points
+elsewhere are tagged `CALV5-PLACEHOLDER:`.
 
 ### How They Interact on a Page
 
@@ -75,7 +56,7 @@ Entity Profile Page Load:
      @mentions that reference game content
 ```
 
-Cross-tier communication rules are in root `CLAUDE.md` → Code Conventions.
+Cross-tier communication rules: root `CLAUDE.md` → Code Conventions.
 
 ## Directory Structure
 
@@ -99,10 +80,9 @@ chronicle/
 │   │   ├── plugin_schema.go          #   Plugin migration runner (reads embed.FS)
 │   │   └── plugin_health.go          #   Plugin health registry
 │   │
-│   ├── middleware/                    # CORE: HTTP middleware (logging, recovery, CSRF,
-│   │                                  #   CORS, rate limiting, IDOR checks, security headers,
-│   │                                  #   static caching); session validation lives in
-│   │                                  #   internal/plugins/auth/middleware.go
+│   ├── middleware/                    # CORE: HTTP middleware (logging, recovery, CSRF, CORS,
+│   │                                  #   rate limiting, IDOR, security headers, static caching;
+│   │                                  #   session validation: internal/plugins/auth/middleware.go)
 │   │
 │   ├── apperror/                     # CORE: Domain error types
 │   │   └── errors.go
@@ -112,13 +92,7 @@ chronicle/
 │   │
 │   ├── plugins/                      # PLUGINS: Feature applications
 │   │   ├── auth/                     #   Authentication & user management
-│   │   │   ├── .ai.md
-│   │   │   ├── handler.go
-│   │   │   ├── service.go
-│   │   │   ├── repository.go
-│   │   │   ├── model.go
-│   │   │   ├── routes.go
-│   │   │   └── templates/
+│   │   │                             #   (standard plugin shape, see below)
 │   │   ├── campaigns/                #   Campaign/world management
 │   │   ├── entities/                 #   Entity CRUD & configurable types
 │   │   ├── calendar/                 #   Domain layer + migrations only (mid-rebuild, see below)
@@ -144,8 +118,7 @@ chronicle/
 │   │   └── handler.go                #   System reference page handlers
 │   │
 │   ├── widgets/                      # WIDGETS: Reusable UI building blocks
-│   │   ├── editor/                   #   TipTap rich text editor (no backend of its
-│   │   │   │                         #   own; loads/saves via the entity API)
+│   │   ├── editor/                   #   TipTap rich text editor (no backend; loads/saves via the entity API)
 │   │   │   ├── .ai.md
 │   │   │   └── templates/
 │   │   ├── notes/                    #   Floating notes panel (full backend)
@@ -153,7 +126,7 @@ chronicle/
 │   │   │   ├── model.go              #   Note, NoteVersion, Block structs
 │   │   │   ├── repository.go         #   CRUD + locking + versions SQL
 │   │   │   ├── service.go            #   Business logic + snapshots
-│   │   │   ├── handler.go            #   HTTP endpoints (see routes.go)
+│   │   │   ├── handler.go            #   HTTP endpoints
 │   │   │   └── routes.go
 │   │   ├── title/                    #   Page title component
 │   │   ├── tags/                     #   Tag picker/display
@@ -180,17 +153,15 @@ chronicle/
 ├── static/
 │   ├── css/
 │   │   └── input.css                 # Tailwind input
-│   ├── js/                           # Global scripts (boot.js is the widget auto-mounter;
-│   │   │                             #   keyboard_shortcuts.js, search_modal.js, sidebar_drill.js,
-│   │   │                             #   theme.js, command_palette.js, and more)
-│   │   └── widgets/                  # One file per widget (editor.js, attributes.js,
-│   │                                 #   tag_picker.js, editor_mention.js, notes.js, etc.)
+│   ├── js/                           # Global scripts (boot.js is the widget auto-mounter,
+│   │   │                             #   plus keyboard_shortcuts.js and other UI helpers)
+│   │   └── widgets/                  # One file per widget (editor.js, attributes.js, etc.)
 │   ├── vendor/                       # Vendored CDN libs
 │   ├── fonts/
 │   └── img/
 │
-├── docs/                              # Operator + API docs (deployment, restore drills, docs/api/openapi.yaml)
-├── extensions/                        # Example/reference extensions (dice-roller, wasm examples, harptos-calendar)
+├── docs/                              # Operator + API docs (deployment, restore drills, api/openapi.yaml)
+├── extensions/                        # Example/reference extensions (dice-roller, wasm, harptos-calendar)
 ├── scripts/                           # Shell scripts (backup.sh, restore.sh)
 ├── sdk/                               # Go SDK for extension authors
 ├── test/                              # JS test suites
@@ -208,37 +179,37 @@ chronicle/
 
 ## Plugin Internal Structure
 
-Every plugin has this common shape (test files, and exactly where `.templ`
-files live, vary per plugin; not every plugin embeds something, and the file
-that does may hold migrations, static assets, or both — see ADR-030):
+Every plugin has this common shape (test-file location and where `.templ`
+lives vary per plugin; not every plugin embeds something, and the file that
+does may hold migrations, static assets, or both — ADR-030):
 
 ```
 internal/plugins/<name>/
   .ai.md              # Plugin-level AI documentation
-  embed.go            # Optional: go:embed for migrations and/or static assets
-  handler.go          # Echo handlers (thin: bind, call service, render)
-  service.go          # Business logic (never imports Echo types)
+  embed.go            # Optional: go:embed for migrations/static assets
+  handler.go          # Echo handlers (conventions: root CLAUDE.md)
+  service.go          # Business logic
   repository.go       # MariaDB queries (hand-written SQL)
   model.go            # Domain models, DTOs, request/response structs
   routes.go           # Route registration function
-  migrations/         # Plugin-specific schema migrations, if any (embedded in binary)
-  templates/          # Templ components for this plugin (some plugins keep
-                       #   top-level .templ files instead of this subdirectory)
+  migrations/         # Plugin schema migrations, if any (embedded in binary)
+  templates/          # Templ components (some plugins keep top-level
+                       #   .templ files instead of this subdirectory)
 ```
 
 ## System (Game System) Internal Structure
 
-Systems are **external packages**, not in-repo directories. `internal/systems/` is a
-flat Go package (loader, manifest parser, generic content-serving handler, registry) —
-there are no `internal/systems/<name>/` subdirectories. A game system content pack
-(D&D 5e, Draw Steel, Pathfinder 2e, etc.) is a manifest + data-files bundle installed
-per-campaign via Admin > Packages; its manifest declares categories/fields/metadata and
-its data lives under the installed package's own on-disk version directory, outside the
-Go source tree.
+Systems are **external packages**, not in-repo directories: `internal/systems/` is a
+flat Go package (loader, manifest parser, generic content-serving handler, registry),
+with no `internal/systems/<name>/` subdirectories. A game system content pack (D&D 5e,
+Draw Steel, Pathfinder 2e, etc.) is a manifest + data-files bundle installed per-campaign
+via Admin > Packages; its manifest declares categories/fields/metadata, and its data
+lives under the installed package's own on-disk version directory, outside the Go source
+tree.
 
-For custom tooltip formatting, a system package registers a Go file with `init()` that
-calls `systems.RegisterFactory()` (e.g., a stat-block formatter) — the registration
-mechanism is generic; no system gets a bespoke in-repo package.
+For custom tooltip formatting, a system package registers a Go file with `init()` calling
+`systems.RegisterFactory()` (e.g. a stat-block formatter) — generic registration, so no
+system gets a bespoke in-repo package.
 
 ## Widget Internal Structure
 
@@ -248,11 +219,9 @@ Widgets have minimal backend and primarily live in static/js/widgets/.
 internal/widgets/<name>/
   .ai.md              # Widget-level AI documentation
   handler.go          # API endpoints (save/load/search) -- optional
-  *.templ             # Optional: a widget with its own markup (e.g. relations/graph.templ,
-                       #   notes/journal.templ) keeps it top-level, not in a subdirectory
+  *.templ             # Optional: own markup, kept top-level (e.g. relations/graph.templ)
 
-static/js/widgets/<name>.js   # Client-side JavaScript (the actual widget); mounts to
-                               # a `data-widget` element rendered by whatever page embeds it
+static/js/widgets/<name>.js   # The actual widget; mounts to a `data-widget` element
 ```
 
 Request flow and cross-boundary rules: see root `CLAUDE.md`.
