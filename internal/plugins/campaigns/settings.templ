@@ -806,7 +806,7 @@ templ PluginHubListContent(cc *CampaignContext, addons []PluginHubAddon, isOwner
 
 // pluginHubCard renders a single feature card with optional toggle for owners.
 templ pluginHubCard(cc *CampaignContext, addon PluginHubAddon, isOwner bool, csrfToken string) {
-	<div class={ "card p-4 flex items-start gap-3 transition-all",
+	<div class={ "card p-4 flex items-start gap-3 transition-shadow",
 		templ.KV("hover:ring-2 hover:ring-accent/50", addon.Enabled),
 		templ.KV("opacity-60", !addon.Enabled && !isOwner) }>
 		<div class={ "w-10 h-10 rounded-lg flex items-center justify-center shrink-0",
