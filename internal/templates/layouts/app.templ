@@ -267,7 +267,10 @@ templ Sidebar() {
 						if item.Type == "dashboard" {
 							@sidebarDashboardLink(ctx)
 						}
-						if item.Type == "addon" && IsAddonEnabled(ctx, item.Slug) {
+						// "npcs" is skipped here even when enabled/configured: its link is
+						// redundant with the Characters entry below (which already lists
+						// the party and NPCs together), so it never renders as a second row.
+						if item.Type == "addon" && item.Slug != "npcs" && IsAddonEnabled(ctx, item.Slug) {
 							@sidebarAddonLink(ctx, item)
 						}
 						if item.Type == "all_pages" {
@@ -844,7 +847,10 @@ templ sidebarCharactersLink(ctx context.Context) {
 		<span class="w-4 h-4 mr-3 shrink-0 flex items-center justify-center">
 			<i class="fa-solid fa-masks-theater text-xs text-gray-400"></i>
 		</span>
-		<span class="flex-1">Characters</span>
+		<span class="flex-1 min-w-0">
+			Characters
+			<span class="block text-[10px] leading-tight text-gray-500 truncate">Party &amp; NPCs</span>
+		</span>
 	</a>
 }
 
