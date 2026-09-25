@@ -219,6 +219,31 @@ jobs:
             }
           done
 
+      - name: Database-backed tests
+        # These tests SKIP without CHRONICLE_TEST_DB_DSN, so a plain `go test`
+        # passes having run none of them. Each creates and drops its own
+        # scratch schema, so sharing the replay's server is safe, and the
+        # PASS-line check fails the job if one is skipped.
+        env:
+          CHRONICLE_TEST_DB_DSN: root:chronicle@tcp(127.0.0.1:3306)/
+        run: |
+          go test ./internal/plugins/sessions/... ./internal/plugins/entities/... ./internal/plugins/timeline/... \
+            -v -count=1 2>&1 | tee dbtests.log
+          go test ./internal/app/ -v -count=1 -run 'CustomVisibilityLeak' 2>&1 | tee -a dbtests.log
+          for want in TestDB_SessionRSVPTokenCannotBeSpentTwiceConcurrently \
+                      TestEntityTypeRepository_Integration \
+                      TestConsolidatePlayerCharacterDuplicate_Integration \
+                      TestFindAncestors_LeaksHiddenParentToViewerWhoCanOnlySeeChild \
+                      TestTimelineEventCount_Integration \
+                      TestSearchTimelines_DoesNotNameAllowListRestrictedTimelineToAnonymous \
+                      TestArmoryGallery_CustomVisibilityLeak \
+                      TestNPCGallery_CustomVisibilityLeak; do
+            grep -q -- "--- PASS: $want" dbtests.log || {
+              echo "::error::$want did not PASS — it was skipped or never ran."
+              exit 1
+            }
+          done
+
   # --- Lint ---
   lint:
     name: Lint
