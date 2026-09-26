@@ -3,12 +3,24 @@ package campaigns
 import (
 	"fmt"
 	"net/http"
+	"time"
 
 	"github.com/labstack/echo/v4"
 
 	"github.com/keyxmakerx/chronicle/internal/apperror"
+	"github.com/keyxmakerx/chronicle/internal/middleware"
 	"github.com/keyxmakerx/chronicle/internal/plugins/auth"
 )
+
+// campaignWriteRateLimitBudget caps each user's writes per minute through the
+// campaign gates, so every campaign route gets it without wiring its own. It
+// sits far above human pace (the busiest loop, the notes edit-lock
+// heartbeat, runs every 2 minutes); it only blunts scripted floods.
+const campaignWriteRateLimitBudget = 300
+
+// sharedWriteRateLimiter is the one limiter behind every call to either gate,
+// so the budget counts per user across all plugins, not per route group.
+var sharedWriteRateLimiter = middleware.UserRateLimit(auth.GetUserID, campaignWriteRateLimitBudget, time.Minute)
 
 // contextKeyCampaign is the Echo context key for campaign context data.
 const contextKeyCampaign = "campaign_context"
@@ -104,6 +116,10 @@ func RequireCampaignAccess(service CampaignService) echo.MiddlewareFunc {
 			}
 
 			c.Set(contextKeyCampaign, cc)
+
+			if isWriteMethod(c.Request().Method) {
+				return sharedWriteRateLimiter(next)(c)
+			}
 			return next(c)
 		}
 	}
@@ -125,6 +141,10 @@ func RequireCampaignAccessEvenIfArchived(service CampaignService) echo.Middlewar
 			}
 
 			c.Set(contextKeyCampaign, cc)
+
+			if isWriteMethod(c.Request().Method) {
+				return sharedWriteRateLimiter(next)(c)
+			}
 			return next(c)
 		}
 	}

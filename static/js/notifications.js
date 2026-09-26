@@ -25,6 +25,28 @@
   var toasts = [];
   var nextId = 0;
 
+  /**
+   * Whether the visitor asked the OS/browser for reduced motion. Checked live
+   * (not cached) since it can change mid-session and toasts are short-lived.
+   */
+  function prefersReducedMotion() {
+    return typeof window !== 'undefined' && typeof window.matchMedia === 'function' &&
+      window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  }
+
+  /**
+   * Find an on-screen toast with the same message and type, so a repeat can
+   * reuse it (count badge + restarted timer) instead of stacking a copy.
+   */
+  function findActiveToast(message, type) {
+    for (var i = 0; i < toasts.length; i++) {
+      var t = toasts[i];
+      // A toast mid fade-out is on its way off screen; a repeat gets a new one.
+      if (t.message === message && t.type === type && t.el.parentNode && !t.el.dataset.dismissing) return t;
+    }
+    return null;
+  }
+
   // Toast type configuration: icon, colors.
   var typeConfig = {
     success: {
@@ -63,6 +85,19 @@
   function ensureContainer() {
     if (container && document.body.contains(container)) return;
 
+    // Inject the count badge's bump-on-repeat animation once. A transition,
+    // not a hand-rolled transform in JS, so prefers-reduced-motion is
+    // handled by simply never adding the class that triggers it.
+    if (!document.getElementById('chronicle-toast-styles')) {
+      var style = document.createElement('style');
+      style.id = 'chronicle-toast-styles';
+      style.textContent = [
+        '.chronicle-toast-badge { transform: scale(1); transition: transform 0.15s ease; }',
+        '.chronicle-toast-badge-bump { transform: scale(1.35); }',
+      ].join(' ');
+      document.head.appendChild(style);
+    }
+
     container = document.createElement('div');
     container.id = 'chronicle-toasts';
     container.style.cssText = [
@@ -94,6 +129,15 @@
     var duration = opts.duration !== undefined ? opts.duration : 4000;
 
     ensureContainer();
+
+    // A repeat of an on-screen toast (same message and type) reuses it --
+    // a count badge and a restarted timer -- instead of stacking a copy
+    // underneath it. Everything else about toasts stays the same.
+    var existing = findActiveToast(message, type);
+    if (existing) {
+      bumpToast(existing, duration);
+      return;
+    }
 
     var config = typeConfig[type] || typeConfig.info;
     var id = ++nextId;
@@ -136,18 +180,21 @@
     }
     toast.appendChild(msg);
 
+    var record = { id: id, el: toast, message: message, type: type, count: 1, msgEl: msg, badgeEl: null, timer: null, duration: duration };
+
     // Close button.
     var close = document.createElement('button');
     close.type = 'button';
     close.style.cssText = 'border:none;background:none;color:var(--color-text-muted,#9ca3af);cursor:pointer;padding:0;font-size:14px;flex-shrink:0;line-height:1;';
     close.innerHTML = '&times;';
     close.addEventListener('click', function () {
+      if (record.timer) clearTimeout(record.timer);
       dismissToast(toast, id);
     });
     toast.appendChild(close);
 
     container.appendChild(toast);
-    toasts.push({ id: id, el: toast });
+    toasts.push(record);
 
     // Animate in.
     requestAnimationFrame(function () {
@@ -155,20 +202,76 @@
       toast.style.opacity = '1';
     });
 
-    // Auto-dismiss.
-    if (duration > 0) {
-      setTimeout(function () {
-        dismissToast(toast, id);
-      }, duration);
-    }
+    restartTimer(record);
   };
+
+  /**
+   * (Re)start a toast's auto-dismiss timer, clearing any timer already
+   * running. Shared by the initial show and every repeat, so a repeat
+   * genuinely restarts the countdown instead of leaving the old one armed
+   * alongside a new one.
+   */
+  function restartTimer(record) {
+    if (record.timer) {
+      clearTimeout(record.timer);
+      record.timer = null;
+    }
+    if (record.duration > 0) {
+      record.timer = setTimeout(function () {
+        dismissToast(record.el, record.id);
+      }, record.duration);
+    }
+  }
+
+  /**
+   * Reuse an on-screen toast for a repeat: bump its count badge and restart
+   * its timer. The badge's "grow" animation is skipped under
+   * prefers-reduced-motion; the count itself always updates.
+   */
+  function bumpToast(record, duration) {
+    record.count += 1;
+    record.duration = duration;
+
+    if (!record.badgeEl) {
+      var badge = document.createElement('span');
+      badge.className = 'chronicle-toast-badge';
+      badge.style.cssText = [
+        'display: inline-flex',
+        'align-items: center',
+        'justify-content: center',
+        'min-width: 16px',
+        'height: 16px',
+        'padding: 0 5px',
+        'margin-left: 6px',
+        'border-radius: 999px',
+        'background: var(--color-accent-light, #a5b4fc)',
+        'color: var(--color-accent-hover, #4f46e5)',
+        'font-size: 11px',
+        'font-weight: 700',
+        'vertical-align: 1px',
+      ].join(';');
+      record.msgEl.appendChild(badge);
+      record.badgeEl = badge;
+    }
+    record.badgeEl.textContent = '×' + record.count;
+
+    if (!prefersReducedMotion()) {
+      record.badgeEl.classList.add('chronicle-toast-badge-bump');
+      setTimeout(function () {
+        record.badgeEl.classList.remove('chronicle-toast-badge-bump');
+      }, 200);
+    }
+
+    restartTimer(record);
+  }
 
   /**
    * Dismiss a toast with animation.
    */
   function dismissToast(toast, id) {
     // Avoid double-dismiss.
-    if (!toast.parentNode) return;
+    if (!toast.parentNode || toast.dataset.dismissing) return;
+    toast.dataset.dismissing = 'true';
 
     toast.style.transform = 'translateX(100%)';
     toast.style.opacity = '0';

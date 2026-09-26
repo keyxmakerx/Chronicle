@@ -39,6 +39,18 @@ type SecurityService interface {
 
 	// EnableUser re-enables a previously disabled user account.
 	EnableUser(ctx context.Context, userID string) error
+
+	// SetConnectionRevoker injects the hub's revocation surface, used by
+	// DisableUser. Late-bound and nil-safe: a disabled account is already
+	// logged out and refused on its next login regardless.
+	SetConnectionRevoker(cr ConnectionRevoker)
+}
+
+// ConnectionRevoker is the narrow hub view this plugin needs:
+// force-disconnect a user's sockets everywhere when their account is
+// disabled — unlike other plugins, there's no single campaign to scope to.
+type ConnectionRevoker interface {
+	RevokeUserEverywhere(userID string)
 }
 
 // securityService implements SecurityService.
@@ -46,6 +58,10 @@ type securityService struct {
 	repo        SecurityEventRepository
 	authRepo    auth.UserRepository
 	authService auth.AuthService
+
+	// connRevoker drops an account's sockets everywhere when disabled.
+	// Injected after construction; nil means not wired yet, a no-op.
+	connRevoker ConnectionRevoker
 }
 
 // NewSecurityService creates a new security service.
@@ -55,6 +71,11 @@ func NewSecurityService(repo SecurityEventRepository, authRepo auth.UserReposito
 		authRepo:    authRepo,
 		authService: authService,
 	}
+}
+
+// SetConnectionRevoker injects the WebSocket hub's revocation surface.
+func (s *securityService) SetConnectionRevoker(cr ConnectionRevoker) {
+	s.connRevoker = cr
 }
 
 // LogEvent validates and persists a security event.
@@ -141,8 +162,9 @@ func (s *securityService) ForceLogoutUser(ctx context.Context, userID string) (i
 	return s.authService.DestroyAllUserSessions(ctx, userID)
 }
 
-// DisableUser disables a user account and invalidates all their sessions.
-// Prevents future logins until re-enabled by an admin.
+// DisableUser disables a user account, invalidates all their sessions, and
+// drops any of their live WebSocket sockets in every campaign. Prevents
+// future logins until re-enabled by an admin.
 func (s *securityService) DisableUser(ctx context.Context, userID string) error {
 	if userID == "" {
 		return apperror.NewBadRequest("user ID is required")
@@ -174,6 +196,13 @@ func (s *securityService) DisableUser(ctx context.Context, userID string) error 
 			slog.String("user_id", userID),
 			slog.Int("session_count", count),
 		)
+	}
+
+	// A destroyed session stops HTTP cold, but an open WebSocket is never
+	// rechecked, so it would keep receiving without this. Runs last, after
+	// the account is disabled and logged out.
+	if s.connRevoker != nil {
+		s.connRevoker.RevokeUserEverywhere(userID)
 	}
 
 	return nil

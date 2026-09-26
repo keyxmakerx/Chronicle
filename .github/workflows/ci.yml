@@ -219,6 +219,31 @@ jobs:
             }
           done
 
+      - name: Database-backed tests
+        # These tests SKIP without CHRONICLE_TEST_DB_DSN, so a plain `go test`
+        # passes having run none of them. Each creates and drops its own
+        # scratch schema, so sharing the replay's server is safe, and the
+        # PASS-line check fails the job if one is skipped.
+        env:
+          CHRONICLE_TEST_DB_DSN: root:chronicle@tcp(127.0.0.1:3306)/
+        run: |
+          go test ./internal/plugins/sessions/... ./internal/plugins/entities/... ./internal/plugins/timeline/... \
+            -v -count=1 2>&1 | tee dbtests.log
+          go test ./internal/app/ -v -count=1 -run 'CustomVisibilityLeak' 2>&1 | tee -a dbtests.log
+          for want in TestDB_SessionRSVPTokenCannotBeSpentTwiceConcurrently \
+                      TestEntityTypeRepository_Integration \
+                      TestConsolidatePlayerCharacterDuplicate_Integration \
+                      TestFindAncestors_LeaksHiddenParentToViewerWhoCanOnlySeeChild \
+                      TestTimelineEventCount_Integration \
+                      TestSearchTimelines_DoesNotNameAllowListRestrictedTimelineToAnonymous \
+                      TestArmoryGallery_CustomVisibilityLeak \
+                      TestNPCGallery_CustomVisibilityLeak; do
+            grep -q -- "--- PASS: $want" dbtests.log || {
+              echo "::error::$want did not PASS — it was skipped or never ran."
+              exit 1
+            }
+          done
+
   # --- Lint ---
   lint:
     name: Lint
@@ -259,6 +284,14 @@ jobs:
         with:
           go-version: '1.27'
 
+      - name: Install templ
+        # govulncheck compiles every package, and Templ components exist only
+        # once generated.
+        run: go install github.com/a-h/templ/cmd/templ@v0.3.1001
+
+      - name: Generate templ files
+        run: templ generate
+
       - name: Install govulncheck
         # Pinned so @latest can't drift ahead of this job's go-version and
         # require a newer toolchain than is installed. Bump this pin together
@@ -267,11 +300,7 @@ jobs:
         run: go install golang.org/x/vuln/cmd/govulncheck@v1.8.0
 
       - name: Run govulncheck
-        # continue-on-error: vuln.go.dev is not reachable from every CI
-        # environment. Do not flip this to blocking without a real clean run's
-        # output in hand from an environment that can reach it — an
-        # unverified "clean" is worse than a known gap.
-        continue-on-error: true
+        # Blocking: a known vulnerability in code Chronicle calls fails CI.
         run: govulncheck ./...
 
   # --- Docker Build & Push to GHCR ---

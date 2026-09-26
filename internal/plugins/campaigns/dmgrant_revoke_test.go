@@ -199,6 +199,119 @@ func TestUpdateDmGrants_Dedups(t *testing.T) {
 	}
 }
 
+// mockConnRevoker records RevokeUser calls for assertions.
+type mockConnRevoker struct {
+	revoked          []struct{ campaignID, userID string }
+	revokedCampaigns []string
+}
+
+func (m *mockConnRevoker) RevokeUser(campaignID, userID string) {
+	m.revoked = append(m.revoked, struct{ campaignID, userID string }{campaignID, userID})
+}
+
+func (m *mockConnRevoker) RevokeCampaign(campaignID string) {
+	m.revokedCampaigns = append(m.revokedCampaigns, campaignID)
+}
+
+// TestRemoveMember_DropsLiveConnectionForRevokedGrant pins that clearing a
+// removed member's co-DM grant also drops their live socket — IsDmGranted
+// is cached at connect time and never rechecked otherwise.
+func TestRemoveMember_DropsLiveConnectionForRevokedGrant(t *testing.T) {
+	repo := &mockCampaignRepo{
+		findMemberFn: func(_ context.Context, _, userID string) (*CampaignMember, error) {
+			return &CampaignMember{CampaignID: "camp-1", UserID: userID, Role: RoleScribe}, nil
+		},
+		findByIDFn: func(context.Context, string) (*Campaign, error) {
+			return campaignWithGrants(t, true, "u-gone"), nil
+		},
+		updateSettingsFn: func(context.Context, string, string) error { return nil },
+	}
+	revoker := &mockConnRevoker{}
+	svc := &campaignService{repo: repo, connRevoker: revoker}
+
+	if err := svc.RemoveMember(context.Background(), "camp-1", "u-gone"); err != nil {
+		t.Fatalf("RemoveMember: %v", err)
+	}
+
+	if len(revoker.revoked) != 1 || revoker.revoked[0].campaignID != "camp-1" || revoker.revoked[0].userID != "u-gone" {
+		t.Errorf("revoked = %v, want exactly [{camp-1 u-gone}] — removing a member's dm grant "+
+			"must drop their live socket", revoker.revoked)
+	}
+}
+
+// TestRemoveMember_WithoutGrant_StillRevokesConnection pins that the drop
+// is unconditional: a plain member still loses their socket, since cached
+// Role (not just IsDmGranted) governs the hub's audience checks too.
+func TestRemoveMember_WithoutGrant_StillRevokesConnection(t *testing.T) {
+	repo := &mockCampaignRepo{
+		findMemberFn: func(_ context.Context, _, userID string) (*CampaignMember, error) {
+			return &CampaignMember{CampaignID: "camp-1", UserID: userID, Role: RolePlayer}, nil
+		},
+		findByIDFn: func(context.Context, string) (*Campaign, error) {
+			return campaignWithGrants(t, true, "someone-else"), nil
+		},
+		updateSettingsFn: func(context.Context, string, string) error { return nil },
+	}
+	revoker := &mockConnRevoker{}
+	svc := &campaignService{repo: repo, connRevoker: revoker}
+
+	if err := svc.RemoveMember(context.Background(), "camp-1", "u-plain"); err != nil {
+		t.Fatalf("RemoveMember: %v", err)
+	}
+	if len(revoker.revoked) != 1 || revoker.revoked[0].campaignID != "camp-1" || revoker.revoked[0].userID != "u-plain" {
+		t.Errorf("revoked = %v, want exactly [{camp-1 u-plain}] — removing a member must drop "+
+			"their live socket even when they held no co-DM grant", revoker.revoked)
+	}
+}
+
+// TestUpdateDmGrants_DropsLiveConnectionsForRemovedGrants pins the write
+// path: an owner pulling someone from the co-DM list (without removing
+// them as a member) must also drop their live socket.
+func TestUpdateDmGrants_DropsLiveConnectionsForRemovedGrants(t *testing.T) {
+	repo := &mockCampaignRepo{
+		findByIDFn: func(context.Context, string) (*Campaign, error) {
+			return campaignWithGrants(t, true, "u-kept", "u-removed"), nil
+		},
+		findMemberFn: func(_ context.Context, _, userID string) (*CampaignMember, error) {
+			return &CampaignMember{CampaignID: "camp-1", UserID: userID, Role: RoleScribe}, nil
+		},
+		updateSettingsFn: func(context.Context, string, string) error { return nil },
+	}
+	revoker := &mockConnRevoker{}
+	svc := &campaignService{repo: repo, connRevoker: revoker}
+
+	if err := svc.UpdateDmGrants(context.Background(), "camp-1", []string{"u-kept"}); err != nil {
+		t.Fatalf("UpdateDmGrants: %v", err)
+	}
+
+	if len(revoker.revoked) != 1 || revoker.revoked[0].userID != "u-removed" {
+		t.Errorf("revoked = %v, want exactly one entry for u-removed", revoker.revoked)
+	}
+}
+
+// TestUpdateDmGrants_NoRemovals_DoesNotRevoke keeps the fix scoped: keeping
+// or adding grants must not disconnect anyone.
+func TestUpdateDmGrants_NoRemovals_DoesNotRevoke(t *testing.T) {
+	repo := &mockCampaignRepo{
+		findByIDFn: func(context.Context, string) (*Campaign, error) {
+			return campaignWithGrants(t, true, "u-kept"), nil
+		},
+		findMemberFn: func(_ context.Context, _, userID string) (*CampaignMember, error) {
+			return &CampaignMember{CampaignID: "camp-1", UserID: userID, Role: RoleScribe}, nil
+		},
+		updateSettingsFn: func(context.Context, string, string) error { return nil },
+	}
+	revoker := &mockConnRevoker{}
+	svc := &campaignService{repo: repo, connRevoker: revoker}
+
+	if err := svc.UpdateDmGrants(context.Background(), "camp-1", []string{"u-kept", "u-new"}); err != nil {
+		t.Fatalf("UpdateDmGrants: %v", err)
+	}
+	if len(revoker.revoked) != 0 {
+		t.Errorf("revoked = %v, want none — nobody was removed from the grant list", revoker.revoked)
+	}
+}
+
 // TestUpdateDmGrants_MissingCampaignIs404 pins the nil guard its sibling
 // settings mutators already carry. Without it a missing campaign is a nil
 // dereference, not a 404.

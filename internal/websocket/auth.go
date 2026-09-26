@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"net/http"
 	"strings"
+	"time"
 
 	"github.com/keyxmakerx/chronicle/internal/plugins/foundry_vtt"
 )
@@ -12,9 +13,9 @@ import (
 // APIKeyAuthenticator authenticates API key tokens for WebSocket connections.
 // Implemented by the syncapi service.
 type APIKeyAuthenticator interface {
-	// AuthenticateKey validates a raw API key and returns the key's campaign ID,
-	// owner user ID, and whether the owner has owner-level campaign access.
-	AuthenticateKeyForWS(ctx context.Context, rawKey string) (campaignID, userID string, role int, err error)
+	// AuthenticateKeyForWS validates a raw API key and returns its campaign,
+	// owner, owner-level role, and expiry (nil if the key never expires).
+	AuthenticateKeyForWS(ctx context.Context, rawKey string) (campaignID, userID string, role int, expiresAt *time.Time, err error)
 }
 
 // SessionAuthenticator authenticates browser sessions for WebSocket connections.
@@ -55,7 +56,7 @@ func NewMultiAuthenticator(apiKey APIKeyAuthenticator, session SessionAuthentica
 
 // AuthenticateWS implements the Authenticator interface.
 // Priority: API key (via ?token= query param) > Session cookie.
-func (a *MultiAuthenticator) AuthenticateWS(r *http.Request) (campaignID, userID, source string, role int, isDmGranted bool, err error) {
+func (a *MultiAuthenticator) AuthenticateWS(r *http.Request) (campaignID, userID, source string, role int, isDmGranted bool, expiresAt *time.Time, err error) {
 	ctx := r.Context()
 
 	// foundrySource picks "foundry-module" when the Foundry module
@@ -76,24 +77,24 @@ func (a *MultiAuthenticator) AuthenticateWS(r *http.Request) (campaignID, userID
 	token := r.URL.Query().Get("token")
 	if token != "" {
 		if a.apiKeyAuth == nil {
-			return "", "", "", 0, false, fmt.Errorf("api key auth not configured")
+			return "", "", "", 0, false, nil, fmt.Errorf("api key auth not configured")
 		}
-		campaignID, userID, role, err = a.apiKeyAuth.AuthenticateKeyForWS(ctx, token)
+		campaignID, userID, role, expiresAt, err = a.apiKeyAuth.AuthenticateKeyForWS(ctx, token)
 		if err != nil {
-			return "", "", "", 0, false, fmt.Errorf("api key auth: %w", err)
+			return "", "", "", 0, false, nil, fmt.Errorf("api key auth: %w", err)
 		}
 		isDmGranted = a.lookupDmGranted(ctx, campaignID, userID)
-		return campaignID, userID, foundrySource(), role, isDmGranted, nil
+		return campaignID, userID, foundrySource(), role, isDmGranted, expiresAt, nil
 	}
 
 	// Fall back to session cookie auth (browser clients).
 	if a.sessionAuth == nil {
-		return "", "", "", 0, false, fmt.Errorf("no authentication provided")
+		return "", "", "", 0, false, nil, fmt.Errorf("no authentication provided")
 	}
 
 	userID, err = a.sessionAuth.AuthenticateSessionForWS(r)
 	if err != nil {
-		return "", "", "", 0, false, fmt.Errorf("session auth: %w", err)
+		return "", "", "", 0, false, nil, fmt.Errorf("session auth: %w", err)
 	}
 
 	// Session auth requires a campaign parameter.
@@ -104,30 +105,31 @@ func (a *MultiAuthenticator) AuthenticateWS(r *http.Request) (campaignID, userID
 		if strings.HasPrefix(authHeader, "Bearer ") {
 			rawKey := strings.TrimPrefix(authHeader, "Bearer ")
 			if a.apiKeyAuth != nil {
-				campaignID, userID, role, err = a.apiKeyAuth.AuthenticateKeyForWS(ctx, rawKey)
+				campaignID, userID, role, expiresAt, err = a.apiKeyAuth.AuthenticateKeyForWS(ctx, rawKey)
 				if err != nil {
-					return "", "", "", 0, false, fmt.Errorf("bearer auth: %w", err)
+					return "", "", "", 0, false, nil, fmt.Errorf("bearer auth: %w", err)
 				}
 				isDmGranted = a.lookupDmGranted(ctx, campaignID, userID)
-				return campaignID, userID, foundrySource(), role, isDmGranted, nil
+				return campaignID, userID, foundrySource(), role, isDmGranted, expiresAt, nil
 			}
 		}
-		return "", "", "", 0, false, fmt.Errorf("campaign parameter required for session auth")
+		return "", "", "", 0, false, nil, fmt.Errorf("campaign parameter required for session auth")
 	}
 
 	// Look up the user's role in the campaign.
 	if a.roleLookup != nil {
 		role, err = a.roleLookup.GetUserCampaignRole(ctx, campaignID, userID)
 		if err != nil {
-			return "", "", "", 0, false, fmt.Errorf("role lookup: %w", err)
+			return "", "", "", 0, false, nil, fmt.Errorf("role lookup: %w", err)
 		}
 		if role == 0 {
-			return "", "", "", 0, false, fmt.Errorf("user is not a member of campaign %s", campaignID)
+			return "", "", "", 0, false, nil, fmt.Errorf("user is not a member of campaign %s", campaignID)
 		}
 	}
 
+	// expiresAt stays nil: a session has no key expiry to carry.
 	isDmGranted = a.lookupDmGranted(ctx, campaignID, userID)
-	return campaignID, userID, "browser", role, isDmGranted, nil
+	return campaignID, userID, "browser", role, isDmGranted, nil, nil
 }
 
 // lookupDmGranted resolves the user's IsDmGranted flag, swallowing lookup

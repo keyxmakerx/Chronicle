@@ -79,6 +79,18 @@ type AddonService interface {
 	// under campaign_addons.config_json["setup"].
 	GetSetupState(ctx context.Context, campaignID, addonSlug string) (SetupState, error)
 	SaveSetupState(ctx context.Context, campaignID, addonSlug string, state SetupState) error
+
+	// SetConnectionRevoker injects the hub's revocation surface, used by
+	// DisableForCampaign. Late-bound and nil-safe: a nil revoker only
+	// skips the live-drop, since AuthenticateKeyForWS still gates reconnect.
+	SetConnectionRevoker(cr ConnectionRevoker)
+}
+
+// ConnectionRevoker is the narrow hub view this plugin needs: force-
+// disconnect a campaign's Foundry sockets when Sync API turns off.
+// Declared locally (not imported) so the plugin states only what it needs.
+type ConnectionRevoker interface {
+	RevokeAPIKeyClients(campaignID string)
 }
 
 // PresetApplier creates entity types from system presets when a game system
@@ -115,6 +127,7 @@ type addonService struct {
 	presetApplier  PresetApplier
 	systemFinder   SystemManifestFinder
 	setupProviders map[string]SetupProvider // addon slug -> settings/onboarding provider
+	connRevoker    ConnectionRevoker        // Drops live Sync API sockets on disable/delete. May be nil until wiring reaches it.
 }
 
 // NewAddonService creates a new addon service.
@@ -133,6 +146,11 @@ func (s *addonService) SetSystemFinder(finder SystemManifestFinder) {
 // when a game system is enabled. Optional — if nil, presets are not applied.
 func (s *addonService) SetPresetApplier(applier PresetApplier) {
 	s.presetApplier = applier
+}
+
+// SetConnectionRevoker injects the WebSocket hub's revocation surface.
+func (s *addonService) SetConnectionRevoker(cr ConnectionRevoker) {
+	s.connRevoker = cr
 }
 
 // CountAddons returns the total number of registered addons.
@@ -409,11 +427,27 @@ func (s *addonService) Update(ctx context.Context, id int, input UpdateAddonInpu
 	return addon, nil
 }
 
-// Delete removes an addon from the registry.
+// Delete removes an addon from the registry. Deleting Sync API also drops
+// live Foundry sockets in every campaign that had it enabled, since the
+// campaign_addons cascade otherwise switches it off with no reconnect forced.
 func (s *addonService) Delete(ctx context.Context, id int) error {
+	// Collected before delete: campaign_addons is gone once the row is,
+	// and a lookup failure here only costs the live-drop nicety below.
+	var campaignIDs []string
+	if addon, err := s.repo.FindByID(ctx, id); err == nil && addon != nil && addon.Slug == syncAPIAddonSlug {
+		campaignIDs, _ = s.repo.ListCampaignsUsingAddon(ctx, addon.Slug)
+	}
+
 	if err := s.repo.Delete(ctx, id); err != nil {
 		return err
 	}
+
+	if s.connRevoker != nil {
+		for _, campaignID := range campaignIDs {
+			s.connRevoker.RevokeAPIKeyClients(campaignID)
+		}
+	}
+
 	slog.Info("addon deleted", slog.Int("id", id))
 	return nil
 }
@@ -559,11 +593,26 @@ func (s *addonService) HasCampaignAddonRecord(ctx context.Context, campaignID st
 	return s.repo.HasCampaignAddonRecord(ctx, campaignID, addonSlug)
 }
 
-// DisableForCampaign disables an addon for a campaign.
+// syncAPIAddonSlug identifies the Sync API addon whose disable also has to
+// drop live Foundry sockets — see DisableForCampaign.
+const syncAPIAddonSlug = "sync-api"
+
+// DisableForCampaign disables an addon for a campaign. When it's Sync API,
+// this also drops the campaign's already-open Foundry sockets — otherwise
+// they'd keep receiving until they happened to reconnect on their own.
 func (s *addonService) DisableForCampaign(ctx context.Context, campaignID string, addonID int) error {
 	if err := s.repo.DisableForCampaign(ctx, campaignID, addonID); err != nil {
 		return apperror.NewInternal(fmt.Errorf("disabling addon: %w", err))
 	}
+
+	if s.connRevoker != nil {
+		// Best-effort lookup: a failure here only costs the live-drop
+		// nicety, not the disable itself, which already succeeded above.
+		if addon, err := s.repo.FindByID(ctx, addonID); err == nil && addon != nil && addon.Slug == syncAPIAddonSlug {
+			s.connRevoker.RevokeAPIKeyClients(campaignID)
+		}
+	}
+
 	slog.Info("addon disabled for campaign",
 		slog.String("campaign_id", campaignID),
 		slog.Int("addon_id", addonID),
