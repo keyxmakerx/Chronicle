@@ -60,6 +60,11 @@ type SyncAPIService interface {
 	// wiring: without it AuthenticateKeyForWS fails closed.
 	SetMemberChecker(mc MembershipChecker)
 
+	// SetConnectionRevoker injects the hub's revocation surface. Late-bound
+	// and nil-safe: the authoritative check is still AuthenticateKeyForWS
+	// on reconnect, so a nil revoker only skips the live-drop nicety.
+	SetConnectionRevoker(cr ConnectionRevoker)
+
 	// Authentication.
 	AuthenticateKey(ctx context.Context, rawKey string) (*APIKey, error)
 	UpdateKeyLastUsed(ctx context.Context, id int, ip string) error
@@ -90,8 +95,9 @@ type SyncAPIService interface {
 	GetStats(ctx context.Context, since time.Time) (*APIStats, error)
 	GetCampaignStats(ctx context.Context, campaignID string, since time.Time) (*APIStats, error)
 
-	// WebSocket authentication.
-	AuthenticateKeyForWS(ctx context.Context, rawKey string) (campaignID, userID string, role int, err error)
+	// WebSocket authentication. expiresAt is the key's expiry (nil if it
+	// never expires) so the hub can cut the socket off when it passes.
+	AuthenticateKeyForWS(ctx context.Context, rawKey string) (campaignID, userID string, role int, expiresAt *time.Time, err error)
 
 	// Calendar date beacon.
 	RecordCalendarDateBeacon(ctx context.Context, campaignID string, year, month, day int) error
@@ -118,6 +124,13 @@ type MembershipChecker interface {
 	GetMember(ctx context.Context, campaignID, userID string) (*campaigns.CampaignMember, error)
 }
 
+// ConnectionRevoker is the narrow hub view this plugin needs:
+// force-disconnect a campaign's Foundry sockets on a key revoke.
+// Declared locally, not imported — same reason as SyncAPIAddonGate.
+type ConnectionRevoker interface {
+	RevokeAPIKeyClients(campaignID string)
+}
+
 // syncAPIService implements SyncAPIService.
 type syncAPIService struct {
 	repo SyncAPIRepository
@@ -134,6 +147,10 @@ type syncAPIService struct {
 	// injected-after-construction, fail-closed-when-nil treatment as
 	// addonGate.
 	memberChecker MembershipChecker
+
+	// connRevoker drops already-open Foundry sockets on key revoke.
+	// Injected after construction; nil means not wired yet, a no-op.
+	connRevoker ConnectionRevoker
 }
 
 // NewSyncAPIService creates a new sync API service.
@@ -149,6 +166,11 @@ func (s *syncAPIService) SetAddonGate(gate SyncAPIAddonGate) {
 // SetMemberChecker injects the campaign membership reader.
 func (s *syncAPIService) SetMemberChecker(mc MembershipChecker) {
 	s.memberChecker = mc
+}
+
+// SetConnectionRevoker injects the WebSocket hub's revocation surface.
+func (s *syncAPIService) SetConnectionRevoker(cr ConnectionRevoker) {
+	s.connRevoker = cr
 }
 
 // --- Key Management ---
@@ -306,20 +328,50 @@ func (s *syncAPIService) ActivateKey(ctx context.Context, id int) error {
 	return nil
 }
 
-// DeactivateKey disables an API key without deleting it.
+// DeactivateKey disables a key without deleting it, and drops its
+// already-open Foundry sockets — same treatment as RevokeKey, since
+// AuthenticateKey only refuses a deactivated key on the next reconnect.
 func (s *syncAPIService) DeactivateKey(ctx context.Context, id int) error {
+	// Looked up before deactivate so we still know which campaign to drop
+	// sockets for afterward — same best-effort treatment as RevokeKey: a
+	// lookup failure only costs the live-drop nicety, not the deactivate.
+	var campaignID string
+	if key, err := s.repo.FindKeyByID(ctx, id); err == nil && key != nil {
+		campaignID = key.CampaignID
+	}
+
 	if err := s.repo.UpdateKeyActive(ctx, id, false); err != nil {
 		return err
 	}
+
+	if s.connRevoker != nil && campaignID != "" {
+		s.connRevoker.RevokeAPIKeyClients(campaignID)
+	}
+
 	slog.Info("api key deactivated", slog.Int("id", id))
 	return nil
 }
 
-// RevokeKey permanently deletes an API key.
+// RevokeKey permanently deletes a key and drops its already-open Foundry
+// sockets — the forced drop is what makes the revoke take effect
+// immediately, rather than on the socket's next reconnect.
 func (s *syncAPIService) RevokeKey(ctx context.Context, id int) error {
+	// Looked up before delete so we still know which campaign to drop
+	// sockets for afterward. A lookup failure only costs the live-drop
+	// nicety, not the revoke itself — the key is deleted regardless.
+	var campaignID string
+	if key, err := s.repo.FindKeyByID(ctx, id); err == nil && key != nil {
+		campaignID = key.CampaignID
+	}
+
 	if err := s.repo.DeleteKey(ctx, id); err != nil {
 		return err
 	}
+
+	if s.connRevoker != nil && campaignID != "" {
+		s.connRevoker.RevokeAPIKeyClients(campaignID)
+	}
+
 	slog.Info("api key revoked", slog.Int("id", id))
 	return nil
 }
@@ -561,15 +613,13 @@ func (s *syncAPIService) GetCampaignStats(ctx context.Context, campaignID string
 
 // --- WebSocket Authentication ---
 
-// AuthenticateKeyForWS validates a raw API key and returns the campaign ID,
-// owner user ID, and Owner role (3) — granted only after confirming
-// key.UserID is still an Owner of key.CampaignID (the WS twin of the REST
-// gate RequireKeyOwnerStillOwner). This provides the WebSocket
-// authenticator with the identity needed to register a client.
-func (s *syncAPIService) AuthenticateKeyForWS(ctx context.Context, rawKey string) (campaignID, userID string, role int, err error) {
+// AuthenticateKeyForWS validates a raw key and returns its campaign, owner
+// user ID, Owner role (confirmed live, not just stored), and expiry — the
+// WS twin of the REST gate RequireKeyOwnerStillOwner.
+func (s *syncAPIService) AuthenticateKeyForWS(ctx context.Context, rawKey string) (campaignID, userID string, role int, expiresAt *time.Time, err error) {
 	key, err := s.AuthenticateKey(ctx, rawKey)
 	if err != nil {
-		return "", "", 0, err
+		return "", "", 0, nil, err
 	}
 
 	// The campaign's "Sync API" toggle governs the push channel exactly as it
@@ -588,7 +638,7 @@ func (s *syncAPIService) AuthenticateKeyForWS(ctx context.Context, rawKey string
 			slog.String("campaign_id", key.CampaignID),
 			slog.Int("key_id", key.ID),
 		)
-		return "", "", 0, apperror.NewInternal(errAddonGateUnwired)
+		return "", "", 0, nil, apperror.NewInternal(errAddonGateUnwired)
 	}
 	enabled, gateErr := s.addonGate.IsEnabledForCampaign(ctx, key.CampaignID, SyncAPIAddonSlug)
 	if gateErr != nil {
@@ -599,10 +649,10 @@ func (s *syncAPIService) AuthenticateKeyForWS(ctx context.Context, rawKey string
 			slog.Int("key_id", key.ID),
 			slog.Any("error", gateErr),
 		)
-		return "", "", 0, apperror.NewInternalMessage("temporarily unable to verify addon status", gateErr)
+		return "", "", 0, nil, apperror.NewInternalMessage("temporarily unable to verify addon status", gateErr)
 	}
 	if !enabled {
-		return "", "", 0, syncAPIDisabledError()
+		return "", "", 0, nil, syncAPIDisabledError()
 	}
 
 	// A sync key must never carry more power than its creator currently has:
@@ -615,15 +665,15 @@ func (s *syncAPIService) AuthenticateKeyForWS(ctx context.Context, rawKey string
 			slog.String("campaign_id", key.CampaignID),
 			slog.Int("key_id", key.ID),
 		)
-		return "", "", 0, apperror.NewInternal(errMemberCheckerUnwired)
+		return "", "", 0, nil, apperror.NewInternal(errMemberCheckerUnwired)
 	}
 	member, memErr := s.memberChecker.GetMember(ctx, key.CampaignID, key.UserID)
 	if memErr != nil || member.Role < campaigns.RoleOwner {
-		return "", "", 0, keyOwnerLostAccessError()
+		return "", "", 0, nil, keyOwnerLostAccessError()
 	}
 
 	// key.UserID is confirmed Owner, so the WS session gets Owner role.
-	return key.CampaignID, key.UserID, int(campaigns.RoleOwner), nil
+	return key.CampaignID, key.UserID, int(campaigns.RoleOwner), key.ExpiresAt, nil
 }
 
 // --- Calendar Date Beacon ---

@@ -147,6 +147,19 @@ type CampaignService interface {
 	SetLayoutPresetSeeder(seeder LayoutPresetSeeder)
 	SetMediaCleaner(cleaner MediaCleaner)
 	SetHookDispatcher(dispatcher CampaignHookDispatcher)
+
+	// SetConnectionRevoker injects the hub's revocation surface. Late-bound
+	// and nil-safe: a nil revoker only skips the live-drop, since a
+	// reconnect re-resolves role/grant from current settings anyway.
+	SetConnectionRevoker(cr ConnectionRevoker)
+}
+
+// ConnectionRevoker is the narrow hub view this plugin needs: drop a
+// user's sockets when their access is lowered, or a whole campaign's
+// once it's deleted. Declared locally, not imported.
+type ConnectionRevoker interface {
+	RevokeUser(campaignID, userID string)
+	RevokeCampaign(campaignID string)
 }
 
 // GroupService handles business logic for campaign group operations.
@@ -184,6 +197,7 @@ type campaignService struct {
 	layoutSeeder     LayoutPresetSeeder     // Seeds default layout presets on campaign creation. May be nil.
 	mediaCleaner     MediaCleaner           // Cleans up media files on campaign delete. May be nil.
 	hookDispatcher   CampaignHookDispatcher // Dispatches WASM lifecycle events. May be nil.
+	connRevoker      ConnectionRevoker      // Drops live sockets when access is lowered. May be nil until wiring reaches it.
 	baseURL          string
 }
 
@@ -226,6 +240,11 @@ func (s *campaignService) SetMediaCleaner(cleaner MediaCleaner) {
 // Called after all plugins are wired to avoid initialization order issues.
 func (s *campaignService) SetHookDispatcher(dispatcher CampaignHookDispatcher) {
 	s.hookDispatcher = dispatcher
+}
+
+// SetConnectionRevoker injects the WebSocket hub's revocation surface.
+func (s *campaignService) SetConnectionRevoker(cr ConnectionRevoker) {
+	s.connRevoker = cr
 }
 
 // --- Campaign CRUD ---
@@ -459,6 +478,11 @@ func (s *campaignService) Delete(ctx context.Context, campaignID string) error {
 		return err
 	}
 
+	// No member, grant or key survives the delete to hold a socket open.
+	if s.connRevoker != nil {
+		s.connRevoker.RevokeCampaign(campaignID)
+	}
+
 	slog.Info("campaign deleted", slog.String("campaign_id", campaignID))
 	return nil
 }
@@ -545,6 +569,12 @@ func (s *campaignService) RemoveMember(ctx context.Context, campaignID, userID s
 		return err
 	}
 
+	// Unconditional, not just for a held grant: cached Role governs the
+	// hub's gates too, so even a plain member keeps receiving otherwise.
+	if s.connRevoker != nil {
+		s.connRevoker.RevokeUser(campaignID, userID)
+	}
+
 	slog.Info("member removed from campaign",
 		slog.String("campaign_id", campaignID),
 		slog.String("user_id", userID),
@@ -554,7 +584,9 @@ func (s *campaignService) RemoveMember(ctx context.Context, campaignID, userID s
 
 // revokeDmGrant drops one user from a campaign's dm_grant_ids. It is a no-op
 // when the user holds no grant, so ordinary member removal does not churn the
-// settings row.
+// settings row. Only called from RemoveMember, which drops the removed
+// member's live sockets itself (unconditionally, not just for a held grant)
+// once this returns — so this method owns the STORED settings cleanup only.
 //
 // This closes the STORED half of the leak. The resolve-time half lives in
 // middleware.go, which refuses to honour a grant for a non-member — both are
@@ -619,6 +651,12 @@ func (s *campaignService) UpdateMemberRole(ctx context.Context, campaignID, user
 
 	if err := s.repo.UpdateMemberRole(ctx, campaignID, userID, role); err != nil {
 		return apperror.NewInternal(fmt.Errorf("updating role: %w", err))
+	}
+
+	// A downgrade must drop the live socket (cached Role still governs
+	// the hub's gates); an upgrade needs nothing.
+	if role < member.Role && s.connRevoker != nil {
+		s.connRevoker.RevokeUser(campaignID, userID)
 	}
 
 	slog.Info("member role updated",
@@ -749,6 +787,12 @@ func (s *campaignService) AcceptTransfer(ctx context.Context, token string, acce
 	// Perform the atomic transfer.
 	if err := s.repo.TransferOwnership(ctx, transfer.CampaignID, transfer.FromUserID, transfer.ToUserID); err != nil {
 		return apperror.NewInternal(fmt.Errorf("transferring ownership: %w", err))
+	}
+
+	// Drop the old owner's live socket: cached Role=Owner isn't touched
+	// by the demotion above, so it would keep owner-level visibility.
+	if s.connRevoker != nil {
+		s.connRevoker.RevokeUser(transfer.CampaignID, transfer.FromUserID)
 	}
 
 	slog.Info("ownership transfer completed",
@@ -1189,6 +1233,20 @@ func (s *campaignService) UpdateDmGrants(ctx context.Context, campaignID string,
 	}
 
 	settings := campaign.ParseSettings()
+
+	// Diffed against the old list before it's overwritten, so anyone
+	// losing the grant can have their live socket dropped below.
+	stillGranted := make(map[string]bool, len(clean))
+	for _, id := range clean {
+		stillGranted[id] = true
+	}
+	var removed []string
+	for _, id := range settings.DmGrantIDs {
+		if !stillGranted[id] {
+			removed = append(removed, id)
+		}
+	}
+
 	settings.DmGrantIDs = clean
 
 	settingsJSON, err := json.Marshal(settings)
@@ -1196,7 +1254,16 @@ func (s *campaignService) UpdateDmGrants(ctx context.Context, campaignID string,
 		return apperror.NewInternal(fmt.Errorf("marshaling settings: %w", err))
 	}
 
-	return s.repo.UpdateSettings(ctx, campaignID, string(settingsJSON))
+	if err := s.repo.UpdateSettings(ctx, campaignID, string(settingsJSON)); err != nil {
+		return err
+	}
+
+	if s.connRevoker != nil {
+		for _, userID := range removed {
+			s.connRevoker.RevokeUser(campaignID, userID)
+		}
+	}
+	return nil
 }
 
 // validFontFamilies defines the allowed font families for campaigns.
@@ -1622,8 +1689,18 @@ func (s *campaignService) ResetOwnerDashboardLayout(ctx context.Context, campaig
 // ForceTransferOwnership is used by admins to take ownership of a campaign.
 // No email confirmation needed — this is an administrative action.
 func (s *campaignService) ForceTransferOwnership(ctx context.Context, campaignID, newOwnerID string) error {
+	// Looked up before the demotion below, which targets by role, not id —
+	// this is the only place the previous owner's id is available.
+	previousOwner, ownerErr := s.repo.FindOwnerMember(ctx, campaignID)
+
 	if err := s.repo.ForceTransferOwnership(ctx, campaignID, newOwnerID); err != nil {
 		return apperror.NewInternal(fmt.Errorf("force transferring ownership: %w", err))
+	}
+
+	// Drop the old owner's live sockets — same reasoning as AcceptTransfer.
+	// Skipped if newOwnerID was already the owner: nobody's access changed.
+	if s.connRevoker != nil && ownerErr == nil && previousOwner != nil && previousOwner.UserID != newOwnerID {
+		s.connRevoker.RevokeUser(campaignID, previousOwner.UserID)
 	}
 
 	slog.Info("admin force-transferred campaign ownership",
@@ -1654,7 +1731,15 @@ func (s *campaignService) AdminAddMember(ctx context.Context, campaignID, userID
 		}
 
 		// Otherwise just update the role.
-		return s.repo.UpdateMemberRole(ctx, campaignID, userID, role)
+		if err := s.repo.UpdateMemberRole(ctx, campaignID, userID, role); err != nil {
+			return err
+		}
+		// Same downgrade check as UpdateMemberRole, which this admin
+		// path bypasses (it can even demote an admin's own Owner row).
+		if role < existing.Role && s.connRevoker != nil {
+			s.connRevoker.RevokeUser(campaignID, userID)
+		}
+		return nil
 	}
 
 	// Not a member -- add them. If joining as Owner, force-transfer.

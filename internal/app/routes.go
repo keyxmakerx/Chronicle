@@ -831,6 +831,37 @@ func (h *entityNotesNotifierHolder) Notify(event string, note *entity_notes.Note
 	}))
 }
 
+// wsRevokerHolder bridges each plugin's own ConnectionRevoker interface
+// to the hub. hub is set once in RegisterRoutes before the server accepts
+// connections, so the field needs no mutex.
+type wsRevokerHolder struct {
+	hub *ws.Hub
+}
+
+func (h *wsRevokerHolder) RevokeAPIKeyClients(campaignID string) {
+	if h.hub != nil {
+		h.hub.RevokeAPIKeyClients(campaignID)
+	}
+}
+
+func (h *wsRevokerHolder) RevokeUser(campaignID, userID string) {
+	if h.hub != nil {
+		h.hub.RevokeUser(campaignID, userID)
+	}
+}
+
+func (h *wsRevokerHolder) RevokeUserEverywhere(userID string) {
+	if h.hub != nil {
+		h.hub.RevokeUserEverywhere(userID)
+	}
+}
+
+func (h *wsRevokerHolder) RevokeCampaign(campaignID string) {
+	if h.hub != nil {
+		h.hub.RevokeCampaign(campaignID)
+	}
+}
+
 // mapEventPublisherAdapter bridges the websocket.EventBus to the maps.MapEventPublisher
 // interface, translating domain events into WebSocket messages.
 type mapEventPublisherAdapter struct {
@@ -1576,6 +1607,10 @@ func (a *App) RegisterRoutes() {
 	e.GET("/healthz", healthHandler)
 	e.GET("/health", healthHandler)
 
+	// wsRevoker is wired into syncapi, addons and campaigns below, well
+	// before wsHub is constructed further down — see wsRevokerHolder.
+	wsRevoker := &wsRevokerHolder{}
+
 	// --- Plugin Routes ---
 
 	// Auth plugin: login, register, logout (public routes).
@@ -1662,6 +1697,10 @@ func (a *App) RegisterRoutes() {
 	userFinder := campaigns.NewUserFinderAdapter(authRepo)
 	campaignRepo := campaigns.NewCampaignRepository(a.DB)
 	campaignService := campaigns.NewCampaignService(campaignRepo, userFinder, smtpService, entityService, a.Config.BaseURL)
+	// Drops a user's live sockets when their co-DM grant is pulled, so a
+	// stale IsDmGranted resolved at connect time can't outlive the grant.
+	// See wsRevokerHolder — wsHub itself is constructed further down.
+	campaignService.SetConnectionRevoker(wsRevoker)
 
 	// One-time, idempotent boot reconciler: convert any campaign still on the
 	// legacy sidebar model onto the unified items model. Runs synchronously
@@ -1933,6 +1972,10 @@ func (a *App) RegisterRoutes() {
 	// Addons plugin: extension framework with per-campaign enable/disable toggles.
 	addonRepo := addons.NewAddonRepository(a.DB)
 	addonService := addons.NewAddonService(addonRepo)
+	// Drops live Foundry sockets when the Sync API addon is switched off
+	// for a campaign, so a socket that authenticated while it was on can't
+	// keep receiving after it's off. See wsRevokerHolder.
+	addonService.SetConnectionRevoker(wsRevoker)
 	// Auto-register discovered game systems as addons so new systems
 	// (from internal/systems/, package manager, or GitHub) appear in the
 	// addon UI without hardcoded definitions.
@@ -2189,6 +2232,10 @@ func (a *App) RegisterRoutes() {
 	securityRepo := admin.NewSecurityEventRepository(a.DB)
 	securityService := admin.NewSecurityService(securityRepo, authRepo, authService)
 	adminHandler.SetSecurityService(securityService)
+	// Drops a disabled account's live sockets in every campaign, so a
+	// socket that authenticated before the disable can't keep receiving.
+	// See wsRevokerHolder — wsHub itself is constructed further down.
+	securityService.SetConnectionRevoker(wsRevoker)
 
 	// Data hygiene scanner: orphan detection and cleanup for media, API keys, stale files.
 	hygieneScanner := admin.NewHygieneService(a.DB, mediaRepo, mediaService, a.Config.Upload.MediaPath, securityRepo)
@@ -2309,6 +2356,10 @@ func (a *App) RegisterRoutes() {
 	// WS path fails CLOSED if this line is ever dropped, same direction as
 	// the addon gate above.
 	syncService.SetMemberChecker(campaignService)
+	// Drops live Foundry sockets when a key is revoked, so a socket that
+	// authenticated with it can't keep receiving until it happens to
+	// reconnect on its own. See wsRevokerHolder.
+	syncService.SetConnectionRevoker(wsRevoker)
 	// One-time, idempotent startup backfill: enable sync-api for campaigns
 	// that already own API keys but have no recorded toggle state, so
 	// enforcing the toggle cannot cut off an integration that was working.
@@ -3545,6 +3596,11 @@ func (a *App) RegisterRoutes() {
 	// Real-time bidirectional sync for Foundry VTT and browser clients.
 	wsHub := ws.NewHub()
 	go wsHub.Run()
+
+	// Late-bind now that wsHub exists — see wsRevokerHolder above. From
+	// here on, every wired revoke path force-disconnects the sockets it
+	// affects instead of being a no-op.
+	wsRevoker.hub = wsHub
 
 	// Wire the WS hub's presence lookup into foundry_vtt. fvttHandler owns
 	// both GET /campaigns/:id/foundry-presence (live diagnostic JSON) and

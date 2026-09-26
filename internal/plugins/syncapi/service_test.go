@@ -604,6 +604,7 @@ func TestAuthenticateKey_SharedByRESTAndWS(t *testing.T) {
 	if err != nil {
 		t.Fatalf("bcrypt hash failed: %v", err)
 	}
+	expiry := time.Now().Add(24 * time.Hour).Truncate(time.Second)
 	storedKey := &APIKey{
 		ID:         42,
 		KeyHash:    string(hash),
@@ -611,6 +612,7 @@ func TestAuthenticateKey_SharedByRESTAndWS(t *testing.T) {
 		CampaignID: "camp-abc",
 		UserID:     "user-xyz",
 		IsActive:   true,
+		ExpiresAt:  &expiry,
 	}
 	var lookedUpFor []string
 	repo := &mockSyncAPIRepo{
@@ -648,8 +650,8 @@ func TestAuthenticateKey_SharedByRESTAndWS(t *testing.T) {
 		t.Fatalf("REST AuthenticateKey: got key %+v, want ID %d", restKey, storedKey.ID)
 	}
 
-	// WS path: service.AuthenticateKeyForWS(rawKey) → (campaignID, userID, role, err)
-	wsCampaign, wsUser, wsRole, wsErr := svc.AuthenticateKeyForWS(ctx, rawKey)
+	// WS path: service.AuthenticateKeyForWS(rawKey) → (campaignID, userID, role, expiresAt, err)
+	wsCampaign, wsUser, wsRole, wsExpiresAt, wsErr := svc.AuthenticateKeyForWS(ctx, rawKey)
 	if wsErr != nil {
 		t.Fatalf("WS AuthenticateKeyForWS returned error: %v", wsErr)
 	}
@@ -661,6 +663,10 @@ func TestAuthenticateKey_SharedByRESTAndWS(t *testing.T) {
 	}
 	if wsRole == 0 {
 		t.Errorf("WS role = 0, want owner-level (nonzero)")
+	}
+	if wsExpiresAt == nil || !wsExpiresAt.Equal(expiry) {
+		t.Errorf("WS expiresAt = %v, want %v — the WS path must carry the key's expiry so a "+
+			"socket can be cut off once it passes", wsExpiresAt, expiry)
 	}
 
 	// Structural assertion: both paths performed the same prefix lookup.
@@ -729,6 +735,110 @@ func TestRevokeKey(t *testing.T) {
 	}
 	if deletedID != 42 {
 		t.Errorf("expected ID 42, got %d", deletedID)
+	}
+}
+
+// mockConnectionRevoker records RevokeAPIKeyClients calls for assertions.
+type mockConnectionRevoker struct {
+	revokedCampaigns []string
+}
+
+func (m *mockConnectionRevoker) RevokeAPIKeyClients(campaignID string) {
+	m.revokedCampaigns = append(m.revokedCampaigns, campaignID)
+}
+
+// TestRevokeKey_DropsLiveConnections pins that deleting a key must
+// force-disconnect any already-open Foundry socket that authenticated with
+// it, not just remove the row a future connect would check.
+func TestRevokeKey_DropsLiveConnections(t *testing.T) {
+	repo := &mockSyncAPIRepo{
+		findKeyByIDFn: func(ctx context.Context, id int) (*APIKey, error) {
+			return &APIKey{ID: id, CampaignID: "camp-1"}, nil
+		},
+	}
+	revoker := &mockConnectionRevoker{}
+
+	svc := NewSyncAPIService(repo)
+	svc.SetConnectionRevoker(revoker)
+
+	if err := svc.RevokeKey(context.Background(), 42); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if len(revoker.revokedCampaigns) != 1 || revoker.revokedCampaigns[0] != "camp-1" {
+		t.Errorf("revokedCampaigns = %v, want [camp-1] — revoking a key must drop its "+
+			"campaign's live Foundry sockets, not just delete the row", revoker.revokedCampaigns)
+	}
+}
+
+// TestDeactivateKey_DropsLiveConnections pins that pausing a key drops its
+// campaign's live Foundry sockets, exactly as RevokeKey does.
+func TestDeactivateKey_DropsLiveConnections(t *testing.T) {
+	repo := &mockSyncAPIRepo{
+		findKeyByIDFn: func(ctx context.Context, id int) (*APIKey, error) {
+			return &APIKey{ID: id, CampaignID: "camp-1"}, nil
+		},
+	}
+	revoker := &mockConnectionRevoker{}
+
+	svc := NewSyncAPIService(repo)
+	svc.SetConnectionRevoker(revoker)
+
+	if err := svc.DeactivateKey(context.Background(), 42); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if len(revoker.revokedCampaigns) != 1 || revoker.revokedCampaigns[0] != "camp-1" {
+		t.Errorf("revokedCampaigns = %v, want [camp-1] — deactivating a key must drop its "+
+			"campaign's live Foundry sockets, not just flip the toggle", revoker.revokedCampaigns)
+	}
+}
+
+// TestDeactivateKey_UnwiredRevokerStillDeactivates matches RevokeKey's
+// fail-open convention: a nil revoker (not yet wired at boot) must not
+// block the deactivate itself.
+func TestDeactivateKey_UnwiredRevokerStillDeactivates(t *testing.T) {
+	var capturedActive bool
+	capturedActive = true
+	repo := &mockSyncAPIRepo{
+		findKeyByIDFn: func(ctx context.Context, id int) (*APIKey, error) {
+			return &APIKey{ID: id, CampaignID: "camp-1"}, nil
+		},
+		updateKeyActiveFn: func(ctx context.Context, id int, active bool) error {
+			capturedActive = active
+			return nil
+		},
+	}
+
+	svc := NewSyncAPIService(repo)
+	if err := svc.DeactivateKey(context.Background(), 7); err != nil {
+		t.Fatalf("unexpected error with no connection revoker wired: %v", err)
+	}
+	if capturedActive {
+		t.Error("expected active=false even with no revoker wired")
+	}
+}
+
+// TestRevokeKey_UnwiredRevokerStillDeletes matches the fail-open convention:
+// a nil (not-yet-wired) revoker must not block the delete itself.
+func TestRevokeKey_UnwiredRevokerStillDeletes(t *testing.T) {
+	var deletedID int
+	repo := &mockSyncAPIRepo{
+		findKeyByIDFn: func(ctx context.Context, id int) (*APIKey, error) {
+			return &APIKey{ID: id, CampaignID: "camp-1"}, nil
+		},
+		deleteKeyFn: func(ctx context.Context, id int) error {
+			deletedID = id
+			return nil
+		},
+	}
+
+	svc := NewSyncAPIService(repo)
+	if err := svc.RevokeKey(context.Background(), 7); err != nil {
+		t.Fatalf("unexpected error with no connection revoker wired: %v", err)
+	}
+	if deletedID != 7 {
+		t.Errorf("expected key 7 to be deleted even with no revoker wired, got %d", deletedID)
 	}
 }
 

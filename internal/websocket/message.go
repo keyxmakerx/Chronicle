@@ -92,57 +92,6 @@ const (
 	MsgSyncConflict MessageType = "sync.conflict"
 )
 
-// validMessageTypes is the set of known message types, used for validation.
-var validMessageTypes = map[MessageType]struct{}{
-	MsgEntityCreated:            {},
-	MsgEntityUpdated:            {},
-	MsgEntityDeleted:            {},
-	MsgMapUpdated:               {},
-	MsgDrawingCreated:           {},
-	MsgDrawingUpdated:           {},
-	MsgDrawingDeleted:           {},
-	MsgTokenCreated:             {},
-	MsgTokenMoved:               {},
-	MsgTokenUpdated:             {},
-	MsgTokenDeleted:             {},
-	MsgMarkerCreated:            {},
-	MsgMarkerUpdated:            {},
-	MsgMarkerDeleted:            {},
-	MsgFogCreated:               {},
-	MsgFogUpdated:               {},
-	MsgFogDeleted:               {},
-	MsgLayerCreated:             {},
-	MsgLayerUpdated:             {},
-	MsgLayerDeleted:             {},
-	MsgCalendarEventCreated:     {},
-	MsgCalendarEventUpdated:     {},
-	MsgCalendarEventDeleted:     {},
-	MsgCalendarDateAdvanced:     {},
-	MsgCalendarSeasonChanged:    {},
-	MsgCalendarMoonPhaseChanged: {},
-	MsgCalendarWeatherChanged:   {},
-	MsgCalendarStructureUpdated: {},
-	MsgCalendarEraChanged:       {},
-	MsgEntityTypeCreated:        {},
-	MsgEntityTypeUpdated:        {},
-	MsgEntityTypeDeleted:        {},
-	MsgNoteCreated:              {},
-	MsgNoteUpdated:              {},
-	MsgNoteDeleted:              {},
-	MsgEntityNoteCreated:        {},
-	MsgEntityNoteUpdated:        {},
-	MsgEntityNoteDeleted:        {},
-	MsgSyncStatus:               {},
-	MsgSyncError:                {},
-	MsgSyncConflict:             {},
-}
-
-// IsValidMessageType reports whether the given message type is known.
-func IsValidMessageType(t MessageType) bool {
-	_, ok := validMessageTypes[t]
-	return ok
-}
-
 // Message is the envelope for all WebSocket communication.
 // Clients and servers exchange these JSON messages over the WS connection.
 type Message struct {
@@ -180,15 +129,6 @@ type Message struct {
 // Encode serializes a Message to JSON bytes.
 func (m *Message) Encode() ([]byte, error) {
 	return json.Marshal(m)
-}
-
-// DecodeMessage parses a JSON byte slice into a Message.
-func DecodeMessage(data []byte) (*Message, error) {
-	var msg Message
-	if err := json.Unmarshal(data, &msg); err != nil {
-		return nil, err
-	}
-	return &msg, nil
 }
 
 // NewMessage creates a Message with the given type, campaign, and payload.

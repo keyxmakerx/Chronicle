@@ -323,7 +323,7 @@ func TestSyncAPIAddon_WebSocketRefusedWhenDisabled(t *testing.T) {
 	gate.enabled["camp-ws"] = false
 	svc, rawKey := wsGateService(t, gate, wsOwnerMember)
 
-	_, _, _, err := svc.AuthenticateKeyForWS(context.Background(), rawKey)
+	_, _, _, _, err := svc.AuthenticateKeyForWS(context.Background(), rawKey)
 	if err == nil {
 		t.Fatal("AuthenticateKeyForWS accepted a key for a campaign with the Sync API addon disabled")
 	}
@@ -340,7 +340,7 @@ func TestSyncAPIAddon_WebSocketAllowedWhenEnabled(t *testing.T) {
 	gate.enabled["camp-ws"] = true
 	svc, rawKey := wsGateService(t, gate, wsOwnerMember)
 
-	campaignID, userID, role, err := svc.AuthenticateKeyForWS(context.Background(), rawKey)
+	campaignID, userID, role, _, err := svc.AuthenticateKeyForWS(context.Background(), rawKey)
 	if err != nil {
 		t.Fatalf("AuthenticateKeyForWS with addon enabled: %v", err)
 	}
@@ -354,7 +354,7 @@ func TestSyncAPIAddon_WebSocketAllowedWhenEnabled(t *testing.T) {
 func TestSyncAPIAddon_WebSocketRefusedWhenGateUnwired(t *testing.T) {
 	svc, rawKey := wsGateService(t, nil, wsOwnerMember)
 
-	if _, _, _, err := svc.AuthenticateKeyForWS(context.Background(), rawKey); err == nil {
+	if _, _, _, _, err := svc.AuthenticateKeyForWS(context.Background(), rawKey); err == nil {
 		t.Fatal("AuthenticateKeyForWS accepted a key with no addon gate wired")
 	}
 }

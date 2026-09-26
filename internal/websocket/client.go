@@ -17,15 +17,16 @@ const (
 	// pongWait is the time allowed to read the next pong from the peer.
 	pongWait = 60 * time.Second
 
-	// pingPeriod sends pings at this interval. Must be less than pongWait.
-	pingPeriod = 30 * time.Second
-
 	// maxMessageSize is the maximum size of an incoming message (64KB).
 	maxMessageSize = 64 * 1024
 
 	// sendBufferSize is the channel buffer for outgoing messages.
 	sendBufferSize = 256
 )
+
+// pingPeriod is the default ping interval (must stay under pongWait). It
+// also sets how often writePump rechecks a client's expiry.
+const pingPeriod = 30 * time.Second
 
 // Client represents a single WebSocket connection to the hub.
 // Each client belongs to one campaign and has an optional user/API key identity.
@@ -54,6 +55,11 @@ type Client struct {
 	// check; revoking a grant requires the user to reconnect.
 	IsDmGranted bool
 
+	// ExpiresAt is the API key's expiry, if any (nil for a session or an
+	// unexpiring key). Rechecked after connect so an expiry crossed
+	// mid-connection still cuts the socket off.
+	ExpiresAt *time.Time
+
 	hub  *Hub
 	conn *gorillaWs.Conn
 	send chan []byte
@@ -61,8 +67,9 @@ type Client struct {
 	once sync.Once
 }
 
-// readPump reads messages from the WebSocket connection and forwards them
-// to the hub for broadcast. It runs in its own goroutine per client.
+// readPump reads WebSocket frames to keep pongs, close frames and read
+// deadlines working. It never forwards a client's message: only the
+// server broadcasts.
 func (c *Client) readPump() {
 	defer func() {
 		c.hub.unregister <- c
@@ -84,7 +91,7 @@ func (c *Client) readPump() {
 	})
 
 	for {
-		_, data, err := c.conn.ReadMessage()
+		_, _, err := c.conn.ReadMessage()
 		if err != nil {
 			if gorillaWs.IsUnexpectedCloseError(err,
 				gorillaWs.CloseGoingAway,
@@ -98,36 +105,16 @@ func (c *Client) readPump() {
 			return
 		}
 
-		msg, err := DecodeMessage(data)
-		if err != nil {
-			slog.Warn("ws: invalid message",
-				slog.String("client", c.ID),
-				slog.Any("error", err),
-			)
-			continue
-		}
-
-		// Reject unknown message types to prevent garbage from propagating.
-		if !IsValidMessageType(msg.Type) {
-			slog.Warn("ws: unknown message type",
-				slog.String("client", c.ID),
-				slog.String("type", string(msg.Type)),
-			)
-			continue
-		}
-
-		// Enforce campaign scope: clients can only send messages for their campaign.
-		msg.CampaignID = c.CampaignID
-		msg.SenderID = c.ID
-
-		c.hub.broadcast <- msg
+		// Every frame is discarded — see the doc comment above. Debug only,
+		// so a chatty or misbehaving client can't fill logs at a louder level.
+		slog.Debug("ws: dropped client-sent message", slog.String("client", c.ID))
 	}
 }
 
 // writePump sends messages from the hub to the WebSocket connection.
 // It runs in its own goroutine per client.
 func (c *Client) writePump() {
-	ticker := time.NewTicker(pingPeriod)
+	ticker := time.NewTicker(c.hub.pingEvery)
 	defer func() {
 		ticker.Stop()
 		c.close()
@@ -149,6 +136,12 @@ func (c *Client) writePump() {
 			}
 
 		case <-ticker.C:
+			// Reuses the ping cadence to recheck expiry, rather than a
+			// separate timer: an expired key closes here instead of
+			// getting pinged.
+			if c.ExpiresAt != nil && time.Now().After(*c.ExpiresAt) {
+				return
+			}
 			if err := c.conn.SetWriteDeadline(time.Now().Add(writeWait)); err != nil {
 				return
 			}

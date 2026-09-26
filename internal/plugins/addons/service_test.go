@@ -26,6 +26,7 @@ type mockAddonRepo struct {
 	isEnabledFn              func(ctx context.Context, campaignID string, addonSlug string) (bool, error)
 	hasCampaignAddonRecordFn func(ctx context.Context, campaignID string, addonSlug string) (bool, error)
 	updateCampaignCfgFn      func(ctx context.Context, campaignID string, addonID int, config map[string]any) error
+	listCampaignsUsingFn     func(ctx context.Context, addonSlug string) ([]string, error)
 }
 
 func (m *mockAddonRepo) Count(ctx context.Context) (int, error) {
@@ -129,6 +130,9 @@ func (m *mockAddonRepo) CountCampaignsUsingAddon(ctx context.Context, addonSlug 
 }
 
 func (m *mockAddonRepo) ListCampaignsUsingAddon(ctx context.Context, addonSlug string) ([]string, error) {
+	if m.listCampaignsUsingFn != nil {
+		return m.listCampaignsUsingFn(ctx, addonSlug)
+	}
 	return nil, nil
 }
 
@@ -551,6 +555,96 @@ func TestDelete_NotFound(t *testing.T) {
 	assertAppError(t, err, 404)
 }
 
+// TestDelete_SyncAPI_DropsLiveConnectionsForEveryEnabledCampaign pins that
+// deleting Sync API must drop every enabled campaign's live Foundry
+// sockets — the cascade otherwise switches it off with no reconnect forced.
+func TestDelete_SyncAPI_DropsLiveConnectionsForEveryEnabledCampaign(t *testing.T) {
+	repo := &mockAddonRepo{
+		findByIDFn: func(ctx context.Context, id int) (*Addon, error) {
+			return &Addon{ID: id, Slug: "sync-api"}, nil
+		},
+		listCampaignsUsingFn: func(ctx context.Context, addonSlug string) ([]string, error) {
+			return []string{"camp-1", "camp-2"}, nil
+		},
+		deleteFn: func(ctx context.Context, id int) error { return nil },
+	}
+	revoker := &mockConnRevoker{}
+
+	svc := NewAddonService(repo)
+	svc.SetConnectionRevoker(revoker)
+
+	if err := svc.Delete(context.Background(), 5); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if len(revoker.revokedCampaigns) != 2 {
+		t.Fatalf("revokedCampaigns = %v, want 2 entries — deleting sync-api must drop every "+
+			"enabled campaign's live Foundry sockets", revoker.revokedCampaigns)
+	}
+	want := map[string]bool{"camp-1": true, "camp-2": true}
+	for _, id := range revoker.revokedCampaigns {
+		if !want[id] {
+			t.Errorf("revoked unexpected campaign %q", id)
+		}
+		delete(want, id)
+	}
+	if len(want) != 0 {
+		t.Errorf("campaigns never revoked: %v", want)
+	}
+}
+
+// TestDelete_OtherAddon_DoesNotRevoke keeps the fix scoped: deleting any
+// addon other than Sync API must not touch live Foundry connections.
+func TestDelete_OtherAddon_DoesNotRevoke(t *testing.T) {
+	repo := &mockAddonRepo{
+		findByIDFn: func(ctx context.Context, id int) (*Addon, error) {
+			return &Addon{ID: id, Slug: "dice-roller"}, nil
+		},
+		listCampaignsUsingFn: func(ctx context.Context, addonSlug string) ([]string, error) {
+			t.Fatalf("ListCampaignsUsingAddon called for a non-sync-api addon")
+			return nil, nil
+		},
+		deleteFn: func(ctx context.Context, id int) error { return nil },
+	}
+	revoker := &mockConnRevoker{}
+
+	svc := NewAddonService(repo)
+	svc.SetConnectionRevoker(revoker)
+
+	if err := svc.Delete(context.Background(), 5); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(revoker.revokedCampaigns) != 0 {
+		t.Errorf("revokedCampaigns = %v, want none", revoker.revokedCampaigns)
+	}
+}
+
+// TestDelete_UnwiredRevokerStillDeletes matches the fail-open convention:
+// a nil revoker (not yet wired at boot) must not block the delete.
+func TestDelete_UnwiredRevokerStillDeletes(t *testing.T) {
+	deleted := false
+	repo := &mockAddonRepo{
+		findByIDFn: func(ctx context.Context, id int) (*Addon, error) {
+			return &Addon{ID: id, Slug: "sync-api"}, nil
+		},
+		listCampaignsUsingFn: func(ctx context.Context, addonSlug string) ([]string, error) {
+			return []string{"camp-1"}, nil
+		},
+		deleteFn: func(ctx context.Context, id int) error {
+			deleted = true
+			return nil
+		},
+	}
+
+	svc := NewAddonService(repo)
+	if err := svc.Delete(context.Background(), 5); err != nil {
+		t.Fatalf("unexpected error with no connection revoker wired: %v", err)
+	}
+	if !deleted {
+		t.Error("addon was not deleted even though the revoker was never wired")
+	}
+}
+
 // --- EnableForCampaign Tests ---
 
 func TestEnableForCampaign_Success(t *testing.T) {
@@ -646,6 +740,62 @@ func TestDisableForCampaign_Success(t *testing.T) {
 	}
 	if !called {
 		t.Error("expected repo.DisableForCampaign to be called")
+	}
+}
+
+// mockConnRevoker records RevokeAPIKeyClients calls for assertions.
+type mockConnRevoker struct {
+	revokedCampaigns []string
+}
+
+func (m *mockConnRevoker) RevokeAPIKeyClients(campaignID string) {
+	m.revokedCampaigns = append(m.revokedCampaigns, campaignID)
+}
+
+// TestDisableForCampaign_SyncAPI_DropsLiveConnections pins that switching
+// the Sync API addon off must drop any already-open Foundry socket for the
+// campaign, not just flip the toggle a future connect would check.
+func TestDisableForCampaign_SyncAPI_DropsLiveConnections(t *testing.T) {
+	repo := &mockAddonRepo{
+		disableForCampaignFn: func(ctx context.Context, campaignID string, addonID int) error { return nil },
+		findByIDFn: func(ctx context.Context, id int) (*Addon, error) {
+			return &Addon{ID: id, Slug: "sync-api"}, nil
+		},
+	}
+	revoker := &mockConnRevoker{}
+
+	svc := NewAddonService(repo)
+	svc.SetConnectionRevoker(revoker)
+
+	if err := svc.DisableForCampaign(context.Background(), "camp-1", 5); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(revoker.revokedCampaigns) != 1 || revoker.revokedCampaigns[0] != "camp-1" {
+		t.Errorf("revokedCampaigns = %v, want [camp-1] — disabling sync-api must drop the "+
+			"campaign's live Foundry sockets", revoker.revokedCampaigns)
+	}
+}
+
+// TestDisableForCampaign_OtherAddon_DoesNotRevoke keeps the fix scoped:
+// disabling any other addon (e.g. a game system) must not touch live
+// Foundry connections that have nothing to do with the Sync API.
+func TestDisableForCampaign_OtherAddon_DoesNotRevoke(t *testing.T) {
+	repo := &mockAddonRepo{
+		disableForCampaignFn: func(ctx context.Context, campaignID string, addonID int) error { return nil },
+		findByIDFn: func(ctx context.Context, id int) (*Addon, error) {
+			return &Addon{ID: id, Slug: "dice-roller"}, nil
+		},
+	}
+	revoker := &mockConnRevoker{}
+
+	svc := NewAddonService(repo)
+	svc.SetConnectionRevoker(revoker)
+
+	if err := svc.DisableForCampaign(context.Background(), "camp-1", 9); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(revoker.revokedCampaigns) != 0 {
+		t.Errorf("revokedCampaigns = %v, want none — only disabling sync-api should revoke", revoker.revokedCampaigns)
 	}
 }
 
