@@ -1,0 +1,226 @@
+// calendars_list.templ renders the campaign calendars list: header, card
+// grid, empty state, and the (initially empty) preview/wizard dialog mount
+// points. Ported from the signed mockup's dashboard section — see
+// static/css/calendar_v5.css's own doc comment for what's scoped out.
+package calendar
+
+import (
+	"encoding/json"
+	"fmt"
+
+	"github.com/keyxmakerx/chronicle/internal/templates/layouts"
+)
+
+// CalendarsListPage is the full page (direct navigation / hx-boosted nav).
+templ CalendarsListPage(data CalendarsListData) {
+	@layouts.App("Calendars") {
+		@CalendarsListFragment(data)
+	}
+}
+
+// CalendarsListFragment is the HTMX-fragment body, also embedded by the full
+// page above — see internal/plugins/campaigns/handler.go:283-286 for the
+// IsHTMX-branch convention this mirrors.
+templ CalendarsListFragment(data CalendarsListData) {
+	<link rel="stylesheet" href={ layouts.AssetURL("/static/css/calendar_v5.css") }/>
+	<div
+		class="calv5"
+		x-data="{}"
+		data-created-name={ data.JustCreated }
+		data-created-id={ data.NewCalendarID }
+		x-init={ calv5CreatedInit }
+	>
+		<div class="calv5-wrap">
+			<div class="calv5-dhead">
+				<p class="kicker">{ fmt.Sprintf("Campaign · %s", data.CampaignName) }</p>
+				<h1 class="calv5-dtitle">Calendars</h1>
+				<p class="calv5-dsub">{ calendarsSubtitle(data.Calendars) }</p>
+				if data.IsOwner {
+					<div class="calv5-dacts">
+						<button
+							type="button"
+							class="btn"
+							hx-get={ fmt.Sprintf("/campaigns/%s/calendars/wizard/import", data.CampaignID) }
+							hx-target="#calv5-wizard-root"
+							hx-swap="outerHTML"
+							onclick="window.__calv5Opener=this"
+						>
+							<i class="fa-solid fa-file-import"></i> Import
+						</button>
+						<button
+							type="button"
+							class="btn primary"
+							hx-get={ fmt.Sprintf("/campaigns/%s/calendars/wizard", data.CampaignID) }
+							hx-target="#calv5-wizard-root"
+							hx-swap="outerHTML"
+							onclick="window.__calv5Opener=this"
+						>
+							<i class="fa-solid fa-plus"></i> New calendar
+						</button>
+					</div>
+				}
+			</div>
+			if len(data.Calendars) == 0 {
+				@calendarsEmptyState(data)
+			} else {
+				<div class="calv5-cards" id="calv5-cards">
+					for _, cal := range data.Calendars {
+						@calendarCard(data, cal)
+					}
+				</div>
+			}
+			<p class="caption" style="margin-top:20px;font-size:12px;color:var(--mut);text-align:center">
+				Each card is a calendar in this campaign. Open one to see today's date, tonight's moons and what's coming up, or manage it from its menu.
+			</p>
+		</div>
+		<div id="calv5-preview-root"></div>
+		<div id="calv5-wizard-root"></div>
+	</div>
+}
+
+// calendarsSubtitle summarizes the count + which calendar is the campaign's
+// main one, for the header's one-line subtitle.
+func calendarsSubtitle(cals []Calendar) string {
+	if len(cals) == 0 {
+		return "No calendars yet."
+	}
+	var mainName string
+	for _, c := range cals {
+		if c.IsDefault {
+			mainName = c.Name
+			break
+		}
+	}
+	if len(cals) == 1 {
+		if mainName != "" {
+			return fmt.Sprintf("1 calendar · %s is the main calendar", mainName)
+		}
+		return "1 calendar"
+	}
+	if mainName != "" {
+		return fmt.Sprintf("%d calendars · %s is the main calendar", len(cals), mainName)
+	}
+	return fmt.Sprintf("%d calendars · no main calendar set", len(cals))
+}
+
+// calendarsEmptyState renders when a campaign has no calendars yet.
+templ calendarsEmptyState(data CalendarsListData) {
+	<div class="calv5-empty">
+		<p style="font:500 15px var(--serif, serif);color:var(--ink);margin:0 0 4px">No calendars yet</p>
+		<p style="margin:0">
+			if data.IsOwner {
+				Start from a preset or import one from Simple Calendar, Calendaria or a Chronicle export.
+			} else {
+				The campaign owner hasn't set up a calendar yet.
+			}
+		</p>
+	</div>
+}
+
+// calendarCard renders one calendar's card: badge, main moon, name, world
+// date, visibility line, and (owner only) its menu.
+templ calendarCard(data CalendarsListData, cal Calendar) {
+	<div
+		class={ "calv5-ccard", templ.KV("enter", data.NewCalendarID == cal.ID) }
+		data-card-id={ cal.ID }
+	>
+		<div class="calv5-cc-badge">
+			if cal.IsDefault {
+				<span class="calv5-badge-main"><i class="fa-solid fa-star i"></i> Main calendar</span>
+			}
+		</div>
+		<div class="calv5-cc-moon">
+			if m := mainMoon(&cal); m != nil {
+				@MoonSilhouette(m.MoonPhase(cal.CurrentAbsoluteDay()))
+			} else {
+				<span class="calv5-blankmoon"><i class="fa-solid fa-moon i"></i></span>
+			}
+		</div>
+		<button
+			type="button"
+			class="calv5-cc-open"
+			hx-get={ fmt.Sprintf("/campaigns/%s/calendars/%s/preview", data.CampaignID, cal.ID) }
+			hx-target="#calv5-preview-root"
+			hx-swap="outerHTML"
+			onclick="window.__calv5Opener=this"
+		>
+			<span class="calv5-cc-name">{ cal.Name }</span>
+			<span class="calv5-cc-date">{ cal.FullDateLabel() }</span>
+		</button>
+		<div class="calv5-cc-foot">
+			<i class="fa-solid fa-eye i"></i>
+			<span>{ visibilityLabel(cal) }</span>
+		</div>
+		if data.IsOwner {
+			<div class="calv5-cc-menu" x-data="{open:false}" @click.outside="open=false">
+				<button type="button" class="x" aria-haspopup="true" aria-label="Calendar menu" @click="open=!open">
+					<i class="fa-solid fa-ellipsis-vertical i"></i>
+				</button>
+				<div class="calv5-pop" x-show="open" x-cloak role="menu">
+					<div class="calv5-list">
+						if !cal.IsDefault {
+							<button
+								type="button"
+								class="calv5-mi"
+								role="menuitem"
+								hx-put={ fmt.Sprintf("/campaigns/%s/calendars/%s/default", data.CampaignID, cal.ID) }
+								hx-headers={ csrfHeaderJSON(data.CSRFToken) }
+								hx-swap="none"
+								hx-on::after-request="if(event.detail.successful) window.location.reload()"
+							>
+								Set as the campaign's main calendar
+							</button>
+						}
+						<button
+							type="button"
+							class="calv5-mi danger"
+							role="menuitem"
+							disabled?={ cal.IsDefault }
+							title={ deleteDisabledTitle(cal) }
+							hx-delete={ fmt.Sprintf("/campaigns/%s/calendars/%s", data.CampaignID, cal.ID) }
+							hx-headers={ csrfHeaderJSON(data.CSRFToken) }
+							hx-confirm={ fmt.Sprintf("Delete %q? This cannot be undone.", cal.Name) }
+							hx-swap="none"
+							hx-on::after-request="if(event.detail.successful) window.location.reload()"
+						>
+							Delete
+						</button>
+					</div>
+				</div>
+			</div>
+		}
+	</div>
+}
+
+// deleteDisabledTitle explains a disabled Delete menu item, or "" when
+// deleting is allowed (an empty title attribute is harmless).
+func deleteDisabledTitle(cal Calendar) string {
+	if cal.IsDefault {
+		return "The main calendar can't be deleted — set another one as main first"
+	}
+	return ""
+}
+
+// csrfHeaderJSON builds the hx-headers value carrying the CSRF token, the
+// same shape internal/plugins/timeline/timeline.templ's own hx-headers use
+// — json.Marshal rather than a hand-written literal so the token is always
+// safely escaped into the attribute, regardless of what it contains.
+func csrfHeaderJSON(token string) string {
+	b, err := json.Marshal(map[string]string{"X-CSRF-Token": token})
+	if err != nil {
+		return "{}"
+	}
+	return string(b)
+}
+
+// calv5CreatedInit is the Alpine x-init expression that announces a
+// just-created calendar: a toast and a short CSS entrance animation on its
+// card, then it strips the wizard's query params from the URL. It reads the
+// name and id from the element's data-created-* attributes, so no value is
+// ever formatted into code. Alpine's x-init runs whenever this element
+// enters the DOM, including on an HTMX-swapped fragment, so this needs no
+// <script> tag (see CLAUDE.md's swap-safety rule).
+const calv5CreatedInit = `if($el.dataset.createdName){` +
+	`try{window.Chronicle&&Chronicle.notify($el.dataset.createdName+' created.','success')}catch(e){}; ` +
+	`try{var c=document.querySelector('[data-card-id="'+CSS.escape($el.dataset.createdId)+'"]');if(c)c.classList.add('enter')}catch(e){}; ` +
+	`try{var u=new URL(window.location.href);u.searchParams.delete('created');u.searchParams.delete('new');window.history.replaceState({},'',u)}catch(e){}}`

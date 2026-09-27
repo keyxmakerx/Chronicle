@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/keyxmakerx/chronicle/internal/patch"
+	"github.com/keyxmakerx/chronicle/internal/permissions"
 )
 
 // VisibilityRules defines per-user visibility overrides for calendar events.
@@ -22,18 +23,75 @@ type VisibilityRules struct {
 	DeniedUsers  []string `json:"denied_users,omitempty"`
 }
 
-// UpdateEventVisibilityInput is the validated input for updating event visibility.
+// ParseVisibilityRules parses raw JSON (Calendar.VisibilityRules or
+// Event.VisibilityRules) into a *VisibilityRules, or nil when unset. Shared
+// by both owners of a visibility_rules column so the parse can't drift
+// between them; Event additionally exposes it as a method (below) for
+// existing callers.
+func ParseVisibilityRules(raw *string) *VisibilityRules {
+	if raw == nil || *raw == "" {
+		return nil
+	}
+	var rules VisibilityRules
+	if err := json.Unmarshal([]byte(*raw), &rules); err != nil {
+		return nil
+	}
+	return &rules
+}
+
+// Allows reports whether userID may see an item carrying these rules — a
+// nil receiver (no rules stored) allows everyone. This is a VERBATIM MIRROR
+// of maps.VisibilityRules.Allows (internal/plugins/maps/model.go) and the
+// allow/deny half of timeline's canUserView: cross-plugin repo/model access
+// is forbidden (plugins reach each other only through service interfaces),
+// so the policy is replicated rather than imported.
+//
+// SECURITY-SENSITIVE: keep in lockstep with maps' and timeline's twins,
+// including the ADR-049 DeniesAnonymous check — a logged-out viewer can't be
+// proven not to be the specific player a deny list names, so a non-empty
+// DeniedUsers excludes them too, even though they match no literal entry.
+func (v *VisibilityRules) Allows(userID string) bool {
+	if v == nil {
+		return true
+	}
+	if permissions.DeniesAnonymous(v.DeniedUsers, userID) {
+		return false
+	}
+	for _, id := range v.DeniedUsers {
+		if id == userID {
+			return false
+		}
+	}
+	if len(v.AllowedUsers) == 0 {
+		return true
+	}
+	for _, id := range v.AllowedUsers {
+		if id == userID {
+			return true
+		}
+	}
+	return false
+}
+
+// UpdateEventVisibilityInput is the validated input for updating event
+// visibility. Visibility stays a plain string: this is a "set visibility"
+// action, not a general settings save, so the caller always states the new
+// visibility outright — there is no absent-preserves case for it (see
+// governedFieldExceptions in internal/patch/partial_update_contract_test.go).
+// VisibilityRules is patch.Field so a visibility-only call (flip
+// everyone/dm_only) can leave an existing per-user rules blob untouched:
+// absent preserves it, explicit null clears it, a value replaces it.
 type UpdateEventVisibilityInput struct {
-	Visibility      string  `json:"visibility"`
-	VisibilityRules *string `json:"visibility_rules"`
+	Visibility      string
+	VisibilityRules patch.Field[string]
 }
 
 // UpdateCalendarVisibilityInput is the validated input for updating a
 // calendar's per-calendar visibility. Same shape as the event one — the
 // calendar reuses the event visibility model + resolver.
 type UpdateCalendarVisibilityInput struct {
-	Visibility      string  `json:"visibility"`
-	VisibilityRules *string `json:"visibility_rules"`
+	Visibility      string
+	VisibilityRules patch.Field[string]
 }
 
 // CalendarEventDate is a lightweight (calendar, date, name) tuple from the
@@ -64,27 +122,40 @@ const (
 
 // Calendar is the top-level calendar definition for a campaign.
 type Calendar struct {
-	ID             string  `json:"id"`
-	CampaignID     string  `json:"campaign_id"`
-	Mode           string  `json:"mode"` // "fantasy" or "reallife"
-	Name           string  `json:"name"`
-	Description    *string `json:"description,omitempty"`
-	EpochName      *string `json:"epoch_name,omitempty"`
-	CurrentYear    int     `json:"current_year"`
-	CurrentMonth   int     `json:"current_month"`
-	CurrentDay     int     `json:"current_day"`
-	HoursPerDay      int `json:"hours_per_day"`
-	MinutesPerHour   int `json:"minutes_per_hour"`
-	SecondsPerMinute int `json:"seconds_per_minute"`
-	CurrentHour    int     `json:"current_hour"`
-	CurrentMinute  int     `json:"current_minute"`
-	LeapYearEvery  int     `json:"leap_year_every"`
-	LeapYearOffset int     `json:"leap_year_offset"`
-	SortOrder      int     `json:"sort_order"`
-	IsDefault      bool    `json:"is_default"`
-	// Persisted live mood-tint wash. Both nil = no mood set.
-	MoodTintColor     *string  `json:"mood_tint_color,omitempty"`
-	MoodTintIntensity *float64 `json:"mood_tint_intensity,omitempty"`
+	ID               string  `json:"id"`
+	CampaignID       string  `json:"campaign_id"`
+	Mode             string  `json:"mode"` // "fantasy" or "reallife"
+	Name             string  `json:"name"`
+	Description      *string `json:"description,omitempty"`
+	EpochName        *string `json:"epoch_name,omitempty"`
+	CurrentYear      int     `json:"current_year"`
+	CurrentMonth     int     `json:"current_month"`
+	CurrentDay       int     `json:"current_day"`
+	HoursPerDay      int     `json:"hours_per_day"`
+	MinutesPerHour   int     `json:"minutes_per_hour"`
+	SecondsPerMinute int     `json:"seconds_per_minute"`
+	CurrentHour      int     `json:"current_hour"`
+	CurrentMinute    int     `json:"current_minute"`
+	LeapYearEvery    int     `json:"leap_year_every"`
+	LeapYearOffset   int     `json:"leap_year_offset"`
+	SortOrder        int     `json:"sort_order"`
+	IsDefault        bool    `json:"is_default"`
+	// Hemisphere flips how a real-world calendar's seasons read (winter in
+	// the north is summer in the south); nil means unset (every fantasy
+	// calendar, and a real-world one whose owner hasn't chosen yet).
+	Hemisphere *string `json:"hemisphere,omitempty"`
+	// ForecastsEnabled gates the one exception to "players never learn a
+	// future day's weather before it happens": off by default, and even on,
+	// a forecast only ever describes days ahead of the current one.
+	ForecastsEnabled bool `json:"forecasts_enabled"`
+	// MonthStartsNewWeek makes day 1 of every month the first weekday, with
+	// intercalary festival days belonging to no week, so a festival never
+	// shifts the weekdays that follow it (a Harptos-style calendar: ten-day
+	// "tendays" that reset every month, with 1-day festivals between months
+	// belonging to no week at all). WeekdayIndex is the single reader of this
+	// switch — every weekday placement (recurrence display, a future grid
+	// column) goes through it, so the two can never disagree.
+	MonthStartsNewWeek bool `json:"month_starts_new_week"`
 	// Per-calendar visibility, mirroring the event model: Visibility is
 	// "everyone" | "dm_only"; VisibilityRules is the optional
 	// {allowed_users,denied_users} JSON allow/deny override. Resolved by
@@ -100,7 +171,6 @@ type Calendar struct {
 	RealTimeZone   *string `json:"-"`
 	// The real-date anchor: one in-world date and the Gregorian date it
 	// equals, from which every other day follows by AbsoluteDay arithmetic.
-	// See real_date_anchor.go.
 	//
 	// All four or none — a partial anchor maps nothing, so HasRealAnchor()
 	// requires the set and the service refuses to write a subset.
@@ -116,14 +186,16 @@ type Calendar struct {
 	UpdatedAt      time.Time  `json:"updated_at"`
 
 	// Eager-loaded sub-resources (populated by service, not by every query).
-	Months          []Month         `json:"months,omitempty"`
-	Weekdays        []Weekday       `json:"weekdays,omitempty"`
-	Moons           []Moon          `json:"moons,omitempty"`
-	Seasons         []Season        `json:"seasons,omitempty"`
-	Eras            []Era           `json:"eras,omitempty"`
-	EventCategories []EventCategory `json:"event_categories,omitempty"`
-	Cycles          []Cycle         `json:"cycles,omitempty"`
-	Festivals       []Festival      `json:"festivals,omitempty"`
+	Months   []Month   `json:"months,omitempty"`
+	Weekdays []Weekday `json:"weekdays,omitempty"`
+	Moons    []Moon    `json:"moons,omitempty"`
+	Seasons  []Season  `json:"seasons,omitempty"`
+	Eras     []Era     `json:"eras,omitempty"`
+	// EventKinds is the campaign's shared kind list (see EventKind), not this
+	// calendar's own — every calendar in a campaign sees the same kinds.
+	EventKinds []EventKind `json:"event_kinds,omitempty"`
+	Cycles     []Cycle     `json:"cycles,omitempty"`
+	Festivals  []Festival  `json:"festivals,omitempty"`
 	// Weather is nil when no row exists in calendar_weather for this
 	// calendar, so the settings page can render current state without a
 	// second handler-side fetch.
@@ -205,7 +277,9 @@ func (c *Calendar) MonthDays(monthIdx int, year int) int {
 	if c.IsLeapYear(year) {
 		days += c.Months[monthIdx].LeapYearDays
 	}
-	return days
+	// Every consumer reads a month's length from here, so bounding it here
+	// keeps any per-day loop finite whatever a stored row holds.
+	return min(days, maxCalendarMonthDays)
 }
 
 // WeekLength returns the number of days in a week (number of weekdays).
@@ -257,43 +331,100 @@ func IsSupportedRecurrenceType(t string) bool {
 }
 
 // absDayIndex returns a calendar-absolute day number for (year, month, day).
-// It is the single place the day-counter choice is made; both recurrence
-// expansion (OccursOn) and the display weekday column consume it, so a weekly
-// event and the grid column it renders on can never disagree. month is
-// 1-based.
+// It is the single place the day-counter choice is made; recurrence expansion
+// (OccursOn) and WeekdayIndex's continuous-week branch both consume it, so a
+// weekly event and the weekday column it renders on can never disagree.
+// month is 1-based.
 //
 // Real-time (Gregorian) calendars use the proleptic-Gregorian Julian Day
-// Number, a true day counter that advances by exactly one across a leap day,
-// instead of the constant-length sum (year*YearLength()), which misses a day
-// per elapsed Gregorian leap year and would collapse Feb 29 and Mar 1 onto the
-// same index. Only flagged real-time calendars take this branch; fantasy and
-// reallife-but-manual calendars keep the constant-length geometry unchanged.
+// Number, a true day counter that advances by exactly one across a leap day.
+// A positive year delegates to AbsoluteDay, the same leap-aware closed-form
+// counter moon-phase math already uses — this used to be a separate,
+// leap-naive constant-length sum (year*YearLength()) that diverged from
+// AbsoluteDay by one day per elapsed leap year for positive years;
+// reconciled so recurrence, weekday placement and moon phase can never drift
+// apart there.
+//
+// year <= 0 stays on the old linear formula: AbsoluteDay's leap term is
+// defined only for year > 0 (its own doc comment — "a negative or zero year
+// contributes nothing"), so delegating unconditionally would collapse every
+// non-positive year onto the same index (AbsoluteDay(-5,1,1) ==
+// AbsoluteDay(0,1,1)), breaking recurrence and weekday placement for any
+// calendar that permits year 0 or negative years. linearDayIndex stays
+// leap-unaware but strictly monotonic across zero and negative years, which
+// is what those two consumers actually need.
 func (c *Calendar) absDayIndex(year, month, day int) int {
 	if c.UsesRealTime() {
 		return gregorianJDN(year, month, day)
 	}
-	return c.constLenDayIndex(year, month, day)
+	if year <= 0 {
+		return c.linearDayIndex(year, month, day)
+	}
+	return c.AbsoluteDay(year, month, day)
 }
 
-// constLenDayIndex is the fixed-geometry absolute-day counter:
-// year*YearLength() + prior configured month days + day (month 1-based). It is
-// the one home for the constant-length formula shared by absDayIndex's
-// non-real-time branch and the display weekday path, so the geometry can
-// never drift between recurrence and display.
-//
-// This counter and Calendar.AbsoluteDay (which is leap-aware, via
-// YearLengthForYear) diverge by exactly one day per elapsed leap year: a
-// per-day moon disc, which uses AbsoluteDay, can drift against the weekday
-// grid cell, which uses this counter. Reconciling them would shift the
-// weekday column of every calendar in the operator's production database, so
-// it needs an operator-gated migration, not a quiet fix here.
-// TODO(keyxmakerx/Chronicle#741): reconcile the two day counters for V5.
-func (c *Calendar) constLenDayIndex(year, month, day int) int {
+// linearDayIndex is the constant-length, leap-unaware absolute-day counter:
+// year*YearLength() + prior configured month days + day (month 1-based).
+// absDayIndex's fallback for year <= 0 — see its doc comment.
+func (c *Calendar) linearDayIndex(year, month, day int) int {
 	abs := year * c.YearLength()
 	for i := 0; i < month-1 && i < len(c.Months); i++ {
 		abs += c.Months[i].Days
 	}
 	return abs + day
+}
+
+// monthIsIntercalary reports whether the 1-based month index refers to an
+// intercalary (festival) month. Out-of-range indices are not intercalary —
+// callers that pass a bad month get "not intercalary" rather than a panic.
+func (c *Calendar) monthIsIntercalary(month int) bool {
+	i := month - 1
+	if i < 0 || i >= len(c.Months) {
+		return false
+	}
+	return c.Months[i].IsIntercalary
+}
+
+// WeekdayIndex returns the 0-based index into c.Weekdays that (year, month,
+// day) falls on. It is the single function any weekday renderer (grid column,
+// list badge) calls to place a day in its week — never absDayIndex's modulo
+// directly, so MonthStartsNewWeek's reset/no-week rules apply everywhere or
+// nowhere.
+//
+// LIMITATION: OccursOn's week-based recurrence (weekly/biweekly/custom) does
+// NOT read MonthStartsNewWeek — it steps by continuous absDayIndex days
+// regardless, so on a MonthStartsNewWeek calendar a weekly-recurring event
+// can land in a different WeekdayIndex column than it started in once an
+// intercalary month has passed. Reconciling the two needs OccursOn's stride
+// math to skip intercalary days the same way WeekdayIndex does, which is
+// deferred: WeekdayIndex has no production caller yet (a future grid render
+// is the first one), so nothing surfaces the mismatch today.
+//
+// Real-time calendars ignore MonthStartsNewWeek entirely: Gregorian weeks are
+// always continuous, matching this method's own MonthStartsNewWeek=false
+// branch below.
+//
+// When MonthStartsNewWeek is true, day 1 of every month is always the week's
+// first day (a month never inherits a stray offset from the one before it),
+// and a day inside an INTERCALARY month belongs to no week at all — it is a
+// festival day outside the weekday cycle, so a caller must render it in its
+// own between-week band rather than a weekday column. -1 signals that case.
+//
+// When MonthStartsNewWeek is false (the default), weeks run continuously
+// across month boundaries via the reconciled absDayIndex, guarded against a
+// negative modulo for a year before the calendar's epoch.
+func (c *Calendar) WeekdayIndex(year, month, day int) int {
+	wl := c.WeekLength()
+	if wl <= 0 {
+		return 0
+	}
+	if c.MonthStartsNewWeek && !c.UsesRealTime() {
+		if c.monthIsIntercalary(month) {
+			return -1
+		}
+		return (day - 1) % wl
+	}
+	return ((c.absDayIndex(year, month, day) % wl) + wl) % wl
 }
 
 // OccursOn reports whether the event lands on (year, month, day) for cal.
@@ -433,6 +564,30 @@ func monthsBetween(cal *Calendar, y1, m1, y2, m2 int) int {
 	return (y2-y1)*mc + (m2 - m1)
 }
 
+// MonthName returns the name of the given 1-based month, or a numeric
+// fallback ("Month N") when Months isn't loaded far enough (a list read that
+// didn't eager-load sub-resources, or a month index outside the calendar's
+// own range).
+func (c *Calendar) MonthName(month int) string {
+	idx := month - 1
+	if idx >= 0 && idx < len(c.Months) {
+		return c.Months[idx].Name
+	}
+	return fmt.Sprintf("Month %d", month)
+}
+
+// CurrentMonthName is MonthName for the calendar's own current month.
+func (c *Calendar) CurrentMonthName() string {
+	return c.MonthName(c.CurrentMonth)
+}
+
+// FullDateLabel formats the calendar's current date as "<Month> <Day>,
+// <Year>" (e.g. "Deepwinter 12, 1024") — the calendars list card and preview
+// panel's one-line "world date".
+func (c *Calendar) FullDateLabel() string {
+	return fmt.Sprintf("%s %d, %d", c.CurrentMonthName(), c.CurrentDay, c.CurrentYear)
+}
+
 // FormatCurrentTime returns the current time formatted as "HH:MM".
 // Pads hours/minutes with leading zeros based on the max values
 // (e.g. a 24-hour system uses 2 digits, a 100-hour system uses 3).
@@ -456,17 +611,36 @@ func (c *Calendar) SeasonForDate(month, day int) *Season {
 	return nil
 }
 
-// CurrentEra returns the era containing the current year, or nil if none match.
+// CurrentEra returns the era containing the current date, or nil if none
+// match. Day-granular (EraForDate), since the current date is always known to
+// full precision.
 func (c *Calendar) CurrentEra() *Era {
-	return c.EraForYear(c.CurrentYear)
+	return c.EraForDate(c.CurrentYear, c.CurrentMonth, c.CurrentDay)
 }
 
-// EraForYear returns the era containing the given year, or nil if none match.
-// An era with nil EndYear is considered ongoing (matches all years >= StartYear).
+// EraForYear returns the era containing the given year, or nil if none match,
+// ignoring month/day — for callers that only have a year (e.g. legacy data
+// with no finer precision). An era with nil EndYear is ongoing (matches every
+// year >= StartYear). Prefer EraForDate when month/day are known: a year-only
+// check can misplace a date that falls before an era's start day or after its
+// end day within the boundary years.
 func (c *Calendar) EraForYear(year int) *Era {
 	for i := range c.Eras {
 		e := &c.Eras[i]
 		if year >= e.StartYear && (e.EndYear == nil || year <= *e.EndYear) {
+			return e
+		}
+	}
+	return nil
+}
+
+// EraForDate returns the era containing the given date, or nil if none match.
+// Comparisons are lexicographic over (year, month, day) so an era's start/end
+// day within its boundary years is honoured, not just the year.
+func (c *Calendar) EraForDate(year, month, day int) *Era {
+	for i := range c.Eras {
+		e := &c.Eras[i]
+		if e.ContainsDate(year, month, day) {
 			return e
 		}
 	}
@@ -549,6 +723,12 @@ func (c *Calendar) CurrentAbsoluteDay() int {
 	return c.AbsoluteDay(c.CurrentYear, c.CurrentMonth, c.CurrentDay)
 }
 
+// HasRealAnchor reports whether this calendar's real-date anchor is fully
+// set — see AnchorYear's doc comment for why it is all four fields or none.
+func (c *Calendar) HasRealAnchor() bool {
+	return c.AnchorYear != nil && c.AnchorMonth != nil && c.AnchorDay != nil && c.AnchorRealDate != nil
+}
+
 // Month is a named period in the calendar with a configurable number of days.
 type Month struct {
 	ID            int    `json:"id"`
@@ -586,6 +766,9 @@ type Moon struct {
 	PhaseSource string  `json:"phase_source"`
 	Size        float64 `json:"size"`
 	OrbitSpeed  float64 `json:"orbit_speed"`
+	// HiddenFromPlayers lets the Director hide a moon from players entirely
+	// (undiscovered, or secret world lore) while it still renders for the GM.
+	HiddenFromPlayers bool `json:"hidden_from_players"`
 }
 
 // MoonPhase returns the phase (0.0–1.0) of this moon on a given absolute day
@@ -678,13 +861,21 @@ func (s *Season) ContainsDate(month, day int) bool {
 	return dateVal >= startVal || dateVal <= endVal
 }
 
-// Era is a named time period spanning a range of years (e.g. "First Age", "Age of Fire").
+// Era is a named time period spanning a range of dates (e.g. "First Age",
+// "Age of Fire"). An era begins on a day, not just a year: StartMonth/
+// StartDay give that day within StartYear. EndYear nil means ongoing;
+// EndMonth/EndDay are set together with EndYear (all three or none — the
+// same all-or-nothing shape Calendar's real-date anchor uses).
 type Era struct {
 	ID          int     `json:"id"`
 	CalendarID  string  `json:"calendar_id"`
 	Name        string  `json:"name"`
 	StartYear   int     `json:"start_year"`
+	StartMonth  int     `json:"start_month"`
+	StartDay    int     `json:"start_day"`
 	EndYear     *int    `json:"end_year,omitempty"` // nil = ongoing
+	EndMonth    *int    `json:"end_month,omitempty"`
+	EndDay      *int    `json:"end_day,omitempty"`
 	Description *string `json:"description,omitempty"`
 	Color       string  `json:"color"`
 	SortOrder   int     `json:"sort_order"`
@@ -695,9 +886,40 @@ func (e *Era) IsOngoing() bool {
 	return e.EndYear == nil
 }
 
-// ContainsYear returns true if the given year falls within this era.
+// ContainsYear returns true if the given year falls within this era,
+// ignoring month/day — see EraForYear's doc comment for when to prefer this
+// over ContainsDate.
 func (e *Era) ContainsYear(year int) bool {
 	return year >= e.StartYear && (e.EndYear == nil || year <= *e.EndYear)
+}
+
+// ContainsDate returns true if the given date falls within this era, honoring
+// its start/end day rather than just the boundary years. Comparisons are
+// lexicographic over (year, month, day). An end year with no end month/day
+// (an era imported without day-level bounds) includes its whole end year,
+// rather than only its first day.
+func (e *Era) ContainsDate(year, month, day int) bool {
+	if dateLess(year, month, day, e.StartYear, e.StartMonth, e.StartDay) {
+		return false
+	}
+	if e.EndYear == nil {
+		return true
+	}
+	if e.EndMonth == nil || e.EndDay == nil {
+		return year <= *e.EndYear
+	}
+	return !dateLess(*e.EndYear, *e.EndMonth, *e.EndDay, year, month, day)
+}
+
+// dateLess reports whether (y1,m1,d1) sorts strictly before (y2,m2,d2).
+func dateLess(y1, m1, d1, y2, m2, d2 int) bool {
+	if y1 != y2 {
+		return y1 < y2
+	}
+	if m1 != m2 {
+		return m1 < m2
+	}
+	return d1 < d2
 }
 
 // Event is a calendar entry on a specific date, optionally linked to an entity.
@@ -730,26 +952,39 @@ type Event struct {
 	RecurrenceDayOfWeek      *int    `json:"recurrence_day_of_week,omitempty"`
 	Visibility               string  `json:"visibility"`
 	VisibilityRules          *string `json:"visibility_rules,omitempty"`
-	Category                 *string `json:"category,omitempty"`
+	// KindID references one of the campaign's calendar_event_kinds by id.
+	// Nil means no kind assigned.
+	KindID *int `json:"kind_id,omitempty"`
+	// Announced is this event's override of its kind's DefaultAnnounced
+	// ("ahead" or "on_day" — see EventKind). Nil means "use the kind's
+	// default", falling back to "on_day" when the event has no kind, the same
+	// nil-means-inherit shape Tier already uses on this struct.
+	Announced *string `json:"announced,omitempty"`
 	// Tier references one of the campaign's event_tier_definitions by slug.
 	// Nil means "use platform default" (render-time fallback).
 	Tier   *string `json:"tier,omitempty"`
 	Color  *string `json:"color,omitempty"`
 	Icon   *string `json:"icon,omitempty"`
 	AllDay bool    `json:"all_day"`
-	// CollectRSVPs is the per-event RSVP opt-in. Read-only on this aggregate:
-	// writes go through RSVPRepository.SetCollectRSVPs, deliberately off the
-	// shared UpdateEvent path, so a quick-save that re-sends the whole stored
-	// event shape can never clobber the flag.
-	CollectRSVPs bool      `json:"collect_rsvps"`
-	CreatedBy    *string   `json:"created_by,omitempty"`
-	CreatedAt    time.Time `json:"created_at"`
-	UpdatedAt    time.Time `json:"updated_at"`
+	// Payload is one small nullable JSON slot for typed extras that vary by
+	// event — a moon night, a sky event — so a new one doesn't need another
+	// migration. Raw JSON text, parsed on demand via ParsePayload; nil means
+	// no payload. See MoonNightPayload for the one currently-defined shape.
+	Payload   *string   `json:"payload,omitempty"`
+	CreatedBy *string   `json:"created_by,omitempty"`
+	CreatedAt time.Time `json:"created_at"`
+	UpdatedAt time.Time `json:"updated_at"`
 
 	// Joined fields for display (populated by some queries).
 	EntityName  string `json:"entity_name,omitempty"`
 	EntityIcon  string `json:"entity_icon,omitempty"`
 	EntityColor string `json:"entity_color,omitempty"`
+	// KindName/KindIcon/KindColor/KindSlug are joined from calendar_event_kinds
+	// when KindID is set; empty when it is nil.
+	KindName  string `json:"kind_name,omitempty"`
+	KindSlug  string `json:"kind_slug,omitempty"`
+	KindIcon  string `json:"kind_icon,omitempty"`
+	KindColor string `json:"kind_color,omitempty"`
 }
 
 // HasTime returns true if this event has a specific start time (not all-day).
@@ -794,14 +1029,103 @@ func (e *Event) IsMultiDay() bool {
 // ParseVisibilityRules parses the JSON visibility rules into a VisibilityRules struct.
 // Returns nil if no rules are set.
 func (e *Event) ParseVisibilityRules() *VisibilityRules {
-	if e.VisibilityRules == nil || *e.VisibilityRules == "" {
+	return ParseVisibilityRules(e.VisibilityRules)
+}
+
+// Announced setting constants: separate from Visibility (who can ever see an
+// event) and from an event's date (when it happens). AnnouncedAhead means
+// players may know about an event before it happens (a festival's date is
+// common knowledge); AnnouncedOnDay means it only becomes knowable on the
+// day itself.
+const (
+	AnnouncedAhead = "ahead"
+	AnnouncedOnDay = "on_day"
+)
+
+// AnnouncedValues is the accepted set, for input validation — mirrors the
+// RecurrenceTypes pattern above.
+var AnnouncedValues = []string{AnnouncedAhead, AnnouncedOnDay}
+
+// IsSupportedAnnounced reports whether a is a recognized Announced value.
+func IsSupportedAnnounced(a string) bool {
+	for _, ok := range AnnouncedValues {
+		if a == ok {
+			return true
+		}
+	}
+	return false
+}
+
+// EffectiveAnnounced resolves this event's announced setting, in order:
+// the event's own override; "ahead" if the event repeats yearly (a yearly
+// festival is expected knowledge regardless of its kind); its kind's
+// default, only when kind actually matches e.KindID (a caller must not pass
+// an unrelated kind and have it apply); otherwise "on_day".
+func (e *Event) EffectiveAnnounced(kind *EventKind) string {
+	if e.Announced != nil && *e.Announced != "" {
+		return *e.Announced
+	}
+	if e.IsRecurring && e.RecurrenceType != nil && *e.RecurrenceType == RecurrenceYearly {
+		return AnnouncedAhead
+	}
+	if kind != nil && e.KindID != nil && kind.ID == *e.KindID && kind.DefaultAnnounced != "" {
+		return kind.DefaultAnnounced
+	}
+	return AnnouncedOnDay
+}
+
+// Hemisphere constants for Calendar.Hemisphere.
+const (
+	HemisphereNorth = "north"
+	HemisphereSouth = "south"
+)
+
+// Moon night payload: the "type" a calendar_events.payload JSON blob carries
+// for a moon-themed night, e.g. `{"type":"blood","moons":[3]}`. moons holds
+// the ids of the calendar_moons rows the night applies to.
+const (
+	MoonNightBlood       = "blood"
+	MoonNightMagic       = "magic"
+	MoonNightConjunction = "conjunction"
+	MoonNightEclipse     = "eclipse"
+	MoonNightHarvest     = "harvest"
+)
+
+// MoonNightPayload is one shape an Event.Payload JSON blob can carry.
+// "a sky event" is a second shape the same column is meant to hold — its
+// fields aren't decided yet, so it isn't typed here.
+type MoonNightPayload struct {
+	Type  string `json:"type"`
+	Moons []int  `json:"moons,omitempty"`
+}
+
+// IsMoonNightType reports whether t is one of the five recognized moon-night
+// types.
+func IsMoonNightType(t string) bool {
+	switch t {
+	case MoonNightBlood, MoonNightMagic, MoonNightConjunction, MoonNightEclipse, MoonNightHarvest:
+		return true
+	}
+	return false
+}
+
+// ParsePayload parses Event.Payload as a MoonNightPayload. Returns nil when
+// there is no payload, it isn't valid JSON, or its type is not one of the
+// MoonNight* constants (a future non-moon-night payload, or JSON "null",
+// which unmarshals into a zero-value, untyped struct) — callers that need to
+// tell those apart should parse e.Payload themselves instead.
+func (e *Event) ParsePayload() *MoonNightPayload {
+	if e.Payload == nil || *e.Payload == "" {
 		return nil
 	}
-	var rules VisibilityRules
-	if err := json.Unmarshal([]byte(*e.VisibilityRules), &rules); err != nil {
+	var p MoonNightPayload
+	if err := json.Unmarshal([]byte(*e.Payload), &p); err != nil {
 		return nil
 	}
-	return &rules
+	if !IsMoonNightType(p.Type) {
+		return nil
+	}
+	return &p
 }
 
 // HasRichText returns true if this event has a rich text description (ProseMirror JSON
@@ -828,6 +1152,12 @@ func (e *Event) PlainDescription() string {
 // --- Request DTOs ---
 
 // CreateCalendarInput is the validated input for creating a calendar.
+//
+// Visibility/VisibilityRules default to "everyone" when left blank (the
+// ordinary create-a-calendar route never sets them), mirroring
+// CreateEventInput's own default. The route that exposes calendar creation
+// is Owner-only, so no separate CanAuthorDmOnly gate is needed the way
+// CreateEvent needs one for Scribes.
 type CreateCalendarInput struct {
 	Mode             string // "fantasy" or "reallife"
 	Name             string
@@ -839,26 +1169,58 @@ type CreateCalendarInput struct {
 	SecondsPerMinute int
 	LeapYearEvery    int
 	LeapYearOffset   int
+	Visibility       string
+	VisibilityRules  *string
+}
+
+// CreateCalendarFromImportOptions carries the caller's explicit choice for
+// the calendar CreateCalendarFromImport is about to create's current
+// ("today") date. CreateCalendarFromImport never falls back to an
+// undocumented default (#741 — "an import never silently resets the
+// calendar's current date"): when the import itself left a field of
+// ImportResult.Today unspecified (Month/Day nil — Calendaria only ever
+// determines a year), the matching field here MUST be set or
+// CreateCalendarFromImport returns a validation error instead of silently
+// picking day 1. CurrentYear is optional even then — the import always
+// determines a year, and this only overrides it when the caller wants the
+// calendar to start somewhere else than the source file did.
+type CreateCalendarFromImportOptions struct {
+	CurrentYear  *int
+	CurrentMonth *int
+	CurrentDay   *int
 }
 
 // UpdateCalendarInput is the validated input for updating calendar settings.
-// Mode is optional: empty means "leave unchanged"; non-empty must be one of
-// the calendar Mode constants (ModeFantasy / ModeRealLife).
+// Partial update (internal/patch's Field type): an absent field preserves
+// the stored value, an explicit null clears it, a present value replaces it.
+// Name stays a plain string: UpdateCalendar rejects a blank merged name with
+// 400, so an absent name fails loudly instead of silently overwriting — the
+// same governedFieldExceptions shape as maps.UpdateMapInput.Name and
+// timeline.UpdateTimelineInput.Name. Mode, when present, must be one of the
+// calendar Mode constants (ModeFantasy / ModeRealLife).
 type UpdateCalendarInput struct {
 	Name             string
-	Description      *string
-	EpochName        *string
-	Mode             string
-	CurrentYear      int
-	CurrentMonth     int
-	CurrentDay       int
-	CurrentHour      int
-	CurrentMinute    int
-	HoursPerDay      int
-	MinutesPerHour   int
-	SecondsPerMinute int
-	LeapYearEvery    int
-	LeapYearOffset   int
+	Description      patch.Field[string]
+	EpochName        patch.Field[string]
+	Mode             patch.Field[string]
+	CurrentYear      patch.Field[int]
+	CurrentMonth     patch.Field[int]
+	CurrentDay       patch.Field[int]
+	CurrentHour      patch.Field[int]
+	CurrentMinute    patch.Field[int]
+	HoursPerDay      patch.Field[int]
+	MinutesPerHour   patch.Field[int]
+	SecondsPerMinute patch.Field[int]
+	LeapYearEvery    patch.Field[int]
+	LeapYearOffset   patch.Field[int]
+	// Hemisphere flips how a real-world calendar's seasons read (see
+	// Calendar.Hemisphere's doc comment). When present, must be
+	// HemisphereNorth or HemisphereSouth. Setting it for the first time on a
+	// real-life calendar with no seasons yet auto-seeds the four default
+	// seasons for that hemisphere (see UpdateCalendar and
+	// defaultRealLifeSeasons) — a calendar that already has any seasons is
+	// never touched by this field.
+	Hemisphere patch.Field[string]
 	// SetRealTime is nil for every caller that does not manage the flag (e.g.
 	// PutDate, worldstate advance/time, seed/create), so their update
 	// preserves the stored TracksRealTime/RealTimeZone — a *bool so "absent"
@@ -894,14 +1256,28 @@ type CreateEventInput struct {
 	RecurrenceMaxOccurrences *int
 	Visibility               string
 	VisibilityRules          *string
-	Category                 *string
+	// KindID references calendar_event_kinds.id; nil = no kind.
+	KindID *int
+	// Announced: nil = inherit from the kind's default (see
+	// Event.EffectiveAnnounced).
+	Announced *string
 	// Tier — campaign tier definition slug; nil = use platform default
 	// at render.
 	Tier      *string
 	Color     *string
 	Icon      *string
 	AllDay    bool
+	Payload   *string
 	CreatedBy string
+	// CanAuthorDmOnly is set by the handler from the request viewer
+	// (v.SkipsPerUserRules(), true for an Owner or a granted co-DM) before
+	// this reaches the service: CreateEvent has no stored row to compare a
+	// visibility change against the way UpdateEvent does, so a create with
+	// Visibility "dm_only" (or a non-empty VisibilityRules) is refused
+	// outright for a caller this is false for, rather than silently
+	// downgraded. Zero value (false) is "not authorized" — a caller that
+	// never sets it is never trusted by default.
+	CanAuthorDmOnly bool
 }
 
 // UpdateEventInput is the validated input for updating an event.
@@ -935,12 +1311,14 @@ type UpdateEventInput struct {
 	RecurrenceMaxOccurrences patch.Field[int]
 	Visibility               patch.Field[string]
 	VisibilityRules          patch.Field[string]
-	Category                 patch.Field[string]
+	KindID                   patch.Field[int]
+	Announced                patch.Field[string]
 	// Tier — see CreateEventInput.Tier doc.
-	Tier   patch.Field[string]
-	Color  patch.Field[string]
-	Icon   patch.Field[string]
-	AllDay patch.Field[bool]
+	Tier    patch.Field[string]
+	Color   patch.Field[string]
+	Icon    patch.Field[string]
+	AllDay  patch.Field[bool]
+	Payload patch.Field[string]
 }
 
 // MonthInput is the input for creating/updating a month.
@@ -961,41 +1339,106 @@ type WeekdayInput struct {
 
 // MoonInput is the input for creating/updating a moon.
 type MoonInput struct {
-	Name        string  `json:"name"`
-	CycleDays   float64 `json:"cycle_days"`
-	PhaseOffset float64 `json:"phase_offset"`
-	Color       string  `json:"color"`
+	// ID is nil for a new moon, or an existing calendar_moons id to update in
+	// place. SetMoons upserts on it, so an id present in the calendar but
+	// absent from the input list is deleted, and one present in both is
+	// updated rather than replaced. An update never touches
+	// HiddenFromPlayers or the render parameters (this input carries no
+	// render parameters at all); a fresh insert sets HiddenFromPlayers from
+	// this field, which is how an imported hidden moon stays hidden.
+	ID                *int    `json:"id,omitempty"`
+	Name              string  `json:"name"`
+	CycleDays         float64 `json:"cycle_days"`
+	PhaseOffset       float64 `json:"phase_offset"`
+	Color             string  `json:"color"`
+	HiddenFromPlayers bool    `json:"hidden_from_players,omitempty"`
 }
 
-// EraInput is the input for creating/updating an era.
+// EraInput is the input for creating/updating an era. Field order matches
+// ExportEra, which converts directly to/from this type via a Go type
+// conversion in import.go; keep the two in lockstep.
 type EraInput struct {
+	// ID is nil for a new era, or an existing calendar_eras id to update in
+	// place. SetEras upserts on it, so an id present in the calendar but
+	// absent from the input list is deleted, and one present in both is
+	// updated rather than replaced (preserving entity_era_links, which
+	// cascade-delete when the era row itself is deleted and reinserted).
+	// Always nil coming from an import file, which has no Chronicle ids.
+	ID          *int    `json:"id,omitempty"`
 	Name        string  `json:"name"`
 	StartYear   int     `json:"start_year"`
+	StartMonth  int     `json:"start_month"`
+	StartDay    int     `json:"start_day"`
 	EndYear     *int    `json:"end_year"`
+	EndMonth    *int    `json:"end_month"`
+	EndDay      *int    `json:"end_day"`
 	Description *string `json:"description"`
 	Color       string  `json:"color"`
 	SortOrder   int     `json:"sort_order"`
 }
 
-// EventCategory is a campaign-defined event category for calendar events.
-// Categories have a slug (stored on events), display name, emoji icon, and color.
-type EventCategory struct {
-	ID         int    `json:"id"`
-	CalendarID string `json:"calendar_id"`
-	Slug       string `json:"slug"`
-	Name       string `json:"name"`
-	Icon       string `json:"icon"`
-	Color      string `json:"color"`
-	SortOrder  int    `json:"sort_order"`
+// UpdateEraInput is the validated PARTIAL-update input for an existing era:
+// an absent field preserves the stored value, an explicit null clears it, a
+// present value replaces it. Name stays a plain string — UpdateEra rejects a
+// blank merged name with 400, so an absent name fails loudly instead of
+// silently overwriting (the same governedFieldExceptions shape as
+// calendar.UpdateCalendarInput.Name).
+type UpdateEraInput struct {
+	Name        string
+	StartYear   patch.Field[int]
+	StartMonth  patch.Field[int]
+	StartDay    patch.Field[int]
+	EndYear     patch.Field[int]
+	EndMonth    patch.Field[int]
+	EndDay      patch.Field[int]
+	Description patch.Field[string]
+	Color       patch.Field[string]
+	SortOrder   patch.Field[int]
 }
 
-// EventCategoryInput is the input for creating/updating an event category.
-type EventCategoryInput struct {
-	Slug      string `json:"slug"`
-	Name      string `json:"name"`
-	Icon      string `json:"icon"`
-	Color     string `json:"color"`
-	SortOrder int    `json:"sort_order"`
+// EventKind is a campaign-defined event kind (category) for calendar events.
+// Kinds are shared by every calendar in a campaign — keyed by CampaignID, not
+// a single calendar — and carry a slug (referenced by events), display name,
+// emoji icon, color, and the default Announced setting new events of this
+// kind get unless overridden (see Event.EffectiveAnnounced).
+type EventKind struct {
+	ID               int    `json:"id"`
+	CampaignID       string `json:"campaign_id"`
+	Slug             string `json:"slug"`
+	Name             string `json:"name"`
+	Icon             string `json:"icon"`
+	Color            string `json:"color"`
+	SortOrder        int    `json:"sort_order"`
+	DefaultAnnounced string `json:"default_announced"`
+}
+
+// GetCampaignID implements middleware.CampaignScoped for IDOR protection.
+func (k *EventKind) GetCampaignID() string {
+	return k.CampaignID
+}
+
+// EventKindInput is the input for creating/updating an event kind.
+type EventKindInput struct {
+	Slug             string `json:"slug"`
+	Name             string `json:"name"`
+	Icon             string `json:"icon"`
+	Color            string `json:"color"`
+	SortOrder        int    `json:"sort_order"`
+	DefaultAnnounced string `json:"default_announced"`
+}
+
+// UpdateEventKindInput is the validated PARTIAL-update input for an
+// existing event kind: an absent field preserves the stored value, an
+// explicit null clears it, a present value replaces it. Name stays a plain
+// string for the same reason UpdateCalendarInput.Name does (a blank merged
+// name fails loudly rather than silently overwriting).
+type UpdateEventKindInput struct {
+	Slug             patch.Field[string]
+	Name             string
+	Icon             patch.Field[string]
+	Color            patch.Field[string]
+	SortOrder        patch.Field[int]
+	DefaultAnnounced patch.Field[string]
 }
 
 // Weather represents the current weather state for a calendar.
@@ -1143,20 +1586,48 @@ type FestivalInput struct {
 	SortOrder   int     `json:"sort_order"`
 }
 
-// DefaultEventCategories returns the default set of event categories seeded
-// for new calendars. Provides a sensible starting point for TTRPG campaigns.
-func DefaultEventCategories() []EventCategoryInput {
-	return []EventCategoryInput{
+// DefaultEventKinds returns the default event kinds seeded for a new
+// campaign. DefaultAnnounced records each kind's own default: festivals and
+// holidays default to "ahead"; everything else to "on_day". A yearly-
+// recurring event overrides its kind's default to "ahead" regardless (see
+// Event.EffectiveAnnounced).
+func DefaultEventKinds() []EventKindInput {
+	return []EventKindInput{
 		// Holiday is lime, not amber: gold means "GM only" across the product
 		// (a GM-only day strikes all its runes gold), and amber at small sizes
-		// is indistinguishable from that gold by hue. This seeds new calendars
-		// only — an existing calendar keeps its stored colour; the owner can
-		// change it in settings -> Categories.
-		{Slug: "holiday", Name: "Holiday", Icon: "⭐", Color: "#84cc16", SortOrder: 0},
-		{Slug: "battle", Name: "Battle", Icon: "⚔", Color: "#ef4444", SortOrder: 1},
-		{Slug: "quest", Name: "Quest", Icon: "❗", Color: "#8b5cf6", SortOrder: 2},
-		{Slug: "birthday", Name: "Birthday", Icon: "🎂", Color: "#ec4899", SortOrder: 3},
-		{Slug: "festival", Name: "Festival", Icon: "🎉", Color: "#10b981", SortOrder: 4},
-		{Slug: "travel", Name: "Travel", Icon: "🚶", Color: "#3b82f6", SortOrder: 5},
+		// is indistinguishable from that gold by hue. This seeds new campaigns
+		// only — an existing kind keeps its stored colour; the owner can
+		// change it in settings -> Kinds.
+		{Slug: "holiday", Name: "Holiday", Icon: "⭐", Color: "#84cc16", SortOrder: 0, DefaultAnnounced: AnnouncedAhead},
+		{Slug: "battle", Name: "Battle", Icon: "⚔", Color: "#ef4444", SortOrder: 1, DefaultAnnounced: AnnouncedOnDay},
+		{Slug: "quest", Name: "Quest", Icon: "❗", Color: "#8b5cf6", SortOrder: 2, DefaultAnnounced: AnnouncedOnDay},
+		{Slug: "birthday", Name: "Birthday", Icon: "🎂", Color: "#ec4899", SortOrder: 3, DefaultAnnounced: AnnouncedOnDay},
+		{Slug: "festival", Name: "Festival", Icon: "🎉", Color: "#10b981", SortOrder: 4, DefaultAnnounced: AnnouncedAhead},
+		{Slug: "travel", Name: "Travel", Icon: "🚶", Color: "#3b82f6", SortOrder: 5, DefaultAnnounced: AnnouncedOnDay},
+	}
+}
+
+// defaultRealLifeSeasons returns the four seasons a new real-world calendar
+// starts with, per the operator's signed decision: the same four Gregorian
+// reference dates (Mar 20 / Jun 21 / Sep 23 / Dec 21) every real-world
+// calendar uses, with the season NAMES flipped between hemispheres — a
+// northern Spring lands on the same dates as a southern Autumn. An unknown
+// hemisphere value returns the northern set (UpdateCalendar validates
+// Hemisphere against HemisphereNorth/HemisphereSouth before this is ever
+// called, so that case is unreached in practice).
+//
+// Season.ContainsDate's wrap-around logic (start > end) already handles
+// Winter/Summer spanning the Dec 21 → Mar 19 year boundary — see
+// TestDefaultRealLifeSeasonsContainsDate.
+func defaultRealLifeSeasons(hemisphere string) []Season {
+	names := [4]string{"Spring", "Summer", "Autumn", "Winter"}
+	if hemisphere == HemisphereSouth {
+		names = [4]string{"Autumn", "Winter", "Spring", "Summer"}
+	}
+	return []Season{
+		{Name: names[0], StartMonth: 3, StartDay: 20, EndMonth: 6, EndDay: 20, Color: "#22c55e"},
+		{Name: names[1], StartMonth: 6, StartDay: 21, EndMonth: 9, EndDay: 22, Color: "#eab308"},
+		{Name: names[2], StartMonth: 9, StartDay: 23, EndMonth: 12, EndDay: 20, Color: "#f97316"},
+		{Name: names[3], StartMonth: 12, StartDay: 21, EndMonth: 3, EndDay: 19, Color: "#38bdf8"},
 	}
 }

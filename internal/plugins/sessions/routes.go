@@ -8,6 +8,27 @@ import (
 	"github.com/keyxmakerx/chronicle/internal/plugins/campaigns"
 )
 
+// scribeOrCoDirector gates a route to a Scribe+ member OR a co-Director (the
+// IsDmGranted capability — see campaigns.CampaignContext.CanAuthorDmOnly,
+// which a plain Player can hold; a co-Director is not necessarily Scribe
+// role). Reused by every game-night route the operator's "Co-Directors run
+// game nights with the Director's controls" server change widens.
+func scribeOrCoDirector() echo.MiddlewareFunc {
+	return campaigns.RequireCapability(func(cc *campaigns.CampaignContext) bool {
+		return cc.MemberRole >= campaigns.RoleScribe || cc.CanAuthorDmOnly()
+	}, "only a Scribe, the campaign owner, or a granted co-Director may do this")
+}
+
+// ownerOrCoDirector gates a route to the campaign Owner or a co-Director —
+// campaigns.CanAuthorDmOnly's exact condition, matching the pattern
+// internal/plugins/calendar/routes.go already uses for its own Owner-or-
+// co-Director route.
+func ownerOrCoDirector() echo.MiddlewareFunc {
+	return campaigns.RequireCapability(func(cc *campaigns.CampaignContext) bool {
+		return cc.CanAuthorDmOnly()
+	}, "only the campaign owner or a granted co-Director may do this")
+}
+
 // RegisterRoutes sets up all session-related routes.
 // Sessions require the calendar addon since sessions are integrated into the calendar.
 func RegisterRoutes(e *echo.Echo, h *Handler,
@@ -20,12 +41,31 @@ func RegisterRoutes(e *echo.Echo, h *Handler,
 		addons.RequireAddon(addonSvc, "calendar"),
 	)
 	cg.POST("/sessions", h.CreateSession, campaigns.RequireRole(campaigns.RoleScribe))
-	cg.PUT("/sessions/:sid", h.UpdateSessionAPI, campaigns.RequireRole(campaigns.RoleScribe))
-	cg.DELETE("/sessions/:sid", h.DeleteSessionAPI, campaigns.RequireRole(campaigns.RoleOwner))
+	// Move (schedule-changing edits) and delete run a game night, so a
+	// co-Director (the IsDmGranted capability — not necessarily Scribe role,
+	// see campaigns.CampaignContext.CanAuthorDmOnly) gets them too, per the
+	// operator's server-change #4 ("Co-Directors run game nights with the
+	// Director's controls: move, cancel, restore, propose and confirm").
+	// scribeOrCoDirector/ownerOrCoDirector below are declared once and reused
+	// by every route this build widens the same way.
+	cg.PUT("/sessions/:sid", h.UpdateSessionAPI, scribeOrCoDirector())
+	cg.DELETE("/sessions/:sid", h.DeleteSessionAPI, ownerOrCoDirector())
 	cg.PUT("/sessions/:sid/recap", h.UpdateRecapAPI, campaigns.RequireRole(campaigns.RoleScribe))
 	cg.POST("/sessions/:sid/rsvp", h.RSVPSession, campaigns.RequireRole(campaigns.RolePlayer))
 	cg.POST("/sessions/:sid/entities", h.LinkEntityAPI, campaigns.RequireRole(campaigns.RoleScribe))
 	cg.DELETE("/sessions/:sid/entities/:eid", h.UnlinkEntityAPI, campaigns.RequireRole(campaigns.RoleScribe))
+
+	// Game-night routes: restoring a soft-deleted session (co-Directors run
+	// game nights per scribeOrCoDirector/ownerOrCoDirector above), a member's
+	// own tally-exclusion switch, and the calendar-feed settings/token
+	// endpoints (the feed's own public redemption route sits with the other
+	// public token routes below).
+	cg.POST("/sessions/:sid/restore", h.RestoreSessionAPI, ownerOrCoDirector())
+	cg.PUT("/sessions/:sid/rsvp-exclude", h.SetRSVPExcludedAPI, campaigns.RequireRole(campaigns.RolePlayer))
+	cg.GET("/sessions/feed-settings", h.GetFeedSettingsAPI, campaigns.RequireRole(campaigns.RolePlayer))
+	cg.PUT("/sessions/feed-settings", h.SetFeedSettingsAPI, campaigns.RequireRole(campaigns.RoleOwner))
+	cg.POST("/sessions/feed/token", h.GetFeedTokenAPI, campaigns.RequireRole(campaigns.RolePlayer))
+	cg.POST("/sessions/feed/token/replace", h.ReplaceFeedTokenAPI, campaigns.RequireRole(campaigns.RolePlayer))
 
 	// Availability scheduler. Member-only data — every route rides the AUTHED
 	// cg group above (auth + campaign access + the calendar-addon guard),
@@ -58,12 +98,12 @@ func RegisterRoutes(e *echo.Echo, h *Handler,
 	// ride the authed cg group — NEVER the public pub group; the only public
 	// proposal route is the emailed token below.
 	cg.GET("/proposals", h.ListProposals, campaigns.RequireRole(campaigns.RolePlayer))
-	cg.POST("/proposals", h.CreateProposalAPI, campaigns.RequireRole(campaigns.RoleScribe))
+	cg.POST("/proposals", h.CreateProposalAPI, scribeOrCoDirector())
 	cg.GET("/proposals/:pid", h.ShowProposal, campaigns.RequireRole(campaigns.RolePlayer))
 	cg.POST("/proposals/:pid/options/:oid/respond", h.RespondOptionAPI, campaigns.RequireRole(campaigns.RolePlayer))
-	// Confirm-winner: Scribe+ picks the winning option, which closes the
-	// proposal and mints a planned session from that slot.
-	cg.POST("/proposals/:pid/confirm", h.ConfirmProposalAPI, campaigns.RequireRole(campaigns.RoleScribe))
+	// Confirm-winner: Scribe+ or a co-Director picks the winning option,
+	// which closes the proposal and mints a planned session from that slot.
+	cg.POST("/proposals/:pid/confirm", h.ConfirmProposalAPI, scribeOrCoDirector())
 
 	// Public-capable view routes.
 	pub := e.Group("/campaigns/:id",
@@ -89,6 +129,17 @@ func RegisterRoutes(e *echo.Echo, h *Handler,
 	// still a member.
 	e.GET("/proposals/respond/:token", h.RedeemProposalToken)
 	e.POST("/proposals/respond/:token", h.ApplyProposalToken)
+
+	// "Suggest another time" — same public GET-confirm/POST-apply split as
+	// every other token route above (a mail scanner's background GET must
+	// never write); see ValidateAndRecordSuggestion for the validate-before-
+	// consume ordering this exists to fix.
+	e.GET("/rsvp/:token/suggest", h.RedeemSuggestToken)
+	e.POST("/rsvp/:token/suggest", h.ApplySuggestToken)
+
+	// Personal game-night calendar feed (operator answer #1) — public, the
+	// token IS the credential, exactly like /rsvp/:token.
+	e.GET("/sessions/feed/:token", h.GameNightFeedICS)
 
 	// Scheduler notifications. User-scoped, not campaign-scoped — the topbar
 	// bell is global — so these ride a plain authenticated group, not the

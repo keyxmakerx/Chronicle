@@ -36,9 +36,10 @@ func (s *stubUserDir) GetUser(_ context.Context, userID string) (*auth.User, err
 	return &auth.User{ID: userID, DisplayName: "Player", Timezone: &tz}, nil
 }
 
-type captureMailer struct{ lastHTML string }
+type captureMailer struct{ lastPlain, lastHTML string }
 
-func (m *captureMailer) SendHTMLMail(_ context.Context, _ []string, _, _, htmlBody string) error {
+func (m *captureMailer) SendHTMLMail(_ context.Context, _ []string, _, plainBody, htmlBody string) error {
+	m.lastPlain = plainBody
 	m.lastHTML = htmlBody
 	return nil
 }
@@ -82,7 +83,7 @@ func TestConfirmProposalWinner_ClosesAndCreatesSession(t *testing.T) {
 	}
 	svc := NewSessionService(repo, nil, nil)
 
-	session, err := svc.ConfirmProposalWinner(context.Background(), "c1", "p1", "o1", "dm-user", "America/New_York")
+	session, _, err := svc.ConfirmProposalWinner(context.Background(), "c1", "p1", "o1", "dm-user", "America/New_York")
 	if err != nil {
 		t.Fatalf("ConfirmProposalWinner: %v", err)
 	}
@@ -109,6 +110,57 @@ func TestConfirmProposalWinner_ClosesAndCreatesSession(t *testing.T) {
 	}
 }
 
+// TestConfirmProposalWinner_CarriesOnlyWinningOptionYesVoters pins the
+// yesVoters return value against a fake that behaves like the real
+// ListProposalResponses query: rows joined across every option belonging to
+// the proposal, not scoped to a single option. It must be called with the
+// proposal id (not the option id) and the result filtered down to the
+// winning option's yes-responders only.
+func TestConfirmProposalWinner_CarriesOnlyWinningOptionYesVoters(t *testing.T) {
+	startUTC := time.Now().UTC()
+	var gotProposalID string
+	repo := &mockSessionRepo{
+		getProposalFn: func(_ context.Context, _, _ string) (*SlotProposal, []SlotProposalOption, error) {
+			return &SlotProposal{ID: "p1", CampaignID: "c1", Title: "The Dragon's Lair", Status: ProposalOpen},
+				[]SlotProposalOption{
+					{ID: "o1", ProposalID: "p1", StartsAtUTC: startUTC, EndsAtUTC: startUTC.Add(time.Hour)},
+					{ID: "o2", ProposalID: "p1", StartsAtUTC: startUTC, EndsAtUTC: startUTC.Add(time.Hour)},
+				}, nil
+		},
+		setProposalWinnerAndCloseFn: func(_ context.Context, _, _ string) error { return nil },
+		createFn:                    func(_ context.Context, _ string, _ *Session) error { return nil },
+		listProposalResponsesFn: func(_ context.Context, proposalID string) ([]SlotProposalResponse, error) {
+			gotProposalID = proposalID
+			// Mirrors the real query: every response across every option of
+			// the proposal, regardless of which option ends up winning.
+			return []SlotProposalResponse{
+				{OptionID: "o1", UserID: "alice", Response: ResponseYes},
+				{OptionID: "o1", UserID: "bob", Response: ResponseNo},
+				{OptionID: "o1", UserID: "carol", Response: ResponseYes},
+				{OptionID: "o2", UserID: "dave", Response: ResponseYes},
+			}, nil
+		},
+	}
+	svc := NewSessionService(repo, nil, nil)
+
+	_, yesVoters, err := svc.ConfirmProposalWinner(context.Background(), "c1", "p1", "o1", "dm-user", "UTC")
+	if err != nil {
+		t.Fatalf("ConfirmProposalWinner: %v", err)
+	}
+	if gotProposalID != "p1" {
+		t.Errorf("ListProposalResponses called with %q, want the proposal id p1", gotProposalID)
+	}
+	want := map[string]bool{"alice": true, "carol": true}
+	if len(yesVoters) != len(want) {
+		t.Fatalf("yesVoters = %v, want exactly %v", yesVoters, want)
+	}
+	for _, v := range yesVoters {
+		if !want[v] {
+			t.Errorf("yesVoters contains %q, which did not vote yes on the winning option", v)
+		}
+	}
+}
+
 func TestConfirmProposalWinner_RejectsClosedProposal(t *testing.T) {
 	closed := false
 	repo := &mockSessionRepo{
@@ -119,7 +171,7 @@ func TestConfirmProposalWinner_RejectsClosedProposal(t *testing.T) {
 		setProposalWinnerAndCloseFn: func(_ context.Context, _, _ string) error { closed = true; return nil },
 	}
 	svc := NewSessionService(repo, nil, nil)
-	if _, err := svc.ConfirmProposalWinner(context.Background(), "c1", "p1", "o1", "dm", "UTC"); err == nil {
+	if _, _, err := svc.ConfirmProposalWinner(context.Background(), "c1", "p1", "o1", "dm", "UTC"); err == nil {
 		t.Error("expected rejection when confirming an already-closed proposal")
 	}
 	if closed {
@@ -141,7 +193,7 @@ func TestConfirmProposalWinner_ConcurrentCloseNoDuplicateSession(t *testing.T) {
 		createFn:                    func(_ context.Context, _ string, _ *Session) error { created = true; return nil },
 	}
 	svc := NewSessionService(repo, nil, nil)
-	if _, err := svc.ConfirmProposalWinner(context.Background(), "c1", "p1", "o1", "dm", "UTC"); err == nil {
+	if _, _, err := svc.ConfirmProposalWinner(context.Background(), "c1", "p1", "o1", "dm", "UTC"); err == nil {
 		t.Error("expected an already-confirmed rejection on a lost close race")
 	}
 	if created {
@@ -362,6 +414,41 @@ func TestRSVPEmail_EscapesSessionName(t *testing.T) {
 	}
 	if !strings.Contains(mailer.lastHTML, "&lt;img") {
 		t.Error("session name should be HTML-escaped")
+	}
+}
+
+// TestRSVPEmail_IncludesSuggestLink pins that "Suggest another time" is
+// actually reachable from the invite email: a token with RSVPActionSuggest
+// must be minted alongside accept/decline, and its /suggest link must appear
+// in both the plain-text and HTML bodies (previously CreateRSVPTokens only
+// minted accept/decline, so RedeemSuggestToken/ApplySuggestToken could never
+// be reached from an emailed invite).
+func TestRSVPEmail_IncludesSuggestLink(t *testing.T) {
+	mailer := &captureMailer{}
+	var suggestToken string
+	repo := &mockSessionRepo{
+		createRSVPTokenFn: func(_ context.Context, token *RSVPToken) error {
+			if token.Action == RSVPActionSuggest {
+				suggestToken = token.Token
+			}
+			return nil
+		},
+	}
+	h := &Handler{svc: NewSessionService(repo, nil, nil), mailer: mailer, baseURL: "https://x.test"}
+
+	date := "2026-07-18"
+	session := &Session{ID: "s1", Name: "Session Zero", ScheduledDate: &date}
+	h.sendRSVPEmails(context.Background(), session, "Camp", []campaigns.CampaignMember{{UserID: "u1", Email: "a@b.test"}})
+
+	if suggestToken == "" {
+		t.Fatal("expected a suggest-another-time token to be minted alongside accept/decline")
+	}
+	wantLink := "https://x.test/rsvp/" + suggestToken + "/suggest"
+	if !strings.Contains(mailer.lastPlain, wantLink) {
+		t.Errorf("plain-text RSVP email missing the suggest link %q; body=%s", wantLink, mailer.lastPlain)
+	}
+	if !strings.Contains(mailer.lastHTML, wantLink) {
+		t.Errorf("HTML RSVP email missing the suggest link %q; body=%s", wantLink, mailer.lastHTML)
 	}
 }
 

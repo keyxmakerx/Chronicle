@@ -154,7 +154,8 @@ func TestSanitizeNoteHTMLForEgress_NilSafe(t *testing.T) {
 // CALV5-PLACEHOLDER: three direct-call tests stood here — strips <script> on a
 // single event, on a slice (ListEvents), and nil-safety. They come back WITH
 // the sanitizers and the handlers; TestEgressSanitize_HandlersInvokeHelpers
-// below fires the moment the handlers stop being placeholders.
+// below fires the moment the handlers stop being placeholders. TODO(#778):
+// Foundry sync rewiring is deliberately out of scope for calendar-v5-sky-seams.
 
 // --- inline-secret redaction (DM-secret egress) ---
 
@@ -357,6 +358,8 @@ func TestEgressSanitize_HandlersInvokeHelpers(t *testing.T) {
 	//   {"calendar_api_handler.go", "ListEvents", "sanitizeCalendarEventsHTMLForEgress"}
 	// — to the table above, in the same change that gives those handlers real
 	// bodies; the sub-test below pins the placeholder state until then.
+	// TODO(#778): Foundry sync rewiring is deliberately out of scope for
+	// calendar-v5-sky-seams.
 	t.Run("calendar handlers are still placeholders", func(t *testing.T) {
 		for _, fn := range []string{"GetEvent", "ListEvents"} {
 			body := readHandlerBody(t, "calendar_api_handler.go", fn)

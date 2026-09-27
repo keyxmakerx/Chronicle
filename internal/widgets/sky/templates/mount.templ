@@ -1,0 +1,85 @@
+// Package templates renders the sky pane widget's mount point (issue #763).
+// It ships only static HTML skeleton for static/js/widgets/sky_pane.js
+// (registered as data-widget="sky-pane") to hydrate and paint into — no
+// server-side rendering of the sky itself, since the widget fetches the
+// campaign's calendar/events client-side (see that file's doc comment).
+package templates
+
+import "fmt"
+
+// Mount renders the sky pane for one campaign's calendar. calendarID is the
+// campaign's DEFAULT calendar, resolved server-side by the caller (see
+// internal/app/routes.go's "skybox" block, which calls
+// CalendarService.GetDefaultCalendarForViewer) so the widget's first fetch
+// goes straight to /calendars/:calid instead of first listing calendars to
+// find the default one.
+//
+// Empty(campaignID) is the sibling to call instead when campaignID has no
+// default calendar yet (GetDefaultCalendarForViewer returned NotFound) — do
+// not call Mount with an empty calendarID.
+templ Mount(campaignID string, calendarID string) {
+	<div
+		data-widget="sky-pane"
+		data-campaign-id={ campaignID }
+		data-calendar-id={ calendarID }
+		class="skypane"
+	>
+		<div class="skypane-bar">
+			<span class="skypane-title">Sky</span>
+			<button
+				type="button"
+				class="skychip"
+				aria-expanded="false"
+				aria-controls={ MountID(calendarID) }
+			>
+				<span class="sw" aria-hidden="true"></span>
+				<span class="skychip-text">Today's sky</span>
+			</button>
+		</div>
+		<div class="skywrap">
+			<div class="sky" id={ MountID(calendarID) }>
+				<canvas></canvas>
+				<p class="skycap" aria-live="polite">Loading the sky…</p>
+			</div>
+		</div>
+	</div>
+}
+
+// Empty renders a quiet placeholder instead of the sky-pane mount (which
+// needs a calendar id to fetch) whenever the caller has no calendar id to
+// give it — GetDefaultCalendarForViewer returning NotFound, which covers
+// TWO different situations under one answer: the campaign genuinely has no
+// default calendar yet, OR it has one that is hidden from this viewer
+// (dm_only, or excluded by its own visibility_rules). Those two cases are
+// deliberately NOT distinguished in copy here, the same anti-oracle reason
+// calendarInCampaignForViewer's own doc comment gives for collapsing them
+// into one NotFound in the first place: telling a Player "there is a
+// calendar, you just can't see it" would itself leak that a hidden
+// calendar exists. So this message must read sensibly for both cases, and
+// must not name a specific place to go fix it: an Owner without a default
+// calendar sets one from the campaign's Calendars page
+// (GET /campaigns/:id/calendars — calendars_list.templ's "Set as the
+// campaign's main calendar" menu item), but a Player reading this same
+// copy has no such option and must not be pointed at owner-only settings.
+templ Empty(campaignID string) {
+	<div class="skypane skypane-empty" data-campaign-id={ campaignID }>
+		<div class="skypane-bar">
+			<span class="skypane-title">Sky</span>
+		</div>
+		<p class="skypane-empty-note">
+			No sky to show for this campaign right now.
+		</p>
+	</div>
+}
+
+// MountID builds the same "sky-pane-<calendarID>" id Mount uses for its own
+// mount point's id/aria-controls pair. Exported for a future caller that
+// wants to point its own control at an EXISTING sky-pane mount without
+// re-deriving the format by hand. The calendar's own page
+// (internal/plugins/calendar/view.templ) does not mount this widget — it
+// paints its own separate, simplified sky context instead (TODO(#741)) — so
+// today Mount itself, via routes.go's "skybox" dashboard/entity block, is
+// MountID's only caller.
+func MountID(calendarID string) string {
+	return fmt.Sprintf("sky-pane-%s", calendarID)
+}

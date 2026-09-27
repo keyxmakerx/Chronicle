@@ -1,0 +1,18 @@
+// moon_silhouette.templ renders the v5 moon-silhouette mark: a plain circle
+// disc plus the lit-crescent path from MoonLitPath. Used wherever a moon
+// appears (card, preview info panel, month grid day cells) instead of the
+// mockup's photorealistic canvas-rendered moons — see moon_silhouette.go's
+// package doc.
+package calendar
+
+// MoonSilhouette renders one moon's phase as an inline SVG. class is an
+// additional class on the <svg> (e.g. "" for the plain mark, used as-is
+// inside a sizing wrapper like .calv5-msil).
+templ MoonSilhouette(phase float64) {
+	<svg class="sil" viewBox="-7 -7 14 14" aria-hidden="true">
+		<circle class="db" r="6"></circle>
+		if d := MoonLitPath(phase, moonSilhouetteRadius); d != "" {
+			<path class="dl" d={ d }></path>
+		}
+	</svg>
+}

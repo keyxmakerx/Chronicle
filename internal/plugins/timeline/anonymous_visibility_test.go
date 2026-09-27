@@ -82,6 +82,13 @@ func TestAnonymous_PublicCampaign_SeesNoRestrictedTimeline(t *testing.T) {
 
 // TestAnonymous_PublicCampaign_SeesNoRestrictedEventLink is the same claim one
 // layer down, on the merged event stream a public timeline page renders.
+//
+// links plays the role of the calendar plugin's OWN event data now (calendar-v5
+// seams, #778): repo.ListEventLinks returns only the link-level row (EventID +
+// VisibilityRules, the timeline_event_links columns), and fakeCalEventLinkLister
+// below stands in for CalendarEventLinkLister, echoing back each requested id's
+// calendar-side fields — including the role-based dm_only exclusion the real
+// adapter applies via the calendar plugin's own GetEventForViewer.
 func TestAnonymous_PublicCampaign_SeesNoRestrictedEventLink(t *testing.T) {
 	links := []EventLink{
 		{EventID: "pub", EventVisibility: "everyone", EventYear: 1},
@@ -90,14 +97,31 @@ func TestAnonymous_PublicCampaign_SeesNoRestrictedEventLink(t *testing.T) {
 			VisibilityRules: strPtr(`{"allowed_users":["u1"]}`)},
 	}
 	repo := &mockTimelineRepo{
+		getByIDFn: func(_ context.Context, id string) (*Timeline, error) {
+			return &Timeline{ID: id, CampaignID: "camp-1", CalendarID: strPtr("cal-1")}, nil
+		},
 		listEventLinksFn: func(_ context.Context, _ string, _ int) ([]EventLink, error) {
-			return append([]EventLink(nil), links...), nil
+			// Raw link rows: only the fields timeline_event_links itself
+			// carries. VisibilityRules is a LINK-level override, so it
+			// travels here rather than through the fake lister below.
+			raw := make([]EventLink, len(links))
+			for i, l := range links {
+				raw[i] = EventLink{EventID: l.EventID, VisibilityRules: l.VisibilityRules}
+			}
+			return raw, nil
 		},
 		listStandaloneEventsFn: func(_ context.Context, _ string, _ int) ([]TimelineEvent, error) {
 			return nil, nil
 		},
 	}
 	svc := newTestTimelineService(repo)
+	if s, ok := svc.(interface {
+		SetCalendarEventLinkLister(CalendarEventLinkLister)
+	}); ok {
+		s.SetCalendarEventLinkLister(&fakeCalEventLinkLister{events: links})
+	} else {
+		t.Fatal("TimelineService does not expose SetCalendarEventLinkLister")
+	}
 	ctx := context.Background()
 
 	anon, err := svc.ListTimelineEvents(ctx, "tl-1", "camp-1", anonViewer())
@@ -158,4 +182,39 @@ func TestCanUserView_DeniedUsersExcludesAnonymous(t *testing.T) {
 	if !canUserView("everyone", &noRules, int(permissions.RoleNone), "") {
 		t.Error("an item with no visibility_rules must stay visible to anonymous")
 	}
+}
+
+// fakeCalEventLinkLister is a test double for CalendarEventLinkLister: it
+// stands in for the calendar plugin, resolving each requested event id
+// against a fixed fixture and applying the SAME role-based dm_only exclusion
+// the real adapter (calendarEventLinkListerAdapter in app/routes.go) applies
+// via the calendar plugin's own GetEventForViewer — an event this role may
+// not see is simply absent from the result, never returned with content
+// blanked.
+type fakeCalEventLinkLister struct {
+	events []EventLink // keyed by EventID
+}
+
+func (f *fakeCalEventLinkLister) CalendarName(context.Context, string, string, int) string { return "" }
+
+func (f *fakeCalEventLinkLister) EventsByIDs(_ context.Context, _, _ string, eventIDs []string, role int) ([]CalendarEventRef, error) {
+	want := make(map[string]bool, len(eventIDs))
+	for _, id := range eventIDs {
+		want[id] = true
+	}
+	var refs []CalendarEventRef
+	for _, e := range f.events {
+		if !want[e.EventID] {
+			continue
+		}
+		if e.EventVisibility == "dm_only" && !permissions.CanSeeDmOnly(role) {
+			continue
+		}
+		refs = append(refs, CalendarEventRef{
+			ID: e.EventID, Name: e.EventName,
+			Year: e.EventYear, Month: e.EventMonth, Day: e.EventDay,
+			Visibility: e.EventVisibility,
+		})
+	}
+	return refs, nil
 }

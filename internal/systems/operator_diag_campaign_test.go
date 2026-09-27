@@ -234,11 +234,13 @@ func TestCampaignSurfaces_UnreadableTableIsNotAnAbsence(t *testing.T) {
 	})
 }
 
-// TestCampaignSurfaces_DisabledAddonIsStatedButNotGating. Before the rebuild
-// a disabled addon made every route below unreachable; the three remaining
-// routes no longer gate on it (CALV5-PLACEHOLDER in writeSurfaceGate), so the
-// state is still reported but must not be read as a reachability verdict.
-func TestCampaignSurfaces_DisabledAddonIsStatedButNotGating(t *testing.T) {
+// TestCampaignSurfaces_DisabledAddonGatesOnlyTheListPage. Before the rebuild
+// a disabled addon made every calendar route unreachable. Now /apps/calendar
+// and /calendar redirect regardless of the addon's state, but /calendars and
+// the calendar JSON API (calendar.RegisterRoutes' own RequireAddon) are still
+// gated on it; the diagnostic must say so precisely, not claim either "gates
+// everything" or "gates nothing".
+func TestCampaignSurfaces_DisabledAddonGatesOnlyTheListPage(t *testing.T) {
 	f := surfaceFactsWith(liveCalendarRoutes())
 	f.CalendarAddonEnabled = boolPtr(false)
 	withCampaignProvider(t, &fakeCampaignProvider{surf: f}, func() {
@@ -246,8 +248,14 @@ func TestCampaignSurfaces_DisabledAddonIsStatedButNotGating(t *testing.T) {
 		if !strings.Contains(got, "calendar addon: **disabled**") {
 			t.Errorf("the addon state must be stated:\n%s", got)
 		}
-		if !strings.Contains(got, "Not currently load-bearing") {
-			t.Errorf("disabled must not be read as a reachability gate:\n%s", got)
+		if !strings.Contains(got, "`/calendars` itself 404s while disabled") {
+			t.Errorf("disabled must be read as gating the list page specifically:\n%s", got)
+		}
+		if !strings.Contains(got, "redirect either way") {
+			t.Errorf("the redirect routes must be stated as ungated:\n%s", got)
+		}
+		if !strings.Contains(got, "as does the calendar JSON API") {
+			t.Errorf("disabled must be read as gating the JSON API too:\n%s", got)
 		}
 		if !strings.Contains(got, "**CURRENT** `/campaigns/:id/apps/calendar`") {
 			t.Errorf("the route table must still print despite the disabled addon:\n%s", got)
@@ -290,16 +298,15 @@ func TestCampaignConfig_PlacedSkyboxIsNamedAndDistinguished(t *testing.T) {
 		if !strings.Contains(got, "`skybox` ×2") {
 			t.Errorf("duplicates must be counted, not collapsed:\n%s", got)
 		}
-		// The two things nicknamed "skybox" must stay distinguished, and the
-		// text must say the widget's engine was deleted and the placement
-		// renders the rebuilding notice rather than claiming it still
-		// renders the Moon.
-		if !strings.Contains(got, "LEGACY skybox widget") || !strings.Contains(got, "distinct from the v4 sky band") {
+		// The two things nicknamed "skybox" must stay distinguished, and
+		// the text must say what the placement renders TODAY — the real
+		// sky pane (issue #763), not the rebuilding notice it used to
+		// answer with before the sky pane was wired in.
+		if !strings.Contains(got, "sky pane placement") || !strings.Contains(got, "distinct from the v4 sky band") {
 			t.Errorf("the two things called skybox must be distinguished:\n%s", got)
 		}
-		if !strings.Contains(got, "rebuilding notice") {
-			t.Errorf("the placement must say what it renders TODAY (the rebuilding notice), "+
-				"not what the deleted engine used to render:\n%s", got)
+		if strings.Contains(got, "rebuilding notice") {
+			t.Errorf("the skybox placement now renders the real sky pane, not the rebuilding notice:\n%s", got)
 		}
 		if !strings.Contains(got, "no migration seeds one") {
 			t.Errorf("the 'it can only be hand-placed' claim must be stated:\n%s", got)
@@ -353,8 +360,11 @@ func TestCampaignConfig_DisabledAddonIsMarked(t *testing.T) {
 		if !strings.Contains(got, "✓ enabled `notes`") {
 			t.Errorf("an enabled addon must be marked:\n%s", got)
 		}
-		if !strings.Contains(got, "no longer removes the calendar routes") {
-			t.Errorf("the current (not-gating) consequence of a disabled calendar addon must be stated:\n%s", got)
+		if !strings.Contains(got, "gates the calendar pages and the calendar plugin's JSON API (404)") {
+			t.Errorf("a disabled calendar addon must be read as gating the pages and the JSON API:\n%s", got)
+		}
+		if !strings.Contains(got, "still redirect to the list page either way") {
+			t.Errorf("the redirect routes must be stated as ungated:\n%s", got)
 		}
 	})
 }

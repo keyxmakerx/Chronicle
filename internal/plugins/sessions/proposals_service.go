@@ -349,13 +349,24 @@ func (s *sessionService) ApplyProposalToken(ctx context.Context, tokenStr string
 // add the session manually. Returns the new session so the handler can
 // invite members + notify responders (both handler concerns — the service
 // stays campaigns-free).
-func (s *sessionService) ConfirmProposalWinner(ctx context.Context, campaignID, proposalID, optionID, confirmedBy, confirmerTZ string) (*Session, error) {
+// ConfirmProposalWinner additionally returns the user ids who voted "yes" on
+// the WINNING option (operator server-change #3): the confirmer becomes
+// Going immediately, but a plain yes vote on the option that got confirmed is
+// not automatically a Going for anyone else — they still owe an explicit
+// confirm, carried as RSVPCarriedYes. The handler (which alone has the
+// member roster — this service stays campaigns-free, per this method's
+// existing division of labor) is the one that actually sets every
+// attendee's starting status, INCLUDING the confirmer's own — this method
+// only reports who voted yes so the handler can special-case them, rather
+// than writing an attendee row here that a handler-side InviteAll would
+// then immediately overwrite back to "invited".
+func (s *sessionService) ConfirmProposalWinner(ctx context.Context, campaignID, proposalID, optionID, confirmedBy, confirmerTZ string) (*Session, []string, error) {
 	p, opts, err := s.repo.GetProposal(ctx, campaignID, proposalID)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	if p.Status == ProposalClosed {
-		return nil, apperror.NewBadRequest("this proposal has already been confirmed")
+		return nil, nil, apperror.NewBadRequest("this proposal has already been confirmed")
 	}
 	var winner *SlotProposalOption
 	for i := range opts {
@@ -365,29 +376,48 @@ func (s *sessionService) ConfirmProposalWinner(ctx context.Context, campaignID, 
 		}
 	}
 	if winner == nil {
-		return nil, apperror.NewNotFound("option not found")
+		return nil, nil, apperror.NewNotFound("option not found")
 	}
 
 	if err := s.repo.SetProposalWinnerAndClose(ctx, proposalID, optionID); err != nil {
 		// A concurrent confirm won the close — bail before creating a session so a
 		// proposal never mints two (the conditional close is the serialization point).
 		if errors.Is(err, errProposalAlreadyClosed) {
-			return nil, apperror.NewBadRequest("this proposal has already been confirmed")
+			return nil, nil, apperror.NewBadRequest("this proposal has already been confirmed")
 		}
-		return nil, apperror.NewInternal(fmt.Errorf("confirming winner: %w", err))
+		return nil, nil, apperror.NewInternal(fmt.Errorf("confirming winner: %w", err))
+	}
+
+	// ListProposalResponses is keyed by proposal, not option (it joins across
+	// every option to serve GetProposalView's tally) — filter down to the
+	// winning option here, the same grouping GetProposalView does per-option.
+	responses, err := s.repo.ListProposalResponses(ctx, proposalID)
+	if err != nil {
+		return nil, nil, apperror.NewInternal(fmt.Errorf("listing winning option's responses: %w", err))
+	}
+	var yesVoters []string
+	for _, r := range responses {
+		if r.OptionID == optionID && r.Response == ResponseYes {
+			yesVoters = append(yesVoters, r.UserID)
+		}
 	}
 
 	local := winner.StartsAtUTC.In(timeutil.LoadLocation(confirmerTZ))
 	date := local.Format("2006-01-02")
 	clock := local.Format("15:04")
+	var tz *string
+	if confirmerTZ != "" {
+		tz = &confirmerTZ
+	}
 	session, err := s.CreateSession(ctx, campaignID, CreateSessionInput{
 		Name:          p.Title,
 		ScheduledDate: &date,
 		ScheduledTime: &clock,
+		ScheduledTZ:   tz,
 		CreatedBy:     confirmedBy,
 	})
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
-	return session, nil
+	return session, yesVoters, nil
 }

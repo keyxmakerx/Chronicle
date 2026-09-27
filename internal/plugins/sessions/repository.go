@@ -14,6 +14,10 @@ import (
 type SessionRepository interface {
 	Create(ctx context.Context, campaignID string, s *Session) error
 	FindByID(ctx context.Context, id string) (*Session, error)
+	// FindByIDIncludingDeleted is FindByID without the deleted_at filter —
+	// used only to confirm a soft-deleted session's campaign before
+	// restoring it.
+	FindByIDIncludingDeleted(ctx context.Context, id string) (*Session, error)
 	ListByCampaign(ctx context.Context, campaignID string) ([]Session, error)
 	ListByDateRange(ctx context.Context, campaignID, startDate, endDate string) ([]Session, error)
 	SearchByCampaign(ctx context.Context, campaignID, query string) ([]Session, error)
@@ -26,6 +30,52 @@ type SessionRepository interface {
 	UpdateAttendeeStatus(ctx context.Context, sessionID, userID, status string) error
 	RemoveAttendee(ctx context.Context, sessionID, userID string) error
 	ListAttendees(ctx context.Context, sessionID string) ([]Attendee, error)
+	// SetAttendeeNote sets or clears a single attendee's note. Only ever
+	// called when the caller means to touch the note (the service simply
+	// skips the call otherwise), so there is no "leave alone" state here.
+	SetAttendeeNote(ctx context.Context, sessionID, userID string, note *string) error
+	// SetAttendeeExcluded is the Director's own "leave myself out of the
+	// tally" switch for a non-recurring session's single attendee row.
+	SetAttendeeExcluded(ctx context.Context, sessionID, userID string, excluded bool) error
+	// MarkSeriesNeedsRecheck bulk-flags every ANSWERED (non-invited)
+	// session_attendees row for a moved/cancelled non-recurring session.
+	MarkSeriesNeedsRecheck(ctx context.Context, sessionID string) error
+	// ListRespondedUserIDs returns user ids with a non-"invited" answer on a
+	// non-recurring session — who to notify on a move/cancel/restore.
+	ListRespondedUserIDs(ctx context.Context, sessionID string) ([]string, error)
+
+	// Soft delete. A soft-deleted session is excluded from every other read
+	// in this file (FindByID, the list/search/date-range queries); both
+	// methods are idempotent no-ops when the row is already in the target
+	// state, matching this file's existing same-state-resubmit convention.
+	SoftDeleteSession(ctx context.Context, id string) error
+	RestoreSession(ctx context.Context, id string) error
+
+	// Per-occurrence RSVPs for a RECURRING session (session_occurrence_rsvps).
+	// See occurrence_rsvp_repository.go.
+	UpsertOccurrenceRSVP(ctx context.Context, sessionID, userID, occurrenceDate, status string, note *string) error
+	ListOccurrenceRSVPs(ctx context.Context, sessionID, occurrenceDate string) ([]OccurrenceRSVP, error)
+	SetOccurrenceExcluded(ctx context.Context, sessionID, userID, occurrenceDate string, excluded bool) error
+	// MarkOccurrenceNeedsRecheck bulk-flags every answered row for ONE night.
+	MarkOccurrenceNeedsRecheck(ctx context.Context, sessionID, occurrenceDate string) error
+	ListOccurrenceRespondedUserIDs(ctx context.Context, sessionID, occurrenceDate string) ([]string, error)
+	// MarkAllOccurrencesNeedsRecheck / ListAllOccurrenceRespondedUserIDs are
+	// the whole-series equivalents of the two methods above, needed when a
+	// RECURRING session itself (not one specific night) is moved, cancelled
+	// or restored — every night's answer is flagged, not just one.
+	MarkAllOccurrencesNeedsRecheck(ctx context.Context, sessionID string) error
+	ListAllOccurrenceRespondedUserIDs(ctx context.Context, sessionID string) ([]string, error)
+
+	// "Suggest another time" (session_reschedule_suggestions).
+	CreateRescheduleSuggestion(ctx context.Context, s *RescheduleSuggestion) error
+
+	// Calendar feed credentials + the campaign-wide kill switch (see
+	// feed_repository.go).
+	GetOrCreateFeedToken(ctx context.Context, campaignID, userID string) (*CalendarFeedToken, error)
+	ReplaceFeedToken(ctx context.Context, campaignID, userID string) (*CalendarFeedToken, error)
+	FindFeedToken(ctx context.Context, token string) (*CalendarFeedToken, error)
+	IsCalendarFeedEnabled(ctx context.Context, campaignID string) (bool, error)
+	SetCalendarFeedEnabled(ctx context.Context, campaignID string, enabled bool) error
 
 	// Entity linking.
 	LinkEntity(ctx context.Context, sessionID, entityID, role string) error
@@ -95,13 +145,13 @@ func NewSessionRepository(db *sql.DB) SessionRepository {
 // Create inserts a new session.
 func (r *sessionRepository) Create(ctx context.Context, campaignID string, s *Session) error {
 	query := `INSERT INTO sessions
-		(id, campaign_id, name, summary, scheduled_date, scheduled_time, calendar_year, calendar_month,
+		(id, campaign_id, name, summary, scheduled_date, scheduled_time, scheduled_tz, calendar_year, calendar_month,
 		 calendar_day, status, is_recurring, recurrence_type, recurrence_interval,
 		 recurrence_day_of_week, recurrence_end_date, sort_order, created_by, created_at, updated_at)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
 
 	_, err := r.db.ExecContext(ctx, query,
-		s.ID, campaignID, s.Name, s.Summary, s.ScheduledDate, s.ScheduledTime,
+		s.ID, campaignID, s.Name, s.Summary, s.ScheduledDate, s.ScheduledTime, s.ScheduledTZ,
 		s.CalendarYear, s.CalendarMonth, s.CalendarDay,
 		s.Status, s.IsRecurring, s.RecurrenceType, s.RecurrenceInterval,
 		s.RecurrenceDayOfWeek, s.RecurrenceEndDate,
@@ -115,22 +165,28 @@ func (r *sessionRepository) Create(ctx context.Context, campaignID string, s *Se
 
 // FindByID retrieves a session by its UUID.
 func (r *sessionRepository) FindByID(ctx context.Context, id string) (*Session, error) {
+	// deleted_at IS NULL: a soft-deleted session must vanish from FindByID the
+	// same way a hard-deleted one used to. SoftDeleteSession/RestoreSession
+	// themselves operate by id alone (plain UPDATE) and never need to SELECT
+	// a deleted row — but confirming a soft-deleted session's campaign before
+	// restoring it does, which is exactly what FindByIDIncludingDeleted below
+	// is for; do not use this method for that check, it will always 404.
 	query := `SELECT s.id, s.campaign_id, s.name, s.summary, s.notes, s.notes_html,
 	                 s.recap, s.recap_html,
-	                 s.scheduled_date, s.scheduled_time, s.calendar_year, s.calendar_month, s.calendar_day,
+	                 s.scheduled_date, s.scheduled_time, s.scheduled_tz, s.calendar_year, s.calendar_month, s.calendar_day,
 	                 s.status, s.is_recurring, s.recurrence_type, s.recurrence_interval,
 	                 s.recurrence_day_of_week, s.recurrence_end_date,
 	                 s.sort_order, s.created_by, s.created_at, s.updated_at,
 	                 u.display_name
 	          FROM sessions s
 	          LEFT JOIN users u ON u.id = s.created_by
-	          WHERE s.id = ?`
+	          WHERE s.id = ? AND s.deleted_at IS NULL`
 
 	s := &Session{}
 	err := r.db.QueryRowContext(ctx, query, id).Scan(
 		&s.ID, &s.CampaignID, &s.Name, &s.Summary, &s.Notes, &s.NotesHTML,
 		&s.Recap, &s.RecapHTML,
-		&s.ScheduledDate, &s.ScheduledTime, &s.CalendarYear, &s.CalendarMonth, &s.CalendarDay,
+		&s.ScheduledDate, &s.ScheduledTime, &s.ScheduledTZ, &s.CalendarYear, &s.CalendarMonth, &s.CalendarDay,
 		&s.Status, &s.IsRecurring, &s.RecurrenceType, &s.RecurrenceInterval,
 		&s.RecurrenceDayOfWeek, &s.RecurrenceEndDate,
 		&s.SortOrder, &s.CreatedBy, &s.CreatedAt, &s.UpdatedAt,
@@ -145,18 +201,53 @@ func (r *sessionRepository) FindByID(ctx context.Context, id string) (*Session, 
 	return s, nil
 }
 
-// ListByCampaign returns all sessions for a campaign, ordered by scheduled date
-// descending (most recent first), then by sort_order.
-func (r *sessionRepository) ListByCampaign(ctx context.Context, campaignID string) ([]Session, error) {
-	query := `SELECT s.id, s.campaign_id, s.name, s.summary,
-	                 s.scheduled_date, s.scheduled_time, s.calendar_year, s.calendar_month, s.calendar_day,
+// FindByIDIncludingDeleted is FindByID without the deleted_at filter — the
+// one read path that CAN see a soft-deleted session, so the restore flow can
+// confirm which campaign it belongs to (IDOR scoping) before restoring it.
+// Every other read in this file must keep filtering deleted_at IS NULL.
+func (r *sessionRepository) FindByIDIncludingDeleted(ctx context.Context, id string) (*Session, error) {
+	query := `SELECT s.id, s.campaign_id, s.name, s.summary, s.notes, s.notes_html,
+	                 s.recap, s.recap_html,
+	                 s.scheduled_date, s.scheduled_time, s.scheduled_tz, s.calendar_year, s.calendar_month, s.calendar_day,
 	                 s.status, s.is_recurring, s.recurrence_type, s.recurrence_interval,
 	                 s.recurrence_day_of_week, s.recurrence_end_date,
 	                 s.sort_order, s.created_by, s.created_at, s.updated_at,
 	                 u.display_name
 	          FROM sessions s
 	          LEFT JOIN users u ON u.id = s.created_by
-	          WHERE s.campaign_id = ?
+	          WHERE s.id = ?`
+
+	s := &Session{}
+	err := r.db.QueryRowContext(ctx, query, id).Scan(
+		&s.ID, &s.CampaignID, &s.Name, &s.Summary, &s.Notes, &s.NotesHTML,
+		&s.Recap, &s.RecapHTML,
+		&s.ScheduledDate, &s.ScheduledTime, &s.ScheduledTZ, &s.CalendarYear, &s.CalendarMonth, &s.CalendarDay,
+		&s.Status, &s.IsRecurring, &s.RecurrenceType, &s.RecurrenceInterval,
+		&s.RecurrenceDayOfWeek, &s.RecurrenceEndDate,
+		&s.SortOrder, &s.CreatedBy, &s.CreatedAt, &s.UpdatedAt,
+		&s.CreatorName,
+	)
+	if err == sql.ErrNoRows {
+		return nil, apperror.NewNotFound("session not found")
+	}
+	if err != nil {
+		return nil, fmt.Errorf("querying session by id (including deleted): %w", err)
+	}
+	return s, nil
+}
+
+// ListByCampaign returns all sessions for a campaign, ordered by scheduled date
+// descending (most recent first), then by sort_order.
+func (r *sessionRepository) ListByCampaign(ctx context.Context, campaignID string) ([]Session, error) {
+	query := `SELECT s.id, s.campaign_id, s.name, s.summary,
+	                 s.scheduled_date, s.scheduled_time, s.scheduled_tz, s.calendar_year, s.calendar_month, s.calendar_day,
+	                 s.status, s.is_recurring, s.recurrence_type, s.recurrence_interval,
+	                 s.recurrence_day_of_week, s.recurrence_end_date,
+	                 s.sort_order, s.created_by, s.created_at, s.updated_at,
+	                 u.display_name
+	          FROM sessions s
+	          LEFT JOIN users u ON u.id = s.created_by
+	          WHERE s.campaign_id = ? AND s.deleted_at IS NULL
 	          ORDER BY CASE s.status
 	              WHEN 'planned' THEN 0
 	              WHEN 'completed' THEN 1
@@ -176,7 +267,7 @@ func (r *sessionRepository) ListByCampaign(ctx context.Context, campaignID strin
 		var s Session
 		if err := rows.Scan(
 			&s.ID, &s.CampaignID, &s.Name, &s.Summary,
-			&s.ScheduledDate, &s.ScheduledTime, &s.CalendarYear, &s.CalendarMonth, &s.CalendarDay,
+			&s.ScheduledDate, &s.ScheduledTime, &s.ScheduledTZ, &s.CalendarYear, &s.CalendarMonth, &s.CalendarDay,
 			&s.Status, &s.IsRecurring, &s.RecurrenceType, &s.RecurrenceInterval,
 			&s.RecurrenceDayOfWeek, &s.RecurrenceEndDate,
 			&s.SortOrder, &s.CreatedBy, &s.CreatedAt, &s.UpdatedAt,
@@ -192,14 +283,14 @@ func (r *sessionRepository) ListByCampaign(ctx context.Context, campaignID strin
 // SearchByCampaign returns sessions matching a name query for a campaign.
 func (r *sessionRepository) SearchByCampaign(ctx context.Context, campaignID, query string) ([]Session, error) {
 	q := `SELECT s.id, s.campaign_id, s.name, s.summary,
-	             s.scheduled_date, s.scheduled_time, s.calendar_year, s.calendar_month, s.calendar_day,
+	             s.scheduled_date, s.scheduled_time, s.scheduled_tz, s.calendar_year, s.calendar_month, s.calendar_day,
 	             s.status, s.is_recurring, s.recurrence_type, s.recurrence_interval,
 	             s.recurrence_day_of_week, s.recurrence_end_date,
 	             s.sort_order, s.created_by, s.created_at, s.updated_at,
 	             u.display_name
 	      FROM sessions s
 	      LEFT JOIN users u ON u.id = s.created_by
-	      WHERE s.campaign_id = ? AND s.name LIKE ?
+	      WHERE s.campaign_id = ? AND s.deleted_at IS NULL AND s.name LIKE ?
 	      ORDER BY s.name
 	      LIMIT 10`
 
@@ -215,7 +306,7 @@ func (r *sessionRepository) SearchByCampaign(ctx context.Context, campaignID, qu
 		var s Session
 		if err := rows.Scan(
 			&s.ID, &s.CampaignID, &s.Name, &s.Summary,
-			&s.ScheduledDate, &s.ScheduledTime, &s.CalendarYear, &s.CalendarMonth, &s.CalendarDay,
+			&s.ScheduledDate, &s.ScheduledTime, &s.ScheduledTZ, &s.CalendarYear, &s.CalendarMonth, &s.CalendarDay,
 			&s.Status, &s.IsRecurring, &s.RecurrenceType, &s.RecurrenceInterval,
 			&s.RecurrenceDayOfWeek, &s.RecurrenceEndDate,
 			&s.SortOrder, &s.CreatedBy, &s.CreatedAt, &s.UpdatedAt,
@@ -233,15 +324,15 @@ func (r *sessionRepository) Update(ctx context.Context, s *Session) error {
 	query := `UPDATE sessions SET
 		name = ?, summary = ?, notes = ?, notes_html = ?,
 		recap = ?, recap_html = ?,
-		scheduled_date = ?, scheduled_time = ?, calendar_year = ?, calendar_month = ?, calendar_day = ?,
+		scheduled_date = ?, scheduled_time = ?, scheduled_tz = ?, calendar_year = ?, calendar_month = ?, calendar_day = ?,
 		status = ?, is_recurring = ?, recurrence_type = ?, recurrence_interval = ?,
 		recurrence_day_of_week = ?, recurrence_end_date = ?, updated_at = ?
-		WHERE id = ?`
+		WHERE id = ? AND deleted_at IS NULL`
 
 	result, err := r.db.ExecContext(ctx, query,
 		s.Name, s.Summary, s.Notes, s.NotesHTML,
 		s.Recap, s.RecapHTML,
-		s.ScheduledDate, s.ScheduledTime, s.CalendarYear, s.CalendarMonth, s.CalendarDay,
+		s.ScheduledDate, s.ScheduledTime, s.ScheduledTZ, s.CalendarYear, s.CalendarMonth, s.CalendarDay,
 		s.Status, s.IsRecurring, s.RecurrenceType, s.RecurrenceInterval,
 		s.RecurrenceDayOfWeek, s.RecurrenceEndDate, time.Now().UTC(), s.ID,
 	)
@@ -286,7 +377,10 @@ func (r *sessionRepository) Delete(ctx context.Context, id string) error {
 
 // --- Attendee Management ---
 
-// AddAttendee invites a user to a session.
+// AddAttendee invites a user to a session. Signature unchanged from before the
+// game-night migration — note/excluded_from_count are never touched here, so
+// re-inviting a member (e.g. a roster refresh) can never clobber a note they
+// already set or an exclusion they already chose for themselves.
 func (r *sessionRepository) AddAttendee(ctx context.Context, sessionID, userID, status string) error {
 	query := `INSERT INTO session_attendees (session_id, user_id, status)
 	          VALUES (?, ?, ?)
@@ -311,10 +405,15 @@ func (r *sessionRepository) AddAttendee(ctx context.Context, sessionID, userID, 
 // calendar-RSVP token paths do. This method must never be reachable from a path
 // that has not established membership, or it will mint attendee rows for
 // non-members.
+// needs_recheck is reset to 0 here: submitting ANY answer (even re-submitting
+// the same one) is the member looking again, which is exactly what the flag
+// asked them to do. The note column is deliberately absent from this SET
+// clause — changing status must never touch a note set through the separate
+// SetAttendeeNote call.
 func (r *sessionRepository) UpdateAttendeeStatus(ctx context.Context, sessionID, userID, status string) error {
 	query := `INSERT INTO session_attendees (session_id, user_id, status, responded_at)
 	          VALUES (?, ?, ?, NOW())
-	          ON DUPLICATE KEY UPDATE status = VALUES(status), responded_at = NOW()`
+	          ON DUPLICATE KEY UPDATE status = VALUES(status), needs_recheck = 0, responded_at = NOW()`
 
 	if _, err := r.db.ExecContext(ctx, query, sessionID, userID, status); err != nil {
 		return fmt.Errorf("updating attendee status: %w", err)
@@ -337,11 +436,12 @@ func (r *sessionRepository) RemoveAttendee(ctx context.Context, sessionID, userI
 // ListAttendees returns all attendees for a session with user display data.
 func (r *sessionRepository) ListAttendees(ctx context.Context, sessionID string) ([]Attendee, error) {
 	query := `SELECT sa.id, sa.session_id, sa.user_id, sa.status, sa.responded_at,
+	                 sa.note, sa.excluded_from_count, sa.needs_recheck,
 	                 u.display_name, u.avatar_path
 	          FROM session_attendees sa
 	          INNER JOIN users u ON u.id = sa.user_id
 	          WHERE sa.session_id = ?
-	          ORDER BY FIELD(sa.status, 'accepted', 'tentative', 'invited', 'declined'),
+	          ORDER BY FIELD(sa.status, 'accepted', 'carried_yes', 'tentative', 'invited', 'declined'),
 	                   u.display_name`
 
 	rows, err := r.db.QueryContext(ctx, query, sessionID)
@@ -355,6 +455,7 @@ func (r *sessionRepository) ListAttendees(ctx context.Context, sessionID string)
 		var a Attendee
 		if err := rows.Scan(
 			&a.ID, &a.SessionID, &a.UserID, &a.Status, &a.RespondedAt,
+			&a.Note, &a.ExcludedFromCount, &a.NeedsRecheck,
 			&a.DisplayName, &a.AvatarPath,
 		); err != nil {
 			return nil, fmt.Errorf("scanning attendee row: %w", err)
@@ -427,7 +528,7 @@ func (r *sessionRepository) ListSessionEntities(ctx context.Context, sessionID s
 // date matches and recurring sessions that would fall in the range.
 func (r *sessionRepository) ListByDateRange(ctx context.Context, campaignID, startDate, endDate string) ([]Session, error) {
 	query := `SELECT s.id, s.campaign_id, s.name, s.summary,
-	                 s.scheduled_date, s.scheduled_time, s.calendar_year, s.calendar_month, s.calendar_day,
+	                 s.scheduled_date, s.scheduled_time, s.scheduled_tz, s.calendar_year, s.calendar_month, s.calendar_day,
 	                 s.status, s.is_recurring, s.recurrence_type, s.recurrence_interval,
 	                 s.recurrence_day_of_week, s.recurrence_end_date,
 	                 s.sort_order, s.created_by, s.created_at, s.updated_at,
@@ -435,6 +536,7 @@ func (r *sessionRepository) ListByDateRange(ctx context.Context, campaignID, sta
 	          FROM sessions s
 	          LEFT JOIN users u ON u.id = s.created_by
 	          WHERE s.campaign_id = ?
+	            AND s.deleted_at IS NULL
 	            AND s.status = 'planned'
 	            AND (
 	              (s.scheduled_date BETWEEN ? AND ?)
@@ -454,7 +556,7 @@ func (r *sessionRepository) ListByDateRange(ctx context.Context, campaignID, sta
 		var s Session
 		if err := rows.Scan(
 			&s.ID, &s.CampaignID, &s.Name, &s.Summary,
-			&s.ScheduledDate, &s.ScheduledTime, &s.CalendarYear, &s.CalendarMonth, &s.CalendarDay,
+			&s.ScheduledDate, &s.ScheduledTime, &s.ScheduledTZ, &s.CalendarYear, &s.CalendarMonth, &s.CalendarDay,
 			&s.Status, &s.IsRecurring, &s.RecurrenceType, &s.RecurrenceInterval,
 			&s.RecurrenceDayOfWeek, &s.RecurrenceEndDate,
 			&s.SortOrder, &s.CreatedBy, &s.CreatedAt, &s.UpdatedAt,

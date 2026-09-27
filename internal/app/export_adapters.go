@@ -6,15 +6,18 @@ package app
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"log/slog"
+	"net/http"
 	"os"
 
 	"github.com/keyxmakerx/chronicle/internal/apperror"
 	"github.com/keyxmakerx/chronicle/internal/patch"
 	"github.com/keyxmakerx/chronicle/internal/permissions"
 	"github.com/keyxmakerx/chronicle/internal/plugins/addons"
+	"github.com/keyxmakerx/chronicle/internal/plugins/calendar"
 	"github.com/keyxmakerx/chronicle/internal/plugins/campaigns"
 	"github.com/keyxmakerx/chronicle/internal/plugins/entities"
 	"github.com/keyxmakerx/chronicle/internal/plugins/maps"
@@ -240,10 +243,164 @@ func (a *entityExportAdapter) ExportEntities(ctx context.Context, campaignID str
 
 // --- Calendar Export Adapter ---
 
-// CALV5-PLACEHOLDER: calendarExportAdapter (campaigns.CalendarExporter) stood
-// here. V5 must restore it, along with the SetCalendarExporter wiring in
-// routes.go — until then the exporter is unwired and ExportImportService
-// treats that as "no calendar section" rather than an empty one.
+// calendarExportAdapter implements campaigns.CalendarExporter.
+type calendarExportAdapter struct {
+	svc calendar.CalendarService
+}
+
+// isNotFound reports whether err is an apperror.AppError carrying a 404 —
+// the "no calendar" case ExportCalendar's caller (ExportImportService.Export)
+// already treats as "skip this section" rather than a hard failure.
+func isNotFound(err error) bool {
+	var ae *apperror.AppError
+	return errors.As(err, &ae) && ae.Code == http.StatusNotFound
+}
+
+// ExportCalendar walks one campaign calendar into campaigns.ExportCalendarData
+// for a campaign backup, as a declared SYSTEM caller (ADR-049) that bypasses
+// the per-user visibility layer entirely — a backup must capture dm_only
+// events, hidden moons and GM-only calendars, or a restore silently loses
+// content the campaign actually had.
+//
+// campaigns.ExportCalendarData (and campaigns.IDMap.CalendarID) is SINGULAR,
+// a V4-era shape that predates calendar-v5's multi-calendar-per-campaign
+// model (see calendar.Calendar's package doc: "Each campaign can have
+// multiple calendars"). This adapter exports the campaign's DEFAULT calendar,
+// falling back to the first one (by sort order) if none is marked default —
+// any additional calendars in the same campaign are NOT backed up. Widening
+// the export envelope to carry every calendar is a real gap, but a bigger
+// wire-format change than this restoration pass should make unreviewed;
+// left as a follow-up rather than silently ignored (see the PR description).
+func (a *calendarExportAdapter) ExportCalendar(ctx context.Context, campaignID string, entitySlugLookup func(string) string) (*campaigns.ExportCalendarData, error) {
+	const ownerRole = 3
+	systemViewer := permissions.SystemViewer(ownerRole)
+
+	cal, err := a.svc.GetDefaultCalendarForViewer(ctx, campaignID, systemViewer)
+	if err != nil {
+		if !isNotFound(err) {
+			return nil, err
+		}
+		// No calendar is marked default — could be a campaign with zero
+		// calendars (the common case, and the caller treats this NotFound as
+		// "skip"), or one whose calendars predate SetDefaultCalendar ever
+		// being called. Fall back to the first by sort order rather than
+		// silently exporting nothing when a calendar clearly exists.
+		cals, listErr := a.svc.ListCalendars(ctx, campaignID, systemViewer)
+		if listErr != nil {
+			return nil, listErr
+		}
+		if len(cals) == 0 {
+			return nil, err
+		}
+		cal, err = a.svc.GetCalendarForViewer(ctx, cals[0].ID, campaignID, systemViewer)
+		if err != nil {
+			return nil, err
+		}
+	}
+
+	events, err := a.svc.ListAllEventsForCalendar(ctx, cal.ID, campaignID, systemViewer)
+	if err != nil {
+		return nil, err
+	}
+
+	// EventKind id → slug, for Event.KindID → ExportCalendarEvent.Category.
+	kindSlugByID := make(map[int]string, len(cal.EventKinds))
+	for _, k := range cal.EventKinds {
+		kindSlugByID[k.ID] = k.Slug
+	}
+
+	data := &campaigns.ExportCalendarData{
+		Name:             cal.Name,
+		Description:      cal.Description,
+		Mode:             cal.Mode,
+		Visibility:       cal.Visibility,
+		VisibilityRules:  cal.VisibilityRules,
+		EpochName:        cal.EpochName,
+		CurrentYear:      cal.CurrentYear,
+		CurrentMonth:     cal.CurrentMonth,
+		CurrentDay:       cal.CurrentDay,
+		CurrentHour:      cal.CurrentHour,
+		CurrentMinute:    cal.CurrentMinute,
+		HoursPerDay:      cal.HoursPerDay,
+		MinutesPerHour:   cal.MinutesPerHour,
+		SecondsPerMinute: cal.SecondsPerMinute,
+		LeapYearEvery:    cal.LeapYearEvery,
+		LeapYearOffset:   cal.LeapYearOffset,
+	}
+
+	for _, m := range cal.Months {
+		data.Months = append(data.Months, campaigns.ExportCalendarMonth{
+			Name: m.Name, Days: m.Days, SortOrder: m.SortOrder,
+			IsIntercalary: m.IsIntercalary, LeapYearDays: m.LeapYearDays,
+		})
+	}
+	for _, w := range cal.Weekdays {
+		data.Weekdays = append(data.Weekdays, campaigns.ExportCalendarWeekday{
+			Name: w.Name, SortOrder: w.SortOrder,
+		})
+	}
+	for _, m := range cal.Moons {
+		// Always write a non-nil pointer: a fresh export must never itself
+		// produce the "unknown, pre-V5 backup" shape ImportCalendar treats
+		// as hidden — see ExportCalendarMoon's doc comment.
+		hidden := m.HiddenFromPlayers
+		data.Moons = append(data.Moons, campaigns.ExportCalendarMoon{
+			Name: m.Name, CycleDays: m.CycleDays, PhaseOffset: m.PhaseOffset,
+			Color: m.Color, HiddenFromPlayers: &hidden,
+		})
+	}
+	for _, s := range cal.Seasons {
+		data.Seasons = append(data.Seasons, campaigns.ExportCalendarSeason{
+			Name: s.Name, StartMonth: s.StartMonth, StartDay: s.StartDay,
+			EndMonth: s.EndMonth, EndDay: s.EndDay, Description: s.Description,
+			Color: s.Color, WeatherEffect: s.WeatherEffect,
+		})
+	}
+	for _, e := range cal.Eras {
+		data.Eras = append(data.Eras, campaigns.ExportCalendarEra{
+			Name: e.Name, StartYear: e.StartYear, StartMonth: e.StartMonth, StartDay: e.StartDay,
+			EndYear: e.EndYear, EndMonth: e.EndMonth, EndDay: e.EndDay,
+			Description: e.Description, Color: e.Color, SortOrder: e.SortOrder,
+		})
+	}
+	for _, k := range cal.EventKinds {
+		data.EventCategories = append(data.EventCategories, campaigns.ExportEventCategory{
+			Slug: k.Slug, Name: k.Name, Icon: k.Icon, Color: k.Color, SortOrder: k.SortOrder,
+		})
+	}
+
+	for _, evt := range events {
+		var entitySlug *string
+		if evt.EntityID != nil {
+			if s := entitySlugLookup(*evt.EntityID); s != "" {
+				entitySlug = &s
+			}
+		}
+		var category *string
+		if evt.KindID != nil {
+			if slug, ok := kindSlugByID[*evt.KindID]; ok {
+				category = &slug
+			}
+		}
+		data.Events = append(data.Events, campaigns.ExportCalendarEvent{
+			Name: evt.Name, Description: evt.Description, DescriptionHTML: evt.DescriptionHTML,
+			EntitySlug: entitySlug, Year: evt.Year, Month: evt.Month, Day: evt.Day,
+			StartHour: evt.StartHour, StartMinute: evt.StartMinute,
+			EndYear: evt.EndYear, EndMonth: evt.EndMonth, EndDay: evt.EndDay,
+			EndHour: evt.EndHour, EndMinute: evt.EndMinute,
+			IsRecurring: evt.IsRecurring, RecurrenceType: evt.RecurrenceType,
+			RecurrenceInterval: evt.RecurrenceInterval,
+			RecurrenceEndYear:  evt.RecurrenceEndYear, RecurrenceEndMonth: evt.RecurrenceEndMonth, RecurrenceEndDay: evt.RecurrenceEndDay,
+			RecurrenceMaxOccurrences: evt.RecurrenceMaxOccurrences,
+			Visibility:               evt.Visibility, VisibilityRules: evt.VisibilityRules,
+			Category:  category,
+			Announced: evt.Announced, Tier: evt.Tier, Color: evt.Color, Icon: evt.Icon,
+			AllDay: evt.AllDay, Payload: evt.Payload,
+		})
+	}
+
+	return data, nil
+}
 
 // timelineExportAdapter implements campaigns.TimelineExporter.
 type timelineExportAdapter struct {
@@ -984,9 +1141,270 @@ func (a *entityImportAdapter) ImportEntities(ctx context.Context, campaignID, us
 	return idMap, nil
 }
 
-// CALV5-PLACEHOLDER: calendarImportAdapter (campaigns.CalendarImporter, the
-// inverse of the exporter above) stood here. V5 must restore it — until then,
-// importing a pre-V5 backup silently drops any Calendar section in its JSON.
+// calendarImportAdapter implements campaigns.CalendarImporter, the inverse of
+// calendarExportAdapter.
+type calendarImportAdapter struct {
+	svc calendar.CalendarService
+}
+
+// ImportCalendar rebuilds one calendar (and its months/weekdays/moons/
+// seasons/eras/event kinds/events) from data into a freshly-created campaign,
+// re-linking entity ties through idMap. Best-effort: a bad sub-resource is
+// reported via report.Fail and skipped rather than aborting the whole import
+// (see ExportImportService.Import's doc comment) — a partially-restored
+// calendar beats none.
+//
+// data.EndMonth/EndDay-less eras and CreateEventKind's own icon-shape
+// validation are the two places a PRE-V5 backup's calendar section is most
+// likely to partially fail: V4's ExportCalendarEra carried year-only
+// boundaries (no month/day — see ExportCalendarEra's doc comment) and V4's
+// default event kinds used emoji icons, which V5's CreateEventKind rejects
+// (Font Awesome class names only, enforced at creation, not merely at
+// display). Both degrade gracefully here — an era gets month/day defaults
+// (see eraStartMonthDay below), and an event whose category's kind failed to
+// import still gets created, just with no KindID — rather than losing the
+// era or the event outright.
+func (a *calendarImportAdapter) ImportCalendar(ctx context.Context, campaignID string, data *campaigns.ExportCalendarData, idMap *campaigns.IDMap, report *campaigns.ImportReport) error {
+	months := make([]calendar.MonthInput, len(data.Months))
+	for i, m := range data.Months {
+		months[i] = calendar.MonthInput{
+			Name: m.Name, Days: m.Days, SortOrder: m.SortOrder,
+			IsIntercalary: m.IsIntercalary, LeapYearDays: m.LeapYearDays,
+		}
+	}
+	weekdays := make([]calendar.WeekdayInput, len(data.Weekdays))
+	for i, w := range data.Weekdays {
+		weekdays[i] = calendar.WeekdayInput{Name: w.Name, SortOrder: w.SortOrder}
+	}
+
+	cal, err := a.svc.CreateCalendar(ctx, campaignID, calendar.CreateCalendarInput{
+		Name:             data.Name,
+		Description:      data.Description,
+		Mode:             data.Mode,
+		EpochName:        data.EpochName,
+		CurrentYear:      data.CurrentYear,
+		HoursPerDay:      data.HoursPerDay,
+		MinutesPerHour:   data.MinutesPerHour,
+		SecondsPerMinute: data.SecondsPerMinute,
+		LeapYearEvery:    data.LeapYearEvery,
+		LeapYearOffset:   data.LeapYearOffset,
+		Visibility:       importCalendarVisibility(data.Visibility),
+		VisibilityRules:  data.VisibilityRules,
+	})
+	if err != nil {
+		return fmt.Errorf("create calendar: %w", err)
+	}
+	idMap.CalendarID = cal.ID
+
+	// This is the campaign's first (only, per ExportCalendarData's singular
+	// shape) calendar, so it becomes the default — every default-calendar
+	// reader (GetDefaultCalendarForViewer, the skybox/dashboard/category
+	// blocks) needs one marked, and CreateCalendar itself never sets it.
+	if err := a.svc.SetDefaultCalendar(ctx, campaignID, cal.ID); err != nil {
+		slog.Warn("import: set default calendar failed", slog.Any("error", err))
+		report.Fail(campaigns.SectionCalendar, campaigns.KindCalendar, data.Name, apperror.SafeMessage(err))
+	}
+
+	if len(months) > 0 {
+		if err := a.svc.SetMonths(ctx, cal.ID, campaignID, months); err != nil {
+			slog.Warn("import: set months failed", slog.Any("error", err))
+			report.Fail(campaigns.SectionCalendar, "months", data.Name, apperror.SafeMessage(err))
+		}
+	}
+	if len(weekdays) > 0 {
+		if err := a.svc.SetWeekdays(ctx, cal.ID, campaignID, weekdays); err != nil {
+			slog.Warn("import: set weekdays failed", slog.Any("error", err))
+			report.Fail(campaigns.SectionCalendar, "weekdays", data.Name, apperror.SafeMessage(err))
+		}
+	}
+	if len(data.Moons) > 0 {
+		moons := make([]calendar.MoonInput, len(data.Moons))
+		for i, m := range data.Moons {
+			moons[i] = calendar.MoonInput{
+				Name: m.Name, CycleDays: m.CycleDays, PhaseOffset: m.PhaseOffset,
+				Color: m.Color, HiddenFromPlayers: importMoonHidden(m.HiddenFromPlayers),
+			}
+		}
+		if err := a.svc.SetMoons(ctx, cal.ID, campaignID, moons); err != nil {
+			slog.Warn("import: set moons failed", slog.Any("error", err))
+			report.Fail(campaigns.SectionCalendar, "moons", data.Name, apperror.SafeMessage(err))
+		}
+	}
+	if len(data.Seasons) > 0 {
+		seasons := make([]calendar.Season, len(data.Seasons))
+		for i, s := range data.Seasons {
+			seasons[i] = calendar.Season{
+				Name: s.Name, StartMonth: s.StartMonth, StartDay: s.StartDay,
+				EndMonth: s.EndMonth, EndDay: s.EndDay, Description: s.Description,
+				Color: s.Color, WeatherEffect: s.WeatherEffect,
+			}
+		}
+		if err := a.svc.SetSeasons(ctx, cal.ID, campaignID, seasons); err != nil {
+			slog.Warn("import: set seasons failed", slog.Any("error", err))
+			report.Fail(campaigns.SectionCalendar, "seasons", data.Name, apperror.SafeMessage(err))
+		}
+	}
+
+	// Eras, one CreateEra call each — the only way to write eras this
+	// service exposes (no bulk SetEras; see CalendarService's doc comment).
+	for _, e := range data.Eras {
+		startMonth, startDay := eraStartMonthDay(e.StartMonth, e.StartDay)
+		var endMonth, endDay *int
+		if e.EndYear != nil {
+			endMonth, endDay = e.EndMonth, e.EndDay
+			if endMonth == nil {
+				m := 12
+				endMonth = &m
+			}
+			if endDay == nil {
+				d := 31
+				endDay = &d
+			}
+		}
+		if _, err := a.svc.CreateEra(ctx, cal.ID, campaignID, calendar.EraInput{
+			Name: e.Name, StartYear: e.StartYear, StartMonth: startMonth, StartDay: startDay,
+			EndYear: e.EndYear, EndMonth: endMonth, EndDay: endDay,
+			Description: e.Description, Color: e.Color, SortOrder: e.SortOrder,
+		}); err != nil {
+			slog.Warn("import: create era failed", slog.String("name", e.Name), slog.Any("error", err))
+			report.Fail(campaigns.SectionCalendar, "era", e.Name, apperror.SafeMessage(err))
+		}
+	}
+
+	// Event kinds (categories), by slug — an event referencing a slug whose
+	// kind failed to import (see the icon-validation note above) is still
+	// created below, just with no KindID.
+	kindIDBySlug := make(map[string]int, len(data.EventCategories))
+	for _, c := range data.EventCategories {
+		kind, err := a.svc.CreateEventKind(ctx, campaignID, calendar.EventKindInput{
+			Slug: c.Slug, Name: c.Name, Icon: c.Icon, Color: c.Color, SortOrder: c.SortOrder,
+		})
+		if err != nil {
+			slog.Warn("import: create event kind failed", slog.String("slug", c.Slug), slog.Any("error", err))
+			report.Fail(campaigns.SectionCalendar, "event category", c.Name, apperror.SafeMessage(err))
+			continue
+		}
+		kindIDBySlug[c.Slug] = kind.ID
+	}
+
+	// Set current date/time (CreateCalendar only takes CurrentYear).
+	if err := a.svc.UpdateCalendar(ctx, cal.ID, campaignID, calendar.UpdateCalendarInput{
+		Name:          data.Name,
+		CurrentMonth:  patch.Of(data.CurrentMonth),
+		CurrentDay:    patch.Of(data.CurrentDay),
+		CurrentHour:   patch.Of(data.CurrentHour),
+		CurrentMinute: patch.Of(data.CurrentMinute),
+	}); err != nil {
+		slog.Warn("import: set current date failed", slog.Any("error", err))
+		report.Fail(campaigns.SectionCalendar, campaigns.KindCalendar, data.Name, apperror.SafeMessage(err))
+	}
+
+	// Events. CanAuthorDmOnly is forced true: this is a Director-initiated
+	// campaign restore (the export/import endpoints are Owner-only end to
+	// end), rebuilding events the campaign already had, including dm_only
+	// ones — the same trust level ExportCalendar itself was read under.
+	for _, evt := range data.Events {
+		var entityID *string
+		if evt.EntitySlug != nil {
+			if id, ok := idMap.EntitySlugToID[*evt.EntitySlug]; ok {
+				entityID = &id
+			}
+		}
+		var kindID *int
+		if evt.Category != nil {
+			if id, ok := kindIDBySlug[*evt.Category]; ok {
+				kindID = &id
+			}
+		}
+		_, err := a.svc.CreateEvent(ctx, cal.ID, campaignID, calendar.CreateEventInput{
+			Name:                     evt.Name,
+			Description:              evt.Description,
+			DescriptionHTML:          evt.DescriptionHTML,
+			EntityID:                 entityID,
+			Year:                     evt.Year,
+			Month:                    evt.Month,
+			Day:                      evt.Day,
+			StartHour:                evt.StartHour,
+			StartMinute:              evt.StartMinute,
+			EndYear:                  evt.EndYear,
+			EndMonth:                 evt.EndMonth,
+			EndDay:                   evt.EndDay,
+			EndHour:                  evt.EndHour,
+			EndMinute:                evt.EndMinute,
+			IsRecurring:              evt.IsRecurring,
+			RecurrenceType:           evt.RecurrenceType,
+			RecurrenceInterval:       evt.RecurrenceInterval,
+			RecurrenceEndYear:        evt.RecurrenceEndYear,
+			RecurrenceEndMonth:       evt.RecurrenceEndMonth,
+			RecurrenceEndDay:         evt.RecurrenceEndDay,
+			RecurrenceMaxOccurrences: evt.RecurrenceMaxOccurrences,
+			Visibility:               evt.Visibility,
+			VisibilityRules:          evt.VisibilityRules,
+			KindID:                   kindID,
+			Announced:                evt.Announced,
+			Tier:                     evt.Tier,
+			Color:                    evt.Color,
+			Icon:                     evt.Icon,
+			AllDay:                   evt.AllDay,
+			Payload:                  evt.Payload,
+			CanAuthorDmOnly:          true,
+		})
+		if err != nil {
+			slog.Warn("import: create calendar event failed", slog.String("name", evt.Name), slog.Any("error", err))
+			report.Fail(campaigns.SectionCalendar, "calendar event", evt.Name, apperror.SafeMessage(err))
+		}
+	}
+
+	return nil
+}
+
+// eraStartMonthDay resolves an imported era's start month/day: a modern
+// export always carries real values (validated 1-12 / 1-31 at creation, see
+// validateEraShape), so 0 only appears from a PRE-V5 backup whose
+// ExportCalendarEra never had these fields (see its doc comment) — read as
+// "day-level precision unknown" and defaulted to the 1st of the start year,
+// the same "whole year" reading Era.ContainsDate gives an end year with no
+// end month/day.
+func eraStartMonthDay(month, day int) (int, int) {
+	if month == 0 {
+		month = 1
+	}
+	if day == 0 {
+		day = 1
+	}
+	return month, day
+}
+
+// importCalendarVisibility resolves an imported calendar's visibility,
+// never trusting the JSON blindly. A recognized value ("everyone" or
+// "dm_only") passes through unchanged. Anything else — including "" from a
+// PRE-V5 backup, which never had this field (see ExportCalendarData's doc
+// comment) — fails toward privacy rather than toward exposure: a calendar
+// that was actually dm_only before the backup must never come back as
+// "everyone" just because the backup predates this field or was corrupted,
+// so an unknown value defaults to dm_only, not everyone.
+func importCalendarVisibility(v string) string {
+	switch v {
+	case "everyone", "dm_only":
+		return v
+	default:
+		return "dm_only"
+	}
+}
+
+// importMoonHidden resolves an imported moon's HiddenFromPlayers, mirroring
+// importCalendarVisibility's reasoning one field down: a nil pointer means
+// the backup predates ExportCalendarMoon.HiddenFromPlayers (V5, #778) and
+// never recorded whether the Director had hidden this moon, so it must fail
+// toward privacy rather than toward exposure — an unknown value imports as
+// hidden, never visible, so restoring an old backup can never un-hide a moon
+// on its own.
+func importMoonHidden(hidden *bool) bool {
+	if hidden == nil {
+		return true
+	}
+	return *hidden
+}
 
 // sessionImportAdapter implements campaigns.SessionImporter.
 type sessionImportAdapter struct {
@@ -1599,4 +2017,37 @@ func ptrString(s *string) string {
 		return *s
 	}
 	return ""
+}
+
+// aiExportCalendarListerAdapter implements aiexport.CalendarLister.
+// A declared SYSTEM caller (ADR-049): the AI export is a Director-only tool
+// (ai_workspace's own route gating enforces this) that needs the FULL
+// picture — dm_only events, not-yet-announced ones, hidden moons — so the
+// renderer's own Safe-mode filter (aiexport/renderer.go's
+// RenderCalendarEvents) can apply its own honest rules rather than trusting
+// a per-viewer calendar read to already agree with what "Safe" means.
+type aiExportCalendarListerAdapter struct {
+	svc calendar.CalendarService
+}
+
+// GetCalendar returns the campaign's default calendar, unfiltered. Same
+// "no calendar yet" -> nil,nil degrade aiexport's service.go already expects
+// (a disabled addon or a campaign with no calendar just skips the section).
+func (a *aiExportCalendarListerAdapter) GetCalendar(ctx context.Context, campaignID string) (*calendar.Calendar, error) {
+	const ownerRole = 3
+	cal, err := a.svc.GetDefaultCalendarForViewer(ctx, campaignID, permissions.SystemViewer(ownerRole))
+	if err != nil {
+		if isNotFound(err) {
+			return nil, nil //nolint:nilerr // no calendar yet — a normal state, not a failure
+		}
+		return nil, err
+	}
+	return cal, nil
+}
+
+// ListAllEventsForCalendar returns every event on calendarID, unfiltered —
+// see the type doc comment for why this bypass is safe here specifically.
+func (a *aiExportCalendarListerAdapter) ListAllEventsForCalendar(ctx context.Context, campaignID, calendarID string) ([]calendar.Event, error) {
+	const ownerRole = 3
+	return a.svc.ListAllEventsForCalendar(ctx, calendarID, campaignID, permissions.SystemViewer(ownerRole))
 }

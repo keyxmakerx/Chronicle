@@ -301,6 +301,74 @@ func IsAddonEnabled(ctx context.Context, slug string) bool {
 	return addons[slug]
 }
 
+// --- Plugin health (for conditional widget rendering) ---
+//
+// Distinct from IsAddonEnabled: an addon can be turned ON in the campaign's
+// settings while its plugin failed to load its own schema migrations (a
+// degraded install, see database.PluginHealthRegistry) — its routes are
+// never registered, so an hx-get to one 404s. HTMX does not swap an error
+// response, so a block whose hx-get target route may not exist must check
+// this BEFORE emitting the hx-get wrapper, or it renders as a stuck spinner
+// forever, and any accompanying error response still pops a toast for every
+// viewer even though nothing is actually wrong for them.
+type ctxKeyHealthyPlugins struct{}
+
+// SetHealthyPlugins stores which plugin slugs have a healthy schema for the
+// current request. A plugin absent from the map is treated as healthy —
+// most plugins have no degraded-install concept worth checking, so callers
+// only need to populate the ones a template actually branches on.
+func SetHealthyPlugins(ctx context.Context, healthy map[string]bool) context.Context {
+	return context.WithValue(ctx, ctxKeyHealthyPlugins{}, healthy)
+}
+
+// IsPluginHealthy reports whether slug's plugin has a healthy schema, per
+// SetHealthyPlugins. Defaults to true when unset (nothing was ever recorded
+// for that slug, or the map wasn't set for this request) — a template
+// checking a plugin's health degrades to "assume healthy" the same way
+// IsAddonEnabled degrades to "assume disabled" for an unrecognized slug: the
+// safer default for what each check protects against.
+func IsPluginHealthy(ctx context.Context, slug string) bool {
+	healthy, ok := ctx.Value(ctxKeyHealthyPlugins{}).(map[string]bool)
+	if !ok {
+		return true
+	}
+	status, known := healthy[slug]
+	if !known {
+		return true
+	}
+	return status
+}
+
+// --- Upcoming-events availability (dashboard/category calendar cards) ---
+//
+// The campaign dashboard and entity-category dashboard each have an
+// "Upcoming Events" card that hx-gets the calendar plugin's own embed
+// route. Whether that route actually exists for this request depends on
+// two calendar-specific facts — the calendar addon enabled for the
+// campaign, and the calendar plugin's schema healthy (see IsPluginHealthy)
+// — that neither the campaigns nor the entities package may check by name:
+// a literal calendar-plugin slug in either would cross plugin isolation
+// (T-B2), since neither owns nor may import the calendar plugin. internal/app
+// is allowed to name it (it wires every plugin), so it resolves both facts
+// into this one neutral flag, once, alongside SetHealthyPlugins.
+type ctxKeyUpcomingEventsAvailable struct{}
+
+// SetUpcomingEventsAvailable records whether a dashboard/category "Upcoming
+// Events" card's hx-get target is actually reachable for this request.
+func SetUpcomingEventsAvailable(ctx context.Context, available bool) context.Context {
+	return context.WithValue(ctx, ctxKeyUpcomingEventsAvailable{}, available)
+}
+
+// UpcomingEventsAvailable reports SetUpcomingEventsAvailable's value,
+// defaulting to false (unavailable) when unset — the same fail-closed
+// default IsAddonEnabled gives an addon it has no record of, so a template
+// rendered without the request middleware (e.g. a bare unit test) shows the
+// quiet "not enabled" state rather than an hx-get that 404s.
+func UpcomingEventsAvailable(ctx context.Context) bool {
+	available, _ := ctx.Value(ctxKeyUpcomingEventsAvailable{}).(bool)
+	return available
+}
+
 // EnabledSystem identifies the game system enabled for the current campaign,
 // used to render its rulebook (reference) nav link. Slug is the system's
 // module ID (the `:mod` path segment, e.g. "drawsteel").

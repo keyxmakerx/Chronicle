@@ -6,8 +6,13 @@
 //  2. TestTimelineEventCount_Integration — a real-MariaDB behavioral proof
 //     that List/ListByCalendar's EventCount agrees with the merged service
 //     read (ListTimelineEvents) for a player viewer with a dm_only event and
-//     a dm_only link override in scope. Skipped under `-short`. Run with
-//     `make docker-up && make migrate-up && make test-int`.
+//     a dm_only link override in scope. Wires dbCalEventLinkLister, a
+//     CalendarEventLinkLister test double that reads calendar_events/
+//     calendars directly via SQL rather than importing the calendar package
+//     — this file's own convention (see search_visibility_reachability_test.go's
+//     header comment) is to reach the calendar plugin's tables through its
+//     migrations, never its Go package, even from a test. Skipped under
+//     `-short`. Run with `make docker-up && make migrate-up && make test-int`.
 package timeline
 
 import (
@@ -82,7 +87,7 @@ func flatten(s string) string {
 // ListStandaloneEvents) use, including the link-level override: a count
 // that only checks ce.visibility would still count a link a GM overrode to
 // dm_only even though the row reads hide it. COALESCE(NULLIF(tel
-// .visibility_override, ''), ce.visibility) is the SQL mirror of
+// .visibility_override, ”), ce.visibility) is the SQL mirror of
 // EffectiveVisibility().
 func TestEventCountVisibility_MatchesListFilters(t *testing.T) {
 	for _, fn := range []string{"List", "ListByCalendar"} {
@@ -95,16 +100,25 @@ func TestEventCountVisibility_MatchesListFilters(t *testing.T) {
 			}
 		}
 
-		// CALV5-PLACEHOLDER: the linked half of this count is dark while the
-		// calendar tables are dropped. This asserts that dark state; when V5
-		// reintroduces the calendar_events join, it must also restore the
-		// linked visibility fragment in the same change, or a player's count
-		// will again include events their rows don't show.
+		// The linked half of the count is restored in the SERVICE layer now
+		// (calendar-v5 seams, #778), not in this SQL: repository.go can no
+		// longer JOIN calendar_events to count linked events (plugin
+		// isolation rule 8), so timelineService.recountEventsForViewer
+		// recomputes EventCount from the SAME merged, filtered read
+		// (timelineEventLinks + filterEventLinksByUser) ListTimelineEvents
+		// returns, for EVERY viewer including Owners — see that function's
+		// doc comment and TestTimelineEventCount_Integration below, the
+		// behavioral proof of the two staying in agreement.
+		//
+		// This guard stays as a regression net against the OLD design: if a
+		// future change reintroduces a direct join here, it must restore the
+		// visibility fragment in the same change, or a player's count would
+		// again include events their rows don't show.
 		if strings.Contains(body, flatten("JOIN calendar_events")) {
 			if !strings.Contains(body, flatten(`COALESCE(NULLIF(tel.visibility_override, ''), ce.visibility) = 'everyone'`)) {
-				t.Errorf("%s: the linked-event count is back WITHOUT its visibility fragment — "+
+				t.Errorf("%s: a direct calendar_events join reappeared WITHOUT its visibility fragment — "+
 					"that is the counting oracle this test exists for. Restore the filter, or "+
-					"read links through the calendar service instead of joining its table.", fn)
+					"keep reading links through the calendar service instead of joining its table.", fn)
 			}
 		}
 		// Both filters must be CLEARED (not just declared) for a DM-capable
@@ -128,10 +142,6 @@ func TestEventCountVisibility_MatchesListFilters(t *testing.T) {
 // (ListTimelineEvents: repo filter + EffectiveVisibility()) returns for both
 // a player and an owner viewer. Links carrying visibility_rules remain
 // outside this agreement (resolved in Go per user; see List's doc comment).
-//
-// CALV5-PLACEHOLDER: event links are dark until V5 restores the
-// calendar_events join, so these counts cover only the standalone dm_only
-// event. With the join back, the wants are player 1, owner 4, ListByCalendar 1.
 func TestTimelineEventCount_Integration(t *testing.T) {
 	if testing.Short() {
 		t.Skip("integration test requires a database; skipped under -short")
@@ -199,20 +209,37 @@ func TestTimelineEventCount_Integration(t *testing.T) {
 
 	// assertAgrees derives the row count from the real merged service read
 	// (ListTimelineEvents, including the EffectiveVisibility() override
-	// step) and checks List's EventCount against that, not a hardcoded
-	// expectation, so it fails if either side drifts.
+	// step) and checks the SERVICE's EventCount against that, not a
+	// hardcoded expectation, so it fails if either side drifts.
+	//
+	// Deliberately goes through svc.ListTimelines, not repo.List directly:
+	// the repository's own SQL count now covers standalone events only (it
+	// can no longer JOIN calendar_events — plugin isolation rule 8), and the
+	// linked half is restored at the service layer by recountEventsForViewer
+	// (service.go). repo.List's EventCount was never meant to already equal
+	// the full count on its own; asserting that at the repo layer produced a
+	// false "DISAGREE" here even though the real caller-facing path
+	// (ListTimelines) was already correct.
 	svc := NewTimelineService(repo, nil, nil, nil)
+	if s, ok := svc.(interface {
+		SetCalendarEventLinkLister(CalendarEventLinkLister)
+	}); ok {
+		s.SetCalendarEventLinkLister(&dbCalEventLinkLister{db: db})
+	} else {
+		t.Fatal("TimelineService does not expose SetCalendarEventLinkLister")
+	}
 	assertAgrees := func(t *testing.T, role int, wantCount int) {
 		t.Helper()
-		tls, err := repo.List(ctx, campaignID, role)
+		viewer := permissions.RequestViewer(role, userID)
+		tls, err := svc.ListTimelines(ctx, campaignID, viewer)
 		if err != nil {
-			t.Fatalf("List: %v", err)
+			t.Fatalf("ListTimelines: %v", err)
 		}
 		if len(tls) != 1 {
 			t.Fatalf("expected exactly 1 timeline, got %d", len(tls))
 		}
 
-		rows, err := svc.ListTimelineEvents(ctx, timelineID, campaignID, permissions.RequestViewer(role, userID))
+		rows, err := svc.ListTimelineEvents(ctx, timelineID, campaignID, viewer)
 		if err != nil {
 			t.Fatalf("ListTimelineEvents: %v", err)
 		}
@@ -222,27 +249,77 @@ func TestTimelineEventCount_Integration(t *testing.T) {
 			t.Fatalf("role %d: len(ListTimelineEvents) = %d, want %d (fixture drift, not the bug under test)", role, gotRows, wantCount)
 		}
 		if tls[0].EventCount != gotRows {
-			t.Errorf("role %d: List's EventCount (%d) and the actual row count (%d) DISAGREE — the visibility-oracle bug is back", role, tls[0].EventCount, gotRows)
+			t.Errorf("role %d: ListTimelines' EventCount (%d) and the actual row count (%d) DISAGREE — the visibility-oracle bug is back", role, tls[0].EventCount, gotRows)
 		}
 	}
 
-	t.Run("player sees nothing (linked events dark, standalone is dm_only)", func(t *testing.T) {
-		assertAgrees(t, permissions.RolePlayer, 0)
+	t.Run("player sees only the public linked event", func(t *testing.T) {
+		assertAgrees(t, permissions.RolePlayer, 1)
 	})
-	t.Run("owner sees only the standalone event (linked events dark)", func(t *testing.T) {
-		assertAgrees(t, permissions.RoleOwner, 1)
+	t.Run("owner sees all four events", func(t *testing.T) {
+		assertAgrees(t, permissions.RoleOwner, 4)
 	})
 
-	// ListByCalendar carries the identical fix; confirm it agrees too.
+	// ListByCalendar carries the identical fix; confirm it agrees too, again
+	// through the service (ListTimelinesForCalendar), not the bare repo call.
 	t.Run("ListByCalendar agrees for player", func(t *testing.T) {
-		tls, err := repo.ListByCalendar(ctx, calendarID, permissions.RolePlayer)
+		tls, err := svc.ListTimelinesForCalendar(ctx, calendarID, permissions.RequestViewer(permissions.RolePlayer, userID))
 		if err != nil {
-			t.Fatalf("ListByCalendar: %v", err)
+			t.Fatalf("ListTimelinesForCalendar: %v", err)
 		}
-		if len(tls) != 1 || tls[0].EventCount != 0 {
-			t.Errorf("ListByCalendar (player): got %+v, want exactly 1 timeline with EventCount=0 (linked events dark, standalone is dm_only)", tls)
+		if len(tls) != 1 || tls[0].EventCount != 1 {
+			t.Errorf("ListTimelinesForCalendar (player): got %+v, want exactly 1 timeline with EventCount=1", tls)
 		}
 	})
+}
+
+// dbCalEventLinkLister is a CalendarEventLinkLister test double for
+// TestTimelineEventCount_Integration: it reads calendar_events/calendars
+// directly via SQL, mirroring the calendar plugin's own role-based
+// visibility filter, rather than importing the calendar package (see the
+// file doc comment for why).
+type dbCalEventLinkLister struct{ db *sql.DB }
+
+func (l *dbCalEventLinkLister) CalendarName(ctx context.Context, _, calendarID string, _ int) string {
+	var name string
+	if err := l.db.QueryRowContext(ctx, `SELECT name FROM calendars WHERE id = ?`, calendarID).Scan(&name); err != nil {
+		return ""
+	}
+	return name
+}
+
+func (l *dbCalEventLinkLister) EventsByIDs(ctx context.Context, calendarID, _ string, eventIDs []string, role int) ([]CalendarEventRef, error) {
+	if len(eventIDs) == 0 {
+		return nil, nil
+	}
+	visFilter := "AND visibility = 'everyone'"
+	if permissions.CanSeeDmOnly(role) {
+		visFilter = ""
+	}
+	placeholders := strings.TrimSuffix(strings.Repeat("?,", len(eventIDs)), ",")
+	args := make([]any, 0, len(eventIDs)+1)
+	args = append(args, calendarID)
+	for _, id := range eventIDs {
+		args = append(args, id)
+	}
+	query := fmt.Sprintf(
+		`SELECT id, name, year, month, day, visibility FROM calendar_events
+		 WHERE calendar_id = ? AND id IN (%s) %s`, placeholders, visFilter)
+	rows, err := l.db.QueryContext(ctx, query, args...)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var refs []CalendarEventRef
+	for rows.Next() {
+		var r CalendarEventRef
+		if err := rows.Scan(&r.ID, &r.Name, &r.Year, &r.Month, &r.Day, &r.Visibility); err != nil {
+			return nil, err
+		}
+		refs = append(refs, r)
+	}
+	return refs, rows.Err()
 }
 
 // --- DB test helpers (mirrors internal/plugins/entities/repository_integration_test.go verbatim) ---

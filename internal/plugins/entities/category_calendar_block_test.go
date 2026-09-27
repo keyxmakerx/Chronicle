@@ -12,6 +12,7 @@ import (
 	"testing"
 
 	"github.com/keyxmakerx/chronicle/internal/plugins/campaigns"
+	"github.com/keyxmakerx/chronicle/internal/templates/layouts"
 )
 
 func TestCategoryDashboard_CalendarBlockRenders(t *testing.T) {
@@ -34,18 +35,28 @@ func TestCategoryDashboard_CalendarBlockRenders(t *testing.T) {
 		t.Fatalf("block type = %q, want calendar_preview", got)
 	}
 
-	// 2) Render: the custom dashboard must show the calendar card.
-	//
-	// CALV5-PLACEHOLDER: while the calendar is rebuilt this asserts the
-	// shared rebuild notice instead of the card's own header ("Upcoming
-	// Events"); restore the header assertion when V5 restores the card.
+	// 2) Render: the custom dashboard must show the real "Upcoming Events"
+	// card (calendar-v5, #778), lazy-loading from the calendar plugin's own
+	// embed route — not the shared rebuild notice.
 	cc := &campaigns.CampaignContext{Campaign: &campaigns.Campaign{ID: "camp-1", Name: "C"}, MemberRole: campaigns.RoleOwner}
+	// The real request pipeline always populates the upcoming-events-available
+	// flag on the render context (internal/app/routes.go's LayoutInjector)
+	// before a page renders; this test does the same rather than exercising
+	// the "context never set" fail-safe path, which
+	// category_calendar_card_test.go covers on its own.
+	ctx := layouts.SetUpcomingEventsAvailable(context.Background(), true)
 	var buf bytes.Buffer
-	if err := CategoryDashboardContent(cc, et, nil, nil, 0, ListOptions{}, "", nil).Render(context.Background(), &buf); err != nil {
+	if err := CategoryDashboardContent(cc, et, nil, nil, 0, ListOptions{}, "", nil).Render(ctx, &buf); err != nil {
 		t.Fatalf("render: %v", err)
 	}
 	html := buf.String()
-	if !strings.Contains(html, "is being rebuilt") {
-		t.Errorf("calendar block did not render at all; custom dashboard likely fell back to default.\nHTML:\n%s", html)
+	if strings.Contains(html, "is being rebuilt") {
+		t.Errorf("calendar block still shows the rebuild notice; V5's real card did not wire in.\nHTML:\n%s", html)
+	}
+	if !strings.Contains(html, "Upcoming Events") {
+		t.Errorf("calendar block did not render its own header.\nHTML:\n%s", html)
+	}
+	if !strings.Contains(html, "/campaigns/camp-1/calendars/upcoming") {
+		t.Errorf("calendar block did not hx-get the calendar plugin's upcoming-events fragment.\nHTML:\n%s", html)
 	}
 }

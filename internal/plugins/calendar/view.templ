@@ -1,0 +1,101 @@
+// view.templ renders the calendar's own page: a thin page shell (Templ) plus
+// a mount point the calendar_view widget fills in entirely — the month
+// grid, header, day/era fold-out cards, event glance/detail overlays and
+// moons are all client-rendered from the JSON this page ferries down on
+// first paint. Mirrors internal/plugins/maps/maps.templ's structure: a
+// server-rendered config div read by the widget's JS, since templ's
+// `{ expr }` interpolation does not run inside <script> blocks.
+package calendar
+
+import (
+	"encoding/json"
+	"fmt"
+
+	"github.com/keyxmakerx/chronicle/internal/plugins/campaigns"
+	"github.com/keyxmakerx/chronicle/internal/templates/components"
+	"github.com/keyxmakerx/chronicle/internal/templates/layouts"
+)
+
+// CalendarViewPage renders the full calendar page.
+templ CalendarViewPage(cc *campaigns.CampaignContext, data CalendarViewData) {
+	@layouts.App("Calendar") {
+		@calendarViewContent(cc, data)
+	}
+}
+
+// calendarViewContent renders the breadcrumbs, the calendar-view.css
+// stylesheet (loaded only on this page, same reasoning as maps.templ
+// loading Leaflet's CSS/JS inline rather than globally) and the widget's
+// mount point. The widget scripts themselves are NOT loaded here — see the
+// comment at the bottom of this function for why a page templ can't
+// <script src> them, and internal/app/routes.go's pluginBodyScripts for
+// where they actually load.
+templ calendarViewContent(cc *campaigns.CampaignContext, data CalendarViewData) {
+	<link rel="stylesheet" href={ layouts.AssetURL("/static/css/calendar-view.css") }/>
+	<div class="max-w-5xl mx-auto py-6 px-4">
+		@components.Breadcrumbs([]components.BreadcrumbItem{
+			{Label: cc.Campaign.Name, Href: fmt.Sprintf("/campaigns/%s", data.CampaignID), Icon: "fa-dice-d20"},
+			{Label: data.Calendar.Name},
+		})
+		<div
+			class="cal-v5"
+			data-widget="calendar_view"
+			data-campaign-id={ data.CampaignID }
+			data-calendar-id={ data.CalendarID }
+			data-can-edit={ fmt.Sprintf("%t", data.CanEdit) }
+			data-can-author-dm-only={ fmt.Sprintf("%t", data.CanAuthorDmOnly) }
+			data-role={ fmt.Sprintf("%d", data.ViewerRole) }
+			data-api-base={ fmt.Sprintf("/campaigns/%s/calendars/%s", data.CampaignID, data.CalendarID) }
+		>
+			<!-- Server-rendered config, read by calendar_view.js. A hidden div's
+			     dataset is the simplest stable channel for a JSON blob this size
+			     (calendar + sub-resources, current month's events) — see
+			     maps.templ's #map-config for the same pattern and its reasoning. -->
+			<div
+				id="calendar-config"
+				class="hidden"
+				data-calendar={ mustMarshalCalendar(data.Calendar) }
+				data-events={ mustMarshalEvents(data.CurrentMonthEvents) }
+			></div>
+		</div>
+	</div>
+	<!-- No script tag here on purpose: a page templ's own script element
+	     would land inside <main id="main-content">, which the sidebar's
+	     hx-boost swap strips (tools/check-page-scripts.sh). Both widget
+	     scripts are registered once, unconditionally, in
+	     internal/app/routes.go's pluginBodyScripts — outside the swapped
+	     region — and self-gate at runtime instead: calendar_view.js
+	     no-ops without a data-widget="calendar_view" mount, and
+	     calendar_editor.js additionally requires that mount's
+	     data-can-edit="true". -->
+}
+
+// mustMarshalCalendar serializes the calendar (with its eager-loaded
+// sub-resources) for the widget's first paint. Never expected to fail
+// (Calendar has no un-marshalable field), but a failure degrades to an
+// empty object rather than a panicking page.
+func mustMarshalCalendar(cal *Calendar) string {
+	if cal == nil {
+		return "{}"
+	}
+	b, err := json.Marshal(cal)
+	if err != nil {
+		return "{}"
+	}
+	return string(b)
+}
+
+// mustMarshalEvents serializes the current month's events. Empty/nil must
+// serialize to "[]", not the bare "null" json.Marshal(nil) produces — the
+// same reasoning as maps.templ's mustMarshalMarkers: a parsed `null` crashes
+// the widget's first `events.length` read before anything else runs.
+func mustMarshalEvents(events []Event) string {
+	if len(events) == 0 {
+		return "[]"
+	}
+	b, err := json.Marshal(events)
+	if err != nil {
+		return "[]"
+	}
+	return string(b)
+}

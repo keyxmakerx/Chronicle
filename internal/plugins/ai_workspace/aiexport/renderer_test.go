@@ -17,6 +17,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/keyxmakerx/chronicle/internal/plugins/calendar"
 	"github.com/keyxmakerx/chronicle/internal/plugins/entities"
 	"github.com/keyxmakerx/chronicle/internal/plugins/sessions"
 	"github.com/keyxmakerx/chronicle/internal/plugins/timeline"
@@ -68,6 +69,7 @@ func TestRenderers_FunnelThroughHtmlToMarkdown(t *testing.T) {
 	required := []string{
 		"renderEntity",
 		"renderNoteTree",
+		"renderCalendarEvent",
 		"renderSession",
 		"renderTimeline",
 	}
@@ -146,7 +148,7 @@ func TestRenderEntities_StripsScriptAndGroups(t *testing.T) {
 		},
 		{
 			ID: "e2", Name: "The Coral Court", EntityTypeID: 2,
-			TypeName: "Location",
+			TypeName:  "Location",
 			EntryHTML: sp("<p>A ruined court submerged in the Cataclysm.</p>"),
 		},
 	}
@@ -172,8 +174,8 @@ func TestRenderEntities_StripsScriptAndGroups(t *testing.T) {
 	// Heading grouping
 	for _, want := range []string{"# Entities", "## Characters", "## Locations",
 		"### Lyra Vance", "### The Coral Court",
-		"**Tags:** pc",                  // dm_only tag dropped in Safe mode
-		"haunts [The Coral Court](#",    // relation with wikilink
+		"**Tags:** pc",               // dm_only tag dropped in Safe mode
+		"haunts [The Coral Court](#", // relation with wikilink
 	} {
 		if !strings.Contains(got, want) {
 			t.Errorf("want substring %q in output:\n%s", want, got)
@@ -232,18 +234,107 @@ func TestRenderNotes_FolderHierarchyAndScriptStripped(t *testing.T) {
 	}
 }
 
-// CALV5-PLACEHOLDER: V5 must restore, alongside the renderer,
-// TestRenderCalendarEvents_MonthNamesAndSafeFilter, which pins that events
-// are labelled with the calendar's own month/era name and that Safe mode
-// drops Visibility=="dm_only" events as defence-in-depth.
+// TestRenderCalendarEvents_MonthNamesAndSafeFilter pins that events are
+// labelled with the calendar's own month/era names (not "Month 4, Year X")
+// and that Safe mode independently drops content a Director-only,
+// role-bypassing CalendarLister would otherwise leak straight through:
+//
+//   - a dm_only event, regardless of date,
+//   - an "on_day"-announced event whose date is still in the calendar's
+//     future (players have no advance word of it yet).
+//
+// Everything mode is the control: both must appear there, proving the drop
+// is Safe-mode-specific rather than the event fixtures being broken.
+func TestRenderCalendarEvents_MonthNamesAndSafeFilter(t *testing.T) {
+	ctx := context.Background()
+	ahead := calendar.AnnouncedAhead
+	cal := &calendar.Calendar{
+		ID: "cal1", Name: "Ashfall Calendar", EpochName: sp("AR"),
+		CurrentYear: 1102, CurrentMonth: 6, CurrentDay: 15,
+		Months: []calendar.Month{
+			{Name: "Thaw", Days: 30}, {Name: "Bloom", Days: 30},
+			{Name: "Highsummer", Days: 31}, {Name: "Harvest", Days: 30},
+			{Name: "Frostfall", Days: 30}, {Name: "Deepwinter", Days: 30},
+		},
+		Eras: []calendar.Era{{Name: "Second Age", StartYear: 1000, EndYear: nil}},
+	}
+	events := []calendar.Event{
+		{ID: "e-past", Name: "The Founding", Year: 1102, Month: 3, Day: 1, Visibility: "everyone"},
+		{ID: "e-secret", Name: "Secret War Council", Year: 1102, Month: 3, Day: 2, Visibility: "dm_only"},
+		{ID: "e-future-hidden", Name: "The Ambush", Year: 1102, Month: 8, Day: 1, Visibility: "everyone"},
+		{ID: "e-future-known", Name: "The Grand Tournament", Year: 1102, Month: 8, Day: 2,
+			Visibility: "everyone", Announced: &ahead},
+	}
+
+	safe, err := RenderCalendarEvents(ctx, cal, events, Options{Privacy: PrivacyModeSafe})
+	if err != nil {
+		t.Fatalf("RenderCalendarEvents (safe): %v", err)
+	}
+	assertClean(t, "RenderCalendarEvents/safe", safe)
+	for _, want := range []string{"## Highsummer 1102 Second Age", "The Founding", "The Grand Tournament"} {
+		if !strings.Contains(safe, want) {
+			t.Errorf("safe export missing %q:\n%s", want, safe)
+		}
+	}
+	for _, unwanted := range []string{"Secret War Council", "The Ambush"} {
+		if strings.Contains(safe, unwanted) {
+			t.Errorf("SECURITY: safe export leaked %q that a Player has no way to know about:\n%s", unwanted, safe)
+		}
+	}
+
+	everything, err := RenderCalendarEvents(ctx, cal, events, Options{Privacy: PrivacyModeEverything})
+	if err != nil {
+		t.Fatalf("RenderCalendarEvents (everything): %v", err)
+	}
+	for _, want := range []string{"Secret War Council", "The Ambush", "The Founding", "The Grand Tournament"} {
+		if !strings.Contains(everything, want) {
+			t.Errorf("everything-mode control missing %q (fixture drift, not the bug under test):\n%s", want, everything)
+		}
+	}
+}
+
+// TestRenderCalendarEvents_DmOnlyCalendarHiddenInSafeMode pins the fix for a
+// finding distinct from the per-event dm_only/announced filter above: the
+// CALENDAR itself can be dm_only (independent of any individual event's own
+// visibility), and Safe mode must drop the whole section in that case — not
+// just each dm_only event within it. Before the fix, a GM-only calendar's
+// "everyone" events all rendered in Safe mode because RenderCalendarEvents
+// never looked at cal.Visibility.
+func TestRenderCalendarEvents_DmOnlyCalendarHiddenInSafeMode(t *testing.T) {
+	ctx := context.Background()
+	cal := &calendar.Calendar{
+		ID: "cal1", Name: "Inner Circle Calendar", Visibility: "dm_only",
+		CurrentYear: 1102, CurrentMonth: 6, CurrentDay: 15,
+		Months: []calendar.Month{{Name: "Highsummer", Days: 31}},
+	}
+	events := []calendar.Event{
+		{ID: "e1", Name: "Open Council", Year: 1102, Month: 6, Day: 1, Visibility: "everyone"},
+	}
+
+	safe, err := RenderCalendarEvents(ctx, cal, events, Options{Privacy: PrivacyModeSafe})
+	if err != nil {
+		t.Fatalf("RenderCalendarEvents (safe): %v", err)
+	}
+	if safe != "" {
+		t.Errorf("SECURITY: Safe mode rendered a dm_only calendar's events: %q", safe)
+	}
+
+	everything, err := RenderCalendarEvents(ctx, cal, events, Options{Privacy: PrivacyModeEverything})
+	if err != nil {
+		t.Fatalf("RenderCalendarEvents (everything): %v", err)
+	}
+	if !strings.Contains(everything, "Open Council") {
+		t.Errorf("everything-mode control missing the event (fixture drift, not the bug under test):\n%s", everything)
+	}
+}
 
 func TestRenderSessions_GMNotesGated(t *testing.T) {
 	ctx := context.Background()
 	list := []sessions.Session{
 		{ID: "s1", Name: "Into the Glasswater Maze", Status: sessions.StatusPlanned,
-			Summary:   sp("Cross into the maze."),
-			RecapHTML: sp("<p>Recap body</p>"),
-			NotesHTML: sp(polluted),
+			Summary:       sp("Cross into the maze."),
+			RecapHTML:     sp("<p>Recap body</p>"),
+			NotesHTML:     sp(polluted),
 			ScheduledDate: sp("2026-06-12"),
 		},
 	}

@@ -1170,8 +1170,17 @@ func tagFilterClause(tagSlugs []string) (string, []any) {
 //
 // SECURITY-SENSITIVE: previously mirrored in the (now-deleted) calendar
 // plugin per rule 8 (no cross-plugin repo imports).
-// CALV5-PLACEHOLDER: V5 must re-mirror this policy wherever it re-ties
-// calendar events to entities, and add a cross-mirror sync test (#741).
+// CALV5-PLACEHOLDER: V5's calendar plugin re-ties events to entities via
+// calendar.Event.EntityID; calendar/service.go's redactHiddenEntityLinks
+// (restored ahead of this comment, #741/#778) is that re-mirroring — it
+// blanks EntityID/EntityName/EntityIcon/EntityColor for a viewer this
+// filter would also exclude, fail-closed if its entity gate is ever
+// unwired. The two policies are read from separate places (this SQL
+// fragment vs. an injected EntityVisibilityGate) and could still drift if
+// one changes without the other; no cross-mirror sync test exists yet
+// (#778 evaluated adding one and judged it over-engineering for the
+// dashboard/category-preview call sites currently wired — revisit if a
+// THIRD caller of either policy appears).
 func visibilityFilter(role int, userID string) (string, []any) {
 	if role >= permissions.RoleOwner {
 		return "", nil

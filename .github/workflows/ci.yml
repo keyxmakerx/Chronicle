@@ -240,9 +240,9 @@ jobs:
         env:
           CHRONICLE_TEST_DB_DSN: root:chronicle@tcp(127.0.0.1:3306)/
         run: |
-          go test ./internal/plugins/sessions/... ./internal/plugins/entities/... ./internal/plugins/timeline/... \
+          go test ./internal/plugins/sessions/... ./internal/plugins/entities/... ./internal/plugins/timeline/... ./internal/plugins/calendar/... \
             -v -count=1 2>&1 | tee dbtests.log
-          go test ./internal/app/ -v -count=1 -run 'CustomVisibilityLeak|PrivateEntityVisibilityLeak' 2>&1 | tee -a dbtests.log
+          go test ./internal/app/ -v -count=1 -run 'CustomVisibilityLeak|PrivateEntityVisibilityLeak|CalendarCampaignExportImport' 2>&1 | tee -a dbtests.log
           go test ./internal/plugins/campaigns/ -v -count=1 -run TestNavPins_Integration 2>&1 | tee -a dbtests.log
           go test ./internal/plugins/auth/ -v -count=1 -run 'TestUserRepository_.*_Integration' 2>&1 | tee -a dbtests.log
           for want in TestDB_SessionRSVPTokenCannotBeSpentTwiceConcurrently \
@@ -257,7 +257,14 @@ jobs:
                       TestTimelineEntityGroups_PrivateEntityVisibilityLeak \
                       TestNavPins_Integration \
                       TestUserRepository_UpdateAvatarPath_Integration \
-                      TestUserRepository_ClearAvatarPathIfMatches_Integration; do
+                      TestUserRepository_ClearAvatarPathIfMatches_Integration \
+                      TestCalendarRepository_Integration \
+                      TestEventRepository_Integration \
+                      TestEventKindRepository_Integration \
+                      TestWeatherRepository_Integration \
+                      TestCalendarService_Integration_PrivateEntityNameRedacted \
+                      TestCalendarCampaignExportImport_DBRoundTrip \
+                      TestCalendarCampaignExportImport_DmOnlyCalendarVisibilityDBRoundTrip; do
             grep -q -- "--- PASS: $want" dbtests.log || {
               echo "::error::$want did not PASS — it was skipped or never ran."
               exit 1

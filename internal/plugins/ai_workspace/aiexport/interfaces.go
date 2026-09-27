@@ -4,6 +4,7 @@ import (
 	"context"
 
 	"github.com/keyxmakerx/chronicle/internal/permissions"
+	"github.com/keyxmakerx/chronicle/internal/plugins/calendar"
 	"github.com/keyxmakerx/chronicle/internal/plugins/entities"
 	"github.com/keyxmakerx/chronicle/internal/plugins/sessions"
 	"github.com/keyxmakerx/chronicle/internal/plugins/timeline"
@@ -28,9 +29,22 @@ type NoteLister interface {
 	ListByUserAndCampaign(ctx context.Context, userID, campaignID string) ([]notes.Note, error)
 }
 
-// CALV5-PLACEHOLDER: V5 must restore CalendarLister (GetCalendar +
-// ListAllEventsForCalendar) and re-wire Service.Calendar so the renderer can
-// label events with in-world month/era names again.
+// CalendarLister loads the calendar configuration (Months / Eras needed for
+// human-readable date labels) and every event on it.
+// ListAllEventsForCalendar intentionally bypasses role-filtering — the
+// aiexport renderer applies the privacy filter itself (Safe mode's own
+// drops, see renderer.go's RenderCalendarEvents) so it can choose between
+// Owner-view / Safe / Everything modes rather than trusting a per-viewer
+// read to already agree with any one of those definitions.
+//
+// ListAllEventsForCalendar's campaignID parameter is a deliberate addition
+// over the pre-V5 shape: the calendar plugin's own bulk read
+// (CalendarService.ListAllEventsForCalendar) is campaign-scoped for IDOR
+// safety, the same reason GetCalendar itself takes campaignID.
+type CalendarLister interface {
+	GetCalendar(ctx context.Context, campaignID string) (*calendar.Calendar, error)
+	ListAllEventsForCalendar(ctx context.Context, campaignID, calendarID string) ([]calendar.Event, error)
+}
 
 // SessionLister loads sessions + their nested joins. Attendees +
 // SessionEntity slices are fetched per-session; the N+1 pattern is accepted

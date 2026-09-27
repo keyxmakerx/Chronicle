@@ -8,7 +8,7 @@
 package entities
 
 import (
-	"github.com/keyxmakerx/chronicle/internal/templates/components"
+	"context"
 	"fmt"
 	"sort"
 	"time"
@@ -293,18 +293,60 @@ func catRelativeTime(t time.Time) string {
 	}
 }
 
-// catCalendarPreview renders a calendar upcoming-events card for category dashboards.
-// Uses the same HTMX lazy-load pattern as the campaign dashboard calendar block.
-// Mounts calendar-widget JS for interactive features.
+// catCalendarUnavailable mirrors campaigns.dashboard_blocks.templ's
+// calendarCardUnavailable (unexported there, so duplicated here rather than
+// reached across the plugin boundary — see that doc comment for the full
+// reasoning): true when an hx-get to /calendars/upcoming would 403/404 into
+// a permanent "Loading..." shell with no swap. This package may not name
+// the calendar plugin to work that out itself (plugin isolation, T-B2), so
+// it reads the same neutral flag internal/app/routes.go already resolved.
+func catCalendarUnavailable(ctx context.Context) bool {
+	return !layouts.UpcomingEventsAvailable(ctx)
+}
+
+// catCalendarUnavailableState is the quiet neutral state shown instead of
+// the hx-get shell when catCalendarUnavailable is true — no spinner, no
+// error, just an honest "not here" message.
+templ catCalendarUnavailableState() {
+	<div class="card text-center px-4 py-6 min-h-[60px]">
+		<i class="fa-solid fa-calendar-days text-xl text-fg-muted mb-2"></i>
+		<p class="text-sm text-fg-secondary">Calendar isn't enabled for this campaign.</p>
+	</div>
+}
+
+// catCalendarPreview renders a calendar upcoming-events card for category
+// dashboards. Same hx-get="/campaigns/:id/calendars/upcoming" fragment
+// campaigns/dashboard_blocks.templ's dashCalendarPreview lazy-loads
+// (calendar-v5, #778) — a category dashboard has no calendar of its own, so
+// like the campaign dashboard block this shows the campaign's default
+// calendar's upcoming events, viewer-filtered (hidden entity names blanked,
+// dm_only events excluded for a Player) by the calendar plugin's own route.
 templ catCalendarPreview(cc *campaigns.CampaignContext, config map[string]any) {
-	// CALV5-PLACEHOLDER: mounted the calendar-widget mount and HTMX-fetched
-	// the calendar plugin's upcoming-events fragment. Same reasoning as
-	// campaigns/dashboard_blocks.templ's dashCalendarPreview: an unregistered
-	// widget mount is a permanently empty div that boot.js fails silently on,
-	// and the fragment route no longer exists.
-	_ = cc
-	_ = config
-	@components.FeatureRebuildingBlock("The calendar")
+	<div>
+		<div class="flex items-center justify-between mb-3">
+			<h2 class="text-sm font-semibold text-fg-secondary uppercase tracking-wider">
+				<i class="fa-solid fa-calendar-days mr-1.5"></i>Upcoming Events
+			</h2>
+			<a
+				href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/apps/calendar", cc.Campaign.ID)) }
+				class="text-xs text-accent hover:underline"
+			>
+				View calendar
+			</a>
+		</div>
+		if catCalendarUnavailable(ctx) {
+			@catCalendarUnavailableState()
+		} else {
+			<div
+				hx-get={ fmt.Sprintf("/campaigns/%s/calendars/upcoming?limit=%d", cc.Campaign.ID, catCalendarLimit(config)) }
+				hx-trigger="intersect once"
+				hx-swap="innerHTML"
+				class="card divide-y divide-edge min-h-[60px]"
+			>
+				<div class="px-4 py-3 text-sm text-fg-muted">Loading...</div>
+			</div>
+		}
+	</div>
 }
 
 // catTimelinePreview renders a timeline summary card for category dashboards.

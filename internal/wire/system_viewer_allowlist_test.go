@@ -17,12 +17,16 @@ import (
 )
 
 // systemViewerAllowlist is the reviewed set of repo-relative files allowed
-// to call permissions.SystemViewer. Both are genuinely request-less: an
-// export walking its own rows, and a widget picker already authorized at
-// its own route (see each call site's comment for why it's trusted).
+// to call permissions.SystemViewer. Each is request-less or owner-only by
+// its own route: the campaign and AI exports, a widget picker already
+// authorized at its route, and the operator's health check (see each call
+// site's comment for why it's trusted).
 var systemViewerAllowlist = map[string]bool{
 	"internal/app/export_adapters.go":                   true,
 	"internal/plugins/timeline/timeline_widget_type.go": true,
+	// The operator's calendar health diagnostic counts rows for the server
+	// admin; no campaign member's view is behind it.
+	"internal/app/operator_diag_calendar_adapter.go": true,
 }
 
 // TestSystemViewerAllowlist scans internal/ for calls to

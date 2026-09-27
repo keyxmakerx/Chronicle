@@ -172,31 +172,37 @@ type surfaceRow struct {
 // statusCurrent is the only status calendarSurfaceMap uses today — its
 // LEGACY-PRESERVED / LEGACY-REDIRECT siblings went with the routes they
 // described. CALV5-PLACEHOLDER: re-add them if V5's calendar routes need a
-// legacy or redirect row again.
+// legacy or redirect row again. Still accurate as of calendar-v5 seams
+// (#778): that pass restored the plugin's service, JSON API and a
+// dashboard-embed fragment, not a calendar PAGE, so the three rows below are
+// unchanged. TODO(#778)
 const statusCurrent = "CURRENT"
 
 // calendarSurfaceMap is the declared map.
 //
-// CALV5-PLACEHOLDER: the v4 Bench, the builder wizard, the settings editor,
-// the V1 legacy pages and every redirect between them were deleted with the
-// pre-V5 calendar plugin (#741); these three GETs are everything that is
-// left, and all three now render the same rebuilding notice (a direct
-// render, not a redirect). V5 must replace this block with the real
-// per-route classification once the calendar plugin has routes again.
+// The v4 Bench, builder wizard, settings editor, V1 legacy pages and every
+// redirect between them were deleted with the pre-V5 calendar plugin; these
+// three GETs are what is left. /calendars is the calendars list page, and
+// /apps/calendar and /calendar redirect (302) to it. They stay redirects,
+// not linked directly from the sidebar or dashboard, because the
+// plugin-isolation guard won't let a literal "calendars" path live in
+// app.templ's addonURLMap (see internal/app/routes.go).
 //
-// Handler is left "" on all three: the live handler is one anonymous
-// closure registered in internal/app/routes.go, not a stable named method,
-// so pinning its runtime name here would be pinning a Go compiler detail.
-// An empty Handler skips the disagreement check and only confirms the path
-// is registered — see writeSurfaceTable.
+// Handler is left "" on all three: for /apps/calendar and /calendar the
+// live handler is one anonymous closure registered in
+// internal/app/routes.go, not a stable named method, so pinning its runtime
+// name here would be pinning a Go compiler detail; /calendars' handler
+// (calendar.Handler.Index) IS stable, but is left unpinned too so all three
+// rows are checked the same way. An empty Handler skips the disagreement
+// check and only confirms the path is registered — see writeSurfaceTable.
 func calendarSurfaceMap() []surfaceRow {
 	return []surfaceRow{
-		{"/campaigns/:id/apps/calendar", "", "calendar (rebuilding)", statusCurrent,
-			"THE calendar page today: a static notice, not the v4 Bench. The sidebar's Calendar item points here."},
-		{"/campaigns/:id/calendar", "", "calendar (rebuilding)", statusCurrent,
-			"Same notice as `/apps/calendar` — the oldest bookmark in the product, no longer a redirect."},
-		{"/campaigns/:id/calendars", "", "calendar (rebuilding)", statusCurrent,
-			"Same notice as `/apps/calendar`, no longer a redirect."},
+		{"/campaigns/:id/apps/calendar", "", "calendar (redirect)", statusCurrent,
+			"Redirects (302) to `/campaigns/:id/calendars` — not a notice, not the v4 Bench. The sidebar's Calendar item points here."},
+		{"/campaigns/:id/calendar", "", "calendar (redirect)", statusCurrent,
+			"Same redirect as `/apps/calendar` — the oldest bookmark in the product."},
+		{"/campaigns/:id/calendars", "", "calendar (list page)", statusCurrent,
+			"The calendars list page — not a notice, not a redirect; each calendar opens from here to its own page at `/campaigns/:id/calendars/:calid/view`. Unlike the two rows above, this one IS gated on the calendar addon (RequireAddon): a disabled addon 404s here instead of redirecting."},
 	}
 }
 
@@ -206,7 +212,7 @@ func calendarSurfaceMap() []surfaceRow {
 // outright with the pre-V5 plugin — not merely unreachable, gone — so there
 // is no live handler left to discover. CALV5-PLACEHOLDER: if V5 preserves an
 // old page under a stable handler name the way the V2 shell once was, its
-// entry belongs here rather than in calendarSurfaceMap.
+// entry belongs here rather than in calendarSurfaceMap. TODO(#778)
 func handlerSurfaces() map[string]surfaceRow {
 	return map[string]surfaceRow{}
 }
@@ -245,20 +251,22 @@ func renderCampaignSurfaces(arg string) string {
 
 // writeSurfaceGate prints the calendar addon's enabled state.
 //
-// CALV5-PLACEHOLDER: before the rebuild this state gated every route below
-// (`addons.RequireAddon(addonSvc, "calendar")`); it no longer does, because
-// the three remaining routes ride RequireCampaignAccess only and render the
-// same rebuilding notice regardless of the addon's state. Stated here so the
-// setting is not mistaken for a reachability gate it currently is not. V5
-// must restore the gate once it restores real calendar routes.
+// Before the rebuild this state gated every calendar route. Now
+// /apps/calendar and /calendar ride RequireCampaignAccess only and redirect
+// regardless of it, while /calendars and the calendar JSON API sit in
+// calendar.RegisterRoutes' group, which gates on addons.RequireAddon: a
+// disabled addon 404s there. The dashboard and category "Upcoming Events"
+// cards check the same addon state (and the calendar plugin's health) before
+// calling that API, so a disabled addon shows their quiet "Calendar isn't
+// enabled" state rather than a request that never swaps in.
 func writeSurfaceGate(b *strings.Builder, f CampaignSurfaceFacts) {
 	switch {
 	case f.CalendarAddonEnabled == nil:
 		fmt.Fprintf(b, "> calendar addon: **UNKNOWN** — %s\n\n", fallback(f.AddonNote, "the addons service could not be read"))
 	case !*f.CalendarAddonEnabled:
-		b.WriteString("> calendar addon: **disabled** for this campaign. Not currently load-bearing: the routes below render the same rebuilding notice either way (see CALV5-PLACEHOLDER above).\n\n")
+		b.WriteString("> calendar addon: **disabled** for this campaign. `/apps/calendar` and `/calendar` redirect either way; `/calendars` itself 404s while disabled, as does the calendar JSON API.\n\n")
 	default:
-		b.WriteString("> calendar addon: **enabled**. Not currently load-bearing: the routes below render the same rebuilding notice either way (see CALV5-PLACEHOLDER above).\n\n")
+		b.WriteString("> calendar addon: **enabled**. `/calendars` and the calendar JSON API are reachable; `/apps/calendar` and `/calendar` would redirect there regardless of this setting.\n\n")
 	}
 }
 
@@ -452,7 +460,7 @@ func writeConfigAddons(b *strings.Builder, f CampaignConfigFacts) {
 		}
 		b.WriteString("\n")
 	}
-	b.WriteString("\nCALV5-PLACEHOLDER: a disabled `calendar` addon no longer removes the calendar routes `campaign.surfaces` lists — they render the same rebuilding notice either way until V5 restores the gate.\n\n")
+	b.WriteString("\nA disabled `calendar` addon gates the calendar pages and the calendar plugin's JSON API (404), while `/apps/calendar` and `/calendar` still redirect to the list page either way; see `campaign.surfaces`. The dashboard/category \"Upcoming Events\" cards also check it: they the dashboard/category \"Upcoming Events\" cards check the same addon-enabled state (and the plugin's own health) before calling that API, and degrade to a quiet \"Calendar isn't enabled\" state instead of a stuck spinner — see `calendar.stats` for that plugin's own counts and migration state.\n\n")
 }
 
 const (
@@ -481,16 +489,22 @@ func writeConfigLayouts(b *strings.Builder, f CampaignConfigFacts) {
 	}
 
 	interesting := map[string]string{
-		// CALV5-PLACEHOLDER: the four calendar-family descriptions below
-		// describe rebuild-era behavior. V5 must re-wire each placement's
-		// rendering once its world-state pipeline replaces the deleted one;
-		// until then every one renders the "being rebuilt" notice, and the
-		// bindings are kept so a placed block still reports as a fact.
-		"skybox":            "the LEGACY skybox widget placement. Its canvas/particle engine and the world-state pipeline behind it were deleted in the CALV5 clean slate, so this placement renders the calendar-rebuilding notice today; the binding is kept so V5 can reclaim the seat. (Historically this was the surface that rendered the synthesized real Moon — distinct from the v4 sky band on the Bench, which was server-rendered with no JavaScript.)",
-		"entity_worldstate": "the world-state band placement — its pipeline was deleted in the CALV5 clean slate; renders the rebuilding notice until V5.",
-		"entity_calendar":   "a calendar Block embedded on an entity page — renders the rebuilding notice until V5.",
-		"calendar_full":     "a full calendar block — renders the rebuilding notice until V5.",
-		blockTypeCalendar:   "a calendar block — renders the rebuilding notice until V5.",
+		// CALV5-PLACEHOLDER: "skybox", "entity_worldstate" and
+		// "entity_calendar" describe rebuild-era behavior for OTHER
+		// placements (the skybox widget-binding pipeline and the
+		// entity_calendar/entity_worldstate widget-type bindings) that are
+		// out of scope for this pass — see #778's own priority list. Left
+		// as-is; do not assume they are still accurate without checking
+		// their own restoration status first. TODO(#778)
+		"skybox":            "the sky pane placement (issue #763) — renders the real sky (moons/weather/events for the resolved default calendar). (Historically this was the surface that rendered the synthesized real Moon — distinct from the v4 sky band on the Bench, which was server-rendered with no JavaScript.)",
+		"entity_worldstate": "the world-state band placement — its pipeline was deleted in the CALV5 clean slate; renders the rebuilding notice until it is rebuilt (#778).",
+		"entity_calendar":   "a calendar Block embedded on an entity page — renders the rebuilding notice until it is rebuilt (#778).",
+		// calendar_full/calendar_preview now render the real "Upcoming
+		// Events" card (calendar-v5 seams, #778) via the calendar plugin's
+		// own /calendars/upcoming embed fragment, not the rebuilding notice.
+		"calendar_full":    "a full calendar block — now renders real upcoming-events data via the calendar plugin's embed fragment (calendar-v5 seams, #778), not the rebuilding notice.",
+		"calendar_preview": "an upcoming-events preview block — renders real data via the calendar plugin's embed fragment (calendar-v5 seams, #778), not the rebuilding notice.",
+		blockTypeCalendar:  "a calendar block — renders the rebuilding notice until it is rebuilt (#778).",
 	}
 
 	for _, l := range f.Layouts {

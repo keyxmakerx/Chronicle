@@ -138,6 +138,12 @@ always_allowed_prefixes=(
   # Same reason: the timeline visibility tests' scratch schema gets calendar's
   # and then timeline's migrations, named by slug in the fixture.
   "internal/app/timeline_entity_visibility_leak_test.go"
+  # Pins isCalendarImportPath, the global BodyLimit skipper's route match
+  # (app.go, itself already allowed above) against literal URL path
+  # fixtures — the exact "URL segment in a test fixture" case this script's
+  # own error message names as a legitimate exception, not a cross-plugin
+  # code dependency.
+  "internal/app/calendar_import_body_limit_test.go"
 )
 
 # ---------------------------------------------------------------------------

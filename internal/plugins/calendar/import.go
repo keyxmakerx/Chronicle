@@ -22,17 +22,19 @@ import (
 	"math"
 	"sort"
 	"strings"
+
+	"github.com/keyxmakerx/chronicle/internal/apperror"
 )
 
 // ImportFormat identifies which JSON format was detected.
 type ImportFormat string
 
 const (
-	FormatChronicle    ImportFormat = "chronicle"
-	FormatSimpleCal    ImportFormat = "simple-calendar"
-	FormatCalendaria   ImportFormat = "calendaria"
-	FormatFantasyCal   ImportFormat = "fantasy-calendar"
-	FormatUnknown      ImportFormat = "unknown"
+	FormatChronicle  ImportFormat = "chronicle"
+	FormatSimpleCal  ImportFormat = "simple-calendar"
+	FormatCalendaria ImportFormat = "calendaria"
+	FormatFantasyCal ImportFormat = "fantasy-calendar"
+	FormatUnknown    ImportFormat = "unknown"
 )
 
 // ImportResult holds the parsed calendar data ready to be applied.
@@ -45,10 +47,56 @@ type ImportResult struct {
 	Seasons      []Season         `json:"seasons"`
 	Eras         []EraInput       `json:"eras"`
 	Settings     ImportedSettings `json:"settings"`
+	// Events carries a Chronicle-native export's own events forward through a
+	// re-import (#779): parseChronicle is the only parser that populates it —
+	// Simple Calendar, Calendaria and Fantasy-Calendar files never had
+	// Chronicle events to bring over in the first place. Shaped exactly like
+	// ExportEvent (kind by SLUG, never EntityID/KindID/VisibilityRules/
+	// RecurrenceDayOfWeek — see ExportEvent's own doc comment on why a
+	// portable event excludes those), so CreateCalendarFromImport resolves
+	// the kind slug against the TARGET campaign rather than trusting a
+	// numeric id that means nothing there.
+	Events []ExportEvent `json:"events,omitempty"`
+	// Today is what the import file itself determined for the created
+	// calendar's current ("today") date — never a fallback this package
+	// invented on the file's behalf. Month/Day are nil when the format
+	// carries no day-level current date at all (Calendaria only ever
+	// specifies a year); CreateCalendarFromImport then REQUIRES the caller
+	// to supply an explicit override for whichever of the two is nil rather
+	// than silently defaulting either to 1 (#741: "an import never silently
+	// resets the calendar's current date").
+	Today ImportedToday `json:"today"`
+	// Warnings are user-facing notes about data this import clamped or
+	// filled in rather than failing the whole import over (#741: "warn,
+	// never refuse, when a structural oddity is found") — an out-of-range
+	// season date, a non-positive month length, a blank name, an event whose
+	// kind slug doesn't exist in the target campaign. Populated at parse
+	// time by clampCalendarStructure for Calendaria/Simple Calendar (real
+	// exports in the wild carry values Chronicle's own schema can't store
+	// as-is; Chronicle's own export and Fantasy-Calendar's computed ranges
+	// never produce these shapes) and appended to at apply time by
+	// CreateCalendarFromImport (an unresolved event kind slug).
+	Warnings []string `json:"warnings,omitempty"`
+}
+
+// ImportedToday is the day-level "today" ImportResult carries forward — see
+// ImportResult.Today's doc comment for the rule it exists to enforce.
+type ImportedToday struct {
+	Year  int  `json:"year"`
+	Month *int `json:"month,omitempty"`
+	Day   *int `json:"day,omitempty"`
 }
 
 // ImportedSettings holds calendar-level settings extracted from the import.
 type ImportedSettings struct {
+	// Mode is only ever set by parseChronicle (from the export's own Mode):
+	// every external format (Simple Calendar, Calendaria, Fantasy-Calendar)
+	// describes a custom fantasy calendar with no Gregorian/real-time
+	// concept, so their parsers leave this "" and CreateCalendarFromImport's
+	// CreateCalendar call defaults an empty Mode to ModeFantasy — the same
+	// default CreateCalendar already applies to a manual create with no
+	// mode specified.
+	Mode             string  `json:"mode,omitempty"`
 	EpochName        *string `json:"epoch_name,omitempty"`
 	CurrentYear      int     `json:"current_year"`
 	HoursPerDay      int     `json:"hours_per_day"`
@@ -61,6 +109,11 @@ type ImportedSettings struct {
 	// ApplyImport validates them through the same rules as the enable flow.
 	TracksRealTime bool    `json:"tracks_real_time,omitempty"`
 	RealTimeZone   *string `json:"real_time_zone,omitempty"`
+	// Also Chronicle-native only: external formats have no concept of a
+	// hemisphere, forecast toggle or week-start rule.
+	Hemisphere         *string `json:"hemisphere,omitempty"`
+	ForecastsEnabled   bool    `json:"forecasts_enabled,omitempty"`
+	MonthStartsNewWeek bool    `json:"month_starts_new_week,omitempty"`
 }
 
 // DetectAndParse auto-detects the format of raw JSON bytes and parses into
@@ -150,6 +203,7 @@ func parseChronicle(data []byte) (*ImportResult, error) {
 		Format:       FormatChronicle,
 		CalendarName: export.Calendar.Name,
 		Settings: ImportedSettings{
+			Mode:             export.Calendar.Mode,
 			EpochName:        export.Calendar.EpochName,
 			CurrentYear:      export.Calendar.CurrentYear,
 			HoursPerDay:      export.Calendar.HoursPerDay,
@@ -157,10 +211,24 @@ func parseChronicle(data []byte) (*ImportResult, error) {
 			SecondsPerMinute: export.Calendar.SecondsPerMinute,
 			LeapYearEvery:    export.Calendar.LeapYearEvery,
 			LeapYearOffset:   export.Calendar.LeapYearOffset,
-			// Real-time round-trip (0c): carry the flag + anchor zone so a
-			// re-import restores wall-clock authority instead of dropping it.
-			TracksRealTime: export.Calendar.TracksRealTime,
-			RealTimeZone:   export.Calendar.RealTimeZone,
+			// Carries the real-time flag, anchor zone, hemisphere, forecast
+			// toggle and week-start rule forward, so a re-import restores them
+			// instead of silently dropping back to their defaults.
+			TracksRealTime:     export.Calendar.TracksRealTime,
+			RealTimeZone:       export.Calendar.RealTimeZone,
+			Hemisphere:         export.Calendar.Hemisphere,
+			ForecastsEnabled:   export.Calendar.ForecastsEnabled,
+			MonthStartsNewWeek: export.Calendar.MonthStartsNewWeek,
+		},
+		// export.Events is already the top-level "events" array (ExportEvent's
+		// own json tag lives on ChronicleExport, not nested under "calendar") —
+		// json.Unmarshal above populated it directly; #779's bug was only ever
+		// that ImportResult had nowhere to carry it onward from here.
+		Events: export.Events,
+		Today: ImportedToday{
+			Year:  export.Calendar.CurrentYear,
+			Month: importIntPtr(export.Calendar.CurrentMonth),
+			Day:   importIntPtr(export.Calendar.CurrentDay),
 		},
 	}
 
@@ -174,31 +242,73 @@ func parseChronicle(data []byte) (*ImportResult, error) {
 		result.Weekdays = append(result.Weekdays, WeekdayInput(w))
 	}
 
-	// Copy moons.
+	// Copy moons. Field-by-field, not a type conversion: ExportMoon carries
+	// no ID (a re-import always inserts fresh moons), while MoonInput does
+	// (for SetMoons' upsert), so the two shapes are not interchangeable.
 	for _, m := range export.Calendar.Moons {
-		result.Moons = append(result.Moons, MoonInput(m))
+		result.Moons = append(result.Moons, MoonInput{
+			Name:        m.Name,
+			CycleDays:   m.CycleDays,
+			PhaseOffset: m.PhaseOffset,
+			// normalizeColor: a hand-edited or malicious "chronicle-calendar-v1"
+			// upload is not guaranteed to round-trip a valid color the way a
+			// real Chronicle export does — calendar_moons.color is VARCHAR(7),
+			// so an unnormalized value can crash the import under strict SQL
+			// mode instead of merely looking wrong.
+			Color:             normalizeColor(m.Color),
+			HiddenFromPlayers: m.HiddenFromPlayers,
+		})
 	}
 
 	// Copy seasons.
 	for _, s := range export.Calendar.Seasons {
 		result.Seasons = append(result.Seasons, Season{
-			Name:          s.Name,
-			StartMonth:    s.StartMonth,
-			StartDay:      s.StartDay,
-			EndMonth:      s.EndMonth,
-			EndDay:        s.EndDay,
-			Description:   s.Description,
-			Color:         s.Color,
+			Name:        s.Name,
+			StartMonth:  s.StartMonth,
+			StartDay:    s.StartDay,
+			EndMonth:    s.EndMonth,
+			EndDay:      s.EndDay,
+			Description: s.Description,
+			// normalizeColor: same reasoning as the moon color above —
+			// calendar_seasons.color is VARCHAR(7) too.
+			Color:         normalizeColor(s.Color),
 			WeatherEffect: s.WeatherEffect,
 		})
 	}
 
-	// Copy eras.
+	// Copy eras. A pre-V5 export has no start_month/start_day keys at all,
+	// which unmarshal to the Go zero value 0; normalizeEraStart treats that
+	// the same as any other era missing day-level bounds.
 	for _, e := range export.Calendar.Eras {
-		result.Eras = append(result.Eras, EraInput(e))
+		result.Eras = append(result.Eras, normalizeEraStart(EraInput(e)))
 	}
 
+	// clampCalendarStructure's bounds apply here too: detectFormat trusts
+	// any file that merely claims "format":"chronicle-calendar-v1", so a
+	// hand-edited or malicious upload can carry this path's structure
+	// without ever having gone through a real Chronicle export.
+	if err := clampCalendarStructure(result); err != nil {
+		return nil, err
+	}
 	return result, nil
+}
+
+// normalizeEraStart clamps a missing start month or day (0, from a format
+// with no day-level era bounds) up to 1, so the era begins on a real day
+// instead of one that does not exist.
+func normalizeEraStart(e EraInput) EraInput {
+	if e.StartMonth < 1 {
+		e.StartMonth = 1
+	}
+	if e.StartDay < 1 {
+		e.StartDay = 1
+	}
+	// Every era-producing parser (Chronicle, Calendaria, Fantasy-Calendar)
+	// funnels through here, so this is also where every era's color gets
+	// clamped to something calendar_eras.color can hold, regardless of
+	// format.
+	e.Color = normalizeColor(e.Color)
+	return e
 }
 
 // --- Simple Calendar Parser ---
@@ -211,8 +321,14 @@ type scData struct {
 // scCalendar holds the Simple Calendar configuration. Supports both v2 field names
 // and v1 legacy aliases (yearSettings, monthSettings, etc.) via custom UnmarshalJSON.
 type scCalendar struct {
-	Name           string           `json:"name"`
-	CurrentDate    scCurrentDate    `json:"currentDate"`
+	Name string `json:"name"`
+	// CurrentDate is a pointer, not a value, so a file that omits it
+	// entirely (a template/definitions-only export with no live campaign
+	// date) unmarshals to nil rather than the zero value {Month:0, Day:0} —
+	// which, being valid 0-indexed values, is indistinguishable from "no
+	// current date" if collapsed to a value type. See its use in
+	// parseSimpleCalendarInner.
+	CurrentDate    *scCurrentDate   `json:"currentDate"`
 	General        scGeneral        `json:"general"`
 	LeapYear       scLeapYear       `json:"leapYear"`
 	Months         []scMonth        `json:"months"`
@@ -296,16 +412,16 @@ type scLeapYear struct {
 }
 
 type scMonth struct {
-	Name                         string `json:"name"`
-	Abbreviation                 string `json:"abbreviation"`
-	NumericRepresentation        int    `json:"numericRepresentation"`
-	NumericRepresentationOffset  int    `json:"numericRepresentationOffset"`
-	NumberOfDays                 int    `json:"numberOfDays"`
-	NumberOfLeapYearDays         int    `json:"numberOfLeapYearDays"`
-	Intercalary                  bool   `json:"intercalary"`
-	IntercalaryInclude           bool   `json:"intercalaryInclude"`
-	StartingWeekday              *int   `json:"startingWeekday"`
-	Description                  string `json:"description"`
+	Name                        string `json:"name"`
+	Abbreviation                string `json:"abbreviation"`
+	NumericRepresentation       int    `json:"numericRepresentation"`
+	NumericRepresentationOffset int    `json:"numericRepresentationOffset"`
+	NumberOfDays                int    `json:"numberOfDays"`
+	NumberOfLeapYearDays        int    `json:"numberOfLeapYearDays"`
+	Intercalary                 bool   `json:"intercalary"`
+	IntercalaryInclude          bool   `json:"intercalaryInclude"`
+	StartingWeekday             *int   `json:"startingWeekday"`
+	Description                 string `json:"description"`
 }
 
 type scWeekday struct {
@@ -496,6 +612,20 @@ func parseSimpleCalendarInner(cal scCalendar) (*ImportResult, error) {
 		})
 	}
 
+	// Simple Calendar's currentDate is 0-indexed, like its months/seasons —
+	// see scCurrentDate's own field comments. A file with no currentDate at
+	// all leaves Month/Day nil (#741: never a disguised default) — only the
+	// year, which Simple Calendar always carries via yearSettings/year, is
+	// populated unconditionally.
+	result.Today = ImportedToday{Year: cal.Year.NumericRepresentation}
+	if cal.CurrentDate != nil {
+		result.Today.Month = importIntPtr(cal.CurrentDate.Month + 1)
+		result.Today.Day = importIntPtr(cal.CurrentDate.Day + 1)
+	}
+
+	if err := clampCalendarStructure(result); err != nil {
+		return nil, err
+	}
 	return result, nil
 }
 
@@ -759,10 +889,10 @@ type calEra struct {
 }
 
 type calMoon struct {
-	Name          string       `json:"name"`
-	CycleLength   float64      `json:"cycleLength"`
-	Color         string       `json:"color"`
-	ReferenceDate calRefDate   `json:"referenceDate"`
+	Name          string     `json:"name"`
+	CycleLength   float64    `json:"cycleLength"`
+	Color         string     `json:"color"`
+	ReferenceDate calRefDate `json:"referenceDate"`
 }
 
 type calRefDate struct {
@@ -772,12 +902,12 @@ type calRefDate struct {
 }
 
 type calFestival struct {
-	Name        string  `json:"name"`
-	Month       int     `json:"month"`
-	Day         int     `json:"day"`
-	Icon        string  `json:"icon"`
-	Color       string  `json:"color"`
-	Description string  `json:"description"`
+	Name        string `json:"name"`
+	Month       int    `json:"month"`
+	Day         int    `json:"day"`
+	Icon        string `json:"icon"`
+	Color       string `json:"color"`
+	Description string `json:"description"`
 }
 
 type calWeek struct {
@@ -1009,16 +1139,25 @@ func parseCalendaria(data []byte) (*ImportResult, error) {
 		if abbr != "" {
 			desc = &abbr
 		}
-		result.Eras = append(result.Eras, EraInput{
+		result.Eras = append(result.Eras, normalizeEraStart(EraInput{
 			Name:        stripLocalizationKey(e.val.Name),
 			StartYear:   e.val.StartYear,
 			EndYear:     e.val.EndYear,
 			Description: desc,
 			Color:       "#6366f1", // default since Calendaria doesn't have era colors
 			SortOrder:   i,
-		})
+		}))
 	}
 
+	// Calendaria's file gives no day-level current date at all — only a
+	// year (Years.YearZero, already used for Settings.CurrentYear above).
+	// Month/Day stay nil so CreateCalendarFromImport requires the caller to
+	// confirm them explicitly instead of guessing day 1 (#741).
+	result.Today = ImportedToday{Year: result.Settings.CurrentYear}
+
+	if err := clampCalendarStructure(result); err != nil {
+		return nil, err
+	}
 	return result, nil
 }
 
@@ -1061,11 +1200,11 @@ type fcStaticData struct {
 }
 
 type fcYearData struct {
-	FirstDay   int           `json:"first_day"`
-	Overflow   bool          `json:"overflow"`
-	GlobalWeek []string      `json:"global_week"`
-	Timespans  []fcTimespan  `json:"timespans"`
-	LeapDays   []fcLeapDay   `json:"leap_days"`
+	FirstDay   int          `json:"first_day"`
+	Overflow   bool         `json:"overflow"`
+	GlobalWeek []string     `json:"global_week"`
+	Timespans  []fcTimespan `json:"timespans"`
+	LeapDays   []fcLeapDay  `json:"leap_days"`
 }
 
 type fcTimespan struct {
@@ -1168,6 +1307,18 @@ func parseFantasyCalendar(data []byte) (*ImportResult, error) {
 		result.Settings.MinutesPerHour = 60
 	}
 
+	// Today — dynamic_data is Fantasy-Calendar's live current-date state for
+	// THIS specific calendar export, not an optional/defaults-only section,
+	// so year/month/day are populated unconditionally from it, the same way
+	// parseChronicle treats its own always-present current_month/
+	// current_day. Timespan (the current month) and Day are both
+	// 0-indexed, like LeapDays' Timespan index above.
+	result.Today = ImportedToday{
+		Year:  fc.DynamicData.Year,
+		Month: importIntPtr(fc.DynamicData.Timespan + 1),
+		Day:   importIntPtr(fc.DynamicData.Day + 1),
+	}
+
 	// Months — timespans array. Intercalary timespans become intercalary months.
 	for i, ts := range fc.StaticData.YearData.Timespans {
 		result.Months = append(result.Months, MonthInput{
@@ -1252,15 +1403,18 @@ func parseFantasyCalendar(data []byte) (*ImportResult, error) {
 		if e.Description != "" {
 			desc = &e.Description
 		}
-		result.Eras = append(result.Eras, EraInput{
+		result.Eras = append(result.Eras, normalizeEraStart(EraInput{
 			Name:        e.Name,
 			StartYear:   e.Date.Year,
 			Description: desc,
 			Color:       "#6366f1",
 			SortOrder:   i,
-		})
+		}))
 	}
 
+	if err := clampCalendarStructure(result); err != nil {
+		return nil, err
+	}
 	return result, nil
 }
 
@@ -1278,15 +1432,34 @@ func stripLocalizationKey(s string) string {
 	return parts[len(parts)-1]
 }
 
-// normalizeColor ensures a color string is a valid hex color.
-// Returns the color as-is if already valid, or a default gray.
+// normalizeColor makes an import-supplied color value safe to store: it
+// must fit calendar_moons.color/calendar_seasons.color's VARCHAR(7) — the
+// narrowest color column any import format writes to — under strict SQL
+// mode, where an over-length value errors the whole transaction instead of
+// silently truncating (a crash-the-import risk, not just a cosmetic one).
+// Every caller across every format (including Chronicle's own re-import,
+// which is untrusted the moment it's a file someone uploaded, not
+// necessarily one Chronicle itself produced) routes through this rather
+// than writing a source value directly.
+//
+// A valid #rgb/#rrggbb (with or without the leading '#') is accepted and
+// #rgb is expanded to #rrggbb, so every result is exactly 7 characters.
+// Anything else — a CSS name like "steelblue", an rgba() string, garbage —
+// falls back to a default gray rather than being truncated or rejected.
 func normalizeColor(c string) string {
+	const fallback = "#808080"
 	c = strings.TrimSpace(c)
 	if c == "" {
-		return "#808080"
+		return fallback
 	}
 	if c[0] != '#' {
 		c = "#" + c
+	}
+	if !hexColorPattern.MatchString(c) {
+		return fallback
+	}
+	if len(c) == 4 { // "#" + 3 hex digits: expand to the 6-digit form.
+		c = fmt.Sprintf("#%c%c%c%c%c%c", c[1], c[1], c[2], c[2], c[3], c[3])
 	}
 	return c
 }
@@ -1299,3 +1472,225 @@ func roundFloat(f float64, n int) float64 {
 
 // unused but kept for potential future use with moon phase offsets.
 var _ = roundFloat
+
+// importIntPtr returns a pointer to v — used to populate
+// ImportedToday.Month/Day from a plain int without a throwaway local
+// variable at every call site. Named distinctly from the repository
+// integration tests' own intPtr test helper (same package, different file).
+func importIntPtr(v int) *int { return &v }
+
+// Upper bounds an imported calendar's structure is held to. Without them, a
+// single crafted (or just badly-behaved) file can hand this package a month
+// with billions of days, or tens of thousands of rows to write in one
+// request — clampCalendarStructure enforces every one of these for every
+// import format (see its own doc comment); buildMonthGrid/countEventsByDay
+// in view_helpers.go re-clamp maxCalendarMonthDays independently, so a
+// calendar_months row that reached this bound some other way (not
+// necessarily an import) still renders safely.
+//
+// Sized well past any real calendar this importer targets: the shipped
+// Harptos preset — the Forgotten Realms' actual calendar, festivals and
+// all — comes to 17 months, 10 weekdays, 4 moons, 4 seasons and 1 era, and
+// the Gregorian/Golarion shapes it also covers are smaller still; a large
+// Fantasy-Calendar or Calendaria back-catalog runs to a few thousand
+// events, not tens of thousands.
+const (
+	maxCalendarMonths       = 200  // real calendars top out near 20
+	maxCalendarMonthDays    = 3660 // ten real years of days in one "month" is already absurd
+	maxCalendarWeekdays     = 100
+	maxCalendarEras         = 500
+	maxCalendarSeasons      = 200
+	maxCalendarMoons        = 100
+	maxCalendarImportEvents = 20000
+
+	// calendar_months/weekdays/moons/seasons.name are all VARCHAR(100).
+	// calendar_eras.name is the wider VARCHAR(200) a hand-made era already
+	// enforces via apperror.MaxNameLength (validateEraShape) — reused below
+	// rather than a second constant carrying the same number.
+	maxCalendarShortNameLength = 100
+	// calendar_seasons.weather_effect VARCHAR(200).
+	maxCalendarWeatherEffectLength = 200
+)
+
+// checkCalendarImportLimits refuses an import whose structure is too large
+// to plausibly be a real calendar (see the maxCalendar* constants above).
+// Counts are refused rather than truncated: there's no sane way to drop "the
+// extra 4,000 months" that leaves a usable calendar behind, so the whole
+// file is rejected with a message the wizard's preview step shows directly,
+// before anything is parsed further or written.
+func checkCalendarImportLimits(result *ImportResult) error {
+	if n := len(result.Months); n > maxCalendarMonths {
+		return fmt.Errorf("this calendar has %d months; the maximum is %d", n, maxCalendarMonths)
+	}
+	if n := len(result.Weekdays); n > maxCalendarWeekdays {
+		return fmt.Errorf("this calendar has %d weekdays; the maximum is %d", n, maxCalendarWeekdays)
+	}
+	if n := len(result.Eras); n > maxCalendarEras {
+		return fmt.Errorf("this calendar has %d eras; the maximum is %d", n, maxCalendarEras)
+	}
+	if n := len(result.Seasons); n > maxCalendarSeasons {
+		return fmt.Errorf("this calendar has %d seasons; the maximum is %d", n, maxCalendarSeasons)
+	}
+	if n := len(result.Moons); n > maxCalendarMoons {
+		return fmt.Errorf("this calendar has %d moons; the maximum is %d", n, maxCalendarMoons)
+	}
+	if n := len(result.Events); n > maxCalendarImportEvents {
+		return fmt.Errorf("this calendar has %d events; the maximum is %d", n, maxCalendarImportEvents)
+	}
+	return nil
+}
+
+// truncateImportText shortens s to at most maxLen bytes without splitting a
+// multi-byte UTF-8 rune in two — every name/description/weather-effect
+// length clamp below routes its truncation through this rather than a bare
+// s[:n], which can produce a byte sequence MariaDB's utf8mb4 columns refuse
+// to store under strict SQL mode.
+func truncateImportText(s string, maxLen int) string {
+	if len(s) <= maxLen {
+		return s
+	}
+	return strings.ToValidUTF8(s[:maxLen], "")
+}
+
+// clampCalendarStructure holds an imported calendar to the bounds above and
+// clamps the out-of-range or blank values a real Simple Calendar / Calendaria
+// export can carry — a season date outside its month's day range, a
+// non-positive month length, a blank name — to something calendars' own
+// schema can store, appending a warning for each clamp instead of failing
+// the import outright (#741: "warn, never refuse, when a structural oddity
+// is found"). The one exception is the counts checked by
+// checkCalendarImportLimits: there's no reasonable value to clamp "too many
+// months" down to, so those are refused instead — see its own doc comment.
+// The fix belongs here, upstream of CalendarRepository.ApplyImport: that
+// transaction stays atomic and rejects only genuine data-integrity
+// violations (see "ApplyImport rolls back every write when a later step
+// fails" in repository_integration_test.go), never a merely-odd-but-storable
+// shape.
+//
+// Called by every format's parser (parseChronicle included — detectFormat
+// trusts any file that merely claims the right "format" value, so a
+// hand-edited or malicious upload can reach this path without ever having
+// gone through a real Chronicle export) and, for the wizard's create step,
+// a second time over browser-submitted data — see WizardCreate — so it must
+// be safe to run twice over its own output; every clamp below is already
+// idempotent (an in-range value is left untouched, so a second pass adds no
+// further warnings).
+func clampCalendarStructure(result *ImportResult) error {
+	if err := checkCalendarImportLimits(result); err != nil {
+		return err
+	}
+
+	for i := range result.Months {
+		m := &result.Months[i]
+		if strings.TrimSpace(m.Name) == "" {
+			m.Name = fmt.Sprintf("Month %d", i+1)
+			result.Warnings = append(result.Warnings, fmt.Sprintf("month %d had no name; named %q", i+1, m.Name))
+		}
+		if trunc := truncateImportText(m.Name, maxCalendarShortNameLength); trunc != m.Name {
+			m.Name = trunc
+			result.Warnings = append(result.Warnings, fmt.Sprintf("month %d's name was too long; shortened", i+1))
+		}
+		if m.Days <= 0 {
+			result.Warnings = append(result.Warnings, fmt.Sprintf(
+				"month %q had a non-positive length (%d days); clamped to 1 day", m.Name, m.Days))
+			m.Days = 1
+		} else if m.Days > maxCalendarMonthDays {
+			result.Warnings = append(result.Warnings, fmt.Sprintf(
+				"month %q had a length of %d days, over the %d-day maximum; clamped", m.Name, m.Days, maxCalendarMonthDays))
+			m.Days = maxCalendarMonthDays
+		}
+	}
+
+	for i := range result.Weekdays {
+		w := &result.Weekdays[i]
+		if strings.TrimSpace(w.Name) == "" {
+			w.Name = fmt.Sprintf("Day %d", i+1)
+			result.Warnings = append(result.Warnings, fmt.Sprintf("weekday %d had no name; named %q", i+1, w.Name))
+		}
+		if trunc := truncateImportText(w.Name, maxCalendarShortNameLength); trunc != w.Name {
+			w.Name = trunc
+			result.Warnings = append(result.Warnings, fmt.Sprintf("weekday %d's name was too long; shortened", i+1))
+		}
+	}
+
+	for i := range result.Moons {
+		mo := &result.Moons[i]
+		mo.Color = normalizeColor(mo.Color)
+		if trunc := truncateImportText(mo.Name, maxCalendarShortNameLength); trunc != mo.Name {
+			mo.Name = trunc
+			result.Warnings = append(result.Warnings, fmt.Sprintf("moon %d's name was too long; shortened", i+1))
+		}
+	}
+
+	for i := range result.Eras {
+		e := &result.Eras[i]
+		e.Color = normalizeColor(e.Color)
+		if strings.TrimSpace(e.Name) == "" {
+			e.Name = fmt.Sprintf("Era %d", i+1)
+			result.Warnings = append(result.Warnings, fmt.Sprintf("era %d had no name; named %q", i+1, e.Name))
+		}
+		if trunc := truncateImportText(e.Name, apperror.MaxNameLength); trunc != e.Name {
+			e.Name = trunc
+			result.Warnings = append(result.Warnings, fmt.Sprintf("era %d's name was too long; shortened", i+1))
+		}
+		if e.Description != nil {
+			if trunc := truncateImportText(*e.Description, apperror.MaxDescriptionLength); trunc != *e.Description {
+				e.Description = &trunc
+				result.Warnings = append(result.Warnings, fmt.Sprintf("era %d's description was too long; shortened", i+1))
+			}
+		}
+	}
+
+	// Colors are normalized here as well as in each parser, so the wizard's
+	// create step, which re-reads browser-submitted data, gets the same check.
+	for i := range result.Seasons {
+		result.Seasons[i].Color = normalizeColor(result.Seasons[i].Color)
+	}
+
+	n := len(result.Months)
+	if n == 0 {
+		// No months to clamp a season into — nothing more this pass can do
+		// (a months-less calendar is its own, separately-surfaced problem).
+		return nil
+	}
+	for i := range result.Seasons {
+		s := &result.Seasons[i]
+		if strings.TrimSpace(s.Name) == "" {
+			s.Name = fmt.Sprintf("Season %d", i+1)
+			result.Warnings = append(result.Warnings, fmt.Sprintf("season %d had no name; named %q", i+1, s.Name))
+		}
+		if trunc := truncateImportText(s.Name, maxCalendarShortNameLength); trunc != s.Name {
+			s.Name = trunc
+			result.Warnings = append(result.Warnings, fmt.Sprintf("season %d's name was too long; shortened", i+1))
+		}
+		if s.Description != nil {
+			if trunc := truncateImportText(*s.Description, apperror.MaxDescriptionLength); trunc != *s.Description {
+				s.Description = &trunc
+				result.Warnings = append(result.Warnings, fmt.Sprintf("season %d's description was too long; shortened", i+1))
+			}
+		}
+		if s.WeatherEffect != nil {
+			if trunc := truncateImportText(*s.WeatherEffect, maxCalendarWeatherEffectLength); trunc != *s.WeatherEffect {
+				s.WeatherEffect = &trunc
+				result.Warnings = append(result.Warnings, fmt.Sprintf("season %d's weather effect was too long; shortened", i+1))
+			}
+		}
+
+		clampedStartMonth := clampInt(s.StartMonth, 1, n)
+		clampedEndMonth := clampInt(s.EndMonth, 1, n)
+		if clampedStartMonth != s.StartMonth || clampedEndMonth != s.EndMonth {
+			result.Warnings = append(result.Warnings, fmt.Sprintf(
+				"season %q referenced a month outside this calendar's %d months; clamped", s.Name, n))
+		}
+		s.StartMonth, s.EndMonth = clampedStartMonth, clampedEndMonth
+
+		clampedStartDay := clampInt(s.StartDay, 1, result.Months[s.StartMonth-1].Days)
+		clampedEndDay := clampInt(s.EndDay, 1, result.Months[s.EndMonth-1].Days)
+		if clampedStartDay != s.StartDay || clampedEndDay != s.EndDay {
+			result.Warnings = append(result.Warnings, fmt.Sprintf(
+				"season %q had a day outside its month's range; clamped", s.Name))
+		}
+		s.StartDay, s.EndDay = clampedStartDay, clampedEndDay
+	}
+	return nil
+}

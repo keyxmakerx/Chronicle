@@ -200,6 +200,10 @@ func diagnosticCatalog() []Diagnostic {
 		// CAMPAIGN LOOKS LIKE THIS. Defined in operator_diag_campaign.go.
 		campaignSurfacesDiagnostic(),
 		campaignConfigDiagnostic(),
+		// The calendar plugin's own state, narrower than campaign.config's
+		// addon row: counts, migration version, Foundry sync state. Defined
+		// in operator_diag_calendar.go (calendar-v5 seams, #778).
+		calendarStatsDiagnostic(),
 		{
 			Name:    "entity.types",
 			Title:   "List a campaign's entity types (id, slug, preset, count)",
