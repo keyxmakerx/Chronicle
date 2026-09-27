@@ -2417,8 +2417,10 @@ func (a *App) RegisterRoutes() {
 
 	// CALV5-PLACEHOLDER: keeps the route the sidebar, campaign dashboard and
 	// Extensions hub link to (/campaigns/:id/apps/calendar) answering with a
-	// rebuilding notice instead of 404. Legacy /calendars and /calendar
-	// paths, which used to redirect here, get the same answer.
+	// rebuilding notice instead of 404. The legacy /calendar path, which
+	// used to redirect here, gets the same answer. /calendars (bare, no
+	// trailing segment) is NOT in this group any more — Part B (#764) gave
+	// it a real page (calendar.RegisterRoutes' Index handler) below.
 	calendarRebuildGroup := e.Group("/campaigns/:id",
 		auth.RequireAuth(authService),
 		campaigns.RequireCampaignAccess(campaignService),
@@ -2428,17 +2430,15 @@ func (a *App) RegisterRoutes() {
 	}
 	calendarRebuildGroup.GET("/apps/calendar", calendarRebuildNotice)
 	calendarRebuildGroup.GET("/calendar", calendarRebuildNotice)
-	calendarRebuildGroup.GET("/calendars", calendarRebuildNotice)
 
-	// calendar.RegisterRoutes is the JSON API: calendars, events, event
-	// kinds, eras, the moon hidden flag. It cannot change what a page
-	// renders — calendarRebuildGroup above registers GET /calendar and GET
-	// /calendars (the rebuild notice page); RegisterRoutes's only bare
-	// /calendars route is POST (create), every other path adds a segment
-	// (/calendars/list, /calendars/:calid, ...), so the two never contend on
-	// the same method+path, and the page a player navigates to keeps
-	// showing "being rebuilt" until a later change replaces
-	// calendarRebuildNotice itself.
+	// calendar.RegisterRoutes is both the JSON API (calendars, events, event
+	// kinds, eras, the moon hidden flag) and, since Part B (#764), the
+	// calendars list/preview pages and the new-calendar wizard. If the
+	// calendar plugin is unhealthy, none of it registers (the else branch
+	// below only logs) and every one of these paths, including
+	// /campaigns/:id/calendars itself, 404s rather than showing a notice —
+	// unlike /apps/calendar and /calendar above, which stay answered by
+	// calendarRebuildGroup regardless of plugin health.
 	//
 	// CALV5-PLACEHOLDER: V5 must still restore calendar.RegisterRSVPRoutes
 	// and the public Foundry-facing calendar API (token-verified through

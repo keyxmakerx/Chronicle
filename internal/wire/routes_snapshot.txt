@@ -160,7 +160,7 @@ GET	/calendar/seasons	internal/plugins/syncapi/routes.go
 GET	/calendar/structure	internal/plugins/syncapi/routes.go
 GET	/calendar/weather	internal/plugins/syncapi/routes.go
 GET	/calendar/world-state	internal/plugins/syncapi/routes.go
-GET	/calendars	internal/app/routes.go
+GET	/calendars	internal/plugins/calendar/routes.go
 GET	/calendars	internal/plugins/syncapi/routes.go
 GET	/calendars/:calid	internal/plugins/calendar/routes.go
 GET	/calendars/:calid	internal/plugins/calendar/routes.go
@@ -168,11 +168,16 @@ GET	/calendars/:calid/events	internal/plugins/calendar/routes.go
 GET	/calendars/:calid/events	internal/plugins/calendar/routes.go
 GET	/calendars/:calid/events/:eid	internal/plugins/calendar/routes.go
 GET	/calendars/:calid/events/:eid	internal/plugins/calendar/routes.go
+GET	/calendars/:calid/preview	internal/plugins/calendar/routes.go
 GET	/calendars/event-kinds	internal/plugins/calendar/routes.go
 GET	/calendars/list	internal/plugins/calendar/routes.go
 GET	/calendars/list	internal/plugins/calendar/routes.go
 GET	/calendars/presets	internal/plugins/calendar/routes.go
 GET	/calendars/presets/:name	internal/plugins/calendar/routes.go
+GET	/calendars/wizard	internal/plugins/calendar/routes.go
+GET	/calendars/wizard/import	internal/plugins/calendar/routes.go
+GET	/calendars/wizard/presets	internal/plugins/calendar/routes.go
+GET	/calendars/wizard/presets/:name	internal/plugins/calendar/routes.go
 GET	/campaigns	internal/plugins/admin/routes.go
 GET	/campaigns	internal/plugins/campaigns/routes.go
 GET	/campaigns/:id/accept-transfer	internal/plugins/campaigns/routes.go
@@ -447,6 +452,8 @@ POST	/calendars/event-kinds	internal/plugins/calendar/routes.go
 POST	/calendars/import	internal/plugins/calendar/routes.go
 POST	/calendars/import/preview	internal/plugins/calendar/routes.go
 POST	/calendars/presets/:name	internal/plugins/calendar/routes.go
+POST	/calendars/wizard/create	internal/plugins/calendar/routes.go
+POST	/calendars/wizard/import/preview	internal/plugins/calendar/routes.go
 POST	/campaigns	internal/plugins/campaigns/routes.go
 POST	/campaigns/:id/join	internal/plugins/admin/routes.go
 POST	/campaigns/:id/media	internal/plugins/syncapi/routes.go

@@ -134,6 +134,14 @@ type CalendarService interface {
 	// event is visible to v.
 	GetEventForViewer(ctx context.Context, eventID, calendarID, campaignID string, v permissions.Viewer) (*Event, error)
 	ListEventsForMonth(ctx context.Context, calendarID, campaignID string, year, month int, v permissions.Viewer) ([]Event, error)
+	// UpcomingEvents returns a calendar's next (up to limit) events on or
+	// after its own current date, visibility-filtered for v — the calendar
+	// preview's "Coming up" list (Part B, #764). Built on the same
+	// EventRepository.ListUpcomingEvents a base-date-only read the events
+	// list already has no equivalent for; it does not expand recurrence
+	// past a base date in the past, the same limitation ListUpcomingEvents
+	// itself carries — see that method's own doc comment.
+	UpcomingEvents(ctx context.Context, calendarID, campaignID string, limit int, v permissions.Viewer) ([]Event, error)
 	UpdateEvent(ctx context.Context, eventID, calendarID, campaignID string, input UpdateEventInput, v permissions.Viewer) error
 	DeleteEvent(ctx context.Context, eventID, calendarID, campaignID string, v permissions.Viewer) error
 	// SetEventVisibility is the dm_only toggle's dedicated action endpoint;
@@ -1002,6 +1010,26 @@ func occursSomewhereInMonth(e Event, cal *Calendar, year, month int) bool {
 		}
 	}
 	return false
+}
+
+// UpcomingEvents returns a calendar's next (up to limit) events on or after
+// its own current date, visibility-filtered for v. See the interface doc
+// comment for what it does not do (recurrence expansion past a base date in
+// the past).
+func (s *calendarService) UpcomingEvents(ctx context.Context, calendarID, campaignID string, limit int, v permissions.Viewer) ([]Event, error) {
+	cal, err := s.calendarInCampaignForViewer(ctx, calendarID, campaignID, v)
+	if err != nil {
+		return nil, err
+	}
+	events, err := s.eventRepo.ListUpcomingEvents(ctx, calendarID, cal.CurrentYear, cal.CurrentMonth, cal.CurrentDay, v.Role(), limit)
+	if err != nil {
+		return nil, fmt.Errorf("list upcoming events: %w", err)
+	}
+	events = filterEventsByUser(events, v)
+	if err := s.redactHiddenEntityLinks(ctx, campaignID, events, v); err != nil {
+		return nil, err
+	}
+	return events, nil
 }
 
 // eventInCalendar loads an event and confirms it belongs to calendarID

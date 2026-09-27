@@ -132,6 +132,10 @@ func (f *fakeCalendarSvc) ListEventsForMonth(_ context.Context, calendarID, _ st
 	f.lastViewer = v
 	return []Event{{ID: "evt-1", CalendarID: calendarID}}, nil
 }
+func (f *fakeCalendarSvc) UpcomingEvents(_ context.Context, calendarID, _ string, _ int, v permissions.Viewer) ([]Event, error) {
+	f.lastViewer = v
+	return []Event{{ID: "evt-1", CalendarID: calendarID}}, nil
+}
 func (f *fakeCalendarSvc) UpdateEvent(_ context.Context, _, _, _ string, _ UpdateEventInput, v permissions.Viewer) error {
 	f.lastViewer = v
 	return nil
@@ -270,6 +274,12 @@ func TestRouteGates_PlayerBlockedFromOwnerAndScribeRoutes(t *testing.T) {
 		{"create calendar from preset (Owner only)", http.MethodPost, "/campaigns/camp-1/calendars/presets/blank"},
 		{"preview calendar import (Owner only)", http.MethodPost, "/campaigns/camp-1/calendars/import/preview"},
 		{"create calendar from import (Owner only)", http.MethodPost, "/campaigns/camp-1/calendars/import"},
+		{"wizard start (Owner only)", http.MethodGet, "/campaigns/camp-1/calendars/wizard"},
+		{"wizard preset picker (Owner only)", http.MethodGet, "/campaigns/camp-1/calendars/wizard/presets"},
+		{"wizard preset review (Owner only)", http.MethodGet, "/campaigns/camp-1/calendars/wizard/presets/blank"},
+		{"wizard import step (Owner only)", http.MethodGet, "/campaigns/camp-1/calendars/wizard/import"},
+		{"wizard import preview (Owner only)", http.MethodPost, "/campaigns/camp-1/calendars/wizard/import/preview"},
+		{"wizard create (Owner only)", http.MethodPost, "/campaigns/camp-1/calendars/wizard/create"},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
