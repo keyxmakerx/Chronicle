@@ -244,6 +244,7 @@ jobs:
             -v -count=1 2>&1 | tee dbtests.log
           go test ./internal/app/ -v -count=1 -run 'CustomVisibilityLeak|PrivateEntityVisibilityLeak' 2>&1 | tee -a dbtests.log
           go test ./internal/plugins/campaigns/ -v -count=1 -run TestNavPins_Integration 2>&1 | tee -a dbtests.log
+          go test ./internal/plugins/auth/ -v -count=1 -run 'TestUserRepository_.*_Integration' 2>&1 | tee -a dbtests.log
           for want in TestDB_SessionRSVPTokenCannotBeSpentTwiceConcurrently \
                       TestEntityTypeRepository_Integration \
                       TestConsolidatePlayerCharacterDuplicate_Integration \
@@ -254,7 +255,9 @@ jobs:
                       TestNPCGallery_CustomVisibilityLeak \
                       TestTimelineEvents_PrivateEntityVisibilityLeak \
                       TestTimelineEntityGroups_PrivateEntityVisibilityLeak \
-                      TestNavPins_Integration; do
+                      TestNavPins_Integration \
+                      TestUserRepository_UpdateAvatarPath_Integration \
+                      TestUserRepository_ClearAvatarPathIfMatches_Integration; do
             grep -q -- "--- PASS: $want" dbtests.log || {
               echo "::error::$want did not PASS — it was skipped or never ran."
               exit 1
