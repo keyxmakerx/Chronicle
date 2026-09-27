@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/keyxmakerx/chronicle/internal/patch"
+	"github.com/keyxmakerx/chronicle/internal/permissions"
 )
 
 // VisibilityRules defines per-user visibility overrides for calendar events.
@@ -22,18 +23,75 @@ type VisibilityRules struct {
 	DeniedUsers  []string `json:"denied_users,omitempty"`
 }
 
-// UpdateEventVisibilityInput is the validated input for updating event visibility.
+// ParseVisibilityRules parses raw JSON (Calendar.VisibilityRules or
+// Event.VisibilityRules) into a *VisibilityRules, or nil when unset. Shared
+// by both owners of a visibility_rules column so the parse can't drift
+// between them; Event additionally exposes it as a method (below) for
+// existing callers.
+func ParseVisibilityRules(raw *string) *VisibilityRules {
+	if raw == nil || *raw == "" {
+		return nil
+	}
+	var rules VisibilityRules
+	if err := json.Unmarshal([]byte(*raw), &rules); err != nil {
+		return nil
+	}
+	return &rules
+}
+
+// Allows reports whether userID may see an item carrying these rules — a
+// nil receiver (no rules stored) allows everyone. This is a VERBATIM MIRROR
+// of maps.VisibilityRules.Allows (internal/plugins/maps/model.go) and the
+// allow/deny half of timeline's canUserView: cross-plugin repo/model access
+// is forbidden (plugins reach each other only through service interfaces),
+// so the policy is replicated rather than imported.
+//
+// SECURITY-SENSITIVE: keep in lockstep with maps' and timeline's twins,
+// including the ADR-049 DeniesAnonymous check — a logged-out viewer can't be
+// proven not to be the specific player a deny list names, so a non-empty
+// DeniedUsers excludes them too, even though they match no literal entry.
+func (v *VisibilityRules) Allows(userID string) bool {
+	if v == nil {
+		return true
+	}
+	if permissions.DeniesAnonymous(v.DeniedUsers, userID) {
+		return false
+	}
+	for _, id := range v.DeniedUsers {
+		if id == userID {
+			return false
+		}
+	}
+	if len(v.AllowedUsers) == 0 {
+		return true
+	}
+	for _, id := range v.AllowedUsers {
+		if id == userID {
+			return true
+		}
+	}
+	return false
+}
+
+// UpdateEventVisibilityInput is the validated input for updating event
+// visibility. Visibility stays a plain string: this is a "set visibility"
+// action, not a general settings save, so the caller always states the new
+// visibility outright — there is no absent-preserves case for it (see
+// governedFieldExceptions in internal/patch/partial_update_contract_test.go).
+// VisibilityRules is patch.Field so a visibility-only call (flip
+// everyone/dm_only) can leave an existing per-user rules blob untouched:
+// absent preserves it, explicit null clears it, a value replaces it.
 type UpdateEventVisibilityInput struct {
-	Visibility      string  `json:"visibility"`
-	VisibilityRules *string `json:"visibility_rules"`
+	Visibility      string
+	VisibilityRules patch.Field[string]
 }
 
 // UpdateCalendarVisibilityInput is the validated input for updating a
 // calendar's per-calendar visibility. Same shape as the event one — the
 // calendar reuses the event visibility model + resolver.
 type UpdateCalendarVisibilityInput struct {
-	Visibility      string  `json:"visibility"`
-	VisibilityRules *string `json:"visibility_rules"`
+	Visibility      string
+	VisibilityRules patch.Field[string]
 }
 
 // CalendarEventDate is a lightweight (calendar, date, name) tuple from the
@@ -879,14 +937,7 @@ func (e *Event) IsMultiDay() bool {
 // ParseVisibilityRules parses the JSON visibility rules into a VisibilityRules struct.
 // Returns nil if no rules are set.
 func (e *Event) ParseVisibilityRules() *VisibilityRules {
-	if e.VisibilityRules == nil || *e.VisibilityRules == "" {
-		return nil
-	}
-	var rules VisibilityRules
-	if err := json.Unmarshal([]byte(*e.VisibilityRules), &rules); err != nil {
-		return nil
-	}
-	return &rules
+	return ParseVisibilityRules(e.VisibilityRules)
 }
 
 // Announced setting constants: separate from Visibility (who can ever see an
@@ -1023,23 +1074,28 @@ type CreateCalendarInput struct {
 }
 
 // UpdateCalendarInput is the validated input for updating calendar settings.
-// Mode is optional: empty means "leave unchanged"; non-empty must be one of
-// the calendar Mode constants (ModeFantasy / ModeRealLife).
+// Partial update (internal/patch's Field type): an absent field preserves
+// the stored value, an explicit null clears it, a present value replaces it.
+// Name stays a plain string: UpdateCalendar rejects a blank merged name with
+// 400, so an absent name fails loudly instead of silently overwriting — the
+// same governedFieldExceptions shape as maps.UpdateMapInput.Name and
+// timeline.UpdateTimelineInput.Name. Mode, when present, must be one of the
+// calendar Mode constants (ModeFantasy / ModeRealLife).
 type UpdateCalendarInput struct {
 	Name             string
-	Description      *string
-	EpochName        *string
-	Mode             string
-	CurrentYear      int
-	CurrentMonth     int
-	CurrentDay       int
-	CurrentHour      int
-	CurrentMinute    int
-	HoursPerDay      int
-	MinutesPerHour   int
-	SecondsPerMinute int
-	LeapYearEvery    int
-	LeapYearOffset   int
+	Description      patch.Field[string]
+	EpochName        patch.Field[string]
+	Mode             patch.Field[string]
+	CurrentYear      patch.Field[int]
+	CurrentMonth     patch.Field[int]
+	CurrentDay       patch.Field[int]
+	CurrentHour      patch.Field[int]
+	CurrentMinute    patch.Field[int]
+	HoursPerDay      patch.Field[int]
+	MinutesPerHour   patch.Field[int]
+	SecondsPerMinute patch.Field[int]
+	LeapYearEvery    patch.Field[int]
+	LeapYearOffset   patch.Field[int]
 	// SetRealTime is nil for every caller that does not manage the flag (e.g.
 	// PutDate, worldstate advance/time, seed/create), so their update
 	// preserves the stored TracksRealTime/RealTimeZone — a *bool so "absent"

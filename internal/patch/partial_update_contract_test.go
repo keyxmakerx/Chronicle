@@ -35,6 +35,16 @@ var contractGoverned = map[string]string{
 	// CALV5 SALVAGE: restored with the domain layer, already presence-aware,
 	// so it stays on the governed list rather than the allowlist.
 	"calendar.UpdateEventInput": "PUT .../calendar/events/:eid — Foundry's five-key push turned off recurrence, all-day and the entity link",
+	// V5 slice 2: swept from notYetSwept when the service+handler were wired.
+	// PUT .../calendars/:calid is a settings save covering thirteen fields
+	// (hours-per-day, leap-year rules, the current date/time, real-time
+	// toggle...); a narrow push (e.g. rename-only) must not reset any of them.
+	"calendar.UpdateCalendarInput": "PUT .../calendars/:calid — a settings-only push (e.g. rename) must not reset current date/time, leap-year rules or the hours-per-day/minute/second geometry",
+	// Visibility stays required (see governedFieldExceptions); VisibilityRules
+	// is the field this struct exists to protect — a visibility-flip call
+	// must not silently wipe an existing per-user allow/deny list.
+	"calendar.UpdateEventVisibilityInput":    "PUT .../calendar/events/:eid/visibility — a visibility-only flip (everyone <-> dm_only) must not clear an existing per-user visibility_rules blob",
+	"calendar.UpdateCalendarVisibilityInput": "same shape and same reason as calendar.UpdateEventVisibilityInput — the calendar reuses the event visibility model",
 
 	// Each is pinned by a *_partial_update_test.go next to it.
 	"maps.UpdateTokenInput":        "PUT .../tokens/:tid (web + syncapi) — a drag PUT carrying only {x, y} zeroed IsHidden, IsLocked, both HP bars and every aura/light/vision field; a hidden ambush monster went visible on the next nudge",
@@ -61,6 +71,15 @@ var governedFieldExceptions = map[string]string{
 	"timeline.UpdateTimelineInput.Name": "value-typed by choice: UpdateTimeline validates the merged name is non-empty and rejects the whole call with 400 when it is blank, so an absent name fails loudly rather than silently overwriting.",
 	"tags.UpdateTagInput.Name":          "value-typed by choice: tagService.Update validates the merged name is non-empty and rejects the whole call with 400 when it is blank, so an absent name fails loudly rather than silently overwriting.",
 	"tags.UpdateTagRequest.Name":        "value-typed by choice: the same required-name validation applies via UpdateTagInput.Name above — this is the wire-bound twin.",
+	"calendar.UpdateCalendarInput.Name": "value-typed by choice: UpdateCalendar validates the merged name is non-empty and rejects the whole call with 400 when it is blank, so an absent name fails loudly rather than silently overwriting.",
+
+	// These are action endpoints ("set visibility"), not general settings
+	// saves — every call states the new visibility outright, so there is no
+	// absent-preserves case for it. VisibilityRules on both structs is
+	// presence-aware (patch.Field), which is the field the fix is actually
+	// about.
+	"calendar.UpdateEventVisibilityInput.Visibility":    "value-typed by choice: SetEventVisibility is a dedicated set-visibility action, not a general update — the caller always states the event's new visibility outright.",
+	"calendar.UpdateCalendarVisibilityInput.Visibility": "value-typed by choice: same reason as calendar.UpdateEventVisibilityInput.Visibility — a dedicated set-visibility action, not a general update.",
 }
 
 // notYetSwept freezes the rest of the inventory. Being on this list is a
@@ -80,12 +99,6 @@ var notYetSwept = map[string]bool{
 	"entities.UpdatePromptInput":          true,
 	"maps.UpdateTokenPositionInput":       true,
 	"campaigns.UpdateCampaignInput":       true,
-	// CALV5 SALVAGE: these three (recovered verbatim with the domain layer)
-	// have no handler, service or repository yet. V5 must sweep them to
-	// patch.Field before wiring a handler, then delete these three lines.
-	"calendar.UpdateEventVisibilityInput":    true,
-	"calendar.UpdateCalendarVisibilityInput": true,
-	"calendar.UpdateCalendarInput":           true,
 
 	// The scanner covers Update*Input and Update*Request (ADR-056). These are
 	// unaudited, not verified safe — several (UpdateEntityRequest,
