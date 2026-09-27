@@ -421,18 +421,26 @@
     return document.body.classList.contains('nav-editing');
   }
 
+  // Watches the sidebar's classes for the drawer opening and the folding to
+  // icons. It follows the sidebar element, which Back replaces (below).
+  var observer = null;
+
   function init() {
+    if (observer) observer.disconnect();
+    observer = null;
     if (!list()) return;
     var sb = sidebar();
     if (sb && window.MutationObserver) {
-      new MutationObserver(onSidebarClass).observe(sb, { attributes: true, attributeFilter: ['class'] });
+      observer = new MutationObserver(onSidebarClass);
+      observer.observe(sb, { attributes: true, attributeFilter: ['class'] });
     }
-    if (phoneQuery && phoneQuery.addEventListener) phoneQuery.addEventListener('change', syncDrawer);
     wasOpen = drawerOpen();
     wasCollapsed = !!sb && sb.classList.contains('sidebar-collapsed');
     if (wasCollapsed && currentKey()) moveRing(ringTargetFor(currentKey()), false);
     syncDrawer();
   }
+
+  if (phoneQuery && phoneQuery.addEventListener) phoneQuery.addEventListener('change', syncDrawer);
 
   document.addEventListener('click', function (e) {
     var t = e.target;
@@ -460,6 +468,15 @@
   document.addEventListener('htmx:afterSettle', function (e) {
     var target = e.detail && e.detail.target;
     if (target && target.id === 'main-content') syncFromMarker(true);
+  });
+
+  // Back and Forward swap in a whole new body (htmx fetches the page, since
+  // boot.js keeps its history cache off), so the sidebar is a new element:
+  // watch the new one, re-apply the drawer's state, and put the ring on the
+  // row the restored page names.
+  document.addEventListener('htmx:historyRestore', function () {
+    init();
+    syncFromMarker(false);
   });
 
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', init);

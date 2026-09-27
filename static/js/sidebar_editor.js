@@ -1126,6 +1126,30 @@
     togglePersonalPin(btn);
   });
 
+  // Back and Forward swap in a whole new body, with the sidebar as the server
+  // draws it (or, were htmx's history cache on, as it was left, perhaps
+  // mid-edit). The editor follows what is live now: while editing, it
+  // redraws from the draft; otherwise it clears any editor the body holds.
+  document.addEventListener('htmx:historyRestore', function () {
+    var ed = editList(), list = viewList();
+    removeChrome();
+    if (!S) {
+      if (ed) ed.remove();
+      if (list) list.hidden = false;
+      setPencil(false);
+      return;
+    }
+    if (!list) return;
+    var fresh = buildEditList();
+    if (ed) ed.parentNode.replaceChild(fresh, ed);
+    else list.parentNode.insertBefore(fresh, list.nextSibling);
+    list.hidden = true;
+    ensureChrome();
+    renderChrome();
+    // After Alpine has set up the restored sidebar, so it stays open.
+    setTimeout(function () { if (S) setEditing(true); }, 0);
+  });
+
   // --- Wiring ----------------------------------------------------------------
 
   // The pencil: opens the editor, or saves and closes it.
