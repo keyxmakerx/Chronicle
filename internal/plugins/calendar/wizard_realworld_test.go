@@ -152,7 +152,9 @@ func TestWizardCreate_RealWorld_TracksRealTimeComputesTodayServerSide(t *testing
 	// Deliberately no current_year/month/day — the switch is on, so the
 	// browser's own review step never sends them (they're x-show hidden).
 
+	before := time.Now().UTC()
 	rec := doHTMXFormRequest(e, "/campaigns/camp-real/calendars/wizard/create", "u-owner", form)
+	after := time.Now().UTC()
 	if rec.Code != http.StatusNoContent || rec.Header().Get("HX-Redirect") == "" {
 		t.Fatalf("expected a redirect on success, got %d (HX-Redirect=%q): %s",
 			rec.Code, rec.Header().Get("HX-Redirect"), rec.Body.String())
@@ -169,10 +171,15 @@ func TestWizardCreate_RealWorld_TracksRealTimeComputesTodayServerSide(t *testing
 	if created.RealTimeZone == nil || *created.RealTimeZone != "UTC" {
 		t.Errorf("RealTimeZone = %v, want \"UTC\"", created.RealTimeZone)
 	}
-	wantY, wantM, wantD := time.Now().UTC().Date()
-	if created.CurrentYear != wantY || created.CurrentMonth != int(wantM) || created.CurrentDay != wantD {
-		t.Errorf("current date = %d-%d-%d, want today in UTC (%d-%d-%d)",
-			created.CurrentYear, created.CurrentMonth, created.CurrentDay, wantY, int(wantM), wantD)
+	// Today is read between before and after, so either date is right when
+	// the request straddles midnight.
+	isDay := func(ts time.Time) bool {
+		y, m, d := ts.Date()
+		return created.CurrentYear == y && created.CurrentMonth == int(m) && created.CurrentDay == d
+	}
+	if !isDay(before) && !isDay(after) {
+		t.Errorf("current date = %d-%d-%d, want today in UTC (%s)",
+			created.CurrentYear, created.CurrentMonth, created.CurrentDay, before.Format("2006-01-02"))
 	}
 	if appliedIR == nil || len(appliedIR.Months) != 12 || len(appliedIR.Weekdays) != 7 {
 		t.Errorf("expected the fixed Gregorian structure to be applied, got %+v", appliedIR)

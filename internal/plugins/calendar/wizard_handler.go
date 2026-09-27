@@ -24,7 +24,6 @@ import (
 	"fmt"
 	"net/http"
 	"net/url"
-	"time"
 
 	"github.com/a-h/templ"
 	"github.com/labstack/echo/v4"
@@ -145,9 +144,9 @@ func (h *Handler) WizardImportPreview(c echo.Context) error {
 // GET /campaigns/:id/calendars/wizard/reallife
 func (h *Handler) WizardRealWorldReview(c echo.Context) error {
 	cc := campaigns.GetCampaignContext(c)
-	ir, err := GregorianImportResult()
+	ir, err := h.svc.PreviewRealWorld(c.Request().Context())
 	if err != nil {
-		return apperror.NewInternal(err)
+		return err
 	}
 	body := wizardRealWorldReviewBody(cc.Campaign.ID, middleware.GetCSRFToken(c),
 		fmt.Sprintf("/campaigns/%s/calendars/wizard", cc.Campaign.ID), "", h.ownerZoneHint(c), timeutil.CommonZones(), ir)
@@ -319,9 +318,9 @@ func (h *Handler) WizardCreate(c echo.Context) error {
 		// checks (time.LoadLocation, validateImportCurrentDate) validate
 		// them the same way an enabled real-time calendar's update route does.
 		backURL = fmt.Sprintf("/campaigns/%s/calendars/wizard", cc.Campaign.ID)
-		built, err := GregorianImportResult()
+		built, err := h.svc.PreviewRealWorld(ctx)
 		if err != nil {
-			return apperror.NewInternal(err)
+			return err
 		}
 		ir = built
 		ir.Settings.TracksRealTime = form.TracksRealTime
@@ -330,18 +329,15 @@ func (h *Handler) WizardCreate(c echo.Context) error {
 			ir.Settings.RealTimeZone = &zone
 		}
 		if form.TracksRealTime {
-			// The date selects are hidden client-side while this switch is
-			// on (today comes from the clock), so there is nothing in
-			// form.CurrentYear/Month/Day to trust — compute "today" from the
-			// chosen zone's wall clock here instead. A zone that fails to
-			// load falls through to CreateCalendarFromImport's own
-			// real_time_zone check below (with a harmless year-1/Jan-1
-			// placeholder), so the owner sees THAT precise error rather than
-			// a vaguer "current_month is required".
+			// The date fields are disabled while this switch is on, so the
+			// browser sends no date to trust: today comes from the chosen
+			// zone's clock. A zone that doesn't load keeps a placeholder
+			// date, and a blank one is never stored, so either way
+			// CreateCalendarFromImport's own real_time_zone check is the
+			// error the owner sees.
 			y, m, d := 1, 1, 1
-			if loc, zerr := time.LoadLocation(form.RealTimeZone); zerr == nil {
-				yy, mm, dd := time.Now().In(loc).Date()
-				y, m, d = yy, int(mm), dd
+			if yy, mm, dd, zerr := h.svc.TodayInZone(form.RealTimeZone); zerr == nil {
+				y, m, d = yy, mm, dd
 			}
 			form.CurrentYear, form.CurrentMonth, form.CurrentDay = &y, &m, &d
 		}
