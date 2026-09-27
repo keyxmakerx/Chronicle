@@ -15,7 +15,8 @@ import (
 // Permissions (.ai/conventions.md):
 //   - Calendar: view Player, create/edit/delete Owner.
 //   - Calendar events: view Player (visibility-filtered), create/edit
-//     Scribe, delete Owner, the dm_only toggle Owner only.
+//     Scribe, delete Owner, the dm_only toggle gated on CanAuthorDmOnly
+//     (the Owner or a granted co-DM, never a plain Scribe).
 //   - Event kinds, eras and the moon hidden flag are calendar STRUCTURE, so
 //     Owner only end to end (no Player read route for any of the three).
 func RegisterRoutes(e *echo.Echo, h *Handler, campaignSvc campaigns.CampaignService, authSvc auth.AuthService, addonSvc addons.AddonService) {
@@ -54,7 +55,13 @@ func RegisterRoutes(e *echo.Echo, h *Handler, campaignSvc campaigns.CampaignServ
 	cg.POST("/calendars/:calid/events", h.CreateEventAPI, campaigns.RequireRole(campaigns.RoleScribe))
 	cg.PUT("/calendars/:calid/events/:eid", h.UpdateEventAPI, campaigns.RequireRole(campaigns.RoleScribe))
 	cg.DELETE("/calendars/:calid/events/:eid", h.DeleteEventAPI, campaigns.RequireRole(campaigns.RoleOwner))
-	cg.PUT("/calendars/:calid/events/:eid/visibility", h.SetEventVisibilityAPI, campaigns.RequireRole(campaigns.RoleOwner))
+	// The dm_only toggle is gated on CanAuthorDmOnly, not a bare role
+	// minimum: the operator has decided a granted co-DM (Scribe role, plus
+	// the dm_only grant) may use this the same as the Owner, so RequireRole
+	// alone would wrongly exclude them.
+	cg.PUT("/calendars/:calid/events/:eid/visibility", h.SetEventVisibilityAPI,
+		campaigns.RequireCapability(func(cc *campaigns.CampaignContext) bool { return cc.CanAuthorDmOnly() },
+			"only the campaign owner or a granted co-DM may change this event's visibility"))
 
 	// Event kinds: campaign structure, Owner only end to end (no Player read).
 	cg.GET("/calendars/event-kinds", h.ListEventKindsAPI, campaigns.RequireRole(campaigns.RoleOwner))
