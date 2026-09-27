@@ -108,8 +108,10 @@ type EntityService interface {
 	GetAliases(ctx context.Context, entityID string) ([]EntityAlias, error)
 	SetAliases(ctx context.Context, entityID string, aliases []string) error
 
-	// Backlinks with context snippets — always campaign-scoped.
-	GetBacklinksWithSnippets(ctx context.Context, campaignID, entityID string, role int, userID string) ([]BacklinkEntry, error)
+	// Backlinks with context snippets — always campaign-scoped. canSeeGM
+	// gates whether the snippet is built from the linking page's raw HTML or
+	// its GM-secret-stripped form (same bar as GetEntry/GetFieldsAPI: Scribe+).
+	GetBacklinksWithSnippets(ctx context.Context, campaignID, entityID string, role int, userID string, canSeeGM bool) ([]BacklinkEntry, error)
 
 	// GetMentionLinks returns all @mention references across a campaign for the
 	// relations graph. Each link is a source→target pair extracted from entry_html.
@@ -2546,17 +2548,44 @@ func (s *entityService) SetAliases(ctx context.Context, entityID string, aliases
 
 // GetBacklinksWithSnippets returns backlink entities with context snippets
 // showing text around the @mention. Builds on the existing GetBacklinks by
-// extracting snippets from each referencing entity's entry_html.
-func (s *entityService) GetBacklinksWithSnippets(ctx context.Context, campaignID, entityID string, role int, userID string) ([]BacklinkEntry, error) {
+// extracting snippets from each referencing entity's entry_html. Only a safe
+// summary of each linking entity is returned (BacklinkEntity), never its raw
+// content; for canSeeGM=false the snippet is extracted from GM-secret-stripped
+// HTML, and a linking page whose only mention was inside that secret is
+// dropped entirely rather than shown with an empty snippet.
+func (s *entityService) GetBacklinksWithSnippets(ctx context.Context, campaignID, entityID string, role int, userID string, canSeeGM bool) ([]BacklinkEntry, error) {
 	backlinks, err := s.entities.FindBacklinks(ctx, campaignID, entityID, role, userID)
 	if err != nil {
 		return nil, apperror.NewInternal(fmt.Errorf("finding backlinks: %w", err))
 	}
 
+	needle := `data-mention-id="` + entityID + `"`
 	entries := make([]BacklinkEntry, 0, len(backlinks))
 	for _, bl := range backlinks {
-		snippet := extractMentionSnippet(bl.EntryHTML, entityID)
-		entries = append(entries, BacklinkEntry{Entity: bl, Snippet: snippet})
+		html := bl.EntryHTML
+		if !canSeeGM && html != nil {
+			stripped := sanitize.StripSecretsHTML(*html)
+			html = &stripped
+			// FindBacklinks matched the mention in the page's RAW entry_html,
+			// which may have been inside the secret span just removed. If so,
+			// the only link to this page's target lived in GM-only content —
+			// omit the entry entirely for a sub-Scribe viewer rather than
+			// showing a bare "referenced by" row with an empty snippet.
+			if !strings.Contains(*html, needle) {
+				continue
+			}
+		}
+		snippet := extractMentionSnippet(html, entityID)
+		entries = append(entries, BacklinkEntry{
+			Entity: BacklinkEntity{
+				ID:        bl.ID,
+				Name:      bl.Name,
+				TypeName:  bl.TypeName,
+				TypeIcon:  bl.TypeIcon,
+				TypeColor: bl.TypeColor,
+			},
+			Snippet: snippet,
+		})
 	}
 	return entries, nil
 }
@@ -2629,7 +2658,11 @@ func stripHTMLTags(s string) string {
 func buildSearchText(entryHTML string, fieldsData map[string]any) string {
 	var parts []string
 	if entryHTML != "" {
-		parts = append(parts, stripHTMLTags(entryHTML))
+		// search_text is one shared column matched for every viewer regardless
+		// of role, so GM secret text must never enter it — strip it here rather
+		// than at query time, or a player's search could match a word that
+		// appears only inside a GM secret on an otherwise-visible page.
+		parts = append(parts, stripHTMLTags(sanitize.StripSecretsHTML(entryHTML)))
 	}
 	for _, v := range fieldsData {
 		switch val := v.(type) {

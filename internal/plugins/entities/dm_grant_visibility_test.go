@@ -82,9 +82,9 @@ func (s *dmGrantEntitySvc) CheckEntityAccess(_ context.Context, _ string, role i
 // GetBacklinksWithSnippets always returns one entry. Production scopes this
 // query by VisibilityRole() (handler.go's BacklinksFragment computes `role`
 // once, at the top); the list side is not what's under test here.
-func (s *dmGrantEntitySvc) GetBacklinksWithSnippets(_ context.Context, campaignID, _ string, _ int, _ string) ([]BacklinkEntry, error) {
+func (s *dmGrantEntitySvc) GetBacklinksWithSnippets(_ context.Context, _ string, _ string, _ int, _ string, _ bool) ([]BacklinkEntry, error) {
 	return []BacklinkEntry{{
-		Entity:  Entity{ID: "mentioner-1", CampaignID: campaignID, Name: "Secret War Council Minutes"},
+		Entity:  BacklinkEntity{ID: "mentioner-1", Name: "Secret War Council Minutes"},
 		Snippet: "...the Baron's plan hinges on the hidden garrison...",
 	}}, nil
 }

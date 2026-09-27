@@ -3249,6 +3249,9 @@ func (h *Handler) BacklinksFragment(c echo.Context) error {
 	ctx := c.Request().Context()
 	role := cc.VisibilityRole()
 	userID := auth.GetUserID(c)
+	// Same bar as inline secrets (GetEntry) and GM field values (GetFieldsAPI):
+	// Scribe+ sees secret text in snippets, everyone else gets it stripped.
+	canSeeGM := cc.MemberRole >= campaigns.RoleScribe
 
 	entity, err := h.service.GetByID(ctx, entityID)
 	if err != nil {
@@ -3275,8 +3278,11 @@ func (h *Handler) BacklinksFragment(c echo.Context) error {
 	}
 
 	// Try Redis cache for JSON response. The campaign is part of the key because
-	// the result set is campaign-scoped (mention ids alone are not).
-	cacheKey := fmt.Sprintf("backlinks:%s:%s:%d:%s", cc.Campaign.ID, entityID, role, userID)
+	// the result set is campaign-scoped (mention ids alone are not). canSeeGM is
+	// part of the key too, explicitly, so a Scribe's cached (unstripped) entries
+	// can never be served to a player or anonymous visitor even if some future
+	// change makes two viewers share a role/userID pairing.
+	cacheKey := fmt.Sprintf("backlinks:%s:%s:%d:%s:%t", cc.Campaign.ID, entityID, role, userID, canSeeGM)
 	var entries []BacklinkEntry
 
 	if h.cache != nil {
@@ -3291,7 +3297,7 @@ func (h *Handler) BacklinksFragment(c echo.Context) error {
 		}
 	}
 
-	entries, err = h.service.GetBacklinksWithSnippets(ctx, cc.Campaign.ID, entityID, role, userID)
+	entries, err = h.service.GetBacklinksWithSnippets(ctx, cc.Campaign.ID, entityID, role, userID, canSeeGM)
 	if err != nil {
 		return err
 	}

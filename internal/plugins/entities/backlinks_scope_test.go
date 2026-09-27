@@ -39,10 +39,10 @@ func (m *backlinkGuardSvc) CheckEntityAccess(_ context.Context, _ string, _ int,
 	return &EffectivePermission{CanView: m.canView}, nil
 }
 
-func (m *backlinkGuardSvc) GetBacklinksWithSnippets(_ context.Context, campaignID, _ string, _ int, _ string) ([]BacklinkEntry, error) {
+func (m *backlinkGuardSvc) GetBacklinksWithSnippets(_ context.Context, campaignID, _ string, _ int, _ string, _ bool) ([]BacklinkEntry, error) {
 	m.gotCampaignID = campaignID
 	snippet := "The baron hid the key beneath the chapel floor."
-	return []BacklinkEntry{{Entity: Entity{ID: "mentioner-1", CampaignID: m.entityCampaign, Name: "Baron Vex's Secret Ledger"}, Snippet: snippet}}, nil
+	return []BacklinkEntry{{Entity: BacklinkEntity{ID: "mentioner-1", Name: "Baron Vex's Secret Ledger"}, Snippet: snippet}}, nil
 }
 
 // TestBacklinksAnonymousCrossCampaign pins that the backlinks read refuses an
