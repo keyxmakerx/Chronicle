@@ -22,7 +22,7 @@ templ campaignNavBrand() {
 			}
 			<span class="nav-brand-name">{ GetDisplayName(ctx) }</span>
 		</a>
-		if GetCampaignRole(ctx) >= 3 {
+		if NavCanEdit(ctx) {
 			<button
 				type="button"
 				class="nav-ibtn nav-edit-btn"

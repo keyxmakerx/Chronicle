@@ -50,10 +50,11 @@ func SetNavEdit(ctx context.Context, v *NavEditView) context.Context {
 }
 
 // NavEditJSON is the owner's arrangement as JSON for the editor, or "" for
-// anyone else, including an owner viewing the campaign as a player.
+// anyone else, including an owner viewing the campaign as a player, and on
+// an archived campaign.
 func NavEditJSON(ctx context.Context) string {
 	v, _ := ctx.Value(keyNavEdit).(*NavEditView)
-	if v == nil || !IsAuthenticated(ctx) || GetCampaignRole(ctx) < 3 {
+	if v == nil || !NavCanEdit(ctx) {
 		return ""
 	}
 	b, err := json.Marshal(v)

@@ -32,11 +32,12 @@ func navStateTestSections() []NavSectionView {
 }
 
 type navStateCase struct {
-	role   int
-	player bool // an owner or scribe viewing as a player
-	path   string
-	folds  NavFolds
-	hint   *NavHint
+	role     int
+	player   bool // an owner or scribe viewing as a player
+	archived bool
+	path     string
+	folds    NavFolds
+	hint     *NavHint
 }
 
 func (c navStateCase) ctx() context.Context {
@@ -46,6 +47,7 @@ func (c navStateCase) ctx() context.Context {
 	ctx = SetCampaignName(ctx, "Saltmarsh")
 	ctx = SetCampaignRole(ctx, c.role)
 	ctx = SetViewingAsPlayer(ctx, c.player)
+	ctx = SetCampaignArchived(ctx, c.archived)
 	ctx = SetActivePath(ctx, c.path)
 	ctx = SetNavSections(ctx, navStateTestSections())
 	if c.folds != nil {
@@ -252,5 +254,26 @@ func TestApp_MarksTheCurrentRowForBoostedNavigation(t *testing.T) {
 	main := html[strings.Index(html, `id="main-content"`):]
 	if !strings.Contains(main, `data-nav-current="cat:11" data-nav-page="Water&lt;deep&gt;"`) {
 		t.Errorf("#main-content must carry the current row and the page's escaped name: %.300s", main)
+	}
+}
+
+func TestCampaignNavList_ArchivedCampaignDrawsNoWriteControls(t *testing.T) {
+	player := renderNavList(t, navStateCase{role: 1, path: "/campaigns/c1"}.ctx())
+	if !strings.Contains(player, "data-nav-pin=") {
+		t.Fatalf("a player on a live campaign gets their own pins")
+	}
+	archivedPlayer := renderNavList(t, navStateCase{role: 1, archived: true, path: "/campaigns/c1"}.ctx())
+	if strings.Contains(archivedPlayer, "data-nav-pin=") {
+		t.Errorf("an archived campaign refuses pins, so none may be drawn")
+	}
+
+	ownerCtx := SetNavEdit(navStateCase{role: 3, archived: true, path: "/campaigns/c1"}.ctx(), &NavEditView{})
+	owner := renderNavList(t, ownerCtx)
+	var brand bytes.Buffer
+	if err := campaignNavBrand().Render(ownerCtx, &brand); err != nil {
+		t.Fatalf("render brand: %v", err)
+	}
+	if strings.Contains(owner, "data-nav-edit") || strings.Contains(brand.String(), "data-sidebar-edit-toggle") {
+		t.Errorf("an archived campaign refuses sidebar saves, so the owner gets no editor")
 	}
 }

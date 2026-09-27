@@ -310,6 +310,21 @@ func IsViewingAsPlayer(ctx context.Context) bool {
 	return viewing
 }
 
+// keyCampaignArchived marks an archived (read-only) campaign.
+const keyCampaignArchived ctxKey = "layout_campaign_archived"
+
+// SetCampaignArchived records that the campaign is archived, so controls
+// whose save the server would refuse are not drawn.
+func SetCampaignArchived(ctx context.Context, archived bool) context.Context {
+	return context.WithValue(ctx, keyCampaignArchived, archived)
+}
+
+// IsCampaignArchived reports whether the campaign is archived (read-only).
+func IsCampaignArchived(ctx context.Context) bool {
+	archived, _ := ctx.Value(keyCampaignArchived).(bool)
+	return archived
+}
+
 // SetIsOwner stores whether the user's actual campaign role is Owner.
 // This is separate from GetCampaignRole because "view as player" overrides
 // GetCampaignRole to RolePlayer, but the toggle button must still render.

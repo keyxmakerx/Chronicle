@@ -658,13 +658,13 @@ func (a *sidebarAutoAdderAdapter) AddEntityTypeToSidebar(ctx context.Context, ca
 
 	// Only persist an auto-add when the campaign has an explicit, customized
 	// items order. A campaign with empty Items renders the DEFAULT sidebar,
-	// which the render injector (injectDefaultSidebarItems) already completes
-	// with every top-level type — including this new one, in its natural
-	// sort_order position. Persisting a lone category item here would instead
-	// make the new type the only explicit entry and snap it to the FRONT of the
-	// list, so we leave empty configs to the injector. Converted campaigns (the
-	// reconciler put them on a non-empty Items array) fall through and correctly
-	// auto-gain the new type appended in their customized order.
+	// which campaigns.NormalizeNav already completes with every top-level
+	// type — including this new one, in its natural sort_order position.
+	// Persisting a lone category item here would instead make the new type the
+	// only explicit entry and snap it to the FRONT of the list, so empty
+	// configs are left to NormalizeNav. Converted campaigns (the reconciler put
+	// them on a non-empty Items array) fall through and correctly auto-gain the
+	// new type appended in their customized order.
 	if len(cfg.Items) == 0 {
 		return nil
 	}
@@ -3397,6 +3397,7 @@ func (a *App) RegisterRoutes() {
 				}
 			}
 			ctx = layouts.SetCampaignRole(ctx, effectiveRole)
+			ctx = layouts.SetCampaignArchived(ctx, cc.Campaign.IsArchived())
 
 			// Entity types, per-type counts and the enabled addons: what the
 			// sidebar is built from. Use the request context (not the

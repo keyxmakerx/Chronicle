@@ -224,10 +224,18 @@ func navShowsMe(ctx context.Context) bool {
 
 // NavCanPin reports whether the viewer pins rows for themselves: a signed-in
 // member who is not the owner. The owner pins for everyone in the editor,
-// and an owner previewing the campaign as a player is still the owner.
+// and an owner previewing the campaign as a player is still the owner. An
+// archived campaign is read-only, so nobody pins there.
 func NavCanPin(ctx context.Context) bool {
 	role := GetCampaignRole(ctx)
-	return IsAuthenticated(ctx) && (role == 1 || role == 2) && !IsViewingAsPlayer(ctx)
+	return IsAuthenticated(ctx) && (role == 1 || role == 2) && !IsViewingAsPlayer(ctx) && !IsCampaignArchived(ctx)
+}
+
+// NavCanEdit reports whether the viewer gets the sidebar editor: the owner,
+// not while viewing as a player (GetCampaignRole is Player then), and not
+// on an archived campaign, which refuses the save.
+func NavCanEdit(ctx context.Context) bool {
+	return IsAuthenticated(ctx) && GetCampaignRole(ctx) >= 3 && !IsCampaignArchived(ctx)
 }
 
 // navPinnable reports whether a row gets the viewer's own pin: any row

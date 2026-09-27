@@ -265,7 +265,7 @@ func TestSidebarEmitsNavClassVocabulary(t *testing.T) {
 	}
 }
 
-// TestAllPagesRowIsCurrentOnEntitySubpath pins r2-3: All Pages matches by
+// TestAllPagesRowIsCurrentOnEntitySubpath pins that All Pages matches by
 // prefix, so an entity page with no category hint still marks it current on a
 // hard server load; an unrelated page must not.
 func TestAllPagesRowIsCurrentOnEntitySubpath(t *testing.T) {
@@ -280,7 +280,7 @@ func TestAllPagesRowIsCurrentOnEntitySubpath(t *testing.T) {
 		return buf.String()
 	}
 	if got := render("/campaigns/camp1/entities/42"); !strings.Contains(got, `aria-current="page"`) {
-		t.Errorf("All Pages must be current on an entity detail sub-path (r2-3); got %q", got)
+		t.Errorf("All Pages must be current on an entity detail sub-path; got %q", got)
 	}
 	if got := render("/campaigns/camp1/members"); strings.Contains(got, `aria-current`) {
 		t.Errorf("All Pages must not be current off the entities tree; got %q", got)

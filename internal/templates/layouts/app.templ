@@ -498,7 +498,7 @@ templ sidebarCreateCategory(ctx context.Context) {
 				class="input w-full text-xs"
 				maxlength="100"
 				@keydown.enter="create()"
-				@keydown.escape="$el.closest('#sidebar-create-category').style.display='none'"
+				@keydown.escape.prevent="$el.closest('#sidebar-create-category').style.display='none'; const b = document.querySelector('#sidebar-nav .nav-gh-add'); if (b) b.focus()"
 			/>
 			<div class="flex flex-wrap gap-1 max-h-16 overflow-y-auto">
 				<template x-for="ic in icons" :key="ic">
