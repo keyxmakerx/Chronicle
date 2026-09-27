@@ -503,6 +503,30 @@
       var l = $('#cal5-live', this.el);
       l.textContent = '';
       setTimeout(function () { l.textContent = msg; }, 40);
+      this._toast(msg);
+    },
+
+    // Every say() call is also a visible, self-dismissing toast — calendar-view.css
+    // already ships '.toast' (an "undo" style, scoped .cal-v5 .toast, with its
+    // own reduced-motion handling) but nothing built or showed one, so a write's
+    // outcome — success or failure, and a no-op explanation like "This calendar
+    // has no moons." — was announced only to the #cal5-live aria-live region
+    // above, invisible to a sighted viewer. aria-hidden here so it isn't a
+    // second, redundant announcement on top of that live region.
+    _toast: function (msg) {
+      var el = this._toastEl;
+      if (!el) {
+        el = document.createElement('div');
+        el.className = 'toast';
+        el.setAttribute('aria-hidden', 'true');
+        el.innerHTML = '<span></span>';
+        this.calEl.appendChild(el);
+        this._toastEl = el;
+      }
+      el.querySelector('span').textContent = msg;
+      el.classList.add('on');
+      clearTimeout(this._toastTimer);
+      this._toastTimer = setTimeout(function () { el.classList.remove('on'); }, 3200);
     },
 
     // --------------------------------------------------------------
