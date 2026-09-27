@@ -360,11 +360,11 @@ func TestCampaignConfig_DisabledAddonIsMarked(t *testing.T) {
 		if !strings.Contains(got, "✓ enabled `notes`") {
 			t.Errorf("an enabled addon must be marked:\n%s", got)
 		}
-		if !strings.Contains(got, "does not remove the three PAGE routes") {
-			t.Errorf("the current (page-not-gating, API-gating) consequence of a disabled calendar addon must be stated:\n%s", got)
+		if !strings.Contains(got, "gates the calendar pages and the calendar plugin's JSON API (404)") {
+			t.Errorf("a disabled calendar addon must be read as gating the pages and the JSON API:\n%s", got)
 		}
-		if !strings.Contains(got, "DOES gate the calendar plugin's JSON API") {
-			t.Errorf("disabling the addon MUST be read as gating the calendar plugin's own JSON API now:\n%s", got)
+		if !strings.Contains(got, "still redirect to the list page either way") {
+			t.Errorf("the redirect routes must be stated as ungated:\n%s", got)
 		}
 	})
 }

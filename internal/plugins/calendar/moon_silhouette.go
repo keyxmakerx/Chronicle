@@ -2,9 +2,8 @@
 // for the v5 moon-silhouette mark (the .sil/.db/.dl classes in
 // static/css/calendar_v5.css). This is a direct, small port of the signed
 // mockup's litPath(p, r) — the photorealistic canvas-rendered moon engine
-// the mockup also carries (MOONR) is out of scope for Part B (a separate,
-// larger rendering system), so every place a moon appears here uses this
-// simple silhouette instead.
+// the mockup also carries (MOONR) is a separate, larger rendering system,
+// so every place a moon appears here uses this simple silhouette instead.
 package calendar
 
 import (

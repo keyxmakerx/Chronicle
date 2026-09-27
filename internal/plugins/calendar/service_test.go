@@ -160,8 +160,8 @@ func TestListEventsForMonth_VisibilityFilterPerUser(t *testing.T) {
 	}
 }
 
-// TestUpcomingEvents_VisibilityFilterAndOwnCurrentDate pins UpcomingEvents
-// (Part B, #764's calendar-preview "Coming up" list): it reads the
+// TestUpcomingEvents_VisibilityFilterAndOwnCurrentDate pins ListUpcomingEvents
+// (the calendar preview's "Coming up" list): it reads the
 // calendar's OWN current date rather than a caller-supplied one, and applies
 // the same per-user visibility filter as every other read in this package.
 func TestUpcomingEvents_VisibilityFilterAndOwnCurrentDate(t *testing.T) {

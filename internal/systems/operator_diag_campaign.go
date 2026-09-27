@@ -202,7 +202,7 @@ func calendarSurfaceMap() []surfaceRow {
 		{"/campaigns/:id/calendar", "", "calendar (redirect)", statusCurrent,
 			"Same redirect as `/apps/calendar` — the oldest bookmark in the product."},
 		{"/campaigns/:id/calendars", "", "calendar (list page)", statusCurrent,
-			"THE calendar page itself: Part B's calendars list — not a notice, not a redirect. Unlike the two rows above, this one IS gated on the calendar addon (RequireAddon): a disabled addon 404s here instead of redirecting."},
+			"The calendars list page — not a notice, not a redirect; each calendar opens from here to its own page at `/campaigns/:id/calendars/:calid/view`. Unlike the two rows above, this one IS gated on the calendar addon (RequireAddon): a disabled addon 404s here instead of redirecting."},
 	}
 }
 
@@ -460,7 +460,7 @@ func writeConfigAddons(b *strings.Builder, f CampaignConfigFacts) {
 		}
 		b.WriteString("\n")
 	}
-	b.WriteString("\nA disabled `calendar` addon does not remove the three PAGE routes `campaign.surfaces` lists — they render the same rebuilding notice either way, since no calendar PAGE UI exists yet (calendar-v5 seams, #778, restored the plugin's service and JSON API, not its page). It DOES gate the calendar plugin's JSON API directly (403), and the dashboard/category \"Upcoming Events\" cards check the same addon-enabled state (and the plugin's own health) before calling that API, so they degrade to a quiet \"Calendar isn't enabled\" state instead of a stuck spinner — see `calendar.stats` for that plugin's own counts and migration state.\n\n")
+	b.WriteString("\nA disabled `calendar` addon gates the calendar pages and the calendar plugin's JSON API (404), while `/apps/calendar` and `/calendar` still redirect to the list page either way; see `campaign.surfaces`. The dashboard/category \"Upcoming Events\" cards also check it: they the dashboard/category \"Upcoming Events\" cards check the same addon-enabled state (and the plugin's own health) before calling that API, and degrade to a quiet \"Calendar isn't enabled\" state instead of a stuck spinner — see `calendar.stats` for that plugin's own counts and migration state.\n\n")
 }
 
 const (
@@ -497,14 +497,14 @@ func writeConfigLayouts(b *strings.Builder, f CampaignConfigFacts) {
 		// as-is; do not assume they are still accurate without checking
 		// their own restoration status first. TODO(#778)
 		"skybox":            "the sky pane placement (issue #763) — renders the real sky (moons/weather/events for the resolved default calendar). (Historically this was the surface that rendered the synthesized real Moon — distinct from the v4 sky band on the Bench, which was server-rendered with no JavaScript.)",
-		"entity_worldstate": "the world-state band placement — its pipeline was deleted in the CALV5 clean slate; renders the rebuilding notice until V5.",
-		"entity_calendar":   "a calendar Block embedded on an entity page — renders the rebuilding notice until V5.",
+		"entity_worldstate": "the world-state band placement — its pipeline was deleted in the CALV5 clean slate; renders the rebuilding notice until it is rebuilt (#778).",
+		"entity_calendar":   "a calendar Block embedded on an entity page — renders the rebuilding notice until it is rebuilt (#778).",
 		// calendar_full/calendar_preview now render the real "Upcoming
 		// Events" card (calendar-v5 seams, #778) via the calendar plugin's
 		// own /calendars/upcoming embed fragment, not the rebuilding notice.
 		"calendar_full":    "a full calendar block — now renders real upcoming-events data via the calendar plugin's embed fragment (calendar-v5 seams, #778), not the rebuilding notice.",
 		"calendar_preview": "an upcoming-events preview block — renders real data via the calendar plugin's embed fragment (calendar-v5 seams, #778), not the rebuilding notice.",
-		blockTypeCalendar:  "a calendar block — renders the rebuilding notice until V5.",
+		blockTypeCalendar:  "a calendar block — renders the rebuilding notice until it is rebuilt (#778).",
 	}
 
 	for _, l := range f.Layouts {

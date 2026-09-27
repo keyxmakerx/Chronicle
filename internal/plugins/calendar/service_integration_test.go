@@ -588,7 +588,7 @@ func TestCalendarService_Integration_CreateCalendarFromImport_EveryPreset(t *tes
 }
 
 // TestCalendarService_Integration_CreateCalendarFromImport_UploadedCalendaria
-// (Part B) exercises the upload path end to end: raw bytes through
+// exercises the upload path end to end: raw bytes through
 // PreviewImport, then CreateCalendarFromImport — Calendaria's missing
 // day-level "today" must be rejected without an explicit override and
 // accepted with one, matching the unit-level invariant test in
@@ -632,7 +632,7 @@ func TestCalendarService_Integration_CreateCalendarFromImport_UploadedCalendaria
 }
 
 // TestCalendarService_Integration_CreateCalendarFromImport_ChronicleEventsRoundTrip
-// (#779, Part B) is the full-stack version of
+// (#779) is the full-stack version of
 // TestChronicleExportImport_EventsRoundTrip: a calendar with real events,
 // exported, then re-imported into a fresh calendar via
 // CreateCalendarFromImport, ends up with the same events in the database —

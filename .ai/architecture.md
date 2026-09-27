@@ -58,15 +58,15 @@ System or Widget (see root `CLAUDE.md` for what each tier is).
 | **System** | Game system content pack. Reference data, tooltips, dedicated pages | Yes (data serving) | Yes (tooltips, pages) | Per-campaign |
 | **Widget** | Reusable UI block. Mounts to DOM element, fetches own data | Minimal (API endpoints) | Primarily | Always available |
 
-`calendar`'s ground-up rebuild (V5, #741) is landing in parts, each restoring
-one slice of the plugin shape above: the domain layer, migrations, service,
-handler and JSON API routes shipped first; its own page (the month grid,
-day/era fold-out cards, events, moons) landed next. `syncapi`'s calendar
-routes still answer `503 calendar_rebuilding` (see
-`.ai/plugin-development.md`) pending their own rebuild slice; other plugins'
-re-wiring points are still tagged `CALV5-PLACEHOLDER:` until dashboard/entity
-blocks are restored. See `internal/plugins/calendar/.ai.md` for exactly
-which routes and UI exist today and which are still open.
+`calendar` was rebuilt from the ground up (V5, #741): domain layer,
+migrations, service and JSON API; the calendars list, preview and
+new-calendar wizard; each calendar's own page with owner editing;
+real-world calendars with game-night RSVPs; and the sky pane widget. What
+is still to be rebuilt is tagged `CALV5-PLACEHOLDER:` with a `TODO(#778)`:
+`syncapi`'s calendar routes still answer `503 calendar_rebuilding` (see
+`.ai/plugin-development.md`), and the entity-page calendar blocks show a
+rebuilding notice. See `internal/plugins/calendar/.ai.md` for exactly which
+routes and UI exist.
 
 ### How They Interact on a Page
 

@@ -1,5 +1,5 @@
 /* calendar_v5.css — the signed Calendar V5 creation-wizard/list visual
- * language (issue #764, Part B). Ported from the signed static mockup: the
+ * language. Ported from the signed static mockup: the
  * tokens, card/grid/dialog/wizard classes and the moon-silhouette marks are
  * carried over verbatim (same custom-property names, same class names) so
  * this stays traceable back to the design that was signed off, rather than
@@ -9,8 +9,7 @@
  * fragment's outermost element) so it can never leak into the rest of the
  * app, which uses Tailwind utility classes and a different token set.
  *
- * Cut from the mockup on purpose (see the Part B PR description for the
- * full list): the procedural "Generate one" wizard tile, "Give it a past",
+ * Cut from the mockup on purpose: the procedural "Generate one" wizard tile, "Give it a past",
  * the full structure editor, the moon customizer drawer, and the realistic
  * canvas-rendered moons (MOONR) — none of those are built, so their CSS
  * isn't ported either. What ships instead of a realistic moon is the

@@ -2651,8 +2651,8 @@ func (a *App) RegisterRoutes() {
 	calendarRebuildGroup.GET("/calendar", calendarRedirectToCalendars)
 
 	// calendar.RegisterRoutes is both the JSON API (calendars, events, event
-	// kinds, eras, the moon hidden flag) and, since Part B (#764), the
-	// calendars list/preview pages and the new-calendar wizard. If the
+	// kinds, eras, the moon hidden flag), the calendars list/preview pages,
+	// the new-calendar wizard and each calendar's own page. If the
 	// calendar plugin is unhealthy, none of it registers (the else branch
 	// below only logs) and every one of these paths, including
 	// /campaigns/:id/calendars itself, 404s rather than showing a notice —

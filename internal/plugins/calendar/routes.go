@@ -33,7 +33,7 @@ func RegisterRoutes(e *echo.Echo, h *Handler, campaignSvc campaigns.CampaignServ
 	cg.DELETE("/calendars/:calid", h.DeleteCalendarAPI, campaigns.RequireRole(campaigns.RoleOwner))
 	cg.PUT("/calendars/:calid/default", h.SetDefaultCalendarAPI, campaigns.RequireRole(campaigns.RoleOwner))
 
-	// --- Part B: calendar creation wizard (presets, import) ---
+	// --- Calendar creation wizard (presets, import) ---
 	// Owner only, matching the calendar CRUD block above: creating a
 	// calendar's initial structure from a preset or an uploaded file is
 	// calendar structure, not content. "presets" and "import" are static
@@ -46,7 +46,7 @@ func RegisterRoutes(e *echo.Echo, h *Handler, campaignSvc campaigns.CampaignServ
 	cg.POST("/calendars/import/preview", h.PreviewImportAPI, campaigns.RequireRole(campaigns.RoleOwner))
 	cg.POST("/calendars/import", h.CreateFromImportAPI, campaigns.RequireRole(campaigns.RoleOwner))
 
-	// --- Part B: calendar creation wizard + list UI (frontend, #764) ---
+	// --- Calendar creation wizard and list UI (HTML) ---
 	//
 	// HTML page/fragment routes, distinct from the JSON API block above —
 	// "wizard" is a static segment at the same path depth as "presets",
@@ -73,7 +73,7 @@ func RegisterRoutes(e *echo.Echo, h *Handler, campaignSvc campaigns.CampaignServ
 	// on its own.
 	//
 	// The list route is "/calendars/list", not bare "/calendars": that bare
-	// GET already belongs to THIS file's own h.Index above (the Part B
+	// GET already belongs to THIS file's own h.Index above (the
 	// calendars list PAGE, and to routes_snapshot.txt) — a real page a
 	// browser navigates to, not a JSON endpoint, so this API cannot reuse
 	// it. No real calendar id is ever the literal string "list" (ids are

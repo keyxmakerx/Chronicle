@@ -1,5 +1,5 @@
 // service_import_test.go: table-driven tests for CalendarService's import/
-// preset wiring (#741 Part B) — PreviewImport/PreviewPreset as pure parses,
+// preset wiring — PreviewImport/PreviewPreset as pure parses,
 // and CreateCalendarFromImport's two product-level invariants: the created
 // calendar's current date is always traceable to the import file or an
 // explicit override (never a silent default), and an event whose kind slug

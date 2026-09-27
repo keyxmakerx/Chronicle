@@ -691,7 +691,7 @@ func (h *Handler) SetMoonHiddenAPI(c echo.Context) error {
 	return c.NoContent(http.StatusOK)
 }
 
-// --- Part B: calendar creation wizard (presets, import) ---
+// --- Calendar creation wizard (presets, import) ---
 //
 // Every route below is Owner only (routes.go), matching the rest of this
 // file's calendar-structure mutation routes: creating a calendar's initial
