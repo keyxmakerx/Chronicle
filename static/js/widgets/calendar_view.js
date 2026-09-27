@@ -717,7 +717,7 @@
       var cap = 4, shown = evs.slice(0, cap), extra = evs.length - shown.length;
       var self = this;
       var html = '<div class="marks">' + shown.map(function (e) {
-        var dirRing = self.role >= 3 && e.visibility === 'dm_only' ? ' dir' : '';
+        var dirRing = self.canAuthorDmOnly && e.visibility === 'dm_only' ? ' dir' : '';
         return '<span class="mk' + dirRing + '" data-ev="' + esc(e.id) + '" style="' + eventColorStyle(e) + '" title="' + esc(e.name) + '">' + esc(eventGlyph(e)) + '</span>';
       }).join('');
       if (extra > 0) html += '<span class="more">+' + extra + '</span>';
@@ -1021,7 +1021,7 @@
         recur = '<div class="row"><i class="fa-solid fa-rotate"></i><span class="tt">Repeats ' + esc(ev.recurrence_type) + '</span></div>';
       }
       var entity = ev.entity_id ? '<div class="row"><i class="fa-solid fa-link"></i><a class="tt" href="/campaigns/' + esc(this.campaignId) + '/entities/' + esc(ev.entity_id) + '">' + esc(ev.entity_name || 'Linked page') + '</a></div>' : '';
-      var visBadge = (this.role >= 3 && ev.visibility === 'dm_only') ? '<span class="dirnote"><i class="fa-solid fa-eye-slash"></i>Director only</span>' : '';
+      var visBadge = (this.canAuthorDmOnly && ev.visibility === 'dm_only') ? '<span class="dirnote"><i class="fa-solid fa-eye-slash"></i>Director only</span>' : '';
       var body = ev.description_html ? ev.description_html : (ev.description ? '<p>' + esc(ev.description) + '</p>' : '');
 
       return '<div class="grab" aria-hidden="true"></div>' +
