@@ -712,6 +712,16 @@ func (s *calendarService) CreateCalendarFromImport(ctx context.Context, campaign
 	if day == nil {
 		return nil, apperror.NewValidation("current_day is required: this import did not specify a current day; confirm one")
 	}
+	// The month/day above came from either the import file or an explicit
+	// caller override — either way, nothing upstream has checked it against
+	// THIS calendar's own month structure yet. Without this, a bad value
+	// (an out-of-range month, or a day beyond that month's length) would
+	// land in current_month/current_day unchecked, and every date
+	// computation downstream (MonthDays, DayOfYear, the preview grid) reads
+	// those columns as already-valid.
+	if err := validateImportCurrentDate(ir, year, *month, *day); err != nil {
+		return nil, err
+	}
 
 	cal, err := s.CreateCalendar(ctx, campaignID, CreateCalendarInput{
 		Mode:             ir.Settings.Mode,
@@ -728,6 +738,24 @@ func (s *calendarService) CreateCalendarFromImport(ctx context.Context, campaign
 		return nil, err
 	}
 
+	// From here on cal.ID is a real, committed row. Every step below can
+	// still fail (a bad real_time_zone, a malformed payload on an imported
+	// event, ApplyImport's own transaction), and none of them roll the bare
+	// calendar back on their own — so a failure here used to leave an
+	// orphaned, structure-less calendar behind, and a retried Create would
+	// pile up another one alongside it. cleanupOnFailure deletes that row
+	// (cascading its as-yet-empty sub-resources) before propagating the
+	// original error, so the caller sees exactly one failed attempt and no
+	// residue. The delete is best-effort: if IT fails too, that's logged,
+	// not swallowed, but the original cause is still what the caller gets.
+	cleanupOnFailure := func(cause error) error {
+		if delErr := s.calRepo.Delete(ctx, cal.ID); delErr != nil {
+			slog.Error("calendar: failed to clean up partially-created calendar after import failure",
+				"calendar_id", cal.ID, "campaign_id", campaignID, "cause", cause, "cleanup_error", delErr)
+		}
+		return cause
+	}
+
 	cal.CurrentMonth = *month
 	cal.CurrentDay = *day
 	// Chronicle-only settings CreateCalendarInput has no field for: carried
@@ -739,23 +767,28 @@ func (s *calendarService) CreateCalendarFromImport(ctx context.Context, campaign
 	cal.MonthStartsNewWeek = ir.Settings.MonthStartsNewWeek
 	if ir.Settings.TracksRealTime {
 		if ir.Settings.RealTimeZone == nil || *ir.Settings.RealTimeZone == "" {
-			return nil, apperror.NewValidation("real_time_zone is required when tracks_real_time is set")
+			return nil, cleanupOnFailure(apperror.NewValidation("real_time_zone is required when tracks_real_time is set"))
 		}
 		if _, err := time.LoadLocation(*ir.Settings.RealTimeZone); err != nil {
-			return nil, apperror.NewBadRequest("real_time_zone must be a valid IANA time zone name")
+			return nil, cleanupOnFailure(apperror.NewBadRequest("real_time_zone must be a valid IANA time zone name"))
 		}
 		cal.TracksRealTime = true
 		cal.RealTimeZone = ir.Settings.RealTimeZone
 	}
 
 	if err := s.calRepo.ApplyImport(ctx, cal, ir); err != nil {
-		return nil, fmt.Errorf("apply import: %w", err)
+		return nil, cleanupOnFailure(fmt.Errorf("apply import: %w", err))
 	}
 
 	if err := s.applyImportedEvents(ctx, cal.ID, campaignID, ir); err != nil {
-		return nil, fmt.Errorf("apply imported events: %w", err)
+		return nil, cleanupOnFailure(fmt.Errorf("apply imported events: %w", err))
 	}
 
+	// A failure past this point is a read of data already fully and validly
+	// committed (structure + events both succeeded above) — not a partial
+	// write — so it is NOT run through cleanupOnFailure: the calendar is
+	// genuinely complete, and deleting a good calendar because reading it
+	// back once failed would be the wrong tradeoff.
 	if err := s.loadSubresources(ctx, cal); err != nil {
 		return nil, err
 	}
@@ -769,6 +802,33 @@ func (s *calendarService) CreateCalendarFromImport(ctx context.Context, campaign
 // that doesn't resolve gets the event created WITHOUT a kind rather than
 // dropped or failing the whole import (#741: warn, never refuse), and
 // ir.Warnings records which ones so the caller can tell the owner.
+//
+// Every recreated event is forced to visibility="dm_only", ignoring
+// ee.Visibility entirely — fail closed, not a round-trip of the source's
+// own value. ExportEvent.Visibility DOES carry the source event's base
+// visibility, but VisibilityRules (a per-event allow-list, e.g. "only
+// these three players") is deliberately NOT part of the export format
+// (export/import stays out of scope for that — the fix here is sized to
+// the risk, not to adding visibility_rules portability): an event that was
+// "everyone" at the base level but restricted to a handful of players via
+// visibility_rules would export as plain "everyone" with the allow-list
+// silently dropped, and reimporting it verbatim would hand it to every
+// player. Since there's no way to tell, from the export alone, whether a
+// given event's true audience was narrower than its base Visibility says,
+// every imported event defaults to the most restrictive setting instead —
+// the owner can loosen individual events afterward once they've reviewed
+// them. One summary warning covers this for the whole import, not one per
+// event.
+//
+// Building and inserting goes through buildValidatedEvent — the same
+// validation and description_html sanitization CreateEvent applies to a
+// hand-created event — so an imported description_html can't carry
+// unsanitized markup into storage, and the same field-length/format checks
+// apply. An event that FAILS validation is skipped with its own warning
+// (#741: warn, don't abort); a genuine DB error (a malformed payload, a
+// color that still doesn't fit after normalization) aborts the whole
+// import instead, since that signals something CreateCalendarFromImport's
+// caller should see rather than silently limp past.
 func (s *calendarService) applyImportedEvents(ctx context.Context, calendarID, campaignID string, ir *ImportResult) error {
 	if len(ir.Events) == 0 {
 		return nil
@@ -782,6 +842,7 @@ func (s *calendarService) applyImportedEvents(ctx context.Context, calendarID, c
 		slugToID[k.Slug] = k.ID
 	}
 
+	created := 0
 	for _, ee := range ir.Events {
 		var kindID *int
 		if ee.Kind != nil && *ee.Kind != "" {
@@ -793,13 +854,19 @@ func (s *calendarService) applyImportedEvents(ctx context.Context, calendarID, c
 					ee.Name, *ee.Kind))
 			}
 		}
-		visibility := ee.Visibility
-		if visibility != "everyone" && visibility != "dm_only" {
-			visibility = "everyone"
+
+		// normalizeColor: the same defensive clamp import.go applies to
+		// month/season/moon/era colors, so a color value that doesn't
+		// survive the round-trip fails validation cleanly below rather than
+		// crashing the DB write under strict SQL mode. An absent or blank
+		// color is left alone (nil/"" means "inherit from kind").
+		color := ee.Color
+		if color != nil && *color != "" {
+			normalized := normalizeColor(*color)
+			color = &normalized
 		}
-		evt := &Event{
-			ID:                       generateID(),
-			CalendarID:               calendarID,
+
+		input := CreateEventInput{
 			Name:                     ee.Name,
 			Description:              ee.Description,
 			DescriptionHTML:          ee.DescriptionHTML,
@@ -820,17 +887,31 @@ func (s *calendarService) applyImportedEvents(ctx context.Context, calendarID, c
 			RecurrenceEndMonth:       ee.RecurrenceEndMonth,
 			RecurrenceEndDay:         ee.RecurrenceEndDay,
 			RecurrenceMaxOccurrences: ee.RecurrenceMaxOccurrences,
-			Visibility:               visibility,
+			Visibility:               "dm_only", // fail closed — see doc comment above
+			CanAuthorDmOnly:          true,      // the fixed import default, not a per-event author escalation
 			KindID:                   kindID,
 			Announced:                ee.Announced,
-			Color:                    ee.Color,
+			Color:                    color,
 			Icon:                     ee.Icon,
 			AllDay:                   ee.AllDay,
 			Payload:                  ee.Payload,
 		}
+
+		evt, err := buildValidatedEvent(calendarID, input)
+		if err != nil {
+			ir.Warnings = append(ir.Warnings, fmt.Sprintf(
+				"event %q failed validation and was skipped: %v", ee.Name, err))
+			continue
+		}
 		if err := s.eventRepo.CreateEvent(ctx, evt); err != nil {
 			return fmt.Errorf("create imported event %q: %w", ee.Name, err)
 		}
+		created++
+	}
+
+	if created > 0 {
+		ir.Warnings = append(ir.Warnings,
+			"Imported events default to Director-only visibility; share individually if players should see them.")
 	}
 	return nil
 }
@@ -848,6 +929,29 @@ func (s *calendarService) CreateEvent(ctx context.Context, calendarID, campaignI
 	if _, err := s.calendarInCampaign(ctx, calendarID, campaignID); err != nil {
 		return nil, err
 	}
+	evt, err := buildValidatedEvent(calendarID, input)
+	if err != nil {
+		return nil, err
+	}
+	if err := s.eventRepo.CreateEvent(ctx, evt); err != nil {
+		return nil, fmt.Errorf("create event: %w", err)
+	}
+	return evt, nil
+}
+
+// buildValidatedEvent runs every check CreateEvent applies to a new event
+// (name, visibility, recurrence type, announced, payload, color/icon/tier
+// lengths, description sizes) and sanitizes description_html, returning a
+// ready-to-insert *Event — or the same validation error CreateEvent would
+// return. It touches no DB.
+//
+// This is the ONE path both CreateEvent and applyImportedEvents (recreating
+// events from an import, #779) go through, so an imported event gets
+// exactly the same sanitization and validation a hand-created one does —
+// see applyImportedEvents' doc comment for why that matters (an
+// unsanitized description_html from an untrusted upload is a stored-XSS
+// risk, not just a data-quality one).
+func buildValidatedEvent(calendarID string, input CreateEventInput) (*Event, error) {
 	if err := apperror.ValidateRequired("name", input.Name); err != nil {
 		return nil, err
 	}
@@ -889,6 +993,16 @@ func (s *calendarService) CreateEvent(ctx context.Context, calendarID, campaignI
 
 	descHTML := sanitizeDescriptionHTML(input.DescriptionHTML)
 
+	// CreatedBy is nil, not a pointer to "", for a caller that has no
+	// Chronicle user to attribute (applyImportedEvents: an imported event
+	// wasn't authored by anyone in this campaign) — the handler path always
+	// passes a real user id from auth.GetUserID.
+	var createdBy *string
+	if input.CreatedBy != "" {
+		v := input.CreatedBy
+		createdBy = &v
+	}
+
 	evt := &Event{
 		ID:                       generateID(),
 		CalendarID:               calendarID,
@@ -922,10 +1036,7 @@ func (s *calendarService) CreateEvent(ctx context.Context, calendarID, campaignI
 		Icon:                     input.Icon,
 		AllDay:                   input.AllDay,
 		Payload:                  input.Payload,
-		CreatedBy:                &input.CreatedBy,
-	}
-	if err := s.eventRepo.CreateEvent(ctx, evt); err != nil {
-		return nil, fmt.Errorf("create event: %w", err)
+		CreatedBy:                createdBy,
 	}
 	return evt, nil
 }
@@ -1012,20 +1123,48 @@ func occursSomewhereInMonth(e Event, cal *Calendar, year, month int) bool {
 	return false
 }
 
+// upcomingEventsOverfetchFactor/upcomingEventsMaxFetch: see UpcomingEvents'
+// doc comment for why it over-fetches before filtering rather than trusting
+// the repository's own LIMIT.
+const (
+	upcomingEventsOverfetchFactor = 5
+	upcomingEventsMaxFetch        = 200
+)
+
 // UpcomingEvents returns a calendar's next (up to limit) events on or after
 // its own current date, visibility-filtered for v. See the interface doc
 // comment for what it does not do (recurrence expansion past a base date in
 // the past).
+//
+// ListUpcomingEvents' own SQL LIMIT only applies the role-level (dm_only)
+// filter; the finer per-user visibility_rules allow/deny list is applied
+// afterward, in Go, by filterEventsByUser. Passing `limit` straight through
+// to the repository truncates the result BEFORE that second filter runs, so
+// a viewer whose visible events happen to sort after the SQL cutoff could
+// see "nothing upcoming" while visible events genuinely exist further down
+// the unfiltered list. Fetching a wider page first, filtering, then
+// trimming to `limit` fixes that without teaching the repository
+// visibility_rules.
 func (s *calendarService) UpcomingEvents(ctx context.Context, calendarID, campaignID string, limit int, v permissions.Viewer) ([]Event, error) {
 	cal, err := s.calendarInCampaignForViewer(ctx, calendarID, campaignID, v)
 	if err != nil {
 		return nil, err
 	}
-	events, err := s.eventRepo.ListUpcomingEvents(ctx, calendarID, cal.CurrentYear, cal.CurrentMonth, cal.CurrentDay, v.Role(), limit)
+	fetchLimit := limit
+	if limit > 0 {
+		fetchLimit = limit * upcomingEventsOverfetchFactor
+		if fetchLimit <= 0 || fetchLimit > upcomingEventsMaxFetch {
+			fetchLimit = upcomingEventsMaxFetch
+		}
+	}
+	events, err := s.eventRepo.ListUpcomingEvents(ctx, calendarID, cal.CurrentYear, cal.CurrentMonth, cal.CurrentDay, v.Role(), fetchLimit)
 	if err != nil {
 		return nil, fmt.Errorf("list upcoming events: %w", err)
 	}
 	events = filterEventsByUser(events, v)
+	if limit > 0 && len(events) > limit {
+		events = events[:limit]
+	}
 	if err := s.redactHiddenEntityLinks(ctx, campaignID, events, v); err != nil {
 		return nil, err
 	}
@@ -1490,6 +1629,47 @@ func (s *calendarService) SetMoonHidden(ctx context.Context, moonID int, calenda
 }
 
 // --- Shared validation helpers ---
+
+// validateImportCurrentDate checks month/day (already resolved from either
+// the import file or a caller override — see CreateCalendarFromImport)
+// against the import's OWN month structure (ir.Months), the same shape
+// CalendarRepository.ApplyImport is about to write. It duplicates the shape
+// of Calendar.MonthDays' leap-year arithmetic rather than calling it,
+// because at this point in CreateCalendarFromImport no *Calendar with
+// Months loaded exists yet — the bare row isn't even created until after
+// this check passes.
+//
+// A month/day pair that looks fine to the human confirming it in the wizard
+// but doesn't fit the structure that same import describes (an off-by-one
+// in a hand-edited file, or a malicious upload) is rejected here rather
+// than silently landing in current_month/current_day, where every later
+// date computation trusts it unchecked.
+func validateImportCurrentDate(ir *ImportResult, year, month, day int) error {
+	n := len(ir.Months)
+	if n == 0 {
+		// No month structure to check against yet — CalendarRepository.
+		// ApplyImport / the wizard surface a months-less import as its own,
+		// separate problem; nothing for this check to compare against.
+		return nil
+	}
+	if month < 1 || month > n {
+		return apperror.NewValidation(fmt.Sprintf(
+			"current_month must be between 1 and %d for this calendar's %d months", n, n))
+	}
+	m := ir.Months[month-1]
+	days := m.Days
+	if ir.Settings.LeapYearEvery > 0 && (year-ir.Settings.LeapYearOffset)%ir.Settings.LeapYearEvery == 0 {
+		days += m.LeapYearDays
+	}
+	if days < 1 {
+		days = 1
+	}
+	if day < 1 || day > days {
+		return apperror.NewValidation(fmt.Sprintf(
+			"current_day must be between 1 and %d for month %q", days, m.Name))
+	}
+	return nil
+}
 
 // validateEventCosmeticLengths enforces calendar_events' own color/icon/tier
 // column widths and, for color/icon, the same closed character class an

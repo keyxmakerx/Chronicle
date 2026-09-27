@@ -4,6 +4,7 @@
 package calendar
 
 import (
+	"log/slog"
 	"net/http"
 
 	"github.com/labstack/echo/v4"
@@ -52,7 +53,15 @@ func (h *Handler) Index(c echo.Context) error {
 	for _, summary := range cals {
 		detailed, err := h.svc.GetCalendarForViewer(ctx, summary.ID, cc.Campaign.ID, v)
 		if err != nil {
-			continue // Vanished between the list and detail reads; just omit it.
+			// Still don't fail the whole page over one calendar's error —
+			// but a genuine DB error here would otherwise vanish a
+			// calendar from the list with no trace at all, indistinguishable
+			// from "it was deleted between the list and detail reads".
+			slog.Error("calendar: failed to load calendar for viewer while building the list page",
+				slog.String("calendar_id", summary.ID),
+				slog.String("campaign_id", cc.Campaign.ID),
+				slog.Any("error", err))
+			continue
 		}
 		full = append(full, *detailed)
 	}

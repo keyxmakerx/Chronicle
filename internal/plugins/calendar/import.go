@@ -245,10 +245,15 @@ func parseChronicle(data []byte) (*ImportResult, error) {
 	// (for SetMoons' upsert), so the two shapes are not interchangeable.
 	for _, m := range export.Calendar.Moons {
 		result.Moons = append(result.Moons, MoonInput{
-			Name:              m.Name,
-			CycleDays:         m.CycleDays,
-			PhaseOffset:       m.PhaseOffset,
-			Color:             m.Color,
+			Name:        m.Name,
+			CycleDays:   m.CycleDays,
+			PhaseOffset: m.PhaseOffset,
+			// normalizeColor: a hand-edited or malicious "chronicle-calendar-v1"
+			// upload is not guaranteed to round-trip a valid color the way a
+			// real Chronicle export does — calendar_moons.color is VARCHAR(7),
+			// so an unnormalized value can crash the import under strict SQL
+			// mode instead of merely looking wrong.
+			Color:             normalizeColor(m.Color),
 			HiddenFromPlayers: m.HiddenFromPlayers,
 		})
 	}
@@ -256,13 +261,15 @@ func parseChronicle(data []byte) (*ImportResult, error) {
 	// Copy seasons.
 	for _, s := range export.Calendar.Seasons {
 		result.Seasons = append(result.Seasons, Season{
-			Name:          s.Name,
-			StartMonth:    s.StartMonth,
-			StartDay:      s.StartDay,
-			EndMonth:      s.EndMonth,
-			EndDay:        s.EndDay,
-			Description:   s.Description,
-			Color:         s.Color,
+			Name:        s.Name,
+			StartMonth:  s.StartMonth,
+			StartDay:    s.StartDay,
+			EndMonth:    s.EndMonth,
+			EndDay:      s.EndDay,
+			Description: s.Description,
+			// normalizeColor: same reasoning as the moon color above —
+			// calendar_seasons.color is VARCHAR(7) too.
+			Color:         normalizeColor(s.Color),
 			WeatherEffect: s.WeatherEffect,
 		})
 	}
@@ -287,6 +294,11 @@ func normalizeEraStart(e EraInput) EraInput {
 	if e.StartDay < 1 {
 		e.StartDay = 1
 	}
+	// Every era-producing parser (Chronicle, Calendaria, Fantasy-Calendar)
+	// funnels through here, so this is also where every era's color gets
+	// clamped to something calendar_eras.color can hold, regardless of
+	// format.
+	e.Color = normalizeColor(e.Color)
 	return e
 }
 
@@ -300,8 +312,14 @@ type scData struct {
 // scCalendar holds the Simple Calendar configuration. Supports both v2 field names
 // and v1 legacy aliases (yearSettings, monthSettings, etc.) via custom UnmarshalJSON.
 type scCalendar struct {
-	Name           string           `json:"name"`
-	CurrentDate    scCurrentDate    `json:"currentDate"`
+	Name string `json:"name"`
+	// CurrentDate is a pointer, not a value, so a file that omits it
+	// entirely (a template/definitions-only export with no live campaign
+	// date) unmarshals to nil rather than the zero value {Month:0, Day:0} —
+	// which, being valid 0-indexed values, is indistinguishable from "no
+	// current date" if collapsed to a value type. See its use in
+	// parseSimpleCalendarInner.
+	CurrentDate    *scCurrentDate   `json:"currentDate"`
 	General        scGeneral        `json:"general"`
 	LeapYear       scLeapYear       `json:"leapYear"`
 	Months         []scMonth        `json:"months"`
@@ -586,11 +604,14 @@ func parseSimpleCalendarInner(cal scCalendar) (*ImportResult, error) {
 	}
 
 	// Simple Calendar's currentDate is 0-indexed, like its months/seasons —
-	// see scCurrentDate's own field comments.
-	result.Today = ImportedToday{
-		Year:  cal.Year.NumericRepresentation,
-		Month: importIntPtr(cal.CurrentDate.Month + 1),
-		Day:   importIntPtr(cal.CurrentDate.Day + 1),
+	// see scCurrentDate's own field comments. A file with no currentDate at
+	// all leaves Month/Day nil (#741: never a disguised default) — only the
+	// year, which Simple Calendar always carries via yearSettings/year, is
+	// populated unconditionally.
+	result.Today = ImportedToday{Year: cal.Year.NumericRepresentation}
+	if cal.CurrentDate != nil {
+		result.Today.Month = importIntPtr(cal.CurrentDate.Month + 1)
+		result.Today.Day = importIntPtr(cal.CurrentDate.Day + 1)
 	}
 
 	clampCalendarStructure(result)
@@ -1273,6 +1294,18 @@ func parseFantasyCalendar(data []byte) (*ImportResult, error) {
 		result.Settings.MinutesPerHour = 60
 	}
 
+	// Today — dynamic_data is Fantasy-Calendar's live current-date state for
+	// THIS specific calendar export, not an optional/defaults-only section,
+	// so year/month/day are populated unconditionally from it, the same way
+	// parseChronicle treats its own always-present current_month/
+	// current_day. Timespan (the current month) and Day are both
+	// 0-indexed, like LeapDays' Timespan index above.
+	result.Today = ImportedToday{
+		Year:  fc.DynamicData.Year,
+		Month: importIntPtr(fc.DynamicData.Timespan + 1),
+		Day:   importIntPtr(fc.DynamicData.Day + 1),
+	}
+
 	// Months — timespans array. Intercalary timespans become intercalary months.
 	for i, ts := range fc.StaticData.YearData.Timespans {
 		result.Months = append(result.Months, MonthInput{
@@ -1383,15 +1416,34 @@ func stripLocalizationKey(s string) string {
 	return parts[len(parts)-1]
 }
 
-// normalizeColor ensures a color string is a valid hex color.
-// Returns the color as-is if already valid, or a default gray.
+// normalizeColor makes an import-supplied color value safe to store: it
+// must fit calendar_moons.color/calendar_seasons.color's VARCHAR(7) — the
+// narrowest color column any import format writes to — under strict SQL
+// mode, where an over-length value errors the whole transaction instead of
+// silently truncating (a crash-the-import risk, not just a cosmetic one).
+// Every caller across every format (including Chronicle's own re-import,
+// which is untrusted the moment it's a file someone uploaded, not
+// necessarily one Chronicle itself produced) routes through this rather
+// than writing a source value directly.
+//
+// A valid #rgb/#rrggbb (with or without the leading '#') is accepted and
+// #rgb is expanded to #rrggbb, so every result is exactly 7 characters.
+// Anything else — a CSS name like "steelblue", an rgba() string, garbage —
+// falls back to a default gray rather than being truncated or rejected.
 func normalizeColor(c string) string {
+	const fallback = "#808080"
 	c = strings.TrimSpace(c)
 	if c == "" {
-		return "#808080"
+		return fallback
 	}
 	if c[0] != '#' {
 		c = "#" + c
+	}
+	if !hexColorPattern.MatchString(c) {
+		return fallback
+	}
+	if len(c) == 4 { // "#" + 3 hex digits: expand to the 6-digit form.
+		c = fmt.Sprintf("#%c%c%c%c%c%c", c[1], c[1], c[2], c[2], c[3], c[3])
 	}
 	return c
 }

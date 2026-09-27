@@ -733,8 +733,12 @@ func (h *Handler) PreviewPresetAPI(c echo.Context) error {
 // Owner only. The wizard's Review step is expected to have already called
 // PreviewPresetAPI and shown ir.Today for confirmation; current_month/
 // current_day in the body are only REQUIRED when the preset itself left
-// them unspecified (no shipped preset does today, but the contract is the
-// same one CreateFromImportAPI enforces for an upload that might).
+// them unspecified — the Calendaria-format "elven" preset does (Calendaria
+// has no day-level current-date concept at all, only a year — see
+// parseCalendaria's own comment), so this is a real, exercised path, not a
+// hypothetical one; the other three shipped presets are Chronicle-native
+// exports that always specify a full current date. Same contract
+// CreateFromImportAPI enforces for an upload that might.
 // POST /campaigns/:id/calendars/presets/:name
 func (h *Handler) CreateFromPresetAPI(c echo.Context) error {
 	cc := campaigns.GetCampaignContext(c)
