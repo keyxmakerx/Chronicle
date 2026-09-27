@@ -789,7 +789,7 @@ func TestUpdateStandaloneEvent_Success(t *testing.T) {
 	err := svc.UpdateStandaloneEvent(context.Background(), "tl-1", "evt-1", UpdateTimelineEventInput{
 		Name:       patch.Of("New Name"),
 		Visibility: patch.Of("everyone"),
-	})
+	}, true)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -802,7 +802,7 @@ func TestUpdateStandaloneEvent_NotFound(t *testing.T) {
 	err := svc.UpdateStandaloneEvent(context.Background(), "tl-1", "nonexistent", UpdateTimelineEventInput{
 		Name:       patch.Of("X"),
 		Visibility: patch.Of("everyone"),
-	})
+	}, true)
 	assertAppError(t, err, 404)
 }
 
@@ -818,7 +818,7 @@ func TestUpdateStandaloneEvent_WrongTimeline(t *testing.T) {
 	err := svc.UpdateStandaloneEvent(context.Background(), "tl-1", "evt-1", UpdateTimelineEventInput{
 		Name:       patch.Of("X"),
 		Visibility: patch.Of("everyone"),
-	})
+	}, true)
 	assertAppError(t, err, 404)
 }
 
@@ -833,7 +833,7 @@ func TestUpdateStandaloneEvent_EmptyName(t *testing.T) {
 	err := svc.UpdateStandaloneEvent(context.Background(), "tl-1", "evt-1", UpdateTimelineEventInput{
 		Name:       patch.Of(""),
 		Visibility: patch.Of("everyone"),
-	})
+	}, true)
 	assertAppError(t, err, 422)
 }
 
@@ -852,7 +852,7 @@ func TestDeleteStandaloneEvent_Success(t *testing.T) {
 	}
 	svc := newTestTimelineService(repo)
 
-	err := svc.DeleteStandaloneEvent(context.Background(), "tl-1", "evt-1")
+	err := svc.DeleteStandaloneEvent(context.Background(), "tl-1", "evt-1", true)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -865,7 +865,7 @@ func TestDeleteStandaloneEvent_NotFound(t *testing.T) {
 	repo := &mockTimelineRepo{}
 	svc := newTestTimelineService(repo)
 
-	err := svc.DeleteStandaloneEvent(context.Background(), "tl-1", "nonexistent")
+	err := svc.DeleteStandaloneEvent(context.Background(), "tl-1", "nonexistent", true)
 	assertAppError(t, err, 404)
 }
 
@@ -877,7 +877,7 @@ func TestDeleteStandaloneEvent_WrongTimeline(t *testing.T) {
 	}
 	svc := newTestTimelineService(repo)
 
-	err := svc.DeleteStandaloneEvent(context.Background(), "tl-1", "evt-1")
+	err := svc.DeleteStandaloneEvent(context.Background(), "tl-1", "evt-1", true)
 	assertAppError(t, err, 404)
 }
 

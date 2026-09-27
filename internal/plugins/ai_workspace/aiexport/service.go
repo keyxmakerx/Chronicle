@@ -202,7 +202,7 @@ func (s *Service) renderCategory(
 		}
 		eventsByTimeline := map[string][]timeline.EventLink{}
 		for _, tl := range tls {
-			evs, err := s.Timelines.ListTimelineEvents(ctx, tl.ID, permissions.RequestViewer(role, ownerID))
+			evs, err := s.Timelines.ListTimelineEvents(ctx, tl.ID, campaignID, permissions.RequestViewer(role, ownerID))
 			if err != nil {
 				return "", fmt.Errorf("timeline %q events: %w", tl.Name, err)
 			}

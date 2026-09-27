@@ -60,7 +60,7 @@ func TestListTimelines_EventCountMatchesFilteredEvents(t *testing.T) {
 			t.Fatalf("expected exactly 1 timeline, got %d", len(tls))
 		}
 
-		rows, err := svc.ListTimelineEvents(ctx, timelineID, player)
+		rows, err := svc.ListTimelineEvents(ctx, timelineID, campaignID, player)
 		if err != nil {
 			t.Fatalf("ListTimelineEvents: %v", err)
 		}

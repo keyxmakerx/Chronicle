@@ -63,7 +63,7 @@ type stubTimelineLister struct {
 func (s *stubTimelineLister) ListTimelines(_ context.Context, _ string, _ permissions.Viewer) ([]timeline.Timeline, error) {
 	return s.tls, nil
 }
-func (s *stubTimelineLister) ListTimelineEvents(_ context.Context, tlID string, _ permissions.Viewer) ([]timeline.EventLink, error) {
+func (s *stubTimelineLister) ListTimelineEvents(_ context.Context, tlID, _ string, _ permissions.Viewer) ([]timeline.EventLink, error) {
 	return s.events[tlID], nil
 }
 

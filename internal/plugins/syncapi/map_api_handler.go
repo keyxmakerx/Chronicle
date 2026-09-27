@@ -63,6 +63,22 @@ func (h *MapAPIHandler) requireOwnerRole(c echo.Context) error {
 	return nil
 }
 
+// canAuthorDmOnly reports whether the API key's user may author/update
+// dm_only content — Owner role, or a co-DM grant — mirroring
+// campaigns.CampaignContext.CanAuthorDmOnly for a caller that only has an
+// API key, not a CampaignContext.
+func (h *MapAPIHandler) canAuthorDmOnly(c echo.Context) bool {
+	key := GetAPIKey(c)
+	if key == nil {
+		return false
+	}
+	if campaigns.Role(h.resolveRole(c)) >= campaigns.RoleOwner {
+		return true
+	}
+	granted, err := h.campaignSvc.IsUserDmGranted(c.Request().Context(), key.CampaignID, key.UserID)
+	return err == nil && granted
+}
+
 // requireMapInCampaign validates that the map belongs to the campaign in the URL.
 func (h *MapAPIHandler) requireMapInCampaign(c echo.Context) (*maps.Map, error) {
 	campaignID := c.Param("id")
@@ -832,7 +848,7 @@ func (h *MapAPIHandler) UpdateMarker(c echo.Context) error {
 		VisibilityRules:   req.VisibilityRules,
 		FoundryID:         req.FoundryID,
 		ExpectedUpdatedAt: req.ExpectedUpdatedAt,
-	})
+	}, h.canAuthorDmOnly(c))
 	if err != nil {
 		return err
 	}
@@ -848,7 +864,7 @@ func (h *MapAPIHandler) DeleteMarker(c echo.Context) error {
 	if err := h.requireOwnerRole(c); err != nil {
 		return err
 	}
-	if err := h.mapSvc.DeleteMarker(c.Request().Context(), c.Param("markerID"), maps.ParseExpectedUpdatedAt(c)); err != nil {
+	if err := h.mapSvc.DeleteMarker(c.Request().Context(), c.Param("markerID"), maps.ParseExpectedUpdatedAt(c), h.canAuthorDmOnly(c)); err != nil {
 		return err
 	}
 	return c.NoContent(http.StatusNoContent)
