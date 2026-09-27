@@ -672,6 +672,7 @@ func (a *wsCampaignRoleAdapter) IsUserDmGranted(ctx context.Context, campaignID,
 // A switch ending in `default: return` fails silently: an emitter whose event
 // type has no case here publishes into nothing, unreported. Rebuild it with a
 // test that walks every emitter's event type and asserts a case exists.
+// TODO(#778)
 //
 // The mapping it carried, so V5 has the checklist rather than rediscovering it:
 //   "event.created"                            -> ws.MsgCalendarEventCreated
@@ -2462,7 +2463,7 @@ func (a *App) RegisterRoutes() {
 	//
 	// CALV5-PLACEHOLDER: V5 must still restore the RSVP repo/service/handler
 	// triple, the entity-creator seam, the RSVP reader, and the StaticFS
-	// mount for /static/plugins/calendar/.
+	// mount for /static/plugins/calendar/. TODO(#778)
 	calendarRepo := calendar.NewCalendarRepository(a.DB)
 	calendarEventRepo := calendar.NewEventRepository(a.DB)
 	calendarKindRepo := calendar.NewEventKindRepository(a.DB)
@@ -2511,6 +2512,7 @@ func (a *App) RegisterRoutes() {
 	// every page from here — calendar_widget.js, cal_visibility.js,
 	// calendar_permissions.js, calendar_daycard.js and calendar_theater.js.
 	// Their files are deleted; leaving the paths would 404 on every page.
+	// TODO(#778)
 	pluginBodyScripts := []string{
 		"/static/plugins/" + entities.PluginSlug + "/js/characters.js",
 	}
@@ -2518,7 +2520,8 @@ func (a *App) RegisterRoutes() {
 	// CALV5-PLACEHOLDER: keeps the route the sidebar, campaign dashboard and
 	// Extensions hub link to (/campaigns/:id/apps/calendar) answering with a
 	// rebuilding notice instead of 404. Legacy /calendars and /calendar
-	// paths, which used to redirect here, get the same answer.
+	// paths, which used to redirect here, get the same answer. TODO(#778):
+	// this is Part A's page (the calendar month grid), not this change.
 	calendarRebuildGroup := e.Group("/campaigns/:id",
 		auth.RequireAuth(authService),
 		campaigns.RequireCampaignAccess(campaignService),
@@ -2544,7 +2547,7 @@ func (a *App) RegisterRoutes() {
 	// and the public Foundry-facing calendar API (token-verified through
 	// fvttService, rate limited 300/min) behind the schema health gate. That
 	// public API overlapped syncapi's calendar surface — rebuild only
-	// syncapi's, the one the module's contract documents.
+	// syncapi's, the one the module's contract documents. TODO(#778)
 	if a.PluginHealth.IsHealthy(calendar.PluginSlug) {
 		calendar.RegisterRoutes(e, calendarHandler, campaignService, authService, addonService)
 	} else {
@@ -2609,6 +2612,7 @@ func (a *App) RegisterRoutes() {
 	// SetRSVPNotifier, SetAvailabilityWriter (member zones + exception
 	// dates), SetScheduleReader and SetOwnWeekReader — all nil-safe on the
 	// calendar side, so a degraded neighbour never takes the calendar down.
+	// TODO(#778)
 
 	if a.PluginHealth.IsHealthy("sessions") {
 		sessions.RegisterRoutes(e, sessionsHandler, campaignService, authService, addonService)
@@ -2621,7 +2625,8 @@ func (a *App) RegisterRoutes() {
 	// CALV5-PLACEHOLDER: V5 must restore &calendarListerAdapter{},
 	// &calendarEventListerAdapter{} and &calendarEraListerAdapter{} as the
 	// 2nd-4th arguments. Timeline nil-guards all three, so it runs on
-	// standalone events alone until then.
+	// standalone events alone until then. TODO(#778): distinct from
+	// CalendarEventLinkLister below, which IS restored in this change.
 	timelineSvc := timeline.NewTimelineService(timelineRepo, nil, nil, nil)
 	// SetCalendarEventLinkLister restores timeline's calendar-name display
 	// and calendar-linked event reads (calendar-v5 seams, #778) — a
@@ -2710,7 +2715,8 @@ func (a *App) RegisterRoutes() {
 	syncAPIHandler.SetSystemEnabler(addonService)
 	// CALV5-PLACEHOLDER: V5 must restore (syncService, calendarService) as
 	// arguments. The handler holds the calendar routes open with a 503 while
-	// the plugin is rebuilt.
+	// the plugin is rebuilt. TODO(#778): Foundry sync rewiring is explicitly
+	// later work, deliberately out of scope for this change.
 	calendarAPIHandler := syncapi.NewCalendarAPIHandler()
 	mediaAPIHandler := syncapi.NewMediaAPIHandler(syncService, mediaService)
 	if urlSigner != nil {
@@ -2873,7 +2879,7 @@ func (a *App) RegisterRoutes() {
 	// widget types it does not know, so a GM's existing entity→calendar
 	// bindings survive the blackout untouched and resolve again once V5
 	// registers the types. Deleting the rows, or registering a type whose
-	// InstanceExists answers false, would sweep them permanently.
+	// InstanceExists answers false, would sweep them permanently. TODO(#778)
 	widgetRegistry.Register(timeline.NewTimelineWidgetType(timelineSvc))
 	// maps registers with no campaign default — the legacy entity.map_id
 	// fallback lives in the map_editor closure instead.
@@ -2954,6 +2960,13 @@ func (a *App) RegisterRoutes() {
 		},
 	}, func(ctx entities.BlockRenderContext) templ.Component {
 		// CALV5-PLACEHOLDER: was calendar.BlockUpcomingEvents(ctx.CC, limit).
+		// TODO(#778): a real fix is small and low-risk — reuse the same
+		// GET /campaigns/:id/calendars/upcoming hx-get fragment
+		// dashCalendarPreview/dashCalendarFull/catCalendarPreview now use
+		// (calendar-v5 seams, #778) instead of this notice. Left as a
+		// placeholder rather than rushed here because this is a template
+		// (not dashboard/category) block context with its own markup
+		// convention, unverified in this change.
 		return components.FeatureRebuildingBlock("The calendar")
 	})
 	// entity_calendar — the entity-page calendar embed: a compact worldstate
@@ -2969,7 +2982,11 @@ func (a *App) RegisterRoutes() {
 		// renderBoundBlock(calendar.WidgetTypeCalendar, rc, ""). Explicit
 		// rebuilding notice here rather than renderBoundBlock's fallback
 		// (templ.NopComponent for an unregistered widget type), which would
-		// leave an unexplained gap in the owner's entity layout.
+		// leave an unexplained gap in the owner's entity layout. TODO(#778):
+		// needs calendar.WidgetTypeCalendar to implement widgetbindings.
+		// WidgetType (InstanceExists/DefaultInstance/ListInstances/
+		// CreateInstance/RenderBlock) — a separate, larger body of work than
+		// this change's dashboard/category-preview reconnection.
 		return components.FeatureRebuildingBlock("The calendar")
 	})
 
@@ -2984,6 +3001,8 @@ func (a *App) RegisterRoutes() {
 	}, func(rc entities.BlockRenderContext) templ.Component {
 		// CALV5-PLACEHOLDER: V5 must restore
 		// renderBoundBlock(calendar.WidgetTypeWorldstate, rc, "").
+		// TODO(#778): same widgetbindings.WidgetType work entity_calendar's
+		// comment above describes, for calendar.WidgetTypeWorldstate.
 		return components.FeatureRebuildingBlock("The world state")
 	})
 
@@ -3240,6 +3259,7 @@ func (a *App) RegisterRoutes() {
 	// calendarService (GetCalendar, then ListUpcomingEvents) again. Until
 	// then the adapter stays wired but errors, so a WASM plugin calling
 	// get_calendar gets a reportable error instead of a misleading null.
+	// TODO(#778)
 	errCalendarRebuilding := errors.New("calendar is being rebuilt (V5) and is unavailable to extensions")
 	wasmCalendarReader := extensions.NewWASMCalendarAdapter(
 		func(ctx context.Context, campaignID string) (json.RawMessage, error) {
@@ -3278,6 +3298,7 @@ func (a *App) RegisterRoutes() {
 
 	// CALV5-PLACEHOLDER: V5 must rewire create_event to unmarshal a
 	// calendar.CreateEventInput and delegate to calendarService.CreateEvent.
+	// TODO(#778)
 	wasmHostEnv.SetCalendarWriter(extensions.NewWASMCalendarWriteAdapter(
 		func(ctx context.Context, campaignID string, input json.RawMessage) (json.RawMessage, error) {
 			return nil, errCalendarRebuilding
@@ -3414,7 +3435,8 @@ func (a *App) RegisterRoutes() {
 
 	// CALV5-PLACEHOLDER: the calendar/timeline demo routes and the
 	// internal/templates/demo package were removed. V5's design is signed as
-	// static renders instead, not a maintained route (#741).
+	// static renders instead, not a maintained route (#741). TODO(#778):
+	// not a re-wiring target, listed for completeness.
 
 	// --- Layout Data Injector ---
 	// Registers the callback that copies auth/campaign data from Echo's

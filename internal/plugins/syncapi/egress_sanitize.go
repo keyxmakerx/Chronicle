@@ -59,7 +59,8 @@ func sanitizeNotesHTMLForEgress(ns []notes.Note) {
 // CALV5-PLACEHOLDER: V5 must restore sanitizeCalendarEventHTMLForEgress (+
 // slice variant), re-sanitizing Event.DescriptionHTML before it leaves for
 // Foundry, in the same change as the GetEvent/ListEvents handlers — pinned
-// by egress_sanitize_test.go.
+// by egress_sanitize_test.go. TODO(#778): Foundry sync rewiring is
+// deliberately out of scope for calendar-v5-sky-seams.
 
 // --- Inline-secret redaction (DM-secret egress) ---
 //

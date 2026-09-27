@@ -20,15 +20,21 @@ var MigrationsFS embed.FS
 
 // PluginSlug is the addon slug the calendar's routes gate on.
 //
-// CALV5-PLACEHOLDER: no routes gate on it today; V5's routes must gate on it
-// again.
+// No longer a placeholder: RegisterRoutes (routes.go, restored by #791) and
+// the entity_calendar/entity_worldstate/skybox/upcoming_events dashboard
+// blocks (internal/app/routes.go) already gate on it via
+// addons.RequireAddon. This comment used to say nothing gated on it — fixed
+// here since it was stale and actively misleading (calendar-v5 seams, #778).
 const PluginSlug = "calendar"
 
 // WidgetTypeCalendar and WidgetTypeWorldstate are the widgetbindings widget
 // types a GM's saved entity bindings point at.
 //
 // CALV5-PLACEHOLDER: no widget answers to them while the calendar is
-// rebuilt; V5 must re-wire widgets to these types.
+// rebuilt; V5 must re-wire widgets to these types. TODO(#778): needs
+// calendar.WidgetTypeCalendar/WidgetTypeWorldstate to implement
+// widgetbindings.WidgetType — see internal/app/routes.go's entity_calendar/
+// entity_worldstate block comments for the specifics deferred here.
 const (
 	WidgetTypeCalendar   = "calendar"
 	WidgetTypeWorldstate = "worldstate"

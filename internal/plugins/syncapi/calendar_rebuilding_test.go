@@ -13,7 +13,8 @@ import (
 
 // CALV5-PLACEHOLDER: pins the one contract that matters while the calendar
 // is rebuilt — the Foundry module must be told "unavailable", never "empty".
-// V5 must delete this file along with the placeholder handler.
+// V5 must delete this file along with the placeholder handler. TODO(#778):
+// Foundry sync rewiring is deliberately out of scope for calendar-v5-sky-seams.
 
 // TestCalendarRoutes_AnswerRebuilding is the whole contract: every exported
 // method on the placeholder handler answers 503 with the structured body the

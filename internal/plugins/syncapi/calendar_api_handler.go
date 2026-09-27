@@ -14,6 +14,11 @@ import (
 // unreachable rather than as a real, empty calendar. The date-beacon
 // tables and GET /calendar-sync-beacon are NOT part of this: they are
 // syncapi's own and outlive the calendar.
+//
+// TODO(#778): Foundry sync API rewiring is deliberately out of scope for the
+// calendar-v5 seams change (calendar-v5-sky-seams) — the operator's
+// instruction was to leave every route here answering 503 and rewire the
+// Foundry module separately, later.
 
 // CalendarAPIHandler serves the calendar REST surface for external tools
 // (Foundry VTT Calendaria sync). While the calendar is rebuilt it holds the
@@ -23,7 +28,7 @@ type CalendarAPIHandler struct{}
 // NewCalendarAPIHandler creates the rebuild-state calendar API handler.
 //
 // CALV5-PLACEHOLDER: it took (syncSvc SyncAPIService, calendarSvc
-// calendar.CalendarService). Both return with V5.
+// calendar.CalendarService). Both return with V5. TODO(#778)
 func NewCalendarAPIHandler() *CalendarAPIHandler {
 	return &CalendarAPIHandler{}
 }
