@@ -116,9 +116,9 @@ templ App(title string) {
 				</main>
 			</div>
 		</div>
-		<!-- Notes widget mount point (floating panel, bottom-right).
-		     Gated behind the "notes" addon — off by default.
-		     Hidden on the full-page journal to avoid sync conflicts. -->
+		<!-- Jot notes: the one entry point is the tab bottom-right, which
+		     opens the floating panel of this page's jots. Gated behind the
+		     "notes" addon, off by default. -->
 		if notesWidgetVisible(ctx) {
 			@NotesWidget()
 		}
@@ -839,23 +839,6 @@ templ Topbar() {
 					</svg>
 				</button>
 
-				if notesWidgetVisible(ctx) {
-					<!-- Notes trigger (replaces floating FAB). Gated on the SAME
-					     condition as the floating panel's mount point above —
-					     they previously drifted (this button had no journal
-					     exclusion), so it rendered on the journal page with
-					     nothing to call: Chronicle.toggleNotes is only defined
-					     once NotesWidget's init() runs, which never happened
-					     there (C-NAV-ACTIVE-FIX). -->
-					<button
-						id="topbar-notes-trigger"
-						class="btn-ghost btn-icon"
-						title="Notes"
-						onclick="Chronicle.toggleNotes()"
-					>
-						<i class="fa-solid fa-note-sticky text-sm"></i>
-					</button>
-				}
 			}
 
 			<!-- Dark mode toggle -->
@@ -1015,15 +998,13 @@ func isPathPrefix(ctx context.Context, prefix string) bool {
 	return active == prefix || strings.HasPrefix(active, prefix+"/")
 }
 
-// notesWidgetVisible reports whether the floating notes panel (mounted by
-// NotesWidget) and its topbar trigger button should render for the current
-// request: authenticated, in a campaign, with the "notes" addon enabled, and
-// not on the full-page journal (suppressed there to avoid autosave/sync
-// conflicts between the floating panel and the journal's own editor). Single
-// source of truth for both call sites, so they can't drift apart.
+// notesWidgetVisible reports whether the Jot notes tab and panel (mounted by
+// NotesWidget) render for the current request: authenticated, in a campaign,
+// with the "notes" addon enabled. Jots and Journal notes are different rows,
+// so the panel can sit on the Journal page without the two editing the same
+// note.
 func notesWidgetVisible(ctx context.Context) bool {
-	return InCampaign(ctx) && IsAuthenticated(ctx) && IsAddonEnabled(ctx, "notes") &&
-		!isPathPrefix(ctx, fmt.Sprintf("/campaigns/%s/journal", GetCampaignID(ctx)))
+	return InCampaign(ctx) && IsAuthenticated(ctx) && IsAddonEnabled(ctx, "notes")
 }
 
 // isExternalURL returns true if the URL starts with http:// or https://,
@@ -1138,9 +1119,11 @@ templ NotesWidget() {
 }
 
 // extractEntityID extracts an entity ID from the current URL if we're on an
-// entity show/edit page. Returns "" if not on an entity page.
+// entity show/edit page. Returns "" if not on an entity page. It reads the
+// real request path: an entity page sets its active path to its category for
+// the sidebar, which would hide the page from the jot panel.
 func extractEntityID(ctx context.Context) string {
-	path := GetActivePath(ctx)
+	path := GetRequestPath(ctx)
 	// Pattern: /campaigns/{id}/entities/{eid}[/...]
 	parts := strings.Split(path, "/")
 	// parts: ["", "campaigns", "{id}", "entities", "{eid}", ...]

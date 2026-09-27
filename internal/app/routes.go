@@ -752,13 +752,17 @@ type noteEventPublisherAdapter struct {
 	bus ws.EventBus
 }
 
-// PublishNoteEvent translates note domain events into WebSocket messages.
-func (a *noteEventPublisherAdapter) PublishNoteEvent(eventType, campaignID, noteID string, note *notes.Note) {
-	if campaignID == "" {
+// PublishNoteEvent translates a note change into a WebSocket message that
+// carries IDs only and reaches only the note's audience. Clients refetch the
+// note over HTTP, where CanView decides what they get (#715). The payload
+// deliberately has no "id" key: a client that reads payload.id as a whole
+// note must skip the message, not overwrite its copy with an empty one.
+func (a *noteEventPublisherAdapter) PublishNoteEvent(ev notes.NoteEvent) {
+	if ev.CampaignID == "" {
 		return
 	}
 	var msgType ws.MessageType
-	switch eventType {
+	switch ev.Type {
 	case "created":
 		msgType = ws.MsgNoteCreated
 	case "updated":
@@ -768,8 +772,33 @@ func (a *noteEventPublisherAdapter) PublishNoteEvent(eventType, campaignID, note
 	default:
 		return
 	}
-	a.bus.Publish(ws.NewMessage(msgType, campaignID, noteID, note))
+	payload := map[string]string{"noteId": ev.NoteID}
+	if ev.EntityID != nil {
+		payload["entityId"] = *ev.EntityID
+	}
+	msg := ws.NewMessage(msgType, ev.CampaignID, ev.NoteID, payload)
+	msg.AllowedUsers, msg.StrictAudience = noteAudience(ev.Audience)
+	a.bus.Publish(msg)
 }
+
+// noteAudience maps a note's audience onto the hub's allowlist. Shared with
+// the party: no list. Otherwise the named users; a GM share lets the hub's
+// usual DM bypass admit the Owner and co-DMs, and without one the list binds
+// them too, because a private note is private from the GM.
+func noteAudience(a notes.Audience) (allowed []string, strict bool) {
+	if a.Everyone {
+		return nil, false
+	}
+	if len(a.Users) == 0 {
+		// An audience naming nobody reaches nobody; never widen a malformed
+		// one to "everyone", which is what an empty allowlist means.
+		return []string{noteNoRecipient}, true
+	}
+	return a.Users, !a.GMs
+}
+
+// noteNoRecipient is an allowlist entry no user id can equal (ids are UUIDs).
+const noteNoRecipient = "-"
 
 // entityNotesNotifierHolder is the late-bound bridge from
 // entity_notes.Service.Notify (function-typed) to the WebSocket bus.
@@ -2625,6 +2654,8 @@ func (a *App) RegisterRoutes() {
 	attRepo := notes.NewAttachmentRepository(a.DB)
 	noteSvc := notes.NewNoteServiceWithAttachments(noteRepo, attRepo)
 	noteAPIHandler := syncapi.NewNoteAPIHandler(syncService, noteSvc)
+	// Decides whether an API caller counts as a GM for notes shared with the GM.
+	noteAPIHandler.SetCampaignService(campaignService)
 
 	// Tag API handler for sync API — exposes tag CRUD and bulk tag operations.
 	tagAPIHandler := syncapi.NewTagAPIHandler(syncService, tagService, entityService, campaignService)
@@ -2675,6 +2706,10 @@ func (a *App) RegisterRoutes() {
 	noteHandler.SetAttachmentService(noteSvc)
 	noteHandler.SetMediaUploader(&mediaUploadAdapter{svc: mediaService})
 	noteHandler.SetMemberLister(campaignService)
+	noteHandler.SetCharacterLister(&journalCharacterAdapter{svc: entityService})
+	notePages := &notesPagesAdapter{svc: entityService}
+	noteHandler.SetPageNamer(notePages)
+	noteHandler.SetPageLinker(notePages)
 	notes.RegisterRoutes(e, noteHandler, campaignService, authService)
 
 	// Relations widget routes already registered above (before REST API v1).
@@ -3498,6 +3533,7 @@ func (a *App) RegisterRoutes() {
 		if layouts.GetActivePath(ctx) == "" {
 			ctx = layouts.SetActivePath(ctx, c.Request().URL.Path)
 		}
+		ctx = layouts.SetRequestPath(ctx, c.Request().URL.Path)
 
 		// Where the viewer is in the campaign sidebar, and which sections
 		// they folded (a per-campaign cookie sidebar_nav.js writes), so the
@@ -3603,6 +3639,65 @@ func (a *App) RegisterRoutes() {
 	// Mount each registered plugin's static assets at /static/plugins/<slug>/.
 	// Must run AFTER all plugins have called a.registerPlugin() above.
 	a.mountPluginStatic()
+}
+
+// journalCharacterAdapter adapts EntityService to notes.CharacterLister: the
+// characters a player has claimed, most recently played first.
+type journalCharacterAdapter struct {
+	svc entities.EntityService
+}
+
+// ClaimedCharacters lists userID's characters in the campaign.
+func (a *journalCharacterAdapter) ClaimedCharacters(ctx context.Context, campaignID, userID string) ([]notes.ClaimedCharacter, error) {
+	if userID == "" {
+		return nil, nil
+	}
+	owned, err := a.svc.ListByOwner(ctx, campaignID, userID)
+	if err != nil {
+		return nil, err
+	}
+	out := make([]notes.ClaimedCharacter, 0, len(owned))
+	for _, e := range owned {
+		out = append(out, notes.ClaimedCharacter{ID: e.ID, Name: e.Name, TypeName: e.TypeName})
+	}
+	return out, nil
+}
+
+// notesPagesAdapter adapts EntityService to notes.PageNamer and
+// notes.PageLinker: pages named and listed only as far as the viewer may
+// see them.
+type notesPagesAdapter struct {
+	svc entities.EntityService
+}
+
+// PageNames names the ids the viewer can see; the rest are left out.
+func (a *notesPagesAdapter) PageNames(ctx context.Context, campaignID string, v permissions.Viewer, ids []string) (map[string]string, error) {
+	out := make(map[string]string, len(ids))
+	for _, id := range ids {
+		e, err := a.svc.GetByID(ctx, id)
+		if err != nil || e == nil || e.CampaignID != campaignID {
+			continue
+		}
+		perm, err := a.svc.CheckEntityAccess(ctx, id, v.Role(), v.UserID())
+		if err != nil || perm == nil || !perm.CanView {
+			continue
+		}
+		out[id] = e.Name
+	}
+	return out, nil
+}
+
+// PagesLinkingNote lists the visible pages that link a note, by name only.
+func (a *notesPagesAdapter) PagesLinkingNote(ctx context.Context, campaignID string, v permissions.Viewer, seesSecrets bool, noteID string) ([]notes.PageRef, error) {
+	pages, err := a.svc.PagesLinkingNote(ctx, campaignID, noteID, v.Role(), v.UserID(), seesSecrets)
+	if err != nil {
+		return nil, err
+	}
+	out := make([]notes.PageRef, 0, len(pages))
+	for _, p := range pages {
+		out = append(out, notes.PageRef{ID: p.ID, Name: p.Name, TypeName: p.TypeName})
+	}
+	return out, nil
 }
 
 // mediaUploadAdapter adapts MediaService to the notes.MediaUploader interface.

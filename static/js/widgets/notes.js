@@ -1,16 +1,21 @@
 /**
- * notes.js -- Floating Notes Panel Widget
+ * notes.js -- Jot notes: the floating panel of notes on a page.
  *
- * Quick-capture notes, "Page" mode (current entity) or "All" (campaign-wide).
- * Shared notes use pessimistic locking (2-min heartbeat, 5-min server
- * expiry) to avoid concurrent-edit clobbers, and keep version history.
- * entryHtml is server-sanitized and rendered as-is.
+ * One entry point, a small "Jot notes" tab bottom-right with this page's
+ * count, opens the panel: This page / All my jots, how many Journal notes
+ * reference the page, flat jot cards (no folders: those live in the Journal),
+ * and a button to add a jot. A jot can be sent to the Journal, which makes a
+ * private Journal note linked to the page and remembers it on the jot.
  *
- * Mount: <div data-widget="notes" data-campaign-id="..." data-entity-id="...">
+ * Shared jots use pessimistic locking (2-min heartbeat, 5-min server expiry)
+ * and keep version history. entryHtml is server-sanitized and rendered as-is;
+ * [[note]] links in it are labelled per viewer (editor_notelink.js).
+ *
+ * Mount: <div data-widget="notes" data-campaign-id="..." data-entity-id="..." data-user-id="...">
  */
 Chronicle.register('notes', {
   /**
-   * Initialize the notes widget.
+   * Initialize the jot panel.
    * @param {HTMLElement} el - Mount point element.
    * @param {Object} config - Parsed data-* attributes.
    */
@@ -20,14 +25,20 @@ Chronicle.register('notes', {
     var currentUserId = config.userId || '';
 
     var HEARTBEAT_INTERVAL = 2 * 60 * 1000; // 2 minutes
-
-    var STORAGE_COLLAPSED = 'chronicle_notes_collapsed';
+    var STORAGE_KEY = 'chronicle_notes_size';
+    var STORAGE_TEXT_SIZE = 'chronicle_notes_text_size';
+    var STORAGE_PINNED = 'chronicle_jots_pinned';
+    var TEXT_SIZE_DEFAULT = 'md';
+    var REF_CAP = 12;
 
     var state = {
       open: false,
-      tab: entityId ? 'page' : 'all',  // 'page' or 'all'
-      notes: [],
-      pageNotes: [],
+      collapsed: false,
+      tab: entityId ? 'page' : 'mine', // 'page' (this page's jots) or 'mine' (all of mine)
+      jots: [],       // the viewer's own jots, on every page
+      pageJots: [],   // the jots on this page the viewer can see
+      pageNames: {},  // page id -> name, for jots listed away from their page
+      refs: [],       // Journal notes that link to this page
       editingId: null,
       loading: true,
       searchFilter: '',
@@ -38,15 +49,17 @@ Chronicle.register('notes', {
       versionsNoteId: null,     // note whose history is shown (null = hidden)
       versions: [],
       versionsLoading: false,
-      // Folder collapse state: Set of folder IDs that are collapsed.
-      collapsedFolders: loadCollapsedFolders(),
       // Cached campaign members for share picker.
       members: null,
-      membersLoading: false
+      membersLoading: false,
+      // The viewer's Journal notes, for the [[ picker; loaded on first edit.
+      journal: null
     };
 
     // Track mini TipTap editor instances per note ID for cleanup.
     var miniEditors = {};
+    var wikiExt = null;    // the [[ picker of the jot being edited
+    var mentionExt = null; // the @ picker of the jot being edited
 
     // Debounced autosave for the note currently in edit mode. Mirrors
     // journal.js: an edit schedules a save ~1.5s after typing stops, and a
@@ -56,33 +69,30 @@ Chronicle.register('notes', {
     // from writing the note a second time after a blur already flushed it.
     var AUTOSAVE_DELAY = 1500; // ms
     var autosaveTimer = null;
+    var noteLinksOff = null; // unsubscribes the note-link labels of the drawn list
     var notesDirty = false;
 
     // --- DOM Construction ---
 
-    // Floating button (minimized state).
+    // The one way in: a small tab bottom-right with this page's jot count.
     var fab = document.createElement('button');
-    fab.className = 'notes-fab';
-    fab.innerHTML = '<i class="fa-solid fa-note-sticky"></i>';
-    fab.title = 'Notes';
-    fab.setAttribute('aria-label', 'Toggle notes panel');
+    fab.type = 'button';
+    fab.className = 'jot-tab';
+    fab.innerHTML = '<i class="fa-solid fa-note-sticky" aria-hidden="true"></i><span>Jot notes</span><span class="jot-tab-count" hidden></span>';
+    fab.setAttribute('aria-label', 'Open jot notes');
+    fab.setAttribute('aria-expanded', 'false');
 
     // Panel container.
     var panel = document.createElement('div');
     panel.className = 'notes-panel notes-panel-hidden';
+    panel.setAttribute('role', 'dialog');
+    panel.setAttribute('aria-label', 'Jot notes');
     panel.innerHTML = buildPanelHTML(entityId);
 
     el.appendChild(fab);
     el.appendChild(panel);
 
-    // Both the bottom-right FAB and the topbar notes button stay visible
-    // — they target the same toggle, and the FAB is the primary
-    // call-to-action. Keeping both visible is duplicate but unambiguous.
-
     // --- Saved preferences (localStorage) ---
-    var STORAGE_KEY = 'chronicle_notes_size';
-    var STORAGE_TEXT_SIZE = 'chronicle_notes_text_size';
-    var TEXT_SIZE_DEFAULT = 'md';
 
     function restoreSize() {
       try {
@@ -122,7 +132,6 @@ Chronicle.register('notes', {
     function applyTextSize(size) {
       panel.classList.remove('notes-size-sm', 'notes-size-md', 'notes-size-lg');
       panel.classList.add('notes-size-' + size);
-      // Update the active state on the size option buttons.
       panel.querySelectorAll('.notes-size-opt').forEach(function (btn) {
         btn.classList.toggle('notes-size-opt-active', btn.getAttribute('data-size') === size);
       });
@@ -131,187 +140,154 @@ Chronicle.register('notes', {
 
     restoreTextSize();
 
-    /** Load collapsed folder IDs from localStorage. */
-    function loadCollapsedFolders() {
-      try {
-        var saved = JSON.parse(localStorage.getItem(STORAGE_COLLAPSED));
-        if (Array.isArray(saved)) return new Set(saved);
-      } catch (e) { /* ignore */ }
-      return new Set();
-    }
-
-    /** Persist collapsed folder IDs to localStorage. */
-    function saveCollapsedFolders() {
-      try {
-        localStorage.setItem(STORAGE_COLLAPSED, JSON.stringify(Array.from(state.collapsedFolders)));
-      } catch (e) { /* ignore */ }
-    }
-
-    /** Toggle a folder's collapsed state. */
-    function toggleFolderCollapse(folderId) {
-      if (state.collapsedFolders.has(folderId)) {
-        state.collapsedFolders.delete(folderId);
-      } else {
-        state.collapsedFolders.add(folderId);
-      }
-      saveCollapsedFolders();
-      renderNotes();
+    function isPinnedOpen() {
+      try { return localStorage.getItem(STORAGE_PINNED) === '1'; } catch (e) { return false; }
     }
 
     // --- Resize handle ---
+    // Document listeners live on el so destroy() can take them away: the
+    // widget is re-mounted on every page change.
     var resizeHandle = panel.querySelector('.notes-resize-handle');
-    if (resizeHandle) {
-      var resizing = false;
-      var startX, startY, startW, startH;
-
-      resizeHandle.addEventListener('mousedown', function (e) {
-        e.preventDefault();
-        resizing = true;
-        startX = e.clientX;
-        startY = e.clientY;
-        startW = panel.offsetWidth;
-        startH = panel.offsetHeight;
-        document.body.style.userSelect = 'none';
-      });
-
-      document.addEventListener('mousemove', function (e) {
-        if (!resizing) return;
-        // Dragging top-left corner: moving left increases width, moving up increases height.
-        var newW = Math.max(280, startW - (e.clientX - startX));
-        var newH = Math.max(300, startH - (e.clientY - startY));
-        panel.style.width = newW + 'px';
-        panel.style.height = newH + 'px';
-      });
-
-      document.addEventListener('mouseup', function () {
-        if (!resizing) return;
-        resizing = false;
-        document.body.style.userSelect = '';
-        saveSize();
-      });
-
-      // Touch support for mobile resize (if ever used on tablet).
-      resizeHandle.addEventListener('touchstart', function (e) {
-        var touch = e.touches[0];
-        resizing = true;
-        startX = touch.clientX;
-        startY = touch.clientY;
-        startW = panel.offsetWidth;
-        startH = panel.offsetHeight;
-      }, { passive: true });
-
-      document.addEventListener('touchmove', function (e) {
-        if (!resizing) return;
-        var touch = e.touches[0];
-        var newW = Math.max(280, startW - (touch.clientX - startX));
-        var newH = Math.max(300, startH - (touch.clientY - startY));
-        panel.style.width = newW + 'px';
-        panel.style.height = newH + 'px';
-      }, { passive: true });
-
-      document.addEventListener('touchend', function () {
-        if (!resizing) return;
-        resizing = false;
-        saveSize();
-      });
+    var resizing = false;
+    var startX, startY, startW, startH;
+    function resizeTo(x, y) {
+      // Dragging the top-left corner: moving left or up grows the panel.
+      panel.style.width = Math.max(280, startW - (x - startX)) + 'px';
+      panel.style.height = Math.max(300, startH - (y - startY)) + 'px';
     }
+    resizeHandle.addEventListener('pointerdown', function (e) {
+      e.preventDefault();
+      resizing = true;
+      startX = e.clientX;
+      startY = e.clientY;
+      startW = panel.offsetWidth;
+      startH = panel.offsetHeight;
+      document.body.style.userSelect = 'none';
+    });
+    el._notesPointerMove = function (e) {
+      if (resizing) resizeTo(e.clientX, e.clientY);
+    };
+    el._notesPointerUp = function () {
+      if (!resizing) return;
+      resizing = false;
+      document.body.style.userSelect = '';
+      saveSize();
+    };
+    document.addEventListener('pointermove', el._notesPointerMove);
+    document.addEventListener('pointerup', el._notesPointerUp);
 
     // Cache panel elements.
     var headerTitle = panel.querySelector('.notes-header-title');
     var closeBtn = panel.querySelector('.notes-close');
+    var pinPanelBtn = panel.querySelector('.notes-pin-panel');
+    var collapseBtn = panel.querySelector('.notes-collapse-btn');
     var tabBtns = panel.querySelectorAll('.notes-tab');
-    var quickInput = panel.querySelector('.notes-quick-input');
+    var addBtn = panel.querySelector('.jot-add-btn');
     var notesList = panel.querySelector('.notes-list');
     var searchInput = panel.querySelector('.notes-search-input');
+    var refsBox = panel.querySelector('.jot-refs');
+    var tabCount = fab.querySelector('.jot-tab-count');
 
-    // --- Event Handlers ---
+    // --- Opening, pinning, collapsing ---
 
-    fab.addEventListener('click', function () {
+    function openPanel() {
       state.open = true;
       panel.classList.remove('notes-panel-hidden');
-      fab.classList.add('notes-fab-hidden');
+      fab.classList.add('jot-tab-hidden');
+      fab.setAttribute('aria-expanded', 'true');
       loadNotes();
-      setTimeout(function () { if (quickInput) quickInput.focus(); }, 100);
-    });
+    }
 
-    // Expose global toggle for the topbar notes button.
-    Chronicle.toggleNotes = function () {
-      if (state.open) {
-        closeBtn.click();
-      } else {
-        fab.click();
-      }
-    };
-
-    closeBtn.addEventListener('click', function () {
+    function closePanel() {
       state.open = false;
+      flushAutosave();
       panel.classList.add('notes-panel-hidden');
-      fab.classList.remove('notes-fab-hidden');
+      fab.classList.remove('jot-tab-hidden');
+      fab.setAttribute('aria-expanded', 'false');
       // Release any held lock when closing the panel.
       releaseLockIfHeld();
       state.editingId = null;
       state.versionsNoteId = null;
+      fab.focus({ preventScroll: true });
+    }
+
+    fab.addEventListener('click', function () {
+      openPanel();
+      setTimeout(function () {
+        var first = panel.querySelector('.notes-tab-active') || addBtn;
+        if (first) first.focus({ preventScroll: true });
+      }, 100);
     });
 
-    // New folder button.
-    var newFolderBtn = panel.querySelector('.notes-new-folder-btn');
-    if (newFolderBtn) {
-      newFolderBtn.addEventListener('click', function () {
-        createFolder();
-      });
+    closeBtn.addEventListener('click', closePanel);
+
+    // A pinned panel opens again by itself on the next page.
+    function paintPinPanel() {
+      var on = isPinnedOpen();
+      pinPanelBtn.setAttribute('aria-pressed', String(on));
+      pinPanelBtn.classList.toggle('notes-pin-on', on);
+      pinPanelBtn.title = on ? 'Stop keeping the panel open' : 'Keep the panel open on every page';
     }
+    pinPanelBtn.addEventListener('click', function () {
+      try { localStorage.setItem(STORAGE_PINNED, isPinnedOpen() ? '0' : '1'); } catch (e) { /* not remembered */ }
+      paintPinPanel();
+    });
+    paintPinPanel();
+
+    collapseBtn.addEventListener('click', function () {
+      state.collapsed = !state.collapsed;
+      panel.classList.toggle('notes-panel-collapsed', state.collapsed);
+      collapseBtn.setAttribute('aria-expanded', String(!state.collapsed));
+      collapseBtn.title = state.collapsed ? 'Expand' : 'Collapse';
+    });
+
+    // Escape inside the panel closes it (or its open popover first).
+    panel.addEventListener('keydown', function (e) {
+      if (e.key !== 'Escape' || e.defaultPrevented) return;
+      var pop = panel.querySelector('.note-share-popover:not(.note-share-hidden)');
+      if (pop) { pop.classList.add('note-share-hidden'); e.preventDefault(); return; }
+      if (!settingsPopover.classList.contains('notes-settings-hidden')) {
+        settingsPopover.classList.add('notes-settings-hidden');
+        e.preventDefault();
+        return;
+      }
+      e.preventDefault();
+      closePanel();
+    });
 
     // On mobile, dodge the virtual keyboard by adjusting panel bottom offset
     // when the visual viewport shrinks (keyboard opening).
+    function onViewport() {
+      if (!state.open) return;
+      var kbHeight = window.innerHeight - window.visualViewport.height;
+      panel.style.bottom = (kbHeight > 0 ? kbHeight : 0) + 'px';
+    }
     if (window.visualViewport && window.innerWidth < 640) {
-      window.visualViewport.addEventListener('resize', function () {
-        if (!state.open) return;
-        var kbHeight = window.innerHeight - window.visualViewport.height;
-        panel.style.bottom = (kbHeight > 0 ? kbHeight : 0) + 'px';
-      });
+      window.visualViewport.addEventListener('resize', onViewport);
     }
 
-    // Quick-add: Enter in the text input OR clicking the plus button
-    // both create a note from the current input value.
-    function quickAddFromInput() {
-      if (!quickInput) return;
-      var text = quickInput.value.trim();
-      if (!text) return;
-      quickInput.value = '';
-      quickCreateNote(text);
-    }
-    if (quickInput) {
-      quickInput.addEventListener('keydown', function (e) {
-        if (e.key === 'Enter' && !e.shiftKey) {
-          e.preventDefault();
-          quickAddFromInput();
-        }
-      });
-    }
-    var quickAddBtn = panel.querySelector('.notes-quick-add-btn');
-    if (quickAddBtn) {
-      quickAddBtn.addEventListener('click', quickAddFromInput);
-    }
+    // New jot on this page: made at once and opened for writing.
+    if (addBtn) addBtn.addEventListener('click', createNote);
 
     // Search filter: re-render on input with debounce.
-    if (searchInput) {
-      var searchTimer = null;
-      searchInput.addEventListener('input', function () {
-        clearTimeout(searchTimer);
-        searchTimer = setTimeout(function () {
-          state.searchFilter = searchInput.value.trim().toLowerCase();
-          renderNotes();
-        }, 150);
-      });
-    }
+    var searchTimer = null;
+    searchInput.addEventListener('input', function () {
+      clearTimeout(searchTimer);
+      searchTimer = setTimeout(function () {
+        state.searchFilter = searchInput.value.trim().toLowerCase();
+        renderNotes();
+      }, 150);
+    });
 
     // Tab switching.
     tabBtns.forEach(function (btn) {
       btn.addEventListener('click', function () {
         state.tab = btn.getAttribute('data-tab');
-        tabBtns.forEach(function (b) { b.classList.remove('notes-tab-active'); });
-        btn.classList.add('notes-tab-active');
-        updateQuickPlaceholder();
+        tabBtns.forEach(function (b) {
+          var on = b === btn;
+          b.classList.toggle('notes-tab-active', on);
+          b.setAttribute('aria-selected', String(on));
+        });
         renderNotes();
       });
     });
@@ -319,76 +295,64 @@ Chronicle.register('notes', {
     // Settings gear -- toggle popover.
     var settingsBtn = panel.querySelector('.notes-settings-btn');
     var settingsPopover = panel.querySelector('.notes-settings-popover');
-    if (settingsBtn && settingsPopover) {
-      settingsBtn.addEventListener('click', function (e) {
+    settingsBtn.addEventListener('click', function (e) {
+      e.stopPropagation();
+      settingsPopover.classList.toggle('notes-settings-hidden');
+    });
+    settingsPopover.querySelectorAll('.notes-size-opt').forEach(function (btn) {
+      btn.addEventListener('click', function (e) {
         e.stopPropagation();
-        settingsPopover.classList.toggle('notes-settings-hidden');
+        applyTextSize(btn.getAttribute('data-size'));
       });
+    });
 
-      // Size option buttons.
-      settingsPopover.querySelectorAll('.notes-size-opt').forEach(function (btn) {
-        btn.addEventListener('click', function (e) {
-          e.stopPropagation();
-          applyTextSize(btn.getAttribute('data-size'));
-        });
-      });
-
-      // Close popover and move menus when clicking outside.
-      document.addEventListener('click', function (e) {
-        if (!settingsPopover.classList.contains('notes-settings-hidden') &&
-            !settingsPopover.contains(e.target) &&
-            e.target !== settingsBtn && !settingsBtn.contains(e.target)) {
-          settingsPopover.classList.add('notes-settings-hidden');
+    // Close the settings and share popovers when clicking outside them.
+    el._notesDocClick = function (e) {
+      if (!settingsPopover.classList.contains('notes-settings-hidden') &&
+          !settingsPopover.contains(e.target) && !settingsBtn.contains(e.target)) {
+        settingsPopover.classList.add('notes-settings-hidden');
+      }
+      panel.querySelectorAll('.note-share-popover:not(.note-share-hidden)').forEach(function (p) {
+        var shareBtn = p.previousElementSibling;
+        if (!p.contains(e.target) && (!shareBtn || !shareBtn.contains(e.target))) {
+          p.classList.add('note-share-hidden');
         }
-        // Close any open move-to-folder menus.
-        panel.querySelectorAll('.note-move-menu:not(.note-move-hidden)').forEach(function (m) {
-          if (!m.contains(e.target) && !m.previousElementSibling.contains(e.target)) {
-            m.classList.add('note-move-hidden');
-          }
-        });
-        // Close any open share popovers.
-        panel.querySelectorAll('.note-share-popover:not(.note-share-hidden)').forEach(function (p) {
-          if (!p.contains(e.target)) {
-            var shareBtn = p.previousElementSibling;
-            if (!shareBtn || !shareBtn.contains(e.target)) {
-              p.classList.add('note-share-hidden');
-            }
-          }
-        });
       });
-    }
+    };
+    document.addEventListener('click', el._notesDocClick);
 
     // --- External Events ---
     // Listen for note-created events (from quick capture modal) to refresh.
     var _onNoteCreated = function () { if (state.open) loadNotes(); };
     window.addEventListener('chronicle:note-created', _onNoteCreated);
 
-    // Listen for open-note events (from search modal / session journal) to
-    // open the panel and scroll to a specific note.
+    // An "open this note" request (search, session journal): a jot opens here;
+    // anything else is a Journal note and opens in the Journal.
     var _onOpenNote = function (e) {
       var noteId = e.detail && e.detail.noteId;
       if (!noteId) return;
-      // Open panel if closed.
-      if (!state.open) {
-        state.open = true;
-        panel.classList.remove('notes-panel-hidden');
-        fab.classList.add('notes-fab-hidden');
-      }
-      // Switch to "All" tab and reload notes, then highlight the target note.
-      state.tab = 'all';
-      tabBtns.forEach(function (b) {
-        b.classList.toggle('notes-tab-active', b.getAttribute('data-tab') === 'all');
-      });
-      loadNotes();
-      // After reload, try to scroll to and highlight the note.
-      setTimeout(function () {
-        var noteEl = panel.querySelector('[data-note-id="' + noteId + '"]');
-        if (noteEl) {
-          noteEl.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+      fetchNote(noteId).then(function (note) {
+        if (!note) return;
+        if (!note.entityId) {
+          if (Chronicle.openJournalNote && Chronicle.openJournalNote(note.id)) return;
+          window.location.href = journalUrl(note.id);
+          return;
+        }
+        if (!state.open) openPanel();
+        state.tab = note.entityId === entityId ? 'page' : 'mine';
+        tabBtns.forEach(function (b) {
+          var on = b.getAttribute('data-tab') === state.tab;
+          b.classList.toggle('notes-tab-active', on);
+          b.setAttribute('aria-selected', String(on));
+        });
+        loadNotes().then(function () {
+          var noteEl = panel.querySelector('.note-card[data-id="' + noteId + '"]');
+          if (!noteEl) return;
+          noteEl.scrollIntoView({ block: 'nearest' });
           noteEl.classList.add('note-highlight');
           setTimeout(function () { noteEl.classList.remove('note-highlight'); }, 2000);
-        }
-      }, 500);
+        });
+      });
     };
     window.addEventListener('chronicle:open-note', _onOpenNote);
 
@@ -398,168 +362,180 @@ Chronicle.register('notes', {
       return '/campaigns/' + campaignId + '/notes' + (path || '');
     }
 
+    function journalUrl(noteId) {
+      return '/campaigns/' + encodeURIComponent(campaignId) + '/journal' + (noteId ? '/' + encodeURIComponent(noteId) : '');
+    }
+
+    function fetchNote(id) {
+      return Chronicle.apiFetch(apiUrl('/' + encodeURIComponent(id)))
+        .then(function (r) { return r.ok ? r.json() : null; })
+        .catch(function () { return null; });
+    }
+
+    function jotsOnly(list) {
+      return (list || []).filter(function (n) { return n.entityId && !n.isFolder; });
+    }
+
     function loadNotes() {
+      // The jot being edited keeps what was typed over the fresh copy.
+      keepEditingInputs();
+      var editing = state.editingId ? findNote(state.editingId) : null;
       state.loading = true;
       renderNotes();
 
       var promises = [
-        Chronicle.apiFetch(apiUrl('?scope=all')).then(function (r) { return r.ok ? r.json() : []; })
+        Chronicle.apiFetch(apiUrl('?scope=jots')).then(function (r) { return r.ok ? r.json() : []; })
       ];
-
       if (entityId) {
         promises.push(
-          Chronicle.apiFetch(apiUrl('?scope=entity&entity_id=' + entityId)).then(function (r) { return r.ok ? r.json() : []; })
+          Chronicle.apiFetch(apiUrl('?scope=entity&entity_id=' + encodeURIComponent(entityId))).then(function (r) { return r.ok ? r.json() : []; })
         );
       }
 
-      Promise.all(promises).then(function (results) {
-        state.notes = results[0] || [];
-        state.pageNotes = results[1] || [];
+      return Promise.all(promises).then(function (results) {
+        state.jots = jotsOnly(results[0]).filter(function (n) { return n.userId === currentUserId; });
+        state.pageJots = jotsOnly(results[1]);
+        if (editing) replaceNoteInState(editing);
         state.loading = false;
+        updateTabCount();
         renderNotes();
+        loadPageNames();
+        loadRefs();
       }).catch(function () {
         state.loading = false;
-        state.notes = [];
-        state.pageNotes = [];
+        state.jots = [];
+        state.pageJots = [];
         renderNotes();
       });
     }
 
-    /** Quick-create: one-step note from the quick-add input. */
-    function quickCreateNote(text) {
-      var isPageNote = state.tab === 'page' && entityId;
-      var body = {
-        title: text,
-        content: [{ type: 'text', value: '' }]
-      };
-      if (isPageNote) {
-        body.entityId = entityId;
-      }
+    /** Names the pages of the viewer's jots, for the All my jots tab. */
+    function loadPageNames() {
+      var want = [];
+      state.jots.forEach(function (n) {
+        if (n.entityId !== entityId && !(n.entityId in state.pageNames) && want.indexOf(n.entityId) === -1) want.push(n.entityId);
+      });
+      // The server names up to 200 pages per request.
+      for (var i = 0; i < want.length; i += 200) askPageNames(want.slice(i, i + 200));
+    }
 
-      Chronicle.apiFetch(apiUrl(), {
-        method: 'POST',
-        body: body
-      }).then(function (r) { return r.json(); })
-        .then(function (note) {
-          if (isPageNote) {
-            state.pageNotes.unshift(note);
-          }
-          state.notes.unshift(note);
-          renderNotes();
+    function askPageNames(ids) {
+      Chronicle.apiFetch(apiUrl('/page-names?ids=' + encodeURIComponent(ids.join(','))))
+        .then(function (r) { return r.ok ? r.json() : {}; })
+        .then(function (names) {
+          // A page the viewer cannot see stays unnamed ("" marks it asked).
+          ids.forEach(function (id) { state.pageNames[id] = (names && names[id]) || ''; });
+          if (state.tab === 'mine') renderNotes();
         })
-        .catch(function (err) {
-          console.error('[notes] Failed to create note:', err);
-          Chronicle.notify('Failed to save note', 'error');
-          renderNotes();
-        });
+        .catch(function () { /* the cards say "on a page" */ });
     }
 
-    /** Full create with editing mode (from + button). */
-    function createNote(parentId) {
-      var isPageNote = state.tab === 'page' && entityId;
-      var body = {
-        title: '',
-        content: [{ type: 'text', value: '' }]
-      };
-      if (isPageNote) {
-        body.entityId = entityId;
-      }
-      if (parentId) {
-        body.parentId = parentId;
-      }
+    /** How many Journal notes the viewer can see link to this page. */
+    function loadRefs() {
+      if (!entityId || !refsBox) return;
+      Chronicle.apiFetch(apiUrl('/page-refs?entity_id=' + encodeURIComponent(entityId)))
+        .then(function (r) { return r.ok ? r.json() : []; })
+        .then(function (refs) {
+          state.refs = refs || [];
+          renderRefs();
+        })
+        .catch(function () { /* the box keeps its last count */ });
+    }
 
+    /** Loads this page's jot count for the tab while the panel is closed. */
+    function loadCount() {
+      if (!entityId) return;
+      Chronicle.apiFetch(apiUrl('?scope=entity&entity_id=' + encodeURIComponent(entityId)))
+        .then(function (r) { return r.ok ? r.json() : []; })
+        .then(function (list) {
+          if (state.open) return;
+          state.pageJots = jotsOnly(list);
+          updateTabCount();
+        })
+        .catch(function () { /* the tab just shows no count */ });
+    }
+
+    function updateTabCount() {
+      var n = entityId ? state.pageJots.length : 0;
+      tabCount.hidden = n === 0;
+      tabCount.textContent = String(n);
+      fab.setAttribute('aria-label', n ? 'Open jot notes, ' + n + ' on this page' : 'Open jot notes');
+    }
+
+    /**
+     * Leaves the jot being edited before another one opens: its unsaved
+     * edit is saved and its edit lock handed back.
+     */
+    function leaveEditing(nextId) {
+      flushAutosave();
+      if (state.lockedNoteId && state.lockedNoteId !== nextId) releaseLock(state.lockedNoteId);
+    }
+
+    /** A new, empty jot on this page, opened for writing with its title focused. */
+    function createNote() {
+      if (!entityId) return;
+      leaveEditing(null);
       Chronicle.apiFetch(apiUrl(), {
         method: 'POST',
-        body: body
-      }).then(function (r) { return r.json(); })
-        .then(function (note) {
-          if (isPageNote) {
-            state.pageNotes.unshift(note);
-          }
-          state.notes.unshift(note);
-          state.editingId = note.id;
-          // Expand parent folder if creating inside one.
-          if (parentId) {
-            state.collapsedFolders.delete(parentId);
-            saveCollapsedFolders();
-          }
-          renderNotes();
-          var titleInput = notesList.querySelector('.note-card[data-id="' + note.id + '"] .note-title-input');
-          if (titleInput) titleInput.focus();
-        });
-    }
-
-    /** Create a new folder. */
-    function createFolder(parentId) {
-      var name = prompt('Folder name:');
-      if (!name || !name.trim()) return;
-
-      var isPageNote = state.tab === 'page' && entityId;
-      var body = {
-        title: name.trim(),
-        isFolder: true,
-        content: []
-      };
-      if (isPageNote) {
-        body.entityId = entityId;
-      }
-      if (parentId) {
-        body.parentId = parentId;
-      }
-
-      Chronicle.apiFetch(apiUrl(), {
-        method: 'POST',
-        body: body
-      }).then(function (r) { return r.json(); })
-        .then(function (folder) {
-          if (isPageNote) {
-            state.pageNotes.unshift(folder);
-          }
-          state.notes.unshift(folder);
-          if (parentId) {
-            state.collapsedFolders.delete(parentId);
-            saveCollapsedFolders();
-          }
-          renderNotes();
-        });
-    }
-
-    /** Move a note into or out of a folder. */
-    function moveNote(noteId, newParentId) {
-      var data = { parentId: newParentId || '' };
-      updateNote(noteId, data).then(function () {
+        body: { title: '', entityId: entityId, content: [{ type: 'text', value: '' }] }
+      }).then(function (r) {
+        if (!r.ok) throw new Error('HTTP ' + r.status);
+        return r.json();
+      }).then(function (note) {
+        addNoteToState(note);
+        state.editingId = note.id;
         renderNotes();
+        var titleInput = notesList.querySelector('.note-card[data-id="' + note.id + '"] .note-title-input');
+        if (titleInput) titleInput.focus();
+      }).catch(function () {
+        Chronicle.notify('Failed to save note', 'error');
       });
+    }
+
+    function addNoteToState(note) {
+      if (state.tab !== 'page' && entityId) {
+        state.tab = 'page';
+        tabBtns.forEach(function (b) {
+          var on = b.getAttribute('data-tab') === 'page';
+          b.classList.toggle('notes-tab-active', on);
+          b.setAttribute('aria-selected', String(on));
+        });
+      }
+      state.pageJots.unshift(note);
+      if (note.userId === currentUserId) state.jots.unshift(note);
+      updateTabCount();
     }
 
     function updateNote(id, data) {
       return Chronicle.apiFetch(apiUrl('/' + id), {
         method: 'PUT',
         body: data
-      }).then(function (r) { return r.json(); })
-        .then(function (updated) {
-          replaceNoteInState(updated);
-          return updated;
-        });
+      }).then(function (r) {
+        if (!r.ok) throw new Error('HTTP ' + r.status);
+        return r.json();
+      }).then(function (updated) {
+        replaceNoteInState(updated);
+        return updated;
+      });
     }
 
     function deleteNote(id) {
-      var note = findNote(id);
-      var msg = note && note.isFolder
-        ? 'Delete this folder and all notes inside it? This cannot be undone.'
-        : 'Delete this note? This cannot be undone.';
-      if (!confirm(msg)) return;
+      if (!confirm('Delete this jot? This cannot be undone.')) return;
       // Release lock before deleting if we hold one.
       if (state.lockedNoteId === id) {
         releaseLockIfHeld();
       }
       Chronicle.apiFetch(apiUrl('/' + id), {
         method: 'DELETE'
-      }).then(function () {
-        state.notes = state.notes.filter(function (n) { return n.id !== id; });
-        state.pageNotes = state.pageNotes.filter(function (n) { return n.id !== id; });
+      }).then(function (r) {
+        if (!r.ok) throw new Error('HTTP ' + r.status);
+        state.jots = state.jots.filter(function (n) { return n.id !== id; });
+        state.pageJots = state.pageJots.filter(function (n) { return n.id !== id; });
         if (state.editingId === id) state.editingId = null;
+        updateTabCount();
         renderNotes();
+      }).catch(function () {
+        Chronicle.notify('Could not delete the jot.', 'error');
       });
     }
 
@@ -575,8 +551,35 @@ Chronicle.register('notes', {
     }
 
     function replaceNoteInState(updated) {
-      state.notes = state.notes.map(function (n) { return n.id === updated.id ? updated : n; });
-      state.pageNotes = state.pageNotes.map(function (n) { return n.id === updated.id ? updated : n; });
+      state.jots = state.jots.map(function (n) { return n.id === updated.id ? updated : n; });
+      state.pageJots = state.pageJots.map(function (n) { return n.id === updated.id ? updated : n; });
+    }
+
+    /**
+     * Sends a jot to the Journal: the server makes (or finds) the private
+     * Journal note, and the Journal opens at it.
+     */
+    function sendToJournal(noteId) {
+      Chronicle.apiFetch(apiUrl('/' + encodeURIComponent(noteId) + '/send-to-journal'), { method: 'POST' })
+        .then(function (r) {
+          if (!r.ok) throw new Error('HTTP ' + r.status);
+          return r.json();
+        })
+        .then(function (res) {
+          if (res.jot) replaceNoteInState(res.jot);
+          renderNotes();
+          Chronicle.notify(res.existing ? 'Already in the Journal.' : 'Sent to the Journal, linked both ways.', 'success');
+          openInJournal(res.note.id);
+        })
+        .catch(function () {
+          Chronicle.notify('Could not send the jot to the Journal.', 'error');
+        });
+    }
+
+    function openInJournal(noteId) {
+      flushAutosave();
+      if (Chronicle.openJournalNote && Chronicle.openJournalNote(noteId)) return;
+      window.location.href = journalUrl(noteId);
     }
 
     // --- Locking API ---
@@ -693,231 +696,161 @@ Chronicle.register('notes', {
         });
     }
 
+    /** The viewer's Journal notes, for the [[ picker. Loaded once, on first edit. */
+    function loadJournalForLinks() {
+      if (state.journal) return;
+      state.journal = [];
+      Chronicle.apiFetch(apiUrl('/index'))
+        .then(function (r) { return r.ok ? r.json() : { notes: [] }; })
+        .then(function (idx) {
+          state.journal = ((idx && idx.notes) || []).filter(function (n) { return !n.isFolder && !n.archived; });
+          if (Chronicle.NoteLabels) Chronicle.NoteLabels.prime(campaignId, state.journal);
+        })
+        .catch(function () { /* pages still link; notes just are not offered */ });
+    }
+
+    function linkCandidates(query) {
+      var q = (query || '').trim().toLowerCase();
+      return (state.journal || []).filter(function (n) {
+        return !q || (n.title || '').toLowerCase().indexOf(q) !== -1;
+      }).slice(0, 6).map(function (n) {
+        return { id: n.id, title: n.title || 'Untitled', sub: 'Journal note' };
+      });
+    }
+
     // --- Rendering ---
 
-    function updateQuickPlaceholder() {
-      if (!quickInput) return;
-      quickInput.placeholder = state.tab === 'page'
-        ? 'Quick note for this page...'
-        : 'Quick note...';
-    }
-
-    /**
-     * Build a tree structure from a flat list of notes.
-     * Returns array of root-level items, each with a `children` array.
-     */
-    function buildTree(notes) {
-      var byId = {};
-      var roots = [];
-      // Index all notes by ID.
-      notes.forEach(function (n) { byId[n.id] = Object.assign({}, n, { children: [] }); });
-      // Assign children to parents.
-      notes.forEach(function (n) {
-        var node = byId[n.id];
-        if (n.parentId && byId[n.parentId]) {
-          byId[n.parentId].children.push(node);
-        } else {
-          roots.push(node);
-        }
+    /** Jots flat, pinned first, then the most recently changed. */
+    function sortJots(list) {
+      return list.slice().sort(function (a, b) {
+        if (!!a.pinned !== !!b.pinned) return a.pinned ? -1 : 1;
+        return (Date.parse(b.updatedAt) || 0) - (Date.parse(a.updatedAt) || 0);
       });
-      // Sort: folders first, then pinned, then by updatedAt.
-      var sortFn = function (a, b) {
-        if (a.isFolder !== b.isFolder) return a.isFolder ? -1 : 1;
-        if (a.pinned !== b.pinned) return a.pinned ? -1 : 1;
-        return 0;
-      };
-      roots.sort(sortFn);
-      Object.keys(byId).forEach(function (id) { byId[id].children.sort(sortFn); });
-      return roots;
     }
 
-    /** Get all folders from the current note list (for move-to dropdown). */
-    function getFolders(list) {
-      return (list || []).filter(function (n) { return n.isFolder; });
+    function renderRefs() {
+      if (!refsBox) return;
+      var refs = state.refs || [];
+      refsBox.querySelector('.jot-refs-count').textContent = refs.length;
+      refsBox.querySelector('.jot-refs-noun').textContent = refs.length === 1 ? 'Journal note references this page' : 'Journal notes reference this page';
+      var list = refsBox.querySelector('.jot-refs-list');
+      if (!refs.length) {
+        list.innerHTML = '<div class="refline">No Journal notes link to this page yet.</div>';
+        return;
+      }
+      var html = refs.slice(0, REF_CAP).map(function (r) {
+        return '<a class="refline" href="' + Chronicle.escapeAttr(journalUrl(r.id)) + '" data-open-note="' + Chronicle.escapeAttr(r.id) + '">' +
+          Chronicle.escapeHtml(r.title || 'Untitled') + ' <i class="fa-solid fa-arrow-right" aria-hidden="true"></i></a>';
+      }).join('');
+      if (refs.length > REF_CAP) {
+        html += '<a class="refline more" href="' + Chronicle.escapeAttr(journalUrl() + '?links=' + encodeURIComponent(entityId)) + '">+' +
+          (refs.length - REF_CAP) + ' more — see them in the Journal</a>';
+      }
+      list.innerHTML = html;
     }
 
     function renderNotes() {
+      keepEditingInputs();
       // If version history sub-panel is open, render that instead.
       if (state.versionsNoteId) {
         renderVersionsPanel();
         return;
       }
-
-      var list = state.tab === 'page' ? state.pageNotes : state.notes;
-      if (headerTitle) {
-        headerTitle.textContent = state.tab === 'page' ? 'Page Notes' : 'All Notes';
-      }
+      headerTitle.textContent = 'Jot notes';
 
       if (state.loading) {
         notesList.innerHTML = '<div class="notes-empty"><i class="fa-solid fa-spinner fa-spin"></i> Loading...</div>';
         return;
       }
 
-      if (!list || list.length === 0) {
-        var emptyMsg = state.tab === 'page'
-          ? 'No notes for this page yet'
-          : 'No notes yet';
+      var list = state.tab === 'page' ? state.pageJots : state.jots;
+      if (state.searchFilter) {
+        var q = state.searchFilter;
+        list = list.filter(function (n) { return n.title && n.title.toLowerCase().indexOf(q) !== -1; });
+      }
+      if (!list.length) {
+        var emptyMsg = state.searchFilter ? 'No matching jots'
+          : state.tab === 'page' ? 'No jots here yet — add one below.'
+            : 'No jots yet. Jots live on pages: open one to add a jot.';
         notesList.innerHTML = '<div class="notes-empty">' + Chronicle.escapeHtml(emptyMsg) + '</div>';
         return;
       }
 
-      // Apply search filter: keep notes whose title matches, plus any
-      // folders that contain matching children.
-      var filtered = list;
-      if (state.searchFilter) {
-        var q = state.searchFilter;
-        // Collect IDs of notes that match the query.
-        var matchIds = new Set();
-        list.forEach(function (n) {
-          if (!n.isFolder && n.title && n.title.toLowerCase().indexOf(q) !== -1) {
-            matchIds.add(n.id);
-            // Also include the parent folder so the tree stays intact.
-            if (n.parentId) matchIds.add(n.parentId);
-          }
-        });
-        filtered = list.filter(function (n) {
-          return matchIds.has(n.id);
-        });
-        if (filtered.length === 0) {
-          notesList.innerHTML = '<div class="notes-empty">No matching notes</div>';
-          return;
-        }
-      }
+      notesList.innerHTML = sortJots(list).map(renderNoteCard).join('');
 
-      var tree = buildTree(filtered);
-      var html = '';
-      tree.forEach(function (node) {
-        html += renderTreeNode(node, 0, list);
-      });
-      notesList.innerHTML = html;
-
+      // [[links]] to notes are stored without titles; label them for this viewer.
+      if (noteLinksOff) noteLinksOff();
+      noteLinksOff = Chronicle.hydrateNoteLinks ? Chronicle.hydrateNoteLinks(notesList, campaignId) : null;
       bindCardEvents();
       initMiniEditors();
     }
 
-    /** Render a tree node (folder or note) at a given depth. */
-    function renderTreeNode(node, depth, allNotes) {
-      if (node.isFolder) {
-        return renderFolderCard(node, depth, allNotes);
-      }
-      return renderNoteCard(node, depth, allNotes);
+    /**
+     * Carries what is typed in the jot being edited into its state before the
+     * list is drawn again, so a redraw (a share change, page names arriving)
+     * never puts back an older title or checklist line. Nothing is saved here.
+     */
+    function keepEditingInputs() {
+      if (!state.editingId) return;
+      var card = notesList.querySelector('.note-card[data-id="' + state.editingId + '"]');
+      var note = findNote(state.editingId);
+      if (!card || !note) return;
+      var titleInput = card.querySelector('.note-title-input');
+      if (titleInput) note.title = titleInput.value.trim() || 'Untitled';
+      card.querySelectorAll('.note-check-text-input').forEach(function (inp) {
+        var b = note.content && note.content[parseInt(inp.getAttribute('data-block'), 10)];
+        var it = b && b.items && b.items[parseInt(inp.getAttribute('data-item'), 10)];
+        if (it) it.text = inp.value;
+      });
     }
 
-    /** Render a folder as a collapsible container with children. */
-    function renderFolderCard(folder, depth, allNotes) {
-      var isOwner = folder.userId === currentUserId;
-      var isCollapsed = state.collapsedFolders.has(folder.id);
-      var indent = depth > 0 ? ' style="margin-left:' + (depth * 12) + 'px"' : '';
-      var chevron = isCollapsed ? 'fa-chevron-right' : 'fa-chevron-down';
-      var childCount = folder.children ? folder.children.length : 0;
-
-      var html = '<div class="note-folder"' + indent + ' data-folder-id="' + Chronicle.escapeAttr(folder.id) + '">';
-      html += '<div class="note-folder-header" data-id="' + Chronicle.escapeAttr(folder.id) + '">';
-      html += '<button class="note-btn note-folder-toggle" data-folder="' + Chronicle.escapeAttr(folder.id) + '" title="' + (isCollapsed ? 'Expand' : 'Collapse') + '">';
-      html += '<i class="fa-solid ' + chevron + ' text-[10px]"></i></button>';
-      html += '<i class="fa-solid fa-folder' + (isCollapsed ? '' : '-open') + ' text-[11px] text-fg-muted mr-1"></i>';
-      html += '<span class="note-folder-name">' + Chronicle.escapeHtml(folder.title || 'Untitled Folder') + '</span>';
-      html += '<span class="note-folder-count text-fg-muted text-[10px] ml-1">(' + childCount + ')</span>';
-      html += '<div class="note-actions">';
-      // Add note inside folder.
-      html += '<button class="note-btn note-add-in-folder" data-folder="' + Chronicle.escapeAttr(folder.id) + '" title="Add note in folder"><i class="fa-solid fa-plus text-[10px]"></i></button>';
-      // Rename folder.
-      if (isOwner) {
-        html += '<button class="note-btn note-rename-folder" data-folder="' + Chronicle.escapeAttr(folder.id) + '" title="Rename folder"><i class="fa-solid fa-pen text-[10px]"></i></button>';
+    /** Who can see a jot, as the share button's label. */
+    function shareLabel(note) {
+      switch (note.visibility) {
+        case 'party': return 'Shared with party';
+        case 'gm': return 'Shared with the GM';
+        case 'custom': return 'Shared with ' + (note.sharedWith || []).length + ' people';
+        default: return 'Private';
       }
-      // Delete folder (owner only).
-      if (isOwner) {
-        html += '<button class="note-btn note-delete-btn" title="Delete folder"><i class="fa-solid fa-trash-can text-[10px]"></i></button>';
-      }
-      html += '</div></div>';
-
-      // Children (hidden when collapsed).
-      if (!isCollapsed && folder.children && folder.children.length > 0) {
-        html += '<div class="note-folder-children">';
-        folder.children.forEach(function (child) {
-          html += renderTreeNode(child, depth + 1, allNotes);
-        });
-        html += '</div>';
-      }
-
-      html += '</div>';
-      return html;
     }
 
-    function renderNoteCard(note, depth, allNotes) {
+    function renderNoteCard(note) {
       var isEditing = state.editingId === note.id;
       var isOwner = note.userId === currentUserId;
-      var isShared = note.isShared;
-      var hasSharedWith = note.sharedWith && note.sharedWith.length > 0;
-      var isSharedAny = isShared || hasSharedWith;
+      var vis = note.visibility || (note.isShared ? 'party' : (note.sharedWith && note.sharedWith.length ? 'custom' : 'private'));
+      var isSharedAny = vis !== 'private';
       var isLockedByOther = isSharedAny && note.lockedBy && note.lockedBy !== currentUserId && note.lockedAt;
-      var pinClass = note.pinned ? ' note-pinned' : '';
-      var sharedClass = isSharedAny ? ' note-shared' : '';
-      var indent = depth > 0 ? ' style="margin-left:' + (depth * 12) + 'px"' : '';
-      var html = '<div class="note-card' + pinClass + sharedClass + '"' + indent + ' data-id="' + Chronicle.escapeAttr(note.id) + '">';
+      var accent = /^#[0-9a-fA-F]{3,8}$/.test(note.color || '') && note.color !== '#374151' ? ' style="border-left-color:' + note.color + '"' : '';
+      var html = '<div class="note-card"' + accent + ' data-id="' + Chronicle.escapeAttr(note.id) + '">';
 
       // Header row.
       html += '<div class="note-card-header">';
       if (isEditing) {
-        html += '<input type="text" class="note-title-input" value="' + Chronicle.escapeAttr(note.title === 'Untitled' ? '' : note.title) + '" placeholder="Note title...">';
+        html += '<input type="text" class="note-title-input" value="' + Chronicle.escapeAttr(note.title === 'Untitled' ? '' : note.title) + '" placeholder="Jot title..." maxlength="200">';
       } else {
         html += '<span class="note-title">' + Chronicle.escapeHtml(note.title) + '</span>';
       }
       html += '<div class="note-actions">';
 
-      // Shared badge (non-owners see a simple indicator).
-      if (isSharedAny && !isOwner) {
-        var shareTitle = hasSharedWith ? 'Shared with you' : 'Shared note';
-        html += '<span class="note-shared-badge" title="' + shareTitle + '"><i class="fa-solid fa-users text-[9px]"></i></span>';
-      }
-
-      // Share button (owner only) — opens sharing popover.
+      // Share button (owner only) — opens the who-can-see-it popover.
       if (isOwner) {
         var shareIcon = isSharedAny ? 'fa-lock-open' : 'fa-share-nodes';
-        var shareLabel = isShared ? 'Everyone' : hasSharedWith ? note.sharedWith.length + ' player(s)' : 'Private';
+        var nid = Chronicle.escapeAttr(note.id);
         html += '<div class="note-share-wrap">';
-        html += '<button class="note-btn note-share-btn" title="Sharing: ' + shareLabel + '">' +
+        html += '<button class="note-btn note-share-btn" title="' + Chronicle.escapeAttr(shareLabel(note)) + '" aria-haspopup="true">' +
           '<i class="fa-solid ' + shareIcon + ' text-[10px]"></i></button>';
-        html += '<div class="note-share-popover note-share-hidden" data-note-id="' + Chronicle.escapeAttr(note.id) + '">';
+        html += '<div class="note-share-popover note-share-hidden" data-note-id="' + nid + '">';
         html += '<div class="note-share-opts">';
-        html += '<label class="note-share-opt"><input type="radio" name="share-' + Chronicle.escapeAttr(note.id) + '" value="private"' + (!isSharedAny ? ' checked' : '') + '> Private</label>';
-        html += '<label class="note-share-opt"><input type="radio" name="share-' + Chronicle.escapeAttr(note.id) + '" value="everyone"' + (isShared ? ' checked' : '') + '> Everyone</label>';
-        html += '<label class="note-share-opt"><input type="radio" name="share-' + Chronicle.escapeAttr(note.id) + '" value="specific"' + (hasSharedWith ? ' checked' : '') + '> Specific Players</label>';
+        html += '<label class="note-share-opt"><input type="radio" name="share-' + nid + '" value="private"' + (vis === 'private' ? ' checked' : '') + '> Private</label>';
+        html += '<label class="note-share-opt"><input type="radio" name="share-' + nid + '" value="party"' + (vis === 'party' ? ' checked' : '') + '> Shared with party</label>';
+        html += '<label class="note-share-opt"><input type="radio" name="share-' + nid + '" value="gm"' + (vis === 'gm' ? ' checked' : '') + '> Shared with the GM</label>';
+        html += '<label class="note-share-opt"><input type="radio" name="share-' + nid + '" value="specific"' + (vis === 'custom' ? ' checked' : '') + '> Specific people</label>';
         html += '</div>';
-        html += '<div class="note-share-members' + (hasSharedWith ? '' : ' note-share-hidden') + '" data-note-id="' + Chronicle.escapeAttr(note.id) + '">';
+        html += '<div class="note-share-members' + (vis === 'custom' ? '' : ' note-share-hidden') + '" data-note-id="' + nid + '">';
         html += '<div class="note-share-members-loading"><i class="fa-solid fa-spinner fa-spin text-[10px]"></i> Loading...</div>';
         html += '</div>';
         html += '</div>';
         html += '</div>';
-      }
-
-      // Lock indicator (shared notes locked by another user).
-      if (isLockedByOther) {
-        html += '<span class="note-lock-badge" title="Being edited by another user"><i class="fa-solid fa-lock text-[9px]"></i></span>';
-      }
-
-      // Pin button (owner only).
-      if (isOwner) {
-        html += '<button class="note-btn note-pin-btn" title="' + (note.pinned ? 'Unpin' : 'Pin') + '"><i class="fa-solid fa-thumbtack' + (note.pinned ? '' : ' fa-rotate-45') + '"></i></button>';
-      }
-
-      // Move to folder button (owner only, non-folder notes).
-      if (isOwner && !note.isFolder) {
-        var folders = getFolders(allNotes || []);
-        if (folders.length > 0 || note.parentId) {
-          html += '<div class="note-move-wrap">';
-          html += '<button class="note-btn note-move-btn" title="Move to folder"><i class="fa-solid fa-folder-tree text-[10px]"></i></button>';
-          html += '<div class="note-move-menu note-move-hidden">';
-          if (note.parentId) {
-            html += '<button class="note-move-opt" data-move-to="">— Top level —</button>';
-          }
-          folders.forEach(function (f) {
-            if (f.id !== note.id && f.id !== note.parentId) {
-              html += '<button class="note-move-opt" data-move-to="' + Chronicle.escapeAttr(f.id) + '">' + Chronicle.escapeHtml(f.title || 'Untitled') + '</button>';
-            }
-          });
-          html += '</div></div>';
-        }
       }
 
       // Version history button.
@@ -935,7 +868,25 @@ Chronicle.register('notes', {
         html += '<button class="note-btn note-delete-btn" title="Delete"><i class="fa-solid fa-trash-can text-[10px]"></i></button>';
       }
 
+      // Marks last, so at rest (tools hidden) they sit at the card's edge.
+      if (isLockedByOther) {
+        html += '<span class="note-lock-badge" title="Being edited by another user"><i class="fa-solid fa-lock text-[9px]"></i></span>';
+      }
+      if (isSharedAny && !isOwner) {
+        html += '<span class="note-shared-badge" title="' + Chronicle.escapeAttr(shareLabel(note)) + '"><i class="fa-solid fa-users text-[9px]"></i></span>';
+      }
+      if (note.pinned) {
+        html += '<span class="note-pin-mark" title="Pinned"><i class="fa-solid fa-thumbtack text-[9px]"></i></span>';
+      }
+
       html += '</div></div>';
+
+      // In All my jots, each card says which page it sits on.
+      if (state.tab === 'mine' && note.entityId) {
+        var pageName = note.entityId === entityId ? 'this page' : state.pageNames[note.entityId];
+        html += '<a class="jot-page" href="/campaigns/' + Chronicle.escapeAttr(encodeURIComponent(campaignId)) + '/entities/' + Chronicle.escapeAttr(encodeURIComponent(note.entityId)) + '">on ' +
+          Chronicle.escapeHtml(pageName || 'a page') + '</a>';
+      }
 
       // Content blocks.
       html += '<div class="note-card-body">';
@@ -945,54 +896,61 @@ Chronicle.register('notes', {
         html += '<div class="note-tiptap-mount" data-note-editor="' + Chronicle.escapeAttr(note.id) + '"></div>';
 
         // Checklist blocks remain as interactive checkboxes (not TipTap).
-        if (note.content && note.content.length > 0) {
-          note.content.forEach(function (block, bIdx) {
-            if (block.type === 'checklist') {
-              html += '<div class="note-checklist" data-block="' + bIdx + '">';
-              if (block.items) {
-                block.items.forEach(function (item, iIdx) {
-                  var checked = item.checked ? ' checked' : '';
-                  var strikeClass = item.checked ? ' note-checked' : '';
-                  html += '<label class="note-check-item' + strikeClass + '">';
-                  html += '<input type="checkbox"' + checked + ' data-block="' + bIdx + '" data-item="' + iIdx + '" class="note-checkbox">';
-                  html += '<input type="text" class="note-check-text-input" value="' + Chronicle.escapeAttr(item.text) + '" data-block="' + bIdx + '" data-item="' + iIdx + '" placeholder="List item...">';
-                  html += '</label>';
-                });
-              }
-              html += '<button class="note-add-check-item" data-block="' + bIdx + '"><i class="fa-solid fa-plus text-[9px]"></i> Add item</button>';
-              html += '</div>';
-            }
+        (note.content || []).forEach(function (block, bIdx) {
+          if (block.type !== 'checklist') return;
+          html += '<div class="note-checklist" data-block="' + bIdx + '">';
+          (block.items || []).forEach(function (item, iIdx) {
+            var checked = item.checked ? ' checked' : '';
+            var strikeClass = item.checked ? ' note-checked' : '';
+            html += '<label class="note-check-item' + strikeClass + '">';
+            html += '<input type="checkbox"' + checked + ' data-block="' + bIdx + '" data-item="' + iIdx + '" class="note-checkbox">';
+            html += '<input type="text" class="note-check-text-input" value="' + Chronicle.escapeAttr(item.text) + '" data-block="' + bIdx + '" data-item="' + iIdx + '" placeholder="List item...">';
+            html += '</label>';
           });
-        }
+          html += '<button class="note-add-check-item" data-block="' + bIdx + '"><i class="fa-solid fa-plus text-[9px]"></i> Add item</button>';
+          html += '</div>';
+        });
+        html += '<div class="note-add-block"><button class="note-add-tasks" type="button" title="Checklist" aria-label="Checklist"><i class="fa-solid fa-list-check"></i></button></div>';
       } else {
-        // Display mode: show rendered HTML or legacy blocks.
+        // Display mode: the rich text, then any checklist blocks.
         if (note.entryHtml) {
           html += '<div class="note-entry-html">' + note.entryHtml + '</div>';
-        } else if (note.content && note.content.length > 0) {
-          note.content.forEach(function (block, bIdx) {
-            if (block.type === 'text') {
-              if (block.value) {
-                html += '<p class="note-text">' + Chronicle.escapeHtml(block.value) + '</p>';
-              }
-            } else if (block.type === 'checklist') {
-              html += '<div class="note-checklist" data-block="' + bIdx + '">';
-              if (block.items) {
-                block.items.forEach(function (item, iIdx) {
-                  var checked = item.checked ? ' checked' : '';
-                  var strikeClass = item.checked ? ' note-checked' : '';
-                  html += '<label class="note-check-item' + strikeClass + '">';
-                  html += '<input type="checkbox"' + checked + ' data-block="' + bIdx + '" data-item="' + iIdx + '" class="note-checkbox">';
-                  html += '<span>' + Chronicle.escapeHtml(item.text) + '</span>';
-                  html += '</label>';
-                });
-              }
-              html += '</div>';
+        } else {
+          (note.content || []).forEach(function (block) {
+            if (block.type === 'text' && block.value) {
+              html += '<p class="note-text">' + Chronicle.escapeHtml(block.value) + '</p>';
             }
           });
         }
+        (note.content || []).forEach(function (block, bIdx) {
+          if (block.type !== 'checklist') return;
+          html += '<div class="note-checklist" data-block="' + bIdx + '">';
+          (block.items || []).forEach(function (item, iIdx) {
+            var checked = item.checked ? ' checked' : '';
+            var strikeClass = item.checked ? ' note-checked' : '';
+            html += '<label class="note-check-item' + strikeClass + '">';
+            html += '<input type="checkbox"' + checked + ' data-block="' + bIdx + '" data-item="' + iIdx + '" class="note-checkbox">';
+            html += '<span>' + Chronicle.escapeHtml(item.text) + '</span>';
+            html += '</label>';
+          });
+          html += '</div>';
+        });
+      }
+      html += '</div>';
+
+      // Card foot: pin, and the link to the Journal (owner only).
+      if (isOwner && !isEditing) {
+        html += '<div class="jot-card-foot">';
+        html += '<button type="button" class="jot-mini-btn note-pin-btn"><i class="fa-solid fa-thumbtack" aria-hidden="true"></i>' + (note.pinned ? 'Unpin' : 'Pin') + '</button>';
+        if (note.linkedNoteId) {
+          html += '<button type="button" class="jot-mini-btn linked" data-open-journal="' + Chronicle.escapeAttr(note.linkedNoteId) + '"><i class="fa-solid fa-link" aria-hidden="true"></i>Open in Journal</button>';
+        } else {
+          html += '<button type="button" class="jot-mini-btn linked" data-send-journal><i class="fa-solid fa-paper-plane" aria-hidden="true"></i>Send to Journal</button>';
+        }
+        html += '</div>';
       }
 
-      html += '</div></div>';
+      html += '</div>';
       return html;
     }
 
@@ -1001,9 +959,7 @@ Chronicle.register('notes', {
       var note = findNote(state.versionsNoteId);
       var title = note ? Chronicle.escapeHtml(note.title) : 'Note';
 
-      if (headerTitle) {
-        headerTitle.textContent = 'History: ' + (note ? note.title : '');
-      }
+      headerTitle.textContent = 'History: ' + (note ? note.title : '');
 
       if (state.versionsLoading) {
         notesList.innerHTML = '<div class="notes-versions-header">' +
@@ -1074,15 +1030,18 @@ Chronicle.register('notes', {
           var card = btn.closest('.note-card');
           var noteId = card.getAttribute('data-id');
           var note = findNote(noteId);
-
-          // If shared note, acquire lock before entering edit mode.
-          var noteIsSharedAny = note && (note.isShared || (note.sharedWith && note.sharedWith.length > 0));
-          if (noteIsSharedAny) {
+          leaveEditing(noteId);
+          if (note && note.visibility && note.visibility !== 'private') {
             acquireLock(noteId).then(function (locked) {
               if (locked) {
                 state.editingId = noteId;
                 renderNotes();
               } else {
+                // The jot open before has already let go of its lock.
+                if (state.editingId && state.editingId !== noteId) {
+                  state.editingId = null;
+                  renderNotes();
+                }
                 showLockError();
               }
             });
@@ -1101,7 +1060,7 @@ Chronicle.register('notes', {
           var noteId = card.getAttribute('data-id');
           // Flush instead of an unconditional save: clicking Done blurs the
           // editor first (which already flushed if dirty), so a bare
-          // saveEditingNote here would write the note a second time.
+          // save here would write the note a second time.
           flushAutosave();
           state.editingId = null;
           // Release lock if we hold one for this note.
@@ -1119,18 +1078,31 @@ Chronicle.register('notes', {
         inp.addEventListener('input', markNoteDirty);
       });
 
-      // Pin button.
+      // Pin (card foot, owner only).
       notesList.querySelectorAll('.note-pin-btn').forEach(function (btn) {
         btn.addEventListener('click', function (e) {
           e.stopPropagation();
-          var card = btn.closest('.note-card');
-          var noteId = card.getAttribute('data-id');
+          var noteId = btn.closest('.note-card').getAttribute('data-id');
           var note = findNote(noteId);
           if (note) {
             updateNote(noteId, { pinned: !note.pinned }).then(function () {
               renderNotes();
-            });
+            }).catch(function () { Chronicle.notify('Could not pin the jot.', 'error'); });
           }
+        });
+      });
+
+      // Send to Journal / Open in Journal (card foot, owner only).
+      notesList.querySelectorAll('[data-send-journal]').forEach(function (btn) {
+        btn.addEventListener('click', function (e) {
+          e.stopPropagation();
+          sendToJournal(btn.closest('.note-card').getAttribute('data-id'));
+        });
+      });
+      notesList.querySelectorAll('[data-open-journal]').forEach(function (btn) {
+        btn.addEventListener('click', function (e) {
+          e.stopPropagation();
+          openInJournal(btn.getAttribute('data-open-journal'));
         });
       });
 
@@ -1140,7 +1112,6 @@ Chronicle.register('notes', {
           e.stopPropagation();
           var popover = btn.nextElementSibling;
           if (!popover) return;
-          // Close all other share popovers.
           notesList.querySelectorAll('.note-share-popover').forEach(function (p) {
             if (p !== popover) p.classList.add('note-share-hidden');
           });
@@ -1151,17 +1122,11 @@ Chronicle.register('notes', {
         });
       });
 
-      // Delete button (works for both notes and folders).
+      // Delete button.
       notesList.querySelectorAll('.note-delete-btn').forEach(function (btn) {
         btn.addEventListener('click', function (e) {
           e.stopPropagation();
-          var card = btn.closest('.note-card');
-          var folder = btn.closest('.note-folder-header');
-          if (card) {
-            deleteNote(card.getAttribute('data-id'));
-          } else if (folder) {
-            deleteNote(folder.getAttribute('data-id'));
-          }
+          deleteNote(btn.closest('.note-card').getAttribute('data-id'));
         });
       });
 
@@ -1169,24 +1134,21 @@ Chronicle.register('notes', {
       notesList.querySelectorAll('.note-history-btn').forEach(function (btn) {
         btn.addEventListener('click', function (e) {
           e.stopPropagation();
-          var card = btn.closest('.note-card');
-          var noteId = card.getAttribute('data-id');
-          loadVersions(noteId);
+          loadVersions(btn.closest('.note-card').getAttribute('data-id'));
         });
       });
 
       // Checkbox toggle (works in both view and edit modes).
       notesList.querySelectorAll('.note-checkbox').forEach(function (cb) {
         cb.addEventListener('change', function () {
-          var card = cb.closest('.note-card');
-          var noteId = card.getAttribute('data-id');
+          var noteId = cb.closest('.note-card').getAttribute('data-id');
           var bIdx = parseInt(cb.getAttribute('data-block'), 10);
           var iIdx = parseInt(cb.getAttribute('data-item'), 10);
           toggleCheck(noteId, bIdx, iIdx);
         });
       });
 
-      // Add checklist item button.
+      // Add an item to a legacy checklist block.
       notesList.querySelectorAll('.note-add-check-item').forEach(function (btn) {
         btn.addEventListener('click', function (e) {
           e.stopPropagation();
@@ -1195,10 +1157,12 @@ Chronicle.register('notes', {
           var bIdx = parseInt(btn.getAttribute('data-block'), 10);
           var note = findNote(noteId);
           if (note && note.content[bIdx] && note.content[bIdx].type === 'checklist') {
-            saveEditingNote(card, noteId);
-            note = findNote(noteId);
+            // One save carries what was typed and the new, empty line.
+            keepEditingInputs();
             note.content[bIdx].items.push({ text: '', checked: false });
-            updateNote(noteId, { content: note.content }).then(function () {
+            if (autosaveTimer) { clearTimeout(autosaveTimer); autosaveTimer = null; }
+            notesDirty = false;
+            saveEditingNote(noteId).then(function () {
               renderNotes();
               var inputs = notesList.querySelectorAll('.note-card[data-id="' + noteId + '"] .note-check-text-input[data-block="' + bIdx + '"]');
               if (inputs.length) inputs[inputs.length - 1].focus();
@@ -1207,135 +1171,45 @@ Chronicle.register('notes', {
         });
       });
 
-      // Add text block.
-      notesList.querySelectorAll('.note-add-text-block').forEach(function (btn) {
+      // A checklist in the rich text, the same kind the Journal writes.
+      notesList.querySelectorAll('.note-add-tasks').forEach(function (btn) {
+        btn.addEventListener('mousedown', function (e) { e.preventDefault(); });
         btn.addEventListener('click', function (e) {
           e.stopPropagation();
-          var card = btn.closest('.note-card');
-          var noteId = card.getAttribute('data-id');
-          saveEditingNote(card, noteId);
-          var note = findNote(noteId);
-          if (note) {
-            note.content.push({ type: 'text', value: '' });
-            updateNote(noteId, { content: note.content }).then(function () {
-              renderNotes();
-            });
-          }
+          var ed = miniEditors[state.editingId];
+          if (ed && ed.chain().toggleTaskList) ed.chain().focus().toggleTaskList().run();
         });
       });
 
-      // Add checklist block.
-      notesList.querySelectorAll('.note-add-checklist-block').forEach(function (btn) {
-        btn.addEventListener('click', function (e) {
-          e.stopPropagation();
-          var card = btn.closest('.note-card');
-          var noteId = card.getAttribute('data-id');
-          saveEditingNote(card, noteId);
-          var note = findNote(noteId);
-          if (note) {
-            note.content.push({ type: 'checklist', items: [{ text: '', checked: false }] });
-            updateNote(noteId, { content: note.content }).then(function () {
-              renderNotes();
-            });
-          }
-        });
-      });
-
-      // Folder toggle (expand/collapse).
-      notesList.querySelectorAll('.note-folder-toggle').forEach(function (btn) {
-        btn.addEventListener('click', function (e) {
-          e.stopPropagation();
-          var folderId = btn.getAttribute('data-folder');
-          toggleFolderCollapse(folderId);
-        });
-      });
-
-      // Folder header click also toggles.
-      notesList.querySelectorAll('.note-folder-header').forEach(function (hdr) {
-        hdr.addEventListener('click', function (e) {
-          // Don't toggle if clicking on an action button.
-          if (e.target.closest('.note-actions') || e.target.closest('.note-btn')) return;
-          var folderId = hdr.getAttribute('data-id');
-          toggleFolderCollapse(folderId);
-        });
-      });
-
-      // Add note inside folder.
-      notesList.querySelectorAll('.note-add-in-folder').forEach(function (btn) {
-        btn.addEventListener('click', function (e) {
-          e.stopPropagation();
-          var folderId = btn.getAttribute('data-folder');
-          createNote(folderId);
-        });
-      });
-
-      // Rename folder.
-      notesList.querySelectorAll('.note-rename-folder').forEach(function (btn) {
-        btn.addEventListener('click', function (e) {
-          e.stopPropagation();
-          var folderId = btn.getAttribute('data-folder');
-          var folder = findNote(folderId);
-          if (!folder) return;
-          var newName = prompt('Rename folder:', folder.title);
-          if (newName !== null && newName.trim()) {
-            updateNote(folderId, { title: newName.trim() }).then(function () {
-              renderNotes();
-            });
-          }
-        });
-      });
-
-      // Move to folder dropdown toggle.
-      notesList.querySelectorAll('.note-move-btn').forEach(function (btn) {
-        btn.addEventListener('click', function (e) {
-          e.stopPropagation();
-          var menu = btn.nextElementSibling;
-          // Close all other open menus first.
-          notesList.querySelectorAll('.note-move-menu').forEach(function (m) {
-            if (m !== menu) m.classList.add('note-move-hidden');
-          });
-          menu.classList.toggle('note-move-hidden');
-        });
-      });
-
-      // Move option selected.
-      notesList.querySelectorAll('.note-move-opt').forEach(function (opt) {
-        opt.addEventListener('click', function (e) {
-          e.stopPropagation();
-          var card = opt.closest('.note-card');
-          var noteId = card.getAttribute('data-id');
-          var targetId = opt.getAttribute('data-move-to');
-          moveNote(noteId, targetId);
-        });
+      // Journal references open in the Journal.
+      notesList.querySelectorAll('a.note-link').forEach(function (a) {
+        a.addEventListener('click', function () { flushAutosave(); });
       });
     }
 
-    /** Initialize a share popover: wire radio buttons and load members. */
+    /** Initialize a share popover: wire the four audiences and load members. */
     function initSharePopover(popover) {
       var noteId = popover.getAttribute('data-note-id');
       var note = findNote(noteId);
-      if (!note) return;
+      if (!note || popover._wired) {
+        if (note && popover.querySelector('input[value="specific"]:checked')) loadShareMembers(popover, noteId);
+        return;
+      }
+      popover._wired = true;
 
-      // Wire radio buttons.
       popover.querySelectorAll('input[type="radio"]').forEach(function (radio) {
         radio.addEventListener('change', function () {
           var val = radio.value;
           var membersDiv = popover.querySelector('.note-share-members');
-
-          if (val === 'private') {
-            if (membersDiv) membersDiv.classList.add('note-share-hidden');
-            updateNote(noteId, { isShared: false, sharedWith: [] }).then(function () {
-              renderNotes();
-            });
-          } else if (val === 'everyone') {
-            if (membersDiv) membersDiv.classList.add('note-share-hidden');
-            updateNote(noteId, { isShared: true, sharedWith: [] }).then(function () {
-              renderNotes();
-            });
-          } else if (val === 'specific') {
+          if (val === 'specific') {
             if (membersDiv) membersDiv.classList.remove('note-share-hidden');
             loadShareMembers(popover, noteId);
+            return;
           }
+          if (membersDiv) membersDiv.classList.add('note-share-hidden');
+          updateNote(noteId, { visibility: val }).then(function () {
+            renderNotes();
+          }).catch(function () { Chronicle.notify('Could not change who sees the jot.', 'error'); });
         });
       });
 
@@ -1357,7 +1231,7 @@ Chronicle.register('notes', {
           membersDiv.innerHTML = '<div class="note-share-no-members">No other members</div>';
           return;
         }
-        var currentShared = (note && note.sharedWith) || [];
+        var currentShared = (note && note.visibility === 'custom' && note.sharedWith) || [];
         var html = '';
         members.forEach(function (m) {
           // memberRef fields (handler.go): user_id / username / role.
@@ -1369,20 +1243,16 @@ Chronicle.register('notes', {
         });
         membersDiv.innerHTML = html;
 
-        // Wire checkbox changes to update sharing.
+        // Each tick shares with the ticked people; none ticked is private.
         membersDiv.querySelectorAll('.note-share-member-cb').forEach(function (cb) {
           cb.addEventListener('change', function () {
             var selected = [];
             membersDiv.querySelectorAll('.note-share-member-cb:checked').forEach(function (c) {
               selected.push(c.value);
             });
-            updateNote(noteId, { isShared: false, sharedWith: selected }).then(function () {
-              // Update local state without full re-render (keeps popover open).
-              var n = findNote(noteId);
-              if (n) {
-                n.sharedWith = selected;
-                n.isShared = false;
-              }
+            var data = selected.length ? { visibility: 'custom', sharedWith: selected } : { visibility: 'private' };
+            updateNote(noteId, data).catch(function () {
+              Chronicle.notify('Could not change who sees the jot.', 'error');
             });
           });
         });
@@ -1393,25 +1263,24 @@ Chronicle.register('notes', {
     function showLockError() {
       var toast = document.createElement('div');
       toast.className = 'notes-lock-toast';
-      toast.textContent = 'This note is being edited by another user';
+      toast.setAttribute('role', 'status');
+      toast.textContent = 'This jot is being edited by someone else';
       panel.appendChild(toast);
       setTimeout(function () { toast.remove(); }, 3000);
     }
 
-    /** Read all editing inputs from a card and save to the API. */
-    function saveEditingNote(card, noteId) {
+    /**
+     * Saves the jot being edited: its title and checklist lines as typed
+     * (kept in state by keepEditingInputs, so this works while the card is
+     * off screen) and the editor's text. Returns the save.
+     */
+    function saveEditingNote(noteId) {
       var note = findNote(noteId);
-      if (!note) return;
+      if (!note) return Promise.resolve(null);
+      if (noteId === state.editingId) keepEditingInputs();
 
-      var titleInput = card.querySelector('.note-title-input');
-      if (titleInput) {
-        note.title = titleInput.value.trim() || 'Untitled';
-      }
-
-      // Read TipTap editor content if present.
-      var editor = miniEditors[noteId];
       var updateData = { title: note.title };
-
+      var editor = miniEditors[noteId];
       if (editor) {
         var entryJSON = JSON.stringify(editor.getJSON());
         var entryHTML = editor.getHTML();
@@ -1421,22 +1290,15 @@ Chronicle.register('notes', {
         note.entry = entryJSON;
         note.entryHtml = entryHTML;
       }
-
-      // Read checklist block edits (checklists remain outside TipTap).
-      card.querySelectorAll('.note-check-text-input').forEach(function (inp) {
-        var bIdx = parseInt(inp.getAttribute('data-block'), 10);
-        var iIdx = parseInt(inp.getAttribute('data-item'), 10);
-        if (note.content[bIdx] && note.content[bIdx].items && note.content[bIdx].items[iIdx]) {
-          note.content[bIdx].items[iIdx].text = inp.value;
-        }
-      });
-
-      // Include checklist content updates if any checklists exist.
+      // Legacy checklists live outside the editor.
       if (note.content && note.content.some(function (b) { return b.type === 'checklist'; })) {
         updateData.content = note.content;
       }
 
-      updateNote(noteId, updateData);
+      return updateNote(noteId, updateData).catch(function () {
+        Chronicle.notify('Could not save the jot.', 'error');
+        return null;
+      });
     }
 
     /**
@@ -1462,11 +1324,8 @@ Chronicle.register('notes', {
         autosaveTimer = null;
       }
       if (!notesDirty || !state.editingId) return;
-      var card = notesList.querySelector('.note-card[data-id="' + state.editingId + '"]');
-      if (card) {
-        saveEditingNote(card, state.editingId);
-        notesDirty = false;
-      }
+      saveEditingNote(state.editingId);
+      notesDirty = false;
     }
 
     /** Drop any pending autosave without saving (fresh edit session). */
@@ -1479,10 +1338,9 @@ Chronicle.register('notes', {
     }
 
     /**
-     * Initialize mini TipTap editors for notes currently in edit mode.
-     * Called after DOM rendering. Creates a TipTap instance in each
-     * .note-tiptap-mount element, populated with the note's entry content
-     * or converted from legacy text blocks.
+     * Initialize the TipTap editor for the jot in edit mode: the Journal's
+     * editor, with [[links]], @mentions and checklists. Populated from the
+     * jot's entry, else its HTML, else its legacy text blocks.
      */
     function initMiniEditors() {
       // Destroy stale editors for notes no longer editing.
@@ -1496,12 +1354,18 @@ Chronicle.register('notes', {
       if (!window.TipTap) return; // TipTap bundle not loaded.
 
       var mount = panel.querySelector('[data-note-editor="' + state.editingId + '"]');
-      if (!mount || miniEditors[state.editingId]) return;
+      if (!mount) return;
+      var open = miniEditors[state.editingId];
+      if (open) {
+        // The list was drawn again: the same editor, unsaved text and all,
+        // moves into the new card.
+        if (open.view && open.view.dom && open.view.dom.parentNode !== mount) mount.appendChild(open.view.dom);
+        return;
+      }
 
       var note = findNote(state.editingId);
       if (!note) return;
 
-      // Determine initial content: prefer entry JSON, then convert legacy blocks.
       var initialContent = null;
       if (note.entry) {
         try {
@@ -1517,27 +1381,44 @@ Chronicle.register('notes', {
         initialContent = legacyBlocksToHTML(note);
       }
 
+      loadJournalForLinks();
+      var extensions = [
+        TipTap.StarterKit.configure({ link: false, underline: false }),
+        TipTap.Underline,
+        TipTap.Placeholder.configure({ placeholder: 'Write something… type [[ to link a note or a page.' }),
+        (Chronicle.MentionLink || TipTap.Link).configure({ openOnClick: false, autolink: true })
+      ];
+      if (Chronicle.NoteLink) extensions.push(Chronicle.NoteLink.configure({ campaignId: campaignId, onOpen: openInJournal }));
+      if (TipTap.TaskList && TipTap.TaskItem) extensions.push(TipTap.TaskList, TipTap.TaskItem.configure({ nested: true }));
+
+      wikiExt = Chronicle.WikiLinkExtension ? Chronicle.WikiLinkExtension({ campaignId: campaignId, notes: linkCandidates }) : null;
+      mentionExt = Chronicle.MentionExtension ? Chronicle.MentionExtension({ campaignId: campaignId }) : null;
+
       var editor = new TipTap.Editor({
         element: mount,
-        extensions: [
-          TipTap.StarterKit,
-          TipTap.Underline,
-          TipTap.Placeholder.configure({ placeholder: 'Write something...' })
-        ],
+        extensions: extensions,
         editable: true,
         content: initialContent || '<p></p>',
         editorProps: {
           attributes: {
             class: 'prose prose-sm max-w-none focus:outline-none min-h-[60px] p-2 text-fg-body'
+          },
+          handleKeyDown: function (view, event) {
+            if (wikiExt && wikiExt.onKeyDown(null, event)) return true;
+            if (mentionExt && mentionExt.onKeyDown(null, event)) return true;
+            return false;
           }
         },
         // Autosave: debounce on content changes, flush when the editor
         // loses focus (e.g. the user clicks elsewhere before the timer).
-        onUpdate: function () { markNoteDirty(); },
+        // Toggling editability also emits an update; only edits count.
+        onUpdate: function (p) { if (p.transaction && !p.transaction.docChanged) return; if (wikiExt) wikiExt.onUpdate(p.editor); if (mentionExt) mentionExt.onUpdate(p.editor); markNoteDirty(); },
         onBlur: function () { flushAutosave(); }
       });
 
       miniEditors[state.editingId] = editor;
+      if (wikiExt) wikiExt.onCreate(editor);
+      if (mentionExt) mentionExt.onCreate(editor);
       // New edit session: start clean so a stale flag from a prior note
       // can't trigger a spurious save. Runs once per session — initMiniEditors
       // returns early when the editor already exists.
@@ -1546,6 +1427,8 @@ Chronicle.register('notes', {
 
     /** Destroy a mini TipTap editor instance for a note. */
     function destroyMiniEditor(noteId) {
+      if (wikiExt) { wikiExt.onDestroy(); wikiExt = null; }
+      if (mentionExt) { mentionExt.onDestroy(); mentionExt = null; }
       if (miniEditors[noteId]) {
         miniEditors[noteId].destroy();
         delete miniEditors[noteId];
@@ -1558,9 +1441,7 @@ Chronicle.register('notes', {
       var html = '';
       note.content.forEach(function (block) {
         if (block.type === 'text' && block.value) {
-          // Convert newlines to paragraphs.
-          var lines = block.value.split('\n');
-          lines.forEach(function (line) {
+          block.value.split('\n').forEach(function (line) {
             html += '<p>' + Chronicle.escapeHtml(line || '') + '</p>';
           });
         }
@@ -1570,11 +1451,11 @@ Chronicle.register('notes', {
     }
 
     function findNote(id) {
-      for (var i = 0; i < state.notes.length; i++) {
-        if (state.notes[i].id === id) return state.notes[i];
+      for (var i = 0; i < state.pageJots.length; i++) {
+        if (state.pageJots[i].id === id) return state.pageJots[i];
       }
-      for (var j = 0; j < state.pageNotes.length; j++) {
-        if (state.pageNotes[j].id === id) return state.pageNotes[j];
+      for (var j = 0; j < state.jots.length; j++) {
+        if (state.jots[j].id === id) return state.jots[j];
       }
       return null;
     }
@@ -1582,22 +1463,29 @@ Chronicle.register('notes', {
     // --- Panel HTML ---
 
     function buildPanelHTML(eid) {
-      var tabsHtml = '';
-      if (eid) {
-        tabsHtml = '<div class="notes-tabs">' +
-          '<button class="notes-tab notes-tab-active" data-tab="page">This Page</button>' +
-          '<button class="notes-tab" data-tab="all">All Notes</button>' +
-          '</div>';
-      }
+      var tabsHtml = '<div class="notes-tabs" role="tablist">' +
+        (eid ? '<button class="notes-tab notes-tab-active" data-tab="page" role="tab" aria-selected="true">This page</button>' : '') +
+        '<button class="notes-tab' + (eid ? '' : ' notes-tab-active') + '" data-tab="mine" role="tab" aria-selected="' + (eid ? 'false' : 'true') + '">All my jots</button>' +
+        '</div>';
 
-      var quickPlaceholder = eid ? 'Quick note for this page...' : 'Quick note...';
+      var refsHtml = eid
+        ? '<details class="jot-refs"><summary><i class="fa-solid fa-link" aria-hidden="true"></i> <span class="jot-refs-count">0</span> <span class="jot-refs-noun">Journal notes reference this page</span></summary>' +
+          '<div class="jot-refs-list"></div></details>'
+        : '';
+
+      var footHtml = eid
+        ? '<div class="jot-foot"><button class="jot-add-btn" type="button"><i class="fa-solid fa-plus" aria-hidden="true"></i> New jot on this page</button></div>'
+        : '<div class="notes-foot-hint">Jots live on pages: open one to add a jot there.</div>';
 
       return '<div class="notes-resize-handle" title="Drag to resize"></div>' +
         '<div class="notes-header">' +
-        '<span class="notes-header-title">' + (eid ? 'Page Notes' : 'All Notes') + '</span>' +
+        '<i class="fa-solid fa-note-sticky notes-header-icon" aria-hidden="true"></i>' +
+        '<span class="notes-header-title">Jot notes</span>' +
         '<div class="notes-header-actions">' +
-        '<button class="note-btn notes-settings-btn" title="Settings"><i class="fa-solid fa-gear"></i></button>' +
-        '<button class="note-btn notes-close" title="Close"><i class="fa-solid fa-xmark"></i></button>' +
+        '<button class="note-btn notes-pin-panel" type="button" aria-pressed="false"><i class="fa-solid fa-thumbtack"></i></button>' +
+        '<button class="note-btn notes-collapse-btn" type="button" title="Collapse" aria-expanded="true"><i class="fa-solid fa-chevron-down"></i></button>' +
+        '<button class="note-btn notes-settings-btn" type="button" title="Settings"><i class="fa-solid fa-gear"></i></button>' +
+        '<button class="note-btn notes-close" type="button" title="Close" aria-label="Close jot notes"><i class="fa-solid fa-xmark"></i></button>' +
         '</div>' +
         '<div class="notes-settings-popover notes-settings-hidden">' +
         '<div class="notes-settings-label">Text Size</div>' +
@@ -1608,34 +1496,37 @@ Chronicle.register('notes', {
         '</div>' +
         '</div>' +
         '</div>' +
+        '<div class="notes-body">' +
         tabsHtml +
-        '<div class="notes-quick-add">' +
-        '<button class="note-btn notes-quick-add-btn" title="Add note" type="button"><i class="fa-solid fa-plus text-[10px]"></i></button>' +
-        '<input type="text" class="notes-quick-input" placeholder="' + Chronicle.escapeAttr(quickPlaceholder) + '" autocomplete="off">' +
-        '<button class="note-btn notes-new-folder-btn" title="New folder" type="button"><i class="fa-solid fa-folder-plus text-[11px]"></i></button>' +
-        '</div>' +
-        '<div class="notes-search" style="padding:4px 8px">' +
-        '<input type="text" class="notes-search-input" placeholder="Filter notes..." autocomplete="off" style="width:100%;padding:4px 8px;font-size:12px;border:1px solid var(--border-color,#e5e7eb);border-radius:4px;outline:none;background:transparent;color:inherit;">' +
-        '</div>' +
-        '<div class="notes-list"></div>';
+        refsHtml +
+        '<div class="notes-search"><input type="text" class="notes-search-input" placeholder="Filter jots…" aria-label="Filter jots" autocomplete="off"></div>' +
+        '<div class="notes-list"></div>' +
+        footHtml +
+        '</div>';
+    }
+
+    // Journal references in the refs box open in place when the Journal is up.
+    if (refsBox) {
+      refsBox.addEventListener('click', function (e) {
+        var a = e.target.closest('[data-open-note]');
+        if (!a) return;
+        if (Chronicle.openJournalNote && Chronicle.openJournalNote(a.getAttribute('data-open-note'))) e.preventDefault();
+      });
     }
 
     // --- hx-boost navigation sync ---
-    // The notes widget is outside #main-content, so it persists across
-    // boosted navigations. Detect entity context changes and re-mount
-    // with the correct entity ID when the URL changes.
+    // The panel is outside #main-content, so it persists across boosted
+    // navigations. Re-mount it with the new page when the URL changes.
     function onNavigated() {
       // SPA navigation tears the widget down; flush any unsaved edit first.
       flushAutosave();
       var newEntityId = extractEntityIdFromUrl();
       if (newEntityId !== entityId) {
-        // Update the data attribute so re-mount picks up the new entity.
         if (newEntityId) {
           el.setAttribute('data-entity-id', newEntityId);
         } else {
           el.removeAttribute('data-entity-id');
         }
-        // Destroy and re-create the widget with the new entity context.
         Chronicle.destroyWidget(el);
         Chronicle.mountWidgets(el.parentElement || document);
       }
@@ -1661,6 +1552,9 @@ Chronicle.register('notes', {
     // below), but it costs nothing and rescues the common case.
     window.addEventListener('beforeunload', flushAutosave);
 
+    // A pinned panel reopens on the next page; otherwise just count this page.
+    if (isPinnedOpen()) openPanel(); else loadCount();
+
     // Store references for cleanup.
     el._notesState = state;
     el._notesFab = fab;
@@ -1670,10 +1564,17 @@ Chronicle.register('notes', {
     el._notesBeforeUnload = flushAutosave;
     el._notesOnCreated = _onNoteCreated;
     el._notesOnOpenNote = _onOpenNote;
+    el._notesViewport = window.visualViewport ? onViewport : null;
+    el._notesLinksOff = function () {
+      if (noteLinksOff) noteLinksOff();
+      noteLinksOff = null;
+      Object.keys(miniEditors).forEach(destroyMiniEditor);
+    };
+    el._notesRelease = releaseLockIfHeld;
   },
 
   /**
-   * Clean up the notes widget.
+   * Clean up the jot panel.
    * @param {HTMLElement} el - Mount point element.
    */
   destroy: function (el) {
@@ -1682,6 +1583,12 @@ Chronicle.register('notes', {
       el._notesBeforeUnload();
       window.removeEventListener('beforeunload', el._notesBeforeUnload);
       delete el._notesBeforeUnload;
+    }
+    document.removeEventListener('pointermove', el._notesPointerMove);
+    document.removeEventListener('pointerup', el._notesPointerUp);
+    document.removeEventListener('click', el._notesDocClick);
+    if (el._notesViewport && window.visualViewport) {
+      window.visualViewport.removeEventListener('resize', el._notesViewport);
     }
     // Remove hx-boost navigation handler.
     if (el._notesNavHandler) {
@@ -1697,28 +1604,17 @@ Chronicle.register('notes', {
       window.removeEventListener('chronicle:open-note', el._notesOnOpenNote);
       delete el._notesOnOpenNote;
     }
-    // Release any held lock and stop heartbeat.
-    if (el._notesState) {
-      if (el._notesState.lockHeartbeatTimer) {
-        clearInterval(el._notesState.lockHeartbeatTimer);
-      }
-      // Best-effort unlock on destroy (page navigation).
-      if (el._notesState.lockedNoteId && el._notesPanel) {
-        var campaignId = '';
-        var panel = el._notesPanel;
-        if (panel && panel.dataset) {
-          campaignId = el.dataset.campaignId || '';
-        }
-        // We can't reliably call the API during page unload, but try anyway.
-      }
+    // Hand back a held edit lock and stop its heartbeat.
+    if (el._notesRelease) {
+      el._notesRelease();
+      delete el._notesRelease;
     }
-    // Destroy mini TipTap editors.
-    if (el._notesMiniEditors) {
-      Object.keys(el._notesMiniEditors).forEach(function (id) {
-        if (el._notesMiniEditors[id]) el._notesMiniEditors[id].destroy();
-      });
-      delete el._notesMiniEditors;
+    // Label subscriptions and the editors (and their pickers) go too.
+    if (el._notesLinksOff) {
+      el._notesLinksOff();
+      delete el._notesLinksOff;
     }
+    delete el._notesMiniEditors;
     if (el._notesFab) el._notesFab.remove();
     if (el._notesPanel) el._notesPanel.remove();
     delete el._notesState;

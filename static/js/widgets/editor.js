@@ -8,7 +8,9 @@
  *
  * Content is stored as ProseMirror JSON in `entry` and pre-rendered to
  * `entry_html` for display. When editor_mention.js is loaded and a
- * campaign ID is set, typing @ triggers entity-mention search.
+ * campaign ID is set, typing @ triggers entity-mention search, and typing
+ * [[ links a Journal note or a page (editor_notelink.js). A note link is
+ * stored by id only and labelled for each reader.
  */
 (function () {
   'use strict';
@@ -133,6 +135,22 @@
         extensions.push(Chronicle.SecretMark);
       }
 
+      // [[links]] to notes. Always in the schema, so a body holding one
+      // loads anywhere; reading, a click opens the Journal at the note,
+      // unless this reader can't see it. While editing a click selects it.
+      var editorRef = { current: null };
+      if (Chronicle.NoteLink) {
+        extensions.push(Chronicle.NoteLink.configure({
+          campaignId: campaignId,
+          onOpen: function (noteId) {
+            var ed = editorRef.current;
+            if (!ed || ed.isEditable || !campaignId) return;
+            if (Chronicle.NoteLabels && Chronicle.NoteLabels.get(campaignId, noteId) === null) return;
+            window.location.href = '/campaigns/' + encodeURIComponent(campaignId) + '/journal/' + encodeURIComponent(noteId);
+          },
+        }));
+      }
+
       // Build editor props. When mention extension is available and editor
       // is editable, intercept keydown events to let the mention popup
       // handle arrow keys, Enter, and Escape before ProseMirror processes them.
@@ -145,12 +163,17 @@
       // We store references to extensions here so the keydown handler
       // closure can access them. They will be set after editor creation.
       var mentionExtRef = { current: null };
+      var wikiExtRef = { current: null };
       var slashExtRef = { current: null };
 
       if (canEdit) {
         editorProps.handleKeyDown = function (view, event) {
           // Let mention popup handle keys first (if active).
           if (mentionExtRef.current && mentionExtRef.current.onKeyDown(null, event)) {
+            return true;
+          }
+          // Then the [[ picker.
+          if (wikiExtRef.current && wikiExtRef.current.onKeyDown(null, event)) {
             return true;
           }
           // Then let slash command popup handle keys (if active).
@@ -169,6 +192,7 @@
         content: '<p></p>',
         editorProps: editorProps,
       });
+      editorRef.current = editor;
 
       // --- @Mention Extension ---
       // Initialize mention support if the extension module is loaded and we
@@ -180,6 +204,45 @@
         mentionExt.onCreate(editor);
         // Set the ref so the editorProps.handleKeyDown closure can access it.
         mentionExtRef.current = mentionExt;
+      }
+
+      // --- [[ picker ---
+      // Offers the reader's own Journal notes (visible and not archived),
+      // then pages. The notes load once, on the first [[.
+      var wikiExt = null;
+      if (canEdit && campaignId && Chronicle.WikiLinkExtension) {
+        var linkNotes = null;
+        var loadLinkNotes = function () {
+          if (linkNotes) return;
+          linkNotes = [];
+          Chronicle.apiFetch('/campaigns/' + encodeURIComponent(campaignId) + '/notes/index')
+            .then(function (r) { return r.ok ? r.json() : { notes: [] }; })
+            .then(function (idx) {
+              linkNotes = ((idx && idx.notes) || []).filter(function (n) { return !n.isFolder && !n.archived; });
+              if (Chronicle.NoteLabels) Chronicle.NoteLabels.prime(campaignId, linkNotes);
+              if (wikiExt) wikiExt.refresh();
+            })
+            .catch(function () { /* pages are still offered */ });
+        };
+        wikiExt = Chronicle.WikiLinkExtension({
+          campaignId: campaignId,
+          notes: function (query) {
+            loadLinkNotes();
+            var q = (query || '').trim().toLowerCase();
+            var starts = [];
+            var within = [];
+            linkNotes.forEach(function (n) {
+              var t = (n.title || '').toLowerCase();
+              if (!q || t.indexOf(q) === 0) starts.push(n);
+              else if (t.indexOf(q) !== -1) within.push(n);
+            });
+            return starts.concat(within).slice(0, 6).map(function (n) {
+              return { id: n.id, title: n.title || 'Untitled', sub: 'Journal note' };
+            });
+          },
+        });
+        wikiExt.onCreate(editor);
+        wikiExtRef.current = wikiExt;
       }
 
       // --- Slash Command Extension ---
@@ -204,6 +267,7 @@
         toolbar: toolbar,
         headerEl: headerEl,
         mentionExt: mentionExt,
+        wikiExt: wikiExt,
         slashExt: slashExt,
         canEdit: canEdit,
         isEditing: false, // tracks current edit mode state
@@ -230,6 +294,12 @@
       if (mentionExt) {
         editor.on('update', function () {
           mentionExt.onUpdate(editor);
+        });
+      }
+
+      if (wikiExt) {
+        editor.on('update', function () {
+          wikiExt.onUpdate(editor);
         });
       }
 
@@ -279,6 +349,10 @@
       // Clean up mention extension popup and listeners.
       if (state.mentionExt) {
         state.mentionExt.onDestroy();
+      }
+
+      if (state.wikiExt) {
+        state.wikiExt.onDestroy();
       }
 
       // Clean up slash command extension popup.
@@ -541,6 +615,7 @@
     // Menu items: each has an action key, icon, label, and shortcut hint.
     var items = [
       { action: 'mention',        icon: 'fa-diagram-project', label: 'Link Entity',     hint: 'Type @' },
+      { action: 'notelink',       icon: 'fa-file-lines',      label: 'Link a Note',     hint: 'Type [[' },
       { action: 'link',           icon: 'fa-link',            label: 'Insert Link',     hint: '' },
       { action: 'horizontalRule', icon: 'fa-minus',           label: 'Horizontal Rule', hint: '---' },
       { action: 'blockquote',     icon: 'fa-circle-info',     label: 'Callout Block',   hint: '>' },
@@ -623,6 +698,11 @@
         if (state.mentionExt) {
           state.mentionExt.onUpdate(editor);
         }
+        break;
+
+      case 'notelink':
+        // Types [[ at the cursor, which opens the note picker.
+        if (state.wikiExt) state.wikiExt.begin();
         break;
 
       case 'link':

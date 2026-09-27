@@ -130,6 +130,25 @@ func SetActivePath(ctx context.Context, path string) context.Context {
 	return context.WithValue(ctx, keyActivePath, path)
 }
 
+// keyRequestPath holds the request's real URL path. The active path may be
+// overridden for nav highlighting (an entity page highlights its category),
+// so whatever needs the page actually shown reads this one.
+const keyRequestPath ctxKey = "layout_request_path"
+
+// SetRequestPath stores the request's real URL path.
+func SetRequestPath(ctx context.Context, path string) context.Context {
+	return context.WithValue(ctx, keyRequestPath, path)
+}
+
+// GetRequestPath returns the request's real URL path, falling back to the
+// active path for a render that never set it.
+func GetRequestPath(ctx context.Context) string {
+	if p, _ := ctx.Value(keyRequestPath).(string); p != "" {
+		return p
+	}
+	return GetActivePath(ctx)
+}
+
 // --- Getters (called by Templ templates) ---
 
 // IsAuthenticated returns true if the current request has a valid session.
