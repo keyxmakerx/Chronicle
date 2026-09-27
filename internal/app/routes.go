@@ -3458,11 +3458,15 @@ func (a *App) RegisterRoutes() {
 
 			// The sidebar, cut down for this viewer. Rows hidden from
 			// players reach only the owner, and not while they view as a
-			// player (effectiveRole is Player then).
+			// player (effectiveRole is Player then); so does the whole
+			// arrangement the owner's editor starts from.
 			if typesErr == nil {
-				ctx = layouts.SetNavSections(ctx, buildNavSections(cc,
-					effectiveRole >= int(campaigns.RoleOwner), nil,
-					sidebarTypes, counts, enabledSlugs, enabledSystem))
+				in := navInputsFor(cc, sidebarTypes, counts, enabledSlugs, enabledSystem)
+				navOwner := effectiveRole >= int(campaigns.RoleOwner)
+				ctx = layouts.SetNavSections(ctx, viewNavSections(cc, in, navOwner, nil))
+				if navOwner {
+					ctx = layouts.SetNavEdit(ctx, buildNavEdit(in))
+				}
 			}
 
 			// Extension widget scripts for campaign pages.

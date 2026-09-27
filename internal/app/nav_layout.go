@@ -136,15 +136,43 @@ func navSectionViews(secs []campaigns.NavSection) []layouts.NavSectionView {
 
 // navTypeID reads the entity type id back out of a category key ("cat:12").
 func navTypeID(key string) int {
-	const prefix = "cat:"
-	if len(key) <= len(prefix) || key[:len(prefix)] != prefix {
+	kind, ref, ok := campaigns.NavKeyKind(key)
+	if !ok || kind != campaigns.NavRowCategory {
 		return 0
 	}
-	id, err := strconv.Atoi(key[len(prefix):])
+	id, err := strconv.Atoi(ref)
 	if err != nil {
 		return 0
 	}
 	return id
+}
+
+// navInputs is what one campaign's sidebar is built from: its apps, its
+// categories and the owner's arrangement of them.
+type navInputs struct {
+	apps   []campaigns.NavApp
+	cats   []campaigns.NavCategory
+	layout campaigns.NavLayout
+}
+
+// navInputsFor resolves the apps and categories and normalizes the owner's
+// stored items over them.
+func navInputsFor(cc *campaigns.CampaignContext, types []layouts.SidebarEntityType,
+	counts map[int]int, enabled map[string]bool, sys layouts.EnabledSystem) navInputs {
+	apps := navAppsFor(cc.Campaign.ID, enabled, sys)
+	cats := navCategoriesFor(cc.Campaign.ID, types, counts)
+	return navInputs{
+		apps:   apps,
+		cats:   cats,
+		layout: campaigns.NormalizeNav(cc.Campaign.ParseSidebarConfig().Items, apps, cats),
+	}
+}
+
+// viewNavSections cuts the arrangement down for one viewer and maps it to
+// view rows.
+func viewNavSections(cc *campaigns.CampaignContext, in navInputs, owner bool, pins []string) []layouts.NavSectionView {
+	viewer := campaigns.NavViewer{Owner: owner, Access: navAccessFor(cc), Pins: pins}
+	return navSectionViews(campaigns.ViewNav(in.layout, in.apps, in.cats, viewer))
 }
 
 // buildNavSections is the whole sidebar pipeline for one request: normalize
@@ -152,9 +180,67 @@ func navTypeID(key string) int {
 func buildNavSections(cc *campaigns.CampaignContext, owner bool, pins []string,
 	types []layouts.SidebarEntityType, counts map[int]int,
 	enabled map[string]bool, sys layouts.EnabledSystem) []layouts.NavSectionView {
-	apps := navAppsFor(cc.Campaign.ID, enabled, sys)
-	cats := navCategoriesFor(cc.Campaign.ID, types, counts)
-	layout := campaigns.NormalizeNav(cc.Campaign.ParseSidebarConfig().Items, apps, cats)
-	viewer := campaigns.NavViewer{Owner: owner, Access: navAccessFor(cc), Pins: pins}
-	return navSectionViews(campaigns.ViewNav(layout, apps, cats, viewer))
+	return viewNavSections(cc, navInputsFor(cc, types, counts, enabled, sys), owner, pins)
+}
+
+// buildNavEdit is the owner's editor model: the whole arrangement, with rows
+// hidden from players and turned-off apps kept in place and marked, plus the
+// turned-off apps for the editor's tray. Only ever given to the owner.
+func buildNavEdit(in navInputs) *layouts.NavEditView {
+	appBySlug := make(map[string]campaigns.NavApp, len(in.apps))
+	for _, a := range in.apps {
+		appBySlug[a.Slug] = a
+	}
+	catByKey := make(map[string]campaigns.NavCategory, len(in.cats))
+	for _, c := range in.cats {
+		catByKey[campaigns.NavCategoryKey(c.TypeID)] = c
+	}
+
+	out := &layouts.NavEditView{Sections: []layouts.NavEditSection{}, Off: []layouts.NavEditRow{}}
+	for _, s := range in.layout.Sections {
+		sec := layouts.NavEditSection{ID: s.ID, Kind: s.ID, Label: s.Label, Items: []layouts.NavEditRow{}}
+		switch s.ID {
+		case campaigns.NavSectionPinned:
+			sec.Label = "Pinned"
+		case campaigns.NavSectionApps:
+			sec.Label = "Apps"
+		case campaigns.NavSectionCategories:
+			sec.Label = "Categories"
+		default:
+			sec.Kind = campaigns.NavKindCustom
+		}
+		for _, it := range s.Items {
+			kind, ref, ok := campaigns.NavKeyKind(it.Key)
+			if !ok {
+				continue
+			}
+			row := layouts.NavEditRow{Key: it.Key, Kind: kind, Hidden: it.Hidden}
+			switch kind {
+			case campaigns.NavRowApp:
+				a, found := appBySlug[ref]
+				if !found {
+					continue
+				}
+				row.Label, row.Icon, row.Off = a.Label, a.Icon, !a.Enabled
+			case campaigns.NavRowCategory:
+				c, found := catByKey[it.Key]
+				if !found {
+					continue
+				}
+				row.Label, row.Icon, row.Color = c.Label, c.Icon, c.Color
+			case campaigns.NavRowLink:
+				row.Label, row.Icon, row.URL = it.Label, it.Icon, it.URL
+			}
+			sec.Items = append(sec.Items, row)
+		}
+		out.Sections = append(out.Sections, sec)
+	}
+	for _, a := range in.apps {
+		if !a.Enabled {
+			out.Off = append(out.Off, layouts.NavEditRow{
+				Key: campaigns.NavAppKey(a.Slug), Kind: campaigns.NavRowApp, Label: a.Label, Icon: a.Icon, Off: true,
+			})
+		}
+	}
+	return out
 }

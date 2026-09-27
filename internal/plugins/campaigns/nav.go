@@ -176,6 +176,25 @@ func NavCategoryKey(id int) string { return navKeyCategory + ":" + strconv.Itoa(
 // NavLinkKey returns the key of a link item.
 func NavLinkKey(id string) string { return navKeyLink + ":" + id }
 
+// NavKeyKind splits a key into the row kind it names (NavRowApp,
+// NavRowCategory or NavRowLink) and its reference: an app's slug, a
+// category's id or a link's id. ok is false for anything else.
+func NavKeyKind(key string) (kind, ref string, ok bool) {
+	prefix, ref, found := strings.Cut(key, ":")
+	if !found || ref == "" {
+		return "", "", false
+	}
+	switch prefix {
+	case navKeyApp:
+		return NavRowApp, ref, true
+	case navKeyCategory:
+		return NavRowCategory, ref, true
+	case navKeyLink:
+		return NavRowLink, ref, true
+	}
+	return "", "", false
+}
+
 // Formats for ids, app slugs and link icons. Ids and slugs end up in keys and
 // markup; an icon is spliced into a class list, so only a Font Awesome name
 // is accepted there.
@@ -477,12 +496,12 @@ func ViewNav(layout NavLayout, apps []NavApp, cats []NavCategory, viewer NavView
 // navRowFor resolves one layout item into a row, or reports false when the
 // viewer should not see it at all.
 func navRowFor(it NavLayoutItem, apps map[string]NavApp, cats map[int]NavCategory, viewer NavViewer) (NavRow, bool) {
-	prefix, ref, ok := strings.Cut(it.Key, ":")
+	kind, ref, ok := NavKeyKind(it.Key)
 	if !ok {
 		return NavRow{}, false
 	}
-	switch prefix {
-	case navKeyApp:
+	switch kind {
+	case NavRowApp:
 		a, found := apps[ref]
 		if !found || !a.Enabled || viewer.Access < a.Access || a.URL == "" {
 			return NavRow{}, false
@@ -491,7 +510,7 @@ func navRowFor(it NavLayoutItem, apps map[string]NavApp, cats map[int]NavCategor
 			Key: it.Key, Kind: NavRowApp, Label: a.Label, Icon: a.Icon,
 			URL: a.URL, Caption: a.Caption,
 		}, true
-	case navKeyCategory:
+	case NavRowCategory:
 		id, err := strconv.Atoi(ref)
 		if err != nil {
 			return NavRow{}, false
@@ -504,7 +523,7 @@ func navRowFor(it NavLayoutItem, apps map[string]NavApp, cats map[int]NavCategor
 			Key: it.Key, Kind: NavRowCategory, Label: c.Label, Icon: c.Icon,
 			Color: c.Color, URL: c.URL, Count: c.Count, Subs: c.Subs,
 		}, true
-	case navKeyLink:
+	case NavRowLink:
 		target, safe := sanitize.SafeLinkURL(it.URL)
 		if !safe || it.Label == "" {
 			return NavRow{}, false

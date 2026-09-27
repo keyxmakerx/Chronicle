@@ -290,3 +290,74 @@ func TestSidebar_PlayerHTMLHasNoHiddenRow(t *testing.T) {
 		t.Errorf("the owner's sidebar marks %d rows hidden, want 3", got)
 	}
 }
+
+func TestBuildNavEdit_KeepsTheWholeArrangementForTheOwner(t *testing.T) {
+	enabled := navTestEnabled()
+	delete(enabled, "maps") // turned off in Extensions, but arranged: it keeps its place
+	items := append(hiddenTestItems(), campaigns.SidebarItem{Type: "app", Slug: "notes", Section: "pinned", Visible: true})
+	cc := navTestContext(items, campaigns.RoleOwner, true, false)
+	edit := buildNavEdit(navInputsFor(cc, navTestTypes(), map[int]int{1: 9}, enabled, navTestSystem))
+
+	rows := map[string]layouts.NavEditRow{}
+	kinds := map[string]string{}
+	for _, s := range edit.Sections {
+		kinds[s.ID] = s.Kind
+		for _, r := range s.Items {
+			rows[r.Key] = r
+		}
+	}
+	if kinds["pinned"] != "pinned" || kinds["apps"] != "apps" || kinds["categories"] != "categories" || kinds["sec_gm"] != "custom" {
+		t.Fatalf("section kinds = %v", kinds)
+	}
+	if r := rows["app:maps"]; !r.Off || !r.Hidden || r.Label != "Maps" {
+		t.Errorf("a turned-off, hidden app must keep its place, marked: %+v", r)
+	}
+	if r := rows["cat:2"]; !r.Hidden || r.Icon != "" || r.Color != "#fbbf24" {
+		t.Errorf("a hidden category keeps its colour and loses a poisoned icon: %+v", r)
+	}
+	if r := rows["link:lnk_1"]; !r.Hidden || r.URL != "/campaigns/camp-1/tunnel" || r.Kind != "link" {
+		t.Errorf("a hidden link keeps its target: %+v", r)
+	}
+	if _, ok := rows["cat:11"]; ok {
+		t.Errorf("sub-categories move with their parent and have no row of their own in the editor")
+	}
+	off := map[string]bool{}
+	for _, r := range edit.Off {
+		off[r.Key] = r.Off
+	}
+	if !off["app:maps"] || off["app:notes"] {
+		t.Errorf("the tray lists the apps turned off, and only those: %v", off)
+	}
+}
+
+func TestSidebar_EditorDataReachesOnlyTheOwner(t *testing.T) {
+	cc := navTestContext(hiddenTestItems(), campaigns.RoleOwner, true, false)
+	in := navInputsFor(cc, navTestTypes(), nil, navTestEnabled(), navTestSystem)
+	edit := buildNavEdit(in)
+	render := func(role int, viewingAsPlayer bool) string {
+		ctx := navTestLayoutCtx(viewNavSections(cc, in, role >= 3, nil), role)
+		ctx = layouts.SetViewingAsPlayer(ctx, viewingAsPlayer)
+		ctx = layouts.SetNavEdit(ctx, edit) // even if it were set, only an owner's page carries it
+		var buf bytes.Buffer
+		if err := layouts.Sidebar().Render(ctx, &buf); err != nil {
+			t.Fatalf("render Sidebar: %v", err)
+		}
+		return buf.String()
+	}
+	owner := render(int(campaigns.RoleOwner), false)
+	if !strings.Contains(owner, "data-nav-edit=") || !strings.Contains(owner, "Secret Tunnel") {
+		t.Fatalf("the owner's sidebar must carry the editor's arrangement")
+	}
+	for name, html := range map[string]string{
+		"player":                  render(int(campaigns.RolePlayer), false),
+		"scribe":                  render(int(campaigns.RoleScribe), false),
+		"owner viewing as player": render(int(campaigns.RolePlayer), true),
+	} {
+		if strings.Contains(html, "data-nav-edit") || strings.Contains(html, "data-sidebar-edit-toggle") {
+			t.Errorf("%s: the sidebar carries the editor or its pencil", name)
+		}
+		if strings.Contains(html, "Secret Tunnel") || strings.Contains(html, "&#34;hidden&#34;") {
+			t.Errorf("%s: the sidebar leaks a row hidden from players", name)
+		}
+	}
+}

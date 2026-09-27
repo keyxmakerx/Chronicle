@@ -48,12 +48,16 @@ templ campaignNavBrand() {
 
 // campaignNavList is the one scrolling list. It is boosted, so moving between
 // campaign pages swaps only the page and the sidebar (and its ring) stays.
+// The owner's copy also carries the whole arrangement for the editor.
 templ campaignNavList() {
 	<nav
 		id="sidebar-nav"
 		class="nav-scroll"
 		aria-label="Campaign"
 		data-nav-base={ fmt.Sprintf("/campaigns/%s", GetCampaignID(ctx)) }
+		if edit := NavEditJSON(ctx); edit != "" {
+			data-nav-edit={ edit }
+		}
 		hx-boost="true"
 		hx-target="#main-content"
 		hx-select="#main-content"
