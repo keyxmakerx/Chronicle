@@ -150,6 +150,16 @@ func main() {
 		)
 	}
 
+	// Reset any stored icon name that fails the shared icon check. Runs after
+	// every migration so all icon tables exist, and before serving so no page
+	// is built from an old bad value. Idempotent; a failure is logged and
+	// boot continues, since every page also escapes icons.
+	if n, err := database.ReconcileIconColumns(context.Background(), db, app.IconColumns()); err != nil {
+		slog.Error("icon reconcile failed", slog.Any("error", err), slog.Int("rows_fixed", n))
+	} else if n > 0 {
+		slog.Info("icon reconcile: reset invalid stored icons", slog.Int("rows", n))
+	}
+
 	// --- Connect to Redis ---
 	rdb, err := database.NewRedis(cfg.Redis)
 	if err != nil {
