@@ -1118,6 +1118,27 @@ func (h *Handler) UpdateSidebarConfig(c echo.Context) error {
 	return c.JSON(http.StatusOK, map[string]string{"status": "ok"})
 }
 
+// UpdateNavPins stores the caller's own pinned sidebar rows for this campaign
+// (PUT /campaigns/:id/nav-pins, body {"pins": ["app:x", "cat:12"]}) and
+// returns what was stored.
+func (h *Handler) UpdateNavPins(c echo.Context) error {
+	cc := GetCampaignContext(c)
+	if cc == nil {
+		return apperror.NewMissingContext()
+	}
+	var req struct {
+		Pins []string `json:"pins"`
+	}
+	if err := json.NewDecoder(c.Request().Body).Decode(&req); err != nil {
+		return apperror.NewBadRequest("invalid JSON body")
+	}
+	pins, err := h.service.UpdateNavPins(c.Request().Context(), cc, auth.GetUserID(c), req.Pins)
+	if err != nil {
+		return err
+	}
+	return c.JSON(http.StatusOK, map[string][]string{"pins": pins})
+}
+
 // --- Sidebar Drill-Down ---
 
 // SidebarDrill returns the drill-down panel content for a sidebar category

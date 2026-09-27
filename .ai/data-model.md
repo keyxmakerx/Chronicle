@@ -94,7 +94,7 @@ numbered core migrations after it, tracked once each via `golang-migrate`'s
 | Table | Purpose | Notable columns |
 |---|---|---|
 | `campaigns` | A worldbuilding project | `slug` UNIQUE; `settings`/`sidebar_config`/`dashboard_layout`/`owner_dashboard_layout` JSON; `is_public`; `archived_at` (soft-archive); `join_code` UNIQUE (shareable invite link) |
-| `campaign_members` | Campaign ↔ user, with role | composite PK `(campaign_id, user_id)`; `role` CHECK IN (`owner`,`scribe`,`player`); `character_entity_id` FK→`entities` SET NULL |
+| `campaign_members` | Campaign ↔ user, with role | composite PK `(campaign_id, user_id)`; `role` CHECK IN (`owner`,`scribe`,`player`); `character_entity_id` FK→`entities` SET NULL; `nav_pins` JSON (the member's own pinned sidebar row keys, NULL for none) |
 | `campaign_invites` | Email invitations | `token` UNIQUE; `role` CHECK IN (`player`,`scribe`); `expires_at`/`accepted_at` |
 | `ownership_transfers` | Pending campaign-owner handoff | one pending per campaign (`campaign_id` UNIQUE); `token` UNIQUE; 72h expiry |
 | `campaign_storage_limits` | Per-campaign upload/storage overrides | PK `campaign_id`; `bypass_*` columns |

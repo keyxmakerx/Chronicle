@@ -43,6 +43,8 @@ type mockCampaignRepo struct {
 	// UpdateSettings mock was a no-op stub; the hook is opt-in so
 	// existing tests don't need to change.
 	updateSettingsFn        func(ctx context.Context, campaignID, settingsJSON string) error
+	// navPins holds members' own pins, keyed "campaignID/userID".
+	navPins map[string][]string
 }
 
 func (m *mockCampaignRepo) Create(ctx context.Context, campaign *Campaign) error {
@@ -151,6 +153,18 @@ func (m *mockCampaignRepo) UpdateMemberRole(ctx context.Context, campaignID, use
 }
 
 func (m *mockCampaignRepo) UpdateMemberCharacter(ctx context.Context, campaignID, userID string, characterEntityID *string) error {
+	return nil
+}
+
+func (m *mockCampaignRepo) GetMemberNavPins(_ context.Context, campaignID, userID string) ([]string, error) {
+	return m.navPins[campaignID+"/"+userID], nil
+}
+
+func (m *mockCampaignRepo) SetMemberNavPins(_ context.Context, campaignID, userID string, pins []string) error {
+	if m.navPins == nil {
+		m.navPins = map[string][]string{}
+	}
+	m.navPins[campaignID+"/"+userID] = pins
 	return nil
 }
 

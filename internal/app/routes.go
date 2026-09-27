@@ -1957,6 +1957,9 @@ func (a *App) RegisterRoutes() {
 	// Addons plugin: extension framework with per-campaign enable/disable toggles.
 	addonRepo := addons.NewAddonRepository(a.DB)
 	addonService := addons.NewAddonService(addonRepo)
+	// A member's own sidebar pins are checked against the sidebar they see,
+	// which only this composition root can draw.
+	campaignService.SetNavSectionsSource(&navSectionsSource{entities: entityService, addons: addonService})
 	// Drops live Foundry sockets when the Sync API addon is switched off
 	// for a campaign, so a socket that authenticated while it was on can't
 	// keep receiving after it's off. See wsRevokerHolder.
@@ -3403,20 +3406,7 @@ func (a *App) RegisterRoutes() {
 			var sidebarTypes []layouts.SidebarEntityType
 			etypes, typesErr := entityService.GetEntityTypes(reqCtx, cc.Campaign.ID)
 			if typesErr == nil {
-				sidebarTypes = make([]layouts.SidebarEntityType, len(etypes))
-				for i, et := range etypes {
-					sidebarTypes[i] = layouts.SidebarEntityType{
-						ID:           et.ID,
-						Slug:         et.Slug,
-						Name:         et.Name,
-						NamePlural:   et.NamePlural,
-						Icon:         et.Icon,
-						Color:        et.Color,
-						SortOrder:    et.SortOrder,
-						ParentTypeID: et.ParentTypeID,
-					}
-				}
-				// Still set entity types for the drill panel.
+				sidebarTypes = sidebarTypesFrom(etypes)
 				ctx = layouts.SetEntityTypes(ctx, sidebarTypes)
 			}
 
@@ -3434,22 +3424,12 @@ func (a *App) RegisterRoutes() {
 				ctx = layouts.SetEntityCounts(ctx, counts)
 			}
 
-			// Enabled addons for conditional widget rendering.
+			// Enabled addons for conditional widget rendering, and the game
+			// system that backs the campaign's rulebook.
 			enabledSlugs := make(map[string]bool)
 			var enabledSystem layouts.EnabledSystem
 			if campaignAddons, err := addonService.ListForCampaign(reqCtx, cc.Campaign.ID); err == nil {
-				for _, ca := range campaignAddons {
-					if !ca.Enabled {
-						continue
-					}
-					enabledSlugs[ca.AddonSlug] = true
-					// The enabled game system backs the campaign's rulebook
-					// (reference) nav link. Systems are mutually exclusive, so the
-					// first enabled one wins.
-					if ca.AddonCategory == addons.CategorySystem && enabledSystem.Slug == "" {
-						enabledSystem = layouts.EnabledSystem{Slug: ca.AddonSlug, Name: ca.AddonName, Icon: ca.AddonIcon}
-					}
-				}
+				enabledSlugs, enabledSystem = navAddonsFrom(campaignAddons)
 				ctx = layouts.SetEnabledAddons(ctx, enabledSlugs)
 				if enabledSystem.Slug != "" {
 					ctx = layouts.SetEnabledSystem(ctx, enabledSystem)

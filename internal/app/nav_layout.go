@@ -1,10 +1,13 @@
 package app
 
 import (
+	"context"
 	"sort"
 	"strconv"
 
+	"github.com/keyxmakerx/chronicle/internal/plugins/addons"
 	"github.com/keyxmakerx/chronicle/internal/plugins/campaigns"
+	"github.com/keyxmakerx/chronicle/internal/plugins/entities"
 	"github.com/keyxmakerx/chronicle/internal/templates/layouts"
 )
 
@@ -243,4 +246,70 @@ func buildNavEdit(in navInputs) *layouts.NavEditView {
 		}
 	}
 	return out
+}
+
+// sidebarTypesFrom maps a campaign's entity types to the layout's.
+func sidebarTypesFrom(etypes []entities.EntityType) []layouts.SidebarEntityType {
+	out := make([]layouts.SidebarEntityType, len(etypes))
+	for i, et := range etypes {
+		out[i] = layouts.SidebarEntityType{
+			ID:           et.ID,
+			Slug:         et.Slug,
+			Name:         et.Name,
+			NamePlural:   et.NamePlural,
+			Icon:         et.Icon,
+			Color:        et.Color,
+			SortOrder:    et.SortOrder,
+			ParentTypeID: et.ParentTypeID,
+		}
+	}
+	return out
+}
+
+// navAddonsFrom reads which addons a campaign has on, and the game system
+// behind its rulebook. Systems are mutually exclusive, so the first enabled
+// one wins.
+func navAddonsFrom(list []addons.CampaignAddon) (map[string]bool, layouts.EnabledSystem) {
+	enabled := make(map[string]bool)
+	var sys layouts.EnabledSystem
+	for _, ca := range list {
+		if !ca.Enabled {
+			continue
+		}
+		enabled[ca.AddonSlug] = true
+		if ca.AddonCategory == addons.CategorySystem && sys.Slug == "" {
+			sys = layouts.EnabledSystem{Slug: ca.AddonSlug, Name: ca.AddonName, Icon: ca.AddonIcon}
+		}
+	}
+	return enabled, sys
+}
+
+// navSectionsSource draws a member's sidebar, before their own pins, for the
+// campaigns plugin's pin check (campaigns.NavSectionsSource). It gathers the
+// same inputs the LayoutInjector does, so a member can pin exactly the rows
+// their sidebar shows.
+type navSectionsSource struct {
+	entities interface {
+		GetEntityTypes(ctx context.Context, campaignID string) ([]entities.EntityType, error)
+	}
+	addons interface {
+		ListForCampaign(ctx context.Context, campaignID string) ([]addons.CampaignAddon, error)
+	}
+}
+
+// NavSectionsFor implements campaigns.NavSectionsSource. The viewer is never
+// the owner here: only non-owner members have pins of their own.
+func (s *navSectionsSource) NavSectionsFor(ctx context.Context, cc *campaigns.CampaignContext) ([]campaigns.NavSection, error) {
+	etypes, err := s.entities.GetEntityTypes(ctx, cc.Campaign.ID)
+	if err != nil {
+		return nil, err
+	}
+	list, err := s.addons.ListForCampaign(ctx, cc.Campaign.ID)
+	if err != nil {
+		return nil, err
+	}
+	enabled, sys := navAddonsFrom(list)
+	in := navInputsFor(cc, sidebarTypesFrom(etypes), nil, enabled, sys)
+	viewer := campaigns.NavViewer{Access: navAccessFor(cc)}
+	return campaigns.ViewNav(in.layout, in.apps, in.cats, viewer), nil
 }

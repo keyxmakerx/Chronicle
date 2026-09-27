@@ -86,6 +86,9 @@ func RegisterRoutes(e *echo.Echo, h *Handler, svc CampaignService, authSvc auth.
 	// Sidebar config API (Owner only).
 	cg.GET("/sidebar-config", h.GetSidebarConfig, RequireRole(RoleOwner))
 	cg.PUT("/sidebar-config", h.UpdateSidebarConfig, RequireRole(RoleOwner))
+	// A member's own pinned rows; the service refuses the owner, who pins
+	// for everyone through sidebar-config.
+	cg.PUT("/nav-pins", h.UpdateNavPins, RequireRole(RolePlayer))
 
 	// Dashboard layout API (Owner only).
 	cg.GET("/dashboard-layout", h.GetDashboardLayout, RequireRole(RoleOwner))

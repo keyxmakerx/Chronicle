@@ -493,6 +493,47 @@ func ViewNav(layout NavLayout, apps []NavApp, cats []NavCategory, viewer NavView
 	return out
 }
 
+// maxNavPins bounds a member's own pins: the sidebar is a short list.
+const maxNavPins = 24
+
+// PinnableNavKeys lists the rows a member may pin for themselves: every row
+// of their sidebar (as ViewNav draws it before their own pins) outside
+// Pinned. Rows the campaign already pins need no personal pin.
+func PinnableNavKeys(secs []NavSection) map[string]bool {
+	out := make(map[string]bool)
+	for _, s := range secs {
+		if s.ID == NavSectionPinned {
+			continue
+		}
+		for _, r := range s.Rows {
+			out[r.Key] = true
+		}
+	}
+	return out
+}
+
+// CleanNavPins checks a member's pins against what they may pin and returns
+// them without repeats, in order. A key they cannot pin is refused rather than
+// dropped, so a caller learns its view of the sidebar is out of date.
+func CleanNavPins(pins []string, pinnable map[string]bool) ([]string, error) {
+	out := make([]string, 0, len(pins))
+	seen := make(map[string]bool, len(pins))
+	for _, key := range pins {
+		if seen[key] {
+			continue
+		}
+		if !pinnable[key] {
+			return nil, apperror.NewBadRequest("only rows in your own sidebar can be pinned; reload the page and try again")
+		}
+		seen[key] = true
+		out = append(out, key)
+	}
+	if len(out) > maxNavPins {
+		return nil, apperror.NewBadRequest(fmt.Sprintf("you can pin at most %d rows", maxNavPins))
+	}
+	return out, nil
+}
+
 // navRowFor resolves one layout item into a row, or reports false when the
 // viewer should not see it at all.
 func navRowFor(it NavLayoutItem, apps map[string]NavApp, cats map[int]NavCategory, viewer NavViewer) (NavRow, bool) {

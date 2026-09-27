@@ -8,8 +8,10 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/keyxmakerx/chronicle/internal/plugins/addons"
 	"github.com/keyxmakerx/chronicle/internal/plugins/calendar"
 	"github.com/keyxmakerx/chronicle/internal/plugins/campaigns"
+	"github.com/keyxmakerx/chronicle/internal/plugins/entities"
 	"github.com/keyxmakerx/chronicle/internal/templates/layouts"
 )
 
@@ -359,5 +361,46 @@ func TestSidebar_EditorDataReachesOnlyTheOwner(t *testing.T) {
 		if strings.Contains(html, "Secret Tunnel") || strings.Contains(html, "&#34;hidden&#34;") {
 			t.Errorf("%s: the sidebar leaks a row hidden from players", name)
 		}
+	}
+}
+
+// fakeNavEntities and fakeNavAddons stand in for the entity and addon
+// services behind navSectionsSource.
+type fakeNavEntities struct{ types []entities.EntityType }
+
+func (f fakeNavEntities) GetEntityTypes(context.Context, string) ([]entities.EntityType, error) {
+	return f.types, nil
+}
+
+type fakeNavAddons struct{ list []addons.CampaignAddon }
+
+func (f fakeNavAddons) ListForCampaign(context.Context, string) ([]addons.CampaignAddon, error) {
+	return f.list, nil
+}
+
+func TestNavSectionsSource_OffersOnlyWhatThePlayerSees(t *testing.T) {
+	var etypes []entities.EntityType
+	for _, st := range navTestTypes() {
+		etypes = append(etypes, entities.EntityType{ID: st.ID, Slug: st.Slug, Name: st.Name, NamePlural: st.NamePlural,
+			Icon: st.Icon, Color: st.Color, SortOrder: st.SortOrder, ParentTypeID: st.ParentTypeID})
+	}
+	var list []addons.CampaignAddon
+	for slug := range navTestEnabled() {
+		list = append(list, addons.CampaignAddon{AddonSlug: slug, Enabled: true})
+	}
+	src := &navSectionsSource{entities: fakeNavEntities{types: etypes}, addons: fakeNavAddons{list: list}}
+	cc := navTestContext(hiddenTestItems(), campaigns.RolePlayer, true, false)
+	secs, err := src.NavSectionsFor(context.Background(), cc)
+	if err != nil {
+		t.Fatalf("NavSectionsFor: %v", err)
+	}
+	pinnable := campaigns.PinnableNavKeys(secs)
+	for _, hidden := range []string{"app:maps", "cat:2", "link:lnk_1"} {
+		if pinnable[hidden] {
+			t.Errorf("%s is hidden from players and must not be pinnable", hidden)
+		}
+	}
+	if !pinnable["cat:1"] || !pinnable["app:characters"] {
+		t.Errorf("rows the player sees must be pinnable: %v", pinnable)
 	}
 }

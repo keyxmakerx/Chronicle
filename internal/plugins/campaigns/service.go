@@ -113,6 +113,12 @@ type CampaignService interface {
 	// converts campaigns still on the legacy sidebar model onto the unified
 	// items model. Returns the number of campaigns converted.
 	EnsureSidebarItems(ctx context.Context) (int, error)
+	// NavPins returns a member's own pinned sidebar rows, in the order pinned.
+	NavPins(ctx context.Context, campaignID, userID string) ([]string, error)
+	// UpdateNavPins replaces the calling member's own pinned sidebar rows and
+	// returns what was stored. Owners are refused (they pin for everyone in
+	// the sidebar editor), and so is any row the member's sidebar does not show.
+	UpdateNavPins(ctx context.Context, cc *CampaignContext, userID string, pins []string) ([]string, error)
 
 	// Dashboard layout
 	UpdateDashboardLayout(ctx context.Context, campaignID string, layout *DashboardLayout) error
@@ -152,6 +158,17 @@ type CampaignService interface {
 	// and nil-safe: a nil revoker only skips the live-drop, since a
 	// reconnect re-resolves role/grant from current settings anyway.
 	SetConnectionRevoker(cr ConnectionRevoker)
+
+	// SetNavSectionsSource injects what draws a member's sidebar, which
+	// UpdateNavPins checks pins against. Until it is set, pins are refused.
+	SetNavSectionsSource(src NavSectionsSource)
+}
+
+// NavSectionsSource draws a member's sidebar as ViewNav does, before their
+// own pins are applied. The composition root provides it, because only it
+// knows every plugin's apps and addons.
+type NavSectionsSource interface {
+	NavSectionsFor(ctx context.Context, cc *CampaignContext) ([]NavSection, error)
 }
 
 // ConnectionRevoker is the narrow hub view this plugin needs: drop a
@@ -198,6 +215,7 @@ type campaignService struct {
 	mediaCleaner     MediaCleaner           // Cleans up media files on campaign delete. May be nil.
 	hookDispatcher   CampaignHookDispatcher // Dispatches WASM lifecycle events. May be nil.
 	connRevoker      ConnectionRevoker      // Drops live sockets when access is lowered. May be nil until wiring reaches it.
+	navSections      NavSectionsSource      // Draws a member's sidebar for pin checks. Pins are refused while nil.
 	baseURL          string
 }
 
@@ -240,6 +258,47 @@ func (s *campaignService) SetMediaCleaner(cleaner MediaCleaner) {
 // Called after all plugins are wired to avoid initialization order issues.
 func (s *campaignService) SetHookDispatcher(dispatcher CampaignHookDispatcher) {
 	s.hookDispatcher = dispatcher
+}
+
+// SetNavSectionsSource injects what draws a member's sidebar for pin checks.
+func (s *campaignService) SetNavSectionsSource(src NavSectionsSource) {
+	s.navSections = src
+}
+
+// NavPins returns a member's own pinned sidebar rows.
+func (s *campaignService) NavPins(ctx context.Context, campaignID, userID string) ([]string, error) {
+	if campaignID == "" || userID == "" {
+		return nil, nil
+	}
+	return s.repo.GetMemberNavPins(ctx, campaignID, userID)
+}
+
+// UpdateNavPins stores the calling member's own pinned sidebar rows. Every
+// pin is checked against the sidebar that member sees right now, so a pin can
+// never name a row hidden from players or an app they cannot open, and the
+// row written is the caller's own (campaign and user together).
+func (s *campaignService) UpdateNavPins(ctx context.Context, cc *CampaignContext, userID string, pins []string) ([]string, error) {
+	if cc == nil || cc.Campaign == nil || !cc.IsMember || cc.MemberRole < RolePlayer || userID == "" {
+		return nil, apperror.NewForbidden("only members of this campaign can pin rows")
+	}
+	if cc.MemberRole >= RoleOwner {
+		return nil, apperror.NewForbidden("the owner pins rows for everyone in the sidebar editor")
+	}
+	if s.navSections == nil {
+		return nil, apperror.NewInternal(fmt.Errorf("nav sections source is not wired"))
+	}
+	secs, err := s.navSections.NavSectionsFor(ctx, cc)
+	if err != nil {
+		return nil, apperror.NewInternal(fmt.Errorf("drawing the member's sidebar: %w", err))
+	}
+	clean, err := CleanNavPins(pins, PinnableNavKeys(secs))
+	if err != nil {
+		return nil, err
+	}
+	if err := s.repo.SetMemberNavPins(ctx, cc.Campaign.ID, userID, clean); err != nil {
+		return nil, apperror.NewInternal(err)
+	}
+	return clean, nil
 }
 
 // SetConnectionRevoker injects the WebSocket hub's revocation surface.
