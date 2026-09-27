@@ -55,6 +55,7 @@ import (
 	"github.com/keyxmakerx/chronicle/internal/widgets/notes"
 	"github.com/keyxmakerx/chronicle/internal/widgets/posts"
 	"github.com/keyxmakerx/chronicle/internal/widgets/relations"
+	skywidget "github.com/keyxmakerx/chronicle/internal/widgets/sky/templates"
 	"github.com/keyxmakerx/chronicle/internal/widgets/tags"
 )
 
@@ -2873,14 +2874,7 @@ func (a *App) RegisterRoutes() {
 		Description: "Ambient sky only — moons, stars, weather + celestial events for the current world date",
 		Addon:       "calendar", Contexts: []string{"template", "dashboard"}, Singleton: true,
 	}, func(rc entities.BlockRenderContext) templ.Component {
-		entityID := ""
-		if rc.Entity != nil {
-			entityID = rc.Entity.ID
-		}
-		// CALV5-PLACEHOLDER: V5 must restore
-		// calendar.EntitySkyboxBlock(calendarService, ...).
-		_ = entityID
-		return components.FeatureRebuildingBlock("The sky")
+		return renderSkyboxBlock(context.Background(), calendarService, rc)
 	})
 
 	// Timeline plugin blocks (requires "timeline" addon).
@@ -3642,6 +3636,52 @@ func (a *App) RegisterRoutes() {
 	// Mount each registered plugin's static assets at /static/plugins/<slug>/.
 	// Must run AFTER all plugins have called a.registerPlugin() above.
 	a.mountPluginStatic()
+}
+
+// skyboxCalendarService is the narrow seam renderSkyboxBlock needs from
+// calendar.CalendarService — small enough that a test double
+// (skybox_block_test.go) doesn't have to implement the plugin's whole
+// surface. calendar.CalendarService satisfies this structurally, so
+// RegisterRoutes passes it straight through with no adapter.
+type skyboxCalendarService interface {
+	GetDefaultCalendarForViewer(ctx context.Context, campaignID string, v permissions.Viewer) (*calendar.Calendar, error)
+}
+
+// renderSkyboxBlock resolves rc's viewer and campaign, then renders the
+// "skybox" block (see its BlockRegistry.Register call above) for it.
+// Extracted out of that block's registration closure purely so it can be
+// unit tested without spinning up the whole app — see skybox_block_test.go.
+//
+// Failure modes:
+//   - no campaign in context: an empty slot (nothing to resolve against).
+//   - GetDefaultCalendarForViewer's NotFound (no default calendar yet, OR one
+//     the viewer may not see — the two collapse identically, see that
+//     method's own doc comment): sky.Empty's quiet placeholder, not a crash.
+//   - any other error: an infra problem, not a policy outcome — logged and
+//     failed safe to an empty slot, same as the npc_gallery/armory_preview
+//     blocks' own error handling above: an ambient dashboard/entity-page
+//     decoration never turns into a 500.
+func renderSkyboxBlock(ctx context.Context, svc skyboxCalendarService, rc entities.BlockRenderContext) templ.Component {
+	if rc.CC == nil || rc.CC.Campaign == nil {
+		return templ.NopComponent
+	}
+	campaignID := rc.CC.Campaign.ID
+	// Same viewer construction as calendar.viewerFrom (handler.go): promoted
+	// VisibilityRole + the request's user id, empty for an anonymous
+	// public-campaign visitor — this block has no echo.Context to build it
+	// the handler's own way.
+	viewer := permissions.RequestViewer(rc.CC.VisibilityRole(), rc.UserID)
+	cal, err := svc.GetDefaultCalendarForViewer(ctx, campaignID, viewer)
+	if err != nil {
+		var ae *apperror.AppError
+		if errors.As(err, &ae) && ae.Code == http.StatusNotFound {
+			return skywidget.Empty(campaignID)
+		}
+		slog.Error("skybox block: get default calendar for viewer",
+			slog.String("campaign_id", campaignID), slog.Any("error", err))
+		return templ.NopComponent
+	}
+	return skywidget.Mount(campaignID, cal.ID)
 }
 
 // mediaUploadAdapter adapts MediaService to the notes.MediaUploader interface.

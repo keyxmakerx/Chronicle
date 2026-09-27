@@ -185,6 +185,21 @@ templ Base(title string) {
 		<!-- Entity manager widget (sortable, filterable entity list block) -->
 		<script src={ AssetURL("/static/js/widgets/entity_manager.js") } defer></script>
 
+		<!-- Sky pane widget (issue #763): the "skybox" dashboard/template
+		     block's ambient sky — moons, stars, weather, celestial events.
+		     Six files, loaded in the dependency order each one's own header
+		     comment documents: world (astronomy/palette) and looks (weather
+		     recipes) both stand alone; moon (the body renderer) stands alone
+		     too; events (day-event parsing/camera) needs world; the 2D
+		     painter needs world+looks+moon; the widget glue (sky_pane.js,
+		     Chronicle.register('sky-pane', ...)) needs all of the above. -->
+		<script src={ AssetURL("/static/js/widgets/sky_world.js") } defer></script>
+		<script src={ AssetURL("/static/js/widgets/sky_looks.js") } defer></script>
+		<script src={ AssetURL("/static/js/widgets/sky_moon.js") } defer></script>
+		<script src={ AssetURL("/static/js/widgets/sky_events.js") } defer></script>
+		<script src={ AssetURL("/static/js/widgets/sky_2d.js") } defer></script>
+		<script src={ AssetURL("/static/js/widgets/sky_pane.js") } defer></script>
+
 		<!-- Tag filtering in sidebar drill panel -->
 		<script src={ AssetURL("/static/js/sidebar_tag_filter.js") } defer></script>
 

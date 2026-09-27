@@ -290,11 +290,6 @@
     }
   };
 
-  Chronicle.register('sky-pane', {
-    init: function (el) { injectStyles(); var inst = new Instance(el); el._skyPane = inst; inst.init(); },
-    destroy: function (el) { if (el._skyPane) { el._skyPane.destroy(); el._skyPane = null; } }
-  });
-
   // ── Scoped styles. Ported layout from sky-widget.css (the design
   // contract), values re-mapped onto Chronicle's own design tokens
   // (static/css/input.css's --color-*/--ease-*/--dur-* family) instead of
@@ -304,7 +299,25 @@
   // interaction) are ported here too, at the CSS layer only, ahead of need:
   // Part A's calendar page (the day grid) doesn't exist in this branch yet,
   // so nothing here uses them, but they're ready the moment it does — see
-  // internal/widgets/sky/.ai.md's "Integrating into the calendar page". ──
+  // internal/widgets/sky/.ai.md's "Integrating into the calendar page".
+  //
+  // Declared BEFORE Chronicle.register below, not after: every script here
+  // loads with `defer`, and a deferred script executes once the document is
+  // already "interactive" — so Chronicle.register's own mount scan (it
+  // mounts any matching element immediately when the DOM isn't still
+  // "loading", see boot.js) runs SYNCHRONOUSLY as part of evaluating this
+  // very statement, calling injectStyles() before a `var` declared further
+  // down this same file would exist. That was a real, shipped bug: the
+  // hoisted-but-unassigned SKY_PANE_CSS read as undefined,
+  // `style.textContent = undefined` silently became an empty string
+  // (confirmed in Chromium — assigning undefined does NOT stringify to the
+  // word "undefined"), and injectStyles()'s own guard (return early once
+  // #sky-pane-styles exists) meant the pane never got a second chance: the
+  // ENTIRE scoped stylesheet below was permanently empty on every real page
+  // load, in every browser — the widget worked (fetch, render, toggle
+  // state) but rendered fully unstyled. Caught by
+  // test/e2e/sky_pane.spec.mjs's real-browser assertion that the closed
+  // pane's computed height is 0. ──
   var SKY_PANE_CSS = [
     // container-name "cal" reuses the design contract's own container name
     // (.cal in sky-widget.css) so the phone rule below matches whether this
@@ -341,4 +354,9 @@
     '.dwx:focus-visible{outline:2px solid var(--color-text-primary);outline-offset:2px;}',
     '@container cal (max-width:600px){.dcard{max-width:100%;}}'
   ].join('\n');
+
+  Chronicle.register('sky-pane', {
+    init: function (el) { injectStyles(); var inst = new Instance(el); el._skyPane = inst; inst.init(); },
+    destroy: function (el) { if (el._skyPane) { el._skyPane.destroy(); el._skyPane = null; } }
+  });
 })();
