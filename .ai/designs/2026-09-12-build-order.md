@@ -28,10 +28,10 @@ and tint**; page name In the row.
    right-edge card, Owner edits, Scribe sees the badge; retire the edit
    form's inline mount and the bottom-of-Details icon. Small, isolated,
    highest value per token. **Start here.**
-2. **N1 Sidebar: Apps drawer + switcher flyout + brand in place** — Zone 2
-   becomes Dashboard · Apps ▸ · Categories ▸ · My Characters; Apps reuses
-   the categories slide-over; the switcher is the sidebar's second
-   slide-over (search, folded filters incl. Public, current first); header
+2. **N1 Sidebar: switcher flyout + brand in place** — the Apps drawer first
+   planned here is superseded by the sidebar signed on #739 (Pinned +
+   folding sections). The switcher is a slide-over from the sidebar's edge
+   (search, folded filters incl. Public, current first); header
    picker and Campaigns link retire; Owner edits name/logo in the header.
    One `items` model, `SidebarItem` extended, never paralleled. The
    header's left slot shows the path (direction C).
