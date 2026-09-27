@@ -1615,6 +1615,7 @@ func clampCalendarStructure(result *ImportResult) error {
 
 	for i := range result.Moons {
 		mo := &result.Moons[i]
+		mo.Color = normalizeColor(mo.Color)
 		if trunc := truncateImportText(mo.Name, maxCalendarShortNameLength); trunc != mo.Name {
 			mo.Name = trunc
 			result.Warnings = append(result.Warnings, fmt.Sprintf("moon %d's name was too long; shortened", i+1))
@@ -1623,6 +1624,7 @@ func clampCalendarStructure(result *ImportResult) error {
 
 	for i := range result.Eras {
 		e := &result.Eras[i]
+		e.Color = normalizeColor(e.Color)
 		if strings.TrimSpace(e.Name) == "" {
 			e.Name = fmt.Sprintf("Era %d", i+1)
 			result.Warnings = append(result.Warnings, fmt.Sprintf("era %d had no name; named %q", i+1, e.Name))
@@ -1637,6 +1639,12 @@ func clampCalendarStructure(result *ImportResult) error {
 				result.Warnings = append(result.Warnings, fmt.Sprintf("era %d's description was too long; shortened", i+1))
 			}
 		}
+	}
+
+	// Colors are normalized here as well as in each parser, so the wizard's
+	// create step, which re-reads browser-submitted data, gets the same check.
+	for i := range result.Seasons {
+		result.Seasons[i].Color = normalizeColor(result.Seasons[i].Color)
 	}
 
 	n := len(result.Months)

@@ -85,6 +85,37 @@ func TestParseWizardImportJSON_TamperedStructureGetsSameValidationAsUpload(t *te
 // tampered import_json must be refused by the handler, proving
 // parseWizardImportJSON is actually wired into WizardCreate and not just
 // correct in isolation.
+// TestParseWizardImportJSON_NormalizesColors: colors arriving through the
+// wizard's browser-submitted data get the same check an upload's colors get
+// in each parser, so an unchecked value never reaches the store.
+func TestParseWizardImportJSON_NormalizesColors(t *testing.T) {
+	ir := &ImportResult{
+		Format:       FormatChronicle,
+		CalendarName: "Colors",
+		Months:       []MonthInput{{Name: "Firstmonth", Days: 30}},
+		Moons:        []MoonInput{{Name: "Luna", CycleDays: 28, Color: "red;x:y"}},
+		Seasons:      []Season{{Name: "Spring", StartMonth: 1, StartDay: 1, EndMonth: 1, EndDay: 30, Color: "abc"}},
+		Eras:         []EraInput{{Name: "First Age", StartYear: 1, Color: "url(x)"}},
+	}
+	raw, err := json.Marshal(ir)
+	if err != nil {
+		t.Fatalf("marshal fixture: %v", err)
+	}
+	got, err := parseWizardImportJSON(string(raw))
+	if err != nil {
+		t.Fatalf("parseWizardImportJSON: %v", err)
+	}
+	if c := got.Moons[0].Color; c != "#808080" {
+		t.Errorf("moon color = %q, want the #808080 fallback", c)
+	}
+	if c := got.Seasons[0].Color; c != "#aabbcc" {
+		t.Errorf("season color = %q, want #aabbcc", c)
+	}
+	if c := got.Eras[0].Color; c != "#808080" {
+		t.Errorf("era color = %q, want the #808080 fallback", c)
+	}
+}
+
 func TestWizardCreate_TamperedImportJSONIsRefused(t *testing.T) {
 	const campaignID = "camp-wizard-tampered-import"
 	e := echo.New()
