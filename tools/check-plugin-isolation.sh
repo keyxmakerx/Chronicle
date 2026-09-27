@@ -135,6 +135,9 @@ always_allowed_prefixes=(
   "internal/plugins/timeline/search_visibility_reachability_test.go"
   # Same reason: its scratch-schema helper applies calendar's migrations first.
   "internal/plugins/timeline/repository_test.go"
+  # Same reason: the timeline visibility tests' scratch schema gets calendar's
+  # and then timeline's migrations, named by slug in the fixture.
+  "internal/app/timeline_entity_visibility_leak_test.go"
 )
 
 # ---------------------------------------------------------------------------
