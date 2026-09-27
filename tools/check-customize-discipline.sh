@@ -1,19 +1,21 @@
 #!/usr/bin/env bash
 # tools/check-customize-discipline.sh
 #
-# CUSTOMIZE SURFACE DISCIPLINE LOCK: every customization dimension on
-# Customize -> Appearance ships as first-class server-rendered templ markup
-# (no JS-injected UI control), a save reaches it through the staged
-# draft/save/discard flow (no setTimeout-driven page reload), and any JSON
-# handed to the browser is produced by encoding/json, not hand-assembled
-# inside a templ file.
+# Three checks against a fixed file list on the Customize -> Appearance
+# surface: JS constructing a topbar mode/upload control that belongs in
+# server-rendered templ markup instead; a setTimeout(...) whose body reloads
+# the page rather than swapping the affected fragment; and a hand-built
+# multi-field JSON string literal in a templ file, in place of encoding/json.
+# These are heuristics on the three concrete shapes named above, not a
+# general "no bad JS/JSON" scan.
 #
 # Whole-tree, not diff-scoped, against a FIXED file list: this guard exists
 # specifically so a returning regression fails even when nobody remembers it
 # was already fixed once, not only a new violation on a diff. Needs no git
 # history. Self-test: --self-test-only.
 #
-# Exit: 0 clean / 1 a rule fired / 2 self-test failed
+# Exit: 0 clean / 1 a rule fired (including a listed file that's missing) /
+# 2 self-test failed
 set -euo pipefail
 
 # The Customize surface this guard polices. A new Customize file joins this
@@ -28,12 +30,26 @@ JS_FILES=(
   "static/js/widgets/appearance_editor.js"
 )
 
+# require_file_exists <file>
+#   Prints an ERROR and fails if <file> doesn't exist. A listed file that's
+#   gone means every check below silently runs against nothing for it — a
+#   guard reporting clean while checking less than it claims. Missing is a
+#   failure, not something to skip past.
+require_file_exists() {
+  if [[ ! -f "$1" ]]; then
+    echo "ERROR: $1 is listed here but does not exist — update the file list, or restore the file."
+    return 1
+  fi
+  return 0
+}
+
 # setTimeout_reload_hits <file>
 #   Prints one "line N" hit per setTimeout(...) call whose argument list
 #   contains a "reload(" call, and returns non-zero if it found any. A
-#   paren-depth scan, not a line-bounded regex, because the regression this
-#   guards (a `setTimeout(function(){ location.reload(); }, 600)` after a
-#   save) and its natural fix both wrap the callback across several lines.
+#   paren-depth scan, not a line-bounded regex, because a
+#   `setTimeout(function(){ location.reload(); }, 600)` and its fix (an
+#   HTMX-style swap of the affected fragment) both wrap the callback across
+#   several lines.
 setTimeout_reload_hits() {
   awk '
     BEGIN { armed = 0; depth = 0; buf = ""; startLine = 0; hits = 0 }
@@ -69,9 +85,8 @@ setTimeout_reload_hits() {
 # manual_json_hits <file>
 #   Flags the hand-built-JSON signature: a backtick string literal opening on
 #   `{"` with a SECOND quoted key following a comma — e.g.
-#   `{"mode":"%s","color":"%s",...}` (what topbarStyleJSON / topbarContentJSON
-#   looked like before #632). The comma is what tells a multi-field config
-#   blob (the anti-pattern) apart from this same codebase's pervasive
+#   `{"mode":"%s","color":"%s",...}`. The comma is what tells a multi-field
+#   config blob (the anti-pattern) apart from this same codebase's pervasive
 #   single-field wire idiom, `hx-headers={ fmt.Sprintf(`{"X-CSRF-Token":"%s"}`,
 #   ...) }` and the equivalent one-key hx-vals, neither of which has a second
 #   field to comma-separate. An Alpine.js x-data object literal — the other
@@ -84,10 +99,10 @@ manual_json_hits() {
 
 # js_injected_ui_hits <file>
 #   Flags JS constructing a `data-mode="..."` control or a `type="file"`
-#   input as a string/DOM-build — the exact shape of the historical topbar
-#   Image-mode regression (built in JS instead of shipping as first-class
-#   TopbarImageSection markup). This file only ever READS data-mode (
-#   `querySelectorAll('button[data-mode]')`, `getAttribute('data-mode')` —
+#   input as a string/DOM-build: the topbar Image mode's button and upload
+#   panel belong in branding.templ's server-rendered markup (TopbarImageSection),
+#   never assembled here. This file only ever READS data-mode
+#   (`querySelectorAll('button[data-mode]')`, `getAttribute('data-mode')` —
 #   neither has `=` immediately after `data-mode`), so a write signature here
 #   is unambiguous.
 js_injected_ui_hits() {
@@ -106,7 +121,8 @@ self_test() {
   if setTimeout_reload_hits "${tmp}/bad1.js" >/dev/null; then
     echo "  self-test FAILED: single-line setTimeout(reload) not caught" >&2; fail=1
   fi
-  # setTimeout+reload: multi-line (the historical shape).
+  # setTimeout+reload: multi-line, the shape a swapped-in fragment callback
+  # actually takes.
   printf 'setTimeout(function () {\n  window.location.reload();\n}, 600);\n' > "${tmp}/bad2.js"
   if setTimeout_reload_hits "${tmp}/bad2.js" >/dev/null; then
     echo "  self-test FAILED: multi-line setTimeout(reload) not caught" >&2; fail=1
@@ -118,9 +134,8 @@ self_test() {
     echo "  self-test FAILED: an unrelated setTimeout tripped the guard" >&2; fail=1
   fi
 
-  # Manual JSON in a templ file: the real historical shape has several
-  # fields, which is exactly what tells it apart from the single-field wire
-  # idiom below.
+  # Manual JSON in a templ file: a multi-field literal is what tells the
+  # anti-pattern apart from the single-field wire idiom below.
   printf 'func f() string { return fmt.Sprintf(`{"mode":"%%s","color":"%%s"}`, x, y) }\n' > "${tmp}/bad.templ"
   if [[ -z "$(manual_json_hits "${tmp}/bad.templ")" ]]; then
     echo "  self-test FAILED: hand-built JSON literal not caught" >&2; fail=1
@@ -152,6 +167,14 @@ self_test() {
     echo "  self-test FAILED: reading data-mode via getAttribute false-positived" >&2; fail=1
   fi
 
+  # A missing listed file must fail, not be silently skipped.
+  if require_file_exists "${tmp}/does-not-exist.js" >/dev/null; then
+    echo "  self-test FAILED: a missing listed file did not fail" >&2; fail=1
+  fi
+  if ! require_file_exists "${tmp}/bad1.js" >/dev/null; then
+    echo "  self-test FAILED: an existing file was reported as missing" >&2; fail=1
+  fi
+
   return "${fail}"
 }
 
@@ -161,7 +184,7 @@ if ! self_test; then
 fi
 
 if [[ "${1:-}" == "--self-test-only" ]]; then
-  echo "check-customize-discipline: self-test OK (setTimeout-reload / manual-JSON / JS-injected-UI each fire, clean stays quiet)."
+  echo "check-customize-discipline: self-test OK (missing-file / setTimeout-reload / manual-JSON / JS-injected-UI each fire, clean stays quiet)."
   exit 0
 fi
 
@@ -173,7 +196,10 @@ cd "${repo_root}"
 problems=0
 
 for f in "${JS_FILES[@]}"; do
-  [[ -f "${f}" ]] || continue
+  if ! require_file_exists "${f}"; then
+    problems=1
+    continue
+  fi
   if out="$(setTimeout_reload_hits "${f}")"; then
     :
   else
@@ -190,7 +216,10 @@ for f in "${JS_FILES[@]}"; do
 done
 
 for f in "${TEMPL_FILES[@]}"; do
-  [[ -f "${f}" ]] || continue
+  if ! require_file_exists "${f}"; then
+    problems=1
+    continue
+  fi
   out="$(manual_json_hits "${f}")"
   if [[ -n "${out}" ]]; then
     echo "ERROR: ${f} hand-assembles a JSON string literal; build it with encoding/json from a small .go helper instead:"
@@ -201,11 +230,12 @@ done
 
 if [[ "${problems}" -ne 0 ]]; then
   echo
-  echo "See CLEANUP-B (Chronicle issue #632): no JS-injected UI, no setTimeout"
-  echo "reloads, no manual JSON construction in templ files on the Customize"
-  echo "surface. Each is a returning regression this guard exists to reject."
+  echo "Each of these is a regression this guard exists to reject: a mode or"
+  echo "upload control built in JS instead of shipped as templ markup, a"
+  echo "setTimeout that reloads the page instead of swapping a fragment, or a"
+  echo "hand-built multi-field JSON literal instead of encoding/json."
   exit 1
 fi
 
-echo "check-customize-discipline: OK — no JS-injected UI, no setTimeout reloads, no hand-built JSON in the Customize files. (self-test OK)"
+echo "check-customize-discipline: OK — no JS-built mode/upload control, no setTimeout reload, no hand-built JSON in the Customize files. (self-test OK)"
 exit 0
