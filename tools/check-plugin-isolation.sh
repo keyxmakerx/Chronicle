@@ -133,6 +133,8 @@ always_allowed_prefixes=(
   # loads the calendar plugin's migrations off disk via os.DirFS rather than
   # importing the plugin.
   "internal/plugins/timeline/search_visibility_reachability_test.go"
+  # Same reason: its scratch-schema helper applies calendar's migrations first.
+  "internal/plugins/timeline/repository_test.go"
 )
 
 # ---------------------------------------------------------------------------

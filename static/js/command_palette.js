@@ -69,7 +69,10 @@
       cmds.push({ label: 'Go to Journal', icon: 'fa-book', href: '/campaigns/' + cid + '/journal', shortcut: '' });
       cmds.push({ label: 'Go to Media', icon: 'fa-images', href: '/campaigns/' + cid + '/media', shortcut: '' });
       cmds.push({ label: 'Go to Members', icon: 'fa-users', href: '/campaigns/' + cid + '/members', shortcut: '' });
-      cmds.push({ label: 'Go to NPCs', icon: 'fa-people-group', href: '/campaigns/' + cid + '/npcs', shortcut: '' });
+      // Characters already lists the party and NPCs together, so this is the
+      // palette's one entry for both -- straight to the page, not the old
+      // /npcs redirect hop.
+      cmds.push({ label: 'Go to Characters', icon: 'fa-masks-theater', href: '/campaigns/' + cid + '/characters', shortcut: '' });
       cmds.push({ label: 'Go to Relations Graph', icon: 'fa-diagram-project', href: '/campaigns/' + cid + '/relations-graph/page', shortcut: '' });
       cmds.push({ label: 'Go to Settings', icon: 'fa-gear', href: '/campaigns/' + cid + '/settings', shortcut: '' });
       cmds.push({ label: 'Go to Customize', icon: 'fa-palette', href: '/campaigns/' + cid + '/customize', shortcut: '' });

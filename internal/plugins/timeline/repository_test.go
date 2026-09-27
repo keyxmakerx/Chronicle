@@ -18,13 +18,17 @@ import (
 	"go/ast"
 	"go/parser"
 	"go/token"
+	"io/fs"
+	mrand "math/rand"
 	"os"
+	"path/filepath"
 	"regexp"
 	"strings"
 	"testing"
 
 	"github.com/go-sql-driver/mysql"
 
+	"github.com/keyxmakerx/chronicle/internal/database"
 	"github.com/keyxmakerx/chronicle/internal/permissions"
 )
 
@@ -124,6 +128,10 @@ func TestEventCountVisibility_MatchesListFilters(t *testing.T) {
 // (ListTimelineEvents: repo filter + EffectiveVisibility()) returns for both
 // a player and an owner viewer. Links carrying visibility_rules remain
 // outside this agreement (resolved in Go per user; see List's doc comment).
+//
+// CALV5-PLACEHOLDER: event links are dark until V5 restores the
+// calendar_events join, so these counts cover only the standalone dm_only
+// event. With the join back, the wants are player 1, owner 4, ListByCalendar 1.
 func TestTimelineEventCount_Integration(t *testing.T) {
 	if testing.Short() {
 		t.Skip("integration test requires a database; skipped under -short")
@@ -218,11 +226,11 @@ func TestTimelineEventCount_Integration(t *testing.T) {
 		}
 	}
 
-	t.Run("player sees only the public linked event", func(t *testing.T) {
-		assertAgrees(t, permissions.RolePlayer, 1)
+	t.Run("player sees nothing (linked events dark, standalone is dm_only)", func(t *testing.T) {
+		assertAgrees(t, permissions.RolePlayer, 0)
 	})
-	t.Run("owner sees all four events", func(t *testing.T) {
-		assertAgrees(t, permissions.RoleOwner, 4)
+	t.Run("owner sees only the standalone event (linked events dark)", func(t *testing.T) {
+		assertAgrees(t, permissions.RoleOwner, 1)
 	})
 
 	// ListByCalendar carries the identical fix; confirm it agrees too.
@@ -231,34 +239,85 @@ func TestTimelineEventCount_Integration(t *testing.T) {
 		if err != nil {
 			t.Fatalf("ListByCalendar: %v", err)
 		}
-		if len(tls) != 1 || tls[0].EventCount != 1 {
-			t.Errorf("ListByCalendar (player): got %+v, want exactly 1 timeline with EventCount=1", tls)
+		if len(tls) != 1 || tls[0].EventCount != 0 {
+			t.Errorf("ListByCalendar (player): got %+v, want exactly 1 timeline with EventCount=0 (linked events dark, standalone is dm_only)", tls)
 		}
 	})
 }
 
 // --- DB test helpers (mirrors internal/plugins/entities/repository_integration_test.go verbatim) ---
 
+// openTestDB returns a scratch schema with core, calendar and timeline
+// migrations applied (timeline_event_links references calendar_events),
+// dropped on cleanup. It never uses the DSN's own database: test-int-local's
+// DSN names none.
 func openTestDB(t *testing.T) *sql.DB {
 	t.Helper()
-	dsn := os.Getenv("CHRONICLE_TEST_DB_DSN")
-	if dsn == "" {
+
+	raw := os.Getenv("CHRONICLE_TEST_DB_DSN")
+	if raw == "" {
 		cfg := mysql.NewConfig()
 		cfg.User = getenvDefault("DB_USER", "chronicle")
 		cfg.Passwd = getenvDefault("DB_PASSWORD", "chronicle")
 		cfg.Net = "tcp"
 		cfg.Addr = getenvDefault("DB_HOST", "127.0.0.1:3306")
-		cfg.DBName = getenvDefault("DB_NAME", "chronicle")
-		cfg.ParseTime = true
-		dsn = cfg.FormatDSN()
+		raw = cfg.FormatDSN()
 	}
-	db, err := sql.Open("mysql", dsn)
+	cfg, err := mysql.ParseDSN(raw)
+	if err != nil {
+		t.Skipf("CHRONICLE_TEST_DB_DSN is not a valid DSN: %v", err)
+	}
+	cfg.ParseTime = true
+
+	serverCfg := *cfg
+	serverCfg.DBName = ""
+	admin, err := sql.Open("mysql", serverCfg.FormatDSN())
 	if err != nil {
 		t.Skipf("no test DB (sql.Open: %v)", err)
 	}
-	if err := db.Ping(); err != nil {
-		db.Close()
-		t.Skipf("no test DB reachable at %s (ping: %v) — run `make docker-up && make migrate-up`", maskDSN(dsn), err)
+	t.Cleanup(func() { admin.Close() })
+	if err := admin.Ping(); err != nil {
+		t.Skipf("no test DB server reachable at %s: %v — run `make docker-up` or `make test-db-up`", cfg.Addr, err)
+	}
+
+	name := fmt.Sprintf("chronicle_tl_%06d", mrand.Intn(1000000)) //nolint:gosec // test schema name
+	if _, err := admin.Exec("CREATE DATABASE `" + name + "` CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci"); err != nil {
+		t.Skipf("cannot create scratch schema: %v", err)
+	}
+	t.Cleanup(func() { _, _ = admin.Exec("DROP DATABASE IF EXISTS `" + name + "`") })
+
+	scratchCfg := *cfg
+	scratchCfg.DBName = name
+	db, err := sql.Open("mysql", scratchCfg.FormatDSN())
+	if err != nil {
+		t.Fatalf("opening scratch schema: %v", err)
+	}
+	t.Cleanup(func() { db.Close() })
+
+	root, err := filepath.Abs(filepath.Join("..", "..", ".."))
+	if err != nil {
+		t.Fatalf("repo root: %v", err)
+	}
+	if err := database.RunMigrations(db, scratchCfg.FormatDSN(), filepath.Join(root, "db", "migrations")); err != nil {
+		t.Skipf("core migrations did not apply: %v", err)
+	}
+	sub, err := fs.Sub(MigrationsFS, database.PluginMigrationsSubdir)
+	if err != nil {
+		t.Fatalf("sub-FS: %v", err)
+	}
+	// timeline_event_links.event_id references calendar_events(id), so the
+	// calendar plugin's schema has to exist first. Loaded off disk rather
+	// than by importing the calendar package, mirroring the sessions
+	// plugin's scratch-schema helper, which keeps this test fixture from
+	// depending on another plugin's exported Go surface.
+	calDir := os.DirFS(filepath.Join(root, "internal", "plugins", "calendar", "migrations"))
+	for _, res := range database.RunPluginMigrations(db, []database.PluginSchema{
+		{Slug: "calendar", MigrationsFS: calDir},
+		{Slug: "timeline", MigrationsFS: sub},
+	}) {
+		if !res.Healthy {
+			t.Skipf("%s plugin migrations did not apply: %v", res.Slug, res.Error)
+		}
 	}
 	return db
 }
@@ -268,14 +327,6 @@ func getenvDefault(key, def string) string {
 		return v
 	}
 	return def
-}
-
-// maskDSN hides the password when reporting a skipped/failed connection.
-func maskDSN(dsn string) string {
-	if cfg, err := mysql.ParseDSN(dsn); err == nil {
-		return cfg.Addr + "/" + cfg.DBName
-	}
-	return "configured DSN"
 }
 
 func mustExec(t *testing.T, db *sql.DB, query string, args ...any) {

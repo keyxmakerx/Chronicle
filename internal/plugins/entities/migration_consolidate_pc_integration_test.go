@@ -23,8 +23,9 @@ func TestConsolidatePlayerCharacterDuplicate_Integration(t *testing.T) {
 		t.Skip("integration test requires a database; skipped under -short")
 	}
 
+	// openTestDB closes db in its own Cleanup; a defer would run before the
+	// deletes below.
 	db := openTestDB(t)
-	defer db.Close()
 
 	ctx := context.Background()
 	repo := NewEntityTypeRepository(db)
@@ -32,7 +33,9 @@ func TestConsolidatePlayerCharacterDuplicate_Integration(t *testing.T) {
 	userID := testUUID(t)
 	mustExec(t, db, `INSERT INTO users (id, email, display_name, password_hash) VALUES (?, ?, ?, ?)`,
 		userID, "consolidate-int-"+userID+"@example.test", "Consolidate Int Test", "x")
-	defer mustExec(t, db, `DELETE FROM users WHERE id = ?`, userID)
+	// Registered before the campaigns so it runs after their deletes
+	// (Cleanups are LIFO): campaigns reference this user.
+	t.Cleanup(func() { mustExec(t, db, `DELETE FROM users WHERE id = ?`, userID) })
 
 	// newCampaign seeds a campaign and registers its teardown (CASCADE clears its
 	// entity_types + entities).

@@ -172,6 +172,64 @@ func TestExtensionsHubFragment_MixedEnabledDisabledAndNotInstalled(t *testing.T)
 	}
 }
 
+// TestExtensionsHubFragment_InstalledOffCardLooksActionable pins #597:
+// an installed-but-off extension is a real control and must not read
+// as disabled the way a not-yet-available ("Soon") one does.
+func TestExtensionsHubFragment_InstalledOffCardLooksActionable(t *testing.T) {
+	cc := &CampaignContext{Campaign: &Campaign{ID: "c-3"}}
+	addons := []PluginHubAddon{
+		{AddonID: 2, Slug: "maps", Name: "Interactive Maps", Installed: true, Enabled: false},
+		{AddonID: 3, Slug: "family-tree", Name: "Family Tree", Installed: false, Enabled: false},
+	}
+	var buf bytes.Buffer
+	if err := ExtensionsHubFragment(cc, addons, "csrf").Render(context.Background(), &buf); err != nil {
+		t.Fatalf("render: %v", err)
+	}
+	html := buf.String()
+	mapsCard := extractCardHTML(t, html, "maps")
+	familyTreeCard := extractCardHTML(t, html, "family-tree")
+
+	if strings.Contains(mapsCard, "opacity-70") {
+		t.Errorf("installed-but-off card (Interactive Maps) must not be dimmed; got:\n%s", mapsCard)
+	}
+	if strings.Contains(mapsCard, ">Off<") {
+		t.Errorf("installed-but-off card must not read as a muted 'Off' status; got:\n%s", mapsCard)
+	}
+	if !strings.Contains(mapsCard, "Enable") {
+		t.Errorf("installed-but-off card should offer an 'Enable' control; got:\n%s", mapsCard)
+	}
+
+	if !strings.Contains(familyTreeCard, "opacity-70") {
+		t.Errorf("not-installed card (Family Tree) should stay dimmed; got:\n%s", familyTreeCard)
+	}
+	if !strings.Contains(familyTreeCard, "Soon</span>") {
+		t.Errorf("not-installed card should keep the 'Soon' badge; got:\n%s", familyTreeCard)
+	}
+}
+
+// extractCardHTML isolates one extensionsHubCard's rendered markup by
+// slug, from its opening `<div class="card-elev...` through the start
+// of the next card (or end of string). Card markup puts the class
+// attribute before `data-extension-card`, so a naive split on the
+// latter cuts a card's own class list off into the previous chunk;
+// anchoring on the div's own start avoids that.
+func extractCardHTML(t *testing.T, html, slug string) string {
+	t.Helper()
+	slugIdx := strings.Index(html, `data-extension-slug="`+slug+`"`)
+	if slugIdx == -1 {
+		t.Fatalf("card for slug %q not found in:\n%s", slug, html)
+	}
+	start := strings.LastIndex(html[:slugIdx], `<div class="card-elev`)
+	if start == -1 {
+		t.Fatalf("could not find opening tag for slug %q in:\n%s", slug, html)
+	}
+	end := len(html)
+	if next := strings.Index(html[slugIdx:], `<div class="card-elev`); next != -1 {
+		end = slugIdx + next
+	}
+	return html[start:end]
+}
+
 // TestPluginHubRedirect_LandsOnExtensionsHub pins the redirect change:
 // the legacy /plugins URL must redirect to the new top-level
 // Extensions hub, not the retired Settings>Features tab.

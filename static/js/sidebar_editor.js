@@ -18,9 +18,11 @@
 
   var TOUCH_THRESHOLD = 10;
 
+  // "npcs" is deliberately absent: its sidebar link is redundant with
+  // Characters (which already lists the party and NPCs together), so edit
+  // mode must not offer or auto-generate it as a separate item.
   var KNOWN_ADDONS = [
     { slug: 'notes', label: 'Journal', icon: 'fa-book-open' },
-    { slug: 'npcs', label: 'NPCs', icon: 'fa-users' },
     { slug: 'armory', label: 'Armory', icon: 'fa-shield-halved' }
   ];
 
@@ -228,7 +230,10 @@
         if (config.items && config.items.length > 0) {
           // Strip any persisted sub-category items from older configs — they
           // are now template variants and must not appear in the editor.
+          // Also strip a persisted "npcs" addon item from older configs — its
+          // link is redundant with Characters and must not reappear here.
           var filtered = config.items.filter(function (item) {
+            if (item.type === 'addon' && item.slug === 'npcs') return false;
             if (item.type !== 'category') return true;
             for (var i = 0; i < entityTypes.length; i++) {
               if (entityTypes[i].id === item.type_id) return !entityTypes[i].parent_type_id;

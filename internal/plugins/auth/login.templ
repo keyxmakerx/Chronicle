@@ -22,7 +22,7 @@ templ LoginPage(csrfToken, email, errMsg, successMsg, redirect string) {
 					<p class="text-fg-secondary mt-2">Sign in to your Chronicle account</p>
 				</div>
 				if successMsg != "" {
-					<div class="bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800 text-green-700 dark:text-green-400 px-4 py-3 rounded-md mb-4 text-sm" role="status">
+					<div class="alert-success mb-4" role="status">
 						<i class="fa-solid fa-check-circle mr-1.5"></i>
 						{ successMsg }
 					</div>

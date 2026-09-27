@@ -1,0 +1,36 @@
+# Its own file on purpose: a malformed step stops GitHub compiling the whole
+# workflow file it's in, so none of that file's jobs run or turn red. A check
+# inside ci.yml therefore can't report ci.yml broken; this file still runs.
+
+name: Workflow Lint
+
+on:
+  push:
+    branches: [main]
+    paths: ['.github/workflows/**']
+  pull_request:
+    branches: [main]
+    paths: ['.github/workflows/**']
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  actionlint:
+    name: Workflow Lint
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: actions/setup-go@v6
+        with:
+          go-version: '1.27'
+
+      - name: Install actionlint
+        # Pinned so a new release can't change what passes unreviewed.
+        run: go install github.com/rhysd/actionlint/cmd/actionlint@v1.7.12
+
+      - name: Lint workflow files
+        # With no arguments it checks every file in .github/workflows.
+        run: actionlint

@@ -155,7 +155,7 @@ func TestAuthenticateKeyForWS_RefusesWhenCreatorLostAccess(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			svc, rawKey := wsGateService(t, gate, tc.member)
 
-			_, _, _, err := svc.AuthenticateKeyForWS(context.Background(), rawKey)
+			_, _, _, _, err := svc.AuthenticateKeyForWS(context.Background(), rawKey)
 			if err == nil {
 				t.Fatal("AuthenticateKeyForWS accepted a key whose creator lost Owner access")
 			}
@@ -175,7 +175,7 @@ func TestAuthenticateKeyForWS_RefusedWhenMemberCheckerUnwired(t *testing.T) {
 	gate.enabled["camp-ws"] = true
 	svc, rawKey := wsGateService(t, gate, nil)
 
-	if _, _, _, err := svc.AuthenticateKeyForWS(context.Background(), rawKey); err == nil {
+	if _, _, _, _, err := svc.AuthenticateKeyForWS(context.Background(), rawKey); err == nil {
 		t.Fatal("AuthenticateKeyForWS accepted a key with no membership checker wired")
 	}
 }

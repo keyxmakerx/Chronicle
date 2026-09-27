@@ -119,7 +119,11 @@ templ extensionsHubCard(cc *CampaignContext, addon PluginHubAddon, csrfToken str
 	<div
 		class={ "card-elev p-4 lift-hover transition-shadow",
 			templ.KV("ring-1 ring-accent/30", addon.Enabled),
-			templ.KV("opacity-70", !addon.Enabled) }
+			// Dim only extensions that genuinely can't be enabled yet
+			// (Installed == false, "Soon"). An installed-but-off card
+			// stays full brightness — it's a real control, not a
+			// disabled indicator.
+			templ.KV("opacity-70", !addon.Installed) }
 		data-extension-card
 		data-extension-slug={ addon.Slug }
 		data-extension-enabled={ extensionEnabledAttr(addon.Enabled) }
@@ -260,11 +264,11 @@ templ extensionsHubToggle(cc *CampaignContext, addon PluginHubAddon, csrfToken s
 				<input type="hidden" name="action" value="enable"/>
 				<button
 					type="submit"
-					class="inline-flex items-center gap-1.5 px-3 py-1 text-xs font-medium rounded-full bg-surface-alt text-fg-muted border border-edge hover:bg-accent/10 hover:text-accent transition-colors duration-micro"
+					class="inline-flex items-center gap-1.5 px-3 py-1 text-xs font-medium rounded-full bg-accent/10 text-accent border border-accent hover:bg-accent/20 transition-colors duration-micro"
 					title="Click to enable"
 				>
 					<i class="fa-solid fa-plus text-[10px]"></i>
-					Off
+					Enable
 				</button>
 			}
 		</form>

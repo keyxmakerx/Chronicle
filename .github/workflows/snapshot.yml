@@ -1,0 +1,31 @@
+name: Weekly snapshot
+
+# Tags main once a week as snapshot-YYYY-MM-DD, so every past state stays
+# recoverable even if main's history is rewritten or the branch is deleted.
+# Tags are cheap and never pruned. Run it from the Actions tab for an extra
+# snapshot before a risky change.
+
+on:
+  schedule:
+    - cron: '23 4 * * 1'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  snapshot:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          ref: main
+      - name: Tag main
+        run: |
+          tag="snapshot-$(date -u +%Y-%m-%d)"
+          if git ls-remote --exit-code --tags origin "refs/tags/$tag" >/dev/null; then
+            echo "$tag already exists"
+            exit 0
+          fi
+          git tag "$tag"
+          git push origin "refs/tags/$tag"

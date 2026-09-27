@@ -45,6 +45,9 @@ type Hub struct {
 	// or persistence needed.
 	foundryMu       sync.RWMutex
 	foundryLastSeen map[string]time.Time
+
+	// pingEvery is fixed before any client connects; tests shorten it per hub.
+	pingEvery time.Duration
 }
 
 // NewHub creates a new WebSocket hub. Call Run() to start processing.
@@ -55,6 +58,7 @@ func NewHub() *Hub {
 		register:        make(chan *Client),
 		unregister:      make(chan *Client),
 		foundryLastSeen: make(map[string]time.Time),
+		pingEvery:       pingPeriod,
 	}
 }
 
@@ -153,6 +157,13 @@ func (h *Hub) Run() {
 			for id, client := range campaign {
 				// Don't echo back to sender.
 				if id == msg.SenderID {
+					continue
+				}
+
+				// An expired key's socket may still be open (writePump
+				// hasn't ticked yet); stop delivering to it immediately
+				// rather than waiting for that tick to close it.
+				if client.ExpiresAt != nil && time.Now().After(*client.ExpiresAt) {
 					continue
 				}
 
@@ -276,12 +287,9 @@ func (h *Hub) TotalClientCount() int {
 }
 
 // RegisterClient creates a new client and starts its read/write pumps.
-// Returns the client for external reference (e.g., to track in tests).
-//
-// isDmGranted reflects CampaignContext.IsDmGranted resolved at auth time; it
-// lets the broadcast loop deliver RequiresDM messages to non-Owner users the
-// campaign Owner has explicitly trusted, without a per-message DB hit.
-func (h *Hub) RegisterClient(conn WSConn, campaignID, userID, source string, role int, isDmGranted bool) *Client {
+// isDmGranted and expiresAt are both resolved once at auth time and cached
+// on the client rather than looked up per message or per tick.
+func (h *Hub) RegisterClient(conn WSConn, campaignID, userID, source string, role int, isDmGranted bool, expiresAt *time.Time) *Client {
 	client := &Client{
 		ID:          uuid.New().String(),
 		CampaignID:  campaignID,
@@ -289,6 +297,7 @@ func (h *Hub) RegisterClient(conn WSConn, campaignID, userID, source string, rol
 		Source:      source,
 		Role:        role,
 		IsDmGranted: isDmGranted,
+		ExpiresAt:   expiresAt,
 		hub:         h,
 		conn:        conn.(*gorillaWs.Conn),
 		send:        make(chan []byte, sendBufferSize),
@@ -304,3 +313,67 @@ func (h *Hub) RegisterClient(conn WSConn, campaignID, userID, source string, rol
 
 // WSConn is an interface satisfied by *websocket.Conn, used for testability.
 type WSConn interface{}
+
+// RevokeAPIKeyClients force-disconnects every Foundry-sourced client in
+// the campaign. Call this when a sync key is revoked or Sync API is
+// switched off, so a socket from before the change can't keep receiving.
+func (h *Hub) RevokeAPIKeyClients(campaignID string) {
+	h.revokeMatching(campaignID, func(c *Client) bool {
+		return c.Source == "foundry" || c.Source == foundry_vtt.ModuleSource
+	})
+}
+
+// RevokeUser force-disconnects every client belonging to userID in the
+// campaign, regardless of source. Call this whenever that user's access
+// in the campaign is lowered, so a cached role or grant can't outlive it.
+func (h *Hub) RevokeUser(campaignID, userID string) {
+	h.revokeMatching(campaignID, func(c *Client) bool {
+		return c.UserID == userID
+	})
+}
+
+// RevokeUserEverywhere force-disconnects userID's sockets across ALL
+// campaigns. Call this when an account is disabled: unlike RevokeUser,
+// there's no single campaign to scope to, so every client map is swept.
+func (h *Hub) RevokeUserEverywhere(userID string) {
+	h.mu.RLock()
+	var matched []*Client
+	for _, clients := range h.clients {
+		for _, c := range clients {
+			if c.UserID == userID {
+				matched = append(matched, c)
+			}
+		}
+	}
+	h.mu.RUnlock()
+
+	for _, c := range matched {
+		c.close()
+	}
+}
+
+// RevokeCampaign force-disconnects every client in campaignID, regardless
+// of user or source. Call this once a campaign is deleted — its members and
+// addon state are gone, so nothing should keep receiving on that socket.
+func (h *Hub) RevokeCampaign(campaignID string) {
+	h.revokeMatching(campaignID, func(*Client) bool { return true })
+}
+
+// revokeMatching closes every client in campaignID for which match returns
+// true. Only needs a read lock: closing makes the conn error out, and
+// readPump's own cleanup removes it from the map via the normal event loop.
+func (h *Hub) revokeMatching(campaignID string, match func(*Client) bool) {
+	h.mu.RLock()
+	campaign := h.clients[campaignID]
+	matched := make([]*Client, 0, len(campaign))
+	for _, c := range campaign {
+		if match(c) {
+			matched = append(matched, c)
+		}
+	}
+	h.mu.RUnlock()
+
+	for _, c := range matched {
+		c.close()
+	}
+}
