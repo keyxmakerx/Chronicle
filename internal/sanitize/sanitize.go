@@ -12,6 +12,18 @@ import (
 	"github.com/microcosm-cc/bluemonday"
 )
 
+// noteIDPattern is the shape a note link's data-note-id must have.
+var noteIDPattern = regexp.MustCompile(`^[0-9a-fA-F-]{8,64}$`)
+
+// The rich editor's checklist markup: which list is a checklist, and whether
+// an item is ticked. Only these exact values pass; the checkbox <input> the
+// editor draws is not kept, since readers style ticked items from the
+// attribute and no stored HTML needs a form control.
+var (
+	taskTypePattern    = regexp.MustCompile(`^(taskList|taskItem)$`)
+	taskCheckedPattern = regexp.MustCompile(`^(true|false)$`)
+)
+
 // policy is the singleton bluemonday policy for sanitizing user-generated HTML.
 // Initialized once via sync.Once for thread-safe lazy initialization.
 var (
@@ -28,6 +40,10 @@ func getPolicy() *bluemonday.Policy {
 		// and entity preview tooltips.
 		policy.AllowAttrs("data-mention-id").OnElements("a")
 		policy.AllowAttrs("data-entity-preview").OnElements("a")
+
+		// A [[link]] to a note: only an id-shaped value survives, since
+		// readers resolve it to a title through the viewer's visibility.
+		policy.AllowAttrs("data-note-id").Matching(noteIDPattern).OnElements("a")
 
 		// Allow class attributes broadly — needed for TipTap/ProseMirror output
 		// which uses classes for text alignment, code blocks, etc.
@@ -47,6 +63,8 @@ func getPolicy() *bluemonday.Policy {
 
 		// Allow data attributes used by the editor for various features.
 		policy.AllowAttrs("data-type").OnElements("div", "span")
+		policy.AllowAttrs("data-type").Matching(taskTypePattern).OnElements("ul", "li")
+		policy.AllowAttrs("data-checked").Matching(taskCheckedPattern).OnElements("li")
 
 		// Allow inline secrets (GM-only text wrapped in <span data-secret>).
 		policy.AllowAttrs("data-secret").OnElements("span")
@@ -104,7 +122,7 @@ func StripSecretsHTML(html string) string {
 	return secretSpanRe.ReplaceAllString(html, "")
 }
 
-// StripSecretsJSON removes text nodes marked with the "secret" mark from
+// StripSecretsJSON removes nodes marked with the "secret" mark from
 // ProseMirror JSON content. Returns the modified JSON string. If the input
 // is not valid ProseMirror JSON, it is returned unchanged.
 func StripSecretsJSON(jsonStr string) string {
@@ -126,8 +144,9 @@ func StripSecretsJSON(jsonStr string) string {
 	return string(out)
 }
 
-// stripSecretNodes recursively walks ProseMirror JSON and removes text nodes
-// that carry a "secret" mark.
+// stripSecretNodes recursively walks ProseMirror JSON and removes every
+// node that carries a "secret" mark: text, and inline nodes such as a
+// [[note]] link, which would otherwise show a player what a secret links to.
 func stripSecretNodes(node map[string]interface{}) {
 	content, ok := node["content"].([]interface{})
 	if !ok {
@@ -142,11 +161,8 @@ func stripSecretNodes(node map[string]interface{}) {
 			continue
 		}
 
-		// Check if this is a text node with a "secret" mark.
-		if childMap["type"] == "text" {
-			if hasSecretMark(childMap) {
-				continue // strip this text node
-			}
+		if hasSecretMark(childMap) {
+			continue // strip this node
 		}
 
 		// Recurse into child nodes.

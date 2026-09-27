@@ -7,7 +7,6 @@ package layouts
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"strconv"
 	"strings"
@@ -39,7 +38,6 @@ const (
 	keyMediaThumbFunc    ctxKey = "layout_media_thumb_func"
 	keyExtWidgetScripts  ctxKey = "layout_ext_widget_scripts"
 	keyPluginBodyScripts ctxKey = "layout_plugin_body_scripts"
-	keySidebarItems      ctxKey = "layout_sidebar_items"
 	keyAccentColor       ctxKey = "layout_accent_color"
 	keyBrandName         ctxKey = "layout_brand_name"
 	keyBrandLogo         ctxKey = "layout_brand_logo"
@@ -130,6 +128,25 @@ func SetFlashError(ctx context.Context, msg string) context.Context {
 // SetActivePath stores the current request path for nav highlighting.
 func SetActivePath(ctx context.Context, path string) context.Context {
 	return context.WithValue(ctx, keyActivePath, path)
+}
+
+// keyRequestPath holds the request's real URL path. The active path may be
+// overridden for nav highlighting (an entity page highlights its category),
+// so whatever needs the page actually shown reads this one.
+const keyRequestPath ctxKey = "layout_request_path"
+
+// SetRequestPath stores the request's real URL path.
+func SetRequestPath(ctx context.Context, path string) context.Context {
+	return context.WithValue(ctx, keyRequestPath, path)
+}
+
+// GetRequestPath returns the request's real URL path, falling back to the
+// active path for a render that never set it.
+func GetRequestPath(ctx context.Context) string {
+	if p, _ := ctx.Value(keyRequestPath).(string); p != "" {
+		return p
+	}
+	return GetActivePath(ctx)
 }
 
 // --- Getters (called by Templ templates) ---
@@ -237,29 +254,6 @@ func GetEntityTypes(ctx context.Context) []SidebarEntityType {
 	return types
 }
 
-// EntityTypesJSON serializes the sidebar entity types to a JSON string for
-// JavaScript widget data attributes.
-func EntityTypesJSON(ctx context.Context) string {
-	types := GetEntityTypes(ctx)
-	type jsonET struct {
-		ID           int    `json:"id"`
-		Name         string `json:"name"`
-		NamePlural   string `json:"name_plural"`
-		Icon         string `json:"icon"`
-		Color        string `json:"color"`
-		ParentTypeID *int   `json:"parent_type_id,omitempty"`
-	}
-	out := make([]jsonET, len(types))
-	for i, t := range types {
-		out[i] = jsonET{ID: t.ID, Name: t.Name, NamePlural: t.NamePlural, Icon: t.Icon, Color: t.Color, ParentTypeID: t.ParentTypeID}
-	}
-	b, err := json.Marshal(out)
-	if err != nil {
-		return "[]"
-	}
-	return string(b)
-}
-
 // SetEntityCounts stores per-type entity counts for sidebar badges.
 func SetEntityCounts(ctx context.Context, counts map[int]int) context.Context {
 	return context.WithValue(ctx, keyEntityCounts, counts)
@@ -314,67 +308,12 @@ func GetEnabledSystem(ctx context.Context) (EnabledSystem, bool) {
 	return sys, sys.Slug != ""
 }
 
-// --- Custom Sidebar Navigation (link items) ---
-
-// SidebarLink represents a custom link item in the unified sidebar navigation
-// (rendered by customNavLink from a SidebarItemView of type "link").
-type SidebarLink struct {
-	ID    string
-	Label string
-	URL   string
-	Icon  string // FontAwesome icon class (e.g. "fa-globe").
-}
-
-// --- Unified Sidebar Items ---
-
-// SidebarItemView is the template-ready representation of a sidebar item.
-// Populated by the LayoutInjector from the campaign's SidebarConfig.Items.
-//
-// Sub-category entity_types (ParentTypeID != nil) are filtered out at build
-// time in routes.go and never become SidebarItemViews — they are template
-// variants of their parent, not navigable collections. ParentTypeID here is
-// always nil in practice; retained as defensive documentation of that.
-type SidebarItemView struct {
-	Type         string // "dashboard", "addon", "category", "section", "link", "all_pages"
-	Slug         string // Addon slug (for addon items).
-	TypeID       int    // Entity type ID (for category items).
-	ID           string // Unique ID (for sections/links).
-	Label        string // Display label.
-	URL          string // Navigation URL.
-	Icon         string // FontAwesome icon class.
-	Color        string // Category color.
-	Count        int    // Entity count (for categories).
-	ParentTypeID *int   // Always nil for items in the sidebar; see type comment.
-}
-
-// SetSidebarItems stores the unified sidebar items in context.
-func SetSidebarItems(ctx context.Context, items []SidebarItemView) context.Context {
-	return context.WithValue(ctx, keySidebarItems, items)
-}
-
-// GetSidebarItems returns unified sidebar items from context.
-// Returns nil if the campaign uses the legacy sidebar format.
-func GetSidebarItems(ctx context.Context) []SidebarItemView {
-	items, _ := ctx.Value(keySidebarItems).([]SidebarItemView)
-	return items
-}
-
 // drillSearchURL builds the search endpoint URL for a drill panel.
 // Sub-category entity_types are not surfaced in the sidebar, so the drill
 // panel searches only the parent's own type — child entities flow into the
 // parent's listing via aggregation in the entities service.
 func drillSearchURL(_ context.Context, campaignID string, typeID int) string {
 	return fmt.Sprintf("/campaigns/%s/entities/search?type=%d&sidebar=1", campaignID, typeID)
-}
-
-// getEntityTypeSlug looks up the slug for an entity type by ID from context.
-func getEntityTypeSlug(ctx context.Context, typeID int) string {
-	for _, et := range GetEntityTypes(ctx) {
-		if et.ID == typeID {
-			return et.Slug
-		}
-	}
-	return ""
 }
 
 // --- View As Player (owner preview toggle) ---
@@ -388,6 +327,21 @@ func SetViewingAsPlayer(ctx context.Context, viewing bool) context.Context {
 func IsViewingAsPlayer(ctx context.Context) bool {
 	viewing, _ := ctx.Value(keyViewingAsPlayer).(bool)
 	return viewing
+}
+
+// keyCampaignArchived marks an archived (read-only) campaign.
+const keyCampaignArchived ctxKey = "layout_campaign_archived"
+
+// SetCampaignArchived records that the campaign is archived, so controls
+// whose save the server would refuse are not drawn.
+func SetCampaignArchived(ctx context.Context, archived bool) context.Context {
+	return context.WithValue(ctx, keyCampaignArchived, archived)
+}
+
+// IsCampaignArchived reports whether the campaign is archived (read-only).
+func IsCampaignArchived(ctx context.Context) bool {
+	archived, _ := ctx.Value(keyCampaignArchived).(bool)
+	return archived
 }
 
 // SetIsOwner stores whether the user's actual campaign role is Owner.

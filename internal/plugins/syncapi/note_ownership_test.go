@@ -11,6 +11,8 @@ import (
 	"github.com/labstack/echo/v4"
 
 	"github.com/keyxmakerx/chronicle/internal/apperror"
+	"github.com/keyxmakerx/chronicle/internal/permissions"
+	"github.com/keyxmakerx/chronicle/internal/plugins/campaigns"
 	"github.com/keyxmakerx/chronicle/internal/widgets/notes"
 )
 
@@ -48,7 +50,8 @@ func (s *stubNoteSvcForOwnership) GetByID(_ context.Context, id string) (*notes.
 // Update replicates noteService.Update's patch-with-no-owner-check verbatim for
 // the fields these handlers can set, so a missing handler gate really does
 // mutate the stored note (rather than being masked by a stricter stub).
-func (s *stubNoteSvcForOwnership) Update(_ context.Context, id, userID string, req notes.UpdateNoteRequest) (*notes.Note, error) {
+func (s *stubNoteSvcForOwnership) Update(_ context.Context, id string, editor permissions.Viewer, req notes.UpdateNoteRequest) (*notes.Note, error) {
+	userID := editor.UserID()
 	n, ok := s.notes[id]
 	if !ok {
 		return nil, apperror.NewNotFound("note not found")
@@ -366,4 +369,52 @@ func TestNoteOwnership_MissingAPIKeyIs401(t *testing.T) {
 			}
 		})
 	}
+}
+
+// stubNoteRoles answers the two member lookups NoteAPIHandler.viewer makes.
+type stubNoteRoles struct {
+	campaigns.CampaignService
+	roles   map[string]campaigns.Role
+	granted map[string]bool
+}
+
+func (s *stubNoteRoles) GetMember(_ context.Context, _, userID string) (*campaigns.CampaignMember, error) {
+	r, ok := s.roles[userID]
+	if !ok {
+		return nil, apperror.NewNotFound("not a member")
+	}
+	return &campaigns.CampaignMember{UserID: userID, Role: r}, nil
+}
+
+func (s *stubNoteRoles) IsUserDmGranted(_ context.Context, _, userID string) (bool, error) {
+	return s.granted[userID], nil
+}
+
+// TestGetNote_GMShareFollowsTheLiveRole: a note a player shared with the GM
+// is readable by the campaign Owner and a co-DM over the API, and by no
+// other member.
+func TestGetNote_GMShareFollowsTheLiveRole(t *testing.T) {
+	svc := newNoteOwnershipSvc()
+	svc.notes["note-bob-for-gm"] = &notes.Note{
+		ID: "note-bob-for-gm", CampaignID: "campaign-C", UserID: "bob", Title: "For the GM", SharedWithGM: true,
+	}
+	h := NewNoteAPIHandler(nil, svc)
+	h.SetCampaignService(&stubNoteRoles{
+		roles:   map[string]campaigns.Role{"gina": campaigns.RoleOwner, "dave": campaigns.RolePlayer, "alice": campaigns.RoleScribe},
+		granted: map[string]bool{"dave": true},
+	})
+
+	for _, who := range []string{"gina", "dave"} {
+		c, rec := newNoteOwnershipContext(http.MethodGet, "campaign-C", "note-bob-for-gm", who, nil)
+		if err := h.GetNote(c); err != nil || rec.Code != http.StatusOK {
+			t.Errorf("%s (a GM) must read a note shared with the GM: err=%v code=%d", who, err, rec.Code)
+		}
+	}
+	c, _ := newNoteOwnershipContext(http.MethodGet, "campaign-C", "note-bob-for-gm", "alice", nil)
+	assertNotFound(t, h.GetNote(c))
+
+	// Without the lookup wired, nobody is read as a GM.
+	bare := NewNoteAPIHandler(nil, svc)
+	c, _ = newNoteOwnershipContext(http.MethodGet, "campaign-C", "note-bob-for-gm", "gina", nil)
+	assertNotFound(t, bare.GetNote(c))
 }

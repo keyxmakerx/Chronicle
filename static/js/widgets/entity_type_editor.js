@@ -24,7 +24,7 @@
     'fa-flag', 'fa-landmark', 'fa-globe', 'fa-mountain', 'fa-tree', 'fa-water',
     'fa-fire', 'fa-bolt', 'fa-gem', 'fa-skull', 'fa-dragon', 'fa-hat-wizard',
     'fa-dungeon', 'fa-chess-rook', 'fa-hand-fist', 'fa-wand-sparkles',
-    'fa-circle', 'fa-heart', 'fa-swords', 'fa-compass', 'fa-anchor',
+    'fa-circle', 'fa-heart', 'fa-chess-knight', 'fa-compass', 'fa-anchor',
     'fa-feather', 'fa-paw', 'fa-horse', 'fa-ghost', 'fa-flask'
   ];
 

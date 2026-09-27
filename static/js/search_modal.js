@@ -194,10 +194,11 @@
         var entityData = responses[0];
         var allNotes = responses[1] || [];
 
-        // Filter notes by title match (case-insensitive).
+        // Filter notes by title match (case-insensitive). Archived notes
+        // stay out, as they do everywhere a note is picked by name.
         var queryLower = query.toLowerCase();
         var matchingNotes = allNotes.filter(function (n) {
-          return !n.isFolder && n.title && n.title.toLowerCase().indexOf(queryLower) !== -1;
+          return !n.isFolder && !n.archived && n.title && n.title.toLowerCase().indexOf(queryLower) !== -1;
         });
 
         // Build unified results: entities first, then notes.
@@ -208,7 +209,8 @@
         for (var i = 0; i < Math.min(matchingNotes.length, 5); i++) {
           var note = matchingNotes[i];
           results.push({
-            url: '#note:' + note.id,
+            // A Journal note opens in the Journal; a jot opens on its page's panel.
+            url: note.entityId ? '#note:' + note.id : '/campaigns/' + encodeURIComponent(campaignId) + '/journal/' + encodeURIComponent(note.id),
             name: note.title,
             type_name: 'Note',
             type_icon: 'fa-solid fa-sticky-note',
@@ -380,6 +382,10 @@
       }));
       return;
     }
+
+    // Already in the Journal: open the note in place instead of reloading.
+    var m = url && url.match(/^\/campaigns\/[^/]+\/journal\/([0-9a-fA-F-]+)$/);
+    if (m && Chronicle.openJournalNote && Chronicle.openJournalNote(m[1])) return;
 
     window.location.href = url;
   }

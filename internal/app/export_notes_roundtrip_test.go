@@ -10,6 +10,7 @@ import (
 	"testing"
 
 	"github.com/keyxmakerx/chronicle/internal/apperror"
+	"github.com/keyxmakerx/chronicle/internal/permissions"
 
 	"github.com/keyxmakerx/chronicle/internal/plugins/campaigns"
 	"github.com/keyxmakerx/chronicle/internal/widgets/notes"
@@ -36,12 +37,12 @@ func (f *fakeNoteService) ListSharedByCampaign(_ context.Context, _ string) ([]n
 	return f.shared, nil
 }
 
-func (f *fakeNoteService) Create(_ context.Context, campaignID, userID string, req notes.CreateNoteRequest) (*notes.Note, error) {
+func (f *fakeNoteService) Create(_ context.Context, campaignID string, creator permissions.Viewer, req notes.CreateNoteRequest) (*notes.Note, error) {
 	f.nextID++
 	n := notes.Note{
 		ID:         string(rune('a'+f.nextID-1)) + "-new",
 		CampaignID: campaignID,
-		UserID:     userID,
+		UserID:     creator.UserID(),
 		EntityID:   req.EntityID,
 		IsFolder:   req.IsFolder,
 		Title:      req.Title,
@@ -55,7 +56,7 @@ func (f *fakeNoteService) Create(_ context.Context, campaignID, userID string, r
 	return stored, nil
 }
 
-func (f *fakeNoteService) Update(_ context.Context, id, _ string, req notes.UpdateNoteRequest) (*notes.Note, error) {
+func (f *fakeNoteService) Update(_ context.Context, id string, _ permissions.Viewer, req notes.UpdateNoteRequest) (*notes.Note, error) {
 	n, ok := f.byID[id]
 	if !ok {
 		t := notes.Note{}
@@ -218,7 +219,7 @@ func TestCampaignExportImport_SharedNotesRoundTrip(t *testing.T) {
 // gone away partway through a restore.
 type failingNoteService struct{ notes.NoteService }
 
-func (failingNoteService) Create(context.Context, string, string, notes.CreateNoteRequest) (*notes.Note, error) {
+func (failingNoteService) Create(context.Context, string, permissions.Viewer, notes.CreateNoteRequest) (*notes.Note, error) {
 	return nil, apperror.NewInternal(errors.New("notes table is gone"))
 }
 

@@ -111,6 +111,12 @@ type EntityService interface {
 	// Backlinks with context snippets — always campaign-scoped.
 	GetBacklinksWithSnippets(ctx context.Context, campaignID, entityID string, role int, userID string) ([]BacklinkEntry, error)
 
+	// PagesLinkingNote returns the pages of a campaign whose entry links the
+	// note noteID and that the viewer may see. A viewer who does not see
+	// inline secrets (seesSecrets false) does not get a page whose only link
+	// to the note sits inside one.
+	PagesLinkingNote(ctx context.Context, campaignID, noteID string, role int, userID string, seesSecrets bool) ([]Entity, error)
+
 	// GetMentionLinks returns all @mention references across a campaign for the
 	// relations graph. Each link is a source→target pair extracted from entry_html.
 	GetMentionLinks(ctx context.Context, campaignID string, role int, userID string) ([]MentionLink, error)
@@ -2559,6 +2565,27 @@ func (s *entityService) GetBacklinksWithSnippets(ctx context.Context, campaignID
 		entries = append(entries, BacklinkEntry{Entity: bl, Snippet: snippet})
 	}
 	return entries, nil
+}
+
+// PagesLinkingNote lists the visible pages that link a note; see the
+// interface. The secret check reads the stored HTML the way the entry route
+// strips it for the same viewer.
+func (s *entityService) PagesLinkingNote(ctx context.Context, campaignID, noteID string, role int, userID string, seesSecrets bool) ([]Entity, error) {
+	pages, err := s.entities.FindPagesLinkingNote(ctx, campaignID, noteID, role, userID)
+	if err != nil {
+		return nil, apperror.NewInternal(fmt.Errorf("finding pages linking a note: %w", err))
+	}
+	if seesSecrets {
+		return pages, nil
+	}
+	needle := `data-note-id="` + noteID + `"`
+	out := pages[:0]
+	for _, p := range pages {
+		if p.EntryHTML != nil && strings.Contains(sanitize.StripSecretsHTML(*p.EntryHTML), needle) {
+			out = append(out, p)
+		}
+	}
+	return out, nil
 }
 
 // GetMentionLinks returns all @mention references across a campaign. Delegates

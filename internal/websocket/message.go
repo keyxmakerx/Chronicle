@@ -124,6 +124,13 @@ type Message struct {
 	// recipient outside the audience gets nothing: no message, no stub.
 	AllowedUsers []string `json:"-"`
 	DeniedUsers  []string `json:"-"`
+
+	// StrictAudience makes AllowedUsers/DeniedUsers bind DM-equivalent
+	// clients too, instead of letting them bypass. For content that is
+	// private to named people — a player's private journal note — where "the
+	// GM sees everything" does not hold. Set only with a non-empty
+	// AllowedUsers: an empty allowlist still means everyone.
+	StrictAudience bool `json:"-"`
 }
 
 // Encode serializes a Message to JSON bytes.

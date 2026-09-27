@@ -658,13 +658,13 @@ func (a *sidebarAutoAdderAdapter) AddEntityTypeToSidebar(ctx context.Context, ca
 
 	// Only persist an auto-add when the campaign has an explicit, customized
 	// items order. A campaign with empty Items renders the DEFAULT sidebar,
-	// which the render injector (injectDefaultSidebarItems) already completes
-	// with every top-level type — including this new one, in its natural
-	// sort_order position. Persisting a lone category item here would instead
-	// make the new type the only explicit entry and snap it to the FRONT of the
-	// list, so we leave empty configs to the injector. Converted campaigns (the
-	// reconciler put them on a non-empty Items array) fall through and correctly
-	// auto-gain the new type appended in their customized order.
+	// which campaigns.NormalizeNav already completes with every top-level
+	// type — including this new one, in its natural sort_order position.
+	// Persisting a lone category item here would instead make the new type the
+	// only explicit entry and snap it to the FRONT of the list, so empty
+	// configs are left to NormalizeNav. Converted campaigns (the reconciler put
+	// them on a non-empty Items array) fall through and correctly auto-gain the
+	// new type appended in their customized order.
 	if len(cfg.Items) == 0 {
 		return nil
 	}
@@ -703,62 +703,47 @@ func (a *sidebarAutoAdderAdapter) AddEntityTypeToSidebar(ctx context.Context, ca
 		campaigns.UpdateSidebarConfigRequest{Items: &cfg.Items})
 }
 
-// defaultSidebarAddons are the addon shortcuts the default sidebar shows in its
-// top nav (each rendered only when its addon is enabled): Journal + Calendar,
-// so a never-customized campaign renders that same top nav.
-var defaultSidebarAddons = []campaigns.SidebarItem{
-	{Type: "addon", Slug: "notes", Label: "Journal", Icon: "fa-book-open", Visible: true},
-	{Type: "addon", Slug: "calendar", Label: "Calendar", Icon: "fa-calendar-days", Visible: true},
+// navAppDef is one app page the campaign sidebar can list. It lives here, in
+// the composition root, because it names other plugins' addons and routes.
+type navAppDef struct {
+	slug    string // the app item's slug in sidebar_config (Journal keeps "notes", its addon)
+	label   string
+	icon    string
+	path    string   // campaign-relative page
+	caption string   // a few muted words beside the label
+	addons  []string // the app is on when any of these addons is enabled
+	access  campaigns.NavAccess
+	pinned  bool // starts in Pinned for a campaign that never arranged its sidebar
+	system  bool // the enabled game system's reference; label, icon and path come from it
 }
 
-// injectDefaultSidebarItems completes a sidebar items array with the standard
-// scaffold — Dashboard, the default addon shortcuts, every top-level entity
-// type, and All Pages — adding only what is missing and preserving the caller's
-// order for everything already present. It is the server mirror of
-// injectMissing()/generateDefaults() in sidebar_editor.js and the reason an
-// empty Items array (a never-customized or reconciler-skipped campaign) still
-// renders the full default sidebar now that the legacy fallback path is gone.
-// Non-persistent: it shapes one render only.
-//
-// Sub-category entity_types (parent_type_id != nil) are template variants of
-// their parent and are never added as sidebar items.
-func injectDefaultSidebarItems(items []campaigns.SidebarItem, types []layouts.SidebarEntityType) []campaigns.SidebarItem {
-	hasDashboard, hasAllPages := false, false
-	presentAddons := make(map[string]bool)
-	presentCats := make(map[int]bool)
-	for _, it := range items {
-		switch it.Type {
-		case "dashboard":
-			hasDashboard = true
-		case "all_pages":
-			hasAllPages = true
-		case "addon":
-			presentAddons[it.Slug] = true
-		case "category":
-			presentCats[it.TypeID] = true
-		}
-	}
+// navAppCatalog lists every app the sidebar can show, in the order a campaign
+// that never arranged its sidebar lists them. Each access level mirrors the
+// app route's own gate, so the sidebar never offers a page that would turn
+// the viewer away; Sessions is gated on the calendar addon because its routes
+// are. Characters is the campaign's cast, party and NPCs together, which is
+// why the NPC gallery addon also turns it on.
+var navAppCatalog = []navAppDef{
+	{slug: "notes", label: "Journal", icon: "fa-book-open", path: "/journal", addons: []string{"notes"}, access: campaigns.NavAccessMember, pinned: true},
+	{slug: "calendar", label: "Calendar", icon: "fa-calendar-days", path: "/apps/calendar", addons: []string{calendar.PluginSlug}, access: campaigns.NavAccessMemberOrAdmin, pinned: true},
+	{slug: "sessions", label: "Sessions", icon: "fa-dice-d20", path: "/sessions", addons: []string{calendar.PluginSlug}, access: campaigns.NavAccessAnyone},
+	{slug: "maps", label: "Maps", icon: "fa-map", path: "/maps", addons: []string{"maps"}, access: campaigns.NavAccessAnyone},
+	{slug: "characters", label: "Characters", icon: "fa-masks-theater", path: "/characters", caption: "Party & NPCs", addons: []string{entities.AddonPlayerCharacterClaiming, "npcs"}, access: campaigns.NavAccessMember},
+	{slug: "armory", label: "Armory", icon: "fa-shield-halved", path: "/armory", addons: []string{"armory"}, access: campaigns.NavAccessAnyone},
+	{slug: "timeline", label: "Timeline", icon: "fa-timeline", path: "/timelines", addons: []string{"timeline"}, access: campaigns.NavAccessAnyone},
+	{slug: "rulebook", label: "Rulebook", icon: "fa-book", system: true, access: campaigns.NavAccessMemberOrAdmin},
+}
 
-	if !hasDashboard {
-		items = append([]campaigns.SidebarItem{{Type: "dashboard", Visible: true}}, items...)
-	}
-	for _, addon := range defaultSidebarAddons {
-		if !presentAddons[addon.Slug] {
-			items = append(items, addon)
+// navAppPath returns the campaign-relative page an app links to ("" for an
+// unknown slug or the system reference, whose path depends on the system).
+// The operator diagnostic reports the sidebar's Calendar destination from it.
+func navAppPath(slug string) string {
+	for _, d := range navAppCatalog {
+		if d.slug == slug {
+			return d.path
 		}
 	}
-	for _, et := range types {
-		if et.ParentTypeID != nil {
-			continue
-		}
-		if !presentCats[et.ID] {
-			items = append(items, campaigns.SidebarItem{Type: "category", TypeID: et.ID, Visible: true})
-		}
-	}
-	if !hasAllPages {
-		items = append(items, campaigns.SidebarItem{Type: "all_pages", Visible: true})
-	}
-	return items
+	return ""
 }
 
 // noteEventPublisherAdapter bridges the websocket.EventBus to the
@@ -767,13 +752,17 @@ type noteEventPublisherAdapter struct {
 	bus ws.EventBus
 }
 
-// PublishNoteEvent translates note domain events into WebSocket messages.
-func (a *noteEventPublisherAdapter) PublishNoteEvent(eventType, campaignID, noteID string, note *notes.Note) {
-	if campaignID == "" {
+// PublishNoteEvent translates a note change into a WebSocket message that
+// carries IDs only and reaches only the note's audience. Clients refetch the
+// note over HTTP, where CanView decides what they get (#715). The payload
+// deliberately has no "id" key: a client that reads payload.id as a whole
+// note must skip the message, not overwrite its copy with an empty one.
+func (a *noteEventPublisherAdapter) PublishNoteEvent(ev notes.NoteEvent) {
+	if ev.CampaignID == "" {
 		return
 	}
 	var msgType ws.MessageType
-	switch eventType {
+	switch ev.Type {
 	case "created":
 		msgType = ws.MsgNoteCreated
 	case "updated":
@@ -783,8 +772,33 @@ func (a *noteEventPublisherAdapter) PublishNoteEvent(eventType, campaignID, note
 	default:
 		return
 	}
-	a.bus.Publish(ws.NewMessage(msgType, campaignID, noteID, note))
+	payload := map[string]string{"noteId": ev.NoteID}
+	if ev.EntityID != nil {
+		payload["entityId"] = *ev.EntityID
+	}
+	msg := ws.NewMessage(msgType, ev.CampaignID, ev.NoteID, payload)
+	msg.AllowedUsers, msg.StrictAudience = noteAudience(ev.Audience)
+	a.bus.Publish(msg)
 }
+
+// noteAudience maps a note's audience onto the hub's allowlist. Shared with
+// the party: no list. Otherwise the named users; a GM share lets the hub's
+// usual DM bypass admit the Owner and co-DMs, and without one the list binds
+// them too, because a private note is private from the GM.
+func noteAudience(a notes.Audience) (allowed []string, strict bool) {
+	if a.Everyone {
+		return nil, false
+	}
+	if len(a.Users) == 0 {
+		// An audience naming nobody reaches nobody; never widen a malformed
+		// one to "everyone", which is what an empty allowlist means.
+		return []string{noteNoRecipient}, true
+	}
+	return a.Users, !a.GMs
+}
+
+// noteNoRecipient is an allowlist entry no user id can equal (ids are UUIDs).
+const noteNoRecipient = "-"
 
 // entityNotesNotifierHolder is the late-bound bridge from
 // entity_notes.Service.Notify (function-typed) to the WebSocket bus.
@@ -1972,6 +1986,9 @@ func (a *App) RegisterRoutes() {
 	// Addons plugin: extension framework with per-campaign enable/disable toggles.
 	addonRepo := addons.NewAddonRepository(a.DB)
 	addonService := addons.NewAddonService(addonRepo)
+	// A member's own sidebar pins are checked against the sidebar they see,
+	// which only this composition root can draw.
+	campaignService.SetNavSectionsSource(&navSectionsSource{entities: entityService, addons: addonService})
 	// Drops live Foundry sockets when the Sync API addon is switched off
 	// for a campaign, so a socket that authenticated while it was on can't
 	// keep receiving after it's off. See wsRevokerHolder.
@@ -2637,6 +2654,8 @@ func (a *App) RegisterRoutes() {
 	attRepo := notes.NewAttachmentRepository(a.DB)
 	noteSvc := notes.NewNoteServiceWithAttachments(noteRepo, attRepo)
 	noteAPIHandler := syncapi.NewNoteAPIHandler(syncService, noteSvc)
+	// Decides whether an API caller counts as a GM for notes shared with the GM.
+	noteAPIHandler.SetCampaignService(campaignService)
 
 	// Tag API handler for sync API — exposes tag CRUD and bulk tag operations.
 	tagAPIHandler := syncapi.NewTagAPIHandler(syncService, tagService, entityService, campaignService)
@@ -2687,6 +2706,10 @@ func (a *App) RegisterRoutes() {
 	noteHandler.SetAttachmentService(noteSvc)
 	noteHandler.SetMediaUploader(&mediaUploadAdapter{svc: mediaService})
 	noteHandler.SetMemberLister(campaignService)
+	noteHandler.SetCharacterLister(&journalCharacterAdapter{svc: entityService})
+	notePages := &notesPagesAdapter{svc: entityService}
+	noteHandler.SetPageNamer(notePages)
+	noteHandler.SetPageLinker(notePages)
 	notes.RegisterRoutes(e, noteHandler, campaignService, authService)
 
 	// Relations widget routes already registered above (before REST API v1).
@@ -2727,10 +2750,10 @@ func (a *App) RegisterRoutes() {
 			}
 			return out
 		},
-		// Read from the same map sidebarAddonLink renders hrefs from, never
-		// re-typed here — a copied path would keep reporting the old
-		// destination after the real one moved.
-		sidebarCalendarPath: layouts.AddonSidebarPath("calendar"),
+		// Read from the same catalog the sidebar links from, never re-typed
+		// here — a copied path would keep reporting the old destination
+		// after the real one moved.
+		sidebarCalendarPath: navAppPath(calendar.PluginSlug),
 	})
 
 	// And the enable-state checker the hub fragment route consults
@@ -3409,90 +3432,17 @@ func (a *App) RegisterRoutes() {
 				}
 			}
 			ctx = layouts.SetCampaignRole(ctx, effectiveRole)
+			ctx = layouts.SetCampaignArchived(ctx, cc.Campaign.IsArchived())
 
-			// Entity types for dynamic sidebar rendering.
-			// Use the request context (not the enriched ctx) since service calls
-			// only need cancellation/deadline, not layout data.
+			// Entity types, per-type counts and the enabled addons: what the
+			// sidebar is built from. Use the request context (not the
+			// enriched ctx) since service calls only need cancellation/
+			// deadline, not layout data.
 			reqCtx := c.Request().Context()
-			if etypes, err := entityService.GetEntityTypes(reqCtx, cc.Campaign.ID); err == nil {
-				sidebarTypes := make([]layouts.SidebarEntityType, len(etypes))
-				for i, et := range etypes {
-					sidebarTypes[i] = layouts.SidebarEntityType{
-						ID:           et.ID,
-						Slug:         et.Slug,
-						Name:         et.Name,
-						NamePlural:   et.NamePlural,
-						Icon:         et.Icon,
-						Color:        et.Color,
-						SortOrder:    et.SortOrder,
-						ParentTypeID: et.ParentTypeID,
-					}
-				}
-
-				// Build the sidebar from the single unified Items model. An empty
-				// Items array is valid: injectDefaultSidebarItems synthesizes the
-				// full default sidebar for a never-customized campaign.
-				sidebarCfg := cc.Campaign.ParseSidebarConfig()
-
-				// Entity types indexed by ID for quick lookup.
-				typeMap := make(map[int]layouts.SidebarEntityType)
-				for _, et := range sidebarTypes {
-					typeMap[et.ID] = et
-				}
-
-				// Complete the items with the standard scaffold + any missing
-				// entity types. Non-persistent: shapes this render only.
-				items := injectDefaultSidebarItems(sidebarCfg.Items, sidebarTypes)
-
-				var sidebarItems []layouts.SidebarItemView
-				for _, item := range items {
-					if !item.Visible {
-						continue
-					}
-					switch item.Type {
-					case "dashboard":
-						sidebarItems = append(sidebarItems, layouts.SidebarItemView{
-							Type: "dashboard", Label: "Dashboard",
-							Icon: "fa-home",
-						})
-					case "addon":
-						sidebarItems = append(sidebarItems, layouts.SidebarItemView{
-							Type: "addon", Slug: item.Slug, Label: item.Label,
-							Icon: item.Icon,
-						})
-					case "category":
-						if et, ok := typeMap[item.TypeID]; ok {
-							// Sub-category entity_types (ParentTypeID != nil) are
-							// template variants of their parent, not navigable
-							// collections; they surface via the parent's +New
-							// picker instead, so skip them here.
-							if et.ParentTypeID != nil {
-								continue
-							}
-							sidebarItems = append(sidebarItems, layouts.SidebarItemView{
-								Type: "category", TypeID: et.ID,
-								Label: et.NamePlural, Icon: et.Icon, Color: et.Color,
-								ParentTypeID: et.ParentTypeID,
-							})
-						}
-					case "all_pages":
-						sidebarItems = append(sidebarItems, layouts.SidebarItemView{
-							Type: "all_pages", Label: "All Pages",
-							Icon: "fa-layer-group",
-						})
-					case "section":
-						sidebarItems = append(sidebarItems, layouts.SidebarItemView{
-							Type: "section", ID: item.ID, Label: item.Label,
-						})
-					case "link":
-						sidebarItems = append(sidebarItems, layouts.SidebarItemView{
-							Type: "link", ID: item.ID, Label: item.Label,
-							URL: item.URL, Icon: item.Icon,
-						})
-					}
-				}
-				ctx = layouts.SetSidebarItems(ctx, sidebarItems)
-				// Still set entity types for the drill panel.
+			var sidebarTypes []layouts.SidebarEntityType
+			etypes, typesErr := entityService.GetEntityTypes(reqCtx, cc.Campaign.ID)
+			if typesErr == nil {
+				sidebarTypes = sidebarTypesFrom(etypes)
 				ctx = layouts.SetEntityTypes(ctx, sidebarTypes)
 			}
 
@@ -3503,31 +3453,45 @@ func (a *App) RegisterRoutes() {
 			if session := auth.GetSession(c); session != nil {
 				layoutUserID = session.UserID
 			}
-			if counts, err := entityService.CountByType(reqCtx, cc.Campaign.ID, effectiveRole, layoutUserID); err == nil {
+			counts, countsErr := entityService.CountByType(reqCtx, cc.Campaign.ID, effectiveRole, layoutUserID)
+			if countsErr == nil {
 				// CountByType already rolls child entity_type counts up into
 				// their parent under the sub-category-as-template model.
 				ctx = layouts.SetEntityCounts(ctx, counts)
 			}
 
-			// Enabled addons for conditional widget rendering.
+			// Enabled addons for conditional widget rendering, and the game
+			// system that backs the campaign's rulebook.
+			enabledSlugs := make(map[string]bool)
+			var enabledSystem layouts.EnabledSystem
 			if campaignAddons, err := addonService.ListForCampaign(reqCtx, cc.Campaign.ID); err == nil {
-				enabledSlugs := make(map[string]bool)
-				var enabledSystem layouts.EnabledSystem
-				for _, ca := range campaignAddons {
-					if !ca.Enabled {
-						continue
-					}
-					enabledSlugs[ca.AddonSlug] = true
-					// The enabled game system backs the campaign's rulebook
-					// (reference) nav link. Systems are mutually exclusive, so the
-					// first enabled one wins.
-					if ca.AddonCategory == addons.CategorySystem && enabledSystem.Slug == "" {
-						enabledSystem = layouts.EnabledSystem{Slug: ca.AddonSlug, Name: ca.AddonName, Icon: ca.AddonIcon}
-					}
-				}
+				enabledSlugs, enabledSystem = navAddonsFrom(campaignAddons)
 				ctx = layouts.SetEnabledAddons(ctx, enabledSlugs)
 				if enabledSystem.Slug != "" {
 					ctx = layouts.SetEnabledSystem(ctx, enabledSystem)
+				}
+			}
+
+			// The sidebar, cut down for this viewer. Rows hidden from
+			// players reach only the owner, and not while they view as a
+			// player (effectiveRole is Player then); so does the whole
+			// arrangement the owner's editor starts from.
+			if typesErr == nil {
+				in := navInputsFor(cc, sidebarTypes, counts, enabledSlugs, enabledSystem)
+				navOwner := effectiveRole >= int(campaigns.RoleOwner)
+				// A member who is not the owner has pins of their own; they
+				// are read for this user only.
+				var pins []string
+				if cc.IsMember && cc.MemberRole < campaigns.RoleOwner && layoutUserID != "" {
+					if p, err := campaignService.NavPins(reqCtx, cc.Campaign.ID, layoutUserID); err == nil {
+						pins = p
+					} else {
+						slog.Warn("reading member nav pins", slog.String("campaign_id", cc.Campaign.ID), slog.Any("error", err))
+					}
+				}
+				ctx = layouts.SetNavSections(ctx, viewNavSections(cc, in, navOwner, pins))
+				if navOwner {
+					ctx = layouts.SetNavEdit(ctx, buildNavEdit(in))
 				}
 			}
 
@@ -3568,6 +3532,17 @@ func (a *App) RegisterRoutes() {
 		// request context (e.g., entity show overrides to the category URL).
 		if layouts.GetActivePath(ctx) == "" {
 			ctx = layouts.SetActivePath(ctx, c.Request().URL.Path)
+		}
+		ctx = layouts.SetRequestPath(ctx, c.Request().URL.Path)
+
+		// Where the viewer is in the campaign sidebar, and which sections
+		// they folded (a per-campaign cookie sidebar_nav.js writes), so the
+		// server paints the finished sidebar and nothing jumps on load.
+		if campaigns.GetCampaignContext(c) != nil {
+			if cookie, err := c.Cookie(layouts.NavFoldsCookie); err == nil {
+				ctx = layouts.SetNavFolds(ctx, layouts.ParseNavFolds(cookie.Value))
+			}
+			ctx = layouts.ResolveNavState(ctx)
 		}
 
 		// Signed media URL generators for templates. Bound to whoever is
@@ -3664,6 +3639,65 @@ func (a *App) RegisterRoutes() {
 	// Mount each registered plugin's static assets at /static/plugins/<slug>/.
 	// Must run AFTER all plugins have called a.registerPlugin() above.
 	a.mountPluginStatic()
+}
+
+// journalCharacterAdapter adapts EntityService to notes.CharacterLister: the
+// characters a player has claimed, most recently played first.
+type journalCharacterAdapter struct {
+	svc entities.EntityService
+}
+
+// ClaimedCharacters lists userID's characters in the campaign.
+func (a *journalCharacterAdapter) ClaimedCharacters(ctx context.Context, campaignID, userID string) ([]notes.ClaimedCharacter, error) {
+	if userID == "" {
+		return nil, nil
+	}
+	owned, err := a.svc.ListByOwner(ctx, campaignID, userID)
+	if err != nil {
+		return nil, err
+	}
+	out := make([]notes.ClaimedCharacter, 0, len(owned))
+	for _, e := range owned {
+		out = append(out, notes.ClaimedCharacter{ID: e.ID, Name: e.Name, TypeName: e.TypeName})
+	}
+	return out, nil
+}
+
+// notesPagesAdapter adapts EntityService to notes.PageNamer and
+// notes.PageLinker: pages named and listed only as far as the viewer may
+// see them.
+type notesPagesAdapter struct {
+	svc entities.EntityService
+}
+
+// PageNames names the ids the viewer can see; the rest are left out.
+func (a *notesPagesAdapter) PageNames(ctx context.Context, campaignID string, v permissions.Viewer, ids []string) (map[string]string, error) {
+	out := make(map[string]string, len(ids))
+	for _, id := range ids {
+		e, err := a.svc.GetByID(ctx, id)
+		if err != nil || e == nil || e.CampaignID != campaignID {
+			continue
+		}
+		perm, err := a.svc.CheckEntityAccess(ctx, id, v.Role(), v.UserID())
+		if err != nil || perm == nil || !perm.CanView {
+			continue
+		}
+		out[id] = e.Name
+	}
+	return out, nil
+}
+
+// PagesLinkingNote lists the visible pages that link a note, by name only.
+func (a *notesPagesAdapter) PagesLinkingNote(ctx context.Context, campaignID string, v permissions.Viewer, seesSecrets bool, noteID string) ([]notes.PageRef, error) {
+	pages, err := a.svc.PagesLinkingNote(ctx, campaignID, noteID, v.Role(), v.UserID(), seesSecrets)
+	if err != nil {
+		return nil, err
+	}
+	out := make([]notes.PageRef, 0, len(pages))
+	for _, p := range pages {
+		out = append(out, notes.PageRef{ID: p.ID, Name: p.Name, TypeName: p.TypeName})
+	}
+	return out, nil
 }
 
 // mediaUploadAdapter adapts MediaService to the notes.MediaUploader interface.

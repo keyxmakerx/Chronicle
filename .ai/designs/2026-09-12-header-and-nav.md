@@ -4,6 +4,11 @@
 addenda below supersede the July layout where they conflict. Order of work:
 `2026-09-12-build-order.md`.**
 
+**The sidebar's structure is #739's, not this file's:** the Apps drawer
+(round-2 ruling 3, slice N1) is superseded by the signed "Pinned + folding
+sections" sidebar, where apps and categories stay on screen as folding
+sections. The living-ring ruling at the foot of this file stands.
+
 **Ruling:** the customizable header was designed in July, signed by the
 operator, and never built. **Revive it; do not redesign it.** The nav's
 structural work (one item model, one reorder mechanic — C-NAV-V3) shipped and

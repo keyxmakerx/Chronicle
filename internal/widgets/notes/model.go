@@ -1,21 +1,18 @@
-// Package notes implements the player notes widget for Chronicle. Notes are
-// per-user records scoped to a campaign and optionally to a specific entity
-// (page). They support text blocks, interactive checklists, and rich text
-// (TipTap/ProseMirror), providing a collaborative note-taking experience in
-// a collapsible bottom-right panel.
+// Package notes implements Chronicle's notes: the full-page Journal and the
+// floating per-page Jot notes. Both are rows in one table; a note with no page
+// (entity_id NULL) belongs to the Journal, a note on a page is that page's jot.
+// Notes support folders, rich text (TipTap/ProseMirror), checklists, version
+// history, audio attachments and a pessimistic edit lock with 5-minute expiry.
 //
-// Notes can be shared with the entire campaign (is_shared=true) and support
-// pessimistic edit locking with 5-minute auto-expiry. Version history tracks
-// content snapshots on each save.
-//
-// Notes are a Widget in Chronicle's three-tier extension architecture: they
-// provide API endpoints for the frontend notes panel and are auto-mounted
-// on every campaign page when the addon is enabled.
+// Who can read a note is decided by Note.CanView and its SQL twin in the
+// repository; see Visibility for the four audiences.
 package notes
 
 import (
 	"encoding/json"
 	"time"
+
+	"github.com/keyxmakerx/chronicle/internal/permissions"
 )
 
 // LockTimeout is how long an edit lock remains valid without a heartbeat.
@@ -25,22 +22,84 @@ const LockTimeout = 5 * time.Minute
 // pruned when this limit is exceeded.
 const MaxVersionsPerNote = 50
 
-// Note represents a single user note within a campaign.
+// Visibility is who besides its owner can read a note. It is derived from
+// three columns rather than stored as one, so the rows written before the GM
+// state existed keep their exact audience and older sync clients that only
+// know isShared/sharedWith keep working:
+//
+//	party   is_shared = TRUE
+//	custom  shared_with names at least one person
+//	gm      shared_with_gm = TRUE (the campaign Owner and co-DMs)
+//	private none of the above: the owner alone, not even the GM
+type Visibility string
+
+// The four audiences a note can have.
+const (
+	VisibilityPrivate Visibility = "private"
+	VisibilityGM      Visibility = "gm"
+	VisibilityParty   Visibility = "party"
+	VisibilityCustom  Visibility = "custom"
+)
+
+// Valid reports whether v is one of the four audiences.
+func (v Visibility) Valid() bool {
+	switch v {
+	case VisibilityPrivate, VisibilityGM, VisibilityParty, VisibilityCustom:
+		return true
+	}
+	return false
+}
+
+// derive fills the fields computed from stored columns. Called on every row
+// the repository scans, so a Note never leaves the package without them.
+func (n *Note) derive() {
+	n.Archived = n.ArchivedAt != nil
+	switch {
+	case n.IsShared:
+		n.Visibility = VisibilityParty
+	case len(n.SharedWith) > 0:
+		n.Visibility = VisibilityCustom
+	case n.SharedWithGM:
+		n.Visibility = VisibilityGM
+	default:
+		n.Visibility = VisibilityPrivate
+	}
+}
+
+// applyVisibility sets the sharing columns for v. The columns are written
+// together so the derived Visibility and the SQL filter can never disagree.
+func (n *Note) applyVisibility(v Visibility, sharedWith []string) {
+	n.IsShared = v == VisibilityParty
+	n.SharedWithGM = v == VisibilityGM
+	n.SharedWith = nil
+	if v == VisibilityCustom {
+		n.SharedWith = sharedWith
+	}
+	n.derive()
+}
+
+// Note represents a single note within a campaign: a Journal note, a jot on a
+// page, or a folder.
 type Note struct {
 	ID           string     `json:"id"`
 	CampaignID   string     `json:"campaignId"`
 	UserID       string     `json:"userId"`
-	EntityID     *string    `json:"entityId,omitempty"`    // nil = campaign-wide note
-	ParentID     *string    `json:"parentId,omitempty"`    // nil = top-level note/folder
-	IsFolder     bool       `json:"isFolder"`              // true = folder container
+	EntityID     *string    `json:"entityId,omitempty"`     // nil = Journal note; set = that page's jot
+	LinkedNoteID *string    `json:"linkedNoteId,omitempty"` // jot sent to the Journal: the note it became
+	ParentID     *string    `json:"parentId,omitempty"`     // nil = top-level note/folder
+	IsFolder     bool       `json:"isFolder"`               // true = folder container
 	Title        string     `json:"title"`
-	Content      []Block    `json:"content"`               // Legacy block content
-	Entry        *string    `json:"entry,omitempty"`       // ProseMirror JSON (rich text)
-	EntryHTML    *string    `json:"entryHtml,omitempty"`   // Pre-rendered HTML from entry
+	Content      []Block    `json:"content"`             // Legacy block content
+	Entry        *string    `json:"entry,omitempty"`     // ProseMirror JSON (rich text)
+	EntryHTML    *string    `json:"entryHtml,omitempty"` // Pre-rendered HTML from entry
 	Color        string     `json:"color"`
 	Pinned       bool       `json:"pinned"`
+	ArchivedAt   *time.Time `json:"archivedAt,omitempty"`
+	Archived     bool       `json:"archived"` // derived from ArchivedAt
 	IsShared     bool       `json:"isShared"`
-	SharedWith   []string   `json:"sharedWith,omitempty"`   // User IDs this note is shared with (nil = use IsShared)
+	SharedWith   []string   `json:"sharedWith,omitempty"` // User IDs this note is shared with (nil = use IsShared)
+	SharedWithGM bool       `json:"-"`                    // read through Visibility
+	Visibility   Visibility `json:"visibility"`           // derived from the three sharing columns
 	LastEditedBy *string    `json:"lastEditedBy,omitempty"`
 	LockedBy     *string    `json:"lockedBy,omitempty"`
 	LockedAt     *time.Time `json:"lockedAt,omitempty"`
@@ -61,33 +120,41 @@ func (n *Note) IsLockedByUser(userID string) bool {
 	return n.IsLocked() && *n.LockedBy == userID
 }
 
-// CanAccess reports whether userID may read this note within campaignID: the
-// owner, a campaign-wide share (IsShared), or an explicit per-user share.
-// Per ADR-013 a private (non-shared) note is owner-only.
+// CanView reports whether v may read this note within campaignID: its owner,
+// anyone when it is shared with the party, a named person when it is shared
+// with them, and the campaign's GMs (Owner or co-DM) when it is shared with
+// the GM. Private is private from the GM too, so SkipsPerUserRules is never
+// consulted, and an anonymous viewer sees nothing.
 //
-// Lives on the model rather than in a handler because both route sets that
-// address a single note — the web widget routes and the REST API v1 routes
-// (syncapi) — must apply the identical predicate. Neither the repository nor
-// the service filters by user on the single-resource path (`WHERE id = ?`),
-// so this is the only ownership gate; a route that forgets it is an IDOR.
-func (n *Note) CanAccess(userID, campaignID string) bool {
+// Lives on the model because every path that addresses a single note (the web
+// routes and the REST API v1 routes) must apply the identical predicate, and
+// neither the repository nor the service filters the single-resource path
+// (`WHERE id = ?`); a route that forgets it is an IDOR. The repository's
+// visibleFilter is the SQL twin of this function and must stay in step
+// (TestDB_ListVisibilityMatchesCanView pins them together).
+func (n *Note) CanView(v permissions.Viewer, campaignID string) bool {
 	if n.CampaignID != campaignID {
 		return false
 	}
-	if n.UserID == userID || n.IsShared {
+	uid := v.UserID()
+	if uid == "" {
+		return false
+	}
+	if n.UserID == uid || n.IsShared {
 		return true
 	}
-	for _, uid := range n.SharedWith {
-		if uid == userID {
+	for _, id := range n.SharedWith {
+		if id == uid {
 			return true
 		}
 	}
-	return false
+	return n.SharedWithGM && permissions.CanSeeDmOnly(v.Role())
 }
 
 // IsOwnedBy reports whether userID owns this note within campaignID. Owner-only
-// operations — deleting the note, and changing its sharing/pinned state — gate
-// on this rather than on CanAccess, which also admits share recipients.
+// operations — deleting, filing into a folder, archiving, and changing its
+// sharing or pinned state — gate on this rather than on CanView, which also
+// admits everyone the note is shared with.
 func (n *Note) IsOwnedBy(userID, campaignID string) bool {
 	return n.CampaignID == campaignID && n.UserID == userID
 }
@@ -144,6 +211,10 @@ type CreateNoteRequest struct {
 	Color      string   `json:"color,omitempty"`
 	IsShared   bool     `json:"isShared,omitempty"`
 	SharedWith []string `json:"sharedWith,omitempty"` // Share with specific users
+	// Visibility, when set, decides the audience instead of IsShared/SharedWith.
+	// Absent means private: a new note is private to its writer until they
+	// choose to share it.
+	Visibility Visibility `json:"visibility,omitempty"`
 }
 
 // UpdateNoteRequest holds the data submitted when updating a note.
@@ -156,7 +227,23 @@ type UpdateNoteRequest struct {
 	Pinned     *bool    `json:"pinned,omitempty"`
 	IsShared   *bool    `json:"isShared,omitempty"`
 	SharedWith []string `json:"sharedWith,omitempty"` // Share with specific users (empty = clear)
-	ParentID   *string  `json:"parentId,omitempty"`   // move note into/out of folder
+	ParentID   *string  `json:"parentId,omitempty"`   // move note into/out of folder ("" = top level)
+	// Visibility sets the audience in one field; wins over IsShared/SharedWith
+	// when both are sent. SharedWith supplies the people for "custom".
+	Visibility *Visibility `json:"visibility,omitempty"`
+	Archived   *bool       `json:"archived,omitempty"`
+}
+
+// StripOwnerOnly drops the fields only a note's owner may change, so a person
+// the note is shared with can still save its title and body. Dropped, not
+// refused: a client that echoes the whole note back must not fail the edit.
+func (r *UpdateNoteRequest) StripOwnerOnly() {
+	r.IsShared = nil
+	r.SharedWith = nil
+	r.Visibility = nil
+	r.Pinned = nil
+	r.ParentID = nil
+	r.Archived = nil
 }
 
 // MarshalSharedWith converts a SharedWith slice to JSON for database storage.

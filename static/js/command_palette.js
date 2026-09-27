@@ -50,6 +50,34 @@
     return false;
   }
 
+  // Only a Font Awesome name may reach an icon's class list: the result list
+  // is built as markup, and category icons are owner-entered text.
+  var ICON_RE = /^fa-[a-z0-9-]{1,40}$/;
+
+  /**
+   * The viewer's sidebar destinations, read from #sidebar[data-nav-commands]
+   * (rendered by layouts.NavCommandsJSON). Malformed entries are skipped.
+   */
+  function navCommands() {
+    var sidebar = document.getElementById('sidebar');
+    var raw = sidebar && sidebar.getAttribute('data-nav-commands');
+    if (!raw) return [];
+    var list;
+    try { list = JSON.parse(raw); } catch (e) { return []; }
+    if (!Array.isArray(list)) return [];
+    var out = [];
+    list.forEach(function (c) {
+      if (!c || typeof c.label !== 'string' || typeof c.href !== 'string' || !c.label || !c.href) return;
+      out.push({
+        label: 'Go to ' + c.label,
+        icon: ICON_RE.test(c.icon || '') ? c.icon : 'fa-chevron-right',
+        href: c.href,
+        shortcut: ''
+      });
+    });
+    return out;
+  }
+
   // --- Command Definitions ---
 
   function buildCommands() {
@@ -60,22 +88,12 @@
     cmds.push({ label: 'Go to Campaigns', icon: 'fa-dice-d20', href: '/campaigns', shortcut: '' });
 
     if (cid) {
-      // Campaign navigation.
-      cmds.push({ label: 'Go to Campaign Home', icon: 'fa-home', href: '/campaigns/' + cid, shortcut: '' });
-      cmds.push({ label: 'Go to Calendar', icon: 'fa-calendar-days', href: '/campaigns/' + cid + '/calendar', shortcut: '' });
-      cmds.push({ label: 'Go to Timelines', icon: 'fa-timeline', href: '/campaigns/' + cid + '/timelines', shortcut: '' });
-      cmds.push({ label: 'Go to Maps', icon: 'fa-map', href: '/campaigns/' + cid + '/maps', shortcut: '' });
-      cmds.push({ label: 'Go to Sessions', icon: 'fa-dice-d20', href: '/campaigns/' + cid + '/sessions', shortcut: '' });
-      cmds.push({ label: 'Go to Journal', icon: 'fa-book', href: '/campaigns/' + cid + '/journal', shortcut: '' });
-      cmds.push({ label: 'Go to Media', icon: 'fa-images', href: '/campaigns/' + cid + '/media', shortcut: '' });
-      cmds.push({ label: 'Go to Members', icon: 'fa-users', href: '/campaigns/' + cid + '/members', shortcut: '' });
-      // Characters already lists the party and NPCs together, so this is the
-      // palette's one entry for both -- straight to the page, not the old
-      // /npcs redirect hop.
-      cmds.push({ label: 'Go to Characters', icon: 'fa-masks-theater', href: '/campaigns/' + cid + '/characters', shortcut: '' });
+      // Campaign navigation: one "Go to" per row of the viewer's own sidebar.
+      // The server renders that list per viewer, so the palette can never
+      // offer what the sidebar withholds (a row hidden from players, an app
+      // the viewer cannot open, the owner's Manage pages).
+      navCommands().forEach(function (c) { cmds.push(c); });
       cmds.push({ label: 'Go to Relations Graph', icon: 'fa-diagram-project', href: '/campaigns/' + cid + '/relations-graph/page', shortcut: '' });
-      cmds.push({ label: 'Go to Settings', icon: 'fa-gear', href: '/campaigns/' + cid + '/settings', shortcut: '' });
-      cmds.push({ label: 'Go to Customize', icon: 'fa-palette', href: '/campaigns/' + cid + '/customize', shortcut: '' });
       cmds.push({ label: 'Go to Plugins', icon: 'fa-puzzle-piece', href: '/campaigns/' + cid + '/plugins', shortcut: '' });
 
       // Actions.

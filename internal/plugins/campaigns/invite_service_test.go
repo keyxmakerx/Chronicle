@@ -140,6 +140,12 @@ func (m *mockCampaignRepoForInvites) UpdateMemberRole(context.Context, string, s
 func (m *mockCampaignRepoForInvites) UpdateMemberCharacter(context.Context, string, string, *string) error {
 	return nil
 }
+func (m *mockCampaignRepoForInvites) GetMemberNavPins(context.Context, string, string) ([]string, error) {
+	return nil, nil
+}
+func (m *mockCampaignRepoForInvites) SetMemberNavPins(context.Context, string, string, []string) error {
+	return nil
+}
 func (m *mockCampaignRepoForInvites) FindOwnerMember(context.Context, string) (*CampaignMember, error) {
 	return nil, nil
 }

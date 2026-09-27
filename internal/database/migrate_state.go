@@ -21,7 +21,7 @@ import (
 // the database to be at (the health-check floor). It MUST equal the highest
 // db/migrations/NNNNNN_*.up.sql number — TestExpectedCoreMigrationVersion_MatchesMax
 // enforces that, so this constant can never silently drift from reality again.
-const ExpectedCoreMigrationVersion uint = 30
+const ExpectedCoreMigrationVersion uint = 33
 
 // HighestSourceVersion returns the highest migration version present in
 // migrationsPath, parsed from the leading NNNNNN_ of each *.up.sql filename.
