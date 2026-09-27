@@ -11,11 +11,8 @@ import (
 	"github.com/keyxmakerx/chronicle/internal/apperror"
 	"github.com/keyxmakerx/chronicle/internal/concurrency"
 	"github.com/keyxmakerx/chronicle/internal/permissions"
+	"github.com/keyxmakerx/chronicle/internal/sanitize"
 )
-
-// iconPattern validates FontAwesome icon class names to prevent XSS injection
-// via the icon field which is rendered into HTML attributes.
-var iconPattern = regexp.MustCompile(`^fa-[a-z0-9-]+$`)
 
 // colorPattern validates hex color values to prevent XSS injection via the
 // color field which is rendered into CSS style attributes.
@@ -246,17 +243,19 @@ func (s *mapService) CreateMarker(ctx context.Context, input CreateMarkerInput) 
 	if input.Visibility == "" {
 		input.Visibility = "everyone"
 	}
-	if input.Icon == "" {
-		input.Icon = "fa-map-pin"
+	icon, err := sanitize.ValidateIcon(input.Icon)
+	if err != nil {
+		return nil, err
 	}
+	if icon == "" {
+		icon = "fa-map-pin"
+	}
+	input.Icon = icon
 	if input.Color == "" {
 		input.Color = "#3b82f6"
 	}
 
-	// Validate icon and color to prevent XSS (these are rendered into HTML).
-	if !iconPattern.MatchString(input.Icon) {
-		return nil, apperror.NewValidation("icon must be a valid FontAwesome class name (e.g., fa-map-pin)")
-	}
+	// Validate color to prevent XSS (it is rendered into HTML).
 	if !colorPattern.MatchString(input.Color) {
 		return nil, apperror.NewValidation("color must be a valid hex color (e.g., #3b82f6)")
 	}
@@ -324,10 +323,11 @@ func (s *mapService) UpdateMarker(ctx context.Context, id string, input UpdateMa
 	}
 
 	// Validate icon and color to prevent XSS (these are rendered into HTML).
-	icon, color := input.Icon.Val(mk.Icon), input.Color.Val(mk.Color)
-	if icon != "" && !iconPattern.MatchString(icon) {
-		return apperror.NewValidation("icon must be a valid FontAwesome class name")
+	icon, err := sanitize.ValidateIcon(input.Icon.Val(mk.Icon))
+	if err != nil {
+		return err
 	}
+	color := input.Color.Val(mk.Color)
 	if color != "" && !colorPattern.MatchString(color) {
 		return apperror.NewValidation("color must be a valid hex color")
 	}

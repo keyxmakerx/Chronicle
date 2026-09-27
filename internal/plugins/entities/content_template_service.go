@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	"github.com/keyxmakerx/chronicle/internal/apperror"
+	"github.com/keyxmakerx/chronicle/internal/sanitize"
 )
 
 // maxContentTemplateSize is the maximum allowed size for content JSON or HTML (100KB).
@@ -62,7 +63,10 @@ func (s *contentTemplateService) Create(ctx context.Context, campaignID string, 
 		return nil, apperror.NewBadRequest("content_html exceeds maximum size")
 	}
 
-	icon := strings.TrimSpace(input.Icon)
+	icon, err := sanitize.ValidateIcon(input.Icon)
+	if err != nil {
+		return nil, err
+	}
 	if icon == "" {
 		icon = "fa-file-lines"
 	}
@@ -145,7 +149,11 @@ func (s *contentTemplateService) Update(ctx context.Context, id int, input Updat
 	t.Description = strings.TrimSpace(input.Description)
 	t.ContentJSON = contentJSON
 	t.ContentHTML = strings.TrimSpace(input.ContentHTML)
-	if icon := strings.TrimSpace(input.Icon); icon != "" {
+	icon, err := sanitize.ValidateIcon(input.Icon)
+	if err != nil {
+		return nil, err
+	}
+	if icon != "" {
 		t.Icon = icon
 	}
 

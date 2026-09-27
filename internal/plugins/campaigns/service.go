@@ -1003,6 +1003,9 @@ func (s *campaignService) UpdateTopbarContent(ctx context.Context, campaignID st
 			if err := validateNavLinkURL(link.Label, link.URL); err != nil {
 				return err
 			}
+			if _, err := sanitize.ValidateIcon(link.Icon); err != nil {
+				return err
+			}
 		}
 	}
 
@@ -1412,6 +1415,9 @@ func (s *campaignService) UpdateSidebarConfig(ctx context.Context, campaignID st
 	// nothing new to validate; the render-time guard re-checks regardless).
 	if req.Items != nil {
 		for _, it := range *req.Items {
+			if _, err := sanitize.ValidateIcon(it.Icon); err != nil {
+				return err
+			}
 			if it.Type != "link" || it.URL == "" {
 				continue
 			}

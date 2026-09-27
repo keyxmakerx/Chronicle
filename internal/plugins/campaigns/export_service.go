@@ -435,6 +435,8 @@ func (s *ExportImportService) Import(ctx context.Context, userID string, data *C
 
 	campaignID := campaign.ID
 
+	normalizeImportIcons(data, report)
+
 	// Apply campaign settings if present.
 	if len(data.Campaign.SidebarConfig) > 0 {
 		// A legacy export carries the old sidebar fields; convert it to the
@@ -448,6 +450,7 @@ func (s *ExportImportService) Import(ctx context.Context, userID string, data *C
 				cfg = parsed
 			}
 		}
+		normalizeSidebarIcons(cfg.Items, data.Campaign.Name, report)
 		sidebarReq := UpdateSidebarConfigRequest{
 			Items:           &cfg.Items,
 			HiddenEntityIDs: &cfg.HiddenEntityIDs,

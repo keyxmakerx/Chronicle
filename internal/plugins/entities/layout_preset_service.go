@@ -8,6 +8,7 @@ import (
 	"strings"
 
 	"github.com/keyxmakerx/chronicle/internal/apperror"
+	"github.com/keyxmakerx/chronicle/internal/sanitize"
 )
 
 // LayoutPresetService handles business logic for layout presets.
@@ -147,7 +148,10 @@ func (s *layoutPresetService) validateInput(name, desc, icon, layoutJSONRaw stri
 		return "", "", "", "", err
 	}
 
-	icon = strings.TrimSpace(icon)
+	icon, err := sanitize.ValidateIcon(icon)
+	if err != nil {
+		return "", "", "", "", err
+	}
 	if icon == "" {
 		icon = "fa-table-columns"
 	}

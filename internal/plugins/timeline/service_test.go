@@ -370,7 +370,7 @@ func TestCreateTimeline_InvalidIcon(t *testing.T) {
 		Name: "TL",
 		Icon: "<script>alert(1)</script>",
 	})
-	assertAppError(t, err, 422)
+	assertAppError(t, err, 400)
 }
 
 func TestCreateTimeline_InvalidColor(t *testing.T) {
