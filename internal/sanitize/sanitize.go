@@ -122,7 +122,7 @@ func StripSecretsHTML(html string) string {
 	return secretSpanRe.ReplaceAllString(html, "")
 }
 
-// StripSecretsJSON removes text nodes marked with the "secret" mark from
+// StripSecretsJSON removes nodes marked with the "secret" mark from
 // ProseMirror JSON content. Returns the modified JSON string. If the input
 // is not valid ProseMirror JSON, it is returned unchanged.
 func StripSecretsJSON(jsonStr string) string {
@@ -144,8 +144,9 @@ func StripSecretsJSON(jsonStr string) string {
 	return string(out)
 }
 
-// stripSecretNodes recursively walks ProseMirror JSON and removes text nodes
-// that carry a "secret" mark.
+// stripSecretNodes recursively walks ProseMirror JSON and removes every
+// node that carries a "secret" mark: text, and inline nodes such as a
+// [[note]] link, which would otherwise show a player what a secret links to.
 func stripSecretNodes(node map[string]interface{}) {
 	content, ok := node["content"].([]interface{})
 	if !ok {
@@ -160,11 +161,8 @@ func stripSecretNodes(node map[string]interface{}) {
 			continue
 		}
 
-		// Check if this is a text node with a "secret" mark.
-		if childMap["type"] == "text" {
-			if hasSecretMark(childMap) {
-				continue // strip this text node
-			}
+		if hasSecretMark(childMap) {
+			continue // strip this node
 		}
 
 		// Recurse into child nodes.
