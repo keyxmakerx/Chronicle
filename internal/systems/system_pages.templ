@@ -19,6 +19,13 @@ type categoryInfo struct {
 	Count int
 }
 
+// rulebookFrontpageWidgetSlug is the widget slug a system's manifest
+// registers to supply the Rulebook page's signed front page. Checked via
+// SystemManifest.HasWidget so this stays system-agnostic — any package
+// that ships a widget with this slug gets it mounted here, not just Draw
+// Steel.
+const rulebookFrontpageWidgetSlug = "rulebook-frontpage"
+
 // SystemIndexPage renders the full module category index page.
 templ SystemIndexPage(cc *campaigns.CampaignContext, manifest *SystemManifest, cats []categoryInfo) {
 	@layouts.App(manifest.Name + " - " + cc.Campaign.Name) {
@@ -33,6 +40,10 @@ templ SystemIndexContent(cc *campaigns.CampaignContext, manifest *SystemManifest
 			{Label: cc.Campaign.Name, Href: "/campaigns/" + cc.Campaign.ID, Icon: "fa-book-open"},
 			{Label: manifest.Name},
 		})
+
+		if manifest.HasWidget(rulebookFrontpageWidgetSlug) {
+			<div class="mb-6" data-widget={ rulebookFrontpageWidgetSlug } data-campaign-id={ cc.Campaign.ID }></div>
+		}
 
 		<!-- System header -->
 		<div class="mb-6">

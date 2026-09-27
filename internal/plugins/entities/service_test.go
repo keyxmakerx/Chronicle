@@ -2,7 +2,9 @@ package entities
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
+	"strings"
 	"testing"
 
 	"github.com/keyxmakerx/chronicle/internal/apperror"
@@ -1431,6 +1433,27 @@ func TestExtractMentionSnippet_Nil(t *testing.T) {
 	}
 }
 
+// TestBuildSearchText_ExcludesSecrets pins that search_text — one column
+// matched for every viewer regardless of role — never indexes GM secret
+// text: a player's search could otherwise match a word that appears only
+// inside a GM secret on an otherwise-visible page. Non-secret content must
+// still be indexed.
+func TestBuildSearchText_ExcludesSecrets(t *testing.T) {
+	const secretWord = "moonshadowkey"
+	const visibleWord = "lighthouse"
+	html := `<p>The ` + visibleWord + ` stands tall. ` +
+		`<span data-secret="true">The password is ` + secretWord + `.</span></p>`
+
+	got := buildSearchText(html, nil)
+
+	if strings.Contains(got, secretWord) {
+		t.Errorf("buildSearchText indexed GM secret text: %q", got)
+	}
+	if !strings.Contains(got, visibleWord) {
+		t.Errorf("buildSearchText dropped non-secret text: %q", got)
+	}
+}
+
 func TestGetBacklinksWithSnippets(t *testing.T) {
 	html := `<p>See <a data-mention-id="target-1" href="/e/target-1">@Target</a> for details.</p>`
 	entityRepo := &mockEntityRepo{
@@ -1442,7 +1465,7 @@ func TestGetBacklinksWithSnippets(t *testing.T) {
 	}
 
 	svc := newTestService(entityRepo, &mockEntityTypeRepo{})
-	entries, err := svc.GetBacklinksWithSnippets(context.Background(), "camp-1", "target-1", 2, "")
+	entries, err := svc.GetBacklinksWithSnippets(context.Background(), "camp-1", "target-1", 2, "", true)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -1455,6 +1478,110 @@ func TestGetBacklinksWithSnippets(t *testing.T) {
 	if entries[0].Entity.ID != "ref-1" {
 		t.Errorf("expected entity ID ref-1, got %s", entries[0].Entity.ID)
 	}
+}
+
+// TestGetBacklinksWithSnippets_SecretRedaction pins at the service layer that
+// a linking page's GM secret must never reach a viewer below Scribe through
+// the backlinks snippet, and that the JSON response never carries the
+// linking entity's raw fields (entry/entry_html/fields_data) for any
+// viewer — only the safe BacklinkEntity summary.
+func TestGetBacklinksWithSnippets_SecretRedaction(t *testing.T) {
+	const secretText = "the crown is hidden beneath the chapel"
+	html := `<p>See <span data-secret="true">` + secretText + `</span> and ` +
+		`<a data-mention-id="target-1" href="/e/target-1">@Target</a> for details.</p>`
+
+	tests := []struct {
+		name       string
+		role       int
+		canSeeGM   bool
+		wantSecret bool
+	}{
+		{"owner sees secret text in snippet", permissions.RoleOwner, true, true},
+		{"scribe sees secret text in snippet", permissions.RoleScribe, true, true},
+		{"player never sees secret text", permissions.RolePlayer, false, false},
+		{"anonymous visitor never sees secret text", permissions.RoleNone, false, false},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			entityRepo := &mockEntityRepo{
+				findBacklinksFn: func(_ context.Context, _, _ string, _ int, _ string) ([]Entity, error) {
+					return []Entity{{
+						ID: "ref-1", Name: "Source", TypeName: "Note",
+						TypeIcon: "fa-note", TypeColor: "#abcdef", EntryHTML: &html,
+					}}, nil
+				},
+			}
+			svc := newTestService(entityRepo, &mockEntityTypeRepo{})
+			entries, err := svc.GetBacklinksWithSnippets(
+				context.Background(), "camp-1", "target-1", tt.role, "user-1", tt.canSeeGM)
+			if err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
+			if len(entries) != 1 {
+				t.Fatalf("expected 1 backlink entry, got %d", len(entries))
+			}
+
+			gotSecret := strings.Contains(entries[0].Snippet, secretText)
+			if gotSecret != tt.wantSecret {
+				t.Errorf("snippet contains secret text = %v, want %v (snippet=%q)",
+					gotSecret, tt.wantSecret, entries[0].Snippet)
+			}
+
+			data, err := json.Marshal(entries)
+			if err != nil {
+				t.Fatalf("marshal: %v", err)
+			}
+			body := string(data)
+			if !tt.wantSecret && strings.Contains(body, secretText) {
+				t.Errorf("secret text leaked into JSON response: %s", body)
+			}
+			for _, forbidden := range []string{`"entry"`, `"entry_html"`, `"fields_data"`, `"player_notes"`} {
+				if strings.Contains(body, forbidden) {
+					t.Errorf("backlinks JSON must not carry raw entity field %s: %s", forbidden, body)
+				}
+			}
+		})
+	}
+}
+
+// TestGetBacklinksWithSnippets_MentionOnlyInSecret pins that when the ONLY
+// mention of the target lives inside a GM secret span, a viewer below Scribe
+// gets no entry for that linking page at all — not an entry with an empty
+// snippet, which would still announce that the page references the target.
+// FindBacklinks matches on the page's raw (unstripped) entry_html, so the
+// service layer is what must drop it once the secret is stripped away.
+func TestGetBacklinksWithSnippets_MentionOnlyInSecret(t *testing.T) {
+	html := `<p>Something to see here, but the actual link is ` +
+		`<span data-secret="true">only known via ` +
+		`<a data-mention-id="target-1" href="/e/target-1">@Target</a></span>.</p>`
+
+	entityRepo := &mockEntityRepo{
+		findBacklinksFn: func(_ context.Context, _, _ string, _ int, _ string) ([]Entity, error) {
+			return []Entity{{ID: "ref-1", Name: "Source", EntryHTML: &html}}, nil
+		},
+	}
+	svc := newTestService(entityRepo, &mockEntityTypeRepo{})
+
+	t.Run("Scribe+ still sees the entry (secret-only mention, but they may see secrets)", func(t *testing.T) {
+		entries, err := svc.GetBacklinksWithSnippets(context.Background(), "camp-1", "target-1", permissions.RoleScribe, "user-1", true)
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if len(entries) != 1 {
+			t.Fatalf("expected 1 backlink entry for a Scribe, got %d", len(entries))
+		}
+	})
+
+	t.Run("player gets no entry, not an empty-snippet placeholder", func(t *testing.T) {
+		entries, err := svc.GetBacklinksWithSnippets(context.Background(), "camp-1", "target-1", permissions.RolePlayer, "user-1", false)
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if len(entries) != 0 {
+			t.Fatalf("expected the secret-only mention to be omitted for a player, got %d entries: %+v", len(entries), entries)
+		}
+	})
 }
 
 // --- Permission Model Validation Tests ---
