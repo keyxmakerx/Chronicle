@@ -15,6 +15,15 @@ import (
 // noteIDPattern is the shape a note link's data-note-id must have.
 var noteIDPattern = regexp.MustCompile(`^[0-9a-fA-F-]{8,64}$`)
 
+// The rich editor's checklist markup: which list is a checklist, and whether
+// an item is ticked. Only these exact values pass; the checkbox <input> the
+// editor draws is not kept, since readers style ticked items from the
+// attribute and no stored HTML needs a form control.
+var (
+	taskTypePattern    = regexp.MustCompile(`^(taskList|taskItem)$`)
+	taskCheckedPattern = regexp.MustCompile(`^(true|false)$`)
+)
+
 // policy is the singleton bluemonday policy for sanitizing user-generated HTML.
 // Initialized once via sync.Once for thread-safe lazy initialization.
 var (
@@ -54,6 +63,8 @@ func getPolicy() *bluemonday.Policy {
 
 		// Allow data attributes used by the editor for various features.
 		policy.AllowAttrs("data-type").OnElements("div", "span")
+		policy.AllowAttrs("data-type").Matching(taskTypePattern).OnElements("ul", "li")
+		policy.AllowAttrs("data-checked").Matching(taskCheckedPattern).OnElements("li")
 
 		// Allow inline secrets (GM-only text wrapped in <span data-secret>).
 		policy.AllowAttrs("data-secret").OnElements("span")
