@@ -19,6 +19,7 @@ import (
 	"log/slog"
 	"regexp"
 	"time"
+	"unicode/utf8"
 
 	"github.com/keyxmakerx/chronicle/internal/apperror"
 	"github.com/keyxmakerx/chronicle/internal/patch"
@@ -1986,6 +1987,9 @@ func (s *calendarService) PreviewAnchorMove(ctx context.Context, calendarID, cam
 // way V4's did: every current caller is importing into a calendar that has
 // no events yet, so there is nothing for a month-position edit to re-date.
 func (s *calendarService) SetMonths(ctx context.Context, calendarID, campaignID string, months []MonthInput) error {
+	if err := validateMonthInputs(months); err != nil {
+		return err
+	}
 	if _, err := s.calendarInCampaign(ctx, calendarID, campaignID); err != nil {
 		return err
 	}
@@ -1994,6 +1998,14 @@ func (s *calendarService) SetMonths(ctx context.Context, calendarID, campaignID 
 
 // SetWeekdays replaces calendarID's weekday list.
 func (s *calendarService) SetWeekdays(ctx context.Context, calendarID, campaignID string, weekdays []WeekdayInput) error {
+	if len(weekdays) > maxCalendarWeekdays {
+		return apperror.NewBadRequest(fmt.Sprintf("a calendar can have at most %d weekdays", maxCalendarWeekdays))
+	}
+	for _, w := range weekdays {
+		if err := validateStructureName("weekday", w.Name, maxCalendarShortNameLength); err != nil {
+			return err
+		}
+	}
 	if _, err := s.calendarInCampaign(ctx, calendarID, campaignID); err != nil {
 		return err
 	}
@@ -2003,6 +2015,15 @@ func (s *calendarService) SetWeekdays(ctx context.Context, calendarID, campaignI
 // SetMoons replaces (upserts by ID, see MoonInput's doc comment)
 // calendarID's moon list.
 func (s *calendarService) SetMoons(ctx context.Context, calendarID, campaignID string, moons []MoonInput) error {
+	if len(moons) > maxCalendarMoons {
+		return apperror.NewBadRequest(fmt.Sprintf("a calendar can have at most %d moons", maxCalendarMoons))
+	}
+	for i := range moons {
+		if err := validateStructureName("moon", moons[i].Name, maxCalendarShortNameLength); err != nil {
+			return err
+		}
+		moons[i].Color = normalizeColor(moons[i].Color)
+	}
 	if _, err := s.calendarInCampaign(ctx, calendarID, campaignID); err != nil {
 		return err
 	}
@@ -2011,10 +2032,53 @@ func (s *calendarService) SetMoons(ctx context.Context, calendarID, campaignID s
 
 // SetSeasons replaces calendarID's season list.
 func (s *calendarService) SetSeasons(ctx context.Context, calendarID, campaignID string, seasons []Season) error {
+	if len(seasons) > maxCalendarSeasons {
+		return apperror.NewBadRequest(fmt.Sprintf("a calendar can have at most %d seasons", maxCalendarSeasons))
+	}
+	for i := range seasons {
+		se := &seasons[i]
+		if err := validateStructureName("season", se.Name, maxCalendarShortNameLength); err != nil {
+			return err
+		}
+		if se.WeatherEffect != nil && utf8.RuneCountInString(*se.WeatherEffect) > maxCalendarWeatherEffectLength {
+			return apperror.NewBadRequest(fmt.Sprintf("a season's weather effect can be at most %d characters", maxCalendarWeatherEffectLength))
+		}
+		if se.Description != nil && utf8.RuneCountInString(*se.Description) > apperror.MaxDescriptionLength {
+			return apperror.NewBadRequest(fmt.Sprintf("a season's description can be at most %d characters", apperror.MaxDescriptionLength))
+		}
+		se.Color = normalizeColor(se.Color)
+	}
 	if _, err := s.calendarInCampaign(ctx, calendarID, campaignID); err != nil {
 		return err
 	}
 	return s.calRepo.SetSeasons(ctx, calendarID, seasons)
+}
+
+// validateMonthInputs holds a whole-list month write to the limits an
+// uploaded calendar file gets. The campaign backup import writes through
+// SetMonths without going through the import parsers.
+func validateMonthInputs(months []MonthInput) error {
+	if len(months) > maxCalendarMonths {
+		return apperror.NewBadRequest(fmt.Sprintf("a calendar can have at most %d months", maxCalendarMonths))
+	}
+	for _, m := range months {
+		if m.Days < 1 || m.Days > maxCalendarMonthDays || m.LeapYearDays > maxCalendarMonthDays {
+			return apperror.NewBadRequest(fmt.Sprintf("month %q must have between 1 and %d days", m.Name, maxCalendarMonthDays))
+		}
+		if err := validateStructureName("month", m.Name, maxCalendarShortNameLength); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// validateStructureName refuses a month, weekday, moon or season name longer
+// than its column, with a clear message rather than a database error.
+func validateStructureName(kind, name string, maxLen int) error {
+	if utf8.RuneCountInString(name) > maxLen {
+		return apperror.NewBadRequest(fmt.Sprintf("a %s name can be at most %d characters", kind, maxLen))
+	}
+	return nil
 }
 
 // ListAllEventsForCalendar is the unfiltered bulk event read for system

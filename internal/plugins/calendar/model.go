@@ -277,7 +277,9 @@ func (c *Calendar) MonthDays(monthIdx int, year int) int {
 	if c.IsLeapYear(year) {
 		days += c.Months[monthIdx].LeapYearDays
 	}
-	return days
+	// Every consumer reads a month's length from here, so bounding it here
+	// keeps any per-day loop finite whatever a stored row holds.
+	return min(days, maxCalendarMonthDays)
 }
 
 // WeekLength returns the number of days in a week (number of weekdays).
