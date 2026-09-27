@@ -550,19 +550,6 @@
   // call Chronicle.escapeHtml() etc. instead of defining their own copies.
 
   /**
-   * Escape a string for safe insertion into HTML content.
-   * Uses DOM textContent/innerHTML for correctness.
-   *
-   * @param {string} str - Raw string to escape.
-   * @returns {string} HTML-safe string.
-   */
-  Chronicle.escapeHtml = function (str) {
-    var div = document.createElement('div');
-    div.textContent = String(str || '');
-    return div.innerHTML;
-  };
-
-  /**
    * Escape a string for safe insertion into an HTML attribute value.
    *
    * @param {string} str - Raw string to escape.
@@ -576,6 +563,16 @@
       .replace(/</g, '&lt;')
       .replace(/>/g, '&gt;');
   };
+
+  /**
+   * Escape a string for safe insertion into HTML content. Quotes are escaped
+   * too, so a value that ends up inside a quoted attribute can't break out;
+   * in element content the entities render as the same characters.
+   *
+   * @param {string} str - Raw string to escape.
+   * @returns {string} HTML-safe string.
+   */
+  Chronicle.escapeHtml = Chronicle.escapeAttr;
 
   /**
    * Read the CSRF token from the CSRF cookie.

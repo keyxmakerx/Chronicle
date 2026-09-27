@@ -543,7 +543,7 @@ Chronicle.register('template-editor', {
 
     el.innerHTML = `
       <i class="fa-solid fa-grip-vertical text-fg-muted text-xs"></i>
-      <i class="fa-solid ${bt.icon} w-4 text-fg-muted text-center text-sm"></i>
+      <i class="fa-solid ${Chronicle.escapeAttr(bt.icon)} w-4 text-fg-muted text-center text-sm"></i>
       <span class="text-sm font-medium text-fg flex-1">${bt.label}</span>
       ${curVisibility === 'dm_only' ? '<i class="fa-solid fa-lock text-amber-500 text-[10px]" title="DM Only"></i>' : ''}
       <select class="te-block-vis opacity-0 group-hover/block:opacity-100 text-[10px] bg-transparent text-fg-muted border border-edge rounded px-1 py-0.5 cursor-pointer hover:text-fg transition-all" title="Visibility">
@@ -871,7 +871,7 @@ Chronicle.register('template-editor', {
     header.className = 'flex items-center gap-2 px-3 py-2 bg-accent/10 border-b border-accent/30 cursor-grab';
     header.innerHTML = `
       <i class="fa-solid fa-grip-vertical text-accent/40 text-xs"></i>
-      <i class="fa-solid ${bt.icon} w-4 text-accent/60 text-center text-sm"></i>
+      <i class="fa-solid ${Chronicle.escapeAttr(bt.icon)} w-4 text-accent/60 text-center text-sm"></i>
       <span class="text-sm font-semibold text-accent flex-1">${bt.label}</span>
     `;
 
@@ -1250,7 +1250,7 @@ Chronicle.register('template-editor', {
     el.dataset.subIdx = subIdx;
     el.innerHTML = `
       <i class="fa-solid fa-grip-vertical text-fg-muted text-[10px]"></i>
-      <i class="fa-solid ${bt.icon} w-3 text-fg-muted text-center text-[10px]"></i>
+      <i class="fa-solid ${Chronicle.escapeAttr(bt.icon)} w-3 text-fg-muted text-center text-[10px]"></i>
       <span class="font-medium text-fg-secondary flex-1">${bt.label}</span>
       <button class="te-sub-del opacity-0 group-hover/sub:opacity-100 text-fg-muted hover:text-red-500 dark:hover:text-red-400 transition-all p-0.5" title="Remove">
         <i class="fa-solid fa-xmark text-[10px]"></i>
