@@ -305,7 +305,7 @@
         ? '<span class="text-[8px] px-1 py-px rounded bg-surface-alt text-fg-muted border border-edge leading-tight shrink-0">' + Chronicle.escapeHtml(source) + '</span>'
         : '';
       item.innerHTML =
-        '<i class="fa-solid ' + bt.icon + ' w-4 text-fg-muted text-center"></i>' +
+        '<i class="fa-solid ' + Chronicle.escapeAttr(bt.icon) + ' w-4 text-fg-muted text-center"></i>' +
         '<div class="flex-1 min-w-0">' +
           '<div class="flex items-center gap-1">' +
             '<span class="font-medium text-fg">' + Chronicle.escapeHtml(bt.label) + '</span>' +
@@ -586,7 +586,7 @@
       el.dataset.blockIdx = blockIdx;
 
       var html = '<i class="fa-solid fa-grip-vertical text-fg-muted text-xs"></i>' +
-        '<i class="fa-solid ' + bt.icon + ' w-4 text-fg-muted text-center text-sm"></i>' +
+        '<i class="fa-solid ' + Chronicle.escapeAttr(bt.icon) + ' w-4 text-fg-muted text-center text-sm"></i>' +
         '<span class="text-sm font-medium text-fg flex-1">' + Chronicle.escapeHtml(bt.label) + '</span>';
 
       // Visibility controls (template with visibility feature).
@@ -729,7 +729,7 @@
       header.className = 'flex items-center gap-2 px-3 py-2 bg-accent/10 border-b border-accent/30 cursor-grab';
       header.innerHTML =
         '<i class="fa-solid fa-grip-vertical text-accent/40 text-xs"></i>' +
-        '<i class="fa-solid ' + bt.icon + ' w-4 text-accent/60 text-center text-sm"></i>' +
+        '<i class="fa-solid ' + Chronicle.escapeAttr(bt.icon) + ' w-4 text-accent/60 text-center text-sm"></i>' +
         '<span class="text-sm font-semibold text-accent flex-1">' + Chronicle.escapeHtml(bt.label) + '</span>';
 
       var configArea = document.createElement('div');
@@ -1011,7 +1011,7 @@
       el.dataset.subIdx = subIdx;
       el.innerHTML =
         '<i class="fa-solid fa-grip-vertical text-fg-muted text-[10px]"></i>' +
-        '<i class="fa-solid ' + bt.icon + ' w-3 text-fg-muted text-center text-[10px]"></i>' +
+        '<i class="fa-solid ' + Chronicle.escapeAttr(bt.icon) + ' w-3 text-fg-muted text-center text-[10px]"></i>' +
         '<span class="font-medium text-fg-secondary flex-1">' + Chronicle.escapeHtml(bt.label) + '</span>' +
         '<button class="le-sub-del opacity-0 group-hover/sub:opacity-100 text-fg-muted hover:text-red-500 dark:hover:text-red-400 transition-all p-0.5" title="Remove"><i class="fa-solid fa-xmark text-[10px]"></i></button>';
 
@@ -1354,7 +1354,7 @@
       // Header.
       var header = document.createElement('div');
       header.style.cssText = 'padding:16px;border-bottom:1px solid var(--color-border-light,#f3f4f6);display:flex;align-items:center;gap:8px;';
-      header.innerHTML = '<i class="fa-solid ' + bt.icon + '" style="color:var(--color-text-muted);"></i>' +
+      header.innerHTML = '<i class="fa-solid ' + Chronicle.escapeAttr(bt.icon) + '" style="color:var(--color-text-muted);"></i>' +
         '<span style="font-weight:600;font-size:14px;">Configure ' + Chronicle.escapeHtml(bt.label) + '</span>';
       panel.appendChild(header);
 
@@ -1564,7 +1564,7 @@
       // Header.
       var header = document.createElement('div');
       header.style.cssText = 'padding:12px 16px;border-bottom:1px solid var(--color-border-light,#f3f4f6);display:flex;align-items:center;gap:8px;';
-      header.innerHTML = '<i class="fa-solid ' + bt.icon + '" style="color:var(--color-text-muted);font-size:14px;"></i>' +
+      header.innerHTML = '<i class="fa-solid ' + Chronicle.escapeAttr(bt.icon) + '" style="color:var(--color-text-muted);font-size:14px;"></i>' +
         '<span style="font-weight:600;font-size:14px;color:var(--color-text-primary);">' + Chronicle.escapeHtml(bt.label) + ' Preview</span>' +
         '<span style="flex:1"></span>' +
         '<span style="font-size:11px;color:var(--color-text-muted);padding:2px 8px;border-radius:4px;background:var(--color-bg-tertiary);">Mock preview</span>';

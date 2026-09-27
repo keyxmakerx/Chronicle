@@ -50,7 +50,7 @@ func runMarkerUpdate(t *testing.T, input UpdateMarkerInput) *Marker {
 		getMarkerFn:    func(_ context.Context, _ string) (*Marker, error) { return storedMarker(), nil },
 		updateMarkerFn: func(_ context.Context, mk *Marker) error { written = mk; return nil },
 	}
-	if err := newTestMapService(repo).UpdateMarker(context.Background(), "mk-1", input); err != nil {
+	if err := newTestMapService(repo).UpdateMarker(context.Background(), "mk-1", input, true); err != nil {
 		t.Fatalf("UpdateMarker: %v", err)
 	}
 	if written == nil {
@@ -133,7 +133,7 @@ func TestMarker_ValidatorsReadTheMergedRow(t *testing.T) {
 	}
 	// …and a coordinate that IS sent is still range-checked.
 	repo := &mockMapRepo{getMarkerFn: func(_ context.Context, _ string) (*Marker, error) { return storedMarker(), nil }}
-	if err := newTestMapService(repo).UpdateMarker(context.Background(), "mk-1", UpdateMarkerInput{X: patch.Of(150.0)}); err == nil {
+	if err := newTestMapService(repo).UpdateMarker(context.Background(), "mk-1", UpdateMarkerInput{X: patch.Of(150.0)}, true); err == nil {
 		t.Error("an out-of-range x must still be rejected")
 	}
 }

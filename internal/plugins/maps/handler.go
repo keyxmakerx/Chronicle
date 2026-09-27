@@ -296,9 +296,10 @@ func (h *Handler) CreateMarkerAPI(c echo.Context) error {
 		}
 	}
 
-	// Only Owners can create dm_only markers; Scribes default to 'everyone'.
+	// Only a caller who can author dm_only content (Owner or a co-DM grant)
+	// may create a dm_only marker; anyone else defaults to 'everyone'.
 	visibility := req.Visibility
-	if visibility == "dm_only" && cc.MemberRole < campaigns.RoleOwner && !cc.IsSiteAdmin {
+	if visibility == "dm_only" && !cc.CanAuthorDmOnly() && !cc.IsSiteAdmin {
 		visibility = "everyone"
 	}
 	// Only Owners can set per-player visibility rules.
@@ -365,10 +366,12 @@ func (h *Handler) UpdateMarkerAPI(c echo.Context) error {
 		return apperror.NewBadRequest("invalid request")
 	}
 
-	// Only Owners can set dm_only visibility; Scribes default to 'everyone'.
-	// The downgrade applies only to a visibility the caller actually SENT.
+	// Only a caller who can author dm_only content (Owner or a co-DM grant)
+	// may set dm_only visibility; anyone else defaults to 'everyone'. The
+	// downgrade applies only to a visibility the caller actually SENT.
+	canAuthorDmOnly := cc.CanAuthorDmOnly() || cc.IsSiteAdmin
 	visibility := req.Visibility
-	if v, ok := req.Visibility.Get(); ok && v == "dm_only" && cc.MemberRole < campaigns.RoleOwner && !cc.IsSiteAdmin {
+	if v, ok := req.Visibility.Get(); ok && v == "dm_only" && !canAuthorDmOnly {
 		visibility = patch.Of("everyone")
 	}
 	// Only Owners can set per-player visibility rules. A non-Owner's request
@@ -391,7 +394,7 @@ func (h *Handler) UpdateMarkerAPI(c echo.Context) error {
 		Visibility:        visibility,
 		VisibilityRules:   visRules,
 		ExpectedUpdatedAt: req.ExpectedUpdatedAt,
-	})
+	}, canAuthorDmOnly)
 }
 
 // DeleteMarkerAPI deletes a marker.
@@ -406,7 +409,8 @@ func (h *Handler) DeleteMarkerAPI(c echo.Context) error {
 		return err
 	}
 
-	if err := h.svc.DeleteMarker(ctx, markerID, ParseExpectedUpdatedAt(c)); err != nil {
+	canAuthorDmOnly := cc.CanAuthorDmOnly() || cc.IsSiteAdmin
+	if err := h.svc.DeleteMarker(ctx, markerID, ParseExpectedUpdatedAt(c), canAuthorDmOnly); err != nil {
 		return err
 	}
 	return c.NoContent(http.StatusOK)

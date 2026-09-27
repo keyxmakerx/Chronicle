@@ -90,7 +90,9 @@ func (s *stubTimelineSvc) CreateStandaloneEvent(_ context.Context, _ string, _ C
 	}
 	return &TimelineEvent{ID: "se-1", Name: "Standalone"}, nil
 }
-func (s *stubTimelineSvc) DeleteStandaloneEvent(_ context.Context, _, _ string) error { return nil }
+func (s *stubTimelineSvc) DeleteStandaloneEvent(_ context.Context, _, _ string, _ bool) error {
+	return nil
+}
 func (s *stubTimelineSvc) CreateEntityGroup(_ context.Context, _ string, _ CreateEntityGroupInput) (*EntityGroup, error) {
 	if s.createdGroup != nil {
 		return s.createdGroup, nil

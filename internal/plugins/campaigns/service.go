@@ -1048,6 +1048,9 @@ func (s *campaignService) UpdateTopbarContent(ctx context.Context, campaignID st
 				return err
 			}
 		}
+		// Same rule as the sidebar: the links are re-sent as a set, so a bad
+		// icon is dropped rather than refused.
+		normalizeNavIcons(content.Links, func(l *TopbarLink) *string { return &l.Icon })
 	}
 
 	campaign, err := s.repo.FindByID(ctx, campaignID)
@@ -1064,6 +1067,19 @@ func (s *campaignService) UpdateTopbarContent(ctx context.Context, campaignID st
 	}
 
 	return s.repo.UpdateSettings(ctx, campaignID, string(settingsJSON))
+}
+
+// normalizeNavIcons clears any navigation icon that fails the shared icon
+// check, so it renders with the default instead, and logs what it dropped.
+func normalizeNavIcons[T any](items []T, icon func(*T) *string) {
+	for i := range items {
+		p := icon(&items[i])
+		cleaned, replaced := sanitize.IconOrDefault(*p, "")
+		if replaced {
+			slog.Warn("campaign navigation: dropped invalid icon", slog.String("icon", *p))
+		}
+		*p = cleaned
+	}
 }
 
 // validateNavLinkURL rejects an owner-supplied navigation link URL that isn't an
@@ -1478,6 +1494,10 @@ func (s *campaignService) UpdateSidebarConfig(ctx context.Context, campaignID st
 	// the REQUEST's incoming link items (merge semantics: nil = field absent,
 	// nothing new to validate; the render-time guard re-checks regardless).
 	if req.Items != nil {
+		// The editor re-sends every stored item on each save, so a bad icon
+		// is dropped rather than refused: an old value must not block the
+		// owner from ever saving the sidebar again.
+		normalizeNavIcons(*req.Items, func(it *SidebarItem) *string { return &it.Icon })
 		for _, it := range *req.Items {
 			if it.Type != "link" || it.URL == "" {
 				continue

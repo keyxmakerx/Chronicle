@@ -9,6 +9,7 @@ import (
 	"strings"
 
 	"github.com/keyxmakerx/chronicle/internal/apperror"
+	"github.com/keyxmakerx/chronicle/internal/sanitize"
 )
 
 // AddonService handles business logic for addon operations.
@@ -295,6 +296,9 @@ func IsInstalled(slug string) bool {
 // Idempotent: if the slug already exists, its metadata is updated in
 // place rather than creating a duplicate entry.
 func RegisterSystemAddon(slug, name, description, version, icon, author string) {
+	// A package manifest is third-party input; an unusable icon falls back
+	// to the column default rather than refusing the package.
+	icon, _ = sanitize.IconOrDefault(icon, "fa-puzzle-piece")
 	// Update existing entry if already registered (handles package updates).
 	for i := range builtinAddons {
 		if builtinAddons[i].Slug == slug {
@@ -364,6 +368,13 @@ func (s *addonService) Create(ctx context.Context, input CreateAddonInput) (*Add
 	if err == nil && existing != nil {
 		return nil, apperror.NewConflict("an addon with this slug already exists")
 	}
+	icon, err := sanitize.ValidateIcon(input.Icon)
+	if err != nil {
+		return nil, err
+	}
+	if icon == "" {
+		icon = "fa-puzzle-piece"
+	}
 
 	addon := &Addon{
 		Slug:     slug,
@@ -371,7 +382,7 @@ func (s *addonService) Create(ctx context.Context, input CreateAddonInput) (*Add
 		Version:  strings.TrimSpace(input.Version),
 		Category: input.Category,
 		Status:   StatusPlanned, // New addons start as planned.
-		Icon:     strings.TrimSpace(input.Icon),
+		Icon:     icon,
 	}
 	if desc := strings.TrimSpace(input.Description); desc != "" {
 		addon.Description = &desc
@@ -405,11 +416,18 @@ func (s *addonService) Update(ctx context.Context, id int, input UpdateAddonInpu
 	if !validStatuses[input.Status] {
 		return nil, apperror.NewBadRequest("invalid addon status")
 	}
+	icon, err := sanitize.ValidateIcon(input.Icon)
+	if err != nil {
+		return nil, err
+	}
+	if icon == "" {
+		icon = "fa-puzzle-piece"
+	}
 
 	addon.Name = name
 	addon.Version = strings.TrimSpace(input.Version)
 	addon.Status = input.Status
-	addon.Icon = strings.TrimSpace(input.Icon)
+	addon.Icon = icon
 	if desc := strings.TrimSpace(input.Description); desc != "" {
 		addon.Description = &desc
 	} else {

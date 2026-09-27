@@ -377,8 +377,8 @@
       } else if (ctx.type === CTX_PAGE_TEMPLATE) {
         h += '<div class="flex items-center gap-2">';
         if (ctx.etColor) {
-          h += '<span class="w-6 h-6 rounded flex items-center justify-center text-[10px]" style="background-color:' + ctx.etColor + '20;color:' + ctx.etColor + '">';
-          h += '<i class="fa-solid ' + (ctx.etIcon || 'fa-file') + '"></i></span>';
+          h += '<span class="w-6 h-6 rounded flex items-center justify-center text-[10px]" style="background-color:' + Chronicle.escapeAttr(ctx.etColor) + '20;color:' + Chronicle.escapeAttr(ctx.etColor) + '">';
+          h += '<i class="fa-solid ' + Chronicle.escapeAttr(ctx.etIcon || 'fa-file') + '"></i></span>';
         }
         h += '<span class="text-sm font-medium text-fg">' + Chronicle.escapeHtml(ctx.etName || 'Entity') + ' Page Template</span>';
         h += '</div>';
@@ -389,8 +389,8 @@
       } else if (ctx.type === CTX_CATEGORY_DASH) {
         h += '<div class="flex items-center gap-2">';
         if (ctx.etColor) {
-          h += '<span class="w-6 h-6 rounded flex items-center justify-center text-[10px]" style="background-color:' + ctx.etColor + '20;color:' + ctx.etColor + '">';
-          h += '<i class="fa-solid ' + (ctx.etIcon || 'fa-file') + '"></i></span>';
+          h += '<span class="w-6 h-6 rounded flex items-center justify-center text-[10px]" style="background-color:' + Chronicle.escapeAttr(ctx.etColor) + '20;color:' + Chronicle.escapeAttr(ctx.etColor) + '">';
+          h += '<i class="fa-solid ' + Chronicle.escapeAttr(ctx.etIcon || 'fa-file') + '"></i></span>';
         }
         h += '<span class="text-sm font-medium text-fg">' + Chronicle.escapeHtml(ctx.etName || 'Entity') + ' Category Dashboard</span>';
         h += '</div>';

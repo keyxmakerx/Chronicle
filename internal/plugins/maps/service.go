@@ -11,11 +11,8 @@ import (
 	"github.com/keyxmakerx/chronicle/internal/apperror"
 	"github.com/keyxmakerx/chronicle/internal/concurrency"
 	"github.com/keyxmakerx/chronicle/internal/permissions"
+	"github.com/keyxmakerx/chronicle/internal/sanitize"
 )
-
-// iconPattern validates FontAwesome icon class names to prevent XSS injection
-// via the icon field which is rendered into HTML attributes.
-var iconPattern = regexp.MustCompile(`^fa-[a-z0-9-]+$`)
 
 // colorPattern validates hex color values to prevent XSS injection via the
 // color field which is rendered into CSS style attributes.
@@ -45,11 +42,15 @@ type MapService interface {
 	ListMaps(ctx context.Context, campaignID string) ([]Map, error)
 	SearchMaps(ctx context.Context, campaignID, query string) ([]map[string]string, error)
 
-	// Marker CRUD.
+	// Marker CRUD. UpdateMarker and DeleteMarker take canAuthorDmOnly (Owner
+	// or a co-DM grant, campaigns.CampaignContext.CanAuthorDmOnly) so a
+	// caller who cannot author dm_only content gets the same NotFound a
+	// missing id would give when the stored marker is dm_only, regardless of
+	// which fields the request touches.
 	CreateMarker(ctx context.Context, input CreateMarkerInput) (*Marker, error)
 	GetMarker(ctx context.Context, id string) (*Marker, error)
-	UpdateMarker(ctx context.Context, id string, input UpdateMarkerInput) error
-	DeleteMarker(ctx context.Context, id string, expectedUpdatedAt *time.Time) error
+	UpdateMarker(ctx context.Context, id string, input UpdateMarkerInput, canAuthorDmOnly bool) error
+	DeleteMarker(ctx context.Context, id string, expectedUpdatedAt *time.Time, canAuthorDmOnly bool) error
 	// ListMarkers takes campaignID so non-owner results can be narrowed by
 	// EntityVisibilityGate: the marker's own visibility is repo-filtered, but
 	// a linked entity's visibility is a separate check the caller must supply.
@@ -246,17 +247,19 @@ func (s *mapService) CreateMarker(ctx context.Context, input CreateMarkerInput) 
 	if input.Visibility == "" {
 		input.Visibility = "everyone"
 	}
-	if input.Icon == "" {
-		input.Icon = "fa-map-pin"
+	icon, err := sanitize.ValidateIcon(input.Icon)
+	if err != nil {
+		return nil, err
 	}
+	if icon == "" {
+		icon = "fa-map-pin"
+	}
+	input.Icon = icon
 	if input.Color == "" {
 		input.Color = "#3b82f6"
 	}
 
-	// Validate icon and color to prevent XSS (these are rendered into HTML).
-	if !iconPattern.MatchString(input.Icon) {
-		return nil, apperror.NewValidation("icon must be a valid FontAwesome class name (e.g., fa-map-pin)")
-	}
+	// Validate color to prevent XSS (it is rendered into HTML).
 	if !colorPattern.MatchString(input.Color) {
 		return nil, apperror.NewValidation("color must be a valid hex color (e.g., #3b82f6)")
 	}
@@ -297,12 +300,19 @@ func (s *mapService) GetMarker(ctx context.Context, id string) (*Marker, error) 
 }
 
 // UpdateMarker modifies an existing marker.
-func (s *mapService) UpdateMarker(ctx context.Context, id string, input UpdateMarkerInput) error {
+func (s *mapService) UpdateMarker(ctx context.Context, id string, input UpdateMarkerInput, canAuthorDmOnly bool) error {
 	mk, err := s.repo.GetMarker(ctx, id)
 	if err != nil {
 		return fmt.Errorf("get marker for update: %w", err)
 	}
 	if mk == nil {
+		return apperror.NewNotFound("marker not found")
+	}
+	// A stored dm_only marker is invisible to a caller who cannot author
+	// dm_only content: answer the same NotFound a missing id would give,
+	// whatever fields this update touches, so this can't be used to confirm
+	// the marker exists or to change it without ever seeing it.
+	if mk.Visibility == "dm_only" && !canAuthorDmOnly {
 		return apperror.NewNotFound("marker not found")
 	}
 
@@ -324,10 +334,14 @@ func (s *mapService) UpdateMarker(ctx context.Context, id string, input UpdateMa
 	}
 
 	// Validate icon and color to prevent XSS (these are rendered into HTML).
-	icon, color := input.Icon.Val(mk.Icon), input.Color.Val(mk.Color)
-	if icon != "" && !iconPattern.MatchString(icon) {
-		return apperror.NewValidation("icon must be a valid FontAwesome class name")
+	icon, err := sanitize.ValidateIcon(input.Icon.Val(mk.Icon))
+	if err != nil {
+		return err
 	}
+	if icon == "" {
+		icon = "fa-map-pin"
+	}
+	color := input.Color.Val(mk.Color)
 	if color != "" && !colorPattern.MatchString(color) {
 		return apperror.NewValidation("color must be a valid hex color")
 	}
@@ -352,12 +366,17 @@ func (s *mapService) UpdateMarker(ctx context.Context, id string, input UpdateMa
 }
 
 // DeleteMarker removes a marker.
-func (s *mapService) DeleteMarker(ctx context.Context, id string, expectedUpdatedAt *time.Time) error {
+func (s *mapService) DeleteMarker(ctx context.Context, id string, expectedUpdatedAt *time.Time, canAuthorDmOnly bool) error {
 	mk, err := s.repo.GetMarker(ctx, id)
 	if err != nil {
 		return fmt.Errorf("get marker for delete: %w", err)
 	}
 	if mk == nil {
+		return apperror.NewNotFound("marker not found")
+	}
+	// See UpdateMarker: a stored dm_only marker answers the same NotFound a
+	// missing id would to a caller who cannot author dm_only content.
+	if mk.Visibility == "dm_only" && !canAuthorDmOnly {
 		return apperror.NewNotFound("marker not found")
 	}
 	if err := concurrency.Check(mk.UpdatedAt, expectedUpdatedAt, "marker"); err != nil {

@@ -132,12 +132,12 @@ func (h *Handler) Show(c echo.Context) error {
 		return err
 	}
 
-	events, err := h.svc.ListTimelineEvents(ctx, timelineID, permissions.RequestViewer(role, userID))
+	events, err := h.svc.ListTimelineEvents(ctx, timelineID, cc.Campaign.ID, permissions.RequestViewer(role, userID))
 	if err != nil {
 		return err
 	}
 
-	groups, err := h.svc.ListEntityGroups(ctx, timelineID)
+	groups, err := h.svc.ListEntityGroups(ctx, timelineID, cc.Campaign.ID, permissions.RequestViewer(role, userID))
 	if err != nil {
 		return err
 	}
@@ -385,9 +385,10 @@ func (h *Handler) CreateStandaloneEventAPI(c echo.Context) error {
 		return apperror.NewBadRequest("invalid request")
 	}
 
-	// Only Owners can create dm_only events; Scribes default to 'everyone'.
+	// Only a caller who can author dm_only content (Owner or a co-DM grant)
+	// may create a dm_only event; anyone else defaults to 'everyone'.
 	visibility := req.Visibility
-	if visibility == "dm_only" && cc.MemberRole < campaigns.RoleOwner && !cc.IsSiteAdmin {
+	if visibility == "dm_only" && !cc.CanAuthorDmOnly() && !cc.IsSiteAdmin {
 		visibility = "everyone"
 	}
 
@@ -463,11 +464,13 @@ func (h *Handler) UpdateStandaloneEventAPI(c echo.Context) error {
 		return apperror.NewBadRequest("invalid request")
 	}
 
-	// Only Owners can set dm_only visibility; Scribes default to 'everyone'.
-	// The downgrade only applies to a visibility the caller actually SENT —
-	// an absent visibility is not an attempt to set dm_only.
+	// Only a caller who can author dm_only content (Owner or a co-DM grant)
+	// may set dm_only visibility; anyone else defaults to 'everyone'. The
+	// downgrade only applies to a visibility the caller actually SENT — an
+	// absent visibility is not an attempt to set dm_only.
+	canAuthorDmOnly := cc.CanAuthorDmOnly() || cc.IsSiteAdmin
 	visibility := req.Visibility
-	if v, ok := req.Visibility.Get(); ok && v == "dm_only" && cc.MemberRole < campaigns.RoleOwner && !cc.IsSiteAdmin {
+	if v, ok := req.Visibility.Get(); ok && v == "dm_only" && !canAuthorDmOnly {
 		visibility = patch.Of("everyone")
 	}
 
@@ -492,7 +495,7 @@ func (h *Handler) UpdateStandaloneEventAPI(c echo.Context) error {
 		Visibility:      visibility,
 		Label:           req.Label,
 		Color:           req.Color,
-	}); err != nil {
+	}, canAuthorDmOnly); err != nil {
 		return err
 	}
 	// The audit payload records what the request CARRIED; an absent key logs
@@ -514,7 +517,8 @@ func (h *Handler) DeleteStandaloneEventAPI(c echo.Context) error {
 		return err
 	}
 
-	if err := h.svc.DeleteStandaloneEvent(ctx, timelineID, eventID); err != nil {
+	canAuthorDmOnly := cc.CanAuthorDmOnly() || cc.IsSiteAdmin
+	if err := h.svc.DeleteStandaloneEvent(ctx, timelineID, eventID, canAuthorDmOnly); err != nil {
 		return err
 	}
 	h.logTimelineAudit(c, cc.Campaign.ID, audit.ActionTimelineStandaloneEventDeleted, "timeline_standalone_event", eventID, "",
@@ -539,12 +543,12 @@ func (h *Handler) TimelineDataAPI(c echo.Context) error {
 		return err
 	}
 
-	events, err := h.svc.ListTimelineEvents(ctx, timelineID, permissions.RequestViewer(role, userID))
+	events, err := h.svc.ListTimelineEvents(ctx, timelineID, cc.Campaign.ID, permissions.RequestViewer(role, userID))
 	if err != nil {
 		return err
 	}
 
-	groups, err := h.svc.ListEntityGroups(ctx, timelineID)
+	groups, err := h.svc.ListEntityGroups(ctx, timelineID, cc.Campaign.ID, permissions.RequestViewer(role, userID))
 	if err != nil {
 		return err
 	}
@@ -773,7 +777,12 @@ func (h *Handler) ListEntityGroupsAPI(c echo.Context) error {
 		return err
 	}
 
-	groups, err := h.svc.ListEntityGroups(c.Request().Context(), timelineID)
+	// This is the Owner-only group-manager API (routes.go requires RoleOwner),
+	// not a content-viewing surface: it must show the real data even while
+	// the Owner is previewing as a player elsewhere, so it uses cc.MemberRole
+	// directly rather than effectiveRole's view-as-player override.
+	userID := auth.GetUserID(c)
+	groups, err := h.svc.ListEntityGroups(c.Request().Context(), timelineID, cc.Campaign.ID, permissions.RequestViewer(int(cc.MemberRole), userID))
 	if err != nil {
 		return err
 	}
@@ -897,7 +906,7 @@ func (h *Handler) UpdateStandaloneEventVisibilityAPI(c echo.Context) error {
 	if err := h.svc.UpdateStandaloneEvent(ctx, timelineID, eventID, UpdateTimelineEventInput{
 		Visibility:      patch.Of(req.Visibility),
 		VisibilityRules: patch.FromPtr(req.VisibilityRules),
-	}); err != nil {
+	}, cc.CanAuthorDmOnly() || cc.IsSiteAdmin); err != nil {
 		return err
 	}
 	h.logTimelineAudit(c, cc.Campaign.ID, audit.ActionTimelineStandaloneEventUpdated, "timeline_standalone_event", eventID, e.Name,
