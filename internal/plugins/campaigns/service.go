@@ -1472,20 +1472,15 @@ func (s *campaignService) UpdateSidebarConfig(ctx context.Context, campaignID st
 	if req.Items != nil && len(*req.Items) > maxSidebarConfigEntries {
 		return apperror.NewBadRequest("sidebar items list is too long")
 	}
-	// Stored-XSS / open-redirect guard: owner-supplied link URLs are rendered
-	// to every campaign visitor (incl. anonymous on public campaigns) via
-	// templ.SafeURL, so reject any non-http(s)/non-relative URL. Validates
-	// the REQUEST's incoming link items (merge semantics: nil = field absent,
-	// nothing new to validate; the render-time guard re-checks regardless).
+	// Validates only the REQUEST's items (merge semantics: nil = field absent,
+	// nothing new to check). Link URLs are rendered to every visitor, so an
+	// unsafe one is refused here and dropped again at render (ViewNav).
 	if req.Items != nil {
-		for _, it := range *req.Items {
-			if it.Type != "link" || it.URL == "" {
-				continue
-			}
-			if err := validateNavLinkURL(it.Label, it.URL); err != nil {
-				return err
-			}
+		cleaned, err := validateSidebarItems(*req.Items)
+		if err != nil {
+			return err
 		}
+		req.Items = &cleaned
 	}
 
 	// Read current stored config so absent fields are preserved.
