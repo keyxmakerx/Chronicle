@@ -212,6 +212,7 @@ jobs:
                       TestPluginMigration_PreflightRefusesBeforeApplyingAnything \
                       TestPluginMigration_IgnoresProgressRecordedForDifferentSQL \
                       TestIconReconcile_RealSchema \
+                      TestIconReconcile_SyncAPICreateEntityType \
                       TestReconcileIconColumns_Integration \
                       TestReconcileIconColumns_RefusesBadConfig_Integration; do
             grep -q -- "--- PASS: $want" replay.log || {

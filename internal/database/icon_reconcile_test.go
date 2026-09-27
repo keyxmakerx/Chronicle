@@ -95,6 +95,9 @@ func TestReconcileIconColumns_Integration(t *testing.T) {
 	mustExecIcon(t, db, `CREATE TABLE str_icons (id VARCHAR(36) PRIMARY KEY, icon VARCHAR(100) NOT NULL DEFAULT 'fa-x')
 		CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci`)
 
+	// The defaults differ from every repaired name so a repair can't pass
+	// by landing on the default by accident.
+	const intDefault, strDefault = "fa-square", "fa-location-dot"
 	intRows := []struct {
 		icon *string
 		want string
@@ -102,13 +105,21 @@ func TestReconcileIconColumns_Integration(t *testing.T) {
 		{iconPtr("fa-book"), "fa-book"},
 		{iconPtr("fa-dice-d20"), "fa-dice-d20"},
 		{nil, "<NULL>"},
-		{iconPtr(`fa-x" data-y="z`), "fa-circle"},
-		{iconPtr("fa-<b>"), "fa-circle"},
-		{iconPtr("FA-BOOK"), "fa-circle"},
-		{iconPtr("fa-book extra"), "fa-circle"},
-		{iconPtr("fa-"), "fa-circle"},
-		{iconPtr(""), "fa-circle"},
-		{iconPtr("fa-" + strings.Repeat("a", 60)), "fa-circle"},
+		{iconPtr(`fa-x" data-y="z`), intDefault},
+		{iconPtr("fa-<b>"), intDefault},
+		{iconPtr("FA-BOOK"), intDefault},
+		{iconPtr("fa-book extra"), intDefault},
+		{iconPtr("fa-"), intDefault},
+		{iconPtr(""), intDefault},
+		{iconPtr("fa-" + strings.Repeat("a", 60)), intDefault},
+		{iconPtr(`fa-solid fa-circle" onmouseover`), intDefault},
+		{iconPtr("fa-brands fa-github"), intDefault},
+		{iconPtr("fa-solid fa-circle extra"), intDefault},
+		// Style-prefixed or padded names are repaired, not reset.
+		{iconPtr("fa-solid fa-circle"), "fa-circle"},
+		{iconPtr("fa-solid  fa-dragon"), "fa-dragon"},
+		{iconPtr("far fa-bell"), "fa-bell"},
+		{iconPtr(" fa-book "), "fa-book"},
 	}
 	for _, r := range intRows {
 		mustExecIcon(t, db, `INSERT INTO int_icons (icon) VALUES (?)`, r.icon)
@@ -116,15 +127,15 @@ func TestReconcileIconColumns_Integration(t *testing.T) {
 	strRows := map[string][2]string{
 		"a": {"fa-map-pin", "fa-map-pin"},
 		"b": {"fa-solid fa-map-pin", "fa-map-pin"},
-		"c": {"fa-map-pin'", "fa-map-pin"},
+		"c": {"fa-map-pin'", strDefault},
 	}
 	for id, r := range strRows {
 		mustExecIcon(t, db, `INSERT INTO str_icons (id, icon) VALUES (?, ?)`, id, r[0])
 	}
 
 	cols := []IconColumn{
-		{Table: "int_icons", Column: "icon", Default: "fa-circle"},
-		{Table: "str_icons", Column: "icon", Default: "fa-map-pin"},
+		{Table: "int_icons", Column: "icon", Default: intDefault},
+		{Table: "str_icons", Column: "icon", Default: strDefault},
 		{Table: "not_migrated", Column: "icon", Default: "fa-circle"}, // skipped, not an error
 	}
 
@@ -132,7 +143,7 @@ func TestReconcileIconColumns_Integration(t *testing.T) {
 	if err != nil {
 		t.Fatalf("first run: %v", err)
 	}
-	if want := 7 + 2; n != want {
+	if want := 14 + 2; n != want {
 		t.Errorf("first run changed %d rows, want %d", n, want)
 	}
 

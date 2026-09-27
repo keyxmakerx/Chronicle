@@ -21,17 +21,19 @@ type IconColumn struct {
 	Default string
 }
 
-// ReconcileIconColumns replaces every stored icon that fails
-// sanitize.IsIconName with its column's default and logs the old value, so
-// no page is ever built from an unchecked icon. It is a data fix, so it
-// lives here rather than in a migration.
+// ReconcileIconColumns repairs every stored icon that fails
+// sanitize.IsIconName: a value that sanitize.NormalizeIcon turns into a valid
+// name (a style-prefixed "fa-solid fa-book", say) is rewritten to that name,
+// and anything else gets its column's default. Each change is logged with the
+// old value, so no page is ever built from an unchecked icon. It is a data
+// fix, so it lives here rather than in a migration.
 //
-// Idempotent: it only touches rows that fail the check, and a replaced row
-// holds a valid default, so a second run changes nothing. NULLs are left
-// alone. A table that doesn't exist (plugin not migrated) is skipped. The
-// check runs in Go rather than SQL so it can't drift from the write-path
-// rule. A column that fails is reported and the rest still run. Returns the
-// number of rows changed.
+// Idempotent: it only touches rows that fail the check, and every rewrite is
+// a valid name, so a second run changes nothing. NULLs are left alone. A
+// table that doesn't exist (plugin not migrated) is skipped. The check runs
+// in Go rather than SQL so it can't drift from the write-path rule. A column
+// that fails is reported and the rest still run. Returns the number of rows
+// changed.
 func ReconcileIconColumns(ctx context.Context, db *sql.DB, cols []IconColumn) (int, error) {
 	if db == nil {
 		return 0, fmt.Errorf("ReconcileIconColumns: nil db handle")
@@ -75,7 +77,10 @@ func reconcileIconColumn(ctx context.Context, db *sql.DB, col IconColumn) (int, 
 
 	// Collect first, then update, so no UPDATE runs while the result set is
 	// still open on the same connection pool.
-	type badRow struct{ id, icon string }
+	type badRow struct {
+		id, icon, fixed string
+		normalised      bool
+	}
 	var bad []badRow
 	rows, err := db.QueryContext(ctx,
 		"SELECT id, "+column+" FROM "+table+" WHERE "+column+" IS NOT NULL")
@@ -88,9 +93,14 @@ func reconcileIconColumn(ctx context.Context, db *sql.DB, col IconColumn) (int, 
 			rows.Close()
 			return 0, fmt.Errorf("scanning icon row: %w", err)
 		}
-		if !sanitize.IsIconName(r.icon) {
-			bad = append(bad, r)
+		if sanitize.IsIconName(r.icon) {
+			continue
 		}
+		r.fixed, r.normalised = sanitize.NormalizeIcon(r.icon)
+		if !r.normalised {
+			r.fixed = col.Default
+		}
+		bad = append(bad, r)
 	}
 	if err := rows.Err(); err != nil {
 		rows.Close()
@@ -104,17 +114,21 @@ func reconcileIconColumn(ctx context.Context, db *sql.DB, col IconColumn) (int, 
 		// never overwritten under the case-insensitive collation.
 		res, err := db.ExecContext(ctx,
 			"UPDATE "+table+" SET "+column+" = ? WHERE id = ? AND BINARY "+column+" = ?",
-			col.Default, r.id, r.icon)
+			r.fixed, r.id, r.icon)
 		if err != nil {
-			return changed, fmt.Errorf("resetting icon on row %s: %w", r.id, err)
+			return changed, fmt.Errorf("rewriting icon on row %s: %w", r.id, err)
 		}
 		if n, _ := res.RowsAffected(); n > 0 {
 			changed += int(n)
-			slog.Warn("icon reconcile: replaced invalid stored icon",
+			msg := "icon reconcile: normalised stored icon"
+			if !r.normalised {
+				msg = "icon reconcile: replaced invalid stored icon"
+			}
+			slog.Warn(msg,
 				slog.String("table", col.Table),
 				slog.String("id", r.id),
 				slog.String("old_icon", r.icon),
-				slog.String("new_icon", col.Default),
+				slog.String("new_icon", r.fixed),
 			)
 		}
 	}
