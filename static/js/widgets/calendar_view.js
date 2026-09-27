@@ -114,10 +114,32 @@
       return total + day;
     },
 
+    // gregorianJDN mirrors gregorian.go's gregorianJDN exactly (the
+    // Fliegel-Van Flandern integer formula) — the real-time day counter
+    // Calendar.absDayIndex switches to for a real-time-tracked calendar.
+    // Math.floor mirrors Go's truncating integer division, which floors for
+    // the non-negative operands every real calendar date produces here.
+    gregorianJDN: function (y, m, d) {
+      var a = Math.floor((14 - m) / 12);
+      var yy = y + 4800 - a;
+      var mm = m + 12 * a - 3;
+      return d + Math.floor((153 * mm + 2) / 5) + 365 * yy + Math.floor(yy / 4) - Math.floor(yy / 100) + Math.floor(yy / 400) - 32045;
+    },
+
+    // dayIndex mirrors Calendar.absDayIndex: the real-time branch (JDN) for a
+    // real-time-tracked calendar, constLenDayIndex otherwise. Every caller
+    // that needs "the" day counter (recurrence base/target, the weekday
+    // column, span containment, past/today comparison) goes through this —
+    // using constLenDayIndex unconditionally would disagree with the
+    // server's own OccursOn across a leap day for a real-time calendar.
+    dayIndex: function (cal, year, month1, day) {
+      return CalDate.usesRealTime(cal) ? CalDate.gregorianJDN(year, month1, day) : CalDate.constLenDayIndex(cal, year, month1, day);
+    },
+
     weekLen: function (cal) { return (cal.weekdays || []).length || 7; },
 
     weekdayCol: function (cal, year, month1, day) {
-      return CalDate.mod(CalDate.constLenDayIndex(cal, year, month1, day), CalDate.weekLen(cal));
+      return CalDate.mod(CalDate.dayIndex(cal, year, month1, day), CalDate.weekLen(cal));
     },
 
     monthCount: function (cal) { return (cal.months || []).length || 12; },
@@ -174,11 +196,11 @@
       var known = [CalDate.RECUR_WEEKLY, CalDate.RECUR_BIWEEKLY, CalDate.RECUR_MONTHLY, CalDate.RECUR_CUSTOM, CalDate.RECUR_YEARLY];
       if (known.indexOf(rt) === -1) return onBase;
 
-      var base = CalDate.constLenDayIndex(cal, e.year, e.month, e.day);
-      var target = CalDate.constLenDayIndex(cal, year, month, day);
+      var base = CalDate.dayIndex(cal, e.year, e.month, e.day);
+      var target = CalDate.dayIndex(cal, year, month, day);
       if (target < base) return false;
       if (e.recurrence_end_year != null && e.recurrence_end_month != null && e.recurrence_end_day != null) {
-        if (target > CalDate.constLenDayIndex(cal, e.recurrence_end_year, e.recurrence_end_month, e.recurrence_end_day)) return false;
+        if (target > CalDate.dayIndex(cal, e.recurrence_end_year, e.recurrence_end_month, e.recurrence_end_day)) return false;
       }
 
       if (rt === CalDate.RECUR_YEARLY) {
@@ -210,9 +232,9 @@
     // event: is (y,m,d) within [event start, event end] inclusive.
     withinSpan: function (cal, e, year, month, day) {
       if (e.end_year == null || e.end_month == null || e.end_day == null) return false;
-      var t = CalDate.constLenDayIndex(cal, year, month, day);
-      var lo = CalDate.constLenDayIndex(cal, e.year, e.month, e.day);
-      var hi = CalDate.constLenDayIndex(cal, e.end_year, e.end_month, e.end_day);
+      var t = CalDate.dayIndex(cal, year, month, day);
+      var lo = CalDate.dayIndex(cal, e.year, e.month, e.day);
+      var hi = CalDate.dayIndex(cal, e.end_year, e.end_month, e.end_day);
       return t >= lo && t <= hi;
     }
   };
@@ -266,6 +288,17 @@
   // degrades gracefully for both.
   function eventGlyph(e) {
     return e.icon || e.kind_icon || '●';
+  }
+
+  // Event category color: an event's own color falls back to its kind's.
+  // Rendered as a plain inline `color:` declaration (not the mockup's --h
+  // oklch hue variable, which would need a hex->oklch-hue conversion this
+  // port doesn't do) — an inline style declaration already wins over the
+  // stylesheet's `.mk{color:oklch(var(--icL) var(--icC) var(--h,260))}`
+  // regardless, so this is a complete override, not a partial one.
+  function eventColorStyle(e) {
+    var c = e.color || e.kind_color;
+    return c ? ('color:' + String(c).replace(/[^#a-zA-Z0-9(),.% ]/g, '') + ';') : '';
   }
 
   // ---------------------------------------------------------------
@@ -353,8 +386,11 @@
 
   // Exposed for calendar_editor.js (a separate script/closure loaded only
   // for a CanEdit viewer — see that file's header) so the date-math port
-  // is written once and both files stay in agreement with the server.
+  // is written once and both files stay in agreement with the server, and
+  // so a canEdit override of view.showFlap/etc. can open/close a panel with
+  // the exact same grow-from-anchor motion as every other panel here.
   Chronicle.calendarDate = CalDate;
+  Chronicle.calendarPanel = { growOpen: growOpen, growClose: growClose };
 
   // ================================================================
   Chronicle.register('calendar_view', {
@@ -512,8 +548,11 @@
       return visible[0] || moons[0] || null;
     },
 
+    // Moon.ID round-trips as a JSON number, but every caller here resolves a
+    // moon from a DOM dataset attribute (always a string) — String()
+    // coerces both sides so a numeric id and its dataset string still match.
     moonById: function (id) {
-      return (this.cal.moons || []).filter(function (mo) { return mo.id === id; })[0] || null;
+      return (this.cal.moons || []).filter(function (mo) { return String(mo.id) === String(id); })[0] || null;
     },
 
     seasonForDate: function (month, day) {
@@ -595,7 +634,12 @@
       var html = '';
 
       if (monthDef && monthDef.is_intercalary) {
-        html += this._dayBandHTML(y, m, 1, monthDef);
+        // An intercalary/festival month can be more than one day long
+        // (Month.Days carries no upper bound) — a band per day, not just
+        // day 1, or every day past the first would be unreachable: never
+        // rendered, never clickable, and any event stored on it invisible.
+        var interDays = CalDate.monthDays(cal, m0, y);
+        for (var bd = 1; bd <= interDays; bd++) html += this._dayBandHTML(y, m, bd, monthDef, interDays);
       } else {
         var days = CalDate.monthDays(cal, m0, y);
         var firstCol = CalDate.weekdayCol(cal, y, m, 1);
@@ -614,19 +658,21 @@
       this._paintDaySkyContext();
     },
 
-    _dayBandHTML: function (y, m, d, monthDef) {
-      var isToday = y === this.cal.current_year && m === this.cal.current_month;
+    _dayBandHTML: function (y, m, d, monthDef, totalDays) {
+      var cal = this.cal;
+      var isToday = y === cal.current_year && m === cal.current_month && d === cal.current_day;
       var marks = this._marksHTML(y, m, d);
+      var label = esc(monthDef.name) + (totalDays > 1 ? ', day ' + d : '');
       return '<div class="band' + (isToday ? ' today' : '') + '">' +
         '<button type="button" class="day" data-key="' + dayKey(y, m, d) + '" style="width:100%">' +
-          '<div class="dc"><span class="bn">' + esc(monthDef.name) + '</span>' + marks + '</div>' +
+          '<div class="dc"><span class="bn">' + label + '</span>' + marks + '</div>' +
         '</button></div>';
     },
 
     _dayCellHTML: function (y, m, d) {
       var cal = this.cal, key = dayKey(y, m, d);
       var isToday = y === cal.current_year && m === cal.current_month && d === cal.current_day;
-      var isPast = CalDate.constLenDayIndex(cal, y, m, d) < CalDate.constLenDayIndex(cal, cal.current_year, cal.current_month, cal.current_day);
+      var isPast = CalDate.dayIndex(cal, y, m, d) < CalDate.dayIndex(cal, cal.current_year, cal.current_month, cal.current_day);
       var moon = this.mainMoon();
       var moonHTML = '';
       if (moon) {
@@ -647,7 +693,7 @@
       var self = this;
       var html = '<div class="marks">' + shown.map(function (e) {
         var dirRing = self.role >= 3 && e.visibility === 'dm_only' ? ' dir' : '';
-        return '<span class="mk' + dirRing + '" data-ev="' + esc(e.id) + '" style="--h:0" title="' + esc(e.name) + '">' + esc(eventGlyph(e)) + '</span>';
+        return '<span class="mk' + dirRing + '" data-ev="' + esc(e.id) + '" style="' + eventColorStyle(e) + '" title="' + esc(e.name) + '">' + esc(eventGlyph(e)) + '</span>';
       }).join('');
       if (extra > 0) html += '<span class="more">+' + extra + '</span>';
       html += '</div>';
@@ -845,7 +891,7 @@
         var hl = highlightEventId && e.id === highlightEventId ? ' hl' : '';
         var time = e.all_day ? '' : (e.start_hour != null ? pad2(e.start_hour) + ':' + pad2(e.start_minute || 0) : '');
         return '<div class="evd go' + hl + '" data-ev="' + esc(e.id) + '">' +
-          '<div class="evh"><span class="ric" style="--h:0">' + esc(eventGlyph(e)) + '</span><span class="qt0">' + esc(e.name) + '</span></div>' +
+          '<div class="evh"><span class="ric" style="' + eventColorStyle(e) + '">' + esc(eventGlyph(e)) + '</span><span class="qt0">' + esc(e.name) + '</span></div>' +
           (time ? '<div class="evm">' + esc(time) + '</div>' : '') +
           '</div>';
       }).join('') : '<div class="none">Nothing on the calendar today.</div>';

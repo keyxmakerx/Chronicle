@@ -380,10 +380,22 @@
       var body = {
         name: form.name.value.trim(),
         description: form.description.value || null,
-        year: d[0], month: d[1], day: d[2],
-        all_day: true,
         kind_id: form.dataset.kindId ? +form.dataset.kindId : null
       };
+      // This compact form has no date or time picker, so it must never
+      // resend year/month/day/all_day on an EDIT — a PUT is a partial
+      // update (patch.Field): omitting a key preserves the stored value,
+      // while resending today's wing day or a hardcoded all_day:true would
+      // silently move the event (wrong for a recurring/spanning event
+      // viewed from an occurrence other than its own base date) or flip a
+      // timed event to all-day on its very first edit through this UI. A
+      // brand-new event has no stored date yet, so it takes the day whose
+      // wing it was created from and is all-day (the only mode this form
+      // supports until a time picker exists).
+      if (isNew) {
+        body.year = d[0]; body.month = d[1]; body.day = d[2];
+        body.all_day = true;
+      }
       if (view.canAuthorDmOnly) body.visibility = form.dataset.visibility;
       var req;
       if (isNew) req = Chronicle.apiFetch(view.apiBase + '/events', { method: 'POST', body: body });
@@ -405,7 +417,8 @@
 
   CalendarEditor.prototype._kindChipsHTML = function (kinds, activeId) {
     var html = kinds.map(function (k) {
-      return '<button type="button" data-kind="' + k.id + '" aria-pressed="' + (k.id === activeId) + '" style="--h:0">' + esc(k.icon || '') + ' ' + esc(k.name) + '</button>';
+      var style = k.color ? ('color:' + String(k.color).replace(/[^#a-zA-Z0-9(),.% ]/g, '') + ';') : '';
+      return '<button type="button" data-kind="' + k.id + '" aria-pressed="' + (k.id === activeId) + '" style="' + style + '">' + esc(k.icon || '') + ' ' + esc(k.name) + '</button>';
     }).join('');
     if (this.view.role >= ROLE_OWNER) html += '<button type="button" class="nkb" data-nkb><i class="fa-solid fa-plus"></i> New kind</button>';
     return html;
@@ -517,7 +530,7 @@
       var btn = $('#cal5-erabtn', view.el);
       self._eraFormFor = undefined;
       view.flapEl.innerHTML = self._eraManagerHTML();
-      growOpen(view.flapEl, btn, view.calEl);
+      Chronicle.calendarPanel.growOpen(view.flapEl, btn, view.calEl);
       btn.setAttribute('aria-expanded', 'true');
       view._updateScrim();
     };
