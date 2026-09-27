@@ -558,8 +558,8 @@ func (h *Handler) sendRSVPEmails(ctx context.Context, session *Session, campaign
 			continue
 		}
 
-		// Generate one-click accept/decline tokens.
-		acceptToken, declineToken, err := h.svc.CreateRSVPTokens(ctx, session.ID, m.UserID)
+		// Generate one-click accept/decline/suggest-another-time tokens.
+		acceptToken, declineToken, suggestToken, err := h.svc.CreateRSVPTokens(ctx, session.ID, m.UserID)
 		if err != nil {
 			slog.Warn("failed to create rsvp tokens", slog.Any("error", err), slog.String("user_id", m.UserID))
 			continue
@@ -573,6 +573,7 @@ func (h *Handler) sendRSVPEmails(ctx context.Context, session *Session, campaign
 		subject := fmt.Sprintf("Session Invite: %s — %s", session.Name, campaignName)
 		acceptURL := fmt.Sprintf("%s/rsvp/%s", h.baseURL, acceptToken)
 		declineURL := fmt.Sprintf("%s/rsvp/%s", h.baseURL, declineToken)
+		suggestURL := fmt.Sprintf("%s/rsvp/%s/suggest", h.baseURL, suggestToken)
 
 		plainBody := fmt.Sprintf(`You've been invited to a game session!
 
@@ -582,9 +583,10 @@ Date: %s
 
 Accept: %s
 Decline: %s
+Suggest another time: %s
 
 These links expire in 7 days.
-`, session.Name, campaignName, dateStr, acceptURL, declineURL)
+`, session.Name, campaignName, dateStr, acceptURL, declineURL, suggestURL)
 
 		htmlBody := fmt.Sprintf(`<!DOCTYPE html><html><head><meta charset="utf-8"></head><body style="font-family:system-ui,-apple-system,sans-serif;max-width:480px;margin:0 auto;padding:20px;color:#333">
 <div style="text-align:center;margin-bottom:24px">
@@ -601,12 +603,13 @@ These links expire in 7 days.
   <a href="%s" style="display:inline-block;padding:10px 24px;background:#22c55e;color:#fff;text-decoration:none;border-radius:6px;font-weight:600;margin:0 8px">✓ Going</a>
   <a href="%s" style="display:inline-block;padding:10px 24px;background:#ef4444;color:#fff;text-decoration:none;border-radius:6px;font-weight:600;margin:0 8px">✗ Can't Make It</a>
 </div>
+<p style="text-align:center;margin:0 0 24px"><a href="%s" style="color:#6366f1;font-size:13px">Suggest another time</a></p>
 <p style="text-align:center;color:#999;font-size:12px">These links expire in 7 days.</p>
 </body></html>`,
 			// Escape the operator-authored session name + campaign name so they
 			// can't inject markup into the email. dateStr is our own formatted
 			// label; URLs are hex tokens — both safe.
-			html.EscapeString(session.Name), html.EscapeString(campaignName), dateStr, acceptURL, declineURL)
+			html.EscapeString(session.Name), html.EscapeString(campaignName), dateStr, acceptURL, declineURL, suggestURL)
 
 		if err := h.mailer.SendHTMLMail(ctx, []string{m.Email}, subject, plainBody, htmlBody); err != nil {
 			slog.Warn("failed to send rsvp email",

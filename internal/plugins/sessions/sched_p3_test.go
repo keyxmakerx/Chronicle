@@ -36,9 +36,10 @@ func (s *stubUserDir) GetUser(_ context.Context, userID string) (*auth.User, err
 	return &auth.User{ID: userID, DisplayName: "Player", Timezone: &tz}, nil
 }
 
-type captureMailer struct{ lastHTML string }
+type captureMailer struct{ lastPlain, lastHTML string }
 
-func (m *captureMailer) SendHTMLMail(_ context.Context, _ []string, _, _, htmlBody string) error {
+func (m *captureMailer) SendHTMLMail(_ context.Context, _ []string, _, plainBody, htmlBody string) error {
+	m.lastPlain = plainBody
 	m.lastHTML = htmlBody
 	return nil
 }
@@ -413,6 +414,41 @@ func TestRSVPEmail_EscapesSessionName(t *testing.T) {
 	}
 	if !strings.Contains(mailer.lastHTML, "&lt;img") {
 		t.Error("session name should be HTML-escaped")
+	}
+}
+
+// TestRSVPEmail_IncludesSuggestLink pins that "Suggest another time" is
+// actually reachable from the invite email: a token with RSVPActionSuggest
+// must be minted alongside accept/decline, and its /suggest link must appear
+// in both the plain-text and HTML bodies (previously CreateRSVPTokens only
+// minted accept/decline, so RedeemSuggestToken/ApplySuggestToken could never
+// be reached from an emailed invite).
+func TestRSVPEmail_IncludesSuggestLink(t *testing.T) {
+	mailer := &captureMailer{}
+	var suggestToken string
+	repo := &mockSessionRepo{
+		createRSVPTokenFn: func(_ context.Context, token *RSVPToken) error {
+			if token.Action == RSVPActionSuggest {
+				suggestToken = token.Token
+			}
+			return nil
+		},
+	}
+	h := &Handler{svc: NewSessionService(repo, nil, nil), mailer: mailer, baseURL: "https://x.test"}
+
+	date := "2026-07-18"
+	session := &Session{ID: "s1", Name: "Session Zero", ScheduledDate: &date}
+	h.sendRSVPEmails(context.Background(), session, "Camp", []campaigns.CampaignMember{{UserID: "u1", Email: "a@b.test"}})
+
+	if suggestToken == "" {
+		t.Fatal("expected a suggest-another-time token to be minted alongside accept/decline")
+	}
+	wantLink := "https://x.test/rsvp/" + suggestToken + "/suggest"
+	if !strings.Contains(mailer.lastPlain, wantLink) {
+		t.Errorf("plain-text RSVP email missing the suggest link %q; body=%s", wantLink, mailer.lastPlain)
+	}
+	if !strings.Contains(mailer.lastHTML, wantLink) {
+		t.Errorf("HTML RSVP email missing the suggest link %q; body=%s", wantLink, mailer.lastHTML)
 	}
 }
 
