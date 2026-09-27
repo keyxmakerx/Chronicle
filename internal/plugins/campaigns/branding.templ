@@ -778,42 +778,7 @@ var fontFamilyPresets = []fontFamilyPreset{
 	{"merriweather", "Merriweather", "'Merriweather', Georgia, serif"},
 }
 
-// topbarContentJSON serializes TopbarContent to a JSON data attribute value.
-func topbarContentJSON(content *TopbarContent) string {
-	if content == nil {
-		return `{"mode":"none","links":[],"quote":""}`
-	}
-	// Build links array manually.
-	linksJSON := "["
-	for i, link := range content.Links {
-		if i > 0 {
-			linksJSON += ","
-		}
-		linksJSON += fmt.Sprintf(`{"label":"%s","url":"%s","icon":"%s"}`,
-			layouts.EscapeJSONString(link.Label),
-			layouts.EscapeJSONString(link.URL),
-			layouts.EscapeJSONString(link.Icon))
-	}
-	linksJSON += "]"
-	return fmt.Sprintf(`{"mode":"%s","links":%s,"quote":"%s"}`,
-		layouts.EscapeJSONString(content.Mode),
-		linksJSON,
-		layouts.EscapeJSONString(content.Quote))
-}
-
-// topbarStyleJSON serializes a TopbarStyle to a JSON data attribute value.
-func topbarStyleJSON(style *TopbarStyle) string {
-	if style == nil {
-		return "{}"
-	}
-	// Manual construction to avoid importing encoding/json in templ file.
-	return fmt.Sprintf(
-		`{"mode":"%s","color":"%s","gradient_from":"%s","gradient_to":"%s","gradient_dir":"%s","image_path":"%s"}`,
-		layouts.EscapeJSONString(style.Mode),
-		layouts.EscapeJSONString(style.Color),
-		layouts.EscapeJSONString(style.GradientFrom),
-		layouts.EscapeJSONString(style.GradientTo),
-		layouts.EscapeJSONString(style.GradientDir),
-		layouts.EscapeJSONString(style.ImagePath),
-	)
-}
+// topbarStyleJSON and topbarContentJSON moved to topbar_json.go: they build
+// this data-attribute payload through encoding/json (a plain .go file, not
+// this templ file — see that file's doc comment for why) instead of hand-
+// assembling JSON text.
