@@ -28,7 +28,7 @@ func renderCatCardWithCtx(t *testing.T, ctx context.Context, c templ.Component) 
 
 func TestCatCalendarPreview_AddonDisabled_NoHxGetNoSpinner(t *testing.T) {
 	cc := &campaigns.CampaignContext{Campaign: &campaigns.Campaign{ID: "camp-1"}}
-	ctx := layouts.SetEnabledAddons(context.Background(), map[string]bool{})
+	ctx := layouts.SetUpcomingEventsAvailable(context.Background(), false)
 
 	out := renderCatCardWithCtx(t, ctx, catCalendarPreview(cc, nil))
 	if strings.Contains(out, "hx-get") {
@@ -44,9 +44,11 @@ func TestCatCalendarPreview_AddonDisabled_NoHxGetNoSpinner(t *testing.T) {
 
 func TestCatCalendarPreview_PluginUnhealthy_NoHxGetNoSpinner(t *testing.T) {
 	cc := &campaigns.CampaignContext{Campaign: &campaigns.Campaign{ID: "camp-1"}}
-	ctx := context.Background()
-	ctx = layouts.SetEnabledAddons(ctx, map[string]bool{"calendar": true})
-	ctx = layouts.SetHealthyPlugins(ctx, map[string]bool{"calendar": false})
+	// Addon-on-but-plugin-degraded is resolved to the same neutral flag as
+	// addon-off before this template ever sees it (internal/app/routes.go);
+	// from here the two scenarios are indistinguishable by design, since
+	// this package may not read the calendar plugin's health itself.
+	ctx := layouts.SetUpcomingEventsAvailable(context.Background(), false)
 
 	out := renderCatCardWithCtx(t, ctx, catCalendarPreview(cc, nil))
 	if strings.Contains(out, "hx-get") {
@@ -59,8 +61,8 @@ func TestCatCalendarPreview_PluginUnhealthy_NoHxGetNoSpinner(t *testing.T) {
 
 // TestCatCalendarPreview_NoContextSet_FailsToQuietState mirrors
 // campaigns.TestDashCalendarPreview_NoContextSet_FailsToQuietState: a render
-// context that never had SetEnabledAddons/SetHealthyPlugins called at all
-// must fail toward the quiet state, never toward assuming the addon is on.
+// context that never had SetUpcomingEventsAvailable called at all must fail
+// toward the quiet state, never toward assuming the addon is on.
 func TestCatCalendarPreview_NoContextSet_FailsToQuietState(t *testing.T) {
 	cc := &campaigns.CampaignContext{Campaign: &campaigns.Campaign{ID: "camp-1"}}
 	out := renderCatCardWithCtx(t, context.Background(), catCalendarPreview(cc, nil))
@@ -71,9 +73,7 @@ func TestCatCalendarPreview_NoContextSet_FailsToQuietState(t *testing.T) {
 
 func TestCatCalendarPreview_AddonEnabledAndHealthy_EmitsHxGet(t *testing.T) {
 	cc := &campaigns.CampaignContext{Campaign: &campaigns.Campaign{ID: "camp-1"}}
-	ctx := context.Background()
-	ctx = layouts.SetEnabledAddons(ctx, map[string]bool{"calendar": true})
-	ctx = layouts.SetHealthyPlugins(ctx, map[string]bool{"calendar": true})
+	ctx := layouts.SetUpcomingEventsAvailable(context.Background(), true)
 
 	out := renderCatCardWithCtx(t, ctx, catCalendarPreview(cc, nil))
 	if !strings.Contains(out, "hx-get") {

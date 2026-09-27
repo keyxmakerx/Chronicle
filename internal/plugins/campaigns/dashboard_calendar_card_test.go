@@ -38,7 +38,7 @@ func renderCardWithCtx(t *testing.T, ctx context.Context, c templ.Component) str
 
 func TestDashCalendarPreview_AddonDisabled_NoHxGetNoSpinner(t *testing.T) {
 	cc := calendarCardTestCampaign()
-	ctx := layouts.SetEnabledAddons(context.Background(), map[string]bool{})
+	ctx := layouts.SetUpcomingEventsAvailable(context.Background(), false)
 
 	out := renderCardWithCtx(t, ctx, dashCalendarPreview(cc, nil))
 	if strings.Contains(out, "hx-get") {
@@ -54,9 +54,11 @@ func TestDashCalendarPreview_AddonDisabled_NoHxGetNoSpinner(t *testing.T) {
 
 func TestDashCalendarPreview_PluginUnhealthy_NoHxGetNoSpinner(t *testing.T) {
 	cc := calendarCardTestCampaign()
-	ctx := context.Background()
-	ctx = layouts.SetEnabledAddons(ctx, map[string]bool{"calendar": true})
-	ctx = layouts.SetHealthyPlugins(ctx, map[string]bool{"calendar": false})
+	// Addon-on-but-plugin-degraded is resolved to the same neutral flag as
+	// addon-off before this template ever sees it (internal/app/routes.go);
+	// from here the two scenarios are indistinguishable by design, since
+	// this package may not read the calendar plugin's health itself.
+	ctx := layouts.SetUpcomingEventsAvailable(context.Background(), false)
 
 	out := renderCardWithCtx(t, ctx, dashCalendarPreview(cc, nil))
 	if strings.Contains(out, "hx-get") {
@@ -69,9 +71,7 @@ func TestDashCalendarPreview_PluginUnhealthy_NoHxGetNoSpinner(t *testing.T) {
 
 func TestDashCalendarPreview_AddonEnabledAndHealthy_EmitsHxGet(t *testing.T) {
 	cc := calendarCardTestCampaign()
-	ctx := context.Background()
-	ctx = layouts.SetEnabledAddons(ctx, map[string]bool{"calendar": true})
-	ctx = layouts.SetHealthyPlugins(ctx, map[string]bool{"calendar": true})
+	ctx := layouts.SetUpcomingEventsAvailable(context.Background(), true)
 
 	out := renderCardWithCtx(t, ctx, dashCalendarPreview(cc, nil))
 	if !strings.Contains(out, "hx-get") {
@@ -84,10 +84,10 @@ func TestDashCalendarPreview_AddonEnabledAndHealthy_EmitsHxGet(t *testing.T) {
 
 // TestDashCalendarPreview_NoContextSet_FailsToQuietState covers the ordinary
 // safety default: a render whose context never had
-// SetEnabledAddons/SetHealthyPlugins called at all (e.g. a test harness, or
-// a future caller that forgets to wire it) must fail toward the quiet
-// state, not toward silently assuming the addon is on — IsAddonEnabled
-// already defaults an unknown slug to false.
+// SetUpcomingEventsAvailable called at all (e.g. a test harness, or a
+// future caller that forgets to wire it) must fail toward the quiet state,
+// not toward silently assuming the addon is on — UpcomingEventsAvailable
+// already defaults to false when unset.
 func TestDashCalendarPreview_NoContextSet_FailsToQuietState(t *testing.T) {
 	cc := calendarCardTestCampaign()
 	out := renderCardWithCtx(t, context.Background(), dashCalendarPreview(cc, nil))
@@ -98,7 +98,7 @@ func TestDashCalendarPreview_NoContextSet_FailsToQuietState(t *testing.T) {
 
 func TestDashCalendarFull_AddonDisabled_NoHxGetNoSpinner(t *testing.T) {
 	cc := calendarCardTestCampaign()
-	ctx := layouts.SetEnabledAddons(context.Background(), map[string]bool{})
+	ctx := layouts.SetUpcomingEventsAvailable(context.Background(), false)
 
 	out := renderCardWithCtx(t, ctx, dashCalendarFull(cc, nil))
 	if strings.Contains(out, "hx-get") || strings.Contains(out, "Loading...") {

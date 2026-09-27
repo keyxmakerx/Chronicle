@@ -339,6 +339,36 @@ func IsPluginHealthy(ctx context.Context, slug string) bool {
 	return status
 }
 
+// --- Upcoming-events availability (dashboard/category calendar cards) ---
+//
+// The campaign dashboard and entity-category dashboard each have an
+// "Upcoming Events" card that hx-gets the calendar plugin's own embed
+// route. Whether that route actually exists for this request depends on
+// two calendar-specific facts — the calendar addon enabled for the
+// campaign, and the calendar plugin's schema healthy (see IsPluginHealthy)
+// — that neither the campaigns nor the entities package may check by name:
+// a literal calendar-plugin slug in either would cross plugin isolation
+// (T-B2), since neither owns nor may import the calendar plugin. internal/app
+// is allowed to name it (it wires every plugin), so it resolves both facts
+// into this one neutral flag, once, alongside SetHealthyPlugins.
+type ctxKeyUpcomingEventsAvailable struct{}
+
+// SetUpcomingEventsAvailable records whether a dashboard/category "Upcoming
+// Events" card's hx-get target is actually reachable for this request.
+func SetUpcomingEventsAvailable(ctx context.Context, available bool) context.Context {
+	return context.WithValue(ctx, ctxKeyUpcomingEventsAvailable{}, available)
+}
+
+// UpcomingEventsAvailable reports SetUpcomingEventsAvailable's value,
+// defaulting to false (unavailable) when unset — the same fail-closed
+// default IsAddonEnabled gives an addon it has no record of, so a template
+// rendered without the request middleware (e.g. a bare unit test) shows the
+// quiet "not enabled" state rather than an hx-get that 404s.
+func UpcomingEventsAvailable(ctx context.Context) bool {
+	available, _ := ctx.Value(ctxKeyUpcomingEventsAvailable{}).(bool)
+	return available
+}
+
 // EnabledSystem identifies the game system enabled for the current campaign,
 // used to render its rulebook (reference) nav link. Slug is the system's
 // module ID (the `:mod` path segment, e.g. "drawsteel").

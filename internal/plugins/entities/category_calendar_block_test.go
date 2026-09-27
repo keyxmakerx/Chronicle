@@ -39,14 +39,12 @@ func TestCategoryDashboard_CalendarBlockRenders(t *testing.T) {
 	// card (calendar-v5, #778), lazy-loading from the calendar plugin's own
 	// embed route — not the shared rebuild notice.
 	cc := &campaigns.CampaignContext{Campaign: &campaigns.Campaign{ID: "camp-1", Name: "C"}, MemberRole: campaigns.RoleOwner}
-	// The real request pipeline always populates addon-enabled/plugin-health
-	// on the render context (internal/app/routes.go's LayoutInjector) before
-	// a page renders; this test does the same rather than exercising the
-	// "context never set" fail-safe path, which category_calendar_card_test.go
-	// covers on its own.
-	ctx := context.Background()
-	ctx = layouts.SetEnabledAddons(ctx, map[string]bool{"calendar": true})
-	ctx = layouts.SetHealthyPlugins(ctx, map[string]bool{"calendar": true})
+	// The real request pipeline always populates the upcoming-events-available
+	// flag on the render context (internal/app/routes.go's LayoutInjector)
+	// before a page renders; this test does the same rather than exercising
+	// the "context never set" fail-safe path, which
+	// category_calendar_card_test.go covers on its own.
+	ctx := layouts.SetUpcomingEventsAvailable(context.Background(), true)
 	var buf bytes.Buffer
 	if err := CategoryDashboardContent(cc, et, nil, nil, 0, ListOptions{}, "", nil).Render(ctx, &buf); err != nil {
 		t.Fatalf("render: %v", err)
