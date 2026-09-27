@@ -10,17 +10,50 @@ package app
 // not import the entities repository directly, per plugin isolation),
 // because a mock of the predicate would not prove the wiring is real.
 //
-// Skipped under -short. Run with `make docker-up && make migrate-up && go
-// test ./internal/app/... -run TimelineEntityVisibilityLeak -v`, or against
-// tools/start-test-db.sh's local MariaDB via CHRONICLE_TEST_DB_DSN.
+// Skipped under -short. Run against tools/start-test-db.sh's local MariaDB
+// with `CHRONICLE_TEST_DB_DSN='root@tcp(127.0.0.1:13306)/' go test
+// ./internal/app/ -run 'Timeline.*VisibilityLeak' -v`.
 
 import (
 	"context"
+	"database/sql"
+	"io/fs"
+	"os"
+	"path/filepath"
 	"testing"
 
+	"github.com/keyxmakerx/chronicle/internal/database"
 	"github.com/keyxmakerx/chronicle/internal/permissions"
 	"github.com/keyxmakerx/chronicle/internal/plugins/timeline"
 )
+
+// openTimelineTestDB is openGalleryTestDB plus the timeline plugin's tables,
+// which the core migrations don't create. Timeline's tables reference the
+// calendar plugin's, so those go first, as at startup.
+func openTimelineTestDB(t *testing.T) *sql.DB {
+	t.Helper()
+	db := openGalleryTestDB(t)
+	root, err := filepath.Abs(filepath.Join("..", ".."))
+	if err != nil {
+		t.Fatalf("repo root: %v", err)
+	}
+	sub, err := fs.Sub(timeline.MigrationsFS, database.PluginMigrationsSubdir)
+	if err != nil {
+		t.Fatalf("sub-FS: %v", err)
+	}
+	calDir := os.DirFS(filepath.Join(root, "internal", "plugins", "calendar", "migrations"))
+	for _, res := range database.RunPluginMigrations(db, []database.PluginSchema{
+		{Slug: "calendar", MigrationsFS: calDir},
+		{Slug: "timeline", MigrationsFS: sub},
+	}) {
+		// Fatal, not skip: the server answered, so a failure here is real and
+		// must not pass quietly as a skipped test.
+		if !res.Healthy {
+			t.Fatalf("%s plugin migrations did not apply: %v", res.Slug, res.Error)
+		}
+	}
+	return db
+}
 
 // TestTimelineEvents_PrivateEntityVisibilityLeak is the timeline-event half
 // of ADR-055 rule 3 for this plugin: a standalone event's own visibility is
@@ -31,7 +64,7 @@ func TestTimelineEvents_PrivateEntityVisibilityLeak(t *testing.T) {
 	if testing.Short() {
 		t.Skip("integration test requires a database; skipped under -short")
 	}
-	db := openGalleryTestDB(t)
+	db := openTimelineTestDB(t)
 	defer db.Close()
 	ctx := context.Background()
 
@@ -113,7 +146,7 @@ func TestTimelineEntityGroups_PrivateEntityVisibilityLeak(t *testing.T) {
 	if testing.Short() {
 		t.Skip("integration test requires a database; skipped under -short")
 	}
-	db := openGalleryTestDB(t)
+	db := openTimelineTestDB(t)
 	defer db.Close()
 	ctx := context.Background()
 
