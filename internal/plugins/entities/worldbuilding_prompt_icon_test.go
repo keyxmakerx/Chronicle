@@ -12,7 +12,7 @@ import (
 
 // badPromptIconNames are inputs that must fail sanitize.ValidateIcon.
 var badPromptIconNames = []string{
-	`fa-x" onmouseover="y`,
+	`fa-x" data-y="z`,
 	`<b>`,
 	`FA-BOOK`,
 	`fa-`,

@@ -47,7 +47,7 @@ func (m *mockLayoutPresetRepo) Delete(ctx context.Context, id int) error {
 
 // badLayoutPresetIconNames are inputs that must fail sanitize.ValidateIcon.
 var badLayoutPresetIconNames = []string{
-	`fa-x" onmouseover="y`,
+	`fa-x" data-y="z`,
 	`<b>`,
 	`FA-BOOK`,
 	`fa-`,

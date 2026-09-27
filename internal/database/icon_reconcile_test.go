@@ -102,7 +102,7 @@ func TestReconcileIconColumns_Integration(t *testing.T) {
 		{iconPtr("fa-book"), "fa-book"},
 		{iconPtr("fa-dice-d20"), "fa-dice-d20"},
 		{nil, "<NULL>"},
-		{iconPtr(`fa-x" onmouseover="alert(1)`), "fa-circle"},
+		{iconPtr(`fa-x" data-y="z`), "fa-circle"},
 		{iconPtr("fa-<b>"), "fa-circle"},
 		{iconPtr("FA-BOOK"), "fa-circle"},
 		{iconPtr("fa-book extra"), "fa-circle"},

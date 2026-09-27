@@ -565,9 +565,9 @@
   };
 
   /**
-   * Escape a string for safe insertion into HTML content. Quotes are escaped
-   * too, so a value that ends up inside a quoted attribute can't break out;
-   * in element content the entities render as the same characters.
+   * Escape a string for safe insertion into HTML content or an attribute
+   * value. Same as escapeAttr; in element content the entities render as the
+   * original characters.
    *
    * @param {string} str - Raw string to escape.
    * @returns {string} HTML-safe string.

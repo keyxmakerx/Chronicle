@@ -11,7 +11,7 @@ import (
 
 // badInstanceIconNames are inputs that must fail sanitize.ValidateIcon.
 var badInstanceIconNames = []string{
-	`fa-x" onmouseover="y`,
+	`fa-x" data-y="z`,
 	`<b>`,
 	`FA-BOOK`,
 	`fa-`,

@@ -10,7 +10,7 @@ import (
 
 // badAddonIconNames are inputs that must fail sanitize.ValidateIcon.
 var badAddonIconNames = []string{
-	`fa-x" onmouseover="y`,
+	`fa-x" data-y="z`,
 	`<b>`,
 	`FA-BOOK`,
 	`fa-`,
@@ -143,7 +143,7 @@ func TestRegisterSystemAddon_InvalidIconFallsBack(t *testing.T) {
 		installedAddons[k] = v
 	}
 
-	RegisterSystemAddon("test-system", "Test System", "A test system", "1.0.0", `<script>bad</script>`, "Author")
+	RegisterSystemAddon("test-system", "Test System", "A test system", "1.0.0", `<b>bad</b>`, "Author")
 
 	found := false
 	for _, def := range builtinAddons {

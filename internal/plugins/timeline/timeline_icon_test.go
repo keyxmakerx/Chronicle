@@ -12,7 +12,7 @@ import (
 
 // badTimelineIconNames are inputs that must fail sanitize.ValidateIcon.
 var badTimelineIconNames = []string{
-	`fa-x" onmouseover="y`,
+	`fa-x" data-y="z`,
 	`<b>`,
 	`FA-BOOK`,
 	`fa-`,

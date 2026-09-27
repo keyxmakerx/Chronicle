@@ -12,7 +12,7 @@ import (
 
 // badImportIconNames are inputs that must fail sanitize.ValidateIcon.
 var badImportIconNames = []string{
-	`fa-x" onmouseover="y`,
+	`fa-x" data-y="z`,
 	`<b>`,
 	`FA-BOOK`,
 	`fa-`,
@@ -193,7 +193,7 @@ func TestNormalizeImportIcons_NilData(t *testing.T) {
 
 func TestNormalizeSidebarIcons(t *testing.T) {
 	t.Run("invalid icon cleared and reported under item label", func(t *testing.T) {
-		items := []SidebarItem{{Type: "link", Label: "Quest Board", Icon: `fa-x" onmouseover="y`}}
+		items := []SidebarItem{{Type: "link", Label: "Quest Board", Icon: `fa-x" data-y="z`}}
 		report := NewImportReport()
 		normalizeSidebarIcons(items, "My Campaign", report)
 

@@ -1022,12 +1022,7 @@ var _impl = {
   },
 
   /**
-   * Draw event markers on the timeline.
-   */
-  /**
-   * Markup for a day-zoom event card. Every server value is escaped; the
-   * entity icon lands inside a class attribute, so it needs the quote-safe
-   * escape as well as the server-side icon check.
+   * Markup for a day-zoom event card. Every server value is escaped.
    */
   _cardHtml: function(d) {
     var label = Chronicle.escapeHtml(d.label || d.event_name || 'Untitled');
@@ -1045,6 +1040,9 @@ var _impl = {
            catHtml;
   },
 
+  /**
+   * Draw event markers on the timeline.
+   */
   _drawEvents: function() {
     var self = this;
     var xScale = this.xScale;

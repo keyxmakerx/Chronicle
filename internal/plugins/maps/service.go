@@ -327,6 +327,9 @@ func (s *mapService) UpdateMarker(ctx context.Context, id string, input UpdateMa
 	if err != nil {
 		return err
 	}
+	if icon == "" {
+		icon = "fa-map-pin"
+	}
 	color := input.Color.Val(mk.Color)
 	if color != "" && !colorPattern.MatchString(color) {
 		return apperror.NewValidation("color must be a valid hex color")

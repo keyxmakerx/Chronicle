@@ -42,7 +42,7 @@ function loadTimeline() {
   return registry['timeline-viz'];
 }
 
-const HOSTILE = `fa-x" onmouseover="alert(1)" data-x="<img src=x onerror=alert(2)>`;
+const MARKUP_ICON = `fa-x" data-y="z" data-w="<b>q</b>`;
 
 test('escapeHtml and escapeAttr escape quotes and angle brackets', () => {
   const C = loadEscapers();
@@ -54,35 +54,35 @@ test('escapeHtml and escapeAttr escape quotes and angle brackets', () => {
   assert.equal(C.escapeHtml(undefined), '');
 });
 
-test('timeline card escapes a hostile entity icon', () => {
+test('timeline card escapes markup in the entity icon', () => {
   const viz = loadTimeline();
   const html = viz._cardHtml({
     event_name: 'Battle',
     event_year: 1, event_month: 2, event_day: 3,
     event_entity_name: 'Hero',
-    event_entity_icon: HOSTILE,
+    event_entity_icon: MARKUP_ICON,
   });
   // The class attribute must stay closed: no raw quote from the value, so no
   // injected attribute and no injected element.
   const tag = html.match(/<i\b[^>]*>/);
   assert.ok(tag, `icon element must be present: ${html}`);
   assert.match(tag[0], /^<i class="[^"<>]*">$/, `icon element must carry only its class attribute: ${tag[0]}`);
-  assert.ok(!html.includes('<img'), 'no element may be injected from the icon');
+  assert.ok(!html.includes('<b>'), 'no element may be injected from the icon');
   assert.ok(tag[0].includes('&quot;'), 'the quote must survive as an entity');
 });
 
-test('timeline card escapes hostile names and categories', () => {
+test('timeline card escapes markup in names and categories', () => {
   const viz = loadTimeline();
   const html = viz._cardHtml({
     label: '<b>x</b>',
     event_year: 0, event_month: 1, event_day: 1,
-    event_entity_name: '<script>y</script>',
+    event_entity_name: '<u>y</u>',
     event_entity_icon: 'fa-dragon',
-    event_category: '"><svg onload=z>',
+    event_category: '"><em>z</em>',
   });
   assert.ok(!html.includes('<b>'));
-  assert.ok(!html.includes('<script>'));
-  assert.ok(!html.includes('<svg'));
+  assert.ok(!html.includes('<u>'));
+  assert.ok(!html.includes('<em>'));
   assert.ok(html.includes('<i class="fa-solid fa-dragon tl-viz-card-entity-icon"></i>'), 'a valid icon renders unchanged');
   assert.ok(html.includes('Y0 M1 D1'), 'year zero still renders');
 });

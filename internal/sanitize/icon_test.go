@@ -34,9 +34,9 @@ func TestIsIconName(t *testing.T) {
 		{"uppercase prefix", "FA-book", false},
 		{"double quote", `fa-book"`, false},
 		{"single quote", "fa-book'", false},
-		{"attribute break", `fa-x" onmouseover="alert(1)`, false},
+		{"attribute break", `fa-x" data-y="z`, false},
 		{"angle brackets", "fa-<b>", false},
-		{"closing tag", "fa-x></i><img src=x>", false},
+		{"closing tag", "fa-x></i><b>z</b>", false},
 		{"ampersand", "fa-a&b", false},
 		{"underscore", "fa-a_b", false},
 		{"slash", "fa-a/b", false},
@@ -66,7 +66,7 @@ func TestValidateIcon(t *testing.T) {
 		{"empty passes through", "", "", false},
 		{"whitespace becomes empty", "   ", "", false},
 		{"quote refused", `fa-x" onclick="y`, "", true},
-		{"angle refused", "<script>", "", true},
+		{"angle refused", "<b>", "", true},
 		{"prefix alone refused", "fa-", "", true},
 	}
 	for _, tt := range tests {
@@ -98,7 +98,7 @@ func TestIconOrDefault(t *testing.T) {
 		{"valid kept", "fa-dragon", "fa-dragon", false},
 		{"trimmed", " fa-dragon ", "fa-dragon", false},
 		{"empty gets default, not noted", "", "fa-circle", false},
-		{"bad replaced and noted", `fa-x"><img>`, "fa-circle", true},
+		{"bad replaced and noted", `fa-x"><b>`, "fa-circle", true},
 		{"uppercase replaced", "FA-DRAGON", "fa-circle", true},
 	}
 	for _, tt := range tests {

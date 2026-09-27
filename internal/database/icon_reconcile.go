@@ -5,6 +5,7 @@ package database
 import (
 	"context"
 	"database/sql"
+	"errors"
 	"fmt"
 	"log/slog"
 
@@ -21,29 +22,30 @@ type IconColumn struct {
 }
 
 // ReconcileIconColumns replaces every stored icon that fails
-// sanitize.IsIconName with its column's default and logs the old value.
-// Icons are only ever written through the shared check now, so this cleans
-// up rows written before it existed. It is a data fix, so it lives here
-// rather than in a migration.
+// sanitize.IsIconName with its column's default and logs the old value, so
+// no page is ever built from an unchecked icon. It is a data fix, so it
+// lives here rather than in a migration.
 //
 // Idempotent: it only touches rows that fail the check, and a replaced row
 // holds a valid default, so a second run changes nothing. NULLs are left
 // alone. A table that doesn't exist (plugin not migrated) is skipped. The
 // check runs in Go rather than SQL so it can't drift from the write-path
-// rule. Returns the number of rows changed.
+// rule. A column that fails is reported and the rest still run. Returns the
+// number of rows changed.
 func ReconcileIconColumns(ctx context.Context, db *sql.DB, cols []IconColumn) (int, error) {
 	if db == nil {
 		return 0, fmt.Errorf("ReconcileIconColumns: nil db handle")
 	}
 	total := 0
+	var errs []error
 	for _, col := range cols {
 		n, err := reconcileIconColumn(ctx, db, col)
 		total += n
 		if err != nil {
-			return total, fmt.Errorf("reconciling %s.%s icons: %w", col.Table, col.Column, err)
+			errs = append(errs, fmt.Errorf("reconciling %s.%s icons: %w", col.Table, col.Column, err))
 		}
 	}
-	return total, nil
+	return total, errors.Join(errs...)
 }
 
 func reconcileIconColumn(ctx context.Context, db *sql.DB, col IconColumn) (int, error) {

@@ -58,7 +58,7 @@ func TestIconReconcile_RealSchema(t *testing.T) {
 		userID     = "00000000-0000-0000-0000-00000000000a"
 		campaignID = "00000000-0000-0000-0000-00000000000b"
 		mapID      = "00000000-0000-0000-0000-00000000000c"
-		bad        = `fa-x" onmouseover="alert(1)`
+		bad        = `fa-x" data-y="z`
 	)
 	exec := func(q string, args ...any) {
 		t.Helper()
@@ -71,7 +71,7 @@ func TestIconReconcile_RealSchema(t *testing.T) {
 	exec(`INSERT INTO entity_types (campaign_id, slug, name, name_plural, icon) VALUES (?, 'bad', 'Bad', 'Bads', ?)`, campaignID, bad)
 	exec(`INSERT INTO entity_types (campaign_id, slug, name, name_plural, icon) VALUES (?, 'good', 'Good', 'Goods', 'fa-dragon')`, campaignID)
 	exec(`INSERT INTO maps (id, campaign_id, name) VALUES (?, ?, 'Map')`, mapID, campaignID)
-	exec(`INSERT INTO map_markers (id, map_id, name, icon) VALUES ('mk-bad', ?, 'Bad', 'fa-<img>')`, mapID)
+	exec(`INSERT INTO map_markers (id, map_id, name, icon) VALUES ('mk-bad', ?, 'Bad', 'fa-<b>')`, mapID)
 	exec(`INSERT INTO map_markers (id, map_id, name, icon) VALUES ('mk-good', ?, 'Good', 'fa-castle')`, mapID)
 	exec(`INSERT INTO timelines (id, campaign_id, name, icon) VALUES ('tl-bad', ?, 'Bad', 'FA-TIMELINE')`, campaignID)
 	exec(`INSERT INTO layout_presets (campaign_id, name, layout_json, icon) VALUES (?, 'Bad', '{}', 'fa-')`, campaignID)

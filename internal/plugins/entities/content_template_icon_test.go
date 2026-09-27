@@ -51,7 +51,7 @@ func (m *mockContentTemplateRepo) Delete(ctx context.Context, id int) error {
 
 // badContentTemplateIconNames are inputs that must fail sanitize.ValidateIcon.
 var badContentTemplateIconNames = []string{
-	`fa-x" onmouseover="y`,
+	`fa-x" data-y="z`,
 	`<b>`,
 	`FA-BOOK`,
 	`fa-`,

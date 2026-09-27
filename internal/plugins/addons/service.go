@@ -354,6 +354,9 @@ func (s *addonService) Create(ctx context.Context, input CreateAddonInput) (*Add
 	if err != nil {
 		return nil, err
 	}
+	if icon == "" {
+		icon = "fa-puzzle-piece"
+	}
 
 	addon := &Addon{
 		Slug:     slug,
@@ -398,6 +401,9 @@ func (s *addonService) Update(ctx context.Context, id int, input UpdateAddonInpu
 	icon, err := sanitize.ValidateIcon(input.Icon)
 	if err != nil {
 		return nil, err
+	}
+	if icon == "" {
+		icon = "fa-puzzle-piece"
 	}
 
 	addon.Name = name

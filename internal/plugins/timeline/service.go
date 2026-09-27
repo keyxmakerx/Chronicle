@@ -375,6 +375,9 @@ func (s *timelineService) UpdateTimeline(ctx context.Context, timelineID string,
 	if err != nil {
 		return err
 	}
+	if icon == "" {
+		icon = "fa-timeline"
+	}
 	color := input.Color.Val(t.Color)
 	if color != "" && !colorPattern.MatchString(color) {
 		return apperror.NewValidation("color must be a valid hex color")
