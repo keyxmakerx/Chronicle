@@ -1,4 +1,4 @@
-// page_routes_test.go covers the Part B (#764) page routes end to end
+// page_routes_test.go covers the calendar list, preview and wizard routes end to end
 // through the same access-test harness access_test.go builds (real
 // RegisterRoutes, real middleware chain, fakeCalendarSvc standing in for the
 // business logic service_test.go already covers): the calendars list page,
@@ -121,11 +121,11 @@ func TestCalendarPreview_PlayerAndOwnerCanOpenIt(t *testing.T) {
 		if !strings.Contains(rec.Body.String(), "The Secret Calendar") {
 			t.Errorf("%s: expected the calendar's name in the preview, body:\n%s", userID, rec.Body.String())
 		}
-		if !strings.Contains(rec.Body.String(), "Full calendar view (coming soon)") {
-			t.Errorf("%s: expected a disabled placeholder for Part A's full calendar view (not merged yet, must not be a live link), body:\n%s", userID, rec.Body.String())
+		if !strings.Contains(rec.Body.String(), `href="/campaigns/camp-1/calendars/cal-1/view"`) {
+			t.Errorf("%s: the preview must link to the calendar's own page, body:\n%s", userID, rec.Body.String())
 		}
-		if strings.Contains(rec.Body.String(), "/calendars/cal-1/view") {
-			t.Errorf("%s: Part A's route hasn't merged — the preview must not link to it yet, body:\n%s", userID, rec.Body.String())
+		if strings.Contains(rec.Body.String(), "coming soon") {
+			t.Errorf("%s: the full calendar view exists; the preview must not call it coming soon, body:\n%s", userID, rec.Body.String())
 		}
 	}
 }

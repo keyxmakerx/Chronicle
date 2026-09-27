@@ -1,5 +1,5 @@
 // Package calendar — list_handler.go serves the campaign calendars list
-// page and the per-card preview fragment (Part B, #764). Thin handlers only:
+// page and the per-card preview fragment. Thin handlers only:
 // bind, call the service, render — see CLAUDE.md's layering rule.
 package calendar
 
@@ -94,9 +94,9 @@ type CalendarPreviewData struct {
 
 // Preview renders the calendar preview fragment
 // (GET /campaigns/:id/calendars/:calid/preview), opened from a card into the
-// list page's preview dialog. Fragment-only — there is no standalone page
-// for it, matching the scope note on the folded-preview-only decision (the
-// full "unfold to calendar" view is Part A's /calendars/:calid/view route).
+// list page's preview dialog. Fragment-only: there is no standalone page
+// for it; its "Full calendar view" link opens the calendar's own page
+// (/calendars/:calid/view).
 func (h *Handler) Preview(c echo.Context) error {
 	cc := campaigns.GetCampaignContext(c)
 	ctx := c.Request().Context()

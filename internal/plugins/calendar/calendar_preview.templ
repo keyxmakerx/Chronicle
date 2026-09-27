@@ -1,11 +1,10 @@
 // calendar_preview.templ renders the per-card preview dialog: the
 // calendar's name, today's date, the current month's grid, tonight's moons
-// and what's coming up. This is always the mockup's folded ".pv" state —
-// the in-page "unfold to full calendar" animation and its month-to-month
-// paging are Part A's /campaigns/:id/calendars/:calid/view route (not part
-// of this checkout yet — see the Part B PR description). No weather line:
-// that needs a weather-generation engine this plugin doesn't have wired for
-// a viewer with no forecast permission, and #764 didn't ask for it.
+// and what's coming up. This is always the mockup's folded ".pv" state;
+// month-to-month paging lives on the calendar's own page
+// (/campaigns/:id/calendars/:calid/view), which the "Full calendar view"
+// link opens. No weather line: that needs a weather-generation engine this
+// plugin doesn't have wired for a viewer with no forecast permission.
 package calendar
 
 import "fmt"
@@ -89,23 +88,13 @@ templ CalendarPreviewFragment(data CalendarPreviewData) {
 							}
 
 							<div style="margin-top:18px;display:flex;flex-direction:column;gap:8px">
-								// Not a clickable <a href> yet: Part A's
-								// /campaigns/:id/calendars/:calid/view route (this
-								// preview's real "unfold to full calendar" target —
-								// see the package doc comment above) hasn't merged,
-								// so linking there today would be a dead 404. A
-								// disabled button says so instead of pretending the
-								// feature exists; swap back to the <a href> once
-								// that route lands.
-								<button
-									type="button"
+<a
+									href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/calendars/%s/view", data.CampaignID, data.Calendar.ID)) }
 									class="btn primary"
-									style="width:100%"
-									disabled
-									title="The full calendar view is not available yet"
+									style="width:100%;text-align:center"
 								>
-									<i class="fa-solid fa-book-open"></i> Full calendar view (coming soon)
-								</button>
+									<i class="fa-solid fa-book-open"></i> Full calendar view
+								</a>
 							</div>
 						</div>
 					</div>
