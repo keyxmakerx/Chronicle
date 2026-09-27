@@ -250,7 +250,7 @@ func TestRouteGates_PlayerBlockedFromOwnerAndScribeRoutes(t *testing.T) {
 		{"create event (Scribe+)", http.MethodPost, "/campaigns/camp-1/calendars/cal-1/events"},
 		{"update event (Scribe+)", http.MethodPut, "/campaigns/camp-1/calendars/cal-1/events/evt-1"},
 		{"delete event (Owner only)", http.MethodDelete, "/campaigns/camp-1/calendars/cal-1/events/evt-1"},
-		{"set event visibility (Owner only, the dm_only toggle)", http.MethodPut, "/campaigns/camp-1/calendars/cal-1/events/evt-1/visibility"},
+		{"set event visibility (the dm_only toggle, gated on CanAuthorDmOnly)", http.MethodPut, "/campaigns/camp-1/calendars/cal-1/events/evt-1/visibility"},
 		{"list event kinds (calendar structure, Owner only)", http.MethodGet, "/campaigns/camp-1/calendars/event-kinds"},
 		{"create event kind (Owner only)", http.MethodPost, "/campaigns/camp-1/calendars/event-kinds"},
 		{"create era (Owner only)", http.MethodPost, "/campaigns/camp-1/calendars/cal-1/eras"},
