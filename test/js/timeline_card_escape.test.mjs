@@ -1,7 +1,7 @@
 // timeline_card_escape.test.mjs — pins that the timeline's day-zoom event
 // card escapes every server value, including the linked entity's type icon,
-// which lands inside a class attribute. Also pins that Chronicle.escapeHtml
-// escapes quotes, since many widgets use it inside quoted attributes.
+// which lands inside a class attribute. Also pins that escapeHtml and
+// escapeAttr both escape quotes and angle brackets.
 //
 // Runs the real boot.js escape helpers and the real timeline widget source in
 // a vm sandbox, so the markup asserted is the markup a browser would parse.
@@ -63,11 +63,11 @@ test('timeline card escapes markup in the entity icon', () => {
     event_entity_icon: MARKUP_ICON,
   });
   // The class attribute must stay closed: no raw quote from the value, so no
-  // injected attribute and no injected element.
+  // extra attribute and no extra element.
   const tag = html.match(/<i\b[^>]*>/);
   assert.ok(tag, `icon element must be present: ${html}`);
   assert.match(tag[0], /^<i class="[^"<>]*">$/, `icon element must carry only its class attribute: ${tag[0]}`);
-  assert.ok(!html.includes('<b>'), 'no element may be injected from the icon');
+  assert.ok(!html.includes('<b>'), 'the icon must not add an element');
   assert.ok(tag[0].includes('&quot;'), 'the quote must survive as an entity');
 });
 

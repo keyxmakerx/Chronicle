@@ -87,7 +87,7 @@ func TestIconReconcile_RealSchema(t *testing.T) {
 	exec(`INSERT INTO entity_types (campaign_id, slug, name, name_plural, icon) VALUES (?, 'bad', 'Bad', 'Bads', ?)`, campaignID, bad)
 	exec(`INSERT INTO entity_types (campaign_id, slug, name, name_plural, icon) VALUES (?, 'good', 'Good', 'Goods', 'fa-dragon')`, campaignID)
 	exec(`INSERT INTO entity_types (campaign_id, slug, name, name_plural, icon) VALUES (?, 'styled', 'Styled', 'Styleds', 'fa-solid fa-anchor')`, campaignID)
-	exec(`INSERT INTO entity_types (campaign_id, slug, name, name_plural, icon) VALUES (?, 'styled-junk', 'Junk', 'Junks', ?)`, campaignID, `fa-solid fa-anchor" onmouseover`)
+	exec(`INSERT INTO entity_types (campaign_id, slug, name, name_plural, icon) VALUES (?, 'styled-junk', 'Junk', 'Junks', ?)`, campaignID, `fa-solid fa-anchor"x`)
 	exec(`INSERT INTO maps (id, campaign_id, name) VALUES (?, ?, 'Map')`, mapID, campaignID)
 	exec(`INSERT INTO map_markers (id, map_id, name, icon) VALUES ('mk-bad', ?, 'Bad', 'fa-<b>')`, mapID)
 	exec(`INSERT INTO map_markers (id, map_id, name, icon) VALUES ('mk-good', ?, 'Good', 'fa-castle')`, mapID)

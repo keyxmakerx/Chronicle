@@ -112,7 +112,7 @@ func TestReconcileIconColumns_Integration(t *testing.T) {
 		{iconPtr("fa-"), intDefault},
 		{iconPtr(""), intDefault},
 		{iconPtr("fa-" + strings.Repeat("a", 60)), intDefault},
-		{iconPtr(`fa-solid fa-circle" onmouseover`), intDefault},
+		{iconPtr(`fa-solid fa-circle"x`), intDefault},
 		{iconPtr("fa-brands fa-github"), intDefault},
 		{iconPtr("fa-solid fa-circle extra"), intDefault},
 		// Style-prefixed or padded names are repaired, not reset.
