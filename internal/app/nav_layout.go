@@ -96,15 +96,16 @@ func navCategoriesFor(campaignID string, types []layouts.SidebarEntityType, coun
 	return out
 }
 
-// navAccessFor is what the viewer may open: members get member-only apps,
-// any signed-in viewer gets signed-in ones, and a public visitor only the
-// pages open to anyone.
+// navAccessFor is what the viewer may open: members get member-only apps, a
+// site admin looking in gets the pages RequireCampaignAccess lets them open,
+// and anyone else (a public visitor, signed in or not) only the pages open to
+// anyone.
 func navAccessFor(cc *campaigns.CampaignContext) campaigns.NavAccess {
 	switch {
 	case cc.IsMember && cc.MemberRole >= campaigns.RolePlayer:
 		return campaigns.NavAccessMember
-	case !cc.IsAnonymous:
-		return campaigns.NavAccessSignedIn
+	case cc.IsSiteAdmin && !cc.IsAnonymous:
+		return campaigns.NavAccessMemberOrAdmin
 	default:
 		return campaigns.NavAccessAnyone
 	}

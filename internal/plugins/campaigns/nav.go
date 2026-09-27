@@ -55,9 +55,9 @@ const (
 type NavAccess int
 
 const (
-	NavAccessAnyone   NavAccess = iota // anyone who can view the campaign
-	NavAccessSignedIn                  // any signed-in viewer
-	NavAccessMember                    // a member of the campaign
+	NavAccessAnyone        NavAccess = iota // anyone who can view the campaign
+	NavAccessMemberOrAdmin                  // a member, or a site admin looking in (RequireCampaignAccess)
+	NavAccessMember                         // a member of the campaign (RequireRole(RolePlayer))
 )
 
 // NavApp is one app page the sidebar can list, resolved for a campaign.

@@ -11,7 +11,7 @@ import (
 func navTestApps() []NavApp {
 	return []NavApp{
 		{Slug: "notes", Label: "Journal", URL: "/c/journal", Enabled: true, Access: NavAccessMember, DefaultPinned: true},
-		{Slug: "dates", Label: "Dates", URL: "/c/dates", Enabled: true, Access: NavAccessSignedIn, DefaultPinned: true},
+		{Slug: "dates", Label: "Dates", URL: "/c/dates", Enabled: true, Access: NavAccessMemberOrAdmin, DefaultPinned: true},
 		{Slug: "maps", Label: "Maps", URL: "/c/maps", Enabled: true, Access: NavAccessAnyone},
 		{Slug: "characters", Label: "Characters", URL: "/c/characters", Caption: "Party & NPCs", Enabled: true, Access: NavAccessMember},
 		{Slug: "forge", Label: "Forge", URL: "/c/forge", Enabled: false, Access: NavAccessAnyone},
@@ -242,7 +242,7 @@ func TestViewNav_AppsNeedAccessAndMustBeOn(t *testing.T) {
 		want   []string
 	}{
 		{name: "a public visitor gets only public apps", access: NavAccessAnyone, want: []string{"app:maps"}},
-		{name: "a signed-in visitor also gets signed-in apps", access: NavAccessSignedIn, want: []string{"app:dates", "app:maps"}},
+		{name: "a site admin looking in also gets member-or-admin apps", access: NavAccessMemberOrAdmin, want: []string{"app:dates", "app:maps"}},
 		{name: "a member gets every app that is on", access: NavAccessMember, want: []string{"app:notes", "app:dates", "app:maps", "app:characters"}},
 	}
 	for _, tt := range tests {
