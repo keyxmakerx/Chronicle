@@ -8,7 +8,7 @@ the core interactive component of the sidebar drill panel.
 
 **No page loads it.** The campaign sidebar (`layouts/nav.templ`) has no page
 tree and nothing opens the drill panel; the script, the panel and its
-endpoint remain until the page tree has a new home.
+endpoint remain until the tree moves onto category pages (#784).
 
 ## Architecture
 
