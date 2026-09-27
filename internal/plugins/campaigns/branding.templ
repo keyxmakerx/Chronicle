@@ -308,11 +308,14 @@ templ surfaceAccentRow(slot int, label string, current string) {
 }
 
 // appearanceTab renders the visual customization editor in the Customization Hub.
-// Contains: faux site outline, brand name/logo, welcome message, accent
-// colors, topbar styling, and backdrop image. One staged draft covers the
-// whole tab (including Surface Accents, which used to save on click): Save
-// persists every changed field, Discard reverts every control to the last
-// save.
+// Contains: faux site outline, brand name/logo, accent colors, topbar
+// styling, and backdrop image. One staged draft covers the whole tab
+// (including Surface Accents, which used to save on click): Save persists
+// every changed field, Discard reverts every control to the last save.
+//
+// Deliberately no Welcome Message card: Campaign Settings -> General already
+// edits that field, and the Customize page redesign will decide which
+// surface keeps it — not a gap to fill in here.
 templ appearanceTab(cc *CampaignContext, csrfToken string) {
 	<h2 class="text-base font-semibold text-fg mb-1">Appearance</h2>
 	<p class="text-xs text-fg-secondary mb-4">Customize the visual style of your campaign. Changes preview instantly — click Save when you're happy.</p>
@@ -346,7 +349,6 @@ templ appearanceTab(cc *CampaignContext, csrfToken string) {
 		data-topbar-style={ topbarStyleJSON(cc.Campaign.ParseSettings().TopbarStyle) }
 		data-topbar-content={ topbarContentJSON(cc.Campaign.ParseSettings().TopbarContent) }
 		data-font-family={ cc.Campaign.ParseSettings().FontFamily }
-		data-welcome-message={ cc.Campaign.ParseSettings().WelcomeMessage }
 	>
 		<!-- Live preview of campaign appearance -->
 		<div class="rounded-lg border border-edge overflow-hidden mb-6 bg-surface-alt shadow-sm" id="appearance-preview-root">
@@ -507,25 +509,6 @@ templ appearanceTab(cc *CampaignContext, csrfToken string) {
 					<i class="fa-solid fa-xmark"></i>
 				</button>
 			</div>
-		</div>
-
-		<!-- Welcome message: the MOTD banner shown on the campaign dashboard.
-		     Same card/label/input pattern as Brand Name above; staged into
-		     the same draft as every other field here. -->
-		<div class="card p-4 mb-4">
-			<h3 class="text-sm font-semibold text-fg mb-2">
-				<i class="fa-solid fa-bullhorn text-xs mr-1.5 text-fg-muted"></i> Welcome Message
-			</h3>
-			<p class="text-xs text-fg-secondary mb-3">Banner shown on the campaign dashboard.</p>
-			<textarea
-				id="appearance-welcome-message"
-				class="input w-full h-20 text-sm"
-				placeholder="Welcome to the campaign! Here's what's new..."
-				maxlength={ fmt.Sprintf("%d", MaxWelcomeMessageLen) }
-			>{ cc.Campaign.ParseSettings().WelcomeMessage }</textarea>
-			<p class="text-[10px] text-fg-muted mt-1" id="appearance-welcome-counter">
-				{ fmt.Sprintf("%d / %d", len(cc.Campaign.ParseSettings().WelcomeMessage), MaxWelcomeMessageLen) }
-			</p>
 		</div>
 
 		<!-- Site accent, Action highlight, App accent: one shared picker

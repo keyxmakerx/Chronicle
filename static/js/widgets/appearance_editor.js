@@ -2,13 +2,13 @@
  * appearance_editor.js -- Campaign Appearance Editor Widget
  *
  * Mounts on data-widget="appearance-editor". Live-previews brand name/logo,
- * welcome message, topbar styling, and five accent slots: data-accent-color
- * (site-wide), data-accent-action (primary buttons/hover/FABs),
- * data-accent-app (character pages, calendar app), and the legacy
- * data-accent-surface-1/2 pair (content-surface primary/secondary). Every
- * field — including Surface Accents, which used to PUT on every click —
- * stages into one local draft until the user clicks "Save Changes"; a
- * "Discard" button reverts every control back to the last save.
+ * topbar styling, and five accent slots: data-accent-color (site-wide),
+ * data-accent-action (primary buttons/hover/FABs), data-accent-app
+ * (character pages, calendar app), and the legacy data-accent-surface-1/2
+ * pair (content-surface primary/secondary). Every field — including Surface
+ * Accents, which used to PUT on every click — stages into one local draft
+ * until the user clicks "Save Changes"; a "Discard" button reverts every
+ * control back to the last save.
  */
 (function () {
   'use strict';
@@ -50,7 +50,6 @@
         accentSurface1: el.getAttribute('data-accent-surface-1') || '',
         accentSurface2: el.getAttribute('data-accent-surface-2') || '',
         fontFamily: config.fontFamily || '',
-        welcomeMessage: el.getAttribute('data-welcome-message') || '',
         topbarStyle: { mode: '', color: '', gradient_from: '', gradient_to: '', gradient_dir: 'to-r', image_path: '' },
         topbarContent: { mode: 'none', links: [], quote: '' }
       };
@@ -84,7 +83,6 @@
         accentSurface1: saved.accentSurface1,
         accentSurface2: saved.accentSurface2,
         fontFamily: saved.fontFamily,
-        welcomeMessage: saved.welcomeMessage,
         topbarStyle: {
           mode: saved.topbarStyle.mode || '',
           color: saved.topbarStyle.color || '',
@@ -123,8 +121,6 @@
       var gradFromInput = el.querySelector('#appearance-topbar-gradient-from');
       var gradToInput = el.querySelector('#appearance-topbar-gradient-to');
       var gradDirSelect = el.querySelector('#appearance-topbar-gradient-dir');
-      var welcomeInput = el.querySelector('#appearance-welcome-message');
-      var welcomeCounter = el.querySelector('#appearance-welcome-counter');
 
       // Preview elements for live accent/font/backdrop updates. The primary
       // button follows the Action slot (mirrors the .btn-primary CSS swap in
@@ -192,7 +188,6 @@
                draft.accentSurface1 !== saved.accentSurface1 ||
                draft.accentSurface2 !== saved.accentSurface2 ||
                draft.fontFamily !== saved.fontFamily ||
-               draft.welcomeMessage !== saved.welcomeMessage ||
                draft.topbarStyle.mode !== (saved.topbarStyle.mode || '') ||
                draft.topbarStyle.color !== (saved.topbarStyle.color || '') ||
                draft.topbarStyle.gradient_from !== (saved.topbarStyle.gradient_from || '') ||
@@ -351,16 +346,6 @@
         }
         updateSaveBar();
       });
-
-      // --- Welcome Message ---
-
-      if (welcomeInput) {
-        welcomeInput.addEventListener('input', function () {
-          draft.welcomeMessage = welcomeInput.value;
-          if (welcomeCounter) welcomeCounter.textContent = welcomeInput.value.length + ' / 500';
-          updateSaveBar();
-        });
-      }
 
       // --- Font Family Buttons ---
 
@@ -561,7 +546,6 @@
                 saved.accentSurface1 = draft.accentSurface1;
                 saved.accentSurface2 = draft.accentSurface2;
                 saved.fontFamily = draft.fontFamily;
-                saved.welcomeMessage = draft.welcomeMessage;
                 saved.topbarStyle = {
                   mode: draft.topbarStyle.mode,
                   color: draft.topbarStyle.color,
@@ -689,22 +673,6 @@
             });
           }
 
-          // Save welcome message if changed.
-          if (draft.welcomeMessage !== saved.welcomeMessage) {
-            pending++;
-            Chronicle.apiFetch('/campaigns/' + campaignId + '/welcome-message', {
-              method: 'PUT',
-              body: { message: draft.welcomeMessage },
-              csrfToken: csrfToken
-            }).then(function (res) {
-              if (!res.ok) { failed = true; }
-              onComplete();
-            }).catch(function () {
-              failed = true;
-              onComplete();
-            });
-          }
-
           // Save font family if changed.
           if (draft.fontFamily !== saved.fontFamily) {
             pending++;
@@ -801,7 +769,6 @@
           draft.accentSurface1 = saved.accentSurface1;
           draft.accentSurface2 = saved.accentSurface2;
           draft.fontFamily = saved.fontFamily;
-          draft.welcomeMessage = saved.welcomeMessage;
           draft.topbarStyle = {
             mode: saved.topbarStyle.mode || '',
             color: saved.topbarStyle.color || '',
@@ -870,10 +837,6 @@
             if (quoteCounter) quoteCounter.textContent = quoteTextarea.value.length + ' / 200';
           }
           renderLinksList();
-
-          // Welcome message.
-          if (welcomeInput) welcomeInput.value = draft.welcomeMessage;
-          if (welcomeCounter) welcomeCounter.textContent = draft.welcomeMessage.length + ' / 500';
 
           updateSaveBar();
         });
