@@ -2,6 +2,7 @@ package campaigns
 
 import (
 	"fmt"
+	"html"
 	"text/template"
 
 	"github.com/a-h/templ"
@@ -17,11 +18,11 @@ import (
 // interpolated; the custom color is read from the input when the handler
 // runs.
 //
-// The handler no longer PUTs to the server itself: it sets the CSS variable
-// for an instant local preview, then dispatches a CustomEvent so the
-// appearance-editor widget's own JS (which owns campaignId/csrfToken and the
-// Save/Discard flow) can fold the slot into its one staged draft instead of
-// saving on every click.
+// The handler previews locally on the appearance-editor widget element (so
+// the sample card inherits it, without leaking to the rest of the page) and
+// dispatches a CustomEvent so the widget's own JS — which owns
+// campaignId/csrfToken and the Save/Discard flow — folds the slot into its
+// one staged draft.
 
 // jsStr returns a single-quoted JS string literal for embedding in an inline
 // attribute handler (which templ delimits with double quotes).
@@ -31,23 +32,38 @@ func jsStr(s string) string {
 
 // inlineHandler wraps a JS body in a ComponentScript with an empty Function
 // (no <script> tag emitted) so the body renders directly into the attribute.
+// templ writes ComponentScript.Call into onclick="..."/onchange="..."
+// verbatim, with no HTML-escaping of its own (generator.go's
+// writeExpressionAttributeValueScript writes .Call raw) — so a literal `"`
+// anywhere in the body would close the attribute early and truncate every
+// handler after it. html.EscapeString makes the body opaque to the HTML
+// parser regardless of what characters the JS needs, so jsStr (and any
+// future caller building a body from non-constant input) doesn't have to
+// get that right on its own.
 func inlineHandler(name, jsBody string) templ.ComponentScript {
-	return templ.ComponentScript{Name: name, Function: "", Call: jsBody}
+	return templ.ComponentScript{Name: name, Function: "", Call: html.EscapeString(jsBody)}
 }
 
 // applySurfaceAccentJS is the shared body for the preset/reset buttons and
-// the custom picker: local CSS-variable preview, then a
-// chronicle:surface-accent-change event the widget listens for. colorExpr is
-// a JS expression yielding the chosen color ("" clears the slot).
+// the custom picker: an instant local preview on the appearance-editor
+// widget element (its style, not <html> — the "Sample character header"
+// card inherits the custom property through the normal CSS cascade since
+// it's a descendant, while the rest of the page, outside the widget, never
+// sees it), then a chronicle:surface-accent-change event the widget listens
+// for. colorExpr is a JS expression yielding the chosen color ("" clears
+// the slot). The selector's quotes are backslash-escaped single quotes, not
+// literal double quotes, so the body stays readable without leaning on
+// html.EscapeString alone to keep the attribute intact.
 func applySurfaceAccentJS(slot int, colorExpr string) string {
 	return fmt.Sprintf(
 		`(function(){`+
 			`var color=%s;`+
 			`var prop='--color-accent-surface-%d';`+
-			`if(color){document.documentElement.style.setProperty(prop,color);}`+
-			`else{document.documentElement.style.removeProperty(prop);}`+
-			`var w=document.querySelector('[data-widget="appearance-editor"]');`+
-			`if(w){w.dispatchEvent(new CustomEvent('chronicle:surface-accent-change',{detail:{slot:%d,color:color}}));}`+
+			`var w=document.querySelector('[data-widget=\'appearance-editor\']');`+
+			`if(w){`+
+			`if(color){w.style.setProperty(prop,color);}else{w.style.removeProperty(prop);}`+
+			`w.dispatchEvent(new CustomEvent('chronicle:surface-accent-change',{detail:{slot:%d,color:color}}));`+
+			`}`+
 			`})()`,
 		colorExpr, slot, slot,
 	)
