@@ -10,6 +10,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/keyxmakerx/chronicle/internal/plugins/calendar"
 	"github.com/keyxmakerx/chronicle/internal/plugins/entities"
 	"github.com/keyxmakerx/chronicle/internal/widgets/notes"
 )
@@ -32,6 +33,19 @@ func (e errEntityLister) List(context.Context, string, int, int, string, entitie
 }
 func (e errEntityLister) GetEntityTypes(context.Context, string) ([]entities.EntityType, error) {
 	return e.types, nil
+}
+
+// errCalendarLister fails GetCalendar to simulate a real read failure (e.g.
+// a DB error) — distinct from the ordinary "no calendar yet" case, which the
+// real adapter (aiExportCalendarListerAdapter.GetCalendar) maps to (nil,
+// nil) rather than an error. See TestGenerate_CalendarListerError_SkipsSectionNotExport.
+type errCalendarLister struct{}
+
+func (errCalendarLister) GetCalendar(context.Context, string) (*calendar.Calendar, error) {
+	return nil, fmt.Errorf("simulated DB failure")
+}
+func (errCalendarLister) ListAllEventsForCalendar(context.Context, string, string) ([]calendar.Event, error) {
+	return nil, nil
 }
 
 // pagingEntityLister honors Page/PerPage so listAllEntities can be exercised
@@ -120,6 +134,32 @@ func TestGenerate_CategoryListerError_SkipsSectionNotExport(t *testing.T) {
 	}
 	if !strings.Contains(got, "# Notes") || !strings.Contains(got, "note body") {
 		t.Errorf("later categories must still render after an earlier failure:\n%s", got)
+	}
+}
+
+// TestGenerate_CalendarListerError_SkipsSectionNotExport pins the fix for a
+// finding distinct from the general lister-error handling above: the
+// calendar category used to treat "GetCalendar returned a real error" the
+// same as "no calendar yet", silently rendering an empty section instead of
+// surfacing the failure. A genuine read error must now behave exactly like
+// every other category's lister error — a visible skip note, not silence.
+func TestGenerate_CalendarListerError_SkipsSectionNotExport(t *testing.T) {
+	svc := NewService(
+		&stubEntityLister{},
+		&stubNoteLister{list: []notes.Note{{ID: "n1", Title: "Survives", EntryHTML: sp("<p>note body</p>")}}},
+		errCalendarLister{}, &stubSessionLister{}, &stubTimelineLister{},
+		&stubRelationLister{}, &stubTagLister{},
+	)
+
+	got, err := svc.Generate(context.Background(), "Ashfall", "owner-1", "camp-1", Options{})
+	if err != nil {
+		t.Fatalf("Generate must survive a category lister error: %v", err)
+	}
+	if !strings.Contains(got, "could not be exported") {
+		t.Errorf("a real calendar-lister read failure must surface as a skip note, not render silently empty:\n%s", got)
+	}
+	if !strings.Contains(got, "# Notes") || !strings.Contains(got, "note body") {
+		t.Errorf("later categories must still render after the calendar category's failure:\n%s", got)
 	}
 }
 

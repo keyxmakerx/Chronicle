@@ -178,11 +178,20 @@ func (s *Service) renderCategory(
 			return "", fmt.Errorf("calendar lister not wired")
 		}
 		cal, err := s.Calendar.GetCalendar(ctx, campaignID)
-		if err != nil || cal == nil {
+		if err != nil {
+			// aiExportCalendarListerAdapter.GetCalendar already maps "no
+			// calendar yet" (NotFound) to (nil, nil) — see its doc comment —
+			// so a non-nil err here is a genuine read failure (e.g. a DB
+			// error), not the ordinary "nothing to export" case below. It
+			// must surface, like every sibling category's read error does,
+			// rather than silently rendering as an empty calendar section.
+			return "", fmt.Errorf("get calendar: %w", err)
+		}
+		if cal == nil {
 			// Calendar addon disabled or no calendar yet: skip gracefully —
 			// distinct from "the export failed", which bodyOrSkip's caller
 			// would otherwise render as a "could not be exported" note.
-			return "", nil //nolint:nilerr // intentional skip on missing calendar
+			return "", nil
 		}
 		events, err := s.Calendar.ListAllEventsForCalendar(ctx, campaignID, cal.ID)
 		if err != nil {

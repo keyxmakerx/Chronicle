@@ -132,10 +132,19 @@ type ExportRelation struct {
 
 // ExportCalendarData captures the full calendar configuration and events.
 // Reuses the existing calendar export types for sub-resources.
+//
+// Visibility/VisibilityRules are additive fields (V5, #778): a calendar can
+// itself be dm_only (see calendar.Calendar), independent of any individual
+// event's visibility. Omitting these on export would mean every restored
+// calendar comes back as "everyone" regardless of how it was set before the
+// backup — see calendarImportAdapter.ImportCalendar's doc comment for how a
+// pre-V5 backup (which never had this field) is handled on import.
 type ExportCalendarData struct {
 	Name             string                  `json:"name"`
 	Description      *string                 `json:"description,omitempty"`
 	Mode             string                  `json:"mode"`
+	Visibility       string                  `json:"visibility,omitempty"`
+	VisibilityRules  *string                 `json:"visibility_rules,omitempty"`
 	EpochName        *string                 `json:"epoch_name,omitempty"`
 	CurrentYear      int                     `json:"current_year"`
 	CurrentMonth     int                     `json:"current_month"`

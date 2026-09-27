@@ -403,6 +403,12 @@ func renderNoteTree(
 // picture — so Safe mode's drops happen HERE, independently, rather than
 // trusting an upstream read to already agree with what "safe" means:
 //
+//   - cal.Visibility == "dm_only": the CALENDAR itself is GM-only (mirroring
+//     the sibling timeline renderer's tl.Visibility == "dm_only" check
+//     above), so none of its events — even "everyone" ones — are Safe. A
+//     calendar's own visibility is independent of any individual event's,
+//     and skipping this check would export every "everyone" event inside a
+//     hidden calendar even in Safe mode.
 //   - Visibility == "dm_only": never shown to a Player, so never Safe.
 //   - Not yet announced: EffectiveAnnounced resolves to "on_day" (the
 //     event's own kind default, absent an override) AND the event's date is
@@ -423,6 +429,9 @@ func RenderCalendarEvents(
 	opts Options,
 ) (string, error) {
 	if cal == nil || len(events) == 0 {
+		return "", nil
+	}
+	if opts.Privacy == PrivacyModeSafe && cal.Visibility == "dm_only" {
 		return "", nil
 	}
 

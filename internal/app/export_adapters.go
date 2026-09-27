@@ -313,6 +313,8 @@ func (a *calendarExportAdapter) ExportCalendar(ctx context.Context, campaignID s
 		Name:             cal.Name,
 		Description:      cal.Description,
 		Mode:             cal.Mode,
+		Visibility:       cal.Visibility,
+		VisibilityRules:  cal.VisibilityRules,
 		EpochName:        cal.EpochName,
 		CurrentYear:      cal.CurrentYear,
 		CurrentMonth:     cal.CurrentMonth,
@@ -1182,6 +1184,8 @@ func (a *calendarImportAdapter) ImportCalendar(ctx context.Context, campaignID s
 		SecondsPerMinute: data.SecondsPerMinute,
 		LeapYearEvery:    data.LeapYearEvery,
 		LeapYearOffset:   data.LeapYearOffset,
+		Visibility:       importCalendarVisibility(data.Visibility),
+		VisibilityRules:  data.VisibilityRules,
 	})
 	if err != nil {
 		return fmt.Errorf("create calendar: %w", err)
@@ -1365,6 +1369,23 @@ func eraStartMonthDay(month, day int) (int, int) {
 		day = 1
 	}
 	return month, day
+}
+
+// importCalendarVisibility resolves an imported calendar's visibility,
+// never trusting the JSON blindly. A recognized value ("everyone" or
+// "dm_only") passes through unchanged. Anything else — including "" from a
+// PRE-V5 backup, which never had this field (see ExportCalendarData's doc
+// comment) — fails toward privacy rather than toward exposure: a calendar
+// that was actually dm_only before the backup must never come back as
+// "everyone" just because the backup predates this field or was corrupted,
+// so an unknown value defaults to dm_only, not everyone.
+func importCalendarVisibility(v string) string {
+	switch v {
+	case "everyone", "dm_only":
+		return v
+	default:
+		return "dm_only"
+	}
 }
 
 // sessionImportAdapter implements campaigns.SessionImporter.

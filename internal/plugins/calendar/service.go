@@ -464,6 +464,16 @@ func (s *calendarService) CreateCalendar(ctx context.Context, campaignID string,
 	if err := validateOptionalText("epoch_name", input.EpochName, maxEpochNameLength); err != nil {
 		return nil, err
 	}
+	visibility := input.Visibility
+	if visibility == "" {
+		visibility = "everyone"
+	}
+	if visibility != "everyone" && visibility != "dm_only" {
+		return nil, apperror.NewValidation("visibility must be \"everyone\" or \"dm_only\"")
+	}
+	if err := validateVisibilityRulesJSON(input.VisibilityRules); err != nil {
+		return nil, err
+	}
 
 	cal := &Calendar{
 		ID:               generateID(),
@@ -478,7 +488,8 @@ func (s *calendarService) CreateCalendar(ctx context.Context, campaignID string,
 		SecondsPerMinute: secondsPerMinute,
 		LeapYearEvery:    input.LeapYearEvery,
 		LeapYearOffset:   input.LeapYearOffset,
-		Visibility:       "everyone",
+		Visibility:       visibility,
+		VisibilityRules:  input.VisibilityRules,
 	}
 	if err := s.calRepo.Create(ctx, cal); err != nil {
 		return nil, fmt.Errorf("create calendar: %w", err)
@@ -881,10 +892,62 @@ func (s *calendarService) ListUpcomingEvents(ctx context.Context, calendarID, ca
 		return nil, fmt.Errorf("list upcoming events: %w", err)
 	}
 	events = filterEventsByUser(events, v)
+	if !v.SkipsPerUserRules() {
+		if events, err = s.dropUnannouncedFutureEvents(ctx, cal, campaignID, events); err != nil {
+			return nil, err
+		}
+	}
 	if err := s.redactHiddenEntityLinks(ctx, campaignID, events, v); err != nil {
 		return nil, err
 	}
 	return events, nil
+}
+
+// dropUnannouncedFutureEvents removes events a non-author viewer cannot yet
+// know about, mirroring aiexport's RenderCalendarEvents Safe-mode filter
+// (ai_workspace/aiexport/renderer.go): a future event (strictly after the
+// calendar's current date) whose EffectiveAnnounced resolves to
+// AnnouncedOnDay ("only knowable on the day itself") stays secret until that
+// day arrives. An AnnouncedAhead event (a yearly festival, or one explicitly
+// marked ahead) is common knowledge regardless of date and is never dropped.
+// Callers that skip per-user rules (Owner/co-DM/system) never call this —
+// content authors already know their own unannounced events.
+func (s *calendarService) dropUnannouncedFutureEvents(ctx context.Context, cal *Calendar, campaignID string, events []Event) ([]Event, error) {
+	if len(events) == 0 {
+		return events, nil
+	}
+	// AbsoluteDay needs the calendar's month lengths; calendarInCampaignForViewer
+	// (this method's caller) returns a bare calendar row with no sub-resources
+	// loaded, so they're fetched here rather than assumed present.
+	months, err := s.calRepo.GetMonths(ctx, cal.ID)
+	if err != nil {
+		return nil, fmt.Errorf("load months: %w", err)
+	}
+	cal.Months = months
+	kinds, err := s.kindRepo.List(ctx, campaignID)
+	if err != nil {
+		return nil, fmt.Errorf("list event kinds: %w", err)
+	}
+	kindByID := make(map[int]*EventKind, len(kinds))
+	for i := range kinds {
+		kindByID[kinds[i].ID] = &kinds[i]
+	}
+	currentAbsDay := cal.CurrentAbsoluteDay()
+
+	visible := events[:0]
+	for _, e := range events {
+		var kind *EventKind
+		if e.KindID != nil {
+			kind = kindByID[*e.KindID]
+		}
+		announced := e.EffectiveAnnounced(kind)
+		eventAbsDay := cal.AbsoluteDay(e.Year, e.Month, e.Day)
+		if announced == AnnouncedOnDay && eventAbsDay > currentAbsDay {
+			continue // hasn't happened yet, and this viewer has no advance word
+		}
+		visible = append(visible, e)
+	}
+	return visible, nil
 }
 
 // eventInCalendar loads an event and confirms it belongs to calendarID

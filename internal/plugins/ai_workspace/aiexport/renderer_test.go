@@ -293,6 +293,41 @@ func TestRenderCalendarEvents_MonthNamesAndSafeFilter(t *testing.T) {
 	}
 }
 
+// TestRenderCalendarEvents_DmOnlyCalendarHiddenInSafeMode pins the fix for a
+// finding distinct from the per-event dm_only/announced filter above: the
+// CALENDAR itself can be dm_only (independent of any individual event's own
+// visibility), and Safe mode must drop the whole section in that case — not
+// just each dm_only event within it. Before the fix, a GM-only calendar's
+// "everyone" events all rendered in Safe mode because RenderCalendarEvents
+// never looked at cal.Visibility.
+func TestRenderCalendarEvents_DmOnlyCalendarHiddenInSafeMode(t *testing.T) {
+	ctx := context.Background()
+	cal := &calendar.Calendar{
+		ID: "cal1", Name: "Inner Circle Calendar", Visibility: "dm_only",
+		CurrentYear: 1102, CurrentMonth: 6, CurrentDay: 15,
+		Months: []calendar.Month{{Name: "Highsummer", Days: 31}},
+	}
+	events := []calendar.Event{
+		{ID: "e1", Name: "Open Council", Year: 1102, Month: 6, Day: 1, Visibility: "everyone"},
+	}
+
+	safe, err := RenderCalendarEvents(ctx, cal, events, Options{Privacy: PrivacyModeSafe})
+	if err != nil {
+		t.Fatalf("RenderCalendarEvents (safe): %v", err)
+	}
+	if safe != "" {
+		t.Errorf("SECURITY: Safe mode rendered a dm_only calendar's events: %q", safe)
+	}
+
+	everything, err := RenderCalendarEvents(ctx, cal, events, Options{Privacy: PrivacyModeEverything})
+	if err != nil {
+		t.Fatalf("RenderCalendarEvents (everything): %v", err)
+	}
+	if !strings.Contains(everything, "Open Council") {
+		t.Errorf("everything-mode control missing the event (fixture drift, not the bug under test):\n%s", everything)
+	}
+}
+
 func TestRenderSessions_GMNotesGated(t *testing.T) {
 	ctx := context.Background()
 	list := []sessions.Session{

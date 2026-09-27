@@ -260,3 +260,88 @@ func TestCalendarCampaignExportImport_DBRoundTrip(t *testing.T) {
 	}
 }
 
+// TestCalendarCampaignExportImport_DmOnlyCalendarVisibilityDBRoundTrip is the
+// DB-backed regression for the "export/import silently makes a GM-only
+// calendar public" finding: a calendar that is itself dm_only (with a
+// visibility_rules allow-list), not merely one containing dm_only events,
+// must come back dm_only after a real export/import round trip against
+// MariaDB — never "everyone", which would expose the calendar's "everyone"
+// events to every player through the JSON API, the Upcoming Events card and
+// the sky pane.
+func TestCalendarCampaignExportImport_DmOnlyCalendarVisibilityDBRoundTrip(t *testing.T) {
+	if testing.Short() {
+		t.Skip("integration test requires a database; skipped under -short")
+	}
+	db := openGalleryTestDB(t)
+	t.Cleanup(func() { db.Close() })
+	ctx := context.Background()
+
+	srcCampaignID, _ := newCalRoundTripCampaign(t, db, "vis-src")
+	dstCampaignID, _ := newCalRoundTripCampaign(t, db, "vis-dst")
+
+	calRepo := calendar.NewCalendarRepository(db)
+	eventRepo := calendar.NewEventRepository(db)
+	kindRepo := calendar.NewEventKindRepository(db)
+	weatherRepo := calendar.NewWeatherRepository(db)
+	calSvc := calendar.NewCalendarService(calRepo, eventRepo, kindRepo, weatherRepo)
+
+	const ownerRole = 3
+	systemViewer := permissions.SystemViewer(ownerRole)
+
+	visRules := `{"allowed_users":["gm-2"]}`
+	srcCal, err := calSvc.CreateCalendar(ctx, srcCampaignID, calendar.CreateCalendarInput{
+		Name: "Inner Circle Calendar", CurrentYear: 998,
+		Visibility: "dm_only", VisibilityRules: &visRules,
+	})
+	if err != nil {
+		t.Fatalf("create calendar: %v", err)
+	}
+	if err := calSvc.SetDefaultCalendar(ctx, srcCampaignID, srcCal.ID); err != nil {
+		t.Fatalf("set default calendar: %v", err)
+	}
+	if _, err := calSvc.CreateEvent(ctx, srcCal.ID, srcCampaignID, calendar.CreateEventInput{
+		Name: "Open Council", Year: 998, Month: 1, Day: 1, Visibility: "everyone",
+	}); err != nil {
+		t.Fatalf("create everyone event: %v", err)
+	}
+
+	exportAdapter := &calendarExportAdapter{svc: calSvc}
+	data, err := exportAdapter.ExportCalendar(ctx, srcCampaignID, func(string) string { return "" })
+	if err != nil {
+		t.Fatalf("export calendar: %v", err)
+	}
+	if data.Visibility != "dm_only" {
+		t.Fatalf("exported calendar visibility = %q, want dm_only", data.Visibility)
+	}
+	if data.VisibilityRules == nil || *data.VisibilityRules != visRules {
+		t.Fatal("exported calendar lost its visibility_rules allow-list")
+	}
+
+	idMap := campaigns.NewIDMap(dstCampaignID)
+	report := campaigns.NewImportReport()
+	importAdapter := &calendarImportAdapter{svc: calSvc}
+	if err := importAdapter.ImportCalendar(ctx, dstCampaignID, data, idMap, report); err != nil {
+		t.Fatalf("import calendar: %v", err)
+	}
+	if report.HasFailures() {
+		t.Fatalf("clean calendar import reported failures: %s", report.Summary())
+	}
+
+	dstCal, err := calSvc.GetDefaultCalendarForViewer(ctx, dstCampaignID, systemViewer)
+	if err != nil {
+		t.Fatalf("get imported default calendar: %v", err)
+	}
+	if dstCal.Visibility != "dm_only" {
+		t.Errorf("imported calendar visibility = %q, want dm_only — a GM-only calendar must never come back public", dstCal.Visibility)
+	}
+	if dstCal.VisibilityRules == nil || *dstCal.VisibilityRules != visRules {
+		t.Error("imported calendar lost its visibility_rules allow-list")
+	}
+
+	// A Player must never see the imported calendar at all, let alone its
+	// "everyone" event inside — the calendar's own dm_only gate must hold.
+	playerViewer := permissions.RequestViewer(permissions.RolePlayer, "player-9")
+	if _, err := calSvc.GetCalendarForViewer(ctx, dstCal.ID, dstCampaignID, playerViewer); err == nil {
+		t.Error("LEAK: a Player can read the imported dm_only calendar")
+	}
+}

@@ -10,9 +10,9 @@ import (
 	"testing"
 
 	"github.com/keyxmakerx/chronicle/internal/apperror"
+	"github.com/keyxmakerx/chronicle/internal/permissions"
 	"github.com/keyxmakerx/chronicle/internal/plugins/calendar"
 	"github.com/keyxmakerx/chronicle/internal/plugins/campaigns"
-	"github.com/keyxmakerx/chronicle/internal/permissions"
 )
 
 // fakeCalendarService is an in-memory calendar.CalendarService. It embeds the
@@ -68,6 +68,10 @@ func (f *fakeCalendarService) ListAllEventsForCalendar(_ context.Context, _ stri
 }
 
 func (f *fakeCalendarService) CreateCalendar(_ context.Context, campaignID string, input calendar.CreateCalendarInput) (*calendar.Calendar, error) {
+	visibility := input.Visibility
+	if visibility == "" {
+		visibility = "everyone"
+	}
 	f.created = &calendar.Calendar{
 		ID: "new-cal", CampaignID: campaignID,
 		Mode: input.Mode, Name: input.Name, Description: input.Description,
@@ -75,6 +79,8 @@ func (f *fakeCalendarService) CreateCalendar(_ context.Context, campaignID strin
 		HoursPerDay: input.HoursPerDay, MinutesPerHour: input.MinutesPerHour,
 		SecondsPerMinute: input.SecondsPerMinute,
 		LeapYearEvery:    input.LeapYearEvery, LeapYearOffset: input.LeapYearOffset,
+		Visibility:      visibility,
+		VisibilityRules: input.VisibilityRules,
 	}
 	return f.created, nil
 }
@@ -338,6 +344,97 @@ func TestCalendarImportAdapter_PreV5EraDefaultsToJanuaryFirst(t *testing.T) {
 	}
 	if dst.eras[0].StartMonth != 1 || dst.eras[0].StartDay != 1 {
 		t.Errorf("pre-V5 era did not default to month 1 day 1: %+v", dst.eras[0])
+	}
+}
+
+// TestCalendarExportImport_DmOnlyCalendarVisibilityRoundTrip is the
+// regression for the "export/import silently makes a GM-only calendar
+// public" finding: a campaign whose calendar is itself dm_only (with a
+// visibility_rules allow-list, not just individual dm_only events) must
+// come back exactly as dm_only on import — never "everyone", which would
+// expose every "everyone" event inside it that was previously unreachable
+// only because the calendar itself was hidden.
+func TestCalendarExportImport_DmOnlyCalendarVisibilityRoundTrip(t *testing.T) {
+	visRules := `{"allowed_users":["gm-2"]}`
+	src := &fakeCalendarService{
+		cal: &calendar.Calendar{
+			ID: "cal-1", CampaignID: "c1", Mode: calendar.ModeFantasy,
+			Name:            "Inner Circle Calendar",
+			Visibility:      "dm_only",
+			VisibilityRules: &visRules,
+			HoursPerDay:     24, MinutesPerHour: 60, SecondsPerMinute: 60,
+		},
+	}
+
+	exportAdapter := &calendarExportAdapter{svc: src}
+	calData, err := exportAdapter.ExportCalendar(context.Background(), "c1", func(string) string { return "" })
+	if err != nil {
+		t.Fatalf("export: %v", err)
+	}
+	if calData.Visibility != "dm_only" {
+		t.Errorf("exported calendar visibility = %q, want dm_only", calData.Visibility)
+	}
+	if calData.VisibilityRules == nil || *calData.VisibilityRules != visRules {
+		t.Error("exported calendar lost its visibility_rules allow-list")
+	}
+
+	// Round-trip through JSON, exactly like a real backup file.
+	env := &campaigns.CampaignExport{Format: campaigns.ExportFormat, Version: campaigns.ExportVersion, Calendar: calData}
+	raw, err := json.Marshal(env)
+	if err != nil {
+		t.Fatalf("marshal envelope: %v", err)
+	}
+	var reloaded campaigns.CampaignExport
+	if err := json.Unmarshal(raw, &reloaded); err != nil {
+		t.Fatalf("unmarshal envelope: %v", err)
+	}
+
+	dst := &fakeCalendarService{}
+	report := campaigns.NewImportReport()
+	if err := (&calendarImportAdapter{svc: dst}).ImportCalendar(context.Background(), "imported-campaign", reloaded.Calendar, campaigns.NewIDMap("imported-campaign"), report); err != nil {
+		t.Fatalf("import calendar: %v", err)
+	}
+	if report.HasFailures() {
+		t.Fatalf("clean calendar import reported failures: %s", report.Summary())
+	}
+	if dst.created == nil {
+		t.Fatal("ImportCalendar did not create a calendar")
+	}
+	if dst.created.Visibility != "dm_only" {
+		t.Errorf("imported calendar visibility = %q, want dm_only — a GM-only calendar must never come back public", dst.created.Visibility)
+	}
+	if dst.created.VisibilityRules == nil || *dst.created.VisibilityRules != visRules {
+		t.Error("imported calendar lost its visibility_rules allow-list")
+	}
+}
+
+// TestCalendarImportAdapter_PreV5CalendarDefaultsToDmOnly pins the
+// fail-toward-privacy default: a backup taken before this field existed (or
+// any backup whose Visibility is otherwise unrecognized) must import as
+// dm_only, never as "everyone" — see importCalendarVisibility's doc comment.
+func TestCalendarImportAdapter_PreV5CalendarDefaultsToDmOnly(t *testing.T) {
+	tests := []struct {
+		name string
+		in   string
+	}{
+		{"empty (pre-V5 backup)", ""},
+		{"unrecognized value", "public"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			dst := &fakeCalendarService{}
+			data := &campaigns.ExportCalendarData{Name: "Legacy Calendar", Visibility: tt.in}
+			report := campaigns.NewImportReport()
+			if err := (&calendarImportAdapter{svc: dst}).ImportCalendar(context.Background(), "c2", data, campaigns.NewIDMap("c2"), report); err != nil {
+				t.Fatalf("import calendar: %v", err)
+			}
+			if dst.created == nil {
+				t.Fatal("ImportCalendar did not create a calendar")
+			}
+			if dst.created.Visibility != "dm_only" {
+				t.Errorf("visibility %q imported as %q, want dm_only (fail toward privacy)", tt.in, dst.created.Visibility)
+			}
+		})
 	}
 }
 
