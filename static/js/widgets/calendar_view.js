@@ -1,9 +1,9 @@
 /**
- * calendar_view.js — Calendar V5 part A (#741): the calendar's own page.
- * Renders the month grid, the day-card and era-card fold-outs, event
- * icons/glance/full-detail, moons (silhouette + moon view), and the
- * calendar-switcher hub popover — everything the read-only (Player) surface
- * needs. Ported from the two operator-signed mockups' CSS/markup contract
+ * calendar_view.js — the calendar's own page. Renders the month grid, the
+ * day-card and era-card fold-outs, event icons/glance/full-detail, moons
+ * (silhouette + moon view), and the calendar-switcher hub popover —
+ * everything the read-only (Player) surface needs. Ported from the two
+ * operator-signed mockups' CSS/markup contract
  * (internal/plugins/calendar/.ai.md documents the port and its honest gaps);
  * the JS itself is a fresh implementation against Chronicle's real API
  * (the mockups' own JS runs against synthetic sample data with a different

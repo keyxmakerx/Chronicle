@@ -1,6 +1,6 @@
 /**
- * calendar_editor.js — Calendar V5 part A (#741): the Owner/co-Director
- * editing surface layered on top of calendar_view.js. Loaded only when the
+ * calendar_editor.js — the Owner/co-Director editing surface layered on top
+ * of calendar_view.js. Loaded only when the
  * page's mount div carries data-can-edit="true" (view.templ), which is
  * true for MemberRole >= RoleOwner OR CanAuthorDmOnly() — see view.go's
  * CalendarViewData.CanEdit doc comment.
