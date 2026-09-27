@@ -130,6 +130,7 @@ verify: ## Run the full local CI sequence (templ → build → vet → guards �
 	@echo "==> guard: v2-motion-discipline";   ./tools/check-v2-motion-discipline.sh
 	@echo "==> guard: decision-citations";     ./tools/check-decision-citations.sh
 	@echo "==> guard: widget-mounts";          ./tools/check-widget-mounts.sh
+	@echo "==> guard: customize-discipline";   ./tools/check-customize-discipline.sh
 	@echo "==> go test ./... -short";          go test ./... -short
 	@echo "==> make test-js";                  $(MAKE) test-js
 	@echo "==> verify: OK"
