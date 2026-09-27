@@ -1107,6 +1107,55 @@ func (a *foundryCampaignOwnerLookupAdapter) GetCampaignOwnerEmail(ctx context.Co
 	return user.Email, display, nil
 }
 
+// avatarUploaderAdapter wraps media.MediaService to implement the
+// auth.AvatarUploader interface without creating a circular import: media
+// already imports auth (for auth.GetUserID and friends), so auth cannot
+// import media back. Mirrors media.Handler.Upload's own signed-vs-unsigned
+// URL logic so a freshly uploaded avatar is immediately displayable the
+// same way a freshly uploaded entity image is.
+type avatarUploaderAdapter struct {
+	svc    media.MediaService
+	signer *media.URLSigner // nil when no signing secret is configured
+}
+
+// UploadAvatar stores fileBytes as userID's avatar with usage_type "avatar"
+// and no campaign.
+func (a *avatarUploaderAdapter) UploadAvatar(ctx context.Context, userID string, fileBytes []byte, originalName, mimeType string) (string, string, error) {
+	file, err := a.svc.Upload(ctx, media.UploadInput{
+		UploadedBy:   userID,
+		OriginalName: originalName,
+		MimeType:     mimeType,
+		FileSize:     int64(len(fileBytes)),
+		UsageType:    media.UsageAvatar,
+		FileBytes:    fileBytes,
+	})
+	if err != nil {
+		return "", "", err
+	}
+	if a.signer != nil {
+		return file.ID, a.signer.Sign(file.ID, media.ViewerSession(userID), media.SignedURLTTL), nil
+	}
+	return file.ID, "/media/" + file.ID, nil
+}
+
+// DeleteAvatarMedia removes mediaID's row and file, but only if it still
+// belongs to userID and is still usage_type "avatar" -- never someone
+// else's file, and never one repurposed for something else since it was
+// last a user's avatar. A media id that no longer exists or fails either
+// check is treated as nothing-to-do rather than an error, since the caller
+// (auth.authService, after replacing or clearing an avatar) always calls
+// this as best-effort cleanup of what the column used to point at.
+func (a *avatarUploaderAdapter) DeleteAvatarMedia(ctx context.Context, userID, mediaID string) error {
+	file, err := a.svc.GetByID(ctx, mediaID)
+	if err != nil {
+		return nil
+	}
+	if file.UploadedBy != userID || file.UsageType != media.UsageAvatar {
+		return nil
+	}
+	return a.svc.Delete(ctx, mediaID)
+}
+
 // mediaMemberCheckerAdapter wraps campaigns.CampaignService to implement the
 // media.MemberChecker interface without creating a circular import.
 // Uses background context since membership checks happen on unauthenticated
@@ -1903,6 +1952,30 @@ func (a *App) RegisterRoutes() {
 	if signingSecret != "" {
 		urlSigner = media.NewURLSigner(signingSecret)
 		mediaHandler.SetURLSigner(urlSigner)
+	}
+
+	// Avatar uploads go through the media pipeline: the auth plugin's upload
+	// handler never touches disk itself, so it gets the same magic-byte
+	// validation, EXIF stripping/re-encode and disk-space checks every other
+	// upload gets (not the per-campaign storage quota — an avatar has no
+	// campaign; auth/routes.go rate-limits the route instead). Wired here
+	// (rather than at auth.NewHandler) because it needs mediaService, and
+	// for a display-ready URL, the same signer media's own Upload handler
+	// uses.
+	avatarUploader := &avatarUploaderAdapter{svc: mediaService, signer: urlSigner}
+	auth.ConfigureAvatarUploader(authService, avatarUploader)
+
+	// One-time, idempotent startup migration for avatar_path rows still
+	// pointing at a dead legacy /uploads/avatars/ web path: moves the file
+	// into the media store if it's still there (rare — that directory lived
+	// outside the Docker volume), or clears the column so the default avatar
+	// shows instead of a permanent 404 (the common case). Best-effort: logs
+	// and never blocks startup.
+	if moved, cleared, err := auth.ReconcileLegacyAvatarPaths(context.Background(), authRepo, avatarUploader, filepath.Join("uploads", "avatars")); err != nil {
+		slog.Error("auth: legacy avatar path reconciler failed; some legacy avatar_path rows may still point at the dead /uploads/ path",
+			slog.String("error", err.Error()))
+	} else if moved > 0 || cleared > 0 {
+		slog.Info("auth: legacy avatar path reconciler complete", slog.Int("moved", moved), slog.Int("cleared", cleared))
 	}
 
 	// Wire campaign membership checker for private media access control.
@@ -3355,6 +3428,7 @@ func (a *App) RegisterRoutes() {
 			ctx = layouts.SetUserID(ctx, session.UserID)
 			ctx = layouts.SetUserName(ctx, session.Name)
 			ctx = layouts.SetUserEmail(ctx, session.Email)
+			ctx = layouts.SetUserAvatarPath(ctx, session.AvatarPath)
 			ctx = layouts.SetIsAdmin(ctx, session.IsAdmin)
 
 			// Inject degraded plugin count for admin sidebar badge.

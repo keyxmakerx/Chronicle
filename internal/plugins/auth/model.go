@@ -73,10 +73,15 @@ type LoginInput struct {
 // outside the normal service layer. Zero-value triggers immediate revalidation
 // (backwards-compatible with sessions created before this field existed).
 type Session struct {
-	UserID        string    `json:"user_id"`
-	Email         string    `json:"email"`
-	Name          string    `json:"name"`
-	IsAdmin       bool      `json:"is_admin"`
+	UserID  string `json:"user_id"`
+	Email   string `json:"email"`
+	Name    string `json:"name"`
+	IsAdmin bool   `json:"is_admin"`
+	// AvatarPath is the user's avatar media id (empty if unset). Cached here
+	// like Name/Email so the top bar can render it without a DB hit on every
+	// page; it carries the same eventual-consistency lag as those fields —
+	// refreshed at login and by the periodic revalidation below.
+	AvatarPath    string    `json:"avatar_path,omitempty"`
 	IP            string    `json:"ip,omitempty"`
 	UserAgent     string    `json:"user_agent,omitempty"`
 	CreatedAt     time.Time `json:"created_at"`

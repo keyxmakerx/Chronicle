@@ -35,7 +35,12 @@ func RegisterRoutes(e *echo.Echo, h *Handler) {
 	e.PUT("/account/timezone", h.UpdateTimezoneAPI, RequireAuth(h.service))
 	e.PUT("/account/password", h.ChangePasswordAPI, RequireAuth(h.service))
 	e.PUT("/account/display-name", h.UpdateDisplayNameAPI, RequireAuth(h.service))
-	e.POST("/account/avatar", h.UploadAvatarAPI, RequireAuth(h.service))
+	// Same rate limit as the general /media/upload route (media/routes.go):
+	// avatar uploads skip mediaService's per-campaign quota (there is no
+	// campaign), so this is the only throttle standing between a signed-in
+	// user and looping uploads against the shared disk-space floor.
+	e.POST("/account/avatar", h.UploadAvatarAPI, RequireAuth(h.service), middleware.RateLimit(30, time.Minute))
+	e.DELETE("/account/avatar", h.ClearAvatarAPI, RequireAuth(h.service), middleware.RateLimit(30, time.Minute))
 
 	// Email change (requires auth for request, public for verification link).
 	e.PUT("/account/email", h.RequestEmailChangeAPI, RequireAuth(h.service))

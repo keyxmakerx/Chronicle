@@ -7,6 +7,7 @@ DELETE	/:id/deprecate	internal/plugins/packages/routes.go
 DELETE	/:id/favorite	internal/plugins/bestiary/routes.go
 DELETE	/:id/pin	internal/plugins/packages/routes.go
 DELETE	/:id/rate	internal/plugins/bestiary/routes.go
+DELETE	/account/avatar	internal/plugins/auth/routes.go
 DELETE	/addons/:addonID	internal/plugins/addons/routes.go
 DELETE	/api-keys/:keyID	internal/plugins/syncapi/routes.go
 DELETE	/api/ip-blocks/:blockID	internal/plugins/syncapi/routes.go

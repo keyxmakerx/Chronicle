@@ -16,36 +16,37 @@ import (
 type ctxKey string
 
 const (
-	keyIsAuthenticated ctxKey = "layout_is_authenticated"
-	keyUserID          ctxKey = "layout_user_id"
-	keyUserName        ctxKey = "layout_user_name"
-	keyUserEmail       ctxKey = "layout_user_email"
-	keyIsAdmin         ctxKey = "layout_is_admin"
-	keyCampaignID    ctxKey = "layout_campaign_id"
-	keyCampaignName  ctxKey = "layout_campaign_name"
-	keyCampaignRole  ctxKey = "layout_campaign_role"
-	keyCSRFToken     ctxKey = "layout_csrf_token"
-	keyFlashSuccess  ctxKey = "layout_flash_success"
-	keyFlashError    ctxKey = "layout_flash_error"
-	keyActivePath    ctxKey = "layout_active_path"
-	keyEntityTypes   ctxKey = "layout_entity_types"
-	keyEntityCounts  ctxKey = "layout_entity_counts"
-	keyEnabledAddons     ctxKey = "layout_enabled_addons"
-	keyEnabledSystem     ctxKey = "layout_enabled_system"
-	keyViewingAsPlayer   ctxKey = "layout_viewing_as_player"
-	keyIsOwner           ctxKey = "layout_is_owner"
-	keyMediaURLFunc      ctxKey = "layout_media_url_func"
-	keyMediaThumbFunc    ctxKey = "layout_media_thumb_func"
-	keyExtWidgetScripts  ctxKey = "layout_ext_widget_scripts"
-	keyPluginBodyScripts ctxKey = "layout_plugin_body_scripts"
-	keyAccentColor       ctxKey = "layout_accent_color"
-	keyBrandName         ctxKey = "layout_brand_name"
-	keyBrandLogo         ctxKey = "layout_brand_logo"
-	keyTopbarStyle           ctxKey = "layout_topbar_style"
-	keyTopbarContent         ctxKey = "layout_topbar_content"
-	keyDegradedPluginCount   ctxKey = "layout_degraded_plugin_count"
-	keyFontFamily            ctxKey = "layout_font_family"
-	keyUserCampaigns         ctxKey = "layout_user_campaigns"
+	keyIsAuthenticated     ctxKey = "layout_is_authenticated"
+	keyUserID              ctxKey = "layout_user_id"
+	keyUserName            ctxKey = "layout_user_name"
+	keyUserEmail           ctxKey = "layout_user_email"
+	keyUserAvatarPath      ctxKey = "layout_user_avatar_path"
+	keyIsAdmin             ctxKey = "layout_is_admin"
+	keyCampaignID          ctxKey = "layout_campaign_id"
+	keyCampaignName        ctxKey = "layout_campaign_name"
+	keyCampaignRole        ctxKey = "layout_campaign_role"
+	keyCSRFToken           ctxKey = "layout_csrf_token"
+	keyFlashSuccess        ctxKey = "layout_flash_success"
+	keyFlashError          ctxKey = "layout_flash_error"
+	keyActivePath          ctxKey = "layout_active_path"
+	keyEntityTypes         ctxKey = "layout_entity_types"
+	keyEntityCounts        ctxKey = "layout_entity_counts"
+	keyEnabledAddons       ctxKey = "layout_enabled_addons"
+	keyEnabledSystem       ctxKey = "layout_enabled_system"
+	keyViewingAsPlayer     ctxKey = "layout_viewing_as_player"
+	keyIsOwner             ctxKey = "layout_is_owner"
+	keyMediaURLFunc        ctxKey = "layout_media_url_func"
+	keyMediaThumbFunc      ctxKey = "layout_media_thumb_func"
+	keyExtWidgetScripts    ctxKey = "layout_ext_widget_scripts"
+	keyPluginBodyScripts   ctxKey = "layout_plugin_body_scripts"
+	keyAccentColor         ctxKey = "layout_accent_color"
+	keyBrandName           ctxKey = "layout_brand_name"
+	keyBrandLogo           ctxKey = "layout_brand_logo"
+	keyTopbarStyle         ctxKey = "layout_topbar_style"
+	keyTopbarContent       ctxKey = "layout_topbar_content"
+	keyDegradedPluginCount ctxKey = "layout_degraded_plugin_count"
+	keyFontFamily          ctxKey = "layout_font_family"
+	keyUserCampaigns       ctxKey = "layout_user_campaigns"
 )
 
 // NavCampaign holds the minimum info needed to render a campaign link
@@ -88,6 +89,12 @@ func SetUserName(ctx context.Context, name string) context.Context {
 // SetUserEmail stores the authenticated user's email in context.
 func SetUserEmail(ctx context.Context, email string) context.Context {
 	return context.WithValue(ctx, keyUserEmail, email)
+}
+
+// SetUserAvatarPath stores the authenticated user's avatar media id in
+// context (empty when the user has no avatar set).
+func SetUserAvatarPath(ctx context.Context, avatarPath string) context.Context {
+	return context.WithValue(ctx, keyUserAvatarPath, avatarPath)
 }
 
 // SetIsAdmin stores whether the user is a site admin.
@@ -173,6 +180,13 @@ func GetUserName(ctx context.Context) string {
 func GetUserEmail(ctx context.Context) string {
 	email, _ := ctx.Value(keyUserEmail).(string)
 	return email
+}
+
+// GetUserAvatarPath returns the authenticated user's avatar media id, or ""
+// if they have none set.
+func GetUserAvatarPath(ctx context.Context) string {
+	avatarPath, _ := ctx.Value(keyUserAvatarPath).(string)
+	return avatarPath
 }
 
 // GetIsAdmin returns true if the user is a site admin.

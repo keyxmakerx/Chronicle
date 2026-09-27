@@ -30,6 +30,7 @@ type mockUserRepo struct {
 	countUsersFn         func(ctx context.Context) (int, error)
 	countAdminsFn        func(ctx context.Context) (int, error)
 	updateIsDisabledFn   func(ctx context.Context, id string, isDisabled bool) error
+	updateAvatarPathFn   func(ctx context.Context, userID string, avatarPath *string) error
 }
 
 func (m *mockUserRepo) Create(ctx context.Context, user *User) error {
@@ -139,7 +140,18 @@ func (m *mockUserRepo) UpdateDisplayName(ctx context.Context, userID, displayNam
 }
 
 func (m *mockUserRepo) UpdateAvatarPath(ctx context.Context, userID string, avatarPath *string) error {
+	if m.updateAvatarPathFn != nil {
+		return m.updateAvatarPathFn(ctx, userID, avatarPath)
+	}
 	return nil
+}
+
+func (m *mockUserRepo) ListLegacyAvatarPaths(ctx context.Context, prefix string) (map[string]string, error) {
+	return nil, nil
+}
+
+func (m *mockUserRepo) ClearAvatarPathIfMatches(ctx context.Context, userID, expectedPath string) (bool, error) {
+	return false, nil
 }
 
 func (m *mockUserRepo) SetPendingEmail(ctx context.Context, userID, pendingEmail, tokenHash string, expiresAt time.Time) error {
@@ -1047,5 +1059,40 @@ func TestValidateSession_TTLPreserved(t *testing.T) {
 	ttl := mr.TTL(key)
 	if ttl > 3*time.Hour {
 		t.Errorf("expected TTL to be preserved (~2h), got %v", ttl)
+	}
+}
+
+// TestRevalidateSession_KeyDeletedBeforeWrite_StaysGone pins the fix for a
+// TTL-read-then-unconditional-SET race: if the session key is deleted
+// between the caller's read and revalidateSession's write -- e.g. a
+// concurrent logout -- the write must not recreate it. SetXX only succeeds
+// when the key still exists, so a vanished key must stay gone.
+func TestRevalidateSession_KeyDeletedBeforeWrite_StaysGone(t *testing.T) {
+	repo := &mockUserRepo{
+		findByIDFn: func(ctx context.Context, id string) (*User, error) {
+			return &User{
+				ID:          id,
+				Email:       "alice@example.com",
+				DisplayName: "Alice",
+				IsAdmin:     true,
+			}, nil
+		},
+	}
+	svc, mr := newTestAuthServiceWithRedis(t, repo)
+
+	session := Session{UserID: "user-1", Email: "alice@example.com"}
+	token := seedSession(t, svc, mr, session)
+	key := sessionKeyPrefix + token
+
+	// Simulate the key disappearing between the caller's read and this
+	// write (e.g. a concurrent DestroySession racing this revalidation).
+	mr.Del(key)
+
+	if err := svc.revalidateSession(context.Background(), key, token, &session); err != nil {
+		t.Fatalf("revalidateSession: %v", err)
+	}
+
+	if mr.Exists(key) {
+		t.Error("revalidateSession must not recreate a session key that was deleted concurrently")
 	}
 }

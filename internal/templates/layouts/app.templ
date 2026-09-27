@@ -911,10 +911,14 @@ templ Topbar() {
 						@click.outside="open = false"
 						class="flex items-center gap-1.5 px-1.5 py-1 rounded-lg hover:bg-surface-alt transition-colors"
 					>
-						<div class="w-7 h-7 rounded-full bg-accent flex items-center justify-center">
-							<span class="text-[10px] font-semibold text-white">
-								{ userInitials(ctx) }
-							</span>
+						<div class="w-7 h-7 rounded-full bg-accent flex items-center justify-center overflow-hidden">
+							if avatarPath := GetUserAvatarPath(ctx); avatarPath != "" {
+								<img src={ MediaThumbURL(ctx, avatarPath, "300") } class="w-full h-full object-cover" alt=""/>
+							} else {
+								<span class="text-[10px] font-semibold text-white">
+									{ userInitials(ctx) }
+								</span>
+							}
 						</div>
 						<svg class="w-3 h-3 text-fg-muted hidden sm:block" fill="none" stroke="currentColor" viewBox="0 0 24 24">
 							<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path>

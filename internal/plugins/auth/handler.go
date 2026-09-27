@@ -2,16 +2,12 @@ package auth
 
 import (
 	"context"
-	"crypto/rand"
-	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
 	"net/http"
 	"net/url"
-	"os"
-	"path/filepath"
 	"strings"
 	"time"
 
@@ -433,8 +429,20 @@ func (h *Handler) UpdateDisplayNameAPI(c echo.Context) error {
 	return c.JSON(http.StatusOK, map[string]string{"status": "ok"})
 }
 
-// UploadAvatarAPI handles avatar image upload for the current user.
-// POST /account/avatar
+// avatarMaxUploadBytes caps the avatar upload before it ever reaches the
+// media service. media.MediaService.Upload applies its own quota/size
+// checks, but reading an unbounded body into memory here would let a
+// caller exhaust memory before those checks ever run.
+const avatarMaxUploadBytes = 2 * 1024 * 1024
+
+// UploadAvatarAPI handles avatar image upload for the current user
+// (POST /account/avatar). Delegates entirely to mediaService.Upload (via
+// AuthService.UploadAvatar): magic-byte validation, EXIF stripping/
+// re-encode, the per-file size limit, disk-space check and 0640
+// permissions all happen there — this handler only binds the multipart
+// form and renders the result. The per-campaign storage/file-count quota
+// does NOT apply (there is no campaign to scope it to); the route-level
+// rate limit (routes.go) is the only throttle on repeated avatar uploads.
 func (h *Handler) UploadAvatarAPI(c echo.Context) error {
 	userID := GetUserID(c)
 	if userID == "" {
@@ -445,73 +453,53 @@ func (h *Handler) UploadAvatarAPI(c echo.Context) error {
 	if err != nil {
 		return apperror.NewBadRequest("no avatar file provided")
 	}
-
-	// Validate file size (max 2MB).
-	if file.Size > 2*1024*1024 {
+	if file.Size > avatarMaxUploadBytes {
 		return apperror.NewBadRequest("avatar must be under 2MB")
 	}
 
-	// Read file bytes for content-based MIME detection.
 	src, err := file.Open()
 	if err != nil {
 		return apperror.NewInternal(fmt.Errorf("opening uploaded file: %w", err))
 	}
 	defer func() { _ = src.Close() }()
 
-	fileBytes, err := io.ReadAll(io.LimitReader(src, 2*1024*1024+1))
+	fileBytes, err := io.ReadAll(io.LimitReader(src, avatarMaxUploadBytes+1))
 	if err != nil {
 		return apperror.NewInternal(fmt.Errorf("reading uploaded file: %w", err))
 	}
 
-	// Validate MIME type using magic bytes, not client-provided Content-Type.
-	contentType := http.DetectContentType(fileBytes)
-	allowedAvatarTypes := map[string]string{
-		"image/jpeg": ".jpg",
-		"image/png":  ".png",
-		"image/gif":  ".gif",
-		"image/webp": ".webp",
-	}
-	ext, ok := allowedAvatarTypes[contentType]
-	if !ok {
-		return apperror.NewBadRequest("avatar must be a JPEG, PNG, GIF, or WebP image")
+	// The declared Content-Type header is client-supplied and untrusted;
+	// sniff the actual bytes instead (mirrors the boot reconciler's legacy
+	// avatar migration). An avatar must be an image -- the media service's
+	// own MIME allowlist also accepts audio, which has no business being a
+	// profile picture.
+	mimeType := http.DetectContentType(fileBytes)
+	if !strings.HasPrefix(mimeType, "image/") {
+		return apperror.NewBadRequest("avatar must be an image")
 	}
 
-	// Use file extension from filename if it matches the detected type.
-	if fileExt := filepath.Ext(file.Filename); fileExt != "" {
-		for _, allowed := range allowedAvatarTypes {
-			if strings.EqualFold(fileExt, allowed) {
-				ext = allowed
-				break
-			}
-		}
+	_, url, err := h.service.UploadAvatar(c.Request().Context(), userID, fileBytes, file.Filename, mimeType)
+	if err != nil {
+		return err
 	}
 
-	// Generate random filename.
-	randBytes := make([]byte, 16)
-	if _, err := rand.Read(randBytes); err != nil {
-		return apperror.NewInternal(fmt.Errorf("generating filename: %w", err))
-	}
-	filename := hex.EncodeToString(randBytes) + ext
+	return c.JSON(http.StatusOK, map[string]string{"status": "ok", "avatar_path": url})
+}
 
-	// Ensure avatars directory exists.
-	avatarDir := filepath.Join("uploads", "avatars")
-	if err := os.MkdirAll(avatarDir, 0o755); err != nil {
-		return apperror.NewInternal(fmt.Errorf("creating avatar directory: %w", err))
-	}
-
-	// Save file.
-	destPath := filepath.Join(avatarDir, filename)
-	if err := os.WriteFile(destPath, fileBytes, 0o644); err != nil {
-		return apperror.NewInternal(fmt.Errorf("saving avatar file: %w", err))
+// ClearAvatarAPI removes the current user's avatar (DELETE /account/avatar).
+// A user may only clear their own avatar: userID comes from the session,
+// never from a request parameter.
+func (h *Handler) ClearAvatarAPI(c echo.Context) error {
+	userID := GetUserID(c)
+	if userID == "" {
+		return apperror.NewUnauthorized("not authenticated")
 	}
 
-	// Update user's avatar path.
-	webPath := "/uploads/avatars/" + filename
-	if err := h.service.UpdateAvatarPath(c.Request().Context(), userID, &webPath); err != nil {
-		return apperror.NewInternal(fmt.Errorf("updating avatar path: %w", err))
+	if err := h.service.ClearAvatar(c.Request().Context(), userID); err != nil {
+		return err
 	}
 
-	return c.JSON(http.StatusOK, map[string]string{"status": "ok", "avatar_path": webPath})
+	return c.JSON(http.StatusOK, map[string]string{"status": "ok"})
 }
 
 // RequestEmailChangeAPI initiates an email change (PUT /account/email).

@@ -12,19 +12,20 @@ import (
 
 // mockMediaRepo implements MediaRepository for testing.
 type mockMediaRepo struct {
-	createFn           func(ctx context.Context, file *MediaFile) error
-	findByIDFn         func(ctx context.Context, id string) (*MediaFile, error)
-	findByContentHashFn   func(ctx context.Context, campaignID, hash string) (*MediaFile, error)
-	listMissingHashFn     func(ctx context.Context, limit int) ([]MediaFile, error)
-	setContentHashFn      func(ctx context.Context, id, hash string) error
-	deleteFn           func(ctx context.Context, id string) error
-	listByCampaignFn   func(ctx context.Context, campaignID string, limit, offset int) ([]MediaFile, int, error)
-	getStorageStatsFn  func(ctx context.Context) (*StorageStats, error)
-	listAllFn          func(ctx context.Context, limit, offset int) ([]AdminMediaFile, int, error)
-	getCampaignUsageFn func(ctx context.Context, campaignID string) (int64, int, error)
-	findReferencesFn   func(ctx context.Context, campaignID, mediaID string) ([]MediaRef, error)
-	listAllFilenamesFn    func(ctx context.Context) (map[string]bool, error)
-	listFilesByCampaignFn func(ctx context.Context, campaignID string) ([]MediaFile, error)
+	createFn                   func(ctx context.Context, file *MediaFile) error
+	findByIDFn                 func(ctx context.Context, id string) (*MediaFile, error)
+	findByContentHashFn        func(ctx context.Context, campaignID, hash string) (*MediaFile, error)
+	listMissingHashFn          func(ctx context.Context, limit int) ([]MediaFile, error)
+	setContentHashFn           func(ctx context.Context, id, hash string) error
+	deleteFn                   func(ctx context.Context, id string) error
+	listByCampaignFn           func(ctx context.Context, campaignID string, limit, offset int) ([]MediaFile, int, error)
+	getStorageStatsFn          func(ctx context.Context) (*StorageStats, error)
+	listAllFn                  func(ctx context.Context, limit, offset int) ([]AdminMediaFile, int, error)
+	getCampaignUsageFn         func(ctx context.Context, campaignID string) (int64, int, error)
+	getUserCampaignlessUsageFn func(ctx context.Context, userID string) (int64, int, error)
+	findReferencesFn           func(ctx context.Context, campaignID, mediaID string) ([]MediaRef, error)
+	listAllFilenamesFn         func(ctx context.Context) (map[string]bool, error)
+	listFilesByCampaignFn      func(ctx context.Context, campaignID string) ([]MediaFile, error)
 }
 
 func (m *mockMediaRepo) Create(ctx context.Context, file *MediaFile) error {
@@ -93,6 +94,13 @@ func (m *mockMediaRepo) ListAll(ctx context.Context, limit, offset int) ([]Admin
 func (m *mockMediaRepo) GetCampaignUsage(ctx context.Context, campaignID string) (int64, int, error) {
 	if m.getCampaignUsageFn != nil {
 		return m.getCampaignUsageFn(ctx, campaignID)
+	}
+	return 0, 0, nil
+}
+
+func (m *mockMediaRepo) GetUserCampaignlessUsage(ctx context.Context, userID string) (int64, int, error) {
+	if m.getUserCampaignlessUsageFn != nil {
+		return m.getUserCampaignlessUsageFn(ctx, userID)
 	}
 	return 0, 0, nil
 }
@@ -678,11 +686,21 @@ func TestCheckQuotas_LimiterError_FailsOpen(t *testing.T) {
 	}
 }
 
-func TestCheckQuotas_NoCampaign_SkipsCampaignChecks(t *testing.T) {
-	svc := newTestMediaService(&mockMediaRepo{})
+func TestCheckQuotas_NoCampaign_SkipsCampaignChecksButAppliesCampaignlessQuota(t *testing.T) {
+	campaignUsageCalled := false
+	repo := &mockMediaRepo{
+		getCampaignUsageFn: func(ctx context.Context, campaignID string) (int64, int, error) {
+			campaignUsageCalled = true
+			return 0, 0, nil
+		},
+		getUserCampaignlessUsageFn: func(ctx context.Context, userID string) (int64, int, error) {
+			return 0, 0, nil // nothing uploaded yet
+		},
+	}
+	svc := newTestMediaService(repo)
 	svc.limiter = &mockStorageLimiter{
 		getEffectiveLimitsFn: func(ctx context.Context, userID, campaignID string) (int64, int64, int, error) {
-			return 0, 0, 0, nil // unlimited
+			return 0, 0, 0, nil // no per-user override configured
 		},
 	}
 
@@ -694,7 +712,66 @@ func TestCheckQuotas_NoCampaign_SkipsCampaignChecks(t *testing.T) {
 
 	err := svc.checkQuotas(context.Background(), input)
 	if err != nil {
-		t.Fatalf("expected nil error, got %v", err)
+		t.Fatalf("expected nil error (well under the default campaign-less quota), got %v", err)
+	}
+	if campaignUsageCalled {
+		t.Error("a campaign-less upload must not query per-campaign usage")
+	}
+}
+
+// TestCheckQuotas_CampaignlessDefaultQuotaExceeded pins that a campaign-less
+// upload (avatars, and any /media/upload with a blank campaign_id) is
+// capped at defaultCampaignlessStorageBytes when no admin override is set —
+// unlike a campaign upload, it has no campaign quota to fall back on.
+func TestCheckQuotas_CampaignlessDefaultQuotaExceeded(t *testing.T) {
+	repo := &mockMediaRepo{
+		getUserCampaignlessUsageFn: func(ctx context.Context, userID string) (int64, int, error) {
+			return defaultCampaignlessStorageBytes - 100, 1, nil // just under the default cap
+		},
+	}
+	svc := newTestMediaService(repo)
+	svc.limiter = &mockStorageLimiter{
+		getEffectiveLimitsFn: func(ctx context.Context, userID, campaignID string) (int64, int64, int, error) {
+			return 0, 0, 0, nil // no per-user override
+		},
+	}
+
+	input := UploadInput{
+		UploadedBy: "user-1",
+		CampaignID: "",
+		FileSize:   1000, // pushes usage over the default 25 MB cap
+	}
+
+	err := svc.checkQuotas(context.Background(), input)
+	assertMediaAppError(t, err, 400)
+}
+
+// TestCheckQuotas_CampaignlessQuota_UserOverrideRaisesLimit pins that an
+// admin's existing per-user MaxTotalStorage override replaces the built-in
+// default for the campaign-less bucket, the same override tier a campaign
+// upload already honors.
+func TestCheckQuotas_CampaignlessQuota_UserOverrideRaisesLimit(t *testing.T) {
+	repo := &mockMediaRepo{
+		getUserCampaignlessUsageFn: func(ctx context.Context, userID string) (int64, int, error) {
+			return defaultCampaignlessStorageBytes, 1, nil // already at the default cap
+		},
+	}
+	svc := newTestMediaService(repo)
+	svc.limiter = &mockStorageLimiter{
+		getEffectiveLimitsFn: func(ctx context.Context, userID, campaignID string) (int64, int64, int, error) {
+			return 0, defaultCampaignlessStorageBytes * 2, 0, nil // admin raised this user's total storage
+		},
+	}
+
+	input := UploadInput{
+		UploadedBy: "user-1",
+		CampaignID: "",
+		FileSize:   1024,
+	}
+
+	err := svc.checkQuotas(context.Background(), input)
+	if err != nil {
+		t.Fatalf("expected nil error under the raised per-user override, got %v", err)
 	}
 }
 
