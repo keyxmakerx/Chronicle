@@ -254,6 +254,7 @@ GET	/invites/accept	internal/plugins/campaigns/routes.go
 GET	/invites/page	internal/plugins/campaigns/routes.go
 GET	/join/:code	internal/plugins/campaigns/routes.go
 GET	/journal	internal/widgets/notes/routes.go
+GET	/journal/:noteId	internal/widgets/notes/routes.go
 GET	/layout-presets	internal/plugins/entities/layout_preset_routes.go
 GET	/layout-presets/:pid	internal/plugins/entities/layout_preset_routes.go
 GET	/login	internal/plugins/auth/routes.go
@@ -303,9 +304,15 @@ GET	/notes	internal/plugins/syncapi/routes.go
 GET	/notes	internal/widgets/notes/routes.go
 GET	/notes/:nid/attachments	internal/widgets/notes/routes.go
 GET	/notes/:noteID	internal/plugins/syncapi/routes.go
+GET	/notes/:noteId	internal/widgets/notes/routes.go
+GET	/notes/:noteId/backlinks	internal/widgets/notes/routes.go
 GET	/notes/:noteId/versions	internal/widgets/notes/routes.go
 GET	/notes/:noteId/versions/:vid	internal/widgets/notes/routes.go
+GET	/notes/index	internal/widgets/notes/routes.go
+GET	/notes/labels	internal/widgets/notes/routes.go
 GET	/notes/members	internal/widgets/notes/routes.go
+GET	/notes/page-refs	internal/widgets/notes/routes.go
+GET	/notes/search	internal/widgets/notes/routes.go
 GET	/notifications	internal/plugins/sessions/routes.go
 GET	/notifications/badge	internal/plugins/sessions/routes.go
 GET	/notifications/call-to-action	internal/plugins/sessions/routes.go
@@ -490,6 +497,7 @@ POST	/notes/:noteId/lock	internal/widgets/notes/routes.go
 POST	/notes/:noteId/toggle	internal/widgets/notes/routes.go
 POST	/notes/:noteId/unlock	internal/widgets/notes/routes.go
 POST	/notes/:noteId/versions/:vid/restore	internal/widgets/notes/routes.go
+POST	/notes/bulk	internal/widgets/notes/routes.go
 POST	/notifications/:nid/read	internal/plugins/sessions/routes.go
 POST	/notifications/read-all	internal/plugins/sessions/routes.go
 POST	/npcs/:eid/reveal	internal/plugins/npcs/routes.go

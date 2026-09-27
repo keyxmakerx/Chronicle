@@ -14,22 +14,24 @@ import (
 
 // mockNoteRepo implements NoteRepository for testing.
 type mockNoteRepo struct {
-	createFn                 func(ctx context.Context, note *Note) error
-	findByIDFn               func(ctx context.Context, id string) (*Note, error)
-	updateFn                 func(ctx context.Context, note *Note) error
-	deleteFn                 func(ctx context.Context, id string) error
-	listVisibleFn            func(ctx context.Context, campaignID string, v permissions.Viewer, scope ListScope) ([]Note, error)
-	listTreeFn               func(ctx context.Context, campaignID string) ([]TreeRow, error)
-	reparentToTopFn          func(ctx context.Context, ids []string) error
-	listSharedByCampaignFn   func(ctx context.Context, campaignID string) ([]Note, error)
-	acquireLockFn            func(ctx context.Context, noteID, userID string) (bool, error)
-	releaseLockFn            func(ctx context.Context, noteID, userID string) error
-	forceReleaseLockFn       func(ctx context.Context, noteID string) error
-	refreshLockFn            func(ctx context.Context, noteID, userID string) error
-	createVersionFn          func(ctx context.Context, v *NoteVersion) error
-	listVersionsFn           func(ctx context.Context, noteID string, limit int) ([]NoteVersion, error)
-	findVersionByIDFn        func(ctx context.Context, id string) (*NoteVersion, error)
-	pruneVersionsFn          func(ctx context.Context, noteID string, keep int) error
+	createFn               func(ctx context.Context, note *Note) error
+	findByIDFn             func(ctx context.Context, id string) (*Note, error)
+	updateFn               func(ctx context.Context, note *Note) error
+	deleteFn               func(ctx context.Context, id string) error
+	listVisibleFn          func(ctx context.Context, campaignID string, v permissions.Viewer, scope ListScope) ([]Note, error)
+	listTreeFn             func(ctx context.Context, campaignID string) ([]TreeRow, error)
+	reparentToTopFn        func(ctx context.Context, ids []string) error
+	findByIDsFn            func(ctx context.Context, ids []string) ([]Note, error)
+	listVisibleLinkingFn   func(ctx context.Context, campaignID string, v permissions.Viewer, kind, targetID string) ([]Note, error)
+	listSharedByCampaignFn func(ctx context.Context, campaignID string) ([]Note, error)
+	acquireLockFn          func(ctx context.Context, noteID, userID string) (bool, error)
+	releaseLockFn          func(ctx context.Context, noteID, userID string) error
+	forceReleaseLockFn     func(ctx context.Context, noteID string) error
+	refreshLockFn          func(ctx context.Context, noteID, userID string) error
+	createVersionFn        func(ctx context.Context, v *NoteVersion) error
+	listVersionsFn         func(ctx context.Context, noteID string, limit int) ([]NoteVersion, error)
+	findVersionByIDFn      func(ctx context.Context, id string) (*NoteVersion, error)
+	pruneVersionsFn        func(ctx context.Context, noteID string, keep int) error
 }
 
 func (m *mockNoteRepo) Create(ctx context.Context, note *Note) error {
@@ -70,6 +72,20 @@ func (m *mockNoteRepo) ListVisible(ctx context.Context, campaignID string, v per
 func (m *mockNoteRepo) ListTree(ctx context.Context, campaignID string) ([]TreeRow, error) {
 	if m.listTreeFn != nil {
 		return m.listTreeFn(ctx, campaignID)
+	}
+	return nil, nil
+}
+
+func (m *mockNoteRepo) FindByIDs(ctx context.Context, ids []string) ([]Note, error) {
+	if m.findByIDsFn != nil {
+		return m.findByIDsFn(ctx, ids)
+	}
+	return nil, nil
+}
+
+func (m *mockNoteRepo) ListVisibleLinking(ctx context.Context, campaignID string, v permissions.Viewer, kind, targetID string) ([]Note, error) {
+	if m.listVisibleLinkingFn != nil {
+		return m.listVisibleLinkingFn(ctx, campaignID, v, kind, targetID)
 	}
 	return nil, nil
 }

@@ -12,6 +12,9 @@ import (
 	"github.com/microcosm-cc/bluemonday"
 )
 
+// noteIDPattern is the shape a note link's data-note-id must have.
+var noteIDPattern = regexp.MustCompile(`^[0-9a-fA-F-]{8,64}$`)
+
 // policy is the singleton bluemonday policy for sanitizing user-generated HTML.
 // Initialized once via sync.Once for thread-safe lazy initialization.
 var (
@@ -28,6 +31,10 @@ func getPolicy() *bluemonday.Policy {
 		// and entity preview tooltips.
 		policy.AllowAttrs("data-mention-id").OnElements("a")
 		policy.AllowAttrs("data-entity-preview").OnElements("a")
+
+		// A [[link]] to a note: only an id-shaped value survives, since
+		// readers resolve it to a title through the viewer's visibility.
+		policy.AllowAttrs("data-note-id").Matching(noteIDPattern).OnElements("a")
 
 		// Allow class attributes broadly — needed for TipTap/ProseMirror output
 		// which uses classes for text alignment, code blocks, etc.

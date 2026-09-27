@@ -229,3 +229,20 @@ func TestUpdate_GMShareIsVisibleToTheGMOnly(t *testing.T) {
 		t.Error("the GM is not the owner: sharing and archiving must be stripped")
 	}
 }
+
+// TestJournalRoutes_GateOnTheNote: a single note and its backlinks load only
+// for someone who can see it; the stub panics if the service is reached.
+func TestJournalRoutes_GateOnTheNote(t *testing.T) {
+	h := NewHandler(newAccessSvc())
+
+	c, _ := ctxFor(http.MethodGet, "/", "u-other", campaigns.RolePlayer, map[string]string{"noteId": "gm-private"}, nil)
+	wantStatus(t, h.Get(c), http.StatusNotFound)
+
+	c, _ = ctxFor(http.MethodGet, "/", "u-other", campaigns.RolePlayer, map[string]string{"noteId": "gm-private"}, nil)
+	wantStatus(t, h.Backlinks(c), http.StatusNotFound)
+
+	c, rec := ctxFor(http.MethodGet, "/", "u-other", campaigns.RolePlayer, map[string]string{"noteId": "party"}, nil)
+	if err := h.Get(c); err != nil || rec.Code != http.StatusOK {
+		t.Fatalf("a party note loads: %v %d", err, rec.Code)
+	}
+}

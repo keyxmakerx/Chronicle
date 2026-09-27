@@ -18,15 +18,25 @@ func RegisterRoutes(e *echo.Echo, h *Handler, campaignSvc campaigns.CampaignServ
 
 	player := campaigns.RequireRole(campaigns.RolePlayer)
 
-	// Full-page journal view.
+	// Full-page journal view, optionally opened at one note.
 	cg.GET("/journal", h.ShowJournal, player)
+	cg.GET("/journal/:noteId", h.ShowJournal, player)
 
 	// Members API for share-with-players picker.
 	cg.GET("/notes/members", h.MembersAPI, player)
 
+	// Journal views: the list, search, link labels, page references, bulk.
+	cg.GET("/notes/index", h.Index, player)
+	cg.GET("/notes/search", h.Search, player)
+	cg.GET("/notes/labels", h.Labels, player)
+	cg.GET("/notes/page-refs", h.PageRefs, player)
+	cg.POST("/notes/bulk", h.Bulk, player)
+
 	// CRUD — own notes + shared note access.
 	cg.GET("/notes", h.List, player)
 	cg.POST("/notes", h.Create, player)
+	cg.GET("/notes/:noteId", h.Get, player)
+	cg.GET("/notes/:noteId/backlinks", h.Backlinks, player)
 	cg.PUT("/notes/:noteId", h.Update, player)
 	cg.DELETE("/notes/:noteId", h.Delete, player)
 	cg.POST("/notes/:noteId/toggle", h.ToggleCheck, player)

@@ -142,9 +142,9 @@ func TestDB_ListVisibilityMatchesCanView(t *testing.T) {
 	all.Close()
 
 	viewers := map[string]permissions.Viewer{
-		"gm (Owner)": permissions.RequestViewer(permissions.RoleOwner, u["gm"]),
-		"ana":        permissions.RequestViewer(permissions.RolePlayer, u["ana"]),
-		"bo":         permissions.RequestViewer(permissions.RolePlayer, u["bo"]),
+		"gm (Owner)":  permissions.RequestViewer(permissions.RoleOwner, u["gm"]),
+		"ana":         permissions.RequestViewer(permissions.RolePlayer, u["ana"]),
+		"bo":          permissions.RequestViewer(permissions.RolePlayer, u["bo"]),
 		"cy (Scribe)": permissions.RequestViewer(permissions.RoleScribe, u["cy"]),
 	}
 	for name, v := range viewers {
@@ -270,5 +270,55 @@ func TestDB_ScopesAndTree(t *testing.T) {
 	moved, _ := repo.FindByID(ctx, child.ID)
 	if moved.ParentID != nil {
 		t.Error("ReparentToTop must clear parent_id")
+	}
+}
+
+// TestDB_LinkQueries covers the queries behind backlinks, page references,
+// link labels and the has-audio flag.
+func TestDB_LinkQueries(t *testing.T) {
+	db := newNotesScratchDB(t)
+	ctx := context.Background()
+	repo := NewNoteRepository(db)
+	camp, u := seedNotesCampaign(t, db, "gm", "ana")
+
+	target := &Note{ID: newUUID(t), CampaignID: camp, UserID: u["gm"], Title: "Thalrik", Content: []Block{}, Color: "#374151", IsShared: true}
+	page := newUUID(t)
+	shared := `<p>` + `<a data-note-id="` + target.ID + `">Journal note</a> and <a data-mention-id="` + page + `">@Ashkeep</a></p>`
+	linkingParty := &Note{ID: newUUID(t), CampaignID: camp, UserID: u["gm"], Title: "Session 12", Content: []Block{}, Color: "#374151", IsShared: true, EntryHTML: &shared}
+	linkingPrivate := &Note{ID: newUUID(t), CampaignID: camp, UserID: u["ana"], Title: "Ana's doubts", Content: []Block{}, Color: "#374151", EntryHTML: &shared}
+	for _, n := range []*Note{target, linkingParty, linkingPrivate} {
+		if err := repo.Create(ctx, n); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	gmViewer := permissions.RequestViewer(permissions.RoleOwner, u["gm"])
+	got, err := repo.ListVisibleLinking(ctx, camp, gmViewer, LinkNote, target.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(got) != 1 || got[0].ID != linkingParty.ID {
+		t.Errorf("the GM's backlinks = %v; ana's private note must not appear", got)
+	}
+	anaViewer := permissions.RequestViewer(permissions.RolePlayer, u["ana"])
+	if got, _ := repo.ListVisibleLinking(ctx, camp, anaViewer, LinkPage, page); len(got) != 2 {
+		t.Errorf("ana sees both notes that mention the page, got %d", len(got))
+	}
+	if got, _ := repo.ListVisibleLinking(ctx, camp, gmViewer, LinkNote, `%" OR 1=1 -- `); got != nil {
+		t.Error("a non-id target must query nothing")
+	}
+
+	found, err := repo.FindByIDs(ctx, []string{target.ID, linkingPrivate.ID, newUUID(t)})
+	if err != nil || len(found) != 2 {
+		t.Errorf("FindByIDs = %d rows, %v", len(found), err)
+	}
+
+	if _, err := db.Exec(`INSERT INTO note_attachments (id, note_id, campaign_id, file_path, original_name, mime_type, file_size) VALUES (?,?,?,?,?,?,?)`,
+		newUUID(t), linkingParty.ID, camp, "a.mp3", "a.mp3", "audio/mpeg", 10); err != nil {
+		t.Fatal(err)
+	}
+	withAudio, err := NewAttachmentRepository(db).NotesWithAttachments(ctx, camp)
+	if err != nil || !withAudio[linkingParty.ID] || withAudio[target.ID] {
+		t.Errorf("NotesWithAttachments = %v, %v", withAudio, err)
 	}
 }

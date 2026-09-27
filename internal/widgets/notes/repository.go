@@ -32,6 +32,14 @@ type NoteRepository interface {
 	// ReparentToTop moves the given notes out of any folder.
 	ReparentToTop(ctx context.Context, ids []string) error
 
+	// FindByIDs loads the given notes, in no particular order. Unfiltered,
+	// like FindByID: the caller applies CanView to each.
+	FindByIDs(ctx context.Context, ids []string) ([]Note, error)
+
+	// ListVisibleLinking returns the notes v can see whose body links to the
+	// note (kind LinkNote) or page (LinkPage) targetID, newest first.
+	ListVisibleLinking(ctx context.Context, campaignID string, v permissions.Viewer, kind, targetID string) ([]Note, error)
+
 	// ListSharedByCampaign returns every campaign-wide-shared note in the
 	// campaign regardless of which user owns it.
 	//
@@ -76,6 +84,11 @@ type AttachmentRepository interface {
 	FindAttachmentByID(ctx context.Context, id string) (*NoteAttachment, error)
 	DeleteAttachment(ctx context.Context, id string) error
 	UpdateTranscript(ctx context.Context, id string, transcript string) error
+
+	// NotesWithAttachments returns the ids of the campaign's notes that have
+	// at least one attachment. Unfiltered: callers intersect it with notes
+	// the viewer can see.
+	NotesWithAttachments(ctx context.Context, campaignID string) (map[string]bool, error)
 }
 
 // noteRepository is the MariaDB implementation of NoteRepository.
@@ -198,7 +211,7 @@ func (r *noteRepository) Delete(ctx context.Context, id string) error {
 
 // visibleFilter is the SQL twin of Note.CanView: the owner, a party share, a
 // share naming the viewer, or a GM share when the viewer is a GM. The caller
-// has already refused an anonymous viewer, so user_id = '' never matches.
+// has already refused an anonymous viewer, so an empty user_id never matches.
 func visibleFilter(v permissions.Viewer) (string, []any) {
 	return `(user_id = ? OR is_shared = TRUE OR JSON_CONTAINS(shared_with, JSON_QUOTE(?), '$')
 		OR (shared_with_gm = TRUE AND ?))`,
@@ -227,6 +240,39 @@ func (r *noteRepository) ListVisible(ctx context.Context, campaignID string, v p
 	}
 	query := `SELECT ` + noteColumns + ` FROM notes WHERE ` + where + `
 		ORDER BY pinned DESC, updated_at DESC`
+	return r.scanNotes(ctx, query, args...)
+}
+
+// FindByIDs loads the given notes, unfiltered.
+func (r *noteRepository) FindByIDs(ctx context.Context, ids []string) ([]Note, error) {
+	if len(ids) == 0 {
+		return nil, nil
+	}
+	placeholders := strings.TrimSuffix(strings.Repeat("?,", len(ids)), ",")
+	args := make([]any, len(ids))
+	for i, id := range ids {
+		args[i] = id
+	}
+	return r.scanNotes(ctx, `SELECT `+noteColumns+` FROM notes WHERE id IN (`+placeholders+`)`, args...)
+}
+
+// linkAttr is the anchor attribute each link kind is stored under.
+var linkAttr = map[string]string{LinkNote: "data-note-id", LinkPage: "data-mention-id"}
+
+// ListVisibleLinking returns the visible notes whose entry_html carries an
+// anchor pointing at targetID. The id is checked against idPattern, so it
+// can hold no LIKE wildcard.
+func (r *noteRepository) ListVisibleLinking(ctx context.Context, campaignID string, v permissions.Viewer, kind, targetID string) ([]Note, error) {
+	a, ok := linkAttr[kind]
+	if !ok || !idPattern.MatchString(targetID) || v.UserID() == "" {
+		return nil, nil
+	}
+	vis, visArgs := visibleFilter(v)
+	args := append([]any{campaignID}, visArgs...)
+	args = append(args, "%"+a+`="`+targetID+`"%`)
+	query := `SELECT ` + noteColumns + ` FROM notes
+		WHERE campaign_id = ? AND ` + vis + ` AND entry_html LIKE ?
+		ORDER BY updated_at DESC LIMIT 500`
 	return r.scanNotes(ctx, query, args...)
 }
 
@@ -565,6 +611,25 @@ func (r *noteRepository) DeleteAttachment(ctx context.Context, id string) error 
 		return apperror.NewNotFound("attachment not found")
 	}
 	return nil
+}
+
+// NotesWithAttachments returns the set of note ids with an attachment.
+func (r *noteRepository) NotesWithAttachments(ctx context.Context, campaignID string) (map[string]bool, error) {
+	rows, err := r.db.QueryContext(ctx,
+		`SELECT DISTINCT note_id FROM note_attachments WHERE campaign_id = ?`, campaignID)
+	if err != nil {
+		return nil, fmt.Errorf("querying notes with attachments: %w", err)
+	}
+	defer rows.Close()
+	out := map[string]bool{}
+	for rows.Next() {
+		var id string
+		if err := rows.Scan(&id); err != nil {
+			return nil, fmt.Errorf("scanning note id: %w", err)
+		}
+		out[id] = true
+	}
+	return out, rows.Err()
 }
 
 // UpdateTranscript sets the transcript text for an attachment.

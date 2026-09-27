@@ -87,11 +87,11 @@ type Note struct {
 	EntityID     *string    `json:"entityId,omitempty"`     // nil = Journal note; set = that page's jot
 	LinkedNoteID *string    `json:"linkedNoteId,omitempty"` // jot sent to the Journal: the note it became
 	ParentID     *string    `json:"parentId,omitempty"`     // nil = top-level note/folder
-	IsFolder     bool       `json:"isFolder"`              // true = folder container
+	IsFolder     bool       `json:"isFolder"`               // true = folder container
 	Title        string     `json:"title"`
-	Content      []Block    `json:"content"`               // Legacy block content
-	Entry        *string    `json:"entry,omitempty"`       // ProseMirror JSON (rich text)
-	EntryHTML    *string    `json:"entryHtml,omitempty"`   // Pre-rendered HTML from entry
+	Content      []Block    `json:"content"`             // Legacy block content
+	Entry        *string    `json:"entry,omitempty"`     // ProseMirror JSON (rich text)
+	EntryHTML    *string    `json:"entryHtml,omitempty"` // Pre-rendered HTML from entry
 	Color        string     `json:"color"`
 	Pinned       bool       `json:"pinned"`
 	ArchivedAt   *time.Time `json:"archivedAt,omitempty"`

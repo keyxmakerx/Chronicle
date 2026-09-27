@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"io"
 	"net/http"
+	"strings"
 
 	"github.com/labstack/echo/v4"
 
@@ -92,6 +93,113 @@ func (h *Handler) List(c echo.Context) error {
 		notes = []Note{}
 	}
 	return c.JSON(http.StatusOK, notes)
+}
+
+// Get returns one note (GET /campaigns/:id/notes/:noteId).
+func (h *Handler) Get(c echo.Context) error {
+	cc := campaigns.GetCampaignContext(c)
+	if cc == nil {
+		return apperror.NewMissingContext()
+	}
+	note, err := h.viewableNote(c, cc, c.Param("noteId"))
+	if err != nil {
+		return err
+	}
+	return c.JSON(http.StatusOK, note)
+}
+
+// Index returns the viewer's Journal list (GET /campaigns/:id/notes/index).
+func (h *Handler) Index(c echo.Context) error {
+	cc := campaigns.GetCampaignContext(c)
+	if cc == nil {
+		return apperror.NewMissingContext()
+	}
+	idx, err := h.service.JournalIndex(c.Request().Context(), cc.Campaign.ID, viewerFor(c, cc))
+	if err != nil {
+		return err
+	}
+	return c.JSON(http.StatusOK, idx)
+}
+
+// Search finds the viewer's notes by title or text
+// (GET /campaigns/:id/notes/search?q=…[&jots=1]).
+func (h *Handler) Search(c echo.Context) error {
+	cc := campaigns.GetCampaignContext(c)
+	if cc == nil {
+		return apperror.NewMissingContext()
+	}
+	hits, err := h.service.Search(c.Request().Context(), cc.Campaign.ID, viewerFor(c, cc),
+		c.QueryParam("q"), c.QueryParam("jots") == "1")
+	if err != nil {
+		return err
+	}
+	return c.JSON(http.StatusOK, hits)
+}
+
+// Backlinks lists the viewer's notes that link to a note
+// (GET /campaigns/:id/notes/:noteId/backlinks).
+func (h *Handler) Backlinks(c echo.Context) error {
+	cc := campaigns.GetCampaignContext(c)
+	if cc == nil {
+		return apperror.NewMissingContext()
+	}
+	noteID := c.Param("noteId")
+	if _, err := h.viewableNote(c, cc, noteID); err != nil {
+		return err
+	}
+	refs, err := h.service.Backlinks(c.Request().Context(), cc.Campaign.ID, viewerFor(c, cc), noteID)
+	if err != nil {
+		return err
+	}
+	return c.JSON(http.StatusOK, refs)
+}
+
+// PageRefs lists the viewer's Journal notes that link to a page
+// (GET /campaigns/:id/notes/page-refs?entity_id=…).
+func (h *Handler) PageRefs(c echo.Context) error {
+	cc := campaigns.GetCampaignContext(c)
+	if cc == nil {
+		return apperror.NewMissingContext()
+	}
+	refs, err := h.service.PageRefs(c.Request().Context(), cc.Campaign.ID, viewerFor(c, cc), c.QueryParam("entity_id"))
+	if err != nil {
+		return err
+	}
+	return c.JSON(http.StatusOK, refs)
+}
+
+// Labels resolves [[note]] link labels for the viewer
+// (GET /campaigns/:id/notes/labels?ids=a,b,…). A note the viewer cannot see
+// is absent from the result, exactly like one that does not exist.
+func (h *Handler) Labels(c echo.Context) error {
+	cc := campaigns.GetCampaignContext(c)
+	if cc == nil {
+		return apperror.NewMissingContext()
+	}
+	labels, err := h.service.Labels(c.Request().Context(), cc.Campaign.ID, viewerFor(c, cc),
+		strings.Split(c.QueryParam("ids"), ","))
+	if err != nil {
+		return err
+	}
+	return c.JSON(http.StatusOK, labels)
+}
+
+// Bulk applies one action to several of the viewer's own notes
+// (POST /campaigns/:id/notes/bulk).
+func (h *Handler) Bulk(c echo.Context) error {
+	cc := campaigns.GetCampaignContext(c)
+	if cc == nil {
+		return apperror.NewMissingContext()
+	}
+	var req BulkRequest
+	if err := json.NewDecoder(c.Request().Body).Decode(&req); err != nil {
+		return apperror.NewBadRequest("invalid JSON body")
+	}
+	res, err := h.service.Bulk(c.Request().Context(), cc.Campaign.ID, viewerFor(c, cc), req)
+	if err != nil {
+		return err
+	}
+	return c.JSON(http.StatusOK, res)
 }
 
 // Create adds a new note (POST /campaigns/:id/notes).

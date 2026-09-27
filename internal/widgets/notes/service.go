@@ -36,6 +36,14 @@ type NoteService interface {
 	// only with the GM. Kept for callers that have a user but no role.
 	ListByUserAndCampaign(ctx context.Context, userID, campaignID string) ([]Note, error)
 
+	// The Journal's views (journal_service.go). Each reads only what v can see.
+	JournalIndex(ctx context.Context, campaignID string, v permissions.Viewer) (*JournalIndex, error)
+	Search(ctx context.Context, campaignID string, v permissions.Viewer, q string, withJots bool) ([]SearchHit, error)
+	Backlinks(ctx context.Context, campaignID string, v permissions.Viewer, noteID string) ([]NoteRef, error)
+	PageRefs(ctx context.Context, campaignID string, v permissions.Viewer, entityID string) ([]NoteRef, error)
+	Labels(ctx context.Context, campaignID string, v permissions.Viewer, ids []string) (map[string]*NoteLabel, error)
+	Bulk(ctx context.Context, campaignID string, v permissions.Viewer, req BulkRequest) (*BulkResult, error)
+
 	// ListSharedByCampaign returns every shared note in the campaign across
 	// all owners. Unlike the three list methods above it applies no per-user
 	// visibility filter, so it is owner-gated data: campaign export is the
@@ -257,8 +265,11 @@ func (s *noteService) Update(ctx context.Context, id string, editor permissions.
 		}
 	}
 
-	// Snapshot the current state before applying changes.
-	s.createVersionSnapshot(ctx, note, userID)
+	// Snapshot the current state before a content edit. Pinning, sharing,
+	// filing and archiving leave the text alone, so they add no version.
+	if req.Title != nil || req.Content != nil || req.Entry != nil || req.EntryHTML != nil {
+		s.createVersionSnapshot(ctx, note, userID)
+	}
 
 	if title != nil {
 		note.Title = *title
