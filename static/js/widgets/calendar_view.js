@@ -1,9 +1,9 @@
 /**
- * calendar_view.js — Calendar V5 part A (#741): the calendar's own page.
- * Renders the month grid, the day-card and era-card fold-outs, event
- * icons/glance/full-detail, moons (silhouette + moon view), and the
- * calendar-switcher hub popover — everything the read-only (Player) surface
- * needs. Ported from the two operator-signed mockups' CSS/markup contract
+ * calendar_view.js — the calendar's own page. Renders the month grid, the
+ * day-card and era-card fold-outs, event icons/glance/full-detail, moons
+ * (silhouette + moon view), and the calendar-switcher hub popover —
+ * everything the read-only (Player) surface needs. Ported from the two
+ * operator-signed mockups' CSS/markup contract
  * (internal/plugins/calendar/.ai.md documents the port and its honest gaps);
  * the JS itself is a fresh implementation against Chronicle's real API
  * (the mockups' own JS runs against synthetic sample data with a different
@@ -25,14 +25,19 @@
   // ---------------------------------------------------------------------
   // Small date-math module, ported term-for-term from
   // internal/plugins/calendar/model.go so a recurring event's occurrence
-  // days and the weekday grid column can never disagree with the server.
-  // Two independent day counters exist in the Go model and both are kept
-  // here, on purpose: constLenDayIndex (no leap adjustment) drives
-  // recurrence matching and the weekday column, matching Event.OccursOn;
-  // absoluteDay (leap-aware) drives moon phase, matching Moon.MoonPhase's
-  // caller. They diverge by one day per elapsed leap year — a known,
-  // TODO(#741)-tracked quirk in the server itself, not a bug introduced
-  // here (see constLenDayIndex's Go doc comment).
+  // days, the weekday grid column and moon phase can never disagree with
+  // the server. dayIndex mirrors Calendar.absDayIndex exactly (a
+  // real-time calendar's Gregorian JDN; the leap-unaware linear counter
+  // for year <= 0, where AbsoluteDay's leap term is undefined; the
+  // leap-aware absoluteDay otherwise) and is the one day counter every
+  // caller here goes through — recurrence base/target, the weekday
+  // column, span containment, past/today comparison — the same
+  // reconciliation Calendar.absDayIndex's own doc comment describes
+  // server-side. weekdayCol additionally mirrors WeekdayIndex's
+  // MonthStartsNewWeek branch (day 1 of every month restarts the week; a
+  // day inside an intercalary month on such a calendar belongs to no
+  // week at all, signaled -1 — see view_helpers.go's buildMonthGrid for
+  // the server's own "place it from the first column" handling of that).
   // ---------------------------------------------------------------------
   var CalDate = {
     mod: function (a, n) { return ((a % n) + n) % n; },
@@ -76,8 +81,9 @@
       return days;
     },
 
-    // constLenDayIndex mirrors Calendar.constLenDayIndex (model.go): a
-    // constant-length counter (no leap adjustment at all), month 1-based.
+    // constLenDayIndex mirrors Calendar.linearDayIndex (model.go): a
+    // constant-length counter (no leap adjustment at all), month 1-based —
+    // dayIndex's fallback for year <= 0, see its own doc comment.
     constLenDayIndex: function (cal, year, month1, day) {
       var months = cal.months || [];
       var abs = year * CalDate.yearLength(cal);
@@ -126,20 +132,47 @@
       return d + Math.floor((153 * mm + 2) / 5) + 365 * yy + Math.floor(yy / 4) - Math.floor(yy / 100) + Math.floor(yy / 400) - 32045;
     },
 
-    // dayIndex mirrors Calendar.absDayIndex: the real-time branch (JDN) for a
-    // real-time-tracked calendar, constLenDayIndex otherwise. Every caller
-    // that needs "the" day counter (recurrence base/target, the weekday
-    // column, span containment, past/today comparison) goes through this —
-    // using constLenDayIndex unconditionally would disagree with the
-    // server's own OccursOn across a leap day for a real-time calendar.
+    // dayIndex mirrors Calendar.absDayIndex exactly: the real-time branch
+    // (JDN) for a real-time-tracked calendar; constLenDayIndex (leap-unaware)
+    // for year <= 0, where AbsoluteDay's leap term is undefined (its own doc
+    // comment: "a negative or zero year contributes nothing"); the leap-aware
+    // absoluteDay for every other year. Every caller that needs "the" day
+    // counter (recurrence base/target, the weekday column, span containment,
+    // past/today comparison) goes through this, so none of them can drift
+    // from what the server computes across an elapsed leap year.
     dayIndex: function (cal, year, month1, day) {
-      return CalDate.usesRealTime(cal) ? CalDate.gregorianJDN(year, month1, day) : CalDate.constLenDayIndex(cal, year, month1, day);
+      if (CalDate.usesRealTime(cal)) return CalDate.gregorianJDN(year, month1, day);
+      if (year <= 0) return CalDate.constLenDayIndex(cal, year, month1, day);
+      return CalDate.absoluteDay(cal, year, month1, day);
     },
 
     weekLen: function (cal) { return (cal.weekdays || []).length || 7; },
 
+    // monthIsIntercalary mirrors Calendar.monthIsIntercalary: whether the
+    // 1-based month index refers to an intercalary (festival) month. An
+    // out-of-range month is not intercalary, matching the Go guard.
+    monthIsIntercalary: function (cal, month1) {
+      var months = cal.months || [];
+      var i = month1 - 1;
+      if (i < 0 || i >= months.length) return false;
+      return !!months[i].is_intercalary;
+    },
+
+    // weekdayCol mirrors Calendar.WeekdayIndex exactly, including its
+    // MonthStartsNewWeek branch: on such a calendar, day 1 of every month
+    // restarts the week (it never inherits an offset from the month
+    // before), and a day inside an INTERCALARY month belongs to no week at
+    // all — -1, which a grid renderer must place from its own first column
+    // (view_helpers.go's buildMonthGrid does exactly that for the server's
+    // preview grid; _paintMonth below mirrors it).
     weekdayCol: function (cal, year, month1, day) {
-      return CalDate.mod(CalDate.dayIndex(cal, year, month1, day), CalDate.weekLen(cal));
+      var wl = CalDate.weekLen(cal);
+      if (wl <= 0) return 0;
+      if (cal.month_starts_new_week && !CalDate.usesRealTime(cal)) {
+        if (CalDate.monthIsIntercalary(cal, month1)) return -1;
+        return CalDate.mod(day - 1, wl);
+      }
+      return CalDate.mod(CalDate.dayIndex(cal, year, month1, day), wl);
     },
 
     monthCount: function (cal) { return (cal.months || []).length || 12; },
@@ -290,6 +323,18 @@
     return e.icon || e.kind_icon || '●';
   }
 
+  // Allowlist for a color value read from server data (event/kind colors)
+  // before it lands in a style="color:..." attribute: strips everything
+  // but the characters a hex/rgb/oklch/named CSS color can legitimately
+  // contain, so a crafted value can't close the attribute early or inject a
+  // second declaration. Exposed on Chronicle so calendar_editor.js's kind
+  // chips and era-manager rendering use this exact same allowlist rather
+  // than a second copy that could drift from it — the same cross-file
+  // sharing CalDate/growOpen/growClose already use below.
+  function sanitizeColor(c) {
+    return c ? String(c).replace(/[^#a-zA-Z0-9(),.% ]/g, '') : '';
+  }
+
   // Event category color: an event's own color falls back to its kind's.
   // Rendered as a plain inline `color:` declaration (not the mockup's --h
   // oklch hue variable, which would need a hex->oklch-hue conversion this
@@ -297,8 +342,8 @@
   // stylesheet's `.mk{color:oklch(var(--icL) var(--icC) var(--h,260))}`
   // regardless, so this is a complete override, not a partial one.
   function eventColorStyle(e) {
-    var c = e.color || e.kind_color;
-    return c ? ('color:' + String(c).replace(/[^#a-zA-Z0-9(),.% ]/g, '') + ';') : '';
+    var c = sanitizeColor(e.color || e.kind_color);
+    return c ? ('color:' + c + ';') : '';
   }
 
   // ---------------------------------------------------------------
@@ -391,6 +436,7 @@
   // the exact same grow-from-anchor motion as every other panel here.
   Chronicle.calendarDate = CalDate;
   Chronicle.calendarPanel = { growOpen: growOpen, growClose: growClose };
+  Chronicle.calendarColor = sanitizeColor;
 
   // ================================================================
   Chronicle.register('calendar_view', {
@@ -503,6 +549,30 @@
       var l = $('#cal5-live', this.el);
       l.textContent = '';
       setTimeout(function () { l.textContent = msg; }, 40);
+      this._toast(msg);
+    },
+
+    // Every say() call is also a visible, self-dismissing toast — calendar-view.css
+    // already ships '.toast' (an "undo" style, scoped .cal-v5 .toast, with its
+    // own reduced-motion handling) but nothing built or showed one, so a write's
+    // outcome — success or failure, and a no-op explanation like "This calendar
+    // has no moons." — was announced only to the #cal5-live aria-live region
+    // above, invisible to a sighted viewer. aria-hidden here so it isn't a
+    // second, redundant announcement on top of that live region.
+    _toast: function (msg) {
+      var el = this._toastEl;
+      if (!el) {
+        el = document.createElement('div');
+        el.className = 'toast';
+        el.setAttribute('aria-hidden', 'true');
+        el.innerHTML = '<span></span>';
+        this.calEl.appendChild(el);
+        this._toastEl = el;
+      }
+      el.querySelector('span').textContent = msg;
+      el.classList.add('on');
+      clearTimeout(this._toastTimer);
+      this._toastTimer = setTimeout(function () { el.classList.remove('on'); }, 3200);
     },
 
     // --------------------------------------------------------------
@@ -612,7 +682,8 @@
     renderLegend: function () {
       var kinds = this.cal.event_kinds || [];
       $('#cal5-legend', this.el).innerHTML = kinds.slice(0, 8).map(function (k) {
-        return '<li><span class="mk" style="color:' + esc(k.color || '') + '">' + esc(k.icon || '●') + '</span>' + esc(k.name) + '</li>';
+        var color = sanitizeColor(k.color);
+        return '<li><span class="mk" style="' + (color ? 'color:' + color + ';' : '') + '">' + esc(k.icon || '●') + '</span>' + esc(k.name) + '</li>';
       }).join('');
     },
 
@@ -644,6 +715,14 @@
       } else {
         var days = CalDate.monthDays(cal, m0, y);
         var firstCol = CalDate.weekdayCol(cal, y, m, 1);
+        // -1 (MonthStartsNewWeek + an intercalary month) can't actually
+        // reach here — the branch above already routes every intercalary
+        // month to the band renderer — but weekdayCol's contract allows it,
+        // and clamping keeps this file's handling the same as the server's
+        // own preview grid (view_helpers.go's buildMonthGrid: "its days run
+        // from the first column") rather than leaning on a guard elsewhere
+        // that could change.
+        if (firstCol < 0) firstCol = 0;
         var cells = [];
         for (var i = 0; i < firstCol; i++) cells.push(null);
         for (var d = 1; d <= days; d++) cells.push(d);
@@ -693,7 +772,7 @@
       var cap = 4, shown = evs.slice(0, cap), extra = evs.length - shown.length;
       var self = this;
       var html = '<div class="marks">' + shown.map(function (e) {
-        var dirRing = self.role >= 3 && e.visibility === 'dm_only' ? ' dir' : '';
+        var dirRing = self.canAuthorDmOnly && e.visibility === 'dm_only' ? ' dir' : '';
         return '<span class="mk' + dirRing + '" data-ev="' + esc(e.id) + '" style="' + eventColorStyle(e) + '" title="' + esc(e.name) + '">' + esc(eventGlyph(e)) + '</span>';
       }).join('');
       if (extra > 0) html += '<span class="more">+' + extra + '</span>';
@@ -983,7 +1062,6 @@
 
     _evpHTML: function (ev) {
       var cal = this.cal;
-      var when = ev.year + '/' + ev.month + '/' + ev.day;
       var mc = CalDate.monthCount(cal), m0 = ((ev.month - 1) % mc + mc) % mc, monthDef = (cal.months || [])[m0];
       var label = (monthDef ? monthDef.name : ev.month) + ' ' + ev.day + ', ' + ev.year;
       if (ev.end_year != null) {
@@ -997,7 +1075,7 @@
         recur = '<div class="row"><i class="fa-solid fa-rotate"></i><span class="tt">Repeats ' + esc(ev.recurrence_type) + '</span></div>';
       }
       var entity = ev.entity_id ? '<div class="row"><i class="fa-solid fa-link"></i><a class="tt" href="/campaigns/' + esc(this.campaignId) + '/entities/' + esc(ev.entity_id) + '">' + esc(ev.entity_name || 'Linked page') + '</a></div>' : '';
-      var visBadge = (this.role >= 3 && ev.visibility === 'dm_only') ? '<span class="dirnote"><i class="fa-solid fa-eye-slash"></i>Director only</span>' : '';
+      var visBadge = (this.canAuthorDmOnly && ev.visibility === 'dm_only') ? '<span class="dirnote"><i class="fa-solid fa-eye-slash"></i>Director only</span>' : '';
       var body = ev.description_html ? ev.description_html : (ev.description ? '<p>' + esc(ev.description) + '</p>' : '');
 
       return '<div class="grab" aria-hidden="true"></div>' +
@@ -1184,7 +1262,7 @@
           if (!body) return;
           body.innerHTML = list.map(function (c) {
             var current = c.id === self.calendarId;
-            return '<a class="hubi" href="/campaigns/' + self.campaignId + '/calendars/' + c.id + '/view"' + (current ? ' aria-current="true"' : '') + '>' +
+            return '<a class="hubi" href="/campaigns/' + esc(self.campaignId) + '/calendars/' + esc(c.id) + '/view"' + (current ? ' aria-current="true"' : '') + '>' +
               '<span class="hn">' + esc(c.name) + '</span>' +
               (c.is_default ? '<span class="hs">Default calendar</span>' : '') +
               '</a>';
@@ -1204,4 +1282,13 @@
       this._updateScrim();
     }
   });
+
+  // Test-only hook: exposes the pure date/moon-phase math so the node:test
+  // contract suite (test/js/calendar_math.test.mjs) can check it against the
+  // Go model's own values without a browser DOM, the same pattern
+  // appearance_editor.js uses for its save-sequencing helper. `module` is
+  // undefined when loaded via <script>, so this is a no-op in the browser.
+  if (typeof module !== 'undefined' && module.exports) {
+    module.exports = { CalDate: CalDate, MoonMath: MoonMath };
+  }
 })();

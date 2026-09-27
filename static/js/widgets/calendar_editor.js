@@ -1,6 +1,6 @@
 /**
- * calendar_editor.js — Calendar V5 part A (#741): the Owner/co-Director
- * editing surface layered on top of calendar_view.js. Loaded only when the
+ * calendar_editor.js — the Owner/co-Director editing surface layered on top
+ * of calendar_view.js. Loaded only when the
  * page's mount div carries data-can-edit="true" (view.templ), which is
  * true for MemberRole >= RoleOwner OR CanAuthorDmOnly() — see view.go's
  * CalendarViewData.CanEdit doc comment.
@@ -33,6 +33,9 @@
   // "shift events" uses the exact same date arithmetic as the grid/moon
   // phase code, rather than a second copy that could drift from it.
   var CalDate = Chronicle.calendarDate;
+  // Shared with calendar_view.js's eventColorStyle so a kind's colour goes
+  // through one allowlist everywhere it lands in a style="" attribute.
+  var sanitizeColor = Chronicle.calendarColor;
 
   function $(sel, root) { return (root || document).querySelector(sel); }
   function $$(sel, root) { return Array.prototype.slice.call((root || document).querySelectorAll(sel)); }
@@ -40,6 +43,39 @@
     return String(s == null ? '' : s).replace(/[&<>"']/g, function (ch) {
       return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[ch];
     });
+  }
+
+  // The compact event form (below) only ever edits plain text — it has no
+  // rich-text editor — so reading an existing rich description back into it
+  // strips the stored HTML down to text rather than showing markup.
+  function stripHtml(html) {
+    if (!html) return '';
+    var div = document.createElement('div');
+    div.innerHTML = html;
+    return div.textContent || div.innerText || '';
+  }
+
+  // existing.description is ProseMirror JSON whenever existing.description_html
+  // is set (Event's doc comment, model.go) and plain text otherwise — the same
+  // rule showGlance() in calendar_view.js reads. Showing the JSON verbatim in a
+  // plain textarea would be unreadable and, worse, invites saving it back as
+  // "plain text" that is actually still-JSON-shaped garbage.
+  function descriptionText(existing) {
+    if (!existing) return '';
+    if (existing.description_html) return stripHtml(existing.description_html);
+    return existing.description || '';
+  }
+
+  // Rebuilds description_html from the textarea's plain text on save, the same
+  // paragraph-per-blank-line shape entity_notes.js's bodyToHTML uses, so the
+  // sanitizer (bluemonday's UGC policy, internal/sanitize) has plain <p>/<br>
+  // to accept rather than raw text with no markup at all.
+  function bodyToHTML(text) {
+    if (!text) return '';
+    var paragraphs = text.split(/\n{2,}/);
+    return paragraphs.map(function (p) {
+      return '<p>' + esc(p).replace(/\n/g, '<br>') + '</p>';
+    }).join('');
   }
 
   function attach(view) {
@@ -206,6 +242,11 @@
 
   CalendarEditor.prototype._renderBar = function () {
     var n = this._selectedKeys().length;
+    // .bar-up tells calendar-view.css's toast rule to lift a toast clear of
+    // the bar (they're both bottom-centered a few px apart) — set on .cal,
+    // not .bbar itself, so a plain CSS sibling/descendant selector can react
+    // to it without needing :has().
+    this.view.calEl.classList.toggle('bar-up', !!n);
     if (!n) { this.bbar.hidden = true; this.bbar.innerHTML = ''; this._closeShiftTray(); return; }
     var canVis = this.view.canAuthorDmOnly;
     this.bbar.hidden = false;
@@ -218,17 +259,47 @@
       '<button type="button" class="x" data-bb="none" aria-label="Choose no days">✕</button>';
   };
 
+  // Runs one Chronicle.apiFetch()-returning promise per item and resolves
+  // true/false per item instead of letting a bare Promise.all either fail
+  // fast on the first network rejection or (worse) resolve "done" on a
+  // 403/404/500 — apiFetch's promise only ever rejects on a network failure,
+  // never on a non-2xx status (boot.js), so treating its resolution alone as
+  // success is exactly how a bulk write can report success while some or all
+  // of its per-event requests actually failed. Every bulk write in this file
+  // goes through this so a partial failure is counted, not swallowed.
+  function settleAll(promises) {
+    return Promise.all(promises.map(function (p) {
+      return p.then(function (resp) { return resp.ok; }).catch(function () { return false; });
+    }));
+  }
+
+  // Refreshes the grid from the server (so it matches whatever actually
+  // landed, even on a partial failure) and reports how many of a bulk
+  // write's per-event requests succeeded. verb is past tense ("Hid",
+  // "Revealed", "Shifted"); tail is an optional clause inserted before the
+  // event count's trailing punctuation (e.g. " by 2 days").
+  CalendarEditor.prototype._reportBulkResult = function (oks, verb, tail) {
+    var view = this.view, okCount = oks.filter(Boolean).length, failCount = oks.length - okCount;
+    view.eventsByMonth = {}; // simplest correct invalidation: refetch on next paint
+    view.renderMonth();
+    tail = tail || '';
+    if (!failCount) {
+      view.say(verb + ' ' + okCount + (okCount === 1 ? ' event' : ' events') + tail + '.');
+    } else {
+      view.say(verb + ' ' + okCount + ' of ' + oks.length + ' events' + tail + '; ' + failCount + " couldn't be saved.");
+    }
+  };
+
   CalendarEditor.prototype._bulkVisibility = function (visibility) {
     var self = this, view = this.view, events = this._eventsInSelection();
     if (!events.length) { view.say('No events in the selected days.'); return; }
-    Promise.all(events.map(function (e) {
+    var verb = visibility === 'dm_only' ? 'Hid' : 'Revealed';
+    settleAll(events.map(function (e) {
       return Chronicle.apiFetch(view.apiBase + '/events/' + e.id + '/visibility', {
         method: 'PUT', body: { visibility: visibility }
       });
-    })).then(function () {
-      view.eventsByMonth = {}; // simplest correct invalidation: refetch on next paint
-      view.renderMonth();
-      view.say((visibility === 'dm_only' ? 'Hidden ' : 'Revealed ') + events.length + (events.length === 1 ? ' event.' : ' events.'));
+    })).then(function (oks) {
+      self._reportBulkResult(oks, verb);
     });
   };
 
@@ -262,7 +333,7 @@
   CalendarEditor.prototype._applyShift = function () {
     var self = this, view = this.view, cal = view.cal, delta = this._shiftN, events = this._eventsInSelection();
     if (!delta || !events.length) { this._closeShiftTray(); return; }
-    Promise.all(events.map(function (e) {
+    settleAll(events.map(function (e) {
       var start = CalDate.addDays(cal, { y: e.year, m: e.month, d: e.day }, delta);
       var body = { year: start.y, month: start.m, day: start.d };
       if (e.end_year != null) {
@@ -270,11 +341,10 @@
         body.end_year = end.y; body.end_month = end.m; body.end_day = end.d;
       }
       return Chronicle.apiFetch(view.apiBase + '/events/' + e.id, { method: 'PUT', body: body });
-    })).then(function () {
-      view.eventsByMonth = {};
-      view.renderMonth();
+    })).then(function (oks) {
       self._closeShiftTray();
-      view.say('Shifted ' + events.length + (events.length === 1 ? ' event' : ' events') + ' by ' + delta + ' day' + (Math.abs(delta) === 1 ? '' : 's') + '.');
+      var tail = ' by ' + delta + (Math.abs(delta) === 1 ? ' day' : ' days');
+      self._reportBulkResult(oks, 'Shifted', tail);
     });
   };
 
@@ -348,7 +418,7 @@
     form.style.marginTop = '10px';
     form.innerHTML =
       '<div class="fld"><input class="etitle" name="name" placeholder="Event name" required value="' + esc(existing ? existing.name : '') + '"/></div>' +
-      '<div class="fld"><textarea name="description" rows="2" placeholder="Optional description">' + esc(existing ? existing.description || '' : '') + '</textarea></div>' +
+      '<div class="fld"><textarea name="description" rows="2" placeholder="Optional description">' + esc(descriptionText(existing)) + '</textarea></div>' +
       '<div class="fld">Kind<div class="chips" id="cal5-edkinds">' + this._kindChipsHTML(kinds, existing ? existing.kind_id : null) + '</div></div>' +
       (view.role >= ROLE_OWNER ? '<div id="cal5-nkf-mount"></div>' : '') +
       (view.canAuthorDmOnly ? '<div class="vis" role="group" aria-label="Visibility">' +
@@ -371,9 +441,19 @@
 
     form.addEventListener('submit', function (e) {
       e.preventDefault();
+      // description and description_html always move together: description
+      // stays the honest plain text this textarea can actually edit, and
+      // description_html is rebuilt from that same text so the view (which
+      // prefers description_html — calendar_view.js's _evpHTML/showGlance)
+      // renders what was typed instead of a stale rich-text render left over
+      // from before this save (description_html is patch.Field, so leaving
+      // it out of the body would PRESERVE that old HTML, not clear it —
+      // UpdateEventInput's doc comment, model.go).
+      var descText = form.description.value;
       var body = {
         name: form.name.value.trim(),
-        description: form.description.value || null,
+        description: descText || null,
+        description_html: descText ? bodyToHTML(descText) : null,
         kind_id: form.dataset.kindId ? +form.dataset.kindId : null
       };
       // This compact form has no date or time picker, so it must never
@@ -411,7 +491,8 @@
 
   CalendarEditor.prototype._kindChipsHTML = function (kinds, activeId) {
     var html = kinds.map(function (k) {
-      var style = k.color ? ('color:' + String(k.color).replace(/[^#a-zA-Z0-9(),.% ]/g, '') + ';') : '';
+      var color = sanitizeColor(k.color);
+      var style = color ? ('color:' + color + ';') : '';
       return '<button type="button" data-kind="' + k.id + '" aria-pressed="' + (k.id === activeId) + '" style="' + style + '">' + esc(k.icon || '') + ' ' + esc(k.name) + '</button>';
     }).join('');
     if (this.view.role >= ROLE_OWNER) html += '<button type="button" class="nkb" data-nkb><i class="fa-solid fa-plus"></i> New kind</button>';
@@ -565,9 +646,9 @@
     return '<form class="ebody" id="cal5-eraform" style="margin-top:10px">' +
       '<div class="fld"><input class="etitle" name="name" placeholder="Era name" required value="' + esc(era ? era.name : '') + '"/></div>' +
       '<div class="two">' +
-        '<div class="fld">Starts<div class="erow"><span class="rl">Y</span><input type="number" name="start_year" required value="' + (era ? era.start_year : '') + '"/><input type="number" name="start_month" min="1" placeholder="M" value="' + (era ? era.start_month : 1) + '"/><input type="number" name="start_day" min="1" placeholder="D" value="' + (era ? era.start_day : 1) + '"/></div></div>' +
+        '<div class="fld">Starts<div class="erow"><span class="rl">Y</span><input type="number" name="start_year" required value="' + esc(era ? era.start_year : '') + '"/><input type="number" name="start_month" min="1" placeholder="M" value="' + esc(era ? era.start_month : 1) + '"/><input type="number" name="start_day" min="1" placeholder="D" value="' + esc(era ? era.start_day : 1) + '"/></div></div>' +
         '<div class="fld">Ends<label class="check"><input type="checkbox" name="ongoing"' + (!era || era.end_year == null ? ' checked' : '') + '/> Ongoing</label>' +
-          '<div class="erow" data-end-fields' + (!era || era.end_year == null ? ' hidden' : '') + '><span class="rl">Y</span><input type="number" name="end_year" value="' + (era && era.end_year != null ? era.end_year : '') + '"/><input type="number" name="end_month" min="1" placeholder="M" value="' + (era && era.end_month != null ? era.end_month : '') + '"/><input type="number" name="end_day" min="1" placeholder="D" value="' + (era && era.end_day != null ? era.end_day : '') + '"/></div></div>' +
+          '<div class="erow" data-end-fields' + (!era || era.end_year == null ? ' hidden' : '') + '><span class="rl">Y</span><input type="number" name="end_year" value="' + esc(era && era.end_year != null ? era.end_year : '') + '"/><input type="number" name="end_month" min="1" placeholder="M" value="' + esc(era && era.end_month != null ? era.end_month : '') + '"/><input type="number" name="end_day" min="1" placeholder="D" value="' + esc(era && era.end_day != null ? era.end_day : '') + '"/></div></div>' +
       '</div>' +
       '<div class="fld"><textarea name="description" rows="2" placeholder="Optional description">' + esc(era && era.description ? era.description : '') + '</textarea></div>' +
       '<div class="efoot"><button type="button" class="btn quiet" data-cancel-era>Cancel</button><span class="sp"></span>' +

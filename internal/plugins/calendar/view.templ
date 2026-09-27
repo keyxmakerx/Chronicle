@@ -59,14 +59,15 @@ templ calendarViewContent(cc *campaigns.CampaignContext, data CalendarViewData) 
 			></div>
 		</div>
 	</div>
-	<!-- No <script src> here: a page templ's own <script> lands inside
-	     <main id="main-content">, which the sidebar's hx-boost swap strips
-	     (tools/check-page-scripts.sh). Both widget scripts are registered
-	     once, unconditionally, in internal/app/routes.go's
-	     pluginBodyScripts — outside the swapped region — and self-gate at
-	     runtime instead: calendar_view.js no-ops without a
-	     data-widget="calendar_view" mount, and calendar_editor.js
-	     additionally requires that mount's data-can-edit="true". -->
+	<!-- No script tag here on purpose: a page templ's own script element
+	     would land inside <main id="main-content">, which the sidebar's
+	     hx-boost swap strips (tools/check-page-scripts.sh). Both widget
+	     scripts are registered once, unconditionally, in
+	     internal/app/routes.go's pluginBodyScripts — outside the swapped
+	     region — and self-gate at runtime instead: calendar_view.js
+	     no-ops without a data-widget="calendar_view" mount, and
+	     calendar_editor.js additionally requires that mount's
+	     data-can-edit="true". -->
 }
 
 // mustMarshalCalendar serializes the calendar (with its eager-loaded
