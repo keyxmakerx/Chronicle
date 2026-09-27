@@ -287,6 +287,37 @@ func TestDB_OccurrenceRSVPsAreIndependentAcrossNights(t *testing.T) {
 	}
 }
 
+// TestDB_SearchByCampaign_ScansScheduledTZ pins SearchByCampaign returning
+// scheduled_tz like every other session read does. Its SELECT/Scan pair had
+// silently dropped the column together — a mock repository can't catch a
+// column missing from both sides of a real query, only a real row can.
+func TestDB_SearchByCampaign_ScansScheduledTZ(t *testing.T) {
+	if testing.Short() {
+		t.Skip("row-level test")
+	}
+	db := newScratchDB(t)
+	campID, ownerID := seedCampaign(t, db)
+	repo := NewSessionRepository(db)
+	ctx := context.Background()
+
+	sessID := seedSession(t, db, campID, ownerID, "Vale of Ash Session")
+	if _, err := db.ExecContext(ctx,
+		`UPDATE sessions SET scheduled_tz = ? WHERE id = ?`, "America/New_York", sessID); err != nil {
+		t.Fatalf("setting scheduled_tz: %v", err)
+	}
+
+	results, err := repo.SearchByCampaign(ctx, campID, "Vale")
+	if err != nil {
+		t.Fatalf("SearchByCampaign: %v", err)
+	}
+	if len(results) != 1 {
+		t.Fatalf("results = %d, want exactly 1", len(results))
+	}
+	if results[0].ScheduledTZ == nil || *results[0].ScheduledTZ != "America/New_York" {
+		t.Errorf("ScheduledTZ = %v, want \"America/New_York\"", results[0].ScheduledTZ)
+	}
+}
+
 // TestDB_SuggestionTokenCannotBeSpentTwiceConcurrently is the suggest-flow's
 // row-level twin of TestDB_SessionRSVPTokenCannotBeSpentTwiceConcurrently:
 // exactly one of two concurrent submissions of the SAME single-use suggest
