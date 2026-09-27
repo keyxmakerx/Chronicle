@@ -242,6 +242,11 @@
 
   CalendarEditor.prototype._renderBar = function () {
     var n = this._selectedKeys().length;
+    // .bar-up tells calendar-view.css's toast rule to lift a toast clear of
+    // the bar (they're both bottom-centered a few px apart) — set on .cal,
+    // not .bbar itself, so a plain CSS sibling/descendant selector can react
+    // to it without needing :has().
+    this.view.calEl.classList.toggle('bar-up', !!n);
     if (!n) { this.bbar.hidden = true; this.bbar.innerHTML = ''; this._closeShiftTray(); return; }
     var canVis = this.view.canAuthorDmOnly;
     this.bbar.hidden = false;

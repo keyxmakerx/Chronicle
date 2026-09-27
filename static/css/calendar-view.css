@@ -475,6 +475,16 @@
 .cal-v5 .toast span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .cal-v5 .toast button{flex:none;font:650 12px/1 var(--sans);color:var(--paper);padding:7px 10px;border-radius:8px;box-shadow:inset 0 0 0 1px oklch(1 0 0 / .28)}
 .cal-v5 .toast button:hover{background:oklch(1 0 0 / .1)}
+/* A toast and the bulk-selection bar are both bottom-centered a few px apart
+   (.toast at 16px, .bbar at 14px); .bar-up (toggled on .cal by
+   calendar_editor.js's _renderBar alongside .bbar's own hidden state) lifts
+   the toast clear of it, reusing the bar-height custom property .btray/.bmore
+   already stack on above the bar. Scoped to the width the two actually share
+   this corner at: below it the toast moves to the top of the screen (the
+   max-width:600px block further down), where it never meets the bar. */
+@media (min-width:601px){
+  .cal-v5 .cal.bar-up .toast{bottom:calc(22px + var(--barH,48px))}
+}
 /* Era card: drops out of the era label's bottom edge. */
 .cal-v5 .flap{width:392px;border-radius:4px 14px 14px 14px;--hg:linear-gradient(180deg,var(--crease),transparent 14px)}
 .cal-v5 .fb{padding:14px 18px 18px}
