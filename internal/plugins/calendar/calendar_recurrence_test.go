@@ -37,10 +37,10 @@ func TestEventOccursOn(t *testing.T) {
 	cal := recurrenceCal()
 
 	tests := []struct {
-		name       string
-		ev         Event
-		y, m, d    int
-		want       bool
+		name    string
+		ev      Event
+		y, m, d int
+		want    bool
 	}{
 		// Non-recurring: only the stored date.
 		{"non-recurring base", Event{Year: 1, Month: 1, Day: 5}, 1, 1, 5, true},
@@ -226,5 +226,122 @@ func TestEventOccursOn_MonthlyIntervalRespectsMax(t *testing.T) {
 	}
 	if plain.OccursOn(cal, 1, 5, 15) {
 		t.Error("plain monthly × 4: the 5th month must be past the cap")
+	}
+}
+
+// TestAbsDayIndexReconciledWithAbsoluteDay pins the V5 fix: absDayIndex's
+// non-real-time branch used to be a leap-naive constant-length sum
+// (year*YearLength()) that diverged from the leap-aware AbsoluteDay by
+// exactly one day per elapsed leap year. It now delegates to AbsoluteDay
+// directly, so the two can never drift apart again.
+func TestAbsDayIndexReconciledWithAbsoluteDay(t *testing.T) {
+	cal := recurrenceCal() // LeapYearEvery: 4, LeapYearOffset: 0 -> year 4, 8, ... are leap.
+
+	// Consecutive days must always advance the index by exactly 1, including
+	// across the year-3 -> year-4 (leap year) boundary.
+	prev := cal.absDayIndex(3, 12, 1)
+	for day := 2; day <= 30; day++ {
+		cur := cal.absDayIndex(3, 12, day)
+		if cur-prev != 1 {
+			t.Fatalf("absDayIndex(3,12,%d)-prev = %d, want 1", day, cur-prev)
+		}
+		prev = cur
+	}
+	if first := cal.absDayIndex(4, 1, 1); first-prev != 1 {
+		t.Fatalf("crossing into year 4 must still advance by exactly 1: got delta %d", first-prev)
+	}
+
+	// The reconciled counter must equal AbsoluteDay exactly, for both
+	// non-leap and leap years -- this equality IS the fix.
+	for _, yr := range []int{1, 4, 5, 8} {
+		for m := 1; m <= 12; m++ {
+			days := cal.MonthDays(m-1, yr)
+			for d := 1; d <= days; d++ {
+				if got, want := cal.absDayIndex(yr, m, d), cal.AbsoluteDay(yr, m, d); got != want {
+					t.Fatalf("absDayIndex(%d,%d,%d) = %d, want %d (AbsoluteDay)", yr, m, d, got, want)
+				}
+			}
+		}
+	}
+
+	// A full leap year (year 4) must span YearLength()+1 days (the +1 leap
+	// day on month index 1) -- the old counter, using the constant
+	// YearLength() everywhere, would have reported YearLength() here too,
+	// silently losing the leap day from the recurrence/weekday counter while
+	// AbsoluteDay's moon-phase counter kept it.
+	if total, want := cal.absDayIndex(5, 1, 1)-cal.absDayIndex(4, 1, 1), cal.YearLength()+1; total != want {
+		t.Errorf("year 4 (a leap year) spans %d days, want %d", total, want)
+	}
+	// A non-leap year (year 1) still spans exactly YearLength() days.
+	if total, want := cal.absDayIndex(2, 1, 1)-cal.absDayIndex(1, 1, 1), cal.YearLength(); total != want {
+		t.Errorf("year 1 (not a leap year) spans %d days, want %d", total, want)
+	}
+}
+
+// TestWeekdayIndex_MonthStartsNewWeek_Harptos pins the Harptos-shaped
+// behavior: with MonthStartsNewWeek, day 1 of every month is always the
+// first weekday, and a day inside an intercalary month belongs to no week at
+// all (-1).
+func TestWeekdayIndex_MonthStartsNewWeek_Harptos(t *testing.T) {
+	// Simplified Harptos shape: two 30-day regular months separated by a
+	// 1-day intercalary festival month, ten-day weeks (a real Harptos has
+	// twelve 30-day months and five intercalary festivals; three months are
+	// enough to exercise the reset-at-every-month-including-after-a-festival
+	// rule without the full calendar).
+	cal := &Calendar{
+		Months: []Month{
+			{Days: 30},
+			{Days: 1, IsIntercalary: true},
+			{Days: 30},
+		},
+		Weekdays:           make([]Weekday, 10),
+		MonthStartsNewWeek: true,
+	}
+
+	tests := []struct {
+		name             string
+		year, month, day int
+		want             int
+	}{
+		{"day 1 of month 1 is always weekday 0", 1, 1, 1, 0},
+		{"day 10 of month 1 is the tenday's last weekday", 1, 1, 10, 9},
+		{"day 11 resets within the same month (the next tenday's day 1)", 1, 1, 11, 0},
+		{"day 30 of month 1 (the third tenday's last day)", 1, 1, 30, 9},
+		{"an intercalary festival day belongs to no week", 1, 2, 1, -1},
+		{"day 1 of month 3 resets to weekday 0, regardless of the festival before it", 1, 3, 1, 0},
+		{"day 10 of month 3", 1, 3, 10, 9},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := cal.WeekdayIndex(tt.year, tt.month, tt.day); got != tt.want {
+				t.Errorf("WeekdayIndex(%d,%d,%d) = %d, want %d", tt.year, tt.month, tt.day, got, tt.want)
+			}
+		})
+	}
+}
+
+// TestWeekdayIndex_ContinuousAcrossMonthBoundary pins the default
+// (MonthStartsNewWeek=false) behavior: weeks run continuously across a month
+// boundary, unlike the Harptos-shaped reset case above.
+func TestWeekdayIndex_ContinuousAcrossMonthBoundary(t *testing.T) {
+	cal := &Calendar{
+		Months: []Month{
+			{Days: 30},
+			{Days: 30},
+		},
+		Weekdays: make([]Weekday, 10), // MonthStartsNewWeek defaults to false.
+	}
+
+	last := cal.WeekdayIndex(1, 1, 30)
+	first := cal.WeekdayIndex(1, 2, 1)
+	if want := (last + 1) % cal.WeekLength(); first != want {
+		t.Errorf("weeks must run continuously across a month boundary: day30=%d, next-month day1=%d, want %d",
+			last, first, want)
+	}
+
+	// A date before the calendar's epoch must not panic or return a
+	// negative index -- WeekdayIndex guards the modulo for exactly this case.
+	if idx := cal.WeekdayIndex(-1, 1, 1); idx < 0 || idx >= cal.WeekLength() {
+		t.Errorf("WeekdayIndex(-1,1,1) = %d, want a value in [0,%d)", idx, cal.WeekLength())
 	}
 }

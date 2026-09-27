@@ -36,6 +36,19 @@ const (
 	// there is no scheduled-job runner, so a timer-fired reminder would need
 	// separate consent.
 	NotifAvailabilityNudge = "availability_nudge"
+
+	// Game-night lifecycle notifications (issue #741 Part C). Each fires only
+	// to members who had already RESPONDED before the change — an untouched
+	// invite carries no expectation to notify anyone of. The event itself
+	// (needs_recheck) always fires; whether a member reads it as urgent is a
+	// UI concern.
+	NotifSessionMoved     = "session_moved"
+	NotifSessionCancelled = "session_cancelled"
+	NotifSessionRestored  = "session_restored"
+	// NotifSessionRescheduleSuggested tells the organizer/co-Director a
+	// member proposed a different time via the emailed "suggest another
+	// time" link.
+	NotifSessionRescheduleSuggested = "session_reschedule_suggested"
 )
 
 // maxProposalOptions caps a proposal at 5 candidate slots (design: 1..5).

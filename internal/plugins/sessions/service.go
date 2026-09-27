@@ -43,14 +43,63 @@ type SessionService interface {
 	// completed, auto-generates the next occurrence and returns it. Returns nil
 	// if no new session was created.
 	UpdateSession(ctx context.Context, id string, input UpdateSessionInput) (*Session, error)
-	DeleteSession(ctx context.Context, id string) error
+	// MoveSession is UpdateSession's entrypoint for the PUT session route: same
+	// partial update, plus — when the stored schedule actually changed on a
+	// session that already has RSVP responses — those responses are flagged
+	// "needs to check again" (never cleared) and the affected user ids are
+	// returned so the handler can notify them.
+	MoveSession(ctx context.Context, id string, input UpdateSessionInput) (*Session, []string, error)
+	// DeleteSession soft-deletes (never hard-deletes — a co-Director/Owner can
+	// restore). Returns the user ids who had already RESPONDED, to notify.
+	DeleteSession(ctx context.Context, id string) ([]string, error)
+	// RestoreSession undoes a soft delete, returning the restored session and
+	// the same "who had responded" list DeleteSession returned, for a
+	// symmetrical re-notify.
+	RestoreSession(ctx context.Context, id string) (*Session, []string, error)
 	UpdateSessionRecap(ctx context.Context, id string, recap, recapHTML *string) error
 	SearchSessions(ctx context.Context, campaignID, query string) ([]map[string]string, error)
 
 	// Attendees / RSVP.
 	InviteAll(ctx context.Context, sessionID string, userIDs []string) error
+	// InviteAllWithStatus is InviteAll generalized to any status — used to
+	// carry a proposal's winning-option yes-voters in as "carried_yes" rather
+	// than plain "invited" (see ConfirmProposalWinner).
+	InviteAllWithStatus(ctx context.Context, sessionID string, userIDs []string, status string) error
 	UpdateRSVP(ctx context.Context, sessionID, userID, status string) error
+	// UpdateRSVPDetailed is UpdateRSVP extended for game nights: an optional
+	// occurrenceDate routes a RECURRING session's answer to its own night
+	// (session_occurrence_rsvps) instead of the whole-series row, defaulting
+	// to the next upcoming night when omitted; note is a patch.Field so
+	// "clear my note" (explicit null) is distinguishable from "don't touch
+	// it" (absent) at this boundary. UpdateRSVP itself is unchanged and keeps
+	// its exact prior behavior — this is an addition, not a replacement.
+	UpdateRSVPDetailed(ctx context.Context, sessionID, userID, status string, occurrenceDate *string, note patch.Field[string]) error
+	// SetExcludedFromCount is the Director's own "leave myself out of the
+	// tally" switch (operator answer #3). Only the session's organizer or the
+	// campaign owner may call it, and only ever on their OWN userID —
+	// isCampaignOwner is the handler's campaign-role check, passed in because
+	// this service never imports the campaigns package.
+	SetExcludedFromCount(ctx context.Context, sessionID, userID string, isCampaignOwner, excluded bool, occurrenceDate *string) error
 	ListAttendees(ctx context.Context, sessionID string) ([]Attendee, error)
+	// ListOccurrenceAttendees is ListAttendees' per-occurrence twin for a
+	// recurring session's one specific night.
+	ListOccurrenceAttendees(ctx context.Context, sessionID, occurrenceDate string) ([]OccurrenceRSVP, error)
+
+	// "Suggest another time" (see ValidateAndRecordSuggestion's doc comment
+	// for the validate-before-consume ordering this fixes).
+	ValidateAndRecordSuggestion(ctx context.Context, tokenStr, suggestedDate string, suggestedTime, note *string) (*RescheduleSuggestion, error)
+
+	// Calendar feed (operator answer #1): a private, replaceable per-member
+	// feed link, campaign-wide-enabled by default.
+	GetOrCreateFeedToken(ctx context.Context, campaignID, userID string) (*CalendarFeedToken, error)
+	ReplaceFeedToken(ctx context.Context, campaignID, userID string) (*CalendarFeedToken, error)
+	IsCalendarFeedEnabled(ctx context.Context, campaignID string) (bool, error)
+	SetCalendarFeedEnabled(ctx context.Context, campaignID string, enabled bool) error
+	// ResolveFeedSessions validates a feed token (checking the campaign-wide
+	// switch) and returns the campaign's upcoming, non-cancelled sessions to
+	// render as an ICS feed.
+	ResolveFeedSessions(ctx context.Context, tokenStr string) (campaignID string, sessions []Session, err error)
+	BuildFeedICS(sessions []Session) string
 
 	// RSVP tokens for email-based responses. Redeem is split into a read-only
 	// validate (GET confirm page) + a state-changing apply (POST) so a mail
@@ -108,9 +157,12 @@ type SessionService interface {
 	// still open.
 	ValidateProposalToken(ctx context.Context, tokenStr string) (*ProposalTokenContext, error)
 	ApplyProposalToken(ctx context.Context, tokenStr string) (*ProposalTokenContext, error)
-	// ConfirmProposalWinner (Scribe+) marks the winning option, closes the
+	// ConfirmProposalWinner (Scribe+ or co-Director) marks the winning option, closes the
 	// proposal, and creates a planned session from the winning UTC instant.
-	ConfirmProposalWinner(ctx context.Context, campaignID, proposalID, optionID, confirmedBy, confirmerTZ string) (*Session, error)
+	// Also returns the user ids who voted "yes" on the WINNING option — see
+	// its own doc comment for why the handler, not this method, decides
+	// every attendee's starting status.
+	ConfirmProposalWinner(ctx context.Context, campaignID, proposalID, optionID, confirmedBy, confirmerTZ string) (*Session, []string, error)
 
 	// Scheduler-scoped notifications. Writes are driven by the handler (which
 	// enumerates members / resolves names); the service owns the
@@ -179,6 +231,7 @@ func (s *sessionService) CreateSession(ctx context.Context, campaignID string, i
 		Summary:             input.Summary,
 		ScheduledDate:       input.ScheduledDate,
 		ScheduledTime:       input.ScheduledTime,
+		ScheduledTZ:         input.ScheduledTZ,
 		CalendarYear:        input.CalendarYear,
 		CalendarMonth:       input.CalendarMonth,
 		CalendarDay:         input.CalendarDay,
@@ -347,9 +400,10 @@ func (s *sessionService) UpdateSession(ctx context.Context, id string, input Upd
 	return nil, nil
 }
 
-// DeleteSession removes a session.
-func (s *sessionService) DeleteSession(ctx context.Context, id string) error {
-	return s.repo.Delete(ctx, id)
+// DeleteSession soft-deletes a session (see game_night_service.go for the
+// full move/delete/restore + needs-recheck logic this now shares).
+func (s *sessionService) DeleteSession(ctx context.Context, id string) ([]string, error) {
+	return s.cancelOrDeleteSession(ctx, id)
 }
 
 // UpdateSessionRecap saves the post-session recap (visible to all members).

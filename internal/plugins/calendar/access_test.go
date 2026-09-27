@@ -18,6 +18,7 @@ import (
 	"net/http/httptest"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/labstack/echo/v4"
 	emw "github.com/labstack/echo/v4/middleware"
@@ -165,6 +166,10 @@ func (f *fakeCalendarSvc) UpdateEra(context.Context, int, string, string, Update
 func (f *fakeCalendarSvc) DeleteEra(context.Context, int, string, string) error { return nil }
 
 func (f *fakeCalendarSvc) SetMoonHidden(context.Context, int, string, string, bool) error { return nil }
+
+func (f *fakeCalendarSvc) PreviewAnchorMove(context.Context, string, string, int, int, int, time.Time) (*AnchorMovePreview, error) {
+	return &AnchorMovePreview{}, nil
+}
 
 // --- Harness ---
 

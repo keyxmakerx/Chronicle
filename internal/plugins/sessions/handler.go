@@ -8,6 +8,7 @@ import (
 	"log/slog"
 	"net/http"
 	"strconv"
+	"strings"
 
 	"github.com/labstack/echo/v4"
 
@@ -29,7 +30,7 @@ type Handler struct {
 	svc          SessionService
 	memberLister campaigns.MemberLister
 	mailer       MailSender
-	baseURL      string // Application base URL for RSVP links (e.g. "https://chronicle.example.com").
+	baseURL      string        // Application base URL for RSVP links (e.g. "https://chronicle.example.com").
 	userDir      UserDirectory // Resolves a user's stored IANA timezone for the availability overlay.
 	// campaignReader is the one-read source of the co-DM grant set the overlay
 	// roster's role column needs. Nil-safe.
@@ -293,7 +294,7 @@ func (h *Handler) UpdateSessionAPI(c echo.Context) error {
 		}
 
 		return c.JSON(http.StatusOK, map[string]string{
-			"status":         "ok",
+			"status":          "ok",
 			"next_session_id": nextSession.ID,
 		})
 	}
@@ -301,9 +302,46 @@ func (h *Handler) UpdateSessionAPI(c echo.Context) error {
 	return c.JSON(http.StatusOK, map[string]string{"status": "ok"})
 }
 
-// DeleteSessionAPI deletes a session.
+// DeleteSessionAPI soft-deletes a session (co-Director/Owner — see routes.go)
+// and, per the operator's "moving or deleting an event that collects RSVPs
+// notifies the people who answered" rule, tells everyone who had already
+// responded. Their answer is kept, not cleared — RestoreSessionAPI below puts
+// it back exactly as it was.
 // DELETE /campaigns/:id/sessions/:sid
 func (h *Handler) DeleteSessionAPI(c echo.Context) error {
+	cc := campaigns.GetCampaignContext(c)
+	sessionID := c.Param("sid")
+
+	sess, err := h.requireSessionInCampaign(c, sessionID, cc.Campaign.ID)
+	if err != nil {
+		return err
+	}
+
+	responded, err := h.svc.DeleteSession(c.Request().Context(), sessionID)
+	if err != nil {
+		return err
+	}
+	if len(responded) > 0 {
+		msg := "\"" + sess.Name + "\" was cancelled."
+		link := "/campaigns/" + cc.Campaign.ID + "/sessions"
+		if nErr := h.svc.NotifyUsers(c.Request().Context(), responded, cc.Campaign.ID, NotifSessionCancelled, msg, link); nErr != nil {
+			slog.Error("notifying responded members of a cancelled session", slog.String("error", nErr.Error()))
+		}
+	}
+
+	if middleware.IsHTMX(c) {
+		c.Response().Header().Set("HX-Redirect",
+			"/campaigns/"+cc.Campaign.ID+"/sessions")
+		return c.NoContent(http.StatusNoContent)
+	}
+	return c.JSON(http.StatusOK, map[string]string{"status": "ok"})
+}
+
+// RestoreSessionAPI undoes a soft delete (co-Director/Owner — see routes.go)
+// and tells everyone who had answered before it was cancelled that it's back
+// on, so a stale "cancelled" notification doesn't stay the last word they saw.
+// POST /campaigns/:id/sessions/:sid/restore
+func (h *Handler) RestoreSessionAPI(c echo.Context) error {
 	cc := campaigns.GetCampaignContext(c)
 	sessionID := c.Param("sid")
 
@@ -311,13 +349,21 @@ func (h *Handler) DeleteSessionAPI(c echo.Context) error {
 		return err
 	}
 
-	if err := h.svc.DeleteSession(c.Request().Context(), sessionID); err != nil {
+	sess, responded, err := h.svc.RestoreSession(c.Request().Context(), sessionID)
+	if err != nil {
 		return err
+	}
+	if len(responded) > 0 {
+		msg := "\"" + sess.Name + "\" is back on."
+		link := "/campaigns/" + cc.Campaign.ID + "/sessions/" + sess.ID
+		if nErr := h.svc.NotifyUsers(c.Request().Context(), responded, cc.Campaign.ID, NotifSessionRestored, msg, link); nErr != nil {
+			slog.Error("notifying responded members of a restored session", slog.String("error", nErr.Error()))
+		}
 	}
 
 	if middleware.IsHTMX(c) {
 		c.Response().Header().Set("HX-Redirect",
-			"/campaigns/"+cc.Campaign.ID+"/sessions")
+			"/campaigns/"+cc.Campaign.ID+"/sessions/"+sess.ID)
 		return c.NoContent(http.StatusNoContent)
 	}
 	return c.JSON(http.StatusOK, map[string]string{"status": "ok"})
@@ -361,25 +407,75 @@ func (h *Handler) RSVPSession(c echo.Context) error {
 	}
 
 	status := c.FormValue("status")
+	// note/occurrenceDate are an OPT-IN extension (Part C: game-night RSVP):
+	// a caller that never sends them keeps hitting the exact old path
+	// (UpdateRSVP, session_attendees, unchanged for every existing session,
+	// recurring or not). Only a caller that explicitly sends one of them
+	// engages UpdateRSVPDetailed, so no shipped caller's behavior changes.
+	var note patch.Field[string]
+	var occurrenceDate *string
 	if status == "" {
 		var req struct {
-			Status string `json:"status"`
+			Status         string              `json:"status"`
+			Note           patch.Field[string] `json:"note"`
+			OccurrenceDate *string             `json:"occurrenceDate"`
 		}
 		if err := json.NewDecoder(c.Request().Body).Decode(&req); err == nil {
 			status = req.Status
+			note = req.Note
+			occurrenceDate = req.OccurrenceDate
 		}
 	}
 
-	if err := h.svc.UpdateRSVP(c.Request().Context(), sessionID, userID, status); err != nil {
+	var err error
+	if note.Present() || occurrenceDate != nil {
+		err = h.svc.UpdateRSVPDetailed(c.Request().Context(), sessionID, userID, status, occurrenceDate, note)
+	} else {
+		err = h.svc.UpdateRSVP(c.Request().Context(), sessionID, userID, status)
+	}
+	if err != nil {
 		return c.JSON(apperror.SafeCode(err), map[string]string{"error": apperror.SafeMessage(err)})
 	}
 
-	if middleware.IsHTMX(c) {
+	// A per-occurrence answer has no session_attendees row to re-render from
+	// (see UpdateRSVPDetailed's doc comment) — the occurrence roster fragment
+	// is a future UI's job, not built here (documented gap).
+	if occurrenceDate == nil && middleware.IsHTMX(c) {
 		// Re-render the attendee list.
 		attendees, _ := h.svc.ListAttendees(c.Request().Context(), sessionID)
 		csrfToken := middleware.GetCSRFToken(c)
 		return middleware.Render(c, http.StatusOK,
 			AttendeeList(cc, sessionID, attendees, csrfToken, userID))
+	}
+	return c.JSON(http.StatusOK, map[string]string{"status": "ok"})
+}
+
+// SetRSVPExcludedAPI is the Director's own "leave myself out of the tally"
+// switch (operator answer #3: the Director counts like any member, with a
+// switch to leave themselves out). Self-only and organizer/owner-only — the
+// service enforces that, this handler just passes the caller's own id and
+// campaign role through.
+// PUT /campaigns/:id/sessions/:sid/rsvp-exclude
+func (h *Handler) SetRSVPExcludedAPI(c echo.Context) error {
+	cc := campaigns.GetCampaignContext(c)
+	sessionID := c.Param("sid")
+	userID := auth.GetUserID(c)
+
+	if _, err := h.requireSessionInCampaign(c, sessionID, cc.Campaign.ID); err != nil {
+		return err
+	}
+
+	var req struct {
+		Excluded       bool    `json:"excluded"`
+		OccurrenceDate *string `json:"occurrenceDate"`
+	}
+	if err := json.NewDecoder(c.Request().Body).Decode(&req); err != nil {
+		return apperror.NewBadRequest("invalid request")
+	}
+
+	isOwner := cc.MemberRole >= campaigns.RoleOwner
+	if err := h.svc.SetExcludedFromCount(c.Request().Context(), sessionID, userID, isOwner, req.Excluded, req.OccurrenceDate); err != nil {
+		return err
 	}
 	return c.JSON(http.StatusOK, map[string]string{"status": "ok"})
 }
@@ -657,6 +753,152 @@ button{font:inherit;font-weight:600;padding:.65rem 1.6rem;border:0;border-radius
 <h1>` + html.EscapeString(title) + `</h1><p>` + html.EscapeString(message) + `</p>
 <form method="POST" action="` + html.EscapeString(actionURL) + `"><input type="hidden" name="csrf_token" value="` + html.EscapeString(csrfToken) + `"><button type="submit">` + html.EscapeString(confirmLabel) + `</button></form>
 </div></body></html>`
+}
+
+// --- Calendar feed (operator answer #1: a private, replaceable per-member
+// link into the member's own calendar app, on for every campaign by default,
+// owner can switch off) ---
+
+// GetFeedSettingsAPI reports whether this campaign's calendar feed is on.
+// GET /campaigns/:id/sessions/feed-settings
+func (h *Handler) GetFeedSettingsAPI(c echo.Context) error {
+	cc := campaigns.GetCampaignContext(c)
+	enabled, err := h.svc.IsCalendarFeedEnabled(c.Request().Context(), cc.Campaign.ID)
+	if err != nil {
+		return err
+	}
+	return c.JSON(http.StatusOK, map[string]bool{"enabled": enabled})
+}
+
+// SetFeedSettingsAPI is the owner's campaign-wide kill switch.
+// PUT /campaigns/:id/sessions/feed-settings
+func (h *Handler) SetFeedSettingsAPI(c echo.Context) error {
+	cc := campaigns.GetCampaignContext(c)
+	var req struct {
+		Enabled bool `json:"enabled"`
+	}
+	if err := json.NewDecoder(c.Request().Body).Decode(&req); err != nil {
+		return apperror.NewBadRequest("invalid request")
+	}
+	if err := h.svc.SetCalendarFeedEnabled(c.Request().Context(), cc.Campaign.ID, req.Enabled); err != nil {
+		return err
+	}
+	return c.JSON(http.StatusOK, map[string]string{"status": "ok"})
+}
+
+// GetFeedTokenAPI returns (creating on first call) the caller's own private
+// feed URL.
+// POST /campaigns/:id/sessions/feed/token
+func (h *Handler) GetFeedTokenAPI(c echo.Context) error {
+	cc := campaigns.GetCampaignContext(c)
+	userID := auth.GetUserID(c)
+	tok, err := h.svc.GetOrCreateFeedToken(c.Request().Context(), cc.Campaign.ID, userID)
+	if err != nil {
+		return err
+	}
+	return c.JSON(http.StatusOK, map[string]string{"url": "/sessions/feed/" + tok.Token + ".ics"})
+}
+
+// ReplaceFeedTokenAPI mints a new token and drops the old one at once — "if
+// it gets out, replace it: the old link stops working immediately."
+// POST /campaigns/:id/sessions/feed/token/replace
+func (h *Handler) ReplaceFeedTokenAPI(c echo.Context) error {
+	cc := campaigns.GetCampaignContext(c)
+	userID := auth.GetUserID(c)
+	tok, err := h.svc.ReplaceFeedToken(c.Request().Context(), cc.Campaign.ID, userID)
+	if err != nil {
+		return err
+	}
+	return c.JSON(http.StatusOK, map[string]string{"url": "/sessions/feed/" + tok.Token + ".ics"})
+}
+
+// GameNightFeedICS serves one member's private game-night feed as an ICS
+// subscription. Public — the token IS the credential, mirroring /rsvp/:token
+// — so an unknown token and a campaign-disabled feed both answer a plain 404
+// rather than distinguishing "wrong token" from "turned off" to a stranger.
+// GET /sessions/feed/:token(.ics)
+func (h *Handler) GameNightFeedICS(c echo.Context) error {
+	tokenStr := strings.TrimSuffix(c.Param("token"), ".ics")
+	_, sessions, err := h.svc.ResolveFeedSessions(c.Request().Context(), tokenStr)
+	if err != nil {
+		return c.String(http.StatusNotFound, "not found")
+	}
+	c.Response().Header().Set("Content-Type", "text/calendar; charset=utf-8")
+	return c.String(http.StatusOK, h.svc.BuildFeedICS(sessions))
+}
+
+// --- "Suggest another time" (the third RSVP email-link fix: the token is
+// consumed only AFTER the suggestion validates, never before) ---
+
+// RedeemSuggestToken shows the suggest-a-time form for an emailed
+// "Suggest another time" link. Read-only — nothing is written until the form
+// is submitted, matching every other token route's GET-confirm/POST-apply
+// split (a mail scanner's background GET must never act).
+// GET /rsvp/:token/suggest
+func (h *Handler) RedeemSuggestToken(c echo.Context) error {
+	tokenStr := c.Param("token")
+	token, err := h.svc.ValidateRSVPToken(c.Request().Context(), tokenStr)
+	if err != nil || token.Action != RSVPActionSuggest {
+		return c.HTML(http.StatusOK, rsvpResultHTML("Invalid Link",
+			"This link is invalid, has expired, or has already been used.", false))
+	}
+	return c.HTML(http.StatusOK, suggestFormHTML(
+		fmt.Sprintf("/rsvp/%s/suggest", tokenStr), middleware.GetCSRFToken(c)))
+}
+
+// ApplySuggestToken records the suggestion — see
+// SessionService.ValidateAndRecordSuggestion for the validate-before-consume
+// ordering — and tells the organizer.
+// POST /rsvp/:token/suggest
+func (h *Handler) ApplySuggestToken(c echo.Context) error {
+	tokenStr := c.Param("token")
+	date := c.FormValue("date")
+	var timeVal, note *string
+	if v := c.FormValue("time"); v != "" {
+		timeVal = &v
+	}
+	if v := c.FormValue("note"); v != "" {
+		note = &v
+	}
+
+	suggestion, err := h.svc.ValidateAndRecordSuggestion(c.Request().Context(), tokenStr, date, timeVal, note)
+	if err != nil {
+		msg := apperror.UserMessage(err, "This link is invalid or has expired.")
+		return c.HTML(http.StatusOK, rsvpResultHTML("Suggestion Failed", msg, false))
+	}
+
+	if sess, sErr := h.svc.GetSession(c.Request().Context(), suggestion.SessionID); sErr == nil && sess != nil {
+		msg := fmt.Sprintf("A player suggested a different time for %q.", sess.Name)
+		link := "/campaigns/" + sess.CampaignID + "/sessions/" + sess.ID
+		if nErr := h.svc.NotifyUsers(c.Request().Context(), []string{sess.CreatedBy}, sess.CampaignID,
+			NotifSessionRescheduleSuggested, msg, link); nErr != nil {
+			slog.Error("notifying organizer of a suggested time", slog.String("error", nErr.Error()))
+		}
+	}
+
+	return c.HTML(http.StatusOK, rsvpResultHTML("Suggestion Sent",
+		"Thanks — the organizer has been told. You can close this page.", true))
+}
+
+// suggestFormHTML renders the "suggest another time" form, matching
+// tokenConfirmHTML/rsvpResultHTML's minimal inline-styled page.
+func suggestFormHTML(actionURL, csrfToken string) string {
+	return `<!DOCTYPE html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Suggest another time - Chronicle</title>
+<style>body{font-family:system-ui;display:flex;justify-content:center;align-items:center;min-height:100vh;margin:0;background:#f8f9fa}
+.card{text-align:center;padding:2.5rem;border-radius:12px;background:#fff;box-shadow:0 2px 12px rgba(0,0,0,.08);max-width:360px;width:100%}
+h1{font-size:1.25rem;margin:0 0 .5rem}p{color:#666;margin:0 0 1.25rem;font-size:.9rem}
+label{display:block;text-align:left;font-size:.8rem;font-weight:600;margin:.75rem 0 .25rem}
+input,textarea{width:100%;box-sizing:border-box;padding:.5rem;border:1px solid #ddd;border-radius:6px;font:inherit}
+button{margin-top:1.25rem;font:inherit;font-weight:600;padding:.65rem 1.6rem;border:0;border-radius:8px;background:#6366f1;color:#fff;cursor:pointer;width:100%}</style></head><body>
+<div class="card"><h1>Suggest another time</h1><p>Pick a date and, if you know it, a time. The organizer will be told — this does not change your own answer.</p>
+<form method="POST" action="` + html.EscapeString(actionURL) + `">
+<input type="hidden" name="csrf_token" value="` + html.EscapeString(csrfToken) + `">
+<label for="sug-date">Date</label><input id="sug-date" type="date" name="date" required>
+<label for="sug-time">Time (optional)</label><input id="sug-time" type="time" name="time">
+<label for="sug-note">Note (optional)</label><textarea id="sug-note" name="note" maxlength="140" rows="2"></textarea>
+<button type="submit">Send suggestion</button>
+</form></div></body></html>`
 }
 
 // SidebarRSVP returns an HTMX fragment showing planned sessions with RSVP statuses.
