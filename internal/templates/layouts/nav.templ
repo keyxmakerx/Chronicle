@@ -257,9 +257,9 @@ templ navRowInner(row NavRowView) {
 		<i class="fa-solid fa-arrow-up-right-from-square nav-ext" aria-hidden="true"></i>
 	}
 	if row.Hidden {
-		<span class="nav-hid" title="Hidden from players">
+		<span class="nav-hid" title="Hidden from players' sidebar. It still opens from a link.">
 			<i class="fa-solid fa-eye-slash" aria-hidden="true"></i>
-			<span class="sr-only">(hidden from players)</span>
+			<span class="sr-only">(hidden from players' sidebar)</span>
 		</span>
 	}
 	if NavHasRing(ctx, row.Key) {

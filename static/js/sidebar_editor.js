@@ -322,24 +322,43 @@
     return b;
   }
 
+  // Hiding a row changes only players' sidebar; the page still opens from a
+  // link. The eye and every hidden row say so, and the editor points to a
+  // page's visibility for real privacy.
+  var HIDDEN_NOTE = "Hidden from players' sidebar. It still opens from a link.";
+  var PRIVACY_HINT = "Hiding changes only players' sidebar. To keep a page private, set its visibility on the page.";
+
   function eyeButton(row) {
-    var n = nameOf(row), label = row.hidden ? 'Show ' + n + ' to players' : 'Hide ' + n + ' from players';
+    var n = nameOf(row);
+    var label = row.hidden ? 'Show ' + n + " in players' sidebar" : 'Hide ' + n + " from players' sidebar";
     var b = el('button', 'nav-eb nav-eye', {
       type: 'button', 'data-act': 'hide', 'data-k': row.key, 'data-fk': 'e:' + row.key,
-      'aria-pressed': String(!!row.hidden), 'aria-label': label, title: label
+      'aria-pressed': String(!!row.hidden), 'aria-label': label,
+      title: row.hidden ? "Show in players' sidebar" : "Hide from players' sidebar. It still opens from a link."
     });
     b.appendChild(faIcon(row.hidden ? 'fa-eye-slash' : 'fa-eye'));
     return b;
   }
 
+  function hiddenNote() {
+    return el('span', 'nav-ed-note', null, HIDDEN_NOTE);
+  }
+
   function editRow(row, sec) {
-    var r = el('div', 'nav-row nav-ed' + (row.hidden ? ' is-hidden' : '') + (row.kind === 'link' ? ' nav-ed-link' : ''), {
+    var r = el('div', 'nav-row nav-ed' + (row.hidden ? ' is-hidden has-note' : '') + (row.kind === 'link' ? ' nav-ed-link' : ''), {
       'data-drag': row.key, 'data-flip': 'n:' + row.key
     });
     r.appendChild(handle(row.key, nameOf(row)));
     r.appendChild(rowIcon(row));
     if (row.kind !== 'link') {
-      r.appendChild(el('span', 'nav-lb', null, row.label));
+      if (row.hidden) {
+        var text = el('span', 'nav-ed-text');
+        text.appendChild(el('span', 'nav-lb', null, row.label));
+        text.appendChild(hiddenNote());
+        r.appendChild(text);
+      } else {
+        r.appendChild(el('span', 'nav-lb', null, row.label));
+      }
       r.appendChild(pinButton(row, sec.id === 'pinned'));
       r.appendChild(eyeButton(row));
       return r;
@@ -367,6 +386,7 @@
     x.appendChild(faIcon('fa-xmark'));
     line.appendChild(x);
     r.appendChild(line);
+    if (row.hidden) r.appendChild(hiddenNote());
     return r;
   }
 
@@ -436,6 +456,15 @@
       wrap.appendChild(body);
       list.appendChild(wrap);
     });
+    var anyHidden = S.draft.sections.some(function (sec) {
+      return shownRows(sec).some(function (r) { return r.hidden; });
+    });
+    if (anyHidden) {
+      var hint = el('div', 'nav-ed-hint', { 'data-flip': 'hint' });
+      hint.appendChild(faIcon('fa-circle-info'));
+      hint.appendChild(el('span', null, null, PRIVACY_HINT));
+      list.appendChild(hint);
+    }
     list.appendChild(addButton('newsec', 'New section', 'fa-plus'));
     list.appendChild(addButton('newlink', 'New link', 'fa-link'));
     var tray = offTray(S.saved);
@@ -788,8 +817,8 @@
         var hid = !loc.row.hidden;
         change(function (d) { findRow(d, key).row.hidden = hid; }, {
           focus: 'e:' + key,
-          msg: hid ? nameOf(loc.row) + ' is hidden from players. You still see it, marked.'
-            : nameOf(loc.row) + ' is visible to players again.'
+          msg: hid ? nameOf(loc.row) + " is hidden from players' sidebar. It still opens from a link; set its visibility to keep it private."
+            : nameOf(loc.row) + " is back in players' sidebar."
         });
         break;
       }

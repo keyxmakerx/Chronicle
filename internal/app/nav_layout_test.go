@@ -300,7 +300,8 @@ func TestSidebar_PlayerHTMLHasNoHiddenRow(t *testing.T) {
 			t.Errorf("the owner's sidebar is missing %q", want)
 		}
 	}
-	if got := strings.Count(ownerHTML, "(hidden from players)"); got != 3 {
+	// The mark says hiding is about the sidebar only.
+	if got := strings.Count(ownerHTML, "(hidden from players' sidebar)"); got != 3 {
 		t.Errorf("the owner's sidebar marks %d rows hidden, want 3", got)
 	}
 }
