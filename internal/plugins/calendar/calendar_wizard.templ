@@ -64,7 +64,6 @@ templ wizardStartBody(campaignID string) {
 			hx-target="#calv5-wizard-root"
 			hx-swap="outerHTML"
 		>
-			<span class="calv5-ti"><i class="fa-solid fa-book i"></i></span>
 			<b>Start from a preset</b>
 			<span>One of Chronicle's shipped calendars — ready to use, easy to adjust later.</span>
 		</button>
@@ -75,13 +74,11 @@ templ wizardStartBody(campaignID string) {
 			hx-target="#calv5-wizard-root"
 			hx-swap="outerHTML"
 		>
-			<span class="calv5-ti"><i class="fa-solid fa-file-import i"></i></span>
 			<b>Import a file</b>
 			<span>Bring over a calendar from Simple Calendar, Calendaria, Fantasy-Calendar or a Chronicle export.</span>
 		</button>
 	</div>
 	<div class="calv5-reassure">
-		<i class="fa-solid fa-circle-info i"></i>
 		<span>Nothing is created until you confirm on the last step — you can back out any time.</span>
 	</div>
 }
@@ -125,7 +122,7 @@ templ wizardPresetsBody(campaignID string, presets []presetCardData) {
 			hx-target="#calv5-wizard-root"
 			hx-swap="outerHTML"
 		>
-			<i class="fa-solid fa-arrow-left"></i> Back
+			Back
 		</button>
 	</div>
 }
@@ -156,7 +153,6 @@ templ wizardImportBody(campaignID, csrfToken, formError string) {
 			@dragleave.prevent="over=false"
 			@drop.prevent="over=false; $refs.calv5File.files=$event.dataTransfer.files; fileName=$event.dataTransfer.files[0]?.name||''"
 		>
-			<i class="fa-solid fa-cloud-arrow-up i"></i>
 			<b>Drop a calendar file here</b>
 			<small>or choose one below</small>
 			<input
@@ -169,7 +165,6 @@ templ wizardImportBody(campaignID, csrfToken, formError string) {
 				@change="fileName=$event.target.files[0]?.name||''"
 			/>
 			<div class="calv5-fchip" x-show="fileName" x-cloak>
-				<i class="fa-solid fa-file-lines i"></i>
 				<span x-text="fileName"></span>
 			</div>
 		</div>
@@ -181,7 +176,7 @@ templ wizardImportBody(campaignID, csrfToken, formError string) {
 				hx-target="#calv5-wizard-root"
 				hx-swap="outerHTML"
 			>
-				<i class="fa-solid fa-arrow-left"></i> Back
+				Back
 			</button>
 			<span class="sp" style="flex:1"></span>
 			<i id="calv5-import-spinner" class="fa-solid fa-spinner fa-spin htmx-indicator" aria-hidden="true"></i>
@@ -279,16 +274,16 @@ templ wizardReviewBody(campaignID, source, presetName, importJSON, csrfToken, ba
 					<div class="calv5-rgrp">
 						<h4>Structure</h4>
 						<ul>
-							<li><b>{ fmt.Sprintf("%d", len(ir.Months)) }</b> months</li>
-							<li><b>{ fmt.Sprintf("%d", len(ir.Weekdays)) }</b> weekdays</li>
-							<li><b>{ fmt.Sprintf("%d", len(ir.Seasons)) }</b> seasons</li>
+							<li><b>{ fmt.Sprintf("%d", len(ir.Months)) }</b> { nounFor(len(ir.Months), "month", "months") }</li>
+							<li><b>{ fmt.Sprintf("%d", len(ir.Weekdays)) }</b> { nounFor(len(ir.Weekdays), "weekday", "weekdays") }</li>
+							<li><b>{ fmt.Sprintf("%d", len(ir.Seasons)) }</b> { nounFor(len(ir.Seasons), "season", "seasons") }</li>
 						</ul>
 					</div>
 					<div class="calv5-rgrp">
 						<h4>Sky &amp; eras</h4>
 						<ul>
-							<li><b>{ fmt.Sprintf("%d", len(ir.Moons)) }</b> moons</li>
-							<li><b>{ fmt.Sprintf("%d", len(ir.Eras)) }</b> eras</li>
+							<li><b>{ fmt.Sprintf("%d", len(ir.Moons)) }</b> { nounFor(len(ir.Moons), "moon", "moons") }</li>
+							<li><b>{ fmt.Sprintf("%d", len(ir.Eras)) }</b> { nounFor(len(ir.Eras), "era", "eras") }</li>
 						</ul>
 					</div>
 					<div class="calv5-rgrp">
@@ -302,12 +297,12 @@ templ wizardReviewBody(campaignID, source, presetName, importJSON, csrfToken, ba
 		</div>
 		<div style="margin-top:18px;display:flex;gap:8px;align-items:center">
 			<button type="button" class="btn quiet" hx-get={ backURL } hx-target="#calv5-wizard-root" hx-swap="outerHTML">
-				<i class="fa-solid fa-arrow-left"></i> Back
+				Back
 			</button>
 			<span class="sp" style="flex:1"></span>
 			<i id="calv5-review-spinner" class="fa-solid fa-spinner fa-spin htmx-indicator" aria-hidden="true"></i>
 			<button id="calv5-review-submit" type="submit" class="btn primary" x-bind:disabled="!m || !d">
-				<i class="fa-solid fa-check"></i> Create calendar
+				Create calendar
 			</button>
 		</div>
 	</form>

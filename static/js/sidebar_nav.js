@@ -12,14 +12,17 @@
  *
  * Motion moves only transform and opacity. Content is laid out at its final
  * size first and never revealed by a moving clip; the ring is one element
- * that glides between rows, never a copy. Under reduced motion everything
- * crossfades.
+ * that moves between rows, never a copy, and fades in where it lands rather
+ * than travelling: a glide from a far row swept it across every row between.
+ * Under reduced motion everything crossfades.
  */
 (function () {
   'use strict';
 
   var FOLD_MS = 280;
-  var GLIDE_MS = 360;
+  // A closing section's rows fade out this fast, so none are left showing
+  // below a follower shorter than the section (Manage above a folded Admin).
+  var FADE_OUT_MS = 120;
   var EASE = 'cubic-bezier(.2,.8,.2,1)';
   var EASE_OUT = 'cubic-bezier(.16,1,.3,1)';
   var COOKIE = 'chronicle_nav_folds';
@@ -148,7 +151,7 @@
     var after = followers(body), anims = [];
     var rows = foldContent(body);
     for (var i = 0; i < rows.length; i++) {
-      anims.push(play(rows[i], [{ opacity: 1 }, { opacity: 0 }], { duration: FOLD_MS * 0.7, easing: 'ease-in', fill: 'forwards' }));
+      anims.push(play(rows[i], [{ opacity: 1 }, { opacity: 0 }], { duration: FADE_OUT_MS, easing: 'ease-out', fill: 'forwards' }));
     }
     // The rows below slide up over the closing section, like a drawer shutting.
     var lead = null;
@@ -259,36 +262,9 @@
       return;
     }
     if (ring.parentElement === target) return;
-    var from = shown(ring.parentElement) ? ring.getBoundingClientRect() : null;
-
-    if (animate && from && reduced()) {
-      // Reduced motion: the same ring fades out where it was, then fades in
-      // on its new row.
-      var out = play(ring, [{ opacity: 1 }, { opacity: 0 }], { duration: 120, easing: 'ease-out', fill: 'forwards' });
-      whenDone(out, function () {
-        target.appendChild(ring);
-        keepPhase(ring);
-        if (out) out.cancel();
-        play(ring, [{ opacity: 0 }, { opacity: 1 }], { duration: 180, easing: 'ease-out' });
-      });
-      return;
-    }
-
     target.appendChild(ring);
     keepPhase(ring);
-    if (!animate) return;
-    var to = ring.getBoundingClientRect();
-    if (!from || Math.abs(from.width - to.width) > 1 || Math.abs(from.height - to.height) > 1) {
-      play(ring, [{ opacity: 0 }, { opacity: 1 }], { duration: 220, easing: 'ease-out' });
-      return;
-    }
-    // Same size: glide from where it was, dimmed while it travels.
-    ring.classList.add('is-gliding');
-    var glide = play(ring, [
-      { transform: 'translate(' + (from.left - to.left) + 'px,' + (from.top - to.top) + 'px)' },
-      { transform: 'none' }
-    ], { duration: GLIDE_MS, easing: EASE });
-    whenDone(glide, function () { ring.classList.remove('is-gliding'); });
+    if (animate) play(ring, [{ opacity: 0 }, { opacity: 1 }], { duration: 200, easing: 'ease-out' });
   }
 
   function restoreTrail(row) {
