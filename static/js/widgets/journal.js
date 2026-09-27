@@ -199,10 +199,33 @@
     Promise.all([this.loadMembers(), this.loadIndex()]).then(function () {
       if (self.dead) return;
       self.renderList();
+      self.applyLinksParam();
       var want = self.deepId || load(self.prefix + 'last', '');
       if (want) self.open(want, { quiet: !self.deepId, keepPane: !self.deepId });
     });
     this.connect();
+  };
+
+  /**
+   * ?links=<id> opens the list narrowed to notes linking to a page or note
+   * (the Jot panel's "see them in the Journal"). The token is labelled from
+   * what the viewer's own list already shows, never looked up.
+   */
+  Journal.prototype.applyLinksParam = function () {
+    var id = '';
+    try { id = new URLSearchParams(window.location.search).get('links') || ''; } catch (e) { return; }
+    if (!ID_RE.test(id)) return;
+    var label = '';
+    var row = this.byId[id];
+    if (row && !row.isFolder) label = row.title;
+    for (var i = 0; !label && i < this.notes.length; i++) {
+      var links = this.notes[i].links || [];
+      for (var k = 0; k < links.length; k++) {
+        if (links[k].kind === 'page' && links[k].id === id && links[k].label) { label = links[k].label; break; }
+      }
+    }
+    this.setFieldTokens([{ field: 'linksTo', value: id, kw: 'links', label: label || 'this page' }]);
+    try { window.history.replaceState(window.history.state, '', window.location.pathname); } catch (e) { /* stays */ }
   };
 
   // --- Data ------------------------------------------------------------------
