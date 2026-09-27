@@ -25,9 +25,11 @@ templ CalendarViewPage(cc *campaigns.CampaignContext, data CalendarViewData) {
 
 // calendarViewContent renders the breadcrumbs, the calendar-view.css
 // stylesheet (loaded only on this page, same reasoning as maps.templ
-// loading Leaflet's CSS/JS inline rather than globally), the widget's mount
-// point, and the widget scripts. The editor script loads only for a viewer
-// CanEdit — mirrors maps.templ's `if data.IsScribe` for map_drawing_tools.js.
+// loading Leaflet's CSS/JS inline rather than globally) and the widget's
+// mount point. The widget scripts themselves are NOT loaded here — see the
+// comment at the bottom of this function for why a page templ can't
+// <script src> them, and internal/app/routes.go's pluginBodyScripts for
+// where they actually load.
 templ calendarViewContent(cc *campaigns.CampaignContext, data CalendarViewData) {
 	<link rel="stylesheet" href={ layouts.AssetURL("/static/css/calendar-view.css") }/>
 	<div class="max-w-5xl mx-auto py-6 px-4">
@@ -57,15 +59,14 @@ templ calendarViewContent(cc *campaigns.CampaignContext, data CalendarViewData) 
 			></div>
 		</div>
 	</div>
-	<!-- defer, not inline like maps.templ's Leaflet init: this widget registers
-	     itself via Chronicle.register (Chronicle is created by boot.js), and
-	     deferred scripts run in document order after parsing, so this must
-	     come after boot.js's <script defer> in base.templ — a synchronous
-	     script here would run during body parsing, before boot.js exists. -->
-	<script src={ layouts.AssetURL("/static/js/widgets/calendar_view.js") } defer></script>
-	if data.CanEdit {
-		<script src={ layouts.AssetURL("/static/js/widgets/calendar_editor.js") } defer></script>
-	}
+	<!-- No <script src> here: a page templ's own <script> lands inside
+	     <main id="main-content">, which the sidebar's hx-boost swap strips
+	     (tools/check-page-scripts.sh). Both widget scripts are registered
+	     once, unconditionally, in internal/app/routes.go's
+	     pluginBodyScripts — outside the swapped region — and self-gate at
+	     runtime instead: calendar_view.js no-ops without a
+	     data-widget="calendar_view" mount, and calendar_editor.js
+	     additionally requires that mount's data-can-edit="true". -->
 }
 
 // mustMarshalCalendar serializes the calendar (with its eager-loaded
