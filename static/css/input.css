@@ -3218,7 +3218,7 @@
     .jnl .nl-tbtn span, .jnl .nl-newbody span { display: none; }
     .jnl .nl-tbtn { padding: 0 8px; }
     .jnl .nl-newbody { padding: 0 10px; }
-    .jnl .ed-hint { display: none; }
+    .jnl .ed-hint { flex-basis: 100%; text-align: right; }
   }
 }
 
