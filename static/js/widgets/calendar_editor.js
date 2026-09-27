@@ -42,6 +42,39 @@
     });
   }
 
+  // The compact event form (below) only ever edits plain text — it has no
+  // rich-text editor — so reading an existing rich description back into it
+  // strips the stored HTML down to text rather than showing markup.
+  function stripHtml(html) {
+    if (!html) return '';
+    var div = document.createElement('div');
+    div.innerHTML = html;
+    return div.textContent || div.innerText || '';
+  }
+
+  // existing.description is ProseMirror JSON whenever existing.description_html
+  // is set (Event's doc comment, model.go) and plain text otherwise — the same
+  // rule showGlance() in calendar_view.js reads. Showing the JSON verbatim in a
+  // plain textarea would be unreadable and, worse, invites saving it back as
+  // "plain text" that is actually still-JSON-shaped garbage.
+  function descriptionText(existing) {
+    if (!existing) return '';
+    if (existing.description_html) return stripHtml(existing.description_html);
+    return existing.description || '';
+  }
+
+  // Rebuilds description_html from the textarea's plain text on save, the same
+  // paragraph-per-blank-line shape entity_notes.js's bodyToHTML uses, so the
+  // sanitizer (bluemonday's UGC policy, internal/sanitize) has plain <p>/<br>
+  // to accept rather than raw text with no markup at all.
+  function bodyToHTML(text) {
+    if (!text) return '';
+    var paragraphs = text.split(/\n{2,}/);
+    return paragraphs.map(function (p) {
+      return '<p>' + esc(p).replace(/\n/g, '<br>') + '</p>';
+    }).join('');
+  }
+
   function attach(view) {
     var editor = new CalendarEditor(view);
     editor.install();
@@ -377,7 +410,7 @@
     form.style.marginTop = '10px';
     form.innerHTML =
       '<div class="fld"><input class="etitle" name="name" placeholder="Event name" required value="' + esc(existing ? existing.name : '') + '"/></div>' +
-      '<div class="fld"><textarea name="description" rows="2" placeholder="Optional description">' + esc(existing ? existing.description || '' : '') + '</textarea></div>' +
+      '<div class="fld"><textarea name="description" rows="2" placeholder="Optional description">' + esc(descriptionText(existing)) + '</textarea></div>' +
       '<div class="fld">Kind<div class="chips" id="cal5-edkinds">' + this._kindChipsHTML(kinds, existing ? existing.kind_id : null) + '</div></div>' +
       (view.role >= ROLE_OWNER ? '<div id="cal5-nkf-mount"></div>' : '') +
       (view.canAuthorDmOnly ? '<div class="vis" role="group" aria-label="Visibility">' +
@@ -400,9 +433,19 @@
 
     form.addEventListener('submit', function (e) {
       e.preventDefault();
+      // description and description_html always move together: description
+      // stays the honest plain text this textarea can actually edit, and
+      // description_html is rebuilt from that same text so the view (which
+      // prefers description_html — calendar_view.js's _evpHTML/showGlance)
+      // renders what was typed instead of a stale rich-text render left over
+      // from before this save (description_html is patch.Field, so leaving
+      // it out of the body would PRESERVE that old HTML, not clear it —
+      // UpdateEventInput's doc comment, model.go).
+      var descText = form.description.value;
       var body = {
         name: form.name.value.trim(),
-        description: form.description.value || null,
+        description: descText || null,
+        description_html: descText ? bodyToHTML(descText) : null,
         kind_id: form.dataset.kindId ? +form.dataset.kindId : null
       };
       // This compact form has no date or time picker, so it must never
