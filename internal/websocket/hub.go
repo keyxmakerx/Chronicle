@@ -182,8 +182,9 @@ func (h *Hub) Run() {
 				// list path's SQL predicate (maps' ListMarkers/ListDrawings)
 				// or a marker/drawing leaks more or less visibility over the
 				// wire than the HTTP list shows. DM-equivalent clients
-				// bypass this too, matching HTTP.
-				if !permissions.CanSeeDmOnly(client.Role, client.IsDmGranted) && !msg.AudienceAllows(client.UserID) {
+				// bypass this too, matching HTTP — unless the message is
+				// StrictAudience (content private even from the GM).
+				if (msg.StrictAudience || !permissions.CanSeeDmOnly(client.Role, client.IsDmGranted)) && !msg.AudienceAllows(client.UserID) {
 					continue
 				}
 

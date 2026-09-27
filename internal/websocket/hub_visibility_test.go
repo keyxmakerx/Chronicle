@@ -183,3 +183,60 @@ func TestHubBroadcast_DrawingRuleDeniesPlayer(t *testing.T) {
 		t.Errorf("denied Player must receive NOTHING for this drawing event; got: %s", data)
 	}
 }
+
+// TestHubBroadcast_StrictAudienceBindsTheGMToo pins StrictAudience: an
+// allowlist that DM-equivalent clients do NOT bypass. A player's private
+// journal note is private from the GM as well, so its change event must reach
+// its owner's socket and no one else's — not the Owner's, not a co-DM's.
+func TestHubBroadcast_StrictAudienceBindsTheGMToo(t *testing.T) {
+	h := newVisibilityTestHub(t)
+	const campaignID = "camp-strict"
+
+	owner := registerTestClient(t, h, campaignID, "user-gm", permissions.RoleOwner, false)
+	coDM := registerTestClient(t, h, campaignID, "user-codm", permissions.RolePlayer, true)
+	writer := registerTestClient(t, h, campaignID, "user-writer", permissions.RolePlayer, false)
+	other := registerTestClient(t, h, campaignID, "user-other", permissions.RolePlayer, false)
+
+	msg := NewMessage(MsgNoteUpdated, campaignID, "note-1", map[string]string{"noteId": "note-1"})
+	msg.AllowedUsers = []string{"user-writer"}
+	msg.StrictAudience = true
+
+	h.Broadcast(msg)
+	settleBroadcast()
+
+	if data := drainOrNil(writer); data == nil {
+		t.Error("the user the strict allowlist names must receive the message; got nothing")
+	}
+	for name, c := range map[string]*Client{"campaign Owner": owner, "co-DM": coDM, "unlisted player": other} {
+		if data := drainOrNil(c); data != nil {
+			t.Errorf("%s must receive NOTHING for a strict-audience message; got: %s", name, data)
+		}
+	}
+}
+
+// TestHubBroadcast_NonStrictAllowlistStillLetsTheGMThrough pins the other
+// side: without StrictAudience the existing DM bypass is unchanged.
+func TestHubBroadcast_NonStrictAllowlistStillLetsTheGMThrough(t *testing.T) {
+	h := newVisibilityTestHub(t)
+	const campaignID = "camp-nonstrict"
+
+	owner := registerTestClient(t, h, campaignID, "user-gm", permissions.RoleOwner, false)
+	writer := registerTestClient(t, h, campaignID, "user-writer", permissions.RolePlayer, false)
+	other := registerTestClient(t, h, campaignID, "user-other", permissions.RolePlayer, false)
+
+	msg := NewMessage(MsgNoteUpdated, campaignID, "note-2", map[string]string{"noteId": "note-2"})
+	msg.AllowedUsers = []string{"user-writer"}
+
+	h.Broadcast(msg)
+	settleBroadcast()
+
+	if drainOrNil(owner) == nil {
+		t.Error("a GM must still bypass a non-strict allowlist; got nothing")
+	}
+	if drainOrNil(writer) == nil {
+		t.Error("the listed user must receive the message; got nothing")
+	}
+	if data := drainOrNil(other); data != nil {
+		t.Errorf("an unlisted player must receive nothing; got: %s", data)
+	}
+}
