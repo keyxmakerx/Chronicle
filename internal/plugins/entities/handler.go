@@ -658,11 +658,12 @@ func (h *Handler) Show(c echo.Context) error {
 		}
 	}
 
-	// Override the active path to the entity's category URL so the sidebar
-	// stays drilled into the correct category (e.g., /campaigns/{id}/characters)
-	// instead of collapsing because /entities/{eid} doesn't match any category.
+	// Point the sidebar at the entity's category (e.g. /campaigns/{id}/city):
+	// /entities/{eid} matches no category row. The hint also names the page,
+	// which the category's row shows while it is open.
 	categoryPath := fmt.Sprintf("/campaigns/%s/%s", cc.Campaign.ID, entityType.Slug)
 	ctx := layouts.SetActivePath(c.Request().Context(), categoryPath)
+	ctx = layouts.WithNavHint(ctx, layouts.NavHint{TypeID: entityType.ID, PageName: entity.Name})
 	// Install the per-request singleton tracker — RenderBlock uses it to
 	// detect duplicate singleton blocks (e.g., two map_editor on one
 	// page) and swap the second instance for an inline error rather

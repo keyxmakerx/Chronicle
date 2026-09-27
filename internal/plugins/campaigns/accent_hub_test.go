@@ -273,3 +273,52 @@ func TestAppearanceTab_SemanticSlotsDefaultUnset(t *testing.T) {
 			strings.Count(html, "Using default theme color"))
 	}
 }
+
+// TestAppearanceTab_DataAccentSurfaceAttributes pins that the widget's
+// data-widget carrier exposes both legacy surface-pair values, the same way
+// it already does for the other three accent slots — appearance_editor.js
+// reads them via getAttribute (not the config object; see the widget's own
+// comment on why) to seed saved.accentSurface1/2.
+func TestAppearanceTab_DataAccentSurfaceAttributes(t *testing.T) {
+	cc := &CampaignContext{
+		Campaign: &Campaign{
+			ID:       "camp-1",
+			Settings: `{"accent_surface_1":"#10b981","accent_surface_2":"#f59e0b"}`,
+		},
+		MemberRole: RoleOwner,
+	}
+	var sb strings.Builder
+	if err := appearanceTab(cc, "tok").Render(context.Background(), &sb); err != nil {
+		t.Fatalf("render appearanceTab: %v", err)
+	}
+	html := sb.String()
+
+	if !strings.Contains(html, `data-accent-surface-1="#10b981"`) {
+		t.Error("data-accent-surface-1 must carry the current surface-1 color")
+	}
+	if !strings.Contains(html, `data-accent-surface-2="#f59e0b"`) {
+		t.Error("data-accent-surface-2 must carry the current surface-2 color")
+	}
+}
+
+// TestAppearanceTab_DataAccentSurfaceAttributesDefaultEmpty pins the
+// zero-change guarantee at the render layer for the surface pair, matching
+// TestAppearanceTab_SemanticSlotsDefaultUnset's coverage of action/app.
+func TestAppearanceTab_DataAccentSurfaceAttributesDefaultEmpty(t *testing.T) {
+	cc := &CampaignContext{
+		Campaign:   &Campaign{ID: "camp-1", Settings: "{}"},
+		MemberRole: RoleOwner,
+	}
+	var sb strings.Builder
+	if err := appearanceTab(cc, "tok").Render(context.Background(), &sb); err != nil {
+		t.Fatalf("render appearanceTab: %v", err)
+	}
+	html := sb.String()
+
+	if !strings.Contains(html, `data-accent-surface-1=""`) {
+		t.Error("data-accent-surface-1 must be empty when unset")
+	}
+	if !strings.Contains(html, `data-accent-surface-2=""`) {
+		t.Error("data-accent-surface-2 must be empty when unset")
+	}
+}

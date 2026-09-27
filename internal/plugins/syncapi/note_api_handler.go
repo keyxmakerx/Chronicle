@@ -11,13 +11,44 @@ import (
 	"github.com/labstack/echo/v4"
 
 	"github.com/keyxmakerx/chronicle/internal/apperror"
+	"github.com/keyxmakerx/chronicle/internal/permissions"
+	"github.com/keyxmakerx/chronicle/internal/plugins/campaigns"
 	"github.com/keyxmakerx/chronicle/internal/widgets/notes"
 )
 
 // NoteAPIHandler serves note-related REST API endpoints for external tools.
 type NoteAPIHandler struct {
-	syncSvc SyncAPIService
-	noteSvc notes.NoteService
+	syncSvc     SyncAPIService
+	noteSvc     notes.NoteService
+	campaignSvc campaigns.CampaignService
+}
+
+// SetCampaignService supplies the live member lookup that decides whether a
+// caller counts as a GM for notes shared with the GM. Without it every caller
+// is read as a plain member, which only ever sees less.
+func (h *NoteAPIHandler) SetCampaignService(svc campaigns.CampaignService) {
+	h.campaignSvc = svc
+}
+
+// viewer is the note viewer for the API caller: the key's (or session's)
+// user at their live campaign role, a co-DM grant counting as GM, like the
+// web routes' CampaignContext.VisibilityRole. A failed lookup falls back to a
+// plain member.
+func (h *NoteAPIHandler) viewer(c echo.Context, key *APIKey) permissions.Viewer {
+	role := permissions.RolePlayer
+	if h.campaignSvc != nil {
+		ctx := c.Request().Context()
+		campaignID := c.Param("id")
+		if m, err := h.campaignSvc.GetMember(ctx, campaignID, key.UserID); err == nil && m != nil {
+			role = int(m.Role)
+		}
+		if role < permissions.RoleOwner {
+			if granted, err := h.campaignSvc.IsUserDmGranted(ctx, campaignID, key.UserID); err == nil && granted {
+				role = permissions.RoleOwner
+			}
+		}
+	}
+	return permissions.RequestViewer(role, key.UserID)
 }
 
 // NewNoteAPIHandler creates a new note API handler.
@@ -39,7 +70,7 @@ func (h *NoteAPIHandler) ListNotes(c echo.Context) error {
 		return apperror.NewUnauthorized("api key required")
 	}
 
-	result, err := h.noteSvc.ListByUserAndCampaign(c.Request().Context(), key.UserID, campaignID)
+	result, err := h.noteSvc.ListVisible(c.Request().Context(), campaignID, h.viewer(c, key), notes.ListScope{})
 	if err != nil {
 		slog.Error("api: list notes failed", slog.Any("error", err))
 		return apperror.NewInternal(fmt.Errorf("failed to list notes"))
@@ -63,13 +94,13 @@ func (h *NoteAPIHandler) GetNote(c echo.Context) error {
 		return err
 	}
 
-	// Ownership gate: the middleware only proves campaign membership, and the
+	// Visibility gate: the middleware only proves campaign membership, and the
 	// repository addresses the note by bare `WHERE id = ?` with no ownership
 	// filter, so this check is what stops any member reading another
 	// member's private journal (ADR-013: private notes are owner-only). 404
 	// rather than 403 so the response doesn't confirm the note exists.
 	campaignID := c.Param("id")
-	if !note.CanAccess(key.UserID, campaignID) {
+	if !note.CanView(h.viewer(c, key), campaignID) {
 		return apperror.NewNotFound("note not found")
 	}
 
@@ -106,7 +137,8 @@ func (h *NoteAPIHandler) CreateNote(c echo.Context) error {
 		return apperror.NewBadRequest("invalid request body")
 	}
 
-	note, err := h.noteSvc.Create(c.Request().Context(), campaignID, key.UserID, notes.CreateNoteRequest{
+	caller := h.viewer(c, key)
+	note, err := h.noteSvc.Create(c.Request().Context(), campaignID, caller, notes.CreateNoteRequest{
 		EntityID:   req.EntityID,
 		ParentID:   req.ParentID,
 		IsFolder:   req.IsFolder,
@@ -123,7 +155,7 @@ func (h *NoteAPIHandler) CreateNote(c echo.Context) error {
 	// If entry/entryHTML were provided, apply them via update (Create doesn't
 	// accept ProseMirror content directly).
 	if req.Entry != nil || req.EntryHTML != nil {
-		note, err = h.noteSvc.Update(c.Request().Context(), note.ID, key.UserID, notes.UpdateNoteRequest{
+		note, err = h.noteSvc.Update(c.Request().Context(), note.ID, caller, notes.UpdateNoteRequest{
 			Entry:     req.Entry,
 			EntryHTML: req.EntryHTML,
 		})
@@ -166,7 +198,8 @@ func (h *NoteAPIHandler) UpdateNote(c echo.Context) error {
 		return err
 	}
 	campaignID := c.Param("id")
-	if !existing.CanAccess(key.UserID, campaignID) {
+	caller := h.viewer(c, key)
+	if !existing.CanView(caller, campaignID) {
 		return apperror.NewNotFound("note not found")
 	}
 
@@ -175,16 +208,7 @@ func (h *NoteAPIHandler) UpdateNote(c echo.Context) error {
 		return apperror.NewBadRequest("invalid request body")
 	}
 
-	// Only the owner can change sharing/pinned status — a share recipient may
-	// edit the body but must not be able to re-share or un-share someone else's
-	// note. Mirrors the web route.
-	if !existing.IsOwnedBy(key.UserID, campaignID) {
-		req.IsShared = nil
-		req.SharedWith = nil
-		req.Pinned = nil
-	}
-
-	note, err := h.noteSvc.Update(c.Request().Context(), noteID, key.UserID, notes.UpdateNoteRequest{
+	update := notes.UpdateNoteRequest{
 		Title:      req.Title,
 		Content:    req.Content,
 		Entry:      req.Entry,
@@ -194,7 +218,15 @@ func (h *NoteAPIHandler) UpdateNote(c echo.Context) error {
 		IsShared:   req.IsShared,
 		SharedWith: req.SharedWith,
 		ParentID:   req.ParentID,
-	})
+	}
+	// Only the owner can change sharing, pinning or the folder — a person the
+	// note is shared with may edit the body but must not be able to re-share,
+	// un-share or refile someone else's note. Mirrors the web route.
+	if !existing.IsOwnedBy(key.UserID, campaignID) {
+		update.StripOwnerOnly()
+	}
+
+	note, err := h.noteSvc.Update(c.Request().Context(), noteID, caller, update)
 	if err != nil {
 		return err
 	}

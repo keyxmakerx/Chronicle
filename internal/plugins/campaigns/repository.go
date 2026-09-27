@@ -3,6 +3,7 @@ package campaigns
 import (
 	"context"
 	"database/sql"
+	"encoding/json"
 	"errors"
 	"fmt"
 
@@ -32,6 +33,13 @@ type CampaignRepository interface {
 	UpdateMemberRole(ctx context.Context, campaignID, userID string, role Role) error
 	UpdateMemberCharacter(ctx context.Context, campaignID, userID string, characterEntityID *string) error
 	FindOwnerMember(ctx context.Context, campaignID string) (*CampaignMember, error)
+
+	// GetMemberNavPins returns a member's own pinned sidebar row keys, in the
+	// order pinned; nil when they have none or are not a member.
+	GetMemberNavPins(ctx context.Context, campaignID, userID string) ([]string, error)
+	// SetMemberNavPins replaces a member's own pinned sidebar row keys; an
+	// empty list clears them. It never touches another member's row.
+	SetMemberNavPins(ctx context.Context, campaignID, userID string, pins []string) error
 
 	// Ownership transfer
 	CreateTransfer(ctx context.Context, transfer *OwnershipTransfer) error
@@ -580,6 +588,50 @@ func (r *campaignRepository) UpdateMemberRole(ctx context.Context, campaignID, u
 	rows, _ := result.RowsAffected()
 	if rows == 0 {
 		return apperror.NewNotFound("member not found")
+	}
+	return nil
+}
+
+// GetMemberNavPins returns a member's own pinned sidebar row keys.
+func (r *campaignRepository) GetMemberNavPins(ctx context.Context, campaignID, userID string) ([]string, error) {
+	var raw sql.NullString
+	err := r.db.QueryRowContext(ctx,
+		`SELECT nav_pins FROM campaign_members WHERE campaign_id = ? AND user_id = ?`,
+		campaignID, userID,
+	).Scan(&raw)
+	if errors.Is(err, sql.ErrNoRows) {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, fmt.Errorf("reading member nav pins: %w", err)
+	}
+	if !raw.Valid || raw.String == "" {
+		return nil, nil
+	}
+	var pins []string
+	if err := json.Unmarshal([]byte(raw.String), &pins); err != nil {
+		return nil, fmt.Errorf("decoding member nav pins: %w", err)
+	}
+	return pins, nil
+}
+
+// SetMemberNavPins replaces a member's own pinned sidebar row keys. The row
+// is addressed by campaign and user together, so it can only ever be the
+// caller's own. An unchanged value updates no rows, which is not an error.
+func (r *campaignRepository) SetMemberNavPins(ctx context.Context, campaignID, userID string, pins []string) error {
+	var value any
+	if len(pins) > 0 {
+		b, err := json.Marshal(pins)
+		if err != nil {
+			return fmt.Errorf("encoding member nav pins: %w", err)
+		}
+		value = string(b)
+	}
+	if _, err := r.db.ExecContext(ctx,
+		`UPDATE campaign_members SET nav_pins = ? WHERE campaign_id = ? AND user_id = ?`,
+		value, campaignID, userID,
+	); err != nil {
+		return fmt.Errorf("updating member nav pins: %w", err)
 	}
 	return nil
 }

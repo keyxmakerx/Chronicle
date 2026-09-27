@@ -178,6 +178,7 @@ type mockEntityRepo struct {
 	findAncestorsFn    func(ctx context.Context, entityID string, role int, userID string) ([]Entity, error)
 	updateParentFn     func(ctx context.Context, entityID string, parentID *string) error
 	findBacklinksFn    func(ctx context.Context, campaignID, entityID string, role int, userID string) ([]Entity, error)
+	pagesLinkingNoteFn func(ctx context.Context, campaignID, noteID string, role int, userID string) ([]Entity, error)
 	setAliasesFn       func(ctx context.Context, entityID string, aliases []string) error
 	updatePrivateFn    func(ctx context.Context, entityID string, isPrivate bool) error
 	listByOwnerFn      func(ctx context.Context, campaignID, ownerUserID string) ([]Entity, error)
@@ -334,6 +335,13 @@ func (m *mockEntityRepo) ResequenceSiblings(ctx context.Context, campaignID stri
 		return m.resequenceFn(ctx, campaignID, orderedIDs)
 	}
 	return nil
+}
+
+func (m *mockEntityRepo) FindPagesLinkingNote(ctx context.Context, campaignID, noteID string, role int, userID string) ([]Entity, error) {
+	if m.pagesLinkingNoteFn != nil {
+		return m.pagesLinkingNoteFn(ctx, campaignID, noteID, role, userID)
+	}
+	return nil, nil
 }
 
 func (m *mockEntityRepo) FindBacklinks(ctx context.Context, campaignID, entityID string, role int, userID string) ([]Entity, error) {

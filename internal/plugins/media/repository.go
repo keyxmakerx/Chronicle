@@ -12,8 +12,8 @@ import (
 
 // StorageStats holds aggregate storage statistics for the admin dashboard.
 type StorageStats struct {
-	TotalFiles  int              // Total number of media files.
-	TotalBytes  int64            // Total storage used in bytes.
+	TotalFiles  int                       // Total number of media files.
+	TotalBytes  int64                     // Total storage used in bytes.
 	ByUsageType map[string]UsageTypeStats // Breakdown by usage type.
 }
 
@@ -56,6 +56,13 @@ type MediaRepository interface {
 	// GetCampaignUsage returns the total bytes and file count for a campaign.
 	// Used for storage quota enforcement at upload time.
 	GetCampaignUsage(ctx context.Context, campaignID string) (totalBytes int64, fileCount int, err error)
+
+	// GetUserCampaignlessUsage returns the total bytes and file count for a
+	// user's uploads that carry no campaign_id (avatars, and any
+	// /media/upload posted with a blank campaign_id). Used for storage
+	// quota enforcement on that bucket, which has no campaign to check a
+	// quota against instead.
+	GetUserCampaignlessUsage(ctx context.Context, userID string) (totalBytes int64, fileCount int, err error)
 
 	// FindReferences returns entities that reference the given media file,
 	// either via image_path or in their editor HTML content.
@@ -405,6 +412,22 @@ func (r *mediaRepository) GetCampaignUsage(ctx context.Context, campaignID strin
 	).Scan(&fileCount, &totalBytes)
 	if err != nil {
 		return 0, 0, fmt.Errorf("querying campaign storage usage: %w", err)
+	}
+	return totalBytes, fileCount, nil
+}
+
+// GetUserCampaignlessUsage returns the total bytes stored and file count for
+// a single user's campaign-less media (campaign_id IS NULL). Returns 0, 0 if
+// the user has no such files.
+func (r *mediaRepository) GetUserCampaignlessUsage(ctx context.Context, userID string) (int64, int, error) {
+	var totalBytes int64
+	var fileCount int
+	err := r.db.QueryRowContext(ctx,
+		`SELECT COUNT(*), COALESCE(SUM(file_size), 0) FROM media_files WHERE uploaded_by = ? AND campaign_id IS NULL`,
+		userID,
+	).Scan(&fileCount, &totalBytes)
+	if err != nil {
+		return 0, 0, fmt.Errorf("querying user campaign-less storage usage: %w", err)
 	}
 	return totalBytes, fileCount, nil
 }

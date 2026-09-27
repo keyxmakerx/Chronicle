@@ -168,60 +168,16 @@ var accentColorPresets = []struct {
 	{"Orange", "#f97316"},
 }
 
-// AccentColorPicker renders a color picker for the campaign accent color.
-templ AccentColorPicker(campaignID string, currentColor string, csrfToken string) {
-	<div class="space-y-3">
-		<div class="flex flex-wrap gap-2">
-			for _, preset := range accentColorPresets {
-				if currentColor == preset.Color {
-					<button
-						hx-put={ fmt.Sprintf("/campaigns/%s/accent-color", campaignID) }
-						hx-vals={ fmt.Sprintf(`{"accent_color":"%s"}`, preset.Color) }
-						hx-headers={ fmt.Sprintf(`{"X-CSRF-Token":"%s"}`, csrfToken) }
-						class="w-8 h-8 rounded-full border-2 border-white ring-2 ring-offset-2 ring-offset-surface ring-fg transition-transform hover:scale-110 shrink-0"
-						style={ fmt.Sprintf("background-color: %s", preset.Color) }
-						title={ preset.Name }
-					></button>
-				} else {
-					<button
-						hx-put={ fmt.Sprintf("/campaigns/%s/accent-color", campaignID) }
-						hx-vals={ fmt.Sprintf(`{"accent_color":"%s"}`, preset.Color) }
-						hx-headers={ fmt.Sprintf(`{"X-CSRF-Token":"%s"}`, csrfToken) }
-						class="w-8 h-8 rounded-full border-2 border-transparent hover:border-white/50 transition-transform hover:scale-110 shrink-0"
-						style={ fmt.Sprintf("background-color: %s", preset.Color) }
-						title={ preset.Name }
-					></button>
-				}
-			}
-			// Reset to default button.
-			<button
-				hx-put={ fmt.Sprintf("/campaigns/%s/accent-color", campaignID) }
-				hx-vals={ `{"accent_color":""}` }
-				hx-headers={ fmt.Sprintf(`{"X-CSRF-Token":"%s"}`, csrfToken) }
-				class="w-8 h-8 rounded-full border-2 border-dashed border-edge flex items-center justify-center hover:border-fg-muted transition-colors shrink-0"
-				title="Reset to default"
-			>
-				<i class="fa-solid fa-xmark text-[10px] text-fg-muted"></i>
-			</button>
-		</div>
-		if currentColor != "" {
-			<p class="text-[10px] text-fg-muted">Current: { currentColor }</p>
-		} else {
-			<p class="text-[10px] text-fg-muted">Using default theme color</p>
-		}
-	</div>
-}
-
-// semanticAccentPicker renders the Action highlight / App accent pickers: the
-// same preset-swatch + reset + custom-picker layout as the Site accent card,
-// parameterized by slot key. Buttons carry data-slot-color (not a per-slot
-// attribute name — the container's id disambiguates the picker) and are
-// wired by appearance_editor.js's staged draft/save flow, not the legacy
-// Surface Accents card's direct-PUT-per-click pattern below.
-templ semanticAccentPicker(slotKey, label, hint, current string) {
+// semanticAccentPicker renders one accent slot's picker: the shared
+// preset-swatch + reset + custom-picker layout, parameterized by slot key so
+// Site accent, Action highlight, and App accent (all three staged into the
+// same draft/save flow by appearance_editor.js) share one component instead
+// of three near-identical copies. Buttons carry data-slot-color (not a
+// per-slot attribute name — the container's id disambiguates the picker).
+templ semanticAccentPicker(slotKey, icon, label, hint, current string) {
 	<div class="card p-4 mb-4">
 		<h3 class="text-sm font-semibold text-fg mb-2">
-			<i class="fa-solid fa-palette text-xs mr-1.5 text-fg-muted"></i> { label }
+			<i class={ "fa-solid " + icon + " text-xs mr-1.5 text-fg-muted" }></i> { label }
 		</h3>
 		<p class="text-xs text-fg-secondary mb-3">{ hint }</p>
 		<div id={ "appearance-" + slotKey + "-colors" } class="space-y-3">
@@ -296,35 +252,43 @@ templ semanticAccentPicker(slotKey, label, hint, current string) {
 // circles, a reset, and a custom picker. Each control carries its own inline
 // IIFE onclick/onchange handler (surface_accent_onclick.go) rather than
 // relying on a parent <script> with delegated listeners — that script gets
-// deleted whole by htmx on a boosted swap (allowScriptTags=false). Clicks
-// save immediately (direct PUT) and live-preview locally.
-templ surfaceAccentRow(campaignID, csrfToken string, slot int, label string, current string) {
-	<div class="flex flex-wrap items-center gap-2 mb-2">
+// deleted whole by htmx on a boosted swap (allowScriptTags=false). The
+// handler previews locally and hands the new value to the appearance-editor
+// widget through a DOM event, folding the slot into the tab's one staged
+// draft/save/discard flow. data-slot-color and the row/label ids let the
+// widget's JS re-sync the ring and label (highlightSurfaceRow in
+// appearance_editor.js), the same contract semanticAccentPicker's buttons
+// use.
+templ surfaceAccentRow(slot int, label string, current string) {
+	<div class="flex flex-wrap items-center gap-2 mb-2" id={ fmt.Sprintf("appearance-surface-row-%d", slot) }>
 		<span class="text-[11px] text-fg-secondary w-32 shrink-0">{ label }</span>
 		for _, preset := range accentColorPresets {
 			if current == preset.Color {
 				<button
 					type="button"
+					data-slot-color={ preset.Color }
 					class="w-6 h-6 rounded-full border-2 border-white ring-2 ring-offset-1 ring-offset-surface ring-fg transition-transform hover:scale-110 shrink-0"
 					style={ fmt.Sprintf("background-color: %s", preset.Color) }
 					title={ preset.Name }
-					onclick={ surfaceAccentApplyOnClick(campaignID, csrfToken, slot, preset.Color) }
+					onclick={ surfaceAccentApplyOnClick(slot, preset.Color) }
 				></button>
 			} else {
 				<button
 					type="button"
+					data-slot-color={ preset.Color }
 					class="w-6 h-6 rounded-full border-2 border-transparent hover:border-white/50 transition-transform hover:scale-110 shrink-0"
 					style={ fmt.Sprintf("background-color: %s", preset.Color) }
 					title={ preset.Name }
-					onclick={ surfaceAccentApplyOnClick(campaignID, csrfToken, slot, preset.Color) }
+					onclick={ surfaceAccentApplyOnClick(slot, preset.Color) }
 				></button>
 			}
 		}
 		<button
 			type="button"
+			data-slot-color=""
 			class="w-6 h-6 rounded-full border-2 border-dashed border-edge flex items-center justify-center hover:border-fg-muted transition-colors shrink-0"
 			title="Follow Accent Color"
-			onclick={ surfaceAccentApplyOnClick(campaignID, csrfToken, slot, "") }
+			onclick={ surfaceAccentApplyOnClick(slot, "") }
 		>
 			<i class="fa-solid fa-xmark text-[9px] text-fg-muted"></i>
 		</button>
@@ -338,19 +302,27 @@ templ surfaceAccentRow(campaignID, csrfToken string, slot int, label string, cur
 				value="#6366f1"
 			}
 			title="Pick a custom color"
-			onchange={ surfaceAccentCustomOnChange(campaignID, csrfToken, slot, fmt.Sprintf("appearance-surface-custom-%d", slot)) }
+			onchange={ surfaceAccentCustomOnChange(slot, fmt.Sprintf("appearance-surface-custom-%d", slot)) }
 		/>
-		if current != "" {
-			<span class="text-[10px] text-fg-muted">{ current }</span>
-		} else {
-			<span class="text-[10px] text-fg-muted">follows Accent Color</span>
-		}
+		<span class="text-[10px] text-fg-muted" id={ fmt.Sprintf("appearance-surface-label-%d", slot) }>
+			if current != "" {
+				{ current }
+			} else {
+				follows Accent Color
+			}
+		</span>
 	</div>
 }
 
 // appearanceTab renders the visual customization editor in the Customization Hub.
-// Contains: faux site outline, brand name/logo, accent color, topbar styling,
-// and backdrop image. Changes preview locally; a Save button persists them.
+// Contains: faux site outline, brand name/logo, accent colors, topbar
+// styling, and backdrop image. One staged draft covers the whole tab,
+// including Surface Accents: Save persists every changed field, Discard
+// reverts every control to the last save.
+//
+// No Welcome Message card: Campaign Settings -> General already edits that
+// field. TODO(#739): the Customize page redesign decides which surface
+// keeps it.
 templ appearanceTab(cc *CampaignContext, csrfToken string) {
 	<h2 class="text-base font-semibold text-fg mb-1">Appearance</h2>
 	<p class="text-xs text-fg-secondary mb-4">Customize the visual style of your campaign. Changes preview instantly — click Save when you're happy.</p>
@@ -360,9 +332,14 @@ templ appearanceTab(cc *CampaignContext, csrfToken string) {
 		<span class="text-sm text-amber-800 dark:text-amber-200">
 			<i class="fa-solid fa-circle-exclamation text-xs mr-1.5"></i> You have unsaved changes
 		</span>
-		<button type="button" id="appearance-save-btn" class="btn-primary text-sm px-4 py-1.5">
-			<i class="fa-solid fa-check text-xs mr-1"></i> Save Changes
-		</button>
+		<div class="flex items-center gap-2">
+			<button type="button" id="appearance-discard-btn" class="btn-secondary text-sm px-4 py-1.5">
+				Discard
+			</button>
+			<button type="button" id="appearance-save-btn" class="btn-primary text-sm px-4 py-1.5">
+				<i class="fa-solid fa-check text-xs mr-1"></i> Save Changes
+			</button>
+		</div>
 	</div>
 
 	<div
@@ -374,6 +351,8 @@ templ appearanceTab(cc *CampaignContext, csrfToken string) {
 		data-accent-color={ cc.Campaign.ParseSettings().AccentColor }
 		data-accent-action={ cc.Campaign.ParseSettings().AccentAction }
 		data-accent-app={ cc.Campaign.ParseSettings().AccentApp }
+		data-accent-surface-1={ cc.Campaign.ParseSettings().AccentSurface1 }
+		data-accent-surface-2={ cc.Campaign.ParseSettings().AccentSurface2 }
 		data-topbar-style={ topbarStyleJSON(cc.Campaign.ParseSettings().TopbarStyle) }
 		data-topbar-content={ topbarContentJSON(cc.Campaign.ParseSettings().TopbarContent) }
 		data-font-family={ cc.Campaign.ParseSettings().FontFamily }
@@ -425,11 +404,7 @@ templ appearanceTab(cc *CampaignContext, csrfToken string) {
 					>
 						<div class="flex items-center gap-2">
 							<span class="text-[10px] font-semibold" id="appearance-preview-brand">
-								if cc.Campaign.ParseSettings().BrandName != "" {
-									{ cc.Campaign.ParseSettings().BrandName }
-								} else {
-									{ cc.Campaign.Name }
-								}
+								{ layouts.GetDisplayName(ctx) }
 							</span>
 						</div>
 						<div class="flex items-center gap-1.5">
@@ -543,100 +518,28 @@ templ appearanceTab(cc *CampaignContext, csrfToken string) {
 			</div>
 		</div>
 
-		<!-- Site accent: overall feel. JS-driven, no server calls until Save. -->
-		<div class="card p-4 mb-4">
-			<h3 class="text-sm font-semibold text-fg mb-2">
-				<i class="fa-solid fa-droplet text-xs mr-1.5 text-fg-muted"></i> Site accent — overall feel
-			</h3>
-			<p class="text-xs text-fg-secondary mb-3">Nav, links, selection, today ring — the theme color used across the whole campaign.</p>
-			<div id="appearance-accent-colors" class="space-y-3">
-				<div class="flex flex-wrap gap-2">
-					for _, preset := range accentColorPresets {
-						if cc.Campaign.ParseSettings().AccentColor == preset.Color {
-							<button
-								type="button"
-								data-accent-color={ preset.Color }
-								class="w-8 h-8 rounded-full border-2 border-white ring-2 ring-offset-2 ring-offset-surface ring-fg transition-transform hover:scale-110 shrink-0"
-								style={ fmt.Sprintf("background-color: %s", preset.Color) }
-								title={ preset.Name }
-							></button>
-						} else {
-							<button
-								type="button"
-								data-accent-color={ preset.Color }
-								class="w-8 h-8 rounded-full border-2 border-transparent hover:border-white/50 transition-transform hover:scale-110 shrink-0"
-								style={ fmt.Sprintf("background-color: %s", preset.Color) }
-								title={ preset.Name }
-							></button>
-						}
-					}
-					// Reset to default button.
-					if cc.Campaign.ParseSettings().AccentColor == "" {
-						<button
-							type="button"
-							data-accent-color=""
-							class="w-8 h-8 rounded-full border-2 border-dashed border-fg ring-2 ring-offset-2 ring-offset-surface ring-fg flex items-center justify-center transition-colors shrink-0"
-							title="Reset to default"
-						>
-							<i class="fa-solid fa-xmark text-[10px] text-fg-muted"></i>
-						</button>
-					} else {
-						<button
-							type="button"
-							data-accent-color=""
-							class="w-8 h-8 rounded-full border-2 border-dashed border-edge flex items-center justify-center hover:border-fg-muted transition-colors shrink-0"
-							title="Reset to default"
-						>
-							<i class="fa-solid fa-xmark text-[10px] text-fg-muted"></i>
-						</button>
-					}
-					<!-- Custom color picker -->
-					<div class="flex items-center gap-2 ml-2 pl-2 border-l border-edge">
-						<input
-							type="color"
-							id="appearance-accent-custom"
-							class="w-8 h-8 rounded-full border border-edge cursor-pointer"
-							if cc.Campaign.ParseSettings().AccentColor != "" {
-								value={ cc.Campaign.ParseSettings().AccentColor }
-							} else {
-								value="#6366f1"
-							}
-							title="Pick a custom color"
-						/>
-						<span class="text-[10px] text-fg-muted">Custom</span>
-					</div>
-				</div>
-				<p class="text-[10px] text-fg-muted" id="appearance-accent-label">
-					if cc.Campaign.ParseSettings().AccentColor != "" {
-						Current: { cc.Campaign.ParseSettings().AccentColor }
-					} else {
-						Using default theme color
-					}
-				</p>
-			</div>
-		</div>
+		<!-- Site accent, Action highlight, App accent: one shared picker
+		     component (semanticAccentPicker), all three staged into the same
+		     draft/save flow wired in appearance_editor.js. -->
+		@semanticAccentPicker("accent", "fa-droplet", "Site accent — overall feel", "Nav, links, selection, today ring — the theme color used across the whole campaign.", cc.Campaign.ParseSettings().AccentColor)
+		@semanticAccentPicker("action", "fa-palette", "Action highlight — buttons & presses", "Primary buttons, hover/press states, and FABs. Leave unset to follow the Site accent above.", cc.Campaign.ParseSettings().AccentAction)
+		@semanticAccentPicker("app", "fa-palette", "App accent — character pages & apps", "Per-app identity color. Live on the character-header sample below; individual app pages adopt it over time. Leave unset to follow the Surface Accents pair below, then the Site accent.", cc.Campaign.ParseSettings().AccentApp)
 
-		<!-- Action highlight + App accent: both ride the staged draft/save
-		     flow wired in appearance_editor.js, same as Site accent above —
-		     unlike the legacy Surface Accents card below. -->
-		@semanticAccentPicker("action", "Action highlight — buttons & presses", "Primary buttons, hover/press states, and FABs. Leave unset to follow the Site accent above.", cc.Campaign.ParseSettings().AccentAction)
-		@semanticAccentPicker("app", "App accent — character pages & apps", "Per-app identity color. Live on the character-header sample below; individual app pages adopt it over time. Leave unset to follow the Surface Accents pair below, then the Site accent.", cc.Campaign.ParseSettings().AccentApp)
-
-		<!-- Surface accents: two extra
-		     accent slots consumed by themed CONTENT surfaces (character page
-		     first) as primary/secondary. Unlike the main accent above these
-		     save immediately per click (the AccentColorPicker direct-PUT
-		     precedent) — they are additive slots, not part of the staged
-		     Save-bar flow. Unset slots inherit Accent 1 via CSS fallback,
-		     and the App accent picker above falls back through this pair
-		     when an app has no accent of its own. -->
+		<!-- Surface accents: two extra accent slots consumed by themed
+		     CONTENT surfaces (character page first) as primary/secondary.
+		     Their swatches fold into the same staged draft/save/discard flow
+		     as every other field (surfaceAccentRow's inline handlers preview
+		     locally and hand the value to the widget via a DOM event — see
+		     surface_accent_onclick.go). Unset slots inherit Accent 1 via CSS
+		     fallback, and the App accent picker above falls back through
+		     this pair when an app has no accent of its own. -->
 		<div class="card p-4 mb-4" id="appearance-surface-accents">
 			<h3 class="text-sm font-semibold text-fg mb-2">
 				<i class="fa-solid fa-palette text-xs mr-1.5 text-fg-muted"></i> Surface Accents
 			</h3>
 			<p class="text-xs text-fg-secondary mb-3">Two extra colors used by content pages (like character sheets) as primary and secondary. Leave unset to follow the Site accent above (or the App accent above, once set).</p>
-			@surfaceAccentRow(cc.Campaign.ID, csrfToken, 1, "Surface A · primary", cc.Campaign.ParseSettings().AccentSurface1)
-			@surfaceAccentRow(cc.Campaign.ID, csrfToken, 2, "Surface B · secondary", cc.Campaign.ParseSettings().AccentSurface2)
+			@surfaceAccentRow(1, "Surface A · primary", cc.Campaign.ParseSettings().AccentSurface1)
+			@surfaceAccentRow(2, "Surface B · secondary", cc.Campaign.ParseSettings().AccentSurface2)
 			<!-- Live sample: a mini content-surface card driven by the
 			     surface tokens so owners see the pair applied, not a
 			     swatch. Colors fall through app accent -> surface-1/2 ->
@@ -782,42 +685,6 @@ var fontFamilyPresets = []fontFamilyPreset{
 	{"merriweather", "Merriweather", "'Merriweather', Georgia, serif"},
 }
 
-// topbarContentJSON serializes TopbarContent to a JSON data attribute value.
-func topbarContentJSON(content *TopbarContent) string {
-	if content == nil {
-		return `{"mode":"none","links":[],"quote":""}`
-	}
-	// Build links array manually.
-	linksJSON := "["
-	for i, link := range content.Links {
-		if i > 0 {
-			linksJSON += ","
-		}
-		linksJSON += fmt.Sprintf(`{"label":"%s","url":"%s","icon":"%s"}`,
-			layouts.EscapeJSONString(link.Label),
-			layouts.EscapeJSONString(link.URL),
-			layouts.EscapeJSONString(link.Icon))
-	}
-	linksJSON += "]"
-	return fmt.Sprintf(`{"mode":"%s","links":%s,"quote":"%s"}`,
-		layouts.EscapeJSONString(content.Mode),
-		linksJSON,
-		layouts.EscapeJSONString(content.Quote))
-}
-
-// topbarStyleJSON serializes a TopbarStyle to a JSON data attribute value.
-func topbarStyleJSON(style *TopbarStyle) string {
-	if style == nil {
-		return "{}"
-	}
-	// Manual construction to avoid importing encoding/json in templ file.
-	return fmt.Sprintf(
-		`{"mode":"%s","color":"%s","gradient_from":"%s","gradient_to":"%s","gradient_dir":"%s","image_path":"%s"}`,
-		layouts.EscapeJSONString(style.Mode),
-		layouts.EscapeJSONString(style.Color),
-		layouts.EscapeJSONString(style.GradientFrom),
-		layouts.EscapeJSONString(style.GradientTo),
-		layouts.EscapeJSONString(style.GradientDir),
-		layouts.EscapeJSONString(style.ImagePath),
-	)
-}
+// topbarStyleJSON and topbarContentJSON live in topbar_json.go, a plain .go
+// file (see its doc comment), so this templ file needs no encoding/json
+// import.

@@ -1,158 +1,207 @@
-// journal.templ renders the full-page Journal view. This is the expanded
-// version of the floating notes panel, providing an Obsidian-like notebook
-// experience for pre/during/post session note-taking. The actual note
-// management is handled client-side by the journal.js widget, which
-// communicates with the existing notes API endpoints.
+// journal.templ renders the Journal: a resizable list of the viewer's notes,
+// the note being edited, and a details drawer. journal.js fills and drives it
+// over the notes JSON routes. The whole layout is here, so the page is laid
+// out at its final size before any script runs and nothing moves when the
+// data arrives.
 
 package notes
 
 import (
 	"fmt"
 	"github.com/keyxmakerx/chronicle/internal/plugins/campaigns"
-	"github.com/keyxmakerx/chronicle/internal/templates/components"
 	"github.com/keyxmakerx/chronicle/internal/templates/layouts"
 )
 
-// JournalPage renders the full-page journal wrapped in the app layout.
-templ JournalPage(cc *campaigns.CampaignContext) {
+// JournalPage renders the Journal wrapped in the app layout.
+templ JournalPage(cc *campaigns.CampaignContext, view JournalView) {
 	@layouts.App("Journal") {
-		@journalContent(cc)
+		@journalContent(cc, view)
 	}
 }
 
-// JournalFragment renders the journal content as an HTMX fragment.
-templ JournalFragment(cc *campaigns.CampaignContext) {
-	@journalContent(cc)
+// JournalFragment renders the Journal as an HTMX fragment.
+templ JournalFragment(cc *campaigns.CampaignContext, view JournalView) {
+	@journalContent(cc, view)
 }
 
-// journalContent renders the journal page body with a two-panel layout:
-// sidebar for note navigation/tree and main area for the active note editor.
-templ journalContent(cc *campaigns.CampaignContext) {
-	<div class="h-full flex flex-col" data-journal-page="true">
-		<!-- Header -->
-		<div class="shrink-0 px-6 py-4 border-b border-edge">
-			@components.Breadcrumbs([]components.BreadcrumbItem{
-				{Label: cc.Campaign.Name, Href: fmt.Sprintf("/campaigns/%s", cc.Campaign.ID), Icon: "fa-dice-d20"},
-				{Label: "Journal"},
-			})
-			<div class="flex items-center justify-between">
-				<div>
-					<h1 class="text-xl font-bold text-fg">Journal</h1>
-					<p class="text-sm text-fg-secondary mt-0.5">Session notebook &amp; notes</p>
-				</div>
-				<div class="flex items-center gap-2">
-					<button
-						id="journal-new-note"
-						class="btn-primary text-sm flex items-center gap-1.5"
-					>
-						<i class="fa-solid fa-plus text-xs"></i>
-						New Note
-					</button>
-					<button
-						id="journal-new-folder"
-						class="btn-secondary text-sm flex items-center gap-1.5"
-					>
-						<i class="fa-solid fa-folder-plus text-xs"></i>
-						New Folder
-					</button>
-				</div>
-			</div>
+// journalContent is the workspace: list pane, resize handle, editor pane and
+// details drawer, plus the phone's pane tabs and the floating layers (view
+// options, token suggestions, row peek, toasts).
+templ journalContent(cc *campaigns.CampaignContext, view JournalView) {
+	<div
+		class="jnl pane-list"
+		data-widget="journal"
+		data-campaign-id={ cc.Campaign.ID }
+		data-user-id={ layouts.GetUserID(ctx) }
+		data-gm={ fmt.Sprint(view.IsGM) }
+		data-note-id={ view.NoteID }
+	>
+		<h1 class="sr-only">Journal</h1>
+		<div class="jnl-panetabs" role="tablist" aria-label="Journal panes">
+			<button type="button" role="tab" data-pane="list" aria-selected="true"><i class="fa-solid fa-folder" aria-hidden="true"></i> Notes</button>
+			<button type="button" role="tab" data-pane="note" aria-selected="false"><i class="fa-solid fa-file-lines" aria-hidden="true"></i> Note</button>
+			<button type="button" role="tab" data-pane="links" aria-selected="false"><i class="fa-solid fa-link" aria-hidden="true"></i> Links</button>
 		</div>
-		<!-- Two-panel layout: note list + editor -->
-		<div class="flex-1 flex min-h-0 overflow-hidden">
-			<!-- Left panel: note list / tree -->
-			<div class="w-72 shrink-0 border-r border-edge flex flex-col bg-surface-alt">
-				<!-- Search -->
-				<div class="p-3 border-b border-edge">
-					<div class="relative">
-						<input
-							type="search"
-							id="journal-search"
-							placeholder="Search notes..."
-							class="w-full px-3 py-1.5 pl-8 text-sm rounded-md bg-surface border border-edge text-fg placeholder-fg-muted focus:outline-none focus:border-accent transition-colors"
-							autocomplete="off"
-						/>
-						<i class="fa-solid fa-magnifying-glass absolute left-2.5 top-1/2 -translate-y-1/2 text-fg-muted text-xs pointer-events-none"></i>
+		<div class="jnl-row">
+			<section class="jnl-list" id="jnl-list" aria-label="Notes">
+				<div class="nl-bar">
+					<div class="nl-search">
+						<i class="fa-solid fa-magnifying-glass nl-ico" aria-hidden="true"></i>
+						<div class="nl-search-field" contenteditable="true" role="searchbox" aria-label="Search notes" data-placeholder="Search…" spellcheck="false"></div>
+						<button type="button" class="nl-scope" data-scope="title" title="Searching titles only — click to also search contents">Titles</button>
+					</div>
+					<button type="button" class="nl-tbtn nl-viewbtn" aria-haspopup="true" aria-expanded="false">
+						<i class="fa-solid fa-bars nl-ico" aria-hidden="true"></i><span>View</span><i class="fa-solid fa-chevron-right nl-ico chev" aria-hidden="true"></i>
+					</button>
+					<div class="nl-newsplit">
+						<button type="button" class="nl-newbody" data-new="note"><i class="fa-solid fa-plus nl-ico" aria-hidden="true"></i><span>New</span></button>
+						<button type="button" class="nl-newcaret" aria-haspopup="true" aria-expanded="false" title="New note or folder" aria-label="New note or folder"><i class="fa-solid fa-chevron-right nl-ico chev" aria-hidden="true"></i></button>
+						<div class="nl-newmenu" role="menu" aria-label="New">
+							<button type="button" role="menuitem" data-new="note"><i class="fa-solid fa-file-lines nl-ico" aria-hidden="true"></i>Note</button>
+							<button type="button" role="menuitem" data-new="folder"><i class="fa-solid fa-folder nl-ico" aria-hidden="true"></i>Folder</button>
+						</div>
 					</div>
 				</div>
-				<!-- Filter tabs -->
-				<div class="flex border-b border-edge text-xs">
-					<button class="journal-tab flex-1 py-2 text-center text-fg-muted hover:text-fg transition-colors border-b-2 border-transparent" data-tab="all">
-						All
-					</button>
-					<button class="journal-tab flex-1 py-2 text-center text-fg-muted hover:text-fg transition-colors border-b-2 border-transparent" data-tab="campaign">
-						Campaign
-					</button>
-					<button class="journal-tab flex-1 py-2 text-center text-fg-muted hover:text-fg transition-colors border-b-2 border-transparent" data-tab="session">
-						Session
-					</button>
-				</div>
-				<!-- Note list -->
-				<div id="journal-note-list" class="flex-1 overflow-y-auto p-2">
-					<!-- Populated by journal.js -->
-					<div class="flex items-center justify-center py-12 text-fg-muted text-sm">
-						<i class="fa-solid fa-spinner fa-spin mr-2"></i>
-						Loading...
+				<div class="nl-tabs" role="tablist" aria-label="Saved views"></div>
+				if view.Character != nil {
+					@journalClaimCard(cc, view.Character)
+				}
+				<div class="nl-listwrap">
+					<div class="nl-scroll" tabindex="0" role="listbox" aria-label="Notes" aria-multiselectable="true">
+						<div class="nl-inner"><div class="nl-empty">Loading…</div></div>
+					</div>
+					<div class="nl-bulkpill" role="toolbar" aria-label="Selected notes">
+						<span class="cnt">0 selected</span><span class="sp"></span>
+						<button type="button" data-bulk="archive" title="Archive" aria-label="Archive"><i class="fa-solid fa-box-archive" aria-hidden="true"></i></button>
+						<button type="button" data-bulk="move" title="Move to folder" aria-label="Move to folder"><i class="fa-solid fa-folder" aria-hidden="true"></i></button>
+						<button type="button" data-bulk="visibility" title="Change visibility" aria-label="Change visibility"><i class="fa-solid fa-eye" aria-hidden="true"></i></button>
+						<button type="button" data-bulk="delete" class="danger" title="Delete" aria-label="Delete"><i class="fa-solid fa-trash-can" aria-hidden="true"></i></button>
+						<button type="button" data-bulk="clear" class="x" title="Clear selection" aria-label="Clear selection"><i class="fa-solid fa-xmark" aria-hidden="true"></i></button>
 					</div>
 				</div>
+				<div class="nl-foot" aria-live="polite"></div>
+			</section>
+			<div
+				class="tp-handle"
+				role="separator"
+				tabindex="0"
+				aria-orientation="vertical"
+				aria-label="Resize note list"
+				aria-controls="jnl-list"
+				aria-valuemin="0"
+				aria-valuemax="3"
+				aria-valuenow="2"
+				aria-valuetext="normal"
+			>
+				<button type="button" class="tp-cycle" title="Resize note list" aria-label="Resize note list"><i class="fa-solid fa-table-columns" aria-hidden="true"></i></button>
 			</div>
-			<!-- Right panel: note editor -->
-			<div class="flex-1 flex flex-col min-w-0">
-				<div
-					id="journal-editor"
-					class="flex-1 overflow-y-auto"
-					data-widget="journal"
-					data-campaign-id={ cc.Campaign.ID }
-					data-user-id={ layouts.GetUserID(ctx) }
-				>
-					<!-- Empty state shown when no note is selected -->
-					<div id="journal-empty-state" class="flex flex-col items-center justify-center h-full text-fg-muted">
-						<i class="fa-solid fa-book-open text-4xl mb-4 opacity-30"></i>
-						<p class="text-lg font-medium mb-1">No note selected</p>
-						<p class="text-sm">Select a note from the sidebar or create a new one</p>
-					</div>
-					<!-- Active note content (hidden until a note is selected) -->
-					<div id="journal-note-content" class="hidden h-full flex flex-col">
-						<!-- Note header -->
-						<div class="shrink-0 px-6 py-3 border-b border-edge flex items-center gap-3">
-							<input
-								type="text"
-								id="journal-note-title"
-								class="flex-1 text-lg font-semibold bg-transparent text-fg border-none outline-none placeholder-fg-muted"
-								placeholder="Untitled note"
-							/>
-							<div class="flex items-center gap-1.5">
-								<label id="journal-note-audio" class="p-1.5 rounded text-fg-muted hover:text-fg hover:bg-surface-alt transition-colors cursor-pointer" title="Attach audio">
-									<i class="fa-solid fa-microphone text-sm"></i>
-									<input type="file" accept="audio/mpeg,audio/ogg,audio/wav,audio/webm" class="hidden" id="journal-audio-input"/>
-								</label>
-								<button id="journal-note-share" class="p-1.5 rounded text-fg-muted hover:text-fg hover:bg-surface-alt transition-colors" title="Share note">
-									<i class="fa-solid fa-share-nodes text-sm"></i>
+			<section class="jnl-editor" aria-label="Note">
+				<div class="jnl-blank">
+					<i class="fa-solid fa-book-open" aria-hidden="true"></i>
+					<p class="t">No note open</p>
+					<p class="s">Pick one from the list, or start a new one.</p>
+					<button type="button" class="jnl-btn" data-new="note"><i class="fa-solid fa-plus" aria-hidden="true"></i> New note</button>
+				</div>
+				<div class="jnl-note" hidden>
+					<div class="ed-head">
+						<div class="ed-titlerow">
+							<input type="text" class="ed-title" placeholder="Untitled note" aria-label="Title" maxlength="200" autocomplete="off"/>
+							<button type="button" class="ed-ibtn" data-act="archive" title="Archive this note" aria-label="Archive this note"><i class="fa-solid fa-box-archive" aria-hidden="true"></i></button>
+							<button type="button" class="ed-ibtn" data-act="pin" title="Pin note" aria-label="Pin note" aria-pressed="false"><i class="fa-solid fa-thumbtack" aria-hidden="true"></i></button>
+							<button type="button" class="ed-ibtn drawer-toggle" data-act="drawer" title="Links, backlinks, history, audio" aria-label="Note details" aria-expanded="false" aria-controls="jnl-drawer">
+								<i class="fa-solid fa-link" aria-hidden="true"></i><span class="dt-badge" hidden></span>
+							</button>
+						</div>
+						<div class="ed-metarow">
+							<div class="vis-control" role="group" aria-label="Who can see this note">
+								<button type="button" class="vis-chip v-private" data-vis="private" aria-pressed="false"><i class="fa-solid fa-eye-slash" aria-hidden="true"></i>Private</button>
+								<button type="button" class="vis-chip v-party" data-vis="party" aria-pressed="false"><i class="fa-solid fa-users" aria-hidden="true"></i>Shared with party</button>
+								<button type="button" class="vis-chip v-gm" data-vis="gm" aria-pressed="false">
+									<i class="fa-solid fa-shield-halved" aria-hidden="true"></i>
+									if view.IsGM {
+										GM only
+									} else {
+										Shared with GM
+									}
 								</button>
-								<button id="journal-note-pin" class="p-1.5 rounded text-fg-muted hover:text-fg hover:bg-surface-alt transition-colors" title="Pin note">
-									<i class="fa-solid fa-thumbtack text-sm"></i>
-								</button>
-								<button id="journal-note-delete" class="p-1.5 rounded text-fg-muted hover:text-red-400 hover:bg-surface-alt transition-colors" title="Delete note">
-									<i class="fa-solid fa-trash text-sm"></i>
-								</button>
+								<button type="button" class="vis-chip v-custom" data-vis="custom" aria-pressed="false"><i class="fa-solid fa-user-group" aria-hidden="true"></i><span>Specific people</span></button>
 							</div>
-						</div>
-						<!-- Editor area -->
-						<div id="journal-editor-area" class="flex-1 overflow-y-auto px-6 py-4">
-							<!-- TipTap editor mounts here -->
-						</div>
-						<!-- Audio attachments area -->
-						<div id="journal-attachments" class="hidden shrink-0 border-t border-edge px-6 py-3">
-							<!-- Populated by journal.js when note has attachments -->
-						</div>
-						<!-- Status bar -->
-						<div class="shrink-0 px-6 py-1.5 border-t border-edge text-[11px] text-fg-muted flex items-center gap-3">
-							<span id="journal-note-status">Ready</span>
-							<span class="ml-auto" id="journal-note-updated"></span>
+							<span class="ed-owner" hidden></span>
+							<span class="ed-lock" hidden>
+								<i class="fa-solid fa-lock" aria-hidden="true"></i><span class="who"></span>
+								if view.IsGM {
+									<button type="button" data-act="unlock">Unlock</button>
+								}
+							</span>
 						</div>
 					</div>
+					<div class="ed-toolbar" role="toolbar" aria-label="Formatting">
+						<button type="button" class="ed-btn" data-cmd="bold" title="Bold (Ctrl+B)" aria-label="Bold"><b>B</b></button>
+						<button type="button" class="ed-btn" data-cmd="italic" title="Italic (Ctrl+I)" aria-label="Italic"><i>i</i></button>
+						<button type="button" class="ed-btn" data-cmd="heading" title="Heading" aria-label="Heading">H</button>
+						<span class="ed-sep" aria-hidden="true"></span>
+						<button type="button" class="ed-btn" data-cmd="tasks" title="Checklist" aria-label="Checklist"><i class="fa-solid fa-list-check" aria-hidden="true"></i></button>
+						<label class="ed-btn" title="Attach audio">
+							<i class="fa-solid fa-microphone" aria-hidden="true"></i>
+							<span class="sr-only">Attach audio</span>
+							<input type="file" accept="audio/mpeg,audio/ogg,audio/wav,audio/webm" class="sr-only" data-audio-input/>
+						</label>
+						<span class="ed-sep" aria-hidden="true"></span>
+						<button type="button" class="ed-btn" data-cmd="link" title="Insert a [[link]]" aria-label="Insert a link"><i class="fa-solid fa-link" aria-hidden="true"></i></button>
+						<span class="ed-hint">type <b class="kbd">[[</b> to link a note or page</span>
+					</div>
+					<div class="ed-body"></div>
+					<div class="ed-legacy" hidden></div>
+					<div class="ed-foot">
+						<span class="ed-status" aria-live="polite">Saved</span>
+						<span class="ed-updated"></span>
+						<span class="grow"></span>
+						<button type="button" class="ed-mini" data-jump="history"><i class="fa-solid fa-clock-rotate-left" aria-hidden="true"></i> History</button>
+						<button type="button" class="ed-mini" data-jump="audio"><i class="fa-solid fa-microphone" aria-hidden="true"></i> Audio</button>
+					</div>
 				</div>
-			</div>
+			</section>
+			<aside class="jnl-drawer" id="jnl-drawer" aria-label="Note details">
+				<div class="dr-head">
+					<i class="fa-solid fa-link" aria-hidden="true"></i><span class="grow">Note details</span>
+					<button type="button" class="ed-ibtn" data-act="drawer-close" title="Close" aria-label="Close details"><i class="fa-solid fa-xmark" aria-hidden="true"></i></button>
+				</div>
+				<div class="dr-sec">
+					<div class="dr-title"><i class="fa-solid fa-link" aria-hidden="true"></i> Links from this note</div>
+					<div class="dr-list" data-list="out"></div>
+				</div>
+				<div class="dr-sec">
+					<div class="dr-title"><i class="fa-solid fa-reply" aria-hidden="true"></i> Backlinks</div>
+					<div class="dr-list" data-list="back"></div>
+				</div>
+				<div class="dr-sec" data-sec="history">
+					<div class="dr-title"><i class="fa-solid fa-clock-rotate-left" aria-hidden="true"></i> Version history</div>
+					<div class="dr-list" data-list="history"></div>
+				</div>
+				<div class="dr-sec" data-sec="audio">
+					<div class="dr-title"><i class="fa-solid fa-microphone" aria-hidden="true"></i> Audio attachments</div>
+					<div class="dr-list" data-list="audio"></div>
+				</div>
+			</aside>
 		</div>
+		<div class="nl-fold" role="menu" aria-label="View options"></div>
+		<div class="nl-suggest" role="listbox" aria-label="Filter suggestions"></div>
+		<div class="nl-peek" aria-hidden="true"></div>
+		<div class="jnl-toasts" aria-live="polite"></div>
+	</div>
+}
+
+// journalClaimCard is a player's "Playing …" card. Mirroring the journal to
+// Foundry is not built; the badge says so rather than implying it works.
+templ journalClaimCard(cc *campaigns.CampaignContext, ch *ClaimedCharacter) {
+	<div class="jnl-claim">
+		<div class="claim-avatar" aria-hidden="true">{ initials(ch.Name) }</div>
+		<div class="grow">
+			<a class="name" href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/entities/%s", cc.Campaign.ID, ch.ID)) }>Playing { ch.Name }</a>
+			if ch.TypeName != "" {
+				<div class="sub">{ ch.TypeName }</div>
+			}
+		</div>
+		<span class="claim-badge" title="Planned: mirrors this journal to Foundry once character sync ships">Foundry: soon</span>
 	</div>
 }

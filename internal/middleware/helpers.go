@@ -17,13 +17,18 @@ import (
 var LayoutInjector func(echo.Context, context.Context) context.Context
 
 // IsHTMX returns true if the current request was initiated by HTMX and is NOT
-// a boosted navigation. Boosted requests (hx-boost="true") behave like normal
-// page navigations — they expect full page responses so hx-select can extract
-// the target element. Handlers use this to decide whether to return a fragment
-// or full page.
+// a boosted navigation or a history restore. Boosted requests
+// (hx-boost="true") behave like normal page navigations — they expect full
+// page responses so hx-select can extract the target element. A history
+// restore (Back or Forward; boot.js keeps htmx's history cache off, so every
+// one fetches) swaps the whole body with what it gets, so it needs the full
+// page too, or the sidebar and top bar vanish. Handlers use this to decide
+// whether to return a fragment or full page.
 func IsHTMX(c echo.Context) bool {
-	return c.Request().Header.Get("HX-Request") == "true" &&
-		c.Request().Header.Get("HX-Boosted") != "true"
+	h := c.Request().Header
+	return h.Get("HX-Request") == "true" &&
+		h.Get("HX-Boosted") != "true" &&
+		h.Get("HX-History-Restore-Request") != "true"
 }
 
 // IsAPIRequest reports whether the caller expects JSON rather than HTML: the

@@ -6,6 +6,10 @@ Transforms the flat entity list rendered by `SidebarEntityList` into a
 collapsible tree with drag-and-drop reordering and reparenting. This is
 the core interactive component of the sidebar drill panel.
 
+**No page loads it.** The campaign sidebar (`layouts/nav.templ`) has no page
+tree and nothing opens the drill panel; the script, the panel and its
+endpoint remain until the tree moves onto category pages (#784).
+
 ## Architecture
 
 **IIFE module** — no exports, self-initializing. Listens for HTMX swaps

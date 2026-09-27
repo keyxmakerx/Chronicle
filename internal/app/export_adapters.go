@@ -1333,6 +1333,10 @@ type noteImportAdapter struct {
 // untrusted input.
 func (a *noteImportAdapter) ImportNotes(ctx context.Context, campaignID, userID string, data []campaigns.ExportNote, idMap *campaigns.IDMap, report *campaigns.ImportReport) error {
 	newIDs := make([]string, len(data))
+	// The importer owns every note it creates here, so its own role never
+	// widens what it can see; a plain-member viewer is enough to re-file its
+	// own notes into its own folders.
+	importer := permissions.RequestViewer(permissions.RolePlayer, userID)
 
 	for i, n := range data {
 		var entityID *string
@@ -1357,7 +1361,7 @@ func (a *noteImportAdapter) ImportNotes(ctx context.Context, campaignID, userID 
 			}
 		}
 
-		created, err := a.svc.Create(ctx, campaignID, userID, notes.CreateNoteRequest{
+		created, err := a.svc.Create(ctx, campaignID, importer, notes.CreateNoteRequest{
 			EntityID: entityID,
 			IsFolder: n.IsFolder,
 			Title:    n.Title,
@@ -1374,7 +1378,7 @@ func (a *noteImportAdapter) ImportNotes(ctx context.Context, campaignID, userID 
 
 		if n.Entry != nil || n.EntryHTML != nil || n.Pinned {
 			pinned := n.Pinned
-			if _, err := a.svc.Update(ctx, created.ID, userID, notes.UpdateNoteRequest{
+			if _, err := a.svc.Update(ctx, created.ID, importer, notes.UpdateNoteRequest{
 				Entry:     n.Entry,
 				EntryHTML: n.EntryHTML,
 				Pinned:    &pinned,
@@ -1398,7 +1402,7 @@ func (a *noteImportAdapter) ImportNotes(ctx context.Context, campaignID, userID 
 			continue
 		}
 		parentID := newIDs[pi]
-		if _, err := a.svc.Update(ctx, newIDs[i], userID, notes.UpdateNoteRequest{
+		if _, err := a.svc.Update(ctx, newIDs[i], importer, notes.UpdateNoteRequest{
 			ParentID: &parentID,
 		}); err != nil {
 			slog.Warn("import: note re-parent failed", slog.String("note", n.Title), slog.Any("error", err))

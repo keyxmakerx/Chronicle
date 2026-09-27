@@ -144,22 +144,29 @@ type SidebarConfig struct {
 }
 
 // SidebarItem represents a single item in the unified sidebar navigation.
-// All sidebar content (dashboard, addons, categories, sections, links) is
-// modeled as items so owners can freely reorder everything.
+// Apps, categories, the owner's sections and links are all items, so owners
+// can arrange everything with one mechanism; nav.go reads them into sections.
 //
 // Nesting is intentionally NOT a field here. Whether a category renders
 // nested under a parent is derived from entity_types.parent_type_id (the
 // structural source of truth); a persisted "nested" flag would be a second
 // source of truth that can drift.
 type SidebarItem struct {
-	Type    string `json:"type"`              // "dashboard", "addon", "category", "section", "link", "all_pages"
-	Visible bool   `json:"visible"`           // Whether to show this item.
-	Slug    string `json:"slug,omitempty"`    // Addon slug (for type=addon).
+	Type string `json:"type"` // "app" (or its older spelling "addon"), "category", "section", "link"; "dashboard" and "all_pages" in older configs
+	// Visible false hides the item from players. The owner still sees it,
+	// marked as hidden, so they can reach what they hid while they prep.
+	Visible bool   `json:"visible"`
+	Slug    string `json:"slug,omitempty"`    // App slug (for type=app/addon).
 	TypeID  int    `json:"type_id,omitempty"` // Entity type ID (for type=category).
 	ID      string `json:"id,omitempty"`      // Unique ID (for sections/links).
 	Label   string `json:"label,omitempty"`   // Display label (for sections/links).
 	URL     string `json:"url,omitempty"`     // Link URL (for type=link).
 	Icon    string `json:"icon,omitempty"`    // FontAwesome icon (for type=link).
+	// Section is the section the item sits in: "pinned", "apps",
+	// "categories" or the id of one of the owner's sections. Empty on items
+	// saved before sections existed; NormalizeNav places those where the old
+	// sidebar drew them.
+	Section string `json:"section,omitempty"`
 }
 
 // ParseSidebarConfig parses the campaign's sidebar_config JSON into a

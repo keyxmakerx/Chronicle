@@ -455,6 +455,15 @@ func (s *mediaService) canMergeWithExisting(ctx context.Context, campaignID, exi
 	return true, refs, nil
 }
 
+// defaultCampaignlessStorageBytes caps a user's total campaign-less uploads
+// (avatars, and any /media/upload posted with a blank campaign_id) when no
+// per-user override raises or lowers it. Campaign-scoped uploads get their
+// quota from the campaign's own limits (checkQuotas below); campaign-less
+// uploads have no campaign to scope a quota to, so without this a user could
+// upload an unbounded number of avatar-sized files against the same shared
+// disk-space floor every other upload competes for.
+const defaultCampaignlessStorageBytes int64 = 25 * 1024 * 1024
+
 // checkQuotas enforces dynamic storage limits from the settings plugin.
 // Checks per-file size, campaign storage total, and campaign file count.
 // Returns a user-facing error if any quota would be exceeded. A limit of 0
@@ -476,9 +485,10 @@ func (s *mediaService) checkQuotas(ctx context.Context, input UploadInput) error
 		return apperror.NewBadRequest(fmt.Sprintf("file too large; maximum size is %d MB", maxUpload/(1024*1024)))
 	}
 
-	// Campaign-scoped limits only apply if the upload is associated with a campaign.
+	// Campaign-less uploads have no campaign to check a storage quota
+	// against, so they get their own per-user total instead.
 	if input.CampaignID == "" {
-		return nil
+		return s.checkCampaignlessQuota(ctx, input, maxStorage)
 	}
 
 	usedBytes, fileCount, err := s.repo.GetCampaignUsage(ctx, input.CampaignID)
@@ -497,6 +507,34 @@ func (s *mediaService) checkQuotas(ctx context.Context, input UploadInput) error
 		return apperror.NewBadRequest("campaign file count limit reached")
 	}
 
+	return nil
+}
+
+// checkCampaignlessQuota enforces a per-user total on uploads with no
+// campaign_id (avatars, and any /media/upload posted with a blank
+// campaign_id). maxStorage is the per-user override GetEffectiveLimits
+// already resolved above; for this bucket, 0 there means "no override
+// configured" and falls back to defaultCampaignlessStorageBytes rather than
+// "unlimited" -- a campaign-less upload has no campaign quota to fall back
+// on the way a campaign-scoped upload does.
+func (s *mediaService) checkCampaignlessQuota(ctx context.Context, input UploadInput, maxStorage int64) error {
+	limit := maxStorage
+	if limit <= 0 {
+		limit = defaultCampaignlessStorageBytes
+	}
+
+	usedBytes, _, err := s.repo.GetUserCampaignlessUsage(ctx, input.UploadedBy)
+	if err != nil {
+		slog.Warn("failed to query campaign-less storage usage, allowing upload",
+			slog.String("user_id", input.UploadedBy),
+			slog.Any("error", err),
+		)
+		return nil
+	}
+
+	if usedBytes+input.FileSize > limit {
+		return apperror.NewBadRequest("storage quota exceeded")
+	}
 	return nil
 }
 

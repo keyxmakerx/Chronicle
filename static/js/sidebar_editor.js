@@ -1,666 +1,1186 @@
 /**
- * sidebar_editor.js -- Unified Sidebar Edit Mode
+ * sidebar_editor.js -- the owner's edit mode for the campaign sidebar, and a
+ * member's own pins
  *
- * One pencil button triggers edit mode for all sidebar items (dashboard,
- * addons, categories, sub-types, sections, links). At entity level (drilled
- * into a category), it signals sidebar_tree.js to enable drag-and-drop on
- * the entity tree.
+ * The pencil in the sidebar's brand row turns the rows into an editor over
+ * one staged draft: drag a row's handle (or focus it and use the arrow keys)
+ * to move it, press its pin to move it into or out of Pinned, press its eye
+ * to hide it from players, add and name sections, edit links. A "What
+ * players see" card follows the draft. Save stores the whole draft with
+ * PUT /campaigns/:id/sidebar-config; Cancel throws it away. Nothing is
+ * stored before Save.
  *
- * Items become directly draggable (no grip handles). Eye toggles,
- * edit/delete actions appear inline on hover.
+ * The draft starts from the arrangement only the owner's page carries
+ * (#sidebar-nav[data-nav-edit]), which includes rows hidden from players and
+ * apps turned off in Extensions. Rows are built with DOM calls, never from
+ * markup strings, because labels and link addresses are typed by the owner.
  *
- * API: PUT /campaigns/:id/sidebar-config
- * Events: chronicle:toggle-sidebar-editor, chronicle:reorg-changed,
- *         chronicle:toggle-entity-visibility, chronicle:toggle-node-visibility
+ * Players and scribes have no editor; they pin rows for themselves with the
+ * pin on each row, which the server stores for them alone.
+ *
+ * Motion moves only transform and opacity. A moved row is the real row,
+ * lifted: let go, it glides into its new slot, or back into its own when the
+ * drop is cancelled; it is never copied. Under reduced motion everything
+ * crossfades.
  */
 (function () {
   'use strict';
 
-  var TOUCH_THRESHOLD = 10;
+  var FLIP_MS = 320;
+  var BACK_MS = 220;
+  var EASE = 'cubic-bezier(.2,.8,.2,1)';
+  var EASE_OUT = 'cubic-bezier(.16,1,.3,1)';
+  var HIST_MAX = 40;
+  var DRAG_SLOP = 5;
+  var ICON_RE = /^fa-[a-z0-9-]{1,40}$/;
 
-  // "npcs" is deliberately absent: its sidebar link is redundant with
-  // Characters (which already lists the party and NPCs together), so edit
-  // mode must not offer or auto-generate it as a separate item.
-  var KNOWN_ADDONS = [
-    { slug: 'notes', label: 'Journal', icon: 'fa-book-open' },
-    { slug: 'armory', label: 'Armory', icon: 'fa-shield-halved' }
-  ];
+  // --- The draft: pure operations (exported for tests) ---------------------
 
-  // State.
-  var active = false;
-  var level = null; // 'global' or 'entities'
-  var campaignId = null;
-  var config = null;
-  var items = [];
-  var entityTypes = [];
-  var endpoint = null;
-
-  // Touch drag state.
-  var touchDrag = { src: null, ghost: null, startX: 0, startY: 0, started: false };
-
-  // --- Helpers ---
-
-  function isDrilled() {
-    var panel = document.getElementById('sidebar-category');
-    return panel && panel.classList.contains('sidebar-drill-active');
+  /** Where a row goes when it leaves Pinned or a removed section. */
+  function homeFor(kind) {
+    return kind === 'category' ? 'categories' : 'apps';
   }
 
-  function getCampaignId() {
-    if (campaignId) return campaignId;
-    var el = document.querySelector('[data-campaign-id]');
-    if (el) campaignId = el.dataset.campaignId;
-    return campaignId;
+  /** Which rows a section may hold; the server applies the same rule. */
+  function accepts(sectionKind, rowKind) {
+    if (sectionKind === 'apps') return rowKind === 'app' || rowKind === 'link';
+    if (sectionKind === 'categories') return rowKind === 'category';
+    return true;
   }
 
-  function getEndpoint() {
-    if (endpoint) return endpoint;
-    var cid = getCampaignId();
-    if (cid) endpoint = '/campaigns/' + cid + '/sidebar-config';
-    return endpoint;
+  function clone(o) {
+    return JSON.parse(JSON.stringify(o));
   }
 
-  function getItemLabel(item) {
-    switch (item.type) {
-      case 'dashboard': return 'Dashboard';
-      case 'all_pages': return 'All Pages';
-      case 'addon': return item.label || item.slug;
-      case 'category':
-        for (var i = 0; i < entityTypes.length; i++) {
-          if (entityTypes[i].id === item.type_id) return entityTypes[i].name_plural || entityTypes[i].name;
-        }
-        return 'Category #' + item.type_id;
-      case 'section': return item.label || 'Section';
-      case 'link': return item.label || item.url || 'Link';
-      default: return item.type;
+  /** The rows a section shows in the editor: apps turned off keep their
+   *  place in the draft but are not drawn. */
+  function shownRows(sec) {
+    return sec.items.filter(function (r) { return !r.off; });
+  }
+
+  function sectionById(draft, id) {
+    for (var i = 0; i < draft.sections.length; i++) {
+      if (draft.sections[i].id === id) return draft.sections[i];
     }
+    return null;
   }
 
-  function getItemIcon(item) {
-    switch (item.type) {
-      case 'dashboard': return 'fa-home';
-      case 'all_pages': return 'fa-layer-group';
-      case 'addon': return item.icon || 'fa-puzzle-piece';
-      case 'category':
-        for (var i = 0; i < entityTypes.length; i++) {
-          if (entityTypes[i].id === item.type_id) return entityTypes[i].icon || 'fa-folder';
-        }
-        return 'fa-folder';
-      case 'section': return 'fa-grip-lines';
-      case 'link': return item.icon || 'fa-link';
-      default: return 'fa-circle';
-    }
-  }
-
-  function getItemColor(item) {
-    if (item.type === 'category') {
-      for (var i = 0; i < entityTypes.length; i++) {
-        if (entityTypes[i].id === item.type_id) return entityTypes[i].color || '';
+  function findRow(draft, key) {
+    for (var i = 0; i < draft.sections.length; i++) {
+      var items = draft.sections[i].items;
+      for (var j = 0; j < items.length; j++) {
+        if (items[j].key === key) return { sec: draft.sections[i], index: j, row: items[j] };
       }
     }
-    return '';
+    return null;
   }
 
-  // Returns true if the item is a sub-type category (has a parent_type_id).
-  function isSubType(item) {
-    if (item.type !== 'category') return false;
-    for (var i = 0; i < entityTypes.length; i++) {
-      if (entityTypes[i].id === item.type_id) return !!entityTypes[i].parent_type_id;
+  /**
+   * Moves a row into section toId, before the shown row at shownIndex
+   * (counted with the row already taken out), or to the end when shownIndex
+   * is past the last. Returns false when the section cannot hold the row.
+   */
+  function moveRowTo(draft, key, toId, shownIndex) {
+    var loc = findRow(draft, key), to = sectionById(draft, toId);
+    if (!loc || !to || !accepts(to.kind, loc.row.kind)) return false;
+    loc.sec.items.splice(loc.index, 1);
+    var shown = shownRows(to);
+    var at = shownIndex < shown.length ? to.items.indexOf(shown[shownIndex]) : to.items.length;
+    to.items.splice(at, 0, loc.row);
+    return true;
+  }
+
+  /**
+   * Moves a row one shown place up (dir -1) or down (+1); at either end of
+   * its section it crosses into the neighbouring section that can hold it.
+   * Returns the section it lands in, or null when it cannot move.
+   */
+  function stepRow(draft, key, dir) {
+    var loc = findRow(draft, key);
+    if (!loc) return null;
+    var cur = loc.sec, shown = shownRows(cur), i = shown.indexOf(loc.row);
+    var conts = draft.sections.filter(function (s) { return accepts(s.kind, loc.row.kind); });
+    var ci = conts.indexOf(cur);
+    if (dir < 0) {
+      if (i > 0) { moveRowTo(draft, key, cur.id, i - 1); return cur; }
+      if (ci > 0) { moveRowTo(draft, key, conts[ci - 1].id, Infinity); return conts[ci - 1]; }
+    } else {
+      if (i < shown.length - 1) { moveRowTo(draft, key, cur.id, i + 1); return cur; }
+      if (ci >= 0 && ci < conts.length - 1) { moveRowTo(draft, key, conts[ci + 1].id, 0); return conts[ci + 1]; }
+    }
+    return null;
+  }
+
+  /** Pins a row (to the end of Pinned) or unpins it (to the top of its
+   *  home section). Returns the section it lands in. */
+  function togglePin(draft, key) {
+    var loc = findRow(draft, key);
+    if (!loc) return null;
+    var toId = loc.sec.id === 'pinned' ? homeFor(loc.row.kind) : 'pinned';
+    if (!moveRowTo(draft, key, toId, toId === 'pinned' ? Infinity : 0)) return null;
+    return sectionById(draft, toId);
+  }
+
+  /** Removes one of the owner's sections; its rows go back to their homes. */
+  function removeSection(draft, id) {
+    for (var i = 0; i < draft.sections.length; i++) {
+      var sec = draft.sections[i];
+      if (sec.id !== id || sec.kind !== 'custom') continue;
+      draft.sections.splice(i, 1);
+      sec.items.forEach(function (r) { sectionById(draft, homeFor(r.kind)).items.push(r); });
+      return true;
     }
     return false;
   }
 
-  function injectMissing(existingItems, types) {
-    var hasDashboard = false, hasAllPages = false;
-    var addonSlugs = {}, categoryIds = {};
-
-    existingItems.forEach(function (item) {
-      if (item.type === 'dashboard') hasDashboard = true;
-      if (item.type === 'all_pages') hasAllPages = true;
-      if (item.type === 'addon') addonSlugs[item.slug] = true;
-      if (item.type === 'category') categoryIds[item.type_id] = true;
+  function uniqueId(draft, prefix) {
+    var taken = {};
+    draft.sections.forEach(function (s) {
+      taken[s.id] = true;
+      s.items.forEach(function (r) { taken[r.key.slice(r.key.indexOf(':') + 1)] = true; });
     });
-
-    if (!hasDashboard) existingItems.unshift({ type: 'dashboard', visible: true });
-
-    KNOWN_ADDONS.forEach(function (addon) {
-      if (!addonSlugs[addon.slug]) {
-        existingItems.push({ type: 'addon', slug: addon.slug, label: addon.label, icon: addon.icon, visible: true });
-      }
-    });
-
-    // Only add TOP-LEVEL entity types. Sub-category entity_types
-    // (parent_type_id != null) are template variants of their parent, not
-    // navigable collections, and must never appear in the sidebar config.
-    types.forEach(function (et) {
-      if (et.parent_type_id) return;
-      if (!categoryIds[et.id]) {
-        existingItems.push({ type: 'category', type_id: et.id, visible: true });
-      }
-    });
-
-    if (!hasAllPages) existingItems.push({ type: 'all_pages', visible: true });
-    return existingItems;
-  }
-
-  function generateDefaults(types) {
-    var defaults = [{ type: 'dashboard', visible: true }];
-    KNOWN_ADDONS.forEach(function (a) {
-      defaults.push({ type: 'addon', slug: a.slug, label: a.label, icon: a.icon, visible: true });
-    });
-    // Only top-level types; sub-categories are template variants.
-    var parents = types.filter(function (t) { return !t.parent_type_id; });
-    parents.forEach(function (parent) {
-      defaults.push({ type: 'category', type_id: parent.id, visible: true });
-    });
-    defaults.push({ type: 'all_pages', visible: true });
-    return defaults;
-  }
-
-  // --- Toggle Edit Mode ---
-
-  function toggle() {
-    if (active) {
-      deactivate();
-    } else {
-      activate();
+    for (;;) {
+      var id = prefix + Math.random().toString(36).slice(2, 10);
+      if (!taken[id]) return id;
     }
   }
 
-  function activate() {
-    active = true;
-    level = isDrilled() ? 'entities' : 'global';
-    document.body.classList.add('sidebar-reorg-active');
-    updateButton(true);
-
-    if (level === 'global') {
-      activateGlobal();
-    } else {
-      activateEntities();
-    }
+  /** Adds a section at the end and returns it. */
+  function addSection(draft) {
+    var sec = { id: uniqueId(draft, 'sec_'), kind: 'custom', label: 'New section', items: [] };
+    draft.sections.push(sec);
+    return sec;
   }
 
-  function deactivate() {
-    if (level === 'global') {
-      deactivateGlobal();
-    } else {
-      deactivateEntities();
-    }
-    active = false;
-    level = null;
-    document.body.classList.remove('sidebar-reorg-active');
-    updateButton(false);
-  }
-
-  function updateButton(isActive) {
-    var btns = document.querySelectorAll('[data-sidebar-edit-toggle]');
-    btns.forEach(function (btn) {
-      var icon = btn.querySelector('i');
-      if (isActive) {
-        btn.classList.add('bg-accent/20', 'text-accent');
-        btn.classList.remove('text-gray-500');
-        btn.title = 'Done editing';
-        if (icon) { icon.className = 'fa-solid fa-check text-[10px]'; }
-      } else {
-        btn.classList.remove('bg-accent/20', 'text-accent');
-        btn.classList.add('text-gray-500');
-        btn.title = 'Edit sidebar';
-        if (icon) { icon.className = 'fa-solid fa-pencil text-[10px]'; }
-      }
-    });
-  }
-
-  // --- Global Level (Categories, Addons, Sections, Links) ---
-
-  var editPanel = null;
-
-  function activateGlobal() {
-    var ep = getEndpoint();
-    if (!ep) return;
-
-    // Try to get entity types from sidebar data attribute.
-    var etEl = document.querySelector('[data-sidebar-entity-types]');
-    if (etEl) {
-      try { entityTypes = JSON.parse(etEl.dataset.sidebarEntityTypes); } catch (e) { /* ignore */ }
-    }
-
-    Chronicle.apiFetch(ep)
-      .then(function (res) { return res.ok ? res.json() : {}; })
-      .then(function (data) {
-        config = data || {};
-        if (config.items && config.items.length > 0) {
-          // Strip any persisted sub-category items from older configs — they
-          // are now template variants and must not appear in the editor.
-          // Also strip a persisted "npcs" addon item from older configs — its
-          // link is redundant with Characters and must not reappear here.
-          var filtered = config.items.filter(function (item) {
-            if (item.type === 'addon' && item.slug === 'npcs') return false;
-            if (item.type !== 'category') return true;
-            for (var i = 0; i < entityTypes.length; i++) {
-              if (entityTypes[i].id === item.type_id) return !entityTypes[i].parent_type_id;
-            }
-            return true;
-          });
-          items = injectMissing(filtered, entityTypes);
-        } else {
-          items = generateDefaults(entityTypes);
-        }
-        renderEditPanel();
-      })
-      .catch(function () { renderEditPanel(); });
-  }
-
-  var configChanged = false;
-
-  function deactivateGlobal() {
-    if (editPanel) {
-      editPanel.remove();
-      editPanel = null;
-    }
-    // Reload page to reflect sidebar changes (order, visibility, sections).
-    if (configChanged) {
-      configChanged = false;
-      window.location.reload();
-      return;
-    }
-    // Restore original sidebar content if no changes were made.
-    var catList = document.getElementById('sidebar-cat-list');
-    if (catList) {
-      Array.from(catList.children).forEach(function (child) {
-        // Only unhide children that were visible before edit mode.
-        if (child.dataset.editWasHidden === 'yes') {
-          // Was already hidden — leave it hidden.
-        } else {
-          child.style.display = '';
-        }
-        delete child.dataset.editWasHidden;
-      });
-    }
-  }
-
-  function renderEditPanel() {
-    // Remove existing panel if any.
-    if (editPanel) editPanel.remove();
-
-    var catList = document.getElementById('sidebar-cat-list');
-    if (!catList) return;
-
-    editPanel = document.createElement('div');
-    editPanel.id = 'sidebar-edit-panel';
-    editPanel.className = 'px-2 py-2 space-y-1';
-
-    items.forEach(function (item, idx) {
-      var row = createEditRow(item, idx);
-      editPanel.appendChild(row);
-    });
-
-    // Add section/link buttons.
-    var actions = document.createElement('div');
-    actions.className = 'flex gap-2 px-1 pt-2 border-t border-gray-700/50 mt-2';
-    actions.innerHTML =
-      '<button type="button" class="text-[10px] text-fg-muted hover:text-accent transition-colors" data-add-section>' +
-      '<i class="fa-solid fa-plus mr-1"></i>Section</button>' +
-      '<button type="button" class="text-[10px] text-fg-muted hover:text-accent transition-colors" data-add-link>' +
-      '<i class="fa-solid fa-plus mr-1"></i>Link</button>';
-
-    actions.querySelector('[data-add-section]').addEventListener('click', function () {
-      var label = prompt('Section label:');
-      if (!label || !label.trim()) return;
-      items.push({ type: 'section', id: 'sec_' + Math.random().toString(36).substr(2, 8), label: label.trim(), visible: true });
-      saveConfig();
-      renderEditPanel();
-    });
-
-    actions.querySelector('[data-add-link]').addEventListener('click', function () {
-      var label = prompt('Link label:');
-      if (!label || !label.trim()) return;
-      var url = prompt('URL:');
-      if (!url || !url.trim()) return;
-      items.push({ type: 'link', id: 'lnk_' + Math.random().toString(36).substr(2, 8), label: label.trim(), url: url.trim(), icon: 'fa-link', visible: true });
-      saveConfig();
-      renderEditPanel();
-    });
-
-    editPanel.appendChild(actions);
-
-    // Hide original sidebar content, append edit panel.
-    // Track which children were already hidden so we don't unhide them on restore.
-    Array.from(catList.children).forEach(function (child) {
-      if (child.id !== 'sidebar-edit-panel') {
-        if (!child.dataset.editWasHidden) {
-          child.dataset.editWasHidden = child.style.display === 'none' ? 'yes' : 'no';
-        }
-        child.style.display = 'none';
-      }
-    });
-    catList.appendChild(editPanel);
-  }
-
-  function createEditRow(item, idx) {
-    var vis = item.visible !== false;
-    var label = Chronicle.escapeHtml(getItemLabel(item));
-    var icon = getItemIcon(item);
-    var color = getItemColor(item);
-
-    var row = document.createElement('div');
-    var subType = isSubType(item);
-    row.className = 'sidebar-edit-item flex items-center gap-1.5 px-2 py-1.5 rounded-md group transition-all cursor-grab' +
-      (vis ? '' : ' opacity-40') +
-      (subType ? ' ml-4' : '');
-    row.draggable = true;
-    row.dataset.editIdx = idx;
-
-    // Nesting is derived from the entity-type parent_type_id, not a
-    // per-item flag — sub-types are always rendered nested in their
-    // parent's drill panel. The visual ml-4 indent above already
-    // communicates the parent-child relationship in the editor.
-    var iconStyle = color ? ' style="color:' + Chronicle.escapeAttr(color) + '"' : '';
-    row.innerHTML =
-      '<span class="w-4 h-4 flex items-center justify-center shrink-0"' + iconStyle + '>' +
-      '<i class="fa-solid ' + Chronicle.escapeHtml(icon) + ' text-[10px]"></i></span>' +
-      '<span class="flex-1 text-[11px] text-sidebar-text truncate">' + label + '</span>' +
-      '<span class="flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity shrink-0">' +
-      (item.type === 'section' || item.type === 'link'
-        ? '<button type="button" class="w-5 h-5 flex items-center justify-center rounded text-[9px] text-fg-muted hover:text-fg" data-action="edit" title="Edit">' +
-          '<i class="fa-solid fa-pen"></i></button>' +
-          '<button type="button" class="w-5 h-5 flex items-center justify-center rounded text-[9px] text-fg-muted hover:text-rose-400" data-action="delete" title="Remove">' +
-          '<i class="fa-solid fa-trash"></i></button>'
-        : '') +
-      '<button type="button" class="w-5 h-5 flex items-center justify-center rounded text-[9px] text-fg-muted hover:text-fg" data-action="toggle" title="' + (vis ? 'Hide' : 'Show') + '">' +
-      '<i class="fa-solid ' + (vis ? 'fa-eye' : 'fa-eye-slash') + '"></i></button>' +
-      '</span>';
-
-    // Event handlers.
-    row.querySelector('[data-action="toggle"]').addEventListener('click', function (e) {
-      e.stopPropagation();
-      items[idx].visible = !items[idx].visible;
-      saveConfig();
-      renderEditPanel();
-    });
-
-    var editBtn = row.querySelector('[data-action="edit"]');
-    if (editBtn) {
-      editBtn.addEventListener('click', function (e) {
-        e.stopPropagation();
-        editItem(idx);
-      });
-    }
-
-    var delBtn = row.querySelector('[data-action="delete"]');
-    if (delBtn) {
-      delBtn.addEventListener('click', function (e) {
-        e.stopPropagation();
-        if (!confirm('Remove "' + getItemLabel(items[idx]) + '"?')) return;
-        items.splice(idx, 1);
-        saveConfig();
-        renderEditPanel();
-      });
-    }
-
-    // Desktop drag-and-drop.
-    row.addEventListener('dragstart', function (e) {
-      e.dataTransfer.effectAllowed = 'move';
-      e.dataTransfer.setData('text/plain', String(idx));
-      row.classList.add('opacity-40');
-    });
-
-    row.addEventListener('dragover', function (e) {
-      e.preventDefault();
-      e.dataTransfer.dropEffect = 'move';
-      row.classList.add('ring-1', 'ring-accent/50');
-    });
-
-    row.addEventListener('dragleave', function () {
-      row.classList.remove('ring-1', 'ring-accent/50');
-    });
-
-    row.addEventListener('drop', function (e) {
-      e.preventDefault();
-      row.classList.remove('ring-1', 'ring-accent/50');
-      var fromIdx = parseInt(e.dataTransfer.getData('text/plain'), 10);
-      var toIdx = idx;
-      if (isNaN(fromIdx) || fromIdx === toIdx) return;
-      var moved = items.splice(fromIdx, 1)[0];
-      items.splice(toIdx, 0, moved);
-      saveConfig();
-      renderEditPanel();
-    });
-
-    row.addEventListener('dragend', function () {
-      row.classList.remove('opacity-40');
-      // Clean up any lingering highlight on all rows.
-      if (editPanel) {
-        editPanel.querySelectorAll('.sidebar-edit-item').forEach(function (r) {
-          r.classList.remove('ring-1', 'ring-accent/50', 'opacity-40');
-        });
-      }
-    });
-
-    // Touch drag-and-drop.
-    var startX = 0, startY = 0, dragging = false;
-    row.addEventListener('touchstart', function (e) {
-      var touch = e.touches[0];
-      startX = touch.clientX;
-      startY = touch.clientY;
-      dragging = false;
-    }, { passive: true });
-
-    row.addEventListener('touchmove', function (e) {
-      var touch = e.touches[0];
-      if (!dragging && Math.abs(touch.clientY - startY) > TOUCH_THRESHOLD) {
-        dragging = true;
-        touchDrag.src = idx;
-        touchDrag.ghost = row.cloneNode(true);
-        touchDrag.ghost.style.cssText = 'position:fixed;pointer-events:none;opacity:0.7;z-index:9999;width:' + row.offsetWidth + 'px;';
-        document.body.appendChild(touchDrag.ghost);
-        row.classList.add('opacity-40');
-      }
-      if (dragging) {
-        e.preventDefault();
-        touchDrag.ghost.style.left = (touch.clientX - row.offsetWidth / 2) + 'px';
-        touchDrag.ghost.style.top = (touch.clientY - 20) + 'px';
-        // Highlight drop target.
-        editPanel.querySelectorAll('.sidebar-edit-item').forEach(function (r) {
-          r.classList.remove('ring-1', 'ring-accent/50');
-        });
-        var target = document.elementFromPoint(touch.clientX, touch.clientY);
-        if (target) {
-          var targetRow = target.closest('.sidebar-edit-item');
-          if (targetRow && targetRow !== row) targetRow.classList.add('ring-1', 'ring-accent/50');
-        }
-      }
-    }, { passive: false });
-
-    row.addEventListener('touchend', function (e) {
-      if (touchDrag.ghost) { touchDrag.ghost.remove(); touchDrag.ghost = null; }
-      row.classList.remove('opacity-40');
-      editPanel.querySelectorAll('.sidebar-edit-item').forEach(function (r) {
-        r.classList.remove('ring-1', 'ring-accent/50');
-      });
-      if (dragging && touchDrag.src !== null) {
-        var touch = e.changedTouches[0];
-        var target = document.elementFromPoint(touch.clientX, touch.clientY);
-        if (target) {
-          var targetRow = target.closest('.sidebar-edit-item');
-          if (targetRow) {
-            var toIdx = parseInt(targetRow.dataset.editIdx, 10);
-            if (!isNaN(toIdx) && toIdx !== touchDrag.src) {
-              var moved = items.splice(touchDrag.src, 1)[0];
-              items.splice(toIdx, 0, moved);
-              saveConfig();
-              renderEditPanel();
-            }
-          }
-        }
-      }
-      touchDrag.src = null;
-      dragging = false;
-    });
-
+  /** Adds an empty link at the end of Apps and returns it. */
+  function addLink(draft) {
+    var row = { key: 'link:' + uniqueId(draft, 'lnk_'), kind: 'link', label: '', url: '', icon: 'fa-link' };
+    sectionById(draft, 'apps').items.push(row);
     return row;
   }
 
-  function editItem(idx) {
-    var item = items[idx];
-    var label = prompt('Label:', item.label || '');
-    if (label === null) return;
-    item.label = label.trim();
-    if (item.type === 'link') {
-      var url = prompt('URL:', item.url || '');
-      if (url !== null) item.url = url.trim();
-      var icon = prompt('Icon (e.g. fa-globe):', item.icon || '');
-      if (icon !== null) item.icon = icon.trim();
+  /** The first link the server would refuse for a missing name or address. */
+  function incompleteLink(draft) {
+    for (var i = 0; i < draft.sections.length; i++) {
+      var items = draft.sections[i].items;
+      for (var j = 0; j < items.length; j++) {
+        var r = items[j];
+        if (r.kind === 'link' && (!String(r.label || '').trim() || !String(r.url || '').trim())) return r;
+      }
     }
-    saveConfig();
-    renderEditPanel();
+    return null;
   }
 
-  function saveConfig() {
-    var ep = getEndpoint();
-    if (!ep) return;
-    configChanged = true;
-
-    Chronicle.apiFetch(ep, {
-      method: 'PUT',
-      body: {
-        items: items,
-        hidden_entity_ids: (config && config.hidden_entity_ids) || [],
-        hidden_node_ids: (config && config.hidden_node_ids) || []
+  /**
+   * The draft as sidebar_config items, in order: each of the owner's
+   * sections is written as a section item ahead of its rows, and every row
+   * names its section. Apps turned off are written too, so they keep their
+   * place for when they are turned back on. Every section is visible: a
+   * heading the old editor hid never reaches the draft (NormalizeNav leaves
+   * it out), so saving drops it instead of showing it.
+   */
+  function itemsFromDraft(draft) {
+    var out = [];
+    draft.sections.forEach(function (sec) {
+      if (sec.kind === 'custom') {
+        out.push({ type: 'section', id: sec.id, label: String(sec.label || '').trim() || 'Untitled', visible: true });
       }
-    }).then(function (res) {
-      if (!res.ok) Chronicle.notify('Failed to save sidebar', 'error');
-    }).catch(function () {
-      Chronicle.notify('Failed to save sidebar', 'error');
+      sec.items.forEach(function (r) {
+        var ref = r.key.slice(r.key.indexOf(':') + 1), it;
+        if (r.kind === 'app') it = { type: 'app', slug: ref };
+        else if (r.kind === 'category') it = { type: 'category', type_id: parseInt(ref, 10) };
+        else if (r.kind === 'link') {
+          it = { type: 'link', id: ref, label: String(r.label || '').trim(), url: String(r.url || '').trim(), icon: r.icon || '' };
+        } else return;
+        it.visible = !r.hidden;
+        it.section = sec.id;
+        out.push(it);
+      });
+    });
+    return out;
+  }
+
+  /** What players will see: every section's rows that are neither hidden
+   *  from players nor turned off, leaving out sections with none. */
+  function playerView(draft) {
+    var out = [];
+    draft.sections.forEach(function (sec) {
+      var rows = sec.items.filter(function (r) { return !r.hidden && !r.off; });
+      if (rows.length) out.push({ id: sec.id, label: sec.label, rows: rows });
+    });
+    return out;
+  }
+
+  /** Reads the owner's arrangement from the page, or null for anyone else. */
+  function readModel(navEl) {
+    var raw = navEl && navEl.getAttribute('data-nav-edit');
+    if (!raw) return null;
+    var m;
+    try { m = JSON.parse(raw); } catch (e) { return null; }
+    if (!m || !Array.isArray(m.sections) || !sectionById(m, 'pinned') || !sectionById(m, 'apps') || !sectionById(m, 'categories')) return null;
+    m.sections.forEach(function (s) { if (!Array.isArray(s.items)) s.items = []; });
+    if (!Array.isArray(m.off)) m.off = [];
+    return m;
+  }
+
+  // --- Page helpers ----------------------------------------------------------
+
+  var S = null; // the edit session: { saved, draft, hist, armed, saving }
+  var D = null; // a drag in progress
+
+  function $$(sel, root) {
+    return Array.prototype.slice.call((root || document).querySelectorAll(sel));
+  }
+
+  function reduced() {
+    var q = window.matchMedia ? window.matchMedia('(prefers-reduced-motion: reduce)') : null;
+    return !!(q && q.matches) || document.documentElement.classList.contains('nav-rm');
+  }
+
+  // Element.animate, or nothing where it is missing: every caller copes with null.
+  function play(node, frames, opts) {
+    return node && node.animate ? node.animate(frames, opts) : null;
+  }
+
+  function whenDone(anim, fn) {
+    if (!anim) { fn(); return; }
+    anim.finished.then(fn, fn);
+  }
+
+  function nav() { return document.getElementById('sidebar-nav'); }
+  function viewList() { return document.getElementById('sidebar-nav-list'); }
+  function editList() { return document.getElementById('sidebar-nav-edit'); }
+
+  function el(tag, cls, attrs, text) {
+    var n = document.createElement(tag);
+    if (cls) n.className = cls;
+    if (attrs) Object.keys(attrs).forEach(function (k) { n.setAttribute(k, attrs[k]); });
+    if (text != null) n.textContent = text;
+    return n;
+  }
+
+  function faIcon(name, cls) {
+    var i = el('i', 'fa-solid ' + (ICON_RE.test(name) ? name : 'fa-circle') + (cls ? ' ' + cls : ''));
+    i.setAttribute('aria-hidden', 'true');
+    return i;
+  }
+
+  function announce(msg) {
+    var live = document.getElementById('nav-live');
+    if (!live) {
+      live = el('div', 'sr-only', { id: 'nav-live', 'aria-live': 'polite' });
+      document.body.appendChild(live);
+    }
+    live.textContent = '';
+    setTimeout(function () { live.textContent = msg; }, 30);
+  }
+
+  function notify(msg, type) {
+    if (window.Chronicle && Chronicle.notify) Chronicle.notify(msg, type);
+  }
+
+  function changed() {
+    return !!S && JSON.stringify(S.draft) !== JSON.stringify(S.saved);
+  }
+
+  function nameOf(row) {
+    return row.kind === 'link' ? (String(row.label || '').trim() || 'New link') : row.label;
+  }
+
+  // --- Drawing the editor ----------------------------------------------------
+
+  function rowIcon(row) {
+    var ic = el('span', 'nav-ic');
+    if (row.kind === 'category' && !ICON_RE.test(row.icon || '')) {
+      var dot = el('span', 'nav-dot');
+      dot.style.backgroundColor = row.color || '';
+      ic.appendChild(dot);
+    } else {
+      var i = faIcon(ICON_RE.test(row.icon || '') ? row.icon : (row.kind === 'link' ? 'fa-link' : 'fa-circle'));
+      if (row.color) i.style.color = row.color;
+      ic.appendChild(i);
+    }
+    return ic;
+  }
+
+  function handle(key, name) {
+    var h = el('button', 'nav-hd', {
+      type: 'button', 'data-handle': '', 'data-k': key, 'data-fk': 'h:' + key,
+      'aria-label': 'Move ' + name, 'aria-describedby': 'nav-hint-move'
+    });
+    h.appendChild(faIcon('fa-grip-vertical'));
+    return h;
+  }
+
+  function pinButton(row, inPinned) {
+    var n = nameOf(row), label = inPinned ? 'Unpin ' + n : 'Pin ' + n + ' to the top';
+    var b = el('button', 'nav-eb nav-pin', {
+      type: 'button', 'data-act': 'pin', 'data-k': row.key, 'data-fk': 'p:' + row.key,
+      'aria-pressed': String(inPinned), 'aria-label': label, title: label
+    });
+    b.appendChild(faIcon('fa-thumbtack'));
+    return b;
+  }
+
+  // Hiding a row changes only players' sidebar; the page still opens from a
+  // link. The eye and every hidden row say so, and the editor points to a
+  // page's visibility for real privacy.
+  var HIDDEN_NOTE = "Hidden from players' sidebar. It still opens from a link.";
+  var PRIVACY_HINT = "Hiding changes only players' sidebar. To keep a page private, set its visibility on the page.";
+
+  function eyeButton(row) {
+    var n = nameOf(row);
+    var label = row.hidden ? 'Show ' + n + " in players' sidebar" : 'Hide ' + n + " from players' sidebar";
+    var b = el('button', 'nav-eb nav-eye', {
+      type: 'button', 'data-act': 'hide', 'data-k': row.key, 'data-fk': 'e:' + row.key,
+      'aria-pressed': String(!!row.hidden), 'aria-label': label,
+      title: row.hidden ? "Show in players' sidebar" : "Hide from players' sidebar. It still opens from a link."
+    });
+    b.appendChild(faIcon(row.hidden ? 'fa-eye-slash' : 'fa-eye'));
+    return b;
+  }
+
+  function hiddenNote() {
+    return el('span', 'nav-ed-note', null, HIDDEN_NOTE);
+  }
+
+  function editRow(row, sec) {
+    var r = el('div', 'nav-row nav-ed' + (row.hidden ? ' is-hidden has-note' : '') + (row.kind === 'link' ? ' nav-ed-link' : ''), {
+      'data-drag': row.key, 'data-flip': 'n:' + row.key
+    });
+    r.appendChild(handle(row.key, nameOf(row)));
+    r.appendChild(rowIcon(row));
+    if (row.kind !== 'link') {
+      if (row.hidden) {
+        var text = el('span', 'nav-ed-text');
+        text.appendChild(el('span', 'nav-lb', null, row.label));
+        text.appendChild(hiddenNote());
+        r.appendChild(text);
+      } else {
+        r.appendChild(el('span', 'nav-lb', null, row.label));
+      }
+      r.appendChild(pinButton(row, sec.id === 'pinned'));
+      r.appendChild(eyeButton(row));
+      return r;
+    }
+    // A link is named on its first line and addressed on its second.
+    var name = el('input', 'nav-li', {
+      type: 'text', maxlength: '100', placeholder: 'Link name', 'aria-label': 'Link name',
+      'data-link-label': row.key, 'data-fk': 'l:' + row.key
+    });
+    name.value = row.label || '';
+    r.appendChild(name);
+    r.appendChild(pinButton(row, sec.id === 'pinned'));
+    r.appendChild(eyeButton(row));
+    var line = el('span', 'nav-ed-url');
+    var url = el('input', 'nav-li nav-li-url', {
+      type: 'text', maxlength: '2048', placeholder: 'https://… or /campaigns/…', 'aria-label': 'Link address',
+      'data-link-url': row.key, 'data-fk': 'u:' + row.key, spellcheck: 'false', autocomplete: 'off'
+    });
+    url.value = row.url || '';
+    line.appendChild(url);
+    var x = el('button', 'nav-eb', {
+      type: 'button', 'data-act': 'dellink', 'data-k': row.key,
+      'aria-label': 'Remove ' + nameOf(row), title: 'Remove link'
+    });
+    x.appendChild(faIcon('fa-xmark'));
+    line.appendChild(x);
+    r.appendChild(line);
+    if (row.hidden) r.appendChild(hiddenNote());
+    return r;
+  }
+
+  function editHeading(sec) {
+    var h = el('div', 'nav-gh nav-gh-ed', { 'data-flip': 'g:' + sec.id });
+    if (sec.kind === 'custom') {
+      var input = el('input', 'nav-gi', {
+        type: 'text', maxlength: '100', 'aria-label': 'Name of this section',
+        'data-rename': sec.id, 'data-fk': 'r:' + sec.id
+      });
+      input.value = sec.label || '';
+      h.appendChild(input);
+    } else {
+      var l = el('span', 'nav-gh-l');
+      if (sec.kind === 'pinned') l.appendChild(faIcon('fa-thumbtack'));
+      l.appendChild(document.createTextNode(sec.label));
+      h.appendChild(l);
+    }
+    h.appendChild(el('span', 'nav-gh-n', null, String(shownRows(sec).length)));
+    if (sec.kind === 'custom') {
+      var x = el('button', 'nav-eb', {
+        type: 'button', 'data-act': 'delsec', 'data-sec': sec.id,
+        'aria-label': 'Remove the ' + (sec.label || 'Untitled') + ' section; its rows move back', title: 'Remove section'
+      });
+      x.appendChild(faIcon('fa-xmark'));
+      h.appendChild(x);
+    }
+    return h;
+  }
+
+  function addButton(act, label, iconName) {
+    var b = el('button', 'nav-addg', { type: 'button', 'data-act': act, 'data-fk': 'a:' + act, 'data-flip': 'a:' + act });
+    b.appendChild(faIcon(iconName));
+    b.appendChild(document.createTextNode(label));
+    return b;
+  }
+
+  function offTray(model) {
+    if (!model.off.length) return null;
+    var tray = el('div', 'nav-off', { 'data-flip': 'off' });
+    tray.appendChild(el('div', 'nav-off-h', null, 'Turned off in Extensions'));
+    model.off.forEach(function (row) {
+      var r = el('div', 'nav-row');
+      r.appendChild(rowIcon(row));
+      r.appendChild(el('span', 'nav-lb', null, row.label));
+      tray.appendChild(r);
+    });
+    var base = nav() ? nav().getAttribute('data-nav-base') : '';
+    var go = el('a', 'nav-off-go', { href: base + '/extensions', 'hx-boost': 'false' }, 'Turn apps on in Extensions');
+    go.appendChild(faIcon('fa-arrow-right'));
+    tray.appendChild(go);
+    return tray;
+  }
+
+  /** Builds the editor's list from the draft. */
+  function buildEditList() {
+    var list = el('div', 'nav-list nav-edit-list', { id: 'sidebar-nav-edit' });
+    S.draft.sections.forEach(function (sec) {
+      var wrap = el('div', 'nav-sec', { 'data-nav-section': sec.id });
+      wrap.appendChild(editHeading(sec));
+      var body = el('div', 'nav-gb', { 'data-drop': sec.id });
+      var rows = shownRows(sec);
+      rows.forEach(function (row) { body.appendChild(editRow(row, sec)); });
+      if (!rows.length) {
+        body.appendChild(el('div', 'nav-empty', null, sec.kind === 'pinned' ? 'Drag rows here, or press a pin' : 'Drag rows here'));
+      }
+      wrap.appendChild(body);
+      list.appendChild(wrap);
+    });
+    var anyHidden = S.draft.sections.some(function (sec) {
+      return shownRows(sec).some(function (r) { return r.hidden; });
+    });
+    if (anyHidden) {
+      var hint = el('div', 'nav-ed-hint', { 'data-flip': 'hint' });
+      hint.appendChild(faIcon('fa-circle-info'));
+      hint.appendChild(el('span', null, null, PRIVACY_HINT));
+      list.appendChild(hint);
+    }
+    list.appendChild(addButton('newsec', 'New section', 'fa-plus'));
+    list.appendChild(addButton('newlink', 'New link', 'fa-link'));
+    var tray = offTray(S.saved);
+    if (tray) list.appendChild(tray);
+    return list;
+  }
+
+  // --- The save bar and the player preview -----------------------------------
+
+  function chromeHost() {
+    return document.getElementById('app-main') || document.body;
+  }
+
+  function button(act, cls, label, iconName) {
+    var b = el('button', 'nav-btn ' + cls, { type: 'button', 'data-act': act });
+    if (iconName) b.appendChild(faIcon(iconName));
+    b.appendChild(document.createTextNode(label));
+    return b;
+  }
+
+  function ensureChrome() {
+    if (!document.getElementById('nav-hint-move')) {
+      document.body.appendChild(el('span', null, { id: 'nav-hint-move', hidden: '' }, 'Arrow keys move it. Escape cancels a drag.'));
+    }
+    var host = chromeHost();
+    var bar = el('div', 'nav-ebar', { id: 'nav-ebar', role: 'toolbar', 'aria-label': 'Sidebar changes' });
+    var t = el('div', 'nav-ebar-t');
+    t.appendChild(el('b', null, null, 'Editing navigation'));
+    t.appendChild(el('span', null, { 'data-ebar-status': '' }));
+    bar.appendChild(t);
+    bar.appendChild(button('undo', 'nav-btn-gho', 'Undo', 'fa-rotate-left'));
+    bar.appendChild(button('cancel', 'nav-btn-gho', 'Cancel'));
+    bar.appendChild(button('save', 'nav-btn-pri', 'Save', 'fa-check'));
+    host.appendChild(bar);
+    host.appendChild(el('div', 'nav-pv', { id: 'nav-pv', 'aria-live': 'off' }));
+  }
+
+  function removeChrome() {
+    ['nav-ebar', 'nav-pv'].forEach(function (id) {
+      var n = document.getElementById(id);
+      if (n) n.remove();
     });
   }
 
-  // --- Entity Level (Drilled Into Category) ---
+  /** Refreshes the save bar's state and the player preview from the draft. */
+  function renderChrome() {
+    var bar = document.getElementById('nav-ebar'), pv = document.getElementById('nav-pv');
+    if (!S || !bar || !pv) return;
+    var status = bar.querySelector('[data-ebar-status]');
+    status.textContent = S.saving ? 'Saving…' : (changed() ? 'Players see this once you save.' : 'Drag a handle, press a pin or an eye.');
+    bar.querySelector('[data-act="undo"]').disabled = !S.hist.length || !!S.saving;
+    bar.querySelector('[data-act="cancel"]').disabled = !!S.saving;
+    bar.querySelector('[data-act="save"]').disabled = !!S.saving;
 
-  function activateEntities() {
-    var ep = getEndpoint();
-    if (!ep) return;
+    pv.textContent = '';
+    var h = el('div', 'nav-pv-h');
+    h.appendChild(faIcon('fa-eye'));
+    h.appendChild(document.createTextNode('What players see'));
+    pv.appendChild(h);
+    pv.appendChild(el('div', 'nav-pv-s', null, 'Updates as you edit. Hidden rows and Manage are left out.'));
+    playerView(S.draft).forEach(function (sec) {
+      pv.appendChild(el('div', 'nav-pv-sec', null, sec.label || 'Untitled'));
+      sec.rows.forEach(function (row) {
+        var it = el('div', 'nav-pv-it');
+        var i = faIcon(ICON_RE.test(row.icon || '') ? row.icon : (row.kind === 'link' ? 'fa-link' : 'fa-circle'));
+        if (row.color) i.style.color = row.color;
+        it.appendChild(i);
+        it.appendChild(el('span', null, null, nameOf(row)));
+        pv.appendChild(it);
+      });
+    });
+    // Sit below the top bar, clear of the save bar.
+    var host = chromeHost(), top = host.firstElementChild ? host.firstElementChild.offsetHeight + 12 : 12;
+    pv.style.top = top + 'px';
+    pv.style.maxHeight = Math.max(120, host.clientHeight - top - 84) + 'px';
+  }
 
-    // Fetch config for visibility data.
-    Chronicle.apiFetch(ep)
-      .then(function (res) { return res.ok ? res.json() : {}; })
-      .then(function (data) {
-        config = data || {};
+  // --- Moving between the sidebar and the editor -----------------------------
 
-        // Set data-reorg-active on tree element (sidebar_tree.js checks this).
-        var tree = document.getElementById('sidebar-entity-tree');
-        if (tree) {
-          tree.setAttribute('data-reorg-active', 'true');
-          document.dispatchEvent(new CustomEvent('chronicle:reorg-changed', {
-            detail: {
-              active: true,
-              hiddenEntityIds: config.hidden_entity_ids || [],
-              hiddenNodeIds: config.hidden_node_ids || []
-            }
-          }));
-        } else {
-          // Tree not loaded yet (HTMX lazy load). Wait for it.
-          document.addEventListener('htmx:afterSwap', function onSwap() {
-            var t = document.getElementById('sidebar-entity-tree');
-            if (t && active) {
-              t.setAttribute('data-reorg-active', 'true');
-              setTimeout(function () {
-                document.dispatchEvent(new CustomEvent('chronicle:reorg-changed', {
-                  detail: {
-                    active: true,
-                    hiddenEntityIds: (config && config.hidden_entity_ids) || [],
-                    hiddenNodeIds: (config && config.hidden_node_ids) || []
-                  }
-                }));
-              }, 50);
-              document.removeEventListener('htmx:afterSwap', onSwap);
-            }
-          });
+  /** The key an element keeps across a redraw, in the sidebar and the editor
+   *  alike: a row by its key, a heading by its section. */
+  function flipKey(node) {
+    var k = node.getAttribute('data-flip');
+    if (k) return k;
+    if (node.hasAttribute('data-nav-key')) return 'n:' + node.getAttribute('data-nav-key');
+    if (node.classList.contains('nav-gh')) {
+      var sec = node.closest('[data-nav-section]');
+      return sec ? 'g:' + sec.getAttribute('data-nav-section') : null;
+    }
+    return null;
+  }
+
+  var FLIP_SEL = '[data-flip], [data-nav-key], .nav-gh';
+
+  /** Where every keyed element in root is on screen now. */
+  function snapshot(root) {
+    var out = {};
+    if (!root) return out;
+    $$(FLIP_SEL, root).forEach(function (node) {
+      if (node.offsetParent === null) return;
+      var k = flipKey(node);
+      if (k && !out[k]) out[k] = node.getBoundingClientRect();
+    });
+    return out;
+  }
+
+  /**
+   * Plays every keyed element in root from where it was (prev) to where it
+   * is now, drawn whole at its final size from the first frame. Newcomers
+   * fade in. The row the owner moved (o.lift) travels on its own raised
+   * surface. Reduced motion crossfades the list instead.
+   */
+  function playFlip(root, prev, o) {
+    o = o || {};
+    if (!root) return;
+    if (reduced()) {
+      play(root, [{ opacity: 0.35 }, { opacity: 1 }], { duration: 180, easing: 'linear' });
+      return;
+    }
+    $$(FLIP_SEL, root).forEach(function (node) {
+      if (node.offsetParent === null) return;
+      var k = flipKey(node);
+      if (!k) return;
+      var p = prev[k], n = node.getBoundingClientRect();
+      if (!p) {
+        play(node, [{ opacity: 0, transform: 'translateY(-6px)' }, { opacity: 1, transform: 'none' }],
+          { duration: FLIP_MS, delay: 80, easing: EASE_OUT, fill: 'backwards' });
+        return;
+      }
+      var dx = p.left - n.left, dy = p.top - n.top;
+      if (Math.abs(dx) < 0.5 && Math.abs(dy) < 0.5) return;
+      var a = play(node, [{ transform: 'translate(' + dx + 'px,' + dy + 'px)' }, { transform: 'none' }],
+        { duration: FLIP_MS, easing: EASE });
+      if (a && o.lift === k) {
+        node.classList.add('nav-lifted');
+        whenDone(a, function () { node.classList.remove('nav-lifted'); });
+      }
+    });
+  }
+
+  function focusByKey(fk) {
+    if (!fk) return;
+    var root = editList();
+    var node = root && root.querySelector('[data-fk="' + fk.replace(/["\\]/g, '\\$&') + '"]');
+    if (!node) return;
+    node.focus({ preventScroll: true });
+    if (node.scrollIntoView) node.scrollIntoView({ block: 'nearest' });
+  }
+
+  /** Redraws the editor from the draft, playing everything from where it was. */
+  function redraw(o) {
+    o = o || {};
+    var old = editList();
+    if (!old) return;
+    var fk = o.focus || (document.activeElement && old.contains(document.activeElement) ? document.activeElement.getAttribute('data-fk') : null);
+    var prev = snapshot(old);
+    if (o.prev) Object.keys(o.prev).forEach(function (k) { prev[k] = o.prev[k]; });
+    var fresh = buildEditList();
+    old.parentNode.replaceChild(fresh, old);
+    playFlip(fresh, prev, o);
+    focusByKey(fk);
+    renderChrome();
+  }
+
+  /** Applies one change to the draft as an undoable step. */
+  function change(mutate, o) {
+    o = o || {};
+    var before = clone(S.draft);
+    if (mutate(S.draft) === false) return;
+    S.hist.push(before);
+    if (S.hist.length > HIST_MAX) S.hist.shift();
+    redraw(o);
+    if (o.msg) announce(o.msg);
+  }
+
+  function setPencil(on) {
+    $$('[data-sidebar-edit-toggle]').forEach(function (b) {
+      var label = on ? 'Save and stop editing' : 'Edit the sidebar';
+      b.setAttribute('aria-pressed', String(on));
+      b.setAttribute('aria-label', label);
+      b.setAttribute('title', label);
+      var i = b.querySelector('i');
+      if (i) i.className = 'fa-solid ' + (on ? 'fa-check' : 'fa-pencil');
+    });
+  }
+
+  function setEditing(on) {
+    document.body.classList.toggle('nav-editing', on);
+    // Keeps an unpinned sidebar from folding to icons while it is edited.
+    window.dispatchEvent(new CustomEvent('chronicle:nav-editing', { detail: on }));
+    setPencil(on);
+  }
+
+  function enter() {
+    if (S) return;
+    var list = viewList(), model = readModel(nav());
+    if (!list || !model) return;
+    S = { saved: model, draft: clone(model), hist: [], armed: null, saving: false };
+    var prev = snapshot(list);
+    setEditing(true);
+    var ed = buildEditList();
+    list.parentNode.insertBefore(ed, list.nextSibling);
+    list.hidden = true;
+    ensureChrome();
+    renderChrome();
+    playFlip(ed, prev);
+    if (!reduced()) {
+      $$('.nav-hd, .nav-eb', ed).forEach(function (b, i) {
+        play(b, [{ opacity: 0, transform: 'translateX(-6px) scale(.9)' }, { opacity: 1, transform: 'none' }],
+          { duration: 240, delay: Math.min(i, 24) * 12, easing: EASE_OUT, fill: 'backwards' });
+      });
+      // The bar is centred with a transform everywhere but a phone.
+      var phone = window.matchMedia && window.matchMedia('(max-width: 767px)').matches;
+      var x = phone ? '' : 'translateX(-50%) ';
+      play(document.getElementById('nav-ebar'), [{ opacity: 0, transform: x + 'translateY(18px)' }, { opacity: 1, transform: x + 'translateY(0)' }],
+        { duration: 300, easing: EASE_OUT });
+    } else {
+      play(document.getElementById('nav-ebar'), [{ opacity: 0 }, { opacity: 1 }], { duration: 180 });
+    }
+    play(document.getElementById('nav-pv'), [{ opacity: 0 }, { opacity: 1 }], { duration: 220, delay: 60, fill: 'backwards' });
+    var wide = window.matchMedia && window.matchMedia('(min-width: 901px)').matches;
+    announce('Editing navigation. Drag a handle, or focus it and use the arrow keys.' +
+      (wide ? ' Watch the preview on the right.' : '') + ' Save when you are done.');
+  }
+
+  /** Leaves edit mode for the sidebar list (the one saved, or the one that
+   *  was there), playing the rows back into it. */
+  function leave() {
+    var ed = editList(), list = viewList();
+    var prev = snapshot(ed);
+    if (ed) ed.remove();
+    if (list) list.hidden = false;
+    S = null;
+    removeChrome();
+    setEditing(false);
+    playFlip(list, prev);
+    // The ring comes back once the rows have landed.
+    var ring = list && list.querySelector('.nav-ring');
+    if (ring) play(ring, [{ opacity: 0 }, { opacity: 1 }], { duration: 220, delay: reduced() ? 0 : 220, fill: 'backwards' });
+    var pencil = document.querySelector('[data-sidebar-edit-toggle]');
+    if (pencil) pencil.focus({ preventScroll: true });
+  }
+
+  function cancel() {
+    if (!S || S.saving) return;
+    leave();
+    notify('Changes discarded.', 'info');
+  }
+
+  /**
+   * Swaps in the sidebar the server now draws for this page, with the
+   * owner's new arrangement and the command palette's rows. The list stays
+   * hidden until leave() plays the rows into it.
+   */
+  function refreshSidebar() {
+    return fetch(window.location.href, { credentials: 'same-origin', headers: { Accept: 'text/html' } })
+      .then(function (res) {
+        if (!res.ok) throw new Error('refresh failed');
+        return res.text();
+      })
+      .then(function (html) {
+        var doc = new DOMParser().parseFromString(html, 'text/html');
+        var fresh = doc.getElementById('sidebar-nav-list'), list = viewList();
+        if (!fresh || !list) throw new Error('refresh failed');
+        var node = document.importNode(fresh, true);
+        node.hidden = true;
+        list.parentNode.replaceChild(node, list);
+        var freshNav = doc.getElementById('sidebar-nav'), n = nav();
+        if (n) {
+          var edit = freshNav && freshNav.getAttribute('data-nav-edit');
+          if (edit) n.setAttribute('data-nav-edit', edit); else n.removeAttribute('data-nav-edit');
         }
+        var freshSb = doc.getElementById('sidebar'), sb = document.getElementById('sidebar');
+        if (freshSb && sb && freshSb.hasAttribute('data-nav-commands')) {
+          sb.setAttribute('data-nav-commands', freshSb.getAttribute('data-nav-commands'));
+        }
+        if (window.htmx && htmx.process) htmx.process(node);
       });
   }
 
-  function deactivateEntities() {
-    var tree = document.getElementById('sidebar-entity-tree');
-    if (tree) {
-      tree.removeAttribute('data-reorg-active');
+  function save() {
+    if (!S || S.saving) return;
+    if (!changed()) {
+      leave();
+      return;
     }
-    document.dispatchEvent(new CustomEvent('chronicle:reorg-changed', {
-      detail: { active: false }
-    }));
+    var bad = incompleteLink(S.draft);
+    if (bad) {
+      notify('Each link needs a name and an address.', 'error');
+      focusByKey((String(bad.label || '').trim() ? 'u:' : 'l:') + bad.key);
+      return;
+    }
+    var base = nav() ? nav().getAttribute('data-nav-base') : '';
+    S.saving = true;
+    renderChrome();
+    Chronicle.apiFetch(base + '/sidebar-config', { method: 'PUT', body: { items: itemsFromDraft(S.draft) } })
+      .then(function (res) {
+        if (res.ok) return true;
+        return res.json().catch(function () { return {}; }).then(function (body) {
+          throw new Error(body.message || body.error || 'The sidebar could not be saved.');
+        });
+      }, function () {
+        throw new Error('The sidebar could not be saved. Check your connection and try again.');
+      })
+      .then(function () {
+        return refreshSidebar().then(function () {
+          leave();
+          notify('Saved. Everyone sees this layout now.', 'success');
+        }, function () {
+          // Saved, but the new sidebar could not be fetched: load the page,
+          // without the unsaved-changes prompt, since nothing is unsaved.
+          S.saved = S.draft;
+          window.location.reload();
+        });
+      })
+      .catch(function (err) {
+        if (!S) return;
+        S.saving = false;
+        renderChrome();
+        notify(err.message, 'error');
+      });
   }
 
-  // --- Visibility Events from sidebar_tree.js ---
-
-  document.addEventListener('chronicle:toggle-entity-visibility', function (e) {
-    if (!config) return;
-    var entityId = e.detail && e.detail.entityId;
-    if (!entityId) return;
-
-    if (!config.hidden_entity_ids) config.hidden_entity_ids = [];
-    var idx = config.hidden_entity_ids.indexOf(entityId);
-    if (idx >= 0) {
-      config.hidden_entity_ids.splice(idx, 1);
-    } else {
-      config.hidden_entity_ids.push(entityId);
-    }
-
-    saveConfig();
-    document.dispatchEvent(new CustomEvent('chronicle:entity-visibility-changed', {
-      detail: { entityId: entityId, hidden: idx < 0 }
-    }));
-  });
-
-  document.addEventListener('chronicle:toggle-node-visibility', function (e) {
-    if (!config) return;
-    var nodeId = e.detail && e.detail.nodeId;
-    if (!nodeId) return;
-
-    if (!config.hidden_node_ids) config.hidden_node_ids = [];
-    var idx = config.hidden_node_ids.indexOf(nodeId);
-    if (idx >= 0) {
-      config.hidden_node_ids.splice(idx, 1);
-    } else {
-      config.hidden_node_ids.push(nodeId);
-    }
-
-    saveConfig();
-    document.dispatchEvent(new CustomEvent('chronicle:node-visibility-changed', {
-      detail: { nodeId: nodeId, hidden: idx < 0 }
-    }));
-  });
-
-  // --- Drill State Observer ---
-  // When user drills in/out while edit mode is active, switch levels.
-
-  var observer = new MutationObserver(function () {
-    if (!active) return;
-    var newLevel = isDrilled() ? 'entities' : 'global';
-    if (newLevel !== level) {
-      if (level === 'global') deactivateGlobal();
-      else if (level === 'entities') deactivateEntities();
-      level = newLevel;
-      if (level === 'global') activateGlobal();
-      else activateEntities();
-    }
-  });
-
-  var sidebarEl = document.getElementById('sidebar-category');
-  if (sidebarEl) {
-    observer.observe(sidebarEl, { attributes: true, attributeFilter: ['class'] });
+  function undo() {
+    if (!S || !S.hist.length) return;
+    S.draft = S.hist.pop();
+    redraw();
+    announce('Undone.');
   }
 
-  // --- Event Listeners ---
+  // --- Actions ---------------------------------------------------------------
 
+  function doAct(act, node) {
+    var key = node.getAttribute('data-k');
+    var loc = key ? findRow(S.draft, key) : null;
+    switch (act) {
+      case 'save': save(); break;
+      case 'cancel': cancel(); break;
+      case 'undo': undo(); break;
+      case 'pin': {
+        if (!loc) return;
+        var to = null;
+        change(function (d) { to = togglePin(d, key); return !!to; },
+          { lift: 'n:' + key, focus: 'p:' + key });
+        if (to) announce(nameOf(loc.row) + ' moved to ' + to.label + '.');
+        break;
+      }
+      case 'hide': {
+        if (!loc) return;
+        var hid = !loc.row.hidden;
+        change(function (d) { findRow(d, key).row.hidden = hid; }, {
+          focus: 'e:' + key,
+          msg: hid ? nameOf(loc.row) + " is hidden from players' sidebar. It still opens from a link; set its visibility to keep it private."
+            : nameOf(loc.row) + " is back in players' sidebar."
+        });
+        break;
+      }
+      case 'dellink':
+        if (!loc) return;
+        change(function (d) { var l = findRow(d, key); l.sec.items.splice(l.index, 1); }, { msg: 'Removed.' });
+        break;
+      case 'delsec': {
+        var id = node.getAttribute('data-sec');
+        change(function (d) { return removeSection(d, id); }, { msg: 'Removed. Its rows moved back.' });
+        break;
+      }
+      case 'newsec': {
+        var sec = null;
+        change(function (d) { sec = addSection(d); });
+        if (sec) {
+          focusByKey('r:' + sec.id);
+          var input = document.activeElement;
+          if (input && input.select) input.select();
+          announce('Added. Type a name, then drag rows into it.');
+        }
+        break;
+      }
+      case 'newlink': {
+        var row = null;
+        change(function (d) { row = addLink(d); });
+        if (row) {
+          focusByKey('l:' + row.key);
+          announce('Link added at the end of Apps. Give it a name and an address.');
+        }
+        break;
+      }
+    }
+  }
+
+  // --- Dragging a row (pointer events: mouse, pen and touch) -----------------
+
+  function scroller() { return nav(); }
+
+  function onPointerDown(e) {
+    if (!S || S.saving || D || e.button !== 0) return;
+    var h = e.target.closest && e.target.closest('#sidebar-nav-edit [data-handle]');
+    var row = h && h.closest('[data-drag]');
+    if (!row) return;
+    e.preventDefault();
+    h.focus({ preventScroll: true });
+    var sc = scroller();
+    D = {
+      key: row.getAttribute('data-drag'), row: row, h: h, pid: e.pointerId,
+      sx: e.clientX, sy: e.clientY, x: e.clientX, y: e.clientY,
+      st0: sc ? sc.scrollTop : 0, moved: false, target: null, line: null, raf: 0
+    };
+    try { h.setPointerCapture(e.pointerId); } catch (err) { /* capture is a nicety */ }
+    h.addEventListener('pointermove', onDragMove);
+    h.addEventListener('pointerup', onDragEnd);
+    h.addEventListener('pointercancel', onDragCancel);
+  }
+
+  function beginDrag() {
+    D.moved = true;
+    // A row still gliding from the last change lands first, so it follows
+    // the pointer from here rather than from where it was going.
+    if (D.row.getAnimations) D.row.getAnimations().forEach(function (a) { a.finish(); });
+    D.row.classList.add('nav-lifted', 'nav-dragged');
+    document.body.classList.add('nav-dragging');
+    D.line = el('div', 'nav-dropline', { 'aria-hidden': 'true' });
+    D.line.hidden = true;
+    editList().appendChild(D.line);
+    var tick = function () {
+      if (!D) return;
+      autoScroll();
+      D.raf = requestAnimationFrame(tick);
+    };
+    D.raf = requestAnimationFrame(tick);
+  }
+
+  /** Keeps the lifted row under the pointer, in its column. */
+  function placeRow() {
+    var sc = scroller();
+    var dy = (D.y - D.sy) + (sc ? sc.scrollTop - D.st0 : 0);
+    D.row.style.transform = 'translateY(' + dy + 'px)' + (reduced() ? '' : ' scale(1.02)');
+  }
+
+  function onDragMove(e) {
+    if (!D) return;
+    D.x = e.clientX;
+    D.y = e.clientY;
+    if (!D.moved) {
+      if (Math.abs(D.x - D.sx) + Math.abs(D.y - D.sy) < DRAG_SLOP) return;
+      beginDrag();
+    }
+    placeRow();
+    findDrop();
+  }
+
+  /** Finds the section under the pointer that can take the row, and the
+   *  place in it, and draws the drop line there. */
+  function findDrop() {
+    var list = editList(), sb = document.getElementById('sidebar');
+    var row = findRow(S.draft, D.key), target = null, zoneRect = null, kids = [];
+    var sr = sb ? sb.getBoundingClientRect() : null;
+    if (row && (!sr || (D.x >= sr.left && D.x <= sr.right))) {
+      $$('[data-drop]', list).some(function (zone) {
+        var r = zone.getBoundingClientRect();
+        if (D.y < r.top || D.y > r.bottom) return false;
+        var sec = sectionById(S.draft, zone.getAttribute('data-drop'));
+        if (!sec || !accepts(sec.kind, row.row.kind)) return true;
+        kids = $$(':scope > [data-drag]', zone).filter(function (k) { return k !== D.row; });
+        var idx = kids.length;
+        for (var i = 0; i < kids.length; i++) {
+          var kr = kids[i].getBoundingClientRect();
+          if (D.y < kr.top + kr.height / 2) { idx = i; break; }
+        }
+        target = { sec: sec, index: idx };
+        zoneRect = r;
+        return true;
+      });
+    }
+    D.target = target;
+    if (!target) { D.line.hidden = true; return; }
+    var lr = list.getBoundingClientRect();
+    var y = kids[target.index] ? kids[target.index].getBoundingClientRect().top
+      : (kids.length ? kids[kids.length - 1].getBoundingClientRect().bottom : zoneRect.top + 4);
+    D.line.style.width = Math.max(24, zoneRect.width - 12) + 'px';
+    D.line.style.transform = 'translate(' + (zoneRect.left - lr.left + 6) + 'px,' + (y - lr.top - 1.5) + 'px)';
+    D.line.hidden = false;
+  }
+
+  // Near the top or bottom edge of the sidebar, a drag scrolls it.
+  function autoScroll() {
+    var sc = scroller();
+    if (!D || !D.moved || !sc) return;
+    var r = sc.getBoundingClientRect(), edge = 36;
+    var dy = D.y < r.top + edge ? -8 : (D.y > r.bottom - edge ? 8 : 0);
+    if (!dy) return;
+    var before = sc.scrollTop;
+    sc.scrollTop += dy;
+    if (sc.scrollTop !== before) { placeRow(); findDrop(); }
+  }
+
+  function endDrag() {
+    var d = D;
+    D = null;
+    cancelAnimationFrame(d.raf);
+    d.h.removeEventListener('pointermove', onDragMove);
+    d.h.removeEventListener('pointerup', onDragEnd);
+    d.h.removeEventListener('pointercancel', onDragCancel);
+    try { d.h.releasePointerCapture(d.pid); } catch (err) { /* already released */ }
+    document.body.classList.remove('nav-dragging');
+    if (d.line) d.line.remove();
+    return d;
+  }
+
+  /** A row let go with nowhere to land glides back into its own slot. */
+  function glideBack(d) {
+    var row = d.row, from = row.style.transform;
+    row.style.transform = '';
+    var land = function () { row.classList.remove('nav-lifted', 'nav-dragged'); };
+    if (reduced() || !from) {
+      land();
+      play(row, [{ opacity: 0.35 }, { opacity: 1 }], { duration: 180, easing: 'linear' });
+      return;
+    }
+    whenDone(play(row, [{ transform: from }, { transform: 'none' }], { duration: BACK_MS, easing: EASE }), land);
+  }
+
+  function onDragEnd() {
+    if (!D) return;
+    var d = endDrag();
+    if (!d.moved) return;
+    if (!d.target) { glideBack(d); return; }
+    var loc = findRow(S.draft, d.key), t = d.target;
+    var prev = {};
+    prev['n:' + d.key] = d.row.getBoundingClientRect();
+    change(function (dr) { return moveRowTo(dr, d.key, t.sec.id, t.index); },
+      { prev: prev, lift: 'n:' + d.key, focus: 'h:' + d.key });
+    announce(nameOf(loc.row) + ' moved to ' + t.sec.label + ', position ' + (t.index + 1) + '.');
+  }
+
+  function onDragCancel() {
+    if (!D) return;
+    var d = endDrag();
+    if (d.moved) glideBack(d);
+  }
+
+  // --- Keyboard and typing ---------------------------------------------------
+
+  function onKeyDown(e) {
+    if (!S) return;
+    if (e.key === 'Escape' && D) {
+      // Escape puts a dragged row back; edit mode itself stays open.
+      e.preventDefault();
+      var d = endDrag();
+      if (d.moved) glideBack(d);
+      return;
+    }
+    var t = e.target;
+    var h = t && t.closest && t.closest('#sidebar-nav-edit [data-handle]');
+    if (h && !D && (e.key === 'ArrowUp' || e.key === 'ArrowDown')) {
+      e.preventDefault();
+      var key = h.getAttribute('data-k'), dir = e.key === 'ArrowUp' ? -1 : 1, loc = findRow(S.draft, key), to = null;
+      change(function (dr) { to = stepRow(dr, key, dir); return !!to; }, { lift: 'n:' + key, focus: 'h:' + key });
+      if (to) {
+        var pos = shownRows(to).indexOf(findRow(S.draft, key).row) + 1;
+        announce(nameOf(loc.row) + ': position ' + pos + ' of ' + shownRows(to).length + ' in ' + to.label + '.');
+      }
+      return;
+    }
+    if (e.key === 'Enter' && t && t.matches && t.matches('#sidebar-nav-edit input')) {
+      e.preventDefault();
+      t.blur();
+    }
+  }
+
+  // Typing names a section or a link as it goes; the first keystroke after
+  // focusing a field is one undo step.
+  function onInput(e) {
+    if (!S) return;
+    var t = e.target;
+    if (!t || !t.closest || !t.closest('#sidebar-nav-edit')) return;
+    var id = t.getAttribute('data-rename'), lk = t.getAttribute('data-link-label'), lu = t.getAttribute('data-link-url');
+    var field = id ? 'r:' + id : (lk ? 'l:' + lk : (lu ? 'u:' + lu : null));
+    if (!field) return;
+    if (S.armed !== field) {
+      S.hist.push(clone(S.draft));
+      if (S.hist.length > HIST_MAX) S.hist.shift();
+      S.armed = field;
+    }
+    if (id) {
+      var sec = sectionById(S.draft, id);
+      if (sec) sec.label = t.value.trim() || 'Untitled';
+    } else {
+      var loc = findRow(S.draft, lk || lu);
+      if (loc) loc.row[lk ? 'label' : 'url'] = t.value;
+    }
+    renderChrome();
+  }
+
+  function onFocusIn(e) {
+    if (S && e.target && e.target.matches && !e.target.matches('#sidebar-nav-edit input')) S.armed = null;
+  }
+
+  function onClick(e) {
+    if (!S) return;
+    var t = e.target;
+    var act = t && t.closest && t.closest('#sidebar-nav-edit [data-act], #nav-ebar [data-act]');
+    if (!act || act.disabled) return;
+    e.preventDefault();
+    doAct(act.getAttribute('data-act'), act);
+  }
+
+  // --- A member's own pins ----------------------------------------------------
+
+  // Players and scribes pin rows for themselves (PUT /campaigns/:id/nav-pins);
+  // the server checks every pin against the sidebar they see and stores it
+  // for them alone. The row then glides up into Pinned, or back down.
+  var pinning = false;
+
+  /** The viewer's own pins, in the order pinned (Pinned lists them so). */
+  function ownPins() {
+    return $$('#sidebar-nav-list [data-nav-pin][aria-pressed="true"]').map(function (b) {
+      return b.getAttribute('data-nav-pin');
+    });
+  }
+
+  function togglePersonalPin(btn) {
+    if (pinning || S) return;
+    var key = btn.getAttribute('data-nav-pin'), on = btn.getAttribute('aria-pressed') !== 'true';
+    var pins = ownPins().filter(function (k) { return k !== key; });
+    if (on) pins.push(key);
+    var label = btn.parentNode.querySelector('.nav-lb');
+    var name = label ? label.textContent : '';
+    var base = nav() ? nav().getAttribute('data-nav-base') : '';
+    pinning = true;
+    Chronicle.apiFetch(base + '/nav-pins', { method: 'PUT', body: { pins: pins } })
+      .then(function (res) {
+        if (res.ok) return true;
+        return res.json().catch(function () { return {}; }).then(function (body) {
+          throw new Error(body.message || body.error || 'That row could not be pinned.');
+        });
+      }, function () {
+        throw new Error('That row could not be pinned. Check your connection and try again.');
+      })
+      .then(function () {
+        var prev = snapshot(viewList());
+        return refreshSidebar().then(function () {
+          var list = viewList();
+          list.hidden = false;
+          playFlip(list, prev, { lift: 'n:' + key });
+          var again = list.querySelector('[data-nav-pin="' + key.replace(/["\\]/g, '\\$&') + '"]');
+          if (again) again.focus({ preventScroll: true });
+          announce(on ? name + ' is pinned to the top of your sidebar.' : name + ' is unpinned.');
+        }, function () {
+          window.location.reload();
+        });
+      })
+      .catch(function (err) { notify(err.message, 'error'); })
+      .then(function () { pinning = false; });
+  }
+
+  document.addEventListener('click', function (e) {
+    var btn = e.target && e.target.closest && e.target.closest('#sidebar-nav-list [data-nav-pin]');
+    if (!btn) return;
+    e.preventDefault();
+    togglePersonalPin(btn);
+  });
+
+  // Back and Forward swap in a whole new body, with the sidebar as the server
+  // draws it (or, were htmx's history cache on, as it was left, perhaps
+  // mid-edit). The editor follows what is live now: while editing, it
+  // redraws from the draft; otherwise it clears any editor the body holds.
+  document.addEventListener('htmx:historyRestore', function () {
+    var ed = editList(), list = viewList();
+    removeChrome();
+    if (!S) {
+      if (ed) ed.remove();
+      if (list) list.hidden = false;
+      setPencil(false);
+      return;
+    }
+    if (!list) return;
+    var fresh = buildEditList();
+    if (ed) ed.parentNode.replaceChild(fresh, ed);
+    else list.parentNode.insertBefore(fresh, list.nextSibling);
+    list.hidden = true;
+    ensureChrome();
+    renderChrome();
+    // After Alpine has set up the restored sidebar, so it stays open.
+    setTimeout(function () { if (S) setEditing(true); }, 0);
+  });
+
+  // --- Wiring ----------------------------------------------------------------
+
+  // The pencil: opens the editor, or saves and closes it.
   document.addEventListener('chronicle:toggle-sidebar-editor', function () {
-    toggle();
+    if (S) save(); else enter();
+  });
+  document.addEventListener('click', onClick);
+  document.addEventListener('pointerdown', onPointerDown);
+  document.addEventListener('keydown', onKeyDown);
+  document.addEventListener('input', onInput);
+  document.addEventListener('focusin', onFocusIn);
+  window.addEventListener('beforeunload', function (e) {
+    if (changed()) {
+      e.preventDefault();
+      e.returnValue = '';
+    }
   });
 
-  // Exit edit mode on navigation.
-  document.addEventListener('chronicle:navigated', function () {
-    if (active) deactivate();
-  });
-
-  // Also exit on HTMX navigation.
-  document.addEventListener('htmx:beforeRequest', function (e) {
-    if (active && e.detail && e.detail.boosted) deactivate();
-  });
+  window.Chronicle = window.Chronicle || {};
+  window.Chronicle.navEditor = {
+    accepts: accepts,
+    homeFor: homeFor,
+    moveRowTo: moveRowTo,
+    stepRow: stepRow,
+    togglePin: togglePin,
+    removeSection: removeSection,
+    addSection: addSection,
+    addLink: addLink,
+    incompleteLink: incompleteLink,
+    itemsFromDraft: itemsFromDraft,
+    playerView: playerView,
+    readModel: readModel
+  };
 })();

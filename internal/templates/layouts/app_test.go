@@ -150,9 +150,8 @@ func TestTopbarHeaderIsolate(t *testing.T) {
 	t.Fatalf("<header> classes %q must include \"isolate\" — without it z-index:-1 brand layers escape the stacking context and paint behind the header surface", classVal)
 }
 
-// TestNotesWidgetVisible pins the notesWidgetVisible predicate that gates both
-// the floating notes panel's mount point and its topbar trigger button
-// (single source of truth for both).
+// TestNotesWidgetVisible pins the notesWidgetVisible predicate that gates the
+// Jot notes tab and panel.
 func TestNotesWidgetVisible(t *testing.T) {
 	tests := []struct {
 		name         string
@@ -168,14 +167,15 @@ func TestNotesWidgetVisible(t *testing.T) {
 			want: true,
 		},
 		{
+			// Jots and Journal notes are different rows, so the tab stays.
 			name: "authed, in campaign, addon on, journal page itself", authed: true,
 			campaignID: "camp1", notesEnabled: true, activePath: "/campaigns/camp1/journal",
-			want: false,
+			want: true,
 		},
 		{
-			name: "authed, in campaign, addon on, journal sub-path", authed: true,
-			campaignID: "camp1", notesEnabled: true, activePath: "/campaigns/camp1/journal/entry/5",
-			want: false,
+			name: "authed, in campaign, addon on, journal note", authed: true,
+			campaignID: "camp1", notesEnabled: true, activePath: "/campaigns/camp1/journal/5",
+			want: true,
 		},
 		{
 			name: "addon disabled", authed: true,
@@ -192,12 +192,6 @@ func TestNotesWidgetVisible(t *testing.T) {
 			campaignID: "", notesEnabled: true, activePath: "/campaigns",
 			want: false,
 		},
-		{
-			// A different campaign's journal path must not falsely exclude this one.
-			name: "in campaign, active path is ANOTHER campaign's journal", authed: true,
-			campaignID: "camp1", notesEnabled: true, activePath: "/campaigns/camp2/journal",
-			want: true,
-		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -209,34 +203,19 @@ func TestNotesWidgetVisible(t *testing.T) {
 	}
 }
 
-// TestNotesButtonRenderGate is the render-level pin: the topbar's
-// #topbar-notes-trigger button must be present exactly when notesWidgetVisible
-// is true, and absent on the journal page even when the notes addon is
-// enabled and the user is authenticated. Guards against the template's two
-// call sites drifting apart.
-func TestNotesButtonRenderGate(t *testing.T) {
-	tests := []struct {
-		name       string
-		activePath string
-		wantButton bool
-	}{
-		{name: "present on a non-journal page", activePath: "/campaigns/camp1/dashboard", wantButton: true},
-		{name: "absent on the journal page", activePath: "/campaigns/camp1/journal", wantButton: false},
-		{name: "absent on a journal sub-path", activePath: "/campaigns/camp1/journal/entry/5", wantButton: false},
-	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			ctx := ctxForNotes(true, "camp1", true, tt.activePath)
-			var buf bytes.Buffer
-			if err := Topbar().Render(ctx, &buf); err != nil {
-				t.Fatalf("render Topbar: %v", err)
-			}
-			html := buf.String()
-			hasButton := strings.Contains(html, `id="topbar-notes-trigger"`)
-			if hasButton != tt.wantButton {
-				t.Fatalf("topbar-notes-trigger present=%v, want %v (path %q)", hasButton, tt.wantButton, tt.activePath)
-			}
-		})
+// TestTopbarHasNoNotesButton: the Jot notes tab is the one way in, so the
+// topbar carries no second notes button on any page.
+func TestTopbarHasNoNotesButton(t *testing.T) {
+	for _, path := range []string{"/campaigns/camp1/dashboard", "/campaigns/camp1/journal", "/campaigns/camp1/entities/e1"} {
+		ctx := ctxForNotes(true, "camp1", true, path)
+		var buf bytes.Buffer
+		if err := Topbar().Render(ctx, &buf); err != nil {
+			t.Fatalf("render Topbar: %v", err)
+		}
+		html := buf.String()
+		if strings.Contains(html, "topbar-notes-trigger") || strings.Contains(html, "toggleNotes") {
+			t.Fatalf("the topbar must not carry a notes button (path %q)", path)
+		}
 	}
 }
 
@@ -265,24 +244,39 @@ func TestSidebarEmitsNavClassVocabulary(t *testing.T) {
 	}
 }
 
-// TestAllPagesLinkHighlightsOnEntitySubpath pins r2-3: the Entities/"All Pages"
-// link uses longest-prefix (isPathPrefix), so an entity detail page highlights
-// it on a hard server load, matching boot.js. It must stay inactive on an
-// unrelated page — the prefix must not over-highlight.
-func TestAllPagesLinkHighlightsOnEntitySubpath(t *testing.T) {
+// TestAllPagesRowIsCurrentOnEntitySubpath pins that All Pages matches by
+// prefix, so an entity page with no category hint still marks it current on a
+// hard server load; an unrelated page must not.
+func TestAllPagesRowIsCurrentOnEntitySubpath(t *testing.T) {
 	render := func(activePath string) string {
 		ctx := SetCampaignID(context.Background(), "camp1")
 		ctx = SetActivePath(ctx, activePath)
+		ctx = ResolveNavState(ctx)
 		var buf bytes.Buffer
-		if err := sidebarAllPagesLink(ctx).Render(ctx, &buf); err != nil {
-			t.Fatalf("render All Pages link: %v", err)
+		if err := navFixedRow("all", "All Pages", "fa-layer-group", "/campaigns/camp1/entities", "").Render(ctx, &buf); err != nil {
+			t.Fatalf("render All Pages row: %v", err)
 		}
 		return buf.String()
 	}
-	if got := render("/campaigns/camp1/entities/42"); !strings.Contains(got, sidebarNavActive) {
-		t.Errorf("All Pages link must be active on an entity detail sub-path (r2-3); got %q", got)
+	if got := render("/campaigns/camp1/entities/42"); !strings.Contains(got, `aria-current="page"`) {
+		t.Errorf("All Pages must be current on an entity detail sub-path; got %q", got)
 	}
-	if got := render("/campaigns/camp1/members"); strings.Contains(got, sidebarNavActive) {
-		t.Errorf("All Pages link must be inactive off the entities tree; got %q", got)
+	if got := render("/campaigns/camp1/members"); strings.Contains(got, `aria-current`) {
+		t.Errorf("All Pages must not be current off the entities tree; got %q", got)
+	}
+}
+
+// TestNotesWidget_EntityIDFromTheRequestPath: an entity page overrides its
+// active path to its category for the sidebar; the jot panel must still get
+// the page it is on, from the real request path.
+func TestNotesWidget_EntityIDFromTheRequestPath(t *testing.T) {
+	ctx := ctxForNotes(true, "camp1", true, "/campaigns/camp1/characters")
+	ctx = SetRequestPath(ctx, "/campaigns/camp1/entities/0a1b2c3d-0000-4000-8000-000000000001")
+	var buf bytes.Buffer
+	if err := NotesWidget().Render(ctx, &buf); err != nil {
+		t.Fatalf("render NotesWidget: %v", err)
+	}
+	if !strings.Contains(buf.String(), `data-entity-id="0a1b2c3d-0000-4000-8000-000000000001"`) {
+		t.Fatalf("the jot panel must know its page: %s", buf.String())
 	}
 }

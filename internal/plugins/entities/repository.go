@@ -772,6 +772,11 @@ type EntityRepository interface {
 	// filtering.
 	FindBacklinks(ctx context.Context, campaignID, entityID string, role int, userID string) ([]Entity, error)
 
+	// FindPagesLinkingNote returns entities of campaignID whose entry_html
+	// holds a [[link]] to the note noteID (an anchor's data-note-id), that
+	// the viewer may see. At most 50, by name.
+	FindPagesLinkingNote(ctx context.Context, campaignID, noteID string, role int, userID string) ([]Entity, error)
+
 	// UpdatePopupConfig persists the entity's hover preview configuration.
 	UpdatePopupConfig(ctx context.Context, entityID string, config *PopupConfig) error
 
@@ -1858,6 +1863,48 @@ func (r *entityRepository) FindBacklinks(ctx context.Context, campaignID, entity
 		entities = append(entities, *e)
 	}
 	return entities, rows.Err()
+}
+
+// pagesLinkingNoteWhere builds the WHERE clause + args for
+// FindPagesLinkingNote. Like backlinksWhere, the campaign term is what keeps
+// a note id (a campaign-agnostic UUID) from matching other campaigns' pages.
+func pagesLinkingNoteWhere(campaignID, noteID string, role int, userID string) (string, []any) {
+	where := `WHERE e.campaign_id = ? AND e.entry_html LIKE ?`
+	escaped := strings.NewReplacer(`\`, `\\`, "%", `\%`, "_", `\_`).Replace(noteID)
+	args := []any{campaignID, `%data-note-id="` + escaped + `"%`}
+
+	visFilter, visArgs := visibilityFilter(role, userID)
+	where += visFilter
+	args = append(args, visArgs...)
+	return where, args
+}
+
+// FindPagesLinkingNote returns the pages of a campaign that link a note, as
+// far as the viewer may see them.
+func (r *entityRepository) FindPagesLinkingNote(ctx context.Context, campaignID, noteID string, role int, userID string) ([]Entity, error) {
+	where, args := pagesLinkingNoteWhere(campaignID, noteID, role, userID)
+	query := fmt.Sprintf(`SELECT `+entitySelectColumns+`
+	          FROM entities e
+	          INNER JOIN entity_types et ON et.id = e.entity_type_id
+	          %s
+	          ORDER BY e.name, e.id
+	          LIMIT 50`, where)
+
+	rows, err := r.db.QueryContext(ctx, query, args...)
+	if err != nil {
+		return nil, fmt.Errorf("finding pages linking a note: %w", err)
+	}
+	defer rows.Close()
+
+	var out []Entity
+	for rows.Next() {
+		e, err := r.scanEntityRow(rows)
+		if err != nil {
+			return nil, err
+		}
+		out = append(out, *e)
+	}
+	return out, rows.Err()
 }
 
 // UpdatePopupConfig persists the entity's hover preview configuration as JSON.

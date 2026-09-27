@@ -118,6 +118,15 @@ jobs:
         # may only shrink. Needs no git history; self-tests on every run.
         run: ./tools/check-widget-mounts.sh
 
+      - name: Customize surface discipline guard
+        # Fixed-file-list check on the Customize -> Appearance surface: no
+        # setTimeout-driven page reload, no JS-constructed data-mode/file-
+        # upload control, no hand-built multi-field JSON string in a templ
+        # file. Whole-tree against a hand-kept file list, not diff-scoped, so
+        # a fix that regresses later fails again. Needs no git history;
+        # self-tests on every run.
+        run: ./tools/check-customize-discipline.sh
+
       - name: Test
         # Includes the cross-plugin import guard (TestPluginImportGuard in
         # internal/wire/plugin_import_guard_test.go): fails on any NEW
@@ -234,6 +243,8 @@ jobs:
           go test ./internal/plugins/sessions/... ./internal/plugins/entities/... ./internal/plugins/timeline/... \
             -v -count=1 2>&1 | tee dbtests.log
           go test ./internal/app/ -v -count=1 -run 'CustomVisibilityLeak|PrivateEntityVisibilityLeak' 2>&1 | tee -a dbtests.log
+          go test ./internal/plugins/campaigns/ -v -count=1 -run TestNavPins_Integration 2>&1 | tee -a dbtests.log
+          go test ./internal/plugins/auth/ -v -count=1 -run 'TestUserRepository_.*_Integration' 2>&1 | tee -a dbtests.log
           for want in TestDB_SessionRSVPTokenCannotBeSpentTwiceConcurrently \
                       TestEntityTypeRepository_Integration \
                       TestConsolidatePlayerCharacterDuplicate_Integration \
@@ -243,7 +254,10 @@ jobs:
                       TestArmoryGallery_CustomVisibilityLeak \
                       TestNPCGallery_CustomVisibilityLeak \
                       TestTimelineEvents_PrivateEntityVisibilityLeak \
-                      TestTimelineEntityGroups_PrivateEntityVisibilityLeak; do
+                      TestTimelineEntityGroups_PrivateEntityVisibilityLeak \
+                      TestNavPins_Integration \
+                      TestUserRepository_UpdateAvatarPath_Integration \
+                      TestUserRepository_ClearAvatarPathIfMatches_Integration; do
             grep -q -- "--- PASS: $want" dbtests.log || {
               echo "::error::$want did not PASS — it was skipped or never ran."
               exit 1
