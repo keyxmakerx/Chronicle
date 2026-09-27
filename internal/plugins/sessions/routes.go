@@ -55,15 +55,17 @@ func RegisterRoutes(e *echo.Echo, h *Handler,
 	cg.POST("/sessions/:sid/entities", h.LinkEntityAPI, campaigns.RequireRole(campaigns.RoleScribe))
 	cg.DELETE("/sessions/:sid/entities/:eid", h.UnlinkEntityAPI, campaigns.RequireRole(campaigns.RoleScribe))
 
-	// --- Part C: game-night RSVP additions (real-world calendars,
-	// per-occurrence RSVP, notes, tally-exclusion, restore, calendar feed) ---
+	// Game-night routes: restoring a soft-deleted session (co-Directors run
+	// game nights per scribeOrCoDirector/ownerOrCoDirector above), a member's
+	// own tally-exclusion switch, and the calendar-feed settings/token
+	// endpoints (the feed's own public redemption route sits with the other
+	// public token routes below).
 	cg.POST("/sessions/:sid/restore", h.RestoreSessionAPI, ownerOrCoDirector())
 	cg.PUT("/sessions/:sid/rsvp-exclude", h.SetRSVPExcludedAPI, campaigns.RequireRole(campaigns.RolePlayer))
 	cg.GET("/sessions/feed-settings", h.GetFeedSettingsAPI, campaigns.RequireRole(campaigns.RolePlayer))
 	cg.PUT("/sessions/feed-settings", h.SetFeedSettingsAPI, campaigns.RequireRole(campaigns.RoleOwner))
 	cg.POST("/sessions/feed/token", h.GetFeedTokenAPI, campaigns.RequireRole(campaigns.RolePlayer))
 	cg.POST("/sessions/feed/token/replace", h.ReplaceFeedTokenAPI, campaigns.RequireRole(campaigns.RolePlayer))
-	// --- end Part C additions (continued below the public/token groups) ---
 
 	// Availability scheduler. Member-only data — every route rides the AUTHED
 	// cg group above (auth + campaign access + the calendar-addon guard),
@@ -138,7 +140,6 @@ func RegisterRoutes(e *echo.Echo, h *Handler,
 	// Personal game-night calendar feed (operator answer #1) — public, the
 	// token IS the credential, exactly like /rsvp/:token.
 	e.GET("/sessions/feed/:token", h.GameNightFeedICS)
-	// --- end Part C additions ---
 
 	// Scheduler notifications. User-scoped, not campaign-scoped — the topbar
 	// bell is global — so these ride a plain authenticated group, not the

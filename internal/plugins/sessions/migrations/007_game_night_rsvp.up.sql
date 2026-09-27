@@ -1,4 +1,4 @@
--- Calendar V5 "game nights" (issue #741, Part C): real-world calendar feeds,
+-- Calendar V5 "game nights" (issue #741): real-world calendar feeds,
 -- per-occurrence RSVPs on a repeating session, and the "suggest another time"
 -- email-link flow. Idempotent (ADD COLUMN IF NOT EXISTS / CREATE TABLE IF NOT
 -- EXISTS) per CLAUDE.md's migration-safety rules.
