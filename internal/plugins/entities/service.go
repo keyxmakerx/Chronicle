@@ -1746,7 +1746,10 @@ func (s *entityService) CreateEntityType(ctx context.Context, campaignID string,
 		return nil, apperror.NewBadRequest("entity type plural name must be at most 100 characters")
 	}
 
-	icon := strings.TrimSpace(input.Icon)
+	icon, err := sanitize.ValidateIcon(input.Icon)
+	if err != nil {
+		return nil, err
+	}
 	if icon == "" {
 		icon = "fa-circle" // Default icon.
 	}
@@ -1912,7 +1915,10 @@ func (s *entityService) UpdateEntityType(ctx context.Context, id int, input Upda
 		return nil, apperror.NewBadRequest("entity type plural name must be at most 100 characters")
 	}
 
-	icon := strings.TrimSpace(input.Icon)
+	icon, err := sanitize.ValidateIcon(input.Icon)
+	if err != nil {
+		return nil, err
+	}
 	if icon == "" {
 		icon = "fa-circle"
 	}

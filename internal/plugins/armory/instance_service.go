@@ -9,6 +9,7 @@ import (
 	"unicode"
 
 	"github.com/keyxmakerx/chronicle/internal/apperror"
+	"github.com/keyxmakerx/chronicle/internal/sanitize"
 )
 
 // InstanceService handles business logic for inventory instances.
@@ -80,7 +81,10 @@ func (s *instanceService) CreateInstance(ctx context.Context, campaignID string,
 		slug = "inventory"
 	}
 
-	icon := strings.TrimSpace(input.Icon)
+	icon, err := sanitize.ValidateIcon(input.Icon)
+	if err != nil {
+		return nil, err
+	}
 	if icon == "" {
 		icon = "fa-box"
 	}
@@ -88,6 +92,9 @@ func (s *instanceService) CreateInstance(ctx context.Context, campaignID string,
 	color := strings.TrimSpace(input.Color)
 	if color == "" {
 		color = "#6b7280"
+	}
+	if !instanceColorRe.MatchString(color) {
+		return nil, apperror.NewBadRequest("color must be a hex value like #6b7280")
 	}
 
 	desc := strings.TrimSpace(input.Description)
@@ -115,7 +122,10 @@ func (s *instanceService) UpdateInstance(ctx context.Context, campaignID string,
 		slug = "inventory"
 	}
 
-	icon := strings.TrimSpace(input.Icon)
+	icon, err := sanitize.ValidateIcon(input.Icon)
+	if err != nil {
+		return err
+	}
 	if icon == "" {
 		icon = "fa-box"
 	}
@@ -123,6 +133,9 @@ func (s *instanceService) UpdateInstance(ctx context.Context, campaignID string,
 	color := strings.TrimSpace(input.Color)
 	if color == "" {
 		color = "#6b7280"
+	}
+	if !instanceColorRe.MatchString(color) {
+		return apperror.NewBadRequest("color must be a hex value like #6b7280")
 	}
 
 	desc := strings.TrimSpace(input.Description)
@@ -159,6 +172,9 @@ func (s *instanceService) RemoveItem(ctx context.Context, campaignID string, ins
 
 // slugRe matches non-alphanumeric characters for slug generation.
 var slugRe = regexp.MustCompile(`[^a-z0-9]+`)
+
+// instanceColorRe matches the #rrggbb values the column (VARCHAR(7)) stores.
+var instanceColorRe = regexp.MustCompile(`^#[0-9a-fA-F]{6}$`)
 
 // slugify converts a name to a URL-safe slug.
 func slugify(name string) string {

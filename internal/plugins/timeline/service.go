@@ -13,9 +13,6 @@ import (
 	"github.com/keyxmakerx/chronicle/internal/sanitize"
 )
 
-// iconPattern validates FontAwesome icon class names to prevent XSS injection.
-var iconPattern = regexp.MustCompile(`^fa-[a-z0-9-]+$`)
-
 // colorPattern validates hex color values to prevent XSS injection.
 var colorPattern = regexp.MustCompile(`^#([0-9a-fA-F]{3}|[0-9a-fA-F]{6})$`)
 
@@ -175,9 +172,14 @@ func (s *timelineService) CreateTimeline(ctx context.Context, campaignID string,
 	if input.Color == "" {
 		input.Color = "#6366f1"
 	}
-	if input.Icon == "" {
-		input.Icon = "fa-timeline"
+	icon, err := sanitize.ValidateIcon(input.Icon)
+	if err != nil {
+		return nil, err
 	}
+	if icon == "" {
+		icon = "fa-timeline"
+	}
+	input.Icon = icon
 	if input.Visibility == "" {
 		input.Visibility = "everyone"
 	}
@@ -191,9 +193,6 @@ func (s *timelineService) CreateTimeline(ctx context.Context, campaignID string,
 	}
 	if !IsValidZoom(input.ZoomDefault) {
 		return nil, apperror.NewValidation("invalid zoom default level")
-	}
-	if !iconPattern.MatchString(input.Icon) {
-		return nil, apperror.NewValidation("icon must be a valid FontAwesome class name")
 	}
 	if !colorPattern.MatchString(input.Color) {
 		return nil, apperror.NewValidation("color must be a valid hex color")
@@ -372,9 +371,12 @@ func (s *timelineService) UpdateTimeline(ctx context.Context, timelineID string,
 	if !IsValidZoom(zoom) {
 		return apperror.NewValidation("invalid zoom default level")
 	}
-	icon := input.Icon.Val(t.Icon)
-	if icon != "" && !iconPattern.MatchString(icon) {
-		return apperror.NewValidation("icon must be a valid FontAwesome class name")
+	icon, err := sanitize.ValidateIcon(input.Icon.Val(t.Icon))
+	if err != nil {
+		return err
+	}
+	if icon == "" {
+		icon = "fa-timeline"
 	}
 	color := input.Color.Val(t.Color)
 	if color != "" && !colorPattern.MatchString(color) {

@@ -1,0 +1,11 @@
+package addons
+
+import "github.com/keyxmakerx/chronicle/internal/database"
+
+// IconColumns lists this plugin's stored icon columns and the default that
+// replaces an unusable value, for the boot-time icon reconciler.
+func IconColumns() []database.IconColumn {
+	return []database.IconColumn{
+		{Table: "addons", Column: "icon", Default: "fa-puzzle-piece"},
+	}
+}

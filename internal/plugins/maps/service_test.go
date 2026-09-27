@@ -7,6 +7,7 @@ import (
 
 	"github.com/keyxmakerx/chronicle/internal/patch"
 	"github.com/keyxmakerx/chronicle/internal/apperror"
+	"github.com/keyxmakerx/chronicle/internal/sanitize"
 )
 
 // --- Mock Repository ---
@@ -511,7 +512,7 @@ func TestCreateMarker_InvalidIcon(t *testing.T) {
 		Color:     "#ff0000",
 		CreatedBy: "user-1",
 	})
-	assertAppError(t, err, 422)
+	assertAppError(t, err, 400)
 }
 
 func TestCreateMarker_InvalidColor(t *testing.T) {
@@ -698,7 +699,7 @@ func TestUpdateMarker_InvalidIcon(t *testing.T) {
 		Y:    patch.Of(50.0),
 		Icon: patch.Of("javascript:alert(1)"),
 	})
-	assertAppError(t, err, 422)
+	assertAppError(t, err, 400)
 }
 
 func TestUpdateMarker_InvalidColor(t *testing.T) {
@@ -1017,12 +1018,12 @@ func TestIconPattern(t *testing.T) {
 	invalid := []string{"<script>", "javascript:", "map-pin", "FA-MAP", "fa_map", ""}
 
 	for _, icon := range valid {
-		if !iconPattern.MatchString(icon) {
+		if !sanitize.IsIconName(icon) {
 			t.Errorf("expected icon %q to be valid", icon)
 		}
 	}
 	for _, icon := range invalid {
-		if iconPattern.MatchString(icon) {
+		if sanitize.IsIconName(icon) {
 			t.Errorf("expected icon %q to be invalid", icon)
 		}
 	}

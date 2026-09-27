@@ -85,6 +85,7 @@ function boot(apiFetch) {
     Chronicle: {
       register: (name, impl) => { registry[name] = impl; },
       escapeHtml: (s) => String(s === undefined || s === null ? '' : s),
+      escapeAttr: (s) => String(s === undefined || s === null ? '' : s),
       apiFetch,
     },
   };
