@@ -28,11 +28,11 @@ import (
 type ImportFormat string
 
 const (
-	FormatChronicle    ImportFormat = "chronicle"
-	FormatSimpleCal    ImportFormat = "simple-calendar"
-	FormatCalendaria   ImportFormat = "calendaria"
-	FormatFantasyCal   ImportFormat = "fantasy-calendar"
-	FormatUnknown      ImportFormat = "unknown"
+	FormatChronicle  ImportFormat = "chronicle"
+	FormatSimpleCal  ImportFormat = "simple-calendar"
+	FormatCalendaria ImportFormat = "calendaria"
+	FormatFantasyCal ImportFormat = "fantasy-calendar"
+	FormatUnknown    ImportFormat = "unknown"
 )
 
 // ImportResult holds the parsed calendar data ready to be applied.
@@ -61,6 +61,11 @@ type ImportedSettings struct {
 	// ApplyImport validates them through the same rules as the enable flow.
 	TracksRealTime bool    `json:"tracks_real_time,omitempty"`
 	RealTimeZone   *string `json:"real_time_zone,omitempty"`
+	// Also Chronicle-native only: external formats have no concept of a
+	// hemisphere, forecast toggle or week-start rule.
+	Hemisphere         *string `json:"hemisphere,omitempty"`
+	ForecastsEnabled   bool    `json:"forecasts_enabled,omitempty"`
+	MonthStartsNewWeek bool    `json:"month_starts_new_week,omitempty"`
 }
 
 // DetectAndParse auto-detects the format of raw JSON bytes and parses into
@@ -157,10 +162,14 @@ func parseChronicle(data []byte) (*ImportResult, error) {
 			SecondsPerMinute: export.Calendar.SecondsPerMinute,
 			LeapYearEvery:    export.Calendar.LeapYearEvery,
 			LeapYearOffset:   export.Calendar.LeapYearOffset,
-			// Real-time round-trip (0c): carry the flag + anchor zone so a
-			// re-import restores wall-clock authority instead of dropping it.
-			TracksRealTime: export.Calendar.TracksRealTime,
-			RealTimeZone:   export.Calendar.RealTimeZone,
+			// Carries the real-time flag, anchor zone, hemisphere, forecast
+			// toggle and week-start rule forward, so a re-import restores them
+			// instead of silently dropping back to their defaults.
+			TracksRealTime:     export.Calendar.TracksRealTime,
+			RealTimeZone:       export.Calendar.RealTimeZone,
+			Hemisphere:         export.Calendar.Hemisphere,
+			ForecastsEnabled:   export.Calendar.ForecastsEnabled,
+			MonthStartsNewWeek: export.Calendar.MonthStartsNewWeek,
 		},
 	}
 
@@ -174,9 +183,17 @@ func parseChronicle(data []byte) (*ImportResult, error) {
 		result.Weekdays = append(result.Weekdays, WeekdayInput(w))
 	}
 
-	// Copy moons.
+	// Copy moons. Field-by-field, not a type conversion: ExportMoon carries
+	// no ID (a re-import always inserts fresh moons), while MoonInput does
+	// (for SetMoons' upsert), so the two shapes are not interchangeable.
 	for _, m := range export.Calendar.Moons {
-		result.Moons = append(result.Moons, MoonInput(m))
+		result.Moons = append(result.Moons, MoonInput{
+			Name:              m.Name,
+			CycleDays:         m.CycleDays,
+			PhaseOffset:       m.PhaseOffset,
+			Color:             m.Color,
+			HiddenFromPlayers: m.HiddenFromPlayers,
+		})
 	}
 
 	// Copy seasons.
@@ -193,12 +210,27 @@ func parseChronicle(data []byte) (*ImportResult, error) {
 		})
 	}
 
-	// Copy eras.
+	// Copy eras. A pre-V5 export has no start_month/start_day keys at all,
+	// which unmarshal to the Go zero value 0; normalizeEraStart treats that
+	// the same as any other era missing day-level bounds.
 	for _, e := range export.Calendar.Eras {
-		result.Eras = append(result.Eras, EraInput(e))
+		result.Eras = append(result.Eras, normalizeEraStart(EraInput(e)))
 	}
 
 	return result, nil
+}
+
+// normalizeEraStart clamps a missing start month or day (0, from a format
+// with no day-level era bounds) up to 1, so the era begins on a real day
+// instead of one that does not exist.
+func normalizeEraStart(e EraInput) EraInput {
+	if e.StartMonth < 1 {
+		e.StartMonth = 1
+	}
+	if e.StartDay < 1 {
+		e.StartDay = 1
+	}
+	return e
 }
 
 // --- Simple Calendar Parser ---
@@ -296,16 +328,16 @@ type scLeapYear struct {
 }
 
 type scMonth struct {
-	Name                         string `json:"name"`
-	Abbreviation                 string `json:"abbreviation"`
-	NumericRepresentation        int    `json:"numericRepresentation"`
-	NumericRepresentationOffset  int    `json:"numericRepresentationOffset"`
-	NumberOfDays                 int    `json:"numberOfDays"`
-	NumberOfLeapYearDays         int    `json:"numberOfLeapYearDays"`
-	Intercalary                  bool   `json:"intercalary"`
-	IntercalaryInclude           bool   `json:"intercalaryInclude"`
-	StartingWeekday              *int   `json:"startingWeekday"`
-	Description                  string `json:"description"`
+	Name                        string `json:"name"`
+	Abbreviation                string `json:"abbreviation"`
+	NumericRepresentation       int    `json:"numericRepresentation"`
+	NumericRepresentationOffset int    `json:"numericRepresentationOffset"`
+	NumberOfDays                int    `json:"numberOfDays"`
+	NumberOfLeapYearDays        int    `json:"numberOfLeapYearDays"`
+	Intercalary                 bool   `json:"intercalary"`
+	IntercalaryInclude          bool   `json:"intercalaryInclude"`
+	StartingWeekday             *int   `json:"startingWeekday"`
+	Description                 string `json:"description"`
 }
 
 type scWeekday struct {
@@ -759,10 +791,10 @@ type calEra struct {
 }
 
 type calMoon struct {
-	Name          string       `json:"name"`
-	CycleLength   float64      `json:"cycleLength"`
-	Color         string       `json:"color"`
-	ReferenceDate calRefDate   `json:"referenceDate"`
+	Name          string     `json:"name"`
+	CycleLength   float64    `json:"cycleLength"`
+	Color         string     `json:"color"`
+	ReferenceDate calRefDate `json:"referenceDate"`
 }
 
 type calRefDate struct {
@@ -772,12 +804,12 @@ type calRefDate struct {
 }
 
 type calFestival struct {
-	Name        string  `json:"name"`
-	Month       int     `json:"month"`
-	Day         int     `json:"day"`
-	Icon        string  `json:"icon"`
-	Color       string  `json:"color"`
-	Description string  `json:"description"`
+	Name        string `json:"name"`
+	Month       int    `json:"month"`
+	Day         int    `json:"day"`
+	Icon        string `json:"icon"`
+	Color       string `json:"color"`
+	Description string `json:"description"`
 }
 
 type calWeek struct {
@@ -1009,14 +1041,14 @@ func parseCalendaria(data []byte) (*ImportResult, error) {
 		if abbr != "" {
 			desc = &abbr
 		}
-		result.Eras = append(result.Eras, EraInput{
+		result.Eras = append(result.Eras, normalizeEraStart(EraInput{
 			Name:        stripLocalizationKey(e.val.Name),
 			StartYear:   e.val.StartYear,
 			EndYear:     e.val.EndYear,
 			Description: desc,
 			Color:       "#6366f1", // default since Calendaria doesn't have era colors
 			SortOrder:   i,
-		})
+		}))
 	}
 
 	return result, nil
@@ -1061,11 +1093,11 @@ type fcStaticData struct {
 }
 
 type fcYearData struct {
-	FirstDay   int           `json:"first_day"`
-	Overflow   bool          `json:"overflow"`
-	GlobalWeek []string      `json:"global_week"`
-	Timespans  []fcTimespan  `json:"timespans"`
-	LeapDays   []fcLeapDay   `json:"leap_days"`
+	FirstDay   int          `json:"first_day"`
+	Overflow   bool         `json:"overflow"`
+	GlobalWeek []string     `json:"global_week"`
+	Timespans  []fcTimespan `json:"timespans"`
+	LeapDays   []fcLeapDay  `json:"leap_days"`
 }
 
 type fcTimespan struct {
@@ -1252,13 +1284,13 @@ func parseFantasyCalendar(data []byte) (*ImportResult, error) {
 		if e.Description != "" {
 			desc = &e.Description
 		}
-		result.Eras = append(result.Eras, EraInput{
+		result.Eras = append(result.Eras, normalizeEraStart(EraInput{
 			Name:        e.Name,
 			StartYear:   e.Date.Year,
 			Description: desc,
 			Color:       "#6366f1",
 			SortOrder:   i,
-		})
+		}))
 	}
 
 	return result, nil

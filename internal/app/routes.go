@@ -2498,16 +2498,36 @@ func (a *App) RegisterRoutes() {
 		slog.Warn("syncapi plugin degraded — routes not registered")
 	}
 
-	// CALV5-PLACEHOLDER: V5 must restore the calendar plugin's construction —
-	// repository, service, handler, the RSVP repo/service/handler triple, the
-	// entity-creator seam, the RSVP reader, and the StaticFS mount for
-	// /static/plugins/calendar/. The plugin stays registered (no service, no
-	// static FS) so the campaign settings page, the addon gate and the
-	// operator diagnostics see it as degraded rather than uninstalled.
+	// Calendar plugin: service + handler over the repositories, routed below
+	// (after the rebuild-notice group) once migrations report healthy.
+	//
+	// CALV5-PLACEHOLDER: V5 must still restore the RSVP repo/service/handler
+	// triple, the entity-creator seam, the RSVP reader, and the StaticFS
+	// mount for /static/plugins/calendar/.
+	calendarRepo := calendar.NewCalendarRepository(a.DB)
+	calendarEventRepo := calendar.NewEventRepository(a.DB)
+	calendarKindRepo := calendar.NewEventKindRepository(a.DB)
+	calendarWeatherRepo := calendar.NewWeatherRepository(a.DB)
+	calendarService := calendar.NewCalendarService(calendarRepo, calendarEventRepo, calendarKindRepo, calendarWeatherRepo)
+	// An event's entity_id join reads straight from entities with no
+	// visibility filter of its own (calendar.EntityVisibilityGate's doc
+	// comment) — reuses the same entityVisibilityFilterAdapter sessions,
+	// maps, npcs, armory and media wire above, never a second copy of the
+	// predicate. Reached via a type assertion (the CalendarService interface
+	// itself stays unchanged for callers that don't need it).
+	if gated, ok := calendarService.(interface {
+		SetEntityVisibilityGate(calendar.EntityVisibilityGate)
+	}); ok {
+		gated.SetEntityVisibilityGate(&entityVisibilityFilterAdapter{svc: entityService})
+	}
+	calendarHandler := calendar.NewHandler(calendarService)
 	a.registerPlugin(PluginRegistration{
 		Slug: calendar.PluginSlug,
 		HealthCheck: func() error {
-			return errors.New("calendar is being rebuilt (V5) — no routes registered")
+			if a.PluginHealth != nil && !a.PluginHealth.IsHealthy(calendar.PluginSlug) {
+				return errors.New("calendar schema unhealthy")
+			}
+			return nil
 		},
 	})
 
@@ -2551,12 +2571,26 @@ func (a *App) RegisterRoutes() {
 	calendarRebuildGroup.GET("/calendar", calendarRebuildNotice)
 	calendarRebuildGroup.GET("/calendars", calendarRebuildNotice)
 
-	// CALV5-PLACEHOLDER: V5 must restore calendar.RegisterRoutes,
-	// calendar.RegisterRSVPRoutes, and the public Foundry-facing calendar
-	// API (token-verified through fvttService, rate limited 300/min) behind
-	// the schema health gate. That public API overlapped syncapi's calendar
-	// surface — rebuild only syncapi's, the one the module's contract
-	// documents.
+	// calendar.RegisterRoutes is the JSON API: calendars, events, event
+	// kinds, eras, the moon hidden flag. It cannot change what a page
+	// renders — calendarRebuildGroup above registers GET /calendar and GET
+	// /calendars (the rebuild notice page); RegisterRoutes's only bare
+	// /calendars route is POST (create), every other path adds a segment
+	// (/calendars/list, /calendars/:calid, ...), so the two never contend on
+	// the same method+path, and the page a player navigates to keeps
+	// showing "being rebuilt" until a later change replaces
+	// calendarRebuildNotice itself.
+	//
+	// CALV5-PLACEHOLDER: V5 must still restore calendar.RegisterRSVPRoutes
+	// and the public Foundry-facing calendar API (token-verified through
+	// fvttService, rate limited 300/min) behind the schema health gate. That
+	// public API overlapped syncapi's calendar surface — rebuild only
+	// syncapi's, the one the module's contract documents.
+	if a.PluginHealth.IsHealthy(calendar.PluginSlug) {
+		calendar.RegisterRoutes(e, calendarHandler, campaignService, authService, addonService)
+	} else {
+		slog.Warn("calendar plugin degraded — routes not registered")
+	}
 
 	// Bestiary plugin: community creature sharing with ratings, favorites, import.
 	bestiaryRepo := bestiary.NewBestiaryRepository(a.DB)

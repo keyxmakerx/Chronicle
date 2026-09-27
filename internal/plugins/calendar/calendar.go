@@ -4,6 +4,10 @@
 // issue #741); only migrations, MigrationsFS, PluginSlug and the widget type
 // constants remain, kept so applied migrations stay immutable, the plugin
 // stays registered, and existing addon/widget-binding rows don't orphan.
+//
+// TODO(#778): this doc has been stale since service.go/handler.go/routes.go
+// landed; rewrite it once V5 is complete instead of patching it slice by
+// slice.
 package calendar
 
 import "embed"
