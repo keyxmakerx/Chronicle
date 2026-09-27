@@ -11,7 +11,10 @@
 // structure editor — none of those exist anywhere in this codebase.
 package calendar
 
-import "fmt"
+import (
+	"encoding/json"
+	"fmt"
+)
 
 // wizardShell is the dialog chrome every step renders inside.
 templ wizardShell(stepLabel string, body templ.Component) {
@@ -192,6 +195,13 @@ templ wizardImportBody(campaignID, csrfToken, formError string) {
 // for the former, importJSON (the ImportResult round-tripped as JSON) for
 // the latter — see WizardCreate for why: no server-side draft session, so
 // the two paths carry forward what they need in the form itself.
+//
+// The form below submits with hx-encoding="multipart/form-data" specifically
+// so import_json isn't sent application/x-www-form-urlencoded: percent-
+// encoding a large JSON blob (every '"', ':', '{', space, …) bloats it by
+// roughly 3x, which could otherwise make a file well within the wizard's own
+// ~10MB import cap pass Preview but then fail Create purely from the
+// round-trip's own re-encoding overhead.
 templ wizardReviewBody(campaignID, source, presetName, importJSON, csrfToken, backURL, formError string, ir *ImportResult) {
 	<h2 class="calv5-wz-h">Review</h2>
 	<p class="calv5-wz-lead">Confirm the calendar's name and today's date in the world, then create it.</p>
@@ -215,7 +225,8 @@ templ wizardReviewBody(campaignID, source, presetName, importJSON, csrfToken, ba
 		hx-post={ fmt.Sprintf("/campaigns/%s/calendars/wizard/create", campaignID) }
 		hx-target="#calv5-wizard-root"
 		hx-swap="outerHTML"
-		x-data={ fmt.Sprintf("{m:%s,d:%s}", jsIntOrEmpty(ir.Today.Month), jsIntOrEmpty(ir.Today.Day)) }
+		hx-encoding="multipart/form-data"
+		x-data={ fmt.Sprintf("{m:%s,d:%s,md:%s}", jsIntOrEmpty(ir.Today.Month), jsIntOrEmpty(ir.Today.Day), jsMonthDayCounts(ir.Months)) }
 	>
 		<input type="hidden" name="csrf_token" value={ csrfToken }/>
 		<input type="hidden" name="source" value={ source }/>
@@ -246,7 +257,15 @@ templ wizardReviewBody(campaignID, source, presetName, importJSON, csrfToken, ba
 					</label>
 					<label class="calv5-fld">
 						<span>Day</span>
-						<input class="calv5-inp" type="number" name="current_day" min="1" x-model="d" required/>
+						<input
+							class="calv5-inp"
+							type="number"
+							name="current_day"
+							min="1"
+							x-bind:max="md[m-1] || 31"
+							x-model="d"
+							required
+						/>
 					</label>
 				</div>
 			</div>
@@ -297,4 +316,23 @@ func jsIntOrEmpty(v *int) string {
 		return "''"
 	}
 	return fmt.Sprintf("%d", *v)
+}
+
+// jsMonthDayCounts serializes each month's day count (Days — not leap-year
+// adjusted, since this only feeds the day input's client-side `max` hint,
+// not an authoritative check) as a JSON array literal for the Review step's
+// Alpine x-data. The real check is server-side, in
+// CreateCalendarFromImport's own current-date range validation — this is
+// defense in depth so a wrong day is caught before submit, not instead of
+// that check.
+func jsMonthDayCounts(months []MonthInput) string {
+	days := make([]int, len(months))
+	for i, m := range months {
+		days[i] = m.Days
+	}
+	b, err := json.Marshal(days)
+	if err != nil {
+		return "[]"
+	}
+	return string(b)
 }

@@ -11,6 +11,7 @@ import (
 	"fmt"
 	"log/slog"
 	"net/http"
+	"regexp"
 	"strings"
 	"time"
 
@@ -144,11 +145,21 @@ func (a *App) setupMiddleware() {
 	// oversized payloads on non-upload endpoints. The media upload endpoint
 	// has its own per-route body limit based on the configured max upload size,
 	// so we skip this global limit for that path.
+	//
+	// The calendar import routes (the wizard's drag-and-drop preview and its
+	// review-step create, plus the equivalent JSON API pair) advertise an
+	// ~10MB cap of their own, enforced via an http.LimitReader in the
+	// calendar handler — this global 2MB limit would otherwise be the real
+	// (and silent, since it fails before the handler's own check ever runs)
+	// ceiling for every one of them.
 	a.Echo.Use(echomw.BodyLimitWithConfig(echomw.BodyLimitConfig{
 		Limit: "2M",
 		Skipper: func(c echo.Context) bool {
 			path := c.Request().URL.Path
-			return strings.HasPrefix(path, "/media/upload") || path == "/ws"
+			if strings.HasPrefix(path, "/media/upload") || path == "/ws" {
+				return true
+			}
+			return isCalendarImportPath(path)
 		},
 	}))
 
@@ -181,6 +192,24 @@ func (a *App) setupMiddleware() {
 
 	// CSRF -- double-submit cookie pattern on all state-changing requests.
 	a.Echo.Use(middleware.CSRF())
+}
+
+// calendarImportPathPattern matches the calendar plugin's upload-heavy
+// routes (its own routes.go): the wizard's drag-and-drop import preview and
+// its review-step create, and their JSON-API equivalents. Matched against
+// the raw incoming URL path, so it doesn't need an *echo.Route lookup this
+// early in the middleware chain — :id is any single path segment, exactly
+// as permissive as Echo's own routing is for that position.
+var calendarImportPathPattern = regexp.MustCompile(
+	`^/campaigns/[^/]+/calendars/(wizard/import/preview|wizard/create|import/preview|import)$`)
+
+// isCalendarImportPath reports whether path is one of the calendar import
+// routes the global body limit above must not apply to (see its own
+// comment): they enforce their own ~10MB cap via an http.LimitReader in the
+// calendar handler, so the global 2MB limit would otherwise silently be the
+// real ceiling instead.
+func isCalendarImportPath(path string) bool {
+	return calendarImportPathPattern.MatchString(path)
 }
 
 // errorHandler is the custom Echo error handler. It maps domain errors

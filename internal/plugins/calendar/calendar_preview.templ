@@ -89,13 +89,23 @@ templ CalendarPreviewFragment(data CalendarPreviewData) {
 							}
 
 							<div style="margin-top:18px;display:flex;flex-direction:column;gap:8px">
-								<a
+								// Not a clickable <a href> yet: Part A's
+								// /campaigns/:id/calendars/:calid/view route (this
+								// preview's real "unfold to full calendar" target —
+								// see the package doc comment above) hasn't merged,
+								// so linking there today would be a dead 404. A
+								// disabled button says so instead of pretending the
+								// feature exists; swap back to the <a href> once
+								// that route lands.
+								<button
+									type="button"
 									class="btn primary"
 									style="width:100%"
-									href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/calendars/%s/view", data.CampaignID, data.Calendar.ID)) }
+									disabled
+									title="The full calendar view is not available yet"
 								>
-									<i class="fa-solid fa-book-open"></i> Open calendar
-								</a>
+									<i class="fa-solid fa-book-open"></i> Full calendar view (coming soon)
+								</button>
 							</div>
 						</div>
 					</div>
@@ -109,7 +119,13 @@ templ CalendarPreviewFragment(data CalendarPreviewData) {
 // day numbers, today highlighted, a moon silhouette and event-count dots per
 // day. No prev/next paging (MVP scope — see this file's package doc).
 templ previewMonthGrid(cal *Calendar, monthEvents []Event) {
-	<div class="calv5-mgrid">
+	// --cols overrides the CSS default of 7 (static/css/calendar_v5.css'
+	// .calv5-mgrid) with this calendar's actual weekday count: 3 of the 4
+	// shipped presets (Harptos 10, Dwarven 6, Blank 10) aren't 7-day weeks,
+	// and without this the grid wraps/misaligns for every one of them. Never
+	// 0 — an empty weekday list would set --cols:0 and hide the grid
+	// entirely, worse than the wrong-but-visible default.
+	<div class="calv5-mgrid" style={ fmt.Sprintf("--cols:%d", max(len(cal.Weekdays), 1)) }>
 		<div class="calv5-mg-head">
 			<h3 class="calv5-mg-title">
 				{ cal.CurrentMonthName() } <span class="yr">{ fmt.Sprintf("%d", cal.CurrentYear) }</span>
