@@ -108,6 +108,10 @@ func (f *fakeCalendarSvc) GetCalendarForViewer(_ context.Context, calendarID, ca
 	}
 	return &Calendar{ID: calendarID, CampaignID: campaignID, Name: "The Secret Calendar"}, nil
 }
+func (f *fakeCalendarSvc) GetDefaultCalendarForViewer(_ context.Context, campaignID string, v permissions.Viewer) (*Calendar, error) {
+	f.lastViewer = v
+	return &Calendar{ID: "cal-default", CampaignID: campaignID, Name: "The Default Calendar", IsDefault: true}, nil
+}
 func (f *fakeCalendarSvc) ListCalendars(_ context.Context, _ string, v permissions.Viewer) ([]Calendar, error) {
 	f.lastViewer = v
 	return []Calendar{{ID: "cal-1"}}, nil

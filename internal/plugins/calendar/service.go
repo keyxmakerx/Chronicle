@@ -96,6 +96,14 @@ type CalendarService interface {
 	// EventKinds are stripped and Moons are filtered for a viewer that does
 	// not skip the per-user layer.
 	GetCalendarForViewer(ctx context.Context, calendarID, campaignID string, v permissions.Viewer) (*Calendar, error)
+	// GetDefaultCalendarForViewer returns the campaign's default calendar
+	// (Calendar.IsDefault), gated exactly like GetCalendarForViewer, for
+	// callers that want "the campaign's calendar" without already knowing its
+	// id — e.g. the skybox dashboard/template block, which is campaign-level
+	// and binds to no specific calendar. Returns apperror.NotFound both when
+	// the campaign has no default calendar and when it has one the viewer may
+	// not see, the same collapse GetCalendarForViewer uses.
+	GetDefaultCalendarForViewer(ctx context.Context, campaignID string, v permissions.Viewer) (*Calendar, error)
 	// ListCalendars returns a campaign's calendars, role- and per-user
 	// visibility-filtered. No sub-resources are eager-loaded (list view).
 	ListCalendars(ctx context.Context, campaignID string, v permissions.Viewer) ([]Calendar, error)
@@ -445,6 +453,30 @@ func (s *calendarService) GetCalendarForViewer(ctx context.Context, calendarID, 
 	if err != nil {
 		return nil, err
 	}
+	return s.finishCalendarForViewer(ctx, cal, v)
+}
+
+// GetDefaultCalendarForViewer returns the campaign's default calendar with
+// its sub-resources, gated the same way as GetCalendarForViewer (see the
+// interface doc comment). Shares finishCalendarForViewer with it so the two
+// entry points — "this calendar id" and "whichever calendar is default" —
+// can never load or filter sub-resources differently.
+func (s *calendarService) GetDefaultCalendarForViewer(ctx context.Context, campaignID string, v permissions.Viewer) (*Calendar, error) {
+	cal, err := s.calRepo.GetDefaultByCampaignID(ctx, campaignID)
+	if err != nil {
+		return nil, err
+	}
+	if cal == nil || cal.CampaignID != campaignID || !calendarVisibleToViewer(*cal, v) {
+		return nil, apperror.NewNotFound("calendar not found")
+	}
+	return s.finishCalendarForViewer(ctx, cal, v)
+}
+
+// finishCalendarForViewer eager-loads cal's sub-resources and applies the
+// viewer-gated stripping (event kinds/eras hidden entirely, hidden moons
+// filtered) that every "one calendar, for this viewer" read needs. Callers
+// have already resolved cal and checked visibility.
+func (s *calendarService) finishCalendarForViewer(ctx context.Context, cal *Calendar, v permissions.Viewer) (*Calendar, error) {
 	if err := s.loadSubresources(ctx, cal); err != nil {
 		return nil, err
 	}
