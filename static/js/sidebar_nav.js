@@ -101,6 +101,14 @@
     if (body._navSettle) body._navSettle();
   }
 
+  /** What fades while a fold opens or closes: its rows, twisties, and any
+   *  member pins that are showing (hidden ones stay hidden). */
+  function foldContent(body) {
+    return Array.prototype.filter.call(body.querySelectorAll('.nav-row, .nav-tw, .nav-mypin'), function (el) {
+      return !el.classList.contains('nav-mypin') || getComputedStyle(el).opacity !== '0';
+    });
+  }
+
   function unfold(body) {
     body.hidden = false;
     if (reduced()) {
@@ -115,9 +123,11 @@
       el.classList.add('nav-cover');
       anims.push(play(el, [{ transform: 'translateY(' + (-h) + 'px)' }, { transform: 'none' }], { duration: FOLD_MS, easing: EASE }));
     });
-    var rows = body.querySelectorAll('.nav-row, .nav-tw');
+    // The opened rows fade in drawn whole, each settling from a few pixels
+    // up, as the signed mockup draws them.
+    var rows = foldContent(body);
     for (var i = 0; i < rows.length; i++) {
-      anims.push(play(rows[i], [{ opacity: 0, transform: 'translateY(-6px)' }, { opacity: 1, transform: 'none' }],
+      anims.push(play(rows[i], [{ opacity: 0, transform: 'translateY(-8px)' }, { opacity: 1, transform: 'none' }],
         { duration: FOLD_MS, delay: Math.min(i, 8) * 16, easing: EASE_OUT, fill: 'backwards' }));
     }
     var cleanup = function () {
@@ -136,7 +146,7 @@
     }
     var h = body.offsetHeight;
     var after = followers(body), anims = [];
-    var rows = body.querySelectorAll('.nav-row, .nav-tw');
+    var rows = foldContent(body);
     for (var i = 0; i < rows.length; i++) {
       anims.push(play(rows[i], [{ opacity: 1 }, { opacity: 0 }], { duration: FOLD_MS * 0.7, easing: 'ease-in', fill: 'forwards' }));
     }
