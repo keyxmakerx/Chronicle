@@ -706,7 +706,7 @@ func (a *sidebarAutoAdderAdapter) AddEntityTypeToSidebar(ctx context.Context, ca
 // navAppDef is one app page the campaign sidebar can list. It lives here, in
 // the composition root, because it names other plugins' addons and routes.
 type navAppDef struct {
-	slug    string   // the app item's slug in sidebar_config (Journal keeps "notes", its addon)
+	slug    string // the app item's slug in sidebar_config (Journal keeps "notes", its addon)
 	label   string
 	icon    string
 	path    string   // campaign-relative page
@@ -3502,6 +3502,16 @@ func (a *App) RegisterRoutes() {
 		// request context (e.g., entity show overrides to the category URL).
 		if layouts.GetActivePath(ctx) == "" {
 			ctx = layouts.SetActivePath(ctx, c.Request().URL.Path)
+		}
+
+		// Where the viewer is in the campaign sidebar, and which sections
+		// they folded (a per-campaign cookie sidebar_nav.js writes), so the
+		// server paints the finished sidebar and nothing jumps on load.
+		if campaigns.GetCampaignContext(c) != nil {
+			if cookie, err := c.Cookie(layouts.NavFoldsCookie); err == nil {
+				ctx = layouts.SetNavFolds(ctx, layouts.ParseNavFolds(cookie.Value))
+			}
+			ctx = layouts.ResolveNavState(ctx)
 		}
 
 		// Signed media URL generators for templates. Bound to whoever is
