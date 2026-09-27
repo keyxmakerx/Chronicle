@@ -1,7 +1,7 @@
-// calendars_list.templ renders the campaign calendars list (Part B, #764):
-// header, card grid, empty state, and the (initially empty) preview/wizard
-// dialog mount points. Ported from the signed mockup's dashboard section —
-// see static/css/calendar_v5.css's own doc comment for what's scoped out.
+// calendars_list.templ renders the campaign calendars list: header, card
+// grid, empty state, and the (initially empty) preview/wizard dialog mount
+// points. Ported from the signed mockup's dashboard section — see
+// static/css/calendar_v5.css's own doc comment for what's scoped out.
 package calendar
 
 import (
@@ -200,9 +200,15 @@ func deleteDisabledTitle(cal Calendar) string {
 }
 
 // csrfHeaderJSON builds the hx-headers value carrying the CSRF token, the
-// same shape internal/plugins/timeline/timeline.templ's own hx-headers use.
+// same shape internal/plugins/timeline/timeline.templ's own hx-headers use
+// — json.Marshal rather than a hand-written literal so the token is always
+// safely escaped into the attribute, regardless of what it contains.
 func csrfHeaderJSON(token string) string {
-	return fmt.Sprintf(`{"X-CSRF-Token":"%s"}`, token)
+	b, err := json.Marshal(map[string]string{"X-CSRF-Token": token})
+	if err != nil {
+		return "{}"
+	}
+	return string(b)
 }
 
 // calv5CreatedInit builds the Alpine x-init expression that announces a

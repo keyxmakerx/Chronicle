@@ -22,6 +22,8 @@ import (
 	"math"
 	"sort"
 	"strings"
+
+	"github.com/keyxmakerx/chronicle/internal/apperror"
 )
 
 // ImportFormat identifies which JSON format was detected.
@@ -281,6 +283,13 @@ func parseChronicle(data []byte) (*ImportResult, error) {
 		result.Eras = append(result.Eras, normalizeEraStart(EraInput(e)))
 	}
 
+	// clampCalendarStructure's bounds apply here too: detectFormat trusts
+	// any file that merely claims "format":"chronicle-calendar-v1", so a
+	// hand-edited or malicious upload can carry this path's structure
+	// without ever having gone through a real Chronicle export.
+	if err := clampCalendarStructure(result); err != nil {
+		return nil, err
+	}
 	return result, nil
 }
 
@@ -614,7 +623,9 @@ func parseSimpleCalendarInner(cal scCalendar) (*ImportResult, error) {
 		result.Today.Day = importIntPtr(cal.CurrentDate.Day + 1)
 	}
 
-	clampCalendarStructure(result)
+	if err := clampCalendarStructure(result); err != nil {
+		return nil, err
+	}
 	return result, nil
 }
 
@@ -1144,7 +1155,9 @@ func parseCalendaria(data []byte) (*ImportResult, error) {
 	// confirm them explicitly instead of guessing day 1 (#741).
 	result.Today = ImportedToday{Year: result.Settings.CurrentYear}
 
-	clampCalendarStructure(result)
+	if err := clampCalendarStructure(result); err != nil {
+		return nil, err
+	}
 	return result, nil
 }
 
@@ -1399,6 +1412,9 @@ func parseFantasyCalendar(data []byte) (*ImportResult, error) {
 		}))
 	}
 
+	if err := clampCalendarStructure(result); err != nil {
+		return nil, err
+	}
 	return result, nil
 }
 
@@ -1463,32 +1479,125 @@ var _ = roundFloat
 // integration tests' own intPtr test helper (same package, different file).
 func importIntPtr(v int) *int { return &v }
 
-// clampCalendarStructure clamps the out-of-range or blank values a real
-// Simple Calendar / Calendaria export can carry — a season date outside its
-// month's day range, a non-positive month length, a blank name — to
-// something calendars' own schema can store, and appends a warning for each
-// clamp instead of failing the import outright (#741: "warn, never refuse,
-// when a structural oddity is found"). The fix belongs here, upstream of
-// CalendarRepository.ApplyImport: that transaction stays atomic and
-// rejects only genuine data-integrity violations (see
-// "ApplyImport rolls back every write when a later step fails" in
-// repository_integration_test.go), never a merely-odd-but-storable shape.
+// Upper bounds an imported calendar's structure is held to. Without them, a
+// single crafted (or just badly-behaved) file can hand this package a month
+// with billions of days, or tens of thousands of rows to write in one
+// request — clampCalendarStructure enforces every one of these for every
+// import format (see its own doc comment); buildMonthGrid/countEventsByDay
+// in view_helpers.go re-clamp maxCalendarMonthDays independently, so a
+// calendar_months row that reached this bound some other way (not
+// necessarily an import) still renders safely.
 //
-// Not called for Chronicle (its own export always round-trips values that
-// were already valid) or Fantasy-Calendar (its season ranges are computed
-// in Go from the already-parsed months, so they can't independently go out
-// of range).
-func clampCalendarStructure(result *ImportResult) {
+// Sized well past any real calendar this importer targets: the shipped
+// Harptos preset — the Forgotten Realms' actual calendar, festivals and
+// all — comes to 17 months, 10 weekdays, 4 moons, 4 seasons and 1 era, and
+// the Gregorian/Golarion shapes it also covers are smaller still; a large
+// Fantasy-Calendar or Calendaria back-catalog runs to a few thousand
+// events, not tens of thousands.
+const (
+	maxCalendarMonths       = 200  // real calendars top out near 20
+	maxCalendarMonthDays    = 3660 // ten real years of days in one "month" is already absurd
+	maxCalendarWeekdays     = 100
+	maxCalendarEras         = 500
+	maxCalendarSeasons      = 200
+	maxCalendarMoons        = 100
+	maxCalendarImportEvents = 20000
+
+	// calendar_months/weekdays/moons/seasons.name are all VARCHAR(100).
+	// calendar_eras.name is the wider VARCHAR(200) a hand-made era already
+	// enforces via apperror.MaxNameLength (validateEraShape) — reused below
+	// rather than a second constant carrying the same number.
+	maxCalendarShortNameLength = 100
+	// calendar_seasons.weather_effect VARCHAR(200).
+	maxCalendarWeatherEffectLength = 200
+)
+
+// checkCalendarImportLimits refuses an import whose structure is too large
+// to plausibly be a real calendar (see the maxCalendar* constants above).
+// Counts are refused rather than truncated: there's no sane way to drop "the
+// extra 4,000 months" that leaves a usable calendar behind, so the whole
+// file is rejected with a message the wizard's preview step shows directly,
+// before anything is parsed further or written.
+func checkCalendarImportLimits(result *ImportResult) error {
+	if n := len(result.Months); n > maxCalendarMonths {
+		return fmt.Errorf("this calendar has %d months; the maximum is %d", n, maxCalendarMonths)
+	}
+	if n := len(result.Weekdays); n > maxCalendarWeekdays {
+		return fmt.Errorf("this calendar has %d weekdays; the maximum is %d", n, maxCalendarWeekdays)
+	}
+	if n := len(result.Eras); n > maxCalendarEras {
+		return fmt.Errorf("this calendar has %d eras; the maximum is %d", n, maxCalendarEras)
+	}
+	if n := len(result.Seasons); n > maxCalendarSeasons {
+		return fmt.Errorf("this calendar has %d seasons; the maximum is %d", n, maxCalendarSeasons)
+	}
+	if n := len(result.Moons); n > maxCalendarMoons {
+		return fmt.Errorf("this calendar has %d moons; the maximum is %d", n, maxCalendarMoons)
+	}
+	if n := len(result.Events); n > maxCalendarImportEvents {
+		return fmt.Errorf("this calendar has %d events; the maximum is %d", n, maxCalendarImportEvents)
+	}
+	return nil
+}
+
+// truncateImportText shortens s to at most maxLen bytes without splitting a
+// multi-byte UTF-8 rune in two — every name/description/weather-effect
+// length clamp below routes its truncation through this rather than a bare
+// s[:n], which can produce a byte sequence MariaDB's utf8mb4 columns refuse
+// to store under strict SQL mode.
+func truncateImportText(s string, maxLen int) string {
+	if len(s) <= maxLen {
+		return s
+	}
+	return strings.ToValidUTF8(s[:maxLen], "")
+}
+
+// clampCalendarStructure holds an imported calendar to the bounds above and
+// clamps the out-of-range or blank values a real Simple Calendar / Calendaria
+// export can carry — a season date outside its month's day range, a
+// non-positive month length, a blank name — to something calendars' own
+// schema can store, appending a warning for each clamp instead of failing
+// the import outright (#741: "warn, never refuse, when a structural oddity
+// is found"). The one exception is the counts checked by
+// checkCalendarImportLimits: there's no reasonable value to clamp "too many
+// months" down to, so those are refused instead — see its own doc comment.
+// The fix belongs here, upstream of CalendarRepository.ApplyImport: that
+// transaction stays atomic and rejects only genuine data-integrity
+// violations (see "ApplyImport rolls back every write when a later step
+// fails" in repository_integration_test.go), never a merely-odd-but-storable
+// shape.
+//
+// Called by every format's parser (parseChronicle included — detectFormat
+// trusts any file that merely claims the right "format" value, so a
+// hand-edited or malicious upload can reach this path without ever having
+// gone through a real Chronicle export) and, for the wizard's create step,
+// a second time over browser-submitted data — see WizardCreate — so it must
+// be safe to run twice over its own output; every clamp below is already
+// idempotent (an in-range value is left untouched, so a second pass adds no
+// further warnings).
+func clampCalendarStructure(result *ImportResult) error {
+	if err := checkCalendarImportLimits(result); err != nil {
+		return err
+	}
+
 	for i := range result.Months {
 		m := &result.Months[i]
 		if strings.TrimSpace(m.Name) == "" {
 			m.Name = fmt.Sprintf("Month %d", i+1)
 			result.Warnings = append(result.Warnings, fmt.Sprintf("month %d had no name; named %q", i+1, m.Name))
 		}
+		if trunc := truncateImportText(m.Name, maxCalendarShortNameLength); trunc != m.Name {
+			m.Name = trunc
+			result.Warnings = append(result.Warnings, fmt.Sprintf("month %d's name was too long; shortened", i+1))
+		}
 		if m.Days <= 0 {
 			result.Warnings = append(result.Warnings, fmt.Sprintf(
 				"month %q had a non-positive length (%d days); clamped to 1 day", m.Name, m.Days))
 			m.Days = 1
+		} else if m.Days > maxCalendarMonthDays {
+			result.Warnings = append(result.Warnings, fmt.Sprintf(
+				"month %q had a length of %d days, over the %d-day maximum; clamped", m.Name, m.Days, maxCalendarMonthDays))
+			m.Days = maxCalendarMonthDays
 		}
 	}
 
@@ -1498,6 +1607,18 @@ func clampCalendarStructure(result *ImportResult) {
 			w.Name = fmt.Sprintf("Day %d", i+1)
 			result.Warnings = append(result.Warnings, fmt.Sprintf("weekday %d had no name; named %q", i+1, w.Name))
 		}
+		if trunc := truncateImportText(w.Name, maxCalendarShortNameLength); trunc != w.Name {
+			w.Name = trunc
+			result.Warnings = append(result.Warnings, fmt.Sprintf("weekday %d's name was too long; shortened", i+1))
+		}
+	}
+
+	for i := range result.Moons {
+		mo := &result.Moons[i]
+		if trunc := truncateImportText(mo.Name, maxCalendarShortNameLength); trunc != mo.Name {
+			mo.Name = trunc
+			result.Warnings = append(result.Warnings, fmt.Sprintf("moon %d's name was too long; shortened", i+1))
+		}
 	}
 
 	for i := range result.Eras {
@@ -1506,19 +1627,45 @@ func clampCalendarStructure(result *ImportResult) {
 			e.Name = fmt.Sprintf("Era %d", i+1)
 			result.Warnings = append(result.Warnings, fmt.Sprintf("era %d had no name; named %q", i+1, e.Name))
 		}
+		if trunc := truncateImportText(e.Name, apperror.MaxNameLength); trunc != e.Name {
+			e.Name = trunc
+			result.Warnings = append(result.Warnings, fmt.Sprintf("era %d's name was too long; shortened", i+1))
+		}
+		if e.Description != nil {
+			if trunc := truncateImportText(*e.Description, apperror.MaxDescriptionLength); trunc != *e.Description {
+				e.Description = &trunc
+				result.Warnings = append(result.Warnings, fmt.Sprintf("era %d's description was too long; shortened", i+1))
+			}
+		}
 	}
 
 	n := len(result.Months)
 	if n == 0 {
 		// No months to clamp a season into — nothing more this pass can do
 		// (a months-less calendar is its own, separately-surfaced problem).
-		return
+		return nil
 	}
 	for i := range result.Seasons {
 		s := &result.Seasons[i]
 		if strings.TrimSpace(s.Name) == "" {
 			s.Name = fmt.Sprintf("Season %d", i+1)
 			result.Warnings = append(result.Warnings, fmt.Sprintf("season %d had no name; named %q", i+1, s.Name))
+		}
+		if trunc := truncateImportText(s.Name, maxCalendarShortNameLength); trunc != s.Name {
+			s.Name = trunc
+			result.Warnings = append(result.Warnings, fmt.Sprintf("season %d's name was too long; shortened", i+1))
+		}
+		if s.Description != nil {
+			if trunc := truncateImportText(*s.Description, apperror.MaxDescriptionLength); trunc != *s.Description {
+				s.Description = &trunc
+				result.Warnings = append(result.Warnings, fmt.Sprintf("season %d's description was too long; shortened", i+1))
+			}
+		}
+		if s.WeatherEffect != nil {
+			if trunc := truncateImportText(*s.WeatherEffect, maxCalendarWeatherEffectLength); trunc != *s.WeatherEffect {
+				s.WeatherEffect = &trunc
+				result.Warnings = append(result.Warnings, fmt.Sprintf("season %d's weather effect was too long; shortened", i+1))
+			}
 		}
 
 		clampedStartMonth := clampInt(s.StartMonth, 1, n)
@@ -1537,4 +1684,5 @@ func clampCalendarStructure(result *ImportResult) {
 		}
 		s.StartDay, s.EndDay = clampedStartDay, clampedEndDay
 	}
+	return nil
 }

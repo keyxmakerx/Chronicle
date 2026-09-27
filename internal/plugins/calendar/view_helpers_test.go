@@ -80,6 +80,67 @@ func TestCountEventsByDay_RecurrenceAware(t *testing.T) {
 	}
 }
 
+// hugeMonthCalendar is a calendar whose one month claims more days than
+// clampCalendarStructure would ever let an import store — standing in for a
+// calendar_months row that reached that value some other way (a pre-fix
+// import, a future hand-made structure editor), which buildMonthGrid and
+// countEventsByDay must not trust past maxCalendarMonthDays regardless of
+// how it got there.
+func hugeMonthCalendar() *Calendar {
+	return &Calendar{
+		ID: "cal-huge", CurrentYear: 1, CurrentMonth: 1, CurrentDay: 1,
+		Months: []Month{{Name: "Endless", Days: maxCalendarMonthDays + 700}},
+		Weekdays: []Weekday{
+			{Name: "One"}, {Name: "Two"}, {Name: "Three"}, {Name: "Four"},
+			{Name: "Five"}, {Name: "Six"}, {Name: "Seven"},
+		},
+	}
+}
+
+func TestBuildMonthGrid_ClampsAbsurdStoredDays(t *testing.T) {
+	cal := hugeMonthCalendar()
+	weeks := buildMonthGrid(cal, 1, 1, nil, nil)
+
+	maxDay := 0
+	for _, wk := range weeks {
+		for _, cell := range wk {
+			if !cell.Blank && cell.Day > maxDay {
+				maxDay = cell.Day
+			}
+		}
+	}
+	if maxDay > maxCalendarMonthDays {
+		t.Errorf("grid rendered day %d, want none past the %d-day bound (calendar_months.days claimed %d)",
+			maxDay, maxCalendarMonthDays, cal.Months[0].Days)
+	}
+	if maxDay == 0 {
+		t.Fatal("expected at least one non-blank day cell")
+	}
+}
+
+func TestCountEventsByDay_ClampsAbsurdStoredDays(t *testing.T) {
+	cal := hugeMonthCalendar()
+	weekly := RecurrenceWeekly
+	events := []Event{
+		{ID: "e1", Year: 1, Month: 1, Day: 1, IsRecurring: true, RecurrenceType: &weekly},
+	}
+	counts := countEventsByDay(cal, events, 1, 1)
+
+	maxDay := 0
+	for day := range counts {
+		if day > maxDay {
+			maxDay = day
+		}
+	}
+	if maxDay > maxCalendarMonthDays {
+		t.Errorf("countEventsByDay produced an entry for day %d, want none past the %d-day bound (calendar_months.days claimed %d)",
+			maxDay, maxCalendarMonthDays, cal.Months[0].Days)
+	}
+	if maxDay == 0 {
+		t.Fatal("expected the weekly recurrence to land on at least one day within the clamped range")
+	}
+}
+
 func TestPresetFacts(t *testing.T) {
 	ir := &ImportResult{
 		Months:   []MonthInput{{Days: 30}, {Days: 31}},
