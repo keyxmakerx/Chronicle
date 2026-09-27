@@ -1,5 +1,5 @@
 // Package calendar - service.go holds the calendar plugin's business logic
-// over the slice-1 repositories (CalendarRepository, EventRepository,
+// over the repositories (CalendarRepository, EventRepository,
 // EventKindRepository, WeatherRepository). It never imports Echo — the
 // handler binds requests and the service decides what happens.
 //
@@ -16,7 +16,9 @@ import (
 	"crypto/rand"
 	"encoding/json"
 	"fmt"
+	"log/slog"
 	"regexp"
+	"time"
 
 	"github.com/keyxmakerx/chronicle/internal/apperror"
 	"github.com/keyxmakerx/chronicle/internal/patch"
@@ -29,36 +31,36 @@ import (
 // user-authored slugs referenced by other rows.
 var slugPattern = regexp.MustCompile(`^[a-z0-9]+(-[a-z0-9]+)*$`)
 
-// faIconPattern and hexColorPattern are a security control, not a shape
-// nicety: an icon or color value that reaches an unescaped HTML template
-// verbatim (a confirmed weakness elsewhere in the product) can carry a
-// quote, an angle bracket or arbitrary markup. Restricting both fields to a
-// closed character class makes that unrepresentable, independent of
-// whatever templates end up rendering them. faIconPattern accepts only a
-// Font Awesome class name (fa- + lowercase letters/digits/hyphens);
-// hexColorPattern is the exact pattern internal/plugins/entities/service.go
-// and internal/plugins/timeline/service.go already use for the same
-// reason — kept as its own local copy here (a shared validator is being
-// built on another branch; this one joins it later) rather than importing
-// across the plugin boundary.
+// faIconPattern and hexColorPattern restrict an icon or color value to a
+// closed character class: icons and colors are interpolated into class and
+// style attributes by the clients that render them, so a quote or an angle
+// bracket in either must be structurally unrepresentable rather than merely
+// discouraged. faIconPattern accepts only a Font Awesome class name (fa- +
+// lowercase letters/digits/hyphens); hexColorPattern is the same #rgb/
+// #rrggbb pattern internal/plugins/entities/service.go and
+// internal/plugins/timeline/service.go already use for their own color
+// fields. Kept as its own local copy per this plugin's isolation (cross-
+// plugin reuse goes through a service interface, never a shared regex
+// imported across the boundary).
 var (
 	faIconPattern   = regexp.MustCompile(`^fa-[a-z0-9-]+$`)
 	hexColorPattern = regexp.MustCompile(`^#([0-9a-fA-F]{3}|[0-9a-fA-F]{6})$`)
 )
 
-// Column-width limits narrower than apperror's generic Max*Length constants
-// (rule 6: a value that doesn't fit its column must fail as a clean
-// apperror, never reach the driver and come back as a raw "data too long"
-// error). calendar_events.color/icon are intentionally tighter than
-// calendar_event_kinds' — an event's color/icon is a short override, not a
-// rich identifier — see migrations/001_calendar_tables.up.sql and
-// db/migrations. calendars.epoch_name and calendar_eras.color match their
-// own column widths too.
+// Column-width limits: a value that doesn't fit its column must fail as a
+// clean apperror, never reach the driver and come back as a raw "data too
+// long" error. These match the LIVE schema (calendar_events.color/icon were
+// widened to VARCHAR(20)/VARCHAR(50) in migration 002, superseding their
+// original 001 definition) rather than any one migration file in isolation.
 const (
-	maxEventColorLength = 7   // calendar_events.color VARCHAR(7)
-	maxEventIconLength  = 10  // calendar_events.icon VARCHAR(10)
-	maxEventTierLength  = 64  // calendar_events.tier VARCHAR(64)
-	maxEpochNameLength  = 100 // calendars.epoch_name VARCHAR(100)
+	maxEventColorLength    = 20    // calendar_events.color VARCHAR(20)
+	maxEventIconLength     = 50    // calendar_events.icon VARCHAR(50)
+	maxEventTierLength     = 64    // calendar_events.tier VARCHAR(64)
+	maxEpochNameLength     = 100   // calendars.epoch_name VARCHAR(100)
+	maxRealTimeZoneLength  = 64    // calendars.real_time_zone VARCHAR(64)
+	maxEventKindSlugLength = 50    // calendar_event_kinds.slug VARCHAR(50)
+	maxEventKindNameLength = 100   // calendar_event_kinds.name VARCHAR(100)
+	maxTextColumnBytes     = 65535 // a TEXT column's byte capacity (description, description_html)
 )
 
 // generateID creates a random UUID v4 string. Duplicated per-package by
@@ -72,6 +74,17 @@ func generateID() string {
 	return fmt.Sprintf("%x-%x-%x-%x-%x", b[0:4], b[4:6], b[6:8], b[8:10], b[10:16])
 }
 
+// EntityVisibilityGate resolves which of a set of entity IDs a viewer (role
+// + user id) may actually see — the same seam maps.MapService uses
+// (maps/service.go's EntityVisibilityGate). An event's entity_id join reads
+// straight from the entities table with no visibility filter of its own
+// (unlike the entity_event_links ties in entity_ties_repository.go, which
+// already replicate entities' own filter), so this is the one place that
+// closes it for the single linked-entity fields on Event.
+type EntityVisibilityGate interface {
+	FilterViewableEntityIDs(ctx context.Context, campaignID string, entityIDs []string, role int, userID string) (map[string]bool, error)
+}
+
 // CalendarService defines the calendar plugin's business logic. Handlers
 // call it; it never imports Echo.
 type CalendarService interface {
@@ -79,9 +92,9 @@ type CalendarService interface {
 	CreateCalendar(ctx context.Context, campaignID string, input CreateCalendarInput) (*Calendar, error)
 	// GetCalendarForViewer returns a calendar only if it belongs to
 	// campaignID and v may see it (ADR-049); both failure modes collapse to
-	// the same NotFound (ADR-058-style, see GetEventForViewer). Eager-loads
-	// every sub-resource; Eras and EventKinds are stripped and Moons are
-	// filtered for a viewer that does not skip the per-user layer.
+	// the same NotFound. Eager-loads every sub-resource; Eras and
+	// EventKinds are stripped and Moons are filtered for a viewer that does
+	// not skip the per-user layer.
 	GetCalendarForViewer(ctx context.Context, calendarID, campaignID string, v permissions.Viewer) (*Calendar, error)
 	// ListCalendars returns a campaign's calendars, role- and per-user
 	// visibility-filtered. No sub-resources are eager-loaded (list view).
@@ -90,32 +103,49 @@ type CalendarService interface {
 	DeleteCalendar(ctx context.Context, calendarID, campaignID string) error
 	SetDefaultCalendar(ctx context.Context, campaignID, calendarID string) error
 
-	// Events.
+	// Events. CreateEvent has no stored row to weigh a viewer against, so it
+	// takes no Viewer: authorization for its one viewer-dependent decision
+	// (may this caller author dm_only content) travels pre-resolved on
+	// CreateEventInput.CanAuthorDmOnly, set by the handler from the request
+	// viewer — see that field's doc comment. Every method below THIS point
+	// takes a permissions.Viewer: an event on a calendar the viewer cannot
+	// see, or an event the viewer cannot see itself, must answer identically
+	// to one that doesn't exist — a write is not an exception to that (a
+	// caller who cannot GET an event must not be able to PUT it either).
+	// Visibility writes are further gated by who may AUTHOR dm_only content:
+	// v.SkipsPerUserRules() is exactly campaigns.CanAuthorDmOnly()'s
+	// condition when the caller's Viewer was built from cc.VisibilityRole()
+	// (see handler.go's viewerFrom) — an Owner or a granted co-DM, never a
+	// plain Scribe. visibility_rules carries no such gate (canChangeVisibility's
+	// doc comment says why).
 	CreateEvent(ctx context.Context, calendarID, campaignID string, input CreateEventInput) (*Event, error)
-	// GetEventForViewer is GetEvent's viewer-aware sibling (ADR-049/058): it
-	// returns NotFound (never the event) unless the event belongs to
-	// calendarID, calendarID belongs to campaignID, AND v may see it.
+	// GetEventForViewer is GetEvent's viewer-aware sibling: it returns
+	// NotFound (never the event) unless the event belongs to calendarID,
+	// calendarID belongs to campaignID AND is itself visible to v, AND the
+	// event is visible to v.
 	GetEventForViewer(ctx context.Context, eventID, calendarID, campaignID string, v permissions.Viewer) (*Event, error)
 	ListEventsForMonth(ctx context.Context, calendarID, campaignID string, year, month int, v permissions.Viewer) ([]Event, error)
-	UpdateEvent(ctx context.Context, eventID, calendarID, campaignID string, input UpdateEventInput) error
-	DeleteEvent(ctx context.Context, eventID, calendarID, campaignID string) error
-	// SetEventVisibility is the dm_only toggle: Owner-only end to end, so it
-	// takes no viewer parameter (the route itself is Owner-gated).
-	SetEventVisibility(ctx context.Context, eventID, calendarID, campaignID string, input UpdateEventVisibilityInput) error
+	UpdateEvent(ctx context.Context, eventID, calendarID, campaignID string, input UpdateEventInput, v permissions.Viewer) error
+	DeleteEvent(ctx context.Context, eventID, calendarID, campaignID string, v permissions.Viewer) error
+	// SetEventVisibility is the dm_only toggle's dedicated action endpoint;
+	// its route already requires campaigns.CanAuthorDmOnly, but the check
+	// is repeated here (v.SkipsPerUserRules()) rather than trusted blindly.
+	SetEventVisibility(ctx context.Context, eventID, calendarID, campaignID string, input UpdateEventVisibilityInput, v permissions.Viewer) error
 
 	// Event kinds. Campaign-scoped (shared by every calendar in the
 	// campaign, see EventKind's doc comment) and Owner-only end to end —
 	// calendar structure, not content a Player ever reads directly.
 	ListEventKinds(ctx context.Context, campaignID string) ([]EventKind, error)
 	CreateEventKind(ctx context.Context, campaignID string, input EventKindInput) (*EventKind, error)
-	UpdateEventKind(ctx context.Context, kindID int, campaignID string, input EventKindInput) error
+	UpdateEventKind(ctx context.Context, kindID int, campaignID string, input UpdateEventKindInput) error
 	DeleteEventKind(ctx context.Context, kindID int, campaignID string) error
 
 	// Eras. Owner-only end to end (calendar structure), resolved through the
 	// calendar the caller reached (GetEraByID itself is not calendar-scoped;
-	// this service never calls it with an untrusted id — see repository.go).
+	// this service never calls it with an untrusted id without also
+	// checking the result's CalendarID — see eraInCalendar).
 	CreateEra(ctx context.Context, calendarID, campaignID string, input EraInput) (*Era, error)
-	UpdateEra(ctx context.Context, eraID int, calendarID, campaignID string, input EraInput) error
+	UpdateEra(ctx context.Context, eraID int, calendarID, campaignID string, input UpdateEraInput) error
 	DeleteEra(ctx context.Context, eraID int, calendarID, campaignID string) error
 
 	// Moon. Owner-only end to end (the hidden flag is calendar structure).
@@ -128,22 +158,32 @@ type calendarService struct {
 	eventRepo   EventRepository
 	kindRepo    EventKindRepository
 	weatherRepo WeatherRepository
+	entityGate  EntityVisibilityGate
 }
 
-// NewCalendarService constructs a CalendarService over the four slice-1
+// NewCalendarService constructs a CalendarService over the four
 // repositories.
 func NewCalendarService(calRepo CalendarRepository, eventRepo EventRepository, kindRepo EventKindRepository, weatherRepo WeatherRepository) CalendarService {
 	return &calendarService{calRepo: calRepo, eventRepo: eventRepo, kindRepo: kindRepo, weatherRepo: weatherRepo}
 }
 
-// --- Cross-campaign / cross-calendar scoping (rule: no cross-tenant reach) ---
+// SetEntityVisibilityGate injects the entity-visibility check used to blank
+// an event's linked-entity fields for a viewer who cannot separately see
+// that entity (ADR-055 rule 3). Reached via a type assertion at wiring time
+// (see app/routes.go), the same pattern maps.MapService's
+// SetEntityVisibilityGate uses, so the CalendarService interface itself
+// stays unchanged for callers that don't need it (tests, mocks).
+func (s *calendarService) SetEntityVisibilityGate(g EntityVisibilityGate) { s.entityGate = g }
+
+// --- Cross-campaign / cross-calendar scoping (no cross-tenant reach) ---
 
 // calendarInCampaign loads a calendar and confirms it belongs to campaignID,
 // collapsing "doesn't exist" and "exists in a different campaign" into the
 // exact same NotFound message — a wrong-campaign id must look identical to a
-// missing one, or its existence becomes an oracle for a prober (ADR-058).
-// This is the one gate every calendar-, event-, era- and moon-scoped method
-// below calls first.
+// missing one, or its existence becomes an oracle for a prober. This is the
+// one gate every calendar-, event-, era- and moon-scoped method below calls
+// first. It does NOT check visibility — see calendarVisibleToViewer for
+// that; callers that reach content through a Viewer must check both.
 func (s *calendarService) calendarInCampaign(ctx context.Context, calendarID, campaignID string) (*Calendar, error) {
 	cal, err := s.calRepo.GetByID(ctx, calendarID)
 	if err != nil {
@@ -157,10 +197,26 @@ func (s *calendarService) calendarInCampaign(ctx context.Context, calendarID, ca
 	return cal, nil
 }
 
+// calendarInCampaignForViewer is calendarInCampaign plus the visibility
+// check: a calendar the viewer cannot see (dm_only, or excluded by its own
+// visibility_rules) answers exactly like a missing one, for every event/era
+// read or write reached through it — a hidden calendar's events must never
+// be reachable just because the calendar id and campaign id are otherwise
+// valid.
+func (s *calendarService) calendarInCampaignForViewer(ctx context.Context, calendarID, campaignID string, v permissions.Viewer) (*Calendar, error) {
+	cal, err := s.calendarInCampaign(ctx, calendarID, campaignID)
+	if err != nil {
+		return nil, err
+	}
+	if !calendarVisibleToViewer(*cal, v) {
+		return nil, apperror.NewNotFound("calendar not found")
+	}
+	return cal, nil
+}
+
 // --- Visibility (ADR-049): the one predicate behind every calendar/event
 // decision in this package, mirroring timeline's canUserView/
-// timelineVisibleToViewer (ADR-058) so list and single-item reads can't
-// drift apart. ---
+// timelineVisibleToViewer so list and single-item reads can't drift apart. ---
 
 // canUserView resolves a visibility ("everyone"/"dm_only") + optional
 // per-user rules JSON against v. Callers that already know v skips the
@@ -176,8 +232,8 @@ func canUserView(visibility string, visRulesJSON *string, v permissions.Viewer) 
 }
 
 // calendarVisibleToViewer is the one predicate behind every calendar
-// visibility decision. filterCalendarsByUser's per-row filter and
-// GetCalendarForViewer's single-item lookup both call it.
+// visibility decision. filterCalendarsByUser's per-row filter and every
+// single-item lookup both call it.
 func calendarVisibleToViewer(cal Calendar, v permissions.Viewer) bool {
 	if v.SkipsPerUserRules() {
 		return true
@@ -242,10 +298,87 @@ func filterMoonsForViewer(moons []Moon, v permissions.Viewer) []Moon {
 	return filtered
 }
 
+// redactHiddenEntityLinks blanks EntityID/EntityName/EntityIcon/EntityColor
+// on any event whose linked entity the viewer isn't separately permitted to
+// see, mirroring maps.ListMarkers's identical treatment of a marker's linked
+// entity. Owners/co-DMs/system callers are unfiltered. If the gate was never
+// wired (a construction bug, not a policy outcome), this fails CLOSED —
+// every linked entity is blanked — rather than leaking a name because
+// nothing was configured to check it.
+func (s *calendarService) redactHiddenEntityLinks(ctx context.Context, campaignID string, events []Event, v permissions.Viewer) error {
+	if v.SkipsPerUserRules() {
+		return nil
+	}
+	ids := make([]string, 0, len(events))
+	seen := make(map[string]bool, len(events))
+	for _, e := range events {
+		if e.EntityID == nil || *e.EntityID == "" || seen[*e.EntityID] {
+			continue
+		}
+		seen[*e.EntityID] = true
+		ids = append(ids, *e.EntityID)
+	}
+	if len(ids) == 0 {
+		return nil
+	}
+
+	var viewable map[string]bool
+	if s.entityGate == nil {
+		slog.Error("calendar: entity visibility gate not configured; blanking all linked entity names",
+			slog.String("campaign_id", campaignID))
+		viewable = map[string]bool{}
+	} else {
+		var err error
+		viewable, err = s.entityGate.FilterViewableEntityIDs(ctx, campaignID, ids, v.Role(), v.UserID())
+		if err != nil {
+			return fmt.Errorf("filter viewable event entities: %w", err)
+		}
+	}
+
+	for i := range events {
+		e := &events[i]
+		if e.EntityID == nil || *e.EntityID == "" {
+			continue
+		}
+		if !viewable[*e.EntityID] {
+			// Blank the ID too, not just the name/icon: a bare id still
+			// tells the viewer a specific hidden entity exists.
+			e.EntityID = nil
+			e.EntityName = ""
+			e.EntityIcon = ""
+			e.EntityColor = ""
+		}
+	}
+	return nil
+}
+
+// canChangeVisibility decides whether a present visibility write may
+// proceed: an author (v.SkipsPerUserRules(), see the CalendarService doc
+// comment on why that's the correct test) may set it to anything; anyone
+// else may only "change" it to the value already stored — which is not a
+// change at all, so it is silently treated as a no-op rather than either
+// rewritten or refused. Anything else — a genuine attempted change by a
+// non-author — is a 403, never a silent rewrite.
+//
+// visibility_rules (the per-user allow/deny list) is NOT gated the same
+// way: it can only ever narrow who among the players sees an "everyone"
+// event, never hide anything from an Owner/co-DM (eventVisibleToViewer
+// short-circuits to visible for any v.SkipsPerUserRules() caller before
+// visibility_rules is even consulted), so a Scribe setting it is a content
+// decision within their existing Create/edit authority, not a dm_only-shaped
+// privilege — the field is scoped by the ordinary Scribe route gate, not by
+// CanAuthorDmOnly.
+func canChangeVisibility(v permissions.Viewer, newVisibility, storedVisibility string) error {
+	if v.SkipsPerUserRules() || newVisibility == storedVisibility {
+		return nil
+	}
+	return apperror.NewForbidden("only the campaign owner or a granted co-DM may change this event's visibility")
+}
+
 // --- Calendars ---
 
 // CreateCalendar creates a bare calendar (no months/weekdays/moons — later
-// slices own seeding a preset or an editing UI for those). Mode defaults to
+// work owns seeding a preset or an editing UI for those). Mode defaults to
 // fantasy; the day/hour/minute/second geometry defaults to a standard
 // 24/60/60 day when the caller leaves it zero.
 func (s *calendarService) CreateCalendar(ctx context.Context, campaignID string, input CreateCalendarInput) (*Calendar, error) {
@@ -277,15 +410,11 @@ func (s *calendarService) CreateCalendar(ctx context.Context, campaignID string,
 	if hoursPerDay < 0 || minutesPerHour < 0 || secondsPerMinute < 0 {
 		return nil, apperror.NewValidation("hours_per_day, minutes_per_hour and seconds_per_minute must not be negative")
 	}
-	if input.Description != nil {
-		if err := apperror.ValidateStringLength("description", *input.Description, apperror.MaxDescriptionLength); err != nil {
-			return nil, err
-		}
+	if err := validateOptionalText("description", input.Description, apperror.MaxDescriptionLength); err != nil {
+		return nil, err
 	}
-	if input.EpochName != nil {
-		if err := apperror.ValidateStringLength("epoch_name", *input.EpochName, maxEpochNameLength); err != nil {
-			return nil, err
-		}
+	if err := validateOptionalText("epoch_name", input.EpochName, maxEpochNameLength); err != nil {
+		return nil, err
 	}
 
 	cal := &Calendar{
@@ -312,21 +441,18 @@ func (s *calendarService) CreateCalendar(ctx context.Context, campaignID string,
 // GetCalendarForViewer returns a calendar with its sub-resources, gated by
 // campaign membership and visibility (see the interface doc comment).
 func (s *calendarService) GetCalendarForViewer(ctx context.Context, calendarID, campaignID string, v permissions.Viewer) (*Calendar, error) {
-	cal, err := s.calendarInCampaign(ctx, calendarID, campaignID)
+	cal, err := s.calendarInCampaignForViewer(ctx, calendarID, campaignID, v)
 	if err != nil {
 		return nil, err
-	}
-	if !calendarVisibleToViewer(*cal, v) {
-		return nil, apperror.NewNotFound("calendar not found")
 	}
 	if err := s.loadSubresources(ctx, cal); err != nil {
 		return nil, err
 	}
 	if !v.SkipsPerUserRules() {
 		// Event kinds and eras are calendar STRUCTURE (Owner-only end to
-		// end, .ai/conventions.md); a Player never learns of their
-		// existence through the calendar read either. Moons are content —
-		// only the hidden ones are stripped.
+		// end, see .ai/conventions.md's permission table); a Player never
+		// learns of their existence through the calendar read either.
+		// Moons are content — only the hidden ones are stripped.
 		cal.EventKinds = nil
 		cal.Eras = nil
 		cal.Moons = filterMoonsForViewer(cal.Moons, v)
@@ -371,6 +497,21 @@ func (s *calendarService) loadSubresources(ctx context.Context, cal *Calendar) e
 	return nil
 }
 
+// loadCalendarGeometry loads just enough of a calendar to drive
+// Event.OccursOn / MonthDays / WeekLength (Months + Weekdays), for
+// ListEventsForMonth's recurrence placement — cheaper than
+// loadSubresources's full eager-load, which this doesn't need.
+func (s *calendarService) loadCalendarGeometry(ctx context.Context, cal *Calendar) error {
+	var err error
+	if cal.Months, err = s.calRepo.GetMonths(ctx, cal.ID); err != nil {
+		return fmt.Errorf("load months: %w", err)
+	}
+	if cal.Weekdays, err = s.calRepo.GetWeekdays(ctx, cal.ID); err != nil {
+		return fmt.Errorf("load weekdays: %w", err)
+	}
+	return nil
+}
+
 // ListCalendars returns a campaign's calendars, role- and per-user
 // visibility-filtered. No sub-resources are loaded (see the interface doc).
 func (s *calendarService) ListCalendars(ctx context.Context, campaignID string, v permissions.Viewer) ([]Calendar, error) {
@@ -407,16 +548,12 @@ func (s *calendarService) UpdateCalendar(ctx context.Context, calendarID, campai
 		return apperror.NewValidation("hours_per_day, minutes_per_hour and seconds_per_minute must be positive")
 	}
 	description := input.Description.Ptr(cal.Description)
-	if description != nil {
-		if err := apperror.ValidateStringLength("description", *description, apperror.MaxDescriptionLength); err != nil {
-			return err
-		}
+	if err := validateOptionalText("description", description, apperror.MaxDescriptionLength); err != nil {
+		return err
 	}
 	epochName := input.EpochName.Ptr(cal.EpochName)
-	if epochName != nil {
-		if err := apperror.ValidateStringLength("epoch_name", *epochName, maxEpochNameLength); err != nil {
-			return err
-		}
+	if err := validateOptionalText("epoch_name", epochName, maxEpochNameLength); err != nil {
+		return err
 	}
 
 	cal.Name = name
@@ -440,6 +577,12 @@ func (s *calendarService) UpdateCalendar(ctx context.Context, calendarID, campai
 		if *input.SetRealTime {
 			if input.RealTimeZone == nil || *input.RealTimeZone == "" {
 				return apperror.NewValidation("real_time_zone is required to enable real-time tracking")
+			}
+			if err := apperror.ValidateStringLength("real_time_zone", *input.RealTimeZone, maxRealTimeZoneLength); err != nil {
+				return err
+			}
+			if _, err := time.LoadLocation(*input.RealTimeZone); err != nil {
+				return apperror.NewBadRequest("real_time_zone must be a valid IANA time zone name")
 			}
 			cal.TracksRealTime = true
 			cal.RealTimeZone = input.RealTimeZone
@@ -479,11 +622,13 @@ func (s *calendarService) SetDefaultCalendar(ctx context.Context, campaignID, ca
 
 // --- Events ---
 
-// CreateEvent creates an event on calendarID. Visibility and per-user
-// visibility_rules must already reflect the caller's permission (the
-// handler downgrades a non-Owner's attempted dm_only/visibility_rules
-// before this is ever called, mirroring maps.CreateMarkerAPI); this method
-// still validates the shape.
+// CreateEvent creates an event on calendarID. input.CanAuthorDmOnly decides
+// whether the request may set visibility=dm_only (there is no stored value
+// to compare against on create, so any attempt by a non-author is refused
+// outright rather than silently downgraded — see canChangeVisibility's doc
+// comment for why a downgrade is the wrong fix). visibility_rules carries no
+// such gate — see canChangeVisibility's doc comment on why that field is
+// scoped by the ordinary Scribe route gate instead.
 func (s *calendarService) CreateEvent(ctx context.Context, calendarID, campaignID string, input CreateEventInput) (*Event, error) {
 	if _, err := s.calendarInCampaign(ctx, calendarID, campaignID); err != nil {
 		return nil, err
@@ -501,6 +646,9 @@ func (s *calendarService) CreateEvent(ctx context.Context, calendarID, campaignI
 	if visibility != "everyone" && visibility != "dm_only" {
 		return nil, apperror.NewValidation("visibility must be \"everyone\" or \"dm_only\"")
 	}
+	if visibility == "dm_only" && !input.CanAuthorDmOnly {
+		return nil, apperror.NewForbidden("only the campaign owner or a granted co-DM may create a dm_only event")
+	}
 	if err := validateVisibilityRulesJSON(input.VisibilityRules); err != nil {
 		return nil, err
 	}
@@ -515,6 +663,12 @@ func (s *calendarService) CreateEvent(ctx context.Context, calendarID, campaignI
 		return nil, err
 	}
 	if err := validateEventCosmeticLengths(input.Color, input.Icon, input.Tier); err != nil {
+		return nil, err
+	}
+	if err := validateOptionalText("description", input.Description, maxTextColumnBytes); err != nil {
+		return nil, err
+	}
+	if err := validateOptionalText("description_html", input.DescriptionHTML, maxTextColumnBytes); err != nil {
 		return nil, err
 	}
 
@@ -562,10 +716,12 @@ func (s *calendarService) CreateEvent(ctx context.Context, calendarID, campaignI
 }
 
 // GetEventForViewer returns an event only if it belongs to calendarID,
-// calendarID belongs to campaignID, and v may see it. Every failure mode
-// collapses to the same NotFound (see the interface doc comment).
+// calendarID belongs to campaignID AND is itself visible to v, and the
+// event is visible to v. Every failure mode collapses to the same NotFound.
+// The linked entity's name/icon/color are blanked (and the id nilled) for
+// any viewer not permitted to see that entity separately.
 func (s *calendarService) GetEventForViewer(ctx context.Context, eventID, calendarID, campaignID string, v permissions.Viewer) (*Event, error) {
-	if _, err := s.calendarInCampaign(ctx, calendarID, campaignID); err != nil {
+	if _, err := s.calendarInCampaignForViewer(ctx, calendarID, campaignID, v); err != nil {
 		return nil, err
 	}
 	evt, err := s.eventRepo.GetEvent(ctx, eventID)
@@ -575,26 +731,76 @@ func (s *calendarService) GetEventForViewer(ctx context.Context, eventID, calend
 	if evt == nil || evt.CalendarID != calendarID || !eventVisibleToViewer(*evt, v) {
 		return nil, apperror.NewNotFound("event not found")
 	}
-	return evt, nil
+	events := []Event{*evt}
+	if err := s.redactHiddenEntityLinks(ctx, campaignID, events, v); err != nil {
+		return nil, err
+	}
+	result := events[0]
+	return &result, nil
 }
 
 // ListEventsForMonth returns a calendar's events for (year, month),
 // role-filtered by SQL (dm_only) and per-user-filtered in Go
-// (visibility_rules) on top.
+// (visibility_rules) on top, then narrowed to the events that actually
+// OCCUR in this month: the repository widens in every recurring candidate
+// from anywhere in the calendar (recurringCandidateClause) so Event.OccursOn
+// can decide exact placement in Go — this is that placement step, so a
+// weekly event recurring into a DIFFERENT month never appears here as a
+// false positive.
 func (s *calendarService) ListEventsForMonth(ctx context.Context, calendarID, campaignID string, year, month int, v permissions.Viewer) ([]Event, error) {
-	if _, err := s.calendarInCampaign(ctx, calendarID, campaignID); err != nil {
+	cal, err := s.calendarInCampaignForViewer(ctx, calendarID, campaignID, v)
+	if err != nil {
 		return nil, err
 	}
 	events, err := s.eventRepo.ListEventsForMonth(ctx, calendarID, year, month, v.Role())
 	if err != nil {
 		return nil, fmt.Errorf("list events for month: %w", err)
 	}
-	return filterEventsByUser(events, v), nil
+	events = filterEventsByUser(events, v)
+	if err := s.loadCalendarGeometry(ctx, cal); err != nil {
+		return nil, err
+	}
+	events = filterRecurringToMonth(events, cal, year, month)
+	if err := s.redactHiddenEntityLinks(ctx, campaignID, events, v); err != nil {
+		return nil, err
+	}
+	return events, nil
+}
+
+// filterRecurringToMonth drops a recurring candidate that does not actually
+// land on any day of (year, month) — see ListEventsForMonth's doc comment.
+// Non-recurring (including multi-day spanning) events pass through
+// unchanged: OccursOn only answers a single-day placement question for a
+// recurring rule, not "does this stored [start,end] window overlap this
+// month", which the repository's spanningCandidateClause already answers in
+// SQL (see event_repository.go).
+func filterRecurringToMonth(events []Event, cal *Calendar, year, month int) []Event {
+	filtered := events[:0]
+	for _, e := range events {
+		if e.IsRecurring && !occursSomewhereInMonth(e, cal, year, month) {
+			continue
+		}
+		filtered = append(filtered, e)
+	}
+	return filtered
+}
+
+// occursSomewhereInMonth reports whether e has at least one occurrence on
+// some day of (year, month) per Event.OccursOn.
+func occursSomewhereInMonth(e Event, cal *Calendar, year, month int) bool {
+	days := cal.MonthDays(month-1, year)
+	for day := 1; day <= days; day++ {
+		if e.OccursOn(cal, year, month, day) {
+			return true
+		}
+	}
+	return false
 }
 
 // eventInCalendar loads an event and confirms it belongs to calendarID
 // (which the caller has already confirmed belongs to campaignID), collapsing
 // "doesn't exist" and "belongs to a different calendar" into one NotFound.
+// It does not check visibility — see eventInCalendarForViewer.
 func (s *calendarService) eventInCalendar(ctx context.Context, eventID, calendarID string) (*Event, error) {
 	evt, err := s.eventRepo.GetEvent(ctx, eventID)
 	if err != nil {
@@ -606,14 +812,33 @@ func (s *calendarService) eventInCalendar(ctx context.Context, eventID, calendar
 	return evt, nil
 }
 
+// eventInCalendarForViewer is eventInCalendar plus the visibility check: an
+// event the viewer cannot see must answer NotFound on a write just as it
+// does on a read — a caller who cannot GET an event must not be able to
+// PUT/DELETE it either by knowing (or guessing) its id.
+func (s *calendarService) eventInCalendarForViewer(ctx context.Context, eventID, calendarID string, v permissions.Viewer) (*Event, error) {
+	evt, err := s.eventInCalendar(ctx, eventID, calendarID)
+	if err != nil {
+		return nil, err
+	}
+	if !eventVisibleToViewer(*evt, v) {
+		return nil, apperror.NewNotFound("event not found")
+	}
+	return evt, nil
+}
+
 // UpdateEvent applies a partial update to an event (load-merge-write; see
-// UpdateEventInput's doc comment). Visibility/visibility_rules are expected
-// to already reflect the caller's permission — see CreateEvent's doc.
-func (s *calendarService) UpdateEvent(ctx context.Context, eventID, calendarID, campaignID string, input UpdateEventInput) error {
-	if _, err := s.calendarInCampaign(ctx, calendarID, campaignID); err != nil {
+// UpdateEventInput's doc comment). The event (and its calendar) must be
+// visible to v or this answers NotFound, closing the blind-write hole a
+// caller who cannot GET the event would otherwise have through PUT.
+// Visibility/visibility_rules are only ever changed for an author
+// (v.SkipsPerUserRules()); anyone else re-sending the stored value is a
+// no-op, and any other attempted value is a 403 — never a silent rewrite.
+func (s *calendarService) UpdateEvent(ctx context.Context, eventID, calendarID, campaignID string, input UpdateEventInput, v permissions.Viewer) error {
+	if _, err := s.calendarInCampaignForViewer(ctx, calendarID, campaignID, v); err != nil {
 		return err
 	}
-	evt, err := s.eventInCalendar(ctx, eventID, calendarID)
+	evt, err := s.eventInCalendarForViewer(ctx, eventID, calendarID, v)
 	if err != nil {
 		return err
 	}
@@ -628,6 +853,9 @@ func (s *calendarService) UpdateEvent(ctx context.Context, eventID, calendarID, 
 	visibility := input.Visibility.Val(evt.Visibility)
 	if visibility != "everyone" && visibility != "dm_only" {
 		return apperror.NewValidation("visibility must be \"everyone\" or \"dm_only\"")
+	}
+	if err := canChangeVisibility(v, visibility, evt.Visibility); err != nil {
+		return err
 	}
 	visRules := input.VisibilityRules.Ptr(evt.VisibilityRules)
 	if err := validateVisibilityRulesJSON(visRules); err != nil {
@@ -651,17 +879,26 @@ func (s *calendarService) UpdateEvent(ctx context.Context, eventID, calendarID, 
 	if err := validateEventCosmeticLengths(color, icon, tier); err != nil {
 		return err
 	}
+	description := input.Description.Ptr(evt.Description)
+	if err := validateOptionalText("description", description, maxTextColumnBytes); err != nil {
+		return err
+	}
 
 	// An ABSENT description_html preserves the stored (already-sanitized)
 	// HTML; a present value (including empty) is re-sanitized on write, the
 	// same rule entities/timeline apply to rich text.
 	descHTML := evt.DescriptionHTML
 	if input.DescriptionHTML.Present() {
+		if htmlVal, ok := input.DescriptionHTML.Get(); ok {
+			if err := apperror.ValidateStringLength("description_html", htmlVal, maxTextColumnBytes); err != nil {
+				return err
+			}
+		}
 		descHTML = sanitizeDescriptionHTMLField(input.DescriptionHTML)
 	}
 
 	evt.Name = name
-	evt.Description = input.Description.Ptr(evt.Description)
+	evt.Description = description
 	evt.DescriptionHTML = descHTML
 	evt.EntityID = input.EntityID.Ptr(evt.EntityID)
 	evt.Year = input.Year.Val(evt.Year)
@@ -697,12 +934,14 @@ func (s *calendarService) UpdateEvent(ctx context.Context, eventID, calendarID, 
 	return nil
 }
 
-// DeleteEvent removes an event, scoped to calendarID/campaignID.
-func (s *calendarService) DeleteEvent(ctx context.Context, eventID, calendarID, campaignID string) error {
-	if _, err := s.calendarInCampaign(ctx, calendarID, campaignID); err != nil {
+// DeleteEvent removes an event, scoped to calendarID/campaignID and visible
+// to v (see eventInCalendarForViewer's doc comment on why a write checks
+// visibility the same way a read does).
+func (s *calendarService) DeleteEvent(ctx context.Context, eventID, calendarID, campaignID string, v permissions.Viewer) error {
+	if _, err := s.calendarInCampaignForViewer(ctx, calendarID, campaignID, v); err != nil {
 		return err
 	}
-	if _, err := s.eventInCalendar(ctx, eventID, calendarID); err != nil {
+	if _, err := s.eventInCalendarForViewer(ctx, eventID, calendarID, v); err != nil {
 		return err
 	}
 	if err := s.eventRepo.DeleteEvent(ctx, eventID); err != nil {
@@ -711,18 +950,23 @@ func (s *calendarService) DeleteEvent(ctx context.Context, eventID, calendarID, 
 	return nil
 }
 
-// SetEventVisibility is the dm_only toggle: Owner-only end to end (the
-// route gates it), so the visibility value itself needs no downgrade here.
-func (s *calendarService) SetEventVisibility(ctx context.Context, eventID, calendarID, campaignID string, input UpdateEventVisibilityInput) error {
-	if _, err := s.calendarInCampaign(ctx, calendarID, campaignID); err != nil {
+// SetEventVisibility is the dm_only toggle's dedicated action endpoint. Its
+// route already requires campaigns.CanAuthorDmOnly (v.SkipsPerUserRules()
+// here), but that is re-checked rather than trusted blindly, matching every
+// other defense-in-depth check in this file.
+func (s *calendarService) SetEventVisibility(ctx context.Context, eventID, calendarID, campaignID string, input UpdateEventVisibilityInput, v permissions.Viewer) error {
+	if _, err := s.calendarInCampaignForViewer(ctx, calendarID, campaignID, v); err != nil {
 		return err
 	}
-	evt, err := s.eventInCalendar(ctx, eventID, calendarID)
+	evt, err := s.eventInCalendarForViewer(ctx, eventID, calendarID, v)
 	if err != nil {
 		return err
 	}
 	if input.Visibility != "everyone" && input.Visibility != "dm_only" {
 		return apperror.NewValidation("visibility must be \"everyone\" or \"dm_only\"")
+	}
+	if err := canChangeVisibility(v, input.Visibility, evt.Visibility); err != nil {
+		return err
 	}
 	visRules := input.VisibilityRules.Ptr(evt.VisibilityRules)
 	if err := validateVisibilityRulesJSON(visRules); err != nil {
@@ -737,43 +981,58 @@ func (s *calendarService) SetEventVisibility(ctx context.Context, eventID, calen
 // --- Event kinds (campaign-scoped, Owner-only end to end) ---
 
 // validateEventKindShape checks the fields the repository's own
-// validateEventKindInput does not (Slug/Name shape + length limits); the
-// repository still re-validates DefaultAnnounced and the slug uniqueness
-// constraint, so this is defense in depth, not the only check.
+// validateEventKindInput does not (Slug/Name shape + length limits, plus
+// Icon/Color against a closed character class); the repository still
+// re-validates DefaultAnnounced and the slug uniqueness constraint, so this
+// is defense in depth, not the only check.
 func validateEventKindShape(input EventKindInput) error {
 	if err := apperror.ValidateRequired("name", input.Name); err != nil {
 		return err
 	}
-	if err := apperror.ValidateStringLength("name", input.Name, apperror.MaxNameLength); err != nil {
+	if err := apperror.ValidateStringLength("name", input.Name, maxEventKindNameLength); err != nil {
 		return err
 	}
 	if err := apperror.ValidateRequired("slug", input.Slug); err != nil {
 		return err
 	}
+	if err := apperror.ValidateStringLength("slug", input.Slug, maxEventKindSlugLength); err != nil {
+		return err
+	}
 	if !slugPattern.MatchString(input.Slug) {
 		return apperror.NewValidation("slug must be lowercase letters, digits and hyphens")
 	}
-	// Icon/color are validated by closed character class, not just length:
-	// an event kind's icon has previously reached an unescaped HTML template
-	// verbatim elsewhere in the product, so free text here is refused
-	// outright rather than merely length-capped.
-	if err := apperror.ValidateStringLength("icon", input.Icon, apperror.MaxIconLength); err != nil {
+	if err := validateIconAndColor(input.Icon, input.Color); err != nil {
 		return err
-	}
-	if !faIconPattern.MatchString(input.Icon) {
-		return apperror.NewBadRequest("icon must be a Font Awesome class name (fa-lowercase-with-hyphens)")
-	}
-	if err := apperror.ValidateStringLength("color", input.Color, apperror.MaxColorLength); err != nil {
-		return err
-	}
-	if !hexColorPattern.MatchString(input.Color) {
-		return apperror.NewBadRequest("color must be a hex color (#rgb or #rrggbb)")
 	}
 	if input.DefaultAnnounced != "" && !IsSupportedAnnounced(input.DefaultAnnounced) {
 		return apperror.NewValidation("default_announced must be \"" + AnnouncedAhead + "\" or \"" + AnnouncedOnDay + "\"")
 	}
 	return nil
 }
+
+// validateIconAndColor checks icon/color length THEN pattern, as two
+// independent rules: a value can fail either one without the other (a
+// too-long-but-well-formed icon, or a short-but-invalid one).
+func validateIconAndColor(icon, color string) error {
+	if err := apperror.ValidateStringLength("icon", icon, maxEventKindIconLength); err != nil {
+		return err
+	}
+	if !faIconPattern.MatchString(icon) {
+		return apperror.NewBadRequest("icon must be a Font Awesome class name (fa-lowercase-with-hyphens)")
+	}
+	if err := apperror.ValidateStringLength("color", color, apperror.MaxColorLength); err != nil {
+		return err
+	}
+	if !hexColorPattern.MatchString(color) {
+		return apperror.NewBadRequest("color must be a hex color (#rgb or #rrggbb)")
+	}
+	return nil
+}
+
+// maxEventKindIconLength is calendar_event_kinds.icon's own width — matches
+// apperror.MaxIconLength today, named separately so the two can diverge
+// without a caller silently picking up an unrelated column's limit.
+const maxEventKindIconLength = apperror.MaxIconLength
 
 func (s *calendarService) ListEventKinds(ctx context.Context, campaignID string) ([]EventKind, error) {
 	kinds, err := s.kindRepo.List(ctx, campaignID)
@@ -797,11 +1056,55 @@ func (s *calendarService) CreateEventKind(ctx context.Context, campaignID string
 	return kind, nil
 }
 
-func (s *calendarService) UpdateEventKind(ctx context.Context, kindID int, campaignID string, input EventKindInput) error {
-	if err := validateEventKindShape(input); err != nil {
+// UpdateEventKind applies a partial update to an event kind (load-merge-
+// write, see UpdateEventKindInput's doc comment). GetByID is already
+// campaign-scoped (returns nil for a kind belonging to another campaign),
+// so this can't reach across tenants by guessing a numeric id.
+func (s *calendarService) UpdateEventKind(ctx context.Context, kindID int, campaignID string, input UpdateEventKindInput) error {
+	kind, err := s.kindRepo.GetByID(ctx, kindID, campaignID)
+	if err != nil {
+		return fmt.Errorf("get event kind for update: %w", err)
+	}
+	if kind == nil {
+		return apperror.NewNotFound("event kind not found")
+	}
+
+	name := input.Name
+	if name == "" {
+		return apperror.NewValidation("event kind name is required")
+	}
+	if err := apperror.ValidateStringLength("name", name, maxEventKindNameLength); err != nil {
 		return err
 	}
-	if err := s.kindRepo.Update(ctx, kindID, campaignID, input); err != nil {
+	slug := input.Slug.Val(kind.Slug)
+	if err := apperror.ValidateRequired("slug", slug); err != nil {
+		return err
+	}
+	if err := apperror.ValidateStringLength("slug", slug, maxEventKindSlugLength); err != nil {
+		return err
+	}
+	if !slugPattern.MatchString(slug) {
+		return apperror.NewValidation("slug must be lowercase letters, digits and hyphens")
+	}
+	icon := input.Icon.Val(kind.Icon)
+	color := input.Color.Val(kind.Color)
+	if err := validateIconAndColor(icon, color); err != nil {
+		return err
+	}
+	defaultAnnounced := input.DefaultAnnounced.Val(kind.DefaultAnnounced)
+	if defaultAnnounced != "" && !IsSupportedAnnounced(defaultAnnounced) {
+		return apperror.NewValidation("default_announced must be \"" + AnnouncedAhead + "\" or \"" + AnnouncedOnDay + "\"")
+	}
+
+	merged := EventKindInput{
+		Slug:             slug,
+		Name:             name,
+		Icon:             icon,
+		Color:            color,
+		SortOrder:        input.SortOrder.Val(kind.SortOrder),
+		DefaultAnnounced: defaultAnnounced,
+	}
+	if err := s.kindRepo.Update(ctx, kindID, campaignID, merged); err != nil {
 		return err
 	}
 	return nil
@@ -817,7 +1120,7 @@ func (s *calendarService) CreateEra(ctx context.Context, calendarID, campaignID 
 	if _, err := s.calendarInCampaign(ctx, calendarID, campaignID); err != nil {
 		return nil, err
 	}
-	if err := validateEraShape(input); err != nil {
+	if err := validateEraShape(input.Name, input.Description, input.Color, input.StartYear, input.StartMonth, input.StartDay, input.EndYear, input.EndMonth, input.EndDay); err != nil {
 		return nil, err
 	}
 	era, err := s.calRepo.CreateEra(ctx, calendarID, input)
@@ -827,16 +1130,63 @@ func (s *calendarService) CreateEra(ctx context.Context, calendarID, campaignID 
 	return era, nil
 }
 
-func (s *calendarService) UpdateEra(ctx context.Context, eraID int, calendarID, campaignID string, input EraInput) error {
+// eraInCalendar loads an era via the UNSCOPED GetEraByID and confirms it
+// belongs to calendarID (which the caller has already confirmed belongs to
+// campaignID) — GetEraByID's own doc comment warns it must never be called
+// with an untrusted id without this check; this is that check.
+func (s *calendarService) eraInCalendar(ctx context.Context, eraID int, calendarID string) (*Era, error) {
+	era, err := s.calRepo.GetEraByID(ctx, eraID)
+	if err != nil {
+		return nil, fmt.Errorf("get era: %w", err)
+	}
+	if era == nil || era.CalendarID != calendarID {
+		return nil, apperror.NewNotFound("era not found in calendar")
+	}
+	return era, nil
+}
+
+// UpdateEra applies a partial update to an era (load-merge-write, see
+// UpdateEraInput's doc comment).
+func (s *calendarService) UpdateEra(ctx context.Context, eraID int, calendarID, campaignID string, input UpdateEraInput) error {
 	if _, err := s.calendarInCampaign(ctx, calendarID, campaignID); err != nil {
 		return err
 	}
-	if err := validateEraShape(input); err != nil {
+	era, err := s.eraInCalendar(ctx, eraID, calendarID)
+	if err != nil {
 		return err
+	}
+
+	name := input.Name
+	if name == "" {
+		return apperror.NewValidation("era name is required")
+	}
+	startYear := input.StartYear.Val(era.StartYear)
+	startMonth := input.StartMonth.Val(era.StartMonth)
+	startDay := input.StartDay.Val(era.StartDay)
+	endYear := input.EndYear.Ptr(era.EndYear)
+	endMonth := input.EndMonth.Ptr(era.EndMonth)
+	endDay := input.EndDay.Ptr(era.EndDay)
+	description := input.Description.Ptr(era.Description)
+	color := input.Color.Val(era.Color)
+	if err := validateEraShape(name, description, color, startYear, startMonth, startDay, endYear, endMonth, endDay); err != nil {
+		return err
+	}
+
+	merged := EraInput{
+		Name:        name,
+		StartYear:   startYear,
+		StartMonth:  startMonth,
+		StartDay:    startDay,
+		EndYear:     endYear,
+		EndMonth:    endMonth,
+		EndDay:      endDay,
+		Description: description,
+		Color:       color,
+		SortOrder:   input.SortOrder.Val(era.SortOrder),
 	}
 	// UpdateEra is itself scoped to calendarID (WHERE id = ? AND
 	// calendar_id = ?) and returns apperror.NewNotFound on no match.
-	if err := s.calRepo.UpdateEra(ctx, calendarID, eraID, input); err != nil {
+	if err := s.calRepo.UpdateEra(ctx, calendarID, eraID, merged); err != nil {
 		return err
 	}
 	return nil
@@ -852,35 +1202,36 @@ func (s *calendarService) DeleteEra(ctx context.Context, eraID int, calendarID, 
 	return nil
 }
 
-// validateEraShape checks the era fields a handler binds directly (EraInput
-// carries no ID from an untrusted caller path here — CreateEra/UpdateEra
-// build it fresh per call, see handler.go).
-func validateEraShape(input EraInput) error {
-	if err := apperror.ValidateRequired("name", input.Name); err != nil {
+// validateEraShape checks the era fields shared by create and (merged)
+// update. color is checked against the same closed character class as an
+// event kind's — an era's color renders the same way.
+func validateEraShape(name string, description *string, color string, startYear, startMonth, startDay int, endYear, endMonth, endDay *int) error {
+	if err := apperror.ValidateRequired("name", name); err != nil {
 		return err
 	}
-	if err := apperror.ValidateStringLength("name", input.Name, apperror.MaxNameLength); err != nil {
+	if err := apperror.ValidateStringLength("name", name, apperror.MaxNameLength); err != nil {
 		return err
 	}
-	if input.Description != nil {
-		if err := apperror.ValidateStringLength("description", *input.Description, apperror.MaxDescriptionLength); err != nil {
+	if err := validateOptionalText("description", description, apperror.MaxDescriptionLength); err != nil {
+		return err
+	}
+	if color != "" {
+		if err := apperror.ValidateStringLength("color", color, apperror.MaxColorLength); err != nil {
 			return err
 		}
-	}
-	if input.Color != "" {
-		if err := apperror.ValidateStringLength("color", input.Color, apperror.MaxColorLength); err != nil {
-			return err
+		if !hexColorPattern.MatchString(color) {
+			return apperror.NewBadRequest("color must be a hex color (#rgb or #rrggbb)")
 		}
 	}
-	if input.EndYear != nil {
-		endMonth, endDay := 1, 1
-		if input.EndMonth != nil {
-			endMonth = *input.EndMonth
+	if endYear != nil {
+		em, ed := 1, 1
+		if endMonth != nil {
+			em = *endMonth
 		}
-		if input.EndDay != nil {
-			endDay = *input.EndDay
+		if endDay != nil {
+			ed = *endDay
 		}
-		if dateLess(*input.EndYear, endMonth, endDay, input.StartYear, input.StartMonth, input.StartDay) {
+		if dateLess(*endYear, em, ed, startYear, startMonth, startDay) {
 			return apperror.NewValidation("era end date must not be before its start date")
 		}
 	}
@@ -891,7 +1242,8 @@ func validateEraShape(input EraInput) error {
 
 // SetMoonHidden toggles a moon's visibility to players. Owner-only end to
 // end (the route gates it); CalendarRepository.SetMoonHidden is itself
-// scoped to calendarID.
+// scoped to calendarID, so a moon belonging to a sibling calendar in the
+// SAME campaign is rejected exactly like one from another campaign.
 func (s *calendarService) SetMoonHidden(ctx context.Context, moonID int, calendarID, campaignID string, hidden bool) error {
 	if _, err := s.calendarInCampaign(ctx, calendarID, campaignID); err != nil {
 		return err
@@ -904,16 +1256,11 @@ func (s *calendarService) SetMoonHidden(ctx context.Context, moonID int, calenda
 
 // --- Shared validation helpers ---
 
-// validateEventCosmeticLengths enforces calendar_events' own (narrower)
-// column widths for color/icon/tier — see the maxEvent*Length doc comment.
-// All three are optional; a nil pointer is simply not checked.
-//
-// Icon and color are each optional overrides of the event's kind (nil/empty
-// means "inherit"), so an absent or blank value is not checked — but ANY
-// non-empty value must match the same closed character class
-// validateEventKindShape enforces, for the same reason: an icon/color value
-// has previously reached an unescaped HTML template verbatim elsewhere in
-// the product.
+// validateEventCosmeticLengths enforces calendar_events' own color/icon/tier
+// column widths and, for color/icon, the same closed character class an
+// event kind's own values go through. All three are optional overrides of
+// the event's kind (nil/empty means "inherit"), so an absent or blank value
+// is not checked.
 func validateEventCosmeticLengths(color, icon, tier *string) error {
 	if color != nil && *color != "" {
 		if err := apperror.ValidateStringLength("color", *color, maxEventColorLength); err != nil {
@@ -937,6 +1284,16 @@ func validateEventCosmeticLengths(color, icon, tier *string) error {
 		}
 	}
 	return nil
+}
+
+// validateOptionalText checks an optional field against maxLen when it is
+// present, so a value that doesn't fit its column fails as a clean
+// apperror rather than reaching the driver as a raw "data too long" error.
+func validateOptionalText(field string, value *string, maxLen int) error {
+	if value == nil {
+		return nil
+	}
+	return apperror.ValidateStringLength(field, *value, maxLen)
 }
 
 // validateVisibilityRulesJSON rejects a malformed visibility_rules blob

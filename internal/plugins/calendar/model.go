@@ -1144,6 +1144,15 @@ type CreateEventInput struct {
 	AllDay    bool
 	Payload   *string
 	CreatedBy string
+	// CanAuthorDmOnly is set by the handler from the request viewer
+	// (v.SkipsPerUserRules(), true for an Owner or a granted co-DM) before
+	// this reaches the service: CreateEvent has no stored row to compare a
+	// visibility change against the way UpdateEvent does, so a create with
+	// Visibility "dm_only" (or a non-empty VisibilityRules) is refused
+	// outright for a caller this is false for, rather than silently
+	// downgraded. Zero value (false) is "not authorized" — a caller that
+	// never sets it is never trusted by default.
+	CanAuthorDmOnly bool
 }
 
 // UpdateEventInput is the validated input for updating an event.
@@ -1243,6 +1252,25 @@ type EraInput struct {
 	SortOrder   int     `json:"sort_order"`
 }
 
+// UpdateEraInput is the validated PARTIAL-update input for an existing era:
+// an absent field preserves the stored value, an explicit null clears it, a
+// present value replaces it. Name stays a plain string — UpdateEra rejects a
+// blank merged name with 400, so an absent name fails loudly instead of
+// silently overwriting (the same governedFieldExceptions shape as
+// calendar.UpdateCalendarInput.Name).
+type UpdateEraInput struct {
+	Name        string
+	StartYear   patch.Field[int]
+	StartMonth  patch.Field[int]
+	StartDay    patch.Field[int]
+	EndYear     patch.Field[int]
+	EndMonth    patch.Field[int]
+	EndDay      patch.Field[int]
+	Description patch.Field[string]
+	Color       patch.Field[string]
+	SortOrder   patch.Field[int]
+}
+
 // EventKind is a campaign-defined event kind (category) for calendar events.
 // Kinds are shared by every calendar in a campaign — keyed by CampaignID, not
 // a single calendar — and carry a slug (referenced by events), display name,
@@ -1272,6 +1300,20 @@ type EventKindInput struct {
 	Color            string `json:"color"`
 	SortOrder        int    `json:"sort_order"`
 	DefaultAnnounced string `json:"default_announced"`
+}
+
+// UpdateEventKindInput is the validated PARTIAL-update input for an
+// existing event kind: an absent field preserves the stored value, an
+// explicit null clears it, a present value replaces it. Name stays a plain
+// string for the same reason UpdateCalendarInput.Name does (a blank merged
+// name fails loudly rather than silently overwriting).
+type UpdateEventKindInput struct {
+	Slug             patch.Field[string]
+	Name             string
+	Icon             patch.Field[string]
+	Color            patch.Field[string]
+	SortOrder        patch.Field[int]
+	DefaultAnnounced patch.Field[string]
 }
 
 // Weather represents the current weather state for a calendar.

@@ -65,10 +65,15 @@ type guardCampaignSvc struct {
 	campaigns.CampaignService
 	public bool
 	roles  map[string]campaigns.Role
+	// settings is the campaign's raw Settings JSON, e.g. `{"dm_grant_ids":["u-codm"]}`
+	// — a co-DM test wires this so CampaignContext.IsDmGranted (and so
+	// CanAuthorDmOnly/VisibilityRole) resolves the same way it does in
+	// production, off the real hasDmGrant/ParseSettings path.
+	settings string
 }
 
 func (g guardCampaignSvc) GetByID(_ context.Context, id string) (*campaigns.Campaign, error) {
-	return &campaigns.Campaign{ID: id, IsPublic: g.public}, nil
+	return &campaigns.Campaign{ID: id, IsPublic: g.public, Settings: g.settings}, nil
 }
 
 func (g guardCampaignSvc) GetMember(_ context.Context, _, userID string) (*campaigns.CampaignMember, error) {
@@ -127,11 +132,16 @@ func (f *fakeCalendarSvc) ListEventsForMonth(_ context.Context, calendarID, _ st
 	f.lastViewer = v
 	return []Event{{ID: "evt-1", CalendarID: calendarID}}, nil
 }
-func (f *fakeCalendarSvc) UpdateEvent(context.Context, string, string, string, UpdateEventInput) error {
+func (f *fakeCalendarSvc) UpdateEvent(_ context.Context, _, _, _ string, _ UpdateEventInput, v permissions.Viewer) error {
+	f.lastViewer = v
 	return nil
 }
-func (f *fakeCalendarSvc) DeleteEvent(context.Context, string, string, string) error { return nil }
-func (f *fakeCalendarSvc) SetEventVisibility(context.Context, string, string, string, UpdateEventVisibilityInput) error {
+func (f *fakeCalendarSvc) DeleteEvent(_ context.Context, _, _, _ string, v permissions.Viewer) error {
+	f.lastViewer = v
+	return nil
+}
+func (f *fakeCalendarSvc) SetEventVisibility(_ context.Context, _, _, _ string, _ UpdateEventVisibilityInput, v permissions.Viewer) error {
+	f.lastViewer = v
 	return nil
 }
 
@@ -141,7 +151,7 @@ func (f *fakeCalendarSvc) ListEventKinds(context.Context, string) ([]EventKind, 
 func (f *fakeCalendarSvc) CreateEventKind(_ context.Context, campaignID string, input EventKindInput) (*EventKind, error) {
 	return &EventKind{ID: 1, CampaignID: campaignID, Slug: input.Slug, Name: input.Name}, nil
 }
-func (f *fakeCalendarSvc) UpdateEventKind(context.Context, int, string, EventKindInput) error {
+func (f *fakeCalendarSvc) UpdateEventKind(context.Context, int, string, UpdateEventKindInput) error {
 	return nil
 }
 func (f *fakeCalendarSvc) DeleteEventKind(context.Context, int, string) error { return nil }
@@ -149,14 +159,23 @@ func (f *fakeCalendarSvc) DeleteEventKind(context.Context, int, string) error { 
 func (f *fakeCalendarSvc) CreateEra(_ context.Context, calendarID, _ string, input EraInput) (*Era, error) {
 	return &Era{ID: 1, CalendarID: calendarID, Name: input.Name}, nil
 }
-func (f *fakeCalendarSvc) UpdateEra(context.Context, int, string, string, EraInput) error { return nil }
-func (f *fakeCalendarSvc) DeleteEra(context.Context, int, string, string) error           { return nil }
+func (f *fakeCalendarSvc) UpdateEra(context.Context, int, string, string, UpdateEraInput) error {
+	return nil
+}
+func (f *fakeCalendarSvc) DeleteEra(context.Context, int, string, string) error { return nil }
 
 func (f *fakeCalendarSvc) SetMoonHidden(context.Context, int, string, string, bool) error { return nil }
 
 // --- Harness ---
 
 func newAccessTestRouter(public, addonEnabled bool, roles map[string]campaigns.Role) (*echo.Echo, *fakeCalendarSvc) {
+	return newAccessTestRouterWithSettings(public, addonEnabled, roles, "")
+}
+
+// newAccessTestRouterWithSettings is newAccessTestRouter plus the campaign's
+// raw Settings JSON, for a test that needs a co-DM grant (guardCampaignSvc's
+// doc comment).
+func newAccessTestRouterWithSettings(public, addonEnabled bool, roles map[string]campaigns.Role, settings string) (*echo.Echo, *fakeCalendarSvc) {
 	e := echo.New()
 	e.Use(emw.Recover())
 	// The real app's HTTPErrorHandler lives in internal/app (unexported,
@@ -176,13 +195,25 @@ func newAccessTestRouter(public, addonEnabled bool, roles map[string]campaigns.R
 	}
 	svc := &fakeCalendarSvc{}
 	h := NewHandler(svc)
-	campaignSvc := guardCampaignSvc{public: public, roles: roles}
+	campaignSvc := guardCampaignSvc{public: public, roles: roles, settings: settings}
 	RegisterRoutes(e, h, campaignSvc, guardAuthSvc{}, guardAddonSvc{enabled: addonEnabled})
 	return e, svc
 }
 
 func doRequest(e *echo.Echo, method, path, userID string) *httptest.ResponseRecorder {
-	req := httptest.NewRequest(method, path, nil)
+	return doRequestWithBody(e, method, path, userID, "")
+}
+
+// doRequestWithBody is doRequest plus a JSON body, for the write-path tests
+// that must distinguish an absent key from a present one (patch.Field).
+func doRequestWithBody(e *echo.Echo, method, path, userID, body string) *httptest.ResponseRecorder {
+	var req *http.Request
+	if body != "" {
+		req = httptest.NewRequest(method, path, strings.NewReader(body))
+		req.Header.Set("Content-Type", "application/json")
+	} else {
+		req = httptest.NewRequest(method, path, nil)
+	}
 	if userID != "" {
 		req.AddCookie(&http.Cookie{Name: sessionCookieName, Value: userID})
 	}
@@ -277,6 +308,21 @@ func TestRouteGates_OwnerReachesEveryRoute(t *testing.T) {
 		if rec.Code != tt.want {
 			t.Errorf("%s %s: owner expected %d, got %d: %s", tt.method, tt.path, tt.want, rec.Code, rec.Body.String())
 		}
+	}
+}
+
+// TestRouteGates_CoDMCanToggleEventVisibility proves the dm_only toggle's
+// route gate is CanAuthorDmOnly, not a bare role minimum: a co-DM (Scribe
+// role, plus the operator's dm_only grant) reaches it exactly like an Owner,
+// where a plain Scribe (see TestRouteGates_ScribeCanCreateAndEditEventsButNotDeleteOrToggleVisibility)
+// is forbidden.
+func TestRouteGates_CoDMCanToggleEventVisibility(t *testing.T) {
+	roles := map[string]campaigns.Role{"u-codm": campaigns.RoleScribe}
+	e, _ := newAccessTestRouterWithSettings(false, true, roles, `{"dm_grant_ids":["u-codm"]}`)
+
+	rec := doRequest(e, http.MethodPut, "/campaigns/camp-1/calendars/cal-1/events/evt-1/visibility", "u-codm")
+	if rec.Code != http.StatusOK {
+		t.Errorf("a granted co-DM must be able to toggle event visibility, got %d: %s", rec.Code, rec.Body.String())
 	}
 }
 

@@ -35,7 +35,6 @@ var contractGoverned = map[string]string{
 	// CALV5 SALVAGE: restored with the domain layer, already presence-aware,
 	// so it stays on the governed list rather than the allowlist.
 	"calendar.UpdateEventInput": "PUT .../calendar/events/:eid — Foundry's five-key push turned off recurrence, all-day and the entity link",
-	// V5 slice 2: swept from notYetSwept when the service+handler were wired.
 	// PUT .../calendars/:calid is a settings save covering thirteen fields
 	// (hours-per-day, leap-year rules, the current date/time, real-time
 	// toggle...); a narrow push (e.g. rename-only) must not reset any of them.
@@ -45,6 +44,8 @@ var contractGoverned = map[string]string{
 	// must not silently wipe an existing per-user allow/deny list.
 	"calendar.UpdateEventVisibilityInput":    "PUT .../calendar/events/:eid/visibility — a visibility-only flip (everyone <-> dm_only) must not clear an existing per-user visibility_rules blob",
 	"calendar.UpdateCalendarVisibilityInput": "same shape and same reason as calendar.UpdateEventVisibilityInput — the calendar reuses the event visibility model",
+	"calendar.UpdateEraInput":                "PUT .../eras/:eraID — a rename-only push must not reset the era's start/end dates, description or color",
+	"calendar.UpdateEventKindInput":          "PUT .../event-kinds/:kindID — a rename-only push must not reset the kind's icon, color or default_announced",
 
 	// Each is pinned by a *_partial_update_test.go next to it.
 	"maps.UpdateTokenInput":        "PUT .../tokens/:tid (web + syncapi) — a drag PUT carrying only {x, y} zeroed IsHidden, IsLocked, both HP bars and every aura/light/vision field; a hidden ambush monster went visible on the next nudge",
@@ -71,7 +72,9 @@ var governedFieldExceptions = map[string]string{
 	"timeline.UpdateTimelineInput.Name": "value-typed by choice: UpdateTimeline validates the merged name is non-empty and rejects the whole call with 400 when it is blank, so an absent name fails loudly rather than silently overwriting.",
 	"tags.UpdateTagInput.Name":          "value-typed by choice: tagService.Update validates the merged name is non-empty and rejects the whole call with 400 when it is blank, so an absent name fails loudly rather than silently overwriting.",
 	"tags.UpdateTagRequest.Name":        "value-typed by choice: the same required-name validation applies via UpdateTagInput.Name above — this is the wire-bound twin.",
-	"calendar.UpdateCalendarInput.Name": "value-typed by choice: UpdateCalendar validates the merged name is non-empty and rejects the whole call with 400 when it is blank, so an absent name fails loudly rather than silently overwriting.",
+	"calendar.UpdateCalendarInput.Name":   "value-typed by choice: UpdateCalendar validates the merged name is non-empty and rejects the whole call with 400 when it is blank, so an absent name fails loudly rather than silently overwriting.",
+	"calendar.UpdateEraInput.Name":        "value-typed by choice: UpdateEra validates the merged name is non-empty and rejects the whole call with 400 when it is blank, so an absent name fails loudly rather than silently overwriting.",
+	"calendar.UpdateEventKindInput.Name":  "value-typed by choice: UpdateEventKind validates the merged name is non-empty and rejects the whole call with 400 when it is blank, so an absent name fails loudly rather than silently overwriting.",
 
 	// These are action endpoints ("set visibility"), not general settings
 	// saves — every call states the new visibility outright, so there is no

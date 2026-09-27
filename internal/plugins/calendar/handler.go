@@ -37,39 +37,6 @@ func viewerFrom(c echo.Context, cc *campaigns.CampaignContext) permissions.Viewe
 	return permissions.RequestViewer(cc.VisibilityRole(), auth.GetUserID(c))
 }
 
-// downgradeEventVisibility applies the dm_only toggle's write-side rule to a
-// Scribe-reachable create/update: only an Owner (or a site admin acting on
-// their behalf) may set an event to dm_only or attach per-user
-// visibility_rules. Mirrors maps.CreateMarkerAPI / timeline.
-// CreateStandaloneEventAPI's identical downgrade, which is why it lives here
-// rather than in the service — it is a request-shaping rule keyed on the
-// AUTHENTICATED CALLER's role, not on stored data.
-func downgradeEventVisibility(cc *campaigns.CampaignContext, visibility string, rules *string) (string, *string) {
-	isOwner := cc.MemberRole >= campaigns.RoleOwner || cc.IsSiteAdmin
-	if visibility == "dm_only" && !isOwner {
-		visibility = "everyone"
-	}
-	if !isOwner {
-		rules = nil
-	}
-	return visibility, rules
-}
-
-// downgradeEventVisibilityField is downgradeEventVisibility for a PATCH
-// request: a non-Owner's visibility_rules is dropped to ABSENT, not to
-// null — refusing a write is not authority to erase an Owner's existing
-// rules (the same distinction maps.UpdateMarkerAPI draws).
-func downgradeEventVisibilityField(cc *campaigns.CampaignContext, visibility patch.Field[string], rules patch.Field[string]) (patch.Field[string], patch.Field[string]) {
-	isOwner := cc.MemberRole >= campaigns.RoleOwner || cc.IsSiteAdmin
-	if v, ok := visibility.Get(); ok && v == "dm_only" && !isOwner {
-		visibility = patch.Of("everyone")
-	}
-	if !isOwner {
-		rules = patch.Absent[string]()
-	}
-	return visibility, rules
-}
-
 // --- Calendars ---
 
 // ListCalendarsAPI lists a campaign's calendars.
@@ -234,8 +201,9 @@ func (h *Handler) GetEventAPI(c echo.Context) error {
 	return c.JSON(http.StatusOK, evt)
 }
 
-// CreateEventAPI creates an event. Scribe+; only an Owner's request may set
-// dm_only visibility or attach visibility_rules (downgradeEventVisibility).
+// CreateEventAPI creates an event. Scribe+; the service refuses (403) a
+// visibility=dm_only or a visibility_rules from a caller who may not author
+// dm_only content (CalendarService.CreateEvent's doc comment).
 // POST /campaigns/:id/calendars/:calid/events
 func (h *Handler) CreateEventAPI(c echo.Context) error {
 	cc := campaigns.GetCampaignContext(c)
@@ -274,9 +242,9 @@ func (h *Handler) CreateEventAPI(c echo.Context) error {
 	if err := c.Bind(&req); err != nil {
 		return apperror.NewBadRequest("invalid request")
 	}
-	visibility, visRules := downgradeEventVisibility(cc, req.Visibility, req.VisibilityRules)
 
 	evt, err := h.svc.CreateEvent(c.Request().Context(), c.Param("calid"), cc.Campaign.ID, CreateEventInput{
+		CanAuthorDmOnly:          viewerFrom(c, cc).SkipsPerUserRules(),
 		Name:                     req.Name,
 		Description:              req.Description,
 		DescriptionHTML:          req.DescriptionHTML,
@@ -298,8 +266,8 @@ func (h *Handler) CreateEventAPI(c echo.Context) error {
 		RecurrenceEndMonth:       req.RecurrenceEndMonth,
 		RecurrenceEndDay:         req.RecurrenceEndDay,
 		RecurrenceMaxOccurrences: req.RecurrenceMaxOccurrences,
-		Visibility:               visibility,
-		VisibilityRules:          visRules,
+		Visibility:               req.Visibility,
+		VisibilityRules:          req.VisibilityRules,
 		KindID:                   req.KindID,
 		Announced:                req.Announced,
 		Tier:                     req.Tier,
@@ -315,8 +283,11 @@ func (h *Handler) CreateEventAPI(c echo.Context) error {
 	return c.JSON(http.StatusCreated, evt)
 }
 
-// UpdateEventAPI applies a partial update to an event. Scribe+; only an
-// Owner's request may set dm_only visibility or attach visibility_rules.
+// UpdateEventAPI applies a partial update to an event. Scribe+; the service
+// (CalendarService.UpdateEvent) refuses (403) a caller who may not author
+// dm_only content changing visibility/visibility_rules to anything other
+// than what is already stored, and answers NotFound for an event the caller
+// cannot see at all.
 // PUT /campaigns/:id/calendars/:calid/events/:eid
 func (h *Handler) UpdateEventAPI(c echo.Context) error {
 	cc := campaigns.GetCampaignContext(c)
@@ -355,7 +326,6 @@ func (h *Handler) UpdateEventAPI(c echo.Context) error {
 	if err := c.Bind(&req); err != nil {
 		return apperror.NewBadRequest("invalid request")
 	}
-	visibility, visRules := downgradeEventVisibilityField(cc, req.Visibility, req.VisibilityRules)
 
 	return h.svc.UpdateEvent(c.Request().Context(), c.Param("eid"), c.Param("calid"), cc.Campaign.ID, UpdateEventInput{
 		Name:                     req.Name,
@@ -379,8 +349,8 @@ func (h *Handler) UpdateEventAPI(c echo.Context) error {
 		RecurrenceEndMonth:       req.RecurrenceEndMonth,
 		RecurrenceEndDay:         req.RecurrenceEndDay,
 		RecurrenceMaxOccurrences: req.RecurrenceMaxOccurrences,
-		Visibility:               visibility,
-		VisibilityRules:          visRules,
+		Visibility:               req.Visibility,
+		VisibilityRules:          req.VisibilityRules,
 		KindID:                   req.KindID,
 		Announced:                req.Announced,
 		Tier:                     req.Tier,
@@ -388,21 +358,22 @@ func (h *Handler) UpdateEventAPI(c echo.Context) error {
 		Icon:                     req.Icon,
 		AllDay:                   req.AllDay,
 		Payload:                  req.Payload,
-	})
+	}, viewerFrom(c, cc))
 }
 
 // DeleteEventAPI deletes an event. Owner only.
 // DELETE /campaigns/:id/calendars/:calid/events/:eid
 func (h *Handler) DeleteEventAPI(c echo.Context) error {
 	cc := campaigns.GetCampaignContext(c)
-	if err := h.svc.DeleteEvent(c.Request().Context(), c.Param("eid"), c.Param("calid"), cc.Campaign.ID); err != nil {
+	if err := h.svc.DeleteEvent(c.Request().Context(), c.Param("eid"), c.Param("calid"), cc.Campaign.ID, viewerFrom(c, cc)); err != nil {
 		return err
 	}
 	return c.NoContent(http.StatusOK)
 }
 
-// SetEventVisibilityAPI is the dm_only toggle. Owner only end to end (the
-// route gates it), so no downgrade is needed here.
+// SetEventVisibilityAPI is the dm_only toggle. Gated on
+// campaigns.CanAuthorDmOnly (the Owner, or a co-DM with a grant), not
+// RequireRole(Owner) — see routes.go.
 // PUT /campaigns/:id/calendars/:calid/events/:eid/visibility
 func (h *Handler) SetEventVisibilityAPI(c echo.Context) error {
 	cc := campaigns.GetCampaignContext(c)
@@ -416,7 +387,7 @@ func (h *Handler) SetEventVisibilityAPI(c echo.Context) error {
 	if err := h.svc.SetEventVisibility(c.Request().Context(), c.Param("eid"), c.Param("calid"), cc.Campaign.ID, UpdateEventVisibilityInput{
 		Visibility:      req.Visibility,
 		VisibilityRules: req.VisibilityRules,
-	}); err != nil {
+	}, viewerFrom(c, cc)); err != nil {
 		return err
 	}
 	return c.NoContent(http.StatusOK)
@@ -475,7 +446,7 @@ func (h *Handler) CreateEventKindAPI(c echo.Context) error {
 	return c.JSON(http.StatusCreated, kind)
 }
 
-// UpdateEventKindAPI updates an event kind. Owner only.
+// UpdateEventKindAPI applies a partial update to an event kind. Owner only.
 // PUT /campaigns/:id/calendars/event-kinds/:kindID
 func (h *Handler) UpdateEventKindAPI(c echo.Context) error {
 	cc := campaigns.GetCampaignContext(c)
@@ -483,11 +454,25 @@ func (h *Handler) UpdateEventKindAPI(c echo.Context) error {
 	if err != nil {
 		return apperror.NewBadRequest("invalid event kind id")
 	}
-	input, err := bindEventKindInput(c)
-	if err != nil {
-		return err
+	var req struct {
+		Slug             patch.Field[string] `json:"slug"`
+		Name             string              `json:"name"`
+		Icon             patch.Field[string] `json:"icon"`
+		Color            patch.Field[string] `json:"color"`
+		SortOrder        patch.Field[int]    `json:"sort_order"`
+		DefaultAnnounced patch.Field[string] `json:"default_announced"`
 	}
-	if err := h.svc.UpdateEventKind(c.Request().Context(), kindID, cc.Campaign.ID, input); err != nil {
+	if err := c.Bind(&req); err != nil {
+		return apperror.NewBadRequest("invalid request")
+	}
+	if err := h.svc.UpdateEventKind(c.Request().Context(), kindID, cc.Campaign.ID, UpdateEventKindInput{
+		Slug:             req.Slug,
+		Name:             req.Name,
+		Icon:             req.Icon,
+		Color:            req.Color,
+		SortOrder:        req.SortOrder,
+		DefaultAnnounced: req.DefaultAnnounced,
+	}); err != nil {
 		return err
 	}
 	return c.NoContent(http.StatusOK)
@@ -554,7 +539,7 @@ func (h *Handler) CreateEraAPI(c echo.Context) error {
 	return c.JSON(http.StatusCreated, era)
 }
 
-// UpdateEraAPI updates an era. Owner only.
+// UpdateEraAPI applies a partial update to an era. Owner only.
 // PUT /campaigns/:id/calendars/:calid/eras/:eraID
 func (h *Handler) UpdateEraAPI(c echo.Context) error {
 	cc := campaigns.GetCampaignContext(c)
@@ -562,11 +547,33 @@ func (h *Handler) UpdateEraAPI(c echo.Context) error {
 	if err != nil {
 		return apperror.NewBadRequest("invalid era id")
 	}
-	input, err := bindEraInput(c)
-	if err != nil {
-		return err
+	var req struct {
+		Name        string              `json:"name"`
+		StartYear   patch.Field[int]    `json:"start_year"`
+		StartMonth  patch.Field[int]    `json:"start_month"`
+		StartDay    patch.Field[int]    `json:"start_day"`
+		EndYear     patch.Field[int]    `json:"end_year"`
+		EndMonth    patch.Field[int]    `json:"end_month"`
+		EndDay      patch.Field[int]    `json:"end_day"`
+		Description patch.Field[string] `json:"description"`
+		Color       patch.Field[string] `json:"color"`
+		SortOrder   patch.Field[int]    `json:"sort_order"`
 	}
-	if err := h.svc.UpdateEra(c.Request().Context(), eraID, c.Param("calid"), cc.Campaign.ID, input); err != nil {
+	if err := c.Bind(&req); err != nil {
+		return apperror.NewBadRequest("invalid request")
+	}
+	if err := h.svc.UpdateEra(c.Request().Context(), eraID, c.Param("calid"), cc.Campaign.ID, UpdateEraInput{
+		Name:        req.Name,
+		StartYear:   req.StartYear,
+		StartMonth:  req.StartMonth,
+		StartDay:    req.StartDay,
+		EndYear:     req.EndYear,
+		EndMonth:    req.EndMonth,
+		EndDay:      req.EndDay,
+		Description: req.Description,
+		Color:       req.Color,
+		SortOrder:   req.SortOrder,
+	}); err != nil {
 		return err
 	}
 	return c.NoContent(http.StatusOK)

@@ -1,7 +1,7 @@
 // service_test.go: table-driven tests for CalendarService against the
-// fakes in mocks_test.go. Covers the security rules from the V5 slice-2
-// task: per-role visibility filtering (including a co-DM grant and a public
-// visitor), hidden moons + visibility_rules, input validation, not-found
+// fakes in mocks_test.go. Covers per-role visibility filtering (including a
+// co-DM grant and a public visitor), hidden moons + visibility_rules,
+// dm_only authorization on create, input validation, not-found
 // unification, and cross-campaign/cross-calendar id scoping.
 package calendar
 
@@ -274,7 +274,8 @@ func TestGetCalendarForViewer_ErasAndEventKindsStrippedForPlayer(t *testing.T) {
 
 // assertNotFound fails the test unless err is an *apperror.AppError with a
 // 404 status — the one shape every "doesn't exist / not yours / hidden"
-// response in this package must take (rule 3).
+// response in this package must take, so a wrong-campaign or hidden id can
+// never be distinguished from a genuinely missing one.
 func assertNotFound(t *testing.T, err error) {
 	t.Helper()
 	var appErr *apperror.AppError
@@ -332,7 +333,7 @@ func TestGetEventForViewer_NotFoundIsUniform(t *testing.T) {
 	}
 
 	// The wrong-CAMPAIGN case, at the calendar level: :calid must belong to
-	// :id (rule 2). "cal-404" is not served by getByIDFn's known-id branch.
+	// :id. "cal-404" is not served by getByIDFn's known-id branch.
 	if _, err := svc.GetEventForViewer(context.Background(), "evt-in-cal1", "cal-404", testCampaignA, playerViewer("u-1")); err == nil {
 		t.Error("expected NotFound for a calendar id that does not exist")
 	} else {
@@ -387,7 +388,7 @@ func TestUpdateEra_CrossCalendarIDIsRejected(t *testing.T) {
 	}
 	svc := newTestCalendarService(calRepo, nil, nil, nil)
 
-	err := svc.UpdateEra(context.Background(), 1, "cal-real", testCampaignA, EraInput{Name: "Renamed"})
+	err := svc.UpdateEra(context.Background(), 1, "cal-real", testCampaignA, UpdateEraInput{Name: "Renamed"})
 	assertNotFound(t, err)
 }
 
@@ -411,7 +412,7 @@ func TestDeleteEvent_EventFromAnotherCalendarIsRejected(t *testing.T) {
 	}
 	svc := newTestCalendarService(calRepo, eventRepo, nil, nil)
 
-	err := svc.DeleteEvent(context.Background(), "evt-1", "cal-mine", testCampaignA)
+	err := svc.DeleteEvent(context.Background(), "evt-1", "cal-mine", testCampaignA, ownerViewer("u-owner"))
 	assertNotFound(t, err)
 }
 
@@ -432,4 +433,64 @@ func TestSetMoonHidden_WrongCampaignIsRejected(t *testing.T) {
 
 	err := svc.SetMoonHidden(context.Background(), 1, "cal-1", testCampaignA, true)
 	assertNotFound(t, err)
+}
+
+// assertForbidden is assertNotFound's 403 twin — the shape a non-author's
+// refused visibility write must take (never a silent downgrade, never a
+// generic 500).
+func assertForbidden(t *testing.T, err error) {
+	t.Helper()
+	var appErr *apperror.AppError
+	if !errors.As(err, &appErr) {
+		t.Fatalf("expected an *apperror.AppError, got %T: %v", err, err)
+	}
+	if appErr.Code != 403 {
+		t.Fatalf("expected 403 forbidden, got code=%d type=%s message=%q", appErr.Code, appErr.Type, appErr.Message)
+	}
+}
+
+// TestCreateEvent_DMOnlyAuthorization pins the create-time half of the
+// dm_only authorization rule: CreateEvent has no stored row to weigh a
+// visibility CHANGE against, so a caller not authorized to author dm_only
+// content is refused outright for attempting to set visibility=dm_only at
+// all, never silently downgraded to "everyone" — see canChangeVisibility's
+// doc comment on why a downgrade is the wrong fix, and
+// CreateEventInput.CanAuthorDmOnly's on why this travels as a plain bool
+// rather than a Viewer parameter. visibility_rules is deliberately NOT
+// gated here (canChangeVisibility's doc comment says why): a non-author
+// setting an allow/deny list on their own new "everyone" event is an
+// ordinary content decision within the Scribe route's existing authority.
+func TestCreateEvent_DMOnlyAuthorization(t *testing.T) {
+	calRepo := &fakeCalendarRepo{
+		getByIDFn: func(_ context.Context, id string) (*Calendar, error) {
+			return &Calendar{ID: id, CampaignID: testCampaignA}, nil
+		},
+	}
+	svc := newTestCalendarService(calRepo, &fakeEventRepo{}, nil, nil)
+	ctx := context.Background()
+
+	t.Run("non-author sending dm_only is refused", func(t *testing.T) {
+		_, err := svc.CreateEvent(ctx, "cal-1", testCampaignA, CreateEventInput{Name: "Secret", Visibility: "dm_only"})
+		assertForbidden(t, err)
+	})
+	t.Run("non-author attaching visibility_rules to an everyone event is fine", func(t *testing.T) {
+		rules := `{"denied_users":["u-1"]}`
+		if _, err := svc.CreateEvent(ctx, "cal-1", testCampaignA, CreateEventInput{Name: "Secret", VisibilityRules: &rules}); err != nil {
+			t.Errorf("visibility_rules on an everyone event must not require CanAuthorDmOnly: %v", err)
+		}
+	})
+	t.Run("non-author creating an ordinary everyone event is fine", func(t *testing.T) {
+		if _, err := svc.CreateEvent(ctx, "cal-1", testCampaignA, CreateEventInput{Name: "Feast"}); err != nil {
+			t.Errorf("an ordinary create must not require CanAuthorDmOnly: %v", err)
+		}
+	})
+	t.Run("an author may create a dm_only event", func(t *testing.T) {
+		evt, err := svc.CreateEvent(ctx, "cal-1", testCampaignA, CreateEventInput{Name: "Secret", Visibility: "dm_only", CanAuthorDmOnly: true})
+		if err != nil {
+			t.Fatalf("an authorized caller must be able to create a dm_only event: %v", err)
+		}
+		if evt.Visibility != "dm_only" {
+			t.Errorf("expected visibility dm_only, got %q", evt.Visibility)
+		}
+	})
 }

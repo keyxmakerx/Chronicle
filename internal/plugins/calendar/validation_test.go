@@ -1,6 +1,7 @@
 // validation_test.go: table-driven input-validation tests for
-// CalendarService (security rule 4 — announced/visibility/payload shape —
-// plus the required-field checks each Create/Update method states).
+// CalendarService — announced/visibility/payload shape, icon/color/text
+// column-width and character-class checks, plus the required-field checks
+// each Create/Update method states.
 package calendar
 
 import (
@@ -141,18 +142,25 @@ func TestCreateEvent_Validation(t *testing.T) {
 		{"unsupported recurrence_type", CreateEventInput{Name: "Feast", RecurrenceType: strPtr("fortnightly")}},
 		{"unsupported announced", CreateEventInput{Name: "Feast", Announced: strPtr("sometimes")}},
 		{"malformed payload JSON", CreateEventInput{Name: "Feast", Payload: strPtr("{not json")}},
-		{"malformed visibility_rules JSON", CreateEventInput{Name: "Feast", VisibilityRules: strPtr("{not json")}},
-		// calendar_events.color/icon are narrower than the generic
-		// apperror.MaxColorLength/MaxIconLength constants (VARCHAR(7) /
-		// VARCHAR(10) — see maxEventColorLength's doc comment); a value that
-		// doesn't fit must fail as a clean validation error here, never
-		// reach the driver and come back as a raw "data too long" error.
-		{"color longer than the VARCHAR(7) column", CreateEventInput{Name: "Feast", Color: strPtr("#ffffff-too-long")}},
-		{"icon longer than the VARCHAR(10) column", CreateEventInput{Name: "Feast", Icon: strPtr("way-too-long-an-icon-token")}},
+		// CanAuthorDmOnly: true so this reaches the JSON-shape check at all —
+		// a non-empty visibility_rules from a non-author is refused first,
+		// which is not what this case means to test.
+		{"malformed visibility_rules JSON", CreateEventInput{Name: "Feast", VisibilityRules: strPtr("{not json"), CanAuthorDmOnly: true}},
+		// calendar_events.color/icon are VARCHAR(20)/VARCHAR(50) — the LIVE
+		// schema (migration 002 widened them past their original 001
+		// definition); a value that doesn't fit must fail as a clean
+		// validation error here, never reach the driver as a raw "data too
+		// long" error. These are well-FORMED (pattern-valid) but too long,
+		// so they pin the LENGTH rule specifically — see
+		// TestCreateEvent_Validation_LengthVsPatternAreIndependentChecks for
+		// the explicit length-vs-pattern split.
+		{"color longer than the VARCHAR(20) column", CreateEventInput{Name: "Feast", Color: strPtr("#" + strings.Repeat("a", 25))}},
+		{"icon longer than the VARCHAR(50) column", CreateEventInput{Name: "Feast", Icon: strPtr("fa-" + strings.Repeat("a", 50))}},
 		// An event's icon/color are optional kind-overrides, but any
 		// non-empty value goes through the same closed-character-class
-		// checks as an event kind's (an icon/color value has previously
-		// reached an unescaped HTML template verbatim elsewhere).
+		// checks as an event kind's: icons and colors are interpolated into
+		// class and style attributes by the clients that render them, so a
+		// quote or an angle bracket must be structurally impossible.
 		{"non-fa icon (emoji) is refused", CreateEventInput{Name: "Feast", Icon: strPtr("⭐")}},
 		{"icon with a quote is refused (HTML-injection shape)", CreateEventInput{Name: "Feast", Icon: strPtr(`fa-x" onload="`)}},
 		{"icon with an angle bracket is refused", CreateEventInput{Name: "Feast", Icon: strPtr("fa-x<b>")}},
@@ -162,12 +170,59 @@ func TestCreateEvent_Validation(t *testing.T) {
 		{"color with a quote is refused (HTML-injection shape)", CreateEventInput{Name: "Feast", Color: strPtr(`#f"f`)}},
 		{"color with an angle bracket is refused", CreateEventInput{Name: "Feast", Color: strPtr("#f<b")}},
 		{"color with a space is refused", CreateEventInput{Name: "Feast", Color: strPtr("#f f")}},
+		// N2: text columns.
+		{"description over the TEXT column's byte capacity", CreateEventInput{Name: "Feast", Description: strPtr(strings.Repeat("d", maxTextColumnBytes+1))}},
+		{"description_html over the TEXT column's byte capacity", CreateEventInput{Name: "Feast", DescriptionHTML: strPtr(strings.Repeat("d", maxTextColumnBytes+1))}},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			_, err := svc.CreateEvent(context.Background(), "cal-1", testCampaignA, tt.input)
 			wantValidationErr(t, err, tt.name)
 		})
+	}
+}
+
+// TestCreateEvent_Validation_LengthVsPatternAreIndependentChecks (N1) proves
+// icon/color length and pattern are two SEPARATE checks: a value can be
+// pattern-valid but too long (length fails first), or short but
+// pattern-invalid (pattern fails), and the two failures are distinguishable.
+func TestCreateEvent_Validation_LengthVsPatternAreIndependentChecks(t *testing.T) {
+	calRepo := &fakeCalendarRepo{
+		getByIDFn: func(_ context.Context, id string) (*Calendar, error) {
+			return &Calendar{ID: id, CampaignID: testCampaignA}, nil
+		},
+	}
+	svc := newTestCalendarService(calRepo, &fakeEventRepo{}, nil, nil)
+
+	// Pattern-valid, too long: fails on LENGTH.
+	tooLongIcon := "fa-" + strings.Repeat("a", 50) // 53 chars, valid fa- shape, over the 50-char column
+	_, err := svc.CreateEvent(context.Background(), "cal-1", testCampaignA, CreateEventInput{Name: "F", Icon: &tooLongIcon})
+	wantErrorContains(t, err, "too long", "over-length but well-formed icon")
+
+	// Short enough, malformed: fails on PATTERN, not length.
+	badIcon := "FA-X"
+	_, err = svc.CreateEvent(context.Background(), "cal-1", testCampaignA, CreateEventInput{Name: "F", Icon: &badIcon})
+	wantErrorContains(t, err, "Font Awesome", "short but malformed icon")
+
+	tooLongColor := "#" + strings.Repeat("a", 25) // valid hex digits, over the 20-char column
+	_, err = svc.CreateEvent(context.Background(), "cal-1", testCampaignA, CreateEventInput{Name: "F", Color: &tooLongColor})
+	wantErrorContains(t, err, "too long", "over-length but well-formed color")
+
+	badColor := "red"
+	_, err = svc.CreateEvent(context.Background(), "cal-1", testCampaignA, CreateEventInput{Name: "F", Color: &badColor})
+	wantErrorContains(t, err, "hex color", "short but malformed color")
+}
+
+// wantErrorContains fails unless err is non-nil and its message contains
+// substr — used where the test cares WHICH rule rejected the input, not
+// just that something did.
+func wantErrorContains(t *testing.T, err error, substr, label string) {
+	t.Helper()
+	if err == nil {
+		t.Fatalf("%s: expected an error containing %q, got nil", label, substr)
+	}
+	if !strings.Contains(err.Error(), substr) {
+		t.Fatalf("%s: expected error to contain %q, got: %v", label, substr, err)
 	}
 }
 
@@ -192,8 +247,8 @@ func TestCreateEvent_IconAndColor_AbsentOrValidAccepted(t *testing.T) {
 	}
 }
 
-// TestCreateEvent_DescriptionHTMLIsSanitized pins security rule 5: an
-// event's HTML description is sanitized on write.
+// TestCreateEvent_DescriptionHTMLIsSanitized pins the sanitize-on-write
+// invariant: an event's HTML description is sanitized before it is stored.
 func TestCreateEvent_DescriptionHTMLIsSanitized(t *testing.T) {
 	calRepo := &fakeCalendarRepo{
 		getByIDFn: func(_ context.Context, id string) (*Calendar, error) {
@@ -253,10 +308,12 @@ func TestUpdateEvent_PartialUpdatePreservesAbsentFields(t *testing.T) {
 	svc := newTestCalendarService(calRepo, eventRepo, nil, nil)
 
 	// A rename-only PUT (mirrors CreateStandaloneEvent/UpdateEvent siblings'
-	// "a rename must not touch anything else" regression class).
+	// "a rename must not touch anything else" regression class). The owner
+	// viewer keeps this test focused on the merge mechanics — the
+	// authorization rule for a NON-author has its own test.
 	err := svc.UpdateEvent(context.Background(), "evt-1", "cal-1", testCampaignA, UpdateEventInput{
 		Name: patch.Of("New Name"),
-	})
+	}, ownerViewer("u-owner"))
 	if err != nil {
 		t.Fatalf("rename-only update: %v", err)
 	}
@@ -281,7 +338,7 @@ func TestUpdateEvent_PartialUpdatePreservesAbsentFields(t *testing.T) {
 	err = svc.UpdateEvent(context.Background(), "evt-1", "cal-1", testCampaignA, UpdateEventInput{
 		Name:            patch.Of("New Name"),
 		VisibilityRules: patch.Null[string](),
-	})
+	}, ownerViewer("u-owner"))
 	if err != nil {
 		t.Fatalf("explicit-null update: %v", err)
 	}
@@ -305,13 +362,13 @@ func TestSetEventVisibility_Validation(t *testing.T) {
 
 	err := svc.SetEventVisibility(context.Background(), "evt-1", "cal-1", testCampaignA, UpdateEventVisibilityInput{
 		Visibility: "secret",
-	})
+	}, ownerViewer("u-owner"))
 	wantValidationErr(t, err, "unsupported visibility value")
 
 	err = svc.SetEventVisibility(context.Background(), "evt-1", "cal-1", testCampaignA, UpdateEventVisibilityInput{
 		Visibility:      "everyone",
 		VisibilityRules: patch.Of("{not json"),
-	})
+	}, ownerViewer("u-owner"))
 	wantValidationErr(t, err, "malformed visibility_rules JSON")
 }
 
@@ -404,6 +461,36 @@ func TestEra_Validation(t *testing.T) {
 			Color: "this-hex-color-string-is-way-too-long-for-the-column",
 		})
 		wantValidationErr(t, err, "era color too long")
+	})
+	// An era's color renders the same way an event kind's does (interpolated
+	// into a style attribute), so it goes through the same closed hex
+	// character class — a short-but-invalid value must fail on PATTERN, not
+	// slip through because only the length was ever checked.
+	t.Run("non-hex color is refused", func(t *testing.T) {
+		_, err := svc.CreateEra(context.Background(), "cal-1", testCampaignA, EraInput{
+			Name: "First Age", StartYear: 1, StartMonth: 1, StartDay: 1, Color: "red",
+		})
+		wantErrorContains(t, err, "hex color", "non-hex era color")
+	})
+	t.Run("color with an HTML-injection shape is refused", func(t *testing.T) {
+		_, err := svc.CreateEra(context.Background(), "cal-1", testCampaignA, EraInput{
+			Name: "First Age", StartYear: 1, StartMonth: 1, StartDay: 1, Color: `"><b>x</b>`,
+		})
+		wantErrorContains(t, err, "hex color", "era color with an HTML-injection shape")
+	})
+	t.Run("empty color is accepted (no override)", func(t *testing.T) {
+		if _, err := svc.CreateEra(context.Background(), "cal-1", testCampaignA, EraInput{
+			Name: "First Age", StartYear: 1, StartMonth: 1, StartDay: 1,
+		}); err != nil {
+			t.Errorf("an era with no color at all must be accepted, got: %v", err)
+		}
+	})
+	t.Run("valid hex color is accepted", func(t *testing.T) {
+		if _, err := svc.CreateEra(context.Background(), "cal-1", testCampaignA, EraInput{
+			Name: "First Age", StartYear: 1, StartMonth: 1, StartDay: 1, Color: "#84cc16",
+		}); err != nil {
+			t.Errorf("a valid hex era color must be accepted, got: %v", err)
+		}
 	})
 }
 
