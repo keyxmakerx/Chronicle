@@ -5,10 +5,12 @@
  * topbar styling, and five accent slots: data-accent-color (site-wide),
  * data-accent-action (primary buttons/hover/FABs), data-accent-app
  * (character pages, calendar app), and the legacy data-accent-surface-1/2
- * pair (content-surface primary/secondary). Every field — including Surface
- * Accents, which used to PUT on every click — stages into one local draft
- * until the user clicks "Save Changes"; a "Discard" button reverts every
- * control back to the last save.
+ * pair (content-surface primary/secondary). Every field stages into one
+ * local draft until the user clicks "Save Changes"; a "Discard" button
+ * reverts every control back to the last save. Save issues its PUTs one at a
+ * time (runSaveStepsSequentially): every Update* service method is a
+ * read-modify-write on the whole settings blob, so two in flight together
+ * can silently drop whichever one's write lands first.
  */
 (function () {
   'use strict';
@@ -19,6 +21,39 @@
     'to-br': 'to bottom right',
     'to-b': 'to bottom'
   };
+
+  // runSaveStepsSequentially(steps) -- pure (no DOM, no Chronicle): given an
+  // array of { name, run }, where run() returns a promise resolving to
+  // something with an `ok` boolean (matching Chronicle.apiFetch's response)
+  // or rejecting, executes them ONE AT A TIME rather than concurrently.
+  // Every Update* service method this widget's Save calls is a
+  // read-modify-write on the campaign's whole settings blob (find, change
+  // one field, write the whole thing back) with no locking, so two of them
+  // in flight at once can race: the one whose write lands second overwrites
+  // the first's change with a copy of the settings read before it happened.
+  // Chaining removes the race by construction — each step's write is on
+  // disk before the next step reads. Resolves with which step names
+  // succeeded and which failed, never rejects, so the caller can apply only
+  // the fields that actually saved.
+  function runSaveStepsSequentially(steps) {
+    var succeeded = [];
+    var failed = [];
+    return steps.reduce(function (chain, step) {
+      return chain.then(function () {
+        return step.run().then(function (res) {
+          if (res && res.ok) {
+            succeeded.push(step.name);
+          } else {
+            failed.push(step.name);
+          }
+        }).catch(function () {
+          failed.push(step.name);
+        });
+      });
+    }, Promise.resolve()).then(function () {
+      return { succeeded: succeeded, failed: failed };
+    });
+  }
 
   Chronicle.register('appearance-editor', {
     destroy: function (el) {
@@ -323,27 +358,52 @@
       // The card's preset/reset/custom controls apply their own instant
       // CSS-variable preview via an inline onclick/onchange (they must stay
       // inline, not a delegated <script>, since htmx strips a <script> tag
-      // from a boosted sidebar swap — surface_accent_onclick.go) and then
-      // hand the chosen value to this widget through a DOM event, because
-      // the inline handler runs outside this closure. That folds the slot
-      // into the same staged draft/save/discard flow as every other field,
-      // instead of the PUT-per-click it used before #632.
-      function applySurfaceVar(slot, color) {
-        var prop = '--color-accent-surface-' + slot;
-        if (color) {
-          document.documentElement.style.setProperty(prop, color);
-        } else {
-          document.documentElement.style.removeProperty(prop);
-        }
+      // from a boosted sidebar swap — surface_accent_onclick.go), scoped to
+      // this widget element so the "Sample character header" card inherits
+      // it (it's a descendant) without the color leaking to the rest of the
+      // page. They then hand the chosen value to this widget through a DOM
+      // event, because the inline handler runs outside this closure, folding
+      // the slot into the same staged draft/save/discard flow as every
+      // other field. The widget-level preview is cleared — never carried to
+      // <html> — on both Discard and a successful Save (Save applies the
+      // real, site-wide property instead; see the Save button below).
+      function clearSurfaceVarPreview(slot) {
+        el.style.removeProperty('--color-accent-surface-' + slot);
       }
+
+      // highlightSurfaceRow syncs one surface row's ring, custom-picker
+      // swatch, and label to selectedColor. Reset never changes appearance
+      // (surfaceAccentRow renders it with a single static class, unlike the
+      // semantic pickers' reset button), so only preset buttons are touched.
+      function highlightSurfaceRow(slot, selectedColor) {
+        var row = el.querySelector('#appearance-surface-row-' + slot);
+        if (row) {
+          var buttons = row.querySelectorAll('button[data-slot-color]');
+          for (var j = 0; j < buttons.length; j++) {
+            var btn = buttons[j];
+            var btnColor = btn.getAttribute('data-slot-color');
+            if (btnColor === '') continue;
+            btn.className = (btnColor === selectedColor)
+              ? 'w-6 h-6 rounded-full border-2 border-white ring-2 ring-offset-1 ring-offset-surface ring-fg transition-transform hover:scale-110 shrink-0'
+              : 'w-6 h-6 rounded-full border-2 border-transparent hover:border-white/50 transition-transform hover:scale-110 shrink-0';
+          }
+        }
+        var custom = el.querySelector('#appearance-surface-custom-' + slot);
+        if (custom) custom.value = selectedColor || '#6366f1';
+        var label = el.querySelector('#appearance-surface-label-' + slot);
+        if (label) label.textContent = selectedColor || 'follows Accent Color';
+      }
+
       el.addEventListener('chronicle:surface-accent-change', function (evt) {
         var detail = evt.detail || {};
+        var slot = detail.slot;
         var color = detail.color || '';
-        if (detail.slot === 1) {
+        if (slot === 1) {
           draft.accentSurface1 = color;
-        } else if (detail.slot === 2) {
+        } else if (slot === 2) {
           draft.accentSurface2 = color;
         }
+        highlightSurfaceRow(slot, color);
         updateSaveBar();
       });
 
@@ -522,233 +582,241 @@
 
       // --- Save Button ---
 
+      // buildSaveSteps compares draft against saved and returns one
+      // { name, apply, run } per changed field: apply() copies that field's
+      // draft value into saved (called only for steps that actually
+      // succeeded — see the click handler below), run() issues its PUT and
+      // returns the apiFetch promise. Building this list is pure given
+      // draft/saved, but stays a closure (not hoisted out with
+      // runSaveStepsSequentially) since apply()/run() both read and write
+      // this init() call's own draft/saved/campaignId/csrfToken.
+      function buildSaveSteps() {
+        var steps = [];
+
+        if (draft.brandName !== saved.brandName) {
+          steps.push({
+            name: 'brandName',
+            apply: function () { saved.brandName = draft.brandName; },
+            run: function () {
+              return Chronicle.apiFetch('/campaigns/' + campaignId + '/branding', {
+                method: 'PUT',
+                body: { brand_name: draft.brandName },
+                csrfToken: csrfToken
+              });
+            }
+          });
+        }
+
+        // Accent color if changed (form-encoded for c.FormValue).
+        if (draft.accentColor !== saved.accentColor) {
+          steps.push({
+            name: 'accentColor',
+            apply: function () { saved.accentColor = draft.accentColor; },
+            run: function () {
+              return Chronicle.apiFetch('/campaigns/' + campaignId + '/accent-color', {
+                method: 'PUT',
+                body: 'accent_color=' + encodeURIComponent(draft.accentColor),
+                headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+                csrfToken: csrfToken
+              });
+            }
+          });
+        }
+
+        // Action highlight if changed (same endpoint + form-encoded shape as
+        // the site accent, routed by slot).
+        if (draft.accentAction !== saved.accentAction) {
+          steps.push({
+            name: 'accentAction',
+            apply: function () { saved.accentAction = draft.accentAction; },
+            run: function () {
+              return Chronicle.apiFetch('/campaigns/' + campaignId + '/accent-color', {
+                method: 'PUT',
+                body: 'accent_color=' + encodeURIComponent(draft.accentAction) + '&slot=action',
+                headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+                csrfToken: csrfToken
+              });
+            }
+          });
+        }
+
+        // App accent if changed.
+        if (draft.accentApp !== saved.accentApp) {
+          steps.push({
+            name: 'accentApp',
+            apply: function () { saved.accentApp = draft.accentApp; },
+            run: function () {
+              return Chronicle.apiFetch('/campaigns/' + campaignId + '/accent-color', {
+                method: 'PUT',
+                body: 'accent_color=' + encodeURIComponent(draft.accentApp) + '&slot=app',
+                headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+                csrfToken: csrfToken
+              });
+            }
+          });
+        }
+
+        // Surface accent 1 if changed (same endpoint + form-encoded shape as
+        // action/app, routed by the legacy numeric slot).
+        if (draft.accentSurface1 !== saved.accentSurface1) {
+          steps.push({
+            name: 'accentSurface1',
+            apply: function () { saved.accentSurface1 = draft.accentSurface1; },
+            run: function () {
+              return Chronicle.apiFetch('/campaigns/' + campaignId + '/accent-color', {
+                method: 'PUT',
+                body: 'accent_color=' + encodeURIComponent(draft.accentSurface1) + '&slot=1',
+                headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+                csrfToken: csrfToken
+              });
+            }
+          });
+        }
+
+        // Surface accent 2 if changed.
+        if (draft.accentSurface2 !== saved.accentSurface2) {
+          steps.push({
+            name: 'accentSurface2',
+            apply: function () { saved.accentSurface2 = draft.accentSurface2; },
+            run: function () {
+              return Chronicle.apiFetch('/campaigns/' + campaignId + '/accent-color', {
+                method: 'PUT',
+                body: 'accent_color=' + encodeURIComponent(draft.accentSurface2) + '&slot=2',
+                headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+                csrfToken: csrfToken
+              });
+            }
+          });
+        }
+
+        // Font family if changed.
+        if (draft.fontFamily !== saved.fontFamily) {
+          steps.push({
+            name: 'fontFamily',
+            apply: function () { saved.fontFamily = draft.fontFamily; },
+            run: function () {
+              return Chronicle.apiFetch('/campaigns/' + campaignId + '/font-family', {
+                method: 'PUT',
+                body: { font_family: draft.fontFamily },
+                csrfToken: csrfToken
+              });
+            }
+          });
+        }
+
+        // Topbar style if changed.
+        var topbarChanged = draft.topbarStyle.mode !== (saved.topbarStyle.mode || '') ||
+                            draft.topbarStyle.color !== (saved.topbarStyle.color || '') ||
+                            draft.topbarStyle.gradient_from !== (saved.topbarStyle.gradient_from || '') ||
+                            draft.topbarStyle.gradient_to !== (saved.topbarStyle.gradient_to || '') ||
+                            draft.topbarStyle.gradient_dir !== (saved.topbarStyle.gradient_dir || 'to-r') ||
+                            draft.topbarStyle.image_path !== (saved.topbarStyle.image_path || '');
+        if (topbarChanged) {
+          steps.push({
+            name: 'topbarStyle',
+            apply: function () {
+              saved.topbarStyle = {
+                mode: draft.topbarStyle.mode,
+                color: draft.topbarStyle.color,
+                gradient_from: draft.topbarStyle.gradient_from,
+                gradient_to: draft.topbarStyle.gradient_to,
+                gradient_dir: draft.topbarStyle.gradient_dir,
+                image_path: draft.topbarStyle.image_path
+              };
+            },
+            run: function () {
+              return Chronicle.apiFetch('/campaigns/' + campaignId + '/topbar-style', {
+                method: 'PUT',
+                body: {
+                  mode: draft.topbarStyle.mode || '',
+                  color: draft.topbarStyle.color || '',
+                  gradient_from: draft.topbarStyle.gradient_from || '',
+                  gradient_to: draft.topbarStyle.gradient_to || '',
+                  gradient_dir: draft.topbarStyle.gradient_dir || '',
+                  // Preserve the uploaded image path so switching a non-image
+                  // topbar field and saving never blanks an image-mode topbar.
+                  image_path: draft.topbarStyle.image_path || ''
+                },
+                csrfToken: csrfToken
+              });
+            }
+          });
+        }
+
+        // Topbar content if changed.
+        var contentChanged = draft.topbarContent.mode !== (saved.topbarContent.mode || 'none') ||
+                             draft.topbarContent.quote !== (saved.topbarContent.quote || '') ||
+                             JSON.stringify(draft.topbarContent.links) !== JSON.stringify(saved.topbarContent.links || []);
+        if (contentChanged) {
+          steps.push({
+            name: 'topbarContent',
+            apply: function () {
+              saved.topbarContent = {
+                mode: draft.topbarContent.mode,
+                links: JSON.parse(JSON.stringify(draft.topbarContent.links)),
+                quote: draft.topbarContent.quote
+              };
+            },
+            run: function () {
+              return Chronicle.apiFetch('/campaigns/' + campaignId + '/topbar-content', {
+                method: 'PUT',
+                body: {
+                  mode: draft.topbarContent.mode || 'none',
+                  links: draft.topbarContent.links || [],
+                  quote: draft.topbarContent.quote || ''
+                },
+                csrfToken: csrfToken
+              });
+            }
+          });
+        }
+
+        return steps;
+      }
+
       if (saveBtn) {
         saveBtn.addEventListener('click', function () {
+          var steps = buildSaveSteps();
+          if (steps.length === 0) {
+            updateSaveBar();
+            return;
+          }
+
           saveBtn.disabled = true;
           saveBtn.innerHTML = '<i class="fa-solid fa-spinner fa-spin text-xs mr-1"></i> Saving...';
 
-          var pending = 0;
-          var failed = false;
-
-          function onComplete() {
-            pending--;
-            if (pending <= 0) {
-              saveBtn.disabled = false;
-              saveBtn.innerHTML = '<i class="fa-solid fa-check text-xs mr-1"></i> Save Changes';
-              if (failed) {
-                Chronicle.notify('Some changes failed to save', 'error');
-              } else {
-                // Update saved state to match draft.
-                saved.brandName = draft.brandName;
-                saved.accentColor = draft.accentColor;
-                saved.accentAction = draft.accentAction;
-                saved.accentApp = draft.accentApp;
-                saved.accentSurface1 = draft.accentSurface1;
-                saved.accentSurface2 = draft.accentSurface2;
-                saved.fontFamily = draft.fontFamily;
-                saved.topbarStyle = {
-                  mode: draft.topbarStyle.mode,
-                  color: draft.topbarStyle.color,
-                  gradient_from: draft.topbarStyle.gradient_from,
-                  gradient_to: draft.topbarStyle.gradient_to,
-                  gradient_dir: draft.topbarStyle.gradient_dir,
-                  image_path: draft.topbarStyle.image_path
-                };
-                saved.topbarContent = {
-                  mode: draft.topbarContent.mode,
-                  links: JSON.parse(JSON.stringify(draft.topbarContent.links)),
-                  quote: draft.topbarContent.quote
-                };
-                updateSaveBar();
-                // Apply all three accent slots to page CSS custom properties
-                // live (T-B3), so the change is visible site-wide immediately.
-                applySlotToPage('--color-accent', draft.accentColor);
-                applySlotToPage('--color-accent-action', draft.accentAction);
-                applySlotToPage('--color-accent-app', draft.accentApp);
-                Chronicle.notify('Appearance saved', 'success');
-              }
-            }
-          }
-
-          // Save branding if changed.
-          if (draft.brandName !== saved.brandName) {
-            pending++;
-            Chronicle.apiFetch('/campaigns/' + campaignId + '/branding', {
-              method: 'PUT',
-              body: { brand_name: draft.brandName },
-              csrfToken: csrfToken
-            }).then(function (res) {
-              if (!res.ok) { failed = true; }
-              onComplete();
-            }).catch(function () {
-              failed = true;
-              onComplete();
-            });
-          }
-
-          // Save accent color if changed (form-encoded for c.FormValue).
-          if (draft.accentColor !== saved.accentColor) {
-            pending++;
-            Chronicle.apiFetch('/campaigns/' + campaignId + '/accent-color', {
-              method: 'PUT',
-              body: 'accent_color=' + encodeURIComponent(draft.accentColor),
-              headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-              csrfToken: csrfToken
-            }).then(function (res) {
-              if (!res.ok) { failed = true; }
-              onComplete();
-            }).catch(function () {
-              failed = true;
-              onComplete();
-            });
-          }
-
-          // Save action highlight if changed (same endpoint + form-encoded
-          // shape as the site accent, routed by slot).
-          if (draft.accentAction !== saved.accentAction) {
-            pending++;
-            Chronicle.apiFetch('/campaigns/' + campaignId + '/accent-color', {
-              method: 'PUT',
-              body: 'accent_color=' + encodeURIComponent(draft.accentAction) + '&slot=action',
-              headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-              csrfToken: csrfToken
-            }).then(function (res) {
-              if (!res.ok) { failed = true; }
-              onComplete();
-            }).catch(function () {
-              failed = true;
-              onComplete();
-            });
-          }
-
-          // Save app accent if changed.
-          if (draft.accentApp !== saved.accentApp) {
-            pending++;
-            Chronicle.apiFetch('/campaigns/' + campaignId + '/accent-color', {
-              method: 'PUT',
-              body: 'accent_color=' + encodeURIComponent(draft.accentApp) + '&slot=app',
-              headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-              csrfToken: csrfToken
-            }).then(function (res) {
-              if (!res.ok) { failed = true; }
-              onComplete();
-            }).catch(function () {
-              failed = true;
-              onComplete();
-            });
-          }
-
-          // Save surface accent 1 if changed (same endpoint + form-encoded
-          // shape as action/app, routed by the legacy numeric slot).
-          if (draft.accentSurface1 !== saved.accentSurface1) {
-            pending++;
-            Chronicle.apiFetch('/campaigns/' + campaignId + '/accent-color', {
-              method: 'PUT',
-              body: 'accent_color=' + encodeURIComponent(draft.accentSurface1) + '&slot=1',
-              headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-              csrfToken: csrfToken
-            }).then(function (res) {
-              if (!res.ok) { failed = true; }
-              onComplete();
-            }).catch(function () {
-              failed = true;
-              onComplete();
-            });
-          }
-
-          // Save surface accent 2 if changed.
-          if (draft.accentSurface2 !== saved.accentSurface2) {
-            pending++;
-            Chronicle.apiFetch('/campaigns/' + campaignId + '/accent-color', {
-              method: 'PUT',
-              body: 'accent_color=' + encodeURIComponent(draft.accentSurface2) + '&slot=2',
-              headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-              csrfToken: csrfToken
-            }).then(function (res) {
-              if (!res.ok) { failed = true; }
-              onComplete();
-            }).catch(function () {
-              failed = true;
-              onComplete();
-            });
-          }
-
-          // Save font family if changed.
-          if (draft.fontFamily !== saved.fontFamily) {
-            pending++;
-            Chronicle.apiFetch('/campaigns/' + campaignId + '/font-family', {
-              method: 'PUT',
-              body: { font_family: draft.fontFamily },
-              csrfToken: csrfToken
-            }).then(function (res) {
-              if (!res.ok) { failed = true; }
-              onComplete();
-            }).catch(function () {
-              failed = true;
-              onComplete();
-            });
-          }
-
-          // Save topbar style if changed.
-          var topbarChanged = draft.topbarStyle.mode !== (saved.topbarStyle.mode || '') ||
-                              draft.topbarStyle.color !== (saved.topbarStyle.color || '') ||
-                              draft.topbarStyle.gradient_from !== (saved.topbarStyle.gradient_from || '') ||
-                              draft.topbarStyle.gradient_to !== (saved.topbarStyle.gradient_to || '') ||
-                              draft.topbarStyle.gradient_dir !== (saved.topbarStyle.gradient_dir || 'to-r') ||
-                              draft.topbarStyle.image_path !== (saved.topbarStyle.image_path || '');
-          if (topbarChanged) {
-            pending++;
-            Chronicle.apiFetch('/campaigns/' + campaignId + '/topbar-style', {
-              method: 'PUT',
-              body: {
-                mode: draft.topbarStyle.mode || '',
-                color: draft.topbarStyle.color || '',
-                gradient_from: draft.topbarStyle.gradient_from || '',
-                gradient_to: draft.topbarStyle.gradient_to || '',
-                gradient_dir: draft.topbarStyle.gradient_dir || '',
-                // Preserve the uploaded image path so switching a non-image
-                // topbar field and saving never blanks an image-mode topbar.
-                image_path: draft.topbarStyle.image_path || ''
-              },
-              csrfToken: csrfToken
-            }).then(function (res) {
-              if (!res.ok) { failed = true; }
-              onComplete();
-            }).catch(function () {
-              failed = true;
-              onComplete();
-            });
-          }
-
-          // Save topbar content if changed.
-          var contentChanged = draft.topbarContent.mode !== (saved.topbarContent.mode || 'none') ||
-                               draft.topbarContent.quote !== (saved.topbarContent.quote || '') ||
-                               JSON.stringify(draft.topbarContent.links) !== JSON.stringify(saved.topbarContent.links || []);
-          if (contentChanged) {
-            pending++;
-            Chronicle.apiFetch('/campaigns/' + campaignId + '/topbar-content', {
-              method: 'PUT',
-              body: {
-                mode: draft.topbarContent.mode || 'none',
-                links: draft.topbarContent.links || [],
-                quote: draft.topbarContent.quote || ''
-              },
-              csrfToken: csrfToken
-            }).then(function (res) {
-              if (!res.ok) { failed = true; }
-              onComplete();
-            }).catch(function () {
-              failed = true;
-              onComplete();
-            });
-          }
-
-          // If nothing changed, just hide the bar.
-          if (pending === 0) {
+          runSaveStepsSequentially(steps).then(function (result) {
             saveBtn.disabled = false;
             saveBtn.innerHTML = '<i class="fa-solid fa-check text-xs mr-1"></i> Save Changes';
+
+            // Copy only the fields that actually saved into `saved`, so a
+            // partial failure leaves Discard (and the page) agreeing with
+            // what the database now holds rather than what was attempted.
+            for (var i = 0; i < steps.length; i++) {
+              if (result.succeeded.indexOf(steps[i].name) !== -1) {
+                steps[i].apply();
+              }
+            }
             updateSaveBar();
-          }
+
+            if (result.failed.length > 0) {
+              Chronicle.notify('Some changes failed to save', 'error');
+            } else {
+              // Apply every accent slot that just saved to page CSS custom
+              // properties live (T-B3), so the change is visible site-wide
+              // immediately. Surface 1/2 move from the widget-scoped preview
+              // (surface_accent_onclick.go) to the real, page-wide property;
+              // the widget-scoped override is cleared so nothing shadows it.
+              applySlotToPage('--color-accent', saved.accentColor);
+              applySlotToPage('--color-accent-action', saved.accentAction);
+              applySlotToPage('--color-accent-app', saved.accentApp);
+              applySlotToPage('--color-accent-surface-1', saved.accentSurface1);
+              applySlotToPage('--color-accent-surface-2', saved.accentSurface2);
+              clearSurfaceVarPreview(1);
+              clearSurfaceVarPreview(2);
+              Chronicle.notify('Appearance saved', 'success');
+            }
+          });
         });
       }
 
@@ -802,11 +870,13 @@
           var appCustom = el.querySelector('#appearance-app-custom');
           if (appCustom) appCustom.value = draft.accentApp || '#6366f1';
 
-          // Surface accents: only the CSS-variable preview needs restoring —
-          // the swatch ring was never live-updated in the first place (it
-          // only ever reflects the server-rendered value at load).
-          applySurfaceVar(1, draft.accentSurface1);
-          applySurfaceVar(2, draft.accentSurface2);
+          // Surface accents: clear the widget-scoped preview override (it
+          // falls back to whatever <html> already carries from the last
+          // save) and resync the ring, custom swatch, and label.
+          clearSurfaceVarPreview(1);
+          clearSurfaceVarPreview(2);
+          highlightSurfaceRow(1, draft.accentSurface1);
+          highlightSurfaceRow(2, draft.accentSurface2);
 
           // Font.
           if (fontContainer) {
@@ -1095,4 +1165,14 @@
       }
     }
   });
+
+  // Test-only hook: exposes the pure save-sequencing helper so the node:test
+  // contract suite can assert steps run one at a time (never concurrently)
+  // without a real browser DOM. `module` is undefined when loaded via
+  // <script>, so this is a no-op in the browser.
+  if (typeof module !== 'undefined' && module.exports) {
+    module.exports = {
+      runSaveStepsSequentially: runSaveStepsSequentially
+    };
+  }
 })();
