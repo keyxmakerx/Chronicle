@@ -1228,4 +1228,13 @@
       this._updateScrim();
     }
   });
+
+  // Test-only hook: exposes the pure date/moon-phase math so the node:test
+  // contract suite (test/js/calendar_math.test.mjs) can check it against the
+  // Go model's own values without a browser DOM, the same pattern
+  // appearance_editor.js uses for its save-sequencing helper. `module` is
+  // undefined when loaded via <script>, so this is a no-op in the browser.
+  if (typeof module !== 'undefined' && module.exports) {
+    module.exports = { CalDate: CalDate, MoonMath: MoonMath };
+  }
 })();
