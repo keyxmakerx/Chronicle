@@ -1,6 +1,7 @@
 package layouts
 
 import (
+	"bytes"
 	"context"
 	"reflect"
 	"strings"
@@ -151,5 +152,95 @@ func TestResolveNavState_RingAndFolds(t *testing.T) {
 				}
 			}
 		})
+	}
+}
+
+func renderNavList(t *testing.T, ctx context.Context) string {
+	t.Helper()
+	var buf bytes.Buffer
+	if err := campaignNavList().Render(ctx, &buf); err != nil {
+		t.Fatalf("render campaignNavList: %v", err)
+	}
+	return buf.String()
+}
+
+func TestCampaignNavList_PaintsWhereTheViewerIs(t *testing.T) {
+	html := renderNavList(t, navStateCase{role: 1, path: "/campaigns/c1/cities",
+		hint: &NavHint{TypeID: 11, PageName: "Waterdeep"}}.ctx())
+
+	if got := strings.Count(html, `class="nav-ring"`); got != 1 {
+		t.Fatalf("sidebar has %d living rings, want exactly 1", got)
+	}
+	if got := strings.Count(html, `aria-current="page"`); got != 1 {
+		t.Fatalf("sidebar marks %d rows current, want 1", got)
+	}
+	cities := html[strings.Index(html, `data-nav-key="cat:11"`):]
+	cities = cities[:strings.Index(cities, "</a>")]
+	for _, want := range []string{`aria-current="page"`, `class="nav-ring"`, "Waterdeep"} {
+		if !strings.Contains(cities, want) {
+			t.Errorf("the Cities row is missing %q: %s", want, cities)
+		}
+	}
+	if strings.Contains(html, `id="nav-b-sub-1" hidden`) {
+		t.Errorf("the open page's sub-categories must be painted open")
+	}
+}
+
+func TestCampaignNavList_FoldedSectionNamesTheCurrentPage(t *testing.T) {
+	html := renderNavList(t, navStateCase{role: 1, path: "/campaigns/c1/factions",
+		folds: NavFolds{"categories": false}}.ctx())
+	if !strings.Contains(html, `id="nav-b-categories" hidden`) {
+		t.Errorf("a section the viewer folded must be painted folded")
+	}
+	head := html[strings.Index(html, `data-nav-fold="categories"`)-80:]
+	head = head[:strings.Index(head, "</button>")]
+	if !strings.Contains(head, "has-cur") || !strings.Contains(head, `<span class="nav-gh-cur">Factions</span>`) {
+		t.Errorf("a folded heading must name the current page inside it: %s", head)
+	}
+	if !strings.Contains(head, `aria-expanded="false"`) {
+		t.Errorf("a folded heading must say it is collapsed: %s", head)
+	}
+}
+
+func TestCampaignNavList_ManageAndEditingAreTheOwners(t *testing.T) {
+	player := renderNavList(t, navStateCase{role: 1, path: "/campaigns/c1"}.ctx())
+	for _, owners := range []string{`data-nav-section="manage"`, "/campaigns/c1/settings", "data-sidebar-entity-types", "Add category"} {
+		if strings.Contains(player, owners) {
+			t.Errorf("a player's sidebar contains the owner's %q", owners)
+		}
+	}
+	if !strings.Contains(player, `data-nav-key="me"`) {
+		t.Errorf("a player's sidebar is missing My Characters")
+	}
+
+	owner := renderNavList(t, navStateCase{role: 3, path: "/campaigns/c1"}.ctx())
+	for _, want := range []string{`data-nav-section="manage"`, `id="nav-b-manage" hidden`, "/campaigns/c1/settings", "data-sidebar-entity-types"} {
+		if !strings.Contains(owner, want) {
+			t.Errorf("the owner's sidebar is missing %q", want)
+		}
+	}
+	if strings.Contains(owner, `data-nav-key="me"`) {
+		t.Errorf("the owner's sidebar must not have My Characters")
+	}
+
+	var brand bytes.Buffer
+	if err := campaignNavBrand().Render(navStateCase{role: 1, path: "/campaigns/c1"}.ctx(), &brand); err != nil {
+		t.Fatalf("render brand: %v", err)
+	}
+	if strings.Contains(brand.String(), "data-sidebar-edit-toggle") {
+		t.Errorf("a player must never get the edit pencil")
+	}
+}
+
+func TestApp_MarksTheCurrentRowForBoostedNavigation(t *testing.T) {
+	ctx := navStateCase{role: 1, path: "/campaigns/c1/cities", hint: &NavHint{TypeID: 11, PageName: "Water<deep>"}}.ctx()
+	var buf bytes.Buffer
+	if err := App("Waterdeep").Render(ctx, &buf); err != nil {
+		t.Fatalf("render App: %v", err)
+	}
+	html := buf.String()
+	main := html[strings.Index(html, `id="main-content"`):]
+	if !strings.Contains(main, `data-nav-current="cat:11" data-nav-page="Water&lt;deep&gt;"`) {
+		t.Errorf("#main-content must carry the current row and the page's escaped name: %.300s", main)
 	}
 }

@@ -20,7 +20,14 @@ templ App(title string) {
 	@Base(title) {
 		<!-- Global HTMX loading indicator (thin bar at top of viewport) -->
 		<div id="htmx-indicator" class="htmx-indicator"></div>
-		<div class="flex h-screen overflow-hidden" x-data="{ sidebarOpen: false, sidebarHidden: localStorage.getItem('chronicle-sidebar-hidden') === 'true' }" @chronicle:navigated.window="sidebarOpen = false">
+		<!-- Escape closes the phone drawer (unless something on top already took
+		     the key) and hands focus back to the menu button that opened it. -->
+		<div
+			class="flex h-screen overflow-hidden"
+			x-data="{ sidebarOpen: false, sidebarHidden: localStorage.getItem('chronicle-sidebar-hidden') === 'true' }"
+			@chronicle:navigated.window="sidebarOpen = false"
+			@keydown.escape.window="if (sidebarOpen && !$event.defaultPrevented) { sidebarOpen = false; $nextTick(() => { const t = document.getElementById('nav-toggle'); if (t) t.focus() }) }"
+		>
 			<!-- Mobile backdrop -->
 			<div
 				x-show="sidebarOpen"
@@ -53,7 +60,7 @@ templ App(title string) {
 			</button>
 
 			<!-- Main content area -->
-			<div class="flex-1 flex flex-col overflow-hidden min-w-0">
+			<div id="app-main" class="relative flex-1 flex flex-col overflow-hidden min-w-0">
 				<!-- Topbar -->
 				@Topbar()
 
@@ -99,6 +106,12 @@ templ App(title string) {
 
 				<!-- Page content (scrollable) -->
 				<main class="flex-1 overflow-y-auto px-3 py-3 md:px-5 md:py-4 bg-surface" id="main-content">
+					if InCampaign(ctx) {
+						<!-- Which sidebar row this page belongs to, and its name. A
+						     boosted navigation swaps only #main-content, so this is
+						     how sidebar_nav.js learns where the viewer now is. -->
+						<span hidden data-nav-current={ navCurrentKey(ctx) } data-nav-page={ navCurrentPage(ctx) }></span>
+					}
 					{ children... }
 				</main>
 			</div>
@@ -125,9 +138,8 @@ var sidebarNavActive = "sidebar-nav-active text-sidebar-active border-accent"
 // No hover:bg — the sidebar-nav-glow ::before handles the hover visual.
 var sidebarNavInactive = "text-sidebar-text hover:text-sidebar-active"
 
-// Sidebar renders the left navigation bar with drill-down support. Organized
-// into distinct zones so that global nav, manage, and admin sections remain
-// static while only the categories area participates in the drill-down.
+// Sidebar renders the left navigation bar: inside a campaign, the campaign's
+// own sidebar (nav.templ); elsewhere, the site's short navigation.
 templ Sidebar() {
 	<!-- data-nav-active-classes / data-nav-inactive-classes expose the SAME class
 	     tokens used to render every nav link below (sidebarNavActive /
@@ -143,7 +155,7 @@ templ Sidebar() {
 		x-init="$nextTick(() => { if (!pinned) hovered = false })"
 		@mouseenter="hovered = true"
 		@mouseleave="hovered = false"
-		class="fixed inset-y-0 left-0 z-40 w-64 bg-sidebar-bg text-sidebar-text flex flex-col
+		class="nav-sb fixed inset-y-0 left-0 z-40 w-64 bg-sidebar-bg text-sidebar-text flex flex-col
 		       -translate-x-full md:translate-x-0 transition-[width,transform] duration-300 ease-in-out
 		       md:static md:z-auto md:shrink-0"
 		:class="[
@@ -156,209 +168,10 @@ templ Sidebar() {
 		x-transition:leave-start="translate-x-0"
 		x-transition:leave-end="-translate-x-full"
 	>
-		<!-- Logo / Brand + Pin Toggle -->
-		<div class="h-16 flex items-center px-4 border-b border-gray-700 shrink-0">
-			<a
-				if InCampaign(ctx) {
-					href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s", GetCampaignID(ctx))) }
-				} else {
-					href="/campaigns"
-				}
-				class="flex items-center flex-1 min-w-0 gap-2 hover:opacity-80 transition-opacity"
-			>
-				if InCampaign(ctx) && GetBrandLogo(ctx) != "" {
-					<img
-						src={ MediaURL(ctx, GetBrandLogo(ctx)) }
-						alt=""
-						class="w-7 h-7 rounded-md object-cover shrink-0 sidebar-hide-collapsed"
-					/>
-				}
-				<span class="text-lg font-bold text-white tracking-tight truncate sidebar-hide-collapsed">
-					if InCampaign(ctx) && GetBrandName(ctx) != "" {
-						{ GetBrandName(ctx) }
-					} else if InCampaign(ctx) {
-						{ GetCampaignName(ctx) }
-					} else {
-						Chronicle
-					}
-				</span>
-				<!-- Collapsed state: show logo or book icon -->
-				<span class="hidden items-center justify-center w-5 h-5 shrink-0" :class="{ '!flex': !pinned && !hovered }">
-					if InCampaign(ctx) && GetBrandLogo(ctx) != "" {
-						<img src={ MediaURL(ctx, GetBrandLogo(ctx)) } alt="" class="w-5 h-5 rounded object-cover"/>
-					} else {
-						<i class="fa-solid fa-book-open text-white text-sm"></i>
-					}
-				</span>
-			</a>
-			<!-- Pin/unpin button (visible only when expanded) -->
-			<button
-				class="sidebar-pin-btn w-6 h-6 flex items-center justify-center rounded text-gray-500 hover:text-white hover:bg-gray-700 transition-colors"
-				@click.stop="pinned = !pinned; localStorage.setItem('chronicle-sidebar-pinned', pinned)"
-				:title="pinned ? 'Unpin sidebar' : 'Pin sidebar open'"
-			>
-				<i class="fa-solid fa-thumbtack text-xs transition-transform" :class="{ 'rotate-45 text-gray-600': !pinned, 'text-accent': pinned }"></i>
-			</button>
-			<!-- Hide sidebar button (visible only when expanded) -->
-			<button
-				class="sidebar-pin-btn w-6 h-6 flex items-center justify-center rounded text-gray-500 hover:text-white hover:bg-gray-700 transition-colors ml-0.5"
-				@click.stop="sidebarHidden = true; localStorage.setItem('chronicle-sidebar-hidden', 'true')"
-				title="Hide sidebar"
-			>
-				<i class="fa-solid fa-angles-left text-xs"></i>
-			</button>
-		</div>
-
 		if InCampaign(ctx) {
-			<!-- Zone 1: Global nav (static, always visible) -->
-			<div class="shrink-0 pt-3 pb-1 border-b border-gray-700/50" hx-boost="false">
-				<a href="/campaigns" class={ sidebarNavLink, sidebarNavInactive }>
-					<svg class="w-4 h-4 mr-3 shrink-0" width="16" height="16" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-						<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 17l-5-5m0 0l5-5m-5 5h12"></path>
-					</svg>
-					All Campaigns
-				</a>
-				<a href="/" class={ sidebarNavLink, sidebarNavInactive }>
-					<span class="w-4 h-4 mr-3 shrink-0 flex items-center justify-center">
-						<i class="fa-solid fa-compass text-xs"></i>
-					</span>
-					Discover
-				</a>
-			</div>
-
-			<!-- Zone 2: Campaign context area (scrollable middle) -->
-			<div class="flex-1 flex flex-col min-h-0 overflow-hidden">
-				<!-- Campaign header + navigation items -->
-				<div class="shrink-0 pt-3" hx-boost="true" hx-target="#main-content" hx-select="#main-content" hx-swap="innerHTML show:window:top">
-					<div class="px-4 mb-1 flex items-center gap-2">
-						if GetBrandLogo(ctx) != "" {
-							<img
-								src={ MediaURL(ctx, GetBrandLogo(ctx)) }
-								alt=""
-								class="w-5 h-5 rounded object-cover shrink-0"
-							/>
-						}
-						<a
-							href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s", GetCampaignID(ctx))) }
-							class="text-xs font-semibold uppercase tracking-wider text-gray-500 hover:text-gray-300 transition-colors truncate flex-1"
-						>
-							{ GetDisplayName(ctx) }
-						</a>
-						if GetCampaignRole(ctx) >= 3 {
-							<button
-								type="button"
-								@click="$dispatch('chronicle:toggle-sidebar-editor')"
-								class="w-5 h-5 flex items-center justify-center rounded text-gray-500 hover:text-gray-300 hover:bg-white/10 transition-colors shrink-0"
-								title="Edit sidebar"
-								data-sidebar-edit-toggle
-							>
-								<i class="fa-solid fa-pencil text-[10px]"></i>
-							</button>
-						}
-					</div>
-					<!-- Sidebar entity types data for sidebar_editor.js -->
-					if GetCampaignRole(ctx) >= 3 {
-						<div data-sidebar-entity-types={ EntityTypesJSON(ctx) } data-campaign-id={ GetCampaignID(ctx) } class="hidden"></div>
-					}
-					<!-- The viewer's sidebar, already cut down for them (hidden rows
-					     reach only the owner, marked): Pinned, Apps and the owner's
-					     own sections here; Categories in the zone below. -->
-					@sidebarDashboardLink(ctx)
-					for _, sec := range GetNavSections(ctx) {
-						if sec.Kind != "categories" && len(sec.Rows) > 0 {
-							if sec.Kind == "custom" {
-								<div class="mt-3 px-4 mb-2 text-xs font-semibold uppercase tracking-wider text-gray-500 sidebar-cat-list-label">
-									{ sec.Label }
-								</div>
-							}
-							for _, row := range sec.Rows {
-								@sidebarNavRow(row)
-							}
-						}
-					}
-					@sidebarAllPagesLink(ctx)
-				</div>
-
-				<!-- Categories drill-down zone -->
-				<div id="sidebar-categories-zone" class="flex-1 overflow-hidden relative min-h-0">
-					<!-- Category icon list (always present, visible behind overlay panel) -->
-					<div
-						id="sidebar-cat-list"
-						class={ "h-full overflow-y-auto py-2",
-							templ.KV("sidebar-icon-only", activeDrillSlug(ctx) != "") }
-						hx-boost="true"
-						hx-target="#main-content"
-						hx-select="#main-content"
-						hx-swap="innerHTML show:window:top"
-					>
-						<div class="px-4 mb-2 flex items-center justify-between sidebar-cat-list-label">
-							<span class="text-xs font-semibold uppercase tracking-wider text-gray-500">Categories</span>
-							if GetCampaignRole(ctx) >= 3 {
-								<button
-									type="button"
-									class="text-fg-muted hover:text-accent transition-colors p-0.5"
-									title="Add category"
-									onclick="document.getElementById('sidebar-create-category').toggleAttribute('data-open'); var el = document.getElementById('sidebar-create-category'); if (el.hasAttribute('data-open')) { el.style.display = ''; el.querySelector('input[type=text]').focus(); } else { el.style.display = 'none'; }"
-								>
-									<i class="fa-solid fa-plus text-[10px]"></i>
-								</button>
-							}
-						</div>
-						if GetCampaignRole(ctx) >= 3 {
-							@sidebarCreateCategory(ctx)
-						}
-						<!-- Unified: render top-level categories in config order. Sub-category
-						     entity_types (ParentTypeID != nil) are template variants of their
-						     parent and are filtered out upstream in the LayoutInjector, so the
-						     ParentTypeID == nil check here is defensive. The injector always
-						     supplies the default categories when the config is empty, so there
-						     is no legacy fallback branch; "All Pages" is an all_pages item
-						     rendered in the top nav above. -->
-						for _, sec := range GetNavSections(ctx) {
-							if sec.Kind == "categories" {
-								for _, row := range sec.Rows {
-									@entityTypeLink(getEntityTypeSlug(ctx, row.TypeID), row.Label, row.Color, row.Icon, row.Count, row.TypeID, row.Hidden)
-								}
-							}
-						}
-						<!-- My Characters link (CH2). Visible to Players (the
-						     primary audience) and to Owner/Scribe when
-						     "view as player" mode is on so the owner can
-						     preview the player landing experience. -->
-						if GetCampaignRole(ctx) == 1 || (GetCampaignRole(ctx) >= 2 && IsViewingAsPlayer(ctx)) {
-							@sidebarMyCharactersLink(ctx)
-						}
-					</div>
-
-					<!-- Category slide-over panel (overlays icon list) -->
-					<div
-						id="sidebar-category"
-						class={ "sidebar-drill-panel",
-							templ.KV("sidebar-drill-active", activeDrillSlug(ctx) != "") }
-					>
-						<!-- Back button -->
-						<div
-							class="flex items-center px-4 py-2 border-b border-gray-700/50 cursor-pointer hover:bg-sidebar-hover transition-colors shrink-0"
-							onclick="Chronicle.drillOut()"
-						>
-							<svg class="w-3.5 h-3.5 mr-2 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-								<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"></path>
-							</svg>
-							<span class="text-xs text-gray-400">Categories</span>
-						</div>
-						<!-- Panel content area -->
-						<div id="sidebar-cat-content" class="flex-1 flex flex-col min-h-0 overflow-y-auto">
-							for _, et := range GetEntityTypes(ctx) {
-								if activeDrillSlug(ctx) == et.Slug {
-									@SidebarDrillPanel(GetCampaignID(ctx), et, GetEntityCount(ctx, et.ID))
-								}
-							}
-						</div>
-					</div>
-				</div>
-			</div>
-
-			<!-- Session RSVP sidebar (lazy-loaded, members only, calendar addon required) -->
+			@campaignNavBrand()
+			@campaignNavList()
+			<!-- Session RSVP card (lazy-loaded, members only, calendar addon required) -->
 			if IsAuthenticated(ctx) && GetCampaignRole(ctx) >= 1 && IsAddonEnabled(ctx, "calendar") {
 				<div
 					id="sidebar-sessions-rsvp"
@@ -368,120 +181,49 @@ templ Sidebar() {
 					hx-swap="innerHTML"
 				></div>
 			}
-
-			<!-- Zone 3: Manage section (collapsible, campaign-scoped) -->
-			if IsAuthenticated(ctx) {
-				<div
-					class="shrink-0 border-t border-gray-700 py-1"
-					hx-boost="true" hx-target="#main-content" hx-select="#main-content" hx-swap="innerHTML show:window:top"
-					x-data="{ open: localStorage.getItem('sidebar-manage-open') !== 'false' }"
-				>
-					<button
-						type="button"
-						class="w-full px-4 pt-2 pb-1 flex items-center justify-between text-xs font-semibold uppercase tracking-wider text-gray-500 hover:text-gray-300 transition-colors"
-						@click="open = !open; localStorage.setItem('sidebar-manage-open', open)"
-					>
-						Manage
-						<i class="fa-solid fa-chevron-right text-[8px] transition-transform" :class="open && 'rotate-90'"></i>
-					</button>
-					<div x-show="open" x-collapse>
-					if GetCampaignRole(ctx) >= 3 {
-						<a
-							href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/dashboard", GetCampaignID(ctx))) }
-							class={ sidebarNavLink,
-								templ.KV(sidebarNavActive, isPathPrefix(ctx, fmt.Sprintf("/campaigns/%s/dashboard", GetCampaignID(ctx)))),
-								templ.KV(sidebarNavInactive, !isPathPrefix(ctx, fmt.Sprintf("/campaigns/%s/dashboard", GetCampaignID(ctx)))) }
-						>
-							<span class="w-4 h-4 mr-3 shrink-0 flex items-center justify-center">
-								<i class="fa-solid fa-gauge text-xs"></i>
-							</span>
-							Dashboard
-						</a>
-					}
-					<a
-						href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/members", GetCampaignID(ctx))) }
-						class={ sidebarNavLink,
-							templ.KV(sidebarNavActive, isPathPrefix(ctx, fmt.Sprintf("/campaigns/%s/members", GetCampaignID(ctx)))),
-							templ.KV(sidebarNavInactive, !isPathPrefix(ctx, fmt.Sprintf("/campaigns/%s/members", GetCampaignID(ctx)))) }
-					>
-						<svg class="w-4 h-4 mr-3 shrink-0" width="16" height="16" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-							<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z"></path>
-						</svg>
-						Members
-					</a>
-					if GetCampaignRole(ctx) >= 3 {
-						if IsAddonEnabled(ctx, "media-gallery") {
-						<a
-							href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/media", GetCampaignID(ctx))) }
-							class={ sidebarNavLink,
-								templ.KV(sidebarNavActive, isPathPrefix(ctx, fmt.Sprintf("/campaigns/%s/media", GetCampaignID(ctx)))),
-								templ.KV(sidebarNavInactive, !isPathPrefix(ctx, fmt.Sprintf("/campaigns/%s/media", GetCampaignID(ctx)))) }
-						>
-							<span class="w-4 h-4 mr-3 shrink-0 flex items-center justify-center">
-								<i class="fa-solid fa-photo-film text-xs"></i>
-							</span>
-							Media
-						</a>
-						}
-						<a
-							href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/customize", GetCampaignID(ctx))) }
-							class={ sidebarNavLink,
-								templ.KV(sidebarNavActive, isPathPrefix(ctx, fmt.Sprintf("/campaigns/%s/customize", GetCampaignID(ctx)))),
-								templ.KV(sidebarNavInactive, !isPathPrefix(ctx, fmt.Sprintf("/campaigns/%s/customize", GetCampaignID(ctx)))) }
-						>
-							<span class="w-4 h-4 mr-3 shrink-0 flex items-center justify-center">
-								<i class="fa-solid fa-paintbrush text-xs"></i>
-							</span>
-							Customize
-						</a>
-						// C-EXT-HUB Phase 1: top-level Extensions hub
-						// (operator's new per-campaign feature entry point;
-						// absorbs the retired Features Settings tab).
-						<a
-							href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/extensions", GetCampaignID(ctx))) }
-							class={ sidebarNavLink,
-								templ.KV(sidebarNavActive, isPathPrefix(ctx, fmt.Sprintf("/campaigns/%s/extensions", GetCampaignID(ctx)))),
-								templ.KV(sidebarNavInactive, !isPathPrefix(ctx, fmt.Sprintf("/campaigns/%s/extensions", GetCampaignID(ctx)))) }
-						>
-							<span class="w-4 h-4 mr-3 shrink-0 flex items-center justify-center">
-								<i class="fa-solid fa-puzzle-piece text-xs"></i>
-							</span>
-							Extensions
-						</a>
-						<a
-							href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/settings", GetCampaignID(ctx))) }
-							class={ sidebarNavLink,
-								templ.KV(sidebarNavActive, isPathPrefix(ctx, fmt.Sprintf("/campaigns/%s/settings", GetCampaignID(ctx)))),
-								templ.KV(sidebarNavInactive, !isPathPrefix(ctx, fmt.Sprintf("/campaigns/%s/settings", GetCampaignID(ctx)))) }
-						>
-							<svg class="w-4 h-4 mr-3 shrink-0" width="16" height="16" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-								<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.066 2.573c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.573 1.066c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.066-2.573c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"></path>
-								<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"></path>
-							</svg>
-							Settings
-						</a>
-					}
-					</div>
-				</div>
-			}
+			@campaignNavFooter()
 		} else {
+			<!-- Logo / Brand + Pin Toggle -->
+			<div class="h-16 flex items-center px-4 border-b border-gray-700 shrink-0">
+				<a href="/campaigns" class="flex items-center flex-1 min-w-0 gap-2 hover:opacity-80 transition-opacity">
+					<span class="text-lg font-bold text-white tracking-tight truncate sidebar-hide-collapsed">Chronicle</span>
+					<!-- Collapsed state: book icon -->
+					<span class="hidden items-center justify-center w-5 h-5 shrink-0" :class="{ '!flex': !pinned && !hovered }">
+						<i class="fa-solid fa-book-open text-white text-sm"></i>
+					</span>
+				</a>
+				<!-- Pin/unpin button (visible only when expanded) -->
+				<button
+					class="sidebar-pin-btn w-6 h-6 flex items-center justify-center rounded text-gray-500 hover:text-white hover:bg-gray-700 transition-colors"
+					@click.stop="pinned = !pinned; localStorage.setItem('chronicle-sidebar-pinned', pinned)"
+					:title="pinned ? 'Unpin sidebar' : 'Pin sidebar open'"
+				>
+					<i class="fa-solid fa-thumbtack text-xs transition-transform" :class="{ 'rotate-45 text-gray-600': !pinned, 'text-accent': pinned }"></i>
+				</button>
+				<!-- Hide sidebar button (visible only when expanded) -->
+				<button
+					class="sidebar-pin-btn w-6 h-6 flex items-center justify-center rounded text-gray-500 hover:text-white hover:bg-gray-700 transition-colors ml-0.5"
+					@click.stop="sidebarHidden = true; localStorage.setItem('chronicle-sidebar-hidden', 'true')"
+					title="Hide sidebar"
+				>
+					<i class="fa-solid fa-angles-left text-xs"></i>
+				</button>
+			</div>
 			<!-- Non-campaign sidebar: simple navigation -->
 			<nav class="flex-1 py-4 overflow-y-auto" hx-boost="true" hx-target="#main-content" hx-select="#main-content" hx-swap="innerHTML show:window:top">
 				@DefaultSidebarNav()
 			</nav>
-		}
-
-		<!-- Zone 4: Admin section (site admins only, static, collapsible) -->
-		if GetIsAdmin(ctx) {
-			@AdminSidebarNav()
-		}
-
-		<!-- Sidebar footer -->
-		<div class="p-4 border-t border-gray-700 shrink-0">
-			<div class="text-xs text-gray-600">
-				Chronicle v0.1.0
+			<!-- Admin section (site admins only, static, collapsible) -->
+			if GetIsAdmin(ctx) {
+				@AdminSidebarNav()
+			}
+			<!-- Sidebar footer -->
+			<div class="p-4 border-t border-gray-700 shrink-0">
+				<div class="text-xs text-gray-600">
+					Chronicle v0.1.0
+				</div>
 			</div>
-		</div>
+		}
 	</aside>
 }
 
@@ -715,126 +457,6 @@ templ DefaultSidebarNav() {
 	</a>
 }
 
-// sidebarDashboardLink renders the Dashboard link in the sidebar.
-templ sidebarDashboardLink(ctx context.Context) {
-	<a
-		href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s", GetCampaignID(ctx))) }
-		class={ sidebarNavLink,
-			templ.KV(sidebarNavActive, isExactPath(ctx, fmt.Sprintf("/campaigns/%s", GetCampaignID(ctx)))),
-			templ.KV(sidebarNavInactive, !isExactPath(ctx, fmt.Sprintf("/campaigns/%s", GetCampaignID(ctx)))) }
-	>
-		<svg class="w-4 h-4 mr-3 shrink-0" width="16" height="16" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-			<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6"></path>
-		</svg>
-		Dashboard
-	</a>
-}
-
-// sidebarAllPagesLink renders the "All Pages" (Entities) link in the sidebar.
-// Uses longest-prefix (isPathPrefix), not exact match, so an entity detail page
-// (/campaigns/:id/entities/42) highlights this link on a hard server load too,
-// matching boot.js's boosted-nav highlighter. Sibling links stay exact
-// (Dashboard is /campaigns/:id), so this prefix never over-highlights them.
-templ sidebarAllPagesLink(ctx context.Context) {
-	<a
-		href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/entities", GetCampaignID(ctx))) }
-		class={ sidebarNavLink,
-			templ.KV(sidebarNavActive, isPathPrefix(ctx, fmt.Sprintf("/campaigns/%s/entities", GetCampaignID(ctx)))),
-			templ.KV(sidebarNavInactive, !isPathPrefix(ctx, fmt.Sprintf("/campaigns/%s/entities", GetCampaignID(ctx)))) }
-	>
-		<span class="w-4 h-4 mr-3 shrink-0 flex items-center justify-center">
-			<i class="fa-solid fa-layer-group text-xs text-gray-400"></i>
-		</span>
-		<span class="flex-1">All Pages</span>
-	</a>
-}
-
-// sidebarMyCharactersLink renders the "My Characters" entry shown to
-// players (CH2). Owners/Scribes see it only when "view as player" mode
-// is enabled — outside that mode it stays hidden so the owner UI
-// doesn't gain a player-only menu item.
-templ sidebarMyCharactersLink(ctx context.Context) {
-	<a
-		href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/me", GetCampaignID(ctx))) }
-		class={ sidebarNavLink,
-			templ.KV(sidebarNavActive, isExactPath(ctx, fmt.Sprintf("/campaigns/%s/me", GetCampaignID(ctx)))),
-			templ.KV(sidebarNavInactive, !isExactPath(ctx, fmt.Sprintf("/campaigns/%s/me", GetCampaignID(ctx)))) }
-	>
-		<span class="w-4 h-4 mr-3 shrink-0 flex items-center justify-center">
-			<i class="fa-solid fa-user-shield text-xs text-gray-400"></i>
-		</span>
-		<span class="flex-1">My Characters</span>
-	</a>
-}
-
-// sidebarNavRow draws one app, link or category row of the viewer's nav. A
-// row hidden from players is only ever given to the owner, who sees it dimmed
-// and marked so they can still reach it while they prep.
-templ sidebarNavRow(row NavRowView) {
-	if row.Kind == "link" {
-		<a
-			href={ safeExternalURL(row.URL) }
-			hx-boost="false"
-			data-nav-key={ row.Key }
-			class={ sidebarNavLink, sidebarNavInactive }
-			if row.External {
-				target="_blank"
-				rel="noopener noreferrer"
-			}
-		>
-			@sidebarNavRowBody(row)
-		</a>
-	} else {
-		<a
-			href={ templ.SafeURL(row.URL) }
-			data-nav-key={ row.Key }
-			class={ sidebarNavLink,
-				templ.KV(sidebarNavActive, isPathPrefix(ctx, row.URL)),
-				templ.KV(sidebarNavInactive, !isPathPrefix(ctx, row.URL)) }
-		>
-			@sidebarNavRowBody(row)
-		</a>
-	}
-}
-
-// sidebarNavRowBody is the inside of a nav row: icon, label with its caption,
-// the external-link arrow and the hidden-from-players mark.
-templ sidebarNavRowBody(row NavRowView) {
-	<span class={ "w-4 h-4 mr-3 shrink-0 flex items-center justify-center", templ.KV("opacity-50", row.Hidden) }>
-		if row.Icon != "" && row.Color != "" {
-			<i class={ "fa-solid " + row.Icon, "text-xs" } style={ fmt.Sprintf("color: %s", row.Color) }></i>
-		} else if row.Icon != "" {
-			<i class={ "fa-solid " + row.Icon, "text-xs text-gray-400" }></i>
-		} else if row.Kind == "category" {
-			<span class="w-2 h-2 rounded-full" style={ fmt.Sprintf("background-color: %s", row.Color) }></span>
-		} else {
-			<i class="fa-solid fa-link text-xs text-gray-400"></i>
-		}
-	</span>
-	<span class={ "flex-1 min-w-0", templ.KV("opacity-50", row.Hidden) }>
-		{ row.Label }
-		if row.Caption != "" {
-			<span class="block text-[10px] leading-tight text-gray-500 truncate">{ row.Caption }</span>
-		}
-	</span>
-	if row.External {
-		<i class="fa-solid fa-arrow-up-right-from-square text-[9px] text-gray-500 ml-auto"></i>
-	}
-	if row.Hidden {
-		@navHiddenMark()
-	}
-}
-
-// navHiddenMark marks a row the owner has hidden from players.
-templ navHiddenMark() {
-	<span class="ml-auto pl-2 shrink-0 text-amber-400/80" title="Hidden from players">
-		<i class="fa-solid fa-eye-slash text-[10px]" aria-hidden="true"></i>
-		<span class="sr-only">(hidden from players)</span>
-	</span>
-}
-
-// entityTypeLink renders a single category link in the sidebar icon list.
-// Clicking triggers the slide-over panel via sidebar_drill.js.
 // sidebarCreateCategory renders a compact inline form for creating a new
 // entity type directly from the sidebar. Visible to campaign owners only.
 templ sidebarCreateCategory(ctx context.Context) {
@@ -903,36 +525,6 @@ templ sidebarCreateCategory(ctx context.Context) {
 	</div>
 }
 
-
-templ entityTypeLink(slug string, label string, color string, icon string, count int, typeID int, hidden bool) {
-	<a
-		href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/%s", GetCampaignID(ctx), slug)) }
-		hx-boost="false"
-		data-drill-url={ fmt.Sprintf("/campaigns/%s/sidebar/drill/%s", GetCampaignID(ctx), slug) }
-		class={ "sidebar-category-link", sidebarNavLink,
-			templ.KV(sidebarNavActive, isPathPrefix(ctx, fmt.Sprintf("/campaigns/%s/%s", GetCampaignID(ctx), slug))),
-			templ.KV(sidebarNavInactive, !isPathPrefix(ctx, fmt.Sprintf("/campaigns/%s/%s", GetCampaignID(ctx), slug))) }
-		data-cat-slug={ slug }
-		data-cat-url={ fmt.Sprintf("/campaigns/%s/%s", GetCampaignID(ctx), slug) }
-		data-entity-type-id={ strconv.Itoa(typeID) }
-		data-tooltip={ label }
-	>
-		<span class={ "w-4 h-4 mr-3 shrink-0 flex items-center justify-center", templ.KV("opacity-50", hidden) }>
-			if icon != "" {
-				<i class={ "fa-solid " + icon, "text-xs" } style={ fmt.Sprintf("color: %s", color) }></i>
-			} else {
-				<span class="w-2 h-2 rounded-full" style={ fmt.Sprintf("background-color: %s", color) }></span>
-			}
-		</span>
-		<span class={ "flex-1", templ.KV("opacity-50", hidden) }>{ label }</span>
-		if count > 0 {
-			<span class="ml-auto text-xs text-gray-500">{ strconv.Itoa(count) }</span>
-		}
-		if hidden {
-			@navHiddenMark()
-		}
-	</a>
-}
 
 // SidebarDrillPanel renders the slide-over panel content for a category.
 // Header doubles as navigation: clicking the category name opens the full
@@ -1032,41 +624,6 @@ templ SidebarDrillFragment(slug string) {
 	}
 }
 
-// activeDrillSlug returns the entity type slug whose drill panel should be
-// auto-opened for the current request, or "" if none. Always a top-level
-// category's slug — when the URL matches a sub-category (template-variant)
-// entity type, this resolves up to the parent so the sidebar highlights the
-// canonical Characters / Locations / etc. drill panel.
-//
-// Sub-categories are template variants (ADR: sub-cats-as-templates): they
-// live in the entity_types table for layout/template scoping but never
-// appear as their own sidebar items, so a variant slug must resolve up to
-// its parent or the drill has no matching top-level item to open.
-func activeDrillSlug(ctx context.Context) string {
-	types := GetEntityTypes(ctx)
-	for _, et := range types {
-		prefix := fmt.Sprintf("/campaigns/%s/%s", GetCampaignID(ctx), et.Slug)
-		if !isPathPrefix(ctx, prefix) {
-			continue
-		}
-		if et.ParentTypeID == nil {
-			return et.Slug
-		}
-		// Sub-cat: walk up to its parent and return the parent's slug.
-		// Linear scan is fine — entity_types per campaign is small.
-		for _, parent := range types {
-			if parent.ID == *et.ParentTypeID {
-				return parent.Slug
-			}
-		}
-		// Parent not found in the type list (data inconsistency): fall back
-		// to the variant's own slug so the drill at least opens, rather
-		// than silently dropping the highlight.
-		return et.Slug
-	}
-	return ""
-}
-
 // safeExternalURL re-applies the SafeLinkURL allowlist at render time so a
 // link row stored before the ingress guard existed can never render as
 // javascript:/data:/protocol-relative — defense-in-depth over templ.SafeURL,
@@ -1110,9 +667,14 @@ templ Topbar() {
 		<div class="flex items-center gap-2 shrink-0">
 			<!-- Mobile hamburger -->
 			<button
+				id="nav-toggle"
+				type="button"
 				@click="sidebarOpen = !sidebarOpen"
 				class="btn-ghost btn-icon -ml-1 md:hidden"
 				title="Toggle menu"
+				aria-label="Open navigation"
+				aria-controls="sidebar"
+				:aria-expanded="sidebarOpen ? 'true' : 'false'"
 			>
 				<i class="fa-solid fa-bars text-base"></i>
 			</button>

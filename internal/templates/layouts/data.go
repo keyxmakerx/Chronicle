@@ -321,16 +321,6 @@ func drillSearchURL(_ context.Context, campaignID string, typeID int) string {
 	return fmt.Sprintf("/campaigns/%s/entities/search?type=%d&sidebar=1", campaignID, typeID)
 }
 
-// getEntityTypeSlug looks up the slug for an entity type by ID from context.
-func getEntityTypeSlug(ctx context.Context, typeID int) string {
-	for _, et := range GetEntityTypes(ctx) {
-		if et.ID == typeID {
-			return et.Slug
-		}
-	}
-	return ""
-}
-
 // --- View As Player (owner preview toggle) ---
 
 // SetViewingAsPlayer marks whether the owner is currently in "view as player" mode.

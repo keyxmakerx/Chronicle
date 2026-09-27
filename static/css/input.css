@@ -2698,3 +2698,241 @@
 @media (prefers-reduced-motion: reduce) {
   .cta-bar { animation: none; }
 }
+
+/* ============================================================================
+ * Campaign sidebar (nav.templ, sidebar_nav.js)
+ * ----------------------------------------------------------------------------
+ * The signed design: Pinned at the top, then Apps, Categories and the owner's
+ * sections, each folding under its heading, with the living ring at Calm on
+ * the current row. The sidebar stays dark in both themes, as Chronicle's
+ * always has. Motion moves only transform and opacity (the ring's traces
+ * animate their dash, as ruled for it); nothing reveals content by moving a
+ * clip, and no box that holds text changes size mid-animation.
+ * ========================================================================== */
+@layer components {
+  .nav-sb {
+    --nav-bg: var(--color-sidebar-bg, #1a1c23);
+    --nav-hover: #262a33;
+    --nav-press: #15171d;
+    --nav-text: #cbd5e1;
+    --nav-text-2: #8b93a1;
+    --nav-text-3: #5f6776;
+    --nav-hi: #ffffff;
+    --nav-strong: #f3f4f6;
+    --nav-line: rgb(255 255 255 / 0.07);
+    --nav-focus: #a5b4fc;
+    --nav-accent: var(--color-accent-rgb, 99 102 241);
+    --nav-accent-soft: var(--color-accent-light, #a5b4fc);
+    --nav-ease: cubic-bezier(0.2, 0.8, 0.2, 1);
+    --nav-ease-out: cubic-bezier(0.16, 1, 0.3, 1);
+  }
+  .nav-sb :focus-visible { outline: 2px solid var(--nav-focus); outline-offset: -2px; }
+
+  /* Brand row: the campaign's logo and name, the owner's pencil and, on a
+     phone, close. 56px, the topbar's height, so their bottom edges line up. */
+  .nav-brand {
+    height: 56px; flex: none; display: flex; align-items: center; gap: 4px;
+    padding: 0 8px 0 14px; border-bottom: 1px solid var(--nav-line);
+  }
+  .nav-brand-link { flex: 1; min-width: 0; display: flex; align-items: center; gap: 9px; color: #fff; }
+  .nav-logo { width: 28px; height: 28px; border-radius: 8px; flex: none; object-fit: cover; }
+  .nav-logo-letter {
+    display: grid; place-items: center; font-size: 14px; font-weight: 800; color: #fff;
+    background: linear-gradient(140deg, rgb(var(--nav-accent) / 0.95), rgb(var(--nav-accent) / 0.5));
+    box-shadow: inset 0 1px 0 rgb(255 255 255 / 0.25);
+  }
+  .nav-brand-name { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 13.5px; font-weight: 700; }
+  .nav-ibtn {
+    width: 32px; height: 32px; flex: none; border-radius: 8px; display: grid; place-items: center;
+    color: var(--nav-text-2); transition: transform 120ms var(--nav-ease);
+  }
+  .nav-ibtn i { font-size: 13px; }
+  .nav-ibtn:hover { color: var(--nav-hi); background: var(--nav-hover); }
+  .nav-ibtn:active { transform: scale(0.9); }
+  .nav-ibtn[aria-pressed="true"] { color: #fff; background: rgb(var(--nav-accent)); }
+  .nav-ibtn-sm { width: 24px; height: 24px; border-radius: 6px; }
+  .nav-ibtn-sm i { font-size: 10px; }
+  .nav-unpinned { transform: rotate(45deg); opacity: 0.6; }
+  .nav-x-close { display: none; }
+
+  /* The one scrolling list. */
+  .nav-scroll {
+    position: relative; flex: 1; min-height: 0; overflow-x: hidden; overflow-y: auto; padding-bottom: 14px;
+    scrollbar-width: thin; scrollbar-color: rgb(255 255 255 / 0.14) transparent;
+  }
+  .nav-list { position: relative; padding-top: 6px; }
+
+  /* Rows. */
+  .nav-row {
+    position: relative; display: flex; align-items: center; gap: 10px; height: 32px; padding: 0 12px 0 14px;
+    color: var(--nav-text); font-size: 13.5px; white-space: nowrap; user-select: none; -webkit-user-select: none;
+    -webkit-tap-highlight-color: transparent;
+  }
+  .nav-ic {
+    width: 18px; height: 18px; flex: none; display: grid; place-items: center; font-size: 13px;
+    color: var(--nav-text-2); transition: transform 160ms var(--nav-ease);
+  }
+  .nav-lb { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+  .nav-tr {
+    flex: none; max-width: 48%; overflow: hidden; text-overflow: ellipsis; font-size: 11px;
+    color: var(--nav-text-3); font-variant-numeric: tabular-nums;
+  }
+  .nav-tr:empty { display: none; }
+  .nav-hid { flex: none; display: grid; place-items: center; font-size: 11px; color: #fbbf24; opacity: 0.85; }
+  .nav-ext { flex: none; font-size: 9px; color: var(--nav-text-3); }
+  .nav-dot { display: block; width: 6px; height: 6px; border-radius: 50%; }
+  /* Chronicle's approved hover glow, unchanged in effect: accent edges on the
+     right and bottom plus a wash from the right, faded in by opacity. */
+  .nav-row::before {
+    content: ""; position: absolute; inset: 0; pointer-events: none; opacity: 0; transition: opacity 180ms ease;
+    background:
+      linear-gradient(to top, rgb(var(--nav-accent) / 0.5) 0 2px, transparent 2px) no-repeat bottom right / 66% 2px,
+      linear-gradient(to left, rgb(var(--nav-accent) / 0.45) 0 2px, transparent 2px) no-repeat right center / 2px 100%,
+      linear-gradient(to bottom, rgb(var(--nav-accent) / 0.3) 0 2px, transparent 2px) no-repeat top right / 20% 2px,
+      linear-gradient(to left, rgb(var(--nav-accent) / 0.12), transparent 55%);
+  }
+  /* Pressed: a darker layer fades in so the row reads as pushed in. */
+  .nav-row::after {
+    content: ""; position: absolute; inset: 0; pointer-events: none; background: var(--nav-press);
+    opacity: 0; transition: opacity 90ms ease; mix-blend-mode: multiply;
+  }
+  .nav-row:hover { color: var(--nav-hi); }
+  .nav-row:hover::before { opacity: 1; }
+  .nav-row:hover .nav-ic { transform: translateX(1px); }
+  .nav-row:active { transform: translateY(1px); }
+  .nav-row:active::after { opacity: 0.9; }
+  .nav-row:active .nav-ic { transform: scale(0.88); }
+  .nav-row[aria-current="page"] { color: var(--nav-hi); }
+  .nav-row[aria-current="page"] .nav-ic { color: var(--nav-accent-soft); }
+  .nav-row[aria-current="page"] .nav-tr, .nav-tr.is-page { color: var(--nav-strong); font-weight: 600; }
+  .nav-row.is-hidden .nav-lb, .nav-row.is-hidden .nav-ic { opacity: 0.5; }
+
+  /* A category's sub-categories: their own rows under a twisty. */
+  .nav-rw { position: relative; }
+  .nav-rw > .nav-row { padding-right: 40px; }
+  .nav-row.nav-sub { padding-left: 44px; font-size: 12.5px; color: var(--nav-text-2); }
+  .nav-row.nav-sub .nav-ic { width: 10px; }
+  .nav-subs { position: relative; }
+  .nav-subs::before { content: ""; position: absolute; left: 23px; top: 0; bottom: 10px; width: 1px; background: var(--nav-line); }
+  .nav-tw {
+    position: absolute; top: 4px; right: 8px; z-index: 3; width: 24px; height: 24px; border-radius: 6px;
+    display: grid; place-items: center; color: var(--nav-text-3); transition: transform 120ms var(--nav-ease);
+  }
+  .nav-tw:hover { color: var(--nav-hi); background: var(--nav-hover); }
+  .nav-tw:active { transform: scale(0.88); }
+  .nav-tw i, .nav-chev { font-size: 10px; transition: transform 240ms var(--nav-ease); }
+  .nav-tw[aria-expanded="false"] i, .nav-gh[aria-expanded="false"] .nav-chev { transform: rotate(-90deg); }
+
+  /* Section headings: the whole heading is the fold button. */
+  .nav-gh-wrap { position: relative; margin-top: 8px; }
+  .nav-gh {
+    position: relative; width: 100%; height: 30px; margin-top: 8px; display: flex; align-items: center; gap: 8px;
+    padding: 0 10px 0 14px; text-align: left; white-space: nowrap;
+    font-size: 10.5px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: var(--nav-text-3);
+  }
+  button.nav-gh:hover { color: var(--nav-text); }
+  button.nav-gh:active .nav-gh-l { transform: translateY(1px); }
+  .nav-gh-l { display: flex; align-items: center; gap: 6px; min-width: 0; transition: transform 90ms ease; }
+  .nav-gh-l i { font-size: 9px; }
+  .nav-gh-n {
+    padding: 1px 6px; border-radius: 99px; background: rgb(255 255 255 / 0.06); color: var(--nav-text-2);
+    font-size: 10px; font-weight: 650; letter-spacing: 0; font-variant-numeric: tabular-nums;
+  }
+  .nav-gh .nav-chev { margin-left: auto; }
+  /* A folded heading names the current page when it is inside. */
+  .nav-gh-cur {
+    display: none; min-width: 0; overflow: hidden; text-overflow: ellipsis; text-transform: none; letter-spacing: 0;
+    font-size: 11.5px; font-weight: 600; color: var(--nav-accent-soft);
+  }
+  .nav-gh-cur::before {
+    content: ""; display: inline-block; width: 6px; height: 6px; margin-right: 6px; border-radius: 50%;
+    vertical-align: 1px; background: rgb(var(--nav-accent));
+  }
+  .nav-gh.has-cur[aria-expanded="false"] .nav-gh-cur { display: block; }
+  .nav-gh-wrap > .nav-gh { margin-top: 0; }
+  .nav-gh-add {
+    position: absolute; top: 4px; right: 30px; width: 22px; height: 22px; border-radius: 6px;
+    display: grid; place-items: center; font-size: 9px; color: var(--nav-text-3); transition: transform 120ms var(--nav-ease);
+  }
+  .nav-gh-add:hover { color: var(--nav-hi); background: var(--nav-hover); }
+  .nav-gh-add:active { transform: scale(0.88); }
+  .nav-gb { position: relative; }
+
+  /* While a section folds, the rows below it slide over the section's own
+     rows on the sidebar's colour, like a drawer closing over them. */
+  .nav-cover { position: relative; z-index: 2; background: var(--nav-bg); }
+
+  /* The living ring, at Calm. Rest shows nothing; the current row gets two
+     traces circling its box, drifting in length and pace on uneven 14s and
+     19s cycles. It sits on the rows' own box, square corners, like the glow. */
+  .nav-ring { position: absolute; inset: 0; z-index: 1; pointer-events: none; }
+  .nav-ring-tint {
+    position: absolute; inset: 0;
+    background: linear-gradient(to left, rgb(var(--nav-accent) / 0.17), rgb(var(--nav-accent) / 0.05));
+  }
+  .nav-ring-svg {
+    position: absolute; left: 1px; top: 1px; width: calc(100% - 2px); height: calc(100% - 2px);
+    overflow: visible; transition: opacity 160ms ease;
+  }
+  .nav-ring-svg rect { fill: none; stroke: rgb(var(--nav-accent)); stroke-width: 2; }
+  .nav-ring-t1 { stroke-dasharray: 12 88; animation: nav-ring-a 14s ease-in-out infinite; }
+  .nav-ring-t2 { stroke-dasharray: 10 90; stroke-dashoffset: -50; animation: nav-ring-b 19s ease-in-out infinite; opacity: 0.8; }
+  .nav-ring.is-gliding .nav-ring-svg { opacity: 0.45; }
+  /* The still twin (rail and tint), for reduced motion. */
+  .nav-ring-j {
+    display: none; position: absolute; left: 0; top: 3px; bottom: 3px; width: 3px;
+    border-radius: 0 3px 3px 0; background: rgb(var(--nav-accent));
+  }
+  .sidebar-reorg-active .nav-ring, .nav-editing .nav-ring { display: none; }
+  .nav-rm .nav-ring-svg { display: none; }
+  .nav-rm .nav-ring-j { display: block; }
+  @keyframes nav-ring-a {
+    0% { stroke-dasharray: 12 88; stroke-dashoffset: 0; }
+    18% { stroke-dasharray: 22 78; stroke-dashoffset: -30; }
+    34% { stroke-dasharray: 16 84; stroke-dashoffset: -19; }
+    55% { stroke-dasharray: 26 74; stroke-dashoffset: -62; }
+    70% { stroke-dasharray: 10 90; stroke-dashoffset: -55; }
+    100% { stroke-dasharray: 12 88; stroke-dashoffset: -100; }
+  }
+  @keyframes nav-ring-b {
+    0% { stroke-dasharray: 10 90; stroke-dashoffset: -50; }
+    22% { stroke-dasharray: 18 82; stroke-dashoffset: -38; }
+    45% { stroke-dasharray: 24 76; stroke-dashoffset: -70; }
+    63% { stroke-dasharray: 14 86; stroke-dashoffset: -66; }
+    80% { stroke-dasharray: 20 80; stroke-dashoffset: -120; }
+    100% { stroke-dasharray: 10 90; stroke-dashoffset: -150; }
+  }
+
+  /* Ways out of the campaign, at the foot of the sidebar. */
+  .nav-foot {
+    flex: none; display: flex; align-items: center; gap: 6px; height: 40px; padding: 0 8px 0 14px;
+    border-top: 1px solid var(--nav-line); font-size: 11.5px; color: var(--nav-text-3); white-space: nowrap;
+  }
+  .nav-foot a { color: var(--nav-text-2); }
+  .nav-foot a:hover { color: var(--nav-hi); }
+  .nav-foot-gap { flex: 1; }
+
+  /* Folded to icons (the unpinned sidebar when the pointer leaves it). */
+  .sidebar-collapsed .nav-brand { padding: 0; justify-content: center; }
+  .sidebar-collapsed .nav-brand-link { flex: none; }
+  .sidebar-collapsed .nav-brand-name, .sidebar-collapsed .nav-edit-btn, .sidebar-collapsed .nav-lb,
+  .sidebar-collapsed .nav-tr, .sidebar-collapsed .nav-hid, .sidebar-collapsed .nav-ext, .sidebar-collapsed .nav-gh-wrap,
+  .sidebar-collapsed .nav-gh, .sidebar-collapsed .nav-tw, .sidebar-collapsed .nav-subs, .sidebar-collapsed .nav-admin,
+  .sidebar-collapsed .nav-foot, .sidebar-collapsed #sidebar-sessions-rsvp { display: none; }
+  .sidebar-collapsed .nav-sb .nav-row, .nav-sb.sidebar-collapsed .nav-row { padding: 0; justify-content: center; }
+
+  /* Phone: today's slide-out drawer, with a close button. */
+  @media (max-width: 767px) {
+    .nav-sb { width: min(304px, calc(100vw - 48px)); }
+    .nav-x-close { display: grid; }
+    .nav-sb .sidebar-pin-btn { display: none; }
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  /* The still rail and tint instead of moving traces, and no press or hover
+     nudges; sidebar_nav.js swaps glides and folds for crossfades. */
+  .nav-ring-svg { display: none; }
+  .nav-ring-j { display: block; }
+  .nav-row:active, .nav-row:hover .nav-ic, .nav-row:active .nav-ic, .nav-ibtn:active, .nav-tw:active,
+  .nav-gh-add:active, button.nav-gh:active .nav-gh-l { transform: none; }
+}

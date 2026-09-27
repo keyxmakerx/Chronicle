@@ -25,12 +25,12 @@ func TestSafeExternalURL_Helper(t *testing.T) {
 	}
 }
 
-// TestSidebarNavRow_PoisonedURLRendersHash: a link row stored BEFORE the
-// ingress guard must still never render a javascript: href — it falls back to
-// "#". (ViewNav already drops such a link; this is the template's own guard.)
-func TestSidebarNavRow_PoisonedURLRendersHash(t *testing.T) {
+// TestNavRow_PoisonedURLRendersHash: a link row stored BEFORE the ingress
+// guard must still never render a javascript: href — it falls back to "#".
+// (ViewNav already drops such a link; this is the template's own guard.)
+func TestNavRow_PoisonedURLRendersHash(t *testing.T) {
 	var sb strings.Builder
-	if err := sidebarNavRow(NavRowView{Kind: "link", Label: "Evil", URL: "javascript:alert(document.cookie)"}).
+	if err := navRow(NavRowView{Kind: "link", Label: "Evil", URL: "javascript:alert(document.cookie)"}).
 		Render(context.Background(), &sb); err != nil {
 		t.Fatalf("render: %v", err)
 	}

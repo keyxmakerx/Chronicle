@@ -265,7 +265,7 @@
       return;
     }
     // Restore original sidebar content if no changes were made.
-    var catList = document.getElementById('sidebar-cat-list');
+    var catList = document.getElementById('sidebar-nav-list');
     if (catList) {
       Array.from(catList.children).forEach(function (child) {
         // Only unhide children that were visible before edit mode.
@@ -283,7 +283,7 @@
     // Remove existing panel if any.
     if (editPanel) editPanel.remove();
 
-    var catList = document.getElementById('sidebar-cat-list');
+    var catList = document.getElementById('sidebar-nav-list');
     if (!catList) return;
 
     editPanel = document.createElement('div');

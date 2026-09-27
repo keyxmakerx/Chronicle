@@ -265,24 +265,24 @@ func TestSidebarEmitsNavClassVocabulary(t *testing.T) {
 	}
 }
 
-// TestAllPagesLinkHighlightsOnEntitySubpath pins r2-3: the Entities/"All Pages"
-// link uses longest-prefix (isPathPrefix), so an entity detail page highlights
-// it on a hard server load, matching boot.js. It must stay inactive on an
-// unrelated page — the prefix must not over-highlight.
-func TestAllPagesLinkHighlightsOnEntitySubpath(t *testing.T) {
+// TestAllPagesRowIsCurrentOnEntitySubpath pins r2-3: All Pages matches by
+// prefix, so an entity page with no category hint still marks it current on a
+// hard server load; an unrelated page must not.
+func TestAllPagesRowIsCurrentOnEntitySubpath(t *testing.T) {
 	render := func(activePath string) string {
 		ctx := SetCampaignID(context.Background(), "camp1")
 		ctx = SetActivePath(ctx, activePath)
+		ctx = ResolveNavState(ctx)
 		var buf bytes.Buffer
-		if err := sidebarAllPagesLink(ctx).Render(ctx, &buf); err != nil {
-			t.Fatalf("render All Pages link: %v", err)
+		if err := navFixedRow("all", "All Pages", "fa-layer-group", "/campaigns/camp1/entities", "").Render(ctx, &buf); err != nil {
+			t.Fatalf("render All Pages row: %v", err)
 		}
 		return buf.String()
 	}
-	if got := render("/campaigns/camp1/entities/42"); !strings.Contains(got, sidebarNavActive) {
-		t.Errorf("All Pages link must be active on an entity detail sub-path (r2-3); got %q", got)
+	if got := render("/campaigns/camp1/entities/42"); !strings.Contains(got, `aria-current="page"`) {
+		t.Errorf("All Pages must be current on an entity detail sub-path (r2-3); got %q", got)
 	}
-	if got := render("/campaigns/camp1/members"); strings.Contains(got, sidebarNavActive) {
-		t.Errorf("All Pages link must be inactive off the entities tree; got %q", got)
+	if got := render("/campaigns/camp1/members"); strings.Contains(got, `aria-current`) {
+		t.Errorf("All Pages must not be current off the entities tree; got %q", got)
 	}
 }

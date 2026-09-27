@@ -221,3 +221,57 @@ func navShowsMe(ctx context.Context) bool {
 	role := GetCampaignRole(ctx)
 	return IsAuthenticated(ctx) && (role == 1 || (role >= 2 && IsViewingAsPlayer(ctx)))
 }
+
+// navSubFold is the fold id of a category's sub-category rows.
+func navSubFold(typeID int) string { return "sub-" + strconv.Itoa(typeID) }
+
+// navCount is a row's count as trailing text; zero shows nothing.
+func navCount(n int) string {
+	if n <= 0 {
+		return ""
+	}
+	return strconv.Itoa(n)
+}
+
+// navRowTrail is a row's own trailing text: a category's count, or an app's
+// caption.
+func navRowTrail(row NavRowView) string {
+	if row.Kind == "category" {
+		return navCount(row.Count)
+	}
+	return row.Caption
+}
+
+// navAllPagesCount is how many pages the viewer can open in All Pages: every
+// top-level category's count (each already includes its sub-categories),
+// whether or not the category has a row, since All Pages lists them all.
+func navAllPagesCount(ctx context.Context, _ []NavRowView) string {
+	counts := GetEntityCounts(ctx)
+	total := 0
+	for _, t := range GetEntityTypes(ctx) {
+		if t.ParentTypeID == nil {
+			total += counts[t.ID]
+		}
+	}
+	return navCount(total)
+}
+
+// navInitial is the letter on a campaign's logo tile when it has no logo.
+func navInitial(name string) string {
+	for _, r := range strings.TrimSpace(name) {
+		return strings.ToUpper(string(r))
+	}
+	return "?"
+}
+
+// navCurrentKey and navCurrentPage feed the marker App renders into
+// #main-content.
+func navCurrentKey(ctx context.Context) string {
+	key, _ := NavCurrent(ctx)
+	return key
+}
+
+func navCurrentPage(ctx context.Context) string {
+	_, page := NavCurrent(ctx)
+	return page
+}

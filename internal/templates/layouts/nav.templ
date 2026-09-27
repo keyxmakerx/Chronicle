@@ -1,0 +1,343 @@
+// nav.templ draws a campaign's sidebar: the brand row, then one scrolling
+// list of Dashboard, Pinned, Apps, Categories (with sub-category rows), the
+// owner's own sections and, for the owner, Manage. Every section but Pinned
+// folds under its heading. The rows arrive already cut down for the viewer
+// (GetNavSections); where the viewer is comes from nav_state.go.
+// sidebar_nav.js runs the folds, the living ring and the phone drawer.
+
+package layouts
+
+import "fmt"
+import "strconv"
+
+// campaignNavBrand is the sidebar's top row: the campaign's logo and name,
+// the owner's pencil and, on a phone, close.
+templ campaignNavBrand() {
+	<div class="nav-brand">
+		<a href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s", GetCampaignID(ctx))) } class="nav-brand-link">
+			if GetBrandLogo(ctx) != "" {
+				<img src={ MediaURL(ctx, GetBrandLogo(ctx)) } alt="" class="nav-logo"/>
+			} else {
+				<span class="nav-logo nav-logo-letter" aria-hidden="true">{ navInitial(GetDisplayName(ctx)) }</span>
+			}
+			<span class="nav-brand-name">{ GetDisplayName(ctx) }</span>
+		</a>
+		if GetCampaignRole(ctx) >= 3 {
+			<button
+				type="button"
+				class="nav-ibtn nav-edit-btn"
+				data-sidebar-edit-toggle
+				aria-pressed="false"
+				aria-label="Edit the sidebar"
+				title="Edit the sidebar"
+				@click="$dispatch('chronicle:toggle-sidebar-editor')"
+			>
+				<i class="fa-solid fa-pencil" aria-hidden="true"></i>
+			</button>
+		}
+		<button
+			type="button"
+			class="nav-ibtn nav-x-close"
+			aria-label="Close navigation"
+			@click="sidebarOpen = false; $nextTick(() => { const t = document.getElementById('nav-toggle'); if (t) t.focus() })"
+		>
+			<i class="fa-solid fa-xmark" aria-hidden="true"></i>
+		</button>
+	</div>
+}
+
+// campaignNavList is the one scrolling list. It is boosted, so moving between
+// campaign pages swaps only the page and the sidebar (and its ring) stays.
+templ campaignNavList() {
+	<nav
+		id="sidebar-nav"
+		class="nav-scroll"
+		aria-label="Campaign"
+		data-nav-base={ fmt.Sprintf("/campaigns/%s", GetCampaignID(ctx)) }
+		hx-boost="true"
+		hx-target="#main-content"
+		hx-select="#main-content"
+		hx-swap="innerHTML show:window:top"
+	>
+		<div class="nav-list" id="sidebar-nav-list">
+			@navFixedRow("dashboard", "Dashboard", "fa-house", fmt.Sprintf("/campaigns/%s", GetCampaignID(ctx)), "")
+			if navShowsMe(ctx) {
+				@navFixedRow("me", "My Characters", "fa-user-shield", fmt.Sprintf("/campaigns/%s/me", GetCampaignID(ctx)), "You")
+			}
+			for _, sec := range GetNavSections(ctx) {
+				@navSection(sec)
+			}
+			if GetCampaignRole(ctx) >= 3 {
+				@navManage()
+			}
+			if GetIsAdmin(ctx) {
+				<div class="nav-admin">
+					@AdminSidebarNav()
+				</div>
+			}
+		</div>
+		if GetCampaignRole(ctx) >= 3 {
+			<!-- The categories and campaign the sidebar editor works with. -->
+			<div data-sidebar-entity-types={ EntityTypesJSON(ctx) } data-campaign-id={ GetCampaignID(ctx) } hidden></div>
+		}
+	</nav>
+}
+
+// navSection draws one section. Pinned has a plain heading and is left out
+// when empty; the others fold. Categories always shows, since All Pages
+// lives there.
+templ navSection(sec NavSectionView) {
+	if sec.Kind == "pinned" {
+		if len(sec.Rows) > 0 {
+			<div class="nav-sec" data-nav-section={ sec.ID }>
+				<div class="nav-gh nav-gh-static">
+					<span class="nav-gh-l"><i class="fa-solid fa-thumbtack" aria-hidden="true"></i>{ sec.Label }</span>
+				</div>
+				<div class="nav-gb" id="nav-b-pinned">
+					for _, row := range sec.Rows {
+						@navItem(row)
+					}
+				</div>
+			</div>
+		}
+	} else if len(sec.Rows) > 0 || sec.Kind == "categories" {
+		<div class="nav-sec" data-nav-section={ sec.ID }>
+			<div class="nav-gh-wrap">
+				@navFoldHead(sec.ID, sec.Label, len(sec.Rows), NavSectionCurrent(ctx, sec.Rows))
+				if sec.Kind == "categories" && GetCampaignRole(ctx) >= 3 {
+					<button
+						type="button"
+						class="nav-gh-add"
+						title="Add category"
+						aria-label="Add category"
+						onclick="(function(){var el=document.getElementById('sidebar-create-category');if(!el)return;var open=el.style.display==='none';el.style.display=open?'':'none';if(open){var i=el.querySelector('input[type=text]');if(i)i.focus();}})()"
+					>
+						<i class="fa-solid fa-plus" aria-hidden="true"></i>
+					</button>
+				}
+			</div>
+			if sec.Kind == "categories" && GetCampaignRole(ctx) >= 3 {
+				@sidebarCreateCategory(ctx)
+			}
+			<div class="nav-gb" id={ "nav-b-" + sec.ID } hidden?={ !NavFoldOpen(ctx, sec.ID) }>
+				if sec.Kind == "categories" {
+					@navFixedRow("all", "All Pages", "fa-layer-group", fmt.Sprintf("/campaigns/%s/entities", GetCampaignID(ctx)), navAllPagesCount(ctx, sec.Rows))
+				}
+				for _, row := range sec.Rows {
+					@navItem(row)
+				}
+			</div>
+		</div>
+	}
+}
+
+// navFoldHead is a folding section's heading: the whole heading is the
+// button. While folded it names the current page when that page is inside.
+templ navFoldHead(id string, label string, count int, cur string) {
+	<button
+		type="button"
+		class={ "nav-gh", templ.KV("has-cur", cur != "") }
+		data-nav-fold={ id }
+		aria-expanded={ strconv.FormatBool(NavFoldOpen(ctx, id)) }
+		aria-controls={ "nav-b-" + id }
+	>
+		<span class="nav-gh-l">{ label }</span>
+		<span class="nav-gh-n">{ strconv.Itoa(count) }</span>
+		<span class="nav-gh-cur">{ cur }</span>
+		<i class="fa-solid fa-chevron-down nav-chev" aria-hidden="true"></i>
+	</button>
+}
+
+// navItem is a row, plus its sub-category rows under a twisty when it has any.
+templ navItem(row NavRowView) {
+	if len(row.Subs) > 0 {
+		<div class="nav-rw">
+			@navRow(row)
+			<button
+				type="button"
+				class="nav-tw"
+				data-nav-fold={ navSubFold(row.TypeID) }
+				aria-expanded={ strconv.FormatBool(NavFoldOpen(ctx, navSubFold(row.TypeID))) }
+				aria-controls={ "nav-b-" + navSubFold(row.TypeID) }
+				aria-label={ row.Label + " sub-categories" }
+			>
+				<i class="fa-solid fa-chevron-down" aria-hidden="true"></i>
+			</button>
+			<div class="nav-subs" id={ "nav-b-" + navSubFold(row.TypeID) } hidden?={ !NavFoldOpen(ctx, navSubFold(row.TypeID)) }>
+				for _, sub := range row.Subs {
+					@navSubRow(sub, row.Hidden)
+				}
+			</div>
+		</div>
+	} else {
+		@navRow(row)
+	}
+}
+
+// navRow is one app, category, link or Manage row. A row hidden from players
+// is only ever given to the owner, who sees it dimmed and marked.
+templ navRow(row NavRowView) {
+	if row.Kind == "link" {
+		<a
+			href={ safeExternalURL(row.URL) }
+			class={ "nav-row", templ.KV("is-hidden", row.Hidden) }
+			data-nav-key={ row.Key }
+			data-nav-tr=""
+			hx-boost="false"
+			if row.External {
+				target="_blank"
+				rel="noopener noreferrer"
+			}
+		>
+			@navRowInner(row)
+		</a>
+	} else {
+		<a
+			href={ templ.SafeURL(row.URL) }
+			class={ "nav-row", templ.KV("is-hidden", row.Hidden) }
+			data-nav-key={ row.Key }
+			data-nav-tr={ navRowTrail(row) }
+			if NavIsCurrent(ctx, row.Key) {
+				aria-current="page"
+			}
+		>
+			@navRowInner(row)
+		</a>
+	}
+}
+
+// navRowInner is the inside of a row: icon, label, trailing text, marks and,
+// on the current row, the living ring.
+templ navRowInner(row NavRowView) {
+	<span class="nav-ic">
+		if row.Icon != "" && row.Color != "" {
+			<i class={ "fa-solid " + row.Icon } style={ fmt.Sprintf("color: %s", row.Color) } aria-hidden="true"></i>
+		} else if row.Icon != "" {
+			<i class={ "fa-solid " + row.Icon } aria-hidden="true"></i>
+		} else if row.Kind == "category" {
+			<span class="nav-dot" style={ fmt.Sprintf("background-color: %s", row.Color) }></span>
+		} else {
+			<i class="fa-solid fa-link" aria-hidden="true"></i>
+		}
+	</span>
+	<span class="nav-lb">{ row.Label }</span>
+	@navTrail(row.Key, navRowTrail(row))
+	if row.External {
+		<i class="fa-solid fa-arrow-up-right-from-square nav-ext" aria-hidden="true"></i>
+	}
+	if row.Hidden {
+		<span class="nav-hid" title="Hidden from players">
+			<i class="fa-solid fa-eye-slash" aria-hidden="true"></i>
+			<span class="sr-only">(hidden from players)</span>
+		</span>
+	}
+	if NavHasRing(ctx, row.Key) {
+		@navRing()
+	}
+}
+
+// navSubRow is a sub-category's own row under its parent.
+templ navSubRow(sub NavSubRowView, parentHidden bool) {
+	<a
+		href={ templ.SafeURL(sub.URL) }
+		class={ "nav-row nav-sub", templ.KV("is-hidden", parentHidden) }
+		data-nav-key={ sub.Key }
+		data-nav-tr={ navCount(sub.Count) }
+		if NavIsCurrent(ctx, sub.Key) {
+			aria-current="page"
+		}
+	>
+		<span class="nav-ic"><span class="nav-dot" style={ fmt.Sprintf("background-color: %s", sub.Color) }></span></span>
+		<span class="nav-lb">{ sub.Label }</span>
+		@navTrail(sub.Key, navCount(sub.Count))
+		if NavHasRing(ctx, sub.Key) {
+			@navRing()
+		}
+	</a>
+}
+
+// navFixedRow is a row the sidebar always has: Dashboard, My Characters,
+// All Pages.
+templ navFixedRow(key string, label string, icon string, url string, trail string) {
+	<a
+		href={ templ.SafeURL(url) }
+		class="nav-row"
+		data-nav-key={ key }
+		data-nav-tr={ trail }
+		if NavIsCurrent(ctx, key) {
+			aria-current="page"
+		}
+	>
+		<span class="nav-ic"><i class={ "fa-solid " + icon } aria-hidden="true"></i></span>
+		<span class="nav-lb">{ label }</span>
+		@navTrail(key, trail)
+		if NavHasRing(ctx, key) {
+			@navRing()
+		}
+	</a>
+}
+
+// navTrail is a row's trailing text: the open page's own name on the current
+// row, otherwise the row's count or caption.
+templ navTrail(key string, fallback string) {
+	if cur, page := NavCurrent(ctx); cur == key && page != "" {
+		<span class="nav-tr is-page">{ page }</span>
+	} else if fallback != "" {
+		<span class="nav-tr">{ fallback }</span>
+	} else {
+		<span class="nav-tr"></span>
+	}
+}
+
+// navRing is the living ring at Calm: two traces circling the current row's
+// box, drifting in length and pace on uneven cycles; still rail and tint
+// under reduced motion. One per sidebar; sidebar_nav.js moves it.
+templ navRing() {
+	<span class="nav-ring" aria-hidden="true">
+		<span class="nav-ring-tint"></span>
+		<svg class="nav-ring-svg" focusable="false"><rect class="nav-ring-t1" width="100%" height="100%" pathLength="100"></rect><rect class="nav-ring-t2" width="100%" height="100%" pathLength="100"></rect></svg>
+		<span class="nav-ring-j"></span>
+	</span>
+}
+
+// navManage is the owner's Manage section, folded until opened.
+templ navManage() {
+	<div class="nav-sec" data-nav-section="manage">
+		@navFoldHead("manage", "Manage", len(NavManageRows(ctx)), NavSectionCurrent(ctx, NavManageRows(ctx)))
+		<div class="nav-gb" id="nav-b-manage" hidden?={ !NavFoldOpen(ctx, "manage") }>
+			for _, row := range NavManageRows(ctx) {
+				@navRow(row)
+			}
+		</div>
+	</div>
+}
+
+// campaignNavFooter keeps the ways out of the campaign (every campaign, and
+// the public Discover page) and the buttons that fold the sidebar to icons or
+// hide it, which would crowd the campaign's name in the brand row.
+templ campaignNavFooter() {
+	<div class="nav-foot">
+		<a href="/campaigns" hx-boost="false">All campaigns</a>
+		<span aria-hidden="true">·</span>
+		<a href="/" hx-boost="false">Discover</a>
+		<span class="nav-foot-gap"></span>
+		<button
+			type="button"
+			class="nav-ibtn nav-ibtn-sm sidebar-pin-btn"
+			@click.stop="pinned = !pinned; localStorage.setItem('chronicle-sidebar-pinned', pinned)"
+			:title="pinned ? 'Unpin sidebar' : 'Pin sidebar open'"
+			:aria-label="pinned ? 'Unpin sidebar' : 'Pin sidebar open'"
+		>
+			<i class="fa-solid fa-thumbtack" :class="{ 'nav-unpinned': !pinned }" aria-hidden="true"></i>
+		</button>
+		<button
+			type="button"
+			class="nav-ibtn nav-ibtn-sm sidebar-pin-btn"
+			@click.stop="sidebarHidden = true; localStorage.setItem('chronicle-sidebar-hidden', 'true')"
+			title="Hide sidebar"
+			aria-label="Hide sidebar"
+		>
+			<i class="fa-solid fa-angles-left" aria-hidden="true"></i>
+		</button>
+	</div>
+}

@@ -109,7 +109,11 @@ func NavCommandsJSON(ctx context.Context) string {
 	}
 	add("All Pages", base+"/entities", "fa-layer-group")
 	for _, row := range NavManageRows(ctx) {
-		add(row.Label, row.URL, row.Icon)
+		label := row.Label
+		if row.Key == "manage:dashboard" {
+			label = "Owner dashboard" // the campaign's own Dashboard is listed above
+		}
+		add(label, row.URL, row.Icon)
 	}
 	b, err := json.Marshal(out)
 	if err != nil || out == nil {
@@ -118,30 +122,24 @@ func NavCommandsJSON(ctx context.Context) string {
 	return string(b)
 }
 
-// NavManageRows are the campaign-management pages, in the order the sidebar
-// lists them: Members for any signed-in member, the rest for the owner only.
-// View-as-player hides the owner's rows, exactly as it hides every other
-// owner-only control.
+// NavManageRows are the owner's campaign-management pages, in the order the
+// sidebar lists them. Nobody else gets Manage, and neither does an owner
+// viewing as a player (GetCampaignRole is Player then).
 func NavManageRows(ctx context.Context) []NavRowView {
-	if !InCampaign(ctx) || !IsAuthenticated(ctx) {
+	if !InCampaign(ctx) || !IsAuthenticated(ctx) || GetCampaignRole(ctx) < 3 {
 		return nil
 	}
 	base := "/campaigns/" + GetCampaignID(ctx)
-	owner := GetCampaignRole(ctx) >= 3
-	var rows []NavRowView
-	if owner {
-		rows = append(rows, NavRowView{Key: "manage:dashboard", Label: "Dashboard", Icon: "fa-gauge", URL: base + "/dashboard"})
+	rows := []NavRowView{
+		{Key: "manage:dashboard", Label: "Dashboard", Icon: "fa-gauge", URL: base + "/dashboard"},
+		{Key: "manage:members", Label: "Members", Icon: "fa-users", URL: base + "/members"},
 	}
-	rows = append(rows, NavRowView{Key: "manage:members", Label: "Members", Icon: "fa-users", URL: base + "/members"})
-	if owner {
-		if IsAddonEnabled(ctx, "media-gallery") {
-			rows = append(rows, NavRowView{Key: "manage:media", Label: "Media", Icon: "fa-photo-film", URL: base + "/media"})
-		}
-		rows = append(rows,
-			NavRowView{Key: "manage:customize", Label: "Customize", Icon: "fa-paintbrush", URL: base + "/customize"},
-			NavRowView{Key: "manage:extensions", Label: "Extensions", Icon: "fa-puzzle-piece", URL: base + "/extensions"},
-			NavRowView{Key: "manage:settings", Label: "Settings", Icon: "fa-gear", URL: base + "/settings"},
-		)
+	if IsAddonEnabled(ctx, "media-gallery") {
+		rows = append(rows, NavRowView{Key: "manage:media", Label: "Media", Icon: "fa-photo-film", URL: base + "/media"})
 	}
-	return rows
+	return append(rows,
+		NavRowView{Key: "manage:customize", Label: "Customize", Icon: "fa-paintbrush", URL: base + "/customize"},
+		NavRowView{Key: "manage:extensions", Label: "Extensions", Icon: "fa-puzzle-piece", URL: base + "/extensions"},
+		NavRowView{Key: "manage:settings", Label: "Settings", Icon: "fa-gear", URL: base + "/settings"},
+	)
 }
