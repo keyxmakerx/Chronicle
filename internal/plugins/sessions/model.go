@@ -127,8 +127,11 @@ type Attendee struct {
 	RespondedAt *time.Time `json:"responded_at,omitempty"`
 	// Note is a short player-set note on their own RSVP. Nil means none —
 	// stored as SQL NULL, and an explicit empty-string write also clears it
-	// (see sessionRepository.SetAttendeeNote).
-	Note *string `json:"note,omitempty"`
+	// (see sessionRepository.SetAttendeeNote). json:"-": nothing serializes
+	// Attendee to JSON today (every read renders Templ/HTML); a future JSON
+	// endpoint must opt back in deliberately rather than hand every
+	// attendee's note to every viewer by default.
+	Note *string `json:"-"`
 	// ExcludedFromCount is the Director's own "leave myself out of the N/M
 	// tally" switch (operator answer #3). Only ever true on the row of the
 	// user who set it on themselves; excludes the row from both the

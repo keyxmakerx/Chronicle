@@ -2,6 +2,7 @@ package sessions
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"strings"
 	"testing"
@@ -1995,5 +1996,22 @@ func TestComputeNextOccurrence_UnknownRecurrenceType(t *testing.T) {
 	next := computeNextOccurrence(session)
 	if next != "" {
 		t.Errorf("expected empty string for unknown recurrence type, got %q", next)
+	}
+}
+
+// TestAttendee_NoteNeverSerializesToJSON pins Attendee.Note's json:"-" tag:
+// nothing in this codebase serializes Attendee to JSON today (every read
+// renders Templ/HTML), so this only guards against a future JSON endpoint
+// silently handing every attendee's private note to every viewer by
+// inheriting a stray json tag.
+func TestAttendee_NoteNeverSerializesToJSON(t *testing.T) {
+	note := "running 15 late"
+	a := Attendee{ID: 1, SessionID: "s1", UserID: "u1", Status: RSVPAccepted, Note: &note}
+	b, err := json.Marshal(a)
+	if err != nil {
+		t.Fatalf("marshal: %v", err)
+	}
+	if strings.Contains(string(b), "running 15 late") || strings.Contains(string(b), `"note"`) {
+		t.Errorf("Attendee.Note leaked into JSON output: %s", b)
 	}
 }
