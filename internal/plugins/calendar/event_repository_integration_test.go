@@ -370,7 +370,7 @@ func TestEventRepository_Integration(t *testing.T) {
 			t.Errorf("EntitiesForCalendar did not include the tied entity: %+v", calRefs)
 		}
 
-		eventTies, err := eventRepo.EventsForEntity(ctx, fix.CampaignID, entityID)
+		eventTies, err := eventRepo.EventsForEntity(ctx, fix.CampaignID, entityID, permissions.RoleOwner)
 		if err != nil {
 			t.Fatalf("EventsForEntity: %v", err)
 		}
@@ -542,7 +542,7 @@ func TestEventRepository_Integration(t *testing.T) {
 				t.Fatalf("LinkEntityEra: %v", err)
 			}
 
-			ties, err := eventRepo.EventsForEntity(ctx, fix.CampaignID, entityID)
+			ties, err := eventRepo.EventsForEntity(ctx, fix.CampaignID, entityID, permissions.RoleOwner)
 			if err != nil {
 				t.Fatalf("EventsForEntity(own campaign): %v", err)
 			}
@@ -556,7 +556,7 @@ func TestEventRepository_Integration(t *testing.T) {
 				t.Error("EventsForEntity(own campaign) should include the tied event")
 			}
 
-			ties, err = eventRepo.EventsForEntity(ctx, other.CampaignID, entityID)
+			ties, err = eventRepo.EventsForEntity(ctx, other.CampaignID, entityID, permissions.RoleOwner)
 			if err != nil {
 				t.Fatalf("EventsForEntity(other campaign): %v", err)
 			}
@@ -584,6 +584,40 @@ func TestEventRepository_Integration(t *testing.T) {
 			}
 			if len(eraTies) != 0 {
 				t.Errorf("ErasForEntity(wrong campaign) = %+v, want empty", eraTies)
+			}
+		})
+
+		t.Run("EventsForEntity hides a dm_only tied event from a player", func(t *testing.T) {
+			secret := newEvent(testUUID(t), "Secret Tie Event", 301, 1, 7)
+			secret.Visibility = "dm_only"
+			if err := eventRepo.CreateEvent(ctx, secret); err != nil {
+				t.Fatalf("CreateEvent: %v", err)
+			}
+			if err := eventRepo.LinkEntityEvent(ctx, entityID, secret.ID, string(RoleInvolved)); err != nil {
+				t.Fatalf("LinkEntityEvent: %v", err)
+			}
+			has := func(ties []EntityEventTie) bool {
+				for _, tie := range ties {
+					if tie.Event.ID == secret.ID {
+						return true
+					}
+				}
+				return false
+			}
+
+			asPlayer, err := eventRepo.EventsForEntity(ctx, fix.CampaignID, entityID, permissions.RolePlayer)
+			if err != nil {
+				t.Fatalf("EventsForEntity(player): %v", err)
+			}
+			if has(asPlayer) {
+				t.Error("EventsForEntity(player) surfaced a dm_only event")
+			}
+			asOwner, err := eventRepo.EventsForEntity(ctx, fix.CampaignID, entityID, permissions.RoleOwner)
+			if err != nil {
+				t.Fatalf("EventsForEntity(owner): %v", err)
+			}
+			if !has(asOwner) {
+				t.Error("EventsForEntity(owner) should include the dm_only event")
 			}
 		})
 	})

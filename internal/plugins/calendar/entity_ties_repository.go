@@ -269,18 +269,23 @@ func scanEntityTieRefs(rows *sql.Rows) ([]EntityTieRef, error) {
 }
 
 // EventsForEntity returns every event tied to an entity within campaignID
-// (with the tie role). campaignID is required because an entity id alone
-// carries no campaign to filter by; c.campaign_id comes from eventJoins,
-// which already joins calendars for its own display-field guard. Reuses
-// eventCols/eventJoins so the embedded Event carries the same display
-// fields the regular event lists do.
-func (r *eventRepo) EventsForEntity(ctx context.Context, campaignID, entityID string) ([]EntityEventTie, error) {
+// (with the tie role), role-filtered like every other event list so a
+// dm_only event never reaches a player through its tie. campaignID is
+// required because an entity id alone carries no campaign to filter by;
+// c.campaign_id comes from eventJoins, which already joins calendars for its
+// own display-field guard. Reuses eventCols/eventJoins so the embedded Event
+// carries the same display fields the regular event lists do.
+func (r *eventRepo) EventsForEntity(ctx context.Context, campaignID, entityID string, role int) ([]EntityEventTie, error) {
+	visFilter := " AND e.visibility = 'everyone'"
+	if permissions.CanSeeDmOnly(role) {
+		visFilter = ""
+	}
 	rows, err := r.db.QueryContext(ctx,
 		`SELECT `+eventCols+`, l.participation_role
 		 FROM entity_event_links l
 		 JOIN calendar_events e ON e.id = l.event_id
 		 `+eventJoins+`
-		 WHERE l.entity_id = ? AND c.campaign_id = ?
+		 WHERE l.entity_id = ? AND c.campaign_id = ?`+visFilter+`
 		 ORDER BY e.year, e.month, e.day, e.name`, entityID, campaignID)
 	if err != nil {
 		return nil, err

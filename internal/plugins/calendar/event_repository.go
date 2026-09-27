@@ -53,8 +53,9 @@ type EventRepository interface {
 	EntitiesForCalendar(ctx context.Context, calendarID string, role int, userID string) ([]EntityTieRef, error)
 	// EventsForEntity and ErasForEntity take campaignID explicitly: an entity
 	// id alone carries no campaign to filter by, and every tie must be
-	// confined to one campaign the same way EntitiesFor* are.
-	EventsForEntity(ctx context.Context, campaignID, entityID string) ([]EntityEventTie, error)
+	// confined to one campaign the same way EntitiesFor* are. EventsForEntity
+	// is role-filtered like the other event lists.
+	EventsForEntity(ctx context.Context, campaignID, entityID string, role int) ([]EntityEventTie, error)
 	ErasForEntity(ctx context.Context, campaignID, entityID string) ([]EntityEraTie, error)
 }
 
