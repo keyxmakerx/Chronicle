@@ -546,7 +546,21 @@ func TestCalendarService_Integration_CreateCalendarFromImport_EveryPreset(t *tes
 			if err != nil {
 				t.Fatalf("PreviewPreset(%q): %v", name, err)
 			}
-			cal, err := svc.CreateCalendarFromImport(ctx, fixture.CampaignID, ir, CreateCalendarFromImportOptions{})
+			// Three presets are Chronicle-native and fully specify their own
+			// current date (see presets/*.json). "elven" ships in Calendaria's
+			// own format (deliberately, per presets.go's doc comment — a
+			// preset IS an export, so it exercises a real importer), and
+			// Calendaria never carries a day-level date, only a year — so it
+			// needs the same explicit override an uploaded Calendaria file
+			// would, per the "never silently reset the current date" rule.
+			opts := CreateCalendarFromImportOptions{}
+			if ir.Today.Month == nil {
+				opts.CurrentMonth = intPtrForTest(1)
+			}
+			if ir.Today.Day == nil {
+				opts.CurrentDay = intPtrForTest(1)
+			}
+			cal, err := svc.CreateCalendarFromImport(ctx, fixture.CampaignID, ir, opts)
 			if err != nil {
 				t.Fatalf("CreateCalendarFromImport(%q): %v", name, err)
 			}
@@ -562,8 +576,6 @@ func TestCalendarService_Integration_CreateCalendarFromImport_EveryPreset(t *tes
 			if len(months) != len(ir.Months) {
 				t.Errorf("got %d months in the DB, want %d (from the preset)", len(months), len(ir.Months))
 			}
-			// Every preset fully specifies its own current date (see
-			// presets/*.json), so none of them should need an override.
 			got, err := calRepo.GetByID(ctx, cal.ID)
 			if err != nil {
 				t.Fatalf("GetByID: %v", err)
@@ -635,7 +647,7 @@ func TestCalendarService_Integration_CreateCalendarFromImport_ChronicleEventsRou
 	ctx := context.Background()
 
 	source := &Calendar{ID: testUUID(t), CampaignID: fixture.CampaignID, Mode: ModeFantasy, Name: "Source Calendar",
-		CurrentYear: 10, CurrentMonth: 2, CurrentDay: 5,
+		CurrentYear: 10, CurrentMonth: 1, CurrentDay: 5,
 		HoursPerDay: 24, MinutesPerHour: 60, SecondsPerMinute: 60, Visibility: "everyone"}
 	if err := calRepo.Create(ctx, source); err != nil {
 		t.Fatalf("seed source calendar: %v", err)
@@ -699,7 +711,13 @@ func TestCalendarService_Integration_CreateCalendarFromImport_ChronicleEventsRou
 	if got.KindID == nil || *got.KindID != kind.ID {
 		t.Errorf("re-imported event KindID = %v, want %d (resolved by slug %q in the target campaign)", got.KindID, kind.ID, kind.Slug)
 	}
-	if len(ir.Warnings) != 0 {
-		t.Errorf("expected no warnings when the kind slug resolves cleanly, got %v", ir.Warnings)
+	if got.Visibility != "dm_only" {
+		t.Errorf("re-imported event Visibility = %q, want dm_only (imported events fail closed regardless of the source's visibility, which the export format doesn't carry)", got.Visibility)
+	}
+	// The kind slug resolved cleanly (no per-event warning for that), but the
+	// fail-closed dm_only default for imported events still gets its one
+	// summary warning, regardless of how cleanly everything else resolved.
+	if len(ir.Warnings) != 1 || !strings.Contains(ir.Warnings[0], "Director-only") {
+		t.Errorf("expected exactly one Director-only-visibility warning, got %v", ir.Warnings)
 	}
 }
