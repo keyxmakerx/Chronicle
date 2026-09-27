@@ -281,19 +281,19 @@ templ dashPinnedPages(cc *CampaignContext, config map[string]any) {
 }
 
 // calendarCardUnavailable reports whether a calendar dashboard/category card
-// must skip its hx-get entirely rather than emit it: the calendar addon is
-// off for this campaign, or its plugin is degraded and its routes were
-// never registered (see calendar.PluginSlug's health gate around
-// calendar.RegisterRoutes in app/routes.go). Either way, hx-get-ing a
-// 403/404 into the "Loading..." shell leaves it stuck forever — HTMX
-// doesn't swap a non-2xx response — and any error body still pops a toast
-// for every viewer even though nothing is actually wrong for them. Read via
-// the request's Templ context (layouts.IsAddonEnabled/IsPluginHealthy)
-// rather than a new parameter threaded through every block signature,
-// mirroring how every other addon-gated conditional in this codebase's
-// templates already reads it (see internal/templates/layouts/app.templ).
+// must skip its hx-get entirely rather than emit it: hx-get-ing a 403/404
+// into the "Loading..." shell leaves it stuck forever — HTMX doesn't swap a
+// non-2xx response — and any error body still pops a toast for every viewer
+// even though nothing is actually wrong for them. The underlying reasons
+// (calendar addon off for this campaign, or its plugin degraded so its
+// routes were never registered) are calendar-plugin facts this package may
+// not name directly (plugin isolation, T-B2); internal/app/routes.go
+// resolves both into layouts.SetUpcomingEventsAvailable, one neutral flag
+// this reads back via the request's Templ context, the same way every
+// other addon-gated conditional in this codebase's templates reads layout
+// data (see internal/templates/layouts/app.templ).
 func calendarCardUnavailable(ctx context.Context) bool {
-	return !layouts.IsAddonEnabled(ctx, "calendar") || !layouts.IsPluginHealthy(ctx, "calendar")
+	return !layouts.UpcomingEventsAvailable(ctx)
 }
 
 // calendarCardUnavailableState is the quiet neutral state calendar cards

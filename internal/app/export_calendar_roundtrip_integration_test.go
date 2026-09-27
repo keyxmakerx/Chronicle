@@ -72,7 +72,12 @@ func TestCalendarCampaignExportImport_DBRoundTrip(t *testing.T) {
 	if testing.Short() {
 		t.Skip("integration test requires a database; skipped under -short")
 	}
-	db := openGalleryTestDB(t)
+	// openTimelineTestDB, not openGalleryTestDB: this round trip creates and
+	// reads real calendars, so it needs the calendar plugin's tables, which
+	// core migrations don't carry (openTimelineTestDB's own doc comment).
+	// Timeline's tables come along too, unused here, rather than factoring a
+	// third scratch-schema helper for calendar's alone.
+	db := openTimelineTestDB(t)
 	// t.Cleanup, not a bare defer: newCalRoundTripCampaign below registers its
 	// own t.Cleanup teardown (DELETE FROM campaigns/users), and t.Cleanup
 	// callbacks run in LIFO order strictly after the test function (and its
@@ -272,7 +277,10 @@ func TestCalendarCampaignExportImport_DmOnlyCalendarVisibilityDBRoundTrip(t *tes
 	if testing.Short() {
 		t.Skip("integration test requires a database; skipped under -short")
 	}
-	db := openGalleryTestDB(t)
+	// See TestCalendarCampaignExportImport_DBRoundTrip above: needs the
+	// calendar plugin's tables, which only openTimelineTestDB (not
+	// openGalleryTestDB's core-only migrations) applies.
+	db := openTimelineTestDB(t)
 	t.Cleanup(func() { db.Close() })
 	ctx := context.Background()
 

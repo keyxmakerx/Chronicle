@@ -209,7 +209,7 @@ func TestCampaignExportImport_CalendarRoundTrip(t *testing.T) {
 	if len(calData.Events) != 2 {
 		t.Fatalf("exported %d events, want 2", len(calData.Events))
 	}
-	if len(calData.Moons) != 1 || !calData.Moons[0].HiddenFromPlayers {
+	if len(calData.Moons) != 1 || calData.Moons[0].HiddenFromPlayers == nil || !*calData.Moons[0].HiddenFromPlayers {
 		t.Errorf("exported moon lost its HiddenFromPlayers flag: %+v", calData.Moons)
 	}
 	if len(calData.Eras) != 1 || calData.Eras[0].StartMonth != 1 || calData.Eras[0].StartDay != 1 {
@@ -438,4 +438,114 @@ func TestCalendarImportAdapter_PreV5CalendarDefaultsToDmOnly(t *testing.T) {
 	}
 }
 
+// TestCalendarImportAdapter_PreV5MoonDefaultsToHidden pins the
+// fail-toward-privacy default for ExportCalendarMoon.HiddenFromPlayers: a
+// backup taken before this field existed (whose JSON omits the key
+// entirely, unmarshaling to a nil pointer) must import that moon as hidden,
+// never visible — see importMoonHidden's doc comment. An explicit true or
+// false always passes through unchanged.
+func TestCalendarImportAdapter_PreV5MoonDefaultsToHidden(t *testing.T) {
+	tests := []struct {
+		name   string
+		hidden *bool
+		want   bool
+	}{
+		{"missing key (pre-V5 backup)", nil, true},
+		{"explicit false", boolPtr(false), false},
+		{"explicit true", boolPtr(true), true},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			dst := &fakeCalendarService{}
+			data := &campaigns.ExportCalendarData{
+				Name: "Legacy Calendar",
+				Moons: []campaigns.ExportCalendarMoon{
+					{Name: "Wandering Moon", CycleDays: 29.5, Color: "#ffffff", HiddenFromPlayers: tt.hidden},
+				},
+			}
+			report := campaigns.NewImportReport()
+			if err := (&calendarImportAdapter{svc: dst}).ImportCalendar(context.Background(), "c2", data, campaigns.NewIDMap("c2"), report); err != nil {
+				t.Fatalf("import calendar: %v", err)
+			}
+			if report.HasFailures() {
+				t.Fatalf("moon import reported failures: %s", report.Summary())
+			}
+			if len(dst.moons) != 1 {
+				t.Fatalf("got %d moons, want 1", len(dst.moons))
+			}
+			if dst.moons[0].HiddenFromPlayers != tt.want {
+				t.Errorf("HiddenFromPlayers = %v, want %v", dst.moons[0].HiddenFromPlayers, tt.want)
+			}
+		})
+	}
+}
+
+// TestCalendarExportImport_MoonHiddenFlagRoundTrip is the regression for
+// "restoring an older campaign backup un-hides a moon the GM hid": a fresh
+// export must always write an explicit true/false for every moon (never the
+// omitted-key shape a pre-V5 backup has), and both a hidden and a visible
+// moon must come back exactly as they went in, through a real JSON round
+// trip — not just collapse to whichever value the zero-value default gives.
+func TestCalendarExportImport_MoonHiddenFlagRoundTrip(t *testing.T) {
+	src := &fakeCalendarService{
+		cal: &calendar.Calendar{
+			ID: "cal-1", CampaignID: "c1", Mode: calendar.ModeFantasy,
+			Name: "Two Moons", HoursPerDay: 24, MinutesPerHour: 60, SecondsPerMinute: 60,
+			Moons: []calendar.Moon{
+				{ID: 1, Name: "Secret Moon", CycleDays: 29.5, Color: "#ffffff", HiddenFromPlayers: true},
+				{ID: 2, Name: "Common Moon", CycleDays: 14.0, Color: "#cccccc", HiddenFromPlayers: false},
+			},
+		},
+	}
+
+	exportAdapter := &calendarExportAdapter{svc: src}
+	calData, err := exportAdapter.ExportCalendar(context.Background(), "c1", func(string) string { return "" })
+	if err != nil {
+		t.Fatalf("export: %v", err)
+	}
+	if len(calData.Moons) != 2 {
+		t.Fatalf("exported %d moons, want 2", len(calData.Moons))
+	}
+	for _, m := range calData.Moons {
+		if m.HiddenFromPlayers == nil {
+			t.Errorf("exported moon %q has a nil HiddenFromPlayers — a fresh export must always write true/false", m.Name)
+		}
+	}
+
+	// Round-trip through JSON, exactly like a real backup file.
+	env := &campaigns.CampaignExport{Format: campaigns.ExportFormat, Version: campaigns.ExportVersion, Calendar: calData}
+	raw, err := json.Marshal(env)
+	if err != nil {
+		t.Fatalf("marshal envelope: %v", err)
+	}
+	var reloaded campaigns.CampaignExport
+	if err := json.Unmarshal(raw, &reloaded); err != nil {
+		t.Fatalf("unmarshal envelope: %v", err)
+	}
+
+	dst := &fakeCalendarService{}
+	report := campaigns.NewImportReport()
+	if err := (&calendarImportAdapter{svc: dst}).ImportCalendar(context.Background(), "imported-campaign", reloaded.Calendar, campaigns.NewIDMap("imported-campaign"), report); err != nil {
+		t.Fatalf("import calendar: %v", err)
+	}
+	if report.HasFailures() {
+		t.Fatalf("clean moon import reported failures: %s", report.Summary())
+	}
+	if len(dst.moons) != 2 {
+		t.Fatalf("imported %d moons, want 2", len(dst.moons))
+	}
+	want := map[string]bool{"Secret Moon": true, "Common Moon": false}
+	for _, m := range dst.moons {
+		wantHidden, ok := want[m.Name]
+		if !ok {
+			t.Fatalf("unexpected imported moon %q", m.Name)
+		}
+		if m.HiddenFromPlayers != wantHidden {
+			t.Errorf("moon %q imported HiddenFromPlayers = %v, want %v", m.Name, m.HiddenFromPlayers, wantHidden)
+		}
+	}
+}
+
 func intPtr(i int) *int { return &i }
+
+func boolPtr(b bool) *bool { return &b }

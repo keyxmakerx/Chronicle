@@ -186,13 +186,19 @@ type ExportCalendarWeekday struct {
 // would mean an imported campaign always shows a previously GM-only moon to
 // players, quietly reversing a secrecy choice the Director made — the same
 // class of mistake CLAUDE.md's partial-update warning names ("a rename push
-// once bound is_private=false and published a hidden character").
+// once bound is_private=false and published a hidden character"). It is a
+// *bool, not bool, so a backup taken before this field existed (which omits
+// the key entirely) can be told apart from one that explicitly recorded
+// "visible": the exporter always writes a non-nil true/false, and a nil read
+// back on import means "unknown, from an old backup" — see
+// calendarImportAdapter.ImportCalendar, which fails that case closed
+// (treats it as hidden), mirroring importCalendarVisibility's reasoning.
 type ExportCalendarMoon struct {
 	Name              string  `json:"name"`
 	CycleDays         float64 `json:"cycle_days"`
 	PhaseOffset       float64 `json:"phase_offset"`
 	Color             string  `json:"color"`
-	HiddenFromPlayers bool    `json:"hidden_from_players,omitempty"`
+	HiddenFromPlayers *bool   `json:"hidden_from_players"`
 }
 
 // ExportCalendarSeason is a season definition for export.

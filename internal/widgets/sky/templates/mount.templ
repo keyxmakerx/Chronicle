@@ -56,9 +56,11 @@ templ Mount(campaignID string, calendarID string) {
 // into one NotFound in the first place: telling a Player "there is a
 // calendar, you just can't see it" would itself leak that a hidden
 // calendar exists. So this message must read sensibly for both cases, and
-// must not promise a specific settings UI — no calendar-settings page for
-// choosing a default calendar exists yet (calendar-v5's page UI is still
-// pending; see calendarRebuildNotice in internal/app/routes.go).
+// must not name a specific place to go fix it: an Owner without a default
+// calendar sets one from the campaign's Calendars page
+// (GET /campaigns/:id/calendars — calendars_list.templ's "Set as the
+// campaign's main calendar" menu item), but a Player reading this same
+// copy has no such option and must not be pointed at owner-only settings.
 templ Empty(campaignID string) {
 	<div class="skypane skypane-empty" data-campaign-id={ campaignID }>
 		<div class="skypane-bar">
@@ -70,10 +72,14 @@ templ Empty(campaignID string) {
 	</div>
 }
 
-// mountID is exported for callers (Part A's calendar page) that want to
-// build the same "sky-pane-<calendarID>" id this package uses internally,
-// e.g. to point a REPLACEMENT chip's aria-controls at an existing mount
-// without re-deriving the format by hand.
+// MountID builds the same "sky-pane-<calendarID>" id Mount uses for its own
+// mount point's id/aria-controls pair. Exported for a future caller that
+// wants to point its own control at an EXISTING sky-pane mount without
+// re-deriving the format by hand. The calendar's own page
+// (internal/plugins/calendar/view.templ) does not mount this widget — it
+// paints its own separate, simplified sky context instead (TODO(#741)) — so
+// today Mount itself, via routes.go's "skybox" dashboard/entity block, is
+// MountID's only caller.
 func MountID(calendarID string) string {
 	return fmt.Sprintf("sky-pane-%s", calendarID)
 }

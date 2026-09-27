@@ -3737,10 +3737,18 @@ func (a *App) RegisterRoutes() {
 			// Only calendar is populated today; a block for another
 			// health-gated plugin can add its slug here when it needs the
 			// same guard.
+			calendarHealthy := a.PluginHealth == nil || a.PluginHealth.IsHealthy(calendar.PluginSlug)
 			healthyPlugins := map[string]bool{
-				calendar.PluginSlug: a.PluginHealth == nil || a.PluginHealth.IsHealthy(calendar.PluginSlug),
+				calendar.PluginSlug: calendarHealthy,
 			}
 			ctx = layouts.SetHealthyPlugins(ctx, healthyPlugins)
+
+			// The campaign/category "Upcoming Events" cards need both facts
+			// above (addon on AND plugin healthy) combined into one flag,
+			// but campaigns/entities may not name the calendar plugin
+			// themselves (plugin isolation, T-B2) to compute it — resolve it
+			// here, where calendar.PluginSlug is already in scope.
+			ctx = layouts.SetUpcomingEventsAvailable(ctx, enabledSlugs[calendar.PluginSlug] && calendarHealthy)
 
 			// Extension widget scripts for campaign pages.
 			if widgetURLs := extHandler.GetWidgetScriptURLs(reqCtx, cc.Campaign.ID); len(widgetURLs) > 0 {

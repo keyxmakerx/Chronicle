@@ -296,12 +296,12 @@ func catRelativeTime(t time.Time) string {
 // catCalendarUnavailable mirrors campaigns.dashboard_blocks.templ's
 // calendarCardUnavailable (unexported there, so duplicated here rather than
 // reached across the plugin boundary — see that doc comment for the full
-// reasoning): true when the calendar addon is off for this campaign, or its
-// plugin is degraded and its routes were never registered, either of which
-// would leave an hx-get to /calendars/upcoming 403/404ing into a permanent
-// "Loading..." shell with no swap.
+// reasoning): true when an hx-get to /calendars/upcoming would 403/404 into
+// a permanent "Loading..." shell with no swap. This package may not name
+// the calendar plugin to work that out itself (plugin isolation, T-B2), so
+// it reads the same neutral flag internal/app/routes.go already resolved.
 func catCalendarUnavailable(ctx context.Context) bool {
-	return !layouts.IsAddonEnabled(ctx, "calendar") || !layouts.IsPluginHealthy(ctx, "calendar")
+	return !layouts.UpcomingEventsAvailable(ctx)
 }
 
 // catCalendarUnavailableState is the quiet neutral state shown instead of

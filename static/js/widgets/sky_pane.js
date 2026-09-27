@@ -314,9 +314,11 @@
   // rest of the app in both themes without a second palette to maintain.
   // .dsky/.dscrub/.dwx/.dcard (the day-card weather band + its grow
   // interaction) are ported here too, at the CSS layer only, ahead of need:
-  // Part A's calendar page (the day grid) doesn't exist in this branch yet,
-  // so nothing here uses them, but they're ready the moment it does — see
-  // internal/widgets/sky/.ai.md's "Integrating into the calendar page".
+  // the calendar page's day grid (internal/plugins/calendar/view.templ)
+  // exists now but does not mount this widget or use these rules — it
+  // paints its own separate, simplified sky context instead (TODO(#741));
+  // see internal/widgets/sky/.ai.md's "Integrating into the calendar page"
+  // for what wiring them in would take.
   //
   // Declared BEFORE Chronicle.register below, not after: every script here
   // loads with `defer`, and a deferred script executes once the document is
@@ -339,9 +341,10 @@
     // container-name "cal" reuses the design contract's own container name
     // (.cal in sky-widget.css) so the phone rule below matches whether this
     // pane sits standalone (a dashboard/entity block, establishing its own
-    // container) or, later, nested inside Part A's real .cal calendar card
-    // (which then becomes the nearest match instead — either way `cqw`
-    // below resolves against a real size container, never falling back to 0).
+    // container) or, if a future caller nests it inside a real .cal
+    // calendar card, that becomes the nearest match instead — either way
+    // `cqw` below resolves against a real size container, never falling
+    // back to 0.
     '.skypane{display:block;border-radius:12px;overflow:hidden;background:var(--color-card-bg);box-shadow:var(--elev-resting);container-type:inline-size;container-name:cal;}',
     '.skypane-bar{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:8px 12px;}',
     '.skypane-title{font:600 12px/1 var(--font-serif,inherit);color:var(--color-text-primary);}',
@@ -360,7 +363,9 @@
     '.skycap{position:absolute;left:8px;bottom:6px;margin:0;font-size:11px;line-height:1.3;color:#f2f4fa;text-shadow:0 1px 2px rgba(0,0,0,.55);pointer-events:none;}',
     '@container cal (max-width:600px){.skywrap{--skyH:clamp(100px,14cqw,166px);}}',
     '@media (max-width:600px){.skywrap{--skyH:clamp(100px,14cqw,166px);}}',
-    /* ── Day card (ready for Part A; unused until the day grid exists). ── */
+    /* ── Day card: ready to wire in, but unused — the calendar page's day
+       grid paints its own sky context instead of mounting this widget
+       (TODO(#741)). ── */
     '.dcard{position:relative;width:100%;max-width:340px;}',
     '.dsky{position:relative;height:80px;cursor:pointer;border:0;padding:0;display:block;width:100%;background:none;}',
     '.dsky canvas{position:absolute;left:0;top:0;width:100%;height:100%;display:block;}',
