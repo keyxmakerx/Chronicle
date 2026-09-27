@@ -6,9 +6,9 @@
 // at the cost of re-sending the shell's chrome on every step; that chrome is
 // a few hundred bytes, not a real cost at this scale.
 //
-// Out of scope for this wizard (see the Part B PR description for the full
-// list): the "Generate one" procedural tile, "Give it a past", and the full
-// structure editor — none of those exist anywhere in this codebase.
+// Out of scope for this wizard: the "Generate one" procedural tile, "Give it
+// a past", and the full structure editor — none of those exist anywhere in
+// this codebase.
 package calendar
 
 import (
@@ -144,6 +144,8 @@ templ wizardImportBody(campaignID, csrfToken, formError string) {
 		hx-target="#calv5-wizard-root"
 		hx-swap="outerHTML"
 		hx-encoding="multipart/form-data"
+		hx-disabled-elt="#calv5-import-submit"
+		hx-indicator="#calv5-import-spinner"
 	>
 		<input type="hidden" name="csrf_token" value={ csrfToken }/>
 		<div
@@ -182,7 +184,8 @@ templ wizardImportBody(campaignID, csrfToken, formError string) {
 				<i class="fa-solid fa-arrow-left"></i> Back
 			</button>
 			<span class="sp" style="flex:1"></span>
-			<button type="submit" class="btn primary">Continue</button>
+			<i id="calv5-import-spinner" class="fa-solid fa-spinner fa-spin htmx-indicator" aria-hidden="true"></i>
+			<button id="calv5-import-submit" type="submit" class="btn primary">Continue</button>
 		</div>
 	</form>
 }
@@ -226,6 +229,8 @@ templ wizardReviewBody(campaignID, source, presetName, importJSON, csrfToken, ba
 		hx-target="#calv5-wizard-root"
 		hx-swap="outerHTML"
 		hx-encoding="multipart/form-data"
+		hx-disabled-elt="#calv5-review-submit"
+		hx-indicator="#calv5-review-spinner"
 		x-data={ fmt.Sprintf("{m:%s,d:%s,md:%s}", jsIntOrEmpty(ir.Today.Month), jsIntOrEmpty(ir.Today.Day), jsMonthDayCounts(ir.Months)) }
 	>
 		<input type="hidden" name="csrf_token" value={ csrfToken }/>
@@ -300,7 +305,8 @@ templ wizardReviewBody(campaignID, source, presetName, importJSON, csrfToken, ba
 				<i class="fa-solid fa-arrow-left"></i> Back
 			</button>
 			<span class="sp" style="flex:1"></span>
-			<button type="submit" class="btn primary" x-bind:disabled="!m || !d">
+			<i id="calv5-review-spinner" class="fa-solid fa-spinner fa-spin htmx-indicator" aria-hidden="true"></i>
+			<button id="calv5-review-submit" type="submit" class="btn primary" x-bind:disabled="!m || !d">
 				<i class="fa-solid fa-check"></i> Create calendar
 			</button>
 		</div>
