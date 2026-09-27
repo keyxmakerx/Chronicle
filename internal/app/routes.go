@@ -2548,12 +2548,18 @@ func (a *App) RegisterRoutes() {
 	// both paths deliver the same scripts; each re-inits on
 	// htmx:afterSettle/htmx:load and no-ops when its mount is absent.
 	//
-	// CALV5-PLACEHOLDER: V5 must restore five calendar scripts loaded on
-	// every page from here — calendar_widget.js, cal_visibility.js,
-	// calendar_permissions.js, calendar_daycard.js and calendar_theater.js.
-	// Their files are deleted; leaving the paths would 404 on every page.
+	// CALV5-PLACEHOLDER: the V4 calendar loaded five scripts from here —
+	// calendar_widget.js, cal_visibility.js, calendar_permissions.js,
+	// calendar_daycard.js and calendar_theater.js — all since deleted. V5
+	// part A (#741) restores the surface with two new scripts instead:
+	// calendar_view.js (mounts on data-widget="calendar_view", the
+	// calendar's own page) and calendar_editor.js (self-gates on that
+	// mount's data-can-edit="true" — see its own file header). Both are
+	// harmless no-ops on every other page, same as every entry here.
 	pluginBodyScripts := []string{
 		"/static/plugins/" + entities.PluginSlug + "/js/characters.js",
+		"/static/js/widgets/calendar_view.js",
+		"/static/js/widgets/calendar_editor.js",
 	}
 
 	// CALV5-PLACEHOLDER: keeps the route the sidebar, campaign dashboard and

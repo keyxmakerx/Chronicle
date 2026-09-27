@@ -1,0 +1,1401 @@
+/* Calendar V5 part A — ported from the two operator-signed mockups (#741):
+ * the calendar page mockup (month grid, day/era fold-out cards, event
+ * icons/glance/detail, moons) and the owner-editing mockup (edit mode,
+ * bulk bar, event kinds, new-kind-in-place). The two mockups' CSS is ~90%
+ * identical; this file reconciles them (the editing mockup is the later,
+ * more complete iteration, so it wins conflicts) and keeps every class name
+ * recognizable against either mockup for future diffs.
+ *
+ * Everything below is scoped under .cal-v5 (the widget's mount class) as a
+ * descendant combinator, because the mockup's own class names are short and
+ * generic (.btn, .chip, .row, .x, .i, .check, .err, ...) and collide with
+ * app.css's own component classes (.btn, .btn-primary, .input, ...) if
+ * loaded unscoped — app.css's classes live in `@layer components`, and an
+ * unlayered stylesheet like this one always wins the cascade over any
+ * layered one regardless of specificity, so an unscoped .btn here would
+ * silently repaint every other .btn on the page. :root/:root[data-theme]
+ * blocks are left unscoped (global custom properties only, no visual
+ * side effect elsewhere). Every @keyframes name is prefixed cal5- (and every
+ * animation/animation-name reference updated to match) so a future sheet
+ * using a common name like fadeIn can never shadow this one's.
+ *
+ * Left out of the mockups' own CSS deliberately (documented in the plugin's
+ * .ai.md "Honest gaps" section): the weather click-and-drag painting UI and
+ * the recipe-sheet generator UI ship no client, since neither has a
+ * server-side generate/write endpoint yet (issue #765 and the missing
+ * generators.js respectively) — their classes are still included since they
+ * are inert without matching markup, so a later PR can wire them up without
+ * re-porting this file.
+ */
+/* Tokens: ink and paper do the work; the only colour is the era/season field. */
+:root{
+  color-scheme:light;
+  --spring:cubic-bezier(.34,1.3,.4,1);
+  --ease:cubic-bezier(.22,.8,.24,1);
+  --sweep:cubic-bezier(.3,.1,.3,1);
+  --sans:ui-sans-serif,system-ui,-apple-system,"Segoe UI",Roboto,"Helvetica Neue","Liberation Sans",Arial,sans-serif;
+  --serif:"Iowan Old Style","Palatino Linotype",Palatino,"Book Antiqua",Charter,"Bitstream Charter",Georgia,"Liberation Serif",serif;
+  --page:oklch(.968 .004 85);
+  --ink:oklch(.24 .012 265);
+  --ink2:oklch(.40 .012 265);
+  --mut:oklch(.52 .012 265);
+  --hair:oklch(.24 .02 265 / .09);
+  --hair2:oklch(.24 .02 265 / .05);
+  --paper:oklch(.993 .003 90);
+  --paper2:oklch(.978 .005 85);
+  --edge:oklch(.24 .02 265 / .13);
+  --lift:oklch(1 0 0 / .5);
+  --crease:oklch(.24 .03 265 / .10);
+  --scrim:oklch(.2 .02 265 / .22);
+  --shadow-s:0 1px 2px oklch(.2 .02 265 / .07),0 8px 24px -10px oklch(.2 .02 265 / .18);
+  --shadow-l:0 2px 6px oklch(.2 .02 265 / .07),0 24px 52px -16px oklch(.2 .03 265 / .30);
+  --fL:.958; --fC:.021; --rL:.80; --rC:.11; --pageField:oklch(.972 .003 85);
+  --mkL:.62; --mkC:.08; --icL:.52; --icC:.1;
+  --light:oklch(1 0 0 / .45); --sheen:oklch(1 0 0 / .42); --grainOp:.05; --grainBlend:multiply;
+  --night:oklch(.32 .05 270 / .16); --dawn:oklch(.86 .07 55 / .30);
+  /* Moons: the grid's silhouette is ink; a blood moon is red; realistic moons get a hairline so a pale limb holds on paper. */
+  --silB:oklch(.44 .016 265); --silS:oklch(.3 .02 265 / .55); --silL:oklch(.985 .004 90);
+  --bldB:oklch(.4 .11 25); --bldS:oklch(.42 .15 25 / .75); --bldL:oklch(.6 .21 26); --bldT:oklch(.5 .17 25);
+  --arcT:oklch(.5 .15 295); --arcS:oklch(.6 .14 295 / .55); --tsB:.46; --tsS:.4; --tsL:.97; --mring:oklch(.24 .02 265 / .14);
+  --eclT:oklch(.46 .07 50); --eclS:oklch(.5 .07 50 / .5); --hvtT:oklch(.52 .12 75); --hvtS:oklch(.66 .13 78 / .6);
+  --gold:oklch(.50 .10 75); --goldBg:oklch(.86 .085 85 / .4); --goldRing:oklch(.62 .10 80 / .5);
+}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){color-scheme:dark;
+    --page:oklch(.16 .008 265); --ink:oklch(.94 .006 265); --ink2:oklch(.82 .008 265); --mut:oklch(.68 .01 265);
+    --hair:oklch(.94 .01 265 / .085); --hair2:oklch(.94 .01 265 / .05);
+    --paper:oklch(.27 .01 265); --paper2:oklch(.235 .01 265); --edge:oklch(.94 .01 265 / .12);
+    --lift:oklch(1 0 0 / .035); --crease:oklch(0 0 0 / .32); --scrim:oklch(0 0 0 / .45);
+    --shadow-s:0 1px 2px oklch(0 0 0 / .4),0 10px 26px -10px oklch(0 0 0 / .6);
+    --shadow-l:0 2px 8px oklch(0 0 0 / .35),0 26px 56px -16px oklch(0 0 0 / .72);
+    --fL:.245; --fC:.032; --rL:.40; --rC:.10; --pageField:oklch(.19 .008 265);
+    --mkL:.74; --mkC:.075; --icL:.8; --icC:.085;
+    --light:oklch(1 0 0 / .035); --sheen:oklch(1 0 0 / .05); --grainOp:.06; --grainBlend:screen;
+    --night:oklch(.08 .03 270 / .40); --dawn:oklch(.55 .08 50 / .16);
+    --silB:oklch(.31 .012 265); --silS:oklch(.94 .01 265 / .34); --silL:oklch(.93 .008 265);
+    --bldB:oklch(.34 .1 25); --bldS:oklch(.66 .19 25 / .7); --bldL:oklch(.66 .2 26); --bldT:oklch(.72 .16 25);
+    --arcT:oklch(.8 .12 295); --arcS:oklch(.7 .13 295 / .5); --tsB:.34; --tsS:.8; --tsL:.93; --mring:oklch(.94 .01 265 / .12);
+    --eclT:oklch(.76 .07 52); --eclS:oklch(.68 .07 52 / .5); --hvtT:oklch(.84 .12 80); --hvtS:oklch(.76 .12 80 / .5);
+    --gold:oklch(.84 .10 85); --goldBg:oklch(.70 .10 85 / .15); --goldRing:oklch(.78 .10 85 / .38);}
+
+}
+:root[data-theme="dark"]{color-scheme:dark;
+  --page:oklch(.16 .008 265); --ink:oklch(.94 .006 265); --ink2:oklch(.82 .008 265); --mut:oklch(.68 .01 265);
+  --hair:oklch(.94 .01 265 / .085); --hair2:oklch(.94 .01 265 / .05);
+  --paper:oklch(.27 .01 265); --paper2:oklch(.235 .01 265); --edge:oklch(.94 .01 265 / .12);
+  --lift:oklch(1 0 0 / .035); --crease:oklch(0 0 0 / .32); --scrim:oklch(0 0 0 / .45);
+  --shadow-s:0 1px 2px oklch(0 0 0 / .4),0 10px 26px -10px oklch(0 0 0 / .6);
+  --shadow-l:0 2px 8px oklch(0 0 0 / .35),0 26px 56px -16px oklch(0 0 0 / .72);
+  --fL:.245; --fC:.032; --rL:.40; --rC:.10; --pageField:oklch(.19 .008 265);
+  --mkL:.74; --mkC:.075; --icL:.8; --icC:.085;
+  --light:oklch(1 0 0 / .035); --sheen:oklch(1 0 0 / .05); --grainOp:.06; --grainBlend:screen;
+  --night:oklch(.08 .03 270 / .40); --dawn:oklch(.55 .08 50 / .16);
+  --silB:oklch(.31 .012 265); --silS:oklch(.94 .01 265 / .34); --silL:oklch(.93 .008 265);
+  --bldB:oklch(.34 .1 25); --bldS:oklch(.66 .19 25 / .7); --bldL:oklch(.66 .2 26); --bldT:oklch(.72 .16 25);
+  --arcT:oklch(.8 .12 295); --arcS:oklch(.7 .13 295 / .5); --tsB:.34; --tsS:.8; --tsL:.93; --mring:oklch(.94 .01 265 / .12);
+  --eclT:oklch(.76 .07 52); --eclS:oklch(.68 .07 52 / .5); --hvtT:oklch(.84 .12 80); --hvtS:oklch(.76 .12 80 / .5);
+  --gold:oklch(.84 .10 85); --goldBg:oklch(.70 .10 85 / .15); --goldRing:oklch(.78 .10 85 / .38);}
+.cal-v5 *, .cal-v5 *::before, .cal-v5 *::after{box-sizing:border-box}
+.cal-v5 html, .cal-v5 body{margin:0}
+.cal-v5 body{background:var(--page);color:var(--ink);font:14px/1.45 var(--sans);-webkit-font-smoothing:antialiased;overflow-x:hidden}
+.cal-v5 button, .cal-v5 input, .cal-v5 select, .cal-v5 textarea{font:inherit;color:inherit}
+.cal-v5 button{background:none;border:0;padding:0;cursor:pointer;text-align:left}
+/* The calendar gives its own press feedback, so the browser's grey tap cal5-flash is off. */
+.cal-v5 .cal button{-webkit-tap-highlight-color:transparent}
+.cal-v5 .i{width:16px;height:16px;flex:none;fill:none;stroke:currentColor;stroke-width:1.4;stroke-linecap:round;stroke-linejoin:round}
+.cal-v5 [hidden]{display:none!important}
+.cal-v5 .sr{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}
+/* Mockup chrome: dashed, muted, clearly outside the product. */
+.cal-v5 .mock{max-width:1100px;margin:12px auto 0;padding:8px 12px 10px;border:1px dashed var(--edge);border-radius:14px;font-size:12px;color:var(--mut)}
+.cal-v5 .mock-top{display:flex;align-items:center;gap:10px}
+.cal-v5 .mock-tag{font:700 9.5px/1 var(--sans);letter-spacing:.14em;text-transform:uppercase;color:var(--ink2);border:1px dashed var(--mut);border-radius:6px;padding:4px 7px;white-space:nowrap}
+.cal-v5 .mock-title{flex:1;min-width:0}
+.cal-v5 .mock-break{flex-basis:100%;height:0}
+.cal-v5 .cmp-tag{align-self:center}
+.cal-v5 .mock-toggle{display:none;font:600 12px/1 var(--sans);color:var(--ink2);border:1px solid var(--edge);border-radius:8px;padding:7px 10px}
+.cal-v5 .mock-body{display:flex;flex-wrap:wrap;gap:6px 16px;margin-top:8px}
+.cal-v5 .mg{display:flex;align-items:center;gap:8px;min-width:0;flex-wrap:wrap}
+.cal-v5 .ml{font:650 9.5px/1 var(--sans);letter-spacing:.12em;text-transform:uppercase;color:var(--mut);white-space:nowrap}
+.cal-v5 .mg.cmp .ml{color:var(--ink2)}
+.cal-v5 .seg{display:inline-flex;flex-wrap:wrap;border:1px solid var(--edge);border-radius:9px;padding:2px;gap:2px;min-width:0}
+.cal-v5 .seg button{font:550 11px/1 var(--sans);color:var(--ink2);padding:5px 8px;border-radius:7px;white-space:nowrap}
+.cal-v5 .seg button:hover{background:var(--hair2)}
+.cal-v5 .seg button[aria-pressed="true"]{background:var(--paper);color:var(--ink);box-shadow:0 0 0 1px var(--edge),0 1px 2px oklch(0 0 0 / .08)}
+.cal-v5 .rec{font-style:normal;font-size:9px;letter-spacing:.06em;text-transform:uppercase;color:var(--mut);margin-left:3px}
+.cal-v5 .wrap{max-width:1100px;margin:0 auto;padding:16px 20px 40px}
+.cal-v5 .caption{margin:14px 4px 0;font-size:12px;color:var(--mut);text-align:center}
+.cal-v5 .caption p{margin:0}
+.cal-v5 .c-touch{display:none}
+@media (hover:none){.cal-v5 .c-pointer{display:none}
+.cal-v5 .c-touch{display:block}
+}
+/* The key under the widget, in the same marks the grid uses. */
+.cal-v5 .legend{list-style:none;display:flex;flex-wrap:wrap;justify-content:center;gap:6px 14px;margin:10px 0 0;padding:0}
+.cal-v5 .legend li{display:inline-flex;align-items:center;gap:5px;color:var(--ink2)}
+.cal-v5 .legend .mk{width:20px;height:20px}
+.cal-v5 .lg-more{font:600 10.5px/1 var(--sans);color:var(--mut)}
+/* The widget. It carries no transform or filter, so phone sheets can be position:fixed. */
+.cal-v5 .cal{position:relative;z-index:1;isolation:isolate;border-radius:24px;border:1px solid var(--edge);box-shadow:var(--shadow-s);background:var(--pageField);
+  --gx:18px;--cellH:100px;--cols:7}
+.cal-v5 .cal[data-struct="greg"]{--cellH:92px}
+.cal-v5 .cal[data-struct="harptos"]{--cellH:106px}
+.cal-v5 .cal[data-struct="custom"]{--cellH:86px}
+/* Backdrop: one soft field per era+season. A change inside the month bleeds along a slow blurred wave. */
+.cal-v5 .fieldwrap{position:absolute;inset:0;border-radius:inherit;overflow:hidden;z-index:0;pointer-events:none}
+.cal-v5 .field{position:absolute;inset:0}
+.cal-v5 .field .base{position:absolute;inset:0}
+.cal-v5 .bleed{position:absolute;overflow:visible;filter:blur(var(--blur,26px));will-change:transform}
+.cal-v5 .bleed.l1{animation:cal5-drift1 19s ease-in-out infinite alternate}
+.cal-v5 .bleed.l2{opacity:.55;animation:cal5-drift2 27s ease-in-out infinite alternate}
+@keyframes cal5-drift1{from{transform:translate3d(-16px,-1px,0)}to{transform:translate3d(16px,2px,0)}}
+@keyframes cal5-drift2{from{transform:translate3d(14px,2px,0)}to{transform:translate3d(-18px,-2px,0)}}
+.cal-v5 .field.leaving{z-index:1;-webkit-mask-size:220% 100%;mask-size:220% 100%;-webkit-mask-repeat:no-repeat;mask-repeat:no-repeat}
+.cal-v5 .field.leaving.to-l{animation:cal5-sweepL .95s var(--sweep) forwards}
+.cal-v5 .field.leaving.to-r{animation:cal5-sweepR .95s var(--sweep) forwards}
+.cal-v5 .field.leaving.fade{-webkit-mask-image:none!important;mask-image:none!important;animation:cal5-fadeOut .35s ease forwards}
+@keyframes cal5-sweepL{from{-webkit-mask-position:0% 0;mask-position:0% 0}to{-webkit-mask-position:100% 0;mask-position:100% 0}}
+@keyframes cal5-sweepR{from{-webkit-mask-position:100% 0;mask-position:100% 0}to{-webkit-mask-position:0% 0;mask-position:0% 0}}
+@keyframes cal5-fadeOut{to{opacity:0}}
+/* A faint crest rides the sweep edge, so the wash reads even when two months' colours are close. */
+.cal-v5 .crest{position:absolute;top:-10%;left:0;width:40%;height:120%;z-index:1;pointer-events:none;will-change:transform}
+.cal-v5 .crest.to-l{animation:cal5-crestL .95s var(--sweep) forwards}
+.cal-v5 .crest.to-r{animation:cal5-crestR .95s var(--sweep) forwards}
+@keyframes cal5-crestL{from{transform:translate3d(225%,0,0)}to{transform:translate3d(-75%,0,0)}}
+@keyframes cal5-crestR{from{transform:translate3d(-75%,0,0)}to{transform:translate3d(225%,0,0)}}
+.cal-v5 .crest svg{display:block;width:100%;height:100%}
+.cal-v5 .fx-sky, .cal-v5 .fx-light, .cal-v5 .fx-grain{position:absolute;inset:0;z-index:2}
+.cal-v5 .fx-sky{opacity:0;transition:opacity .8s var(--ease)}
+.cal-v5 .cal[data-sky="night"] .fx-sky{opacity:1;background:linear-gradient(180deg,var(--night),transparent 62%)}
+.cal-v5 .cal[data-sky="dawn"] .fx-sky{opacity:1;background:radial-gradient(120% 75% at 0% 100%,var(--dawn),transparent 62%)}
+.cal-v5 .fx-light{background:radial-gradient(90% 70% at 8% -8%,var(--light),transparent 62%)}
+.cal-v5 .fx-grain{opacity:var(--grainOp);mix-blend-mode:var(--grainBlend);background-size:160px 160px;
+  background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.85' numOctaves='2' stitchTiles='stitch'/%3E%3CfeColorMatrix type='saturate' values='0'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E")}
+.cal-v5 .cal[data-backdrop="off"] .fx-light, .cal-v5 .cal[data-backdrop="off"] .fx-grain{display:none}
+/* Header: typography carries it. */
+.cal-v5 .head, .cal-v5 .dow, .cal-v5 .stage{position:relative;z-index:1}
+.cal-v5 .head{padding:16px 24px 10px}
+.cal-v5 .h-row{display:flex;align-items:center;gap:12px;min-width:0}
+.cal-v5 .h-top{justify-content:space-between;min-height:34px}
+.cal-v5 .hub{display:inline-flex;align-items:center;gap:6px;font:550 12.5px/1 var(--sans);color:var(--ink2);padding:8px 9px 8px 10px;margin-left:-10px;border-radius:9px;white-space:nowrap;min-width:0}
+.cal-v5 .hub span{overflow:hidden;text-overflow:ellipsis}
+.cal-v5 .hub:hover, .cal-v5 .hub[aria-expanded="true"]{background:var(--lift);color:var(--ink);box-shadow:0 0 0 1px var(--hair)}
+.cal-v5 .hub .i, .cal-v5 .erabtn .i{width:13px;height:13px;transition:transform .35s var(--spring)}
+.cal-v5 .hub[aria-expanded="true"] .i, .cal-v5 .erabtn[aria-expanded="true"] .i{transform:rotate(180deg)}
+.cal-v5 .h-acts{display:flex;align-items:center;gap:4px;min-width:0;flex:none}
+.cal-v5 .tbtn{display:inline-flex;align-items:center;gap:7px;height:32px;padding:0 11px;border-radius:9px;font:550 12.5px/1 var(--sans);color:var(--ink2);white-space:nowrap}
+.cal-v5 .tbtn:hover, .cal-v5 .tbtn[aria-expanded="true"]{background:var(--lift);color:var(--ink);box-shadow:0 0 0 1px var(--hair)}
+.cal-v5 .ib{width:32px;height:32px;border-radius:50%;display:grid;place-items:center;color:var(--ink2);flex:none}
+.cal-v5 .ib:hover{background:var(--lift);color:var(--ink);box-shadow:0 0 0 1px var(--hair)}
+.cal-v5 .h-mid{justify-content:space-between;margin-top:6px}
+.cal-v5 .mtitle{margin:0;font:500 36px/1.08 var(--serif);letter-spacing:-.012em;color:var(--ink);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:0}
+.cal-v5 .mtitle.swap{animation:cal5-titleIn .42s var(--ease) both}
+@keyframes cal5-titleIn{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:none}}
+.cal-v5 .myear{color:var(--mut);font-weight:400}
+.cal-v5 .mnav{display:flex;align-items:center;gap:2px;flex:none}
+.cal-v5 .h-sub{margin-top:7px;flex-wrap:wrap;gap:4px 12px}
+.cal-v5 .erabtn{display:inline-flex;align-items:center;gap:6px;font:650 10.5px/1 var(--sans);letter-spacing:.15em;text-transform:uppercase;color:var(--ink2);padding:7px 8px;margin-left:-8px;border-radius:6px 6px 0 0}
+.cal-v5 .erabtn[aria-expanded="true"]{background:var(--paper);box-shadow:inset 0 0 0 1px var(--edge)}
+.cal-v5 .erabtn:hover span, .cal-v5 .erabtn[aria-expanded="true"] span{color:var(--ink);text-decoration:underline;text-decoration-color:var(--edge);text-underline-offset:4px}
+.cal-v5 .season{font:500 12.5px/1.35 var(--sans);color:var(--mut)}
+.cal-v5 .season b{font-weight:550;color:var(--ink2)}
+/* The world date. For the Director it carries the one-day step (the most frequent action). */
+.cal-v5 .todaypill{display:inline-flex;align-items:center;height:32px;padding:0 6px;margin-left:auto;border-radius:99px;font:500 12.5px/1 var(--sans);color:var(--ink2);white-space:nowrap;min-width:0}
+.cal-v5 .todaypill .tl{font:650 9.5px/1 var(--sans);letter-spacing:.13em;text-transform:uppercase;color:var(--mut);margin-right:7px}
+.cal-v5 .todaypill .td{color:var(--ink);font-weight:600;padding:0 3px}
+.cal-v5 .todaypill .tw{color:var(--mut);margin-left:7px;overflow:hidden;text-overflow:ellipsis}
+.cal-v5 .todaypill.step{box-shadow:0 0 0 1px var(--hair);background:var(--lift);padding:0 3px}
+.cal-v5 .todaypill .sb{width:26px;height:26px;border-radius:50%;display:grid;place-items:center;color:var(--ink2)}
+.cal-v5 .todaypill .sb:hover{background:var(--hair);color:var(--ink)}
+.cal-v5 .todaypill .sb .i{width:14px;height:14px}
+.cal-v5 .todaypill .td.bump{animation:cal5-bump .45s var(--spring)}
+@keyframes cal5-bump{from{opacity:.2;transform:translateY(5px)}to{opacity:1;transform:none}}
+.cal-v5 .dow{display:grid;grid-template-columns:repeat(var(--cols),minmax(0,1fr));padding:8px var(--gx) 0}
+.cal-v5 .dow span{padding:0 10px 9px;font:650 9.5px/1 var(--sans);letter-spacing:.13em;text-transform:uppercase;color:var(--mut);white-space:nowrap;overflow:hidden}
+.cal-v5 .dow .s{display:none}
+/* The grid lays itself out from the structure: --cols is the week length, never a fixed 7. */
+.cal-v5 .stage{padding:0 var(--gx) 14px}
+.cal-v5 .month.entering{position:absolute;left:var(--gx);right:var(--gx);top:0}
+.cal-v5 .month{position:relative}
+.cal-v5 .month.leaving{position:absolute;left:var(--gx);right:var(--gx);top:0;pointer-events:none}
+.cal-v5 .month.in-l{animation:cal5-inL .42s var(--ease) both}
+.cal-v5 .month.in-r{animation:cal5-inR .42s var(--ease) both}
+.cal-v5 .month.out-l{animation:cal5-outL .3s var(--ease) both}
+.cal-v5 .month.out-r{animation:cal5-outR .3s var(--ease) both}
+.cal-v5 .month.fadein{animation:cal5-fadeIn .3s ease both}
+.cal-v5 .month.fadeout{animation:cal5-fadeOut .25s ease both}
+@keyframes cal5-inL{from{opacity:0;transform:translate3d(30px,0,0)}to{opacity:1;transform:none}}
+@keyframes cal5-inR{from{opacity:0;transform:translate3d(-30px,0,0)}to{opacity:1;transform:none}}
+@keyframes cal5-outL{to{opacity:0;transform:translate3d(-30px,0,0)}}
+@keyframes cal5-outR{to{opacity:0;transform:translate3d(30px,0,0)}}
+@keyframes cal5-fadeIn{from{opacity:0}}
+.cal-v5 .wk{display:grid;grid-template-columns:repeat(var(--cols),minmax(0,1fr));border-top:1px solid var(--hair)}
+.cal-v5 .day{position:relative;display:flex;flex-direction:column;justify-content:flex-start;min-width:0;min-height:var(--cellH);padding:8px 9px 0 10px;color:var(--ink2);border-left:1px solid var(--hair2);transition:opacity .3s}
+.cal-v5 .wk>.day:first-child{border-left-color:transparent}
+/* The day's surface is its own layer, so hover, selection and the press change only its opacity and scale. */
+.cal-v5 .day::before{content:"";position:absolute;inset:0;z-index:-1;border-radius:inherit;background:var(--lift);opacity:0;transition:opacity .2s;pointer-events:none}
+.cal-v5 button.day:hover::before{opacity:1}
+.cal-v5 .day.sel::before{background:var(--paper);box-shadow:inset 0 0 0 1px var(--edge);opacity:1}
+.cal-v5 .day:focus{outline:none}
+.cal-v5 .day:focus-visible{box-shadow:inset 0 0 0 1.5px var(--ink);border-radius:10px}
+.cal-v5 .dc{position:relative;display:flex;flex-direction:column;align-items:flex-start;gap:5px;min-width:0}
+.cal-v5 .num{position:relative;display:grid;place-items:center;width:25px;height:25px;margin:-3px 0 0 -5px;border-radius:50%;font:500 13px/1 var(--sans);font-variant-numeric:tabular-nums;color:var(--ink)}
+.cal-v5 .past .num{color:var(--mut)}
+.cal-v5 .today .num{background:var(--ink);color:var(--paper);font-weight:650}
+.cal-v5 .today .num.pop{animation:cal5-todayPop .5s var(--spring)}
+@keyframes cal5-todayPop{from{transform:scale(.4);opacity:0}to{transform:none;opacity:1}}
+/* Events are marks: their category's line icon in its muted hue. An event may carry its own icon instead. */
+.cal-v5 .marks{display:flex;flex-wrap:wrap;gap:3px 4px;min-width:0;max-width:100%}
+.cal-v5 .mk{position:relative;display:grid;place-items:center;width:22px;height:22px;flex:none;border-radius:50%;color:oklch(var(--icL) var(--icC) var(--h,260))}
+.cal-v5 .mk>.ci{width:16px;height:16px}
+.cal-v5 .mk::before{content:"";position:absolute;inset:0;border-radius:50%;background:var(--hair);opacity:0;transition:opacity .15s}
+.cal-v5 .mk.hot::before{opacity:1}
+@media (hover:hover){.cal-v5 .mk:hover::before{opacity:1}
+}
+.cal-v5 .ci{position:relative;width:14px;height:14px;flex:none;fill:none;stroke:currentColor;stroke-width:1.45;stroke-linecap:round;stroke-linejoin:round}
+/* Director view only: a dashed ring marks what players can't see. */
+.cal-v5 .mk.dir::after, .cal-v5 .ric.dir::after, .cal-v5 .flyer.dir::after{content:"";position:absolute;inset:0;border-radius:50%;border:1px dashed currentColor;opacity:.75;pointer-events:none}
+.cal-v5 .more{font:600 10.5px/22px var(--sans);color:var(--mut);padding:0 2px;white-space:nowrap;transition:opacity .15s}
+/* While a day's card is open, its marks are in the card, not the cell. */
+.cal-v5 .day.packed .mk, .cal-v5 .mk.away{visibility:hidden}
+.cal-v5 .day.packed .more{opacity:0}
+.cal-v5 .wing:focus, .cal-v5 .flap:focus, .cal-v5 .pop:focus, .cal-v5 .drawer:focus, .cal-v5 .evp:focus{outline:none}
+/* Multi-day: a hairline along the cell bottoms. Each week row's piece starts with the event's mark; in name mode the name rides on the line too. */
+.cal-v5 .span{position:absolute;left:0;right:0;bottom:calc(10px + var(--lane) * var(--laneGap,18px));height:1.5px;z-index:1;pointer-events:none;background:oklch(var(--mkL) var(--mkC) var(--h,260))}
+.cal-v5 .span.s{left:10px}
+.cal-v5 .span.e{right:10px}
+.cal-v5 .span.hm{left:31px}
+.cal-v5 .span .mk{position:absolute;left:-23px;top:50%;width:20px;height:20px;margin-top:-10px;pointer-events:auto}
+.cal-v5 .span .mk .ci{width:15px;height:15px}
+.cal-v5 .span.hm:not(.s) .mk{opacity:.8}
+.cal-v5 .span .lbl{position:absolute;left:-2px;bottom:5px;max-width:calc(var(--seg,1) * 100% + 8px);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font:500 11px/1.25 var(--sans);color:var(--ink2);pointer-events:auto}
+.cal-v5 .span:not(.s) .lbl{font-style:italic;color:var(--mut)}
+.cal-v5 .cal[data-multi="icon"] .span .lbl{display:none}
+.cal-v5 .cal[data-multi="name"]{--laneGap:22px}
+/* Director only: a dotted rule after the last day players can see weather for. */
+.cal-v5 .horizon::after{content:"";position:absolute;top:10px;bottom:10px;right:-1px;border-right:1px dashed var(--ink);opacity:.35}
+/* Festival / intercalary day: a band between weeks that belongs to none of them. */
+.cal-v5 .band{display:flex;flex-direction:row;align-items:center;width:100%;min-height:44px;padding:0 16px;border-top:1px solid var(--hair);border-left:0;position:relative;color:var(--ink2);
+  background:linear-gradient(90deg,transparent,var(--lift) 18%,var(--lift) 82%,transparent)}
+.cal-v5 .band .dc{flex-direction:row;align-items:center;gap:12px;width:100%}
+.cal-v5 .band .bn{font:italic 500 16px/1 var(--serif);color:var(--ink);white-space:nowrap}
+.cal-v5 .band .bd{font:500 11.5px/1.3 var(--sans);color:var(--mut);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:0}
+.cal-v5 .band .marks{margin-left:auto;flex-wrap:nowrap;flex:none}
+.cal-v5 .band.today .bn{text-decoration:underline;text-underline-offset:4px}
+/* While a day is open, it turns to paper and the rest recede a little. */
+.cal-v5 .month.dim .day:not(.sel){opacity:.5}
+/* Glance cards: they grow out of what is hovered in about 140ms, never take the pointer, and vanish the instant it leaves. */
+.cal-v5 .hc{position:absolute;z-index:30;left:0;top:0;width:256px;padding:12px 14px;background:var(--paper);border:1px solid var(--edge);border-radius:12px;box-shadow:var(--shadow-l);pointer-events:none;
+  opacity:0;visibility:hidden;transform:scale(.6);transform-origin:0 0;transition:none}
+.cal-v5 .hc.on{opacity:1;visibility:visible;transform:none;transition:opacity .14s var(--ease),transform .14s var(--ease)}
+.cal-v5 .hc.ev{width:252px;padding:11px 13px 12px}
+.cal-v5 .gh{display:flex;align-items:flex-start;gap:8px;min-width:0}
+.cal-v5 .gh b{font:600 13px/1.35 var(--sans);color:var(--ink);min-width:0;padding-top:2px;overflow-wrap:anywhere}
+.cal-v5 .gw{margin:2px 0 0 30px;font:500 11.5px/1.35 var(--sans);color:var(--mut)}
+.cal-v5 .gb{margin:7px 0 0 30px;font:450 12px/1.45 var(--sans);color:var(--ink2);display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+.cal-v5 .gt{display:flex;flex-wrap:wrap;gap:4px 10px;margin:8px 0 0 30px;font:500 11px/1.3 var(--sans);color:var(--mut)}
+.cal-v5 .gt span{display:inline-flex;align-items:center;gap:4px}
+.cal-v5 .gt .i{width:12px;height:12px}
+/* An event's icon in the cards: the same mark as the grid, a little larger. */
+.cal-v5 .ric{position:relative;display:grid;place-items:center;width:22px;height:22px;flex:none;border-radius:50%;color:oklch(var(--icL) var(--icC) var(--h,260))}
+.cal-v5 .ric .ci{width:16px;height:16px}
+.cal-v5 .ric.sm{width:18px;height:18px}
+.cal-v5 .ric.sm .ci{width:13px;height:13px}
+.cal-v5 .ric.wait{visibility:hidden}
+.cal-v5 .hc .d1{font:600 13px/1.3 var(--sans);color:var(--ink)}
+.cal-v5 .hc .d2{font:500 11.5px/1.3 var(--sans);color:var(--mut);margin-top:2px}
+.cal-v5 .rows{margin-top:10px;display:flex;flex-direction:column;gap:6px}
+.cal-v5 .row{display:flex;align-items:center;gap:8px;font:500 12px/1.35 var(--sans);color:var(--ink2);min-width:0}
+.cal-v5 .row .tt{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;min-width:0}
+.cal-v5 .row .i{width:14px;height:14px;color:var(--mut)}
+.cal-v5 .row .aside{margin-left:auto;padding-left:8px;color:var(--mut);font-size:11px;white-space:nowrap}
+.cal-v5 .hc .hx{display:none}
+.cal-v5 .facts .row{flex-wrap:wrap}
+.cal-v5 .facts .row .tt{white-space:normal}
+.cal-v5 .hc .note{margin-top:10px;padding-top:8px;border-top:1px dashed var(--edge);font:500 11px/1.4 var(--sans);color:var(--mut)}
+.cal-v5 .moon{width:14px;height:14px;flex:none;overflow:visible}
+.cal-v5 .moon .mb{fill:var(--ink);fill-opacity:.06;stroke:var(--ink);stroke-opacity:.42;stroke-width:.9}
+.cal-v5 .moon .ml{fill:var(--ink);fill-opacity:.78}
+.cal-v5 .dirnote{display:inline-flex;align-items:center;gap:4px;font:500 10.5px/1 var(--sans);color:var(--mut);white-space:nowrap}
+.cal-v5 .dirnote .i{width:12px;height:12px}
+/* The calendar switcher drops like the rulebook's flaps. */
+.cal-v5 .pop{position:absolute;left:0;top:0;z-index:40;border:1px solid var(--edge);box-shadow:var(--shadow-l);color:var(--ink);
+  --hg:linear-gradient(transparent,transparent);background:var(--hg),var(--paper);background-repeat:no-repeat;
+  opacity:0;visibility:hidden;pointer-events:none;transition:transform .52s var(--spring),opacity .22s var(--ease),visibility 0s linear .52s}
+.cal-v5 .pop.open{opacity:1;visibility:visible;pointer-events:auto;transform:none;transition:transform .52s var(--spring),opacity .2s var(--ease),visibility 0s}
+/* The day's card and the era's card unfold out of the edge of what was pressed. Each is laid out at full size first,
+   scrollbar and all, and the unfold only moves a clip, so no text ever reflows. */
+.cal-v5 .wing, .cal-v5 .flap{position:absolute;left:0;top:0;z-index:40;border:1px solid var(--edge);box-shadow:var(--shadow-l);color:var(--ink);
+  --hg:linear-gradient(transparent,transparent);background:var(--hg),var(--paper);background-repeat:no-repeat;
+  visibility:hidden;pointer-events:none;overflow:auto;overscroll-behavior:contain}
+.cal-v5 .wing.live, .cal-v5 .flap.live{visibility:visible}
+.cal-v5 .wing.open, .cal-v5 .flap.open{pointer-events:auto}
+.cal-v5 .wing{width:340px;border-radius:0 14px 14px 14px;--hg:linear-gradient(90deg,var(--crease),transparent 18px)}
+.cal-v5 .wing[data-side="left"]{border-radius:14px 0 14px 14px;--hg:linear-gradient(270deg,var(--crease),transparent 18px)}
+.cal-v5 .wing[data-side="down"]{border-radius:0 0 14px 14px;--hg:linear-gradient(180deg,var(--crease),transparent 16px)}
+.cal-v5 .wing[data-side="up"]{border-radius:14px 14px 0 0;--hg:linear-gradient(0deg,var(--crease),transparent 16px)}
+/* A day's marks in flight between its cell and its card: the mark itself travels, and nothing is left behind. */
+.cal-v5 .carry{position:absolute;inset:0;z-index:45;pointer-events:none}
+.cal-v5 .flyer{position:absolute;left:0;top:0;display:block;transform-origin:0 0;color:oklch(var(--icL) var(--icC) var(--h,260));will-change:transform}
+.cal-v5 .flyer .ci{display:block;width:100%;height:100%}
+.cal-v5 .flyer.dir::after{inset:-3px}
+.cal-v5 .crease{position:sticky;top:0;z-index:2;display:flex;align-items:center;gap:8px;min-height:40px;padding:6px 8px 6px 16px;border-bottom:1px dashed var(--edge);background:inherit;
+  font:650 10px/1.2 var(--sans);letter-spacing:.14em;text-transform:uppercase;color:var(--mut)}
+.cal-v5 .crease .x{margin-left:auto}
+.cal-v5 .x{width:28px;height:28px;border-radius:8px;display:grid;place-items:center;color:var(--ink2);flex:none}
+.cal-v5 .x:hover{background:var(--hair);color:var(--ink)}
+.cal-v5 .grab{display:none}
+.cal-v5 .wb{padding:14px 16px 16px}
+.cal-v5 .wdate{margin:0;font:500 24px/1.12 var(--serif);color:var(--ink)}
+.cal-v5 .wsub{margin-top:4px;font:500 12px/1.35 var(--sans);color:var(--mut)}
+.cal-v5 .facts{margin-top:12px;display:flex;flex-direction:column;gap:7px;padding:10px 12px;border-radius:10px;background:var(--paper2)}
+.cal-v5 .sect{margin:16px 0 4px;font:650 9.5px/1 var(--sans);letter-spacing:.14em;text-transform:uppercase;color:var(--mut)}
+/* Each event in the day's card is a box with a brief; everything else about it is one click away. */
+.cal-v5 .evd{position:relative;margin:6px -8px 0;padding:9px 8px 10px;border-radius:12px;box-shadow:inset 0 0 0 1px var(--hair)}
+.cal-v5 .evd.go{cursor:pointer}
+.cal-v5 .evd.go:hover{background:var(--paper2);box-shadow:inset 0 0 0 1px var(--edge)}
+/* The event you came from is picked out, with one soft pulse as it arrives. */
+.cal-v5 .evd.hl, .cal-v5 .evd.hl:hover{background:var(--paper2);box-shadow:inset 0 0 0 1.5px var(--ink)}
+.cal-v5 .evd.hl.pulse::after{content:"";position:absolute;inset:-4px;border-radius:15px;border:1.5px solid var(--ink);pointer-events:none;animation:cal5-hlPulse .8s var(--ease) both}
+@keyframes cal5-hlPulse{from{opacity:.45;transform:scale(.985)}to{opacity:0;transform:scale(1.02)}}
+.cal-v5 .evh{display:flex;align-items:center;gap:8px;min-width:0}
+.cal-v5 .evh .qt0{font:600 13.5px/1.3 var(--sans);color:var(--ink);min-width:0;overflow-wrap:anywhere}
+.cal-v5 .evopen{display:flex;align-items:center;gap:8px;flex:1;min-width:0;border-radius:8px}
+.cal-v5 .evopen .chev{margin-left:auto;width:15px;height:15px;color:var(--mut)}
+.cal-v5 .evopen:hover .chev{color:var(--ink)}
+.cal-v5 .evopen:focus-visible, .cal-v5 .evgo:focus-visible, .cal-v5 .back:focus-visible, .cal-v5 button.ric:focus-visible{outline:1.5px solid var(--ink);outline-offset:2px}
+.cal-v5 .evm{margin:3px 0 0 30px;font:500 11.5px/1.4 var(--sans);color:var(--mut);display:flex;flex-wrap:wrap;gap:2px 7px}
+.cal-v5 .brief{margin:6px 0 0 30px;font:450 12.5px/1.5 var(--sans);color:var(--ink2);display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+.cal-v5 .none{font:500 12.5px/1.4 var(--sans);color:var(--mut);padding:4px 0}
+.cal-v5 .addev{display:flex;align-items:center;gap:7px;width:100%;margin-top:12px;padding:9px 10px;border-radius:9px;border:1px dashed var(--edge);font:550 12.5px/1 var(--sans);color:var(--ink2)}
+.cal-v5 .addev:hover{background:var(--paper2);color:var(--ink)}
+/* RSVP: silence is shown as "no answer yet", never as a no. */
+.cal-v5 .rsvp{margin:9px 0 0 30px;padding:9px 11px;border-radius:10px;background:var(--paper);box-shadow:inset 0 0 0 1px var(--hair)}
+.cal-v5 .rq{font:600 12.5px/1.3 var(--sans);color:var(--ink)}
+.cal-v5 .seg3{display:flex;gap:4px;margin-top:7px}
+.cal-v5 .seg3 button{flex:1;height:30px;border-radius:8px;border:1px solid var(--edge);font:550 12px/1 var(--sans);color:var(--ink2);text-align:center;background:var(--paper)}
+.cal-v5 .seg3 button:hover{color:var(--ink)}
+.cal-v5 .seg3 button[aria-pressed="true"]{background:var(--ink);color:var(--paper);border-color:transparent}
+.cal-v5 .rcount{margin-top:7px;font:500 11px/1.4 var(--sans);color:var(--mut)}
+.cal-v5 .roster{list-style:none;margin:10px 0 0;padding:0;display:flex;flex-direction:column;gap:7px}
+.cal-v5 .roster li{display:flex;align-items:flex-start;gap:8px;font:500 12px/1.35 var(--sans);color:var(--ink2)}
+.cal-v5 .roster .who{flex:1;min-width:0;padding-top:3px}
+.cal-v5 .roster .rn2{display:block;margin-top:2px;font:450 11.5px/1.4 var(--sans);font-style:italic;color:var(--mut)}
+.cal-v5 .av{width:22px;height:22px;border-radius:50%;display:grid;place-items:center;flex:none;font:650 10px/1 var(--sans);color:var(--ink2);box-shadow:inset 0 0 0 1px var(--edge)}
+.cal-v5 .roster .st{margin-left:auto;padding-top:3px;color:var(--mut);white-space:nowrap}
+.cal-v5 .roster .st.yes{color:var(--ink)}
+.cal-v5 .rnote{margin-top:9px;font:500 11px/1.45 var(--sans);color:var(--mut)}
+/* Quick edits in the day's card (Director): titles and times edit in place, small controls sit at the row's end. */
+.cal-v5 .evh .qt{font:600 13.5px/1.3 var(--sans);color:var(--ink);min-width:0;flex:0 1 auto;overflow-wrap:anywhere}
+.cal-v5 .qt{text-align:left;border-radius:6px;padding:2px 4px;margin:-2px -4px;cursor:text}
+.cal-v5 .qt:hover, .cal-v5 .qt:focus-visible{background:var(--hair2);box-shadow:inset 0 -1px 0 var(--edge);outline:none}
+.cal-v5 .qinput{font:600 13.5px/1.3 var(--sans);color:var(--ink);background:var(--paper2);border:0;border-radius:6px;padding:2px 6px;margin:-2px -6px -2px -4px;min-width:0;flex:1;outline:1.5px solid var(--ink)}
+.cal-v5 .qinput.qtm{font:500 11.5px/1.4 var(--sans);color:var(--ink2);flex:0 1 150px;margin:0;padding:1px 6px}
+/* The Director's event icon is also the kind control. */
+.cal-v5 button.ric::before{content:"";position:absolute;inset:0;border-radius:50%;background:var(--hair);opacity:0;transition:opacity .15s}
+.cal-v5 button.ric:hover::before, .cal-v5 button.ric[aria-expanded="true"]::before{opacity:1}
+.cal-v5 .acts{margin-left:auto;display:flex;align-items:center;flex:none;opacity:.55;transition:opacity .2s}
+.cal-v5 .evd:hover .acts, .cal-v5 .acts:focus-within{opacity:1}
+/* While a title is being renamed, the field gets the whole row. */
+.cal-v5 .evd.editing .acts, .cal-v5 .evd.editing .evgo{display:none}
+.cal-v5 .qi{width:26px;height:26px;border-radius:7px;display:grid;place-items:center;color:var(--ink2);flex:none}
+.cal-v5 .qi:hover{background:var(--hair2);color:var(--ink)}
+.cal-v5 .qi .i{width:14px;height:14px}
+.cal-v5 .evgo .i{width:15px;height:15px}
+.cal-v5 .mi{display:inline-flex;align-items:center;gap:4px}
+.cal-v5 .mi .i{width:12px;height:12px}
+.cal-v5 .mi+.mi::before{content:"·";margin-right:3px;color:var(--mut)}
+.cal-v5 .qtime{font:500 11.5px/1.4 var(--sans);color:var(--mut);border-radius:5px;padding:0 3px;margin:0 -3px;cursor:text;text-decoration:underline dotted var(--edge);text-underline-offset:3px}
+.cal-v5 .qtime:hover, .cal-v5 .qtime:focus-visible{color:var(--ink);background:var(--hair2);outline:none}
+.cal-v5 .evspan{margin:3px 0 0 30px;display:flex;align-items:center;flex-wrap:wrap;gap:4px 8px;font:500 11.5px/1.4 var(--sans);color:var(--mut)}
+.cal-v5 .evspan.dirnote{gap:5px}
+.cal-v5 .nudge{display:inline-flex;align-items:center;gap:3px}
+.cal-v5 .nudge .nl{font:600 9.5px/1 var(--sans);letter-spacing:.1em;text-transform:uppercase;color:var(--mut)}
+.cal-v5 .nudge button{width:20px;height:20px;border-radius:6px;display:grid;place-items:center;color:var(--ink2);box-shadow:inset 0 0 0 1px var(--edge)}
+.cal-v5 .nudge button:hover{background:var(--hair2);color:var(--ink)}
+.cal-v5 .nudge .i{width:11px;height:11px}
+@keyframes cal5-foldDown{from{opacity:0;transform:perspective(600px) rotateX(-65deg)}to{opacity:1;transform:none}}
+.cal-v5 .kinds{display:flex;flex-wrap:wrap;gap:5px;margin:8px 0 2px 30px;padding:8px;border-radius:10px;background:var(--paper2);transform-origin:top;animation:cal5-foldDown .34s var(--spring) both}
+.cal-v5 .kinds button, .cal-v5 .wxchips button{display:inline-flex;align-items:center;gap:6px;height:27px;padding:0 10px;border-radius:99px;font:550 11.5px/1 var(--sans);color:var(--ink2);box-shadow:inset 0 0 0 1px var(--edge);background:var(--paper)}
+.cal-v5 .kinds button:hover, .cal-v5 .wxchips button:hover{color:var(--ink)}
+.cal-v5 .kinds button[aria-pressed="true"], .cal-v5 .wxchips button[aria-pressed="true"]{box-shadow:inset 0 0 0 1.3px var(--ink);color:var(--ink)}
+.cal-v5 .kinds .ci, .cal-v5 .chips button .ci{width:14px;height:14px;color:oklch(var(--icL) var(--icC) var(--h,260))}
+.cal-v5 .wxchips{display:flex;flex-wrap:wrap;gap:5px;padding:2px 0 3px 22px;transform-origin:top;animation:cal5-foldDown .34s var(--spring) both}
+.cal-v5 .wxchips .i{width:13px;height:13px}
+.cal-v5 .wxrow{width:calc(100% + 12px);margin:-3px -6px;padding:3px 6px;border-radius:7px;text-align:left}
+.cal-v5 .wxrow:hover, .cal-v5 .wxrow[aria-expanded="true"]{background:var(--paper)}
+.cal-v5 .links{display:flex;flex-wrap:wrap;align-items:center;gap:5px}
+.cal-v5 .chip{display:inline-flex;align-items:center;gap:5px;height:24px;padding:0 9px 0 7px;border-radius:99px;font:550 11.5px/1 var(--sans);color:var(--ink2);box-shadow:inset 0 0 0 1px var(--edge);background:var(--paper);white-space:nowrap;max-width:100%}
+.cal-v5 .chip .i{width:12px;height:12px;color:var(--mut)}
+.cal-v5 .chip small{font-size:10px;font-weight:500;color:var(--mut)}
+.cal-v5 .chip .cx{width:18px;height:18px;border-radius:50%;display:grid;place-items:center;margin-right:-5px;color:var(--mut)}
+.cal-v5 .chip .cx:hover{background:var(--hair);color:var(--ink)}
+.cal-v5 .chip .cx .i{width:10px;height:10px}
+.cal-v5 .evlist{display:flex;flex-direction:column}
+.cal-v5 .evd.rowin{animation:cal5-rowIn .45s var(--spring) both}
+@keyframes cal5-rowIn{from{opacity:0;transform:translateY(-10px)}to{opacity:1;transform:none}}
+.cal-v5 .evd.rowout{animation:cal5-rowOut .26s var(--ease) both;pointer-events:none}
+@keyframes cal5-rowOut{to{opacity:0;transform:translateX(14px)}}
+/* An event's full page grows out of its box in the day's card and covers the card. Players read it; the Director edits from it. */
+.cal-v5 .evp{position:absolute;left:0;top:0;z-index:43;display:flex;flex-direction:column;border-radius:14px;box-shadow:var(--shadow-l);color:var(--ink);visibility:hidden;pointer-events:none}
+.cal-v5 .evp::before{content:"";position:absolute;inset:0;border-radius:inherit;background:var(--paper);box-shadow:inset 0 0 0 1px var(--edge)}
+.cal-v5 .evp.live{visibility:visible}
+.cal-v5 .evp.open{pointer-events:auto}
+.cal-v5 .ein{position:relative;flex:1;min-height:0;display:flex;flex-direction:column;overflow:auto;overscroll-behavior:contain;border-radius:inherit}
+.cal-v5 .ein>.epb{flex:1 0 auto}
+.cal-v5 .evp .crease{background:var(--paper);border-radius:14px 14px 0 0;padding-left:8px}
+.cal-v5 .back{display:inline-flex;align-items:center;gap:3px;height:28px;min-width:0;padding:0 9px 0 4px;border-radius:8px;font:650 10px/1 var(--sans);letter-spacing:.14em;text-transform:uppercase;color:var(--ink2);white-space:nowrap}
+.cal-v5 .back span{overflow:hidden;text-overflow:ellipsis}
+.cal-v5 .back:hover{background:var(--hair);color:var(--ink)}
+.cal-v5 .back .i{width:14px;height:14px}
+.cal-v5 .epb{padding:12px 16px 18px}
+.cal-v5 .ept{margin:0;font:600 17px/1.3 var(--sans);color:var(--ink);min-width:0;overflow-wrap:anywhere}
+.cal-v5 .notes{margin:10px 0 0 30px;font:450 13px/1.6 var(--sans);color:var(--ink2)}
+.cal-v5 .notes p{margin:0 0 8px}
+.cal-v5 .notes ul{margin:0 0 8px;padding-left:17px}
+.cal-v5 .notes li{margin:2px 0}
+.cal-v5 .notes>:last-child{margin-bottom:0}
+.cal-v5 .eps{margin:14px 0 0 30px;padding-top:12px;border-top:1px solid var(--hair)}
+.cal-v5 .eps h4{margin:0 0 8px;font:650 9.5px/1 var(--sans);letter-spacing:.14em;text-transform:uppercase;color:var(--mut)}
+.cal-v5 .eps .v{display:flex;align-items:flex-start;gap:7px;font:500 12.5px/1.5 var(--sans);color:var(--ink2)}
+.cal-v5 .eps .v .i{width:14px;height:14px;margin-top:3px;color:var(--mut)}
+.cal-v5 .eps .v small{display:block;font-size:11.5px;color:var(--mut)}
+.cal-v5 .eps .rsvp{margin:0}
+.cal-v5 .chip .role{font-size:10px;font-weight:500;font-style:italic;color:var(--mut)}
+.cal-v5 .evp .efoot{position:sticky;bottom:0;background:var(--paper);border-radius:0 0 14px 14px}
+.cal-v5 .qadd{display:flex;align-items:center;gap:8px;margin-top:12px;padding:5px 5px 5px 10px;border-radius:10px;border:1px dashed var(--edge)}
+.cal-v5 .qadd:focus-within{border-style:solid;border-color:var(--ink)}
+.cal-v5 .qadd>.i{color:var(--mut)}
+.cal-v5 .qadd input{flex:1;min-width:0;border:0;background:transparent;font:500 12.5px/1.3 var(--sans);color:var(--ink);outline:none;padding:6px 0}
+.cal-v5 .qadd input::placeholder{color:var(--mut)}
+.cal-v5 .qmore{flex:none;font:550 11.5px/1 var(--sans);color:var(--ink2);padding:7px 8px;border-radius:7px;white-space:nowrap}
+.cal-v5 .qmore:hover{background:var(--hair2);color:var(--ink)}
+/* Undo toast: inside the widget, never a confirm dialog. */
+.cal-v5 .toast{position:absolute;left:50%;bottom:16px;z-index:60;display:flex;align-items:center;gap:12px;max-width:calc(100% - 32px);padding:8px 8px 8px 14px;border-radius:12px;background:var(--ink);color:var(--paper);
+  font:500 12.5px/1.3 var(--sans);box-shadow:var(--shadow-l);opacity:0;visibility:hidden;transform:translate(-50%,14px);transition:transform .38s var(--spring),opacity .2s var(--ease),visibility 0s linear .38s}
+.cal-v5 .toast.on{opacity:1;visibility:visible;transform:translate(-50%,0);transition:transform .38s var(--spring),opacity .2s var(--ease),visibility 0s}
+.cal-v5 .toast span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.cal-v5 .toast button{flex:none;font:650 12px/1 var(--sans);color:var(--paper);padding:7px 10px;border-radius:8px;box-shadow:inset 0 0 0 1px oklch(1 0 0 / .28)}
+.cal-v5 .toast button:hover{background:oklch(1 0 0 / .1)}
+/* Era card: drops out of the era label's bottom edge. */
+.cal-v5 .flap{width:392px;border-radius:4px 14px 14px 14px;--hg:linear-gradient(180deg,var(--crease),transparent 14px)}
+.cal-v5 .fb{padding:14px 18px 18px}
+.cal-v5 .fb.swap{animation:cal5-fadeIn .28s ease both}
+.cal-v5 .ename{margin:0;font:500 24px/1.15 var(--serif);color:var(--ink)}
+.cal-v5 .espan{margin-top:4px;font:500 12px/1.35 var(--sans);color:var(--mut);display:flex;flex-wrap:wrap;gap:4px 10px;align-items:center}
+.cal-v5 .edesc{margin:10px 0 0;font:450 13px/1.6 var(--sans);color:var(--ink2)}
+.cal-v5 .etl{position:relative;margin-top:14px;padding-top:26px}
+.cal-v5 .etl-track{display:flex;gap:5px}
+.cal-v5 .etl-seg{position:relative;flex:1 1 0;min-width:0;padding:10px 0 2px;color:var(--mut);font:500 11px/1.3 var(--sans);border-radius:4px}
+.cal-v5 .etl-seg::before{content:"";position:absolute;left:0;right:0;top:0;height:2px;border-radius:2px;background:currentColor;opacity:.4}
+.cal-v5 .etl-seg.cur{color:var(--ink)}
+.cal-v5 .etl-seg.cur::before{opacity:1}
+.cal-v5 .etl-seg.plan::before{background:none;height:0;border-top:2px dotted currentColor}
+.cal-v5 .etl-seg span{display:block;line-height:1.25;overflow-wrap:anywhere}
+.cal-v5 .etl-seg small{display:block;font-size:10.5px;color:var(--mut)}
+.cal-v5 .etl-seg:hover span, .cal-v5 .etl-seg[aria-pressed="true"] span{color:var(--ink);text-decoration:underline;text-decoration-color:var(--edge);text-underline-offset:3px}
+.cal-v5 .here{position:absolute;top:0;transform:translateX(-50%);font:650 9.5px/1 var(--sans);letter-spacing:.1em;text-transform:uppercase;color:var(--ink);white-space:nowrap;pointer-events:none}
+.cal-v5 .hdot{position:absolute;top:22.5px;width:7px;height:7px;margin-left:-3.5px;border-radius:50%;background:var(--ink);box-shadow:0 0 0 3px var(--paper);z-index:1;pointer-events:none}
+.cal-v5 .yr .tick{position:absolute;top:0;bottom:0;width:2px;margin-left:-1px;background:var(--ink);opacity:.8}
+.cal-v5 .yr{position:relative;display:flex;height:8px;border-radius:99px;overflow:hidden;margin-top:8px;box-shadow:inset 0 0 0 1px var(--hair)}
+.cal-v5 .yr i{display:block;height:100%}
+.cal-v5 .yrl{display:flex;flex-wrap:wrap;gap:3px 12px;margin-top:7px;font:500 11px/1.3 var(--sans);color:var(--mut)}
+.cal-v5 .yrl b{font-weight:550;color:var(--ink2)}
+/* Calendar switcher: every calendar this viewer can see, as peers. */
+.cal-v5 .pop{width:330px;max-width:calc(100vw - 16px);border-radius:4px 14px 14px 14px;transform-origin:top left;transform:perspective(1000px) rotateX(-80deg);--hg:linear-gradient(180deg,var(--crease),transparent 14px)}
+.cal-v5 .pop .list{padding:6px}
+.cal-v5 .hubi{display:flex;flex-direction:column;gap:3px;width:100%;padding:10px 12px;border-radius:10px}
+.cal-v5 .hubi:hover, .cal-v5 .hubi:focus-visible{background:var(--paper2);outline:none}
+.cal-v5 .hubi .hn{font:600 13px/1.3 var(--sans);color:var(--ink);display:flex;align-items:center;gap:6px;min-width:0}
+.cal-v5 .hubi .hn .i{width:13px;height:13px;color:var(--mut)}
+.cal-v5 .hubi .hs{font:500 11.5px/1.3 var(--sans);color:var(--mut)}
+.cal-v5 .hubi .ht{font:500 11.5px/1.3 var(--sans);color:var(--ink2)}
+.cal-v5 .hubi .ht::before{content:"Today · ";color:var(--mut)}
+.cal-v5 .hubi[aria-current="true"]{box-shadow:inset 2px 0 0 var(--ink)}
+.cal-v5 .btn{display:inline-flex;align-items:center;justify-content:center;gap:6px;height:32px;padding:0 13px;border-radius:9px;border:1px solid var(--edge);background:var(--paper);font:550 12.5px/1 var(--sans);color:var(--ink);white-space:nowrap}
+.cal-v5 .btn:hover{background:var(--paper2)}
+.cal-v5 .btn .i{width:14px;height:14px}
+.cal-v5 .btn.primary{background:var(--ink);color:var(--paper);border-color:transparent}
+.cal-v5 .btn.primary:hover{opacity:.9;background:var(--ink)}
+.cal-v5 .btn.quiet{border-color:transparent;background:transparent;color:var(--ink2)}
+.cal-v5 .btn.quiet:hover{background:var(--hair2);color:var(--ink)}
+.cal-v5 .btn.danger{border-color:transparent;background:transparent;color:oklch(.55 .11 28)}
+/* Drawers slide out of the widget's own edges; the dock clips them to the widget. */
+.cal-v5 .dock{position:absolute;inset:0;z-index:50;border-radius:inherit;overflow:hidden;overflow:clip;pointer-events:none}
+.cal-v5 .dscrim{position:absolute;inset:0;background:var(--scrim);opacity:0;transition:opacity .3s var(--ease)}
+.cal-v5 .dock.on .dscrim{opacity:.7;pointer-events:auto}
+.cal-v5 .drawer{position:absolute;top:0;bottom:0;display:flex;flex-direction:column;background:var(--paper);box-shadow:var(--shadow-l);pointer-events:auto;visibility:hidden;
+  transition:transform .55s var(--spring),visibility 0s linear .55s}
+.cal-v5 .drawer.open{visibility:visible;transform:none;transition:transform .55s var(--spring),visibility 0s}
+.cal-v5 .ddir{left:-28px;width:368px;padding-left:28px;border-right:1px solid var(--edge);border-radius:0 18px 18px 0;transform:translate3d(-104%,0,0)}
+.cal-v5 .ded{right:-28px;width:428px;padding-right:28px;border-left:1px solid var(--edge);border-radius:18px 0 0 18px;transform:translate3d(104%,0,0)}
+.cal-v5 .drawer .crease{position:relative;background:transparent}
+.cal-v5 .dbody{flex:1;overflow:auto;overscroll-behavior:contain;padding:4px 18px 18px}
+.cal-v5 .dsec{padding:14px 0;border-top:1px solid var(--hair)}
+.cal-v5 .dsec:first-child{border-top:0}
+.cal-v5 .dsec h4{margin:0 0 8px;font:650 9.5px/1 var(--sans);letter-spacing:.14em;text-transform:uppercase;color:var(--mut)}
+.cal-v5 .bigdate{font:500 22px/1.15 var(--serif);color:var(--ink)}
+.cal-v5 .dnote{margin-top:6px;font:500 11.5px/1.45 var(--sans);color:var(--mut)}
+.cal-v5 .brow{display:flex;flex-wrap:wrap;gap:6px;margin-top:10px}
+.cal-v5 .fields{display:flex;flex-wrap:wrap;gap:8px;margin-top:10px;align-items:flex-end}
+.cal-v5 .fields[hidden]{display:none}
+.cal-v5 .fld{display:flex;flex-direction:column;gap:5px;font:600 11px/1 var(--sans);color:var(--mut);min-width:0}
+.cal-v5 .fld input, .cal-v5 .fld select, .cal-v5 .fld textarea{height:34px;padding:0 10px;border-radius:9px;border:1px solid var(--edge);background:var(--paper2);font:500 13px/1 var(--sans);color:var(--ink);min-width:0;width:100%}
+.cal-v5 .fld textarea{height:auto;min-height:74px;padding:9px 10px;line-height:1.5;resize:vertical}
+.cal-v5 .fld input:focus, .cal-v5 .fld select:focus, .cal-v5 .fld textarea:focus{outline:1.5px solid var(--ink);outline-offset:0}
+.cal-v5 .wx{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:6px}
+.cal-v5 .wx button{display:flex;align-items:center;gap:8px;height:36px;padding:0 10px;border-radius:9px;border:1px solid var(--edge);font:550 12px/1 var(--sans);color:var(--ink2);background:var(--paper)}
+.cal-v5 .wx button:hover{color:var(--ink);background:var(--paper2)}
+.cal-v5 .wx button[aria-pressed="true"]{border-color:var(--ink);color:var(--ink);box-shadow:inset 0 0 0 .5px var(--ink)}
+.cal-v5 .sw{display:flex;align-items:center;gap:10px;padding:7px 0;font:500 12.5px/1.3 var(--sans);color:var(--ink2)}
+.cal-v5 .sw .moon{width:16px;height:16px}
+.cal-v5 .sw span{flex:1;min-width:0}
+.cal-v5 .sw small{display:block;color:var(--mut);font-size:11px}
+.cal-v5 .tog{position:relative;width:34px;height:20px;border-radius:99px;background:var(--hair);flex:none;box-shadow:inset 0 0 0 1px var(--edge)}
+/* The "on" colour is its own layer, so switching fades opacity rather than a colour. */
+.cal-v5 .tog::before{content:"";position:absolute;inset:0;border-radius:inherit;background:var(--ink);opacity:0;transition:opacity .2s}
+.cal-v5 .tog[aria-checked="true"]::before{opacity:1}
+.cal-v5 .tog::after{content:"";position:absolute;top:3px;left:3px;width:14px;height:14px;border-radius:50%;background:var(--paper);box-shadow:0 1px 2px oklch(0 0 0 / .25);transition:transform .35s var(--spring)}
+.cal-v5 .tog[aria-checked="true"]::after{transform:translateX(14px)}
+.cal-v5 .ebody{flex:1;overflow:auto;overscroll-behavior:contain;padding:14px 18px 18px;display:flex;flex-direction:column;gap:14px}
+.cal-v5 .fld .etitle{height:auto;padding:4px 0 8px;border:0;border-bottom:1px solid var(--edge);border-radius:0;background:transparent;font:500 22px/1.2 var(--serif)}
+.cal-v5 .fld .etitle:focus{outline:none;border-bottom-color:var(--ink)}
+.cal-v5 .two{display:grid;grid-template-columns:minmax(0,1.5fr) minmax(0,1fr);gap:8px}
+.cal-v5 .chips{display:flex;flex-wrap:wrap;gap:6px}
+.cal-v5 .chips button{display:inline-flex;align-items:center;gap:6px;height:30px;padding:0 10px;border-radius:99px;border:1px solid var(--edge);font:550 12px/1 var(--sans);color:var(--ink2);background:var(--paper)}
+.cal-v5 .chips button[aria-pressed="true"], .cal-v5 .vis button[aria-pressed="true"]{border-color:var(--ink);color:var(--ink);box-shadow:inset 0 0 0 .5px var(--ink)}
+.cal-v5 .vis{display:grid;grid-template-columns:1fr 1fr;gap:6px}
+.cal-v5 .vis button{padding:9px 11px;border-radius:10px;border:1px solid var(--edge);font:600 12.5px/1.3 var(--sans);color:var(--ink);background:var(--paper)}
+.cal-v5 .vis button small{display:block;font-weight:500;font-size:11px;color:var(--mut);margin-top:2px}
+.cal-v5 .check{display:flex;align-items:center;gap:9px;font:500 12.5px/1.3 var(--sans);color:var(--ink2)}
+.cal-v5 .check input{width:16px;height:16px;accent-color:var(--ink)}
+.cal-v5 .err{font:500 11.5px/1.3 var(--sans);color:oklch(.55 .12 28)}
+.cal-v5 .efoot{display:flex;align-items:center;gap:8px;padding:12px 18px;border-top:1px solid var(--hair)}
+.cal-v5 .efoot .sp{flex:1}
+/* Full editor: grouped into When / Details / Who, rarely used fields folded under More. */
+.cal-v5 .ebody{gap:0}
+.cal-v5 .ebody>.fld:first-child{margin-bottom:4px}
+.cal-v5 .esec{display:flex;flex-direction:column;gap:11px;padding:14px 0 16px;border-top:1px solid var(--hair)}
+.cal-v5 .esec:first-of-type{margin-top:8px}
+.cal-v5 .esec h4{margin:0;font:650 9.5px/1 var(--sans);letter-spacing:.14em;text-transform:uppercase;color:var(--mut)}
+.cal-v5 .swrow{display:flex;align-items:center;justify-content:space-between;gap:12px;font:550 12.5px/1.3 var(--sans);color:var(--ink)}
+.cal-v5 .swrow small{display:block;font-weight:500;font-size:11px;color:var(--mut);margin-top:1px}
+.cal-v5 .erow{display:grid;grid-template-columns:44px minmax(0,1.5fr) minmax(0,.9fr) minmax(0,1fr);gap:7px;align-items:center}
+.cal-v5 .erow .rl{font:600 11.5px/1 var(--sans);color:var(--mut)}
+.cal-v5 .erow select, .cal-v5 .erow input, .cal-v5 .fld .erep{height:34px;padding:0 9px;border-radius:9px;border:1px solid var(--edge);background:var(--paper2);font:500 13px/1 var(--sans);color:var(--ink);min-width:0;width:100%}
+.cal-v5 .erow select:focus, .cal-v5 .erow input:focus, .cal-v5 .fld .erep:focus{outline:1.5px solid var(--ink);outline-offset:0}
+.cal-v5 .allday .etime{visibility:hidden}
+.cal-v5 .segs{display:flex;flex-wrap:wrap;gap:5px}
+.cal-v5 .segs button{height:30px;padding:0 11px;border-radius:8px;font:550 12px/1 var(--sans);color:var(--ink2);box-shadow:inset 0 0 0 1px var(--edge);background:var(--paper)}
+.cal-v5 .segs button:hover{color:var(--ink)}
+.cal-v5 .segs button[aria-pressed="true"]{box-shadow:inset 0 0 0 1.3px var(--ink);color:var(--ink)}
+.cal-v5 .eann{margin-top:10px}
+.cal-v5 .repend{display:flex;flex-direction:column;gap:8px;padding:10px;border-radius:10px;background:var(--paper2)}
+.cal-v5 .repend .fields{margin-top:0}
+.cal-v5 .repend .rn{display:flex;align-items:center;gap:8px;font:500 12.5px/1 var(--sans);color:var(--ink2)}
+.cal-v5 .repend .rn input{width:70px;height:32px;padding:0 9px;border-radius:8px;border:1px solid var(--edge);background:var(--paper);font:500 13px/1 var(--sans);color:var(--ink)}
+.cal-v5 .chipset{display:flex;flex-wrap:wrap;gap:5px}
+.cal-v5 .chipset:empty{display:none}
+.cal-v5 .lpick{position:relative}
+.cal-v5 .lin{width:100%;height:34px;padding:0 10px;border-radius:9px;border:1px dashed var(--edge);background:transparent;font:500 12.5px/1 var(--sans);color:var(--ink)}
+.cal-v5 .lin:focus{outline:none;border-style:solid;border-color:var(--ink)}
+.cal-v5 .lsug{position:absolute;left:0;right:0;top:calc(100% + 4px);z-index:5;padding:4px;border-radius:10px;background:var(--paper);box-shadow:var(--shadow-l);border:1px solid var(--edge);transform-origin:top;animation:cal5-foldDown .3s var(--spring) both}
+.cal-v5 .lsug button{display:flex;align-items:center;gap:8px;width:100%;padding:8px 9px;border-radius:7px;font:550 12.5px/1.2 var(--sans);color:var(--ink)}
+.cal-v5 .lsug button .i{width:13px;height:13px;color:var(--mut)}
+.cal-v5 .lsug button small{margin-left:auto;font:500 11px/1 var(--sans);color:var(--mut)}
+.cal-v5 .lsug button:hover, .cal-v5 .lsug button.hl{background:var(--paper2)}
+.cal-v5 .lsug .none{padding:8px 9px}
+.cal-v5 .moreb{display:flex;align-items:center;gap:6px;width:100%;padding:14px 0 12px;border-top:1px solid var(--hair);font:650 9.5px/1 var(--sans);letter-spacing:.14em;text-transform:uppercase;color:var(--ink2)}
+.cal-v5 .moreb:hover{color:var(--ink)}
+.cal-v5 .moreb .i{width:13px;height:13px;transition:transform .3s var(--spring)}
+.cal-v5 .moreb[aria-expanded="true"] .i{transform:rotate(180deg)}
+.cal-v5 .moresec{display:flex;flex-direction:column;gap:12px;padding-bottom:12px;transform-origin:top;animation:cal5-foldDown .34s var(--spring) both}
+.cal-v5 .scrim{position:fixed;inset:0;z-index:38;background:var(--scrim);opacity:0;pointer-events:none;transition:opacity .3s var(--ease);display:none}
+/* A changed day flashes once: its surface turns to paper and fades back. */
+.cal-v5 .day.flash::before{background:var(--paper);animation:cal5-flash 1.8s ease}
+.cal-v5 .day.sel.flash::before{animation:none}
+@keyframes cal5-flash{0%,35%{opacity:1}100%{opacity:0}}
+@media (max-width:900px){.cal-v5 .h-acts .tbtn span{display:none}
+.cal-v5 .h-acts .tbtn{padding:0 9px}
+}
+/* Phones: the widget fills the width, cards become bottom sheets, the drawers slide up. */
+@media (max-width:600px){.cal-v5 .mock{margin:8px 8px 0;padding:8px 10px}
+.cal-v5 .mock-title{font-size:11px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.cal-v5 .mock-toggle{display:inline-flex}
+.cal-v5 .mock-body{display:none}
+.cal-v5 .mock.open .mock-body{display:flex}
+.cal-v5 .wrap{padding:10px 0 28px}
+.cal-v5 .cal{border-radius:0;border-left:0;border-right:0;--gx:4px}
+.cal-v5 .cal[data-struct="greg"]{--cellH:70px}
+.cal-v5 .cal[data-struct="harptos"]{--cellH:66px}
+.cal-v5 .cal[data-struct="custom"]{--cellH:68px}
+.cal-v5 .head{display:grid;grid-template-columns:minmax(0,1fr) auto;grid-template-areas:"hub acts" "title nav" "sub sub" "pill pill";column-gap:8px;align-items:center;padding:10px 12px 4px}
+.cal-v5 .h-top, .cal-v5 .h-mid{display:contents}
+.cal-v5 .hub{grid-area:hub;justify-self:start;margin-left:-8px}
+.cal-v5 .h-acts{grid-area:acts}
+.cal-v5 .tbtn span{display:none}
+.cal-v5 .h-acts .tbtn{padding:0 9px}
+.cal-v5 .mtitle{grid-area:title;font-size:24px;margin-top:4px}
+.cal-v5 .mnav .tbtn{padding:0 6px}
+.cal-v5 .mnav{grid-area:nav;margin-top:4px}
+.cal-v5 .h-sub{grid-area:sub;margin-top:4px}
+.cal-v5 .h-subw{grid-area:sub;min-width:0}
+/* v6 adds Edit and the gear to the actions: they span the whole first row, so their width never narrows the title's. */
+.cal-v5 .h-acts{grid-area:auto;grid-row:1;grid-column:1 / -1;justify-self:end}
+.cal-v5 .todaypill{grid-area:pill;justify-self:start;margin:6px 0 2px;max-width:100%}
+.cal-v5 .dow span{padding:0 0 8px;text-align:center}
+.cal-v5 .dow .f{display:none}
+.cal-v5 .dow .s{display:inline}
+.cal-v5 .day{padding:6px 1px 0}
+.cal-v5 .dc{align-items:center;gap:3px}
+.cal-v5 .num{margin:0;width:24px;height:24px;font-size:12.5px}
+/* On phones the whole day is the target; its marks are small and only say what is there. */
+.cal-v5 .marks{justify-content:center;gap:2px 1px}
+.cal-v5 .mk{width:12px;height:12px}
+.cal-v5 .mk .ci{width:10px;height:10px;stroke-width:1.7}
+.cal-v5 .mk::before{display:none}
+.cal-v5 .mk.dir::after{inset:-1.5px}
+.cal-v5 .mk>.ci{width:10px;height:10px}
+.cal-v5 .more{width:12px;font-size:9px;line-height:12px;padding:0;text-align:center;letter-spacing:-.03em}
+.cal-v5 .span{bottom:calc(5px + var(--lane) * 4px)}
+.cal-v5 .span.s{left:6px}
+.cal-v5 .span.e{right:6px}
+.cal-v5 .span.hm{left:0}
+.cal-v5 .span.hm.s{left:6px}
+.cal-v5 .span .lbl, .cal-v5 .span .mk{display:none}
+.cal-v5 .band{min-height:38px;padding:0 10px}
+.cal-v5 .band .dc{gap:8px}
+.cal-v5 .hc{display:none}
+.cal-v5 .wing, .cal-v5 .flap, .cal-v5 .evp{position:fixed;left:0!important;right:0;top:auto!important;bottom:0;width:auto!important;border-radius:18px 18px 0 0}
+.cal-v5 .wing, .cal-v5 .flap{height:auto!important;max-height:82vh!important;border-left:0;border-right:0;border-bottom:0;overflow:auto;--hg:linear-gradient(transparent,transparent)!important}
+.cal-v5 .evp{max-height:86vh!important}
+.cal-v5 .evp::before{box-shadow:inset 0 1px 0 var(--edge)}
+.cal-v5 .evp .crease{border-radius:18px 18px 0 0}
+.cal-v5 .grab{display:block;width:36px;height:4px;border-radius:99px;background:var(--edge);margin:8px auto 0}
+.cal-v5 .dock{overflow:visible}
+.cal-v5 .dscrim{display:none}
+.cal-v5 .drawer{position:fixed;top:auto;left:0;right:0;bottom:-28px;width:auto;max-height:calc(86vh + 28px);padding:0 0 28px;border:0;border-top:1px solid var(--edge);border-radius:18px 18px 0 0;transform:translate3d(0,105%,0)}
+.cal-v5 .drawer.open{transform:none}
+.cal-v5 .scrim{display:block}
+.cal-v5 .scrim.on{opacity:1;pointer-events:auto}
+.cal-v5 .two{grid-template-columns:1fr}
+.cal-v5 .wx{grid-template-columns:repeat(2,minmax(0,1fr))}
+.cal-v5 .caption{padding:0 16px}
+.cal-v5 .toast{position:fixed;bottom:auto;top:12px;transform:translate(-50%,-14px)}
+.cal-v5 .erow{grid-template-columns:40px minmax(0,1.4fr) minmax(0,.9fr) minmax(0,1fr)}
+
+}
+/* Reduced motion: no travel, no drift; everything is a short cross-fade. */
+.cal-v5 .rm .bleed{animation:none!important}
+.cal-v5 .rm .pop, .cal-v5 .rm .drawer, .cal-v5 .rm .toast{transform:none!important;transition:opacity .18s ease,visibility 0s linear .18s!important}
+.cal-v5 .rm .pop.open, .cal-v5 .rm .drawer.open, .cal-v5 .rm .toast.on{transition:opacity .18s ease,visibility 0s!important}
+.cal-v5 .rm .hc{transform:none!important}
+.cal-v5 .rm .hc.on{transition:opacity .12s ease!important}
+.cal-v5 .rm .kinds, .cal-v5 .rm .wxchips, .cal-v5 .rm .lsug, .cal-v5 .rm .moresec, .cal-v5 .rm .evd.rowin, .cal-v5 .rm .evd.rowout{animation:cal5-fadeIn .15s ease both!important}
+.cal-v5 .rm .evd.hl.pulse::after{animation:none!important;opacity:0}
+.cal-v5 .rm .toast{transform:translate(-50%,0)!important}
+.cal-v5 .rm .drawer{opacity:0}
+.cal-v5 .rm .drawer.open{opacity:1}
+.cal-v5 .rm .month.in-l, .cal-v5 .rm .month.in-r{animation:cal5-fadeIn .25s ease both!important}
+.cal-v5 .rm .month.out-l, .cal-v5 .rm .month.out-r{animation:cal5-fadeOut .2s ease both!important}
+.cal-v5 .rm .mtitle.swap, .cal-v5 .rm .todaypill .td.bump, .cal-v5 .rm .today .num.pop, .cal-v5 .rm .tog::after{animation:none!important;transition:none!important}
+@media (prefers-reduced-motion:reduce){.cal-v5 .bleed{animation:none!important}
+}
+/* ── Moons on the grid: the main moon's silhouette rests in each day's top-right corner, a flat disc of ink. ── */
+.cal-v5 .msil{position:absolute;top:6px;right:6px;z-index:2;width:22px;height:22px;display:grid;place-items:center;border-radius:50%;--sb:var(--silB);--ss:var(--silS);--sl:var(--silL)}
+.cal-v5 .msil::before{content:"";position:absolute;inset:0;border-radius:50%;background:var(--hair);opacity:0;transition:opacity .15s}
+.cal-v5 .msil.hot::before{opacity:1}
+@media (hover:hover){.cal-v5 .msil:hover::before{opacity:1}
+}
+.cal-v5 .sil{position:relative;display:block;width:14px;height:14px;overflow:visible}
+.cal-v5 .sil .db{fill:var(--sb);stroke:var(--ss);stroke-width:.9}
+.cal-v5 .sil .dl{fill:var(--sl)}
+.cal-v5 .msil.blood, .cal-v5 .flyer.blood{--sb:var(--bldB);--ss:var(--bldS);--sl:var(--bldL)}
+/* Director only: a dashed ring on a red moon players can't see yet. */
+.cal-v5 .msil.blood.dir::after{content:"";position:absolute;inset:1.5px;border-radius:50%;border:1px dashed var(--bldS);pointer-events:none}
+.cal-v5 .band .msil{position:relative;top:auto;right:auto;margin-left:4px;flex:none}
+.cal-v5 .day.packed .msil, .cal-v5 .msil.away{visibility:hidden}
+/* A silhouette in flight into the day's card turns into the realistic moon it lands as. */
+.cal-v5 .flyer.mflyer{--sb:var(--silB);--ss:var(--silS);--sl:var(--silL)}
+.cal-v5 .flyer.mflyer.blood{--sb:var(--bldB);--ss:var(--bldS);--sl:var(--bldL)}
+.cal-v5 .flyer.mflyer .sil{position:absolute;inset:0;width:100%;height:100%}
+.cal-v5 .flyer.mflyer .fcv{position:absolute;inset:0;width:100%;height:100%;border-radius:50%;opacity:0}
+/* In glance cards each moon's silhouette carries its hue, so the moons can be told apart. */
+.cal-v5 .tsil{display:grid;place-items:center;width:18px;height:18px;flex:none}
+.cal-v5 .sw .tsil{flex:none}
+.cal-v5 .tsil .sil{width:15px;height:15px}
+.cal-v5 .tsil .db{fill:oklch(var(--tsB) calc(var(--c) * .6) var(--h));stroke:oklch(var(--tsS) calc(var(--c) * 1.1 + .01) var(--h) / .6)}
+.cal-v5 .tsil .dl{fill:oklch(var(--tsL) calc(var(--c) * .8 + .01) var(--h))}
+.cal-v5 .tsil.blood .db{fill:var(--bldB);stroke:var(--bldS)}
+.cal-v5 .tsil.blood .dl{fill:var(--bldL)}
+.cal-v5 .hc .mgr .tt{display:flex;align-items:center;gap:5px}
+.cal-v5 .hc .mgr .tt b{font-weight:600;color:var(--ink)}
+.cal-v5 .hc .mgr .dirnote .i{width:11px;height:11px}
+.cal-v5 .lg-sil{display:grid;place-items:center;width:20px;height:20px;--sb:var(--silB);--ss:var(--silS);--sl:var(--silL)}
+.cal-v5 .lg-sil.blood{--sb:var(--bldB);--ss:var(--bldS);--sl:var(--bldL)}
+/* The header's way into the moon view: tonight's main moon, real. */
+.cal-v5 .tbtn .hmoon{display:block;flex:none;border-radius:50%;box-shadow:0 0 0 1px var(--mring)}
+.cal-v5 .hmoon.gone, .cal-v5 .rmoon.gone, .cal-v5 .smoon.gone{visibility:hidden}
+/* ── Moons in a day's card and an event's page: a row per moon, each a way into the moon view. ── */
+.cal-v5 .moonsec{position:relative;display:flex;flex-direction:column;gap:1px;margin:6px -8px 0;padding:3px;border-radius:12px;box-shadow:inset 0 0 0 1px var(--hair)}
+.cal-v5 .moonsec.hl{background:var(--paper2);box-shadow:inset 0 0 0 1.5px var(--ink)}
+.cal-v5 .moonsec.hl.pulse::after{content:"";position:absolute;inset:-4px;border-radius:15px;border:1.5px solid var(--ink);pointer-events:none;animation:cal5-hlPulse .8s var(--ease) both}
+.cal-v5 .mrow{display:flex;align-items:center;gap:10px;width:100%;min-height:40px;padding:5px 8px 5px 6px;border-radius:9px;text-align:left;color:var(--ink2)}
+.cal-v5 .mrow:hover{background:var(--paper2)}
+.cal-v5 .moonsec.hl .mrow:hover{background:var(--paper)}
+.cal-v5 .mrow:focus-visible{outline:1.5px solid var(--ink);outline-offset:-1.5px}
+.cal-v5 .rmoon{display:block;flex:none;border-radius:50%;box-shadow:0 0 0 1px var(--mring)}
+.cal-v5 .rmoon.wait{visibility:hidden}
+.cal-v5 .mt{display:flex;flex-direction:column;gap:1px;min-width:0}
+.cal-v5 .mt b{font:600 13px/1.25 var(--sans);color:var(--ink)}
+.cal-v5 .mt small{font:500 11.5px/1.3 var(--sans);color:var(--mut)}
+.cal-v5 .mtag{flex:none;font:650 9px/1 var(--sans);letter-spacing:.08em;text-transform:uppercase;padding:4px 6px;border-radius:99px;color:var(--ink2);box-shadow:inset 0 0 0 1px var(--edge);white-space:nowrap}
+.cal-v5 .mtag.blood{color:var(--bldT);box-shadow:inset 0 0 0 1px var(--bldS)}
+.cal-v5 .mtag.arcane{color:var(--arcT);box-shadow:inset 0 0 0 1px var(--arcS)}
+.cal-v5 .mtag.eclipse{color:var(--eclT);box-shadow:inset 0 0 0 1px var(--eclS)}
+.cal-v5 .mtag.harvest{color:var(--hvtT);box-shadow:inset 0 0 0 1px var(--hvtS)}
+.cal-v5 .mrow .mh{margin-left:2px}
+.cal-v5 .mrow .mh .i{width:12px;height:12px}
+.cal-v5 .mrow .chev{margin-left:auto;width:15px;height:15px;color:var(--mut)}
+.cal-v5 .mrow:hover .chev{color:var(--ink)}
+.cal-v5 .eps .moonsec{margin:0 0 0 -6px}
+/* ── The moon view. Desktop: a wide panel over the calendar. Phone: a full-height sheet. ── */
+.cal-v5 .mv{position:absolute;left:0;top:0;z-index:47;display:flex;flex-direction:column;min-height:0;background:var(--paper);border:1px solid var(--edge);border-radius:16px;box-shadow:var(--shadow-l);color:var(--ink);visibility:hidden;pointer-events:none;overflow:hidden}
+.cal-v5 .mv.live{visibility:visible}
+.cal-v5 .mv.open{pointer-events:auto}
+.cal-v5 .mv:focus{outline:none}
+.cal-v5 .mvcarry{position:fixed;inset:0;z-index:49;pointer-events:none}
+.cal-v5 .mvfc{position:absolute;left:0;top:0;display:block;border-radius:50%;transform-origin:0 0;will-change:transform}
+.cal-v5 .mvcrease{position:relative;flex:none;border-bottom:1px dashed var(--edge);background:var(--paper);border-radius:16px 16px 0 0}
+.cal-v5 .mvcrease .mvt{color:var(--ink2)}
+.cal-v5 .mvsub{font-weight:600;letter-spacing:.1em;color:var(--mut);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:0}
+.cal-v5 .mvbody{flex:1;min-height:0;overflow:auto;overscroll-behavior:contain;display:grid;grid-template-columns:268px minmax(0,1fr)}
+.cal-v5 .mvl{padding:14px 18px 18px;border-right:1px solid var(--hair);min-width:0}
+.cal-v5 .mvr{padding:12px 18px 18px;min-width:0}
+.cal-v5 .mvbig{position:relative;display:grid;place-items:center;padding:0 0 10px}
+/* A magic night's aura and sigils sit round the big moon; the words stay above them. */
+.cal-v5 .bigaura{position:absolute;left:50%;top:calc(50% - 5px);transform:translate(-50%,-50%);pointer-events:none}
+.cal-v5 .bigaura[hidden]{display:none}
+.cal-v5 .bigaura.wait{visibility:hidden}
+.cal-v5 .mvhead{position:relative;z-index:1}
+.cal-v5 .bigmoon{display:block;border-radius:50%;box-shadow:0 0 0 1px var(--mring),0 14px 40px -18px oklch(.15 .03 265 / .6)}
+.cal-v5 .bigmoon.wait{visibility:hidden}
+.cal-v5 .mvname{display:flex;align-items:center;flex-wrap:wrap;gap:4px 8px;margin:0;font:500 26px/1.12 var(--serif);color:var(--ink)}
+.cal-v5 .mvlit{margin-top:5px;font:500 12.5px/1.35 var(--sans);color:var(--ink2)}
+.cal-v5 .mvlit b{font:650 17px/1 var(--sans);color:var(--ink);margin-right:1px}
+.cal-v5 .mvname .mtag{font-family:var(--sans)}
+.cal-v5 .mvhead{text-align:left}
+.cal-v5 .mvfacts dl{margin:12px 0 0;display:grid;grid-template-columns:auto minmax(0,1fr);gap:4px 12px;font:500 12px/1.4 var(--sans)}
+.cal-v5 .mvfacts dl div{display:contents}
+.cal-v5 .mvfacts dt{color:var(--mut)}
+.cal-v5 .mvfacts dd{margin:0;color:var(--ink2)}
+.cal-v5 .mvevs{margin-top:12px;display:flex;flex-direction:column;gap:8px}
+.cal-v5 .mve{display:flex;align-items:flex-start;gap:8px;font:500 12px/1.35 var(--sans);color:var(--ink2)}
+.cal-v5 .mve b{display:block;font-weight:600;color:var(--ink)}
+.cal-v5 .mve small{display:block;font-size:11.5px;color:var(--mut)}
+.cal-v5 .mve .eg{margin-top:4px}
+.cal-v5 .mve .gchip{margin-left:auto}
+.cal-v5 .mvstrip{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:2px;margin:10px -6px 0}
+.cal-v5 .msi{position:relative;display:flex;flex-direction:column;align-items:center;gap:4px;min-width:0;padding:7px 2px 6px;border-radius:10px;color:var(--ink2);text-align:center}
+.cal-v5 .msi:hover{background:var(--paper2)}
+.cal-v5 .msi[aria-pressed="true"]{background:var(--paper2);box-shadow:inset 0 0 0 1.5px var(--ink)}
+.cal-v5 .msi:focus-visible{outline:1.5px solid var(--ink);outline-offset:1px}
+.cal-v5 .msw{position:relative;flex:none;display:grid;place-items:center}
+.cal-v5 .smoon{display:block;border-radius:50%;box-shadow:0 0 0 1px var(--mring)}
+/* The strip is a picker: the moon shown above keeps its place here and wears a ring. */
+.cal-v5 .msw::after{content:"";position:absolute;inset:-3.5px;border-radius:50%;box-shadow:0 0 0 1.5px var(--ink);opacity:0;transition:opacity .2s var(--ease)}
+.cal-v5 .msi.on .msw::after{opacity:1}
+.cal-v5 .mst{display:flex;flex-direction:column;gap:1px;min-width:0;max-width:100%}
+.cal-v5 .mst b{font:600 12.5px/1.2 var(--sans);color:var(--ink);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.cal-v5 .mst small{font:500 11px/1.2 var(--sans);color:var(--mut)}
+.cal-v5 .msi .dirnote{position:absolute;top:5px;right:6px}
+.cal-v5 .msi .dirnote .i{width:11px;height:11px}
+.cal-v5 .gchip{display:inline-flex;align-items:center;gap:4px;height:18px;padding:0 7px 0 6px;border-radius:99px;font:650 9px/1 var(--sans);letter-spacing:.08em;text-transform:uppercase;color:var(--gold);background:var(--goldBg);box-shadow:inset 0 0 0 1px var(--goldRing);white-space:nowrap;flex:none;vertical-align:middle}
+.cal-v5 .gchip .i{width:11px;height:11px}
+.cal-v5 .mvname .gchip{font-family:var(--sans)}
+/* The range header over the lanes. */
+.cal-v5 .phead{display:flex;align-items:center;flex-wrap:wrap;gap:6px 12px}
+.cal-v5 .plabel{margin:0;font:650 9.5px/1 var(--sans);letter-spacing:.14em;text-transform:uppercase;color:var(--mut)}
+.cal-v5 .rname{font:500 18px/1.15 var(--serif);color:var(--ink);white-space:nowrap}
+.cal-v5 .phead .sp{flex:1}
+.cal-v5 .rseg{display:inline-flex;gap:2px;padding:2px;border-radius:9px;box-shadow:inset 0 0 0 1px var(--edge)}
+.cal-v5 .rseg button{height:26px;padding:0 10px;border-radius:7px;font:550 11.5px/1 var(--sans);color:var(--ink2)}
+.cal-v5 .rseg button:hover{color:var(--ink);background:var(--hair2)}
+.cal-v5 .rseg button[aria-pressed="true"]{background:var(--ink);color:var(--paper)}
+.cal-v5 .gnav{display:flex;gap:2px}
+.cal-v5 .gnav .ib{width:28px;height:28px}
+/* The lanes' window. Glass and deep sky are a night window in both themes, so moonlight always reads; relief is stone
+   that follows the theme. */
+.cal-v5 .gframe{position:relative;margin-top:10px;overflow-x:auto;overflow-y:hidden;border-radius:12px;overscroll-behavior-x:contain;scrollbar-width:thin;background:#0e121c;
+  --gtx:oklch(.93 .01 265 / .9);--gtx2:oklch(.93 .01 265 / .55);--gln:oklch(.93 .01 265 / .5);--gsel:oklch(.97 .01 265);
+  --hbT:oklch(.86 .1 85);--hbBg:oklch(.32 .05 80 / .7);--hbR:oklch(.8 .1 85 / .45)}
+.cal-v5 .gframe[data-look="relief"]{background:#e8e5de;--gtx:oklch(.33 .015 265 / .9);--gtx2:oklch(.4 .012 265 / .62);--gln:oklch(.3 .02 265 / .4);--gsel:oklch(.24 .012 265);--hbT:oklch(.45 .1 75);--hbBg:oklch(.9 .07 85 / .8);--hbR:oklch(.62 .1 80 / .5)}
+.cal-v5 .gframe[data-look="relief"].dark{background:#2e3138;--gtx:oklch(.9 .01 265 / .9);--gtx2:oklch(.85 .01 265 / .55);--gln:oklch(.93 .01 265 / .45);--gsel:oklch(.96 .01 265);--hbT:oklch(.86 .1 85);--hbBg:oklch(.32 .05 80 / .7);--hbR:oklch(.8 .1 85 / .45)}
+.cal-v5 .gframe:focus{outline:none}
+.cal-v5 .gframe:focus-visible{box-shadow:0 0 0 2px var(--paper),0 0 0 3.5px var(--ink)}
+.cal-v5 .gcanvas{position:relative}
+.cal-v5 .gcanvas canvas{position:absolute;left:0;top:0;display:block}
+.cal-v5 .gcanvas .gfxg{mix-blend-mode:screen}
+.cal-v5 .gframe[data-look="relief"] .gfxg{mix-blend-mode:normal}
+.cal-v5 .gcanvas .mg-stars{mix-blend-mode:screen;animation:cal5-starDrift linear infinite;will-change:transform}
+.cal-v5 .gcanvas .mg-stars.s1{animation-duration:520s}
+.cal-v5 .gcanvas .mg-stars.s2{animation-duration:340s}
+.cal-v5 .gcanvas .mg-stars.s3{animation-duration:210s}
+@keyframes cal5-starDrift{to{transform:translate3d(-50%,0,0)}}
+.cal-v5 .gframe.still .mg-stars{animation-play-state:paused}
+.cal-v5 .gl{position:absolute;left:12px;z-index:7;display:flex;align-items:center;gap:7px;height:18px;white-space:nowrap;pointer-events:none}
+.cal-v5 .gln{font:650 9.5px/1 var(--sans);letter-spacing:.13em;text-transform:uppercase;color:var(--gtx2)}
+.cal-v5 .glc{font:500 10.5px/1 var(--sans);color:var(--gtx2)}
+.cal-v5 .gl.on .gln{color:var(--gtx)}
+.cal-v5 .gl .gchip{height:16px;font-size:8.5px;color:var(--hbT);background:var(--hbBg);box-shadow:inset 0 0 0 1px var(--hbR)}
+.cal-v5 .ghit{position:absolute;left:0;right:0;z-index:6;cursor:pointer}
+.cal-v5 .gtoday{position:absolute;z-index:4;width:0;border-left:1px dashed var(--gln);pointer-events:none}
+.cal-v5 .gnight{position:absolute;left:0;z-index:5;border-radius:7px;box-shadow:inset 0 0 0 1.5px var(--gsel);pointer-events:none;transition:transform .22s var(--ease)}
+.cal-v5 .gcol{position:absolute;left:0;z-index:4;border-radius:5px;background:oklch(1 0 0 / .08);opacity:0;pointer-events:none}
+.cal-v5 .gframe[data-look="relief"]:not(.dark) .gcol{background:oklch(.3 .02 265 / .07)}
+.cal-v5 .gcol.on{opacity:1}
+.cal-v5 .hbadge{position:absolute;z-index:4;transform:translateX(-50%);display:inline-flex;align-items:center;gap:3px;height:16px;padding:0 6px;border-radius:99px;font:650 8.5px/1 var(--sans);letter-spacing:.08em;text-transform:uppercase;color:var(--hbT);background:var(--hbBg);box-shadow:inset 0 0 0 1px var(--hbR);white-space:nowrap;pointer-events:none}
+.cal-v5 .hbadge .i{width:10px;height:10px}
+.cal-v5 .gaxis{position:absolute;left:0;right:0;height:28px;border-top:1px solid var(--gln)}
+.cal-v5 .gx{position:absolute;top:7px;transform:translateX(-50%);font:500 10.5px/1 var(--sans);font-variant-numeric:tabular-nums;color:var(--gtx2);white-space:nowrap;pointer-events:none}
+.cal-v5 .gx.today{top:4px;display:grid;place-items:center;min-width:20px;height:18px;padding:0 5px;border-radius:99px;background:var(--gtx);color:#0e121c;font-weight:650}
+.cal-v5 .gframe[data-look="relief"]:not(.dark) .gx.today{color:#e8e5de}
+.cal-v5 .gx.sel{color:var(--gsel);font-weight:650}
+.cal-v5 .gx.today.sel{box-shadow:0 0 0 1.5px var(--gsel),0 0 0 3px transparent}
+.cal-v5 .gx.fest .ci{display:block;width:10px;height:10px;margin-top:-1px}
+.cal-v5 .gx.mo{transform:none;font:550 10px/12px var(--sans);color:var(--gtx2);padding-left:4px;border-left:1px solid var(--gln)}
+.cal-v5 .gx.tdot{top:-4px;width:7px;height:7px;border-radius:50%;background:var(--gtx)}
+.cal-v5 .gx.sdot{top:-5px;width:9px;height:9px;border-radius:50%;box-shadow:inset 0 0 0 1.5px var(--gsel)}
+.cal-v5 .gpulse{position:absolute;z-index:6;pointer-events:none;border-radius:10px;box-shadow:0 0 0 2px var(--gsel);opacity:0;animation:cal5-gPulse 1.7s var(--ease) 2}
+@keyframes cal5-gPulse{0%{opacity:0;transform:scale(1.1)}30%{opacity:.9;transform:none}100%{opacity:0;transform:scale(1.03)}}
+
+/* .gtick: this port's own day-tick strip (calendar_view.js's _mvGraphHTML),
+   standing in for the mockups' ambient canvas graph (#794). Deliberately
+   NOT .gx: .gx is an absolutely-positioned label meant to overlay that
+   future canvas and has no flow height of its own — every child of
+   .gframe being position:absolute collapses .gframe to zero height, which
+   is exactly what happened before this rule existed. .gtick is a normal
+   flow item instead, so .gframe sizes itself from its content. */
+.cal-v5 .gframe{display:flex;align-items:flex-end;gap:2px;min-height:78px;padding:10px 8px}
+.cal-v5 .gtick{position:relative;display:flex;flex-direction:column;align-items:center;gap:3px;flex:none;width:22px;color:var(--gtx2);font:500 10px/1 var(--sans);font-variant-numeric:tabular-nums}
+.cal-v5 .gtick .sil{width:18px;height:18px}
+.cal-v5 .gtick.today{color:var(--gtx)}
+.cal-v5 .gtick.today span{font-weight:650}
+/* A moon-night payload's span gets a ring in its type's hue — a minimal,
+   honest stand-in for the mockups' drip/aura effect (#794 builds the real
+   one) rather than nothing at all. */
+.cal-v5 .gtick[data-night="blood"] .sil{box-shadow:0 0 0 1.5px var(--bldT);border-radius:50%}
+.cal-v5 .gtick[data-night="magic"] .sil{box-shadow:0 0 0 1.5px var(--arcT);border-radius:50%}
+.cal-v5 .gtick[data-night="eclipse"] .sil{box-shadow:0 0 0 1.5px var(--eclT);border-radius:50%}
+.cal-v5 .gtick[data-night="harvest"] .sil{box-shadow:0 0 0 1.5px var(--hvtT);border-radius:50%}
+/* The key: what the light, the discs and the moving marks mean, in the lanes' own marks. */
+.cal-v5 .gkey{list-style:none;margin:10px 0 0;padding:0;display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:6px 18px;font:500 11.5px/1.4 var(--sans);color:var(--mut)}
+.cal-v5 .gkey li{display:flex;align-items:flex-start;gap:8px}
+.cal-v5 .gkey b{font-weight:600;color:var(--ink2)}
+.cal-v5 .k{flex:none;width:22px;height:12px;margin-top:2px;border-radius:99px}
+.cal-v5 .k-light{background:linear-gradient(90deg,transparent,oklch(.88 .03 255) 45%,oklch(.97 .01 255) 50%,oklch(.88 .03 255) 55%,transparent);box-shadow:inset 0 0 0 1px var(--hair);clip-path:polygon(0 50%,50% 0,100% 50%,50% 100%)}
+.cal-v5 .k-disc{width:12px;margin:2px 5px 0;border-radius:50%;background:radial-gradient(circle at 60% 50%,oklch(.9 .01 255) 0 45%,oklch(.3 .01 265) 47%)}
+.cal-v5 .k-blood{background:radial-gradient(ellipse 45% 70% at 50% 45%,oklch(.58 .17 22 / .9),oklch(.58 .17 22 / 0) 100%),linear-gradient(90deg,oklch(.86 .02 255),oklch(.96 .01 255) 50%,oklch(.86 .02 255));box-shadow:inset 0 -1.5px 0 oklch(.4 .15 22)}
+.cal-v5 .k-eclipse{width:12px;height:12px;margin:2px 5px 0;border-radius:50%;background:radial-gradient(circle at 72% 40%,oklch(.4 .06 45) 0 58%,oklch(.3 .05 40) 62%),oklch(.86 .02 255);box-shadow:inset -1px 0 0 oklch(.62 .08 55)}
+.cal-v5 .k-harvest{width:14px;height:14px;margin:1px 4px 0;border-radius:50%;background:radial-gradient(circle at 42% 40%,oklch(.9 .11 85),oklch(.76 .14 72))}
+.cal-v5 .k-arcane{width:14px;margin:0 4px;height:14px;margin-top:1px;border-radius:50%;background:radial-gradient(circle,oklch(.9 .02 300) 0 36%,oklch(.72 .13 300 / .75) 40%,oklch(.72 .13 300 / 0) 72%)}
+.cal-v5 .k-conj{width:12px;margin:0 5px;height:16px;border-radius:0;background:linear-gradient(90deg,transparent 45%,oklch(.72 .15 300) 45% 55%,transparent 55%)}
+.cal-v5 .k-night{box-shadow:inset 0 0 0 1.5px var(--ink2);border-radius:5px;width:14px;margin:0 4px}
+/* Moon events under the lanes, with the Director's reveal switches. */
+.cal-v5 .skyev{margin-top:12px}
+.cal-v5 .skyev .plabel{margin-bottom:4px}
+.cal-v5 .evrow{display:flex;align-items:center;gap:10px;padding:8px 0;border-top:1px solid var(--hair)}
+.cal-v5 .evrow .en{display:flex;align-items:center;gap:10px;min-width:0;flex:1;border-radius:8px;padding:2px 4px;margin:-2px -4px}
+.cal-v5 .evrow .en:hover b{text-decoration:underline;text-decoration-color:var(--edge);text-underline-offset:3px}
+.cal-v5 .evrow .en:focus-visible{outline:1.5px solid var(--ink);outline-offset:1px}
+.cal-v5 .evrow .et{display:flex;flex-direction:column;gap:2px;min-width:0}
+.cal-v5 .evrow b{font:600 13px/1.3 var(--sans);color:var(--ink)}
+.cal-v5 .evrow small{font:500 11.5px/1.35 var(--sans);color:var(--mut)}
+.cal-v5 .nw{white-space:nowrap}
+.cal-v5 .evrow .sw{display:flex;align-items:center;gap:8px;flex:none;font:500 11.5px/1.2 var(--sans);color:var(--ink2)}
+.cal-v5 .eg{width:9px;height:9px;flex:none;border-radius:50%}
+.cal-v5 .eg.blood{background:oklch(.5 .19 25);border-radius:50% 50% 50% 50% / 60% 60% 40% 40%}
+.cal-v5 .eg.arcane{background:oklch(.66 .18 300);box-shadow:0 0 0 2px oklch(.66 .18 300 / .25)}
+.cal-v5 .eg.conj{background:linear-gradient(90deg,oklch(.68 .13 295),oklch(.74 .13 70))}
+.cal-v5 .eg.eclipse{background:radial-gradient(circle at 70% 40%,oklch(.36 .06 45) 0 55%,oklch(.66 .08 55) 60%)}
+.cal-v5 .eg.harvest{width:10px;height:10px;background:oklch(.78 .14 75)}
+.cal-v5 .mvhc{z-index:8}
+.cal-v5 .mvhc .mvh1{display:flex;align-items:center;gap:6px}
+.cal-v5 .mvhc .mvh1 .v{margin-left:auto;font:650 15px/1 var(--sans);color:var(--ink);white-space:nowrap}
+.cal-v5 .mvhc .mvh1 .v small{font:500 11px/1 var(--sans);color:var(--mut);margin-left:2px}
+.cal-v5 .mvhc .gchip{margin-left:auto}
+/* The moon customizer: a live moon on top with its phase scrubber, then the fields, grouped as in the event editor. */
+.cal-v5 .meprev{display:grid;justify-items:center;gap:9px;padding:4px 0 14px}
+.cal-v5 .mepv{width:148px;height:148px;border-radius:50%;box-shadow:0 0 0 1px var(--mring),0 16px 38px -20px oklch(.15 .03 265 / .7)}
+.cal-v5 .mescrub{position:relative;width:100%;max-width:300px;padding-top:12px}
+.cal-v5 .mescrub input{display:block;width:100%;height:18px;margin:0;background:transparent;-webkit-appearance:none;appearance:none}
+.cal-v5 .mescrub input::-webkit-slider-runnable-track{height:6px;border-radius:99px;background:linear-gradient(90deg,oklch(.3 .01 265),oklch(.95 .01 255) 50%,oklch(.3 .01 265));box-shadow:inset 0 0 0 1px var(--edge)}
+.cal-v5 .mescrub input::-moz-range-track{height:6px;border-radius:99px;background:linear-gradient(90deg,oklch(.3 .01 265),oklch(.95 .01 255) 50%,oklch(.3 .01 265));box-shadow:inset 0 0 0 1px var(--edge)}
+.cal-v5 .mescrub input::-webkit-slider-thumb{-webkit-appearance:none;appearance:none;width:16px;height:16px;margin-top:-5px;border-radius:50%;background:var(--paper);box-shadow:0 0 0 1.5px var(--ink),0 1px 3px oklch(0 0 0 / .3)}
+.cal-v5 .mescrub input::-moz-range-thumb{width:16px;height:16px;border:0;border-radius:50%;background:var(--paper);box-shadow:0 0 0 1.5px var(--ink),0 1px 3px oklch(0 0 0 / .3)}
+.cal-v5 .mescrub input:focus-visible{outline:1.5px solid var(--ink);outline-offset:3px;border-radius:6px}
+/* Tonight's place in the cycle: a tick above the track, under the thumb's centre at that phase. */
+.cal-v5 .mescrub .tn{position:absolute;top:8px;left:calc(var(--tn) * (100% - 16px) + 8px);width:2px;height:6px;margin-left:-1px;border-radius:1px;background:var(--ink)}
+.cal-v5 .mescrub .tnl{position:absolute;top:-3px;left:calc(var(--tn) * (100% - 16px) + 8px);transform:translateX(-50%);font:600 9px/1 var(--sans);letter-spacing:.06em;text-transform:uppercase;color:var(--mut);white-space:nowrap}
+.cal-v5 .meph{font:500 12px/1.3 var(--sans);color:var(--ink2);text-align:center}
+.cal-v5 .mecyc{max-width:190px}
+.cal-v5 .menights{max-width:120px}
+.cal-v5 .meswatches{display:flex;flex-wrap:wrap;gap:9px}
+.cal-v5 .meswatches button{width:26px;height:26px;border-radius:50%;background:var(--c);box-shadow:inset 0 0 0 1px oklch(0 0 0 / .14)}
+.cal-v5 .meswatches button[aria-pressed="true"]{box-shadow:inset 0 0 0 1px oklch(0 0 0 / .14),0 0 0 2px var(--paper),0 0 0 3.5px var(--ink)}
+.cal-v5 .mehue{-webkit-appearance:none;appearance:none;height:18px;padding:0!important;border:0!important;background:transparent!important}
+.cal-v5 .mehue::-webkit-slider-runnable-track{height:8px;border-radius:99px;background:linear-gradient(90deg,oklch(.8 .07 0),oklch(.8 .07 60),oklch(.8 .07 120),oklch(.8 .07 180),oklch(.8 .07 240),oklch(.8 .07 300),oklch(.8 .07 360))}
+.cal-v5 .mehue::-moz-range-track{height:8px;border-radius:99px;background:linear-gradient(90deg,oklch(.8 .07 0),oklch(.8 .07 60),oklch(.8 .07 120),oklch(.8 .07 180),oklch(.8 .07 240),oklch(.8 .07 300),oklch(.8 .07 360))}
+.cal-v5 .mehue::-webkit-slider-thumb{-webkit-appearance:none;appearance:none;width:16px;height:16px;margin-top:-4px;border-radius:50%;background:var(--paper);box-shadow:0 0 0 1.5px var(--ink)}
+.cal-v5 .mehue::-moz-range-thumb{width:16px;height:16px;border:0;border-radius:50%;background:var(--paper);box-shadow:0 0 0 1.5px var(--ink)}
+.cal-v5 .menote{font:500 11px/1.45 var(--sans);color:var(--mut);margin-top:-4px}
+.cal-v5 .snrow{display:flex;align-items:center;gap:9px;padding:6px 0;border-top:1px solid var(--hair);font:500 12.5px/1.3 var(--sans);color:var(--ink)}
+.cal-v5 .snrow:first-child{border-top:0}
+.cal-v5 .snrow .snt{flex:1;min-width:0}
+.cal-v5 .snrow b{font-weight:600}
+.cal-v5 .snrow small{display:block;color:var(--mut);font-size:11px}
+.cal-v5 .snv{font:550 11px/1 var(--sans);color:var(--mut)}
+.cal-v5 .snlist:empty{display:none}
+.cal-v5 .snform{display:flex;flex-direction:column;gap:10px;padding:12px;border-radius:11px;background:var(--paper2);box-shadow:inset 0 0 0 1px var(--hair)}
+.cal-v5 .snform[hidden]{display:none}
+.cal-v5 .mesnb{align-self:flex-start}
+.cal-v5 .x.sm{width:24px;height:24px}
+.cal-v5 .x.sm .i{width:12px;height:12px}
+.cal-v5 .btn.sm{height:26px;padding:0 9px;font-size:11.5px}
+.cal-v5 .btn.sm .i{width:12px;height:12px}
+.cal-v5 .dedit{color:var(--mut)}
+.cal-v5 .dedit:hover{color:var(--ink);background:var(--hair2)}
+.cal-v5 .addm{margin-top:4px;padding-left:4px}
+.cal-v5 .mvedit{height:28px;margin-top:8px;padding:0 9px 0 6px}
+/* The day's moon sits in the card's corner, as its silhouette sits in the day's corner on the grid. */
+.cal-v5 .wb{position:relative}
+.cal-v5 .dmoon{position:absolute;top:10px;right:12px;width:38px;height:38px;display:grid;place-items:center;border-radius:50%}
+.cal-v5 .dmoon:hover{background:var(--hair2)}
+.cal-v5 .dmoon:focus-visible{outline:1.5px solid var(--ink);outline-offset:1px}
+.cal-v5 .wb .wdate, .cal-v5 .wb .wsub{padding-right:44px}
+@media (max-width:900px){.cal-v5 .mvbody{grid-template-columns:236px minmax(0,1fr)}
+.cal-v5 .gkey{grid-template-columns:1fr}
+}
+@media (max-width:600px){/* The moon sits under the date on phones, where a corner would crowd the number. */
+.cal-v5 .msil{top:31px;right:auto;left:50%;width:16px;height:16px;margin-left:-8px}
+.cal-v5 .msil::before{display:none}
+.cal-v5 .msil .sil{width:11px;height:11px}
+.cal-v5 .dc .marks{margin-top:13px}
+.cal-v5 .band .msil{top:auto;left:auto;margin-left:6px}
+.cal-v5 .band .dc .marks{margin-top:0}
+.cal-v5 .mv{position:fixed;left:0!important;right:0;top:10px!important;bottom:0;width:auto!important;max-height:none!important;border-radius:18px 18px 0 0;border-left:0;border-right:0;border-bottom:0}
+.cal-v5 .mvcrease{border-radius:18px 18px 0 0}
+.cal-v5 .mvbody{display:block}
+.cal-v5 .mvl{border-right:0;padding:12px 14px 8px;display:grid;grid-template-columns:auto minmax(0,1fr);grid-template-areas:"big head" "strip strip" "facts facts";column-gap:14px;align-items:center}
+.cal-v5 .mvbig{grid-area:big;padding:0}
+.cal-v5 .bigaura{top:50%}
+.cal-v5 .mvhead{grid-area:head}
+.cal-v5 .mvstrip{grid-area:strip}
+.cal-v5 .mvfacts{grid-area:facts}
+.cal-v5 .mvname{font-size:22px}
+.cal-v5 .mvr{padding:12px 14px 22px;border-top:1px solid var(--hair)}
+.cal-v5 .rname{font-size:16px}
+.cal-v5 .gkey{grid-template-columns:1fr}
+
+}
+/* Reduced motion: the stars stand still; the lanes' moving layer is drawn once, as one still moment. */
+.cal-v5 .rm .gcanvas .mg-stars{animation:none!important}
+.cal-v5 .rm .gnight{transition:none}
+.cal-v5 .rm .moonsec.hl.pulse::after, .cal-v5 .rm .gpulse{animation:none!important;opacity:0}
+/* ── v6: owner editing. Edit mode, the bulk bar, the recipe sheet and Settings. ── */
+:root{--pickBg:oklch(.56 .08 250 / .13);--pickRing:oklch(.46 .1 252 / .62);--ghost:oklch(.5 .06 265 / .9);
+  --wxClear:oklch(.86 .09 85 / .55);--wxCloud:oklch(.8 .015 265 / .6);--wxRain:oklch(.78 .06 240 / .55);--wxSnow:oklch(.9 .03 230 / .8);--wxStorm:oklch(.72 .06 290 / .5);--wxFog:oklch(.84 .02 180 / .6);
+  --keep:oklch(.62 .12 75);--keepBg:oklch(.9 .07 85 / .45)}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){--pickBg:oklch(.72 .08 250 / .16);--pickRing:oklch(.8 .08 250 / .6);--ghost:oklch(.82 .04 265 / .9);
+  --wxClear:oklch(.6 .08 85 / .3);--wxCloud:oklch(.5 .01 265 / .45);--wxRain:oklch(.5 .07 240 / .4);--wxSnow:oklch(.72 .03 230 / .3);--wxStorm:oklch(.45 .07 290 / .45);--wxFog:oklch(.55 .02 180 / .35);
+  --keep:oklch(.82 .1 85);--keepBg:oklch(.7 .1 85 / .16)}
+}
+:root[data-theme="dark"]{--pickBg:oklch(.72 .08 250 / .16);--pickRing:oklch(.8 .08 250 / .6);--ghost:oklch(.82 .04 265 / .9);
+  --wxClear:oklch(.6 .08 85 / .3);--wxCloud:oklch(.5 .01 265 / .45);--wxRain:oklch(.5 .07 240 / .4);--wxSnow:oklch(.72 .03 230 / .3);--wxStorm:oklch(.45 .07 290 / .45);--wxFog:oklch(.55 .02 180 / .35);
+  --keep:oklch(.82 .1 85);--keepBg:oklch(.7 .1 85 / .16)}
+/* The Edit toggle is pressed ink while it is on. */
+.cal-v5 .tbtn[aria-pressed="true"], .cal-v5 .tbtn[aria-pressed="true"]:hover{background:var(--ink);color:var(--paper);box-shadow:none}
+/* The edit strip takes the era line's place, at the same height, so the grid never moves. */
+.cal-v5 .h-subw{position:relative}
+.cal-v5 .h-sub{transition:opacity .2s var(--ease)}
+.cal-v5 .h-edit{position:absolute;left:0;right:0;top:0;bottom:0;margin-top:7px;display:flex;align-items:center;gap:8px;min-width:0;opacity:0;visibility:hidden;pointer-events:none;transition:opacity .2s var(--ease),visibility 0s linear .2s}
+.cal-v5 .cal.editing .h-edit{opacity:1;visibility:visible;pointer-events:auto;transition:opacity .2s var(--ease),visibility 0s}
+.cal-v5 .cal.editing .h-sub{opacity:0;visibility:hidden;transition:opacity .15s var(--ease),visibility 0s linear .15s}
+.cal-v5 .etag{font:650 9.5px/1 var(--sans);letter-spacing:.14em;text-transform:uppercase;color:var(--paper);background:var(--ink);padding:5px 7px;border-radius:6px;white-space:nowrap;flex:none}
+.cal-v5 .ehint{font:500 12px/1.3 var(--sans);color:var(--mut);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:0}
+.cal-v5 .h-edit .sp{flex:1 1 0}
+.cal-v5 .h-edit .btn{flex:none}
+/* Edit mode: the cells step back to their dates, so every day is an easy target. */
+.cal-v5 .day .mk, .cal-v5 .day .span, .cal-v5 .day .msil{transition:opacity .25s var(--ease)}
+.cal-v5 .cal.editing .day .mk:not(.ghost), .cal-v5 .cal.editing .day .more, .cal-v5 .cal.editing .day .span:not(.ghost), .cal-v5 .cal.editing .day .msil{opacity:.14}
+.cal-v5 .cal.editing .day .marks, .cal-v5 .cal.editing .day .span, .cal-v5 .cal.editing .day .msil{pointer-events:none}
+.cal-v5 .cal.editing .day{-webkit-user-select:none;user-select:none;-webkit-touch-callout:none;cursor:pointer}
+.cal-v5 .cal.editing.painting .day{cursor:crosshair}
+.cal-v5 .cal.editing .day.pick::before{inset:2px;border-radius:9px;background:var(--pickBg);box-shadow:inset 0 0 0 1.5px var(--pickRing);opacity:1}
+.cal-v5 .cal.editing .stage{padding-bottom:84px}
+/* A day's weather, shown while editing or generating; painted days carry their weather's tint. */
+.cal-v5 .cwx{position:absolute;right:5px;bottom:5px;z-index:2;width:20px;height:20px;display:none;place-items:center;border-radius:50%;color:var(--mut);pointer-events:none}
+.cal-v5 .cal.wxon .cwx{display:grid}
+.cal-v5 .cwx .i{width:13px;height:13px}
+.cal-v5 .cwx.hand{color:var(--ink)}
+.cal-v5 .cwx.hand .i{stroke-width:1.9}
+.cal-v5 .cwx.dir::after{content:"";position:absolute;inset:0;border-radius:50%;border:1px dashed currentColor;opacity:.7}
+.cal-v5 .cwx.ghost{color:var(--ink)}
+.cal-v5 .cwx.ghost .i{stroke-dasharray:2.2 1.6}
+.cal-v5 .cpt{position:absolute;inset:2px;z-index:-1;border-radius:9px;background:var(--wxc);opacity:0;pointer-events:none}
+.cal-v5 .cal.wxon .cpt.hand{opacity:1}
+.cal-v5 .cal.wxon .cpt.ghost{opacity:.62}
+.cal-v5 .cpt.in{animation:cal5-ghostWx .32s var(--ease) both}
+@keyframes cal5-ghostWx{from{opacity:0}}
+.cal-v5 .cwx.in{animation:cal5-fadeIn .32s var(--ease) both}
+.cal-v5 .cwx.solid-in{animation:cal5-solidWx .7s var(--ease) both}
+@keyframes cal5-solidWx{from{opacity:.45}to{opacity:1}}
+.cal-v5 .cpt.solid-in{animation:cal5-solidPt .7s var(--ease) both}
+@keyframes cal5-solidPt{from{opacity:.62}to{opacity:0}}
+.cal-v5 .cal.wxon .cpt.hand.solid-in{animation:none}
+/* Locks and hidden days: small marks in the day, for the Director only. */
+.cal-v5 .clk, .cal-v5 .chd{position:absolute;z-index:2;display:grid;place-items:center;width:15px;height:15px;color:var(--mut);pointer-events:none}
+.cal-v5 .clk{left:32px;top:9px}
+.cal-v5 .chd{left:6px;bottom:6px}
+.cal-v5 .clk .i, .cal-v5 .chd .i{width:12px;height:12px}
+.cal-v5 .cal.editing .clk{color:var(--ink)}
+.cal-v5 .band .clk{left:auto;right:34px;top:50%;margin-top:-7px}
+.cal-v5 .band .chd{left:auto;right:52px;bottom:auto;top:50%;margin-top:-7px}
+.cal-v5 .band .cwx{right:74px;bottom:auto;top:50%;margin-top:-10px}
+.cal-v5 .band .cpt{inset:3px 6px}
+/* Week handles sit in the grid's gutter while editing. */
+.cal-v5 .wk{position:relative}
+.cal-v5 .wkh{position:absolute;top:4px;bottom:4px;left:calc(-1 * var(--gx));width:calc(var(--gx) - 2px);display:grid;place-items:center;border-radius:7px;color:var(--mut)}
+.cal-v5 .wkh .i{width:13px;height:13px}
+.cal-v5 .wkh:hover, .cal-v5 .wkh[aria-pressed="true"]{background:var(--lift);color:var(--ink);box-shadow:0 0 0 1px var(--hair)}
+.cal-v5 .wkh:focus-visible{outline:1.5px solid var(--ink);outline-offset:-1px}
+.cal-v5 .dow .dwb{display:block;width:100%;padding:0 10px 9px;border-radius:6px 6px 0 0;font:650 9.5px/1 var(--sans);letter-spacing:.13em;text-transform:uppercase;color:var(--mut);white-space:nowrap;overflow:hidden}
+.cal-v5 .dow .dwb:hover, .cal-v5 .dow .dwb[aria-pressed="true"]{color:var(--ink);background:var(--lift)}
+.cal-v5 .dow .dwb:focus-visible{outline:1.5px solid var(--ink);outline-offset:-1.5px}
+/* Ghosts: a preview drawn in place, dashed and faint; applying makes them solid where they stand. */
+.cal-v5 .mk.ghost{color:var(--ghost)}
+.cal-v5 .mk.ghost .ci{stroke-dasharray:2.2 1.5}
+.cal-v5 .mk.ghost.in{animation:cal5-ghostIn .3s var(--ease) both}
+@keyframes cal5-ghostIn{from{opacity:0}}
+.cal-v5 .mk.solid-in{animation:cal5-solidIn .7s var(--ease) backwards}
+@keyframes cal5-solidIn{from{opacity:.4}to{opacity:1}}
+/* While editing, what an Apply made turns solid, holds a moment, then steps back with the other marks. */
+.cal-v5 .cal.editing .mk.solid-in{animation:cal5-solidInEd 2.4s var(--ease) backwards}
+@keyframes cal5-solidInEd{0%{opacity:.4}25%{opacity:1}75%{opacity:1}100%{opacity:.14}}
+.cal-v5 .mk.moving{opacity:.3}
+.cal-v5 .span.ghost{background:none;border-top:1.5px dashed oklch(var(--mkL) var(--mkC) var(--h,260));height:0}
+.cal-v5 .span.ghost.in{animation:cal5-ghostIn .3s var(--ease) both}
+/* ── The bulk bar: it rises from the grid's bottom edge whenever days are selected. ── */
+.cal-v5 .bbw{position:sticky;bottom:0;height:0;z-index:35;pointer-events:none}
+.cal-v5 .bbar{position:absolute;left:0;right:0;bottom:14px;margin:0 auto;width:-moz-fit-content;width:fit-content;max-width:calc(100% - 24px);display:flex;align-items:center;gap:4px;padding:6px 6px 6px 14px;border-radius:14px;background:var(--paper);border:1px solid var(--edge);box-shadow:var(--shadow-l);pointer-events:auto}
+.cal-v5 .bbl{display:flex;flex-direction:column;gap:2px;min-width:0;margin-right:6px}
+.cal-v5 .bbl b{font:650 12.5px/1.2 var(--sans);color:var(--ink);white-space:nowrap}
+.cal-v5 .bbl span{font:500 11px/1.2 var(--sans);color:var(--mut);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:190px}
+.cal-v5 .bba{display:flex;align-items:center;gap:2px;flex-wrap:wrap;min-width:0}
+.cal-v5 .bbb{display:inline-flex;align-items:center;gap:6px;height:34px;padding:0 10px;border-radius:9px;font:550 12.5px/1 var(--sans);color:var(--ink2);white-space:nowrap}
+.cal-v5 .bbb:hover, .cal-v5 .bbb[aria-expanded="true"]{background:var(--paper2);color:var(--ink);box-shadow:inset 0 0 0 1px var(--hair)}
+.cal-v5 .bbb[aria-expanded="true"]{box-shadow:inset 0 0 0 1.3px var(--ink)}
+.cal-v5 .bbb:focus-visible, .cal-v5 .bbar .x:focus-visible{outline:1.5px solid var(--ink);outline-offset:1px}
+.cal-v5 .bbb .i{width:15px;height:15px}
+.cal-v5 .bbar .x{margin-left:2px}
+/* The tray: a paint palette, a shift or a clear, floating just above the bar. */
+.cal-v5 .btray{position:absolute;left:0;right:0;bottom:calc(22px + var(--barH,48px));margin:0 auto;width:-moz-fit-content;width:fit-content;max-width:min(560px,calc(100% - 24px));padding:12px 14px 12px;border-radius:14px;background:var(--paper);border:1px solid var(--edge);box-shadow:var(--shadow-l);pointer-events:auto}
+.cal-v5 .trh{font:600 12.5px/1.35 var(--sans);color:var(--ink)}
+.cal-v5 .trh small{display:block;font-weight:500;font-size:11.5px;color:var(--mut);margin-top:2px}
+.cal-v5 .trf{display:flex;flex-wrap:wrap;align-items:center;gap:6px;margin-top:10px}
+.cal-v5 .pal{display:flex;flex-wrap:wrap;gap:5px;margin-top:9px}
+.cal-v5 .btray.slim{max-width:calc(100% - 24px);padding:7px 8px}
+.cal-v5 .trrow{display:flex;flex-wrap:wrap;align-items:center;gap:6px}
+.cal-v5 .trrow .pal{margin-top:0}
+.cal-v5 .trf1{display:flex;align-items:center;gap:6px;margin-left:auto}
+.cal-v5 .cal.editing.traying .stage{padding-bottom:calc(84px + var(--trayH,0px))}
+.cal-v5 .pal button{display:inline-flex;align-items:center;gap:6px;height:30px;padding:0 11px 0 9px;border-radius:99px;font:550 12px/1 var(--sans);color:var(--ink2);background:var(--paper);box-shadow:inset 0 0 0 1px var(--edge)}
+.cal-v5 .pal button .sw2{width:12px;height:12px;border-radius:50%;background:var(--wxc);box-shadow:inset 0 0 0 1px var(--edge)}
+.cal-v5 .pal button[aria-checked="true"]{box-shadow:inset 0 0 0 1.5px var(--ink);color:var(--ink)}
+.cal-v5 .pal button .i{width:14px;height:14px}
+.cal-v5 .shn{display:flex;align-items:center;gap:8px;margin-top:9px}
+.cal-v5 .shn output{min-width:150px;text-align:center;font:600 13px/1.2 var(--sans);color:var(--ink)}
+.cal-v5 .shn button{width:30px;height:30px;border-radius:8px;display:grid;place-items:center;color:var(--ink2);box-shadow:inset 0 0 0 1px var(--edge)}
+.cal-v5 .shn button:hover{background:var(--paper2);color:var(--ink)}
+.cal-v5 .shn .i{width:13px;height:13px}
+.cal-v5 .clo{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:6px;margin-top:9px}
+.cal-v5 .clo button{display:flex;flex-direction:column;align-items:flex-start;gap:3px;padding:8px 10px;border-radius:10px;box-shadow:inset 0 0 0 1px var(--edge);background:var(--paper);font:600 12.5px/1.25 var(--sans);color:var(--ink)}
+.cal-v5 .clo button small{font:500 11px/1.3 var(--sans);color:var(--mut)}
+.cal-v5 .clo button:hover{background:var(--paper2)}
+.cal-v5 .clo button:disabled{opacity:.45;cursor:default}
+.cal-v5 .clo button:disabled:hover{background:var(--paper)}
+.cal-v5 .trnote{margin-top:8px;font:500 11px/1.4 var(--sans);color:var(--mut)}
+/* ── The recipe sheet: one sheet for every generator. ── */
+.cal-v5 .gsheet{width:452px}
+.cal-v5 .gbody{flex:1;min-height:0;overflow:auto;overscroll-behavior:contain;padding:12px 18px 16px;display:flex;flex-direction:column;gap:14px}
+.cal-v5 .gcr .sub{margin-left:6px;font-weight:600;letter-spacing:.08em;color:var(--mut);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:0}
+.cal-v5 .gfam{display:flex;flex-wrap:wrap;gap:4px}
+.cal-v5 .gfam button{flex:1 1 auto;padding:0 8px;font-size:11.5px}
+.cal-v5 .gfam button:disabled{opacity:.4;cursor:default}
+.cal-v5 .grec{display:flex;align-items:flex-end;gap:8px}
+.cal-v5 .grec .fld{flex:1;min-width:0}
+.cal-v5 .gtag{flex:none;margin-bottom:9px;font:650 9px/1 var(--sans);letter-spacing:.08em;text-transform:uppercase;padding:4px 6px;border-radius:99px;color:var(--ink2);box-shadow:inset 0 0 0 1px var(--edge);white-space:nowrap}
+.cal-v5 .gtag.chg{color:var(--gold);background:var(--goldBg);box-shadow:inset 0 0 0 1px var(--goldRing)}
+.cal-v5 .gdesc{margin:-6px 0 0;font:500 12px/1.45 var(--sans);color:var(--mut)}
+.cal-v5 .gsum{margin:0;padding:10px 12px;border-radius:10px;background:var(--paper2);font:450 12.5px/1.55 var(--sans);color:var(--ink2)}
+.cal-v5 .gsum b{font-weight:600;color:var(--ink)}
+.cal-v5 .gsum .gw{display:block;margin-top:6px;color:var(--mut);font-size:11.5px}
+.cal-v5 .gsec{display:flex;flex-direction:column;gap:2px;padding-top:12px;border-top:1px solid var(--hair)}
+.cal-v5 .gsec>h4{margin:0 0 6px;font:650 9.5px/1 var(--sans);letter-spacing:.14em;text-transform:uppercase;color:var(--mut)}
+.cal-v5 .ing{display:grid;grid-template-columns:34px minmax(0,1fr) auto;align-items:center;gap:4px 10px;padding:7px 0;border-top:1px solid var(--hair2)}
+.cal-v5 .ing:first-of-type{border-top:0}
+.cal-v5 .ingl{font:550 12.5px/1.3 var(--sans);color:var(--ink);min-width:0}
+.cal-v5 .ingl small{display:block;font-weight:500;font-size:11px;color:var(--mut);margin-top:1px}
+.cal-v5 .ingl .yt{font-weight:500;font-size:10.5px;color:var(--mut);margin-left:4px}
+.cal-v5 .lv{display:inline-flex;gap:2px;padding:2px;border-radius:9px;box-shadow:inset 0 0 0 1px var(--edge)}
+.cal-v5 .lv button{height:24px;padding:0 8px;border-radius:7px;font:550 11px/1 var(--sans);color:var(--ink2);white-space:nowrap}
+.cal-v5 .lv button:hover{color:var(--ink);background:var(--hair2)}
+.cal-v5 .lv button[aria-checked="true"]{background:var(--ink);color:var(--paper)}
+.cal-v5 .lv.off{opacity:.35}
+.cal-v5 .lv button:focus-visible, .cal-v5 .gchips button:focus-visible, .cal-v5 .rc button:focus-visible{outline:1.5px solid var(--ink);outline-offset:1px}
+.cal-v5 .ing .clr{grid-column:2 / 4;margin:2px 0 0;font-size:12px}
+.cal-v5 .ing .own{grid-column:2 / 4;font:500 11px/1.35 var(--sans);color:var(--mut)}
+.cal-v5 .gdet{display:flex;flex-direction:column;gap:12px;padding:10px 0 4px}
+.cal-v5 .gdet .fld{font-size:11.5px}
+.cal-v5 .gdet .dv{display:flex;align-items:center;gap:10px}
+.cal-v5 .gdet .dv input[type=range]{flex:1;height:18px;padding:0;border:0;background:transparent;accent-color:var(--ink)}
+.cal-v5 .gdet .dv output{min-width:44px;text-align:right;font:600 12px/1 var(--sans);color:var(--ink)}
+.cal-v5 .gdet .dh{font:500 11px/1.35 var(--sans);color:var(--mut)}
+.cal-v5 .gadv{margin-top:2px;padding:10px 12px;border-radius:10px;background:var(--paper2);display:flex;flex-direction:column;gap:12px}
+.cal-v5 .gadv>p{margin:0;font:500 11px/1.4 var(--sans);color:var(--mut)}
+.cal-v5 .gchips{display:flex;flex-wrap:wrap;gap:5px;margin:4px 0 6px}
+.cal-v5 .gchips button{display:inline-flex;align-items:center;gap:5px;height:28px;padding:0 10px;border-radius:99px;font:550 11.5px/1 var(--sans);color:var(--ink2);background:var(--paper);box-shadow:inset 0 0 0 1px var(--edge);white-space:nowrap}
+.cal-v5 .gchips button:hover{color:var(--ink)}
+.cal-v5 .gchips button[aria-pressed="true"]{box-shadow:inset 0 0 0 1.4px var(--ink);color:var(--ink)}
+.cal-v5 .gchips button small{font-size:10.5px;font-weight:500;color:var(--mut)}
+.cal-v5 .gchips .ci{width:13px;height:13px;color:oklch(var(--icL) var(--icC) var(--h,260))}
+.cal-v5 .glab{font:600 11px/1 var(--sans);color:var(--mut);margin-top:6px}
+.cal-v5 .grange{display:flex;flex-wrap:wrap;gap:8px;align-items:flex-end;margin:4px 0 6px}
+.cal-v5 .grange .fld{flex:1 1 120px}
+.cal-v5 .gmine{margin-top:4px}
+.cal-v5 .gmine small{display:block;font-size:11px;color:var(--mut);margin-top:1px}
+.cal-v5 .gpv{display:flex;align-items:center;gap:8px;margin-bottom:6px;font:500 11.5px/1.3 var(--sans);color:var(--mut)}
+.cal-v5 .gpv b{font-weight:600;color:var(--ink2)}
+.cal-v5 .gpv .ib{width:26px;height:26px}
+.cal-v5 .gpv .sp{flex:1}
+.cal-v5 .rcs{display:flex;flex-direction:column;gap:6px}
+.cal-v5 .rc{position:relative;display:grid;grid-template-columns:24px minmax(0,1fr) auto;align-items:center;gap:8px;min-height:50px;padding:6px 6px 6px 10px;border-radius:11px;background:var(--paper);box-shadow:inset 0 0 0 1px var(--hair)}
+.cal-v5 .rc .rci{display:grid;place-items:center;width:22px;height:22px;color:oklch(var(--icL) var(--icC) var(--h,260))}
+.cal-v5 .rc .rci .ci, .cal-v5 .rc .rci .i{width:16px;height:16px}
+.cal-v5 .rc .rct{min-width:0}
+.cal-v5 .rc .rct b{display:block;font:600 12.5px/1.3 var(--sans);color:var(--ink);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.cal-v5 .rc .rct small{display:block;font:500 11px/1.35 var(--sans);color:var(--mut);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.cal-v5 .rc .rca{display:flex;gap:2px}
+.cal-v5 .rc .rca button{width:30px;height:30px;border-radius:8px;display:grid;place-items:center;color:var(--ink2)}
+.cal-v5 .rc .rca button:hover{background:var(--hair2);color:var(--ink)}
+.cal-v5 .rc .rca button:disabled{opacity:.3;cursor:default}
+.cal-v5 .rc .rca .i{width:15px;height:15px}
+.cal-v5 .rc.kept{background:var(--keepBg);box-shadow:inset 0 0 0 1.4px var(--keep)}
+.cal-v5 .rc.kept [data-rc="keep"]{color:var(--keep)}
+.cal-v5 .rc.kept [data-rc="keep"] .i{fill:currentColor}
+.cal-v5 .rc::after{content:"";position:absolute;inset:-3px;border-radius:14px;box-shadow:0 0 0 2px var(--keep);opacity:0;pointer-events:none}
+.cal-v5 .rc.pulse::after{animation:cal5-keepPulse .7s var(--ease) both}
+@keyframes cal5-keepPulse{0%{opacity:0;transform:scale(1.03)}30%{opacity:.9;transform:none}100%{opacity:0;transform:scale(1.015)}}
+.cal-v5 .rc .rcx{display:contents}
+.cal-v5 .rc.dir .rci{position:relative}
+.cal-v5 .rc.dir .rci::after{content:"";position:absolute;inset:-2px;border-radius:50%;border:1px dashed currentColor;opacity:.75}
+.cal-v5 .rcmore{align-self:flex-start;margin-top:4px}
+.cal-v5 .gnone{padding:10px 12px;border-radius:10px;box-shadow:inset 0 0 0 1px var(--hair);font:500 12px/1.45 var(--sans);color:var(--mut)}
+.cal-v5 .gseed{display:flex;align-items:center;flex-wrap:wrap;gap:6px;margin-top:8px;font:500 11px/1.3 var(--sans);color:var(--mut)}
+.cal-v5 .gseed input{width:150px;height:26px;padding:0 8px;border-radius:7px;border:1px solid var(--edge);background:var(--paper2);font:500 11.5px/1 ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;color:var(--ink)}
+.cal-v5 .gseed input:focus{outline:1.5px solid var(--ink);outline-offset:0}
+.cal-v5 .gseed .x{width:26px;height:26px}
+.cal-v5 .gseed .x .i{width:13px;height:13px}
+.cal-v5 .gfoot{flex-wrap:wrap;row-gap:8px}
+.cal-v5 .gfa{display:flex;gap:8px;margin-left:auto}
+.cal-v5 .gsave{display:flex;align-items:flex-end;gap:8px;width:100%;padding:0 0 10px;border-bottom:1px solid var(--hair);margin-bottom:2px}
+.cal-v5 .gsave .fld{flex:1}
+/* ── Settings: the calendar's own door. ── */
+.cal-v5 .gset{width:452px}
+.cal-v5 .stl{display:flex;flex-direction:column}
+.cal-v5 .str{display:flex;align-items:center;gap:10px;padding:9px 0;border-top:1px solid var(--hair2);font:500 12.5px/1.3 var(--sans);color:var(--ink2)}
+.cal-v5 .str:first-child{border-top:0}
+.cal-v5 .str .stt{flex:1;min-width:0}
+.cal-v5 .str .stt b{display:block;font-weight:600;color:var(--ink);overflow-wrap:anywhere}
+.cal-v5 .str .stt small{display:block;color:var(--mut);font-size:11px;margin-top:1px}
+.cal-v5 .str .stt input{width:100%;height:30px;padding:0 8px;border-radius:8px;border:1px solid var(--edge);background:var(--paper2);font:600 12.5px/1 var(--sans);color:var(--ink)}
+.cal-v5 .str .stt input:focus{outline:1.5px solid var(--ink);outline-offset:0}
+.cal-v5 .stn{font:500 12px/1.45 var(--sans);color:var(--mut);padding:4px 0}
+.cal-v5 .trows{display:flex;flex-direction:column;gap:8px}
+.cal-v5 .trw{display:flex;flex-direction:column;gap:7px;padding:10px;border-radius:11px;background:var(--paper2);box-shadow:inset 0 0 0 1px var(--hair)}
+.cal-v5 .trw .r1{display:flex;gap:6px;align-items:center}
+.cal-v5 .trw .r1 input{flex:1;min-width:0}
+.cal-v5 .trw input, .cal-v5 .trw select{height:32px;padding:0 9px;border-radius:8px;border:1px solid var(--edge);background:var(--paper);font:500 12.5px/1 var(--sans);color:var(--ink);min-width:0}
+.cal-v5 .trw input:focus, .cal-v5 .trw select:focus{outline:1.5px solid var(--ink);outline-offset:0}
+.cal-v5 .trw .r2{display:grid;grid-template-columns:64px minmax(0,1fr) minmax(0,1fr);gap:6px}
+.cal-v5 .trw .r2 label, .cal-v5 .trw .r4 label{display:flex;flex-direction:column;gap:3px;font:600 10.5px/1 var(--sans);color:var(--mut);min-width:0}
+.cal-v5 .trw .r4{display:grid;grid-template-columns:minmax(0,1fr);gap:6px}
+.cal-v5 .trw .gchips{margin:0}
+.cal-v5 .trw .gchips button{height:24px;font-size:11px;padding:0 8px}
+.cal-v5 .trw .kept2{font:500 10.5px/1.3 var(--sans);color:var(--mut)}
+.cal-v5 .ttry{display:flex;flex-direction:column;gap:6px;margin-top:6px}
+.cal-v5 .ttry .tr1{padding:8px 10px;border-radius:9px;box-shadow:inset 0 0 0 1px var(--hair);font:500 12px/1.4 var(--sans);color:var(--ink2)}
+.cal-v5 .ttry .tr1 b{display:block;color:var(--ink);font-weight:600}
+.cal-v5 .terr{display:flex;flex-direction:column;gap:4px}
+.cal-v5 .terr p{margin:0}
+/* The moon customizer's lasting defaults for special nights. */
+.cal-v5 .mend{display:flex;flex-direction:column;gap:2px;margin-bottom:6px}
+.cal-v5 .mend .mnr{display:grid;grid-template-columns:34px minmax(0,1fr) auto;align-items:center;gap:4px 10px;padding:6px 0;font:550 12.5px/1.3 var(--sans);color:var(--ink)}
+.cal-v5 .mend .mnr small{display:block;font-weight:500;font-size:11px;color:var(--mut)}
+.cal-v5 .megen{align-self:flex-start;margin-top:6px}
+.cal-v5 .menote2{font:500 11px/1.4 var(--sans);color:var(--mut)}
+@media (max-width:900px){.cal-v5 .gsheet, .cal-v5 .gset{width:420px}
+}
+@media (max-width:600px){.cal-v5 .h-edit{margin-top:4px}
+/* On a phone the hint may take two lines (holding to choose a range is not guessable); Generate… keeps only its icon. */
+.cal-v5 .h-subw{min-height:34px}
+.cal-v5 .ehint{white-space:normal;font-size:11px;line-height:1.25;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical}
+.cal-v5 #edGen{padding:0 9px}
+.cal-v5 #edGen .btxt{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}
+.cal-v5 .cal.editing{--gx:16px}
+.cal-v5 .cal.editing .stage{padding-bottom:150px}
+.cal-v5 .wkh{width:14px;left:-15px}
+.cal-v5 .wkh .i{width:11px;height:11px}
+.cal-v5 .clk{left:3px;top:auto;bottom:3px;width:12px;height:12px}
+.cal-v5 .chd{left:auto;right:3px;top:3px;bottom:auto;width:12px;height:12px}
+.cal-v5 .clk .i, .cal-v5 .chd .i{width:10px;height:10px}
+.cal-v5 .cwx{right:1px;bottom:2px;width:15px;height:15px}
+.cal-v5 .cwx .i{width:11px;height:11px}
+.cal-v5 .dow .dwb{padding:0 0 8px;text-align:center;border-radius:5px 5px 0 0}
+.cal-v5 .bbw{position:static;height:0}
+.cal-v5 .bbar{position:fixed;left:0;right:0;bottom:0;z-index:55;width:auto;max-width:none;margin:0;flex-wrap:wrap;gap:6px;padding:10px 10px calc(12px + env(safe-area-inset-bottom,0px));border-radius:18px 18px 0 0;border-left:0;border-right:0;border-bottom:0}
+.cal-v5 .bbl{flex:1;flex-direction:row;align-items:baseline;gap:8px;margin:0 0 0 4px}
+.cal-v5 .bbl span{max-width:none}
+.cal-v5 .bba{order:3;width:100%;display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:4px}
+.cal-v5 .bbb{flex-direction:column;justify-content:center;gap:3px;height:48px;padding:0 2px;font-size:10.5px;box-shadow:inset 0 0 0 1px var(--hair)}
+.cal-v5 .btray{position:fixed;left:0;right:0;z-index:56;bottom:var(--barH,110px);width:auto;max-width:none;margin:0;border-radius:16px 16px 0 0;border-left:0;border-right:0;box-shadow:0 -8px 24px -12px oklch(0 0 0 / .3)}
+.cal-v5 .gsheet{max-height:calc(64vh + 28px)}
+.cal-v5 .gset{max-height:calc(86vh + 28px)}
+.cal-v5 .gsheet, .cal-v5 .gset{width:auto}
+.cal-v5 .clo{grid-template-columns:repeat(2,minmax(0,1fr))}
+.cal-v5 .btray.slim{max-width:none}
+/* A tool is a bottom sheet here: the bar and its tray wait underneath it rather than covering its footer. */
+.cal-v5 .cal.toolup .bbar, .cal-v5 .cal.toolup .btray{visibility:hidden}
+.cal-v5 .shn output{min-width:0;flex:1}
+
+}
+/* Behind the recipe sheet the calendar dims only a little, so the preview drawn on it stays readable. */
+.cal-v5 .dock.on.ghosting .dscrim{opacity:.22}
+.cal-v5 .cal.editing .day.pick.flash::before{animation:none}
+/* Reduced motion: ghosts and fills simply appear; the rest are cross-fades handled where they run. */
+.cal-v5 .rm .mk.ghost.in, .cal-v5 .rm .span.ghost.in, .cal-v5 .rm .cwx.in, .cal-v5 .rm .cpt.in{animation:cal5-fadeIn .15s ease both!important}
+.cal-v5 .rm .mk.solid-in, .cal-v5 .rm .cwx.solid-in, .cal-v5 .rm .cpt.solid-in{animation:cal5-fadeIn .18s ease both!important}
+.cal-v5 .rm .rc.pulse::after{animation:none!important}
+.cal-v5 .rm .day .mk, .cal-v5 .rm .day .span, .cal-v5 .rm .day .msil, .cal-v5 .rm .h-edit, .cal-v5 .rm .h-sub{transition-duration:.12s!important}
+/* v6: your weather and your kinds of event. The six swatches paint days in the same soft register as the weather tints. */
+:root{--wk-violet:oklch(.78 .09 290 / .55);--wk-teal:oklch(.8 .07 185 / .55);--wk-rose:oklch(.8 .08 355 / .5);--wk-amber:oklch(.84 .1 75 / .55);--wk-moss:oklch(.82 .08 125 / .55);--wk-slate:oklch(.76 .03 255 / .55)}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){--wk-violet:oklch(.5 .1 290 / .45);--wk-teal:oklch(.52 .07 185 / .42);--wk-rose:oklch(.52 .09 355 / .42);--wk-amber:oklch(.58 .09 75 / .36);--wk-moss:oklch(.55 .08 125 / .38);--wk-slate:oklch(.5 .03 255 / .45)}
+}
+:root[data-theme="dark"]{--wk-violet:oklch(.5 .1 290 / .45);--wk-teal:oklch(.52 .07 185 / .42);--wk-rose:oklch(.52 .09 355 / .42);--wk-amber:oklch(.58 .09 75 / .36);--wk-moss:oklch(.55 .08 125 / .38);--wk-slate:oklch(.5 .03 255 / .45)}
+.cal-v5 .cwx.yours{color:var(--wkc)}
+.cal-v5 .pal button.yours .i{color:var(--wkc)}
+.cal-v5 .wksw{width:26px;height:26px;border-radius:8px;display:grid;place-items:center;background:var(--wxc);color:var(--wkc);flex:none}
+.cal-v5 .wksw .i{width:15px;height:15px}
+.cal-v5 .str .mk{flex:none}
+.cal-v5 .wkf, .cal-v5 .ekf{display:flex;flex-direction:column;gap:12px}
+.cal-v5 .icp, .cal-v5 .swp{display:flex;flex-wrap:wrap;gap:5px}
+.cal-v5 .icp button{min-width:32px;height:30px;border-radius:8px;display:grid;place-items:center;color:var(--ink2);box-shadow:inset 0 0 0 1px var(--edge);background:var(--paper)}
+.cal-v5 .icp button:hover{color:var(--ink)}
+.cal-v5 .icp button[aria-checked="true"]{box-shadow:inset 0 0 0 1.6px var(--ink);color:var(--ink)}
+.cal-v5 .icp button .i, .cal-v5 .icp button .ci{width:15px;height:15px}
+.cal-v5 .icp button small{font:550 11px/1 var(--sans);padding:0 8px;white-space:nowrap}
+.cal-v5 .swp button{width:26px;height:26px;border-radius:50%;background:var(--sw);box-shadow:inset 0 0 0 1px oklch(0 0 0 / .14)}
+.cal-v5 .swp button[aria-checked="true"]{box-shadow:0 0 0 2px var(--paper),0 0 0 3.6px var(--ink)}
+.cal-v5 .icp button:focus-visible, .cal-v5 .swp button:focus-visible{outline:1.5px solid var(--ink);outline-offset:2px}
+.cal-v5 .wks{display:flex;flex-direction:column;gap:5px}
+.cal-v5 .wksr{display:flex;align-items:center;gap:10px}
+.cal-v5 .wksr > span{width:62px;font:500 12.5px/1 var(--sans);color:var(--ink2)}
+.cal-v5 .wkp{padding:10px 12px;border-radius:12px;background:var(--paper2)}
+.cal-v5 .wkpt{display:flex;align-items:center;justify-content:space-between;gap:8px;font:600 12px/1.3 var(--sans);color:var(--ink);margin-bottom:8px}
+.cal-v5 .wkstrip svg{display:block;width:100%;height:28px;border-radius:5px;overflow:hidden}
+.cal-v5 .wkstrip .g-clear{fill:var(--wxClear)}
+.cal-v5 .wkstrip .g-cloud{fill:var(--wxCloud)}
+.cal-v5 .wkstrip .g-rain{fill:var(--wxRain)}
+.cal-v5 .wkstrip .g-snow{fill:var(--wxSnow)}
+.cal-v5 .wkstrip .g-storm{fill:var(--wxStorm)}
+.cal-v5 .wkstrip .g-fog{fill:var(--wxFog)}
+.cal-v5 .wksl{position:relative;height:16px;font:500 10.5px/1 var(--sans);color:var(--mut)}
+.cal-v5 .wksl span{position:absolute;top:4px;transform:translateX(-50%);white-space:nowrap}
+.cal-v5 .wkcap{margin:4px 0 0;font:450 12.5px/1.45 var(--sans);color:var(--ink2)}
+.cal-v5 .terr .warn{color:var(--mut)}
+.cal-v5 .newcat{display:flex;flex-direction:column;gap:10px;padding:10px 12px;border-radius:12px;box-shadow:inset 0 0 0 1px var(--hair)}
+.cal-v5 .ingl .yt.mg{color:oklch(.55 .13 300)}
+:root[data-theme="dark"] .ingl .yt.mg{color:oklch(.78 .1 300)}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]) .ingl .yt.mg{color:oklch(.78 .1 300)}
+}
+.cal-v5 .tbnote{margin:0}
+.cal-v5 .lookph{padding:10px 12px;border-radius:12px;border:1px dashed var(--edge)}
+.cal-v5 .lookph .glab{margin:0}
+.cal-v5 .lookph .stn{margin:4px 0 0}
+/* ── v6b: any weather on any day, and a new kind of event where you pick one. Built-in magic weather has a tint of its
+   own: two soft violets side by side, so it reads as neither a storm nor your own weather, on light and dark paper. ── */
+:root{--wxMagic:linear-gradient(135deg,oklch(.83 .075 295 / .55),oklch(.86 .07 345 / .55));--wxMagicInk:oklch(.5 .15 318);--mgTag:oklch(.55 .13 300)}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){--wxMagic:linear-gradient(135deg,oklch(.45 .09 295 / .45),oklch(.48 .085 345 / .45));--wxMagicInk:oklch(.82 .1 318);--mgTag:oklch(.78 .1 300)}
+}
+:root[data-theme="dark"]{--wxMagic:linear-gradient(135deg,oklch(.45 .09 295 / .45),oklch(.48 .085 345 / .45));--wxMagicInk:oklch(.82 .1 318);--mgTag:oklch(.78 .1 300)}
+.cal-v5 .cwx.mg, .cal-v5 .row .i.mg{color:var(--wxMagicInk)}
+/* The six common chips, then More weather…, which unfolds the whole list the way the chips unfold. */
+.cal-v5 .wxchips button.wxmb, .cal-v5 .trrow .pmore, .cal-v5 .kinds .nkb, .cal-v5 .chips .nkb{box-shadow:none;border:1px dashed var(--edge);background:transparent;color:var(--ink2)}
+.cal-v5 .wxchips button.wxmb:hover, .cal-v5 .trrow .pmore:hover, .cal-v5 .kinds .nkb:hover, .cal-v5 .chips .nkb:hover{color:var(--ink);background:var(--paper)}
+.cal-v5 .wxchips button.wxmb[aria-expanded="true"], .cal-v5 .trrow .pmore[aria-expanded="true"], .cal-v5 .kinds .nkb[aria-expanded="true"], .cal-v5 .chips .nkb[aria-expanded="true"]{border-style:solid;border-color:var(--ink);color:var(--ink);background:var(--paper)}
+.cal-v5 .wxmore{margin:3px 0 4px 22px;padding:8px;border-radius:10px;background:var(--paper);box-shadow:inset 0 0 0 1px var(--hair);transform-origin:top;animation:cal5-foldDown .34s var(--spring) both}
+.cal-v5 .dsec .wxmore{margin:8px 0 0}
+.cal-v5 .wxmb2{margin-top:8px}
+.cal-v5 .wxq{display:block;width:100%;height:30px;padding:0 10px;border-radius:8px;border:1px solid var(--edge);background:var(--paper2);font:500 12.5px/1 var(--sans);color:var(--ink)}
+.cal-v5 .wxq:focus{outline:1.5px solid var(--ink);outline-offset:0}
+.cal-v5 .wxl{max-height:244px;overflow:auto;overscroll-behavior:contain;margin-top:6px}
+.cal-v5 .wxgt{position:sticky;top:0;z-index:1;padding:7px 8px 5px;background:var(--paper);font:650 9.5px/1 var(--sans);letter-spacing:.14em;text-transform:uppercase;color:var(--mut)}
+.cal-v5 .wxi{display:flex;align-items:center;gap:8px;width:100%;min-height:30px;padding:0 8px;border-radius:8px;font:550 12px/1.2 var(--sans);color:var(--ink2);text-align:left}
+.cal-v5 .wxi:hover{background:var(--paper2);color:var(--ink)}
+.cal-v5 .wxi[aria-pressed="true"]{box-shadow:inset 0 0 0 1.3px var(--ink);color:var(--ink)}
+.cal-v5 .wxi:focus-visible, .cal-v5 .wxchips button:focus-visible, .cal-v5 .pmore:focus-visible, .cal-v5 .nkb:focus-visible{outline:1.5px solid var(--ink);outline-offset:1px}
+.cal-v5 .wxi .sw2{width:10px;height:10px;flex:none;border-radius:50%;background:var(--wxc);box-shadow:inset 0 0 0 1px var(--edge)}
+.cal-v5 .wxi .i{width:13px;height:13px}
+.cal-v5 .wxi.mg .i, .cal-v5 .pal button.mg .i{color:var(--wxMagicInk)}
+.cal-v5 .wxi.yours .i{color:var(--wkc)}
+.cal-v5 .wxi .wxn{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.cal-v5 .wmg{flex:none;font:600 10.5px/1 var(--sans);color:var(--mgTag)}
+.cal-v5 .wmg.yt{color:var(--mut)}
+.cal-v5 .wxnone{margin:8px;font:500 12px/1.4 var(--sans);color:var(--mut)}
+.cal-v5 .rm .wxmore, .cal-v5 .rm .nkf{animation:cal5-fadeIn .15s ease both!important}
+/* The paint tray's More…: the same list, in a panel of its own just above the tray. A weather picked there joins the
+   palette for this session, ringed with dashes so it is plainly an addition. */
+.cal-v5 .trrow .pmore{display:inline-flex;align-items:center;gap:6px;height:30px;padding:0 11px 0 9px;border-radius:99px;font:550 12px/1 var(--sans)}
+.cal-v5 .trrow .pmore .i{width:14px;height:14px}
+.cal-v5 .pal button.added:not([aria-checked="true"]){box-shadow:none;outline:1px dashed var(--mut);outline-offset:-1px}
+.cal-v5 .bmore{position:absolute;left:0;right:0;bottom:calc(22px + var(--barH,48px) + var(--trayH,52px));margin:0 auto;width:min(380px,calc(100% - 24px));max-height:min(420px,52vh);display:flex;flex-direction:column;padding:10px 10px 6px;border-radius:14px;background:var(--paper);border:1px solid var(--edge);box-shadow:var(--shadow-l);pointer-events:auto}
+.cal-v5 .bmore .wxl{flex:1;min-height:0;max-height:none}
+.cal-v5 .bmore .wxq, .cal-v5 .bmore .pmh{flex:none}
+.cal-v5 .bmore .pmh{display:flex;align-items:center;justify-content:space-between;gap:8px;margin:0 0 8px 2px;font:600 12.5px/1.3 var(--sans);color:var(--ink)}
+/* A new kind of event, right where kinds are picked: a name, an icon and a colour. It is the campaign's, like the ones
+   made in Settings. */
+.cal-v5 .kinds .nkb, .cal-v5 .chips .nkb{display:inline-flex;align-items:center;gap:6px}
+.cal-v5 .kinds .nkb .i, .cal-v5 .chips .nkb .i{width:13px;height:13px}
+.cal-v5 .nkf{flex:1 1 100%;display:flex;flex-direction:column;gap:9px;margin-top:3px;padding:10px;border-radius:10px;background:var(--paper);box-shadow:inset 0 0 0 1px var(--hair);font:500 12px/1.3 var(--sans);color:var(--ink2);transform-origin:top;animation:cal5-foldDown .34s var(--spring) both}
+.cal-v5 .chips + .nkf{margin-top:8px}
+.cal-v5 .nkf .nkt{font:600 12.5px/1.3 var(--sans);color:var(--ink)}
+.cal-v5 .nkf .nkt small{display:block;font-weight:500;font-size:11px;color:var(--mut);margin-top:1px}
+.cal-v5 .kinds .nkf button{height:auto;padding:0;border-radius:0;box-shadow:none;background:none;font:inherit;color:inherit}
+.cal-v5 .nkf .icp, .cal-v5 .nkf .swp{display:flex;flex-wrap:wrap;gap:4px}
+.cal-v5 .nkf .icp button{min-width:28px;height:28px;border-radius:8px;display:grid;place-items:center;color:var(--ink2);box-shadow:inset 0 0 0 1px var(--edge);background:var(--paper)}
+.cal-v5 .nkf .icp button[aria-checked="true"]{box-shadow:inset 0 0 0 1.6px var(--ink);color:var(--ink)}
+.cal-v5 .nkf .icp .ci{width:14px;height:14px;color:oklch(var(--icL) var(--icC) var(--h,260))}
+.cal-v5 .nkf .swp button{width:24px;height:24px;border-radius:50%;background:var(--sw);box-shadow:inset 0 0 0 1px oklch(0 0 0 / .14)}
+.cal-v5 .nkf .swp button[aria-checked="true"]{box-shadow:0 0 0 2px var(--paper),0 0 0 3.6px var(--ink)}
+.cal-v5 .nkf .icp button:focus-visible, .cal-v5 .nkf .swp button:focus-visible{outline:1.5px solid var(--ink);outline-offset:2px}
+.cal-v5 .nkf .fld input{height:32px;background:var(--paper2)}
+.cal-v5 .nkf .err{margin:0}
+.cal-v5 .nkfoot{display:flex;justify-content:flex-end;gap:6px}
+.cal-v5 .nkf button.btn{height:28px;padding:0 11px;border-radius:9px;border:1px solid var(--edge);background:var(--paper);font:550 12px/1 var(--sans);color:var(--ink)}
+.cal-v5 .nkf button.btn.quiet{border-color:transparent;background:transparent;color:var(--ink2)}
+.cal-v5 .nkf button.btn.primary{background:var(--ink);color:var(--paper);border-color:transparent}
+.cal-v5 .nkf button.btn:focus-visible{outline:1.5px solid var(--ink);outline-offset:1px}
+@media (max-width:600px){.cal-v5 .bmore{position:fixed;left:8px;right:8px;z-index:57;width:auto;margin:0;bottom:calc(var(--barH,110px) + var(--trayH,52px));max-height:46vh}
+.cal-v5 .cal.toolup .bmore{visibility:hidden}
+.cal-v5 .wxl{max-height:40vh}
+
+}
+
