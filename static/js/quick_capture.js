@@ -202,9 +202,11 @@
         if (!res.ok) throw new Error('Failed to create note: ' + res.status);
         return res.json();
       })
-      .then(function () {
+      .then(function (note) {
         close();
-        var journalUrl = '/campaigns/' + encodeURIComponent(cid) + '/journal';
+        // The link opens the Journal at the new note.
+        var journalUrl = '/campaigns/' + encodeURIComponent(cid) + '/journal' +
+          (note && note.id ? '/' + encodeURIComponent(note.id) : '');
         Chronicle.notify('Note created — <a href="' + journalUrl + '" style="color:inherit;text-decoration:underline;font-weight:500;">View in Journal</a>', 'success', { duration: 6000, html: true });
         // Dispatch event so the notes widget can refresh its list.
         window.dispatchEvent(new CustomEvent('chronicle:note-created'));

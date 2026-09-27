@@ -100,6 +100,8 @@ templ Base(title string) {
 		<script src={ AssetURL("/static/vendor/tiptap-bundle.min.js") } defer></script>
 		<!-- @mention extension must load before editor.js so Chronicle.MentionExtension is available -->
 		<script src={ AssetURL("/static/js/widgets/editor_mention.js") } defer></script>
+		<!-- [[links]] to notes (Chronicle.NoteLink, the [[ picker, per-viewer link labels) -->
+		<script src={ AssetURL("/static/js/widgets/editor_notelink.js") } defer></script>
 		<!-- Inline secrets mark (GM-only text, must load before editor.js) -->
 		<script src={ AssetURL("/static/js/widgets/editor_secret.js") } defer></script>
 		<!-- Auto-link entities (must load before editor.js so Chronicle.autoLinkEntities is available) -->
@@ -179,7 +181,8 @@ templ Base(title string) {
 		     widget owns only the browser timezone and the dismissal. -->
 		<script src={ AssetURL("/static/js/widgets/callout.js") } defer></script>
 
-		<!-- Journal widget (full-page Obsidian-like note editor) -->
+		<!-- Journal: the list's filter/group/sort rules, then the workspace widget -->
+		<script src={ AssetURL("/static/js/widgets/journal_list.js") } defer></script>
 		<script src={ AssetURL("/static/js/widgets/journal.js") } defer></script>
 
 		<!-- Entity manager widget (sortable, filterable entity list block) -->

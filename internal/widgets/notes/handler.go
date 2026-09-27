@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"io"
+	"log/slog"
 	"net/http"
 	"strings"
 
@@ -36,10 +37,11 @@ type MediaUploader interface {
 // Handler handles HTTP requests for note operations. Handlers are thin:
 // bind request, call service, render response. No business logic lives here.
 type Handler struct {
-	service       NoteService
-	attService    AttachmentService
-	mediaUploader MediaUploader
-	memberLister  MemberLister
+	service         NoteService
+	attService      AttachmentService
+	mediaUploader   MediaUploader
+	memberLister    MemberLister
+	characterLister CharacterLister
 }
 
 // NewHandler creates a new note handler backed by the given service.
@@ -60,6 +62,11 @@ func (h *Handler) SetMediaUploader(mu MediaUploader) {
 // SetMemberLister sets the member lister for the share-with-players picker.
 func (h *Handler) SetMemberLister(ml MemberLister) {
 	h.memberLister = ml
+}
+
+// SetCharacterLister sets the lookup behind the Journal's claim card.
+func (h *Handler) SetCharacterLister(cl CharacterLister) {
+	h.characterLister = cl
 }
 
 // List returns notes for the current user in the campaign (GET /campaigns/:id/notes).
@@ -455,18 +462,45 @@ func (h *Handler) RestoreVersion(c echo.Context) error {
 	return c.JSON(http.StatusOK, note)
 }
 
-// ShowJournal renders the full-page journal view (GET /campaigns/:id/journal).
-// Returns full page or HTMX fragment based on request headers.
+// ShowJournal renders the Journal (GET /campaigns/:id/journal, and
+// /journal/:noteId to open it at one note). Full page or HTMX fragment.
 func (h *Handler) ShowJournal(c echo.Context) error {
 	cc := campaigns.GetCampaignContext(c)
 	if cc == nil {
 		return apperror.NewMissingContext()
 	}
-
+	view := h.journalView(c, cc)
+	// middleware.Render runs the layout injector: without it the page drew
+	// the signed-out chrome and the widget never learned who was viewing.
 	if middleware.IsHTMX(c) {
-		return JournalFragment(cc).Render(c.Request().Context(), c.Response())
+		return middleware.Render(c, http.StatusOK, JournalFragment(cc, view))
 	}
-	return JournalPage(cc).Render(c.Request().Context(), c.Response())
+	return middleware.Render(c, http.StatusOK, JournalPage(cc, view))
+}
+
+// journalView gathers the page's server-side inputs. The deep-linked id is
+// only echoed back when id-shaped; whether the note exists or may be seen is
+// answered later by the gated JSON route, never by this page.
+func (h *Handler) journalView(c echo.Context, cc *campaigns.CampaignContext) JournalView {
+	// The same test that admits someone to notes shared with the GM.
+	view := JournalView{IsGM: permissions.CanSeeDmOnly(cc.VisibilityRole())}
+	if id := c.Param("noteId"); idPattern.MatchString(id) {
+		view.NoteID = id
+	}
+	if view.IsGM || h.characterLister == nil {
+		return view
+	}
+	chars, err := h.characterLister.ClaimedCharacters(c.Request().Context(), cc.Campaign.ID, auth.GetUserID(c))
+	if err != nil {
+		// The card is a nicety: a failed lookup must not take the page down.
+		slog.Warn("journal: claimed character lookup failed",
+			slog.String("campaign_id", cc.Campaign.ID), slog.Any("error", err))
+		return view
+	}
+	if len(chars) > 0 {
+		view.Character = &chars[0] // most recently played first
+	}
+	return view
 }
 
 // MembersAPI returns campaign members as JSON for the share-with-players picker.

@@ -2718,6 +2718,7 @@ func (a *App) RegisterRoutes() {
 	noteHandler.SetAttachmentService(noteSvc)
 	noteHandler.SetMediaUploader(&mediaUploadAdapter{svc: mediaService})
 	noteHandler.SetMemberLister(campaignService)
+	noteHandler.SetCharacterLister(&journalCharacterAdapter{svc: entityService})
 	notes.RegisterRoutes(e, noteHandler, campaignService, authService)
 
 	// Relations widget routes already registered above (before REST API v1).
@@ -3695,6 +3696,28 @@ func (a *App) RegisterRoutes() {
 	// Mount each registered plugin's static assets at /static/plugins/<slug>/.
 	// Must run AFTER all plugins have called a.registerPlugin() above.
 	a.mountPluginStatic()
+}
+
+// journalCharacterAdapter adapts EntityService to notes.CharacterLister: the
+// characters a player has claimed, most recently played first.
+type journalCharacterAdapter struct {
+	svc entities.EntityService
+}
+
+// ClaimedCharacters lists userID's characters in the campaign.
+func (a *journalCharacterAdapter) ClaimedCharacters(ctx context.Context, campaignID, userID string) ([]notes.ClaimedCharacter, error) {
+	if userID == "" {
+		return nil, nil
+	}
+	owned, err := a.svc.ListByOwner(ctx, campaignID, userID)
+	if err != nil {
+		return nil, err
+	}
+	out := make([]notes.ClaimedCharacter, 0, len(owned))
+	for _, e := range owned {
+		out = append(out, notes.ClaimedCharacter{ID: e.ID, Name: e.Name, TypeName: e.TypeName})
+	}
+	return out, nil
 }
 
 // mediaUploadAdapter adapts MediaService to the notes.MediaUploader interface.

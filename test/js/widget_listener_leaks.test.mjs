@@ -20,6 +20,7 @@ const WIDGETS = [
   'static/js/widgets/entity_posts.js',   // finding 1
   'static/js/widgets/relation_graph.js', // finding 2
   'static/js/widgets/tag_picker.js',     // canonical correct pattern (control)
+  'static/js/widgets/journal.js',        // keys, outside clicks and visibility, per mount
 ];
 
 // Strip comments so prose mentioning the call names can't trip the guard.

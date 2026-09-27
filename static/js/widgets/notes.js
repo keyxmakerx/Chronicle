@@ -56,6 +56,7 @@ Chronicle.register('notes', {
     // from writing the note a second time after a blur already flushed it.
     var AUTOSAVE_DELAY = 1500; // ms
     var autosaveTimer = null;
+    var noteLinksOff = null; // unsubscribes the note-link labels of the drawn list
     var notesDirty = false;
 
     // --- DOM Construction ---
@@ -791,6 +792,9 @@ Chronicle.register('notes', {
       });
       notesList.innerHTML = html;
 
+      // [[links]] to notes are stored without titles; label them for this viewer.
+      if (noteLinksOff) noteLinksOff();
+      noteLinksOff = Chronicle.hydrateNoteLinks ? Chronicle.hydrateNoteLinks(notesList, campaignId) : null;
       bindCardEvents();
       initMiniEditors();
     }
@@ -1517,13 +1521,19 @@ Chronicle.register('notes', {
         initialContent = legacyBlocksToHTML(note);
       }
 
+      // The Journal's own nodes, so a note written there keeps its [[links]]
+      // and checklists when it is edited here.
+      var extensions = [
+        TipTap.StarterKit,
+        TipTap.Underline,
+        TipTap.Placeholder.configure({ placeholder: 'Write something...' })
+      ];
+      if (Chronicle.NoteLink) extensions.push(Chronicle.NoteLink.configure({ campaignId: campaignId }));
+      if (TipTap.TaskList && TipTap.TaskItem) extensions.push(TipTap.TaskList, TipTap.TaskItem.configure({ nested: true }));
+
       var editor = new TipTap.Editor({
         element: mount,
-        extensions: [
-          TipTap.StarterKit,
-          TipTap.Underline,
-          TipTap.Placeholder.configure({ placeholder: 'Write something...' })
-        ],
+        extensions: extensions,
         editable: true,
         content: initialContent || '<p></p>',
         editorProps: {
@@ -1670,6 +1680,7 @@ Chronicle.register('notes', {
     el._notesBeforeUnload = flushAutosave;
     el._notesOnCreated = _onNoteCreated;
     el._notesOnOpenNote = _onOpenNote;
+    el._notesLinksOff = function () { if (noteLinksOff) noteLinksOff(); noteLinksOff = null; };
   },
 
   /**
@@ -1696,6 +1707,10 @@ Chronicle.register('notes', {
     if (el._notesOnOpenNote) {
       window.removeEventListener('chronicle:open-note', el._notesOnOpenNote);
       delete el._notesOnOpenNote;
+    }
+    if (el._notesLinksOff) {
+      el._notesLinksOff();
+      delete el._notesLinksOff;
     }
     // Release any held lock and stop heartbeat.
     if (el._notesState) {
