@@ -63,7 +63,8 @@
     switch (item.type) {
       case 'dashboard': return 'Dashboard';
       case 'all_pages': return 'All Pages';
-      case 'addon': return item.label || item.slug;
+      case 'addon':
+      case 'app': return item.label || item.slug;
       case 'category':
         for (var i = 0; i < entityTypes.length; i++) {
           if (entityTypes[i].id === item.type_id) return entityTypes[i].name_plural || entityTypes[i].name;
@@ -79,7 +80,8 @@
     switch (item.type) {
       case 'dashboard': return 'fa-home';
       case 'all_pages': return 'fa-layer-group';
-      case 'addon': return item.icon || 'fa-puzzle-piece';
+      case 'addon':
+      case 'app': return item.icon || 'fa-puzzle-piece';
       case 'category':
         for (var i = 0; i < entityTypes.length; i++) {
           if (entityTypes[i].id === item.type_id) return entityTypes[i].icon || 'fa-folder';
@@ -365,7 +367,7 @@
           '<button type="button" class="w-5 h-5 flex items-center justify-center rounded text-[9px] text-fg-muted hover:text-rose-400" data-action="delete" title="Remove">' +
           '<i class="fa-solid fa-trash"></i></button>'
         : '') +
-      '<button type="button" class="w-5 h-5 flex items-center justify-center rounded text-[9px] text-fg-muted hover:text-fg" data-action="toggle" title="' + (vis ? 'Hide' : 'Show') + '">' +
+      '<button type="button" class="w-5 h-5 flex items-center justify-center rounded text-[9px] text-fg-muted hover:text-fg" data-action="toggle" title="' + (vis ? 'Hide from players' : 'Show to players') + '">' +
       '<i class="fa-solid ' + (vis ? 'fa-eye' : 'fa-eye-slash') + '"></i></button>' +
       '</span>';
 

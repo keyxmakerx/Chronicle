@@ -39,7 +39,6 @@ const (
 	keyMediaThumbFunc    ctxKey = "layout_media_thumb_func"
 	keyExtWidgetScripts  ctxKey = "layout_ext_widget_scripts"
 	keyPluginBodyScripts ctxKey = "layout_plugin_body_scripts"
-	keySidebarItems      ctxKey = "layout_sidebar_items"
 	keyAccentColor       ctxKey = "layout_accent_color"
 	keyBrandName         ctxKey = "layout_brand_name"
 	keyBrandLogo         ctxKey = "layout_brand_logo"
@@ -312,51 +311,6 @@ func SetEnabledSystem(ctx context.Context, sys EnabledSystem) context.Context {
 func GetEnabledSystem(ctx context.Context) (EnabledSystem, bool) {
 	sys, _ := ctx.Value(keyEnabledSystem).(EnabledSystem)
 	return sys, sys.Slug != ""
-}
-
-// --- Custom Sidebar Navigation (link items) ---
-
-// SidebarLink represents a custom link item in the unified sidebar navigation
-// (rendered by customNavLink from a SidebarItemView of type "link").
-type SidebarLink struct {
-	ID    string
-	Label string
-	URL   string
-	Icon  string // FontAwesome icon class (e.g. "fa-globe").
-}
-
-// --- Unified Sidebar Items ---
-
-// SidebarItemView is the template-ready representation of a sidebar item.
-// Populated by the LayoutInjector from the campaign's SidebarConfig.Items.
-//
-// Sub-category entity_types (ParentTypeID != nil) are filtered out at build
-// time in routes.go and never become SidebarItemViews — they are template
-// variants of their parent, not navigable collections. ParentTypeID here is
-// always nil in practice; retained as defensive documentation of that.
-type SidebarItemView struct {
-	Type         string // "dashboard", "addon", "category", "section", "link", "all_pages"
-	Slug         string // Addon slug (for addon items).
-	TypeID       int    // Entity type ID (for category items).
-	ID           string // Unique ID (for sections/links).
-	Label        string // Display label.
-	URL          string // Navigation URL.
-	Icon         string // FontAwesome icon class.
-	Color        string // Category color.
-	Count        int    // Entity count (for categories).
-	ParentTypeID *int   // Always nil for items in the sidebar; see type comment.
-}
-
-// SetSidebarItems stores the unified sidebar items in context.
-func SetSidebarItems(ctx context.Context, items []SidebarItemView) context.Context {
-	return context.WithValue(ctx, keySidebarItems, items)
-}
-
-// GetSidebarItems returns unified sidebar items from context.
-// Returns nil if the campaign uses the legacy sidebar format.
-func GetSidebarItems(ctx context.Context) []SidebarItemView {
-	items, _ := ctx.Value(keySidebarItems).([]SidebarItemView)
-	return items
 }
 
 // drillSearchURL builds the search endpoint URL for a drill panel.

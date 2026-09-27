@@ -703,62 +703,47 @@ func (a *sidebarAutoAdderAdapter) AddEntityTypeToSidebar(ctx context.Context, ca
 		campaigns.UpdateSidebarConfigRequest{Items: &cfg.Items})
 }
 
-// defaultSidebarAddons are the addon shortcuts the default sidebar shows in its
-// top nav (each rendered only when its addon is enabled): Journal + Calendar,
-// so a never-customized campaign renders that same top nav.
-var defaultSidebarAddons = []campaigns.SidebarItem{
-	{Type: "addon", Slug: "notes", Label: "Journal", Icon: "fa-book-open", Visible: true},
-	{Type: "addon", Slug: "calendar", Label: "Calendar", Icon: "fa-calendar-days", Visible: true},
+// navAppDef is one app page the campaign sidebar can list. It lives here, in
+// the composition root, because it names other plugins' addons and routes.
+type navAppDef struct {
+	slug    string   // the app item's slug in sidebar_config (Journal keeps "notes", its addon)
+	label   string
+	icon    string
+	path    string   // campaign-relative page
+	caption string   // a few muted words beside the label
+	addons  []string // the app is on when any of these addons is enabled
+	access  campaigns.NavAccess
+	pinned  bool // starts in Pinned for a campaign that never arranged its sidebar
+	system  bool // the enabled game system's reference; label, icon and path come from it
 }
 
-// injectDefaultSidebarItems completes a sidebar items array with the standard
-// scaffold — Dashboard, the default addon shortcuts, every top-level entity
-// type, and All Pages — adding only what is missing and preserving the caller's
-// order for everything already present. It is the server mirror of
-// injectMissing()/generateDefaults() in sidebar_editor.js and the reason an
-// empty Items array (a never-customized or reconciler-skipped campaign) still
-// renders the full default sidebar now that the legacy fallback path is gone.
-// Non-persistent: it shapes one render only.
-//
-// Sub-category entity_types (parent_type_id != nil) are template variants of
-// their parent and are never added as sidebar items.
-func injectDefaultSidebarItems(items []campaigns.SidebarItem, types []layouts.SidebarEntityType) []campaigns.SidebarItem {
-	hasDashboard, hasAllPages := false, false
-	presentAddons := make(map[string]bool)
-	presentCats := make(map[int]bool)
-	for _, it := range items {
-		switch it.Type {
-		case "dashboard":
-			hasDashboard = true
-		case "all_pages":
-			hasAllPages = true
-		case "addon":
-			presentAddons[it.Slug] = true
-		case "category":
-			presentCats[it.TypeID] = true
-		}
-	}
+// navAppCatalog lists every app the sidebar can show, in the order a campaign
+// that never arranged its sidebar lists them. Each access level mirrors the
+// app route's own gate, so the sidebar never offers a page that would turn
+// the viewer away; Sessions is gated on the calendar addon because its routes
+// are. Characters is the campaign's cast, party and NPCs together, which is
+// why the NPC gallery addon also turns it on.
+var navAppCatalog = []navAppDef{
+	{slug: "notes", label: "Journal", icon: "fa-book-open", path: "/journal", addons: []string{"notes"}, access: campaigns.NavAccessMember, pinned: true},
+	{slug: "calendar", label: "Calendar", icon: "fa-calendar-days", path: "/apps/calendar", addons: []string{calendar.PluginSlug}, access: campaigns.NavAccessSignedIn, pinned: true},
+	{slug: "sessions", label: "Sessions", icon: "fa-dice-d20", path: "/sessions", addons: []string{calendar.PluginSlug}, access: campaigns.NavAccessAnyone},
+	{slug: "maps", label: "Maps", icon: "fa-map", path: "/maps", addons: []string{"maps"}, access: campaigns.NavAccessAnyone},
+	{slug: "characters", label: "Characters", icon: "fa-masks-theater", path: "/characters", caption: "Party & NPCs", addons: []string{entities.AddonPlayerCharacterClaiming, "npcs"}, access: campaigns.NavAccessMember},
+	{slug: "armory", label: "Armory", icon: "fa-shield-halved", path: "/armory", addons: []string{"armory"}, access: campaigns.NavAccessAnyone},
+	{slug: "timeline", label: "Timeline", icon: "fa-timeline", path: "/timelines", addons: []string{"timeline"}, access: campaigns.NavAccessAnyone},
+	{slug: "rulebook", label: "Rulebook", icon: "fa-book", system: true, access: campaigns.NavAccessSignedIn},
+}
 
-	if !hasDashboard {
-		items = append([]campaigns.SidebarItem{{Type: "dashboard", Visible: true}}, items...)
-	}
-	for _, addon := range defaultSidebarAddons {
-		if !presentAddons[addon.Slug] {
-			items = append(items, addon)
+// navAppPath returns the campaign-relative page an app links to ("" for an
+// unknown slug or the system reference, whose path depends on the system).
+// The operator diagnostic reports the sidebar's Calendar destination from it.
+func navAppPath(slug string) string {
+	for _, d := range navAppCatalog {
+		if d.slug == slug {
+			return d.path
 		}
 	}
-	for _, et := range types {
-		if et.ParentTypeID != nil {
-			continue
-		}
-		if !presentCats[et.ID] {
-			items = append(items, campaigns.SidebarItem{Type: "category", TypeID: et.ID, Visible: true})
-		}
-	}
-	if !hasAllPages {
-		items = append(items, campaigns.SidebarItem{Type: "all_pages", Visible: true})
-	}
-	return items
+	return ""
 }
 
 // noteEventPublisherAdapter bridges the websocket.EventBus to the
@@ -2727,10 +2712,10 @@ func (a *App) RegisterRoutes() {
 			}
 			return out
 		},
-		// Read from the same map sidebarAddonLink renders hrefs from, never
-		// re-typed here — a copied path would keep reporting the old
-		// destination after the real one moved.
-		sidebarCalendarPath: layouts.AddonSidebarPath("calendar"),
+		// Read from the same catalog the sidebar links from, never re-typed
+		// here — a copied path would keep reporting the old destination
+		// after the real one moved.
+		sidebarCalendarPath: navAppPath(calendar.PluginSlug),
 	})
 
 	// And the enable-state checker the hub fragment route consults
@@ -3410,12 +3395,15 @@ func (a *App) RegisterRoutes() {
 			}
 			ctx = layouts.SetCampaignRole(ctx, effectiveRole)
 
-			// Entity types for dynamic sidebar rendering.
-			// Use the request context (not the enriched ctx) since service calls
-			// only need cancellation/deadline, not layout data.
+			// Entity types, per-type counts and the enabled addons: what the
+			// sidebar is built from. Use the request context (not the
+			// enriched ctx) since service calls only need cancellation/
+			// deadline, not layout data.
 			reqCtx := c.Request().Context()
-			if etypes, err := entityService.GetEntityTypes(reqCtx, cc.Campaign.ID); err == nil {
-				sidebarTypes := make([]layouts.SidebarEntityType, len(etypes))
+			var sidebarTypes []layouts.SidebarEntityType
+			etypes, typesErr := entityService.GetEntityTypes(reqCtx, cc.Campaign.ID)
+			if typesErr == nil {
+				sidebarTypes = make([]layouts.SidebarEntityType, len(etypes))
 				for i, et := range etypes {
 					sidebarTypes[i] = layouts.SidebarEntityType{
 						ID:           et.ID,
@@ -3428,70 +3416,6 @@ func (a *App) RegisterRoutes() {
 						ParentTypeID: et.ParentTypeID,
 					}
 				}
-
-				// Build the sidebar from the single unified Items model. An empty
-				// Items array is valid: injectDefaultSidebarItems synthesizes the
-				// full default sidebar for a never-customized campaign.
-				sidebarCfg := cc.Campaign.ParseSidebarConfig()
-
-				// Entity types indexed by ID for quick lookup.
-				typeMap := make(map[int]layouts.SidebarEntityType)
-				for _, et := range sidebarTypes {
-					typeMap[et.ID] = et
-				}
-
-				// Complete the items with the standard scaffold + any missing
-				// entity types. Non-persistent: shapes this render only.
-				items := injectDefaultSidebarItems(sidebarCfg.Items, sidebarTypes)
-
-				var sidebarItems []layouts.SidebarItemView
-				for _, item := range items {
-					if !item.Visible {
-						continue
-					}
-					switch item.Type {
-					case "dashboard":
-						sidebarItems = append(sidebarItems, layouts.SidebarItemView{
-							Type: "dashboard", Label: "Dashboard",
-							Icon: "fa-home",
-						})
-					case "addon":
-						sidebarItems = append(sidebarItems, layouts.SidebarItemView{
-							Type: "addon", Slug: item.Slug, Label: item.Label,
-							Icon: item.Icon,
-						})
-					case "category":
-						if et, ok := typeMap[item.TypeID]; ok {
-							// Sub-category entity_types (ParentTypeID != nil) are
-							// template variants of their parent, not navigable
-							// collections; they surface via the parent's +New
-							// picker instead, so skip them here.
-							if et.ParentTypeID != nil {
-								continue
-							}
-							sidebarItems = append(sidebarItems, layouts.SidebarItemView{
-								Type: "category", TypeID: et.ID,
-								Label: et.NamePlural, Icon: et.Icon, Color: et.Color,
-								ParentTypeID: et.ParentTypeID,
-							})
-						}
-					case "all_pages":
-						sidebarItems = append(sidebarItems, layouts.SidebarItemView{
-							Type: "all_pages", Label: "All Pages",
-							Icon: "fa-layer-group",
-						})
-					case "section":
-						sidebarItems = append(sidebarItems, layouts.SidebarItemView{
-							Type: "section", ID: item.ID, Label: item.Label,
-						})
-					case "link":
-						sidebarItems = append(sidebarItems, layouts.SidebarItemView{
-							Type: "link", ID: item.ID, Label: item.Label,
-							URL: item.URL, Icon: item.Icon,
-						})
-					}
-				}
-				ctx = layouts.SetSidebarItems(ctx, sidebarItems)
 				// Still set entity types for the drill panel.
 				ctx = layouts.SetEntityTypes(ctx, sidebarTypes)
 			}
@@ -3503,16 +3427,17 @@ func (a *App) RegisterRoutes() {
 			if session := auth.GetSession(c); session != nil {
 				layoutUserID = session.UserID
 			}
-			if counts, err := entityService.CountByType(reqCtx, cc.Campaign.ID, effectiveRole, layoutUserID); err == nil {
+			counts, countsErr := entityService.CountByType(reqCtx, cc.Campaign.ID, effectiveRole, layoutUserID)
+			if countsErr == nil {
 				// CountByType already rolls child entity_type counts up into
 				// their parent under the sub-category-as-template model.
 				ctx = layouts.SetEntityCounts(ctx, counts)
 			}
 
 			// Enabled addons for conditional widget rendering.
+			enabledSlugs := make(map[string]bool)
+			var enabledSystem layouts.EnabledSystem
 			if campaignAddons, err := addonService.ListForCampaign(reqCtx, cc.Campaign.ID); err == nil {
-				enabledSlugs := make(map[string]bool)
-				var enabledSystem layouts.EnabledSystem
 				for _, ca := range campaignAddons {
 					if !ca.Enabled {
 						continue
@@ -3529,6 +3454,15 @@ func (a *App) RegisterRoutes() {
 				if enabledSystem.Slug != "" {
 					ctx = layouts.SetEnabledSystem(ctx, enabledSystem)
 				}
+			}
+
+			// The sidebar, cut down for this viewer. Rows hidden from
+			// players reach only the owner, and not while they view as a
+			// player (effectiveRole is Player then).
+			if typesErr == nil {
+				ctx = layouts.SetNavSections(ctx, buildNavSections(cc,
+					effectiveRole >= int(campaigns.RoleOwner), nil,
+					sidebarTypes, counts, enabledSlugs, enabledSystem))
 			}
 
 			// Extension widget scripts for campaign pages.

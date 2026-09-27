@@ -138,6 +138,7 @@ templ Sidebar() {
 		id="sidebar"
 		data-nav-active-classes={ sidebarNavActive }
 		data-nav-inactive-classes={ sidebarNavInactive }
+		data-nav-commands={ NavCommandsJSON(ctx) }
 		x-data="{ pinned: localStorage.getItem('chronicle-sidebar-pinned') !== 'false', hovered: false }"
 		x-init="$nextTick(() => { if (!pinned) hovered = false })"
 		@mouseenter="hovered = true"
@@ -259,44 +260,23 @@ templ Sidebar() {
 					if GetCampaignRole(ctx) >= 3 {
 						<div data-sidebar-entity-types={ EntityTypesJSON(ctx) } data-campaign-id={ GetCampaignID(ctx) } class="hidden"></div>
 					}
-					<!-- Unified sidebar: render top-nav items in owner-defined order.
-					     The injector always provides at least the default scaffold
-					     (Dashboard + enabled addon shortcuts + All Pages), so there is
-					     no legacy fallback branch. -->
-					for _, item := range GetSidebarItems(ctx) {
-						if item.Type == "dashboard" {
-							@sidebarDashboardLink(ctx)
-						}
-						// "npcs" is skipped here even when enabled/configured: its link is
-						// redundant with the Characters entry below (which already lists
-						// the party and NPCs together), so it never renders as a second row.
-						if item.Type == "addon" && item.Slug != "npcs" && IsAddonEnabled(ctx, item.Slug) {
-							@sidebarAddonLink(ctx, item)
-						}
-						if item.Type == "all_pages" {
-							@sidebarAllPagesLink(ctx)
-						}
-						if item.Type == "section" {
-							<div class="mt-3 px-4 mb-2 text-xs font-semibold uppercase tracking-wider text-gray-500 sidebar-cat-list-label">
-								{ item.Label }
-							</div>
-						}
-						if item.Type == "link" {
-							@customNavLink(SidebarLink{ID: item.ID, Label: item.Label, URL: item.URL, Icon: item.Icon})
+					<!-- The viewer's sidebar, already cut down for them (hidden rows
+					     reach only the owner, marked): Pinned, Apps and the owner's
+					     own sections here; Categories in the zone below. -->
+					@sidebarDashboardLink(ctx)
+					for _, sec := range GetNavSections(ctx) {
+						if sec.Kind != "categories" && len(sec.Rows) > 0 {
+							if sec.Kind == "custom" {
+								<div class="mt-3 px-4 mb-2 text-xs font-semibold uppercase tracking-wider text-gray-500 sidebar-cat-list-label">
+									{ sec.Label }
+								</div>
+							}
+							for _, row := range sec.Rows {
+								@sidebarNavRow(row)
+							}
 						}
 					}
-					<!-- Characters (the Cast): top-level nav beside Dashboard/Calendar
-					     (not in the categories zone). Shown when the
-					     player-character-claiming OR npcs addon is enabled; visible to
-					     every member. -->
-					if IsAddonEnabled(ctx, "player-character-claiming") || IsAddonEnabled(ctx, "npcs") {
-						@sidebarCharactersLink(ctx)
-					}
-					<!-- Rulebook: the enabled game system's reference index, labeled
-					     with the system's name. Shown only when a system is enabled. -->
-					if sys, ok := GetEnabledSystem(ctx); ok {
-						@sidebarSystemReferenceLink(ctx, sys)
-					}
+					@sidebarAllPagesLink(ctx)
 				</div>
 
 				<!-- Categories drill-down zone -->
@@ -334,9 +314,11 @@ templ Sidebar() {
 						     supplies the default categories when the config is empty, so there
 						     is no legacy fallback branch; "All Pages" is an all_pages item
 						     rendered in the top nav above. -->
-						for _, item := range GetSidebarItems(ctx) {
-							if item.Type == "category" && item.ParentTypeID == nil {
-								@entityTypeLink(getEntityTypeSlug(ctx, item.TypeID), item.Label, item.Color, item.Icon, GetEntityCount(ctx, item.TypeID), item.TypeID)
+						for _, sec := range GetNavSections(ctx) {
+							if sec.Kind == "categories" {
+								for _, row := range sec.Rows {
+									@entityTypeLink(getEntityTypeSlug(ctx, row.TypeID), row.Label, row.Color, row.Icon, row.Count, row.TypeID, row.Hidden)
+								}
 							}
 						}
 						<!-- My Characters link (CH2). Visible to Players (the
@@ -733,27 +715,6 @@ templ DefaultSidebarNav() {
 	</a>
 }
 
-// addonURLMap maps addon slugs to their sidebar URL paths.
-var addonURLMap = map[string]string{
-	"notes":    "/journal",
-	"armory":   "/armory",
-	"calendar": "/apps/calendar", // W5c: the role-aware calendar dashboard
-}
-
-// addonIconMap maps addon slugs to their default icons.
-var addonIconMap = map[string]string{
-	"notes":    "fa-book-open",
-	"armory":   "fa-shield-halved",
-	"calendar": "fa-calendar-days",
-}
-
-// addonLabelMap maps addon slugs to their display labels.
-var addonLabelMap = map[string]string{
-	"notes":    "Journal",
-	"armory":   "Armory",
-	"calendar": "Calendar",
-}
-
 // sidebarDashboardLink renders the Dashboard link in the sidebar.
 templ sidebarDashboardLink(ctx context.Context) {
 	<a
@@ -766,31 +727,6 @@ templ sidebarDashboardLink(ctx context.Context) {
 			<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6"></path>
 		</svg>
 		Dashboard
-	</a>
-}
-
-// sidebarAddonLink renders an addon link in the sidebar (Journal, NPCs, etc.).
-templ sidebarAddonLink(ctx context.Context, item SidebarItemView) {
-	<a
-		href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s%s", GetCampaignID(ctx), addonURLMap[item.Slug])) }
-		class={ sidebarNavLink,
-			templ.KV(sidebarNavActive, isPathPrefix(ctx, fmt.Sprintf("/campaigns/%s%s", GetCampaignID(ctx), addonURLMap[item.Slug]))),
-			templ.KV(sidebarNavInactive, !isPathPrefix(ctx, fmt.Sprintf("/campaigns/%s%s", GetCampaignID(ctx), addonURLMap[item.Slug]))) }
-	>
-		<span class="w-4 h-4 mr-3 shrink-0 flex items-center justify-center">
-			if item.Icon != "" {
-				<i class={ "fa-solid " + item.Icon + " text-xs" }></i>
-			} else {
-				<i class={ "fa-solid " + addonIconMap[item.Slug] + " text-xs" }></i>
-			}
-		</span>
-		<span class="flex-1">
-			if item.Label != "" {
-				{ item.Label }
-			} else {
-				{ addonLabelMap[item.Slug] }
-			}
-		</span>
 	</a>
 }
 
@@ -831,50 +767,70 @@ templ sidebarMyCharactersLink(ctx context.Context) {
 	</a>
 }
 
-// sidebarCharactersLink is the campaign "Characters" (Cast) nav link — the
-// party + active NPCs. A core campaign view shown to every member, distinct
-// from the player-only "My Characters" landing page.
-templ sidebarCharactersLink(ctx context.Context) {
-	<a
-		href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/characters", GetCampaignID(ctx))) }
-		class={ sidebarNavLink,
-			templ.KV(sidebarNavActive, isExactPath(ctx, fmt.Sprintf("/campaigns/%s/characters", GetCampaignID(ctx)))),
-			templ.KV(sidebarNavInactive, !isExactPath(ctx, fmt.Sprintf("/campaigns/%s/characters", GetCampaignID(ctx)))) }
-	>
-		<span class="w-4 h-4 mr-3 shrink-0 flex items-center justify-center">
-			<i class="fa-solid fa-masks-theater text-xs text-gray-400"></i>
-		</span>
-		<span class="flex-1 min-w-0">
-			Characters
-			<span class="block text-[10px] leading-tight text-gray-500 truncate">Party &amp; NPCs</span>
-		</span>
-	</a>
+// sidebarNavRow draws one app, link or category row of the viewer's nav. A
+// row hidden from players is only ever given to the owner, who sees it dimmed
+// and marked so they can still reach it while they prep.
+templ sidebarNavRow(row NavRowView) {
+	if row.Kind == "link" {
+		<a
+			href={ safeExternalURL(row.URL) }
+			hx-boost="false"
+			data-nav-key={ row.Key }
+			class={ sidebarNavLink, sidebarNavInactive }
+			if row.External {
+				target="_blank"
+				rel="noopener noreferrer"
+			}
+		>
+			@sidebarNavRowBody(row)
+		</a>
+	} else {
+		<a
+			href={ templ.SafeURL(row.URL) }
+			data-nav-key={ row.Key }
+			class={ sidebarNavLink,
+				templ.KV(sidebarNavActive, isPathPrefix(ctx, row.URL)),
+				templ.KV(sidebarNavInactive, !isPathPrefix(ctx, row.URL)) }
+		>
+			@sidebarNavRowBody(row)
+		</a>
+	}
 }
 
-// sidebarSystemReferenceLink renders the campaign "Rulebook" nav link — the
-// enabled game system's reference index — labeled with the system's name.
-templ sidebarSystemReferenceLink(ctx context.Context, sys EnabledSystem) {
-	<a
-		href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/systems/%s", GetCampaignID(ctx), sys.Slug)) }
-		class={ sidebarNavLink,
-			templ.KV(sidebarNavActive, isPathPrefix(ctx, fmt.Sprintf("/campaigns/%s/systems/%s", GetCampaignID(ctx), sys.Slug))),
-			templ.KV(sidebarNavInactive, !isPathPrefix(ctx, fmt.Sprintf("/campaigns/%s/systems/%s", GetCampaignID(ctx), sys.Slug))) }
-	>
-		<span class="w-4 h-4 mr-3 shrink-0 flex items-center justify-center">
-			if sys.Icon != "" {
-				<i class={ "fa-solid " + sys.Icon + " text-xs text-gray-400" }></i>
-			} else {
-				<i class="fa-solid fa-book text-xs text-gray-400"></i>
-			}
-		</span>
-		<span class="flex-1">
-			if sys.Name != "" {
-				{ sys.Name }
-			} else {
-				Rulebook
-			}
-		</span>
-	</a>
+// sidebarNavRowBody is the inside of a nav row: icon, label with its caption,
+// the external-link arrow and the hidden-from-players mark.
+templ sidebarNavRowBody(row NavRowView) {
+	<span class={ "w-4 h-4 mr-3 shrink-0 flex items-center justify-center", templ.KV("opacity-50", row.Hidden) }>
+		if row.Icon != "" && row.Color != "" {
+			<i class={ "fa-solid " + row.Icon, "text-xs" } style={ fmt.Sprintf("color: %s", row.Color) }></i>
+		} else if row.Icon != "" {
+			<i class={ "fa-solid " + row.Icon, "text-xs text-gray-400" }></i>
+		} else if row.Kind == "category" {
+			<span class="w-2 h-2 rounded-full" style={ fmt.Sprintf("background-color: %s", row.Color) }></span>
+		} else {
+			<i class="fa-solid fa-link text-xs text-gray-400"></i>
+		}
+	</span>
+	<span class={ "flex-1 min-w-0", templ.KV("opacity-50", row.Hidden) }>
+		{ row.Label }
+		if row.Caption != "" {
+			<span class="block text-[10px] leading-tight text-gray-500 truncate">{ row.Caption }</span>
+		}
+	</span>
+	if row.External {
+		<i class="fa-solid fa-arrow-up-right-from-square text-[9px] text-gray-500 ml-auto"></i>
+	}
+	if row.Hidden {
+		@navHiddenMark()
+	}
+}
+
+// navHiddenMark marks a row the owner has hidden from players.
+templ navHiddenMark() {
+	<span class="ml-auto pl-2 shrink-0 text-amber-400/80" title="Hidden from players">
+		<i class="fa-solid fa-eye-slash text-[10px]" aria-hidden="true"></i>
+		<span class="sr-only">(hidden from players)</span>
+	</span>
 }
 
 // entityTypeLink renders a single category link in the sidebar icon list.
@@ -948,7 +904,7 @@ templ sidebarCreateCategory(ctx context.Context) {
 }
 
 
-templ entityTypeLink(slug string, label string, color string, icon string, count int, typeID int) {
+templ entityTypeLink(slug string, label string, color string, icon string, count int, typeID int, hidden bool) {
 	<a
 		href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/%s", GetCampaignID(ctx), slug)) }
 		hx-boost="false"
@@ -961,16 +917,19 @@ templ entityTypeLink(slug string, label string, color string, icon string, count
 		data-entity-type-id={ strconv.Itoa(typeID) }
 		data-tooltip={ label }
 	>
-		<span class="w-4 h-4 mr-3 shrink-0 flex items-center justify-center">
+		<span class={ "w-4 h-4 mr-3 shrink-0 flex items-center justify-center", templ.KV("opacity-50", hidden) }>
 			if icon != "" {
 				<i class={ "fa-solid " + icon, "text-xs" } style={ fmt.Sprintf("color: %s", color) }></i>
 			} else {
 				<span class="w-2 h-2 rounded-full" style={ fmt.Sprintf("background-color: %s", color) }></span>
 			}
 		</span>
-		<span class="flex-1">{ label }</span>
+		<span class={ "flex-1", templ.KV("opacity-50", hidden) }>{ label }</span>
 		if count > 0 {
 			<span class="ml-auto text-xs text-gray-500">{ strconv.Itoa(count) }</span>
+		}
+		if hidden {
+			@navHiddenMark()
 		}
 	</a>
 }
@@ -1108,8 +1067,6 @@ func activeDrillSlug(ctx context.Context) string {
 	return ""
 }
 
-// customNavLink renders a single custom link in the sidebar. Used for owner-
-// defined links from the Customization Hub's navigation editor.
 // safeExternalURL re-applies the SafeLinkURL allowlist at render time so a
 // link row stored before the ingress guard existed can never render as
 // javascript:/data:/protocol-relative — defense-in-depth over templ.SafeURL,
@@ -1119,30 +1076,6 @@ func safeExternalURL(url string) templ.SafeURL {
 		return templ.SafeURL(u)
 	}
 	return templ.SafeURL("#")
-}
-
-templ customNavLink(link SidebarLink) {
-	<a
-		href={ safeExternalURL(link.URL) }
-		hx-boost="false"
-		class={ sidebarNavLink, sidebarNavInactive }
-		if isExternalURL(link.URL) {
-			target="_blank"
-			rel="noopener noreferrer"
-		}
-	>
-		<span class="w-4 h-4 mr-3 shrink-0 flex items-center justify-center">
-			if link.Icon != "" {
-				<i class={ "fa-solid " + link.Icon, "text-xs text-gray-400" }></i>
-			} else {
-				<i class="fa-solid fa-link text-xs text-gray-400"></i>
-			}
-		</span>
-		{ link.Label }
-		if isExternalURL(link.URL) {
-			<i class="fa-solid fa-arrow-up-right-from-square text-[9px] text-gray-500 ml-auto"></i>
-		}
-	</a>
 }
 
 // Topbar renders the top navigation bar with campaign selector, customizable
