@@ -34,7 +34,7 @@ var DefaultTrustedProxies = []string{
 // address for every request, collapsing per-IP rate limiting into one shared
 // bucket and writing the same address into every audit row.
 //
-// Entries may be CIDR blocks ("10.0.0.0/8") or bare addresses ("100.82.251.84",
+// Entries may be CIDR blocks ("10.0.0.0/8") or bare addresses ("100.64.0.10",
 // read as a single host). An unparseable entry is a startup ERROR, never a
 // silent skip, so a typo in the deployment environment can't silently stop
 // client IPs resolving.
