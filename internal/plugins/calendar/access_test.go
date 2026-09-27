@@ -109,6 +109,10 @@ func (f *fakeCalendarSvc) GetCalendarForViewer(_ context.Context, calendarID, ca
 	}
 	return &Calendar{ID: calendarID, CampaignID: campaignID, Name: "The Secret Calendar"}, nil
 }
+func (f *fakeCalendarSvc) GetDefaultCalendarForViewer(_ context.Context, campaignID string, v permissions.Viewer) (*Calendar, error) {
+	f.lastViewer = v
+	return &Calendar{ID: "cal-default", CampaignID: campaignID, Name: "The Default Calendar", IsDefault: true}, nil
+}
 func (f *fakeCalendarSvc) ListCalendars(_ context.Context, _ string, v permissions.Viewer) ([]Calendar, error) {
 	f.lastViewer = v
 	return []Calendar{{ID: "cal-1"}}, nil
@@ -133,7 +137,7 @@ func (f *fakeCalendarSvc) ListEventsForMonth(_ context.Context, calendarID, _ st
 	f.lastViewer = v
 	return []Event{{ID: "evt-1", CalendarID: calendarID}}, nil
 }
-func (f *fakeCalendarSvc) UpcomingEvents(_ context.Context, calendarID, _ string, _ int, v permissions.Viewer) ([]Event, error) {
+func (f *fakeCalendarSvc) ListUpcomingEvents(_ context.Context, calendarID, _ string, _ int, v permissions.Viewer) ([]Event, error) {
 	f.lastViewer = v
 	return []Event{{ID: "evt-1", CalendarID: calendarID}}, nil
 }
@@ -170,6 +174,17 @@ func (f *fakeCalendarSvc) UpdateEra(context.Context, int, string, string, Update
 func (f *fakeCalendarSvc) DeleteEra(context.Context, int, string, string) error { return nil }
 
 func (f *fakeCalendarSvc) SetMoonHidden(context.Context, int, string, string, bool) error { return nil }
+
+func (f *fakeCalendarSvc) SetMonths(context.Context, string, string, []MonthInput) error { return nil }
+func (f *fakeCalendarSvc) SetWeekdays(context.Context, string, string, []WeekdayInput) error {
+	return nil
+}
+func (f *fakeCalendarSvc) SetMoons(context.Context, string, string, []MoonInput) error { return nil }
+func (f *fakeCalendarSvc) SetSeasons(context.Context, string, string, []Season) error  { return nil }
+
+func (f *fakeCalendarSvc) ListAllEventsForCalendar(context.Context, string, string, permissions.Viewer) ([]Event, error) {
+	return nil, nil
+}
 
 func (f *fakeCalendarSvc) PreviewImport(context.Context, []byte) (*ImportResult, error) {
 	return &ImportResult{Format: FormatChronicle, CalendarName: "Previewed Calendar"}, nil

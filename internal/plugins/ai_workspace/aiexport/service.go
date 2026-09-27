@@ -22,6 +22,7 @@ import (
 type Service struct {
 	Entities  EntityLister
 	Notes     NoteLister
+	Calendar  CalendarLister
 	Sessions  SessionLister
 	Timelines TimelineLister
 	Relations RelationLister
@@ -30,10 +31,15 @@ type Service struct {
 
 // NewService constructs a Service. Every dependency is required for
 // v1; a nil dependency for a Category the owner has enabled produces
-// a clear error at Generate time rather than a panic.
+// a clear error at Generate time rather than a panic. Calendar is the one
+// exception (see the CategoryCalendarEvents case below): a nil CalendarLister
+// degrades that one section to "unavailable" rather than failing the whole
+// export, since a campaign export must still succeed when the calendar addon
+// is disabled or the calendar plugin adapter isn't wired.
 func NewService(
 	ents EntityLister,
 	notes NoteLister,
+	cal CalendarLister,
 	sess SessionLister,
 	tl TimelineLister,
 	rel RelationLister,
@@ -42,6 +48,7 @@ func NewService(
 	return &Service{
 		Entities:  ents,
 		Notes:     notes,
+		Calendar:  cal,
 		Sessions:  sess,
 		Timelines: tl,
 		Relations: rel,
@@ -161,12 +168,36 @@ func (s *Service) renderCategory(
 		return RenderNotes(ctx, list, opts)
 
 	case CategoryCalendarEvents:
-		// CALV5-PLACEHOLDER: V5 must restore loading the campaign's calendar
-		// and grouping events by in-world month (RenderCalendarEvents). Until
-		// then this says so explicitly rather than returning "", which would
-		// falsely read as "this campaign has no events".
-		return "# Calendar Events\n\n_The calendar is being rebuilt (V5). No calendar" +
-			" events are available for export._\n\n", nil
+		// TODO(#778): this export is read-only. Issue #778 also asks for
+		// AI-WRITTEN calendar content (new/edited events) to flow back
+		// through the ai_workspace importer, reviewed on the existing
+		// import-review screen the way entity pages already are. That needs
+		// a signed mockup first (the review screen's change is UI work) and
+		// is deliberately not built here — see the calendar-v5 seams PR.
+		if s.Calendar == nil {
+			return "", fmt.Errorf("calendar lister not wired")
+		}
+		cal, err := s.Calendar.GetCalendar(ctx, campaignID)
+		if err != nil {
+			// aiExportCalendarListerAdapter.GetCalendar already maps "no
+			// calendar yet" (NotFound) to (nil, nil) — see its doc comment —
+			// so a non-nil err here is a genuine read failure (e.g. a DB
+			// error), not the ordinary "nothing to export" case below. It
+			// must surface, like every sibling category's read error does,
+			// rather than silently rendering as an empty calendar section.
+			return "", fmt.Errorf("get calendar: %w", err)
+		}
+		if cal == nil {
+			// Calendar addon disabled or no calendar yet: skip gracefully —
+			// distinct from "the export failed", which bodyOrSkip's caller
+			// would otherwise render as a "could not be exported" note.
+			return "", nil
+		}
+		events, err := s.Calendar.ListAllEventsForCalendar(ctx, campaignID, cal.ID)
+		if err != nil {
+			return "", err
+		}
+		return RenderCalendarEvents(ctx, cal, events, opts)
 
 	case CategorySessions:
 		if s.Sessions == nil {

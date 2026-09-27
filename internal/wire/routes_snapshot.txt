@@ -177,6 +177,7 @@ GET	/calendars/list	internal/plugins/calendar/routes.go
 GET	/calendars/list	internal/plugins/calendar/routes.go
 GET	/calendars/presets	internal/plugins/calendar/routes.go
 GET	/calendars/presets/:name	internal/plugins/calendar/routes.go
+GET	/calendars/upcoming	internal/plugins/calendar/routes.go
 GET	/calendars/wizard	internal/plugins/calendar/routes.go
 GET	/calendars/wizard/import	internal/plugins/calendar/routes.go
 GET	/calendars/wizard/presets	internal/plugins/calendar/routes.go

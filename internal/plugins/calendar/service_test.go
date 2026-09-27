@@ -186,7 +186,7 @@ func TestUpcomingEvents_VisibilityFilterAndOwnCurrentDate(t *testing.T) {
 	}
 	svc := newTestCalendarService(calRepo, eventRepo, nil, nil)
 
-	got, err := svc.UpcomingEvents(context.Background(), "cal-1", testCampaignA, 5, playerViewer("u-1"))
+	got, err := svc.ListUpcomingEvents(context.Background(), "cal-1", testCampaignA, 5, playerViewer("u-1"))
 	if err != nil {
 		t.Fatalf("UpcomingEvents: %v", err)
 	}
@@ -197,7 +197,7 @@ func TestUpcomingEvents_VisibilityFilterAndOwnCurrentDate(t *testing.T) {
 		t.Errorf("a Player must not see the dm_only event, got %v", got)
 	}
 
-	got, err = svc.UpcomingEvents(context.Background(), "cal-1", testCampaignA, 5, ownerViewer("u-owner"))
+	got, err = svc.ListUpcomingEvents(context.Background(), "cal-1", testCampaignA, 5, ownerViewer("u-owner"))
 	if err != nil {
 		t.Fatalf("UpcomingEvents (owner): %v", err)
 	}

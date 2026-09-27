@@ -57,19 +57,66 @@ type CalendarEra struct {
 	Color     string `json:"color"`
 }
 
-// CalendarEventRef is a lightweight reference to a calendar event used in the
-// event picker when linking events to a timeline.
+// CalendarEventRef is a lightweight reference to a calendar event, used both
+// by the event picker (CalendarEventLister, above) and by
+// CalendarEventLinkLister (below) to enrich a timeline's OWN
+// timeline_event_links rows with the calendar event data they point at.
+//
+// Description/EndYear/EndMonth/EndDay are additive fields the picker's own
+// use never needed (a picker row shows just name + date), but an already-
+// LINKED event's card does — they mirror calendar.Event's own fields.
 type CalendarEventRef struct {
-	ID         string  `json:"id"`
-	Name       string  `json:"name"`
-	Year       int     `json:"year"`
-	Month      int     `json:"month"`
-	Day        int     `json:"day"`
-	Category   *string `json:"category,omitempty"`
-	Visibility string  `json:"visibility"`
-	EntityID   *string `json:"entity_id,omitempty"`
-	EntityName string  `json:"entity_name,omitempty"`
-	EntityIcon string  `json:"entity_icon,omitempty"`
+	ID          string  `json:"id"`
+	Name        string  `json:"name"`
+	Description *string `json:"description,omitempty"`
+	Year        int     `json:"year"`
+	Month       int     `json:"month"`
+	Day         int     `json:"day"`
+	EndYear     *int    `json:"end_year,omitempty"`
+	EndMonth    *int    `json:"end_month,omitempty"`
+	EndDay      *int    `json:"end_day,omitempty"`
+	Category    *string `json:"category,omitempty"`
+	Visibility  string  `json:"visibility"`
+	EntityID    *string `json:"entity_id,omitempty"`
+	EntityName  string  `json:"entity_name,omitempty"`
+	EntityIcon  string  `json:"entity_icon,omitempty"`
+}
+
+// CalendarEventLinkLister resolves calendar_events details for a timeline's
+// OWN timeline_event_links rows, plus a timeline's calendar_id display name
+// — restoring the two dark spots repository.go's CALV5-PLACEHOLDER comments
+// name (the GetByID calendar-name join, and the event-link read path).
+//
+// This is a DIFFERENT, newly-added interface from CalendarLister/
+// CalendarEventLister/CalendarEraLister above: those three (plus
+// timelineForCalendarAdapter and six others toward the calendar) are their
+// own separate restoration, explicitly deferred past this one — see the
+// CALV5-PLACEHOLDER doc comment on NewTimelineService's call site in
+// app/routes.go. Implemented by a new adapter there,
+// calendarEventLinkListerAdapter, wired through SetCalendarEventLinkLister.
+// Optional: nil (never wired) means no calendar event can be resolved, so a
+// timeline shows standalone events only — degraded, not broken, the same
+// "dark means safe" reasoning the deletion commit used.
+type CalendarEventLinkLister interface {
+	// CalendarName returns calendarID's display name in campaignID, or ""
+	// if it doesn't exist OR role may not see it (a dm_only calendar's real
+	// name must not leak to a Player/anonymous timeline viewer through this
+	// display-only field). Never used for authorization itself, so either
+	// miss degrades to a blank name rather than an error — the same
+	// role-only viewer shape EventsByIDs below already uses (no per-request
+	// user id carried by this interface, so a per-user visibility_rules
+	// allow/deny list on the calendar itself is not evaluated here; role is
+	// enough to keep a dm_only calendar's name from a Player).
+	CalendarName(ctx context.Context, campaignID, calendarID string, role int) string
+	// EventsByIDs returns calendar_events rows for the given ids (all drawn
+	// from calendarID — a timeline links events from exactly one calendar,
+	// its own CalendarID), role-filtered (dm_only) exactly like the calendar
+	// plugin's own event reads: an event the given role may not see is
+	// simply ABSENT from the result — never present with its content
+	// blanked — the same behavior the deleted `JOIN calendar_events ce ...
+	// WHERE ce.visibility = 'everyone'` gave a Player (the row disappeared,
+	// it didn't degrade).
+	EventsByIDs(ctx context.Context, calendarID, campaignID string, eventIDs []string, role int) ([]CalendarEventRef, error)
 }
 
 // TimelineService defines business logic for the timeline plugin.
@@ -157,12 +204,13 @@ type EntityVisibilityGate interface {
 
 // timelineService is the default TimelineService implementation.
 type timelineService struct {
-	repo           TimelineRepository
-	calLists       CalendarLister
-	calEvents      CalendarEventLister
-	calEras        CalendarEraLister
-	bindingCleaner BindingCleaner
-	entityGate     EntityVisibilityGate
+	repo               TimelineRepository
+	calLists           CalendarLister
+	calEvents          CalendarEventLister
+	calEras            CalendarEraLister
+	calEventLinkLister CalendarEventLinkLister
+	bindingCleaner     BindingCleaner
+	entityGate         EntityVisibilityGate
 }
 
 // BindingCleaner sweeps a deleted instance's widget bindings. Implemented by
@@ -190,6 +238,15 @@ func (s *timelineService) SetBindingCleaner(c BindingCleaner) { s.bindingCleaner
 // fail closed and blank every entity-linked row's id/name/icon rather than
 // risk showing one nothing verified as viewable.
 func (s *timelineService) SetEntityVisibilityGate(g EntityVisibilityGate) { s.entityGate = g }
+
+// SetCalendarEventLinkLister injects the calendar-event-link resolver (wired
+// at app startup, calendar-v5 seams, #778). Reached via a type assertion in
+// routes.go, the same way SetBindingCleaner is, so TimelineService's
+// interface stays unchanged. Leaving this unset (nil) is a supported,
+// degraded state — see CalendarEventLinkLister's doc comment.
+func (s *timelineService) SetCalendarEventLinkLister(l CalendarEventLinkLister) {
+	s.calEventLinkLister = l
+}
 
 // CreateTimeline creates a new timeline in a campaign.
 func (s *timelineService) CreateTimeline(ctx context.Context, campaignID string, input CreateTimelineInput) (*Timeline, error) {
@@ -278,7 +335,23 @@ func (s *timelineService) GetTimelineForViewer(ctx context.Context, timelineID, 
 	if t == nil || t.GetCampaignID() != campaignID || !timelineVisibleToViewer(*t, v) {
 		return nil, apperror.NewNotFound("timeline not found")
 	}
+	s.fillCalendarName(ctx, t, v)
 	return t, nil
+}
+
+// fillCalendarName sets t.CalendarName from calEventLinkLister — repository
+// reads no longer join the calendar's own `calendars` table for it (plugin
+// isolation rule 8). A no-op when the timeline has no bound calendar, or
+// when the lister is unset (never wired): CalendarName then stays "", which
+// every template already renders as "no calendar bound" rather than
+// crashing. v's role gates the read (see CalendarEventLinkLister.CalendarName's
+// doc comment) — a dm_only calendar's real name must not reach a viewer who
+// couldn't otherwise see that calendar.
+func (s *timelineService) fillCalendarName(ctx context.Context, t *Timeline, v permissions.Viewer) {
+	if t == nil || !t.HasCalendar() || s.calEventLinkLister == nil {
+		return
+	}
+	t.CalendarName = s.calEventLinkLister.CalendarName(ctx, t.CampaignID, *t.CalendarID, v.Role())
 }
 
 // ListTimelines returns all timelines for a campaign, filtered by role-based
@@ -289,6 +362,9 @@ func (s *timelineService) ListTimelines(ctx context.Context, campaignID string, 
 		return nil, fmt.Errorf("list timelines: %w", err)
 	}
 	timelines = filterTimelinesByUser(timelines, v)
+	for i := range timelines {
+		s.fillCalendarName(ctx, &timelines[i], v)
+	}
 	if err := s.recountEventsForViewer(ctx, timelines, v); err != nil {
 		return nil, err
 	}
@@ -298,19 +374,21 @@ func (s *timelineService) ListTimelines(ctx context.Context, campaignID string, 
 // recountEventsForViewer overwrites each timeline's SQL-computed EventCount
 // with the number of events this viewer can actually open, reusing the same
 // per-event filter ListTimelineEvents applies to its rows (filterEventLinksByUser)
-// so the two can't disagree (ADR-055 rule 3: a count is content too). The SQL
-// count only ever applied the dm_only predicate; per-user visibility_rules
-// are Go-side, so without this step a viewer excluded from an event only by
-// rules saw a count one higher than their event list — revealing that a
-// hidden event exists.
+// so the two can't disagree (ADR-055 rule 3: a count is content too; calendar-v5
+// seams, #778, restores the linked half of that count alongside this filter,
+// per issue #741's own item — see timelineEventLinks/enrichLinkedEvents).
 //
-// Owners/co-DMs and system callers keep the cheap SQL count: SkipsPerUserRules
-// means they see every event, so recounting would just repeat the SQL's own
-// answer at the cost of two extra queries per timeline.
+// This now runs for EVERY viewer, including Owners/co-DMs and system
+// callers: repository.go's List/ListByCalendar can no longer JOIN
+// calendar_events to count linked events in SQL (plugin isolation rule 8 —
+// the calendar's tables are not this plugin's to read), so their SQL count
+// covers standalone events only. Recounting in Go via
+// CalendarEventLinkLister is the only path that can add the linked half back
+// for ANY viewer now, not just the ones already paying for per-user
+// filtering. filterEventLinksByUser is a no-op passthrough for a viewer that
+// SkipsPerUserRules, so this costs those viewers nothing beyond the extra
+// reads themselves.
 func (s *timelineService) recountEventsForViewer(ctx context.Context, timelines []Timeline, v permissions.Viewer) error {
-	if v.SkipsPerUserRules() {
-		return nil
-	}
 	role := v.Role()
 	for i := range timelines {
 		events, err := s.timelineEventLinks(ctx, timelines[i].ID, role)
@@ -367,6 +445,9 @@ func (s *timelineService) ListTimelinesForCalendar(ctx context.Context, calendar
 		return nil, fmt.Errorf("list timelines for calendar: %w", err)
 	}
 	timelines = filterTimelinesByUser(timelines, v)
+	for i := range timelines {
+		s.fillCalendarName(ctx, &timelines[i], v)
+	}
 	if err := s.recountEventsForViewer(ctx, timelines, v); err != nil {
 		return nil, err
 	}
@@ -570,9 +651,13 @@ func (s *timelineService) viewableEntityIDs(ctx context.Context, campaignID stri
 // ListTimelineEvents (the rows a viewer opens) and recountEventsForViewer
 // (the count a timeline reports) build on, so the two can't diverge.
 func (s *timelineService) timelineEventLinks(ctx context.Context, timelineID string, role int) ([]EventLink, error) {
-	events, err := s.repo.ListEventLinks(ctx, timelineID, role)
+	links, err := s.repo.ListEventLinks(ctx, timelineID, role)
 	if err != nil {
 		return nil, fmt.Errorf("list timeline events: %w", err)
+	}
+	events, err := s.enrichLinkedEvents(ctx, timelineID, links, role)
+	if err != nil {
+		return nil, err
 	}
 	for i := range events {
 		events[i].Source = "calendar"
@@ -588,6 +673,67 @@ func (s *timelineService) timelineEventLinks(ctx context.Context, timelineID str
 
 	sortEventLinks(events)
 	return events, nil
+}
+
+// enrichLinkedEvents fills each raw timeline_event_links row's Event* fields
+// (name, dates, category, visibility, entity) from the calendar plugin via
+// calEventLinkLister, since repository.go's ListEventLinks can no longer
+// JOIN calendar_events for them (plugin isolation rule 8). A link whose
+// event the given role may not see is DROPPED here — never returned with
+// its content blanked — mirroring the deleted `JOIN calendar_events ce ...
+// WHERE ce.visibility = 'everyone'`'s row-level exclusion.
+//
+// calEventLinkLister == nil (never wired) or a timeline with no bound
+// calendar both degrade to "no linked events resolved" rather than an
+// error: a timeline built entirely from standalone events is a normal,
+// supported state, not a failure.
+func (s *timelineService) enrichLinkedEvents(ctx context.Context, timelineID string, links []EventLink, role int) ([]EventLink, error) {
+	if len(links) == 0 || s.calEventLinkLister == nil {
+		return nil, nil
+	}
+	t, err := s.repo.GetByID(ctx, timelineID)
+	if err != nil {
+		return nil, fmt.Errorf("get timeline for event-link enrichment: %w", err)
+	}
+	if t == nil || !t.HasCalendar() {
+		return nil, nil
+	}
+
+	ids := make([]string, len(links))
+	for i, l := range links {
+		ids[i] = l.EventID
+	}
+	refs, err := s.calEventLinkLister.EventsByIDs(ctx, *t.CalendarID, t.CampaignID, ids, role)
+	if err != nil {
+		return nil, fmt.Errorf("resolve linked calendar events: %w", err)
+	}
+	byID := make(map[string]CalendarEventRef, len(refs))
+	for _, r := range refs {
+		byID[r.ID] = r
+	}
+
+	enriched := make([]EventLink, 0, len(links))
+	for _, l := range links {
+		ref, ok := byID[l.EventID]
+		if !ok {
+			continue // role may not see this event, or it no longer exists
+		}
+		l.EventName = ref.Name
+		l.EventDescription = ref.Description
+		l.EventYear = ref.Year
+		l.EventMonth = ref.Month
+		l.EventDay = ref.Day
+		l.EventEndYear = ref.EndYear
+		l.EventEndMonth = ref.EndMonth
+		l.EventEndDay = ref.EndDay
+		l.EventCategory = ref.Category
+		l.EventVisibility = ref.Visibility
+		l.EventEntityID = ref.EntityID
+		l.EventEntityName = ref.EntityName
+		l.EventEntityIcon = ref.EntityIcon
+		enriched = append(enriched, l)
+	}
+	return enriched, nil
 }
 
 // filterEventLinksByUser applies the per-user visibility layer to a merged

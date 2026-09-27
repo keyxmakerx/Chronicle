@@ -106,7 +106,7 @@ func (h *Handler) Preview(c echo.Context) error {
 	if err != nil {
 		return err
 	}
-	upcoming, err := h.svc.UpcomingEvents(ctx, cal.ID, cc.Campaign.ID, upcomingEventsLimit, v)
+	upcoming, err := h.svc.ListUpcomingEvents(ctx, cal.ID, cc.Campaign.ID, upcomingEventsLimit, v)
 	if err != nil {
 		return err
 	}

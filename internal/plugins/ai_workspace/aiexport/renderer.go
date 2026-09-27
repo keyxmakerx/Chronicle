@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/keyxmakerx/chronicle/internal/permissions"
+	"github.com/keyxmakerx/chronicle/internal/plugins/calendar"
 	"github.com/keyxmakerx/chronicle/internal/plugins/entities"
 	"github.com/keyxmakerx/chronicle/internal/plugins/sessions"
 	"github.com/keyxmakerx/chronicle/internal/plugins/timeline"
@@ -390,11 +391,172 @@ func renderNoteTree(
 // ----------------------------------------------------------------------------
 // Calendar events
 // ----------------------------------------------------------------------------
+
+// RenderCalendarEvents groups events by their calendar month using the
+// calendar's own month-name labels (e.g. "Highsummer 1247 AR" not "Month 4,
+// Year 1247"). The era is appended via the matching Era row when one exists
+// for the year.
 //
-// CALV5-PLACEHOLDER: V5 must restore RenderCalendarEvents +
-// renderCalendarEvent, grouping calendar.Event rows by in-world month/era
-// name, and MUST keep the Safe-mode dm_only drop as defence-in-depth since
-// ListAllEventsForCalendar deliberately bypasses role filtering.
+// Privacy filter (defense in depth): the caller's CalendarLister
+// (aiexport's interfaces.go) deliberately bypasses per-viewer role
+// filtering — the AI export is a Director-only tool that needs the full
+// picture — so Safe mode's drops happen HERE, independently, rather than
+// trusting an upstream read to already agree with what "safe" means:
+//
+//   - cal.Visibility == "dm_only": the CALENDAR itself is GM-only (mirroring
+//     the sibling timeline renderer's tl.Visibility == "dm_only" check
+//     above), so none of its events — even "everyone" ones — are Safe. A
+//     calendar's own visibility is independent of any individual event's,
+//     and skipping this check would export every "everyone" event inside a
+//     hidden calendar even in Safe mode.
+//   - Visibility == "dm_only": never shown to a Player, so never Safe.
+//   - Not yet announced: EffectiveAnnounced resolves to "on_day" (the
+//     event's own kind default, absent an override) AND the event's date is
+//     still in the calendar's future (cal.CurrentAbsoluteDay()) — an event
+//     players could not yet know about. An "ahead"-announced event (a
+//     yearly festival, or one explicitly marked AnnouncedAhead) is common
+//     knowledge regardless of date and stays in.
+//
+// Moons and weather are deliberately NOT read or rendered by this function
+// at all — RenderCalendarEvents' job is events, and a hidden moon
+// (Moon.HiddenFromPlayers) or a not-yet-happened day's weather can only leak
+// through a renderer that touches that data; this one never does, so there
+// is nothing here for Safe mode to independently filter for either.
+func RenderCalendarEvents(
+	ctx context.Context,
+	cal *calendar.Calendar,
+	events []calendar.Event,
+	opts Options,
+) (string, error) {
+	if cal == nil || len(events) == 0 {
+		return "", nil
+	}
+	if opts.Privacy == PrivacyModeSafe && cal.Visibility == "dm_only" {
+		return "", nil
+	}
+
+	monthName := func(month int) string {
+		if month < 1 || month > len(cal.Months) {
+			return fmt.Sprintf("Month %d", month)
+		}
+		return cal.Months[month-1].Name
+	}
+
+	eraFor := func(year int) string {
+		// Eras sorted by start year; pick the matching one. Era.EndYear
+		// nil = ongoing.
+		for _, era := range cal.Eras {
+			if year >= era.StartYear && (era.EndYear == nil || year <= *era.EndYear) {
+				return era.Name
+			}
+		}
+		return ""
+	}
+
+	kindByID := make(map[int]*calendar.EventKind, len(cal.EventKinds))
+	for i := range cal.EventKinds {
+		kindByID[cal.EventKinds[i].ID] = &cal.EventKinds[i]
+	}
+	currentAbsDay := cal.CurrentAbsoluteDay()
+
+	// Filter + group by (year, month). Sort keys for determinism.
+	type ymKey struct{ Year, Month int }
+	groups := make(map[ymKey][]calendar.Event)
+	for _, e := range events {
+		if opts.Privacy == PrivacyModeSafe {
+			if e.Visibility == "dm_only" {
+				continue
+			}
+			var kind *calendar.EventKind
+			if e.KindID != nil {
+				kind = kindByID[*e.KindID]
+			}
+			announced := e.EffectiveAnnounced(kind)
+			eventAbsDay := cal.AbsoluteDay(e.Year, e.Month, e.Day)
+			if announced == calendar.AnnouncedOnDay && eventAbsDay > currentAbsDay {
+				continue // hasn't happened yet, and players have no advance word
+			}
+		}
+		k := ymKey{e.Year, e.Month}
+		groups[k] = append(groups[k], e)
+	}
+	if len(groups) == 0 {
+		return "", nil
+	}
+	keys := make([]ymKey, 0, len(groups))
+	for k := range groups {
+		keys = append(keys, k)
+	}
+	sort.Slice(keys, func(i, j int) bool {
+		if keys[i].Year != keys[j].Year {
+			return keys[i].Year < keys[j].Year
+		}
+		return keys[i].Month < keys[j].Month
+	})
+
+	var b strings.Builder
+	b.WriteString("# Calendar Events\n\n")
+	fmt.Fprintf(&b, "*Calendar: **%s**", cal.Name)
+	if cal.EpochName != nil && *cal.EpochName != "" {
+		fmt.Fprintf(&b, " · Epoch: %s", *cal.EpochName)
+	}
+	b.WriteString("*\n\n")
+
+	for _, k := range keys {
+		bucket := groups[k]
+		sort.SliceStable(bucket, func(i, j int) bool {
+			if bucket[i].Day != bucket[j].Day {
+				return bucket[i].Day < bucket[j].Day
+			}
+			return bucket[i].Name < bucket[j].Name
+		})
+
+		era := eraFor(k.Year)
+		if era != "" {
+			fmt.Fprintf(&b, "## %s %d %s\n\n", monthName(k.Month), k.Year, era)
+		} else {
+			fmt.Fprintf(&b, "## %s %d\n\n", monthName(k.Month), k.Year)
+		}
+
+		for _, e := range bucket {
+			if err := renderCalendarEvent(&b, &e, opts); err != nil {
+				return "", err
+			}
+		}
+	}
+	return b.String(), nil
+}
+
+func renderCalendarEvent(b *strings.Builder, e *calendar.Event, opts Options) error {
+	fmt.Fprintf(b, "### Day %d — %s {#%s}\n\n", e.Day, e.Name, slugify(e.Name))
+
+	meta := []string{}
+	if e.StartHour != nil && e.StartMinute != nil {
+		meta = append(meta, fmt.Sprintf("Time: %02d:%02d", *e.StartHour, *e.StartMinute))
+	}
+	if e.IsRecurring {
+		t := "recurring"
+		if e.RecurrenceType != nil && *e.RecurrenceType != "" {
+			t = *e.RecurrenceType
+		}
+		meta = append(meta, "Recurrence: "+t)
+	}
+	if e.Visibility == "dm_only" {
+		meta = append(meta, "_GM-only_")
+	}
+	if len(meta) > 0 {
+		b.WriteString(strings.Join(meta, " · "))
+		b.WriteString("\n\n")
+	}
+
+	body, err := htmlToMarkdown(e.DescriptionHTML)
+	body = bodyOrSkip("calendar event", e.Name, body, err)
+	if body != "" {
+		b.WriteString(body)
+		b.WriteString("\n\n")
+	}
+	return nil
+}
 
 // ----------------------------------------------------------------------------
 // Sessions

@@ -155,6 +155,14 @@ type CalendarService interface {
 	// EventKinds are stripped and Moons are filtered for a viewer that does
 	// not skip the per-user layer.
 	GetCalendarForViewer(ctx context.Context, calendarID, campaignID string, v permissions.Viewer) (*Calendar, error)
+	// GetDefaultCalendarForViewer returns the campaign's default calendar
+	// (Calendar.IsDefault), gated exactly like GetCalendarForViewer, for
+	// callers that want "the campaign's calendar" without already knowing its
+	// id — e.g. the skybox dashboard/template block, which is campaign-level
+	// and binds to no specific calendar. Returns apperror.NotFound both when
+	// the campaign has no default calendar and when it has one the viewer may
+	// not see, the same collapse GetCalendarForViewer uses.
+	GetDefaultCalendarForViewer(ctx context.Context, campaignID string, v permissions.Viewer) (*Calendar, error)
 	// ListCalendars returns a campaign's calendars, role- and per-user
 	// visibility-filtered. No sub-resources are eager-loaded (list view).
 	ListCalendars(ctx context.Context, campaignID string, v permissions.Viewer) ([]Calendar, error)
@@ -193,14 +201,18 @@ type CalendarService interface {
 	// event is visible to v.
 	GetEventForViewer(ctx context.Context, eventID, calendarID, campaignID string, v permissions.Viewer) (*Event, error)
 	ListEventsForMonth(ctx context.Context, calendarID, campaignID string, year, month int, v permissions.Viewer) ([]Event, error)
-	// UpcomingEvents returns a calendar's next (up to limit) events on or
-	// after its own current date, visibility-filtered for v — the calendar
-	// preview's "Coming up" list (Part B, #764). Built on the same
-	// EventRepository.ListUpcomingEvents a base-date-only read the events
-	// list already has no equivalent for; it does not expand recurrence
-	// past a base date in the past, the same limitation ListUpcomingEvents
-	// itself carries — see that method's own doc comment.
-	UpcomingEvents(ctx context.Context, calendarID, campaignID string, limit int, v permissions.Viewer) ([]Event, error)
+	// ListUpcomingEvents returns up to limit events on or after the
+	// calendar's current date, chronological, viewer-filtered exactly like
+	// ListEventsForMonth (SQL role filter + per-user visibility_rules +
+	// hidden-entity-link redaction). Powers the "what's coming up" dashboard
+	// and category-dashboard preview blocks (campaigns.dashCalendarPreview/
+	// dashCalendarFull, entities.catCalendarPreview) and the calendar
+	// preview's "Coming up" list — none of them are scoped to a single
+	// month, unlike ListEventsForMonth. Does not expand
+	// recurrence beyond each event's own stored date (the repository read
+	// this wraps is a literal date-range scan); a recurring event only
+	// appears here on its next literal occurrence row, not a virtual one.
+	ListUpcomingEvents(ctx context.Context, calendarID, campaignID string, limit int, v permissions.Viewer) ([]Event, error)
 	UpdateEvent(ctx context.Context, eventID, calendarID, campaignID string, input UpdateEventInput, v permissions.Viewer) error
 	DeleteEvent(ctx context.Context, eventID, calendarID, campaignID string, v permissions.Viewer) error
 	// SetEventVisibility is the dm_only toggle's dedicated action endpoint;
@@ -232,6 +244,35 @@ type CalendarService interface {
 	// sessions but writes nothing. Owner-only (see routes.go); the real
 	// anchor write this previews is a future Part A/D endpoint, not this one.
 	PreviewAnchorMove(ctx context.Context, calendarID, campaignID string, newAnchorYear, newAnchorMonth, newAnchorDay int, newRealDate time.Time) (*AnchorMovePreview, error)
+
+	// --- Bulk structure writers ---
+	//
+	// SetMonths/SetWeekdays/SetMoons/SetSeasons replace a calendar's whole
+	// list for that sub-resource in one call. They exist for the campaign
+	// import path (calendarImportAdapter, internal/app/export_adapters.go)
+	// and the calendar plugin's own native/Simple-Calendar/Calendaria import
+	// (internal/plugins/calendar/import.go), neither of which has a stored
+	// row per item to update incrementally the way CreateEra/CreateEventKind
+	// do. Not wired to any HTTP route yet (calendar-v5 slice 2, #741) — Owner-
+	// only calendar-settings editing UI is a later slice — so today's only
+	// callers are trusted in-process ones; a caller reaching these through a
+	// future HTTP handler must still be gated Owner-only there, the same as
+	// every other calendar-structure write in this file.
+	SetMonths(ctx context.Context, calendarID, campaignID string, months []MonthInput) error
+	SetWeekdays(ctx context.Context, calendarID, campaignID string, weekdays []WeekdayInput) error
+	SetMoons(ctx context.Context, calendarID, campaignID string, moons []MoonInput) error
+	SetSeasons(ctx context.Context, calendarID, campaignID string, seasons []Season) error
+
+	// ListAllEventsForCalendar returns every event for a calendar with no
+	// role or per-user visibility filter — a bulk, unredacted read for
+	// SYSTEM-ONLY callers that apply their own gating afterward: the
+	// campaign export walk (calendarExportAdapter) and the Director-only AI
+	// export (aiexport.CalendarLister). v must be a permissions.SystemViewer
+	// (ADR-049); any other viewer is refused, since nothing here re-checks
+	// per-event visibility the way ListEventsForMonth's SQL role filter +
+	// filterEventsByUser do — a caller that isn't declaring system trust
+	// must not get the unfiltered list.
+	ListAllEventsForCalendar(ctx context.Context, calendarID, campaignID string, v permissions.Viewer) ([]Event, error)
 }
 
 // calendarService is the concrete CalendarService.
@@ -507,6 +548,16 @@ func (s *calendarService) CreateCalendar(ctx context.Context, campaignID string,
 	if err := validateOptionalText("epoch_name", input.EpochName, maxEpochNameLength); err != nil {
 		return nil, err
 	}
+	visibility := input.Visibility
+	if visibility == "" {
+		visibility = "everyone"
+	}
+	if visibility != "everyone" && visibility != "dm_only" {
+		return nil, apperror.NewValidation("visibility must be \"everyone\" or \"dm_only\"")
+	}
+	if err := validateVisibilityRulesJSON(input.VisibilityRules); err != nil {
+		return nil, err
+	}
 
 	cal := &Calendar{
 		ID:               generateID(),
@@ -521,7 +572,8 @@ func (s *calendarService) CreateCalendar(ctx context.Context, campaignID string,
 		SecondsPerMinute: secondsPerMinute,
 		LeapYearEvery:    input.LeapYearEvery,
 		LeapYearOffset:   input.LeapYearOffset,
-		Visibility:       "everyone",
+		Visibility:       visibility,
+		VisibilityRules:  input.VisibilityRules,
 	}
 	if err := s.calRepo.Create(ctx, cal); err != nil {
 		return nil, fmt.Errorf("create calendar: %w", err)
@@ -536,6 +588,30 @@ func (s *calendarService) GetCalendarForViewer(ctx context.Context, calendarID, 
 	if err != nil {
 		return nil, err
 	}
+	return s.finishCalendarForViewer(ctx, cal, v)
+}
+
+// GetDefaultCalendarForViewer returns the campaign's default calendar with
+// its sub-resources, gated the same way as GetCalendarForViewer (see the
+// interface doc comment). Shares finishCalendarForViewer with it so the two
+// entry points — "this calendar id" and "whichever calendar is default" —
+// can never load or filter sub-resources differently.
+func (s *calendarService) GetDefaultCalendarForViewer(ctx context.Context, campaignID string, v permissions.Viewer) (*Calendar, error) {
+	cal, err := s.calRepo.GetDefaultByCampaignID(ctx, campaignID)
+	if err != nil {
+		return nil, err
+	}
+	if cal == nil || cal.CampaignID != campaignID || !calendarVisibleToViewer(*cal, v) {
+		return nil, apperror.NewNotFound("calendar not found")
+	}
+	return s.finishCalendarForViewer(ctx, cal, v)
+}
+
+// finishCalendarForViewer eager-loads cal's sub-resources and applies the
+// viewer-gated stripping (event kinds/eras hidden entirely, hidden moons
+// filtered) that every "one calendar, for this viewer" read needs. Callers
+// have already resolved cal and checked visibility.
+func (s *calendarService) finishCalendarForViewer(ctx context.Context, cal *Calendar, v permissions.Viewer) (*Calendar, error) {
 	if err := s.loadSubresources(ctx, cal); err != nil {
 		return nil, err
 	}
@@ -1237,29 +1313,23 @@ func occursSomewhereInMonth(e Event, cal *Calendar, year, month int) bool {
 	return false
 }
 
-// upcomingEventsOverfetchFactor/upcomingEventsMaxFetch: see UpcomingEvents'
-// doc comment for why it over-fetches before filtering rather than trusting
-// the repository's own LIMIT.
+// upcomingEventsOverfetchFactor/upcomingEventsMaxFetch: see
+// ListUpcomingEvents for why it over-fetches before filtering rather than
+// trusting the repository's own LIMIT.
 const (
 	upcomingEventsOverfetchFactor = 5
 	upcomingEventsMaxFetch        = 200
 )
 
-// UpcomingEvents returns a calendar's next (up to limit) events on or after
-// its own current date, visibility-filtered for v. See the interface doc
-// comment for what it does not do (recurrence expansion past a base date in
-// the past).
+// ListUpcomingEvents is the "what's coming up" preview read — see the
+// interface doc comment.
 //
-// ListUpcomingEvents' own SQL LIMIT only applies the role-level (dm_only)
-// filter; the finer per-user visibility_rules allow/deny list is applied
-// afterward, in Go, by filterEventsByUser. Passing `limit` straight through
-// to the repository truncates the result BEFORE that second filter runs, so
-// a viewer whose visible events happen to sort after the SQL cutoff could
-// see "nothing upcoming" while visible events genuinely exist further down
-// the unfiltered list. Fetching a wider page first, filtering, then
-// trimming to `limit` fixes that without teaching the repository
-// visibility_rules.
-func (s *calendarService) UpcomingEvents(ctx context.Context, calendarID, campaignID string, limit int, v permissions.Viewer) ([]Event, error) {
+// The repository's SQL LIMIT applies only the role-level (dm_only) filter;
+// the per-user visibility_rules and the unannounced-future-event rule run
+// afterward, in Go. Passing limit straight through would truncate before
+// those filters, so a viewer could see "nothing upcoming" while visible
+// events exist further down. It fetches a wider page, filters, then trims.
+func (s *calendarService) ListUpcomingEvents(ctx context.Context, calendarID, campaignID string, limit int, v permissions.Viewer) ([]Event, error) {
 	cal, err := s.calendarInCampaignForViewer(ctx, calendarID, campaignID, v)
 	if err != nil {
 		return nil, err
@@ -1276,6 +1346,11 @@ func (s *calendarService) UpcomingEvents(ctx context.Context, calendarID, campai
 		return nil, fmt.Errorf("list upcoming events: %w", err)
 	}
 	events = filterEventsByUser(events, v)
+	if !v.SkipsPerUserRules() {
+		if events, err = s.dropUnannouncedFutureEvents(ctx, cal, campaignID, events); err != nil {
+			return nil, err
+		}
+	}
 	if limit > 0 && len(events) > limit {
 		events = events[:limit]
 	}
@@ -1283,6 +1358,53 @@ func (s *calendarService) UpcomingEvents(ctx context.Context, calendarID, campai
 		return nil, err
 	}
 	return events, nil
+}
+
+// dropUnannouncedFutureEvents removes events a non-author viewer cannot yet
+// know about, mirroring aiexport's RenderCalendarEvents Safe-mode filter
+// (ai_workspace/aiexport/renderer.go): a future event (strictly after the
+// calendar's current date) whose EffectiveAnnounced resolves to
+// AnnouncedOnDay ("only knowable on the day itself") stays secret until that
+// day arrives. An AnnouncedAhead event (a yearly festival, or one explicitly
+// marked ahead) is common knowledge regardless of date and is never dropped.
+// Callers that skip per-user rules (Owner/co-DM/system) never call this —
+// content authors already know their own unannounced events.
+func (s *calendarService) dropUnannouncedFutureEvents(ctx context.Context, cal *Calendar, campaignID string, events []Event) ([]Event, error) {
+	if len(events) == 0 {
+		return events, nil
+	}
+	// AbsoluteDay needs the calendar's month lengths; calendarInCampaignForViewer
+	// (this method's caller) returns a bare calendar row with no sub-resources
+	// loaded, so they're fetched here rather than assumed present.
+	months, err := s.calRepo.GetMonths(ctx, cal.ID)
+	if err != nil {
+		return nil, fmt.Errorf("load months: %w", err)
+	}
+	cal.Months = months
+	kinds, err := s.kindRepo.List(ctx, campaignID)
+	if err != nil {
+		return nil, fmt.Errorf("list event kinds: %w", err)
+	}
+	kindByID := make(map[int]*EventKind, len(kinds))
+	for i := range kinds {
+		kindByID[kinds[i].ID] = &kinds[i]
+	}
+	currentAbsDay := cal.CurrentAbsoluteDay()
+
+	visible := events[:0]
+	for _, e := range events {
+		var kind *EventKind
+		if e.KindID != nil {
+			kind = kindByID[*e.KindID]
+		}
+		announced := e.EffectiveAnnounced(kind)
+		eventAbsDay := cal.AbsoluteDay(e.Year, e.Month, e.Day)
+		if announced == AnnouncedOnDay && eventAbsDay > currentAbsDay {
+			continue // hasn't happened yet, and this viewer has no advance word
+		}
+		visible = append(visible, e)
+	}
+	return visible, nil
 }
 
 // eventInCalendar loads an event and confirms it belongs to calendarID
@@ -1850,6 +1972,54 @@ func (s *calendarService) PreviewAnchorMove(ctx context.Context, calendarID, cam
 		})
 	}
 	return preview, nil
+}
+
+// SetMonths replaces calendarID's month list. See the interface doc comment
+// for who calls this today and why it takes no MonthEditImpact preview the
+// way V4's did: every current caller is importing into a calendar that has
+// no events yet, so there is nothing for a month-position edit to re-date.
+func (s *calendarService) SetMonths(ctx context.Context, calendarID, campaignID string, months []MonthInput) error {
+	if _, err := s.calendarInCampaign(ctx, calendarID, campaignID); err != nil {
+		return err
+	}
+	return s.calRepo.SetMonths(ctx, calendarID, months)
+}
+
+// SetWeekdays replaces calendarID's weekday list.
+func (s *calendarService) SetWeekdays(ctx context.Context, calendarID, campaignID string, weekdays []WeekdayInput) error {
+	if _, err := s.calendarInCampaign(ctx, calendarID, campaignID); err != nil {
+		return err
+	}
+	return s.calRepo.SetWeekdays(ctx, calendarID, weekdays)
+}
+
+// SetMoons replaces (upserts by ID, see MoonInput's doc comment)
+// calendarID's moon list.
+func (s *calendarService) SetMoons(ctx context.Context, calendarID, campaignID string, moons []MoonInput) error {
+	if _, err := s.calendarInCampaign(ctx, calendarID, campaignID); err != nil {
+		return err
+	}
+	return s.calRepo.SetMoons(ctx, calendarID, moons)
+}
+
+// SetSeasons replaces calendarID's season list.
+func (s *calendarService) SetSeasons(ctx context.Context, calendarID, campaignID string, seasons []Season) error {
+	if _, err := s.calendarInCampaign(ctx, calendarID, campaignID); err != nil {
+		return err
+	}
+	return s.calRepo.SetSeasons(ctx, calendarID, seasons)
+}
+
+// ListAllEventsForCalendar is the unfiltered bulk event read for system
+// callers — see the interface doc comment for the trust boundary.
+func (s *calendarService) ListAllEventsForCalendar(ctx context.Context, calendarID, campaignID string, v permissions.Viewer) ([]Event, error) {
+	if !v.IsSystem() {
+		return nil, apperror.NewForbidden("ListAllEventsForCalendar is system-only")
+	}
+	if _, err := s.calendarInCampaign(ctx, calendarID, campaignID); err != nil {
+		return nil, err
+	}
+	return s.eventRepo.ListAllEvents(ctx, calendarID)
 }
 
 // --- Shared validation helpers ---

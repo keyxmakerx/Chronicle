@@ -55,6 +55,7 @@ import (
 	"github.com/keyxmakerx/chronicle/internal/widgets/notes"
 	"github.com/keyxmakerx/chronicle/internal/widgets/posts"
 	"github.com/keyxmakerx/chronicle/internal/widgets/relations"
+	skywidget "github.com/keyxmakerx/chronicle/internal/widgets/sky/templates"
 	"github.com/keyxmakerx/chronicle/internal/widgets/tags"
 )
 
@@ -521,7 +522,81 @@ func (a *entityVisibilityFilterAdapter) FilterViewableEntityIDs(ctx context.Cont
 // CalendarRef/CalendarEventRef/CalendarEra — timeline nil-guards these as
 // optional, so it still builds and runs without them). Each was a narrow
 // interface owned by the consuming plugin, not a shared type — keep that
-// shape so the rebuild stays surgical rather than a cascade.
+// shape so the rebuild stays surgical rather than a cascade. TODO(#778)
+//
+// calendarEventLinkListerAdapter below is a SEPARATE, newly-added seam, not
+// one of the ten above: it feeds timeline's calendar-name display and its
+// timeline_event_links -> calendar_events resolution (calendar-v5 seams,
+// #778's item 3), which needed restoring regardless of when the ten above
+// land.
+type calendarEventLinkListerAdapter struct {
+	svc calendar.CalendarService
+}
+
+// CalendarName implements timeline.CalendarEventLinkLister. A real,
+// role-gated read — NOT a system bypass — because unlike EventsByIDs'
+// per-event visibility (which the deleted JOIN already enforced), the
+// calendar's OWN visibility was never checked at this seam before: a
+// dm_only calendar's real name would otherwise leak to a Player/anonymous
+// timeline viewer through this display-only field. Built as a role-only
+// RequestViewer, matching EventsByIDs' own convention just below (the
+// interface carries no per-request user id, so a calendar's per-user
+// visibility_rules allow/deny list is not evaluated here — role alone is
+// enough to keep a dm_only calendar's name away from anyone who isn't at
+// least an Owner/co-DM). Best-effort — any miss (not found, or hidden from
+// this role) degrades to an empty name rather than surfacing as a page
+// error, matching the deleted `LEFT JOIN` + `COALESCE(c.name, "")`'s own
+// failure-to-empty behavior.
+func (a *calendarEventLinkListerAdapter) CalendarName(ctx context.Context, campaignID, calendarID string, role int) string {
+	if calendarID == "" {
+		return ""
+	}
+	v := permissions.RequestViewer(role, "")
+	cal, err := a.svc.GetCalendarForViewer(ctx, calendarID, campaignID, v)
+	if err != nil || cal == nil {
+		return ""
+	}
+	return cal.Name
+}
+
+// EventsByIDs implements timeline.CalendarEventLinkLister. Built as a plain
+// role-only RequestViewer (no per-request user id — the interface carries
+// none, matching CalendarEventLister's existing picker convention above):
+// this is STRICTER than the deleted JOIN's own `ce.visibility = 'everyone'`
+// check, never looser, since it also runs a calendar event's own
+// visibility_rules and redacts a hidden linked entity, both of which the old
+// SQL never touched.
+//
+// One GetEventForViewer call per id — no batch read exists on
+// CalendarService yet — acceptable for the handful of events a timeline
+// typically links; a real batch method is the natural follow-up if that
+// stops being true.
+func (a *calendarEventLinkListerAdapter) EventsByIDs(ctx context.Context, calendarID, campaignID string, eventIDs []string, role int) ([]timeline.CalendarEventRef, error) {
+	if calendarID == "" || len(eventIDs) == 0 {
+		return nil, nil
+	}
+	v := permissions.RequestViewer(role, "")
+	refs := make([]timeline.CalendarEventRef, 0, len(eventIDs))
+	for _, id := range eventIDs {
+		evt, err := a.svc.GetEventForViewer(ctx, id, calendarID, campaignID, v)
+		if err != nil {
+			continue // not found, or not visible to this role — simply absent
+		}
+		var category *string
+		if evt.KindSlug != "" {
+			category = &evt.KindSlug
+		}
+		refs = append(refs, timeline.CalendarEventRef{
+			ID: evt.ID, Name: evt.Name, Description: evt.Description,
+			Year: evt.Year, Month: evt.Month, Day: evt.Day,
+			EndYear: evt.EndYear, EndMonth: evt.EndMonth, EndDay: evt.EndDay,
+			Category: category, Visibility: evt.Visibility,
+			EntityID: evt.EntityID, EntityName: evt.EntityName, EntityIcon: evt.EntityIcon,
+		})
+	}
+	return refs, nil
+}
+
 type wsSessionAuthAdapter struct {
 	svc auth.AuthService
 }
@@ -572,6 +647,7 @@ func (a *wsCampaignRoleAdapter) IsUserDmGranted(ctx context.Context, campaignID,
 // A switch ending in `default: return` fails silently: an emitter whose event
 // type has no case here publishes into nothing, unreported. Rebuild it with a
 // test that walks every emitter's event type and asserts a case exists.
+// TODO(#778)
 //
 // The mapping it carried, so V5 has the checklist rather than rediscovering it:
 //   "event.created"                            -> ws.MsgCalendarEventCreated
@@ -2503,7 +2579,7 @@ func (a *App) RegisterRoutes() {
 	//
 	// CALV5-PLACEHOLDER: V5 must still restore the RSVP repo/service/handler
 	// triple, the entity-creator seam, the RSVP reader, and the StaticFS
-	// mount for /static/plugins/calendar/.
+	// mount for /static/plugins/calendar/. TODO(#778)
 	calendarRepo := calendar.NewCalendarRepository(a.DB)
 	calendarEventRepo := calendar.NewEventRepository(a.DB)
 	calendarKindRepo := calendar.NewEventKindRepository(a.DB)
@@ -2548,31 +2624,22 @@ func (a *App) RegisterRoutes() {
 	// both paths deliver the same scripts; each re-inits on
 	// htmx:afterSettle/htmx:load and no-ops when its mount is absent.
 	//
-	// CALV5-PLACEHOLDER: the V4 calendar loaded five scripts from here —
-	// calendar_widget.js, cal_visibility.js, calendar_permissions.js,
-	// calendar_daycard.js and calendar_theater.js — all since deleted. V5
-	// part A (#741) restores the surface with two new scripts instead:
-	// calendar_view.js (mounts on data-widget="calendar_view", the
-	// calendar's own page) and calendar_editor.js (self-gates on that
-	// mount's data-can-edit="true" — see its own file header). Both are
-	// harmless no-ops on every other page, same as every entry here.
+	// The calendar's page scripts: calendar_view.js mounts on
+	// data-widget="calendar_view" (the calendar's own page) and
+	// calendar_editor.js self-gates on that mount's data-can-edit="true".
+	// Both are no-ops on every other page, same as every entry here.
 	pluginBodyScripts := []string{
 		"/static/plugins/" + entities.PluginSlug + "/js/characters.js",
 		"/static/js/widgets/calendar_view.js",
 		"/static/js/widgets/calendar_editor.js",
 	}
 
-	// CALV5-PLACEHOLDER: the sidebar, campaign dashboard and Extensions hub
-	// still link to /campaigns/:id/apps/calendar — addonURLMap in
-	// internal/templates/layouts/app.templ has to keep pointing at that path
-	// (rather than /calendars directly) because the plugin-isolation guard
-	// (T-B2/M-B2.1) flags a literal "calendar" slug string outside this file
-	// and internal/plugins/calendar/ as a new cross-plugin reference; this
-	// file is on the guard's allowlist, app.templ is not. So both legacy
-	// paths redirect here to the real page instead of duplicating it.
-	// /calendars (bare, no trailing segment) is NOT in this group — Part B
-	// (#764) gave it a real page (calendar.RegisterRoutes' Index handler)
-	// below, and this redirect sends legacy links there.
+	// The sidebar, campaign dashboard and Extensions hub link to
+	// /campaigns/:id/apps/calendar: addonURLMap in app.templ keeps that path
+	// because the plugin-isolation guard flags a literal "calendar" slug
+	// outside this file and the calendar plugin. That path and the legacy
+	// /calendar redirect to the calendars list page, which
+	// calendar.RegisterRoutes serves below.
 	calendarRebuildGroup := e.Group("/campaigns/:id",
 		auth.RequireAuth(authService),
 		campaigns.RequireCampaignAccess(campaignService),
@@ -2597,7 +2664,7 @@ func (a *App) RegisterRoutes() {
 	// and the public Foundry-facing calendar API (token-verified through
 	// fvttService, rate limited 300/min) behind the schema health gate. That
 	// public API overlapped syncapi's calendar surface — rebuild only
-	// syncapi's, the one the module's contract documents.
+	// syncapi's, the one the module's contract documents. TODO(#778)
 	if a.PluginHealth.IsHealthy(calendar.PluginSlug) {
 		calendar.RegisterRoutes(e, calendarHandler, campaignService, authService, addonService)
 	} else {
@@ -2662,6 +2729,7 @@ func (a *App) RegisterRoutes() {
 	// SetRSVPNotifier, SetAvailabilityWriter (member zones + exception
 	// dates), SetScheduleReader and SetOwnWeekReader — all nil-safe on the
 	// calendar side, so a degraded neighbour never takes the calendar down.
+	// TODO(#778)
 
 	if a.PluginHealth.IsHealthy("sessions") {
 		sessions.RegisterRoutes(e, sessionsHandler, campaignService, authService, addonService)
@@ -2674,7 +2742,8 @@ func (a *App) RegisterRoutes() {
 	// CALV5-PLACEHOLDER: V5 must restore &calendarListerAdapter{},
 	// &calendarEventListerAdapter{} and &calendarEraListerAdapter{} as the
 	// 2nd-4th arguments. Timeline nil-guards all three, so it runs on
-	// standalone events alone until then.
+	// standalone events alone until then. TODO(#778): distinct from
+	// CalendarEventLinkLister below, which IS restored in this change.
 	timelineSvc := timeline.NewTimelineService(timelineRepo, nil, nil, nil)
 	// Reuses the same entityVisibilityFilterAdapter maps, media, npcs and
 	// sessions wire, so a timeline event or entity-group member naming a
@@ -2685,6 +2754,17 @@ func (a *App) RegisterRoutes() {
 		SetEntityVisibilityGate(timeline.EntityVisibilityGate)
 	}); ok {
 		g.SetEntityVisibilityGate(&entityVisibilityFilterAdapter{svc: entityService})
+	}
+	// SetCalendarEventLinkLister restores timeline's calendar-name display
+	// and calendar-linked event reads (calendar-v5 seams, #778) — a
+	// SEPARATE, newly-added seam from the three CALV5-PLACEHOLDER
+	// constructor args above (those remain deferred). Reached via a type
+	// assertion so TimelineService's interface stays unchanged, the same
+	// pattern SetBindingCleaner below uses.
+	if t, ok := timelineSvc.(interface {
+		SetCalendarEventLinkLister(timeline.CalendarEventLinkLister)
+	}); ok {
+		t.SetCalendarEventLinkLister(&calendarEventLinkListerAdapter{svc: calendarService})
 	}
 	timelineHandler := timeline.NewHandler(timelineSvc)
 	timelineHandler.SetMemberLister(campaignService)
@@ -2762,7 +2842,8 @@ func (a *App) RegisterRoutes() {
 	syncAPIHandler.SetSystemEnabler(addonService)
 	// CALV5-PLACEHOLDER: V5 must restore (syncService, calendarService) as
 	// arguments. The handler holds the calendar routes open with a 503 while
-	// the plugin is rebuilt.
+	// the plugin is rebuilt. TODO(#778): Foundry sync rewiring is explicitly
+	// later work, deliberately out of scope for this change.
 	calendarAPIHandler := syncapi.NewCalendarAPIHandler()
 	mediaAPIHandler := syncapi.NewMediaAPIHandler(syncService, mediaService)
 	if urlSigner != nil {
@@ -2860,7 +2941,7 @@ func (a *App) RegisterRoutes() {
 	// RealTimeSeam + SyncLinkProbe + calendar.InstallBlockSpine). Keep the
 	// spine's repository a narrow read surface over *sql.DB rather than a
 	// wide CalendarRepository interface — the old plugin's 60-method
-	// interface was itself a reason it became hard to change.
+	// interface was itself a reason it became hard to change. TODO(#778)
 
 	// Wire the per-campaign read window into the operator diagnostics, so it
 	// can answer "why does MY campaign look like this?" and not only "which
@@ -2885,6 +2966,18 @@ func (a *App) RegisterRoutes() {
 		sidebarCalendarPath: navAppPath(calendar.PluginSlug),
 	})
 
+	// The new calendar.* diagnostic (calendar-v5 seams, #778): counts only
+	// (calendars/events/moons/eras/kinds), the plugin's own migration state,
+	// and the Foundry sync state — never event text, member names, or
+	// answers. A separate provider/interface from campaignDiagAdapter above,
+	// mirroring how entity.* has its own EntityDiagProvider.
+	systems.SetCalendarDiagProvider(calendarDiagAdapter{
+		campaigns:    campaignService,
+		addons:       addonService,
+		calendar:     calendarService,
+		pluginHealth: a.PluginHealth,
+	})
+
 	// And the enable-state checker the hub fragment route consults
 	// to render the disabled-extension placeholder. addonService
 	// already exposes IsEnabledForCampaign with the canonical narrow
@@ -2896,7 +2989,7 @@ func (a *App) RegisterRoutes() {
 	entityHandler.SetMapSearcher(mapsService)
 	// CALV5-PLACEHOLDER: V5 must restore
 	// entityHandler.SetCalendarSearcher(calendarService) for the calendar's
-	// rows in global entity search. Nil-safe meanwhile; search returns none.
+	// rows in global entity search. Nil-safe meanwhile; search returns none. TODO(#778)
 	entityHandler.SetSessionSearcher(sessionsService)
 	entityHandler.SetSystemSearcher(systems.NewSystemSearchAdapter(addonService))
 	entityHandler.SetMemberLister(campaignService)
@@ -2919,7 +3012,7 @@ func (a *App) RegisterRoutes() {
 	// widget types it does not know, so a GM's existing entity→calendar
 	// bindings survive the blackout untouched and resolve again once V5
 	// registers the types. Deleting the rows, or registering a type whose
-	// InstanceExists answers false, would sweep them permanently.
+	// InstanceExists answers false, would sweep them permanently. TODO(#778)
 	widgetRegistry.Register(timeline.NewTimelineWidgetType(timelineSvc))
 	// maps registers with no campaign default — the legacy entity.map_id
 	// fallback lives in the map_editor closure instead.
@@ -3000,6 +3093,13 @@ func (a *App) RegisterRoutes() {
 		},
 	}, func(ctx entities.BlockRenderContext) templ.Component {
 		// CALV5-PLACEHOLDER: was calendar.BlockUpcomingEvents(ctx.CC, limit).
+		// TODO(#778): a real fix is small and low-risk — reuse the same
+		// GET /campaigns/:id/calendars/upcoming hx-get fragment
+		// dashCalendarPreview/dashCalendarFull/catCalendarPreview now use
+		// (calendar-v5 seams, #778) instead of this notice. Left as a
+		// placeholder rather than rushed here because this is a template
+		// (not dashboard/category) block context with its own markup
+		// convention, unverified in this change.
 		return components.FeatureRebuildingBlock("The calendar")
 	})
 	// entity_calendar — the entity-page calendar embed: a compact worldstate
@@ -3015,7 +3115,11 @@ func (a *App) RegisterRoutes() {
 		// renderBoundBlock(calendar.WidgetTypeCalendar, rc, ""). Explicit
 		// rebuilding notice here rather than renderBoundBlock's fallback
 		// (templ.NopComponent for an unregistered widget type), which would
-		// leave an unexplained gap in the owner's entity layout.
+		// leave an unexplained gap in the owner's entity layout. TODO(#778):
+		// needs calendar.WidgetTypeCalendar to implement widgetbindings.
+		// WidgetType (InstanceExists/DefaultInstance/ListInstances/
+		// CreateInstance/RenderBlock) — a separate, larger body of work than
+		// this change's dashboard/category-preview reconnection.
 		return components.FeatureRebuildingBlock("The calendar")
 	})
 
@@ -3030,6 +3134,8 @@ func (a *App) RegisterRoutes() {
 	}, func(rc entities.BlockRenderContext) templ.Component {
 		// CALV5-PLACEHOLDER: V5 must restore
 		// renderBoundBlock(calendar.WidgetTypeWorldstate, rc, "").
+		// TODO(#778): same widgetbindings.WidgetType work entity_calendar's
+		// comment above describes, for calendar.WidgetTypeWorldstate.
 		return components.FeatureRebuildingBlock("The world state")
 	})
 
@@ -3042,14 +3148,7 @@ func (a *App) RegisterRoutes() {
 		Description: "Ambient sky only — moons, stars, weather + celestial events for the current world date",
 		Addon:       "calendar", Contexts: []string{"template", "dashboard"}, Singleton: true,
 	}, func(rc entities.BlockRenderContext) templ.Component {
-		entityID := ""
-		if rc.Entity != nil {
-			entityID = rc.Entity.ID
-		}
-		// CALV5-PLACEHOLDER: V5 must restore
-		// calendar.EntitySkyboxBlock(calendarService, ...).
-		_ = entityID
-		return components.FeatureRebuildingBlock("The sky")
+		return renderSkyboxBlock(context.Background(), calendarService, rc)
 	})
 
 	// Timeline plugin blocks (requires "timeline" addon).
@@ -3166,11 +3265,10 @@ func (a *App) RegisterRoutes() {
 	// mount on a /campaigns/:id group that already enforces auth + campaign
 	// membership, mirroring foundry_vtt's RegisterOwnerRoutes pattern.
 	//
-	// CALV5-PLACEHOLDER: V5 must restore calendarService as the third
-	// argument (aiexport's CalendarLister).
 	aiWorkspaceRenderer := aiexport.NewService(
 		entityService,
 		noteSvc,
+		&aiExportCalendarListerAdapter{svc: calendarService},
 		sessionsService,
 		timelineSvc,
 		relService,
@@ -3208,6 +3306,7 @@ func (a *App) RegisterRoutes() {
 	// --- Campaign Export/Import ---
 	exportSvc := campaigns.NewExportImportService(campaignService)
 	exportSvc.SetEntityExporter(&entityExportAdapter{entitySvc: entityService, tagSvc: tagService, relationSvc: relService})
+	exportSvc.SetCalendarExporter(&calendarExportAdapter{svc: calendarService})
 	exportSvc.SetTimelineExporter(&timelineExportAdapter{svc: timelineSvc})
 	exportSvc.SetSessionExporter(&sessionExportAdapter{svc: sessionsService})
 	exportSvc.SetMapExporter(&mapExportAdapter{mapSvc: mapsService, drawingSvc: drawingService})
@@ -3216,6 +3315,7 @@ func (a *App) RegisterRoutes() {
 	exportSvc.SetMediaExporter(&mediaExportAdapter{svc: mediaService})
 	exportSvc.SetMediaBundler(&mediaBundleAdapter{svc: mediaService})
 	exportSvc.SetEntityImporter(&entityImportAdapter{entitySvc: entityService, tagSvc: tagService, relationSvc: relService})
+	exportSvc.SetCalendarImporter(&calendarImportAdapter{svc: calendarService})
 	exportSvc.SetTimelineImporter(&timelineImportAdapter{svc: timelineSvc})
 	exportSvc.SetSessionImporter(&sessionImportAdapter{svc: sessionsService})
 	exportSvc.SetMapImporter(&mapImportAdapter{mapSvc: mapsService, drawingSvc: drawingService})
@@ -3292,6 +3392,7 @@ func (a *App) RegisterRoutes() {
 	// calendarService (GetCalendar, then ListUpcomingEvents) again. Until
 	// then the adapter stays wired but errors, so a WASM plugin calling
 	// get_calendar gets a reportable error instead of a misleading null.
+	// TODO(#778)
 	errCalendarRebuilding := errors.New("calendar is being rebuilt (V5) and is unavailable to extensions")
 	wasmCalendarReader := extensions.NewWASMCalendarAdapter(
 		func(ctx context.Context, campaignID string) (json.RawMessage, error) {
@@ -3330,6 +3431,7 @@ func (a *App) RegisterRoutes() {
 
 	// CALV5-PLACEHOLDER: V5 must rewire create_event to unmarshal a
 	// calendar.CreateEventInput and delegate to calendarService.CreateEvent.
+	// TODO(#778)
 	wasmHostEnv.SetCalendarWriter(extensions.NewWASMCalendarWriteAdapter(
 		func(ctx context.Context, campaignID string, input json.RawMessage) (json.RawMessage, error) {
 			return nil, errCalendarRebuilding
@@ -3466,7 +3568,8 @@ func (a *App) RegisterRoutes() {
 
 	// CALV5-PLACEHOLDER: the calendar/timeline demo routes and the
 	// internal/templates/demo package were removed. V5's design is signed as
-	// static renders instead, not a maintained route (#741).
+	// static renders instead, not a maintained route (#741). TODO(#778):
+	// not a re-wiring target, listed for completeness.
 
 	// --- Layout Data Injector ---
 	// Registers the callback that copies auth/campaign data from Echo's
@@ -3624,6 +3727,20 @@ func (a *App) RegisterRoutes() {
 					ctx = layouts.SetNavEdit(ctx, buildNavEdit(in))
 				}
 			}
+
+			// Plugin health, for the same dashboard/category blocks that
+			// check IsAddonEnabled above: an addon can be turned on in
+			// settings while its plugin's own schema is degraded, in which
+			// case its routes (like calendar's) were never registered (see
+			// the calendar.PluginSlug health gate around RegisterRoutes
+			// below) and an hx-get to one would 404 forever with no swap.
+			// Only calendar is populated today; a block for another
+			// health-gated plugin can add its slug here when it needs the
+			// same guard.
+			healthyPlugins := map[string]bool{
+				calendar.PluginSlug: a.PluginHealth == nil || a.PluginHealth.IsHealthy(calendar.PluginSlug),
+			}
+			ctx = layouts.SetHealthyPlugins(ctx, healthyPlugins)
 
 			// Extension widget scripts for campaign pages.
 			if widgetURLs := extHandler.GetWidgetScriptURLs(reqCtx, cc.Campaign.ID); len(widgetURLs) > 0 {
@@ -3828,6 +3945,52 @@ func (a *notesPagesAdapter) PagesLinkingNote(ctx context.Context, campaignID str
 		out = append(out, notes.PageRef{ID: p.ID, Name: p.Name, TypeName: p.TypeName})
 	}
 	return out, nil
+}
+
+// skyboxCalendarService is the narrow seam renderSkyboxBlock needs from
+// calendar.CalendarService — small enough that a test double
+// (skybox_block_test.go) doesn't have to implement the plugin's whole
+// surface. calendar.CalendarService satisfies this structurally, so
+// RegisterRoutes passes it straight through with no adapter.
+type skyboxCalendarService interface {
+	GetDefaultCalendarForViewer(ctx context.Context, campaignID string, v permissions.Viewer) (*calendar.Calendar, error)
+}
+
+// renderSkyboxBlock resolves rc's viewer and campaign, then renders the
+// "skybox" block (see its BlockRegistry.Register call above) for it.
+// Extracted out of that block's registration closure purely so it can be
+// unit tested without spinning up the whole app — see skybox_block_test.go.
+//
+// Failure modes:
+//   - no campaign in context: an empty slot (nothing to resolve against).
+//   - GetDefaultCalendarForViewer's NotFound (no default calendar yet, OR one
+//     the viewer may not see — the two collapse identically, see that
+//     method's own doc comment): sky.Empty's quiet placeholder, not a crash.
+//   - any other error: an infra problem, not a policy outcome — logged and
+//     failed safe to an empty slot, same as the npc_gallery/armory_preview
+//     blocks' own error handling above: an ambient dashboard/entity-page
+//     decoration never turns into a 500.
+func renderSkyboxBlock(ctx context.Context, svc skyboxCalendarService, rc entities.BlockRenderContext) templ.Component {
+	if rc.CC == nil || rc.CC.Campaign == nil {
+		return templ.NopComponent
+	}
+	campaignID := rc.CC.Campaign.ID
+	// Same viewer construction as calendar.viewerFrom (handler.go): promoted
+	// VisibilityRole + the request's user id, empty for an anonymous
+	// public-campaign visitor — this block has no echo.Context to build it
+	// the handler's own way.
+	viewer := permissions.RequestViewer(rc.CC.VisibilityRole(), rc.UserID)
+	cal, err := svc.GetDefaultCalendarForViewer(ctx, campaignID, viewer)
+	if err != nil {
+		var ae *apperror.AppError
+		if errors.As(err, &ae) && ae.Code == http.StatusNotFound {
+			return skywidget.Empty(campaignID)
+		}
+		slog.Error("skybox block: get default calendar for viewer",
+			slog.String("campaign_id", campaignID), slog.Any("error", err))
+		return templ.NopComponent
+	}
+	return skywidget.Mount(campaignID, cal.ID)
 }
 
 // mediaUploadAdapter adapts MediaService to the notes.MediaUploader interface.

@@ -1150,6 +1150,12 @@ func (e *Event) PlainDescription() string {
 // --- Request DTOs ---
 
 // CreateCalendarInput is the validated input for creating a calendar.
+//
+// Visibility/VisibilityRules default to "everyone" when left blank (the
+// ordinary create-a-calendar route never sets them), mirroring
+// CreateEventInput's own default. The route that exposes calendar creation
+// is Owner-only, so no separate CanAuthorDmOnly gate is needed the way
+// CreateEvent needs one for Scribes.
 type CreateCalendarInput struct {
 	Mode             string // "fantasy" or "reallife"
 	Name             string
@@ -1161,6 +1167,8 @@ type CreateCalendarInput struct {
 	SecondsPerMinute int
 	LeapYearEvery    int
 	LeapYearOffset   int
+	Visibility       string
+	VisibilityRules  *string
 }
 
 // CreateCalendarFromImportOptions carries the caller's explicit choice for

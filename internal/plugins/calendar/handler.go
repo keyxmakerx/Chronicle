@@ -5,6 +5,7 @@
 package calendar
 
 import (
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -14,6 +15,7 @@ import (
 	"github.com/labstack/echo/v4"
 
 	"github.com/keyxmakerx/chronicle/internal/apperror"
+	"github.com/keyxmakerx/chronicle/internal/middleware"
 	"github.com/keyxmakerx/chronicle/internal/patch"
 	"github.com/keyxmakerx/chronicle/internal/permissions"
 	"github.com/keyxmakerx/chronicle/internal/plugins/auth"
@@ -54,6 +56,44 @@ func (h *Handler) ListCalendarsAPI(c echo.Context) error {
 		cals = []Calendar{}
 	}
 	return c.JSON(http.StatusOK, cals)
+}
+
+// PreviewUpcomingEvents renders the small "upcoming events" HTML fragment
+// other plugins' dashboard/category-dashboard blocks hx-get lazy-load
+// (campaigns.dashCalendarPreview/dashCalendarFull, entities.catCalendarPreview
+// — see dashboard_embed.templ). Public-capable and viewer-filtered like the
+// JSON event reads: a campaign with no default calendar yet renders the
+// "no calendar" empty state rather than an error, since that's a completely
+// ordinary state for a campaign that has the addon enabled but never
+// configured it.
+// GET /campaigns/:id/calendars/upcoming?limit=N
+func (h *Handler) PreviewUpcomingEvents(c echo.Context) error {
+	cc := campaigns.GetCampaignContext(c)
+	v := viewerFrom(c, cc)
+	ctx := c.Request().Context()
+
+	limit := 5
+	if l, err := strconv.Atoi(c.QueryParam("limit")); err == nil && l >= 1 {
+		limit = l
+	}
+	if limit > 20 {
+		limit = 20
+	}
+
+	cal, err := h.svc.GetDefaultCalendarForViewer(ctx, cc.Campaign.ID, v)
+	if err != nil {
+		var ae *apperror.AppError
+		if errors.As(err, &ae) && ae.Code == http.StatusNotFound {
+			return middleware.Render(c, http.StatusOK, UpcomingEventsEmbed(cc, nil, nil))
+		}
+		return err
+	}
+
+	events, err := h.svc.ListUpcomingEvents(ctx, cal.ID, cc.Campaign.ID, limit, v)
+	if err != nil {
+		return err
+	}
+	return middleware.Render(c, http.StatusOK, UpcomingEventsEmbed(cc, cal, events))
 }
 
 // GetCalendarAPI returns one calendar with its sub-resources.

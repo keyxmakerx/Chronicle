@@ -21,9 +21,7 @@ import (
 // campaigns.CampaignExport that would otherwise be silently empty.
 var requiredExportSetters = []string{
 	"SetEntityExporter", "SetEntityImporter",
-	// CALV5-PLACEHOLDER: V5 must re-add "SetCalendarExporter",
-	// "SetCalendarImporter" here once the calendar rebuild wires adapters
-	// again; until then a campaign backup carries no calendar section.
+	"SetCalendarExporter", "SetCalendarImporter",
 	"SetTimelineExporter", "SetTimelineImporter",
 	"SetSessionExporter", "SetSessionImporter",
 	"SetMapExporter", "SetMapImporter",
