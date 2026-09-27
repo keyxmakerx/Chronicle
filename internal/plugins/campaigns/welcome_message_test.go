@@ -1,6 +1,6 @@
-// welcome_message_test.go covers UpdateWelcomeMessage: the length limit the
-// Appearance tab's textarea and the handler both rely on, and that a
-// rejected message never reaches the repository.
+// welcome_message_test.go covers UpdateWelcomeMessage: the 500-character
+// limit the handler enforces, and that a rejected message never reaches the
+// repository.
 
 package campaigns
 
