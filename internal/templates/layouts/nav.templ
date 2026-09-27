@@ -80,10 +80,6 @@ templ campaignNavList() {
 				</div>
 			}
 		</div>
-		if GetCampaignRole(ctx) >= 3 {
-			<!-- The categories and campaign the sidebar editor works with. -->
-			<div data-sidebar-entity-types={ EntityTypesJSON(ctx) } data-campaign-id={ GetCampaignID(ctx) } hidden></div>
-		}
 	</nav>
 }
 

@@ -204,7 +204,7 @@ func TestCampaignNavList_FoldedSectionNamesTheCurrentPage(t *testing.T) {
 
 func TestCampaignNavList_ManageAndEditingAreTheOwners(t *testing.T) {
 	player := renderNavList(t, navStateCase{role: 1, path: "/campaigns/c1"}.ctx())
-	for _, owners := range []string{`data-nav-section="manage"`, "/campaigns/c1/settings", "data-sidebar-entity-types", "Add category"} {
+	for _, owners := range []string{`data-nav-section="manage"`, "/campaigns/c1/settings", "data-nav-edit", "Add category"} {
 		if strings.Contains(player, owners) {
 			t.Errorf("a player's sidebar contains the owner's %q", owners)
 		}
@@ -213,8 +213,9 @@ func TestCampaignNavList_ManageAndEditingAreTheOwners(t *testing.T) {
 		t.Errorf("a player's sidebar is missing My Characters")
 	}
 
-	owner := renderNavList(t, navStateCase{role: 3, path: "/campaigns/c1"}.ctx())
-	for _, want := range []string{`data-nav-section="manage"`, `id="nav-b-manage" hidden`, "/campaigns/c1/settings", "data-sidebar-entity-types"} {
+	ownerCtx := SetNavEdit(navStateCase{role: 3, path: "/campaigns/c1"}.ctx(), &NavEditView{})
+	owner := renderNavList(t, ownerCtx)
+	for _, want := range []string{`data-nav-section="manage"`, `id="nav-b-manage" hidden`, "/campaigns/c1/settings", "data-nav-edit"} {
 		if !strings.Contains(owner, want) {
 			t.Errorf("the owner's sidebar is missing %q", want)
 		}

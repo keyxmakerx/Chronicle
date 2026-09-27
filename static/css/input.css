@@ -2714,6 +2714,7 @@
     --nav-bg: var(--color-sidebar-bg, #1a1c23);
     --nav-hover: #262a33;
     --nav-press: #15171d;
+    --nav-raised: #22252e;
     --nav-text: #cbd5e1;
     --nav-text-2: #8b93a1;
     --nav-text-3: #5f6776;
@@ -2883,7 +2884,7 @@
     display: none; position: absolute; left: 0; top: 3px; bottom: 3px; width: 3px;
     border-radius: 0 3px 3px 0; background: rgb(var(--nav-accent));
   }
-  .sidebar-reorg-active .nav-ring, .nav-editing .nav-ring { display: none; }
+  .nav-editing .nav-ring { display: none; }
   .nav-rm .nav-ring-svg { display: none; }
   .nav-rm .nav-ring-j { display: block; }
   @keyframes nav-ring-a {
@@ -2921,11 +2922,132 @@
   .sidebar-collapsed .nav-foot, .sidebar-collapsed #sidebar-sessions-rsvp { display: none; }
   .sidebar-collapsed .nav-sb .nav-row, .nav-sb.sidebar-collapsed .nav-row { padding: 0; justify-content: center; }
 
+  /* The owner's edit mode (sidebar_editor.js): a handle, a pin and an eye on
+     every row, headings that name instead of fold, one staged save. */
+  .nav-editing .nav-sb { box-shadow: inset 0 0 0 2px rgb(var(--nav-accent) / 0.55); }
+  .nav-editing .nav-scroll { padding-bottom: 84px; }
+  .nav-row.nav-ed { padding-left: 4px; padding-right: 6px; gap: 6px; cursor: default; }
+  .nav-row.nav-ed::before, .nav-row.nav-ed::after { display: none; }
+  .nav-row.nav-ed:active { transform: none; }
+  .nav-ed-link { height: auto; min-height: 32px; flex-wrap: wrap; row-gap: 4px; padding-top: 4px; padding-bottom: 4px; }
+  .nav-ed-url { flex-basis: 100%; min-width: 0; display: flex; align-items: center; gap: 6px; padding-left: 30px; }
+  .nav-li, .nav-gi {
+    min-width: 0; height: 24px; padding: 0 7px; border-radius: 6px; border: 1px solid rgb(255 255 255 / 0.14);
+    background: rgb(255 255 255 / 0.05); color: var(--nav-hi);
+  }
+  .nav-li { flex: 1; width: 100%; font-size: 12.5px; }
+  .nav-li-url { font-size: 11.5px; color: var(--nav-text-2); }
+  .nav-li::placeholder { color: var(--nav-text-3); }
+  .nav-gi { flex: 1; font-size: 11px; font-weight: 700; letter-spacing: 0.07em; text-transform: uppercase; }
+  .nav-li:focus, .nav-gi:focus { outline: 2px solid var(--nav-focus); outline-offset: 0; border-color: transparent; }
+  .nav-hd {
+    width: 24px; height: 28px; flex: none; border-radius: 6px; display: grid; place-items: center; color: var(--nav-text-3);
+    cursor: grab; touch-action: none; transition: transform 120ms var(--nav-ease);
+  }
+  .nav-hd i { font-size: 12px; }
+  .nav-hd:hover { color: var(--nav-hi); background: var(--nav-hover); }
+  .nav-hd:active { cursor: grabbing; transform: scale(0.92); }
+  .nav-eb {
+    width: 26px; height: 26px; flex: none; border-radius: 7px; display: grid; place-items: center; color: var(--nav-text-3);
+    transition: transform 120ms var(--nav-ease);
+  }
+  .nav-eb i { font-size: 12px; }
+  .nav-eb:hover { color: var(--nav-hi); background: var(--nav-hover); }
+  .nav-eb:active { transform: scale(0.86); }
+  .nav-eb.nav-pin[aria-pressed="true"] { color: var(--nav-accent-soft); }
+  .nav-eb.nav-eye[aria-pressed="true"] { color: #fbbf24; }
+  .nav-gh.nav-gh-ed { padding-left: 4px; gap: 6px; }
+  .nav-gh.nav-gh-ed .nav-gh-l { padding-left: 10px; }
+  .nav-empty {
+    margin: 2px 14px 6px; padding: 8px 10px; border-radius: 8px; border: 1px dashed rgb(255 255 255 / 0.14);
+    font-size: 12px; color: var(--nav-text-3);
+  }
+  .nav-addg {
+    display: flex; align-items: center; gap: 8px; width: calc(100% - 24px); height: 32px; margin: 10px 12px 0; padding: 0 10px;
+    border-radius: 8px; border: 1px dashed rgb(255 255 255 / 0.18); color: var(--nav-text-2); font-size: 12.5px; font-weight: 600;
+    transition: transform 120ms var(--nav-ease);
+  }
+  .nav-addg i { font-size: 11px; }
+  .nav-addg:hover { color: var(--nav-hi); border-color: rgb(var(--nav-accent) / 0.7); }
+  .nav-addg:active { transform: translateY(1px) scale(0.99); }
+  .nav-off { margin: 12px 12px 0; padding: 6px 0 8px; border-radius: 10px; border: 1px solid var(--nav-line); background: rgb(255 255 255 / 0.025); }
+  .nav-off-h {
+    padding: 2px 10px 4px; font-size: 10.5px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: var(--nav-text-3);
+  }
+  .nav-off .nav-row { padding-left: 10px; cursor: default; color: var(--nav-text-2); }
+  .nav-off .nav-row::before, .nav-off .nav-row::after { display: none; }
+  .nav-off-go { display: inline-flex; align-items: center; gap: 6px; margin: 4px 10px 0; font-size: 12px; font-weight: 600; color: var(--nav-accent-soft); }
+  .nav-off-go i { font-size: 10px; }
+  .nav-off-go:hover { color: var(--nav-hi); }
+  /* The row being moved rides on its own raised surface. */
+  .nav-lifted {
+    z-index: 6; border-radius: 8px; background: var(--nav-raised);
+    box-shadow: 0 12px 26px -10px rgb(0 0 0 / 0.65), 0 0 0 1px rgb(var(--nav-accent) / 0.4);
+  }
+  .nav-dragging, .nav-dragging * { cursor: grabbing !important; }
+  .nav-dropline {
+    position: absolute; left: 0; top: 0; z-index: 7; height: 3px; pointer-events: none; border-radius: 2px;
+    background: rgb(var(--nav-accent)); box-shadow: 0 0 0 3px rgb(var(--nav-accent) / 0.25);
+  }
+
+  /* The save bar and the live "What players see" card float over the page,
+     outside the sidebar, so they carry the tokens they share with it. */
+  .nav-ebar, .nav-pv {
+    --nav-accent: var(--color-accent-rgb, 99 102 241);
+    --nav-ease: cubic-bezier(0.2, 0.8, 0.2, 1);
+  }
+  .nav-ebar {
+    position: absolute; z-index: 50; left: 50%; bottom: 16px; transform: translateX(-50%); display: flex; align-items: center; gap: 6px;
+    max-width: calc(100% - 24px); padding: 7px 7px 7px 14px; border-radius: 14px; white-space: nowrap;
+    background: var(--color-bg-secondary); color: var(--color-text-primary); border: 1px solid var(--color-border);
+    box-shadow: 0 10px 28px -10px rgb(16 24 40 / 0.28), 0 2px 6px -2px rgb(16 24 40 / 0.1);
+  }
+  /* The notes button would sit on the save bar; it steps aside while editing. */
+  .nav-editing .notes-fab { opacity: 0; pointer-events: none; }
+  .nav-ebar-t { display: flex; flex-direction: column; min-width: 0; margin-right: 8px; line-height: 1.25; }
+  .nav-ebar-t b { font-size: 12.5px; }
+  .nav-ebar-t span { overflow: hidden; text-overflow: ellipsis; font-size: 11.5px; color: var(--color-text-secondary); }
+  .nav-btn {
+    height: 32px; padding: 0 12px; border-radius: 9px; display: inline-flex; align-items: center; gap: 6px;
+    font-size: 12.5px; font-weight: 650; transition: transform 120ms var(--nav-ease);
+  }
+  .nav-btn i { font-size: 12px; }
+  .nav-btn:active { transform: translateY(1px) scale(0.97); }
+  .nav-btn[disabled] { opacity: 0.45; cursor: default; }
+  .nav-btn-pri {
+    background: rgb(var(--nav-accent)); color: #fff;
+    box-shadow: inset 0 1px 0 rgb(255 255 255 / 0.22), 0 2px 8px -2px rgb(var(--nav-accent) / 0.7);
+  }
+  .nav-btn-pri:hover { background: var(--color-accent-hover, #4f46e5); }
+  .nav-btn-gho { color: var(--color-text-secondary); }
+  .nav-btn-gho:hover { background: var(--color-bg-tertiary); color: var(--color-text-primary); }
+  .nav-pv {
+    position: absolute; z-index: 45; right: 16px; top: 68px; width: 252px; overflow: auto; padding: 12px 14px 14px; border-radius: 12px;
+    background: var(--color-bg-secondary); color: var(--color-text-primary); border: 1px solid var(--color-border);
+    box-shadow: 0 10px 28px -10px rgb(16 24 40 / 0.28), 0 2px 6px -2px rgb(16 24 40 / 0.1);
+  }
+  .nav-pv-h { display: flex; align-items: center; gap: 7px; font-size: 12.5px; font-weight: 750; }
+  .nav-pv-h i { color: rgb(var(--nav-accent)); }
+  .nav-pv-s { margin: 3px 0 6px; font-size: 11.5px; line-height: 1.4; color: var(--color-text-secondary); }
+  .nav-pv-sec {
+    margin: 9px 0 3px; font-size: 9.5px; font-weight: 750; letter-spacing: 0.08em; text-transform: uppercase; color: var(--color-text-muted);
+  }
+  .nav-pv-it { display: flex; align-items: center; gap: 7px; height: 21px; font-size: 12px; color: var(--color-text-body); }
+  .nav-pv-it i { width: 13px; text-align: center; font-size: 11px; color: var(--color-text-secondary); }
+  .nav-pv-it span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  @media (max-width: 900px) {
+    .nav-pv { display: none; }
+  }
+
   /* Phone: today's slide-out drawer, with a close button. */
   @media (max-width: 767px) {
     .nav-sb { width: min(304px, calc(100vw - 48px)); }
     .nav-x-close { display: grid; }
     .nav-sb .sidebar-pin-btn { display: none; }
+    .nav-ebar { left: 8px; right: 8px; bottom: 8px; transform: none; justify-content: flex-end; }
+    .nav-ebar-t { margin-right: auto; }
+    .nav-ebar-t span { display: none; }
+    .nav-sb.sidebar-mobile-open ~ #app-main .nav-ebar { left: auto; }
   }
 }
 @media (prefers-reduced-motion: reduce) {
@@ -2934,5 +3056,6 @@
   .nav-ring-svg { display: none; }
   .nav-ring-j { display: block; }
   .nav-row:active, .nav-row:hover .nav-ic, .nav-row:active .nav-ic, .nav-ibtn:active, .nav-tw:active,
-  .nav-gh-add:active, button.nav-gh:active .nav-gh-l { transform: none; }
+  .nav-gh-add:active, button.nav-gh:active .nav-gh-l, .nav-hd:active, .nav-eb:active, .nav-addg:active,
+  .nav-btn:active { transform: none; }
 }

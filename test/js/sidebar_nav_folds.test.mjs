@@ -26,6 +26,7 @@ function load() {
     addEventListener: noop,
   };
   const window = {
+    addEventListener: noop,
     matchMedia: () => ({ matches: false, addEventListener: noop }),
   };
   const sandbox = { window, document, performance: { now: () => 0 } };

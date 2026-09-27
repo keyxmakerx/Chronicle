@@ -354,8 +354,10 @@
     } else if (phone) {
       sb.removeAttribute('inert');
       sb.setAttribute('role', 'dialog');
-      sb.setAttribute('aria-modal', 'true');
       sb.setAttribute('aria-label', 'Navigation');
+      // While the owner edits, the save bar outside the drawer is live too.
+      if (editing()) sb.removeAttribute('aria-modal');
+      else sb.setAttribute('aria-modal', 'true');
     } else {
       sb.removeAttribute('inert');
       sb.removeAttribute('role');
@@ -401,10 +403,11 @@
   }
 
   function trapTab(e) {
-    var sb = sidebar();
-    var items = Array.prototype.filter.call(
-      sb.querySelectorAll('a[href], button:not([disabled]), input, select, textarea, [tabindex]:not([tabindex="-1"])'),
-      shown);
+    var sel = 'a[href], button:not([disabled]), input, select, textarea, [tabindex]:not([tabindex="-1"])';
+    var items = Array.prototype.filter.call(sidebar().querySelectorAll(sel), shown);
+    // While the owner edits, Tab also reaches the save bar.
+    var bar = document.getElementById('nav-ebar');
+    if (bar) items = items.concat(Array.prototype.filter.call(bar.querySelectorAll(sel), shown));
     if (!items.length) return;
     var first = items[0], last = items[items.length - 1], cur = document.activeElement;
     if (items.indexOf(cur) < 0) { e.preventDefault(); first.focus(); }
@@ -415,7 +418,7 @@
   // --- Wiring ----------------------------------------------------------------
 
   function editing() {
-    return document.body.classList.contains('sidebar-reorg-active') || document.body.classList.contains('nav-editing');
+    return document.body.classList.contains('nav-editing');
   }
 
   function init() {
@@ -447,6 +450,8 @@
     if (row.target === '_blank' || row.getAttribute('hx-boost') === 'false' || editing()) return;
     moveRing(row, true);
   });
+
+  window.addEventListener('chronicle:nav-editing', syncDrawer);
 
   document.addEventListener('keydown', function (e) {
     if (e.key === 'Tab' && drawerOpen() && phoneQuery && phoneQuery.matches) trapTab(e);
