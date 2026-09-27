@@ -218,17 +218,47 @@
       '<button type="button" class="x" data-bb="none" aria-label="Choose no days">✕</button>';
   };
 
+  // Runs one Chronicle.apiFetch()-returning promise per item and resolves
+  // true/false per item instead of letting a bare Promise.all either fail
+  // fast on the first network rejection or (worse) resolve "done" on a
+  // 403/404/500 — apiFetch's promise only ever rejects on a network failure,
+  // never on a non-2xx status (boot.js), so treating its resolution alone as
+  // success is exactly how a bulk write can report success while some or all
+  // of its per-event requests actually failed. Every bulk write in this file
+  // goes through this so a partial failure is counted, not swallowed.
+  function settleAll(promises) {
+    return Promise.all(promises.map(function (p) {
+      return p.then(function (resp) { return resp.ok; }).catch(function () { return false; });
+    }));
+  }
+
+  // Refreshes the grid from the server (so it matches whatever actually
+  // landed, even on a partial failure) and reports how many of a bulk
+  // write's per-event requests succeeded. verb is past tense ("Hid",
+  // "Revealed", "Shifted"); tail is an optional clause inserted before the
+  // event count's trailing punctuation (e.g. " by 2 days").
+  CalendarEditor.prototype._reportBulkResult = function (oks, verb, tail) {
+    var view = this.view, okCount = oks.filter(Boolean).length, failCount = oks.length - okCount;
+    view.eventsByMonth = {}; // simplest correct invalidation: refetch on next paint
+    view.renderMonth();
+    tail = tail || '';
+    if (!failCount) {
+      view.say(verb + ' ' + okCount + (okCount === 1 ? ' event' : ' events') + tail + '.');
+    } else {
+      view.say(verb + ' ' + okCount + ' of ' + oks.length + ' events' + tail + '; ' + failCount + " couldn't be saved.");
+    }
+  };
+
   CalendarEditor.prototype._bulkVisibility = function (visibility) {
     var self = this, view = this.view, events = this._eventsInSelection();
     if (!events.length) { view.say('No events in the selected days.'); return; }
-    Promise.all(events.map(function (e) {
+    var verb = visibility === 'dm_only' ? 'Hid' : 'Revealed';
+    settleAll(events.map(function (e) {
       return Chronicle.apiFetch(view.apiBase + '/events/' + e.id + '/visibility', {
         method: 'PUT', body: { visibility: visibility }
       });
-    })).then(function () {
-      view.eventsByMonth = {}; // simplest correct invalidation: refetch on next paint
-      view.renderMonth();
-      view.say((visibility === 'dm_only' ? 'Hidden ' : 'Revealed ') + events.length + (events.length === 1 ? ' event.' : ' events.'));
+    })).then(function (oks) {
+      self._reportBulkResult(oks, verb);
     });
   };
 
@@ -262,7 +292,7 @@
   CalendarEditor.prototype._applyShift = function () {
     var self = this, view = this.view, cal = view.cal, delta = this._shiftN, events = this._eventsInSelection();
     if (!delta || !events.length) { this._closeShiftTray(); return; }
-    Promise.all(events.map(function (e) {
+    settleAll(events.map(function (e) {
       var start = CalDate.addDays(cal, { y: e.year, m: e.month, d: e.day }, delta);
       var body = { year: start.y, month: start.m, day: start.d };
       if (e.end_year != null) {
@@ -270,11 +300,10 @@
         body.end_year = end.y; body.end_month = end.m; body.end_day = end.d;
       }
       return Chronicle.apiFetch(view.apiBase + '/events/' + e.id, { method: 'PUT', body: body });
-    })).then(function () {
-      view.eventsByMonth = {};
-      view.renderMonth();
+    })).then(function (oks) {
       self._closeShiftTray();
-      view.say('Shifted ' + events.length + (events.length === 1 ? ' event' : ' events') + ' by ' + delta + ' day' + (Math.abs(delta) === 1 ? '' : 's') + '.');
+      var tail = ' by ' + delta + (Math.abs(delta) === 1 ? ' day' : ' days');
+      self._reportBulkResult(oks, 'Shifted', tail);
     });
   };
 
