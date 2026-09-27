@@ -73,12 +73,12 @@ func RegisterRoutes(e *echo.Echo, h *Handler, campaignSvc campaigns.CampaignServ
 	// on its own.
 	//
 	// The list route is "/calendars/list", not bare "/calendars": that bare
-	// GET already belongs to app/routes.go's calendar-rebuild notice page
-	// (and to routes_snapshot.txt) — a real page a browser navigates to, not
-	// a JSON endpoint, so this API cannot reuse it. No real calendar id is
-	// ever the literal string "list" (ids are UUIDs), and a static segment
-	// always wins over a same-position ":calid" param, so the two can't
-	// collide going the other way either.
+	// GET already belongs to THIS file's own h.Index above (the Part B
+	// calendars list PAGE, and to routes_snapshot.txt) — a real page a
+	// browser navigates to, not a JSON endpoint, so this API cannot reuse
+	// it. No real calendar id is ever the literal string "list" (ids are
+	// UUIDs), and a static segment always wins over a same-position ":calid"
+	// param, so the two can't collide going the other way either.
 	cg.GET("/calendars/list", h.ListCalendarsAPI, campaigns.RequireRole(campaigns.RolePlayer))
 	cg.GET("/calendars/:calid", h.GetCalendarAPI, campaigns.RequireRole(campaigns.RolePlayer))
 

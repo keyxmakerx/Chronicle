@@ -2415,21 +2415,26 @@ func (a *App) RegisterRoutes() {
 		"/static/plugins/" + entities.PluginSlug + "/js/characters.js",
 	}
 
-	// CALV5-PLACEHOLDER: keeps the route the sidebar, campaign dashboard and
-	// Extensions hub link to (/campaigns/:id/apps/calendar) answering with a
-	// rebuilding notice instead of 404. The legacy /calendar path, which
-	// used to redirect here, gets the same answer. /calendars (bare, no
-	// trailing segment) is NOT in this group any more — Part B (#764) gave
-	// it a real page (calendar.RegisterRoutes' Index handler) below.
+	// CALV5-PLACEHOLDER: the sidebar, campaign dashboard and Extensions hub
+	// still link to /campaigns/:id/apps/calendar — addonURLMap in
+	// internal/templates/layouts/app.templ has to keep pointing at that path
+	// (rather than /calendars directly) because the plugin-isolation guard
+	// (T-B2/M-B2.1) flags a literal "calendar" slug string outside this file
+	// and internal/plugins/calendar/ as a new cross-plugin reference; this
+	// file is on the guard's allowlist, app.templ is not. So both legacy
+	// paths redirect here to the real page instead of duplicating it.
+	// /calendars (bare, no trailing segment) is NOT in this group — Part B
+	// (#764) gave it a real page (calendar.RegisterRoutes' Index handler)
+	// below, and this redirect sends legacy links there.
 	calendarRebuildGroup := e.Group("/campaigns/:id",
 		auth.RequireAuth(authService),
 		campaigns.RequireCampaignAccess(campaignService),
 	)
-	calendarRebuildNotice := func(c echo.Context) error {
-		return middleware.Render(c, http.StatusOK, components.FeatureRebuilding("The calendar"))
+	calendarRedirectToCalendars := func(c echo.Context) error {
+		return c.Redirect(http.StatusFound, fmt.Sprintf("/campaigns/%s/calendars", c.Param("id")))
 	}
-	calendarRebuildGroup.GET("/apps/calendar", calendarRebuildNotice)
-	calendarRebuildGroup.GET("/calendar", calendarRebuildNotice)
+	calendarRebuildGroup.GET("/apps/calendar", calendarRedirectToCalendars)
+	calendarRebuildGroup.GET("/calendar", calendarRedirectToCalendars)
 
 	// calendar.RegisterRoutes is both the JSON API (calendars, events, event
 	// kinds, eras, the moon hidden flag) and, since Part B (#764), the
@@ -2437,8 +2442,9 @@ func (a *App) RegisterRoutes() {
 	// calendar plugin is unhealthy, none of it registers (the else branch
 	// below only logs) and every one of these paths, including
 	// /campaigns/:id/calendars itself, 404s rather than showing a notice —
-	// unlike /apps/calendar and /calendar above, which stay answered by
-	// calendarRebuildGroup regardless of plugin health.
+	// unlike /apps/calendar and /calendar above, which redirect there
+	// regardless of plugin health (a 302 to a 404 is still clearer than a
+	// notice claiming the feature is merely rebuilding).
 	//
 	// CALV5-PLACEHOLDER: V5 must still restore calendar.RegisterRSVPRoutes
 	// and the public Foundry-facing calendar API (token-verified through

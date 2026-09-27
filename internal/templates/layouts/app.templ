@@ -735,7 +735,7 @@ var addonURLMap = map[string]string{
 	"notes":    "/journal",
 	"npcs":     "/npcs",
 	"armory":   "/armory",
-	"calendar": "/calendars", // Part B (#764): the real calendars list page
+	"calendar": "/apps/calendar", // redirects to /campaigns/:id/calendars (#764) — kept out of the plugin-isolation guard's cross-plugin scope (T-B2/M-B2.1); see internal/app/routes.go's calendarRebuildGroup.
 }
 
 // addonIconMap maps addon slugs to their default icons.

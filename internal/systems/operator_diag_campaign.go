@@ -177,26 +177,34 @@ const statusCurrent = "CURRENT"
 
 // calendarSurfaceMap is the declared map.
 //
-// CALV5-PLACEHOLDER: the v4 Bench, the builder wizard, the settings editor,
-// the V1 legacy pages and every redirect between them were deleted with the
-// pre-V5 calendar plugin (#741); these three GETs are everything that is
-// left, and all three now render the same rebuilding notice (a direct
-// render, not a redirect). V5 must replace this block with the real
-// per-route classification once the calendar plugin has routes again.
+// CALV5-PLACEHOLDER/#764: the v4 Bench, the builder wizard, the settings
+// editor, the V1 legacy pages and every redirect between them were deleted
+// with the pre-V5 calendar plugin (#741); these three GETs are everything
+// that is left. Part B (#764) gave /calendars a real page (the calendars
+// list), so it is no longer true that all three render the same rebuilding
+// notice: /apps/calendar and /calendar now redirect (302) to /calendars —
+// kept as redirects, not pointed at directly from the sidebar/dashboard,
+// because the plugin-isolation guard (T-B2/M-B2.1) won't let a literal
+// "calendars" path live in internal/templates/layouts/app.templ's
+// addonURLMap (see internal/app/routes.go's calendarRebuildGroup comment).
+// V5 must replace this block with the real per-route classification once
+// more calendar routes exist.
 //
-// Handler is left "" on all three: the live handler is one anonymous
-// closure registered in internal/app/routes.go, not a stable named method,
-// so pinning its runtime name here would be pinning a Go compiler detail.
-// An empty Handler skips the disagreement check and only confirms the path
-// is registered — see writeSurfaceTable.
+// Handler is left "" on all three: for /apps/calendar and /calendar the
+// live handler is one anonymous closure registered in
+// internal/app/routes.go, not a stable named method, so pinning its runtime
+// name here would be pinning a Go compiler detail; /calendars' handler
+// (calendar.Handler.Index) IS stable, but is left unpinned too so all three
+// rows are checked the same way. An empty Handler skips the disagreement
+// check and only confirms the path is registered — see writeSurfaceTable.
 func calendarSurfaceMap() []surfaceRow {
 	return []surfaceRow{
-		{"/campaigns/:id/apps/calendar", "", "calendar (rebuilding)", statusCurrent,
-			"THE calendar page today: a static notice, not the v4 Bench. The sidebar's Calendar item points here."},
-		{"/campaigns/:id/calendar", "", "calendar (rebuilding)", statusCurrent,
-			"Same notice as `/apps/calendar` — the oldest bookmark in the product, no longer a redirect."},
-		{"/campaigns/:id/calendars", "", "calendar (rebuilding)", statusCurrent,
-			"Same notice as `/apps/calendar`, no longer a redirect."},
+		{"/campaigns/:id/apps/calendar", "", "calendar (redirect)", statusCurrent,
+			"Redirects (302) to `/campaigns/:id/calendars` — not a notice, not the v4 Bench. The sidebar's Calendar item points here."},
+		{"/campaigns/:id/calendar", "", "calendar (redirect)", statusCurrent,
+			"Same redirect as `/apps/calendar` — the oldest bookmark in the product."},
+		{"/campaigns/:id/calendars", "", "calendar (list page)", statusCurrent,
+			"THE calendar page itself: Part B's calendars list — not a notice, not a redirect. Unlike the two rows above, this one IS gated on the calendar addon (RequireAddon): a disabled addon 404s here instead of redirecting."},
 	}
 }
 
@@ -246,19 +254,23 @@ func renderCampaignSurfaces(arg string) string {
 // writeSurfaceGate prints the calendar addon's enabled state.
 //
 // CALV5-PLACEHOLDER: before the rebuild this state gated every route below
-// (`addons.RequireAddon(addonSvc, "calendar")`); it no longer does, because
-// the three remaining routes ride RequireCampaignAccess only and render the
-// same rebuilding notice regardless of the addon's state. Stated here so the
-// setting is not mistaken for a reachability gate it currently is not. V5
-// must restore the gate once it restores real calendar routes.
+// (`addons.RequireAddon(addonSvc, "calendar")`). Since Part B (#764) it's a
+// mixed picture, not a uniform "not load-bearing" any more: /apps/calendar
+// and /calendar still ride RequireCampaignAccess only and redirect
+// regardless of this setting, but /calendars itself is registered under
+// calendar.RegisterRoutes' own group, which DOES gate on RequireAddon — a
+// disabled addon 404s there. Stated here so the setting reads correctly for
+// all three rather than being mistaken for either "gates everything" or
+// "gates nothing". V5 should fold /apps/calendar and /calendar into the same
+// gate once they have a reason to.
 func writeSurfaceGate(b *strings.Builder, f CampaignSurfaceFacts) {
 	switch {
 	case f.CalendarAddonEnabled == nil:
 		fmt.Fprintf(b, "> calendar addon: **UNKNOWN** — %s\n\n", fallback(f.AddonNote, "the addons service could not be read"))
 	case !*f.CalendarAddonEnabled:
-		b.WriteString("> calendar addon: **disabled** for this campaign. Not currently load-bearing: the routes below render the same rebuilding notice either way (see CALV5-PLACEHOLDER above).\n\n")
+		b.WriteString("> calendar addon: **disabled** for this campaign. `/apps/calendar` and `/calendar` redirect either way; `/calendars` itself 404s while disabled (see CALV5-PLACEHOLDER above).\n\n")
 	default:
-		b.WriteString("> calendar addon: **enabled**. Not currently load-bearing: the routes below render the same rebuilding notice either way (see CALV5-PLACEHOLDER above).\n\n")
+		b.WriteString("> calendar addon: **enabled**. `/calendars` is reachable; `/apps/calendar` and `/calendar` would redirect there regardless of this setting (see CALV5-PLACEHOLDER above).\n\n")
 	}
 }
 

@@ -234,11 +234,14 @@ func TestCampaignSurfaces_UnreadableTableIsNotAnAbsence(t *testing.T) {
 	})
 }
 
-// TestCampaignSurfaces_DisabledAddonIsStatedButNotGating. Before the rebuild
-// a disabled addon made every route below unreachable; the three remaining
-// routes no longer gate on it (CALV5-PLACEHOLDER in writeSurfaceGate), so the
-// state is still reported but must not be read as a reachability verdict.
-func TestCampaignSurfaces_DisabledAddonIsStatedButNotGating(t *testing.T) {
+// TestCampaignSurfaces_DisabledAddonGatesOnlyTheListPage. Before the rebuild
+// a disabled addon made every calendar route unreachable. Since Part B
+// (#764) that's no longer uniform: /apps/calendar and /calendar redirect
+// regardless of the addon's state, but /calendars itself (calendar.
+// RegisterRoutes' own RequireAddon) IS still gated on it — the diagnostic
+// must say so precisely, not claim either "gates everything" or "gates
+// nothing".
+func TestCampaignSurfaces_DisabledAddonGatesOnlyTheListPage(t *testing.T) {
 	f := surfaceFactsWith(liveCalendarRoutes())
 	f.CalendarAddonEnabled = boolPtr(false)
 	withCampaignProvider(t, &fakeCampaignProvider{surf: f}, func() {
@@ -246,8 +249,11 @@ func TestCampaignSurfaces_DisabledAddonIsStatedButNotGating(t *testing.T) {
 		if !strings.Contains(got, "calendar addon: **disabled**") {
 			t.Errorf("the addon state must be stated:\n%s", got)
 		}
-		if !strings.Contains(got, "Not currently load-bearing") {
-			t.Errorf("disabled must not be read as a reachability gate:\n%s", got)
+		if !strings.Contains(got, "`/calendars` itself 404s while disabled") {
+			t.Errorf("disabled must be read as gating the list page specifically:\n%s", got)
+		}
+		if !strings.Contains(got, "redirect either way") {
+			t.Errorf("the redirect routes must be stated as ungated:\n%s", got)
 		}
 		if !strings.Contains(got, "**CURRENT** `/campaigns/:id/apps/calendar`") {
 			t.Errorf("the route table must still print despite the disabled addon:\n%s", got)
