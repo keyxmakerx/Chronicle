@@ -207,3 +207,86 @@ func TestDeleteStandaloneEventAPI_StoredDmOnly_RequiresCanAuthorDmOnly(t *testin
 		})
 	}
 }
+
+// --- Control: a stored 'everyone' event is unaffected by canAuthorDmOnly ---
+
+func storedEveryoneEvent() *TimelineEvent {
+	return &TimelineEvent{
+		ID: "evt-public", TimelineID: "tl-1", Name: "Town Meeting",
+		Year: 1, Month: 1, Day: 1, Visibility: "everyone",
+	}
+}
+
+func everyoneTimelineRepo() *mockTimelineRepo {
+	repo := dmWriteTimelineRepo()
+	repo.getEventFn = func(_ context.Context, id string) (*TimelineEvent, error) {
+		if id == "evt-public" {
+			return storedEveryoneEvent(), nil
+		}
+		return nil, nil
+	}
+	return repo
+}
+
+// TestUpdateStandaloneEventAPI_StoredEveryone_AlwaysReachesRepo is the
+// control for TestUpdateStandaloneEventAPI_StoredDmOnly_RequiresCanAuthorDmOnly:
+// the dm_only gate must never block a Scribe (or Player, or anyone else)
+// from editing an event that was never dm_only in the first place.
+func TestUpdateStandaloneEventAPI_StoredEveryone_AlwaysReachesRepo(t *testing.T) {
+	for _, tc := range dmWriteRoles {
+		t.Run(tc.name, func(t *testing.T) {
+			var updated bool
+			repo := everyoneTimelineRepo()
+			repo.updateEventFn = func(_ context.Context, _ *TimelineEvent) error {
+				updated = true
+				return nil
+			}
+			h := NewHandler(newTestTimelineService(repo))
+			c, rec := newTimelineDMWriteRequest(http.MethodPut, "/campaigns/camp-1/timelines/tl-1/standalone-events/evt-public",
+				`{"name":"Renamed Meeting"}`)
+			c.SetParamNames("id", "tid", "eid")
+			c.SetParamValues("camp-1", "tl-1", "evt-public")
+			c.Set("campaign_context", dmWriteTimelineCtx(tc.role, tc.dmGranted))
+
+			if err := h.UpdateStandaloneEventAPI(c); err != nil {
+				t.Fatalf("%s: expected success editing a non-dm_only event, got %v", tc.name, err)
+			}
+			if rec.Code != http.StatusOK {
+				t.Errorf("%s: status = %d, want 200", tc.name, rec.Code)
+			}
+			if !updated {
+				t.Errorf("%s: expected UpdateEvent to reach the repo for a non-dm_only event", tc.name)
+			}
+		})
+	}
+}
+
+// TestDeleteStandaloneEventAPI_StoredEveryone_AlwaysReachesRepo is
+// DeleteStandaloneEvent's twin of the Update control above.
+func TestDeleteStandaloneEventAPI_StoredEveryone_AlwaysReachesRepo(t *testing.T) {
+	for _, tc := range dmWriteRoles {
+		t.Run(tc.name, func(t *testing.T) {
+			var deleted bool
+			repo := everyoneTimelineRepo()
+			repo.deleteEventFn = func(_ context.Context, _ string) error {
+				deleted = true
+				return nil
+			}
+			h := NewHandler(newTestTimelineService(repo))
+			c, rec := newTimelineDMWriteRequest(http.MethodDelete, "/campaigns/camp-1/timelines/tl-1/standalone-events/evt-public", "")
+			c.SetParamNames("id", "tid", "eid")
+			c.SetParamValues("camp-1", "tl-1", "evt-public")
+			c.Set("campaign_context", dmWriteTimelineCtx(tc.role, tc.dmGranted))
+
+			if err := h.DeleteStandaloneEventAPI(c); err != nil {
+				t.Fatalf("%s: expected success deleting a non-dm_only event, got %v", tc.name, err)
+			}
+			if rec.Code != http.StatusOK {
+				t.Errorf("%s: status = %d, want 200", tc.name, rec.Code)
+			}
+			if !deleted {
+				t.Errorf("%s: expected DeleteEvent to reach the repo for a non-dm_only event", tc.name)
+			}
+		})
+	}
+}

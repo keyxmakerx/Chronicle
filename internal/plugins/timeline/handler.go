@@ -777,9 +777,12 @@ func (h *Handler) ListEntityGroupsAPI(c echo.Context) error {
 		return err
 	}
 
-	role := effectiveRole(c, cc)
+	// This is the Owner-only group-manager API (routes.go requires RoleOwner),
+	// not a content-viewing surface: it must show the real data even while
+	// the Owner is previewing as a player elsewhere, so it uses cc.MemberRole
+	// directly rather than effectiveRole's view-as-player override.
 	userID := auth.GetUserID(c)
-	groups, err := h.svc.ListEntityGroups(c.Request().Context(), timelineID, cc.Campaign.ID, permissions.RequestViewer(role, userID))
+	groups, err := h.svc.ListEntityGroups(c.Request().Context(), timelineID, cc.Campaign.ID, permissions.RequestViewer(int(cc.MemberRole), userID))
 	if err != nil {
 		return err
 	}

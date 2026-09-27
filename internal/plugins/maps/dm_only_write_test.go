@@ -202,3 +202,89 @@ func TestDeleteMarkerAPI_StoredDmOnly_RequiresCanAuthorDmOnly(t *testing.T) {
 		})
 	}
 }
+
+// --- Control: a stored 'everyone' marker is unaffected by canAuthorDmOnly ---
+
+func storedEveryoneMarker() *Marker {
+	return &Marker{
+		ID: "mk-public", MapID: "map-1", Name: "Town Square",
+		X: 20, Y: 20, Icon: "fa-flag", Color: "#00ff00", Visibility: "everyone",
+	}
+}
+
+func everyoneMapRepo() *mockMapRepo {
+	return &mockMapRepo{
+		getMapFn: func(_ context.Context, id string) (*Map, error) {
+			return &Map{ID: id, CampaignID: "camp-1"}, nil
+		},
+		getMarkerFn: func(_ context.Context, id string) (*Marker, error) {
+			if id == "mk-public" {
+				return storedEveryoneMarker(), nil
+			}
+			return nil, nil
+		},
+	}
+}
+
+// TestUpdateMarkerAPI_StoredEveryone_AlwaysReachesRepo is the control for
+// TestUpdateMarkerAPI_StoredDmOnly_RequiresCanAuthorDmOnly: the dm_only gate
+// must never block a Scribe (or Player, or anyone else) from editing a
+// marker that was never dm_only in the first place.
+func TestUpdateMarkerAPI_StoredEveryone_AlwaysReachesRepo(t *testing.T) {
+	for _, tc := range dmWriteRoles {
+		t.Run(tc.name, func(t *testing.T) {
+			var updated bool
+			repo := everyoneMapRepo()
+			repo.updateMarkerFn = func(_ context.Context, _ *Marker) error {
+				updated = true
+				return nil
+			}
+			h := NewHandler(NewMapService(repo))
+			c, rec := newDMWriteRequest(http.MethodPut, "/campaigns/camp-1/maps/map-1/markers/mk-public",
+				`{"name":"Renamed Square"}`)
+			c.SetParamNames("id", "mid", "mkid")
+			c.SetParamValues("camp-1", "map-1", "mk-public")
+			c.Set("campaign_context", dmWriteCampaignCtx(tc.role, tc.dmGranted))
+
+			if err := h.UpdateMarkerAPI(c); err != nil {
+				t.Fatalf("%s: expected success editing a non-dm_only marker, got %v", tc.name, err)
+			}
+			if rec.Code != http.StatusOK {
+				t.Errorf("%s: status = %d, want 200", tc.name, rec.Code)
+			}
+			if !updated {
+				t.Errorf("%s: expected UpdateMarker to reach the repo for a non-dm_only marker", tc.name)
+			}
+		})
+	}
+}
+
+// TestDeleteMarkerAPI_StoredEveryone_AlwaysReachesRepo is DeleteMarker's
+// twin of the Update control above.
+func TestDeleteMarkerAPI_StoredEveryone_AlwaysReachesRepo(t *testing.T) {
+	for _, tc := range dmWriteRoles {
+		t.Run(tc.name, func(t *testing.T) {
+			var deleted bool
+			repo := everyoneMapRepo()
+			repo.deleteMarkerFn = func(_ context.Context, _ string) error {
+				deleted = true
+				return nil
+			}
+			h := NewHandler(NewMapService(repo))
+			c, rec := newDMWriteRequest(http.MethodDelete, "/campaigns/camp-1/maps/map-1/markers/mk-public", "")
+			c.SetParamNames("id", "mid", "mkid")
+			c.SetParamValues("camp-1", "map-1", "mk-public")
+			c.Set("campaign_context", dmWriteCampaignCtx(tc.role, tc.dmGranted))
+
+			if err := h.DeleteMarkerAPI(c); err != nil {
+				t.Fatalf("%s: expected success deleting a non-dm_only marker, got %v", tc.name, err)
+			}
+			if rec.Code != http.StatusOK {
+				t.Errorf("%s: status = %d, want 200", tc.name, rec.Code)
+			}
+			if !deleted {
+				t.Errorf("%s: expected DeleteMarker to reach the repo for a non-dm_only marker", tc.name)
+			}
+		})
+	}
+}

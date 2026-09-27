@@ -93,9 +93,6 @@ type TimelineService interface {
 	// caller that really is trusted says so with permissions.SystemViewer.
 	ListTimelines(ctx context.Context, campaignID string, v permissions.Viewer) ([]Timeline, error)
 	ListTimelinesForCalendar(ctx context.Context, calendarID string, v permissions.Viewer) ([]Timeline, error)
-	// ListTimelineEvents below also takes campaignID, so a non-owner's
-	// result can be narrowed by EntityVisibilityGate (a linked entity's
-	// visibility is a separate check from the event's own).
 	UpdateTimeline(ctx context.Context, timelineID string, input UpdateTimelineInput) error
 	DeleteTimeline(ctx context.Context, timelineID string) error
 
@@ -103,6 +100,9 @@ type TimelineService interface {
 	LinkEvent(ctx context.Context, timelineID, eventID string, input LinkEventInput) (*EventLink, error)
 	LinkAllEvents(ctx context.Context, timelineID string, role int) (int, error)
 	UnlinkEvent(ctx context.Context, timelineID, eventID string) error
+	// ListTimelineEvents also takes campaignID, so a non-owner's result can
+	// be narrowed by EntityVisibilityGate (a linked entity's visibility is a
+	// separate check from the event's own).
 	ListTimelineEvents(ctx context.Context, timelineID, campaignID string, v permissions.Viewer) ([]EventLink, error)
 	ListAvailableEvents(ctx context.Context, timelineID string, role int) ([]CalendarEventRef, error)
 
