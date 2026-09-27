@@ -2,23 +2,18 @@
 // hand port of internal/plugins/calendar/model.go's day/leap-year/moon-phase
 // math, kept so a recurring event's occurrence days, the weekday grid column
 // and moon phases can never disagree with the server) actually agree with the
-// Go implementation on a shared fixture calendar.
+// Go implementation on shared fixture calendars — including across an elapsed
+// leap year and on a MonthStartsNewWeek calendar with an intercalary month,
+// the two cases dayIndex/weekdayCol previously got wrong (see calendar_view.js's
+// CalDate module comment: dayIndex now mirrors Calendar.absDayIndex exactly —
+// leap-aware for every year > 0 — and weekdayCol mirrors WeekdayIndex's
+// MonthStartsNewWeek branch, including its -1 "outside the week cycle"
+// signal for an intercalary month).
 //
 // Every expected number below is copied verbatim from a throwaway `go test`
-// run against internal/plugins/calendar's real Calendar/Moon methods on this
-// same fixture (the Go function is named next to each one); the throwaway
-// test file itself was never committed.
-//
-// The weekday-index fixture date (year 2) is deliberately BEFORE the
-// fixture's first leap year (year 3: leap_year_every=4, leap_year_offset=3):
-// Go's WeekdayIndex/OccursOn route every year>0 through the leap-aware
-// AbsoluteDay (model.go's absDayIndex, reconciled so recurrence, weekday
-// placement and moon phase can't drift apart there), but this file's
-// CalDate.weekdayCol still goes through the leap-UNAWARE constLenDayIndex —
-// see the "Two independent day counters" comment atop calendar_view.js's
-// CalDate module. The two happen to agree before any leap year has elapsed,
-// which is what this test exercises; past that point they are a known,
-// separate divergence this test makes no claim about.
+// run against internal/plugins/calendar's real Calendar/Event/Moon methods on
+// these same fixtures (the Go function is named next to each one); the
+// throwaway test file itself was never committed.
 
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
@@ -87,4 +82,52 @@ test('MoonMath.phase matches Moon.MoonPhase(519)', () => {
   // double (the same IEEE 754 binary64 type, but not guaranteed
   // bit-identical across independent implementations of the same formula).
   assert.ok(Math.abs(phase - 0.5932203389830519) < 1e-9, `MoonPhase(519) = ${phase}`);
+});
+
+test('CalDate.weekdayCol matches Calendar.WeekdayIndex(15, 2, 10) == 3, several years after the first leap year', () => {
+  const { CalDate } = loadCalendarMath();
+  // leapYearsBefore(15) == 3 on this fixture (years 3, 7 and 11 have all
+  // elapsed) — this is the case the old constLenDayIndex-based weekdayCol
+  // got wrong, since it never accounted for any elapsed leap year at all.
+  assert.equal(CalDate.weekdayCol(cal, 15, 2, 10), 3);
+});
+
+test("CalDate.occursOn matches Event.OccursOn for a weekly recurrence crossing a leap day", () => {
+  const { CalDate } = loadCalendarMath();
+  const event = { year: 2, month: 1, day: 1, is_recurring: true, recurrence_type: 'weekly' };
+  // Event.OccursOn(cal, event, 3, 3, 2) == true: base (2,1,1) to target
+  // (3,3,2) is 150 days apart by the leap-aware AbsoluteDay (year 3 is the
+  // fixture's own leap year, so Secondmonth gains a day before Thirdmonth is
+  // reached) — an exact multiple of the 5-day week. It is only 149 days
+  // apart by the leap-unaware linearDayIndex, which the old
+  // constLenDayIndex-based occursOn used and would have missed this
+  // occurrence entirely (149 % 5 != 0).
+  assert.equal(CalDate.occursOn(cal, event, 3, 3, 2), true);
+});
+
+// A second fixture: MonthStartsNewWeek, with an intercalary (festival)
+// month — mirrored field-for-field into the same throwaway Go test's second
+// Calendar{} literal.
+const cal2 = {
+  month_starts_new_week: true,
+  months: [
+    { name: 'Regular', days: 30, is_intercalary: false },
+    { name: 'Festival', days: 3, is_intercalary: true }
+  ],
+  weekdays: [{ name: 'a' }, { name: 'b' }, { name: 'c' }, { name: 'd' }, { name: 'e' }]
+};
+
+test('CalDate.weekdayCol matches Calendar.WeekdayIndex on a MonthStartsNewWeek calendar', () => {
+  const { CalDate } = loadCalendarMath();
+  // WeekdayIndex(1,1,1) == 0: day 1 of a month always restarts the week,
+  // regardless of any absolute day count.
+  assert.equal(CalDate.weekdayCol(cal2, 1, 1, 1), 0);
+  // WeekdayIndex(1,1,7) == 1: (day-1) % weekLen, still independent of the
+  // absolute day count.
+  assert.equal(CalDate.weekdayCol(cal2, 1, 1, 7), 1);
+  // WeekdayIndex(1,2,2) == -1: month 2 (Festival) is intercalary, so it sits
+  // outside the weekday cycle entirely — _paintMonth clamps this to 0 (the
+  // grid's first column), the same convention view_helpers.go's
+  // buildMonthGrid uses for the server's own preview grid.
+  assert.equal(CalDate.weekdayCol(cal2, 1, 2, 2), -1);
 });
