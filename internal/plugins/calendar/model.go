@@ -502,6 +502,46 @@ func monthsBetween(cal *Calendar, y1, m1, y2, m2 int) int {
 	return (y2-y1)*mc + (m2 - m1)
 }
 
+// MonthName returns the name of the given 1-based month, or a numeric
+// fallback ("Month N") when Months isn't loaded far enough (a list read that
+// didn't eager-load sub-resources, or a month index outside the calendar's
+// own range).
+func (c *Calendar) MonthName(month int) string {
+	idx := month - 1
+	if idx >= 0 && idx < len(c.Months) {
+		return c.Months[idx].Name
+	}
+	return fmt.Sprintf("Month %d", month)
+}
+
+// CurrentMonthName is MonthName for the calendar's own current month.
+func (c *Calendar) CurrentMonthName() string {
+	return c.MonthName(c.CurrentMonth)
+}
+
+// FullDateLabel formats the calendar's current date as "<Month> <Day>,
+// <Year>" (e.g. "Deepwinter 12, 1024") — the calendars list card and preview
+// panel's one-line "world date".
+func (c *Calendar) FullDateLabel() string {
+	return fmt.Sprintf("%s %d, %d", c.CurrentMonthName(), c.CurrentDay, c.CurrentYear)
+}
+
+// WeekdayIndex returns the 0-based column (0..WeekLength()-1) the given date
+// falls on in the repeating weekly cycle — the calendar preview's month grid
+// uses it to place each day under the right weekday header. Returns 0 when
+// the calendar has no weekdays configured (WeekLength()==0).
+func (c *Calendar) WeekdayIndex(year, month, day int) int {
+	wl := c.WeekLength()
+	if wl <= 0 {
+		return 0
+	}
+	idx := c.absDayIndex(year, month, day) % wl
+	if idx < 0 {
+		idx += wl
+	}
+	return idx
+}
+
 // FormatCurrentTime returns the current time formatted as "HH:MM".
 // Pads hours/minutes with leading zeros based on the max values
 // (e.g. a 24-hour system uses 2 digits, a 100-hour system uses 3).
@@ -1071,6 +1111,23 @@ type CreateCalendarInput struct {
 	SecondsPerMinute int
 	LeapYearEvery    int
 	LeapYearOffset   int
+}
+
+// CreateCalendarFromImportOptions carries the caller's explicit choice for
+// the calendar CreateCalendarFromImport is about to create's current
+// ("today") date. CreateCalendarFromImport never falls back to an
+// undocumented default (#741 — "an import never silently resets the
+// calendar's current date"): when the import itself left a field of
+// ImportResult.Today unspecified (Month/Day nil — Calendaria only ever
+// determines a year), the matching field here MUST be set or
+// CreateCalendarFromImport returns a validation error instead of silently
+// picking day 1. CurrentYear is optional even then — the import always
+// determines a year, and this only overrides it when the caller wants the
+// calendar to start somewhere else than the source file did.
+type CreateCalendarFromImportOptions struct {
+	CurrentYear  *int
+	CurrentMonth *int
+	CurrentDay   *int
 }
 
 // UpdateCalendarInput is the validated input for updating calendar settings.

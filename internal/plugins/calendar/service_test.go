@@ -160,6 +160,52 @@ func TestListEventsForMonth_VisibilityFilterPerUser(t *testing.T) {
 	}
 }
 
+// TestUpcomingEvents_VisibilityFilterAndOwnCurrentDate pins UpcomingEvents
+// (Part B, #764's calendar-preview "Coming up" list): it reads the
+// calendar's OWN current date rather than a caller-supplied one, and applies
+// the same per-user visibility filter as every other read in this package.
+func TestUpcomingEvents_VisibilityFilterAndOwnCurrentDate(t *testing.T) {
+	visible := Event{ID: "evt-open", CalendarID: "cal-1", Visibility: "everyone"}
+	dmOnly := Event{ID: "evt-dm", CalendarID: "cal-1", Visibility: "dm_only"}
+
+	var gotYear, gotMonth, gotDay int
+	calRepo := &fakeCalendarRepo{
+		getByIDFn: func(_ context.Context, id string) (*Calendar, error) {
+			return &Calendar{ID: id, CampaignID: testCampaignA, CurrentYear: 1024, CurrentMonth: 3, CurrentDay: 12}, nil
+		},
+	}
+	eventRepo := &fakeEventRepo{
+		listUpcomingFn: func(_ context.Context, _ string, year, month, day, role, _ int) ([]Event, error) {
+			gotYear, gotMonth, gotDay = year, month, day
+			all := []Event{visible}
+			if permissions.CanSeeDmOnly(role) {
+				all = append(all, dmOnly)
+			}
+			return all, nil
+		},
+	}
+	svc := newTestCalendarService(calRepo, eventRepo, nil, nil)
+
+	got, err := svc.UpcomingEvents(context.Background(), "cal-1", testCampaignA, 5, playerViewer("u-1"))
+	if err != nil {
+		t.Fatalf("UpcomingEvents: %v", err)
+	}
+	if gotYear != 1024 || gotMonth != 3 || gotDay != 12 {
+		t.Errorf("expected the calendar's own current date (1024-03-12), got %d-%d-%d", gotYear, gotMonth, gotDay)
+	}
+	if len(got) != 1 || got[0].ID != "evt-open" {
+		t.Errorf("a Player must not see the dm_only event, got %v", got)
+	}
+
+	got, err = svc.UpcomingEvents(context.Background(), "cal-1", testCampaignA, 5, ownerViewer("u-owner"))
+	if err != nil {
+		t.Fatalf("UpcomingEvents (owner): %v", err)
+	}
+	if len(got) != 2 {
+		t.Errorf("the owner must see the dm_only event too, got %v", got)
+	}
+}
+
 // TestGetEventForViewer_DMOnly_HiddenFromPlayerVisibleToOwner pins the
 // single-item read path (no SQL role filter, unlike the list) applies the
 // exact same dm_only + visibility_rules predicate as the list.

@@ -75,6 +75,12 @@ type CalendarRepository interface {
 	// format supplies them). Calendaria festivals are parsed and then
 	// dropped rather than carried into the result: TODO(#771) add a
 	// Festivals field to ImportResult and write it here via SetFestivals.
+	// result.Events (#779) is deliberately NOT written by this method: an
+	// event's kind slug must be resolved against the target campaign's
+	// calendar_event_kinds, which is a cross-aggregate lookup this
+	// single-aggregate repository has no business making — see
+	// CalendarService.CreateCalendarFromImport, which calls this first and
+	// then recreates the events itself via EventRepository.
 	ApplyImport(ctx context.Context, cal *Calendar, result *ImportResult) error
 }
 

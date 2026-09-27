@@ -33,6 +33,39 @@ func RegisterRoutes(e *echo.Echo, h *Handler, campaignSvc campaigns.CampaignServ
 	cg.DELETE("/calendars/:calid", h.DeleteCalendarAPI, campaigns.RequireRole(campaigns.RoleOwner))
 	cg.PUT("/calendars/:calid/default", h.SetDefaultCalendarAPI, campaigns.RequireRole(campaigns.RoleOwner))
 
+	// --- Part B: calendar creation wizard (presets, import) ---
+	// Owner only, matching the calendar CRUD block above: creating a
+	// calendar's initial structure from a preset or an uploaded file is
+	// calendar structure, not content. "presets" and "import" are static
+	// first segments at the same path depth as "list" and ":calid" below —
+	// see that block's own comment on why a static segment always wins and
+	// none of these can collide with a real (UUID) :calid.
+	cg.GET("/calendars/presets", h.ListPresetsAPI, campaigns.RequireRole(campaigns.RoleOwner))
+	cg.GET("/calendars/presets/:name", h.PreviewPresetAPI, campaigns.RequireRole(campaigns.RoleOwner))
+	cg.POST("/calendars/presets/:name", h.CreateFromPresetAPI, campaigns.RequireRole(campaigns.RoleOwner))
+	cg.POST("/calendars/import/preview", h.PreviewImportAPI, campaigns.RequireRole(campaigns.RoleOwner))
+	cg.POST("/calendars/import", h.CreateFromImportAPI, campaigns.RequireRole(campaigns.RoleOwner))
+
+	// --- Part B: calendar creation wizard + list UI (frontend, #764) ---
+	//
+	// HTML page/fragment routes, distinct from the JSON API block above —
+	// "wizard" is a static segment at the same path depth as "presets",
+	// "import" and ":calid" everywhere else in this file, so it can never
+	// collide with a real (UUID) :calid the same way "list" and "presets"
+	// already don't (see this file's earlier comments). Every wizard route
+	// is Owner only, matching the calendar CRUD block above: creating a
+	// calendar's initial structure is calendar structure. The list page and
+	// the per-card preview are Player+ (read access, filtered by the
+	// service's own viewer-aware visibility — see list_handler.go).
+	cg.GET("/calendars", h.Index, campaigns.RequireRole(campaigns.RolePlayer))
+	cg.GET("/calendars/:calid/preview", h.Preview, campaigns.RequireRole(campaigns.RolePlayer))
+	cg.GET("/calendars/wizard", h.WizardStart, campaigns.RequireRole(campaigns.RoleOwner))
+	cg.GET("/calendars/wizard/presets", h.WizardPresets, campaigns.RequireRole(campaigns.RoleOwner))
+	cg.GET("/calendars/wizard/presets/:name", h.WizardPresetReview, campaigns.RequireRole(campaigns.RoleOwner))
+	cg.GET("/calendars/wizard/import", h.WizardImportStep, campaigns.RequireRole(campaigns.RoleOwner))
+	cg.POST("/calendars/wizard/import/preview", h.WizardImportPreview, campaigns.RequireRole(campaigns.RoleOwner))
+	cg.POST("/calendars/wizard/create", h.WizardCreate, campaigns.RequireRole(campaigns.RoleOwner))
+
 	// Calendar reads (Player) — re-registered under the public-capable group
 	// below, whose registration wins for the same path (see maps/routes.go's
 	// /maps, /maps/:mid, /maps/:mid/markers for the identical shape): kept
@@ -40,12 +73,12 @@ func RegisterRoutes(e *echo.Echo, h *Handler, campaignSvc campaigns.CampaignServ
 	// on its own.
 	//
 	// The list route is "/calendars/list", not bare "/calendars": that bare
-	// GET already belongs to app/routes.go's calendar-rebuild notice page
-	// (and to routes_snapshot.txt) — a real page a browser navigates to, not
-	// a JSON endpoint, so this API cannot reuse it. No real calendar id is
-	// ever the literal string "list" (ids are UUIDs), and a static segment
-	// always wins over a same-position ":calid" param, so the two can't
-	// collide going the other way either.
+	// GET already belongs to THIS file's own h.Index above (the Part B
+	// calendars list PAGE, and to routes_snapshot.txt) — a real page a
+	// browser navigates to, not a JSON endpoint, so this API cannot reuse
+	// it. No real calendar id is ever the literal string "list" (ids are
+	// UUIDs), and a static segment always wins over a same-position ":calid"
+	// param, so the two can't collide going the other way either.
 	cg.GET("/calendars/list", h.ListCalendarsAPI, campaigns.RequireRole(campaigns.RolePlayer))
 	cg.GET("/calendars/:calid", h.GetCalendarAPI, campaigns.RequireRole(campaigns.RolePlayer))
 

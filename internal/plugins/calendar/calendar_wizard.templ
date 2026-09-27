@@ -1,0 +1,338 @@
+// calendar_wizard.templ renders the new-calendar wizard's steps: Start,
+// Preset (picker + review) and Import (drop zone + review). Every step is
+// fetched via HTMX into the SAME dialog shell (#calv5-wizard-root, replaced
+// wholesale with hx-swap="outerHTML" on every step change) — simpler than
+// juggling a separate "shell vs. inner fragment" response shape per route,
+// at the cost of re-sending the shell's chrome on every step; that chrome is
+// a few hundred bytes, not a real cost at this scale.
+//
+// Out of scope for this wizard (see the Part B PR description for the full
+// list): the "Generate one" procedural tile, "Give it a past", and the full
+// structure editor — none of those exist anywhere in this codebase.
+package calendar
+
+import (
+	"encoding/json"
+	"fmt"
+)
+
+// wizardShell is the dialog chrome every step renders inside.
+templ wizardShell(stepLabel string, body templ.Component) {
+	<div id="calv5-wizard-root" class="calv5" x-data="{open:true}" x-show="open" x-cloak>
+		<div class="calv5-overlay" @click.self="open=false; if(window.__calv5Opener)window.__calv5Opener.focus()">
+			<div
+				class="calv5-panel wide"
+				role="dialog"
+				aria-modal="true"
+				aria-label="New calendar"
+				tabindex="-1"
+				x-init="$nextTick(() => $el.focus())"
+				@keydown.escape.window="open=false; if(window.__calv5Opener)window.__calv5Opener.focus()"
+			>
+				<div class="calv5-crease">
+					<span>New calendar</span>
+					<span>&middot;</span>
+					<span>{ stepLabel }</span>
+					<button
+						type="button"
+						class="x"
+						style="margin-left:auto"
+						aria-label="Close"
+						@click="open=false; if(window.__calv5Opener)window.__calv5Opener.focus()"
+					>
+						<i class="fa-solid fa-xmark"></i>
+					</button>
+				</div>
+				<div class="calv5-body">
+					@body
+				</div>
+			</div>
+		</div>
+	</div>
+}
+
+// wizardStartBody is the Start step: exactly two tiles (the mockup's third,
+// procedural "Generate one" tile is out of scope — see the PR description).
+templ wizardStartBody(campaignID string) {
+	<h2 class="calv5-wz-h">New calendar</h2>
+	<p class="calv5-wz-lead">Choose how to set up this calendar's months, weekdays, moons and seasons.</p>
+	<div class="calv5-tiles">
+		<button
+			type="button"
+			class="calv5-tile"
+			hx-get={ fmt.Sprintf("/campaigns/%s/calendars/wizard/presets", campaignID) }
+			hx-target="#calv5-wizard-root"
+			hx-swap="outerHTML"
+		>
+			<span class="calv5-ti"><i class="fa-solid fa-book i"></i></span>
+			<b>Start from a preset</b>
+			<span>One of Chronicle's shipped calendars — ready to use, easy to adjust later.</span>
+		</button>
+		<button
+			type="button"
+			class="calv5-tile"
+			hx-get={ fmt.Sprintf("/campaigns/%s/calendars/wizard/import", campaignID) }
+			hx-target="#calv5-wizard-root"
+			hx-swap="outerHTML"
+		>
+			<span class="calv5-ti"><i class="fa-solid fa-file-import i"></i></span>
+			<b>Import a file</b>
+			<span>Bring over a calendar from Simple Calendar, Calendaria, Fantasy-Calendar or a Chronicle export.</span>
+		</button>
+	</div>
+	<div class="calv5-reassure">
+		<i class="fa-solid fa-circle-info i"></i>
+		<span>Nothing is created until you confirm on the last step — you can back out any time.</span>
+	</div>
+}
+
+// presetCardData is one preset's card content on the picker step.
+type presetCardData struct {
+	Name         string
+	CalendarName string
+	Facts        string
+	BarWidths    []float64
+}
+
+// wizardPresetsBody is the preset-picker step.
+templ wizardPresetsBody(campaignID string, presets []presetCardData) {
+	<h2 class="calv5-wz-h">Start from a preset</h2>
+	<p class="calv5-wz-lead">Each preset is a complete calendar — ready to use as-is, or adjust later.</p>
+	<div class="calv5-presets">
+		for _, p := range presets {
+			<button
+				type="button"
+				class="calv5-pcard"
+				hx-get={ fmt.Sprintf("/campaigns/%s/calendars/wizard/presets/%s", campaignID, p.Name) }
+				hx-target="#calv5-wizard-root"
+				hx-swap="outerHTML"
+			>
+				<b>{ p.CalendarName }</b>
+				<span class="pf">{ p.Facts }</span>
+				<div class="calv5-ybar">
+					for _, w := range p.BarWidths {
+						<i style={ fmt.Sprintf("flex-grow:%.4f", w) }></i>
+					}
+				</div>
+			</button>
+		}
+	</div>
+	<div style="margin-top:16px">
+		<button
+			type="button"
+			class="btn quiet"
+			hx-get={ fmt.Sprintf("/campaigns/%s/calendars/wizard", campaignID) }
+			hx-target="#calv5-wizard-root"
+			hx-swap="outerHTML"
+		>
+			<i class="fa-solid fa-arrow-left"></i> Back
+		</button>
+	</div>
+}
+
+// wizardImportBody is the Import step: a drop zone (Alpine handles
+// dragover/drop declaratively — no separate JS widget needed for it) plus a
+// plain file picker fallback.
+templ wizardImportBody(campaignID, csrfToken, formError string) {
+	<h2 class="calv5-wz-h">Import a file</h2>
+	<p class="calv5-wz-lead">Bring over a calendar from Simple Calendar, Calendaria, Fantasy-Calendar or a Chronicle export (JSON, up to 10MB).</p>
+	if formError != "" {
+		<p class="calv5-err">{ formError }</p>
+	}
+	<form
+		hx-post={ fmt.Sprintf("/campaigns/%s/calendars/wizard/import/preview", campaignID) }
+		hx-target="#calv5-wizard-root"
+		hx-swap="outerHTML"
+		hx-encoding="multipart/form-data"
+	>
+		<input type="hidden" name="csrf_token" value={ csrfToken }/>
+		<div
+			class="calv5-drop"
+			x-data="{over:false,fileName:''}"
+			x-bind:class="{over:over}"
+			@dragover.prevent="over=true"
+			@dragleave.prevent="over=false"
+			@drop.prevent="over=false; $refs.calv5File.files=$event.dataTransfer.files; fileName=$event.dataTransfer.files[0]?.name||''"
+		>
+			<i class="fa-solid fa-cloud-arrow-up i"></i>
+			<b>Drop a calendar file here</b>
+			<small>or choose one below</small>
+			<input
+				type="file"
+				name="file"
+				accept=".json,application/json"
+				required
+				x-ref="calv5File"
+				style="margin-top:10px"
+				@change="fileName=$event.target.files[0]?.name||''"
+			/>
+			<div class="calv5-fchip" x-show="fileName" x-cloak>
+				<i class="fa-solid fa-file-lines i"></i>
+				<span x-text="fileName"></span>
+			</div>
+		</div>
+		<div style="margin-top:16px;display:flex;gap:8px">
+			<button
+				type="button"
+				class="btn quiet"
+				hx-get={ fmt.Sprintf("/campaigns/%s/calendars/wizard", campaignID) }
+				hx-target="#calv5-wizard-root"
+				hx-swap="outerHTML"
+			>
+				<i class="fa-solid fa-arrow-left"></i> Back
+			</button>
+			<span class="sp" style="flex:1"></span>
+			<button type="submit" class="btn primary">Continue</button>
+		</div>
+	</form>
+}
+
+// wizardReviewBody is the shared Review step for both a preset and an
+// import: an editable calendar name, the required "today in the world"
+// selects (never pre-filled with a silent default when the source left one
+// unspecified — #741), a read-only parts summary, and any warnings the
+// import/preset carried. source is "preset" or "import"; presetName is set
+// for the former, importJSON (the ImportResult round-tripped as JSON) for
+// the latter — see WizardCreate for why: no server-side draft session, so
+// the two paths carry forward what they need in the form itself.
+//
+// The form below submits with hx-encoding="multipart/form-data" specifically
+// so import_json isn't sent application/x-www-form-urlencoded: percent-
+// encoding a large JSON blob (every '"', ':', '{', space, …) bloats it by
+// roughly 3x, which could otherwise make a file well within the wizard's own
+// ~10MB import cap pass Preview but then fail Create purely from the
+// round-trip's own re-encoding overhead.
+templ wizardReviewBody(campaignID, source, presetName, importJSON, csrfToken, backURL, formError string, ir *ImportResult) {
+	<h2 class="calv5-wz-h">Review</h2>
+	<p class="calv5-wz-lead">Confirm the calendar's name and today's date in the world, then create it.</p>
+	if formError != "" {
+		<p class="calv5-err">{ formError }</p>
+	}
+	if len(ir.Warnings) > 0 {
+		<div class="calv5-warnbox">
+			<i class="fa-solid fa-triangle-exclamation i"></i>
+			<div>
+				<b>Worth a look</b>
+				<ul>
+					for _, w := range ir.Warnings {
+						<li>{ w }</li>
+					}
+				</ul>
+			</div>
+		</div>
+	}
+	<form
+		hx-post={ fmt.Sprintf("/campaigns/%s/calendars/wizard/create", campaignID) }
+		hx-target="#calv5-wizard-root"
+		hx-swap="outerHTML"
+		hx-encoding="multipart/form-data"
+		x-data={ fmt.Sprintf("{m:%s,d:%s,md:%s}", jsIntOrEmpty(ir.Today.Month), jsIntOrEmpty(ir.Today.Day), jsMonthDayCounts(ir.Months)) }
+	>
+		<input type="hidden" name="csrf_token" value={ csrfToken }/>
+		<input type="hidden" name="source" value={ source }/>
+		if source == "preset" {
+			<input type="hidden" name="preset_name" value={ presetName }/>
+		} else {
+			<input type="hidden" name="import_json" value={ importJSON }/>
+		}
+		<div class="calv5-rv">
+			<div>
+				<label class="calv5-fld">
+					<span>Calendar name</span>
+					<input class="calv5-inp" type="text" name="name" value={ ir.CalendarName } required maxlength="120"/>
+				</label>
+				<div class="calv5-rv-date">
+					<label class="calv5-fld">
+						<span>Year</span>
+						<input class="calv5-inp" type="number" name="current_year" value={ fmt.Sprintf("%d", ir.Today.Year) } required/>
+					</label>
+					<label class="calv5-fld">
+						<span>Month</span>
+						<select class="calv5-inp" name="current_month" x-model="m" required>
+							<option value="" disabled selected?={ ir.Today.Month == nil }>Choose…</option>
+							for i, mo := range ir.Months {
+								<option value={ fmt.Sprintf("%d", i+1) } selected?={ ir.Today.Month != nil && *ir.Today.Month == i+1 }>{ mo.Name }</option>
+							}
+						</select>
+					</label>
+					<label class="calv5-fld">
+						<span>Day</span>
+						<input
+							class="calv5-inp"
+							type="number"
+							name="current_day"
+							min="1"
+							x-bind:max="md[m-1] || 31"
+							x-model="d"
+							required
+						/>
+					</label>
+				</div>
+			</div>
+			<div>
+				<div class="calv5-report">
+					<div class="calv5-rgrp">
+						<h4>Structure</h4>
+						<ul>
+							<li><b>{ fmt.Sprintf("%d", len(ir.Months)) }</b> months</li>
+							<li><b>{ fmt.Sprintf("%d", len(ir.Weekdays)) }</b> weekdays</li>
+							<li><b>{ fmt.Sprintf("%d", len(ir.Seasons)) }</b> seasons</li>
+						</ul>
+					</div>
+					<div class="calv5-rgrp">
+						<h4>Sky &amp; eras</h4>
+						<ul>
+							<li><b>{ fmt.Sprintf("%d", len(ir.Moons)) }</b> moons</li>
+							<li><b>{ fmt.Sprintf("%d", len(ir.Eras)) }</b> eras</li>
+						</ul>
+					</div>
+					<div class="calv5-rgrp">
+						<h4>Events</h4>
+						<ul>
+							<li><b>{ fmt.Sprintf("%d", len(ir.Events)) }</b> carried over</li>
+						</ul>
+					</div>
+				</div>
+			</div>
+		</div>
+		<div style="margin-top:18px;display:flex;gap:8px;align-items:center">
+			<button type="button" class="btn quiet" hx-get={ backURL } hx-target="#calv5-wizard-root" hx-swap="outerHTML">
+				<i class="fa-solid fa-arrow-left"></i> Back
+			</button>
+			<span class="sp" style="flex:1"></span>
+			<button type="submit" class="btn primary" x-bind:disabled="!m || !d">
+				<i class="fa-solid fa-check"></i> Create calendar
+			</button>
+		</div>
+	</form>
+}
+
+// jsIntOrEmpty renders an *int as a bare JS number literal, or the string
+// '' when nil — used only to seed wizardReviewBody's Alpine x-data so the
+// Create button starts disabled exactly when #741 requires an explicit
+// month/day the source didn't supply.
+func jsIntOrEmpty(v *int) string {
+	if v == nil {
+		return "''"
+	}
+	return fmt.Sprintf("%d", *v)
+}
+
+// jsMonthDayCounts serializes each month's day count (Days — not leap-year
+// adjusted, since this only feeds the day input's client-side `max` hint,
+// not an authoritative check) as a JSON array literal for the Review step's
+// Alpine x-data. The real check is server-side, in
+// CreateCalendarFromImport's own current-date range validation — this is
+// defense in depth so a wrong day is caught before submit, not instead of
+// that check.
+func jsMonthDayCounts(months []MonthInput) string {
+	days := make([]int, len(months))
+	for i, m := range months {
+		days[i] = m.Days
+	}
+	b, err := json.Marshal(days)
+	if err != nil {
+		return "[]"
+	}
+	return string(b)
+}
