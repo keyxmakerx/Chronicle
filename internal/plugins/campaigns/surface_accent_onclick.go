@@ -13,8 +13,15 @@ import (
 // <script> in a swapped-in fragment, and this card is reached by a boosted
 // sidebar swap (.ai/conventions.md, HTMX swap-safety). Same pattern as
 // internal/plugins/foundry_vtt/onclick_handlers.go. Only server-controlled
-// values (IDs, the CSRF token, preset colors) are interpolated; the custom
-// color is read from the input when the handler runs.
+// values (the slot, preset colors, the custom input's own id) are
+// interpolated; the custom color is read from the input when the handler
+// runs.
+//
+// The handler no longer PUTs to the server itself: it sets the CSS variable
+// for an instant local preview, then dispatches a CustomEvent so the
+// appearance-editor widget's own JS (which owns campaignId/csrfToken and the
+// Save/Discard flow) can fold the slot into its one staged draft instead of
+// saving on every click.
 
 // jsStr returns a single-quoted JS string literal for embedding in an inline
 // attribute handler (which templ delimits with double quotes).
@@ -29,39 +36,36 @@ func inlineHandler(name, jsBody string) templ.ComponentScript {
 }
 
 // applySurfaceAccentJS is the shared body for the preset/reset buttons and
-// the custom picker: local CSS-variable preview first (instant recolor of the
-// sample card), then persisted via the existing accent endpoint. colorExpr is
+// the custom picker: local CSS-variable preview, then a
+// chronicle:surface-accent-change event the widget listens for. colorExpr is
 // a JS expression yielding the chosen color ("" clears the slot).
-func applySurfaceAccentJS(campaignID, csrfToken string, slot int, colorExpr string) string {
+func applySurfaceAccentJS(slot int, colorExpr string) string {
 	return fmt.Sprintf(
 		`(function(){`+
 			`var color=%s;`+
 			`var prop='--color-accent-surface-%d';`+
 			`if(color){document.documentElement.style.setProperty(prop,color);}`+
 			`else{document.documentElement.style.removeProperty(prop);}`+
-			`if(window.htmx){window.htmx.ajax('PUT','/campaigns/'+%s+'/accent-color',{`+
-			`values:{accent_color:color,slot:'%d'},`+
-			`headers:{'X-CSRF-Token':%s},`+
-			`swap:'none'`+
-			`});}`+
+			`var w=document.querySelector('[data-widget="appearance-editor"]');`+
+			`if(w){w.dispatchEvent(new CustomEvent('chronicle:surface-accent-change',{detail:{slot:%d,color:color}}));}`+
 			`})()`,
-		colorExpr, slot, jsStr(campaignID), slot, jsStr(csrfToken),
+		colorExpr, slot, slot,
 	)
 }
 
 // surfaceAccentApplyOnClick returns the onclick handler for a preset swatch
 // (or the reset button, with color=""): the slot and color are both known at
 // render time, so they're baked in as literals.
-func surfaceAccentApplyOnClick(campaignID, csrfToken string, slot int, color string) templ.ComponentScript {
-	body := applySurfaceAccentJS(campaignID, csrfToken, slot, jsStr(color))
+func surfaceAccentApplyOnClick(slot int, color string) templ.ComponentScript {
+	body := applySurfaceAccentJS(slot, jsStr(color))
 	return inlineHandler(fmt.Sprintf("surfaceAccentApply_%d_%s", slot, color), body)
 }
 
 // surfaceAccentCustomOnChange returns the onchange handler for the custom
 // color <input>: the color isn't known until the user picks one, so it reads
 // the input's own current value at fire time via its id.
-func surfaceAccentCustomOnChange(campaignID, csrfToken string, slot int, inputID string) templ.ComponentScript {
-	body := applySurfaceAccentJS(campaignID, csrfToken, slot,
+func surfaceAccentCustomOnChange(slot int, inputID string) templ.ComponentScript {
+	body := applySurfaceAccentJS(slot,
 		fmt.Sprintf(`document.getElementById(%s).value`, jsStr(inputID)))
 	return inlineHandler(fmt.Sprintf("surfaceAccentCustom_%d", slot), body)
 }

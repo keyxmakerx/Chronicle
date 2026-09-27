@@ -1,11 +1,14 @@
 /**
  * appearance_editor.js -- Campaign Appearance Editor Widget
  *
- * Mounts on data-widget="appearance-editor". Live-previews brand name/logo
- * and topbar styling, plus three accent colors: data-accent-color
+ * Mounts on data-widget="appearance-editor". Live-previews brand name/logo,
+ * welcome message, topbar styling, and five accent slots: data-accent-color
  * (site-wide), data-accent-action (primary buttons/hover/FABs),
- * data-accent-app (character pages, calendar app). Changes stay local until
- * the user clicks "Save Changes".
+ * data-accent-app (character pages, calendar app), and the legacy
+ * data-accent-surface-1/2 pair (content-surface primary/secondary). Every
+ * field — including Surface Accents, which used to PUT on every click —
+ * stages into one local draft until the user clicks "Save Changes"; a
+ * "Discard" button reverts every control back to the last save.
  */
 (function () {
   'use strict';
@@ -39,7 +42,15 @@
         // parser convention, same as accentColor).
         accentAction: config.accentAction || '',
         accentApp: config.accentApp || '',
+        // Legacy surface-accent pair. Read via getAttribute, not config:
+        // boot.js's kebab->camelCase conversion only folds a hyphen before a
+        // LETTER, so "data-accent-surface-1" would not become
+        // config.accentSurface1 (same reason data-topbar-style below is read
+        // this way rather than through config).
+        accentSurface1: el.getAttribute('data-accent-surface-1') || '',
+        accentSurface2: el.getAttribute('data-accent-surface-2') || '',
         fontFamily: config.fontFamily || '',
+        welcomeMessage: el.getAttribute('data-welcome-message') || '',
         topbarStyle: { mode: '', color: '', gradient_from: '', gradient_to: '', gradient_dir: 'to-r', image_path: '' },
         topbarContent: { mode: 'none', links: [], quote: '' }
       };
@@ -70,7 +81,10 @@
         accentColor: saved.accentColor,
         accentAction: saved.accentAction,
         accentApp: saved.accentApp,
+        accentSurface1: saved.accentSurface1,
+        accentSurface2: saved.accentSurface2,
         fontFamily: saved.fontFamily,
+        welcomeMessage: saved.welcomeMessage,
         topbarStyle: {
           mode: saved.topbarStyle.mode || '',
           color: saved.topbarStyle.color || '',
@@ -109,8 +123,8 @@
       var gradFromInput = el.querySelector('#appearance-topbar-gradient-from');
       var gradToInput = el.querySelector('#appearance-topbar-gradient-to');
       var gradDirSelect = el.querySelector('#appearance-topbar-gradient-dir');
-      var accentContainer = el.querySelector('#appearance-accent-colors');
-      var accentLabel = el.querySelector('#appearance-accent-label');
+      var welcomeInput = el.querySelector('#appearance-welcome-message');
+      var welcomeCounter = el.querySelector('#appearance-welcome-counter');
 
       // Preview elements for live accent/font/backdrop updates. The primary
       // button follows the Action slot (mirrors the .btn-primary CSS swap in
@@ -131,6 +145,7 @@
       // Save bar lives outside the widget element (sibling above it).
       var saveBar = document.getElementById('appearance-save-bar');
       var saveBtn = document.getElementById('appearance-save-btn');
+      var discardBtn = document.getElementById('appearance-discard-btn');
 
       // --- Initialization ---
 
@@ -174,7 +189,10 @@
                draft.accentColor !== saved.accentColor ||
                draft.accentAction !== saved.accentAction ||
                draft.accentApp !== saved.accentApp ||
+               draft.accentSurface1 !== saved.accentSurface1 ||
+               draft.accentSurface2 !== saved.accentSurface2 ||
                draft.fontFamily !== saved.fontFamily ||
+               draft.welcomeMessage !== saved.welcomeMessage ||
                draft.topbarStyle.mode !== (saved.topbarStyle.mode || '') ||
                draft.topbarStyle.color !== (saved.topbarStyle.color || '') ||
                draft.topbarStyle.gradient_from !== (saved.topbarStyle.gradient_from || '') ||
@@ -221,74 +239,13 @@
         });
       }
 
-      // --- Accent Color (JS-driven, no server calls) ---
-
-      if (accentContainer) {
-        var accentButtons = accentContainer.querySelectorAll('button[data-accent-color]');
-        for (var i = 0; i < accentButtons.length; i++) {
-          accentButtons[i].addEventListener('click', function () {
-            var color = this.getAttribute('data-accent-color');
-            draft.accentColor = color;
-            updateAccentHighlight(color);
-            updateAccentPreview(color);
-            // Sync the custom color picker value when a preset is chosen.
-            var customInput = el.querySelector('#appearance-accent-custom');
-            if (customInput && color) {
-              customInput.value = color;
-            }
-            updateSaveBar();
-          });
-        }
-
-        // Custom hex color picker input.
-        var customColorInput = el.querySelector('#appearance-accent-custom');
-        if (customColorInput) {
-          customColorInput.addEventListener('input', function () {
-            draft.accentColor = this.value;
-            updateAccentHighlight(this.value);
-            updateAccentPreview(this.value);
-            updateSaveBar();
-          });
-        }
-      }
-
-      function updateAccentHighlight(selectedColor) {
-        if (!accentContainer) return;
-        var buttons = accentContainer.querySelectorAll('button[data-accent-color]');
-        for (var j = 0; j < buttons.length; j++) {
-          var btn = buttons[j];
-          var btnColor = btn.getAttribute('data-accent-color');
-          var isReset = btnColor === '';
-
-          if (btnColor === selectedColor) {
-            if (isReset) {
-              btn.className = 'w-8 h-8 rounded-full border-2 border-dashed border-fg ring-2 ring-offset-2 ring-offset-surface ring-fg flex items-center justify-center transition-colors shrink-0';
-            } else {
-              btn.className = 'w-8 h-8 rounded-full border-2 border-white ring-2 ring-offset-2 ring-offset-surface ring-fg transition-transform hover:scale-110 shrink-0';
-            }
-          } else {
-            if (isReset) {
-              btn.className = 'w-8 h-8 rounded-full border-2 border-dashed border-edge flex items-center justify-center hover:border-fg-muted transition-colors shrink-0';
-            } else {
-              btn.className = 'w-8 h-8 rounded-full border-2 border-transparent hover:border-white/50 transition-transform hover:scale-110 shrink-0';
-            }
-          }
-        }
-
-        // Update label.
-        if (accentLabel) {
-          accentLabel.textContent = selectedColor ? 'Selected: ' + selectedColor : 'Using default theme color';
-        }
-      }
-
-      // --- Action highlight + App accent pickers ---
+      // --- Site accent / Action highlight / App accent pickers ---
       //
-      // Both pickers share this generic wiring (unlike the bespoke Site
-      // accent block above) since their swatch/reset/custom-picker markup
-      // and click behavior are identical, just scoped to a different
-      // container id and draft field. Returns a highlight(color) function so
-      // callers can re-sync the swatch ring when the value changes elsewhere
-      // (e.g. via the custom color input's reset).
+      // All three slots share this generic wiring, since their
+      // swatch/reset/custom-picker markup and click behavior are identical
+      // (semanticAccentPicker), just scoped to a different container id and
+      // draft field. Returns a highlight(color) function so callers (Discard,
+      // below) can re-sync the swatch ring when the value changes elsewhere.
       function wireSemanticSlotPicker(containerId, customId, labelId, getDraft, setDraft, onChange) {
         var container = el.querySelector('#' + containerId);
         var custom = el.querySelector('#' + customId);
@@ -347,18 +304,63 @@
         return highlight;
       }
 
-      wireSemanticSlotPicker(
+      var highlightAccent = wireSemanticSlotPicker(
+        'appearance-accent-colors', 'appearance-accent-custom', 'appearance-accent-label',
+        function () { return draft.accentColor; },
+        function (v) { draft.accentColor = v; },
+        updateAccentPreview
+      );
+      var highlightAction = wireSemanticSlotPicker(
         'appearance-action-colors', 'appearance-action-custom', 'appearance-action-label',
         function () { return draft.accentAction; },
         function (v) { draft.accentAction = v; },
         function () { updateActionPreview(); }
       );
-      wireSemanticSlotPicker(
+      var highlightApp = wireSemanticSlotPicker(
         'appearance-app-colors', 'appearance-app-custom', 'appearance-app-label',
         function () { return draft.accentApp; },
         function (v) { draft.accentApp = v; },
         function () { updateAppPreview(); }
       );
+
+      // --- Surface Accents (legacy pair) ---
+      //
+      // The card's preset/reset/custom controls apply their own instant
+      // CSS-variable preview via an inline onclick/onchange (they must stay
+      // inline, not a delegated <script>, since htmx strips a <script> tag
+      // from a boosted sidebar swap — surface_accent_onclick.go) and then
+      // hand the chosen value to this widget through a DOM event, because
+      // the inline handler runs outside this closure. That folds the slot
+      // into the same staged draft/save/discard flow as every other field,
+      // instead of the PUT-per-click it used before #632.
+      function applySurfaceVar(slot, color) {
+        var prop = '--color-accent-surface-' + slot;
+        if (color) {
+          document.documentElement.style.setProperty(prop, color);
+        } else {
+          document.documentElement.style.removeProperty(prop);
+        }
+      }
+      el.addEventListener('chronicle:surface-accent-change', function (evt) {
+        var detail = evt.detail || {};
+        var color = detail.color || '';
+        if (detail.slot === 1) {
+          draft.accentSurface1 = color;
+        } else if (detail.slot === 2) {
+          draft.accentSurface2 = color;
+        }
+        updateSaveBar();
+      });
+
+      // --- Welcome Message ---
+
+      if (welcomeInput) {
+        welcomeInput.addEventListener('input', function () {
+          draft.welcomeMessage = welcomeInput.value;
+          if (welcomeCounter) welcomeCounter.textContent = welcomeInput.value.length + ' / 500';
+          updateSaveBar();
+        });
+      }
 
       // --- Font Family Buttons ---
 
@@ -556,7 +558,10 @@
                 saved.accentColor = draft.accentColor;
                 saved.accentAction = draft.accentAction;
                 saved.accentApp = draft.accentApp;
+                saved.accentSurface1 = draft.accentSurface1;
+                saved.accentSurface2 = draft.accentSurface2;
                 saved.fontFamily = draft.fontFamily;
+                saved.welcomeMessage = draft.welcomeMessage;
                 saved.topbarStyle = {
                   mode: draft.topbarStyle.mode,
                   color: draft.topbarStyle.color,
@@ -649,6 +654,57 @@
             });
           }
 
+          // Save surface accent 1 if changed (same endpoint + form-encoded
+          // shape as action/app, routed by the legacy numeric slot).
+          if (draft.accentSurface1 !== saved.accentSurface1) {
+            pending++;
+            Chronicle.apiFetch('/campaigns/' + campaignId + '/accent-color', {
+              method: 'PUT',
+              body: 'accent_color=' + encodeURIComponent(draft.accentSurface1) + '&slot=1',
+              headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+              csrfToken: csrfToken
+            }).then(function (res) {
+              if (!res.ok) { failed = true; }
+              onComplete();
+            }).catch(function () {
+              failed = true;
+              onComplete();
+            });
+          }
+
+          // Save surface accent 2 if changed.
+          if (draft.accentSurface2 !== saved.accentSurface2) {
+            pending++;
+            Chronicle.apiFetch('/campaigns/' + campaignId + '/accent-color', {
+              method: 'PUT',
+              body: 'accent_color=' + encodeURIComponent(draft.accentSurface2) + '&slot=2',
+              headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+              csrfToken: csrfToken
+            }).then(function (res) {
+              if (!res.ok) { failed = true; }
+              onComplete();
+            }).catch(function () {
+              failed = true;
+              onComplete();
+            });
+          }
+
+          // Save welcome message if changed.
+          if (draft.welcomeMessage !== saved.welcomeMessage) {
+            pending++;
+            Chronicle.apiFetch('/campaigns/' + campaignId + '/welcome-message', {
+              method: 'PUT',
+              body: { message: draft.welcomeMessage },
+              csrfToken: csrfToken
+            }).then(function (res) {
+              if (!res.ok) { failed = true; }
+              onComplete();
+            }).catch(function () {
+              failed = true;
+              onComplete();
+            });
+          }
+
           // Save font family if changed.
           if (draft.fontFamily !== saved.fontFamily) {
             pending++;
@@ -725,6 +781,101 @@
             saveBtn.innerHTML = '<i class="fa-solid fa-check text-xs mr-1"></i> Save Changes';
             updateSaveBar();
           }
+        });
+      }
+
+      // --- Discard Button ---
+      //
+      // The inverse of Save: reset every draft field to the last-saved
+      // value, then push that back into each control and its live preview.
+      // Named update*/highlight* functions already exist for every field
+      // (Save uses none of them — it only reads draft — so they are reused
+      // here rather than duplicated).
+
+      if (discardBtn) {
+        discardBtn.addEventListener('click', function () {
+          draft.brandName = saved.brandName;
+          draft.accentColor = saved.accentColor;
+          draft.accentAction = saved.accentAction;
+          draft.accentApp = saved.accentApp;
+          draft.accentSurface1 = saved.accentSurface1;
+          draft.accentSurface2 = saved.accentSurface2;
+          draft.fontFamily = saved.fontFamily;
+          draft.welcomeMessage = saved.welcomeMessage;
+          draft.topbarStyle = {
+            mode: saved.topbarStyle.mode || '',
+            color: saved.topbarStyle.color || '',
+            gradient_from: saved.topbarStyle.gradient_from || '',
+            gradient_to: saved.topbarStyle.gradient_to || '',
+            gradient_dir: saved.topbarStyle.gradient_dir || 'to-r',
+            image_path: saved.topbarStyle.image_path || ''
+          };
+          draft.topbarContent = {
+            mode: saved.topbarContent.mode || 'none',
+            links: JSON.parse(JSON.stringify(saved.topbarContent.links || [])),
+            quote: saved.topbarContent.quote || ''
+          };
+
+          // Brand name.
+          if (brandInput) brandInput.value = draft.brandName;
+          if (previewBrand) previewBrand.textContent = draft.brandName || (brandInput && brandInput.placeholder) || '';
+
+          // Site / Action / App accent slots: swatch ring, custom-picker
+          // swatch, and live preview.
+          highlightAccent(draft.accentColor);
+          updateAccentPreview(draft.accentColor);
+          highlightAction(draft.accentAction);
+          updateActionPreview();
+          highlightApp(draft.accentApp);
+          updateAppPreview();
+          var accentCustom = el.querySelector('#appearance-accent-custom');
+          if (accentCustom) accentCustom.value = draft.accentColor || '#6366f1';
+          var actionCustom = el.querySelector('#appearance-action-custom');
+          if (actionCustom) actionCustom.value = draft.accentAction || '#6366f1';
+          var appCustom = el.querySelector('#appearance-app-custom');
+          if (appCustom) appCustom.value = draft.accentApp || '#6366f1';
+
+          // Surface accents: only the CSS-variable preview needs restoring —
+          // the swatch ring was never live-updated in the first place (it
+          // only ever reflects the server-rendered value at load).
+          applySurfaceVar(1, draft.accentSurface1);
+          applySurfaceVar(2, draft.accentSurface2);
+
+          // Font.
+          if (fontContainer) {
+            var allFontBtns = fontContainer.querySelectorAll('button[data-font-family]');
+            for (var fi = 0; fi < allFontBtns.length; fi++) {
+              var fbtn = allFontBtns[fi];
+              var fSelected = fbtn.getAttribute('data-font-family') === draft.fontFamily;
+              fbtn.className = fSelected
+                ? 'px-3 py-2 rounded-lg border border-accent bg-accent/10 text-accent font-medium text-sm'
+                : 'px-3 py-2 rounded-lg border border-edge bg-surface hover:border-accent/30 text-fg-secondary text-sm';
+            }
+          }
+          updateFontPreview(draft.fontFamily);
+
+          // Topbar style (image mode/path is never dirty — see
+          // initTopbarImageSync — so there is nothing to revert there).
+          if (solidColorInput) solidColorInput.value = draft.topbarStyle.color || '#000000';
+          if (gradFromInput) gradFromInput.value = draft.topbarStyle.gradient_from || '#000000';
+          if (gradToInput) gradToInput.value = draft.topbarStyle.gradient_to || '#000000';
+          if (gradDirSelect) gradDirSelect.value = draft.topbarStyle.gradient_dir || 'to-r';
+          setActiveMode(draft.topbarStyle.mode);
+          updateTopbarPreview();
+
+          // Topbar content.
+          setActiveContentMode(draft.topbarContent.mode);
+          if (quoteTextarea) {
+            quoteTextarea.value = draft.topbarContent.quote || '';
+            if (quoteCounter) quoteCounter.textContent = quoteTextarea.value.length + ' / 200';
+          }
+          renderLinksList();
+
+          // Welcome message.
+          if (welcomeInput) welcomeInput.value = draft.welcomeMessage;
+          if (welcomeCounter) welcomeCounter.textContent = draft.welcomeMessage.length + ' / 500';
+
+          updateSaveBar();
         });
       }
 
