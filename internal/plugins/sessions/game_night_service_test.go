@@ -621,3 +621,35 @@ func TestRestoreSessionAPI_SoftDeletedSessionIsReachable(t *testing.T) {
 		t.Errorf("status = %d, want 200", rec.Code)
 	}
 }
+
+// TestRestoreSessionAPI_CrossCampaign404s pins the IDOR check
+// RestoreSessionAPI re-implements by hand (it can't reuse
+// requireSessionInCampaign/GetSession, which filters deleted_at IS NULL —
+// see the handler's own comment): a session belonging to a DIFFERENT
+// campaign than the one in the URL must 404, never be restored.
+func TestRestoreSessionAPI_CrossCampaign404s(t *testing.T) {
+	var restored bool
+	repo := &mockSessionRepo{
+		findByIDIncludingDeletedFn: func(_ context.Context, id string) (*Session, error) {
+			return &Session{ID: id, CampaignID: "camp-other", Name: "Someone Else's Game"}, nil
+		},
+		restoreSessionFn: func(_ context.Context, _ string) error {
+			restored = true
+			return nil
+		},
+	}
+	h := &Handler{svc: NewSessionService(repo, nil, nil)}
+
+	e := echo.New()
+	rec := httptest.NewRecorder()
+	c := e.NewContext(httptest.NewRequest(http.MethodPost, "/x", nil), rec)
+	c.SetParamNames("sid")
+	c.SetParamValues("s1")
+	c.Set("campaign_context", &campaigns.CampaignContext{Campaign: &campaigns.Campaign{ID: "camp-1"}})
+
+	err := h.RestoreSessionAPI(c)
+	assertAppError(t, err, http.StatusNotFound)
+	if restored {
+		t.Error("a session belonging to another campaign must not be restored")
+	}
+}
