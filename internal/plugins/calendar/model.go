@@ -64,24 +64,24 @@ const (
 
 // Calendar is the top-level calendar definition for a campaign.
 type Calendar struct {
-	ID             string  `json:"id"`
-	CampaignID     string  `json:"campaign_id"`
-	Mode           string  `json:"mode"` // "fantasy" or "reallife"
-	Name           string  `json:"name"`
-	Description    *string `json:"description,omitempty"`
-	EpochName      *string `json:"epoch_name,omitempty"`
-	CurrentYear    int     `json:"current_year"`
-	CurrentMonth   int     `json:"current_month"`
-	CurrentDay     int     `json:"current_day"`
-	HoursPerDay      int `json:"hours_per_day"`
-	MinutesPerHour   int `json:"minutes_per_hour"`
-	SecondsPerMinute int `json:"seconds_per_minute"`
-	CurrentHour    int     `json:"current_hour"`
-	CurrentMinute  int     `json:"current_minute"`
-	LeapYearEvery  int     `json:"leap_year_every"`
-	LeapYearOffset int     `json:"leap_year_offset"`
-	SortOrder      int     `json:"sort_order"`
-	IsDefault      bool    `json:"is_default"`
+	ID               string  `json:"id"`
+	CampaignID       string  `json:"campaign_id"`
+	Mode             string  `json:"mode"` // "fantasy" or "reallife"
+	Name             string  `json:"name"`
+	Description      *string `json:"description,omitempty"`
+	EpochName        *string `json:"epoch_name,omitempty"`
+	CurrentYear      int     `json:"current_year"`
+	CurrentMonth     int     `json:"current_month"`
+	CurrentDay       int     `json:"current_day"`
+	HoursPerDay      int     `json:"hours_per_day"`
+	MinutesPerHour   int     `json:"minutes_per_hour"`
+	SecondsPerMinute int     `json:"seconds_per_minute"`
+	CurrentHour      int     `json:"current_hour"`
+	CurrentMinute    int     `json:"current_minute"`
+	LeapYearEvery    int     `json:"leap_year_every"`
+	LeapYearOffset   int     `json:"leap_year_offset"`
+	SortOrder        int     `json:"sort_order"`
+	IsDefault        bool    `json:"is_default"`
 	// Persisted live mood-tint wash. Both nil = no mood set.
 	MoodTintColor     *string  `json:"mood_tint_color,omitempty"`
 	MoodTintIntensity *float64 `json:"mood_tint_intensity,omitempty"`
@@ -603,46 +603,46 @@ func (m *Moon) MoonPhase(absoluteDay int) float64 {
 	return phase
 }
 
-// MoonPhaseName returns a human-readable phase name.
+// MoonPhaseName returns the nearest named phase, centered on its turning point.
 func (m *Moon) MoonPhaseName(absoluteDay int) string {
 	phase := m.MoonPhase(absoluteDay)
 	switch {
-	case phase < 0.125:
+	case phase < 0.0625 || phase >= 0.9375:
 		return "New Moon"
-	case phase < 0.25:
+	case phase < 0.1875:
 		return "Waxing Crescent"
-	case phase < 0.375:
+	case phase < 0.3125:
 		return "First Quarter"
-	case phase < 0.5:
+	case phase < 0.4375:
 		return "Waxing Gibbous"
-	case phase < 0.625:
+	case phase < 0.5625:
 		return "Full Moon"
-	case phase < 0.75:
+	case phase < 0.6875:
 		return "Waning Gibbous"
-	case phase < 0.875:
+	case phase < 0.8125:
 		return "Last Quarter"
 	default:
 		return "Waning Crescent"
 	}
 }
 
-// MoonPhaseIcon returns an icon identifier for the current phase.
+// MoonPhaseIcon returns the icon for the same centered phase as MoonPhaseName.
 func (m *Moon) MoonPhaseIcon(absoluteDay int) string {
 	phase := m.MoonPhase(absoluteDay)
 	switch {
-	case phase < 0.125:
+	case phase < 0.0625 || phase >= 0.9375:
 		return "circle-dot"
-	case phase < 0.25:
+	case phase < 0.1875:
 		return "moon-waxing-crescent"
-	case phase < 0.375:
+	case phase < 0.3125:
 		return "moon-first-quarter"
-	case phase < 0.5:
+	case phase < 0.4375:
 		return "moon-waxing-gibbous"
-	case phase < 0.625:
+	case phase < 0.5625:
 		return "moon"
-	case phase < 0.75:
+	case phase < 0.6875:
 		return "moon-waning-gibbous"
-	case phase < 0.875:
+	case phase < 0.8125:
 		return "moon-last-quarter"
 	default:
 		return "moon-waning-crescent"
