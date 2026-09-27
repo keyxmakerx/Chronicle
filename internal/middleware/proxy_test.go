@@ -24,7 +24,7 @@ func TestParseTrustedProxies_RejectsWhatItCannotParse(t *testing.T) {
 		wantLen int
 	}{
 		{"a CIDR block", []string{"10.0.0.0/8"}, false, 1},
-		{"a bare v4 address is one host", []string{"100.82.251.84"}, false, 1},
+		{"a bare v4 address is one host", []string{"100.64.0.10"}, false, 1},
 		{"a bare v6 address is one host", []string{"fd00::1"}, false, 1},
 		{"blanks and spacing are tolerated", []string{" 10.0.0.0/8 ", "", "::1/128"}, false, 2},
 		{"a typo is an error, not a skip", []string{"10.0.0.0/8", "192.168.1.0/33"}, true, 0},
@@ -55,7 +55,7 @@ func TestParseTrustedProxies_RejectsWhatItCannotParse(t *testing.T) {
 func TestIPExtractor_TrustsOnlyTheNamedProxy(t *testing.T) {
 	const (
 		client = "203.0.113.7"
-		proxy  = "100.82.251.84"
+		proxy  = "100.64.0.10"
 	)
 	for _, tc := range []struct {
 		name    string
@@ -78,7 +78,7 @@ func TestIPExtractor_TrustsOnlyTheNamedProxy(t *testing.T) {
 			want: client,
 		},
 		{
-			// The measured deployment: the proxy sits in 100.64.0.0/10 and the
+			// A mesh-network proxy sits in 100.64.0.0/10 and the
 			// shipped default stops at the private ranges, so without an entry
 			// every visitor is recorded as the proxy.
 			name:    "the shipped default does not cover a mesh proxy",
@@ -90,8 +90,8 @@ func TestIPExtractor_TrustsOnlyTheNamedProxy(t *testing.T) {
 			// Naming one host must not hand the same power to its neighbours.
 			name:    "a neighbour of the named proxy is not trusted",
 			trusted: []string{proxy},
-			peer:    "100.82.251.85", realIP: client,
-			want: "100.82.251.85",
+			peer:    "100.64.0.11", realIP: client,
+			want: "100.64.0.11",
 		},
 		{
 			name:    "X-Real-IP outranks X-Forwarded-For",
