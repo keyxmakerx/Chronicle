@@ -30,6 +30,13 @@ type UserRepository interface {
 	UpdateDisplayName(ctx context.Context, userID, displayName string) error
 	UpdateAvatarPath(ctx context.Context, userID string, avatarPath *string) error
 
+	// ListLegacyAvatarPaths returns userID -> avatar_path for every user
+	// whose avatar_path still starts with prefix. Used only by the boot
+	// reconciler (reconcile_avatar_paths.go) to find rows still pointing at
+	// the dead pre-M0 /uploads/ web path (#610); ordinary reads use
+	// FindByID/FindByEmail.
+	ListLegacyAvatarPaths(ctx context.Context, prefix string) (map[string]string, error)
+
 	// Email change verification.
 	SetPendingEmail(ctx context.Context, userID, pendingEmail, tokenHash string, expiresAt time.Time) error
 	FindByEmailVerifyToken(ctx context.Context, tokenHash string) (userID, pendingEmail string, expiresAt time.Time, err error)
@@ -305,6 +312,31 @@ func (r *userRepository) UpdateAvatarPath(ctx context.Context, userID string, av
 		return apperror.NewNotFound("user not found")
 	}
 	return nil
+}
+
+// ListLegacyAvatarPaths returns userID -> avatar_path for every row whose
+// avatar_path starts with prefix. No wildcard characters are expected in
+// prefix (it is always a compile-time constant), so no LIKE-escaping is done.
+func (r *userRepository) ListLegacyAvatarPaths(ctx context.Context, prefix string) (map[string]string, error) {
+	query := `SELECT id, avatar_path FROM users WHERE avatar_path LIKE ?`
+	rows, err := r.db.QueryContext(ctx, query, prefix+"%")
+	if err != nil {
+		return nil, fmt.Errorf("listing legacy avatar paths: %w", err)
+	}
+	defer rows.Close()
+
+	result := make(map[string]string)
+	for rows.Next() {
+		var id string
+		var avatarPath sql.NullString
+		if err := rows.Scan(&id, &avatarPath); err != nil {
+			return nil, fmt.Errorf("scanning legacy avatar path row: %w", err)
+		}
+		if avatarPath.Valid {
+			result[id] = avatarPath.String
+		}
+	}
+	return result, rows.Err()
 }
 
 // --- Password Reset ---

@@ -4,10 +4,17 @@
 // whose campaign_id has been nulled — by a partial or unwired cleanup on
 // campaign delete, an import, or a restored backup — must deny like any
 // other unknown file, not fall through to "public".
+//
+// An avatar is a narrower case than a backdrop: it is public to any
+// signed-in user but denied to an anonymous visitor (#730 decision 2).
 
 package media
 
-import "testing"
+import (
+	"testing"
+
+	"github.com/keyxmakerx/chronicle/internal/plugins/auth"
+)
 
 // nilCampaignMediaFile returns a MediaFile with no campaign, tagged with
 // the given usage type — the shape both an intentional avatar/backdrop
@@ -19,13 +26,21 @@ func nilCampaignMediaFile(usageType string) *MediaFile {
 	}
 }
 
-func TestCheckMediaAccess_NilCampaign_Avatar_Allowed(t *testing.T) {
+func TestCheckMediaAccess_NilCampaign_Avatar_SignedIn_Allowed(t *testing.T) {
+	h := newTestHandler("test-secret", nil)
+	c := newAccessTestContext(nil, &auth.Session{UserID: "user-1"})
+
+	if err := h.checkMediaAccess(c, nilCampaignMediaFile(UsageAvatar), false, ""); err != nil {
+		t.Errorf("a signed-in viewer must be able to see a profile picture; got %v", err)
+	}
+}
+
+func TestCheckMediaAccess_NilCampaign_Avatar_Anonymous_Denied(t *testing.T) {
 	h := newTestHandler("test-secret", nil)
 	c := newAccessTestContext(nil, nil)
 
-	if err := h.checkMediaAccess(c, nilCampaignMediaFile(UsageAvatar), false, ""); err != nil {
-		t.Errorf("avatar upload with no campaign must stay public; got %v", err)
-	}
+	err := h.checkMediaAccess(c, nilCampaignMediaFile(UsageAvatar), false, "")
+	mustDeny(t, err, "an anonymous visitor must not see a profile picture")
 }
 
 func TestCheckMediaAccess_NilCampaign_Backdrop_Allowed(t *testing.T) {

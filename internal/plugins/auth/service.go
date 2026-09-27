@@ -61,6 +61,17 @@ type MailSender interface {
 	IsConfigured(ctx context.Context) bool
 }
 
+// AvatarUploader stores a profile picture through the media pipeline's
+// Upload (magic-byte validation, EXIF stripping/re-encode, quota and disk
+// checks, 0640 permissions — see #610). Implemented by an adapter over
+// media.MediaService in routes.go, keeping auth decoupled from the media
+// plugin the same way MediaCampaignVerifier keeps entities decoupled from it.
+// Returns the stored file's media id (persisted to users.avatar_path) and a
+// URL ready for immediate display (signed if URL signing is configured).
+type AvatarUploader interface {
+	UploadAvatar(ctx context.Context, userID string, fileBytes []byte, originalName, mimeType string) (mediaID, url string, err error)
+}
+
 // AuthService defines the business logic contract for authentication.
 // Handlers call these methods -- they never touch the repository directly.
 type AuthService interface {
@@ -86,6 +97,19 @@ type AuthService interface {
 	UpdateDisplayName(ctx context.Context, userID, displayName string) error
 	UpdateAvatarPath(ctx context.Context, userID string, avatarPath *string) error
 	ChangePassword(ctx context.Context, userID, currentPassword, newPassword string) error
+
+	// UploadAvatar stores fileBytes as userID's avatar through the wired
+	// AvatarUploader (media.MediaService, usage_type "avatar", no
+	// campaign — see #610/#733 M0) and persists the returned media id to
+	// users.avatar_path. Returns apperror.NewInternal if no uploader is
+	// configured (should never happen outside a test that constructs
+	// authService directly without ConfigureAvatarUploader).
+	UploadAvatar(ctx context.Context, userID string, fileBytes []byte, originalName, mimeType string) (mediaID, url string, err error)
+
+	// ClearAvatar removes the user's avatar (sets avatar_path to NULL). A
+	// user may only clear their own avatar -- the handler binds userID from
+	// the caller's own session, never from a request parameter.
+	ClearAvatar(ctx context.Context, userID string) error
 
 	// Email change with verification.
 	RequestEmailChange(ctx context.Context, userID, newEmail, currentPassword string) error
@@ -117,6 +141,11 @@ type authService struct {
 	// absent wiring fails open rather than locking out an instance.
 	regPolicy     RegistrationPolicy
 	inviteChecker RegistrationInviteChecker
+
+	// avatarUploader routes avatar uploads through the media pipeline. Wired
+	// in routes.go after the media service exists (ConfigureAvatarUploader);
+	// nil only in a test that constructs authService directly.
+	avatarUploader AvatarUploader
 }
 
 // Registration modes. These mirror the settings plugin's canonical constants;
@@ -169,6 +198,15 @@ func ConfigureMailSender(svc AuthService, mail MailSender, baseURL string) {
 	if s, ok := svc.(*authService); ok {
 		s.mail = mail
 		s.baseURL = baseURL
+	}
+}
+
+// ConfigureAvatarUploader wires the media-backed avatar uploader into the
+// auth service. Called from routes.go once the media service exists.
+// Mirrors ConfigureMailSender.
+func ConfigureAvatarUploader(svc AuthService, uploader AvatarUploader) {
+	if s, ok := svc.(*authService); ok {
+		s.avatarUploader = uploader
 	}
 }
 
@@ -518,6 +556,7 @@ func (s *authService) revalidateSession(ctx context.Context, key, token string, 
 	session.IsAdmin = user.IsAdmin
 	session.Email = user.Email
 	session.Name = user.DisplayName
+	session.AvatarPath = derefOrEmpty(user.AvatarPath)
 	session.LastValidated = time.Now().UTC()
 
 	// Write the updated session back to Redis, preserving the original TTL
@@ -583,6 +622,7 @@ func (s *authService) createSession(ctx context.Context, user *User, ip, userAge
 		Email:         user.Email,
 		Name:          user.DisplayName,
 		IsAdmin:       user.IsAdmin,
+		AvatarPath:    derefOrEmpty(user.AvatarPath),
 		IP:            ip,
 		UserAgent:     userAgent,
 		CreatedAt:     now,
@@ -903,6 +943,29 @@ func (s *authService) UpdateAvatarPath(ctx context.Context, userID string, avata
 	return s.repo.UpdateAvatarPath(ctx, userID, avatarPath)
 }
 
+// UploadAvatar stores fileBytes through the wired media pipeline and
+// records the resulting media id as the user's avatar.
+func (s *authService) UploadAvatar(ctx context.Context, userID string, fileBytes []byte, originalName, mimeType string) (string, string, error) {
+	if s.avatarUploader == nil {
+		return "", "", apperror.NewInternal(fmt.Errorf("avatar uploader not configured"))
+	}
+	mediaID, url, err := s.avatarUploader.UploadAvatar(ctx, userID, fileBytes, originalName, mimeType)
+	if err != nil {
+		return "", "", err
+	}
+	if err := s.repo.UpdateAvatarPath(ctx, userID, &mediaID); err != nil {
+		return "", "", apperror.NewInternal(fmt.Errorf("updating avatar path: %w", err))
+	}
+	return mediaID, url, nil
+}
+
+// ClearAvatar removes the user's avatar. The underlying media file is left
+// in place (same as replacing an avatar with a new upload) -- only the
+// column pointing to it is cleared.
+func (s *authService) ClearAvatar(ctx context.Context, userID string) error {
+	return s.repo.UpdateAvatarPath(ctx, userID, nil)
+}
+
 // ChangePassword verifies the current password and sets a new one.
 func (s *authService) ChangePassword(ctx context.Context, userID, currentPassword, newPassword string) error {
 	user, err := s.repo.FindByID(ctx, userID)
@@ -1173,6 +1236,14 @@ func generateSessionToken() (string, error) {
 		return "", err
 	}
 	return hex.EncodeToString(b), nil
+}
+
+// derefOrEmpty returns *s, or "" if s is nil.
+func derefOrEmpty(s *string) string {
+	if s == nil {
+		return ""
+	}
+	return *s
 }
 
 // isNotFound checks if an error is an apperror.NotFound type.

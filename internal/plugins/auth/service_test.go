@@ -30,6 +30,7 @@ type mockUserRepo struct {
 	countUsersFn         func(ctx context.Context) (int, error)
 	countAdminsFn        func(ctx context.Context) (int, error)
 	updateIsDisabledFn   func(ctx context.Context, id string, isDisabled bool) error
+	updateAvatarPathFn   func(ctx context.Context, userID string, avatarPath *string) error
 }
 
 func (m *mockUserRepo) Create(ctx context.Context, user *User) error {
@@ -139,7 +140,14 @@ func (m *mockUserRepo) UpdateDisplayName(ctx context.Context, userID, displayNam
 }
 
 func (m *mockUserRepo) UpdateAvatarPath(ctx context.Context, userID string, avatarPath *string) error {
+	if m.updateAvatarPathFn != nil {
+		return m.updateAvatarPathFn(ctx, userID, avatarPath)
+	}
 	return nil
+}
+
+func (m *mockUserRepo) ListLegacyAvatarPaths(ctx context.Context, prefix string) (map[string]string, error) {
+	return nil, nil
 }
 
 func (m *mockUserRepo) SetPendingEmail(ctx context.Context, userID, pendingEmail, tokenHash string, expiresAt time.Time) error {

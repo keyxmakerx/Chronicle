@@ -331,10 +331,20 @@ func (h *Handler) checkMediaAccess(c echo.Context, file *MediaFile, isThumb bool
 	// column went NULL. Deny exactly like an unknown id, so an orphaned
 	// row isn't distinguishable from one that was never there.
 	if file.CampaignID == nil {
-		if file.UsageType == UsageAvatar || file.UsageType == UsageBackdrop {
+		switch file.UsageType {
+		case UsageAvatar:
+			// #730 decision 2: a profile picture is visible to any
+			// signed-in user, but not to an anonymous visitor — unlike a
+			// backdrop (below), which has no owner to protect.
+			if auth.GetUserID(c) == "" {
+				return apperror.NewNotFound("media file not found")
+			}
 			return nil
+		case UsageBackdrop:
+			return nil
+		default:
+			return apperror.NewNotFound("media file not found")
 		}
-		return apperror.NewNotFound("media file not found")
 	}
 
 	fileID := file.ID

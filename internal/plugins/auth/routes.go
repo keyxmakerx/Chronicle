@@ -36,6 +36,7 @@ func RegisterRoutes(e *echo.Echo, h *Handler) {
 	e.PUT("/account/password", h.ChangePasswordAPI, RequireAuth(h.service))
 	e.PUT("/account/display-name", h.UpdateDisplayNameAPI, RequireAuth(h.service))
 	e.POST("/account/avatar", h.UploadAvatarAPI, RequireAuth(h.service))
+	e.DELETE("/account/avatar", h.ClearAvatarAPI, RequireAuth(h.service))
 
 	// Email change (requires auth for request, public for verification link).
 	e.PUT("/account/email", h.RequestEmailChangeAPI, RequireAuth(h.service))
