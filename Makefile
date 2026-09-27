@@ -128,6 +128,7 @@ verify: ## Run the full local CI sequence (templ → build → vet → guards �
 	@echo "==> guard: plugin-isolation";       ./tools/check-plugin-isolation.sh
 	@echo "==> guard: migration-immutability"; ./tools/check-migration-immutability.sh
 	@echo "==> guard: v2-motion-discipline";   ./tools/check-v2-motion-discipline.sh
+	@echo "==> guard: page-scripts";           ./tools/check-page-scripts.sh
 	@echo "==> guard: decision-citations";     ./tools/check-decision-citations.sh
 	@echo "==> guard: widget-mounts";          ./tools/check-widget-mounts.sh
 	@echo "==> guard: customize-discipline";   ./tools/check-customize-discipline.sh
