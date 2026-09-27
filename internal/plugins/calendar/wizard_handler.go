@@ -1,19 +1,22 @@
 // Package calendar — wizard_handler.go serves the new-calendar wizard's
-// steps (Part B, #764): Start, the preset picker + review, and the import
-// drop zone + review. Every route is Owner only (routes.go), matching the
-// rest of this plugin's calendar-structure mutation routes.
+// steps: Start, the preset picker + review, and the import drop zone +
+// review. Every route is Owner only (routes.go), matching the rest of this
+// plugin's calendar-structure mutation routes.
 //
-// There is no server-side draft session for the wizard (#764's own scope
-// note): a preset's step-to-step state is just re-fetched each time
-// (PreviewPreset is a pure, deterministic read), and an uploaded import's
-// parsed *ImportResult is round-tripped through a hidden form field between
-// the import-preview and review/create steps, since the browser already
-// holds the original file and re-uploading it a second time would need
-// larger form plumbing for no benefit.
+// There is no server-side draft session for the wizard: a preset's
+// step-to-step state is just re-fetched each time (PreviewPreset is a pure,
+// deterministic read), and an uploaded import's parsed *ImportResult is
+// round-tripped through a hidden form field between the import-preview and
+// review/create steps, since the browser already holds the original file
+// and re-uploading it a second time would need larger form plumbing for no
+// benefit. Because that field is client-submitted, WizardCreate re-validates
+// it (parseWizardImportJSON) rather than trusting it outright — see that
+// function's own doc comment.
 package calendar
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
 	"net/url"
@@ -134,6 +137,33 @@ func bindWizardCreateForm(c echo.Context) wizardCreateForm {
 	}
 }
 
+// parseWizardImportJSON re-derives an *ImportResult from the Review step's
+// round-tripped import_json field. That field is ordinary client-submitted
+// form data — a hidden input the browser sends back, not a value this
+// handler ever re-reads from the original upload — so it is held to the
+// same two checks an upload itself goes through rather than trusted as
+// already-validated: the size cap every other import route enforces via
+// readCalendarImportFile (isCalendarImportPath in internal/app/app.go skips
+// the global body-limit middleware for this route specifically because it
+// assumes this check exists), and clampCalendarStructure's structural
+// bounds, which are otherwise only reached by parsing raw bytes through
+// DetectAndParse. A tampered or hand-crafted import_json — more months than
+// any calendar needs, a day count past what a month can hold — fails here
+// exactly as it would have failed the upload it claims to be.
+func parseWizardImportJSON(raw string) (*ImportResult, error) {
+	if len(raw) > maxCalendarImportSize {
+		return nil, fmt.Errorf("import data too large, maximum %d MB", maxCalendarImportSize/(1024*1024))
+	}
+	var parsed ImportResult
+	if err := json.Unmarshal([]byte(raw), &parsed); err != nil {
+		return nil, errors.New("the import couldn't be read back — try uploading the file again")
+	}
+	if err := clampCalendarStructure(&parsed); err != nil {
+		return nil, err
+	}
+	return &parsed, nil
+}
+
 // WizardCreate resolves the review step's source (a preset re-fetched by
 // name, or an uploaded file's ImportResult carried forward as JSON), applies
 // the confirmed name/date, and creates the calendar. On success it redirects
@@ -150,7 +180,7 @@ func (h *Handler) WizardCreate(c echo.Context) error {
 	form := bindWizardCreateForm(c)
 
 	var ir *ImportResult
-	backURL := fmt.Sprintf("/campaigns/%s/calendars/wizard", cc.Campaign.ID)
+	var backURL string
 	switch form.Source {
 	case "preset":
 		backURL = fmt.Sprintf("/campaigns/%s/calendars/wizard/presets", cc.Campaign.ID)
@@ -161,11 +191,11 @@ func (h *Handler) WizardCreate(c echo.Context) error {
 		ir = fetched
 	case "import":
 		backURL = fmt.Sprintf("/campaigns/%s/calendars/wizard/import", cc.Campaign.ID)
-		var parsed ImportResult
-		if err := json.Unmarshal([]byte(form.ImportJSON), &parsed); err != nil {
-			return apperror.NewBadRequest("the import couldn't be read back — try uploading the file again")
+		parsed, err := parseWizardImportJSON(form.ImportJSON)
+		if err != nil {
+			return apperror.NewBadRequest(err.Error())
 		}
-		ir = &parsed
+		ir = parsed
 	default:
 		return apperror.NewBadRequest("source must be \"preset\" or \"import\"")
 	}
