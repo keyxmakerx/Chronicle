@@ -100,6 +100,10 @@ func TestReconcileLegacyAvatarPaths(t *testing.T) {
 		})
 	}
 
+	if _, err := os.Stat(filepath.Join(dir, "present.jpg")); !os.IsNotExist(err) {
+		t.Errorf("a successfully migrated file must be removed from the legacy directory (true move, not a copy); stat err = %v", err)
+	}
+
 	for _, userID := range []string{"user-already-media"} {
 		for _, called := range uploader.calledForUser {
 			if called == userID {
@@ -167,3 +171,74 @@ func TestReconcileLegacyAvatarPaths_UploadFailure_LeavesRowUntouched(t *testing.
 type testUploadErr struct{}
 
 func (*testUploadErr) Error() string { return "upload failed" }
+
+// TestReconcileLegacyAvatarPaths_MalformedPath_Cleared pins the path-
+// traversal guard: any avatar_path value that doesn't reduce to a single,
+// same-directory filename is treated as unrecoverable and cleared, exactly
+// like a missing file, rather than being joined into avatarsDir unchecked.
+func TestReconcileLegacyAvatarPaths_MalformedPath_Cleared(t *testing.T) {
+	dir := t.TempDir()
+
+	tests := []struct {
+		name  string
+		value string
+	}{
+		{"empty filename", "/uploads/avatars/"},
+		{"parent traversal", "/uploads/avatars/../../etc/passwd"},
+		{"nested path", "/uploads/avatars/sub/dir.jpg"},
+		{"backslash", "/uploads/avatars/a\\b.jpg"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			repo := &fakeLegacyAvatarRepo{avatarPaths: map[string]string{"user-1": tt.value}}
+			uploader := &fakeAvatarUploaderForReconciler{}
+
+			moved, cleared, err := ReconcileLegacyAvatarPaths(context.Background(), repo, uploader, dir)
+			if err != nil {
+				t.Fatalf("ReconcileLegacyAvatarPaths: %v", err)
+			}
+			if moved != 0 || cleared != 1 {
+				t.Errorf("moved=%d cleared=%d, want 0/1 for a malformed value", moved, cleared)
+			}
+			if _, ok := repo.avatarPaths["user-1"]; ok {
+				t.Errorf("avatar_path must be cleared for a malformed value %q", tt.value)
+			}
+			if len(uploader.calledForUser) != 0 {
+				t.Errorf("uploader must never be called for a malformed value %q", tt.value)
+			}
+		})
+	}
+}
+
+// TestReconcileLegacyAvatarPaths_UnreadableFile_LeavesRowUntouched pins that
+// a read failure OTHER than "file does not exist" (permissions, I/O, the
+// path being a directory) leaves the row untouched rather than being
+// treated like a missing file — clearing it would be a permanent,
+// un-retriable loss for what may be a transient condition. A directory in
+// place of the expected file reproduces such an error portably (root can
+// still read a permission-denied file, so chmod alone won't trigger this).
+func TestReconcileLegacyAvatarPaths_UnreadableFile_LeavesRowUntouched(t *testing.T) {
+	dir := t.TempDir()
+	if err := os.Mkdir(filepath.Join(dir, "present.jpg"), 0o755); err != nil {
+		t.Fatalf("seeding a directory in place of the avatar file: %v", err)
+	}
+
+	repo := &fakeLegacyAvatarRepo{avatarPaths: map[string]string{
+		"user-1": "/uploads/avatars/present.jpg",
+	}}
+	uploader := &fakeAvatarUploaderForReconciler{}
+
+	moved, cleared, err := ReconcileLegacyAvatarPaths(context.Background(), repo, uploader, dir)
+	if err != nil {
+		t.Fatalf("ReconcileLegacyAvatarPaths: %v", err)
+	}
+	if moved != 0 || cleared != 0 {
+		t.Errorf("moved=%d cleared=%d, want 0/0 for a non-NotExist read error", moved, cleared)
+	}
+	if repo.avatarPaths["user-1"] != "/uploads/avatars/present.jpg" {
+		t.Errorf("row must be left untouched after a non-NotExist read error; got %q", repo.avatarPaths["user-1"])
+	}
+	if len(uploader.calledForUser) != 0 {
+		t.Errorf("uploader must never be called when the file can't be read")
+	}
+}

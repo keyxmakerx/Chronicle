@@ -62,8 +62,10 @@ type MailSender interface {
 }
 
 // AvatarUploader stores a profile picture through the media pipeline's
-// Upload (magic-byte validation, EXIF stripping/re-encode, quota and disk
-// checks, 0640 permissions — see #610). Implemented by an adapter over
+// Upload (magic-byte validation, EXIF stripping/re-encode, the per-file
+// size limit, a disk-space check, 0640 permissions — see #610; NOT the
+// per-campaign storage/file-count quota, since an avatar has no campaign).
+// Implemented by an adapter over
 // media.MediaService in routes.go, keeping auth decoupled from the media
 // plugin the same way MediaCampaignVerifier keeps entities decoupled from it.
 // Returns the stored file's media id (persisted to users.avatar_path) and a
@@ -956,6 +958,7 @@ func (s *authService) UploadAvatar(ctx context.Context, userID string, fileBytes
 	if err := s.repo.UpdateAvatarPath(ctx, userID, &mediaID); err != nil {
 		return "", "", apperror.NewInternal(fmt.Errorf("updating avatar path: %w", err))
 	}
+	s.refreshSessionAvatar(ctx, userID, &mediaID)
 	return mediaID, url, nil
 }
 
@@ -963,7 +966,68 @@ func (s *authService) UploadAvatar(ctx context.Context, userID string, fileBytes
 // in place (same as replacing an avatar with a new upload) -- only the
 // column pointing to it is cleared.
 func (s *authService) ClearAvatar(ctx context.Context, userID string) error {
-	return s.repo.UpdateAvatarPath(ctx, userID, nil)
+	if err := s.repo.UpdateAvatarPath(ctx, userID, nil); err != nil {
+		return err
+	}
+	s.refreshSessionAvatar(ctx, userID, nil)
+	return nil
+}
+
+// refreshSessionAvatar patches AvatarPath on every one of userID's active
+// sessions in Redis, preserving each session's remaining TTL. Session.
+// AvatarPath is otherwise only refreshed by the periodic revalidation in
+// ValidateSession (like Name/Email), which can lag up to
+// sessionRevalidateInterval; calling this after an upload/clear makes the
+// top bar reflect the change on the very next page render instead. Nil-safe
+// and best-effort: a failure here costs nothing but that same staleness
+// window, never the write to avatar_path (already committed by the caller).
+func (s *authService) refreshSessionAvatar(ctx context.Context, userID string, avatarPath *string) {
+	if s.redis == nil {
+		return
+	}
+	newPath := ""
+	if avatarPath != nil {
+		newPath = *avatarPath
+	}
+
+	userSetKey := userSessionsKeyPrefix + userID
+	tokens, err := s.redis.SMembers(ctx, userSetKey).Result()
+	if err != nil {
+		slog.Warn("auth: failed to list sessions for avatar refresh; top bar will catch up at the next revalidation",
+			slog.String("user_id", userID), slog.Any("error", err))
+		return
+	}
+
+	for _, token := range tokens {
+		key := sessionKeyPrefix + token
+		data, err := s.redis.Get(ctx, key).Bytes()
+		if err != nil {
+			continue // Expired between SMembers and Get.
+		}
+		var session Session
+		if err := json.Unmarshal(data, &session); err != nil {
+			continue
+		}
+		if session.AvatarPath == newPath {
+			continue
+		}
+		session.AvatarPath = newPath
+
+		// Preserve the session's own remaining TTL -- this must never
+		// extend (or accidentally shorten) how long the session lives.
+		ttl, err := s.redis.TTL(ctx, key).Result()
+		if err != nil || ttl <= 0 {
+			continue
+		}
+		updated, err := json.Marshal(session)
+		if err != nil {
+			continue
+		}
+		if err := s.redis.Set(ctx, key, updated, ttl).Err(); err != nil {
+			slog.Warn("auth: failed to write avatar-refreshed session",
+				slog.String("user_id", userID), slog.Any("error", err))
+		}
+	}
 }
 
 // ChangePassword verifies the current password and sets a new one.

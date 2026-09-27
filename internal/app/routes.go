@@ -1885,10 +1885,12 @@ func (a *App) RegisterRoutes() {
 
 	// Avatars join the media pipeline (#610, #733 M0): the auth plugin's
 	// upload handler no longer writes to disk itself, so it gets the same
-	// magic-byte validation, EXIF stripping/re-encode, quota and disk-space
-	// checks every other upload gets. Wired here (rather than at
-	// auth.NewHandler) because it needs mediaService, and for a
-	// display-ready URL, the same signer media's own Upload handler uses.
+	// magic-byte validation, EXIF stripping/re-encode and disk-space checks
+	// every other upload gets (not the per-campaign storage quota — an
+	// avatar has no campaign; auth/routes.go rate-limits the route
+	// instead). Wired here (rather than at auth.NewHandler) because it
+	// needs mediaService, and for a display-ready URL, the same signer
+	// media's own Upload handler uses.
 	avatarUploader := &avatarUploaderAdapter{svc: mediaService, signer: urlSigner}
 	auth.ConfigureAvatarUploader(authService, avatarUploader)
 

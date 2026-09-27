@@ -2,7 +2,9 @@ package auth
 
 import (
 	"context"
+	"errors"
 	"fmt"
+	"io/fs"
 	"log/slog"
 	"net/http"
 	"os"
@@ -63,6 +65,17 @@ func ReconcileLegacyAvatarPaths(ctx context.Context, repo LegacyAvatarRepository
 		fullPath := filepath.Join(avatarsDir, filename)
 		data, readErr := os.ReadFile(fullPath)
 		if readErr != nil {
+			if !errors.Is(readErr, fs.ErrNotExist) {
+				// Something other than "file is gone" (permissions, I/O,
+				// the path being a directory): the file may still be
+				// there, so leave the row untouched for a later boot to
+				// retry, exactly like a failed upload below. Clearing here
+				// would be a permanent, un-retriable data loss for a
+				// transient condition.
+				slog.Error("auth: failed to read a legacy avatar file; leaving avatar_path untouched for a later boot to retry",
+					slog.String("user_id", userID), slog.String("old_value", oldPath), slog.Any("error", readErr))
+				continue
+			}
 			// The common case: the file lived outside the Docker volume and
 			// is already gone. Clear the column so the default avatar shows
 			// instead of a permanent 404.
@@ -86,6 +99,15 @@ func ReconcileLegacyAvatarPaths(ctx context.Context, repo LegacyAvatarRepository
 		}
 		if err := repo.UpdateAvatarPath(ctx, userID, &mediaID); err != nil {
 			return moved, cleared, fmt.Errorf("auth.ReconcileLegacyAvatarPaths: updating avatar_path for user %s: %w", userID, err)
+		}
+		// The column now points at the media store's own copy; remove the
+		// legacy file so it doesn't sit in the volume forever. Best-effort:
+		// the row is already correctly migrated either way, and admin
+		// hygiene's orphan scan would eventually need to cover this
+		// directory too if it didn't run here.
+		if rmErr := os.Remove(fullPath); rmErr != nil && !errors.Is(rmErr, fs.ErrNotExist) {
+			slog.Warn("auth: migrated a legacy avatar file but could not remove the original",
+				slog.String("user_id", userID), slog.String("path", fullPath), slog.Any("error", rmErr))
 		}
 		slog.Info("auth: migrated a legacy avatar file into the media store",
 			slog.String("user_id", userID), slog.String("old_value", oldPath), slog.String("media_id", mediaID))

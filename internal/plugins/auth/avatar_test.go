@@ -8,6 +8,7 @@ package auth
 import (
 	"bytes"
 	"context"
+	"encoding/json"
 	"errors"
 	"mime/multipart"
 	"net/http"
@@ -142,6 +143,70 @@ func TestAuthService_ClearAvatar(t *testing.T) {
 	if clearedPath != nil {
 		t.Errorf("ClearAvatar must write a nil avatar_path, got %v", clearedPath)
 	}
+}
+
+// TestAuthService_UploadAvatar_RefreshesActiveSessions pins that a fresh
+// upload is visible in the top bar immediately (via the cached Session, see
+// layouts.GetUserAvatarPath), not only after the periodic revalidation.
+func TestAuthService_UploadAvatar_RefreshesActiveSessions(t *testing.T) {
+	repo := &mockUserRepo{}
+	svc, mr := newTestAuthServiceWithRedis(t, repo)
+	uploader := &fakeAvatarUploader{mediaID: "media-1", url: "/media/media-1"}
+	ConfigureAvatarUploader(svc, uploader)
+
+	token := seedSession(t, svc, mr, Session{UserID: "user-1", Name: "Alice"})
+	if err := svc.redis.SAdd(context.Background(), userSessionsKeyPrefix+"user-1", token).Err(); err != nil {
+		t.Fatalf("seeding user session set: %v", err)
+	}
+
+	if _, _, err := svc.UploadAvatar(context.Background(), "user-1", []byte("bytes"), "photo.jpg", "image/jpeg"); err != nil {
+		t.Fatalf("UploadAvatar: %v", err)
+	}
+
+	session := readSession(t, svc, token)
+	if session.AvatarPath != "media-1" {
+		t.Errorf("session.AvatarPath = %q, want media-1", session.AvatarPath)
+	}
+	if session.Name != "Alice" {
+		t.Errorf("refreshing the avatar must not disturb other session fields; Name = %q", session.Name)
+	}
+}
+
+// TestAuthService_ClearAvatar_RefreshesActiveSessions is UploadAvatar's
+// counterpart for removal: the cached session must stop pointing at the
+// avatar the moment it's cleared.
+func TestAuthService_ClearAvatar_RefreshesActiveSessions(t *testing.T) {
+	repo := &mockUserRepo{}
+	svc, mr := newTestAuthServiceWithRedis(t, repo)
+
+	token := seedSession(t, svc, mr, Session{UserID: "user-1", AvatarPath: "old-media-id"})
+	if err := svc.redis.SAdd(context.Background(), userSessionsKeyPrefix+"user-1", token).Err(); err != nil {
+		t.Fatalf("seeding user session set: %v", err)
+	}
+
+	if err := svc.ClearAvatar(context.Background(), "user-1"); err != nil {
+		t.Fatalf("ClearAvatar: %v", err)
+	}
+
+	session := readSession(t, svc, token)
+	if session.AvatarPath != "" {
+		t.Errorf("session.AvatarPath = %q, want cleared to empty", session.AvatarPath)
+	}
+}
+
+// readSession fetches and unmarshals a session directly from the service's
+// Redis client, for asserting on fields a refresh touched.
+func readSession(t *testing.T, svc *authService, token string) Session {
+	t.Helper()
+	data, err := svc.redis.Get(context.Background(), sessionKeyPrefix+token).Bytes()
+	if err != nil {
+		t.Fatalf("reading session: %v", err)
+	}
+	var session Session
+	if err := json.Unmarshal(data, &session); err != nil {
+		t.Fatalf("unmarshaling session: %v", err)
+	}
+	return session
 }
 
 // stubAvatarAuthService embeds a nil AuthService so only the two avatar

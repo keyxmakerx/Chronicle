@@ -11,6 +11,7 @@
 package media
 
 import (
+	"strings"
 	"testing"
 
 	"github.com/keyxmakerx/chronicle/internal/plugins/auth"
@@ -66,4 +67,40 @@ func TestCheckMediaAccess_NilCampaign_EntityImage_Denied(t *testing.T) {
 
 	err := h.checkMediaAccess(c, nilCampaignMediaFile(UsageEntityImage), false, "")
 	mustDeny(t, err, "orphaned entity image (nil campaign_id) must not become public")
+}
+
+// TestSetSecurityHeaders_Avatar_NotPubliclyCacheable pins that an avatar
+// response is never marked "public" for caching purposes, even though
+// checkMediaAccess allows it (to a signed-in viewer). A shared/proxy cache
+// that treated it as public could serve a cached response back to a later
+// anonymous request without that request ever reaching checkMediaAccess —
+// silently undoing the sign-in gate for anyone sharing that cache.
+func TestSetSecurityHeaders_Avatar_NotPubliclyCacheable(t *testing.T) {
+	h := newTestHandler("test-secret", nil)
+	c := newAccessTestContext(nil, nil)
+
+	h.setSecurityHeaders(c, nilCampaignMediaFile(UsageAvatar))
+
+	got := c.Response().Header().Get("Cache-Control")
+	if strings.Contains(got, "public") {
+		t.Errorf("avatar Cache-Control = %q, must not say public", got)
+	}
+	if !strings.Contains(got, "private") {
+		t.Errorf("avatar Cache-Control = %q, want it to say private", got)
+	}
+}
+
+// TestSetSecurityHeaders_Backdrop_StaysPubliclyCacheable pins that this
+// change is scoped to avatars only — a backdrop (still unconditionally
+// public in checkMediaAccess) keeps its aggressive public caching.
+func TestSetSecurityHeaders_Backdrop_StaysPubliclyCacheable(t *testing.T) {
+	h := newTestHandler("test-secret", nil)
+	c := newAccessTestContext(nil, nil)
+
+	h.setSecurityHeaders(c, nilCampaignMediaFile(UsageBackdrop))
+
+	got := c.Response().Header().Get("Cache-Control")
+	if !strings.Contains(got, "public") {
+		t.Errorf("backdrop Cache-Control = %q, want it to stay public", got)
+	}
 }

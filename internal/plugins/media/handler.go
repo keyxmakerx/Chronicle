@@ -648,10 +648,19 @@ func (h *Handler) setSecurityHeaders(c echo.Context, file *MediaFile) {
 	resp.Header().Set("Referrer-Policy", "no-referrer")
 
 	// Cache control based on campaign privacy.
-	if file.CampaignIsPublic != nil && !*file.CampaignIsPublic {
+	switch {
+	case file.CampaignIsPublic != nil && !*file.CampaignIsPublic:
 		// Private campaign media must not be cached by shared proxies.
 		resp.Header().Set("Cache-Control", "private, no-store, max-age=0")
-	} else {
+	case file.CampaignID == nil && file.UsageType == UsageAvatar:
+		// An avatar is gated on sign-in (#730 decision 2), not campaign
+		// membership — checkMediaAccess denies an anonymous request for it.
+		// A shared/proxy cache (nginx, a CDN, a corporate proxy) must not be
+		// allowed to serve that same URL back to a later anonymous request
+		// without ever reaching checkMediaAccess again; "public" here would
+		// undo the sign-in gate for anyone sharing that cache.
+		resp.Header().Set("Cache-Control", "private, max-age=31536000, immutable")
+	default:
 		// Public/orphan media: cache aggressively (UUID filenames are immutable).
 		resp.Header().Set("Cache-Control", "public, max-age=31536000, immutable")
 	}

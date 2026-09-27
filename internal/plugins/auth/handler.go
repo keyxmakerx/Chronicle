@@ -438,8 +438,11 @@ const avatarMaxUploadBytes = 2 * 1024 * 1024
 // UploadAvatarAPI handles avatar image upload for the current user
 // (POST /account/avatar). Delegates entirely to mediaService.Upload (via
 // AuthService.UploadAvatar): magic-byte validation, EXIF stripping/
-// re-encode, quota, disk-space check and 0640 permissions all happen there
-// — this handler only binds the multipart form and renders the result.
+// re-encode, the per-file size limit, disk-space check and 0640
+// permissions all happen there — this handler only binds the multipart
+// form and renders the result. The per-campaign storage/file-count quota
+// does NOT apply (there is no campaign to scope it to); the route-level
+// rate limit (routes.go) is the only throttle on repeated avatar uploads.
 func (h *Handler) UploadAvatarAPI(c echo.Context) error {
 	userID := GetUserID(c)
 	if userID == "" {
