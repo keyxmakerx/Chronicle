@@ -1,11 +1,11 @@
 package sessions
 
-// Tests for the two most novel-and-risky pieces of the game-night RSVP build
-// (issue #741 Part C): that a repeating game night keeps one answer PER
-// NIGHT rather than one shared answer for the whole series, and that the
-// "suggest another time" email link validates the suggestion BEFORE
-// consuming its single-use token (the historical bug: a bad submission burned
-// the link with nothing to show for it).
+// Tests for the two most novel-and-risky pieces of game-night RSVP (issue
+// #741): that a repeating game night keeps one answer PER NIGHT rather than
+// one shared answer for the whole series, and that the "suggest another
+// time" email link validates the suggestion BEFORE consuming its single-use
+// token, so a rejected submission never burns the link with nothing to show
+// for it.
 
 import (
 	"context"

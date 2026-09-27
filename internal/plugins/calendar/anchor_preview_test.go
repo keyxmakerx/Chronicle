@@ -1,8 +1,8 @@
 // anchor_preview_test.go: table-driven tests for CalendarService.PreviewAnchorMove
 // — the read-only warning-box preview for moving a calendar's real-date
-// anchor (see service.go's "Real-date anchor (Part C: preview only)"
-// section). Uses a fake GameNightsAffectedByAnchorMove, mirroring this
-// file's other fake-repo/fake-gate patterns (mocks_test.go,
+// anchor (see service.go's "Real-date anchor (preview only)" section). Uses
+// a fake GameNightsAffectedByAnchorMove, mirroring this file's other
+// fake-repo/fake-gate patterns (mocks_test.go,
 // service_integration_test.go's testEntityGate).
 package calendar
 

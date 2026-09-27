@@ -430,11 +430,11 @@ func (h *Handler) RSVPSession(c echo.Context) error {
 	}
 
 	status := c.FormValue("status")
-	// note/occurrenceDate are an OPT-IN extension (Part C: game-night RSVP):
-	// a caller that never sends them keeps hitting the exact old path
-	// (UpdateRSVP, session_attendees, unchanged for every existing session,
-	// recurring or not). Only a caller that explicitly sends one of them
-	// engages UpdateRSVPDetailed, so no shipped caller's behavior changes.
+	// note/occurrenceDate are an OPT-IN extension: a caller that never sends
+	// them keeps hitting the exact old path (UpdateRSVP, session_attendees,
+	// unchanged for every existing session, recurring or not). Only a caller
+	// that explicitly sends one of them engages UpdateRSVPDetailed, so no
+	// shipped caller's behavior changes.
 	var note patch.Field[string]
 	var occurrenceDate *string
 	if status == "" {

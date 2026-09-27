@@ -638,7 +638,7 @@ func (h *Handler) DeleteEraAPI(c echo.Context) error {
 	return c.NoContent(http.StatusOK)
 }
 
-// --- Real-date anchor (Part C: preview only) ---
+// --- Real-date anchor (preview only) ---
 
 // AnchorPreviewAPI is a READ-ONLY preview of moving the calendar's real-date
 // anchor: it writes nothing, and only reports the day shift + up to three

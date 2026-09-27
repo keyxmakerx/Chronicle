@@ -37,7 +37,7 @@ const (
 	// separate consent.
 	NotifAvailabilityNudge = "availability_nudge"
 
-	// Game-night lifecycle notifications (issue #741 Part C). Each fires only
+	// Game-night lifecycle notifications (issue #741). Each fires only
 	// to members who had already RESPONDED before the change — an untouched
 	// invite carries no expectation to notify anyone of. The event itself
 	// (needs_recheck) always fires; whether a member reads it as urgent is a

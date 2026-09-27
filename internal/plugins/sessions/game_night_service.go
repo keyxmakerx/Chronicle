@@ -1,7 +1,7 @@
 package sessions
 
-// Game-night RSVP business logic (issue #741 Part C): soft delete/restore
-// with "needs to check again" flagging, per-occurrence RSVPs on a recurring
+// Game-night RSVP business logic (issue #741): soft delete/restore with
+// "needs to check again" flagging, per-occurrence RSVPs on a recurring
 // session, the Director's own tally-exclusion switch, the "suggest another
 // time" validate-before-consume flow, and the private calendar feed.
 //

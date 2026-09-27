@@ -66,7 +66,7 @@ type mockSessionRepo struct {
 	countUnreadNotificationsFn  func(ctx context.Context, userID string) (int, error)
 	markNotificationReadFn      func(ctx context.Context, userID, notificationID string) error
 	markAllNotificationsReadFn  func(ctx context.Context, userID string) error
-	// Game-night RSVP (Part C).
+	// Game-night RSVP.
 	setAttendeeNoteFn                   func(ctx context.Context, sessionID, userID string, note *string) error
 	setAttendeeExcludedFn               func(ctx context.Context, sessionID, userID string, excluded bool) error
 	markSeriesNeedsRecheckFn            func(ctx context.Context, sessionID string) error
