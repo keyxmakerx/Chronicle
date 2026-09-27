@@ -2,8 +2,9 @@
 // MariaDB: CRUD, every structural sub-resource, tenant isolation between
 // campaigns, and cascade behavior on delete. Skipped under `-short`.
 //
-// Run with: `make test-db-up && CHRONICLE_TEST_DB_DSN='root@tcp(127.0.0.1:13306)/chronicle?parseTime=true' go test ./internal/plugins/calendar/... -run Integration`
-// or `make test-int-local`.
+// Run with: `make test-int-local`, or `make test-db-up && CHRONICLE_TEST_DB_DSN='root@tcp(127.0.0.1:13306)/' go test ./internal/plugins/calendar/... -run Integration`.
+// openTestDB (dbtest_support_test.go) creates its own scratch schema, so the
+// DSN names a server only, never a database.
 package calendar
 
 import (
