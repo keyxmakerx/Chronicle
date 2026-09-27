@@ -18,13 +18,14 @@ import "embed"
 //go:embed migrations/*.sql
 var MigrationsFS embed.FS
 
-// PluginSlug is the addon slug the calendar's routes gate on.
+// PluginSlug is the addon slug the calendar plugin gates on.
 //
-// No longer a placeholder: RegisterRoutes (routes.go, restored by #791) and
-// the entity_calendar/entity_worldstate/skybox/upcoming_events dashboard
-// blocks (internal/app/routes.go) already gate on it via
-// addons.RequireAddon. This comment used to say nothing gated on it — fixed
-// here since it was stale and actively misleading (calendar-v5 seams, #778).
+// calendar/routes.go's own RegisterRoutes gates directly on it via
+// addons.RequireAddon. The entity_calendar/entity_worldstate/skybox/
+// upcoming_events dashboard blocks (internal/app/routes.go) do not call
+// RequireAddon themselves — they register with entities.BlockRegistry,
+// passing this slug as their BlockMeta.Addon, and BlockRegistry.Render is
+// what checks it before rendering each block.
 const PluginSlug = "calendar"
 
 // WidgetTypeCalendar and WidgetTypeWorldstate are the widgetbindings widget

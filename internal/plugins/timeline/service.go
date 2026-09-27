@@ -102,10 +102,15 @@ type CalendarEventRef struct {
 // "dark means safe" reasoning the deletion commit used.
 type CalendarEventLinkLister interface {
 	// CalendarName returns calendarID's display name in campaignID, or ""
-	// if it doesn't exist — Timeline.CalendarName is display-only, never
-	// used for authorization, so a miss degrades to a blank name rather
-	// than an error.
-	CalendarName(ctx context.Context, campaignID, calendarID string) string
+	// if it doesn't exist OR role may not see it (a dm_only calendar's real
+	// name must not leak to a Player/anonymous timeline viewer through this
+	// display-only field). Never used for authorization itself, so either
+	// miss degrades to a blank name rather than an error — the same
+	// role-only viewer shape EventsByIDs below already uses (no per-request
+	// user id carried by this interface, so a per-user visibility_rules
+	// allow/deny list on the calendar itself is not evaluated here; role is
+	// enough to keep a dm_only calendar's name from a Player).
+	CalendarName(ctx context.Context, campaignID, calendarID string, role int) string
 	// EventsByIDs returns calendar_events rows for the given ids (all drawn
 	// from calendarID — a timeline links events from exactly one calendar,
 	// its own CalendarID), role-filtered (dm_only) exactly like the calendar
@@ -300,7 +305,7 @@ func (s *timelineService) GetTimelineForViewer(ctx context.Context, timelineID, 
 	if t == nil || t.GetCampaignID() != campaignID || !timelineVisibleToViewer(*t, v) {
 		return nil, apperror.NewNotFound("timeline not found")
 	}
-	s.fillCalendarName(ctx, t)
+	s.fillCalendarName(ctx, t, v)
 	return t, nil
 }
 
@@ -308,12 +313,15 @@ func (s *timelineService) GetTimelineForViewer(ctx context.Context, timelineID, 
 // reads no longer join the calendar's own `calendars` table for it (plugin
 // isolation rule 8). A no-op when the timeline has no bound calendar, or
 // when the lister is unset (never wired): CalendarName then stays "", which
-// every template already renders as "no calendar bound" rather than crashing.
-func (s *timelineService) fillCalendarName(ctx context.Context, t *Timeline) {
+// every template already renders as "no calendar bound" rather than
+// crashing. v's role gates the read (see CalendarEventLinkLister.CalendarName's
+// doc comment) — a dm_only calendar's real name must not reach a viewer who
+// couldn't otherwise see that calendar.
+func (s *timelineService) fillCalendarName(ctx context.Context, t *Timeline, v permissions.Viewer) {
 	if t == nil || !t.HasCalendar() || s.calEventLinkLister == nil {
 		return
 	}
-	t.CalendarName = s.calEventLinkLister.CalendarName(ctx, t.CampaignID, *t.CalendarID)
+	t.CalendarName = s.calEventLinkLister.CalendarName(ctx, t.CampaignID, *t.CalendarID, v.Role())
 }
 
 // ListTimelines returns all timelines for a campaign, filtered by role-based
@@ -325,7 +333,7 @@ func (s *timelineService) ListTimelines(ctx context.Context, campaignID string, 
 	}
 	timelines = filterTimelinesByUser(timelines, v)
 	for i := range timelines {
-		s.fillCalendarName(ctx, &timelines[i])
+		s.fillCalendarName(ctx, &timelines[i], v)
 	}
 	if err := s.recountEventsForViewer(ctx, timelines, v); err != nil {
 		return nil, err
@@ -408,7 +416,7 @@ func (s *timelineService) ListTimelinesForCalendar(ctx context.Context, calendar
 	}
 	timelines = filterTimelinesByUser(timelines, v)
 	for i := range timelines {
-		s.fillCalendarName(ctx, &timelines[i])
+		s.fillCalendarName(ctx, &timelines[i], v)
 	}
 	if err := s.recountEventsForViewer(ctx, timelines, v); err != nil {
 		return nil, err

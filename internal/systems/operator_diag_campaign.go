@@ -259,8 +259,11 @@ func renderCampaignSurfaces(arg string) string {
 // tracked separately). The calendar plugin's JSON API
 // (`/campaigns/:id/calendars/...`, including the upcoming-events embed
 // fragment campaign.surfaces does not list) IS gated by this setting
-// (`addons.RequireAddon`) — disabling it 403s those routes and blanks the
-// dashboard/category "Upcoming Events" cards.
+// (`addons.RequireAddon`) — disabling it 403s those routes directly. The
+// dashboard/category "Upcoming Events" cards check the same addon-enabled
+// state (and the calendar plugin's own health) before ever calling that
+// route, so a disabled addon renders their quiet "Calendar isn't enabled"
+// state rather than an hx-get that would 403 into a stuck spinner.
 func writeSurfaceGate(b *strings.Builder, f CampaignSurfaceFacts) {
 	switch {
 	case f.CalendarAddonEnabled == nil:
@@ -462,7 +465,7 @@ func writeConfigAddons(b *strings.Builder, f CampaignConfigFacts) {
 		}
 		b.WriteString("\n")
 	}
-	b.WriteString("\nA disabled `calendar` addon does not remove the three PAGE routes `campaign.surfaces` lists — they render the same rebuilding notice either way, since no calendar PAGE UI exists yet (calendar-v5 seams, #778, restored the plugin's service and JSON API, not its page). It DOES gate the calendar plugin's JSON API and dashboard/category \"Upcoming Events\" cards — see `calendar.stats` for that plugin's own counts and migration state.\n\n")
+	b.WriteString("\nA disabled `calendar` addon does not remove the three PAGE routes `campaign.surfaces` lists — they render the same rebuilding notice either way, since no calendar PAGE UI exists yet (calendar-v5 seams, #778, restored the plugin's service and JSON API, not its page). It DOES gate the calendar plugin's JSON API directly (403), and the dashboard/category \"Upcoming Events\" cards check the same addon-enabled state (and the plugin's own health) before calling that API, so they degrade to a quiet \"Calendar isn't enabled\" state instead of a stuck spinner — see `calendar.stats` for that plugin's own counts and migration state.\n\n")
 }
 
 const (
@@ -498,7 +501,7 @@ func writeConfigLayouts(b *strings.Builder, f CampaignConfigFacts) {
 		// out of scope for this pass — see #778's own priority list. Left
 		// as-is; do not assume they are still accurate without checking
 		// their own restoration status first. TODO(#778)
-		"skybox":            "the LEGACY skybox widget placement. Its canvas/particle engine and the world-state pipeline behind it were deleted in the CALV5 clean slate, so this placement renders the calendar-rebuilding notice today; the binding is kept so V5 can reclaim the seat. (Historically this was the surface that rendered the synthesized real Moon — distinct from the v4 sky band on the Bench, which was server-rendered with no JavaScript.)",
+		"skybox":            "the sky pane placement (issue #763) — renders the real sky (moons/weather/events for the resolved default calendar). (Historically this was the surface that rendered the synthesized real Moon — distinct from the v4 sky band on the Bench, which was server-rendered with no JavaScript.)",
 		"entity_worldstate": "the world-state band placement — its pipeline was deleted in the CALV5 clean slate; renders the rebuilding notice until V5.",
 		"entity_calendar":   "a calendar Block embedded on an entity page — renders the rebuilding notice until V5.",
 		// calendar_full/calendar_preview now render the real "Upcoming

@@ -96,7 +96,14 @@
 
     // Astronomy first (independent of the view's facing), so the day's
     // events can point the camera before the projection is built.
-    var astro = (cal.moons || []).filter(function (m) { return !m.hidden_from_players; }).map(function (mo) {
+    //
+    // No client-side hidden_from_players filter here: the server already
+    // strips hidden moons for a Player viewer (see filterMoonsForViewer in
+    // the calendar plugin), so re-filtering here is redundant for a Player
+    // and actively wrong for a GM — it would hide the GM's own hidden moon
+    // from the GM. The server decides what a viewer receives; this widget
+    // trusts the response as-is (CLAUDE.md).
+    var astro = (cal.moons || []).map(function (mo) {
       var m = skym.moon(mo, tCont, year, month, day, h24);
       return { mo: mo, m: m, up: m.alt > -6 * SW.D2R };
     });
@@ -226,7 +233,17 @@
   Instance.prototype.onResize = function () {
     clearTimeout(this._resizeT);
     var self = this;
-    this._resizeT = setTimeout(function () { if (self.open) self.resizeCanvas(); }, 100);
+    this._resizeT = setTimeout(function () {
+      if (!self.open) return;
+      self.resizeCanvas();
+      // Setting canvas.width/height (inside resizeCanvas, on an actual size
+      // change) clears the canvas per the HTML canvas spec. Nothing redraws
+      // it afterward unless the shared render loop happens to be running —
+      // and it only runs while a blood-moon-style overlay effect is active
+      // (see paceOf) — so a resize/rotation would otherwise leave the sky
+      // blank until the next such effect. Force one paint here instead.
+      self.render(self.reduced ? 0 : performance.now() / 1000);
+    }, 100);
   };
   Instance.prototype.resizeCanvas = function () {
     var w = this.sky.clientWidth, h = this.sky.clientHeight;

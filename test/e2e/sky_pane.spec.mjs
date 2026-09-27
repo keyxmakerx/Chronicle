@@ -55,8 +55,10 @@ const CALENDAR_ID = 'cal-1';
 // A Calendar JSON payload shaped like GET /campaigns/:id/calendars/:calid
 // (internal/plugins/calendar/model.go's Calendar, Month, Moon, Weather json
 // tags). current_month=2 (1-indexed) lands inside the 3-month year below.
-function calendarFixture() {
-  return {
+// `overrides` is shallow-merged in last, so a test can swap out e.g. `moons`
+// wholesale (a hidden-moon fixture) without repeating the rest of the shape.
+function calendarFixture(overrides) {
+  return Object.assign({
     id: CALENDAR_ID,
     campaign_id: CAMPAIGN_ID,
     mode: 'fantasy',
@@ -95,7 +97,7 @@ function calendarFixture() {
       id: 1, calendar_id: CALENDAR_ID, preset_id: 'clear', preset_label: 'Clear skies',
       icon: 'clear', color: '#ffffff', updated_at: '2024-01-01T00:00:00Z',
     },
-  };
+  }, overrides);
 }
 
 // One event today with a moon-night payload (a harvest moon on Luna), so the
@@ -194,7 +196,7 @@ function jsContentType(path) {
 // installRoutes wires every request the page will make to either a real
 // on-disk static asset, a fixture JSON response, or the harness document
 // itself — and fails loudly (via unexpected.push) on anything else.
-async function installRoutes(page, unexpected) {
+async function installRoutes(page, unexpected, calendarOverrides) {
   await page.route('**/*', async (route) => {
     const url = new URL(route.request().url());
     const p = url.pathname;
@@ -214,7 +216,7 @@ async function installRoutes(page, unexpected) {
       return route.fulfill({ status: 200, contentType: jsContentType(p), body });
     }
     if (p === `/campaigns/${CAMPAIGN_ID}/calendars/${CALENDAR_ID}`) {
-      return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(calendarFixture()) });
+      return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(calendarFixture(calendarOverrides)) });
     }
     if (p === `/campaigns/${CAMPAIGN_ID}/calendars/${CALENDAR_ID}/events`) {
       return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(eventsFixture()) });
@@ -243,7 +245,7 @@ async function withPage(opts, fn) {
     const unexpected = [];
     const pageErrors = [];
     page.on('pageerror', (err) => pageErrors.push(err.message));
-    await installRoutes(page, unexpected);
+    await installRoutes(page, unexpected, opts.calendarOverrides);
     await page.goto('https://chronicle.test/dashboard');
     await waitForLoaded(page);
     await fn(page);
@@ -285,27 +287,83 @@ test('sky pane: chip toggles the pane open/closed with a real height change', { 
   });
 });
 
+// canvasPixelStats reads the sky canvas's own pixels back — the only honest
+// way to prove a paint actually happened (or didn't), rather than trusting
+// that some JS ran.
+async function canvasPixelStats(page) {
+  return page.evaluate(() => {
+    const canvas = document.querySelector('.sky canvas');
+    const ctx = canvas.getContext('2d');
+    const { data } = ctx.getImageData(0, 0, canvas.width, canvas.height);
+    let opaque = 0, distinctColors = new Set();
+    for (let i = 0; i < data.length; i += 4) {
+      if (data[i + 3] > 0) opaque++;
+      distinctColors.add(data[i] + ',' + data[i + 1] + ',' + data[i + 2]);
+      if (distinctColors.size > 4) break; // early out once variety is proven
+    }
+    return { width: canvas.width, height: canvas.height, opaque, distinctColors: distinctColors.size };
+  });
+}
+
 test('sky pane: the canvas actually paints a non-blank frame once opened', { timeout: 20000 }, async () => {
   await withPage({ viewport: { width: 1280, height: 800 } }, async (page) => {
     await page.locator('.skychip').click();
     await page.waitForTimeout(400); // let the reveal + first render settle
 
-    const pixelStats = await page.evaluate(() => {
-      const canvas = document.querySelector('.sky canvas');
-      const ctx = canvas.getContext('2d');
-      const { data } = ctx.getImageData(0, 0, canvas.width, canvas.height);
-      let opaque = 0, distinctColors = new Set();
-      for (let i = 0; i < data.length; i += 4) {
-        if (data[i + 3] > 0) opaque++;
-        distinctColors.add(data[i] + ',' + data[i + 1] + ',' + data[i + 2]);
-        if (distinctColors.size > 4) break; // early out once variety is proven
-      }
-      return { width: canvas.width, height: canvas.height, opaque, distinctColors: distinctColors.size };
-    });
+    const pixelStats = await canvasPixelStats(page);
 
     assert.ok(pixelStats.width > 0 && pixelStats.height > 0, 'canvas must have a real pixel size once opened');
     assert.ok(pixelStats.opaque > 0, 'the sky must paint at least some opaque pixels — a blank/transparent canvas means the render pipeline did not run');
     assert.ok(pixelStats.distinctColors > 1, 'a real sky paints more than one flat colour (gradient/moon/stars), not a solid fill');
+  });
+});
+
+// Regression for the resize-blanks-the-canvas finding: setting
+// canvas.width/height (inside resizeCanvas, whenever the backing size
+// actually changes) clears the canvas per the HTML canvas spec, and before
+// the fix nothing redrew it afterward unless the shared animation loop
+// happened to already be running.
+test('sky pane: resizing repaints instead of leaving the canvas blank', { timeout: 20000 }, async () => {
+  await withPage({ viewport: { width: 1280, height: 800 } }, async (page) => {
+    await page.locator('.skychip').click();
+    await page.waitForTimeout(400); // let the reveal + first render settle
+
+    const before = await canvasPixelStats(page);
+    assert.ok(before.opaque > 0, 'sanity: the sky must be painted before the resize');
+
+    await page.setViewportSize({ width: 900, height: 700 });
+    // onResize debounces 100ms before calling resizeCanvas + repainting.
+    await page.waitForTimeout(400);
+
+    const after = await canvasPixelStats(page);
+    assert.ok(after.width > 0 && after.height > 0, 'canvas must still have a real pixel size after resize');
+    assert.ok(after.opaque > 0, 'BLANK CANVAS BUG: the sky must repaint after a resize/rotation, not stay blank');
+  });
+});
+
+// Regression for the client-side hidden_from_players re-filter finding: the
+// server already strips hidden moons for a Player viewer, so this widget
+// must render whatever moons the response actually contains rather than
+// re-filtering on hidden_from_players itself — that second filter is
+// redundant for a Player (server already did it) and actively wrong for a
+// GM (it would hide the GM's own hidden moon from the GM). current_day=1,
+// current_hour=20 is a fixed point where Luna is above the horizon (proven
+// against the unmodified fixture below), so a moon dropped by an incorrect
+// client-side filter is visibly absent from the chip caption.
+test('sky pane: does not re-filter hidden_from_players client-side (server decides)', { timeout: 20000 }, async () => {
+  const moonOverrides = {
+    current_day: 1, current_hour: 20, current_minute: 0,
+    moons: [{
+      id: 1, calendar_id: CALENDAR_ID, name: 'Luna', cycle_days: 30, phase_offset: 0,
+      color: '#d9e1ec', base_design: 'moon-realistic-selene', phase_source: 'auto',
+      size: 1, orbit_speed: 1, hidden_from_players: true,
+    }],
+  };
+  await withPage({ viewport: { width: 1280, height: 800 }, calendarOverrides: moonOverrides }, async (page) => {
+    await page.locator('.skychip').click();
+    await page.waitForTimeout(400);
+    const caption = await page.locator('.skycap').textContent();
+    assert.ok(caption.includes('Luna'), `LEAK-SHAPED BUG (inverted): a moon the server sent with hidden_from_players:true must still render for this viewer — the server decides, not the client. Got caption: ${caption}`);
   });
 });
 

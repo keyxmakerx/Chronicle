@@ -108,7 +108,7 @@ func renderCalendarStats(arg string) string {
 	case f.AddonEnabled == nil:
 		fmt.Fprintf(&b, "> calendar addon: **UNKNOWN** — %s\n\n", fallback(f.AddonNote, "the addons service could not be read"))
 	case !*f.AddonEnabled:
-		b.WriteString("> calendar addon: **disabled** for this campaign — its JSON API and the dashboard/category \"Upcoming Events\" cards are unreachable or blank.\n\n")
+		b.WriteString("> calendar addon: **disabled** for this campaign — its JSON API is unreachable, and the dashboard/category \"Upcoming Events\" cards render a quiet \"Calendar isn't enabled\" state rather than calling it.\n\n")
 	default:
 		b.WriteString("> calendar addon: **enabled**.\n\n")
 	}

@@ -45,15 +45,27 @@ templ Mount(campaignID string, calendarID string) {
 	</div>
 }
 
-// Empty renders a quiet placeholder for a campaign with no default calendar
-// yet, instead of the sky-pane mount (which needs a calendar id to fetch).
+// Empty renders a quiet placeholder instead of the sky-pane mount (which
+// needs a calendar id to fetch) whenever the caller has no calendar id to
+// give it — GetDefaultCalendarForViewer returning NotFound, which covers
+// TWO different situations under one answer: the campaign genuinely has no
+// default calendar yet, OR it has one that is hidden from this viewer
+// (dm_only, or excluded by its own visibility_rules). Those two cases are
+// deliberately NOT distinguished in copy here, the same anti-oracle reason
+// calendarInCampaignForViewer's own doc comment gives for collapsing them
+// into one NotFound in the first place: telling a Player "there is a
+// calendar, you just can't see it" would itself leak that a hidden
+// calendar exists. So this message must read sensibly for both cases, and
+// must not promise a specific settings UI — no calendar-settings page for
+// choosing a default calendar exists yet (calendar-v5's page UI is still
+// pending; see calendarRebuildNotice in internal/app/routes.go).
 templ Empty(campaignID string) {
 	<div class="skypane skypane-empty" data-campaign-id={ campaignID }>
 		<div class="skypane-bar">
 			<span class="skypane-title">Sky</span>
 		</div>
 		<p class="skypane-empty-note">
-			No default calendar yet — set one in Calendar settings to show its sky here.
+			No sky to show for this campaign right now.
 		</p>
 	</div>
 }

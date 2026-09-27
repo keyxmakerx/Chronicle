@@ -276,7 +276,7 @@ func TestTimelineEventCount_Integration(t *testing.T) {
 // file doc comment for why).
 type dbCalEventLinkLister struct{ db *sql.DB }
 
-func (l *dbCalEventLinkLister) CalendarName(ctx context.Context, _, calendarID string) string {
+func (l *dbCalEventLinkLister) CalendarName(ctx context.Context, _, calendarID string, _ int) string {
 	var name string
 	if err := l.db.QueryRowContext(ctx, `SELECT name FROM calendars WHERE id = ?`, calendarID).Scan(&name); err != nil {
 		return ""

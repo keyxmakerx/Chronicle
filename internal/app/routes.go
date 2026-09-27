@@ -533,18 +533,26 @@ type calendarEventLinkListerAdapter struct {
 	svc calendar.CalendarService
 }
 
-// CalendarName implements timeline.CalendarEventLinkLister. A declared
-// SYSTEM read (ADR-049): a calendar's display name is shown to every
-// timeline viewer regardless of role, so there is no per-request identity to
-// gate it by. Best-effort — any error (not found, calendar hidden from
-// everyone) degrades to an empty name rather than surfacing as a page error,
-// matching the deleted `LEFT JOIN` + `COALESCE(c.name, '')`'s own behavior.
-func (a *calendarEventLinkListerAdapter) CalendarName(ctx context.Context, campaignID, calendarID string) string {
+// CalendarName implements timeline.CalendarEventLinkLister. A real,
+// role-gated read — NOT a system bypass — because unlike EventsByIDs'
+// per-event visibility (which the deleted JOIN already enforced), the
+// calendar's OWN visibility was never checked at this seam before: a
+// dm_only calendar's real name would otherwise leak to a Player/anonymous
+// timeline viewer through this display-only field. Built as a role-only
+// RequestViewer, matching EventsByIDs' own convention just below (the
+// interface carries no per-request user id, so a calendar's per-user
+// visibility_rules allow/deny list is not evaluated here — role alone is
+// enough to keep a dm_only calendar's name away from anyone who isn't at
+// least an Owner/co-DM). Best-effort — any miss (not found, or hidden from
+// this role) degrades to an empty name rather than surfacing as a page
+// error, matching the deleted `LEFT JOIN` + `COALESCE(c.name, '')`'s own
+// failure-to-empty behavior.
+func (a *calendarEventLinkListerAdapter) CalendarName(ctx context.Context, campaignID, calendarID string, role int) string {
 	if calendarID == "" {
 		return ""
 	}
-	const ownerRole = 3
-	cal, err := a.svc.GetCalendarForViewer(ctx, calendarID, campaignID, permissions.SystemViewer(ownerRole))
+	v := permissions.RequestViewer(role, "")
+	cal, err := a.svc.GetCalendarForViewer(ctx, calendarID, campaignID, v)
 	if err != nil || cal == nil {
 		return ""
 	}
@@ -3652,6 +3660,20 @@ func (a *App) RegisterRoutes() {
 					ctx = layouts.SetEnabledSystem(ctx, enabledSystem)
 				}
 			}
+
+			// Plugin health, for the same dashboard/category blocks that
+			// check IsAddonEnabled above: an addon can be turned on in
+			// settings while its plugin's own schema is degraded, in which
+			// case its routes (like calendar's) were never registered (see
+			// the calendar.PluginSlug health gate around RegisterRoutes
+			// below) and an hx-get to one would 404 forever with no swap.
+			// Only calendar is populated today; a block for another
+			// health-gated plugin can add its slug here when it needs the
+			// same guard.
+			healthyPlugins := map[string]bool{
+				calendar.PluginSlug: a.PluginHealth == nil || a.PluginHealth.IsHealthy(calendar.PluginSlug),
+			}
+			ctx = layouts.SetHealthyPlugins(ctx, healthyPlugins)
 
 			// Extension widget scripts for campaign pages.
 			if widgetURLs := extHandler.GetWidgetScriptURLs(reqCtx, cc.Campaign.ID); len(widgetURLs) > 0 {

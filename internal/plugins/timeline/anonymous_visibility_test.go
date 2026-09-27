@@ -195,7 +195,7 @@ type fakeCalEventLinkLister struct {
 	events []EventLink // keyed by EventID
 }
 
-func (f *fakeCalEventLinkLister) CalendarName(context.Context, string, string) string { return "" }
+func (f *fakeCalEventLinkLister) CalendarName(context.Context, string, string, int) string { return "" }
 
 func (f *fakeCalEventLinkLister) EventsByIDs(_ context.Context, _, _ string, eventIDs []string, role int) ([]CalendarEventRef, error) {
 	want := make(map[string]bool, len(eventIDs))

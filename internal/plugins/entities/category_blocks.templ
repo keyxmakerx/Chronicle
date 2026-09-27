@@ -8,6 +8,7 @@
 package entities
 
 import (
+	"context"
 	"fmt"
 	"sort"
 	"time"
@@ -292,6 +293,27 @@ func catRelativeTime(t time.Time) string {
 	}
 }
 
+// catCalendarUnavailable mirrors campaigns.dashboard_blocks.templ's
+// calendarCardUnavailable (unexported there, so duplicated here rather than
+// reached across the plugin boundary — see that doc comment for the full
+// reasoning): true when the calendar addon is off for this campaign, or its
+// plugin is degraded and its routes were never registered, either of which
+// would leave an hx-get to /calendars/upcoming 403/404ing into a permanent
+// "Loading..." shell with no swap.
+func catCalendarUnavailable(ctx context.Context) bool {
+	return !layouts.IsAddonEnabled(ctx, "calendar") || !layouts.IsPluginHealthy(ctx, "calendar")
+}
+
+// catCalendarUnavailableState is the quiet neutral state shown instead of
+// the hx-get shell when catCalendarUnavailable is true — no spinner, no
+// error, just an honest "not here" message.
+templ catCalendarUnavailableState() {
+	<div class="card text-center px-4 py-6 min-h-[60px]">
+		<i class="fa-solid fa-calendar-days text-xl text-fg-muted mb-2"></i>
+		<p class="text-sm text-fg-secondary">Calendar isn't enabled for this campaign.</p>
+	</div>
+}
+
 // catCalendarPreview renders a calendar upcoming-events card for category
 // dashboards. Same hx-get="/campaigns/:id/calendars/upcoming" fragment
 // campaigns/dashboard_blocks.templ's dashCalendarPreview lazy-loads
@@ -312,14 +334,18 @@ templ catCalendarPreview(cc *campaigns.CampaignContext, config map[string]any) {
 				View calendar
 			</a>
 		</div>
-		<div
-			hx-get={ fmt.Sprintf("/campaigns/%s/calendars/upcoming?limit=%d", cc.Campaign.ID, catCalendarLimit(config)) }
-			hx-trigger="intersect once"
-			hx-swap="innerHTML"
-			class="card divide-y divide-edge min-h-[60px]"
-		>
-			<div class="px-4 py-3 text-sm text-fg-muted">Loading...</div>
-		</div>
+		if catCalendarUnavailable(ctx) {
+			@catCalendarUnavailableState()
+		} else {
+			<div
+				hx-get={ fmt.Sprintf("/campaigns/%s/calendars/upcoming?limit=%d", cc.Campaign.ID, catCalendarLimit(config)) }
+				hx-trigger="intersect once"
+				hx-swap="innerHTML"
+				class="card divide-y divide-edge min-h-[60px]"
+			>
+				<div class="px-4 py-3 text-sm text-fg-muted">Loading...</div>
+			</div>
+		}
 	</div>
 }
 

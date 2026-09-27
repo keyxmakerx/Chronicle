@@ -13,6 +13,7 @@
 package campaigns
 
 import (
+	"context"
 	"fmt"
 	"strconv"
 	"github.com/keyxmakerx/chronicle/internal/sanitize"
@@ -279,6 +280,34 @@ templ dashPinnedPages(cc *CampaignContext, config map[string]any) {
 	</div>
 }
 
+// calendarCardUnavailable reports whether a calendar dashboard/category card
+// must skip its hx-get entirely rather than emit it: the calendar addon is
+// off for this campaign, or its plugin is degraded and its routes were
+// never registered (see calendar.PluginSlug's health gate around
+// calendar.RegisterRoutes in app/routes.go). Either way, hx-get-ing a
+// 403/404 into the "Loading..." shell leaves it stuck forever — HTMX
+// doesn't swap a non-2xx response — and any error body still pops a toast
+// for every viewer even though nothing is actually wrong for them. Read via
+// the request's Templ context (layouts.IsAddonEnabled/IsPluginHealthy)
+// rather than a new parameter threaded through every block signature,
+// mirroring how every other addon-gated conditional in this codebase's
+// templates already reads it (see internal/templates/layouts/app.templ).
+func calendarCardUnavailable(ctx context.Context) bool {
+	return !layouts.IsAddonEnabled(ctx, "calendar") || !layouts.IsPluginHealthy(ctx, "calendar")
+}
+
+// calendarCardUnavailableState is the quiet neutral state calendar cards
+// render instead of their hx-get shell when calendarCardUnavailable is
+// true: no spinner (nothing is loading), no error (nothing is wrong for
+// this viewer specifically) — just an honest "not here" message, the same
+// register as calendar.UpcomingEventsEmbed's own "no calendar yet" state.
+templ calendarCardUnavailableState(minHeightPx int) {
+	<div class="card text-center px-4 py-6" style={ fmt.Sprintf("min-height: %dpx", minHeightPx) }>
+		<i class="fa-solid fa-calendar-days text-xl text-fg-muted mb-2"></i>
+		<p class="text-sm text-fg-secondary">Calendar isn't enabled for this campaign.</p>
+	</div>
+}
+
 // dashCalendarPreview renders a card that lazy-loads upcoming calendar
 // events from the calendar plugin's own embed route (calendar-v5, #778) —
 // the same hx-get="/campaigns/:id/<plugin>/..." pattern dashTimelinePreview,
@@ -299,14 +328,18 @@ templ dashCalendarPreview(cc *CampaignContext, config map[string]any) {
 				View calendar
 			</a>
 		</div>
-		<div
-			hx-get={ fmt.Sprintf("/campaigns/%s/calendars/upcoming?limit=%d", cc.Campaign.ID, dashCalendarLimit(config)) }
-			hx-trigger="intersect once"
-			hx-swap="innerHTML"
-			class="card divide-y divide-edge min-h-[60px]"
-		>
-			<div class="px-4 py-3 text-sm text-fg-muted">Loading...</div>
-		</div>
+		if calendarCardUnavailable(ctx) {
+			@calendarCardUnavailableState(60)
+		} else {
+			<div
+				hx-get={ fmt.Sprintf("/campaigns/%s/calendars/upcoming?limit=%d", cc.Campaign.ID, dashCalendarLimit(config)) }
+				hx-trigger="intersect once"
+				hx-swap="innerHTML"
+				class="card divide-y divide-edge min-h-[60px]"
+			>
+				<div class="px-4 py-3 text-sm text-fg-muted">Loading...</div>
+			</div>
+		}
 	</div>
 }
 
@@ -521,15 +554,19 @@ templ dashCalendarFull(cc *CampaignContext, config map[string]any) {
 				Open calendar
 			</a>
 		</div>
-		<div
-			hx-get={ fmt.Sprintf("/campaigns/%s/calendars/upcoming?limit=%d", cc.Campaign.ID, dashCalendarFullLimit(config)) }
-			hx-trigger="intersect once"
-			hx-swap="innerHTML"
-			class="card divide-y divide-edge overflow-y-auto"
-			style={ fmt.Sprintf("min-height: %dpx", dashGraphHeight(config)) }
-		>
-			<div class="px-4 py-3 text-sm text-fg-muted">Loading...</div>
-		</div>
+		if calendarCardUnavailable(ctx) {
+			@calendarCardUnavailableState(dashGraphHeight(config))
+		} else {
+			<div
+				hx-get={ fmt.Sprintf("/campaigns/%s/calendars/upcoming?limit=%d", cc.Campaign.ID, dashCalendarFullLimit(config)) }
+				hx-trigger="intersect once"
+				hx-swap="innerHTML"
+				class="card divide-y divide-edge overflow-y-auto"
+				style={ fmt.Sprintf("min-height: %dpx", dashGraphHeight(config)) }
+			>
+				<div class="px-4 py-3 text-sm text-fg-muted">Loading...</div>
+			</div>
+		}
 	</div>
 }
 
