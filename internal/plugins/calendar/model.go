@@ -1073,6 +1073,23 @@ type CreateCalendarInput struct {
 	LeapYearOffset   int
 }
 
+// CreateCalendarFromImportOptions carries the caller's explicit choice for
+// the calendar CreateCalendarFromImport is about to create's current
+// ("today") date. CreateCalendarFromImport never falls back to an
+// undocumented default (#741 — "an import never silently resets the
+// calendar's current date"): when the import itself left a field of
+// ImportResult.Today unspecified (Month/Day nil — Calendaria only ever
+// determines a year), the matching field here MUST be set or
+// CreateCalendarFromImport returns a validation error instead of silently
+// picking day 1. CurrentYear is optional even then — the import always
+// determines a year, and this only overrides it when the caller wants the
+// calendar to start somewhere else than the source file did.
+type CreateCalendarFromImportOptions struct {
+	CurrentYear  *int
+	CurrentMonth *int
+	CurrentDay   *int
+}
+
 // UpdateCalendarInput is the validated input for updating calendar settings.
 // Partial update (internal/patch's Field type): an absent field preserves
 // the stored value, an explicit null clears it, a present value replaces it.

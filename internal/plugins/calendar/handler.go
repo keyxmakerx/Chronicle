@@ -5,6 +5,8 @@
 package calendar
 
 import (
+	"fmt"
+	"io"
 	"net/http"
 	"strconv"
 
@@ -613,4 +615,189 @@ func (h *Handler) SetMoonHiddenAPI(c echo.Context) error {
 		return err
 	}
 	return c.NoContent(http.StatusOK)
+}
+
+// --- Part B: calendar creation wizard (presets, import) ---
+//
+// Every route below is Owner only (routes.go), matching the rest of this
+// file's calendar-structure mutation routes: creating a calendar's initial
+// structure is calendar structure, the same category eras/event kinds/the
+// moon hidden flag already fall in.
+
+// maxCalendarImportSize caps an uploaded calendar file. Calendar exports are
+// JSON only (never a zip, unlike campaigns' own import/export — see
+// internal/plugins/campaigns/export_handler.go's maxImportZipSize), so a
+// much smaller ceiling is appropriate; 10MB comfortably fits even a large
+// calendar's full event history.
+const maxCalendarImportSize = 10 * 1024 * 1024
+
+// readCalendarImportFile reads and size-caps the "file" field of a
+// multipart upload, shared by PreviewImportAPI and CreateFromImportAPI —
+// mirrors campaigns.ExportHandler.ImportCampaign's own FormFile handling.
+func readCalendarImportFile(c echo.Context) ([]byte, error) {
+	fh, err := c.FormFile("file")
+	if err != nil {
+		return nil, apperror.NewBadRequest("file upload required")
+	}
+	if fh.Size > maxCalendarImportSize {
+		return nil, apperror.NewBadRequest(fmt.Sprintf("file too large, maximum %d MB", maxCalendarImportSize/(1024*1024)))
+	}
+	src, err := fh.Open()
+	if err != nil {
+		return nil, apperror.NewInternal(fmt.Errorf("open uploaded file: %w", err))
+	}
+	defer func() { _ = src.Close() }()
+	data, err := io.ReadAll(io.LimitReader(src, maxCalendarImportSize+1))
+	if err != nil {
+		return nil, apperror.NewInternal(fmt.Errorf("read uploaded file: %w", err))
+	}
+	if int64(len(data)) > maxCalendarImportSize {
+		return nil, apperror.NewBadRequest(fmt.Sprintf("file too large, maximum %d MB", maxCalendarImportSize/(1024*1024)))
+	}
+	return data, nil
+}
+
+// formIntPtr parses a multipart/form value as *int, or nil when absent or
+// unparseable. An unparseable override is treated as "not supplied" (the
+// value the import itself determined, or a validation error if it
+// specified none, still governs) rather than a hard 400 on a field the
+// wizard's own review step already validated client-side.
+func formIntPtr(c echo.Context, key string) *int {
+	v := c.FormValue(key)
+	if v == "" {
+		return nil
+	}
+	n, err := strconv.Atoi(v)
+	if err != nil {
+		return nil
+	}
+	return &n
+}
+
+// presetSummary is one entry in ListPresetsAPI's response: enough to show a
+// preset card without a second request per preset.
+type presetSummary struct {
+	Name         string       `json:"name"`
+	CalendarName string       `json:"calendar_name"`
+	Format       ImportFormat `json:"format"`
+	MonthCount   int          `json:"month_count"`
+	WeekdayCount int          `json:"weekday_count"`
+}
+
+// calendarImportResponse is CreateFromPresetAPI/CreateFromImportAPI's
+// response shape: the created calendar plus any warnings the import
+// produced (parse-time clamps, apply-time event-kind-slug fallbacks — see
+// ImportResult.Warnings), so the wizard's confirmation step can show
+// whatever didn't come through exactly as the source described it.
+type calendarImportResponse struct {
+	Calendar *Calendar `json:"calendar"`
+	Warnings []string  `json:"warnings,omitempty"`
+}
+
+// ListPresetsAPI lists the shipped calendar presets. Owner only.
+// GET /campaigns/:id/calendars/presets
+func (h *Handler) ListPresetsAPI(c echo.Context) error {
+	names, err := PresetNames()
+	if err != nil {
+		return apperror.NewInternal(err)
+	}
+	summaries := make([]presetSummary, 0, len(names))
+	for _, name := range names {
+		ir, err := h.svc.PreviewPreset(c.Request().Context(), name)
+		if err != nil {
+			return err
+		}
+		summaries = append(summaries, presetSummary{
+			Name:         name,
+			CalendarName: ir.CalendarName,
+			Format:       ir.Format,
+			MonthCount:   len(ir.Months),
+			WeekdayCount: len(ir.Weekdays),
+		})
+	}
+	return c.JSON(http.StatusOK, summaries)
+}
+
+// PreviewPresetAPI parses one shipped preset without creating anything.
+// Owner only.
+// GET /campaigns/:id/calendars/presets/:name
+func (h *Handler) PreviewPresetAPI(c echo.Context) error {
+	ir, err := h.svc.PreviewPreset(c.Request().Context(), c.Param("name"))
+	if err != nil {
+		return err
+	}
+	return c.JSON(http.StatusOK, ir)
+}
+
+// CreateFromPresetAPI creates a new calendar from a shipped preset by name.
+// Owner only. The wizard's Review step is expected to have already called
+// PreviewPresetAPI and shown ir.Today for confirmation; current_month/
+// current_day in the body are only REQUIRED when the preset itself left
+// them unspecified (no shipped preset does today, but the contract is the
+// same one CreateFromImportAPI enforces for an upload that might).
+// POST /campaigns/:id/calendars/presets/:name
+func (h *Handler) CreateFromPresetAPI(c echo.Context) error {
+	cc := campaigns.GetCampaignContext(c)
+	var req struct {
+		CurrentYear  *int `json:"current_year"`
+		CurrentMonth *int `json:"current_month"`
+		CurrentDay   *int `json:"current_day"`
+	}
+	if err := c.Bind(&req); err != nil {
+		return apperror.NewBadRequest("invalid request")
+	}
+	ir, err := h.svc.PreviewPreset(c.Request().Context(), c.Param("name"))
+	if err != nil {
+		return err
+	}
+	cal, err := h.svc.CreateCalendarFromImport(c.Request().Context(), cc.Campaign.ID, ir, CreateCalendarFromImportOptions{
+		CurrentYear:  req.CurrentYear,
+		CurrentMonth: req.CurrentMonth,
+		CurrentDay:   req.CurrentDay,
+	})
+	if err != nil {
+		return err
+	}
+	return c.JSON(http.StatusCreated, calendarImportResponse{Calendar: cal, Warnings: ir.Warnings})
+}
+
+// PreviewImportAPI parses an uploaded calendar file without creating
+// anything. Owner only.
+// POST /campaigns/:id/calendars/import/preview (multipart, field "file")
+func (h *Handler) PreviewImportAPI(c echo.Context) error {
+	data, err := readCalendarImportFile(c)
+	if err != nil {
+		return err
+	}
+	ir, err := h.svc.PreviewImport(c.Request().Context(), data)
+	if err != nil {
+		return err
+	}
+	return c.JSON(http.StatusOK, ir)
+}
+
+// CreateFromImportAPI creates a new calendar from an uploaded file. Owner
+// only. current_year/current_month/current_day are ordinary multipart form
+// fields alongside "file" — see CreateCalendarFromImportOptions's doc
+// comment on when current_month/current_day are required.
+// POST /campaigns/:id/calendars/import (multipart, field "file")
+func (h *Handler) CreateFromImportAPI(c echo.Context) error {
+	cc := campaigns.GetCampaignContext(c)
+	data, err := readCalendarImportFile(c)
+	if err != nil {
+		return err
+	}
+	ir, err := h.svc.PreviewImport(c.Request().Context(), data)
+	if err != nil {
+		return err
+	}
+	cal, err := h.svc.CreateCalendarFromImport(c.Request().Context(), cc.Campaign.ID, ir, CreateCalendarFromImportOptions{
+		CurrentYear:  formIntPtr(c, "current_year"),
+		CurrentMonth: formIntPtr(c, "current_month"),
+		CurrentDay:   formIntPtr(c, "current_day"),
+	})
+	if err != nil {
+		return err
+	}
+	return c.JSON(http.StatusCreated, calendarImportResponse{Calendar: cal, Warnings: ir.Warnings})
 }

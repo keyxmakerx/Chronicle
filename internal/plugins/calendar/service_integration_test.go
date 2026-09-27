@@ -10,6 +10,7 @@ package calendar
 import (
 	"context"
 	"database/sql"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"strings"
@@ -521,5 +522,184 @@ func assertIntegrationNotFound(t *testing.T, err error) {
 	}
 	if appErr.Code != 404 {
 		t.Fatalf("expected 404 not_found, got code=%d type=%s message=%q", appErr.Code, appErr.Type, appErr.Message)
+	}
+}
+
+// TestCalendarService_Integration_CreateCalendarFromImport_EveryPreset (Part
+// B) proves the actual missing link this PR wires up: every shipped preset
+// creates a real, fully-structured calendar through CreateCalendarFromImport
+// — not just a parse (presets_test.go already covers that half).
+func TestCalendarService_Integration_CreateCalendarFromImport_EveryPreset(t *testing.T) {
+	db := openTestDB(t)
+	fixture := newTestCampaign(t, db, "import-presets")
+	calRepo := NewCalendarRepository(db)
+	svc := NewCalendarService(calRepo, NewEventRepository(db), NewEventKindRepository(db), NewWeatherRepository(db))
+	ctx := context.Background()
+
+	names, err := PresetNames()
+	if err != nil {
+		t.Fatalf("PresetNames: %v", err)
+	}
+	for _, name := range names {
+		t.Run(name, func(t *testing.T) {
+			ir, err := svc.PreviewPreset(ctx, name)
+			if err != nil {
+				t.Fatalf("PreviewPreset(%q): %v", name, err)
+			}
+			cal, err := svc.CreateCalendarFromImport(ctx, fixture.CampaignID, ir, CreateCalendarFromImportOptions{})
+			if err != nil {
+				t.Fatalf("CreateCalendarFromImport(%q): %v", name, err)
+			}
+			if cal.ID == "" || cal.CampaignID != fixture.CampaignID {
+				t.Fatalf("created calendar looks wrong: %+v", cal)
+			}
+			// Structure actually landed in the DB, not just in memory: read
+			// it back the way GetCalendarForViewer would.
+			months, err := calRepo.GetMonths(ctx, cal.ID)
+			if err != nil {
+				t.Fatalf("GetMonths: %v", err)
+			}
+			if len(months) != len(ir.Months) {
+				t.Errorf("got %d months in the DB, want %d (from the preset)", len(months), len(ir.Months))
+			}
+			// Every preset fully specifies its own current date (see
+			// presets/*.json), so none of them should need an override.
+			got, err := calRepo.GetByID(ctx, cal.ID)
+			if err != nil {
+				t.Fatalf("GetByID: %v", err)
+			}
+			if got.CurrentYear != ir.Today.Year {
+				t.Errorf("current_year = %d, want %d (from the preset)", got.CurrentYear, ir.Today.Year)
+			}
+		})
+	}
+}
+
+// TestCalendarService_Integration_CreateCalendarFromImport_UploadedCalendaria
+// (Part B) exercises the upload path end to end: raw bytes through
+// PreviewImport, then CreateCalendarFromImport — Calendaria's missing
+// day-level "today" must be rejected without an explicit override and
+// accepted with one, matching the unit-level invariant test in
+// service_import_test.go but against a real DB write.
+func TestCalendarService_Integration_CreateCalendarFromImport_UploadedCalendaria(t *testing.T) {
+	db := openTestDB(t)
+	fixture := newTestCampaign(t, db, "import-upload")
+	calRepo := NewCalendarRepository(db)
+	svc := NewCalendarService(calRepo, NewEventRepository(db), NewEventKindRepository(db), NewWeatherRepository(db))
+	ctx := context.Background()
+
+	raw := calendariaSeasonFixture([]int{30, 31}, []fixtureSeason{
+		{Name: "Only Season", DayStart: 1, DayEnd: 30},
+	})
+
+	ir, err := svc.PreviewImport(ctx, raw)
+	if err != nil {
+		t.Fatalf("PreviewImport: %v", err)
+	}
+	if ir.Today.Month != nil || ir.Today.Day != nil {
+		t.Fatalf("expected Calendaria's Today to have no day-level date, got %+v", ir.Today)
+	}
+
+	if _, err := svc.CreateCalendarFromImport(ctx, fixture.CampaignID, ir, CreateCalendarFromImportOptions{}); err == nil {
+		t.Error("expected CreateCalendarFromImport to require an explicit current-date override for a Calendaria upload, got nil error")
+	}
+
+	cal, err := svc.CreateCalendarFromImport(ctx, fixture.CampaignID, ir, CreateCalendarFromImportOptions{
+		CurrentMonth: intPtrForTest(1), CurrentDay: intPtrForTest(1),
+	})
+	if err != nil {
+		t.Fatalf("CreateCalendarFromImport with an explicit override: %v", err)
+	}
+	got, err := calRepo.GetByID(ctx, cal.ID)
+	if err != nil {
+		t.Fatalf("GetByID: %v", err)
+	}
+	if got.CurrentMonth != 1 || got.CurrentDay != 1 {
+		t.Errorf("current date = %d-%d, want the explicit 1-1 override", got.CurrentMonth, got.CurrentDay)
+	}
+}
+
+// TestCalendarService_Integration_CreateCalendarFromImport_ChronicleEventsRoundTrip
+// (#779, Part B) is the full-stack version of
+// TestChronicleExportImport_EventsRoundTrip: a calendar with real events,
+// exported, then re-imported into a fresh calendar via
+// CreateCalendarFromImport, ends up with the same events in the database —
+// resolved against the TARGET campaign's own event kind, not the source's.
+func TestCalendarService_Integration_CreateCalendarFromImport_ChronicleEventsRoundTrip(t *testing.T) {
+	db := openTestDB(t)
+	fixture := newTestCampaign(t, db, "import-events")
+	calRepo := NewCalendarRepository(db)
+	eventRepo := NewEventRepository(db)
+	kindRepo := NewEventKindRepository(db)
+	svc := NewCalendarService(calRepo, eventRepo, kindRepo, NewWeatherRepository(db))
+	ctx := context.Background()
+
+	source := &Calendar{ID: testUUID(t), CampaignID: fixture.CampaignID, Mode: ModeFantasy, Name: "Source Calendar",
+		CurrentYear: 10, CurrentMonth: 2, CurrentDay: 5,
+		HoursPerDay: 24, MinutesPerHour: 60, SecondsPerMinute: 60, Visibility: "everyone"}
+	if err := calRepo.Create(ctx, source); err != nil {
+		t.Fatalf("seed source calendar: %v", err)
+	}
+	if err := calRepo.SetMonths(ctx, source.ID, []MonthInput{{Name: "Firstmonth", Days: 30, SortOrder: 0}}); err != nil {
+		t.Fatalf("seed months: %v", err)
+	}
+	kind, err := kindRepo.Create(ctx, fixture.CampaignID, EventKindInput{Slug: "festival", Name: "Festival", Icon: "fa-star", Color: "#ff0000", DefaultAnnounced: AnnouncedAhead})
+	if err != nil {
+		t.Fatalf("seed event kind: %v", err)
+	}
+	if err := eventRepo.CreateEvent(ctx, &Event{
+		ID: testUUID(t), CalendarID: source.ID, Name: "Founding Day", Year: 1, Month: 1, Day: 1,
+		Visibility: "everyone", KindID: &kind.ID, CreatedBy: &fixture.UserID,
+	}); err != nil {
+		t.Fatalf("seed event: %v", err)
+	}
+
+	loaded, err := calRepo.GetByID(ctx, source.ID)
+	if err != nil {
+		t.Fatalf("GetByID: %v", err)
+	}
+	loaded.Months, err = calRepo.GetMonths(ctx, source.ID)
+	if err != nil {
+		t.Fatalf("GetMonths: %v", err)
+	}
+	events, err := eventRepo.ListAllEvents(ctx, source.ID)
+	if err != nil {
+		t.Fatalf("ListAllEvents: %v", err)
+	}
+	for i := range events {
+		events[i].KindSlug = kind.Slug
+	}
+
+	export := BuildExport(loaded, events, true)
+	raw, err := json.Marshal(export)
+	if err != nil {
+		t.Fatalf("marshal export: %v", err)
+	}
+
+	ir, err := svc.PreviewImport(ctx, raw)
+	if err != nil {
+		t.Fatalf("PreviewImport: %v", err)
+	}
+	target, err := svc.CreateCalendarFromImport(ctx, fixture.CampaignID, ir, CreateCalendarFromImportOptions{})
+	if err != nil {
+		t.Fatalf("CreateCalendarFromImport: %v", err)
+	}
+
+	targetEvents, err := eventRepo.ListAllEvents(ctx, target.ID)
+	if err != nil {
+		t.Fatalf("ListAllEvents on the re-imported calendar: %v", err)
+	}
+	if len(targetEvents) != 1 {
+		t.Fatalf("got %d events on the re-imported calendar, want 1", len(targetEvents))
+	}
+	got := targetEvents[0]
+	if got.Name != "Founding Day" || got.Year != 1 || got.Month != 1 || got.Day != 1 {
+		t.Errorf("re-imported event = %+v, want the Founding Day fields preserved", got)
+	}
+	if got.KindID == nil || *got.KindID != kind.ID {
+		t.Errorf("re-imported event KindID = %v, want %d (resolved by slug %q in the target campaign)", got.KindID, kind.ID, kind.Slug)
+	}
+	if len(ir.Warnings) != 0 {
+		t.Errorf("expected no warnings when the kind slug resolves cleanly, got %v", ir.Warnings)
 	}
 }

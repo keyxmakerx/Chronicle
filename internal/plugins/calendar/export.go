@@ -1,9 +1,9 @@
 // Package calendar — export.go provides JSON export of calendar configurations.
 // Exports include all sub-resources (months, weekdays, moons, seasons, eras,
 // cycles, festivals, weather) in Chronicle's native format. Events are
-// optionally included in the export, but TODO(#779): parseChronicle does not
-// read them back — a Chronicle export/import round-trip today covers
-// calendar structure only, never events.
+// optionally included in the export and read back on import (#779, see
+// ImportResult.Events and parseChronicle in import.go) — a Chronicle
+// export/import round-trip covers events as well as calendar structure.
 package calendar
 
 // ChronicleExport is the top-level JSON envelope for calendar export.
@@ -13,8 +13,9 @@ type ChronicleExport struct {
 	Format   string         `json:"format"`  // "chronicle-calendar-v1"
 	Version  int            `json:"version"` // schema version (2)
 	Calendar ExportCalendar `json:"calendar"`
-	// Events is written by BuildExport but not yet read by any importer:
-	// TODO(#779) to carry it into ImportResult and ApplyImport.
+	// Events is written by BuildExport and read back by parseChronicle into
+	// ImportResult.Events (#779), then recreated by
+	// CalendarService.CreateCalendarFromImport.
 	Events []ExportEvent `json:"events,omitempty"`
 }
 

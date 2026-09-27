@@ -166,6 +166,16 @@ func (f *fakeCalendarSvc) DeleteEra(context.Context, int, string, string) error 
 
 func (f *fakeCalendarSvc) SetMoonHidden(context.Context, int, string, string, bool) error { return nil }
 
+func (f *fakeCalendarSvc) PreviewImport(context.Context, []byte) (*ImportResult, error) {
+	return &ImportResult{Format: FormatChronicle, CalendarName: "Previewed Calendar"}, nil
+}
+func (f *fakeCalendarSvc) PreviewPreset(_ context.Context, name string) (*ImportResult, error) {
+	return &ImportResult{Format: FormatChronicle, CalendarName: "Preset " + name}, nil
+}
+func (f *fakeCalendarSvc) CreateCalendarFromImport(_ context.Context, campaignID string, ir *ImportResult, _ CreateCalendarFromImportOptions) (*Calendar, error) {
+	return &Calendar{ID: "cal-imported", CampaignID: campaignID, Name: ir.CalendarName}, nil
+}
+
 // --- Harness ---
 
 func newAccessTestRouter(public, addonEnabled bool, roles map[string]campaigns.Role) (*echo.Echo, *fakeCalendarSvc) {
@@ -255,6 +265,11 @@ func TestRouteGates_PlayerBlockedFromOwnerAndScribeRoutes(t *testing.T) {
 		{"create event kind (Owner only)", http.MethodPost, "/campaigns/camp-1/calendars/event-kinds"},
 		{"create era (Owner only)", http.MethodPost, "/campaigns/camp-1/calendars/cal-1/eras"},
 		{"set moon hidden (Owner only)", http.MethodPut, "/campaigns/camp-1/calendars/cal-1/moons/1/hidden"},
+		{"list calendar presets (Owner only)", http.MethodGet, "/campaigns/camp-1/calendars/presets"},
+		{"preview calendar preset (Owner only)", http.MethodGet, "/campaigns/camp-1/calendars/presets/blank"},
+		{"create calendar from preset (Owner only)", http.MethodPost, "/campaigns/camp-1/calendars/presets/blank"},
+		{"preview calendar import (Owner only)", http.MethodPost, "/campaigns/camp-1/calendars/import/preview"},
+		{"create calendar from import (Owner only)", http.MethodPost, "/campaigns/camp-1/calendars/import"},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -302,6 +317,9 @@ func TestRouteGates_OwnerReachesEveryRoute(t *testing.T) {
 		{http.MethodPost, "/campaigns/camp-1/calendars/cal-1/eras", http.StatusCreated},
 		{http.MethodPut, "/campaigns/camp-1/calendars/cal-1/moons/1/hidden", http.StatusOK},
 		{http.MethodPut, "/campaigns/camp-1/calendars/cal-1/events/evt-1/visibility", http.StatusOK},
+		{http.MethodGet, "/campaigns/camp-1/calendars/presets", http.StatusOK},
+		{http.MethodGet, "/campaigns/camp-1/calendars/presets/blank", http.StatusOK},
+		{http.MethodPost, "/campaigns/camp-1/calendars/presets/blank", http.StatusCreated},
 	}
 	for _, tt := range tests {
 		rec := doRequest(e, tt.method, tt.path, "u-owner")

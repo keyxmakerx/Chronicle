@@ -103,6 +103,15 @@ type CalendarService interface {
 	DeleteCalendar(ctx context.Context, calendarID, campaignID string) error
 	SetDefaultCalendar(ctx context.Context, campaignID, calendarID string) error
 
+	// Import / presets (the calendar-creation wizard, #741). PreviewImport
+	// and PreviewPreset are pure parses — no DB write — so the wizard's
+	// Review step can show what a file/preset contains before anything is
+	// created. CreateCalendarFromImport does the actual write: see its own
+	// doc comment for the current-date and event-kind-slug rules.
+	PreviewImport(ctx context.Context, data []byte) (*ImportResult, error)
+	PreviewPreset(ctx context.Context, name string) (*ImportResult, error)
+	CreateCalendarFromImport(ctx context.Context, campaignID string, ir *ImportResult, opts CreateCalendarFromImportOptions) (*Calendar, error)
+
 	// Events. CreateEvent has no stored row to weigh a viewer against, so it
 	// takes no Viewer: authorization for its one viewer-dependent decision
 	// (may this caller author dm_only content) travels pre-resolved on
@@ -616,6 +625,204 @@ func (s *calendarService) DeleteCalendar(ctx context.Context, calendarID, campai
 func (s *calendarService) SetDefaultCalendar(ctx context.Context, campaignID, calendarID string) error {
 	if err := s.calRepo.SetDefault(ctx, campaignID, calendarID); err != nil {
 		return fmt.Errorf("set default calendar: %w", err)
+	}
+	return nil
+}
+
+// --- Import / presets (the calendar-creation wizard, #741) ---
+
+// PreviewImport parses raw uploaded calendar data through the shared,
+// auto-detecting importer without writing anything, so the wizard's
+// Import/Review step can show what a file contains before the owner
+// confirms creating a calendar from it. A parse failure is reported as a
+// BadRequest (the file's problem, not the server's).
+func (s *calendarService) PreviewImport(ctx context.Context, data []byte) (*ImportResult, error) {
+	ir, err := DetectAndParse(data)
+	if err != nil {
+		return nil, apperror.NewBadRequest(err.Error())
+	}
+	return ir, nil
+}
+
+// PreviewPreset is PreviewImport's sibling for a shipped preset by name. A
+// preset IS an export (presets.go's own doc comment) — LoadPreset goes
+// through the exact same DetectAndParse an upload does — so this returns
+// the identical *ImportResult shape and a caller cannot (and need not) tell
+// the two apart.
+func (s *calendarService) PreviewPreset(ctx context.Context, name string) (*ImportResult, error) {
+	ir, err := LoadPreset(name)
+	if err != nil {
+		return nil, apperror.NewNotFound("unknown preset")
+	}
+	return ir, nil
+}
+
+// CreateCalendarFromImport creates a new calendar from a previously-parsed
+// ImportResult (an uploaded file or a shipped preset — see PreviewImport/
+// PreviewPreset). It creates the bare calendar row through the same
+// validation CreateCalendar applies, writes the import's full structure
+// (months/weekdays/moons/seasons/eras) in one transaction via
+// CalendarRepository.ApplyImport, then recreates any events the import
+// carried (#779) via applyImportedEvents.
+//
+// The created calendar's current date is either what the import file
+// itself specified (ir.Today) or an explicit override in opts — never a
+// silent, unexplained default (#741): when the import left Month or Day
+// unspecified and opts doesn't supply it either, this returns a validation
+// error instead of guessing day 1.
+//
+// ir is mutated in place: applyImportedEvents appends to ir.Warnings for
+// anything discovered only at apply time (an event's kind slug not
+// existing in this campaign), so the caller should read ir.Warnings AFTER
+// this returns for the complete set — parse-time and apply-time combined —
+// not just what PreviewImport/PreviewPreset returned earlier.
+func (s *calendarService) CreateCalendarFromImport(ctx context.Context, campaignID string, ir *ImportResult, opts CreateCalendarFromImportOptions) (*Calendar, error) {
+	if ir == nil {
+		return nil, apperror.NewValidation("import result is required")
+	}
+
+	name := ir.CalendarName
+	if name == "" {
+		name = "Imported Calendar"
+	}
+
+	year := ir.Today.Year
+	if opts.CurrentYear != nil {
+		year = *opts.CurrentYear
+	}
+	month := ir.Today.Month
+	if opts.CurrentMonth != nil {
+		month = opts.CurrentMonth
+	}
+	if month == nil {
+		return nil, apperror.NewValidation("current_month is required: this import did not specify a current month; confirm one")
+	}
+	day := ir.Today.Day
+	if opts.CurrentDay != nil {
+		day = opts.CurrentDay
+	}
+	if day == nil {
+		return nil, apperror.NewValidation("current_day is required: this import did not specify a current day; confirm one")
+	}
+
+	cal, err := s.CreateCalendar(ctx, campaignID, CreateCalendarInput{
+		Mode:             ir.Settings.Mode,
+		Name:             name,
+		EpochName:        ir.Settings.EpochName,
+		CurrentYear:      year,
+		HoursPerDay:      ir.Settings.HoursPerDay,
+		MinutesPerHour:   ir.Settings.MinutesPerHour,
+		SecondsPerMinute: ir.Settings.SecondsPerMinute,
+		LeapYearEvery:    ir.Settings.LeapYearEvery,
+		LeapYearOffset:   ir.Settings.LeapYearOffset,
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	cal.CurrentMonth = *month
+	cal.CurrentDay = *day
+	// Chronicle-only settings CreateCalendarInput has no field for: carried
+	// onto the row here (rather than lost) so re-importing a Chronicle
+	// export restores them — the same fields UpdateCalendar lets an owner
+	// manage after the fact.
+	cal.Hemisphere = ir.Settings.Hemisphere
+	cal.ForecastsEnabled = ir.Settings.ForecastsEnabled
+	cal.MonthStartsNewWeek = ir.Settings.MonthStartsNewWeek
+	if ir.Settings.TracksRealTime {
+		if ir.Settings.RealTimeZone == nil || *ir.Settings.RealTimeZone == "" {
+			return nil, apperror.NewValidation("real_time_zone is required when tracks_real_time is set")
+		}
+		if _, err := time.LoadLocation(*ir.Settings.RealTimeZone); err != nil {
+			return nil, apperror.NewBadRequest("real_time_zone must be a valid IANA time zone name")
+		}
+		cal.TracksRealTime = true
+		cal.RealTimeZone = ir.Settings.RealTimeZone
+	}
+
+	if err := s.calRepo.ApplyImport(ctx, cal, ir); err != nil {
+		return nil, fmt.Errorf("apply import: %w", err)
+	}
+
+	if err := s.applyImportedEvents(ctx, cal.ID, campaignID, ir); err != nil {
+		return nil, fmt.Errorf("apply imported events: %w", err)
+	}
+
+	if err := s.loadSubresources(ctx, cal); err != nil {
+		return nil, err
+	}
+	return cal, nil
+}
+
+// applyImportedEvents recreates ir.Events (Chronicle-only, #779) on the
+// freshly-created calendarID. An event's Kind slug is resolved against
+// THIS campaign's event kinds (never the source campaign's numeric ids,
+// which mean nothing here — see ExportEvent.Kind's doc comment); a slug
+// that doesn't resolve gets the event created WITHOUT a kind rather than
+// dropped or failing the whole import (#741: warn, never refuse), and
+// ir.Warnings records which ones so the caller can tell the owner.
+func (s *calendarService) applyImportedEvents(ctx context.Context, calendarID, campaignID string, ir *ImportResult) error {
+	if len(ir.Events) == 0 {
+		return nil
+	}
+	kinds, err := s.kindRepo.List(ctx, campaignID)
+	if err != nil {
+		return fmt.Errorf("list event kinds: %w", err)
+	}
+	slugToID := make(map[string]int, len(kinds))
+	for _, k := range kinds {
+		slugToID[k.Slug] = k.ID
+	}
+
+	for _, ee := range ir.Events {
+		var kindID *int
+		if ee.Kind != nil && *ee.Kind != "" {
+			if id, ok := slugToID[*ee.Kind]; ok {
+				kindID = &id
+			} else {
+				ir.Warnings = append(ir.Warnings, fmt.Sprintf(
+					"event %q referenced kind %q, which does not exist in this campaign; imported without a kind",
+					ee.Name, *ee.Kind))
+			}
+		}
+		visibility := ee.Visibility
+		if visibility != "everyone" && visibility != "dm_only" {
+			visibility = "everyone"
+		}
+		evt := &Event{
+			ID:                       generateID(),
+			CalendarID:               calendarID,
+			Name:                     ee.Name,
+			Description:              ee.Description,
+			DescriptionHTML:          ee.DescriptionHTML,
+			Year:                     ee.Year,
+			Month:                    ee.Month,
+			Day:                      ee.Day,
+			StartHour:                ee.StartHour,
+			StartMinute:              ee.StartMinute,
+			EndYear:                  ee.EndYear,
+			EndMonth:                 ee.EndMonth,
+			EndDay:                   ee.EndDay,
+			EndHour:                  ee.EndHour,
+			EndMinute:                ee.EndMinute,
+			IsRecurring:              ee.IsRecurring,
+			RecurrenceType:           ee.RecurrenceType,
+			RecurrenceInterval:       ee.RecurrenceInterval,
+			RecurrenceEndYear:        ee.RecurrenceEndYear,
+			RecurrenceEndMonth:       ee.RecurrenceEndMonth,
+			RecurrenceEndDay:         ee.RecurrenceEndDay,
+			RecurrenceMaxOccurrences: ee.RecurrenceMaxOccurrences,
+			Visibility:               visibility,
+			KindID:                   kindID,
+			Announced:                ee.Announced,
+			Color:                    ee.Color,
+			Icon:                     ee.Icon,
+			AllDay:                   ee.AllDay,
+			Payload:                  ee.Payload,
+		}
+		if err := s.eventRepo.CreateEvent(ctx, evt); err != nil {
+			return fmt.Errorf("create imported event %q: %w", ee.Name, err)
+		}
 	}
 	return nil
 }

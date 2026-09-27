@@ -33,6 +33,19 @@ func RegisterRoutes(e *echo.Echo, h *Handler, campaignSvc campaigns.CampaignServ
 	cg.DELETE("/calendars/:calid", h.DeleteCalendarAPI, campaigns.RequireRole(campaigns.RoleOwner))
 	cg.PUT("/calendars/:calid/default", h.SetDefaultCalendarAPI, campaigns.RequireRole(campaigns.RoleOwner))
 
+	// --- Part B: calendar creation wizard (presets, import) ---
+	// Owner only, matching the calendar CRUD block above: creating a
+	// calendar's initial structure from a preset or an uploaded file is
+	// calendar structure, not content. "presets" and "import" are static
+	// first segments at the same path depth as "list" and ":calid" below —
+	// see that block's own comment on why a static segment always wins and
+	// none of these can collide with a real (UUID) :calid.
+	cg.GET("/calendars/presets", h.ListPresetsAPI, campaigns.RequireRole(campaigns.RoleOwner))
+	cg.GET("/calendars/presets/:name", h.PreviewPresetAPI, campaigns.RequireRole(campaigns.RoleOwner))
+	cg.POST("/calendars/presets/:name", h.CreateFromPresetAPI, campaigns.RequireRole(campaigns.RoleOwner))
+	cg.POST("/calendars/import/preview", h.PreviewImportAPI, campaigns.RequireRole(campaigns.RoleOwner))
+	cg.POST("/calendars/import", h.CreateFromImportAPI, campaigns.RequireRole(campaigns.RoleOwner))
+
 	// Calendar reads (Player) — re-registered under the public-capable group
 	// below, whose registration wins for the same path (see maps/routes.go's
 	// /maps, /maps/:mid, /maps/:mid/markers for the identical shape): kept
