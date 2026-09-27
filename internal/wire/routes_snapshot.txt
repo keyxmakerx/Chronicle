@@ -168,6 +168,8 @@ GET	/calendars/:calid/events	internal/plugins/calendar/routes.go
 GET	/calendars/:calid/events	internal/plugins/calendar/routes.go
 GET	/calendars/:calid/events/:eid	internal/plugins/calendar/routes.go
 GET	/calendars/:calid/events/:eid	internal/plugins/calendar/routes.go
+GET	/calendars/:calid/view	internal/plugins/calendar/routes.go
+GET	/calendars/:calid/view	internal/plugins/calendar/routes.go
 GET	/calendars/event-kinds	internal/plugins/calendar/routes.go
 GET	/calendars/list	internal/plugins/calendar/routes.go
 GET	/calendars/list	internal/plugins/calendar/routes.go

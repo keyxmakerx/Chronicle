@@ -92,4 +92,12 @@ func RegisterRoutes(e *echo.Echo, h *Handler, campaignSvc campaigns.CampaignServ
 	pub.GET("/calendars/:calid", h.GetCalendarAPI, campaigns.RequireViewAccess())
 	pub.GET("/calendars/:calid/events", h.ListEventsAPI, campaigns.RequireViewAccess())
 	pub.GET("/calendars/:calid/events/:eid", h.GetEventAPI, campaigns.RequireViewAccess())
+
+	// --- Calendar page (V5 part A, #741) ---
+	// The month grid / day-card / era-card / event / moon page. A real page a
+	// browser navigates to, so it's registered in both groups the same way
+	// GET /calendars/:calid already is above: Player+ for members, and the
+	// public-capable group for anonymous/public-campaign viewers.
+	cg.GET("/calendars/:calid/view", h.CalendarViewPage, campaigns.RequireRole(campaigns.RolePlayer))
+	pub.GET("/calendars/:calid/view", h.CalendarViewPage, campaigns.RequireViewAccess())
 }

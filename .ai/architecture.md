@@ -58,12 +58,15 @@ System or Widget (see root `CLAUDE.md` for what each tier is).
 | **System** | Game system content pack. Reference data, tooltips, dedicated pages | Yes (data serving) | Yes (tooltips, pages) | Per-campaign |
 | **Widget** | Reusable UI block. Mounts to DOM element, fetches own data | Minimal (API endpoints) | Primarily | Always available |
 
-`calendar` is the one exception to the plugin shape above: its UI, routes and
-handler were deleted for a ground-up rebuild (V5, #741). Only its domain layer
-(`model.go`, `calendar.go`, import/export, presets) and migrations remain.
-`syncapi`'s calendar routes stay registered and answer `503
-calendar_rebuilding` (see `.ai/plugin-development.md`); re-wiring points in
-other plugins are tagged `CALV5-PLACEHOLDER:`.
+`calendar`'s ground-up rebuild (V5, #741) is landing in parts, each restoring
+one slice of the plugin shape above: the domain layer, migrations, service,
+handler and JSON API routes shipped first; its own page (the month grid,
+day/era fold-out cards, events, moons) landed next. `syncapi`'s calendar
+routes still answer `503 calendar_rebuilding` (see
+`.ai/plugin-development.md`) pending their own rebuild slice; other plugins'
+re-wiring points are still tagged `CALV5-PLACEHOLDER:` until dashboard/entity
+blocks are restored. See `internal/plugins/calendar/.ai.md` for exactly
+which routes and UI exist today and which are still open.
 
 ### How They Interact on a Page
 

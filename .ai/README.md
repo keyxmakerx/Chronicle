@@ -32,10 +32,11 @@ Every directory below has an `.ai.md` describing its purpose, files, routes,
 business rules and footguns.
 
 - **Plugins** (`internal/plugins/<name>/`): addons, admin, ai_workspace (and
-  ai_workspace/aiexport), armory, audit, auth, backup, bestiary, campaigns,
-  designlab, entities, foundry_vtt, maps, media, npcs, packages, restore,
-  sessions, settings, smtp, syncapi, timeline, widgetbindings. The calendar
-  plugin has none: it holds only a domain layer and migrations until V5 (#741).
+  ai_workspace/aiexport), armory, audit, auth, backup, bestiary, calendar,
+  campaigns, designlab, entities, foundry_vtt, maps, media, npcs, packages,
+  restore, sessions, settings, smtp, syncapi, timeline, widgetbindings.
+  calendar's V5 rebuild (#741) is landing in parts — its `.ai.md` says
+  which parts have shipped and which are still open.
 - **Widgets** (`internal/widgets/<name>/`): attributes, editor, entity_notes,
   mentions, notes, posts, relations, tags, title.
 - **Infrastructure:** `internal/database/`, `internal/extensions/`,
