@@ -616,6 +616,9 @@ func (h *Handler) AnchorPreviewAPI(c echo.Context) error {
 	if err := c.Bind(&req); err != nil {
 		return apperror.NewBadRequest("invalid request")
 	}
+	if req.RealDate.IsZero() {
+		return apperror.NewValidation("real_date is required")
+	}
 	preview, err := h.svc.PreviewAnchorMove(c.Request().Context(), c.Param("calid"), cc.Campaign.ID,
 		req.AnchorYear, req.AnchorMonth, req.AnchorDay, req.RealDate)
 	if err != nil {

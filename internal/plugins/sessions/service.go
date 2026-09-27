@@ -35,6 +35,11 @@ type EntityVisibilityFilter interface {
 type SessionService interface {
 	CreateSession(ctx context.Context, campaignID string, input CreateSessionInput) (*Session, error)
 	GetSession(ctx context.Context, id string) (*Session, error)
+	// GetSessionIncludingDeleted is GetSession for a soft-deleted session —
+	// used only to confirm which campaign a session to be RESTORED belongs
+	// to (IDOR scoping) before restoring it; GetSession itself must keep
+	// answering not-found for a soft-deleted session everywhere else.
+	GetSessionIncludingDeleted(ctx context.Context, id string) (*Session, error)
 	ListSessions(ctx context.Context, campaignID string) ([]Session, error)
 	// ListPlannedSessions returns only planned (upcoming) sessions for a campaign.
 	ListPlannedSessions(ctx context.Context, campaignID string) ([]Session, error)
@@ -95,10 +100,16 @@ type SessionService interface {
 	ReplaceFeedToken(ctx context.Context, campaignID, userID string) (*CalendarFeedToken, error)
 	IsCalendarFeedEnabled(ctx context.Context, campaignID string) (bool, error)
 	SetCalendarFeedEnabled(ctx context.Context, campaignID string, enabled bool) error
-	// ResolveFeedSessions validates a feed token (checking the campaign-wide
-	// switch) and returns the campaign's upcoming, non-cancelled sessions to
-	// render as an ICS feed.
-	ResolveFeedSessions(ctx context.Context, tokenStr string) (campaignID string, sessions []Session, err error)
+	// ResolveFeedToken validates a feed token (checking the campaign-wide
+	// switch) and returns its campaignID/userID, WITHOUT touching any
+	// session data. The caller MUST re-check that userID is still a
+	// campaign member before calling ListFeedSessions — this token has no
+	// expiry, unlike a session RSVP token.
+	ResolveFeedToken(ctx context.Context, tokenStr string) (campaignID, userID string, err error)
+	// ListFeedSessions returns campaignID's upcoming sessions for the ICS
+	// feed. Call only after ResolveFeedToken succeeds and membership is
+	// re-checked — see ResolveFeedToken's doc comment.
+	ListFeedSessions(ctx context.Context, campaignID string) ([]Session, error)
 	BuildFeedICS(sessions []Session) string
 
 	// RSVP tokens for email-based responses. Redeem is split into a read-only
@@ -274,6 +285,13 @@ func (s *sessionService) GetSession(ctx context.Context, id string) (*Session, e
 	session.Entities = entities
 
 	return session, nil
+}
+
+// GetSessionIncludingDeleted returns a session (soft-deleted or not) with no
+// joined attendees/entities — see the interface doc comment for why this
+// exists at all: only the restore flow's campaign-scoping check needs it.
+func (s *sessionService) GetSessionIncludingDeleted(ctx context.Context, id string) (*Session, error) {
+	return s.repo.FindByIDIncludingDeleted(ctx, id)
 }
 
 // ListSessions returns all sessions for a campaign.

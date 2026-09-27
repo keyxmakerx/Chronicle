@@ -336,16 +336,40 @@ func IsSupportedRecurrenceType(t string) bool {
 //
 // Real-time (Gregorian) calendars use the proleptic-Gregorian Julian Day
 // Number, a true day counter that advances by exactly one across a leap day.
-// Every other calendar delegates to AbsoluteDay, the same leap-aware
-// closed-form counter moon-phase math already uses — this used to be a
-// separate, leap-naive constant-length sum (year*YearLength()) that
-// diverged from AbsoluteDay by one day per elapsed leap year; reconciled so
-// recurrence, weekday placement and moon phase can never drift apart again.
+// A positive year delegates to AbsoluteDay, the same leap-aware closed-form
+// counter moon-phase math already uses — this used to be a separate,
+// leap-naive constant-length sum (year*YearLength()) that diverged from
+// AbsoluteDay by one day per elapsed leap year for positive years;
+// reconciled so recurrence, weekday placement and moon phase can never drift
+// apart there.
+//
+// year <= 0 stays on the old linear formula: AbsoluteDay's leap term is
+// defined only for year > 0 (its own doc comment — "a negative or zero year
+// contributes nothing"), so delegating unconditionally would collapse every
+// non-positive year onto the same index (AbsoluteDay(-5,1,1) ==
+// AbsoluteDay(0,1,1)), breaking recurrence and weekday placement for any
+// calendar that permits year 0 or negative years. linearDayIndex stays
+// leap-unaware but strictly monotonic across zero and negative years, which
+// is what those two consumers actually need.
 func (c *Calendar) absDayIndex(year, month, day int) int {
 	if c.UsesRealTime() {
 		return gregorianJDN(year, month, day)
 	}
+	if year <= 0 {
+		return c.linearDayIndex(year, month, day)
+	}
 	return c.AbsoluteDay(year, month, day)
+}
+
+// linearDayIndex is the constant-length, leap-unaware absolute-day counter:
+// year*YearLength() + prior configured month days + day (month 1-based).
+// absDayIndex's fallback for year <= 0 — see its doc comment.
+func (c *Calendar) linearDayIndex(year, month, day int) int {
+	abs := year * c.YearLength()
+	for i := 0; i < month-1 && i < len(c.Months); i++ {
+		abs += c.Months[i].Days
+	}
+	return abs + day
 }
 
 // monthIsIntercalary reports whether the 1-based month index refers to an
@@ -364,6 +388,15 @@ func (c *Calendar) monthIsIntercalary(month int) bool {
 // list badge) calls to place a day in its week — never absDayIndex's modulo
 // directly, so MonthStartsNewWeek's reset/no-week rules apply everywhere or
 // nowhere.
+//
+// LIMITATION: OccursOn's week-based recurrence (weekly/biweekly/custom) does
+// NOT read MonthStartsNewWeek — it steps by continuous absDayIndex days
+// regardless, so on a MonthStartsNewWeek calendar a weekly-recurring event
+// can land in a different WeekdayIndex column than it started in once an
+// intercalary month has passed. Reconciling the two needs OccursOn's stride
+// math to skip intercalary days the same way WeekdayIndex does, which is
+// deferred: WeekdayIndex has no production caller yet (a future grid render
+// is the first one), so nothing surfaces the mismatch today.
 //
 // Real-time calendars ignore MonthStartsNewWeek entirely: Gregorian weeks are
 // always continuous, matching this method's own MonthStartsNewWeek=false

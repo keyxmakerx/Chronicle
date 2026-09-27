@@ -122,34 +122,55 @@ func (s *sessionService) MoveSession(ctx context.Context, id string, input Updat
 	return next, responded, nil
 }
 
-// respondedUserIDs collects who has already answered a session, from
-// whichever store it actually uses.
+// respondedUserIDs collects who has already answered a session, from BOTH
+// stores it might use. A recurring session's answers are NOT exclusively in
+// session_occurrence_rsvps: the shipped RSVP control (a bare {status} POST)
+// still writes to session_attendees regardless of IsRecurring — only a
+// caller that explicitly sends note/occurrenceDate engages the per-occurrence
+// path (see UpdateRSVPDetailed) — so checking occurrence rows alone would
+// silently miss every answer given through the ordinary RSVP buttons on a
+// recurring session, and a cancel/delete would notify nobody.
 func (s *sessionService) respondedUserIDs(ctx context.Context, session *Session) ([]string, error) {
-	if session.IsRecurring {
-		ids, err := s.repo.ListAllOccurrenceRespondedUserIDs(ctx, session.ID)
-		if err != nil {
-			return nil, apperror.NewInternal(fmt.Errorf("listing occurrence responders: %w", err))
-		}
-		return ids, nil
-	}
-	ids, err := s.repo.ListRespondedUserIDs(ctx, session.ID)
+	attendeeIDs, err := s.repo.ListRespondedUserIDs(ctx, session.ID)
 	if err != nil {
 		return nil, apperror.NewInternal(fmt.Errorf("listing responders: %w", err))
 	}
-	return ids, nil
+	if !session.IsRecurring {
+		return attendeeIDs, nil
+	}
+	occurrenceIDs, err := s.repo.ListAllOccurrenceRespondedUserIDs(ctx, session.ID)
+	if err != nil {
+		return nil, apperror.NewInternal(fmt.Errorf("listing occurrence responders: %w", err))
+	}
+	seen := make(map[string]bool, len(attendeeIDs)+len(occurrenceIDs))
+	out := make([]string, 0, len(attendeeIDs)+len(occurrenceIDs))
+	for _, id := range attendeeIDs {
+		if !seen[id] {
+			seen[id] = true
+			out = append(out, id)
+		}
+	}
+	for _, id := range occurrenceIDs {
+		if !seen[id] {
+			seen[id] = true
+			out = append(out, id)
+		}
+	}
+	return out, nil
 }
 
-// flagNeedsRecheck marks every existing answer "needs to check again",
-// without clearing any of them.
+// flagNeedsRecheck marks every existing answer "needs to check again" in
+// BOTH stores — see respondedUserIDs' doc comment for why a recurring
+// session's answers are not exclusively in the per-occurrence table.
 func (s *sessionService) flagNeedsRecheck(ctx context.Context, session *Session) error {
-	if session.IsRecurring {
-		if err := s.repo.MarkAllOccurrencesNeedsRecheck(ctx, session.ID); err != nil {
-			return apperror.NewInternal(fmt.Errorf("flagging occurrence responses: %w", err))
-		}
-		return nil
-	}
 	if err := s.repo.MarkSeriesNeedsRecheck(ctx, session.ID); err != nil {
 		return apperror.NewInternal(fmt.Errorf("flagging responses: %w", err))
+	}
+	if !session.IsRecurring {
+		return nil
+	}
+	if err := s.repo.MarkAllOccurrencesNeedsRecheck(ctx, session.ID); err != nil {
+		return apperror.NewInternal(fmt.Errorf("flagging occurrence responses: %w", err))
 	}
 	return nil
 }
@@ -232,11 +253,24 @@ func (s *sessionService) UpdateRSVPDetailed(ctx context.Context, sessionID, user
 		return apperror.NewBadRequest("invalid RSVP status: must be accepted, declined, or tentative")
 	}
 
+	noteVal := notePatchToRepoNote(note)
+	// Matches session_attendees.note / session_occurrence_rsvps.note
+	// VARCHAR(140) — reject an over-length note here, before any write,
+	// rather than letting the column reject it after the status write has
+	// already committed.
+	if noteVal != nil && len(*noteVal) > 140 {
+		return apperror.NewValidation("the note must be at most 140 characters")
+	}
+	if occurrenceDate != nil && *occurrenceDate != "" {
+		if _, err := time.Parse("2006-01-02", *occurrenceDate); err != nil {
+			return apperror.NewValidation("occurrenceDate must be a valid YYYY-MM-DD date")
+		}
+	}
+
 	session, err := s.repo.FindByID(ctx, sessionID)
 	if err != nil {
 		return err
 	}
-	noteVal := notePatchToRepoNote(note)
 
 	if session.IsRecurring {
 		occDate := ""
@@ -345,9 +379,30 @@ func (s *sessionService) ValidateAndRecordSuggestion(ctx context.Context, tokenS
 	if parsedDate.Before(today) {
 		return nil, apperror.NewValidation("the suggested date can't be in the past")
 	}
-	if suggestedTime != nil && strings.TrimSpace(*suggestedTime) != "" {
-		if _, err := time.Parse("15:04", strings.TrimSpace(*suggestedTime)); err != nil {
-			return nil, apperror.NewValidation("please enter a valid time")
+	// Normalize (trim) BEFORE both validating and storing — the earlier
+	// version validated a trimmed copy but stored the caller's raw,
+	// untrimmed pointer, so a value like " 19:00 " passed validation here and
+	// then failed the VARCHAR(5) column write AFTER the token was already
+	// consumed, which is exactly the bug this method exists to avoid.
+	var cleanTime *string
+	if suggestedTime != nil {
+		if t := strings.TrimSpace(*suggestedTime); t != "" {
+			if _, err := time.Parse("15:04", t); err != nil {
+				return nil, apperror.NewValidation("please enter a valid time")
+			}
+			cleanTime = &t
+		}
+	}
+	var cleanNote *string
+	if note != nil {
+		if n := strings.TrimSpace(*note); n != "" {
+			// Matches session_reschedule_suggestions.note VARCHAR(140) — an
+			// over-length note must fail HERE, before the token is
+			// consumed, not as a column-width error after it.
+			if len(n) > 140 {
+				return nil, apperror.NewValidation("the note must be at most 140 characters")
+			}
+			cleanNote = &n
 		}
 	}
 
@@ -362,8 +417,8 @@ func (s *sessionService) ValidateAndRecordSuggestion(ctx context.Context, tokenS
 		SessionID:     token.SessionID,
 		UserID:        token.UserID,
 		SuggestedDate: parsedDate.Format("2006-01-02"),
-		SuggestedTime: suggestedTime,
-		Note:          note,
+		SuggestedTime: cleanTime,
+		Note:          cleanNote,
 		CreatedAt:     time.Now().UTC(),
 	}
 	if err := s.repo.CreateRescheduleSuggestion(ctx, suggestion); err != nil {
@@ -405,34 +460,53 @@ func (s *sessionService) SetCalendarFeedEnabled(ctx context.Context, campaignID 
 	return nil
 }
 
-// ResolveFeedSessions is the read behind the public feed route: the token IS
-// the credential (mirrors /rsvp/:token), so a missing or unknown token and a
-// campaign-disabled feed both fail the SAME way — apperror.NewNotFound — so
-// the route can return one plain 404 either way rather than distinguishing
-// "wrong token" from "turned off" to an unauthenticated caller.
-func (s *sessionService) ResolveFeedSessions(ctx context.Context, tokenStr string) (string, []Session, error) {
+// ResolveFeedToken is the read behind the public feed route's credential
+// check: the token IS the credential (mirrors /rsvp/:token), so a missing or
+// unknown token and a campaign-disabled feed both fail the SAME way —
+// apperror.NewNotFound — so the route can return one plain 404 either way
+// rather than distinguishing "wrong token" from "turned off" to an
+// unauthenticated caller.
+//
+// Deliberately does NOT list any session data: unlike a session-scoped RSVP
+// token, a feed token has no natural expiry, so the HANDLER must re-check the
+// token's user is STILL a campaign member before this method's sibling,
+// ListFeedSessions, is ever called — a removed member's subscribed calendar
+// app would otherwise keep pulling every planned session's name, date and
+// time indefinitely, since nothing else revokes the token when membership
+// ends. Splitting the credential check from the data read means that failure
+// mode can't reach the data at all, not just "the handler happens to discard
+// it before responding".
+func (s *sessionService) ResolveFeedToken(ctx context.Context, tokenStr string) (campaignID, userID string, err error) {
 	tok, err := s.repo.FindFeedToken(ctx, tokenStr)
 	if err != nil {
-		return "", nil, err
+		return "", "", err
 	}
 	enabled, err := s.repo.IsCalendarFeedEnabled(ctx, tok.CampaignID)
 	if err != nil {
-		return "", nil, apperror.NewInternal(fmt.Errorf("reading feed settings: %w", err))
+		return "", "", apperror.NewInternal(fmt.Errorf("reading feed settings: %w", err))
 	}
 	if !enabled {
-		return "", nil, apperror.NewNotFound("this campaign's calendar feed is turned off")
+		return "", "", apperror.NewNotFound("this campaign's calendar feed is turned off")
 	}
+	return tok.CampaignID, tok.UserID, nil
+}
+
+// ListFeedSessions returns campaignID's upcoming sessions to render as an ICS
+// feed. Call only AFTER ResolveFeedToken has succeeded AND the caller has
+// re-checked the token's user is still a campaign member — see
+// ResolveFeedToken's doc comment.
+func (s *sessionService) ListFeedSessions(ctx context.Context, campaignID string) ([]Session, error) {
 	// A generous forward window (2 years) plus everything already past that
 	// is still planned: an ICS feed subscriber's calendar app re-fetches
 	// periodically, so this does not need to be exhaustive, only sufficient
 	// for a subscribed app to show "what's next".
 	start := time.Now().UTC().Format("2006-01-02")
 	end := time.Now().UTC().AddDate(2, 0, 0).Format("2006-01-02")
-	sessions, err := s.repo.ListByDateRange(ctx, tok.CampaignID, start, end)
+	list, err := s.repo.ListByDateRange(ctx, campaignID, start, end)
 	if err != nil {
-		return "", nil, apperror.NewInternal(fmt.Errorf("listing feed sessions: %w", err))
+		return nil, apperror.NewInternal(fmt.Errorf("listing feed sessions: %w", err))
 	}
-	return tok.CampaignID, sessions, nil
+	return list, nil
 }
 
 // BuildFeedICS renders a minimal, valid RFC 5545 VCALENDAR/VEVENT block, one
@@ -460,24 +534,41 @@ func (s *sessionService) BuildFeedICS(sessions []Session) string {
 		b.WriteString("BEGIN:VEVENT\r\n")
 		fmt.Fprintf(&b, "UID:session-%s@chronicle\r\n", sess.ID)
 		fmt.Fprintf(&b, "DTSTAMP:%s\r\n", now)
-		if sess.ScheduledTime == nil || *sess.ScheduledTime == "" {
+		switch {
+		case sess.ScheduledTime == nil || *sess.ScheduledTime == "":
 			day := strings.ReplaceAll(*sess.ScheduledDate, "-", "")
 			fmt.Fprintf(&b, "DTSTART;VALUE=DATE:%s\r\n", day)
-		} else {
-			zone := "UTC"
-			if sess.ScheduledTZ != nil && *sess.ScheduledTZ != "" {
-				zone = *sess.ScheduledTZ
-			}
-			loc := timeutil.LoadLocation(zone)
+		case sess.ScheduledTZ != nil && *sess.ScheduledTZ != "":
+			// A known zone converts cleanly to a real UTC instant.
+			loc := timeutil.LoadLocation(*sess.ScheduledTZ)
 			start, err := time.ParseInLocation("2006-01-02 15:04", *sess.ScheduledDate+" "+*sess.ScheduledTime, loc)
-			if err == nil {
-				end := start.Add(3 * time.Hour) // no stored duration; a typical session-length default
-				fmt.Fprintf(&b, "DTSTART:%s\r\n", start.UTC().Format("20060102T150405Z"))
-				fmt.Fprintf(&b, "DTEND:%s\r\n", end.UTC().Format("20060102T150405Z"))
-			} else {
+			if err != nil {
 				day := strings.ReplaceAll(*sess.ScheduledDate, "-", "")
 				fmt.Fprintf(&b, "DTSTART;VALUE=DATE:%s\r\n", day)
+				break
 			}
+			end := start.Add(3 * time.Hour) // no stored duration; a typical session-length default
+			fmt.Fprintf(&b, "DTSTART:%s\r\n", start.UTC().Format("20060102T150405Z"))
+			fmt.Fprintf(&b, "DTEND:%s\r\n", end.UTC().Format("20060102T150405Z"))
+		default:
+			// No stored zone (every pre-Part-C session, and any manual
+			// session whose creator's zone wasn't captured): a session with
+			// a time but no zone is NOT UTC — treating it as UTC would put
+			// e.g. a Chicago Director's "7:00 PM" at 2:00 PM for a subscriber
+			// six hours east. RFC 5545 "floating" time (no Z, no TZID) is the
+			// honest representation: each subscriber's calendar app shows it
+			// at face value, in ITS OWN local time, same as the organizer
+			// typed it — no worse than the UTC guess, and never confidently
+			// wrong by a fixed offset.
+			start, err := time.Parse("2006-01-02 15:04", *sess.ScheduledDate+" "+*sess.ScheduledTime)
+			if err != nil {
+				day := strings.ReplaceAll(*sess.ScheduledDate, "-", "")
+				fmt.Fprintf(&b, "DTSTART;VALUE=DATE:%s\r\n", day)
+				break
+			}
+			end := start.Add(3 * time.Hour)
+			fmt.Fprintf(&b, "DTSTART:%s\r\n", start.Format("20060102T150405"))
+			fmt.Fprintf(&b, "DTEND:%s\r\n", end.Format("20060102T150405"))
 		}
 		fmt.Fprintf(&b, "SUMMARY:%s\r\n", icsEscape(sess.Name))
 		b.WriteString("END:VEVENT\r\n")

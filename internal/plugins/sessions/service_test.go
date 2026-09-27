@@ -17,24 +17,25 @@ import (
 // individual tests can override only the methods they care about. Nil
 // methods return sensible zero values (nil error, empty slices).
 type mockSessionRepo struct {
-	createFn               func(ctx context.Context, campaignID string, s *Session) error
-	findByIDFn             func(ctx context.Context, id string) (*Session, error)
-	listByCampaignFn       func(ctx context.Context, campaignID string) ([]Session, error)
-	listByDateRangeFn      func(ctx context.Context, campaignID, startDate, endDate string) ([]Session, error)
-	searchByCampaignFn     func(ctx context.Context, campaignID, query string) ([]Session, error)
-	updateFn               func(ctx context.Context, s *Session) error
-	updateRecapFn          func(ctx context.Context, id string, recap, recapHTML *string) error
-	deleteFn               func(ctx context.Context, id string) error
-	addAttendeeFn          func(ctx context.Context, sessionID, userID, status string) error
-	updateAttendeeStatusFn func(ctx context.Context, sessionID, userID, status string) error
-	removeAttendeeFn       func(ctx context.Context, sessionID, userID string) error
-	listAttendeesFn        func(ctx context.Context, sessionID string) ([]Attendee, error)
-	linkEntityFn           func(ctx context.Context, sessionID, entityID, role string) error
-	unlinkEntityFn         func(ctx context.Context, sessionID, entityID string) error
-	listSessionEntitiesFn  func(ctx context.Context, sessionID string) ([]SessionEntity, error)
-	createRSVPTokenFn      func(ctx context.Context, token *RSVPToken) error
-	findRSVPTokenFn        func(ctx context.Context, tokenStr string) (*RSVPToken, error)
-	markRSVPTokenUsedFn    func(ctx context.Context, tokenStr string) error
+	createFn                   func(ctx context.Context, campaignID string, s *Session) error
+	findByIDFn                 func(ctx context.Context, id string) (*Session, error)
+	findByIDIncludingDeletedFn func(ctx context.Context, id string) (*Session, error)
+	listByCampaignFn           func(ctx context.Context, campaignID string) ([]Session, error)
+	listByDateRangeFn          func(ctx context.Context, campaignID, startDate, endDate string) ([]Session, error)
+	searchByCampaignFn         func(ctx context.Context, campaignID, query string) ([]Session, error)
+	updateFn                   func(ctx context.Context, s *Session) error
+	updateRecapFn              func(ctx context.Context, id string, recap, recapHTML *string) error
+	deleteFn                   func(ctx context.Context, id string) error
+	addAttendeeFn              func(ctx context.Context, sessionID, userID, status string) error
+	updateAttendeeStatusFn     func(ctx context.Context, sessionID, userID, status string) error
+	removeAttendeeFn           func(ctx context.Context, sessionID, userID string) error
+	listAttendeesFn            func(ctx context.Context, sessionID string) ([]Attendee, error)
+	linkEntityFn               func(ctx context.Context, sessionID, entityID, role string) error
+	unlinkEntityFn             func(ctx context.Context, sessionID, entityID string) error
+	listSessionEntitiesFn      func(ctx context.Context, sessionID string) ([]SessionEntity, error)
+	createRSVPTokenFn          func(ctx context.Context, token *RSVPToken) error
+	findRSVPTokenFn            func(ctx context.Context, tokenStr string) (*RSVPToken, error)
+	markRSVPTokenUsedFn        func(ctx context.Context, tokenStr string) error
 	// Availability.
 	listUserAvailabilityFn        func(ctx context.Context, campaignID, userID string) ([]AvailabilityBlock, error)
 	listCampaignAvailabilityFn    func(ctx context.Context, campaignID string) ([]AvailabilityBlock, error)
@@ -227,6 +228,16 @@ func (m *mockSessionRepo) Create(ctx context.Context, campaignID string, s *Sess
 }
 
 func (m *mockSessionRepo) FindByID(ctx context.Context, id string) (*Session, error) {
+	if m.findByIDFn != nil {
+		return m.findByIDFn(ctx, id)
+	}
+	return nil, nil
+}
+
+func (m *mockSessionRepo) FindByIDIncludingDeleted(ctx context.Context, id string) (*Session, error) {
+	if m.findByIDIncludingDeletedFn != nil {
+		return m.findByIDIncludingDeletedFn(ctx, id)
+	}
 	if m.findByIDFn != nil {
 		return m.findByIDFn(ctx, id)
 	}

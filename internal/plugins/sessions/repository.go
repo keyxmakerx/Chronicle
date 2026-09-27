@@ -14,6 +14,10 @@ import (
 type SessionRepository interface {
 	Create(ctx context.Context, campaignID string, s *Session) error
 	FindByID(ctx context.Context, id string) (*Session, error)
+	// FindByIDIncludingDeleted is FindByID without the deleted_at filter —
+	// used only to confirm a soft-deleted session's campaign before
+	// restoring it.
+	FindByIDIncludingDeleted(ctx context.Context, id string) (*Session, error)
 	ListByCampaign(ctx context.Context, campaignID string) ([]Session, error)
 	ListByDateRange(ctx context.Context, campaignID, startDate, endDate string) ([]Session, error)
 	SearchByCampaign(ctx context.Context, campaignID, query string) ([]Session, error)
@@ -162,9 +166,11 @@ func (r *sessionRepository) Create(ctx context.Context, campaignID string, s *Se
 // FindByID retrieves a session by its UUID.
 func (r *sessionRepository) FindByID(ctx context.Context, id string) (*Session, error) {
 	// deleted_at IS NULL: a soft-deleted session must vanish from FindByID the
-	// same way a hard-deleted one used to. RestoreSession/SoftDeleteSession
-	// operate by id alone (plain UPDATE) and never need to SELECT a deleted
-	// row, so they need no "including deleted" variant of this query.
+	// same way a hard-deleted one used to. SoftDeleteSession/RestoreSession
+	// themselves operate by id alone (plain UPDATE) and never need to SELECT
+	// a deleted row — but confirming a soft-deleted session's campaign before
+	// restoring it does, which is exactly what FindByIDIncludingDeleted below
+	// is for; do not use this method for that check, it will always 404.
 	query := `SELECT s.id, s.campaign_id, s.name, s.summary, s.notes, s.notes_html,
 	                 s.recap, s.recap_html,
 	                 s.scheduled_date, s.scheduled_time, s.scheduled_tz, s.calendar_year, s.calendar_month, s.calendar_day,
@@ -191,6 +197,41 @@ func (r *sessionRepository) FindByID(ctx context.Context, id string) (*Session, 
 	}
 	if err != nil {
 		return nil, fmt.Errorf("querying session by id: %w", err)
+	}
+	return s, nil
+}
+
+// FindByIDIncludingDeleted is FindByID without the deleted_at filter — the
+// one read path that CAN see a soft-deleted session, so the restore flow can
+// confirm which campaign it belongs to (IDOR scoping) before restoring it.
+// Every other read in this file must keep filtering deleted_at IS NULL.
+func (r *sessionRepository) FindByIDIncludingDeleted(ctx context.Context, id string) (*Session, error) {
+	query := `SELECT s.id, s.campaign_id, s.name, s.summary, s.notes, s.notes_html,
+	                 s.recap, s.recap_html,
+	                 s.scheduled_date, s.scheduled_time, s.scheduled_tz, s.calendar_year, s.calendar_month, s.calendar_day,
+	                 s.status, s.is_recurring, s.recurrence_type, s.recurrence_interval,
+	                 s.recurrence_day_of_week, s.recurrence_end_date,
+	                 s.sort_order, s.created_by, s.created_at, s.updated_at,
+	                 u.display_name
+	          FROM sessions s
+	          LEFT JOIN users u ON u.id = s.created_by
+	          WHERE s.id = ?`
+
+	s := &Session{}
+	err := r.db.QueryRowContext(ctx, query, id).Scan(
+		&s.ID, &s.CampaignID, &s.Name, &s.Summary, &s.Notes, &s.NotesHTML,
+		&s.Recap, &s.RecapHTML,
+		&s.ScheduledDate, &s.ScheduledTime, &s.ScheduledTZ, &s.CalendarYear, &s.CalendarMonth, &s.CalendarDay,
+		&s.Status, &s.IsRecurring, &s.RecurrenceType, &s.RecurrenceInterval,
+		&s.RecurrenceDayOfWeek, &s.RecurrenceEndDate,
+		&s.SortOrder, &s.CreatedBy, &s.CreatedAt, &s.UpdatedAt,
+		&s.CreatorName,
+	)
+	if err == sql.ErrNoRows {
+		return nil, apperror.NewNotFound("session not found")
+	}
+	if err != nil {
+		return nil, fmt.Errorf("querying session by id (including deleted): %w", err)
 	}
 	return s, nil
 }

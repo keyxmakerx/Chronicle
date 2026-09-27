@@ -264,7 +264,8 @@ func (h *Handler) UpdateSessionAPI(c echo.Context) error {
 	cc := campaigns.GetCampaignContext(c)
 	sessionID := c.Param("sid")
 
-	if _, err := h.requireSessionInCampaign(c, sessionID, cc.Campaign.ID); err != nil {
+	existing, err := h.requireSessionInCampaign(c, sessionID, cc.Campaign.ID)
+	if err != nil {
 		return err
 	}
 
@@ -273,9 +274,21 @@ func (h *Handler) UpdateSessionAPI(c echo.Context) error {
 		return c.JSON(http.StatusBadRequest, map[string]string{"error": "invalid request"})
 	}
 
-	nextSession, err := h.svc.UpdateSession(c.Request().Context(), sessionID, req.toInput())
+	// MoveSession wraps UpdateSession's exact partial update and additionally
+	// flags-and-reports responders ONLY when the stored schedule actually
+	// changed on a session that already has RSVP responses (a recap save or
+	// a Mark Complete leaves nextSession's own meaning — the auto-generated
+	// next occurrence, if any — untouched).
+	nextSession, responded, err := h.svc.MoveSession(c.Request().Context(), sessionID, req.toInput())
 	if err != nil {
 		return c.JSON(apperror.SafeCode(err), map[string]string{"error": apperror.SafeMessage(err)})
+	}
+	if len(responded) > 0 {
+		msg := "\"" + existing.Name + "\" was moved. Please check your answer."
+		link := "/campaigns/" + cc.Campaign.ID + "/sessions/" + sessionID
+		if nErr := h.svc.NotifyUsers(c.Request().Context(), responded, cc.Campaign.ID, NotifSessionMoved, msg, link); nErr != nil {
+			slog.Error("notifying responded members of a moved session", slog.String("error", nErr.Error()))
+		}
 	}
 
 	// If a recurring session was completed, a new session was auto-generated.
@@ -345,8 +358,18 @@ func (h *Handler) RestoreSessionAPI(c echo.Context) error {
 	cc := campaigns.GetCampaignContext(c)
 	sessionID := c.Param("sid")
 
-	if _, err := h.requireSessionInCampaign(c, sessionID, cc.Campaign.ID); err != nil {
+	// requireSessionInCampaign goes through GetSession -> FindByID, which
+	// filters deleted_at IS NULL — a session to be RESTORED is by definition
+	// still soft-deleted at this point, so that check would always 404 here.
+	// GetSessionIncludingDeleted is the one read path built to see it; the
+	// campaign-id comparison below is the same IDOR scoping
+	// requireSessionInCampaign would otherwise have done.
+	existing, err := h.svc.GetSessionIncludingDeleted(c.Request().Context(), sessionID)
+	if err != nil {
 		return err
+	}
+	if existing.CampaignID != cc.Campaign.ID {
+		return apperror.NewNotFound("session not found")
 	}
 
 	sess, responded, err := h.svc.RestoreSession(c.Request().Context(), sessionID)
@@ -819,11 +842,25 @@ func (h *Handler) ReplaceFeedTokenAPI(c echo.Context) error {
 // GET /sessions/feed/:token(.ics)
 func (h *Handler) GameNightFeedICS(c echo.Context) error {
 	tokenStr := strings.TrimSuffix(c.Param("token"), ".ics")
-	_, sessions, err := h.svc.ResolveFeedSessions(c.Request().Context(), tokenStr)
+	campaignID, userID, err := h.svc.ResolveFeedToken(c.Request().Context(), tokenStr)
+	if err != nil {
+		return c.String(http.StatusNotFound, "not found")
+	}
+	// This token has no expiry (unlike a session RSVP token), so a member
+	// removed from the campaign after subscribing must be re-checked on
+	// every fetch — otherwise their calendar app keeps pulling every planned
+	// session indefinitely. Checked BEFORE any session data is read (see
+	// ResolveFeedToken/ListFeedSessions' split), fails closed like every
+	// other token route.
+	if !h.isCampaignMember(c.Request().Context(), campaignID, userID) {
+		return c.String(http.StatusNotFound, "not found")
+	}
+	sessions, err := h.svc.ListFeedSessions(c.Request().Context(), campaignID)
 	if err != nil {
 		return c.String(http.StatusNotFound, "not found")
 	}
 	c.Response().Header().Set("Content-Type", "text/calendar; charset=utf-8")
+	c.Response().Header().Set("Cache-Control", "private, no-store")
 	return c.String(http.StatusOK, h.svc.BuildFeedICS(sessions))
 }
 
@@ -842,6 +879,14 @@ func (h *Handler) RedeemSuggestToken(c echo.Context) error {
 		return c.HTML(http.StatusOK, rsvpResultHTML("Invalid Link",
 			"This link is invalid, has expired, or has already been used.", false))
 	}
+	// Same re-check every other token route in this file makes: a link
+	// cannot outlive the access that justified it. Without this, a member
+	// removed from the campaign (or a link for a since-deleted session)
+	// could still submit a suggestion and notify the organizer.
+	if !h.tokenUserStillBelongs(c.Request().Context(), token) {
+		return c.HTML(http.StatusOK, rsvpResultHTML("Invalid Link",
+			"You're no longer a member of this campaign, so this link can't be used.", false))
+	}
 	return c.HTML(http.StatusOK, suggestFormHTML(
 		fmt.Sprintf("/rsvp/%s/suggest", tokenStr), middleware.GetCSRFToken(c)))
 }
@@ -852,6 +897,17 @@ func (h *Handler) RedeemSuggestToken(c echo.Context) error {
 // POST /rsvp/:token/suggest
 func (h *Handler) ApplySuggestToken(c echo.Context) error {
 	tokenStr := c.Param("token")
+
+	preToken, err := h.svc.ValidateRSVPToken(c.Request().Context(), tokenStr)
+	if err != nil || preToken.Action != RSVPActionSuggest {
+		return c.HTML(http.StatusOK, rsvpResultHTML("Suggestion Failed",
+			"This link is invalid, has expired, or has already been used.", false))
+	}
+	if !h.tokenUserStillBelongs(c.Request().Context(), preToken) {
+		return c.HTML(http.StatusOK, rsvpResultHTML("Suggestion Failed",
+			"You're no longer a member of this campaign, so this link can't be used.", false))
+	}
+
 	date := c.FormValue("date")
 	var timeVal, note *string
 	if v := c.FormValue("time"); v != "" {

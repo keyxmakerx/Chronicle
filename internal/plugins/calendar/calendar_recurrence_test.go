@@ -278,6 +278,44 @@ func TestAbsDayIndexReconciledWithAbsoluteDay(t *testing.T) {
 	}
 }
 
+// TestAbsDayIndexStaysMonotonicForNonPositiveYears pins that delegating to
+// AbsoluteDay for year > 0 did not also break year <= 0: AbsoluteDay's own
+// doc comment says "a negative or zero year contributes nothing" to its
+// leap term, so calling it unconditionally would have collapsed every
+// non-positive year onto the same index (a campaign event dated year -5
+// would have reported the same day as one dated year 0), making a
+// weekly-recurring event starting in a negative year fire before its own
+// start date. absDayIndex's year<=0 branch (linearDayIndex) must stay
+// strictly increasing across the zero boundary instead.
+func TestAbsDayIndexStaysMonotonicForNonPositiveYears(t *testing.T) {
+	cal := recurrenceCal()
+
+	got := map[int]bool{}
+	prev := cal.absDayIndex(-5, 1, 1)
+	for _, yr := range []int{-4, -3, -2, -1, 0, 1} {
+		cur := cal.absDayIndex(yr, 1, 1)
+		if cur <= prev {
+			t.Fatalf("absDayIndex(%d,1,1) = %d, want strictly greater than absDayIndex for the previous year (%d)", yr, cur, prev)
+		}
+		if got[cur] {
+			t.Fatalf("absDayIndex(%d,1,1) = %d collides with an earlier year's index", yr, cur)
+		}
+		got[cur] = true
+		prev = cur
+	}
+
+	// A weekly event starting at year -1 must never be reported as occurring
+	// before its own start date.
+	rt := RecurrenceWeekly
+	e := Event{Year: -1, Month: 1, Day: 1, IsRecurring: true, RecurrenceType: &rt}
+	if e.OccursOn(cal, -5, 1, 1) {
+		t.Error("a weekly event starting in year -1 must not occur in year -5, before its own start")
+	}
+	if !e.OccursOn(cal, -1, 1, 1) {
+		t.Error("a weekly event must occur on its own start date")
+	}
+}
+
 // TestWeekdayIndex_MonthStartsNewWeek_Harptos pins the Harptos-shaped
 // behavior: with MonthStartsNewWeek, day 1 of every month is always the
 // first weekday, and a day inside an intercalary month belongs to no week at

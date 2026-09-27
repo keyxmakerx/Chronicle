@@ -124,20 +124,24 @@ type AnchorMovePreview struct {
 	// DeltaDays is positive when the move is later, negative when earlier.
 	// Zero for a calendar's first-time anchor set (see PreviewAnchorMove's
 	// doc comment) — there is no prior mapping to shift away from.
-	DeltaDays int
+	DeltaDays int `json:"delta_days"`
 	// FirstTimeSet is true when the calendar has no anchor yet: there is
 	// nothing to warn about moving, since nothing was ever mapped before.
 	// Affected is always empty in this case.
-	FirstTimeSet bool
-	Affected     []AffectedSessionPreview
+	FirstTimeSet bool                     `json:"first_time_set"`
+	Affected     []AffectedSessionPreview `json:"affected,omitempty"`
 }
 
 // AffectedSessionPreview is one session's date under the current anchor and
 // what it would become under the proposed one.
 type AffectedSessionPreview struct {
-	Name                      string
-	OldYear, OldMonth, OldDay int
-	NewYear, NewMonth, NewDay int
+	Name     string `json:"name"`
+	OldYear  int    `json:"old_year"`
+	OldMonth int    `json:"old_month"`
+	OldDay   int    `json:"old_day"`
+	NewYear  int    `json:"new_year"`
+	NewMonth int    `json:"new_month"`
+	NewDay   int    `json:"new_day"`
 }
 
 // CalendarService defines the calendar plugin's business logic. Handlers
