@@ -121,8 +121,11 @@ func TestCalendarPreview_PlayerAndOwnerCanOpenIt(t *testing.T) {
 		if !strings.Contains(rec.Body.String(), "The Secret Calendar") {
 			t.Errorf("%s: expected the calendar's name in the preview, body:\n%s", userID, rec.Body.String())
 		}
-		if !strings.Contains(rec.Body.String(), "Open calendar") {
-			t.Errorf("%s: expected a link to Part A's full calendar view, body:\n%s", userID, rec.Body.String())
+		if !strings.Contains(rec.Body.String(), "Full calendar view (coming soon)") {
+			t.Errorf("%s: expected a disabled placeholder for Part A's full calendar view (not merged yet, must not be a live link), body:\n%s", userID, rec.Body.String())
+		}
+		if strings.Contains(rec.Body.String(), "/calendars/cal-1/view") {
+			t.Errorf("%s: Part A's route hasn't merged — the preview must not link to it yet, body:\n%s", userID, rec.Body.String())
 		}
 	}
 }
