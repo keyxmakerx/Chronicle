@@ -290,6 +290,18 @@
     return e.icon || e.kind_icon || '●';
   }
 
+  // Allowlist for a color value read from server data (event/kind colors)
+  // before it lands in a style="color:..." attribute: strips everything
+  // but the characters a hex/rgb/oklch/named CSS color can legitimately
+  // contain, so a crafted value can't close the attribute early or inject a
+  // second declaration. Exposed on Chronicle so calendar_editor.js's kind
+  // chips and era-manager rendering use this exact same allowlist rather
+  // than a second copy that could drift from it — the same cross-file
+  // sharing CalDate/growOpen/growClose already use below.
+  function sanitizeColor(c) {
+    return c ? String(c).replace(/[^#a-zA-Z0-9(),.% ]/g, '') : '';
+  }
+
   // Event category color: an event's own color falls back to its kind's.
   // Rendered as a plain inline `color:` declaration (not the mockup's --h
   // oklch hue variable, which would need a hex->oklch-hue conversion this
@@ -297,8 +309,8 @@
   // stylesheet's `.mk{color:oklch(var(--icL) var(--icC) var(--h,260))}`
   // regardless, so this is a complete override, not a partial one.
   function eventColorStyle(e) {
-    var c = e.color || e.kind_color;
-    return c ? ('color:' + String(c).replace(/[^#a-zA-Z0-9(),.% ]/g, '') + ';') : '';
+    var c = sanitizeColor(e.color || e.kind_color);
+    return c ? ('color:' + c + ';') : '';
   }
 
   // ---------------------------------------------------------------
@@ -391,6 +403,7 @@
   // the exact same grow-from-anchor motion as every other panel here.
   Chronicle.calendarDate = CalDate;
   Chronicle.calendarPanel = { growOpen: growOpen, growClose: growClose };
+  Chronicle.calendarColor = sanitizeColor;
 
   // ================================================================
   Chronicle.register('calendar_view', {
@@ -636,7 +649,8 @@
     renderLegend: function () {
       var kinds = this.cal.event_kinds || [];
       $('#cal5-legend', this.el).innerHTML = kinds.slice(0, 8).map(function (k) {
-        return '<li><span class="mk" style="color:' + esc(k.color || '') + '">' + esc(k.icon || '●') + '</span>' + esc(k.name) + '</li>';
+        var color = sanitizeColor(k.color);
+        return '<li><span class="mk" style="' + (color ? 'color:' + color + ';' : '') + '">' + esc(k.icon || '●') + '</span>' + esc(k.name) + '</li>';
       }).join('');
     },
 
@@ -1007,7 +1021,6 @@
 
     _evpHTML: function (ev) {
       var cal = this.cal;
-      var when = ev.year + '/' + ev.month + '/' + ev.day;
       var mc = CalDate.monthCount(cal), m0 = ((ev.month - 1) % mc + mc) % mc, monthDef = (cal.months || [])[m0];
       var label = (monthDef ? monthDef.name : ev.month) + ' ' + ev.day + ', ' + ev.year;
       if (ev.end_year != null) {
@@ -1208,7 +1221,7 @@
           if (!body) return;
           body.innerHTML = list.map(function (c) {
             var current = c.id === self.calendarId;
-            return '<a class="hubi" href="/campaigns/' + self.campaignId + '/calendars/' + c.id + '/view"' + (current ? ' aria-current="true"' : '') + '>' +
+            return '<a class="hubi" href="/campaigns/' + esc(self.campaignId) + '/calendars/' + esc(c.id) + '/view"' + (current ? ' aria-current="true"' : '') + '>' +
               '<span class="hn">' + esc(c.name) + '</span>' +
               (c.is_default ? '<span class="hs">Default calendar</span>' : '') +
               '</a>';

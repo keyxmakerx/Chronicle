@@ -33,6 +33,9 @@
   // "shift events" uses the exact same date arithmetic as the grid/moon
   // phase code, rather than a second copy that could drift from it.
   var CalDate = Chronicle.calendarDate;
+  // Shared with calendar_view.js's eventColorStyle so a kind's colour goes
+  // through one allowlist everywhere it lands in a style="" attribute.
+  var sanitizeColor = Chronicle.calendarColor;
 
   function $(sel, root) { return (root || document).querySelector(sel); }
   function $$(sel, root) { return Array.prototype.slice.call((root || document).querySelectorAll(sel)); }
@@ -483,7 +486,8 @@
 
   CalendarEditor.prototype._kindChipsHTML = function (kinds, activeId) {
     var html = kinds.map(function (k) {
-      var style = k.color ? ('color:' + String(k.color).replace(/[^#a-zA-Z0-9(),.% ]/g, '') + ';') : '';
+      var color = sanitizeColor(k.color);
+      var style = color ? ('color:' + color + ';') : '';
       return '<button type="button" data-kind="' + k.id + '" aria-pressed="' + (k.id === activeId) + '" style="' + style + '">' + esc(k.icon || '') + ' ' + esc(k.name) + '</button>';
     }).join('');
     if (this.view.role >= ROLE_OWNER) html += '<button type="button" class="nkb" data-nkb><i class="fa-solid fa-plus"></i> New kind</button>';
@@ -637,9 +641,9 @@
     return '<form class="ebody" id="cal5-eraform" style="margin-top:10px">' +
       '<div class="fld"><input class="etitle" name="name" placeholder="Era name" required value="' + esc(era ? era.name : '') + '"/></div>' +
       '<div class="two">' +
-        '<div class="fld">Starts<div class="erow"><span class="rl">Y</span><input type="number" name="start_year" required value="' + (era ? era.start_year : '') + '"/><input type="number" name="start_month" min="1" placeholder="M" value="' + (era ? era.start_month : 1) + '"/><input type="number" name="start_day" min="1" placeholder="D" value="' + (era ? era.start_day : 1) + '"/></div></div>' +
+        '<div class="fld">Starts<div class="erow"><span class="rl">Y</span><input type="number" name="start_year" required value="' + esc(era ? era.start_year : '') + '"/><input type="number" name="start_month" min="1" placeholder="M" value="' + esc(era ? era.start_month : 1) + '"/><input type="number" name="start_day" min="1" placeholder="D" value="' + esc(era ? era.start_day : 1) + '"/></div></div>' +
         '<div class="fld">Ends<label class="check"><input type="checkbox" name="ongoing"' + (!era || era.end_year == null ? ' checked' : '') + '/> Ongoing</label>' +
-          '<div class="erow" data-end-fields' + (!era || era.end_year == null ? ' hidden' : '') + '><span class="rl">Y</span><input type="number" name="end_year" value="' + (era && era.end_year != null ? era.end_year : '') + '"/><input type="number" name="end_month" min="1" placeholder="M" value="' + (era && era.end_month != null ? era.end_month : '') + '"/><input type="number" name="end_day" min="1" placeholder="D" value="' + (era && era.end_day != null ? era.end_day : '') + '"/></div></div>' +
+          '<div class="erow" data-end-fields' + (!era || era.end_year == null ? ' hidden' : '') + '><span class="rl">Y</span><input type="number" name="end_year" value="' + esc(era && era.end_year != null ? era.end_year : '') + '"/><input type="number" name="end_month" min="1" placeholder="M" value="' + esc(era && era.end_month != null ? era.end_month : '') + '"/><input type="number" name="end_day" min="1" placeholder="D" value="' + esc(era && era.end_day != null ? era.end_day : '') + '"/></div></div>' +
       '</div>' +
       '<div class="fld"><textarea name="description" rows="2" placeholder="Optional description">' + esc(era && era.description ? era.description : '') + '</textarea></div>' +
       '<div class="efoot"><button type="button" class="btn quiet" data-cancel-era>Cancel</button><span class="sp"></span>' +
