@@ -1,0 +1,89 @@
+// dashboard_embed.templ renders the small "upcoming events" fragment other
+// plugins' dashboard/category-dashboard blocks hx-get lazy-load
+// (campaigns.dashCalendarPreview/dashCalendarFull, entities.catCalendarPreview
+// — see PreviewUpcomingEvents in handler.go) — the same
+// hx-get="/campaigns/:id/<plugin>/..." embed pattern audit's
+// ActivityEmbedFragment and sessions' embed fragment already use for their
+// own dashboard cards. Kept minimal (no JS widget mount): the deleted V4
+// calendar-widget.js is not being resurrected as part of this restoration.
+package calendar
+
+import (
+	"fmt"
+
+	"github.com/keyxmakerx/chronicle/internal/plugins/campaigns"
+)
+
+// UpcomingEventsEmbed renders up to len(events) upcoming calendar events as a
+// compact list, or a "no calendar yet" / "nothing upcoming" empty state.
+// cal is nil when the campaign has no default calendar at all (calendar addon
+// enabled but never configured) — a real, honest empty state, not an error.
+templ UpcomingEventsEmbed(cc *campaigns.CampaignContext, cal *Calendar, events []Event) {
+	if cal == nil {
+		<div class="px-4 py-6 text-center">
+			<i class="fa-solid fa-calendar-days text-xl text-fg-muted mb-2"></i>
+			<p class="text-sm text-fg-secondary">No calendar has been set up yet.</p>
+		</div>
+	} else if len(events) == 0 {
+		<div class="px-4 py-6 text-center">
+			<i class="fa-solid fa-calendar-check text-xl text-fg-muted mb-2"></i>
+			<p class="text-sm text-fg-secondary">Nothing upcoming.</p>
+		</div>
+	} else {
+		for _, evt := range events {
+			<div class="flex items-start gap-3 px-4 py-2.5 hover:bg-surface-alt/50 transition-colors">
+				<div class="shrink-0 mt-0.5">
+					<div
+						class="w-6 h-6 rounded-full flex items-center justify-center text-[10px]"
+						style={ eventDotStyle(evt) }
+					>
+						if evt.KindIcon != "" {
+							<i class={ evt.KindIcon, "text-[10px]" }></i>
+						} else {
+							<i class="fa-solid fa-star text-[10px]"></i>
+						}
+					</div>
+				</div>
+				<div class="flex-1 min-w-0">
+					<div class="flex items-baseline flex-wrap gap-x-1 text-xs">
+						<span class="font-semibold text-fg truncate">{ evt.Name }</span>
+						if evt.EntityName != "" && evt.EntityID != nil {
+							<a
+								href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/entities/%s", cc.Campaign.ID, *evt.EntityID)) }
+								class="text-accent hover:underline truncate max-w-[120px] inline-block align-bottom"
+								title={ evt.EntityName }
+							>
+								{ evt.EntityName }
+							</a>
+						}
+					</div>
+					<p class="text-[10px] text-fg-muted mt-0.5">{ formatEventDate(cal, evt) }</p>
+				</div>
+			</div>
+		}
+	}
+}
+
+// eventDotStyle returns the inline background/text color for the event's
+// kind badge, falling back to a neutral color for an event with no kind.
+func eventDotStyle(evt Event) string {
+	color := evt.KindColor
+	if color == "" {
+		return "background-color: var(--color-fg-secondary, #6b7280); opacity: 0.6; color: white"
+	}
+	return fmt.Sprintf("background-color: %s; color: white", color)
+}
+
+// formatEventDate renders an event's in-world date + time for the embed,
+// using cal's own month names when available.
+func formatEventDate(cal *Calendar, evt Event) string {
+	monthName := fmt.Sprintf("Month %d", evt.Month)
+	if evt.Month >= 1 && evt.Month <= len(cal.Months) {
+		monthName = cal.Months[evt.Month-1].Name
+	}
+	date := fmt.Sprintf("%s %d, Year %d", monthName, evt.Day, evt.Year)
+	if t := evt.FormatTime(); t != "" {
+		date += " · " + t
+	}
+	return date
+}

@@ -522,7 +522,73 @@ func (a *entityVisibilityFilterAdapter) FilterViewableEntityIDs(ctx context.Cont
 // CalendarRef/CalendarEventRef/CalendarEra — timeline nil-guards these as
 // optional, so it still builds and runs without them). Each was a narrow
 // interface owned by the consuming plugin, not a shared type — keep that
-// shape so the rebuild stays surgical rather than a cascade.
+// shape so the rebuild stays surgical rather than a cascade. TODO(#778)
+//
+// calendarEventLinkListerAdapter below is a SEPARATE, newly-added seam, not
+// one of the ten above: it feeds timeline's calendar-name display and its
+// timeline_event_links -> calendar_events resolution (calendar-v5 seams,
+// #778's item 3), which needed restoring regardless of when the ten above
+// land.
+type calendarEventLinkListerAdapter struct {
+	svc calendar.CalendarService
+}
+
+// CalendarName implements timeline.CalendarEventLinkLister. A declared
+// SYSTEM read (ADR-049): a calendar's display name is shown to every
+// timeline viewer regardless of role, so there is no per-request identity to
+// gate it by. Best-effort — any error (not found, calendar hidden from
+// everyone) degrades to an empty name rather than surfacing as a page error,
+// matching the deleted `LEFT JOIN` + `COALESCE(c.name, '')`'s own behavior.
+func (a *calendarEventLinkListerAdapter) CalendarName(ctx context.Context, campaignID, calendarID string) string {
+	if calendarID == "" {
+		return ""
+	}
+	const ownerRole = 3
+	cal, err := a.svc.GetCalendarForViewer(ctx, calendarID, campaignID, permissions.SystemViewer(ownerRole))
+	if err != nil || cal == nil {
+		return ""
+	}
+	return cal.Name
+}
+
+// EventsByIDs implements timeline.CalendarEventLinkLister. Built as a plain
+// role-only RequestViewer (no per-request user id — the interface carries
+// none, matching CalendarEventLister's existing picker convention above):
+// this is STRICTER than the deleted JOIN's own `ce.visibility = 'everyone'`
+// check, never looser, since it also runs a calendar event's own
+// visibility_rules and redacts a hidden linked entity, both of which the old
+// SQL never touched.
+//
+// One GetEventForViewer call per id — no batch read exists on
+// CalendarService yet — acceptable for the handful of events a timeline
+// typically links; a real batch method is the natural follow-up if that
+// stops being true.
+func (a *calendarEventLinkListerAdapter) EventsByIDs(ctx context.Context, calendarID, campaignID string, eventIDs []string, role int) ([]timeline.CalendarEventRef, error) {
+	if calendarID == "" || len(eventIDs) == 0 {
+		return nil, nil
+	}
+	v := permissions.RequestViewer(role, "")
+	refs := make([]timeline.CalendarEventRef, 0, len(eventIDs))
+	for _, id := range eventIDs {
+		evt, err := a.svc.GetEventForViewer(ctx, id, calendarID, campaignID, v)
+		if err != nil {
+			continue // not found, or not visible to this role — simply absent
+		}
+		var category *string
+		if evt.KindSlug != "" {
+			category = &evt.KindSlug
+		}
+		refs = append(refs, timeline.CalendarEventRef{
+			ID: evt.ID, Name: evt.Name, Description: evt.Description,
+			Year: evt.Year, Month: evt.Month, Day: evt.Day,
+			EndYear: evt.EndYear, EndMonth: evt.EndMonth, EndDay: evt.EndDay,
+			Category: category, Visibility: evt.Visibility,
+			EntityID: evt.EntityID, EntityName: evt.EntityName, EntityIcon: evt.EntityIcon,
+		})
+	}
+	return refs, nil
+}
+
 type wsSessionAuthAdapter struct {
 	svc auth.AuthService
 }
@@ -2524,6 +2590,17 @@ func (a *App) RegisterRoutes() {
 	// 2nd-4th arguments. Timeline nil-guards all three, so it runs on
 	// standalone events alone until then.
 	timelineSvc := timeline.NewTimelineService(timelineRepo, nil, nil, nil)
+	// SetCalendarEventLinkLister restores timeline's calendar-name display
+	// and calendar-linked event reads (calendar-v5 seams, #778) — a
+	// SEPARATE, newly-added seam from the three CALV5-PLACEHOLDER
+	// constructor args above (those remain deferred). Reached via a type
+	// assertion so TimelineService's interface stays unchanged, the same
+	// pattern SetBindingCleaner below uses.
+	if t, ok := timelineSvc.(interface {
+		SetCalendarEventLinkLister(timeline.CalendarEventLinkLister)
+	}); ok {
+		t.SetCalendarEventLinkLister(&calendarEventLinkListerAdapter{svc: calendarService})
+	}
 	timelineHandler := timeline.NewHandler(timelineSvc)
 	timelineHandler.SetMemberLister(campaignService)
 	if a.PluginHealth.IsHealthy("timeline") {
@@ -3033,6 +3110,7 @@ func (a *App) RegisterRoutes() {
 	// --- Campaign Export/Import ---
 	exportSvc := campaigns.NewExportImportService(campaignService)
 	exportSvc.SetEntityExporter(&entityExportAdapter{entitySvc: entityService, tagSvc: tagService, relationSvc: relService})
+	exportSvc.SetCalendarExporter(&calendarExportAdapter{svc: calendarService})
 	exportSvc.SetTimelineExporter(&timelineExportAdapter{svc: timelineSvc})
 	exportSvc.SetSessionExporter(&sessionExportAdapter{svc: sessionsService})
 	exportSvc.SetMapExporter(&mapExportAdapter{mapSvc: mapsService, drawingSvc: drawingService})
@@ -3041,6 +3119,7 @@ func (a *App) RegisterRoutes() {
 	exportSvc.SetMediaExporter(&mediaExportAdapter{svc: mediaService})
 	exportSvc.SetMediaBundler(&mediaBundleAdapter{svc: mediaService})
 	exportSvc.SetEntityImporter(&entityImportAdapter{entitySvc: entityService, tagSvc: tagService, relationSvc: relService})
+	exportSvc.SetCalendarImporter(&calendarImportAdapter{svc: calendarService})
 	exportSvc.SetTimelineImporter(&timelineImportAdapter{svc: timelineSvc})
 	exportSvc.SetSessionImporter(&sessionImportAdapter{svc: sessionsService})
 	exportSvc.SetMapImporter(&mapImportAdapter{mapSvc: mapsService, drawingSvc: drawingService})

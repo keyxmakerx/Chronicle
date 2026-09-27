@@ -6,8 +6,13 @@
 //  2. TestTimelineEventCount_Integration — a real-MariaDB behavioral proof
 //     that List/ListByCalendar's EventCount agrees with the merged service
 //     read (ListTimelineEvents) for a player viewer with a dm_only event and
-//     a dm_only link override in scope. Skipped under `-short`. Run with
-//     `make docker-up && make migrate-up && make test-int`.
+//     a dm_only link override in scope. Wires dbCalEventLinkLister, a
+//     CalendarEventLinkLister test double that reads calendar_events/
+//     calendars directly via SQL rather than importing the calendar package
+//     — this file's own convention (see search_visibility_reachability_test.go's
+//     header comment) is to reach the calendar plugin's tables through its
+//     migrations, never its Go package, even from a test. Skipped under
+//     `-short`. Run with `make docker-up && make migrate-up && make test-int`.
 package timeline
 
 import (
@@ -78,7 +83,7 @@ func flatten(s string) string {
 // ListStandaloneEvents) use, including the link-level override: a count
 // that only checks ce.visibility would still count a link a GM overrode to
 // dm_only even though the row reads hide it. COALESCE(NULLIF(tel
-// .visibility_override, ''), ce.visibility) is the SQL mirror of
+// .visibility_override, ”), ce.visibility) is the SQL mirror of
 // EffectiveVisibility().
 func TestEventCountVisibility_MatchesListFilters(t *testing.T) {
 	for _, fn := range []string{"List", "ListByCalendar"} {
@@ -91,16 +96,25 @@ func TestEventCountVisibility_MatchesListFilters(t *testing.T) {
 			}
 		}
 
-		// CALV5-PLACEHOLDER: the linked half of this count is dark while the
-		// calendar tables are dropped. This asserts that dark state; when V5
-		// reintroduces the calendar_events join, it must also restore the
-		// linked visibility fragment in the same change, or a player's count
-		// will again include events their rows don't show.
+		// The linked half of the count is restored in the SERVICE layer now
+		// (calendar-v5 seams, #778), not in this SQL: repository.go can no
+		// longer JOIN calendar_events to count linked events (plugin
+		// isolation rule 8), so timelineService.recountEventsForViewer
+		// recomputes EventCount from the SAME merged, filtered read
+		// (timelineEventLinks + filterEventLinksByUser) ListTimelineEvents
+		// returns, for EVERY viewer including Owners — see that function's
+		// doc comment and TestTimelineEventCount_Integration below, the
+		// behavioral proof of the two staying in agreement.
+		//
+		// This guard stays as a regression net against the OLD design: if a
+		// future change reintroduces a direct join here, it must restore the
+		// visibility fragment in the same change, or a player's count would
+		// again include events their rows don't show.
 		if strings.Contains(body, flatten("JOIN calendar_events")) {
 			if !strings.Contains(body, flatten(`COALESCE(NULLIF(tel.visibility_override, ''), ce.visibility) = 'everyone'`)) {
-				t.Errorf("%s: the linked-event count is back WITHOUT its visibility fragment — "+
+				t.Errorf("%s: a direct calendar_events join reappeared WITHOUT its visibility fragment — "+
 					"that is the counting oracle this test exists for. Restore the filter, or "+
-					"read links through the calendar service instead of joining its table.", fn)
+					"keep reading links through the calendar service instead of joining its table.", fn)
 			}
 		}
 		// Both filters must be CLEARED (not just declared) for a DM-capable
@@ -194,6 +208,13 @@ func TestTimelineEventCount_Integration(t *testing.T) {
 	// step) and checks List's EventCount against that, not a hardcoded
 	// expectation, so it fails if either side drifts.
 	svc := NewTimelineService(repo, nil, nil, nil)
+	if s, ok := svc.(interface {
+		SetCalendarEventLinkLister(CalendarEventLinkLister)
+	}); ok {
+		s.SetCalendarEventLinkLister(&dbCalEventLinkLister{db: db})
+	} else {
+		t.Fatal("TimelineService does not expose SetCalendarEventLinkLister")
+	}
 	assertAgrees := func(t *testing.T, role int, wantCount int) {
 		t.Helper()
 		tls, err := repo.List(ctx, campaignID, role)
@@ -235,6 +256,55 @@ func TestTimelineEventCount_Integration(t *testing.T) {
 			t.Errorf("ListByCalendar (player): got %+v, want exactly 1 timeline with EventCount=1", tls)
 		}
 	})
+}
+
+// dbCalEventLinkLister is a CalendarEventLinkLister test double for
+// TestTimelineEventCount_Integration: it reads calendar_events/calendars
+// directly via SQL, mirroring the calendar plugin's own role-based
+// visibility filter, rather than importing the calendar package (see the
+// file doc comment for why).
+type dbCalEventLinkLister struct{ db *sql.DB }
+
+func (l *dbCalEventLinkLister) CalendarName(ctx context.Context, _, calendarID string) string {
+	var name string
+	if err := l.db.QueryRowContext(ctx, `SELECT name FROM calendars WHERE id = ?`, calendarID).Scan(&name); err != nil {
+		return ""
+	}
+	return name
+}
+
+func (l *dbCalEventLinkLister) EventsByIDs(ctx context.Context, calendarID, _ string, eventIDs []string, role int) ([]CalendarEventRef, error) {
+	if len(eventIDs) == 0 {
+		return nil, nil
+	}
+	visFilter := "AND visibility = 'everyone'"
+	if permissions.CanSeeDmOnly(role) {
+		visFilter = ""
+	}
+	placeholders := strings.TrimSuffix(strings.Repeat("?,", len(eventIDs)), ",")
+	args := make([]any, 0, len(eventIDs)+1)
+	args = append(args, calendarID)
+	for _, id := range eventIDs {
+		args = append(args, id)
+	}
+	query := fmt.Sprintf(
+		`SELECT id, name, year, month, day, visibility FROM calendar_events
+		 WHERE calendar_id = ? AND id IN (%s) %s`, placeholders, visFilter)
+	rows, err := l.db.QueryContext(ctx, query, args...)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var refs []CalendarEventRef
+	for rows.Next() {
+		var r CalendarEventRef
+		if err := rows.Scan(&r.ID, &r.Name, &r.Year, &r.Month, &r.Day, &r.Visibility); err != nil {
+			return nil, err
+		}
+		refs = append(refs, r)
+	}
+	return refs, rows.Err()
 }
 
 // --- DB test helpers (mirrors internal/plugins/entities/repository_integration_test.go verbatim) ---

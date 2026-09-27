@@ -13,7 +13,6 @@
 package campaigns
 
 import (
-	"github.com/keyxmakerx/chronicle/internal/templates/components"
 	"fmt"
 	"strconv"
 	"github.com/keyxmakerx/chronicle/internal/sanitize"
@@ -280,15 +279,35 @@ templ dashPinnedPages(cc *CampaignContext, config map[string]any) {
 	</div>
 }
 
-// dashCalendarPreview renders a card that lazy-loads upcoming calendar events.
-// Config: limit (int, default 5). Uses HTMX to fetch from the calendar plugin.
-// Mounts the calendar-widget JS for interactive features (quick-add, event detail).
+// dashCalendarPreview renders a card that lazy-loads upcoming calendar
+// events from the calendar plugin's own embed route (calendar-v5, #778) —
+// the same hx-get="/campaigns/:id/<plugin>/..." pattern dashTimelinePreview,
+// dashSessionTracker and dashActivityFeed already use for their own
+// dashboard cards, since campaigns cannot import the calendar plugin
+// directly (plugin isolation) and each plugin owns its own embed fragment.
+// Config: limit (int, default 5).
 templ dashCalendarPreview(cc *CampaignContext, config map[string]any) {
-	// CALV5-PLACEHOLDER: V5 must re-wire this to mount the calendar widget and
-	// HTMX-fetch upcoming events again; until then, show the rebuilding notice
-	// rather than an empty div stuck on "Loading...".
-	_ = config
-	@components.FeatureRebuildingBlock("The calendar")
+	<div>
+		<div class="flex items-center justify-between mb-3">
+			<h2 class="text-sm font-semibold text-fg-secondary uppercase tracking-wider">
+				<i class="fa-solid fa-calendar-days mr-1.5"></i>Upcoming Events
+			</h2>
+			<a
+				href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/apps/calendar", cc.Campaign.ID)) }
+				class="text-xs text-accent hover:underline"
+			>
+				View calendar
+			</a>
+		</div>
+		<div
+			hx-get={ fmt.Sprintf("/campaigns/%s/calendars/upcoming?limit=%d", cc.Campaign.ID, dashCalendarLimit(config)) }
+			hx-trigger="intersect once"
+			hx-swap="innerHTML"
+			class="card divide-y divide-edge min-h-[60px]"
+		>
+			<div class="px-4 py-3 text-sm text-fg-muted">Loading...</div>
+		</div>
+	</div>
 }
 
 // dashCalendarLimit extracts the event limit from block config (default 5).
@@ -481,14 +500,46 @@ func dashGraphHeight(config map[string]any) int {
 	return height
 }
 
-// dashCalendarFull renders the full-calendar dashboard block.
-// CALV5-PLACEHOLDER: its /calendars/embed fragment route was deleted with the
-// V4 calendar plugin (#741); same reasoning as dashCalendarPreview above —
-// show the rebuilding notice instead of an hx-get that always 404s.
+// dashCalendarFull renders the full-calendar dashboard block. Its old
+// /calendars/embed fragment route (an interactive month grid) was deleted
+// with the V4 calendar plugin and is not resurrected here (calendar-v5,
+// #778) — a full interactive month view is real UI work of its own,
+// pending a signed mockup, not a re-wiring. Until then this renders the
+// same upcoming-events list dashCalendarPreview does, just roomier (a
+// higher default limit and a taller card): real V5 data, not a placeholder.
+// Config: limit (int, default 10, max 20), height (int, default 400).
 templ dashCalendarFull(cc *CampaignContext, config map[string]any) {
-	_ = cc
-	_ = config
-	@components.FeatureRebuildingBlock("The calendar")
+	<div>
+		<div class="flex items-center justify-between mb-3">
+			<h2 class="text-sm font-semibold text-fg-secondary uppercase tracking-wider">
+				<i class="fa-solid fa-calendar-days mr-1.5"></i>Calendar
+			</h2>
+			<a
+				href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/apps/calendar", cc.Campaign.ID)) }
+				class="text-xs text-accent hover:underline"
+			>
+				Open calendar
+			</a>
+		</div>
+		<div
+			hx-get={ fmt.Sprintf("/campaigns/%s/calendars/upcoming?limit=%d", cc.Campaign.ID, dashCalendarFullLimit(config)) }
+			hx-trigger="intersect once"
+			hx-swap="innerHTML"
+			class="card divide-y divide-edge overflow-y-auto"
+			style={ fmt.Sprintf("min-height: %dpx", dashGraphHeight(config)) }
+		>
+			<div class="px-4 py-3 text-sm text-fg-muted">Loading...</div>
+		</div>
+	</div>
+}
+
+// dashCalendarFullLimit is dashCalendarLimit's sibling for the "full" block,
+// which defaults roomier (10, not 5) since it has more room to show events.
+func dashCalendarFullLimit(config map[string]any) int {
+	if _, ok := config["limit"]; ok {
+		return dashCalendarLimit(config)
+	}
+	return 10
 }
 
 // dashTimelineFull renders a full interactive timeline visualization in the dashboard.

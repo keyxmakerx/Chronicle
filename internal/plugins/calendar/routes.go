@@ -88,6 +88,11 @@ func RegisterRoutes(e *echo.Echo, h *Handler, campaignSvc campaigns.CampaignServ
 		campaigns.AllowPublicCampaignAccess(campaignSvc),
 		addons.RequireAddon(addonSvc, PluginSlug),
 	)
+	// Dashboard/category-dashboard "upcoming events" embed fragment — a
+	// static "/calendars/upcoming" segment, so it can never collide with the
+	// "/calendars/:calid" param route below it (same reasoning as
+	// "/calendars/list" above).
+	pub.GET("/calendars/upcoming", h.PreviewUpcomingEvents, campaigns.RequireViewAccess())
 	pub.GET("/calendars/list", h.ListCalendarsAPI, campaigns.RequireViewAccess())
 	pub.GET("/calendars/:calid", h.GetCalendarAPI, campaigns.RequireViewAccess())
 	pub.GET("/calendars/:calid/events", h.ListEventsAPI, campaigns.RequireViewAccess())
