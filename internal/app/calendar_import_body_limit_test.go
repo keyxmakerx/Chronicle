@@ -13,6 +13,7 @@ func TestIsCalendarImportPath(t *testing.T) {
 		want bool
 	}{
 		{"/campaigns/abc-123/calendars/wizard/import/preview", true},
+		{"/campaigns/abc-123/calendars/wizard/build/preview", true},
 		{"/campaigns/abc-123/calendars/wizard/create", true},
 		{"/campaigns/abc-123/calendars/import/preview", true},
 		{"/campaigns/abc-123/calendars/import", true},
@@ -25,6 +26,8 @@ func TestIsCalendarImportPath(t *testing.T) {
 		{"/campaigns/abc-123/calendars/presets/blank", false},
 		{"/campaigns/abc-123/calendars", false},
 		{"/campaigns/abc-123/calendars/wizard/import", false}, // GET step, no upload
+		{"/campaigns/abc-123/calendars/wizard/build", false},  // GET step, no upload
+		{"/campaigns/abc-123/calendars/wizard/reallife", false},
 		{"/media/upload", false},
 		{"/campaigns/abc-123/calendars/import/preview/extra", false},
 		{"/campaigns/abc-123/apps/calendar", false},

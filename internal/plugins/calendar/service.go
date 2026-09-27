@@ -2123,7 +2123,15 @@ func validateImportCurrentDate(ir *ImportResult, year, month, day int) error {
 	}
 	m := ir.Months[month-1]
 	days := m.Days
-	if ir.Settings.LeapYearEvery > 0 && (year-ir.Settings.LeapYearOffset)%ir.Settings.LeapYearEvery == 0 {
+	if ir.Settings.Mode == ModeRealLife && ir.Settings.TracksRealTime {
+		// A TracksRealTime calendar's real month lengths follow the true
+		// Gregorian 4/100/400 leap rule (MonthDays' own UsesRealTime branch),
+		// which the naive leap_year_every/offset arithmetic below cannot
+		// express — it would accept Feb 29 in a century year like 2100 that
+		// isn't actually a leap year. Mirror daysInGregorianMonth here since
+		// no *Calendar exists yet to call MonthDays on.
+		days = daysInGregorianMonth(year, month)
+	} else if ir.Settings.LeapYearEvery > 0 && (year-ir.Settings.LeapYearOffset)%ir.Settings.LeapYearEvery == 0 {
 		days += m.LeapYearDays
 	}
 	if days < 1 {

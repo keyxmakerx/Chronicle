@@ -25,6 +25,11 @@ import (
 // Handler processes HTTP requests for the calendar plugin.
 type Handler struct {
 	svc CalendarService
+	// userZones is optional (nil unless SetTimezoneLookup is called — see its
+	// own doc comment in wizard_handler.go): a UX nicety for the real-world
+	// calendar wizard step, never load-bearing, so NewHandler's existing
+	// signature and every caller of it stay unchanged.
+	userZones timezoneLookup
 }
 
 // NewHandler creates a new calendar Handler.
