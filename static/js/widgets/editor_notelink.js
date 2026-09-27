@@ -381,6 +381,12 @@
         if (editor) editor.chain().focus().insertContent('[[').run();
       },
       isOpen: function () { return active; },
+      /** Lists the notes again, for a host whose notes arrived after [[ was typed. */
+      refresh: function () {
+        if (!active) return;
+        collect();
+        render();
+      },
       close: close,
       onCreate: function (ed) { editor = ed; },
       onUpdate: function (ed) {

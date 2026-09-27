@@ -2719,7 +2719,9 @@ func (a *App) RegisterRoutes() {
 	noteHandler.SetMediaUploader(&mediaUploadAdapter{svc: mediaService})
 	noteHandler.SetMemberLister(campaignService)
 	noteHandler.SetCharacterLister(&journalCharacterAdapter{svc: entityService})
-	noteHandler.SetPageNamer(&jotPageNameAdapter{svc: entityService})
+	notePages := &notesPagesAdapter{svc: entityService}
+	noteHandler.SetPageNamer(notePages)
+	noteHandler.SetPageLinker(notePages)
 	notes.RegisterRoutes(e, noteHandler, campaignService, authService)
 
 	// Relations widget routes already registered above (before REST API v1).
@@ -3722,14 +3724,15 @@ func (a *journalCharacterAdapter) ClaimedCharacters(ctx context.Context, campaig
 	return out, nil
 }
 
-// jotPageNameAdapter adapts EntityService to notes.PageNamer: each page's
-// name, only for pages of the campaign the viewer may see.
-type jotPageNameAdapter struct {
+// notesPagesAdapter adapts EntityService to notes.PageNamer and
+// notes.PageLinker: pages named and listed only as far as the viewer may
+// see them.
+type notesPagesAdapter struct {
 	svc entities.EntityService
 }
 
 // PageNames names the ids the viewer can see; the rest are left out.
-func (a *jotPageNameAdapter) PageNames(ctx context.Context, campaignID string, v permissions.Viewer, ids []string) (map[string]string, error) {
+func (a *notesPagesAdapter) PageNames(ctx context.Context, campaignID string, v permissions.Viewer, ids []string) (map[string]string, error) {
 	out := make(map[string]string, len(ids))
 	for _, id := range ids {
 		e, err := a.svc.GetByID(ctx, id)
@@ -3741,6 +3744,19 @@ func (a *jotPageNameAdapter) PageNames(ctx context.Context, campaignID string, v
 			continue
 		}
 		out[id] = e.Name
+	}
+	return out, nil
+}
+
+// PagesLinkingNote lists the visible pages that link a note, by name only.
+func (a *notesPagesAdapter) PagesLinkingNote(ctx context.Context, campaignID string, v permissions.Viewer, seesSecrets bool, noteID string) ([]notes.PageRef, error) {
+	pages, err := a.svc.PagesLinkingNote(ctx, campaignID, noteID, v.Role(), v.UserID(), seesSecrets)
+	if err != nil {
+		return nil, err
+	}
+	out := make([]notes.PageRef, 0, len(pages))
+	for _, p := range pages {
+		out = append(out, notes.PageRef{ID: p.ID, Name: p.Name, TypeName: p.TypeName})
 	}
 	return out, nil
 }

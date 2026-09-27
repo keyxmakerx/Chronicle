@@ -43,6 +43,7 @@ type Handler struct {
 	memberLister    MemberLister
 	characterLister CharacterLister
 	pageNamer       PageNamer
+	pageLinker      PageLinker
 }
 
 // NewHandler creates a new note handler backed by the given service.
@@ -73,6 +74,11 @@ func (h *Handler) SetCharacterLister(cl CharacterLister) {
 // SetPageNamer sets the lookup that names the pages jots sit on.
 func (h *Handler) SetPageNamer(pn PageNamer) {
 	h.pageNamer = pn
+}
+
+// SetPageLinker sets the lookup of pages that link a note, for backlinks.
+func (h *Handler) SetPageLinker(pl PageLinker) {
+	h.pageLinker = pl
 }
 
 // List returns notes for the current user in the campaign (GET /campaigns/:id/notes).
@@ -149,8 +155,8 @@ func (h *Handler) Search(c echo.Context) error {
 	return c.JSON(http.StatusOK, hits)
 }
 
-// Backlinks lists the viewer's notes that link to a note
-// (GET /campaigns/:id/notes/:noteId/backlinks).
+// Backlinks lists what links to a note, as far as the viewer may see: notes
+// and pages (GET /campaigns/:id/notes/:noteId/backlinks).
 func (h *Handler) Backlinks(c echo.Context) error {
 	cc := campaigns.GetCampaignContext(c)
 	if cc == nil {
@@ -160,11 +166,27 @@ func (h *Handler) Backlinks(c echo.Context) error {
 	if _, err := h.viewableNote(c, cc, noteID); err != nil {
 		return err
 	}
-	refs, err := h.service.Backlinks(c.Request().Context(), cc.Campaign.ID, viewerFor(c, cc), noteID)
+	ctx := c.Request().Context()
+	viewer := viewerFor(c, cc)
+	refs, err := h.service.Backlinks(ctx, cc.Campaign.ID, viewer, noteID)
 	if err != nil {
 		return err
 	}
-	return c.JSON(http.StatusOK, refs)
+	out := LinksIn{Notes: refs, Pages: []PageRef{}}
+	if out.Notes == nil {
+		out.Notes = []NoteRef{}
+	}
+	if h.pageLinker != nil {
+		// Inline secrets are for scribes and owners, as on the entry route.
+		pages, err := h.pageLinker.PagesLinkingNote(ctx, cc.Campaign.ID, viewer, cc.MemberRole >= campaigns.RoleScribe, noteID)
+		if err != nil {
+			return err
+		}
+		if pages != nil {
+			out.Pages = pages
+		}
+	}
+	return c.JSON(http.StatusOK, out)
 }
 
 // PageRefs lists the viewer's Journal notes that link to a page

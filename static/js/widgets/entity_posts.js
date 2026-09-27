@@ -159,6 +159,9 @@
         }
 
         el.innerHTML = html;
+        // [[links]] to notes in a post's HTML are labelled for this reader.
+        if (el._postsNoteLinksOff) el._postsNoteLinksOff();
+        el._postsNoteLinksOff = Chronicle.hydrateNoteLinks ? Chronicle.hydrateNoteLinks(el, campaignId) : null;
         bindEvents();
       }
 
@@ -413,6 +416,10 @@
       if (el._postsMenuClose) {
         document.removeEventListener('click', el._postsMenuClose);
         delete el._postsMenuClose;
+      }
+      if (el._postsNoteLinksOff) {
+        el._postsNoteLinksOff();
+        delete el._postsNoteLinksOff;
       }
       el.innerHTML = '';
     }

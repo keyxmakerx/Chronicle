@@ -120,7 +120,8 @@
     this.lockHeld = null;
     this.openSeq = 0;
     this.drawerFor = null;
-    this.backlinks = [];
+    this.backlinks = [];     // notes linking to the open note
+    this.pageBacklinks = []; // pages linking to it
 
     this.size = 'normal';
     this.lastOpenSize = 'normal';
@@ -2193,11 +2194,13 @@
     if (!n) return;
     var id = n.id;
     this.backlinks = [];
+    this.pageBacklinks = [];
     this.paintBadge();
     this.dom.back.innerHTML = '<p class="dr-hint">Loading…</p>';
-    Chronicle.apiFetch(this.api('/' + encodeURIComponent(id) + '/backlinks')).then(json).then(function (refs) {
+    Chronicle.apiFetch(this.api('/' + encodeURIComponent(id) + '/backlinks')).then(json).then(function (res) {
       if (!self.active || self.active.id !== id) return;
-      self.backlinks = refs || [];
+      self.backlinks = (res && res.notes) || [];
+      self.pageBacklinks = (res && res.pages) || [];
       self.renderBacklinks();
     }).catch(function () {
       if (self.active && self.active.id === id) self.dom.back.innerHTML = '<p class="dr-hint">Backlinks didn’t load.</p>';
@@ -2206,7 +2209,7 @@
 
   Journal.prototype.paintBadge = function () {
     var b = this.dom.badge;
-    var n = this.backlinks.length;
+    var n = this.backlinks.length + this.pageBacklinks.length;
     b.hidden = !n;
     b.textContent = n > 99 ? '99+' : String(n);
     this.dom.drawerBtn.setAttribute('aria-label', n ? 'Note details, ' + plural(n, 'backlink') : 'Note details');
@@ -2215,10 +2218,11 @@
   Journal.prototype.renderBacklinks = function () {
     var self = this;
     var refs = this.backlinks;
+    var pages = this.pageBacklinks;
     this.paintBadge();
     var box = this.dom.back;
-    if (!refs.length) {
-      box.innerHTML = '<p class="dr-hint">Nothing links here yet. Backlinks appear the moment another note references this one.</p>';
+    if (!refs.length && !pages.length) {
+      box.innerHTML = '<p class="dr-hint">Nothing links here yet. Backlinks appear the moment a note or a page links to this one.</p>';
       return;
     }
     var html = refs.slice(0, BACKLINK_CAP).map(function (r) {
@@ -2231,6 +2235,12 @@
     if (refs.length > BACKLINK_CAP) {
       html += '<button type="button" class="jnl-btn ghost dr-more" data-backlinks-all>+' + (refs.length - BACKLINK_CAP) + ' more — filter the list by this</button>';
     }
+    // Pages that link here: named only as far as this viewer may see them.
+    html += pages.map(function (p) {
+      var href = '/campaigns/' + encodeURIComponent(self.cid) + '/entities/' + encodeURIComponent(p.id);
+      return '<a class="dr-item page" href="' + attr(href) + '"><div class="ttl"><i class="fa-solid fa-book-open" aria-hidden="true"></i><span>' +
+        esc(p.name || 'A page') + '</span></div><div class="snip">' + esc(p.typeName ? p.typeName + ' page' : 'Campaign page') + '</div></a>';
+    }).join('');
     box.innerHTML = html;
   };
 
