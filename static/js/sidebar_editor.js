@@ -175,7 +175,9 @@
    * The draft as sidebar_config items, in order: each of the owner's
    * sections is written as a section item ahead of its rows, and every row
    * names its section. Apps turned off are written too, so they keep their
-   * place for when they are turned back on.
+   * place for when they are turned back on. Every section is visible: a
+   * heading the old editor hid never reaches the draft (NormalizeNav leaves
+   * it out), so saving drops it instead of showing it.
    */
   function itemsFromDraft(draft) {
     var out = [];

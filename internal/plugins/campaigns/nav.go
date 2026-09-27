@@ -245,13 +245,33 @@ func sanitizeNavIcon(icon string) string {
 // maxNavLabelLen caps a section's or link's label; both are drawn on one line.
 const maxNavLabelLen = 100
 
+// sidebarItemRowKind is the row kind an item would be drawn as, or "" for an
+// item that is not a row (a section heading, or an older Dashboard entry).
+func sidebarItemRowKind(it SidebarItem) string {
+	switch it.Type {
+	case SidebarTypeApp, SidebarTypeAddon:
+		return NavRowApp
+	case SidebarTypeCategory:
+		return NavRowCategory
+	case SidebarTypeLink:
+		return NavRowLink
+	}
+	return ""
+}
+
 // validateSidebarItems checks an owner's items before they are stored and
 // returns them tidied: known types only, well-formed ids and slugs, section
 // references that exist, bounded labels, link targets that are safe to render
 // for every visitor (anonymous ones included, on a public campaign) and link
 // icons that are Font Awesome names, since an icon lands in a class list.
+//
+// A section heading saved hidden (visible:false, which only the old editor
+// wrote) is dropped rather than stored: the sidebar has no hidden headings,
+// and keeping one would risk its label reaching players. Items naming it go
+// to their home section.
 func validateSidebarItems(items []SidebarItem) ([]SidebarItem, error) {
 	sections := make(map[string]bool)
+	hiddenSections := make(map[string]bool)
 	for _, it := range items {
 		if it.Type != SidebarTypeSection {
 			continue
@@ -262,10 +282,14 @@ func validateSidebarItems(items []SidebarItem) ([]SidebarItem, error) {
 			return nil, apperror.NewBadRequest("each section needs an id of up to 40 letters, digits, dashes or underscores")
 		case isBuiltInNavSection(id):
 			return nil, apperror.NewBadRequest(fmt.Sprintf("%q is a built-in section and cannot be added again", id))
-		case sections[id]:
+		case sections[id] || hiddenSections[id]:
 			return nil, apperror.NewBadRequest(fmt.Sprintf("two sections share the id %q", id))
 		}
-		sections[id] = true
+		if it.Visible {
+			sections[id] = true
+		} else {
+			hiddenSections[id] = true
+		}
 	}
 
 	out := make([]SidebarItem, 0, len(items))
@@ -299,6 +323,12 @@ func validateSidebarItems(items []SidebarItem) ([]SidebarItem, error) {
 		default:
 			return nil, apperror.NewBadRequest(fmt.Sprintf("unknown sidebar item type %q", it.Type))
 		}
+		if it.Type == SidebarTypeSection && !it.Visible {
+			continue
+		}
+		if hiddenSections[it.Section] {
+			it.Section = navHomeSection(sidebarItemRowKind(it))
+		}
 		if it.Section != "" && !isBuiltInNavSection(it.Section) && !sections[it.Section] {
 			return nil, apperror.NewBadRequest(fmt.Sprintf("an item names a section that does not exist: %q", it.Section))
 		}
@@ -314,9 +344,12 @@ func validateSidebarItems(items []SidebarItem) ([]SidebarItem, error) {
 // Items saved before sections existed carry no section. They land where the
 // old sidebar drew them: an app or link under a section heading stays in that
 // section, any other app or link was in the list at the top (now Pinned), and
-// a category stays in Categories. Apps that are turned on but missing join
-// Apps, or their default section when the owner never arranged anything, and
-// categories that are missing join Categories, so nothing is ever left out.
+// a category stays in Categories. A heading the old editor saved hidden is no
+// section for anyone: the rows after it stay under the visible heading before
+// it, and an item naming it goes to its home section. Apps that are turned on
+// but missing join Apps, or their default section when the owner never
+// arranged anything, and categories that are missing join Categories, so
+// nothing is ever left out.
 func NormalizeNav(items []SidebarItem, apps []NavApp, cats []NavCategory) NavLayout {
 	knownApps := make(map[string]bool, len(apps))
 	for _, a := range apps {
@@ -334,7 +367,10 @@ func NormalizeNav(items []SidebarItem, apps []NavApp, cats []NavCategory) NavLay
 	}}
 	index := map[string]int{NavSectionPinned: 0, NavSectionApps: 1, NavSectionCategories: 2}
 	for _, it := range items {
-		if it.Type != SidebarTypeSection {
+		// A heading hidden in the old editor never becomes a section, for
+		// anyone: its label is the owner's alone, and the old sidebar drew
+		// nothing for it.
+		if it.Type != SidebarTypeSection || !it.Visible {
 			continue
 		}
 		id := strings.TrimSpace(it.ID)
@@ -357,7 +393,9 @@ func NormalizeNav(items []SidebarItem, apps []NavApp, cats []NavCategory) NavLay
 		var kind string
 		switch it.Type {
 		case SidebarTypeSection:
-			if id := strings.TrimSpace(it.ID); !isBuiltInNavSection(id) {
+			// Rows after a hidden heading stay under the visible heading
+			// before it, where the old sidebar drew them.
+			if id := strings.TrimSpace(it.ID); it.Visible && !isBuiltInNavSection(id) {
 				if _, ok := index[id]; ok {
 					under = id
 				}

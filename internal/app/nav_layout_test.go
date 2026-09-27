@@ -443,3 +443,41 @@ func TestSidebar_OwnPinsReachOnlyTheirMember(t *testing.T) {
 		}
 	}
 }
+
+func TestSidebar_HiddenLegacyHeadingReachesNobody(t *testing.T) {
+	items := []campaigns.SidebarItem{
+		{Type: "section", ID: "sec_party", Label: "The party", Visible: true},
+		{Type: "section", ID: "sec_lair", Label: "Villain lair (spoilers)", Visible: false},
+		{Type: "link", ID: "lnk_map", Label: "Lair map", URL: "/campaigns/camp-1/lair", Visible: true},
+	}
+	for _, v := range []struct {
+		who       string
+		role      campaigns.Role
+		member    bool
+		anonymous bool
+	}{
+		{"player", campaigns.RolePlayer, true, false},
+		{"scribe", campaigns.RoleScribe, true, false},
+		{"public visitor", campaigns.RoleNone, false, true},
+		{"owner", campaigns.RoleOwner, true, false},
+	} {
+		cc := navTestContext(items, v.role, v.member, v.anonymous)
+		in := navInputsFor(cc, navTestTypes(), nil, navTestEnabled(), navTestSystem)
+		owner := v.role >= campaigns.RoleOwner
+		ctx := navTestLayoutCtx(viewNavSections(cc, in, owner, nil), int(v.role))
+		if owner {
+			ctx = layouts.SetNavEdit(ctx, buildNavEdit(in))
+		}
+		var buf bytes.Buffer
+		if err := layouts.Sidebar().Render(ctx, &buf); err != nil {
+			t.Fatalf("%s: render Sidebar: %v", v.who, err)
+		}
+		html := buf.String()
+		if strings.Contains(html, "Villain lair") || strings.Contains(html, "sec_lair") {
+			t.Errorf("%s: the sidebar (or the editor's data) carries the hidden heading", v.who)
+		}
+		if !strings.Contains(html, "Lair map") {
+			t.Errorf("%s: the row after the hidden heading must stay, under the heading before it", v.who)
+		}
+	}
+}

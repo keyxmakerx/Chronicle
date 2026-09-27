@@ -2,6 +2,7 @@ package campaigns
 
 import (
 	"reflect"
+	"strconv"
 	"testing"
 )
 
@@ -391,4 +392,138 @@ func TestViewNav_Rows(t *testing.T) {
 			}
 		}
 	}
+}
+
+// legacyHiddenHeading is an older sidebar where the owner hid a section
+// heading, with rows before, under and after it, and a later item naming it.
+func legacyHiddenHeading() []SidebarItem {
+	return []SidebarItem{
+		{Type: "section", ID: "sec_party", Label: "The party", Visible: true},
+		{Type: "link", ID: "lnk_wiki", Label: "Wiki", URL: "https://example.test/wiki", Visible: true},
+		{Type: "section", ID: "sec_lair", Label: "Villain lair (spoilers)", Visible: false},
+		{Type: "link", ID: "lnk_map", Label: "Lair map", URL: "https://example.test/lair", Visible: true},
+		{Type: "app", Slug: "maps", Visible: true},
+		{Type: "category", TypeID: 2, Section: "sec_lair", Visible: true},
+		{Type: "link", ID: "lnk_named", Label: "Named", URL: "/c/named", Section: "sec_lair", Visible: true},
+	}
+}
+
+// noSectionCalled fails when any section carries the label or id.
+func noSectionCalled(t *testing.T, who string, ids, labels []string) {
+	t.Helper()
+	for i := range ids {
+		if ids[i] == "sec_lair" || labels[i] == "Villain lair (spoilers)" {
+			t.Errorf("%s: the hidden heading became section %q (%q)", who, ids[i], labels[i])
+		}
+	}
+}
+
+func TestNormalizeNav_HiddenLegacyHeadingNeverBecomesASection(t *testing.T) {
+	layout := NormalizeNav(legacyHiddenHeading(), navTestApps(), navTestCats())
+
+	var ids, labels []string
+	for _, s := range layout.Sections {
+		ids, labels = append(ids, s.ID), append(labels, s.Label)
+	}
+	noSectionCalled(t, "the owner's layout", ids, labels)
+
+	got := layoutKeys(layout)
+	// Rows after the hidden heading stay under the visible heading before it,
+	// where the old sidebar drew them; items naming it go to their home.
+	if want := []string{"link:lnk_wiki", "link:lnk_map", "app:maps"}; !reflect.DeepEqual(got["sec_party"], want) {
+		t.Errorf("sec_party = %v, want %v", got["sec_party"], want)
+	}
+	if !contains(got[NavSectionCategories], "cat:2") || !contains(got[NavSectionApps], "link:lnk_named") {
+		t.Errorf("items naming the hidden heading must go home: %v", got)
+	}
+
+	for _, v := range []struct {
+		who    string
+		viewer NavViewer
+	}{
+		{"a player", NavViewer{Access: NavAccessMember}},
+		{"a scribe", NavViewer{Access: NavAccessMember}},
+		{"a public visitor", NavViewer{Access: NavAccessAnyone}},
+		{"the owner", NavViewer{Owner: true, Access: NavAccessMember}},
+	} {
+		var ids, labels []string
+		for _, s := range ViewNav(layout, navTestApps(), navTestCats(), v.viewer) {
+			ids, labels = append(ids, s.ID), append(labels, s.Label)
+		}
+		noSectionCalled(t, v.who, ids, labels)
+	}
+}
+
+// editorItems writes a layout back the way the owner's editor saves it
+// (sidebar_editor.js itemsFromDraft): each of the owner's sections ahead of
+// its rows, every row naming its section.
+func editorItems(l NavLayout) []SidebarItem {
+	var out []SidebarItem
+	for _, s := range l.Sections {
+		if !isBuiltInNavSection(s.ID) {
+			out = append(out, SidebarItem{Type: "section", ID: s.ID, Label: s.Label, Visible: true})
+		}
+		for _, it := range s.Items {
+			kind, ref, _ := NavKeyKind(it.Key)
+			item := SidebarItem{Visible: !it.Hidden, Section: s.ID}
+			switch kind {
+			case NavRowApp:
+				item.Type, item.Slug = "app", ref
+			case NavRowCategory:
+				item.Type = "category"
+				item.TypeID, _ = strconv.Atoi(ref)
+			case NavRowLink:
+				item.Type, item.ID, item.Label, item.URL, item.Icon = "link", ref, it.Label, it.URL, it.Icon
+			}
+			out = append(out, item)
+		}
+	}
+	return out
+}
+
+func TestEditorSave_DoesNotResurrectAHiddenHeading(t *testing.T) {
+	before := NormalizeNav(legacyHiddenHeading(), navTestApps(), navTestCats())
+	saved, err := validateSidebarItems(editorItems(before))
+	if err != nil {
+		t.Fatalf("the editor's save is refused: %v", err)
+	}
+	for _, it := range saved {
+		if it.Type == SidebarTypeSection && (it.ID == "sec_lair" || it.Label == "Villain lair (spoilers)") {
+			t.Fatalf("the editor's save stores the hidden heading: %+v", it)
+		}
+	}
+	after := NormalizeNav(saved, navTestApps(), navTestCats())
+	if !reflect.DeepEqual(layoutKeys(after), layoutKeys(before)) {
+		t.Errorf("saving moved rows:\n before %v\n after  %v", layoutKeys(before), layoutKeys(after))
+	}
+}
+
+func TestValidateSidebarItems_DropsHiddenHeadings(t *testing.T) {
+	got, err := validateSidebarItems(legacyHiddenHeading())
+	if err != nil {
+		t.Fatalf("validateSidebarItems: %v", err)
+	}
+	for _, it := range got {
+		if it.Type == SidebarTypeSection && it.ID == "sec_lair" {
+			t.Fatalf("a hidden heading must not be stored: %+v", it)
+		}
+		switch it.ID {
+		case "lnk_named":
+			if it.Section != NavSectionApps {
+				t.Errorf("a link naming the hidden heading goes to Apps, got %q", it.Section)
+			}
+		}
+		if it.Type == SidebarTypeCategory && it.TypeID == 2 && it.Section != NavSectionCategories {
+			t.Errorf("a category naming the hidden heading goes to Categories, got %q", it.Section)
+		}
+	}
+}
+
+func contains(list []string, want string) bool {
+	for _, s := range list {
+		if s == want {
+			return true
+		}
+	}
+	return false
 }

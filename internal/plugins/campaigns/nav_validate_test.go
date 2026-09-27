@@ -47,7 +47,7 @@ func TestValidateSidebarItems(t *testing.T) {
 
 func TestValidateSidebarItems_Tidies(t *testing.T) {
 	got, err := validateSidebarItems([]SidebarItem{
-		{Type: "section", ID: " sec_a ", Label: "  Lore  "},
+		{Type: "section", ID: " sec_a ", Label: "  Lore  ", Visible: true},
 		{Type: "link", ID: "lnk", Label: " Wiki ", URL: "/wiki", Icon: "w-screen h-screen fixed", Section: " sec_a "},
 		{Type: "link", ID: "lnk2", Label: "Map", URL: "/map", Icon: "fa-map"},
 	})
