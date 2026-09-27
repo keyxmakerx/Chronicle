@@ -23,9 +23,10 @@ type CalendarsListData struct {
 	Calendars    []Calendar
 	IsOwner      bool
 	CSRFToken    string
-	// JustCreated/NewCalendarID come from the wizard's post-create redirect
-	// (?created=<name>&new=<id>) — see WizardCreate. JustCreated is "" on an
-	// ordinary visit to this page.
+	// JustCreated/NewCalendarID announce the calendar the wizard just made
+	// (its redirect carries ?new=<id>). Both are "" unless that id is one of
+	// the calendars listed here; the name is the stored one, never taken from
+	// the URL, so a crafted link can't make the page announce arbitrary text.
 	JustCreated   string
 	NewCalendarID string
 }
@@ -72,8 +73,14 @@ func (h *Handler) Index(c echo.Context) error {
 		Calendars:     full,
 		IsOwner:       cc.MemberRole >= campaigns.RoleOwner,
 		CSRFToken:     middleware.GetCSRFToken(c),
-		JustCreated:   c.QueryParam("created"),
-		NewCalendarID: c.QueryParam("new"),
+	}
+	if newID := c.QueryParam("new"); newID != "" {
+		for _, cal := range full {
+			if cal.ID == newID {
+				data.JustCreated, data.NewCalendarID = cal.Name, cal.ID
+				break
+			}
+		}
 	}
 	if middleware.IsHTMX(c) {
 		return middleware.Render(c, http.StatusOK, CalendarsListFragment(data))

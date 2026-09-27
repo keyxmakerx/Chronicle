@@ -62,6 +62,32 @@ func TestCalendarsListPage_PlayerSeesReadOnlyView(t *testing.T) {
 	}
 }
 
+// TestCalendarsListPage_AnnouncesOnlyAListedCalendar: the post-create toast
+// names a calendar only when ?new= is one the viewer can see, and uses its
+// stored name; the URL's own text is never shown.
+func TestCalendarsListPage_AnnouncesOnlyAListedCalendar(t *testing.T) {
+	roles := map[string]campaigns.Role{"u-owner": campaigns.RoleOwner}
+	e, _ := newAccessTestRouter(false, true, roles)
+
+	rec := doRequest(e, http.MethodGet, "/campaigns/camp-1/calendars?created=Injected+text&new=cal-1", "u-owner")
+	body := rec.Body.String()
+	if rec.Code != http.StatusOK {
+		t.Fatalf("list page: got %d: %s", rec.Code, body)
+	}
+	if !strings.Contains(body, `data-created-name="The Secret Calendar"`) || !strings.Contains(body, `data-created-id="cal-1"`) {
+		t.Errorf("a listed calendar must be announced by its stored name, body:\n%s", body)
+	}
+	if strings.Contains(body, "Injected text") {
+		t.Errorf("the URL's created= text must never reach the page, body:\n%s", body)
+	}
+
+	rec = doRequest(e, http.MethodGet, "/campaigns/camp-1/calendars?created=Injected+text&new=cal-unknown", "u-owner")
+	body = rec.Body.String()
+	if !strings.Contains(body, `data-created-name=""`) || strings.Contains(body, "Injected text") {
+		t.Errorf("an id that isn't listed must announce nothing, body:\n%s", body)
+	}
+}
+
 func TestCalendarsListPage_OwnerSeesOwnerActions(t *testing.T) {
 	roles := map[string]campaigns.Role{"u-owner": campaigns.RoleOwner}
 	e, _ := newAccessTestRouter(false, true, roles)

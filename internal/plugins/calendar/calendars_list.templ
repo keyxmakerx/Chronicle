@@ -26,7 +26,9 @@ templ CalendarsListFragment(data CalendarsListData) {
 	<div
 		class="calv5"
 		x-data="{}"
-		x-init={ calv5CreatedInit(data.JustCreated, data.NewCalendarID) }
+		data-created-name={ data.JustCreated }
+		data-created-id={ data.NewCalendarID }
+		x-init={ calv5CreatedInit }
 	>
 		<div class="calv5-wrap">
 			<div class="calv5-dhead">
@@ -211,24 +213,14 @@ func csrfHeaderJSON(token string) string {
 	return string(b)
 }
 
-// calv5CreatedInit builds the Alpine x-init expression that announces a
-// just-created calendar (from the wizard's post-create redirect,
-// ?created=<name>&new=<id>): a toast and a short CSS entrance animation on
-// its card, then it strips both query params from the URL. Alpine's x-init
-// runs whenever this element enters the DOM — including on an HTMX-swapped
-// fragment — so this needs no <script> tag (one wouldn't reliably run on an
-// innerHTML swap; see CLAUDE.md's swap-safety rule). Returns "" (a no-op
-// expression) when there is nothing to announce.
-func calv5CreatedInit(name, id string) string {
-	if name == "" {
-		return ""
-	}
-	nameJSON, _ := json.Marshal(name + " created.")
-	idJSON, _ := json.Marshal(id)
-	return fmt.Sprintf(
-		`try{window.Chronicle&&Chronicle.notify(%s,'success')}catch(e){}; `+
-			`try{var c=document.querySelector('[data-card-id="'+%s+'"]');if(c)c.classList.add('enter')}catch(e){}; `+
-			`try{var u=new URL(window.location.href);u.searchParams.delete('created');u.searchParams.delete('new');window.history.replaceState({},'',u)}catch(e){}`,
-		nameJSON, idJSON,
-	)
-}
+// calv5CreatedInit is the Alpine x-init expression that announces a
+// just-created calendar: a toast and a short CSS entrance animation on its
+// card, then it strips the wizard's query params from the URL. It reads the
+// name and id from the element's data-created-* attributes, so no value is
+// ever formatted into code. Alpine's x-init runs whenever this element
+// enters the DOM, including on an HTMX-swapped fragment, so this needs no
+// <script> tag (see CLAUDE.md's swap-safety rule).
+const calv5CreatedInit = `if($el.dataset.createdName){` +
+	`try{window.Chronicle&&Chronicle.notify($el.dataset.createdName+' created.','success')}catch(e){}; ` +
+	`try{var c=document.querySelector('[data-card-id="'+CSS.escape($el.dataset.createdId)+'"]');if(c)c.classList.add('enter')}catch(e){}; ` +
+	`try{var u=new URL(window.location.href);u.searchParams.delete('created');u.searchParams.delete('new');window.history.replaceState({},'',u)}catch(e){}}`
