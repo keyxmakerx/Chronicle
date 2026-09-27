@@ -468,11 +468,14 @@ func (h *Handler) UploadAvatarAPI(c echo.Context) error {
 		return apperror.NewInternal(fmt.Errorf("reading uploaded file: %w", err))
 	}
 
-	// Declared Content-Type is advisory; the media service validates magic
-	// bytes against its own MIME allowlist regardless of what's passed here.
-	mimeType := file.Header.Get("Content-Type")
-	if mimeType == "" || mimeType == "application/octet-stream" {
-		mimeType = http.DetectContentType(fileBytes)
+	// The declared Content-Type header is client-supplied and untrusted;
+	// sniff the actual bytes instead (mirrors the boot reconciler's legacy
+	// avatar migration). An avatar must be an image -- the media service's
+	// own MIME allowlist also accepts audio, which has no business being a
+	// profile picture.
+	mimeType := http.DetectContentType(fileBytes)
+	if !strings.HasPrefix(mimeType, "image/") {
+		return apperror.NewBadRequest("avatar must be an image")
 	}
 
 	_, url, err := h.service.UploadAvatar(c.Request().Context(), userID, fileBytes, file.Filename, mimeType)

@@ -6,6 +6,8 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/keyxmakerx/chronicle/internal/apperror"
 )
 
 // fakeLegacyAvatarRepo simulates the users table's avatar_path column well
@@ -35,6 +37,16 @@ func (f *fakeLegacyAvatarRepo) UpdateAvatarPath(ctx context.Context, userID stri
 	return nil
 }
 
+// ClearAvatarPathIfMatches mirrors the real conditional UPDATE: it only
+// clears (and reports true) when the stored value still equals expectedPath.
+func (f *fakeLegacyAvatarRepo) ClearAvatarPathIfMatches(ctx context.Context, userID, expectedPath string) (bool, error) {
+	if f.avatarPaths[userID] != expectedPath {
+		return false, nil
+	}
+	delete(f.avatarPaths, userID)
+	return true, nil
+}
+
 // fakeAvatarUploaderForReconciler records every call so a test can assert
 // the reconciler never invokes it for a row it shouldn't touch.
 type fakeAvatarUploaderForReconciler struct {
@@ -50,6 +62,12 @@ func (f *fakeAvatarUploaderForReconciler) UploadAvatar(ctx context.Context, user
 	}
 	id := f.mediaIDByUser[userID]
 	return id, "/media/" + id, nil
+}
+
+// DeleteAvatarMedia is unused by the reconciler (it never replaces or
+// clears an avatar itself) but is required to satisfy AvatarUploader.
+func (f *fakeAvatarUploaderForReconciler) DeleteAvatarMedia(ctx context.Context, userID, mediaID string) error {
+	return nil
 }
 
 func TestReconcileLegacyAvatarPaths(t *testing.T) {
@@ -171,6 +189,66 @@ func TestReconcileLegacyAvatarPaths_UploadFailure_LeavesRowUntouched(t *testing.
 type testUploadErr struct{}
 
 func (*testUploadErr) Error() string { return "upload failed" }
+
+// TestReconcileLegacyAvatarPaths_PermanentRejection_ClearsRow pins that a
+// bad-request upload error (an undecodable legacy file) is treated as
+// permanent -- cleared once, not retried on every future boot -- unlike the
+// transient failure in TestReconcileLegacyAvatarPaths_UploadFailure_LeavesRowUntouched.
+func TestReconcileLegacyAvatarPaths_PermanentRejection_ClearsRow(t *testing.T) {
+	dir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(dir, "present.jpg"), []byte("not-a-real-image"), 0o600); err != nil {
+		t.Fatalf("seeding avatar file: %v", err)
+	}
+
+	repo := &fakeLegacyAvatarRepo{avatarPaths: map[string]string{
+		"user-1": "/uploads/avatars/present.jpg",
+	}}
+	uploader := &fakeAvatarUploaderForReconciler{
+		errByUser: map[string]error{"user-1": apperror.NewBadRequest("image sanitization failed: unrecognized format")},
+	}
+
+	moved, cleared, err := ReconcileLegacyAvatarPaths(context.Background(), repo, uploader, dir)
+	if err != nil {
+		t.Fatalf("ReconcileLegacyAvatarPaths: %v", err)
+	}
+	if moved != 0 || cleared != 1 {
+		t.Errorf("moved=%d cleared=%d, want 0/1 for a permanently rejected file", moved, cleared)
+	}
+	if _, ok := repo.avatarPaths["user-1"]; ok {
+		t.Error("avatar_path must be cleared after a permanent (bad-request) upload rejection")
+	}
+
+	// A second run must not retry the upload -- the row no longer matches
+	// the legacy prefix.
+	uploader.calledForUser = nil
+	if _, _, err := ReconcileLegacyAvatarPaths(context.Background(), repo, uploader, dir); err != nil {
+		t.Fatalf("second ReconcileLegacyAvatarPaths run: %v", err)
+	}
+	if len(uploader.calledForUser) != 0 {
+		t.Errorf("second run: uploader called %d times, want 0", len(uploader.calledForUser))
+	}
+}
+
+// TestReconcileLegacyAvatarPaths_ClearRacesConcurrentUpload pins that a
+// clear (missing file, malformed value, or permanent rejection) never
+// clobbers a row a user has already overwritten with a real upload between
+// the reconciler's listing and its write.
+func TestReconcileLegacyAvatarPaths_ClearRacesConcurrentUpload(t *testing.T) {
+	repo := &fakeLegacyAvatarRepo{avatarPaths: map[string]string{
+		"user-1": "/uploads/avatars/gone.jpg",
+	}}
+
+	// A concurrent real upload lands between the reconciler's listing and
+	// the clear it will attempt for the (now stale) expected value.
+	repo.avatarPaths["user-1"] = "fresh-real-upload-id"
+
+	if didClear, err := repo.ClearAvatarPathIfMatches(context.Background(), "user-1", "/uploads/avatars/gone.jpg"); err != nil || didClear {
+		t.Errorf("ClearAvatarPathIfMatches must refuse to clear a row that changed since the expected value was read: didClear=%v err=%v", didClear, err)
+	}
+	if repo.avatarPaths["user-1"] != "fresh-real-upload-id" {
+		t.Errorf("a fresh real upload must never be clobbered by a stale clear; got %q", repo.avatarPaths["user-1"])
+	}
+}
 
 // TestReconcileLegacyAvatarPaths_MalformedPath_Cleared pins the path-
 // traversal guard: any avatar_path value that doesn't reduce to a single,

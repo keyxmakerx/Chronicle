@@ -63,15 +63,24 @@ type MailSender interface {
 
 // AvatarUploader stores a profile picture through the media pipeline's
 // Upload (magic-byte validation, EXIF stripping/re-encode, the per-file
-// size limit, a disk-space check, 0640 permissions — see #610; NOT the
-// per-campaign storage/file-count quota, since an avatar has no campaign).
-// Implemented by an adapter over
-// media.MediaService in routes.go, keeping auth decoupled from the media
-// plugin the same way MediaCampaignVerifier keeps entities decoupled from it.
-// Returns the stored file's media id (persisted to users.avatar_path) and a
-// URL ready for immediate display (signed if URL signing is configured).
+// size limit, a disk-space check, 0640 permissions; NOT the per-campaign
+// storage/file-count quota, since an avatar has no campaign). Implemented
+// by an adapter over media.MediaService in routes.go, keeping auth
+// decoupled from the media plugin the same way MediaCampaignVerifier keeps
+// entities decoupled from it. UploadAvatar returns the stored file's media
+// id (persisted to users.avatar_path) and a URL ready for immediate
+// display (signed if URL signing is configured).
 type AvatarUploader interface {
 	UploadAvatar(ctx context.Context, userID string, fileBytes []byte, originalName, mimeType string) (mediaID, url string, err error)
+
+	// DeleteAvatarMedia removes a previously-stored avatar's media row and
+	// file, but only if mediaID still belongs to userID and is still an
+	// avatar (never someone else's file, and never one repurposed for
+	// something else since it was last a user's avatar). Called after a
+	// replacement avatar or a clear has already been persisted, so this is
+	// best-effort cleanup of what the column used to point at -- an error
+	// here is logged and swallowed, never surfaced to the caller.
+	DeleteAvatarMedia(ctx context.Context, userID, mediaID string) error
 }
 
 // AuthService defines the business logic contract for authentication.
@@ -101,16 +110,17 @@ type AuthService interface {
 	ChangePassword(ctx context.Context, userID, currentPassword, newPassword string) error
 
 	// UploadAvatar stores fileBytes as userID's avatar through the wired
-	// AvatarUploader (media.MediaService, usage_type "avatar", no
-	// campaign — see #610/#733 M0) and persists the returned media id to
-	// users.avatar_path. Returns apperror.NewInternal if no uploader is
-	// configured (should never happen outside a test that constructs
-	// authService directly without ConfigureAvatarUploader).
+	// AvatarUploader (media.MediaService, usage_type "avatar", no campaign)
+	// and persists the returned media id to users.avatar_path, deleting
+	// whatever avatar it replaces. Returns apperror.NewInternal if no
+	// uploader is configured (should never happen outside a test that
+	// constructs authService directly without ConfigureAvatarUploader).
 	UploadAvatar(ctx context.Context, userID string, fileBytes []byte, originalName, mimeType string) (mediaID, url string, err error)
 
-	// ClearAvatar removes the user's avatar (sets avatar_path to NULL). A
-	// user may only clear their own avatar -- the handler binds userID from
-	// the caller's own session, never from a request parameter.
+	// ClearAvatar removes the user's avatar (sets avatar_path to NULL) and
+	// deletes its underlying media file. A user may only clear their own
+	// avatar -- the handler binds userID from the caller's own session,
+	// never from a request parameter.
 	ClearAvatar(ctx context.Context, userID string) error
 
 	// Email change with verification.
@@ -561,14 +571,6 @@ func (s *authService) revalidateSession(ctx context.Context, key, token string, 
 	session.AvatarPath = derefOrEmpty(user.AvatarPath)
 	session.LastValidated = time.Now().UTC()
 
-	// Write the updated session back to Redis, preserving the original TTL
-	// so revalidation does not extend the session lifetime.
-	remainingTTL, err := s.redis.TTL(ctx, key).Result()
-	if err != nil || remainingTTL <= 0 {
-		// Key expired or error -- session will naturally expire.
-		return nil
-	}
-
 	data, err := json.Marshal(session)
 	if err != nil {
 		slog.Warn("failed to marshal updated session",
@@ -578,7 +580,11 @@ func (s *authService) revalidateSession(ctx context.Context, key, token string, 
 		return nil
 	}
 
-	if err := s.redis.Set(ctx, key, data, remainingTTL).Err(); err != nil {
+	// SetXX + KeepTTL writes only if the key still exists, and never
+	// changes its remaining TTL. A plain Set here (after a separate TTL
+	// read) could recreate a session that was destroyed -- e.g. by a
+	// concurrent logout -- between that read and this write.
+	if err := s.redis.SetXX(ctx, key, data, redis.KeepTTL).Err(); err != nil {
 		slog.Warn("failed to write revalidated session to Redis",
 			slog.String("user_id", session.UserID),
 			slog.Any("error", err),
@@ -946,11 +952,15 @@ func (s *authService) UpdateAvatarPath(ctx context.Context, userID string, avata
 }
 
 // UploadAvatar stores fileBytes through the wired media pipeline and
-// records the resulting media id as the user's avatar.
+// records the resulting media id as the user's avatar. Once the new avatar
+// is safely persisted, the previous one (if any) is deleted so it doesn't
+// keep being served forever.
 func (s *authService) UploadAvatar(ctx context.Context, userID string, fileBytes []byte, originalName, mimeType string) (string, string, error) {
 	if s.avatarUploader == nil {
 		return "", "", apperror.NewInternal(fmt.Errorf("avatar uploader not configured"))
 	}
+	oldAvatarPath := s.currentAvatarPath(ctx, userID)
+
 	mediaID, url, err := s.avatarUploader.UploadAvatar(ctx, userID, fileBytes, originalName, mimeType)
 	if err != nil {
 		return "", "", err
@@ -959,18 +969,50 @@ func (s *authService) UploadAvatar(ctx context.Context, userID string, fileBytes
 		return "", "", apperror.NewInternal(fmt.Errorf("updating avatar path: %w", err))
 	}
 	s.refreshSessionAvatar(ctx, userID, &mediaID)
+	s.deleteOldAvatarMedia(ctx, userID, oldAvatarPath, mediaID)
 	return mediaID, url, nil
 }
 
-// ClearAvatar removes the user's avatar. The underlying media file is left
-// in place (same as replacing an avatar with a new upload) -- only the
-// column pointing to it is cleared.
+// ClearAvatar removes the user's avatar and deletes the underlying media
+// file, once the column pointing to it has been cleared.
 func (s *authService) ClearAvatar(ctx context.Context, userID string) error {
+	oldAvatarPath := s.currentAvatarPath(ctx, userID)
+
 	if err := s.repo.UpdateAvatarPath(ctx, userID, nil); err != nil {
-		return err
+		return apperror.NewInternal(fmt.Errorf("clearing avatar path: %w", err))
 	}
 	s.refreshSessionAvatar(ctx, userID, nil)
+	s.deleteOldAvatarMedia(ctx, userID, oldAvatarPath, "")
 	return nil
+}
+
+// currentAvatarPath looks up userID's avatar media id before it's
+// overwritten or cleared, for deleteOldAvatarMedia to clean up afterward.
+// Returns "" on any lookup failure -- a stale/missing read here only means
+// the old file (if any) doesn't get cleaned up this time, never that the
+// upload or clear the caller is performing gets blocked.
+func (s *authService) currentAvatarPath(ctx context.Context, userID string) string {
+	user, err := s.repo.FindByID(ctx, userID)
+	if err != nil || user.AvatarPath == nil {
+		return ""
+	}
+	return *user.AvatarPath
+}
+
+// deleteOldAvatarMedia removes oldAvatarPath's media row and file through
+// the wired uploader, once the caller has already persisted the new state
+// (a fresh upload's newMediaID, or "" for a clear). Skips a no-op delete
+// when the "old" id is empty or unchanged, and is best-effort throughout:
+// the avatar_path write already succeeded, so a cleanup failure here only
+// leaves an unreferenced file behind, never blocks the caller.
+func (s *authService) deleteOldAvatarMedia(ctx context.Context, userID, oldAvatarPath, newMediaID string) {
+	if s.avatarUploader == nil || oldAvatarPath == "" || oldAvatarPath == newMediaID {
+		return
+	}
+	if err := s.avatarUploader.DeleteAvatarMedia(ctx, userID, oldAvatarPath); err != nil {
+		slog.Warn("auth: failed to delete the replaced avatar's media file",
+			slog.String("user_id", userID), slog.String("media_id", oldAvatarPath), slog.Any("error", err))
+	}
 }
 
 // refreshSessionAvatar patches AvatarPath on every one of userID's active
@@ -1013,17 +1055,15 @@ func (s *authService) refreshSessionAvatar(ctx context.Context, userID string, a
 		}
 		session.AvatarPath = newPath
 
-		// Preserve the session's own remaining TTL -- this must never
-		// extend (or accidentally shorten) how long the session lives.
-		ttl, err := s.redis.TTL(ctx, key).Result()
-		if err != nil || ttl <= 0 {
-			continue
-		}
 		updated, err := json.Marshal(session)
 		if err != nil {
 			continue
 		}
-		if err := s.redis.Set(ctx, key, updated, ttl).Err(); err != nil {
+		// SetXX + KeepTTL writes only if the key still exists, and never
+		// changes its remaining TTL. A plain Set here (after a separate
+		// TTL read) could recreate a session that was destroyed -- e.g. by
+		// a concurrent logout -- between that read and this write.
+		if err := s.redis.SetXX(ctx, key, updated, redis.KeepTTL).Err(); err != nil {
 			slog.Warn("auth: failed to write avatar-refreshed session",
 				slog.String("user_id", userID), slog.Any("error", err))
 		}

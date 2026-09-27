@@ -255,8 +255,10 @@ func (h *Handler) Upload(c echo.Context) error {
 
 // Serve serves a media file (GET /media/:id).
 // Enforces HMAC-signed URL verification for campaign media and access
-// control for private campaigns. Files without a campaign (avatars,
-// backdrops) are served without signing.
+// control for private campaigns. Files without a campaign are served
+// without signing: an avatar still requires an authenticated viewer
+// (checkMediaAccess denies an anonymous request); a backdrop is fully
+// public.
 func (h *Handler) Serve(c echo.Context) error {
 	fileID := c.Param("id")
 	fileID = strings.TrimSuffix(fileID, "/")
@@ -323,19 +325,20 @@ func currentViewerIdentity(c echo.Context) string {
 // campaign access control. Returns nil if access is allowed, or an error to
 // return to the client.
 func (h *Handler) checkMediaAccess(c echo.Context, file *MediaFile, isThumb bool, thumbSize string) error {
-	// A nil campaign is only public when the file was uploaded that way on
-	// purpose (avatar, backdrop). Campaign-scoped usage types (attachment,
+	// A nil campaign_id only skips the checks below for a usage type that
+	// was uploaded without a campaign on purpose: an avatar (gated on
+	// sign-in, not campaign membership) or a backdrop (fully public, no
+	// owner to protect). Campaign-scoped usage types (attachment,
 	// entity_image) can end up with a nil campaign_id later — the FK is
 	// ON DELETE SET NULL, and campaign-delete's media cleanup is
-	// best-effort — and must not fall through to public just because the
-	// column went NULL. Deny exactly like an unknown id, so an orphaned
-	// row isn't distinguishable from one that was never there.
+	// best-effort — and must not fall through to either of those just
+	// because the column went NULL. Deny exactly like an unknown id, so an
+	// orphaned row isn't distinguishable from one that was never there.
 	if file.CampaignID == nil {
 		switch file.UsageType {
 		case UsageAvatar:
-			// #730 decision 2: a profile picture is visible to any
-			// signed-in user, but not to an anonymous visitor — unlike a
-			// backdrop (below), which has no owner to protect.
+			// A profile picture is visible to any signed-in user, but not
+			// to an anonymous visitor.
 			if auth.GetUserID(c) == "" {
 				return apperror.NewNotFound("media file not found")
 			}
@@ -653,13 +656,13 @@ func (h *Handler) setSecurityHeaders(c echo.Context, file *MediaFile) {
 		// Private campaign media must not be cached by shared proxies.
 		resp.Header().Set("Cache-Control", "private, no-store, max-age=0")
 	case file.CampaignID == nil && file.UsageType == UsageAvatar:
-		// An avatar is gated on sign-in (#730 decision 2), not campaign
-		// membership — checkMediaAccess denies an anonymous request for it.
-		// A shared/proxy cache (nginx, a CDN, a corporate proxy) must not be
-		// allowed to serve that same URL back to a later anonymous request
-		// without ever reaching checkMediaAccess again; "public" here would
-		// undo the sign-in gate for anyone sharing that cache.
-		resp.Header().Set("Cache-Control", "private, max-age=31536000, immutable")
+		// An avatar is gated on sign-in, not campaign membership --
+		// checkMediaAccess denies an anonymous request for it. The signed
+		// URL also changes on every render, so there's nothing stable to
+		// cache; no-store also keeps a shared/proxy cache (nginx, a CDN, a
+		// corporate proxy) from serving this response back to a later
+		// request after the viewer signs out.
+		resp.Header().Set("Cache-Control", "private, no-store, max-age=0")
 	default:
 		// Public/orphan media: cache aggressively (UUID filenames are immutable).
 		resp.Header().Set("Cache-Control", "public, max-age=31536000, immutable")

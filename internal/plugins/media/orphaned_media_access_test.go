@@ -5,8 +5,8 @@
 // campaign delete, an import, or a restored backup — must deny like any
 // other unknown file, not fall through to "public".
 //
-// An avatar is a narrower case than a backdrop: it is public to any
-// signed-in user but denied to an anonymous visitor (#730 decision 2).
+// An avatar is a narrower case than a backdrop: it is visible to any
+// signed-in user but denied to an anonymous visitor.
 
 package media
 
@@ -87,6 +87,9 @@ func TestSetSecurityHeaders_Avatar_NotPubliclyCacheable(t *testing.T) {
 	}
 	if !strings.Contains(got, "private") {
 		t.Errorf("avatar Cache-Control = %q, want it to say private", got)
+	}
+	if !strings.Contains(got, "no-store") {
+		t.Errorf("avatar Cache-Control = %q, want no-store (the signed URL changes on every render, and a year-long cache would keep serving it after sign-out)", got)
 	}
 }
 

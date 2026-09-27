@@ -1431,7 +1431,7 @@ templ Topbar() {
 					>
 						<div class="w-7 h-7 rounded-full bg-accent flex items-center justify-center overflow-hidden">
 							if avatarPath := GetUserAvatarPath(ctx); avatarPath != "" {
-								<img src={ MediaURL(ctx, avatarPath) } class="w-full h-full object-cover" alt=""/>
+								<img src={ MediaThumbURL(ctx, avatarPath, "300") } class="w-full h-full object-cover" alt=""/>
 							} else {
 								<span class="text-[10px] font-semibold text-white">
 									{ userInitials(ctx) }
