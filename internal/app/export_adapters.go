@@ -278,7 +278,7 @@ func (a *timelineExportAdapter) ExportTimelines(ctx context.Context, campaignID 
 		// Export standalone events only (calendar events are in the calendar section).
 		// Build event ID → export index map for connection references.
 		eventIDToIndex := make(map[string]int)
-		events, err := a.svc.ListTimelineEvents(ctx, tl.ID, systemViewer)
+		events, err := a.svc.ListTimelineEvents(ctx, tl.ID, campaignID, systemViewer)
 		if err == nil {
 			for _, evt := range events {
 				if evt.Source != "standalone" {
@@ -323,7 +323,7 @@ func (a *timelineExportAdapter) ExportTimelines(ctx context.Context, campaignID 
 		}
 
 		// Export entity groups (swim lanes).
-		groups, err := a.svc.ListEntityGroups(ctx, tl.ID)
+		groups, err := a.svc.ListEntityGroups(ctx, tl.ID, campaignID, systemViewer)
 		if err == nil {
 			for _, g := range groups {
 				eg := campaigns.ExportEntityGroup{

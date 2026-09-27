@@ -42,11 +42,15 @@ type MapService interface {
 	ListMaps(ctx context.Context, campaignID string) ([]Map, error)
 	SearchMaps(ctx context.Context, campaignID, query string) ([]map[string]string, error)
 
-	// Marker CRUD.
+	// Marker CRUD. UpdateMarker and DeleteMarker take canAuthorDmOnly (Owner
+	// or a co-DM grant, campaigns.CampaignContext.CanAuthorDmOnly) so a
+	// caller who cannot author dm_only content gets the same NotFound a
+	// missing id would give when the stored marker is dm_only, regardless of
+	// which fields the request touches.
 	CreateMarker(ctx context.Context, input CreateMarkerInput) (*Marker, error)
 	GetMarker(ctx context.Context, id string) (*Marker, error)
-	UpdateMarker(ctx context.Context, id string, input UpdateMarkerInput) error
-	DeleteMarker(ctx context.Context, id string, expectedUpdatedAt *time.Time) error
+	UpdateMarker(ctx context.Context, id string, input UpdateMarkerInput, canAuthorDmOnly bool) error
+	DeleteMarker(ctx context.Context, id string, expectedUpdatedAt *time.Time, canAuthorDmOnly bool) error
 	// ListMarkers takes campaignID so non-owner results can be narrowed by
 	// EntityVisibilityGate: the marker's own visibility is repo-filtered, but
 	// a linked entity's visibility is a separate check the caller must supply.
@@ -296,12 +300,19 @@ func (s *mapService) GetMarker(ctx context.Context, id string) (*Marker, error) 
 }
 
 // UpdateMarker modifies an existing marker.
-func (s *mapService) UpdateMarker(ctx context.Context, id string, input UpdateMarkerInput) error {
+func (s *mapService) UpdateMarker(ctx context.Context, id string, input UpdateMarkerInput, canAuthorDmOnly bool) error {
 	mk, err := s.repo.GetMarker(ctx, id)
 	if err != nil {
 		return fmt.Errorf("get marker for update: %w", err)
 	}
 	if mk == nil {
+		return apperror.NewNotFound("marker not found")
+	}
+	// A stored dm_only marker is invisible to a caller who cannot author
+	// dm_only content: answer the same NotFound a missing id would give,
+	// whatever fields this update touches, so this can't be used to confirm
+	// the marker exists or to change it without ever seeing it.
+	if mk.Visibility == "dm_only" && !canAuthorDmOnly {
 		return apperror.NewNotFound("marker not found")
 	}
 
@@ -355,12 +366,17 @@ func (s *mapService) UpdateMarker(ctx context.Context, id string, input UpdateMa
 }
 
 // DeleteMarker removes a marker.
-func (s *mapService) DeleteMarker(ctx context.Context, id string, expectedUpdatedAt *time.Time) error {
+func (s *mapService) DeleteMarker(ctx context.Context, id string, expectedUpdatedAt *time.Time, canAuthorDmOnly bool) error {
 	mk, err := s.repo.GetMarker(ctx, id)
 	if err != nil {
 		return fmt.Errorf("get marker for delete: %w", err)
 	}
 	if mk == nil {
+		return apperror.NewNotFound("marker not found")
+	}
+	// See UpdateMarker: a stored dm_only marker answers the same NotFound a
+	// missing id would to a caller who cannot author dm_only content.
+	if mk.Visibility == "dm_only" && !canAuthorDmOnly {
 		return apperror.NewNotFound("marker not found")
 	}
 	if err := concurrency.Check(mk.UpdatedAt, expectedUpdatedAt, "marker"); err != nil {

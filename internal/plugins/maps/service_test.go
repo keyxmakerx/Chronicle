@@ -643,7 +643,7 @@ func TestUpdateMarker_Success(t *testing.T) {
 		Y:     patch.Of(30.0),
 		Icon:  patch.Of("fa-castle"),
 		Color: patch.Of("#ff0000"),
-	})
+	}, true)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -656,7 +656,7 @@ func TestUpdateMarker_NotFound(t *testing.T) {
 		},
 	}
 	svc := newTestMapService(repo)
-	err := svc.UpdateMarker(context.Background(), "nonexistent", UpdateMarkerInput{Name: patch.Of("X"), X: patch.Of(50.0), Y: patch.Of(50.0)})
+	err := svc.UpdateMarker(context.Background(), "nonexistent", UpdateMarkerInput{Name: patch.Of("X"), X: patch.Of(50.0), Y: patch.Of(50.0)}, true)
 	assertAppError(t, err, 404)
 }
 
@@ -667,7 +667,7 @@ func TestUpdateMarker_EmptyName(t *testing.T) {
 		},
 	}
 	svc := newTestMapService(repo)
-	err := svc.UpdateMarker(context.Background(), "mk-1", UpdateMarkerInput{Name: patch.Of(""), X: patch.Of(50.0), Y: patch.Of(50.0)})
+	err := svc.UpdateMarker(context.Background(), "mk-1", UpdateMarkerInput{Name: patch.Of(""), X: patch.Of(50.0), Y: patch.Of(50.0)}, true)
 	assertAppError(t, err, 422)
 }
 
@@ -682,7 +682,7 @@ func TestUpdateMarker_InvalidCoordinates(t *testing.T) {
 		Name: patch.Of("Pin"),
 		X:    patch.Of(150.0),
 		Y:    patch.Of(50.0),
-	})
+	}, true)
 	assertAppError(t, err, 422)
 }
 
@@ -698,7 +698,7 @@ func TestUpdateMarker_InvalidIcon(t *testing.T) {
 		X:    patch.Of(50.0),
 		Y:    patch.Of(50.0),
 		Icon: patch.Of("javascript:alert(1)"),
-	})
+	}, true)
 	assertAppError(t, err, 400)
 }
 
@@ -715,7 +715,7 @@ func TestUpdateMarker_InvalidColor(t *testing.T) {
 		Y:     patch.Of(50.0),
 		Icon:  patch.Of("fa-map-pin"),
 		Color: patch.Of("not-a-color"),
-	})
+	}, true)
 	assertAppError(t, err, 422)
 }
 
@@ -737,7 +737,7 @@ func TestDeleteMarker_Success(t *testing.T) {
 	}
 	svc := newTestMapService(repo)
 
-	err := svc.DeleteMarker(context.Background(), "mk-1", nil)
+	err := svc.DeleteMarker(context.Background(), "mk-1", nil, true)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -753,7 +753,7 @@ func TestDeleteMarker_NotFound(t *testing.T) {
 		},
 	}
 	svc := newTestMapService(repo)
-	err := svc.DeleteMarker(context.Background(), "nonexistent", nil)
+	err := svc.DeleteMarker(context.Background(), "nonexistent", nil, true)
 	assertAppError(t, err, 404)
 }
 

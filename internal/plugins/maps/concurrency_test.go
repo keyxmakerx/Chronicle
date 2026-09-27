@@ -51,7 +51,7 @@ func TestUpdateMarker_StaleConflict(t *testing.T) {
 				Color:             patch.Of("#3b82f6"),
 				Visibility:        patch.Of("everyone"),
 				ExpectedUpdatedAt: tc.expected,
-			})
+			}, true)
 
 			if tc.wantHTTPCode == 0 {
 				if err != nil {
@@ -76,13 +76,13 @@ func TestDeleteMarker_StaleConflict(t *testing.T) {
 	}
 	svc := newTestMapService(repo)
 
-	if err := svc.DeleteMarker(context.Background(), "mk-1", &stale); err == nil {
+	if err := svc.DeleteMarker(context.Background(), "mk-1", &stale, true); err == nil {
 		t.Fatal("expected stale-timestamp delete to be rejected with conflict")
 	} else {
 		assertAppError(t, err, http.StatusConflict)
 	}
 
-	if err := svc.DeleteMarker(context.Background(), "mk-1", &rowUpdated); err != nil {
+	if err := svc.DeleteMarker(context.Background(), "mk-1", &rowUpdated, true); err != nil {
 		t.Fatalf("expected matching-timestamp delete to succeed, got: %v", err)
 	}
 }

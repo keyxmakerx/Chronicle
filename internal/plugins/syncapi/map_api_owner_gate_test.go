@@ -27,7 +27,7 @@ type stubMapSvcOwnerGate struct {
 }
 
 func (s *stubMapSvcOwnerGate) GetMap(context.Context, string) (*maps.Map, error) { return s.m, nil }
-func (s *stubMapSvcOwnerGate) DeleteMarker(context.Context, string, *time.Time) error {
+func (s *stubMapSvcOwnerGate) DeleteMarker(context.Context, string, *time.Time, bool) error {
 	return nil
 }
 
