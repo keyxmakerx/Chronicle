@@ -47,20 +47,6 @@
     editor.install();
   }
 
-  // Loaded unconditionally on every page (internal/app/routes.go's
-  // pluginBodyScripts registry, outside the sidebar's hx-boost-swapped
-  // region — see tools/check-page-scripts.sh for why a page templ can't
-  // conditionally <script src> this instead), so THIS file — not the
-  // Templ page — is what gates the whole editing surface on the viewer
-  // actually being able to edit: no mount at all (most pages), or a mount
-  // whose data-can-edit isn't "true" (a Player on the calendar page), both
-  // no-op here, exactly as if the script had never loaded.
-  var mount = document.querySelector('[data-widget="calendar_view"]');
-  if (mount && mount.dataset.canEdit === 'true') {
-    if (mount.calendarView) attach(mount.calendarView);
-    else mount.addEventListener('calendarv5:ready', function (e) { attach(e.detail); });
-  }
-
   function CalendarEditor(view) {
     this.view = view;
     this.editing = false;
@@ -661,4 +647,27 @@
       });
     });
   };
+
+  // Loaded unconditionally on every page (internal/app/routes.go's
+  // pluginBodyScripts registry, outside the sidebar's hx-boost-swapped
+  // region — see tools/check-page-scripts.sh for why a page templ can't
+  // conditionally <script src> this instead), so THIS file — not the
+  // Templ page — is what gates the whole editing surface on the viewer
+  // actually being able to edit: no mount at all (most pages), or a mount
+  // whose data-can-edit isn't "true" (a Player on the calendar page), both
+  // no-op here, exactly as if the script had never loaded.
+  //
+  // MUST be the last thing in this file: calendar_view.js's widget mounts
+  // (and sets mount.calendarView) synchronously during ITS OWN <script
+  // defer>, which the pluginBodyScripts registry always emits before this
+  // one — so by the time this line runs, mount.calendarView is already
+  // set and `attach` fires immediately, not later via the
+  // 'calendarv5:ready' event. Attaching before every CalendarEditor.
+  // prototype method above is assigned would throw "editor.install is
+  // not a function" the instant a canEdit viewer loads the page.
+  var mount = document.querySelector('[data-widget="calendar_view"]');
+  if (mount && mount.dataset.canEdit === 'true') {
+    if (mount.calendarView) attach(mount.calendarView);
+    else mount.addEventListener('calendarv5:ready', function (e) { attach(e.detail); });
+  }
 })();

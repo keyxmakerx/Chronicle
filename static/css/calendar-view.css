@@ -866,6 +866,26 @@
 .cal-v5 .gx.sdot{top:-5px;width:9px;height:9px;border-radius:50%;box-shadow:inset 0 0 0 1.5px var(--gsel)}
 .cal-v5 .gpulse{position:absolute;z-index:6;pointer-events:none;border-radius:10px;box-shadow:0 0 0 2px var(--gsel);opacity:0;animation:cal5-gPulse 1.7s var(--ease) 2}
 @keyframes cal5-gPulse{0%{opacity:0;transform:scale(1.1)}30%{opacity:.9;transform:none}100%{opacity:0;transform:scale(1.03)}}
+
+/* .gtick: this port's own day-tick strip (calendar_view.js's _mvGraphHTML),
+   standing in for the mockups' ambient canvas graph (#794). Deliberately
+   NOT .gx: .gx is an absolutely-positioned label meant to overlay that
+   future canvas and has no flow height of its own — every child of
+   .gframe being position:absolute collapses .gframe to zero height, which
+   is exactly what happened before this rule existed. .gtick is a normal
+   flow item instead, so .gframe sizes itself from its content. */
+.cal-v5 .gframe{display:flex;align-items:flex-end;gap:2px;min-height:78px;padding:10px 8px}
+.cal-v5 .gtick{position:relative;display:flex;flex-direction:column;align-items:center;gap:3px;flex:none;width:22px;color:var(--gtx2);font:500 10px/1 var(--sans);font-variant-numeric:tabular-nums}
+.cal-v5 .gtick .sil{width:18px;height:18px}
+.cal-v5 .gtick.today{color:var(--gtx)}
+.cal-v5 .gtick.today span{font-weight:650}
+/* A moon-night payload's span gets a ring in its type's hue — a minimal,
+   honest stand-in for the mockups' drip/aura effect (#794 builds the real
+   one) rather than nothing at all. */
+.cal-v5 .gtick[data-night="blood"] .sil{box-shadow:0 0 0 1.5px var(--bldT);border-radius:50%}
+.cal-v5 .gtick[data-night="magic"] .sil{box-shadow:0 0 0 1.5px var(--arcT);border-radius:50%}
+.cal-v5 .gtick[data-night="eclipse"] .sil{box-shadow:0 0 0 1.5px var(--eclT);border-radius:50%}
+.cal-v5 .gtick[data-night="harvest"] .sil{box-shadow:0 0 0 1.5px var(--hvtT);border-radius:50%}
 /* The key: what the light, the discs and the moving marks mean, in the lanes' own marks. */
 .cal-v5 .gkey{list-style:none;margin:10px 0 0;padding:0;display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:6px 18px;font:500 11.5px/1.4 var(--sans);color:var(--mut)}
 .cal-v5 .gkey li{display:flex;align-items:flex-start;gap:8px}

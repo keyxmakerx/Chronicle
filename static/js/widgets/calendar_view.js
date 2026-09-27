@@ -432,6 +432,7 @@
 
     destroy: function (el) {
       if (this._resizeHandler) window.removeEventListener('resize', this._resizeHandler);
+      if (this._escHandler) document.removeEventListener('keydown', this._escHandler);
     },
 
     // --------------------------------------------------------------
@@ -817,6 +818,20 @@
 
       this._resizeHandler = function () { if (self.wingFor) self.closeWing(); };
       window.addEventListener('resize', this._resizeHandler);
+
+      // Escape closes whichever panel is open (motion rule #760: "every
+      // panel works from the keyboard"), innermost first: the event detail
+      // overlay before the day wing it grew out of, so Escape steps back
+      // one layer at a time rather than closing everything at once.
+      this._escHandler = function (e) {
+        if (e.key !== 'Escape') return;
+        if (self.evpEl.classList.contains('open')) { self.closeEventDetail(); return; }
+        if (self.mvEl.classList.contains('open')) { self.closeMoonView(); return; }
+        if (self.flapEl.classList.contains('open')) { self.closeFlap(); return; }
+        if (self.popEl.classList.contains('open')) { self.closePop(); return; }
+        if (self.wingFor) { self.closeWing(); return; }
+      };
+      document.addEventListener('keydown', this._escHandler);
     },
 
     _moveRoving: function (delta) {
@@ -1121,7 +1136,14 @@
           var payload = self._parsePayload(e);
           if (payload && payload.moons && payload.moons.indexOf(moon.id) >= 0) badge = ' data-night="' + esc(payload.type) + '"';
         });
-        ticks += '<div class="gx' + (d === todayD ? ' today' : '') + '"' + badge + ' title="' + esc(MoonMath.name(phase)) + '">' + this._moonSilSVG(phase) + '<span>' + d + '</span></div>';
+        // .gtick, not the mockup's .gx: .gx is an absolutely-positioned
+        // LABEL meant to overlay a canvas graph (position:absolute, no
+        // flow height of its own) — the ambient canvas it was designed for
+        // is #794, not built here. Reusing it directly collapses .gframe
+        // to zero height (every child pulled out of flow, nothing left to
+        // size the container). .gtick is this strip's own flow-layout
+        // class instead, styled fresh further down calendar-view.css.
+        ticks += '<div class="gtick' + (d === todayD ? ' today' : '') + '"' + badge + ' title="' + esc(MoonMath.name(phase)) + '">' + this._moonSilSVG(phase) + '<span>' + d + '</span></div>';
       }
       return '<div class="gframe" tabindex="0">' + ticks + '</div>';
     },
