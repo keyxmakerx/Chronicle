@@ -253,17 +253,20 @@ templ semanticAccentPicker(slotKey, icon, label, hint, current string) {
 // IIFE onclick/onchange handler (surface_accent_onclick.go) rather than
 // relying on a parent <script> with delegated listeners — that script gets
 // deleted whole by htmx on a boosted swap (allowScriptTags=false). The
-// handler sets the CSS variable for an instant local preview, then hands the
-// new value to the appearance-editor widget through a DOM event so it can
-// fold the slot into the tab's one staged draft/save/discard flow — it no
-// longer saves by itself per click.
+// handler previews locally and hands the new value to the appearance-editor
+// widget through a DOM event, folding the slot into the tab's one staged
+// draft/save/discard flow. data-slot-color and the row/label ids let the
+// widget's JS re-sync the ring and label (highlightSurfaceRow in
+// appearance_editor.js), the same contract semanticAccentPicker's buttons
+// use.
 templ surfaceAccentRow(slot int, label string, current string) {
-	<div class="flex flex-wrap items-center gap-2 mb-2">
+	<div class="flex flex-wrap items-center gap-2 mb-2" id={ fmt.Sprintf("appearance-surface-row-%d", slot) }>
 		<span class="text-[11px] text-fg-secondary w-32 shrink-0">{ label }</span>
 		for _, preset := range accentColorPresets {
 			if current == preset.Color {
 				<button
 					type="button"
+					data-slot-color={ preset.Color }
 					class="w-6 h-6 rounded-full border-2 border-white ring-2 ring-offset-1 ring-offset-surface ring-fg transition-transform hover:scale-110 shrink-0"
 					style={ fmt.Sprintf("background-color: %s", preset.Color) }
 					title={ preset.Name }
@@ -272,6 +275,7 @@ templ surfaceAccentRow(slot int, label string, current string) {
 			} else {
 				<button
 					type="button"
+					data-slot-color={ preset.Color }
 					class="w-6 h-6 rounded-full border-2 border-transparent hover:border-white/50 transition-transform hover:scale-110 shrink-0"
 					style={ fmt.Sprintf("background-color: %s", preset.Color) }
 					title={ preset.Name }
@@ -281,6 +285,7 @@ templ surfaceAccentRow(slot int, label string, current string) {
 		}
 		<button
 			type="button"
+			data-slot-color=""
 			class="w-6 h-6 rounded-full border-2 border-dashed border-edge flex items-center justify-center hover:border-fg-muted transition-colors shrink-0"
 			title="Follow Accent Color"
 			onclick={ surfaceAccentApplyOnClick(slot, "") }
@@ -299,23 +304,25 @@ templ surfaceAccentRow(slot int, label string, current string) {
 			title="Pick a custom color"
 			onchange={ surfaceAccentCustomOnChange(slot, fmt.Sprintf("appearance-surface-custom-%d", slot)) }
 		/>
-		if current != "" {
-			<span class="text-[10px] text-fg-muted">{ current }</span>
-		} else {
-			<span class="text-[10px] text-fg-muted">follows Accent Color</span>
-		}
+		<span class="text-[10px] text-fg-muted" id={ fmt.Sprintf("appearance-surface-label-%d", slot) }>
+			if current != "" {
+				{ current }
+			} else {
+				follows Accent Color
+			}
+		</span>
 	</div>
 }
 
 // appearanceTab renders the visual customization editor in the Customization Hub.
 // Contains: faux site outline, brand name/logo, accent colors, topbar
-// styling, and backdrop image. One staged draft covers the whole tab
-// (including Surface Accents, which used to save on click): Save persists
-// every changed field, Discard reverts every control to the last save.
+// styling, and backdrop image. One staged draft covers the whole tab,
+// including Surface Accents: Save persists every changed field, Discard
+// reverts every control to the last save.
 //
-// Deliberately no Welcome Message card: Campaign Settings -> General already
-// edits that field, and the Customize page redesign will decide which
-// surface keeps it — not a gap to fill in here.
+// No Welcome Message card: Campaign Settings -> General already edits that
+// field. TODO(#739): the Customize page redesign decides which surface
+// keeps it.
 templ appearanceTab(cc *CampaignContext, csrfToken string) {
 	<h2 class="text-base font-semibold text-fg mb-1">Appearance</h2>
 	<p class="text-xs text-fg-secondary mb-4">Customize the visual style of your campaign. Changes preview instantly — click Save when you're happy.</p>
@@ -678,7 +685,6 @@ var fontFamilyPresets = []fontFamilyPreset{
 	{"merriweather", "Merriweather", "'Merriweather', Georgia, serif"},
 }
 
-// topbarStyleJSON and topbarContentJSON moved to topbar_json.go: they build
-// this data-attribute payload through encoding/json (a plain .go file, not
-// this templ file — see that file's doc comment for why) instead of hand-
-// assembling JSON text.
+// topbarStyleJSON and topbarContentJSON live in topbar_json.go, a plain .go
+// file (see its doc comment), so this templ file needs no encoding/json
+// import.
