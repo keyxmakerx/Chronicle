@@ -803,11 +803,24 @@ const MaxAliasLength = 200
 
 // --- Backlinks ---
 
-// BacklinkEntry pairs an entity that references the current entity with
-// a text snippet showing the context around the @mention.
+// BacklinkEntity is the safe, minimal view of a linking entity exposed by the
+// backlinks API — enough to link to it and render its type icon, never its
+// content. Unlike Entity, this type has no Entry/EntryHTML/FieldsData fields
+// to accidentally serialize, so a new field added to Entity can't leak here.
+type BacklinkEntity struct {
+	ID        string `json:"id"`
+	Name      string `json:"name"`
+	TypeName  string `json:"type_name"`
+	TypeIcon  string `json:"type_icon"`
+	TypeColor string `json:"type_color"`
+}
+
+// BacklinkEntry pairs a linking entity's safe summary with a text snippet
+// showing the context around the @mention. For viewers below Scribe the
+// snippet is built from GM-secret-stripped HTML (see GetBacklinksWithSnippets).
 type BacklinkEntry struct {
-	Entity  Entity `json:"entity"`
-	Snippet string `json:"snippet"`
+	Entity  BacklinkEntity `json:"entity"`
+	Snippet string         `json:"snippet"`
 }
 
 // --- Mention Links (for graph visualization) ---
