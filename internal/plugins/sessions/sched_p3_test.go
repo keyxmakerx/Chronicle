@@ -109,6 +109,57 @@ func TestConfirmProposalWinner_ClosesAndCreatesSession(t *testing.T) {
 	}
 }
 
+// TestConfirmProposalWinner_CarriesOnlyWinningOptionYesVoters pins the
+// yesVoters return value against a fake that behaves like the real
+// ListProposalResponses query: rows joined across every option belonging to
+// the proposal, not scoped to a single option. It must be called with the
+// proposal id (not the option id) and the result filtered down to the
+// winning option's yes-responders only.
+func TestConfirmProposalWinner_CarriesOnlyWinningOptionYesVoters(t *testing.T) {
+	startUTC := time.Now().UTC()
+	var gotProposalID string
+	repo := &mockSessionRepo{
+		getProposalFn: func(_ context.Context, _, _ string) (*SlotProposal, []SlotProposalOption, error) {
+			return &SlotProposal{ID: "p1", CampaignID: "c1", Title: "The Dragon's Lair", Status: ProposalOpen},
+				[]SlotProposalOption{
+					{ID: "o1", ProposalID: "p1", StartsAtUTC: startUTC, EndsAtUTC: startUTC.Add(time.Hour)},
+					{ID: "o2", ProposalID: "p1", StartsAtUTC: startUTC, EndsAtUTC: startUTC.Add(time.Hour)},
+				}, nil
+		},
+		setProposalWinnerAndCloseFn: func(_ context.Context, _, _ string) error { return nil },
+		createFn:                    func(_ context.Context, _ string, _ *Session) error { return nil },
+		listProposalResponsesFn: func(_ context.Context, proposalID string) ([]SlotProposalResponse, error) {
+			gotProposalID = proposalID
+			// Mirrors the real query: every response across every option of
+			// the proposal, regardless of which option ends up winning.
+			return []SlotProposalResponse{
+				{OptionID: "o1", UserID: "alice", Response: ResponseYes},
+				{OptionID: "o1", UserID: "bob", Response: ResponseNo},
+				{OptionID: "o1", UserID: "carol", Response: ResponseYes},
+				{OptionID: "o2", UserID: "dave", Response: ResponseYes},
+			}, nil
+		},
+	}
+	svc := NewSessionService(repo, nil, nil)
+
+	_, yesVoters, err := svc.ConfirmProposalWinner(context.Background(), "c1", "p1", "o1", "dm-user", "UTC")
+	if err != nil {
+		t.Fatalf("ConfirmProposalWinner: %v", err)
+	}
+	if gotProposalID != "p1" {
+		t.Errorf("ListProposalResponses called with %q, want the proposal id p1", gotProposalID)
+	}
+	want := map[string]bool{"alice": true, "carol": true}
+	if len(yesVoters) != len(want) {
+		t.Fatalf("yesVoters = %v, want exactly %v", yesVoters, want)
+	}
+	for _, v := range yesVoters {
+		if !want[v] {
+			t.Errorf("yesVoters contains %q, which did not vote yes on the winning option", v)
+		}
+	}
+}
+
 func TestConfirmProposalWinner_RejectsClosedProposal(t *testing.T) {
 	closed := false
 	repo := &mockSessionRepo{
