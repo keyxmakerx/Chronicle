@@ -1,48 +1,55 @@
 // Package calendar — export.go provides JSON export of calendar configurations.
 // Exports include all sub-resources (months, weekdays, moons, seasons, eras,
 // cycles, festivals, weather) in Chronicle's native format. Events are
-// optionally included.
+// optionally included in the export, but TODO(#779): parseChronicle does not
+// read them back — a Chronicle export/import round-trip today covers
+// calendar structure only, never events.
 package calendar
 
 // ChronicleExport is the top-level JSON envelope for calendar export.
 // This is Chronicle's native format — a superset of what can be imported
 // from external sources (Simple Calendar, Calendaria).
 type ChronicleExport struct {
-	Format  string         `json:"format"`  // "chronicle-calendar-v1"
-	Version int            `json:"version"` // schema version (2)
+	Format   string         `json:"format"`  // "chronicle-calendar-v1"
+	Version  int            `json:"version"` // schema version (2)
 	Calendar ExportCalendar `json:"calendar"`
-	Events  []ExportEvent  `json:"events,omitempty"` // optional
+	// Events is written by BuildExport but not yet read by any importer:
+	// TODO(#779) to carry it into ImportResult and ApplyImport.
+	Events []ExportEvent `json:"events,omitempty"`
 }
 
 // ExportCalendar holds the calendar configuration for export.
 type ExportCalendar struct {
-	Name             string            `json:"name"`
-	Description      *string           `json:"description,omitempty"`
-	Mode             string            `json:"mode"` // "fantasy" or "reallife"
-	EpochName        *string           `json:"epoch_name,omitempty"`
-	CurrentYear      int               `json:"current_year"`
-	CurrentMonth     int               `json:"current_month"`
-	CurrentDay       int               `json:"current_day"`
-	CurrentHour      int               `json:"current_hour"`
-	CurrentMinute    int               `json:"current_minute"`
-	HoursPerDay      int               `json:"hours_per_day"`
-	MinutesPerHour   int               `json:"minutes_per_hour"`
-	SecondsPerMinute int               `json:"seconds_per_minute"`
-	LeapYearEvery    int               `json:"leap_year_every"`
-	LeapYearOffset   int               `json:"leap_year_offset"`
+	Name             string  `json:"name"`
+	Description      *string `json:"description,omitempty"`
+	Mode             string  `json:"mode"` // "fantasy" or "reallife"
+	EpochName        *string `json:"epoch_name,omitempty"`
+	CurrentYear      int     `json:"current_year"`
+	CurrentMonth     int     `json:"current_month"`
+	CurrentDay       int     `json:"current_day"`
+	CurrentHour      int     `json:"current_hour"`
+	CurrentMinute    int     `json:"current_minute"`
+	HoursPerDay      int     `json:"hours_per_day"`
+	MinutesPerHour   int     `json:"minutes_per_hour"`
+	SecondsPerMinute int     `json:"seconds_per_minute"`
+	LeapYearEvery    int     `json:"leap_year_every"`
+	LeapYearOffset   int     `json:"leap_year_offset"`
 	// Preserves whether the calendar is wall-clock authoritative and which
 	// IANA zone anchors it, so export/re-import round-trips it. RealTimeZone is
 	// omitted when unset (manual).
-	TracksRealTime   bool              `json:"tracks_real_time"`
-	RealTimeZone     *string           `json:"real_time_zone,omitempty"`
-	Months           []ExportMonth     `json:"months"`
-	Weekdays         []ExportWeekday   `json:"weekdays"`
-	Moons            []ExportMoon      `json:"moons,omitempty"`
-	Seasons          []ExportSeason    `json:"seasons,omitempty"`
-	Eras             []ExportEra       `json:"eras,omitempty"`
-	Cycles           []ExportCycle     `json:"cycles,omitempty"`
-	Festivals        []ExportFestival  `json:"festivals,omitempty"`
-	Weather          *WeatherInput     `json:"weather,omitempty"`
+	TracksRealTime     bool             `json:"tracks_real_time"`
+	RealTimeZone       *string          `json:"real_time_zone,omitempty"`
+	Hemisphere         *string          `json:"hemisphere,omitempty"`
+	ForecastsEnabled   bool             `json:"forecasts_enabled"`
+	MonthStartsNewWeek bool             `json:"month_starts_new_week"`
+	Months             []ExportMonth    `json:"months"`
+	Weekdays           []ExportWeekday  `json:"weekdays"`
+	Moons              []ExportMoon     `json:"moons,omitempty"`
+	Seasons            []ExportSeason   `json:"seasons,omitempty"`
+	Eras               []ExportEra      `json:"eras,omitempty"`
+	Cycles             []ExportCycle    `json:"cycles,omitempty"`
+	Festivals          []ExportFestival `json:"festivals,omitempty"`
+	Weather            *WeatherInput    `json:"weather,omitempty"`
 }
 
 // ExportMonth is a month definition for export.
@@ -63,10 +70,11 @@ type ExportWeekday struct {
 
 // ExportMoon is a moon definition for export.
 type ExportMoon struct {
-	Name        string  `json:"name"`
-	CycleDays   float64 `json:"cycle_days"`
-	PhaseOffset float64 `json:"phase_offset"`
-	Color       string  `json:"color"`
+	Name              string  `json:"name"`
+	CycleDays         float64 `json:"cycle_days"`
+	PhaseOffset       float64 `json:"phase_offset"`
+	Color             string  `json:"color"`
+	HiddenFromPlayers bool    `json:"hidden_from_players,omitempty"`
 }
 
 // ExportSeason is a season definition for export.
@@ -81,11 +89,19 @@ type ExportSeason struct {
 	WeatherEffect *string `json:"weather_effect,omitempty"`
 }
 
-// ExportEra is an era definition for export.
+// ExportEra is an era definition for export. Field order matches EraInput's
+// creatable fields exactly: import.go converts between the two with a direct
+// type conversion (EraInput(e)), which requires identical field name/type/
+// order on both sides.
 type ExportEra struct {
+	ID          *int    `json:"id,omitempty"`
 	Name        string  `json:"name"`
 	StartYear   int     `json:"start_year"`
+	StartMonth  int     `json:"start_month"`
+	StartDay    int     `json:"start_day"`
 	EndYear     *int    `json:"end_year,omitempty"`
+	EndMonth    *int    `json:"end_month,omitempty"`
+	EndDay      *int    `json:"end_day,omitempty"`
 	Description *string `json:"description,omitempty"`
 	Color       string  `json:"color"`
 	SortOrder   int     `json:"sort_order"`
@@ -143,10 +159,15 @@ type ExportEvent struct {
 	RecurrenceEndDay         *int    `json:"recurrence_end_day,omitempty"`
 	RecurrenceMaxOccurrences *int    `json:"recurrence_max_occurrences,omitempty"`
 	Visibility               string  `json:"visibility"`
-	Category                 *string `json:"category,omitempty"`
-	Color                    *string `json:"color,omitempty"`
-	Icon                     *string `json:"icon,omitempty"`
-	AllDay                   bool    `json:"all_day"`
+	// Kind is the event's kind SLUG, not its numeric id: an id only means
+	// something within the campaign that minted it, while a slug can be
+	// looked up or recreated by slug in the target campaign on re-import.
+	Kind      *string `json:"kind,omitempty"`
+	Announced *string `json:"announced,omitempty"`
+	Color     *string `json:"color,omitempty"`
+	Icon      *string `json:"icon,omitempty"`
+	AllDay    bool    `json:"all_day"`
+	Payload   *string `json:"payload,omitempty"`
 }
 
 // BuildExport creates a ChronicleExport from a fully-loaded Calendar and
@@ -156,22 +177,25 @@ func BuildExport(cal *Calendar, events []Event, includeEvents bool) *ChronicleEx
 		Format:  "chronicle-calendar-v1",
 		Version: 2,
 		Calendar: ExportCalendar{
-			Name:             cal.Name,
-			Description:      cal.Description,
-			Mode:             cal.Mode,
-			EpochName:        cal.EpochName,
-			CurrentYear:      cal.CurrentYear,
-			CurrentMonth:     cal.CurrentMonth,
-			CurrentDay:       cal.CurrentDay,
-			CurrentHour:      cal.CurrentHour,
-			CurrentMinute:    cal.CurrentMinute,
-			HoursPerDay:      cal.HoursPerDay,
-			MinutesPerHour:   cal.MinutesPerHour,
-			SecondsPerMinute: cal.SecondsPerMinute,
-			LeapYearEvery:    cal.LeapYearEvery,
-			LeapYearOffset:   cal.LeapYearOffset,
-			TracksRealTime:   cal.TracksRealTime,
-			RealTimeZone:     cal.RealTimeZone,
+			Name:               cal.Name,
+			Description:        cal.Description,
+			Mode:               cal.Mode,
+			EpochName:          cal.EpochName,
+			CurrentYear:        cal.CurrentYear,
+			CurrentMonth:       cal.CurrentMonth,
+			CurrentDay:         cal.CurrentDay,
+			CurrentHour:        cal.CurrentHour,
+			CurrentMinute:      cal.CurrentMinute,
+			HoursPerDay:        cal.HoursPerDay,
+			MinutesPerHour:     cal.MinutesPerHour,
+			SecondsPerMinute:   cal.SecondsPerMinute,
+			LeapYearEvery:      cal.LeapYearEvery,
+			LeapYearOffset:     cal.LeapYearOffset,
+			TracksRealTime:     cal.TracksRealTime,
+			RealTimeZone:       cal.RealTimeZone,
+			Hemisphere:         cal.Hemisphere,
+			ForecastsEnabled:   cal.ForecastsEnabled,
+			MonthStartsNewWeek: cal.MonthStartsNewWeek,
 		},
 	}
 
@@ -198,10 +222,11 @@ func BuildExport(cal *Calendar, events []Event, includeEvents bool) *ChronicleEx
 	// Moons.
 	for _, m := range cal.Moons {
 		export.Calendar.Moons = append(export.Calendar.Moons, ExportMoon{
-			Name:        m.Name,
-			CycleDays:   m.CycleDays,
-			PhaseOffset: m.PhaseOffset,
-			Color:       m.Color,
+			Name:              m.Name,
+			CycleDays:         m.CycleDays,
+			PhaseOffset:       m.PhaseOffset,
+			Color:             m.Color,
+			HiddenFromPlayers: m.HiddenFromPlayers,
 		})
 	}
 
@@ -224,7 +249,11 @@ func BuildExport(cal *Calendar, events []Event, includeEvents bool) *ChronicleEx
 		export.Calendar.Eras = append(export.Calendar.Eras, ExportEra{
 			Name:        e.Name,
 			StartYear:   e.StartYear,
+			StartMonth:  e.StartMonth,
+			StartDay:    e.StartDay,
 			EndYear:     e.EndYear,
+			EndMonth:    e.EndMonth,
+			EndDay:      e.EndDay,
 			Description: e.Description,
 			Color:       e.Color,
 			SortOrder:   e.SortOrder,
@@ -289,13 +318,25 @@ func BuildExport(cal *Calendar, events []Event, includeEvents bool) *ChronicleEx
 				RecurrenceEndDay:         evt.RecurrenceEndDay,
 				RecurrenceMaxOccurrences: evt.RecurrenceMaxOccurrences,
 				Visibility:               evt.Visibility,
-				Category:                 evt.Category,
+				Kind:                     nonEmptyPtr(evt.KindSlug),
+				Announced:                evt.Announced,
 				Color:                    evt.Color,
 				Icon:                     evt.Icon,
 				AllDay:                   evt.AllDay,
+				Payload:                  evt.Payload,
 			})
 		}
 	}
 
 	return export
+}
+
+// nonEmptyPtr returns nil for "", else a pointer to s: the empty string and
+// "no value at all" are the same thing for a joined display field like
+// Event.KindSlug, so the exported JSON omits the key rather than emitting "".
+func nonEmptyPtr(s string) *string {
+	if s == "" {
+		return nil
+	}
+	return &s
 }
