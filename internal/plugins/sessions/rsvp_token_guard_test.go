@@ -208,7 +208,7 @@ func TestDB_SessionRSVPTokenCannotBeSpentTwiceConcurrently(t *testing.T) {
 		if err := repo.AddAttendee(ctx, sessID, userID, RSVPInvited); err != nil {
 			t.Fatalf("invite: %v", err)
 		}
-		accept, _, err := svc.CreateRSVPTokens(ctx, sessID, userID)
+		accept, _, _, err := svc.CreateRSVPTokens(ctx, sessID, userID)
 		if err != nil {
 			t.Fatalf("CreateRSVPTokens: %v", err)
 		}
@@ -255,7 +255,7 @@ func TestDB_MarkRSVPTokenUsedReportsTheLoser(t *testing.T) {
 	ctx := context.Background()
 
 	sessID := seedSession(t, db, campID, userID, "S")
-	accept, _, err := svc.CreateRSVPTokens(ctx, sessID, userID)
+	accept, _, _, err := svc.CreateRSVPTokens(ctx, sessID, userID)
 	if err != nil {
 		t.Fatalf("tokens: %v", err)
 	}

@@ -1,6 +1,6 @@
 package sessions
 
-// Game-night RSVP storage (issue #741 Part C): soft delete/restore, the
+// Game-night RSVP storage (issue #741): soft delete/restore, the
 // attendee note + tally-exclusion + needs-recheck columns, per-occurrence
 // RSVPs for a repeating session, the "suggest another time" record, and the
 // private calendar-feed credential + campaign kill switch.

@@ -388,13 +388,16 @@ func (s *sessionService) ConfirmProposalWinner(ctx context.Context, campaignID, 
 		return nil, nil, apperror.NewInternal(fmt.Errorf("confirming winner: %w", err))
 	}
 
-	responses, err := s.repo.ListProposalResponses(ctx, optionID)
+	// ListProposalResponses is keyed by proposal, not option (it joins across
+	// every option to serve GetProposalView's tally) — filter down to the
+	// winning option here, the same grouping GetProposalView does per-option.
+	responses, err := s.repo.ListProposalResponses(ctx, proposalID)
 	if err != nil {
 		return nil, nil, apperror.NewInternal(fmt.Errorf("listing winning option's responses: %w", err))
 	}
 	var yesVoters []string
 	for _, r := range responses {
-		if r.Response == ResponseYes {
+		if r.OptionID == optionID && r.Response == ResponseYes {
 			yesVoters = append(yesVoters, r.UserID)
 		}
 	}

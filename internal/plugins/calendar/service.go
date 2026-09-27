@@ -242,7 +242,7 @@ type CalendarService interface {
 	// PreviewAnchorMove is a READ-ONLY preview of moving a real-anchored
 	// calendar's anchor: it computes the day shift and up to three affected
 	// sessions but writes nothing. Owner-only (see routes.go); the real
-	// anchor write this previews is a future Part A/D endpoint, not this one.
+	// anchor write this previews is a separate, not-yet-built endpoint.
 	PreviewAnchorMove(ctx context.Context, calendarID, campaignID string, newAnchorYear, newAnchorMonth, newAnchorDay int, newRealDate time.Time) (*AnchorMovePreview, error)
 
 	// --- Bulk structure writers ---
@@ -303,6 +303,13 @@ func (s *calendarService) SetEntityVisibilityGate(g EntityVisibilityGate) { s.en
 // PreviewAnchorMove uses to name affected game nights. Same optional,
 // nil-safe wiring pattern as SetEntityVisibilityGate above: unset, the
 // preview still works, just with an empty Affected list.
+//
+// TODO(#806): has no caller — needs a sessions-plugin adapter wired from
+// internal/app/routes.go (mirroring the SetEntityVisibilityGate call beside
+// it) backed by a real SessionsInWorldDateRange query, which the sessions
+// plugin doesn't have yet either; until both exist, PreviewAnchorMove always
+// reports zero affected sessions, so this must land before the anchor-move
+// WRITE endpoint ships.
 func (s *calendarService) SetGameNightsAffectedByAnchorMove(g GameNightsAffectedByAnchorMove) {
 	s.gameNights = g
 }
@@ -1864,8 +1871,8 @@ func (s *calendarService) SetMoonHidden(ctx context.Context, moonID int, calenda
 	return nil
 }
 
-// --- Real-date anchor (Part C: preview only — the real anchor WRITE this
-// previews is a separate, not-yet-built endpoint) ---
+// --- Real-date anchor (preview only — the real anchor WRITE this previews
+// is a separate, not-yet-built endpoint) ---
 
 // anchorPreviewWindowYears bounds how far into a calendar's future
 // PreviewAnchorMove asks the sessions plugin about: enough to surface "the

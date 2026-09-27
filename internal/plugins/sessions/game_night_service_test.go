@@ -1,11 +1,11 @@
 package sessions
 
-// Tests for the two most novel-and-risky pieces of the game-night RSVP build
-// (issue #741 Part C): that a repeating game night keeps one answer PER
-// NIGHT rather than one shared answer for the whole series, and that the
-// "suggest another time" email link validates the suggestion BEFORE
-// consuming its single-use token (the historical bug: a bad submission burned
-// the link with nothing to show for it).
+// Tests for the two most novel-and-risky pieces of game-night RSVP (issue
+// #741): that a repeating game night keeps one answer PER NIGHT rather than
+// one shared answer for the whole series, and that the "suggest another
+// time" email link validates the suggestion BEFORE consuming its single-use
+// token, so a rejected submission never burns the link with nothing to show
+// for it.
 
 import (
 	"context"
@@ -284,6 +284,37 @@ func TestDB_OccurrenceRSVPsAreIndependentAcrossNights(t *testing.T) {
 	}
 	if rsvps2[0].Note != nil {
 		t.Errorf("night 2 note = %v, want nil — night 1's note must not have leaked across", rsvps2[0].Note)
+	}
+}
+
+// TestDB_SearchByCampaign_ScansScheduledTZ pins SearchByCampaign returning
+// scheduled_tz like every other session read does. Its SELECT/Scan pair had
+// silently dropped the column together — a mock repository can't catch a
+// column missing from both sides of a real query, only a real row can.
+func TestDB_SearchByCampaign_ScansScheduledTZ(t *testing.T) {
+	if testing.Short() {
+		t.Skip("row-level test")
+	}
+	db := newScratchDB(t)
+	campID, ownerID := seedCampaign(t, db)
+	repo := NewSessionRepository(db)
+	ctx := context.Background()
+
+	sessID := seedSession(t, db, campID, ownerID, "Vale of Ash Session")
+	if _, err := db.ExecContext(ctx,
+		`UPDATE sessions SET scheduled_tz = ? WHERE id = ?`, "America/New_York", sessID); err != nil {
+		t.Fatalf("setting scheduled_tz: %v", err)
+	}
+
+	results, err := repo.SearchByCampaign(ctx, campID, "Vale")
+	if err != nil {
+		t.Fatalf("SearchByCampaign: %v", err)
+	}
+	if len(results) != 1 {
+		t.Fatalf("results = %d, want exactly 1", len(results))
+	}
+	if results[0].ScheduledTZ == nil || *results[0].ScheduledTZ != "America/New_York" {
+		t.Errorf("ScheduledTZ = %v, want \"America/New_York\"", results[0].ScheduledTZ)
 	}
 }
 
@@ -619,5 +650,37 @@ func TestRestoreSessionAPI_SoftDeletedSessionIsReachable(t *testing.T) {
 	}
 	if rec.Code != http.StatusOK {
 		t.Errorf("status = %d, want 200", rec.Code)
+	}
+}
+
+// TestRestoreSessionAPI_CrossCampaign404s pins the IDOR check
+// RestoreSessionAPI re-implements by hand (it can't reuse
+// requireSessionInCampaign/GetSession, which filters deleted_at IS NULL —
+// see the handler's own comment): a session belonging to a DIFFERENT
+// campaign than the one in the URL must 404, never be restored.
+func TestRestoreSessionAPI_CrossCampaign404s(t *testing.T) {
+	var restored bool
+	repo := &mockSessionRepo{
+		findByIDIncludingDeletedFn: func(_ context.Context, id string) (*Session, error) {
+			return &Session{ID: id, CampaignID: "camp-other", Name: "Someone Else's Game"}, nil
+		},
+		restoreSessionFn: func(_ context.Context, _ string) error {
+			restored = true
+			return nil
+		},
+	}
+	h := &Handler{svc: NewSessionService(repo, nil, nil)}
+
+	e := echo.New()
+	rec := httptest.NewRecorder()
+	c := e.NewContext(httptest.NewRequest(http.MethodPost, "/x", nil), rec)
+	c.SetParamNames("sid")
+	c.SetParamValues("s1")
+	c.Set("campaign_context", &campaigns.CampaignContext{Campaign: &campaigns.Campaign{ID: "camp-1"}})
+
+	err := h.RestoreSessionAPI(c)
+	assertAppError(t, err, http.StatusNotFound)
+	if restored {
+		t.Error("a session belonging to another campaign must not be restored")
 	}
 }

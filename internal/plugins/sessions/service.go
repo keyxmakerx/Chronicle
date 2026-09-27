@@ -115,7 +115,7 @@ type SessionService interface {
 	// RSVP tokens for email-based responses. Redeem is split into a read-only
 	// validate (GET confirm page) + a state-changing apply (POST) so a mail
 	// prefetcher's GET never records an RSVP.
-	CreateRSVPTokens(ctx context.Context, sessionID, userID string) (acceptToken, declineToken string, err error)
+	CreateRSVPTokens(ctx context.Context, sessionID, userID string) (acceptToken, declineToken, suggestToken string, err error)
 	ValidateRSVPToken(ctx context.Context, tokenStr string) (*RSVPToken, error)
 	ApplyRSVPToken(ctx context.Context, tokenStr string) (*RSVPToken, error)
 
@@ -577,11 +577,13 @@ func (s *sessionService) ListSessionsForDateRange(ctx context.Context, campaignI
 	return sessions, nil
 }
 
-// CreateRSVPTokens generates accept and decline tokens for a session invitation.
-// Tokens are single-use and expire in 7 days.
-func (s *sessionService) CreateRSVPTokens(ctx context.Context, sessionID, userID string) (string, string, error) {
+// CreateRSVPTokens generates accept, decline, and suggest-another-time tokens
+// for a session invitation, so the emailed invite can offer all three
+// one-click actions. Tokens are single-use and expire in 7 days.
+func (s *sessionService) CreateRSVPTokens(ctx context.Context, sessionID, userID string) (string, string, string, error) {
 	acceptToken := generateToken()
 	declineToken := generateToken()
+	suggestToken := generateToken()
 	now := time.Now().UTC()
 	expires := now.Add(7 * 24 * time.Hour)
 
@@ -591,6 +593,7 @@ func (s *sessionService) CreateRSVPTokens(ctx context.Context, sessionID, userID
 	}{
 		{acceptToken, RSVPAccepted},
 		{declineToken, RSVPDeclined},
+		{suggestToken, RSVPActionSuggest},
 	} {
 		if err := s.repo.CreateRSVPToken(ctx, &RSVPToken{
 			Token:     tok.token,
@@ -600,11 +603,11 @@ func (s *sessionService) CreateRSVPTokens(ctx context.Context, sessionID, userID
 			ExpiresAt: expires,
 			CreatedAt: now,
 		}); err != nil {
-			return "", "", apperror.NewInternal(fmt.Errorf("creating rsvp token: %w", err))
+			return "", "", "", apperror.NewInternal(fmt.Errorf("creating rsvp token: %w", err))
 		}
 	}
 
-	return acceptToken, declineToken, nil
+	return acceptToken, declineToken, suggestToken, nil
 }
 
 // ValidateRSVPToken resolves + checks an RSVP token WITHOUT applying it. Used
