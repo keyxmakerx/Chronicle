@@ -17,7 +17,7 @@ import (
 )
 
 // TestNavPins_Integration round-trips members' own sidebar pins through a
-// real MariaDB with every core migration applied (000031 adds the column):
+// real MariaDB with every core migration applied (000033 adds the column):
 // each member reads back only their own pins, a refused update stores
 // nothing, clearing writes NULL, and pins leave with the membership.
 //
