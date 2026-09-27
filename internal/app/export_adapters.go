@@ -1194,7 +1194,7 @@ func (a *calendarImportAdapter) ImportCalendar(ctx context.Context, campaignID s
 	// blocks) needs one marked, and CreateCalendar itself never sets it.
 	if err := a.svc.SetDefaultCalendar(ctx, campaignID, cal.ID); err != nil {
 		slog.Warn("import: set default calendar failed", slog.Any("error", err))
-		report.Fail(campaigns.SectionCalendar, "calendar", data.Name, apperror.SafeMessage(err))
+		report.Fail(campaigns.SectionCalendar, campaigns.KindCalendar, data.Name, apperror.SafeMessage(err))
 	}
 
 	if len(months) > 0 {
@@ -1288,7 +1288,7 @@ func (a *calendarImportAdapter) ImportCalendar(ctx context.Context, campaignID s
 		CurrentMinute: patch.Of(data.CurrentMinute),
 	}); err != nil {
 		slog.Warn("import: set current date failed", slog.Any("error", err))
-		report.Fail(campaigns.SectionCalendar, "calendar", data.Name, apperror.SafeMessage(err))
+		report.Fail(campaigns.SectionCalendar, campaigns.KindCalendar, data.Name, apperror.SafeMessage(err))
 	}
 
 	// Events. CanAuthorDmOnly is forced true: this is a Director-initiated

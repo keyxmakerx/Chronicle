@@ -510,8 +510,9 @@ func renderInboundRecords(b *strings.Builder, recs []InboundSyncRecord, scope st
 // is everything after the first colon.
 func campaignSlot(name, arg string) (slot, rest string, whole, scoped bool) {
 	switch name {
-	// campaign.surfaces / campaign.config take the campaign and nothing else.
-	case "entity.types", "campaign.surfaces", "campaign.config":
+	// campaign.surfaces / campaign.config / calendar.stats take the campaign
+	// and nothing else.
+	case "entity.types", "campaign.surfaces", "campaign.config", "calendar.stats":
 		return strings.TrimSpace(arg), "", true, true
 	case "entity.fields", "entity.field-coverage", "entity.find", "sync.inbound", "entity.sync-mappings":
 		parts := strings.SplitN(arg, ":", 2)

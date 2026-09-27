@@ -73,7 +73,12 @@ func TestCalendarCampaignExportImport_DBRoundTrip(t *testing.T) {
 		t.Skip("integration test requires a database; skipped under -short")
 	}
 	db := openGalleryTestDB(t)
-	defer db.Close()
+	// t.Cleanup, not a bare defer: newCalRoundTripCampaign below registers its
+	// own t.Cleanup teardown (DELETE FROM campaigns/users), and t.Cleanup
+	// callbacks run in LIFO order strictly after the test function (and its
+	// own defers) returns. A plain `defer db.Close()` here would close the
+	// connection before those later-registered cleanups run against it.
+	t.Cleanup(func() { db.Close() })
 	ctx := context.Background()
 
 	srcCampaignID, srcOwnerID := newCalRoundTripCampaign(t, db, "src")

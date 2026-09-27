@@ -234,11 +234,13 @@ func TestCampaignSurfaces_UnreadableTableIsNotAnAbsence(t *testing.T) {
 	})
 }
 
-// TestCampaignSurfaces_DisabledAddonIsStatedButNotGating. Before the rebuild
-// a disabled addon made every route below unreachable; the three remaining
-// routes no longer gate on it (CALV5-PLACEHOLDER in writeSurfaceGate), so the
-// state is still reported but must not be read as a reachability verdict.
-func TestCampaignSurfaces_DisabledAddonIsStatedButNotGating(t *testing.T) {
+// TestCampaignSurfaces_DisabledAddonIsStatedButNotGatingPages pins the
+// current (calendar-v5 seams, #778) split: the three PAGE routes still
+// don't gate on this setting — no page UI exists yet — but the calendar
+// plugin's JSON API now genuinely does (addons.RequireAddon), so the
+// diagnostic must say so plainly rather than blanket-claiming "not
+// load-bearing" the way it did before the plugin's service/API existed.
+func TestCampaignSurfaces_DisabledAddonIsStatedButNotGatingPages(t *testing.T) {
 	f := surfaceFactsWith(liveCalendarRoutes())
 	f.CalendarAddonEnabled = boolPtr(false)
 	withCampaignProvider(t, &fakeCampaignProvider{surf: f}, func() {
@@ -246,8 +248,11 @@ func TestCampaignSurfaces_DisabledAddonIsStatedButNotGating(t *testing.T) {
 		if !strings.Contains(got, "calendar addon: **disabled**") {
 			t.Errorf("the addon state must be stated:\n%s", got)
 		}
-		if !strings.Contains(got, "Not currently load-bearing") {
-			t.Errorf("disabled must not be read as a reachability gate:\n%s", got)
+		if !strings.Contains(got, "PAGE routes below still render the same rebuilding notice") {
+			t.Errorf("disabled must not be read as a PAGE reachability gate:\n%s", got)
+		}
+		if !strings.Contains(got, "JSON API is gated by this setting and will 403") {
+			t.Errorf("disabled MUST be read as a JSON-API reachability gate now:\n%s", got)
 		}
 		if !strings.Contains(got, "**CURRENT** `/campaigns/:id/apps/calendar`") {
 			t.Errorf("the route table must still print despite the disabled addon:\n%s", got)
@@ -353,8 +358,11 @@ func TestCampaignConfig_DisabledAddonIsMarked(t *testing.T) {
 		if !strings.Contains(got, "✓ enabled `notes`") {
 			t.Errorf("an enabled addon must be marked:\n%s", got)
 		}
-		if !strings.Contains(got, "no longer removes the calendar routes") {
-			t.Errorf("the current (not-gating) consequence of a disabled calendar addon must be stated:\n%s", got)
+		if !strings.Contains(got, "does not remove the three PAGE routes") {
+			t.Errorf("the current (page-not-gating, API-gating) consequence of a disabled calendar addon must be stated:\n%s", got)
+		}
+		if !strings.Contains(got, "DOES gate the calendar plugin's JSON API") {
+			t.Errorf("disabling the addon MUST be read as gating the calendar plugin's own JSON API now:\n%s", got)
 		}
 	})
 }

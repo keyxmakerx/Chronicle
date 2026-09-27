@@ -172,7 +172,10 @@ type surfaceRow struct {
 // statusCurrent is the only status calendarSurfaceMap uses today — its
 // LEGACY-PRESERVED / LEGACY-REDIRECT siblings went with the routes they
 // described. CALV5-PLACEHOLDER: re-add them if V5's calendar routes need a
-// legacy or redirect row again.
+// legacy or redirect row again. Still accurate as of calendar-v5 seams
+// (#778): that pass restored the plugin's service, JSON API and a
+// dashboard-embed fragment, not a calendar PAGE, so the three rows below are
+// unchanged. TODO(#778)
 const statusCurrent = "CURRENT"
 
 // calendarSurfaceMap is the declared map.
@@ -183,6 +186,9 @@ const statusCurrent = "CURRENT"
 // left, and all three now render the same rebuilding notice (a direct
 // render, not a redirect). V5 must replace this block with the real
 // per-route classification once the calendar plugin has routes again.
+// TODO(#778): still true after calendar-v5 seams — the plugin's service and
+// JSON API are live (see calendar.stats/campaign.config's addon-gate note),
+// but no calendar PAGE exists yet, so this map is unchanged.
 //
 // Handler is left "" on all three: the live handler is one anonymous
 // closure registered in internal/app/routes.go, not a stable named method,
@@ -206,7 +212,7 @@ func calendarSurfaceMap() []surfaceRow {
 // outright with the pre-V5 plugin — not merely unreachable, gone — so there
 // is no live handler left to discover. CALV5-PLACEHOLDER: if V5 preserves an
 // old page under a stable handler name the way the V2 shell once was, its
-// entry belongs here rather than in calendarSurfaceMap.
+// entry belongs here rather than in calendarSurfaceMap. TODO(#778)
 func handlerSurfaces() map[string]surfaceRow {
 	return map[string]surfaceRow{}
 }
@@ -245,20 +251,24 @@ func renderCampaignSurfaces(arg string) string {
 
 // writeSurfaceGate prints the calendar addon's enabled state.
 //
-// CALV5-PLACEHOLDER: before the rebuild this state gated every route below
-// (`addons.RequireAddon(addonSvc, "calendar")`); it no longer does, because
-// the three remaining routes ride RequireCampaignAccess only and render the
-// same rebuilding notice regardless of the addon's state. Stated here so the
-// setting is not mistaken for a reachability gate it currently is not. V5
-// must restore the gate once it restores real calendar routes.
+// The three PAGE routes below (campaignSurfaceMap) are NOT gated by this
+// setting: they sit on RequireCampaignAccess only and render the same
+// rebuilding notice either way, because no real calendar PAGE UI exists yet
+// (calendar-v5 seams, #778, restored the plugin's service, JSON API and
+// dashboard-embed fragment — not its page; that is real UI work of its own,
+// tracked separately). The calendar plugin's JSON API
+// (`/campaigns/:id/calendars/...`, including the upcoming-events embed
+// fragment campaign.surfaces does not list) IS gated by this setting
+// (`addons.RequireAddon`) — disabling it 403s those routes and blanks the
+// dashboard/category "Upcoming Events" cards.
 func writeSurfaceGate(b *strings.Builder, f CampaignSurfaceFacts) {
 	switch {
 	case f.CalendarAddonEnabled == nil:
 		fmt.Fprintf(b, "> calendar addon: **UNKNOWN** — %s\n\n", fallback(f.AddonNote, "the addons service could not be read"))
 	case !*f.CalendarAddonEnabled:
-		b.WriteString("> calendar addon: **disabled** for this campaign. Not currently load-bearing: the routes below render the same rebuilding notice either way (see CALV5-PLACEHOLDER above).\n\n")
+		b.WriteString("> calendar addon: **disabled** for this campaign. The three PAGE routes below still render the same rebuilding notice either way (no page UI exists yet); its JSON API is gated by this setting and will 403.\n\n")
 	default:
-		b.WriteString("> calendar addon: **enabled**. Not currently load-bearing: the routes below render the same rebuilding notice either way (see CALV5-PLACEHOLDER above).\n\n")
+		b.WriteString("> calendar addon: **enabled**. The three PAGE routes below still render the same rebuilding notice regardless of this setting (no page UI exists yet); its JSON API is live and gated by this setting.\n\n")
 	}
 }
 
@@ -452,7 +462,7 @@ func writeConfigAddons(b *strings.Builder, f CampaignConfigFacts) {
 		}
 		b.WriteString("\n")
 	}
-	b.WriteString("\nCALV5-PLACEHOLDER: a disabled `calendar` addon no longer removes the calendar routes `campaign.surfaces` lists — they render the same rebuilding notice either way until V5 restores the gate.\n\n")
+	b.WriteString("\nA disabled `calendar` addon does not remove the three PAGE routes `campaign.surfaces` lists — they render the same rebuilding notice either way, since no calendar PAGE UI exists yet (calendar-v5 seams, #778, restored the plugin's service and JSON API, not its page). It DOES gate the calendar plugin's JSON API and dashboard/category \"Upcoming Events\" cards — see `calendar.stats` for that plugin's own counts and migration state.\n\n")
 }
 
 const (
@@ -481,16 +491,22 @@ func writeConfigLayouts(b *strings.Builder, f CampaignConfigFacts) {
 	}
 
 	interesting := map[string]string{
-		// CALV5-PLACEHOLDER: the four calendar-family descriptions below
-		// describe rebuild-era behavior. V5 must re-wire each placement's
-		// rendering once its world-state pipeline replaces the deleted one;
-		// until then every one renders the "being rebuilt" notice, and the
-		// bindings are kept so a placed block still reports as a fact.
+		// CALV5-PLACEHOLDER: "skybox", "entity_worldstate" and
+		// "entity_calendar" describe rebuild-era behavior for OTHER
+		// placements (the skybox widget-binding pipeline and the
+		// entity_calendar/entity_worldstate widget-type bindings) that are
+		// out of scope for this pass — see #778's own priority list. Left
+		// as-is; do not assume they are still accurate without checking
+		// their own restoration status first. TODO(#778)
 		"skybox":            "the LEGACY skybox widget placement. Its canvas/particle engine and the world-state pipeline behind it were deleted in the CALV5 clean slate, so this placement renders the calendar-rebuilding notice today; the binding is kept so V5 can reclaim the seat. (Historically this was the surface that rendered the synthesized real Moon — distinct from the v4 sky band on the Bench, which was server-rendered with no JavaScript.)",
 		"entity_worldstate": "the world-state band placement — its pipeline was deleted in the CALV5 clean slate; renders the rebuilding notice until V5.",
 		"entity_calendar":   "a calendar Block embedded on an entity page — renders the rebuilding notice until V5.",
-		"calendar_full":     "a full calendar block — renders the rebuilding notice until V5.",
-		blockTypeCalendar:   "a calendar block — renders the rebuilding notice until V5.",
+		// calendar_full/calendar_preview now render the real "Upcoming
+		// Events" card (calendar-v5 seams, #778) via the calendar plugin's
+		// own /calendars/upcoming embed fragment, not the rebuilding notice.
+		"calendar_full":    "a full calendar block — now renders real upcoming-events data via the calendar plugin's embed fragment (calendar-v5 seams, #778), not the rebuilding notice.",
+		"calendar_preview": "an upcoming-events preview block — renders real data via the calendar plugin's embed fragment (calendar-v5 seams, #778), not the rebuilding notice.",
+		blockTypeCalendar:  "a calendar block — renders the rebuilding notice until V5.",
 	}
 
 	for _, l := range f.Layouts {

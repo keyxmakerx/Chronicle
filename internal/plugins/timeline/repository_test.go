@@ -205,8 +205,17 @@ func TestTimelineEventCount_Integration(t *testing.T) {
 
 	// assertAgrees derives the row count from the real merged service read
 	// (ListTimelineEvents, including the EffectiveVisibility() override
-	// step) and checks List's EventCount against that, not a hardcoded
-	// expectation, so it fails if either side drifts.
+	// step) and checks the SERVICE's EventCount against that, not a
+	// hardcoded expectation, so it fails if either side drifts.
+	//
+	// Deliberately goes through svc.ListTimelines, not repo.List directly:
+	// the repository's own SQL count now covers standalone events only (it
+	// can no longer JOIN calendar_events — plugin isolation rule 8), and the
+	// linked half is restored at the service layer by recountEventsForViewer
+	// (service.go). repo.List's EventCount was never meant to already equal
+	// the full count on its own; asserting that at the repo layer produced a
+	// false "DISAGREE" here even though the real caller-facing path
+	// (ListTimelines) was already correct.
 	svc := NewTimelineService(repo, nil, nil, nil)
 	if s, ok := svc.(interface {
 		SetCalendarEventLinkLister(CalendarEventLinkLister)
@@ -217,15 +226,16 @@ func TestTimelineEventCount_Integration(t *testing.T) {
 	}
 	assertAgrees := func(t *testing.T, role int, wantCount int) {
 		t.Helper()
-		tls, err := repo.List(ctx, campaignID, role)
+		viewer := permissions.RequestViewer(role, userID)
+		tls, err := svc.ListTimelines(ctx, campaignID, viewer)
 		if err != nil {
-			t.Fatalf("List: %v", err)
+			t.Fatalf("ListTimelines: %v", err)
 		}
 		if len(tls) != 1 {
 			t.Fatalf("expected exactly 1 timeline, got %d", len(tls))
 		}
 
-		rows, err := svc.ListTimelineEvents(ctx, timelineID, permissions.RequestViewer(role, userID))
+		rows, err := svc.ListTimelineEvents(ctx, timelineID, viewer)
 		if err != nil {
 			t.Fatalf("ListTimelineEvents: %v", err)
 		}
@@ -235,7 +245,7 @@ func TestTimelineEventCount_Integration(t *testing.T) {
 			t.Fatalf("role %d: len(ListTimelineEvents) = %d, want %d (fixture drift, not the bug under test)", role, gotRows, wantCount)
 		}
 		if tls[0].EventCount != gotRows {
-			t.Errorf("role %d: List's EventCount (%d) and the actual row count (%d) DISAGREE — the visibility-oracle bug is back", role, tls[0].EventCount, gotRows)
+			t.Errorf("role %d: ListTimelines' EventCount (%d) and the actual row count (%d) DISAGREE — the visibility-oracle bug is back", role, tls[0].EventCount, gotRows)
 		}
 	}
 
@@ -246,14 +256,15 @@ func TestTimelineEventCount_Integration(t *testing.T) {
 		assertAgrees(t, permissions.RoleOwner, 4)
 	})
 
-	// ListByCalendar carries the identical fix; confirm it agrees too.
+	// ListByCalendar carries the identical fix; confirm it agrees too, again
+	// through the service (ListTimelinesForCalendar), not the bare repo call.
 	t.Run("ListByCalendar agrees for player", func(t *testing.T) {
-		tls, err := repo.ListByCalendar(ctx, calendarID, permissions.RolePlayer)
+		tls, err := svc.ListTimelinesForCalendar(ctx, calendarID, permissions.RequestViewer(permissions.RolePlayer, userID))
 		if err != nil {
-			t.Fatalf("ListByCalendar: %v", err)
+			t.Fatalf("ListTimelinesForCalendar: %v", err)
 		}
 		if len(tls) != 1 || tls[0].EventCount != 1 {
-			t.Errorf("ListByCalendar (player): got %+v, want exactly 1 timeline with EventCount=1", tls)
+			t.Errorf("ListTimelinesForCalendar (player): got %+v, want exactly 1 timeline with EventCount=1", tls)
 		}
 	})
 }

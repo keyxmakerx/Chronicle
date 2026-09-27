@@ -47,9 +47,11 @@ type campaignDiagAdapter struct {
 // calendarAddonSlug is the addon the campaign-page calendar routes used to
 // gate on. Kept as an alias of the plugin's own identifier, never a re-typed
 // literal — tools/check-plugin-isolation.sh (T-B2) enforces this. Still read
-// by SurfaceFacts below to report the addon's state; CALV5-PLACEHOLDER: it is
-// no longer load-bearing for those routes (see the note SurfaceFacts writes)
-// until V5 restores the gate.
+// by SurfaceFacts below to report the addon's state; it is NOT load-bearing
+// for the three campaign.surfaces PAGE routes (see the note SurfaceFacts
+// writes — no calendar page UI exists yet, calendar-v5 seams, #778), but it
+// IS load-bearing for the calendar plugin's own JSON API and its own
+// diagnostic (see calendar.stats, internal/systems/operator_diag_calendar.go).
 const calendarAddonSlug = calendar.PluginSlug
 
 // ── campaign.surfaces ───────────────────────────────────────────────────────

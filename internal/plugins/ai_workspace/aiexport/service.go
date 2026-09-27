@@ -168,6 +168,12 @@ func (s *Service) renderCategory(
 		return RenderNotes(ctx, list, opts)
 
 	case CategoryCalendarEvents:
+		// TODO(#778): this export is read-only. Issue #778 also asks for
+		// AI-WRITTEN calendar content (new/edited events) to flow back
+		// through the ai_workspace importer, reviewed on the existing
+		// import-review screen the way entity pages already are. That needs
+		// a signed mockup first (the review screen's change is UI work) and
+		// is deliberately not built here — see the calendar-v5 seams PR.
 		if s.Calendar == nil {
 			return "", fmt.Errorf("calendar lister not wired")
 		}

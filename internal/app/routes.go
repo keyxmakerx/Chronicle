@@ -589,6 +589,39 @@ func (a *calendarEventLinkListerAdapter) EventsByIDs(ctx context.Context, calend
 	return refs, nil
 }
 
+// aiExportCalendarListerAdapter implements aiexport.CalendarLister.
+// A declared SYSTEM caller (ADR-049): the AI export is a Director-only tool
+// (ai_workspace's own route gating enforces this) that needs the FULL
+// picture — dm_only events, not-yet-announced ones, hidden moons — so the
+// renderer's own Safe-mode filter (aiexport/renderer.go's
+// RenderCalendarEvents) can apply its own honest rules rather than trusting
+// a per-viewer calendar read to already agree with what "Safe" means.
+type aiExportCalendarListerAdapter struct {
+	svc calendar.CalendarService
+}
+
+// GetCalendar returns the campaign's default calendar, unfiltered. Same
+// "no calendar yet" -> nil,nil degrade aiexport's service.go already expects
+// (a disabled addon or a campaign with no calendar just skips the section).
+func (a *aiExportCalendarListerAdapter) GetCalendar(ctx context.Context, campaignID string) (*calendar.Calendar, error) {
+	const ownerRole = 3
+	cal, err := a.svc.GetDefaultCalendarForViewer(ctx, campaignID, permissions.SystemViewer(ownerRole))
+	if err != nil {
+		if isNotFound(err) {
+			return nil, nil //nolint:nilerr // no calendar yet — a normal state, not a failure
+		}
+		return nil, err
+	}
+	return cal, nil
+}
+
+// ListAllEventsForCalendar returns every event on calendarID, unfiltered —
+// see the type doc comment for why this bypass is safe here specifically.
+func (a *aiExportCalendarListerAdapter) ListAllEventsForCalendar(ctx context.Context, campaignID, calendarID string) ([]calendar.Event, error) {
+	const ownerRole = 3
+	return a.svc.ListAllEventsForCalendar(ctx, calendarID, campaignID, permissions.SystemViewer(ownerRole))
+}
+
 type wsSessionAuthAdapter struct {
 	svc auth.AuthService
 }
@@ -2769,7 +2802,7 @@ func (a *App) RegisterRoutes() {
 	// RealTimeSeam + SyncLinkProbe + calendar.InstallBlockSpine). Keep the
 	// spine's repository a narrow read surface over *sql.DB rather than a
 	// wide CalendarRepository interface — the old plugin's 60-method
-	// interface was itself a reason it became hard to change.
+	// interface was itself a reason it became hard to change. TODO(#778)
 
 	// Wire the per-campaign read window into the operator diagnostics, so it
 	// can answer "why does MY campaign look like this?" and not only "which
@@ -2794,6 +2827,18 @@ func (a *App) RegisterRoutes() {
 		sidebarCalendarPath: layouts.AddonSidebarPath("calendar"),
 	})
 
+	// The new calendar.* diagnostic (calendar-v5 seams, #778): counts only
+	// (calendars/events/moons/eras/kinds), the plugin's own migration state,
+	// and the Foundry sync state — never event text, member names, or
+	// answers. A separate provider/interface from campaignDiagAdapter above,
+	// mirroring how entity.* has its own EntityDiagProvider.
+	systems.SetCalendarDiagProvider(calendarDiagAdapter{
+		campaigns:    campaignService,
+		addons:       addonService,
+		calendar:     calendarService,
+		pluginHealth: a.PluginHealth,
+	})
+
 	// And the enable-state checker the hub fragment route consults
 	// to render the disabled-extension placeholder. addonService
 	// already exposes IsEnabledForCampaign with the canonical narrow
@@ -2805,7 +2850,7 @@ func (a *App) RegisterRoutes() {
 	entityHandler.SetMapSearcher(mapsService)
 	// CALV5-PLACEHOLDER: V5 must restore
 	// entityHandler.SetCalendarSearcher(calendarService) for the calendar's
-	// rows in global entity search. Nil-safe meanwhile; search returns none.
+	// rows in global entity search. Nil-safe meanwhile; search returns none. TODO(#778)
 	entityHandler.SetSessionSearcher(sessionsService)
 	entityHandler.SetSystemSearcher(systems.NewSystemSearchAdapter(addonService))
 	entityHandler.SetMemberLister(campaignService)
@@ -3068,11 +3113,10 @@ func (a *App) RegisterRoutes() {
 	// mount on a /campaigns/:id group that already enforces auth + campaign
 	// membership, mirroring foundry_vtt's RegisterOwnerRoutes pattern.
 	//
-	// CALV5-PLACEHOLDER: V5 must restore calendarService as the third
-	// argument (aiexport's CalendarLister).
 	aiWorkspaceRenderer := aiexport.NewService(
 		entityService,
 		noteSvc,
+		&aiExportCalendarListerAdapter{svc: calendarService},
 		sessionsService,
 		timelineSvc,
 		relService,

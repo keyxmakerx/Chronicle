@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"github.com/keyxmakerx/chronicle/internal/permissions"
+	"github.com/keyxmakerx/chronicle/internal/plugins/calendar"
 	"github.com/keyxmakerx/chronicle/internal/plugins/entities"
 	"github.com/keyxmakerx/chronicle/internal/plugins/sessions"
 	"github.com/keyxmakerx/chronicle/internal/plugins/timeline"
@@ -35,9 +36,21 @@ func (s *stubNoteLister) ListByUserAndCampaign(_ context.Context, _, _ string) (
 	return s.list, nil
 }
 
-// CALV5-PLACEHOLDER: stubCalendarLister stood here (GetCalendar +
-// ListAllEventsForCalendar). V5 restores it with the CalendarLister interface.
+// stubCalendarLister satisfies CalendarLister with canned return values —
+// ListAllEventsForCalendar deliberately ignores its role-bypass warning here
+// (a stub has no role to bypass); the renderer's own Safe-mode filter is
+// what's under test wherever this stub is used with real event fixtures.
+type stubCalendarLister struct {
+	cal    *calendar.Calendar
+	events []calendar.Event
+}
 
+func (s *stubCalendarLister) GetCalendar(_ context.Context, _ string) (*calendar.Calendar, error) {
+	return s.cal, nil
+}
+func (s *stubCalendarLister) ListAllEventsForCalendar(_ context.Context, _, _ string) ([]calendar.Event, error) {
+	return s.events, nil
+}
 
 type stubSessionLister struct {
 	list   []sessions.Session
@@ -101,6 +114,15 @@ func TestService_GenerateAllCategories(t *testing.T) {
 		&stubNoteLister{list: []notes.Note{
 			{ID: "n1", Title: "Plot Threads", EntryHTML: sp("<p>note body</p>")},
 		}},
+		&stubCalendarLister{
+			cal: &calendar.Calendar{
+				ID: "cal1", Name: "Ashfall Calendar", CurrentYear: 1102, CurrentMonth: 1, CurrentDay: 1,
+				Months: []calendar.Month{{Name: "Firstmonth", Days: 30}},
+			},
+			events: []calendar.Event{
+				{ID: "ce1", Name: "The Crowning", Year: 1102, Month: 1, Day: 1, Visibility: "everyone"},
+			},
+		},
 		&stubSessionLister{
 			list: []sessions.Session{{ID: "s1", Name: "Session 1",
 				Status: sessions.StatusPlanned, Summary: sp("Cross into the maze.")}},
@@ -150,6 +172,7 @@ func TestService_Generate_CategorySubset(t *testing.T) {
 			types: []entities.EntityType{{ID: 1, Name: "Thing", NamePlural: "Things"}},
 		},
 		&stubNoteLister{},
+		&stubCalendarLister{},
 		&stubSessionLister{},
 		&stubTimelineLister{},
 		&stubRelationLister{},
@@ -173,7 +196,7 @@ func TestService_Generate_CategorySubset(t *testing.T) {
 // TestService_Generate_MissingCampaignID guards the most obvious
 // caller mistake.
 func TestService_Generate_MissingCampaignID(t *testing.T) {
-	svc := NewService(nil, nil, nil, nil, nil, nil)
+	svc := NewService(nil, nil, nil, nil, nil, nil, nil)
 	_, err := svc.Generate(context.Background(), "x", "owner-1", "", Options{})
 	if err == nil {
 		t.Fatal("expected error on empty campaignID")
