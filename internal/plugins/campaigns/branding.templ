@@ -425,11 +425,7 @@ templ appearanceTab(cc *CampaignContext, csrfToken string) {
 					>
 						<div class="flex items-center gap-2">
 							<span class="text-[10px] font-semibold" id="appearance-preview-brand">
-								if cc.Campaign.ParseSettings().BrandName != "" {
-									{ cc.Campaign.ParseSettings().BrandName }
-								} else {
-									{ cc.Campaign.Name }
-								}
+								{ layouts.GetDisplayName(ctx) }
 							</span>
 						</div>
 						<div class="flex items-center gap-1.5">
