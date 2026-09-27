@@ -211,15 +211,19 @@ jobs:
         env:
           CHRONICLE_TEST_DB_DSN: root:chronicle@tcp(127.0.0.1:3306)/
         run: |
-          go test ./cmd/server/ -v -run 'TestFreshDatabase_|TestUpgradeDatabase_' \
+          go test ./cmd/server/ -v -run 'TestFreshDatabase_|TestUpgradeDatabase_|TestIconReconcile_' \
             2>&1 | tee replay.log
-          go test ./internal/database/ -v -run 'TestPluginMigration_' \
+          go test ./internal/database/ -v -run 'TestPluginMigration_|TestReconcileIconColumns_' \
             2>&1 | tee -a replay.log
           for want in TestFreshDatabase_EveryPluginSchemaApplies \
                       TestUpgradeDatabase_FoundryConsolidationStillRuns \
                       TestPluginMigration_ResumesInsteadOfCrashLooping \
                       TestPluginMigration_PreflightRefusesBeforeApplyingAnything \
-                      TestPluginMigration_IgnoresProgressRecordedForDifferentSQL; do
+                      TestPluginMigration_IgnoresProgressRecordedForDifferentSQL \
+                      TestIconReconcile_RealSchema \
+                      TestIconReconcile_SyncAPICreateEntityType \
+                      TestReconcileIconColumns_Integration \
+                      TestReconcileIconColumns_RefusesBadConfig_Integration; do
             grep -q -- "--- PASS: $want" replay.log || {
               echo "::error::$want did not PASS — it was skipped or never ran."
               echo "This job exists because a skipped fresh-DB replay is why"
@@ -238,7 +242,7 @@ jobs:
         run: |
           go test ./internal/plugins/sessions/... ./internal/plugins/entities/... ./internal/plugins/timeline/... \
             -v -count=1 2>&1 | tee dbtests.log
-          go test ./internal/app/ -v -count=1 -run 'CustomVisibilityLeak' 2>&1 | tee -a dbtests.log
+          go test ./internal/app/ -v -count=1 -run 'CustomVisibilityLeak|PrivateEntityVisibilityLeak' 2>&1 | tee -a dbtests.log
           go test ./internal/plugins/campaigns/ -v -count=1 -run TestNavPins_Integration 2>&1 | tee -a dbtests.log
           for want in TestDB_SessionRSVPTokenCannotBeSpentTwiceConcurrently \
                       TestEntityTypeRepository_Integration \
@@ -248,6 +252,8 @@ jobs:
                       TestSearchTimelines_DoesNotNameAllowListRestrictedTimelineToAnonymous \
                       TestArmoryGallery_CustomVisibilityLeak \
                       TestNPCGallery_CustomVisibilityLeak \
+                      TestTimelineEvents_PrivateEntityVisibilityLeak \
+                      TestTimelineEntityGroups_PrivateEntityVisibilityLeak \
                       TestNavPins_Integration; do
             grep -q -- "--- PASS: $want" dbtests.log || {
               echo "::error::$want did not PASS — it was skipped or never ran."

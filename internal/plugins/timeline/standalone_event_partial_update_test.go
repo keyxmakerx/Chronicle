@@ -53,7 +53,7 @@ func runEventUpdate(t *testing.T, input UpdateTimelineEventInput) *TimelineEvent
 		getEventFn:    func(_ context.Context, _ string) (*TimelineEvent, error) { return storedEvent(), nil },
 		updateEventFn: func(_ context.Context, e *TimelineEvent) error { written = e; return nil },
 	}
-	if err := newTestTimelineService(repo).UpdateStandaloneEvent(context.Background(), "tl-1", "evt-1", input); err != nil {
+	if err := newTestTimelineService(repo).UpdateStandaloneEvent(context.Background(), "tl-1", "evt-1", input, true); err != nil {
 		t.Fatalf("UpdateStandaloneEvent: %v", err)
 	}
 	if written == nil {

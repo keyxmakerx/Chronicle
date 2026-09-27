@@ -50,7 +50,10 @@ type TimelineLister interface {
 	// builds a RequestViewer from the operator's real id — never a system
 	// caller.
 	ListTimelines(ctx context.Context, campaignID string, v permissions.Viewer) ([]timeline.Timeline, error)
-	ListTimelineEvents(ctx context.Context, timelineID string, v permissions.Viewer) ([]timeline.EventLink, error)
+	// ListTimelineEvents also takes campaignID, so a non-owner's result can
+	// be narrowed by EntityVisibilityGate (a linked entity's visibility is a
+	// separate check from the event's own).
+	ListTimelineEvents(ctx context.Context, timelineID, campaignID string, v permissions.Viewer) ([]timeline.EventLink, error)
 }
 
 // RelationLister exposes a single entity's relations. Rendering is

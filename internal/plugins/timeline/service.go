@@ -13,9 +13,6 @@ import (
 	"github.com/keyxmakerx/chronicle/internal/sanitize"
 )
 
-// iconPattern validates FontAwesome icon class names to prevent XSS injection.
-var iconPattern = regexp.MustCompile(`^fa-[a-z0-9-]+$`)
-
 // colorPattern validates hex color values to prevent XSS injection.
 var colorPattern = regexp.MustCompile(`^#([0-9a-fA-F]{3}|[0-9a-fA-F]{6})$`)
 
@@ -100,23 +97,35 @@ type TimelineService interface {
 	LinkEvent(ctx context.Context, timelineID, eventID string, input LinkEventInput) (*EventLink, error)
 	LinkAllEvents(ctx context.Context, timelineID string, role int) (int, error)
 	UnlinkEvent(ctx context.Context, timelineID, eventID string) error
-	ListTimelineEvents(ctx context.Context, timelineID string, v permissions.Viewer) ([]EventLink, error)
+	// ListTimelineEvents also takes campaignID, so a non-owner's result can
+	// be narrowed by EntityVisibilityGate (a linked entity's visibility is a
+	// separate check from the event's own).
+	ListTimelineEvents(ctx context.Context, timelineID, campaignID string, v permissions.Viewer) ([]EventLink, error)
 	ListAvailableEvents(ctx context.Context, timelineID string, role int) ([]CalendarEventRef, error)
 
 	// Event link visibility.
 	UpdateEventLinkVisibility(ctx context.Context, timelineID, eventID string, input UpdateEventVisibilityInput) error
 
-	// Standalone events.
+	// Standalone events. UpdateStandaloneEvent and DeleteStandaloneEvent take
+	// canAuthorDmOnly (Owner or a co-DM grant,
+	// campaigns.CampaignContext.CanAuthorDmOnly) so a caller who cannot
+	// author dm_only content gets the same NotFound a missing id would give
+	// when the stored event is dm_only, regardless of which fields the
+	// request touches.
 	CreateStandaloneEvent(ctx context.Context, timelineID string, input CreateTimelineEventInput) (*TimelineEvent, error)
 	GetStandaloneEvent(ctx context.Context, eventID string) (*TimelineEvent, error)
-	UpdateStandaloneEvent(ctx context.Context, timelineID, eventID string, input UpdateTimelineEventInput) error
-	DeleteStandaloneEvent(ctx context.Context, timelineID, eventID string) error
+	UpdateStandaloneEvent(ctx context.Context, timelineID, eventID string, input UpdateTimelineEventInput, canAuthorDmOnly bool) error
+	DeleteStandaloneEvent(ctx context.Context, timelineID, eventID string, canAuthorDmOnly bool) error
 
 	// Entity groups.
 	CreateEntityGroup(ctx context.Context, timelineID string, input CreateEntityGroupInput) (*EntityGroup, error)
 	UpdateEntityGroup(ctx context.Context, timelineID string, groupID int, input UpdateEntityGroupInput) error
 	DeleteEntityGroup(ctx context.Context, timelineID string, groupID int) error
-	ListEntityGroups(ctx context.Context, timelineID string) ([]EntityGroup, error)
+	// ListEntityGroups takes campaignID and a Viewer so a non-owner's result
+	// can be narrowed by EntityVisibilityGate, same as ListTimelineEvents:
+	// a group member's entity link is a separate visibility check the caller
+	// must supply.
+	ListEntityGroups(ctx context.Context, timelineID, campaignID string, v permissions.Viewer) ([]EntityGroup, error)
 	AddGroupMember(ctx context.Context, timelineID string, groupID int, entityID string) error
 	RemoveGroupMember(ctx context.Context, timelineID string, groupID int, entityID string) error
 
@@ -135,6 +144,17 @@ type TimelineService interface {
 	ListCalendarEras(ctx context.Context, calendarID string) ([]CalendarEra, error)
 }
 
+// EntityVisibilityGate resolves which of a set of entity IDs a viewer (role +
+// userID) may see, applying the entities plugin's own canonical visibility
+// policy (default is_private, custom per-subject grants, tag grants). Wraps
+// entities.EntityService.FilterViewableEntityIDs — the same seam maps,
+// media, npcs and sessions use — so a timeline event or entity-group member
+// naming a dm_only/private entity never leaks that entity's name/icon to a
+// viewer who could not otherwise see it.
+type EntityVisibilityGate interface {
+	FilterViewableEntityIDs(ctx context.Context, campaignID string, entityIDs []string, role int, userID string) (map[string]bool, error)
+}
+
 // timelineService is the default TimelineService implementation.
 type timelineService struct {
 	repo           TimelineRepository
@@ -142,6 +162,7 @@ type timelineService struct {
 	calEvents      CalendarEventLister
 	calEras        CalendarEraLister
 	bindingCleaner BindingCleaner
+	entityGate     EntityVisibilityGate
 }
 
 // BindingCleaner sweeps a deleted instance's widget bindings. Implemented by
@@ -163,6 +184,13 @@ func NewTimelineService(repo TimelineRepository, calLists CalendarLister, calEve
 // interface stays unchanged.
 func (s *timelineService) SetBindingCleaner(c BindingCleaner) { s.bindingCleaner = c }
 
+// SetEntityVisibilityGate injects the entity-visibility check used by
+// ListTimelineEvents and ListEntityGroups (wired post-construction, like
+// SetBindingCleaner). Nil is a valid — if unwired — value: both list methods
+// fail closed and blank every entity-linked row's id/name/icon rather than
+// risk showing one nothing verified as viewable.
+func (s *timelineService) SetEntityVisibilityGate(g EntityVisibilityGate) { s.entityGate = g }
+
 // CreateTimeline creates a new timeline in a campaign.
 func (s *timelineService) CreateTimeline(ctx context.Context, campaignID string, input CreateTimelineInput) (*Timeline, error) {
 	if input.Name == "" {
@@ -175,9 +203,14 @@ func (s *timelineService) CreateTimeline(ctx context.Context, campaignID string,
 	if input.Color == "" {
 		input.Color = "#6366f1"
 	}
-	if input.Icon == "" {
-		input.Icon = "fa-timeline"
+	icon, err := sanitize.ValidateIcon(input.Icon)
+	if err != nil {
+		return nil, err
 	}
+	if icon == "" {
+		icon = "fa-timeline"
+	}
+	input.Icon = icon
 	if input.Visibility == "" {
 		input.Visibility = "everyone"
 	}
@@ -191,9 +224,6 @@ func (s *timelineService) CreateTimeline(ctx context.Context, campaignID string,
 	}
 	if !IsValidZoom(input.ZoomDefault) {
 		return nil, apperror.NewValidation("invalid zoom default level")
-	}
-	if !iconPattern.MatchString(input.Icon) {
-		return nil, apperror.NewValidation("icon must be a valid FontAwesome class name")
 	}
 	if !colorPattern.MatchString(input.Color) {
 		return nil, apperror.NewValidation("color must be a valid hex color")
@@ -372,9 +402,12 @@ func (s *timelineService) UpdateTimeline(ctx context.Context, timelineID string,
 	if !IsValidZoom(zoom) {
 		return apperror.NewValidation("invalid zoom default level")
 	}
-	icon := input.Icon.Val(t.Icon)
-	if icon != "" && !iconPattern.MatchString(icon) {
-		return apperror.NewValidation("icon must be a valid FontAwesome class name")
+	icon, err := sanitize.ValidateIcon(input.Icon.Val(t.Icon))
+	if err != nil {
+		return err
+	}
+	if icon == "" {
+		icon = "fa-timeline"
 	}
 	color := input.Color.Val(t.Color)
 	if color != "" && !colorPattern.MatchString(color) {
@@ -466,13 +499,69 @@ func (s *timelineService) UnlinkEvent(ctx context.Context, timelineID, eventID s
 // ListTimelineEvents returns all events for a timeline — both linked calendar
 // events and standalone events — merged into a unified EventLink slice, sorted
 // by date, and filtered by role-based and per-user visibility rules.
-func (s *timelineService) ListTimelineEvents(ctx context.Context, timelineID string, v permissions.Viewer) ([]EventLink, error) {
+//
+// It additionally blanks EventEntityID/Name/Icon on any remaining event whose
+// linked entity the viewer isn't separately permitted to see, via
+// EntityVisibilityGate — mirrors mapService.ListMarkers, so a timeline can't
+// name a private/dm_only entity to a viewer who couldn't otherwise see it.
+func (s *timelineService) ListTimelineEvents(ctx context.Context, timelineID, campaignID string, v permissions.Viewer) ([]EventLink, error) {
 	role := v.Role()
 	events, err := s.timelineEventLinks(ctx, timelineID, role)
 	if err != nil {
 		return nil, err
 	}
-	return filterEventLinksByUser(events, role, v), nil
+	events = filterEventLinksByUser(events, role, v)
+
+	// Owners/co-DMs already see every entity link unfiltered elsewhere in the
+	// app; the entity link they see here is the entity link that exists.
+	if permissions.CanSeeDmOnly(role) {
+		return events, nil
+	}
+
+	entityIDs := make([]string, 0, len(events))
+	seen := make(map[string]bool, len(events))
+	for _, el := range events {
+		if el.EventEntityID == nil || *el.EventEntityID == "" || seen[*el.EventEntityID] {
+			continue
+		}
+		seen[*el.EventEntityID] = true
+		entityIDs = append(entityIDs, *el.EventEntityID)
+	}
+	if len(entityIDs) == 0 {
+		return events, nil
+	}
+
+	viewable, err := s.viewableEntityIDs(ctx, campaignID, entityIDs, role, v.UserID())
+	if err != nil {
+		return nil, fmt.Errorf("filter viewable event entities: %w", err)
+	}
+
+	for i := range events {
+		if events[i].EventEntityID == nil || *events[i].EventEntityID == "" {
+			continue
+		}
+		if !viewable[*events[i].EventEntityID] {
+			// Blank the ID too, not just the name/icon: a bare id still
+			// tells the viewer a specific hidden entity exists.
+			events[i].EventEntityID = nil
+			events[i].EventEntityName = ""
+			events[i].EventEntityIcon = ""
+		}
+	}
+	return events, nil
+}
+
+// viewableEntityIDs resolves which of entityIDs this viewer may see via the
+// injected EntityVisibilityGate. Fails closed (nothing viewable) if the gate
+// isn't wired — a misconfiguration, not a policy outcome, same as maps'
+// ListMarkers when its own gate is unset.
+func (s *timelineService) viewableEntityIDs(ctx context.Context, campaignID string, entityIDs []string, role int, userID string) (map[string]bool, error) {
+	if s.entityGate == nil {
+		slog.Error("timeline: entity visibility gate not configured; blanking all linked entity names",
+			slog.String("campaign_id", campaignID))
+		return map[string]bool{}, nil
+	}
+	return s.entityGate.FilterViewableEntityIDs(ctx, campaignID, entityIDs, role, userID)
 }
 
 // timelineEventLinks fetches a timeline's linked calendar events and
@@ -696,12 +785,19 @@ func (s *timelineService) GetStandaloneEvent(ctx context.Context, eventID string
 
 // UpdateStandaloneEvent modifies an existing standalone event.
 // timelineID is checked against the event's owner to prevent IDOR attacks.
-func (s *timelineService) UpdateStandaloneEvent(ctx context.Context, timelineID, eventID string, input UpdateTimelineEventInput) error {
+func (s *timelineService) UpdateStandaloneEvent(ctx context.Context, timelineID, eventID string, input UpdateTimelineEventInput, canAuthorDmOnly bool) error {
 	e, err := s.repo.GetEvent(ctx, eventID)
 	if err != nil {
 		return fmt.Errorf("get event for update: %w", err)
 	}
 	if e == nil || e.TimelineID != timelineID {
+		return apperror.NewNotFound("event not found")
+	}
+	// A stored dm_only event is invisible to a caller who cannot author
+	// dm_only content: answer the same NotFound a missing id would give,
+	// whatever fields this update touches, so this can't be used to confirm
+	// the event exists or to change it without ever seeing it.
+	if e.Visibility == "dm_only" && !canAuthorDmOnly {
 		return apperror.NewNotFound("event not found")
 	}
 
@@ -767,12 +863,18 @@ func (s *timelineService) UpdateStandaloneEvent(ctx context.Context, timelineID,
 
 // DeleteStandaloneEvent removes a standalone event from a timeline.
 // timelineID is checked against the event's owner to prevent IDOR attacks.
-func (s *timelineService) DeleteStandaloneEvent(ctx context.Context, timelineID, eventID string) error {
+func (s *timelineService) DeleteStandaloneEvent(ctx context.Context, timelineID, eventID string, canAuthorDmOnly bool) error {
 	e, err := s.repo.GetEvent(ctx, eventID)
 	if err != nil {
 		return fmt.Errorf("get event for delete: %w", err)
 	}
 	if e == nil || e.TimelineID != timelineID {
+		return apperror.NewNotFound("event not found")
+	}
+	// See UpdateStandaloneEvent: a stored dm_only event answers the same
+	// NotFound a missing id would to a caller who cannot author dm_only
+	// content.
+	if e.Visibility == "dm_only" && !canAuthorDmOnly {
 		return apperror.NewNotFound("event not found")
 	}
 	if err := s.repo.DeleteEvent(ctx, eventID); err != nil {
@@ -844,10 +946,50 @@ func (s *timelineService) DeleteEntityGroup(ctx context.Context, timelineID stri
 }
 
 // ListEntityGroups returns all entity groups for a timeline with members.
-func (s *timelineService) ListEntityGroups(ctx context.Context, timelineID string) ([]EntityGroup, error) {
+// ListEntityGroups additionally blanks a member's EntityID/Name/Icon when the
+// viewer isn't separately permitted to see that entity, via
+// EntityVisibilityGate — same reasoning as ListTimelineEvents.
+func (s *timelineService) ListEntityGroups(ctx context.Context, timelineID, campaignID string, v permissions.Viewer) ([]EntityGroup, error) {
 	groups, err := s.repo.ListEntityGroups(ctx, timelineID)
 	if err != nil {
 		return nil, fmt.Errorf("list entity groups: %w", err)
+	}
+
+	role := v.Role()
+	if permissions.CanSeeDmOnly(role) {
+		return groups, nil
+	}
+
+	entityIDs := make([]string, 0, len(groups))
+	seen := make(map[string]bool, len(groups))
+	for _, g := range groups {
+		for _, m := range g.Members {
+			if m.EntityID == "" || seen[m.EntityID] {
+				continue
+			}
+			seen[m.EntityID] = true
+			entityIDs = append(entityIDs, m.EntityID)
+		}
+	}
+	if len(entityIDs) == 0 {
+		return groups, nil
+	}
+
+	viewable, err := s.viewableEntityIDs(ctx, campaignID, entityIDs, role, v.UserID())
+	if err != nil {
+		return nil, fmt.Errorf("filter viewable group member entities: %w", err)
+	}
+
+	for gi := range groups {
+		for mi := range groups[gi].Members {
+			m := &groups[gi].Members[mi]
+			if m.EntityID == "" || viewable[m.EntityID] {
+				continue
+			}
+			m.EntityID = ""
+			m.EntityName = ""
+			m.EntityIcon = ""
+		}
 	}
 	return groups, nil
 }

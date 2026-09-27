@@ -2630,6 +2630,16 @@ func (a *App) RegisterRoutes() {
 	// 2nd-4th arguments. Timeline nil-guards all three, so it runs on
 	// standalone events alone until then.
 	timelineSvc := timeline.NewTimelineService(timelineRepo, nil, nil, nil)
+	// Reuses the same entityVisibilityFilterAdapter maps, media, npcs and
+	// sessions wire, so a timeline event or entity-group member naming a
+	// dm_only/private entity is narrowed by entities' one canonical
+	// visibility predicate. Type-asserted like maps' own wiring above so the
+	// TimelineService interface stays unchanged.
+	if g, ok := timelineSvc.(interface {
+		SetEntityVisibilityGate(timeline.EntityVisibilityGate)
+	}); ok {
+		g.SetEntityVisibilityGate(&entityVisibilityFilterAdapter{svc: entityService})
+	}
 	timelineHandler := timeline.NewHandler(timelineSvc)
 	timelineHandler.SetMemberLister(campaignService)
 	if a.PluginHealth.IsHealthy("timeline") {

@@ -100,7 +100,7 @@ func TestAnonymous_PublicCampaign_SeesNoRestrictedEventLink(t *testing.T) {
 	svc := newTestTimelineService(repo)
 	ctx := context.Background()
 
-	anon, err := svc.ListTimelineEvents(ctx, "tl-1", anonViewer())
+	anon, err := svc.ListTimelineEvents(ctx, "tl-1", "camp-1", anonViewer())
 	if err != nil {
 		t.Fatalf("ListTimelineEvents(anonymous): %v", err)
 	}
@@ -109,7 +109,7 @@ func TestAnonymous_PublicCampaign_SeesNoRestrictedEventLink(t *testing.T) {
 	}
 
 	// Control: the whitelisted player keeps their event.
-	u1, err := svc.ListTimelineEvents(ctx, "tl-1", permissions.RequestViewer(permissions.RolePlayer, "u1"))
+	u1, err := svc.ListTimelineEvents(ctx, "tl-1", "camp-1", permissions.RequestViewer(permissions.RolePlayer, "u1"))
 	if err != nil {
 		t.Fatalf("ListTimelineEvents(u1): %v", err)
 	}
@@ -123,7 +123,7 @@ func TestAnonymous_PublicCampaign_SeesNoRestrictedEventLink(t *testing.T) {
 	}
 
 	// Control: the owner sees all three.
-	owner, err := svc.ListTimelineEvents(ctx, "tl-1", permissions.RequestViewer(permissions.RoleOwner, "u1"))
+	owner, err := svc.ListTimelineEvents(ctx, "tl-1", "camp-1", permissions.RequestViewer(permissions.RoleOwner, "u1"))
 	if err != nil {
 		t.Fatalf("ListTimelineEvents(owner): %v", err)
 	}

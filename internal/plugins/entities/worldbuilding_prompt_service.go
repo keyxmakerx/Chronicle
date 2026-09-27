@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	"github.com/keyxmakerx/chronicle/internal/apperror"
+	"github.com/keyxmakerx/chronicle/internal/sanitize"
 )
 
 // WorldbuildingPromptService handles business logic for worldbuilding prompts.
@@ -54,7 +55,10 @@ func (s *worldbuildingPromptService) Create(ctx context.Context, campaignID stri
 		return nil, apperror.NewValidation("prompt text must be 5000 characters or fewer")
 	}
 
-	icon := strings.TrimSpace(input.Icon)
+	icon, err := sanitize.ValidateIcon(input.Icon)
+	if err != nil {
+		return nil, err
+	}
 	if icon == "" {
 		icon = "fa-lightbulb"
 	}
@@ -111,7 +115,10 @@ func (s *worldbuildingPromptService) Update(ctx context.Context, id int, input U
 		return apperror.NewValidation("prompt text must be 5000 characters or fewer")
 	}
 
-	icon := strings.TrimSpace(input.Icon)
+	icon, err := sanitize.ValidateIcon(input.Icon)
+	if err != nil {
+		return err
+	}
 	if icon == "" {
 		icon = existing.Icon
 	}

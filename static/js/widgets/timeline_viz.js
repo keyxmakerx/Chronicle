@@ -1022,6 +1022,25 @@ var _impl = {
   },
 
   /**
+   * Markup for a day-zoom event card. Every server value is escaped.
+   */
+  _cardHtml: function(d) {
+    var label = Chronicle.escapeHtml(d.label || d.event_name || 'Untitled');
+    var date = 'Y' + d.event_year + ' M' + d.event_month + ' D' + d.event_day;
+    var entity = d.event_entity_name ? Chronicle.escapeHtml(d.event_entity_name) : '';
+    var catHtml = '';
+    if (d.event_category) {
+      catHtml = '<span class="tl-viz-card-cat">' + Chronicle.escapeHtml(d.event_category) + '</span>';
+    }
+    return '<div class="tl-viz-card-name">' + label + '</div>' +
+           '<div class="tl-viz-card-date">' + date + '</div>' +
+           (entity ? '<div class="tl-viz-card-entity"><i class="fa-solid ' +
+             Chronicle.escapeAttr(d.event_entity_icon || 'fa-circle-dot') + ' tl-viz-card-entity-icon"></i>' +
+             entity + '</div>' : '') +
+           catHtml;
+  },
+
+  /**
    * Draw event markers on the timeline.
    */
   _drawEvents: function() {
@@ -1169,20 +1188,7 @@ var _impl = {
         .attr('x', style.radius + 6).attr('y', -40)
         .append('xhtml:div')
         .attr('class', 'tl-viz-card')
-        .html(function(d) {
-          var label = Chronicle.escapeHtml(d.label || d.event_name || 'Untitled');
-          var date = 'Y' + d.event_year + ' M' + d.event_month + ' D' + d.event_day;
-          var entity = d.event_entity_name ? Chronicle.escapeHtml(d.event_entity_name) : '';
-          var catHtml = '';
-          if (d.event_category) {
-            catHtml = '<span class="tl-viz-card-cat">' + Chronicle.escapeHtml(d.event_category) + '</span>';
-          }
-          return '<div class="tl-viz-card-name">' + label + '</div>' +
-                 '<div class="tl-viz-card-date">' + date + '</div>' +
-                 (entity ? '<div class="tl-viz-card-entity"><i class="fa-solid ' +
-                   (d.event_entity_icon || 'fa-circle-dot') + ' tl-viz-card-entity-icon"></i>' + entity + '</div>' : '') +
-                 catHtml;
-        });
+        .html(function(d) { return self._cardHtml(d); });
     }
 
     // Event name label (hidden at day zoom — cards replace it).

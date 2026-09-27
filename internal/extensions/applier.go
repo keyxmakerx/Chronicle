@@ -10,6 +10,8 @@ import (
 	"encoding/json"
 	"log/slog"
 	"strconv"
+
+	"github.com/keyxmakerx/chronicle/internal/sanitize"
 )
 
 // ContentApplier applies extension content to a campaign when enabled.
@@ -175,10 +177,17 @@ func (a *contentApplier) applyEntityTypeTemplates(
 	templates []EntityTypeTemplate,
 ) error {
 	for _, t := range templates {
+		// A bad manifest icon falls back to the default rather than
+		// dropping the whole category.
+		icon, replaced := sanitize.IconOrDefault(t.Icon, "")
+		if replaced {
+			slog.Warn("extension entity type has an invalid icon; using the default",
+				slog.String("slug", t.Slug), slog.String("icon", t.Icon))
+		}
 		input := EntityTypeCreateInput{
 			Name:           t.Name,
 			NamePlural:     t.NamePlural,
-			Icon:           t.Icon,
+			Icon:           icon,
 			Color:          t.Color,
 			PresetCategory: t.Category,
 		}
