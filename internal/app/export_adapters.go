@@ -340,9 +340,13 @@ func (a *calendarExportAdapter) ExportCalendar(ctx context.Context, campaignID s
 		})
 	}
 	for _, m := range cal.Moons {
+		// Always write a non-nil pointer: a fresh export must never itself
+		// produce the "unknown, pre-V5 backup" shape ImportCalendar treats
+		// as hidden — see ExportCalendarMoon's doc comment.
+		hidden := m.HiddenFromPlayers
 		data.Moons = append(data.Moons, campaigns.ExportCalendarMoon{
 			Name: m.Name, CycleDays: m.CycleDays, PhaseOffset: m.PhaseOffset,
-			Color: m.Color, HiddenFromPlayers: m.HiddenFromPlayers,
+			Color: m.Color, HiddenFromPlayers: &hidden,
 		})
 	}
 	for _, s := range cal.Seasons {
@@ -1218,7 +1222,7 @@ func (a *calendarImportAdapter) ImportCalendar(ctx context.Context, campaignID s
 		for i, m := range data.Moons {
 			moons[i] = calendar.MoonInput{
 				Name: m.Name, CycleDays: m.CycleDays, PhaseOffset: m.PhaseOffset,
-				Color: m.Color, HiddenFromPlayers: m.HiddenFromPlayers,
+				Color: m.Color, HiddenFromPlayers: importMoonHidden(m.HiddenFromPlayers),
 			}
 		}
 		if err := a.svc.SetMoons(ctx, cal.ID, campaignID, moons); err != nil {
@@ -1386,6 +1390,20 @@ func importCalendarVisibility(v string) string {
 	default:
 		return "dm_only"
 	}
+}
+
+// importMoonHidden resolves an imported moon's HiddenFromPlayers, mirroring
+// importCalendarVisibility's reasoning one field down: a nil pointer means
+// the backup predates ExportCalendarMoon.HiddenFromPlayers (V5, #778) and
+// never recorded whether the Director had hidden this moon, so it must fail
+// toward privacy rather than toward exposure — an unknown value imports as
+// hidden, never visible, so restoring an old backup can never un-hide a moon
+// on its own.
+func importMoonHidden(hidden *bool) bool {
+	if hidden == nil {
+		return true
+	}
+	return *hidden
 }
 
 // sessionImportAdapter implements campaigns.SessionImporter.
