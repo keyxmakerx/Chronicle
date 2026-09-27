@@ -11,6 +11,7 @@ import (
 	"strings"
 
 	"github.com/keyxmakerx/chronicle/internal/plugins/entities"
+	"github.com/keyxmakerx/chronicle/internal/sanitize"
 	"github.com/keyxmakerx/chronicle/internal/systems"
 )
 
@@ -102,10 +103,17 @@ func (p *presetApplier) ApplySystemPresets(ctx context.Context, campaignID, syst
 		}
 
 		// Create path: no matching type yet — make a new one with its fields.
+		// A bad manifest icon falls back to the default rather than dropping
+		// the preset.
+		icon, replaced := sanitize.IconOrDefault(preset.Icon, "")
+		if replaced {
+			slog.Warn("system preset has an invalid icon; using the default",
+				slog.String("preset", preset.Slug), slog.String("icon", preset.Icon))
+		}
 		input := entities.CreateEntityTypeInput{
 			Name:           preset.Name,
 			NamePlural:     preset.NamePlural,
-			Icon:           preset.Icon,
+			Icon:           icon,
 			Color:          preset.Color,
 			PresetCategory: preset.Category,
 			Fields:         declared,
