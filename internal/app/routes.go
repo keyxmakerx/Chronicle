@@ -3602,6 +3602,7 @@ func (a *App) RegisterRoutes() {
 		if layouts.GetActivePath(ctx) == "" {
 			ctx = layouts.SetActivePath(ctx, c.Request().URL.Path)
 		}
+		ctx = layouts.SetRequestPath(ctx, c.Request().URL.Path)
 
 		// Signed media URL generators for templates. Bound to whoever is
 		// RENDERING this response (ADR-058), resolved once per render and

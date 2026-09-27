@@ -286,3 +286,18 @@ func TestAllPagesLinkHighlightsOnEntitySubpath(t *testing.T) {
 		t.Errorf("All Pages link must be inactive off the entities tree; got %q", got)
 	}
 }
+
+// TestNotesWidget_EntityIDFromTheRequestPath: an entity page overrides its
+// active path to its category for the sidebar; the jot panel must still get
+// the page it is on, from the real request path.
+func TestNotesWidget_EntityIDFromTheRequestPath(t *testing.T) {
+	ctx := ctxForNotes(true, "camp1", true, "/campaigns/camp1/characters")
+	ctx = SetRequestPath(ctx, "/campaigns/camp1/entities/0a1b2c3d-0000-4000-8000-000000000001")
+	var buf bytes.Buffer
+	if err := NotesWidget().Render(ctx, &buf); err != nil {
+		t.Fatalf("render NotesWidget: %v", err)
+	}
+	if !strings.Contains(buf.String(), `data-entity-id="0a1b2c3d-0000-4000-8000-000000000001"`) {
+		t.Fatalf("the jot panel must know its page: %s", buf.String())
+	}
+}
