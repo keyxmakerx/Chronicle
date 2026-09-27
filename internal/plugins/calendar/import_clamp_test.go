@@ -37,7 +37,9 @@ func TestClampCalendarStructure_ClampsAndWarns(t *testing.T) {
 		},
 	}
 
-	clampCalendarStructure(result)
+	if err := clampCalendarStructure(result); err != nil {
+		t.Fatalf("clampCalendarStructure: %v", err)
+	}
 
 	if result.Months[0].Name != "Month 1" {
 		t.Errorf("month 0 name = %q, want a fallback name", result.Months[0].Name)

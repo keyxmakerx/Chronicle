@@ -1,8 +1,8 @@
 // Package calendar — view_helpers.go holds small, pure presentation-shaping
-// helpers shared by the Part B (#764) Templ pages: the calendars list, the
-// per-card preview, and the new-calendar wizard. None of these decide
-// authorization or business rules (that stays in service.go) — they only
-// reshape already-authorized data for rendering.
+// helpers shared by the calendars list, the per-card preview, and the
+// new-calendar wizard Templ pages. None of these decide authorization or
+// business rules (that stays in service.go) — they only reshape
+// already-authorized data for rendering.
 package calendar
 
 import (
@@ -32,8 +32,8 @@ func visibilityLabel(cal Calendar) string {
 // mainMoon returns a calendar's "main" moon for card/preview display — the
 // first entry in Moons. The real schema has no explicit primary-moon flag
 // (unlike the mockup's fictional mo.main), so "first in stored order" is the
-// stand-in; an owner can reorder moons (when a structure editor exists,
-// #764's own follow-up) to change which one that is.
+// stand-in; a future structure editor letting an owner reorder moons would
+// change which one that is.
 func mainMoon(cal *Calendar) *Moon {
 	if len(cal.Moons) == 0 {
 		return nil
@@ -63,7 +63,14 @@ func buildMonthGrid(cal *Calendar, year, month int, eventCounts map[int]int, mai
 	if wl <= 0 {
 		wl = 7
 	}
+	// clampCalendarStructure holds an import to maxCalendarMonthDays, but a
+	// row can reach calendar_months.days some other way (a pre-fix import, a
+	// future hand-made structure editor) — re-clamping here keeps this grid
+	// from building a slice sized to whatever that column holds.
 	days := cal.MonthDays(month-1, year)
+	if days > maxCalendarMonthDays {
+		days = maxCalendarMonthDays
+	}
 	lead := cal.WeekdayIndex(year, month, 1)
 	if lead < 0 {
 		// An intercalary month on a calendar whose months restart the week
@@ -108,7 +115,12 @@ func countEventsByDay(cal *Calendar, events []Event, year, month int) map[int]in
 		return nil
 	}
 	counts := make(map[int]int, len(events))
+	// See buildMonthGrid's own comment: don't trust a stored days value past
+	// the bound an import is held to, regardless of how a row got here.
 	days := cal.MonthDays(month-1, year)
+	if days > maxCalendarMonthDays {
+		days = maxCalendarMonthDays
+	}
 	for d := 1; d <= days; d++ {
 		for _, e := range events {
 			if e.OccursOn(cal, year, month, d) {
