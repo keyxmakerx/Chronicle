@@ -1,6 +1,6 @@
 // nav.templ draws a campaign's sidebar: the brand row, then one scrolling
 // list of Dashboard, Pinned, Apps, Categories (with sub-category rows), the
-// owner's own sections and, for the owner, Manage. Every section but Pinned
+// owner's own sections and, for members, Manage. Every section but Pinned
 // folds under its heading. The rows arrive already cut down for the viewer
 // (GetNavSections); where the viewer is comes from nav_state.go.
 // sidebar_nav.js runs the folds, the living ring and the phone drawer.
@@ -71,7 +71,7 @@ templ campaignNavList() {
 			for _, sec := range GetNavSections(ctx) {
 				@navSection(sec)
 			}
-			if GetCampaignRole(ctx) >= 3 {
+			if len(NavManageRows(ctx)) > 0 {
 				@navManage()
 			}
 			if GetIsAdmin(ctx) {
@@ -331,7 +331,8 @@ templ navRing() {
 	</span>
 }
 
-// navManage is the owner's Manage section, folded until opened.
+// navManage is the Manage section, folded until opened: Members for every
+// member, and the owner's own pages for the owner.
 templ navManage() {
 	<div class="nav-sec" data-nav-section="manage">
 		@navFoldHead("manage", "Manage", len(NavManageRows(ctx)), NavSectionCurrent(ctx, NavManageRows(ctx)))

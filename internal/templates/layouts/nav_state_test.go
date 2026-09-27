@@ -110,7 +110,8 @@ func TestResolveNavState_CurrentRow(t *testing.T) {
 		{"an owner has no My Characters row", navStateCase{role: 3, path: "/campaigns/c1/me"}, "", ""},
 		{"an owner viewing as a player does", navStateCase{role: 3, player: true, path: "/campaigns/c1/me"}, "me", ""},
 		{"the owner's Manage pages", navStateCase{role: 3, path: "/campaigns/c1/settings/general"}, "manage:settings", ""},
-		{"a player has no Manage rows", navStateCase{role: 1, path: "/campaigns/c1/settings"}, "", ""},
+		{"a player has none of the owner's Manage rows", navStateCase{role: 1, path: "/campaigns/c1/settings"}, "", ""},
+		{"a player's Members page", navStateCase{role: 1, path: "/campaigns/c1/members"}, "manage:members", ""},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -204,10 +205,18 @@ func TestCampaignNavList_FoldedSectionNamesTheCurrentPage(t *testing.T) {
 
 func TestCampaignNavList_ManageAndEditingAreTheOwners(t *testing.T) {
 	player := renderNavList(t, navStateCase{role: 1, path: "/campaigns/c1"}.ctx())
-	for _, owners := range []string{`data-nav-section="manage"`, "/campaigns/c1/settings", "data-nav-edit", "Add category"} {
+	for _, owners := range []string{"/campaigns/c1/settings", "/campaigns/c1/customize", "/campaigns/c1/dashboard", "data-nav-edit", "Add category"} {
 		if strings.Contains(player, owners) {
 			t.Errorf("a player's sidebar contains the owner's %q", owners)
 		}
+	}
+	// Every member keeps a Members link, under Manage.
+	if !strings.Contains(player, `data-nav-section="manage"`) || !strings.Contains(player, `href="/campaigns/c1/members"`) {
+		t.Errorf("a player's sidebar is missing Manage's Members link")
+	}
+	visitor := renderNavList(t, navStateCase{role: 0, path: "/campaigns/c1"}.ctx())
+	if strings.Contains(visitor, `data-nav-section="manage"`) {
+		t.Errorf("a visitor who is not a member gets no Manage")
 	}
 	if !strings.Contains(player, `data-nav-key="me"`) {
 		t.Errorf("a player's sidebar is missing My Characters")

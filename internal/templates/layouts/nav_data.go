@@ -84,8 +84,8 @@ type navCommand struct {
 // NavCommandsJSON lists the viewer's sidebar destinations for the command
 // palette, as JSON [{label, href, icon}]. It is built from the same rows the
 // sidebar draws, so the palette can never offer what the sidebar withholds:
-// a row hidden from players, an app the viewer cannot open, or Manage for a
-// non-owner.
+// a row hidden from players, an app the viewer cannot open, or the owner's
+// Manage pages for anyone else.
 func NavCommandsJSON(ctx context.Context) string {
 	if !InCampaign(ctx) {
 		return "[]"
@@ -122,17 +122,23 @@ func NavCommandsJSON(ctx context.Context) string {
 	return string(b)
 }
 
-// NavManageRows are the owner's campaign-management pages, in the order the
-// sidebar lists them. Nobody else gets Manage, and neither does an owner
-// viewing as a player (GetCampaignRole is Player then).
+// NavManageRows are the campaign-management pages, in the order the sidebar
+// lists them: Members for every member, the rest for the owner alone. An
+// owner viewing as a player gets a player's (GetCampaignRole is Player then),
+// and a visitor who is not a member gets none.
 func NavManageRows(ctx context.Context) []NavRowView {
-	if !InCampaign(ctx) || !IsAuthenticated(ctx) || GetCampaignRole(ctx) < 3 {
+	role := GetCampaignRole(ctx)
+	if !InCampaign(ctx) || !IsAuthenticated(ctx) || role < 1 {
 		return nil
 	}
 	base := "/campaigns/" + GetCampaignID(ctx)
+	members := NavRowView{Key: "manage:members", Label: "Members", Icon: "fa-users", URL: base + "/members"}
+	if role < 3 {
+		return []NavRowView{members}
+	}
 	rows := []NavRowView{
 		{Key: "manage:dashboard", Label: "Dashboard", Icon: "fa-gauge", URL: base + "/dashboard"},
-		{Key: "manage:members", Label: "Members", Icon: "fa-users", URL: base + "/members"},
+		members,
 	}
 	if IsAddonEnabled(ctx, "media-gallery") {
 		rows = append(rows, NavRowView{Key: "manage:media", Label: "Media", Icon: "fa-photo-film", URL: base + "/media"})

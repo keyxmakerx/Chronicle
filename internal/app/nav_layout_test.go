@@ -256,12 +256,12 @@ func TestNavCommandsJSON_OffersOnlyTheViewersRows(t *testing.T) {
 			t.Errorf("a player's palette offers %q, which is hidden from players", hidden)
 		}
 	}
-	for _, want := range []string{"Dashboard", "Journal", "Locations", "Cities", "All Pages"} {
+	for _, want := range []string{"Dashboard", "Journal", "Locations", "Cities", "All Pages", "Members"} {
 		if _, ok := playerCmds[want]; !ok {
 			t.Errorf("a player's palette is missing %q: %v", want, playerCmds)
 		}
 	}
-	for _, manage := range []string{"Members", "Customize", "Extensions", "Settings", "Owner dashboard"} {
+	for _, manage := range []string{"Customize", "Extensions", "Settings", "Owner dashboard"} {
 		if _, ok := playerCmds[manage]; ok {
 			t.Errorf("a player's palette offers the owner's %q", manage)
 		}
