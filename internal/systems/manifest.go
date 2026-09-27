@@ -333,6 +333,19 @@ func (m *SystemManifest) CharacterPresetByCategory() *EntityPresetDef {
 	return nil
 }
 
+// HasWidget reports whether this manifest declares a widget with the given
+// slug. Lets callers gate an optional page mount on "does the enabled
+// system actually provide this widget" instead of hardcoding a check
+// against one specific system package.
+func (m *SystemManifest) HasWidget(slug string) bool {
+	for i := range m.Widgets {
+		if m.Widgets[i].Slug == slug {
+			return true
+		}
+	}
+	return false
+}
+
 // ItemPreset returns the first entity preset with category "item", or nil
 // if no item preset is defined. Used by the Armory plugin and item sync.
 func (m *SystemManifest) ItemPreset() *EntityPresetDef {
