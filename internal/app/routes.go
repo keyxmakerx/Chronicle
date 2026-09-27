@@ -2719,6 +2719,7 @@ func (a *App) RegisterRoutes() {
 	noteHandler.SetMediaUploader(&mediaUploadAdapter{svc: mediaService})
 	noteHandler.SetMemberLister(campaignService)
 	noteHandler.SetCharacterLister(&journalCharacterAdapter{svc: entityService})
+	noteHandler.SetPageNamer(&jotPageNameAdapter{svc: entityService})
 	notes.RegisterRoutes(e, noteHandler, campaignService, authService)
 
 	// Relations widget routes already registered above (before REST API v1).
@@ -3716,6 +3717,29 @@ func (a *journalCharacterAdapter) ClaimedCharacters(ctx context.Context, campaig
 	out := make([]notes.ClaimedCharacter, 0, len(owned))
 	for _, e := range owned {
 		out = append(out, notes.ClaimedCharacter{ID: e.ID, Name: e.Name, TypeName: e.TypeName})
+	}
+	return out, nil
+}
+
+// jotPageNameAdapter adapts EntityService to notes.PageNamer: each page's
+// name, only for pages of the campaign the viewer may see.
+type jotPageNameAdapter struct {
+	svc entities.EntityService
+}
+
+// PageNames names the ids the viewer can see; the rest are left out.
+func (a *jotPageNameAdapter) PageNames(ctx context.Context, campaignID string, v permissions.Viewer, ids []string) (map[string]string, error) {
+	out := make(map[string]string, len(ids))
+	for _, id := range ids {
+		e, err := a.svc.GetByID(ctx, id)
+		if err != nil || e == nil || e.CampaignID != campaignID {
+			continue
+		}
+		perm, err := a.svc.CheckEntityAccess(ctx, id, v.Role(), v.UserID())
+		if err != nil || perm == nil || !perm.CanView {
+			continue
+		}
+		out[id] = e.Name
 	}
 	return out, nil
 }

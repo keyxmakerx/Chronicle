@@ -42,6 +42,7 @@ type Handler struct {
 	mediaUploader   MediaUploader
 	memberLister    MemberLister
 	characterLister CharacterLister
+	pageNamer       PageNamer
 }
 
 // NewHandler creates a new note handler backed by the given service.
@@ -67,6 +68,11 @@ func (h *Handler) SetMemberLister(ml MemberLister) {
 // SetCharacterLister sets the lookup behind the Journal's claim card.
 func (h *Handler) SetCharacterLister(cl CharacterLister) {
 	h.characterLister = cl
+}
+
+// SetPageNamer sets the lookup that names the pages jots sit on.
+func (h *Handler) SetPageNamer(pn PageNamer) {
+	h.pageNamer = pn
 }
 
 // List returns notes for the current user in the campaign (GET /campaigns/:id/notes).
@@ -207,6 +213,69 @@ func (h *Handler) Bulk(c echo.Context) error {
 		return err
 	}
 	return c.JSON(http.StatusOK, res)
+}
+
+// maxPageNames caps one page-name lookup; the jot panel asks per list.
+const maxPageNames = 200
+
+// PageNames names the pages behind jots, for the viewer
+// (GET /campaigns/:id/notes/page-names?ids=a,b,…). A page the viewer cannot
+// see is absent, exactly like one that does not exist.
+func (h *Handler) PageNames(c echo.Context) error {
+	cc := campaigns.GetCampaignContext(c)
+	if cc == nil {
+		return apperror.NewMissingContext()
+	}
+	var ids []string
+	seen := map[string]bool{}
+	for _, id := range strings.Split(c.QueryParam("ids"), ",") {
+		if idPattern.MatchString(id) && !seen[id] && len(ids) < maxPageNames {
+			seen[id] = true
+			ids = append(ids, id)
+		}
+	}
+	names := map[string]string{}
+	if h.pageNamer != nil && len(ids) > 0 {
+		var err error
+		if names, err = h.pageNamer.PageNames(c.Request().Context(), cc.Campaign.ID, viewerFor(c, cc), ids); err != nil {
+			return err
+		}
+	}
+	return c.JSON(http.StatusOK, names)
+}
+
+// SendToJournal copies one of the caller's jots into a new Journal note
+// (POST /campaigns/:id/notes/:noteId/send-to-journal). Owner only.
+func (h *Handler) SendToJournal(c echo.Context) error {
+	cc := campaigns.GetCampaignContext(c)
+	if cc == nil {
+		return apperror.NewMissingContext()
+	}
+	viewer := viewerFor(c, cc)
+	jot, err := h.viewableNote(c, cc, c.Param("noteId"))
+	if err != nil {
+		return err
+	}
+	if !jot.IsOwnedBy(viewer.UserID(), cc.Campaign.ID) {
+		return apperror.NewNotFound("note not found")
+	}
+	pageName := ""
+	if h.pageNamer != nil && jot.EntityID != nil {
+		// The note's backlink reads as the page's name, looked up as the
+		// owner sees it; a page they can no longer see stays unnamed.
+		if names, err := h.pageNamer.PageNames(c.Request().Context(), cc.Campaign.ID, viewer, []string{*jot.EntityID}); err == nil {
+			pageName = names[*jot.EntityID]
+		}
+	}
+	res, err := h.service.SendToJournal(c.Request().Context(), cc.Campaign.ID, viewer, jot.ID, pageName)
+	if err != nil {
+		return err
+	}
+	status := http.StatusCreated
+	if res.Existing {
+		status = http.StatusOK
+	}
+	return c.JSON(status, res)
 }
 
 // Create adds a new note (POST /campaigns/:id/notes).

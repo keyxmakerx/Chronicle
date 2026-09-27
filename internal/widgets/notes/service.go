@@ -44,6 +44,10 @@ type NoteService interface {
 	Labels(ctx context.Context, campaignID string, v permissions.Viewer, ids []string) (map[string]*NoteLabel, error)
 	Bulk(ctx context.Context, campaignID string, v permissions.Viewer, req BulkRequest) (*BulkResult, error)
 
+	// SendToJournal copies v's own jot into a new private Journal note linked
+	// to the jot's page, and records it on the jot (jots.go).
+	SendToJournal(ctx context.Context, campaignID string, v permissions.Viewer, jotID, pageName string) (*SendResult, error)
+
 	// ListSharedByCampaign returns every shared note in the campaign across
 	// all owners. Unlike the three list methods above it applies no per-user
 	// visibility filter, so it is owner-gated data: campaign export is the

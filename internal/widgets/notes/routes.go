@@ -30,6 +30,7 @@ func RegisterRoutes(e *echo.Echo, h *Handler, campaignSvc campaigns.CampaignServ
 	cg.GET("/notes/search", h.Search, player)
 	cg.GET("/notes/labels", h.Labels, player)
 	cg.GET("/notes/page-refs", h.PageRefs, player)
+	cg.GET("/notes/page-names", h.PageNames, player)
 	cg.POST("/notes/bulk", h.Bulk, player)
 
 	// CRUD — own notes + shared note access.
@@ -40,6 +41,7 @@ func RegisterRoutes(e *echo.Echo, h *Handler, campaignSvc campaigns.CampaignServ
 	cg.PUT("/notes/:noteId", h.Update, player)
 	cg.DELETE("/notes/:noteId", h.Delete, player)
 	cg.POST("/notes/:noteId/toggle", h.ToggleCheck, player)
+	cg.POST("/notes/:noteId/send-to-journal", h.SendToJournal, player)
 
 	// Edit locking — pessimistic lock for shared notes.
 	cg.POST("/notes/:noteId/lock", h.Lock, player)

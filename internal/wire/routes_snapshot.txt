@@ -311,6 +311,7 @@ GET	/notes/:noteId/versions/:vid	internal/widgets/notes/routes.go
 GET	/notes/index	internal/widgets/notes/routes.go
 GET	/notes/labels	internal/widgets/notes/routes.go
 GET	/notes/members	internal/widgets/notes/routes.go
+GET	/notes/page-names	internal/widgets/notes/routes.go
 GET	/notes/page-refs	internal/widgets/notes/routes.go
 GET	/notes/search	internal/widgets/notes/routes.go
 GET	/notifications	internal/plugins/sessions/routes.go
@@ -494,6 +495,7 @@ POST	/notes/:nid/attachments	internal/widgets/notes/routes.go
 POST	/notes/:noteId/force-unlock	internal/widgets/notes/routes.go
 POST	/notes/:noteId/heartbeat	internal/widgets/notes/routes.go
 POST	/notes/:noteId/lock	internal/widgets/notes/routes.go
+POST	/notes/:noteId/send-to-journal	internal/widgets/notes/routes.go
 POST	/notes/:noteId/toggle	internal/widgets/notes/routes.go
 POST	/notes/:noteId/unlock	internal/widgets/notes/routes.go
 POST	/notes/:noteId/versions/:vid/restore	internal/widgets/notes/routes.go
