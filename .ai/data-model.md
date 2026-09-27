@@ -128,7 +128,7 @@ numbered core migrations after it, tracked once each via `golang-migrate`'s
 
 | Table | Purpose | Notable columns |
 |---|---|---|
-| `notes` | Campaign-wide or entity-attached notes, with folders and live-edit locking | `parent_id` self-FK (folder nesting); `is_folder`; `content` JSON (legacy block array) + `entry`/`entry_html`; `shared_with` JSON array of user IDs (NULL = use `is_shared`); `locked_by`/`locked_at` (edit lock) |
+| `notes` | Journal notes (no page) and per-page jots, with folders and live-edit locking | `parent_id` self-FK (folder nesting); `is_folder`; `content` JSON (legacy block array) + `entry`/`entry_html`; audience in `is_shared` (party) / `shared_with` JSON user ids / `shared_with_gm`; `archived_at`; `linked_note_id` (jot → Journal note, no FK); `locked_by`/`locked_at` (edit lock) |
 | `note_versions` | Snapshot history on each save | FK→`notes` CASCADE; mirrors `notes`' content columns |
 | `note_attachments` | Audio + transcript attachments on a note | `duration_secs`, `transcript` LONGTEXT |
 

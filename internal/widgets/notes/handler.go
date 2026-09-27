@@ -10,6 +10,7 @@ import (
 
 	"github.com/keyxmakerx/chronicle/internal/apperror"
 	"github.com/keyxmakerx/chronicle/internal/middleware"
+	"github.com/keyxmakerx/chronicle/internal/permissions"
 	"github.com/keyxmakerx/chronicle/internal/plugins/auth"
 	"github.com/keyxmakerx/chronicle/internal/plugins/campaigns"
 )
@@ -69,26 +70,21 @@ func (h *Handler) List(c echo.Context) error {
 	if cc == nil {
 		return apperror.NewMissingContext()
 	}
-	userID := auth.GetUserID(c)
 
-	scope := c.QueryParam("scope")
-	entityID := c.QueryParam("entity_id")
-
-	var notes []Note
-	var err error
-
-	switch scope {
+	var scope ListScope
+	switch c.QueryParam("scope") {
 	case "entity":
-		if entityID == "" {
+		scope = ListScope{Kind: "entity", EntityID: c.QueryParam("entity_id")}
+		if scope.EntityID == "" {
 			return apperror.NewBadRequest("entity_id is required for entity scope")
 		}
-		notes, err = h.service.ListByEntity(c.Request().Context(), userID, cc.Campaign.ID, entityID)
 	case "campaign":
-		notes, err = h.service.ListCampaignWide(c.Request().Context(), userID, cc.Campaign.ID)
-	default:
-		notes, err = h.service.ListByUserAndCampaign(c.Request().Context(), userID, cc.Campaign.ID)
+		scope = ListScope{Kind: "campaign"}
+	case "jots":
+		scope = ListScope{Kind: "jots"}
 	}
 
+	notes, err := h.service.ListVisible(c.Request().Context(), cc.Campaign.ID, viewerFor(c, cc), scope)
 	if err != nil {
 		return err
 	}
@@ -104,14 +100,13 @@ func (h *Handler) Create(c echo.Context) error {
 	if cc == nil {
 		return apperror.NewMissingContext()
 	}
-	userID := auth.GetUserID(c)
 
 	var req CreateNoteRequest
 	if err := json.NewDecoder(c.Request().Body).Decode(&req); err != nil {
 		return apperror.NewBadRequest("invalid JSON body")
 	}
 
-	note, err := h.service.Create(c.Request().Context(), cc.Campaign.ID, userID, req)
+	note, err := h.service.Create(c.Request().Context(), cc.Campaign.ID, viewerFor(c, cc), req)
 	if err != nil {
 		return err
 	}
@@ -120,36 +115,30 @@ func (h *Handler) Create(c echo.Context) error {
 }
 
 // Update modifies an existing note (PUT /campaigns/:id/notes/:noteId).
-// Access: note owner OR any campaign member if the note is shared.
+// Access: anyone who can view the note may edit its title and body; only its
+// owner may change sharing, pinning, archiving or its folder.
 func (h *Handler) Update(c echo.Context) error {
 	cc := campaigns.GetCampaignContext(c)
 	if cc == nil {
 		return apperror.NewMissingContext()
 	}
-	userID := auth.GetUserID(c)
+	viewer := viewerFor(c, cc)
 	noteID := c.Param("noteId")
 
-	existing, err := h.service.GetByID(c.Request().Context(), noteID)
+	existing, err := h.viewableNote(c, cc, noteID)
 	if err != nil {
 		return err
-	}
-	if !canAccessNote(existing, userID, cc.Campaign.ID) {
-		return apperror.NewNotFound("note not found")
 	}
 
 	var req UpdateNoteRequest
 	if err := json.NewDecoder(c.Request().Body).Decode(&req); err != nil {
 		return apperror.NewBadRequest("invalid JSON body")
 	}
-
-	// Only the owner can change sharing/pinned status.
-	if existing.UserID != userID {
-		req.IsShared = nil
-		req.SharedWith = nil
-		req.Pinned = nil
+	if !existing.IsOwnedBy(viewer.UserID(), cc.Campaign.ID) {
+		req.StripOwnerOnly()
 	}
 
-	note, err := h.service.Update(c.Request().Context(), noteID, userID, req)
+	note, err := h.service.Update(c.Request().Context(), noteID, viewer, req)
 	if err != nil {
 		return err
 	}
@@ -188,15 +177,10 @@ func (h *Handler) ToggleCheck(c echo.Context) error {
 	if cc == nil {
 		return apperror.NewMissingContext()
 	}
-	userID := auth.GetUserID(c)
 	noteID := c.Param("noteId")
 
-	existing, err := h.service.GetByID(c.Request().Context(), noteID)
-	if err != nil {
+	if _, err := h.viewableNote(c, cc, noteID); err != nil {
 		return err
-	}
-	if !canAccessNote(existing, userID, cc.Campaign.ID) {
-		return apperror.NewNotFound("note not found")
 	}
 
 	var req ToggleCheckRequest
@@ -221,12 +205,8 @@ func (h *Handler) Lock(c echo.Context) error {
 	userID := auth.GetUserID(c)
 	noteID := c.Param("noteId")
 
-	existing, err := h.service.GetByID(c.Request().Context(), noteID)
-	if err != nil {
+	if _, err := h.viewableNote(c, cc, noteID); err != nil {
 		return err
-	}
-	if !canAccessNote(existing, userID, cc.Campaign.ID) {
-		return apperror.NewNotFound("note not found")
 	}
 
 	note, err := h.service.AcquireLock(c.Request().Context(), noteID, userID)
@@ -245,12 +225,8 @@ func (h *Handler) Unlock(c echo.Context) error {
 	userID := auth.GetUserID(c)
 	noteID := c.Param("noteId")
 
-	existing, err := h.service.GetByID(c.Request().Context(), noteID)
-	if err != nil {
+	if _, err := h.viewableNote(c, cc, noteID); err != nil {
 		return err
-	}
-	if !canAccessNote(existing, userID, cc.Campaign.ID) {
-		return apperror.NewNotFound("note not found")
 	}
 
 	if err := h.service.ReleaseLock(c.Request().Context(), noteID, userID); err != nil {
@@ -268,12 +244,8 @@ func (h *Handler) Heartbeat(c echo.Context) error {
 	userID := auth.GetUserID(c)
 	noteID := c.Param("noteId")
 
-	existing, err := h.service.GetByID(c.Request().Context(), noteID)
-	if err != nil {
+	if _, err := h.viewableNote(c, cc, noteID); err != nil {
 		return err
-	}
-	if !canAccessNote(existing, userID, cc.Campaign.ID) {
-		return apperror.NewNotFound("note not found")
 	}
 
 	if err := h.service.Heartbeat(c.Request().Context(), noteID, userID); err != nil {
@@ -294,6 +266,11 @@ func (h *Handler) ForceUnlock(c echo.Context) error {
 	if cc.MemberRole < campaigns.RoleOwner {
 		return apperror.NewForbidden("only campaign owners can force-unlock notes")
 	}
+	// The note must be one this campaign's owner can see: an owner of one
+	// campaign may not reach into another campaign's notes by ID.
+	if _, err := h.viewableNote(c, cc, noteID); err != nil {
+		return err
+	}
 
 	if err := h.service.ForceReleaseLock(c.Request().Context(), noteID); err != nil {
 		return err
@@ -307,15 +284,10 @@ func (h *Handler) ListVersions(c echo.Context) error {
 	if cc == nil {
 		return apperror.NewMissingContext()
 	}
-	userID := auth.GetUserID(c)
 	noteID := c.Param("noteId")
 
-	existing, err := h.service.GetByID(c.Request().Context(), noteID)
-	if err != nil {
+	if _, err := h.viewableNote(c, cc, noteID); err != nil {
 		return err
-	}
-	if !canAccessNote(existing, userID, cc.Campaign.ID) {
-		return apperror.NewNotFound("note not found")
 	}
 
 	versions, err := h.service.ListVersions(c.Request().Context(), noteID)
@@ -334,21 +306,21 @@ func (h *Handler) GetVersion(c echo.Context) error {
 	if cc == nil {
 		return apperror.NewMissingContext()
 	}
-	userID := auth.GetUserID(c)
 	noteID := c.Param("noteId")
 	versionID := c.Param("vid")
 
-	existing, err := h.service.GetByID(c.Request().Context(), noteID)
-	if err != nil {
+	if _, err := h.viewableNote(c, cc, noteID); err != nil {
 		return err
-	}
-	if !canAccessNote(existing, userID, cc.Campaign.ID) {
-		return apperror.NewNotFound("note not found")
 	}
 
 	version, err := h.service.GetVersion(c.Request().Context(), versionID)
 	if err != nil {
 		return err
+	}
+	// Access to the note in the URL is not access to a version of some
+	// other note: the version must belong to it.
+	if version.NoteID != noteID {
+		return apperror.NewNotFound("note version not found")
 	}
 	return c.JSON(http.StatusOK, version)
 }
@@ -364,12 +336,8 @@ func (h *Handler) RestoreVersion(c echo.Context) error {
 	noteID := c.Param("noteId")
 	versionID := c.Param("vid")
 
-	existing, err := h.service.GetByID(c.Request().Context(), noteID)
-	if err != nil {
+	if _, err := h.viewableNote(c, cc, noteID); err != nil {
 		return err
-	}
-	if !canAccessNote(existing, userID, cc.Campaign.ID) {
-		return apperror.NewNotFound("note not found")
 	}
 
 	note, err := h.service.RestoreVersion(c.Request().Context(), noteID, versionID, userID)
@@ -420,12 +388,26 @@ func (h *Handler) MembersAPI(c echo.Context) error {
 	return c.JSON(http.StatusOK, refs)
 }
 
-// canAccessNote checks if a user can access a note: owner, shared with
-// everyone (is_shared), or shared with this specific user (shared_with).
-// Delegates to Note.CanAccess so the web routes and the /api/v1 note routes
-// share one predicate instead of two that can drift apart.
-func canAccessNote(note *Note, userID, campaignID string) bool {
-	return note.CanAccess(userID, campaignID)
+// viewerFor is the note viewer for the session user. VisibilityRole folds a
+// co-DM grant into the Owner tier, which is exactly who "shared with the GM"
+// admits.
+func viewerFor(c echo.Context, cc *campaigns.CampaignContext) permissions.Viewer {
+	return permissions.RequestViewer(cc.VisibilityRole(), auth.GetUserID(c))
+}
+
+// viewableNote loads noteID and returns it only if the session user can view
+// it in this campaign (Note.CanView, the one predicate the web and REST API
+// routes share). Anything else is a 404, so a response never confirms that a
+// note the caller cannot see exists.
+func (h *Handler) viewableNote(c echo.Context, cc *campaigns.CampaignContext, noteID string) (*Note, error) {
+	note, err := h.service.GetByID(c.Request().Context(), noteID)
+	if err != nil {
+		return nil, err
+	}
+	if !note.CanView(viewerFor(c, cc), cc.Campaign.ID) {
+		return nil, apperror.NewNotFound("note not found")
+	}
+	return note, nil
 }
 
 // --- Attachment Handlers ---
@@ -438,15 +420,13 @@ func (h *Handler) ListAttachments(c echo.Context) error {
 	}
 
 	cc := campaigns.GetCampaignContext(c)
-	userID := auth.GetUserID(c)
+	if cc == nil {
+		return apperror.NewMissingContext()
+	}
 	noteID := c.Param("nid")
 
-	note, err := h.service.GetByID(c.Request().Context(), noteID)
-	if err != nil {
+	if _, err := h.viewableNote(c, cc, noteID); err != nil {
 		return err
-	}
-	if !canAccessNote(note, userID, cc.Campaign.ID) {
-		return apperror.NewForbidden("access denied")
 	}
 
 	attachments, err := h.attService.ListAttachments(c.Request().Context(), noteID)
@@ -467,15 +447,16 @@ func (h *Handler) UploadAttachment(c echo.Context) error {
 	}
 
 	cc := campaigns.GetCampaignContext(c)
+	if cc == nil {
+		return apperror.NewMissingContext()
+	}
 	userID := auth.GetUserID(c)
 	noteID := c.Param("nid")
 
-	note, err := h.service.GetByID(c.Request().Context(), noteID)
-	if err != nil {
+	// Attaching audio is editing the note: anyone who can view it in this
+	// campaign, as for its body.
+	if _, err := h.viewableNote(c, cc, noteID); err != nil {
 		return err
-	}
-	if note.UserID != userID && note.CampaignID != cc.Campaign.ID {
-		return apperror.NewForbidden("access denied")
 	}
 
 	file, err := c.FormFile("file")
@@ -528,11 +509,14 @@ func (h *Handler) DeleteAttachment(c echo.Context) error {
 	}
 
 	cc := campaigns.GetCampaignContext(c)
+	if cc == nil {
+		return apperror.NewMissingContext()
+	}
 	userID := auth.GetUserID(c)
 	noteID := c.Param("nid")
 	attID := c.Param("aid")
 
-	note, err := h.service.GetByID(c.Request().Context(), noteID)
+	note, err := h.viewableNote(c, cc, noteID)
 	if err != nil {
 		return err
 	}
@@ -565,11 +549,14 @@ func (h *Handler) UpdateTranscript(c echo.Context) error {
 	}
 
 	cc := campaigns.GetCampaignContext(c)
+	if cc == nil {
+		return apperror.NewMissingContext()
+	}
 	userID := auth.GetUserID(c)
 	noteID := c.Param("nid")
 	attID := c.Param("aid")
 
-	note, err := h.service.GetByID(c.Request().Context(), noteID)
+	note, err := h.viewableNote(c, cc, noteID)
 	if err != nil {
 		return err
 	}

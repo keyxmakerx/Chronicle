@@ -767,13 +767,17 @@ type noteEventPublisherAdapter struct {
 	bus ws.EventBus
 }
 
-// PublishNoteEvent translates note domain events into WebSocket messages.
-func (a *noteEventPublisherAdapter) PublishNoteEvent(eventType, campaignID, noteID string, note *notes.Note) {
-	if campaignID == "" {
+// PublishNoteEvent translates a note change into a WebSocket message that
+// carries IDs only and reaches only the note's audience. Clients refetch the
+// note over HTTP, where CanView decides what they get (#715). The payload
+// deliberately has no "id" key: a client that reads payload.id as a whole
+// note must skip the message, not overwrite its copy with an empty one.
+func (a *noteEventPublisherAdapter) PublishNoteEvent(ev notes.NoteEvent) {
+	if ev.CampaignID == "" {
 		return
 	}
 	var msgType ws.MessageType
-	switch eventType {
+	switch ev.Type {
 	case "created":
 		msgType = ws.MsgNoteCreated
 	case "updated":
@@ -783,8 +787,33 @@ func (a *noteEventPublisherAdapter) PublishNoteEvent(eventType, campaignID, note
 	default:
 		return
 	}
-	a.bus.Publish(ws.NewMessage(msgType, campaignID, noteID, note))
+	payload := map[string]string{"noteId": ev.NoteID}
+	if ev.EntityID != nil {
+		payload["entityId"] = *ev.EntityID
+	}
+	msg := ws.NewMessage(msgType, ev.CampaignID, ev.NoteID, payload)
+	msg.AllowedUsers, msg.StrictAudience = noteAudience(ev.Audience)
+	a.bus.Publish(msg)
 }
+
+// noteAudience maps a note's audience onto the hub's allowlist. Shared with
+// the party: no list. Otherwise the named users; a GM share lets the hub's
+// usual DM bypass admit the Owner and co-DMs, and without one the list binds
+// them too, because a private note is private from the GM.
+func noteAudience(a notes.Audience) (allowed []string, strict bool) {
+	if a.Everyone {
+		return nil, false
+	}
+	if len(a.Users) == 0 {
+		// An audience naming nobody reaches nobody; never widen a malformed
+		// one to "everyone", which is what an empty allowlist means.
+		return []string{noteNoRecipient}, true
+	}
+	return a.Users, !a.GMs
+}
+
+// noteNoRecipient is an allowlist entry no user id can equal (ids are UUIDs).
+const noteNoRecipient = "-"
 
 // entityNotesNotifierHolder is the late-bound bridge from
 // entity_notes.Service.Notify (function-typed) to the WebSocket bus.
@@ -2637,6 +2666,8 @@ func (a *App) RegisterRoutes() {
 	attRepo := notes.NewAttachmentRepository(a.DB)
 	noteSvc := notes.NewNoteServiceWithAttachments(noteRepo, attRepo)
 	noteAPIHandler := syncapi.NewNoteAPIHandler(syncService, noteSvc)
+	// Decides whether an API caller counts as a GM for notes shared with the GM.
+	noteAPIHandler.SetCampaignService(campaignService)
 
 	// Tag API handler for sync API — exposes tag CRUD and bulk tag operations.
 	tagAPIHandler := syncapi.NewTagAPIHandler(syncService, tagService, entityService, campaignService)

@@ -6,8 +6,10 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"strings"
 
 	"github.com/keyxmakerx/chronicle/internal/apperror"
+	"github.com/keyxmakerx/chronicle/internal/permissions"
 )
 
 // NoteRepository defines the data access contract for note operations.
@@ -17,17 +19,18 @@ type NoteRepository interface {
 	Update(ctx context.Context, note *Note) error
 	Delete(ctx context.Context, id string) error
 
-	// ListByUserAndCampaign returns all notes for a user in a campaign
-	// (own notes + shared notes from other users).
-	ListByUserAndCampaign(ctx context.Context, userID, campaignID string) ([]Note, error)
+	// ListVisible returns the notes in campaignID that v can read (the SQL
+	// twin of Note.CanView), narrowed by scope. Pinned first, then newest.
+	ListVisible(ctx context.Context, campaignID string, v permissions.Viewer, scope ListScope) ([]Note, error)
 
-	// ListByEntity returns notes for a user scoped to a specific entity
-	// (own notes + shared notes).
-	ListByEntity(ctx context.Context, userID, campaignID, entityID string) ([]Note, error)
+	// ListTree returns the id, parent, owner and folder flag of every note in
+	// the campaign, with no visibility filter. Internal structure only (cycle
+	// and ownership checks when filing or deleting folders); never returned
+	// to a client.
+	ListTree(ctx context.Context, campaignID string) ([]TreeRow, error)
 
-	// ListCampaignWide returns campaign-wide notes not scoped to any entity
-	// (own notes + shared notes).
-	ListCampaignWide(ctx context.Context, userID, campaignID string) ([]Note, error)
+	// ReparentToTop moves the given notes out of any folder.
+	ReparentToTop(ctx context.Context, ids []string) error
 
 	// ListSharedByCampaign returns every campaign-wide-shared note in the
 	// campaign regardless of which user owns it.
@@ -91,9 +94,25 @@ func NewAttachmentRepository(db *sql.DB) AttachmentRepository {
 }
 
 // noteColumns is the SELECT column list for notes queries.
-const noteColumns = `id, campaign_id, user_id, entity_id, parent_id, is_folder,
-	title, content, entry, entry_html, color, pinned, is_shared, shared_with,
+const noteColumns = `id, campaign_id, user_id, entity_id, linked_note_id, parent_id, is_folder,
+	title, content, entry, entry_html, color, pinned, archived_at, is_shared, shared_with, shared_with_gm,
 	last_edited_by, locked_by, locked_at, created_at, updated_at`
+
+// ListScope narrows ListVisible. The zero value lists every visible note.
+type ListScope struct {
+	// Kind is "" (all), "campaign" (Journal notes and folders: no page),
+	// "entity" (the jots on EntityID) or "jots" (every jot on any page).
+	Kind     string
+	EntityID string
+}
+
+// TreeRow is the structural shape of one note, for folder safety checks.
+type TreeRow struct {
+	ID       string
+	ParentID *string
+	UserID   string
+	IsFolder bool
+}
 
 // Create inserts a new note into the database.
 func (r *noteRepository) Create(ctx context.Context, note *Note) error {
@@ -103,18 +122,18 @@ func (r *noteRepository) Create(ctx context.Context, note *Note) error {
 	}
 
 	query := `INSERT INTO notes
-		(id, campaign_id, user_id, entity_id, parent_id, is_folder,
+		(id, campaign_id, user_id, entity_id, linked_note_id, parent_id, is_folder,
 		 title, content, entry, entry_html,
-		 color, pinned, is_shared, shared_with, last_edited_by)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+		 color, pinned, archived_at, is_shared, shared_with, shared_with_gm, last_edited_by)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
 
 	sharedWithJSON := MarshalSharedWith(note.SharedWith)
 
 	_, err = r.db.ExecContext(ctx, query,
-		note.ID, note.CampaignID, note.UserID, note.EntityID,
+		note.ID, note.CampaignID, note.UserID, note.EntityID, note.LinkedNoteID,
 		note.ParentID, note.IsFolder,
 		note.Title, contentJSON, note.Entry, note.EntryHTML,
-		note.Color, note.Pinned, note.IsShared, sharedWithJSON, note.LastEditedBy,
+		note.Color, note.Pinned, note.ArchivedAt, note.IsShared, sharedWithJSON, note.SharedWithGM, note.LastEditedBy,
 	)
 	if err != nil {
 		return fmt.Errorf("inserting note: %w", err)
@@ -143,14 +162,14 @@ func (r *noteRepository) Update(ctx context.Context, note *Note) error {
 
 	query := `UPDATE notes
 		SET title = ?, content = ?, entry = ?, entry_html = ?,
-		    color = ?, pinned = ?, is_shared = ?, shared_with = ?,
-		    last_edited_by = ?, parent_id = ?, updated_at = CURRENT_TIMESTAMP
+		    color = ?, pinned = ?, archived_at = ?, is_shared = ?, shared_with = ?, shared_with_gm = ?,
+		    linked_note_id = ?, last_edited_by = ?, parent_id = ?, updated_at = CURRENT_TIMESTAMP
 		WHERE id = ?`
 
 	result, err := r.db.ExecContext(ctx, query,
 		note.Title, contentJSON, note.Entry, note.EntryHTML,
-		note.Color, note.Pinned, note.IsShared, sharedWithJSON,
-		note.LastEditedBy, note.ParentID, note.ID,
+		note.Color, note.Pinned, note.ArchivedAt, note.IsShared, sharedWithJSON, note.SharedWithGM,
+		note.LinkedNoteID, note.LastEditedBy, note.ParentID, note.ID,
 	)
 	if err != nil {
 		return fmt.Errorf("updating note: %w", err)
@@ -177,32 +196,74 @@ func (r *noteRepository) Delete(ctx context.Context, id string) error {
 	return nil
 }
 
-// noteVisFilter is the WHERE fragment for note visibility: own notes, shared
-// with everyone (is_shared), or shared with this specific user (shared_with JSON).
-const noteVisFilter = `(user_id = ? OR is_shared = TRUE OR JSON_CONTAINS(shared_with, JSON_QUOTE(?), '$'))`
-
-// ListByUserAndCampaign returns own + shared notes for a user in a campaign.
-func (r *noteRepository) ListByUserAndCampaign(ctx context.Context, userID, campaignID string) ([]Note, error) {
-	query := `SELECT ` + noteColumns + `
-		FROM notes WHERE campaign_id = ? AND ` + noteVisFilter + `
-		ORDER BY pinned DESC, updated_at DESC`
-	return r.scanNotes(ctx, query, campaignID, userID, userID)
+// visibleFilter is the SQL twin of Note.CanView: the owner, a party share, a
+// share naming the viewer, or a GM share when the viewer is a GM. The caller
+// has already refused an anonymous viewer, so user_id = '' never matches.
+func visibleFilter(v permissions.Viewer) (string, []any) {
+	return `(user_id = ? OR is_shared = TRUE OR JSON_CONTAINS(shared_with, JSON_QUOTE(?), '$')
+		OR (shared_with_gm = TRUE AND ?))`,
+		[]any{v.UserID(), v.UserID(), permissions.CanSeeDmOnly(v.Role())}
 }
 
-// ListByEntity returns own + shared notes scoped to a specific entity.
-func (r *noteRepository) ListByEntity(ctx context.Context, userID, campaignID, entityID string) ([]Note, error) {
-	query := `SELECT ` + noteColumns + `
-		FROM notes WHERE campaign_id = ? AND ` + noteVisFilter + ` AND entity_id = ?
+// ListVisible returns the notes v can read in campaignID, narrowed by scope.
+func (r *noteRepository) ListVisible(ctx context.Context, campaignID string, v permissions.Viewer, scope ListScope) ([]Note, error) {
+	if v.UserID() == "" {
+		return nil, nil
+	}
+	vis, visArgs := visibleFilter(v)
+	where := `campaign_id = ? AND ` + vis
+	args := append([]any{campaignID}, visArgs...)
+	switch scope.Kind {
+	case "":
+	case "campaign":
+		where += ` AND entity_id IS NULL`
+	case "jots":
+		where += ` AND entity_id IS NOT NULL`
+	case "entity":
+		where += ` AND entity_id = ?`
+		args = append(args, scope.EntityID)
+	default:
+		return nil, fmt.Errorf("unknown note list scope %q", scope.Kind)
+	}
+	query := `SELECT ` + noteColumns + ` FROM notes WHERE ` + where + `
 		ORDER BY pinned DESC, updated_at DESC`
-	return r.scanNotes(ctx, query, campaignID, userID, userID, entityID)
+	return r.scanNotes(ctx, query, args...)
 }
 
-// ListCampaignWide returns own + shared campaign-wide notes (not entity-scoped).
-func (r *noteRepository) ListCampaignWide(ctx context.Context, userID, campaignID string) ([]Note, error) {
-	query := `SELECT ` + noteColumns + `
-		FROM notes WHERE campaign_id = ? AND ` + noteVisFilter + ` AND entity_id IS NULL
-		ORDER BY pinned DESC, updated_at DESC`
-	return r.scanNotes(ctx, query, campaignID, userID, userID)
+// ListTree returns every note's structural row in the campaign, unfiltered.
+func (r *noteRepository) ListTree(ctx context.Context, campaignID string) ([]TreeRow, error) {
+	rows, err := r.db.QueryContext(ctx,
+		`SELECT id, parent_id, user_id, is_folder FROM notes WHERE campaign_id = ?`, campaignID)
+	if err != nil {
+		return nil, fmt.Errorf("querying note tree: %w", err)
+	}
+	defer rows.Close()
+	var out []TreeRow
+	for rows.Next() {
+		var t TreeRow
+		if err := rows.Scan(&t.ID, &t.ParentID, &t.UserID, &t.IsFolder); err != nil {
+			return nil, fmt.Errorf("scanning note tree row: %w", err)
+		}
+		out = append(out, t)
+	}
+	return out, rows.Err()
+}
+
+// ReparentToTop clears parent_id on the given notes.
+func (r *noteRepository) ReparentToTop(ctx context.Context, ids []string) error {
+	if len(ids) == 0 {
+		return nil
+	}
+	placeholders := strings.TrimSuffix(strings.Repeat("?,", len(ids)), ",")
+	args := make([]any, len(ids))
+	for i, id := range ids {
+		args[i] = id
+	}
+	if _, err := r.db.ExecContext(ctx,
+		`UPDATE notes SET parent_id = NULL WHERE id IN (`+placeholders+`)`, args...); err != nil {
+		return fmt.Errorf("reparenting notes: %w", err)
+	}
+	return nil
 }
 
 // ListSharedByCampaign returns all campaign-wide-shared notes for a campaign,
@@ -367,10 +428,10 @@ func (r *noteRepository) scanNote(row *sql.Row) (*Note, error) {
 	var sharedWithRaw *string
 
 	err := row.Scan(
-		&n.ID, &n.CampaignID, &n.UserID, &n.EntityID,
+		&n.ID, &n.CampaignID, &n.UserID, &n.EntityID, &n.LinkedNoteID,
 		&n.ParentID, &n.IsFolder,
 		&n.Title, &contentRaw, &n.Entry, &n.EntryHTML,
-		&n.Color, &n.Pinned, &n.IsShared, &sharedWithRaw,
+		&n.Color, &n.Pinned, &n.ArchivedAt, &n.IsShared, &sharedWithRaw, &n.SharedWithGM,
 		&n.LastEditedBy, &n.LockedBy, &n.LockedAt,
 		&n.CreatedAt, &n.UpdatedAt,
 	)
@@ -387,6 +448,7 @@ func (r *noteRepository) scanNote(row *sql.Row) (*Note, error) {
 		}
 	}
 	n.SharedWith = UnmarshalSharedWith(sharedWithRaw)
+	n.derive()
 	return n, nil
 }
 
@@ -405,10 +467,10 @@ func (r *noteRepository) scanNotes(ctx context.Context, query string, args ...an
 		var sharedWithRaw *string
 
 		if err := rows.Scan(
-			&n.ID, &n.CampaignID, &n.UserID, &n.EntityID,
+			&n.ID, &n.CampaignID, &n.UserID, &n.EntityID, &n.LinkedNoteID,
 			&n.ParentID, &n.IsFolder,
 			&n.Title, &contentRaw, &n.Entry, &n.EntryHTML,
-			&n.Color, &n.Pinned, &n.IsShared, &sharedWithRaw,
+			&n.Color, &n.Pinned, &n.ArchivedAt, &n.IsShared, &sharedWithRaw, &n.SharedWithGM,
 			&n.LastEditedBy, &n.LockedBy, &n.LockedAt,
 			&n.CreatedAt, &n.UpdatedAt,
 		); err != nil {
@@ -421,6 +483,7 @@ func (r *noteRepository) scanNotes(ctx context.Context, query string, args ...an
 			}
 		}
 		n.SharedWith = UnmarshalSharedWith(sharedWithRaw)
+		n.derive()
 		notes = append(notes, n)
 	}
 	return notes, rows.Err()

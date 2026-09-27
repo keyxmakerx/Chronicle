@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/keyxmakerx/chronicle/internal/apperror"
+	"github.com/keyxmakerx/chronicle/internal/permissions"
 )
 
 // --- Mock Repository ---
@@ -17,9 +18,9 @@ type mockNoteRepo struct {
 	findByIDFn               func(ctx context.Context, id string) (*Note, error)
 	updateFn                 func(ctx context.Context, note *Note) error
 	deleteFn                 func(ctx context.Context, id string) error
-	listByUserAndCampaignFn  func(ctx context.Context, userID, campaignID string) ([]Note, error)
-	listByEntityFn           func(ctx context.Context, userID, campaignID, entityID string) ([]Note, error)
-	listCampaignWideFn       func(ctx context.Context, userID, campaignID string) ([]Note, error)
+	listVisibleFn            func(ctx context.Context, campaignID string, v permissions.Viewer, scope ListScope) ([]Note, error)
+	listTreeFn               func(ctx context.Context, campaignID string) ([]TreeRow, error)
+	reparentToTopFn          func(ctx context.Context, ids []string) error
 	listSharedByCampaignFn   func(ctx context.Context, campaignID string) ([]Note, error)
 	acquireLockFn            func(ctx context.Context, noteID, userID string) (bool, error)
 	releaseLockFn            func(ctx context.Context, noteID, userID string) error
@@ -59,25 +60,25 @@ func (m *mockNoteRepo) Delete(ctx context.Context, id string) error {
 	return nil
 }
 
-func (m *mockNoteRepo) ListByUserAndCampaign(ctx context.Context, userID, campaignID string) ([]Note, error) {
-	if m.listByUserAndCampaignFn != nil {
-		return m.listByUserAndCampaignFn(ctx, userID, campaignID)
+func (m *mockNoteRepo) ListVisible(ctx context.Context, campaignID string, v permissions.Viewer, scope ListScope) ([]Note, error) {
+	if m.listVisibleFn != nil {
+		return m.listVisibleFn(ctx, campaignID, v, scope)
 	}
 	return nil, nil
 }
 
-func (m *mockNoteRepo) ListByEntity(ctx context.Context, userID, campaignID, entityID string) ([]Note, error) {
-	if m.listByEntityFn != nil {
-		return m.listByEntityFn(ctx, userID, campaignID, entityID)
+func (m *mockNoteRepo) ListTree(ctx context.Context, campaignID string) ([]TreeRow, error) {
+	if m.listTreeFn != nil {
+		return m.listTreeFn(ctx, campaignID)
 	}
 	return nil, nil
 }
 
-func (m *mockNoteRepo) ListCampaignWide(ctx context.Context, userID, campaignID string) ([]Note, error) {
-	if m.listCampaignWideFn != nil {
-		return m.listCampaignWideFn(ctx, userID, campaignID)
+func (m *mockNoteRepo) ReparentToTop(ctx context.Context, ids []string) error {
+	if m.reparentToTopFn != nil {
+		return m.reparentToTopFn(ctx, ids)
 	}
-	return nil, nil
+	return nil
 }
 
 func (m *mockNoteRepo) ListSharedByCampaign(ctx context.Context, campaignID string) ([]Note, error) {
@@ -145,6 +146,16 @@ func (m *mockNoteRepo) PruneVersions(ctx context.Context, noteID string, keep in
 
 // --- Test Helpers ---
 
+// player is a plain member viewer: no GM visibility.
+func player(userID string) permissions.Viewer {
+	return permissions.RequestViewer(permissions.RolePlayer, userID)
+}
+
+// gm is a campaign Owner viewer.
+func gm(userID string) permissions.Viewer {
+	return permissions.RequestViewer(permissions.RoleOwner, userID)
+}
+
 // assertAppError checks that err is an *apperror.AppError with the expected code.
 func assertAppError(t *testing.T, err error, expectedCode int) {
 	t.Helper()
@@ -196,7 +207,7 @@ func TestCreate_Success(t *testing.T) {
 	}
 
 	svc := NewNoteService(repo)
-	note, err := svc.Create(context.Background(), "camp-1", "user-1", CreateNoteRequest{
+	note, err := svc.Create(context.Background(), "camp-1", player("user-1"), CreateNoteRequest{
 		Title:   "My Note",
 		Content: []Block{{Type: "text", Value: "Hello"}},
 		Color:   "#ff0000",
@@ -234,7 +245,7 @@ func TestCreate_EmptyTitleDefaultsToUntitled(t *testing.T) {
 	}
 
 	svc := NewNoteService(repo)
-	note, err := svc.Create(context.Background(), "camp-1", "user-1", CreateNoteRequest{
+	note, err := svc.Create(context.Background(), "camp-1", player("user-1"), CreateNoteRequest{
 		Title: "",
 	})
 	if err != nil {
@@ -258,7 +269,7 @@ func TestCreate_WhitespaceOnlyTitleDefaultsToUntitled(t *testing.T) {
 	}
 
 	svc := NewNoteService(repo)
-	note, err := svc.Create(context.Background(), "camp-1", "user-1", CreateNoteRequest{
+	note, err := svc.Create(context.Background(), "camp-1", player("user-1"), CreateNoteRequest{
 		Title: "   ",
 	})
 	if err != nil {
@@ -275,7 +286,7 @@ func TestCreate_TitleTooLong(t *testing.T) {
 	for i := range longTitle {
 		longTitle = longTitle[:i] + "a" + longTitle[i+1:]
 	}
-	_, err := svc.Create(context.Background(), "camp-1", "user-1", CreateNoteRequest{
+	_, err := svc.Create(context.Background(), "camp-1", player("user-1"), CreateNoteRequest{
 		Title: longTitle,
 	})
 	assertAppError(t, err, 400)
@@ -294,7 +305,7 @@ func TestCreate_DefaultColor(t *testing.T) {
 	}
 
 	svc := NewNoteService(repo)
-	note, err := svc.Create(context.Background(), "camp-1", "user-1", CreateNoteRequest{
+	note, err := svc.Create(context.Background(), "camp-1", player("user-1"), CreateNoteRequest{
 		Title: "Test",
 		Color: "", // Empty should default.
 	})
@@ -319,7 +330,7 @@ func TestCreate_NilContentDefaultsToEmpty(t *testing.T) {
 	}
 
 	svc := NewNoteService(repo)
-	note, err := svc.Create(context.Background(), "camp-1", "user-1", CreateNoteRequest{
+	note, err := svc.Create(context.Background(), "camp-1", player("user-1"), CreateNoteRequest{
 		Title:   "Test",
 		Content: nil,
 	})
@@ -348,7 +359,7 @@ func TestCreate_WithEntityScope(t *testing.T) {
 	}
 
 	svc := NewNoteService(repo)
-	note, err := svc.Create(context.Background(), "camp-1", "user-1", CreateNoteRequest{
+	note, err := svc.Create(context.Background(), "camp-1", player("user-1"), CreateNoteRequest{
 		Title:    "Test",
 		EntityID: &entityID,
 	})
@@ -368,7 +379,7 @@ func TestCreate_RepoError(t *testing.T) {
 	}
 
 	svc := NewNoteService(repo)
-	_, err := svc.Create(context.Background(), "camp-1", "user-1", CreateNoteRequest{
+	_, err := svc.Create(context.Background(), "camp-1", player("user-1"), CreateNoteRequest{
 		Title: "Test",
 	})
 	if err == nil {
@@ -389,7 +400,7 @@ func TestUpdate_Success(t *testing.T) {
 	svc := NewNoteService(repo)
 	newTitle := "Updated Title"
 	pinned := true
-	note, err := svc.Update(context.Background(), "note-123", "user-1", UpdateNoteRequest{
+	note, err := svc.Update(context.Background(), "note-123", player("user-1"), UpdateNoteRequest{
 		Title:  &newTitle,
 		Pinned: &pinned,
 	})
@@ -407,7 +418,7 @@ func TestUpdate_Success(t *testing.T) {
 func TestUpdate_NotFound(t *testing.T) {
 	svc := NewNoteService(&mockNoteRepo{})
 	newTitle := "Test"
-	_, err := svc.Update(context.Background(), "nonexistent", "user-1", UpdateNoteRequest{
+	_, err := svc.Update(context.Background(), "nonexistent", player("user-1"), UpdateNoteRequest{
 		Title: &newTitle,
 	})
 	assertAppError(t, err, 404)
@@ -426,7 +437,7 @@ func TestUpdate_TitleTooLong(t *testing.T) {
 	for i := range longTitle {
 		longTitle = longTitle[:i] + "x" + longTitle[i+1:]
 	}
-	_, err := svc.Update(context.Background(), "note-123", "user-1", UpdateNoteRequest{
+	_, err := svc.Update(context.Background(), "note-123", player("user-1"), UpdateNoteRequest{
 		Title: &longTitle,
 	})
 	assertAppError(t, err, 400)
@@ -442,7 +453,7 @@ func TestUpdate_EmptyTitleBecomesUntitled(t *testing.T) {
 
 	svc := NewNoteService(repo)
 	emptyTitle := ""
-	note, err := svc.Update(context.Background(), "note-123", "user-1", UpdateNoteRequest{
+	note, err := svc.Update(context.Background(), "note-123", player("user-1"), UpdateNoteRequest{
 		Title: &emptyTitle,
 	})
 	if err != nil {
@@ -463,7 +474,7 @@ func TestUpdate_ContentReplacement(t *testing.T) {
 
 	svc := NewNoteService(repo)
 	newContent := []Block{{Type: "text", Value: "Replaced"}}
-	note, err := svc.Update(context.Background(), "note-123", "user-1", UpdateNoteRequest{
+	note, err := svc.Update(context.Background(), "note-123", player("user-1"), UpdateNoteRequest{
 		Content: &newContent,
 	})
 	if err != nil {
@@ -484,7 +495,7 @@ func TestUpdate_ColorChange(t *testing.T) {
 
 	svc := NewNoteService(repo)
 	newColor := "#ff5733"
-	note, err := svc.Update(context.Background(), "note-123", "user-1", UpdateNoteRequest{
+	note, err := svc.Update(context.Background(), "note-123", player("user-1"), UpdateNoteRequest{
 		Color: &newColor,
 	})
 	if err != nil {
@@ -652,13 +663,13 @@ func TestToggleCheck_NoteNotFound(t *testing.T) {
 
 // --- List Tests ---
 
-func TestListByUserAndCampaign(t *testing.T) {
+func TestListByUserAndCampaign_ListsAsAPlainMember(t *testing.T) {
+	var got permissions.Viewer
+	var gotScope ListScope
 	repo := &mockNoteRepo{
-		listByUserAndCampaignFn: func(ctx context.Context, userID, campaignID string) ([]Note, error) {
-			return []Note{
-				{ID: "1", Title: "Note 1"},
-				{ID: "2", Title: "Note 2"},
-			}, nil
+		listVisibleFn: func(ctx context.Context, campaignID string, v permissions.Viewer, scope ListScope) ([]Note, error) {
+			got, gotScope = v, scope
+			return []Note{{ID: "1"}, {ID: "2"}}, nil
 		},
 	}
 
@@ -670,42 +681,29 @@ func TestListByUserAndCampaign(t *testing.T) {
 	if len(notes) != 2 {
 		t.Errorf("expected 2 notes, got %d", len(notes))
 	}
+	if got.UserID() != "user-1" || permissions.CanSeeDmOnly(got.Role()) {
+		t.Errorf("must list as a plain member (no GM visibility), got role %d user %q", got.Role(), got.UserID())
+	}
+	if gotScope.Kind != "" {
+		t.Errorf("expected the unscoped list, got %q", gotScope.Kind)
+	}
 }
 
-func TestListByEntity(t *testing.T) {
+func TestListVisible_PassesScopeThrough(t *testing.T) {
+	var gotScope ListScope
 	repo := &mockNoteRepo{
-		listByEntityFn: func(ctx context.Context, userID, campaignID, entityID string) ([]Note, error) {
-			if entityID != "entity-42" {
-				t.Errorf("expected entity-42, got %s", entityID)
-			}
+		listVisibleFn: func(ctx context.Context, campaignID string, v permissions.Viewer, scope ListScope) ([]Note, error) {
+			gotScope = scope
 			return []Note{{ID: "1"}}, nil
 		},
 	}
 
 	svc := NewNoteService(repo)
-	notes, err := svc.ListByEntity(context.Background(), "user-1", "camp-1", "entity-42")
-	if err != nil {
+	if _, err := svc.ListVisible(context.Background(), "camp-1", player("user-1"), ListScope{Kind: "entity", EntityID: "entity-42"}); err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if len(notes) != 1 {
-		t.Errorf("expected 1 note, got %d", len(notes))
-	}
-}
-
-func TestListCampaignWide(t *testing.T) {
-	repo := &mockNoteRepo{
-		listCampaignWideFn: func(ctx context.Context, userID, campaignID string) ([]Note, error) {
-			return []Note{{ID: "1"}, {ID: "2"}, {ID: "3"}}, nil
-		},
-	}
-
-	svc := NewNoteService(repo)
-	notes, err := svc.ListCampaignWide(context.Background(), "user-1", "camp-1")
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	if len(notes) != 3 {
-		t.Errorf("expected 3 notes, got %d", len(notes))
+	if gotScope.Kind != "entity" || gotScope.EntityID != "entity-42" {
+		t.Errorf("scope not passed through: %+v", gotScope)
 	}
 }
 
@@ -748,7 +746,7 @@ func TestCreate_Folder(t *testing.T) {
 	}
 
 	svc := NewNoteService(repo)
-	note, err := svc.Create(context.Background(), "camp-1", "user-1", CreateNoteRequest{
+	note, err := svc.Create(context.Background(), "camp-1", player("user-1"), CreateNoteRequest{
 		Title:    "My Folder",
 		IsFolder: true,
 	})
@@ -765,6 +763,7 @@ func TestCreate_Folder(t *testing.T) {
 
 func TestCreate_NoteWithParentID(t *testing.T) {
 	parentID := "folder-1"
+	folder := &Note{ID: "folder-1", CampaignID: "camp-1", UserID: "user-1", IsFolder: true}
 	var createdNote *Note
 	repo := &mockNoteRepo{
 		createFn: func(ctx context.Context, note *Note) error {
@@ -772,12 +771,15 @@ func TestCreate_NoteWithParentID(t *testing.T) {
 			return nil
 		},
 		findByIDFn: func(ctx context.Context, id string) (*Note, error) {
+			if id == "folder-1" {
+				return folder, nil
+			}
 			return createdNote, nil
 		},
 	}
 
 	svc := NewNoteService(repo)
-	note, err := svc.Create(context.Background(), "camp-1", "user-1", CreateNoteRequest{
+	note, err := svc.Create(context.Background(), "camp-1", player("user-1"), CreateNoteRequest{
 		Title:    "Child Note",
 		ParentID: &parentID,
 	})
@@ -791,15 +793,19 @@ func TestCreate_NoteWithParentID(t *testing.T) {
 
 func TestUpdate_MoveNoteToFolder(t *testing.T) {
 	existing := sampleNote()
+	folder := &Note{ID: "folder-1", CampaignID: "camp-1", UserID: "user-1", IsFolder: true}
 	repo := &mockNoteRepo{
 		findByIDFn: func(ctx context.Context, id string) (*Note, error) {
+			if id == "folder-1" {
+				return folder, nil
+			}
 			return existing, nil
 		},
 	}
 
 	svc := NewNoteService(repo)
 	parentID := "folder-1"
-	note, err := svc.Update(context.Background(), "note-123", "user-1", UpdateNoteRequest{
+	note, err := svc.Update(context.Background(), "note-123", player("user-1"), UpdateNoteRequest{
 		ParentID: &parentID,
 	})
 	if err != nil {
@@ -823,7 +829,7 @@ func TestUpdate_MoveNoteToTopLevel(t *testing.T) {
 
 	svc := NewNoteService(repo)
 	emptyParent := ""
-	note, err := svc.Update(context.Background(), "note-123", "user-1", UpdateNoteRequest{
+	note, err := svc.Update(context.Background(), "note-123", player("user-1"), UpdateNoteRequest{
 		ParentID: &emptyParent,
 	})
 	if err != nil {
