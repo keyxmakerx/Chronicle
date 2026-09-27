@@ -18,6 +18,7 @@ import (
 	"net/http/httptest"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/labstack/echo/v4"
 	emw "github.com/labstack/echo/v4/middleware"
@@ -178,6 +179,9 @@ func (f *fakeCalendarSvc) PreviewPreset(_ context.Context, name string) (*Import
 }
 func (f *fakeCalendarSvc) CreateCalendarFromImport(_ context.Context, campaignID string, ir *ImportResult, _ CreateCalendarFromImportOptions) (*Calendar, error) {
 	return &Calendar{ID: "cal-imported", CampaignID: campaignID, Name: ir.CalendarName}, nil
+}
+func (f *fakeCalendarSvc) PreviewAnchorMove(context.Context, string, string, int, int, int, time.Time) (*AnchorMovePreview, error) {
+	return &AnchorMovePreview{}, nil
 }
 
 // --- Harness ---

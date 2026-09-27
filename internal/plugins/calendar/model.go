@@ -150,8 +150,11 @@ type Calendar struct {
 	ForecastsEnabled bool `json:"forecasts_enabled"`
 	// MonthStartsNewWeek makes day 1 of every month the first weekday, with
 	// intercalary festival days belonging to no week, so a festival never
-	// shifts the weekdays that follow it. TODO(#741): the day counter
-	// (constLenDayIndex) does not read this switch yet.
+	// shifts the weekdays that follow it (a Harptos-style calendar: ten-day
+	// "tendays" that reset every month, with 1-day festivals between months
+	// belonging to no week at all). WeekdayIndex is the single reader of this
+	// switch — every weekday placement (recurrence display, a future grid
+	// column) goes through it, so the two can never disagree.
 	MonthStartsNewWeek bool `json:"month_starts_new_week"`
 	// Per-calendar visibility, mirroring the event model: Visibility is
 	// "everyone" | "dm_only"; VisibilityRules is the optional
@@ -326,43 +329,100 @@ func IsSupportedRecurrenceType(t string) bool {
 }
 
 // absDayIndex returns a calendar-absolute day number for (year, month, day).
-// It is the single place the day-counter choice is made; both recurrence
-// expansion (OccursOn) and the display weekday column consume it, so a weekly
-// event and the grid column it renders on can never disagree. month is
-// 1-based.
+// It is the single place the day-counter choice is made; recurrence expansion
+// (OccursOn) and WeekdayIndex's continuous-week branch both consume it, so a
+// weekly event and the weekday column it renders on can never disagree.
+// month is 1-based.
 //
 // Real-time (Gregorian) calendars use the proleptic-Gregorian Julian Day
-// Number, a true day counter that advances by exactly one across a leap day,
-// instead of the constant-length sum (year*YearLength()), which misses a day
-// per elapsed Gregorian leap year and would collapse Feb 29 and Mar 1 onto the
-// same index. Only flagged real-time calendars take this branch; fantasy and
-// reallife-but-manual calendars keep the constant-length geometry unchanged.
+// Number, a true day counter that advances by exactly one across a leap day.
+// A positive year delegates to AbsoluteDay, the same leap-aware closed-form
+// counter moon-phase math already uses — this used to be a separate,
+// leap-naive constant-length sum (year*YearLength()) that diverged from
+// AbsoluteDay by one day per elapsed leap year for positive years;
+// reconciled so recurrence, weekday placement and moon phase can never drift
+// apart there.
+//
+// year <= 0 stays on the old linear formula: AbsoluteDay's leap term is
+// defined only for year > 0 (its own doc comment — "a negative or zero year
+// contributes nothing"), so delegating unconditionally would collapse every
+// non-positive year onto the same index (AbsoluteDay(-5,1,1) ==
+// AbsoluteDay(0,1,1)), breaking recurrence and weekday placement for any
+// calendar that permits year 0 or negative years. linearDayIndex stays
+// leap-unaware but strictly monotonic across zero and negative years, which
+// is what those two consumers actually need.
 func (c *Calendar) absDayIndex(year, month, day int) int {
 	if c.UsesRealTime() {
 		return gregorianJDN(year, month, day)
 	}
-	return c.constLenDayIndex(year, month, day)
+	if year <= 0 {
+		return c.linearDayIndex(year, month, day)
+	}
+	return c.AbsoluteDay(year, month, day)
 }
 
-// constLenDayIndex is the fixed-geometry absolute-day counter:
-// year*YearLength() + prior configured month days + day (month 1-based). It is
-// the one home for the constant-length formula shared by absDayIndex's
-// non-real-time branch and the display weekday path, so the geometry can
-// never drift between recurrence and display.
-//
-// This counter and Calendar.AbsoluteDay (which is leap-aware, via
-// YearLengthForYear) diverge by exactly one day per elapsed leap year: a
-// per-day moon disc, which uses AbsoluteDay, can drift against the weekday
-// grid cell, which uses this counter. Reconciling them would shift the
-// weekday column of every calendar in the operator's production database, so
-// it needs an operator-gated migration, not a quiet fix here.
-// TODO(keyxmakerx/Chronicle#741): reconcile the two day counters for V5.
-func (c *Calendar) constLenDayIndex(year, month, day int) int {
+// linearDayIndex is the constant-length, leap-unaware absolute-day counter:
+// year*YearLength() + prior configured month days + day (month 1-based).
+// absDayIndex's fallback for year <= 0 — see its doc comment.
+func (c *Calendar) linearDayIndex(year, month, day int) int {
 	abs := year * c.YearLength()
 	for i := 0; i < month-1 && i < len(c.Months); i++ {
 		abs += c.Months[i].Days
 	}
 	return abs + day
+}
+
+// monthIsIntercalary reports whether the 1-based month index refers to an
+// intercalary (festival) month. Out-of-range indices are not intercalary —
+// callers that pass a bad month get "not intercalary" rather than a panic.
+func (c *Calendar) monthIsIntercalary(month int) bool {
+	i := month - 1
+	if i < 0 || i >= len(c.Months) {
+		return false
+	}
+	return c.Months[i].IsIntercalary
+}
+
+// WeekdayIndex returns the 0-based index into c.Weekdays that (year, month,
+// day) falls on. It is the single function any weekday renderer (grid column,
+// list badge) calls to place a day in its week — never absDayIndex's modulo
+// directly, so MonthStartsNewWeek's reset/no-week rules apply everywhere or
+// nowhere.
+//
+// LIMITATION: OccursOn's week-based recurrence (weekly/biweekly/custom) does
+// NOT read MonthStartsNewWeek — it steps by continuous absDayIndex days
+// regardless, so on a MonthStartsNewWeek calendar a weekly-recurring event
+// can land in a different WeekdayIndex column than it started in once an
+// intercalary month has passed. Reconciling the two needs OccursOn's stride
+// math to skip intercalary days the same way WeekdayIndex does, which is
+// deferred: WeekdayIndex has no production caller yet (a future grid render
+// is the first one), so nothing surfaces the mismatch today.
+//
+// Real-time calendars ignore MonthStartsNewWeek entirely: Gregorian weeks are
+// always continuous, matching this method's own MonthStartsNewWeek=false
+// branch below.
+//
+// When MonthStartsNewWeek is true, day 1 of every month is always the week's
+// first day (a month never inherits a stray offset from the one before it),
+// and a day inside an INTERCALARY month belongs to no week at all — it is a
+// festival day outside the weekday cycle, so a caller must render it in its
+// own between-week band rather than a weekday column. -1 signals that case.
+//
+// When MonthStartsNewWeek is false (the default), weeks run continuously
+// across month boundaries via the reconciled absDayIndex, guarded against a
+// negative modulo for a year before the calendar's epoch.
+func (c *Calendar) WeekdayIndex(year, month, day int) int {
+	wl := c.WeekLength()
+	if wl <= 0 {
+		return 0
+	}
+	if c.MonthStartsNewWeek && !c.UsesRealTime() {
+		if c.monthIsIntercalary(month) {
+			return -1
+		}
+		return (day - 1) % wl
+	}
+	return ((c.absDayIndex(year, month, day) % wl) + wl) % wl
 }
 
 // OccursOn reports whether the event lands on (year, month, day) for cal.
@@ -526,22 +586,6 @@ func (c *Calendar) FullDateLabel() string {
 	return fmt.Sprintf("%s %d, %d", c.CurrentMonthName(), c.CurrentDay, c.CurrentYear)
 }
 
-// WeekdayIndex returns the 0-based column (0..WeekLength()-1) the given date
-// falls on in the repeating weekly cycle — the calendar preview's month grid
-// uses it to place each day under the right weekday header. Returns 0 when
-// the calendar has no weekdays configured (WeekLength()==0).
-func (c *Calendar) WeekdayIndex(year, month, day int) int {
-	wl := c.WeekLength()
-	if wl <= 0 {
-		return 0
-	}
-	idx := c.absDayIndex(year, month, day) % wl
-	if idx < 0 {
-		idx += wl
-	}
-	return idx
-}
-
 // FormatCurrentTime returns the current time formatted as "HH:MM".
 // Pads hours/minutes with leading zeros based on the max values
 // (e.g. a 24-hour system uses 2 digits, a 100-hour system uses 3).
@@ -675,6 +719,12 @@ func (c *Calendar) leapYearsBefore(year int) int {
 // CurrentAbsoluteDay returns AbsoluteDay for the current date.
 func (c *Calendar) CurrentAbsoluteDay() int {
 	return c.AbsoluteDay(c.CurrentYear, c.CurrentMonth, c.CurrentDay)
+}
+
+// HasRealAnchor reports whether this calendar's real-date anchor is fully
+// set — see AnchorYear's doc comment for why it is all four fields or none.
+func (c *Calendar) HasRealAnchor() bool {
+	return c.AnchorYear != nil && c.AnchorMonth != nil && c.AnchorDay != nil && c.AnchorRealDate != nil
 }
 
 // Month is a named period in the calendar with a configurable number of days.
@@ -1153,6 +1203,14 @@ type UpdateCalendarInput struct {
 	SecondsPerMinute patch.Field[int]
 	LeapYearEvery    patch.Field[int]
 	LeapYearOffset   patch.Field[int]
+	// Hemisphere flips how a real-world calendar's seasons read (see
+	// Calendar.Hemisphere's doc comment). When present, must be
+	// HemisphereNorth or HemisphereSouth. Setting it for the first time on a
+	// real-life calendar with no seasons yet auto-seeds the four default
+	// seasons for that hemisphere (see UpdateCalendar and
+	// defaultRealLifeSeasons) — a calendar that already has any seasons is
+	// never touched by this field.
+	Hemisphere patch.Field[string]
 	// SetRealTime is nil for every caller that does not manage the flag (e.g.
 	// PutDate, worldstate advance/time, seed/create), so their update
 	// preserves the stored TracksRealTime/RealTimeZone — a *bool so "absent"
@@ -1536,5 +1594,30 @@ func DefaultEventKinds() []EventKindInput {
 		{Slug: "birthday", Name: "Birthday", Icon: "🎂", Color: "#ec4899", SortOrder: 3, DefaultAnnounced: AnnouncedOnDay},
 		{Slug: "festival", Name: "Festival", Icon: "🎉", Color: "#10b981", SortOrder: 4, DefaultAnnounced: AnnouncedAhead},
 		{Slug: "travel", Name: "Travel", Icon: "🚶", Color: "#3b82f6", SortOrder: 5, DefaultAnnounced: AnnouncedOnDay},
+	}
+}
+
+// defaultRealLifeSeasons returns the four seasons a new real-world calendar
+// starts with, per the operator's signed decision: the same four Gregorian
+// reference dates (Mar 20 / Jun 21 / Sep 23 / Dec 21) every real-world
+// calendar uses, with the season NAMES flipped between hemispheres — a
+// northern Spring lands on the same dates as a southern Autumn. An unknown
+// hemisphere value returns the northern set (UpdateCalendar validates
+// Hemisphere against HemisphereNorth/HemisphereSouth before this is ever
+// called, so that case is unreached in practice).
+//
+// Season.ContainsDate's wrap-around logic (start > end) already handles
+// Winter/Summer spanning the Dec 21 → Mar 19 year boundary — see
+// TestDefaultRealLifeSeasonsContainsDate.
+func defaultRealLifeSeasons(hemisphere string) []Season {
+	names := [4]string{"Spring", "Summer", "Autumn", "Winter"}
+	if hemisphere == HemisphereSouth {
+		names = [4]string{"Autumn", "Winter", "Spring", "Summer"}
+	}
+	return []Season{
+		{Name: names[0], StartMonth: 3, StartDay: 20, EndMonth: 6, EndDay: 20, Color: "#22c55e"},
+		{Name: names[1], StartMonth: 6, StartDay: 21, EndMonth: 9, EndDay: 22, Color: "#eab308"},
+		{Name: names[2], StartMonth: 9, StartDay: 23, EndMonth: 12, EndDay: 20, Color: "#f97316"},
+		{Name: names[3], StartMonth: 12, StartDay: 21, EndMonth: 3, EndDay: 19, Color: "#38bdf8"},
 	}
 }

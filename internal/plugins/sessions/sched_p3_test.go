@@ -82,7 +82,7 @@ func TestConfirmProposalWinner_ClosesAndCreatesSession(t *testing.T) {
 	}
 	svc := NewSessionService(repo, nil, nil)
 
-	session, err := svc.ConfirmProposalWinner(context.Background(), "c1", "p1", "o1", "dm-user", "America/New_York")
+	session, _, err := svc.ConfirmProposalWinner(context.Background(), "c1", "p1", "o1", "dm-user", "America/New_York")
 	if err != nil {
 		t.Fatalf("ConfirmProposalWinner: %v", err)
 	}
@@ -119,7 +119,7 @@ func TestConfirmProposalWinner_RejectsClosedProposal(t *testing.T) {
 		setProposalWinnerAndCloseFn: func(_ context.Context, _, _ string) error { closed = true; return nil },
 	}
 	svc := NewSessionService(repo, nil, nil)
-	if _, err := svc.ConfirmProposalWinner(context.Background(), "c1", "p1", "o1", "dm", "UTC"); err == nil {
+	if _, _, err := svc.ConfirmProposalWinner(context.Background(), "c1", "p1", "o1", "dm", "UTC"); err == nil {
 		t.Error("expected rejection when confirming an already-closed proposal")
 	}
 	if closed {
@@ -141,7 +141,7 @@ func TestConfirmProposalWinner_ConcurrentCloseNoDuplicateSession(t *testing.T) {
 		createFn:                    func(_ context.Context, _ string, _ *Session) error { created = true; return nil },
 	}
 	svc := NewSessionService(repo, nil, nil)
-	if _, err := svc.ConfirmProposalWinner(context.Background(), "c1", "p1", "o1", "dm", "UTC"); err == nil {
+	if _, _, err := svc.ConfirmProposalWinner(context.Background(), "c1", "p1", "o1", "dm", "UTC"); err == nil {
 		t.Error("expected an already-confirmed rejection on a lost close race")
 	}
 	if created {

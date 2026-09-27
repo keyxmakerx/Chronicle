@@ -7,8 +7,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/keyxmakerx/chronicle/internal/patch"
 	"github.com/keyxmakerx/chronicle/internal/apperror"
+	"github.com/keyxmakerx/chronicle/internal/patch"
 )
 
 // --- Mock Repository ---
@@ -17,53 +17,207 @@ import (
 // individual tests can override only the methods they care about. Nil
 // methods return sensible zero values (nil error, empty slices).
 type mockSessionRepo struct {
-	createFn              func(ctx context.Context, campaignID string, s *Session) error
-	findByIDFn            func(ctx context.Context, id string) (*Session, error)
-	listByCampaignFn      func(ctx context.Context, campaignID string) ([]Session, error)
-	listByDateRangeFn     func(ctx context.Context, campaignID, startDate, endDate string) ([]Session, error)
-	searchByCampaignFn    func(ctx context.Context, campaignID, query string) ([]Session, error)
-	updateFn              func(ctx context.Context, s *Session) error
-	updateRecapFn         func(ctx context.Context, id string, recap, recapHTML *string) error
-	deleteFn              func(ctx context.Context, id string) error
-	addAttendeeFn         func(ctx context.Context, sessionID, userID, status string) error
-	updateAttendeeStatusFn func(ctx context.Context, sessionID, userID, status string) error
-	removeAttendeeFn      func(ctx context.Context, sessionID, userID string) error
-	listAttendeesFn       func(ctx context.Context, sessionID string) ([]Attendee, error)
-	linkEntityFn          func(ctx context.Context, sessionID, entityID, role string) error
-	unlinkEntityFn        func(ctx context.Context, sessionID, entityID string) error
-	listSessionEntitiesFn func(ctx context.Context, sessionID string) ([]SessionEntity, error)
-	createRSVPTokenFn     func(ctx context.Context, token *RSVPToken) error
-	findRSVPTokenFn       func(ctx context.Context, tokenStr string) (*RSVPToken, error)
-	markRSVPTokenUsedFn   func(ctx context.Context, tokenStr string) error
+	createFn                   func(ctx context.Context, campaignID string, s *Session) error
+	findByIDFn                 func(ctx context.Context, id string) (*Session, error)
+	findByIDIncludingDeletedFn func(ctx context.Context, id string) (*Session, error)
+	listByCampaignFn           func(ctx context.Context, campaignID string) ([]Session, error)
+	listByDateRangeFn          func(ctx context.Context, campaignID, startDate, endDate string) ([]Session, error)
+	searchByCampaignFn         func(ctx context.Context, campaignID, query string) ([]Session, error)
+	updateFn                   func(ctx context.Context, s *Session) error
+	updateRecapFn              func(ctx context.Context, id string, recap, recapHTML *string) error
+	deleteFn                   func(ctx context.Context, id string) error
+	addAttendeeFn              func(ctx context.Context, sessionID, userID, status string) error
+	updateAttendeeStatusFn     func(ctx context.Context, sessionID, userID, status string) error
+	removeAttendeeFn           func(ctx context.Context, sessionID, userID string) error
+	listAttendeesFn            func(ctx context.Context, sessionID string) ([]Attendee, error)
+	linkEntityFn               func(ctx context.Context, sessionID, entityID, role string) error
+	unlinkEntityFn             func(ctx context.Context, sessionID, entityID string) error
+	listSessionEntitiesFn      func(ctx context.Context, sessionID string) ([]SessionEntity, error)
+	createRSVPTokenFn          func(ctx context.Context, token *RSVPToken) error
+	findRSVPTokenFn            func(ctx context.Context, tokenStr string) (*RSVPToken, error)
+	markRSVPTokenUsedFn        func(ctx context.Context, tokenStr string) error
 	// Availability.
-	listUserAvailabilityFn          func(ctx context.Context, campaignID, userID string) ([]AvailabilityBlock, error)
-	listCampaignAvailabilityFn      func(ctx context.Context, campaignID string) ([]AvailabilityBlock, error)
-	replaceUserAvailabilityFn       func(ctx context.Context, campaignID, userID, tz string, blocks []AvailabilityBlock) error
-	listAnsweredUserIDsFn           func(ctx context.Context, campaignID string) (map[string]time.Time, error)
-	listUserExceptionsFn            func(ctx context.Context, campaignID, userID string) ([]AvailabilityException, error)
-	listCampaignExceptionsRangeFn   func(ctx context.Context, campaignID, startDate, endDate string) ([]AvailabilityException, error)
-	addExceptionFn                  func(ctx context.Context, e *AvailabilityException) error
-	countUserExceptionsFn           func(ctx context.Context, campaignID, userID string) (int, error)
-	replaceDayExceptionsFn          func(ctx context.Context, campaignID, userID, onDate string, excs []AvailabilityException) error
-	deleteExceptionFn               func(ctx context.Context, campaignID, userID, exceptionID string) error
+	listUserAvailabilityFn        func(ctx context.Context, campaignID, userID string) ([]AvailabilityBlock, error)
+	listCampaignAvailabilityFn    func(ctx context.Context, campaignID string) ([]AvailabilityBlock, error)
+	replaceUserAvailabilityFn     func(ctx context.Context, campaignID, userID, tz string, blocks []AvailabilityBlock) error
+	listAnsweredUserIDsFn         func(ctx context.Context, campaignID string) (map[string]time.Time, error)
+	listUserExceptionsFn          func(ctx context.Context, campaignID, userID string) ([]AvailabilityException, error)
+	listCampaignExceptionsRangeFn func(ctx context.Context, campaignID, startDate, endDate string) ([]AvailabilityException, error)
+	addExceptionFn                func(ctx context.Context, e *AvailabilityException) error
+	countUserExceptionsFn         func(ctx context.Context, campaignID, userID string) (int, error)
+	replaceDayExceptionsFn        func(ctx context.Context, campaignID, userID, onDate string, excs []AvailabilityException) error
+	deleteExceptionFn             func(ctx context.Context, campaignID, userID, exceptionID string) error
 	// Proposals + notifications.
-	createProposalFn          func(ctx context.Context, p *SlotProposal, options []SlotProposalOption) error
-	getProposalFn             func(ctx context.Context, campaignID, proposalID string) (*SlotProposal, []SlotProposalOption, error)
-	findProposalByIDFn        func(ctx context.Context, proposalID string) (*SlotProposal, error)
+	createProposalFn            func(ctx context.Context, p *SlotProposal, options []SlotProposalOption) error
+	getProposalFn               func(ctx context.Context, campaignID, proposalID string) (*SlotProposal, []SlotProposalOption, error)
+	findProposalByIDFn          func(ctx context.Context, proposalID string) (*SlotProposal, error)
 	setProposalWinnerAndCloseFn func(ctx context.Context, proposalID, winningOptionID string) error
-	listProposalsFn           func(ctx context.Context, campaignID string) ([]SlotProposal, error)
-	listProposalOptionsFn     func(ctx context.Context, proposalID string) ([]SlotProposalOption, error)
-	findOptionFn              func(ctx context.Context, optionID string) (*SlotProposalOption, error)
-	upsertProposalResponseFn  func(ctx context.Context, r *SlotProposalResponse) error
-	listProposalResponsesFn   func(ctx context.Context, proposalID string) ([]SlotProposalResponse, error)
-	createProposalTokenFn     func(ctx context.Context, token *SlotProposalToken) error
-	findProposalTokenFn       func(ctx context.Context, tokenStr string) (*SlotProposalToken, error)
-	markProposalTokenUsedFn   func(ctx context.Context, tokenStr string) error
-	createNotificationFn      func(ctx context.Context, n *Notification) error
-	listNotificationsFn       func(ctx context.Context, userID string, limit int) ([]Notification, error)
-	countUnreadNotificationsFn func(ctx context.Context, userID string) (int, error)
-	markNotificationReadFn    func(ctx context.Context, userID, notificationID string) error
-	markAllNotificationsReadFn func(ctx context.Context, userID string) error
+	listProposalsFn             func(ctx context.Context, campaignID string) ([]SlotProposal, error)
+	listProposalOptionsFn       func(ctx context.Context, proposalID string) ([]SlotProposalOption, error)
+	findOptionFn                func(ctx context.Context, optionID string) (*SlotProposalOption, error)
+	upsertProposalResponseFn    func(ctx context.Context, r *SlotProposalResponse) error
+	listProposalResponsesFn     func(ctx context.Context, proposalID string) ([]SlotProposalResponse, error)
+	createProposalTokenFn       func(ctx context.Context, token *SlotProposalToken) error
+	findProposalTokenFn         func(ctx context.Context, tokenStr string) (*SlotProposalToken, error)
+	markProposalTokenUsedFn     func(ctx context.Context, tokenStr string) error
+	createNotificationFn        func(ctx context.Context, n *Notification) error
+	listNotificationsFn         func(ctx context.Context, userID string, limit int) ([]Notification, error)
+	countUnreadNotificationsFn  func(ctx context.Context, userID string) (int, error)
+	markNotificationReadFn      func(ctx context.Context, userID, notificationID string) error
+	markAllNotificationsReadFn  func(ctx context.Context, userID string) error
+	// Game-night RSVP (Part C).
+	setAttendeeNoteFn                   func(ctx context.Context, sessionID, userID string, note *string) error
+	setAttendeeExcludedFn               func(ctx context.Context, sessionID, userID string, excluded bool) error
+	markSeriesNeedsRecheckFn            func(ctx context.Context, sessionID string) error
+	listRespondedUserIDsFn              func(ctx context.Context, sessionID string) ([]string, error)
+	softDeleteSessionFn                 func(ctx context.Context, id string) error
+	restoreSessionFn                    func(ctx context.Context, id string) error
+	upsertOccurrenceRSVPFn              func(ctx context.Context, sessionID, userID, occurrenceDate, status string, note *string) error
+	listOccurrenceRSVPsFn               func(ctx context.Context, sessionID, occurrenceDate string) ([]OccurrenceRSVP, error)
+	setOccurrenceExcludedFn             func(ctx context.Context, sessionID, userID, occurrenceDate string, excluded bool) error
+	markOccurrenceNeedsRecheckFn        func(ctx context.Context, sessionID, occurrenceDate string) error
+	listOccurrenceRespondedUserIDsFn    func(ctx context.Context, sessionID, occurrenceDate string) ([]string, error)
+	markAllOccurrencesNeedsRecheckFn    func(ctx context.Context, sessionID string) error
+	listAllOccurrenceRespondedUserIDsFn func(ctx context.Context, sessionID string) ([]string, error)
+	createRescheduleSuggestionFn        func(ctx context.Context, s *RescheduleSuggestion) error
+	getOrCreateFeedTokenFn              func(ctx context.Context, campaignID, userID string) (*CalendarFeedToken, error)
+	replaceFeedTokenFn                  func(ctx context.Context, campaignID, userID string) (*CalendarFeedToken, error)
+	findFeedTokenFn                     func(ctx context.Context, token string) (*CalendarFeedToken, error)
+	isCalendarFeedEnabledFn             func(ctx context.Context, campaignID string) (bool, error)
+	setCalendarFeedEnabledFn            func(ctx context.Context, campaignID string, enabled bool) error
+}
+
+func (m *mockSessionRepo) SetAttendeeNote(ctx context.Context, sessionID, userID string, note *string) error {
+	if m.setAttendeeNoteFn != nil {
+		return m.setAttendeeNoteFn(ctx, sessionID, userID, note)
+	}
+	return nil
+}
+
+func (m *mockSessionRepo) SetAttendeeExcluded(ctx context.Context, sessionID, userID string, excluded bool) error {
+	if m.setAttendeeExcludedFn != nil {
+		return m.setAttendeeExcludedFn(ctx, sessionID, userID, excluded)
+	}
+	return nil
+}
+
+func (m *mockSessionRepo) MarkSeriesNeedsRecheck(ctx context.Context, sessionID string) error {
+	if m.markSeriesNeedsRecheckFn != nil {
+		return m.markSeriesNeedsRecheckFn(ctx, sessionID)
+	}
+	return nil
+}
+
+func (m *mockSessionRepo) ListRespondedUserIDs(ctx context.Context, sessionID string) ([]string, error) {
+	if m.listRespondedUserIDsFn != nil {
+		return m.listRespondedUserIDsFn(ctx, sessionID)
+	}
+	return nil, nil
+}
+
+func (m *mockSessionRepo) SoftDeleteSession(ctx context.Context, id string) error {
+	if m.softDeleteSessionFn != nil {
+		return m.softDeleteSessionFn(ctx, id)
+	}
+	return nil
+}
+
+func (m *mockSessionRepo) RestoreSession(ctx context.Context, id string) error {
+	if m.restoreSessionFn != nil {
+		return m.restoreSessionFn(ctx, id)
+	}
+	return nil
+}
+
+func (m *mockSessionRepo) UpsertOccurrenceRSVP(ctx context.Context, sessionID, userID, occurrenceDate, status string, note *string) error {
+	if m.upsertOccurrenceRSVPFn != nil {
+		return m.upsertOccurrenceRSVPFn(ctx, sessionID, userID, occurrenceDate, status, note)
+	}
+	return nil
+}
+
+func (m *mockSessionRepo) ListOccurrenceRSVPs(ctx context.Context, sessionID, occurrenceDate string) ([]OccurrenceRSVP, error) {
+	if m.listOccurrenceRSVPsFn != nil {
+		return m.listOccurrenceRSVPsFn(ctx, sessionID, occurrenceDate)
+	}
+	return nil, nil
+}
+
+func (m *mockSessionRepo) SetOccurrenceExcluded(ctx context.Context, sessionID, userID, occurrenceDate string, excluded bool) error {
+	if m.setOccurrenceExcludedFn != nil {
+		return m.setOccurrenceExcludedFn(ctx, sessionID, userID, occurrenceDate, excluded)
+	}
+	return nil
+}
+
+func (m *mockSessionRepo) MarkOccurrenceNeedsRecheck(ctx context.Context, sessionID, occurrenceDate string) error {
+	if m.markOccurrenceNeedsRecheckFn != nil {
+		return m.markOccurrenceNeedsRecheckFn(ctx, sessionID, occurrenceDate)
+	}
+	return nil
+}
+
+func (m *mockSessionRepo) ListOccurrenceRespondedUserIDs(ctx context.Context, sessionID, occurrenceDate string) ([]string, error) {
+	if m.listOccurrenceRespondedUserIDsFn != nil {
+		return m.listOccurrenceRespondedUserIDsFn(ctx, sessionID, occurrenceDate)
+	}
+	return nil, nil
+}
+
+func (m *mockSessionRepo) MarkAllOccurrencesNeedsRecheck(ctx context.Context, sessionID string) error {
+	if m.markAllOccurrencesNeedsRecheckFn != nil {
+		return m.markAllOccurrencesNeedsRecheckFn(ctx, sessionID)
+	}
+	return nil
+}
+
+func (m *mockSessionRepo) ListAllOccurrenceRespondedUserIDs(ctx context.Context, sessionID string) ([]string, error) {
+	if m.listAllOccurrenceRespondedUserIDsFn != nil {
+		return m.listAllOccurrenceRespondedUserIDsFn(ctx, sessionID)
+	}
+	return nil, nil
+}
+
+func (m *mockSessionRepo) CreateRescheduleSuggestion(ctx context.Context, s *RescheduleSuggestion) error {
+	if m.createRescheduleSuggestionFn != nil {
+		return m.createRescheduleSuggestionFn(ctx, s)
+	}
+	return nil
+}
+
+func (m *mockSessionRepo) GetOrCreateFeedToken(ctx context.Context, campaignID, userID string) (*CalendarFeedToken, error) {
+	if m.getOrCreateFeedTokenFn != nil {
+		return m.getOrCreateFeedTokenFn(ctx, campaignID, userID)
+	}
+	return nil, nil
+}
+
+func (m *mockSessionRepo) ReplaceFeedToken(ctx context.Context, campaignID, userID string) (*CalendarFeedToken, error) {
+	if m.replaceFeedTokenFn != nil {
+		return m.replaceFeedTokenFn(ctx, campaignID, userID)
+	}
+	return nil, nil
+}
+
+func (m *mockSessionRepo) FindFeedToken(ctx context.Context, token string) (*CalendarFeedToken, error) {
+	if m.findFeedTokenFn != nil {
+		return m.findFeedTokenFn(ctx, token)
+	}
+	return nil, nil
+}
+
+func (m *mockSessionRepo) IsCalendarFeedEnabled(ctx context.Context, campaignID string) (bool, error) {
+	if m.isCalendarFeedEnabledFn != nil {
+		return m.isCalendarFeedEnabledFn(ctx, campaignID)
+	}
+	return true, nil
+}
+
+func (m *mockSessionRepo) SetCalendarFeedEnabled(ctx context.Context, campaignID string, enabled bool) error {
+	if m.setCalendarFeedEnabledFn != nil {
+		return m.setCalendarFeedEnabledFn(ctx, campaignID, enabled)
+	}
+	return nil
 }
 
 func (m *mockSessionRepo) Create(ctx context.Context, campaignID string, s *Session) error {
@@ -74,6 +228,16 @@ func (m *mockSessionRepo) Create(ctx context.Context, campaignID string, s *Sess
 }
 
 func (m *mockSessionRepo) FindByID(ctx context.Context, id string) (*Session, error) {
+	if m.findByIDFn != nil {
+		return m.findByIDFn(ctx, id)
+	}
+	return nil, nil
+}
+
+func (m *mockSessionRepo) FindByIDIncludingDeleted(ctx context.Context, id string) (*Session, error) {
+	if m.findByIDIncludingDeletedFn != nil {
+		return m.findByIDIncludingDeletedFn(ctx, id)
+	}
 	if m.findByIDFn != nil {
 		return m.findByIDFn(ctx, id)
 	}
@@ -982,7 +1146,10 @@ func TestUpdateSession_CompletingNonRecurringReturnsNil(t *testing.T) {
 func TestDeleteSession_Success(t *testing.T) {
 	deleted := false
 	repo := &mockSessionRepo{
-		deleteFn: func(_ context.Context, id string) error {
+		findByIDFn: func(_ context.Context, id string) (*Session, error) {
+			return &Session{ID: id}, nil
+		},
+		softDeleteSessionFn: func(_ context.Context, id string) error {
 			deleted = true
 			if id != "sess-1" {
 				t.Errorf("expected delete ID 'sess-1', got %q", id)
@@ -992,34 +1159,37 @@ func TestDeleteSession_Success(t *testing.T) {
 	}
 	svc := newTestSessionService(repo)
 
-	err := svc.DeleteSession(context.Background(), "sess-1")
+	_, err := svc.DeleteSession(context.Background(), "sess-1")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
 	if !deleted {
-		t.Error("expected Delete to be called on repo")
+		t.Error("expected SoftDeleteSession to be called on repo")
 	}
 }
 
 func TestDeleteSession_NotFound(t *testing.T) {
 	repo := &mockSessionRepo{
-		deleteFn: func(_ context.Context, _ string) error {
-			return apperror.NewNotFound("session not found")
+		findByIDFn: func(_ context.Context, _ string) (*Session, error) {
+			return nil, apperror.NewNotFound("session not found")
 		},
 	}
 	svc := newTestSessionService(repo)
-	err := svc.DeleteSession(context.Background(), "nonexistent")
+	_, err := svc.DeleteSession(context.Background(), "nonexistent")
 	assertAppError(t, err, 404)
 }
 
 func TestDeleteSession_RepoError(t *testing.T) {
 	repo := &mockSessionRepo{
-		deleteFn: func(_ context.Context, _ string) error {
+		findByIDFn: func(_ context.Context, id string) (*Session, error) {
+			return &Session{ID: id}, nil
+		},
+		softDeleteSessionFn: func(_ context.Context, _ string) error {
 			return errors.New("db error")
 		},
 	}
 	svc := newTestSessionService(repo)
-	err := svc.DeleteSession(context.Background(), "sess-1")
+	_, err := svc.DeleteSession(context.Background(), "sess-1")
 	if err == nil {
 		t.Fatal("expected error, got nil")
 	}

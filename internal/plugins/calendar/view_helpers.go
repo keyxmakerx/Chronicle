@@ -65,6 +65,11 @@ func buildMonthGrid(cal *Calendar, year, month int, eventCounts map[int]int, mai
 	}
 	days := cal.MonthDays(month-1, year)
 	lead := cal.WeekdayIndex(year, month, 1)
+	if lead < 0 {
+		// An intercalary month on a calendar whose months restart the week
+		// sits outside the weekday cycle; its days run from the first column.
+		lead = 0
+	}
 
 	cells := make([]monthGridCell, 0, lead+days+wl)
 	for i := 0; i < lead; i++ {

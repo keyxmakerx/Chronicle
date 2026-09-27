@@ -85,6 +85,65 @@ type EntityVisibilityGate interface {
 	FilterViewableEntityIDs(ctx context.Context, campaignID string, entityIDs []string, role int, userID string) (map[string]bool, error)
 }
 
+// GameNightsAffectedByAnchorMove is satisfied by the sessions plugin and
+// injected from internal/app/routes.go (plugins reach each other only
+// through service interfaces, never direct repo access) — the same
+// cross-plugin seam EntityVisibilityGate above uses. It lets
+// PreviewAnchorMove name the sessions/game-nights an anchor move would
+// re-date without this plugin importing internal/plugins/sessions directly.
+//
+// Wired optionally, like EntityVisibilityGate: nil-safe, so a build that
+// hasn't wired the sessions side yet still returns a preview — just with no
+// affected sessions listed, rather than failing the whole preview.
+type GameNightsAffectedByAnchorMove interface {
+	// SessionsInWorldDateRange returns up to `limit` sessions/game-nights in
+	// campaignID whose in-world date falls within [fromYMD, toYMD]
+	// (inclusive, by the OLD anchor mapping), for previewing an anchor
+	// move's blast radius. Ordered soonest-first. limit<=0 means no cap.
+	SessionsInWorldDateRange(ctx context.Context, campaignID string, fromYear, fromMonth, fromDay, toYear, toMonth, toDay, limit int) ([]AffectedSession, error)
+}
+
+// AffectedSession is one session/game-night SessionsInWorldDateRange returns:
+// its display name and its in-world date under the OLD anchor mapping.
+type AffectedSession struct {
+	Name                                     string
+	OldWorldYear, OldWorldMonth, OldWorldDay int
+}
+
+// maxAnchorMovePreviewAffected caps how many affected sessions
+// PreviewAnchorMove reports — a future warning box names a few examples, not
+// every session in the campaign.
+const maxAnchorMovePreviewAffected = 3
+
+// AnchorMovePreview is PreviewAnchorMove's read-only result: how many days
+// later/earlier the proposed anchor move shifts every in-world date, plus up
+// to maxAnchorMovePreviewAffected sessions/game-nights it would re-date, so a
+// future UI can render the operator's warning box before the real anchor
+// write is submitted.
+type AnchorMovePreview struct {
+	// DeltaDays is positive when the move is later, negative when earlier.
+	// Zero for a calendar's first-time anchor set (see PreviewAnchorMove's
+	// doc comment) — there is no prior mapping to shift away from.
+	DeltaDays int `json:"delta_days"`
+	// FirstTimeSet is true when the calendar has no anchor yet: there is
+	// nothing to warn about moving, since nothing was ever mapped before.
+	// Affected is always empty in this case.
+	FirstTimeSet bool                     `json:"first_time_set"`
+	Affected     []AffectedSessionPreview `json:"affected,omitempty"`
+}
+
+// AffectedSessionPreview is one session's date under the current anchor and
+// what it would become under the proposed one.
+type AffectedSessionPreview struct {
+	Name     string `json:"name"`
+	OldYear  int    `json:"old_year"`
+	OldMonth int    `json:"old_month"`
+	OldDay   int    `json:"old_day"`
+	NewYear  int    `json:"new_year"`
+	NewMonth int    `json:"new_month"`
+	NewDay   int    `json:"new_day"`
+}
+
 // CalendarService defines the calendar plugin's business logic. Handlers
 // call it; it never imports Echo.
 type CalendarService interface {
@@ -167,6 +226,12 @@ type CalendarService interface {
 
 	// Moon. Owner-only end to end (the hidden flag is calendar structure).
 	SetMoonHidden(ctx context.Context, moonID int, calendarID, campaignID string, hidden bool) error
+
+	// PreviewAnchorMove is a READ-ONLY preview of moving a real-anchored
+	// calendar's anchor: it computes the day shift and up to three affected
+	// sessions but writes nothing. Owner-only (see routes.go); the real
+	// anchor write this previews is a future Part A/D endpoint, not this one.
+	PreviewAnchorMove(ctx context.Context, calendarID, campaignID string, newAnchorYear, newAnchorMonth, newAnchorDay int, newRealDate time.Time) (*AnchorMovePreview, error)
 }
 
 // calendarService is the concrete CalendarService.
@@ -176,6 +241,7 @@ type calendarService struct {
 	kindRepo    EventKindRepository
 	weatherRepo WeatherRepository
 	entityGate  EntityVisibilityGate
+	gameNights  GameNightsAffectedByAnchorMove
 }
 
 // NewCalendarService constructs a CalendarService over the four
@@ -191,6 +257,14 @@ func NewCalendarService(calRepo CalendarRepository, eventRepo EventRepository, k
 // SetEntityVisibilityGate uses, so the CalendarService interface itself
 // stays unchanged for callers that don't need it (tests, mocks).
 func (s *calendarService) SetEntityVisibilityGate(g EntityVisibilityGate) { s.entityGate = g }
+
+// SetGameNightsAffectedByAnchorMove injects the sessions-plugin lookup
+// PreviewAnchorMove uses to name affected game nights. Same optional,
+// nil-safe wiring pattern as SetEntityVisibilityGate above: unset, the
+// preview still works, just with an empty Affected list.
+func (s *calendarService) SetGameNightsAffectedByAnchorMove(g GameNightsAffectedByAnchorMove) {
+	s.gameNights = g
+}
 
 // --- Cross-campaign / cross-calendar scoping (no cross-tenant reach) ---
 
@@ -546,6 +620,10 @@ func (s *calendarService) UpdateCalendar(ctx context.Context, calendarID, campai
 	if err != nil {
 		return err
 	}
+	// Captured before Hemisphere is merged below, so the hemisphere-seeding
+	// check afterward can tell "first choice / a changed choice" from
+	// "resending the value already stored" (a no-op re-save must not reseed).
+	previousHemisphere := cal.Hemisphere
 
 	name := input.Name
 	if name == "" {
@@ -572,6 +650,10 @@ func (s *calendarService) UpdateCalendar(ctx context.Context, calendarID, campai
 	if err := validateOptionalText("epoch_name", epochName, maxEpochNameLength); err != nil {
 		return err
 	}
+	hemisphere := input.Hemisphere.Ptr(cal.Hemisphere)
+	if hemisphere != nil && *hemisphere != HemisphereNorth && *hemisphere != HemisphereSouth {
+		return apperror.NewValidation("hemisphere must be \"" + HemisphereNorth + "\" or \"" + HemisphereSouth + "\"")
+	}
 
 	cal.Name = name
 	cal.Description = description
@@ -587,6 +669,7 @@ func (s *calendarService) UpdateCalendar(ctx context.Context, calendarID, campai
 	cal.SecondsPerMinute = secondsPerMinute
 	cal.LeapYearEvery = input.LeapYearEvery.Val(cal.LeapYearEvery)
 	cal.LeapYearOffset = input.LeapYearOffset.Val(cal.LeapYearOffset)
+	cal.Hemisphere = hemisphere
 
 	// SetRealTime is nil for every caller that does not manage the flag —
 	// see UpdateCalendarInput's doc comment.
@@ -611,6 +694,37 @@ func (s *calendarService) UpdateCalendar(ctx context.Context, calendarID, campai
 
 	if err := s.calRepo.Update(ctx, cal); err != nil {
 		return fmt.Errorf("update calendar: %w", err)
+	}
+
+	// Auto-seed the four default seasons on a real-life calendar's first (or
+	// changed) hemisphere choice — the operator's signed answer to "what a
+	// new real-world calendar starts with" (see defaultRealLifeSeasons).
+	// Gated on the hemisphere actually changing, so resending the value
+	// already stored (e.g. a plain settings re-save) never reseeds.
+	if input.Hemisphere.Present() && hemisphere != nil && cal.Mode == ModeRealLife &&
+		(previousHemisphere == nil || *previousHemisphere != *hemisphere) {
+		if err := s.seedHemisphereSeasonsIfEmpty(ctx, cal.ID, *hemisphere); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// seedHemisphereSeasonsIfEmpty seeds the four default real-life seasons for
+// hemisphere onto calendarID, but ONLY when it currently has none — a
+// calendar with any authored or previously-seeded season is never
+// overwritten. Re-labeling seasons on a later hemisphere flip for a calendar
+// that already has some is a deliberate scope limit, not built here.
+func (s *calendarService) seedHemisphereSeasonsIfEmpty(ctx context.Context, calendarID, hemisphere string) error {
+	existing, err := s.calRepo.GetSeasons(ctx, calendarID)
+	if err != nil {
+		return fmt.Errorf("check existing seasons before hemisphere seeding: %w", err)
+	}
+	if len(existing) > 0 {
+		return nil
+	}
+	if err := s.calRepo.SetSeasons(ctx, calendarID, defaultRealLifeSeasons(hemisphere)); err != nil {
+		return fmt.Errorf("seed hemisphere seasons: %w", err)
 	}
 	return nil
 }
@@ -1626,6 +1740,116 @@ func (s *calendarService) SetMoonHidden(ctx context.Context, moonID int, calenda
 		return err
 	}
 	return nil
+}
+
+// --- Real-date anchor (Part C: preview only — the real anchor WRITE this
+// previews is a separate, not-yet-built endpoint) ---
+
+// anchorPreviewWindowYears bounds how far into a calendar's future
+// PreviewAnchorMove asks the sessions plugin about: enough to surface "the
+// next several sessions" as examples without querying the calendar's entire
+// unbounded future.
+const anchorPreviewWindowYears = 5
+
+// daysBetween returns the whole-day difference b-a for two DATE-granular
+// (no time-of-day) real dates, normalizing away any time-of-day or zone on
+// the inputs first — anchor_real_date is a DATE column, so there is never a
+// genuine partial-day component to round, but a *time.Time value can still
+// carry a non-UTC Location whose wall-clock day would otherwise disagree
+// with a plain Sub.
+func daysBetween(a, b time.Time) int {
+	da := time.Date(a.Year(), a.Month(), a.Day(), 0, 0, 0, 0, time.UTC)
+	db := time.Date(b.Year(), b.Month(), b.Day(), 0, 0, 0, 0, time.UTC)
+	return int(db.Sub(da).Hours() / 24)
+}
+
+// anchorPreviewWindowEnd is the far end of the world-date range
+// PreviewAnchorMove queries: the calendar's current in-world date out
+// anchorPreviewWindowYears years.
+func anchorPreviewWindowEnd(cal *Calendar) (year, month, day int) {
+	year = cal.CurrentYear + anchorPreviewWindowYears
+	month = len(cal.Months)
+	if month == 0 {
+		return year, 12, 31
+	}
+	day = cal.MonthDays(month-1, year)
+	if day == 0 {
+		day = 28
+	}
+	return year, month, day
+}
+
+// PreviewAnchorMove computes, WITHOUT WRITING ANYTHING, what moving
+// calendarID's real-date anchor to (newAnchorYear, newAnchorMonth,
+// newAnchorDay) <-> newRealDate would do: the day shift every session
+// scheduled at a fixed in-world date would see in the REAL (Gregorian) date
+// it now lands on, plus up to maxAnchorMovePreviewAffected named examples —
+// see AnchorMovePreview's doc comment for the exact shape a future warning
+// UI renders from this.
+//
+// A calendar with no anchor yet needs no warning: nothing was ever mapped,
+// so there is nothing to move away from. That case returns
+// AnchorMovePreview{FirstTimeSet: true} rather than a delta.
+//
+// The day-shift math: for a calendar day D, its mapped real date is
+// AnchorRealDate + (AbsoluteDay(D) - AbsoluteDay(anchor)) days. Holding a
+// session's own in-world date fixed and solving for how its real date
+// changes between the old and new anchor collapses to one constant —
+// DeltaDays — independent of which in-world day the session falls on: move
+// both ends of the anchor by the same amount and nothing downstream moves
+// at all, which is exactly what falls out when realDeltaDays equals the
+// world-date shift.
+func (s *calendarService) PreviewAnchorMove(ctx context.Context, calendarID, campaignID string, newAnchorYear, newAnchorMonth, newAnchorDay int, newRealDate time.Time) (*AnchorMovePreview, error) {
+	cal, err := s.calendarInCampaign(ctx, calendarID, campaignID)
+	if err != nil {
+		return nil, err
+	}
+	if !cal.HasRealAnchor() {
+		return &AnchorMovePreview{FirstTimeSet: true}, nil
+	}
+	if err := s.loadCalendarGeometry(ctx, cal); err != nil {
+		return nil, err
+	}
+
+	oldWorldAbs := cal.AbsoluteDay(*cal.AnchorYear, *cal.AnchorMonth, *cal.AnchorDay)
+	newWorldAbs := cal.AbsoluteDay(newAnchorYear, newAnchorMonth, newAnchorDay)
+	realDeltaDays := daysBetween(*cal.AnchorRealDate, newRealDate)
+	deltaDays := realDeltaDays - (newWorldAbs - oldWorldAbs)
+
+	preview := &AnchorMovePreview{DeltaDays: deltaDays}
+	if s.gameNights == nil || deltaDays == 0 {
+		// No configured lookup, or a no-op move (both ends shifted by the
+		// same amount): either way there is nothing to list.
+		return preview, nil
+	}
+
+	fromYear, fromMonth, fromDay := cal.CurrentYear, cal.CurrentMonth, cal.CurrentDay
+	toYear, toMonth, toDay := anchorPreviewWindowEnd(cal)
+	sessions, err := s.gameNights.SessionsInWorldDateRange(ctx, campaignID,
+		fromYear, fromMonth, fromDay, toYear, toMonth, toDay, maxAnchorMovePreviewAffected)
+	if err != nil {
+		return nil, fmt.Errorf("list sessions affected by anchor move: %w", err)
+	}
+
+	anchorReal := time.Date(cal.AnchorRealDate.Year(), cal.AnchorRealDate.Month(), cal.AnchorRealDate.Day(), 0, 0, 0, 0, time.UTC)
+	for _, sess := range sessions {
+		// The session's own in-world date never moves — what moves is the
+		// real date it maps to. oldReal is that mapping under the anchor as
+		// it stands today; newReal is the same session shifted by the one
+		// constant every session shifts by (see the method doc comment).
+		oldReal := anchorReal.AddDate(0, 0, cal.AbsoluteDay(sess.OldWorldYear, sess.OldWorldMonth, sess.OldWorldDay)-oldWorldAbs)
+		newReal := oldReal.AddDate(0, 0, deltaDays)
+		preview.Affected = append(preview.Affected, AffectedSessionPreview{
+			Name:     sess.Name,
+			OldYear:  oldReal.Year(),
+			OldMonth: int(oldReal.Month()),
+			OldDay:   oldReal.Day(),
+			NewYear:  newReal.Year(),
+			NewMonth: int(newReal.Month()),
+			NewDay:   newReal.Day(),
+		})
+	}
+	return preview, nil
 }
 
 // --- Shared validation helpers ---

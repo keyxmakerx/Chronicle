@@ -110,6 +110,15 @@ func RegisterRoutes(e *echo.Echo, h *Handler, campaignSvc campaigns.CampaignServ
 	// Moon hidden flag: calendar structure, Owner only.
 	cg.PUT("/calendars/:calid/moons/:moonID/hidden", h.SetMoonHiddenAPI, campaigns.RequireRole(campaigns.RoleOwner))
 
+	// --- Part C: real-world calendar additions ---
+	// Real-date anchor preview: read-only, Owner only (moving the anchor
+	// re-dates every session scheduled by in-world date at once, so the
+	// operator gets a preview of the blast radius before committing to it;
+	// the real anchor WRITE this previews is a separate, not-yet-built
+	// endpoint).
+	cg.POST("/calendars/:calid/anchor-preview", h.AnchorPreviewAPI, campaigns.RequireRole(campaigns.RoleOwner))
+	// --- end Part C additions ---
+
 	// Public-capable reads: calendar list/detail and event list/detail, for
 	// the embeddable calendar widget / entity-calendar blocks on public
 	// campaigns. Role/visibility filtering happens in the service

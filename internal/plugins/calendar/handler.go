@@ -9,6 +9,7 @@ import (
 	"io"
 	"net/http"
 	"strconv"
+	"time"
 
 	"github.com/labstack/echo/v4"
 
@@ -122,6 +123,7 @@ func (h *Handler) UpdateCalendarAPI(c echo.Context) error {
 		SecondsPerMinute patch.Field[int]    `json:"seconds_per_minute"`
 		LeapYearEvery    patch.Field[int]    `json:"leap_year_every"`
 		LeapYearOffset   patch.Field[int]    `json:"leap_year_offset"`
+		Hemisphere       patch.Field[string] `json:"hemisphere"`
 		SetRealTime      *bool               `json:"set_real_time"`
 		RealTimeZone     *string             `json:"real_time_zone"`
 	}
@@ -143,6 +145,7 @@ func (h *Handler) UpdateCalendarAPI(c echo.Context) error {
 		SecondsPerMinute: req.SecondsPerMinute,
 		LeapYearEvery:    req.LeapYearEvery,
 		LeapYearOffset:   req.LeapYearOffset,
+		Hemisphere:       req.Hemisphere,
 		SetRealTime:      req.SetRealTime,
 		RealTimeZone:     req.RealTimeZone,
 	})
@@ -593,6 +596,37 @@ func (h *Handler) DeleteEraAPI(c echo.Context) error {
 		return err
 	}
 	return c.NoContent(http.StatusOK)
+}
+
+// --- Real-date anchor (Part C: preview only) ---
+
+// AnchorPreviewAPI is a READ-ONLY preview of moving the calendar's real-date
+// anchor: it writes nothing, and only reports the day shift + up to three
+// affected sessions so a future UI can show the operator a warning before the
+// real anchor write (a separate, not-yet-built endpoint) is submitted. Owner
+// only, matching every other anchor-adjacent write in this plugin.
+// real_date is an RFC3339 timestamp; only its calendar date is used.
+// POST /campaigns/:id/calendars/:calid/anchor-preview
+func (h *Handler) AnchorPreviewAPI(c echo.Context) error {
+	cc := campaigns.GetCampaignContext(c)
+	var req struct {
+		AnchorYear  int       `json:"anchor_year"`
+		AnchorMonth int       `json:"anchor_month"`
+		AnchorDay   int       `json:"anchor_day"`
+		RealDate    time.Time `json:"real_date"`
+	}
+	if err := c.Bind(&req); err != nil {
+		return apperror.NewBadRequest("invalid request")
+	}
+	if req.RealDate.IsZero() {
+		return apperror.NewValidation("real_date is required")
+	}
+	preview, err := h.svc.PreviewAnchorMove(c.Request().Context(), c.Param("calid"), cc.Campaign.ID,
+		req.AnchorYear, req.AnchorMonth, req.AnchorDay, req.RealDate)
+	if err != nil {
+		return err
+	}
+	return c.JSON(http.StatusOK, preview)
 }
 
 // --- Moon ---

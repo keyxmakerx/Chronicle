@@ -20,10 +20,10 @@ const (
 
 // Recurrence type constants for repeating sessions.
 const (
-	RecurrenceWeekly    = "weekly"     // Every week on the same day.
-	RecurrenceBiWeekly  = "biweekly"   // Every 2 weeks on the same day.
-	RecurrenceMonthly   = "monthly"    // Same day-of-month each month.
-	RecurrenceCustom    = "custom"     // Every N weeks (recurrence_interval).
+	RecurrenceWeekly   = "weekly"   // Every week on the same day.
+	RecurrenceBiWeekly = "biweekly" // Every 2 weeks on the same day.
+	RecurrenceMonthly  = "monthly"  // Same day-of-month each month.
+	RecurrenceCustom   = "custom"   // Every N weeks (recurrence_interval).
 )
 
 // Attendee RSVP status constants.
@@ -32,7 +32,20 @@ const (
 	RSVPAccepted  = "accepted"
 	RSVPDeclined  = "declined"
 	RSVPTentative = "tentative"
+	// RSVPCarriedYes is a proposal-confirmed "yes" vote that still needs the
+	// member's own explicit confirmation before it counts as Going (operator
+	// server-change #3: a yes vote on the winning option is not automatically
+	// a Going). A member carries this status until they submit their own
+	// accepted/declined/tentative answer through the normal RSVP flow, which
+	// simply overwrites it — there is no separate "confirm" action.
+	RSVPCarriedYes = "carried_yes"
 )
+
+// RSVP-token action constants for session_rsvp_tokens.action, beyond the
+// accept/decline/tentative actions that reuse the RSVP status constants
+// above. RSVPActionSuggest marks an emailed "suggest another time" link,
+// whose token does not resolve to one of those three fixed outcomes.
+const RSVPActionSuggest = "suggest"
 
 // Session entity role constants.
 const (
@@ -43,41 +56,52 @@ const (
 
 // Session represents a game session for a campaign.
 type Session struct {
-	ID            string     `json:"id"`
-	CampaignID    string     `json:"campaign_id"`
-	Name          string     `json:"name"`
-	Summary       *string    `json:"summary,omitempty"`
-	Notes         *string    `json:"-"`         // ProseMirror JSON, GM-only.
-	NotesHTML     *string    `json:"notes_html,omitempty"` // Pre-rendered HTML.
-	Recap         *string    `json:"-"`         // ProseMirror JSON, visible to all members.
-	RecapHTML     *string    `json:"recap_html,omitempty"` // Pre-rendered HTML.
-	ScheduledDate *string    `json:"scheduled_date,omitempty"` // YYYY-MM-DD format.
+	ID            string  `json:"id"`
+	CampaignID    string  `json:"campaign_id"`
+	Name          string  `json:"name"`
+	Summary       *string `json:"summary,omitempty"`
+	Notes         *string `json:"-"`                        // ProseMirror JSON, GM-only.
+	NotesHTML     *string `json:"notes_html,omitempty"`     // Pre-rendered HTML.
+	Recap         *string `json:"-"`                        // ProseMirror JSON, visible to all members.
+	RecapHTML     *string `json:"recap_html,omitempty"`     // Pre-rendered HTML.
+	ScheduledDate *string `json:"scheduled_date,omitempty"` // YYYY-MM-DD format.
 	// ScheduledTime is the wall-clock start time as "HH:MM" (24-hour), zone-less
 	// like ScheduledDate. Set from a confirmed proposal's winning UTC instant
 	// (converted to the confirmer's zone) or the create/edit modal. nil means
 	// no time set.
-	ScheduledTime *string    `json:"scheduled_time,omitempty"`
-	CalendarYear  *int       `json:"calendar_year,omitempty"`
-	CalendarMonth *int       `json:"calendar_month,omitempty"`
-	CalendarDay   *int       `json:"calendar_day,omitempty"`
-	Status        string     `json:"status"`
+	ScheduledTime *string `json:"scheduled_time,omitempty"`
+	// ScheduledTZ is the IANA zone ScheduledTime was set in — the organizer's
+	// zone at confirm/create time (game-night server change #1). Nil for
+	// every row that predates it and for a manual session whose creator's
+	// zone was never captured; a viewer with no zone of their own falls back
+	// to THIS zone for display, never UTC and never a calendar's own zone
+	// (a session is not necessarily tied to one calendar row).
+	ScheduledTZ   *string `json:"scheduled_tz,omitempty"`
+	CalendarYear  *int    `json:"calendar_year,omitempty"`
+	CalendarMonth *int    `json:"calendar_month,omitempty"`
+	CalendarDay   *int    `json:"calendar_day,omitempty"`
+	Status        string  `json:"status"`
 
 	// Recurrence fields for repeating sessions (e.g. "every other Saturday").
-	IsRecurring        bool    `json:"is_recurring"`
-	RecurrenceType     *string `json:"recurrence_type,omitempty"`      // weekly, biweekly, monthly, custom
-	RecurrenceInterval int     `json:"recurrence_interval,omitempty"`  // N for "every N weeks" (custom type)
-	RecurrenceDayOfWeek *int   `json:"recurrence_day_of_week,omitempty"` // 0=Sun, 1=Mon, ..., 6=Sat
-	RecurrenceEndDate  *string `json:"recurrence_end_date,omitempty"`  // YYYY-MM-DD when recurrence stops
+	IsRecurring         bool    `json:"is_recurring"`
+	RecurrenceType      *string `json:"recurrence_type,omitempty"`        // weekly, biweekly, monthly, custom
+	RecurrenceInterval  int     `json:"recurrence_interval,omitempty"`    // N for "every N weeks" (custom type)
+	RecurrenceDayOfWeek *int    `json:"recurrence_day_of_week,omitempty"` // 0=Sun, 1=Mon, ..., 6=Sat
+	RecurrenceEndDate   *string `json:"recurrence_end_date,omitempty"`    // YYYY-MM-DD when recurrence stops
 
-	SortOrder     int        `json:"sort_order"`
-	CreatedBy     string     `json:"created_by"`
-	CreatedAt     time.Time  `json:"created_at"`
-	UpdatedAt     time.Time  `json:"updated_at"`
+	SortOrder int       `json:"sort_order"`
+	CreatedBy string    `json:"created_by"`
+	CreatedAt time.Time `json:"created_at"`
+	UpdatedAt time.Time `json:"updated_at"`
+	// DeletedAt marks a soft-deleted (cancelled/removed) session, restorable
+	// by a co-Director/Owner. Nil means live. Every repository read filters
+	// deleted_at IS NULL except the restore path.
+	DeletedAt *time.Time `json:"-"`
 
 	// Joined data (not always populated).
-	Attendees []Attendee     `json:"attendees,omitempty"`
-	Entities  []SessionEntity `json:"entities,omitempty"`
-	CreatorName string       `json:"creator_name,omitempty"`
+	Attendees   []Attendee      `json:"attendees,omitempty"`
+	Entities    []SessionEntity `json:"entities,omitempty"`
+	CreatorName string          `json:"creator_name,omitempty"`
 }
 
 // GetCampaignID returns the campaign this session belongs to. Implements
@@ -99,20 +123,75 @@ type Attendee struct {
 	ID          int        `json:"id"`
 	SessionID   string     `json:"session_id"`
 	UserID      string     `json:"user_id"`
-	Status      string     `json:"status"` // invited, accepted, declined, tentative
+	Status      string     `json:"status"` // invited, accepted, declined, tentative, carried_yes
 	RespondedAt *time.Time `json:"responded_at,omitempty"`
+	// Note is a short player-set note on their own RSVP. Nil means none —
+	// stored as SQL NULL, and an explicit empty-string write also clears it
+	// (see sessionRepository.SetAttendeeNote).
+	Note *string `json:"note,omitempty"`
+	// ExcludedFromCount is the Director's own "leave myself out of the N/M
+	// tally" switch (operator answer #3). Only ever true on the row of the
+	// user who set it on themselves; excludes the row from both the
+	// numerator and denominator of any going/total count while leaving the
+	// individual answer visible to them and to the Director.
+	ExcludedFromCount bool `json:"excluded_from_count"`
+	// NeedsRecheck is set when the session moved or was cancelled AFTER this
+	// member had already answered. The answer itself is never cleared — this
+	// only flags "look again".
+	NeedsRecheck bool `json:"needs_recheck"`
 
 	// Joined data.
 	DisplayName string  `json:"display_name,omitempty"`
 	AvatarPath  *string `json:"avatar_path,omitempty"`
 }
 
+// OccurrenceRSVP is one member's answer to a SPECIFIC night of a repeating
+// session — the per-occurrence twin of Attendee. See session_occurrence_rsvps.
+type OccurrenceRSVP struct {
+	ID                int
+	SessionID         string
+	UserID            string
+	OccurrenceDate    string // YYYY-MM-DD
+	Status            string
+	Note              *string
+	ExcludedFromCount bool
+	NeedsRecheck      bool
+	RespondedAt       *time.Time
+
+	// Joined data, populated by ListOccurrenceRSVPs for rendering a roster.
+	DisplayName string
+	AvatarPath  *string
+}
+
+// RescheduleSuggestion is a member's "suggest another time" reply, recorded
+// from the emailed suggest-token flow (session_reschedule_suggestions).
+type RescheduleSuggestion struct {
+	ID             int
+	SessionID      string
+	UserID         string
+	OccurrenceDate *string // set only when suggesting against one night of a series
+	SuggestedDate  string
+	SuggestedTime  *string
+	Note           *string
+	CreatedAt      time.Time
+}
+
+// CalendarFeedToken is one member's private, replaceable game-night calendar
+// feed credential (session_calendar_feed_tokens) — operator answer #1.
+type CalendarFeedToken struct {
+	ID         int
+	CampaignID string
+	UserID     string
+	Token      string
+	CreatedAt  time.Time
+}
+
 // SessionEntity represents an entity linked to a session.
 type SessionEntity struct {
-	ID       int    `json:"id"`
+	ID        int    `json:"id"`
 	SessionID string `json:"session_id"`
-	EntityID string `json:"entity_id"`
-	Role     string `json:"role"` // mentioned, encountered, key
+	EntityID  string `json:"entity_id"`
+	Role      string `json:"role"` // mentioned, encountered, key
 
 	// Joined data.
 	EntityName string `json:"entity_name,omitempty"`
@@ -123,10 +202,14 @@ type SessionEntity struct {
 
 // CreateSessionInput is the validated input for creating a session.
 type CreateSessionInput struct {
-	Name                string
-	Summary             *string
-	ScheduledDate       *string
-	ScheduledTime       *string
+	Name          string
+	Summary       *string
+	ScheduledDate *string
+	ScheduledTime *string
+	// ScheduledTZ is the organizer's IANA zone ScheduledTime was set in (see
+	// Session.ScheduledTZ). Nil for a manual session whose creator's zone
+	// wasn't captured.
+	ScheduledTZ         *string
 	CalendarYear        *int
 	CalendarMonth       *int
 	CalendarDay         *int

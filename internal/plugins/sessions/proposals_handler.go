@@ -205,13 +205,19 @@ func (h *Handler) ConfirmProposalAPI(c echo.Context) error {
 		return c.JSON(http.StatusBadRequest, map[string]string{"error": "an option to confirm is required"})
 	}
 	confirmerTZ := h.resolveViewerTZ(c, userID)
-	session, err := h.svc.ConfirmProposalWinner(c.Request().Context(), cc.Campaign.ID, proposalID, req.OptionID, userID, confirmerTZ)
+	session, yesVoters, err := h.svc.ConfirmProposalWinner(c.Request().Context(), cc.Campaign.ID, proposalID, req.OptionID, userID, confirmerTZ)
 	if err != nil {
 		return c.JSON(apperror.SafeCode(err), map[string]string{"error": apperror.SafeMessage(err)})
 	}
 
 	// Auto-invite members + send RSVP email (parity with manual CreateSession) and
 	// notify everyone who responded — all best-effort, off the request path.
+	//
+	// The confirmer is Going immediately (operator server-change #3); a plain
+	// yes vote on the option that got confirmed is not automatically a Going
+	// for anyone ELSE, so they're carried in as RSVPCarriedYes and still owe
+	// an explicit confirm. Both are set AFTER the blanket InviteAll below, or
+	// that upsert would immediately overwrite them back to "invited".
 	if h.memberLister != nil {
 		if members, mErr := h.memberLister.ListMembers(c.Request().Context(), cc.Campaign.ID); mErr == nil {
 			userIDs := make([]string, 0, len(members))
@@ -219,6 +225,16 @@ func (h *Handler) ConfirmProposalAPI(c echo.Context) error {
 				userIDs = append(userIDs, m.UserID)
 			}
 			_ = h.svc.InviteAll(c.Request().Context(), session.ID, userIDs)
+			var carried []string
+			for _, id := range yesVoters {
+				if id != userID {
+					carried = append(carried, id)
+				}
+			}
+			if len(carried) > 0 {
+				_ = h.svc.InviteAllWithStatus(c.Request().Context(), session.ID, carried, RSVPCarriedYes)
+			}
+			_ = h.svc.InviteAllWithStatus(c.Request().Context(), session.ID, []string{userID}, RSVPAccepted)
 			if h.mailer != nil && h.mailer.IsConfigured(c.Request().Context()) {
 				go h.sendRSVPEmails(context.Background(), session, cc.Campaign.Name, members)
 			}

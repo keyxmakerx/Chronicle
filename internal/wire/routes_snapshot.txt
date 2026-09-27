@@ -361,6 +361,7 @@ GET	/relations-graph/page	internal/widgets/relations/routes.go
 GET	/relations/types	internal/plugins/syncapi/routes.go
 GET	/reset-password	internal/plugins/auth/routes.go
 GET	/rsvp/:token	internal/plugins/sessions/routes.go
+GET	/rsvp/:token/suggest	internal/plugins/sessions/routes.go
 GET	/rules-glossary	internal/systems/routes.go
 GET	/saved-filters	internal/plugins/entities/routes.go
 GET	/search	internal/plugins/bestiary/routes.go
@@ -370,6 +371,8 @@ GET	/security	internal/plugins/admin/routes.go
 GET	/sessions	internal/plugins/sessions/routes.go
 GET	/sessions/:sid	internal/plugins/sessions/routes.go
 GET	/sessions/embed	internal/plugins/sessions/routes.go
+GET	/sessions/feed-settings	internal/plugins/sessions/routes.go
+GET	/sessions/feed/:token	internal/plugins/sessions/routes.go
 GET	/settings	internal/plugins/campaigns/routes.go
 GET	/settings	internal/plugins/packages/routes.go
 GET	/sidebar-config	internal/plugins/campaigns/routes.go
@@ -457,6 +460,7 @@ POST	/calendar/date/confirm	internal/plugins/syncapi/routes.go
 POST	/calendar/events	internal/plugins/syncapi/routes.go
 POST	/calendar/import	internal/plugins/syncapi/routes.go
 POST	/calendars	internal/plugins/calendar/routes.go
+POST	/calendars/:calid/anchor-preview	internal/plugins/calendar/routes.go
 POST	/calendars/:calid/eras	internal/plugins/calendar/routes.go
 POST	/calendars/:calid/events	internal/plugins/calendar/routes.go
 POST	/calendars/event-kinds	internal/plugins/calendar/routes.go
@@ -546,6 +550,7 @@ POST	/register	internal/plugins/auth/routes.go
 POST	/rescan	internal/extensions/routes.go
 POST	/reset-password	internal/plugins/auth/routes.go
 POST	/rsvp/:token	internal/plugins/sessions/routes.go
+POST	/rsvp/:token/suggest	internal/plugins/sessions/routes.go
 POST	/run	internal/plugins/backup/routes.go
 POST	/run	internal/plugins/restore/routes.go
 POST	/saved-filters	internal/plugins/entities/routes.go
@@ -553,7 +558,10 @@ POST	/security/registration	internal/plugins/admin/routes.go
 POST	/security/users/:id/force-logout	internal/plugins/admin/routes.go
 POST	/sessions	internal/plugins/sessions/routes.go
 POST	/sessions/:sid/entities	internal/plugins/sessions/routes.go
+POST	/sessions/:sid/restore	internal/plugins/sessions/routes.go
 POST	/sessions/:sid/rsvp	internal/plugins/sessions/routes.go
+POST	/sessions/feed/token	internal/plugins/sessions/routes.go
+POST	/sessions/feed/token/replace	internal/plugins/sessions/routes.go
 POST	/settings	internal/plugins/packages/routes.go
 POST	/sidebar-nodes	internal/plugins/entities/routes.go
 POST	/smtp/send-test	internal/plugins/smtp/routes.go
@@ -686,6 +694,8 @@ PUT	/security/users/:id/disable	internal/plugins/admin/routes.go
 PUT	/security/users/:id/enable	internal/plugins/admin/routes.go
 PUT	/sessions/:sid	internal/plugins/sessions/routes.go
 PUT	/sessions/:sid/recap	internal/plugins/sessions/routes.go
+PUT	/sessions/:sid/rsvp-exclude	internal/plugins/sessions/routes.go
+PUT	/sessions/feed-settings	internal/plugins/sessions/routes.go
 PUT	/sidebar-config	internal/plugins/campaigns/routes.go
 PUT	/sidebar-nodes/:nid	internal/plugins/entities/routes.go
 PUT	/sidebar-nodes/:nid/reorder	internal/plugins/entities/routes.go
