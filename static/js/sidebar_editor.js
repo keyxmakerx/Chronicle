@@ -1,5 +1,6 @@
 /**
- * sidebar_editor.js -- the owner's edit mode for the campaign sidebar
+ * sidebar_editor.js -- the owner's edit mode for the campaign sidebar, and a
+ * member's own pins
  *
  * The pencil in the sidebar's brand row turns the rows into an editor over
  * one staged draft: drag a row's handle (or focus it and use the arrow keys)
@@ -13,6 +14,9 @@
  * (#sidebar-nav[data-nav-edit]), which includes rows hidden from players and
  * apps turned off in Extensions. Rows are built with DOM calls, never from
  * markup strings, because labels and link addresses are typed by the owner.
+ *
+ * Players and scribes have no editor; they pin rows for themselves with the
+ * pin on each row, which the server stores for them alone.
  *
  * Motion moves only transform and opacity. A moved row is the real row,
  * lifted: let go, it glides into its new slot, or back into its own when the
@@ -1034,6 +1038,62 @@
     e.preventDefault();
     doAct(act.getAttribute('data-act'), act);
   }
+
+  // --- A member's own pins ----------------------------------------------------
+
+  // Players and scribes pin rows for themselves (PUT /campaigns/:id/nav-pins);
+  // the server checks every pin against the sidebar they see and stores it
+  // for them alone. The row then glides up into Pinned, or back down.
+  var pinning = false;
+
+  /** The viewer's own pins, in the order pinned (Pinned lists them so). */
+  function ownPins() {
+    return $$('#sidebar-nav-list [data-nav-pin][aria-pressed="true"]').map(function (b) {
+      return b.getAttribute('data-nav-pin');
+    });
+  }
+
+  function togglePersonalPin(btn) {
+    if (pinning || S) return;
+    var key = btn.getAttribute('data-nav-pin'), on = btn.getAttribute('aria-pressed') !== 'true';
+    var pins = ownPins().filter(function (k) { return k !== key; });
+    if (on) pins.push(key);
+    var label = btn.parentNode.querySelector('.nav-lb');
+    var name = label ? label.textContent : '';
+    var base = nav() ? nav().getAttribute('data-nav-base') : '';
+    pinning = true;
+    Chronicle.apiFetch(base + '/nav-pins', { method: 'PUT', body: { pins: pins } })
+      .then(function (res) {
+        if (res.ok) return true;
+        return res.json().catch(function () { return {}; }).then(function (body) {
+          throw new Error(body.message || body.error || 'That row could not be pinned.');
+        });
+      }, function () {
+        throw new Error('That row could not be pinned. Check your connection and try again.');
+      })
+      .then(function () {
+        var prev = snapshot(viewList());
+        return refreshSidebar().then(function () {
+          var list = viewList();
+          list.hidden = false;
+          playFlip(list, prev, { lift: 'n:' + key });
+          var again = list.querySelector('[data-nav-pin="' + key.replace(/["\\]/g, '\\$&') + '"]');
+          if (again) again.focus({ preventScroll: true });
+          announce(on ? name + ' is pinned to the top of your sidebar.' : name + ' is unpinned.');
+        }, function () {
+          window.location.reload();
+        });
+      })
+      .catch(function (err) { notify(err.message, 'error'); })
+      .then(function () { pinning = false; });
+  }
+
+  document.addEventListener('click', function (e) {
+    var btn = e.target && e.target.closest && e.target.closest('#sidebar-nav-list [data-nav-pin]');
+    if (!btn) return;
+    e.preventDefault();
+    togglePersonalPin(btn);
+  });
 
   // --- Wiring ----------------------------------------------------------------
 

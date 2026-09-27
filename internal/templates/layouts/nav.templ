@@ -95,7 +95,7 @@ templ navSection(sec NavSectionView) {
 				</div>
 				<div class="nav-gb" id="nav-b-pinned">
 					for _, row := range sec.Rows {
-						@navItem(row)
+						@navItem(row, navPinnable(ctx, sec, row))
 					}
 				</div>
 			</div>
@@ -124,7 +124,7 @@ templ navSection(sec NavSectionView) {
 					@navFixedRow("all", "All Pages", "fa-layer-group", fmt.Sprintf("/campaigns/%s/entities", GetCampaignID(ctx)), navAllPagesCount(ctx, sec.Rows))
 				}
 				for _, row := range sec.Rows {
-					@navItem(row)
+					@navItem(row, navPinnable(ctx, sec, row))
 				}
 			</div>
 		</div>
@@ -148,30 +148,61 @@ templ navFoldHead(id string, label string, count int, cur string) {
 	</button>
 }
 
-// navItem is a row, plus its sub-category rows under a twisty when it has any.
-templ navItem(row NavRowView) {
-	if len(row.Subs) > 0 {
-		<div class="nav-rw">
+// navItem is a row, plus its sub-category rows under a twisty when it has
+// any, and the viewer's own pin when they can pin it.
+templ navItem(row NavRowView, pinnable bool) {
+	if len(row.Subs) > 0 || pinnable {
+		<div class={ "nav-rw", templ.KV("can-pin", pinnable), templ.KV("is-mine", row.Personal), templ.KV("has-subs", len(row.Subs) > 0) }>
 			@navRow(row)
-			<button
-				type="button"
-				class="nav-tw"
-				data-nav-fold={ navSubFold(row.TypeID) }
-				aria-expanded={ strconv.FormatBool(NavFoldOpen(ctx, navSubFold(row.TypeID))) }
-				aria-controls={ "nav-b-" + navSubFold(row.TypeID) }
-				aria-label={ row.Label + " sub-categories" }
-			>
-				<i class="fa-solid fa-chevron-down" aria-hidden="true"></i>
-			</button>
-			<div class="nav-subs" id={ "nav-b-" + navSubFold(row.TypeID) } hidden?={ !NavFoldOpen(ctx, navSubFold(row.TypeID)) }>
-				for _, sub := range row.Subs {
-					@navSubRow(sub, row.Hidden)
-				}
-			</div>
+			if pinnable {
+				@navMyPin(row)
+			}
+			if len(row.Subs) > 0 {
+				@navSubsFold(row)
+			}
 		</div>
 	} else {
 		@navRow(row)
 	}
+}
+
+// navMyPin is a member's own pin on a row: it pins the row to the top of
+// their sidebar, or unpins one they pinned. Only they see where it goes.
+templ navMyPin(row NavRowView) {
+	<button
+		type="button"
+		class="nav-mypin"
+		data-nav-pin={ row.Key }
+		aria-pressed={ strconv.FormatBool(row.Personal) }
+		if row.Personal {
+			aria-label={ "Unpin " + row.Label }
+			title="Unpin"
+		} else {
+			aria-label={ "Pin " + row.Label + " to the top" }
+			title="Pin to the top"
+		}
+	>
+		<i class="fa-solid fa-thumbtack" aria-hidden="true"></i>
+	</button>
+}
+
+// navSubsFold is a category's twisty and its sub-category rows.
+templ navSubsFold(row NavRowView) {
+	<button
+		type="button"
+		class="nav-tw"
+		data-nav-fold={ navSubFold(row.TypeID) }
+		aria-expanded={ strconv.FormatBool(NavFoldOpen(ctx, navSubFold(row.TypeID))) }
+		aria-controls={ "nav-b-" + navSubFold(row.TypeID) }
+		aria-label={ row.Label + " sub-categories" }
+	>
+		<i class="fa-solid fa-chevron-down" aria-hidden="true"></i>
+	</button>
+	<div class="nav-subs" id={ "nav-b-" + navSubFold(row.TypeID) } hidden?={ !NavFoldOpen(ctx, navSubFold(row.TypeID)) }>
+		for _, sub := range row.Subs {
+			@navSubRow(sub, row.Hidden)
+		}
+	</div>
 }
 
 // navRow is one app, category, link or Manage row. A row hidden from players

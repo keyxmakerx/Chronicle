@@ -404,3 +404,42 @@ func TestNavSectionsSource_OffersOnlyWhatThePlayerSees(t *testing.T) {
 		t.Errorf("rows the player sees must be pinnable: %v", pinnable)
 	}
 }
+
+func TestSidebar_OwnPinsReachOnlyTheirMember(t *testing.T) {
+	cc := navTestContext(nil, campaigns.RolePlayer, true, false)
+	in := navInputsFor(cc, navTestTypes(), nil, navTestEnabled(), navTestSystem)
+	render := func(role int, pins []string, viewingAsPlayer bool) string {
+		ctx := navTestLayoutCtx(viewNavSections(cc, in, role >= 3, pins), role)
+		ctx = layouts.SetViewingAsPlayer(ctx, viewingAsPlayer)
+		var buf bytes.Buffer
+		if err := layouts.Sidebar().Render(ctx, &buf); err != nil {
+			t.Fatalf("render Sidebar: %v", err)
+		}
+		return buf.String()
+	}
+
+	player := render(int(campaigns.RolePlayer), []string{"cat:2"}, false)
+	pinned := player[strings.Index(player, `data-nav-section="pinned"`):]
+	pinned = pinned[:strings.Index(pinned, `data-nav-section="apps"`)]
+	if !strings.Contains(pinned, `data-nav-key="cat:2"`) || !strings.Contains(pinned, `data-nav-pin="cat:2" aria-pressed="true"`) {
+		t.Errorf("a player's own pin must sit in Pinned, pressed: %s", pinned)
+	}
+	if strings.Contains(pinned, `data-nav-pin="app:notes"`) {
+		t.Errorf("the campaign's own pins are not the player's to unpin")
+	}
+	if !strings.Contains(player, `data-nav-pin="cat:1" aria-pressed="false"`) {
+		t.Errorf("a row the player sees must offer their pin")
+	}
+	if !strings.Contains(render(int(campaigns.RoleScribe), nil, false), `data-nav-pin=`) {
+		t.Errorf("a scribe pins for themselves too")
+	}
+	for name, html := range map[string]string{
+		"owner":                   render(int(campaigns.RoleOwner), nil, false),
+		"owner viewing as player": render(int(campaigns.RolePlayer), nil, true),
+		"visitor":                 render(0, nil, false),
+	} {
+		if strings.Contains(html, "data-nav-pin") {
+			t.Errorf("%s: gets member pins, which only a non-owner member has", name)
+		}
+	}
+}

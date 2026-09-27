@@ -2824,6 +2824,32 @@
   .nav-tw i, .nav-chev { font-size: 10px; transition: transform 240ms var(--nav-ease); }
   .nav-tw[aria-expanded="false"] i, .nav-gh[aria-expanded="false"] .nav-chev { transform: rotate(-90deg); }
 
+  /* A member's own pin (players and scribes; the owner pins for everyone in
+     the editor). It shows on hover or focus, always on a row they pinned, and
+     always on touch screens, which have no hover. On hover the row's
+     trailing text fades out under it rather than moving aside. */
+  .nav-tr { transition: opacity 120ms ease; }
+  .nav-mypin {
+    position: absolute; top: 4px; right: 8px; z-index: 3; width: 24px; height: 24px; border-radius: 6px;
+    display: grid; place-items: center; font-size: 10px; color: var(--nav-text-3); opacity: 0;
+    transition: opacity 120ms ease, transform 120ms var(--nav-ease);
+  }
+  .nav-rw.has-subs > .nav-mypin { right: 34px; }
+  .nav-mypin:hover { color: var(--nav-hi); background: var(--nav-hover); }
+  .nav-mypin:active { transform: scale(0.88); }
+  .nav-mypin[aria-pressed="true"] { color: var(--nav-accent-soft); }
+  .nav-rw.can-pin:hover > .nav-mypin, .nav-rw.can-pin:focus-within > .nav-mypin, .nav-rw.is-mine > .nav-mypin { opacity: 1; }
+  .nav-rw.can-pin:not(.is-mine):hover > .nav-row .nav-tr,
+  .nav-rw.can-pin:not(.is-mine):focus-within > .nav-row .nav-tr { opacity: 0; }
+  .nav-rw.is-mine > .nav-row { padding-right: 36px; }
+  .nav-rw.is-mine.has-subs > .nav-row { padding-right: 62px; }
+  @media (hover: none) {
+    .nav-rw.can-pin > .nav-mypin { opacity: 1; }
+    .nav-rw.can-pin > .nav-row { padding-right: 36px; }
+    .nav-rw.can-pin.has-subs > .nav-row { padding-right: 62px; }
+    .nav-rw.can-pin > .nav-row .nav-tr { opacity: 1; }
+  }
+
   /* Section headings: the whole heading is the fold button. */
   .nav-gh-wrap { position: relative; margin-top: 8px; }
   .nav-gh {
@@ -2919,6 +2945,7 @@
   .sidebar-collapsed .nav-brand-name, .sidebar-collapsed .nav-edit-btn, .sidebar-collapsed .nav-lb,
   .sidebar-collapsed .nav-tr, .sidebar-collapsed .nav-hid, .sidebar-collapsed .nav-ext, .sidebar-collapsed .nav-gh-wrap,
   .sidebar-collapsed .nav-gh, .sidebar-collapsed .nav-tw, .sidebar-collapsed .nav-subs, .sidebar-collapsed .nav-admin,
+  .sidebar-collapsed .nav-mypin,
   .sidebar-collapsed .nav-foot, .sidebar-collapsed #sidebar-sessions-rsvp { display: none; }
   .sidebar-collapsed .nav-sb .nav-row, .nav-sb.sidebar-collapsed .nav-row { padding: 0; justify-content: center; }
 
@@ -3057,5 +3084,5 @@
   .nav-ring-j { display: block; }
   .nav-row:active, .nav-row:hover .nav-ic, .nav-row:active .nav-ic, .nav-ibtn:active, .nav-tw:active,
   .nav-gh-add:active, button.nav-gh:active .nav-gh-l, .nav-hd:active, .nav-eb:active, .nav-addg:active,
-  .nav-btn:active { transform: none; }
+  .nav-btn:active, .nav-mypin:active { transform: none; }
 }

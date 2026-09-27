@@ -3443,7 +3443,17 @@ func (a *App) RegisterRoutes() {
 			if typesErr == nil {
 				in := navInputsFor(cc, sidebarTypes, counts, enabledSlugs, enabledSystem)
 				navOwner := effectiveRole >= int(campaigns.RoleOwner)
-				ctx = layouts.SetNavSections(ctx, viewNavSections(cc, in, navOwner, nil))
+				// A member who is not the owner has pins of their own; they
+				// are read for this user only.
+				var pins []string
+				if cc.IsMember && cc.MemberRole < campaigns.RoleOwner && layoutUserID != "" {
+					if p, err := campaignService.NavPins(reqCtx, cc.Campaign.ID, layoutUserID); err == nil {
+						pins = p
+					} else {
+						slog.Warn("reading member nav pins", slog.String("campaign_id", cc.Campaign.ID), slog.Any("error", err))
+					}
+				}
+				ctx = layouts.SetNavSections(ctx, viewNavSections(cc, in, navOwner, pins))
 				if navOwner {
 					ctx = layouts.SetNavEdit(ctx, buildNavEdit(in))
 				}

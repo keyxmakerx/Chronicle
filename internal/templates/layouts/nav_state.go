@@ -222,6 +222,20 @@ func navShowsMe(ctx context.Context) bool {
 	return IsAuthenticated(ctx) && (role == 1 || (role >= 2 && IsViewingAsPlayer(ctx)))
 }
 
+// NavCanPin reports whether the viewer pins rows for themselves: a signed-in
+// member who is not the owner. The owner pins for everyone in the editor,
+// and an owner previewing the campaign as a player is still the owner.
+func NavCanPin(ctx context.Context) bool {
+	role := GetCampaignRole(ctx)
+	return IsAuthenticated(ctx) && (role == 1 || role == 2) && !IsViewingAsPlayer(ctx)
+}
+
+// navPinnable reports whether a row gets the viewer's own pin: any row
+// outside Pinned, and in Pinned only the rows they pinned themselves.
+func navPinnable(ctx context.Context, sec NavSectionView, row NavRowView) bool {
+	return NavCanPin(ctx) && (sec.Kind != "pinned" || row.Personal)
+}
+
 // navSubFold is the fold id of a category's sub-category rows.
 func navSubFold(typeID int) string { return "sub-" + strconv.Itoa(typeID) }
 
