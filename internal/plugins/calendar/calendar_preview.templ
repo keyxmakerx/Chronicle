@@ -1,105 +1,96 @@
-// calendar_preview.templ renders the per-card preview dialog: the
-// calendar's name, today's date, the current month's grid, tonight's moons
-// and what's coming up. This is always the mockup's folded ".pv" state;
-// month-to-month paging lives on the calendar's own page
-// (/campaigns/:id/calendars/:calid/view), which the "Full calendar view"
-// link opens. No weather line: that needs a weather-generation engine this
-// plugin doesn't have wired for a viewer with no forecast permission.
+// calendar_preview.templ renders the almanac a calendar opens as from its
+// card on the Calendars page (the signed setup design, #764): folded, the
+// preview is this month and this calendar's today, tonight and what's coming
+// up; "Open calendar" unfolds it in place into the calendar itself, whose
+// mount waits in a <template> until then. calendar_almanac.js runs the
+// opening, the unfolding and back. No weather line: that needs a
+// weather-generation engine this plugin doesn't have wired for a viewer with
+// no forecast permission.
 package calendar
 
 import "fmt"
 
-// CalendarPreviewFragment is the dialog's whole content, always fragment-only.
+// CalendarPreviewFragment is the almanac's whole content, always fragment-only.
 templ CalendarPreviewFragment(data CalendarPreviewData) {
-	<div
-		id="calv5-preview-root"
-		class="calv5"
-		x-data="{open:true}"
-		x-show="open"
-		x-cloak
-	>
-		<div class="calv5-overlay" @click.self="open=false; if(window.__calv5Opener)window.__calv5Opener.focus()">
-			<div
-				class="calv5-panel wide"
-				role="dialog"
-				aria-modal="true"
-				aria-label={ fmt.Sprintf("%s preview", data.Calendar.Name) }
-				tabindex="-1"
-				x-init="$nextTick(() => $el.focus())"
-				@keydown.escape.window="open=false; if(window.__calv5Opener)window.__calv5Opener.focus()"
-			>
-				<div class="calv5-crease">
-					<span>Calendar preview</span>
-					<button
-						type="button"
-						class="x"
-						aria-label="Close"
-						style="margin-left:auto"
-						@click="open=false; if(window.__calv5Opener)window.__calv5Opener.focus()"
-					>
-						<i class="fa-solid fa-xmark"></i>
+	<div id="calv5-preview-root" class="calv5" data-almanac>
+		<div class="calv5-alm-scrim" data-alm="escape"></div>
+		<div
+			class="calv5-alm pv"
+			id="calv5-alm"
+			role="dialog"
+			aria-modal="true"
+			aria-labelledby="calv5-alm-name"
+			tabindex="-1"
+		>
+			<div class="calv5-ap calv5-ap-grid" id="calv5-alm-grid">
+				@previewMonthGrid(data.Calendar, data.MonthEvents)
+			</div>
+			<div class="calv5-ap calv5-ap-info" id="calv5-alm-info">
+				<div class="calv5-ai-top">
+					<h2 class="calv5-ai-name" id="calv5-alm-name">{ data.Calendar.Name }</h2>
+					<button type="button" class="x" data-alm="close" aria-label={ "Close " + data.Calendar.Name }>
+						<i class="fa-solid fa-xmark" aria-hidden="true"></i>
 					</button>
 				</div>
-				<div class="calv5-body">
-					<div style="display:grid;grid-template-columns:minmax(0,1.3fr) minmax(0,1fr);gap:22px;align-items:start">
-						<div>
-							@previewMonthGrid(data.Calendar, data.MonthEvents)
-						</div>
-						<div>
-							<div class="calv5-ai-top">
-								<h2 class="calv5-ai-name">{ data.Calendar.Name }</h2>
-							</div>
-							<p class="calv5-ai-date">{ data.Calendar.FullDateLabel() }</p>
-
-							<span class="calv5-ai-l">Tonight</span>
-							if len(data.Calendar.Moons) == 0 {
-								<p style="margin:0;font-size:12.5px;color:var(--mut)">No moons in this calendar.</p>
-							} else {
-								<div class="calv5-ai-moons">
-									for _, m := range data.Calendar.Moons {
-										<div class="calv5-ai-moon">
-											<span class="tsil">
-												@MoonSilhouette(m.MoonPhase(data.Calendar.CurrentAbsoluteDay()))
-											</span>
-											<span>
-												<b>{ m.Name }</b>
-												<small>{ m.MoonPhaseName(data.Calendar.CurrentAbsoluteDay()) }</small>
-											</span>
-										</div>
-									}
+				<p class="calv5-ai-date">{ "Today is " + data.Calendar.FullDateLabel() }</p>
+				<div>
+					<span class="calv5-ai-l">Tonight</span>
+					if len(data.Calendar.Moons) == 0 {
+						<p class="calv5-ai-none">No moons in this calendar.</p>
+					} else {
+						<div class="calv5-ai-moons">
+							for _, m := range data.Calendar.Moons {
+								<div class="calv5-ai-moon">
+									<span class="tsil">
+										@MoonSilhouette(m.MoonPhase(data.Calendar.CurrentAbsoluteDay()))
+									</span>
+									<span>
+										<b>{ m.Name }</b>
+										<small>{ m.MoonPhaseName(data.Calendar.CurrentAbsoluteDay()) }</small>
+									</span>
 								</div>
 							}
-
-							<span class="calv5-ai-l">Coming up</span>
-							if len(data.Upcoming) == 0 {
-								<p style="margin:0;font-size:12.5px;color:var(--mut)">Nothing on the calendar yet.</p>
-							} else {
-								<ul class="calv5-up">
-									for _, e := range data.Upcoming {
-										<li>
-											<i class="fa-solid fa-calendar-day i" style="margin-top:2px;color:var(--mut)"></i>
-											<span>
-												<b>{ e.Name }</b>
-												<small>{ fmt.Sprintf("%s %d, %d", data.Calendar.MonthName(e.Month), e.Day, e.Year) }</small>
-											</span>
-										</li>
-									}
-								</ul>
-							}
-
-							<div style="margin-top:18px;display:flex;flex-direction:column;gap:8px">
-<a
-									href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/calendars/%s/view", data.CampaignID, data.Calendar.ID)) }
-									class="btn primary"
-									style="width:100%;text-align:center"
-								>
-									<i class="fa-solid fa-book-open"></i> Full calendar view
-								</a>
-							</div>
 						</div>
-					</div>
+					}
+				</div>
+				<div>
+					<span class="calv5-ai-l">Coming up</span>
+					if len(data.Upcoming) == 0 {
+						<p class="calv5-ai-none">Nothing on the calendar yet.</p>
+					} else {
+						<ul class="calv5-up">
+							for _, e := range data.Upcoming {
+								<li>
+									<i class="fa-solid fa-calendar-day i" style="margin-top:2px;color:var(--mut)"></i>
+									<span>
+										<b>{ e.Name }</b>
+										<small>{ fmt.Sprintf("%s %d, %d", data.Calendar.MonthName(e.Month), e.Day, e.Year) }</small>
+									</span>
+								</li>
+							}
+						</ul>
+					}
+				</div>
+				<div class="calv5-ai-acts">
+					<button type="button" class="btn primary" data-alm="unfold" id="calv5-alm-open">
+						<i class="fa-solid fa-book-open" aria-hidden="true"></i> Open calendar
+					</button>
 				</div>
 			</div>
+			<div class="calv5-alm-full" id="calv5-alm-full" hidden>
+				<div class="calv5-alm-bar">
+					<button type="button" class="btn quiet sm" data-alm="fold">
+						<i class="fa-solid fa-chevron-left" aria-hidden="true"></i> Preview
+					</button>
+					<button type="button" class="x" data-alm="close" aria-label={ "Close " + data.Calendar.Name }>
+						<i class="fa-solid fa-xmark" aria-hidden="true"></i>
+					</button>
+				</div>
+				<div class="calv5-alm-cal" id="calv5-alm-cal"></div>
+			</div>
+			<template id="calv5-alm-tpl">
+				@calendarViewMount(data.View)
+			</template>
 		</div>
 	</div>
 }

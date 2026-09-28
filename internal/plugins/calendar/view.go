@@ -67,19 +67,24 @@ func (h *Handler) CalendarViewPage(c echo.Context) error {
 	if err != nil {
 		return err
 	}
+
+	return middleware.Render(c, http.StatusOK, CalendarViewPage(cc, calendarViewDataFor(cc, cal, events)))
+}
+
+// calendarViewDataFor is the widget's config for one viewer. The calendar's
+// own page and the Calendars page's preview both build it here, so the
+// calendar a preview unfolds into is the one its own page would show.
+func calendarViewDataFor(cc *campaigns.CampaignContext, cal *Calendar, events []Event) CalendarViewData {
 	if events == nil {
 		events = []Event{}
 	}
-
-	data := CalendarViewData{
+	return CalendarViewData{
 		CampaignID:         cc.Campaign.ID,
-		CalendarID:         calID,
+		CalendarID:         cal.ID,
 		Calendar:           cal,
 		CurrentMonthEvents: events,
 		CanEdit:            cc.MemberRole >= campaigns.RoleOwner || cc.CanAuthorDmOnly(),
 		CanAuthorDmOnly:    cc.CanAuthorDmOnly(),
 		ViewerRole:         int(cc.MemberRole),
 	}
-
-	return middleware.Render(c, http.StatusOK, CalendarViewPage(cc, data))
 }

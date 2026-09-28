@@ -97,13 +97,16 @@ type CalendarPreviewData struct {
 	// dots) — cheap to include since ListEventsForMonth already exists and
 	// this dialog only ever shows the current month (see calendar_preview.templ).
 	MonthEvents []Event
+	// View is the calendar the preview unfolds into: the same widget config
+	// its own page renders, built for the same viewer.
+	View CalendarViewData
 }
 
 // Preview renders the calendar preview fragment
-// (GET /campaigns/:id/calendars/:calid/preview), opened from a card into the
-// list page's preview dialog. Fragment-only: there is no standalone page
-// for it; its "Full calendar view" link opens the calendar's own page
-// (/calendars/:calid/view).
+// (GET /campaigns/:id/calendars/:calid/preview), opened from a card on the
+// Calendars page. Fragment-only: "Open calendar" unfolds it in place into
+// the calendar itself, whose own page (/calendars/:calid/view) still serves
+// links and reloads.
 func (h *Handler) Preview(c echo.Context) error {
 	cc := campaigns.GetCampaignContext(c)
 	ctx := c.Request().Context()
@@ -127,6 +130,7 @@ func (h *Handler) Preview(c echo.Context) error {
 		Calendar:    cal,
 		Upcoming:    upcoming,
 		MonthEvents: monthEvents,
+		View:        calendarViewDataFor(cc, cal, monthEvents),
 	}
 	return middleware.Render(c, http.StatusOK, CalendarPreviewFragment(data))
 }
