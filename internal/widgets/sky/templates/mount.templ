@@ -75,10 +75,9 @@ templ Empty(campaignID string) {
 // MountID builds the same "sky-pane-<calendarID>" id Mount uses for its own
 // mount point's id/aria-controls pair. Exported for a future caller that
 // wants to point its own control at an EXISTING sky-pane mount without
-// re-deriving the format by hand. The calendar's own page
-// (internal/plugins/calendar/view.templ) does not mount this widget — it
-// paints its own separate, simplified sky context instead (TODO(#741)) — so
-// today Mount itself, via routes.go's "skybox" dashboard/entity block, is
+// re-deriving the format by hand. The calendar docks its sky with its own
+// markup through SkyPane.Dock (sky_pane.js), not through Mount, so today
+// Mount itself, via routes.go's "skybox" dashboard/entity block, is
 // MountID's only caller.
 func MountID(calendarID string) string {
 	return fmt.Sprintf("sky-pane-%s", calendarID)

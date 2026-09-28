@@ -128,7 +128,9 @@
     btn.id = 'cal5-editbtn';
     btn.setAttribute('aria-pressed', 'false');
     btn.innerHTML = '<i class="fa-solid fa-sliders"></i><span>Edit</span>';
-    acts.insertBefore(btn, acts.firstChild);
+    // After the Sky chip, which leads the actions, as signed.
+    var sky = $('#cal5-skybtn', acts);
+    acts.insertBefore(btn, sky ? sky.nextSibling : acts.firstChild);
     var self = this;
     btn.addEventListener('click', function () { self.setEditing(!self.editing); });
     this.editBtn = btn;

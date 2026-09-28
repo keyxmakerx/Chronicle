@@ -115,17 +115,20 @@
     var altDeg = sun.alt / SW.D2R, eve = h24 >= 12 ? 1 : 0;
     var dark = SW.smooth01(4, -14, altDeg);
     var R = SW.clamp(model.height * .11, 7, 26);
+    // A folding pane draws at every height it passes through, but shades its
+    // moons once, at the height it rests at (restH), and scales them.
+    var RS = model.restH ? SW.clamp(model.restH * .11, 7, 26) : R;
 
     var moons = astro.map(function (a) {
-      var mo = a.mo, up = a.up, r = R * (mo.size || 1);
+      var mo = a.mo, up = a.up, r = R * (mo.size || 1), sr = RS * (mo.size || 1);
       var blood = up && !!overlay.blood[mo.id];
       var harvest = up && !!overlay.harvest[mo.id];
-      if (harvest) r *= 1.18;
+      if (harvest) { r *= 1.18; sr *= 1.18; }
       var shadow = null;
       if (up && overlay.eclipse[mo.id] != null) shadow = [0, 0, r * .55, overlay.eclipse[mo.id]];
       var p = up ? PROJ_at(L, a.m.alt, a.m.az) : { x: 0, y: 0 };
       var rot = up ? SW.moonTurn(L, a.m, sun) : 0;
-      return { mo: mo, m: a.m, up: up, x: p.x, y: p.y, r: r, rot: rot, spec: window.SkyMoon.specFor(mo), blood: blood, shadow: shadow };
+      return { mo: mo, m: a.m, up: up, x: p.x, y: p.y, r: r, sr: sr, rot: rot, spec: window.SkyMoon.specFor(mo), blood: blood, shadow: shadow };
     });
 
     var weatherSpec = LOOKS.spec(cal.weather);
@@ -146,6 +149,20 @@
 
   function paceOf(state) {
     return Object.keys(state.overlay.blood || {}).length > 0;
+  }
+
+  // The moon that lights the sky most: the fullest, weighted by its size.
+  function brightestMoon(st) {
+    return st.moons.filter(function (m) { return m.up && m.m.alt > 0; })
+      .sort(function (a, b) { return b.m.lit * (b.mo.size || 1) - a.m.lit * (a.mo.size || 1); })[0] || null;
+  }
+
+  // The sky in words: weather, the brightest moon and its phase, the time.
+  function describe(model, st) {
+    var cal = model.calendar, bits = [st.weatherLabel], b = brightestMoon(st);
+    if (b) bits.push(b.mo.name + ' – ' + phaseName(b.m.p));
+    bits.push(hhmm(cal.current_hour || 0, cal.current_minute || 0));
+    return bits.join(' · ');
   }
 
   function Instance(el) {
@@ -223,11 +240,7 @@
     this.chipSw.style.background = 'linear-gradient(' + hexOf(st.P.zen) + ',' + hexOf(st.P.hor) + ')';
     var cal = this.model.calendar;
     this.chipText.textContent = hhmm(cal.current_hour || 0, cal.current_minute || 0);
-    var brightest = st.moons.filter(function (m) { return m.up; }).sort(function (a, b) { return b.r - a.r; })[0];
-    var bits = [st.weatherLabel];
-    if (brightest) bits.push(brightest.mo.name + ' – ' + phaseName(brightest.m.p));
-    bits.push(hhmm(cal.current_hour || 0, cal.current_minute || 0));
-    this.caption.textContent = bits.join(' · ');
+    this.caption.textContent = describe(this.model, st);
   };
   Instance.prototype.onResize = function () {
     clearTimeout(this._resizeT);
@@ -313,11 +326,9 @@
   // rest of the app in both themes without a second palette to maintain.
   // .dsky/.dscrub/.dwx/.dcard (the day-card weather band + its grow
   // interaction) are ported here too, at the CSS layer only, ahead of need:
-  // the calendar page's day grid (internal/plugins/calendar/view.templ)
-  // exists now but does not mount this widget or use these rules — it
-  // paints its own separate, simplified sky context instead (TODO(#741));
-  // see internal/widgets/sky/.ai.md's "Integrating into the calendar page"
-  // for what wiring them in would take.
+  // the calendar docks its sky through SkyPane.Dock above, with its own
+  // markup and styles (calendar-view.css), and its day card has no sky band
+  // yet (TODO(#833)).
   //
   // Declared BEFORE Chronicle.register below, not after: every script here
   // loads with `defer`, and a deferred script executes once the document is
@@ -362,9 +373,8 @@
     '.skycap{position:absolute;left:8px;bottom:6px;margin:0;font-size:11px;line-height:1.3;color:#f2f4fa;text-shadow:0 1px 2px rgba(0,0,0,.55);pointer-events:none;}',
     '@container cal (max-width:600px){.skywrap{--skyH:clamp(100px,14cqw,166px);}}',
     '@media (max-width:600px){.skywrap{--skyH:clamp(100px,14cqw,166px);}}',
-    /* ── Day card: ready to wire in, but unused — the calendar page's day
-       grid paints its own sky context instead of mounting this widget
-       (TODO(#741)). ── */
+    /* ── Day card: ready to wire in, but unused until the calendar's day
+       card gets its own sky band (TODO(#833)). ── */
     '.dcard{position:relative;width:100%;max-width:340px;}',
     '.dsky{position:relative;height:80px;cursor:pointer;border:0;padding:0;display:block;width:100%;background:none;}',
     '.dsky canvas{position:absolute;left:0;top:0;width:100%;height:100%;display:block;}',
@@ -375,6 +385,199 @@
     '.dwx:focus-visible{outline:2px solid var(--color-text-primary);outline-offset:2px;}',
     '@container cal (max-width:600px){.dcard{max-width:100%;}}'
   ].join('\n');
+
+  // ── The sky docked over a calendar's month (#830). The calendar builds the
+  // markup (the pane flush at the top of its card, the Sky chip in its
+  // header) and hands it here; this draws the sky and folds it.
+  //
+  // The fold, as signed: at the first frame the pane takes (or gives up) its
+  // room; the card rides a transform so its top edge stays put and a clip
+  // hides what is not there yet; the sky is drawn whole into the strip that
+  // shows, its lower edge riding the header, like a shade rolling into the
+  // chip. Reduced motion only fades. Frames run only while something moves:
+  // folded, at rest, off screen or in a hidden tab, nothing is drawn. ──
+  var FOLD_KEY = 'chronicle.calendar.sky';
+  function readFolded() { try { return window.localStorage.getItem(FOLD_KEY) === 'folded'; } catch (e) { return false; } }
+  function writeFolded(folded) {
+    try { if (folded) window.localStorage.setItem(FOLD_KEY, 'folded'); else window.localStorage.removeItem(FOLD_KEY); }
+    catch (e) { /* a private window: not remembered */ }
+  }
+
+  // Opening springs with a little give; closing is critically damped and
+  // stiffer, so it settles sooner without passing its mark.
+  function spring(sp, dt, opening) {
+    var k = opening ? 240 : 900, z = opening ? .8 : 1, c = 2 * Math.sqrt(k) * z, n = Math.max(1, Math.ceil(dt / (1 / 240))), h = dt / n;
+    for (var i = 0; i < n; i++) { sp.v += (k * (sp.target - sp.e) - c * sp.v) * h; sp.e += sp.v * h; }
+    if (Math.abs(sp.target - sp.e) < .0012 && Math.abs(sp.v) < .015) { sp.e = sp.target; sp.v = 0; sp.on = false; }
+  }
+  function px(v) { return (Math.round(v * 100) / 100) + 'px'; }
+  // The card's clip while it travels: its top edge rounded like the card,
+  // open to the sides and below so its shadow still shows. g is the card's
+  // size and corner, measured once per fold.
+  function cardGeo(el) { return { W: el.offsetWidth, H: el.offsetHeight, r: parseFloat(getComputedStyle(el).borderTopLeftRadius) || 0 }; }
+  function clipTop(g, top) {
+    var W = g.W, H = g.H, r = g.r, s = 40, t = Math.round(top * 100) / 100;
+    return 'path("M0 ' + (t + r) + (r ? ' A' + r + ' ' + r + ' 0 0 1 ' + r + ' ' + t : '') + ' H' + (W - r) + (r ? ' A' + r + ' ' + r + ' 0 0 1 ' + W + ' ' + (t + r) : '') +
+      ' H' + (W + s) + ' V' + (H + s) + ' H' + (-s) + ' V' + (t + r) + ' Z")';
+  }
+  // The pane's height: 14% of the card's width, at least 100px (a phone's
+  // compact strip) and at most 166px. Set from here because the card cannot
+  // be a size container: its phone sheets are position:fixed.
+  function paneHeight(w) { return Math.round(SW.clamp(w * .14, 100, 166)); }
+
+  // o: {card, wrap (.skywrap holding .sky > canvas), chip (holding .sw),
+  //     seed, name, followers() → elements below the card that ride with it,
+  //     before() → called as a fold starts, travel() → false to fold without
+  //     moving the card, say(text)}. Throws when there is nothing to draw with.
+  function Dock(o) {
+    var self = this;
+    this.o = o;
+    this.card = o.card; this.wrap = o.wrap; this.chip = o.chip;
+    this.sky = o.wrap.querySelector('.sky');
+    this.canvas = this.sky.querySelector('canvas');
+    this.sw = o.chip.querySelector('.sw');
+    this.ctx = this.canvas.getContext('2d');
+    if (!this.ctx || !window.Sky2D || !SW || !LOOKS || !EV) throw new Error('sky: nothing to draw with');
+    this.rm = reducedMotion();
+    this.dpr = Math.max(1, Math.min(2, window.devicePixelRatio || 1));
+    this.model = null; this.paced = false; this.W = 0; this.H = 0; this.raf = 0; this.lastT = 0; this.onScreen = true;
+    var open = !readFolded();
+    this.S = { target: open ? 1 : 0, e: open ? 1 : 0, v: 0, on: false, layout: open, fade: 1, lastE: open ? 1 : 0 };
+    this.wrap.classList.toggle('open', open);
+    this.chip.setAttribute('aria-expanded', String(open));
+    this._tick = function (tMs) { self.tick(tMs); };
+    this._click = function () { self.fold(!self.S.layout); };
+    this._vis = function () { self.kick(); };
+    this.chip.addEventListener('click', this._click);
+    document.addEventListener('visibilitychange', this._vis);
+    if ('ResizeObserver' in window) {
+      this.ro = new ResizeObserver(function () { if (self.wrap.clientWidth !== self.W) self.resized(); });
+      this.ro.observe(this.wrap);
+    } else {
+      this._resize = function () { self.resized(); };
+      window.addEventListener('resize', this._resize);
+    }
+    if ('IntersectionObserver' in window) {
+      this.io = new IntersectionObserver(function (es) { es.forEach(function (e) { self.onScreen = e.isIntersecting; }); self.kick(); }, { threshold: 0 });
+      this.io.observe(this.sky);
+    }
+    this.measure();
+  }
+  Dock.prototype.measure = function () {
+    var W = this.wrap.clientWidth;
+    if (!W) return false;
+    var H = paneHeight(W), bw = Math.round(W * this.dpr), bh = Math.round(H * this.dpr);
+    if (H !== this.H) this.wrap.style.setProperty('--skyH', H + 'px');
+    this.W = W; this.H = H;
+    if (this.canvas.width !== bw || this.canvas.height !== bh) { this.canvas.width = bw; this.canvas.height = bh; }
+    return true;
+  };
+  // The day the sky shows: the calendar as this viewer may see it, and that
+  // day's events. Players only ever get today as it is from here.
+  Dock.prototype.setDay = function (cal, events) {
+    this.model = { calendar: cal, todayEvents: events || [], skym: SW.makeSkym(cal), landSeed: hashSeed(this.o.seed), width: 0, height: 0 };
+    var st = buildState({ calendar: cal, todayEvents: this.model.todayEvents, skym: this.model.skym, landSeed: this.model.landSeed, width: this.W || 640, height: this.H || 120 }, 0);
+    this.paced = paceOf(st);
+    this.label(st);
+    if (this.measure() && this.S.layout && !this.S.on) this.paint(performance.now() / 1000, 0, this.H);
+    this.kick();
+  };
+  // The chip's swatch is the sky now, in two colours, with its brightest body
+  // as a dot; the sky's own name says the same in words.
+  Dock.prototype.label = function (st) {
+    var src = st.alt > 0 ? st.sp : brightestMoon(st), body = st.alt > 0 ? 'rgba(255,236,190,.95)' : 'rgba(230,236,248,.9)';
+    var dot = src ? 'radial-gradient(circle at ' + SW.clamp(src.x / st.W * 100, 20, 80).toFixed(0) + '% ' + SW.clamp(src.y / st.H * 100, 22, 70).toFixed(0) + '%,' + body + ' 0 2px,transparent 2.6px),' : '';
+    this.sw.style.setProperty('--sw', dot + 'linear-gradient(' + LOOKS.linHex(st.P.zen) + ',' + LOOKS.linHex(st.P.hor) + ')');
+    this.sky.setAttribute('aria-label', 'The sky over ' + (this.o.name || 'the world') + ' now. ' + describe(this.model, st));
+  };
+  // Draws the whole sky into the strip [y, y+h) of the pane, snapped to
+  // device pixels, and clears the rest.
+  Dock.prototype.paint = function (t, y, h) {
+    if (!this.model || !this.W) return;
+    var d = this.dpr, y0 = Math.round(y * d) / d, h0 = Math.round((y + h) * d) / d - y0;
+    this.ctx.setTransform(1, 0, 0, 1, 0, 0);
+    this.ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
+    if (h0 < 2) return;
+    this.model.width = this.W; this.model.height = h0; this.model.restH = this.H;
+    window.Sky2D.draw(this.ctx, buildState(this.model, this.rm ? 0 : t), d, y0);
+  };
+  Dock.prototype.fold = function (open) {
+    var S = this.S, target = open ? 1 : 0;
+    if (target === S.target && (S.on || S.e === target)) return;
+    if (this.o.before) this.o.before();
+    S.target = target;
+    // The first frame: the room changes at once; transforms hold everything where it was.
+    this.wrap.classList.toggle('open', open); S.layout = open;
+    this.chip.setAttribute('aria-expanded', String(open));
+    writeFolded(!open);
+    var travel = !this.rm && !document.hidden && (!this.o.travel || this.o.travel());
+    if (travel) S.on = true;
+    else { S.e = target; S.v = 0; S.on = false; S.fade = open && this.rm ? 0 : 1; }
+    this.measure();
+    this.geo = cardGeo(this.card);
+    this.apply(performance.now() / 1000);
+    this.kick();
+    if (this.o.say) this.o.say(open ? 'Sky open' : 'Sky folded into its chip');
+  };
+  Dock.prototype.apply = function (t) {
+    var S = this.S, H = this.H, e = S.e, card = this.card, fol = this.o.followers ? this.o.followers() : [];
+    if (!S.on && (e === 0 || e === 1)) {
+      card.style.transform = ''; card.style.clipPath = ''; card.classList.remove('moving'); this.sky.style.clipPath = '';
+      fol.forEach(function (el) { el.style.transform = ''; });
+      this.sky.style.opacity = this.rm && S.layout && S.fade < 1 ? String(S.fade) : '';
+      if (S.layout) this.paint(t, 0, H);
+      // The shade rolled into the chip, and the chip catches it.
+      if (S.lastE !== e && e === 0 && !this.rm) { this.chip.classList.remove('caught'); void this.chip.offsetWidth; this.chip.classList.add('caught'); }
+      S.lastE = e;
+      return;
+    }
+    S.lastE = e;
+    var ty = S.layout ? -H * (1 - e) : H * e, top = S.layout ? H * (1 - e) : -H * e;
+    card.classList.add('moving');
+    card.style.transform = 'translateY(' + px(ty) + ')';
+    card.style.clipPath = clipTop(this.geo || (this.geo = cardGeo(card)), top);
+    this.sky.style.clipPath = 'inset(' + px(H * (1 - e)) + ' 0 0 0)';
+    fol.forEach(function (el) { el.style.transform = 'translateY(' + px(ty) + ')'; });
+    this.paint(t, H * (1 - e), H * e);
+  };
+  Dock.prototype.tick = function (tMs) {
+    this.raf = 0;
+    var S = this.S, dt = this.lastT ? Math.min(.05, (tMs - this.lastT) / 1000) : 1 / 60, t = tMs / 1000;
+    this.lastT = tMs;
+    if (S.on || S.fade < 1) {
+      if (S.fade < 1) S.fade = Math.min(1, S.fade + dt / .18);
+      // The frame a spring settles in is applied too, so the rest state lands.
+      if (S.on) spring(S, dt, S.target === 1);
+      this.apply(t);
+    } else if (this.paced && S.layout) this.paint(t, 0, this.H);
+    this.kick();
+  };
+  Dock.prototype.kick = function () {
+    var S = this.S, want = !document.hidden && (S.on || S.fade < 1 || (this.paced && !this.rm && S.layout && this.onScreen));
+    if (want) { if (!this.raf) this.raf = requestAnimationFrame(this._tick); return; }
+    if (this.raf) { cancelAnimationFrame(this.raf); this.raf = 0; }
+    this.lastT = 0;
+    // A fold that could not run its frames (a hidden tab) lands at once.
+    if (S.on) { S.e = S.target; S.v = 0; S.on = false; this.apply(performance.now() / 1000); }
+  };
+  Dock.prototype.resized = function () {
+    var S = this.S;
+    if (S.on) { S.e = S.target; S.v = 0; S.on = false; }
+    if (!this.measure()) return;
+    this.apply(performance.now() / 1000);
+  };
+  Dock.prototype.destroy = function () {
+    if (this.raf) cancelAnimationFrame(this.raf);
+    this.raf = 0;
+    this.chip.removeEventListener('click', this._click);
+    document.removeEventListener('visibilitychange', this._vis);
+    if (this.ro) this.ro.disconnect();
+    if (this._resize) window.removeEventListener('resize', this._resize);
+    if (this.io) this.io.disconnect();
+    this.card.style.transform = ''; this.card.style.clipPath = ''; this.card.classList.remove('moving');
+    (this.o.followers ? this.o.followers() : []).forEach(function (el) { el.style.transform = ''; });
+  };
+  window.SkyPane = { Dock: Dock, paneHeight: paneHeight, spring: spring, FOLD_KEY: FOLD_KEY };
 
   Chronicle.register('sky-pane', {
     init: function (el) { injectStyles(); var inst = new Instance(el); el._skyPane = inst; inst.init(); },
