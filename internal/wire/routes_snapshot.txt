@@ -180,6 +180,7 @@ GET	/calendars/presets/:name	internal/plugins/calendar/routes.go
 GET	/calendars/upcoming	internal/plugins/calendar/routes.go
 GET	/calendars/wizard	internal/plugins/calendar/routes.go
 GET	/calendars/wizard/build	internal/plugins/calendar/routes.go
+GET	/calendars/wizard/generate	internal/plugins/calendar/routes.go
 GET	/calendars/wizard/import	internal/plugins/calendar/routes.go
 GET	/calendars/wizard/presets	internal/plugins/calendar/routes.go
 GET	/calendars/wizard/presets/:name	internal/plugins/calendar/routes.go
@@ -472,6 +473,7 @@ POST	/calendars/import/preview	internal/plugins/calendar/routes.go
 POST	/calendars/presets/:name	internal/plugins/calendar/routes.go
 POST	/calendars/wizard/build/preview	internal/plugins/calendar/routes.go
 POST	/calendars/wizard/create	internal/plugins/calendar/routes.go
+POST	/calendars/wizard/generate/preview	internal/plugins/calendar/routes.go
 POST	/calendars/wizard/import/preview	internal/plugins/calendar/routes.go
 POST	/campaigns	internal/plugins/campaigns/routes.go
 POST	/campaigns/:id/join	internal/plugins/admin/routes.go

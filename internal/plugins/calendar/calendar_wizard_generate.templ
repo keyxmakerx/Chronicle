@@ -1,0 +1,639 @@
+// calendar_wizard_generate.templ renders the "Generate one" step: a recipe
+// sheet (chips, shape steppers, a naming culture, and a "work it out from
+// the sky" switch) with a live result beside it, driven entirely by the
+// generator engine running in the browser (static/js/widgets/
+// chronicle_gen.js — the design lab's engine, copied verbatim apart from
+// the fromSky extension). The server never runs the generator: this step's Go code only
+// renders the shell and, at Preview, re-validates whatever the browser
+// produced (wizard_generate_handler.go) — identically to every other
+// wizard source.
+//
+// Why the engine loads the way it does: boot.js sets
+// htmx.config.allowScriptTags=false (tools/check-page-scripts.sh explains
+// why — htmx strips <script> tags, src or inline, from ANY swapped
+// fragment, not just boosted nav), so a <script src> written here would
+// silently never run. The plugin body-script registry (routes.go's
+// pluginBodyScripts) is the usual fix, but that loads on EVERY page — wrong
+// for a ~460KB engine only this one step needs. Instead, ensureEngine()
+// below creates a real <script> element with document.createElement and
+// appends it imperatively: a normal DOM mutation the browser executes on
+// its own, entirely outside htmx's swap parsing, and paid for only when
+// this step is actually open.
+//
+// Every interactive control is a plain Alpine directive (x-data/@click/
+// x-model on this SAME step, exactly like wizardBuildBody's editor) —
+// Alpine's own MutationObserver re-initializes x-data roots after an htmx
+// swap regardless, so this is not the "templ script helper / delegated
+// document.addEventListener" pattern the swap-safety rule warns against;
+// it is the established alternative to it, already in use one step over.
+// No decorative icons: every button is a labelled text button.
+package calendar
+
+import (
+	"encoding/json"
+	"fmt"
+
+	"github.com/keyxmakerx/chronicle/internal/templates/layouts"
+)
+
+// wizardGenRecipeInfo is one of the calendar generator's built-in recipes,
+// mirrored here (id/name/description/culture copied verbatim from
+// generators.js's own CAL_RECIPES builtIns) so the recipe chips and their
+// blurbs render immediately on GET, before the engine has even loaded —
+// only the live result waits on that.
+type wizardGenRecipeInfo struct {
+	ID          string `json:"id"`
+	Name        string `json:"name"`
+	Description string `json:"description"`
+	Culture     string `json:"culture"`
+}
+
+var wizardGenRecipes = []wizardGenRecipeInfo{
+	{ID: "calendar.gregorian-like", Name: "Familiar", Description: "Close to our own calendar, renamed for your world.", Culture: "pastoral"},
+	{ID: "calendar.harptos-like", Name: "Tendays and feast days", Description: "Thirty-day months, ten-day weeks and festival days between the months.", Culture: "pastoral"},
+	{ID: "calendar.dwarven", Name: "Deep-count", Description: "Even months for people who live underground; a long vigil at the year's end.", Culture: "dwarven"},
+	{ID: "calendar.lunar", Name: "Moon-reckoned", Description: "Months that follow the moon, with a leap month every third year.", Culture: "pastoral"},
+	{ID: "calendar.wild", Name: "Strange", Description: "Uneven months and an unusual week, for a world that is not ours.", Culture: "fey"},
+}
+
+// wizardGenCultureInfo is one naming culture (generators.js's THEMES).
+type wizardGenCultureInfo struct {
+	ID    string `json:"id"`
+	Label string `json:"label"`
+}
+
+var wizardGenCultures = []wizardGenCultureInfo{
+	{ID: "pastoral", Label: "Pastoral"},
+	{ID: "nautical", Label: "Nautical"},
+	{ID: "dwarven", Label: "Dwarven"},
+	{ID: "elven", Label: "Elven"},
+	{ID: "desert", Label: "Desert"},
+	{ID: "imperial", Label: "Imperial"},
+	{ID: "fey", Label: "Fey"},
+	{ID: "grim", Label: "Grim"},
+}
+
+// wizardGenerateXData is the Generate step's entire Alpine x-data object
+// literal: the recipe sheet's fields plus every method its controls call.
+// It never references window.ChronicleGen at DEFINITION time (only method
+// BODIES do, and only once called) — Alpine can construct this object
+// immediately, with the engine still loading; boot() is what actually waits
+// on it (see ensureEngine).
+//
+// The shape/reroll model, in brief: every ordinary control (a recipe chip,
+// a stepper, the culture select, the sky switch) rebuilds from the SAME
+// seed — the engine's own RNG streams are keyed by seed+template+theme, so
+// changing any of those already gives a different-looking result without
+// needing a new seed token. Only "Reroll all" and a part's own "Reroll"
+// button draw a fresh seed. Keep freezes a part's CURRENT value (whatever
+// is on screen, whether from a generate() run or an earlier per-part
+// reroll) and build() copies it back onto every later rebuild until the
+// part is un-kept — no separate snapshot store needed, since the old
+// this.cal is still in scope at the point a new one is computed.
+func wizardGenerateXData() string {
+	recipesJSON, _ := json.Marshal(wizardGenRecipes)
+	culturesJSON, _ := json.Marshal(wizardGenCultures)
+	return fmt.Sprintf(`{
+recipe: 'calendar.gregorian-like',
+recipes: %s,
+cultures: %s,
+culture: 'pastoral',
+cultureSet: false,
+monthsOverride: 0,
+weekOverride: 0,
+moonsN: 1,
+leap: true,
+fest: 'normal',
+seasonsN: 4,
+rnd: 0.15,
+more: false,
+sky: false,
+suns: 1,
+skyMoons: 1,
+planets: 2,
+seed: '',
+seedEditing: false,
+seedDraft: '',
+seedCopied: false,
+kept: {},
+busy: true,
+ready: false,
+err: '',
+cal: null,
+summary: '',
+validOk: true,
+validText: '',
+view: { month: 1 },
+
+boot(){
+  var self = this;
+  this.ensureEngine(function(){
+    self.applyRecipeDefaults();
+    self.seed = window.ChronicleGen.randomSeed();
+    self.build();
+  });
+},
+ensureEngine(cb){
+  if (window.ChronicleGen && window.ChronicleGen.calendar && window.ChronicleGen.calendar.fromSky) { cb(); return; }
+  var self = this;
+  var s = document.createElement('script');
+  // The versioned URL from the page, so a deploy never serves a stale engine.
+  s.src = this.$root.dataset.engineSrc;
+  s.onload = cb;
+  s.onerror = function () { self.busy = false; self.err = 'The generator could not load. Check your connection and try again.'; };
+  document.head.appendChild(s);
+},
+applyRecipeDefaults(){
+  var r = window.ChronicleGen.recipes.get(this.recipe);
+  if (r) {
+    this.fest = r.makes['festival-days'];
+    this.leap = r.makes.leap;
+    this.moonsN = r.makes.moons;
+    this.seasonsN = r.makes.seasons;
+    this.rnd = r.details.randomness;
+    if (!this.cultureSet) this.culture = r.details.theme;
+  }
+  this.monthsOverride = 0;
+  this.weekOverride = 0;
+},
+recipeInfo(){
+  var found = null;
+  var id = this.recipe;
+  this.recipes.forEach(function (r) { if (r.id === id) found = r; });
+  return found || this.recipes[0];
+},
+recipeObj(){
+  var r = window.ChronicleGen.recipes.get(this.recipe);
+  r.makes['festival-days'] = this.fest;
+  r.makes.leap = this.leap;
+  r.makes.moons = this.moonsN;
+  r.makes.seasons = this.seasonsN;
+  r.makes.festivals = true;
+  r.details.theme = this.culture;
+  r.details.randomness = this.rnd;
+  if (this.monthsOverride) r.details.months = this.monthsOverride;
+  if (this.weekOverride) r.details.weekLength = this.weekOverride;
+  return r;
+},
+setRecipe(id){
+  if (!this.ready) return;
+  this.recipe = id;
+  this.applyRecipeDefaults();
+  this.build();
+},
+setCulture(v){
+  if (!this.ready) return;
+  this.culture = v;
+  this.cultureSet = true;
+  this.build();
+},
+toggleSky(){
+  if (!this.ready) return;
+  this.sky = !this.sky;
+  this.build();
+},
+stepper(name, delta, min, max){
+  if (!this.ready) return;
+  var v = (this[name] || 0) + delta;
+  if (v < min) v = min;
+  if (v > max) v = max;
+  this[name] = v;
+  this.kept.shape = false;
+  this.build();
+},
+toggleLeap(){ if (!this.ready) return; this.leap = !this.leap; this.kept.shape = false; this.build(); },
+setFest(v){ if (!this.ready) return; this.fest = v; this.kept.shape = false; this.build(); },
+onRnd(v){ if (!this.ready) return; this.rnd = +v; this.kept.shape = false; this.build(); },
+rerollAll(){
+  if (!this.ready) return;
+  this.seed = window.ChronicleGen.randomSeed();
+  this.build();
+},
+toggleKeep(part){ this.kept[part] = !this.kept[part]; },
+build(){
+  var oldCal = this.cal;
+  var out;
+  if (this.sky) out = window.ChronicleGen.calendar.fromSky({ suns: this.suns, moons: this.skyMoons, planets: this.planets, seasons: this.seasonsN, theme: this.culture, seed: this.seed });
+  else out = window.ChronicleGen.calendar.generate({ recipe: this.recipeObj(), seed: this.seed });
+  var cal = out.preset.calendar;
+  var self = this;
+  if (oldCal && this.kept.shape) {
+    cal = oldCal;
+  } else if (oldCal) {
+    if (this.kept.name) cal.name = oldCal.name;
+    if (this.kept.era && cal.eras[0] && oldCal.eras[0]) cal.eras[0].name = oldCal.eras[0].name;
+    ['months', 'weekdays', 'seasons', 'festivals'].forEach(function (p) {
+      if (!self.kept[p]) return;
+      var a = cal[p] || [], b = oldCal[p] || [];
+      for (var i = 0; i < a.length && i < b.length; i++) a[i].name = b[i].name;
+    });
+    if (this.kept.moons) cal.moons = oldCal.moons;
+  }
+  if (!this.sky) {
+    if (!this.monthsOverride) this.monthsOverride = cal.months.filter(function (m) { return !m.is_intercalary; }).length;
+    if (!this.weekOverride) this.weekOverride = cal.weekdays.length;
+  }
+  this.cal = cal;
+  this.summary = out.summary;
+  var v = window.ChronicleGen.cal.validatePreset(out.preset);
+  this.validOk = v.ok;
+  this.validText = v.ok ? 'Matches Chronicle’s calendar shape (the engine’s own check).' : v.errors[0].message;
+  if (this.view.month > cal.months.length) this.view.month = 1;
+  this.busy = false;
+  this.ready = true;
+},
+rerollPart(part){
+  if (!this.ready || !this.cal) return;
+  this.kept[part] = false;
+  var seed = window.ChronicleGen.randomSeed();
+  if (part === 'shape') { this.seed = seed; this.build(); return; }
+  if (part === 'name') {
+    var rn = window.ChronicleGen.names.generate({ seed: seed, recipe: { generator: 'names', details: { theme: this.culture }, makes: { places: 1 } } });
+    var place = rn.names.places && rn.names.places[0];
+    if (place) this.cal.name = place + ' Reckoning';
+    return;
+  }
+  if (part === 'era') {
+    var re = window.ChronicleGen.names.generate({ seed: seed, recipe: { generator: 'names', details: { theme: this.culture }, makes: { eras: 1 } } });
+    if (this.cal.eras[0] && re.names.eras && re.names.eras[0]) this.cal.eras[0].name = re.names.eras[0].name;
+    return;
+  }
+  if (part === 'moons') {
+    var count = this.cal.moons.length;
+    if (!count) return;
+    var rm = window.ChronicleGen.moons.generate({ seed: seed, recipe: { generator: 'moons', makes: { count: count }, details: { theme: this.culture } } });
+    this.cal.moons = rm.moons.map(function (m) { return { name: m.name, cycle_days: m.cycle_days, phase_offset: m.phase_offset, color: m.color }; });
+    return;
+  }
+  var count2 = (this.cal[part] || []).length;
+  if (!count2) return;
+  var makes = {};
+  makes[part] = count2;
+  var rp = window.ChronicleGen.names.generate({ seed: seed, recipe: { generator: 'names', details: { theme: this.culture }, makes: makes } });
+  var list = rp.names[part] || [];
+  var target = this.cal[part];
+  for (var i = 0; i < target.length && i < list.length; i++) target[i].name = list[i].name;
+},
+rerollOne(part, idx){
+  if (!this.ready || !this.cal || !this.cal[part]) return;
+  var count = this.cal[part].length;
+  var makes = {};
+  makes[part] = count;
+  var r = window.ChronicleGen.names.generate({ seed: window.ChronicleGen.randomSeed(), recipe: { generator: 'names', details: { theme: this.culture }, makes: makes } });
+  var list = r.names[part] || [];
+  if (list[idx]) this.cal[part][idx].name = list[idx].name;
+},
+yearLine(){
+  if (!this.cal) return '';
+  var lm = null, days = 0;
+  for (var i = 0; i < this.cal.months.length; i++) { days += this.cal.months[i].days; if (this.cal.months[i].leap_year_days > 0) lm = this.cal.months[i]; }
+  return days + ' days a year · ' + this.cal.weekdays.length + '-day weeks · ' + (this.cal.leap_year_every && lm ? 'a leap day every ' + this.cal.leap_year_every + ' years, in ' + lm.name : 'no leap years');
+},
+monthGrid(){
+  if (!this.cal) return [];
+  var m = this.cal.months[this.view.month - 1];
+  if (!m) return [];
+  var week = this.cal.weekdays.length || 7;
+  if (m.is_intercalary) {
+    var out = [];
+    for (var k = 1; k <= m.days; k++) out.push({ day: k, blank: false, rest: false });
+    return out;
+  }
+  var before = 0;
+  for (var i = 0; i < this.view.month - 1; i++) { if (!this.cal.months[i].is_intercalary) before += this.cal.months[i].days; }
+  var offset = before %% week;
+  var cells = [];
+  for (var b = 0; b < offset; b++) cells.push({ day: null, blank: true, rest: false });
+  for (var d = 1; d <= m.days; d++) cells.push({ day: d, blank: false, rest: this.cal.weekdays.length ? !!this.cal.weekdays[(offset + d - 1) %% week].is_rest_day : false });
+  return cells;
+},
+prevMonth(){ if (!this.cal) return; var n = this.cal.months.length; this.view.month = this.view.month <= 1 ? n : this.view.month - 1; },
+nextMonth(){ if (!this.cal) return; var n = this.cal.months.length; this.view.month = this.view.month >= n ? 1 : this.view.month + 1; },
+copySeed(){
+  var self = this;
+  try { navigator.clipboard.writeText(this.seed).then(function () { self.seedCopied = true; setTimeout(function () { self.seedCopied = false; }, 1500); }); } catch (e) {}
+},
+startEditSeed(){ this.seedDraft = this.seed; this.seedEditing = true; },
+applySeed(){
+  if (this.seedDraft && this.seedDraft !== this.seed) { this.seed = this.seedDraft; this.build(); }
+  this.seedEditing = false;
+},
+toPreset(){ return window.ChronicleGen.cal.toPreset({ format: 'chronicle-calendar-v1', version: 2, calendar: this.cal }); },
+reviewJSON(){ return this.cal ? JSON.stringify(this.toPreset()) : ''; }
+}`, recipesJSON, culturesJSON)
+}
+
+// wizardGenPartHeader is one result part's title row: the title, an
+// optional note, and Keep/Reroll text buttons. part is the JS-side key
+// (toggleKeep/rerollPart's argument).
+templ wizardGenPartHeader(part, title string) {
+	<div class="calv5-phead">
+		<h4>{ title }</h4>
+		<span class="calv5-pbtns">
+			<button
+				type="button"
+				class="btn sm quiet"
+				x-bind:aria-pressed={ fmt.Sprintf("String(!!kept.%s)", part) }
+				x-on:click={ fmt.Sprintf("toggleKeep('%s')", part) }
+			>
+				<span x-text={ fmt.Sprintf("kept.%s ? 'Kept' : 'Keep'", part) }></span>
+			</button>
+			<button
+				type="button"
+				class="btn sm quiet"
+				x-bind:disabled={ fmt.Sprintf("kept.%s", part) }
+				x-on:click={ fmt.Sprintf("rerollPart('%s')", part) }
+			>
+				Reroll
+			</button>
+		</span>
+	</div>
+}
+
+// wizardGenerateBody is the Generate step itself.
+templ wizardGenerateBody(campaignID, csrfToken, formError string) {
+	<h2 class="calv5-wz-h">Generate a calendar</h2>
+	<p class="calv5-wz-lead">A whole calendar from a recipe — months, weeks, moons and names in one culture's voice. Change anything and the result follows; press Review whenever you like.</p>
+	if formError != "" {
+		<p class="calv5-err">{ formError }</p>
+	}
+	<div x-data={ wizardGenerateXData() } x-init="boot()" data-engine-src={ layouts.AssetURL("/static/js/widgets/chronicle_gen.js") }>
+		<template x-if="err">
+			<p class="calv5-err" x-text="err"></p>
+		</template>
+		<template x-if="!ready">
+			<p class="calv5-wz-lead">Loading the generator…</p>
+		</template>
+		<template x-if="ready">
+			<div>
+			<div class="calv5-rv">
+				<div>
+					<div class="calv5-bsec" style="margin-top:0">
+						<h4>Recipe</h4>
+						<div class="calv5-chips" role="group" aria-label="Recipe">
+							<template x-for="r in recipes" x-bind:key="r.id">
+								<button
+									type="button"
+									class="btn sm"
+									x-bind:aria-pressed="String(r.id === recipe)"
+									x-on:click="setRecipe(r.id)"
+								>
+									<span x-text="r.name"></span>
+								</button>
+							</template>
+						</div>
+						<p class="calv5-wz-lead" style="margin-top:8px;max-width:none" x-text="recipeInfo().description"></p>
+					</div>
+					<template x-if="!sky">
+						<div class="calv5-bsec" style="margin-top:16px">
+							<div class="calv5-step">
+								<span>Months</span>
+								<span class="calv5-stepctl">
+									<button type="button" class="btn sm quiet" x-on:click="stepper('monthsOverride', -1, 1, 24)">Fewer</button>
+									<b x-text="monthsOverride"></b>
+									<button type="button" class="btn sm quiet" x-on:click="stepper('monthsOverride', 1, 1, 24)">More</button>
+								</span>
+							</div>
+							<div class="calv5-step">
+								<span>Days in a week</span>
+								<span class="calv5-stepctl">
+									<button type="button" class="btn sm quiet" x-on:click="stepper('weekOverride', -1, 3, 14)">Fewer</button>
+									<b x-text="weekOverride"></b>
+									<button type="button" class="btn sm quiet" x-on:click="stepper('weekOverride', 1, 3, 14)">More</button>
+								</span>
+							</div>
+							<div class="calv5-step">
+								<span>Moons</span>
+								<span class="calv5-stepctl">
+									<button type="button" class="btn sm quiet" x-on:click="stepper('moonsN', -1, 0, 5)">Fewer</button>
+									<b x-text="moonsN"></b>
+									<button type="button" class="btn sm quiet" x-on:click="stepper('moonsN', 1, 0, 5)">More</button>
+								</span>
+							</div>
+							<label class="calv5-toggle-row" style="margin-top:12px">
+								<input type="checkbox" x-on:change="toggleLeap()" x-bind:checked="leap"/>
+								<span>Leap years</span>
+							</label>
+						</div>
+					</template>
+					<template x-if="sky">
+						<div class="calv5-bsec" style="margin-top:16px">
+							<div class="calv5-step">
+								<span>Suns</span>
+								<span class="calv5-stepctl">
+									<button type="button" class="btn sm quiet" x-on:click="stepper('suns', -1, 1, 3)">Fewer</button>
+									<b x-text="suns"></b>
+									<button type="button" class="btn sm quiet" x-on:click="stepper('suns', 1, 1, 3)">More</button>
+								</span>
+							</div>
+							<div class="calv5-step">
+								<span>Moons</span>
+								<span class="calv5-stepctl">
+									<button type="button" class="btn sm quiet" x-on:click="stepper('skyMoons', -1, 0, 4)">Fewer</button>
+									<b x-text="skyMoons"></b>
+									<button type="button" class="btn sm quiet" x-on:click="stepper('skyMoons', 1, 0, 4)">More</button>
+								</span>
+							</div>
+							<div class="calv5-step">
+								<span>Wandering planets</span>
+								<span class="calv5-stepctl">
+									<button type="button" class="btn sm quiet" x-on:click="stepper('planets', -1, 0, 7)">Fewer</button>
+									<b x-text="planets"></b>
+									<button type="button" class="btn sm quiet" x-on:click="stepper('planets', 1, 0, 7)">More</button>
+								</span>
+							</div>
+						</div>
+					</template>
+					<label class="calv5-fld" style="margin-top:14px">
+						<span>Naming culture</span>
+						<select class="calv5-inp" x-on:change="setCulture($event.target.value)">
+							<template x-for="cu in cultures" x-bind:key="cu.id">
+								<option x-bind:value="cu.id" x-bind:selected="cu.id === culture" x-text="cu.label"></option>
+							</template>
+						</select>
+					</label>
+					<label class="calv5-toggle-row" style="margin-top:14px">
+						<input type="checkbox" x-on:change="toggleSky()" x-bind:checked="sky"/>
+						<span>Work it out from the sky <small>Derive the shape from suns, moons and wandering planets instead of a recipe</small></span>
+					</label>
+					<button type="button" class="btn quiet sm" style="margin-top:14px" x-on:click="more = !more" x-bind:aria-expanded="String(more)">
+						<span x-text="more ? 'Less' : 'More'"></span>
+					</button>
+					<div x-show="more" x-cloak style="margin-top:10px">
+						<template x-if="!sky">
+							<div>
+								<div class="calv5-fld">
+									<span>Festival days between months</span>
+									<div class="calv5-chips" role="group" aria-label="Festival days between months">
+										<template x-for="v in ['off', 'rare', 'normal', 'often']" x-bind:key="v">
+											<button type="button" class="btn sm" x-bind:aria-pressed="String(v === fest)" x-on:click="setFest(v)" x-text="v === 'normal' ? 'Some' : (v.charAt(0).toUpperCase() + v.slice(1))"></button>
+										</template>
+									</div>
+								</div>
+								<div class="calv5-step" style="margin-top:10px">
+									<span>Seasons</span>
+									<span class="calv5-stepctl">
+										<button type="button" class="btn sm quiet" x-on:click="stepper('seasonsN', -1, 0, 6)">Fewer</button>
+										<b x-text="seasonsN"></b>
+										<button type="button" class="btn sm quiet" x-on:click="stepper('seasonsN', 1, 0, 6)">More</button>
+									</span>
+								</div>
+								<label class="calv5-fld" style="margin-top:10px">
+									<span>How far from the recipe</span>
+									<input type="range" min="0" max="1" step="0.05" x-bind:value="rnd" x-on:input="onRnd($event.target.value)" style="padding:0;height:22px;background:transparent;border:0"/>
+								</label>
+							</div>
+						</template>
+						<template x-if="sky">
+							<div class="calv5-step">
+								<span>Seasons</span>
+								<span class="calv5-stepctl">
+									<button type="button" class="btn sm quiet" x-on:click="stepper('seasonsN', -1, 0, 6)">Fewer</button>
+									<b x-text="seasonsN"></b>
+									<button type="button" class="btn sm quiet" x-on:click="stepper('seasonsN', 1, 0, 6)">More</button>
+								</span>
+							</div>
+						</template>
+						<div class="calv5-seedrow">
+							<code x-text="seed"></code>
+							<button type="button" class="btn quiet sm" x-on:click="copySeed()">
+								<span x-text="seedCopied ? 'Copied' : 'Copy'"></span>
+							</button>
+							<button type="button" class="btn quiet sm" x-on:click="startEditSeed()">Enter one</button>
+						</div>
+						<div x-show="seedEditing" x-cloak style="margin-top:8px;display:flex;gap:8px">
+							<input class="calv5-inp" type="text" x-model="seedDraft" maxlength="80"/>
+							<button type="button" class="btn sm" x-on:click="applySeed()">Use</button>
+						</div>
+					</div>
+					<div style="margin-top:16px">
+						<button type="button" class="btn" x-on:click="rerollAll()">Reroll all</button>
+						<p class="calv5-wz-lead" style="margin-top:6px;max-width:none">Keeps every part you kept.</p>
+					</div>
+				</div>
+				<div>
+					<p class="calv5-wz-lead" style="max-width:none" x-text="summary"></p>
+					<div class="calv5-chk" x-bind:class="{ bad: !validOk }">
+						<span x-text="validText"></span>
+					</div>
+					<template x-if="cal">
+						<div>
+							<div class="calv5-mgrid" x-bind:style="'--cols:' + (cal.weekdays.length || 7) + ';margin-top:14px'">
+								<div class="calv5-mg-head">
+									<h3 class="calv5-mg-title">
+										<span x-text="cal.months[view.month - 1] ? cal.months[view.month - 1].name : ''"></span>
+										<span class="yr" x-text="'· ' + cal.current_year + ' ' + cal.epoch_name"></span>
+									</h3>
+									<nav class="mg-nav" aria-label="Change month" style="display:flex;gap:6px">
+										<button type="button" class="btn sm quiet" x-on:click="prevMonth()">Prev</button>
+										<button type="button" class="btn sm quiet" x-on:click="nextMonth()">Next</button>
+									</nav>
+								</div>
+								<div class="calv5-mg-wk">
+									<template x-for="(cell, ci) in monthGrid()" x-bind:key="ci">
+										<div class="calv5-mg-day" x-bind:class="{ blank: cell.blank, rest: cell.rest }">
+											<template x-if="!cell.blank">
+												<span class="num" x-text="cell.day"></span>
+											</template>
+										</div>
+									</template>
+								</div>
+							</div>
+							@wizardGenPartHeader("name", "Name")
+							<input class="calv5-inp" type="text" x-model="cal.name" x-on:input="kept.name = true" maxlength="120"/>
+							@wizardGenPartHeader("shape", "The year")
+							<p class="calv5-wz-lead" style="max-width:none" x-text="yearLine()"></p>
+							@wizardGenPartHeader("era", "Era")
+							<input class="calv5-inp" type="text" x-model="cal.eras[0].name" x-on:input="kept.era = true" maxlength="120"/>
+							@wizardGenPartHeader("months", "Months")
+							<div class="calv5-blist">
+								<template x-for="(mo, i) in cal.months" x-bind:key="i">
+									<div class="calv5-brow">
+										<input type="text" class="nm" x-model="mo.name" x-on:input="kept.months = true" maxlength="100"/>
+										<span class="calv5-meta" x-text="mo.days + (mo.leap_year_days ? '+' + mo.leap_year_days : '') + ' d'"></span>
+										<button type="button" class="mini" x-on:click="rerollOne('months', i)">Reroll</button>
+									</div>
+								</template>
+							</div>
+							@wizardGenPartHeader("weekdays", "Weekdays")
+							<div class="calv5-blist">
+								<template x-for="(w, i) in cal.weekdays" x-bind:key="i">
+									<div class="calv5-brow">
+										<input type="text" class="nm" x-model="w.name" x-on:input="kept.weekdays = true" maxlength="100"/>
+										<span class="calv5-meta" x-text="w.is_rest_day ? 'rest day' : ''"></span>
+									</div>
+								</template>
+							</div>
+							<template x-if="cal.seasons.length">
+								<div>
+									@wizardGenPartHeader("seasons", "Seasons")
+									<div class="calv5-blist">
+										<template x-for="(se, i) in cal.seasons" x-bind:key="i">
+											<div class="calv5-brow">
+												<input type="text" class="nm" x-model="se.name" x-on:input="kept.seasons = true" maxlength="100"/>
+											</div>
+										</template>
+									</div>
+								</div>
+							</template>
+							<template x-if="cal.moons.length">
+								<div>
+									@wizardGenPartHeader("moons", "Moons")
+									<div class="calv5-blist">
+										<template x-for="(mo, i) in cal.moons" x-bind:key="i">
+											<div class="calv5-brow">
+												<span class="calv5-swatch" x-bind:style="'background:' + mo.color"></span>
+												<input type="text" class="nm" x-model="mo.name" x-on:input="kept.moons = true" maxlength="100"/>
+												<span class="calv5-meta" x-text="mo.cycle_days + ' d'"></span>
+											</div>
+										</template>
+									</div>
+								</div>
+							</template>
+							<template x-if="cal.festivals && cal.festivals.length">
+								<div>
+									@wizardGenPartHeader("festivals", "Festivals")
+									<div class="calv5-blist">
+										<template x-for="(f, i) in cal.festivals" x-bind:key="i">
+											<div class="calv5-brow">
+												<input type="text" class="nm" x-model="f.name" x-on:input="kept.festivals = true" maxlength="100"/>
+											</div>
+										</template>
+									</div>
+								</div>
+							</template>
+						</div>
+					</template>
+				</div>
+			</div>
+			<form
+				hx-post={ fmt.Sprintf("/campaigns/%s/calendars/wizard/generate/preview", campaignID) }
+				hx-target="#calv5-wizard-root"
+				hx-swap="outerHTML"
+				hx-encoding="multipart/form-data"
+				hx-disabled-elt="#calv5-generate-submit"
+				hx-indicator="#calv5-generate-spinner"
+			>
+				<input type="hidden" name="csrf_token" value={ csrfToken }/>
+				<input type="hidden" name="generated_json" x-bind:value="reviewJSON()"/>
+				<div style="margin-top:18px;display:flex;gap:8px;align-items:center">
+					<button
+						type="button"
+						class="btn quiet"
+						hx-get={ fmt.Sprintf("/campaigns/%s/calendars/wizard", campaignID) }
+						hx-target="#calv5-wizard-root"
+						hx-swap="outerHTML"
+					>
+						Back
+					</button>
+					<span class="sp" style="flex:1"></span>
+					<i id="calv5-generate-spinner" class="fa-solid fa-spinner fa-spin htmx-indicator" aria-hidden="true"></i>
+					<button id="calv5-generate-submit" type="submit" class="btn primary" x-bind:disabled="!ready || !validOk">
+						Review
+					</button>
+				</div>
+			</form>
+			</div>
+		</template>
+	</div>
+}
