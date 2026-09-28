@@ -201,16 +201,18 @@
   htmx.config.allowEval = false;
 
   // --- HTMX Loading Indicator ---
-  // Toggle body.htmx-request class to show/hide the global progress bar.
+  // Toggle body.is-loading to show/hide the global progress bar. Not htmx's
+  // own htmx-request class: on body, htmx's ".htmx-request .htmx-indicator"
+  // rule would light every inline spinner on the page during any request.
   var activeRequests = 0;
   document.addEventListener('htmx:beforeRequest', function () {
     activeRequests++;
-    document.body.classList.add('htmx-request');
+    document.body.classList.add('is-loading');
   });
   document.addEventListener('htmx:afterRequest', function () {
     activeRequests = Math.max(0, activeRequests - 1);
     if (activeRequests === 0) {
-      document.body.classList.remove('htmx-request');
+      document.body.classList.remove('is-loading');
     }
   });
 

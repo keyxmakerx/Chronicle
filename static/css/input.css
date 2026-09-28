@@ -1787,9 +1787,11 @@
   }
 
   /* --- HTMX Loading Indicator ---
-   * A thin progress bar fixed at the top of the viewport. Hidden by default,
-   * shown via .htmx-request class that HTMX adds during active requests. */
-  .htmx-indicator {
+   * The one thin progress bar fixed at the top of the viewport, shown while
+   * any request runs (boot.js sets body.is-loading). Scoped to its id because
+   * .htmx-indicator is also every inline spinner's class: styled as this bar,
+   * a spinner kept lit through a redirect was spun across the whole screen. */
+  #htmx-indicator {
     position: fixed;
     top: 0;
     left: 0;
@@ -1804,7 +1806,7 @@
     pointer-events: none;
   }
 
-  body.htmx-request .htmx-indicator {
+  body.is-loading #htmx-indicator {
     opacity: 1;
     transform: scaleX(1);
     animation: htmx-progress 2s ease-in-out infinite;
