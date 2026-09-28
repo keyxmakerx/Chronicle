@@ -47,7 +47,6 @@ import (
 	"github.com/keyxmakerx/chronicle/internal/plugins/timeline"
 	"github.com/keyxmakerx/chronicle/internal/plugins/widgetbindings"
 	"github.com/keyxmakerx/chronicle/internal/systems"
-	"github.com/keyxmakerx/chronicle/internal/templates/components"
 	"github.com/keyxmakerx/chronicle/internal/templates/layouts"
 	"github.com/keyxmakerx/chronicle/internal/templates/pages"
 	ws "github.com/keyxmakerx/chronicle/internal/websocket"
@@ -3014,13 +3013,14 @@ func (a *App) RegisterRoutes() {
 	// resolves a host's instance via the precedence chain (own binding →
 	// entity-type template → default).
 	widgetRegistry := widgetbindings.NewRegistry()
-	// CALV5-PLACEHOLDER: V5 must re-register the calendar and worldstate
-	// widget types. Deliberately unregistered meanwhile: service.Sweep skips
-	// widget types it does not know, so a GM's existing entity→calendar
-	// bindings survive the blackout untouched and resolve again once V5
-	// registers the types. Deleting the rows, or registering a type whose
-	// InstanceExists answers false, would sweep them permanently. TODO(#778)
 	widgetRegistry.Register(timeline.NewTimelineWidgetType(timelineSvc))
+	// calendar/worldstate: re-registered (calendar-v5 seams, #778). A GM's
+	// existing entity→calendar bindings from before these were registered
+	// survived the blackout untouched (service.Sweep skips widget types it
+	// does not know) and resolve again now that InstanceExists can answer
+	// for them.
+	widgetRegistry.Register(calendar.NewCalendarWidgetType(calendarService))
+	widgetRegistry.Register(calendar.NewWorldstateWidgetType(calendarService))
 	// maps registers with no campaign default — the legacy entity.map_id
 	// fallback lives in the map_editor closure instead.
 	widgetRegistry.Register(maps.NewMapWidgetType(mapsService))
@@ -3105,41 +3105,33 @@ func (a *App) RegisterRoutes() {
 		limit := entities.BlockConfigLimit(ctx.Block.Config, "limit", 5)
 		return upcomingEventsBlockShell(ctx.CC.Campaign.ID, limit)
 	})
-	// entity_calendar — the entity-page calendar embed: a compact worldstate
-	// band + this entity's linked events. Singleton per page (the band binds
-	// a fixed engine DOM id). Distinct from calendar_preview (dashboard
-	// upcoming-events card) by design.
+	// entity_calendar — the entity-page calendar embed, bindable to any of
+	// the campaign's calendars (widgetbindings). Singleton per page (the
+	// swap target is a fixed DOM id). Renders that calendar's upcoming
+	// events — calendar.calendarWidgetType's doc comment says why that is
+	// the honest version rather than the fuller "ambient band + this
+	// entity's linked events" engine the description used to promise.
+	// Distinct from calendar_preview (dashboard upcoming-events card) by
+	// design.
 	blockRegistry.Register(entities.BlockMeta{
 		Type: "entity_calendar", Label: "Calendar (this entity)", Icon: "fa-calendar-days",
-		Description: "Ambient calendar + this entity's linked events",
+		Description: "Upcoming events for a bound calendar",
 		Addon:       "calendar", Contexts: []string{"template"}, Singleton: true,
 	}, func(rc entities.BlockRenderContext) templ.Component {
-		// CALV5-PLACEHOLDER: V5 must restore
-		// renderBoundBlock(calendar.WidgetTypeCalendar, rc, ""). Explicit
-		// rebuilding notice here rather than renderBoundBlock's fallback
-		// (templ.NopComponent for an unregistered widget type), which would
-		// leave an unexplained gap in the owner's entity layout. TODO(#778):
-		// needs calendar.WidgetTypeCalendar to implement widgetbindings.
-		// WidgetType (InstanceExists/DefaultInstance/ListInstances/
-		// CreateInstance/RenderBlock) — a separate, larger body of work than
-		// this change's dashboard/category-preview reconnection.
-		return components.FeatureRebuildingBlock("The calendar")
+		return renderBoundBlock(calendar.WidgetTypeCalendar, rc, "")
 	})
 
-	// entity_worldstate — the entity-page worldstate timepiece embed: an
-	// hourglass-on-shelf over a compact sky band. Singleton like
-	// entity_calendar (binds a fixed engine DOM id), and campaign-level (no
-	// per-entity data) so it also works on the campaign dashboard.
+	// entity_worldstate — the entity-page/dashboard sky embed, bindable to
+	// any of the campaign's calendars (widgetbindings). Singleton like
+	// entity_calendar. calendar.worldstateWidgetType's doc comment says why
+	// this renders sky only, not yet the hourglass shelf the description
+	// used to promise (real UI work of its own).
 	blockRegistry.Register(entities.BlockMeta{
 		Type: "entity_worldstate", Label: "Worldstate timepiece", Icon: "fa-hourglass-half",
-		Description: "Ambient sky + hourglass shelf for the current world date",
+		Description: "Ambient sky for the current world date",
 		Addon:       "calendar", Contexts: []string{"template", "dashboard"}, Singleton: true,
 	}, func(rc entities.BlockRenderContext) templ.Component {
-		// CALV5-PLACEHOLDER: V5 must restore
-		// renderBoundBlock(calendar.WidgetTypeWorldstate, rc, "").
-		// TODO(#778): same widgetbindings.WidgetType work entity_calendar's
-		// comment above describes, for calendar.WidgetTypeWorldstate.
-		return components.FeatureRebuildingBlock("The world state")
+		return renderBoundBlock(calendar.WidgetTypeWorldstate, rc, "")
 	})
 
 	// skybox — the ambient sky-only block: no hourglass, no per-entity

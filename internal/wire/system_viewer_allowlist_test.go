@@ -27,6 +27,13 @@ var systemViewerAllowlist = map[string]bool{
 	// The operator's calendar health diagnostic counts rows for the server
 	// admin; no campaign member's view is behind it.
 	"internal/app/operator_diag_calendar_adapter.go": true,
+	// Same shape as timeline_widget_type.go above: InstanceExists and
+	// DefaultInstance are the binding framework's own orphan/scope and
+	// unbound-default checks (not a viewer's content read — RenderBlock
+	// re-checks visibility against the real request viewer), and
+	// ListInstances backs the Scribe+-gated binding picker route, which
+	// carries a role but no per-request user id.
+	"internal/plugins/calendar/calendar_widget_type.go": true,
 }
 
 // TestSystemViewerAllowlist scans internal/ for calls to

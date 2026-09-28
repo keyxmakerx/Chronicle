@@ -29,13 +29,9 @@ var MigrationsFS embed.FS
 const PluginSlug = "calendar"
 
 // WidgetTypeCalendar and WidgetTypeWorldstate are the widgetbindings widget
-// types a GM's saved entity bindings point at.
-//
-// CALV5-PLACEHOLDER: no widget answers to them while the calendar is
-// rebuilt; V5 must re-wire widgets to these types. TODO(#778): needs
-// calendar.WidgetTypeCalendar/WidgetTypeWorldstate to implement
-// widgetbindings.WidgetType — see internal/app/routes.go's entity_calendar/
-// entity_worldstate block comments for the specifics deferred here.
+// types a GM's saved entity bindings point at. calendarWidgetType and
+// worldstateWidgetType (calendar_widget_type.go) implement
+// widgetbindings.WidgetType for them; internal/app/routes.go registers both.
 const (
 	WidgetTypeCalendar   = "calendar"
 	WidgetTypeWorldstate = "worldstate"
