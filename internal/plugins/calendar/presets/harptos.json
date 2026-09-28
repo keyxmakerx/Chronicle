@@ -218,34 +218,34 @@
     "seasons": [
       {
         "name": "Long Night",
-        "start_month": 12,
+        "start_month": 17,
         "start_day": 1,
-        "end_month": 2,
+        "end_month": 3,
         "end_day": 30,
         "color": "oklch(0.65 0.05 240)"
       },
       {
         "name": "The Thaw",
-        "start_month": 3,
+        "start_month": 4,
         "start_day": 1,
-        "end_month": 5,
+        "end_month": 7,
         "end_day": 30,
         "color": "oklch(0.65 0.10 140)"
       },
       {
         "name": "High Sun",
-        "start_month": 6,
+        "start_month": 8,
         "start_day": 1,
-        "end_month": 8,
+        "end_month": 11,
         "end_day": 30,
         "color": "oklch(0.72 0.12 85)"
       },
       {
         "name": "The Fading",
-        "start_month": 9,
+        "start_month": 12,
         "start_day": 1,
-        "end_month": 11,
-        "end_day": 30,
+        "end_month": 16,
+        "end_day": 1,
         "color": "oklch(0.58 0.12 40)"
       }
     ],
