@@ -28,9 +28,11 @@ type CalendarViewData struct {
 	// structure/moon drawer, the bulk bar, new-kind-in-place): Owner or a
 	// granted co-Director, per campaigns.CampaignContext.CanAuthorDmOnly's
 	// doc comment. It does NOT mean every write it exposes will succeed —
-	// event kinds, eras and the moon hidden flag are gated strictly
-	// RoleOwner server-side today (routes.go), so a co-Director sees those
-	// affordances 403. See the plugin's .ai.md "Honest gaps" section.
+	// deleting an event (DELETE .../events/:eid) is gated strictly RoleOwner
+	// server-side (routes.go), so a co-Director sees that one affordance
+	// 403; the widget checks ViewerRole for it. Event kinds, eras and the
+	// moon hidden flag are CanAuthorDmOnly like everything else CanEdit
+	// covers, so those affordances work for a co-Director too.
 	CanEdit bool
 	// CanAuthorDmOnly threads campaigns.CanAuthorDmOnly() through separately
 	// from CanEdit (which already implies it) so the widget can tell "may
@@ -40,8 +42,9 @@ type CalendarViewData struct {
 	CanAuthorDmOnly bool
 	// ViewerRole is cc.MemberRole as a plain int (campaigns.RoleOwner == 3,
 	// RoleScribe == 2, RolePlayer == 1, RoleNone == 0) — ferried to the
-	// widget so it can gate the Owner-only slice of the editing surface
-	// (event kinds) separately from CanEdit's broader co-Director allowance.
+	// widget so it can gate the one remaining Owner-only slice of the
+	// editing surface (deleting an event) separately from CanEdit's broader
+	// co-Director allowance.
 	ViewerRole int
 }
 

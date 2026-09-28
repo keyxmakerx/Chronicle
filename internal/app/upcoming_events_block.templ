@@ -1,0 +1,39 @@
+// upcoming_events_block.templ backs the entity-template "upcoming_events"
+// block (see BlockRegistry.Register in routes.go). It reuses the calendar
+// plugin's own GET /campaigns/:id/calendars/upcoming hx-get fragment — the
+// same lazy-load shell the campaign dashboard and category-dashboard
+// "Upcoming Events" cards already use (campaigns.dashCalendarPreview/
+// dashCalendarFull, entities.catCalendarPreview) — rather than a new
+// rendering path.
+package app
+
+import (
+	"fmt"
+
+	"github.com/keyxmakerx/chronicle/internal/templates/layouts"
+)
+
+// upcomingEventsBlockShell renders the lazy hx-get shell for one entity
+// template block instance, scoped to its own configured limit.
+// calendarCardUnavailable mirrors campaigns.calendarCardUnavailable: the
+// block's own Addon gate (BlockRegistry.Render) already skips it when the
+// "calendar" addon is off, but not when the addon is on and the plugin's
+// schema is degraded (a.PluginHealth) — that combined fact is what
+// layouts.UpcomingEventsAvailable carries.
+templ upcomingEventsBlockShell(campaignID string, limit int) {
+	if !layouts.UpcomingEventsAvailable(ctx) {
+		<div class="card text-center px-4 py-6 min-h-[60px]">
+			<i class="fa-solid fa-calendar-days text-xl text-fg-muted mb-2"></i>
+			<p class="text-sm text-fg-secondary">Calendar isn't enabled for this campaign.</p>
+		</div>
+	} else {
+		<div
+			hx-get={ fmt.Sprintf("/campaigns/%s/calendars/upcoming?limit=%d", campaignID, limit) }
+			hx-trigger="intersect once"
+			hx-swap="innerHTML"
+			class="card divide-y divide-edge min-h-[60px]"
+		>
+			<div class="px-4 py-3 text-sm text-fg-muted">Loading...</div>
+		</div>
+	}
+}

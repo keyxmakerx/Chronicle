@@ -46,14 +46,20 @@ const (
 
 // ImportResult holds the parsed calendar data ready to be applied.
 type ImportResult struct {
-	Format       ImportFormat     `json:"format"`
-	CalendarName string           `json:"calendar_name"`
-	Months       []MonthInput     `json:"months"`
-	Weekdays     []WeekdayInput   `json:"weekdays"`
-	Moons        []MoonInput      `json:"moons"`
-	Seasons      []Season         `json:"seasons"`
-	Eras         []EraInput       `json:"eras"`
-	Settings     ImportedSettings `json:"settings"`
+	Format       ImportFormat   `json:"format"`
+	CalendarName string         `json:"calendar_name"`
+	Months       []MonthInput   `json:"months"`
+	Weekdays     []WeekdayInput `json:"weekdays"`
+	Moons        []MoonInput    `json:"moons"`
+	Seasons      []Season       `json:"seasons"`
+	Eras         []EraInput     `json:"eras"`
+	// Cycles and Festivals are Chronicle-native sub-resources: parseChronicle
+	// is the only parser that populates Cycles (no external format models a
+	// repeating named cycle); Calendaria also carries festivals of its own,
+	// read into Festivals alongside Chronicle's.
+	Cycles    []CycleInput     `json:"cycles,omitempty"`
+	Festivals []FestivalInput  `json:"festivals,omitempty"`
+	Settings  ImportedSettings `json:"settings"`
 	// Events carries a Chronicle-native export's own events forward through a
 	// re-import (#779): parseChronicle is the only parser that populates it —
 	// Simple Calendar, Calendaria and Fantasy-Calendar files never had
@@ -288,6 +294,23 @@ func parseChronicle(data []byte) (*ImportResult, error) {
 	// the same as any other era missing day-level bounds.
 	for _, e := range export.Calendar.Eras {
 		result.Eras = append(result.Eras, normalizeEraStart(EraInput(e)))
+	}
+
+	// Copy cycles (with their entries) and festivals, which BuildExport
+	// writes, so a Chronicle export re-imports whole.
+	for _, c := range export.Calendar.Cycles {
+		ci := CycleInput{Name: c.Name, CycleLength: c.CycleLength, Type: c.Type, SortOrder: c.SortOrder}
+		for _, e := range c.Entries {
+			ci.Entries = append(ci.Entries, CycleEntryInput(e))
+		}
+		result.Cycles = append(result.Cycles, ci)
+	}
+	for _, f := range export.Calendar.Festivals {
+		result.Festivals = append(result.Festivals, FestivalInput{
+			Name: f.Name, Month: f.Month, Day: f.Day, AfterMonth: f.AfterMonth,
+			Description: f.Description, Color: normalizeOptionalColor(f.Color),
+			Icon: f.Icon, SortOrder: f.SortOrder,
+		})
 	}
 
 	// clampCalendarStructure's bounds apply here too: detectFormat trusts
@@ -579,16 +602,25 @@ func parseSimpleCalendarInner(cal scCalendar) (*ImportResult, error) {
 		result.Weekdays = append(result.Weekdays, WeekdayInput{
 			Name:      stripLocalizationKey(w.Name),
 			SortOrder: i,
+			IsRestDay: w.Restday,
 		})
 	}
 
-	// Moons — cycleLength maps to CycleDays, cycleDayAdjust to PhaseOffset.
+	// Moons — cycleLength maps to CycleDays. PhaseOffset is derived from
+	// firstNewMoon (the date Simple Calendar itself calls this moon's
+	// reference new moon), plus cycleDayAdjust as an additional manual
+	// shift on top of it — the same two knobs Simple Calendar's own phase
+	// math combines; month/day are 0-indexed like every other Simple
+	// Calendar date field (see scCurrentDate's own field comments).
 	for _, m := range cal.Moons {
 		result.Moons = append(result.Moons, MoonInput{
-			Name:        stripLocalizationKey(m.Name),
-			CycleDays:   m.CycleLength,
-			PhaseOffset: m.CycleDayAdjust,
-			Color:       normalizeColor(m.Color),
+			Name:      stripLocalizationKey(m.Name),
+			CycleDays: m.CycleLength,
+			PhaseOffset: moonPhaseOffsetFromReference(result.Months,
+				result.Settings.LeapYearEvery, result.Settings.LeapYearOffset,
+				m.CycleLength, m.CycleDayAdjust,
+				m.FirstNewMoon.Year, m.FirstNewMoon.Month+1, m.FirstNewMoon.Day+1),
+			Color: normalizeColor(m.Color),
 		})
 	}
 
@@ -751,8 +783,14 @@ type calLeapYr2 struct {
 }
 
 type calLeapYear struct {
-	Rule  string `json:"rule"` // "none", "gregorian", "custom"
+	Rule  string `json:"rule"` // an older/alternate Calendaria export shape: "none", "gregorian", "custom"
 	Start int    `json:"start"`
+	// Enabled/Interval/Offset is Calendaria's current export shape: confirmed
+	// against the shipped Elven preset (presets/elven.json), whose
+	// leapYearConfig carries these three keys, never rule/start.
+	Enabled  bool `json:"enabled"`
+	Interval int  `json:"interval"`
+	Offset   int  `json:"offset"`
 }
 
 type calMonth struct {
@@ -956,11 +994,17 @@ func parseCalendaria(data []byte) (*ImportResult, error) {
 		result.Settings.SecondsPerMinute = 60
 	}
 
-	// Leap year — check both locations (leapYearConfig and years.leapYear).
-	switch cal.LeapYearConfig.Rule {
-	case "gregorian":
+	// Leap year — check every shape Calendaria has been seen to export.
+	// enabled/interval/offset is tried first since it's the one confirmed
+	// against a real file (the shipped Elven preset); the other two are
+	// older/alternate shapes kept as fallbacks for files that don't carry it.
+	switch {
+	case cal.LeapYearConfig.Enabled && cal.LeapYearConfig.Interval > 0:
+		result.Settings.LeapYearEvery = cal.LeapYearConfig.Interval
+		result.Settings.LeapYearOffset = cal.LeapYearConfig.Offset
+	case cal.LeapYearConfig.Rule == "gregorian":
 		result.Settings.LeapYearEvery = 4
-	case "custom":
+	case cal.LeapYearConfig.Rule == "custom":
 		// Custom rules may be specified in years.leapYear.
 		if cal.Years.LeapYear != nil && cal.Years.LeapYear.LeapInterval > 0 {
 			result.Settings.LeapYearEvery = cal.Years.LeapYear.LeapInterval
@@ -1032,6 +1076,7 @@ func parseCalendaria(data []byte) (*ImportResult, error) {
 		result.Weekdays = append(result.Weekdays, WeekdayInput{
 			Name:      stripLocalizationKey(w.val.Name),
 			SortOrder: i,
+			IsRestDay: w.val.IsRestDay,
 		})
 	}
 
@@ -1054,11 +1099,16 @@ func parseCalendaria(data []byte) (*ImportResult, error) {
 	})
 
 	for _, m := range moonList {
+		// PhaseOffset is derived from referenceDate — calMoon.ReferenceDate,
+		// the date Calendaria itself calls this moon's reference new moon.
 		result.Moons = append(result.Moons, MoonInput{
-			Name:        stripLocalizationKey(m.val.Name),
-			CycleDays:   m.val.CycleLength,
-			PhaseOffset: 0, // Calendaria uses referenceDate instead of offset
-			Color:       normalizeColor(m.val.Color),
+			Name:      stripLocalizationKey(m.val.Name),
+			CycleDays: m.val.CycleLength,
+			PhaseOffset: moonPhaseOffsetFromReference(result.Months,
+				result.Settings.LeapYearEvery, result.Settings.LeapYearOffset,
+				m.val.CycleLength, 0,
+				m.val.ReferenceDate.Year, m.val.ReferenceDate.Month, m.val.ReferenceDate.Day),
+			Color: normalizeColor(m.val.Color),
 		})
 	}
 
@@ -1154,6 +1204,39 @@ func parseCalendaria(data []byte) (*ImportResult, error) {
 			Color:       "#6366f1", // default since Calendaria doesn't have era colors
 			SortOrder:   i,
 		}))
+	}
+
+	// Festivals: cal.Festivals is an object map, so sort by (month, day)
+	// then the authored key for a total order over Go's randomised map
+	// iteration — the same reasoning eraList/moonList/seasonList use above.
+	type festivalEntry struct {
+		key string
+		val calFestival
+	}
+	var festivalList []festivalEntry
+	for k, f := range cal.Festivals {
+		festivalList = append(festivalList, festivalEntry{k, f})
+	}
+	sort.Slice(festivalList, func(i, j int) bool {
+		a, b := festivalList[i].val, festivalList[j].val
+		if a.Month != b.Month {
+			return a.Month < b.Month
+		}
+		if a.Day != b.Day {
+			return a.Day < b.Day
+		}
+		return festivalList[i].key < festivalList[j].key
+	})
+	for i, f := range festivalList {
+		result.Festivals = append(result.Festivals, FestivalInput{
+			Name:        stripLocalizationKey(f.val.Name),
+			Month:       importIntPtr(f.val.Month),
+			Day:         importIntPtr(f.val.Day),
+			Description: nonEmptyPtr(f.val.Description),
+			Color:       normalizeOptionalColor(nonEmptyPtr(f.val.Color)),
+			Icon:        nonEmptyPtr(f.val.Icon),
+			SortOrder:   i,
+		})
 	}
 
 	// Calendaria's file gives no day-level current date at all — only a
@@ -1351,16 +1434,16 @@ func parseFantasyCalendar(data []byte) (*ImportResult, error) {
 		})
 	}
 
-	// Moons.
+	// Moons. A moon Fantasy-Calendar marks hidden (from its own players) is
+	// imported as Director-only rather than dropped outright — the GM who
+	// authored it presumably still wants it on their own calendar.
 	for _, m := range fc.StaticData.Moons {
-		if m.Hidden {
-			continue
-		}
 		result.Moons = append(result.Moons, MoonInput{
-			Name:        m.Name,
-			CycleDays:   m.Cycle,
-			PhaseOffset: m.Shift,
-			Color:       normalizeColor(m.Color),
+			Name:              m.Name,
+			CycleDays:         m.Cycle,
+			PhaseOffset:       m.Shift,
+			Color:             normalizeColor(m.Color),
+			HiddenFromPlayers: m.Hidden,
 		})
 	}
 
@@ -1404,7 +1487,11 @@ func parseFantasyCalendar(data []byte) (*ImportResult, error) {
 		}
 	}
 
-	// Eras.
+	// Eras. Date.Timespan/Date.Day are 0-indexed, like every other
+	// Fantasy-Calendar month-index/day field in this parser (DynamicData.
+	// Timespan/Day above, LeapDay.Timespan). Each era keeps its month/day,
+	// not just StartYear, so it starts on the day it actually began rather
+	// than defaulting to "month 1 day 1".
 	for i, e := range fc.StaticData.Eras {
 		var desc *string
 		if e.Description != "" {
@@ -1413,6 +1500,8 @@ func parseFantasyCalendar(data []byte) (*ImportResult, error) {
 		result.Eras = append(result.Eras, normalizeEraStart(EraInput{
 			Name:        e.Name,
 			StartYear:   e.Date.Year,
+			StartMonth:  e.Date.Timespan + 1,
+			StartDay:    e.Date.Day + 1,
 			Description: desc,
 			Color:       "#6366f1",
 			SortOrder:   i,
@@ -1471,14 +1560,55 @@ func normalizeColor(c string) string {
 	return c
 }
 
+// normalizeOptionalColor applies normalizeColor to an optional color pointer,
+// leaving a truly-absent color (nil) as nil instead of forcing the gray
+// fallback normalizeColor gives an empty string — unlike a moon or season, a
+// festival's color is a genuinely optional field (the UI falls back to its
+// own default), not one that always has a value to sanitize.
+func normalizeOptionalColor(c *string) *string {
+	if c == nil {
+		return nil
+	}
+	v := normalizeColor(*c)
+	return &v
+}
+
 // roundFloat rounds a float to n decimal places.
 func roundFloat(f float64, n int) float64 {
 	pow := math.Pow(10, float64(n))
 	return math.Round(f*pow) / pow
 }
 
-// unused but kept for potential future use with moon phase offsets.
-var _ = roundFloat
+// moonPhaseOffsetFromReference derives a moon's PhaseOffset from a reference
+// "new moon" date the source format states explicitly (Calendaria's
+// referenceDate, Simple Calendar's firstNewMoon), so the moon's cycle
+// anchors on the night the source calendar actually named, not on whatever
+// night absolute day 0 happens to be. adjust folds in an already-known extra
+// day shift (Simple Calendar's own cycleDayAdjust knob, on top of its
+// firstNewMoon date); pass 0 for a format with no such knob (Calendaria).
+//
+// Computed from the SAME AbsoluteDay the rest of the app uses (via a
+// throwaway Calendar carrying only the months/leap settings already parsed
+// this call), so it can't drift from Moon.MoonPhase's own arithmetic:
+// Moon.MoonPhase's raw phase is (absoluteDay+PhaseOffset)/CycleDays, so
+// phase 0 (new moon) at the reference date requires
+// PhaseOffset ≡ -referenceAbsoluteDay (mod CycleDays).
+func moonPhaseOffsetFromReference(months []MonthInput, leapEvery, leapOffset int, cycleDays, adjust float64, year, month, day int) float64 {
+	if cycleDays <= 0 {
+		return 0
+	}
+	tmp := &Calendar{LeapYearEvery: leapEvery, LeapYearOffset: leapOffset}
+	tmp.Months = make([]Month, len(months))
+	for i, m := range months {
+		tmp.Months[i] = Month{Days: m.Days, LeapYearDays: m.LeapYearDays}
+	}
+	refDay := tmp.AbsoluteDay(year, month, day)
+	offset := math.Mod(-(float64(refDay) + adjust), cycleDays)
+	if offset < 0 {
+		offset += cycleDays
+	}
+	return roundFloat(offset, 4)
+}
 
 // importIntPtr returns a pointer to v — used to populate
 // ImportedToday.Month/Day from a plain int without a throwaway local
@@ -1517,6 +1647,12 @@ const (
 	maxCalendarShortNameLength = 100
 	// calendar_seasons.weather_effect VARCHAR(200).
 	maxCalendarWeatherEffectLength = 200
+	// calendar_festivals.icon / calendar_cycle_entries.icon VARCHAR(50).
+	maxCalendarIconLength = 50
+
+	maxCalendarCycles       = 100 // real calendars use at most a handful
+	maxCalendarCycleEntries = 500 // per cycle — a century-long zodiac is already generous
+	maxCalendarFestivals    = 500
 )
 
 // checkCalendarImportLimits refuses an import whose structure is too large
@@ -1543,6 +1679,17 @@ func checkCalendarImportLimits(result *ImportResult) error {
 	}
 	if n := len(result.Events); n > maxCalendarImportEvents {
 		return fmt.Errorf("this calendar has %d events; the maximum is %d", n, maxCalendarImportEvents)
+	}
+	if n := len(result.Cycles); n > maxCalendarCycles {
+		return fmt.Errorf("this calendar has %d cycles; the maximum is %d", n, maxCalendarCycles)
+	}
+	for _, c := range result.Cycles {
+		if n := len(c.Entries); n > maxCalendarCycleEntries {
+			return fmt.Errorf("cycle %q has %d entries; the maximum is %d", c.Name, n, maxCalendarCycleEntries)
+		}
+	}
+	if n := len(result.Festivals); n > maxCalendarFestivals {
+		return fmt.Errorf("this calendar has %d festivals; the maximum is %d", n, maxCalendarFestivals)
 	}
 	return nil
 }
@@ -1644,6 +1791,56 @@ func clampCalendarStructure(result *ImportResult) error {
 			if trunc := truncateImportText(*e.Description, apperror.MaxDescriptionLength); trunc != *e.Description {
 				e.Description = &trunc
 				result.Warnings = append(result.Warnings, fmt.Sprintf("era %d's description was too long; shortened", i+1))
+			}
+		}
+	}
+
+	for i := range result.Cycles {
+		c := &result.Cycles[i]
+		if strings.TrimSpace(c.Name) == "" {
+			c.Name = fmt.Sprintf("Cycle %d", i+1)
+			result.Warnings = append(result.Warnings, fmt.Sprintf("cycle %d had no name; named %q", i+1, c.Name))
+		}
+		if trunc := truncateImportText(c.Name, maxCalendarShortNameLength); trunc != c.Name {
+			c.Name = trunc
+			result.Warnings = append(result.Warnings, fmt.Sprintf("cycle %d's name was too long; shortened", i+1))
+		}
+		for j := range c.Entries {
+			e := &c.Entries[j]
+			if trunc := truncateImportText(e.Name, maxCalendarShortNameLength); trunc != e.Name {
+				e.Name = trunc
+				result.Warnings = append(result.Warnings, fmt.Sprintf("cycle %q entry %d's name was too long; shortened", c.Name, j+1))
+			}
+			if e.Icon != nil {
+				if trunc := truncateImportText(*e.Icon, maxCalendarIconLength); trunc != *e.Icon {
+					e.Icon = &trunc
+					result.Warnings = append(result.Warnings, fmt.Sprintf("cycle %q entry %d's icon was too long; shortened", c.Name, j+1))
+				}
+			}
+		}
+	}
+
+	for i := range result.Festivals {
+		f := &result.Festivals[i]
+		if strings.TrimSpace(f.Name) == "" {
+			f.Name = fmt.Sprintf("Festival %d", i+1)
+			result.Warnings = append(result.Warnings, fmt.Sprintf("festival %d had no name; named %q", i+1, f.Name))
+		}
+		if trunc := truncateImportText(f.Name, apperror.MaxNameLength); trunc != f.Name {
+			f.Name = trunc
+			result.Warnings = append(result.Warnings, fmt.Sprintf("festival %d's name was too long; shortened", i+1))
+		}
+		if f.Description != nil {
+			if trunc := truncateImportText(*f.Description, apperror.MaxDescriptionLength); trunc != *f.Description {
+				f.Description = &trunc
+				result.Warnings = append(result.Warnings, fmt.Sprintf("festival %d's description was too long; shortened", i+1))
+			}
+		}
+		f.Color = normalizeOptionalColor(f.Color)
+		if f.Icon != nil {
+			if trunc := truncateImportText(*f.Icon, maxCalendarIconLength); trunc != *f.Icon {
+				f.Icon = &trunc
+				result.Warnings = append(result.Warnings, fmt.Sprintf("festival %d's icon was too long; shortened", i+1))
 			}
 		}
 	}

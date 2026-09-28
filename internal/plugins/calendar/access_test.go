@@ -181,8 +181,21 @@ func (f *fakeCalendarSvc) SetWeekdays(context.Context, string, string, []Weekday
 }
 func (f *fakeCalendarSvc) SetMoons(context.Context, string, string, []MoonInput) error { return nil }
 func (f *fakeCalendarSvc) SetSeasons(context.Context, string, string, []Season) error  { return nil }
+func (f *fakeCalendarSvc) SetCycles(context.Context, string, string, []CycleInput) error {
+	return nil
+}
+func (f *fakeCalendarSvc) SetFestivals(context.Context, string, string, []FestivalInput) error {
+	return nil
+}
+func (f *fakeCalendarSvc) SetWeather(context.Context, string, string, WeatherInput) error {
+	return nil
+}
 
 func (f *fakeCalendarSvc) ListAllEventsForCalendar(context.Context, string, string, permissions.Viewer) ([]Event, error) {
+	return nil, nil
+}
+
+func (f *fakeCalendarSvc) SearchCalendarEvents(context.Context, string, string, int) ([]map[string]string, error) {
 	return nil, nil
 }
 
@@ -289,9 +302,9 @@ func TestRouteGates_PlayerBlockedFromOwnerAndScribeRoutes(t *testing.T) {
 		{"delete event (Owner only)", http.MethodDelete, "/campaigns/camp-1/calendars/cal-1/events/evt-1"},
 		{"set event visibility (the dm_only toggle, gated on CanAuthorDmOnly)", http.MethodPut, "/campaigns/camp-1/calendars/cal-1/events/evt-1/visibility"},
 		{"list event kinds (calendar structure, Owner only)", http.MethodGet, "/campaigns/camp-1/calendars/event-kinds"},
-		{"create event kind (Owner only)", http.MethodPost, "/campaigns/camp-1/calendars/event-kinds"},
-		{"create era (Owner only)", http.MethodPost, "/campaigns/camp-1/calendars/cal-1/eras"},
-		{"set moon hidden (Owner only)", http.MethodPut, "/campaigns/camp-1/calendars/cal-1/moons/1/hidden"},
+		{"create event kind (CanAuthorDmOnly)", http.MethodPost, "/campaigns/camp-1/calendars/event-kinds"},
+		{"create era (CanAuthorDmOnly)", http.MethodPost, "/campaigns/camp-1/calendars/cal-1/eras"},
+		{"set moon hidden (CanAuthorDmOnly)", http.MethodPut, "/campaigns/camp-1/calendars/cal-1/moons/1/hidden"},
 		{"list calendar presets (Owner only)", http.MethodGet, "/campaigns/camp-1/calendars/presets"},
 		{"preview calendar preset (Owner only)", http.MethodGet, "/campaigns/camp-1/calendars/presets/blank"},
 		{"create calendar from preset (Owner only)", http.MethodPost, "/campaigns/camp-1/calendars/presets/blank"},
@@ -374,6 +387,74 @@ func TestRouteGates_CoDMCanToggleEventVisibility(t *testing.T) {
 	rec := doRequest(e, http.MethodPut, "/campaigns/camp-1/calendars/cal-1/events/evt-1/visibility", "u-codm")
 	if rec.Code != http.StatusOK {
 		t.Errorf("a granted co-DM must be able to toggle event visibility, got %d: %s", rec.Code, rec.Body.String())
+	}
+}
+
+// TestRouteGates_StructureWritesCanAuthorDmOnly is the required table for
+// the era/event-kind/moon-hidden writes widened from RequireRole(RoleOwner)
+// to CanAuthorDmOnly: for every one of the seven changed routes, only the
+// Owner and a granted co-Director (Scribe role + the dm_grant_ids grant) may
+// reach the fake service; a plain Scribe, a Player and a non-member all get
+// 403, exactly as they did before the widening — only the co-Director's
+// outcome flips from 403 to success.
+func TestRouteGates_StructureWritesCanAuthorDmOnly(t *testing.T) {
+	type caller struct {
+		name    string
+		role    campaigns.Role
+		member  bool // false = not in the roles map at all ("no access")
+		granted bool
+	}
+	callers := []caller{
+		{"Owner", campaigns.RoleOwner, true, false},
+		{"co-Director", campaigns.RoleScribe, true, true},
+		{"Scribe", campaigns.RoleScribe, true, false},
+		{"Player", campaigns.RolePlayer, true, false},
+		{"no access", campaigns.RoleNone, false, false},
+	}
+	routes := []struct {
+		name   string
+		method string
+		path   string
+		wantOK int // response code for a caller who passes CanAuthorDmOnly
+	}{
+		{"create event kind", http.MethodPost, "/campaigns/camp-1/calendars/event-kinds", http.StatusCreated},
+		{"update event kind", http.MethodPut, "/campaigns/camp-1/calendars/event-kinds/1", http.StatusOK},
+		{"delete event kind", http.MethodDelete, "/campaigns/camp-1/calendars/event-kinds/1", http.StatusOK},
+		{"create era", http.MethodPost, "/campaigns/camp-1/calendars/cal-1/eras", http.StatusCreated},
+		{"update era", http.MethodPut, "/campaigns/camp-1/calendars/cal-1/eras/1", http.StatusOK},
+		{"delete era", http.MethodDelete, "/campaigns/camp-1/calendars/cal-1/eras/1", http.StatusOK},
+		{"set moon hidden", http.MethodPut, "/campaigns/camp-1/calendars/cal-1/moons/1/hidden", http.StatusOK},
+	}
+
+	const userID = "u-caller"
+	for _, rt := range routes {
+		rt := rt
+		t.Run(rt.name, func(t *testing.T) {
+			for _, c := range callers {
+				c := c
+				t.Run(c.name, func(t *testing.T) {
+					roles := map[string]campaigns.Role{}
+					if c.member {
+						roles[userID] = c.role
+					}
+					settings := ""
+					if c.granted {
+						settings = `{"dm_grant_ids":["` + userID + `"]}`
+					}
+					e, _ := newAccessTestRouterWithSettings(false, true, roles, settings)
+					rec := doRequest(e, rt.method, rt.path, userID)
+
+					canAuthor := c.role >= campaigns.RoleOwner || c.granted
+					want := http.StatusForbidden
+					if canAuthor {
+						want = rt.wantOK
+					}
+					if rec.Code != want {
+						t.Errorf("%s as %s: got %d, want %d: %s", rt.name, c.name, rec.Code, want, rec.Body.String())
+					}
+				})
+			}
+		})
 	}
 }
 

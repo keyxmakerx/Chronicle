@@ -8,7 +8,9 @@
 // for a trusted system caller, and dm_only content / hidden moons / per-user
 // visibility_rules are resolved the same way for every viewer weaker than
 // Owner. Structural resources (event kinds, eras, the moon hidden flag) are
-// Owner-only end to end, so they carry no viewer parameter at all.
+// authorized entirely at the route — listing event kinds Owner only, every
+// other write CanAuthorDmOnly (Owner or a granted co-Director) — so they
+// carry no viewer parameter at all.
 package calendar
 
 import (
@@ -228,22 +230,26 @@ type CalendarService interface {
 	SetEventVisibility(ctx context.Context, eventID, calendarID, campaignID string, input UpdateEventVisibilityInput, v permissions.Viewer) error
 
 	// Event kinds. Campaign-scoped (shared by every calendar in the
-	// campaign, see EventKind's doc comment) and Owner-only end to end —
-	// calendar structure, not content a Player ever reads directly.
+	// campaign, see EventKind's doc comment) — calendar structure, not
+	// content a Player ever reads directly. Listing is Owner only end to
+	// end; creating, editing and deleting are CanAuthorDmOnly (Owner or a
+	// granted co-Director), gated at the route (routes.go).
 	ListEventKinds(ctx context.Context, campaignID string) ([]EventKind, error)
 	CreateEventKind(ctx context.Context, campaignID string, input EventKindInput) (*EventKind, error)
 	UpdateEventKind(ctx context.Context, kindID int, campaignID string, input UpdateEventKindInput) error
 	DeleteEventKind(ctx context.Context, kindID int, campaignID string) error
 
-	// Eras. Owner-only end to end (calendar structure), resolved through the
-	// calendar the caller reached (GetEraByID itself is not calendar-scoped;
-	// this service never calls it with an untrusted id without also
-	// checking the result's CalendarID — see eraInCalendar).
+	// Eras. Calendar structure, gated CanAuthorDmOnly (Owner or a granted
+	// co-Director) at the route (routes.go), resolved through the calendar
+	// the caller reached (GetEraByID itself is not calendar-scoped; this
+	// service never calls it with an untrusted id without also checking the
+	// result's CalendarID — see eraInCalendar).
 	CreateEra(ctx context.Context, calendarID, campaignID string, input EraInput) (*Era, error)
 	UpdateEra(ctx context.Context, eraID int, calendarID, campaignID string, input UpdateEraInput) error
 	DeleteEra(ctx context.Context, eraID int, calendarID, campaignID string) error
 
-	// Moon. Owner-only end to end (the hidden flag is calendar structure).
+	// Moon. Calendar structure; the hidden flag is gated CanAuthorDmOnly
+	// (Owner or a granted co-Director) at the route (routes.go).
 	SetMoonHidden(ctx context.Context, moonID int, calendarID, campaignID string, hidden bool) error
 
 	// PreviewAnchorMove is a READ-ONLY preview of moving a real-anchored
@@ -260,15 +266,23 @@ type CalendarService interface {
 	// and the calendar plugin's own native/Simple-Calendar/Calendaria import
 	// (internal/plugins/calendar/import.go), neither of which has a stored
 	// row per item to update incrementally the way CreateEra/CreateEventKind
-	// do. Not wired to any HTTP route yet (calendar-v5 slice 2, #741) — Owner-
-	// only calendar-settings editing UI is a later slice — so today's only
-	// callers are trusted in-process ones; a caller reaching these through a
-	// future HTTP handler must still be gated Owner-only there, the same as
-	// every other calendar-structure write in this file.
+	// do. Not wired to any HTTP route yet — calendar-settings editing UI is
+	// a later slice — so today's only callers are trusted in-process ones; a
+	// caller reaching these through a future HTTP handler must still be
+	// gated there. Whether that gate is Owner-only or CanAuthorDmOnly (like
+	// eras/event kinds/the moon hidden flag above) is this future slice's
+	// own decision, not assumed here.
 	SetMonths(ctx context.Context, calendarID, campaignID string, months []MonthInput) error
 	SetWeekdays(ctx context.Context, calendarID, campaignID string, weekdays []WeekdayInput) error
 	SetMoons(ctx context.Context, calendarID, campaignID string, moons []MoonInput) error
 	SetSeasons(ctx context.Context, calendarID, campaignID string, seasons []Season) error
+	// SetCycles/SetFestivals/SetWeather are the same bulk-replace shape as
+	// the four above, giving the campaign-backup importer a service-level
+	// caller for the repository side (CalendarRepository.SetCycles/
+	// SetFestivals, WeatherRepository.Set) from outside this package.
+	SetCycles(ctx context.Context, calendarID, campaignID string, cycles []CycleInput) error
+	SetFestivals(ctx context.Context, calendarID, campaignID string, festivals []FestivalInput) error
+	SetWeather(ctx context.Context, calendarID, campaignID string, input WeatherInput) error
 
 	// ListAllEventsForCalendar returns every event for a calendar with no
 	// role or per-user visibility filter — a bulk, unredacted read for
@@ -280,6 +294,17 @@ type CalendarService interface {
 	// filterEventsByUser do — a caller that isn't declaring system trust
 	// must not get the unfiltered list.
 	ListAllEventsForCalendar(ctx context.Context, calendarID, campaignID string, v permissions.Viewer) ([]Event, error)
+
+	// SearchCalendarEvents implements entities.CalendarSearcher (wired from
+	// internal/app/routes.go): campaign-wide calendar-event search results
+	// for the global quick-search popup. Role-only picker convention,
+	// matching CalendarEventLister's shape in
+	// internal/plugins/timeline/service.go: the interface carries no
+	// per-request user id, so a calendar's own visibility_rules allow/deny
+	// list is not evaluated — only role-level dm_only gating, at both the
+	// calendar (ListCalendars already filters those out) and each event
+	// (EventRepository.SearchEvents' own SQL role filter).
+	SearchCalendarEvents(ctx context.Context, campaignID, query string, role int) ([]map[string]string, error)
 }
 
 // calendarService is the concrete CalendarService.
@@ -760,6 +785,8 @@ func (s *calendarService) UpdateCalendar(ctx context.Context, calendarID, campai
 	cal.LeapYearEvery = input.LeapYearEvery.Val(cal.LeapYearEvery)
 	cal.LeapYearOffset = input.LeapYearOffset.Val(cal.LeapYearOffset)
 	cal.Hemisphere = hemisphere
+	cal.ForecastsEnabled = input.ForecastsEnabled.Val(cal.ForecastsEnabled)
+	cal.MonthStartsNewWeek = input.MonthStartsNewWeek.Val(cal.MonthStartsNewWeek)
 
 	// SetRealTime is nil for every caller that does not manage the flag —
 	// see UpdateCalendarInput's doc comment.
@@ -1624,7 +1651,7 @@ func (s *calendarService) SetEventVisibility(ctx context.Context, eventID, calen
 	return nil
 }
 
-// --- Event kinds (campaign-scoped, Owner-only end to end) ---
+// --- Event kinds (campaign-scoped; list Owner only, writes CanAuthorDmOnly) ---
 
 // validateEventKindShape checks the fields the repository's own
 // validateEventKindInput does not (Slug/Name shape + length limits, plus
@@ -1760,7 +1787,7 @@ func (s *calendarService) DeleteEventKind(ctx context.Context, kindID int, campa
 	return s.kindRepo.Delete(ctx, kindID, campaignID)
 }
 
-// --- Eras (per-calendar, Owner-only end to end) ---
+// --- Eras (per-calendar, CanAuthorDmOnly — Owner or a granted co-Director) ---
 
 func (s *calendarService) CreateEra(ctx context.Context, calendarID, campaignID string, input EraInput) (*Era, error) {
 	if _, err := s.calendarInCampaign(ctx, calendarID, campaignID); err != nil {
@@ -1886,10 +1913,11 @@ func validateEraShape(name string, description *string, color string, startYear,
 
 // --- Moon ---
 
-// SetMoonHidden toggles a moon's visibility to players. Owner-only end to
-// end (the route gates it); CalendarRepository.SetMoonHidden is itself
-// scoped to calendarID, so a moon belonging to a sibling calendar in the
-// SAME campaign is rejected exactly like one from another campaign.
+// SetMoonHidden toggles a moon's visibility to players. CanAuthorDmOnly —
+// Owner or a granted co-Director — end to end (the route gates it);
+// CalendarRepository.SetMoonHidden is itself scoped to calendarID, so a
+// moon belonging to a sibling calendar in the SAME campaign is rejected
+// exactly like one from another campaign.
 func (s *calendarService) SetMoonHidden(ctx context.Context, moonID int, calendarID, campaignID string, hidden bool) error {
 	if _, err := s.calendarInCampaign(ctx, calendarID, campaignID); err != nil {
 		return err
@@ -2082,6 +2110,65 @@ func (s *calendarService) SetSeasons(ctx context.Context, calendarID, campaignID
 	return s.calRepo.SetSeasons(ctx, calendarID, seasons)
 }
 
+// SetCycles replaces calendarID's cycle list, each with its own entries.
+func (s *calendarService) SetCycles(ctx context.Context, calendarID, campaignID string, cycles []CycleInput) error {
+	if len(cycles) > maxCalendarCycles {
+		return apperror.NewBadRequest(fmt.Sprintf("a calendar can have at most %d cycles", maxCalendarCycles))
+	}
+	for i := range cycles {
+		c := &cycles[i]
+		if err := validateStructureName("cycle", c.Name, maxCalendarShortNameLength); err != nil {
+			return err
+		}
+		if len(c.Entries) > maxCalendarCycleEntries {
+			return apperror.NewBadRequest(fmt.Sprintf("a cycle can have at most %d entries", maxCalendarCycleEntries))
+		}
+		for _, e := range c.Entries {
+			if err := validateStructureName("cycle entry", e.Name, maxCalendarShortNameLength); err != nil {
+				return err
+			}
+		}
+	}
+	if _, err := s.calendarInCampaign(ctx, calendarID, campaignID); err != nil {
+		return err
+	}
+	return s.calRepo.SetCycles(ctx, calendarID, cycles)
+}
+
+// SetFestivals replaces calendarID's festival list.
+func (s *calendarService) SetFestivals(ctx context.Context, calendarID, campaignID string, festivals []FestivalInput) error {
+	if len(festivals) > maxCalendarFestivals {
+		return apperror.NewBadRequest(fmt.Sprintf("a calendar can have at most %d festivals", maxCalendarFestivals))
+	}
+	for i := range festivals {
+		f := &festivals[i]
+		if err := validateStructureName("festival", f.Name, apperror.MaxNameLength); err != nil {
+			return err
+		}
+		if f.Description != nil && utf8.RuneCountInString(*f.Description) > apperror.MaxDescriptionLength {
+			return apperror.NewBadRequest(fmt.Sprintf("a festival's description can be at most %d characters", apperror.MaxDescriptionLength))
+		}
+		f.Color = normalizeOptionalColor(f.Color)
+	}
+	if _, err := s.calendarInCampaign(ctx, calendarID, campaignID); err != nil {
+		return err
+	}
+	return s.calRepo.SetFestivals(ctx, calendarID, festivals)
+}
+
+// SetWeather replaces calendarID's current weather reading. Reading a
+// calendar's weather goes through weatherRepo.Get inside loadSubresources
+// (read-only, see .ai.md "Honest gaps" — painting/generation is separate,
+// unbuilt work); SetWeather is only the plumbing the campaign-backup
+// importer needs to restore a reading a GM had already set before the
+// backup.
+func (s *calendarService) SetWeather(ctx context.Context, calendarID, campaignID string, input WeatherInput) error {
+	if _, err := s.calendarInCampaign(ctx, calendarID, campaignID); err != nil {
+		return err
+	}
+	return s.weatherRepo.Set(ctx, calendarID, input)
+}
+
 // validateMonthInputs holds a whole-list month write to the limits an
 // uploaded calendar file gets. The campaign backup import writes through
 // SetMonths without going through the import parsers.
@@ -2119,6 +2206,49 @@ func (s *calendarService) ListAllEventsForCalendar(ctx context.Context, calendar
 		return nil, err
 	}
 	return s.eventRepo.ListAllEvents(ctx, calendarID)
+}
+
+// SearchCalendarEvents implements entities.CalendarSearcher — see the
+// interface doc comment for the role-only shape and what it does and does
+// not filter. Every candidate calendar comes from ListCalendars (role +
+// per-user visibility filtered), so a dm_only or otherwise-hidden
+// calendar's events are never even searched; within a visible calendar,
+// EventRepository.SearchEvents applies the same SQL dm_only filter
+// ListEventsForMonth's own read does, and the per-user layer runs after it
+// as it does for the pages. The searcher is told only a role, not who is
+// asking, so an event with its own allow or deny list stays out of a
+// non-GM search; the calendar page, which knows the viewer, still shows it
+// to whoever may see it. Capped at 10 events per calendar by that same
+// query (a search result list, not a full export).
+func (s *calendarService) SearchCalendarEvents(ctx context.Context, campaignID, query string, role int) ([]map[string]string, error) {
+	v := permissions.RequestViewer(role, "")
+	cals, err := s.ListCalendars(ctx, campaignID, v)
+	if err != nil {
+		return nil, fmt.Errorf("search calendar events: list calendars: %w", err)
+	}
+
+	var results []map[string]string
+	for _, cal := range cals {
+		events, err := s.eventRepo.SearchEvents(ctx, cal.ID, query, role)
+		if err != nil {
+			return nil, fmt.Errorf("search calendar events: search calendar %s: %w", cal.ID, err)
+		}
+		for _, evt := range filterEventsByUser(events, v) {
+			icon := evt.KindIcon
+			if icon == "" {
+				icon = "fa-calendar-day"
+			}
+			results = append(results, map[string]string{
+				"id":         evt.ID,
+				"name":       evt.Name,
+				"type_name":  "Calendar Event",
+				"type_icon":  icon,
+				"type_color": evt.KindColor,
+				"url":        fmt.Sprintf("/campaigns/%s/calendars/%s/view", campaignID, cal.ID),
+			})
+		}
+	}
+	return results, nil
 }
 
 // --- Shared validation helpers ---

@@ -481,6 +481,45 @@ func scanMoon(scanner interface{ Scan(...any) error }) (*Moon, error) {
 // from the input is deleted; an entry with no id, or an id that isn't
 // actually in this calendar, is inserted fresh with HiddenFromPlayers from
 // the input and the column defaults for the render params.
+// moonBaseDesignOrDefault, moonPhaseSourceOrDefault, moonSizeOrDefault and
+// moonOrbitSpeedOrDefault mirror calendar_moons' own column DEFAULTs
+// (migrations/020_calv5_schema.up.sql) exactly. A plain INSERT with a Go
+// zero value ("" / 0) would write that zero literally rather than letting
+// MySQL's DEFAULT apply — it only applies when the column is omitted from
+// the statement, not when it's given an explicit empty/zero — so every
+// MoonInput builder that leaves the render params unset (every import
+// format, the wizard's build step) gets the sensible look a hand-created
+// moon gets, instead of an invalid empty design/phase-source and a zero
+// size. Tint has no default (NULL is a normal "no tint" value) and needs
+// no such fallback.
+func moonBaseDesignOrDefault(v string) string {
+	if v == "" {
+		return "moon-realistic-selene"
+	}
+	return v
+}
+
+func moonPhaseSourceOrDefault(v string) string {
+	if v == "" {
+		return "css-clip"
+	}
+	return v
+}
+
+func moonSizeOrDefault(v float64) float64 {
+	if v == 0 {
+		return 1
+	}
+	return v
+}
+
+func moonOrbitSpeedOrDefault(v float64) float64 {
+	if v == 0 {
+		return 1
+	}
+	return v
+}
+
 func upsertMoons(ctx context.Context, ex dbExecutor, calendarID string, moons []MoonInput) error {
 	existing, err := existingIDs(ctx, ex, "calendar_moons", calendarID)
 	if err != nil {
@@ -501,9 +540,12 @@ func upsertMoons(ctx context.Context, ex dbExecutor, calendarID string, moons []
 			continue
 		}
 		res, err := ex.ExecContext(ctx,
-			`INSERT INTO calendar_moons (calendar_id, name, cycle_days, phase_offset, color, hidden_from_players)
-			 VALUES (?, ?, ?, ?, ?, ?)`,
+			`INSERT INTO calendar_moons (calendar_id, name, cycle_days, phase_offset, color, hidden_from_players,
+			        base_design, tint, phase_source, size, orbit_speed)
+			 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 			calendarID, m.Name, m.CycleDays, m.PhaseOffset, m.Color, m.HiddenFromPlayers,
+			moonBaseDesignOrDefault(m.BaseDesign), m.Tint, moonPhaseSourceOrDefault(m.PhaseSource),
+			moonSizeOrDefault(m.Size), moonOrbitSpeedOrDefault(m.OrbitSpeed),
 		)
 		if err != nil {
 			return err
@@ -1053,8 +1095,8 @@ func (r *calendarRepo) GetFestivals(ctx context.Context, calendarID string) ([]F
 // transaction. SQL is duplicated from the corresponding Set* methods (moons
 // and eras share the upsert helpers instead) rather than calling them
 // directly, so those methods' own transaction boundaries and tests are
-// untouched by this one; when a future import format adds cycles or
-// festivals, extend both this method and ImportResult together.
+// untouched by this one; a future sub-resource added to ImportResult needs
+// the same treatment here.
 func (r *calendarRepo) ApplyImport(ctx context.Context, cal *Calendar, result *ImportResult) error {
 	tx, err := r.db.BeginTx(ctx, nil)
 	if err != nil {
@@ -1140,6 +1182,53 @@ func (r *calendarRepo) ApplyImport(ctx context.Context, cal *Calendar, result *I
 	if len(result.Eras) > 0 {
 		if err := upsertEras(ctx, tx, cal.ID, result.Eras); err != nil {
 			return fmt.Errorf("apply eras: %w", err)
+		}
+	}
+
+	// Cycles (with their entries) and festivals: same skip-when-empty rule
+	// as eras above, and the same replace-all SQL SetCycles/SetFestivals
+	// use (duplicated per this method's own doc comment, not called
+	// directly, so their transaction boundaries stay untouched by this one).
+	if len(result.Cycles) > 0 {
+		if _, err := tx.ExecContext(ctx, `DELETE FROM calendar_cycles WHERE calendar_id = ?`, cal.ID); err != nil {
+			return fmt.Errorf("delete cycles: %w", err)
+		}
+		for _, c := range result.Cycles {
+			res, err := tx.ExecContext(ctx,
+				`INSERT INTO calendar_cycles (calendar_id, name, cycle_length, type, sort_order)
+				 VALUES (?, ?, ?, ?, ?)`,
+				cal.ID, c.Name, c.CycleLength, c.Type, c.SortOrder)
+			if err != nil {
+				return fmt.Errorf("insert cycle %q: %w", c.Name, err)
+			}
+			cycleID, err := res.LastInsertId()
+			if err != nil {
+				return fmt.Errorf("insert cycle %q: %w", c.Name, err)
+			}
+			for _, e := range c.Entries {
+				if _, err := tx.ExecContext(ctx,
+					`INSERT INTO calendar_cycle_entries (cycle_id, name, icon, year_offset, sort_order)
+					 VALUES (?, ?, ?, ?, ?)`,
+					cycleID, e.Name, e.Icon, e.YearOffset, e.SortOrder,
+				); err != nil {
+					return fmt.Errorf("insert cycle %q entry %q: %w", c.Name, e.Name, err)
+				}
+			}
+		}
+	}
+
+	if len(result.Festivals) > 0 {
+		if _, err := tx.ExecContext(ctx, `DELETE FROM calendar_festivals WHERE calendar_id = ?`, cal.ID); err != nil {
+			return fmt.Errorf("delete festivals: %w", err)
+		}
+		for _, f := range result.Festivals {
+			if _, err := tx.ExecContext(ctx,
+				`INSERT INTO calendar_festivals (calendar_id, name, month, day, after_month, description, color, icon, sort_order)
+				 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+				cal.ID, f.Name, f.Month, f.Day, f.AfterMonth, f.Description, f.Color, f.Icon, f.SortOrder,
+			); err != nil {
+				return fmt.Errorf("insert festival %q: %w", f.Name, err)
+			}
 		}
 	}
 

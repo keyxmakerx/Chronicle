@@ -17,8 +17,12 @@ import (
 //   - Calendar events: view Player (visibility-filtered), create/edit
 //     Scribe, delete Owner, the dm_only toggle gated on CanAuthorDmOnly
 //     (the Owner or a granted co-DM, never a plain Scribe).
-//   - Event kinds, eras and the moon hidden flag are calendar STRUCTURE, so
-//     Owner only end to end (no Player read route for any of the three).
+//   - Event kinds, eras and the moon hidden flag are calendar STRUCTURE (no
+//     Player read route for any of the three). Listing event kinds stays
+//     Owner only; creating/editing/deleting an event kind or an era, and
+//     the moon hidden flag, are gated CanAuthorDmOnly like the event
+//     visibility toggle above — the Owner or a granted co-Director, never a
+//     plain Scribe.
 func RegisterRoutes(e *echo.Echo, h *Handler, campaignSvc campaigns.CampaignService, authSvc auth.AuthService, addonSvc addons.AddonService) {
 	// Authenticated routes (CRUD + structure management).
 	cg := e.Group("/campaigns/:id",
@@ -101,19 +105,40 @@ func RegisterRoutes(e *echo.Echo, h *Handler, campaignSvc campaigns.CampaignServ
 		campaigns.RequireCapability(func(cc *campaigns.CampaignContext) bool { return cc.CanAuthorDmOnly() },
 			"only the campaign owner or a granted co-DM may change this event's visibility"))
 
-	// Event kinds: campaign structure, Owner only end to end (no Player read).
+	// Event kinds: campaign structure (no Player read). Listing stays Owner
+	// only; creating, editing and deleting a kind are gated CanAuthorDmOnly,
+	// not a bare role minimum — the operator has decided a granted co-DM may
+	// author calendar structure the same as the Owner, matching the eras and
+	// moon-hidden writes below and the event-visibility toggle further up.
 	cg.GET("/calendars/event-kinds", h.ListEventKindsAPI, campaigns.RequireRole(campaigns.RoleOwner))
-	cg.POST("/calendars/event-kinds", h.CreateEventKindAPI, campaigns.RequireRole(campaigns.RoleOwner))
-	cg.PUT("/calendars/event-kinds/:kindID", h.UpdateEventKindAPI, campaigns.RequireRole(campaigns.RoleOwner))
-	cg.DELETE("/calendars/event-kinds/:kindID", h.DeleteEventKindAPI, campaigns.RequireRole(campaigns.RoleOwner))
+	cg.POST("/calendars/event-kinds", h.CreateEventKindAPI,
+		campaigns.RequireCapability(func(cc *campaigns.CampaignContext) bool { return cc.CanAuthorDmOnly() },
+			"only the campaign owner or a granted co-DM may create an event kind"))
+	cg.PUT("/calendars/event-kinds/:kindID", h.UpdateEventKindAPI,
+		campaigns.RequireCapability(func(cc *campaigns.CampaignContext) bool { return cc.CanAuthorDmOnly() },
+			"only the campaign owner or a granted co-DM may edit an event kind"))
+	cg.DELETE("/calendars/event-kinds/:kindID", h.DeleteEventKindAPI,
+		campaigns.RequireCapability(func(cc *campaigns.CampaignContext) bool { return cc.CanAuthorDmOnly() },
+			"only the campaign owner or a granted co-DM may delete an event kind"))
 
-	// Eras: calendar structure, Owner only end to end (no Player read).
-	cg.POST("/calendars/:calid/eras", h.CreateEraAPI, campaigns.RequireRole(campaigns.RoleOwner))
-	cg.PUT("/calendars/:calid/eras/:eraID", h.UpdateEraAPI, campaigns.RequireRole(campaigns.RoleOwner))
-	cg.DELETE("/calendars/:calid/eras/:eraID", h.DeleteEraAPI, campaigns.RequireRole(campaigns.RoleOwner))
+	// Eras: calendar structure (no Player read route; a viewer's own current
+	// era ships inside the calendar's own read instead). Gated CanAuthorDmOnly,
+	// same reasoning as the event-kind writes above.
+	cg.POST("/calendars/:calid/eras", h.CreateEraAPI,
+		campaigns.RequireCapability(func(cc *campaigns.CampaignContext) bool { return cc.CanAuthorDmOnly() },
+			"only the campaign owner or a granted co-DM may create an era"))
+	cg.PUT("/calendars/:calid/eras/:eraID", h.UpdateEraAPI,
+		campaigns.RequireCapability(func(cc *campaigns.CampaignContext) bool { return cc.CanAuthorDmOnly() },
+			"only the campaign owner or a granted co-DM may edit an era"))
+	cg.DELETE("/calendars/:calid/eras/:eraID", h.DeleteEraAPI,
+		campaigns.RequireCapability(func(cc *campaigns.CampaignContext) bool { return cc.CanAuthorDmOnly() },
+			"only the campaign owner or a granted co-DM may delete an era"))
 
-	// Moon hidden flag: calendar structure, Owner only.
-	cg.PUT("/calendars/:calid/moons/:moonID/hidden", h.SetMoonHiddenAPI, campaigns.RequireRole(campaigns.RoleOwner))
+	// Moon hidden flag: calendar structure, gated CanAuthorDmOnly like the
+	// event-kind and era writes above.
+	cg.PUT("/calendars/:calid/moons/:moonID/hidden", h.SetMoonHiddenAPI,
+		campaigns.RequireCapability(func(cc *campaigns.CampaignContext) bool { return cc.CanAuthorDmOnly() },
+			"only the campaign owner or a granted co-DM may change a moon's visibility"))
 
 	// Real-date anchor preview: read-only, Owner only (moving the anchor
 	// re-dates every session scheduled by in-world date at once, so the

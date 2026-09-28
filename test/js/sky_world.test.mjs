@@ -161,9 +161,10 @@ test('paletteFor returns every named colour as a finite linear RGB triple', () =
 
 // The sky pane reads its moons on the calendar page's day count, so a
 // real-world calendar's real Moon (anchored to the Julian Day Number) is
-// full on 2026-09-26 and new on 2026-09-11 in the sky too.
+// full on 2026-09-26 and new on 2026-09-11 in the sky too. tracks_real_time
+// must be set — see the dedicated test below for the manual (false) case.
 test('dayIndex puts a real-world calendar\'s Moon where the sky has it', () => {
-  const real = { mode: 'reallife', months: [] };
+  const real = { mode: 'reallife', tracks_real_time: true, months: [] };
   const epoch = SW.dayIndex(real, 2000, 1, 6);
   assert.equal(epoch, 2451550, 'the Julian Day Number of 2000-01-06');
   const theMoon = { cycle_days: 29.530588853, phase_offset: -epoch };
@@ -175,4 +176,29 @@ test('dayIndex puts a real-world calendar\'s Moon where the sky has it', () => {
 
 test('dayIndex is absoluteDay for any other calendar after year 0', () => {
   assert.equal(SW.dayIndex(CAL, 12, 3, 4), SW.absoluteDay(CAL, 12, 3, 4));
+});
+
+// A manual real-world calendar (mode 'reallife', tracks_real_time false —
+// the owner turned off "today follows the real date") must NOT take the
+// Julian Day Number branch: Calendar.UsesRealTime server-side requires both
+// the mode and the flag, so mode alone reading true here would put its Moon
+// (and, on the calendar page, its weekdays) on a different day than the
+// server computes. Real-world months, mirroring reallife.go's
+// gregorianMonths so absoluteDay's leap bookkeeping matches the server's.
+const REAL_WORLD_MONTHS = [
+  { days: 31 }, { days: 28, leap_year_days: 1 }, { days: 31 }, { days: 30 },
+  { days: 31 }, { days: 30 }, { days: 31 }, { days: 31 },
+  { days: 30 }, { days: 31 }, { days: 30 }, { days: 31 },
+];
+
+test('dayIndex only counts Julian days when tracks_real_time is set, matching Calendar.UsesRealTime', () => {
+  const manual = { mode: 'reallife', tracks_real_time: false, months: REAL_WORLD_MONTHS };
+  const tracked = { mode: 'reallife', tracks_real_time: true, months: REAL_WORLD_MONTHS };
+  // Expected values copied verbatim from a throwaway `go test` run of
+  // Calendar.absDayIndex against this exact fixture: a manual real-world
+  // calendar (leap_year_every unset, same as this fixture) counts a
+  // leap-unaware AbsoluteDay; only a tracked one counts the Julian Day
+  // Number its real Moon is anchored to.
+  assert.equal(SW.dayIndex(manual, 2026, 9, 27), 739760);
+  assert.equal(SW.dayIndex(tracked, 2026, 9, 27), 2461311);
 });

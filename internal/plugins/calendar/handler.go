@@ -443,7 +443,7 @@ func (h *Handler) SetEventVisibilityAPI(c echo.Context) error {
 	return c.NoContent(http.StatusOK)
 }
 
-// --- Event kinds (campaign-scoped, Owner only end to end) ---
+// --- Event kinds (campaign-scoped; list Owner only, writes CanAuthorDmOnly) ---
 
 // ListEventKindsAPI lists a campaign's event kinds.
 // GET /campaigns/:id/calendars/event-kinds
@@ -481,7 +481,8 @@ func bindEventKindInput(c echo.Context) (EventKindInput, error) {
 	}, nil
 }
 
-// CreateEventKindAPI creates an event kind. Owner only.
+// CreateEventKindAPI creates an event kind. CanAuthorDmOnly (Owner or a
+// granted co-Director).
 // POST /campaigns/:id/calendars/event-kinds
 func (h *Handler) CreateEventKindAPI(c echo.Context) error {
 	cc := campaigns.GetCampaignContext(c)
@@ -496,7 +497,8 @@ func (h *Handler) CreateEventKindAPI(c echo.Context) error {
 	return c.JSON(http.StatusCreated, kind)
 }
 
-// UpdateEventKindAPI applies a partial update to an event kind. Owner only.
+// UpdateEventKindAPI applies a partial update to an event kind.
+// CanAuthorDmOnly (Owner or a granted co-Director).
 // PUT /campaigns/:id/calendars/event-kinds/:kindID
 func (h *Handler) UpdateEventKindAPI(c echo.Context) error {
 	cc := campaigns.GetCampaignContext(c)
@@ -528,7 +530,8 @@ func (h *Handler) UpdateEventKindAPI(c echo.Context) error {
 	return c.NoContent(http.StatusOK)
 }
 
-// DeleteEventKindAPI deletes an event kind. Owner only.
+// DeleteEventKindAPI deletes an event kind. CanAuthorDmOnly (Owner or a
+// granted co-Director).
 // DELETE /campaigns/:id/calendars/event-kinds/:kindID
 func (h *Handler) DeleteEventKindAPI(c echo.Context) error {
 	cc := campaigns.GetCampaignContext(c)
@@ -542,7 +545,7 @@ func (h *Handler) DeleteEventKindAPI(c echo.Context) error {
 	return c.NoContent(http.StatusOK)
 }
 
-// --- Eras (per-calendar, Owner only end to end) ---
+// --- Eras (per-calendar, CanAuthorDmOnly — Owner or a granted co-Director) ---
 
 func bindEraInput(c echo.Context) (EraInput, error) {
 	var req struct {
@@ -574,7 +577,8 @@ func bindEraInput(c echo.Context) (EraInput, error) {
 	}, nil
 }
 
-// CreateEraAPI creates an era. Owner only.
+// CreateEraAPI creates an era. CanAuthorDmOnly (Owner or a granted
+// co-Director).
 // POST /campaigns/:id/calendars/:calid/eras
 func (h *Handler) CreateEraAPI(c echo.Context) error {
 	cc := campaigns.GetCampaignContext(c)
@@ -589,7 +593,8 @@ func (h *Handler) CreateEraAPI(c echo.Context) error {
 	return c.JSON(http.StatusCreated, era)
 }
 
-// UpdateEraAPI applies a partial update to an era. Owner only.
+// UpdateEraAPI applies a partial update to an era. CanAuthorDmOnly (Owner or
+// a granted co-Director).
 // PUT /campaigns/:id/calendars/:calid/eras/:eraID
 func (h *Handler) UpdateEraAPI(c echo.Context) error {
 	cc := campaigns.GetCampaignContext(c)
@@ -629,7 +634,8 @@ func (h *Handler) UpdateEraAPI(c echo.Context) error {
 	return c.NoContent(http.StatusOK)
 }
 
-// DeleteEraAPI deletes an era. Owner only.
+// DeleteEraAPI deletes an era. CanAuthorDmOnly (Owner or a granted
+// co-Director).
 // DELETE /campaigns/:id/calendars/:calid/eras/:eraID
 func (h *Handler) DeleteEraAPI(c echo.Context) error {
 	cc := campaigns.GetCampaignContext(c)
@@ -676,7 +682,8 @@ func (h *Handler) AnchorPreviewAPI(c echo.Context) error {
 
 // --- Moon ---
 
-// SetMoonHiddenAPI toggles a moon's visibility to players. Owner only.
+// SetMoonHiddenAPI toggles a moon's visibility to players. CanAuthorDmOnly
+// (Owner or a granted co-Director).
 // PUT /campaigns/:id/calendars/:calid/moons/:moonID/hidden
 func (h *Handler) SetMoonHiddenAPI(c echo.Context) error {
 	cc := campaigns.GetCampaignContext(c)
@@ -698,10 +705,11 @@ func (h *Handler) SetMoonHiddenAPI(c echo.Context) error {
 
 // --- Calendar creation wizard (presets, import) ---
 //
-// Every route below is Owner only (routes.go), matching the rest of this
-// file's calendar-structure mutation routes: creating a calendar's initial
-// structure is calendar structure, the same category eras/event kinds/the
-// moon hidden flag already fall in.
+// Every route below is Owner only (routes.go): creating a calendar's
+// INITIAL structure is calendar structure too, but stricter than editing an
+// existing one's eras, event kinds or moon-hidden flag (CanAuthorDmOnly) —
+// there is no co-Director grant to check until the calendar (and so the
+// campaign's own DM-grant list) already exists.
 
 // maxCalendarImportSize caps an uploaded calendar file. Calendar exports are
 // JSON only (never a zip, unlike campaigns' own import/export — see

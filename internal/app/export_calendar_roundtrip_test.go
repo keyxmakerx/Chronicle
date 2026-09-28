@@ -34,6 +34,9 @@ type fakeCalendarService struct {
 	moons         []calendar.MoonInput
 	seasons       []calendar.Season
 	eras          []calendar.EraInput
+	cycles        []calendar.CycleInput
+	festivals     []calendar.FestivalInput
+	weather       *calendar.WeatherInput
 	kinds         []calendar.EventKindInput
 	createdEvents []calendar.CreateEventInput
 	updateInput   *calendar.UpdateCalendarInput
@@ -110,6 +113,21 @@ func (f *fakeCalendarService) SetSeasons(_ context.Context, _ string, _ string, 
 	return nil
 }
 
+func (f *fakeCalendarService) SetCycles(_ context.Context, _ string, _ string, cycles []calendar.CycleInput) error {
+	f.cycles = cycles
+	return nil
+}
+
+func (f *fakeCalendarService) SetFestivals(_ context.Context, _ string, _ string, festivals []calendar.FestivalInput) error {
+	f.festivals = festivals
+	return nil
+}
+
+func (f *fakeCalendarService) SetWeather(_ context.Context, _ string, _ string, input calendar.WeatherInput) error {
+	f.weather = &input
+	return nil
+}
+
 func (f *fakeCalendarService) CreateEra(_ context.Context, _ string, _ string, input calendar.EraInput) (*calendar.Era, error) {
 	f.eras = append(f.eras, input)
 	return &calendar.Era{ID: len(f.eras), Name: input.Name}, nil
@@ -127,6 +145,13 @@ func (f *fakeCalendarService) UpdateCalendar(_ context.Context, _ string, _ stri
 		f.created.CurrentDay = input.CurrentDay.Val(f.created.CurrentDay)
 		f.created.CurrentHour = input.CurrentHour.Val(f.created.CurrentHour)
 		f.created.CurrentMinute = input.CurrentMinute.Val(f.created.CurrentMinute)
+		f.created.Hemisphere = input.Hemisphere.Ptr(f.created.Hemisphere)
+		f.created.ForecastsEnabled = input.ForecastsEnabled.Val(f.created.ForecastsEnabled)
+		f.created.MonthStartsNewWeek = input.MonthStartsNewWeek.Val(f.created.MonthStartsNewWeek)
+		if input.SetRealTime != nil {
+			f.created.TracksRealTime = *input.SetRealTime
+			f.created.RealTimeZone = input.RealTimeZone
+		}
 	}
 	return nil
 }
@@ -146,6 +171,9 @@ func TestCampaignExportImport_CalendarRoundTrip(t *testing.T) {
 	entityID := "entity-77"
 	startHour, startMinute := 9, 30
 	visRules := `{"denied_users":["player-1"]}`
+	hemisphere := calendar.HemisphereSouth
+	moonTint := "#ffccaa"
+	weatherIcon := "cloud-rain"
 
 	src := &fakeCalendarService{
 		cal: &calendar.Calendar{
@@ -155,6 +183,9 @@ func TestCampaignExportImport_CalendarRoundTrip(t *testing.T) {
 			CurrentHour: 14, CurrentMinute: 5,
 			HoursPerDay: 24, MinutesPerHour: 60, SecondsPerMinute: 60,
 			LeapYearEvery: 4, LeapYearOffset: 0,
+			// Settings the round trip must preserve: Hemisphere/
+			// ForecastsEnabled/MonthStartsNewWeek.
+			Hemisphere: &hemisphere, ForecastsEnabled: true, MonthStartsNewWeek: true,
 			Months: []calendar.Month{
 				{Name: "Thaw", Days: 30, SortOrder: 0},
 				{Name: "Bloom", Days: 30, SortOrder: 1, LeapYearDays: 1},
@@ -163,7 +194,13 @@ func TestCampaignExportImport_CalendarRoundTrip(t *testing.T) {
 				{Name: "Sunday", SortOrder: 0}, {Name: "Moonday", SortOrder: 1},
 			},
 			Moons: []calendar.Moon{
-				{ID: 1, Name: "Secret Moon", CycleDays: 29.5, Color: "#ffffff", HiddenFromPlayers: true},
+				{
+					ID: 1, Name: "Secret Moon", CycleDays: 29.5, Color: "#ffffff", HiddenFromPlayers: true,
+					// Look fields the round trip must preserve, so a restored
+					// moon keeps its look instead of the library default.
+					BaseDesign: "moon-cratered", Tint: &moonTint, PhaseSource: "canvas-arc",
+					Size: 1.4, OrbitSpeed: 0.8,
+				},
 			},
 			Seasons: []calendar.Season{
 				{Name: "Spring", StartMonth: 1, StartDay: 1, EndMonth: 2, EndDay: 30, Color: "#22c55e"},
@@ -172,7 +209,20 @@ func TestCampaignExportImport_CalendarRoundTrip(t *testing.T) {
 				{ID: 1, Name: "First Age", StartYear: 0, StartMonth: 1, StartDay: 1, Color: "#eab308"},
 			},
 			EventKinds: []calendar.EventKind{
-				{ID: 1, Slug: "festival", Name: "Festival", Icon: "fa-star", Color: "#10b981"},
+				{ID: 1, Slug: "festival", Name: "Festival", Icon: "fa-star", Color: "#10b981", DefaultAnnounced: calendar.AnnouncedAhead},
+			},
+			// Sub-resources the round trip must carry through export and import.
+			Cycles: []calendar.Cycle{
+				{Name: "Zodiac", CycleLength: 12, Type: "yearly", Entries: []calendar.CycleEntry{
+					{Name: "Rat", YearOffset: 0},
+				}},
+			},
+			Festivals: []calendar.Festival{
+				{Name: "Founding Day", Month: intPtr(1), Day: intPtr(1)},
+			},
+			Weather: &calendar.Weather{
+				Icon: &weatherIcon, TemperatureCelsius: float64Ptr(12.5),
+				Wind: &calendar.Wind{SpeedKPH: float64Ptr(20)},
 			},
 		},
 		events: []calendar.Event{
@@ -214,6 +264,31 @@ func TestCampaignExportImport_CalendarRoundTrip(t *testing.T) {
 	}
 	if len(calData.Eras) != 1 || calData.Eras[0].StartMonth != 1 || calData.Eras[0].StartDay != 1 {
 		t.Errorf("exported era lost its day-granular start: %+v", calData.Eras)
+	}
+
+	// Settings, moon look fields, cycles, festivals and weather must all
+	// reach the export.
+	if calData.Hemisphere == nil || *calData.Hemisphere != hemisphere {
+		t.Errorf("exported calendar lost its hemisphere: %+v", calData.Hemisphere)
+	}
+	if !calData.ForecastsEnabled || !calData.MonthStartsNewWeek {
+		t.Errorf("exported calendar lost forecasts_enabled/month_starts_new_week: %+v/%v", calData.ForecastsEnabled, calData.MonthStartsNewWeek)
+	}
+	if len(calData.Moons) != 1 || calData.Moons[0].BaseDesign != "moon-cratered" || calData.Moons[0].Tint == nil || *calData.Moons[0].Tint != moonTint ||
+		calData.Moons[0].PhaseSource != "canvas-arc" || calData.Moons[0].Size != 1.4 || calData.Moons[0].OrbitSpeed != 0.8 {
+		t.Errorf("exported moon lost its look fields: %+v", calData.Moons)
+	}
+	if len(calData.Cycles) != 1 || calData.Cycles[0].Name != "Zodiac" || len(calData.Cycles[0].Entries) != 1 {
+		t.Errorf("exported calendar lost its cycles: %+v", calData.Cycles)
+	}
+	if len(calData.Festivals) != 1 || calData.Festivals[0].Name != "Founding Day" {
+		t.Errorf("exported calendar lost its festivals: %+v", calData.Festivals)
+	}
+	if calData.Weather == nil || calData.Weather.Icon == nil || *calData.Weather.Icon != weatherIcon {
+		t.Errorf("exported calendar lost its weather: %+v", calData.Weather)
+	}
+	if len(calData.EventCategories) != 1 || calData.EventCategories[0].DefaultAnnounced != calendar.AnnouncedAhead {
+		t.Errorf("exported event category lost its default_announced: %+v", calData.EventCategories)
 	}
 
 	// The envelope must survive a JSON round trip: this is what lands on disk.
@@ -285,6 +360,32 @@ func TestCampaignExportImport_CalendarRoundTrip(t *testing.T) {
 	if len(dst.eras) != 1 || dst.eras[0].StartMonth != 1 || dst.eras[0].StartDay != 1 {
 		t.Errorf("imported era lost its day-granular start: %+v", dst.eras)
 	}
+
+	// Settings, moon look fields, cycles, festivals and weather must all
+	// reach the actual service calls on import.
+	if dst.created.Hemisphere == nil || *dst.created.Hemisphere != hemisphere {
+		t.Errorf("imported calendar lost its hemisphere: %+v", dst.created.Hemisphere)
+	}
+	if !dst.created.ForecastsEnabled || !dst.created.MonthStartsNewWeek {
+		t.Errorf("imported calendar lost forecasts_enabled/month_starts_new_week: %v/%v", dst.created.ForecastsEnabled, dst.created.MonthStartsNewWeek)
+	}
+	if len(dst.moons) != 1 || dst.moons[0].BaseDesign != "moon-cratered" || dst.moons[0].Tint == nil || *dst.moons[0].Tint != moonTint ||
+		dst.moons[0].PhaseSource != "canvas-arc" || dst.moons[0].Size != 1.4 || dst.moons[0].OrbitSpeed != 0.8 {
+		t.Errorf("imported moon lost its look fields: %+v", dst.moons)
+	}
+	if len(dst.cycles) != 1 || dst.cycles[0].Name != "Zodiac" || len(dst.cycles[0].Entries) != 1 || dst.cycles[0].Entries[0].Name != "Rat" {
+		t.Errorf("imported calendar lost its cycles: %+v", dst.cycles)
+	}
+	if len(dst.festivals) != 1 || dst.festivals[0].Name != "Founding Day" {
+		t.Errorf("imported calendar lost its festivals: %+v", dst.festivals)
+	}
+	if dst.weather == nil || dst.weather.Icon == nil || *dst.weather.Icon != weatherIcon {
+		t.Errorf("imported calendar lost its weather: %+v", dst.weather)
+	}
+	if len(dst.kinds) != 1 || dst.kinds[0].DefaultAnnounced != calendar.AnnouncedAhead {
+		t.Errorf("imported event kind lost its default_announced: %+v", dst.kinds)
+	}
+
 	if len(dst.createdEvents) != 2 {
 		t.Fatalf("imported %d events, want 2", len(dst.createdEvents))
 	}
@@ -549,3 +650,5 @@ func TestCalendarExportImport_MoonHiddenFlagRoundTrip(t *testing.T) {
 func intPtr(i int) *int { return &i }
 
 func boolPtr(b bool) *bool { return &b }
+
+func float64Ptr(f float64) *float64 { return &f }

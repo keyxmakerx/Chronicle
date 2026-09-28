@@ -326,6 +326,12 @@ func (a *calendarExportAdapter) ExportCalendar(ctx context.Context, campaignID s
 		SecondsPerMinute: cal.SecondsPerMinute,
 		LeapYearEvery:    cal.LeapYearEvery,
 		LeapYearOffset:   cal.LeapYearOffset,
+		// Hemisphere/ForecastsEnabled/MonthStartsNewWeek are additive settings
+		// on ExportCalendarData — see its doc comment. TracksRealTime/
+		// RealTimeZone are deliberately not carried; see that same comment.
+		Hemisphere:         cal.Hemisphere,
+		ForecastsEnabled:   cal.ForecastsEnabled,
+		MonthStartsNewWeek: cal.MonthStartsNewWeek,
 	}
 
 	for _, m := range cal.Months {
@@ -347,6 +353,8 @@ func (a *calendarExportAdapter) ExportCalendar(ctx context.Context, campaignID s
 		data.Moons = append(data.Moons, campaigns.ExportCalendarMoon{
 			Name: m.Name, CycleDays: m.CycleDays, PhaseOffset: m.PhaseOffset,
 			Color: m.Color, HiddenFromPlayers: &hidden,
+			BaseDesign: m.BaseDesign, Tint: m.Tint, PhaseSource: m.PhaseSource,
+			Size: m.Size, OrbitSpeed: m.OrbitSpeed,
 		})
 	}
 	for _, s := range cal.Seasons {
@@ -366,7 +374,46 @@ func (a *calendarExportAdapter) ExportCalendar(ctx context.Context, campaignID s
 	for _, k := range cal.EventKinds {
 		data.EventCategories = append(data.EventCategories, campaigns.ExportEventCategory{
 			Slug: k.Slug, Name: k.Name, Icon: k.Icon, Color: k.Color, SortOrder: k.SortOrder,
+			DefaultAnnounced: k.DefaultAnnounced,
 		})
+	}
+
+	// Cycles/Festivals/Weather: cal already carries these eager-loaded
+	// sub-resources (GetCalendarForViewer / GetDefaultCalendarForViewer),
+	// same as Months/Weekdays/Moons/Seasons/Eras above.
+	for _, c := range cal.Cycles {
+		ec := campaigns.ExportCalendarCycle{
+			Name: c.Name, CycleLength: c.CycleLength, Type: c.Type, SortOrder: c.SortOrder,
+		}
+		for _, entry := range c.Entries {
+			ec.Entries = append(ec.Entries, campaigns.ExportCalendarCycleEntry{
+				Name: entry.Name, Icon: entry.Icon, YearOffset: entry.YearOffset, SortOrder: entry.SortOrder,
+			})
+		}
+		data.Cycles = append(data.Cycles, ec)
+	}
+	for _, f := range cal.Festivals {
+		data.Festivals = append(data.Festivals, campaigns.ExportCalendarFestival{
+			Name: f.Name, Month: f.Month, Day: f.Day, AfterMonth: f.AfterMonth,
+			Description: f.Description, Color: f.Color, Icon: f.Icon, SortOrder: f.SortOrder,
+		})
+	}
+	if w := cal.Weather; w != nil {
+		data.Weather = &campaigns.ExportCalendarWeather{
+			PresetID: w.PresetID, PresetLabel: w.PresetLabel, Icon: w.Icon, Color: w.Color,
+			TemperatureCelsius: w.TemperatureCelsius, ZoneID: w.ZoneID, ZoneName: w.ZoneName,
+			Description: w.Description,
+		}
+		if w.Wind != nil {
+			data.Weather.WindSpeedKPH = w.Wind.SpeedKPH
+			data.Weather.WindSpeedTier = w.Wind.SpeedTier
+			data.Weather.WindDirection = w.Wind.Direction
+			data.Weather.WindDirectionDegrees = w.Wind.DirectionDegrees
+		}
+		if w.Precipitation != nil {
+			data.Weather.PrecipitationType = w.Precipitation.Type
+			data.Weather.PrecipitationIntensity = w.Precipitation.Intensity
+		}
 	}
 
 	for _, evt := range events {
@@ -1223,6 +1270,12 @@ func (a *calendarImportAdapter) ImportCalendar(ctx context.Context, campaignID s
 			moons[i] = calendar.MoonInput{
 				Name: m.Name, CycleDays: m.CycleDays, PhaseOffset: m.PhaseOffset,
 				Color: m.Color, HiddenFromPlayers: importMoonHidden(m.HiddenFromPlayers),
+				// Render params: zero-valued when absent from the import data.
+				// upsertMoons' own insert-time fallback treats that the same
+				// way it would a hand-created moon's zero value — never an
+				// empty/invalid look.
+				BaseDesign: m.BaseDesign, Tint: m.Tint, PhaseSource: m.PhaseSource,
+				Size: m.Size, OrbitSpeed: m.OrbitSpeed,
 			}
 		}
 		if err := a.svc.SetMoons(ctx, cal.ID, campaignID, moons); err != nil {
@@ -1242,6 +1295,52 @@ func (a *calendarImportAdapter) ImportCalendar(ctx context.Context, campaignID s
 		if err := a.svc.SetSeasons(ctx, cal.ID, campaignID, seasons); err != nil {
 			slog.Warn("import: set seasons failed", slog.Any("error", err))
 			report.Fail(campaigns.SectionCalendar, "seasons", data.Name, apperror.SafeMessage(err))
+		}
+	}
+
+	// Cycles/Festivals/Weather: same bulk-replace shape as
+	// months/weekdays/moons/seasons above.
+	if len(data.Cycles) > 0 {
+		cycles := make([]calendar.CycleInput, len(data.Cycles))
+		for i, c := range data.Cycles {
+			ci := calendar.CycleInput{Name: c.Name, CycleLength: c.CycleLength, Type: c.Type, SortOrder: c.SortOrder}
+			for _, entry := range c.Entries {
+				ci.Entries = append(ci.Entries, calendar.CycleEntryInput{
+					Name: entry.Name, Icon: entry.Icon, YearOffset: entry.YearOffset, SortOrder: entry.SortOrder,
+				})
+			}
+			cycles[i] = ci
+		}
+		if err := a.svc.SetCycles(ctx, cal.ID, campaignID, cycles); err != nil {
+			slog.Warn("import: set cycles failed", slog.Any("error", err))
+			report.Fail(campaigns.SectionCalendar, "cycles", data.Name, apperror.SafeMessage(err))
+		}
+	}
+	if len(data.Festivals) > 0 {
+		festivals := make([]calendar.FestivalInput, len(data.Festivals))
+		for i, f := range data.Festivals {
+			festivals[i] = calendar.FestivalInput{
+				Name: f.Name, Month: f.Month, Day: f.Day, AfterMonth: f.AfterMonth,
+				Description: f.Description, Color: f.Color, Icon: f.Icon, SortOrder: f.SortOrder,
+			}
+		}
+		if err := a.svc.SetFestivals(ctx, cal.ID, campaignID, festivals); err != nil {
+			slog.Warn("import: set festivals failed", slog.Any("error", err))
+			report.Fail(campaigns.SectionCalendar, "festivals", data.Name, apperror.SafeMessage(err))
+		}
+	}
+	if w := data.Weather; w != nil {
+		input := calendar.WeatherInput{
+			PresetID: w.PresetID, PresetLabel: w.PresetLabel, Icon: w.Icon, Color: w.Color,
+			TemperatureCelsius: w.TemperatureCelsius,
+			WindSpeedKPH:       w.WindSpeedKPH, WindSpeedTier: w.WindSpeedTier,
+			WindDirection: w.WindDirection, WindDirectionDeg: w.WindDirectionDegrees,
+			PrecipitationType: w.PrecipitationType, PrecipitationIntensity: w.PrecipitationIntensity,
+			ZoneID: w.ZoneID, ZoneName: w.ZoneName, Description: w.Description,
+		}
+		if err := a.svc.SetWeather(ctx, cal.ID, campaignID, input); err != nil {
+			slog.Warn("import: set weather failed", slog.Any("error", err))
+			report.Fail(campaigns.SectionCalendar, "weather", data.Name, apperror.SafeMessage(err))
 		}
 	}
 
@@ -1278,6 +1377,7 @@ func (a *calendarImportAdapter) ImportCalendar(ctx context.Context, campaignID s
 	for _, c := range data.EventCategories {
 		kind, err := a.svc.CreateEventKind(ctx, campaignID, calendar.EventKindInput{
 			Slug: c.Slug, Name: c.Name, Icon: c.Icon, Color: c.Color, SortOrder: c.SortOrder,
+			DefaultAnnounced: c.DefaultAnnounced,
 		})
 		if err != nil {
 			slog.Warn("import: create event kind failed", slog.String("slug", c.Slug), slog.Any("error", err))
@@ -1287,13 +1387,24 @@ func (a *calendarImportAdapter) ImportCalendar(ctx context.Context, campaignID s
 		kindIDBySlug[c.Slug] = kind.ID
 	}
 
-	// Set current date/time (CreateCalendar only takes CurrentYear).
+	// Set current date/time (CreateCalendar only takes CurrentYear) plus the
+	// settings CreateCalendarInput has no field for: Hemisphere/
+	// ForecastsEnabled/MonthStartsNewWeek. A full restore of an already-
+	// exported row, so every field is sent PRESENT — the same reasoning the
+	// entity/session importers already use elsewhere in this file (an
+	// absent value in the source really does mean "unset"). Real-time
+	// tracking is deliberately left alone (SetRealTime nil, preserving the
+	// fresh calendar's off-by-default state): ExportCalendarData carries no
+	// RealTimeZone to restore it with — see that struct's doc comment.
 	if err := a.svc.UpdateCalendar(ctx, cal.ID, campaignID, calendar.UpdateCalendarInput{
-		Name:          data.Name,
-		CurrentMonth:  patch.Of(data.CurrentMonth),
-		CurrentDay:    patch.Of(data.CurrentDay),
-		CurrentHour:   patch.Of(data.CurrentHour),
-		CurrentMinute: patch.Of(data.CurrentMinute),
+		Name:               data.Name,
+		CurrentMonth:       patch.Of(data.CurrentMonth),
+		CurrentDay:         patch.Of(data.CurrentDay),
+		CurrentHour:        patch.Of(data.CurrentHour),
+		CurrentMinute:      patch.Of(data.CurrentMinute),
+		Hemisphere:         patch.FromPtr(data.Hemisphere),
+		ForecastsEnabled:   patch.Of(data.ForecastsEnabled),
+		MonthStartsNewWeek: patch.Of(data.MonthStartsNewWeek),
 	}); err != nil {
 		slog.Warn("import: set current date failed", slog.Any("error", err))
 		report.Fail(campaigns.SectionCalendar, campaigns.KindCalendar, data.Name, apperror.SafeMessage(err))
