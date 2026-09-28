@@ -158,3 +158,21 @@ test('paletteFor returns every named colour as a finite linear RGB triple', () =
     for (const v of c) assert.ok(Number.isFinite(v), `P.${name} contains a non-finite channel: ${c}`);
   }
 });
+
+// The sky pane reads its moons on the calendar page's day count, so a
+// real-world calendar's real Moon (anchored to the Julian Day Number) is
+// full on 2026-09-26 and new on 2026-09-11 in the sky too.
+test('dayIndex puts a real-world calendar\'s Moon where the sky has it', () => {
+  const real = { mode: 'reallife', months: [] };
+  const epoch = SW.dayIndex(real, 2000, 1, 6);
+  assert.equal(epoch, 2451550, 'the Julian Day Number of 2000-01-06');
+  const theMoon = { cycle_days: 29.530588853, phase_offset: -epoch };
+  const full = SW.phaseAt(theMoon, SW.dayIndex(real, 2026, 9, 26));
+  const fresh = SW.phaseAt(theMoon, SW.dayIndex(real, 2026, 9, 11));
+  assert.ok(Math.abs(full - 0.5) < 0.04, `2026-09-26 phase ${full}, want about 0.5`);
+  assert.ok(fresh < 0.04 || fresh > 0.96, `2026-09-11 phase ${fresh}, want about 0`);
+});
+
+test('dayIndex is absoluteDay for any other calendar after year 0', () => {
+  assert.equal(SW.dayIndex(CAL, 12, 3, 4), SW.absoluteDay(CAL, 12, 3, 4));
+});

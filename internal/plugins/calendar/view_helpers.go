@@ -91,7 +91,7 @@ func buildMonthGrid(cal *Calendar, year, month int, eventCounts map[int]int, mai
 		}
 		if mainMoonPtr != nil {
 			cell.HasMoon = true
-			cell.MoonPhase = mainMoonPtr.MoonPhase(cal.AbsoluteDay(year, month, d))
+			cell.MoonPhase = mainMoonPtr.MoonPhase(cal.absDayIndex(year, month, d))
 		}
 		cells = append(cells, cell)
 	}

@@ -23,6 +23,8 @@ templ CalendarsListPage(data CalendarsListData) {
 // IsHTMX-branch convention this mirrors.
 templ CalendarsListFragment(data CalendarsListData) {
 	<link rel="stylesheet" href={ layouts.AssetURL("/static/css/calendar_v5.css") }/>
+	<!-- The calendar a preview unfolds into is styled by its own page's sheet. -->
+	<link rel="stylesheet" href={ layouts.AssetURL("/static/css/calendar-view.css") }/>
 	<div
 		class="calv5"
 		x-data="{}"
@@ -131,7 +133,7 @@ templ calendarCard(data CalendarsListData, cal Calendar) {
 		</div>
 		<div class="calv5-cc-moon">
 			if m := mainMoon(&cal); m != nil {
-				@MoonSilhouette(m.MoonPhase(cal.CurrentAbsoluteDay()))
+				@MoonSilhouette(m.MoonPhase(cal.CurrentDayIndex()))
 			} else {
 				<span class="calv5-blankmoon"><i class="fa-solid fa-moon i"></i></span>
 			}
@@ -142,6 +144,7 @@ templ calendarCard(data CalendarsListData, cal Calendar) {
 			hx-get={ fmt.Sprintf("/campaigns/%s/calendars/%s/preview", data.CampaignID, cal.ID) }
 			hx-target="#calv5-preview-root"
 			hx-swap="outerHTML"
+			hx-sync="this:drop"
 			onclick="window.__calv5Opener=this"
 		>
 			<span class="calv5-cc-name">{ cal.Name }</span>

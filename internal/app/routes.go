@@ -2629,13 +2629,16 @@ func (a *App) RegisterRoutes() {
 	// htmx:afterSettle/htmx:load and no-ops when its mount is absent.
 	//
 	// The calendar's page scripts: calendar_view.js mounts on
-	// data-widget="calendar_view" (the calendar's own page) and
-	// calendar_editor.js self-gates on that mount's data-can-edit="true".
-	// Both are no-ops on every other page, same as every entry here.
+	// data-widget="calendar_view" (the calendar's own page, or a Calendars
+	// page preview unfolded in place), calendar_editor.js self-gates on that
+	// mount's data-can-edit="true", and calendar_almanac.js waits for a
+	// Calendars page preview. All are no-ops on every other page, same as
+	// every entry here.
 	pluginBodyScripts := []string{
 		"/static/plugins/" + entities.PluginSlug + "/js/characters.js",
 		"/static/js/widgets/calendar_view.js",
 		"/static/js/widgets/calendar_editor.js",
+		"/static/js/calendar_almanac.js",
 	}
 
 	// The sidebar, campaign dashboard and Extensions hub link to

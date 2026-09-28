@@ -78,9 +78,12 @@
     }).join('');
   }
 
+  // calendar_view is one shared object re-initialised for each mount, so an
+  // editor belongs to the mount element it was installed on, not the view.
   function attach(view) {
-    var editor = new CalendarEditor(view);
-    editor.install();
+    if (!view || !view.el || view._editorEl === view.el) return;
+    view._editorEl = view.el;
+    new CalendarEditor(view).install();
   }
 
   function CalendarEditor(view) {
@@ -751,4 +754,11 @@
     if (mount.calendarView) attach(mount.calendarView);
     else mount.addEventListener('calendarv5:ready', function (e) { attach(e.detail); });
   }
+  // A calendar mounted after this script ran (a Calendars page preview
+  // unfolding in place) announces itself the same way. The event doesn't
+  // bubble, but a capturing listener on the document still sees it.
+  document.addEventListener('calendarv5:ready', function (e) {
+    var m = e.target;
+    if (m && m.dataset && m.dataset.canEdit === 'true') attach(e.detail);
+  }, true);
 })();

@@ -258,3 +258,47 @@ func TestTodayInZone(t *testing.T) {
 		t.Errorf("TodayInZone = %d-%d-%d, want the zone's own date %s", y, m, d, before.Format("2006-01-02"))
 	}
 }
+
+// TestRealWorldCalendar_MoonMatchesTheSky reads the real Moon the way every
+// page does, through the calendar's own day counter, on dates with a known
+// sky. The real Moon is anchored to the Julian Day Number, so reading it
+// through AbsoluteDay (which counts no leap days here) put it about a week
+// behind by 2026.
+func TestRealWorldCalendar_MoonMatchesTheSky(t *testing.T) {
+	mi := gregorianMoon()
+	cal := &Calendar{
+		Mode:           ModeRealLife,
+		TracksRealTime: true,
+		Months:         monthInputsToMonths(gregorianMonths()),
+		Moons:          []Moon{{Name: mi.Name, CycleDays: mi.CycleDays, PhaseOffset: mi.PhaseOffset}},
+	}
+	tests := []struct {
+		name             string
+		year, month, day int
+		want             string
+	}{
+		{"new moon", 2026, 9, 11, "New Moon"},
+		{"full moon", 2026, 9, 26, "Full Moon"},
+		{"two days after full", 2026, 9, 28, "Waning Gibbous"},
+		{"total solar eclipse", 2024, 4, 8, "New Moon"},
+		{"total lunar eclipse", 2025, 3, 14, "Full Moon"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			cal.CurrentYear, cal.CurrentMonth, cal.CurrentDay = tt.year, tt.month, tt.day
+			if got := cal.Moons[0].MoonPhaseName(cal.CurrentDayIndex()); got != tt.want {
+				t.Errorf("%04d-%02d-%02d reads %q, want %q", tt.year, tt.month, tt.day, got, tt.want)
+			}
+		})
+	}
+
+	// The preview's month grid draws the same Moon.
+	cal.CurrentYear, cal.CurrentMonth, cal.CurrentDay = 2026, 9, 28
+	for _, week := range buildMonthGrid(cal, 2026, 9, nil, &cal.Moons[0]) {
+		for _, cell := range week {
+			if !cell.Blank && cell.Day == 26 && math.Abs(cell.MoonPhase-0.5) > 0.04 {
+				t.Errorf("the preview grid draws 2026-09-26 at phase %.3f, want the full moon (0.5)", cell.MoonPhase)
+			}
+		}
+	}
+}

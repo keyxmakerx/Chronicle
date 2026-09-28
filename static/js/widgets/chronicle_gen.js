@@ -1784,8 +1784,9 @@ function litFraction(p) { return (1 - Math.cos(2 * Math.PI * p)) / 2; }
 function daysToPhase(m, abs, target) { var p = moonPhaseAt(m, abs), d = mod(target - p + 0.5, 1) - 0.5; return Math.abs(d * m.cycle); }
 /* Chronicle's MoonPhaseName buckets. */
 function moonPhaseName(p) {
-  return p < 0.125 ? 'New Moon' : p < 0.25 ? 'Waxing Crescent' : p < 0.375 ? 'First Quarter' : p < 0.5 ? 'Waxing Gibbous' :
-    p < 0.625 ? 'Full Moon' : p < 0.75 ? 'Waning Gibbous' : p < 0.875 ? 'Last Quarter' : 'Waning Crescent';
+  return p < 0.0625 || p >= 0.9375 ? 'New Moon' : p < 0.1875 ? 'Waxing Crescent' : p < 0.3125 ? 'First Quarter' :
+    p < 0.4375 ? 'Waxing Gibbous' : p < 0.5625 ? 'Full Moon' : p < 0.6875 ? 'Waning Gibbous' : p < 0.8125 ? 'Last Quarter' :
+    'Waning Crescent';
 }
 /* The instants in [from, to] when a moon's phase equals target (0 new, 0.5 full), with the day they fall on
    and how far through that day (0..1, noon = 0.5). */

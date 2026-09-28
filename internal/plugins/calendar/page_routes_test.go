@@ -139,19 +139,36 @@ func TestCalendarPreview_PlayerAndOwnerCanOpenIt(t *testing.T) {
 	roles := map[string]campaigns.Role{"u-player": campaigns.RolePlayer, "u-owner": campaigns.RoleOwner}
 	e, _ := newAccessTestRouter(false, true, roles)
 
-	for _, userID := range []string{"u-player", "u-owner"} {
-		rec := doRequest(e, http.MethodGet, "/campaigns/camp-1/calendars/cal-1/preview", userID)
+	cases := []struct {
+		user    string
+		canEdit string
+	}{
+		{"u-player", `data-can-edit="false"`},
+		{"u-owner", `data-can-edit="true"`},
+	}
+	for _, tc := range cases {
+		rec := doRequest(e, http.MethodGet, "/campaigns/camp-1/calendars/cal-1/preview", tc.user)
 		if rec.Code != http.StatusOK {
-			t.Errorf("%s must be able to open the preview, got %d: %s", userID, rec.Code, rec.Body.String())
+			t.Errorf("%s must be able to open the preview, got %d: %s", tc.user, rec.Code, rec.Body.String())
+			continue
 		}
-		if !strings.Contains(rec.Body.String(), "The Secret Calendar") {
-			t.Errorf("%s: expected the calendar's name in the preview, body:\n%s", userID, rec.Body.String())
+		body := rec.Body.String()
+		for _, want := range []string{"The Secret Calendar", `data-alm="unfold"`, `data-api-base="/campaigns/camp-1/calendars/cal-1"`, tc.canEdit} {
+			if !strings.Contains(body, want) {
+				t.Errorf("%s: the preview is missing %q, body:\n%s", tc.user, want, body)
+			}
 		}
-		if !strings.Contains(rec.Body.String(), `href="/campaigns/camp-1/calendars/cal-1/view"`) {
-			t.Errorf("%s: the preview must link to the calendar's own page, body:\n%s", userID, rec.Body.String())
+		// The calendar waits inside the template, so it mounts only when the
+		// preview unfolds, never as the preview itself is swapped in.
+		open, mount, shut := strings.Index(body, `<template id="calv5-alm-tpl">`), strings.Index(body, `data-widget="calendar_view"`), strings.Index(body, "</template>")
+		if open < 0 || mount < open || shut < mount {
+			t.Errorf("%s: the calendar's mount must sit inside the preview's template, body:\n%s", tc.user, body)
 		}
-		if strings.Contains(rec.Body.String(), "coming soon") {
-			t.Errorf("%s: the full calendar view exists; the preview must not call it coming soon, body:\n%s", userID, rec.Body.String())
+		if strings.Contains(body, `href="/campaigns/camp-1/calendars/cal-1/view"`) {
+			t.Errorf("%s: the preview unfolds into the calendar in place; it must not link away to it, body:\n%s", tc.user, body)
+		}
+		if strings.Contains(body, "coming soon") {
+			t.Errorf("%s: the full calendar view exists; the preview must not call it coming soon, body:\n%s", tc.user, body)
 		}
 	}
 }

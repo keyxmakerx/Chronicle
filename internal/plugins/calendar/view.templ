@@ -37,27 +37,7 @@ templ calendarViewContent(cc *campaigns.CampaignContext, data CalendarViewData) 
 			{Label: cc.Campaign.Name, Href: fmt.Sprintf("/campaigns/%s", data.CampaignID), Icon: "fa-dice-d20"},
 			{Label: data.Calendar.Name},
 		})
-		<div
-			class="cal-v5"
-			data-widget="calendar_view"
-			data-campaign-id={ data.CampaignID }
-			data-calendar-id={ data.CalendarID }
-			data-can-edit={ fmt.Sprintf("%t", data.CanEdit) }
-			data-can-author-dm-only={ fmt.Sprintf("%t", data.CanAuthorDmOnly) }
-			data-role={ fmt.Sprintf("%d", data.ViewerRole) }
-			data-api-base={ fmt.Sprintf("/campaigns/%s/calendars/%s", data.CampaignID, data.CalendarID) }
-		>
-			<!-- Server-rendered config, read by calendar_view.js. A hidden div's
-			     dataset is the simplest stable channel for a JSON blob this size
-			     (calendar + sub-resources, current month's events) — see
-			     maps.templ's #map-config for the same pattern and its reasoning. -->
-			<div
-				id="calendar-config"
-				class="hidden"
-				data-calendar={ mustMarshalCalendar(data.Calendar) }
-				data-events={ mustMarshalEvents(data.CurrentMonthEvents) }
-			></div>
-		</div>
+		@calendarViewMount(data)
 	</div>
 	<!-- No script tag here on purpose: a page templ's own script element
 	     would land inside <main id="main-content">, which the sidebar's
@@ -68,6 +48,34 @@ templ calendarViewContent(cc *campaigns.CampaignContext, data CalendarViewData) 
 	     no-ops without a data-widget="calendar_view" mount, and
 	     calendar_editor.js additionally requires that mount's
 	     data-can-edit="true". -->
+}
+
+// calendarViewMount is the widget's mount and its first-paint config. The
+// calendar's own page renders it, and so does the Calendars page's preview,
+// inside a <template>, so the preview can unfold into this same calendar
+// without leaving the page.
+templ calendarViewMount(data CalendarViewData) {
+	<div
+		class="cal-v5"
+		data-widget="calendar_view"
+		data-campaign-id={ data.CampaignID }
+		data-calendar-id={ data.CalendarID }
+		data-can-edit={ fmt.Sprintf("%t", data.CanEdit) }
+		data-can-author-dm-only={ fmt.Sprintf("%t", data.CanAuthorDmOnly) }
+		data-role={ fmt.Sprintf("%d", data.ViewerRole) }
+		data-api-base={ fmt.Sprintf("/campaigns/%s/calendars/%s", data.CampaignID, data.CalendarID) }
+	>
+		<!-- Server-rendered config, read by calendar_view.js. A hidden div's
+		     dataset is the simplest stable channel for a JSON blob this size
+		     (calendar + sub-resources, current month's events) — see
+		     maps.templ's #map-config for the same pattern and its reasoning. -->
+		<div
+			id="calendar-config"
+			class="hidden"
+			data-calendar={ mustMarshalCalendar(data.Calendar) }
+			data-events={ mustMarshalEvents(data.CurrentMonthEvents) }
+		></div>
+	</div>
 }
 
 // mustMarshalCalendar serializes the calendar (with its eager-loaded

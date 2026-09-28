@@ -66,13 +66,13 @@
   // internal/plugins/calendar/model.go) so the pane's caption and the
   // server's own phase name never disagree.
   function phaseName(p) {
-    if (p < .125) return 'New Moon';
-    if (p < .25) return 'Waxing Crescent';
-    if (p < .375) return 'First Quarter';
-    if (p < .5) return 'Waxing Gibbous';
-    if (p < .625) return 'Full Moon';
-    if (p < .75) return 'Waning Gibbous';
-    if (p < .875) return 'Last Quarter';
+    if (p < .0625 || p >= .9375) return 'New Moon';
+    if (p < .1875) return 'Waxing Crescent';
+    if (p < .3125) return 'First Quarter';
+    if (p < .4375) return 'Waxing Gibbous';
+    if (p < .5625) return 'Full Moon';
+    if (p < .6875) return 'Waning Gibbous';
+    if (p < .8125) return 'Last Quarter';
     return 'Waning Crescent';
   }
   function hhmm(hour, minute) {
@@ -91,8 +91,7 @@
     var h24 = SW.hour24(cal, cal.current_hour || 0, cal.current_minute || 0);
     var skym = model.skym;
     var sun = skym.sun(year, month, day, h24);
-    var absDay = SW.absoluteDay(cal, year, month, day);
-    var tCont = absDay + h24 / 24;
+    var tCont = SW.dayIndex(cal, year, month, day) + h24 / 24;
 
     // Astronomy first (independent of the view's facing), so the day's
     // events can point the camera before the projection is built.

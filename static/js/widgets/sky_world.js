@@ -71,6 +71,23 @@
     for (var i = 0; i < month - 1 && i < (cal.months || []).length; i++) total += monthDays(cal, i, year);
     return total + day;
   }
+  // dayIndex(cal, year, month, day): the day count the calendar page reads
+  // its moons on (calendar_view.js's CalDate.dayIndex), so both show one sky.
+  // A real-world calendar counts Julian days, which its real Moon is anchored
+  // to; a year at or before 0 counts constant-length years; any other year
+  // counts absoluteDay.
+  function dayIndex(cal, year, month, day) {
+    if (cal.mode === 'reallife') {
+      var a = Math.floor((14 - month) / 12), yy = year + 4800 - a, mm = month + 12 * a - 3;
+      return day + Math.floor((153 * mm + 2) / 5) + 365 * yy + Math.floor(yy / 4) - Math.floor(yy / 100) + Math.floor(yy / 400) - 32045;
+    }
+    if (year <= 0) {
+      var t = year * yearLength(cal), ms = cal.months || [];
+      for (var i = 0; i < month - 1 && i < ms.length; i++) t += ms[i].days || 0;
+      return t + day;
+    }
+    return absoluteDay(cal, year, month, day);
+  }
   // hour24(cal, hour, minute): the calendar's own hour/minute, rescaled onto
   // a 24-hour clock face for the astronomy formulas below (which are written
   // against a 24-hour day). A calendar with HoursPerDay != 24 just runs its
@@ -122,7 +139,7 @@
       return { id: 'sun', alt: a.alt, az: a.az, dec: dec, H: H, lon: lon, v: vec(a.alt, a.az) };
     }
     // moon(moon, absDay, year, month, day, h24): absDay is the moon's own
-    // continuous day+fraction (absoluteDay + h24/24), used for its phase;
+    // continuous day+fraction (dayIndex + h24/24), used for its phase;
     // year/month/day/h24 place the sun that phase is measured against.
     function moon(mo, tContinuous, year, month, day, h24) {
       var p = phaseAt(mo, tContinuous), s = sun(year, month, day, h24);
@@ -261,7 +278,7 @@
 
   window.SkyWorld = {
     D2R: D2R, TAU: TAU, clamp: clamp, mod: mod, smooth01: smooth01, dot3: dot3,
-    absoluteDay: absoluteDay, yearLength: yearLength, isLeapYear: isLeapYear, monthDays: monthDays, hour24: hour24,
+    absoluteDay: absoluteDay, dayIndex: dayIndex, yearLength: yearLength, isLeapYear: isLeapYear, monthDays: monthDays, hour24: hour24,
     phaseAt: phaseAt, inclinationFor: inclinationFor,
     makeSkym: makeSkym, PROJ: PROJ, moonTurn: moonTurn,
     PAL: PAL, paletteFor: paletteFor, tintPalette: tintPalette
