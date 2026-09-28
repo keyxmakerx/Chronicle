@@ -553,10 +553,13 @@ func (h *Handler) TimelineDataAPI(c echo.Context) error {
 		return err
 	}
 
-	// Fetch calendar eras for visualization background bands.
+	// Fetch calendar eras for visualization background bands. Eras are
+	// Owner-only calendar structure (ListCalendarEras' doc comment), so an
+	// anonymous or Player role on this public endpoint correctly resolves to
+	// none.
 	var eras []CalendarEra
 	if t.HasCalendar() && t.CalendarID != nil {
-		eras, _ = h.svc.ListCalendarEras(ctx, *t.CalendarID)
+		eras, _ = h.svc.ListCalendarEras(ctx, cc.Campaign.ID, *t.CalendarID, role)
 	}
 
 	connections, err := h.svc.ListConnections(ctx, timelineID)

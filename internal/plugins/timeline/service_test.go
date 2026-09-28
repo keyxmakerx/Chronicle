@@ -245,23 +245,23 @@ func (m *mockCalendarLister) ListCalendars(ctx context.Context, campaignID strin
 }
 
 type mockCalendarEventLister struct {
-	listFn func(ctx context.Context, calendarID string, role int) ([]CalendarEventRef, error)
+	listFn func(ctx context.Context, campaignID, calendarID string, role int) ([]CalendarEventRef, error)
 }
 
-func (m *mockCalendarEventLister) ListEventsForCalendar(ctx context.Context, calendarID string, role int) ([]CalendarEventRef, error) {
+func (m *mockCalendarEventLister) ListEventsForCalendar(ctx context.Context, campaignID, calendarID string, role int) ([]CalendarEventRef, error) {
 	if m.listFn != nil {
-		return m.listFn(ctx, calendarID, role)
+		return m.listFn(ctx, campaignID, calendarID, role)
 	}
 	return nil, nil
 }
 
 type mockCalendarEraLister struct {
-	listFn func(ctx context.Context, calendarID string) ([]CalendarEra, error)
+	listFn func(ctx context.Context, campaignID, calendarID string, role int) ([]CalendarEra, error)
 }
 
-func (m *mockCalendarEraLister) ListEras(ctx context.Context, calendarID string) ([]CalendarEra, error) {
+func (m *mockCalendarEraLister) ListEras(ctx context.Context, campaignID, calendarID string, role int) ([]CalendarEra, error) {
 	if m.listFn != nil {
-		return m.listFn(ctx, calendarID)
+		return m.listFn(ctx, campaignID, calendarID, role)
 	}
 	return nil, nil
 }

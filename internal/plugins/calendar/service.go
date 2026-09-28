@@ -305,6 +305,18 @@ type CalendarService interface {
 	// calendar (ListCalendars already filters those out) and each event
 	// (EventRepository.SearchEvents' own SQL role filter).
 	SearchCalendarEvents(ctx context.Context, campaignID, query string, role int) ([]map[string]string, error)
+
+	// ListEventsForCalendar and ListErasForCalendar back timeline's calendar
+	// selector, event picker and era bands (internal/app/routes.go's
+	// calendarEventListerAdapter/calendarEraListerAdapter). Both are
+	// campaign-scoped: a calendar id from a different campaign, or one the
+	// role cannot see, answers with an empty slice, never an error.
+	// ListEventsForCalendar filters dm_only events like every other
+	// role-only read here; ListErasForCalendar additionally gates on role
+	// alone, Owner/co-DM only, because eras are calendar structure
+	// (GetCalendarForViewer strips them the same way).
+	ListEventsForCalendar(ctx context.Context, campaignID, calendarID string, role int) ([]Event, error)
+	ListErasForCalendar(ctx context.Context, campaignID, calendarID string, role int) ([]Era, error)
 }
 
 // calendarService is the concrete CalendarService.
@@ -2249,6 +2261,46 @@ func (s *calendarService) SearchCalendarEvents(ctx context.Context, campaignID, 
 		}
 	}
 	return results, nil
+}
+
+// ListEventsForCalendar implements timeline.CalendarEventLister — see the
+// interface doc comment. calendarInCampaignForViewer folds "wrong campaign"
+// and "role can't see it" into the same NotFound, which becomes an empty
+// slice here rather than an error. Linked pages the role can't see are
+// blanked the same way every other event read here blanks them.
+func (s *calendarService) ListEventsForCalendar(ctx context.Context, campaignID, calendarID string, role int) ([]Event, error) {
+	v := permissions.RequestViewer(role, "")
+	if _, err := s.calendarInCampaignForViewer(ctx, calendarID, campaignID, v); err != nil {
+		if isCalendarNotFound(err) {
+			return nil, nil
+		}
+		return nil, err
+	}
+	events, err := s.eventRepo.ListAllEvents(ctx, calendarID)
+	if err != nil {
+		return nil, fmt.Errorf("list events for calendar: %w", err)
+	}
+	events = filterEventsByUser(events, v)
+	if err := s.redactHiddenEntityLinks(ctx, campaignID, events, v); err != nil {
+		return nil, err
+	}
+	return events, nil
+}
+
+// ListErasForCalendar implements timeline.CalendarEraLister — see the
+// interface doc comment for why this gates on role alone rather than the
+// calendar's own visibility.
+func (s *calendarService) ListErasForCalendar(ctx context.Context, campaignID, calendarID string, role int) ([]Era, error) {
+	if !permissions.CanSeeDmOnly(role) {
+		return nil, nil
+	}
+	if _, err := s.calendarInCampaign(ctx, calendarID, campaignID); err != nil {
+		if isCalendarNotFound(err) {
+			return nil, nil
+		}
+		return nil, err
+	}
+	return s.calRepo.GetEras(ctx, calendarID)
 }
 
 // --- Shared validation helpers ---
