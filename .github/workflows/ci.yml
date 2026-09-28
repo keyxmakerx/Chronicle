@@ -127,6 +127,13 @@ jobs:
         # self-tests on every run.
         run: ./tools/check-customize-discipline.sh
 
+      - name: Templ package guard
+        # Generated *_templ.go files are gitignored, so a package holding
+        # only .templ sources looks empty to a checkout that never runs
+        # templ generate (Dependabot's), and go mod tidy fails there. Every
+        # such package carries a hand-written doc.go. Self-tests on every run.
+        run: ./tools/check-templ-packages.sh
+
       - name: Test
         # Includes the cross-plugin import guard (TestPluginImportGuard in
         # internal/wire/plugin_import_guard_test.go): fails on any NEW

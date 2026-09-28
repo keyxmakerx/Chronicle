@@ -132,6 +132,7 @@ verify: ## Run the full local CI sequence (templ → build → vet → guards �
 	@echo "==> guard: decision-citations";     ./tools/check-decision-citations.sh
 	@echo "==> guard: widget-mounts";          ./tools/check-widget-mounts.sh
 	@echo "==> guard: customize-discipline";   ./tools/check-customize-discipline.sh
+	@echo "==> guard: templ-packages";         ./tools/check-templ-packages.sh
 	@echo "==> go test ./... -short";          go test ./... -short
 	@echo "==> make test-js";                  $(MAKE) test-js
 	@echo "==> verify: OK"
