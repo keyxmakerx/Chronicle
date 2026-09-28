@@ -49,6 +49,15 @@ type CalendarEraLister interface {
 	ListEras(ctx context.Context, calendarID string) ([]CalendarEra, error)
 }
 
+// CalendarScope confirms a calendar belongs to a campaign before a timeline
+// is bound to it, so a timeline only ever reads a calendar from its own
+// campaign. Implemented as an adapter in app/routes.go.
+type CalendarScope interface {
+	// CalendarInCampaign reports whether calendarID exists in campaignID. A
+	// missing or foreign calendar is (false, nil); err is for failed reads.
+	CalendarInCampaign(ctx context.Context, campaignID, calendarID string) (bool, error)
+}
+
 // CalendarEra is a lightweight reference to a calendar era for D3 visualization.
 type CalendarEra struct {
 	Name      string `json:"name"`
@@ -209,6 +218,7 @@ type timelineService struct {
 	calEvents          CalendarEventLister
 	calEras            CalendarEraLister
 	calEventLinkLister CalendarEventLinkLister
+	calScope           CalendarScope
 	bindingCleaner     BindingCleaner
 	entityGate         EntityVisibilityGate
 }
@@ -248,6 +258,32 @@ func (s *timelineService) SetCalendarEventLinkLister(l CalendarEventLinkLister) 
 	s.calEventLinkLister = l
 }
 
+// SetCalendarScope injects the check CreateTimeline runs on a requested
+// calendar. Left unset, a timeline can still be created without a calendar,
+// but any calendar id is refused.
+func (s *timelineService) SetCalendarScope(c CalendarScope) { s.calScope = c }
+
+// boundCalendar returns the calendar id a new timeline in campaignID may
+// store: nil for none, or id once confirmed to be in that campaign. A
+// foreign calendar gets the same NotFound as a missing one, so the answer
+// never confirms a calendar exists elsewhere.
+func (s *timelineService) boundCalendar(ctx context.Context, campaignID string, id *string) (*string, error) {
+	if id == nil || *id == "" {
+		return nil, nil
+	}
+	if s.calScope == nil {
+		return nil, apperror.NewNotFound("calendar not found")
+	}
+	ok, err := s.calScope.CalendarInCampaign(ctx, campaignID, *id)
+	if err != nil {
+		return nil, fmt.Errorf("check timeline calendar: %w", err)
+	}
+	if !ok {
+		return nil, apperror.NewNotFound("calendar not found")
+	}
+	return id, nil
+}
+
 // CreateTimeline creates a new timeline in a campaign.
 func (s *timelineService) CreateTimeline(ctx context.Context, campaignID string, input CreateTimelineInput) (*Timeline, error) {
 	if input.Name == "" {
@@ -285,11 +321,15 @@ func (s *timelineService) CreateTimeline(ctx context.Context, campaignID string,
 	if !colorPattern.MatchString(input.Color) {
 		return nil, apperror.NewValidation("color must be a valid hex color")
 	}
+	calendarID, err := s.boundCalendar(ctx, campaignID, input.CalendarID)
+	if err != nil {
+		return nil, err
+	}
 
 	t := &Timeline{
 		ID:          generateID(),
 		CampaignID:  campaignID,
-		CalendarID:  input.CalendarID,
+		CalendarID:  calendarID,
 		Name:        input.Name,
 		Description: input.Description,
 		Color:       input.Color,
