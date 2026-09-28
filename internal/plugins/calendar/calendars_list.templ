@@ -144,6 +144,7 @@ templ calendarCard(data CalendarsListData, cal Calendar) {
 			hx-get={ fmt.Sprintf("/campaigns/%s/calendars/%s/preview", data.CampaignID, cal.ID) }
 			hx-target="#calv5-preview-root"
 			hx-swap="outerHTML"
+			hx-sync="this:drop"
 			onclick="window.__calv5Opener=this"
 		>
 			<span class="calv5-cc-name">{ cal.Name }</span>

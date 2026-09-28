@@ -97,7 +97,8 @@
     var a = S.alm, p = parts(), grid = $('.calv5-mgrid', a);
     var cols = grid ? parseInt(grid.style.getPropertyValue('--cols'), 10) || 7 : 7;
     var cellW = clamp(Math.round(620 / cols), 58, 88), gw = cellW * cols + 2 * GRID_PAD;
-    S.sheet = window.innerWidth < 640 || column().width - 32 < gw + INFO_W;
+    S.gw = gw;
+    S.sheet = wantsSheet();
     a.classList.toggle('sheet', S.sheet);
     a.style.left = a.style.top = '';
     if (S.sheet) { S.pv = null; return; }
@@ -110,6 +111,11 @@
     var box = previewBox();
     a.style.left = box.left + 'px';
     a.style.top = box.top + 'px';
+  }
+  // One rule for both states: a sheet when the month and its side page
+  // don't fit side by side in the content column.
+  function wantsSheet() {
+    return window.innerWidth < 640 || column().width - 32 < (S.gw || 656) + INFO_W;
   }
   function previewBox() {
     var W = S.pv.gw + INFO_W, c = column();
@@ -217,6 +223,7 @@
       S.alm.classList.add('open');
       var b = $('#calv5-alm-open', S.alm);
       if (b) b.focus({ preventScroll: true });
+      settled();
     }, function () {});
   }
 
@@ -323,6 +330,7 @@
       a.classList.add('open');
       var day = $('.stage [tabindex="0"]', mount) || $('[data-alm="fold"]', a);
       if (day) day.focus({ preventScroll: true });
+      settled();
       return true;
     }, function () { return false; });
   }
@@ -393,6 +401,7 @@
       a.classList.add('open');
       var b = $('#calv5-alm-open', a);
       if (b) b.focus({ preventScroll: true });
+      settled();
       return true;
     }, function () { return false; });
   }
@@ -407,8 +416,17 @@
       fold();
     } else if (S.state === 'preview') {
       close();
+    } else if (S.state !== 'closing') {
+      // Mid-motion: act once the page settles, rather than dropping the key.
+      S.pendingEscape = true;
     }
     return true;
+  }
+  // Called as each motion settles, for an Escape pressed during it.
+  function settled() {
+    if (!S.pendingEscape) return;
+    S.pendingEscape = false;
+    escape();
   }
 
   // Tab stays inside the almanac while it is open.
@@ -449,12 +467,7 @@
   document.addEventListener('keydown', function (e) {
     if (!live()) return;
     if (e.key === 'Escape') {
-      if (S.state === 'full' || S.state === 'preview') {
-        if (escape()) { e.preventDefault(); e.stopPropagation(); }
-      } else {
-        e.preventDefault();
-        e.stopPropagation();
-      }
+      if (escape()) { e.preventDefault(); e.stopPropagation(); }
     } else if (e.key === 'Tab' && S.state !== 'closing') {
       trapTab(e);
     }
@@ -466,7 +479,11 @@
     resizeTimer = setTimeout(function () {
       if (!live()) return;
       if (S.state === 'preview') layoutPreview();
-      else if (S.state === 'full') layoutFull();
+      else if (S.state === 'full') {
+        S.sheet = wantsSheet();
+        S.alm.classList.toggle('sheet', S.sheet);
+        layoutFull();
+      }
     }, 120);
   });
 
