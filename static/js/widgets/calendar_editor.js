@@ -13,16 +13,17 @@
  *
  * GATING NOTE — read before changing any of the checks below: CanEdit
  * (the gate this whole file loads behind) covers Owner OR a granted
- * co-Director. Three of the writes this file makes are narrower than that,
- * because their JSON routes (routes.go) are gated RoleOwner strictly, not
- * CanAuthorDmOnly: creating an event kind, toggling a moon's hidden flag,
- * and deleting an event. Each of those three checks `role >= ROLE_OWNER`
- * instead of the broader canEdit/canAuthorDmOnly — a co-Director who can
- * reach this file at all will still see those specific affordances 403 if
- * this gating is loosened without a matching routes.go change. See the
- * plugin's .ai.md "Honest gaps" section: this mismatch (the UI can become
- * visible for a co-Director before the API allows it) is real and tracked,
- * not hidden.
+ * co-Director, and is itself defined as Owner OR CanAuthorDmOnly() — the
+ * two are equal for every viewer who can reach this file at all. One write
+ * this file makes is narrower than that: deleting an event (DELETE
+ * .../events/:eid, routes.go) is gated RoleOwner strictly, not
+ * CanAuthorDmOnly, so its footer button checks `role >= ROLE_OWNER` instead
+ * of the broader canEdit/canAuthorDmOnly — a co-Director who can reach this
+ * file will still see that one affordance 403 if this gating is loosened
+ * without a matching routes.go change. Creating an event kind, toggling a
+ * moon's hidden flag and managing eras used to be narrower the same way;
+ * their routes are now CanAuthorDmOnly too, so they gate on
+ * `view.canAuthorDmOnly` like every other co-Director write in this file.
  */
 (function () {
   'use strict';
@@ -444,7 +445,7 @@
       '<div class="fld"><input class="etitle" name="name" placeholder="Event name" required value="' + esc(existing ? existing.name : '') + '"/></div>' +
       '<div class="fld"><textarea name="description" rows="2" placeholder="Optional description">' + esc(descriptionText(existing)) + '</textarea></div>' +
       '<div class="fld">Kind<div class="chips" id="cal5-edkinds">' + this._kindChipsHTML(kinds, existing ? existing.kind_id : null) + '</div></div>' +
-      (view.role >= ROLE_OWNER ? '<div id="cal5-nkf-mount"></div>' : '') +
+      (view.canAuthorDmOnly ? '<div id="cal5-nkf-mount"></div>' : '') +
       (view.canAuthorDmOnly ? '<div class="vis" role="group" aria-label="Visibility">' +
         '<button type="button" data-vis="everyone" aria-pressed="' + (!existing || existing.visibility !== 'dm_only') + '">Everyone</button>' +
         '<button type="button" data-vis="dm_only" aria-pressed="' + (!!existing && existing.visibility === 'dm_only') + '">Director only</button></div>' : '') +
@@ -523,14 +524,14 @@
       var style = color ? ('color:' + color + ';') : '';
       return '<button type="button" data-kind="' + k.id + '" aria-pressed="' + (k.id === activeId) + '" style="' + style + '">' + esc(k.icon || '') + ' ' + esc(k.name) + '</button>';
     }).join('');
-    if (this.view.role >= ROLE_OWNER) html += '<button type="button" class="nkb" data-nkb><i class="fa-solid fa-plus"></i> New kind</button>';
+    if (this.view.canAuthorDmOnly) html += '<button type="button" class="nkb" data-nkb><i class="fa-solid fa-plus"></i> New kind</button>';
     return html;
   };
 
   // New-kind-in-place: an inline form (name/icon/colour), POSTs
-  // /calendars/event-kinds (campaign-scoped, Owner-only end to end —
+  // /calendars/event-kinds (campaign-scoped, gated CanAuthorDmOnly —
   // routes.go — so this entry point itself is only ever rendered for
-  // role >= RoleOwner, see _kindChipsHTML above).
+  // canAuthorDmOnly, see _kindChipsHTML above).
   CalendarEditor.prototype._openNewKindForm = function (parentForm) {
     var self = this, view = this.view, mount = $('#cal5-nkf-mount', parentForm);
     if (!mount || mount.querySelector('.nkf')) return;
@@ -579,15 +580,15 @@
   };
 
   // ------------------------------------------------------------------
-  // Moon hidden toggle, added to the moon view's strip. Owner-only
-  // (routes.go: PUT .../moons/:id/hidden is RequireRole(RoleOwner), not
-  // CanAuthorDmOnly) — same gating note as event-kind creation.
+  // Moon hidden toggle, added to the moon view's strip. Gated
+  // CanAuthorDmOnly (routes.go: PUT .../moons/:id/hidden), same as
+  // event-kind creation and era management below.
   // ------------------------------------------------------------------
   CalendarEditor.prototype._wrapMvRendering = function () {
     var self = this, view = this.view, original = view._mvHTML.bind(view);
     view._mvHTML = function () {
       var html = original();
-      if (view.role < ROLE_OWNER) return html;
+      if (!view.canAuthorDmOnly) return html;
       var moon = view.moonById(view.mvMoonId) || (view.cal.moons || [])[0];
       if (!moon) return html;
       var toggle = '<div class="sw" style="margin-top:10px"><span>Shown to players<small>Hide a moon while it is still a secret.</small></span>' +
@@ -617,18 +618,17 @@
   // ------------------------------------------------------------------
   // Era manager: the one piece of the mockup's "structure editor" (months,
   // weekdays, leap rule, moons, eras) whose write API actually exists today
-  // (routes.go: POST/PUT/DELETE .../eras[/:eraID], Owner-only end to end).
+  // (routes.go: POST/PUT/DELETE .../eras[/:eraID], gated CanAuthorDmOnly).
   // Months, weekdays, the leap-year rule and a moon's own name/cycle/color
-  // have NO write route in PR #791 at all — see the plugin's .ai.md "Honest
-  // gaps"; building a UI for those would write into nothing. So the flap
-  // becomes a real list-manage-add editor only for role >= ROLE_OWNER (a
-  // co-Director's flap stays the original read-only single-era view — this
-  // route is not gated CanAuthorDmOnly, see the file header's gating note);
-  // everyone else keeps calendar_view.js's read-only current-era flap.
+  // have NO write route at all — see the plugin's .ai.md "Honest gaps";
+  // building a UI for those would write into nothing. So the flap becomes a
+  // real list-manage-add editor for canAuthorDmOnly (Owner or a granted
+  // co-Director); everyone else keeps calendar_view.js's read-only
+  // current-era flap.
   // ------------------------------------------------------------------
   CalendarEditor.prototype._wrapFlapRendering = function () {
     var self = this, view = this.view;
-    if (view.role < ROLE_OWNER) return;
+    if (!view.canAuthorDmOnly) return;
     this._eraFormFor = undefined; // undefined = list mode, 'new' = create, <id> = edit
     view.showFlap = function () {
       self._eraFormFor = undefined;
@@ -686,7 +686,7 @@
 
   CalendarEditor.prototype._bindFlapCapture = function () {
     var self = this, view = this.view;
-    if (view.role < ROLE_OWNER) return;
+    if (!view.canAuthorDmOnly) return;
     view.flapEl.addEventListener('click', function (e) {
       var add = e.target.closest('[data-add-era]');
       var edit = e.target.closest('[data-edit-era]');

@@ -8,7 +8,9 @@
 // for a trusted system caller, and dm_only content / hidden moons / per-user
 // visibility_rules are resolved the same way for every viewer weaker than
 // Owner. Structural resources (event kinds, eras, the moon hidden flag) are
-// Owner-only end to end, so they carry no viewer parameter at all.
+// authorized entirely at the route — listing event kinds Owner only, every
+// other write CanAuthorDmOnly (Owner or a granted co-Director) — so they
+// carry no viewer parameter at all.
 package calendar
 
 import (
@@ -228,22 +230,26 @@ type CalendarService interface {
 	SetEventVisibility(ctx context.Context, eventID, calendarID, campaignID string, input UpdateEventVisibilityInput, v permissions.Viewer) error
 
 	// Event kinds. Campaign-scoped (shared by every calendar in the
-	// campaign, see EventKind's doc comment) and Owner-only end to end —
-	// calendar structure, not content a Player ever reads directly.
+	// campaign, see EventKind's doc comment) — calendar structure, not
+	// content a Player ever reads directly. Listing is Owner only end to
+	// end; creating, editing and deleting are CanAuthorDmOnly (Owner or a
+	// granted co-Director), gated at the route (routes.go).
 	ListEventKinds(ctx context.Context, campaignID string) ([]EventKind, error)
 	CreateEventKind(ctx context.Context, campaignID string, input EventKindInput) (*EventKind, error)
 	UpdateEventKind(ctx context.Context, kindID int, campaignID string, input UpdateEventKindInput) error
 	DeleteEventKind(ctx context.Context, kindID int, campaignID string) error
 
-	// Eras. Owner-only end to end (calendar structure), resolved through the
-	// calendar the caller reached (GetEraByID itself is not calendar-scoped;
-	// this service never calls it with an untrusted id without also
-	// checking the result's CalendarID — see eraInCalendar).
+	// Eras. Calendar structure, gated CanAuthorDmOnly (Owner or a granted
+	// co-Director) at the route (routes.go), resolved through the calendar
+	// the caller reached (GetEraByID itself is not calendar-scoped; this
+	// service never calls it with an untrusted id without also checking the
+	// result's CalendarID — see eraInCalendar).
 	CreateEra(ctx context.Context, calendarID, campaignID string, input EraInput) (*Era, error)
 	UpdateEra(ctx context.Context, eraID int, calendarID, campaignID string, input UpdateEraInput) error
 	DeleteEra(ctx context.Context, eraID int, calendarID, campaignID string) error
 
-	// Moon. Owner-only end to end (the hidden flag is calendar structure).
+	// Moon. Calendar structure; the hidden flag is gated CanAuthorDmOnly
+	// (Owner or a granted co-Director) at the route (routes.go).
 	SetMoonHidden(ctx context.Context, moonID int, calendarID, campaignID string, hidden bool) error
 
 	// PreviewAnchorMove is a READ-ONLY preview of moving a real-anchored
@@ -260,11 +266,12 @@ type CalendarService interface {
 	// and the calendar plugin's own native/Simple-Calendar/Calendaria import
 	// (internal/plugins/calendar/import.go), neither of which has a stored
 	// row per item to update incrementally the way CreateEra/CreateEventKind
-	// do. Not wired to any HTTP route yet (calendar-v5 slice 2, #741) — Owner-
-	// only calendar-settings editing UI is a later slice — so today's only
+	// do. Not wired to any HTTP route yet (calendar-v5 slice 2, #741) —
+	// calendar-settings editing UI is a later slice — so today's only
 	// callers are trusted in-process ones; a caller reaching these through a
-	// future HTTP handler must still be gated Owner-only there, the same as
-	// every other calendar-structure write in this file.
+	// future HTTP handler must still be gated there. Whether that gate is
+	// Owner-only or CanAuthorDmOnly (like eras/event kinds/the moon hidden
+	// flag above) is this future slice's own decision, not assumed here.
 	SetMonths(ctx context.Context, calendarID, campaignID string, months []MonthInput) error
 	SetWeekdays(ctx context.Context, calendarID, campaignID string, weekdays []WeekdayInput) error
 	SetMoons(ctx context.Context, calendarID, campaignID string, moons []MoonInput) error
@@ -1624,7 +1631,7 @@ func (s *calendarService) SetEventVisibility(ctx context.Context, eventID, calen
 	return nil
 }
 
-// --- Event kinds (campaign-scoped, Owner-only end to end) ---
+// --- Event kinds (campaign-scoped; list Owner only, writes CanAuthorDmOnly) ---
 
 // validateEventKindShape checks the fields the repository's own
 // validateEventKindInput does not (Slug/Name shape + length limits, plus
@@ -1760,7 +1767,7 @@ func (s *calendarService) DeleteEventKind(ctx context.Context, kindID int, campa
 	return s.kindRepo.Delete(ctx, kindID, campaignID)
 }
 
-// --- Eras (per-calendar, Owner-only end to end) ---
+// --- Eras (per-calendar, CanAuthorDmOnly — Owner or a granted co-Director) ---
 
 func (s *calendarService) CreateEra(ctx context.Context, calendarID, campaignID string, input EraInput) (*Era, error) {
 	if _, err := s.calendarInCampaign(ctx, calendarID, campaignID); err != nil {
@@ -1886,10 +1893,11 @@ func validateEraShape(name string, description *string, color string, startYear,
 
 // --- Moon ---
 
-// SetMoonHidden toggles a moon's visibility to players. Owner-only end to
-// end (the route gates it); CalendarRepository.SetMoonHidden is itself
-// scoped to calendarID, so a moon belonging to a sibling calendar in the
-// SAME campaign is rejected exactly like one from another campaign.
+// SetMoonHidden toggles a moon's visibility to players. CanAuthorDmOnly —
+// Owner or a granted co-Director — end to end (the route gates it);
+// CalendarRepository.SetMoonHidden is itself scoped to calendarID, so a
+// moon belonging to a sibling calendar in the SAME campaign is rejected
+// exactly like one from another campaign.
 func (s *calendarService) SetMoonHidden(ctx context.Context, moonID int, calendarID, campaignID string, hidden bool) error {
 	if _, err := s.calendarInCampaign(ctx, calendarID, campaignID); err != nil {
 		return err
