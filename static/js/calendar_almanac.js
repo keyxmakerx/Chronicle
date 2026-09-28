@@ -388,7 +388,7 @@
   function fold() {
     if (S.state !== 'full') return Promise.resolve(false);
     var tok = ++S.seq, a = S.alm, p = parts(), mount = p.mount, view = mount && mount.calendarView;
-    if (view && view.closeAllPanels) view.closeAllPanels();
+    if (view && view.closeAllPanels) view.closeAllPanels({ instant: true });
     S.state = 'folding';
     a.classList.remove('open');
     var head = mount && $('.head', mount), cap = mount && $('.caption', mount);
