@@ -9,8 +9,9 @@
  * unfolds from behind its top edge. The side page folds away behind the
  * month: the calendar carries today and its moons in its own header. Back
  * ("Preview") or Escape folds it up again; Escape once more closes it into
- * its card. Narrow screens get one sheet grown from the card; reduced motion
- * gets short cross-fades.
+ * its card, and a click on the dimmed page backs all the way out. Where the
+ * screen has room, both states grow up to half as big again. Narrow screens
+ * get one sheet grown from the card; reduced motion gets short cross-fades.
  *
  * Loaded on every page (internal/app/routes.go's pluginBodyScripts) and idle
  * until htmx swaps in a [data-almanac] preview.
@@ -22,7 +23,10 @@
   var SPRING = 'cubic-bezier(.34,1.3,.4,1)';
   var INFO_W = 272;     // the side page's width (the design's --iw)
   var GRID_PAD = 18;    // the month page's side padding
-  var FULL_MAX_W = 1040;
+  var PV_CELL_H = 62;   // a day's height on the month page at its base size
+  var GROW = 1.5;       // how much bigger either state gets, room allowing
+  var FULL_MIN_W = 1040; // the opened-out calendar never shrinks below this to fit a short screen; it scrolls
+  var FULL_MAX_W = FULL_MIN_W * GROW;
   var COVER_SHUT = 'perspective(1100px) rotateY(0deg)';
   var COVER_OPEN = 'perspective(1100px) rotateY(-100deg)';
   var HOME = 'translate(0px,0px) scale(1)';
@@ -74,12 +78,13 @@
   }
 
   // The move that lays the month page over the calendar's own grid: its
-  // weekday row onto the calendar's weekday row, its weeks as wide as the
-  // calendar's. at is where the page sits unmoved.
+  // first week onto the calendar's first week, as wide. layoutFull shapes the
+  // calendar's weeks like the page's, so every week lands on its twin. at is
+  // where the page sits unmoved.
   function gridMatch(panel, at, mount) {
-    var pd = $('.calv5-mg-dow', panel), rd = $('.dow', mount), rs = $('.stage', mount);
-    if (!pd || !rd || !rs) return null;
-    var d = pd.getBoundingClientRect(), r = rd.getBoundingClientRect(), s = rs.getBoundingClientRect().width / d.width;
+    var pw = $('.calv5-mg-wk', panel), cw = $('.stage .wk', mount);
+    if (!pw || !cw) return null;
+    var d = pw.getBoundingClientRect(), r = cw.getBoundingClientRect(), s = r.width / d.width;
     return tr(r.left - at.left - s * (d.left - at.left), r.top - at.top - s * (d.top - at.top), s);
   }
 
@@ -91,23 +96,40 @@
   }
 
   // The folded page: the month sized for its week (never under 58px a day),
-  // the side page beside it, centred and never closer than 16px to the top.
-  // Too narrow for both side by side, it is one sheet instead.
+  // grown up to half as big again while it still fits the content column and
+  // the window's height, the side page beside it, centred and never closer
+  // than 16px to the top. Too narrow for both side by side, it is one sheet.
   function layoutPreview() {
     var a = S.alm, p = parts(), grid = $('.calv5-mgrid', a);
     var cols = grid ? parseInt(grid.style.getPropertyValue('--cols'), 10) || 7 : 7;
-    var cellW = clamp(Math.round(620 / cols), 58, 88), gw = cellW * cols + 2 * GRID_PAD;
-    S.gw = gw;
+    var base = clamp(Math.round(620 / cols), 58, 88);
+    S.gw = base * cols + 2 * GRID_PAD;
     S.sheet = wantsSheet();
     a.classList.toggle('sheet', S.sheet);
     a.style.left = a.style.top = '';
-    if (S.sheet) { S.pv = null; return; }
-    a.style.setProperty('--cellW', cellW + 'px');
-    a.style.setProperty('--gw', gw + 'px');
+    if (S.sheet) {
+      S.pv = null;
+      if (grid) grid.style.removeProperty('--cellH');
+      return;
+    }
+    var cells = function (k) {
+      a.style.setProperty('--cellW', Math.round(base * k) + 'px');
+      a.style.setProperty('--gw', (Math.round(base * k) * cols + 2 * GRID_PAD) + 'px');
+      if (grid) grid.style.setProperty('--cellH', Math.round(PV_CELL_H * k) + 'px');
+    };
+    cells(1);
+    a.style.setProperty('--rowH', 'auto');
+    var weeks = a.querySelectorAll('.calv5-mg-wk'), n = weeks.length || 6, wk = weeks[0];
+    var wkH = wk ? wk.offsetHeight : PV_CELL_H + 1;
+    var kw = (column().width - 32 - INFO_W - 2 * GRID_PAD) / (base * cols);
+    var kh = ((window.innerHeight - 32 - (p.grid.offsetHeight - n * wkH)) / n - 1) / PV_CELL_H;
+    var k = Math.min(kw, kh);
+    cells(k > 1 ? Math.min(k, GROW) : 1);
     a.style.setProperty('--rowH', 'auto');
     var rowH = Math.ceil(Math.max(p.grid.offsetHeight, p.info.offsetHeight));
     a.style.setProperty('--rowH', rowH + 'px');
-    S.pv = { gw: gw, rowH: rowH };
+    var gw = parseFloat(a.style.getPropertyValue('--gw'));
+    S.pv = { gw: gw, rowH: rowH, wkW: wk ? wk.offsetWidth : gw - 2 * GRID_PAD, wkH: wk ? wk.offsetHeight : PV_CELL_H + 1 };
     var box = previewBox();
     a.style.left = box.left + 'px';
     a.style.top = box.top + 'px';
@@ -130,13 +152,38 @@
     };
   }
 
-  // Opened out: the calendar on its own sheet, as wide as its page allows.
+  // Opened out: the calendar on its own sheet, up to half as big again as its
+  // own page, its weeks shaped like the month page's weeks (so the page moves
+  // onto them exactly) and so as tall as it is wide allows. It narrows until
+  // this month fits the window's height, but never below its own page's
+  // size: past that, it scrolls.
   function layoutFull() {
-    var a = S.alm;
+    var a = S.alm, p = parts();
     a.style.left = a.style.top = '';
+    a.style.removeProperty('--almCellH');
     if (S.sheet) return;
-    var c = column(), W = Math.min(FULL_MAX_W, c.width - 32);
-    a.style.setProperty('--fw', W + 'px');
+    // Without a month page to match (it opened as a sheet), it keeps its own
+    // page's size and shape.
+    var c = column(), W = Math.min(S.pv ? FULL_MAX_W : FULL_MIN_W, c.width - 32);
+    var size = function (w) {
+      a.style.setProperty('--fw', w + 'px');
+      var wk = S.pv && p.mount && $('.stage .wk', p.mount);
+      if (wk) a.style.setProperty('--almCellH', Math.round(S.pv.wkH * wk.offsetWidth / S.pv.wkW - 1) + 'px');
+      return wk;
+    };
+    var wk = size(W);
+    if (wk) {
+      var weeks = p.mount.querySelectorAll('.stage .wk'), rows = 0;
+      Array.prototype.forEach.call(weeks, function (r) { rows += r.offsetHeight; });
+      var fixed = p.full.offsetHeight - rows, sideW = W - wk.offsetWidth;
+      var fits = sideW + (window.innerHeight - 32 - fixed) / weeks.length * S.pv.wkW / S.pv.wkH;
+      var w = Math.round(clamp(fits, Math.min(FULL_MIN_W, c.width - 32), W));
+      if (w !== W) size(W = w);
+      // Held at its narrowest and a few pixels too tall, its weeks give those
+      // up rather than scroll for them.
+      var per = Math.ceil((p.full.offsetHeight - (window.innerHeight - 32)) / weeks.length);
+      if (per > 0 && per <= 4) a.style.setProperty('--almCellH', (parseFloat(a.style.getPropertyValue('--almCellH')) - per) + 'px');
+    }
     a.style.left = Math.round(c.left + (c.width - W) / 2) + 'px';
     a.style.top = '16px';
   }
@@ -406,27 +453,45 @@
     }, function () { return false; });
   }
 
-  // Escape, and a click on the dimmed page: an opened-out almanac folds up
-  // (unless the calendar has a card of its own open, which it closes first);
-  // a preview closes into its card.
+  function openPanel() {
+    var m = parts().mount, v = m && m.calendarView;
+    return v && v.anyPanelOpen && v.anyPanelOpen() ? v : null;
+  }
+  // Escape: an opened-out almanac folds up (unless the calendar has a card of
+  // its own open, which it closes first); a preview closes into its card.
   function escape() {
     if (S.state === 'full') {
-      var m = parts().mount, v = m && m.calendarView;
-      if (v && v.anyPanelOpen && v.anyPanelOpen()) return false;
+      if (openPanel()) return false;
       fold();
     } else if (S.state === 'preview') {
       close();
     } else if (S.state !== 'closing') {
       // Mid-motion: act once the page settles, rather than dropping the key.
-      S.pendingEscape = true;
+      S.pending = escape;
     }
     return true;
   }
-  // Called as each motion settles, for an Escape pressed during it.
+  // A click on the dimmed page backs all the way out: a card open in the
+  // calendar closes first, then the calendar folds up and closes into its
+  // card. Not while the calendar is being edited (edit mode, or a form open
+  // in it), where a stray click would throw the work away.
+  function clickOff() {
+    if (S.state === 'full') {
+      if ($('.cal.editing, .cal .open form', S.alm)) return;
+      var v = openPanel();
+      if (v) v.closeAllPanels();
+      else fold().then(function (ok) { if (ok) close(); });
+    } else if (S.state === 'preview') {
+      close();
+    } else if (S.state !== 'closing') {
+      S.pending = clickOff;
+    }
+  }
+  // Called as each motion settles, for a key or click that came during it.
   function settled() {
-    if (!S.pendingEscape) return;
-    S.pendingEscape = false;
-    escape();
+    var next = S.pending;
+    S.pending = null;
+    if (next) next();
   }
 
   // Tab stays inside the almanac while it is open.
@@ -456,7 +521,7 @@
     var act = t.getAttribute('data-alm');
     if (act === 'unfold') unfold();
     else if (act === 'fold') fold();
-    else if (act === 'escape') escape();
+    else if (act === 'off') clickOff();
     else if (act === 'close') {
       if (S.state === 'full') fold().then(function (ok) { if (ok) close(); });
       else close();
