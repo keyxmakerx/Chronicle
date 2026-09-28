@@ -1350,17 +1350,6 @@
     background-color: rgb(var(--color-accent-rgb, 99 102 241) / 0.2);
   }
 
-  /* Tree toggle button styling. */
-  .sidebar-tree-toggle {
-    transition: transform 150ms ease;
-  }
-  .sidebar-tree-toggle[data-collapsed="true"] {
-    transform: rotate(0deg);
-  }
-  .sidebar-tree-toggle[data-collapsed="false"] {
-    transform: rotate(90deg);
-  }
-
   /* Currently-viewed entity highlight in sidebar tree. */
   .sidebar-tree-item[aria-current="page"] {
     background-color: rgb(var(--color-accent-rgb, 99 102 241) / 0.12);
