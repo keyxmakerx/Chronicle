@@ -251,7 +251,7 @@ Check these by hand: a PR adding an `hx-get` fragment endpoint lists every consu
 ### Extending the guards
 
 - **Wire-contract snapshot:** on an intentional route add/remove/change, run `UPDATE_ROUTES_SNAPSHOT=1 go test ./internal/wire/...` and commit the regenerated `internal/wire/routes_snapshot.txt`, explaining the change (especially for the four auth surfaces below). Limitations: the snapshot captures `(method, path, file)` via static AST extraction — it doesn't resolve group prefixes (an `e.Group("/admin")` rename), classify the auth surface, capture programmatic registration (loops/builders), or catch per-route middleware removal in general (#697 is the open work), except where a focused AST assertion pins one invariant by hand, as `internal/wire/foundry_public_ratelimit_test.go` does for the Foundry rate limit — copy its shape for a new one: locate the function wiring the middleware and assert its `*.Use(...)` call, then the call site supplying the argument and assert it names the middleware.
-- **Plugin-isolation guard:** targets `foundry-vtt` strings only today; other plugin names aren't checked. Uses the fragment-join token pattern (`tools/check-no-instance-hostname.sh`) to scan its own tree without false-positiving on itself.
+- **Plugin-isolation guard:** targets `foundry-vtt` strings only today; other plugin names aren't checked. Joins its tokens from fragments at runtime so it can scan its own tree without false-positiving on itself.
 - **Sanitize-invariant snapshot:** on a new plugin's `service.go`, or added/removed HTML-typed inputs, run `UPDATE_SANITIZE_SNAPSHOT=1 go test ./internal/sanitize/...` and commit the regenerated snapshot; cite the audit in the PR if it's a new sanitize surface.
 
 ## Cross-plugin import discipline

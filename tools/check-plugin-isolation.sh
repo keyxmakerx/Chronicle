@@ -9,8 +9,7 @@
 # addon-slug lookups, and the @layer CSS reservation line.
 #
 # Forbidden tokens are reconstructed via fragment join so this script can
-# scan its own directory tree without matching itself (same technique as
-# tools/check-no-instance-hostname.sh).
+# scan its own directory tree without matching itself.
 
 set -euo pipefail
 

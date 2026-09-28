@@ -61,8 +61,8 @@ jobs:
 
       - name: Scrub guard (no operator instance hostnames in tracked source)
         # Operator-security requirement: production hostnames stay out of the
-        # repo. The script reconstructs the forbidden token via fragment join
-        # so it doesn't self-match.
+        # repo. The script holds only a fingerprint of the hostname, never
+        # the name itself.
         run: ./tools/check-no-instance-hostname.sh
 
       - name: Plugin isolation guard self-tests
