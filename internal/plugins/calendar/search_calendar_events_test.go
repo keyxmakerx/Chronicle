@@ -149,3 +149,52 @@ func TestSearchCalendarEvents_NoKindIconFallsBack(t *testing.T) {
 		t.Errorf("type_icon fallback = %q, want fa-calendar-day", got)
 	}
 }
+
+func TestSearchCalendarEvents_PerPersonRulesStayOutOfNonGMSearch(t *testing.T) {
+	deny := `{"denied_users":["u-player"]}`
+	allow := `{"allowed_users":["u-other"]}`
+	calRepo := &fakeCalendarRepo{
+		listByCampaignFn: func(_ context.Context, campaignID string) ([]Calendar, error) {
+			return []Calendar{{ID: "cal-open", CampaignID: campaignID, Visibility: "everyone"}}, nil
+		},
+	}
+	eventRepo := &fakeEventRepo{
+		searchFn: func(_ context.Context, _, _ string, _ int) ([]Event, error) {
+			return []Event{
+				{ID: "ev-open", Name: "Feast", Visibility: "everyone"},
+				{ID: "ev-denied", Name: "Feast of knives", Visibility: "everyone", VisibilityRules: &deny},
+				{ID: "ev-allowlist", Name: "Feast for one", Visibility: "everyone", VisibilityRules: &allow},
+			}, nil
+		},
+	}
+	svc := newTestCalendarService(calRepo, eventRepo, nil, nil)
+
+	tests := []struct {
+		name string
+		role int
+		want []string
+	}{
+		{"player sees only the event without per-person rules", permissions.RolePlayer, []string{"ev-open"}},
+		{"owner sees all", permissions.RoleOwner, []string{"ev-open", "ev-denied", "ev-allowlist"}},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got, err := svc.SearchCalendarEvents(context.Background(), testCampaignA, "feast", tt.role)
+			if err != nil {
+				t.Fatalf("SearchCalendarEvents: %v", err)
+			}
+			var ids []string
+			for _, r := range got {
+				ids = append(ids, r["id"])
+			}
+			if len(ids) != len(tt.want) {
+				t.Fatalf("got %v, want %v", ids, tt.want)
+			}
+			for i := range ids {
+				if ids[i] != tt.want[i] {
+					t.Fatalf("got %v, want %v", ids, tt.want)
+				}
+			}
+		})
+	}
+}

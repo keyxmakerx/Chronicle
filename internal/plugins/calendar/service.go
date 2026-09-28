@@ -2214,8 +2214,12 @@ func (s *calendarService) ListAllEventsForCalendar(ctx context.Context, calendar
 // per-user visibility filtered), so a dm_only or otherwise-hidden
 // calendar's events are never even searched; within a visible calendar,
 // EventRepository.SearchEvents applies the same SQL dm_only filter
-// ListEventsForMonth's own read does. Capped at 10 events per calendar by
-// that same query (a search result list, not a full export).
+// ListEventsForMonth's own read does, and the per-user layer runs after it
+// as it does for the pages. The searcher is told only a role, not who is
+// asking, so an event with its own allow or deny list stays out of a
+// non-GM search; the calendar page, which knows the viewer, still shows it
+// to whoever may see it. Capped at 10 events per calendar by that same
+// query (a search result list, not a full export).
 func (s *calendarService) SearchCalendarEvents(ctx context.Context, campaignID, query string, role int) ([]map[string]string, error) {
 	v := permissions.RequestViewer(role, "")
 	cals, err := s.ListCalendars(ctx, campaignID, v)
@@ -2229,7 +2233,7 @@ func (s *calendarService) SearchCalendarEvents(ctx context.Context, campaignID, 
 		if err != nil {
 			return nil, fmt.Errorf("search calendar events: search calendar %s: %w", cal.ID, err)
 		}
-		for _, evt := range events {
+		for _, evt := range filterEventsByUser(events, v) {
 			icon := evt.KindIcon
 			if icon == "" {
 				icon = "fa-calendar-day"
