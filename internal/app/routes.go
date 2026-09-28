@@ -596,6 +596,24 @@ func (a *calendarEventLinkListerAdapter) EventsByIDs(ctx context.Context, calend
 	return refs, nil
 }
 
+// calendarScopeAdapter implements timeline.CalendarScope with the calendar
+// plugin's own campaign-scoped read. It asks at Owner level, the level every
+// caller already holds (the create route is Owner-only and campaign import
+// runs as the owner), so any calendar in the campaign is found and the
+// answer depends only on which campaign the calendar lives in.
+type calendarScopeAdapter struct {
+	svc calendar.CalendarService
+}
+
+// CalendarInCampaign implements timeline.CalendarScope.
+func (a *calendarScopeAdapter) CalendarInCampaign(ctx context.Context, campaignID, calendarID string) (bool, error) {
+	_, err := a.svc.GetCalendarForViewer(ctx, calendarID, campaignID, permissions.RequestViewer(permissions.RoleOwner, ""))
+	if isNotFound(err) {
+		return false, nil
+	}
+	return err == nil, err
+}
+
 type wsSessionAuthAdapter struct {
 	svc auth.AuthService
 }
@@ -2771,6 +2789,13 @@ func (a *App) RegisterRoutes() {
 		SetCalendarEventLinkLister(timeline.CalendarEventLinkLister)
 	}); ok {
 		t.SetCalendarEventLinkLister(&calendarEventLinkListerAdapter{svc: calendarService})
+	}
+	// Timeline creation (the form and campaign import alike) binds a calendar
+	// only once this confirms it is in the same campaign.
+	if t, ok := timelineSvc.(interface {
+		SetCalendarScope(timeline.CalendarScope)
+	}); ok {
+		t.SetCalendarScope(&calendarScopeAdapter{svc: calendarService})
 	}
 	timelineHandler := timeline.NewHandler(timelineSvc)
 	timelineHandler.SetMemberLister(campaignService)
