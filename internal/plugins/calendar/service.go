@@ -276,6 +276,14 @@ type CalendarService interface {
 	SetWeekdays(ctx context.Context, calendarID, campaignID string, weekdays []WeekdayInput) error
 	SetMoons(ctx context.Context, calendarID, campaignID string, moons []MoonInput) error
 	SetSeasons(ctx context.Context, calendarID, campaignID string, seasons []Season) error
+	// SetCycles/SetFestivals/SetWeather are the same bulk-replace shape as
+	// the four above, added for the campaign-backup importer (#805): the
+	// repository side (CalendarRepository.SetCycles/SetFestivals,
+	// WeatherRepository.Set) already existed but had no service-level
+	// caller reachable from outside this package.
+	SetCycles(ctx context.Context, calendarID, campaignID string, cycles []CycleInput) error
+	SetFestivals(ctx context.Context, calendarID, campaignID string, festivals []FestivalInput) error
+	SetWeather(ctx context.Context, calendarID, campaignID string, input WeatherInput) error
 
 	// ListAllEventsForCalendar returns every event for a calendar with no
 	// role or per-user visibility filter — a bulk, unredacted read for
@@ -767,6 +775,8 @@ func (s *calendarService) UpdateCalendar(ctx context.Context, calendarID, campai
 	cal.LeapYearEvery = input.LeapYearEvery.Val(cal.LeapYearEvery)
 	cal.LeapYearOffset = input.LeapYearOffset.Val(cal.LeapYearOffset)
 	cal.Hemisphere = hemisphere
+	cal.ForecastsEnabled = input.ForecastsEnabled.Val(cal.ForecastsEnabled)
+	cal.MonthStartsNewWeek = input.MonthStartsNewWeek.Val(cal.MonthStartsNewWeek)
 
 	// SetRealTime is nil for every caller that does not manage the flag —
 	// see UpdateCalendarInput's doc comment.
@@ -2088,6 +2098,64 @@ func (s *calendarService) SetSeasons(ctx context.Context, calendarID, campaignID
 		return err
 	}
 	return s.calRepo.SetSeasons(ctx, calendarID, seasons)
+}
+
+// SetCycles replaces calendarID's cycle list, each with its own entries.
+func (s *calendarService) SetCycles(ctx context.Context, calendarID, campaignID string, cycles []CycleInput) error {
+	if len(cycles) > maxCalendarCycles {
+		return apperror.NewBadRequest(fmt.Sprintf("a calendar can have at most %d cycles", maxCalendarCycles))
+	}
+	for i := range cycles {
+		c := &cycles[i]
+		if err := validateStructureName("cycle", c.Name, maxCalendarShortNameLength); err != nil {
+			return err
+		}
+		if len(c.Entries) > maxCalendarCycleEntries {
+			return apperror.NewBadRequest(fmt.Sprintf("a cycle can have at most %d entries", maxCalendarCycleEntries))
+		}
+		for _, e := range c.Entries {
+			if err := validateStructureName("cycle entry", e.Name, maxCalendarShortNameLength); err != nil {
+				return err
+			}
+		}
+	}
+	if _, err := s.calendarInCampaign(ctx, calendarID, campaignID); err != nil {
+		return err
+	}
+	return s.calRepo.SetCycles(ctx, calendarID, cycles)
+}
+
+// SetFestivals replaces calendarID's festival list.
+func (s *calendarService) SetFestivals(ctx context.Context, calendarID, campaignID string, festivals []FestivalInput) error {
+	if len(festivals) > maxCalendarFestivals {
+		return apperror.NewBadRequest(fmt.Sprintf("a calendar can have at most %d festivals", maxCalendarFestivals))
+	}
+	for i := range festivals {
+		f := &festivals[i]
+		if err := validateStructureName("festival", f.Name, apperror.MaxNameLength); err != nil {
+			return err
+		}
+		if f.Description != nil && utf8.RuneCountInString(*f.Description) > apperror.MaxDescriptionLength {
+			return apperror.NewBadRequest(fmt.Sprintf("a festival's description can be at most %d characters", apperror.MaxDescriptionLength))
+		}
+		f.Color = normalizeOptionalColor(f.Color)
+	}
+	if _, err := s.calendarInCampaign(ctx, calendarID, campaignID); err != nil {
+		return err
+	}
+	return s.calRepo.SetFestivals(ctx, calendarID, festivals)
+}
+
+// SetWeather replaces calendarID's current weather reading. Before #805 this
+// was reachable only as weatherRepo.Get inside loadSubresources (read-only,
+// see .ai.md "Honest gaps" — painting/generation is separate, unbuilt work,
+// #765); this is only the plumbing the campaign-backup importer needs to
+// restore a reading a GM had already set before the backup.
+func (s *calendarService) SetWeather(ctx context.Context, calendarID, campaignID string, input WeatherInput) error {
+	if _, err := s.calendarInCampaign(ctx, calendarID, campaignID); err != nil {
+		return err
+	}
+	return s.weatherRepo.Set(ctx, calendarID, input)
 }
 
 // validateMonthInputs holds a whole-list month write to the limits an

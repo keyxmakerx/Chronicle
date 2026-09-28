@@ -140,29 +140,55 @@ type ExportRelation struct {
 // backup — see calendarImportAdapter.ImportCalendar's doc comment for how a
 // pre-V5 backup (which never had this field) is handled on import.
 type ExportCalendarData struct {
-	Name             string                  `json:"name"`
-	Description      *string                 `json:"description,omitempty"`
-	Mode             string                  `json:"mode"`
-	Visibility       string                  `json:"visibility,omitempty"`
-	VisibilityRules  *string                 `json:"visibility_rules,omitempty"`
-	EpochName        *string                 `json:"epoch_name,omitempty"`
-	CurrentYear      int                     `json:"current_year"`
-	CurrentMonth     int                     `json:"current_month"`
-	CurrentDay       int                     `json:"current_day"`
-	CurrentHour      int                     `json:"current_hour"`
-	CurrentMinute    int                     `json:"current_minute"`
-	HoursPerDay      int                     `json:"hours_per_day"`
-	MinutesPerHour   int                     `json:"minutes_per_hour"`
-	SecondsPerMinute int                     `json:"seconds_per_minute"`
-	LeapYearEvery    int                     `json:"leap_year_every"`
-	LeapYearOffset   int                     `json:"leap_year_offset"`
-	Months           []ExportCalendarMonth   `json:"months"`
-	Weekdays         []ExportCalendarWeekday `json:"weekdays"`
-	Moons            []ExportCalendarMoon    `json:"moons,omitempty"`
-	Seasons          []ExportCalendarSeason  `json:"seasons,omitempty"`
-	Eras             []ExportCalendarEra     `json:"eras,omitempty"`
-	EventCategories  []ExportEventCategory   `json:"event_categories,omitempty"`
-	Events           []ExportCalendarEvent   `json:"events,omitempty"`
+	Name             string  `json:"name"`
+	Description      *string `json:"description,omitempty"`
+	Mode             string  `json:"mode"`
+	Visibility       string  `json:"visibility,omitempty"`
+	VisibilityRules  *string `json:"visibility_rules,omitempty"`
+	EpochName        *string `json:"epoch_name,omitempty"`
+	CurrentYear      int     `json:"current_year"`
+	CurrentMonth     int     `json:"current_month"`
+	CurrentDay       int     `json:"current_day"`
+	CurrentHour      int     `json:"current_hour"`
+	CurrentMinute    int     `json:"current_minute"`
+	HoursPerDay      int     `json:"hours_per_day"`
+	MinutesPerHour   int     `json:"minutes_per_hour"`
+	SecondsPerMinute int     `json:"seconds_per_minute"`
+	LeapYearEvery    int     `json:"leap_year_every"`
+	LeapYearOffset   int     `json:"leap_year_offset"`
+	// Hemisphere/ForecastsEnabled/MonthStartsNewWeek are additive fields
+	// (#805): calendar.Calendar grew all of these under V5, and dropping
+	// them silently on export meant a restored campaign always came back
+	// with the un-set/off defaults regardless of what the GM had actually
+	// configured.
+	//
+	// TracksRealTime/RealTimeZone are also named in #805 but deliberately
+	// NOT carried here: RealTimeZone trips this repo's scheduler-data
+	// egress guard (sessions.TestScheduler_AbsentFromCampaignExport,
+	// RC-12.5), which fails on any exported field whose name contains
+	// "timezone" — a calendar's real-time anchor is GM-configured world
+	// data, not a specific member's own location the way the guard's usual
+	// target (session availability) is, but a GM who anchors a calendar to
+	// their own convenient zone still has that zone leave in the backup,
+	// and the guard's own doc comment says a new zone-carrying field must
+	// consciously EXTEND that pin, not be routed around it — a security
+	// sign-off call for a human reviewer, not this fix.
+	Hemisphere         *string                 `json:"hemisphere,omitempty"`
+	ForecastsEnabled   bool                    `json:"forecasts_enabled,omitempty"`
+	MonthStartsNewWeek bool                    `json:"month_starts_new_week,omitempty"`
+	Months             []ExportCalendarMonth   `json:"months"`
+	Weekdays           []ExportCalendarWeekday `json:"weekdays"`
+	Moons              []ExportCalendarMoon    `json:"moons,omitempty"`
+	Seasons            []ExportCalendarSeason  `json:"seasons,omitempty"`
+	Eras               []ExportCalendarEra     `json:"eras,omitempty"`
+	// Cycles/Festivals/Weather are additive sub-resources (#805), the same
+	// "restored config the GM set, not silently reset to nothing" case as
+	// the settings above.
+	Cycles          []ExportCalendarCycle    `json:"cycles,omitempty"`
+	Festivals       []ExportCalendarFestival `json:"festivals,omitempty"`
+	Weather         *ExportCalendarWeather   `json:"weather,omitempty"`
+	EventCategories []ExportEventCategory    `json:"event_categories,omitempty"`
+	Events          []ExportCalendarEvent    `json:"events,omitempty"`
 }
 
 // ExportCalendarMonth is a month definition for export.
@@ -193,12 +219,21 @@ type ExportCalendarWeekday struct {
 // back on import means "unknown, from an old backup" — see
 // calendarImportAdapter.ImportCalendar, which fails that case closed
 // (treats it as hidden), mirroring importCalendarVisibility's reasoning.
+// BaseDesign/Tint/PhaseSource/Size/OrbitSpeed are additive fields (#805):
+// they drive the sky pane's rendering (calendar.Moon's own doc comment), and
+// dropping them on export meant a restored moon rendered with the library
+// default look rather than whichever one the GM had actually picked.
 type ExportCalendarMoon struct {
 	Name              string  `json:"name"`
 	CycleDays         float64 `json:"cycle_days"`
 	PhaseOffset       float64 `json:"phase_offset"`
 	Color             string  `json:"color"`
 	HiddenFromPlayers *bool   `json:"hidden_from_players"`
+	BaseDesign        string  `json:"base_design,omitempty"`
+	Tint              *string `json:"tint,omitempty"`
+	PhaseSource       string  `json:"phase_source,omitempty"`
+	Size              float64 `json:"size,omitempty"`
+	OrbitSpeed        float64 `json:"orbit_speed,omitempty"`
 }
 
 // ExportCalendarSeason is a season definition for export.
@@ -237,13 +272,70 @@ type ExportCalendarEra struct {
 	SortOrder   int     `json:"sort_order"`
 }
 
+// ExportCalendarCycle is a repeating named cycle (a zodiac of years, say)
+// for export, with its entries. Additive (#805).
+type ExportCalendarCycle struct {
+	Name        string                     `json:"name"`
+	CycleLength int                        `json:"cycle_length"`
+	Type        string                     `json:"type"`
+	SortOrder   int                        `json:"sort_order"`
+	Entries     []ExportCalendarCycleEntry `json:"entries,omitempty"`
+}
+
+// ExportCalendarCycleEntry is a single entry within a cycle for export.
+type ExportCalendarCycleEntry struct {
+	Name       string  `json:"name"`
+	Icon       *string `json:"icon,omitempty"`
+	YearOffset int     `json:"year_offset"`
+	SortOrder  int     `json:"sort_order"`
+}
+
+// ExportCalendarFestival is a fixed calendar entry (holiday) for export.
+// Additive (#805).
+type ExportCalendarFestival struct {
+	Name        string  `json:"name"`
+	Month       *int    `json:"month,omitempty"`
+	Day         *int    `json:"day,omitempty"`
+	AfterMonth  *int    `json:"after_month,omitempty"`
+	Description *string `json:"description,omitempty"`
+	Color       *string `json:"color,omitempty"`
+	Icon        *string `json:"icon,omitempty"`
+	SortOrder   int     `json:"sort_order"`
+}
+
+// ExportCalendarWeather is the calendar's current weather reading for
+// export. Additive (#805): a GM-set reading (or one synced from an external
+// tool) used to be dropped entirely, so a restored calendar always came back
+// with no weather set.
+type ExportCalendarWeather struct {
+	PresetID               *string  `json:"preset_id,omitempty"`
+	PresetLabel            *string  `json:"preset_label,omitempty"`
+	Icon                   *string  `json:"icon,omitempty"`
+	Color                  *string  `json:"color,omitempty"`
+	TemperatureCelsius     *float64 `json:"temperature_celsius,omitempty"`
+	WindSpeedKPH           *float64 `json:"wind_speed_kph,omitempty"`
+	WindSpeedTier          *string  `json:"wind_speed_tier,omitempty"`
+	WindDirection          *string  `json:"wind_direction,omitempty"`
+	WindDirectionDegrees   *int     `json:"wind_direction_degrees,omitempty"`
+	PrecipitationType      *string  `json:"precipitation_type,omitempty"`
+	PrecipitationIntensity *float64 `json:"precipitation_intensity,omitempty"`
+	ZoneID                 *string  `json:"zone_id,omitempty"`
+	ZoneName               *string  `json:"zone_name,omitempty"`
+	Description            *string  `json:"description,omitempty"`
+}
+
 // ExportEventCategory is an event category definition for export.
+//
+// DefaultAnnounced is an additive field (#805): dropping it meant a category
+// whose events were meant to be knowable ahead of time (a festival, say)
+// silently lost that on restore, since import always fell back to "on_day".
 type ExportEventCategory struct {
-	Slug      string `json:"slug"`
-	Name      string `json:"name"`
-	Icon      string `json:"icon"`
-	Color     string `json:"color"`
-	SortOrder int    `json:"sort_order"`
+	Slug             string `json:"slug"`
+	Name             string `json:"name"`
+	Icon             string `json:"icon"`
+	Color            string `json:"color"`
+	SortOrder        int    `json:"sort_order"`
+	DefaultAnnounced string `json:"default_announced,omitempty"`
 }
 
 // ExportCalendarEvent captures a single calendar event.

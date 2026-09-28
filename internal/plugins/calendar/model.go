@@ -1232,6 +1232,13 @@ type UpdateCalendarInput struct {
 	// defaultRealLifeSeasons) — a calendar that already has any seasons is
 	// never touched by this field.
 	Hemisphere patch.Field[string]
+	// ForecastsEnabled/MonthStartsNewWeek mirror the two Calendar fields of
+	// the same name (#805: added so the campaign-backup importer can
+	// restore them — CreateCalendarInput has no field for either, the same
+	// reason CreateCalendarFromImport patches Hemisphere/ForecastsEnabled/
+	// MonthStartsNewWeek onto the row directly after CreateCalendar).
+	ForecastsEnabled   patch.Field[bool]
+	MonthStartsNewWeek patch.Field[bool]
 	// SetRealTime is nil for every caller that does not manage the flag (e.g.
 	// PutDate, worldstate advance/time, seed/create), so their update
 	// preserves the stored TracksRealTime/RealTimeZone — a *bool so "absent"
@@ -1349,20 +1356,31 @@ type WeekdayInput struct {
 }
 
 // MoonInput is the input for creating/updating a moon.
+//
+// BaseDesign/Tint/PhaseSource/Size/OrbitSpeed are the sky-pane render
+// params (mirroring Moon's own doc comment); zero-valued fields (an input
+// built before a caller set them, e.g. the calendar-native and campaign
+// importers before #805) fall back through upsertMoons to the same DB
+// column defaults a hand-created moon gets, never an empty/invalid render.
 type MoonInput struct {
 	// ID is nil for a new moon, or an existing calendar_moons id to update in
 	// place. SetMoons upserts on it, so an id present in the calendar but
 	// absent from the input list is deleted, and one present in both is
 	// updated rather than replaced. An update never touches
-	// HiddenFromPlayers or the render parameters (this input carries no
-	// render parameters at all); a fresh insert sets HiddenFromPlayers from
-	// this field, which is how an imported hidden moon stays hidden.
+	// HiddenFromPlayers or the render parameters; a fresh insert sets both
+	// from this input, which is how an imported hidden or custom-look moon
+	// keeps that on arrival.
 	ID                *int    `json:"id,omitempty"`
 	Name              string  `json:"name"`
 	CycleDays         float64 `json:"cycle_days"`
 	PhaseOffset       float64 `json:"phase_offset"`
 	Color             string  `json:"color"`
 	HiddenFromPlayers bool    `json:"hidden_from_players,omitempty"`
+	BaseDesign        string  `json:"base_design,omitempty"`
+	Tint              *string `json:"tint,omitempty"`
+	PhaseSource       string  `json:"phase_source,omitempty"`
+	Size              float64 `json:"size,omitempty"`
+	OrbitSpeed        float64 `json:"orbit_speed,omitempty"`
 }
 
 // EraInput is the input for creating/updating an era. Field order matches

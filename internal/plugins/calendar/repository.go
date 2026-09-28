@@ -481,6 +481,45 @@ func scanMoon(scanner interface{ Scan(...any) error }) (*Moon, error) {
 // from the input is deleted; an entry with no id, or an id that isn't
 // actually in this calendar, is inserted fresh with HiddenFromPlayers from
 // the input and the column defaults for the render params.
+// moonBaseDesignOrDefault, moonPhaseSourceOrDefault, moonSizeOrDefault and
+// moonOrbitSpeedOrDefault mirror calendar_moons' own column DEFAULTs
+// (migrations/020_calv5_schema.up.sql) exactly. A plain INSERT with a Go
+// zero value ("" / 0) would write that zero literally rather than letting
+// MySQL's DEFAULT apply — it only applies when the column is omitted from
+// the statement, not when it's given an explicit empty/zero — so every
+// MoonInput builder that predates the render params (#805; every import
+// format, the wizard's build step) would otherwise insert an invalid empty
+// design/phase-source and a zero size, instead of the sensible look a
+// hand-created moon gets. Tint has no default (NULL is a normal "no tint"
+// value) and needs no such fallback.
+func moonBaseDesignOrDefault(v string) string {
+	if v == "" {
+		return "moon-realistic-selene"
+	}
+	return v
+}
+
+func moonPhaseSourceOrDefault(v string) string {
+	if v == "" {
+		return "css-clip"
+	}
+	return v
+}
+
+func moonSizeOrDefault(v float64) float64 {
+	if v == 0 {
+		return 1
+	}
+	return v
+}
+
+func moonOrbitSpeedOrDefault(v float64) float64 {
+	if v == 0 {
+		return 1
+	}
+	return v
+}
+
 func upsertMoons(ctx context.Context, ex dbExecutor, calendarID string, moons []MoonInput) error {
 	existing, err := existingIDs(ctx, ex, "calendar_moons", calendarID)
 	if err != nil {
@@ -501,9 +540,12 @@ func upsertMoons(ctx context.Context, ex dbExecutor, calendarID string, moons []
 			continue
 		}
 		res, err := ex.ExecContext(ctx,
-			`INSERT INTO calendar_moons (calendar_id, name, cycle_days, phase_offset, color, hidden_from_players)
-			 VALUES (?, ?, ?, ?, ?, ?)`,
+			`INSERT INTO calendar_moons (calendar_id, name, cycle_days, phase_offset, color, hidden_from_players,
+			        base_design, tint, phase_source, size, orbit_speed)
+			 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 			calendarID, m.Name, m.CycleDays, m.PhaseOffset, m.Color, m.HiddenFromPlayers,
+			moonBaseDesignOrDefault(m.BaseDesign), m.Tint, moonPhaseSourceOrDefault(m.PhaseSource),
+			moonSizeOrDefault(m.Size), moonOrbitSpeedOrDefault(m.OrbitSpeed),
 		)
 		if err != nil {
 			return err

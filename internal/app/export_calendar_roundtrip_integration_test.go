@@ -18,6 +18,7 @@ import (
 	"database/sql"
 	"testing"
 
+	"github.com/keyxmakerx/chronicle/internal/patch"
 	"github.com/keyxmakerx/chronicle/internal/permissions"
 	"github.com/keyxmakerx/chronicle/internal/plugins/calendar"
 	"github.com/keyxmakerx/chronicle/internal/plugins/campaigns"
@@ -127,8 +128,12 @@ func TestCalendarCampaignExportImport_DBRoundTrip(t *testing.T) {
 	}); err != nil {
 		t.Fatalf("set weekdays: %v", err)
 	}
+	moonTint := "#ffccaa"
 	if err := calSvc.SetMoons(ctx, srcCal.ID, srcCampaignID, []calendar.MoonInput{
-		{Name: "Secret Moon", CycleDays: 29.5, Color: "#ffffff", HiddenFromPlayers: true},
+		{
+			Name: "Secret Moon", CycleDays: 29.5, Color: "#ffffff", HiddenFromPlayers: true,
+			BaseDesign: "moon-cratered", Tint: &moonTint, PhaseSource: "canvas-arc", Size: 1.4, OrbitSpeed: 0.8,
+		},
 	}); err != nil {
 		t.Fatalf("set moons: %v", err)
 	}
@@ -142,8 +147,37 @@ func TestCalendarCampaignExportImport_DBRoundTrip(t *testing.T) {
 	}); err != nil {
 		t.Fatalf("create era: %v", err)
 	}
+	if err := calSvc.SetCycles(ctx, srcCal.ID, srcCampaignID, []calendar.CycleInput{
+		{Name: "Zodiac", CycleLength: 12, Type: "yearly", Entries: []calendar.CycleEntryInput{
+			{Name: "Rat", YearOffset: 0},
+		}},
+	}); err != nil {
+		t.Fatalf("set cycles: %v", err)
+	}
+	if err := calSvc.SetFestivals(ctx, srcCal.ID, srcCampaignID, []calendar.FestivalInput{
+		{Name: "Founding Day", Month: intPtr(1), Day: intPtr(1)},
+	}); err != nil {
+		t.Fatalf("set festivals: %v", err)
+	}
+	weatherIcon := "cloud-rain"
+	if err := calSvc.SetWeather(ctx, srcCal.ID, srcCampaignID, calendar.WeatherInput{
+		Icon: &weatherIcon, TemperatureCelsius: float64Ptr(12.5),
+	}); err != nil {
+		t.Fatalf("set weather: %v", err)
+	}
+	hemisphere := calendar.HemisphereSouth
+	realZone := "America/New_York"
+	trackReal := true
+	if err := calSvc.UpdateCalendar(ctx, srcCal.ID, srcCampaignID, calendar.UpdateCalendarInput{
+		Name: "Harvest Calendar", Hemisphere: patch.Of(hemisphere),
+		ForecastsEnabled: patch.Of(true), MonthStartsNewWeek: patch.Of(true),
+		SetRealTime: &trackReal, RealTimeZone: &realZone,
+	}); err != nil {
+		t.Fatalf("update calendar settings: %v", err)
+	}
 	kind, err := calSvc.CreateEventKind(ctx, srcCampaignID, calendar.EventKindInput{
 		Slug: "festival", Name: "Festival", Icon: "fa-star", Color: "#10b981",
+		DefaultAnnounced: calendar.AnnouncedAhead,
 	})
 	if err != nil {
 		t.Fatalf("create event kind: %v", err)
@@ -204,14 +238,48 @@ func TestCalendarCampaignExportImport_DBRoundTrip(t *testing.T) {
 	if len(dstCal.Moons) != 1 || !dstCal.Moons[0].HiddenFromPlayers {
 		t.Errorf("imported moon lost its HiddenFromPlayers flag: %+v", dstCal.Moons)
 	}
+	if len(dstCal.Moons) == 1 {
+		m := dstCal.Moons[0]
+		if m.BaseDesign != "moon-cratered" || m.Tint == nil || *m.Tint != moonTint || m.PhaseSource != "canvas-arc" || m.Size != 1.4 || m.OrbitSpeed != 0.8 {
+			t.Errorf("imported moon lost its look fields: %+v", m)
+		}
+	}
 	if len(dstCal.Seasons) != 1 {
 		t.Errorf("imported calendar lost its season: %+v", dstCal.Seasons)
 	}
 	if len(dstCal.Eras) != 1 || dstCal.Eras[0].StartMonth != 1 || dstCal.Eras[0].StartDay != 1 {
 		t.Errorf("imported era lost its day-granular start: %+v", dstCal.Eras)
 	}
+	if len(dstCal.Cycles) != 1 || dstCal.Cycles[0].Name != "Zodiac" || len(dstCal.Cycles[0].Entries) != 1 {
+		t.Errorf("imported calendar lost its cycles: %+v", dstCal.Cycles)
+	}
+	if len(dstCal.Festivals) != 1 || dstCal.Festivals[0].Name != "Founding Day" {
+		t.Errorf("imported calendar lost its festivals: %+v", dstCal.Festivals)
+	}
+	if dstCal.Weather == nil || dstCal.Weather.Icon == nil || *dstCal.Weather.Icon != weatherIcon {
+		t.Errorf("imported calendar lost its weather: %+v", dstCal.Weather)
+	}
+	if dstCal.Hemisphere == nil || *dstCal.Hemisphere != hemisphere {
+		t.Errorf("imported calendar lost its hemisphere: %+v", dstCal.Hemisphere)
+	}
+	if !dstCal.ForecastsEnabled || !dstCal.MonthStartsNewWeek {
+		t.Errorf("imported calendar lost forecasts_enabled/month_starts_new_week: %v/%v", dstCal.ForecastsEnabled, dstCal.MonthStartsNewWeek)
+	}
+	// The source calendar tracks real time (set above via UpdateCalendar,
+	// unrelated to this test's #805 fields), but that must NOT reach the
+	// destination: ExportCalendarData deliberately carries no
+	// TracksRealTime/RealTimeZone (see its doc comment — RealTimeZone trips
+	// the scheduler-data egress guard), so a restored calendar must come
+	// back with real-time tracking off, not silently re-enabled.
+	if dstCal.TracksRealTime || dstCal.RealTimeZone != nil {
+		t.Errorf("imported calendar has real-time tracking on (tracks=%v zone=%v); ExportCalendarData carries no RealTimeZone, so this must stay off",
+			dstCal.TracksRealTime, dstCal.RealTimeZone)
+	}
 	if len(dstCal.EventKinds) != 1 || dstCal.EventKinds[0].Slug != "festival" {
 		t.Errorf("imported calendar lost its event kind: %+v", dstCal.EventKinds)
+	}
+	if len(dstCal.EventKinds) == 1 && dstCal.EventKinds[0].DefaultAnnounced != calendar.AnnouncedAhead {
+		t.Errorf("imported event kind lost its default_announced: %+v", dstCal.EventKinds[0])
 	}
 
 	dstEvents, err := calSvc.ListAllEventsForCalendar(ctx, dstCal.ID, dstCampaignID, systemViewer)

@@ -181,6 +181,15 @@ func (f *fakeCalendarSvc) SetWeekdays(context.Context, string, string, []Weekday
 }
 func (f *fakeCalendarSvc) SetMoons(context.Context, string, string, []MoonInput) error { return nil }
 func (f *fakeCalendarSvc) SetSeasons(context.Context, string, string, []Season) error  { return nil }
+func (f *fakeCalendarSvc) SetCycles(context.Context, string, string, []CycleInput) error {
+	return nil
+}
+func (f *fakeCalendarSvc) SetFestivals(context.Context, string, string, []FestivalInput) error {
+	return nil
+}
+func (f *fakeCalendarSvc) SetWeather(context.Context, string, string, WeatherInput) error {
+	return nil
+}
 
 func (f *fakeCalendarSvc) ListAllEventsForCalendar(context.Context, string, string, permissions.Viewer) ([]Event, error) {
 	return nil, nil
