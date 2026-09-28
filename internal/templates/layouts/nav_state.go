@@ -297,3 +297,40 @@ func navCurrentPage(ctx context.Context) string {
 	_, page := NavCurrent(ctx)
 	return page
 }
+
+// NavActiveDrillSlug is the entity-type slug the categories area's drill
+// panel should already be open to on a full page load: set when the viewer
+// is on a category's own listing or one of its sub-categories, so the panel
+// is there from first paint instead of popping in after a click.
+func NavActiveDrillSlug(ctx context.Context) string {
+	st := navStateOf(ctx)
+	key := st.current
+	if parent, isSub := st.subOf[key]; isSub {
+		key = parent
+	}
+	if !strings.HasPrefix(key, "cat:") {
+		return ""
+	}
+	id, err := strconv.Atoi(strings.TrimPrefix(key, "cat:"))
+	if err != nil {
+		return ""
+	}
+	for _, t := range GetEntityTypes(ctx) {
+		if t.ID == id {
+			return t.Slug
+		}
+	}
+	return ""
+}
+
+// navDrillURL is a category row's drill-panel endpoint. Empty when the type
+// has gone missing (a row surviving from before its type was deleted), so the
+// row still shows but nothing opens for it.
+func navDrillURL(ctx context.Context, typeID int) string {
+	for _, t := range GetEntityTypes(ctx) {
+		if t.ID == typeID {
+			return "/campaigns/" + GetCampaignID(ctx) + "/sidebar/drill/" + t.Slug
+		}
+	}
+	return ""
+}

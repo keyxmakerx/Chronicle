@@ -250,6 +250,13 @@
   function nav() { return document.getElementById('sidebar-nav'); }
   function viewList() { return document.getElementById('sidebar-nav-list'); }
   function editList() { return document.getElementById('sidebar-nav-edit'); }
+  // campaignNavTop (Dashboard, Pinned, Apps) is a separate list from the
+  // categories area's. The editor draws one combined list in place of BOTH:
+  // it hides this one outright — .nav-cat-zone is flex:1 next to it, so it
+  // grows to cover the whole freed height once nav-top disappears — and
+  // inserts its edit list where viewList() normally goes.
+  function topList() { return document.getElementById('sidebar-nav-top-list'); }
+  function sidebarEl() { return document.getElementById('sidebar'); }
 
   function el(tag, cls, attrs, text) {
     var n = document.createElement(tag);
@@ -663,11 +670,16 @@
     var list = viewList(), model = readModel(nav());
     if (!list || !model) return;
     S = { saved: model, draft: clone(model), hist: [], armed: null, saving: false };
-    var prev = snapshot(list);
+    // Pinned and Apps rows live in campaignNavTop, not this list — snapshot
+    // the whole sidebar so their FLIP into the combined edit list still
+    // plays from where they really were.
+    var prev = snapshot(sidebarEl());
     setEditing(true);
     var ed = buildEditList();
     list.parentNode.insertBefore(ed, list.nextSibling);
     list.hidden = true;
+    var top = topList();
+    if (top) top.hidden = true;
     ensureChrome();
     renderChrome();
     playFlip(ed, prev);
@@ -697,12 +709,15 @@
     var prev = snapshot(ed);
     if (ed) ed.remove();
     if (list) list.hidden = false;
+    var top = topList();
+    if (top) top.hidden = false;
     S = null;
     removeChrome();
     setEditing(false);
-    playFlip(list, prev);
+    // Rows land back in either part, so the FLIP scans the whole sidebar.
+    playFlip(sidebarEl(), prev);
     // The ring comes back once the rows have landed.
-    var ring = list && list.querySelector('.nav-ring');
+    var ring = sidebarEl() && sidebarEl().querySelector('.nav-ring');
     if (ring) play(ring, [{ opacity: 0 }, { opacity: 1 }], { duration: 220, delay: reduced() ? 0 : 220, fill: 'backwards' });
     var pencil = document.querySelector('[data-sidebar-edit-toggle]');
     if (pencil) pencil.focus({ preventScroll: true });
@@ -732,6 +747,16 @@
         var node = document.importNode(fresh, true);
         node.hidden = true;
         list.parentNode.replaceChild(node, list);
+        // campaignNavTop (Pinned, Apps) is a separate list the owner's new
+        // arrangement can also have changed — swap it the same way, hidden
+        // until leave()/togglePersonalPin play it back in.
+        var freshTop = doc.getElementById('sidebar-nav-top-list'), top = topList();
+        if (freshTop && top) {
+          var topNode = document.importNode(freshTop, true);
+          topNode.hidden = true;
+          top.parentNode.replaceChild(topNode, top);
+          if (window.htmx && htmx.process) htmx.process(topNode);
+        }
         var freshNav = doc.getElementById('sidebar-nav'), n = nav();
         if (n) {
           var edit = freshNav && freshNav.getAttribute('data-nav-edit');
@@ -1077,9 +1102,12 @@
   // for them alone. The row then glides up into Pinned, or back down.
   var pinning = false;
 
-  /** The viewer's own pins, in the order pinned (Pinned lists them so). */
+  /** The viewer's own pins, in the order pinned (Pinned lists them so).
+   *  Pinned itself lives in campaignNavTop, but a row being pinned FROM
+   *  (Apps or a category) can be in either part, so this reads the whole
+   *  sidebar, not just one list. */
   function ownPins() {
-    return $$('#sidebar-nav-list [data-nav-pin][aria-pressed="true"]').map(function (b) {
+    return $$('#sidebar [data-nav-pin][aria-pressed="true"]').map(function (b) {
       return b.getAttribute('data-nav-pin');
     });
   }
@@ -1103,12 +1131,15 @@
         throw new Error('That row could not be pinned. Check your connection and try again.');
       })
       .then(function () {
-        var prev = snapshot(viewList());
+        // The row can land in campaignNavTop (Pinned) from either part, so
+        // the FLIP snapshot and its replay both span the whole sidebar.
+        var prev = snapshot(sidebarEl());
         return refreshSidebar().then(function () {
-          var list = viewList();
+          var list = viewList(), top = topList();
           list.hidden = false;
-          playFlip(list, prev, { lift: 'n:' + key });
-          var again = list.querySelector('[data-nav-pin="' + key.replace(/["\\]/g, '\\$&') + '"]');
+          if (top) top.hidden = false;
+          playFlip(sidebarEl(), prev, { lift: 'n:' + key });
+          var again = sidebarEl().querySelector('[data-nav-pin="' + key.replace(/["\\]/g, '\\$&') + '"]');
           if (again) again.focus({ preventScroll: true });
           announce(on ? name + ' is pinned to the top of your sidebar.' : name + ' is unpinned.');
         }, function () {
@@ -1120,7 +1151,7 @@
   }
 
   document.addEventListener('click', function (e) {
-    var btn = e.target && e.target.closest && e.target.closest('#sidebar-nav-list [data-nav-pin]');
+    var btn = e.target && e.target.closest && e.target.closest('#sidebar [data-nav-pin]');
     if (!btn) return;
     e.preventDefault();
     togglePersonalPin(btn);
@@ -1131,11 +1162,12 @@
   // mid-edit). The editor follows what is live now: while editing, it
   // redraws from the draft; otherwise it clears any editor the body holds.
   document.addEventListener('htmx:historyRestore', function () {
-    var ed = editList(), list = viewList();
+    var ed = editList(), list = viewList(), top = topList();
     removeChrome();
     if (!S) {
       if (ed) ed.remove();
       if (list) list.hidden = false;
+      if (top) top.hidden = false;
       setPencil(false);
       return;
     }
@@ -1144,6 +1176,7 @@
     if (ed) ed.parentNode.replaceChild(fresh, ed);
     else list.parentNode.insertBefore(fresh, list.nextSibling);
     list.hidden = true;
+    if (top) top.hidden = true;
     ensureChrome();
     renderChrome();
     // After Alpine has set up the restored sidebar, so it stays open.

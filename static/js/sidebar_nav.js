@@ -45,6 +45,10 @@
     anim.finished.then(fn, fn);
   }
 
+  // The categories area's own list — exists on every campaign page, so it
+  // doubles as the "is this a campaign sidebar" guard. campaignNavTop's own
+  // rows (Dashboard, Pinned, Apps) live in a separate list; sidebar() below
+  // is the shared ancestor searches that must span both use instead.
   function list() { return document.getElementById('sidebar-nav-list'); }
 
   function shown(el) { return !!el && el.offsetParent !== null; }
@@ -87,14 +91,22 @@
 
   // --- Folding -------------------------------------------------------------
 
-  /** Everything shown below body in the list: what slides when it folds. */
+  /** Everything shown below body in its own list: what slides when it
+   *  folds. Only Apps folds inside campaignNavTop, and it is always that
+   *  list's last section, so this walk itself finds nothing there — the
+   *  categories area below still has to slide to meet it, so a fold inside
+   *  .nav-top carries that whole area along as one more follower (its real
+   *  height depends on .nav-top's, since it is flex:1 next to it). */
   function followers(body) {
-    var root = list(), out = [];
+    var root = body.closest('.nav-list'), out = [];
     for (var node = body; node && node !== root; node = node.parentElement) {
       for (var sib = node.nextElementSibling; sib; sib = sib.nextElementSibling) {
         if (shown(sib)) out.push(sib);
       }
     }
+    var topWrap = body.closest('.nav-top');
+    var zone = topWrap && topWrap.parentElement && topWrap.parentElement.querySelector('.nav-cat-zone');
+    if (shown(zone)) out.push(zone);
     return out;
   }
 
@@ -207,8 +219,11 @@
     return window.CSS && CSS.escape ? CSS.escape(s) : String(s).replace(/["\\]/g, '\\$&');
   }
 
+  // A row can be in either part (campaignNavTop or the categories area), so
+  // this and every other "where is X" lookup below searches the whole
+  // sidebar, not just one list.
   function rowFor(key) {
-    var root = list();
+    var root = sidebar();
     return key && root ? root.querySelector('.nav-row[data-nav-key="' + cssEscape(key) + '"]') : null;
   }
 
@@ -234,7 +249,7 @@
   }
 
   function ringEl() {
-    var root = list();
+    var root = sidebar();
     var ring = root && root.querySelector('.nav-ring');
     if (!ring) {
       ring = document.createElement('span');
@@ -276,7 +291,7 @@
 
   /** Names the current row's section on its heading, for when it is folded. */
   function markHeadings(key) {
-    var root = list();
+    var root = sidebar();
     if (!root) return;
     var row = rowFor(key);
     var secs = root.querySelectorAll('.nav-sec');
@@ -431,15 +446,19 @@
   document.addEventListener('click', function (e) {
     var t = e.target;
     if (!t || !t.closest || !list()) return;
-    var fold = t.closest('#sidebar-nav [data-nav-fold]');
+    // Apps' own fold heading lives in campaignNavTop, Manage's and a
+    // category's twisty in the categories area — both under #sidebar.
+    var fold = t.closest('#sidebar [data-nav-fold]');
     if (fold) {
       e.preventDefault();
       if (!editing()) toggleFold(fold);
       return;
     }
     // A plain click on a boosted row: the ring leaves for it at once, and the
-    // page's marker confirms the row when the page arrives.
-    var row = t.closest('#sidebar-nav a.nav-row');
+    // page's marker confirms the row when the page arrives. A category row
+    // is a <button> that opens the drill panel (sidebar_drill.js), never an
+    // <a>, so it never matches here — opening the panel doesn't move the ring.
+    var row = t.closest('#sidebar a.nav-row');
     if (!row || e.defaultPrevented || e.button !== 0 || e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return;
     if (row.target === '_blank' || row.getAttribute('hx-boost') === 'false' || editing()) return;
     moveRing(row, true);

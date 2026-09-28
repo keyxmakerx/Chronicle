@@ -2926,6 +2926,12 @@
   .nav-editing .nav-ring { display: none; }
   .nav-rm .nav-ring-svg { display: none; }
   .nav-rm .nav-ring-j { display: block; }
+  /* The in-app reduced-motion override (.nav-rm) crossfades the drill panel
+     exactly as the OS-level media query does below. */
+  .nav-rm .nav-drill { transition: opacity 160ms linear !important; transform: none !important; }
+  .nav-rm .nav-drill:not(.is-open) { opacity: 0; pointer-events: none; }
+  .nav-rm .nav-drill.is-open { opacity: 1; }
+  .nav-rm .tree-toggle, .nav-rm .tree-toggle i { transition: none; }
   @keyframes nav-ring-a {
     0% { stroke-dasharray: 12 88; stroke-dashoffset: 0; }
     18% { stroke-dasharray: 22 78; stroke-dashoffset: -30; }
@@ -2943,14 +2949,142 @@
     100% { stroke-dasharray: 10 90; stroke-dashoffset: -150; }
   }
 
-  /* Ways out of the campaign, at the foot of the sidebar. */
+  /* Ways out of the campaign, the owner's labelled Edit button and the fold/
+     hide buttons, at the foot of the sidebar. Four controls now share the
+     256px row, so it packs tighter than a plain link row would. */
   .nav-foot {
-    flex: none; display: flex; align-items: center; gap: 6px; height: 40px; padding: 0 8px 0 14px;
+    flex: none; display: flex; align-items: center; gap: 4px; height: 40px; padding: 0 6px 0 12px;
     border-top: 1px solid var(--nav-line); font-size: 11.5px; color: var(--nav-text-3); white-space: nowrap;
   }
   .nav-foot a { color: var(--nav-text-2); }
   .nav-foot a:hover { color: var(--nav-hi); }
   .nav-foot-gap { flex: 1; }
+  .nav-foot-edit {
+    position: relative; flex: none; display: inline-flex; align-items: center; gap: 4px; height: 24px; padding: 0 6px;
+    border-radius: 6px; font-size: 11px; font-weight: 600; color: var(--nav-text-2); transition: transform 120ms var(--nav-ease);
+  }
+  .nav-foot-edit i { font-size: 10px; }
+  .nav-foot-edit:hover { color: var(--nav-hi); background: var(--nav-hover); }
+  .nav-foot-edit:active { transform: scale(0.94); }
+  .nav-foot-edit[aria-pressed="true"] { color: #fff; background: rgb(var(--nav-accent)); }
+
+  /* --- The two parts under the brand row -----------------------------------
+     campaignNavTop (Dashboard, My Characters, Pinned, Apps) never scrolls
+     with the categories area below it; it sizes to its own content, with a
+     safety-valve scroll of its own only past about half the sidebar's
+     height. campaignNavCategories is .nav-cat-zone: its own scroller
+     (.nav-scroll, above), with the drill panel positioned over it. */
+  .nav-top {
+    flex: none; position: relative; max-height: 50%; overflow-x: hidden; overflow-y: auto; padding-bottom: 6px;
+    scrollbar-width: thin; scrollbar-color: rgb(255 255 255 / 0.14) transparent;
+  }
+  .nav-cat-zone {
+    position: relative; flex: 1; min-height: 0; display: flex; flex-direction: column; overflow: hidden;
+    border-top: 1px solid var(--nav-line);
+  }
+
+  /* --- The category drill panel --------------------------------------------
+     Slides over .nav-cat-zone only (transform, never a layout change), so
+     campaignNavTop above it is never covered or moved. */
+  .nav-drill {
+    position: absolute; inset: 0; z-index: 10; background: var(--nav-bg); display: flex; flex-direction: column;
+    transform: translateX(100%); transition: transform 320ms var(--nav-ease-out);
+    box-shadow: -8px 0 24px -12px rgb(0 0 0 / 0.5);
+  }
+  .nav-drill.is-open { transform: translateX(0); }
+  .nav-drill-back {
+    flex: none; display: flex; align-items: center; gap: 8px; height: 38px; padding: 0 12px; margin: 6px 8px 0;
+    border-radius: 8px; color: var(--nav-text-2); font-size: 12px; font-weight: 600;
+  }
+  .nav-drill-back:hover { color: var(--nav-hi); background: var(--nav-hover); }
+  .nav-drill-back i { font-size: 11px; }
+  .nav-drill-head { flex: none; display: flex; align-items: center; gap: 10px; padding: 10px 14px 8px; }
+  .nav-drill-head-link { flex: 1; min-width: 0; display: flex; align-items: center; gap: 10px; color: var(--nav-hi); }
+  .nav-drill-head-link:hover .nav-drill-name { text-decoration: underline; }
+  .nav-drill-ic { width: 26px; height: 26px; border-radius: 7px; display: grid; place-items: center; flex: none; background: rgb(255 255 255 / 0.06); }
+  .nav-drill-ic i { font-size: 12px; }
+  .nav-drill-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; font-size: 13.5px; font-weight: 700; }
+  .nav-drill-count {
+    flex: none; padding: 1px 7px; border-radius: 99px; background: rgb(255 255 255 / 0.07); color: var(--nav-text-2);
+    font-size: 10.5px; font-weight: 650; font-variant-numeric: tabular-nums;
+  }
+  .nav-drill-new {
+    flex: none; width: 26px; height: 26px; border-radius: 7px; display: grid; place-items: center; color: var(--nav-text-2);
+    transition: transform 120ms var(--nav-ease);
+  }
+  .nav-drill-new:hover { color: var(--nav-hi); background: var(--nav-hover); }
+  .nav-drill-new:active { transform: scale(0.88); }
+  .nav-drill-search { flex: none; padding: 0 14px 8px; position: relative; }
+  .nav-drill-search input {
+    width: 100%; height: 28px; padding: 0 10px 0 28px; border-radius: 7px; border: 1px solid rgb(255 255 255 / 0.1);
+    background: rgb(255 255 255 / 0.05); color: var(--nav-hi); font-size: 12px;
+  }
+  .nav-drill-search input::placeholder { color: var(--nav-text-3); }
+  .nav-drill-search i { position: absolute; left: 23px; top: 50%; transform: translateY(-50%); font-size: 11px; color: var(--nav-text-3); pointer-events: none; }
+  /* Sub-categories are their own rows (same row grammar as the folder tree
+     below them: full-width, icon + label + count) rather than a filter chip
+     bar — they navigate to that sub-category's own page. */
+  .nav-drill-subs { flex: none; padding: 2px 8px 8px; margin: 0 6px 4px; border-bottom: 1px solid var(--nav-line); }
+  .nav-drill-sub {
+    width: 100%; height: 28px; padding: 0 8px; border-radius: 6px; font-size: 12.5px; font-weight: 600; color: var(--nav-text-2);
+    display: flex; align-items: center; gap: 8px;
+  }
+  .nav-drill-sub:hover { color: var(--nav-hi); background: rgb(255 255 255 / 0.045); }
+  .nav-drill-sub[aria-current="page"] { color: var(--nav-hi); background: rgb(var(--nav-accent) / 0.18); }
+  .nav-drill-sub-ic { width: 15px; flex: none; display: grid; place-items: center; font-size: 11px; color: var(--nav-text-3); }
+  .nav-drill-sub-lb { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; text-align: left; }
+  .nav-drill-sub-n { flex: none; font-size: 10.5px; color: var(--nav-text-3); font-variant-numeric: tabular-nums; }
+  .nav-drill-body {
+    flex: 1; min-height: 0; overflow-y: auto; padding-bottom: 10px;
+    scrollbar-width: thin; scrollbar-color: rgb(255 255 255 / 0.14) transparent;
+  }
+  .nav-tree-skel { padding: 8px 14px; display: flex; flex-direction: column; gap: 6px; }
+  .nav-drill-fav-h, .nav-drill-recent-h {
+    font-size: 10px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: var(--nav-text-3);
+  }
+  .nav-drill-fav-h { padding: 10px 14px 2px; display: flex; align-items: center; gap: 5px; }
+  .nav-drill-fav-h i { color: #fbbf24; font-size: 9px; }
+  .nav-drill-recent { flex: none; border-top: 1px solid var(--nav-line); padding: 8px 14px 4px; }
+  .nav-drill-recent-h { margin-bottom: 4px; display: flex; align-items: center; gap: 5px; }
+  .nav-drill-recent-h i { font-size: 9px; }
+  .nav-drill-recent-empty { font-size: 11.5px; font-style: italic; color: var(--nav-text-3); padding: 2px 0 6px; }
+
+  /* --- The folder tree: no icons — a folder is its chevron, a semibold name
+     and a count; a page is its plain name (sidebar_tree.js / sidebar_list.templ). */
+  .tree-row {
+    position: relative; display: flex; align-items: center; gap: 7px; height: 29px; padding-right: 8px;
+    color: var(--nav-text); font-size: 12.5px; white-space: nowrap; border-radius: 6px; margin: 0 6px; width: calc(100% - 12px);
+  }
+  .tree-row:hover { background: rgb(255 255 255 / 0.045); color: var(--nav-hi); }
+  .tree-row.is-page { cursor: pointer; }
+  .tree-toggle {
+    width: 16px; height: 16px; flex: none; display: grid; place-items: center; color: var(--nav-text-3);
+    transition: transform 180ms var(--nav-ease); border-radius: 4px;
+  }
+  .tree-toggle:hover { color: var(--nav-hi); }
+  .tree-toggle i { font-size: 9px; transition: transform 180ms var(--nav-ease); }
+  .tree-row[aria-expanded="false"] > .tree-toggle i { transform: rotate(-90deg); }
+  .tree-toggle.tree-spacer { visibility: hidden; }
+  .tree-row.is-folder > .tree-lb { font-weight: 600; color: var(--nav-strong); }
+  .tree-row.is-page > .tree-lb { color: var(--nav-text); }
+  .tree-lb { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; text-align: left; }
+  .tree-row.tree-match .tree-lb mark { background: rgb(var(--nav-accent) / 0.55); color: #fff; border-radius: 2px; padding: 0 1px; }
+  .tree-n { flex: none; font-size: 10.5px; color: var(--nav-text-3); font-variant-numeric: tabular-nums; }
+  .tree-hid { flex: none; font-size: 10px; color: #fbbf24; opacity: 0.85; }
+  .tree-rename {
+    flex: 1; min-width: 0; height: 22px; padding: 0 6px; border-radius: 5px; border: 1px solid rgb(var(--nav-accent) / 0.6);
+    background: rgb(255 255 255 / 0.06); color: #fff; font-size: 12.5px;
+  }
+  .nav-tree-more {
+    display: flex; align-items: center; gap: 7px; height: 30px; margin: 2px 6px 0; padding: 0 10px; border-radius: 6px;
+    color: var(--nav-text-2); font-size: 12px; font-weight: 600; border: 1px dashed rgb(255 255 255 / 0.16);
+  }
+  .nav-tree-more:hover { color: var(--nav-hi); border-color: rgb(255 255 255 / 0.3); }
+  .nav-tree-empty { margin: 10px 14px; padding: 16px 10px; text-align: center; color: var(--nav-text-3); font-size: 12px; }
+  .nav-tree-empty i { display: block; font-size: 18px; margin-bottom: 6px; color: var(--nav-text-3); }
+  /* New-item flash: draws the eye without moving anything else. */
+  @keyframes tree-flash { 0% { background: rgb(var(--nav-accent) / 0.35); } 100% { background: transparent; } }
+  .tree-row.is-new { animation: tree-flash 1100ms ease-out; }
 
   /* Folded to icons (the unpinned sidebar when the pointer leaves it). */
   .sidebar-collapsed .nav-brand { padding: 0; justify-content: center; }
@@ -3108,7 +3242,12 @@
   .nav-ring-j { display: block; }
   .nav-row:active, .nav-row:hover .nav-ic, .nav-row:active .nav-ic, .nav-ibtn:active, .nav-tw:active,
   .nav-gh-add:active, button.nav-gh:active .nav-gh-l, .nav-hd:active, .nav-eb:active, .nav-addg:active,
-  .nav-btn:active, .nav-mypin:active { transform: none; }
+  .nav-btn:active, .nav-mypin:active, .nav-foot-edit:active { transform: none; }
+  /* The drill panel crossfades instead of sliding. */
+  .nav-drill { transition: opacity 160ms linear !important; transform: none !important; }
+  .nav-drill:not(.is-open) { opacity: 0; pointer-events: none; }
+  .nav-drill.is-open { opacity: 1; }
+  .tree-toggle, .tree-toggle i { transition: none; }
 }
 
 

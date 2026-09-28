@@ -13,9 +13,11 @@ import (
 
 // SidebarEntityList renders entity results and folder nodes as compact items
 // for the sidebar panel. Each item includes data attributes for tree structure
-// and reordering. The sidebar_tree.js script transforms this flat list into a
-// collapsible tree with folder/page icons and drag-and-drop support.
-// hiddenIDs marks entities that should appear dimmed for owners.
+// and reordering. sidebar_tree.js transforms this flat list into a
+// collapsible tree with drag-and-drop support — no folder/page icons: a
+// folder is its chevron, a semibold name and a count (added client-side);
+// a page is its plain name. hiddenIDs marks entities that should appear
+// dimmed for owners.
 //
 // typeID is the drilled category's own entity type (the sidebar URL's ?type=),
 // NOT a per-row type. It drives data-entity-type-id, which sidebar_tree.js
@@ -40,7 +42,7 @@ templ SidebarEntityList(results []Entity, nodes []SidebarNode, total int, typeID
 			// Render sidebar folder nodes (pure organizational containers).
 			for _, node := range nodes {
 				<div
-					class="sidebar-tree-item sidebar-tree-folder flex items-center mx-2 px-2.5 py-1.5 rounded-md text-sm transition-all text-sidebar-text hover:bg-sidebar-hover hover:text-sidebar-active group cursor-default"
+					class="sidebar-tree-item sidebar-tree-folder tree-row is-folder"
 					data-node-id={ node.ID }
 					data-is-folder="true"
 					if node.ParentID != nil {
@@ -50,12 +52,7 @@ templ SidebarEntityList(results []Entity, nodes []SidebarNode, total int, typeID
 					data-entity-name={ node.Name }
 					draggable="true"
 				>
-					<span
-						class="sidebar-tree-icon w-4 h-4 flex items-center justify-center mr-2 shrink-0 text-gray-500 group-hover:text-gray-300 transition-colors"
-					>
-						<i class="fa-solid fa-folder text-[10px]"></i>
-					</span>
-					<span class="flex-1 truncate text-xs font-medium">{ node.Name }</span>
+					<span class="tree-lb">{ node.Name }</span>
 				</div>
 			}
 			// Render entity items (navigable pages).
@@ -63,7 +60,7 @@ templ SidebarEntityList(results []Entity, nodes []SidebarNode, total int, typeID
 				<a
 					href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/entities/%s", cc.Campaign.ID, entity.ID)) }
 					class={
-						"sidebar-nav-glow sidebar-tree-item flex items-center mx-2 px-2.5 py-1.5 rounded-md text-sm transition-all text-sidebar-text hover:text-sidebar-active group",
+						"sidebar-tree-item tree-row is-page",
 						templ.KV("opacity-40", hiddenIDs[entity.ID]),
 					}
 					data-entity-id={ entity.ID }
@@ -80,14 +77,9 @@ templ SidebarEntityList(results []Entity, nodes []SidebarNode, total int, typeID
 					}
 					draggable="true"
 				>
-					<span
-						class="sidebar-tree-icon w-4 h-4 flex items-center justify-center mr-2 shrink-0 text-gray-500 group-hover:text-gray-300 transition-colors"
-					>
-						<i class="fa-solid fa-file-lines text-[10px]"></i>
-					</span>
-					<span class="flex-1 truncate text-xs font-medium">{ entity.Name }</span>
+					<span class="tree-lb">{ entity.Name }</span>
 					if hiddenIDs[entity.ID] {
-						<i class="fa-solid fa-eye-slash text-[9px] text-gray-600 ml-1 shrink-0"></i>
+						<i class="fa-solid fa-eye-slash tree-hid" title="Hidden from players"></i>
 					}
 				</a>
 			}

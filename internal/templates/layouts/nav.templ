@@ -1,17 +1,22 @@
-// nav.templ draws a campaign's sidebar: the brand row, then one scrolling
-// list of Dashboard, Pinned, Apps, Categories (with sub-category rows), the
-// owner's own sections and, for members, Manage. Every section but Pinned
-// folds under its heading. The rows arrive already cut down for the viewer
-// (GetNavSections); where the viewer is comes from nav_state.go.
-// sidebar_nav.js runs the folds, the living ring and the phone drawer.
-
+// nav.templ draws a campaign's sidebar in two parts under the brand row.
+// campaignNavTop is fixed: Dashboard, Pinned, Apps, never covered and never
+// scrolled away by the categories area below it. campaignNavCategories is
+// its own scroller: the Categories heading, All Pages, the category rows,
+// the owner's own sections and, for members, Manage — with the drill panel
+// (nav-drill) laid over it, so drilling into a category never touches the
+// fixed part above. Every folding section but Pinned folds under its
+// heading. Rows arrive already cut down for the viewer (GetNavSections);
+// where the viewer is comes from nav_state.go. sidebar_nav.js runs the
+// folds, the living ring and the phone drawer; sidebar_drill.js runs the
+// panel.
 package layouts
 
 import "fmt"
 import "strconv"
 
 // campaignNavBrand is the sidebar's top row: the campaign's logo and name,
-// the owner's pencil and, on a phone, close.
+// and, on a phone, close. Editing the sidebar lives in the footer instead,
+// so this row stays the owner's to customise (logo, name) without it.
 templ campaignNavBrand() {
 	<div class="nav-brand">
 		<a href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s", GetCampaignID(ctx))) } class="nav-brand-link">
@@ -22,19 +27,6 @@ templ campaignNavBrand() {
 			}
 			<span class="nav-brand-name">{ GetDisplayName(ctx) }</span>
 		</a>
-		if NavCanEdit(ctx) {
-			<button
-				type="button"
-				class="nav-ibtn nav-edit-btn"
-				data-sidebar-edit-toggle
-				aria-pressed="false"
-				aria-label="Edit the sidebar"
-				title="Edit the sidebar"
-				@click="$dispatch('chronicle:toggle-sidebar-editor')"
-			>
-				<i class="fa-solid fa-pencil" aria-hidden="true"></i>
-			</button>
-		}
 		<button
 			type="button"
 			class="nav-ibtn nav-x-close"
@@ -46,41 +38,83 @@ templ campaignNavBrand() {
 	</div>
 }
 
-// campaignNavList is the one scrolling list. It is boosted, so moving between
-// campaign pages swaps only the page and the sidebar (and its ring) stays.
-// The owner's copy also carries the whole arrangement for the editor.
-templ campaignNavList() {
+// campaignNavTop is the fixed block: Dashboard, My Characters, Pinned, Apps.
+// It sizes to its own content and never scrolls with the categories area; a
+// safety-valve scroll of its own only engages past about half the sidebar's
+// height (see .nav-top in input.css). It shares hx-boost with the
+// categories nav below so either half's links still swap #main-content.
+templ campaignNavTop() {
 	<nav
-		id="sidebar-nav"
-		class="nav-scroll"
+		id="sidebar-nav-top"
+		class="nav-top"
 		aria-label="Campaign"
-		data-nav-base={ fmt.Sprintf("/campaigns/%s", GetCampaignID(ctx)) }
-		if edit := NavEditJSON(ctx); edit != "" {
-			data-nav-edit={ edit }
-		}
 		hx-boost="true"
 		hx-target="#main-content"
 		hx-select="#main-content"
 		hx-swap="innerHTML show:window:top"
 	>
-		<div class="nav-list" id="sidebar-nav-list">
+		<div class="nav-list" id="sidebar-nav-top-list">
 			@navFixedRow("dashboard", "Dashboard", "fa-house", fmt.Sprintf("/campaigns/%s", GetCampaignID(ctx)), "")
 			if navShowsMe(ctx) {
 				@navFixedRow("me", "My Characters", "fa-user-shield", fmt.Sprintf("/campaigns/%s/me", GetCampaignID(ctx)), "You")
 			}
 			for _, sec := range GetNavSections(ctx) {
-				@navSection(sec)
-			}
-			if len(NavManageRows(ctx)) > 0 {
-				@navManage()
-			}
-			if GetIsAdmin(ctx) {
-				<div class="nav-admin">
-					@AdminSidebarNav()
-				</div>
+				if sec.Kind == "pinned" || sec.Kind == "apps" {
+					@navSection(sec)
+				}
 			}
 		</div>
 	</nav>
+}
+
+// campaignNavCategories is the categories area: its own scroller, with the
+// drill panel (nav-drill) positioned over it. Clicking a category row slides
+// the panel across this area only — campaignNavTop above is never touched.
+// A full page load on a category's own page (or a sub-category's) paints the
+// panel already open (NavActiveDrillSlug), so nothing pops in after a click.
+templ campaignNavCategories() {
+	<div class="nav-cat-zone">
+		<nav
+			id="sidebar-nav"
+			class="nav-scroll"
+			aria-label="Categories"
+			data-nav-base={ fmt.Sprintf("/campaigns/%s", GetCampaignID(ctx)) }
+			if edit := NavEditJSON(ctx); edit != "" {
+				data-nav-edit={ edit }
+			}
+			hx-boost="true"
+			hx-target="#main-content"
+			hx-select="#main-content"
+			hx-swap="innerHTML show:window:top"
+		>
+			<div class="nav-list" id="sidebar-nav-list">
+				for _, sec := range GetNavSections(ctx) {
+					if sec.Kind == "categories" || sec.Kind == "custom" {
+						@navSection(sec)
+					}
+				}
+				if len(NavManageRows(ctx)) > 0 {
+					@navManage()
+				}
+				if GetIsAdmin(ctx) {
+					<div class="nav-admin">
+						@AdminSidebarNav()
+					</div>
+				}
+			</div>
+		</nav>
+		<div
+			class={ "nav-drill", templ.KV("is-open", NavActiveDrillSlug(ctx) != "") }
+			id="sidebar-drill"
+			data-drill-base={ fmt.Sprintf("/campaigns/%s/sidebar/drill/", GetCampaignID(ctx)) }
+		>
+			<div id="sidebar-cat-content">
+				if slug := NavActiveDrillSlug(ctx); slug != "" {
+					@SidebarDrillFragment(slug)
+				}
+			</div>
+		</div>
+	</div>
 }
 
 // navSection draws one section. Pinned has a plain heading and is left out
@@ -206,9 +240,26 @@ templ navSubsFold(row NavRowView) {
 }
 
 // navRow is one app, category, link or Manage row. A row hidden from players
-// is only ever given to the owner, who sees it dimmed and marked.
+// is only ever given to the owner, who sees it dimmed and marked. A category
+// never navigates on its own click — it slides the drill panel over the
+// categories area instead (sidebar_drill.js); the category's own page stays
+// reachable from the panel header's name.
 templ navRow(row NavRowView) {
-	if row.Kind == "link" {
+	if row.Kind == "category" {
+		<button
+			type="button"
+			class={ "nav-row", templ.KV("is-hidden", row.Hidden) }
+			data-nav-key={ row.Key }
+			data-nav-tr={ navRowTrail(row) }
+			data-drill-open={ navDrillURL(ctx, row.TypeID) }
+			aria-haspopup="true"
+			if NavIsCurrent(ctx, row.Key) {
+				aria-current="page"
+			}
+		>
+			@navRowInner(row)
+		</button>
+	} else if row.Kind == "link" {
 		<a
 			href={ safeExternalURL(row.URL) }
 			class={ "nav-row", templ.KV("is-hidden", row.Hidden) }
@@ -345,14 +396,29 @@ templ navManage() {
 }
 
 // campaignNavFooter keeps the ways out of the campaign (every campaign, and
-// the public Discover page) and the buttons that fold the sidebar to icons or
-// hide it, which would crowd the campaign's name in the brand row.
+// the public Discover page), the owner's labelled Edit button (moved here
+// from the brand row) and the buttons that fold the sidebar to icons or hide
+// it.
 templ campaignNavFooter() {
 	<div class="nav-foot">
-		<a href="/campaigns" hx-boost="false">All campaigns</a>
+		<a href="/campaigns" hx-boost="false">Campaigns</a>
 		<span aria-hidden="true">·</span>
 		<a href="/" hx-boost="false">Discover</a>
 		<span class="nav-foot-gap"></span>
+		if NavCanEdit(ctx) {
+			<button
+				type="button"
+				class="nav-foot-edit nav-edit-btn"
+				data-sidebar-edit-toggle
+				aria-pressed="false"
+				aria-label="Edit the sidebar"
+				title="Edit the sidebar"
+				@click="$dispatch('chronicle:toggle-sidebar-editor')"
+			>
+				<i class="fa-solid fa-pencil" aria-hidden="true"></i>
+				<span>Edit</span>
+			</button>
+		}
 		<button
 			type="button"
 			class="nav-ibtn nav-ibtn-sm sidebar-pin-btn"
