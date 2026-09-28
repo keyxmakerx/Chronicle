@@ -296,16 +296,12 @@ func parseChronicle(data []byte) (*ImportResult, error) {
 		result.Eras = append(result.Eras, normalizeEraStart(EraInput(e)))
 	}
 
-	// Copy cycles (with their entries) and festivals (#771): the export
-	// already writes both (see BuildExport), but ImportResult had nowhere to
-	// carry them onward from here, so a Chronicle export/import round trip
-	// silently dropped them — the header's "round-trips perfectly" claim.
+	// Copy cycles (with their entries) and festivals, which BuildExport
+	// writes, so a Chronicle export re-imports whole.
 	for _, c := range export.Calendar.Cycles {
 		ci := CycleInput{Name: c.Name, CycleLength: c.CycleLength, Type: c.Type, SortOrder: c.SortOrder}
 		for _, e := range c.Entries {
-			ci.Entries = append(ci.Entries, CycleEntryInput{
-				Name: e.Name, Icon: e.Icon, YearOffset: e.YearOffset, SortOrder: e.SortOrder,
-			})
+			ci.Entries = append(ci.Entries, CycleEntryInput(e))
 		}
 		result.Cycles = append(result.Cycles, ci)
 	}
