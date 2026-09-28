@@ -153,6 +153,12 @@ func TestPresetFacts(t *testing.T) {
 	if got != want {
 		t.Errorf("presetFacts() = %q, want %q", got, want)
 	}
+
+	// The blank preset has one month: its card must not read "1 months".
+	one := &ImportResult{Months: []MonthInput{{Days: 30}}, Weekdays: make([]WeekdayInput, 10), Seasons: []Season{{}}}
+	if got, want := presetFacts(one), "1 month, 30 days · 10-day weeks · 1 season"; got != want {
+		t.Errorf("presetFacts(one month) = %q, want %q", got, want)
+	}
 }
 
 func TestMonthBarWidths_SumsToWhole(t *testing.T) {

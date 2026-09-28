@@ -139,24 +139,25 @@ func presetFacts(ir *ImportResult) string {
 		totalDays += m.Days
 	}
 	parts := []string{
-		fmt.Sprintf("%d months, %d days", len(ir.Months), totalDays),
+		fmt.Sprintf("%d %s, %d %s", len(ir.Months), nounFor(len(ir.Months), "month", "months"), totalDays, nounFor(totalDays, "day", "days")),
 		fmt.Sprintf("%d-day weeks", len(ir.Weekdays)),
 	}
 	if n := len(ir.Moons); n > 0 {
-		if n == 1 {
-			parts = append(parts, "1 moon")
-		} else {
-			parts = append(parts, fmt.Sprintf("%d moons", n))
-		}
+		parts = append(parts, fmt.Sprintf("%d %s", n, nounFor(n, "moon", "moons")))
 	}
 	if n := len(ir.Seasons); n > 0 {
-		if n == 1 {
-			parts = append(parts, "1 season")
-		} else {
-			parts = append(parts, fmt.Sprintf("%d seasons", n))
-		}
+		parts = append(parts, fmt.Sprintf("%d %s", n, nounFor(n, "season", "seasons")))
 	}
 	return strings.Join(parts, " · ")
+}
+
+// nounFor is the noun to print after a count: one for exactly 1, many
+// otherwise, so a count never reads "1 months".
+func nounFor(n int, one, many string) string {
+	if n == 1 {
+		return one
+	}
+	return many
 }
 
 // monthBarWidths returns each month's share of the year as a percentage
