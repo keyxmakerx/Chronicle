@@ -1233,10 +1233,10 @@ type UpdateCalendarInput struct {
 	// never touched by this field.
 	Hemisphere patch.Field[string]
 	// ForecastsEnabled/MonthStartsNewWeek mirror the two Calendar fields of
-	// the same name (#805: added so the campaign-backup importer can
-	// restore them — CreateCalendarInput has no field for either, the same
-	// reason CreateCalendarFromImport patches Hemisphere/ForecastsEnabled/
-	// MonthStartsNewWeek onto the row directly after CreateCalendar).
+	// the same name, so the campaign-backup importer can restore them:
+	// CreateCalendarInput has no field for either, the same reason
+	// CreateCalendarFromImport patches Hemisphere/ForecastsEnabled/
+	// MonthStartsNewWeek onto the row directly after CreateCalendar.
 	ForecastsEnabled   patch.Field[bool]
 	MonthStartsNewWeek patch.Field[bool]
 	// SetRealTime is nil for every caller that does not manage the flag (e.g.
@@ -1358,10 +1358,11 @@ type WeekdayInput struct {
 // MoonInput is the input for creating/updating a moon.
 //
 // BaseDesign/Tint/PhaseSource/Size/OrbitSpeed are the sky-pane render
-// params (mirroring Moon's own doc comment); zero-valued fields (an input
-// built before a caller set them, e.g. the calendar-native and campaign
-// importers before #805) fall back through upsertMoons to the same DB
-// column defaults a hand-created moon gets, never an empty/invalid render.
+// params (mirroring Moon's own doc comment); an input built by a caller
+// that doesn't set them (the calendar-native and campaign importers) is
+// zero-valued for these fields, and upsertMoons falls back through to the
+// same DB column defaults a hand-created moon gets, never an empty/invalid
+// render.
 type MoonInput struct {
 	// ID is nil for a new moon, or an existing calendar_moons id to update in
 	// place. SetMoons upserts on it, so an id present in the calendar but

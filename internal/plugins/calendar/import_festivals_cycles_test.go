@@ -1,11 +1,10 @@
-// import_festivals_cycles_test.go pins #771: a Chronicle export that
+// import_festivals_cycles_test.go pins that a Chronicle export that
 // includes cycles and festivals, re-imported through the same DetectAndParse
-// path an upload or a preset goes through, must carry those two
-// sub-resources back — parseChronicle's own doc comment already promised
-// "round-trips perfectly", which was only true of months/weekdays/moons/
-// seasons/eras before this fix. Calendaria's own festivals (a separate
-// format, parsed into calData.Festivals and then never read) get their own
-// test below.
+// path an upload or a preset goes through, carries those two sub-resources
+// back — parseChronicle's own doc comment promises "round-trips perfectly",
+// which covers months/weekdays/moons/seasons/eras and these two. Calendaria's
+// own festivals (a separate format, parsed into calData.Festivals) get their
+// own test below.
 package calendar
 
 import (
@@ -111,17 +110,16 @@ func TestChronicleExportImport_CyclesAndFestivalsRoundTrip(t *testing.T) {
 		t.Errorf("Yearless Day lost its description: %+v", yearless.Description)
 	}
 
-	// The calendar's own current date round-trips too (#772's "world's date"
-	// item), belt-and-braces alongside the cycles/festivals this test exists
-	// for.
+	// The calendar's own current date round-trips too, belt-and-braces
+	// alongside the cycles/festivals this test exists for.
 	if ir.Today.Year != 100 || ir.Today.Month == nil || *ir.Today.Month != 3 || ir.Today.Day == nil || *ir.Today.Day != 12 {
 		t.Errorf("ir.Today = %+v, want {100, 3, 12}", ir.Today)
 	}
 }
 
-// TestCalendariaImport_FestivalsSurvive pins the other half of #771:
-// Calendaria's own festivals (a distinct format from Chronicle's own) were
-// parsed into calData.Festivals and then never read into the result at all.
+// TestCalendariaImport_FestivalsSurvive pins that Calendaria's own festivals
+// (a distinct format from Chronicle's own), parsed into calData.Festivals,
+// reach the imported result.
 func TestCalendariaImport_FestivalsSurvive(t *testing.T) {
 	raw := []byte(`{
 		"name": "Calendaria Test",

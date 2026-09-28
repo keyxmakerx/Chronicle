@@ -266,21 +266,20 @@ type CalendarService interface {
 	// and the calendar plugin's own native/Simple-Calendar/Calendaria import
 	// (internal/plugins/calendar/import.go), neither of which has a stored
 	// row per item to update incrementally the way CreateEra/CreateEventKind
-	// do. Not wired to any HTTP route yet (calendar-v5 slice 2, #741) —
-	// calendar-settings editing UI is a later slice — so today's only
-	// callers are trusted in-process ones; a caller reaching these through a
-	// future HTTP handler must still be gated there. Whether that gate is
-	// Owner-only or CanAuthorDmOnly (like eras/event kinds/the moon hidden
-	// flag above) is this future slice's own decision, not assumed here.
+	// do. Not wired to any HTTP route yet — calendar-settings editing UI is
+	// a later slice — so today's only callers are trusted in-process ones; a
+	// caller reaching these through a future HTTP handler must still be
+	// gated there. Whether that gate is Owner-only or CanAuthorDmOnly (like
+	// eras/event kinds/the moon hidden flag above) is this future slice's
+	// own decision, not assumed here.
 	SetMonths(ctx context.Context, calendarID, campaignID string, months []MonthInput) error
 	SetWeekdays(ctx context.Context, calendarID, campaignID string, weekdays []WeekdayInput) error
 	SetMoons(ctx context.Context, calendarID, campaignID string, moons []MoonInput) error
 	SetSeasons(ctx context.Context, calendarID, campaignID string, seasons []Season) error
 	// SetCycles/SetFestivals/SetWeather are the same bulk-replace shape as
-	// the four above, added for the campaign-backup importer (#805): the
-	// repository side (CalendarRepository.SetCycles/SetFestivals,
-	// WeatherRepository.Set) already existed but had no service-level
-	// caller reachable from outside this package.
+	// the four above, giving the campaign-backup importer a service-level
+	// caller for the repository side (CalendarRepository.SetCycles/
+	// SetFestivals, WeatherRepository.Set) from outside this package.
 	SetCycles(ctx context.Context, calendarID, campaignID string, cycles []CycleInput) error
 	SetFestivals(ctx context.Context, calendarID, campaignID string, festivals []FestivalInput) error
 	SetWeather(ctx context.Context, calendarID, campaignID string, input WeatherInput) error
@@ -298,8 +297,8 @@ type CalendarService interface {
 
 	// SearchCalendarEvents implements entities.CalendarSearcher (wired from
 	// internal/app/routes.go): campaign-wide calendar-event search results
-	// for the global quick-search popup (calendar-v5 seams, #778). Role-only
-	// picker convention, matching CalendarEventLister's shape in
+	// for the global quick-search popup. Role-only picker convention,
+	// matching CalendarEventLister's shape in
 	// internal/plugins/timeline/service.go: the interface carries no
 	// per-request user id, so a calendar's own visibility_rules allow/deny
 	// list is not evaluated — only role-level dm_only gating, at both the
@@ -2157,11 +2156,12 @@ func (s *calendarService) SetFestivals(ctx context.Context, calendarID, campaign
 	return s.calRepo.SetFestivals(ctx, calendarID, festivals)
 }
 
-// SetWeather replaces calendarID's current weather reading. Before #805 this
-// was reachable only as weatherRepo.Get inside loadSubresources (read-only,
-// see .ai.md "Honest gaps" — painting/generation is separate, unbuilt work,
-// #765); this is only the plumbing the campaign-backup importer needs to
-// restore a reading a GM had already set before the backup.
+// SetWeather replaces calendarID's current weather reading. Reading a
+// calendar's weather goes through weatherRepo.Get inside loadSubresources
+// (read-only, see .ai.md "Honest gaps" — painting/generation is separate,
+// unbuilt work); SetWeather is only the plumbing the campaign-backup
+// importer needs to restore a reading a GM had already set before the
+// backup.
 func (s *calendarService) SetWeather(ctx context.Context, calendarID, campaignID string, input WeatherInput) error {
 	if _, err := s.calendarInCampaign(ctx, calendarID, campaignID); err != nil {
 		return err

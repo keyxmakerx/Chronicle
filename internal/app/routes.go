@@ -3012,11 +3012,11 @@ func (a *App) RegisterRoutes() {
 	// entity-type template → default).
 	widgetRegistry := widgetbindings.NewRegistry()
 	widgetRegistry.Register(timeline.NewTimelineWidgetType(timelineSvc))
-	// calendar/worldstate: re-registered (calendar-v5 seams, #778). A GM's
-	// existing entity→calendar bindings from before these were registered
-	// survived the blackout untouched (service.Sweep skips widget types it
-	// does not know) and resolve again now that InstanceExists can answer
-	// for them.
+	// Registers the calendar and worldstate widget types. service.Sweep
+	// skips widget types it does not recognize rather than deleting their
+	// bindings, so a GM's entity→calendar bindings persist across any gap
+	// in these types' registration and resolve again once InstanceExists
+	// can answer for them.
 	widgetRegistry.Register(calendar.NewCalendarWidgetType(calendarService))
 	widgetRegistry.Register(calendar.NewWorldstateWidgetType(calendarService))
 	// maps registers with no campaign default — the legacy entity.map_id
@@ -3098,19 +3098,18 @@ func (a *App) RegisterRoutes() {
 		},
 	}, func(ctx entities.BlockRenderContext) templ.Component {
 		// Reuses the calendar plugin's own hx-get fragment, the same one
-		// the dashboard/category "Upcoming Events" cards lazy-load
-		// (calendar-v5 seams, #778) — see upcoming_events_block.templ.
+		// the dashboard/category "Upcoming Events" cards lazy-load — see
+		// upcoming_events_block.templ.
 		limit := entities.BlockConfigLimit(ctx.Block.Config, "limit", 5)
 		return upcomingEventsBlockShell(ctx.CC.Campaign.ID, limit)
 	})
 	// entity_calendar — the entity-page calendar embed, bindable to any of
 	// the campaign's calendars (widgetbindings). Singleton per page (the
 	// swap target is a fixed DOM id). Renders that calendar's upcoming
-	// events — calendar.calendarWidgetType's doc comment says why that is
-	// the honest version rather than the fuller "ambient band + this
-	// entity's linked events" engine the description used to promise.
-	// Distinct from calendar_preview (dashboard upcoming-events card) by
-	// design.
+	// events only — calendar.calendarWidgetType's doc comment says why
+	// that is the honest scope rather than a fuller "ambient band + this
+	// entity's linked events" engine. Distinct from calendar_preview
+	// (dashboard upcoming-events card) by design.
 	blockRegistry.Register(entities.BlockMeta{
 		Type: "entity_calendar", Label: "Calendar (this entity)", Icon: "fa-calendar-days",
 		Description: "Upcoming events for a bound calendar",
@@ -3122,8 +3121,8 @@ func (a *App) RegisterRoutes() {
 	// entity_worldstate — the entity-page/dashboard sky embed, bindable to
 	// any of the campaign's calendars (widgetbindings). Singleton like
 	// entity_calendar. calendar.worldstateWidgetType's doc comment says why
-	// this renders sky only, not yet the hourglass shelf the description
-	// used to promise (real UI work of its own).
+	// this renders sky only, not yet the hourglass shelf (real UI work of
+	// its own).
 	blockRegistry.Register(entities.BlockMeta{
 		Type: "entity_worldstate", Label: "Worldstate timepiece", Icon: "fa-hourglass-half",
 		Description: "Ambient sky for the current world date",

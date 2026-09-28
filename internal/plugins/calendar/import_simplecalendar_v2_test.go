@@ -1,15 +1,13 @@
-// import_simplecalendar_v2_test.go pins two #772 fixes specific to the
-// Simple Calendar format: a moon's firstNewMoon actually contributing to its
-// phase offset (alongside the already-applied cycleDayAdjust), and a
-// weekday's restday surviving import.
+// import_simplecalendar_v2_test.go pins parsing specific to the Simple
+// Calendar format: a moon's firstNewMoon contributing to its phase offset
+// alongside cycleDayAdjust, and a weekday's restday surviving import.
 package calendar
 
 import "testing"
 
-// TestParseSimpleCalendar_MoonPhaseOffsetFromFirstNewMoon pins #772:
-// firstNewMoon was parsed into scFirstNewMoon and then discarded — only
-// cycleDayAdjust reached PhaseOffset. The fix combines both: the moon must
-// read as a New Moon on (firstNewMoon + cycleDayAdjust days).
+// TestParseSimpleCalendar_MoonPhaseOffsetFromFirstNewMoon pins that
+// firstNewMoon (scFirstNewMoon) and cycleDayAdjust combine into PhaseOffset:
+// the moon reads as a New Moon on (firstNewMoon + cycleDayAdjust days).
 func TestParseSimpleCalendar_MoonPhaseOffsetFromFirstNewMoon(t *testing.T) {
 	raw := []byte(`{
 		"calendar": {
@@ -43,8 +41,8 @@ func TestParseSimpleCalendar_MoonPhaseOffsetFromFirstNewMoon(t *testing.T) {
 	}
 }
 
-// TestParseSimpleCalendar_WeekdayRestDaySurvives pins #772's rest-day fix:
-// restday was parsed into scWeekday.Restday and then discarded.
+// TestParseSimpleCalendar_WeekdayRestDaySurvives pins that a weekday's
+// restday survives from scWeekday.Restday into the imported result.
 func TestParseSimpleCalendar_WeekdayRestDaySurvives(t *testing.T) {
 	raw := []byte(`{
 		"calendar": {

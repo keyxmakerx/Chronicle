@@ -60,11 +60,11 @@ func TestCalendar_MonthDays_UsesTrueGregorianRule(t *testing.T) {
 	}
 }
 
-// TestCalendar_TracksRealTimeIsWireExposed pins TracksRealTime onto the JSON
-// wire: it used to be tagged json:"-" (server-only), so a browser-side mirror
-// of UsesRealTime could only key on Mode, never on this flag, and diverged
-// from Calendar.UsesRealTime — which requires both — for a manual real-world
-// calendar. The browser needs the flag on the wire to agree with the server.
+// TestCalendar_TracksRealTimeIsWireExposed pins that TracksRealTime is
+// exposed on the JSON wire (not tagged json:"-"), so a browser-side mirror
+// of UsesRealTime can key on both Mode and this flag, matching
+// Calendar.UsesRealTime — which requires both — for a manual real-world
+// calendar.
 func TestCalendar_TracksRealTimeIsWireExposed(t *testing.T) {
 	tests := []struct {
 		name string

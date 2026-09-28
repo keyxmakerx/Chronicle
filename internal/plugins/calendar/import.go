@@ -53,10 +53,10 @@ type ImportResult struct {
 	Moons        []MoonInput    `json:"moons"`
 	Seasons      []Season       `json:"seasons"`
 	Eras         []EraInput     `json:"eras"`
-	// Cycles and Festivals are Chronicle-native sub-resources (#771):
-	// parseChronicle is the only parser that populates Cycles (no external
-	// format models a repeating named cycle); Calendaria also carries
-	// festivals of its own, read into Festivals alongside Chronicle's.
+	// Cycles and Festivals are Chronicle-native sub-resources: parseChronicle
+	// is the only parser that populates Cycles (no external format models a
+	// repeating named cycle); Calendaria also carries festivals of its own,
+	// read into Festivals alongside Chronicle's.
 	Cycles    []CycleInput     `json:"cycles,omitempty"`
 	Festivals []FestivalInput  `json:"festivals,omitempty"`
 	Settings  ImportedSettings `json:"settings"`
@@ -606,8 +606,8 @@ func parseSimpleCalendarInner(cal scCalendar) (*ImportResult, error) {
 		})
 	}
 
-	// Moons — cycleLength maps to CycleDays. PhaseOffset (#772) is derived
-	// from firstNewMoon (the date Simple Calendar itself calls this moon's
+	// Moons — cycleLength maps to CycleDays. PhaseOffset is derived from
+	// firstNewMoon (the date Simple Calendar itself calls this moon's
 	// reference new moon), plus cycleDayAdjust as an additional manual
 	// shift on top of it — the same two knobs Simple Calendar's own phase
 	// math combines; month/day are 0-indexed like every other Simple
@@ -785,11 +785,9 @@ type calLeapYr2 struct {
 type calLeapYear struct {
 	Rule  string `json:"rule"` // an older/alternate Calendaria export shape: "none", "gregorian", "custom"
 	Start int    `json:"start"`
-	// Enabled/Interval/Offset is Calendaria's current export shape (#772):
-	// confirmed against the shipped Elven preset (presets/elven.json), whose
-	// leapYearConfig carries these three keys, never rule/start — so the
-	// Elven preset's leap year (one every 8 years) was silently read as
-	// LeapYearEvery=0 (no leap years at all) before this was read too.
+	// Enabled/Interval/Offset is Calendaria's current export shape: confirmed
+	// against the shipped Elven preset (presets/elven.json), whose
+	// leapYearConfig carries these three keys, never rule/start.
 	Enabled  bool `json:"enabled"`
 	Interval int  `json:"interval"`
 	Offset   int  `json:"offset"`
@@ -997,10 +995,9 @@ func parseCalendaria(data []byte) (*ImportResult, error) {
 	}
 
 	// Leap year — check every shape Calendaria has been seen to export.
-	// enabled/interval/offset (#772) is tried first since it's the one
-	// confirmed against a real file (the shipped Elven preset); the other
-	// two are older/alternate shapes kept as fallbacks for files that don't
-	// carry it, so this is purely additive over the previous behavior.
+	// enabled/interval/offset is tried first since it's the one confirmed
+	// against a real file (the shipped Elven preset); the other two are
+	// older/alternate shapes kept as fallbacks for files that don't carry it.
 	switch {
 	case cal.LeapYearConfig.Enabled && cal.LeapYearConfig.Interval > 0:
 		result.Settings.LeapYearEvery = cal.LeapYearConfig.Interval
@@ -1102,9 +1099,8 @@ func parseCalendaria(data []byte) (*ImportResult, error) {
 	})
 
 	for _, m := range moonList {
-		// PhaseOffset (#772) is derived from referenceDate, the date
-		// Calendaria itself calls this moon's reference new moon — it was
-		// already parsed into calMoon.ReferenceDate and then discarded.
+		// PhaseOffset is derived from referenceDate — calMoon.ReferenceDate,
+		// the date Calendaria itself calls this moon's reference new moon.
 		result.Moons = append(result.Moons, MoonInput{
 			Name:      stripLocalizationKey(m.val.Name),
 			CycleDays: m.val.CycleLength,
@@ -1210,11 +1206,9 @@ func parseCalendaria(data []byte) (*ImportResult, error) {
 		}))
 	}
 
-	// Festivals (#771): cal.Festivals was already parsed above but never
-	// read into the result, so every Calendaria festival was silently
-	// dropped on import. Object map, so sort by (month, day) then the
-	// authored key for a total order over Go's randomised map iteration —
-	// the same reasoning eraList/moonList/seasonList use above.
+	// Festivals: cal.Festivals is an object map, so sort by (month, day)
+	// then the authored key for a total order over Go's randomised map
+	// iteration — the same reasoning eraList/moonList/seasonList use above.
 	type festivalEntry struct {
 		key string
 		val calFestival
@@ -1441,8 +1435,8 @@ func parseFantasyCalendar(data []byte) (*ImportResult, error) {
 	}
 
 	// Moons. A moon Fantasy-Calendar marks hidden (from its own players) is
-	// imported as Director-only (#772) rather than dropped outright — the
-	// GM who authored it presumably still wants it on their own calendar.
+	// imported as Director-only rather than dropped outright — the GM who
+	// authored it presumably still wants it on their own calendar.
 	for _, m := range fc.StaticData.Moons {
 		result.Moons = append(result.Moons, MoonInput{
 			Name:              m.Name,
@@ -1495,9 +1489,9 @@ func parseFantasyCalendar(data []byte) (*ImportResult, error) {
 
 	// Eras. Date.Timespan/Date.Day are 0-indexed, like every other
 	// Fantasy-Calendar month-index/day field in this parser (DynamicData.
-	// Timespan/Day above, LeapDay.Timespan) — #772: only StartYear was kept
-	// before, so every imported era started on "month 1 day 1" of its year
-	// regardless of the day it actually began on.
+	// Timespan/Day above, LeapDay.Timespan). Each era keeps its month/day,
+	// not just StartYear, so it starts on the day it actually began rather
+	// than defaulting to "month 1 day 1".
 	for i, e := range fc.StaticData.Eras {
 		var desc *string
 		if e.Description != "" {
@@ -1587,10 +1581,9 @@ func roundFloat(f float64, n int) float64 {
 
 // moonPhaseOffsetFromReference derives a moon's PhaseOffset from a reference
 // "new moon" date the source format states explicitly (Calendaria's
-// referenceDate, Simple Calendar's firstNewMoon) — #772: both were already
-// parsed and then discarded, so every moon from those two formats started
-// its cycle on whatever night absolute day 0 happened to be, not the night
-// the source calendar actually named. adjust folds in an already-known extra
+// referenceDate, Simple Calendar's firstNewMoon), so the moon's cycle
+// anchors on the night the source calendar actually named, not on whatever
+// night absolute day 0 happens to be. adjust folds in an already-known extra
 // day shift (Simple Calendar's own cycleDayAdjust knob, on top of its
 // firstNewMoon date); pass 0 for a format with no such knob (Calendaria).
 //

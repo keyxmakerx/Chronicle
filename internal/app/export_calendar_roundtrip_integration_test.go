@@ -266,8 +266,8 @@ func TestCalendarCampaignExportImport_DBRoundTrip(t *testing.T) {
 		t.Errorf("imported calendar lost forecasts_enabled/month_starts_new_week: %v/%v", dstCal.ForecastsEnabled, dstCal.MonthStartsNewWeek)
 	}
 	// The source calendar tracks real time (set above via UpdateCalendar,
-	// unrelated to this test's #805 fields), but that must NOT reach the
-	// destination: ExportCalendarData deliberately carries no
+	// unrelated to the settings fields this test otherwise checks), but that
+	// must NOT reach the destination: ExportCalendarData deliberately carries no
 	// TracksRealTime/RealTimeZone (see its doc comment — RealTimeZone trips
 	// the scheduler-data egress guard), so a restored calendar must come
 	// back with real-time tracking off, not silently re-enabled.

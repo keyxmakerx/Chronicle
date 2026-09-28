@@ -183,8 +183,8 @@ func TestCampaignExportImport_CalendarRoundTrip(t *testing.T) {
 			CurrentHour: 14, CurrentMinute: 5,
 			HoursPerDay: 24, MinutesPerHour: 60, SecondsPerMinute: 60,
 			LeapYearEvery: 4, LeapYearOffset: 0,
-			// #805 settings: Hemisphere/ForecastsEnabled/MonthStartsNewWeek
-			// used to be dropped entirely.
+			// Settings the round trip must preserve: Hemisphere/
+			// ForecastsEnabled/MonthStartsNewWeek.
 			Hemisphere: &hemisphere, ForecastsEnabled: true, MonthStartsNewWeek: true,
 			Months: []calendar.Month{
 				{Name: "Thaw", Days: 30, SortOrder: 0},
@@ -196,8 +196,8 @@ func TestCampaignExportImport_CalendarRoundTrip(t *testing.T) {
 			Moons: []calendar.Moon{
 				{
 					ID: 1, Name: "Secret Moon", CycleDays: 29.5, Color: "#ffffff", HiddenFromPlayers: true,
-					// #805 look fields: used to be dropped, so a restored
-					// moon rendered with the library default look.
+					// Look fields the round trip must preserve, so a restored
+					// moon keeps its look instead of the library default.
 					BaseDesign: "moon-cratered", Tint: &moonTint, PhaseSource: "canvas-arc",
 					Size: 1.4, OrbitSpeed: 0.8,
 				},
@@ -211,7 +211,7 @@ func TestCampaignExportImport_CalendarRoundTrip(t *testing.T) {
 			EventKinds: []calendar.EventKind{
 				{ID: 1, Slug: "festival", Name: "Festival", Icon: "fa-star", Color: "#10b981", DefaultAnnounced: calendar.AnnouncedAhead},
 			},
-			// #805 sub-resources: used to be dropped entirely on export.
+			// Sub-resources the round trip must carry through export and import.
 			Cycles: []calendar.Cycle{
 				{Name: "Zodiac", CycleLength: 12, Type: "yearly", Entries: []calendar.CycleEntry{
 					{Name: "Rat", YearOffset: 0},
@@ -266,8 +266,8 @@ func TestCampaignExportImport_CalendarRoundTrip(t *testing.T) {
 		t.Errorf("exported era lost its day-granular start: %+v", calData.Eras)
 	}
 
-	// #805: settings, moon look fields, cycles, festivals and weather must
-	// all reach the export — none of them did before.
+	// Settings, moon look fields, cycles, festivals and weather must all
+	// reach the export.
 	if calData.Hemisphere == nil || *calData.Hemisphere != hemisphere {
 		t.Errorf("exported calendar lost its hemisphere: %+v", calData.Hemisphere)
 	}
@@ -361,10 +361,8 @@ func TestCampaignExportImport_CalendarRoundTrip(t *testing.T) {
 		t.Errorf("imported era lost its day-granular start: %+v", dst.eras)
 	}
 
-	// #805: settings, moon look fields, cycles, festivals and weather must
-	// all reach the actual service calls on import — none of them did
-	// before (ExportCalendarData had nowhere to carry them from, and
-	// CalendarService had no SetCycles/SetFestivals/SetWeather at all).
+	// Settings, moon look fields, cycles, festivals and weather must all
+	// reach the actual service calls on import.
 	if dst.created.Hemisphere == nil || *dst.created.Hemisphere != hemisphere {
 		t.Errorf("imported calendar lost its hemisphere: %+v", dst.created.Hemisphere)
 	}

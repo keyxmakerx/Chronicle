@@ -723,7 +723,7 @@ func TestCalendarService_Integration_CreateCalendarFromImport_ChronicleEventsRou
 }
 
 // TestCalendarService_Integration_CreateCalendarFromImport_CyclesAndFestivalsRoundTrip
-// (#771) is the full-stack version of
+// is the full-stack version of
 // TestChronicleExportImport_CyclesAndFestivalsRoundTrip: a calendar with a
 // cycle (and its entries) and festivals, exported, then re-imported via
 // CreateCalendarFromImport, ends up with the same cycles/festivals actually

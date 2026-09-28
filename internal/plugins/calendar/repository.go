@@ -487,11 +487,11 @@ func scanMoon(scanner interface{ Scan(...any) error }) (*Moon, error) {
 // zero value ("" / 0) would write that zero literally rather than letting
 // MySQL's DEFAULT apply — it only applies when the column is omitted from
 // the statement, not when it's given an explicit empty/zero — so every
-// MoonInput builder that predates the render params (#805; every import
-// format, the wizard's build step) would otherwise insert an invalid empty
-// design/phase-source and a zero size, instead of the sensible look a
-// hand-created moon gets. Tint has no default (NULL is a normal "no tint"
-// value) and needs no such fallback.
+// MoonInput builder that leaves the render params unset (every import
+// format, the wizard's build step) gets the sensible look a hand-created
+// moon gets, instead of an invalid empty design/phase-source and a zero
+// size. Tint has no default (NULL is a normal "no tint" value) and needs
+// no such fallback.
 func moonBaseDesignOrDefault(v string) string {
 	if v == "" {
 		return "moon-realistic-selene"
@@ -1185,8 +1185,8 @@ func (r *calendarRepo) ApplyImport(ctx context.Context, cal *Calendar, result *I
 		}
 	}
 
-	// Cycles (with their entries) and festivals (#771): same skip-when-empty
-	// rule as eras above, and the same replace-all SQL SetCycles/SetFestivals
+	// Cycles (with their entries) and festivals: same skip-when-empty rule
+	// as eras above, and the same replace-all SQL SetCycles/SetFestivals
 	// use (duplicated per this method's own doc comment, not called
 	// directly, so their transaction boundaries stay untouched by this one).
 	if len(result.Cycles) > 0 {

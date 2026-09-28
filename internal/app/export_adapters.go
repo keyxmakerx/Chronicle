@@ -326,9 +326,9 @@ func (a *calendarExportAdapter) ExportCalendar(ctx context.Context, campaignID s
 		SecondsPerMinute: cal.SecondsPerMinute,
 		LeapYearEvery:    cal.LeapYearEvery,
 		LeapYearOffset:   cal.LeapYearOffset,
-		// Additive settings (#805) — see ExportCalendarData's doc comment.
-		// TracksRealTime/RealTimeZone are deliberately NOT carried; see that
-		// same doc comment.
+		// Hemisphere/ForecastsEnabled/MonthStartsNewWeek are additive settings
+		// on ExportCalendarData — see its doc comment. TracksRealTime/
+		// RealTimeZone are deliberately not carried; see that same comment.
 		Hemisphere:         cal.Hemisphere,
 		ForecastsEnabled:   cal.ForecastsEnabled,
 		MonthStartsNewWeek: cal.MonthStartsNewWeek,
@@ -378,8 +378,8 @@ func (a *calendarExportAdapter) ExportCalendar(ctx context.Context, campaignID s
 		})
 	}
 
-	// Cycles/Festivals/Weather (#805) — cal already carries these eager-
-	// loaded sub-resources (GetCalendarForViewer / GetDefaultCalendarForViewer),
+	// Cycles/Festivals/Weather: cal already carries these eager-loaded
+	// sub-resources (GetCalendarForViewer / GetDefaultCalendarForViewer),
 	// same as Months/Weekdays/Moons/Seasons/Eras above.
 	for _, c := range cal.Cycles {
 		ec := campaigns.ExportCalendarCycle{
@@ -1270,10 +1270,10 @@ func (a *calendarImportAdapter) ImportCalendar(ctx context.Context, campaignID s
 			moons[i] = calendar.MoonInput{
 				Name: m.Name, CycleDays: m.CycleDays, PhaseOffset: m.PhaseOffset,
 				Color: m.Color, HiddenFromPlayers: importMoonHidden(m.HiddenFromPlayers),
-				// Render params (#805): zero-valued for a pre-#805 backup,
-				// which upsertMoons' own insert-time fallback reads the same
-				// way a hand-created moon's would be — never an empty/
-				// invalid look.
+				// Render params: zero-valued when absent from the import data.
+				// upsertMoons' own insert-time fallback treats that the same
+				// way it would a hand-created moon's zero value — never an
+				// empty/invalid look.
 				BaseDesign: m.BaseDesign, Tint: m.Tint, PhaseSource: m.PhaseSource,
 				Size: m.Size, OrbitSpeed: m.OrbitSpeed,
 			}
@@ -1298,7 +1298,7 @@ func (a *calendarImportAdapter) ImportCalendar(ctx context.Context, campaignID s
 		}
 	}
 
-	// Cycles/Festivals/Weather (#805): same bulk-replace shape as
+	// Cycles/Festivals/Weather: same bulk-replace shape as
 	// months/weekdays/moons/seasons above.
 	if len(data.Cycles) > 0 {
 		cycles := make([]calendar.CycleInput, len(data.Cycles))
@@ -1388,7 +1388,7 @@ func (a *calendarImportAdapter) ImportCalendar(ctx context.Context, campaignID s
 	}
 
 	// Set current date/time (CreateCalendar only takes CurrentYear) plus the
-	// settings (#805) CreateCalendarInput has no field for: Hemisphere/
+	// settings CreateCalendarInput has no field for: Hemisphere/
 	// ForecastsEnabled/MonthStartsNewWeek. A full restore of an already-
 	// exported row, so every field is sent PRESENT — the same reasoning the
 	// entity/session importers already use elsewhere in this file (an

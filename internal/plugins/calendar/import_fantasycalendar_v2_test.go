@@ -1,4 +1,4 @@
-// import_fantasycalendar_v2_test.go pins two #772 fixes specific to the
+// import_fantasycalendar_v2_test.go pins parsing specific to the
 // Fantasy-Calendar.com format: a moon marked hidden imports as Director-only
 // rather than being dropped, and an era's start month/day survive import
 // instead of collapsing to "month 1, day 1" of its start year.
@@ -6,10 +6,9 @@ package calendar
 
 import "testing"
 
-// TestParseFantasyCalendar_HiddenMoonImportsAsDirectorOnly pins #772: a moon
-// with "hidden": true used to be skipped (`continue`) entirely rather than
-// imported hidden — so a GM's own secret moon vanished instead of coming
-// over as Director-only.
+// TestParseFantasyCalendar_HiddenMoonImportsAsDirectorOnly pins that a moon
+// with "hidden": true imports as Director-only rather than being skipped,
+// so a GM's own secret moon comes over instead of vanishing.
 func TestParseFantasyCalendar_HiddenMoonImportsAsDirectorOnly(t *testing.T) {
 	raw := []byte(`{
 		"name": "Moon Test",
@@ -58,11 +57,10 @@ func TestParseFantasyCalendar_HiddenMoonImportsAsDirectorOnly(t *testing.T) {
 	}
 }
 
-// TestParseFantasyCalendar_EraStartMonthDaySurvives pins #772: an era's
+// TestParseFantasyCalendar_EraStartMonthDaySurvives pins that an era's
 // date.timespan/date.day (0-indexed, like every other Fantasy-Calendar
-// month-index/day field) were parsed and then dropped — only StartYear
-// reached the imported era, collapsing every era to "month 1, day 1" of its
-// year regardless of when it actually began.
+// month-index/day field) survive import, rather than collapsing every era
+// to "month 1, day 1" of its year regardless of when it actually began.
 func TestParseFantasyCalendar_EraStartMonthDaySurvives(t *testing.T) {
 	raw := []byte(`{
 		"name": "Era Test",

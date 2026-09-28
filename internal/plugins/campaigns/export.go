@@ -156,23 +156,22 @@ type ExportCalendarData struct {
 	SecondsPerMinute int     `json:"seconds_per_minute"`
 	LeapYearEvery    int     `json:"leap_year_every"`
 	LeapYearOffset   int     `json:"leap_year_offset"`
-	// Hemisphere/ForecastsEnabled/MonthStartsNewWeek are additive fields
-	// (#805): calendar.Calendar grew all of these under V5, and dropping
-	// them silently on export meant a restored campaign always came back
-	// with the un-set/off defaults regardless of what the GM had actually
-	// configured.
+	// Hemisphere/ForecastsEnabled/MonthStartsNewWeek are additive fields:
+	// calendar.Calendar grew all of these under V5, and a restored campaign
+	// must carry the GM's actual configuration rather than falling back to
+	// the un-set/off defaults.
 	//
-	// TracksRealTime/RealTimeZone are also named in #805 but deliberately
-	// NOT carried here: RealTimeZone trips this repo's scheduler-data
-	// egress guard (sessions.TestScheduler_AbsentFromCampaignExport,
-	// RC-12.5), which fails on any exported field whose name contains
-	// "timezone" — a calendar's real-time anchor is GM-configured world
-	// data, not a specific member's own location the way the guard's usual
-	// target (session availability) is, but a GM who anchors a calendar to
-	// their own convenient zone still has that zone leave in the backup,
-	// and the guard's own doc comment says a new zone-carrying field must
+	// TracksRealTime/RealTimeZone are deliberately NOT carried here:
+	// RealTimeZone trips this repo's scheduler-data egress guard
+	// (sessions.TestScheduler_AbsentFromCampaignExport, RC-12.5), which
+	// fails on any exported field whose name contains "timezone" — a
+	// calendar's real-time anchor is GM-configured world data, not a
+	// specific member's own location the way the guard's usual target
+	// (session availability) is, but a GM who anchors a calendar to their
+	// own convenient zone still has that zone leave in the backup, and the
+	// guard's own doc comment says a new zone-carrying field must
 	// consciously EXTEND that pin, not be routed around it — a security
-	// sign-off call for a human reviewer, not this fix.
+	// sign-off call for a human reviewer.
 	Hemisphere         *string                 `json:"hemisphere,omitempty"`
 	ForecastsEnabled   bool                    `json:"forecasts_enabled,omitempty"`
 	MonthStartsNewWeek bool                    `json:"month_starts_new_week,omitempty"`
@@ -181,7 +180,7 @@ type ExportCalendarData struct {
 	Moons              []ExportCalendarMoon    `json:"moons,omitempty"`
 	Seasons            []ExportCalendarSeason  `json:"seasons,omitempty"`
 	Eras               []ExportCalendarEra     `json:"eras,omitempty"`
-	// Cycles/Festivals/Weather are additive sub-resources (#805), the same
+	// Cycles/Festivals/Weather are additive sub-resources, the same
 	// "restored config the GM set, not silently reset to nothing" case as
 	// the settings above.
 	Cycles          []ExportCalendarCycle    `json:"cycles,omitempty"`
@@ -219,10 +218,10 @@ type ExportCalendarWeekday struct {
 // back on import means "unknown, from an old backup" — see
 // calendarImportAdapter.ImportCalendar, which fails that case closed
 // (treats it as hidden), mirroring importCalendarVisibility's reasoning.
-// BaseDesign/Tint/PhaseSource/Size/OrbitSpeed are additive fields (#805):
-// they drive the sky pane's rendering (calendar.Moon's own doc comment), and
-// dropping them on export meant a restored moon rendered with the library
-// default look rather than whichever one the GM had actually picked.
+// BaseDesign/Tint/PhaseSource/Size/OrbitSpeed are additive fields: they
+// drive the sky pane's rendering (calendar.Moon's own doc comment), and a
+// restored moon keeps the look the GM actually picked rather than falling
+// back to the library default.
 type ExportCalendarMoon struct {
 	Name              string  `json:"name"`
 	CycleDays         float64 `json:"cycle_days"`
@@ -273,7 +272,7 @@ type ExportCalendarEra struct {
 }
 
 // ExportCalendarCycle is a repeating named cycle (a zodiac of years, say)
-// for export, with its entries. Additive (#805).
+// for export, with its entries. Additive.
 type ExportCalendarCycle struct {
 	Name        string                     `json:"name"`
 	CycleLength int                        `json:"cycle_length"`
@@ -291,7 +290,7 @@ type ExportCalendarCycleEntry struct {
 }
 
 // ExportCalendarFestival is a fixed calendar entry (holiday) for export.
-// Additive (#805).
+// Additive.
 type ExportCalendarFestival struct {
 	Name        string  `json:"name"`
 	Month       *int    `json:"month,omitempty"`
@@ -304,9 +303,8 @@ type ExportCalendarFestival struct {
 }
 
 // ExportCalendarWeather is the calendar's current weather reading for
-// export. Additive (#805): a GM-set reading (or one synced from an external
-// tool) used to be dropped entirely, so a restored calendar always came back
-// with no weather set.
+// export: a GM-set reading, or one synced from an external tool, carried
+// through a restore rather than left unset.
 type ExportCalendarWeather struct {
 	PresetID               *string  `json:"preset_id,omitempty"`
 	PresetLabel            *string  `json:"preset_label,omitempty"`
@@ -326,9 +324,9 @@ type ExportCalendarWeather struct {
 
 // ExportEventCategory is an event category definition for export.
 //
-// DefaultAnnounced is an additive field (#805): dropping it meant a category
-// whose events were meant to be knowable ahead of time (a festival, say)
-// silently lost that on restore, since import always fell back to "on_day".
+// DefaultAnnounced carries a category whose events are meant to be knowable
+// ahead of time (a festival, say) through a restore, rather than falling
+// back to "on_day".
 type ExportEventCategory struct {
 	Slug             string `json:"slug"`
 	Name             string `json:"name"`

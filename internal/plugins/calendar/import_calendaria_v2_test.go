@@ -1,17 +1,15 @@
-// import_calendaria_v2_test.go pins three #772 fixes specific to the
-// Calendaria format: the current leapYearConfig shape (confirmed against the
-// shipped Elven preset), a moon's referenceDate actually setting its phase
-// offset, and a weekday's isRestDay surviving import.
+// import_calendaria_v2_test.go pins parsing specific to the Calendaria
+// format: the current leapYearConfig shape (confirmed against the shipped
+// Elven preset), a moon's referenceDate setting its phase offset, and a
+// weekday's isRestDay surviving import.
 package calendar
 
 import "testing"
 
-// TestParseCalendaria_LeapYearEnabledShape pins the exact regression named in
-// #772: Chronicle's own Elven preset (presets/elven.json) carries
-// leapYearConfig as {"enabled":true,"interval":8,"offset":0}, not the
-// {rule,start} shape the parser previously read — so LoadPreset("elven")
-// came back with LeapYearEvery=0 (no leap years at all) instead of one every
-// 8 years.
+// TestParseCalendaria_LeapYearEnabledShape pins that Chronicle's own Elven
+// preset (presets/elven.json), whose leapYearConfig carries
+// {"enabled":true,"interval":8,"offset":0} rather than {rule,start}, parses
+// to LeapYearEvery=8 (a leap year every 8 years), not 0.
 func TestParseCalendaria_LeapYearEnabledShape(t *testing.T) {
 	raw := []byte(`{
 		"name": "Elven-shaped",
@@ -52,12 +50,10 @@ func TestParseCalendaria_LeapYearDisabledShapeStaysZero(t *testing.T) {
 	}
 }
 
-// TestParseCalendaria_MoonPhaseOffsetFromReferenceDate pins #772's moon-phase
-// fix: referenceDate was parsed into calMoon.ReferenceDate and then
-// discarded (PhaseOffset hardcoded to 0), so every Calendaria moon started
-// its cycle on whatever night absolute day 0 happened to be rather than the
-// night the file actually named. The fix must make the moon read as a New
-// Moon (phase 0) on its own stated reference date.
+// TestParseCalendaria_MoonPhaseOffsetFromReferenceDate pins that a moon's
+// referenceDate sets its PhaseOffset, so the moon reads as a New Moon
+// (phase 0) on its own stated reference date rather than on whatever night
+// absolute day 0 happens to be.
 func TestParseCalendaria_MoonPhaseOffsetFromReferenceDate(t *testing.T) {
 	raw := []byte(`{
 		"name": "Moon Test",
@@ -92,8 +88,8 @@ func TestParseCalendaria_MoonPhaseOffsetFromReferenceDate(t *testing.T) {
 	}
 }
 
-// TestParseCalendaria_WeekdayRestDaySurvives pins #772's rest-day fix:
-// isRestDay was parsed into calWeekday.IsRestDay and then discarded.
+// TestParseCalendaria_WeekdayRestDaySurvives pins that a weekday's isRestDay
+// survives from calWeekday.IsRestDay into the imported result.
 func TestParseCalendaria_WeekdayRestDaySurvives(t *testing.T) {
 	raw := []byte(`{
 		"name": "Rest Day Test",
