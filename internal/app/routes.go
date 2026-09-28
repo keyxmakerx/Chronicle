@@ -3099,15 +3099,11 @@ func (a *App) RegisterRoutes() {
 			{Key: "limit", Label: "Events to show", Type: "number", Min: entities.IntPtr(1), Max: entities.IntPtr(20), Default: 5},
 		},
 	}, func(ctx entities.BlockRenderContext) templ.Component {
-		// CALV5-PLACEHOLDER: was calendar.BlockUpcomingEvents(ctx.CC, limit).
-		// TODO(#778): a real fix is small and low-risk — reuse the same
-		// GET /campaigns/:id/calendars/upcoming hx-get fragment
-		// dashCalendarPreview/dashCalendarFull/catCalendarPreview now use
-		// (calendar-v5 seams, #778) instead of this notice. Left as a
-		// placeholder rather than rushed here because this is a template
-		// (not dashboard/category) block context with its own markup
-		// convention, unverified in this change.
-		return components.FeatureRebuildingBlock("The calendar")
+		// Reuses the calendar plugin's own hx-get fragment, the same one
+		// the dashboard/category "Upcoming Events" cards lazy-load
+		// (calendar-v5 seams, #778) — see upcoming_events_block.templ.
+		limit := entities.BlockConfigLimit(ctx.Block.Config, "limit", 5)
+		return upcomingEventsBlockShell(ctx.CC.Campaign.ID, limit)
 	})
 	// entity_calendar — the entity-page calendar embed: a compact worldstate
 	// band + this entity's linked events. Singleton per page (the band binds
