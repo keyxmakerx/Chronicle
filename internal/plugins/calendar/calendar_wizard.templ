@@ -1,6 +1,7 @@
 // calendar_wizard.templ renders the new-calendar wizard's steps: Start,
 // Preset (picker + review), Import (drop zone + review), the Real-world
-// calendar's own review, and Build your own (structure editor + review).
+// calendar's own review, Build your own (structure editor + review), and
+// Generate one (recipe sheet + review — see calendar_wizard_generate.templ).
 // Every step is fetched via HTMX into the SAME dialog shell
 // (#calv5-wizard-root, replaced wholesale with hx-swap="outerHTML" on every
 // step change) — simpler than juggling a separate "shell vs. inner
@@ -11,14 +12,10 @@
 // No DECORATIVE icons anywhere in this file (the operator's own
 // instruction, already applied to this wizard once — see the close-button/
 // spinner/warning-triangle exceptions noted where wizardShell is defined
-// below): a disabled tile gets a plain text "Under construction" badge, and
-// every structure-editor control (reorder, remove, add) is a labelled text
-// button, never a glyph standing in for one.
+// below): every structure-editor control (reorder, remove, add) is a
+// labelled text button, never a glyph standing in for one.
 //
-// Out of scope for this wizard: the "Generate one" procedural tile is shown
-// but permanently disabled — the generator engine it would need exists only
-// as a design mockup, not in this codebase — and "Give it a past" does not
-// exist here either.
+// Out of scope for this wizard: "Give it a past" does not exist here.
 package calendar
 
 import (
@@ -66,8 +63,9 @@ templ wizardShell(stepLabel string, body templ.Component) {
 // wizardStartBody is the Start step, grouped by purpose per the operator's
 // own framing: "For your table" is the real-world calendar RSVPs and
 // availability actually need; "For your world" is every way to set up a
-// fantasy calendar's structure. "Generate one" renders but stays permanently
-// disabled — see its own doc comment below.
+// fantasy calendar's structure, including generating one from a recipe (or
+// from how many suns, moons and wandering planets the world has) — see
+// calendar_wizard_generate.templ.
 templ wizardStartBody(campaignID string) {
 	<h2 class="calv5-wz-h">New calendar</h2>
 	<p class="calv5-wz-lead">Choose how to set up this calendar's months, weekdays, moons and seasons.</p>
@@ -119,7 +117,7 @@ templ wizardStartBody(campaignID string) {
 				<b>Import a file</b>
 				<span>Bring over a calendar from Simple Calendar, Calendaria, Fantasy-Calendar or a Chronicle export.</span>
 			</button>
-			@wizardGenerateOneTile()
+			@wizardGenerateOneTile(campaignID)
 		</div>
 	</div>
 	<div class="calv5-reassure">
@@ -127,19 +125,21 @@ templ wizardStartBody(campaignID string) {
 	</div>
 }
 
-// wizardGenerateOneTile is the procedural generator tile: shown so the
-// owner knows it's coming, but permanently disabled — the recipe-based
-// generator engine it would need exists only as a design mockup
-// (scratchpad/mockups/calendar-setup/generators.js), not in this codebase,
-// so there is nothing for it to call. A plain <div>, not a <button>: it is
-// aria-disabled and carries no tabindex/hx-get, so it is genuinely inert
-// rather than a focusable control that does nothing when activated.
-templ wizardGenerateOneTile() {
-	<div class="calv5-tile" aria-disabled="true">
+// wizardGenerateOneTile is the procedural generator tile: a whole calendar
+// from a recipe (or from how many suns, moons and wandering planets the
+// world has), months/weeks/moons/names included, ready to review with no
+// typing required. See calendar_wizard_generate.templ for the step itself.
+templ wizardGenerateOneTile(campaignID string) {
+	<button
+		type="button"
+		class="calv5-tile"
+		hx-get={ fmt.Sprintf("/campaigns/%s/calendars/wizard/generate", campaignID) }
+		hx-target="#calv5-wizard-root"
+		hx-swap="outerHTML"
+	>
 		<b>Generate one</b>
-		<span class="calv5-uc-badge">Under construction</span>
-		<span>A whole calendar from a recipe — months, weeks, moons and names in one culture's voice. Use a preset or build your own for now.</span>
-	</div>
+		<span>A whole calendar from a recipe — months, weeks, moons and names in one culture's voice. Keep what you like and reroll the rest.</span>
+	</button>
 }
 
 // presetCardData is one preset's card content on the picker step.

@@ -65,6 +65,8 @@ func RegisterRoutes(e *echo.Echo, h *Handler, campaignSvc campaigns.CampaignServ
 	cg.GET("/calendars/wizard/reallife", h.WizardRealWorldReview, campaigns.RequireRole(campaigns.RoleOwner))
 	cg.GET("/calendars/wizard/build", h.WizardBuildStep, campaigns.RequireRole(campaigns.RoleOwner))
 	cg.POST("/calendars/wizard/build/preview", h.WizardBuildPreview, campaigns.RequireRole(campaigns.RoleOwner))
+	cg.GET("/calendars/wizard/generate", h.WizardGenerateStep, campaigns.RequireRole(campaigns.RoleOwner))
+	cg.POST("/calendars/wizard/generate/preview", h.WizardGeneratePreview, campaigns.RequireRole(campaigns.RoleOwner))
 	cg.GET("/calendars/wizard/import", h.WizardImportStep, campaigns.RequireRole(campaigns.RoleOwner))
 	cg.POST("/calendars/wizard/import/preview", h.WizardImportPreview, campaigns.RequireRole(campaigns.RoleOwner))
 	cg.POST("/calendars/wizard/create", h.WizardCreate, campaigns.RequireRole(campaigns.RoleOwner))

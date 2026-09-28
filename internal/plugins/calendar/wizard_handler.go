@@ -312,6 +312,20 @@ func (h *Handler) WizardCreate(c echo.Context) error {
 			return apperror.NewBadRequest(err.Error())
 		}
 		ir = parsed
+	case "generate":
+		// The Generate step's engine output was already re-validated once,
+		// at Preview (WizardGeneratePreview -> parseGeneratedCalendarJSON),
+		// but that ImportResult still round-trips through this form the same
+		// browser-submitted way "import"/"build" do — parseWizardImportJSON
+		// gives it the identical size-cap + clampCalendarStructure pass
+		// rather than trusting the round trip just because this server was
+		// the one that produced it the first time.
+		backURL = fmt.Sprintf("/campaigns/%s/calendars/wizard/generate", cc.Campaign.ID)
+		parsed, err := parseWizardImportJSON(form.ImportJSON)
+		if err != nil {
+			return apperror.NewBadRequest(err.Error())
+		}
+		ir = parsed
 	case "reallife":
 		// The structure itself is never client-controlled (rebuilt fresh
 		// here, not round-tripped) — only the zone/tracks-flag/date fields
@@ -346,7 +360,7 @@ func (h *Handler) WizardCreate(c echo.Context) error {
 			form.CurrentYear, form.CurrentMonth, form.CurrentDay = &y, &m, &d
 		}
 	default:
-		return apperror.NewBadRequest("source must be \"preset\", \"import\", \"build\" or \"reallife\"")
+		return apperror.NewBadRequest("source must be \"preset\", \"import\", \"build\", \"generate\" or \"reallife\"")
 	}
 
 	// Reflect exactly what the owner submitted, not the source's own

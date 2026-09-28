@@ -172,21 +172,31 @@ func TestWizardStart_GateAndContent(t *testing.T) {
 		t.Fatalf("Owner must be able to open the wizard, got %d: %s", rec.Code, rec.Body.String())
 	}
 	body := rec.Body.String()
-	for _, want := range []string{"Real-world calendar", "Start from a preset", "Build your own", "Import a file", "Generate one", "Under construction"} {
+	for _, want := range []string{"Real-world calendar", "Start from a preset", "Build your own", "Import a file", "Generate one"} {
 		if !strings.Contains(body, want) {
 			t.Errorf("expected the Start step to mention %q, body:\n%s", want, body)
 		}
 	}
-	if !strings.Contains(body, `aria-disabled="true"`) {
-		t.Errorf("the \"Generate one\" tile must be aria-disabled (the generator engine doesn't exist in this codebase), body:\n%s", body)
+	if !strings.Contains(body, `hx-get="/campaigns/camp-1/calendars/wizard/generate"`) {
+		t.Errorf("the \"Generate one\" tile must be an active control (hx-get to the generate step), body:\n%s", body)
 	}
-	if strings.Contains(body, `hx-get="/campaigns/camp-1/calendars/wizard/generate`) {
-		t.Errorf("a disabled tile must not carry an hx-get — it must not be a working control, body:\n%s", body)
+	if strings.Contains(body, "Under construction") {
+		t.Errorf("the \"Generate one\" tile is no longer disabled; it must not carry the old badge, body:\n%s", body)
 	}
 	if strings.Contains(body, "For your table") == false || strings.Contains(body, "For your world") == false {
 		t.Errorf("expected the Start step's two purpose groupings, body:\n%s", body)
 	}
-	if strings.Contains(body, "fa-solid fa-book") || strings.Contains(body, "fa-solid fa-file-import") || strings.Contains(body, "fa-solid fa-dice") {
-		t.Errorf("the Start step's tiles must carry no decorative icons, body:\n%s", body)
+	// Scoped, not a guess at specific class names (which a new icon on any
+	// tile could slip past): no "fa-" anywhere between the two tilegrp
+	// blocks and the reassurance line just past them. The dialog's own
+	// close-button icon renders earlier, in wizardShell's chrome, and stays
+	// out of this window on purpose.
+	start := strings.Index(body, "calv5-tilegrp")
+	end := strings.Index(body, "calv5-reassure")
+	if start < 0 || end < 0 || end < start {
+		t.Fatalf("expected to find both the tile groups and the reassurance line, body:\n%s", body)
+	}
+	if tiles := body[start:end]; strings.Contains(tiles, "fa-") {
+		t.Errorf("no tile may carry a decorative icon (fa-*), tiles region:\n%s", tiles)
 	}
 }
