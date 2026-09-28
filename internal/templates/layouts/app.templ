@@ -171,7 +171,8 @@ templ Sidebar() {
 	>
 		if InCampaign(ctx) {
 			@campaignNavBrand()
-			@campaignNavList()
+			@campaignNavTop()
+			@campaignNavCategories()
 			<!-- Session RSVP card (lazy-loaded, members only, calendar addon required) -->
 			if IsAuthenticated(ctx) && GetCampaignRole(ctx) >= 1 && IsAddonEnabled(ctx, "calendar") {
 				<div
@@ -527,65 +528,94 @@ templ sidebarCreateCategory(ctx context.Context) {
 }
 
 
-// SidebarDrillPanel renders the slide-over panel content for a category.
-// Header doubles as navigation: clicking the category name opens the full
-// category page (replacing the old "View All" button). The "New" action is
-// a compact icon button in the header row.
+// SidebarEntitySubTypes returns et's sub-categories (their own listing pages,
+// each with its own count), re-derived here from the same entity types and
+// counts the sidebar itself uses, so the drill panel needs no plumbing
+// through NavRowView.Subs.
+func SidebarEntitySubTypes(ctx context.Context, parentID int) []SidebarEntityType {
+	var out []SidebarEntityType
+	for _, t := range GetEntityTypes(ctx) {
+		if t.ParentTypeID != nil && *t.ParentTypeID == parentID {
+			out = append(out, t)
+		}
+	}
+	return out
+}
+
+// SidebarDrillPanel renders the slide-over panel's content for a category:
+// a back row to the categories list, a header (name, count, New) that
+// doubles as navigation to the category's own page, search, its
+// sub-categories as their own rows, the folder tree and Recent.
 templ SidebarDrillPanel(campaignID string, et SidebarEntityType, count int) {
-	<!-- Category header — clickable name navigates to full category page -->
-	<div class="px-4 py-2.5 border-b border-gray-700/50 shrink-0">
-		<div class="flex items-center gap-2">
-			<a
-				href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/%s", campaignID, et.Slug)) }
-				class="flex items-center gap-2 flex-1 min-w-0 group"
-				title={ fmt.Sprintf("Open %s page", et.NamePlural) }
-			>
-				<span class="w-6 h-6 rounded-md bg-accent/10 flex items-center justify-center shrink-0">
-					if et.Icon != "" {
-						<i class={ "fa-solid " + et.Icon, "text-sm" } style={ fmt.Sprintf("color: %s", et.Color) }></i>
-					} else {
-						<span class="w-2.5 h-2.5 rounded-full" style={ fmt.Sprintf("background-color: %s", et.Color) }></span>
-					}
-				</span>
-				<span class="text-sm font-semibold text-white truncate group-hover:underline">{ et.NamePlural }</span>
-				if count > 0 {
-					<span
-						class="inline-flex items-center justify-center px-1.5 py-0.5 text-[10px] font-medium rounded-full bg-gray-800 text-gray-400"
-					>{ strconv.Itoa(count) }</span>
+	<button type="button" class="nav-drill-back" data-drill-back>
+		<i class="fa-solid fa-chevron-left" aria-hidden="true"></i>
+		Categories
+	</button>
+	<div class="nav-drill-head">
+		<a
+			href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/%s", campaignID, et.Slug)) }
+			class="nav-drill-head-link"
+			title={ fmt.Sprintf("Open %s page", et.NamePlural) }
+		>
+			<span class="nav-drill-ic" style={ fmt.Sprintf("color: %s", et.Color) }>
+				if et.Icon != "" {
+					<i class={ "fa-solid " + et.Icon } aria-hidden="true"></i>
+				} else {
+					<span class="nav-dot" style={ fmt.Sprintf("background-color: %s", et.Color) }></span>
 				}
-			</a>
-			<!-- New entity button -->
-			<a
-				href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/entities/new?type=%d", campaignID, et.ID)) }
-				class="w-6 h-6 flex items-center justify-center rounded text-gray-500 hover:text-white transition-colors shrink-0"
-				style={ fmt.Sprintf("background-color: %s15", et.Color) }
-				title={ fmt.Sprintf("New %s", et.Slug) }
-				hx-boost="false"
-			>
-				<i class="fa-solid fa-plus text-[9px]"></i>
-			</a>
-		</div>
+			</span>
+			<span class="nav-drill-name">{ et.NamePlural }</span>
+		</a>
+		<span class="nav-drill-count">{ strconv.Itoa(count) }</span>
+		<a
+			href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/entities/new?type=%d", campaignID, et.ID)) }
+			class="nav-drill-new"
+			title={ fmt.Sprintf("New %s", et.Slug) }
+			aria-label={ fmt.Sprintf("New %s", et.Slug) }
+			hx-boost="false"
+		>
+			<i class="fa-solid fa-plus" aria-hidden="true"></i>
+		</a>
 	</div>
-	<!-- Scrollable content -->
-	<div class="flex-1 overflow-y-auto">
-		<!-- Search -->
-		<div class="px-4 pb-2">
-			<div class="relative">
-				<input
-					type="search"
-					placeholder={ fmt.Sprintf("Search %s...", et.NamePlural) }
-					class="w-full px-2.5 py-1.5 pl-7 text-[11px] rounded bg-gray-800/50 border border-gray-700/50 text-gray-300 placeholder-gray-600 focus:outline-none focus:border-gray-600 transition-colors"
-					hx-get={ drillSearchURL(ctx, campaignID, et.ID) }
-					hx-trigger="keyup changed delay:300ms"
-					hx-target="#sidebar-cat-results"
-					hx-swap="innerHTML"
-					name="q"
-					autocomplete="off"
-				/>
-				<i class="fa-solid fa-magnifying-glass absolute left-2.5 top-1/2 -translate-y-1/2 text-gray-600 text-[9px] pointer-events-none"></i>
-			</div>
+	<div class="nav-drill-search">
+		<i class="fa-solid fa-magnifying-glass" aria-hidden="true"></i>
+		<input
+			type="search"
+			placeholder={ fmt.Sprintf("Search %s…", et.NamePlural) }
+			hx-get={ drillSearchURL(ctx, campaignID, et.ID) }
+			hx-trigger="keyup changed delay:300ms"
+			hx-target="#sidebar-cat-results"
+			hx-swap="innerHTML"
+			name="q"
+			autocomplete="off"
+			aria-label={ fmt.Sprintf("Search %s", et.NamePlural) }
+		/>
+	</div>
+	if subs := SidebarEntitySubTypes(ctx, et.ID); len(subs) > 0 {
+		<div class="nav-drill-subs">
+			for _, s := range subs {
+				<a
+					href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/%s", campaignID, s.Slug)) }
+					class="nav-drill-sub"
+					if NavIsCurrent(ctx, fmt.Sprintf("cat:%d", s.ID)) {
+						aria-current="page"
+					}
+				>
+					<span class="nav-drill-sub-ic">
+						if s.Icon != "" {
+							<i class={ "fa-solid " + s.Icon } aria-hidden="true"></i>
+						} else {
+							<span class="nav-dot" style={ fmt.Sprintf("background-color: %s", s.Color) }></span>
+						}
+					</span>
+					<span class="nav-drill-sub-lb">{ s.NamePlural }</span>
+					<span class="nav-drill-sub-n">{ strconv.Itoa(GetEntityCount(ctx, s.ID)) }</span>
+				</a>
+			}
 		</div>
-		<!-- Entity list (lazy-loaded) -->
+	}
+	<!-- Scrollable content: the folder tree (lazy-loaded), then Favorites. -->
+	<div class="nav-drill-body overflow-y-auto">
 		<div id="sidebar-cat-results">
 			<div
 				hx-get={ fmt.Sprintf("/campaigns/%s/entities/search?type=%d&sidebar=1", campaignID, et.ID) }
@@ -593,25 +623,21 @@ templ SidebarDrillPanel(campaignID string, et SidebarEntityType, count int) {
 				hx-target="#sidebar-cat-results"
 				hx-swap="innerHTML"
 			>
-				<div class="px-4 py-2 space-y-1.5">
+				<div class="nav-tree-skel">
 					<div class="skeleton-shimmer h-3 w-3/4"></div>
 					<div class="skeleton-shimmer h-3 w-1/2"></div>
 					<div class="skeleton-shimmer h-3 w-2/3"></div>
 				</div>
 			</div>
 		</div>
-		<!-- Favorites -->
-		<div id="sidebar-cat-favorites-header" class="px-4 mt-3 mb-0.5 text-[10px] font-semibold uppercase tracking-wider text-gray-600" style="display:none">
-			<i class="fa-solid fa-star text-amber-400/70 mr-0.5"></i> Favorites
+		<div id="sidebar-cat-favorites-header" class="nav-drill-fav-h" style="display:none">
+			<i class="fa-solid fa-star" aria-hidden="true"></i> Favorites
 		</div>
 		<div id="sidebar-cat-favorites"></div>
-		<!-- Recent -->
-		<div class="px-4 mt-3 mb-0.5 text-[10px] font-semibold uppercase tracking-wider text-gray-600">
-			<i class="fa-solid fa-clock-rotate-left text-gray-600/70 mr-0.5"></i> Recent
-		</div>
-		<div id="sidebar-cat-recent" class="text-[11px] text-gray-600 px-4 py-1 italic">
-			No recently viewed
-		</div>
+	</div>
+	<div class="nav-drill-recent">
+		<div class="nav-drill-recent-h"><i class="fa-solid fa-clock-rotate-left" aria-hidden="true"></i>Recent</div>
+		<div id="sidebar-cat-recent" class="nav-drill-recent-empty">No recently viewed</div>
 	</div>
 }
 

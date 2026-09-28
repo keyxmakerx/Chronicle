@@ -42,7 +42,7 @@
 
   /** Inject tag filter UI + saved presets into the drill panel. */
   function injectTagFilter() {
-    var searchDiv = document.querySelector('#sidebar-cat-content .px-4.pb-2');
+    var searchDiv = document.querySelector('#sidebar-cat-content .nav-drill-search');
     if (!searchDiv) return;
     if (searchDiv.querySelector('.sidebar-tag-filter')) return;
 

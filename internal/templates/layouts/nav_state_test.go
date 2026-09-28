@@ -158,13 +158,73 @@ func TestResolveNavState_RingAndFolds(t *testing.T) {
 	}
 }
 
+// renderNavList renders both halves of the sidebar (campaignNavTop and
+// campaignNavCategories) and concatenates them, standing in for the single
+// list the pre-split sidebar rendered — every existing assertion below cares
+// about a row or heading existing SOMEWHERE in the sidebar, not which half.
+// TestCampaignNav_TopAndCategoriesAreSeparate below pins the split itself.
 func renderNavList(t *testing.T, ctx context.Context) string {
 	t.Helper()
 	var buf bytes.Buffer
-	if err := campaignNavList().Render(ctx, &buf); err != nil {
-		t.Fatalf("render campaignNavList: %v", err)
+	if err := campaignNavTop().Render(ctx, &buf); err != nil {
+		t.Fatalf("render campaignNavTop: %v", err)
+	}
+	if err := campaignNavCategories().Render(ctx, &buf); err != nil {
+		t.Fatalf("render campaignNavCategories: %v", err)
 	}
 	return buf.String()
+}
+
+func renderNavFooter(t *testing.T, ctx context.Context) string {
+	t.Helper()
+	var buf bytes.Buffer
+	if err := campaignNavFooter().Render(ctx, &buf); err != nil {
+		t.Fatalf("render campaignNavFooter: %v", err)
+	}
+	return buf.String()
+}
+
+// TestCampaignNav_TopAndCategoriesAreSeparate pins the two-part split itself:
+// Dashboard/Pinned/Apps are in the fixed top block and never in the
+// categories area, Categories/Manage are the other way around, and a
+// category row opens the drill panel instead of navigating away.
+func TestCampaignNav_TopAndCategoriesAreSeparate(t *testing.T) {
+	// Entity types resolve a category button's drill URL (navDrillURL); the
+	// shared fixture's cat:1/cat:2 need types 1/2 present to resolve one.
+	ctx := SetEntityTypes(navStateCase{role: 3, path: "/campaigns/c1"}.ctx(), []SidebarEntityType{
+		{ID: 1, Slug: "locations"}, {ID: 2, Slug: "factions"},
+	})
+	var top, cats bytes.Buffer
+	if err := campaignNavTop().Render(ctx, &top); err != nil {
+		t.Fatalf("render campaignNavTop: %v", err)
+	}
+	if err := campaignNavCategories().Render(ctx, &cats); err != nil {
+		t.Fatalf("render campaignNavCategories: %v", err)
+	}
+	topHTML, catHTML := top.String(), cats.String()
+
+	for _, want := range []string{`data-nav-key="dashboard"`, `data-nav-key="app:notes"`, `data-nav-key="app:maps"`} {
+		if !strings.Contains(topHTML, want) {
+			t.Errorf("campaignNavTop is missing %q", want)
+		}
+		if strings.Contains(catHTML, want) {
+			t.Errorf("campaignNavCategories must not have %q — that belongs in the fixed top", want)
+		}
+	}
+	for _, want := range []string{`data-nav-section="categories"`, `data-nav-section="manage"`, `data-nav-key="cat:1"`} {
+		if !strings.Contains(catHTML, want) {
+			t.Errorf("campaignNavCategories is missing %q", want)
+		}
+		if strings.Contains(topHTML, want) {
+			t.Errorf("campaignNavTop must not have %q — that belongs in the scrolling categories area", want)
+		}
+	}
+	// A category is a button that opens the drill panel, never a link.
+	cat := catHTML[strings.Index(catHTML, `data-nav-key="cat:1"`)-40:]
+	cat = cat[:strings.Index(cat, "</button>")+len("</button>")]
+	if !strings.Contains(cat, "<button") || !strings.Contains(cat, "data-drill-open=\"/campaigns/c1/sidebar/drill/") {
+		t.Errorf("a category row must be a button that opens the drill panel: %s", cat)
+	}
 }
 
 func TestCampaignNavList_PaintsWhereTheViewerIs(t *testing.T) {
@@ -240,7 +300,41 @@ func TestCampaignNavList_ManageAndEditingAreTheOwners(t *testing.T) {
 		t.Fatalf("render brand: %v", err)
 	}
 	if strings.Contains(brand.String(), "data-sidebar-edit-toggle") {
-		t.Errorf("a player must never get the edit pencil")
+		t.Errorf("the brand row must never carry the edit toggle — it moved to the footer")
+	}
+	if strings.Contains(renderNavFooter(t, navStateCase{role: 1, path: "/campaigns/c1"}.ctx()), "data-sidebar-edit-toggle") {
+		t.Errorf("a player must never get the footer's labelled Edit button")
+	}
+}
+
+// TestCampaignNavBrand_NeverHasThePencil pins that the brand row is the
+// campaign's logo and name only, for every role — editing moved to the
+// footer (campaignNavFooter), never back to the brand row.
+func TestCampaignNavBrand_NeverHasThePencil(t *testing.T) {
+	for _, role := range []int{1, 2, 3} {
+		var brand bytes.Buffer
+		if err := campaignNavBrand().Render(navStateCase{role: role, path: "/campaigns/c1"}.ctx(), &brand); err != nil {
+			t.Fatalf("render brand: %v", err)
+		}
+		if strings.Contains(brand.String(), "data-sidebar-edit-toggle") || strings.Contains(brand.String(), "fa-pencil") {
+			t.Errorf("role %d: the brand row has a pencil; it must be the campaign's logo and name only", role)
+		}
+	}
+}
+
+// TestCampaignNavFooter_EditIsTheOwners pins the footer's labelled Edit
+// button: only the owner gets it, and it still wires to the same toggle
+// sidebar_editor.js listens for.
+func TestCampaignNavFooter_EditIsTheOwners(t *testing.T) {
+	owner := renderNavFooter(t, navStateCase{role: 3, path: "/campaigns/c1"}.ctx())
+	for _, want := range []string{"data-sidebar-edit-toggle", "chronicle:toggle-sidebar-editor", "Edit", "Campaigns", "Discover"} {
+		if !strings.Contains(owner, want) {
+			t.Errorf("the owner's footer is missing %q: %s", want, owner)
+		}
+	}
+	player := renderNavFooter(t, navStateCase{role: 1, path: "/campaigns/c1"}.ctx())
+	if strings.Contains(player, "data-sidebar-edit-toggle") {
+		t.Errorf("a player's footer must not have the Edit button")
 	}
 }
 
@@ -269,11 +363,7 @@ func TestCampaignNavList_ArchivedCampaignDrawsNoWriteControls(t *testing.T) {
 
 	ownerCtx := SetNavEdit(navStateCase{role: 3, archived: true, path: "/campaigns/c1"}.ctx(), &NavEditView{})
 	owner := renderNavList(t, ownerCtx)
-	var brand bytes.Buffer
-	if err := campaignNavBrand().Render(ownerCtx, &brand); err != nil {
-		t.Fatalf("render brand: %v", err)
-	}
-	if strings.Contains(owner, "data-nav-edit") || strings.Contains(brand.String(), "data-sidebar-edit-toggle") {
+	if strings.Contains(owner, "data-nav-edit") || strings.Contains(renderNavFooter(t, ownerCtx), "data-sidebar-edit-toggle") {
 		t.Errorf("an archived campaign refuses sidebar saves, so the owner gets no editor")
 	}
 }

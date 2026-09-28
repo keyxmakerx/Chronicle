@@ -2,9 +2,10 @@
  * sidebar_tree.js -- Collapsible Tree + Drag-and-Drop for Sidebar Entity List
  *
  * Transforms the flat entity list rendered by SidebarEntityList into a
- * collapsible tree using data-parent-id attributes. Supports:
- *   - Collapsible folders (entities with children get folder icons)
- *   - Leaf nodes get page icons
+ * collapsible tree using data-parent-id attributes. No folder/page icons —
+ * a folder is its chevron, a semibold name and a page count; a page is its
+ * plain name (see renderNode). Supports:
+ *   - Collapsible folders, each with a chevron and its own page count
  *   - Vertical guide lines for visual hierarchy
  *   - Smooth CSS transitions for collapse/expand
  *   - Drag-and-drop reordering within the same level
@@ -24,6 +25,29 @@
   // Track the current container for the reorg-changed listener (IIFE-scoped
   // so the listener is registered once, not per initTree call).
   var currentTreeContainer = null;
+
+  // Folders first, then pages, each group alphabetical (sort_order only
+  // tie-breaks two same-named siblings — the drag-reorder feature this used
+  // to read in full is not reachable yet; see the module doc). Pure over its
+  // argument, so it is hoisted out of initTree() for the test suite.
+  function sortChildren(childNodes) {
+    childNodes.sort(function (a, b) {
+      var aFolder = a.el.hasAttribute('data-is-folder'), bFolder = b.el.hasAttribute('data-is-folder');
+      if (aFolder !== bFolder) return aFolder ? -1 : 1;
+      var nameA = (a.el.getAttribute('data-entity-name') || '').toLowerCase();
+      var nameB = (b.el.getAttribute('data-entity-name') || '').toLowerCase();
+      if (nameA !== nameB) return nameA < nameB ? -1 : 1;
+      return a.sortOrder - b.sortOrder;
+    });
+  }
+
+  // A folder's own count badge: every page (not a folder) in its subtree, at
+  // any depth — a folder contributes nothing itself, only what it holds.
+  function countPages(node) {
+    var n = node.isNode ? 0 : 1;
+    node.children.forEach(function (c) { n += countPages(c); });
+    return n;
+  }
 
   /**
    * Initialize the tree for a freshly loaded entity list.
@@ -77,16 +101,6 @@
       }
     });
 
-    // Sort children by sort_order, then alphabetically by name.
-    function sortChildren(childNodes) {
-      childNodes.sort(function (a, b) {
-        if (a.sortOrder !== b.sortOrder) return a.sortOrder - b.sortOrder;
-        var nameA = (a.el.getAttribute('data-entity-name') || '').toLowerCase();
-        var nameB = (b.el.getAttribute('data-entity-name') || '').toLowerCase();
-        return nameA < nameB ? -1 : nameA > nameB ? 1 : 0;
-      });
-    }
-
     // Load collapsed state from localStorage.
     var storageKey = STORAGE_KEY_PREFIX + campaignId;
     var collapsedSet = {};
@@ -105,9 +119,9 @@
     container.innerHTML = '';
 
     /**
-     * Render a single tree node: clones the link element, adds indent,
-     * toggle button (for parents) or spacer (for nested leaves), and
-     * swaps the icon to folder/page as appropriate.
+     * Render a single tree node: clones the link element, adds indent, a
+     * toggle button (for parents) or a same-size spacer (for leaves), and a
+     * folder's own page count.
      */
     function renderNode(node, depth) {
       var hasChildren = node.children.length > 0;
@@ -158,29 +172,22 @@
         });
       }
 
-      // Swap icon for pure folder nodes; entities keep their page icon.
-      var iconEl = link.querySelector('.sidebar-tree-icon i');
-      if (iconEl && node.isNode) {
-        // Pure folder node: toggle between closed/open folder icon.
-        iconEl.className = isCollapsed
-          ? 'fa-solid fa-folder text-[10px]'
-          : 'fa-solid fa-folder-open text-[10px]';
-      }
-      // Mark any item with children so drag-drop can detect valid parents.
+      // No folder/page icon (the tree is chevron + name + count only) — mark
+      // any item with children so drag-drop can detect valid parents.
       if (hasChildren || isFolder) {
         link.setAttribute('data-has-children', 'true');
       }
 
-      // Add toggle button (chevron) for items with children.
+      // Add toggle button (chevron) for items with children; a leaf gets a
+      // same-size spacer so labels still line up at every depth. aria-expanded
+      // on the row itself (not the button) drives the chevron's CSS rotation.
       if (hasChildren) {
+        wrapper.setAttribute('data-has-children', 'true');
+        link.setAttribute('aria-expanded', String(!isCollapsed));
         var toggle = document.createElement('span');
-        toggle.className = 'sidebar-tree-toggle inline-flex items-center justify-center w-6 h-6 -ml-1 cursor-pointer text-gray-500 hover:text-gray-300 shrink-0';
+        toggle.className = 'tree-toggle sidebar-tree-toggle';
         toggle.setAttribute('data-collapsed', String(isCollapsed));
-        // Use a single right-chevron that rotates via CSS transform.
-        toggle.innerHTML = '<i class="fa-solid fa-chevron-right text-[7px]"></i>';
-        if (!isCollapsed) {
-          toggle.style.transform = 'rotate(90deg)';
-        }
+        toggle.innerHTML = '<i class="fa-solid fa-chevron-down" aria-hidden="true"></i>';
 
         toggle.addEventListener('click', function (e) {
           e.preventDefault();
@@ -195,19 +202,8 @@
           }
           saveCollapsed();
 
-          // Rotate toggle chevron.
-          toggle.style.transform = isCollapsed ? 'rotate(0deg)' : 'rotate(90deg)';
+          link.setAttribute('aria-expanded', String(!isCollapsed));
           toggle.setAttribute('data-collapsed', String(isCollapsed));
-
-          // Swap folder icon between open/closed (folder nodes only).
-          if (node.isNode) {
-            var folderIcon = link.querySelector('.sidebar-tree-icon i');
-            if (folderIcon) {
-              folderIcon.className = isCollapsed
-                ? 'fa-solid fa-folder text-[10px]'
-                : 'fa-solid fa-folder-open text-[10px]';
-            }
-          }
 
           // Animate children container collapse/expand.
           var childContainer = wrapper.querySelector('.sidebar-tree-children');
@@ -230,23 +226,19 @@
           }
         });
 
-        // Insert toggle before the icon span.
-        var iconSpan = link.querySelector('.sidebar-tree-icon');
-        if (iconSpan) {
-          link.insertBefore(toggle, iconSpan);
-        } else {
-          link.insertBefore(toggle, link.firstChild);
-        }
+        link.insertBefore(toggle, link.firstChild);
       } else {
-        // Leaf nodes get a spacer to align with toggled siblings.
         var spacer = document.createElement('span');
-        spacer.className = 'inline-block w-6 shrink-0';
-        var iconSpan2 = link.querySelector('.sidebar-tree-icon');
-        if (iconSpan2) {
-          link.insertBefore(spacer, iconSpan2);
-        } else {
-          link.insertBefore(spacer, link.firstChild);
-        }
+        spacer.className = 'tree-toggle tree-spacer';
+        link.insertBefore(spacer, link.firstChild);
+      }
+
+      // A folder's count: pages in its subtree, at any depth.
+      if (isFolder) {
+        var countEl = document.createElement('span');
+        countEl.className = 'tree-n';
+        countEl.textContent = String(countPages(node));
+        link.appendChild(countEl);
       }
 
       // Set guide line position for nested nodes via inline style.
@@ -737,7 +729,7 @@
    * an input field. Enter/blur saves, Escape cancels.
    */
   function startInlineRename(link, nodeId, campaignId) {
-    var nameSpan = link.querySelector('.truncate');
+    var nameSpan = link.querySelector('.tree-lb');
     if (!nameSpan || nameSpan._renaming) return;
     nameSpan._renaming = true;
 
@@ -1353,7 +1345,10 @@
     var btn = sentinel.querySelector('button');
     if (btn) btn.textContent = 'Loading...';
 
-    Chronicle.apiFetch(url, { headers: { 'HX-Request': 'true' } })
+    // This endpoint answers JSON or the HTML fragment by Accept
+    // (SearchAPI's wantsJSON) — apiFetch defaults to Accept: application/json,
+    // so this overrides it to get the HTML this handler actually parses.
+    Chronicle.apiFetch(url, { headers: { 'HX-Request': 'true', 'Accept': 'text/html' } })
       .then(function (res) { return res.ok ? res.text() : ''; })
       .then(function (html) {
         if (!html) return;
@@ -1444,7 +1439,9 @@
       folderChildCount: folderChildCount,
       reorderEntity: reorderEntity,
       updateDraggable: updateDraggable,
-      createGroupFolder: createGroupFolder
+      createGroupFolder: createGroupFolder,
+      sortChildren: sortChildren,
+      countPages: countPages
     };
   }
 })();
