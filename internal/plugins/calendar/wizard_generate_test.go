@@ -19,6 +19,97 @@ import (
 	"testing"
 )
 
+// TestParseGeneratedCalendarJSON_TableDriven is the direct, table-driven
+// test of parseGeneratedCalendarJSON's two checks (the local size cap, then
+// PreviewImport's own parse/clamp) in isolation from the HTTP layer.
+func TestParseGeneratedCalendarJSON_TableDriven(t *testing.T) {
+	svc := NewCalendarService(&fakeCalendarRepo{}, &fakeEventRepo{}, &fakeEventKindRepo{}, &fakeWeatherRepo{})
+	oversizedMonths := make([]map[string]any, maxCalendarMonths+1)
+	for i := range oversizedMonths {
+		oversizedMonths[i] = map[string]any{"name": "M", "days": 30, "sort_order": i, "is_intercalary": false, "leap_year_days": 0}
+	}
+	oversizedCalendar, err := json.Marshal(map[string]any{
+		"format": "chronicle-calendar-v1", "version": 2,
+		"calendar": map[string]any{
+			"name": "Too Big", "mode": "fantasy", "current_year": 1, "current_month": 1, "current_day": 1,
+			"hours_per_day": 24, "minutes_per_hour": 60, "seconds_per_minute": 60,
+			"leap_year_every": 0, "leap_year_offset": 0, "tracks_real_time": false,
+			"months": oversizedMonths, "weekdays": []map[string]any{{"name": "Day", "sort_order": 0, "is_rest_day": false}},
+		},
+	})
+	if err != nil {
+		t.Fatalf("marshal oversized fixture: %v", err)
+	}
+
+	tests := []struct {
+		name       string
+		raw        string
+		wantErr    bool
+		wantErrHas string
+		wantName   string
+		wantMonths int
+	}{
+		{
+			name:       "valid generated preset (a shipped preset standing in for the engine's own output)",
+			raw:        generatedCalendarFixture(t),
+			wantErr:    false,
+			wantName:   "Dwarven Deep-count",
+			wantMonths: 11,
+		},
+		{
+			name:       "over the local size cap",
+			raw:        strings.Repeat("a", maxGeneratedCalendarSize+1),
+			wantErr:    true,
+			wantErrHas: "too large",
+		},
+		{
+			name:       "malformed JSON",
+			raw:        "{not valid json",
+			wantErr:    true,
+		},
+		{
+			name:       "well-formed JSON that is not a calendar at all",
+			raw:        `{"hello":"world"}`,
+			wantErr:    true,
+		},
+		{
+			name:       "structurally too large (over checkCalendarImportLimits, well under the byte cap)",
+			raw:        string(oversizedCalendar),
+			wantErr:    true,
+			wantErrHas: "months",
+		},
+		{
+			name:       "empty string",
+			raw:        "",
+			wantErr:    true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got, err := parseGeneratedCalendarJSON(context.Background(), svc, tt.raw)
+			if tt.wantErr {
+				if err == nil {
+					t.Fatalf("expected an error, got a result: %+v", got)
+				}
+				if tt.wantErrHas != "" && !strings.Contains(err.Error(), tt.wantErrHas) {
+					t.Errorf("error = %q, want it to mention %q", err.Error(), tt.wantErrHas)
+				}
+				return
+			}
+			if err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
+			if got.CalendarName != tt.wantName {
+				t.Errorf("CalendarName = %q, want %q", got.CalendarName, tt.wantName)
+			}
+			if len(got.Months) != tt.wantMonths {
+				t.Errorf("got %d months, want %d", len(got.Months), tt.wantMonths)
+			}
+		})
+	}
+}
+
 func TestWizardGenerateStep_GateAndContent(t *testing.T) {
 	e, _ := newRealWorldTestRouter(nil)
 	const path = "/campaigns/camp-gen/calendars/wizard/generate"
