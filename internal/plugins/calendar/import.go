@@ -35,6 +35,13 @@ const (
 	FormatCalendaria ImportFormat = "calendaria"
 	FormatFantasyCal ImportFormat = "fantasy-calendar"
 	FormatUnknown    ImportFormat = "unknown"
+	// FormatRealWorld and FormatBuilt never reach DetectAndParse — they mark
+	// an ImportResult the wizard built server-side (reallife.go) or from the
+	// browser's "Build your own" step (parseWizardImportJSON), never a file
+	// on disk. Informational only (ImportResult.Format has no other reader),
+	// kept distinct from the upload-format constants above for clarity.
+	FormatRealWorld ImportFormat = "reallife-gregorian"
+	FormatBuilt     ImportFormat = "built"
 )
 
 // ImportResult holds the parsed calendar data ready to be applied.

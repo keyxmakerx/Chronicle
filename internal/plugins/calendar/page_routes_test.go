@@ -172,10 +172,21 @@ func TestWizardStart_GateAndContent(t *testing.T) {
 		t.Fatalf("Owner must be able to open the wizard, got %d: %s", rec.Code, rec.Body.String())
 	}
 	body := rec.Body.String()
-	if !strings.Contains(body, "Start from a preset") || !strings.Contains(body, "Import a file") {
-		t.Errorf("expected exactly the two in-scope Start tiles, body:\n%s", body)
+	for _, want := range []string{"Real-world calendar", "Start from a preset", "Build your own", "Import a file", "Generate one", "Under construction"} {
+		if !strings.Contains(body, want) {
+			t.Errorf("expected the Start step to mention %q, body:\n%s", want, body)
+		}
 	}
-	if strings.Contains(body, "Generate one") {
-		t.Errorf("the procedural \"Generate one\" tile is out of scope and must not render, body:\n%s", body)
+	if !strings.Contains(body, `aria-disabled="true"`) {
+		t.Errorf("the \"Generate one\" tile must be aria-disabled (the generator engine doesn't exist in this codebase), body:\n%s", body)
+	}
+	if strings.Contains(body, `hx-get="/campaigns/camp-1/calendars/wizard/generate`) {
+		t.Errorf("a disabled tile must not carry an hx-get — it must not be a working control, body:\n%s", body)
+	}
+	if strings.Contains(body, "For your table") == false || strings.Contains(body, "For your world") == false {
+		t.Errorf("expected the Start step's two purpose groupings, body:\n%s", body)
+	}
+	if strings.Contains(body, "fa-solid fa-book") || strings.Contains(body, "fa-solid fa-file-import") || strings.Contains(body, "fa-solid fa-dice") {
+		t.Errorf("the Start step's tiles must carry no decorative icons, body:\n%s", body)
 	}
 }

@@ -1,19 +1,31 @@
 // calendar_wizard.templ renders the new-calendar wizard's steps: Start,
-// Preset (picker + review) and Import (drop zone + review). Every step is
-// fetched via HTMX into the SAME dialog shell (#calv5-wizard-root, replaced
-// wholesale with hx-swap="outerHTML" on every step change) — simpler than
-// juggling a separate "shell vs. inner fragment" response shape per route,
-// at the cost of re-sending the shell's chrome on every step; that chrome is
-// a few hundred bytes, not a real cost at this scale.
+// Preset (picker + review), Import (drop zone + review), the Real-world
+// calendar's own review, and Build your own (structure editor + review).
+// Every step is fetched via HTMX into the SAME dialog shell
+// (#calv5-wizard-root, replaced wholesale with hx-swap="outerHTML" on every
+// step change) — simpler than juggling a separate "shell vs. inner
+// fragment" response shape per route, at the cost of re-sending the shell's
+// chrome on every step; that chrome is a few hundred bytes, not a real cost
+// at this scale.
 //
-// Out of scope for this wizard: the "Generate one" procedural tile, "Give it
-// a past", and the full structure editor — none of those exist anywhere in
-// this codebase.
+// No DECORATIVE icons anywhere in this file (the operator's own
+// instruction, already applied to this wizard once — see the close-button/
+// spinner/warning-triangle exceptions noted where wizardShell is defined
+// below): a disabled tile gets a plain text "Under construction" badge, and
+// every structure-editor control (reorder, remove, add) is a labelled text
+// button, never a glyph standing in for one.
+//
+// Out of scope for this wizard: the "Generate one" procedural tile is shown
+// but permanently disabled — the generator engine it would need exists only
+// as a design mockup, not in this codebase — and "Give it a past" does not
+// exist here either.
 package calendar
 
 import (
 	"encoding/json"
 	"fmt"
+
+	"github.com/keyxmakerx/chronicle/internal/timeutil"
 )
 
 // wizardShell is the dialog chrome every step renders inside.
@@ -51,35 +63,82 @@ templ wizardShell(stepLabel string, body templ.Component) {
 	</div>
 }
 
-// wizardStartBody is the Start step: exactly two tiles (the mockup's third,
-// procedural "Generate one" tile is out of scope — see the PR description).
+// wizardStartBody is the Start step, grouped by purpose per the operator's
+// own framing: "For your table" is the real-world calendar RSVPs and
+// availability actually need; "For your world" is every way to set up a
+// fantasy calendar's structure. "Generate one" renders but stays permanently
+// disabled — see its own doc comment below.
 templ wizardStartBody(campaignID string) {
 	<h2 class="calv5-wz-h">New calendar</h2>
 	<p class="calv5-wz-lead">Choose how to set up this calendar's months, weekdays, moons and seasons.</p>
-	<div class="calv5-tiles">
-		<button
-			type="button"
-			class="calv5-tile"
-			hx-get={ fmt.Sprintf("/campaigns/%s/calendars/wizard/presets", campaignID) }
-			hx-target="#calv5-wizard-root"
-			hx-swap="outerHTML"
-		>
-			<b>Start from a preset</b>
-			<span>One of Chronicle's shipped calendars — ready to use, easy to adjust later.</span>
-		</button>
-		<button
-			type="button"
-			class="calv5-tile"
-			hx-get={ fmt.Sprintf("/campaigns/%s/calendars/wizard/import", campaignID) }
-			hx-target="#calv5-wizard-root"
-			hx-swap="outerHTML"
-		>
-			<b>Import a file</b>
-			<span>Bring over a calendar from Simple Calendar, Calendaria, Fantasy-Calendar or a Chronicle export.</span>
-		</button>
+	<div class="calv5-tilegrp">
+		<span class="kicker">For your table</span>
+		<div class="calv5-tiles calv5-tiles-1">
+			<button
+				type="button"
+				class="calv5-tile featured"
+				hx-get={ fmt.Sprintf("/campaigns/%s/calendars/wizard/reallife", campaignID) }
+				hx-target="#calv5-wizard-root"
+				hx-swap="outerHTML"
+			>
+				<b>Real-world calendar</b>
+				<span>Game nights, RSVPs and everyone's availability, on the real dates.</span>
+			</button>
+		</div>
+	</div>
+	<div class="calv5-tilegrp">
+		<span class="kicker">For your world</span>
+		<div class="calv5-tiles">
+			<button
+				type="button"
+				class="calv5-tile"
+				hx-get={ fmt.Sprintf("/campaigns/%s/calendars/wizard/presets", campaignID) }
+				hx-target="#calv5-wizard-root"
+				hx-swap="outerHTML"
+			>
+				<b>Start from a preset</b>
+				<span>One of Chronicle's shipped calendars — ready to use, easy to adjust later.</span>
+			</button>
+			<button
+				type="button"
+				class="calv5-tile"
+				hx-get={ fmt.Sprintf("/campaigns/%s/calendars/wizard/build", campaignID) }
+				hx-target="#calv5-wizard-root"
+				hx-swap="outerHTML"
+			>
+				<b>Build your own</b>
+				<span>Set your own months, weekdays, moons and era from scratch.</span>
+			</button>
+			<button
+				type="button"
+				class="calv5-tile"
+				hx-get={ fmt.Sprintf("/campaigns/%s/calendars/wizard/import", campaignID) }
+				hx-target="#calv5-wizard-root"
+				hx-swap="outerHTML"
+			>
+				<b>Import a file</b>
+				<span>Bring over a calendar from Simple Calendar, Calendaria, Fantasy-Calendar or a Chronicle export.</span>
+			</button>
+			@wizardGenerateOneTile()
+		</div>
 	</div>
 	<div class="calv5-reassure">
 		<span>Nothing is created until you confirm on the last step — you can back out any time.</span>
+	</div>
+}
+
+// wizardGenerateOneTile is the procedural generator tile: shown so the
+// owner knows it's coming, but permanently disabled — the recipe-based
+// generator engine it would need exists only as a design mockup
+// (scratchpad/mockups/calendar-setup/generators.js), not in this codebase,
+// so there is nothing for it to call. A plain <div>, not a <button>: it is
+// aria-disabled and carries no tabindex/hx-get, so it is genuinely inert
+// rather than a focusable control that does nothing when activated.
+templ wizardGenerateOneTile() {
+	<div class="calv5-tile" aria-disabled="true">
+		<b>Generate one</b>
+		<span class="calv5-uc-badge">Under construction</span>
+		<span>A whole calendar from a recipe — months, weeks, moons and names in one culture's voice. Use a preset or build your own for now.</span>
 	</div>
 }
 
@@ -241,58 +300,10 @@ templ wizardReviewBody(campaignID, source, presetName, importJSON, csrfToken, ba
 					<span>Calendar name</span>
 					<input class="calv5-inp" type="text" name="name" value={ ir.CalendarName } required maxlength="120"/>
 				</label>
-				<div class="calv5-rv-date">
-					<label class="calv5-fld">
-						<span>Year</span>
-						<input class="calv5-inp" type="number" name="current_year" value={ fmt.Sprintf("%d", ir.Today.Year) } required/>
-					</label>
-					<label class="calv5-fld">
-						<span>Month</span>
-						<select class="calv5-inp" name="current_month" x-model="m" required>
-							<option value="" disabled selected?={ ir.Today.Month == nil }>Choose…</option>
-							for i, mo := range ir.Months {
-								<option value={ fmt.Sprintf("%d", i+1) } selected?={ ir.Today.Month != nil && *ir.Today.Month == i+1 }>{ mo.Name }</option>
-							}
-						</select>
-					</label>
-					<label class="calv5-fld">
-						<span>Day</span>
-						<input
-							class="calv5-inp"
-							type="number"
-							name="current_day"
-							min="1"
-							x-bind:max="md[m-1] || 31"
-							x-model="d"
-							required
-						/>
-					</label>
-				</div>
+				@wizardDateFields(ir)
 			</div>
 			<div>
-				<div class="calv5-report">
-					<div class="calv5-rgrp">
-						<h4>Structure</h4>
-						<ul>
-							<li><b>{ fmt.Sprintf("%d", len(ir.Months)) }</b> { nounFor(len(ir.Months), "month", "months") }</li>
-							<li><b>{ fmt.Sprintf("%d", len(ir.Weekdays)) }</b> { nounFor(len(ir.Weekdays), "weekday", "weekdays") }</li>
-							<li><b>{ fmt.Sprintf("%d", len(ir.Seasons)) }</b> { nounFor(len(ir.Seasons), "season", "seasons") }</li>
-						</ul>
-					</div>
-					<div class="calv5-rgrp">
-						<h4>Sky &amp; eras</h4>
-						<ul>
-							<li><b>{ fmt.Sprintf("%d", len(ir.Moons)) }</b> { nounFor(len(ir.Moons), "moon", "moons") }</li>
-							<li><b>{ fmt.Sprintf("%d", len(ir.Eras)) }</b> { nounFor(len(ir.Eras), "era", "eras") }</li>
-						</ul>
-					</div>
-					<div class="calv5-rgrp">
-						<h4>Events</h4>
-						<ul>
-							<li><b>{ fmt.Sprintf("%d", len(ir.Events)) }</b> carried over</li>
-						</ul>
-					</div>
-				</div>
+				@wizardStructureSummary(ir)
 			</div>
 		</div>
 		<div style="margin-top:18px;display:flex;gap:8px;align-items:center">
@@ -306,6 +317,72 @@ templ wizardReviewBody(campaignID, source, presetName, importJSON, csrfToken, ba
 			</button>
 		</div>
 	</form>
+}
+
+// wizardDateFields is the "today in the world" year/month/day trio, shared
+// by every Review step that asks for it (every source except the
+// real-world calendar's own review while "today follows the real date" is
+// on — see wizardRealWorldReviewBody). Relies on the enclosing <form>'s
+// Alpine x-data carrying m/d/md (see wizardReviewBody's and
+// wizardRealWorldReviewBody's own x-data) — a templ component nests plain
+// DOM, so Alpine's scoping (tree-based, not component-based) still resolves
+// x-model="m" etc. to that ancestor regardless of this extraction.
+templ wizardDateFields(ir *ImportResult) {
+	<div class="calv5-rv-date">
+		<label class="calv5-fld">
+			<span>Year</span>
+			<input class="calv5-inp" type="number" name="current_year" value={ fmt.Sprintf("%d", ir.Today.Year) } required/>
+		</label>
+		<label class="calv5-fld">
+			<span>Month</span>
+			<select class="calv5-inp" name="current_month" x-model="m" required>
+				<option value="" disabled selected?={ ir.Today.Month == nil }>Choose…</option>
+				for i, mo := range ir.Months {
+					<option value={ fmt.Sprintf("%d", i+1) } selected?={ ir.Today.Month != nil && *ir.Today.Month == i+1 }>{ mo.Name }</option>
+				}
+			</select>
+		</label>
+		<label class="calv5-fld">
+			<span>Day</span>
+			<input
+				class="calv5-inp"
+				type="number"
+				name="current_day"
+				min="1"
+				x-bind:max="md[m-1] || 31"
+				x-model="d"
+				required
+			/>
+		</label>
+	</div>
+}
+
+// wizardStructureSummary is the read-only "what's about to be created" panel
+// shared by every Review step variant (preset, import, build, real-world).
+templ wizardStructureSummary(ir *ImportResult) {
+	<div class="calv5-report">
+		<div class="calv5-rgrp">
+			<h4>Structure</h4>
+			<ul>
+				<li><b>{ fmt.Sprintf("%d", len(ir.Months)) }</b> { nounFor(len(ir.Months), "month", "months") }</li>
+				<li><b>{ fmt.Sprintf("%d", len(ir.Weekdays)) }</b> { nounFor(len(ir.Weekdays), "weekday", "weekdays") }</li>
+				<li><b>{ fmt.Sprintf("%d", len(ir.Seasons)) }</b> { nounFor(len(ir.Seasons), "season", "seasons") }</li>
+			</ul>
+		</div>
+		<div class="calv5-rgrp">
+			<h4>Sky &amp; eras</h4>
+			<ul>
+				<li><b>{ fmt.Sprintf("%d", len(ir.Moons)) }</b> { nounFor(len(ir.Moons), "moon", "moons") }</li>
+				<li><b>{ fmt.Sprintf("%d", len(ir.Eras)) }</b> { nounFor(len(ir.Eras), "era", "eras") }</li>
+			</ul>
+		</div>
+		<div class="calv5-rgrp">
+			<h4>Events</h4>
+			<ul>
+				<li><b>{ fmt.Sprintf("%d", len(ir.Events)) }</b> carried over</li>
+			</ul>
+		</div>
+	</div>
 }
 
 // jsIntOrEmpty renders an *int as a bare JS number literal, or the string
@@ -336,4 +413,293 @@ func jsMonthDayCounts(months []MonthInput) string {
 		return "[]"
 	}
 	return string(b)
+}
+
+// jsStringLit renders s as a safe, escaped JS string literal — a JSON string
+// is valid JS string syntax, so this is exactly right for embedding server
+// data into an inline Alpine x-data attribute, same job as jsMonthDayCounts.
+func jsStringLit(s string) string {
+	b, err := json.Marshal(s)
+	if err != nil {
+		return `""`
+	}
+	return string(b)
+}
+
+// zoneOrDefault returns z, or "UTC" when z is empty. The review step's
+// x-data always seeds a real zone value so the timezone <select> (bound via
+// x-model) never targets a value no <option> carries — which would leave a
+// plain HTML <select> with nothing visibly selected.
+func zoneOrDefault(z string) string {
+	if z == "" {
+		return "UTC"
+	}
+	return z
+}
+
+// wizardRealWorldReviewBody is the Real-world calendar's own Review step —
+// distinct from wizardReviewBody because it asks for different things: a
+// time zone and "today follows the real date" instead of a bare today-date
+// (see WizardRealWorldReview's own doc comment for why this source needs no
+// picker/upload step first). defaultZone is a starting suggestion only
+// (h.ownerZoneHint, itself best-effort) — the review step's own x-init
+// prefers whatever the BROWSER reports via Intl, when that's one of the
+// zones offered.
+templ wizardRealWorldReviewBody(campaignID, csrfToken, backURL, formError, defaultZone string, zones []timeutil.Zone, ir *ImportResult) {
+	<h2 class="calv5-wz-h">Review</h2>
+	<p class="calv5-wz-lead">Confirm the calendar's name and time zone, then create it.</p>
+	if formError != "" {
+		<p class="calv5-err">{ formError }</p>
+	}
+	if len(ir.Warnings) > 0 {
+		<div class="calv5-warnbox">
+			<i class="fa-solid fa-triangle-exclamation i"></i>
+			<div>
+				<b>Worth a look</b>
+				<ul>
+					for _, w := range ir.Warnings {
+						<li>{ w }</li>
+					}
+				</ul>
+			</div>
+		</div>
+	}
+	<form
+		hx-post={ fmt.Sprintf("/campaigns/%s/calendars/wizard/create", campaignID) }
+		hx-target="#calv5-wizard-root"
+		hx-swap="outerHTML"
+		hx-encoding="multipart/form-data"
+		hx-disabled-elt="#calv5-review-submit"
+		hx-indicator="#calv5-review-spinner"
+		x-data={ fmt.Sprintf("{followsReal:true,tz:%s,zones:%s,m:%s,d:%s,md:%s}",
+			jsStringLit(zoneOrDefault(defaultZone)), timeutil.CommonZonesJSON(),
+			jsIntOrEmpty(ir.Today.Month), jsIntOrEmpty(ir.Today.Day), jsMonthDayCounts(ir.Months)) }
+		x-init="(function(){try{var z=Intl.DateTimeFormat().resolvedOptions().timeZone;if(z&&zones.indexOf(z)>-1){tz=z}}catch(e){}})()"
+	>
+		<input type="hidden" name="csrf_token" value={ csrfToken }/>
+		<input type="hidden" name="source" value="reallife"/>
+		<input type="hidden" name="tracks_real_time" x-bind:value="followsReal ? 'true' : 'false'"/>
+		<div class="calv5-rv">
+			<div>
+				<label class="calv5-fld">
+					<span>Calendar name</span>
+					<input class="calv5-inp" type="text" name="name" value={ ir.CalendarName } required maxlength="120"/>
+				</label>
+				<label class="calv5-fld" style="margin-top:10px">
+					<span>Time zone</span>
+					<select class="calv5-inp" name="real_time_zone" x-model="tz" required>
+						for _, z := range zones {
+							<option value={ z.Value } selected?={ z.Value == zoneOrDefault(defaultZone) }>{ z.Label }</option>
+						}
+					</select>
+				</label>
+				<label class="calv5-toggle-row">
+					<input type="checkbox" x-model="followsReal"/>
+					<span>Today follows the real date</span>
+				</label>
+				<!-- A <fieldset disabled> (not just a hidden <div>) — the year/
+				     month/day fields inside are `required`, and a plain
+				     display:none on a required field still fails the
+				     browser's native constraint validation on submit, since
+				     it's merely hidden, not exempted. Disabling the fieldset
+				     is what actually exempts its fields from validation. -->
+				<fieldset x-show="!followsReal" x-bind:disabled="followsReal" style="border:0;padding:0;margin:0" x-cloak>
+					@wizardDateFields(ir)
+				</fieldset>
+			</div>
+			<div>
+				@wizardStructureSummary(ir)
+			</div>
+		</div>
+		<div style="margin-top:18px;display:flex;gap:8px;align-items:center">
+			<button type="button" class="btn quiet" hx-get={ backURL } hx-target="#calv5-wizard-root" hx-swap="outerHTML">
+				Back
+			</button>
+			<span class="sp" style="flex:1"></span>
+			<i id="calv5-review-spinner" class="fa-solid fa-spinner fa-spin htmx-indicator" aria-hidden="true"></i>
+			<button id="calv5-review-submit" type="submit" class="btn primary" x-bind:disabled="!followsReal && (!m || !d)">
+				Create calendar
+			</button>
+		</div>
+	</form>
+}
+
+// wizardBuildXData is the "Build your own" step's entire Alpine x-data
+// object literal: sensible starting defaults (12 months, 7 weekdays, one
+// moon, one era) plus the add/remove/reorder/serialize methods its buttons
+// call. It is pure client-side state — HTMX only ever sees buildJSON()'s
+// output, in the hidden import_json field wizardBuildBody renders — so there
+// is no server-side mirror of this shape to keep in sync; WizardBuildPreview
+// re-validates whatever buildJSON() produced exactly like an uploaded
+// file's structure (parseWizardImportJSON — see that function and
+// WizardBuildPreview's own doc comments).
+//
+// The default months/weekdays/moon are JSON-marshaled (so their string
+// fields are correctly quoted/escaped) and spliced into an otherwise-static
+// JS object-literal template; JSON syntax is a valid subset of JS object/
+// array literal syntax, so the result is one ordinary Alpine x-data
+// expression, no different in kind from jsMonthDayCounts' array literal
+// above — just larger. Numbers are parsed defensively (parseInt/parseFloat
+// with a fallback) in buildJSON so a field the owner left blank or typed
+// text into still serializes to something clampCalendarStructure can clamp,
+// rather than a literal NaN reaching the server.
+func wizardBuildXData() string {
+	months := make([]map[string]any, 12)
+	for i := range months {
+		months[i] = map[string]any{"name": fmt.Sprintf("Month %d", i+1), "days": 30, "leap": 0}
+	}
+	weekdays := make([]map[string]any, 7)
+	for i := range weekdays {
+		weekdays[i] = map[string]any{"name": fmt.Sprintf("Day %d", i+1)}
+	}
+	moons := []map[string]any{{"name": "Moon", "cycle": 29.5}}
+	monthsJSON, _ := json.Marshal(months)
+	weekdaysJSON, _ := json.Marshal(weekdays)
+	moonsJSON, _ := json.Marshal(moons)
+
+	return fmt.Sprintf(`{
+months: %s,
+weekdays: %s,
+moons: %s,
+leapOn: false,
+leapEvery: 4,
+eraName: 'Age 1',
+eraYear: 1,
+addMonth(){ this.months.push({name:'Month '+(this.months.length+1), days:30, leap:0}); },
+removeMonth(i){ if(this.months.length>1){ this.months.splice(i,1); } },
+moveMonth(i,dir){ var j=i+dir; if(j<0||j>=this.months.length) return; var t=this.months.splice(i,1)[0]; this.months.splice(j,0,t); },
+addWeekday(){ this.weekdays.push({name:'Day '+(this.weekdays.length+1)}); },
+removeWeekday(i){ if(this.weekdays.length>1){ this.weekdays.splice(i,1); } },
+moveWeekday(i,dir){ var j=i+dir; if(j<0||j>=this.weekdays.length) return; var t=this.weekdays.splice(i,1)[0]; this.weekdays.splice(j,0,t); },
+addMoon(){ this.moons.push({name:'Moon '+(this.moons.length+1), cycle:29.5}); },
+removeMoon(i){ this.moons.splice(i,1); },
+buildJSON(){
+  var months=this.months.map(function(mo,i){ return {name:(mo.name||('Month '+(i+1))), days:Math.max(1,parseInt(mo.days,10)||1), sort_order:i, is_intercalary:false, leap_year_days:Math.max(0,parseInt(mo.leap,10)||0)}; });
+  var weekdays=this.weekdays.map(function(w,i){ return {name:(w.name||('Day '+(i+1))), sort_order:i, is_rest_day:false}; });
+  var moons=this.moons.map(function(mo){ return {name:(mo.name||'Moon'), cycle_days:(parseFloat(mo.cycle)||29.5), phase_offset:0, color:'#c0c0c0'}; });
+  var eras=this.eraName?[{name:this.eraName, start_year:(parseInt(this.eraYear,10)||1), start_month:1, start_day:1, color:'#6366f1'}]:[];
+  var year=parseInt(this.eraYear,10)||1;
+  return JSON.stringify({format:'built', calendar_name:'My calendar', months:months, weekdays:weekdays, moons:moons, seasons:[], eras:eras,
+    settings:{mode:'fantasy', current_year:year, hours_per_day:24, minutes_per_hour:60, seconds_per_minute:60, leap_year_every:(this.leapOn?(parseInt(this.leapEvery,10)||0):0), leap_year_offset:0},
+    today:{year:year}});
+}
+}`, monthsJSON, weekdaysJSON, moonsJSON)
+}
+
+// wizardBuildBody is the "Build your own" structure editor: months,
+// weekdays, an optional leap rule, optional moons and a single era, each
+// with sensible starting defaults the owner is expected to rename/reshape.
+// Simplified from the signed structure editor's look (scratchpad/mockups/
+// calendar-v6(b)) to what this wizard needs: no drag-and-drop (up/down
+// buttons reorder instead), no color pickers or per-moon render params —
+// this step only ever produces an ImportResult, and CreateCalendarFromImport
+// fills in every cosmetic default (color, etc.) the same way an import with
+// none of its own would. "Continue" hands the built structure to the
+// existing Review step (WizardBuildPreview), exactly like a parsed upload
+// does. formError is set only by WizardBuildPreview's failure branch (see
+// its own doc comment for why that path is realistically unreached by a
+// normal session) and, unlike every other step's formError, cannot redisplay
+// the owner's in-progress edits — the editor restarts from its own defaults.
+templ wizardBuildBody(campaignID, csrfToken, formError string) {
+	<h2 class="calv5-wz-h">Build your own</h2>
+	<p class="calv5-wz-lead">Set this calendar's months, weekdays, an optional leap rule, moons and era. Everything here can be changed again later.</p>
+	if formError != "" {
+		<p class="calv5-err">{ formError }</p>
+	}
+	<form
+		hx-post={ fmt.Sprintf("/campaigns/%s/calendars/wizard/build/preview", campaignID) }
+		hx-target="#calv5-wizard-root"
+		hx-swap="outerHTML"
+		hx-encoding="multipart/form-data"
+		hx-disabled-elt="#calv5-build-submit"
+		hx-indicator="#calv5-build-spinner"
+		x-data={ wizardBuildXData() }
+	>
+		<input type="hidden" name="csrf_token" value={ csrfToken }/>
+		<input type="hidden" name="import_json" x-bind:value="buildJSON()"/>
+		<div class="calv5-bsec">
+			<h4>Months</h4>
+			<div class="calv5-blist">
+				<template x-for="(mo, i) in months" x-bind:key="i">
+					<div class="calv5-brow">
+						<input type="text" class="nm" x-model="mo.name" placeholder="Name" maxlength="100"/>
+						<input type="number" class="num" x-model.number="mo.days" min="1" max="3660" placeholder="Days"/>
+						<input type="number" class="num" x-model.number="mo.leap" min="0" max="30" placeholder="Leap days"/>
+						<button type="button" class="mini" @click="moveMonth(i,-1)" x-bind:disabled="i===0">Up</button>
+						<button type="button" class="mini" @click="moveMonth(i,1)" x-bind:disabled="i===months.length-1">Down</button>
+						<button type="button" class="mini" @click="removeMonth(i)" x-bind:disabled="months.length<=1">Remove</button>
+					</div>
+				</template>
+			</div>
+			<button type="button" class="btn sm quiet" @click="addMonth()" x-bind:disabled="months.length>=60">Add month</button>
+		</div>
+		<div class="calv5-bsec">
+			<h4>Weekdays</h4>
+			<div class="calv5-blist">
+				<template x-for="(w, i) in weekdays" x-bind:key="i">
+					<div class="calv5-brow">
+						<input type="text" class="nm" x-model="w.name" placeholder="Name" maxlength="100"/>
+						<button type="button" class="mini" @click="moveWeekday(i,-1)" x-bind:disabled="i===0">Up</button>
+						<button type="button" class="mini" @click="moveWeekday(i,1)" x-bind:disabled="i===weekdays.length-1">Down</button>
+						<button type="button" class="mini" @click="removeWeekday(i)" x-bind:disabled="weekdays.length<=1">Remove</button>
+					</div>
+				</template>
+			</div>
+			<button type="button" class="btn sm quiet" @click="addWeekday()" x-bind:disabled="weekdays.length>=30">Add weekday</button>
+		</div>
+		<div class="calv5-bsec">
+			<h4>Leap rule</h4>
+			<label class="calv5-toggle-row">
+				<input type="checkbox" x-model="leapOn"/>
+				<span>Leap years</span>
+			</label>
+			<div class="calv5-rv-date" x-show="leapOn" x-cloak>
+				<label class="calv5-fld">
+					<span>Every N years</span>
+					<input class="calv5-inp" type="number" x-model.number="leapEvery" min="2" max="1000"/>
+				</label>
+			</div>
+			<p class="calv5-wz-lead" style="margin-top:6px">Give a month above a "Leap days" value to say what a leap year adds.</p>
+		</div>
+		<div class="calv5-bsec">
+			<h4>Moons</h4>
+			<div class="calv5-blist">
+				<template x-for="(mo, i) in moons" x-bind:key="i">
+					<div class="calv5-brow">
+						<input type="text" class="nm" x-model="mo.name" placeholder="Name" maxlength="100"/>
+						<input type="number" class="num" x-model.number="mo.cycle" min="1" max="3660" step="0.1" placeholder="Cycle days"/>
+						<button type="button" class="mini" @click="removeMoon(i)">Remove</button>
+					</div>
+				</template>
+			</div>
+			<button type="button" class="btn sm quiet" @click="addMoon()" x-bind:disabled="moons.length>=20">Add moon</button>
+		</div>
+		<div class="calv5-bsec">
+			<h4>Era</h4>
+			<div class="calv5-rv-date">
+				<label class="calv5-fld">
+					<span>Era name</span>
+					<input class="calv5-inp" type="text" x-model="eraName" maxlength="100"/>
+				</label>
+				<label class="calv5-fld">
+					<span>Starting year</span>
+					<input class="calv5-inp" type="number" x-model.number="eraYear"/>
+				</label>
+			</div>
+		</div>
+		<div style="margin-top:18px;display:flex;gap:8px;align-items:center">
+			<button
+				type="button"
+				class="btn quiet"
+				hx-get={ fmt.Sprintf("/campaigns/%s/calendars/wizard", campaignID) }
+				hx-target="#calv5-wizard-root"
+				hx-swap="outerHTML"
+			>
+				Back
+			</button>
+			<span class="sp" style="flex:1"></span>
+			<i id="calv5-build-spinner" class="fa-solid fa-spinner fa-spin htmx-indicator" aria-hidden="true"></i>
+			<button id="calv5-build-submit" type="submit" class="btn primary">Continue</button>
+		</div>
+	</form>
 }

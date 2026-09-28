@@ -209,11 +209,27 @@ html[data-theme="dark"] .calv5 {
 /* ── The new-calendar wizard ── */
 .calv5-wz-h { margin: 0; font: 500 22px/1.15 var(--serif); color: var(--ink); }
 .calv5-wz-lead { margin: 6px 0 0; font: 500 13px/1.5 var(--sans, sans-serif); color: var(--ink2); max-width: 62ch; }
-.calv5-tiles { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; margin-top: 18px; }
+/* Start step: two purpose groups ("For your table" / "For your world"), each
+   its own kicker label above a tile grid — see wizardStartBody. */
+.calv5-tilegrp { margin-top: 18px; }
+.calv5-tilegrp + .calv5-tilegrp { margin-top: 22px; }
+.calv5-tilegrp .calv5-tiles { margin-top: 10px; }
+.calv5-tiles { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
+.calv5-tiles-1 { grid-template-columns: minmax(0, 1fr); }
 .calv5 .calv5-tile { position: relative; display: flex; flex-direction: column; gap: 6px; min-width: 0; padding: 16px 16px 18px; border-radius: 14px; border: 1px solid var(--edge); background: var(--paper2); text-align: left; }
 .calv5 .calv5-tile:hover { background: var(--paper); box-shadow: var(--shadow-s); }
+/* The one tile the operator called "the important one" starts in its own
+   hover-like state, so it reads as the recommended path without a label
+   claiming so (no icons, no badges here — just contrast). */
+.calv5 .calv5-tile.featured { background: var(--paper); box-shadow: var(--shadow-s); }
+/* Generate one: shown, permanently inert (a <div>, not a <button> — see
+   wizardGenerateOneTile). Dimmed and non-interactive rather than merely
+   unclickable, so the disabled state is visible before a click is tried. */
+.calv5 .calv5-tile[aria-disabled="true"] { cursor: default; opacity: 0.55; }
+.calv5 .calv5-tile[aria-disabled="true"]:hover { background: var(--paper2); box-shadow: none; }
 .calv5-tile b { font: 600 15px/1.3 var(--sans, sans-serif); color: var(--ink); }
 .calv5-tile span { font: 500 12.5px/1.45 var(--sans, sans-serif); color: var(--mut); }
+.calv5-uc-badge { display: inline-flex; align-self: flex-start; height: 18px; padding: 0 8px; border-radius: 99px; font: 650 9px/1 var(--sans, sans-serif); letter-spacing: 0.06em; text-transform: uppercase; color: var(--mut); background: var(--hair2); }
 .calv5-reassure { display: flex; align-items: flex-start; gap: 8px; margin-top: 16px; padding: 10px 12px; border-radius: 11px; background: var(--paper2); font: 500 12px/1.5 var(--sans, sans-serif); color: var(--ink2); max-width: 70ch; }
 
 .calv5-presets { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; margin-top: 16px; }
@@ -253,6 +269,28 @@ html[data-theme="dark"] .calv5 {
 .calv5-warnbox ul { margin: 6px 0 0; padding-left: 16px; }
 .calv5-warnbox li { margin: 2px 0; }
 
+/* The real-world review's "Today follows the real date" switch and the
+   build editor's "Leap years" toggle: a plain labelled checkbox, not the
+   (unused, differently-themed) .toggle component elsewhere in the app —
+   see wizardRealWorldReviewBody/wizardBuildBody's own comments for why. */
+.calv5-toggle-row { display: flex; align-items: center; gap: 8px; margin-top: 12px; font: 500 12.5px/1.4 var(--sans, sans-serif); color: var(--ink2); }
+.calv5-toggle-row input[type="checkbox"] { width: 15px; height: 15px; accent-color: var(--ink); }
+
+/* "Build your own": one labelled section per structure part, each holding a
+   list of rows (name + number fields) with plain-text reorder/remove
+   buttons — no icons, per the operator's instruction. */
+.calv5-bsec { margin-top: 20px; }
+.calv5-bsec:first-of-type { margin-top: 16px; }
+.calv5-bsec h4 { margin: 0 0 8px; font: 650 9.5px/1 var(--sans, sans-serif); letter-spacing: 0.14em; text-transform: uppercase; color: var(--mut); }
+.calv5-blist { display: flex; flex-direction: column; gap: 6px; }
+.calv5-brow { display: flex; align-items: center; gap: 6px; }
+.calv5-brow input[type="text"], .calv5-brow input[type="number"] { height: 32px; padding: 0 9px; border-radius: 8px; border: 1px solid var(--edge); background: var(--paper2); font: 500 12.5px/1 var(--sans, sans-serif); color: var(--ink); min-width: 0; }
+.calv5-brow input[type="text"].nm { flex: 1 1 auto; }
+.calv5-brow input[type="number"].num { width: 80px; flex: none; }
+.calv5-brow .mini { flex: none; height: 32px; padding: 0 10px; border-radius: 8px; border: 1px solid var(--edge); background: var(--paper); font: 600 11.5px/1 var(--sans, sans-serif); color: var(--ink2); white-space: nowrap; }
+.calv5-brow .mini:hover:not(:disabled) { background: var(--paper2); color: var(--ink); }
+.calv5-brow .mini:disabled { opacity: 0.4; }
+
 @media (max-width: 640px) {
   .calv5-wrap { padding: 12px 12px 32px; }
   .calv5-dhead { grid-template-columns: minmax(0, 1fr); grid-template-areas: "k" "t" "s" "a"; }
@@ -262,6 +300,8 @@ html[data-theme="dark"] .calv5 {
   .calv5-cards { grid-template-columns: 1fr; grid-auto-rows: 128px; gap: 12px; }
   .calv5-tiles, .calv5-presets, .calv5-report, .calv5-rv { grid-template-columns: 1fr; }
   .calv5-panel { max-width: 100% !important; }
+  .calv5-brow { flex-wrap: wrap; }
+  .calv5-brow input[type="text"].nm { flex-basis: 100%; }
 }
 
 /* Reduced motion: every entrance/exit becomes a short cross-fade, never a
