@@ -6,7 +6,8 @@
  *   the server reads, so a page load paints them already right.
  * - Keeps the current row, its page name and the living ring in step with
  *   boosted navigation, which swaps only #main-content: the layout renders a
- *   [data-nav-current] marker there, and this reads it.
+ *   [data-nav-current] marker there, and this reads it. While a category's
+ *   panel (sidebar_drill.js) is open, the ring marks the panel's header.
  * - The phone drawer: out of the tab order while shut, focus kept inside
  *   while open. (Escape and the menu button live in app.templ's Alpine.)
  *
@@ -235,6 +236,10 @@
   /** The row the ring belongs on: the current row, or its category while
    *  its sub-categories are folded; none while its section is folded. */
   function ringTargetFor(key) {
+    // An open category panel covers the categories, so while it is open the
+    // ring marks its header: that category is where the reader now is.
+    var head = document.querySelector('#sidebar-drill.is-open .nav-drill-head');
+    if (shown(head)) return head;
     var row = rowFor(key);
     if (shown(row)) return row;
     var rw = row && row.parentElement && row.parentElement.closest('.nav-rw');
@@ -457,7 +462,7 @@
     // A plain click on a boosted row: the ring leaves for it at once, and the
     // page's marker confirms the row when the page arrives. A category row
     // is a <button> that opens the drill panel (sidebar_drill.js), never an
-    // <a>, so it never matches here — opening the panel doesn't move the ring.
+    // <a>; the ring follows that panel through 'chronicle:drill' instead.
     var row = t.closest('#sidebar a.nav-row');
     if (!row || e.defaultPrevented || e.button !== 0 || e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return;
     if (row.target === '_blank' || row.getAttribute('hx-boost') === 'false' || editing()) return;
@@ -465,6 +470,12 @@
   });
 
   window.addEventListener('chronicle:nav-editing', syncDrawer);
+
+  // sidebar_drill.js says when a category panel opens (once its content is
+  // in) or closes; the ring follows it there and back.
+  document.addEventListener('chronicle:drill', function () {
+    moveRing(ringTargetFor(currentKey()), true);
+  });
 
   document.addEventListener('keydown', function (e) {
     if (e.key === 'Tab' && drawerOpen() && phoneQuery && phoneQuery.matches) trapTab(e);
