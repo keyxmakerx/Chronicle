@@ -3,6 +3,7 @@ package timeutil
 import (
 	"encoding/json"
 	"testing"
+	"time"
 )
 
 // The three pre-consolidation curated lists (account settings, calendar
@@ -71,25 +72,66 @@ func TestCommonZones_IsUnionOfOldLists(t *testing.T) {
 	}
 }
 
-// TestCommonZones_ExactUnion pins the other direction too: CommonZones must
-// be the union and nothing more — every entry traces back to one of the
-// three old lists below.
+// TestCommonZones_ExactUnion permits only the old union and explicit additions.
 func TestCommonZones_ExactUnion(t *testing.T) {
+	additions := []string{
+		"Asia/Kabul", "Asia/Kathmandu", "Asia/Yangon", "Australia/Darwin", "Pacific/Chatham",
+	}
 	union := make(map[string]bool)
-	for _, old := range [][]string{oldAuthList, oldCalendarList, oldAvailabilityList} {
-		for _, zone := range old {
+	for _, list := range [][]string{oldAuthList, oldCalendarList, oldAvailabilityList, additions} {
+		for _, zone := range list {
 			union[zone] = true
 		}
 	}
-
 	got := commonZoneValueSet(t)
 	if len(got) != len(union) {
-		t.Errorf("CommonZones() has %d entries, want exactly %d (the union of the old lists)", len(got), len(union))
+		t.Errorf("CommonZones() has %d entries, want exactly %d (old union plus additions)", len(got), len(union))
+	}
+	for zone := range union {
+		if !got[zone] {
+			t.Errorf("CommonZones() is missing %q", zone)
+		}
 	}
 	for zone := range got {
 		if !union[zone] {
-			t.Errorf("CommonZones() contains %q, not present in any pre-consolidation list", zone)
+			t.Errorf("CommonZones() contains unapproved zone %q", zone)
 		}
+	}
+}
+
+func TestCommonZones_FractionalOffsets(t *testing.T) {
+	tests := []struct {
+		name          string
+		january, july int
+	}{
+		{"Asia/Kabul", 270, 270},
+		{"Asia/Kathmandu", 345, 345},
+		{"Asia/Yangon", 390, 390},
+		{"Australia/Darwin", 570, 570},
+		{"Pacific/Chatham", 825, 765},
+	}
+	got := commonZoneValueSet(t)
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if !got[tt.name] {
+				t.Fatalf("missing picker option %q", tt.name)
+			}
+			loc, err := time.LoadLocation(tt.name)
+			if err != nil {
+				t.Fatal(err)
+			}
+			for _, date := range []struct {
+				month   time.Month
+				minutes int
+			}{
+				{time.January, tt.january}, {time.July, tt.july},
+			} {
+				_, offset := time.Date(2026, date.month, 15, 12, 0, 0, 0, loc).Zone()
+				if offset != date.minutes*60 {
+					t.Errorf("%s offset = %d seconds, want %d", date.month, offset, date.minutes*60)
+				}
+			}
+		})
 	}
 }
 

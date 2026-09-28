@@ -195,13 +195,16 @@ func (a *App) setupMiddleware() {
 }
 
 // calendarImportPathPattern matches the calendar plugin's upload-heavy
-// routes (its own routes.go): the wizard's drag-and-drop import preview and
-// its review-step create, and their JSON-API equivalents. Matched against
-// the raw incoming URL path, so it doesn't need an *echo.Route lookup this
-// early in the middleware chain — :id is any single path segment, exactly
-// as permissive as Echo's own routing is for that position.
+// routes (its own routes.go): the wizard's drag-and-drop import preview, its
+// "Build your own" structure preview (the browser's hand-built structure is
+// just as large as an uploaded file's, and re-validated the same way —
+// parseWizardImportJSON), its review-step create, and their JSON-API
+// equivalents. Matched against the raw incoming URL path, so it doesn't need
+// an *echo.Route lookup this early in the middleware chain — :id is any
+// single path segment, exactly as permissive as Echo's own routing is for
+// that position.
 var calendarImportPathPattern = regexp.MustCompile(
-	`^/campaigns/[^/]+/calendars/(wizard/import/preview|wizard/create|import/preview|import)$`)
+	`^/campaigns/[^/]+/calendars/(wizard/import/preview|wizard/build/preview|wizard/create|import/preview|import)$`)
 
 // isCalendarImportPath reports whether path is one of the calendar import
 // routes the global body limit above must not apply to (see its own

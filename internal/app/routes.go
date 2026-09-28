@@ -2597,6 +2597,10 @@ func (a *App) RegisterRoutes() {
 		gated.SetEntityVisibilityGate(&entityVisibilityFilterAdapter{svc: entityService})
 	}
 	calendarHandler := calendar.NewHandler(calendarService)
+	// Optional UX nicety: suggest the owner's own stored account timezone as
+	// the real-world calendar wizard step's starting default (see
+	// calendar.Handler.SetTimezoneLookup's own doc comment).
+	calendarHandler.SetTimezoneLookup(authService)
 	a.registerPlugin(PluginRegistration{
 		Slug: calendar.PluginSlug,
 		HealthCheck: func() error {
