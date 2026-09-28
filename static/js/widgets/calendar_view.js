@@ -284,16 +284,17 @@
       var phase = raw - Math.floor(raw);
       return phase < 0 ? phase + 1 : phase;
     },
-    // #768 (moon phase centering) is left to PR #775 — do not touch this
-    // bucket table, it mirrors Moon.MoonPhaseName verbatim.
+    // Mirrors Moon.MoonPhaseName verbatim: each name is centered on its
+    // turning point, so the night before a full moon already reads "Full
+    // Moon" (test/js/moon_phase_names.test.mjs keeps the copies in step).
     name: function (phase) {
-      if (phase < 0.125) return 'New Moon';
-      if (phase < 0.25) return 'Waxing Crescent';
-      if (phase < 0.375) return 'First Quarter';
-      if (phase < 0.5) return 'Waxing Gibbous';
-      if (phase < 0.625) return 'Full Moon';
-      if (phase < 0.75) return 'Waning Gibbous';
-      if (phase < 0.875) return 'Last Quarter';
+      if (phase < 0.0625 || phase >= 0.9375) return 'New Moon';
+      if (phase < 0.1875) return 'Waxing Crescent';
+      if (phase < 0.3125) return 'First Quarter';
+      if (phase < 0.4375) return 'Waxing Gibbous';
+      if (phase < 0.5625) return 'Full Moon';
+      if (phase < 0.6875) return 'Waning Gibbous';
+      if (phase < 0.8125) return 'Last Quarter';
       return 'Waning Crescent';
     },
     litPct: function (phase) { return Math.round(((1 - Math.cos(2 * Math.PI * phase)) / 2) * 100); }

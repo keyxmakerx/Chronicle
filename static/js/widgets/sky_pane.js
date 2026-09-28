@@ -66,13 +66,13 @@
   // internal/plugins/calendar/model.go) so the pane's caption and the
   // server's own phase name never disagree.
   function phaseName(p) {
-    if (p < .125) return 'New Moon';
-    if (p < .25) return 'Waxing Crescent';
-    if (p < .375) return 'First Quarter';
-    if (p < .5) return 'Waxing Gibbous';
-    if (p < .625) return 'Full Moon';
-    if (p < .75) return 'Waning Gibbous';
-    if (p < .875) return 'Last Quarter';
+    if (p < .0625 || p >= .9375) return 'New Moon';
+    if (p < .1875) return 'Waxing Crescent';
+    if (p < .3125) return 'First Quarter';
+    if (p < .4375) return 'Waxing Gibbous';
+    if (p < .5625) return 'Full Moon';
+    if (p < .6875) return 'Waning Gibbous';
+    if (p < .8125) return 'Last Quarter';
     return 'Waning Crescent';
   }
   function hhmm(hour, minute) {
