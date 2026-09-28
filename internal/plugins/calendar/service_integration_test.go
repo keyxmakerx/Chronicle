@@ -721,3 +721,88 @@ func TestCalendarService_Integration_CreateCalendarFromImport_ChronicleEventsRou
 		t.Errorf("expected exactly one Director-only-visibility warning, got %v", ir.Warnings)
 	}
 }
+
+// TestCalendarService_Integration_CreateCalendarFromImport_CyclesAndFestivalsRoundTrip
+// (#771) is the full-stack version of
+// TestChronicleExportImport_CyclesAndFestivalsRoundTrip: a calendar with a
+// cycle (and its entries) and festivals, exported, then re-imported via
+// CreateCalendarFromImport, ends up with the same cycles/festivals actually
+// written to the database — ApplyImport's own SQL, not just the in-memory
+// parse.
+func TestCalendarService_Integration_CreateCalendarFromImport_CyclesAndFestivalsRoundTrip(t *testing.T) {
+	db := openTestDB(t)
+	fixture := newTestCampaign(t, db, "import-cycles")
+	calRepo := NewCalendarRepository(db)
+	svc := NewCalendarService(calRepo, NewEventRepository(db), NewEventKindRepository(db), NewWeatherRepository(db))
+	ctx := context.Background()
+
+	source := &Calendar{ID: testUUID(t), CampaignID: fixture.CampaignID, Mode: ModeFantasy, Name: "Source Calendar",
+		CurrentYear: 10, CurrentMonth: 1, CurrentDay: 5,
+		HoursPerDay: 24, MinutesPerHour: 60, SecondsPerMinute: 60, Visibility: "everyone"}
+	if err := calRepo.Create(ctx, source); err != nil {
+		t.Fatalf("seed source calendar: %v", err)
+	}
+	if err := calRepo.SetMonths(ctx, source.ID, []MonthInput{{Name: "Firstmonth", Days: 30, SortOrder: 0}}); err != nil {
+		t.Fatalf("seed months: %v", err)
+	}
+	if err := calRepo.SetCycles(ctx, source.ID, []CycleInput{
+		{Name: "Zodiac", CycleLength: 12, Type: "yearly", Entries: []CycleEntryInput{
+			{Name: "Rat", YearOffset: 0}, {Name: "Ox", YearOffset: 1},
+		}},
+	}); err != nil {
+		t.Fatalf("seed cycle: %v", err)
+	}
+	month, day := 1, 1
+	if err := calRepo.SetFestivals(ctx, source.ID, []FestivalInput{
+		{Name: "Founding Day", Month: &month, Day: &day},
+	}); err != nil {
+		t.Fatalf("seed festival: %v", err)
+	}
+
+	loaded, err := calRepo.GetByID(ctx, source.ID)
+	if err != nil {
+		t.Fatalf("GetByID: %v", err)
+	}
+	loaded.Months, err = calRepo.GetMonths(ctx, source.ID)
+	if err != nil {
+		t.Fatalf("GetMonths: %v", err)
+	}
+	loaded.Cycles, err = calRepo.GetCycles(ctx, source.ID)
+	if err != nil {
+		t.Fatalf("GetCycles: %v", err)
+	}
+	loaded.Festivals, err = calRepo.GetFestivals(ctx, source.ID)
+	if err != nil {
+		t.Fatalf("GetFestivals: %v", err)
+	}
+
+	raw, err := json.Marshal(BuildExport(loaded, nil, false))
+	if err != nil {
+		t.Fatalf("marshal export: %v", err)
+	}
+
+	ir, err := svc.PreviewImport(ctx, raw)
+	if err != nil {
+		t.Fatalf("PreviewImport: %v", err)
+	}
+	target, err := svc.CreateCalendarFromImport(ctx, fixture.CampaignID, ir, CreateCalendarFromImportOptions{})
+	if err != nil {
+		t.Fatalf("CreateCalendarFromImport: %v", err)
+	}
+
+	gotCycles, err := calRepo.GetCycles(ctx, target.ID)
+	if err != nil {
+		t.Fatalf("GetCycles on the re-imported calendar: %v", err)
+	}
+	if len(gotCycles) != 1 || gotCycles[0].Name != "Zodiac" || len(gotCycles[0].Entries) != 2 {
+		t.Fatalf("re-imported cycles = %+v, want one Zodiac cycle with 2 entries", gotCycles)
+	}
+
+	gotFestivals, err := calRepo.GetFestivals(ctx, target.ID)
+	if err != nil {
+		t.Fatalf("GetFestivals on the re-imported calendar: %v", err)
+	}
+	if len(gotFestivals) != 1 || gotFestivals[0].Name != "Founding Day" {
+		t.Fatalf("re-imported festivals = %+v, want one Founding Day festival", gotFestivals)
+	}
+}
