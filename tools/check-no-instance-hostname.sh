@@ -1,24 +1,31 @@
 #!/usr/bin/env bash
 # tools/check-no-instance-hostname.sh
 #
-# Operator-security guard: scan tracked source for the operator's production
-# hostname and fail if found, so a future PR can't reintroduce it.
+# Operator-security guard: fail if tracked source names the operator's
+# production hostname, so a future PR can't reintroduce it.
 #
-# The pattern is built from a fragment join so this script itself doesn't
-# contain the literal token it's scanning for (otherwise the guard would
-# fail-self). Anyone adding more secret-shaped tokens should follow the same
-# pattern.
+# It holds only a SHA-256 fingerprint of the hostname's distinctive label,
+# never the label itself: a guard that spells out what it guards publishes
+# it. Every word in tracked text files is hashed and compared, and a hit is
+# reported as file:line only, so the CI log doesn't repeat it either.
 
 set -euo pipefail
 
-# Build the forbidden pattern via fragment join — keep the literal out of the
-# file that's looking for it.
-forbidden="bnu""uy"
+fingerprint="ac1714a0d116e09a0a7a89b76e7c51e8d88ce8fa7678d63ec3c5dec301f32868"
 
-if grep -rn --exclude-dir=.git --exclude-dir=vendor --exclude-dir=node_modules --exclude-dir=tmp --exclude-dir=bin --exclude="$(basename "$0")" "$forbidden" .; then
+hits=$(git grep -I -n -o -E '[A-Za-z0-9]+' -- . ':(exclude)**/vendor/**' |
+  FP="$fingerprint" perl -MDigest::SHA=sha256_hex -ne '
+    my ($file, $line, $word) = split /:/, $_, 3;
+    chomp $word;
+    $word = lc $word;
+    $seen{$word} //= sha256_hex($word) eq $ENV{FP};
+    print "$file:$line\n" if $seen{$word};
+  ' | sort -u)
+
+if [ -n "$hits" ]; then
+  echo "$hits"
   echo
   echo "ERROR: operator's production hostname must not appear in tracked source."
-  echo "See cordinator/dispatches/chronicle/C-SCRUB-INSTANCE-URLS.md for context."
   exit 1
 fi
 echo "OK: no instance hostname references in tracked source."

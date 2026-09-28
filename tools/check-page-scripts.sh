@@ -31,8 +31,7 @@ ALLOWLIST="${ALLOWLIST:-tools/page-script-allowlist.txt}"
 
 # The tag name is joined at runtime so the guard's own source and its allowlist —
 # both of which have to spell it out to be readable — can never be swept up by a
-# future widening of the scan beyond *.templ. Same trick as
-# tools/check-no-instance-hostname.sh.
+# future widening of the scan beyond *.templ.
 stag='<scr''ipt'
 marker="${stag} src="
 

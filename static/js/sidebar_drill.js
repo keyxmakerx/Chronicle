@@ -69,6 +69,10 @@
     }
   }
 
+  // The sidebar's ring (sidebar_nav.js) follows the panel: onto its header
+  // while it is open, back to the current page's row once it closes.
+  function announce() { document.dispatchEvent(new CustomEvent('chronicle:drill')); }
+
   function closeDrill() {
     var p = panel();
     if (!isOpen(p)) return;
@@ -76,6 +80,7 @@
     setInert(p, true);
     if (lastOpener && lastOpener.isConnected) lastOpener.focus({ preventScroll: true });
     lastOpener = null;
+    announce();
   }
 
   // --- Wiring ----------------------------------------------------------------
@@ -110,6 +115,7 @@
     if (!isOpen(p)) return;
     var back = target.querySelector('[data-drill-back]');
     if (back) back.focus({ preventScroll: true });
+    announce();
   });
 
   // Boosted navigation never re-renders the sidebar (only #main-content), so

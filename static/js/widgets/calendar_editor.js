@@ -39,6 +39,13 @@
 
   function $(sel, root) { return (root || document).querySelector(sel); }
   function $$(sel, root) { return Array.prototype.slice.call((root || document).querySelectorAll(sel)); }
+  // A form that grows inside a card can run past the edge of whatever is
+  // scrolling it (the page, or a calendar opened out on the Calendars page),
+  // so it is brought into view as it opens.
+  function reveal(el) {
+    var still = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    el.scrollIntoView({ block: 'nearest', behavior: still ? 'auto' : 'smooth' });
+  }
   function esc(s) {
     return String(s == null ? '' : s).replace(/[&<>"']/g, function (ch) {
       return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[ch];
@@ -416,8 +423,19 @@
     var d = dayKey.split('_').map(Number);
     var kinds = view.cal.event_kinds || [];
     var isNew = !existing;
+    // One form at a time: pressing for the same one again brings it back
+    // into view rather than stacking a second copy under it.
+    var target = existing ? String(existing.id) : '';
+    var already = view.wingEl.querySelector('form.ebody');
+    if (already && already.dataset.eventId === target) {
+      already.name.focus({ preventScroll: true });
+      reveal(already);
+      return;
+    }
+    if (already) already.remove();
     var form = document.createElement('form');
     form.className = 'ebody';
+    form.dataset.eventId = target;
     form.style.marginTop = '10px';
     form.innerHTML =
       '<div class="fld"><input class="etitle" name="name" placeholder="Event name" required value="' + esc(existing ? existing.name : '') + '"/></div>' +
@@ -489,7 +507,8 @@
     });
 
     view.wingEl.querySelector('.wb').appendChild(form);
-    form.name.focus();
+    form.name.focus({ preventScroll: true });
+    reveal(form);
   };
 
   CalendarEditor.prototype._kindChipsHTML = function (kinds, activeId) {
@@ -520,6 +539,7 @@
       '<div class="nkfoot"><button type="button" class="btn quiet" data-nk-cancel>Cancel</button><button type="button" class="btn primary" data-nk-save>Add kind</button></div>' +
       '</div>';
     mount.dataset.color = swatches[0];
+    reveal(mount);
     mount.addEventListener('click', function (e) {
       if (e.target.closest('[data-nk-cancel]')) { mount.innerHTML = ''; return; }
       var sw = e.target.closest('[data-sw]');
