@@ -295,6 +295,17 @@ type CalendarService interface {
 	// filterEventsByUser do — a caller that isn't declaring system trust
 	// must not get the unfiltered list.
 	ListAllEventsForCalendar(ctx context.Context, calendarID, campaignID string, v permissions.Viewer) ([]Event, error)
+
+	// SearchCalendarEvents implements entities.CalendarSearcher (wired from
+	// internal/app/routes.go): campaign-wide calendar-event search results
+	// for the global quick-search popup (calendar-v5 seams, #778). Role-only
+	// picker convention, matching CalendarEventLister's shape in
+	// internal/plugins/timeline/service.go: the interface carries no
+	// per-request user id, so a calendar's own visibility_rules allow/deny
+	// list is not evaluated — only role-level dm_only gating, at both the
+	// calendar (ListCalendars already filters those out) and each event
+	// (EventRepository.SearchEvents' own SQL role filter).
+	SearchCalendarEvents(ctx context.Context, campaignID, query string, role int) ([]map[string]string, error)
 }
 
 // calendarService is the concrete CalendarService.
@@ -2195,6 +2206,45 @@ func (s *calendarService) ListAllEventsForCalendar(ctx context.Context, calendar
 		return nil, err
 	}
 	return s.eventRepo.ListAllEvents(ctx, calendarID)
+}
+
+// SearchCalendarEvents implements entities.CalendarSearcher — see the
+// interface doc comment for the role-only shape and what it does and does
+// not filter. Every candidate calendar comes from ListCalendars (role +
+// per-user visibility filtered), so a dm_only or otherwise-hidden
+// calendar's events are never even searched; within a visible calendar,
+// EventRepository.SearchEvents applies the same SQL dm_only filter
+// ListEventsForMonth's own read does. Capped at 10 events per calendar by
+// that same query (a search result list, not a full export).
+func (s *calendarService) SearchCalendarEvents(ctx context.Context, campaignID, query string, role int) ([]map[string]string, error) {
+	v := permissions.RequestViewer(role, "")
+	cals, err := s.ListCalendars(ctx, campaignID, v)
+	if err != nil {
+		return nil, fmt.Errorf("search calendar events: list calendars: %w", err)
+	}
+
+	var results []map[string]string
+	for _, cal := range cals {
+		events, err := s.eventRepo.SearchEvents(ctx, cal.ID, query, role)
+		if err != nil {
+			return nil, fmt.Errorf("search calendar events: search calendar %s: %w", cal.ID, err)
+		}
+		for _, evt := range events {
+			icon := evt.KindIcon
+			if icon == "" {
+				icon = "fa-calendar-day"
+			}
+			results = append(results, map[string]string{
+				"id":         evt.ID,
+				"name":       evt.Name,
+				"type_name":  "Calendar Event",
+				"type_icon":  icon,
+				"type_color": evt.KindColor,
+				"url":        fmt.Sprintf("/campaigns/%s/calendars/%s/view", campaignID, cal.ID),
+			})
+		}
+	}
+	return results, nil
 }
 
 // --- Shared validation helpers ---

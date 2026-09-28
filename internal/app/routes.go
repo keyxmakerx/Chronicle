@@ -2993,9 +2993,7 @@ func (a *App) RegisterRoutes() {
 	entityHandler.SetTagFetcher(tagFetcherAdapter)
 	entityHandler.SetTimelineSearcher(timelineSvc)
 	entityHandler.SetMapSearcher(mapsService)
-	// CALV5-PLACEHOLDER: V5 must restore
-	// entityHandler.SetCalendarSearcher(calendarService) for the calendar's
-	// rows in global entity search. Nil-safe meanwhile; search returns none. TODO(#778)
+	entityHandler.SetCalendarSearcher(calendarService)
 	entityHandler.SetSessionSearcher(sessionsService)
 	entityHandler.SetSystemSearcher(systems.NewSystemSearchAdapter(addonService))
 	entityHandler.SetMemberLister(campaignService)

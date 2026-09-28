@@ -195,6 +195,10 @@ func (f *fakeCalendarSvc) ListAllEventsForCalendar(context.Context, string, stri
 	return nil, nil
 }
 
+func (f *fakeCalendarSvc) SearchCalendarEvents(context.Context, string, string, int) ([]map[string]string, error) {
+	return nil, nil
+}
+
 func (f *fakeCalendarSvc) PreviewImport(context.Context, []byte) (*ImportResult, error) {
 	return &ImportResult{Format: FormatChronicle, CalendarName: "Previewed Calendar"}, nil
 }
