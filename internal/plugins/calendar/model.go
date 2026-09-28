@@ -166,8 +166,11 @@ type Calendar struct {
 	// mode. TracksRealTime=1 makes the loader compute Current* from the wall
 	// clock in RealTimeZone and the date-writers reject manual changes; =0 is
 	// stored-not-computed. RealTimeZone is the IANA anchor, required at enable.
-	// Tagged json:"-": not wire-exposed directly, consumed server-side only.
-	TracksRealTime bool    `json:"-"`
+	// TracksRealTime is wire-exposed (UsesRealTime gates MonthDays/absDayIndex/
+	// WeekdayIndex on it, not on Mode alone, so the browser's CalDate/SkyWorld
+	// mirrors need it to pick the same branch); RealTimeZone stays
+	// server-only, nothing client-side reads it.
+	TracksRealTime bool    `json:"tracks_real_time"`
 	RealTimeZone   *string `json:"-"`
 	// The real-date anchor: one in-world date and the Gregorian date it
 	// equals, from which every other day follows by AbsoluteDay arithmetic.

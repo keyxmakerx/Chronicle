@@ -43,12 +43,13 @@
     mod: function (a, n) { return ((a % n) + n) % n; },
 
     usesRealTime: function (cal) {
-      // TracksRealTime itself is never serialized to the client (server-only
-      // field, model.go). A manual (non-real-time) reallife calendar still
-      // wants true Gregorian month lengths, so 'reallife' alone is the
-      // client-visible signal to use native Date arithmetic — same
-      // heuristic the mockup's own isG() uses for its Gregorian structure.
-      return cal.mode === 'reallife';
+      // Mirrors Calendar.UsesRealTime exactly: Mode == reallife AND
+      // TracksRealTime, not mode alone. A manual (non-real-time) reallife
+      // calendar keeps its stored month/weekday geometry server-side (its
+      // own doc comment: "behaves exactly as before real-time support
+      // existed"), so mode alone would show a 29 February and JDN-based
+      // weekdays the server never produces for that calendar.
+      return cal.mode === 'reallife' && !!cal.tracks_real_time;
     },
 
     monthDaysNative: function (year, month1) {

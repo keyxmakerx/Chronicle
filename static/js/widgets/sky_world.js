@@ -73,11 +73,13 @@
   }
   // dayIndex(cal, year, month, day): the day count the calendar page reads
   // its moons on (calendar_view.js's CalDate.dayIndex), so both show one sky.
-  // A real-world calendar counts Julian days, which its real Moon is anchored
-  // to; a year at or before 0 counts constant-length years; any other year
-  // counts absoluteDay.
+  // A real-world calendar that tracks real time counts Julian days, which
+  // its real Moon is anchored to — mode alone is not enough, since a manual
+  // (non-real-time) reallife calendar keeps its stored, non-Julian day count
+  // server-side (Calendar.UsesRealTime); a year at or before 0 counts
+  // constant-length years; any other year counts absoluteDay.
   function dayIndex(cal, year, month, day) {
-    if (cal.mode === 'reallife') {
+    if (cal.mode === 'reallife' && cal.tracks_real_time) {
       var a = Math.floor((14 - month) / 12), yy = year + 4800 - a, mm = month + 12 * a - 3;
       return day + Math.floor((153 * mm + 2) / 5) + 365 * yy + Math.floor(yy / 4) - Math.floor(yy / 100) + Math.floor(yy / 400) - 32045;
     }

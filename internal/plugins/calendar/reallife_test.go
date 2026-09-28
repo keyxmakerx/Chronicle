@@ -5,6 +5,7 @@
 package calendar
 
 import (
+	"encoding/json"
 	"math"
 	"strings"
 	"testing"
@@ -56,6 +57,41 @@ func TestCalendar_MonthDays_UsesTrueGregorianRule(t *testing.T) {
 	// above can't pass by accident (e.g. every month returning 28).
 	if got := cal.MonthDays(0, 2024); got != 31 { // January
 		t.Errorf("MonthDays(January, 2024) = %d, want 31", got)
+	}
+}
+
+// TestCalendar_TracksRealTimeIsWireExposed pins TracksRealTime onto the JSON
+// wire: it used to be tagged json:"-" (server-only), so a browser-side mirror
+// of UsesRealTime could only key on Mode, never on this flag, and diverged
+// from Calendar.UsesRealTime — which requires both — for a manual real-world
+// calendar. The browser needs the flag on the wire to agree with the server.
+func TestCalendar_TracksRealTimeIsWireExposed(t *testing.T) {
+	tests := []struct {
+		name string
+		val  bool
+	}{
+		{"tracking on", true},
+		{"tracking off (manual)", false},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			cal := &Calendar{Mode: ModeRealLife, TracksRealTime: tt.val}
+			b, err := json.Marshal(cal)
+			if err != nil {
+				t.Fatalf("Marshal: %v", err)
+			}
+			var out map[string]any
+			if err := json.Unmarshal(b, &out); err != nil {
+				t.Fatalf("Unmarshal: %v", err)
+			}
+			got, ok := out["tracks_real_time"]
+			if !ok {
+				t.Fatalf("tracks_real_time missing from JSON: %s", b)
+			}
+			if got != tt.val {
+				t.Errorf("tracks_real_time = %v, want %v", got, tt.val)
+			}
+		})
 	}
 }
 

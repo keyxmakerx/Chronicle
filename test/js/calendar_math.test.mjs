@@ -151,13 +151,71 @@ test('MoonMath.litPath matches MoonLitPath at every quarter of the cycle', () =>
 
 // A real-world calendar's Moon is anchored to the Julian Day Number, so its
 // phase must come through dayIndex, as the calendar page now reads it.
-// Real dates: new moon 2026-09-11, full moon 2026-09-26.
+// Real dates: new moon 2026-09-11, full moon 2026-09-26. tracks_real_time
+// must be set: it is what actually selects the JDN branch (see below).
 test('a real-world calendar reads its moon through dayIndex and matches the sky', () => {
   const { CalDate, MoonMath } = loadCalendarMath();
-  const real = { mode: 'reallife', months: [], weekdays: [] };
+  const real = { mode: 'reallife', tracks_real_time: true, months: [], weekdays: [] };
   const theMoon = { cycle_days: 29.530588853, phase_offset: -CalDate.gregorianJDN(2000, 1, 6) };
   const at = (y, m, d) => MoonMath.phase(theMoon, CalDate.dayIndex(real, y, m, d));
   assert.equal(MoonMath.name(at(2026, 9, 26)), 'Full Moon');
   assert.equal(MoonMath.name(at(2026, 9, 11)), 'New Moon');
   assert.equal(MoonMath.name(at(2026, 9, 28)), 'Waning Gibbous');
+});
+
+// The real-world Gregorian months/weekdays (reallife.go's gregorianMonths/
+// gregorianWeekdays), used below to compare a manual real-world calendar
+// (tracks_real_time: false) against a tracked one on the same shape — the
+// only thing that must differ is which day-counting branch usesRealTime
+// selects.
+const realWorldMonths = [
+  { name: 'January', days: 31, leap_year_days: 0 },
+  { name: 'February', days: 28, leap_year_days: 1 },
+  { name: 'March', days: 31, leap_year_days: 0 },
+  { name: 'April', days: 30, leap_year_days: 0 },
+  { name: 'May', days: 31, leap_year_days: 0 },
+  { name: 'June', days: 30, leap_year_days: 0 },
+  { name: 'July', days: 31, leap_year_days: 0 },
+  { name: 'August', days: 31, leap_year_days: 0 },
+  { name: 'September', days: 30, leap_year_days: 0 },
+  { name: 'October', days: 31, leap_year_days: 0 },
+  { name: 'November', days: 30, leap_year_days: 0 },
+  { name: 'December', days: 31, leap_year_days: 0 }
+];
+const realWorldWeekdays = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'].map((name) => ({ name }));
+const manualRealWorld = { mode: 'reallife', tracks_real_time: false, months: realWorldMonths, weekdays: realWorldWeekdays };
+const trackedRealWorld = { mode: 'reallife', tracks_real_time: true, months: realWorldMonths, weekdays: realWorldWeekdays };
+
+// CalDate.usesRealTime must mirror Calendar.UsesRealTime exactly: Mode ==
+// reallife AND TracksRealTime, not mode alone — mode alone reads true for
+// every reallife calendar, tracked or manual.
+test('CalDate.usesRealTime requires both reallife mode and tracks_real_time', () => {
+  const { CalDate } = loadCalendarMath();
+  assert.equal(CalDate.usesRealTime(trackedRealWorld), true);
+  assert.equal(CalDate.usesRealTime(manualRealWorld), false);
+  assert.equal(CalDate.usesRealTime({ mode: 'fantasy', tracks_real_time: true }), false);
+});
+
+// The bug's headline symptom: a manual real-world calendar (owner turned off
+// "today follows the real date") must keep its stored, leap-unaware February
+// even in a real Gregorian leap year — Calendar.MonthDays never applies the
+// true 4/100/400 rule unless UsesRealTime() is true.
+test('a manual real-world calendar keeps its stored February length in a real leap year', () => {
+  const { CalDate } = loadCalendarMath();
+  assert.equal(CalDate.monthDays(manualRealWorld, 1, 2024), 28, 'manual: stored length, no 29th');
+  assert.equal(CalDate.monthDays(trackedRealWorld, 1, 2024), 29, 'tracked: true Gregorian rule');
+});
+
+// The bug's other symptom: a manual real-world calendar places its weekdays
+// by the same leap-aware AbsoluteDay every other calendar uses, not the
+// Julian Day Number — so it disagrees with the real weekday. Expected
+// indices are copied verbatim from a throwaway `go test` run of
+// Calendar.WeekdayIndex against this exact fixture (manual: Monday/index 0;
+// tracked: the real Sunday/index 6).
+test('a manual real-world calendar places a weekday by AbsoluteDay, not the Julian Day Number', () => {
+  const { CalDate } = loadCalendarMath();
+  assert.equal(CalDate.weekdayCol(manualRealWorld, 2026, 9, 27), 0, 'manual: AbsoluteDay-based');
+  assert.equal(CalDate.weekdayCol(trackedRealWorld, 2026, 9, 27), 6, 'tracked: real Sunday via JDN');
+  assert.equal(CalDate.dayIndex(manualRealWorld, 2026, 9, 27), 739760);
+  assert.equal(CalDate.dayIndex(trackedRealWorld, 2026, 9, 27), 2461311);
 });
