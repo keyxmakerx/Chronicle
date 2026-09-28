@@ -729,7 +729,7 @@
    * an input field. Enter/blur saves, Escape cancels.
    */
   function startInlineRename(link, nodeId, campaignId) {
-    var nameSpan = link.querySelector('.truncate');
+    var nameSpan = link.querySelector('.tree-lb');
     if (!nameSpan || nameSpan._renaming) return;
     nameSpan._renaming = true;
 
@@ -1345,7 +1345,10 @@
     var btn = sentinel.querySelector('button');
     if (btn) btn.textContent = 'Loading...';
 
-    Chronicle.apiFetch(url, { headers: { 'HX-Request': 'true' } })
+    // This endpoint answers JSON or the HTML fragment by Accept
+    // (SearchAPI's wantsJSON) — apiFetch defaults to Accept: application/json,
+    // so this overrides it to get the HTML this handler actually parses.
+    Chronicle.apiFetch(url, { headers: { 'HX-Request': 'true', 'Accept': 'text/html' } })
       .then(function (res) { return res.ok ? res.text() : ''; })
       .then(function (html) {
         if (!html) return;

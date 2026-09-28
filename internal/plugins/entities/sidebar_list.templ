@@ -88,14 +88,13 @@ templ SidebarEntityList(results []Entity, nodes []SidebarNode, total int, typeID
 			<!-- Load more sentinel for infinite scroll -->
 			<div
 				id="sidebar-load-more"
-				class="px-4 py-2 text-center"
 				data-page="2"
 				data-total={ strconv.Itoa(total) }
 				data-loaded={ strconv.Itoa(len(results)) }
 			>
 				<button
 					type="button"
-					class="w-full py-1.5 text-[11px] text-gray-500 hover:text-gray-300 transition-colors rounded hover:bg-gray-800/50"
+					class="nav-tree-more"
 					onclick="this.parentElement.dispatchEvent(new CustomEvent('sidebar:load-more', {bubbles: true}))"
 				>
 					{ fmt.Sprintf("Load more (%d of %d)", len(results), total) }
