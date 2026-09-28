@@ -2,9 +2,8 @@
 // sheet (chips, shape steppers, a naming culture, and a "work it out from
 // the sky" switch) with a live result beside it, driven entirely by the
 // generator engine running in the browser (static/js/widgets/
-// chronicle_gen.js — the same engine scratchpad/mockups/generators/
-// generators.js documents, copied verbatim apart from the fromSky
-// extension). The server never runs the generator: this step's Go code only
+// chronicle_gen.js — the design lab's engine, copied verbatim apart from
+// the fromSky extension). The server never runs the generator: this step's Go code only
 // renders the shell and, at Preview, re-validates whatever the browser
 // produced (wizard_generate_handler.go) — identically to every other
 // wizard source.
@@ -33,6 +32,8 @@ package calendar
 import (
 	"encoding/json"
 	"fmt"
+
+	"github.com/keyxmakerx/chronicle/internal/templates/layouts"
 )
 
 // wizardGenRecipeInfo is one of the calendar generator's built-in recipes,
@@ -136,7 +137,8 @@ ensureEngine(cb){
   if (window.ChronicleGen && window.ChronicleGen.calendar && window.ChronicleGen.calendar.fromSky) { cb(); return; }
   var self = this;
   var s = document.createElement('script');
-  s.src = '/static/js/widgets/chronicle_gen.js';
+  // The versioned URL from the page, so a deploy never serves a stale engine.
+  s.src = this.$root.dataset.engineSrc;
   s.onload = cb;
   s.onerror = function () { self.busy = false; self.err = 'The generator could not load. Check your connection and try again.'; };
   document.head.appendChild(s);
@@ -355,7 +357,7 @@ templ wizardGenerateBody(campaignID, csrfToken, formError string) {
 	if formError != "" {
 		<p class="calv5-err">{ formError }</p>
 	}
-	<div x-data={ wizardGenerateXData() } x-init="boot()">
+	<div x-data={ wizardGenerateXData() } x-init="boot()" data-engine-src={ layouts.AssetURL("/static/js/widgets/chronicle_gen.js") }>
 		<template x-if="err">
 			<p class="calv5-err" x-text="err"></p>
 		</template>

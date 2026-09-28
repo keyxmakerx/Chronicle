@@ -1,5 +1,5 @@
 // chronicle_gen.test.mjs — a focused port of the generator lab's own test
-// suite (scratchpad/mockups/generators/test.mjs) for the three generators the
+// suite for the three generators the
 // calendar wizard's "Generate one" step actually calls (calendar, names,
 // moons), plus the fromSky extension that step adds on top of the vendored
 // engine. Not a full port of the lab's suite (that also covers weather, sky
