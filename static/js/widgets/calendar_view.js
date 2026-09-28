@@ -441,6 +441,324 @@
     });
   }
 
+  // ---------------------------------------------------------------
+  // The day's card and the era's card (the signed calendar mockup,
+  // #829). On a desktop each is two leaves of paper, laid out at its
+  // final size and place: the leaf nearer what was pressed turns out
+  // from behind its edge, the other unfolds from behind that one, and
+  // closing runs the film backwards. What was pressed gives a little
+  // as the card leaves it. A phone's card is a sheet that grows whole
+  // out of the tapped day; reduced motion cross-fades. Only transform
+  // and opacity move, and a leaf only shows while its face is towards
+  // us, so every frame shows each leaf whole or not at all.
+  // ---------------------------------------------------------------
+  var FOLD = { d: 1100, lead: [30, 330], trail: [100, 390], rest: 490, fade: 80, cut: 76, shut: 450, back: 0.86, pressBack: 250, shade: 0.3 };
+  var SPRING = 'cubic-bezier(.34,1.3,.4,1)';
+  var EASE = 'cubic-bezier(.22,.8,.24,1)';
+  function isPhone() { return window.matchMedia('(max-width:600px)').matches; }
+  function anim(el, frames, o) { return el.animate(frames, Object.assign({ fill: 'forwards' }, o)); }
+  function stopAnims(el, deep) { (deep ? el.getAnimations({ subtree: true }) : el.getAnimations()).forEach(function (a) { a.cancel(); }); }
+  function settleAll(list) { return Promise.all(list.map(function (a) { return a.finished; })); }
+  function clampN(v, a, b) { return Math.max(a, Math.min(b, v)); }
+  function relRect(el, box) { var b = box.getBoundingClientRect(), r = el.getBoundingClientRect(); return { x: r.left - b.left, y: r.top - b.top, w: r.width, h: r.height }; }
+
+  // The part of the calendar a card may use: what is on screen, inside
+  // whatever scrolls it (the page, or the almanac on the Calendars page).
+  // vbot is the visible edge alone, past the calendar's own bottom.
+  function visBand(calEl) {
+    var cr = calEl.getBoundingClientRect(), top = 0, bot = window.innerHeight;
+    for (var p = calEl.parentElement; p && p !== document.body; p = p.parentElement) {
+      var oy = getComputedStyle(p).overflowY;
+      if (oy === 'auto' || oy === 'scroll') { var pr = p.getBoundingClientRect(); top = Math.max(top, pr.top); bot = Math.min(bot, pr.bottom); }
+    }
+    return { cr: cr, top: Math.max(8, top - cr.top + 8), bot: Math.min(cr.height - 8, bot - cr.top - 8), vbot: bot - cr.top - 8 };
+  }
+  // A day's card goes beside its day where there is room (right, else
+  // left), else under or over it, and never past the visible band.
+  function wingGeometry(card, btn, calEl) {
+    var B = visBand(calEl), cr = B.cr, cell = relRect(btn, calEl), isBand = btn.classList.contains('band');
+    if (isBand) { cell.x += 8; cell.w = Math.min(220, cell.w - 16); }
+    var W = Math.min(340, cr.width - 24), maxH = Math.max(160, Math.min(540, B.bot - B.top));
+    card.style.width = W + 'px';
+    var H = Math.min(maxH, card.offsetHeight);
+    card.style.width = '';
+    var L = cell.x, R = L + cell.w, T = cell.y, Bt = T + cell.h, side = null, x, y;
+    if (!isBand && R + W <= cr.width - 8) { side = 'right'; x = R; }
+    else if (!isBand && L - W >= 8) { side = 'left'; x = L - W; }
+    if (side) y = T + H <= B.bot ? T : (Bt - H >= B.top ? Bt - H : Math.max(B.top, B.bot - H));
+    else {
+      x = Math.max(8, Math.min(L + cell.w / 2 - W / 2, cr.width - W - 8));
+      if (Bt + H <= B.bot) { side = 'down'; y = Bt; } else if (T - H >= B.top) { side = 'up'; y = T - H; } else { side = 'down'; y = Math.max(B.top, B.bot - H); }
+    }
+    return { cell: cell, side: side, final: { x: x, y: y, w: W, h: H, room: Math.max(H, B.vbot - y) } };
+  }
+  // The era's card drops out of the era label's bottom edge.
+  function eraGeometry(card, btn, calEl) {
+    var B = visBand(calEl), cr = B.cr, cell = relRect(btn, calEl), W = Math.min(392, cr.width - 16), y = cell.y + cell.h;
+    var maxH = Math.max(160, Math.min(560, B.bot - y));
+    card.style.width = W + 'px';
+    var H = Math.min(maxH, card.offsetHeight);
+    card.style.width = '';
+    return { cell: cell, side: 'down', final: { x: Math.max(8, Math.min(cell.x, cr.width - W - 8)), y: y, w: W, h: H, room: Math.max(H, B.vbot - y) } };
+  }
+  // A card opens at its own height, inside the calendar; a form opened
+  // in it later may grow it into the room below, to the visible edge.
+  function placeCard(el, g) {
+    el.dataset.side = g.side;
+    el.style.left = g.final.x + 'px';
+    el.style.top = g.final.y + 'px';
+    el.style.width = g.final.w + 'px';
+    el.style.maxHeight = g.final.room + 'px';
+  }
+
+  // Which leaf leads, on which hinge, and where the eye is: a card beside
+  // its day turns out on the day's edge, a card under or over what was
+  // pressed drops or rises from the edge nearer it. The eye is shared by
+  // both leaves, so the crease between them stays joined. A card with no
+  // second leaf to speak of folds out as one.
+  function foldGeo(P, calEl) {
+    var el = P.el, g = P.g, L1 = el.querySelector('.lf1'), L2 = el.querySelector('.lf2'), bx = relRect(el, calEl);
+    if (L2 && !L2.offsetHeight) L2 = null;
+    var W = el.offsetWidth, H = el.offsetHeight, h1 = L1.offsetHeight, cy = g.cell.y + g.cell.h / 2 - bx.y;
+    var side = g.side, flat = side === 'right' || side === 'left', head = !L2 || (flat ? cy < h1 : side !== 'up' && cy <= H / 2);
+    var F = { el: el, d: FOLD.d, V: { x: W / 2, y: H / 2 }, ax: flat ? 'rotateY' : 'rotateX', B: { x: 0, y: h1 }, head: head, lead: head ? L1 : L2, trail: head ? L2 : L1, s2: head ? -1 : 1 };
+    if (flat) { F.A = { x: side === 'left' ? W : 0, y: 0 }; F.s1 = side === 'right' ? 1 : -1; }
+    else { F.A = { x: 0, y: head ? 0 : H }; F.s1 = head ? -1 : 1; }
+    F.O = { lead: { x: 0, y: head ? 0 : h1 }, trail: { x: 0, y: head ? h1 : 0 } };
+    return F;
+  }
+  function foldEase(u) { u = clampN(u, 0, 1); return 1 - Math.pow(1 - u, 3); }
+  function foldRot(ax, a, v) {
+    var c = Math.cos(a), s = Math.sin(a);
+    return ax === 'rotateY' ? [v[0] * c + v[2] * s, v[1], v[2] * c - v[0] * s] : [v[0], v[1] * c - v[2] * s, v[1] * s + v[2] * c];
+  }
+  // One moment of the open, t ms in: both leaves' angles (180 is folded
+  // flat behind, 0 is open); whether each faces the eye (the second only
+  // once the first does); how dark each is by how far it is turned from
+  // us; and whose shadow shows: the leaves' own while they fold, the
+  // card's once flat.
+  function foldAt(F, t) {
+    var r = Math.PI / 180, a1 = F.s1 * 180 * (1 - foldEase((t - FOLD.lead[0]) / FOLD.lead[1])), a2 = F.s2 * 180 * (1 - foldEase((t - FOLD.trail[0]) / FOLD.trail[1]));
+    var A = F.A, B = F.B, V = F.V, n1 = foldRot(F.ax, a1 * r, [0, 0, 1]), n2 = foldRot(F.ax, a1 * r, foldRot('rotateX', a2 * r, [0, 0, 1])), q = foldRot(F.ax, a1 * r, [B.x - A.x, B.y - A.y, 0]);
+    var f1 = n1[0] * (V.x - A.x) + n1[1] * (V.y - A.y) + n1[2] * F.d, f2 = n2[0] * (V.x - A.x - q[0]) + n2[1] * (V.y - A.y - q[1]) + n2[2] * (F.d - q[2]);
+    var k = clampN((t - FOLD.rest) / FOLD.fade, 0, 1);
+    k = k * k * (3 - 2 * k);
+    return { a1: a1, a2: a2, v1: f1 > 0, v2: f1 > 0 && f2 > 0, d1: FOLD.shade * Math.pow(clampN(1 - n1[2], 0, 1), 0.8), d2: FOLD.shade * Math.pow(clampN(1 - n2[2], 0, 1), 0.8), leaf: 1 - k, card: k };
+  }
+  function pxs(x, y) { return x.toFixed(2) + 'px,' + y.toFixed(2) + 'px'; }
+  // A leaf's transform about its own top-left corner: the eye's
+  // perspective, the first leaf's hinge, and for the second leaf also the
+  // crease, which turns with the first.
+  function foldTf(F, which, s) {
+    var O = F.O[which], V = F.V, A = F.A, B = F.B;
+    var t = 'translate(' + pxs(V.x - O.x, V.y - O.y) + ') perspective(' + F.d + 'px) translate(' + pxs(A.x - V.x, A.y - V.y) + ') ' + F.ax + '(' + s.a1.toFixed(3) + 'deg) ';
+    if (which === 'lead') return t + 'translate(' + pxs(O.x - A.x, O.y - A.y) + ')';
+    return t + 'translate(' + pxs(B.x - A.x, B.y - A.y) + ') rotateX(' + s.a2.toFixed(3) + 'deg) translate(' + pxs(O.x - B.x, O.y - B.y) + ')';
+  }
+  // The film as keyframes, sampled from foldAt, with a sample at every
+  // moment a leaf passes edge-on: a leaf's opacity steps between 0 and 1
+  // only there, when it is a line. Backwards the film runs from where the
+  // leaves have all but settled to where both are hidden again, a little
+  // quicker, and the card's one shadow parts into the leaves' own at once.
+  function foldRun(F, back, sp) {
+    var T = back ? FOLD.shut : FOLD.rest + FOLD.fade, t0 = back ? FOLD.cut : 0, ts = [], flips = [], prev = foldAt(F, t0), i, t;
+    for (i = 0; i <= 40; i++) ts.push(t0 + (T - t0) * i / 40);
+    for (t = t0 + 0.5; t <= T; t += 0.5) { var st = foldAt(F, t); if (st.v1 !== prev.v1 || st.v2 !== prev.v2) { flips.push(t); ts.push(t); } prev = st; }
+    ts.sort(function (a, b) { return a - b; });
+    var off = function (tt) { var o = (tt - t0) / (T - t0); return back ? 1 - o : o; };
+    var fr = { lead: [], trail: [], d1: [], d2: [], leaf: [], card: [], o1: [], o2: [] };
+    ts.forEach(function (tt) {
+      var s = foldAt(F, tt), o = off(tt);
+      if (back) { var k = clampN(o / 0.12, 0, 1); k = k * k * (3 - 2 * k); s.leaf = k; s.card = 1 - k; }
+      fr.lead.push({ offset: o, transform: foldTf(F, 'lead', s) });
+      fr.trail.push({ offset: o, transform: foldTf(F, 'trail', s) });
+      fr.d1.push({ offset: o, opacity: s.d1 });
+      fr.d2.push({ offset: o, opacity: s.d2 });
+      fr.leaf.push({ offset: o, opacity: s.leaf });
+      fr.card.push({ offset: o, opacity: s.card });
+    });
+    [['o1', 'v1'], ['o2', 'v2']].forEach(function (q) {
+      var at = function (tt) { return foldAt(F, tt)[q[1]] ? 1 : 0; }, list = fr[q[0]];
+      list.push({ offset: off(t0), opacity: at(t0) });
+      flips.forEach(function (tt) { var a = at(tt - 0.5), b = at(tt); if (a !== b) { list.push({ offset: off(tt), opacity: a }); list.push({ offset: off(tt), opacity: b }); } });
+      list.push({ offset: off(T), opacity: at(T) });
+    });
+    if (back) Object.keys(fr).forEach(function (k) { fr[k].reverse(); });
+    var o = { duration: (T - t0) * (back ? FOLD.back : 1) / sp, fill: 'both', easing: 'linear' };
+    var pe = function (p) { return Object.assign({ pseudoElement: p }, o); };
+    var list = [anim(F.lead, fr.lead, o), anim(F.lead, fr.o1, o), anim(F.lead, fr.d1, pe('::after')), anim(F.lead, fr.leaf, pe('::before')), anim(F.el, fr.card, pe('::before'))];
+    if (F.trail) list.push(anim(F.trail, fr.trail, o), anim(F.trail, fr.o2, o), anim(F.trail, fr.d2, pe('::after')), anim(F.trail, fr.leaf, pe('::before')));
+    return list;
+  }
+  // What was pressed sinks a little and springs back. Wide things sink
+  // less, so every press moves about as far.
+  function pressIn(list, o) {
+    o = o || {};
+    (list || []).forEach(function (t) {
+      if (!t || !t.el || !t.el.isConnected) return;
+      var d = t.depth || 0.94, opt = { duration: o.dur || 420, delay: o.delay || 0, fill: 'none' };
+      if (o.soft) d = 1 - (1 - d) * 0.5;
+      if (t.pseudo) opt.pseudoElement = t.pseudo;
+      t.el.animate([{ transform: 'scale(1)', easing: 'cubic-bezier(.3,0,.6,1)' }, { transform: 'scale(' + d.toFixed(3) + ')', offset: 0.22, easing: SPRING }, { transform: 'scale(1)' }], opt);
+    });
+  }
+  function pressDepth(el) { return 1 - Math.min(0.06, 6 / Math.max(1, el.getBoundingClientRect().width)); }
+  function originOn(el, src) {
+    var r = el.getBoundingClientRect(), s = src.getBoundingClientRect();
+    el.style.transformOrigin = (s.left + s.width / 2 - r.left).toFixed(1) + 'px ' + (s.top + s.height / 2 - r.top).toFixed(1) + 'px';
+  }
+  // A day's marks travel between its cell and its card: a mark leaves
+  // the cell as it sets off and the card's icon appears as it lands, so
+  // an event is only ever in one place. Only the rows the card shows
+  // receive their mark; the rest fade out of the cell and back.
+  function inCardView(el, card) {
+    var r = el.getBoundingClientRect(), sc = (!isPhone() && el.closest('.lscroll')) || card, v = sc.getBoundingClientRect();
+    return r.top >= v.top && r.bottom <= v.bottom - 4;
+  }
+  function carryPairs(cell, card) {
+    var out = [];
+    $$('.mk[data-ev]', cell).forEach(function (m) {
+      var to = card.querySelector('.evd[data-ev="' + m.dataset.ev + '"] .ric');
+      if (to && m.getBoundingClientRect().width && inCardView(to, card)) out.push({ mk: m, ric: to, id: m.dataset.ev });
+    });
+    return out;
+  }
+  function packMarks(cell, pairs, back) {
+    var going = pairs.map(function (p) { return p.mk; });
+    $$('.mk, .more', cell).forEach(function (m) {
+      stopAnims(m);
+      if (going.indexOf(m) >= 0) { m.classList.add('away'); return; }
+      anim(m, back ? [{ opacity: 0 }, { opacity: 1 }] : [{ opacity: 1 }, { opacity: 0 }], { duration: 200, delay: back ? 200 : 60, easing: 'ease-out', fill: 'both' });
+    });
+  }
+  function unpackMarks(cell) {
+    cell.classList.remove('packed');
+    $$('.mk, .more', cell).forEach(function (m) { stopAnims(m); m.classList.remove('away'); });
+  }
+  // Three motions added together: the straight trip, an arc up and down,
+  // and the growth to the size it lands at. Each is kept when it ends, so
+  // a flyer that lands early holds its place until it is taken away.
+  function fly(P, back, o, calEl) {
+    var cr = calEl.getBoundingClientRect();
+    return (P.pairs || []).map(function (p, i) {
+      var a = (back ? p.ric : p.mk).getBoundingClientRect(), b = (back ? p.mk : p.ric).getBoundingClientRect(), f = document.createElement('span');
+      f.className = 'flyer' + (p.mk.classList.contains('dir') ? ' dir' : '');
+      f.setAttribute('style', (p.mk.getAttribute('style') || '') + ';width:' + a.width.toFixed(1) + 'px;height:' + a.height.toFixed(1) + 'px');
+      f.textContent = p.mk.textContent;
+      P.carry.appendChild(f);
+      p.f = f;
+      var sx = a.left - cr.left, sy = a.top - cr.top, ex = b.left - cr.left, ey = b.top - cr.top, k = b.width / a.width;
+      var lift = Math.min(26, 8 + Math.hypot(ex - sx, ey - sy) * 0.07), t = { duration: o.dur, delay: o.delay + i * o.stagger, fill: 'both' };
+      var trip = anim(f, [{ transform: 'translate(' + sx.toFixed(1) + 'px,' + sy.toFixed(1) + 'px)' }, { transform: 'translate(' + ex.toFixed(1) + 'px,' + ey.toFixed(1) + 'px)' }], Object.assign({ easing: 'cubic-bezier(.45,0,.2,1)' }, t));
+      [trip,
+        anim(f, [{ transform: 'translateY(0px)', easing: 'cubic-bezier(.25,.6,.45,1)' }, { transform: 'translateY(' + (-lift).toFixed(1) + 'px)', offset: 0.42, easing: 'cubic-bezier(.55,0,.75,.4)' }, { transform: 'translateY(0px)' }], Object.assign({ composite: 'add' }, t)),
+        anim(f, [{ transform: 'scale(1)' }, { transform: 'scale(' + (Math.max(k, 1) * 1.16).toFixed(3) + ')', offset: 0.45 }, { transform: 'scale(' + k.toFixed(3) + ')' }], Object.assign({ composite: 'add', easing: 'ease-in-out' }, t))
+      ].forEach(function (x) { x.persist(); });
+      return trip;
+    });
+  }
+  // Flyers land: on the way in the card's icons appear, on the way back
+  // the cell's marks do.
+  function land(P, back) {
+    (P.pairs || []).forEach(function (p) {
+      if (p.f) { stopAnims(p.f); p.f.remove(); p.f = null; }
+      if (!back) p.ric.classList.remove('wait');
+    });
+    if (P.src && P.carried) {
+      if (back) unpackMarks(P.src);
+      else { P.src.classList.add('packed'); $$('.mk, .more', P.src).forEach(function (m) { stopAnims(m); }); }
+    }
+  }
+  function clearCarry(P) {
+    if (!P.carry) return;
+    stopAnims(P.carry, true);
+    P.carry.innerHTML = '';
+    $$('.ric.wait', P.el).forEach(function (r) { r.classList.remove('wait'); });
+  }
+
+  // A card's state: which element, what opened it, where it lies, the
+  // marks it carries, and a token so a later open or close supersedes an
+  // earlier one.
+  function cardState(el, carry) { return { el: el, carry: carry || null, state: 'closed', seq: 0, next: null, g: null, src: null, press: null, pairs: null, carried: false, closing: null }; }
+  function resetCard(el) { stopAnims(el, true); el.classList.remove('live', 'open'); el.removeAttribute('style'); }
+  // Resolves true once the card is fully open, false if something
+  // superseded it.
+  function openCard(P, calEl) {
+    var tok = ++P.seq, el = P.el, run;
+    P.state = 'opening';
+    el.classList.add('live');
+    if (reducedMotion()) {
+      run = anim(el, [{ opacity: 0 }, { opacity: 1 }], { duration: 180, easing: 'ease-out' }).finished;
+    } else if (isPhone() || !P.g) {
+      if (P.src) originOn(el, P.src);
+      pressIn(P.press);
+      var fl = fly(P, false, { delay: 60, dur: 420, stagger: 26 }, calEl);
+      run = settleAll([anim(el, [{ transform: 'scale(.08)' }, { transform: 'scale(1)' }], { duration: 360, delay: 40, easing: EASE, fill: 'both' })].concat(fl));
+      anim(el, [{ opacity: 0 }, { opacity: 1, offset: 0.08 }, { opacity: 1 }], { duration: 360, delay: 40, easing: 'linear', fill: 'both' });
+    } else {
+      // The marks are aimed at the card as it will lie, before its leaves
+      // turn; each lands after its leaf lies flat.
+      var F = foldGeo(P, calEl), marks = fly(P, false, { delay: 110, dur: 390, stagger: 30 }, calEl);
+      pressIn(P.press);
+      run = settleAll(foldRun(F, false, 1).concat(marks));
+    }
+    return run.then(function () {
+      if (tok !== P.seq) throw new Error('superseded');
+      stopAnims(el, true);
+      land(P, false);
+      P.state = 'open';
+      el.classList.add('open');
+      return true;
+    }).catch(function () { return false; });
+  }
+  function closeCard(P, calEl, o) {
+    o = o || {};
+    var tok = ++P.seq, el = P.el, sp = o.fast ? 1.8 : 1, run;
+    P.state = 'closing';
+    el.classList.remove('open');
+    // Marks still flying in are dropped; the ones in the card fly back
+    // from where they are.
+    clearCarry(P);
+    var moving = !o.instant && P.src && P.src.isConnected && !reducedMotion();
+    if (moving && P.carried) {
+      P.pairs = carryPairs(P.src, el);
+      P.src.classList.remove('packed');
+      packMarks(P.src, P.pairs, true);
+      P.pairs.forEach(function (p) { p.ric.classList.add('wait'); });
+    } else {
+      P.pairs = [];
+    }
+    if (o.instant || !P.src || !P.src.isConnected) {
+      run = Promise.resolve();
+    } else if (reducedMotion()) {
+      run = anim(el, [{ opacity: 1 }, { opacity: 0 }], { duration: 160, easing: 'ease-in' }).finished;
+    } else if (isPhone() || !P.g) {
+      originOn(el, P.src);
+      var fl = fly(P, true, { delay: 0, dur: 340 / sp, stagger: 22 / sp }, calEl);
+      run = settleAll([anim(el, [{ transform: 'scale(1)' }, { transform: 'scale(.08)' }], { duration: 280 / sp, delay: 60 / sp, easing: 'cubic-bezier(.5,0,.75,0)', fill: 'both' })].concat(fl));
+      anim(el, [{ opacity: 1 }, { opacity: 1, offset: 0.9 }, { opacity: 0 }], { duration: 280 / sp, delay: 60 / sp, easing: 'linear', fill: 'both' });
+      pressIn(P.press, { delay: 300 / sp, dur: 280 / sp, soft: true });
+    } else {
+      var marks = fly(P, true, { delay: 0, dur: 340 / sp, stagger: 24 / sp }, calEl);
+      run = settleAll(foldRun(foldGeo(P, calEl), true, sp).concat(marks));
+      // The card tucks back into what it came from, which gives a little.
+      pressIn(P.press, { delay: FOLD.pressBack / sp, dur: 300 / sp, soft: true });
+    }
+    return run.then(function () { return true; }, function () { return false; }).then(function () {
+      if (tok !== P.seq) return false;
+      land(P, true);
+      clearCarry(P);
+      if (P.src && P.src.isConnected) unpackMarks(P.src);
+      resetCard(el);
+      P.carried = false;
+      P.pairs = null;
+      P.state = 'closed';
+      P.g = null;
+      P.src = null;
+      return true;
+    });
+  }
+
   // Exposed for calendar_editor.js (a separate script/closure loaded only
   // for a CanEdit viewer — see that file's header) so the date-math port
   // is written once and both files stay in agreement with the server, and
@@ -477,6 +795,8 @@
       this.selection = {}; // edit-mode multi-select, keyed by dayKey -> true
 
       this._buildShell();
+      this._pw = cardState(this.wingEl, this.carryEl);
+      this._pf = cardState(this.flapEl);
       this._bindEvents();
       this.renderMonth();
       this.renderToday();
@@ -533,6 +853,7 @@
           '<div class="mv" id="cal5-mv" role="dialog" aria-label="Moons" tabindex="-1"></div>' +
           '<div class="flap" id="cal5-flap" role="dialog" aria-label="Era" tabindex="-1"></div>' +
           '<div class="pop" id="cal5-pop" role="dialog" aria-label="Calendars you can see" tabindex="-1"></div>' +
+          '<div class="carry" id="cal5-carry" aria-hidden="true"></div>' +
           '<div class="scrim" id="cal5-scrim"></div>' +
           '<div class="dock" id="cal5-dock"></div>' +
         '</section>' +
@@ -554,6 +875,7 @@
       this.flapEl = $('#cal5-flap', this.el);
       this.popEl = $('#cal5-pop', this.el);
       this.scrimEl = $('#cal5-scrim', this.el);
+      this.carryEl = $('#cal5-carry', this.el);
       this.dockEl = $('#cal5-dock', this.el);
     },
 
@@ -704,6 +1026,8 @@
       this.renderHeader();
       this.fetchMonth(this.view.y, this.view.m).then(function () {
         self._paintMonth();
+        // The open day's card shows what the fetch just brought.
+        self.refreshWing();
       });
       // Paint immediately from cache too (avoids a blank grid while the
       // fetch above is in flight for a month already cached).
@@ -747,6 +1071,14 @@
         html += '</div>';
       }
       this.stageEl.innerHTML = '<div class="month">' + html + '</div>';
+      // An open day's card follows its day into the redrawn grid (not one
+      // on its way out: that one is put away with its old cell).
+      var ps = this._pw.state, open = (ps === 'open' || ps === 'opening') && this.stageEl.querySelector('.day[data-key="' + this.wingFor + '"]');
+      if (open) {
+        this._pw.src = open;
+        this._markOpenDay(open);
+        if (this._pw.carried) open.classList.add('packed');
+      }
       this._paintDaySkyContext();
     },
 
@@ -811,12 +1143,15 @@
     // Navigation
     // --------------------------------------------------------------
     goMonth: function (delta) {
+      // A day's card belongs to its day; changing the month puts it away.
+      if (this.wingFor) this.closeWing({ instant: true, quiet: true });
       var next = CalDate.shiftMonth(this.cal, this.view.y, this.view.m, delta);
       this.view = next;
       this.renderMonth();
     },
 
     goToday: function () {
+      if (this.wingFor) this.closeWing({ instant: true, quiet: true });
       this.view = { y: this.cal.current_year, m: this.cal.current_month };
       this.renderMonth();
       this.say('Jumped to today.');
@@ -865,11 +1200,33 @@
 
       this.wingEl.addEventListener('click', function (e) {
         if (e.target.closest('[data-close]')) { self.closeWing(); return; }
+        var mr = e.target.closest('.mrow');
+        if (mr) { self.mvMoonId = mr.dataset.moon; self.openMoonView(); return; }
         var evd = e.target.closest('.evd');
         if (evd) self.openEventDetail(evd.dataset.ev);
       });
       this.flapEl.addEventListener('click', function (e) {
         if (e.target.closest('[data-close]')) self.closeFlap();
+      });
+      // A desktop card scrolls in its second leaf, so the wheel over its
+      // head and the scrolling keys on the card itself move that leaf.
+      [this.wingEl, this.flapEl].forEach(function (card) {
+        var scroller = function () { return (!isPhone() && card.querySelector('.lscroll')) || card; };
+        card.addEventListener('wheel', function (e) {
+          var sc = scroller();
+          if (sc === card || e.ctrlKey || sc.contains(e.target) || sc.scrollHeight <= sc.clientHeight) return;
+          e.preventDefault();
+          sc.scrollTop += e.deltaY * (e.deltaMode === 1 ? 16 : e.deltaMode === 2 ? sc.clientHeight : 1);
+        }, { passive: false });
+        card.addEventListener('keydown', function (e) {
+          var sc = scroller();
+          if (sc === card || e.target !== card || e.altKey || e.ctrlKey || e.metaKey) return;
+          var k = e.key, pg = sc.clientHeight * 0.875;
+          var d = k === 'ArrowDown' ? 40 : k === 'ArrowUp' ? -40 : k === 'PageDown' || (k === ' ' && !e.shiftKey) ? pg : k === 'PageUp' || k === ' ' ? -pg : k === 'End' ? sc.scrollHeight : k === 'Home' ? -sc.scrollHeight : 0;
+          if (!d) return;
+          e.preventDefault();
+          sc.scrollBy({ top: d, behavior: reducedMotion() ? 'auto' : 'smooth' });
+        });
       });
       this.evpEl.addEventListener('click', function (e) {
         if (e.target.closest('[data-close]')) self.closeEventDetail();
@@ -903,7 +1260,10 @@
         if (handled) e.preventDefault();
       });
 
-      this._resizeHandler = function () { if (self.wingFor) self.closeWing(); };
+      this._resizeHandler = function () {
+        if (self.wingFor) self.closeWing({ instant: true, quiet: true });
+        if (self._pf.state !== 'closed') self.closeFlap({ instant: true, quiet: true });
+      };
       window.addEventListener('resize', this._resizeHandler);
 
       // Escape closes whichever panel is open (motion rule #760: "every
@@ -914,7 +1274,7 @@
         if (e.key !== 'Escape') return;
         if (self.evpEl.classList.contains('open')) { self.closeEventDetail(); return; }
         if (self.mvEl.classList.contains('open')) { self.closeMoonView(); return; }
-        if (self.flapEl.classList.contains('open')) { self.closeFlap(); return; }
+        if (self._pf.state !== 'closed') { self.closeFlap(); return; }
         if (self.popEl.classList.contains('open')) { self.closePop(); return; }
         if (self.wingFor) { self.closeWing(); return; }
       };
@@ -929,7 +1289,7 @@
     },
 
     anyPanelOpen: function () {
-      return !!this.wingFor || this.flapEl.classList.contains('open') || this.evpEl.classList.contains('open') ||
+      return !!this.wingFor || this._pf.state !== 'closed' || this.evpEl.classList.contains('open') ||
         this.mvEl.classList.contains('open') || this.popEl.classList.contains('open');
     },
 
@@ -937,39 +1297,125 @@
       this.scrimEl.classList.toggle('on', this.anyPanelOpen() && window.matchMedia('(max-width:600px)').matches);
     },
 
-    closeAllPanels: function () {
-      if (this.wingFor) this.closeWing();
-      this.closeFlap();
+    // o.instant takes them down without their motion (the almanac folding
+    // the whole calendar away).
+    closeAllPanels: function (o) {
+      if (this.wingFor) this.closeWing(o);
+      this.closeFlap(o);
       this.closeEventDetail();
       this.closeMoonView();
       this.closePop();
     },
 
     // --------------------------------------------------------------
-    // Day wing (fold-out day card)
+    // The day's card. A second press on its day folds it back; another
+    // day's press folds this one away first. A press that comes while a
+    // card is moving waits for the motion to finish.
     // --------------------------------------------------------------
     openWing: function (key, highlightEventId) {
-      var self = this;
-      this.wingFor = key;
-      var d = parseDayKey(key);
-      var anchor = this.stageEl.querySelector('.day[data-key="' + key + '"]');
-      this.wingEl.innerHTML = this._wingHTML(d, highlightEventId);
-      growOpen(this.wingEl, anchor, this.calEl).then(function () {
-        self.wingEl.focus({ preventScroll: true });
-        if (highlightEventId) {
-          var row = self.wingEl.querySelector('.evd[data-ev="' + highlightEventId + '"]');
-          if (row) { row.scrollIntoView({ block: 'nearest' }); row.classList.add('pulse'); }
-        }
-      });
-      this._updateScrim();
+      var self = this, P = this._pw;
+      this.hideGlance();
+      if (P.state === 'opening' || P.state === 'closing') { P.next = function () { self.openWing(key, highlightEventId); }; return; }
+      if (this.wingFor === key) {
+        if (highlightEventId) this._pickRow(highlightEventId); else this.closeWing();
+        return;
+      }
+      var go = function () { if (!self.wingFor) self._showWing(key, highlightEventId); };
+      if (this.wingFor) this.closeWing({ quiet: true, fast: true }).then(go);
+      else if (this._pf.state !== 'closed') this.closeFlap({ quiet: true }).then(go);
+      else go();
     },
 
-    closeWing: function () {
-      if (!this.wingFor) return;
-      var anchor = this.stageEl.querySelector('.day[data-key="' + this.wingFor + '"]');
-      this.wingFor = null;
-      growClose(this.wingEl, anchor);
+    _showWing: function (key, highlightEventId) {
+      var self = this, P = this._pw, btn = this.stageEl.querySelector('.day[data-key="' + key + '"]');
+      if (!btn) return;
+      resetCard(this.wingEl);
+      this.wingEl.innerHTML = this._wingHTML(parseDayKey(key), highlightEventId);
+      this.wingFor = key;
+      this._markOpenDay(btn);
+      var g = isPhone() ? null : wingGeometry(this.wingEl, btn, this.calEl);
+      if (g) placeCard(this.wingEl, g);
+      var row = highlightEventId ? this.wingEl.querySelector('.evd[data-ev="' + highlightEventId + '"]') : null;
+      if (row) row.scrollIntoView({ block: 'nearest' });
+      var depth = pressDepth(btn), dc = btn.querySelector('.dc');
+      P.src = btn;
+      P.g = g;
+      P.press = [{ el: dc, depth: depth }, { el: btn, pseudo: '::before', depth: depth }];
+      // The day's own marks go into its card, the pressed mark first; the
+      // card's icons wait for them.
+      P.pairs = [];
+      P.carried = false;
+      if (!reducedMotion() && btn.querySelector('.mk')) {
+        P.pairs = carryPairs(btn, this.wingEl);
+        if (highlightEventId) P.pairs.sort(function (a, b) { return (b.id === highlightEventId) - (a.id === highlightEventId); });
+        P.pairs.forEach(function (p) { p.ric.classList.add('wait'); });
+        packMarks(btn, P.pairs, false);
+        P.carried = true;
+      }
       this._updateScrim();
+      openCard(P, this.calEl).then(function (ok) {
+        if (!ok) return;
+        self.wingEl.focus({ preventScroll: true });
+        if (row && row.isConnected) row.classList.add('pulse');
+        var n = P.next; P.next = null; if (n) n();
+      });
+    },
+
+    // The open day turns to paper and the rest of the month recedes.
+    _markOpenDay: function (btn) {
+      btn.classList.add('sel');
+      btn.setAttribute('aria-expanded', 'true');
+      var m = btn.closest('.month');
+      if (m) m.classList.add('dim');
+    },
+
+    // A mark of the day that is already open picks that event out.
+    _pickRow: function (id) {
+      $$('.evd.hl', this.wingEl).forEach(function (r) { r.classList.remove('hl', 'pulse'); });
+      var row = this.wingEl.querySelector('.evd[data-ev="' + id + '"]');
+      if (!row) return;
+      row.classList.add('hl');
+      row.scrollIntoView({ block: 'nearest' });
+      void row.offsetWidth;
+      row.classList.add('pulse');
+    },
+
+    // Redraws the open card's words in place (after an edit or a fetch
+    // re-renders the month), keeping where its list was scrolled to.
+    refreshWing: function () {
+      // Never under a form being filled in: its own save refreshes after.
+      if (!this.wingFor || this._pw.state !== 'open' || this.wingEl.querySelector('form')) return;
+      var sc = this.wingEl.querySelector('.lscroll') || this.wingEl, top = sc.scrollTop;
+      this.wingEl.innerHTML = this._wingHTML(parseDayKey(this.wingFor));
+      (this.wingEl.querySelector('.lscroll') || this.wingEl).scrollTop = top;
+      var btn = this.stageEl.querySelector('.day[data-key="' + this.wingFor + '"]');
+      if (btn) { this._pw.src = btn; this._markOpenDay(btn); }
+    },
+
+    // Folds the card back into its day. o.fast when another day is
+    // waiting, o.instant without motion, o.quiet to leave focus alone.
+    closeWing: function (o) {
+      o = o || {};
+      var self = this, P = this._pw;
+      if (!this.wingFor) return Promise.resolve();
+      if (P.state === 'opening' && !o.instant) return new Promise(function (res) { P.next = function () { self.closeWing(o).then(res); }; });
+      if (P.state === 'closing' && !o.instant) return P.closing || Promise.resolve();
+      if (this.evpEl.classList.contains('open')) this.closeEventDetail();
+      var btn = P.src, had = this.wingEl.contains(document.activeElement) || this.evpEl.contains(document.activeElement);
+      P.closing = closeCard(P, this.calEl, o).then(function (ok) {
+        if (!ok) return;
+        if (btn) { btn.classList.remove('sel'); btn.removeAttribute('aria-expanded'); }
+        $$('.day.sel', self.stageEl).forEach(function (d) { d.classList.remove('sel'); d.removeAttribute('aria-expanded'); });
+        $$('.month.dim', self.stageEl).forEach(function (m) { m.classList.remove('dim'); });
+        self.wingEl.innerHTML = '';
+        self.wingFor = null;
+        P.closing = null;
+        self._updateScrim();
+        if (!o.quiet && had && btn && btn.isConnected) btn.focus({ preventScroll: true });
+        var n = P.next; P.next = null; if (n) n();
+      });
+      this._updateScrim();
+      return P.closing;
     },
 
     _wingHTML: function (d, highlightEventId) {
@@ -998,15 +1444,21 @@
           '</div>';
       }).join('') : '<div class="none">Nothing on the calendar today.</div>';
 
-      return '<div class="grab" aria-hidden="true"></div>' +
-        '<div class="crease"><span>Day</span><button type="button" class="x" data-close aria-label="Close">✕</button></div>' +
-        '<div class="wb">' +
-          '<h3 class="wdate">' + esc(label) + '</h3>' +
-          (weatherFact || moonRows ? '<div class="facts">' + weatherFact + moonRows + '</div>' : '') +
+      // Two leaves: the head (the date and the weather), which stays in
+      // view, and the rest, which scrolls on a desktop: the day's events
+      // first, then its moons.
+      var moonCount = (cal.moons || []).length;
+      return '<div class="leaf lf1"><div class="grab" aria-hidden="true"></div>' +
+          '<div class="crease"><span>Day</span><button type="button" class="x" data-close aria-label="Close">✕</button></div>' +
+          '<div class="wb wbh"><h3 class="wdate">' + esc(label) + '</h3>' +
+          (weatherFact ? '<div class="facts">' + weatherFact + '</div>' : '') + '</div>' +
+        '</div>' +
+        '<div class="leaf lf2"><div class="lscroll"><div class="wb wbr">' +
           '<div class="sect">' + (evs.length > 1 ? evs.length + ' events' : 'Events') + '</div>' +
           '<div class="evlist">' + evHTML + '</div>' +
           (this.canEdit ? '<button type="button" class="addev" data-add-event><i class="fa-solid fa-plus"></i>Add an event</button>' : '') +
-        '</div>';
+          (moonRows ? '<div class="sect">' + (moonCount > 1 ? 'Moons' : 'Moon') + '</div><div class="moonsec">' + moonRows + '</div>' : '') +
+        '</div></div></div>';
     },
 
     // --------------------------------------------------------------
@@ -1101,37 +1553,70 @@
     // Owner era editing; see .ai.md "Honest gaps").
     // --------------------------------------------------------------
     toggleEra: function () {
-      if (this.flapEl.classList.contains('open')) { this.closeFlap(); return; }
-      this.showFlap();
+      var self = this, P = this._pf;
+      this.hideGlance();
+      if (P.state === 'open') { this.closeFlap(); return; }
+      if (P.state !== 'closed') return;
+      if (this.wingFor) this.closeWing({ quiet: true }).then(function () { self.showFlap(); });
+      else this.showFlap();
     },
 
     showFlap: function () {
       var era = this.eraForDate(this.view.y, this.view.m, 1);
       if (!era) { this.say('No era set for this month.'); return; }
-      var btn = $('#cal5-erabtn', this.el);
-      this.flapEl.innerHTML = this._eraHTML(era);
-      growOpen(this.flapEl, btn, this.calEl);
+      this._showFlapHTML(this._eraHTML(era));
+    },
+
+    // Opens the era's card with the given leaves; calendar_editor.js's era
+    // manager opens through here too, so both fold the same way.
+    _showFlapHTML: function (html) {
+      var self = this, P = this._pf, btn = $('#cal5-erabtn', this.el);
+      if (P.state !== 'closed') return;
+      resetCard(this.flapEl);
+      this.flapEl.innerHTML = html;
+      var g = isPhone() ? null : eraGeometry(this.flapEl, btn, this.calEl);
+      if (g) placeCard(this.flapEl, g);
+      P.src = btn;
+      P.g = g;
+      P.press = [{ el: btn, depth: pressDepth(btn) }];
       btn.setAttribute('aria-expanded', 'true');
       this._updateScrim();
+      openCard(P, this.calEl).then(function (ok) {
+        if (!ok) return;
+        self.flapEl.focus({ preventScroll: true });
+        var n = P.next; P.next = null; if (n) n();
+      });
     },
 
-    closeFlap: function () {
-      if (!this.flapEl.classList.contains('open')) return;
-      var btn = $('#cal5-erabtn', this.el);
-      btn.setAttribute('aria-expanded', 'false');
-      growClose(this.flapEl, btn);
+    closeFlap: function (o) {
+      o = o || {};
+      var self = this, P = this._pf, btn = $('#cal5-erabtn', this.el);
+      if (P.state === 'closed') return Promise.resolve();
+      if (P.state === 'opening' && !o.instant) return new Promise(function (res) { P.next = function () { self.closeFlap(o).then(res); }; });
+      if (P.state === 'closing' && !o.instant) return P.closing || Promise.resolve();
+      var had = this.flapEl.contains(document.activeElement);
+      P.closing = closeCard(P, this.calEl, o).then(function (ok) {
+        if (!ok) return;
+        btn.setAttribute('aria-expanded', 'false');
+        self.flapEl.innerHTML = '';
+        P.closing = null;
+        self._updateScrim();
+        if (!o.quiet && had) btn.focus({ preventScroll: true });
+        var n = P.next; P.next = null; if (n) n();
+      });
       this._updateScrim();
+      return P.closing;
     },
 
+    // The era's card: its name and span in the head leaf, its description
+    // (when it has one) below.
     _eraHTML: function (era) {
       var span = esc(era.start_year) + (era.end_year != null ? '–' + esc(era.end_year) : '–present');
-      return '<div class="grab" aria-hidden="true"></div>' +
-        '<div class="crease"><span>Era</span><button type="button" class="x" data-close aria-label="Close">✕</button></div>' +
-        '<div class="fb">' +
-          '<h3 class="ename">' + esc(era.name) + '</h3>' +
-          '<div class="espan"><span>' + span + '</span></div>' +
-          (era.description ? '<p class="edesc">' + esc(era.description) + '</p>' : '') +
-        '</div>';
+      return '<div class="leaf lf1"><div class="grab" aria-hidden="true"></div>' +
+          '<div class="crease"><span>Era</span><button type="button" class="x" data-close aria-label="Close">✕</button></div>' +
+          '<div class="fb fbh"><h3 class="ename">' + esc(era.name) + '</h3><div class="espan"><span>' + span + '</span></div></div>' +
+        '</div>' +
+        (era.description ? '<div class="leaf lf2"><div class="lscroll"><div class="fb fbr"><p class="edesc">' + esc(era.description) + '</p></div></div></div>' : '');
     },
 
     // --------------------------------------------------------------

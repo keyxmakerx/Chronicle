@@ -405,6 +405,7 @@
           view.eventsByMonth = {};
           view.closeEventDetail();
           view.renderMonth();
+          view.refreshWing();
           view.say('Event deleted.');
         });
       }
@@ -501,12 +502,15 @@
         form.remove();
         if (!isNew) view.closeEventDetail();
         view.renderMonth();
-        view.openWing(dayKey);
+        view.refreshWing();
         view.say(isNew ? 'Event created.' : 'Event saved.');
       });
     });
 
-    view.wingEl.querySelector('.wb').appendChild(form);
+    // Right under "Add an event", ahead of the day's moons.
+    var addBtn = view.wingEl.querySelector('[data-add-event]');
+    if (addBtn) addBtn.insertAdjacentElement('afterend', form);
+    else (view.wingEl.querySelector('.wbr') || view.wingEl.querySelector('.wb')).appendChild(form);
     form.name.focus({ preventScroll: true });
     reveal(form);
   };
@@ -625,12 +629,8 @@
     if (view.role < ROLE_OWNER) return;
     this._eraFormFor = undefined; // undefined = list mode, 'new' = create, <id> = edit
     view.showFlap = function () {
-      var btn = $('#cal5-erabtn', view.el);
       self._eraFormFor = undefined;
-      view.flapEl.innerHTML = self._eraManagerHTML();
-      Chronicle.calendarPanel.growOpen(view.flapEl, btn, view.calEl);
-      btn.setAttribute('aria-expanded', 'true');
-      view._updateScrim();
+      view._showFlapHTML(self._eraManagerHTML());
     };
   };
 
@@ -659,9 +659,11 @@
       ? this._eraFormHTML(formFor === 'new' ? null : eras.filter(function (e) { return String(e.id) === String(formFor); })[0])
       : '<button type="button" class="addev" data-add-era><i class="fa-solid fa-plus"></i>Add an era</button>';
 
-    return '<div class="grab" aria-hidden="true"></div>' +
-      '<div class="crease"><span>Eras</span><button type="button" class="x" data-close aria-label="Close">✕</button></div>' +
-      '<div class="fb"><div class="etl-track">' + rows + '</div>' + body + '</div>';
+    // Two leaves, as calendar_view.js's era card: the bar, then the list and
+    // its form, which scroll.
+    return '<div class="leaf lf1"><div class="grab" aria-hidden="true"></div>' +
+        '<div class="crease"><span>Eras</span><button type="button" class="x" data-close aria-label="Close">✕</button></div></div>' +
+      '<div class="leaf lf2"><div class="lscroll"><div class="fb fbr"><div class="etl-track">' + rows + '</div>' + body + '</div></div></div>';
   };
 
   CalendarEditor.prototype._eraFormHTML = function (era) {

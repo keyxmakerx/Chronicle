@@ -332,9 +332,41 @@
 .cal-v5 .wing[data-side="left"]{border-radius:14px 0 14px 14px;--hg:linear-gradient(270deg,var(--crease),transparent 18px)}
 .cal-v5 .wing[data-side="down"]{border-radius:0 0 14px 14px;--hg:linear-gradient(180deg,var(--crease),transparent 16px)}
 .cal-v5 .wing[data-side="up"]{border-radius:14px 14px 0 0;--hg:linear-gradient(0deg,var(--crease),transparent 16px)}
+/* On a desktop the day's card and the era's card are two leaves of paper, which is what lets them fold
+   (calendar_view.js): the head (the date, the weather) and the rest, which scrolls below it. At rest they read as one
+   card: the leaves carry the paper and the card one shadow. While it folds, each leaf carries its own paper and shadow
+   and darkens as it turns away. Nothing between a leaf and the page clips, so no shadow is ever cut off. */
+@media (min-width:601px){
+  .cal-v5 .wing, .cal-v5 .flap{display:flex;flex-direction:column;overflow:visible;background:none;border:0;box-shadow:none}
+  .cal-v5 .wing::before, .cal-v5 .flap::before{content:"";position:absolute;inset:0;border-radius:inherit;box-shadow:var(--shadow-l);pointer-events:none}
+  .cal-v5 .leaf{position:relative;border:1px solid var(--edge);background:var(--hgl,var(--hg)),var(--paper);background-repeat:no-repeat;backface-visibility:hidden;transform-origin:0 0}
+  .cal-v5 .lf1{z-index:2;flex:none;border-bottom:0;border-top-left-radius:inherit;border-top-right-radius:inherit}
+  .cal-v5 .lf1:last-child{border-bottom:1px solid var(--edge);border-bottom-left-radius:inherit;border-bottom-right-radius:inherit}
+  .cal-v5 .lf2{z-index:1;flex:0 1 auto;min-height:0;display:flex;flex-direction:column;border-top:0;border-bottom-left-radius:inherit;border-bottom-right-radius:inherit}
+  .cal-v5 .lscroll{position:relative;flex:0 1 auto;min-height:0;overflow:auto;overscroll-behavior:contain;border-radius:inherit}
+  .cal-v5 .leaf::before, .cal-v5 .leaf::after{content:"";position:absolute;inset:-1px;border-radius:inherit;opacity:0;pointer-events:none}
+  .cal-v5 .lf1::before, .cal-v5 .lf1::after{bottom:0}
+  .cal-v5 .lf2::before, .cal-v5 .lf2::after{top:0}
+  .cal-v5 .leaf::before{z-index:-1;box-shadow:var(--shadow-l)}
+  .cal-v5 .leaf::after{z-index:5;background:oklch(.14 .02 265)}
+  /* The hinge's shading belongs to the leaf on the hinge side. */
+  .cal-v5 .wing[data-side="down"] .lf2, .cal-v5 .wing[data-side="up"] .lf1, .cal-v5 .flap .lf2{--hgl:linear-gradient(transparent,transparent)}
+  /* While the leaves turn, the head's bar rounds its own corner, so the leaf clips nothing; at rest the head clips it,
+     as the one-piece card did. */
+  .cal-v5 .lf1>.crease{position:relative;background:var(--hg),var(--paper);background-repeat:no-repeat;border-radius:var(--ri)}
+  .cal-v5 .wing.open .lf1, .cal-v5 .flap.open .lf1{overflow:hidden}
+  .cal-v5 .wing.open .lf1>.crease, .cal-v5 .flap.open .lf1>.crease{border-radius:0}
+  .cal-v5 .flap.open .leaf{backface-visibility:visible}
+  .cal-v5 .flap.open .lf1{z-index:auto}
+  .cal-v5 .wing{--ri:0 13px 0 0}
+  .cal-v5 .wing[data-side="left"]{--ri:13px 0 0 0}
+  .cal-v5 .wing[data-side="down"]{--ri:0}
+  .cal-v5 .wing[data-side="up"]{--ri:13px 13px 0 0}
+  .cal-v5 .flap{--ri:3px 13px 0 0}
+}
 /* A day's marks in flight between its cell and its card: the mark itself travels, and nothing is left behind. */
 .cal-v5 .carry{position:absolute;inset:0;z-index:45;pointer-events:none}
-.cal-v5 .flyer{position:absolute;left:0;top:0;display:block;transform-origin:0 0;color:oklch(var(--icL) var(--icC) var(--h,260));will-change:transform}
+.cal-v5 .flyer{position:absolute;left:0;top:0;display:grid;place-items:center;transform-origin:0 0;color:oklch(var(--icL) var(--icC) var(--h,260));will-change:transform}
 .cal-v5 .flyer .ci{display:block;width:100%;height:100%}
 .cal-v5 .flyer.dir::after{inset:-3px}
 .cal-v5 .crease{position:sticky;top:0;z-index:2;display:flex;align-items:center;gap:8px;min-height:40px;padding:6px 8px 6px 16px;border-bottom:1px dashed var(--edge);background:inherit;
@@ -344,6 +376,10 @@
 .cal-v5 .x:hover{background:var(--hair);color:var(--ink)}
 .cal-v5 .grab{display:none}
 .cal-v5 .wb{padding:14px 16px 16px}
+/* The crease between the two leaves runs through the gap under the head. */
+.cal-v5 .wbh{padding-bottom:8px}
+.cal-v5 .wbr{padding-top:0}
+.cal-v5 .wbr>.sect:first-child{margin-top:8px}
 .cal-v5 .wdate{margin:0;font:500 24px/1.12 var(--serif);color:var(--ink)}
 .cal-v5 .wsub{margin-top:4px;font:500 12px/1.35 var(--sans);color:var(--mut)}
 .cal-v5 .facts{margin-top:12px;display:flex;flex-direction:column;gap:7px;padding:10px 12px;border-radius:10px;background:var(--paper2)}
@@ -488,6 +524,8 @@
 /* Era card: drops out of the era label's bottom edge. */
 .cal-v5 .flap{width:392px;border-radius:4px 14px 14px 14px;--hg:linear-gradient(180deg,var(--crease),transparent 14px)}
 .cal-v5 .fb{padding:14px 18px 18px}
+.cal-v5 .fbh{padding-bottom:7px}
+.cal-v5 .fbr{padding-top:0}
 .cal-v5 .fb.swap{animation:cal5-fadeIn .28s ease both}
 .cal-v5 .ename{margin:0;font:500 24px/1.15 var(--serif);color:var(--ink)}
 .cal-v5 .espan{margin-top:4px;font:500 12px/1.35 var(--sans);color:var(--mut);display:flex;flex-wrap:wrap;gap:4px 10px;align-items:center}
@@ -676,6 +714,8 @@
 .cal-v5 .hc{display:none}
 .cal-v5 .wing, .cal-v5 .flap, .cal-v5 .evp{position:fixed;left:0!important;right:0;top:auto!important;bottom:0;width:auto!important;border-radius:18px 18px 0 0}
 .cal-v5 .wing, .cal-v5 .flap{height:auto!important;max-height:82vh!important;border-left:0;border-right:0;border-bottom:0;overflow:auto;--hg:linear-gradient(transparent,transparent)!important}
+/* A phone's sheet grows whole, so its leaves are only groupings and the sheet itself scrolls. */
+.cal-v5 .leaf, .cal-v5 .lscroll{display:contents}
 .cal-v5 .evp{max-height:86vh!important}
 .cal-v5 .evp::before{box-shadow:inset 0 1px 0 var(--edge)}
 .cal-v5 .evp .crease{border-radius:18px 18px 0 0}
