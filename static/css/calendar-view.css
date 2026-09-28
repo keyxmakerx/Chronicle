@@ -184,6 +184,29 @@
 .cal-v5 .tbtn{display:inline-flex;align-items:center;gap:7px;height:32px;padding:0 11px;border-radius:9px;font:550 12.5px/1 var(--sans);color:var(--ink2);white-space:nowrap}
 .cal-v5 .tbtn:hover, .cal-v5 .tbtn[aria-expanded="true"]{background:var(--lift);color:var(--ink);box-shadow:0 0 0 1px var(--hair)}
 .cal-v5 .ib{width:32px;height:32px;border-radius:50%;display:grid;place-items:center;color:var(--ink2);flex:none}
+/* The sky, docked flush at the top of the card. Folded, it takes no room and only the Sky chip remains. Its room changes at
+   once; while it folds the card rides a transform and a clip (SkyPane.Dock, sky_pane.js), and the sky hangs from the pane's
+   lower edge, so it can still show above the header as it rolls away. --skyH is set from the card's width. */
+.cal-v5 .skywrap{position:relative;z-index:2;height:0}
+.cal-v5 .skywrap.open{height:var(--skyH,120px)}
+.cal-v5 .skywrap .sky{position:absolute;left:0;right:0;bottom:0;height:var(--skyH,120px);border-radius:23px 23px 0 0;overflow:hidden;visibility:hidden}
+.cal-v5 .skywrap.open .sky, .cal-v5 .cal.moving .sky{visibility:visible}
+.cal-v5 .skywrap .sky canvas{position:absolute;inset:0;width:100%;height:100%;display:block}
+/* Where the pane meets the header: a hairline in the page's ink, so the sky ends cleanly. */
+.cal-v5 .skywrap .sky::after{content:"";position:absolute;left:0;right:0;bottom:0;height:1px;background:var(--edge);pointer-events:none}
+.cal-v5 .cal.moving{will-change:transform,clip-path}
+/* The Sky chip: the pane's only trace when folded. Its swatch is the sky now, in two colours, with its brightest body. */
+.cal-v5 .skybtn{display:inline-flex;align-items:center;gap:7px;height:30px;padding:0 11px 0 7px;border-radius:99px;font:600 12px/1 var(--sans);color:var(--ink2);white-space:nowrap;box-shadow:0 0 0 1px var(--hair)}
+.cal-v5 .skybtn:hover{background:var(--lift);color:var(--ink);box-shadow:0 0 0 1px var(--edge)}
+.cal-v5 .skybtn:focus-visible{outline:1.5px solid var(--ink);outline-offset:2px}
+.cal-v5 .skybtn[aria-expanded="true"]{background:var(--paper);color:var(--ink);box-shadow:0 0 0 1px var(--edge),0 1px 2px oklch(0 0 0 / .08)}
+.cal-v5 .skybtn .sw{position:relative;width:17px;height:17px;border-radius:50%;flex:none;box-shadow:inset 0 0 0 1px oklch(0 0 0 / .14);background:var(--sw,linear-gradient(#35507f,#9fb2d4))}
+/* As the shade rolls into the chip, the chip catches it (never under reduced motion; sky_pane.js holds it back). */
+.cal-v5 .skybtn .sw::after{content:"";position:absolute;inset:-3px;border-radius:50%;box-shadow:0 0 0 1.5px var(--ink2);opacity:0;pointer-events:none}
+.cal-v5 .skybtn.caught .sw{animation:cal5-catch .5s var(--ease)}
+.cal-v5 .skybtn.caught .sw::after{animation:cal5-catchring .6s var(--ease)}
+@keyframes cal5-catch{0%{transform:scale(1)}35%{transform:scale(1.28)}100%{transform:scale(1)}}
+@keyframes cal5-catchring{0%{opacity:.55;transform:scale(.8)}100%{opacity:0;transform:scale(1.6)}}
 .cal-v5 .ib:hover{background:var(--lift);color:var(--ink);box-shadow:0 0 0 1px var(--hair)}
 .cal-v5 .h-mid{justify-content:space-between;margin-top:6px}
 .cal-v5 .mtitle{margin:0;font:500 36px/1.08 var(--serif);letter-spacing:-.012em;color:var(--ink);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:0}
@@ -672,6 +695,7 @@
 .cal-v5 .mock.open .mock-body{display:flex}
 .cal-v5 .wrap{padding:10px 0 28px}
 .cal-v5 .cal{border-radius:0;border-left:0;border-right:0;--gx:4px}
+.cal-v5 .skywrap .sky{border-radius:0}
 .cal-v5 .cal[data-struct="greg"]{--cellH:70px}
 .cal-v5 .cal[data-struct="harptos"]{--cellH:66px}
 .cal-v5 .cal[data-struct="custom"]{--cellH:68px}

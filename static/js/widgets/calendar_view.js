@@ -798,6 +798,7 @@
       this._pw = cardState(this.wingEl, this.carryEl);
       this._pf = cardState(this.flapEl);
       this._bindEvents();
+      this._dockSky();
       this.renderMonth();
       this.renderToday();
       this.renderLegend();
@@ -809,6 +810,7 @@
     },
 
     destroy: function (el) {
+      if (this.skyDock) this.skyDock.destroy();
       if (this._resizeHandler) window.removeEventListener('resize', this._resizeHandler);
       if (this._escHandler) document.removeEventListener('keydown', this._escHandler);
     },
@@ -822,11 +824,13 @@
       var canEditAttr = this.canEdit ? ' data-can-edit="true"' : '';
       this.el.innerHTML =
         '<section class="cal" id="cal5-cal" aria-label="Calendar"' + canEditAttr + '>' +
+          '<div class="skywrap" id="cal5-skywrap" hidden><div class="sky" role="img" aria-label="The sky"><canvas></canvas></div></div>' +
           '<header class="head">' +
             '<div class="h-row h-top">' +
               '<button type="button" class="hub" id="cal5-hub" aria-haspopup="dialog" aria-expanded="false"><span>' + esc(this.cal.name || 'Calendar') + '</span><i class="fa-solid fa-chevron-down"></i></button>' +
               '<div class="todaypill" id="cal5-todaypill"></div>' +
               '<div class="h-acts">' +
+                '<button type="button" class="skybtn" id="cal5-skybtn" aria-expanded="false" aria-controls="cal5-skywrap" title="Fold or open the sky" hidden><span class="sw" aria-hidden="true"></span><span>Sky</span></button>' +
                 '<button type="button" class="tbtn" id="cal5-moonbtn" aria-haspopup="dialog" aria-expanded="false"><i class="fa-solid fa-moon"></i><span>Moons</span></button>' +
               '</div>' +
             '</div>' +
@@ -880,10 +884,69 @@
     },
 
     say: function (msg) {
+      this._announce(msg);
+      this._toast(msg);
+    },
+
+    // Screen readers only: for things the eye already sees happen.
+    _announce: function (msg) {
       var l = $('#cal5-live', this.el);
       l.textContent = '';
       setTimeout(function () { l.textContent = msg; }, 40);
-      this._toast(msg);
+    },
+
+    // --------------------------------------------------------------
+    // The sky over the month (#830): SkyPane.Dock (sky_pane.js) draws it
+    // and folds it. Without the sky scripts or a canvas it stays missing.
+    // --------------------------------------------------------------
+    _dockSky: function () {
+      var self = this, wrap = $('#cal5-skywrap', this.el), chip = $('#cal5-skybtn', this.el);
+      if (!window.SkyPane || !SkyPane.Dock) return;
+      wrap.hidden = false;
+      try {
+        this.skyDock = new SkyPane.Dock({
+          card: this.calEl, wrap: wrap, chip: chip, seed: this.calendarId, name: this.cal.name,
+          followers: function () {
+            var out = [], n;
+            for (n = self.calEl.nextElementSibling; n; n = n.nextElementSibling) out.push(n);
+            for (n = self.el.nextElementSibling; n; n = n.nextElementSibling) out.push(n);
+            return out;
+          },
+          // The chip is outside every card, so pressing it puts them away.
+          before: function () { self.closeAllPanels({ instant: true }); },
+          travel: function () { return !self._fixedShowing(); },
+          say: function (msg) { self._announce(msg); }
+        });
+      } catch (e) {
+        wrap.hidden = true;
+        this.skyDock = null;
+        return;
+      }
+      chip.hidden = false;
+      this._skyDay();
+    },
+
+    // Today's sky, redrawn only when today's events change. The calendar
+    // and events here are already what this viewer may see.
+    _skyDay: function () {
+      var c = this.cal;
+      if (!this.skyDock || !this.eventsByMonth[this.monthKey(c.current_year, c.current_month)]) return;
+      var evs = this.eventsOnDay(c.current_year, c.current_month, c.current_day);
+      var sig = evs.map(function (e) { return e.id + ':' + (e.updated_at || ''); }).join(',');
+      if (sig === this._skySig) return;
+      this._skySig = sig;
+      this.skyDock.setDay(c, evs);
+    },
+
+    // A transform on the card would carry its phone bars and sheets
+    // (position:fixed) along with it, so while one shows the sky folds
+    // without travelling.
+    _fixedShowing: function () {
+      var els = this.calEl.querySelectorAll('.bbar:not([hidden]), .btray:not([hidden]), .bmore:not([hidden]), .drawer.open, .toast.on');
+      for (var i = 0; i < els.length; i++) {
+        if (getComputedStyle(els[i]).position === 'fixed' && els[i].getClientRects().length) return true;
+      }
+      return false;
     },
 
     // Every say() call is also a visible, self-dismissing toast — calendar-view.css
@@ -1080,6 +1143,7 @@
         if (this._pw.carried) open.classList.add('packed');
       }
       this._paintDaySkyContext();
+      this._skyDay();
     },
 
     _dayBandHTML: function (y, m, d, monthDef, totalDays) {

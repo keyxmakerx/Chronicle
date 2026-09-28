@@ -111,13 +111,15 @@
   }
 
   var X = {};
-  // draw(ctx, st, dpr): st is the state builder's per-frame object (see
+  // draw(ctx, st, dpr, oy): st is the state builder's per-frame object (see
   // sky_pane.js's buildState) — the same shape the contract's Surface.state
-  // produces, minus every field only the WebGL uniforms needed.
-  X.draw = function (ctx, st, dpr) {
+  // produces, minus every field only the WebGL uniforms needed. oy (CSS px,
+  // default 0) lowers the whole picture, so a folding pane draws its sky
+  // whole into the strip that shows rather than cropping a bigger one.
+  X.draw = function (ctx, st, dpr, oy) {
     var P = st.P, L = st.L, Wpx = st.W, H = st.H, wx = st.wx, t = st.t;
     ctx.save();
-    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    ctx.setTransform(dpr, 0, 0, dpr, 0, (oy || 0) * dpr);
     ctx.clearRect(0, 0, Wpx, H);
     var g = ctx.createLinearGradient(0, L.hor, 0, L.top);
     g.addColorStop(0, css(P.hor)); g.addColorStop(.45, css(P.mid)); g.addColorStop(1, css(P.zen));
@@ -140,7 +142,9 @@
     var through = clamp((1 - wx.cloud * .9) * (1 - wx.fog * .75), .04, 1);
     st.moons.forEach(function (M) {
       if (!M.up) return;
-      var sz = Math.max(8, Math.ceil(M.r * 2 * dpr / 8) * 8), spr = window.MOONR.sprite(M.spec, M.m.p, sz, { blood: M.blood });
+      // M.sr, when set, is the moon's resting radius: a folding pane scales
+      // that sprite rather than shading a new one at every size it passes.
+      var sz = Math.max(8, Math.ceil((M.sr || M.r) * 2 * dpr / 8) * 8), spr = window.MOONR.sprite(M.spec, M.m.p, sz, { blood: M.blood });
       ctx.save(); ctx.globalAlpha = through; ctx.translate(M.x, M.y); ctx.rotate(M.rot); ctx.drawImage(spr, -M.r, -M.r, M.r * 2, M.r * 2);
       if (M.shadow) { ctx.rotate(-M.rot); ctx.beginPath(); ctx.arc(0, 0, M.r, 0, TAU); ctx.clip(); ctx.fillStyle = 'rgba(40,12,8,' + (.85 * M.shadow[3]).toFixed(3) + ')'; ctx.beginPath(); ctx.arc(M.shadow[0], M.shadow[1], M.shadow[2], 0, TAU); ctx.fill(); }
       ctx.restore();

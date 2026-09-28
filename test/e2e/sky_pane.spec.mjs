@@ -5,11 +5,10 @@
 // Docker daemon nor a local `mariadbd` binary to bring up Chronicle's own
 // dev server + MariaDB (the repo's `make docker-up` / `make dev` path), so
 // standing up the real app is out of reach here — and even a real app
-// wouldn't add calendar-page coverage: the calendar page exists now
-// (internal/plugins/calendar/view.templ) but doesn't mount this widget, it
-// paints its own separate sky context instead (TODO(#741)), so a
-// dashboard/entity-page mount (routes.go's "skybox" block) is still this
-// widget's only real integration point. Instead, this test drives the REAL
+// wouldn't add calendar-page coverage: the calendar docks its sky through
+// SkyPane.Dock with its own markup (covered by test/js/sky_dock.test.mjs),
+// so a dashboard/entity-page mount (routes.go's "skybox" block) is still
+// this widget's only Mount. Instead, this test drives the REAL
 // production assets end to end in a real browser:
 //   - static/js/boot.js (the real widget auto-mounter) and the six real
 //     static/js/widgets/sky_*.js files, read verbatim off disk — never
