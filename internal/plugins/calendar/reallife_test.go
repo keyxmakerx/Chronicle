@@ -8,6 +8,7 @@ import (
 	"math"
 	"strings"
 	"testing"
+	"time"
 )
 
 // TestDaysInGregorianMonth_LeapYearRule is the direct test of #the
@@ -229,5 +230,31 @@ func TestGregorianImportResult_IsNotAPreset(t *testing.T) {
 		if name == "reallife" || name == "real-world" || name == "gregorian" {
 			t.Errorf("the real-world calendar must not be a preset name, found %q among %v", name, names)
 		}
+	}
+}
+
+// TestTodayInZone pins the date a real-world calendar starts on: the zone's
+// own wall-clock day, and a refusal for a zone that does not exist.
+func TestTodayInZone(t *testing.T) {
+	svc := newTestCalendarService(&fakeCalendarRepo{}, nil, nil, nil)
+	if _, _, _, err := svc.TodayInZone("Not/AZone"); err == nil {
+		t.Error("an unknown zone must be refused")
+	}
+	loc, err := time.LoadLocation("Pacific/Kiritimati")
+	if err != nil {
+		t.Skip("zone database unavailable:", err)
+	}
+	before := time.Now().In(loc)
+	y, m, d, err := svc.TodayInZone("Pacific/Kiritimati")
+	after := time.Now().In(loc)
+	if err != nil {
+		t.Fatalf("TodayInZone: %v", err)
+	}
+	isDay := func(ts time.Time) bool {
+		yy, mm, dd := ts.Date()
+		return y == yy && m == int(mm) && d == dd
+	}
+	if !isDay(before) && !isDay(after) {
+		t.Errorf("TodayInZone = %d-%d-%d, want the zone's own date %s", y, m, d, before.Format("2006-01-02"))
 	}
 }

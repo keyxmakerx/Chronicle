@@ -68,11 +68,11 @@ func (h *Handler) Index(c echo.Context) error {
 	}
 
 	data := CalendarsListData{
-		CampaignID:    cc.Campaign.ID,
-		CampaignName:  cc.Campaign.Name,
-		Calendars:     full,
-		IsOwner:       cc.MemberRole >= campaigns.RoleOwner,
-		CSRFToken:     middleware.GetCSRFToken(c),
+		CampaignID:   cc.Campaign.ID,
+		CampaignName: cc.Campaign.Name,
+		Calendars:    full,
+		IsOwner:      cc.MemberRole >= campaigns.RoleOwner,
+		CSRFToken:    middleware.GetCSRFToken(c),
 	}
 	if newID := c.QueryParam("new"); newID != "" {
 		for _, cal := range full {

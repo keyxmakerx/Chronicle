@@ -192,6 +192,10 @@ func (f *fakeCalendarSvc) PreviewImport(context.Context, []byte) (*ImportResult,
 func (f *fakeCalendarSvc) PreviewPreset(_ context.Context, name string) (*ImportResult, error) {
 	return &ImportResult{Format: FormatChronicle, CalendarName: "Preset " + name}, nil
 }
+func (f *fakeCalendarSvc) PreviewRealWorld(context.Context) (*ImportResult, error) {
+	return GregorianImportResult()
+}
+func (f *fakeCalendarSvc) TodayInZone(string) (int, int, int, error) { return 2026, 1, 1, nil }
 func (f *fakeCalendarSvc) CreateCalendarFromImport(_ context.Context, campaignID string, ir *ImportResult, _ CreateCalendarFromImportOptions) (*Calendar, error) {
 	return &Calendar{ID: "cal-imported", CampaignID: campaignID, Name: ir.CalendarName}, nil
 }

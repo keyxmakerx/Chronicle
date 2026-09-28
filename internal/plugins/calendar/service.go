@@ -178,6 +178,12 @@ type CalendarService interface {
 	// doc comment for the current-date and event-kind-slug rules.
 	PreviewImport(ctx context.Context, data []byte) (*ImportResult, error)
 	PreviewPreset(ctx context.Context, name string) (*ImportResult, error)
+	// PreviewRealWorld is the real-world calendar's fixed structure for the
+	// wizard; it is built here, never taken from the browser.
+	PreviewRealWorld(ctx context.Context) (*ImportResult, error)
+	// TodayInZone is today's date on the wall clock of an IANA zone, for a
+	// real-world calendar whose date follows the real one.
+	TodayInZone(zone string) (year, month, day int, err error)
 	CreateCalendarFromImport(ctx context.Context, campaignID string, ir *ImportResult, opts CreateCalendarFromImportOptions) (*Calendar, error)
 
 	// Events. CreateEvent has no stored row to weigh a viewer against, so it
@@ -861,6 +867,28 @@ func (s *calendarService) PreviewPreset(ctx context.Context, name string) (*Impo
 		return nil, apperror.NewNotFound("unknown preset")
 	}
 	return ir, nil
+}
+
+// PreviewRealWorld returns the Gregorian calendar the wizard's real-world
+// path creates. It is PreviewPreset's sibling for a calendar with no preset
+// file: the same *ImportResult shape, built fresh on every call.
+func (s *calendarService) PreviewRealWorld(_ context.Context) (*ImportResult, error) {
+	ir, err := GregorianImportResult()
+	if err != nil {
+		return nil, apperror.NewInternal(err)
+	}
+	return ir, nil
+}
+
+// TodayInZone returns today's date in zone. The instant is taken first and
+// then converted, so the date is the zone's own, not the server's.
+func (s *calendarService) TodayInZone(zone string) (int, int, int, error) {
+	loc, err := time.LoadLocation(zone)
+	if err != nil {
+		return 0, 0, 0, apperror.NewValidation("unknown time zone")
+	}
+	y, m, d := time.Now().In(loc).Date()
+	return y, int(m), d, nil
 }
 
 // CreateCalendarFromImport creates a new calendar from a previously-parsed
