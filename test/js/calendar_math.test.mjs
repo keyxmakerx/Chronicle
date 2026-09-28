@@ -131,3 +131,33 @@ test('CalDate.weekdayCol matches Calendar.WeekdayIndex on a MonthStartsNewWeek c
   // buildMonthGrid uses for the server's own preview grid.
   assert.equal(CalDate.weekdayCol(cal2, 1, 2, 2), -1);
 });
+
+// MoonMath.litPath must draw exactly what the server's MoonLitPath draws
+// (moon_silhouette.go): these are its outputs for r=6. Before they matched,
+// the calendar page lit the wrong side between first quarter and full, and
+// between last quarter and new.
+test('MoonMath.litPath matches MoonLitPath at every quarter of the cycle', () => {
+  const { MoonMath } = loadCalendarMath();
+  const want = {
+    0.1: 'M0,-6 A6,6 0 0 1 0,6 A4.85,6 0 0 0 0,-6 Z',
+    0.3: 'M0,-6 A6,6 0 0 1 0,6 A1.85,6 0 0 1 0,-6 Z',
+    0.5: 'M0,-6 A6,6 0 0 0 0,6 A6,6 0 0 0 0,-6 Z',
+    0.6: 'M0,-6 A6,6 0 0 0 0,6 A4.85,6 0 0 0 0,-6 Z',
+    0.9: 'M0,-6 A6,6 0 0 0 0,6 A4.85,6 0 0 1 0,-6 Z'
+  };
+  for (const [phase, path] of Object.entries(want)) assert.equal(MoonMath.litPath(Number(phase), 6), path, `phase ${phase}`);
+  assert.equal(MoonMath.litPath(0.002, 6), '', 'no sliver at new moon');
+});
+
+// A real-world calendar's Moon is anchored to the Julian Day Number, so its
+// phase must come through dayIndex, as the calendar page now reads it.
+// Real dates: new moon 2026-09-11, full moon 2026-09-26.
+test('a real-world calendar reads its moon through dayIndex and matches the sky', () => {
+  const { CalDate, MoonMath } = loadCalendarMath();
+  const real = { mode: 'reallife', months: [], weekdays: [] };
+  const theMoon = { cycle_days: 29.530588853, phase_offset: -CalDate.gregorianJDN(2000, 1, 6) };
+  const at = (y, m, d) => MoonMath.phase(theMoon, CalDate.dayIndex(real, y, m, d));
+  assert.equal(MoonMath.name(at(2026, 9, 26)), 'Full Moon');
+  assert.equal(MoonMath.name(at(2026, 9, 11)), 'New Moon');
+  assert.equal(MoonMath.name(at(2026, 9, 28)), 'Waning Gibbous');
+});

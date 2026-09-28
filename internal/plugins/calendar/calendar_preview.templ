@@ -42,11 +42,11 @@ templ CalendarPreviewFragment(data CalendarPreviewData) {
 							for _, m := range data.Calendar.Moons {
 								<div class="calv5-ai-moon">
 									<span class="tsil">
-										@MoonSilhouette(m.MoonPhase(data.Calendar.CurrentAbsoluteDay()))
+										@MoonSilhouette(m.MoonPhase(data.Calendar.CurrentDayIndex()))
 									</span>
 									<span>
 										<b>{ m.Name }</b>
-										<small>{ m.MoonPhaseName(data.Calendar.CurrentAbsoluteDay()) }</small>
+										<small>{ m.MoonPhaseName(data.Calendar.CurrentDayIndex()) }</small>
 									</span>
 								</div>
 							}

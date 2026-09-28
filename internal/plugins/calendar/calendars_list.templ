@@ -133,7 +133,7 @@ templ calendarCard(data CalendarsListData, cal Calendar) {
 		</div>
 		<div class="calv5-cc-moon">
 			if m := mainMoon(&cal); m != nil {
-				@MoonSilhouette(m.MoonPhase(cal.CurrentAbsoluteDay()))
+				@MoonSilhouette(m.MoonPhase(cal.CurrentDayIndex()))
 			} else {
 				<span class="calv5-blankmoon"><i class="fa-solid fa-moon i"></i></span>
 			}

@@ -105,9 +105,10 @@
       return Math.floor((year - 1 - r) / e) + 1;
     },
 
-    // absoluteDay mirrors Calendar.AbsoluteDay: leap-aware, used for moon
-    // phase and for date-shift arithmetic (calendar_editor.js's bulk
-    // "Shift events").
+    // absoluteDay mirrors Calendar.AbsoluteDay: leap-aware, and dayIndex's
+    // count for every year after 0. Moon phases go through dayIndex, like
+    // weekdays, because a real-time calendar's real Moon is anchored to the
+    // Julian Day Number, not to this count.
     absoluteDay: function (cal, year, month1, day) {
       var total = 0;
       if (year > 0) {
@@ -297,7 +298,17 @@
       if (phase < 0.8125) return 'Last Quarter';
       return 'Waning Crescent';
     },
-    litPct: function (phase) { return Math.round(((1 - Math.cos(2 * Math.PI * phase)) / 2) * 100); }
+    litPct: function (phase) { return Math.round(((1 - Math.cos(2 * Math.PI * phase)) / 2) * 100); },
+    // litPath mirrors MoonLitPath (moon_silhouette.go) exactly: the limb's
+    // half-disc on the lit side, closed by the terminator's half-ellipse, for
+    // a disc of radius r at the origin. "" within 0.004 of new.
+    litPath: function (phase, r) {
+      if (phase < 0.004 || phase > 0.996) return '';
+      var num = function (f) { return f === Math.trunc(f) ? String(f) : f.toFixed(2); };
+      var waxing = phase < 0.5, k = Math.cos(2 * Math.PI * phase), rx = Math.abs(k) * r;
+      return 'M0,' + num(-r) + ' A' + num(r) + ',' + num(r) + ' 0 0 ' + (waxing ? 1 : 0) + ' 0,' + num(r) +
+        ' A' + num(rx) + ',' + num(r) + ' 0 0 ' + (waxing === (k > 0) ? 0 : 1) + ' 0,' + num(-r) + ' Z';
+    }
   };
 
   // -----------------------------------------------------------------
@@ -757,7 +768,7 @@
       var moon = this.mainMoon();
       var moonHTML = '';
       if (moon) {
-        var abs = CalDate.absoluteDay(cal, y, m, d);
+        var abs = CalDate.dayIndex(cal, y, m, d);
         var phase = MoonMath.phase(moon, abs);
         moonHTML = '<span class="msil" data-moon-day="' + key + '" title="' + esc(moon.name + ', ' + MoonMath.name(phase)) + '">' + this._moonSilSVG(phase) + '</span>';
       }
@@ -787,11 +798,7 @@
       // simpler than the mockups' seeded crater/sea texture (a real
       // reduction in fidelity, called out in .ai.md), same silhouette
       // idea and the same --sil* custom properties for blood-moon tint.
-      var lit = Math.cos(phase * 2 * Math.PI);
-      var rx = Math.abs(lit) * 6;
-      var large = lit > 0 ? 1 : 0;
-      var path = phase === 0 ? '' :
-        'M 0,-6 A 6,6 0 ' + (phase < 0.5 ? '1,1' : '0,1') + ' 0,6 A ' + rx.toFixed(2) + ',6 0 ' + large + ',' + (phase < 0.5 ? 0 : 1) + ' 0,-6 Z';
+      var path = MoonMath.litPath(phase, 6);
       return '<svg class="sil" viewBox="-7 -7 14 14" aria-hidden="true"><circle class="db" r="6"/>' + (path ? '<path class="dl" d="' + path + '"/>' : '') + '</svg>';
     },
 
@@ -977,7 +984,7 @@
           (w.temperature_celsius != null ? ' · ' + w.temperature_celsius + '°C' : '') + '</span></div>';
       }
       var moonRows = (cal.moons || []).map(function (mo) {
-        var abs = CalDate.absoluteDay(cal, d.y, d.m, d.d), phase = MoonMath.phase(mo, abs);
+        var abs = CalDate.dayIndex(cal, d.y, d.m, d.d), phase = MoonMath.phase(mo, abs);
         return '<button type="button" class="mrow" data-moon="' + esc(mo.id) + '"><span class="mt"><b>' + esc(mo.name) + '</b><small>' + esc(MoonMath.name(phase)) + ' · ' + MoonMath.litPct(phase) + '% lit</small></span><i class="fa-solid fa-chevron-right chev"></i></button>';
       }).join('');
 
@@ -1012,7 +1019,7 @@
         var moon = this.mainMoon();
         if (!moon) return;
         var d = parseDayKey(mk.dataset.moonDay);
-        var abs = CalDate.absoluteDay(this.cal, d.y, d.m, d.d), phase = MoonMath.phase(moon, abs);
+        var abs = CalDate.dayIndex(this.cal, d.y, d.m, d.d), phase = MoonMath.phase(moon, abs);
         html = '<div class="gh"><b>' + esc(moon.name) + '</b></div><div class="gw">' + esc(MoonMath.name(phase)) + ' · ' + MoonMath.litPct(phase) + '% lit</div>';
       } else {
         var ev = this._findEvent(mk.dataset.ev);
@@ -1165,7 +1172,7 @@
 
     _mvHTML: function () {
       var cal = this.cal, moon = this.moonById(this.mvMoonId) || (cal.moons || [])[0];
-      var abs = CalDate.absoluteDay(cal, cal.current_year, cal.current_month, cal.current_day);
+      var abs = CalDate.dayIndex(cal, cal.current_year, cal.current_month, cal.current_day);
       var phase = moon ? MoonMath.phase(moon, abs) : 0;
 
       var strip = (cal.moons || []).map(function (mo) {
@@ -1207,7 +1214,7 @@
       var self = this;
       var ticks = '';
       for (var d = 1; d <= days; d++) {
-        var abs = CalDate.absoluteDay(cal, y, m, d);
+        var abs = CalDate.dayIndex(cal, y, m, d);
         var phase = MoonMath.phase(moon, abs);
         var badge = '';
         evs.forEach(function (e) {

@@ -723,6 +723,14 @@ func (c *Calendar) CurrentAbsoluteDay() int {
 	return c.AbsoluteDay(c.CurrentYear, c.CurrentMonth, c.CurrentDay)
 }
 
+// CurrentDayIndex is today on the day counter weekdays use (absDayIndex).
+// Moon phases read this one: a real-time calendar's real Moon is anchored to
+// the Julian Day Number, which AbsoluteDay drifts from by a day each leap
+// year.
+func (c *Calendar) CurrentDayIndex() int {
+	return c.absDayIndex(c.CurrentYear, c.CurrentMonth, c.CurrentDay)
+}
+
 // HasRealAnchor reports whether this calendar's real-date anchor is fully
 // set — see AnchorYear's doc comment for why it is all four fields or none.
 func (c *Calendar) HasRealAnchor() bool {

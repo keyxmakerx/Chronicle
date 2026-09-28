@@ -91,8 +91,7 @@
     var h24 = SW.hour24(cal, cal.current_hour || 0, cal.current_minute || 0);
     var skym = model.skym;
     var sun = skym.sun(year, month, day, h24);
-    var absDay = SW.absoluteDay(cal, year, month, day);
-    var tCont = absDay + h24 / 24;
+    var tCont = SW.dayIndex(cal, year, month, day) + h24 / 24;
 
     // Astronomy first (independent of the view's facing), so the day's
     // events can point the camera before the projection is built.
