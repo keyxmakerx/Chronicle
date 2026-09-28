@@ -37,18 +37,18 @@ var commonZoneNames = []string{
 	"America/Santiago", "America/Sao_Paulo", "America/St_Johns", "America/Toronto",
 	"America/Vancouver",
 	"Asia/Baghdad", "Asia/Bangkok", "Asia/Colombo", "Asia/Dubai", "Asia/Hong_Kong",
-	"Asia/Istanbul", "Asia/Jakarta", "Asia/Karachi", "Asia/Kolkata", "Asia/Manila",
+	"Asia/Istanbul", "Asia/Jakarta", "Asia/Kabul", "Asia/Karachi", "Asia/Kathmandu", "Asia/Kolkata", "Asia/Manila",
 	"Asia/Seoul", "Asia/Shanghai", "Asia/Singapore", "Asia/Taipei", "Asia/Tehran",
-	"Asia/Tokyo",
+	"Asia/Tokyo", "Asia/Yangon",
 	"Atlantic/Reykjavik",
-	"Australia/Adelaide", "Australia/Brisbane", "Australia/Melbourne",
+	"Australia/Adelaide", "Australia/Brisbane", "Australia/Darwin", "Australia/Melbourne",
 	"Australia/Perth", "Australia/Sydney",
 	"Europe/Amsterdam", "Europe/Athens", "Europe/Berlin", "Europe/Brussels",
 	"Europe/Dublin", "Europe/Helsinki", "Europe/Lisbon", "Europe/London",
 	"Europe/Madrid", "Europe/Moscow", "Europe/Oslo", "Europe/Paris",
 	"Europe/Prague", "Europe/Rome", "Europe/Stockholm", "Europe/Vienna",
 	"Europe/Warsaw", "Europe/Zurich",
-	"Pacific/Auckland", "Pacific/Fiji", "Pacific/Guam", "Pacific/Honolulu",
+	"Pacific/Auckland", "Pacific/Chatham", "Pacific/Fiji", "Pacific/Guam", "Pacific/Honolulu",
 }
 
 // CommonZones returns the canonical curated timezone list — value+label pairs
