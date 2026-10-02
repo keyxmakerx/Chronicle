@@ -6,6 +6,8 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"strconv"
+	"strings"
 
 	"github.com/keyxmakerx/chronicle/internal/apperror"
 )
@@ -137,8 +139,12 @@ func (s *transactionService) Purchase(ctx context.Context, campaignID, userID st
 		input.TransactionType = TxPurchase
 	}
 
-	// Validate stock if a relation ID is provided (shop inventory relation).
+	// The shop listing is the source of truth for stock and price; a
+	// purchase that names none can't be checked, so it is refused.
 	stockRemaining := -1
+	if s.relationFinder != nil && input.RelationID <= 0 {
+		return nil, apperror.NewBadRequest("relation_id is required to buy from a shop")
+	}
 	if input.RelationID > 0 && s.relationFinder != nil {
 		rel, err := s.relationFinder.GetByID(ctx, input.RelationID)
 		if err != nil {
@@ -163,6 +169,14 @@ func (s *transactionService) Purchase(ctx context.Context, campaignID, userID st
 				fmt.Sprintf("insufficient stock: %d available, %d requested", meta.Quantity, input.Quantity),
 			)
 		}
+
+		// Charge the listed price, never one the client sends.
+		input.PriceNumeric = meta.Price * float64(input.Quantity)
+		input.Currency = meta.Currency
+		if input.Currency == "" {
+			input.Currency = "gp"
+		}
+		input.PricePaid = strconv.FormatFloat(input.PriceNumeric, 'f', -1, 64) + " " + input.Currency
 
 		// Decrement stock (unless unlimited: quantity = -1).
 		if meta.Quantity >= 0 && s.metadataUpdater != nil {
@@ -260,8 +274,10 @@ func (s *transactionService) ListBuyerTransactions(ctx context.Context, buyerEnt
 // (price, custom names, anything an editor adds), so the stored object is
 // kept whole and only "quantity" is ever rewritten.
 type shopMeta struct {
-	Quantity int  // -1 means unlimited.
-	InStock  bool // false when an editor marked the item out of stock.
+	Quantity int     // -1 means unlimited.
+	InStock  bool    // false when an editor marked the item out of stock.
+	Price    float64 // unit price as listed; 0 when unset or unreadable.
+	Currency string  // listed currency; empty when unset.
 	fields   map[string]json.RawMessage
 }
 
@@ -285,6 +301,19 @@ func parseShopMeta(raw json.RawMessage) shopMeta {
 		if err := json.Unmarshal(v, &q); err == nil && q != nil && *q >= 0 {
 			m.Quantity = *q
 		}
+	}
+	if v, ok := m.fields["price"]; ok {
+		// The shop widget stores a number; older listings may hold a string.
+		var n float64
+		var str string
+		if err := json.Unmarshal(v, &n); err == nil {
+			m.Price = n
+		} else if err := json.Unmarshal(v, &str); err == nil {
+			m.Price, _ = strconv.ParseFloat(strings.TrimSpace(str), 64)
+		}
+	}
+	if v, ok := m.fields["currency"]; ok {
+		_ = json.Unmarshal(v, &m.Currency)
 	}
 	if v, ok := m.fields["in_stock"]; ok {
 		var in *bool

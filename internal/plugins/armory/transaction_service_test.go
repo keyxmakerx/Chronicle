@@ -499,3 +499,30 @@ func TestPurchase_StockRules(t *testing.T) {
 		})
 	}
 }
+
+// TestPurchase_ChargesListedPrice pins that the transaction records the
+// shop's listed price, whatever the client claims, and that a purchase
+// naming no listing is refused.
+func TestPurchase_ChargesListedPrice(t *testing.T) {
+	var got *Transaction
+	svc := NewTransactionService(&mockTransactionRepo{createFn: func(_ context.Context, tx *Transaction) error {
+		got = tx
+		return nil
+	}})
+	svc.SetRelationFinder(shopRelation(`{"price":15,"currency":"sp","quantity":null}`))
+	in := buyOne()
+	in.Quantity = 2
+	in.PriceNumeric, in.PricePaid, in.Currency = 0, "0 gp", "gp"
+	if _, err := svc.Purchase(context.Background(), "camp-1", "user-1", 1, in); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if got.PriceNumeric == nil || *got.PriceNumeric != 30 || got.Currency != "sp" || got.PricePaid == nil || *got.PricePaid != "30 sp" {
+		t.Errorf("recorded %v %q %v, want 30 sp", got.PriceNumeric, got.Currency, got.PricePaid)
+	}
+
+	in = buyOne()
+	in.RelationID = 0
+	if _, err := svc.Purchase(context.Background(), "camp-1", "user-1", 1, in); err == nil {
+		t.Error("a purchase naming no shop listing must be refused")
+	}
+}
