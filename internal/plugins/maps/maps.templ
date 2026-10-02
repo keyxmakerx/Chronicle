@@ -191,18 +191,48 @@ templ mapShowContent(cc *campaigns.CampaignContext, data MapViewData) {
 			</div>
 		</div>
 
-		<!-- Editor body. flex-1 makes it fill the remaining page height. -->
-		@MapEditorBody(cc, data, "flex-1 relative bg-surface-alt", mapBackgroundStyle(data.Map.BackgroundColor))
+		<!-- The map sits in an Atlas plate: a mat around the viewport, a double
+		     rule, corner flourishes, grid letters across the top and numbers down
+		     the left, and a title plate at the bottom. Decoration only: it is
+		     aria-hidden and never takes pointer events. The viewport is the
+		     positioning context the editor body fills. -->
+		<div class="mp-stage">
+			<div class="mp-frame" data-frame="atlas">
+				<div class="mp-orn" aria-hidden="true">
+					for _, pos := range []string{"tl", "tr", "br", "bl"} {
+						<svg class={ pos } viewBox="0 0 30 30" fill="none" stroke="currentColor" stroke-width="1.4">
+							<path d="M2 28V9q0-7 7-7h19M6 28V12q0-6 6-6h16"></path>
+							<path d="M11 11c3 0 5 2 5 5M11 11c0 3 2 5 5 5"></path>
+							<circle cx="11" cy="11" r="1.6" fill="currentColor"></circle>
+						</svg>
+					}
+					<div class="mp-ticks">
+						for _, l := range []string{"A", "B", "C", "D", "E", "F", "G", "H"} {
+							<span>{ l }</span>
+						}
+					</div>
+					<div class="mp-side-ticks">
+						for _, n := range []string{"1", "2", "3", "4", "5", "6"} {
+							<span>{ n }</span>
+						}
+					</div>
+					<div class="mp-cart">{ data.Map.Name }</div>
+				</div>
+				<div class="mp-viewport">
+					@MapEditorBody(cc, data, "absolute inset-0", "")
+				</div>
+			</div>
+		</div>
 	</div>
 }
 
 // MapEditorBody renders the meat of the map editor: Leaflet imports, the
-// inline toolbar (search + place-marker + gear, role-gated), the map
-// container, modals, the server-rendered config div, and the IIFE that
-// wires everything together. Reusable in two contexts:
+// map wrapper with its floating controls (mapControls), modals, the
+// server-rendered config div, and the IIFE that wires everything together.
+// The class and style parameters size the wrapper. Reusable in two contexts:
 //
-//   1. The dedicated map page (mapShowContent), mapContainerClass="flex-1
-//      relative bg-surface-alt" so the container fills the flex height.
+//   1. The dedicated map page (mapShowContent), mapContainerClass="absolute
+//      inset-0" so the wrapper fills the Atlas frame's viewport.
 //   2. The per-entity Map Editor block (BlockEntityMapEmbed), with a fixed
 //      mapContainerStyle="height: 600px;" embed.
 //
@@ -219,50 +249,14 @@ templ MapEditorBody(cc *campaigns.CampaignContext, data MapViewData, mapContaine
 	<link rel="stylesheet" href={ layouts.AssetURL("/static/vendor/MarkerCluster.css") }/>
 	<script src={ layouts.AssetURL("/static/vendor/leaflet.markercluster.js") }></script>
 
-	<!-- Inline toolbar: search + (Scribe+) place marker + (Scribe+) settings.
-	     Scoped to the editor body itself rather than the page header so the
-	     entity-page embed gets the same controls without duplicating them in
-	     two places. -->
-	<div class="flex items-center gap-2 mb-2">
-		<div class="relative">
-			<input
-				type="text"
-				id="marker-search"
-				class="input text-xs py-1.5 pl-7 pr-2 w-40"
-				placeholder="Search markers..."
-				autocomplete="off"
-			/>
-			<i class="fa-solid fa-search absolute left-2.5 top-1/2 -translate-y-1/2 text-[10px] text-fg-muted pointer-events-none"></i>
-		</div>
-		if data.IsScribe {
-			<button
-				id="place-marker-btn"
-				type="button"
-				class="btn-secondary text-xs"
-				onclick="togglePlaceMode()"
-			>
-				<i class="fa-solid fa-map-pin mr-1"></i> Place Marker
-			</button>
-			// Inline-create hint: double-clicking the map drops a pin without
-			// leaving the editor (Part B). Hidden on small screens to save room.
-			<span class="text-[11px] text-fg-muted hidden sm:inline" data-map-pin-hint>
-				<i class="fa-solid fa-circle-info mr-1"></i>or double-click the map to add a pin
-			</span>
-			<button
-				type="button"
-				class="btn-secondary text-xs"
-				onclick="document.getElementById('map-settings-modal').classList.remove('hidden')"
-				title="Map settings"
-			>
-				<i class="fa-solid fa-gear"></i>
-			</button>
-		}
+	<!-- Map wrapper. Caller controls class + height via the parameters so the
+	     same body works for flex-fill (dedicated page) and fixed-height embed
+	     (entity block). Every control floats over the map inside this wrapper,
+	     each in its own corner; the Leaflet container is the layer beneath. -->
+	<div id="map-wrap" class={ "mp-wrap " + mapContainerClass } style={ mapContainerStyle }>
+		<div id="map-container" class="absolute inset-0 bg-surface-alt" style={ mapBackgroundStyle(data.Map.BackgroundColor) }></div>
+		@mapControls(data)
 	</div>
-
-	<!-- Map container. Caller controls class + height via the parameters
-	     so the same body works for flex-fill (dedicated page) and
-	     fixed-height embed (entity block). -->
-	<div id="map-container" class={ mapContainerClass } style={ mapContainerStyle }></div>
 
 	if data.IsScribe {
 		@markerModal(data)
@@ -283,6 +277,8 @@ templ MapEditorBody(cc *campaigns.CampaignContext, data MapViewData, mapContaine
 		data-image-width={ fmt.Sprintf("%d", data.Map.ImageWidth) }
 		data-image-height={ fmt.Sprintf("%d", data.Map.ImageHeight) }
 		data-is-scribe={ fmt.Sprintf("%t", data.IsScribe) }
+		data-is-owner={ fmt.Sprintf("%t", cc.MemberRole >= campaigns.RoleOwner || cc.IsSiteAdmin) }
+		data-can-dm-only={ fmt.Sprintf("%t", cc.CanAuthorDmOnly() || cc.IsSiteAdmin) }
 		data-markers={ mustMarshalMarkers(data.Markers) }
 	></div>
 
@@ -297,6 +293,8 @@ templ MapEditorBody(cc *campaigns.CampaignContext, data MapViewData, mapContaine
 			var imageW = cfg.dataset.imageWidth;
 			var imageH = cfg.dataset.imageHeight;
 			var isScribe = cfg.dataset.isScribe === 'true';
+			var isOwner = cfg.dataset.isOwner === 'true';
+			var canDmOnly = cfg.dataset.canDmOnly === 'true';
 			// Coerce defensively: JSON.parse('null') returns null and would
 			// crash on every markers.length / markers.forEach below. Server
 			// now returns "[]" for empty (mustMarshalMarkers), but keep this
@@ -316,6 +314,12 @@ templ MapEditorBody(cc *campaigns.CampaignContext, data MapViewData, mapContaine
 				maxZoom: 3,
 				zoomSnap: 0.25,
 				attributionControl: false,
+				// Zoom lives in the bottom-right control cluster; Leaflet's own
+				// top-left control would sit under the search box and tool rail.
+				zoomControl: false,
+				zoomAnimation: !(window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches),
+				fadeAnimation: !(window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches),
+				markerZoomAnimation: !(window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches),
 				// Double-click is repurposed for inline pin creation (Scribe+),
 				// so disable Leaflet's default double-click-to-zoom — otherwise
 				// the create gesture would also zoom the map underneath it.
@@ -345,7 +349,6 @@ templ MapEditorBody(cc *campaigns.CampaignContext, data MapViewData, mapContaine
 
 			// Track placed Leaflet markers by ID for removal/update.
 			var leafletMarkers = {};
-			var placingMode = false;
 
 			// Escape helpers to prevent XSS when building HTML strings from
 			// user-supplied marker data (name, description, icon, color).
@@ -377,6 +380,49 @@ templ MapEditorBody(cc *campaigns.CampaignContext, data MapViewData, mapContaine
 				});
 			}
 
+			// Pin kinds. The five ids are the server's pin_category set (and the
+			// Foundry module's pin types); 'other' is the client-only bucket for
+			// markers that have none. Colours are shown on the kind dots and given
+			// to a pin created from the quick card, so a kind is visible at a glance.
+			var KINDS = [
+				{ id: 'location', label: 'Places', one: 'Place', color: '#2563eb' },
+				{ id: 'danger', label: 'Danger', one: 'Danger', color: '#dc2626' },
+				{ id: 'treasure', label: 'Treasure', one: 'Treasure', color: '#d97706' },
+				{ id: 'quest', label: 'Quests', one: 'Quest', color: '#7c3aed' },
+				{ id: 'note', label: 'Notes', one: 'Note', color: '#0d9488' }
+			];
+			var OTHER_KIND = { id: 'other', label: 'Other', one: 'Other', color: '#6b7280' };
+			function kindInfo(id) {
+				for (var i = 0; i < KINDS.length; i++) if (KINDS[i].id === id) return KINDS[i];
+				return OTHER_KIND;
+			}
+			// A stored legacy value outside the set reads as "other"; it is only
+			// ever rewritten if the person picks a different kind.
+			function kindOf(mk) { return kindInfo(mk.pin_category).id; }
+
+			var reduceMotion = !!(window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches);
+			var kindOn = { location: true, danger: true, treasure: true, quest: true, note: true, other: true };
+			var showDrawings = true;
+			var showHiddenPins = true;
+
+			// Pin visibility is client-side only: filters never touch the server.
+			function pinShown(mk) {
+				if (!kindOn[kindOf(mk)]) return false;
+				if (mk.visibility === 'dm_only' && !(isScribe && showHiddenPins)) return false;
+				return true;
+			}
+
+			function markerIcon(mk) {
+				var badge = mk.visibility === 'dm_only'
+					? '<span class="mp-pin-badge" title="Hidden from players"><i class="fa-solid fa-eye-slash"></i></span>' : '';
+				return L.divIcon({
+					className: 'chronicle-marker',
+					html: '<div style="color:' + escapeAttr(mk.color) + ';font-size:20px;text-shadow:0 1px 3px rgba(0,0,0,0.5);position:relative;"><i class="fa-solid ' + escapeAttr(mk.icon) + '"></i>' + badge + '</div>',
+					iconSize: [24, 24],
+					iconAnchor: [12, 24],
+				});
+			}
+
 			// Render all existing markers.
 			markers.forEach(function(mk) { addMarkerToMap(mk); });
 
@@ -390,22 +436,16 @@ templ MapEditorBody(cc *campaigns.CampaignContext, data MapViewData, mapContaine
 				var lat = h - (mk.y / 100) * h;
 				var lng = (mk.x / 100) * w;
 
-				var icon = L.divIcon({
-					className: 'chronicle-marker',
-					html: '<div style="color:' + escapeAttr(mk.color) + ';font-size:20px;text-shadow:0 1px 3px rgba(0,0,0,0.5);"><i class="fa-solid ' + escapeAttr(mk.icon) + '"></i></div>',
-					iconSize: [24, 24],
-					iconAnchor: [12, 24],
-				});
-
-				var markerTarget = clusterGroup || map;
-				var lm = L.marker([lat, lng], { icon: icon, draggable: isScribe }).addTo(markerTarget);
+				var lm = L.marker([lat, lng], { icon: markerIcon(mk), draggable: isScribe });
+				if (pinShown(mk)) (clusterGroup || map).addLayer(lm);
 
 				// Tooltip with marker name (escaped to prevent HTML injection).
 				lm.bindTooltip(escapeHtml(mk.name), { direction: 'top', offset: [0, -24] });
 
-				// Click to open edit modal (Scribe+).
+				// A click opens the read card; scribes reach editing from there.
+				lm.on('click', function() { openCard(mk, 'read'); });
+
 				if (isScribe) {
-					lm.on('click', function() { openEditMarker(mk); });
 					lm.on('dragend', function(e) {
 						var pos = e.target.getLatLng();
 						var newX = (pos.lng / w) * 100;
@@ -417,70 +457,585 @@ templ MapEditorBody(cc *campaigns.CampaignContext, data MapViewData, mapContaine
 						mk.y = newY;
 						updateMarkerPosition(mk);
 					});
-				} else {
-					// Players: show popup with name + description (all user data escaped).
-					var popupContent = '<strong>' + escapeHtml(mk.name) + '</strong>';
-					if (mk.description) popupContent += '<br><span class="text-xs">' + escapeHtml(mk.description) + '</span>';
-					if (mk.entity_name) {
-						popupContent += '<br><a href="/campaigns/' + escapeAttr(campaignID) + '/entities/' + escapeAttr(mk.entity_id) + '" class="text-accent text-xs hover:underline">' + escapeHtml(mk.entity_name) + '</a>';
-					}
-					lm.bindPopup(popupContent);
 				}
 
 				leafletMarkers[mk.id] = lm;
 			}
 
-			// Marker search: filter and pan to matching markers.
-			(function() {
-				var searchInput = document.getElementById('marker-search');
-				if (!searchInput) return;
-				searchInput.addEventListener('input', function() {
-					var q = searchInput.value.toLowerCase().trim();
-					for (var i = 0; i < markers.length; i++) {
-						var mk = markers[i];
+			// Show or hide one marker to match the current filters.
+			function syncMarkerVisibility(mk) {
+				var lm = leafletMarkers[mk.id];
+				if (!lm) return;
+				var target = clusterGroup || map;
+				var want = pinShown(mk);
+				var has = target.hasLayer(lm);
+				if (want && !has) target.addLayer(lm);
+				if (!want && has) target.removeLayer(lm);
+			}
+			function applyFilters() {
+				markers.forEach(syncMarkerVisibility);
+				renderPanel();
+			}
+
+			// ---- Small DOM builder for cards: user text only ever goes through
+			// textContent, so nothing a person typed can become markup. ----
+			function el(tag, cls, text) {
+				var e = document.createElement(tag);
+				if (cls) e.className = cls;
+				if (text != null) e.textContent = text;
+				return e;
+			}
+			function field(label, control) {
+				var l = el('label', 'mp-field');
+				l.appendChild(el('span', null, label));
+				l.appendChild(control);
+				return l;
+			}
+
+			// ---- Pin cards (Leaflet popups restyled as cards) ----
+			var draft = null;      // a pin being placed, not yet saved
+			var draftPopup = null;
+
+			function cardOptions() {
+				return { className: 'mp-card-popup', minWidth: 230, maxWidth: 270, autoPanPadding: L.point(70, 70), closeOnClick: true };
+			}
+			function showPopup(latlng, node) {
+				var pop = L.popup(cardOptions()).setLatLng(latlng).setContent(node);
+				pop.openOn(map);
+				return pop;
+			}
+			function pinLatLng(x, y) { return L.latLng(h - (y / 100) * h, (x / 100) * w).clone(); }
+			// The popup sits above the pin's tip, not on top of it.
+			function popupAnchor(x, y) {
+				var ll = pinLatLng(x, y);
+				var pt = map.latLngToContainerPoint(ll).subtract([0, 26]);
+				return map.containerPointToLatLng(pt);
+			}
+
+			function openCard(mk, mode) {
+				removeDraft();
+				var node = mode === 'edit' ? editCard(mk, null) : readCard(mk);
+				showPopup(popupAnchor(mk.x, mk.y), node);
+				var first = node.querySelector('input');
+				if (first && mode === 'edit') { first.focus(); first.select(); }
+			}
+
+			function readCard(mk) {
+				var k = kindInfo(mk.pin_category);
+				var card = el('div', 'mp-card');
+				var title = el('div', 'mp-card-title');
+				var dot = el('span', 'mp-dot');
+				dot.style.background = k.color;
+				title.appendChild(dot);
+				title.appendChild(el('strong', null, mk.name));
+				card.appendChild(title);
+				var meta = el('div', 'mp-card-meta', k.one);
+				if (mk.visibility === 'dm_only') {
+					var badge = el('span', 'mp-badge');
+					badge.appendChild(el('i', 'fa-solid fa-eye-slash'));
+					badge.appendChild(document.createTextNode(' Hidden from players'));
+					meta.appendChild(badge);
+				}
+				card.appendChild(meta);
+				if (mk.description) card.appendChild(el('div', 'mp-card-desc', mk.description));
+				if (mk.entity_name && mk.entity_id) {
+					var a = el('a', 'mp-card-link', mk.entity_name);
+					a.href = '/campaigns/' + encodeURIComponent(campaignID) + '/entities/' + encodeURIComponent(mk.entity_id);
+					card.appendChild(a);
+				}
+				if (isScribe) {
+					var row = el('div', 'mp-card-row');
+					var edit = el('button', 'mp-cbtn', 'Edit');
+					edit.type = 'button';
+					edit.addEventListener('click', function() { openCard(mk, 'edit'); });
+					row.appendChild(edit);
+					card.appendChild(row);
+				}
+				return card;
+			}
+
+			// editCard builds the quick form. `mk` is a saved marker, or a draft
+			// ({x, y, isDraft}) for a pin that does not exist yet.
+			function editCard(mk, draftState) {
+				var isNew = !!draftState;
+				var origKind = isNew ? 'location' : (kindOf(mk) === 'other' ? '' : kindOf(mk));
+				var origVis = isNew ? 'everyone' : (mk.visibility || 'everyone');
+				var card = el('div', 'mp-card');
+				card.appendChild(el('div', 'mp-card-title', isNew ? 'New pin' : 'Edit pin'));
+
+				var name = el('input', 'mp-input');
+				name.type = 'text';
+				name.maxLength = 255;
+				name.value = isNew ? '' : (mk.name || '');
+				name.placeholder = 'Pin name';
+				card.appendChild(field('Name', name));
+
+				var kind = el('select', 'mp-input');
+				if (origKind === '') kind.appendChild(new Option('Other', ''));
+				KINDS.forEach(function(k) { kind.appendChild(new Option(k.one, k.id)); });
+				kind.value = origKind;
+				card.appendChild(field('Kind', kind));
+
+				// Hiding a pin from players is an owner-level power on the server, so
+				// only offer it to someone who can use it.
+				var vis = null;
+				if (canDmOnly) {
+					vis = el('select', 'mp-input');
+					vis.appendChild(new Option('Everyone', 'everyone'));
+					vis.appendChild(new Option('Only owners and scribes', 'dm_only'));
+					vis.value = origVis;
+					card.appendChild(field('Who can see it', vis));
+				}
+
+				var row = el('div', 'mp-card-row');
+				var save = el('button', 'mp-cbtn mp-cbtn-primary', 'Save');
+				save.type = 'button';
+				row.appendChild(save);
+				if (isNew || isOwner) {
+					var rm = el('button', 'mp-cbtn', 'Remove');
+					rm.type = 'button';
+					row.appendChild(rm);
+					rm.addEventListener('click', function() {
+						if (isNew) { map.closePopup(); return; }
+						if (!confirm('Remove this pin?')) return;
+						deletePin(mk);
+					});
+				}
+				card.appendChild(row);
+
+				var more = el('button', 'mp-card-more', 'More options');
+				more.type = 'button';
+				card.appendChild(more);
+
+				function curVis() { return vis ? vis.value : origVis; }
+				save.addEventListener('click', function() {
+					var nm = name.value.trim();
+					if (!nm) { name.focus(); Chronicle.notify('Give the pin a name', 'error'); return; }
+					if (isNew) createPin(draftState, nm, kind.value, curVis(), save);
+					else updatePin(mk, nm, kind.value, origKind, curVis(), save);
+				});
+				name.addEventListener('keydown', function(e) { if (e.key === 'Enter') { e.preventDefault(); save.click(); } });
+				more.addEventListener('click', function() {
+					var carry = { name: name.value.trim(), kind: kind.value, vis: curVis() };
+					map.closePopup();
+					leaveFullscreen();
+					if (isNew) openCreateMarker(draftState.x, draftState.y); else openEditMarker(mk);
+					if (carry.name) document.getElementById('mk-name').value = carry.name;
+					document.getElementById('mk-kind').value = carry.kind;
+					document.getElementById('mk-visibility').value = carry.vis;
+				});
+				return card;
+			}
+
+			// ---- Quick-card writes. Each sends only what the person changed. ----
+			function createPin(d, nm, kind, visibility, btn) {
+				var body = { name: nm, x: d.x, y: d.y, visibility: visibility };
+				if (kind) { body.pin_category = kind; body.color = kindInfo(kind).color; }
+				btn.disabled = true;
+				Chronicle.apiFetch('/campaigns/' + campaignID + '/maps/' + mapID + '/markers', { method: 'POST', body: body })
+					.then(function(resp) {
+						if (!resp.ok) return resp.json().catch(function() { return {}; }).then(function(e) {
+							btn.disabled = false;
+							Chronicle.notify(e.message || 'Failed to save pin', 'error');
+						});
+						return resp.json().then(function(mk) {
+							removeDraft();
+							markers.push(mk);
+							if (kind) kindOn[kind] = true;
+							addMarkerToMap(mk);
+							syncMarkerVisibility(mk);
+							renderPanel();
+							openCard(mk, 'read');
+						});
+					})
+					.catch(function(err) { btn.disabled = false; Chronicle.notify('Network error: ' + err.message, 'error'); });
+			}
+
+			function updatePin(mk, nm, kind, origKind, visibility, btn) {
+				var body = {};
+				if (nm !== mk.name) body.name = nm;
+				if (kind !== origKind) body.pin_category = kind || null;
+				if (visibility !== (mk.visibility || 'everyone')) body.visibility = visibility;
+				if (!Object.keys(body).length) { openCard(mk, 'read'); return; }
+				btn.disabled = true;
+				Chronicle.apiFetch('/campaigns/' + campaignID + '/maps/' + mapID + '/markers/' + mk.id, { method: 'PUT', body: body })
+					.then(function(resp) {
+						if (!resp.ok) return resp.json().catch(function() { return {}; }).then(function(e) {
+							btn.disabled = false;
+							Chronicle.notify(e.message || 'Failed to save pin', 'error');
+						});
+						if ('name' in body) mk.name = body.name;
+						if ('pin_category' in body) { if (body.pin_category) mk.pin_category = body.pin_category; else delete mk.pin_category; }
+						if ('visibility' in body) mk.visibility = body.visibility;
 						var lm = leafletMarkers[mk.id];
-						if (!lm) continue;
-						var name = (mk.name || '').toLowerCase();
-						var desc = (mk.description || '').toLowerCase();
-						var match = !q || name.indexOf(q) !== -1 || desc.indexOf(q) !== -1;
+						if (lm) { lm.setIcon(markerIcon(mk)); lm.setTooltipContent(escapeHtml(mk.name)); }
+						syncMarkerVisibility(mk);
+						renderPanel();
+						openCard(mk, 'read');
+					})
+					.catch(function(err) { btn.disabled = false; Chronicle.notify('Network error: ' + err.message, 'error'); });
+			}
+
+			function deletePin(mk) {
+				Chronicle.apiFetch('/campaigns/' + campaignID + '/maps/' + mapID + '/markers/' + mk.id, { method: 'DELETE' })
+					.then(function(resp) {
+						if (!resp.ok) return resp.json().catch(function() { return {}; }).then(function(e) {
+							Chronicle.notify(e.message || 'Failed to remove pin', 'error');
+						});
+						var lm = leafletMarkers[mk.id];
+						if (lm) { (clusterGroup || map).removeLayer(lm); delete leafletMarkers[mk.id]; }
+						markers.splice(markers.indexOf(mk), 1);
+						map.closePopup();
+						renderPanel();
+					})
+					.catch(function(err) { Chronicle.notify('Network error: ' + err.message, 'error'); });
+			}
+
+			// ---- Dropping a pin: a draft marker plus the quick card. Closing the
+			// card without saving discards the draft. ----
+			function startDraft(x, y) {
+				removeDraft();
+				var ll = pinLatLng(x, y);
+				var marker = L.marker(ll, {
+					icon: L.divIcon({
+						className: 'chronicle-marker',
+						html: '<div style="color:' + KINDS[0].color + ';font-size:20px;text-shadow:0 1px 3px rgba(0,0,0,0.5);"><i class="fa-solid fa-map-pin"></i></div>',
+						iconSize: [24, 24], iconAnchor: [12, 24]
+					}),
+					interactive: false, keyboard: false
+				}).addTo(map);
+				draft = { x: x, y: y, marker: marker };
+				var node = editCard(null, draft);
+				draftPopup = showPopup(popupAnchor(x, y), node);
+				var first = node.querySelector('input');
+				if (first) first.focus();
+			}
+			function removeDraft() {
+				if (!draft) return;
+				var d = draft;
+				draft = null;
+				draftPopup = null;
+				map.removeLayer(d.marker);
+			}
+			map.on('popupclose', function(e) {
+				if (draft && e.popup === draftPopup) removeDraft();
+			});
+
+			// ---- Fly to a pin and open its card (search results, pin list) ----
+			function flyToMarker(mk) {
+				var lm = leafletMarkers[mk.id];
+				if (!lm) return;
+				var done = false;
+				function show() { if (done) return; done = true; openCard(mk, 'read'); }
+				if (clusterGroup && clusterGroup.hasLayer(lm)) {
+					clusterGroup.zoomToShowLayer(lm, show);
+					return;
+				}
+				var ll = lm.getLatLng();
+				var z = Math.min(map.getMaxZoom(), Math.max(map.getZoom(), fitZoom() + 1.5));
+				if (reduceMotion) {
+					map.setView(ll, z, { animate: false });
+					show();
+					return;
+				}
+				map.once('moveend', show);
+				map.flyTo(ll, z, { duration: 0.6 });
+				setTimeout(show, 900);
+			}
+
+			// ===== Floating controls =====
+			var wrap = document.getElementById('map-wrap');
+			function $id(id) { return document.getElementById(id); }
+			var tool = 'move';
+			var drawShape = 'freehand';
+			var drawColor = '#2563eb';
+			var drawWidth = 4;
+			var SHAPE_ICON = { freehand: 'fa-pen', rectangle: 'fa-vector-square', ellipse: 'fa-circle', polygon: 'fa-draw-polygon', text: 'fa-font' };
+			var SHAPE_HINT = {
+				freehand: 'Drag to draw a line',
+				rectangle: 'Click one corner, then the opposite corner',
+				ellipse: 'Click the centre, then click the edge',
+				polygon: 'Click each corner, double-click to finish',
+				text: 'Click where the label goes'
+			};
+			function draw() { return window.chronicleMap && window.chronicleMap.draw; }
+
+			// Zoom: 100% is the whole map fitted to the view, so the number means
+			// the same thing on every map regardless of image size.
+			function fitZoom() { return map.getBoundsZoom(bounds, false); }
+			function updateZoomLabel() {
+				var pct = Math.round(Math.pow(2, map.getZoom() - fitZoom()) * 100);
+				$id('mp-zoom-level').textContent = pct + '%';
+			}
+			map.on('zoom zoomend resize', updateZoomLabel);
+			updateZoomLabel();
+			setTimeout(updateZoomLabel, 150);
+			$id('mp-zoom-in').addEventListener('click', function() { map.zoomIn(); });
+			$id('mp-zoom-out').addEventListener('click', function() { map.zoomOut(); });
+			$id('mp-fit').addEventListener('click', function() { map.fitBounds(bounds, { animate: !reduceMotion }); });
+
+			// Full screen on the map wrapper (popups and controls live inside it).
+			var fsBtn = $id('mp-fullscreen');
+			var fsSupported = !!(document.fullscreenEnabled && wrap.requestFullscreen);
+			if (!fsSupported) {
+				fsBtn.hidden = true;
+			} else {
+				fsBtn.addEventListener('click', function() {
+					if (document.fullscreenElement) document.exitFullscreen().catch(function() {});
+					else wrap.requestFullscreen().catch(function() {});
+				});
+				document.addEventListener('fullscreenchange', function() {
+					// The wrapper's size changed under Leaflet; re-measure.
+					setTimeout(function() { map.invalidateSize(); updateZoomLabel(); }, 100);
+				});
+			}
+			function leaveFullscreen() {
+				if (document.fullscreenElement && document.exitFullscreen) document.exitFullscreen().catch(function() {});
+			}
+
+			// Hint bar.
+			var hintEl = $id('mp-hint');
+			function setHint(msg) {
+				if (!msg) { hintEl.hidden = true; return; }
+				hintEl.textContent = msg + ' · Esc to stop';
+				hintEl.hidden = false;
+			}
+
+			// Popovers beside the tool rail (draw shapes, colour and line).
+			var flyDraw = $id('mp-fly-draw');
+			var flyStyle = $id('mp-fly-style');
+			function closePopovers() {
+				var any = false;
+				[flyDraw, flyStyle].forEach(function(f) {
+					if (f && !f.hidden) { f.hidden = true; any = true; }
+				});
+				var db = document.querySelector('[data-tool="draw"]');
+				if (db) db.setAttribute('aria-expanded', 'false');
+				var sb = $id('mp-style-btn');
+				if (sb) sb.setAttribute('aria-expanded', 'false');
+				return any;
+			}
+			function openPopover(f, btn) {
+				var wasOpen = !f.hidden;
+				closePopovers();
+				if (wasOpen) return;
+				f.hidden = false;
+				btn.setAttribute('aria-expanded', 'true');
+			}
+
+			function syncRail() {
+				document.querySelectorAll('[data-tool]').forEach(function(b) {
+					b.setAttribute('aria-pressed', b.dataset.tool === tool ? 'true' : 'false');
+				});
+				var db = document.querySelector('[data-tool="draw"] i');
+				if (db) db.className = 'fa-solid ' + SHAPE_ICON[drawShape];
+				document.querySelectorAll('[data-shape]').forEach(function(b) {
+					b.setAttribute('aria-pressed', (tool === 'draw' && b.dataset.shape === drawShape) ? 'true' : 'false');
+				});
+				// The drawing module sets its own crosshair while a shape tool runs.
+				if (tool === 'pin') map.getContainer().style.cursor = 'crosshair';
+				else if (tool === 'move') map.getContainer().style.cursor = '';
+			}
+
+			function setTool(t) {
+				if (!isScribe) t = 'move';
+				closePopovers();
+				if (t !== 'draw' && draw()) draw().cancel();
+				tool = t;
+				if (t === 'pin') setHint('Click the map to drop a pin');
+				else if (t === 'draw') setHint(SHAPE_HINT[drawShape]);
+				else setHint('');
+				syncRail();
+			}
+			function startShape(shape) {
+				if (!draw()) { Chronicle.notify('Drawing tools are still loading', 'error'); return; }
+				closePopovers();
+				drawShape = shape;
+				tool = 'draw';
+				draw().setStyle({ color: drawColor, width: drawWidth });
+				draw().start(shape);
+				setHint(SHAPE_HINT[shape]);
+				syncRail();
+			}
+
+			if (isScribe) {
+				document.querySelectorAll('[data-tool]').forEach(function(b) {
+					b.addEventListener('click', function() {
+						var t = b.dataset.tool;
+						if (t === 'draw') { openPopover(flyDraw, b); return; }
+						setTool(tool === t && t !== 'move' ? 'move' : t);
+					});
+				});
+				document.querySelectorAll('[data-shape]').forEach(function(b) {
+					b.addEventListener('click', function() { startShape(b.dataset.shape); });
+				});
+				var styleBtn = $id('mp-style-btn');
+				styleBtn.addEventListener('click', function() { openPopover(flyStyle, styleBtn); });
+				function syncStyle() {
+					$id('mp-style-swatch').style.background = drawColor;
+					flyStyle.querySelectorAll('[data-color]').forEach(function(b) {
+						b.setAttribute('aria-pressed', b.dataset.color === drawColor ? 'true' : 'false');
+					});
+					flyStyle.querySelectorAll('[data-width]').forEach(function(b) {
+						b.setAttribute('aria-pressed', parseInt(b.dataset.width, 10) === drawWidth ? 'true' : 'false');
+					});
+				}
+				flyStyle.querySelectorAll('[data-color]').forEach(function(b) {
+					b.addEventListener('click', function() {
+						drawColor = b.dataset.color;
+						if (draw()) draw().setStyle({ color: drawColor });
+						syncStyle();
+					});
+				});
+				flyStyle.querySelectorAll('[data-width]').forEach(function(b) {
+					b.addEventListener('click', function() {
+						drawWidth = parseInt(b.dataset.width, 10);
+						if (draw()) draw().setStyle({ width: drawWidth });
+						syncStyle();
+					});
+				});
+				syncStyle();
+				var undoBtn = $id('mp-undo');
+				undoBtn.addEventListener('click', function() { if (draw()) draw().undo(); });
+				undoBtn.disabled = true;
+				window.__mpUndoChange = function(n) { undoBtn.disabled = n === 0; };
+				syncRail();
+			}
+
+			// ---- Pins & layers panel ----
+			var panel = $id('mp-layers');
+			var layersBtn = $id('mp-layers-btn');
+			var drawingCount = 0;
+			function dot(color) { return '<span class="mp-dot" style="background:' + escapeAttr(color) + '"></span>'; }
+			function renderPanel() {
+				if (!panel) return;
+				var focusKey = document.activeElement && panel.contains(document.activeElement)
+					? document.activeElement.getAttribute('data-key') : null;
+				var counts = {};
+				var hiddenCount = 0;
+				markers.forEach(function(mk) {
+					var k = kindOf(mk);
+					counts[k] = (counts[k] || 0) + 1;
+					if (mk.visibility === 'dm_only') hiddenCount++;
+				});
+				var html = '<div class="mp-sec"><h3>Show on map</h3>';
+				KINDS.concat(counts.other ? [OTHER_KIND] : []).forEach(function(k) {
+					html += '<button type="button" class="mp-tg" data-key="kind-' + k.id + '" data-kind="' + k.id + '" aria-pressed="' + kindOn[k.id] + '">'
+						+ dot(k.color) + '<span>' + escapeHtml(k.label) + '</span><span class="mp-n">' + (counts[k.id] || 0) + '</span></button>';
+				});
+				html += '<button type="button" class="mp-tg" data-key="drawings" data-toggle="drawings" aria-pressed="' + showDrawings + '">'
+					+ '<i class="fa-solid fa-pen mp-eye"></i><span>Drawings</span><span class="mp-n">' + drawingCount + '</span></button>';
+				if (isScribe && (canDmOnly || hiddenCount > 0)) {
+					html += '<button type="button" class="mp-tg" data-key="hidden" data-toggle="hidden" aria-pressed="' + showHiddenPins + '">'
+						+ '<i class="fa-solid fa-eye-slash mp-eye"></i><span>Pins hidden from players</span><span class="mp-n">' + hiddenCount + '</span></button>';
+				}
+				html += '</div><div class="mp-sec"><h3>All pins</h3>';
+				var list = markers.filter(pinShown).sort(function(a, b) { return (a.name || '').localeCompare(b.name || ''); });
+				if (!list.length) html += '<p class="mp-empty">No pins to show</p>';
+				list.forEach(function(mk) {
+					html += '<button type="button" class="mp-pl" data-key="pin-' + escapeAttr(mk.id) + '" data-id="' + escapeAttr(mk.id) + '">'
+						+ dot(kindInfo(mk.pin_category).color) + '<span class="mp-pl-name">' + escapeHtml(mk.name) + '</span>'
+						+ (mk.visibility === 'dm_only' ? '<em>hidden</em>' : '') + '</button>';
+				});
+				html += '</div>';
+				panel.innerHTML = html;
+				if (focusKey) {
+					var again = panel.querySelector('[data-key="' + focusKey.replace(/"/g, '') + '"]');
+					if (again) again.focus();
+				}
+			}
+			panel.addEventListener('click', function(e) {
+				var b = e.target.closest('button');
+				if (!b) return;
+				if (b.dataset.kind) { kindOn[b.dataset.kind] = !kindOn[b.dataset.kind]; applyFilters(); return; }
+				if (b.dataset.toggle === 'drawings') {
+					showDrawings = !showDrawings;
+					if (draw()) draw().setVisible(showDrawings);
+					renderPanel();
+					return;
+				}
+				if (b.dataset.toggle === 'hidden') { showHiddenPins = !showHiddenPins; applyFilters(); return; }
+				if (b.dataset.id) {
+					var mk = markers.filter(function(m) { return m.id === b.dataset.id; })[0];
+					if (mk) flyToMarker(mk);
+				}
+			});
+			layersBtn.addEventListener('click', function() {
+				var open = panel.hidden;
+				panel.hidden = !open;
+				layersBtn.setAttribute('aria-expanded', open ? 'true' : 'false');
+				if (open) renderPanel();
+			});
+			function closePanel() {
+				if (panel.hidden) return false;
+				panel.hidden = true;
+				layersBtn.setAttribute('aria-expanded', 'false');
+				return true;
+			}
+
+			// Map settings: the gear moved out of the removed toolbar row.
+			var gear = $id('mp-settings-btn');
+			if (gear) gear.addEventListener('click', function() {
+				leaveFullscreen();
+				document.getElementById('map-settings-modal').classList.remove('hidden');
+			});
+
+			// ---- Search ----
+			(function() {
+				var input = $id('marker-search');
+				var results = $id('mp-results');
+				function hideResults() { results.hidden = true; }
+				function showResults() {
+					var q = input.value.toLowerCase().trim();
+					// Dim non-matches on the map as the person types.
+					markers.forEach(function(mk) {
+						var lm = leafletMarkers[mk.id];
+						if (!lm) return;
+						var match = !q || (mk.name || '').toLowerCase().indexOf(q) !== -1 || (mk.description || '').toLowerCase().indexOf(q) !== -1;
 						lm.setOpacity(match ? 1 : 0.15);
+					});
+					if (!q) { hideResults(); return; }
+					var hits = markers.filter(function(mk) {
+						return pinShown(mk) && ((mk.name || '').toLowerCase().indexOf(q) !== -1 || (mk.description || '').toLowerCase().indexOf(q) !== -1);
+					}).slice(0, 8);
+					var html = '';
+					hits.forEach(function(mk) {
+						var k = kindInfo(mk.pin_category);
+						html += '<button type="button" data-id="' + escapeAttr(mk.id) + '">' + dot(k.color) + '<span class="mp-pl-name">' + escapeHtml(mk.name) + '</span><small>' + escapeHtml(k.one) + '</small></button>';
+					});
+					results.innerHTML = html || '<p class="mp-empty">No pin called that</p>';
+					results.hidden = false;
+				}
+				function pick(id) {
+					var mk = markers.filter(function(m) { return m.id === id; })[0];
+					if (!mk) return;
+					input.value = mk.name;
+					showResults();
+					hideResults();
+					flyToMarker(mk);
+				}
+				input.addEventListener('input', showResults);
+				input.addEventListener('keydown', function(e) {
+					if (e.key === 'Enter') {
+						var first = results.querySelector('button');
+						if (first) { e.preventDefault(); pick(first.dataset.id); }
 					}
 				});
-				searchInput.addEventListener('keydown', function(e) {
-					if (e.key !== 'Enter') return;
-					var q = searchInput.value.toLowerCase().trim();
-					if (!q) return;
-					// Pan to the first match.
-					for (var i = 0; i < markers.length; i++) {
-						var mk = markers[i];
-						var name = (mk.name || '').toLowerCase();
-						if (name.indexOf(q) !== -1) {
-							var lat = h - (mk.y / 100) * h;
-							var lng = (mk.x / 100) * w;
-							map.setView([lat, lng], 1);
-							var lm = leafletMarkers[mk.id];
-							if (lm) lm.openTooltip();
-							break;
-						}
-					}
+				results.addEventListener('click', function(e) {
+					var b = e.target.closest('button');
+					if (b) pick(b.dataset.id);
 				});
+				document.addEventListener('pointerdown', function(e) {
+					if (!e.target.closest || !e.target.closest('.mp-search')) hideResults();
+				});
+				window.__mpCloseResults = function() {
+					if (results.hidden) return false;
+					hideResults();
+					return true;
+				};
 			})();
 
-			// Place mode: click on map to create a marker at that position.
-			window.togglePlaceMode = function() {
-				placingMode = !placingMode;
-				var btn = document.getElementById('place-marker-btn');
-				if (placingMode) {
-					btn.classList.remove('btn-secondary');
-					btn.classList.add('btn-primary');
-					document.getElementById('map-container').style.cursor = 'crosshair';
-				} else {
-					btn.classList.remove('btn-primary');
-					btn.classList.add('btn-secondary');
-					document.getElementById('map-container').style.cursor = '';
-				}
-			};
-
+			// ---- Pin placement ----
 			// Coordinate helper: Leaflet latlng (CRS.Simple, origin bottom-left)
 			// → marker percentage coords (origin top-left), clamped to 0-100.
 			function latLngToPercent(latlng) {
@@ -489,30 +1044,55 @@ templ MapEditorBody(cc *campaigns.CampaignContext, data MapViewData, mapContaine
 				return { x: x, y: y };
 			}
 
-			// Single-click create — only while the "Place Marker" toggle is on.
-			// Kept so the existing toolbar affordance still works.
+			// The Pin tool: click the map to drop a pin and name it in a card.
 			map.on('click', function(e) {
-				if (!placingMode || !isScribe) return;
+				if (tool !== 'pin' || !isScribe) return;
 				var p = latLngToPercent(e.latlng);
-				openCreateMarker(p.x, p.y);
-				togglePlaceMode();
+				startDraft(p.x, p.y);
 			});
 
-			// Double-click create — pin editing INSIDE the editor without the
-			// separate toolbar toggle (C-MAPS-EDITOR-PIN-AND-ICON-PARITY Part B).
-			// Scribe+ only; double-click avoids the pan/single-click conflict the
-			// dispatch flagged, and doubleClickZoom is disabled above so the map
-			// doesn't zoom under the new pin. The bulk "Place Marker" toggle and
-			// the marker list management stay as they were.
+			// Double-click drops a pin without picking the tool (Scribe+). Skipped
+			// while a drawing tool is active: the polygon tool finishes on
+			// double-click and must not also leave a pin behind.
 			map.on('dblclick', function(e) {
-				if (!isScribe) return;
-				// If place mode happens to be on, turn it off so the cursor resets.
-				if (placingMode) togglePlaceMode();
+				if (!isScribe || tool === 'draw') return;
 				var p = latLngToPercent(e.latlng);
-				openCreateMarker(p.x, p.y);
+				startDraft(p.x, p.y);
 			});
 
-			// Create marker modal handlers.
+			// ---- Keys: V move, P pin, D draw, Esc steps back ----
+			function typing(t) {
+				if (!t || !t.tagName) return false;
+				var n = t.tagName;
+				return n === 'INPUT' || n === 'TEXTAREA' || n === 'SELECT' || t.isContentEditable;
+			}
+			function modalOpen() {
+				var m = document.getElementById('marker-modal');
+				var s = document.getElementById('map-settings-modal');
+				return (m && !m.classList.contains('hidden')) || (s && !s.classList.contains('hidden'));
+			}
+			function onKey(e) {
+				// The page may have been swapped away; stop listening if so.
+				if (!map.getContainer().isConnected) { document.removeEventListener('keydown', onKey); return; }
+				if (e.ctrlKey || e.metaKey || e.altKey || modalOpen()) return;
+				if (e.key === 'Escape') {
+					// Close the nearest thing first: results, popover, panel, card, then the tool.
+					if (window.__mpCloseResults && window.__mpCloseResults()) return;
+					if (closePopovers()) return;
+					if (closePanel()) return;
+					if (map._popup && map._popup.isOpen && map._popup.isOpen()) { map.closePopup(); return; }
+					if (tool !== 'move') setTool('move');
+					return;
+				}
+				if (!isScribe || typing(e.target)) return;
+				var k = e.key.toLowerCase();
+				if (k === 'v') { setTool('move'); e.preventDefault(); }
+				else if (k === 'p') { setTool('pin'); e.preventDefault(); }
+				else if (k === 'd') { openPopover(flyDraw, document.querySelector('[data-tool="draw"]')); e.preventDefault(); }
+			}
+			document.addEventListener('keydown', onKey);
+
+			// Create marker modal handlers (the full editor behind "More options").
 			window.openCreateMarker = function(x, y) {
 				resetMarkerModal();
 				document.getElementById('mk-x').value = x.toFixed(2);
@@ -530,6 +1110,11 @@ templ MapEditorBody(cc *campaigns.CampaignContext, data MapViewData, mapContaine
 				document.getElementById('mk-icon').value = mk.icon || 'fa-map-pin';
 				document.getElementById('mk-color').value = mk.color || '#3b82f6';
 				document.getElementById('mk-visibility').value = mk.visibility || 'everyone';
+				var kindSel = document.getElementById('mk-kind');
+				// A stored value outside the five kinds shows as "Other" and is only
+				// rewritten if the person picks something else.
+				kindSel.value = KINDS.some(function(k) { return k.id === mk.pin_category; }) ? mk.pin_category : '';
+				kindSel.dataset.original = kindSel.value;
 				var entityInput = document.getElementById('mk-entity-id');
 				entityInput.value = mk.entity_id || '';
 				entityInput.dataset.original = entityInput.value;
@@ -552,6 +1137,7 @@ templ MapEditorBody(cc *campaigns.CampaignContext, data MapViewData, mapContaine
 				document.getElementById('mk-id').value = '';
 				document.getElementById('mk-icon').value = 'fa-map-pin';
 				document.getElementById('mk-color').value = '#3b82f6';
+				document.getElementById('mk-kind').dataset.original = '';
 				document.getElementById('mk-modal-title').textContent = 'New Marker';
 				document.getElementById('mk-submit-icon').className = 'fa-solid fa-plus mr-1';
 				document.getElementById('mk-submit-text').textContent = 'Create Marker';
@@ -560,7 +1146,10 @@ templ MapEditorBody(cc *campaigns.CampaignContext, data MapViewData, mapContaine
 			}
 
 			// Form submit — create or update.
-			document.getElementById('marker-form').addEventListener('submit', async function(e) {
+			// The modal markup is Scribe+ only; players have no form to wire, and a
+			// throw here would skip publishing chronicleMap below.
+			var markerForm = document.getElementById('marker-form');
+			if (markerForm) markerForm.addEventListener('submit', async function(e) {
 				e.preventDefault();
 				var fd = new FormData(e.target);
 				var body = {
@@ -581,6 +1170,13 @@ templ MapEditorBody(cc *campaigns.CampaignContext, data MapViewData, mapContaine
 				body.description = fd.get('description') || null;
 
 				var markerID = fd.get('marker_id');
+				// Kind (pin_category): a new marker sends it when chosen; an edit
+				// sends it only when it changed, with null for "Other" (clear).
+				var kindVal = fd.get('pin_category') || '';
+				var kindOriginal = document.getElementById('mk-kind').dataset.original || '';
+				if (!markerID ? kindVal !== '' : kindVal !== kindOriginal) {
+					body.pin_category = kindVal || null;
+				}
 				// An edit sends the entity link only when it changed: a link
 				// to a page this viewer can't see arrives blank, and echoing
 				// that blank back as null would unlink it.
@@ -818,27 +1414,271 @@ templ MapEditorBody(cc *campaigns.CampaignContext, data MapViewData, mapContaine
 				mapID: mapID,
 				imageW: w,
 				imageH: h,
-				isScribe: isScribe
+				isScribe: isScribe,
+				isOwner: isOwner,
+				// Callbacks the drawing module calls so the panel counts and the
+				// undo button stay in step with what is on the map.
+				onDrawingsChange: function(n) {
+					drawingCount = n;
+					if (!showDrawings && draw()) draw().setVisible(false);
+					renderPanel();
+				},
+				onUndoChange: function(n) { if (window.__mpUndoChange) window.__mpUndoChange(n); }
 			};
 		})();
 	</script>
 
-	if data.IsScribe {
-		<script src={ layouts.AssetURL("/static/js/map_drawing_tools.js") }></script>
-	}
+	// Loaded for everyone: it renders saved drawings for players too and only
+	// builds the drawing tools for Scribe+.
+	<script src={ layouts.AssetURL("/static/js/map_drawing_tools.js") }></script>
 
-	<!-- Minimal CSS for Leaflet marker icons -->
+	<!-- CSS for Leaflet marker icons, the floating map controls and pin cards.
+	     Theme tokens come from the app's custom properties so light and dark
+	     both work; the accent follows the campaign accent. -->
 	<style>
 		.chronicle-marker { background: none !important; border: none !important; }
 		.chronicle-cluster { background: none !important; border: none !important; }
 		.chronicle-cluster-icon {
 			width: 32px; height: 32px; line-height: 32px;
 			text-align: center; font-size: 13px; font-weight: 600;
-			color: #fff; background: rgba(59, 130, 246, 0.85);
+			color: #fff; background: rgb(var(--color-accent-rgb, 99 102 241) / 0.9);
 			border-radius: 50%; box-shadow: 0 1px 4px rgba(0,0,0,0.3);
 		}
 		.map-text-annotation { background: none !important; border: none !important; }
+		.mp-pin-badge {
+			position: absolute; top: -4px; right: -8px; width: 14px; height: 14px;
+			display: grid; place-items: center; border-radius: 50%;
+			background: #111827; color: #fff; font-size: 8px; text-shadow: none;
+			border: 1px solid #fff;
+		}
+
+		#map-wrap {
+			--mp-accent: rgb(var(--color-accent-rgb, 99 102 241));
+			--mp-accent-soft: rgb(var(--color-accent-rgb, 99 102 241) / 0.14);
+			--mp-float: rgb(255 255 255 / 0.94);
+			--mp-shadow: 0 1px 2px rgb(15 17 23 / 0.06), 0 8px 24px rgb(15 17 23 / 0.12);
+			isolation: isolate; /* controls stack above Leaflet's panes without leaking out */
+		}
+		.dark #map-wrap { --mp-float: rgb(31 41 55 / 0.94); --mp-shadow: 0 1px 2px rgb(0 0 0 / 0.3), 0 10px 28px rgb(0 0 0 / 0.45); }
+		#map-wrap:fullscreen { background: var(--color-bg-primary); }
+
+		.mp-fl {
+			position: absolute; z-index: 1100; background: var(--mp-float);
+			-webkit-backdrop-filter: blur(6px); backdrop-filter: blur(6px);
+			border: 1px solid var(--color-border); border-radius: 10px;
+			box-shadow: var(--mp-shadow); color: var(--color-text-body);
+		}
+		#map-wrap [hidden] { display: none !important; }
+		#map-wrap button { font: inherit; color: inherit; cursor: pointer; }
+		#map-wrap :focus-visible { outline: 2px solid var(--mp-accent); outline-offset: 2px; }
+
+		.mp-search { top: 12px; left: 12px; display: flex; align-items: center; gap: 8px; padding: 0 10px; height: 36px; width: 230px; color: var(--color-text-secondary); }
+		.mp-search input { border: 0; background: none; outline: none; box-shadow: none; font-size: 13px; color: var(--color-text-primary); width: 100%; padding: 0; }
+		.mp-search input:focus-visible { outline: none; }
+		.mp-search:focus-within { outline: 2px solid var(--mp-accent); outline-offset: 2px; }
+		.mp-results { position: absolute; top: 40px; left: 0; right: 0; background: var(--color-card-bg); border: 1px solid var(--color-border); border-radius: 10px; box-shadow: var(--mp-shadow); padding: 4px; max-height: 240px; overflow: auto; }
+		.mp-results button { display: flex; gap: 8px; align-items: center; width: 100%; text-align: left; border: 0; background: none; padding: 6px 8px; border-radius: 6px; font-size: 13px; color: var(--color-text-primary); }
+		.mp-results button:hover, .mp-results button:focus-visible { background: var(--color-bg-tertiary); }
+		.mp-results small { margin-left: auto; color: var(--color-text-secondary); }
+		.mp-empty { margin: 0; padding: 8px; font-size: 12px; color: var(--color-text-secondary); }
+		.mp-dot { width: 9px; height: 9px; border-radius: 50%; flex: none; display: inline-block; }
+
+		.mp-rail { top: 58px; left: 12px; display: flex; flex-direction: column; padding: 4px; gap: 2px; }
+		.mp-item { position: relative; }
+		.mp-btn { position: relative; width: 36px; height: 36px; border: 0; border-radius: 7px; background: none; color: var(--color-text-body); display: flex; align-items: center; justify-content: center; font-size: 14px; }
+		.mp-btn:hover:not(:disabled) { background: var(--color-bg-tertiary); color: var(--color-text-primary); }
+		.mp-btn[aria-pressed="true"] { background: var(--mp-accent-soft); color: var(--mp-accent); }
+		.mp-btn:disabled { opacity: 0.4; cursor: default; }
+		.mp-tip { position: absolute; left: 44px; top: 50%; transform: translateY(-50%); white-space: nowrap; background: var(--color-text-primary); color: var(--color-bg-primary); font-size: 11px; padding: 3px 7px; border-radius: 5px; opacity: 0; pointer-events: none; transition: opacity 0.12s; z-index: 2; }
+		.mp-btn:hover .mp-tip, .mp-btn:focus-visible .mp-tip { opacity: 1; }
+		.mp-tip kbd { font: 10px ui-monospace, monospace; opacity: 0.7; margin-left: 6px; }
+		.mp-sep { height: 1px; background: var(--color-border); margin: 3px 4px; }
+		.mp-swatch { width: 18px; height: 18px; border-radius: 50%; border: 2px solid var(--color-card-bg); box-shadow: 0 0 0 1px var(--color-border); }
+		.mp-fly { left: 48px; top: 0; padding: 6px; display: flex; gap: 2px; flex-wrap: wrap; width: max-content; max-width: 220px; }
+		.mp-fly-label { flex-basis: 100%; font-size: 11px; color: var(--color-text-secondary); padding: 2px 4px 4px; text-transform: uppercase; letter-spacing: 0.06em; }
+		.mp-fly-gap { margin-top: 6px; }
+		.mp-sw { width: 24px; height: 24px; border-radius: 50%; border: 2px solid transparent; box-shadow: inset 0 0 0 1px var(--color-border); padding: 0; margin: 2px; }
+		.mp-sw[aria-pressed="true"] { border-color: var(--color-text-primary); }
+		.mp-wd { border: 1px solid var(--color-border); background: var(--color-card-bg); border-radius: 6px; padding: 3px 9px; font-size: 12px; }
+		.mp-wd[aria-pressed="true"] { background: var(--mp-accent); border-color: var(--mp-accent); color: #fff; }
+
+		.mp-topright { position: absolute; top: 12px; right: 12px; z-index: 1100; display: flex; gap: 8px; }
+		.mp-pill { position: static; height: 36px; display: flex; align-items: center; gap: 7px; padding: 0 12px; font-size: 13px; color: var(--color-text-primary); }
+		.mp-pill-icon { width: 36px; justify-content: center; padding: 0; }
+		.mp-pill:hover { background: var(--color-card-bg); }
+		.mp-panel { top: 56px; right: 12px; bottom: 212px; width: 260px; padding: 12px; overflow: auto; font-size: 13px; }
+		.mp-sec { display: flex; flex-direction: column; gap: 2px; margin-bottom: 14px; }
+		.mp-sec h3 { margin: 0 0 6px; font-size: 11px; text-transform: uppercase; letter-spacing: 0.07em; color: var(--color-text-secondary); font-weight: 600; }
+		.mp-tg, .mp-pl { display: flex; align-items: center; gap: 8px; padding: 5px 6px; border-radius: 6px; border: 0; background: none; width: 100%; text-align: left; color: var(--color-text-primary); }
+		.mp-tg:hover, .mp-pl:hover { background: var(--color-bg-tertiary); }
+		.mp-tg[aria-pressed="false"] { color: var(--color-text-muted); }
+		.mp-tg[aria-pressed="false"] .mp-dot { opacity: 0.3; }
+		.mp-n { margin-left: auto; font: 11px ui-monospace, monospace; color: var(--color-text-secondary); }
+		.mp-eye { width: 9px; text-align: center; font-size: 11px; color: var(--color-text-secondary); }
+		.mp-pl { font-size: 12.5px; color: var(--color-text-body); }
+		.mp-pl-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+		.mp-pl em { margin-left: auto; font-style: normal; font-size: 10.5px; color: var(--color-text-secondary); flex: none; }
+
+		.mp-zoom { right: 12px; bottom: 12px; display: flex; flex-direction: column; padding: 4px; gap: 2px; }
+		.mp-zoom .mp-tip { left: auto; right: 44px; }
+		.mp-lvl { font: 11px ui-monospace, monospace; text-align: center; color: var(--color-text-secondary); padding: 2px 0; }
+		.mp-hint { left: 50%; bottom: 14px; transform: translateX(-50%); padding: 7px 12px; font-size: 12.5px; color: var(--color-text-primary); white-space: nowrap; pointer-events: none; }
+
+		/* Pin cards: Leaflet popups restyled to match the floating controls. */
+		.mp-card-popup .leaflet-popup-content-wrapper { background: var(--color-card-bg); color: var(--color-text-body); border: 1px solid var(--color-border); border-radius: 10px; box-shadow: var(--mp-shadow); padding: 0; }
+		.mp-card-popup .leaflet-popup-tip { background: var(--color-card-bg); border: 1px solid var(--color-border); box-shadow: none; }
+		.mp-card-popup .leaflet-popup-content { margin: 0; font-size: 12.5px; line-height: 1.4; }
+		.mp-card-popup a.leaflet-popup-close-button { color: var(--color-text-secondary); }
+		.mp-card { padding: 10px 12px; display: flex; flex-direction: column; gap: 6px; }
+		.mp-card-title { display: flex; gap: 6px; align-items: center; font-size: 14px; color: var(--color-text-primary); padding-right: 14px; }
+		.mp-card-meta { font-size: 11px; color: var(--color-text-secondary); display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+		.mp-badge { display: inline-flex; gap: 4px; align-items: center; padding: 1px 6px; border-radius: 999px; background: var(--color-bg-tertiary); }
+		.mp-card-desc { white-space: pre-wrap; overflow-wrap: anywhere; max-height: 140px; overflow: auto; }
+		.mp-card-link { color: var(--mp-accent); font-size: 12px; text-decoration: none; }
+		.mp-card-link:hover { text-decoration: underline; }
+		.mp-field { display: flex; flex-direction: column; gap: 3px; font-size: 11px; color: var(--color-text-secondary); }
+		.mp-input { width: 100%; font: inherit; font-size: 12.5px; padding: 5px 7px; border: 1px solid var(--color-input-border, var(--color-border)); border-radius: 6px; background: var(--color-input-bg, var(--color-card-bg)); color: var(--color-text-primary); }
+		.mp-card-row { display: flex; gap: 6px; margin-top: 4px; }
+		.mp-cbtn { border: 1px solid var(--color-border); background: var(--color-card-bg); border-radius: 7px; padding: 5px 10px; font-size: 12px; color: var(--color-text-body); }
+		.mp-cbtn:hover:not(:disabled) { background: var(--color-bg-tertiary); }
+		.mp-cbtn-primary { background: var(--mp-accent); border-color: var(--mp-accent); color: #fff; }
+		.mp-cbtn-primary:hover:not(:disabled) { background: var(--mp-accent); filter: brightness(1.08); }
+		.mp-cbtn:disabled { opacity: 0.6; }
+		.mp-card-more { align-self: flex-start; border: 0; background: none; padding: 0; font-size: 11.5px; color: var(--mp-accent); }
+		.mp-card-more:hover { text-decoration: underline; }
+
+		/* Narrow screens: the tool rail becomes a bar along the bottom-left. */
+		@media (max-width: 760px) {
+			.mp-search { width: calc(100% - 150px); }
+			.mp-rail { top: auto; bottom: 12px; left: 12px; flex-direction: row; }
+			.mp-rail .mp-sep { width: 1px; height: auto; margin: 4px 3px; }
+			.mp-tip { display: none; }
+			.mp-fly { left: 0; top: auto; bottom: 46px; }
+			.mp-zoom { bottom: 64px; }
+			.mp-hint { bottom: 64px; white-space: normal; width: calc(100% - 24px); text-align: center; }
+			.mp-panel { left: 12px; width: auto; right: 12px; bottom: 120px; }
+			.mp-pill span { display: none; }
+			.mp-pill { padding: 0; width: 36px; justify-content: center; }
+		}
+		@media (prefers-reduced-motion: reduce) {
+			.mp-tip { transition: none; }
+			.leaflet-fade-anim .leaflet-popup, .leaflet-zoom-anim .leaflet-zoom-animated { transition: none !important; }
+		}
+
+		/* Atlas frame (dedicated map page): a printed plate with a double rule,
+		   corner flourishes, grid letters and numbers, and a title plate. */
+		.mp-stage { flex: 1; min-height: 360px; padding: 18px; display: flex; }
+		.mp-frame {
+			--mp-mat: #eef0f4; --mp-rule: #8b7a5a;
+			position: relative; flex: 1; min-width: 0; display: flex;
+			padding: 26px 26px 34px; border-radius: 14px; border: 1px solid var(--color-border);
+			background: var(--mp-mat); box-shadow: 0 1px 2px rgb(15 17 23 / 0.06), 0 8px 24px rgb(15 17 23 / 0.10);
+		}
+		.dark .mp-frame { --mp-mat: #161e2b; --mp-rule: #a8956c; }
+		.mp-viewport { position: relative; flex: 1; min-width: 0; min-height: 0; overflow: hidden; border-radius: 2px; box-shadow: 0 0 0 1px var(--mp-rule), 0 0 0 5px var(--mp-mat), 0 0 0 6px var(--mp-rule); }
+		.mp-orn { position: absolute; inset: 0; pointer-events: none; color: var(--mp-rule); z-index: 2; }
+		.mp-orn svg { position: absolute; width: 30px; height: 30px; }
+		.mp-orn .tl { top: 3px; left: 3px; }
+		.mp-orn .tr { top: 3px; right: 3px; transform: rotate(90deg); }
+		.mp-orn .br { bottom: 3px; right: 3px; transform: rotate(180deg); }
+		.mp-orn .bl { bottom: 3px; left: 3px; transform: rotate(270deg); }
+		.mp-ticks { position: absolute; left: 44px; right: 44px; top: 8px; display: flex; justify-content: space-between; font: 10px ui-monospace, monospace; letter-spacing: 0.08em; }
+		.mp-side-ticks { position: absolute; top: 44px; bottom: 44px; left: 9px; display: flex; flex-direction: column; justify-content: space-between; font: 10px ui-monospace, monospace; }
+		.mp-cart { position: absolute; left: 50%; bottom: 10px; transform: translateX(-50%); max-width: 60%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font: 600 10.5px/1 Georgia, "Palatino Linotype", serif; letter-spacing: 0.32em; text-transform: uppercase; background: var(--mp-mat); padding: 4px 14px; border: 1px solid var(--mp-rule); outline: 1px solid var(--mp-rule); outline-offset: 2px; }
+		@media (max-width: 760px) {
+			.mp-stage { padding: 8px; }
+			.mp-frame { padding: 14px 14px 30px; }
+			.mp-ticks, .mp-side-ticks { display: none; }
+		}
 	</style>
+}
+
+// mapControls renders the controls that float over the map, each in its own
+// corner: search and tool rail (top-left), pins and layers (top-right), zoom
+// (bottom-right) and the active-tool hint (bottom-centre). They are siblings of
+// the Leaflet container, not Leaflet controls, so the map never sees their
+// clicks, wheel or double-clicks. All behaviour is wired by the IIFE in
+// MapEditorBody; this is markup only, and the tool rail is Scribe+ only.
+templ mapControls(data MapViewData) {
+	<div class="mp-fl mp-search">
+		<i class="fa-solid fa-magnifying-glass" aria-hidden="true"></i>
+		<input
+			type="text"
+			id="marker-search"
+			placeholder="Search pins"
+			autocomplete="off"
+			aria-label="Search pins"
+		/>
+		<div id="mp-results" class="mp-results" hidden></div>
+	</div>
+	if data.IsScribe {
+		<div class="mp-fl mp-rail" role="toolbar" aria-label="Map tools">
+			<button type="button" class="mp-btn" data-tool="move" aria-pressed="true" aria-label="Move the map (V)">
+				<i class="fa-solid fa-hand" aria-hidden="true"></i>
+				<span class="mp-tip">Move the map <kbd>V</kbd></span>
+			</button>
+			<button type="button" class="mp-btn" data-tool="pin" aria-pressed="false" aria-label="Drop a pin (P)">
+				<i class="fa-solid fa-location-dot" aria-hidden="true"></i>
+				<span class="mp-tip">Drop a pin <kbd>P</kbd></span>
+			</button>
+			<div class="mp-item">
+				<button type="button" class="mp-btn" data-tool="draw" aria-pressed="false" aria-expanded="false" aria-label="Draw (D)">
+					<i class="fa-solid fa-pen" aria-hidden="true"></i>
+					<span class="mp-tip">Draw <kbd>D</kbd></span>
+				</button>
+				<div id="mp-fly-draw" class="mp-fl mp-fly" hidden>
+					<div class="mp-fly-label">Draw</div>
+					<button type="button" class="mp-btn" data-shape="freehand" aria-pressed="false" aria-label="Freehand"><i class="fa-solid fa-pen" aria-hidden="true"></i></button>
+					<button type="button" class="mp-btn" data-shape="rectangle" aria-pressed="false" aria-label="Rectangle"><i class="fa-solid fa-vector-square" aria-hidden="true"></i></button>
+					<button type="button" class="mp-btn" data-shape="ellipse" aria-pressed="false" aria-label="Circle"><i class="fa-solid fa-circle" aria-hidden="true"></i></button>
+					<button type="button" class="mp-btn" data-shape="polygon" aria-pressed="false" aria-label="Polygon"><i class="fa-solid fa-draw-polygon" aria-hidden="true"></i></button>
+					<button type="button" class="mp-btn" data-shape="text" aria-pressed="false" aria-label="Text"><i class="fa-solid fa-font" aria-hidden="true"></i></button>
+				</div>
+			</div>
+			<div class="mp-sep"></div>
+			<div class="mp-item">
+				<button type="button" id="mp-style-btn" class="mp-btn" aria-expanded="false" aria-label="Colour and line">
+					<span id="mp-style-swatch" class="mp-swatch"></span>
+					<span class="mp-tip">Colour and line</span>
+				</button>
+				<div id="mp-fly-style" class="mp-fl mp-fly" hidden>
+					<div class="mp-fly-label">Colour</div>
+					for _, c := range mapDrawColors {
+						<button type="button" class="mp-sw" data-color={ c } aria-pressed="false" aria-label={ "Colour " + c } style={ "background:" + c }></button>
+					}
+					<div class="mp-fly-label mp-fly-gap">Line</div>
+					<button type="button" class="mp-wd" data-width="2" aria-pressed="false">Thin</button>
+					<button type="button" class="mp-wd" data-width="4" aria-pressed="false">Medium</button>
+					<button type="button" class="mp-wd" data-width="7" aria-pressed="false">Thick</button>
+				</div>
+			</div>
+			<button type="button" id="mp-undo" class="mp-btn" aria-label="Undo last drawing" disabled>
+				<i class="fa-solid fa-rotate-left" aria-hidden="true"></i>
+				<span class="mp-tip">Undo last drawing</span>
+			</button>
+		</div>
+	}
+	<div class="mp-topright">
+		if data.IsScribe {
+			<button type="button" id="mp-settings-btn" class="mp-fl mp-pill mp-pill-icon" aria-label="Map settings" title="Map settings">
+				<i class="fa-solid fa-gear" aria-hidden="true"></i>
+			</button>
+		}
+		<button type="button" id="mp-layers-btn" class="mp-fl mp-pill" aria-expanded="false" aria-controls="mp-layers">
+			<i class="fa-solid fa-layer-group" aria-hidden="true"></i>
+			<span>Pins &amp; layers</span>
+		</button>
+	</div>
+	<div id="mp-layers" class="mp-fl mp-panel" hidden></div>
+	<div class="mp-fl mp-zoom">
+		<button type="button" id="mp-zoom-in" class="mp-btn" aria-label="Zoom in"><i class="fa-solid fa-plus" aria-hidden="true"></i></button>
+		<div id="mp-zoom-level" class="mp-lvl" aria-live="polite">100%</div>
+		<button type="button" id="mp-zoom-out" class="mp-btn" aria-label="Zoom out"><i class="fa-solid fa-minus" aria-hidden="true"></i></button>
+		<div class="mp-sep"></div>
+		<button type="button" id="mp-fit" class="mp-btn" aria-label="Fit whole map"><i class="fa-solid fa-expand" aria-hidden="true"></i></button>
+		<button type="button" id="mp-fullscreen" class="mp-btn" aria-label="Full screen"><i class="fa-solid fa-up-right-and-down-left-from-center" aria-hidden="true"></i></button>
+	</div>
+	<div id="mp-hint" class="mp-fl mp-hint" role="status" hidden></div>
 }
 
 // markerModal renders the create/edit marker modal.
@@ -887,6 +1727,17 @@ templ markerModal(data MapViewData) {
 						<label class="block text-xs font-medium text-fg-body mb-1">Color</label>
 						<input type="color" name="color" id="mk-color" class="input w-full h-9" value="#3b82f6"/>
 					</div>
+				</div>
+				<div>
+					<label class="block text-xs font-medium text-fg-body mb-1">Kind</label>
+					<select name="pin_category" id="mk-kind" class="input w-full">
+						<option value="">Other</option>
+						<option value="location">Place</option>
+						<option value="danger">Danger</option>
+						<option value="treasure">Treasure</option>
+						<option value="quest">Quest</option>
+						<option value="note">Note</option>
+					</select>
 				</div>
 				<div class="grid grid-cols-2 gap-2">
 					<div>
@@ -1060,6 +1911,10 @@ templ mapSettingsModal(data MapViewData) {
 }
 
 // derefStr safely dereferences a *string, returning "" for nil.
+// mapDrawColors are the seven swatches offered for drawings: a small, legible
+// set that reads on both light and dark map art, replacing a free colour input.
+var mapDrawColors = []string{"#c0392b", "#d97706", "#15803d", "#2563eb", "#7c3aed", "#111827", "#ffffff"}
+
 func derefStr(s *string) string {
 	if s == nil {
 		return ""

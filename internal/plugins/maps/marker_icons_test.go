@@ -9,6 +9,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"os"
 	"strings"
 	"testing"
 
@@ -102,19 +103,95 @@ func TestMapEditorBody_IconSelectFromCatalog(t *testing.T) {
 	}
 }
 
-// Part B — the editor exposes the inline double-click create affordance + the
-// hint, and disables Leaflet double-click-zoom so the gesture doesn't zoom.
+// Part B — the editor offers pin creation without leaving the map: the Pin tool
+// on the floating rail, and double-click, with Leaflet's own double-click zoom
+// disabled so the gesture doesn't zoom under the new pin.
 func TestMapEditorBody_InlinePinCreate(t *testing.T) {
 	html := renderMapEditor(t, true)
 	for _, want := range []string{
-		"data-map-pin-hint",     // the "double-click to add a pin" hint
-		"double-click the map",  // the hint copy
-		"doubleClickZoom: false", // zoom disabled so dblclick-create is clean
-		"map.on('dblclick'",     // the inline-create handler
-		"place-marker-btn",      // existing toggle still present (not removed)
+		`class="mp-btn" data-tool="pin"`, // the Pin tool on the rail
+		"doubleClickZoom: false",         // zoom disabled so dblclick-create is clean
+		"map.on('dblclick'",              // the inline-create handler
+		"More options",                   // card -> full marker modal, nothing lost
 	} {
 		if !strings.Contains(html, want) {
 			t.Errorf("editor missing inline-pin affordance %q", want)
+		}
+	}
+}
+
+// Players get the map, search, layers and zoom, but none of the authoring
+// controls. (Strings in the shared init script appear for everyone, so the
+// rail markup is the reliable role signal.)
+func TestMapEditorBody_PlayerHasNoToolRail(t *testing.T) {
+	html := renderMapEditor(t, false)
+	for _, banned := range []string{`class="mp-btn" data-tool="pin"`, `class="mp-btn" data-tool="draw"`, `id="mp-undo"`, `id="mp-settings-btn"`} {
+		if strings.Contains(html, banned) {
+			t.Errorf("players must not see %s", banned)
+		}
+	}
+	for _, want := range []string{`id="marker-search"`, `id="mp-layers-btn"`, `id="mp-zoom-in"`} {
+		if !strings.Contains(html, want) {
+			t.Errorf("players should still get %s", want)
+		}
+	}
+}
+
+// The toolbar row above the map is gone: every control floats over the map
+// wrapper, and Leaflet's own zoom control (which collided with the old
+// top-left draw toolbar) is off.
+func TestMapEditorBody_ControlsFloatOverTheMap(t *testing.T) {
+	html := renderMapEditor(t, true)
+	if strings.Contains(html, "place-marker-btn") || strings.Contains(html, "togglePlaceMode") {
+		t.Errorf("the old toolbar row's Place Marker toggle must be gone")
+	}
+	if !strings.Contains(html, "zoomControl: false") {
+		t.Errorf("Leaflet's default zoom control must be disabled")
+	}
+	wrap := strings.Index(html, `id="map-wrap"`)
+	search := strings.Index(html, `id="marker-search"`)
+	end := strings.Index(html, `id="mp-hint"`)
+	if wrap < 0 || search < wrap || end < search {
+		t.Errorf("search, rail and hint must render inside #map-wrap (wrap=%d search=%d hint=%d)", wrap, search, end)
+	}
+}
+
+// The quick card must send only the fields a person changed, so a rename can
+// never clear the kind or flip visibility (the partial-update contract).
+func TestMapEditorBody_QuickCardSendsOnlyChanges(t *testing.T) {
+	src, err := os.ReadFile("maps.templ")
+	if err != nil {
+		t.Fatalf("read maps.templ: %v", err)
+	}
+	text := string(src)
+	for _, want := range []string{
+		"if (nm !== mk.name) body.name = nm;",
+		"if (kind !== origKind) body.pin_category = kind || null;",
+		"if (visibility !== (mk.visibility || 'everyone')) body.visibility = visibility;",
+	} {
+		if !strings.Contains(text, want) {
+			t.Errorf("maps.templ quick card no longer has %q", want)
+		}
+	}
+}
+
+// All five kinds are offered in the full modal too, so "More options" loses
+// nothing.
+func TestMapEditorBody_ModalOffersEveryPinKind(t *testing.T) {
+	html := renderMapEditor(t, true)
+	for kind := range pinCategories {
+		if !strings.Contains(html, `value="`+kind+`"`) {
+			t.Errorf("marker modal missing kind %q", kind)
+		}
+	}
+}
+
+// The drawing script loads for players as well: it renders saved drawings for
+// them and only builds tools for Scribe+.
+func TestMapEditorBody_DrawingScriptForEveryone(t *testing.T) {
+	for _, scribe := range []bool{true, false} {
+		if !strings.Contains(renderMapEditor(t, scribe), "map_drawing_tools.js") {
+			t.Errorf("drawing script missing for scribe=%v", scribe)
 		}
 	}
 }
@@ -147,8 +224,8 @@ func TestMarkerIconsAPI_ReturnsCatalog(t *testing.T) {
 		t.Fatalf("status = %d", rec.Code)
 	}
 	var body struct {
-		Default string       `json:"default"`
-		Icons   []MarkerIcon `json:"icons"`
+		Default string            `json:"default"`
+		Icons   []MarkerIcon      `json:"icons"`
 		Groups  []MarkerIconGroup `json:"groups"`
 	}
 	if err := json.Unmarshal(rec.Body.Bytes(), &body); err != nil {
