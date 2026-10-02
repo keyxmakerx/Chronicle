@@ -2673,7 +2673,7 @@ func (a *App) RegisterRoutes() {
 	adminHandler.SetAPIAlertCounter(adminAPIAlertCounter{sync: syncService})
 	syncHandler.SetBaseURL(a.Config.BaseURL)
 	if a.PluginHealth.IsHealthy("syncapi") {
-		syncapi.RegisterAdminRoutes(adminGroup, syncHandler)
+		syncapi.RegisterAdminRoutes(adminGroup, syncHandler, auth.RequireReauth(authService))
 		syncapi.RegisterCampaignRoutes(e, syncHandler, campaignService, authService)
 	} else {
 		slog.Warn("syncapi plugin degraded — routes not registered")

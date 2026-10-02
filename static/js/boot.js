@@ -188,6 +188,41 @@
     }
   });
 
+  // --- Password re-confirmation retry ---
+  // A guarded admin write answers 403 with HX-Trigger: reauth-required and the
+  // password modal opens. The refused request is remembered so a confirmed
+  // password re-sends it from the same element (same target, swap and form
+  // values) instead of making the admin click again. Its hx-confirm question
+  // was already answered, so the re-send skips it.
+  var reauthPending = null;
+  var reauthRetrying = null;
+  Chronicle.isReauthResponse = function (xhr) {
+    var t = xhr && xhr.getResponseHeader && xhr.getResponseHeader('HX-Trigger');
+    return xhr && xhr.status === 403 && !!t && t.indexOf('reauth-required') !== -1;
+  };
+  document.addEventListener('htmx:responseError', function (evt) {
+    var d = evt.detail;
+    var elt = d.requestConfig && d.requestConfig.elt;
+    if (Chronicle.isReauthResponse(d.xhr) && elt) {
+      reauthPending = { verb: d.requestConfig.verb, path: d.requestConfig.path, elt: elt };
+    }
+  });
+  document.addEventListener('htmx:confirm', function (evt) {
+    if (reauthRetrying && evt.detail.elt === reauthRetrying) {
+      reauthRetrying = null;
+      evt.preventDefault();
+      evt.detail.issueRequest(true);
+    }
+  });
+  window.addEventListener('reauth-confirmed', function () {
+    var p = reauthPending;
+    reauthPending = null;
+    if (!p || !p.elt.isConnected) return;
+    reauthRetrying = p.elt;
+    htmx.ajax(p.verb, p.path, { source: p.elt });
+  });
+  window.addEventListener('reauth-cancelled', function () { reauthPending = null; });
+
   // --- HTMX Security Hardening ---
   // Restrict HTMX to same-origin requests only, preventing injected hx-get/hx-post
   // attributes from making cross-origin requests.
