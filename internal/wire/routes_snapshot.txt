@@ -381,6 +381,7 @@ GET	/sessions/:sid	internal/plugins/sessions/routes.go
 GET	/sessions/embed	internal/plugins/sessions/routes.go
 GET	/sessions/feed-settings	internal/plugins/sessions/routes.go
 GET	/sessions/feed/:token	internal/plugins/sessions/routes.go
+GET	/sessions/nights	internal/plugins/sessions/routes.go
 GET	/settings	internal/plugins/campaigns/routes.go
 GET	/settings	internal/plugins/packages/routes.go
 GET	/sidebar-config	internal/plugins/campaigns/routes.go
