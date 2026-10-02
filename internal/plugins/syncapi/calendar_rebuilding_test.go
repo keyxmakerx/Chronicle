@@ -11,59 +11,77 @@ import (
 	"github.com/labstack/echo/v4"
 )
 
-// CALV5-PLACEHOLDER: pins the one contract that matters while the calendar
-// is rebuilt — the Foundry module must be told "unavailable", never "empty".
-// V5 must delete this file along with the placeholder handler. TODO(#778):
-// Foundry sync rewiring is deliberately out of scope for calendar-v5-sky-seams.
+// calendarRoutesNotRebuilt is every CalendarAPIHandler method that still
+// answers calendarRebuilding. TODO(#869): it shrinks to empty, then this file
+// and calendarRebuilding go.
+var calendarRoutesNotRebuilt = map[string]bool{
+	"GetEventCategories":     true,
+	"GetWorldState":          true,
+	"AdvanceDate":            true,
+	"AdvanceTime":            true,
+	"UpdateCalendarSettings": true,
+	"UpdateMonths":           true,
+	"UpdateWeekdays":         true,
+	"UpdateMoons":            true,
+	"UpdateEras":             true,
+	"UpdateSeasons":          true,
+	"UpdateEventCategories":  true,
+	"SetWeather":             true,
+	"UpdateCycles":           true,
+	"UpdateFestivals":        true,
+	"ExportCalendar":         true,
+	"ImportCalendar":         true,
+	"CreateCalendar":         true,
+}
 
-// TestCalendarRoutes_AnswerRebuilding is the whole contract: every exported
-// method on the placeholder handler answers 503 with the structured body the
-// module can switch on.
-//
-// It reflects over the handler rather than listing method names, so a method
-// that survives into V5 without its real implementation cannot slip through by
-// being forgotten here.
-func TestCalendarRoutes_AnswerRebuilding(t *testing.T) {
-	h := NewCalendarAPIHandler()
+// TestCalendarRoutes_NotRebuiltAnswerRebuilding: a route not rebuilt yet
+// answers 503 calendar_rebuilding, never an empty 200 (which the module would
+// apply to a live world as "this calendar is empty") or a 404 (which it reads
+// as an old Chronicle). The handlers here touch no service, so a zero handler
+// is enough.
+func TestCalendarRoutes_NotRebuiltAnswerRebuilding(t *testing.T) {
+	h := &CalendarAPIHandler{}
 	ht := reflect.TypeOf(h)
-	if ht.NumMethod() == 0 {
-		t.Fatal("CalendarAPIHandler exports no methods — the route table cannot be held open")
-	}
-
-	for i := 0; i < ht.NumMethod(); i++ {
-		m := ht.Method(i)
-		t.Run(m.Name, func(t *testing.T) {
+	for name := range calendarRoutesNotRebuilt {
+		m, ok := ht.MethodByName(name)
+		if !ok {
+			t.Errorf("%s is listed as not rebuilt but CalendarAPIHandler has no such method", name)
+			continue
+		}
+		t.Run(name, func(t *testing.T) {
 			rec := httptest.NewRecorder()
 			c := echo.New().NewContext(httptest.NewRequest(http.MethodGet, "/", nil), rec)
-
 			out := m.Func.Call([]reflect.Value{reflect.ValueOf(h), reflect.ValueOf(c)})
-			if len(out) != 1 {
-				t.Fatalf("%s: unexpected signature, want func(echo.Context) error", m.Name)
-			}
 			if err, _ := out[0].Interface().(error); err != nil {
-				t.Fatalf("%s returned an error: %v", m.Name, err)
+				t.Fatalf("returned an error: %v", err)
 			}
-
-			// 503, not 404: a 404 tells the module this Chronicle is too old to
-			// have the endpoint, sending it down its old-build compatibility
-			// path and hiding the rebuild from the GM.
 			if rec.Code != http.StatusServiceUnavailable {
-				t.Errorf("%s answered %d, want 503 — an empty 200 would tell the module the "+
-					"campaign HAS a calendar and it is empty, and the module would apply that "+
-					"emptiness to a live Foundry world", m.Name, rec.Code)
+				t.Errorf("answered %d, want 503", rec.Code)
 			}
-
 			var body map[string]string
 			if err := json.Unmarshal(rec.Body.Bytes(), &body); err != nil {
-				t.Fatalf("%s: body is not JSON the module can parse: %v", m.Name, err)
+				t.Fatalf("body is not JSON: %v", err)
 			}
-			if body["error"] != "calendar_rebuilding" {
-				t.Errorf("%s: error code %q, want %q — the module switches on this string",
-					m.Name, body["error"], "calendar_rebuilding")
-			}
-			if strings.TrimSpace(body["message"]) == "" {
-				t.Errorf("%s: empty message — a GM reads this one", m.Name)
+			if body["error"] != "calendar_rebuilding" || strings.TrimSpace(body["message"]) == "" {
+				t.Errorf("body = %v, want error calendar_rebuilding and a message", body)
 			}
 		})
+	}
+}
+
+// TestCalendarRoutes_RebuiltAreReal: every other exported route method has a
+// real body. Reading the source, not calling it, so a method that quietly
+// falls back to calendarRebuilding is caught without a service fake.
+func TestCalendarRoutes_RebuiltAreReal(t *testing.T) {
+	ht := reflect.TypeOf(&CalendarAPIHandler{})
+	for i := 0; i < ht.NumMethod(); i++ {
+		name := ht.Method(i).Name
+		if calendarRoutesNotRebuilt[name] {
+			continue
+		}
+		body := readHandlerBody(t, "calendar_api_handler.go", name)
+		if strings.Contains(body, "calendarRebuilding(") {
+			t.Errorf("%s still answers calendarRebuilding; add it to calendarRoutesNotRebuilt or rebuild it", name)
+		}
 	}
 }

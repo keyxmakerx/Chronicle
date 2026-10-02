@@ -2943,11 +2943,7 @@ func (a *App) RegisterRoutes() {
 	// ownership sync, reusing the entities glance adapter.
 	syncAPIHandler.SetTagGrantLister(tagFetcherAdapter)
 	syncAPIHandler.SetSystemEnabler(addonService)
-	// CALV5-PLACEHOLDER: V5 must restore (syncService, calendarService) as
-	// arguments. The handler holds the calendar routes open with a 503 while
-	// the plugin is rebuilt. TODO(#778): Foundry sync rewiring is explicitly
-	// later work, deliberately out of scope for this change.
-	calendarAPIHandler := syncapi.NewCalendarAPIHandler()
+	calendarAPIHandler := syncapi.NewCalendarAPIHandler(syncService, calendarService, campaignService)
 	mediaAPIHandler := syncapi.NewMediaAPIHandler(syncService, mediaService)
 	if urlSigner != nil {
 		mediaAPIHandler.SetURLSigner(urlSigner)

@@ -117,6 +117,9 @@ func (f *fakeCalendarSvc) ListCalendars(_ context.Context, _ string, v permissio
 	f.lastViewer = v
 	return []Calendar{{ID: "cal-1"}}, nil
 }
+func (f *fakeCalendarSvc) SetCurrentDate(context.Context, string, string, int, int, int, int, int) error {
+	return nil
+}
 func (f *fakeCalendarSvc) UpdateCalendar(context.Context, string, string, UpdateCalendarInput) error {
 	return nil
 }

@@ -170,6 +170,12 @@ type CalendarService interface {
 	// visibility-filtered. No sub-resources are eager-loaded (list view).
 	ListCalendars(ctx context.Context, campaignID string, v permissions.Viewer) ([]Calendar, error)
 	UpdateCalendar(ctx context.Context, calendarID, campaignID string, input UpdateCalendarInput) error
+	// SetCurrentDate moves calendarID's current date and time, for a caller
+	// that only knows the date (the Foundry sync). A real-time calendar's date
+	// follows the wall clock, so it refuses with a validation error (422); a
+	// date or time outside the calendar's own months, days, hours or minutes
+	// is a bad request (400), so a caller can tell the two apart.
+	SetCurrentDate(ctx context.Context, calendarID, campaignID string, year, month, day, hour, minute int) error
 	DeleteCalendar(ctx context.Context, calendarID, campaignID string) error
 	SetDefaultCalendar(ctx context.Context, campaignID, calendarID string) error
 
@@ -207,8 +213,11 @@ type CalendarService interface {
 	// GetEventForViewer is GetEvent's viewer-aware sibling: it returns
 	// NotFound (never the event) unless the event belongs to calendarID,
 	// calendarID belongs to campaignID AND is itself visible to v, AND the
-	// event is visible to v.
+	// event is visible to v. Like ListEventsForMonth, a future event not yet
+	// announced (dropUnannouncedFutureEvents) is not found for a player.
 	GetEventForViewer(ctx context.Context, eventID, calendarID, campaignID string, v permissions.Viewer) (*Event, error)
+	// ListEventsForMonth applies the same player filtering as
+	// ListUpcomingEvents, including dropping future events not yet announced.
 	ListEventsForMonth(ctx context.Context, calendarID, campaignID string, year, month int, v permissions.Viewer) ([]Event, error)
 	// ListUpcomingEvents returns up to limit events on or after the
 	// calendar's current date, chronological, viewer-filtered exactly like
@@ -839,6 +848,39 @@ func (s *calendarService) UpdateCalendar(ctx context.Context, calendarID, campai
 	return nil
 }
 
+// SetCurrentDate validates the date against the calendar's own geometry and
+// writes it through UpdateCalendar, so the write path stays the one the
+// settings page uses. See the interface doc comment for the error split.
+func (s *calendarService) SetCurrentDate(ctx context.Context, calendarID, campaignID string, year, month, day, hour, minute int) error {
+	cal, err := s.calendarInCampaign(ctx, calendarID, campaignID)
+	if err != nil {
+		return err
+	}
+	if cal.UsesRealTime() {
+		return apperror.NewValidation("this calendar tracks real-world time; its date cannot be set by hand")
+	}
+	if err := s.loadCalendarGeometry(ctx, cal); err != nil {
+		return err
+	}
+	if month < 1 || month > len(cal.Months) {
+		return apperror.NewBadRequest(fmt.Sprintf("month must be between 1 and %d", len(cal.Months)))
+	}
+	if days := cal.MonthDays(month-1, year); day < 1 || day > days {
+		return apperror.NewBadRequest(fmt.Sprintf("day must be between 1 and %d for that month", days))
+	}
+	if hour < 0 || hour >= cal.HoursPerDay || minute < 0 || minute >= cal.MinutesPerHour {
+		return apperror.NewBadRequest("hour or minute is outside this calendar's day")
+	}
+	return s.UpdateCalendar(ctx, calendarID, campaignID, UpdateCalendarInput{
+		Name:          cal.Name,
+		CurrentYear:   patch.Of(year),
+		CurrentMonth:  patch.Of(month),
+		CurrentDay:    patch.Of(day),
+		CurrentHour:   patch.Of(hour),
+		CurrentMinute: patch.Of(minute),
+	})
+}
+
 // seedHemisphereSeasonsIfEmpty seeds the four default real-life seasons for
 // hemisphere onto calendarID, but ONLY when it currently has none — a
 // calendar with any authored or previously-seeded season is never
@@ -1312,7 +1354,8 @@ func buildValidatedEvent(calendarID string, input CreateEventInput) (*Event, err
 // The linked entity's name/icon/color are blanked (and the id nilled) for
 // any viewer not permitted to see that entity separately.
 func (s *calendarService) GetEventForViewer(ctx context.Context, eventID, calendarID, campaignID string, v permissions.Viewer) (*Event, error) {
-	if _, err := s.calendarInCampaignForViewer(ctx, calendarID, campaignID, v); err != nil {
+	cal, err := s.calendarInCampaignForViewer(ctx, calendarID, campaignID, v)
+	if err != nil {
 		return nil, err
 	}
 	evt, err := s.eventRepo.GetEvent(ctx, eventID)
@@ -1323,6 +1366,14 @@ func (s *calendarService) GetEventForViewer(ctx context.Context, eventID, calend
 		return nil, apperror.NewNotFound("event not found")
 	}
 	events := []Event{*evt}
+	if !v.SkipsPerUserRules() {
+		if events, err = s.dropUnannouncedFutureEvents(ctx, cal, campaignID, events); err != nil {
+			return nil, err
+		}
+		if len(events) == 0 {
+			return nil, apperror.NewNotFound("event not found")
+		}
+	}
 	if err := s.redactHiddenEntityLinks(ctx, campaignID, events, v); err != nil {
 		return nil, err
 	}
@@ -1352,6 +1403,11 @@ func (s *calendarService) ListEventsForMonth(ctx context.Context, calendarID, ca
 		return nil, err
 	}
 	events = filterRecurringToMonth(events, cal, year, month)
+	if !v.SkipsPerUserRules() {
+		if events, err = s.dropUnannouncedFutureEvents(ctx, cal, campaignID, events); err != nil {
+			return nil, err
+		}
+	}
 	if err := s.redactHiddenEntityLinks(ctx, campaignID, events, v); err != nil {
 		return nil, err
 	}

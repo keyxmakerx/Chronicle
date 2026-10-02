@@ -37,7 +37,7 @@ func newCampaignMemberTestContext(campaignID string) (echo.Context, *httptest.Re
 }
 
 func TestGetCalendarSyncBeacon_ReturnsRecordedBeacon(t *testing.T) {
-	served := time.Date(2026, 7, 17, 12, 0, 0, 0, time.UTC)
+	served := time.Date(2026, 11, 17, 12, 0, 0, 0, time.UTC)
 	repo := &mockSyncAPIRepo{
 		getBeaconFn: func(_ context.Context, campaignID string) (*CalendarDateBeacon, error) {
 			if campaignID != "camp-1" {
@@ -93,8 +93,8 @@ func TestGetCalendarSyncBeacon_NoneRecorded_ReturnsEmptyNotError(t *testing.T) {
 // carries the applied-date half alongside the served-date fields once a
 // confirm has landed for this campaign.
 func TestGetCalendarSyncBeacon_ExposesAppliedFields(t *testing.T) {
-	served := time.Date(2026, 7, 17, 12, 0, 0, 0, time.UTC)
-	applied := time.Date(2026, 7, 18, 9, 30, 0, 0, time.UTC)
+	served := time.Date(2026, 11, 17, 12, 0, 0, 0, time.UTC)
+	applied := time.Date(2026, 11, 18, 9, 30, 0, 0, time.UTC)
 	appliedYear, appliedMonth, appliedDay := 2026, 7, 18
 	repo := &mockSyncAPIRepo{
 		getBeaconFn: func(_ context.Context, _ string) (*CalendarDateBeacon, error) {
@@ -131,7 +131,7 @@ func TestGetCalendarSyncBeacon_ExposesAppliedFields(t *testing.T) {
 // leaves a beacon row whose served fields are the 0/0 "unset" sentinel, and
 // the response must omit the served date rather than surface "0000-00-00".
 func TestGetCalendarSyncBeacon_ConfirmBeforeAnyGET_ServedFieldsOmitted(t *testing.T) {
-	applied := time.Date(2026, 7, 18, 9, 30, 0, 0, time.UTC)
+	applied := time.Date(2026, 11, 18, 9, 30, 0, 0, time.UTC)
 	appliedYear, appliedMonth, appliedDay := 2026, 7, 18
 	repo := &mockSyncAPIRepo{
 		getBeaconFn: func(_ context.Context, _ string) (*CalendarDateBeacon, error) {

@@ -12,6 +12,7 @@
 package syncapi
 
 import (
+	"github.com/keyxmakerx/chronicle/internal/plugins/calendar"
 	"github.com/keyxmakerx/chronicle/internal/plugins/campaigns"
 	"github.com/keyxmakerx/chronicle/internal/plugins/entities"
 	"github.com/keyxmakerx/chronicle/internal/sanitize"
@@ -56,11 +57,22 @@ func sanitizeNotesHTMLForEgress(ns []notes.Note) {
 	}
 }
 
-// CALV5-PLACEHOLDER: V5 must restore sanitizeCalendarEventHTMLForEgress (+
-// slice variant), re-sanitizing Event.DescriptionHTML before it leaves for
-// Foundry, in the same change as the GetEvent/ListEvents handlers — pinned
-// by egress_sanitize_test.go. TODO(#778): Foundry sync rewiring is
-// deliberately out of scope for calendar-v5-sky-seams.
+// sanitizeCalendarEventHTMLForEgress re-sanitizes DescriptionHTML on a
+// calendar event response copy. Safe on nil.
+func sanitizeCalendarEventHTMLForEgress(e *calendar.Event) {
+	if e == nil {
+		return
+	}
+	e.DescriptionHTML = sanitize.HTMLPtr(e.DescriptionHTML)
+}
+
+// sanitizeCalendarEventsHTMLForEgress applies the per-event variant to every
+// element of a fresh slice (ListEvents output).
+func sanitizeCalendarEventsHTMLForEgress(es []calendar.Event) {
+	for i := range es {
+		sanitizeCalendarEventHTMLForEgress(&es[i])
+	}
+}
 
 // --- Inline-secret redaction (DM-secret egress) ---
 //
