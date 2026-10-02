@@ -38,6 +38,9 @@ func RegisterRoutes(e *echo.Echo, h *Handler, authService auth.AuthService, smtp
 	admin.POST("/campaigns/:id/join", h.JoinCampaign)
 	admin.DELETE("/campaigns/:id/leave", h.LeaveCampaign)
 
+	// Site-wide log of admin changes.
+	admin.GET("/activity", h.Activity)
+
 	// Storage management.
 	admin.GET("/storage", h.Storage)
 	admin.DELETE("/media/:fileID", h.DeleteMedia)

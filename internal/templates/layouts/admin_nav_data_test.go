@@ -22,6 +22,7 @@ func TestAdminNavCurrent(t *testing.T) {
 		{"/admin/api", "security", "/admin/api"},
 		{"/admin/api/cors", "security", "/admin/api"},
 		{"/admin/api/security", "security", "/admin/api"},
+		{"/admin/activity", "security", "/admin/activity"},
 		{"/admin/storage", "site", "/admin/storage"},
 		{"/admin/storage/settings", "site", "/admin/storage"},
 		{"/admin/data-hygiene", "site", "/admin/data-hygiene"},

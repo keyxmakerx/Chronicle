@@ -1,6 +1,7 @@
 package packages
 
 import (
+	"context"
 	"log/slog"
 	"net/http"
 	"strconv"
@@ -13,7 +14,8 @@ import (
 
 // Handler handles admin HTTP requests for the package manager plugin.
 type Handler struct {
-	service PackageService
+	activity ActivityRecorder
+	service  PackageService
 }
 
 // NewHandler creates a new package manager handler.
@@ -53,6 +55,8 @@ func (h *Handler) AddPackage(c echo.Context) error {
 		slog.String("repo", pkg.RepoURL),
 	)
 
+	h.recordActivity(c, "package.added", "package", pkg.ID, pkg.Name)
+
 	return middleware.HTMXRedirect(c, "/admin/packages")
 }
 
@@ -80,6 +84,7 @@ func (h *Handler) PruneExecute(c echo.Context) error {
 		slog.Int("removed", len(res.Removed)),
 		slog.Int64("bytes_freed", res.BytesFreed),
 	)
+	h.recordActivity(c, "package.pruned", "package", "", "")
 	return middleware.HTMXRedirect(c, "/admin/packages")
 }
 
@@ -88,9 +93,14 @@ func (h *Handler) RemovePackage(c echo.Context) error {
 	ctx := c.Request().Context()
 	id := c.Param("id")
 
+	// Read the name first: the row is gone after the removal.
+	label := h.packageLabel(ctx, id)
+
 	if err := h.service.RemovePackage(ctx, id); err != nil {
 		return echo.NewHTTPError(http.StatusBadRequest, err.Error())
 	}
+
+	h.recordActivity(c, "package.removed", "package", id, label)
 
 	return middleware.HTMXRedirect(c, "/admin/packages")
 }
@@ -132,6 +142,8 @@ func (h *Handler) InstallVersion(c echo.Context) error {
 		return echo.NewHTTPError(http.StatusBadRequest, err.Error())
 	}
 
+	h.recordActivity(c, "package.version_installed", "package", id, h.packageLabel(ctx, id))
+
 	return middleware.HTMXRedirect(c, "/admin/packages")
 }
 
@@ -149,6 +161,8 @@ func (h *Handler) SetPinnedVersion(c echo.Context) error {
 		return echo.NewHTTPError(http.StatusBadRequest, err.Error())
 	}
 
+	h.recordActivity(c, "package.version_pinned", "package", id, h.packageLabel(ctx, id))
+
 	return middleware.HTMXRedirect(c, "/admin/packages")
 }
 
@@ -160,6 +174,8 @@ func (h *Handler) ClearPinnedVersion(c echo.Context) error {
 	if err := h.service.ClearPinnedVersion(ctx, id); err != nil {
 		return echo.NewHTTPError(http.StatusBadRequest, err.Error())
 	}
+
+	h.recordActivity(c, "package.version_pinned", "package", id, h.packageLabel(ctx, id))
 
 	return middleware.HTMXRedirect(c, "/admin/packages")
 }
@@ -178,6 +194,8 @@ func (h *Handler) SetAutoUpdate(c echo.Context) error {
 	if err := h.service.SetAutoUpdate(ctx, id, policy); err != nil {
 		return echo.NewHTTPError(http.StatusBadRequest, err.Error())
 	}
+
+	h.recordActivity(c, "package.auto_update", "package", id, h.packageLabel(ctx, id))
 
 	return middleware.HTMXRedirect(c, "/admin/packages")
 }
@@ -249,6 +267,8 @@ func (h *Handler) ReviewPackage(c echo.Context) error {
 		return echo.NewHTTPError(http.StatusBadRequest, err.Error())
 	}
 
+	h.recordActivity(c, "package.reviewed", "package", id, h.packageLabel(ctx, id))
+
 	return middleware.HTMXRedirect(c, "/admin/packages")
 }
 
@@ -266,6 +286,8 @@ func (h *Handler) UpdateRepoURL(c echo.Context) error {
 		return echo.NewHTTPError(http.StatusBadRequest, err.Error())
 	}
 
+	h.recordActivity(c, "package.repo_changed", "package", id, h.packageLabel(ctx, id))
+
 	return middleware.HTMXRedirect(c, "/admin/packages")
 }
 
@@ -282,6 +304,8 @@ func (h *Handler) DeprecatePackage(c echo.Context) error {
 	if err := h.service.DeprecatePackage(ctx, id, input.Message); err != nil {
 		return echo.NewHTTPError(http.StatusBadRequest, err.Error())
 	}
+
+	h.recordActivity(c, "package.deprecated", "package", id, h.packageLabel(ctx, id))
 
 	return middleware.HTMXRedirect(c, "/admin/packages")
 }
@@ -301,6 +325,8 @@ func (h *Handler) UndeprecatePackage(c echo.Context) error {
 		return echo.NewHTTPError(http.StatusBadRequest, err.Error())
 	}
 
+	h.recordActivity(c, "package.deprecated", "package", id, h.packageLabel(ctx, id))
+
 	return middleware.HTMXRedirect(c, "/admin/packages")
 }
 
@@ -313,6 +339,8 @@ func (h *Handler) ArchivePackage(c echo.Context) error {
 		return echo.NewHTTPError(http.StatusBadRequest, err.Error())
 	}
 
+	h.recordActivity(c, "package.archived", "package", id, h.packageLabel(ctx, id))
+
 	return middleware.HTMXRedirect(c, "/admin/packages")
 }
 
@@ -324,6 +352,8 @@ func (h *Handler) UnarchivePackage(c echo.Context) error {
 	if err := h.service.UnarchivePackage(ctx, id); err != nil {
 		return echo.NewHTTPError(http.StatusBadRequest, err.Error())
 	}
+
+	h.recordActivity(c, "package.archived", "package", id, h.packageLabel(ctx, id))
 
 	return middleware.HTMXRedirect(c, "/admin/packages")
 }
@@ -374,4 +404,14 @@ func (h *Handler) SaveSecuritySettings(c echo.Context) error {
 	slog.Info("security settings updated")
 
 	return c.Redirect(http.StatusSeeOther, "/admin/packages/settings")
+}
+
+// packageLabel returns a package's name for the change log, or "" when it
+// can't be read; the id is still recorded.
+func (h *Handler) packageLabel(ctx context.Context, id string) string {
+	p, err := h.service.GetPackage(ctx, id)
+	if err != nil || p == nil {
+		return ""
+	}
+	return p.Name
 }

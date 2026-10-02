@@ -2179,6 +2179,13 @@ func (a *App) RegisterRoutes() {
 		return a.Config.Upload.MaxSize
 	})
 	adminHandler.SetBaseURL(a.Config.BaseURL)
+
+	// Site-wide admin change log, shown on admin Home. Other plugins write to
+	// it through the adapter so none of them import admin.
+	adminActivityService := admin.NewActivityService(admin.NewActivityRepository(a.DB))
+	adminHandler.SetActivityService(adminActivityService)
+	adminActivity := adminActivityAdapter{svc: adminActivityService}
+	smtpHandler.SetActivityRecorder(adminActivity)
 	adminGroup := admin.RegisterRoutes(e, adminHandler, authService, smtpHandler)
 
 	// Admin Backup plugin: lists backup artifacts and exposes a "Run
@@ -2189,6 +2196,7 @@ func (a *App) RegisterRoutes() {
 		BackupDir:  a.Config.BackupDir,
 	})
 	backupHandler := backup.NewHandler(backupSvc)
+	backupHandler.SetActivityRecorder(adminActivity)
 	backup.RegisterRoutes(adminGroup, backupHandler)
 
 	// Admin Restore plugin: lists backup manifests in BACKUP_DIR and
@@ -2203,6 +2211,7 @@ func (a *App) RegisterRoutes() {
 		BackupDir:  a.Config.BackupDir,
 	})
 	restoreHandler := restore.NewHandler(restoreSvc)
+	restoreHandler.SetActivityRecorder(adminActivity)
 	restore.RegisterRoutes(adminGroup, restoreHandler, auth.RequireReauth(authService))
 
 	// Settings plugin route registration. The service + repo were
@@ -2211,6 +2220,7 @@ func (a *App) RegisterRoutes() {
 	// closure. Per-user/campaign quotas wired via SetStorageLimiter
 	// up there too. Here we just register the admin HTTP routes.
 	settingsHandler := settings.NewHandler(settingsService)
+	settingsHandler.SetActivityRecorder(adminActivity)
 	settings.RegisterRoutes(adminGroup, settingsHandler)
 
 	// Design Lab: admin-only page hosting the dynamic-surface demo (a live
@@ -2263,6 +2273,7 @@ func (a *App) RegisterRoutes() {
 	}
 	addonService.SetSystemFinder(&systemManifestFinderAdapter{})
 	addonHandler := addons.NewHandler(addonService)
+	addonHandler.SetActivityRecorder(adminActivity)
 	addons.RegisterAdminRoutes(adminGroup, addonHandler)
 	addons.RegisterCampaignRoutes(e, addonHandler, campaignService, authService)
 
@@ -2286,6 +2297,7 @@ func (a *App) RegisterRoutes() {
 	extService := extensions.NewExtensionService(extRepo, a.Config.ExtensionsPath)
 	extService.SetMigrationRunner(extensions.NewMigrationRunner(a.DB))
 	extHandler := extensions.NewHandler(extService, a.Config.ExtensionsPath)
+	extHandler.SetActivityRecorder(adminActivity)
 	extensions.RegisterAdminRoutes(adminGroup, extHandler, auth.RequireReauth(authService))
 	extensions.RegisterCampaignRoutes(e, extHandler, campaignService, authService)
 	extensions.RegisterAssetRoutes(e, extHandler)
@@ -2456,6 +2468,7 @@ func (a *App) RegisterRoutes() {
 	})
 
 	pkgHandler := packages.NewHandler(pkgService)
+	pkgHandler.SetActivityRecorder(adminActivity)
 	pkgOwnerHandler := packages.NewOwnerHandler(pkgService)
 	// Public package file serving — always available so Foundry VTT can
 	// fetch module.json even when the admin UI is degraded.
@@ -2655,6 +2668,8 @@ func (a *App) RegisterRoutes() {
 		return out, nil
 	})
 	syncHandler.SetCORSOriginLister(settingsService)
+	syncHandler.SetActivityRecorder(adminActivity)
+	adminHandler.SetAPIAlertCounter(adminAPIAlertCounter{sync: syncService})
 	syncHandler.SetBaseURL(a.Config.BaseURL)
 	if a.PluginHealth.IsHealthy("syncapi") {
 		syncapi.RegisterAdminRoutes(adminGroup, syncHandler)

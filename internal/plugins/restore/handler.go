@@ -18,7 +18,8 @@ const confirmationToken = "RESTORE"
 // All routes are mounted under /admin/restore and inherit
 // RequireSiteAdmin from the parent group.
 type Handler struct {
-	svc Service
+	activity ActivityRecorder
+	svc      Service
 }
 
 // NewHandler constructs a Handler against the given Service.
@@ -74,5 +75,6 @@ func (h *Handler) Run(c echo.Context) error {
 		}
 		return echo.NewHTTPError(http.StatusInternalServerError, err.Error())
 	}
+	h.recordActivity(c, "restore.run", "backup", "", manifest)
 	return middleware.HTMXRedirect(c, "/admin/restore")
 }

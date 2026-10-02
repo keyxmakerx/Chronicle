@@ -101,6 +101,7 @@ var adminNav = AdminNavTree{
 		{ID: "security", Label: "Security", Items: []AdminNavItem{
 			{Label: "Sign-ins & sessions", Href: "/admin/security", Icon: "fa-shield-halved"},
 			{Label: "API & access", Href: "/admin/api", Icon: "fa-satellite-dish"},
+			{Label: "Admin activity", Href: "/admin/activity", Icon: "fa-clock-rotate-left"},
 		}},
 		{ID: "site", Label: "Site & data", Items: []AdminNavItem{
 			{Label: "Storage", Href: "/admin/storage", Icon: "fa-hard-drive"},

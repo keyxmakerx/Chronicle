@@ -21,7 +21,8 @@ import (
 // Handler handles HTTP requests for site storage settings management.
 // All routes require site admin middleware.
 type Handler struct {
-	service SettingsService
+	activity ActivityRecorder
+	service  SettingsService
 }
 
 // NewHandler creates a new settings handler.
@@ -76,6 +77,7 @@ func (h *Handler) UpdateStorageSettings(c echo.Context) error {
 		return err
 	}
 
+	h.recordActivity(c, "storage.settings_changed", "setting", "storage", "")
 	slog.Info("storage limits updated",
 		slog.String("by", auth.GetUserID(c)),
 		slog.Int64("max_upload", limits.MaxUploadSize),
@@ -383,6 +385,7 @@ func (h *Handler) UpdateCORSOrigins(c echo.Context) error {
 		return err
 	}
 
+	h.recordActivity(c, "cors.changed", "setting", "cors", "")
 	slog.Info("CORS origins updated",
 		slog.String("by", auth.GetUserID(c)),
 		slog.Int("count", len(origins)),

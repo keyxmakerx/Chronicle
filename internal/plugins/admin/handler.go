@@ -64,6 +64,9 @@ type Handler struct {
 	backupLister     BackupLister
 	pendingCounter    PendingCounter
 	addonUsageCounter AddonUsageCounter
+	apiAlertCounter   APIAlertCounter
+	// activity is the admin change log; nil-safe so a missing log never blocks an admin action.
+	activity ActivityService
 	baseURL           string
 	navPins           AdminNavPinService
 }
@@ -159,6 +162,44 @@ func (h *Handler) SetAddonUsageCounter(counter AddonUsageCounter) {
 	h.addonUsageCounter = counter
 }
 
+// SetAPIAlertCounter wires the unresolved API alert count for the Home list.
+func (h *Handler) SetAPIAlertCounter(counter APIAlertCounter) {
+	h.apiAlertCounter = counter
+}
+
+// SetActivityService wires the admin change log.
+func (h *Handler) SetActivityService(svc ActivityService) {
+	h.activity = svc
+}
+
+// record logs an admin change. Called after the change succeeded; a missing or
+// failing log never affects the response.
+func (h *Handler) record(c echo.Context, action, targetType, targetID, label string) {
+	if h.activity == nil {
+		return
+	}
+	h.activity.RecordActivity(c.Request().Context(), auth.GetUserID(c), action, targetType, targetID, label)
+}
+
+// userLabel looks up a display name for the log; empty when the lookup fails,
+// since the id is still recorded.
+func (h *Handler) userLabel(ctx context.Context, userID string) string {
+	u, err := h.authRepo.FindByID(ctx, userID)
+	if err != nil || u == nil {
+		return ""
+	}
+	return u.DisplayName
+}
+
+// campaignLabel looks up a campaign name for the log, before a delete removes it.
+func (h *Handler) campaignLabel(ctx context.Context, campaignID string) string {
+	cm, err := h.campaignService.GetByID(ctx, campaignID)
+	if err != nil || cm == nil {
+		return ""
+	}
+	return cm.Name
+}
+
 // --- Data Hygiene ---
 
 // DataHygiene renders the data hygiene dashboard (GET /admin/data-hygiene).
@@ -208,6 +249,7 @@ func (h *Handler) PurgeOrphanedMediaAPI(c echo.Context) error {
 		return apperror.NewInternal(fmt.Errorf("purging orphaned media: %w", err))
 	}
 	slog.Info("admin purged orphaned media", slog.Int("purged", purged))
+	h.record(c, "hygiene.purged", "hygiene", "", fmt.Sprintf("%d orphaned files", purged))
 	return c.Redirect(http.StatusSeeOther, "/admin/data-hygiene")
 }
 
@@ -221,6 +263,7 @@ func (h *Handler) PurgeOrphanedAPIKeysAPI(c echo.Context) error {
 		return apperror.NewInternal(fmt.Errorf("purging orphaned API keys: %w", err))
 	}
 	slog.Info("admin purged orphaned API keys", slog.Int("purged", purged))
+	h.record(c, "hygiene.purged", "hygiene", "", fmt.Sprintf("%d orphaned API keys", purged))
 	return c.Redirect(http.StatusSeeOther, "/admin/data-hygiene")
 }
 
@@ -234,6 +277,7 @@ func (h *Handler) PurgeStaleFilesAPI(c echo.Context) error {
 		return apperror.NewInternal(fmt.Errorf("purging stale files: %w", err))
 	}
 	slog.Info("admin purged stale files", slog.Int("purged", purged))
+	h.record(c, "hygiene.purged", "hygiene", "", fmt.Sprintf("%d stale files", purged))
 	return c.Redirect(http.StatusSeeOther, "/admin/data-hygiene")
 }
 
@@ -275,14 +319,43 @@ func (h *Handler) Dashboard(c echo.Context) error {
 		pendingSubmissions, _ = h.pendingCounter.CountPendingSubmissions(ctx)
 	}
 
-	// Check for degraded plugins to show alert banner.
+	// degradedPlugins feeds the Database tile (unhealthy or behind); the Needs
+	// you list splits the two because they are fixed on different pages.
 	var degradedPlugins []string
+	var unhealthyPlugins, pendingMigrations int
 	if h.databaseExplorer != nil {
 		statuses, _ := h.databaseExplorer.GetMigrationStatus(ctx)
 		for _, s := range statuses {
 			if !s.Healthy || s.Pending > 0 {
 				degradedPlugins = append(degradedPlugins, s.Slug)
 			}
+			if !s.Healthy {
+				unhealthyPlugins++
+			} else if s.Pending > 0 {
+				pendingMigrations += s.Pending
+			}
+		}
+	}
+
+	var apiAlerts int
+	if h.apiAlertCounter != nil {
+		apiAlerts, _ = h.apiAlertCounter.CountUnresolvedAPIAlerts(ctx)
+	}
+
+	needs := buildNeedsYou(needsInput{
+		UnhealthyPlugins:   unhealthyPlugins,
+		PendingMigrations:  pendingMigrations,
+		APIAlerts:          apiAlerts,
+		PendingSubmissions: pendingSubmissions,
+		SMTPConfigured:     smtpConfigured,
+		SMTPKnown:          h.smtpService != nil,
+	})
+
+	var recent []ActivityEntry
+	if h.activity != nil {
+		var err error
+		if recent, _, err = h.activity.List(ctx, 1, 10); err != nil {
+			slog.Warn("failed to load admin activity", slog.Any("error", err))
 		}
 	}
 
@@ -293,7 +366,24 @@ func (h *Handler) Dashboard(c echo.Context) error {
 		failedSystems = 0
 	}
 
-	return middleware.Render(c, http.StatusOK, AdminDashboardPage(userCount, campaignCount, mediaFileCount, totalStorageBytes, smtpConfigured, addonCount, securityStats, degradedPlugins, pendingSubmissions, registeredSystems, failedSystems))
+	return middleware.Render(c, http.StatusOK, AdminDashboardPage(userCount, campaignCount, mediaFileCount, totalStorageBytes, smtpConfigured, addonCount, securityStats, degradedPlugins, pendingSubmissions, registeredSystems, failedSystems, needs, recent))
+}
+
+// Activity renders the full paginated admin change log (GET /admin/activity).
+func (h *Handler) Activity(c echo.Context) error {
+	page, _ := strconv.Atoi(c.QueryParam("page"))
+	if page < 1 {
+		page = 1
+	}
+	var entries []ActivityEntry
+	var total int
+	if h.activity != nil {
+		var err error
+		if entries, total, err = h.activity.List(c.Request().Context(), page, activityPerPage); err != nil {
+			return apperror.NewInternal(fmt.Errorf("listing admin activity: %w", err))
+		}
+	}
+	return middleware.Render(c, http.StatusOK, AdminActivityPage(entries, total, page, activityPerPage))
 }
 
 // --- Users ---
@@ -378,6 +468,12 @@ func (h *Handler) ToggleAdmin(c echo.Context) error {
 			map[string]any{"action": action, "target_name": user.DisplayName})
 	}
 
+	if newState {
+		h.record(c, "user.admin_granted", "user", targetID, user.DisplayName)
+	} else {
+		h.record(c, "user.admin_revoked", "user", targetID, user.DisplayName)
+	}
+
 	return middleware.HTMXRedirect(c, "/admin/users")
 }
 
@@ -404,9 +500,12 @@ func (h *Handler) Campaigns(c echo.Context) error {
 func (h *Handler) DeleteCampaign(c echo.Context) error {
 	campaignID := c.Param("id")
 
+	// Read the name first: the row is gone after the delete.
+	label := h.campaignLabel(c.Request().Context(), campaignID)
 	if err := h.campaignService.Delete(c.Request().Context(), campaignID); err != nil {
 		return err
 	}
+	h.record(c, "campaign.deleted", "campaign", campaignID, label)
 
 	slog.Info("admin deleted campaign",
 		slog.String("campaign_id", campaignID),
@@ -438,6 +537,7 @@ func (h *Handler) JoinCampaign(c echo.Context) error {
 		slog.String("user_id", userID),
 		slog.String("role", roleStr),
 	)
+	h.record(c, "campaign.joined", "campaign", campaignID, h.campaignLabel(c.Request().Context(), campaignID))
 
 	return middleware.HTMXRedirect(c, "/admin/campaigns")
 }
@@ -451,6 +551,7 @@ func (h *Handler) LeaveCampaign(c echo.Context) error {
 		return err
 	}
 
+	h.record(c, "campaign.left", "campaign", campaignID, h.campaignLabel(c.Request().Context(), campaignID))
 	slog.Info("admin left campaign",
 		slog.String("campaign_id", campaignID),
 		slog.String("user_id", userID),
@@ -535,9 +636,15 @@ func (h *Handler) DeleteMedia(c echo.Context) error {
 
 	fileID := c.Param("fileID")
 
+	// Read the file name first: the row is gone after the delete.
+	var fileLabel string
+	if f, err := h.mediaService.GetByID(c.Request().Context(), fileID); err == nil && f != nil {
+		fileLabel = f.OriginalName
+	}
 	if err := h.mediaService.Delete(c.Request().Context(), fileID); err != nil {
 		return err
 	}
+	h.record(c, "media.deleted", "media", fileID, fileLabel)
 
 	slog.Info("admin deleted media file",
 		slog.String("file_id", fileID),
@@ -607,6 +714,7 @@ func (h *Handler) UpdateRegistrationMode(c echo.Context) error {
 	if err := h.settingsService.UpdateRegistrationMode(c.Request().Context(), mode); err != nil {
 		return err
 	}
+	h.record(c, "registration.mode_changed", "setting", "registration_mode", mode)
 	slog.Info("registration mode updated", slog.String("mode", mode))
 	c.Response().Header().Set("HX-Redirect", "/admin/security")
 	return c.NoContent(http.StatusOK)
@@ -631,6 +739,7 @@ func (h *Handler) TerminateSession(c echo.Context) error {
 		"", currentUserID, c.RealIP(), c.Request().UserAgent(),
 		map[string]any{"token_hash": tokenHash})
 
+	h.record(c, "session.terminated", "session", "", "")
 	slog.Info("admin terminated session",
 		slog.String("by", currentUserID),
 	)
@@ -656,6 +765,7 @@ func (h *Handler) ForceLogoutUser(c echo.Context) error {
 		targetID, currentUserID, c.RealIP(), c.Request().UserAgent(),
 		map[string]any{"sessions_destroyed": count})
 
+	h.record(c, "user.force_logout", "user", targetID, h.userLabel(c.Request().Context(), targetID))
 	slog.Info("admin force-logged out user",
 		slog.String("target_user", targetID),
 		slog.Int("sessions_destroyed", count),
@@ -686,6 +796,7 @@ func (h *Handler) DisableUser(c echo.Context) error {
 	_ = h.securityService.LogEvent(c.Request().Context(), EventUserDisabled,
 		targetID, currentUserID, c.RealIP(), c.Request().UserAgent(), nil)
 
+	h.record(c, "user.disabled", "user", targetID, h.userLabel(c.Request().Context(), targetID))
 	slog.Info("admin disabled user",
 		slog.String("target_user", targetID),
 		slog.String("by", currentUserID),
@@ -710,6 +821,7 @@ func (h *Handler) EnableUser(c echo.Context) error {
 	_ = h.securityService.LogEvent(c.Request().Context(), EventUserEnabled,
 		targetID, currentUserID, c.RealIP(), c.Request().UserAgent(), nil)
 
+	h.record(c, "user.enabled", "user", targetID, h.userLabel(c.Request().Context(), targetID))
 	slog.Info("admin enabled user",
 		slog.String("target_user", targetID),
 		slog.String("by", currentUserID),
@@ -829,6 +941,8 @@ func (h *Handler) ApplyMigrationsAPI(c echo.Context) error {
 			)
 		}
 	}
+
+	h.record(c, "migrations.applied", "database", "", "")
 
 	return middleware.HTMXRedirect(c, "/admin/database")
 }

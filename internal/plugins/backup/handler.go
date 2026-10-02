@@ -13,7 +13,8 @@ import (
 // "download artifact" actions. All routes are mounted under /admin/backup
 // and inherit RequireSiteAdmin from the parent group.
 type Handler struct {
-	svc Service
+	activity ActivityRecorder
+	svc      Service
 }
 
 // NewHandler constructs a Handler against the given Service.
@@ -61,6 +62,7 @@ func (h *Handler) Run(c echo.Context) error {
 		}
 		return echo.NewHTTPError(http.StatusInternalServerError, err.Error())
 	}
+	h.recordActivity(c, "backup.run", "backup", "", "")
 	return middleware.HTMXRedirect(c, "/admin/backup")
 }
 
