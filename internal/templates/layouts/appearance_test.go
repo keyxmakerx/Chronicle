@@ -88,7 +88,7 @@ func TestAppearanceCSSTones(t *testing.T) {
 	}
 	rootAt := strings.Index(css, ":root{")
 	darkAt := strings.Index(css, ":root.dark{")
-	if strings.Index(css, warm[0].bg) > darkAt || strings.Index(css[darkAt:], warm[1].bg) < 0 || rootAt > darkAt {
+	if strings.Index(css, warm[0].bg) > darkAt || !strings.Contains(css[darkAt:], warm[1].bg) || rootAt > darkAt {
 		t.Errorf("light tokens must sit in :root and dark in :root.dark: %s", css)
 	}
 }

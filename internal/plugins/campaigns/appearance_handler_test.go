@@ -142,7 +142,7 @@ func TestSaveAppearanceAPI_MissingContext(t *testing.T) {
 	}
 }
 
-func uploadRequest(t *testing.T, h *Handler, cc *CampaignContext, kind, filename string, data []byte) (error, *httptest.ResponseRecorder) {
+func uploadRequest(t *testing.T, h *Handler, cc *CampaignContext, kind, filename string, data []byte) (*httptest.ResponseRecorder, error) {
 	t.Helper()
 	var body bytes.Buffer
 	w := multipart.NewWriter(&body)
@@ -160,7 +160,8 @@ func uploadRequest(t *testing.T, h *Handler, cc *CampaignContext, kind, filename
 	rec := httptest.NewRecorder()
 	c := e.NewContext(req, rec)
 	c.Set(contextKeyCampaign, cc)
-	return h.UploadAppearancePictureAPI(c), rec
+	err := h.UploadAppearancePictureAPI(c)
+	return rec, err
 }
 
 func TestUploadAppearancePictureAPI(t *testing.T) {
@@ -189,7 +190,7 @@ func TestUploadAppearancePictureAPI(t *testing.T) {
 			h := NewHandler(&appearanceSvcStub{})
 			media := &appearanceMediaStub{uploadName: "2026/09/abc123.png"}
 			h.SetMediaUploader(media)
-			err, rec := uploadRequest(t, h, ownerContext(tc.role, "", nil), tc.kind, tc.filename, tc.data)
+			rec, err := uploadRequest(t, h, ownerContext(tc.role, "", nil), tc.kind, tc.filename, tc.data)
 			if tc.wantCode != 0 {
 				ae, ok := err.(*apperror.AppError)
 				if !ok || ae.Code != tc.wantCode {
@@ -224,7 +225,7 @@ func TestUploadAppearancePictureAPI(t *testing.T) {
 
 	t.Run("no uploader configured", func(t *testing.T) {
 		h := NewHandler(&appearanceSvcStub{})
-		err, _ := uploadRequest(t, h, ownerContext(RoleOwner, "", nil), "logo", "a.png", pngBytes(10))
+		_, err := uploadRequest(t, h, ownerContext(RoleOwner, "", nil), "logo", "a.png", pngBytes(10))
 		ae, ok := err.(*apperror.AppError)
 		if !ok || ae.Code != http.StatusInternalServerError {
 			t.Fatalf("err = %v, want 500", err)

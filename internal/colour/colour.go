@@ -29,7 +29,7 @@ func ValidHex(s string) bool {
 	}
 	for i := 1; i < 7; i++ {
 		c := s[i]
-		if !(c >= '0' && c <= '9' || c >= 'a' && c <= 'f' || c >= 'A' && c <= 'F') {
+		if (c < '0' || c > '9') && (c < 'a' || c > 'f') && (c < 'A' || c > 'F') {
 			return false
 		}
 	}
@@ -114,11 +114,14 @@ func toLab(rgb [3]float64) [3]float64 {
 	}
 }
 
+// cube is x³, written out as staticcheck prefers over math.Pow.
+func cube(x float64) float64 { return x * x * x }
+
 // fromLab converts OKLab to (possibly out-of-gamut) sRGB channels.
 func fromLab(lab [3]float64) [3]float64 {
-	l := math.Pow(lab[0]+0.3963377774*lab[1]+0.2158037573*lab[2], 3)
-	m := math.Pow(lab[0]-0.1055613458*lab[1]-0.0638541728*lab[2], 3)
-	s := math.Pow(lab[0]-0.0894841775*lab[1]-1.2914855480*lab[2], 3)
+	l := cube(lab[0] + 0.3963377774*lab[1] + 0.2158037573*lab[2])
+	m := cube(lab[0] - 0.1055613458*lab[1] - 0.0638541728*lab[2])
+	s := cube(lab[0] - 0.0894841775*lab[1] - 1.2914855480*lab[2])
 	return [3]float64{
 		delin(4.0767416621*l - 3.3077115913*m + 0.2309699292*s),
 		delin(-1.2684380046*l + 2.6097574011*m - 0.3413193965*s),
