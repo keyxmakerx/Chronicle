@@ -9,6 +9,7 @@ package calendar
 import (
 	"context"
 	"database/sql"
+	"encoding/json"
 	"fmt"
 	"os"
 	"strings"
@@ -276,4 +277,106 @@ func TestRecurrenceRepository_Integration_RuleAndOverrides(t *testing.T) {
 			t.Errorf("%d override rows survived their event", n)
 		}
 	})
+}
+
+// TestCalendarFormatImport_Integration_RulesRemapped round-trips repeat
+// rules through the calendar's own export format into a real database: every
+// moon, season and event id a rule names is pointed at the re-created one,
+// and a rule naming something the file does not carry becomes a one-off.
+func TestCalendarFormatImport_Integration_RulesRemapped(t *testing.T) {
+	db := openTestDB(t)
+	fixture := newTestCampaign(t, db, "rule-import")
+	eventRepo := NewEventRepository(db)
+	svc := NewCalendarService(NewCalendarRepository(db), eventRepo, NewEventKindRepository(db), NewWeatherRepository(db))
+	ctx := context.Background()
+
+	byRule, yearly, weekly := RecurrenceByRule, RecurrenceYearly, RecurrenceWeekly
+	src := &Calendar{
+		Name: "Source", Mode: ModeFantasy, CurrentYear: 1, CurrentMonth: 1, CurrentDay: 1,
+		HoursPerDay: 24, MinutesPerHour: 60, SecondsPerMinute: 60,
+		Months:   []Month{{Name: "Alpha", Days: 30}, {Name: "Beta", Days: 30}, {Name: "Gamma", Days: 30}},
+		Weekdays: []Weekday{{Name: "A"}, {Name: "B"}, {Name: "C"}, {Name: "D"}, {Name: "E"}},
+		// Export order is not id order, so a remap by position would be wrong.
+		Moons:   []Moon{{ID: 71, Name: "Selune", CycleDays: 30, Color: "#ffffff"}, {ID: 70, Name: "Shar", CycleDays: 20, Color: "#000000"}},
+		Seasons: []Season{{ID: 91, Name: "Thaw", StartMonth: 1, StartDay: 1, EndMonth: 1, EndDay: 30, Color: "#22c55e"}, {ID: 90, Name: "Harvest", StartMonth: 3, StartDay: 5, EndMonth: 3, EndDay: 30, Color: "#f59e0b"}},
+	}
+	rule := func(r RecurrenceRule) *RecurrenceRule { return &r }
+	events := []Event{
+		{ID: "src-after", Name: "Aftermath", Year: 1, Month: 1, Day: 1, IsRecurring: true, RecurrenceType: &byRule,
+			RecurrenceRule: rule(RecurrenceRule{Match: []RuleCondition{{Kind: RuleRelativeToEvent, EventID: "src-masks"}}, OffsetDays: 2})},
+		{ID: "src-masks", Name: "Masks", Year: 1, Month: 2, Day: 10, IsRecurring: true, RecurrenceType: &yearly},
+		{ID: "src-dark", Name: "Dark Moon", Year: 1, Month: 1, Day: 1, IsRecurring: true, RecurrenceType: &byRule,
+			RecurrenceRule: rule(RecurrenceRule{Match: []RuleCondition{{Kind: RuleMoonPhase, MoonID: 70, Phase: "new"}}})},
+		{ID: "src-fair", Name: "Harvest Fair", Year: 1, Month: 1, Day: 1, IsRecurring: true, RecurrenceType: &byRule,
+			RecurrenceRule: rule(RecurrenceRule{Match: []RuleCondition{{Kind: RuleSeasonStart, SeasonID: 90}}})},
+		{ID: "src-orphan", Name: "Orphan", Year: 1, Month: 1, Day: 3, IsRecurring: true, RecurrenceType: &byRule,
+			RecurrenceRule: rule(RecurrenceRule{Match: []RuleCondition{{Kind: RuleRelativeToEvent, EventID: "src-not-exported"}}})},
+		{ID: "src-watch", Name: "Watch", Year: 1, Month: 1, Day: 1, IsRecurring: true, RecurrenceType: &weekly,
+			RecurrenceRule: rule(RecurrenceRule{Match: []RuleCondition{{Kind: RuleRelativeToEvent, EventID: "src-not-exported"}}})},
+	}
+	raw, err := json.Marshal(BuildExport(src, events, true))
+	if err != nil {
+		t.Fatalf("marshal export: %v", err)
+	}
+	ir, err := parseChronicle(raw)
+	if err != nil {
+		t.Fatalf("parse: %v", err)
+	}
+	cal, err := svc.CreateCalendarFromImport(ctx, fixture.CampaignID, ir, CreateCalendarFromImportOptions{})
+	if err != nil {
+		t.Fatalf("import: %v", err)
+	}
+
+	stored, err := eventRepo.ListAllEvents(ctx, cal.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	byName := map[string]Event{}
+	for _, e := range stored {
+		byName[e.Name] = e
+	}
+	moonByName, seasonByName := map[string]int{}, map[string]int{}
+	for _, m := range cal.Moons {
+		moonByName[m.Name] = m.ID
+	}
+	for _, s := range cal.Seasons {
+		seasonByName[s.Name] = s.ID
+	}
+
+	tests := []struct {
+		event string
+		check func(e Event) bool
+	}{
+		{"Aftermath", func(e Event) bool {
+			return e.RecurrenceRule != nil && e.RecurrenceRule.Match[0].EventID == byName["Masks"].ID && e.RecurrenceRule.OffsetDays == 2
+		}},
+		{"Dark Moon", func(e Event) bool {
+			return e.RecurrenceRule != nil && e.RecurrenceRule.Match[0].MoonID == moonByName["Shar"]
+		}},
+		{"Harvest Fair", func(e Event) bool {
+			return e.RecurrenceRule != nil && e.RecurrenceRule.Match[0].SeasonID == seasonByName["Harvest"]
+		}},
+		{"Orphan", func(e Event) bool { return !e.IsRecurring && e.RecurrenceType == nil && e.RecurrenceRule == nil }},
+		{"Watch", func(e Event) bool {
+			return e.IsRecurring && e.RecurrenceType != nil && *e.RecurrenceType == RecurrenceWeekly && e.RecurrenceRule == nil
+		}},
+	}
+	for _, tt := range tests {
+		t.Run(tt.event, func(t *testing.T) {
+			e, ok := byName[tt.event]
+			if !ok {
+				t.Fatalf("event not imported")
+			}
+			if !tt.check(e) {
+				t.Errorf("imported as %+v, rule %+v", e, e.RecurrenceRule)
+			}
+		})
+	}
+	warned := false
+	for _, w := range ir.Warnings {
+		warned = warned || strings.Contains(w, `"Orphan"`)
+	}
+	if !warned {
+		t.Errorf("no warning names the event imported as a one-off: %v", ir.Warnings)
+	}
 }

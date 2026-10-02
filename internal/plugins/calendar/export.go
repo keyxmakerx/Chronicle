@@ -6,6 +6,8 @@
 // export/import round-trip covers events as well as calendar structure.
 package calendar
 
+import "encoding/json"
+
 // ChronicleExport is the top-level JSON envelope for calendar export.
 // This is Chronicle's native format — a superset of what can be imported
 // from external sources (Simple Calendar, Calendaria).
@@ -76,6 +78,9 @@ type ExportMoon struct {
 	PhaseOffset       float64 `json:"phase_offset"`
 	Color             string  `json:"color"`
 	HiddenFromPlayers bool    `json:"hidden_from_players,omitempty"`
+	// Ref is the moon's id in the exporting calendar, so a repeat rule that
+	// names it can be pointed at the re-created moon on import.
+	Ref int `json:"ref,omitempty"`
 }
 
 // ExportSeason is a season definition for export.
@@ -88,6 +93,9 @@ type ExportSeason struct {
 	Description   *string `json:"description,omitempty"`
 	Color         string  `json:"color"`
 	WeatherEffect *string `json:"weather_effect,omitempty"`
+	// Ref is the season's id in the exporting calendar, for the same reason
+	// as ExportMoon.Ref.
+	Ref int `json:"ref,omitempty"`
 }
 
 // ExportEra is an era definition for export. Field order matches EraInput's
@@ -169,6 +177,11 @@ type ExportEvent struct {
 	Icon      *string `json:"icon,omitempty"`
 	AllDay    bool    `json:"all_day"`
 	Payload   *string `json:"payload,omitempty"`
+	// Ref is the event's id in the exporting calendar, which another event's
+	// rule may name; RecurrenceRule is carried only for a "rule" event, with
+	// the exporting calendar's moon, season and event ids.
+	Ref            string          `json:"ref,omitempty"`
+	RecurrenceRule json.RawMessage `json:"recurrence_rule,omitempty"`
 }
 
 // BuildExport creates a ChronicleExport from a fully-loaded Calendar and
@@ -228,6 +241,7 @@ func BuildExport(cal *Calendar, events []Event, includeEvents bool) *ChronicleEx
 			PhaseOffset:       m.PhaseOffset,
 			Color:             m.Color,
 			HiddenFromPlayers: m.HiddenFromPlayers,
+			Ref:               m.ID,
 		})
 	}
 
@@ -242,6 +256,7 @@ func BuildExport(cal *Calendar, events []Event, includeEvents bool) *ChronicleEx
 			Description:   s.Description,
 			Color:         s.Color,
 			WeatherEffect: s.WeatherEffect,
+			Ref:           s.ID,
 		})
 	}
 
@@ -297,6 +312,10 @@ func BuildExport(cal *Calendar, events []Event, includeEvents bool) *ChronicleEx
 	// Events (optional).
 	if includeEvents && len(events) > 0 {
 		for _, evt := range events {
+			var rule json.RawMessage
+			if evt.usesRuleType() && evt.RecurrenceRule != nil {
+				rule, _ = json.Marshal(evt.RecurrenceRule) // plain structs: cannot fail
+			}
 			export.Events = append(export.Events, ExportEvent{
 				Name:                     evt.Name,
 				Description:              evt.Description,
@@ -325,6 +344,8 @@ func BuildExport(cal *Calendar, events []Event, includeEvents bool) *ChronicleEx
 				Icon:                     evt.Icon,
 				AllDay:                   evt.AllDay,
 				Payload:                  evt.Payload,
+				Ref:                      evt.ID,
+				RecurrenceRule:           rule,
 			})
 		}
 	}

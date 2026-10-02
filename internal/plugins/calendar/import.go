@@ -70,6 +70,13 @@ type ImportResult struct {
 	// the kind slug against the TARGET campaign rather than trusting a
 	// numeric id that means nothing there.
 	Events []ExportEvent `json:"events,omitempty"`
+	// MoonRefs and SeasonRefs are each moon's and season's id in the
+	// exporting calendar, in the same order as Moons and Seasons, so the
+	// repeat rules in Events can be pointed at the re-created ones. Only
+	// parseChronicle fills them; a length that no longer matches (the list
+	// was edited on the way) means no mapping at all.
+	MoonRefs   []int `json:"moon_refs,omitempty"`
+	SeasonRefs []int `json:"season_refs,omitempty"`
 	// Today is what the import file itself determined for the created
 	// calendar's current ("today") date — never a fallback this package
 	// invented on the file's behalf. Month/Day are nil when the format
@@ -271,6 +278,7 @@ func parseChronicle(data []byte) (*ImportResult, error) {
 			Color:             normalizeColor(m.Color),
 			HiddenFromPlayers: m.HiddenFromPlayers,
 		})
+		result.MoonRefs = append(result.MoonRefs, m.Ref)
 	}
 
 	// Copy seasons.
@@ -287,6 +295,7 @@ func parseChronicle(data []byte) (*ImportResult, error) {
 			Color:         normalizeColor(s.Color),
 			WeatherEffect: s.WeatherEffect,
 		})
+		result.SeasonRefs = append(result.SeasonRefs, s.Ref)
 	}
 
 	// Copy eras. A pre-V5 export has no start_month/start_day keys at all,

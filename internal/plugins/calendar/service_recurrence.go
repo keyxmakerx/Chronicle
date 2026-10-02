@@ -19,6 +19,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"sort"
 
 	"github.com/keyxmakerx/chronicle/internal/apperror"
 	"github.com/keyxmakerx/chronicle/internal/permissions"
@@ -581,4 +582,121 @@ func (s *calendarService) ListOccurrenceOverrides(ctx context.Context, calendarI
 		return nil, fmt.Errorf("list occurrence overrides: %w", err)
 	}
 	return out, nil
+}
+
+// importedRules carries a calendar-format import's repeat rules over to the
+// new calendar: the exporting calendar's moon, season and event ids mapped
+// to the re-created ones, and the new calendar's geometry to check each
+// rule against. A rule that cannot be carried whole is dropped and its
+// event imported as a one-off on its start date, with a warning: a rule
+// left pointing at the wrong moon or event would put the event on wrong
+// dates without anyone noticing.
+type importedRules struct {
+	s          *calendarService
+	cal        *Calendar // nil when no imported event repeats by a rule
+	campaignID string
+	moons      map[int]int
+	seasons    map[int]int
+	events     map[string]string
+}
+
+// newImportedRules maps ir's moon and season refs onto the moons and
+// seasons ApplyImport just created on calendarID. They were inserted in
+// list order into a fresh calendar, so sorted by id they line up with the
+// import's; a count that does not match leaves that map empty.
+func (s *calendarService) newImportedRules(ctx context.Context, calendarID, campaignID string, ir *ImportResult) (*importedRules, error) {
+	r := &importedRules{s: s, campaignID: campaignID, moons: map[int]int{}, seasons: map[int]int{}, events: map[string]string{}}
+	anyRule := false
+	for _, ee := range ir.Events {
+		anyRule = anyRule || exportEventUsesRule(ee)
+	}
+	if !anyRule {
+		return r, nil
+	}
+	cal, err := s.calRepo.GetByID(ctx, calendarID)
+	if err != nil {
+		return nil, fmt.Errorf("get calendar: %w", err)
+	}
+	if cal == nil {
+		return nil, apperror.NewNotFound("calendar not found")
+	}
+	if err := s.loadRuleGeometry(ctx, cal); err != nil {
+		return nil, err
+	}
+	r.cal = cal
+
+	moons := append([]Moon(nil), cal.Moons...)
+	sort.Slice(moons, func(i, j int) bool { return moons[i].ID < moons[j].ID })
+	if len(ir.MoonRefs) == len(ir.Moons) && len(moons) == len(ir.Moons) {
+		for i, ref := range ir.MoonRefs {
+			if ref != 0 {
+				r.moons[ref] = moons[i].ID
+			}
+		}
+	}
+	seasons := append([]Season(nil), cal.Seasons...)
+	sort.Slice(seasons, func(i, j int) bool { return seasons[i].ID < seasons[j].ID })
+	if len(ir.SeasonRefs) == len(ir.Seasons) && len(seasons) == len(ir.Seasons) {
+		for i, ref := range ir.SeasonRefs {
+			if ref != 0 {
+				r.seasons[ref] = seasons[i].ID
+			}
+		}
+	}
+	return r, nil
+}
+
+// exportEventUsesRule reports whether an imported event repeats by a rule.
+func exportEventUsesRule(ee ExportEvent) bool {
+	return ee.RecurrenceType != nil && *ee.RecurrenceType == RecurrenceByRule
+}
+
+// hasAnchor reports whether an imported event's rule names another event,
+// so it must be created after that one.
+func (r *importedRules) hasAnchor(ee ExportEvent) bool {
+	if !exportEventUsesRule(ee) {
+		return false
+	}
+	rule, err := ParseRecurrenceRule(ee.RecurrenceRule)
+	return err == nil && rule != nil && rule.hasAfterEvent()
+}
+
+// prepare puts ee's rule on input with its ids remapped, or, when the rule
+// is missing, unreadable or names something the import did not recreate,
+// turns the event into a one-off.
+func (r *importedRules) prepare(input *CreateEventInput, ee ExportEvent, ir *ImportResult) {
+	input.RecurrenceRule = nil
+	if !exportEventUsesRule(ee) {
+		return
+	}
+	rule, err := ParseRecurrenceRule(ee.RecurrenceRule)
+	if err == nil && rule != nil && r.cal != nil {
+		if mapped, ok := rule.remapped(r.moons, r.seasons, r.events); ok {
+			input.RecurrenceRule, _ = json.Marshal(mapped) // plain structs: cannot fail
+			return
+		}
+	}
+	input.IsRecurring, input.RecurrenceType = false, nil
+	ir.Warnings = append(ir.Warnings, fmt.Sprintf(
+		"event %q repeats by a rule that names something this import could not recreate; imported as a one-off on its start date", ee.Name))
+}
+
+// check holds a remapped rule to the same checks a save would, against the
+// new calendar, and turns the event into a one-off if it fails them.
+func (r *importedRules) check(ctx context.Context, evt *Event, ee ExportEvent, ir *ImportResult) {
+	if evt.RecurrenceRule == nil {
+		return
+	}
+	if err := r.s.checkRule(ctx, r.cal, r.campaignID, "", evt.RecurrenceRule, permissions.SystemViewer(int(permissions.RoleOwner))); err != nil {
+		evt.IsRecurring, evt.RecurrenceType, evt.RecurrenceRule = false, nil, nil
+		ir.Warnings = append(ir.Warnings, fmt.Sprintf(
+			"event %q has a repeat rule this calendar cannot use (%s); imported as a one-off on its start date", ee.Name, apperror.SafeMessage(err)))
+	}
+}
+
+// created records an imported event's new id under its exported one.
+func (r *importedRules) created(ee ExportEvent, evt *Event) {
+	if ee.Ref != "" {
+		r.events[ee.Ref] = evt.ID
+	}
 }

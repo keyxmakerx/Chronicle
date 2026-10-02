@@ -120,6 +120,45 @@ func (e *Event) usesRule() bool {
 	return e.IsRecurring && e.RecurrenceType != nil && *e.RecurrenceType == RecurrenceByRule && e.RecurrenceRule != nil
 }
 
+// usesRuleType reports whether e's type is "rule", the only type a rule is
+// kept on.
+func (e *Event) usesRuleType() bool {
+	return e.RecurrenceType != nil && *e.RecurrenceType == RecurrenceByRule
+}
+
+// remapped returns a copy of r with every moon, season and event id it
+// names rewritten through the maps; ok is false when any one has no
+// mapping, so the caller never keeps a rule pointing at the wrong thing.
+func (r *RecurrenceRule) remapped(moons, seasons map[int]int, events map[string]string) (*RecurrenceRule, bool) {
+	out := *r
+	out.Match = append([]RuleCondition(nil), r.Match...)
+	for i := range out.Match {
+		c := &out.Match[i]
+		if c.MoonID != 0 {
+			id, ok := moons[c.MoonID]
+			if !ok {
+				return nil, false
+			}
+			c.MoonID = id
+		}
+		if c.SeasonID != 0 {
+			id, ok := seasons[c.SeasonID]
+			if !ok {
+				return nil, false
+			}
+			c.SeasonID = id
+		}
+		if c.EventID != "" {
+			id, ok := events[c.EventID]
+			if !ok {
+				return nil, false
+			}
+			c.EventID = id
+		}
+	}
+	return &out, true
+}
+
 // isRepeating reports whether e has occurrences beyond its own date, so
 // skipping or moving one of them means something.
 func (e *Event) isRepeating() bool {

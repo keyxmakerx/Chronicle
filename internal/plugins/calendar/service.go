@@ -1181,71 +1181,28 @@ func (s *calendarService) applyImportedEvents(ctx context.Context, calendarID, c
 		slugToID[k.Slug] = k.ID
 	}
 
+	rules, err := s.newImportedRules(ctx, calendarID, campaignID, ir)
+	if err != nil {
+		return err
+	}
+
+	// Events another event's rule names go first, so the rule can point at
+	// the re-created one; an anchor never itself repeats relative to another,
+	// so two passes always suffice.
 	created := 0
-	for _, ee := range ir.Events {
-		var kindID *int
-		if ee.Kind != nil && *ee.Kind != "" {
-			if id, ok := slugToID[*ee.Kind]; ok {
-				kindID = &id
-			} else {
-				ir.Warnings = append(ir.Warnings, fmt.Sprintf(
-					"event %q referenced kind %q, which does not exist in this campaign; imported without a kind",
-					ee.Name, *ee.Kind))
+	for pass := 0; pass < 2; pass++ {
+		for _, ee := range ir.Events {
+			if rules.hasAnchor(ee) != (pass == 1) {
+				continue
+			}
+			ok, err := s.applyImportedEvent(ctx, calendarID, ee, slugToID, rules, ir)
+			if err != nil {
+				return err
+			}
+			if ok {
+				created++
 			}
 		}
-
-		// normalizeColor: the same defensive clamp import.go applies to
-		// month/season/moon/era colors, so a color value that doesn't
-		// survive the round-trip fails validation cleanly below rather than
-		// crashing the DB write under strict SQL mode. An absent or blank
-		// color is left alone (nil/"" means "inherit from kind").
-		color := ee.Color
-		if color != nil && *color != "" {
-			normalized := normalizeColor(*color)
-			color = &normalized
-		}
-
-		input := CreateEventInput{
-			Name:                     ee.Name,
-			Description:              ee.Description,
-			DescriptionHTML:          ee.DescriptionHTML,
-			Year:                     ee.Year,
-			Month:                    ee.Month,
-			Day:                      ee.Day,
-			StartHour:                ee.StartHour,
-			StartMinute:              ee.StartMinute,
-			EndYear:                  ee.EndYear,
-			EndMonth:                 ee.EndMonth,
-			EndDay:                   ee.EndDay,
-			EndHour:                  ee.EndHour,
-			EndMinute:                ee.EndMinute,
-			IsRecurring:              ee.IsRecurring,
-			RecurrenceType:           ee.RecurrenceType,
-			RecurrenceInterval:       ee.RecurrenceInterval,
-			RecurrenceEndYear:        ee.RecurrenceEndYear,
-			RecurrenceEndMonth:       ee.RecurrenceEndMonth,
-			RecurrenceEndDay:         ee.RecurrenceEndDay,
-			RecurrenceMaxOccurrences: ee.RecurrenceMaxOccurrences,
-			Visibility:               "dm_only", // fail closed — see doc comment above
-			CanAuthorDmOnly:          true,      // the fixed import default, not a per-event author escalation
-			KindID:                   kindID,
-			Announced:                ee.Announced,
-			Color:                    color,
-			Icon:                     ee.Icon,
-			AllDay:                   ee.AllDay,
-			Payload:                  ee.Payload,
-		}
-
-		evt, err := buildValidatedEvent(calendarID, input)
-		if err != nil {
-			ir.Warnings = append(ir.Warnings, fmt.Sprintf(
-				"event %q failed validation and was skipped: %v", ee.Name, err))
-			continue
-		}
-		if err := s.eventRepo.CreateEvent(ctx, evt); err != nil {
-			return fmt.Errorf("create imported event %q: %w", ee.Name, err)
-		}
-		created++
 	}
 
 	if created > 0 {
@@ -1253,6 +1210,78 @@ func (s *calendarService) applyImportedEvents(ctx context.Context, calendarID, c
 			"Imported events default to Director-only visibility; share individually if players should see them.")
 	}
 	return nil
+}
+
+// applyImportedEvent creates one imported event (see applyImportedEvents),
+// reporting whether it was created. A validation failure is a warning on
+// ir; only a storage error is returned.
+func (s *calendarService) applyImportedEvent(ctx context.Context, calendarID string, ee ExportEvent, slugToID map[string]int, rules *importedRules, ir *ImportResult) (bool, error) {
+	var kindID *int
+	if ee.Kind != nil && *ee.Kind != "" {
+		if id, ok := slugToID[*ee.Kind]; ok {
+			kindID = &id
+		} else {
+			ir.Warnings = append(ir.Warnings, fmt.Sprintf(
+				"event %q referenced kind %q, which does not exist in this campaign; imported without a kind",
+				ee.Name, *ee.Kind))
+		}
+	}
+
+	// normalizeColor: the same defensive clamp import.go applies to
+	// month/season/moon/era colors, so a color value that doesn't
+	// survive the round-trip fails validation cleanly below rather than
+	// crashing the DB write under strict SQL mode. An absent or blank
+	// color is left alone (nil/"" means "inherit from kind").
+	color := ee.Color
+	if color != nil && *color != "" {
+		normalized := normalizeColor(*color)
+		color = &normalized
+	}
+
+	input := CreateEventInput{
+		Name:                     ee.Name,
+		Description:              ee.Description,
+		DescriptionHTML:          ee.DescriptionHTML,
+		Year:                     ee.Year,
+		Month:                    ee.Month,
+		Day:                      ee.Day,
+		StartHour:                ee.StartHour,
+		StartMinute:              ee.StartMinute,
+		EndYear:                  ee.EndYear,
+		EndMonth:                 ee.EndMonth,
+		EndDay:                   ee.EndDay,
+		EndHour:                  ee.EndHour,
+		EndMinute:                ee.EndMinute,
+		IsRecurring:              ee.IsRecurring,
+		RecurrenceType:           ee.RecurrenceType,
+		RecurrenceInterval:       ee.RecurrenceInterval,
+		RecurrenceEndYear:        ee.RecurrenceEndYear,
+		RecurrenceEndMonth:       ee.RecurrenceEndMonth,
+		RecurrenceEndDay:         ee.RecurrenceEndDay,
+		RecurrenceMaxOccurrences: ee.RecurrenceMaxOccurrences,
+		Visibility:               "dm_only", // fail closed — see doc comment above
+		CanAuthorDmOnly:          true,      // the fixed import default, not a per-event author escalation
+		KindID:                   kindID,
+		Announced:                ee.Announced,
+		Color:                    color,
+		Icon:                     ee.Icon,
+		AllDay:                   ee.AllDay,
+		Payload:                  ee.Payload,
+	}
+
+	rules.prepare(&input, ee, ir)
+	evt, err := buildValidatedEvent(calendarID, input)
+	if err != nil {
+		ir.Warnings = append(ir.Warnings, fmt.Sprintf(
+			"event %q failed validation and was skipped: %v", ee.Name, err))
+		return false, nil
+	}
+	rules.check(ctx, evt, ee, ir)
+	if err := s.eventRepo.CreateEvent(ctx, evt); err != nil {
+		return false, fmt.Errorf("create imported event %q: %w", ee.Name, err)
+	}
+	rules.created(ee, evt)
+	return true, nil
 }
 
 // --- Events ---
