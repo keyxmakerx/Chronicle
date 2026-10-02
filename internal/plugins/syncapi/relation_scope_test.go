@@ -67,6 +67,10 @@ func (s *stubRelationSvcForScope) UpdateMetadata(_ context.Context, id int, meta
 	return nil
 }
 
+func (s *stubRelationSvcForScope) UpdateMetadataIf(ctx context.Context, id int, _, metadata json.RawMessage) (bool, error) {
+	return true, s.UpdateMetadata(ctx, id, metadata)
+}
+
 // newRelationScopeSvc seeds one relation owned by campaign-B (the victim) and
 // one owned by campaign-A (the negative control).
 func newRelationScopeSvc() *stubRelationSvcForScope {

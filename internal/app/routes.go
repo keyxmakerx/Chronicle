@@ -1658,6 +1658,11 @@ func (a *armoryRelationMetadataAdapter) UpdateMetadata(ctx context.Context, id i
 	return a.svc.UpdateMetadata(ctx, id, metadata)
 }
 
+// UpdateMetadataIf delegates the conditional write used for shop stock.
+func (a *armoryRelationMetadataAdapter) UpdateMetadataIf(ctx context.Context, id int, expected, metadata json.RawMessage) (bool, error) {
+	return a.svc.UpdateMetadataIf(ctx, id, expected, metadata)
+}
+
 // entityMapVerifierAdapter wraps maps.MapService to implement
 // entities.MapCampaignVerifier. Used by entityService.AssignMap to
 // confirm a map exists AND lives in the entity's own campaign before
@@ -1731,7 +1736,18 @@ type armoryBuyerAccessAdapter struct {
 
 // CanUserActAsBuyer returns true if the user has edit-level access to the
 // buyer entity. Owners short-circuit true at the entity-service layer.
-func (a *armoryBuyerAccessAdapter) CanUserActAsBuyer(ctx context.Context, entityID, userID string, role int) (bool, error) {
+func (a *armoryBuyerAccessAdapter) CanUserActAsBuyer(ctx context.Context, campaignID, entityID, userID string, role int) (bool, error) {
+	ent, err := a.svc.GetByID(ctx, entityID)
+	if err != nil {
+		var appErr *apperror.AppError
+		if errors.As(err, &appErr) && appErr.Code == http.StatusNotFound {
+			return false, nil
+		}
+		return false, err
+	}
+	if ent.CampaignID != campaignID {
+		return false, nil
+	}
 	perm, err := a.svc.CheckEntityAccess(ctx, entityID, role, userID)
 	if err != nil {
 		return false, err
@@ -1756,9 +1772,11 @@ func (a *armoryRelationFinderAdapter) GetByID(ctx context.Context, id int) (*arm
 		return nil, err
 	}
 	return &armory.RelationInfo{
-		ID:         rel.ID,
-		Metadata:   rel.Metadata,
-		CampaignID: rel.CampaignID,
+		ID:             rel.ID,
+		Metadata:       rel.Metadata,
+		CampaignID:     rel.CampaignID,
+		SourceEntityID: rel.SourceEntityID,
+		TargetEntityID: rel.TargetEntityID,
 	}, nil
 }
 

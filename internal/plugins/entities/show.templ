@@ -80,7 +80,7 @@ templ EntityShowPage(cc *campaigns.CampaignContext, entity *Entity, entityType *
 			} else {
 				<!-- Dynamic layout from entity type template -->
 				if entityType != nil && len(entityType.Layout.Rows) > 0 {
-					for _, row := range entityType.Layout.Rows {
+					for i, row := range entityType.Layout.Rows {
 						<div class="grid grid-cols-1 md:grid-cols-12 gap-4 md:gap-6 mb-4 md:mb-6">
 							for _, col := range row.Columns {
 								<div class={ entityColSpan(col.Width) }>
@@ -90,6 +90,11 @@ templ EntityShowPage(cc *campaigns.CampaignContext, entity *Entity, entityType *
 								</div>
 							}
 						</div>
+						if i == 0 && needsImplicitShopInventory(entity, entityType) {
+							<div class="mb-4 md:mb-6">
+								@blockShopInventory(cc, entity, csrfToken)
+							</div>
+						}
 					}
 				} else {
 					<!-- Fallback: default two-column layout if no layout defined -->

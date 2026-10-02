@@ -58,6 +58,16 @@ func (m *mockRelationFinder) GetByID(ctx context.Context, id int) (*RelationInfo
 
 type mockMetadataUpdater struct {
 	updateFn func(ctx context.Context, id int, metadata json.RawMessage) error
+	// ifFn, when set, decides the conditional write; otherwise it always
+	// lands and is reported through updateFn.
+	ifFn func(ctx context.Context, id int, expected, metadata json.RawMessage) (bool, error)
+}
+
+func (m *mockMetadataUpdater) UpdateMetadataIf(ctx context.Context, id int, expected, metadata json.RawMessage) (bool, error) {
+	if m.ifFn != nil {
+		return m.ifFn(ctx, id, expected, metadata)
+	}
+	return true, m.UpdateMetadata(ctx, id, metadata)
 }
 
 func (m *mockMetadataUpdater) UpdateMetadata(ctx context.Context, id int, metadata json.RawMessage) error {
@@ -71,7 +81,7 @@ type mockBuyerAccess struct {
 	canFn func(ctx context.Context, entityID, userID string, role int) (bool, error)
 }
 
-func (m *mockBuyerAccess) CanUserActAsBuyer(ctx context.Context, entityID, userID string, role int) (bool, error) {
+func (m *mockBuyerAccess) CanUserActAsBuyer(ctx context.Context, _, entityID, userID string, role int) (bool, error) {
 	if m.canFn != nil {
 		return m.canFn(ctx, entityID, userID, role)
 	}
@@ -125,8 +135,8 @@ func TestPurchase_InsufficientStock(t *testing.T) {
 	svc := NewTransactionService(&mockTransactionRepo{})
 	svc.SetRelationFinder(&mockRelationFinder{
 		getByIDFn: func(_ context.Context, _ int) (*RelationInfo, error) {
-			meta, _ := json.Marshal(shopMeta{Quantity: 2})
-			return &RelationInfo{ID: 1, CampaignID: "camp-1", Metadata: meta}, nil
+			meta := json.RawMessage(`{"quantity":2}`)
+			return &RelationInfo{ID: 1, CampaignID: "camp-1", SourceEntityID: "shop-1", TargetEntityID: "item-1", Metadata: meta}, nil
 		},
 	})
 	_, err := svc.Purchase(context.Background(), "camp-1", "user-1", 1, CreateTransactionInput{
@@ -145,8 +155,8 @@ func TestPurchase_StockDecrement(t *testing.T) {
 	svc := NewTransactionService(&mockTransactionRepo{})
 	svc.SetRelationFinder(&mockRelationFinder{
 		getByIDFn: func(_ context.Context, _ int) (*RelationInfo, error) {
-			meta, _ := json.Marshal(shopMeta{Quantity: 10})
-			return &RelationInfo{ID: 1, CampaignID: "camp-1", Metadata: meta}, nil
+			meta := json.RawMessage(`{"quantity":10}`)
+			return &RelationInfo{ID: 1, CampaignID: "camp-1", SourceEntityID: "shop-1", TargetEntityID: "item-1", Metadata: meta}, nil
 		},
 	})
 	svc.SetRelationMetadataUpdater(&mockMetadataUpdater{
@@ -168,11 +178,7 @@ func TestPurchase_StockDecrement(t *testing.T) {
 		t.Errorf("stock remaining = %d, want 7", result.StockRemaining)
 	}
 	// Verify updated metadata.
-	var m shopMeta
-	if err := json.Unmarshal(updatedMeta, &m); err != nil {
-		t.Fatalf("bad metadata: %v", err)
-	}
-	if m.Quantity != 7 {
+	if m := parseShopMeta(updatedMeta); m.Quantity != 7 {
 		t.Errorf("metadata quantity = %d, want 7", m.Quantity)
 	}
 }
@@ -300,8 +306,12 @@ func TestParseShopMeta(t *testing.T) {
 		expected int // quantity
 	}{
 		{"with quantity", json.RawMessage(`{"quantity":5}`), 5},
-		{"zero defaults to unlimited", json.RawMessage(`{}`), -1},
+		{"absent is unlimited", json.RawMessage(`{}`), -1},
+		{"null is unlimited", json.RawMessage(`{"quantity":null}`), -1},
+		{"zero is sold out, not unlimited", json.RawMessage(`{"quantity":0}`), 0},
 		{"explicit unlimited", json.RawMessage(`{"quantity":-1}`), -1},
+		{"legacy unlimited flag", json.RawMessage(`{"quantity":0,"unlimited":true}`), -1},
+		{"numeric price alongside", json.RawMessage(`{"price":15,"quantity":3}`), 3},
 		{"nil input", nil, -1},
 		{"invalid json", json.RawMessage(`{bad`), -1},
 	}
@@ -362,8 +372,8 @@ func TestPurchase_BuyerAccessDenied(t *testing.T) {
 	svc := NewTransactionService(repo)
 	svc.SetRelationFinder(&mockRelationFinder{
 		getByIDFn: func(_ context.Context, _ int) (*RelationInfo, error) {
-			meta, _ := json.Marshal(shopMeta{Quantity: 5})
-			return &RelationInfo{ID: 1, CampaignID: "camp-1", Metadata: meta}, nil
+			meta := json.RawMessage(`{"quantity":5}`)
+			return &RelationInfo{ID: 1, CampaignID: "camp-1", SourceEntityID: "shop-1", TargetEntityID: "item-1", Metadata: meta}, nil
 		},
 	})
 	svc.SetRelationMetadataUpdater(&mockMetadataUpdater{
@@ -423,5 +433,136 @@ func TestPurchase_BuyerAccessSkippedWhenNoBuyer(t *testing.T) {
 	}
 	if checkerCalled {
 		t.Error("access checker was invoked for a no-buyer purchase")
+	}
+}
+
+// shopRelation builds a finder returning shop-1's listing of item-1 with the
+// given metadata.
+func shopRelation(meta string) *mockRelationFinder {
+	return &mockRelationFinder{getByIDFn: func(_ context.Context, _ int) (*RelationInfo, error) {
+		return &RelationInfo{ID: 1, CampaignID: "camp-1", SourceEntityID: "shop-1", TargetEntityID: "item-1", Metadata: json.RawMessage(meta)}, nil
+	}}
+}
+
+func buyOne() CreateTransactionInput {
+	return CreateTransactionInput{ShopEntityID: "shop-1", ItemEntityID: "item-1", RelationID: 1, Quantity: 1}
+}
+
+// TestPurchase_KeepsOtherMetadata pins that a purchase rewrites only the
+// quantity: the shop widget's price and stock flag must survive it.
+func TestPurchase_KeepsOtherMetadata(t *testing.T) {
+	var updated json.RawMessage
+	svc := NewTransactionService(&mockTransactionRepo{})
+	svc.SetRelationFinder(shopRelation(`{"price":15,"quantity":2,"in_stock":true,"custom":"x"}`))
+	svc.SetRelationMetadataUpdater(&mockMetadataUpdater{updateFn: func(_ context.Context, _ int, m json.RawMessage) error {
+		updated = m
+		return nil
+	}})
+	if _, err := svc.Purchase(context.Background(), "camp-1", "user-1", 1, buyOne()); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	var got map[string]any
+	if err := json.Unmarshal(updated, &got); err != nil {
+		t.Fatalf("bad metadata: %v", err)
+	}
+	want := map[string]any{"price": float64(15), "quantity": float64(1), "in_stock": true, "custom": "x"}
+	for k, v := range want {
+		if got[k] != v {
+			t.Errorf("%s = %v, want %v (full: %s)", k, got[k], v, updated)
+		}
+	}
+}
+
+// TestPurchase_StockRules pins which listings can be bought: sold-out (0)
+// and out-of-stock items refuse, and a relation that isn't this shop's
+// listing of this item is not found.
+func TestPurchase_StockRules(t *testing.T) {
+	tests := []struct {
+		name    string
+		rel     *RelationInfo
+		wantErr bool
+	}{
+		{"last unit sells", &RelationInfo{SourceEntityID: "shop-1", TargetEntityID: "item-1", Metadata: json.RawMessage(`{"quantity":1}`)}, false},
+		{"sold out refuses", &RelationInfo{SourceEntityID: "shop-1", TargetEntityID: "item-1", Metadata: json.RawMessage(`{"quantity":0}`)}, true},
+		{"unlimited sells", &RelationInfo{SourceEntityID: "shop-1", TargetEntityID: "item-1", Metadata: json.RawMessage(`{"quantity":null}`)}, false},
+		{"marked out of stock refuses", &RelationInfo{SourceEntityID: "shop-1", TargetEntityID: "item-1", Metadata: json.RawMessage(`{"in_stock":false}`)}, true},
+		{"other shop's relation refuses", &RelationInfo{SourceEntityID: "shop-2", TargetEntityID: "item-1", Metadata: json.RawMessage(`{"quantity":5}`)}, true},
+		{"other item's relation refuses", &RelationInfo{SourceEntityID: "shop-1", TargetEntityID: "item-2", Metadata: json.RawMessage(`{"quantity":5}`)}, true},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			tt.rel.ID, tt.rel.CampaignID = 1, "camp-1"
+			updated := false
+			svc := NewTransactionService(&mockTransactionRepo{})
+			svc.SetRelationFinder(&mockRelationFinder{getByIDFn: func(_ context.Context, _ int) (*RelationInfo, error) { return tt.rel, nil }})
+			svc.SetRelationMetadataUpdater(&mockMetadataUpdater{updateFn: func(_ context.Context, _ int, _ json.RawMessage) error {
+				updated = true
+				return nil
+			}})
+			_, err := svc.Purchase(context.Background(), "camp-1", "user-1", 1, buyOne())
+			if (err != nil) != tt.wantErr {
+				t.Fatalf("err = %v, wantErr %v", err, tt.wantErr)
+			}
+			if tt.wantErr && updated {
+				t.Error("stock was rewritten on a refused purchase")
+			}
+		})
+	}
+}
+
+// TestPurchase_ChargesListedPrice pins that the transaction records the
+// shop's listed price, whatever the client claims, and that a purchase
+// naming no listing is refused.
+func TestPurchase_ChargesListedPrice(t *testing.T) {
+	var got *Transaction
+	svc := NewTransactionService(&mockTransactionRepo{createFn: func(_ context.Context, tx *Transaction) error {
+		got = tx
+		return nil
+	}})
+	svc.SetRelationFinder(shopRelation(`{"price":15,"currency":"sp","quantity":null}`))
+	in := buyOne()
+	in.Quantity = 2
+	in.PriceNumeric, in.PricePaid, in.Currency = 0, "0 gp", "gp"
+	if _, err := svc.Purchase(context.Background(), "camp-1", "user-1", 1, in); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if got.PriceNumeric == nil || *got.PriceNumeric != 30 || got.Currency != "sp" || got.PricePaid == nil || *got.PricePaid != "30 sp" {
+		t.Errorf("recorded %v %q %v, want 30 sp", got.PriceNumeric, got.Currency, got.PricePaid)
+	}
+
+	in = buyOne()
+	in.RelationID = 0
+	if _, err := svc.Purchase(context.Background(), "camp-1", "user-1", 1, in); err == nil {
+		t.Error("a purchase naming no shop listing must be refused")
+	}
+}
+
+// TestPurchase_LastUnitRace pins that a purchase whose stock write loses to
+// another buyer re-reads the listing: here the other buyer took the last
+// unit, so this purchase must be refused, not oversold.
+func TestPurchase_LastUnitRace(t *testing.T) {
+	stored := json.RawMessage(`{"price":5,"quantity":1}`)
+	reads := 0
+	svc := NewTransactionService(&mockTransactionRepo{})
+	svc.SetRelationFinder(&mockRelationFinder{getByIDFn: func(_ context.Context, _ int) (*RelationInfo, error) {
+		reads++
+		return &RelationInfo{ID: 1, CampaignID: "camp-1", SourceEntityID: "shop-1", TargetEntityID: "item-1", Metadata: stored}, nil
+	}})
+	svc.SetRelationMetadataUpdater(&mockMetadataUpdater{ifFn: func(_ context.Context, _ int, expected, m json.RawMessage) (bool, error) {
+		if reads == 1 {
+			// Another buyer's write lands between this read and this write.
+			stored = json.RawMessage(`{"price":5,"quantity":0}`)
+		}
+		if string(expected) != string(stored) {
+			return false, nil
+		}
+		stored = m
+		return true, nil
+	}})
+	if _, err := svc.Purchase(context.Background(), "camp-1", "user-1", 1, buyOne()); err == nil {
+		t.Fatal("the last unit was sold twice")
+	}
+	if reads != 2 {
+		t.Errorf("reads = %d, want 2 (one retry after the lost write)", reads)
 	}
 }
