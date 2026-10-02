@@ -520,7 +520,7 @@
   // (moves every event touching the selection by N days), plus Paint
   // weather, which sets a weather on every chosen day, and Generate…, which
   // opens calendar_weather_sheet.js for them. The mockup's Lock action is
-  // not wired yet (TODO(#765)).
+  // not wired yet (TODO(#918)).
   // ------------------------------------------------------------------
   CalendarEditor.prototype._buildBulkBar = function () {
     var wrap = document.createElement('div');
