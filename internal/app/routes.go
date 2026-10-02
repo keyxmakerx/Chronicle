@@ -2297,7 +2297,7 @@ func (a *App) RegisterRoutes() {
 	addonService.SetSystemFinder(&systemManifestFinderAdapter{})
 	addonHandler := addons.NewHandler(addonService)
 	addonHandler.SetActivityRecorder(adminActivity)
-	addons.RegisterAdminRoutes(adminGroup, addonHandler)
+	addons.RegisterAdminRoutes(adminGroup, addonHandler, auth.RequireReauth(authService))
 	addons.RegisterCampaignRoutes(e, addonHandler, campaignService, authService)
 
 	// Campaign media browser routes (gated behind media-gallery addon).
@@ -2696,7 +2696,7 @@ func (a *App) RegisterRoutes() {
 	adminHandler.SetAPIAlertCounter(adminAPIAlertCounter{sync: syncService})
 	syncHandler.SetBaseURL(a.Config.BaseURL)
 	if a.PluginHealth.IsHealthy("syncapi") {
-		syncapi.RegisterAdminRoutes(adminGroup, syncHandler)
+		syncapi.RegisterAdminRoutes(adminGroup, syncHandler, auth.RequireReauth(authService))
 		syncapi.RegisterCampaignRoutes(e, syncHandler, campaignService, authService)
 	} else {
 		slog.Warn("syncapi plugin degraded — routes not registered")

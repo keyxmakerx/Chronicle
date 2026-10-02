@@ -298,6 +298,8 @@
   document.addEventListener('htmx:responseError', function (evt) {
     var xhr = evt.detail.xhr;
     var status = xhr ? xhr.status : 0;
+    // The password modal is the answer to a reauth 403, not an error toast.
+    if (Chronicle.isReauthResponse && Chronicle.isReauthResponse(xhr)) return;
     // Skip if server already sent a chronicle:notify via HX-Trigger.
     if (xhr && xhr.getResponseHeader && xhr.getResponseHeader('HX-Trigger')) {
       try {

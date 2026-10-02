@@ -26,6 +26,13 @@ templ AdminAddonsPageTempl(addons []Addon, csrfToken string) {
 				</div>
 			</div>
 
+			if len(addons) == 0 {
+				<div class="card p-8 text-center text-fg-muted">
+					<i class="fa-solid fa-plug text-2xl mb-2 block"></i>
+					<p class="text-sm">No features are registered yet.</p>
+				</div>
+			}
+
 			// Active addons.
 			if countAddonsByStatus(addons, StatusActive) > 0 {
 				<div>
@@ -133,7 +140,7 @@ templ adminAddonCard(a Addon, csrfToken string) {
 		<div class="pt-3 border-t border-edge flex items-center justify-between">
 			<div class="flex items-center gap-2">
 				<span class="inline-flex items-center px-2 py-0.5 text-xs rounded-md bg-surface-alt text-fg-secondary">
-					{ string(a.Category) }
+					{ categoryLabel(a.Category) }
 				</span>
 				if a.Version != "" {
 					<span class="text-xs text-fg-muted">v{ a.Version }</span>
@@ -146,7 +153,7 @@ templ adminAddonCard(a Addon, csrfToken string) {
 						<form method="POST" hx-put={ fmt.Sprintf("/admin/addons/%d/status", a.ID) } class="inline">
 							<input type="hidden" name="csrf_token" value={ csrfToken }/>
 							<input type="hidden" name="status" value="active"/>
-							<button type="submit" class="text-xs text-emerald-600 hover:text-emerald-700 dark:text-emerald-400 dark:hover:text-emerald-300" title="Activate">
+							<button type="submit" class="text-xs text-emerald-600 hover:text-emerald-700 dark:text-emerald-400 dark:hover:text-emerald-300" title="Activate" aria-label={ "Activate " + a.Name }>
 								<i class="fa-solid fa-check"></i>
 							</button>
 						</form>
@@ -157,17 +164,17 @@ templ adminAddonCard(a Addon, csrfToken string) {
 					}
 				}
 				if a.Status != StatusDeprecated {
-					<form method="POST" hx-put={ fmt.Sprintf("/admin/addons/%d/status", a.ID) } class="inline">
+					<form method="POST" hx-put={ fmt.Sprintf("/admin/addons/%d/status", a.ID) } hx-confirm={ "Deprecate " + a.Name + "? Campaigns can no longer turn it on." } class="inline">
 						<input type="hidden" name="csrf_token" value={ csrfToken }/>
 						<input type="hidden" name="status" value="deprecated"/>
-						<button type="submit" class="text-xs text-amber-600 hover:text-amber-700 dark:text-amber-400 dark:hover:text-amber-300 ml-1" title="Deprecate">
+						<button type="submit" class="text-xs text-amber-600 hover:text-amber-700 dark:text-amber-400 dark:hover:text-amber-300 ml-1" title="Deprecate" aria-label={ "Deprecate " + a.Name }>
 							<i class="fa-solid fa-archive"></i>
 						</button>
 					</form>
 				}
 				<form method="POST" hx-delete={ fmt.Sprintf("/admin/addons/%d", a.ID) } hx-confirm="Delete this feature? This will also remove it from all campaigns." class="inline">
 					<input type="hidden" name="csrf_token" value={ csrfToken }/>
-					<button type="submit" class="text-xs text-red-500 hover:text-red-600 ml-1" title="Delete">
+					<button type="submit" class="text-xs text-red-500 hover:text-red-600 ml-1" title="Delete" aria-label={ "Delete " + a.Name }>
 						<i class="fa-solid fa-trash"></i>
 					</button>
 				</form>
@@ -187,6 +194,21 @@ templ addonStatusBadge(status AddonStatus) {
 			Deprecated
 		</span>
 	}
+}
+
+// categoryLabel turns the stored category into the words an admin reads.
+func categoryLabel(c AddonCategory) string {
+	switch c {
+	case CategorySystem:
+		return "Game system"
+	case CategoryWidget:
+		return "Widget"
+	case CategoryIntegration:
+		return "Integration"
+	case CategoryPlugin:
+		return "Plugin"
+	}
+	return string(c)
 }
 
 // countAddonsByStatus counts addons with the given status.

@@ -200,6 +200,12 @@ func (h *Handler) UninstallExtension(c echo.Context) error {
 	h.recordActivity(c, "extension.uninstalled", "extension", extID, label)
 
 	if middleware.IsHTMX(c) {
+		// The detail page has no list to swap into; send the browser back to
+		// the list instead of injecting list markup into the button.
+		if c.QueryParam("from") == "detail" {
+			c.Response().Header().Set("HX-Redirect", "/admin/extensions")
+			return c.NoContent(http.StatusOK)
+		}
 		exts, _ := h.svc.List(c.Request().Context())
 		if exts == nil {
 			exts = []Extension{}

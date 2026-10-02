@@ -2,6 +2,7 @@ package backup
 
 import (
 	"errors"
+	"log/slog"
 	"net/http"
 
 	"github.com/labstack/echo/v4"
@@ -60,7 +61,10 @@ func (h *Handler) Run(c echo.Context) error {
 		if errors.Is(err, ErrAlreadyRunning) {
 			return echo.NewHTTPError(http.StatusConflict, "a backup is already running; wait for it to finish")
 		}
-		return echo.NewHTTPError(http.StatusInternalServerError, err.Error())
+		// The script output is on the page's "technical details" block and in
+		// the log; the error text can carry paths and command output.
+		slog.Error("backup run failed", slog.Any("error", err))
+		return echo.NewHTTPError(http.StatusInternalServerError, "The backup could not be completed. Open the technical details on this page, or check the server log.")
 	}
 	h.recordActivity(c, "backup.run", "backup", "", "")
 	return middleware.HTMXRedirect(c, "/admin/backup")

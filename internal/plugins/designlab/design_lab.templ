@@ -9,7 +9,7 @@ import "github.com/keyxmakerx/chronicle/internal/templates/layouts"
 // box expand/collapse primitive, an action that pushes an overlay, and the
 // mini->full launch (container-transform). Admin-only via /admin/design-lab.
 templ SurfaceDemoPage() {
-	@layouts.App("Surface Demo - Admin") {
+	@layouts.App("Design Lab") {
 		<!-- Sample System consumer: registers the box renderers + mounts the sheet.
 		     Loaded defer; it polls for Chronicle.surface (the frame loads later in
 		     base.templ) before mounting. -->
@@ -18,7 +18,7 @@ templ SurfaceDemoPage() {
 		<div class="max-w-5xl mx-auto space-y-6 p-4">
 			<header class="space-y-1.5">
 				<h1 class="text-xl font-bold text-fg">
-					<i class="fa-solid fa-wand-magic-sparkles mr-2 text-accent"></i>Dynamic Surface Demo
+					<i class="fa-solid fa-wand-magic-sparkles mr-2 text-accent"></i>Design Lab
 				</h1>
 				<p class="text-sm text-fg-secondary max-w-3xl">
 					A live character sheet built by the frame (<code class="px-1 rounded bg-surface-alt text-xs">Chronicle.surface</code>)
@@ -33,20 +33,15 @@ templ SurfaceDemoPage() {
 			<!-- Mini profile card → launches the full sheet (the per-player card pattern). -->
 			<section class="space-y-2">
 				<p class="section-header">Mini profile &mdash; click to open the full sheet</p>
-				<div id="surface-demo-mini"></div>
+				<div id="surface-demo-mini"><p class="text-sm text-fg-muted" role="status">Loading the sample profile card…</p></div>
 			</section>
 
 			<!-- The inline surface: rows -> columns -> boxes, mounted by the frame. -->
 			<section class="space-y-2">
 				<p class="section-header">Inline sheet</p>
-				<div id="surface-demo-root"></div>
+				<div id="surface-demo-root"><p class="text-sm text-fg-muted" role="status">Loading the sample sheet… If this stays here, reload the page.</p></div>
 			</section>
 
-			<p class="text-xs text-fg-muted">
-				Frame: <code class="px-1 rounded bg-surface-alt">static/js/widgets/dynamic_surface.js</code>
-				&middot; Sample System: <code class="px-1 rounded bg-surface-alt">static/js/widgets/surface_demo.js</code>
-				&middot; Design: Cordinator <code class="px-1 rounded bg-surface-alt">plans/2026-06-21-dynamic-widget-ui-framework-design.md</code>
-			</p>
 		</div>
 	}
 }

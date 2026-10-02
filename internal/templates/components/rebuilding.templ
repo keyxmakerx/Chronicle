@@ -14,7 +14,7 @@ package components
 // FeatureRebuilding is the full-surface notice: the feature's own page.
 templ FeatureRebuilding(featureName string) {
 	<div class="flex flex-col items-center justify-center py-20 px-6">
-		<div class="max-w-md w-full bg-surface-raised border border-border rounded-lg p-8 text-center">
+		<div class="max-w-md w-full bg-surface-raised border border-edge rounded-lg p-8 text-center">
 			<div class="text-4xl mb-4">
 				<i class="fa-solid fa-screwdriver-wrench text-fg-muted"></i>
 			</div>
@@ -37,7 +37,7 @@ templ FeatureRebuilding(featureName string) {
 // — an entity block, a dashboard block, a bound widget host. It keeps the
 // slot occupied rather than removing it, so the owner's layout isn't altered.
 templ FeatureRebuildingBlock(featureName string) {
-	<div class="border border-dashed border-border rounded-lg p-6 text-center">
+	<div class="border border-dashed border-edge rounded-lg p-6 text-center">
 		<i class="fa-solid fa-screwdriver-wrench text-fg-muted mb-2"></i>
 		<p class="text-sm text-fg-secondary">
 			{ featureName } is being rebuilt.

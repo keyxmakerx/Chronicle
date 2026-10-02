@@ -264,7 +264,7 @@ templ AdminSidebarNav() {
 				@adminNavLink(adminNav.Home)
 				if len(pinned) > 0 {
 					<div role="group" aria-label="Pinned admin pages">
-						<div class="px-4 pt-3 pb-1 text-[9px] font-semibold uppercase tracking-widest text-gray-500">Pinned</div>
+						<div class="px-4 pt-3 pb-1 text-xs font-semibold uppercase tracking-wider text-gray-500">Pinned</div>
 						for _, it := range pinned {
 							@adminNavLink(it)
 						}
@@ -290,12 +290,12 @@ templ adminNavSection(sec AdminNavSection, isCurrent bool, pins []string) {
 			aria-expanded={ strconv.FormatBool(isCurrent) }
 			:aria-expanded="!!secs[id]"
 			aria-controls={ "admin-nav-sec-" + sec.ID }
-			class="w-full flex items-center gap-2 px-4 pt-3 pb-1 text-[9px] font-semibold uppercase tracking-widest text-gray-500 hover:text-gray-300 transition-colors text-left"
+			class="w-full flex items-center gap-2 px-4 pt-3 pb-1 text-xs font-semibold uppercase tracking-wider text-gray-500 hover:text-gray-300 transition-colors text-left"
 		>
 			<span>{ sec.Label }</span>
 			if n := adminNavSectionCount(ctx, sec); n > 0 {
 				<span
-					class="inline-flex items-center justify-center min-w-4 h-4 px-1 text-[9px] font-bold text-white bg-red-500 rounded-full"
+					class="inline-flex items-center justify-center min-w-4 h-4 px-1 text-[10px] font-bold text-white bg-red-500 rounded-full"
 					x-show="!secs[id]"
 					aria-label={ fmt.Sprintf("%d need attention", n) }
 				>

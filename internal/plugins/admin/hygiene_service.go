@@ -59,6 +59,9 @@ type DataHygieneData struct {
 	OrphanedAPIKeys []OrphanedAPIKey
 	StaleFiles      []StaleFile
 	CSRFToken       string
+	// ScanFailed is set when any scan errored, so an empty list is not read as
+	// "nothing found".
+	ScanFailed bool
 }
 
 // DataHygieneScanner detects and cleans up orphaned data across the system.

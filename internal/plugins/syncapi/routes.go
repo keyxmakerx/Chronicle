@@ -8,8 +8,10 @@ import (
 )
 
 // RegisterAdminRoutes adds API monitoring routes to the admin group.
-// These routes require site admin privileges.
-func RegisterAdminRoutes(adminGroup *echo.Group, h *Handler) {
+// These routes require site admin privileges. reauth guards the writes that
+// change who can reach the API: blocking or unblocking an address, and
+// switching off or revoking a key.
+func RegisterAdminRoutes(adminGroup *echo.Group, h *Handler, reauth echo.MiddlewareFunc) {
 	// Dashboard.
 	adminGroup.GET("/api", h.AdminDashboard)
 
@@ -21,12 +23,12 @@ func RegisterAdminRoutes(adminGroup *echo.Group, h *Handler) {
 	adminGroup.PUT("/api/security/:eventID/resolve", h.ResolveEvent)
 
 	// IP blocklist management.
-	adminGroup.POST("/api/ip-blocks", h.BlockIP)
-	adminGroup.DELETE("/api/ip-blocks/:blockID", h.UnblockIP)
+	adminGroup.POST("/api/ip-blocks", h.BlockIP, reauth)
+	adminGroup.DELETE("/api/ip-blocks/:blockID", h.UnblockIP, reauth)
 
 	// Admin key management (can act on any key).
-	adminGroup.PUT("/api/keys/:keyID/toggle", h.AdminToggleKey)
-	adminGroup.DELETE("/api/keys/:keyID", h.AdminRevokeKey)
+	adminGroup.PUT("/api/keys/:keyID/toggle", h.AdminToggleKey, reauth)
+	adminGroup.DELETE("/api/keys/:keyID", h.AdminRevokeKey, reauth)
 }
 
 // RegisterCampaignRoutes adds API key management routes for campaign owners.

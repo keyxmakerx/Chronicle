@@ -7,10 +7,10 @@ import (
 
 // SMTPSettingsPage renders the full SMTP settings page (admin only).
 templ SMTPSettingsPage(settings *SMTPSettings, csrfToken, errMsg string) {
-	@layouts.App("SMTP Settings - Admin") {
+	@layouts.App("Email - Admin") {
 		<div class="max-w-2xl mx-auto">
 			<div class="mb-6">
-				<h1 class="text-2xl font-bold text-fg">SMTP Settings</h1>
+				<h1 class="text-2xl font-bold text-fg">Email</h1>
 				<p class="text-sm text-fg-secondary mt-1">
 					Configure outbound email for password resets and campaign transfer notifications.
 				</p>
@@ -163,6 +163,7 @@ templ SMTPFormComponent(settings *SMTPSettings, csrfToken, errMsg, successMsg st
 			>
 				Test Connection
 			</button>
+			<span class="text-xs text-fg-muted">Tests the saved settings. Save first.</span>
 			<a
 				href="/admin"
 				class="text-sm text-fg-secondary hover:text-fg transition-colors ml-auto"
@@ -172,7 +173,7 @@ templ SMTPFormComponent(settings *SMTPSettings, csrfToken, errMsg, successMsg st
 		</div>
 		<!-- Send Test Email -->
 		<div class="pt-4 border-t border-edge">
-			<label class="block text-sm font-medium text-fg-body mb-2">Send Test Email</label>
+			<label class="block text-sm font-medium text-fg-body mb-2">Send a test email</label>
 			<div class="flex items-center gap-3">
 				<input
 					type="email"
@@ -193,7 +194,7 @@ templ SMTPFormComponent(settings *SMTPSettings, csrfToken, errMsg, successMsg st
 				</button>
 			</div>
 			<p class="text-xs text-fg-muted mt-1">
-				Sends a real email to verify the full delivery pipeline.
+				Sends a real email using the saved settings, so save any changes first.
 			</p>
 		</div>
 	</form>

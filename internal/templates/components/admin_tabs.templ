@@ -30,8 +30,13 @@ var (
 	}}
 	AdminTabsStorage = AdminTabGroup{Title: "Storage & cleanup", Tabs: []AdminTab{
 		{Label: "Overview & files", Href: "/admin/storage", Icon: "fa-hard-drive"},
-		{Label: "Limits", Href: "/admin/storage/settings", Icon: "fa-gauge-high"},
+		{Label: "Limits", Href: "/admin/storage?tab=limits", Icon: "fa-gauge-high"},
 		{Label: "Cleanup", Href: "/admin/data-hygiene", Icon: "fa-broom"},
+	}}
+	// Backup and restore are separate plugins; the tabs link between them.
+	AdminTabsBackup = AdminTabGroup{Title: "Backups & restore", Tabs: []AdminTab{
+		{Label: "Backups", Href: "/admin/backup", Icon: "fa-box-archive"},
+		{Label: "Restore", Href: "/admin/restore", Icon: "fa-rotate-left"},
 	}}
 	// The CORS and request-log endpoints answer JSON only, so they are not
 	// pages and cannot be tabs; with one tab the strip is left out.

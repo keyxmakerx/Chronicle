@@ -8,12 +8,13 @@ import (
 )
 
 // RegisterAdminRoutes adds addon management routes to the admin group.
-// These routes require site admin privileges.
-func RegisterAdminRoutes(adminGroup *echo.Group, h *Handler) {
+// These routes require site admin privileges. reauth guards deleting a
+// feature, which removes it from every campaign.
+func RegisterAdminRoutes(adminGroup *echo.Group, h *Handler, reauth echo.MiddlewareFunc) {
 	adminGroup.GET("/addons", h.AdminAddonsPage)
 	adminGroup.POST("/addons", h.CreateAddon)
 	adminGroup.PUT("/addons/:addonID/status", h.UpdateAddonStatus)
-	adminGroup.DELETE("/addons/:addonID", h.DeleteAddon)
+	adminGroup.DELETE("/addons/:addonID", h.DeleteAddon, reauth)
 }
 
 // RegisterCampaignRoutes adds per-campaign addon management routes.

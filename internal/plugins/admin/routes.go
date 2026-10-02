@@ -35,7 +35,7 @@ func RegisterRoutes(e *echo.Echo, h *Handler, authService auth.AuthService, smtp
 	// Campaign management.
 	admin.GET("/campaigns", h.Campaigns)
 	admin.DELETE("/campaigns/:id", h.DeleteCampaign, reauth)
-	admin.POST("/campaigns/:id/join", h.JoinCampaign)
+	admin.POST("/campaigns/:id/join", h.JoinCampaign, reauth)
 	admin.DELETE("/campaigns/:id/leave", h.LeaveCampaign)
 
 	// Site-wide log of admin changes.
@@ -43,12 +43,12 @@ func RegisterRoutes(e *echo.Echo, h *Handler, authService auth.AuthService, smtp
 
 	// Storage management.
 	admin.GET("/storage", h.Storage)
-	admin.DELETE("/media/:fileID", h.DeleteMedia)
+	admin.DELETE("/media/:fileID", h.DeleteMedia, reauth)
 
 	// Security dashboard.
 	admin.GET("/security", h.Security)
 	admin.POST("/security/registration", h.UpdateRegistrationMode, reauth)
-	admin.DELETE("/security/sessions/:hash", h.TerminateSession)
+	admin.DELETE("/security/sessions/:hash", h.TerminateSession, reauth)
 	admin.POST("/security/users/:id/force-logout", h.ForceLogoutUser, reauth)
 	admin.PUT("/security/users/:id/disable", h.DisableUser, reauth)
 	admin.PUT("/security/users/:id/enable", h.EnableUser, reauth)
@@ -78,7 +78,7 @@ func RegisterRoutes(e *echo.Echo, h *Handler, authService auth.AuthService, smtp
 
 	// SMTP settings (delegates to SMTP plugin handler).
 	if smtpHandler != nil {
-		smtp.RegisterRoutes(admin, smtpHandler)
+		smtp.RegisterRoutes(admin, smtpHandler, reauth)
 	}
 
 	return admin

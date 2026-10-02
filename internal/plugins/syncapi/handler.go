@@ -392,7 +392,8 @@ func (h *Handler) AdminDashboard(c echo.Context) error {
 	topPaths, _ := h.service.GetTopPaths(ctx, since, 10)
 	topKeys, _ := h.service.GetTopKeys(ctx, since, 10)
 
-	secFilter := SecurityEventFilter{Limit: 20}
+	// Same window as the stats and the page copy ("last 24 hours").
+	secFilter := SecurityEventFilter{Limit: 20, Since: &since}
 	secEvents, _, _ := h.service.ListSecurityEvents(ctx, secFilter)
 
 	ipBlocks, _ := h.service.ListIPBlocks(ctx)
@@ -542,11 +543,22 @@ func (h *Handler) UnblockIP(c echo.Context) error {
 		return apperror.NewBadRequest("invalid block ID")
 	}
 
+	// Read the address first so the log names it; the row is gone afterwards.
+	var addr string
+	if blocks, lerr := h.service.ListIPBlocks(c.Request().Context()); lerr == nil {
+		for _, b := range blocks {
+			if b.ID == blockID {
+				addr = b.IPAddress
+				break
+			}
+		}
+	}
+
 	if err := h.service.UnblockIP(c.Request().Context(), blockID); err != nil {
 		return err
 	}
 
-	h.recordActivity(c, "ipblock.changed", "ip_block", strconv.Itoa(blockID), "")
+	h.recordActivity(c, "ipblock.changed", "ip_block", strconv.Itoa(blockID), addr)
 
 	return middleware.HTMXRedirect(c, "/admin/api")
 }
@@ -560,6 +572,7 @@ func (h *Handler) AdminToggleKey(c echo.Context) error {
 
 	action := c.FormValue("action")
 	ctx := c.Request().Context()
+	keyName := h.keyLabel(c, keyID)
 
 	if action == "activate" {
 		if err := h.service.ActivateKey(ctx, keyID); err != nil {
@@ -571,9 +584,19 @@ func (h *Handler) AdminToggleKey(c echo.Context) error {
 		}
 	}
 
-	h.recordActivity(c, "apikey.changed", "api_key", strconv.Itoa(keyID), "")
+	h.recordActivity(c, "apikey.changed", "api_key", strconv.Itoa(keyID), keyName)
 
 	return middleware.HTMXRedirect(c, "/admin/api")
+}
+
+// keyLabel is the key's name for the activity log, or "" when it cannot be
+// read; the log then falls back to a generic label.
+func (h *Handler) keyLabel(c echo.Context, keyID int) string {
+	k, err := h.service.GetKey(c.Request().Context(), keyID)
+	if err != nil || k == nil {
+		return ""
+	}
+	return k.Name
 }
 
 // AdminRevokeKey handles DELETE /admin/api/keys/:keyID — admin can revoke any key.
@@ -583,11 +606,14 @@ func (h *Handler) AdminRevokeKey(c echo.Context) error {
 		return apperror.NewBadRequest("invalid key ID")
 	}
 
+	// Read the name before revoking; the key may not be readable afterwards.
+	keyName := h.keyLabel(c, keyID)
+
 	if err := h.service.RevokeKey(c.Request().Context(), keyID); err != nil {
 		return err
 	}
 
-	h.recordActivity(c, "apikey.changed", "api_key", strconv.Itoa(keyID), "")
+	h.recordActivity(c, "apikey.changed", "api_key", strconv.Itoa(keyID), keyName)
 
 	return middleware.HTMXRedirect(c, "/admin/api")
 }

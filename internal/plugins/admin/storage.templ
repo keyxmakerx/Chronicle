@@ -117,11 +117,19 @@ func formatTimeRemaining(t *time.Time) string {
 	return fmt.Sprintf("%dm", int(math.Floor(remaining.Minutes())))
 }
 
+// storageTabHref names the shared-strip tab that matches the open view.
+func storageTabHref(data StoragePageData) string {
+	if data.LimitsTab {
+		return components.AdminTabsStorage.Tabs[1].Href
+	}
+	return components.AdminTabsStorage.Tabs[0].Href
+}
+
 // AdminStoragePage renders the combined storage management and settings admin page.
 templ AdminStoragePage(data StoragePageData) {
-	@layouts.App("Storage - Admin") {
-		<div class="max-w-6xl mx-auto space-y-4" x-data="{ tab: 'files' }">
-			@components.AdminGroupHeading(components.AdminTabsStorage, "/admin/storage")
+	@layouts.App("Storage & cleanup") {
+		<div class="max-w-6xl mx-auto space-y-4">
+			@components.AdminGroupHeading(components.AdminTabsStorage, storageTabHref(data))
 			<!-- Inline stats -->
 			<div class="flex flex-wrap items-center gap-2">
 				<div class="flex items-center gap-4 text-sm">
@@ -157,37 +165,13 @@ templ AdminStoragePage(data StoragePageData) {
 				</div>
 			}
 
-			<!-- Tabs -->
-			<div class="border-b border-edge">
-				<nav class="flex gap-6">
-					<button
-						@click="tab='files'"
-						:class="tab==='files' ? 'border-accent text-accent' : 'border-transparent text-fg-secondary hover:text-fg-body'"
-						class="pb-2 text-sm font-medium border-b-2 transition-colors"
-					>
-						<i class="fa-solid fa-photo-film mr-1"></i>
-						Files ({ fmt.Sprintf("%d", data.TotalFiles) })
-					</button>
-					<button
-						@click="tab='limits'"
-						:class="tab==='limits' ? 'border-accent text-accent' : 'border-transparent text-fg-secondary hover:text-fg-body'"
-						class="pb-2 text-sm font-medium border-b-2 transition-colors"
-					>
-						<i class="fa-solid fa-sliders mr-1"></i>
-						Limits & Overrides
-					</button>
-				</nav>
-			</div>
-
-			<!-- Files Tab -->
-			<div x-show="tab==='files'" x-cloak>
-				@storageFilesTab(data)
-			</div>
-
-			<!-- Limits Tab -->
-			<div x-show="tab==='limits'" x-cloak>
+			<!-- The shared tab strip above picks the view server-side, so the strip
+			     and the page can never disagree about which tab is open. -->
+			if data.LimitsTab {
 				@storageLimitsTab(data)
-			</div>
+			} else {
+				@storageFilesTab(data)
+			}
 		</div>
 	}
 }
@@ -414,7 +398,7 @@ templ storageLimitsTab(data StoragePageData) {
 				</div>
 
 				<!-- Add User Override Form -->
-				@userOverrideForm(data.Users, data.CSRFToken)
+				@userOverrideForm(data.Users)
 
 				<!-- Existing User Overrides -->
 				if len(data.UserLimits) == 0 {
@@ -491,7 +475,7 @@ templ storageLimitsTab(data StoragePageData) {
 				</div>
 
 				<!-- Add Campaign Override Form -->
-				@campaignOverrideForm(data.Campaigns, data.CSRFToken)
+				@campaignOverrideForm(data.Campaigns)
 
 				<!-- Existing Campaign Overrides -->
 				if len(data.CampaignLimits) == 0 {
@@ -573,10 +557,10 @@ templ storageLimitsTab(data StoragePageData) {
 
 			<div class="grid grid-cols-1 lg:grid-cols-2 gap-4">
 				<!-- User Bypass Form -->
-				@userBypassForm(data.Users, data.CSRFToken)
+				@userBypassForm(data.Users)
 
 				<!-- Campaign Bypass Form -->
-				@campaignBypassForm(data.Campaigns, data.CSRFToken)
+				@campaignBypassForm(data.Campaigns)
 			</div>
 		</div>
 
@@ -594,17 +578,20 @@ templ storageLimitsTab(data StoragePageData) {
 }
 
 // userOverrideForm renders the add/update user override form with a dropdown.
-templ userOverrideForm(users []auth.User, csrfToken string) {
+templ userOverrideForm(users []auth.User) {
 	<form
 		class="p-3 bg-surface-alt rounded-lg"
-		x-data={ fmt.Sprintf("{ userId: '', csrf: '%s' }", csrfToken) }
+		x-data="{ userId: '' }"
 		@submit.prevent="
 			if (!userId) return;
 			const fd = new FormData($el);
 			Chronicle.apiFetch('/admin/users/' + userId + '/storage', {
 				method: 'PUT',
 				body: fd
-			}).then(() => window.location.reload());
+			}).then((res) => {
+					if (res.ok) { window.location.reload(); return; }
+					Chronicle.notify('That change was not saved. Please try again.', 'error');
+				}).catch(() => Chronicle.notify('Could not reach the server. Please try again.', 'error'));
 		"
 	>
 		<div class="grid grid-cols-1 sm:grid-cols-2 gap-2">
@@ -656,17 +643,20 @@ templ userOverrideForm(users []auth.User, csrfToken string) {
 }
 
 // campaignOverrideForm renders the add/update campaign override form with a dropdown.
-templ campaignOverrideForm(allCampaigns []campaigns.Campaign, csrfToken string) {
+templ campaignOverrideForm(allCampaigns []campaigns.Campaign) {
 	<form
 		class="p-3 bg-surface-alt rounded-lg"
-		x-data={ fmt.Sprintf("{ campaignId: '', csrf: '%s' }", csrfToken) }
+		x-data="{ campaignId: '' }"
 		@submit.prevent="
 			if (!campaignId) return;
 			const fd = new FormData($el);
 			Chronicle.apiFetch('/admin/campaigns/' + campaignId + '/storage', {
 				method: 'PUT',
 				body: fd
-			}).then(() => window.location.reload());
+			}).then((res) => {
+					if (res.ok) { window.location.reload(); return; }
+					Chronicle.notify('That change was not saved. Please try again.', 'error');
+				}).catch(() => Chronicle.notify('Could not reach the server. Please try again.', 'error'));
 		"
 	>
 		<div class="grid grid-cols-1 sm:grid-cols-2 gap-2">
@@ -711,21 +701,24 @@ templ campaignOverrideForm(allCampaigns []campaigns.Campaign, csrfToken string) 
 }
 
 // userBypassForm renders the form for setting a temporary user bypass.
-templ userBypassForm(users []auth.User, csrfToken string) {
+templ userBypassForm(users []auth.User) {
 	<div class="p-3 bg-surface-alt rounded-lg">
 		<div class="flex items-center gap-2 mb-2">
 			<i class="fa-solid fa-user text-blue-500 text-xs"></i>
 			<h4 class="text-xs font-semibold text-fg">User Bypass</h4>
 		</div>
 		<form
-			x-data={ fmt.Sprintf("{ userId: '', csrf: '%s' }", csrfToken) }
+			x-data="{ userId: '' }"
 			@submit.prevent="
 				if (!userId) return;
 				const fd = new FormData($el);
 				Chronicle.apiFetch('/admin/users/' + userId + '/storage/bypass', {
 					method: 'PUT',
 					body: fd
-				}).then(() => window.location.reload());
+				}).then((res) => {
+					if (res.ok) { window.location.reload(); return; }
+					Chronicle.notify('That change was not saved. Please try again.', 'error');
+				}).catch(() => Chronicle.notify('Could not reach the server. Please try again.', 'error'));
 			"
 		>
 			<div class="grid grid-cols-1 sm:grid-cols-2 gap-2">
@@ -777,21 +770,24 @@ templ userBypassForm(users []auth.User, csrfToken string) {
 }
 
 // campaignBypassForm renders the form for setting a temporary campaign bypass.
-templ campaignBypassForm(allCampaigns []campaigns.Campaign, csrfToken string) {
+templ campaignBypassForm(allCampaigns []campaigns.Campaign) {
 	<div class="p-3 bg-surface-alt rounded-lg">
 		<div class="flex items-center gap-2 mb-2">
 			<i class="fa-solid fa-book-open text-emerald-500 text-xs"></i>
 			<h4 class="text-xs font-semibold text-fg">Campaign Bypass</h4>
 		</div>
 		<form
-			x-data={ fmt.Sprintf("{ campaignId: '', csrf: '%s' }", csrfToken) }
+			x-data="{ campaignId: '' }"
 			@submit.prevent="
 				if (!campaignId) return;
 				const fd = new FormData($el);
 				Chronicle.apiFetch('/admin/campaigns/' + campaignId + '/storage/bypass', {
 					method: 'PUT',
 					body: fd
-				}).then(() => window.location.reload());
+				}).then((res) => {
+					if (res.ok) { window.location.reload(); return; }
+					Chronicle.notify('That change was not saved. Please try again.', 'error');
+				}).catch(() => Chronicle.notify('Could not reach the server. Please try again.', 'error'));
 			"
 		>
 			<div class="grid grid-cols-1 sm:grid-cols-2 gap-2">

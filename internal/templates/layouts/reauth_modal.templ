@@ -40,7 +40,7 @@ templ ReauthModal() {
 					if (r.ok) {
 						show = false;
 						$refs.reauthPassword.value = '';
-						// Retry the original action by dispatching a custom event.
+						// boot.js re-sends the refused request on this event.
 						window.dispatchEvent(new CustomEvent('reauth-confirmed'));
 					} else {
 						errEl.textContent = 'Incorrect password. Please try again.';
@@ -64,7 +64,7 @@ templ ReauthModal() {
 				<div class="mt-4 flex justify-end gap-3">
 					<button
 						type="button"
-						@click="show = false; $refs.reauthPassword.value = ''"
+						@click="show = false; $refs.reauthPassword.value = ''; window.dispatchEvent(new CustomEvent('reauth-cancelled'))"
 						class="btn-secondary"
 					>
 						Cancel
