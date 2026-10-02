@@ -237,12 +237,12 @@ func (r *weatherRepo) SetDays(ctx context.Context, calendarID string, days []Day
 	if err != nil {
 		return err
 	}
-	defer manual.Close()
+	defer func() { _ = manual.Close() }()
 	generated, err := tx.PrepareContext(ctx, upsertGeneratedDaySQL)
 	if err != nil {
 		return err
 	}
-	defer generated.Close()
+	defer func() { _ = generated.Close() }()
 	for _, d := range days {
 		in := d.WeatherInput
 		stmt, source := manual, WeatherSourceManual
@@ -276,7 +276,7 @@ func (r *weatherRepo) ClearDays(ctx context.Context, calendarID string, dates []
 	if err != nil {
 		return err
 	}
-	defer stmt.Close()
+	defer func() { _ = stmt.Close() }()
 	for _, d := range dates {
 		if _, err := stmt.ExecContext(ctx, calendarID, d.Year, d.Month, d.Day); err != nil {
 			return err
