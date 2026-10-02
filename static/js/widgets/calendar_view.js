@@ -908,6 +908,7 @@
       try {
         this.skyDock = new SkyPane.Dock({
           card: this.calEl, wrap: wrap, chip: chip, seed: this.calendarId, name: this.cal.name,
+          campaignId: this.campaignId, calendarId: this.calendarId,
           followers: function () {
             var out = [], n;
             for (n = self.calEl.nextElementSibling; n; n = n.nextElementSibling) out.push(n);
