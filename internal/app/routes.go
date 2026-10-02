@@ -2274,7 +2274,7 @@ func (a *App) RegisterRoutes() {
 	addonService.SetSystemFinder(&systemManifestFinderAdapter{})
 	addonHandler := addons.NewHandler(addonService)
 	addonHandler.SetActivityRecorder(adminActivity)
-	addons.RegisterAdminRoutes(adminGroup, addonHandler)
+	addons.RegisterAdminRoutes(adminGroup, addonHandler, auth.RequireReauth(authService))
 	addons.RegisterCampaignRoutes(e, addonHandler, campaignService, authService)
 
 	// Campaign media browser routes (gated behind media-gallery addon).

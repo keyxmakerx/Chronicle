@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"net"
 	"strings"
 	"time"
 
@@ -559,6 +560,14 @@ func (s *syncAPIService) BlockIP(ctx context.Context, ip, reason, adminID string
 	if ip == "" {
 		return nil, apperror.NewBadRequest("ip address is required")
 	}
+	// Blocks match the request address exactly, so anything that isn't a
+	// single IP would never match; store the canonical form so "::1" and
+	// "0:0::1" are the same block.
+	parsed := net.ParseIP(ip)
+	if parsed == nil {
+		return nil, apperror.NewBadRequest("enter a single IP address, like 203.0.113.7")
+	}
+	ip = parsed.String()
 
 	block := &IPBlock{
 		IPAddress: ip,

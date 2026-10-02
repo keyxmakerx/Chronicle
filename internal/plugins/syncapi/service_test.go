@@ -885,6 +885,33 @@ func TestBlockIP_WhitespaceIP(t *testing.T) {
 	assertAppError(t, err, 400)
 }
 
+func TestBlockIP_RejectsNonIP(t *testing.T) {
+	for _, in := range []string{"not-an-ip", "10.0.0.0/8", "999.1.1.1", "example.com"} {
+		t.Run(in, func(t *testing.T) {
+			svc := NewSyncAPIService(&mockSyncAPIRepo{})
+			_, err := svc.BlockIP(context.Background(), in, "reason", "admin-1", nil)
+			assertAppError(t, err, 400)
+		})
+	}
+}
+
+func TestBlockIP_StoresCanonicalForm(t *testing.T) {
+	var got string
+	repo := &mockSyncAPIRepo{
+		addIPBlockFn: func(ctx context.Context, block *IPBlock) error {
+			got = block.IPAddress
+			return nil
+		},
+	}
+	svc := NewSyncAPIService(repo)
+	if _, err := svc.BlockIP(context.Background(), " 0:0::1 ", "", "admin-1", nil); err != nil {
+		t.Fatal(err)
+	}
+	if got != "::1" {
+		t.Fatalf("stored %q, want ::1", got)
+	}
+}
+
 func TestBlockIP_EmptyReason(t *testing.T) {
 	var capturedBlock *IPBlock
 	repo := &mockSyncAPIRepo{
