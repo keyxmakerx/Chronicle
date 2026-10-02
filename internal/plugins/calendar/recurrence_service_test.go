@@ -493,6 +493,7 @@ func TestPreviewRecurrence(t *testing.T) {
 		{"count capped at ten", playerViewer("p"), `{"match":[{"kind":"weekday","weekday":2}]}`, 50, 10, 0},
 		{"hidden anchor answers as unknown to a player", playerViewer("p"), `{"match":[{"kind":"relative_to_event","event_id":"secret"}]}`, 3, 0, http.StatusUnprocessableEntity},
 		{"hidden anchor previews for the owner", ownerViewer("o"), `{"match":[{"kind":"relative_to_event","event_id":"secret"}]}`, 3, 3, 0},
+		{"first day of any season", playerViewer("p"), `{"match":[{"kind":"season_start"}]}`, 3, 3, 0},
 		{"never matches: empty, flagged", ownerViewer("o"), `{"match":[{"kind":"month","month":1},{"kind":"day_of_month","day":31}]}`, 3, 0, 0},
 	}
 	for _, tt := range tests {

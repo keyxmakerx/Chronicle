@@ -316,7 +316,7 @@
       case 'month':
         return sel('m', (env.cal.months || []).map(function (m, i) { return [i + 1, m.name]; }), c.m, 'Month');
       case 'season':
-        return sel('season', Rl.seasonsOf(env).map(function (s) { return [s.id, s.name]; }), c.season, 'Season');
+        return sel('season', [[0, 'any season']].concat(Rl.seasonsOf(env).map(function (s) { return [s.id, s.name]; })), c.season || 0, 'Season');
       case 'event':
         var evs = env.events.map(function (e) { return [e.id, e.name]; });
         if (c.event && !evs.some(function (e) { return e[0] === c.event; })) evs.unshift([c.event, Rl.eventName(env, c.event)]);

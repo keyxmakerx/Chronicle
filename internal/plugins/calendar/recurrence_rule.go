@@ -275,7 +275,8 @@ func (c *RuleCondition) validateShape() error {
 		}
 	case RuleSeason, RuleSeasonStart:
 		allowed = map[string]bool{"season_id": true}
-		if c.SeasonID <= 0 {
+		// season_start without a season_id is "the first day of any season".
+		if c.SeasonID < 0 || (c.SeasonID == 0 && c.Kind == RuleSeason) {
 			return apperror.NewValidation("season needs a season_id")
 		}
 	case RuleAfterEvent:
@@ -379,6 +380,12 @@ func (r *RecurrenceRule) validateAgainstCalendar(cal *Calendar, visibleMoon func
 				return bad("month is not a month of this calendar")
 			}
 		case RuleSeason, RuleSeasonStart:
+			if c.SeasonID == 0 {
+				if len(cal.Seasons) == 0 {
+					return bad("this calendar has no seasons, so a rule cannot use the first day of any season")
+				}
+				continue
+			}
 			found := false
 			for _, s := range cal.Seasons {
 				if s.ID == c.SeasonID {

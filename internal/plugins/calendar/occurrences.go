@@ -398,16 +398,17 @@ func (x *expander) natural(e *Event, from, to DayDate, limit, depth int) ([]DayD
 
 // compiledCond is one rule condition ready to test a day cheaply.
 type compiledCond struct {
-	kind     string
-	moon     *Moon
-	target   float64
-	set      map[int]bool
-	n, wd    int
-	day      int
-	season   *Season
-	anchorAt []DayDate  // anchor occurrence dates, sorted, for after_event
-	next     int        // first anchorAt entry not behind lag
-	lag      *dayCursor // walks `days` behind the scan, for after_event
+	kind      string
+	moon      *Moon
+	target    float64
+	set       map[int]bool
+	n, wd     int
+	day       int
+	season    *Season
+	anySeason bool       // season_start without a season: the first day of any season
+	anchorAt  []DayDate  // anchor occurrence dates, sorted, for after_event
+	next      int        // first anchorAt entry not behind lag
+	lag       *dayCursor // walks `days` behind the scan, for after_event
 }
 
 // ruleNatural walks the days a rule's matches could fall on and returns the
@@ -605,6 +606,13 @@ func (x *expander) compileRule(r *RecurrenceRule, scanStart, scanEnd DayDate, de
 				cc.set[m] = true
 			}
 		case RuleSeason, RuleSeasonStart:
+			if c.Kind == RuleSeasonStart && c.SeasonID == 0 {
+				if len(x.cal.Seasons) == 0 {
+					return nil, false, false
+				}
+				cc.anySeason = true
+				break
+			}
 			for i := range x.cal.Seasons {
 				if x.cal.Seasons[i].ID == c.SeasonID {
 					cc.season = &x.cal.Seasons[i]
@@ -686,7 +694,18 @@ func (x *expander) dayMatches(conds []compiledCond, c *dayCursor) bool {
 				return false
 			}
 		case RuleSeasonStart:
-			if c.m != cc.season.StartMonth || c.d != cc.season.StartDay {
+			if cc.anySeason {
+				starts := false
+				for i := range x.cal.Seasons {
+					if c.m == x.cal.Seasons[i].StartMonth && c.d == x.cal.Seasons[i].StartDay {
+						starts = true
+						break
+					}
+				}
+				if !starts {
+					return false
+				}
+			} else if c.m != cc.season.StartMonth || c.d != cc.season.StartDay {
 				return false
 			}
 		case RuleAfterEvent:

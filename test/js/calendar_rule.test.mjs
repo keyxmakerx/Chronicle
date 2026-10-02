@@ -47,6 +47,7 @@ test('rule <-> form round trip, one case per condition kind', () => {
     { match: [{ kind: 'day_of_month', day: -1 }] },
     { match: [{ kind: 'month', month: 9 }] },
     { match: [{ kind: 'season_start', season_id: 7 }] },
+    { match: [{ kind: 'season_start' }] },
     { match: [{ kind: 'relative_to_event', event_id: 'e-mask' }], offset_days: 2 },
     { match: [full, { kind: 'weekday', weekday: 5 }], every: 3, offset_days: -1 }
   ];
@@ -101,6 +102,9 @@ test('summary sentences', () => {
     [f([{ k: 'event', event: 'e-mask' }]), 'The same days as the Festival of Masks.'],
     [f([{ k: 'wd', wds: [0, 1, 2, 3, 4] }]), 'Every Moonday, Tideday, Earthday, Kingsday or Fireday.'],
     [f([{ k: 'season', season: 7 }]), 'The first day of Spring.'],
+    [f([{ k: 'season', season: 0 }]), 'The first day of every season.'],
+    [f([{ k: 'season', season: 0 }], { every: 2 }), 'Every other first day of a season.'],
+    [f([{ k: 'wd', wds: [4] }, { k: 'season', season: 0 }]), 'Every Fireday, only when it falls on the first day of a season.'],
     [f([]), 'Add a condition to start.']
   ];
   for (const [form, want] of cases) assert.equal(R.summary(form, env), want);
@@ -118,7 +122,7 @@ test('summaryInline reads after "Repeats:"', () => {
 
 test('ready-made rules use the calendar\'s own names and include the extras', () => {
   const ids = R.presets(env).map((p) => p.id);
-  for (const id of ['full-moon', 'new-moon', 'before-full', 'third-full', 'first-wd', 'last-wd', 'last-day', 'weekdays-only', 'after-event']) {
+  for (const id of ['full-moon', 'new-moon', 'before-full', 'third-full', 'first-wd', 'last-wd', 'last-day', 'season-start', 'weekdays-only', 'after-event']) {
     assert.ok(ids.includes(id), id + ' offered');
   }
   const by = Object.fromEntries(R.presets(env).map((p) => [p.id, p]));
@@ -134,7 +138,7 @@ test('ready-made rules use the calendar\'s own names and include the extras', ()
 test('a calendar with no moons, seasons or events hides those kinds and rules', () => {
   const bare = { cal: { weekdays: cal.weekdays, months: cal.months }, events: [], hiddenOk: true };
   const ids = R.presets(bare).map((p) => p.id);
-  for (const id of ['full-moon', 'new-moon', 'before-full', 'third-full', 'full-on-wd', 'after-event']) assert.ok(!ids.includes(id), id + ' hidden');
+  for (const id of ['full-moon', 'new-moon', 'before-full', 'third-full', 'full-on-wd', 'after-event', 'season-start']) assert.ok(!ids.includes(id), id + ' hidden');
   assert.deepEqual(R.availableKinds(bare, { conds: [] }), ['wd', 'nth', 'dom', 'month']);
   // A kind an existing rule already uses stays selectable.
   assert.ok(R.availableKinds(bare, { conds: [{ k: 'moon' }] }).includes('moon'));
@@ -184,6 +188,14 @@ test('defaultCond opens on something real for this calendar', () => {
   assert.deepEqual(R.defaultCond('wd', env, { wd: 5 }), { k: 'wd', wds: [5] });
   assert.deepEqual(R.defaultCond('wd', env, { wd: 40 }), { k: 'wd', wds: [6] });
   assert.deepEqual(R.defaultCond('month', env, { m: 99 }), { k: 'month', m: 9 });
-  assert.deepEqual(R.defaultCond('season', env, {}), { k: 'season', season: 7 });
+  assert.deepEqual(R.defaultCond('season', env, {}), { k: 'season', season: 0 });
   assert.deepEqual(R.defaultCond('event', env, {}), { k: 'event', event: 'e-mask' });
+});
+
+test('"any season" validates with seasons present and is a ready-made rule', () => {
+  const f = { conds: [{ k: 'season', season: 0 }], every: 1, shift: 0, dir: 'later' };
+  assert.equal(R.validate(f, env), null);
+  assert.equal(R.presetFor(f, env), 'season-start');
+  assert.deepEqual(R.toRule(R.presetForm('season-start', env)), { match: [{ kind: 'season_start' }] });
+  assert.match(R.validate({ ...f, conds: [{ k: 'season', season: 99 }] }, env), /Pick a season/);
 });

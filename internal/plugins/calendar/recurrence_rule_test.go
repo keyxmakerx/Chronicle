@@ -93,7 +93,8 @@ func TestParseRecurrenceRule_Rejects(t *testing.T) {
 		{"day -2", `{"match":[{"kind":"day_of_month","day":-2}]}`, "day must"},
 		{"month zero", `{"match":[{"kind":"months","months":[0]}]}`, "out-of-range"},
 		{"single month missing", `{"match":[{"kind":"month"}]}`, "month"},
-		{"season no id", `{"match":[{"kind":"season_start"}]}`, "season_id"},
+		{"season no id", `{"match":[{"kind":"season"}]}`, "season_id"},
+		{"season_start negative id", `{"match":[{"kind":"season_start","season_id":-1}]}`, "season_id"},
 		{"after_event no days", `{"match":[{"kind":"after_event","event_id":"x"}]}`, "days"},
 		{"after_event days too far", `{"match":[{"kind":"after_event","event_id":"x","days":400}]}`, "days must"},
 		{"relative_to_event takes no days", `{"match":[{"kind":"relative_to_event","event_id":"x","days":1}]}`, "does not take days"},
@@ -139,6 +140,7 @@ func TestRecurrenceRule_ValidateAgainstCalendar(t *testing.T) {
 		{"hidden moon for a player", `{"match":[{"kind":"moon_phase","moon_id":6,"phase":"new"}]}`, false},
 		{"season of calendar", `{"match":[{"kind":"season","season_id":8}]}`, true},
 		{"season elsewhere", `{"match":[{"kind":"season_start","season_id":99}]}`, false},
+		{"first day of any season", `{"match":[{"kind":"season_start"}]}`, true},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -185,6 +187,8 @@ func TestRuleExpansion_MatchesReference(t *testing.T) {
 			func(y, m, d int) bool { s := cal.SeasonForDate(m, d); return s != nil && s.ID == 9 }},
 		{"season start", `{"match":[{"kind":"season_start","season_id":8}]}`,
 			func(y, m, d int) bool { return m == 1 && d == 10 }},
+		{"first day of any season", `{"match":[{"kind":"season_start"}]}`,
+			func(y, m, d int) bool { return (m == 1 && d == 10) || (m == 3 && d == 25) }},
 		{"custom: last day of the year", `{"match":[{"kind":"month","month":3},{"kind":"day_of_month","day":-1}]}`,
 			func(y, m, d int) bool { return m == 3 && d == cal.MonthDays(2, y) }},
 		{"custom: weekday 2 inside a season", `{"match":[{"kind":"weekday","weekday":2},{"kind":"season","season_id":8}]}`,
@@ -541,5 +545,25 @@ func TestMoonPhaseFalls_HalfDayTieBelongsToOneDay(t *testing.T) {
 	}
 	if n != 1 {
 		t.Errorf("full moon fell on %d days of 60..75, want exactly 1", n)
+	}
+}
+
+// "The first day of any season" needs a season to exist, is not tied to an
+// id, and so has nothing to remap on import.
+func TestRule_AnySeasonStart(t *testing.T) {
+	r := mustRule(t, `{"match":[{"kind":"season_start"}]}`)
+	cal := ruleCal()
+	cal.Seasons = nil
+	err := r.validateAgainstCalendar(cal, func(Moon) bool { return true })
+	if err == nil || !strings.Contains(err.Error(), "no seasons") {
+		t.Fatalf("calendar without seasons: err = %v, want a 'no seasons' refusal", err)
+	}
+	e := ruleEvent("e", 1, 1, 1, r)
+	if got, _ := newExpander(cal, nil, nil).natural(&e, DayDate{1, 1, 1}, DayDate{2, 3, 31}, 0, 0); len(got) != 0 {
+		t.Errorf("a calendar with no seasons must match nothing, got %s", dates(got))
+	}
+	out, ok := r.remapped(nil, nil, nil)
+	if !ok || out.Match[0].SeasonID != 0 {
+		t.Errorf("remapped = %+v ok=%v, want the any-season form unchanged", out, ok)
 	}
 }
