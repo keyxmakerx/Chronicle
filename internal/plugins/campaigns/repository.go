@@ -19,6 +19,8 @@ type CampaignRepository interface {
 	FindBySlug(ctx context.Context, slug string) (*Campaign, error)
 	ListByUser(ctx context.Context, userID string, opts ListOptions) ([]Campaign, int, error)
 	ListAll(ctx context.Context, opts ListOptions) ([]Campaign, int, error)
+	SearchAll(ctx context.Context, opts AdminSearchOptions) ([]Campaign, error)
+	CountBySystem(ctx context.Context, query string) ([]SystemCount, error)
 	ListPublic(ctx context.Context, limit int) ([]Campaign, error)
 	Update(ctx context.Context, campaign *Campaign) error
 	Delete(ctx context.Context, id string) error

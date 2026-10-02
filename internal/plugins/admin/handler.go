@@ -390,20 +390,37 @@ func (h *Handler) Activity(c echo.Context) error {
 
 // Users renders the user management page (GET /admin/users).
 func (h *Handler) Users(c echo.Context) error {
-	page, _ := strconv.Atoi(c.QueryParam("page"))
-	if page < 1 {
-		page = 1
-	}
-	perPage := 25
-	offset := (page - 1) * perPage
+	ctx := c.Request().Context()
+	lq := parseListQuery(c.QueryParam("q"), c.QueryParam("f"), c.QueryParam("page"))
+	filter := auth.ParseUserFilter(lq.Filter)
 
-	users, total, err := h.authRepo.ListUsers(c.Request().Context(), offset, perPage)
+	// Counts first: they give the total for the chosen chip, which lets a
+	// page past the end be clamped before the rows are fetched.
+	counts, err := h.authRepo.CountUserFilters(ctx, lq.Q)
+	if err != nil {
+		return err
+	}
+	page := clampPage(lq.Page, counts.For(filter), adminListPerPage)
+
+	users, err := h.authRepo.SearchUsers(ctx, auth.UserSearchOptions{
+		Query:   lq.Q,
+		Filter:  filter,
+		Offset:  (page - 1) * adminListPerPage,
+		PerPage: adminListPerPage,
+	})
 	if err != nil {
 		return err
 	}
 
-	csrfToken := middleware.GetCSRFToken(c)
-	return middleware.Render(c, http.StatusOK, AdminUsersPage(users, total, page, perPage, csrfToken))
+	data := UserListData{
+		Users:     users,
+		View:      userListView(lq, filter, counts, page),
+		CSRFToken: middleware.GetCSRFToken(c),
+	}
+	if middleware.IsHTMX(c) {
+		return middleware.Render(c, http.StatusOK, AdminUsersList(data))
+	}
+	return middleware.Render(c, http.StatusOK, AdminUsersPage(data))
 }
 
 // ToggleAdmin toggles a user's is_admin flag (PUT /admin/users/:id/admin).
@@ -481,19 +498,37 @@ func (h *Handler) ToggleAdmin(c echo.Context) error {
 
 // Campaigns renders the campaign management page (GET /admin/campaigns).
 func (h *Handler) Campaigns(c echo.Context) error {
-	page, _ := strconv.Atoi(c.QueryParam("page"))
-	if page < 1 {
-		page = 1
-	}
+	ctx := c.Request().Context()
+	lq := parseListQuery(c.QueryParam("q"), c.QueryParam("f"), c.QueryParam("page"))
 
-	opts := campaigns.ListOptions{Page: page, PerPage: 25}
-	allCampaigns, total, err := h.campaignService.ListAll(c.Request().Context(), opts)
+	// Counts first: they validate the chip and give the total, which lets a
+	// page past the end be clamped before the rows are fetched.
+	counts, err := h.campaignService.CountBySystem(ctx, lq.Q)
+	if err != nil {
+		return err
+	}
+	filter := resolveSystemFilter(lq.Filter, counts)
+	view := campaignListView(lq, filter, counts, 1)
+	view.Page = clampPage(lq.Page, view.Total, adminListPerPage)
+
+	list, err := h.campaignService.SearchAll(ctx, campaigns.AdminSearchOptions{
+		Query:       lq.Q,
+		System:      filter,
+		ListOptions: campaigns.ListOptions{Page: view.Page, PerPage: adminListPerPage},
+	})
 	if err != nil {
 		return err
 	}
 
-	csrfToken := middleware.GetCSRFToken(c)
-	return middleware.Render(c, http.StatusOK, AdminCampaignsPage(allCampaigns, total, page, opts.PerPage, csrfToken))
+	data := CampaignListData{
+		Campaigns: list,
+		View:      view,
+		CSRFToken: middleware.GetCSRFToken(c),
+	}
+	if middleware.IsHTMX(c) {
+		return middleware.Render(c, http.StatusOK, AdminCampaignsList(data))
+	}
+	return middleware.Render(c, http.StatusOK, AdminCampaignsPage(data))
 }
 
 // DeleteCampaign force-deletes a campaign (DELETE /admin/campaigns/:id).

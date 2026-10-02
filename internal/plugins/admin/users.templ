@@ -7,12 +7,36 @@ import (
 	"github.com/keyxmakerx/chronicle/internal/templates/layouts"
 )
 
-// AdminUsersPage renders the user management page with a paginated user list.
-templ AdminUsersPage(users []auth.User, total, page, perPage int, csrfToken string) {
-	@layouts.App("Users - Admin") {
+// UserListData is what the people list renders: one page of users plus the
+// search/chip/pager state.
+type UserListData struct {
+	Users     []auth.User
+	View      listView
+	CSRFToken string
+}
+
+// AdminUsersPage renders the people page: search box and the list region.
+templ AdminUsersPage(data UserListData) {
+	@layouts.App("People - Admin") {
 		<div class="max-w-4xl mx-auto space-y-6">
-			<h1 class="text-2xl font-bold text-fg">Users ({ fmt.Sprintf("%d", total) })</h1>
-			<div class="card p-0 overflow-hidden">
+			<h1 class="text-2xl font-bold text-fg">People</h1>
+			@adminListSearch(data.View)
+			@AdminUsersList(data)
+		</div>
+	}
+}
+
+// AdminUsersList is the swappable region of the people page (chips, table
+// and pager). HTMX requests get just this; the id is the swap target.
+templ AdminUsersList(data UserListData) {
+	{{ users := data.Users }}
+	{{ csrfToken := data.CSRFToken }}
+	<div id={ data.View.RegionID } class="space-y-6">
+		if data.View.Filter != "" {
+			<input type="hidden" name="f" value={ data.View.Filter } form={ data.View.RegionID + "-search" }/>
+		}
+		@adminListChips(data.View)
+		<div class="card p-0 overflow-hidden">
 				<table class="w-full">
 					<thead>
 						<tr class="bg-surface-alt border-b border-edge">
@@ -95,21 +119,17 @@ templ AdminUsersPage(users []auth.User, total, page, perPage int, csrfToken stri
 								</tr>
 							}
 						} else {
-							<tr>
-								<td colspan="5" class="px-4 py-12 text-center">
-									<div class="text-fg-muted text-sm">No users found.</div>
-								</td>
-							</tr>
+							@adminListEmpty(data.View, 5)
 						}
 					</tbody>
 				</table>
 			</div>
 			@components.Pagination(components.PaginationData{
-				CurrentPage: page,
-				PerPage:     perPage,
-				Total:       total,
-				BaseURL:     "/admin/users",
+				CurrentPage: data.View.Page,
+				PerPage:     data.View.PerPage,
+				Total:       data.View.Total,
+				BaseURL:     data.View.BaseURL,
+				ExtraParams: data.View.PagerParams(),
 			})
 		</div>
-	}
 }
