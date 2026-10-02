@@ -43,6 +43,11 @@ func (h *Handler) UpdateSettings(c echo.Context) error {
 		settings, _ := h.service.GetSettings(c.Request().Context())
 		csrfToken := middleware.GetCSRFToken(c)
 		errMsg := apperror.UserMessage(err, "failed to save settings")
+		// The form targets an inner container; a full page here would nest a
+		// whole layout inside it.
+		if middleware.IsHTMX(c) {
+			return middleware.Render(c, http.StatusOK, SMTPFormComponent(settings, csrfToken, errMsg, ""))
+		}
 		return middleware.Render(c, http.StatusOK, SMTPSettingsPage(settings, csrfToken, errMsg))
 	}
 
