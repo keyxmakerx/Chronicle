@@ -81,7 +81,7 @@ func TestAdminSidebarNav_PinnedGroup(t *testing.T) {
 		group := strings.Index(out, "Pinned admin pages")
 		home := strings.Index(out, `href="/admin"`)
 		sec := strings.Index(out, "admin-nav-sec-community")
-		if group < 0 || home < 0 || !(home < group && group < sec) {
+		if group < 0 || home < 0 || home >= group || group >= sec {
 			t.Fatalf("Pinned must sit between Home and the sections (home=%d group=%d sec=%d)", home, group, sec)
 		}
 		if n := strings.Count(out, `href="/admin/storage"`); n != 2 {
