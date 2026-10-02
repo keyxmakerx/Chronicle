@@ -47,6 +47,29 @@ type fakeCalendarService struct {
 	kinds         []calendar.EventKindInput
 	createdEvents []calendar.CreateEventInput
 	updateInput   *calendar.UpdateCalendarInput
+	// overrides is the export-side fixture of occurrence overrides by event
+	// id; setOverrides captures the import side's writes.
+	overrides    map[string][]calendar.OccurrenceOverride
+	setOverrides []capturedOverride
+}
+
+// capturedOverride is one SetOccurrenceOverride call on the import side.
+type capturedOverride struct {
+	eventID string
+	occ     calendar.DayDate
+	input   calendar.OccurrenceOverrideInput
+}
+
+func (f *fakeCalendarService) ListOccurrenceOverrides(_ context.Context, _ string, _ string, v permissions.Viewer) (map[string][]calendar.OccurrenceOverride, error) {
+	if !v.IsSystem() {
+		return nil, apperror.NewForbidden("system access only")
+	}
+	return f.overrides, nil
+}
+
+func (f *fakeCalendarService) SetOccurrenceOverride(_ context.Context, eventID, _, _ string, occ calendar.DayDate, input calendar.OccurrenceOverrideInput, _ permissions.Viewer) (*calendar.OccurrenceOverride, error) {
+	f.setOverrides = append(f.setOverrides, capturedOverride{eventID: eventID, occ: occ, input: input})
+	return &calendar.OccurrenceOverride{}, nil
 }
 
 func (f *fakeCalendarService) GetDefaultCalendarForViewer(_ context.Context, _ string, _ permissions.Viewer) (*calendar.Calendar, error) {
@@ -68,6 +91,19 @@ func (f *fakeCalendarService) ListCalendars(_ context.Context, _ string, _ permi
 }
 
 func (f *fakeCalendarService) GetCalendarForViewer(_ context.Context, id string, _ string, _ permissions.Viewer) (*calendar.Calendar, error) {
+	// Import side: the calendar just created, with the moons and seasons set
+	// on it given fresh ids (200+, 300+) in insert order, as the repository
+	// does.
+	if f.created != nil && id == f.created.ID {
+		out := *f.created
+		for i, m := range f.moons {
+			out.Moons = append(out.Moons, calendar.Moon{ID: 200 + i, Name: m.Name})
+		}
+		for i, s := range f.seasons {
+			out.Seasons = append(out.Seasons, calendar.Season{ID: 300 + i, Name: s.Name})
+		}
+		return &out, nil
+	}
 	for _, c := range f.extraCals {
 		if c.ID == id {
 			return c, nil
