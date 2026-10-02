@@ -52,7 +52,6 @@ templ SystemIndexContent(cc *campaigns.CampaignContext, manifest *SystemManifest
 						data-campaign-id={ cc.Campaign.ID }
 						data-book-url={ "/campaigns/" + cc.Campaign.ID + "/systems/" + manifest.ID + "/book" }
 					></div>
-					<script src={ layouts.AssetURL("/static/js/widgets/rulebook.js") }></script>
 				} else {
 					<div data-widget={ rulebookFrontpageWidgetSlug } data-campaign-id={ cc.Campaign.ID }></div>
 				}

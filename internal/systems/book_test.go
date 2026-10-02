@@ -312,10 +312,15 @@ func TestSystemIndexContent_BookMount(t *testing.T) {
 		t.Fatal(err)
 	}
 	html := buf.String()
-	for _, want := range []string{`data-widget="rulebook"`, `data-book-url="/campaigns/camp-1/systems/drawsteel/book"`, "data-rulebook-fullbleed", "rulebook.js", "rulebook.css"} {
+	for _, want := range []string{`data-widget="rulebook"`, `data-book-url="/campaigns/camp-1/systems/drawsteel/book"`, "data-rulebook-fullbleed", "rulebook.css"} {
 		if !strings.Contains(html, want) {
 			t.Errorf("missing %s in:\n%s", want, html)
 		}
+	}
+	// The script comes from the layout's body-script registry: htmx strips
+	// a page fragment's script tags on boosted navigation.
+	if strings.Contains(html, "rulebook.js") {
+		t.Errorf("rulebook.js must not be loaded from the page fragment:\n%s", html)
 	}
 	if strings.Contains(html, `data-widget="rulebook-frontpage"`) || strings.Contains(html, `aria-label="Breadcrumb"`) {
 		t.Errorf("book page should mount only the book:\n%s", html)

@@ -22,7 +22,9 @@ your-package/
 A package has a book when `book/book.yaml` exists. Files are
 [YAML](https://yaml.org): indented `name: value` lines, with `- ` starting
 each item of a list. Text that runs over several lines starts with `|` and is
-indented underneath.
+indented underneath. Put a value in quotes if it is a bare `Null`, `true` or
+`false`, or starts with a symbol like `*`, `[` or `{`; otherwise YAML reads it
+as something other than text.
 
 The `book/` folder is never served to browsers as-is. Chronicle reads it, checks
 it, removes anything the reader isn't allowed to see, and sends only the rest.
