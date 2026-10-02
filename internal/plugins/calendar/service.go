@@ -250,6 +250,15 @@ type CalendarService interface {
 	// is repeated here (v.SkipsPerUserRules()) rather than trusted blindly.
 	SetEventVisibility(ctx context.Context, eventID, calendarID, campaignID string, input UpdateEventVisibilityInput, v permissions.Viewer) error
 
+	// Repeat rules and "this one only" (service_recurrence.go). The override
+	// writes are gated like editing the event (Scribe+ at the route, the
+	// event visible to v); the preview is gated like a read and writes
+	// nothing. ListOccurrenceOverrides is system-only, for the export.
+	SetOccurrenceOverride(ctx context.Context, eventID, calendarID, campaignID string, occ DayDate, input OccurrenceOverrideInput, v permissions.Viewer) (*OccurrenceOverride, error)
+	DeleteOccurrenceOverride(ctx context.Context, eventID, calendarID, campaignID string, occ DayDate, v permissions.Viewer) error
+	PreviewRecurrence(ctx context.Context, calendarID, campaignID string, input RecurrencePreviewInput, v permissions.Viewer) (*RecurrencePreview, error)
+	ListOccurrenceOverrides(ctx context.Context, calendarID, campaignID string, v permissions.Viewer) (map[string][]OccurrenceOverride, error)
+
 	// Event kinds. Campaign-scoped (shared by every calendar in the
 	// campaign, see EventKind's doc comment) — calendar structure, not
 	// content a Player ever reads directly. Listing is Owner only end to
@@ -1263,6 +1272,9 @@ func (s *calendarService) CreateEvent(ctx context.Context, calendarID, campaignI
 	if err != nil {
 		return nil, err
 	}
+	if err := s.validateEventRule(ctx, calendarID, campaignID, "", evt, true, input.Author); err != nil {
+		return nil, err
+	}
 	if err := s.eventRepo.CreateEvent(ctx, evt); err != nil {
 		return nil, fmt.Errorf("create event: %w", err)
 	}
@@ -1303,6 +1315,10 @@ func buildValidatedEvent(calendarID string, input CreateEventInput) (*Event, err
 	}
 	if !IsSupportedRecurrenceType(derefString(input.RecurrenceType)) {
 		return nil, apperror.NewValidation("unsupported recurrence_type")
+	}
+	rule, err := ParseRecurrenceRule(input.RecurrenceRule)
+	if err != nil {
+		return nil, err
 	}
 	announced := derefString(input.Announced)
 	if announced != "" && !IsSupportedAnnounced(announced) {
@@ -1357,6 +1373,7 @@ func buildValidatedEvent(calendarID string, input CreateEventInput) (*Event, err
 		RecurrenceEndMonth:       input.RecurrenceEndMonth,
 		RecurrenceEndDay:         input.RecurrenceEndDay,
 		RecurrenceMaxOccurrences: input.RecurrenceMaxOccurrences,
+		RecurrenceRule:           rule,
 		Visibility:               visibility,
 		VisibilityRules:          input.VisibilityRules,
 		KindID:                   input.KindID,
@@ -1398,6 +1415,9 @@ func (s *calendarService) GetEventForViewer(ctx context.Context, eventID, calend
 		}
 	}
 	if err := s.redactHiddenEntityLinks(ctx, campaignID, events, v); err != nil {
+		return nil, err
+	}
+	if err := s.redactRuleRefs(ctx, cal, campaignID, events, v); err != nil {
 		return nil, err
 	}
 	result := events[0]
@@ -1448,6 +1468,9 @@ func (s *calendarService) ListEventsByIDsForViewer(ctx context.Context, calendar
 	if err := s.redactHiddenEntityLinks(ctx, campaignID, events, v); err != nil {
 		return nil, err
 	}
+	if err := s.redactRuleRefs(ctx, cal, campaignID, events, v); err != nil {
+		return nil, err
+	}
 	return events, nil
 }
 
@@ -1465,10 +1488,11 @@ func (s *calendarService) GetCalendarNameForViewer(ctx context.Context, calendar
 // role-filtered by SQL (dm_only) and per-user-filtered in Go
 // (visibility_rules) on top, then narrowed to the events that actually
 // OCCUR in this month: the repository widens in every recurring candidate
-// from anywhere in the calendar (recurringCandidateClause) so Event.OccursOn
-// can decide exact placement in Go — this is that placement step, so a
-// weekly event recurring into a DIFFERENT month never appears here as a
-// false positive.
+// from anywhere in the calendar (recurringCandidateClause) so the
+// occurrence expander can decide exact placement in Go — this is that
+// placement step, so a weekly event recurring into a DIFFERENT month never
+// appears here as a false positive. Each repeating event carries its
+// Occurrences in the month, skips and moves applied (see expandMonth).
 func (s *calendarService) ListEventsForMonth(ctx context.Context, calendarID, campaignID string, year, month int, v permissions.Viewer) ([]Event, error) {
 	cal, err := s.calendarInCampaignForViewer(ctx, calendarID, campaignID, v)
 	if err != nil {
@@ -1482,7 +1506,9 @@ func (s *calendarService) ListEventsForMonth(ctx context.Context, calendarID, ca
 	if err := s.loadCalendarGeometry(ctx, cal); err != nil {
 		return nil, err
 	}
-	events = filterRecurringToMonth(events, cal, year, month)
+	if events, err = s.expandMonth(ctx, cal, events, year, month, v); err != nil {
+		return nil, err
+	}
 	if !v.SkipsPerUserRules() {
 		if events, err = s.dropUnannouncedFutureEvents(ctx, cal, campaignID, events); err != nil {
 			return nil, err
@@ -1491,37 +1517,10 @@ func (s *calendarService) ListEventsForMonth(ctx context.Context, calendarID, ca
 	if err := s.redactHiddenEntityLinks(ctx, campaignID, events, v); err != nil {
 		return nil, err
 	}
+	if err := s.redactRuleRefs(ctx, cal, campaignID, events, v); err != nil {
+		return nil, err
+	}
 	return events, nil
-}
-
-// filterRecurringToMonth drops a recurring candidate that does not actually
-// land on any day of (year, month) — see ListEventsForMonth's doc comment.
-// Non-recurring (including multi-day spanning) events pass through
-// unchanged: OccursOn only answers a single-day placement question for a
-// recurring rule, not "does this stored [start,end] window overlap this
-// month", which the repository's spanningCandidateClause already answers in
-// SQL (see event_repository.go).
-func filterRecurringToMonth(events []Event, cal *Calendar, year, month int) []Event {
-	filtered := events[:0]
-	for _, e := range events {
-		if e.IsRecurring && !occursSomewhereInMonth(e, cal, year, month) {
-			continue
-		}
-		filtered = append(filtered, e)
-	}
-	return filtered
-}
-
-// occursSomewhereInMonth reports whether e has at least one occurrence on
-// some day of (year, month) per Event.OccursOn.
-func occursSomewhereInMonth(e Event, cal *Calendar, year, month int) bool {
-	days := cal.MonthDays(month-1, year)
-	for day := 1; day <= days; day++ {
-		if e.OccursOn(cal, year, month, day) {
-			return true
-		}
-	}
-	return false
 }
 
 // upcomingEventsOverfetchFactor/upcomingEventsMaxFetch: see
@@ -1566,6 +1565,9 @@ func (s *calendarService) ListUpcomingEvents(ctx context.Context, calendarID, ca
 		events = events[:limit]
 	}
 	if err := s.redactHiddenEntityLinks(ctx, campaignID, events, v); err != nil {
+		return nil, err
+	}
+	if err := s.redactRuleRefs(ctx, cal, campaignID, events, v); err != nil {
 		return nil, err
 	}
 	return events, nil
@@ -1686,6 +1688,20 @@ func (s *calendarService) UpdateEvent(ctx context.Context, eventID, calendarID, 
 	if !IsSupportedRecurrenceType(derefString(recurrenceType)) {
 		return apperror.NewValidation("unsupported recurrence_type")
 	}
+	// recurrence_rule follows the partial-update contract like every other
+	// field. A rule is checked against the calendar when it is sent, or when
+	// the type switches to "rule" and so starts using a stored one; an
+	// untouched stored rule is not re-judged by an unrelated edit.
+	rule := evt.RecurrenceRule
+	if raw, ok := input.RecurrenceRule.Get(); ok {
+		if rule, err = ParseRecurrenceRule(raw); err != nil {
+			return err
+		}
+	} else if input.RecurrenceRule.IsNull() {
+		rule = nil
+	}
+	becameRule := derefString(recurrenceType) == RecurrenceByRule && derefString(evt.RecurrenceType) != RecurrenceByRule
+	recheckRule := (input.RecurrenceRule.Present() && rule != nil) || becameRule
 	announced := input.Announced.Ptr(evt.Announced)
 	if a := derefString(announced); a != "" && !IsSupportedAnnounced(a) {
 		return apperror.NewValidation("announced must be \"" + AnnouncedAhead + "\" or \"" + AnnouncedOnDay + "\"")
@@ -1739,6 +1755,10 @@ func (s *calendarService) UpdateEvent(ctx context.Context, eventID, calendarID, 
 	evt.RecurrenceEndMonth = input.RecurrenceEndMonth.Ptr(evt.RecurrenceEndMonth)
 	evt.RecurrenceEndDay = input.RecurrenceEndDay.Ptr(evt.RecurrenceEndDay)
 	evt.RecurrenceMaxOccurrences = input.RecurrenceMaxOccurrences.Ptr(evt.RecurrenceMaxOccurrences)
+	evt.RecurrenceRule = rule
+	if err := s.validateEventRule(ctx, calendarID, campaignID, evt.ID, evt, recheckRule, v); err != nil {
+		return err
+	}
 	evt.Visibility = visibility
 	evt.VisibilityRules = visRules
 	evt.KindID = input.KindID.Ptr(evt.KindID)
