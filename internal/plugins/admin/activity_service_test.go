@@ -128,3 +128,29 @@ func TestActivityService_RecordClampsToColumns(t *testing.T) {
 		t.Error("clamping split a character")
 	}
 }
+
+// TestActivityPhrases_CoverRecordedActions pins that every action the
+// recorders emit has a readable sentence, and that a label placeholder is
+// used at most once so Sentence never prints a format error.
+func TestActivityPhrases_CoverRecordedActions(t *testing.T) {
+	actions := []string{
+		"extension.updated", "extension.rescanned", "extension.campaign_enabled",
+		"extension.campaign_disabled", "extension.plugin_reloaded", "extension.plugin_stopped",
+		"storage.user_limit_set", "storage.user_limit_removed", "storage.campaign_limit_set",
+		"storage.campaign_limit_removed", "storage.user_bypass_set", "storage.user_bypass_cleared",
+		"storage.campaign_bypass_set", "storage.campaign_bypass_cleared", "apialert.resolved",
+		"foundry.campaign_notified", "foundry.campaign_force_pinned", "foundry.older_notified",
+		"foundry.older_force_pinned", "restore.started",
+	}
+	for _, a := range actions {
+		t.Run(a, func(t *testing.T) {
+			phrase, ok := activityPhrases[a]
+			if !ok {
+				t.Fatalf("no phrase for %q", a)
+			}
+			if strings.Count(phrase, "%s") > 1 {
+				t.Errorf("phrase %q has more than one %%s", phrase)
+			}
+		})
+	}
+}

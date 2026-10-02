@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 
 	"github.com/labstack/echo/v4"
@@ -171,6 +172,8 @@ func (h *Handler) UpdateExtension(c echo.Context) error {
 		return err
 	}
 
+	h.recordActivity(c, "extension.updated", "extension", extID, ext.Name)
+
 	if middleware.IsHTMX(c) {
 		manifest := parseManifestFromExtension(ext)
 		return middleware.Render(c, http.StatusOK, adminExtensionDetailFragment(ext, manifest))
@@ -224,6 +227,10 @@ func (h *Handler) RescanExtensions(c echo.Context) error {
 			slog.Int("count", discovered),
 		)
 	}
+
+	// Recorded even when nothing was found: the rescan itself touches the
+	// extension registry, and "ran, found none" is useful when debugging.
+	h.recordActivity(c, "extension.rescanned", "extension", "", strconv.Itoa(discovered)+" new")
 
 	if middleware.IsHTMX(c) {
 		exts, _ := h.svc.List(c.Request().Context())
@@ -303,6 +310,8 @@ func (h *Handler) EnableExtension(c echo.Context) error {
 		return err
 	}
 
+	h.recordActivity(c, "extension.campaign_enabled", "extension", extID, cc.Campaign.Name)
+
 	if middleware.IsHTMX(c) {
 		exts, _ := h.svc.ListForCampaign(c.Request().Context(), cc.Campaign.ID)
 		if exts == nil {
@@ -326,6 +335,8 @@ func (h *Handler) DisableExtension(c echo.Context) error {
 	if err := h.svc.DisableForCampaign(c.Request().Context(), cc.Campaign.ID, extID); err != nil {
 		return err
 	}
+
+	h.recordActivity(c, "extension.campaign_disabled", "extension", extID, cc.Campaign.Name)
 
 	if middleware.IsHTMX(c) {
 		exts, _ := h.svc.ListForCampaign(c.Request().Context(), cc.Campaign.ID)

@@ -2563,6 +2563,7 @@ func (a *App) RegisterRoutes() {
 		a.Config.BaseURL,
 	)
 	fvttHandler := foundry_vtt.NewHandler(fvttService)
+	fvttHandler.SetActivityRecorder(adminActivity)
 	// The campaign show page lazy-loads /foundry-vtt/show-banner-fragment
 	// rather than using a banner adapter wire.
 	if a.PluginHealth.IsHealthy(foundry_vtt.PluginHealthKey) && a.PluginHealth.IsHealthy("packages") {
@@ -3599,6 +3600,7 @@ func (a *App) RegisterRoutes() {
 	wasmHostEnv.SetPluginManager(wasmPluginMgr)
 	wasmHookDispatcher := extensions.NewHookDispatcher(wasmPluginMgr)
 	wasmHandler := extensions.NewWASMHandler(wasmPluginMgr, wasmHookDispatcher, extService)
+	wasmHandler.SetActivityRecorder(adminActivity)
 	extensions.RegisterWASMAdminRoutes(adminGroup, wasmHandler)
 	extensions.RegisterWASMCampaignRoutes(e, wasmHandler, campaignService, authService)
 

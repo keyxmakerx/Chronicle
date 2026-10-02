@@ -26,6 +26,7 @@ import (
 type Handler struct {
 	svc             Service
 	presenceLookup  PresenceLookup
+	activity        ActivityRecorder
 }
 
 // PresenceLookup is the narrow contract the presence-pill fragment
