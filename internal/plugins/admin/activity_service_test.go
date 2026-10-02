@@ -134,8 +134,8 @@ func TestActivityService_RecordClampsToColumns(t *testing.T) {
 // used at most once so Sentence never prints a format error.
 func TestActivityPhrases_CoverRecordedActions(t *testing.T) {
 	actions := []string{
-		"extension.updated", "extension.rescanned", "extension.campaign_enabled",
-		"extension.campaign_disabled", "extension.plugin_reloaded", "extension.plugin_stopped",
+		"extension.updated", "extension.rescanned",
+		"extension.plugin_reloaded", "extension.plugin_stopped",
 		"storage.user_limit_set", "storage.user_limit_removed", "storage.campaign_limit_set",
 		"storage.campaign_limit_removed", "storage.user_bypass_set", "storage.user_bypass_cleared",
 		"storage.campaign_bypass_set", "storage.campaign_bypass_cleared", "apialert.resolved",

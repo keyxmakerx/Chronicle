@@ -310,8 +310,6 @@ func (h *Handler) EnableExtension(c echo.Context) error {
 		return err
 	}
 
-	h.recordActivity(c, "extension.campaign_enabled", "extension", extID, cc.Campaign.Name)
-
 	if middleware.IsHTMX(c) {
 		exts, _ := h.svc.ListForCampaign(c.Request().Context(), cc.Campaign.ID)
 		if exts == nil {
@@ -335,8 +333,6 @@ func (h *Handler) DisableExtension(c echo.Context) error {
 	if err := h.svc.DisableForCampaign(c.Request().Context(), cc.Campaign.ID, extID); err != nil {
 		return err
 	}
-
-	h.recordActivity(c, "extension.campaign_disabled", "extension", extID, cc.Campaign.Name)
 
 	if middleware.IsHTMX(c) {
 		exts, _ := h.svc.ListForCampaign(c.Request().Context(), cc.Campaign.ID)

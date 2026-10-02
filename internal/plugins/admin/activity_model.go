@@ -58,8 +58,6 @@ var activityPhrases = map[string]string{
 	"extension.uninstalled":           "removed the extension %s",
 	"extension.updated":               "updated the extension %s",
 	"extension.rescanned":             "rescanned for extensions (%s)",
-	"extension.campaign_enabled":      "turned on an extension for the campaign %s",
-	"extension.campaign_disabled":     "turned off an extension for the campaign %s",
 	"extension.plugin_reloaded":       "reloaded the extension plugin %s",
 	"extension.plugin_stopped":        "stopped the extension plugin %s",
 	"storage.user_limit_set":          "set a storage limit for a person",
