@@ -26,6 +26,7 @@ func structureFixture() *Calendar {
 		Weekdays: []Weekday{{Name: "D1"}, {Name: "D2"}, {Name: "D3"}, {Name: "D4"}, {Name: "D5"}, {Name: "D6"}, {Name: "D7"}},
 		Moons:    []Moon{{ID: 7, Name: "Luna", CycleDays: 28}},
 		Seasons:  []Season{{ID: 3, Name: "Warm", StartMonth: 1, StartDay: 1, EndMonth: 2, EndDay: 30}},
+		Eras:     []Era{{ID: 1, Name: "First Age", StartYear: 1, StartMonth: 1, StartDay: 1}, {ID: 2, Name: "Second Age", StartYear: 3, StartMonth: 2, StartDay: 1}},
 	}
 }
 
@@ -61,9 +62,10 @@ func eventIDs(changes []StructureEventChange) []string {
 
 func TestPlanStructureEdit(t *testing.T) {
 	tests := []struct {
-		name   string
-		events []Event
-		change func(e *StructureEdit)
+		name    string
+		events  []Event
+		weather []DayDate
+		change  func(e *StructureEdit)
 		// wants
 		remap        map[int]int
 		moved        int
@@ -73,6 +75,9 @@ func TestPlanStructureEdit(t *testing.T) {
 		currentDay   int
 		clamped      bool
 		noteHas      string
+		otherHas     string
+		// weather: moved, redated, replaced, stranded
+		weatherCounts [4]int
 	}{
 		{
 			name:         "no change touches nothing",
@@ -188,6 +193,83 @@ func TestPlanStructureEdit(t *testing.T) {
 			stranded:     []string{},
 			currentMonth: 2, currentDay: 5, clamped: true,
 		},
+		{
+			// [A,B,G] -> [A,G,X]: Beta has no counterpart, Gamma moves to 2nd,
+			// so an event ending in Beta would end in Gamma.
+			name: "an end month with no counterpart is reported as re-dated",
+			events: func() []Event {
+				e := ev("span", 4, 1, 2)
+				y, m, d := 4, 2, 5
+				e.EndYear, e.EndMonth, e.EndDay = &y, &m, &d
+				return []Event{e}
+			}(),
+			change: func(e *StructureEdit) {
+				e.Months = []MonthInput{e.Months[0], e.Months[2], {Name: "X", Days: 30}}
+			},
+			remap:        map[int]int{3: 2},
+			redated:      []string{"span"},
+			stranded:     []string{},
+			currentMonth: 2, currentDay: 5,
+		},
+		{
+			name: "a repeat-until month with no counterpart is reported as re-dated",
+			events: func() []Event {
+				e := ev("weekly", 4, 1, 2)
+				y, m, d := 9, 2, 5
+				e.RecurrenceEndYear, e.RecurrenceEndMonth, e.RecurrenceEndDay = &y, &m, &d
+				return []Event{e}
+			}(),
+			change: func(e *StructureEdit) {
+				e.Months = []MonthInput{e.Months[0], e.Months[2], {Name: "X", Days: 30}}
+			},
+			remap:        map[int]int{3: 2},
+			redated:      []string{"weekly"},
+			stranded:     []string{},
+			currentMonth: 2, currentDay: 5,
+		},
+		{
+			name: "an end date that follows its month is not reported",
+			events: func() []Event {
+				e := ev("span", 4, 1, 2)
+				y, m, d := 4, 3, 5
+				e.EndYear, e.EndMonth, e.EndDay = &y, &m, &d
+				return []Event{e}
+			}(),
+			change: func(e *StructureEdit) {
+				e.Months = []MonthInput{e.Months[0], e.Months[2], {Name: "X", Days: 30}}
+			},
+			remap:        map[int]int{3: 2},
+			redated:      []string{},
+			stranded:     []string{},
+			currentMonth: 2, currentDay: 5,
+		},
+		{
+			name:    "day weather moves, is re-dated, replaced or stranded like events",
+			weather: []DayDate{{4, 1, 5}, {4, 2, 5}, {4, 2, 6}, {4, 3, 5}, {4, 3, 30}},
+			change: func(e *StructureEdit) {
+				// Beta removed, Gamma (now 20 days) moves into its place.
+				e.Months = []MonthInput{e.Months[0], {Name: "Gamma", Days: 20}}
+			},
+			remap:        map[int]int{3: 2},
+			redated:      []string{},
+			stranded:     []string{},
+			currentMonth: 2, currentDay: 5,
+			// Gamma 5 moves; Beta 5 is replaced by it; Beta 6 shows in Gamma;
+			// Gamma 30 has no day any more.
+			weatherCounts: [4]int{1, 1, 1, 1},
+			otherHas:      "1 day-weather reading in removed months will be deleted",
+		},
+		{
+			name: "eras starting in a removed month are named",
+			change: func(e *StructureEdit) {
+				e.Months = []MonthInput{e.Months[0], e.Months[2], {Name: "X", Days: 30}}
+			},
+			remap:        map[int]int{3: 2},
+			redated:      []string{},
+			stranded:     []string{},
+			currentMonth: 2, currentDay: 5,
+			otherHas: "The era Second Age starts in Beta, which is removed; it will read as Gamma instead.",
+		},
 	}
 
 	for _, tt := range tests {
@@ -195,7 +277,7 @@ func TestPlanStructureEdit(t *testing.T) {
 			cal := structureFixture()
 			edit := editFrom(cal)
 			tt.change(&edit)
-			plan := planStructureEdit(cal, tt.events, edit)
+			plan := planStructureEdit(cal, tt.events, tt.weather, edit)
 			p := plan.preview
 
 			if !reflect.DeepEqual(plan.remap, tt.remap) {
@@ -218,6 +300,12 @@ func TestPlanStructureEdit(t *testing.T) {
 			}
 			if p.CurrentDateClamped != tt.clamped {
 				t.Errorf("clamped = %v, want %v", p.CurrentDateClamped, tt.clamped)
+			}
+			if got := [4]int{p.WeatherMoved, p.WeatherRedated, p.WeatherReplaced, p.WeatherStranded}; got != tt.weatherCounts {
+				t.Errorf("weather (moved, redated, replaced, stranded) = %v, want %v", got, tt.weatherCounts)
+			}
+			if tt.otherHas != "" && !strings.Contains(strings.Join(p.OtherNotes, "\n"), tt.otherHas) {
+				t.Errorf("other notes %q missing %q", p.OtherNotes, tt.otherHas)
 			}
 			if tt.noteHas != "" && !strings.Contains(strings.Join(p.MonthNotes, "\n"), tt.noteHas) {
 				t.Errorf("month notes %q missing %q", p.MonthNotes, tt.noteHas)
@@ -256,6 +344,10 @@ func TestReconcileMonths(t *testing.T) {
 // structureService wires a calendarService over fakes holding cal and
 // events, capturing what ApplyStructure is asked to write.
 func structureService(cal *Calendar, events []Event, wrote *StructureWrite, calls *int) *calendarService {
+	state := func() *StructureState {
+		c := *cal
+		return &StructureState{Calendar: &c, Events: events}
+	}
 	calRepo := &fakeCalendarRepo{
 		getByIDFn: func(_ context.Context, id string) (*Calendar, error) {
 			if id != cal.ID {
@@ -264,18 +356,20 @@ func structureService(cal *Calendar, events []Event, wrote *StructureWrite, call
 			c := *cal
 			return &c, nil
 		},
-		getMonthsFn:   func(context.Context, string) ([]Month, error) { return cal.Months, nil },
-		getWeekdaysFn: func(context.Context, string) ([]Weekday, error) { return cal.Weekdays, nil },
-		getMoonsFn:    func(context.Context, string) ([]Moon, error) { return cal.Moons, nil },
-		getSeasonsFn:  func(context.Context, string) ([]Season, error) { return cal.Seasons, nil },
-		applyStructureFn: func(_ context.Context, _ string, w StructureWrite) error {
+		getStructureFn: func(context.Context, string) (*StructureState, error) { return state(), nil },
+		// Stands in for the locked transaction: plan sees the state as it
+		// is "now", and a plan error means nothing is written.
+		applyStructureFn: func(_ context.Context, _ string, plan func(*StructureState) (*StructureWrite, error)) error {
+			w, err := plan(state())
+			if err != nil {
+				return err
+			}
 			*calls++
-			*wrote = w
+			*wrote = *w
 			return nil
 		},
 	}
-	eventRepo := &fakeEventRepo{listAllFn: func(context.Context, string) ([]Event, error) { return events, nil }}
-	return NewCalendarService(calRepo, eventRepo, &fakeEventKindRepo{}, &fakeWeatherRepo{}).(*calendarService)
+	return NewCalendarService(calRepo, &fakeEventRepo{}, &fakeEventKindRepo{}, &fakeWeatherRepo{}).(*calendarService)
 }
 
 func TestApplyStructureEdit(t *testing.T) {
@@ -337,6 +431,25 @@ func TestApplyStructureEdit(t *testing.T) {
 		}
 		if calls != 0 {
 			t.Errorf("ApplyStructure called %d times on a stale preview, want 0", calls)
+		}
+	})
+
+	t.Run("a change between preview and the locked re-read is a conflict", func(t *testing.T) {
+		cal := structureFixture()
+		var wrote StructureWrite
+		calls := 0
+		svc := structureService(cal, nil, &wrote, &calls)
+		preview, err := svc.PreviewStructureEdit(ctx, cal.ID, cal.CampaignID, editFrom(cal))
+		if err != nil {
+			t.Fatalf("PreviewStructureEdit: %v", err)
+		}
+		cal.CurrentDay = 9 // another save landed first
+		p, err := svc.ApplyStructureEdit(ctx, cal.ID, cal.CampaignID, preview.Fingerprint, editFrom(cal))
+		if apperror.SafeCode(err) != http.StatusConflict || p == nil || p.Fingerprint == preview.Fingerprint {
+			t.Fatalf("err = %v, preview = %+v; want a Conflict carrying a fresh preview", err, p)
+		}
+		if calls != 0 {
+			t.Errorf("wrote %d times after the state changed, want 0", calls)
 		}
 	})
 

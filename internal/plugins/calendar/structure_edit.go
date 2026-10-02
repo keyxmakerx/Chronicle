@@ -20,6 +20,8 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"fmt"
+	"net/http"
+	"sort"
 	"strings"
 
 	"github.com/keyxmakerx/chronicle/internal/apperror"
@@ -95,14 +97,32 @@ type StructurePreview struct {
 	CurrentDate        string
 	NewCurrentDate     string
 	CurrentDateClamped bool
-	Warnings           []string
-	Fingerprint        string
+	// Day-weather readings: moved with their month, now in a different
+	// month (theirs is gone but its position remains), replaced by a moved
+	// reading on the same day, or left on a day that no longer exists.
+	WeatherMoved    int
+	WeatherRedated  int
+	WeatherReplaced int
+	WeatherStranded int
+	Warnings        []string
+	Fingerprint     string
+}
+
+// StructureState is everything a structure save is planned from, as
+// CalendarRepository reads it: the calendar with Months, Weekdays, Moons,
+// Seasons and Eras loaded, every event's dates, and every day-weather
+// reading's date.
+type StructureState struct {
+	Calendar    *Calendar
+	Events      []Event
+	WeatherDays []DayDate
 }
 
 // StructureWrite is one atomic structure save for CalendarRepository.
 // MonthRemap maps an old month position (1-based) to its new one, holding
 // only positions that change; every month column that stores a position
-// (events, their end and recurrence-end dates, eras) is remapped through it.
+// (events, their end and recurrence-end dates, eras, day weather) is
+// remapped through it.
 type StructureWrite struct {
 	Months        []MonthInput
 	Weekdays      []WeekdayInput
@@ -182,7 +202,7 @@ func dateLabel(cal *Calendar, year, month, day int) string {
 // months, its events and its current date. cal must have Months, Weekdays,
 // Moons and Seasons loaded. Pure: no I/O, so the preview and the save
 // compute exactly the same thing from the same state.
-func planStructureEdit(cal *Calendar, events []Event, edit StructureEdit) structurePlan {
+func planStructureEdit(cal *Calendar, events []Event, weather []DayDate, edit StructureEdit) structurePlan {
 	next := &Calendar{
 		Mode:           cal.Mode,
 		LeapYearEvery:  edit.LeapYearEvery,
@@ -263,11 +283,31 @@ func planStructureEdit(cal *Calendar, events []Event, edit StructureEdit) struct
 		case !followed:
 			redated = fmt.Sprintf("%s is removed; the event will show on %s instead.", cal.MonthName(e.Month), dateLabel(next, e.Year, nm, e.Day))
 		}
-		if stranded == "" && e.EndYear != nil && e.EndMonth != nil && e.EndDay != nil &&
-			exists(cal, *e.EndYear, *e.EndMonth, *e.EndDay) {
-			em, _ := place(*e.EndMonth)
-			if !exists(next, *e.EndYear, em, *e.EndDay) {
-				stranded = fmt.Sprintf("its end date, %s, will no longer exist.", dateLabel(cal, *e.EndYear, *e.EndMonth, *e.EndDay))
+		// An end or repeat-until date has the same three fates as the start:
+		// gone, or left on a position that now holds a different month.
+		for _, end := range []struct {
+			what      string
+			y, m, d   *int
+			movedVerb string
+		}{
+			{"end date", e.EndYear, e.EndMonth, e.EndDay, "end"},
+			{"last repeat", e.RecurrenceEndYear, e.RecurrenceEndMonth, e.RecurrenceEndDay, "stop repeating"},
+		} {
+			if stranded != "" || end.y == nil || end.m == nil || end.d == nil || !exists(cal, *end.y, *end.m, *end.d) {
+				continue
+			}
+			em, ef := place(*end.m)
+			switch {
+			case !exists(next, *end.y, em, *end.d):
+				stranded = fmt.Sprintf("its %s, %s, will no longer exist.", end.what, dateLabel(cal, *end.y, *end.m, *end.d))
+			case !ef:
+				note := fmt.Sprintf("its %s is in %s, which is removed; it will %s on %s instead.",
+					end.what, cal.MonthName(*end.m), end.movedVerb, dateLabel(next, *end.y, em, *end.d))
+				if redated == "" {
+					redated = strings.ToUpper(note[:1]) + note[1:]
+				} else {
+					redated += " Also, " + note
+				}
 			}
 		}
 
@@ -310,8 +350,95 @@ func planStructureEdit(cal *Calendar, events []Event, edit StructureEdit) struct
 	}
 	plan.currentMonth, plan.currentDay = cm, cd
 	p.NewCurrentDate = dateLabel(next, cal.CurrentYear, cm, cd)
-	p.Fingerprint = structureFingerprint(cal, events)
+
+	p.OtherNotes = append(p.OtherNotes, eraNotes(cal, next, place)...)
+	planWeather(p, cal, next, weather, place, exists)
+	p.OtherNotes = append(p.OtherNotes, weatherNotes(p)...)
+
+	p.Fingerprint = structureFingerprint(cal, events, weather)
 	return plan
+}
+
+// eraNotes says which eras follow their month, and which start or end in
+// a month that is removed and so will read as a different month.
+func eraNotes(cal, next *Calendar, place func(int) (int, bool)) []string {
+	var notes []string
+	moved := 0
+	for _, er := range cal.Eras {
+		follows := false
+		describe := func(what string, m int) {
+			if m < 1 || m > len(cal.Months) {
+				return
+			}
+			nm, ok := place(m)
+			switch {
+			case ok && nm != m:
+				follows = true
+			case !ok && nm > len(next.Months):
+				notes = append(notes, fmt.Sprintf("The era %s %s in %s, which is removed; that month will no longer exist.", er.Name, what, cal.MonthName(m)))
+			case !ok:
+				notes = append(notes, fmt.Sprintf("The era %s %s in %s, which is removed; it will read as %s instead.", er.Name, what, cal.MonthName(m), next.MonthName(nm)))
+			}
+		}
+		describe("starts", er.StartMonth)
+		if er.EndMonth != nil {
+			describe("ends", *er.EndMonth)
+		}
+		if follows {
+			moved++
+		}
+	}
+	if moved > 0 {
+		notes = append(notes, fmt.Sprintf("%d %s follow their month to its new place.", moved, nounFor(moved, "era", "eras")))
+	}
+	return notes
+}
+
+// planWeather sorts day-weather readings the way events are sorted. A
+// reading left in a month with no counterpart stays put, unless a moved
+// reading now claims its day: the moved one wins (ApplyStructure deletes
+// the other), since its month still exists under its own name.
+func planWeather(p *StructurePreview, cal, next *Calendar, weather []DayDate, place func(int) (int, bool), exists func(*Calendar, int, int, int) bool) {
+	claimed := map[DayDate]bool{}
+	for _, w := range weather {
+		if nm, ok := place(w.Month); ok && nm != w.Month && exists(cal, w.Year, w.Month, w.Day) {
+			claimed[DayDate{Year: w.Year, Month: nm, Day: w.Day}] = true
+		}
+	}
+	for _, w := range weather {
+		if !exists(cal, w.Year, w.Month, w.Day) {
+			continue
+		}
+		nm, ok := place(w.Month)
+		switch {
+		case !ok && claimed[w]:
+			p.WeatherReplaced++
+		case !exists(next, w.Year, nm, w.Day):
+			p.WeatherStranded++
+		case !ok:
+			p.WeatherRedated++
+		case nm != w.Month:
+			p.WeatherMoved++
+		}
+	}
+}
+
+func weatherNotes(p *StructurePreview) []string {
+	var notes []string
+	reading := func(n int) string { return fmt.Sprintf("%d day-weather %s", n, nounFor(n, "reading", "readings")) }
+	if p.WeatherMoved > 0 {
+		notes = append(notes, reading(p.WeatherMoved)+" follow their month to its new place.")
+	}
+	if p.WeatherRedated > 0 {
+		notes = append(notes, reading(p.WeatherRedated)+" in removed months will show in whichever month now holds their place.")
+	}
+	if p.WeatherReplaced > 0 {
+		notes = append(notes, reading(p.WeatherReplaced)+" in removed months will be deleted: a moved month's reading takes their day.")
+	}
+	if p.WeatherStranded > 0 {
+		notes = append(notes, reading(p.WeatherStranded)+" will be on a day that no longer exists; they are kept but not shown.")
+	}
+	return notes
 }
 
 // otherStructureNotes describes the week, leap-rule, moon and season
@@ -364,9 +491,10 @@ func otherStructureNotes(cal *Calendar, edit StructureEdit) []string {
 }
 
 // structureFingerprint hashes everything planStructureEdit reads, so a
-// save can tell that the calendar or its events changed after the preview
-// was shown.
-func structureFingerprint(cal *Calendar, events []Event) string {
+// save can tell that the calendar, its events or its weather changed after
+// the preview was shown. Lists are hashed in a fixed order of their own,
+// whatever order they were read in.
+func structureFingerprint(cal *Calendar, events []Event, weather []DayDate) string {
 	h := sha256.New()
 	fmt.Fprintf(h, "leap %d %d|now %d %d %d|", cal.LeapYearEvery, cal.LeapYearOffset, cal.CurrentYear, cal.CurrentMonth, cal.CurrentDay)
 	for _, m := range cal.Months {
@@ -375,18 +503,33 @@ func structureFingerprint(cal *Calendar, events []Event) string {
 	for _, w := range cal.Weekdays {
 		fmt.Fprintf(h, "w %q|", w.Name)
 	}
+	ptr := func(v *int) string {
+		if v == nil {
+			return "-"
+		}
+		return fmt.Sprint(*v)
+	}
+	var lines []string
 	for _, m := range cal.Moons {
-		fmt.Fprintf(h, "o %d %q|", m.ID, m.Name)
+		lines = append(lines, fmt.Sprintf("o %d %q", m.ID, m.Name))
 	}
 	for _, s := range cal.Seasons {
-		fmt.Fprintf(h, "s %d %q|", s.ID, s.Name)
+		lines = append(lines, fmt.Sprintf("s %d %q", s.ID, s.Name))
+	}
+	for _, er := range cal.Eras {
+		lines = append(lines, fmt.Sprintf("r %d %q %d %s", er.ID, er.Name, er.StartMonth, ptr(er.EndMonth)))
 	}
 	for _, e := range events {
-		fmt.Fprintf(h, "e %s %d %d %d", e.ID, e.Year, e.Month, e.Day)
-		if e.EndYear != nil && e.EndMonth != nil && e.EndDay != nil {
-			fmt.Fprintf(h, " %d %d %d", *e.EndYear, *e.EndMonth, *e.EndDay)
-		}
-		h.Write([]byte("|"))
+		lines = append(lines, fmt.Sprintf("e %s %q %d %d %d %s %s %s %s %s %s", e.ID, e.Name, e.Year, e.Month, e.Day,
+			ptr(e.EndYear), ptr(e.EndMonth), ptr(e.EndDay),
+			ptr(e.RecurrenceEndYear), ptr(e.RecurrenceEndMonth), ptr(e.RecurrenceEndDay)))
+	}
+	for _, w := range weather {
+		lines = append(lines, fmt.Sprintf("d %d %d %d", w.Year, w.Month, w.Day))
+	}
+	sort.Strings(lines)
+	for _, l := range lines {
+		h.Write([]byte(l + "|"))
 	}
 	return hex.EncodeToString(h.Sum(nil))
 }
@@ -439,25 +582,27 @@ func validateStructureEdit(edit StructureEdit) error {
 	return nil
 }
 
-// loadStructureState loads a calendar with the sub-resources a structure
-// save reads, plus every event on it, refusing a calendar whose months
-// follow the real-world calendar.
-func (s *calendarService) loadStructureState(ctx context.Context, calendarID, campaignID string) (*Calendar, []Event, error) {
-	cal, err := s.calendarInCampaign(ctx, calendarID, campaignID)
-	if err != nil {
-		return nil, nil, err
+// structureState loads the plan's input for a calendar in campaignID,
+// refusing one whose months follow the real-world calendar.
+func (s *calendarService) structureState(ctx context.Context, calendarID, campaignID string) (*StructureState, error) {
+	if _, err := s.calendarInCampaign(ctx, calendarID, campaignID); err != nil {
+		return nil, err
 	}
+	st, err := s.calRepo.GetStructureState(ctx, calendarID)
+	if err != nil {
+		return nil, err
+	}
+	if err := refuseRealTime(st.Calendar); err != nil {
+		return nil, err
+	}
+	return st, nil
+}
+
+func refuseRealTime(cal *Calendar) error {
 	if cal.UsesRealTime() {
-		return nil, nil, apperror.NewValidation("this calendar follows the real-world date, so its months and weekdays can't be changed")
+		return apperror.NewValidation("this calendar follows the real-world date, so its months and weekdays can't be changed")
 	}
-	if err := s.loadSubresources(ctx, cal); err != nil {
-		return nil, nil, err
-	}
-	events, err := s.eventRepo.ListAllEvents(ctx, calendarID)
-	if err != nil {
-		return nil, nil, fmt.Errorf("list events: %w", err)
-	}
-	return cal, events, nil
+	return nil
 }
 
 // PreviewStructureEdit computes what saving edit would do, without writing.
@@ -465,31 +610,54 @@ func (s *calendarService) PreviewStructureEdit(ctx context.Context, calendarID, 
 	if err := validateStructureEdit(edit); err != nil {
 		return nil, err
 	}
-	cal, events, err := s.loadStructureState(ctx, calendarID, campaignID)
+	st, err := s.structureState(ctx, calendarID, campaignID)
 	if err != nil {
 		return nil, err
 	}
-	plan := planStructureEdit(cal, events, edit)
+	plan := planStructureEdit(st.Calendar, st.Events, st.WeatherDays, edit)
 	return &plan.preview, nil
 }
 
-// ApplyStructureEdit saves edit in one transaction, recomputing the plan
-// from the calendar as it stands rather than trusting the preview. A
-// fingerprint that no longer matches is a Conflict carrying nothing
-// written; the caller shows a fresh preview.
+// ApplyStructureEdit saves edit in one transaction. The plan is made again
+// inside that transaction, from state read under a lock on the calendar
+// row, rather than trusted from the preview: if its fingerprint differs
+// from the one the owner saw, nothing is written and the error is a
+// Conflict returned with the fresh preview, for the caller to show.
 func (s *calendarService) ApplyStructureEdit(ctx context.Context, calendarID, campaignID, fingerprint string, edit StructureEdit) (*StructurePreview, error) {
 	if err := validateStructureEdit(edit); err != nil {
 		return nil, err
 	}
-	cal, events, err := s.loadStructureState(ctx, calendarID, campaignID)
-	if err != nil {
+	// Which campaign a calendar belongs to never changes, so this check
+	// needs no lock.
+	if _, err := s.calendarInCampaign(ctx, calendarID, campaignID); err != nil {
 		return nil, err
 	}
-	plan := planStructureEdit(cal, events, edit)
-	if fingerprint != plan.preview.Fingerprint {
-		return &plan.preview, apperror.NewConflict("this calendar changed after the preview was made; check the updated preview before saving")
+	var preview *StructurePreview
+	err := s.calRepo.ApplyStructure(ctx, calendarID, func(st *StructureState) (*StructureWrite, error) {
+		if err := refuseRealTime(st.Calendar); err != nil {
+			return nil, err
+		}
+		plan := planStructureEdit(st.Calendar, st.Events, st.WeatherDays, edit)
+		preview = &plan.preview
+		if fingerprint != plan.preview.Fingerprint {
+			return nil, apperror.NewConflict("this calendar changed after the preview was made; check the updated preview before saving")
+		}
+		return structureWriteFor(edit, plan), nil
+	})
+	if err != nil {
+		if apperror.SafeCode(err) == http.StatusConflict {
+			return preview, err
+		}
+		if _, ok := err.(*apperror.AppError); ok {
+			return nil, err
+		}
+		return nil, fmt.Errorf("apply structure: %w", err)
 	}
+	return preview, nil
+}
 
+// structureWriteFor turns a validated edit and its plan into the write.
+func structureWriteFor(edit StructureEdit, plan structurePlan) *StructureWrite {
 	moons := make([]MoonInput, len(edit.Moons))
 	copy(moons, edit.Moons)
 	for i := range moons {
@@ -510,8 +678,7 @@ func (s *calendarService) ApplyStructureEdit(ctx context.Context, calendarID, ca
 		w.SortOrder = i
 		weekdays[i] = w
 	}
-
-	write := StructureWrite{
+	return &StructureWrite{
 		Months:        months,
 		Weekdays:      weekdays,
 		Moons:         moons,
@@ -521,8 +688,4 @@ func (s *calendarService) ApplyStructureEdit(ctx context.Context, calendarID, ca
 		CurrentDay:    plan.currentDay,
 		MonthRemap:    plan.remap,
 	}
-	if err := s.calRepo.ApplyStructure(ctx, calendarID, write); err != nil {
-		return nil, fmt.Errorf("apply structure: %w", err)
-	}
-	return &plan.preview, nil
 }

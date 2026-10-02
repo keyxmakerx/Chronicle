@@ -2,8 +2,12 @@ package calendar
 
 import (
 	"context"
+	"errors"
+	"fmt"
 	"strings"
+	"sync/atomic"
 	"testing"
+	"time"
 )
 
 // TestApplyStructure_Integration runs a structure save against MariaDB:
@@ -20,6 +24,10 @@ func TestApplyStructure_Integration(t *testing.T) {
 	repo := NewCalendarRepository(db)
 	events := NewEventRepository(db)
 	fix := newTestCampaign(t, db, "structure")
+
+	fixed := func(w StructureWrite) func(*StructureState) (*StructureWrite, error) {
+		return func(*StructureState) (*StructureWrite, error) { return &w, nil }
+	}
 
 	setup := func(t *testing.T) (*Calendar, int, int) {
 		t.Helper()
@@ -78,7 +86,7 @@ func TestApplyStructure_Integration(t *testing.T) {
 			CurrentMonth:  1, CurrentDay: 7,
 			MonthRemap: map[int]int{1: 3, 3: 1},
 		}
-		if err := repo.ApplyStructure(ctx, cal.ID, w); err != nil {
+		if err := repo.ApplyStructure(ctx, cal.ID, fixed(w)); err != nil {
 			t.Fatalf("ApplyStructure: %v", err)
 		}
 
@@ -159,7 +167,7 @@ func TestApplyStructure_Integration(t *testing.T) {
 			Seasons:      []Season{{Name: strings.Repeat("x", 300), StartMonth: 1, StartDay: 1, EndMonth: 1, EndDay: 1, Color: "#808080"}},
 			CurrentMonth: 1, CurrentDay: 1,
 		}
-		err := repo.ApplyStructure(ctx, cal.ID, w)
+		err := repo.ApplyStructure(ctx, cal.ID, fixed(w))
 		if err == nil {
 			t.Fatal("expected the oversized season name to fail")
 		}
@@ -174,6 +182,101 @@ func TestApplyStructure_Integration(t *testing.T) {
 		moons, _ := repo.GetMoons(ctx, cal.ID)
 		if len(moons) != 1 || moons[0].Name != "Luna" {
 			t.Errorf("moons changed despite the rollback: %+v", moons)
+		}
+	})
+
+	t.Run("day weather follows a month swap, and a displaced reading gives way", func(t *testing.T) {
+		cal, moonID, seasonID := setup(t)
+		mustExec(t, db, `INSERT INTO calendar_weather_days (calendar_id, year, month, day, preset_label) VALUES
+			(?, 5, 1, 5, 'alpha'), (?, 5, 3, 5, 'gamma'), (?, 5, 2, 7, 'beta'), (?, 5, 2, 5, 'beta-displaced')`,
+			cal.ID, cal.ID, cal.ID, cal.ID)
+		// Gamma moves to 1st and Alpha to 2nd; Beta has no counterpart, so
+		// its readings stay at position 2, except Beta 5, whose day Alpha 5
+		// now claims.
+		w := StructureWrite{
+			Months:       []MonthInput{{Name: "Gamma", Days: 30}, {Name: "Alpha", Days: 30}, {Name: "New", Days: 30}},
+			Weekdays:     []WeekdayInput{{Name: "One"}},
+			Moons:        []MoonInput{{ID: &moonID, Name: "Luna", CycleDays: 28}},
+			Seasons:      []Season{{ID: seasonID, Name: "Warm", StartMonth: 1, StartDay: 1, EndMonth: 2, EndDay: 30}},
+			CurrentMonth: 1, CurrentDay: 7,
+			MonthRemap: map[int]int{1: 2, 3: 1},
+		}
+		if err := repo.ApplyStructure(ctx, cal.ID, fixed(w)); err != nil {
+			t.Fatalf("ApplyStructure: %v", err)
+		}
+		rows, err := db.Query(`SELECT month, day, preset_label FROM calendar_weather_days WHERE calendar_id = ? ORDER BY month, day`, cal.ID)
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer rows.Close()
+		var got []string
+		for rows.Next() {
+			var m, d int
+			var label string
+			if err := rows.Scan(&m, &d, &label); err != nil {
+				t.Fatal(err)
+			}
+			got = append(got, fmt.Sprintf("%d/%d %s", m, d, label))
+		}
+		want := []string{"1/5 gamma", "2/5 alpha", "2/7 beta"}
+		if strings.Join(got, ", ") != strings.Join(want, ", ") {
+			t.Errorf("weather = %v, want %v (alpha moved onto Beta 5's day, which gave way)", got, want)
+		}
+	})
+
+	t.Run("a plan error writes nothing", func(t *testing.T) {
+		cal, _, _ := setup(t)
+		sentinel := errors.New("stale")
+		err := repo.ApplyStructure(ctx, cal.ID, func(*StructureState) (*StructureWrite, error) { return nil, sentinel })
+		if !errors.Is(err, sentinel) {
+			t.Fatalf("err = %v, want the plan's own error", err)
+		}
+		months, _ := repo.GetMonths(ctx, cal.ID)
+		if len(months) != 3 {
+			t.Errorf("months = %d, want 3", len(months))
+		}
+	})
+
+	t.Run("a second save waits for the first and plans from its result", func(t *testing.T) {
+		cal, moonID, seasonID := setup(t)
+		w := StructureWrite{
+			Months:       []MonthInput{{Name: "Alpha", Days: 30}, {Name: "Beta", Days: 30}, {Name: "Gamma", Days: 30}},
+			Weekdays:     []WeekdayInput{{Name: "One"}},
+			Moons:        []MoonInput{{ID: &moonID, Name: "Luna", CycleDays: 28}},
+			Seasons:      []Season{{ID: seasonID, Name: "Warm", StartMonth: 1, StartDay: 1, EndMonth: 2, EndDay: 30}},
+			CurrentMonth: 3, CurrentDay: 20,
+		}
+		inside := make(chan struct{})
+		release := make(chan struct{})
+		firstDone := make(chan error, 1)
+		go func() {
+			firstDone <- repo.ApplyStructure(ctx, cal.ID, func(*StructureState) (*StructureWrite, error) {
+				close(inside)
+				<-release
+				return &w, nil
+			})
+		}()
+		<-inside
+
+		var secondSaw atomic.Int64
+		secondDone := make(chan error, 1)
+		go func() {
+			secondDone <- repo.ApplyStructure(ctx, cal.ID, func(st *StructureState) (*StructureWrite, error) {
+				secondSaw.Store(int64(st.Calendar.CurrentDay))
+				return nil, errors.New("stop")
+			})
+		}()
+		time.Sleep(300 * time.Millisecond)
+		if secondSaw.Load() != 0 {
+			t.Fatal("the second save planned while the first still held the calendar")
+		}
+		close(release)
+		if err := <-firstDone; err != nil {
+			t.Fatalf("first save: %v", err)
+		}
+		<-secondDone
+		if secondSaw.Load() != 20 {
+			t.Errorf("the second save planned from current day %d, want the first save's 20", secondSaw.Load())
 		}
 	})
 }
