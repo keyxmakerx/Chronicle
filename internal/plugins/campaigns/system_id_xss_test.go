@@ -1,12 +1,7 @@
-// system_id_xss_test.go pins that a campaign's SystemID is jsEsc-escaped
-// before flowing into the Game System selector's Alpine `x-data` expression
-// (`_savedSystemId: '%s'`). SystemID accepts an owner-supplied
-// `custom:<url>` value with no server-side validation, so the remainder is
-// free text that could otherwise break out of the JS string literal.
-//
-// See parent_selector_xss_test.go for why the rendered discriminator is the
-// backslash: fixed renders `custom:\&#39;` (escaped quote), vulnerable renders
-// `custom:&#39;` immediately followed by the breakout.
+// system_id_xss_test.go pins that a campaign's SystemID reaches the game
+// system picker only as an HTML-escaped data-* attribute value. SystemID
+// accepts an owner-supplied `custom:<url>` with no server-side validation, so
+// it must never become part of the Alpine x-data script text.
 
 package campaigns
 
@@ -17,46 +12,48 @@ import (
 	"testing"
 )
 
-// TestSettingsGeneralTab_EscapesHostileSystemID pins that a hostile SystemID
-// cannot break out of the _savedSystemId JS string literal.
-func TestSettingsGeneralTab_EscapesHostileSystemID(t *testing.T) {
-	cc := &CampaignContext{Campaign: &Campaign{
-		ID:       "camp-1",
-		Name:     "Test",
-		Settings: `{"system_id":"custom:');alert(1)//"}`,
-	}}
-
+func renderGameSystemCard(t *testing.T, settings string) string {
+	t.Helper()
+	cc := &CampaignContext{Campaign: &Campaign{ID: "camp-1", Name: "Test", Settings: settings}}
 	var buf bytes.Buffer
-	if err := settingsGeneralTab(cc, "csrf", "[]").Render(context.Background(), &buf); err != nil {
+	if err := gameSystemCard(cc, "[]").Render(context.Background(), &buf); err != nil {
 		t.Fatalf("render failed: %v", err)
 	}
-	html := buf.String()
+	return buf.String()
+}
 
-	// Unescaped breakout — the custom: prefix immediately followed by the quote
-	// entity and payload — must NOT appear.
-	if strings.Contains(html, "custom:&#39;);alert(1)") {
-		t.Errorf("settings general tab let a hostile SystemID break out of _savedSystemId; jsEsc missing at the sink\nrendered: %s", html)
+func TestGameSystemCard_HostileSystemIDStaysInDataAttribute(t *testing.T) {
+	html := renderGameSystemCard(t, `{"system_id":"custom:');alert(1)//"}`)
+
+	// The payload may only appear HTML-escaped inside the data attribute.
+	if !strings.Contains(html, `data-saved-system="custom:&#39;);alert(1)//"`) {
+		t.Errorf("expected the system id as an escaped data attribute\nrendered: %s", html)
 	}
-	// Escaped form — a backslash before the injected quote entity — MUST appear.
-	if !strings.Contains(html, `custom:\&#39;);alert(1)`) {
-		t.Errorf("expected the injected quote to be backslash-escaped (jsEsc) in _savedSystemId; not found\nrendered: %s", html)
+	if strings.Count(html, "alert(1)") != 1 {
+		t.Errorf("hostile system id appears outside its data attribute\nrendered: %s", html)
 	}
 }
 
-// TestSettingsGeneralTab_LegitSystemIDUnchanged pins that an ordinary system id
-// still renders intact, so the fix does not regress legitimate values.
-func TestSettingsGeneralTab_LegitSystemIDUnchanged(t *testing.T) {
-	cc := &CampaignContext{Campaign: &Campaign{
-		ID:       "camp-1",
-		Name:     "Test",
-		Settings: `{"system_id":"dnd5e"}`,
-	}}
+func TestGameSystemCard_LegitSystemIDUnchanged(t *testing.T) {
+	html := renderGameSystemCard(t, `{"system_id":"dnd5e"}`)
+	if !strings.Contains(html, `data-saved-system="dnd5e"`) {
+		t.Errorf("legit system id was not rendered intact\nrendered: %s", html)
+	}
+}
 
+// TestSettingsGeneralTab_NoLongerHoldsPicker pins that the picker lives in one
+// place: two live controls for one setting would drift.
+func TestSettingsGeneralTab_NoLongerHoldsPicker(t *testing.T) {
+	cc := &CampaignContext{Campaign: &Campaign{ID: "camp-1", Name: "Test"}}
 	var buf bytes.Buffer
-	if err := settingsGeneralTab(cc, "csrf", "[]").Render(context.Background(), &buf); err != nil {
+	if err := settingsGeneralTab(cc, "csrf").Render(context.Background(), &buf); err != nil {
 		t.Fatalf("render failed: %v", err)
 	}
-	if !strings.Contains(buf.String(), "_savedSystemId: &#39;dnd5e&#39;") {
-		t.Errorf("legit system id was not rendered intact\nrendered: %s", buf.String())
+	html := buf.String()
+	if strings.Contains(html, "data-game-system-card") {
+		t.Error("General tab still renders the game system picker")
+	}
+	if !strings.Contains(html, "/campaigns/camp-1/extensions") {
+		t.Error("General tab should link to the Apps & game system page")
 	}
 }

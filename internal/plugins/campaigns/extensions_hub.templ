@@ -1,7 +1,9 @@
-// extensions_hub.templ — top-level Extensions hub.
+// extensions_hub.templ — the owner's "Apps & game system" page.
 //
-// Operator's top-level entry point at /campaigns/:id/extensions,
-// replacing the old Features Settings tab.
+// Served at /campaigns/:id/extensions (the URL predates the rename and
+// stays so bookmarks and the redirects that point here keep working). It
+// replaced the old Features Settings tab and now also holds the game
+// system picker and links to the connection setups.
 //
 // Catalog source: PluginHubAddon list from the addons store. Each
 // card is one operator-facing extension; owners get a per-card
@@ -29,13 +31,19 @@ import (
 // `contentPacksCard` is nil if the extensions plugin is not wired in
 // this build; the hub renders cleanly without it (graceful
 // degradation, matches AddonLister/MediaUploader/SMTPChecker shape).
-templ ExtensionsHubPage(cc *CampaignContext, addons []PluginHubAddon, csrfToken string, contentPacksCard templ.Component) {
-	@layouts.App(cc.Campaign.Name + " - Extensions") {
+templ ExtensionsHubPage(cc *CampaignContext, addons []PluginHubAddon, csrfToken, systemOptionsJSON string, hasAIWorkspace bool, contentPacksCard templ.Component) {
+	@layouts.App(cc.Campaign.Name + " - Apps & game system") {
 		<div class="max-w-5xl mx-auto px-4 py-6" data-extensions-hub>
-			@layouts.ManageHeader("Extensions", "manage:extensions")
-			<p class="text-sm text-fg-muted -mt-3 mb-6">
-				Enable or disable per-campaign features. Disabling preserves your data.
-			</p>
+			@layouts.ManageHeader("Apps & game system", "manage:extensions")
+			<div class="mb-6">
+				@gameSystemCard(cc, systemOptionsJSON)
+			</div>
+			<div class="mb-3">
+				<h2 class="text-base font-semibold text-fg">Apps</h2>
+				<p class="text-sm text-fg-muted">
+					Turn apps on or off for this campaign. Turning one off keeps its data.
+				</p>
+			</div>
 			// Hub catalog — HTMX-refreshed in place after a toggle so
 			// the card list re-renders without a full nav.
 			<div
@@ -58,6 +66,7 @@ templ ExtensionsHubPage(cc *CampaignContext, addons []PluginHubAddon, csrfToken 
 			// card hx-gets the extension's settings page here; the GET returns a
 			// self-opening modal (ExtensionSettingsOverlay). Empty until opened.
 			<div id="extension-setup-modal"></div>
+			@connectionsCard(cc, hasAIWorkspace)
 			// Content Packs card — installable content from the admin
 			// install surface. Lifts the existing extensions plugin
 			// fragment so the per-pack enable/disable POSTs at
@@ -83,6 +92,33 @@ templ ExtensionsHubPage(cc *CampaignContext, addons []PluginHubAddon, csrfToken 
 			}
 		</div>
 	}
+}
+
+// connectionsCard links to where Foundry and the AI helper are set up. Both
+// setups still live under Settings; linking keeps this page free of a second
+// copy of their forms.
+templ connectionsCard(cc *CampaignContext, hasAIWorkspace bool) {
+	<section class="card p-4 mt-6" aria-labelledby="connections-heading" data-connections-card>
+		<h2 id="connections-heading" class="text-base font-semibold text-fg mb-3">Connections</h2>
+		<ul class="divide-y divide-edge-light">
+			<li class="flex flex-wrap items-center justify-between gap-x-3 gap-y-2 py-2">
+				<div class="min-w-0">
+					<p class="text-sm font-medium text-fg">Foundry VTT</p>
+					<p class="text-xs text-fg-muted">Connection keys and sync status.</p>
+				</div>
+				<a href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/settings?tab=integrations", cc.Campaign.ID)) } class="btn-secondary text-xs">Set up</a>
+			</li>
+			if hasAIWorkspace {
+				<li class="flex flex-wrap items-center justify-between gap-x-3 gap-y-2 py-2">
+					<div class="min-w-0">
+						<p class="text-sm font-medium text-fg">AI helper</p>
+						<p class="text-xs text-fg-muted">Copy a prompt for your own AI and bring its pages back in.</p>
+					</div>
+					<a href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/settings?tab=ai-workspace", cc.Campaign.ID)) } class="btn-secondary text-xs">Open</a>
+				</li>
+			}
+		</ul>
+	</section>
 }
 
 // ExtensionsHubFragment renders the catalog card grid only — used as

@@ -194,7 +194,7 @@ templ settingsActivityTab(cc *CampaignContext) {
 }
 
 // settingsGeneralTab renders the General tab: details, MOTD, visibility, system, danger zone.
-templ settingsGeneralTab(cc *CampaignContext, csrfToken, systemOptionsJSON string) {
+templ settingsGeneralTab(cc *CampaignContext, csrfToken string) {
 	<div class="space-y-4">
 		// Top row: Campaign Details + Welcome Message side-by-side.
 		<div class="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -329,83 +329,17 @@ templ settingsGeneralTab(cc *CampaignContext, csrfToken, systemOptionsJSON strin
 			</div>
 		</div>
 
-		// Game System selector.
+		// The game system picker moved to Apps & game system; this keeps the
+		// old spot from going silent for owners who look here first.
 		<div class="card p-4">
 			<h2 class="text-sm font-semibold text-fg mb-1">Game System</h2>
-			<p class="text-xs text-fg-secondary mb-3">Reference content, tooltips, and presets.</p>
-			<div
-				x-data={ fmt.Sprintf(`{
-					_savedSystemId: '%s',
-					systemId: '',
-					customUrl: '',
-					isCustom: false,
-					saving: false,
-					saved: false,
-					systems: %s,
-					init() {
-						var saved = this._savedSystemId;
-						if (saved.startsWith('custom:')) {
-							this.customUrl = saved.substring(7);
-							this.isCustom = true;
-							this._savedSystemId = 'custom';
-						} else if (saved && !this.systems.find(s => s.id === saved)) {
-							this.systems.push({ id: saved, name: saved + ' (not loaded)', has_error: true });
-						}
-						this.$nextTick(() => {
-							this.systemId = this._savedSystemId;
-						});
-					},
-					get selectedHasError() {
-						var sel = this.systems.find(s => s.id === this.systemId);
-						return sel && sel.has_error;
-					},
-					async save() {
-						this.saving = true;
-						this.saved = false;
-						var id = this.systemId;
-						if (id === 'custom' && this.customUrl.trim()) {
-							id = 'custom:' + this.customUrl.trim();
-						}
-						const res = await Chronicle.apiFetch('/campaigns/%s/system', {
-							method: 'PUT',
-							body: { system_id: id }
-						});
-						this.saving = false;
-						if (res.ok) {
-							this.saved = true;
-							setTimeout(() => { this.saved = false; }, 3000);
-						}
-					},
-					onChange() {
-						this.isCustom = (this.systemId === 'custom');
-						if (!this.isCustom) this.save();
-					}
-				}`, jsEsc(cc.Campaign.ParseSettings().SystemID), systemOptionsJSON, cc.Campaign.ID) }
-			>
-				<select x-model="systemId" @change="onChange()" class="input w-full mb-2">
-					<option value="">None</option>
-					<template x-for="sys in systems" :key="sys.id">
-						<option :value="sys.id" x-text="sys.name"></option>
-					</template>
-					<option value="custom">Custom...</option>
-				</select>
-				<div x-show="selectedHasError" x-transition x-cloak class="flex items-start gap-2 p-3 rounded-lg bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800 mb-2">
-					<i class="fa-solid fa-triangle-exclamation text-amber-500 mt-0.5 shrink-0"></i>
-					<p class="text-xs text-amber-700 dark:text-amber-300">
-						This game system failed to load. Widgets, tooltips, and reference data may be unavailable. See <b>Admin &gt; Systems</b> { "for" } details.
-					</p>
-				</div>
-				<div x-show="isCustom" x-transition class="flex items-center gap-2 mt-2">
-					<input type="url" x-model="customUrl" class="input flex-1" placeholder="https://example.com/system/manifest.json"/>
-					<button type="button" class="btn-primary text-sm" @click="save()">Install</button>
-				</div>
-				<div class="flex items-center gap-2 pt-1">
-					<span x-show="saving" class="text-xs text-fg-muted"><i class="fa-solid fa-spinner fa-spin"></i> Saving...</span>
-					<span x-show="saved" x-transition class="text-xs text-green-600">Saved</span>
-				</div>
-			</div>
+			<p class="text-xs text-fg-secondary">
+				Choose it on
+				<a href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/extensions", cc.Campaign.ID)) } class="text-accent hover:underline focus-visible:outline focus-visible:outline-2 focus-visible:outline-accent">Apps &amp; game system</a>.
+			</p>
 		</div>
 		</div>
+
 
 		// Danger Zone.
 		<div class="card border-red-200 dark:border-red-800" x-data="{ open: false }">

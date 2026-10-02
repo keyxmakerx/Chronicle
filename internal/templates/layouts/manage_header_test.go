@@ -14,7 +14,7 @@ func TestNavManageRows_OwnerOnly(t *testing.T) {
 		c    navStateCase
 		want []string
 	}{
-		{"owner", navStateCase{role: 3, path: "/campaigns/c1"}, []string{"Overview", "People", "Customize", "Extensions", "Settings"}},
+		{"owner", navStateCase{role: 3, path: "/campaigns/c1"}, []string{"Overview", "People", "Customize", "Apps & game system", "Settings"}},
 		{"scribe", navStateCase{role: 2, path: "/campaigns/c1"}, nil},
 		{"player", navStateCase{role: 1, path: "/campaigns/c1"}, nil},
 		{"owner viewing as player", navStateCase{role: 1, player: true, path: "/campaigns/c1"}, nil},

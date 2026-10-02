@@ -136,7 +136,7 @@ func NavManageRows(ctx context.Context) []NavRowView {
 	}
 	return append(rows,
 		NavRowView{Key: "manage:customize", Label: "Customize", Icon: "fa-paintbrush", URL: base + "/customize"},
-		NavRowView{Key: "manage:extensions", Label: "Extensions", Icon: "fa-puzzle-piece", URL: base + "/extensions"},
+		NavRowView{Key: "manage:extensions", Label: "Apps & game system", Icon: "fa-puzzle-piece", URL: base + "/extensions"},
 		NavRowView{Key: "manage:settings", Label: "Settings", Icon: "fa-gear", URL: base + "/settings"},
 	)
 }
