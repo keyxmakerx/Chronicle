@@ -48,7 +48,7 @@
     "description": "A day of open council between nobles and people, occurring once every four years"
   },
   "seasons": [
-    {"name": "Winter",  "start_month": 11, "start_day": 1,  "color": "#93c5fd"},
+    {"name": "Winter",  "start_month": 12, "start_day": 1,  "color": "#93c5fd"},
     {"name": "Spring",  "start_month": 3,  "start_day": 1,  "color": "#86efac"},
     {"name": "Summer",  "start_month": 6,  "start_day": 1,  "color": "#fcd34d"},
     {"name": "Autumn",  "start_month": 9,  "start_day": 1,  "color": "#fca5a5"}
