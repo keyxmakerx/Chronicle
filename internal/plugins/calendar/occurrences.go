@@ -706,3 +706,30 @@ func (x *expander) dayMatches(conds []compiledCond, c *dayCursor) bool {
 	}
 	return true
 }
+
+// hasExpansion reports whether a month read filled this event's dates: the
+// event repeats and the read worked its occurrences out (possibly none, or
+// not all of them when it hit its bound).
+func (e *Event) hasExpansion() bool { return e.Occurrences != nil || e.OccurrencesTruncated }
+
+// visibleOccurrenceDays lists the days of (year, month) the event lands on,
+// one entry per occurrence, skipped ones left out. When the read could not
+// finish counting, the event's own start date still counts, as it does on
+// the page, and nothing is guessed beyond what was found.
+func (e *Event) visibleOccurrenceDays(year, month, monthDays int) []int {
+	var days []int
+	seen := map[int]bool{}
+	for _, o := range e.Occurrences {
+		if o.Year != year || o.Month != month || o.Day < 1 || o.Day > monthDays {
+			continue
+		}
+		seen[o.Day] = true // a skipped start date must not come back as the fallback
+		if !o.Skipped {
+			days = append(days, o.Day)
+		}
+	}
+	if e.OccurrencesTruncated && e.Year == year && e.Month == month && e.Day >= 1 && e.Day <= monthDays && !seen[e.Day] {
+		days = append(days, e.Day)
+	}
+	return days
+}

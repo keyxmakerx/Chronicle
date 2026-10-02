@@ -107,9 +107,10 @@ func buildMonthGrid(cal *Calendar, year, month int, eventCounts map[int]int, mai
 }
 
 // countEventsByDay counts, per day-of-month, how many of events actually
-// occur on that day of (year, month) — recurrence-aware via Event.OccursOn,
-// so a weekly event's dot lands on the day it actually recurs to, not its
-// stored base day. O(days × events), cheap for one month's worth of events.
+// occur on that day of (year, month). An event that came from a month read
+// carries its own dates (Occurrences) and is counted from them; any other is
+// recurrence-aware via Event.OccursOn, so a weekly event's dot lands on the
+// day it actually recurs to, not its stored base day.
 func countEventsByDay(cal *Calendar, events []Event, year, month int) map[int]int {
 	if len(events) == 0 {
 		return nil
@@ -121,8 +122,17 @@ func countEventsByDay(cal *Calendar, events []Event, year, month int) map[int]in
 	if days > maxCalendarMonthDays {
 		days = maxCalendarMonthDays
 	}
-	for d := 1; d <= days; d++ {
-		for _, e := range events {
+	for _, e := range events {
+		if e.hasExpansion() {
+			// The month read already worked out this event's dates, with its
+			// rule and its skips and moves applied; recounting them from
+			// OccursOn would put a dot on a skipped or unmoved date.
+			for _, d := range e.visibleOccurrenceDays(year, month, days) {
+				counts[d]++
+			}
+			continue
+		}
+		for d := 1; d <= days; d++ {
 			if e.OccursOn(cal, year, month, d) {
 				counts[d]++
 			}
