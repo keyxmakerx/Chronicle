@@ -63,14 +63,16 @@ func shortUA(ua string) string {
 // AdminSecurityPage renders the security dashboard with stats, event log,
 // and active sessions management.
 templ AdminSecurityPage(data SecurityPageData) {
-	@layouts.App("Security - Admin") {
+	@layouts.App("Sign-ins & sessions - Admin") {
 		<div class="max-w-6xl mx-auto space-y-8">
 			<div class="flex items-center justify-between">
-				<h1 class="text-2xl font-bold text-fg">Security Dashboard</h1>
+				<h1 class="text-2xl font-bold text-fg">Sign-ins &amp; sessions</h1>
 			</div>
 
 			<!-- Stats Cards -->
-			if data.Stats != nil {
+			if data.StatsFailed {
+				@loadFailedNotice("the sign-in summary")
+			} else if data.Stats != nil {
 				@securityStatsCards(data.Stats)
 			}
 
@@ -84,7 +86,11 @@ templ AdminSecurityPage(data SecurityPageData) {
 					Active Sessions
 					<span class="text-sm font-normal text-fg-muted">({ fmt.Sprintf("%d", len(data.Sessions)) })</span>
 				</h2>
-				@activeSessionsTable(data.Sessions, data.CSRFToken)
+				if data.SessionsFailed {
+					@loadFailedNotice("active sessions")
+				} else {
+					@activeSessionsTable(data.Sessions, data.CSRFToken)
+				}
 			</div>
 
 			<!-- Security Event Log -->
@@ -98,6 +104,7 @@ templ AdminSecurityPage(data SecurityPageData) {
 					<!-- Event type filter -->
 					<div class="flex items-center gap-2">
 						<select
+							aria-label="Filter events by type"
 							onchange="window.location.href='/admin/security?type='+this.value"
 							class="text-sm rounded-lg border border-edge bg-surface px-3 py-1.5 text-fg"
 						>
@@ -111,10 +118,19 @@ templ AdminSecurityPage(data SecurityPageData) {
 							<option value="admin.user_enabled" selected?={ data.EventFilter == "admin.user_enabled" }>User Enabled</option>
 							<option value="admin.session_terminated" selected?={ data.EventFilter == "admin.session_terminated" }>Session Terminated</option>
 							<option value="admin.force_logout" selected?={ data.EventFilter == "admin.force_logout" }>Force Logout</option>
+							<option value="password.reset_completed" selected?={ data.EventFilter == "password.reset_completed" }>Password Reset Completed</option>
+							<option value="admin.diagnostics_batch_run" selected?={ data.EventFilter == "admin.diagnostics_batch_run" }>Diagnostics Batch Run</option>
+							<option value="media.uploaded" selected?={ data.EventFilter == "media.uploaded" }>Media Uploaded</option>
+							<option value="media.deleted" selected?={ data.EventFilter == "media.deleted" }>Media Deleted</option>
+							<option value="media.quota_exceeded" selected?={ data.EventFilter == "media.quota_exceeded" }>Media Quota Exceeded</option>
 						</select>
 					</div>
 				</div>
-				@securityEventLog(data.Events, data.TotalEvents, data.Page, data.PerPage, data.EventFilter)
+				if data.EventsFailed {
+					@loadFailedNotice("the event log")
+				} else {
+					@securityEventLog(data.Events, data.TotalEvents, data.Page, data.PerPage, data.EventFilter)
+				}
 			</div>
 		</div>
 	}
@@ -267,6 +283,7 @@ templ activeSessionsTable(sessions []auth.SessionInfo, csrfToken string) {
 										hx-delete={ fmt.Sprintf("/admin/security/sessions/%s", s.TokenHash) }
 										hx-confirm="Terminate this session? The user will be logged out."
 										hx-headers={ fmt.Sprintf(`{"X-CSRF-Token":"%s"}`, csrfToken) }
+										aria-label={ "Terminate session for " + s.Name }
 										class="text-xs link-danger transition-colors"
 									>
 										Terminate
@@ -390,9 +407,18 @@ templ eventDetails(e SecurityEvent) {
 			}
 		case EventSessionTerminated:
 			if hint, ok := e.Details["token_hint"]; ok {
-				<span>Token: { fmt.Sprintf("%v", hint) }...</span>
+				<span>Session ending { fmt.Sprintf("%v", hint) }...</span>
 			}
 		default:
 			<span>-</span>
 	}
+}
+
+// loadFailedNotice stands in for a section whose data could not be read, so an
+// outage is not mistaken for "nothing happened".
+templ loadFailedNotice(what string) {
+	<div class="card p-4 text-sm text-amber-700 dark:text-amber-300" role="alert">
+		<i class="fa-solid fa-triangle-exclamation mr-1.5"></i>
+		Couldn't load { what }. Reload the page to try again.
+	</div>
 }

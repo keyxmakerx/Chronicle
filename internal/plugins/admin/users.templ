@@ -112,6 +112,7 @@ templ AdminUsersList(data UserListData) {
 											hx-headers={ fmt.Sprintf(`{"X-CSRF-Token":"%s"}`, csrfToken) }
 											class="text-sm text-fg-muted hover:text-fg transition-colors"
 											title="Force logout all sessions"
+											aria-label={ "Force logout all sessions for " + user.DisplayName }
 										>
 											<i class="fa-solid fa-power-off"></i>
 										</button>

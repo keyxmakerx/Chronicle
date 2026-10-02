@@ -287,8 +287,17 @@ func (h *Handler) PurgeStaleFilesAPI(c echo.Context) error {
 func (h *Handler) Dashboard(c echo.Context) error {
 	ctx := c.Request().Context()
 
-	userCount, _ := h.authRepo.CountUsers(ctx)
-	campaignCount, _ := h.campaignService.CountAll(ctx)
+	// A failed count is -1 so the tile shows a dash instead of a false 0.
+	userCount, err := h.authRepo.CountUsers(ctx)
+	if err != nil {
+		slog.Warn("admin dashboard: count users failed", slog.Any("error", err))
+		userCount = -1
+	}
+	campaignCount, err := h.campaignService.CountAll(ctx)
+	if err != nil {
+		slog.Warn("admin dashboard: count campaigns failed", slog.Any("error", err))
+		campaignCount = -1
+	}
 
 	var smtpConfigured bool
 	if h.smtpService != nil {
@@ -699,7 +708,11 @@ func (h *Handler) Security(c echo.Context) error {
 
 	ctx := c.Request().Context()
 
-	stats, _ := h.securityService.GetStats(ctx)
+	// A failed read shows an inline notice, not an empty-looking section.
+	stats, statsErr := h.securityService.GetStats(ctx)
+	if statsErr != nil {
+		slog.Warn("security page: load stats failed", slog.Any("error", statsErr))
+	}
 
 	// Load recent security events (first page).
 	eventType := c.QueryParam("type")
@@ -708,10 +721,16 @@ func (h *Handler) Security(c echo.Context) error {
 		page = 1
 	}
 
-	events, totalEvents, _ := h.securityService.ListEvents(ctx, eventType, page)
+	events, totalEvents, eventsErr := h.securityService.ListEvents(ctx, eventType, page)
+	if eventsErr != nil {
+		slog.Warn("security page: load events failed", slog.Any("error", eventsErr))
+	}
 
 	// Load active sessions.
-	sessions, _ := h.securityService.GetActiveSessions(ctx)
+	sessions, sessionsErr := h.securityService.GetActiveSessions(ctx)
+	if sessionsErr != nil {
+		slog.Warn("security page: load sessions failed", slog.Any("error", sessionsErr))
+	}
 
 	csrfToken := middleware.GetCSRFToken(c)
 
@@ -734,6 +753,9 @@ func (h *Handler) Security(c echo.Context) error {
 		Sessions:         sessions,
 		CSRFToken:        csrfToken,
 		RegistrationMode: registrationMode,
+		StatsFailed:      statsErr != nil,
+		EventsFailed:     eventsErr != nil,
+		SessionsFailed:   sessionsErr != nil,
 	}
 
 	return middleware.Render(c, http.StatusOK, AdminSecurityPage(data))
@@ -749,7 +771,7 @@ func (h *Handler) UpdateRegistrationMode(c echo.Context) error {
 	if err := h.settingsService.UpdateRegistrationMode(c.Request().Context(), mode); err != nil {
 		return err
 	}
-	h.record(c, "registration.mode_changed", "setting", "registration_mode", mode)
+	h.record(c, "registration.mode_changed", "setting", "registration_mode", registrationModeLabel(mode))
 	slog.Info("registration mode updated", slog.String("mode", mode))
 	c.Response().Header().Set("HX-Redirect", "/admin/security")
 	return c.NoContent(http.StatusOK)
@@ -772,7 +794,7 @@ func (h *Handler) TerminateSession(c echo.Context) error {
 
 	_ = h.securityService.LogEvent(c.Request().Context(), EventSessionTerminated,
 		"", currentUserID, c.RealIP(), c.Request().UserAgent(),
-		map[string]any{"token_hash": tokenHash})
+		map[string]any{"token_hint": tokenHint(tokenHash)})
 
 	h.record(c, "session.terminated", "session", "", "")
 	slog.Info("admin terminated session",
@@ -780,6 +802,29 @@ func (h *Handler) TerminateSession(c echo.Context) error {
 	)
 
 	return middleware.HTMXRedirect(c, "/admin/security")
+}
+
+// registrationModeLabel is the plain-language mode name the activity sentence
+// ("changed who can sign up to open") reads with.
+func registrationModeLabel(mode string) string {
+	switch mode {
+	case settings.RegistrationOpen:
+		return "open"
+	case settings.RegistrationInvite:
+		return "invite only"
+	case settings.RegistrationClosed:
+		return "closed"
+	}
+	return mode
+}
+
+// tokenHint is the short prefix shown in the event log; the full hash would
+// let a log reader address that session.
+func tokenHint(hash string) string {
+	if len(hash) > 8 {
+		return hash[:8]
+	}
+	return hash
 }
 
 // ForceLogoutUser destroys all sessions for a user (POST /admin/security/users/:id/force-logout).
@@ -1126,5 +1171,10 @@ type SecurityPageData struct {
 	// RegistrationMode is the current site registration gate ("open", "invite",
 	// "closed"). Rendered as a select on the security page (B-R4).
 	RegistrationMode string
+	// StatsFailed, EventsFailed and SessionsFailed mark sections whose read
+	// errored, so the page says so instead of rendering an empty state.
+	StatsFailed    bool
+	EventsFailed   bool
+	SessionsFailed bool
 }
 

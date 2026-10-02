@@ -7,9 +7,9 @@ import (
 
 // AdminDashboardPage renders the admin overview with high-level stats.
 templ AdminDashboardPage(userCount, campaignCount, mediaFileCount int, totalStorageBytes int64, smtpConfigured bool, addonCount int, securityStats *SecurityStats, degradedPlugins []string, pendingSubmissions, registeredSystems, failedSystems int, needs []NeedsItem, recent []ActivityEntry) {
-	@layouts.App("Admin Dashboard") {
+	@layouts.App("Home - Admin") {
 		<div class="max-w-5xl mx-auto space-y-6">
-			<h1 class="text-2xl font-bold text-fg">Admin Dashboard</h1>
+			<h1 class="text-2xl font-bold text-fg">Home</h1>
 
 			@needsYouCard(needs)
 
@@ -19,20 +19,20 @@ templ AdminDashboardPage(userCount, campaignCount, mediaFileCount int, totalStor
 				<div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
 					<a href="/admin/users" class="card hover:shadow-md transition-shadow group">
 						<div class="flex items-center justify-between">
-							<p class="text-sm font-medium text-fg-secondary">Users</p>
+							<p class="text-sm font-medium text-fg-secondary">People</p>
 							<span class="w-10 h-10 rounded-lg bg-accent/10 flex items-center justify-center">
 								<i class="fa-solid fa-users text-accent"></i>
 							</span>
 						</div>
-						<p class="text-3xl font-bold text-fg mt-2">{ fmt.Sprintf("%d", userCount) }</p>
-						<p class="text-xs text-fg-muted mt-1 group-hover:text-accent transition-colors">Manage users &rarr;</p>
+						<p class="text-3xl font-bold text-fg mt-2">{ countOrDash(userCount) }</p>
+						<p class="text-xs text-fg-muted mt-1 group-hover:text-accent transition-colors">Manage people &rarr;</p>
 					</a>
 					<a href="/admin/campaigns" class="card hover:shadow-md transition-shadow group">
 						<div class="flex items-center justify-between">
 							<p class="text-sm font-medium text-fg-secondary">Campaigns</p>
 							<span class="stat-icon-blue"><i class="fa-solid fa-book-open"></i></span>
 						</div>
-						<p class="text-3xl font-bold text-fg mt-2">{ fmt.Sprintf("%d", campaignCount) }</p>
+						<p class="text-3xl font-bold text-fg mt-2">{ countOrDash(campaignCount) }</p>
 						<p class="text-xs text-fg-muted mt-1 group-hover:text-accent transition-colors">Manage campaigns &rarr;</p>
 					</a>
 					<a href="/admin/addons" class="card hover:shadow-md transition-shadow group">
@@ -45,7 +45,7 @@ templ AdminDashboardPage(userCount, campaignCount, mediaFileCount int, totalStor
 					</a>
 					<a href="/admin/packages" class="card hover:shadow-md transition-shadow group">
 						<div class="flex items-center justify-between">
-							<p class="text-sm font-medium text-fg-secondary">Packages</p>
+							<p class="text-sm font-medium text-fg-secondary">Game systems &amp; modules</p>
 							<span class="stat-icon-emerald"><i class="fa-solid fa-box"></i></span>
 						</div>
 						if pendingSubmissions > 0 {
@@ -57,7 +57,7 @@ templ AdminDashboardPage(userCount, campaignCount, mediaFileCount int, totalStor
 					</a>
 					<a href="/admin/systems" class="card hover:shadow-md transition-shadow group">
 						<div class="flex items-center justify-between">
-							<p class="text-sm font-medium text-fg-secondary">Game Systems</p>
+							<p class="text-sm font-medium text-fg-secondary">Health &amp; diagnostics</p>
 							<span class="stat-icon-purple"><i class="fa-solid fa-microchip"></i></span>
 						</div>
 						<p class="text-3xl font-bold text-fg mt-2">{ fmt.Sprintf("%d", registeredSystems) }</p>
@@ -68,7 +68,8 @@ templ AdminDashboardPage(userCount, campaignCount, mediaFileCount int, totalStor
 						} else {
 							<p class="text-xs text-fg-muted mt-1">None installed</p>
 						}
-						<p class="text-xs text-fg-muted group-hover:text-accent transition-colors">Diagnostics &rarr;</p>
+						<p class="text-xs text-fg-muted mt-1">game systems loaded</p>
+						<p class="text-xs text-fg-muted group-hover:text-accent transition-colors">Health &amp; diagnostics &rarr;</p>
 					</a>
 					<a href="/admin/diagnostics/workspace" class="card hover:shadow-md transition-shadow group">
 						<div class="flex items-center justify-between">
@@ -108,7 +109,7 @@ templ AdminDashboardPage(userCount, campaignCount, mediaFileCount int, totalStor
 					</a>
 					<a href="/admin/smtp" class="card hover:shadow-md transition-shadow group">
 						<div class="flex items-center justify-between">
-							<p class="text-sm font-medium text-fg-secondary">SMTP</p>
+							<p class="text-sm font-medium text-fg-secondary">Email</p>
 							<span class="stat-icon-emerald"><i class="fa-solid fa-envelope"></i></span>
 						</div>
 						if smtpConfigured {
@@ -116,11 +117,11 @@ templ AdminDashboardPage(userCount, campaignCount, mediaFileCount int, totalStor
 						} else {
 							<p class="text-lg font-semibold text-amber-600 dark:text-amber-400 mt-2">Not Configured</p>
 						}
-						<p class="text-xs text-fg-muted mt-1 group-hover:text-accent transition-colors">SMTP settings &rarr;</p>
+						<p class="text-xs text-fg-muted mt-1 group-hover:text-accent transition-colors">Email settings &rarr;</p>
 					</a>
 					<a href="/admin/api" class="card hover:shadow-md transition-shadow group">
 						<div class="flex items-center justify-between">
-							<p class="text-sm font-medium text-fg-secondary">Sync API</p>
+							<p class="text-sm font-medium text-fg-secondary">API &amp; access</p>
 							<span class="stat-icon-cyan"><i class="fa-solid fa-satellite-dish"></i></span>
 						</div>
 						<p class="text-lg font-semibold text-fg mt-2">API Monitor</p>
@@ -135,7 +136,7 @@ templ AdminDashboardPage(userCount, campaignCount, mediaFileCount int, totalStor
 				<div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
 					<a href="/admin/security" class="card hover:shadow-md transition-shadow group">
 						<div class="flex items-center justify-between">
-							<p class="text-sm font-medium text-fg-secondary">Security</p>
+							<p class="text-sm font-medium text-fg-secondary">Sign-ins &amp; sessions</p>
 							<span class="stat-icon-red"><i class="fa-solid fa-shield-halved"></i></span>
 						</div>
 						if securityStats != nil && securityStats.FailedLogins24h > 0 {
@@ -145,11 +146,11 @@ templ AdminDashboardPage(userCount, campaignCount, mediaFileCount int, totalStor
 							<p class="text-lg font-semibold text-emerald-600 dark:text-emerald-400 mt-2">All Clear</p>
 							<p class="text-xs text-fg-muted mt-1">No failed logins (24h)</p>
 						}
-						<p class="text-xs text-fg-muted group-hover:text-accent transition-colors">Security dashboard &rarr;</p>
+						<p class="text-xs text-fg-muted group-hover:text-accent transition-colors">Sign-ins &amp; sessions &rarr;</p>
 					</a>
 					<a href="/admin/data-hygiene" class="card hover:shadow-md transition-shadow group">
 						<div class="flex items-center justify-between">
-							<p class="text-sm font-medium text-fg-secondary">Data Hygiene</p>
+							<p class="text-sm font-medium text-fg-secondary">Storage &amp; cleanup</p>
 							<span class="stat-icon-amber"><i class="fa-solid fa-broom"></i></span>
 						</div>
 						<p class="text-lg font-semibold text-fg mt-2">Orphan Cleanup</p>
@@ -168,7 +169,7 @@ templ AdminDashboardPage(userCount, campaignCount, mediaFileCount int, totalStor
 					class="text-xs text-fg-muted hover:text-accent transition-colors inline-flex items-center gap-1.5"
 				>
 					<i class="fa-solid fa-wand-magic-sparkles text-[10px]"></i>
-					Open Surface Demo
+					Open Design Lab
 					<i class="fa-solid fa-arrow-up-right-from-square text-[8px]"></i>
 				</a>
 			</div>
@@ -223,4 +224,13 @@ templ activityList(entries []ActivityEntry) {
 			}
 		</ul>
 	}
+}
+
+// countOrDash shows a dash when the count could not be loaded (negative), so a
+// failed lookup never reads as "0".
+func countOrDash(n int) string {
+	if n < 0 {
+		return "—"
+	}
+	return fmt.Sprintf("%d", n)
 }

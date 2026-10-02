@@ -20,7 +20,7 @@ type CampaignListData struct {
 templ AdminCampaignsPage(data CampaignListData) {
 	@layouts.App("Campaigns - Admin") {
 		<div class="max-w-4xl mx-auto space-y-6">
-			<h1 class="text-2xl font-bold text-fg">All Campaigns</h1>
+			<h1 class="text-2xl font-bold text-fg">Campaigns</h1>
 			@adminListSearch(data.View)
 			@AdminCampaignsList(data)
 		</div>
@@ -80,12 +80,20 @@ templ AdminCampaignsList(data CampaignListData) {
 														<input type="hidden" name="csrf_token" value={ csrfToken }/>
 														<button type="submit" name="role" value="player" class="block w-full text-left px-4 py-2 text-sm text-fg-body hover:bg-surface-alt transition-colors">Player</button>
 														<button type="submit" name="role" value="scribe" class="block w-full text-left px-4 py-2 text-sm text-fg-body hover:bg-surface-alt transition-colors">Scribe</button>
+													</form>
+													<form
+														hx-post={ fmt.Sprintf("/admin/campaigns/%s/join", c.ID) }
+														hx-headers={ fmt.Sprintf(`{"X-CSRF-Token":"%s"}`, csrfToken) }
+														hx-confirm="Join as Owner? Ownership moves to you and the current owner loses it."
+													>
+														<input type="hidden" name="csrf_token" value={ csrfToken }/>
 														<button type="submit" name="role" value="owner" class="block w-full text-left px-4 py-2 text-sm text-amber-600 hover:bg-surface-alt transition-colors">Owner (transfers)</button>
 													</form>
 												</div>
 											</div>
 											<button
 												hx-delete={ fmt.Sprintf("/admin/campaigns/%s/leave", c.ID) }
+												hx-confirm="Leave this campaign? You will lose the access you gave yourself."
 												hx-headers={ fmt.Sprintf(`{"X-CSRF-Token":"%s"}`, csrfToken) }
 												class="text-sm text-fg-muted hover:text-fg-body transition-colors"
 											>
