@@ -257,7 +257,10 @@ func moonPhaseFalls(m *Moon, abs int, target float64) bool {
 	}
 	x := m.MoonPhase(abs) - target
 	x -= math.Floor(x + 0.5) // signed cycles since the turning point, in [-0.5, 0.5)
-	daysSince := x * m.CycleDays
+	// Rounded so a moment exactly between two days (a 31.4-day cycle with a
+	// whole-day offset does this) lands on one of them rather than, through
+	// float noise, on neither.
+	daysSince := math.Round(x*m.CycleDays*1e6) / 1e6
 	return daysSince > -0.5 && daysSince <= 0.5
 }
 

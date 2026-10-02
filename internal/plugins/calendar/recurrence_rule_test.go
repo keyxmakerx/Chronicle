@@ -527,3 +527,19 @@ func TestDayCursor_WalksBothWays(t *testing.T) {
 		t.Errorf("leap day in a common year started at %v", got)
 	}
 }
+
+// A phase moment exactly between two days belongs to exactly one of them:
+// with a 31.4-day cycle and a 12-day offset the full moon sits between days
+// 66 and 67 to the last decimal, and float noise used to drop it from both.
+func TestMoonPhaseFalls_HalfDayTieBelongsToOneDay(t *testing.T) {
+	m := &Moon{CycleDays: 31.4, PhaseOffset: 12}
+	n := 0
+	for abs := 60; abs <= 75; abs++ {
+		if moonPhaseFalls(m, abs, 0.5) {
+			n++
+		}
+	}
+	if n != 1 {
+		t.Errorf("full moon fell on %d days of 60..75, want exactly 1", n)
+	}
+}
