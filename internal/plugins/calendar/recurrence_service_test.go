@@ -404,6 +404,42 @@ func TestUpdateEvent_AnchorCycleRefused(t *testing.T) {
 	}
 }
 
+// TestUpdateEvent_HiddenDependentNeverRefusesAScribe: whether an anchor
+// may start following another event must not depend on dependents the
+// writer cannot see, or the refusal itself would reveal them.
+func TestUpdateEvent_HiddenDependentNeverRefusesAScribe(t *testing.T) {
+	byRule := RecurrenceByRule
+	tests := []struct {
+		name       string
+		dependent  string // the dependent's visibility
+		viewer     permissions.Viewer
+		wantRefuse bool
+	}{
+		{"scribe, visible dependent", "everyone", scribeViewer("s"), true},
+		{"scribe, Director-only dependent", "dm_only", scribeViewer("s"), false},
+		{"owner, Director-only dependent", "dm_only", ownerViewer("o"), true},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			w := newRuleWorld()
+			w.add(Event{ID: "dep", Name: "Aftermath", Year: 1, Month: 1, Day: 1, IsRecurring: true, RecurrenceType: &byRule,
+				Visibility:     tt.dependent,
+				RecurrenceRule: &RecurrenceRule{Match: []RuleCondition{{Kind: RuleRelativeToEvent, EventID: "masks"}}}})
+			err := w.svc().UpdateEvent(context.Background(), "masks", "cal-1", testCampaignA, UpdateEventInput{
+				RecurrenceType: patch.Of(byRule),
+				RecurrenceRule: patch.Of(json.RawMessage(`{"match":[{"kind":"after_event","event_id":"once","days":1}]}`)),
+			}, tt.viewer)
+			if tt.wantRefuse {
+				wantStatus(t, err, http.StatusUnprocessableEntity, "other events repeat relative to this one")
+				return
+			}
+			if err != nil {
+				t.Fatalf("a hidden dependent refused the write: %v", err)
+			}
+		})
+	}
+}
+
 func TestSetOccurrenceOverride(t *testing.T) {
 	tests := []struct {
 		name   string

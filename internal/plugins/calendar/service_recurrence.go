@@ -99,8 +99,9 @@ func (s *calendarService) visibleAnchors(ctx context.Context, cal *Calendar, cam
 // loadRuleGeometry). selfID is the event being saved, empty on create.
 // Anchors must be events on this calendar the author can see, never the
 // event itself, and never an event that itself repeats relative to
-// another; and an event other rules repeat relative to may not start
-// repeating relative to a third. That one level keeps every chain finite.
+// another; and an event that rules the author can see repeat relative to
+// may not start repeating relative to a third. That one level keeps every
+// chain finite.
 func (s *calendarService) checkRule(ctx context.Context, cal *Calendar, campaignID, selfID string, rule *RecurrenceRule, author permissions.Viewer) error {
 	visibleMoon := func(m Moon) bool { return author.SkipsPerUserRules() || !m.HiddenFromPlayers }
 	if err := rule.validateAgainstCalendar(cal, visibleMoon); err != nil {
@@ -129,19 +130,35 @@ func (s *calendarService) checkRule(ctx context.Context, cal *Calendar, campaign
 	if selfID == "" {
 		return nil
 	}
+	// Only dependents the writer can see may refuse the write. Refusing
+	// because of a hidden one would tell a Scribe that a Director-only event
+	// repeats relative to this one. A hidden dependent is instead left to
+	// the one-level guard at read time: its anchor now follows another
+	// event, so that condition matches nothing until the Director fixes
+	// it, and saving it again is refused with a message naming this anchor.
 	ruleEvents, err := s.eventRepo.ListRuleEvents(ctx, cal.ID)
 	if err != nil {
 		return fmt.Errorf("list rule events: %w", err)
 	}
+	var dependents []Event
 	for _, e := range ruleEvents {
-		if e.ID == selfID || e.RecurrenceRule == nil {
+		if e.ID == selfID || e.RecurrenceRule == nil || !e.usesRuleType() {
 			continue
 		}
 		for _, id := range e.RecurrenceRule.anchorIDs() {
-			if id == selfID {
-				return apperror.NewValidation("other events repeat relative to this one, so it cannot repeat relative to another event")
+			if id == selfID && eventVisibleToViewer(e, author) {
+				dependents = append(dependents, e)
+				break
 			}
 		}
+	}
+	if len(dependents) > 0 && !author.SkipsPerUserRules() {
+		if dependents, err = s.dropUnannouncedFutureEvents(ctx, cal, campaignID, dependents); err != nil {
+			return err
+		}
+	}
+	if len(dependents) > 0 {
+		return apperror.NewValidation("other events repeat relative to this one, so it cannot repeat relative to another event")
 	}
 	return nil
 }
