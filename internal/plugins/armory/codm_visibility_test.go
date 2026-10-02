@@ -40,6 +40,8 @@ func (f *fakeRoleCapturingService) ListItems(ctx context.Context, campaignID str
 	return nil, 0, errStopAfterCapture
 }
 
+func (f *fakeRoleCapturingService) SetTagLister(TagLister) {}
+
 func (f *fakeRoleCapturingService) CountItems(ctx context.Context, campaignID string, role int, userID string) (int, error) {
 	f.lastCountRole = role
 	f.countCalled = true

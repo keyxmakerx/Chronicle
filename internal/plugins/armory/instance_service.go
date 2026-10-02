@@ -4,18 +4,23 @@ package armory
 
 import (
 	"context"
+	"errors"
+	"fmt"
+	"net/http"
 	"regexp"
 	"strings"
 	"unicode"
 
 	"github.com/keyxmakerx/chronicle/internal/apperror"
+	"github.com/keyxmakerx/chronicle/internal/permissions"
 	"github.com/keyxmakerx/chronicle/internal/sanitize"
 )
 
 // InstanceService handles business logic for inventory instances.
 type InstanceService interface {
-	// ListInstances returns all instances for a campaign.
-	ListInstances(ctx context.Context, campaignID string) ([]InventoryInstance, error)
+	// ListInstances returns all instances for a campaign, with each ItemCount
+	// narrowed to the items the viewer (role + userID) may see.
+	ListInstances(ctx context.Context, campaignID string, role int, userID string) ([]InventoryInstance, error)
 
 	// GetInstance retrieves an instance by ID with campaign IDOR check.
 	GetInstance(ctx context.Context, campaignID string, instanceID int) (*InventoryInstance, error)
@@ -36,19 +41,83 @@ type InstanceService interface {
 	RemoveItem(ctx context.Context, campaignID string, instanceID int, entityID string) error
 }
 
+// EntityCampaignChecker reports whether an entity belongs to a campaign.
+// Implemented in routes.go over the entities service so this plugin never
+// reaches into another plugin's repository.
+type EntityCampaignChecker interface {
+	EntityBelongsToCampaign(ctx context.Context, entityID, campaignID string) (bool, error)
+}
+
 // instanceService implements InstanceService.
 type instanceService struct {
-	repo InstanceRepository
+	repo           InstanceRepository
+	visibility     EntityVisibilityFilter
+	entityCampaign EntityCampaignChecker
 }
 
-// NewInstanceService creates a new instance service.
-func NewInstanceService(repo InstanceRepository) InstanceService {
-	return &instanceService{repo: repo}
+// NewInstanceService creates a new instance service. visibility is the same
+// canonical gate the gallery uses, so a collection's count can never exceed
+// what its gallery view lists; entityCampaign guards AddItem against linking
+// another campaign's entity.
+func NewInstanceService(repo InstanceRepository, visibility EntityVisibilityFilter, entityCampaign EntityCampaignChecker) InstanceService {
+	return &instanceService{repo: repo, visibility: visibility, entityCampaign: entityCampaign}
 }
 
-// ListInstances returns all instances for a campaign.
-func (s *instanceService) ListInstances(ctx context.Context, campaignID string) ([]InventoryInstance, error) {
-	return s.repo.ListByCampaign(ctx, campaignID)
+// ListInstances returns the campaign's instances with viewer-visible counts.
+// The raw SQL count ignores entity visibility, so a Player would be told
+// "Loot (7)" and then see two items; counting through the visibility filter
+// avoids both the mismatch and the leak of how many hidden items exist.
+func (s *instanceService) ListInstances(ctx context.Context, campaignID string, role int, userID string) ([]InventoryInstance, error) {
+	instances, err := s.repo.ListByCampaign(ctx, campaignID)
+	if err != nil {
+		return nil, err
+	}
+	if len(instances) == 0 {
+		return instances, nil
+	}
+	byInstance, err := s.repo.ListItemEntityIDsByInstance(ctx, campaignID)
+	if err != nil {
+		return nil, err
+	}
+
+	// nil means "unrestricted" (Owner); a non-nil set is the viewable ids.
+	var viewable map[string]bool
+	if role < permissions.RoleOwner {
+		viewable = map[string]bool{}
+		seen := make(map[string]bool)
+		all := make([]string, 0)
+		for _, ids := range byInstance {
+			for _, id := range ids {
+				if !seen[id] {
+					seen[id] = true
+					all = append(all, id)
+				}
+			}
+		}
+		// Fail closed without a filter, like the gallery.
+		if s.visibility != nil && len(all) > 0 {
+			viewable, err = s.visibility.FilterViewableEntityIDs(ctx, campaignID, all, role, userID)
+			if err != nil {
+				return nil, fmt.Errorf("filtering instance item visibility: %w", err)
+			}
+		}
+	}
+
+	for i := range instances {
+		ids := byInstance[instances[i].ID]
+		if viewable == nil {
+			instances[i].ItemCount = len(ids)
+			continue
+		}
+		n := 0
+		for _, id := range ids {
+			if viewable[id] {
+				n++
+			}
+		}
+		instances[i].ItemCount = n
+	}
+	return instances, nil
 }
 
 // GetInstance retrieves and validates an instance belongs to the campaign.
@@ -158,6 +227,22 @@ func (s *instanceService) AddItem(ctx context.Context, campaignID string, instan
 	}
 	if entityID == "" {
 		return apperror.NewBadRequest("entity_id is required")
+	}
+	// Without this, any entity id (including another campaign's) could be
+	// linked and then counted or listed here.
+	if s.entityCampaign == nil {
+		return apperror.NewInternal(errors.New("entity campaign checker not configured"))
+	}
+	ok, err := s.entityCampaign.EntityBelongsToCampaign(ctx, entityID, campaignID)
+	if err != nil {
+		var appErr *apperror.AppError
+		if errors.As(err, &appErr) && appErr.Code == http.StatusNotFound {
+			return apperror.NewNotFound("entity")
+		}
+		return err
+	}
+	if !ok {
+		return apperror.NewNotFound("entity")
 	}
 	return s.repo.AddItem(ctx, instanceID, entityID, 1)
 }

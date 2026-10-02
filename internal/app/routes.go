@@ -1676,6 +1676,30 @@ func (a *armoryItemTypeFinderAdapter) FindItemTypes(ctx context.Context, campaig
 	return infos, nil
 }
 
+// armoryTagListerAdapter wraps tags.TagService to implement armory.TagLister,
+// so gallery cards carry their tags. Whether GM-only tags are included is the
+// caller's decision, passed through.
+type armoryTagListerAdapter struct {
+	svc tags.TagService
+}
+
+// ListTagsForEntities batch-fetches tags for the given entities.
+func (a *armoryTagListerAdapter) ListTagsForEntities(ctx context.Context, entityIDs []string, includeDmOnly bool) (map[string][]armory.TagInfo, error) {
+	tagsMap, err := a.svc.GetEntityTagsBatch(ctx, entityIDs, includeDmOnly)
+	if err != nil {
+		return nil, err
+	}
+	result := make(map[string][]armory.TagInfo, len(tagsMap))
+	for eid, tagList := range tagsMap {
+		infos := make([]armory.TagInfo, len(tagList))
+		for i, t := range tagList {
+			infos[i] = armory.TagInfo{ID: t.ID, Name: t.Name, Slug: t.Slug, Color: t.Color}
+		}
+		result[eid] = infos
+	}
+	return result, nil
+}
+
 // armoryRelationMetadataAdapter wraps the relations service to implement
 // armory.RelationMetadataUpdater. Used by the transaction service to decrement
 // shop stock when a purchase is made.
@@ -3078,11 +3102,12 @@ func (a *App) RegisterRoutes() {
 	// Same visibility-gate reasoning as the NPC plugin above.
 	armoryRepo := armory.NewArmoryRepository(a.DB)
 	armorySvc := armory.NewArmoryService(armoryRepo, &armoryItemTypeFinderAdapter{svc: entityService}, &entityVisibilityFilterAdapter{svc: entityService})
+	armorySvc.SetTagLister(&armoryTagListerAdapter{svc: tagService})
 	armoryHandler := armory.NewHandler(armorySvc)
 
 	// Instance service: named inventory collections per campaign.
 	instRepo := armory.NewInstanceRepository(a.DB)
-	instSvc := armory.NewInstanceService(instRepo)
+	instSvc := armory.NewInstanceService(instRepo, &entityVisibilityFilterAdapter{svc: entityService}, &entityCampaignCheckerAdapter{svc: entityService})
 	instHandler := armory.NewInstanceHandler(instSvc)
 	armoryHandler.SetInstanceService(instSvc)
 

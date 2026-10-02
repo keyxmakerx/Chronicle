@@ -62,12 +62,12 @@ func (m *mockTypeFinder) FindItemTypes(ctx context.Context, campaignID string) (
 }
 
 type mockTagLister struct {
-	listFn func(ctx context.Context, entityIDs []string) (map[string][]TagInfo, error)
+	listFn func(ctx context.Context, entityIDs []string, includeDmOnly bool) (map[string][]TagInfo, error)
 }
 
-func (m *mockTagLister) ListTagsForEntities(ctx context.Context, entityIDs []string) (map[string][]TagInfo, error) {
+func (m *mockTagLister) ListTagsForEntities(ctx context.Context, entityIDs []string, includeDmOnly bool) (map[string][]TagInfo, error) {
 	if m.listFn != nil {
-		return m.listFn(ctx, entityIDs)
+		return m.listFn(ctx, entityIDs, includeDmOnly)
 	}
 	return nil, nil
 }
@@ -182,7 +182,7 @@ func TestListItems_WithTags(t *testing.T) {
 	}
 	svc := newTestArmoryService(repo, tf, nil)
 	svc.tagLister = &mockTagLister{
-		listFn: func(_ context.Context, ids []string) (map[string][]TagInfo, error) {
+		listFn: func(_ context.Context, ids []string, _ bool) (map[string][]TagInfo, error) {
 			return map[string][]TagInfo{
 				"item-1": {{Name: "Weapon", Color: "#ff0000"}},
 			}, nil

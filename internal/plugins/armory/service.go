@@ -30,8 +30,10 @@ type EntityVisibilityFilter interface {
 
 // TagLister fetches tags for a set of entity IDs in batch.
 // Implemented by tags.TagService — injected to decorate item cards with tags.
+// includeDmOnly must be false for viewers below Scribe so GM-only tags never
+// reach a player's card.
 type TagLister interface {
-	ListTagsForEntities(ctx context.Context, entityIDs []string) (map[string][]TagInfo, error)
+	ListTagsForEntities(ctx context.Context, entityIDs []string, includeDmOnly bool) (map[string][]TagInfo, error)
 }
 
 // TagInfo holds tag display data returned by TagLister.
@@ -52,6 +54,9 @@ type ArmoryService interface {
 
 	// GetItemTypes returns all item-category entity types for filter dropdowns.
 	GetItemTypes(ctx context.Context, campaignID string) ([]ItemTypeInfo, error)
+
+	// SetTagLister injects the tag batch fetcher that decorates item cards.
+	SetTagLister(tl TagLister)
 }
 
 // armoryService implements ArmoryService.
@@ -111,7 +116,7 @@ func (s *armoryService) ListItems(ctx context.Context, campaignID string, role i
 		for i := range cards {
 			ids[i] = cards[i].ID
 		}
-		tagMap, err := s.tagLister.ListTagsForEntities(ctx, ids)
+		tagMap, err := s.tagLister.ListTagsForEntities(ctx, ids, role >= permissions.RoleScribe)
 		if err == nil {
 			for i := range cards {
 				if infos, ok := tagMap[cards[i].ID]; ok {

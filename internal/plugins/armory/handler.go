@@ -88,7 +88,7 @@ func (h *Handler) Index(c echo.Context) error {
 	// Fetch inventory instances for the instance selector.
 	var instances []InventoryInstance
 	if h.instSvc != nil {
-		instances, _ = h.instSvc.ListInstances(c.Request().Context(), cc.Campaign.ID)
+		instances, _ = h.instSvc.ListInstances(c.Request().Context(), cc.Campaign.ID, cc.VisibilityRole(), userID)
 	}
 
 	// Resolve selected instance name for display.
@@ -134,7 +134,7 @@ func (h *Handler) ManageInstances(c echo.Context) error {
 
 	var instances []InventoryInstance
 	if h.instSvc != nil {
-		instances, _ = h.instSvc.ListInstances(c.Request().Context(), cc.Campaign.ID)
+		instances, _ = h.instSvc.ListInstances(c.Request().Context(), cc.Campaign.ID, cc.VisibilityRole(), auth.GetUserID(c))
 	}
 
 	csrfToken := middleware.GetCSRFToken(c)
