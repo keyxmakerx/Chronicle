@@ -219,6 +219,7 @@ func (m *fakeCalendarRepo) ApplyImport(ctx context.Context, cal *Calendar, resul
 type fakeEventRepo struct {
 	createEventFn         func(ctx context.Context, evt *Event) error
 	getEventFn            func(ctx context.Context, id string) (*Event, error)
+	getEventsByIDsFn      func(ctx context.Context, calendarID string, ids []string) ([]Event, error)
 	updateEventFn         func(ctx context.Context, evt *Event) error
 	deleteEventFn         func(ctx context.Context, id string) error
 	listForMonthFn        func(ctx context.Context, calendarID string, year, month, role int) ([]Event, error)
@@ -251,6 +252,12 @@ func (m *fakeEventRepo) CreateEvent(ctx context.Context, evt *Event) error {
 func (m *fakeEventRepo) GetEvent(ctx context.Context, id string) (*Event, error) {
 	if m.getEventFn != nil {
 		return m.getEventFn(ctx, id)
+	}
+	return nil, nil
+}
+func (m *fakeEventRepo) GetEventsByIDs(ctx context.Context, calendarID string, ids []string) ([]Event, error) {
+	if m.getEventsByIDsFn != nil {
+		return m.getEventsByIDsFn(ctx, calendarID, ids)
 	}
 	return nil, nil
 }

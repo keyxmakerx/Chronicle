@@ -636,11 +636,11 @@ func (a *calendarEventLinkListerAdapter) CalendarName(ctx context.Context, campa
 		return ""
 	}
 	v := permissions.RequestViewer(role, "")
-	cal, err := a.svc.GetCalendarForViewer(ctx, calendarID, campaignID, v)
-	if err != nil || cal == nil {
+	name, err := a.svc.GetCalendarNameForViewer(ctx, calendarID, campaignID, v)
+	if err != nil {
 		return ""
 	}
-	return cal.Name
+	return name
 }
 
 // EventsByIDs implements timeline.CalendarEventLinkLister. Built as a plain
@@ -650,22 +650,23 @@ func (a *calendarEventLinkListerAdapter) CalendarName(ctx context.Context, campa
 // check, never looser, since it also runs a calendar event's own
 // visibility_rules and redacts a hidden linked entity, both of which the old
 // SQL never touched.
-//
-// One GetEventForViewer call per id — no batch read exists on
-// CalendarService yet — acceptable for the handful of events a timeline
-// typically links; a real batch method is the natural follow-up if that
-// stops being true.
+// One batch read serves every id, so cost no longer grows with link count.
 func (a *calendarEventLinkListerAdapter) EventsByIDs(ctx context.Context, calendarID, campaignID string, eventIDs []string, role int) ([]timeline.CalendarEventRef, error) {
 	if calendarID == "" || len(eventIDs) == 0 {
 		return nil, nil
 	}
 	v := permissions.RequestViewer(role, "")
-	refs := make([]timeline.CalendarEventRef, 0, len(eventIDs))
-	for _, id := range eventIDs {
-		evt, err := a.svc.GetEventForViewer(ctx, id, calendarID, campaignID, v)
-		if err != nil {
-			continue // not found, or not visible to this role — simply absent
+	events, err := a.svc.ListEventsByIDsForViewer(ctx, calendarID, campaignID, eventIDs, v)
+	if err != nil {
+		if isNotFound(err) {
+			// Calendar missing or hidden from this role: no event resolves.
+			return nil, nil
 		}
+		return nil, err
+	}
+	refs := make([]timeline.CalendarEventRef, 0, len(events))
+	for i := range events {
+		evt := &events[i]
 		var category *string
 		if evt.KindSlug != "" {
 			category = &evt.KindSlug
@@ -2871,6 +2872,14 @@ func (a *App) RegisterRoutes() {
 	// Entity campaign checker prevents cross-campaign entity linking (IDOR).
 	sessionsRepo := sessions.NewSessionRepository(a.DB)
 	sessionsService := sessions.NewSessionService(sessionsRepo, &entityCampaignCheckerAdapter{svc: entityService}, &entityVisibilityFilterAdapter{svc: entityService})
+	// The calendar's anchor-move preview names the sessions it would re-date
+	// through this lookup; without it the owner's warning would always read
+	// "no sessions affected".
+	if wired, ok := calendarService.(interface {
+		SetGameNightsAffectedByAnchorMove(calendar.GameNightsAffectedByAnchorMove)
+	}); ok {
+		wired.SetGameNightsAffectedByAnchorMove(&gameNightsAnchorMoveAdapter{svc: sessionsService})
+	}
 	sessionsHandler := sessions.NewHandler(sessionsService)
 	sessionsHandler.SetMemberLister(campaignService)
 	sessionsHandler.SetMailSender(smtpService, a.Config.BaseURL)
