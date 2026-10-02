@@ -5,6 +5,7 @@ package admin
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"log/slog"
 	"net/http"
@@ -1010,28 +1011,62 @@ func (h *Handler) ApplyMigrationsAPI(c echo.Context) error {
 		return apperror.NewInternal(fmt.Errorf("database explorer not configured"))
 	}
 
-	results, err := h.databaseExplorer.ApplyPendingMigrations(c.Request().Context())
+	ctx := c.Request().Context()
+
+	// Snapshot what was pending first: the results list every plugin, healthy
+	// or not, so only this lets us say which ones actually applied something.
+	pendingBefore := map[string]int{}
+	if statuses, err := h.databaseExplorer.GetMigrationStatus(ctx); err == nil {
+		for _, s := range statuses {
+			pendingBefore[s.Slug] = s.Pending
+		}
+	}
+
+	results, err := h.databaseExplorer.ApplyPendingMigrations(ctx)
 	if err != nil {
 		return apperror.NewInternal(fmt.Errorf("applying migrations: %w", err))
 	}
 
+	var applied, failed []string
 	for _, r := range results {
 		if r.Healthy {
-			slog.Info("migration applied via admin",
-				slog.String("plugin", r.Slug),
-				slog.Int("version", r.Version),
-			)
-		} else {
-			slog.Error("migration failed via admin",
-				slog.String("plugin", r.Slug),
-				slog.Any("error", r.Error),
-			)
+			if pendingBefore[r.Slug] > 0 {
+				applied = append(applied, r.Slug)
+				slog.Info("migration applied via admin",
+					slog.String("plugin", r.Slug),
+					slog.Int("version", r.Version),
+				)
+			}
+			continue
 		}
+		failed = append(failed, r.Slug)
+		slog.Error("migration failed via admin",
+			slog.String("plugin", r.Slug),
+			slog.Any("error", r.Error),
+		)
 	}
 
-	h.record(c, "migrations.applied", "database", "", "")
+	if len(applied) > 0 {
+		h.record(c, "migrations.applied", "database", "", strings.Join(applied, ", "))
+	}
 
-	return middleware.HTMXRedirect(c, "/admin/database")
+	if len(failed) == 0 {
+		return middleware.HTMXRedirect(c, "/admin/database")
+	}
+
+	// A redirect would drop the toast, so stay on the page and say what
+	// failed; the server log has the technical error.
+	msg := "These parts could not be updated: " + strings.Join(failed, ", ") + ". Check the server log, then reload this page."
+	if len(applied) > 0 {
+		msg = "Updated " + strings.Join(applied, ", ") + ". " + msg
+	}
+	if payload, jerr := json.Marshal(map[string]any{"chronicle:notify": map[string]string{"message": msg, "type": "error"}}); jerr == nil {
+		c.Response().Header().Set("HX-Trigger", string(payload))
+	}
+	if !middleware.IsHTMX(c) {
+		return middleware.HTMXRedirect(c, "/admin/database")
+	}
+	return c.NoContent(http.StatusNoContent)
 }
 
 // Systems renders the system diagnostics page (GET /admin/systems).
