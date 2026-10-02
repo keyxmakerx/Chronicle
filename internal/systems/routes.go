@@ -33,6 +33,8 @@ func RegisterRoutes(e *echo.Echo, h *SystemHandler, addonSvc addons.AddonService
 	// glossary so widgets get the authored slug/properties. Static "data"
 	// segment, so it does not collide with the /:cat param route below.
 	mg.GET("/data/:file", h.SystemDataAPI)
+	// The Rulebook book, filtered per viewer (static segment, before /:cat).
+	mg.GET("/book", h.BookAPI)
 	mg.GET("/:cat", h.CategoryList)
 	mg.GET("/:cat/:item", h.ItemDetail)
 	mg.GET("/:cat/:item/tooltip", h.TooltipAPI)

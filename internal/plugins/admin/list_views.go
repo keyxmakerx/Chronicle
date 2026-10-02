@@ -5,6 +5,8 @@
 package admin
 
 import (
+	"net/url"
+
 	"github.com/keyxmakerx/chronicle/internal/plugins/auth"
 	"github.com/keyxmakerx/chronicle/internal/plugins/campaigns"
 )
@@ -99,4 +101,22 @@ func campaignListView(lq listQuery, filter string, counts []campaigns.SystemCoun
 		Page:        page,
 		PerPage:     adminListPerPage,
 	}
+}
+
+// peopleListReturnURL is where a row action on the People list sends the
+// admin back to: the list URL they were on, so search, chip and page survive.
+// currentURL is the browser-supplied HX-Current-URL, so it is untrusted: only
+// the path is compared (host ignored, which keeps the redirect same-site) and
+// the query is re-bound through parseListQuery rather than echoed, so nothing
+// but q, f and page can ride along. Any other origin page (the Security page
+// shares these actions) gets fallback.
+func peopleListReturnURL(currentURL, fallback string) string {
+	u, err := url.Parse(currentURL)
+	if err != nil || u.Path != "/admin/users" {
+		return fallback
+	}
+	vals := u.Query()
+	lq := parseListQuery(vals.Get("q"), vals.Get("f"), vals.Get("page"))
+	v := listView{BaseURL: "/admin/users", Query: lq.Q}
+	return v.href(string(auth.ParseUserFilter(lq.Filter)), lq.Page)
 }

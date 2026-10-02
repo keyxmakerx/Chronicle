@@ -48,16 +48,14 @@ templ App(title string) {
 			@Sidebar()
 
 			<!-- Floating button to restore hidden sidebar. It sits where the hide
-			     button was: the campaign sidebar keeps hide in its footer, the
-			     site sidebar in its brand row, so the arrow doesn't jump. It fades
-			     in as the sidebar's slide ends (CSS .sidebar-restore). -->
+			     button was, in the footer of both sidebars, so the arrow doesn't
+			     jump. It fades in as the sidebar's slide ends (CSS .sidebar-restore). -->
 			<button
 				:class="sidebarHidden && 'is-shown'"
 				:tabindex="sidebarHidden ? 0 : -1"
 				:aria-hidden="sidebarHidden ? 'false' : 'true'"
 				@click="sidebarHidden = false; localStorage.setItem('chronicle-sidebar-hidden', 'false')"
-				class={ "sidebar-restore fixed left-3 z-50 w-8 h-8 flex items-center justify-center rounded-lg bg-sidebar-bg text-sidebar-text shadow-lg hover:bg-sidebar-hover",
-					templ.KV("bottom-1", InCampaign(ctx)), templ.KV("top-3", !InCampaign(ctx)) }
+				class="sidebar-restore fixed left-3 bottom-1 z-50 w-8 h-8 flex items-center justify-center rounded-lg bg-sidebar-bg text-sidebar-text shadow-lg hover:bg-sidebar-hover"
 				title="Show sidebar"
 				aria-label="Show sidebar"
 				x-cloak
@@ -187,7 +185,7 @@ templ Sidebar() {
 			}
 			@campaignNavFooter()
 		} else {
-			<!-- Logo / Brand + Pin Toggle -->
+			<!-- Logo / Brand -->
 			<div class="h-16 flex items-center px-4 border-b border-gray-700 shrink-0">
 				<a href="/campaigns" class="flex items-center flex-1 min-w-0 gap-2 hover:opacity-80 transition-opacity">
 					<span class="text-lg font-bold text-white tracking-tight truncate sidebar-hide-collapsed">Chronicle</span>
@@ -196,6 +194,21 @@ templ Sidebar() {
 						<i class="fa-solid fa-book-open text-white text-sm"></i>
 					</span>
 				</a>
+			</div>
+			<!-- Non-campaign sidebar: simple navigation -->
+			<nav class="flex-1 py-4 overflow-y-auto" hx-boost="true" hx-target="#main-content" hx-select="#main-content" hx-swap="innerHTML show:window:top">
+				@DefaultSidebarNav()
+			</nav>
+			<!-- Admin section (site admins only, static, collapsible) -->
+			if GetIsAdmin(ctx) {
+				@AdminSidebarNav()
+			}
+			<!-- Sidebar footer: pin and hide sit here, as in the campaign sidebar,
+			     so the hide arrow and the restore arrow share the bottom-left. -->
+			<div class="h-10 flex items-center gap-0.5 pl-4 pr-1.5 border-t border-gray-700 shrink-0">
+				<div class="flex-1 min-w-0 truncate text-xs text-gray-600 sidebar-hide-collapsed">
+					Chronicle v0.1.0
+				</div>
 				<!-- Pin/unpin button (visible only when expanded) -->
 				<button
 					class="sidebar-pin-btn w-6 h-6 flex items-center justify-center rounded text-gray-500 hover:text-white hover:bg-gray-700 transition-colors"
@@ -206,26 +219,13 @@ templ Sidebar() {
 				</button>
 				<!-- Hide sidebar button (visible only when expanded) -->
 				<button
-					class="sidebar-pin-btn w-6 h-6 flex items-center justify-center rounded text-gray-500 hover:text-white hover:bg-gray-700 transition-colors ml-0.5"
+					class="sidebar-pin-btn w-6 h-6 flex items-center justify-center rounded text-gray-500 hover:text-white hover:bg-gray-700 transition-colors"
 					@click.stop="sidebarHidden = true; localStorage.setItem('chronicle-sidebar-hidden', 'true')"
 					title="Hide sidebar"
+					aria-label="Hide sidebar"
 				>
-					<i class="fa-solid fa-angles-left text-xs"></i>
+					<i class="fa-solid fa-angles-left text-xs" aria-hidden="true"></i>
 				</button>
-			</div>
-			<!-- Non-campaign sidebar: simple navigation -->
-			<nav class="flex-1 py-4 overflow-y-auto" hx-boost="true" hx-target="#main-content" hx-select="#main-content" hx-swap="innerHTML show:window:top">
-				@DefaultSidebarNav()
-			</nav>
-			<!-- Admin section (site admins only, static, collapsible) -->
-			if GetIsAdmin(ctx) {
-				@AdminSidebarNav()
-			}
-			<!-- Sidebar footer -->
-			<div class="p-4 border-t border-gray-700 shrink-0">
-				<div class="text-xs text-gray-600">
-					Chronicle v0.1.0
-				</div>
 			</div>
 		}
 	</aside>

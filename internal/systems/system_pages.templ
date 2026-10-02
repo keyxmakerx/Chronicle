@@ -27,25 +27,40 @@ type categoryInfo struct {
 const rulebookFrontpageWidgetSlug = "rulebook-frontpage"
 
 // SystemIndexPage renders the full module category index page.
-templ SystemIndexPage(cc *campaigns.CampaignContext, manifest *SystemManifest, cats []categoryInfo) {
+templ SystemIndexPage(cc *campaigns.CampaignContext, manifest *SystemManifest, cats []categoryInfo, hasBook bool) {
 	@layouts.App(manifest.Name + " - " + cc.Campaign.Name) {
-		@SystemIndexContent(cc, manifest, cats)
+		@SystemIndexContent(cc, manifest, cats, hasBook)
 	}
 }
 
 // SystemIndexContent renders the module category index (for HTMX swap).
-templ SystemIndexContent(cc *campaigns.CampaignContext, manifest *SystemManifest, cats []categoryInfo) {
+// What the Rules page shows, in order of preference: the system's book
+// (docs/system-rulebook-book.md), its own rulebook front page widget, or the
+// generic category browser. Only one: stacking them read as competing
+// rulebooks. The category routes stay up for links either way.
+templ SystemIndexContent(cc *campaigns.CampaignContext, manifest *SystemManifest, cats []categoryInfo, hasBook bool) {
 	<div id="module-content">
-		@components.Breadcrumbs([]components.BreadcrumbItem{
-			{Label: cc.Campaign.Name, Href: "/campaigns/" + cc.Campaign.ID, Icon: "fa-book-open"},
-			{Label: manifest.Name},
-		})
-		// A system that ships its own rulebook front page gets that page alone:
-		// stacking the generic category browser under it read as a second,
-		// competing rulebook. The category routes stay up for its links.
-		if manifest.HasWidget(rulebookFrontpageWidgetSlug) {
-			<div data-widget={ rulebookFrontpageWidgetSlug } data-campaign-id={ cc.Campaign.ID }></div>
+		if hasBook || manifest.HasWidget(rulebookFrontpageWidgetSlug) {
+			// The rulebook fills the content area edge to edge, with no breadcrumb:
+			// the negative margins cancel <main>'s padding at each breakpoint, so
+			// it reads as the page rather than a box inside it.
+			<div class="-mx-3 -my-3 md:-mx-5 md:-my-4 min-h-full" data-rulebook-fullbleed>
+				if hasBook {
+					<link rel="stylesheet" href={ layouts.AssetURL("/static/css/rulebook.css") }/>
+					<div
+						data-widget="rulebook"
+						data-campaign-id={ cc.Campaign.ID }
+						data-book-url={ "/campaigns/" + cc.Campaign.ID + "/systems/" + manifest.ID + "/book" }
+					></div>
+				} else {
+					<div data-widget={ rulebookFrontpageWidgetSlug } data-campaign-id={ cc.Campaign.ID }></div>
+				}
+			</div>
 		} else {
+			@components.Breadcrumbs([]components.BreadcrumbItem{
+				{Label: cc.Campaign.Name, Href: "/campaigns/" + cc.Campaign.ID, Icon: "fa-book-open"},
+				{Label: manifest.Name},
+			})
 			@systemCategoryBrowser(cc, manifest, cats)
 		}
 	</div>

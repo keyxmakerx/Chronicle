@@ -143,10 +143,11 @@ func (h *SystemHandler) Index(c echo.Context) error {
 		})
 	}
 
+	hasBook := HasBook(h.systemDir(c, mod))
 	if middleware.IsHTMX(c) {
-		return middleware.Render(c, http.StatusOK, SystemIndexContent(cc, manifest, cats))
+		return middleware.Render(c, http.StatusOK, SystemIndexContent(cc, manifest, cats, hasBook))
 	}
-	return middleware.Render(c, http.StatusOK, SystemIndexPage(cc, manifest, cats))
+	return middleware.Render(c, http.StatusOK, SystemIndexPage(cc, manifest, cats, hasBook))
 }
 
 // CategoryList lists items in a system category.
@@ -474,12 +475,7 @@ func (h *SystemHandler) SystemDataAPI(c echo.Context) error {
 		return apperror.NewBadRequest("invalid data file")
 	}
 
-	sysDir := Dir(mod.Info().ID)
-	if sysDir == "" && h.campaignSystems != nil {
-		if cc := campaigns.GetCampaignContext(c); cc != nil {
-			sysDir = h.campaignSystems.Dir(cc.Campaign.ID)
-		}
-	}
+	sysDir := h.systemDir(c, mod)
 	if sysDir == "" {
 		return apperror.NewNotFound("data file not found")
 	}
@@ -497,6 +493,59 @@ func (h *SystemHandler) SystemDataAPI(c echo.Context) error {
 
 	c.Response().Header().Set("Cache-Control", "public, max-age=3600")
 	return c.Blob(http.StatusOK, "application/json", data)
+}
+
+// systemDir is the on-disk folder of a resolved system: the global
+// install, or the campaign's custom upload. "" when it has none.
+func (h *SystemHandler) systemDir(c echo.Context, mod System) string {
+	sysDir := Dir(mod.Info().ID)
+	if sysDir == "" && h.campaignSystems != nil {
+		if cc := campaigns.GetCampaignContext(c); cc != nil {
+			sysDir = h.campaignSystems.Dir(cc.Campaign.ID)
+		}
+	}
+	return sysDir
+}
+
+// BookAPI serves the system's Rulebook book, checked and filtered for the
+// viewer: Directors (the owner, or a member with Director visibility) get
+// everything, players only the player view (FilterBook). Never cached
+// shared, since the body depends on who asks.
+//
+// GET /campaigns/:id/systems/:mod/book
+func (h *SystemHandler) BookAPI(c echo.Context) error {
+	cc := campaigns.GetCampaignContext(c)
+	if cc == nil {
+		return apperror.NewMissingContext()
+	}
+	mod := h.resolveSystem(c)
+	if mod == nil {
+		return apperror.NewNotFound("system not found")
+	}
+	sysDir := h.systemDir(c, mod)
+	if !HasBook(sysDir) {
+		return apperror.NewNotFound("this system has no book")
+	}
+	manifest := mod.Info()
+	book, err := LoadBook(sysDir, manifest)
+	if err != nil {
+		slog.Warn("rulebook book failed to load",
+			slog.String("system", manifest.ID), slog.Any("error", err))
+		// The detail names package files; only Directors need it.
+		msg := "The rulebook could not be opened."
+		if bookViewerIsDirector(cc) {
+			msg += " " + err.Error()
+		}
+		return apperror.NewBadRequest(msg)
+	}
+	c.Response().Header().Set("Cache-Control", "private, no-store")
+	return c.JSON(http.StatusOK, FilterBook(book, bookViewerIsDirector(cc)))
+}
+
+// bookViewerIsDirector: the campaign owner, or a member the owner granted
+// Director (dm_only) visibility. The same rule as every other dm_only surface.
+func bookViewerIsDirector(cc *campaigns.CampaignContext) bool {
+	return cc.VisibilityRole() >= int(campaigns.RoleOwner)
 }
 
 // resolveEnabledSystem returns the System enabled for the given campaign,

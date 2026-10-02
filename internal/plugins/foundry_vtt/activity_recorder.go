@@ -1,4 +1,4 @@
-package extensions
+package foundry_vtt
 
 import "github.com/labstack/echo/v4"
 
@@ -17,20 +17,6 @@ func (h *Handler) SetActivityRecorder(r ActivityRecorder) {
 
 // recordActivity logs an admin change after it succeeded.
 func (h *Handler) recordActivity(c echo.Context, action, targetType, targetID, label string) {
-	if h.activity == nil {
-		return
-	}
-	h.activity.RecordAdminChange(c, action, targetType, targetID, label)
-}
-
-// SetActivityRecorder wires the admin change log for the WASM endpoints.
-// Optional: nil disables it.
-func (h *WASMHandler) SetActivityRecorder(r ActivityRecorder) {
-	h.activity = r
-}
-
-// recordActivity logs an admin change after it succeeded.
-func (h *WASMHandler) recordActivity(c echo.Context, action, targetType, targetID, label string) {
 	if h.activity == nil {
 		return
 	}

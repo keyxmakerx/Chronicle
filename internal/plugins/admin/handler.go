@@ -491,7 +491,7 @@ func (h *Handler) ToggleAdmin(c echo.Context) error {
 		h.record(c, "user.admin_revoked", "user", targetID, user.DisplayName)
 	}
 
-	return middleware.HTMXRedirect(c, "/admin/users")
+	return middleware.HTMXRedirect(c, peopleListReturnURL(c.Request().Header.Get("HX-Current-URL"), "/admin/users"))
 }
 
 // --- Campaigns ---
@@ -807,7 +807,7 @@ func (h *Handler) ForceLogoutUser(c echo.Context) error {
 		slog.String("by", currentUserID),
 	)
 
-	return middleware.HTMXRedirect(c, "/admin/security")
+	return middleware.HTMXRedirect(c, peopleListReturnURL(c.Request().Header.Get("HX-Current-URL"), "/admin/security"))
 }
 
 // DisableUser disables a user account (PUT /admin/security/users/:id/disable).
@@ -837,7 +837,7 @@ func (h *Handler) DisableUser(c echo.Context) error {
 		slog.String("by", currentUserID),
 	)
 
-	return middleware.HTMXRedirect(c, "/admin/security")
+	return middleware.HTMXRedirect(c, peopleListReturnURL(c.Request().Header.Get("HX-Current-URL"), "/admin/security"))
 }
 
 // EnableUser re-enables a disabled user account (PUT /admin/security/users/:id/enable).
@@ -862,7 +862,7 @@ func (h *Handler) EnableUser(c echo.Context) error {
 		slog.String("by", currentUserID),
 	)
 
-	return middleware.HTMXRedirect(c, "/admin/security")
+	return middleware.HTMXRedirect(c, peopleListReturnURL(c.Request().Header.Get("HX-Current-URL"), "/admin/security"))
 }
 
 // --- Database Explorer ---

@@ -123,3 +123,26 @@ func TestAdminUsersList_Render(t *testing.T) {
 		}
 	}
 }
+
+func TestPeopleListReturnURL(t *testing.T) {
+	tests := []struct {
+		name, current, want string
+	}{
+		{"keeps search chip and page", "https://x.example/admin/users?q=ann&f=admins&page=3", "/admin/users?f=admins&page=3&q=ann"},
+		{"bare list stays bare", "https://x.example/admin/users", "/admin/users"},
+		{"unknown chip dropped", "https://x.example/admin/users?f=evil&q=a", "/admin/users?q=a"},
+		{"bad page falls to 1", "https://x.example/admin/users?page=-4", "/admin/users"},
+		{"other admin page uses fallback", "https://x.example/admin/security?q=a", "/fallback"},
+		{"traversal-looking path uses fallback", "https://x.example/admin/users/../security", "/fallback"},
+		{"empty header uses fallback", "", "/fallback"},
+		{"foreign host cannot redirect off-site", "https://evil.example/admin/users?q=a", "/admin/users?q=a"},
+		{"unparseable uses fallback", "://bad", "/fallback"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := peopleListReturnURL(tt.current, "/fallback"); got != tt.want {
+				t.Errorf("got %q, want %q", got, tt.want)
+			}
+		})
+	}
+}

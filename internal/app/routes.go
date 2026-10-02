@@ -2580,6 +2580,7 @@ func (a *App) RegisterRoutes() {
 		a.Config.BaseURL,
 	)
 	fvttHandler := foundry_vtt.NewHandler(fvttService)
+	fvttHandler.SetActivityRecorder(adminActivity)
 	// The campaign show page lazy-loads /foundry-vtt/show-banner-fragment
 	// rather than using a banner adapter wire.
 	if a.PluginHealth.IsHealthy(foundry_vtt.PluginHealthKey) && a.PluginHealth.IsHealthy("packages") {
@@ -2764,14 +2765,16 @@ func (a *App) RegisterRoutes() {
 	// page preview unfolded in place), calendar_editor.js self-gates on that
 	// mount's data-can-edit="true" and opens calendar_event_drawer.js's full
 	// event editor (loaded first so it exists when the editor binds), and
-	// calendar_almanac.js waits for a Calendars page preview. All are no-ops
-	// on every other page, same as every entry here.
+	// calendar_almanac.js waits for a Calendars page preview. rulebook.js
+	// mounts on the Rules page's data-widget="rulebook" when a system ships a
+	// book. All are no-ops on every other page, same as every entry here.
 	pluginBodyScripts := []string{
 		"/static/plugins/" + entities.PluginSlug + "/js/characters.js",
 		"/static/js/widgets/calendar_view.js",
 		"/static/js/widgets/calendar_event_drawer.js",
 		"/static/js/widgets/calendar_editor.js",
 		"/static/js/calendar_almanac.js",
+		"/static/js/widgets/rulebook.js",
 	}
 
 	// The sidebar, campaign dashboard and Extensions hub link to
@@ -3616,6 +3619,7 @@ func (a *App) RegisterRoutes() {
 	wasmHostEnv.SetPluginManager(wasmPluginMgr)
 	wasmHookDispatcher := extensions.NewHookDispatcher(wasmPluginMgr)
 	wasmHandler := extensions.NewWASMHandler(wasmPluginMgr, wasmHookDispatcher, extService)
+	wasmHandler.SetActivityRecorder(adminActivity)
 	extensions.RegisterWASMAdminRoutes(adminGroup, wasmHandler)
 	extensions.RegisterWASMCampaignRoutes(e, wasmHandler, campaignService, authService)
 

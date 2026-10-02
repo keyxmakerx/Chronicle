@@ -348,6 +348,45 @@
     return c ? String(c).replace(/[^#a-zA-Z0-9(),.% ]/g, '') : '';
   }
 
+  // A weather reading's icon is one of the generator's six glyphs; anything
+  // else (an older or imported reading) gets a neutral sun-and-cloud.
+  var WEATHER_ICONS = { clear: 'fa-sun', cloud: 'fa-cloud', rain: 'fa-cloud-rain', snow: 'fa-snowflake', storm: 'fa-cloud-bolt', fog: 'fa-smog' };
+  function weatherIcon(w) { return WEATHER_ICONS[w && w.icon] || 'fa-cloud-sun'; }
+  function weatherLabel(w) { return w.preset_label || w.description || 'Weather recorded'; }
+  // Colour is per reading, so supernatural weather (acid rain, an owner's
+  // own fire rain) reads apart from plain rain with the same glyph.
+  function weatherStyle(w) { var c = sanitizeColor(w.color); return c ? ' style="color:' + c + '"' : ''; }
+
+  // The corner mark on a day cell. Future days only ever reach a Director
+  // (the server filters them for everyone else), drawn faint.
+  function weatherMarkHTML(w, future) {
+    if (!w) return '';
+    return '<span class="wxm' + (future ? ' fut' : '') + '" title="' + esc(weatherLabel(w)) + '"' + weatherStyle(w) + '>' +
+      '<i class="fa-solid ' + weatherIcon(w) + '" aria-hidden="true"></i></span>';
+  }
+
+  var WIND_DIRS = { N: 'north', NNE: 'north', NE: 'northeast', ENE: 'east', E: 'east', ESE: 'east', SE: 'southeast', SSE: 'south',
+    S: 'south', SSW: 'south', SW: 'southwest', WSW: 'west', W: 'west', WNW: 'west', NW: 'northwest', NNW: 'north' };
+  function windWords(wind) {
+    if (!wind || !wind.speed_tier) return '';
+    var tier = String(wind.speed_tier);
+    if (tier === 'calm') return 'Calm';
+    var dir = WIND_DIRS[wind.direction];
+    return tier.charAt(0).toUpperCase() + tier.slice(1) + ' wind' + (dir ? ' from the ' + dir : '');
+  }
+
+  // The day card's weather line. A future day is ghosted with a note that
+  // players see it on the day.
+  function weatherFactHTML(w, future) {
+    if (!w) return '';
+    var sub = windWords(w.wind);
+    return '<div class="row wxf' + (future ? ' fut' : '') + '"><i class="fa-solid ' + weatherIcon(w) + '"' + weatherStyle(w) + '></i><span class="tt">' +
+      esc(weatherLabel(w)) + (w.temperature_celsius != null ? ' · ' + esc(String(w.temperature_celsius)) + '°C' : '') +
+      (sub ? '<small>' + esc(sub) + '</small>' : '') +
+      (future ? '<span class="wxtag">Players see this on the day</span>' : '') +
+      '</span></div>';
+  }
+
   // Event category color: an event's own color falls back to its kind's.
   // Rendered as a plain inline `color:` declaration (not the mockup's --h
   // oklch hue variable, which would need a hex->oklch-hue conversion this
@@ -788,6 +827,7 @@
       if (!Array.isArray(initialEvents)) initialEvents = [];
 
       this.eventsByMonth = {};
+      this.weatherByYear = {}; // year -> {'m_d': reading}, filled by fetchWeatherYear
       this.eventsByMonth[this.cal.current_year + '_' + this.cal.current_month] = initialEvents;
 
       this.view = { y: this.cal.current_year || 1, m: this.cal.current_month || 1 };
@@ -996,6 +1036,31 @@
         .catch(function () { return []; });
     },
 
+    // fetchWeatherYear loads (and caches) a year's day weather. The server
+    // already leaves out days a viewer may not see yet. Returns a Promise.
+    fetchWeatherYear: function (y) {
+      var self = this;
+      if (this.weatherByYear[y]) return Promise.resolve(this.weatherByYear[y]);
+      return Chronicle.apiFetch(this.apiBase + '/weather/days?year=' + y)
+        .then(function (resp) { return resp.ok ? resp.json() : []; })
+        .then(function (list) {
+          var byDay = {};
+          (Array.isArray(list) ? list : []).forEach(function (w) { byDay[w.month + '_' + w.day] = w; });
+          self.weatherByYear[y] = byDay;
+          return byDay;
+        })
+        .catch(function () { return {}; });
+    },
+
+    // The day's weather reading, or null. Today falls back to the calendar's
+    // single current reading, which predates per-day weather.
+    weatherOnDay: function (y, m, d) {
+      var byDay = this.weatherByYear[y], w = byDay && byDay[m + '_' + d];
+      if (w) return w;
+      var cal = this.cal;
+      return y === cal.current_year && m === cal.current_month && d === cal.current_day && cal.weather ? cal.weather : null;
+    },
+
     // Every event touching (y,m,d): base-date match, recurrence expansion,
     // or a non-recurring multi-day span.
     eventsOnDay: function (y, m, d) {
@@ -1090,7 +1155,7 @@
     renderMonth: function () {
       var self = this, cal = this.cal;
       this.renderHeader();
-      this.fetchMonth(this.view.y, this.view.m).then(function () {
+      Promise.all([this.fetchMonth(this.view.y, this.view.m), this.fetchWeatherYear(this.view.y)]).then(function () {
         self._paintMonth();
         // The open day's card shows what the fetch just brought.
         self.refreshWing();
@@ -1153,10 +1218,11 @@
       var cal = this.cal;
       var isToday = y === cal.current_year && m === cal.current_month && d === cal.current_day;
       var marks = this._marksHTML(y, m, d);
+      var isFuture = CalDate.dayIndex(cal, y, m, d) > CalDate.dayIndex(cal, cal.current_year, cal.current_month, cal.current_day);
       var label = esc(monthDef.name) + (totalDays > 1 ? ', day ' + d : '');
       return '<div class="band' + (isToday ? ' today' : '') + '">' +
         '<button type="button" class="day" data-key="' + dayKey(y, m, d) + '" style="width:100%">' +
-          '<div class="dc"><span class="bn">' + label + '</span>' + marks + '</div>' +
+          '<div class="dc"><span class="bn">' + label + '</span>' + weatherMarkHTML(this.weatherOnDay(y, m, d), isFuture) + marks + '</div>' +
         '</button></div>';
     },
 
@@ -1172,7 +1238,7 @@
         moonHTML = '<span class="msil" data-moon-day="' + key + '" title="' + esc(moon.name + ', ' + MoonMath.name(phase)) + '">' + this._moonSilSVG(phase) + '</span>';
       }
       return '<button type="button" class="day' + (isToday ? ' today' : '') + (isPast ? ' past' : '') + '" data-key="' + key + '">' +
-        moonHTML +
+        moonHTML + weatherMarkHTML(this.weatherOnDay(y, m, d), !isPast && !isToday) +
         '<div class="dc"><span class="num">' + d + '</span>' + this._marksHTML(y, m, d) + '</div>' +
         '</button>';
     },
@@ -1506,12 +1572,8 @@
       var mc = CalDate.monthCount(cal), m0 = ((d.m - 1) % mc + mc) % mc, monthDef = (cal.months || [])[m0];
       var label = (monthDef ? monthDef.name : d.m) + ' ' + d.d + ', ' + d.y;
       var isToday = d.y === cal.current_year && d.m === cal.current_month && d.d === cal.current_day;
-      var weatherFact = '';
-      if (isToday && cal.weather) {
-        var w = cal.weather;
-        weatherFact = '<div class="row"><i class="fa-solid fa-cloud-sun"></i><span class="tt">' + esc(w.preset_label || w.description || 'Weather recorded') +
-          (w.temperature_celsius != null ? ' · ' + w.temperature_celsius + '°C' : '') + '</span></div>';
-      }
+      var isFuture = CalDate.dayIndex(cal, d.y, d.m, d.d) > CalDate.dayIndex(cal, cal.current_year, cal.current_month, cal.current_day);
+      var weatherFact = weatherFactHTML(this.weatherOnDay(d.y, d.m, d.d), isFuture);
       var moonRows = (cal.moons || []).map(function (mo) {
         var abs = CalDate.dayIndex(cal, d.y, d.m, d.d), phase = MoonMath.phase(mo, abs);
         return '<button type="button" class="mrow" data-moon="' + esc(mo.id) + '"><span class="mt"><b>' + esc(mo.name) + '</b><small>' + esc(MoonMath.name(phase)) + ' · ' + MoonMath.litPct(phase) + '% lit</small></span><i class="fa-solid fa-chevron-right chev"></i></button>';
@@ -1864,6 +1926,6 @@
   // Go model's own values without a browser DOM. `module` is undefined when
   // loaded via <script>, so this is a no-op in the browser.
   if (typeof module !== 'undefined' && module.exports) {
-    module.exports = { CalDate: CalDate, MoonMath: MoonMath };
+    module.exports = { CalDate: CalDate, MoonMath: MoonMath, weatherMarkHTML: weatherMarkHTML, weatherFactHTML: weatherFactHTML };
   }
 })();

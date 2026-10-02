@@ -59,6 +59,7 @@ func TestSystemManifest_HasWidget(t *testing.T) {
 // templ can express on its own. Asserts the mount div and its campaign-id
 // config are present or absent accordingly, and that the generic category
 // browser renders only when there is no front page to stand in for it.
+// When it mounts, it is wrapped full-bleed with no breadcrumb.
 func TestSystemIndexContent_RulebookFrontpageMount(t *testing.T) {
 	cc := &campaigns.CampaignContext{Campaign: &campaigns.Campaign{ID: "camp-1", Name: "Test Campaign"}}
 	cats := []categoryInfo{{Slug: "abilities", Name: "Abilities", Count: 3}}
@@ -103,7 +104,7 @@ func TestSystemIndexContent_RulebookFrontpageMount(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			var buf bytes.Buffer
-			if err := SystemIndexContent(cc, tt.manifest, cats).Render(context.Background(), &buf); err != nil {
+			if err := SystemIndexContent(cc, tt.manifest, cats, false).Render(context.Background(), &buf); err != nil {
 				t.Fatalf("Render() error = %v", err)
 			}
 			html := buf.String()
@@ -119,6 +120,16 @@ func TestSystemIndexContent_RulebookFrontpageMount(t *testing.T) {
 			gotBrowser := strings.Contains(html, "Abilities")
 			if gotBrowser == tt.wantMount {
 				t.Errorf("category browser present = %v, want %v; html:\n%s", gotBrowser, !tt.wantMount, html)
+			}
+			// The rulebook fills the content area: wrapped full-bleed and with no
+			// breadcrumb above it. The category browser keeps its breadcrumb.
+			gotFullBleed := strings.Contains(html, "data-rulebook-fullbleed")
+			if gotFullBleed != tt.wantMount {
+				t.Errorf("full-bleed wrapper present = %v, want %v; html:\n%s", gotFullBleed, tt.wantMount, html)
+			}
+			gotCrumbs := strings.Contains(html, `aria-label="Breadcrumb"`)
+			if gotCrumbs == tt.wantMount {
+				t.Errorf("breadcrumb present = %v, want %v; html:\n%s", gotCrumbs, !tt.wantMount, html)
 			}
 		})
 	}

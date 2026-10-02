@@ -504,6 +504,8 @@ func (h *Handler) ResolveEvent(c echo.Context) error {
 		return err
 	}
 
+	h.recordActivity(c, "apialert.resolved", "api_alert", strconv.FormatInt(eventID, 10), "")
+
 	return middleware.HTMXRedirect(c, "/admin/api")
 }
 
