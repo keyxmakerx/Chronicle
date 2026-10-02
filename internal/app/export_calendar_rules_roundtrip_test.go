@@ -9,6 +9,7 @@ import (
 	"encoding/json"
 	"testing"
 
+	"github.com/keyxmakerx/chronicle/internal/apperror"
 	"github.com/keyxmakerx/chronicle/internal/plugins/calendar"
 	"github.com/keyxmakerx/chronicle/internal/plugins/campaigns"
 )
@@ -140,5 +141,86 @@ func TestCalendarExportImport_RecurrenceRulesAndOverrides(t *testing.T) {
 	}
 	if mv := dst.setOverrides[1]; mv.input.Action != calendar.OverrideMove || mv.input.Year != 1000 || mv.input.Month != 2 || mv.input.Day != 3 || mv.occ.Year != 1002 {
 		t.Errorf("move override lost its dates: %+v", mv)
+	}
+}
+
+// overrideSim is the one rule SetOccurrenceOverride enforces that depends on
+// write order: a move may not land on a day that still holds an occurrence
+// (its own un-skipped one, or another moved there).
+type overrideSim struct {
+	natural map[calendar.DayDate]bool
+	stored  map[calendar.DayDate]calendar.OccurrenceOverrideInput
+}
+
+func (s *overrideSim) set(occ calendar.DayDate, in calendar.OccurrenceOverrideInput) error {
+	if in.Action == calendar.OverrideMove {
+		target := calendar.DayDate{Year: in.Year, Month: in.Month, Day: in.Day}
+		_, overridden := s.stored[target]
+		if s.natural[target] && !overridden {
+			return apperror.NewConflict("the event already happens on the new date")
+		}
+		for d, o := range s.stored {
+			if d != occ && o.Action == calendar.OverrideMove && o.Year == in.Year && o.Month == in.Month && o.Day == in.Day {
+				return apperror.NewConflict("the event already happens on the new date")
+			}
+		}
+	}
+	s.stored[occ] = in
+	return nil
+}
+
+func TestCalendarImport_OverridesReplayInAWritableOrder(t *testing.T) {
+	d := func(day int) calendar.DayDate { return calendar.DayDate{Year: 1000, Month: 1, Day: day} }
+	move := func(from, to int) calendar.OccurrenceOverride {
+		y, m, dd := 1000, 1, to
+		return calendar.OccurrenceOverride{Year: 1000, Month: 1, Day: from, Action: calendar.OverrideMove, NewYear: &y, NewMonth: &m, NewDay: &dd}
+	}
+	skip := func(day int) calendar.OccurrenceOverride {
+		return calendar.OccurrenceOverride{Year: 1000, Month: 1, Day: day, Action: calendar.OverrideSkip}
+	}
+	tests := []struct {
+		name      string
+		overrides []calendar.OccurrenceOverride // as the export lists them: by date
+		wantFails int
+	}{
+		{"D2 moved away, then D1 moved onto D2", []calendar.OccurrenceOverride{move(1, 2), move(2, 4)}, 0},
+		{"D2 skipped, then D1 moved onto D2", []calendar.OccurrenceOverride{move(1, 2), skip(2)}, 0},
+		{"a chain of three", []calendar.OccurrenceOverride{move(1, 2), move(2, 3), move(3, 4)}, 0},
+		{"a move that was never writable is still reported", []calendar.OccurrenceOverride{move(1, 2)}, 1},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			daily := calendar.RecurrenceWeekly
+			src := &fakeCalendarService{
+				cal: &calendar.Calendar{
+					ID: "cal-1", CampaignID: "c1", Mode: calendar.ModeFantasy, Name: "Overrides",
+					HoursPerDay: 24, MinutesPerHour: 60, SecondsPerMinute: 60,
+					Months: []calendar.Month{{Name: "One", Days: 30}},
+				},
+				events: []calendar.Event{{ID: "old-e", Name: "Watch", Year: 1000, Month: 1, Day: 1,
+					Visibility: "everyone", IsRecurring: true, RecurrenceType: &daily}},
+				overrides: map[string][]calendar.OccurrenceOverride{"old-e": tt.overrides},
+			}
+			calData, err := (&calendarExportAdapter{svc: src}).ExportCalendar(context.Background(), "c1", func(string) string { return "" })
+			if err != nil {
+				t.Fatalf("export: %v", err)
+			}
+			// Days 1-3 are the event's own occurrences; day 4 is free.
+			sim := &overrideSim{
+				natural: map[calendar.DayDate]bool{d(1): true, d(2): true, d(3): true},
+				stored:  map[calendar.DayDate]calendar.OccurrenceOverrideInput{},
+			}
+			dst := &fakeCalendarService{setOverrideFn: sim.set}
+			report := campaigns.NewImportReport()
+			if err := (&calendarImportAdapter{svc: dst}).ImportCalendar(context.Background(), "c2", calData, campaigns.NewIDMap("c2"), report); err != nil {
+				t.Fatalf("import: %v", err)
+			}
+			if got := len(tt.overrides) - len(dst.setOverrides); got != tt.wantFails {
+				t.Fatalf("%d overrides not written, want %d (report: %s)", got, tt.wantFails, report.Summary())
+			}
+			if report.HasFailures() != (tt.wantFails > 0) {
+				t.Fatalf("report failures = %v, want %v: %s", report.HasFailures(), tt.wantFails > 0, report.Summary())
+			}
+		})
 	}
 }

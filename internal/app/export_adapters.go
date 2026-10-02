@@ -1515,25 +1515,71 @@ func (a *calendarImportAdapter) importOne(ctx context.Context, campaignID string
 			}
 		}
 	}
-	systemViewer := permissions.SystemViewer(3)
 	for i, evt := range data.Events {
-		if created[i] == "" {
-			continue
-		}
-		for _, o := range evt.Overrides {
-			input := calendar.OccurrenceOverrideInput{Action: o.Action}
-			if o.NewYear != nil && o.NewMonth != nil && o.NewDay != nil {
-				input.Year, input.Month, input.Day = *o.NewYear, *o.NewMonth, *o.NewDay
-			}
-			occ := calendar.DayDate{Year: o.Year, Month: o.Month, Day: o.Day}
-			if _, err := a.svc.SetOccurrenceOverride(ctx, created[i], cal.ID, campaignID, occ, input, systemViewer); err != nil {
-				slog.Warn("import: occurrence override failed", slog.String("event", evt.Name), slog.Any("error", err))
-				report.Fail(campaigns.SectionCalendar, "calendar event occurrence", evt.Name, apperror.SafeMessage(err))
-			}
+		if created[i] != "" && len(evt.Overrides) > 0 {
+			a.replayOverrides(ctx, cal.ID, campaignID, created[i], evt, report)
 		}
 	}
 
 	return kindIDBySlug, nil
+}
+
+// replayOverrides re-applies one event's skips and moves. The export lists
+// them by date, which is not an order they can always be written in: moving
+// D1 onto D2 is refused while D2 still holds its own occurrence, so a
+// series where D2 was first moved away (or skipped) must have that written
+// first. Skips go first, then moves, and a move refused as a conflict is
+// retried after the others until a round makes no progress; only what is
+// still refused then is reported.
+func (a *calendarImportAdapter) replayOverrides(ctx context.Context, calendarID, campaignID, eventID string, evt campaigns.ExportCalendarEvent, report *campaigns.ImportReport) {
+	systemViewer := permissions.SystemViewer(3)
+	apply := func(o campaigns.ExportCalendarEventOverride) error {
+		input := calendar.OccurrenceOverrideInput{Action: o.Action}
+		if o.NewYear != nil && o.NewMonth != nil && o.NewDay != nil {
+			input.Year, input.Month, input.Day = *o.NewYear, *o.NewMonth, *o.NewDay
+		}
+		occ := calendar.DayDate{Year: o.Year, Month: o.Month, Day: o.Day}
+		_, err := a.svc.SetOccurrenceOverride(ctx, eventID, calendarID, campaignID, occ, input, systemViewer)
+		return err
+	}
+	fail := func(err error) {
+		slog.Warn("import: occurrence override failed", slog.String("event", evt.Name), slog.Any("error", err))
+		report.Fail(campaigns.SectionCalendar, "calendar event occurrence", evt.Name, apperror.SafeMessage(err))
+	}
+
+	var pending []campaigns.ExportCalendarEventOverride
+	for _, o := range evt.Overrides {
+		if o.Action == calendar.OverrideMove {
+			pending = append(pending, o)
+			continue
+		}
+		if err := apply(o); err != nil {
+			fail(err)
+		}
+	}
+	lastErr := map[int]error{}
+	for len(pending) > 0 {
+		var retry []campaigns.ExportCalendarEventOverride
+		for _, o := range pending {
+			err := apply(o)
+			switch {
+			case err == nil:
+			case apperror.SafeCode(err) == http.StatusConflict:
+				lastErr[len(retry)] = err
+				retry = append(retry, o)
+			default:
+				fail(err)
+			}
+		}
+		if len(retry) == len(pending) {
+			for i := range retry {
+				fail(lastErr[i])
+			}
+			return
+		}
+		pending = retry
+		lastErr = map[int]error{}
+	}
 }
 
 // calendarRuleRefs maps an export's ids (moons, seasons, events) to the ones

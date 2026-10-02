@@ -51,6 +51,9 @@ type fakeCalendarService struct {
 	// id; setOverrides captures the import side's writes.
 	overrides    map[string][]calendar.OccurrenceOverride
 	setOverrides []capturedOverride
+	// setOverrideFn, when set, decides each import-side override write; only
+	// the writes it accepts are captured.
+	setOverrideFn func(occ calendar.DayDate, input calendar.OccurrenceOverrideInput) error
 }
 
 // capturedOverride is one SetOccurrenceOverride call on the import side.
@@ -68,6 +71,11 @@ func (f *fakeCalendarService) ListOccurrenceOverrides(_ context.Context, _ strin
 }
 
 func (f *fakeCalendarService) SetOccurrenceOverride(_ context.Context, eventID, _, _ string, occ calendar.DayDate, input calendar.OccurrenceOverrideInput, _ permissions.Viewer) (*calendar.OccurrenceOverride, error) {
+	if f.setOverrideFn != nil {
+		if err := f.setOverrideFn(occ, input); err != nil {
+			return nil, err
+		}
+	}
 	f.setOverrides = append(f.setOverrides, capturedOverride{eventID: eventID, occ: occ, input: input})
 	return &calendar.OccurrenceOverride{}, nil
 }
