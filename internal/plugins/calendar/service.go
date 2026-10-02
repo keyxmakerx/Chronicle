@@ -1181,7 +1181,7 @@ func (s *calendarService) applyImportedEvents(ctx context.Context, calendarID, c
 		slugToID[k.Slug] = k.ID
 	}
 
-	rules, err := s.newImportedRules(ctx, calendarID, campaignID, ir)
+	rules, err := s.newImportedRules(ctx, calendarID, ir)
 	if err != nil {
 		return err
 	}
@@ -1276,7 +1276,7 @@ func (s *calendarService) applyImportedEvent(ctx context.Context, calendarID str
 			"event %q failed validation and was skipped: %v", ee.Name, err))
 		return false, nil
 	}
-	rules.check(ctx, evt, ee, ir)
+	rules.check(evt, ee, ir)
 	if err := s.eventRepo.CreateEvent(ctx, evt); err != nil {
 		return false, fmt.Errorf("create imported event %q: %w", ee.Name, err)
 	}

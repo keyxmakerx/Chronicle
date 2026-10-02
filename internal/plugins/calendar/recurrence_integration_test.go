@@ -311,6 +311,9 @@ func TestCalendarFormatImport_Integration_RulesRemapped(t *testing.T) {
 			RecurrenceRule: rule(RecurrenceRule{Match: []RuleCondition{{Kind: RuleSeasonStart, SeasonID: 90}}})},
 		{ID: "src-orphan", Name: "Orphan", Year: 1, Month: 1, Day: 3, IsRecurring: true, RecurrenceType: &byRule,
 			RecurrenceRule: rule(RecurrenceRule{Match: []RuleCondition{{Kind: RuleRelativeToEvent, EventID: "src-not-exported"}}})},
+		// A hand-edited file chaining onto a dependent: never remapped.
+		{ID: "src-chain", Name: "Chain", Year: 1, Month: 1, Day: 4, IsRecurring: true, RecurrenceType: &byRule,
+			RecurrenceRule: rule(RecurrenceRule{Match: []RuleCondition{{Kind: RuleRelativeToEvent, EventID: "src-after"}}})},
 		{ID: "src-watch", Name: "Watch", Year: 1, Month: 1, Day: 1, IsRecurring: true, RecurrenceType: &weekly,
 			RecurrenceRule: rule(RecurrenceRule{Match: []RuleCondition{{Kind: RuleRelativeToEvent, EventID: "src-not-exported"}}})},
 	}
@@ -357,6 +360,7 @@ func TestCalendarFormatImport_Integration_RulesRemapped(t *testing.T) {
 			return e.RecurrenceRule != nil && e.RecurrenceRule.Match[0].SeasonID == seasonByName["Harvest"]
 		}},
 		{"Orphan", func(e Event) bool { return !e.IsRecurring && e.RecurrenceType == nil && e.RecurrenceRule == nil }},
+		{"Chain", func(e Event) bool { return !e.IsRecurring && e.RecurrenceType == nil && e.RecurrenceRule == nil }},
 		{"Watch", func(e Event) bool {
 			return e.IsRecurring && e.RecurrenceType != nil && *e.RecurrenceType == RecurrenceWeekly && e.RecurrenceRule == nil
 		}},
