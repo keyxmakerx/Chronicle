@@ -2,8 +2,8 @@ package syncapi
 
 // calendar_date_beacon_test.go pins RecordCalendarDateBeacon's write-throttle
 // decision (skip iff the last beacon is <60s old AND the date is unchanged;
-// a changed date always writes) and GetCalendarDateBeacon's plain
-// passthrough.
+// a changed date always writes) and GetCalendarDateBeacon dropping pre-V5
+// halves.
 
 import (
 	"context"
@@ -141,5 +141,66 @@ func TestGetCalendarDateBeacon_NoneRecorded_ReturnsNilNoError(t *testing.T) {
 	}
 	if got != nil {
 		t.Errorf("GetCalendarDateBeacon = %+v, want nil", got)
+	}
+}
+
+// TestGetCalendarDateBeacon_DropsPreV5Halves: a beacon half written before
+// the V5 calendar existed describes the old calendar, so it reads as never
+// recorded; a V5 half on the same row survives.
+func TestGetCalendarDateBeacon_DropsPreV5Halves(t *testing.T) {
+	old := calendarV5SyncEpoch.Add(-time.Hour)
+	fresh := calendarV5SyncEpoch.Add(time.Hour)
+	y, m, d := 1492, 3, 7
+	cases := []struct {
+		name        string
+		servedAt    time.Time
+		appliedAt   *time.Time
+		wantNil     bool
+		wantServed  bool
+		wantApplied bool
+	}{
+		{"both pre-V5", old, &old, true, false, false},
+		{"served pre-V5, never applied", old, nil, true, false, false},
+		{"served pre-V5, applied V5", old, &fresh, false, false, true},
+		{"served V5, applied pre-V5", fresh, &old, false, true, false},
+		{"both V5", fresh, &fresh, false, true, true},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			row := &CalendarDateBeacon{CampaignID: "camp-1", Year: 1491, Month: 12, Day: 30, ServedAt: tc.servedAt}
+			if tc.appliedAt != nil {
+				at := *tc.appliedAt
+				row.AppliedYear, row.AppliedMonth, row.AppliedDay, row.AppliedAt = &y, &m, &d, &at
+			}
+			repo := &mockSyncAPIRepo{getBeaconFn: func(context.Context, string) (*CalendarDateBeacon, error) { return row, nil }}
+			got, err := NewSyncAPIService(repo).GetCalendarDateBeacon(context.Background(), "camp-1")
+			if err != nil {
+				t.Fatal(err)
+			}
+			if tc.wantNil {
+				if got != nil {
+					t.Fatalf("got %+v, want nil", got)
+				}
+				return
+			}
+			if (got.Month != 0) != tc.wantServed || (got.AppliedAt != nil) != tc.wantApplied {
+				t.Errorf("served kept %v applied kept %v, want %v %v", got.Month != 0, got.AppliedAt != nil, tc.wantServed, tc.wantApplied)
+			}
+		})
+	}
+}
+
+// TestRecordCalendarDateBeacon_PreV5RowNeverThrottles: an unchanged-looking
+// pre-V5 row must not suppress the first V5 write.
+func TestRecordCalendarDateBeacon_PreV5RowNeverThrottles(t *testing.T) {
+	repo := &mockSyncAPIRepo{getBeaconFn: func(context.Context, string) (*CalendarDateBeacon, error) {
+		return &CalendarDateBeacon{CampaignID: "camp-1", Year: 2026, Month: 7, Day: 17,
+			ServedAt: calendarV5SyncEpoch.Add(-time.Second)}, nil
+	}}
+	if err := NewSyncAPIService(repo).RecordCalendarDateBeacon(context.Background(), "camp-1", 2026, 7, 17); err != nil {
+		t.Fatal(err)
+	}
+	if len(repo.upsertBeaconCalls) != 1 {
+		t.Errorf("upserts = %d, want 1", len(repo.upsertBeaconCalls))
 	}
 }

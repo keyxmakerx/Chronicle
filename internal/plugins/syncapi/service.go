@@ -696,7 +696,7 @@ const calendarDateBeaconThrottle = 60 * time.Second
 // GetCurrentDate. A member browsing Chronicle's own calendar over the
 // session-auth path on the same endpoint must never beacon.
 func (s *syncAPIService) RecordCalendarDateBeacon(ctx context.Context, campaignID string, year, month, day int) error {
-	existing, err := s.repo.GetCalendarDateBeacon(ctx, campaignID)
+	existing, err := s.GetCalendarDateBeacon(ctx, campaignID)
 	if err != nil {
 		return err
 	}
@@ -715,11 +715,39 @@ func (s *syncAPIService) RecordCalendarDateBeacon(ctx context.Context, campaignI
 	})
 }
 
+// calendarV5SyncEpoch is the earliest moment a beacon can describe the V5
+// calendar: every calendar route answered 503 from the start of the rebuild
+// until the release that rebuilt them, so a beacon half written before this
+// holds a date from the old calendar and is treated as never recorded.
+var calendarV5SyncEpoch = time.Date(2026, time.October, 2, 0, 0, 0, 0, time.UTC)
+
 // GetCalendarDateBeacon returns the campaign's served-date beacon (nil, nil
-// if none recorded yet). No auth restriction here beyond whatever the
+// if none recorded yet), with any pre-V5 half blanked (see
+// calendarV5SyncEpoch). No auth restriction here beyond whatever the
 // caller's route already enforces (member-read).
 func (s *syncAPIService) GetCalendarDateBeacon(ctx context.Context, campaignID string) (*CalendarDateBeacon, error) {
-	return s.repo.GetCalendarDateBeacon(ctx, campaignID)
+	b, err := s.repo.GetCalendarDateBeacon(ctx, campaignID)
+	if err != nil || b == nil {
+		return b, err
+	}
+	return dropPreV5BeaconHalves(b), nil
+}
+
+// dropPreV5BeaconHalves blanks the served half (to the Month == 0 "never
+// served" sentinel the readers already honor) and the applied half (to
+// nil) when either was written before calendarV5SyncEpoch. Returns nil when
+// nothing V5 is left.
+func dropPreV5BeaconHalves(b *CalendarDateBeacon) *CalendarDateBeacon {
+	if b.ServedAt.Before(calendarV5SyncEpoch) {
+		b.Year, b.Month, b.Day = 0, 0, 0
+	}
+	if b.AppliedAt != nil && b.AppliedAt.Before(calendarV5SyncEpoch) {
+		b.AppliedYear, b.AppliedMonth, b.AppliedDay, b.AppliedAt = nil, nil, nil, nil
+	}
+	if b.Month == 0 && b.AppliedAt == nil {
+		return nil
+	}
+	return b
 }
 
 // ConfirmCalendarDate records the date a Bearer-authed module actually
