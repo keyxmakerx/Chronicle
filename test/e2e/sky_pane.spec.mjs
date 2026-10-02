@@ -199,7 +199,7 @@ function jsContentType(path) {
 // installRoutes wires every request the page will make to either a real
 // on-disk static asset, a fixture JSON response, or the harness document
 // itself — and fails loudly (via unexpected.push) on anything else.
-async function installRoutes(page, unexpected, calendarOverrides) {
+async function installRoutes(page, unexpected, calendarOverrides, dayWeather) {
   await page.route('**/*', async (route) => {
     const url = new URL(route.request().url());
     const p = url.pathname;
@@ -224,13 +224,16 @@ async function installRoutes(page, unexpected, calendarOverrides) {
     if (p === `/campaigns/${CAMPAIGN_ID}/calendars/${CALENDAR_ID}/events`) {
       return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(eventsFixture()) });
     }
+    if (p === `/campaigns/${CAMPAIGN_ID}/calendars/${CALENDAR_ID}/weather/days`) {
+      return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(dayWeather || []) });
+    }
     unexpected.push(`unexpected request: ${route.request().method()} ${p}`);
     return route.fulfill({ status: 404, body: '' });
   });
 }
 
 // waitForLoaded: the widget replaces the "Loading the sky…" caption once its
-// two fetches resolve (see Instance.prototype.onDataReady/refreshPalette).
+// fetches resolve (see Instance.prototype.onDataReady/refreshPalette).
 async function waitForLoaded(page) {
   await page.waitForFunction(() => {
     const cap = document.querySelector('.skycap');
@@ -248,7 +251,7 @@ async function withPage(opts, fn) {
     const unexpected = [];
     const pageErrors = [];
     page.on('pageerror', (err) => pageErrors.push(err.message));
-    await installRoutes(page, unexpected, opts.calendarOverrides);
+    await installRoutes(page, unexpected, opts.calendarOverrides, opts.dayWeather);
     await page.goto('https://chronicle.test/dashboard');
     await waitForLoaded(page);
     await fn(page);
@@ -419,5 +422,15 @@ test('sky pane with prefers-reduced-motion: the reveal transition is instant, no
       return false;
     });
     assert.ok(opaque, 'a reduced-motion viewer must still get a painted frame immediately on open');
+  });
+});
+
+// The day's own weather reading (the calendar's weather/days) wins over the
+// calendar's current weather, so the caption names the day's storm.
+test("sky pane: the shown day's weather reading replaces the current weather", { timeout: 20000 }, async () => {
+  const dayWeather = [{ year: 1491, month: 2, day: 15, preset_id: 'thunderstorm', preset_label: 'Thunderstorm', icon: 'storm', source: 'manual' }];
+  await withPage({ viewport: { width: 1280, height: 800 }, dayWeather }, async (page) => {
+    const caption = await page.locator('.skycap').textContent();
+    assert.ok(caption.includes('Thunderstorm') && !caption.includes('Clear skies'), `caption should name the day's weather, got: ${caption}`);
   });
 });

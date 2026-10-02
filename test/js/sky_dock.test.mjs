@@ -59,7 +59,7 @@ function fakeEl(extra = {}) {
   return el;
 }
 
-function loadSky({ reduced = false, stored = null } = {}) {
+function loadSky({ reduced = false, stored = null, apiFetch = null } = {}) {
   const frames = [], store = new Map(stored ? [['chronicle.calendar.sky', stored]] : []);
   let now = 0;
   const document = {
@@ -83,7 +83,7 @@ function loadSky({ reduced = false, stored = null } = {}) {
     performance: { now: () => now },
     devicePixelRatio: 1,
     setTimeout, clearTimeout, setInterval() { return 0; }, clearInterval() {},
-    Chronicle: { register() {} },
+    Chronicle: { register() {}, apiFetch: apiFetch || (() => Promise.reject(new Error('no server'))) },
     addEventListener() {}, removeEventListener() {},
   };
   sandbox.window = sandbox;
@@ -123,11 +123,11 @@ function dock(env, opts = {}) {
   const follower = fakeEl();
   const said = [];
   const d = new env.SkyPane.Dock({
-    card, wrap, chip, seed: 'cal-1', name: CAL.name,
+    card, wrap, chip, seed: 'cal-1', name: CAL.name, campaignId: opts.campaignId, calendarId: opts.calendarId,
     followers: () => [follower],
     travel: opts.travel, before: opts.before, say: (m) => said.push(m),
   });
-  d.setDay(CAL, []);
+  d.setDay(opts.cal || CAL, []);
   return { d, card, wrap, chip, sky, follower, said, canvas };
 }
 
@@ -269,4 +269,39 @@ test('the calendar docks the sky at the top of its card, and the chip leads the 
   assert.ok(acts.indexOf('id="cal5-skybtn"') > -1 && acts.indexOf('id="cal5-skybtn"') < acts.indexOf('id="cal5-moonbtn"'));
   const editor = readFileSync(join(widgets, 'calendar_editor.js'), 'utf8');
   assert.match(editor, /acts\.insertBefore\(btn, sky \? sky\.nextSibling : acts\.firstChild\)/, 'Edit goes after the Sky chip');
+});
+
+// The day's own weather reading wins over the calendar's current weather.
+const settle = () => new Promise((r) => setTimeout(r, 0));
+const reply = (body, ok = true) => Promise.resolve({ ok, status: ok ? 200 : 503, json: () => Promise.resolve(body) });
+const WITH_CURRENT = { ...CAL, weather: { preset_id: 'clear', preset_label: 'Clear skies' } };
+
+test("the shown day's weather reading replaces the calendar's current weather", async () => {
+  const urls = [];
+  const env = loadSky({ apiFetch: (u) => { urls.push(u); return reply([
+    { year: 1491, month: 1, day: 13, preset_id: 'snow', preset_label: 'Snow', source: 'manual' },
+    { year: 1491, month: 1, day: 14, preset_id: 'thunderstorm', preset_label: 'Thunderstorm', source: 'manual' },
+  ]); } });
+  const { sky } = dock(env, { campaignId: 'c-1', calendarId: 'cal-1', cal: WITH_CURRENT });
+  assert.match(sky.getAttribute('aria-label'), /Clear skies/);
+  await settle();
+  assert.deepEqual(urls, ['/campaigns/c-1/calendars/cal-1/weather/days?year=1491&month=1']);
+  assert.match(sky.getAttribute('aria-label'), /Thunderstorm/);
+});
+
+test('with no reading for the day, or no answer, the current weather stays', async () => {
+  for (const apiFetch of [() => reply([{ year: 1491, month: 1, day: 13, preset_id: 'snow', preset_label: 'Snow' }]), () => reply({ error: 'calendar_rebuilding' }, false)]) {
+    const env = loadSky({ apiFetch });
+    const { sky } = dock(env, { campaignId: 'c-1', calendarId: 'cal-1', cal: WITH_CURRENT });
+    await settle();
+    assert.match(sky.getAttribute('aria-label'), /Clear skies/);
+  }
+});
+
+test('without campaign and calendar ids the dock asks for nothing', async () => {
+  let asked = 0;
+  const env = loadSky({ apiFetch: () => { asked++; return reply([]); } });
+  dock(env, { cal: WITH_CURRENT });
+  await settle();
+  assert.equal(asked, 0);
 });

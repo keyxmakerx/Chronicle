@@ -86,6 +86,22 @@
     var ap = h >= 12 ? 'PM' : 'AM', h12 = h % 12; if (h12 === 0) h12 = 12;
     return h12 + ':' + (m < 10 ? '0' : '') + m + ' ' + ap;
   }
+  function getJSON(url) {
+    return (window.Chronicle && Chronicle.apiFetch ? Chronicle.apiFetch(url) : fetch(url, { credentials: 'same-origin', headers: { Accept: 'application/json' } }))
+      .then(function (r) { if (!r.ok) throw new Error('http ' + r.status); return r.json(); });
+  }
+  // The shown day's own weather reading, or null. A day's reading wins over
+  // the calendar's current weather; a server without day weather, or any
+  // failure, just leaves the current weather in charge.
+  function fetchDayWeather(cid, calid, cal) {
+    var y = cal.current_year, m = cal.current_month, d = cal.current_day;
+    return getJSON('/campaigns/' + encodeURIComponent(cid) + '/calendars/' + encodeURIComponent(calid) + '/weather/days?year=' + y + '&month=' + m)
+      .then(function (days) {
+        days = Array.isArray(days) ? days : (days && days.data) || [];
+        for (var i = 0; i < days.length; i++) if (days[i] && days[i].year === y && days[i].month === m && days[i].day === d) return days[i];
+        return null;
+      }, function () { return null; });
+  }
   function hashSeed(s) { s = String(s || ''); var v = 0; for (var i = 0; i < s.length; i++) v = (v * 131 + s.charCodeAt(i)) >>> 0; return v || 1; }
 
   // buildState(model, tSeconds, dt): the per-frame render state both
@@ -141,7 +157,7 @@
       return { i: i < 4 ? i : -1, extra: i >= 4, mo: mo, m: a.m, up: up, x: p.x, y: p.y, r: r, sr: sr, rot: rot, spec: window.SkyMoon.specFor(mo), blood: blood, shadow: shadow };
     });
 
-    var weatherSpec = LOOKS.spec(cal.weather);
+    var weatherSpec = LOOKS.spec(model.dayWeather || cal.weather);
     var look = LOOKS.resolve(weatherSpec), target = look || LOOKS.blank();
     var wx = model.wxs;
     if (!wx || model.reduced || !(dt > 0 && dt < 1)) { wx = model.wxs = {}; WXKEYS.forEach(function (n) { wx[n] = target[n]; }); }
@@ -252,15 +268,16 @@
   };
   Instance.prototype.load = function () {
     var self = this, cid = this.el.getAttribute('data-campaign-id'), calid = this.el.getAttribute('data-calendar-id');
-    var fetchJSON = function (url) {
-      return (window.Chronicle && Chronicle.apiFetch ? Chronicle.apiFetch(url) : fetch(url, { credentials: 'same-origin', headers: { Accept: 'application/json' } }))
-        .then(function (r) { if (!r.ok) throw new Error('http ' + r.status); return r.json(); });
-    };
+    var fetchJSON = getJSON;
     fetchJSON('/campaigns/' + cid + '/calendars/' + calid).then(function (cal) {
       var y = cal.current_year, m = cal.current_month;
-      return fetchJSON('/campaigns/' + cid + '/calendars/' + calid + '/events?year=' + y + '&month=' + m).then(function (events) {
+      return Promise.all([
+        fetchJSON('/campaigns/' + cid + '/calendars/' + calid + '/events?year=' + y + '&month=' + m),
+        fetchDayWeather(cid, calid, cal)
+      ]).then(function (got) {
+        var events = got[0];
         var todayEvents = (events || []).filter(function (e) { return e.year === cal.current_year && e.month === cal.current_month && e.day === cal.current_day; });
-        self.model = { calendar: cal, todayEvents: todayEvents, skym: SW.makeSkym(cal), landSeed: hashSeed(calid), width: 0, height: 0 };
+        self.model = { calendar: cal, todayEvents: todayEvents, dayWeather: got[1], skym: SW.makeSkym(cal), landSeed: hashSeed(calid), width: 0, height: 0 };
         self.onDataReady();
       });
     }).catch(function (err) {
@@ -479,7 +496,8 @@
   function paneHeight(w) { return Math.round(SW.clamp(w * .14, 100, 166)); }
 
   // o: {card, wrap (.skywrap holding .sky > canvas), chip (holding .sw),
-  //     seed, name, followers() → elements below the card that ride with it,
+  //     seed, name, campaignId + calendarId (to read the day's own weather;
+  //     without them the calendar's current weather shows), followers() → elements below the card that ride with it,
   //     before() → called as a fold starts, travel() → false to fold without
   //     moving the card, say(text)}. Throws when there is nothing to draw with.
   function Dock(o) {
@@ -532,9 +550,23 @@
   // day's events. Players only ever get today as it is from here.
   Dock.prototype.setDay = function (cal, events) {
     // A new day keeps the weather it is rolling from, so a change rolls in.
-    var wxs = this.model ? this.model.wxs : null;
-    this.model = { calendar: cal, todayEvents: events || [], skym: SW.makeSkym(cal), landSeed: hashSeed(this.o.seed), width: 0, height: 0, reduced: this.rm, wxs: wxs };
-    var st = buildState({ calendar: cal, todayEvents: this.model.todayEvents, skym: this.model.skym, landSeed: this.model.landSeed, width: this.W || 640, height: this.H || 120, reduced: this.rm }, 0);
+    var self = this, prev = this.model, wxs = prev ? prev.wxs : null;
+    // The same day keeps its reading while a fresh one loads.
+    var same = prev && prev.calendar.current_year === cal.current_year && prev.calendar.current_month === cal.current_month && prev.calendar.current_day === cal.current_day;
+    this.model = { calendar: cal, todayEvents: events || [], dayWeather: same ? prev.dayWeather : null, skym: SW.makeSkym(cal), landSeed: hashSeed(this.o.seed), width: 0, height: 0, reduced: this.rm, wxs: wxs };
+    this.redraw();
+    var tok = this._wxTok = (this._wxTok || 0) + 1;
+    if (this.o.campaignId && this.o.calendarId) fetchDayWeather(this.o.campaignId, this.o.calendarId, cal).then(function (w) {
+      if (tok !== self._wxTok || !self.model || JSON.stringify(w) === JSON.stringify(self.model.dayWeather)) return;
+      self.model.dayWeather = w;
+      self.redraw();
+    });
+  };
+  // Re-reads the model into the chip, the pace and (when it rests open) the sky.
+  Dock.prototype.redraw = function () {
+    if (this.destroyed) return;
+    var m = this.model;
+    var st = buildState({ calendar: m.calendar, todayEvents: m.todayEvents, dayWeather: m.dayWeather, skym: m.skym, landSeed: m.landSeed, width: this.W || 640, height: this.H || 120, reduced: this.rm }, 0);
     this.pace = paceOf(st);
     this.label(st);
     if (this.measure() && this.S.layout && !this.S.on) this.paint(performance.now() / 1000, 0, this.H);
@@ -633,6 +665,7 @@
     this.apply(performance.now() / 1000);
   };
   Dock.prototype.destroy = function () {
+    this.destroyed = true;
     if (this.raf) cancelAnimationFrame(this.raf);
     this.raf = 0;
     if (this.tmo) clearTimeout(this.tmo);
