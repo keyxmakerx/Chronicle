@@ -733,21 +733,23 @@ func (e *Event) hasExpansion() bool { return e.Occurrences != nil || e.Occurrenc
 
 // visibleOccurrenceDays lists the days of (year, month) the event lands on,
 // one entry per occurrence, skipped ones left out. When the read could not
-// finish counting, the event's own start date still counts, as it does on
-// the page, and nothing is guessed beyond what was found.
+// finish counting and carries no list at all, the event's own start date
+// still counts, as it does on the page. Once a list is given (even empty)
+// the start date is never put back: a player's list has skipped dates
+// stripped out, and a moved start date lives elsewhere.
 func (e *Event) visibleOccurrenceDays(year, month, monthDays int) []int {
 	var days []int
-	seen := map[int]bool{}
+	moved := false
 	for _, o := range e.Occurrences {
-		if o.Year != year || o.Month != month || o.Day < 1 || o.Day > monthDays {
+		if f := o.MovedFrom; f != nil && f.Year == e.Year && f.Month == e.Month && f.Day == e.Day {
+			moved = true
+		}
+		if o.Year != year || o.Month != month || o.Day < 1 || o.Day > monthDays || o.Skipped {
 			continue
 		}
-		seen[o.Day] = true // a skipped start date must not come back as the fallback
-		if !o.Skipped {
-			days = append(days, o.Day)
-		}
+		days = append(days, o.Day)
 	}
-	if e.OccurrencesTruncated && e.Year == year && e.Month == month && e.Day >= 1 && e.Day <= monthDays && !seen[e.Day] {
+	if e.OccurrencesTruncated && e.Occurrences == nil && !moved && e.Year == year && e.Month == month && e.Day >= 1 && e.Day <= monthDays {
 		days = append(days, e.Day)
 	}
 	return days

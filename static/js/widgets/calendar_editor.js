@@ -43,6 +43,7 @@
   // A form that grows inside a card can run past the edge of whatever is
   // scrolling it (the page, or a calendar opened out on the Calendars page),
   // so it is brought into view as it opens.
+  function reducedMotionNow() { return !!(window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches); }
   function reveal(el) {
     var still = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
     el.scrollIntoView({ block: 'nearest', behavior: still ? 'auto' : 'smooth' });
@@ -573,15 +574,15 @@
   // write's per-event requests succeeded. verb is past tense ("Hid",
   // "Revealed", "Shifted"); tail is an optional clause inserted before the
   // event count's trailing punctuation (e.g. " by 2 days").
-  CalendarEditor.prototype._reportBulkResult = function (oks, verb, tail) {
+  CalendarEditor.prototype._reportBulkResult = function (oks, verb, tail, note) {
     var view = this.view, okCount = oks.filter(Boolean).length, failCount = oks.length - okCount;
     view.eventsByMonth = {}; // simplest correct invalidation: refetch on next paint
     view.renderMonth();
     tail = tail || '';
     if (!failCount) {
-      view.say(verb + ' ' + okCount + (okCount === 1 ? ' event' : ' events') + tail + '.');
+      view.say(verb + ' ' + okCount + (okCount === 1 ? ' event' : ' events') + tail + '.' + (note || ''));
     } else {
-      view.say(verb + ' ' + okCount + ' of ' + oks.length + ' events' + tail + '; ' + failCount + " couldn't be saved.");
+      view.say(verb + ' ' + okCount + ' of ' + oks.length + ' events' + tail + '; ' + failCount + " couldn't be saved." + (note || ''));
     }
   };
 
@@ -628,6 +629,20 @@
   CalendarEditor.prototype._applyShift = function () {
     var self = this, view = this.view, cal = view.cal, delta = this._shiftN, events = this._eventsInSelection();
     if (!delta || !events.length) { this._closeShiftTray(); return; }
+    // A rule event's dates come from its rule and a repeating event with
+    // skips or moves is keyed by dates a shift would orphan; both are left
+    // as they are, and the result says so.
+    var left = events.filter(function (e) {
+      if (e.recurrence_type === 'rule') return true;
+      return (e.occurrences || []).some(function (o) { return o.skipped || o.moved_from; });
+    });
+    events = events.filter(function (e) { return left.indexOf(e) < 0; });
+    var note = left.length ? ' ' + left.length + (left.length === 1 ? ' event repeats' : ' events repeat') + ' by a rule or has changed dates, and was left as it is.' : '';
+    if (!events.length) {
+      self._closeShiftTray();
+      view.say('Nothing shifted.' + note);
+      return;
+    }
     settleAll(events.map(function (e) {
       var start = CalDate.addDays(cal, { y: e.year, m: e.month, d: e.day }, delta);
       var body = { year: start.y, month: start.m, day: start.d };
@@ -639,7 +654,7 @@
     })).then(function (oks) {
       self._closeShiftTray();
       var tail = ' by ' + delta + (Math.abs(delta) === 1 ? ' day' : ' days');
-      self._reportBulkResult(oks, 'Shifted', tail);
+      self._reportBulkResult(oks, 'Shifted', tail, note);
     });
   };
 
@@ -749,10 +764,17 @@
     say('');
     Chronicle.apiFetch(url, req).then(function (resp) {
       if (resp.ok) {
+        var dayKey = view.wingFor;
         view.eventsByMonth = {};
         view.closeEventDetail();
         view.renderMonth();
         view.say(done);
+        // Back to the day the card was for, once the month is redrawn.
+        view.fetchMonth(view.view.y, view.view.m).then(function () {
+          var cell = dayKey && view.stageEl.querySelector('.day[data-key="' + dayKey + '"]');
+          var row = view.wingEl.querySelector('.evd');
+          setTimeout(function () { var t = row || cell; if (!t) return; if (!t.hasAttribute('tabindex')) t.setAttribute('tabindex', '-1'); t.focus({ preventScroll: true }); }, reducedMotionNow() ? 0 : 400);
+        });
         return;
       }
       buttons.forEach(function (b) { b.disabled = false; });

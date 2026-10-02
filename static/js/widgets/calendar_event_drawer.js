@@ -127,7 +127,7 @@
     var locked = rtype === 'rule' && (!ev.recurrence_rule || !Rl);
     if (rtype === 'rule' && !locked) {
       var rf = Rl.fromRule(ev.recurrence_rule);
-      rule = { form: rf, preset: Rl.presetFor(rf, env) || 'custom', more: rf.every > 1 || rf.shift > 0 };
+      rule = { form: rf, original: Rl.clone(rf), preset: Rl.presetFor(rf, env) || 'custom', more: rf.every > 1 || rf.shift > 0 };
     }
     this.state = {
       ev: ev, isNew: isNew, back: back,
@@ -234,9 +234,15 @@
   };
 
   // ---- repeating by a rule ----
+  // gone: what to call a stored value no option matches (a deleted moon or
+  // season). It is shown first and selected, so picking any real option is a
+  // change the browser reports.
+  var GONE = { ph: '(choose)', moon: 'a removed moon', season: 'a removed season', event: 'an unavailable event', wd: '(choose)', n: '(choose)', d: '(choose)', m: '(choose)', k: '(choose)' };
   function sel(f, opts, cur, label) {
+    var known = opts.some(function (o) { return String(o[0]) === String(cur); });
+    if (!known) opts = [['', GONE[f] || '(choose)']].concat(opts);
     return '<select data-f="' + f + '" aria-label="' + esc(label) + '">' + opts.map(function (o) {
-      return '<option value="' + esc(o[0]) + '"' + (String(o[0]) === String(cur) ? ' selected' : '') + '>' + esc(o[1]) + '</option>';
+      return '<option value="' + esc(o[0]) + '"' + ((known ? String(o[0]) === String(cur) : o[0] === '') ? ' selected' : '') + '>' + esc(o[1]) + '</option>';
     }).join('') + '</select>';
   }
 
@@ -251,7 +257,7 @@
     var h = REPEATS.map(function (o) {
       return '<option value="' + o[0] + '"' + (o[0] === cur ? ' selected' : '') + '>' + o[1] + '</option>';
     }).join('');
-    if (!Rl) return h;
+    if (!Rl) return S.rep.type === 'rule' ? h + '<option value="rule:locked" selected disabled>Repeats by a rule</option>' : h;
     h += '<optgroup label="By a rule">' + Rl.presets(this._env()).map(function (p) {
       return '<option value="rule:' + esc(p.id) + '"' + ('rule:' + p.id === cur ? ' selected' : '') + '>' + esc(p.label) + '</option>';
     }).join('') + '<option value="rule:custom"' + (cur === 'rule:custom' ? ' selected' : '') + '>Make your own…</option>' +
@@ -405,7 +411,11 @@
     if (t.dataset.rf) {
       if (t.dataset.rf === 'every') f.every = Rl.intIn(t.value, 1, Rl.MAX_EVERY, 1);
       else if (t.dataset.rf === 'dir') f.dir = t.value === 'earlier' ? 'earlier' : 'later';
-      else if (t.dataset.rf === 'shift') f.shift = Rl.intIn(t.value, 0, Rl.MAX_SHIFT, 0);
+      else if (t.dataset.rf === 'shift') {
+        f.shift = Rl.intIn(t.value, 0, Rl.MAX_SHIFT, 0);
+        // Show what is stored: a typed 900 reads 365 at once.
+        if (t.value !== '' && String(f.shift) !== t.value) t.value = f.shift;
+      }
       this._ruleEdited(false);
       return;
     }
@@ -477,7 +487,16 @@
       }).then(function (e) {
         if (!e || !e.name || self.state !== S) return;
         names[id] = e.name;
+        // Redrawing the rows must not drop the keyboard: put focus back on
+        // the same control of the same row.
+        var a = document.activeElement, row = a && a.closest && a.closest('.rrow'), at = null;
+        if (row && self.el.contains(row)) at = { i: row.dataset.i, f: a.dataset.f, r: a.dataset.r, wd: a.dataset.wd };
         $('#cal5-rrows', self.el).innerHTML = self._rowsHTML();
+        if (at) {
+          var base = '.rrow[data-i="' + at.i + '"] ';
+          var back = $(at.f ? base + '[data-f="' + at.f + '"]' : at.wd != null ? base + '[data-wd="' + at.wd + '"]' : at.r ? base + '[data-r="' + at.r + '"]' : base + 'select', self.el);
+          if (back) back.focus();
+        }
         self._renderSummary();
       }, function () { /* the sentence keeps saying "another event" */ });
     });
@@ -562,11 +581,12 @@
       }
       return resp.json().then(function (j) {
         if (self.state !== S || seq !== self._previewSeq) return;
-        var dates = (j && j.dates) || [];
+        if (!j || !Array.isArray(j.dates)) { fail('The dates couldn’t be worked out.'); return; }
+        var dates = j.dates;
         if (!dates.length) self._setNext('empty', [], 'No dates found. Loosen a condition.');
         else if (j.truncated && dates.length < 5) self._setNext('partial', dates, 'No more dates found for a long while.');
         else self._setNext('ok', dates);
-      });
+      }, function () { fail('The dates couldn’t be worked out.'); });
     }, function (err) {
       if (err && err.name === 'AbortError') return;
       fail('Couldn’t work out the dates. Check your connection.');
@@ -626,12 +646,16 @@
     // clear it, and left out to keep it (the case for a rule that is hidden
     // from this viewer, and for any event that never had one).
     if (r.type === 'rule' && !r.locked) {
-      var Rl = Chronicle.calendarRule, bad = Rl.validate(S.rule.form, this._env());
+      var Rl = Chronicle.calendarRule;
+      var unchanged = !!(S.rule.original && Rl.sameRule(S.rule.original, S.rule.form));
+      var bad = unchanged ? null : Rl.validate(S.rule.form, this._env());
       if (bad) { this._fail(bad, $('#cal5-radd', this.el) || $('#cal5-edRep', this.el)); return null; }
       body.is_recurring = true;
       body.recurrence_type = 'rule';
       body.recurrence_interval = null;
-      body.recurrence_rule = Rl.toRule(S.rule.form);
+      // Unchanged since the drawer opened: leave it out so a rule naming
+      // something since deleted does not block saving the title.
+      if (!unchanged) body.recurrence_rule = Rl.toRule(S.rule.form);
     } else if (!r.locked) {
       body.is_recurring = !!r.type;
       body.recurrence_type = r.type || null;
@@ -756,6 +780,8 @@
       if (!view._eventDrawer) view._eventDrawer = new Drawer(view);
       view._eventDrawer.open(ev, day);
     },
-    isOpen: function (view) { return !!(view._eventDrawer && view._eventDrawer.isOpen()); }
+    isOpen: function (view) { return !!(view._eventDrawer && view._eventDrawer.isOpen()); },
+    // The class itself, so the request-body logic can be unit tested.
+    Drawer: Drawer
   };
 })();

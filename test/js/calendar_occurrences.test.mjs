@@ -72,17 +72,28 @@ test('an empty occurrences list means no dates this month, not the start date', 
   assert.deepEqual(days(e, 1), []);
 });
 
-test('truncated: what was found, plus the start date, and no invented dates', () => {
+test('truncated: what was found, and no invented dates', () => {
   const none = { ...rule, occurrences: [], occurrences_truncated: true };
-  assert.deepEqual(days(none, 1), [2]);
-  assert.deepEqual(days(none, 2), []);
+  assert.deepEqual(days(none, 1), []);
   const some = { ...rule, occurrences: [{ year: 1, month: 1, day: 5 }], occurrences_truncated: true };
-  assert.deepEqual(days(some, 1), [2, 5]);
-  // A truncated event whose start date was skipped does not come back on it.
+  assert.deepEqual(days(some, 1), [5]);
+  // Without any list, the event keeps its own start date.
+  const bare = { ...rule, occurrences_truncated: true };
+  assert.equal(CalDate.hasExpansion(bare), true);
+  assert.deepEqual(days(bare, 1), [2]);
+});
+
+test('truncated: a start date that was skipped or moved is never put back', () => {
   const skipped = { ...rule, occurrences: [{ year: 1, month: 1, day: 2, skipped: true }], occurrences_truncated: true };
   assert.equal(CalDate.occurrenceOn(skipped, 1, 1, 2).skipped, true);
-  // omitted occurrences with the flag set (older server shapes) still keep the event.
-  assert.equal(CalDate.hasExpansion({ occurrences_truncated: true }), true);
+  // Moved: only the new date shows.
+  const moved = { ...rule, occurrences: [{ year: 1, month: 1, day: 7, moved_from: { year: 1, month: 1, day: 2 } }], occurrences_truncated: true };
+  assert.deepEqual(days(moved, 1), [7]);
+  // A player's list has skipped dates stripped; the start date is not re-added from it.
+  const player = { ...rule, occurrences: [{ year: 1, month: 1, day: 9 }], occurrences_truncated: true };
+  assert.equal(at(player, 1, 1, 2), false);
+  // An empty list is still a list: nothing is put back.
+  assert.equal(at({ ...rule, occurrences: [], occurrences_truncated: true }, 1, 1, 2), false);
 });
 
 test('an event without occurrences keeps the old arithmetic', () => {

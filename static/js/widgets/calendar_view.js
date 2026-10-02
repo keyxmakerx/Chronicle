@@ -232,16 +232,19 @@
 
     // The occurrence of e on (year, month, day), or null. A skipped one is
     // returned (flagged) only to viewers the server sent it to. When the
-    // server could not finish counting (occurrences_truncated), the event
-    // keeps its own start date and nothing it merely guessed.
+    // server could not finish counting (occurrences_truncated) and sent no
+    // list at all, the event keeps its own start date. Once a list is given
+    // (even empty) the start date is never put back: a player's list has
+    // skipped dates stripped out, and a moved start date lives elsewhere.
     occurrenceOn: function (e, year, month, day) {
       var list = Array.isArray(e.occurrences) ? e.occurrences : [];
       for (var i = 0; i < list.length; i++) {
         var o = list[i];
         if (o.year === year && o.month === month && o.day === day) return o;
       }
-      if (e.occurrences_truncated === true && e.year === year && e.month === month && e.day === day) {
-        return { year: year, month: month, day: day };
+      if (e.occurrences_truncated === true && !Array.isArray(e.occurrences) && e.year === year && e.month === month && e.day === day) {
+        var moved = list.some(function (o) { return o.moved_from && o.moved_from.year === year && o.moved_from.month === month && o.moved_from.day === day; });
+        if (!moved) return { year: year, month: month, day: day };
       }
       return null;
     },

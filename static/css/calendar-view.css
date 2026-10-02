@@ -685,6 +685,7 @@
 .cal-v5 .radd{align-self:flex-start;height:28px;padding:0 10px;border-radius:8px;border:1px dashed var(--edge);background:transparent;font:600 12px/1 var(--sans);color:var(--ink2)}
 .cal-v5 .radd:hover{color:var(--ink);border-style:solid}
 .cal-v5 .radd[hidden]{display:none}
+@media (max-width:480px){.cal-v5 .rrow .rand{width:100%}}
 .cal-v5 .rmore summary{cursor:pointer;list-style:none;font:600 12px/1.3 var(--sans);color:var(--ink2)}
 .cal-v5 .rmore summary::-webkit-details-marker{display:none}
 .cal-v5 .rmore summary::before{content:"\25B8  ";color:var(--mut)}
