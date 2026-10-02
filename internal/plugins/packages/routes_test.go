@@ -23,6 +23,7 @@ func TestRoutesGuardCodeChangingWrites(t *testing.T) {
 		{http.MethodDelete, "/admin/packages/pkg-1"},
 		{http.MethodPut, "/admin/packages/pkg-1/repo"},
 		{http.MethodDelete, "/admin/packages/prune"},
+		{http.MethodPost, "/admin/packages/pkg-1/review"},
 	}
 	for _, tt := range tests {
 		t.Run(tt.method+" "+tt.path, func(t *testing.T) {

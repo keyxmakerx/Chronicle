@@ -5,7 +5,8 @@ import "github.com/labstack/echo/v4"
 // RegisterRoutes mounts all package manager routes under the given admin group.
 // All routes require site admin authentication (enforced by the parent group).
 // reauth guards the writes that change which code the site runs or delete
-// package files: adding, removing or re-pointing a package, and pruning.
+// package files: adding, removing or re-pointing a package, pruning, and
+// reviewing a submission (approving one fetches and installs its code).
 func RegisterRoutes(admin *echo.Group, h *Handler, reauth echo.MiddlewareFunc) {
 	g := admin.Group("/packages")
 
@@ -31,7 +32,7 @@ func RegisterRoutes(admin *echo.Group, h *Handler, reauth echo.MiddlewareFunc) {
 
 	// Submission review.
 	g.GET("/pending", h.ListPendingSubmissions)
-	g.POST("/:id/review", h.ReviewPackage)
+	g.POST("/:id/review", h.ReviewPackage, reauth)
 
 	// Repo URL management.
 	g.PUT("/:id/repo", h.UpdateRepoURL, reauth)
