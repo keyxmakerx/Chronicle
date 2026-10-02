@@ -18,20 +18,17 @@ import (
 
 // AdminDatabasePage renders the tabbed Database control surface.
 templ AdminDatabasePage(core CoreMigrationStatus, statuses []PluginMigrationStatus, health *HealthResult, backups BackupInfo, tableCount int, csrfToken string) {
-	@layouts.App("Database - Admin") {
-		<div class="max-w-7xl mx-auto space-y-5" x-data="{ tab: 'migrations' }">
+	@layouts.App("Database") {
+		<div class="max-w-7xl mx-auto space-y-5" x-data="{ tab: 'migrations' }" x-init="var t = new URLSearchParams(location.search).get('tab'); if (['migrations','health','backups','schema'].indexOf(t) !== -1) { tab = t; }">
 			<!-- Header -->
 			@components.AdminGroupHeading(components.AdminTabsHealth, "/admin/database")
 			<div class="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
 				<div>
 					<p class="text-sm text-fg-secondary mt-0.5">
 						Core schema <span class="font-mono font-semibold text-fg">v{ fmt.Sprintf("%d", core.Version) }</span>
-						&middot; { fmt.Sprintf("%d", tableCount) } tables &middot; migrations, health, backups &amp; schema in one place.
+						&middot; { fmt.Sprintf("%d", tableCount) } tables &middot; updates, health checks, backups and the table layout in one place.
 					</p>
 				</div>
-				<a href="/admin" class="text-sm text-fg-muted hover:text-accent shrink-0">
-					<i class="fa-solid fa-arrow-left mr-1"></i> Back to Dashboard
-				</a>
 			</div>
 
 			<!-- At-a-glance status strip -->
@@ -47,9 +44,9 @@ templ AdminDatabasePage(core CoreMigrationStatus, statuses []PluginMigrationStat
 					>
 						<i class="fa-solid fa-layer-group mr-1"></i> Migrations
 						if core.Ahead {
-							<span class="ml-1 inline-flex items-center px-1.5 py-0.5 rounded-full text-[10px] font-semibold bg-amber-100 text-amber-800 dark:bg-amber-900/40 dark:text-amber-300">ahead</span>
+							<span class="ml-1 inline-flex items-center px-1.5 py-0.5 rounded-full text-[10px] font-semibold bg-amber-100 text-amber-800 dark:bg-amber-900/40 dark:text-amber-300">newer</span>
 						} else if core.Dirty {
-							<span class="ml-1 inline-flex items-center px-1.5 py-0.5 rounded-full text-[10px] font-semibold bg-rose-100 text-rose-700 dark:bg-rose-900/40 dark:text-rose-300">dirty</span>
+							<span class="ml-1 inline-flex items-center px-1.5 py-0.5 rounded-full text-[10px] font-semibold bg-rose-100 text-rose-700 dark:bg-rose-900/40 dark:text-rose-300">needs repair</span>
 						} else if totalPending(core, statuses) > 0 {
 							<span class="ml-1 inline-flex items-center px-1.5 py-0.5 rounded-full text-[10px] font-semibold bg-indigo-100 text-indigo-800 dark:bg-indigo-900/40 dark:text-indigo-300">{ fmt.Sprintf("%d", totalPending(core, statuses)) }</span>
 						}
@@ -75,7 +72,7 @@ templ AdminDatabasePage(core CoreMigrationStatus, statuses []PluginMigrationStat
 					>
 						<i class="fa-solid fa-box-archive mr-1"></i> Backups
 						if !backups.Enabled {
-							<span class="ml-1 inline-flex items-center px-1.5 py-0.5 rounded-full text-[10px] font-semibold bg-surface-alt text-fg-muted">off</span>
+							<span class="ml-1 inline-flex items-center px-1.5 py-0.5 rounded-full text-[10px] font-semibold bg-surface-alt text-fg-muted">not set up</span>
 						} else if len(backups.Artifacts) > 0 {
 							<span class="ml-1 inline-flex items-center px-1.5 py-0.5 rounded-full text-[10px] font-semibold bg-surface-alt text-fg-secondary">{ fmt.Sprintf("%d", len(backups.Artifacts)) }</span>
 						}
@@ -152,13 +149,13 @@ templ dbStatusStrip(core CoreMigrationStatus, health *HealthResult, backups Back
 			</div>
 			if !backups.Enabled {
 				<p class="text-lg font-bold text-fg-muted mt-1">Off</p>
-				<p class="text-xs text-fg-secondary mt-0.5">No backup directory configured.</p>
+				<p class="text-xs text-fg-secondary mt-0.5">No backup folder set up.</p>
 			} else if backups.LastPreMigrate != nil {
 				<p class="text-lg font-bold text-fg mt-1">{ dbTimeAgo(backups.LastPreMigrate.ModTime) }</p>
-				<p class="text-xs text-fg-secondary mt-0.5">Last automatic pre-migration backup.</p>
+				<p class="text-xs text-fg-secondary mt-0.5">Last automatic backup before an update.</p>
 			} else if len(backups.Artifacts) > 0 {
 				<p class="text-lg font-bold text-fg mt-1">{ dbTimeAgo(backups.Artifacts[0].ModTime) }</p>
-				<p class="text-xs text-fg-secondary mt-0.5">Most recent backup artifact.</p>
+				<p class="text-xs text-fg-secondary mt-0.5">Most recent backup file.</p>
 			} else {
 				<p class="text-lg font-bold text-fg-muted mt-1">None yet</p>
 				<p class="text-xs text-fg-secondary mt-0.5">No backups have run.</p>
@@ -180,15 +177,15 @@ templ dbMigrationsTab(core CoreMigrationStatus, statuses []PluginMigrationStatus
 						Version <span class="font-mono font-semibold text-fg">{ fmt.Sprintf("%d", core.Version) }</span>
 						of <span class="font-mono">{ fmt.Sprintf("%d", core.Highest) }</span> shipped in this build.
 						if core.Dirty {
-							<span class="ml-2 inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-rose-100 text-rose-700 dark:bg-rose-900/30 dark:text-rose-300"><i class="fa-solid fa-triangle-exclamation mr-1"></i>dirty</span>
+							<span class="ml-2 inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-rose-100 text-rose-700 dark:bg-rose-900/30 dark:text-rose-300"><i class="fa-solid fa-triangle-exclamation mr-1"></i>needs repair</span>
 						}
 					</p>
 				</div>
 				<div>
 					if core.Ahead {
-						<span class="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium bg-amber-100 text-amber-800 dark:bg-amber-900/30 dark:text-amber-300"><i class="fa-solid fa-rotate-left mr-1"></i>DB ahead of build</span>
+						<span class="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium bg-amber-100 text-amber-800 dark:bg-amber-900/30 dark:text-amber-300"><i class="fa-solid fa-rotate-left mr-1"></i>Database is newer than this app</span>
 					} else if core.Pending > 0 {
-						<span class="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium bg-indigo-100 text-indigo-800 dark:bg-indigo-900/30 dark:text-indigo-300">{ fmt.Sprintf("%d pending", core.Pending) }</span>
+						<span class="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium bg-indigo-100 text-indigo-800 dark:bg-indigo-900/30 dark:text-indigo-300">{ fmt.Sprintf("%d waiting to apply", core.Pending) }</span>
 					} else {
 						<span class="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-300"><i class="fa-solid fa-check mr-1"></i>up to date</span>
 					}
@@ -203,7 +200,7 @@ templ dbMigrationsTab(core CoreMigrationStatus, statuses []PluginMigrationStatus
 			if core.Dirty {
 				<div class="mt-3 text-sm bg-rose-50 dark:bg-rose-900/20 border border-rose-200 dark:border-rose-800 text-rose-800 dark:text-rose-200 rounded-md p-3">
 					<i class="fa-solid fa-triangle-exclamation mr-1"></i>
-					A migration failed partway and the schema is marked <strong>dirty</strong>. Restore the most recent pre-migration backup or repair manually before the next deploy (see docs/deployment.md §Rollback).
+					A migration failed partway and the database is marked <strong>needs repair</strong>. Restore the most recent backup taken before the update, or ask whoever runs your server to repair it, before the next update.
 				</div>
 			}
 		</div>
@@ -246,7 +243,7 @@ templ dbMigrationsTab(core CoreMigrationStatus, statuses []PluginMigrationStatus
 							<tr class="border-b border-edge text-left text-fg-muted bg-surface-alt/50">
 								<th class="px-4 py-2">Plugin</th>
 								<th class="px-4 py-2">Version</th>
-								<th class="px-4 py-2">Applied At</th>
+								<th class="px-4 py-2">Applied</th>
 							</tr>
 						</thead>
 						<tbody>
@@ -291,7 +288,7 @@ templ dbHealthTab(health *HealthResult) {
 				</div>
 				<div class="ml-auto flex items-center gap-3 text-xs text-fg-muted">
 					<a href="/admin/database/status" target="_blank" rel="noopener noreferrer" class="hover:text-accent"><i class="fa-solid fa-code mr-1"></i>JSON</a>
-					<a href="/admin/database" class="hover:text-accent"><i class="fa-solid fa-rotate mr-1"></i>Re-run</a>
+					<a href="/admin/database?tab=health" class="hover:text-accent"><i class="fa-solid fa-rotate mr-1"></i>Check again</a>
 				</div>
 			</div>
 
@@ -308,7 +305,7 @@ templ dbHealthTab(health *HealthResult) {
 							<div class="min-w-0 flex-1">
 								<div class="flex items-center gap-2">
 									<span class="text-sm font-medium text-fg-body">{ ck.Name }</span>
-									<span class={ "inline-flex items-center px-1.5 py-0.5 rounded-full text-[10px] font-semibold uppercase tracking-wide", healthPillClass(ck.Status) }>{ ck.Status }</span>
+									<span class={ "inline-flex items-center px-1.5 py-0.5 rounded-full text-[10px] font-semibold uppercase tracking-wide", healthPillClass(ck.Status) }>{ healthLabel(ck.Status) }</span>
 								</div>
 								if ck.Message != "" {
 									<p class="text-xs text-fg-secondary mt-0.5">{ ck.Message }</p>
@@ -334,7 +331,7 @@ templ dbBackupsTab(backups BackupInfo, csrfToken string) {
 		<div class="card text-center py-10">
 			<i class="fa-solid fa-box-open text-3xl text-fg-muted mb-2"></i>
 			<p class="text-sm text-fg-body font-medium">Backups are not configured.</p>
-			<p class="text-xs text-fg-muted mt-1">Set <code class="font-mono">BACKUP_DIR</code> to enable automatic pre-migration backups and on-demand snapshots. See docs/deployment.md §Backups.</p>
+			<p class="text-xs text-fg-muted mt-1">Ask whoever runs your server to set the backup folder (<code class="font-mono">BACKUP_DIR</code>). Then Chronicle can back up before each update and on demand.</p>
 		</div>
 	} else {
 		<div class="space-y-4">
@@ -342,38 +339,34 @@ templ dbBackupsTab(backups BackupInfo, csrfToken string) {
 			<div class="flex flex-wrap items-center justify-between gap-3">
 				<div class="text-sm text-fg-secondary">
 					if backups.LastPreMigrate != nil {
-						Last automatic pre-migration backup
+						Last automatic backup before an update
 						<span class="font-medium text-fg-body">{ dbTimeAgo(backups.LastPreMigrate.ModTime) }</span>
 						(<span class="font-mono text-xs">{ backups.LastPreMigrate.Name }</span>).
 					} else {
-						No automatic pre-migration backup has run yet — the next pending migration will create one.
+						No automatic backup has run yet. One is made before the next update is applied.
 					}
 				</div>
 				<div class="flex items-center gap-2 shrink-0">
-					<a href="/admin/backup" class="btn btn-sm btn-secondary"><i class="fa-solid fa-gear mr-1"></i> Backup settings</a>
-					<form method="POST" action="/admin/backup/run" hx-post="/admin/backup/run" hx-confirm="Start a backup now? This holds the request open until the backup finishes (up to 20 minutes)." class="inline">
-						<input type="hidden" name="csrf_token" value={ csrfToken }/>
-						<button type="submit" class="btn btn-sm btn-primary"><i class="fa-solid fa-plus mr-1"></i> Create backup</button>
-					</form>
+					<a href="/admin/backup" class="btn btn-sm btn-primary"><i class="fa-solid fa-box-archive mr-1"></i> Go to Backups</a>
 				</div>
 			</div>
 
 			<!-- Restorable snapshots -->
 			<div>
 				<div class="flex items-center justify-between mb-2">
-					<h2 class="section-header">Restorable snapshots</h2>
+					<h2 class="section-header">Backups you can restore</h2>
 					<a href="/admin/restore" class="text-xs text-accent hover:text-accent-hover"><i class="fa-solid fa-rotate-left mr-1"></i>Restore…</a>
 				</div>
 				if len(backups.Manifests) == 0 {
 					<div class="card text-center py-6">
-						<p class="text-sm text-fg-muted">No restorable snapshots found.</p>
+						<p class="text-sm text-fg-muted">No backups you can restore yet.</p>
 					</div>
 				} else {
 					<div class="card p-0 overflow-hidden">
 						<table class="w-full text-sm">
 							<thead>
 								<tr class="bg-surface-alt border-b border-edge text-left text-xs font-semibold text-fg-secondary uppercase tracking-wider">
-									<th class="px-4 py-2.5">Snapshot</th>
+									<th class="px-4 py-2.5">Backup</th>
 									<th class="px-4 py-2.5 hidden sm:table-cell">Chronicle</th>
 									<th class="px-4 py-2.5 hidden sm:table-cell">Schema</th>
 									<th class="px-4 py-2.5">Created</th>
@@ -412,7 +405,7 @@ templ dbBackupsTab(backups BackupInfo, csrfToken string) {
 							<thead>
 								<tr class="bg-surface-alt border-b border-edge text-left text-xs font-semibold text-fg-secondary uppercase tracking-wider">
 									<th class="px-4 py-2.5">File</th>
-									<th class="px-4 py-2.5 hidden sm:table-cell">Kind</th>
+									<th class="px-4 py-2.5 hidden sm:table-cell">Contents</th>
 									<th class="px-4 py-2.5">Size</th>
 									<th class="px-4 py-2.5 hidden md:table-cell">Created</th>
 									<th class="px-4 py-2.5 text-right">Actions</th>
@@ -432,7 +425,7 @@ templ dbBackupsTab(backups BackupInfo, csrfToken string) {
 											</div>
 										</td>
 										<td class="px-4 py-2.5 hidden sm:table-cell">
-											<span class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-surface-alt text-fg-secondary">{ a.Kind }</span>
+											<span class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-surface-alt text-fg-secondary">{ artifactKindLabel(a.Kind) }</span>
 										</td>
 										<td class="px-4 py-2.5 text-fg-secondary">{ formatBytes(a.SizeBytes) }</td>
 										<td class="px-4 py-2.5 text-fg-muted hidden md:table-cell" title={ a.ModTime.Format(time.RFC3339) }>{ dbTimeAgo(a.ModTime) }</td>
@@ -494,7 +487,7 @@ templ migrationStatusCard(s PluginMigrationStatus) {
 		if s.Pending > 0 {
 			<div class="mt-2">
 				<span class="inline-flex items-center px-2 py-0.5 text-xs font-medium rounded-full bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400">
-					{ fmt.Sprintf("%d", s.Pending) } pending
+					{ fmt.Sprintf("%d", s.Pending) } waiting to apply
 				</span>
 			</div>
 		}
@@ -611,13 +604,13 @@ func coreAccentText(core CoreMigrationStatus) string {
 func coreSummary(core CoreMigrationStatus) string {
 	switch {
 	case core.Dirty:
-		return "Schema is dirty — needs repair."
+		return "Needs repair."
 	case core.Ahead:
-		return "DB is ahead of this build (rollback)."
+		return "Database is newer than this app."
 	case core.Pending == 1:
-		return "1 migration pending."
+		return "1 update waiting to apply."
 	case core.Pending > 1:
-		return fmt.Sprintf("%d migrations pending.", core.Pending)
+		return fmt.Sprintf("%d updates waiting to apply.", core.Pending)
 	default:
 		return "Up to date."
 	}
@@ -692,6 +685,38 @@ func healthPillClass(status string) string {
 		return "bg-rose-100 text-rose-700 dark:bg-rose-900/30 dark:text-rose-300"
 	default:
 		return "bg-surface-alt text-fg-secondary"
+	}
+}
+
+// healthLabel turns a check status into plain words for the pill.
+func healthLabel(status string) string {
+	switch status {
+	case "pass":
+		return "OK"
+	case "warn":
+		return "Warning"
+	case "fail":
+		return "Failed"
+	default:
+		return status
+	}
+}
+
+// artifactKindLabel names what a backup file contains, in plain words.
+func artifactKindLabel(kind string) string {
+	switch kind {
+	case "db":
+		return "Database"
+	case "media":
+		return "Uploaded files"
+	case "redis":
+		return "Sessions"
+	case "manifest":
+		return "Summary"
+	case "pre-migrate":
+		return "Before an update"
+	default:
+		return "Other"
 	}
 }
 
