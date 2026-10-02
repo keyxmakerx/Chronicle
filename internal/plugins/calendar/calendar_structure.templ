@@ -139,6 +139,15 @@ templ structurePreviewBody(campaignID, calendarID, csrfToken, importJSON, notice
 					</div>
 				</div>
 			}
+			if p.WeatherReplaced > 0 {
+				<div class="calv5-warnbox">
+					<i class="fa-solid fa-triangle-exclamation i"></i>
+					<div>
+						<b>{ fmt.Sprintf("%d day-weather %s will be deleted", p.WeatherReplaced, nounFor(p.WeatherReplaced, "reading", "readings")) }</b>
+						<p style="margin:4px 0 0">They are in months being removed, on days a moved month's own reading now takes.</p>
+					</div>
+				</div>
+			}
 			if p.RedatedTotal > 0 {
 				<div class="calv5-warnbox">
 					<i class="fa-solid fa-triangle-exclamation i"></i>
