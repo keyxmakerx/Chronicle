@@ -8,16 +8,18 @@ import (
 )
 
 // RegisterAdminRoutes adds extension management routes to the admin group.
-// All routes require site admin authentication.
-func RegisterAdminRoutes(adminGroup *echo.Group, h *Handler) {
+// All routes require site admin authentication; installing or uninstalling
+// also needs a recent password confirmation (reauth), since it changes what
+// code every campaign can run.
+func RegisterAdminRoutes(adminGroup *echo.Group, h *Handler, reauth echo.MiddlewareFunc) {
 	g := adminGroup.Group("/extensions")
 
 	g.GET("", h.ListExtensions)
 	g.GET("/:extID", h.GetExtension)
-	g.POST("/install", h.InstallExtension)
+	g.POST("/install", h.InstallExtension, reauth)
 	g.POST("/rescan", h.RescanExtensions)
 	g.PUT("/:extID", h.UpdateExtension)
-	g.DELETE("/:extID", h.UninstallExtension)
+	g.DELETE("/:extID", h.UninstallExtension, reauth)
 }
 
 // RegisterWASMAdminRoutes adds WASM plugin management routes to the admin group.

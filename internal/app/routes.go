@@ -2199,7 +2199,7 @@ func (a *App) RegisterRoutes() {
 		BackupDir:  a.Config.BackupDir,
 	})
 	restoreHandler := restore.NewHandler(restoreSvc)
-	restore.RegisterRoutes(adminGroup, restoreHandler)
+	restore.RegisterRoutes(adminGroup, restoreHandler, auth.RequireReauth(authService))
 
 	// Settings plugin route registration. The service + repo were
 	// constructed earlier (above the media routes) so the body-limit
@@ -2282,7 +2282,7 @@ func (a *App) RegisterRoutes() {
 	extService := extensions.NewExtensionService(extRepo, a.Config.ExtensionsPath)
 	extService.SetMigrationRunner(extensions.NewMigrationRunner(a.DB))
 	extHandler := extensions.NewHandler(extService, a.Config.ExtensionsPath)
-	extensions.RegisterAdminRoutes(adminGroup, extHandler)
+	extensions.RegisterAdminRoutes(adminGroup, extHandler, auth.RequireReauth(authService))
 	extensions.RegisterCampaignRoutes(e, extHandler, campaignService, authService)
 	extensions.RegisterAssetRoutes(e, extHandler)
 
@@ -2460,7 +2460,7 @@ func (a *App) RegisterRoutes() {
 	packages.RegisterPublicRoutes(e, pkgServeHandler, middleware.RateLimit(300, time.Minute))
 
 	if a.PluginHealth.IsHealthy("packages") {
-		packages.RegisterRoutes(adminGroup, pkgHandler)
+		packages.RegisterRoutes(adminGroup, pkgHandler, auth.RequireReauth(authService))
 
 		// Owner-facing submission routes (authenticated, not admin-only).
 		ownerGroup := e.Group("", auth.RequireAuth(authService))

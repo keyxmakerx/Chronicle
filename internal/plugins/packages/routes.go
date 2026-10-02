@@ -4,17 +4,19 @@ import "github.com/labstack/echo/v4"
 
 // RegisterRoutes mounts all package manager routes under the given admin group.
 // All routes require site admin authentication (enforced by the parent group).
-func RegisterRoutes(admin *echo.Group, h *Handler) {
+// reauth guards the writes that change which code the site runs or delete
+// package files: adding, removing or re-pointing a package, and pruning.
+func RegisterRoutes(admin *echo.Group, h *Handler, reauth echo.MiddlewareFunc) {
 	g := admin.Group("/packages")
 
 	// Package CRUD.
 	g.GET("", h.ListPackages)
-	g.POST("", h.AddPackage)
+	g.POST("", h.AddPackage, reauth)
 	// Stale-version cleanup wizard (static segment — registered before the
 	// param routes conceptually; echo matches static over :id regardless).
 	g.GET("/prune", h.PrunePreview)
-	g.DELETE("/prune", h.PruneExecute)
-	g.DELETE("/:id", h.RemovePackage)
+	g.DELETE("/prune", h.PruneExecute, reauth)
+	g.DELETE("/:id", h.RemovePackage, reauth)
 
 	// Version management.
 	g.GET("/:id/versions", h.ListVersions)
@@ -32,7 +34,7 @@ func RegisterRoutes(admin *echo.Group, h *Handler) {
 	g.POST("/:id/review", h.ReviewPackage)
 
 	// Repo URL management.
-	g.PUT("/:id/repo", h.UpdateRepoURL)
+	g.PUT("/:id/repo", h.UpdateRepoURL, reauth)
 
 	// Lifecycle management.
 	g.POST("/:id/deprecate", h.DeprecatePackage)
