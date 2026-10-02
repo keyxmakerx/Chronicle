@@ -231,8 +231,13 @@ func (s *calendarService) expandMonth(ctx context.Context, cal *Calendar, events
 		if !editor {
 			occ = forPlayers(occ)
 		}
-		if len(occ) == 0 {
+		// A truncated event stays, with what was found: its dates are
+		// unknown, not absent, and dropping it would hide it silently.
+		if len(occ) == 0 && !truncated {
 			continue
+		}
+		if occ == nil {
+			occ = []Occurrence{}
 		}
 		e.Occurrences = occ
 		e.OccurrencesTruncated = truncated

@@ -376,22 +376,42 @@ func TestRuleExpansion_EveryCountsFromStart(t *testing.T) {
 
 func TestRuleExpansion_ScanBound(t *testing.T) {
 	cal := ruleCal()
-	cap := ruleScanCapDays(cal)
-	if cap < ruleScanMinDays || cap > ruleScanMaxDays {
-		t.Fatalf("cap %d outside its bounds", cap)
+	if c := ruleScanCapDays(cal); c < ruleScanMinDays || c > ruleScanMaxDays {
+		t.Fatalf("scan cap %d outside its bounds", c)
 	}
-	// every 2 counts from the start: a start 100 years back cannot be
-	// counted within the bound, so the read is empty and says so.
-	e := ruleEvent("e", 1, 1, 1, mustRule(t, `{"match":[{"kind":"day_of_month","day":1}],"every":2}`))
-	got, truncated := newExpander(cal, nil, nil).natural(&e, DayDate{100, 1, 1}, DayDate{100, 3, 30}, 0, 0)
-	if len(got) != 0 || !truncated {
-		t.Fatalf("got %s truncated=%v, want nothing and truncated", dates(got), truncated)
+	if c := ruleCountCapDays(cal); c < ruleScanCapDays(cal) || c > ruleCountMaxDays {
+		t.Fatalf("count cap %d outside its bounds", c)
 	}
-	// every 1 needs no count: the same far-off month expands fine.
-	e = ruleEvent("e", 1, 1, 1, mustRule(t, `{"match":[{"kind":"day_of_month","day":1}]}`))
-	got, truncated = newExpander(cal, nil, nil).natural(&e, DayDate{100, 1, 1}, DayDate{100, 3, 30}, 0, 0)
-	if dates(got) != "100-1-1 100-2-1 100-3-1" || truncated {
-		t.Fatalf("got %s truncated=%v", dates(got), truncated)
+	everyOther := `{"match":[{"kind":"day_of_month","day":1}],"every":2}`
+	tests := []struct {
+		name          string
+		rule          string
+		startYear     int
+		readYear      int
+		budget        int // 0: the default
+		want          string
+		wantTruncated bool
+	}{
+		// Three months start each year, so years 1..99 hold 297 matches:
+		// Alpha 1 of year 100 is the 298th (index 297, odd, dropped).
+		{"counted from a start 100 years back", everyOther, 1, 100, 0, "100-2-1", false},
+		{"every 1 needs no count", `{"match":[{"kind":"day_of_month","day":1}]}`, 1, 100, 0, "100-1-1 100-2-1 100-3-1", false},
+		{"a start past the count bound is unknown, not empty", everyOther, 1, 1 + 2*ruleCountYears, 0, "", true},
+		{"a spent request budget is unknown, not empty", everyOther, 1, 100, 50, "", true},
+		{"budget stops an uncounted walk too", `{"match":[{"kind":"day_of_month","day":1}]}`, 1, 100, 10, "100-1-1", true},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			e := ruleEvent("e", tt.startYear, 1, 1, mustRule(t, tt.rule))
+			x := newExpander(cal, nil, nil)
+			if tt.budget > 0 {
+				x.budget = tt.budget
+			}
+			got, truncated := x.natural(&e, DayDate{tt.readYear, 1, 1}, DayDate{tt.readYear, 3, 30}, 0, 0)
+			if dates(got) != tt.want || truncated != tt.wantTruncated {
+				t.Fatalf("got %q truncated=%v, want %q truncated=%v", dates(got), truncated, tt.want, tt.wantTruncated)
+			}
+		})
 	}
 }
 

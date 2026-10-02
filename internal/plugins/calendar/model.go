@@ -1023,9 +1023,11 @@ type Event struct {
 	// Occurrences are the dates a repeating event lands on within the range
 	// a month read asked for, after skips and moves, worked out on the
 	// server so a client never re-implements the rule math. Only month reads
-	// fill it; OccurrencesTruncated says the scan hit its bound before the
-	// range was covered (see ruleScanCapDays).
-	Occurrences          []Occurrence `json:"occurrences,omitempty"`
+	// fill it; OccurrencesTruncated says a scan bound or the request's
+	// budget stopped it before the range was covered, so the list may be
+	// short or empty. omitzero, not omitempty: a truncated event still sends
+	// "occurrences": [] so a client can tell "unknown" from "not a month read".
+	Occurrences          []Occurrence `json:"occurrences,omitzero"`
 	OccurrencesTruncated bool         `json:"occurrences_truncated,omitempty"`
 }
 

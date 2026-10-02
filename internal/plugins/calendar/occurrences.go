@@ -75,29 +75,50 @@ func (a DayDate) before(b DayDate) bool {
 // inRange reports whether d lies in [from, to].
 func (d DayDate) inRange(from, to DayDate) bool { return !d.before(from) && !to.before(d) }
 
-// Scan bounds. A rule is scanned day by day, so how far one request may walk
-// is capped: ruleScanYears of the calendar's own years, held between the two
-// absolute bounds so neither a tiny nor a vast year length escapes it.
+// Scan bounds. A rule is scanned day by day, so how far one walk may go is
+// capped: ruleScanYears of the calendar's own years for a walk that starts
+// where the asked-for range does, held between the two absolute bounds so
+// neither a tiny nor a vast year length escapes it.
+//
+// A counted rule (every > 1, or a max-occurrences) must count every match
+// from the event's start to know which ones are kept, so its walk starts at
+// the start date however long ago that is. That walk only tests days, it
+// builds nothing until the range is reached, so it gets the far larger
+// ruleCountYears bound instead.
 const (
-	ruleScanYears   = 5
-	ruleScanMinDays = 400
-	ruleScanMaxDays = 4000
+	ruleScanYears    = 5
+	ruleScanMinDays  = 400
+	ruleScanMaxDays  = 4000
+	ruleCountYears   = 1000
+	ruleCountMaxDays = 400000
 )
+
+// expandBudgetDays is how many days one request may test across every
+// event it expands, anchors included. A read that would go past it answers
+// occurrences_truncated for whatever is left rather than burning CPU: a
+// month of a calendar full of rules must cost the same however the rules
+// were written.
+const expandBudgetDays = 1500000
 
 // ruleScanCapDays is the most days one expansion of one event may walk.
 func ruleScanCapDays(cal *Calendar) int {
-	year := cal.YearLength() + cal.leapExtraDays()
+	return clampDays(ruleScanYears*ruleYearDays(cal), ruleScanMinDays, ruleScanMaxDays)
+}
+
+// ruleCountCapDays is the most days a counted rule may walk from its start.
+func ruleCountCapDays(cal *Calendar) int {
+	return clampDays(ruleCountYears*ruleYearDays(cal), ruleScanMinDays, ruleCountMaxDays)
+}
+
+func ruleYearDays(cal *Calendar) int {
 	if cal.UsesRealTime() {
-		year = 366
+		return 366
 	}
-	days := ruleScanYears * year
-	if days < ruleScanMinDays {
-		days = ruleScanMinDays
-	}
-	if days > ruleScanMaxDays {
-		days = ruleScanMaxDays
-	}
-	return days
+	return cal.YearLength() + cal.leapExtraDays()
+}
+
+func clampDays(days, lo, hi int) int {
+	return min(max(days, lo), hi)
 }
 
 // dayCursor walks consecutive calendar days, skipping months that have no
@@ -243,16 +264,43 @@ func moonPhaseFalls(m *Moon, abs int, target float64) bool {
 // expander expands events against one calendar, which must carry Months,
 // Weekdays, and every Moon and Season (unfiltered: a rule on a hidden moon
 // still has dates). anchors holds the events after_event conditions name;
-// overrides holds stored skips and moves by event id.
+// overrides holds stored skips and moves by event id. One expander serves
+// one request: budget is that request's remaining day tests, and
+// anchorDates memoizes each anchor's dates so a hundred rules on the same
+// anchor walk it once.
 type expander struct {
-	cal       *Calendar
-	anchors   map[string]*Event
-	overrides map[string][]OccurrenceOverride
-	capDays   int
+	cal          *Calendar
+	anchors      map[string]*Event
+	overrides    map[string][]OccurrenceOverride
+	capDays      int
+	countCapDays int
+	budget       int
+	anchorDates  map[string]*anchorSpan
+}
+
+// anchorSpan is an anchor's un-skipped occurrence dates over [from, to],
+// sorted.
+type anchorSpan struct {
+	from, to  DayDate
+	dates     []DayDate
+	truncated bool
 }
 
 func newExpander(cal *Calendar, anchors map[string]*Event, overrides map[string][]OccurrenceOverride) *expander {
-	return &expander{cal: cal, anchors: anchors, overrides: overrides, capDays: ruleScanCapDays(cal)}
+	return &expander{
+		cal: cal, anchors: anchors, overrides: overrides,
+		capDays: ruleScanCapDays(cal), countCapDays: ruleCountCapDays(cal),
+		budget: expandBudgetDays, anchorDates: map[string]*anchorSpan{},
+	}
+}
+
+// spend takes one day test from the request's budget; false once it is gone.
+func (x *expander) spend() bool {
+	if x.budget <= 0 {
+		return false
+	}
+	x.budget--
+	return true
 }
 
 // occurrences returns e's occurrences in [from, to] with its overrides
@@ -290,7 +338,9 @@ func (x *expander) occurrences(e *Event, from, to DayDate, depth int) ([]Occurre
 		}
 		orig := o.date()
 		if !natSet[orig] {
-			if found, _ := x.natural(e, orig, orig, 1, depth); len(found) == 0 {
+			found, tr := x.natural(e, orig, orig, 1, depth)
+			truncated = truncated || tr
+			if len(found) == 0 {
 				continue
 			}
 		}
@@ -329,7 +379,7 @@ func (x *expander) natural(e *Event, from, to DayDate, limit, depth int) ([]DayD
 	var out []DayDate
 	c := newDayCursor(x.cal, start)
 	for steps := 0; c.ok && !to.before(c.date()); steps++ {
-		if steps >= x.capDays {
+		if steps >= x.capDays || !x.spend() {
 			return out, true
 		}
 		if e.OccursOn(x.cal, c.y, c.m, c.d) {
@@ -352,17 +402,19 @@ type compiledCond struct {
 	n, wd    int
 	day      int
 	season   *Season
-	anchorAt map[DayDate]bool // anchor occurrence dates, for after_event
-	lag      *dayCursor       // walks `days` behind the scan, for after_event
+	anchorAt []DayDate  // anchor occurrence dates, sorted, for after_event
+	next     int        // first anchorAt entry not behind lag
+	lag      *dayCursor // walks `days` behind the scan, for after_event
 }
 
 // ruleNatural walks the days a rule's matches could fall on and returns the
 // occurrences (match + offset_days) inside [from, to].
 //
 // With every > 1 or a max-occurrences cap, which match is which depends on
-// every match since the event's start, so the walk starts there; otherwise
-// it starts where the range does. Either way it walks at most capDays days,
-// and reports truncated if that stopped it early.
+// every match since the event's start, so the walk starts there and only
+// counts until the range is near; otherwise it starts where the range does.
+// Either way it stops at its bound or the request's budget and reports
+// truncated if that stopped it early.
 func (x *expander) ruleNatural(e *Event, from, to DayDate, limit, depth int) ([]DayDate, bool) {
 	r := e.RecurrenceRule
 	// An anchor never follows its own anchor: one level only, so a stale
@@ -381,6 +433,9 @@ func (x *expander) ruleNatural(e *Event, from, to DayDate, limit, depth int) ([]
 	var end *DayDate
 	if e.RecurrenceEndYear != nil && e.RecurrenceEndMonth != nil && e.RecurrenceEndDay != nil {
 		end = &DayDate{Year: *e.RecurrenceEndYear, Month: *e.RecurrenceEndMonth, Day: *e.RecurrenceEndDay}
+		if end.before(from) {
+			return nil, false
+		}
 	}
 
 	mFrom, ok1 := shiftDate(x.cal, from, -k)
@@ -389,25 +444,53 @@ func (x *expander) ruleNatural(e *Event, from, to DayDate, limit, depth int) ([]
 		return nil, false
 	}
 	scanStart := mFrom
+	capDays := x.capDays
 	if counting || mFrom.before(base) {
 		scanStart = base
+	}
+	if counting {
+		capDays = x.countCapDays
 	}
 	if mTo.before(scanStart) {
 		return nil, false
 	}
 
-	main := newDayCursor(x.cal, scanStart)
-	emit := newDayCursor(x.cal, scanStart)
-	emit.shift(k)
 	conds, truncated, ok := x.compileRule(r, scanStart, mTo, depth)
 	if !ok {
 		return nil, truncated
 	}
+	main := newDayCursor(x.cal, scanStart)
+	advance := func() {
+		main.next()
+		for i := range conds {
+			if conds[i].lag != nil {
+				conds[i].lag.next()
+			}
+		}
+	}
 
+	// Count-only stretch: a match here lands before the range, so it only
+	// moves the count on. The end date cannot cut in here, since it is not
+	// before the range.
+	matches, steps := 0, 0
+	for ; main.ok && main.date().before(mFrom); steps++ {
+		if steps >= capDays || !x.spend() {
+			return nil, true
+		}
+		if x.dayMatches(conds, &main) {
+			if matches%every == 0 && maxOcc != nil && matches/every >= *maxOcc {
+				return nil, truncated
+			}
+			matches++
+		}
+		advance()
+	}
+
+	emit := newDayCursor(x.cal, main.date())
+	emit.shift(k)
 	var out []DayDate
-	matches := 0
-	for steps := 0; main.ok && emit.ok && !mTo.before(main.date()); steps++ {
-		if steps >= x.capDays {
+	for ; main.ok && emit.ok && !mTo.before(main.date()); steps++ {
+		if steps >= capDays || !x.spend() {
 			truncated = true
 			break
 		}
@@ -429,15 +512,46 @@ func (x *expander) ruleNatural(e *Event, from, to DayDate, limit, depth int) ([]
 			}
 			matches++
 		}
-		main.next()
+		advance()
 		emit.next()
-		for i := range conds {
-			if conds[i].lag != nil {
-				conds[i].lag.next()
-			}
-		}
 	}
 	return out, truncated
+}
+
+// anchorWindowPad widens a memoized anchor walk past what was asked for, so
+// the next condition on the same anchor (shifted by at most a year either
+// way by its own days and its rule's offset) finds the dates already there.
+const anchorWindowPad = 2 * maxRuleShiftDays
+
+// anchorOccurrenceDates returns anchor's un-skipped occurrence dates over at
+// least [from, to], sorted, walking the anchor at most once per request for
+// every range already covered.
+func (x *expander) anchorOccurrenceDates(anchor *Event, from, to DayDate, depth int) ([]DayDate, bool) {
+	if span := x.anchorDates[anchor.ID]; span != nil && !from.before(span.from) && !span.to.before(to) {
+		return span.dates, span.truncated
+	}
+	lo, ok1 := shiftDate(x.cal, from, -anchorWindowPad)
+	hi, ok2 := shiftDate(x.cal, to, anchorWindowPad)
+	if !ok1 || !ok2 {
+		lo, hi = from, to
+	}
+	if span := x.anchorDates[anchor.ID]; span != nil {
+		if span.from.before(lo) {
+			lo = span.from
+		}
+		if hi.before(span.to) {
+			hi = span.to
+		}
+	}
+	occ, truncated := x.occurrences(anchor, lo, hi, depth)
+	dates := make([]DayDate, 0, len(occ))
+	for _, o := range occ {
+		if !o.Skipped {
+			dates = append(dates, DayDate{Year: o.Year, Month: o.Month, Day: o.Day})
+		}
+	}
+	x.anchorDates[anchor.ID] = &anchorSpan{from: lo, to: hi, dates: dates, truncated: truncated}
+	return dates, truncated
 }
 
 // compileRule resolves a rule's references (moons, seasons, anchor dates
@@ -512,14 +626,11 @@ func (x *expander) compileRule(r *RecurrenceRule, scanStart, scanEnd DayDate, de
 			if !lag.ok || !ok {
 				return nil, false, false
 			}
-			occ, tr := x.occurrences(anchor, lag.date(), lagEnd, depth+1)
+			dates, tr := x.anchorOccurrenceDates(anchor, lag.date(), lagEnd, depth+1)
 			truncated = truncated || tr
-			cc.anchorAt = make(map[DayDate]bool, len(occ))
-			for _, o := range occ {
-				if !o.Skipped {
-					cc.anchorAt[DayDate{Year: o.Year, Month: o.Month, Day: o.Day}] = true
-				}
-			}
+			start := lag.date()
+			cc.anchorAt = dates
+			cc.next = sort.Search(len(dates), func(i int) bool { return !dates[i].before(start) })
 			cc.lag = &lag
 		default:
 			return nil, false, false
@@ -576,7 +687,16 @@ func (x *expander) dayMatches(conds []compiledCond, c *dayCursor) bool {
 				return false
 			}
 		case RuleAfterEvent:
-			if cc.lag == nil || !cc.lag.ok || !cc.anchorAt[cc.lag.date()] {
+			// The lag cursor only moves forward, so the anchor dates behind
+			// it are never needed again.
+			if cc.lag == nil || !cc.lag.ok {
+				return false
+			}
+			at := cc.lag.date()
+			for cc.next < len(cc.anchorAt) && cc.anchorAt[cc.next].before(at) {
+				cc.next++
+			}
+			if cc.next >= len(cc.anchorAt) || cc.anchorAt[cc.next] != at {
 				return false
 			}
 		}
