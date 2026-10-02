@@ -19,6 +19,11 @@ import (
 type EventRepository interface {
 	CreateEvent(ctx context.Context, evt *Event) error
 	GetEvent(ctx context.Context, id string) (*Event, error)
+	// GetEventsByIDs batch-reads the events with the given ids that belong to
+	// calendarID, in no particular order. Unknown ids and ids on another
+	// calendar are simply absent. No visibility filtering: the service layer
+	// applies the same per-event predicate GetEvent's callers use.
+	GetEventsByIDs(ctx context.Context, calendarID string, ids []string) ([]Event, error)
 	UpdateEvent(ctx context.Context, evt *Event) error
 	DeleteEvent(ctx context.Context, id string) error
 	ListEventsForMonth(ctx context.Context, calendarID string, year, month int, role int) ([]Event, error)
@@ -262,6 +267,45 @@ func (r *eventRepo) GetEvent(ctx context.Context, id string) (*Event, error) {
 		return nil, nil
 	}
 	return evt, err
+}
+
+// eventIDsChunk bounds the IN list of GetEventsByIDs so a timeline with a very
+// large link set stays under the driver's placeholder and packet limits.
+const eventIDsChunk = 500
+
+// GetEventsByIDs returns the events with the given ids on calendarID. The
+// calendar_id predicate is in SQL so an id from another calendar can never
+// be returned, matching GetEventForViewer's calendar-membership check.
+func (r *eventRepo) GetEventsByIDs(ctx context.Context, calendarID string, ids []string) ([]Event, error) {
+	var out []Event
+	for start := 0; start < len(ids); start += eventIDsChunk {
+		end := start + eventIDsChunk
+		if end > len(ids) {
+			end = len(ids)
+		}
+		chunk := ids[start:end]
+		ph := make([]string, len(chunk))
+		args := make([]any, 0, len(chunk)+1)
+		args = append(args, calendarID)
+		for i, id := range chunk {
+			ph[i] = "?"
+			args = append(args, id)
+		}
+		rows, err := r.db.QueryContext(ctx,
+			`SELECT `+eventCols+`
+			 FROM calendar_events e `+eventJoins+`
+			 WHERE e.calendar_id = ? AND e.id IN (`+strings.Join(ph, ",")+`)`, args...)
+		if err != nil {
+			return nil, err
+		}
+		events, err := scanEvents(rows)
+		rows.Close()
+		if err != nil {
+			return nil, err
+		}
+		out = append(out, events...)
+	}
+	return out, nil
 }
 
 // UpdateEvent modifies an existing event. Validates kind_id/entity_id

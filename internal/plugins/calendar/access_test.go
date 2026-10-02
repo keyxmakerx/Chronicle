@@ -136,6 +136,12 @@ func (f *fakeCalendarSvc) GetEventForViewer(_ context.Context, eventID, calendar
 	}
 	return &Event{ID: eventID, CalendarID: calendarID, Name: "The Secret Event"}, nil
 }
+func (f *fakeCalendarSvc) ListEventsByIDsForViewer(context.Context, string, string, []string, permissions.Viewer) ([]Event, error) {
+	return nil, nil
+}
+func (f *fakeCalendarSvc) GetCalendarNameForViewer(context.Context, string, string, permissions.Viewer) (string, error) {
+	return "", nil
+}
 func (f *fakeCalendarSvc) ListEventsForMonth(_ context.Context, calendarID, _ string, _, _ int, v permissions.Viewer) ([]Event, error) {
 	f.lastViewer = v
 	return []Event{{ID: "evt-1", CalendarID: calendarID}}, nil

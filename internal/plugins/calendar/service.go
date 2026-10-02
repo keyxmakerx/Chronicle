@@ -217,6 +217,17 @@ type CalendarService interface {
 	// event is visible to v. Like ListEventsForMonth, a future event not yet
 	// announced (dropUnannouncedFutureEvents) is not found for a player.
 	GetEventForViewer(ctx context.Context, eventID, calendarID, campaignID string, v permissions.Viewer) (*Event, error)
+	// ListEventsByIDsForViewer is GetEventForViewer for many ids in one
+	// round of queries: the same calendar gate, event visibility, unannounced
+	// and linked-entity redaction rules, with an event the viewer may not
+	// see (or an unknown id, or one on another calendar) simply absent.
+	// Results follow the order of eventIDs, duplicates collapsed. An
+	// unreadable calendar is NotFound, as for the single read.
+	ListEventsByIDsForViewer(ctx context.Context, calendarID, campaignID string, eventIDs []string, v permissions.Viewer) ([]Event, error)
+	// GetCalendarNameForViewer returns just the calendar's name, gated like
+	// GetCalendarForViewer but without eager-loading its sub-resources, for
+	// display-only callers.
+	GetCalendarNameForViewer(ctx context.Context, calendarID, campaignID string, v permissions.Viewer) (string, error)
 	// ListEventsForMonth applies the same player filtering as
 	// ListUpcomingEvents, including dropping future events not yet announced.
 	ListEventsForMonth(ctx context.Context, calendarID, campaignID string, year, month int, v permissions.Viewer) ([]Event, error)
@@ -1388,6 +1399,63 @@ func (s *calendarService) GetEventForViewer(ctx context.Context, eventID, calend
 	}
 	result := events[0]
 	return &result, nil
+}
+
+// ListEventsByIDsForViewer applies GetEventForViewer's gates to a whole id
+// set: the calendar is resolved and checked once, the events come back in one
+// query, and the unannounced/entity-redaction steps (already batch-shaped)
+// run once over the survivors.
+func (s *calendarService) ListEventsByIDsForViewer(ctx context.Context, calendarID, campaignID string, eventIDs []string, v permissions.Viewer) ([]Event, error) {
+	cal, err := s.calendarInCampaignForViewer(ctx, calendarID, campaignID, v)
+	if err != nil {
+		return nil, err
+	}
+	if len(eventIDs) == 0 {
+		return nil, nil
+	}
+	unique := make([]string, 0, len(eventIDs))
+	seen := make(map[string]bool, len(eventIDs))
+	for _, id := range eventIDs {
+		if !seen[id] {
+			seen[id] = true
+			unique = append(unique, id)
+		}
+	}
+	stored, err := s.eventRepo.GetEventsByIDs(ctx, calendarID, unique)
+	if err != nil {
+		return nil, fmt.Errorf("get events by ids: %w", err)
+	}
+	byID := make(map[string]Event, len(stored))
+	for _, e := range stored {
+		if e.CalendarID == calendarID && eventVisibleToViewer(e, v) {
+			byID[e.ID] = e
+		}
+	}
+	events := make([]Event, 0, len(byID))
+	for _, id := range unique {
+		if e, ok := byID[id]; ok {
+			events = append(events, e)
+		}
+	}
+	if !v.SkipsPerUserRules() {
+		if events, err = s.dropUnannouncedFutureEvents(ctx, cal, campaignID, events); err != nil {
+			return nil, err
+		}
+	}
+	if err := s.redactHiddenEntityLinks(ctx, campaignID, events, v); err != nil {
+		return nil, err
+	}
+	return events, nil
+}
+
+// GetCalendarNameForViewer reads only the calendar row, through the same
+// campaign-scope and visibility gate every other viewer read uses.
+func (s *calendarService) GetCalendarNameForViewer(ctx context.Context, calendarID, campaignID string, v permissions.Viewer) (string, error) {
+	cal, err := s.calendarInCampaignForViewer(ctx, calendarID, campaignID, v)
+	if err != nil {
+		return "", err
+	}
+	return cal.Name, nil
 }
 
 // ListEventsForMonth returns a calendar's events for (year, month),
