@@ -2747,7 +2747,8 @@ func (a *App) RegisterRoutes() {
 	// data-widget="calendar_view" (the calendar's own page, or a Calendars
 	// page preview unfolded in place), calendar_editor.js self-gates on that
 	// mount's data-can-edit="true" and opens calendar_event_drawer.js's full
-	// event editor (loaded first so it exists when the editor binds), and
+	// event editor and calendar_weather_sheet.js's Generate sheet (both
+	// loaded first so they exist when the editor binds), and
 	// calendar_almanac.js waits for a Calendars page preview. rulebook.js
 	// mounts on the Rules page's data-widget="rulebook" when a system ships a
 	// book. All are no-ops on every other page, same as every entry here.
@@ -2755,6 +2756,7 @@ func (a *App) RegisterRoutes() {
 		"/static/plugins/" + entities.PluginSlug + "/js/characters.js",
 		"/static/js/widgets/calendar_view.js",
 		"/static/js/widgets/calendar_event_drawer.js",
+		"/static/js/widgets/calendar_weather_sheet.js",
 		"/static/js/widgets/calendar_editor.js",
 		"/static/js/calendar_almanac.js",
 		"/static/js/widgets/rulebook.js",

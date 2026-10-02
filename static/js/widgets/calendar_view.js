@@ -368,12 +368,13 @@
   // Edit mode's view of a day's stored reading (CSS shows it only while
   // .cal.wxon): the glyph, and a tint of the weather's own colour on a day
   // painted by hand. Generated readings show the glyph alone, so the
-  // Director can tell what they set from what the generator set.
-  function weatherPaintHTML(w, future) {
+  // Director can tell what they set from what the generator set. ghost is a
+  // Generate preview: faint, and not yet saved.
+  function weatherPaintHTML(w, future, ghost) {
     if (!w) return '';
-    var hand = w.source !== 'generated', c = sanitizeColor(w.color);
-    return (hand && c ? '<span class="cpt hand" style="--wxc:color-mix(in oklch,' + c + ' 26%,transparent)"></span>' : '') +
-      '<span class="cwx' + (hand ? ' hand' : '') + (future ? ' dir' : '') + '"' + (c ? ' style="color:' + c + '"' : '') + ' aria-hidden="true">' +
+    var hand = !ghost && w.source !== 'generated', c = sanitizeColor(w.color), tone = hand ? ' hand' : (ghost ? ' ghost' : '');
+    return ((hand || ghost) && c ? '<span class="cpt' + tone + '" style="--wxc:color-mix(in oklch,' + c + ' 26%,transparent)"></span>' : '') +
+      '<span class="cwx' + tone + (future ? ' dir' : '') + '"' + (c ? ' style="color:' + c + '"' : '') + ' aria-hidden="true">' +
       '<i class="fa-solid ' + weatherIcon(w) + ' i"></i></span>';
   }
 
@@ -820,6 +821,7 @@
   Chronicle.calendarPanel = { growOpen: growOpen, growClose: growClose };
   Chronicle.calendarColor = sanitizeColor;
   Chronicle.calendarWeatherIcon = weatherIcon;
+  Chronicle.calendarWindWords = windWords;
 
   // ================================================================
   Chronicle.register('calendar_view', {
@@ -939,9 +941,10 @@
       this.dockEl = $('#cal5-dock', this.el);
     },
 
-    say: function (msg) {
+    // action, optional: {label, run} adds a button to the toast (Undo).
+    say: function (msg, action) {
       this._announce(msg);
-      this._toast(msg);
+      this._toast(msg, action);
     },
 
     // Screen readers only: for things the eye already sees happen.
@@ -1013,20 +1016,35 @@
     // has no moons." — was announced only to the #cal5-live aria-live region
     // above, invisible to a sighted viewer. aria-hidden here so it isn't a
     // second, redundant announcement on top of that live region.
-    _toast: function (msg) {
+    // A toast with an action keeps its button reachable and stays up
+    // longer, so the button can be found and pressed.
+    _toast: function (msg, action) {
       var el = this._toastEl;
       if (!el) {
         el = document.createElement('div');
         el.className = 'toast';
-        el.setAttribute('aria-hidden', 'true');
-        el.innerHTML = '<span></span>';
+        el.innerHTML = '<span></span><button type="button" hidden></button>';
         this.calEl.appendChild(el);
         this._toastEl = el;
+        el.querySelector('button').addEventListener('click', function () {
+          var run = el._run;
+          el._run = null;
+          el.classList.remove('on');
+          if (run) run();
+        });
       }
+      var btn = el.querySelector('button');
       el.querySelector('span').textContent = msg;
+      btn.hidden = !action;
+      btn.textContent = action ? action.label : '';
+      el._run = action ? action.run : null;
+      // The live region already reads the message; with an action only the
+      // button is exposed, so nothing is heard twice.
+      if (action) el.removeAttribute('aria-hidden'); else el.setAttribute('aria-hidden', 'true');
+      el.querySelector('span').setAttribute('aria-hidden', 'true');
       el.classList.add('on');
       clearTimeout(this._toastTimer);
-      this._toastTimer = setTimeout(function () { el.classList.remove('on'); }, 3200);
+      this._toastTimer = setTimeout(function () { el.classList.remove('on'); el._run = null; }, action ? 8000 : 3200);
     },
 
     // --------------------------------------------------------------
@@ -1237,7 +1255,18 @@
       return '<div class="band' + (isToday ? ' today' : '') + '">' +
         '<button type="button" class="day" data-key="' + dayKey(y, m, d) + '" style="width:100%">' +
           '<div class="dc"><span class="bn">' + label + '</span>' + weatherMarkHTML(this.weatherOnDay(y, m, d), isFuture) + marks + '</div>' +
+          (this.canAuthorDmOnly ? this._paintMarkHTML(y, m, d, isFuture) : '') +
         '</button></div>';
+    },
+
+    // Edit mode's weather mark: a Generate preview (wxPreview, keyed like the
+    // grid) shows as a faint ghost, except over a day painted by hand, which
+    // a generated reading never replaces.
+    _paintMarkHTML: function (y, m, d, future) {
+      var stored = (this.weatherByYear[y] || {})[m + '_' + d];
+      var pv = this.wxPreview && this.wxPreview[dayKey(y, m, d)];
+      if (pv && !(stored && stored.source !== 'generated')) return weatherPaintHTML(pv, future, true);
+      return weatherPaintHTML(stored, future);
     },
 
     _dayCellHTML: function (y, m, d) {
@@ -1253,7 +1282,7 @@
       }
       return '<button type="button" class="day' + (isToday ? ' today' : '') + (isPast ? ' past' : '') + '" data-key="' + key + '">' +
         moonHTML + weatherMarkHTML(this.weatherOnDay(y, m, d), !isPast && !isToday) +
-        (this.canAuthorDmOnly ? weatherPaintHTML((this.weatherByYear[y] || {})[m + '_' + d], !isPast && !isToday) : '') +
+        (this.canAuthorDmOnly ? this._paintMarkHTML(y, m, d, !isPast && !isToday) : '') +
         '<div class="dc"><span class="num">' + d + '</span>' + this._marksHTML(y, m, d) + '</div>' +
         '</button>';
     },

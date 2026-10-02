@@ -143,9 +143,15 @@
     if (!subw) return;
     var strip = document.createElement('div');
     strip.className = 'h-edit';
-    strip.innerHTML = '<span class="etag">Editing</span><span class="ehint">Click or drag across days. Shift extends, Ctrl/Cmd adds. Touch: tap, or hold then drag.</span><span class="sp"></span><button type="button" class="btn sm quiet" id="cal5-editdone">Done</button>';
+    // Generate… here works without choosing days: it fills the shown month.
+    var gen = this.view.canAuthorDmOnly && Chronicle.calendarWeatherSheet;
+    strip.innerHTML = '<span class="etag">Editing</span><span class="ehint">Click or drag across days. Shift extends, Ctrl/Cmd adds. Touch: tap, or hold then drag.</span><span class="sp"></span>' +
+      (gen ? '<button type="button" class="btn sm quiet" id="edGen" aria-haspopup="dialog" aria-label="Generate weather"><i class="fa-solid fa-wand-magic-sparkles"></i><span class="btxt"> Generate…</span></button>' : '') +
+      '<button type="button" class="btn sm quiet" id="cal5-editdone">Done</button>';
     subw.appendChild(strip);
     $('#cal5-editdone', strip).addEventListener('click', this.setEditing.bind(this, false));
+    var self = this;
+    if (gen) $('#edGen', strip).addEventListener('click', function () { self._openGenerate(true); });
   };
 
   CalendarEditor.prototype.setEditing = function (on) {
@@ -453,7 +459,8 @@
       if (!self._selectedKeys().length) return;
       var panelOpen = view.evpEl.classList.contains('open') || view.mvEl.classList.contains('open') ||
         view._pf.state !== 'closed' || view.popEl.classList.contains('open') || view.wingFor ||
-        (Chronicle.calendarEventDrawer && Chronicle.calendarEventDrawer.isOpen(view));
+        (Chronicle.calendarEventDrawer && Chronicle.calendarEventDrawer.isOpen(view)) ||
+        (Chronicle.calendarWeatherSheet && Chronicle.calendarWeatherSheet.isOpen(view));
       if (panelOpen) return;
       e.stopPropagation();
       self.selection = {};
@@ -511,8 +518,9 @@
   // ship: bulk visibility (Hide/Reveal, gated CanAuthorDmOnly, the same
   // gate the single-event visibility route already uses) and Shift events
   // (moves every event touching the selection by N days), plus Paint
-  // weather, which sets a weather on every chosen day. The mockup's
-  // Generate… and Lock actions are not wired yet (TODO(#765)).
+  // weather, which sets a weather on every chosen day, and Generate…, which
+  // opens calendar_weather_sheet.js for them. The mockup's Lock action is
+  // not wired yet (TODO(#765)).
   // ------------------------------------------------------------------
   CalendarEditor.prototype._buildBulkBar = function () {
     var wrap = document.createElement('div');
@@ -529,6 +537,7 @@
       else if (a === 'hide' || a === 'reveal') self._bulkVisibility(a === 'hide' ? 'dm_only' : 'everyone');
       else if (a === 'shift') self._toggleShiftTray();
       else if (a === 'paint') self._togglePaintTray();
+      else if (a === 'gen') self._openGenerate();
     });
   };
 
@@ -547,7 +556,8 @@
       '<div class="bba">' +
         (canVis ? '<button type="button" class="bbb" data-bb="hide"><i class="fa-solid fa-eye-slash"></i><span>Hide</span></button><button type="button" class="bbb" data-bb="reveal"><i class="fa-solid fa-eye"></i><span>Reveal</span></button>' : '') +
         '<button type="button" class="bbb" data-bb="shift" aria-expanded="' + !!this._shiftTray + '"><i class="fa-solid fa-arrows-left-right"></i><span>Shift events</span></button>' +
-        (canVis ? '<button type="button" class="bbb" data-bb="paint" aria-expanded="' + !!this._paintTray + '"><i class="fa-solid fa-paintbrush"></i><span>Paint weather</span></button>' : '') +
+        (canVis ? '<button type="button" class="bbb" data-bb="paint" aria-expanded="' + !!this._paintTray + '"><i class="fa-solid fa-paintbrush"></i><span>Paint weather</span></button>' +
+          (Chronicle.calendarWeatherSheet ? '<button type="button" class="bbb" data-bb="gen" aria-haspopup="dialog"><i class="fa-solid fa-wand-magic-sparkles"></i><span>Generate…</span></button>' : '') : '') +
       '</div>' +
       '<button type="button" class="x" data-bb="none" aria-label="Choose no days">✕</button>';
     if (this._paintTray) this._paintCount();
@@ -928,6 +938,65 @@
       self._paintBusy = false;
       self._refreshWeather(dates);
       self._syncUndo();
+    });
+  };
+
+  // _openGenerate opens the Generate sheet for the chosen days (or, from the
+  // header with none chosen, every day of the shown month), once the
+  // generator and every year those days fall in have loaded.
+  CalendarEditor.prototype._openGenerate = function (monthIfNone) {
+    var self = this, view = this.view, dates = this._selectedDates();
+    if (!dates.length && monthIfNone) dates = this._shownMonthDates();
+    if (!dates.length || this._paintBusy) return;
+    // The per-day weather API takes at most 1000 days per call.
+    if (dates.length > 1000) { view.say('Choose 1000 days or fewer to generate weather for.'); return; }
+    this._closePaintTray();
+    this._closeShiftTray();
+    var fail = function () { view.say('The weather generator could not load. Check your connection and try again.'); };
+    loadEngine(view.engineSrc, function () {
+      self._snapshot(dates).then(function () {
+        var stored = {};
+        yearsOf(dates).forEach(function (y) {
+          var byDay = view.weatherByYear[y] || {};
+          Object.keys(byDay).forEach(function (md) { stored[y + '_' + md] = byDay[md]; });
+        });
+        Chronicle.calendarWeatherSheet.open(view, {
+          dates: dates, stored: stored,
+          apply: function (days) { return self._applyGenerated(days); }
+        });
+      }).catch(function () { view.say("Couldn't load the weather already on those days. Try again."); });
+    }, fail);
+  };
+
+  CalendarEditor.prototype._shownMonthDates = function () {
+    var view = this.view, cal = view.cal, y = view.view.y, m = view.view.m, out = [];
+    var mc = CalDate.monthCount(cal), m0 = ((m - 1) % mc + mc) % mc;
+    for (var d = 1, n = CalDate.monthDays(cal, m0, y); d <= n; d++) out.push({ year: y, month: m0 + 1, day: d });
+    return out;
+  };
+
+  // _applyGenerated saves the sheet's readings as generated (the server
+  // keeps any day painted meanwhile) and offers Undo. Resolves true once
+  // saved, false if nothing changed.
+  CalendarEditor.prototype._applyGenerated = function (days) {
+    var self = this, view = this.view;
+    var dates = days.map(function (d) { return { year: d.year, month: d.month, day: d.day }; });
+    this._paintBusy = true;
+    return this._snapshot(dates).then(function (snap) {
+      return Chronicle.apiFetch(view.apiBase + '/weather/days', { method: 'PUT', body: { days: days } }).then(function (resp) {
+        if (!resp.ok) throw new Error('generate failed');
+        self._paintUndo = snap;
+        self._refreshWeather(dates);
+        view.say('Generated weather for ' + (days.length === 1 ? '1 day' : days.length + ' days') + '.', { label: 'Undo', run: function () { self._undoPaint(); } });
+        return true;
+      });
+    }).catch(function () {
+      view.say("Couldn't save the weather. Nothing changed.");
+      return false;
+    }).then(function (ok) {
+      self._paintBusy = false;
+      self._syncUndo();
+      return ok;
     });
   };
 
