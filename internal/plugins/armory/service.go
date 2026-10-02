@@ -103,6 +103,26 @@ func (s *armoryService) ListItems(ctx context.Context, campaignID string, role i
 		return nil, 0, nil
 	}
 
+	// Below Scribe a tag slug is honoured only if it is one the viewer is
+	// offered, so a GM-only or nonexistent slug yields the same empty result
+	// and cannot be used to probe for hidden tags.
+	if opts.Tag != "" && role < permissions.RoleScribe {
+		offered, err := s.ListTagOptions(ctx, campaignID, role, userID)
+		if err != nil {
+			return nil, 0, err
+		}
+		found := false
+		for _, t := range offered {
+			if t.Slug == opts.Tag {
+				found = true
+				break
+			}
+		}
+		if !found {
+			return nil, 0, nil
+		}
+	}
+
 	visibleIDs, err := s.visibleItemIDs(ctx, campaignID, typeIDs, role, userID, opts)
 	if err != nil {
 		return nil, 0, err

@@ -205,6 +205,57 @@ func TestInstanceManagementRoleGate(t *testing.T) {
 	}
 }
 
+// TestListItems_TagProbe pins that below Scribe a ?tag= slug that is GM-only
+// or unknown behaves identically (empty result, repo never asked to filter),
+// while a visible tag still filters and Scribes keep GM-only tags.
+func TestListItems_TagProbe(t *testing.T) {
+	tags := map[string][]TagInfo{"a": {{ID: 1, Name: "Magic", Slug: "magic"}, {ID: 2, Name: "Secret", Slug: "secret"}}}
+	tests := []struct {
+		name      string
+		role      int
+		tag       string
+		wantTotal int
+		wantRepo  bool
+	}{
+		{"player, public tag", permissions.RolePlayer, "magic", 1, true},
+		{"player, dm_only tag", permissions.RolePlayer, "secret", 0, false},
+		{"player, unknown tag", permissions.RolePlayer, "nope", 0, false},
+		{"scribe, dm_only tag", permissions.RoleScribe, "secret", 1, true},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			repoCalledWithTag := false
+			repo := &mockArmoryRepo{listIDsFn: func(_ context.Context, _ string, _ []int, o ItemListOptions) ([]string, error) {
+				if o.Tag != "" {
+					repoCalledWithTag = true
+				}
+				return []string{"a"}, nil
+			}}
+			tf := &mockTypeFinder{findIDsFn: func(context.Context, string) ([]int, error) { return []int{1}, nil }}
+			svc := newTestArmoryService(repo, tf, &mockVisibilityFilter{viewable: map[string]bool{"a": true}})
+			svc.SetTagLister(&mockTagLister{listFn: func(_ context.Context, ids []string, dm bool) (map[string][]TagInfo, error) {
+				out := map[string][]TagInfo{}
+				for _, id := range ids {
+					for _, ti := range tags[id] {
+						if ti.Slug == "secret" && !dm {
+							continue
+						}
+						out[id] = append(out[id], ti)
+					}
+				}
+				return out, nil
+			}})
+			_, total, err := svc.ListItems(context.Background(), "camp-1", tt.role, "u", ItemListOptions{Tag: tt.tag, Page: 1, PerPage: 20})
+			if err != nil {
+				t.Fatal(err)
+			}
+			if total != tt.wantTotal || repoCalledWithTag != tt.wantRepo {
+				t.Errorf("total=%d repoTag=%v, want %d/%v", total, repoCalledWithTag, tt.wantTotal, tt.wantRepo)
+			}
+		})
+	}
+}
+
 // TestInlineHandlers_AttributeSafe pins the swap-safety contract: handlers
 // are IIFEs with no double quote (the attribute delimiter), no templ script
 // helpers, and hostile names stay inside their JS string literal.
