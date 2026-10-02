@@ -253,6 +253,7 @@ paths:
     put:
       tags: [Entities]
       summary: Update entity fields
+      description: Partial update. A key in fields_data replaces that field, null clears it, and fields not sent keep their stored value.
       operationId: updateEntityFields
       parameters:
         - $ref: "#/components/parameters/campaignId"

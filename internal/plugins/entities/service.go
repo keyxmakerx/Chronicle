@@ -30,6 +30,7 @@ type EntityService interface {
 	UpdateEntry(ctx context.Context, entityID, entryJSON, entryHTML string) error
 	UpdatePlayerNotes(ctx context.Context, entityID, notesJSON, notesHTML string) error
 	UpdateFields(ctx context.Context, entityID string, fieldsData map[string]any) error
+	MergeFields(ctx context.Context, entityID string, patch map[string]any) error
 	UpdateFieldOverrides(ctx context.Context, entityID string, overrides *FieldOverrides) error
 	UpdateImage(ctx context.Context, entityID, imagePath string) error
 	UpdateCoverImage(ctx context.Context, entityID, coverImagePath string) error
@@ -902,6 +903,35 @@ func (s *entityService) UpdatePlayerNotes(ctx context.Context, entityID, notesJS
 		s.events.PublishEntityEvent("updated", entity.CampaignID, entityID, entity)
 	}
 	return nil
+}
+
+// MergeFields applies a partial field update: a key in patch replaces that
+// field, a null value clears it, and a key not in patch keeps its stored
+// value. External clients (the sync API) only know the fields they map, so a
+// whole-map replace would erase every field they don't.
+func (s *entityService) MergeFields(ctx context.Context, entityID string, patch map[string]any) error {
+	entity, err := s.entities.FindByID(ctx, entityID)
+	if err != nil {
+		return err
+	}
+	return s.UpdateFields(ctx, entityID, mergeFieldPatch(entity.FieldsData, patch))
+}
+
+// mergeFieldPatch returns a new map: current with patch applied (nil value
+// deletes the key). Neither input is modified.
+func mergeFieldPatch(current, patch map[string]any) map[string]any {
+	merged := make(map[string]any, len(current)+len(patch))
+	for k, v := range current {
+		merged[k] = v
+	}
+	for k, v := range patch {
+		if v == nil {
+			delete(merged, k)
+			continue
+		}
+		merged[k] = v
+	}
+	return merged
 }
 
 // UpdateFields updates only the entity's custom field values. Used by the
