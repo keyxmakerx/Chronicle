@@ -22,6 +22,7 @@ type mockSessionRepo struct {
 	findByIDFn                 func(ctx context.Context, id string) (*Session, error)
 	findByIDIncludingDeletedFn func(ctx context.Context, id string) (*Session, error)
 	listByCampaignFn           func(ctx context.Context, campaignID string) ([]Session, error)
+	listPlannedByWorldDateFn   func(ctx context.Context, campaignID string, from, to WorldDate, limit int) ([]Session, error)
 	listByDateRangeFn          func(ctx context.Context, campaignID, startDate, endDate string) ([]Session, error)
 	searchByCampaignFn         func(ctx context.Context, campaignID, query string) ([]Session, error)
 	updateFn                   func(ctx context.Context, s *Session) error
@@ -248,6 +249,13 @@ func (m *mockSessionRepo) FindByIDIncludingDeleted(ctx context.Context, id strin
 func (m *mockSessionRepo) ListByCampaign(ctx context.Context, campaignID string) ([]Session, error) {
 	if m.listByCampaignFn != nil {
 		return m.listByCampaignFn(ctx, campaignID)
+	}
+	return nil, nil
+}
+
+func (m *mockSessionRepo) ListPlannedByWorldDateRange(ctx context.Context, campaignID string, from, to WorldDate, limit int) ([]Session, error) {
+	if m.listPlannedByWorldDateFn != nil {
+		return m.listPlannedByWorldDateFn(ctx, campaignID, from, to, limit)
 	}
 	return nil, nil
 }
@@ -2013,5 +2021,52 @@ func TestAttendee_NoteNeverSerializesToJSON(t *testing.T) {
 	}
 	if strings.Contains(string(b), "running 15 late") || strings.Contains(string(b), `"note"`) {
 		t.Errorf("Attendee.Note leaked into JSON output: %s", b)
+	}
+}
+
+func TestListPlannedSessionsInWorldDateRange(t *testing.T) {
+	y, m, d := 1000, 3, 4
+	tests := []struct {
+		name    string
+		repoErr error
+		wantErr bool
+	}{
+		{"passes the repository result through", nil, false},
+		{"a repository failure is wrapped, never returned raw", errors.New("db down"), true},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			var gotCamp string
+			var gotFrom, gotTo WorldDate
+			var gotLimit int
+			svc := NewSessionService(&mockSessionRepo{
+				listPlannedByWorldDateFn: func(_ context.Context, camp string, from, to WorldDate, limit int) ([]Session, error) {
+					gotCamp, gotFrom, gotTo, gotLimit = camp, from, to, limit
+					if tc.repoErr != nil {
+						return nil, tc.repoErr
+					}
+					return []Session{{ID: "s1", Name: "Night", CalendarYear: &y, CalendarMonth: &m, CalendarDay: &d}}, nil
+				},
+			}, nil, nil)
+
+			got, err := svc.ListPlannedSessionsInWorldDateRange(context.Background(), "camp-1",
+				WorldDate{1000, 1, 1}, WorldDate{1002, 12, 30}, 3)
+			if tc.wantErr {
+				if err == nil {
+					t.Fatal("expected an error")
+				}
+				var ae *apperror.AppError
+				if !errors.As(err, &ae) {
+					t.Errorf("error %T is not an apperror", err)
+				}
+				return
+			}
+			if err != nil || len(got) != 1 || got[0].Name != "Night" {
+				t.Fatalf("got %+v, %v", got, err)
+			}
+			if gotCamp != "camp-1" || gotFrom != (WorldDate{1000, 1, 1}) || gotTo != (WorldDate{1002, 12, 30}) || gotLimit != 3 {
+				t.Errorf("repo called with %q %+v %+v limit %d", gotCamp, gotFrom, gotTo, gotLimit)
+			}
+		})
 	}
 }

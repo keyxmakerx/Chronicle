@@ -2846,6 +2846,14 @@ func (a *App) RegisterRoutes() {
 	// Entity campaign checker prevents cross-campaign entity linking (IDOR).
 	sessionsRepo := sessions.NewSessionRepository(a.DB)
 	sessionsService := sessions.NewSessionService(sessionsRepo, &entityCampaignCheckerAdapter{svc: entityService}, &entityVisibilityFilterAdapter{svc: entityService})
+	// The calendar's anchor-move preview names the sessions it would re-date
+	// through this lookup; without it the owner's warning would always read
+	// "no sessions affected".
+	if wired, ok := calendarService.(interface {
+		SetGameNightsAffectedByAnchorMove(calendar.GameNightsAffectedByAnchorMove)
+	}); ok {
+		wired.SetGameNightsAffectedByAnchorMove(&gameNightsAnchorMoveAdapter{svc: sessionsService})
+	}
 	sessionsHandler := sessions.NewHandler(sessionsService)
 	sessionsHandler.SetMemberLister(campaignService)
 	sessionsHandler.SetMailSender(smtpService, a.Config.BaseURL)

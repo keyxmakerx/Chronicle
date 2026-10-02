@@ -375,14 +375,9 @@ func (s *calendarService) SetEntityVisibilityGate(g EntityVisibilityGate) { s.en
 // SetGameNightsAffectedByAnchorMove injects the sessions-plugin lookup
 // PreviewAnchorMove uses to name affected game nights. Same optional,
 // nil-safe wiring pattern as SetEntityVisibilityGate above: unset, the
-// preview still works, just with an empty Affected list.
-//
-// TODO(#806): has no caller — needs a sessions-plugin adapter wired from
-// internal/app/routes.go (mirroring the SetEntityVisibilityGate call beside
-// it) backed by a real SessionsInWorldDateRange query, which the sessions
-// plugin doesn't have yet either; until both exist, PreviewAnchorMove always
-// reports zero affected sessions, so this must land before the anchor-move
-// WRITE endpoint ships.
+// preview still works, just with an empty Affected list. Production wiring
+// (internal/app/routes.go) always sets it; a preview with it unset would
+// understate the warning, so the anchor-move write must not run unwired.
 func (s *calendarService) SetGameNightsAffectedByAnchorMove(g GameNightsAffectedByAnchorMove) {
 	s.gameNights = g
 }

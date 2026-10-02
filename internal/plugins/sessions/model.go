@@ -113,6 +113,12 @@ func (s *Session) IsPlanned() bool {
 	return s.Status == StatusPlanned
 }
 
+// WorldDate is an in-world calendar date as stored on a session. It carries
+// no calendar id: a session's date is a bare year/month/day triple.
+type WorldDate struct {
+	Year, Month, Day int
+}
+
 // HasCalendarDate returns true if the session has an in-game date set.
 func (s *Session) HasCalendarDate() bool {
 	return s.CalendarYear != nil && s.CalendarMonth != nil && s.CalendarDay != nil
