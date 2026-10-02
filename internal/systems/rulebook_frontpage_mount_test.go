@@ -57,9 +57,8 @@ func TestSystemManifest_HasWidget(t *testing.T) {
 // resolved (requireSystemAddon in routes.go gates it), so "no widgets
 // declared" is the closest reachable analogue of "nothing to mount" this
 // templ can express on its own. Asserts the mount div and its campaign-id
-// config are present or absent accordingly, that it sits above the
-// reference browser (category grid) when present, and that the reference
-// browser always renders.
+// config are present or absent accordingly, and that the generic category
+// browser renders only when there is no front page to stand in for it.
 func TestSystemIndexContent_RulebookFrontpageMount(t *testing.T) {
 	cc := &campaigns.CampaignContext{Campaign: &campaigns.Campaign{ID: "camp-1", Name: "Test Campaign"}}
 	cats := []categoryInfo{{Slug: "abilities", Name: "Abilities", Count: 3}}
@@ -117,15 +116,9 @@ func TestSystemIndexContent_RulebookFrontpageMount(t *testing.T) {
 			if tt.wantMount && !strings.Contains(html, `data-campaign-id="camp-1"`) {
 				t.Errorf("expected mount to carry data-campaign-id=%q; html:\n%s", "camp-1", html)
 			}
-			// The reference browser (category grid) renders regardless, and the
-			// mount — when present — sits above it, per "front page at the top,
-			// reference browser below it".
-			catIdx := strings.Index(html, "Abilities")
-			if catIdx < 0 {
-				t.Errorf("expected reference browser category %q to render; html:\n%s", "Abilities", html)
-			}
-			if tt.wantMount && mountIdx > catIdx {
-				t.Errorf("expected mount to render above the reference browser category grid; html:\n%s", html)
+			gotBrowser := strings.Contains(html, "Abilities")
+			if gotBrowser == tt.wantMount {
+				t.Errorf("category browser present = %v, want %v; html:\n%s", gotBrowser, !tt.wantMount, html)
 			}
 		})
 	}

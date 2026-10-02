@@ -40,47 +40,54 @@ templ SystemIndexContent(cc *campaigns.CampaignContext, manifest *SystemManifest
 			{Label: cc.Campaign.Name, Href: "/campaigns/" + cc.Campaign.ID, Icon: "fa-book-open"},
 			{Label: manifest.Name},
 		})
-
+		// A system that ships its own rulebook front page gets that page alone:
+		// stacking the generic category browser under it read as a second,
+		// competing rulebook. The category routes stay up for its links.
 		if manifest.HasWidget(rulebookFrontpageWidgetSlug) {
-			<div class="mb-6" data-widget={ rulebookFrontpageWidgetSlug } data-campaign-id={ cc.Campaign.ID }></div>
+			<div data-widget={ rulebookFrontpageWidgetSlug } data-campaign-id={ cc.Campaign.ID }></div>
+		} else {
+			@systemCategoryBrowser(cc, manifest, cats)
 		}
+	</div>
+}
 
-		<!-- System header -->
-		<div class="mb-6">
-			<div class="flex items-center gap-3 mb-2">
-				if manifest.Icon != "" {
-					<i class={ "fa-solid " + manifest.Icon + " text-2xl text-primary" }></i>
-				}
-				<h1 class="text-2xl font-bold text-fg">{ manifest.Name }</h1>
-			</div>
-			if manifest.Description != "" {
-				<p class="text-fg-secondary">{ manifest.Description }</p>
+// systemCategoryBrowser is the generic reference index: the system header and
+// one card per data category. Used when the system has no front page of its own.
+templ systemCategoryBrowser(cc *campaigns.CampaignContext, manifest *SystemManifest, cats []categoryInfo) {
+	<!-- System header -->
+	<div class="mb-6">
+		<div class="flex items-center gap-3 mb-2">
+			if manifest.Icon != "" {
+				<i class={ "fa-solid " + manifest.Icon + " text-2xl text-primary" }></i>
 			}
+			<h1 class="text-2xl font-bold text-fg">{ manifest.Name }</h1>
 		</div>
-
-		<!-- Category cards grid -->
-		<div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-			for _, cat := range cats {
-				<a
-					href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/systems/%s/%s", cc.Campaign.ID, manifest.ID, cat.Slug)) }
-					class="block bg-surface border border-edge rounded-lg p-5 hover:border-primary/50 hover:shadow-md transition-all group"
-					hx-get={ fmt.Sprintf("/campaigns/%s/systems/%s/%s", cc.Campaign.ID, manifest.ID, cat.Slug) }
-					hx-target="#module-content"
-					hx-swap="outerHTML"
-					hx-push-url="true"
-				>
-					<div class="flex items-center gap-3 mb-2">
-						if cat.Icon != "" {
-							<i class={ "fa-solid " + cat.Icon + " text-lg text-primary group-hover:scale-110 transition-transform" }></i>
-						}
-						<h2 class="text-lg font-semibold text-fg">{ cat.Name }</h2>
-					</div>
-					<p class="text-sm text-fg-secondary">
-						{ fmt.Sprintf("%d items", cat.Count) }
-					</p>
-				</a>
-			}
-		</div>
+		if manifest.Description != "" {
+			<p class="text-fg-secondary">{ manifest.Description }</p>
+		}
+	</div>
+	<!-- Category cards grid -->
+	<div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+		for _, cat := range cats {
+			<a
+				href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/systems/%s/%s", cc.Campaign.ID, manifest.ID, cat.Slug)) }
+				class="block bg-surface border border-edge rounded-lg p-5 hover:border-primary/50 hover:shadow-md transition-all group"
+				hx-get={ fmt.Sprintf("/campaigns/%s/systems/%s/%s", cc.Campaign.ID, manifest.ID, cat.Slug) }
+				hx-target="#module-content"
+				hx-swap="outerHTML"
+				hx-push-url="true"
+			>
+				<div class="flex items-center gap-3 mb-2">
+					if cat.Icon != "" {
+						<i class={ "fa-solid " + cat.Icon + " text-lg text-primary group-hover:scale-110 transition-transform" }></i>
+					}
+					<h2 class="text-lg font-semibold text-fg">{ cat.Name }</h2>
+				</div>
+				<p class="text-sm text-fg-secondary">
+					{ fmt.Sprintf("%d items", cat.Count) }
+				</p>
+			</a>
+		}
 	</div>
 }
 
@@ -99,7 +106,6 @@ templ CategoryListContent(cc *campaigns.CampaignContext, manifest *SystemManifes
 			{Label: manifest.Name, Href: fmt.Sprintf("/campaigns/%s/systems/%s", cc.Campaign.ID, manifest.ID)},
 			{Label: cat.Name},
 		})
-
 		<div class="mb-6">
 			<div class="flex items-center gap-3 mb-2">
 				if cat.Icon != "" {
@@ -109,7 +115,6 @@ templ CategoryListContent(cc *campaigns.CampaignContext, manifest *SystemManifes
 				<span class="text-sm text-fg-secondary">({ fmt.Sprintf("%d", len(items)) })</span>
 			</div>
 		</div>
-
 		<!-- Item table -->
 		<div class="bg-surface border border-edge rounded-lg overflow-hidden">
 			<table class="w-full text-sm">
@@ -173,7 +178,6 @@ templ ItemDetailContent(cc *campaigns.CampaignContext, manifest *SystemManifest,
 			{Label: cat.Name, Href: fmt.Sprintf("/campaigns/%s/systems/%s/%s", cc.Campaign.ID, manifest.ID, cat.Slug)},
 			{Label: item.Name},
 		})
-
 		<div class="max-w-3xl">
 			<!-- Item header -->
 			<div class="mb-6">
@@ -191,7 +195,6 @@ templ ItemDetailContent(cc *campaigns.CampaignContext, manifest *SystemManifest,
 					}
 				</div>
 			</div>
-
 			<!-- Properties card -->
 			if len(item.Properties) > 0 && cat != nil && len(cat.Fields) > 0 {
 				<div class="bg-surface border border-edge rounded-lg p-4 mb-6">
@@ -207,7 +210,6 @@ templ ItemDetailContent(cc *campaigns.CampaignContext, manifest *SystemManifest,
 					</div>
 				</div>
 			}
-
 			<!-- Tags -->
 			if len(item.Tags) > 0 {
 				<div class="flex flex-wrap gap-1.5 mb-6">
@@ -216,7 +218,6 @@ templ ItemDetailContent(cc *campaigns.CampaignContext, manifest *SystemManifest,
 					}
 				</div>
 			}
-
 			<!-- Description -->
 			if item.Description != "" {
 				<div class="prose prose-sm max-w-none text-fg">
