@@ -232,3 +232,7 @@ func (r *calendarRepo) RewriteSeasonsIfUnchanged(ctx context.Context, calendarID
 	}
 	return true, tx.Commit()
 }
+
+// The startup wiring reaches the store through a type assertion; this keeps
+// that assertion from silently failing if the repository's methods drift.
+var _ HarptosSeasonStore = (*calendarRepo)(nil)
