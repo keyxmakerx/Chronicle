@@ -6,6 +6,8 @@ package restore
 
 import (
 	"fmt"
+
+	"github.com/keyxmakerx/chronicle/internal/templates/components"
 	"github.com/keyxmakerx/chronicle/internal/templates/layouts"
 )
 
@@ -20,16 +22,12 @@ type RestorePageData struct {
 }
 
 templ RestorePage(d RestorePageData) {
-	@layouts.App("Restore - Admin") {
+	@layouts.App("Backups & restore") {
 		<div class="max-w-5xl mx-auto space-y-6">
-			<div>
-				<h1 class="text-2xl font-bold text-fg">Backup &amp; Restore</h1>
-				<p class="text-sm text-fg-secondary mt-1">
-					Restoring overwrites the live database, media tree, and Redis snapshot from the chosen backup. The site will be unavailable for the duration of the restore.
-				</p>
-			</div>
-
-			@tabStrip("restore")
+			@components.AdminGroupHeading(components.AdminTabsBackup, "/admin/restore")
+			<p class="text-sm text-fg-secondary">
+				Restoring puts your site back to how it was when a backup was made. The site is unavailable while it runs.
+			</p>
 
 			@warningBanner()
 
@@ -41,7 +39,7 @@ templ RestorePage(d RestorePageData) {
 				<div class="card p-4 border-l-4 border-red-500">
 					<p class="text-sm text-red-700 dark:text-red-300">
 						<i class="fa-solid fa-triangle-exclamation mr-1"></i>
-						Could not list manifests in <code>{ d.BackupDir }</code>: { d.ListError }
+						Could not list the backups in <code>{ d.BackupDir }</code>: { d.ListError }
 					</p>
 				</div>
 			}
@@ -49,30 +47,6 @@ templ RestorePage(d RestorePageData) {
 			@manifestList(d)
 		</div>
 	}
-}
-
-// tabStrip renders the two-tab navigation shared with /admin/backup.
-// Sidebar collapses both pages into one entry, so this strip is the
-// only way to flip between snapshot list and restore list. The
-// `active` parameter is "snapshots" or "restore".
-templ tabStrip(active string) {
-	<nav class="flex gap-1 border-b border-edge text-sm" aria-label="Backup &amp; restore tabs">
-		if active == "snapshots" {
-			<a href="/admin/backup" class="px-3 py-2 border-b-2 border-accent text-fg font-medium" aria-current="page">
-				<i class="fa-solid fa-box-archive mr-1"></i> Snapshots
-			</a>
-			<a href="/admin/restore" class="px-3 py-2 border-b-2 border-transparent text-fg-muted hover:text-fg">
-				<i class="fa-solid fa-rotate-left mr-1"></i> Restore
-			</a>
-		} else {
-			<a href="/admin/backup" class="px-3 py-2 border-b-2 border-transparent text-fg-muted hover:text-fg">
-				<i class="fa-solid fa-box-archive mr-1"></i> Snapshots
-			</a>
-			<a href="/admin/restore" class="px-3 py-2 border-b-2 border-accent text-fg font-medium" aria-current="page">
-				<i class="fa-solid fa-rotate-left mr-1"></i> Restore
-			</a>
-		}
-	</nav>
 }
 
 // warningBanner is the always-on red banner that tells the operator
@@ -86,10 +60,10 @@ templ warningBanner() {
 			Restore is destructive
 		</p>
 		<ul class="text-xs text-red-700 dark:text-red-300 list-disc ml-5 space-y-0.5">
-			<li>Drops every table in the live database and reloads from the backup's mysqldump.</li>
-			<li>Replaces the media directory's contents with the backup's tarball.</li>
-			<li>Reloads the Redis snapshot if one was bundled (active sessions are dropped — every user is logged out).</li>
-			<li>Cannot be undone except by restoring a different backup. Take a fresh backup first if the live state is even partially trustworthy.</li>
+			<li>Erases the live database and loads the one saved in the backup.</li>
+			<li>Replaces your uploaded files with the ones saved in the backup.</li>
+			<li>Brings back saved sessions if the backup has them, so everyone may be logged out.</li>
+			<li>This cannot be undone except by restoring a different backup. Make a fresh backup first if the site is still in decent shape.</li>
 		</ul>
 	</div>
 }
@@ -117,7 +91,7 @@ templ lastRunStatus(r *RunResult) {
 		}
 		if r.Stderr != "" {
 			<details class="mt-2">
-				<summary class="cursor-pointer text-xs text-fg-muted">Show stderr</summary>
+				<summary class="cursor-pointer text-xs text-fg-muted">Show technical details</summary>
 				<pre class="mt-2 p-2 bg-surface-alt text-xs text-fg-body whitespace-pre-wrap">{ r.Stderr }</pre>
 			</details>
 		}
@@ -133,7 +107,7 @@ templ manifestList(d RestorePageData) {
 		<h2 class="text-lg font-semibold text-fg mb-3">Available backups</h2>
 		if len(d.Manifests) == 0 {
 			<div class="text-sm text-fg-muted py-6 text-center">
-				No backup manifests found in <code>{ d.BackupDir }</code>. Run a backup from /admin/backup first, or check your BACKUP_DIR config.
+				No backup manifests found in <code>{ d.BackupDir }</code>. Make a backup on the Backups tab first, or ask whoever runs your server to check the backup folder setting.
 			</div>
 		} else {
 			<div class="space-y-3">
@@ -176,7 +150,7 @@ templ manifestRow(m ManifestSummary, runningNow bool, csrfToken string) {
 				if m.ParseError != "" {
 					<div class="text-xs text-red-600 mt-1">
 						<i class="fa-solid fa-triangle-exclamation mr-1"></i>
-						Manifest parse error: { m.ParseError }
+						This backup's summary could not be read: { m.ParseError }
 					</div>
 				}
 			</div>
@@ -186,17 +160,17 @@ templ manifestRow(m ManifestSummary, runningNow bool, csrfToken string) {
 			action="/admin/restore/run"
 			hx-post="/admin/restore/run"
 			hx-confirm={ fmt.Sprintf("This will overwrite the live database and media with the contents of %s. Are you sure?", m.Name) }
-			class="flex items-center gap-2 pt-2 border-t border-edge"
+			class="flex flex-wrap items-center gap-2 pt-2 border-t border-edge"
 		>
 			<input type="hidden" name="csrf_token" value={ csrfToken }/>
 			<input type="hidden" name="manifest" value={ m.Name }/>
 			<input
 				type="text"
 				name="confirm"
-				placeholder="Type RESTORE to enable"
+				placeholder="Type RESTORE to confirm"
 				required
 				autocomplete="off"
-				class="input text-sm flex-1"
+				class="input text-sm flex-1 min-w-[12rem]"
 			/>
 			if runningNow {
 				<button type="button" class="btn-danger text-sm opacity-50 cursor-not-allowed" disabled>

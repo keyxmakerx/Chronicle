@@ -103,10 +103,13 @@ func TestAdminNavCoversTabGroups(t *testing.T) {
 		"/admin/systems": components.AdminTabsHealth,
 		"/admin/storage": components.AdminTabsStorage,
 		"/admin/api":     components.AdminTabsAPI,
+		"/admin/backup":  components.AdminTabsBackup,
 	}
 	for row, g := range groups {
 		for _, tab := range g.Tabs {
-			if _, href := adminNav.Current(tab.Href); href != row {
+			// The nav matches on the request path, which never carries the query.
+			path, _, _ := strings.Cut(tab.Href, "?")
+			if _, href := adminNav.Current(path); href != row {
 				t.Errorf("tab %q (%s) maps to menu row %q, want %q", tab.Label, tab.Href, href, row)
 			}
 		}
