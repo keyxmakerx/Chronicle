@@ -780,8 +780,9 @@
 @media (hover:hover){.cal-v5 .msil:hover::before{opacity:1}
 }
 .cal-v5 .sil{position:relative;display:block;width:14px;height:14px;overflow:visible}
-.cal-v5 .sil .db{fill:var(--sb);stroke:var(--ss);stroke-width:.9}
-.cal-v5 .sil .dl{fill:var(--sl)}
+/* The plain ink tokens are the fallback: the moon view's strip and graph set no --sb/--ss/--sl, and an unset var() fills an SVG shape black. */
+.cal-v5 .sil .db{fill:var(--sb,var(--silB));stroke:var(--ss,var(--silS));stroke-width:.9}
+.cal-v5 .sil .dl{fill:var(--sl,var(--silL))}
 .cal-v5 .msil.blood, .cal-v5 .flyer.blood{--sb:var(--bldB);--ss:var(--bldS);--sl:var(--bldL)}
 /* Director only: a dashed ring on a red moon players can't see yet. */
 .cal-v5 .msil.blood.dir::after{content:"";position:absolute;inset:1.5px;border-radius:50%;border:1px dashed var(--bldS);pointer-events:none}

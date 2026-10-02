@@ -9,7 +9,11 @@ package calendar
 // additional class on the <svg> (e.g. "" for the plain mark, used as-is
 // inside a sizing wrapper like .calv5-msil).
 templ MoonSilhouette(phase float64) {
-	<svg class="sil" viewBox="-7 -7 14 14" aria-hidden="true">
+	<!-- The size attributes hold the mark small until the stylesheet sizes
+	     it: an SVG with none fills its container, and the disc's fill
+	     defaults to black, so a page whose CSS arrives a moment after its
+	     markup flashed a screen-sized black circle. -->
+	<svg class="sil" width="14" height="14" viewBox="-7 -7 14 14" aria-hidden="true">
 		<circle class="db" r="6"></circle>
 		if d := MoonLitPath(phase, moonSilhouetteRadius); d != "" {
 			<path class="dl" d={ d }></path>
