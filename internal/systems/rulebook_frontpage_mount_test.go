@@ -104,7 +104,7 @@ func TestSystemIndexContent_RulebookFrontpageMount(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			var buf bytes.Buffer
-			if err := SystemIndexContent(cc, tt.manifest, cats).Render(context.Background(), &buf); err != nil {
+			if err := SystemIndexContent(cc, tt.manifest, cats, false).Render(context.Background(), &buf); err != nil {
 				t.Fatalf("Render() error = %v", err)
 			}
 			html := buf.String()
