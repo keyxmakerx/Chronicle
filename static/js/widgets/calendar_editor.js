@@ -648,7 +648,13 @@
     view.wingEl.addEventListener('click', function (e) {
       if (e.target.closest('[data-add-event]')) {
         e.stopPropagation();
-        self._openEventForm(view.wingFor, null);
+        // New events open in the full drawer like edits do, so times, an
+        // end date and repeats are there from the start; the compact form
+        // is only the fallback if the drawer's script did not load.
+        if (Chronicle.calendarEventDrawer) {
+          var d = view.wingFor.split('_').map(Number);
+          Chronicle.calendarEventDrawer.open(view, null, { y: d[0], m: d[1], d: d[2] });
+        } else self._openEventForm(view.wingFor, null);
       }
     }, true);
   };
@@ -733,7 +739,6 @@
         '<button type="button" data-vis="everyone" aria-pressed="' + (!existing || existing.visibility !== 'dm_only') + '">Everyone</button>' +
         '<button type="button" data-vis="dm_only" aria-pressed="' + (!!existing && existing.visibility === 'dm_only') + '">Director only</button></div>' : '') +
       '<div class="efoot"><button type="button" class="btn quiet" data-cancel>Cancel</button>' +
-        (isNew && Chronicle.calendarEventDrawer ? '<button type="button" class="btn quiet" data-more-opts><i class="fa-solid fa-sliders"></i> More options</button>' : '') +
         '<span class="sp"></span><button type="submit" class="btn primary">' + (isNew ? 'Create' : 'Save') + '</button></div>';
 
     form.dataset.kindId = existing && existing.kind_id != null ? String(existing.kind_id) : '';
@@ -741,14 +746,6 @@
 
     form.addEventListener('click', function (e) {
       if (e.target.closest('[data-cancel]')) { form.remove(); return; }
-      // Times, an end date, repeats and notes live in the full drawer; it
-      // carries over the name typed so far.
-      if (e.target.closest('[data-more-opts]')) {
-        var name = form.name.value;
-        form.remove();
-        Chronicle.calendarEventDrawer.open(view, null, { y: d[0], m: d[1], d: d[2] }, { name: name });
-        return;
-      }
       var chip = e.target.closest('[data-kind]');
       if (chip) { form.dataset.kindId = chip.dataset.kind; $$('#cal5-edkinds [data-kind]', form).forEach(function (b) { b.setAttribute('aria-pressed', String(b === chip)); }); }
       var vis = e.target.closest('[data-vis]');

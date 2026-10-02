@@ -7,8 +7,7 @@
  * stops, its kind, notes, who sees it and whether players learn of it ahead
  * of time.
  *
- * calendar_editor.js opens it (Edit on an event, "More options" under "Add
- * an event") through Chronicle.calendarEventDrawer.open; it renders nothing
+ * calendar_editor.js opens it (Edit on an event, and "Add an event") through Chronicle.calendarEventDrawer.open; it renders nothing
  * by itself. Loaded on every page with the other calendar scripts and inert
  * until opened.
  *
@@ -87,8 +86,8 @@
   Drawer.prototype.isOpen = function () { return this.el.classList.contains('open'); };
 
   // ev: the event to edit (null for a new one). day: {y,m,d} a new event
-  // starts on. pre: {name} typed before "More options" was pressed.
-  Drawer.prototype.open = function (ev, day, pre) {
+  // starts on.
+  Drawer.prototype.open = function (ev, day) {
     var view = this.view, cal = this.cal;
     var back = document.activeElement;
     if (view.wingFor && (view.wingEl.contains(back) || view.evpEl.contains(back))) back = $('.day[data-key="' + view.wingFor + '"]', view.stageEl) || back;
@@ -111,7 +110,7 @@
         until: !isNew && ev.recurrence_end_year != null ? { y: ev.recurrence_end_year, m: ev.recurrence_end_month, d: ev.recurrence_end_day } : s
       }
     };
-    this.el.innerHTML = this._html(ev, s, e, pre);
+    this.el.innerHTML = this._html(ev, s, e);
     void this.el.offsetWidth;
     this.el.classList.add('open');
     view.dockEl.classList.add('on');
@@ -160,9 +159,9 @@
         return '<button type="button" data-kind="' + k.id + '" aria-pressed="' + (k.id === cur) + '"' + (color ? ' style="color:' + color + '"' : '') + '>' + esc(k.icon || '') + ' ' + esc(k.name) + '</button>';
       }).join('');
   };
-  Drawer.prototype._html = function (ev, s, e, pre) {
+  Drawer.prototype._html = function (ev, s, e) {
     var S = this.state, view = this.view;
-    var name = S.isNew ? ((pre && pre.name) || '') : ev.name;
+    var name = S.isNew ? '' : ev.name;
     var h = '<div class="grab" aria-hidden="true"></div><div class="crease"><span id="cal5-edtitle">' + (S.isNew ? 'New event' : 'Edit event') + '</span>' +
       '<button type="button" class="x" data-close aria-label="Close the editor"><i class="fa-solid fa-xmark"></i></button></div>';
     h += '<div class="ebody"><label class="fld"><span class="sr">Title</span><input class="etitle" id="cal5-edT" placeholder="What is happening?" maxlength="255" value="' + esc(name) + '"></label>' +
@@ -357,9 +356,9 @@
   // One drawer per mounted calendar, made the first time it is asked for.
   window.Chronicle = window.Chronicle || {};
   Chronicle.calendarEventDrawer = {
-    open: function (view, ev, day, pre) {
+    open: function (view, ev, day) {
       if (!view._eventDrawer) view._eventDrawer = new Drawer(view);
-      view._eventDrawer.open(ev, day, pre);
+      view._eventDrawer.open(ev, day);
     },
     isOpen: function (view) { return !!(view._eventDrawer && view._eventDrawer.isOpen()); }
   };
