@@ -340,6 +340,14 @@ html[data-theme="dark"] .calv5 {
 .calv5-brow .mini:hover:not(:disabled) { background: var(--paper2); color: var(--ink); }
 .calv5-brow .mini:disabled { opacity: 0.4; }
 
+/* The same editor on an existing calendar's "Edit structure" page: a panel
+   in the page rather than a dialog, season rows with month pickers, and
+   the Festival / Rest day flags an existing calendar's rows carry. */
+.calv5-panel.page { max-height: none; margin: 0 auto 16px; }
+.calv5-brow select { height: 32px; padding: 0 6px; border-radius: 8px; border: 1px solid var(--edge); background: var(--paper2); font: 500 12.5px/1 var(--sans, sans-serif); color: var(--ink); min-width: 0; max-width: 140px; flex: none; }
+.calv5-bflag { display: inline-flex; align-items: center; gap: 4px; flex: none; font: 500 11.5px/1 var(--sans, sans-serif); color: var(--ink2); white-space: nowrap; }
+.calv5-bto { flex: none; font: 500 11.5px/1 var(--sans, sans-serif); color: var(--mut); }
+
 /* ── Generate one (recipe sheet) ──────────────────────────────────────────
  * Reuses .calv5-rv (the two-column layout), .calv5-bsec/.calv5-blist/
  * .calv5-brow (Build-your-own's own section/list/row shapes), .calv5-fld/
