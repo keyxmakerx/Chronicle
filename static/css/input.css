@@ -3870,3 +3870,177 @@
   .jnl .jnl-drawer { opacity: 0; }
   .jnl .jnl-drawer.open { opacity: 1; }
 }
+
+/* ============================================================================
+ * Customize: campaign styles
+ * The owner's Customize choices arrive as data-cz-* attributes on <html>
+ * (layouts.AppearanceAttrs) and tokens in a <style> block
+ * (layouts.AppearanceCSS). No attribute means the Classic look, so nothing
+ * here applies to a campaign that never saved Customize. Unlayered, so a
+ * choice wins over the utilities it adjusts.
+ * ========================================================================== */
+
+/* Readable accent: words in the accent colour use the shade that reads on
+   this page tone; primary buttons use a fill their words can sit on. */
+.text-accent { color: var(--color-accent-link, rgb(var(--color-accent-rgb, 99 102 241))); }
+/* In the components layer, after .btn-primary, so a utility on the same
+   button still wins as before. */
+@layer components {
+  .btn-primary {
+    background-color: var(--color-accent-fill, rgb(var(--color-accent-action-rgb, var(--color-accent-rgb, 99 102 241))));
+    color: var(--color-accent-on-fill, #fff);
+  }
+  .btn-primary:hover { background-color: var(--color-accent-fill-hover, rgb(var(--color-accent-action-hover-rgb, var(--color-accent-hover-rgb, 79 70 229)))); }
+}
+
+/* Text size: rem-based sizes scale with the root. */
+html[data-cz-scale="compact"] { font-size: 93.75%; }
+html[data-cz-scale="roomy"] { font-size: 110%; }
+
+/* Heading face, on page content only; the sidebar and header keep the UI face. */
+[data-cz-heading] #main-content :is(h1, h2, h3) {
+  font-family: var(--font-heading);
+  font-weight: var(--cz-hw, 600);
+  letter-spacing: var(--cz-hls, 0);
+}
+
+/* A custom header that needs light words gets the light ink set inside it. */
+.cz-hdr-light {
+  --color-text-primary: #f9fafb;
+  --color-text-body: #e5e7eb;
+  --color-text-secondary: #c9d1dd;
+  --color-text-muted: #aab2c0;
+  --color-bg-tertiary: rgb(255 255 255 / 0.10);
+  --color-border: rgb(255 255 255 / 0.13);
+  border-bottom-color: rgb(255 255 255 / 0.13);
+}
+
+/* Elevation: cards take the chosen shadow; cards that open something lift. */
+[data-cz-elev] .card { box-shadow: var(--elev-resting); }
+[data-cz-elev] :is(a.card, .card-elev):hover {
+  box-shadow: var(--elev-hover);
+  transform: translateY(calc(var(--cz-lift, 2px) * -1));
+}
+
+/* Buttons. Lift is Chronicle's own button, so it needs no rules. Only
+   transform and opacity move; the rest changes at once. */
+[data-cz-btn="press"] .btn { border-radius: 6px; }
+[data-cz-btn="press"] :is(.btn-primary, .btn-danger, .btn-warning, .btn-success) {
+  box-shadow: 0 3px 0 rgb(0 0 0 / 0.28);
+  transition: transform var(--dur-micro) var(--ease-out);
+}
+[data-cz-btn="press"] :is(.btn-primary, .btn-danger, .btn-warning, .btn-success):hover { box-shadow: 0 3px 0 rgb(0 0 0 / 0.28); }
+[data-cz-btn="press"] :is(.btn-primary, .btn-danger, .btn-warning, .btn-success):active { transform: translateY(2px); box-shadow: 0 1px 0 rgb(0 0 0 / 0.28); }
+[data-cz-btn="glow"] .btn { border-radius: 999px; }
+[data-cz-btn="glow"] .btn-primary:hover {
+  box-shadow: 0 0 0 4px rgb(var(--color-accent-rgb, 99 102 241) / 0.18), 0 6px 18px -4px rgb(var(--color-accent-rgb, 99 102 241) / 0.55);
+}
+[data-cz-btn="ink"] .btn { border-radius: 3px; overflow: hidden; }
+[data-cz-btn="ink"] .btn::after {
+  content: ""; position: absolute; left: 50%; top: 50%; width: 140%; aspect-ratio: 1; border-radius: 50%;
+  background: currentColor; opacity: 0; transform: translate(-50%, -50%) scale(0); pointer-events: none;
+  transition: transform 500ms cubic-bezier(.2, .7, .3, 1), opacity 500ms ease;
+}
+[data-cz-btn="ink"] .btn:active::after { opacity: 0.22; transform: translate(-50%, -50%) scale(1); transition-duration: 0ms; }
+
+/* Menu highlight on the page you are on. The living ring (the default)
+   is drawn by .nav-ring itself; each other style shows some of its layers
+   or styles the row. Strength: Lively is brighter and quicker. */
+[data-cz-strength="lively"] .nav-ring-tint { background: linear-gradient(to left, rgb(var(--nav-accent) / 0.28), rgb(var(--nav-accent) / 0.09)); }
+[data-cz-strength="lively"] .nav-ring-t1 { animation-duration: 9.5s; }
+[data-cz-strength="lively"] .nav-ring-t2 { animation-duration: 12.5s; }
+
+/* Comet: one bright head with a fading tail, a lap every 12s (8s lively). */
+[data-cz-nav="comet"] .nav-ring-tint { opacity: 0.55; }
+[data-cz-nav="comet"] .nav-ring-t1 { stroke-dasharray: 9 91; animation: cz-comet 12s linear infinite; stroke: rgb(var(--color-accent-light-rgb, 165 180 252)); }
+[data-cz-nav="comet"] .nav-ring-t2 { stroke-dasharray: 16 84; animation: cz-comet-tail 12s linear infinite; opacity: 0.4; }
+[data-cz-nav="comet"][data-cz-strength="lively"] :is(.nav-ring-t1, .nav-ring-t2) { animation-duration: 8s; }
+@keyframes cz-comet { from { stroke-dashoffset: 0; } to { stroke-dashoffset: -100; } }
+@keyframes cz-comet-tail { from { stroke-dashoffset: 7; } to { stroke-dashoffset: -93; } }
+
+/* Breathing: a wash from the right deepens and eases, with the rail. */
+[data-cz-nav="breathe"] .nav-ring-svg { display: none; }
+[data-cz-nav="breathe"] .nav-ring-j { display: block; width: 2px; }
+[data-cz-nav="breathe"] .nav-ring-tint {
+  background: none; box-shadow: inset -56px 0 44px -10px rgb(var(--nav-accent) / 0.30);
+  animation: cz-breathe 5s ease-in-out infinite alternate;
+}
+[data-cz-nav="breathe"][data-cz-strength="lively"] .nav-ring-tint { animation-duration: 3.2s; }
+@keyframes cz-breathe { from { opacity: 0.3; } to { opacity: 1; } }
+
+/* Tide: a band of light passes over the row now and then. */
+[data-cz-nav="tide"] .nav-ring { overflow: hidden; }
+[data-cz-nav="tide"] .nav-ring-svg { display: none; }
+[data-cz-nav="tide"] .nav-ring-j { display: block; width: 2px; }
+[data-cz-nav="tide"] .nav-ring::after {
+  content: ""; position: absolute; top: 0; bottom: 0; left: 0; width: 60%; pointer-events: none;
+  background: linear-gradient(100deg, transparent 10%, rgb(var(--nav-accent) / 0.22) 50%, transparent 90%);
+  transform: translateX(-110%); animation: cz-tide 9s ease-in-out infinite;
+}
+[data-cz-nav="tide"][data-cz-strength="lively"] .nav-ring::after { animation-duration: 6s; }
+@keyframes cz-tide { 0% { transform: translateX(-110%); } 62%, 100% { transform: translateX(270%); } }
+
+/* Rail and tint: still, and the clearest at a glance. */
+[data-cz-nav="rail"] .nav-ring-svg { display: none; }
+[data-cz-nav="rail"] .nav-ring-j { display: block; width: 2px; }
+[data-cz-nav="rail"][data-cz-strength="lively"] .nav-ring-j { width: 3px; }
+
+/* Edge-lit: two hairlines, bright at the left and fading to the right. */
+[data-cz-nav="edge"] :is(.nav-ring-svg, .nav-ring-tint, .nav-ring-j) { display: none; }
+[data-cz-nav="edge"] .nav-ring::before,
+[data-cz-nav="edge"] .nav-ring::after {
+  content: ""; position: absolute; left: 0; right: 0; height: 1px;
+  background: linear-gradient(to right, rgb(var(--nav-accent)), rgb(var(--nav-accent) / 0) 72%);
+}
+[data-cz-nav="edge"] .nav-ring::before { top: 0; }
+[data-cz-nav="edge"] .nav-ring::after { bottom: 0; }
+[data-cz-nav="edge"][data-cz-strength="lively"] .nav-ring::before,
+[data-cz-nav="edge"][data-cz-strength="lively"] .nav-ring::after { height: 2px; }
+
+/* Folder tab: the row takes the page colour and joins the page. */
+[data-cz-nav="tab"] .nav-ring { display: none; }
+[data-cz-nav="tab"] .nav-row[aria-current="page"] {
+  margin-left: 6px; width: calc(100% - 6px); padding-left: 8px; border-radius: 8px 0 0 8px;
+  background: var(--color-bg-primary); color: var(--color-text-primary); font-weight: 650;
+}
+[data-cz-nav="tab"] .nav-row[aria-current="page"] :is(.nav-ic, .nav-tr) { color: var(--color-accent-link, rgb(var(--color-accent-rgb, 99 102 241))); }
+[data-cz-nav="tab"][data-cz-strength="lively"] .nav-row[aria-current="page"] { box-shadow: inset 3px 0 0 rgb(var(--nav-accent)); }
+
+/* Solid icon: the icon takes the accent and the words turn white. */
+[data-cz-nav="icon"] .nav-ring { display: none; }
+[data-cz-nav="icon"] .nav-row[aria-current="page"] { color: #fff; font-weight: 600; }
+[data-cz-nav="icon"] .nav-row[aria-current="page"] .nav-ic { color: var(--nav-accent-soft); }
+[data-cz-nav="icon"][data-cz-strength="lively"] .nav-row[aria-current="page"] .nav-ic { transform: scale(1.12); }
+
+/* Less motion, from the device or for everyone in the campaign: each moving
+   highlight shows its still twin. */
+.nav-rm[data-cz-nav="comet"] :is(.nav-ring-svg, .nav-ring-j) { display: none; }
+.nav-rm[data-cz-nav="comet"] .nav-ring::before,
+.nav-rm[data-cz-nav="comet"] .nav-ring::after {
+  content: ""; position: absolute; left: 0; right: 0; height: 1px;
+  background: linear-gradient(to right, rgb(var(--nav-accent)), rgb(var(--nav-accent) / 0) 72%);
+}
+.nav-rm[data-cz-nav="comet"] .nav-ring::before { top: 0; }
+.nav-rm[data-cz-nav="comet"] .nav-ring::after { bottom: 0; }
+.nav-rm[data-cz-nav="breathe"] .nav-ring-tint { animation: none; opacity: 1; }
+.nav-rm[data-cz-nav="tide"] .nav-ring::after { display: none; }
+@media (prefers-reduced-motion: reduce) {
+  [data-cz-nav="comet"] :is(.nav-ring-svg, .nav-ring-j) { display: none; }
+  [data-cz-nav="comet"] .nav-ring::before,
+  [data-cz-nav="comet"] .nav-ring::after {
+    content: ""; position: absolute; left: 0; right: 0; height: 1px;
+    background: linear-gradient(to right, rgb(var(--nav-accent)), rgb(var(--nav-accent) / 0) 72%);
+  }
+  [data-cz-nav="comet"] .nav-ring::before { top: 0; }
+  [data-cz-nav="comet"] .nav-ring::after { bottom: 0; }
+  [data-cz-nav="breathe"] .nav-ring-tint { animation: none; opacity: 1; }
+  [data-cz-nav="tide"] .nav-ring::after { display: none; }
+}
+
+/* Reduce motion for everyone: the same total-disable as the device setting. */
+html[data-cz-reduce] *, html[data-cz-reduce] *::before, html[data-cz-reduce] *::after {
+  animation-duration: 0.01ms !important;
+  animation-iteration-count: 1 !important;
+  transition-duration: 0.01ms !important;
+  scroll-behavior: auto !important;
+}

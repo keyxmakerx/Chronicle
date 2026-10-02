@@ -547,6 +547,7 @@ type CampaignSettings struct {
 	TopbarContent     *TopbarContent `json:"topbar_content,omitempty"`     // Customizable topbar center content.
 	FontFamily        string         `json:"font_family,omitempty"`       // Campaign body font: "serif", "sans-serif", "monospace", "georgia", "merriweather".
 	WelcomeMessage    string       `json:"welcome_message,omitempty"`     // MOTD banner shown on campaign dashboard (max 500 chars).
+	Appearance        *Appearance  `json:"appearance,omitempty"`          // Customize page style choices (look, menu highlight, type, buttons, motion); nil = Classic.
 	DefaultVisibility string       `json:"default_visibility,omitempty"`  // Default visibility for new entities: "", "dm_only", "private".
 	SystemID          string       `json:"system_id,omitempty"`           // Game system ID (e.g. "dnd5e", "drawsteel") or "custom:<url>".
 
@@ -641,6 +642,7 @@ type TopbarStyle struct {
 	GradientTo   string `json:"gradient_to,omitempty"`       // End color for gradient mode.
 	GradientDir  string `json:"gradient_dir,omitempty"`      // Direction: "to-r", "to-br", etc.
 	ImagePath    string `json:"image_path,omitempty"`        // Media path for background image.
+	Scrim        string `json:"scrim,omitempty"`             // Shade over an image: "light", "strong"; empty = medium.
 }
 
 // TopbarContent configures what the owner wants displayed in the topbar center area.
@@ -648,6 +650,9 @@ type TopbarContent struct {
 	Mode  string       `json:"mode"`            // "none", "links", "quote".
 	Quote string       `json:"quote,omitempty"` // Text to display in quote mode (max 200 chars).
 	Links []TopbarLink `json:"links,omitempty"` // Quick-link buttons in links mode (max 8).
+	// Widgets is the header's widgets in order ("links", "text"), written by
+	// the Customize page. Nil means an older save: Mode alone decides.
+	Widgets []string `json:"widgets,omitempty"`
 }
 
 // TopbarLink is a quick-link button displayed in the topbar center area.

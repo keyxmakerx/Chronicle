@@ -131,6 +131,8 @@ type SystemAddonEnabler interface {
 // media package directly.
 type MediaUploader interface {
 	UploadBackdrop(ctx context.Context, campaignID, userID string, fileBytes []byte, originalName, mimeType string) (filename string, err error)
+	// OwnsFile reports whether filename is a media file uploaded to campaignID.
+	OwnsFile(ctx context.Context, campaignID, filename string) (bool, error)
 }
 
 // SMTPChecker reports whether SMTP email delivery is configured.

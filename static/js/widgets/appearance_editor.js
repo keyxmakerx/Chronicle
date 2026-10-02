@@ -70,6 +70,10 @@
           var live = document.getElementById(id);
           if (fresh && live) live.innerHTML = fresh.innerHTML;
         });
+        // The header's word colour follows its background.
+        var freshBar = doc.getElementById('app-topbar');
+        var liveBar = document.getElementById('app-topbar');
+        if (freshBar && liveBar) liveBar.classList.toggle('cz-hdr-light', freshBar.classList.contains('cz-hdr-light'));
       })
       .catch(function () { /* the next full load shows it; the save itself succeeded */ });
   }

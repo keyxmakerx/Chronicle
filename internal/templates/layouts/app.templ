@@ -12,6 +12,7 @@ import "fmt"
 import "strconv"
 import "strings"
 
+import "github.com/keyxmakerx/chronicle/internal/colour"
 import "github.com/keyxmakerx/chronicle/internal/sanitize"
 
 // App renders the authenticated layout with sidebar navigation and a
@@ -666,7 +667,7 @@ func safeExternalURL(url string) templ.SafeURL {
 // Topbar renders the top navigation bar with campaign selector, customizable
 // content area, search, notes, and user menu.
 templ Topbar() {
-	<header class="h-14 bg-surface border-b border-edge flex items-center px-3 md:px-5 shrink-0 gap-2 relative isolate">
+	<header id="app-topbar" class={ "h-14 bg-surface border-b border-edge flex items-center px-3 md:px-5 shrink-0 gap-2 relative isolate", templ.KV("cz-hdr-light", topbarWantsLightWords(ctx)) }>
 		// #topbar-bg is always rendered, even empty, so a save on the Customize
 		// page can swap in the new background without a reload: the header
 		// sits outside #main-content and boosted navigation never redraws it.
@@ -690,7 +691,7 @@ templ Topbar() {
 					// A dark scrim over the photo keeps the nav text + icons legible
 					// regardless of which image the owner uploaded.
 					<div
-						style="position:absolute; inset:0; z-index:-1; pointer-events:none; background:linear-gradient(to bottom, rgba(0,0,0,0.55), rgba(0,0,0,0.25));"
+						style={ "position:absolute; inset:0; z-index:-1; pointer-events:none; " + topbarScrimStyle(ctx) }
 						aria-hidden="true"
 					></div>
 				}
@@ -1054,7 +1055,18 @@ func isExternalURL(url string) bool {
 // Supports quick-link buttons and quote/message text, configured by the owner.
 templ topbarCenterContent(ctx context.Context) {
 	if tc := GetTopbarContent(ctx); tc != nil {
-		if tc.Mode == "links" && len(tc.Links) > 0 {
+		<div class="flex items-center gap-3 min-w-0 justify-center">
+			for _, w := range tc.TopbarWidgets() {
+				@topbarWidget(tc, w)
+			}
+		</div>
+	}
+}
+
+// topbarWidget renders one header widget: the quick links or the owner's
+// line of text.
+templ topbarWidget(tc *TopbarContentData, w string) {
+	if w == "links" && len(tc.Links) > 0 {
 			<div class="flex items-center gap-1.5 flex-wrap justify-center">
 				for _, link := range tc.Links {
 					<a
@@ -1068,11 +1080,10 @@ templ topbarCenterContent(ctx context.Context) {
 					</a>
 				}
 			</div>
-		} else if tc.Mode == "quote" && tc.Quote != "" {
+	} else if w == "text" && tc.Quote != "" {
 			<div class="text-xs text-fg-muted italic truncate px-4 max-w-md text-center">
 				{ tc.Quote }
 			</div>
-		}
 	}
 }
 
@@ -1100,6 +1111,49 @@ func topbarInlineStyle(ctx context.Context) string {
 		}
 	}
 	return ""
+}
+
+// topbarWantsLightWords reports whether the custom header background needs
+// light words: always over a picture, otherwise whichever of white or the
+// page's ink reads better on its colours (the Customize preview's rule).
+func topbarWantsLightWords(ctx context.Context) bool {
+	style := GetTopbarStyle(ctx)
+	if style == nil || !topbarHasCustomStyle(ctx) {
+		return false
+	}
+	var cols []string
+	switch style.Mode {
+	case "image":
+		return true
+	case "solid":
+		cols = []string{style.Color}
+	case "gradient":
+		cols = []string{style.GradientFrom, style.GradientTo}
+	}
+	white, ink := 99.0, 99.0
+	for _, c := range cols {
+		if !colour.ValidHex(c) {
+			return false
+		}
+		white = min(white, colour.Contrast(c, "#ffffff"))
+		ink = min(ink, colour.Contrast(c, "#111827"))
+	}
+	return white >= ink
+}
+
+// topbarScrimStyle is the shade over an image header: the owner's choice
+// of strength, medium by default, darker at the top where the words sit.
+func topbarScrimStyle(ctx context.Context) string {
+	top, bottom := 0.55, 0.25
+	if style := GetTopbarStyle(ctx); style != nil {
+		switch style.Scrim {
+		case "light":
+			top, bottom = 0.38, 0.15
+		case "strong":
+			top, bottom = 0.72, 0.45
+		}
+	}
+	return fmt.Sprintf("background:linear-gradient(to bottom, rgba(0,0,0,%.2f), rgba(0,0,0,%.2f));", top, bottom)
 }
 
 // topbarGradientDir converts the stored shorthand gradient direction into a CSS

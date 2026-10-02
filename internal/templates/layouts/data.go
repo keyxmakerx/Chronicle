@@ -762,6 +762,7 @@ type TopbarStyleData struct {
 	GradientTo   string
 	GradientDir  string
 	ImagePath    string
+	Scrim        string // "light", "strong" or "" (medium) over an image
 }
 
 // SetTopbarStyle stores the campaign's topbar style in the context.
@@ -780,6 +781,27 @@ type TopbarContentData struct {
 	Mode  string
 	Quote string
 	Links []TopbarLinkData
+	// Widgets is the Customize page's ordered list ("links", "text"); nil
+	// for an older save, where Mode alone decides.
+	Widgets []string
+}
+
+// TopbarWidgets returns the header's widgets in order, reading an older
+// save's single Mode as a one-widget list.
+func (tc *TopbarContentData) TopbarWidgets() []string {
+	if tc == nil {
+		return nil
+	}
+	if tc.Widgets != nil {
+		return tc.Widgets
+	}
+	switch tc.Mode {
+	case "links":
+		return []string{"links"}
+	case "quote":
+		return []string{"text"}
+	}
+	return nil
 }
 
 // TopbarLinkData holds a single quick-link button for the topbar.
