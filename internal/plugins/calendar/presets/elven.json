@@ -181,18 +181,14 @@
     "sehanine00000000": {
       "name": "Sehanine",
       "cycleLength": 54.2,
-      "cycleDayAdjust": 20,
-      "referencePhase": 0,
-      "color": "#d5d0e8",
-      "phaseMode": "fixed"
+      "referenceDate": { "year": 0, "month": 1, "day": 21 },
+      "color": "#d5d0e8"
     },
     "lira000000000000": {
       "name": "Lira",
       "cycleLength": 27.1,
-      "cycleDayAdjust": 5,
-      "referencePhase": 0,
-      "color": "#cfd8e0",
-      "phaseMode": "fixed"
+      "referenceDate": { "year": 0, "month": 1, "day": 6 },
+      "color": "#cfd8e0"
     }
   },
   "weeks": {},
