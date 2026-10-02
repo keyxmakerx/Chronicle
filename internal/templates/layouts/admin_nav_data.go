@@ -2,7 +2,6 @@ package layouts
 
 import (
 	"context"
-	"encoding/json"
 	"strings"
 )
 
@@ -157,16 +156,14 @@ func adminNavSectionCount(ctx context.Context, s AdminNavSection) int {
 	return n
 }
 
-// adminNavXData builds the Alpine state for the admin block. The section that
-// holds the open page is forced open without being saved, so browsing does not
-// overwrite the viewer's own choices; only an explicit toggle is remembered.
-// Stored values are parsed defensively since they are client-written and an
-// older release stored a plain string under a different key.
-func adminNavXData(curSection string) string {
-	cur, _ := json.Marshal(curSection)
-	return `{
+// adminNavXData is the Alpine state for the admin block. It is a constant so
+// no server value is ever spliced into script; the current section arrives in
+// a data-cur attribute that templ escapes. The section holding the open page
+// is forced open without being saved, so browsing does not overwrite the
+// viewer's own choices; only an explicit toggle is remembered. Stored values
+// are parsed defensively since they are client-written.
+const adminNavXData = `{
 		open: localStorage.getItem('chronicle-admin-nav') !== 'collapsed',
-		cur: ` + string(cur) + `,
 		saved: {},
 		secs: {},
 		init() {
@@ -175,7 +172,8 @@ func adminNavXData(curSection string) string {
 				if (s && typeof s === 'object' && !Array.isArray(s)) { this.saved = s; }
 			} catch (e) {}
 			this.secs = Object.assign({}, this.saved);
-			if (this.cur) { this.secs[this.cur] = true; }
+			var cur = this.$el.dataset.cur;
+			if (cur) { this.secs[cur] = true; }
 		},
 		toggle(id) {
 			this.secs[id] = !this.secs[id];
@@ -183,4 +181,7 @@ func adminNavXData(curSection string) string {
 			try { localStorage.setItem('chronicle-admin-nav-sections', JSON.stringify(this.saved)); } catch (e) {}
 		}
 	}`
-}
+
+// adminNavSectionXData scopes one section: it reads its own ID from data-sec
+// so the expressions on the fold head stay constant strings.
+const adminNavSectionXData = `{ id: '', init() { this.id = this.$el.dataset.sec; } }`
