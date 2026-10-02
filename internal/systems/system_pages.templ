@@ -36,16 +36,21 @@ templ SystemIndexPage(cc *campaigns.CampaignContext, manifest *SystemManifest, c
 // SystemIndexContent renders the module category index (for HTMX swap).
 templ SystemIndexContent(cc *campaigns.CampaignContext, manifest *SystemManifest, cats []categoryInfo) {
 	<div id="module-content">
-		@components.Breadcrumbs([]components.BreadcrumbItem{
-			{Label: cc.Campaign.Name, Href: "/campaigns/" + cc.Campaign.ID, Icon: "fa-book-open"},
-			{Label: manifest.Name},
-		})
 		// A system that ships its own rulebook front page gets that page alone:
 		// stacking the generic category browser under it read as a second,
 		// competing rulebook. The category routes stay up for its links.
 		if manifest.HasWidget(rulebookFrontpageWidgetSlug) {
-			<div data-widget={ rulebookFrontpageWidgetSlug } data-campaign-id={ cc.Campaign.ID }></div>
+			// The rulebook fills the content area edge to edge, with no breadcrumb:
+			// the negative margins cancel <main>'s padding at each breakpoint, so
+			// it reads as the page rather than a box inside it.
+			<div class="-mx-3 -my-3 md:-mx-5 md:-my-4 min-h-full" data-rulebook-fullbleed>
+				<div data-widget={ rulebookFrontpageWidgetSlug } data-campaign-id={ cc.Campaign.ID }></div>
+			</div>
 		} else {
+			@components.Breadcrumbs([]components.BreadcrumbItem{
+				{Label: cc.Campaign.Name, Href: "/campaigns/" + cc.Campaign.ID, Icon: "fa-book-open"},
+				{Label: manifest.Name},
+			})
 			@systemCategoryBrowser(cc, manifest, cats)
 		}
 	</div>
