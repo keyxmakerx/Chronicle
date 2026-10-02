@@ -10,7 +10,7 @@ import (
 const (
 	AreaPeople    = "people"
 	AreaCampaigns = "campaigns"
-	AreaPackages  = "packages"
+	AreaPackages  = "game-systems"
 	AreaFeatures  = "features"
 	AreaSecurity  = "security"
 	AreaSite      = "site"
