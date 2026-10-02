@@ -82,6 +82,13 @@ type CalendarRepository interface {
 	// CalendarService.CreateCalendarFromImport, which calls this first and
 	// then recreates the events itself via EventRepository.
 	ApplyImport(ctx context.Context, cal *Calendar, result *ImportResult) error
+
+	// ApplyStructure is the owner's structure save (structure_edit.go) in
+	// one transaction: the leap rule and current date, months, weekdays,
+	// moons and seasons, and the month-position remap of events and eras.
+	// The caller validates and plans first; see ApplyStructure for exactly
+	// which columns an existing moon or season keeps.
+	ApplyStructure(ctx context.Context, calendarID string, w StructureWrite) error
 }
 
 // calendarRepo is the MariaDB implementation of CalendarRepository.
@@ -539,24 +546,33 @@ func upsertMoons(ctx context.Context, ex dbExecutor, calendarID string, moons []
 			keep[*m.ID] = true
 			continue
 		}
-		res, err := ex.ExecContext(ctx,
-			`INSERT INTO calendar_moons (calendar_id, name, cycle_days, phase_offset, color, hidden_from_players,
-			        base_design, tint, phase_source, size, orbit_speed)
-			 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-			calendarID, m.Name, m.CycleDays, m.PhaseOffset, m.Color, m.HiddenFromPlayers,
-			moonBaseDesignOrDefault(m.BaseDesign), m.Tint, moonPhaseSourceOrDefault(m.PhaseSource),
-			moonSizeOrDefault(m.Size), moonOrbitSpeedOrDefault(m.OrbitSpeed),
-		)
+		id, err := insertMoon(ctx, ex, calendarID, m)
 		if err != nil {
 			return err
 		}
-		id, err := res.LastInsertId()
-		if err != nil {
-			return err
-		}
-		keep[int(id)] = true
+		keep[id] = true
 	}
 	return deleteUnkept(ctx, ex, "calendar_moons", calendarID, existing, keep)
+}
+
+// insertMoon inserts m as a new moon of calendarID and returns its id.
+func insertMoon(ctx context.Context, ex dbExecutor, calendarID string, m MoonInput) (int, error) {
+	res, err := ex.ExecContext(ctx,
+		`INSERT INTO calendar_moons (calendar_id, name, cycle_days, phase_offset, color, hidden_from_players,
+		        base_design, tint, phase_source, size, orbit_speed)
+		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		calendarID, m.Name, m.CycleDays, m.PhaseOffset, m.Color, m.HiddenFromPlayers,
+		moonBaseDesignOrDefault(m.BaseDesign), m.Tint, moonPhaseSourceOrDefault(m.PhaseSource),
+		moonSizeOrDefault(m.Size), moonOrbitSpeedOrDefault(m.OrbitSpeed),
+	)
+	if err != nil {
+		return 0, err
+	}
+	id, err := res.LastInsertId()
+	if err != nil {
+		return 0, err
+	}
+	return int(id), nil
 }
 
 // SetMoons upserts a calendar's moons; see upsertMoons for the exact

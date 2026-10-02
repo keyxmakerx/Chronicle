@@ -279,6 +279,16 @@ type CalendarService interface {
 	// anchor write this previews is a separate, not-yet-built endpoint.
 	PreviewAnchorMove(ctx context.Context, calendarID, campaignID string, newAnchorYear, newAnchorMonth, newAnchorDay int, newRealDate time.Time) (*AnchorMovePreview, error)
 
+	// PreviewStructureEdit and ApplyStructureEdit are the owner's structure
+	// editor for an existing calendar (structure_edit.go): months, weekdays,
+	// the leap rule, moons and seasons. Preview writes nothing; Apply
+	// recomputes the same plan, refuses a stale fingerprint with a
+	// Conflict (returning the fresh preview), and writes everything in one
+	// transaction. Owner-only at the route. A calendar that follows the
+	// real-world date is refused (its months are the Gregorian ones).
+	PreviewStructureEdit(ctx context.Context, calendarID, campaignID string, edit StructureEdit) (*StructurePreview, error)
+	ApplyStructureEdit(ctx context.Context, calendarID, campaignID, fingerprint string, edit StructureEdit) (*StructurePreview, error)
+
 	// --- Bulk structure writers ---
 	//
 	// SetMonths/SetWeekdays/SetMoons/SetSeasons replace a calendar's whole
@@ -287,12 +297,10 @@ type CalendarService interface {
 	// and the calendar plugin's own native/Simple-Calendar/Calendaria import
 	// (internal/plugins/calendar/import.go), neither of which has a stored
 	// row per item to update incrementally the way CreateEra/CreateEventKind
-	// do. Not wired to any HTTP route yet — calendar-settings editing UI is
-	// a later slice — so today's only callers are trusted in-process ones; a
-	// caller reaching these through a future HTTP handler must still be
-	// gated there. Whether that gate is Owner-only or CanAuthorDmOnly (like
-	// eras/event kinds/the moon hidden flag above) is this future slice's
-	// own decision, not assumed here.
+	// do. No HTTP route calls them: the owner's structure editor writes
+	// through ApplyStructureEdit above instead, so today's only callers are
+	// trusted in-process ones; a caller reaching these through a future
+	// HTTP handler must still be gated there.
 	SetMonths(ctx context.Context, calendarID, campaignID string, months []MonthInput) error
 	SetWeekdays(ctx context.Context, calendarID, campaignID string, weekdays []WeekdayInput) error
 	SetMoons(ctx context.Context, calendarID, campaignID string, moons []MoonInput) error
