@@ -62,6 +62,9 @@ func RegisterRoutes(e *echo.Echo, h *Handler,
 	// public token routes below).
 	cg.POST("/sessions/:sid/restore", h.RestoreSessionAPI, ownerOrCoDirector())
 	cg.PUT("/sessions/:sid/rsvp-exclude", h.SetRSVPExcludedAPI, campaigns.RequireRole(campaigns.RolePlayer))
+	// Game nights with every member's answer and note, for the calendar's
+	// day card. Members only: the roster and notes stay inside the table.
+	cg.GET("/sessions/nights", h.ListGameNightsAPI, campaigns.RequireRole(campaigns.RolePlayer))
 	cg.GET("/sessions/feed-settings", h.GetFeedSettingsAPI, campaigns.RequireRole(campaigns.RolePlayer))
 	cg.PUT("/sessions/feed-settings", h.SetFeedSettingsAPI, campaigns.RequireRole(campaigns.RoleOwner))
 	cg.POST("/sessions/feed/token", h.GetFeedTokenAPI, campaigns.RequireRole(campaigns.RolePlayer))

@@ -828,6 +828,11 @@
 
       this.eventsByMonth = {};
       this.weatherByYear = {}; // year -> {'m_d': reading}, filled by fetchWeatherYear
+      this.nightsByMonth = {}; // 'y_m' -> game nights, filled by fetchNights
+      // Game nights are real-world dates, so only a calendar that follows
+      // the real clock can place them, and only members see who is coming.
+      this.showNights = CalDate.usesRealTime(this.cal) && this.role >= 1;
+      this._gnNoteFor = null; // the night whose note is being written
       this.eventsByMonth[this.cal.current_year + '_' + this.cal.current_month] = initialEvents;
 
       this.view = { y: this.cal.current_year || 1, m: this.cal.current_month || 1 };
@@ -1061,6 +1066,250 @@
       return y === cal.current_year && m === cal.current_month && d === cal.current_day && cal.weather ? cal.weather : null;
     },
 
+    // --------------------------------------------------------------
+    // Game nights: a real-world calendar shows the campaign's game nights
+    // (the sessions plugin's), and members answer Going / Maybe / Can't
+    // right here, in the day's card and on the night's own page. Silence
+    // shows as "no answer yet", never as a no. Each night of a repeating
+    // game night keeps its own answers.
+    // --------------------------------------------------------------
+    nightsFor: function (y, m) { return this.nightsByMonth[this.monthKey(y, m)] || []; },
+
+    // fetchNights loads (and caches) a month's game nights. o.fresh skips
+    // the cache, after an answer is saved. Returns a Promise.
+    fetchNights: function (y, m, o) {
+      var self = this, key = this.monthKey(y, m);
+      if (!this.showNights) return Promise.resolve([]);
+      if (this.nightsByMonth[key] && !(o && o.fresh)) return Promise.resolve(this.nightsByMonth[key]);
+      var from = y + '-' + pad2(m) + '-01', to = y + '-' + pad2(m) + '-' + pad2(CalDate.monthDaysNative(y, m));
+      return Chronicle.apiFetch('/campaigns/' + encodeURIComponent(this.campaignId) + '/sessions/nights?from=' + from + '&to=' + to)
+        .then(function (resp) { return resp.ok ? resp.json() : []; })
+        .then(function (list) {
+          if (!Array.isArray(list)) list = [];
+          self.nightsByMonth[key] = list;
+          return list;
+        })
+        .catch(function () { return self.nightsByMonth[key] || []; });
+    },
+
+    nightsOnDay: function (y, m, d) {
+      var iso = y + '-' + pad2(m) + '-' + pad2(d);
+      return this.nightsFor(y, m).filter(function (n) { return n.date === iso; });
+    },
+
+    // A game night's id in the grid and the cards: "gn:" + session + date,
+    // so the day card's marks carry it like any event's.
+    _gnId: function (n) { return 'gn:' + n.sessionId + ':' + n.date; },
+
+    _findNight: function (id) {
+      var self = this;
+      return this.nightsFor(this.view.y, this.view.m).filter(function (n) { return self._gnId(n) === id; })[0] || null;
+    },
+
+    // The night's start in the zone it was set in, labelled like "19:00 CDT".
+    // Until members can save their own zone, this is the time the organiser
+    // set; the label keeps it honest.
+    _gnTime: function (n) {
+      if (!n.time) return '';
+      if (!n.tz) return n.time;
+      var abbr = '';
+      try {
+        var parts = new Intl.DateTimeFormat('en-US', { timeZone: n.tz, timeZoneName: 'short' }).formatToParts(new Date(n.date + 'T12:00:00Z'));
+        parts.forEach(function (p) { if (p.type === 'timeZoneName') abbr = p.value; });
+      } catch (e) { abbr = ''; }
+      return n.time + (abbr ? ' ' + abbr : '');
+    },
+
+    _gnTally: function (n) {
+      var t = n.tally || {};
+      return (t.going || 0) + ' going · ' + (t.maybe || 0) + ' maybe' + (t.cant ? ' · ' + t.cant + ' can’t' : '') + ' · ' + (t.noAnswer || 0) + ' no answer yet';
+    },
+
+    _gnAnswerWord: function (a) {
+      if (a.excluded) return 'Not counted';
+      if (a.carried) return 'Said yes to the time, not confirmed';
+      return { yes: 'Going', maybe: 'Maybe', no: 'Can’t make it' }[a.answer] || 'No answer yet';
+    },
+
+    _gnRosterHTML: function (n) {
+      var self = this;
+      return '<ul class="roster">' + (n.roster || []).map(function (a) {
+        var me = n.mine && n.mine.userId === a.userId;
+        return '<li><span class="av" aria-hidden="true">' + esc((a.name || '?').charAt(0)) + '</span>' +
+          '<span class="who">' + esc(a.name || 'A member') + (me ? ' (you)' : '') + (a.userId === n.organizerId ? ' · running it' : '') +
+          (a.note ? '<span class="rn2">“' + esc(a.note) + '”</span>' : '') + '</span>' +
+          '<span class="st' + (a.answer === 'yes' && !a.excluded ? ' yes' : '') + '">' + esc(self._gnAnswerWord(a)) + (a.recheck ? ' · to check' : '') + '</span></li>';
+      }).join('') + '</ul>';
+    },
+
+    // The answer block. The same markup serves the day's card (full=false:
+    // buttons, note and count) and the night's page (full=true: plus who
+    // answered what), so an answer looks and works the same in both.
+    _gnRsvpHTML: function (n, full) {
+      var id = this._gnId(n), mine = n.mine || {}, a = mine.carried ? '' : mine.answer, h = '<div class="rsvp" data-gnr="' + esc(id) + '">';
+      if (!n.mine) return h + '<div class="rcount">' + esc(this._gnTally(n)) + '</div></div>';
+      if (mine.recheck && a) h += '<div class="rnote">The time changed after you answered. Is your answer still right?</div>';
+      if (mine.carried) h += '<div class="rnote">You said yes to this time when it was proposed. Are you coming?</div>';
+      h += '<div class="rq">' + (n.organizerId === mine.userId ? 'Are you playing?' : 'Are you coming?') + '</div>';
+      h += '<div class="seg3" role="group" aria-label="' + esc('Your answer for ' + n.name + ', ' + n.date) + '">' + ['yes', 'maybe', 'no'].map(function (x) {
+        return '<button type="button" data-ans="' + x + '" aria-pressed="' + (a === x) + '">' + { yes: 'Going', maybe: 'Maybe', no: 'Can’t' }[x] + '</button>';
+      }).join('') + '</div>';
+      if (this._gnNoteFor === id) {
+        h += '<div class="gnnoteed"><label class="sr" for="gn-note-input">Your note for the table</label>' +
+          '<input id="gn-note-input" data-gn-note-input maxlength="140" autocomplete="off" placeholder="Like “Might be late”" value="' + esc(mine.note || '') + '">' +
+          '<button type="button" class="btn sm primary" data-gn-note="save">Save</button><button type="button" class="btn sm quiet" data-gn-note="cancel">Cancel</button></div>';
+      } else if (mine.note) {
+        h += '<div class="gnnote"><q>' + esc(mine.note) + '</q><button type="button" class="lnk" data-gn-note="edit">Edit note</button><button type="button" class="lnk" data-gn-note="clear">Clear note</button></div>';
+      } else if (a) {
+        h += '<div class="gnnote"><button type="button" class="lnk" data-gn-note="edit">Add a note</button></div>';
+      }
+      h += '<div class="rcount">' + esc(this._gnTally(n)) + '</div>';
+      if (!full) return h + '</div>';
+      h += this._gnRosterHTML(n) + '<div class="rnote">A missing answer is never counted as a no.</div>';
+      if (n.canExclude) {
+        h += '<div class="sw"><span>Count me in the answers<small>Off leaves you out of the numbers, as the one running it.</small></span>' +
+          '<button type="button" class="tog" role="switch" aria-checked="' + !mine.excluded + '" aria-label="Count me in the answers" data-gn-count></button></div>';
+      }
+      return h + '</div>';
+    },
+
+    _gnBoxHTML: function (n, highlightId) {
+      var id = this._gnId(n), hl = highlightId === id ? ' hl' : '', time = this._gnTime(n);
+      var h = '<div class="evd go gnb' + hl + '" data-ev="' + esc(id) + '">' +
+        '<div class="evh"><span class="ric"><i class="fa-solid fa-dice-d20"></i></span><span class="qt0">' + esc(n.name) + '</span></div>' +
+        '<div class="evm">' + (n.past ? '<span class="mi">Played</span>' : '') + (time ? '<span class="mi">' + esc(time) + '</span>' : '') +
+          (n.recurring ? '<span class="mi"><i class="fa-solid fa-rotate"></i> Repeats</span>' : '') + '</div>';
+      if (n.summary) h += '<p class="brief">' + esc(n.summary) + '</p>';
+      if (!n.past) h += this._gnRsvpHTML(n, false);
+      else h += '<div class="rsvp"><div class="rcount">' + esc((n.tally && n.tally.going) || 0) + ' said they’d come</div></div>';
+      return h + '</div>';
+    },
+
+    _gnPageHTML: function (n) {
+      var time = this._gnTime(n);
+      var label = n.date + (time ? ' · ' + time : '');
+      var link = '/campaigns/' + encodeURIComponent(this.campaignId) + '/sessions/' + encodeURIComponent(n.sessionId);
+      return '<div class="grab" aria-hidden="true"></div>' +
+        '<div class="ein"><div class="crease"><button type="button" class="back" data-close><i class="fa-solid fa-arrow-left"></i><span>Day</span></button></div>' +
+        '<div class="epb">' +
+          '<h3 class="ept">' + esc(n.name) + ' <span class="dirnote">' + (n.past ? 'Played' : 'Game night') + '</span></h3>' +
+          '<div class="espan">' + esc(label) + (n.recurring ? ' · repeats' : '') + '</div>' +
+          (n.tz && time ? '<div class="espan">Set by ' + esc(n.organizerName || 'the organiser') + ' in ' + esc(n.tz.replace(/_/g, ' ')) + ' time.</div>' : '') +
+          (n.summary ? '<div class="notes"><p>' + esc(n.summary) + '</p></div>' : '') +
+          '<section class="eps"><h4>Who’s coming</h4>' + (n.past ? this._gnRosterHTML(n) : this._gnRsvpHTML(n, true)) + '</section>' +
+          '<section class="eps"><h4>More</h4><div class="v"><i class="fa-solid fa-book-open"></i><span><a href="' + esc(link) + '">Notes, recap and linked pages</a></span></div></section>' +
+        '</div></div>';
+    },
+
+    // Redraws every visible copy of a night's answer block (day card and
+    // page) from the current data, keeping keyboard focus on the button
+    // that was pressed.
+    _gnRefresh: function (id, focusSel) {
+      var n = this._findNight(id);
+      if (!n) { this.refreshWing(); return; }
+      var box = this.wingEl.querySelector('.evd[data-ev="' + id + '"]');
+      if (box) {
+        var tmp = document.createElement('div');
+        tmp.innerHTML = this._gnBoxHTML(n, box.classList.contains('hl') ? id : null);
+        box.replaceWith(tmp.firstChild);
+      }
+      if (this.evpEl.classList.contains('open') && this.evpEl.dataset.ev === id) {
+        var old = this.evpEl.querySelector('.rsvp[data-gnr]');
+        if (old) {
+          var t2 = document.createElement('div');
+          t2.innerHTML = this._gnRsvpHTML(n, true);
+          old.replaceWith(t2.firstChild);
+        }
+      }
+      if (focusSel) {
+        var scope = this.evpEl.classList.contains('open') ? this.evpEl : this.wingEl;
+        var f = scope.querySelector('.rsvp[data-gnr="' + id + '"] ' + focusSel);
+        if (f) f.focus({ preventScroll: true });
+      }
+    },
+
+    // Applies an answer locally (so the press answers at once), saves it,
+    // then reloads the month's nights so counts match the server.
+    _gnSave: function (id, change) {
+      var self = this, n = this._findNight(id);
+      if (!n || !n.mine) return;
+      var mine = n.mine, body = {};
+      var status = { yes: 'accepted', maybe: 'tentative', no: 'declined' };
+      if (change.answer) { mine.answer = change.answer; mine.carried = false; mine.recheck = false; }
+      if (!mine.answer) return;
+      body.status = status[mine.answer];
+      if ('note' in change) { mine.note = change.note; body.note = change.note === '' ? null : change.note; }
+      if (n.recurring) body.occurrenceDate = n.date;
+      (n.roster || []).forEach(function (a) { if (a.userId === mine.userId) { a.answer = mine.answer; a.note = mine.note; a.carried = false; a.recheck = false; } });
+      this._gnRetally(n);
+      this._gnRefresh(id, change.answer ? '[data-ans="' + change.answer + '"]' : null);
+      Chronicle.apiFetch('/campaigns/' + encodeURIComponent(this.campaignId) + '/sessions/' + encodeURIComponent(n.sessionId) + '/rsvp', { method: 'POST', body: body })
+        .then(function (resp) {
+          self._announce(resp.ok ? 'Answer saved.' : 'Your answer could not be saved.');
+          if (!resp.ok) self._toast('Your answer could not be saved. Try again.');
+          return self.fetchNights(self.view.y, self.view.m, { fresh: true });
+        })
+        // A note being typed meanwhile is left alone; its own save redraws.
+        .then(function () { if (self._gnNoteFor !== id) self._gnRefresh(id); self._paintMonth(); })
+        .catch(function () { self._toast('Your answer could not be saved. Try again.'); });
+    },
+
+    _gnSetCounted: function (id, counted) {
+      var self = this, n = this._findNight(id);
+      if (!n || !n.mine || !n.canExclude) return;
+      n.mine.excluded = !counted;
+      (n.roster || []).forEach(function (a) { if (a.userId === n.mine.userId) a.excluded = !counted; });
+      this._gnRetally(n);
+      this._gnRefresh(id, '[data-gn-count]');
+      var body = { excluded: !counted };
+      if (n.recurring) body.occurrenceDate = n.date;
+      Chronicle.apiFetch('/campaigns/' + encodeURIComponent(this.campaignId) + '/sessions/' + encodeURIComponent(n.sessionId) + '/rsvp-exclude', { method: 'PUT', body: body })
+        .then(function (resp) {
+          if (!resp.ok) self._toast('That could not be saved. Try again.');
+          return self.fetchNights(self.view.y, self.view.m, { fresh: true });
+        })
+        .then(function () { self._gnRefresh(id); })
+        .catch(function () { self._toast('That could not be saved. Try again.'); });
+    },
+
+    _gnRetally: function (n) {
+      var t = { going: 0, maybe: 0, cant: 0, noAnswer: 0 };
+      (n.roster || []).forEach(function (a) {
+        if (a.excluded) return;
+        if (a.carried || !a.answer) t.noAnswer++;
+        else if (a.answer === 'yes') t.going++;
+        else if (a.answer === 'maybe') t.maybe++;
+        else t.cant++;
+      });
+      n.tally = t;
+    },
+
+    // Handles a press inside a night's answer block, in the day's card or
+    // on its page. Returns true when the press was one of these controls.
+    _gnHandleClick: function (e) {
+      var box = e.target.closest('.rsvp[data-gnr]');
+      if (!box) return false;
+      var id = box.dataset.gnr;
+      var ans = e.target.closest('[data-ans]');
+      var note = e.target.closest('[data-gn-note]');
+      var count = e.target.closest('[data-gn-count]');
+      if (ans) this._gnSave(id, { answer: ans.dataset.ans });
+      else if (count) this._gnSetCounted(id, count.getAttribute('aria-checked') !== 'true');
+      else if (note) {
+        var act = note.dataset.gnNote;
+        if (act === 'edit') { this._gnNoteFor = id; this._gnRefresh(id, '[data-gn-note-input]'); }
+        else if (act === 'cancel') { this._gnNoteFor = null; this._gnRefresh(id); }
+        else if (act === 'clear') { this._gnNoteFor = null; this._gnSave(id, { note: '' }); }
+        else if (act === 'save') {
+          var input = box.querySelector('[data-gn-note-input]');
+          this._gnNoteFor = null;
+          this._gnSave(id, { note: input ? input.value.trim().slice(0, 140) : '' });
+        }
+      }
+      // Any press inside the block stays inside it: it never opens the page.
+      return true;
+    },
+
     // Every event touching (y,m,d): base-date match, recurrence expansion,
     // or a non-recurring multi-day span.
     eventsOnDay: function (y, m, d) {
@@ -1155,7 +1404,7 @@
     renderMonth: function () {
       var self = this, cal = this.cal;
       this.renderHeader();
-      Promise.all([this.fetchMonth(this.view.y, this.view.m), this.fetchWeatherYear(this.view.y)]).then(function () {
+      Promise.all([this.fetchMonth(this.view.y, this.view.m), this.fetchWeatherYear(this.view.y), this.fetchNights(this.view.y, this.view.m)]).then(function () {
         self._paintMonth();
         // The open day's card shows what the fetch just brought.
         self.refreshWing();
@@ -1244,11 +1493,15 @@
     },
 
     _marksHTML: function (y, m, d) {
-      var evs = this.eventsOnDay(y, m, d);
-      if (!evs.length) return '';
-      var cap = 4, shown = evs.slice(0, cap), extra = evs.length - shown.length;
+      var evs = this.eventsOnDay(y, m, d), nights = this.nightsOnDay(y, m, d);
+      if (!evs.length && !nights.length) return '';
       var self = this;
-      var html = '<div class="marks">' + shown.map(function (e) {
+      // Game nights come first: they are the marks a player acts on.
+      var gn = nights.map(function (n) {
+        return '<span class="mk gnm" data-ev="' + esc(self._gnId(n)) + '" title="' + esc(n.name) + '"><i class="fa-solid fa-dice-d20"></i></span>';
+      });
+      var cap = Math.max(0, 4 - gn.length), shown = evs.slice(0, cap), extra = evs.length - shown.length;
+      var html = '<div class="marks">' + gn.join('') + shown.map(function (e) {
         var dirRing = self.canAuthorDmOnly && e.visibility === 'dm_only' ? ' dir' : '';
         return '<span class="mk' + dirRing + '" data-ev="' + esc(e.id) + '" style="' + eventColorStyle(e) + '" title="' + esc(e.name) + '">' + esc(eventGlyph(e)) + '</span>';
       }).join('');
@@ -1335,6 +1588,7 @@
 
       this.wingEl.addEventListener('click', function (e) {
         if (e.target.closest('[data-close]')) { self.closeWing(); return; }
+        if (self._gnHandleClick(e)) return;
         var mr = e.target.closest('.mrow');
         if (mr) { self.mvMoonId = mr.dataset.moon; self.openMoonView(); return; }
         var evd = e.target.closest('.evd');
@@ -1364,7 +1618,18 @@
         });
       });
       this.evpEl.addEventListener('click', function (e) {
-        if (e.target.closest('[data-close]')) self.closeEventDetail();
+        if (e.target.closest('[data-close]')) { self.closeEventDetail(); return; }
+        self._gnHandleClick(e);
+      });
+      // Enter saves a game night's note; Escape puts the note away without
+      // closing the card around it.
+      [this.wingEl, this.evpEl].forEach(function (card) {
+        card.addEventListener('keydown', function (e) {
+          if (!e.target.matches || !e.target.matches('[data-gn-note-input]')) return;
+          var box = e.target.closest('.rsvp[data-gnr]');
+          if (e.key === 'Enter') { e.preventDefault(); box.querySelector('[data-gn-note="save"]').click(); }
+          else if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); box.querySelector('[data-gn-note="cancel"]').click(); }
+        });
       });
       this.mvEl.addEventListener('click', function (e) {
         if (e.target.closest('[data-close]')) self.closeMoonView();
@@ -1588,6 +1853,10 @@
           (time ? '<div class="evm">' + esc(time) + '</div>' : '') +
           '</div>';
       }).join('') : '<div class="none">Nothing on the calendar today.</div>';
+      var self = this, nights = this.nightsOnDay(d.y, d.m, d.d);
+      var gnHTML = nights.length ? '<div class="sect">' + (nights.length > 1 ? nights.length + ' game nights' : 'Game night') + '</div>' +
+        '<div class="evlist">' + nights.map(function (n) { return self._gnBoxHTML(n, highlightEventId); }).join('') + '</div>' : '';
+      if (nights.length && !evs.length) evHTML = '';
 
       // Two leaves: the head (the date and the weather), which stays in
       // view, and the rest, which scrolls on a desktop: the day's events
@@ -1598,9 +1867,9 @@
           '<div class="wb wbh"><h3 class="wdate">' + esc(label) + '</h3>' +
           (weatherFact ? '<div class="facts">' + weatherFact + '</div>' : '') + '</div>' +
         '</div>' +
-        '<div class="leaf lf2"><div class="lscroll"><div class="wb wbr">' +
-          '<div class="sect">' + (evs.length > 1 ? evs.length + ' events' : 'Events') + '</div>' +
-          '<div class="evlist">' + evHTML + '</div>' +
+        '<div class="leaf lf2"><div class="lscroll"><div class="wb wbr">' + gnHTML +
+          (evHTML ? '<div class="sect">' + (evs.length > 1 ? evs.length + ' events' : 'Events') + '</div>' +
+          '<div class="evlist">' + evHTML + '</div>' : '') +
           (this.canEdit ? '<button type="button" class="addev" data-add-event><i class="fa-solid fa-plus"></i>Add an event</button>' : '') +
           (moonRows ? '<div class="sect">' + (moonCount > 1 ? 'Moons' : 'Moon') + '</div><div class="moonsec">' + moonRows + '</div>' : '') +
         '</div></div></div>';
@@ -1618,6 +1887,12 @@
         var d = parseDayKey(mk.dataset.moonDay);
         var abs = CalDate.dayIndex(this.cal, d.y, d.m, d.d), phase = MoonMath.phase(moon, abs);
         html = '<div class="gh"><b>' + esc(moon.name) + '</b></div><div class="gw">' + esc(MoonMath.name(phase)) + ' · ' + MoonMath.litPct(phase) + '% lit</div>';
+      } else if (String(mk.dataset.ev).indexOf('gn:') === 0) {
+        var n = this._findNight(mk.dataset.ev);
+        if (!n) return;
+        var gt = this._gnTime(n);
+        html = '<div class="gh"><b>' + esc(n.name) + '</b></div>' + (gt ? '<div class="gw">' + esc(gt) + '</div>' : '') +
+          '<div class="gb">' + esc(n.past ? 'Played' : (n.mine && n.mine.answer ? 'You said ' + this._gnAnswerWord(n.mine) + '. ' : 'You haven’t answered yet. ') + this._gnTally(n)) + '</div>';
       } else {
         var ev = this._findEvent(mk.dataset.ev);
         if (!ev) return;
@@ -1646,9 +1921,9 @@
     // Event full detail (evp)
     // --------------------------------------------------------------
     openEventDetail: function (id) {
-      var self = this, ev = this._findEvent(id);
-      if (!ev) return;
-      this.evpEl.innerHTML = this._evpHTML(ev);
+      var self = this, night = String(id).indexOf('gn:') === 0 ? this._findNight(id) : null, ev = night ? null : this._findEvent(id);
+      if (!ev && !night) return;
+      this.evpEl.innerHTML = night ? this._gnPageHTML(night) : this._evpHTML(ev);
       // The full-detail overlay covers the day card it grew out of (the
       // motion this UI ports, per #741's rules): its final box matches the
       // wing's own rect, not the smaller event row that was clicked.
