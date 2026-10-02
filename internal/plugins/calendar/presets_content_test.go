@@ -51,3 +51,28 @@ func TestElvenPresetMoonsImportWithTheirReferenceDate(t *testing.T) {
 		})
 	}
 }
+
+// TestDwarvenPresetEveryDayHasASeason pins that no day of the Dwarven year
+// falls outside both seasons. The one-day intercalary month "The Long
+// Vigil" follows the last regular month, so it belongs to the season that
+// ends the year (Stillrock) rather than to none.
+func TestDwarvenPresetEveryDayHasASeason(t *testing.T) {
+	res, err := LoadPreset("dwarven")
+	if err != nil {
+		t.Fatalf("LoadPreset: %v", err)
+	}
+	for mi, m := range res.Months {
+		for d := 1; d <= m.Days; d++ {
+			var in []string
+			for _, si := range res.Seasons {
+				s := Season{StartMonth: si.StartMonth, StartDay: si.StartDay, EndMonth: si.EndMonth, EndDay: si.EndDay}
+				if s.ContainsDate(mi+1, d) {
+					in = append(in, si.Name)
+				}
+			}
+			if len(in) != 1 {
+				t.Errorf("month %d (%q) day %d is in seasons %v, want exactly one", mi+1, m.Name, d, in)
+			}
+		}
+	}
+}
