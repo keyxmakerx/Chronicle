@@ -25,9 +25,11 @@ type RelationFinder interface {
 // RelationInfo is a minimal view of a relation, used by the transaction service.
 // Avoids importing the full relations package.
 type RelationInfo struct {
-	ID         int
-	Metadata   json.RawMessage
-	CampaignID string
+	ID             int
+	Metadata       json.RawMessage
+	CampaignID     string
+	SourceEntityID string
+	TargetEntityID string
 }
 
 // EntityFieldUpdater updates entity fields. Used to deduct currency from buyer.
@@ -145,9 +147,17 @@ func (s *transactionService) Purchase(ctx context.Context, campaignID, userID st
 		if rel.CampaignID != campaignID {
 			return nil, apperror.NewNotFound("shop relation not found in this campaign")
 		}
+		// The relation must be this shop's listing of this item; otherwise a
+		// buyer could decrement, and rewrite, any relation's metadata.
+		if rel.SourceEntityID != input.ShopEntityID || rel.TargetEntityID != input.ItemEntityID {
+			return nil, apperror.NewNotFound("shop relation not found for this shop and item")
+		}
 
 		// Parse metadata to check stock.
 		meta := parseShopMeta(rel.Metadata)
+		if !meta.InStock {
+			return nil, apperror.NewBadRequest("this item is out of stock")
+		}
 		if meta.Quantity >= 0 && meta.Quantity < input.Quantity {
 			return nil, apperror.NewBadRequest(
 				fmt.Sprintf("insufficient stock: %d available, %d requested", meta.Quantity, input.Quantity),
@@ -156,9 +166,11 @@ func (s *transactionService) Purchase(ctx context.Context, campaignID, userID st
 
 		// Decrement stock (unless unlimited: quantity = -1).
 		if meta.Quantity >= 0 && s.metadataUpdater != nil {
-			meta.Quantity -= input.Quantity
-			stockRemaining = meta.Quantity
-			updated, _ := json.Marshal(meta)
+			stockRemaining = meta.Quantity - input.Quantity
+			updated, err := meta.withQuantity(stockRemaining)
+			if err != nil {
+				return nil, fmt.Errorf("encoding stock: %w", err)
+			}
 			if err := s.metadataUpdater.UpdateMetadata(ctx, input.RelationID, updated); err != nil {
 				return nil, fmt.Errorf("updating stock: %w", err)
 			}
@@ -243,24 +255,57 @@ func (s *transactionService) ListBuyerTransactions(ctx context.Context, buyerEnt
 	return s.repo.ListByBuyer(ctx, buyerEntityID, opts)
 }
 
-// shopMeta represents the metadata stored on shop→item relations.
+// shopMeta is the stock state Purchase reads from a shop→item relation's
+// metadata. The metadata object also carries fields Purchase doesn't own
+// (price, custom names, anything an editor adds), so the stored object is
+// kept whole and only "quantity" is ever rewritten.
 type shopMeta struct {
-	Price       string `json:"price,omitempty"`
-	Quantity    int    `json:"quantity"`
-	Currency    string `json:"currency,omitempty"`
-	MaxStock    int    `json:"max_stock,omitempty"`
-	Unlimited   bool   `json:"unlimited,omitempty"`
+	Quantity int  // -1 means unlimited.
+	InStock  bool // false when an editor marked the item out of stock.
+	fields   map[string]json.RawMessage
 }
 
-// parseShopMeta extracts shop metadata from relation JSON.
+// parseShopMeta extracts stock state from relation JSON. An absent or null
+// quantity is unlimited; 0 is sold out, never unlimited, so the last unit
+// sold can't turn the item into endless stock. The legacy "unlimited": true
+// flag still means unlimited.
 func parseShopMeta(raw json.RawMessage) shopMeta {
-	var m shopMeta
+	m := shopMeta{Quantity: -1, InStock: true, fields: map[string]json.RawMessage{}}
 	if len(raw) > 0 {
-		_ = json.Unmarshal(raw, &m)
+		if err := json.Unmarshal(raw, &m.fields); err != nil || m.fields == nil {
+			m.fields = map[string]json.RawMessage{}
+		}
 	}
-	// Default quantity to unlimited (-1) when not specified.
-	if m.Quantity == 0 && !m.Unlimited {
-		m.Quantity = -1
+	var unlimited bool
+	if v, ok := m.fields["unlimited"]; ok {
+		_ = json.Unmarshal(v, &unlimited)
+	}
+	if v, ok := m.fields["quantity"]; ok && !unlimited {
+		var q *int
+		if err := json.Unmarshal(v, &q); err == nil && q != nil && *q >= 0 {
+			m.Quantity = *q
+		}
+	}
+	if v, ok := m.fields["in_stock"]; ok {
+		var in *bool
+		if err := json.Unmarshal(v, &in); err == nil && in != nil {
+			m.InStock = *in
+		}
 	}
 	return m
+}
+
+// withQuantity returns the stored metadata object with only "quantity"
+// replaced, so a purchase never drops the price or other fields.
+func (m shopMeta) withQuantity(q int) (json.RawMessage, error) {
+	out := make(map[string]json.RawMessage, len(m.fields)+1)
+	for k, v := range m.fields {
+		out[k] = v
+	}
+	qJSON, err := json.Marshal(q)
+	if err != nil {
+		return nil, err
+	}
+	out["quantity"] = qJSON
+	return json.Marshal(out)
 }

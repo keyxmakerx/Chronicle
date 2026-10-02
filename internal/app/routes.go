@@ -1732,9 +1732,11 @@ func (a *armoryRelationFinderAdapter) GetByID(ctx context.Context, id int) (*arm
 		return nil, err
 	}
 	return &armory.RelationInfo{
-		ID:         rel.ID,
-		Metadata:   rel.Metadata,
-		CampaignID: rel.CampaignID,
+		ID:             rel.ID,
+		Metadata:       rel.Metadata,
+		CampaignID:     rel.CampaignID,
+		SourceEntityID: rel.SourceEntityID,
+		TargetEntityID: rel.TargetEntityID,
 	}, nil
 }
 
