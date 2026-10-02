@@ -509,10 +509,8 @@
   // ship: bulk visibility (Hide/Reveal, gated CanAuthorDmOnly, the same
   // gate the single-event visibility route already uses) and Shift events
   // (moves every event touching the selection by N days). The mockup's
-  // Paint weather / Generate… / Lock actions are left out — no
-  // per-day weather write endpoint (#765) and no generator engine ship in
-  // this PR (see .ai.md); wiring an empty "Generate…" button into a
-  // shipped bulk bar would be worse than not shipping it.
+  // Paint weather / Generate… / Lock actions are not wired yet
+  // (TODO(#765)); the per-day weather endpoints exist, the UI does not.
   // ------------------------------------------------------------------
   CalendarEditor.prototype._buildBulkBar = function () {
     var wrap = document.createElement('div');

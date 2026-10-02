@@ -1,19 +1,30 @@
-// Package calendar - weather_repository.go persists the single current-
-// weather row per calendar (calendar_weather). Player visibility of this
-// data (today only, unless the calendar's ForecastsEnabled is on) is a
-// caller decision, not a repository one: this file only reads and writes
-// the stored state.
+// Package calendar - weather_repository.go persists a calendar's weather:
+// the single current reading (calendar_weather) and one reading per day
+// (calendar_weather_days). Player visibility of this data is a caller
+// decision, not a repository one: this file only reads and writes the
+// stored state.
 package calendar
 
 import (
 	"context"
 	"database/sql"
+	"fmt"
+	"strings"
 )
 
 // WeatherRepository defines persistence for a calendar's current weather.
 type WeatherRepository interface {
 	Get(ctx context.Context, calendarID string) (*Weather, error)
 	Set(ctx context.Context, calendarID string, input WeatherInput) error
+
+	// ListDays returns the stored day readings for year, or for one month of
+	// it when month > 0, in date order.
+	ListDays(ctx context.Context, calendarID string, year, month int) ([]DayWeather, error)
+	// SetDays upserts day readings in one transaction. A generated reading
+	// never replaces a stored manual one; a manual reading replaces anything.
+	SetDays(ctx context.Context, calendarID string, days []DayWeatherInput) error
+	// ClearDays deletes the readings on the given days, whatever their source.
+	ClearDays(ctx context.Context, calendarID string, dates []DayDate) error
 }
 
 // weatherRepo is the MariaDB implementation of WeatherRepository.
@@ -35,9 +46,7 @@ const weatherCols = `id, calendar_id, preset_id, preset_label, icon, color,
         precipitation_type, precipitation_intensity,
         zone_id, zone_name, description, updated_at`
 
-// scanWeather reads a row into a Weather struct, folding the nullable wind
-// and precipitation columns into their sub-structs (nil when nothing was
-// ever set for that group, rather than a struct of all-nil fields).
+// scanWeather reads a row into a Weather struct (see foldWindPrecip).
 func scanWeather(scanner interface{ Scan(...any) error }) (*Weather, error) {
 	w := &Weather{}
 	var windSpeedKPH sql.NullFloat64
@@ -55,34 +64,45 @@ func scanWeather(scanner interface{ Scan(...any) error }) (*Weather, error) {
 		return nil, err
 	}
 
+	w.Wind, w.Precipitation = foldWindPrecip(windSpeedKPH, windSpeedTier, windDir, windDirDeg, precipType, precipIntensity)
+	return w, nil
+}
+
+// foldWindPrecip turns the nullable wind and precipitation columns into
+// their sub-structs: nil when nothing was ever set for that group, rather
+// than a struct of all-nil fields.
+func foldWindPrecip(windSpeedKPH sql.NullFloat64, windSpeedTier, windDir sql.NullString, windDirDeg sql.NullInt32,
+	precipType sql.NullString, precipIntensity sql.NullFloat64) (*Wind, *Precipitation) {
+	var wind *Wind
 	if windSpeedKPH.Valid || windDir.Valid || windSpeedTier.Valid || windDirDeg.Valid {
-		wind := &Wind{}
+		wind = &Wind{}
 		if windSpeedKPH.Valid {
 			v := windSpeedKPH.Float64
 			wind.SpeedKPH = &v
 		}
 		if windSpeedTier.Valid {
-			wind.SpeedTier = &windSpeedTier.String
+			v := windSpeedTier.String
+			wind.SpeedTier = &v
 		}
 		if windDir.Valid {
-			wind.Direction = &windDir.String
+			v := windDir.String
+			wind.Direction = &v
 		}
 		if windDirDeg.Valid {
 			v := int(windDirDeg.Int32)
 			wind.DirectionDegrees = &v
 		}
-		w.Wind = wind
 	}
-
+	var precip *Precipitation
 	if precipType.Valid {
-		p := &Precipitation{Type: &precipType.String}
+		v := precipType.String
+		precip = &Precipitation{Type: &v}
 		if precipIntensity.Valid {
-			p.Intensity = &precipIntensity.Float64
+			f := precipIntensity.Float64
+			precip.Intensity = &f
 		}
-		w.Precipitation = p
 	}
-
-	return w, nil
+	return wind, precip
 }
 
 // Get returns the current weather state for a calendar, or nil if none set.
@@ -120,4 +140,147 @@ func (r *weatherRepo) Set(ctx context.Context, calendarID string, input WeatherI
 		input.ZoneID, input.ZoneName, input.Description,
 	)
 	return err
+}
+
+// weatherDayCols is the column list for day-weather reads, in the order
+// scanDayWeather reads it.
+const weatherDayCols = `year, month, day, preset_id, preset_label, icon, color,
+        temperature_celsius, wind_speed_kph, wind_speed_tier,
+        wind_direction, wind_direction_degrees,
+        precipitation_type, precipitation_intensity,
+        zone_id, zone_name, description, source, updated_at`
+
+func scanDayWeather(scanner interface{ Scan(...any) error }) (DayWeather, error) {
+	var w DayWeather
+	var windSpeedKPH sql.NullFloat64
+	var windSpeedTier, windDir sql.NullString
+	var windDirDeg sql.NullInt32
+	var precipType sql.NullString
+	var precipIntensity sql.NullFloat64
+	err := scanner.Scan(&w.Year, &w.Month, &w.Day, &w.PresetID, &w.PresetLabel, &w.Icon, &w.Color,
+		&w.TemperatureCelsius, &windSpeedKPH, &windSpeedTier,
+		&windDir, &windDirDeg,
+		&precipType, &precipIntensity,
+		&w.ZoneID, &w.ZoneName, &w.Description, &w.Source, &w.UpdatedAt)
+	if err != nil {
+		return w, err
+	}
+	w.Wind, w.Precipitation = foldWindPrecip(windSpeedKPH, windSpeedTier, windDir, windDirDeg, precipType, precipIntensity)
+	return w, nil
+}
+
+// ListDays returns a year's (or one month's) day readings in date order.
+func (r *weatherRepo) ListDays(ctx context.Context, calendarID string, year, month int) ([]DayWeather, error) {
+	q := `SELECT ` + weatherDayCols + ` FROM calendar_weather_days WHERE calendar_id = ? AND year = ?`
+	args := []any{calendarID, year}
+	if month > 0 {
+		q += ` AND month = ?`
+		args = append(args, month)
+	}
+	q += ` ORDER BY year, month, day`
+	rows, err := r.db.QueryContext(ctx, q, args...)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var out []DayWeather
+	for rows.Next() {
+		w, err := scanDayWeather(rows)
+		if err != nil {
+			return nil, err
+		}
+		out = append(out, w)
+	}
+	return out, rows.Err()
+}
+
+// dayWeatherDataCols are the reading's own columns, everything SetDays
+// writes besides the key and source.
+var dayWeatherDataCols = []string{"preset_id", "preset_label", "icon", "color",
+	"temperature_celsius", "wind_speed_kph", "wind_speed_tier",
+	"wind_direction", "wind_direction_degrees",
+	"precipitation_type", "precipitation_intensity",
+	"zone_id", "zone_name", "description"}
+
+// upsertManualDaySQL replaces whatever a day holds. upsertGeneratedDaySQL
+// leaves a manual row untouched: every assignment keeps the stored value
+// while source is 'manual', and source itself is assigned last because
+// MariaDB applies ON DUPLICATE KEY assignments left to right, so the
+// earlier IF()s must still see the stored source.
+var upsertManualDaySQL, upsertGeneratedDaySQL = buildDayUpserts()
+
+func buildDayUpserts() (manual, generated string) {
+	cols := append([]string{"calendar_id", "year", "month", "day"}, dayWeatherDataCols...)
+	cols = append(cols, "source")
+	insert := `INSERT INTO calendar_weather_days (` + strings.Join(cols, ", ") +
+		`) VALUES (` + strings.TrimSuffix(strings.Repeat("?, ", len(cols)), ", ") + `) ON DUPLICATE KEY UPDATE `
+	var m, g []string
+	for _, c := range append(append([]string{}, dayWeatherDataCols...), "source") {
+		m = append(m, fmt.Sprintf("%s = VALUES(%s)", c, c))
+		g = append(g, fmt.Sprintf("%s = IF(source = '%s', %s, VALUES(%s))", c, WeatherSourceManual, c, c))
+	}
+	return insert + strings.Join(m, ", "), insert + strings.Join(g, ", ")
+}
+
+// SetDays upserts day readings in one transaction, so a painted or
+// generated range lands whole or not at all.
+func (r *weatherRepo) SetDays(ctx context.Context, calendarID string, days []DayWeatherInput) error {
+	if len(days) == 0 {
+		return nil
+	}
+	tx, err := r.db.BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback() //nolint:errcheck // no-op after Commit
+	manual, err := tx.PrepareContext(ctx, upsertManualDaySQL)
+	if err != nil {
+		return err
+	}
+	defer manual.Close()
+	generated, err := tx.PrepareContext(ctx, upsertGeneratedDaySQL)
+	if err != nil {
+		return err
+	}
+	defer generated.Close()
+	for _, d := range days {
+		in := d.WeatherInput
+		stmt, source := manual, WeatherSourceManual
+		if d.Source == WeatherSourceGenerated {
+			stmt, source = generated, WeatherSourceGenerated
+		}
+		if _, err := stmt.ExecContext(ctx, calendarID, d.Year, d.Month, d.Day,
+			in.PresetID, in.PresetLabel, in.Icon, in.Color,
+			in.TemperatureCelsius, in.WindSpeedKPH, in.WindSpeedTier,
+			in.WindDirection, in.WindDirectionDeg,
+			in.PrecipitationType, in.PrecipitationIntensity,
+			in.ZoneID, in.ZoneName, in.Description, source); err != nil {
+			return err
+		}
+	}
+	return tx.Commit()
+}
+
+// ClearDays deletes the readings on the given days in one transaction.
+func (r *weatherRepo) ClearDays(ctx context.Context, calendarID string, dates []DayDate) error {
+	if len(dates) == 0 {
+		return nil
+	}
+	tx, err := r.db.BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback() //nolint:errcheck // no-op after Commit
+	stmt, err := tx.PrepareContext(ctx,
+		`DELETE FROM calendar_weather_days WHERE calendar_id = ? AND year = ? AND month = ? AND day = ?`)
+	if err != nil {
+		return err
+	}
+	defer stmt.Close()
+	for _, d := range dates {
+		if _, err := stmt.ExecContext(ctx, calendarID, d.Year, d.Month, d.Day); err != nil {
+			return err
+		}
+	}
+	return tx.Commit()
 }

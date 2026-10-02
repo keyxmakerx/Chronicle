@@ -427,6 +427,10 @@ func (m *fakeEventKindRepo) List(ctx context.Context, campaignID string) ([]Even
 type fakeWeatherRepo struct {
 	getFn func(ctx context.Context, calendarID string) (*Weather, error)
 	setFn func(ctx context.Context, calendarID string, input WeatherInput) error
+
+	listDaysFn  func(ctx context.Context, calendarID string, year, month int) ([]DayWeather, error)
+	setDaysFn   func(ctx context.Context, calendarID string, days []DayWeatherInput) error
+	clearDaysFn func(ctx context.Context, calendarID string, dates []DayDate) error
 }
 
 func (m *fakeWeatherRepo) Get(ctx context.Context, calendarID string) (*Weather, error) {
@@ -438,6 +442,25 @@ func (m *fakeWeatherRepo) Get(ctx context.Context, calendarID string) (*Weather,
 func (m *fakeWeatherRepo) Set(ctx context.Context, calendarID string, input WeatherInput) error {
 	if m.setFn != nil {
 		return m.setFn(ctx, calendarID, input)
+	}
+	return nil
+}
+
+func (m *fakeWeatherRepo) ListDays(ctx context.Context, calendarID string, year, month int) ([]DayWeather, error) {
+	if m.listDaysFn != nil {
+		return m.listDaysFn(ctx, calendarID, year, month)
+	}
+	return nil, nil
+}
+func (m *fakeWeatherRepo) SetDays(ctx context.Context, calendarID string, days []DayWeatherInput) error {
+	if m.setDaysFn != nil {
+		return m.setDaysFn(ctx, calendarID, days)
+	}
+	return nil
+}
+func (m *fakeWeatherRepo) ClearDays(ctx context.Context, calendarID string, dates []DayDate) error {
+	if m.clearDaysFn != nil {
+		return m.clearDaysFn(ctx, calendarID, dates)
 	}
 	return nil
 }

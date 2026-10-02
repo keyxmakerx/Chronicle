@@ -172,6 +172,8 @@ GET	/calendars/:calid/events/:eid	internal/plugins/calendar/routes.go
 GET	/calendars/:calid/preview	internal/plugins/calendar/routes.go
 GET	/calendars/:calid/view	internal/plugins/calendar/routes.go
 GET	/calendars/:calid/view	internal/plugins/calendar/routes.go
+GET	/calendars/:calid/weather/days	internal/plugins/calendar/routes.go
+GET	/calendars/:calid/weather/days	internal/plugins/calendar/routes.go
 GET	/calendars/event-kinds	internal/plugins/calendar/routes.go
 GET	/calendars/list	internal/plugins/calendar/routes.go
 GET	/calendars/list	internal/plugins/calendar/routes.go
@@ -467,6 +469,7 @@ POST	/calendars	internal/plugins/calendar/routes.go
 POST	/calendars/:calid/anchor-preview	internal/plugins/calendar/routes.go
 POST	/calendars/:calid/eras	internal/plugins/calendar/routes.go
 POST	/calendars/:calid/events	internal/plugins/calendar/routes.go
+POST	/calendars/:calid/weather/days/clear	internal/plugins/calendar/routes.go
 POST	/calendars/event-kinds	internal/plugins/calendar/routes.go
 POST	/calendars/import	internal/plugins/calendar/routes.go
 POST	/calendars/import/preview	internal/plugins/calendar/routes.go
@@ -637,6 +640,7 @@ PUT	/calendars/:calid/eras/:eraID	internal/plugins/calendar/routes.go
 PUT	/calendars/:calid/events/:eid	internal/plugins/calendar/routes.go
 PUT	/calendars/:calid/events/:eid/visibility	internal/plugins/calendar/routes.go
 PUT	/calendars/:calid/moons/:moonID/hidden	internal/plugins/calendar/routes.go
+PUT	/calendars/:calid/weather/days	internal/plugins/calendar/routes.go
 PUT	/calendars/event-kinds/:kindID	internal/plugins/calendar/routes.go
 PUT	/campaigns/:id/storage	internal/plugins/settings/routes.go
 PUT	/campaigns/:id/storage/bypass	internal/plugins/settings/routes.go

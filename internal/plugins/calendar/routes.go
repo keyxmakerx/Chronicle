@@ -140,6 +140,18 @@ func RegisterRoutes(e *echo.Echo, h *Handler, campaignSvc campaigns.CampaignServ
 		campaigns.RequireCapability(func(cc *campaigns.CampaignContext) bool { return cc.CanAuthorDmOnly() },
 			"only the campaign owner or a granted co-DM may change a moon's visibility"))
 
+	// Day weather: one reading per day. Read Player (the service hides
+	// future days from anyone who can't see dm_only content); painting,
+	// storing generated weather and clearing are gated CanAuthorDmOnly like
+	// the moon hidden flag above, since a write can reveal future weather.
+	cg.GET("/calendars/:calid/weather/days", h.ListDayWeatherAPI, campaigns.RequireRole(campaigns.RolePlayer))
+	cg.PUT("/calendars/:calid/weather/days", h.SetDayWeatherAPI,
+		campaigns.RequireCapability(func(cc *campaigns.CampaignContext) bool { return cc.CanAuthorDmOnly() },
+			"only the campaign owner or a granted co-DM may set a day's weather"))
+	cg.POST("/calendars/:calid/weather/days/clear", h.ClearDayWeatherAPI,
+		campaigns.RequireCapability(func(cc *campaigns.CampaignContext) bool { return cc.CanAuthorDmOnly() },
+			"only the campaign owner or a granted co-DM may clear a day's weather"))
+
 	// Real-date anchor preview: read-only, Owner only (moving the anchor
 	// re-dates every session scheduled by in-world date at once, so the
 	// operator gets a preview of the blast radius before committing to it;
@@ -167,6 +179,7 @@ func RegisterRoutes(e *echo.Echo, h *Handler, campaignSvc campaigns.CampaignServ
 	pub.GET("/calendars/:calid", h.GetCalendarAPI, campaigns.RequireViewAccess())
 	pub.GET("/calendars/:calid/events", h.ListEventsAPI, campaigns.RequireViewAccess())
 	pub.GET("/calendars/:calid/events/:eid", h.GetEventAPI, campaigns.RequireViewAccess())
+	pub.GET("/calendars/:calid/weather/days", h.ListDayWeatherAPI, campaigns.RequireViewAccess())
 
 	// --- Calendar page (V5 part A, #741) ---
 	// The month grid / day-card / era-card / event / moon page. A real page a
