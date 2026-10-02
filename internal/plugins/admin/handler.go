@@ -85,6 +85,8 @@ type StoragePageData struct {
 	Users          []auth.User
 	Campaigns      []campaigns.Campaign
 	CSRFToken      string
+	// LimitsTab selects the limits view (?tab=limits) instead of the file list.
+	LimitsTab bool
 }
 
 // NewHandler creates a new admin handler.
@@ -214,24 +216,28 @@ func (h *Handler) DataHygiene(c echo.Context) error {
 		stats, err := h.hygieneScanner.GetDiskUsageStats(ctx)
 		if err != nil {
 			slog.Warn("failed to get hygiene stats", slog.Any("error", err))
+			data.ScanFailed = true
 		}
 		data.Stats = stats
 
 		orphanedMedia, err := h.hygieneScanner.ScanOrphanedMedia(ctx)
 		if err != nil {
 			slog.Warn("failed to scan orphaned media", slog.Any("error", err))
+			data.ScanFailed = true
 		}
 		data.OrphanedMedia = orphanedMedia
 
 		orphanedKeys, err := h.hygieneScanner.ScanOrphanedAPIKeys(ctx)
 		if err != nil {
 			slog.Warn("failed to scan orphaned API keys", slog.Any("error", err))
+			data.ScanFailed = true
 		}
 		data.OrphanedAPIKeys = orphanedKeys
 
 		staleFiles, err := h.hygieneScanner.ScanStaleFiles(ctx)
 		if err != nil {
 			slog.Warn("failed to scan stale files", slog.Any("error", err))
+			data.ScanFailed = true
 		}
 		data.StaleFiles = staleFiles
 	}
@@ -250,7 +256,7 @@ func (h *Handler) PurgeOrphanedMediaAPI(c echo.Context) error {
 	}
 	slog.Info("admin purged orphaned media", slog.Int("purged", purged))
 	h.record(c, "hygiene.purged", "hygiene", "", fmt.Sprintf("%d orphaned files", purged))
-	return c.Redirect(http.StatusSeeOther, "/admin/data-hygiene")
+	return middleware.HTMXRedirect(c, "/admin/data-hygiene")
 }
 
 // PurgeOrphanedAPIKeysAPI handles DELETE /admin/data-hygiene/orphaned-api-keys.
@@ -264,7 +270,7 @@ func (h *Handler) PurgeOrphanedAPIKeysAPI(c echo.Context) error {
 	}
 	slog.Info("admin purged orphaned API keys", slog.Int("purged", purged))
 	h.record(c, "hygiene.purged", "hygiene", "", fmt.Sprintf("%d orphaned API keys", purged))
-	return c.Redirect(http.StatusSeeOther, "/admin/data-hygiene")
+	return middleware.HTMXRedirect(c, "/admin/data-hygiene")
 }
 
 // PurgeStaleFilesAPI handles DELETE /admin/data-hygiene/stale-files.
@@ -278,7 +284,7 @@ func (h *Handler) PurgeStaleFilesAPI(c echo.Context) error {
 	}
 	slog.Info("admin purged stale files", slog.Int("purged", purged))
 	h.record(c, "hygiene.purged", "hygiene", "", fmt.Sprintf("%d stale files", purged))
-	return c.Redirect(http.StatusSeeOther, "/admin/data-hygiene")
+	return middleware.HTMXRedirect(c, "/admin/data-hygiene")
 }
 
 // --- Dashboard ---
@@ -668,6 +674,7 @@ func (h *Handler) Storage(c echo.Context) error {
 		Users:          allUsers,
 		Campaigns:      allCampaigns,
 		CSRFToken:      csrfToken,
+		LimitsTab:      c.QueryParam("tab") == "limits",
 	}
 	return middleware.Render(c, http.StatusOK, AdminStoragePage(data))
 }
