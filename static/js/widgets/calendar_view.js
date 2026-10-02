@@ -365,6 +365,18 @@
       '<i class="fa-solid ' + weatherIcon(w) + '" aria-hidden="true"></i></span>';
   }
 
+  // Edit mode's view of a day's stored reading (CSS shows it only while
+  // .cal.wxon): the glyph, and a tint of the weather's own colour on a day
+  // painted by hand. Generated readings show the glyph alone, so the
+  // Director can tell what they set from what the generator set.
+  function weatherPaintHTML(w, future) {
+    if (!w) return '';
+    var hand = w.source !== 'generated', c = sanitizeColor(w.color);
+    return (hand && c ? '<span class="cpt hand" style="--wxc:color-mix(in oklch,' + c + ' 26%,transparent)"></span>' : '') +
+      '<span class="cwx' + (hand ? ' hand' : '') + (future ? ' dir' : '') + '"' + (c ? ' style="color:' + c + '"' : '') + ' aria-hidden="true">' +
+      '<i class="fa-solid ' + weatherIcon(w) + ' i"></i></span>';
+  }
+
   var WIND_DIRS = { N: 'north', NNE: 'north', NE: 'northeast', ENE: 'east', E: 'east', ESE: 'east', SE: 'southeast', SSE: 'south',
     S: 'south', SSW: 'south', SW: 'southwest', WSW: 'west', W: 'west', WNW: 'west', NW: 'northwest', NNW: 'north' };
   function windWords(wind) {
@@ -807,6 +819,7 @@
   Chronicle.calendarDate = CalDate;
   Chronicle.calendarPanel = { growOpen: growOpen, growClose: growClose };
   Chronicle.calendarColor = sanitizeColor;
+  Chronicle.calendarWeatherIcon = weatherIcon;
 
   // ================================================================
   Chronicle.register('calendar_view', {
@@ -819,6 +832,7 @@
       this.canAuthorDmOnly = config.canAuthorDmOnly === true;
       this.role = typeof config.role === 'number' ? config.role : parseInt(config.role, 10) || 0;
       this.apiBase = config.apiBase;
+      this.engineSrc = config.engineSrc; // chronicle_gen.js, loaded only when an editor paints weather
 
       var cfgEl = $('#calendar-config', el);
       try { this.cal = JSON.parse(cfgEl.dataset.calendar || '{}'); } catch (e) { this.cal = {}; }
@@ -1239,6 +1253,7 @@
       }
       return '<button type="button" class="day' + (isToday ? ' today' : '') + (isPast ? ' past' : '') + '" data-key="' + key + '">' +
         moonHTML + weatherMarkHTML(this.weatherOnDay(y, m, d), !isPast && !isToday) +
+        (this.canAuthorDmOnly ? weatherPaintHTML((this.weatherByYear[y] || {})[m + '_' + d], !isPast && !isToday) : '') +
         '<div class="dc"><span class="num">' + d + '</span>' + this._marksHTML(y, m, d) + '</div>' +
         '</button>';
     },
@@ -1927,6 +1942,6 @@
   // appearance_editor.js uses for its save-sequencing helper. `module` is
   // undefined when loaded via <script>, so this is a no-op in the browser.
   if (typeof module !== 'undefined' && module.exports) {
-    module.exports = { CalDate: CalDate, MoonMath: MoonMath, weatherMarkHTML: weatherMarkHTML, weatherFactHTML: weatherFactHTML };
+    module.exports = { CalDate: CalDate, MoonMath: MoonMath, weatherMarkHTML: weatherMarkHTML, weatherFactHTML: weatherFactHTML, weatherPaintHTML: weatherPaintHTML, weatherIcon: weatherIcon };
   }
 })();
