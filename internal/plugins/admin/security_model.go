@@ -1,6 +1,9 @@
 package admin
 
-import "time"
+import (
+	"fmt"
+	"time"
+)
 
 // Security event type constants follow the "resource.verb" pattern for
 // consistent filtering and display grouping in the admin security dashboard.
@@ -95,4 +98,96 @@ func EventTypeIcon(eventType string) string {
 		return icon
 	}
 	return "fa-solid fa-circle-info text-fg-muted"
+}
+
+// Tabs of the Sign-ins & sessions page. Each is a real link (?tab=…) so the
+// page works without JavaScript and under hx-boost.
+const (
+	SecurityTabOverview = "overview"
+	SecurityTabSessions = "sessions"
+	SecurityTabLog      = "log"
+	SecurityTabSignup   = "signup"
+)
+
+// normalizeSecurityTab whitelists the ?tab= value; anything unknown falls back
+// to the overview so a hand-edited URL never renders a blank page.
+func normalizeSecurityTab(raw string) string {
+	switch raw {
+	case SecurityTabSessions, SecurityTabLog, SecurityTabSignup:
+		return raw
+	default:
+		return SecurityTabOverview
+	}
+}
+
+// securityTabHref is the link for a tab; the overview is the bare page.
+func securityTabHref(tab string) string {
+	if tab == SecurityTabOverview {
+		return "/admin/security"
+	}
+	return "/admin/security?tab=" + tab
+}
+
+// WatchItem is one line of the overview's "Worth a look" list.
+type WatchItem struct {
+	Title  string
+	Detail string
+}
+
+// How many wrong passwords for one address inside the window make it worth
+// surfacing; a single typo is not.
+const (
+	repeatedFailureThreshold = 2
+	repeatedFailureWindow    = 24 * time.Hour
+)
+
+// worthALook turns recent failed-login events into plain-language lines. It
+// only reads events already recorded, so it never claims more than the log
+// holds.
+func worthALook(events []SecurityEvent, now time.Time) []WatchItem {
+	type group struct {
+		count  int
+		ips    map[string]struct{}
+		latest time.Time
+	}
+	byEmail := map[string]*group{}
+	var order []string
+	for _, e := range events {
+		if e.EventType != EventLoginFailed || now.Sub(e.CreatedAt) > repeatedFailureWindow {
+			continue
+		}
+		email, _ := e.Details["email"].(string)
+		if email == "" {
+			continue
+		}
+		g, ok := byEmail[email]
+		if !ok {
+			g = &group{ips: map[string]struct{}{}, latest: e.CreatedAt}
+			byEmail[email] = g
+			order = append(order, email)
+		}
+		g.count++
+		if e.IPAddress != "" {
+			g.ips[e.IPAddress] = struct{}{}
+		}
+		if e.CreatedAt.After(g.latest) {
+			g.latest = e.CreatedAt
+		}
+	}
+	var items []WatchItem
+	for _, email := range order {
+		g := byEmail[email]
+		if g.count < repeatedFailureThreshold {
+			continue
+		}
+		where := "from one address"
+		if len(g.ips) > 1 {
+			where = fmt.Sprintf("from %d addresses", len(g.ips))
+		}
+		items = append(items, WatchItem{
+			Title:  fmt.Sprintf("%d wrong passwords for %s", g.count, email),
+			Detail: where + ", latest " + timeAgo(g.latest),
+		})
+	}
+	return items
 }

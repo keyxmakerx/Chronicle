@@ -775,28 +775,52 @@ func (h *Handler) Security(c echo.Context) error {
 
 	ctx := c.Request().Context()
 
+	tab := normalizeSecurityTab(c.QueryParam("tab"))
+
 	// A failed read shows an inline notice, not an empty-looking section.
 	stats, statsErr := h.securityService.GetStats(ctx)
 	if statsErr != nil {
 		slog.Warn("security page: load stats failed", slog.Any("error", statsErr))
 	}
 
-	// Load recent security events (first page).
+	// Only the open tab's list is read; the others are one click away.
 	eventType := c.QueryParam("type")
 	page, _ := strconv.Atoi(c.QueryParam("page"))
 	if page < 1 {
 		page = 1
 	}
 
-	events, totalEvents, eventsErr := h.securityService.ListEvents(ctx, eventType, page)
-	if eventsErr != nil {
-		slog.Warn("security page: load events failed", slog.Any("error", eventsErr))
+	var (
+		events      []SecurityEvent
+		totalEvents int
+		eventsErr   error
+		watch       []WatchItem
+	)
+	switch tab {
+	case SecurityTabLog:
+		events, totalEvents, eventsErr = h.securityService.ListEvents(ctx, eventType, page)
+		if eventsErr != nil {
+			slog.Warn("security page: load events failed", slog.Any("error", eventsErr))
+		}
+	case SecurityTabOverview:
+		var recent []SecurityEvent
+		recent, _, eventsErr = h.securityService.ListEvents(ctx, EventLoginFailed, 1)
+		if eventsErr != nil {
+			slog.Warn("security page: load recent failures failed", slog.Any("error", eventsErr))
+		} else {
+			watch = worthALook(recent, time.Now())
+		}
 	}
 
-	// Load active sessions.
-	sessions, sessionsErr := h.securityService.GetActiveSessions(ctx)
-	if sessionsErr != nil {
-		slog.Warn("security page: load sessions failed", slog.Any("error", sessionsErr))
+	var (
+		sessions    []auth.SessionInfo
+		sessionsErr error
+	)
+	if tab == SecurityTabSessions {
+		sessions, sessionsErr = h.securityService.GetActiveSessions(ctx)
+		if sessionsErr != nil {
+			slog.Warn("security page: load sessions failed", slog.Any("error", sessionsErr))
+		}
 	}
 
 	csrfToken := middleware.GetCSRFToken(c)
@@ -811,6 +835,8 @@ func (h *Handler) Security(c echo.Context) error {
 	}
 
 	data := SecurityPageData{
+		Tab:              tab,
+		WatchItems:       watch,
 		Stats:            stats,
 		Events:           events,
 		TotalEvents:      totalEvents,
@@ -840,7 +866,7 @@ func (h *Handler) UpdateRegistrationMode(c echo.Context) error {
 	}
 	h.record(c, "registration.mode_changed", "setting", "registration_mode", registrationModeLabel(mode))
 	slog.Info("registration mode updated", slog.String("mode", mode))
-	c.Response().Header().Set("HX-Redirect", "/admin/security")
+	c.Response().Header().Set("HX-Redirect", securityTabHref(SecurityTabSignup))
 	return c.NoContent(http.StatusOK)
 }
 
@@ -868,7 +894,7 @@ func (h *Handler) TerminateSession(c echo.Context) error {
 		slog.String("by", currentUserID),
 	)
 
-	return middleware.HTMXRedirect(c, "/admin/security")
+	return middleware.HTMXRedirect(c, securityTabHref(SecurityTabSessions))
 }
 
 // registrationModeLabel is the plain-language mode name the activity sentence
@@ -1261,6 +1287,10 @@ func (h *Handler) DiagnosticsWorkspaceRun(c echo.Context) error {
 
 // SecurityPageData holds all data needed for the security dashboard page.
 type SecurityPageData struct {
+	// Tab is the open tab, already whitelisted (see normalizeSecurityTab).
+	Tab string
+	// WatchItems feeds the overview's "Worth a look" list.
+	WatchItems []WatchItem
 	Stats       *SecurityStats
 	Events      []SecurityEvent
 	TotalEvents int
