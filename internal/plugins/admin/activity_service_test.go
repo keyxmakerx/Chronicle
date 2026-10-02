@@ -3,7 +3,9 @@ package admin
 import (
 	"context"
 	"errors"
+	"strings"
 	"testing"
+	"unicode/utf8"
 )
 
 type fakeActivityRepo struct {
@@ -105,5 +107,24 @@ func TestActivityEntry_Sentence(t *testing.T) {
 				t.Errorf("got %q, want %q", got, tc.want)
 			}
 		})
+	}
+}
+
+func TestActivityService_RecordClampsToColumns(t *testing.T) {
+	repo := &fakeActivityRepo{}
+	svc := NewActivityService(repo)
+	long := strings.Repeat("é", 300)
+	if err := svc.Record(context.Background(), ActivityEntry{Action: "campaign.delete", TargetLabel: long, TargetID: long}); err != nil {
+		t.Fatal(err)
+	}
+	got := repo.inserted[0]
+	if n := utf8.RuneCountInString(got.TargetLabel); n != 255 {
+		t.Errorf("label has %d characters, want 255", n)
+	}
+	if n := utf8.RuneCountInString(got.TargetID); n != 64 {
+		t.Errorf("target id has %d characters, want 64", n)
+	}
+	if !utf8.ValidString(got.TargetLabel) {
+		t.Error("clamping split a character")
 	}
 }

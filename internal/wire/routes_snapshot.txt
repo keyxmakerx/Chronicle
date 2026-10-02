@@ -113,6 +113,7 @@ GET	/:typeSlug	internal/plugins/entities/routes.go
 GET	/about	internal/app/routes.go
 GET	/account	internal/plugins/auth/routes.go
 GET	/account/email/verify	internal/plugins/auth/routes.go
+GET	/activity	internal/plugins/admin/routes.go
 GET	/activity	internal/plugins/audit/routes.go
 GET	/activity/embed	internal/plugins/audit/routes.go
 GET	/activity/fragment	internal/plugins/audit/routes.go

@@ -5,6 +5,7 @@ import (
 	"errors"
 	"log/slog"
 	"strings"
+	"unicode/utf8"
 )
 
 // activityPerPage is the page size of the full activity list.
@@ -46,7 +47,21 @@ func (s *activityService) Record(ctx context.Context, entry ActivityEntry) error
 	if entry.Action == "" {
 		return errors.New("admin activity needs an action")
 	}
+	// Clamp to the column widths: a long campaign or package name must not
+	// make the insert fail under strict SQL mode and lose the row.
+	entry.Action = clampRunes(entry.Action, 64)
+	entry.TargetType = clampRunes(entry.TargetType, 32)
+	entry.TargetID = clampRunes(entry.TargetID, 64)
+	entry.TargetLabel = clampRunes(entry.TargetLabel, 255)
 	return s.repo.Insert(ctx, &entry)
+}
+
+// clampRunes cuts s to at most n characters without splitting one.
+func clampRunes(s string, n int) string {
+	if utf8.RuneCountInString(s) <= n {
+		return s
+	}
+	return string([]rune(s)[:n])
 }
 
 // RecordActivity is the never-fails entry point: the admin change has already
