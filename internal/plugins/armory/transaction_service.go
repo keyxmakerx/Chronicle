@@ -16,6 +16,9 @@ import (
 // Implemented by the relations widget service — injected to avoid circular imports.
 type RelationMetadataUpdater interface {
 	UpdateMetadata(ctx context.Context, id int, metadata json.RawMessage) error
+	// UpdateMetadataIf writes metadata only while the stored value still
+	// equals expected, reporting whether it wrote.
+	UpdateMetadataIf(ctx context.Context, id int, expected, metadata json.RawMessage) (bool, error)
 }
 
 // RelationFinder retrieves a relation by ID.
@@ -50,7 +53,9 @@ type EntityFieldUpdater interface {
 // with a single per-campaign API key — could spoof `buyer_entity_id` to
 // purchase on behalf of any character in the campaign.
 type BuyerAccessChecker interface {
-	CanUserActAsBuyer(ctx context.Context, entityID, userID string, role int) (bool, error)
+	// CanUserActAsBuyer is false for an entity outside campaignID, whatever
+	// the role: a campaign role grants nothing in another campaign.
+	CanUserActAsBuyer(ctx context.Context, campaignID, entityID, userID string, role int) (bool, error)
 }
 
 // TransactionService defines the business logic contract for shop transactions.
@@ -127,7 +132,7 @@ func (s *transactionService) Purchase(ctx context.Context, campaignID, userID st
 	// Mitigates buyer_entity_id spoofing from clients that authenticate
 	// with a single per-campaign identity (Foundry module's API key).
 	if input.BuyerEntityID != "" && s.buyerAccess != nil {
-		ok, err := s.buyerAccess.CanUserActAsBuyer(ctx, input.BuyerEntityID, userID, role)
+		ok, err := s.buyerAccess.CanUserActAsBuyer(ctx, campaignID, input.BuyerEntityID, userID, role)
 		if err != nil {
 			return nil, fmt.Errorf("verify buyer access: %w", err)
 		}
@@ -146,49 +151,11 @@ func (s *transactionService) Purchase(ctx context.Context, campaignID, userID st
 		return nil, apperror.NewBadRequest("relation_id is required to buy from a shop")
 	}
 	if input.RelationID > 0 && s.relationFinder != nil {
-		rel, err := s.relationFinder.GetByID(ctx, input.RelationID)
+		remaining, err := s.reserveStock(ctx, campaignID, &input)
 		if err != nil {
-			return nil, fmt.Errorf("finding shop relation: %w", err)
+			return nil, err
 		}
-		if rel.CampaignID != campaignID {
-			return nil, apperror.NewNotFound("shop relation not found in this campaign")
-		}
-		// The relation must be this shop's listing of this item; otherwise a
-		// buyer could decrement, and rewrite, any relation's metadata.
-		if rel.SourceEntityID != input.ShopEntityID || rel.TargetEntityID != input.ItemEntityID {
-			return nil, apperror.NewNotFound("shop relation not found for this shop and item")
-		}
-
-		// Parse metadata to check stock.
-		meta := parseShopMeta(rel.Metadata)
-		if !meta.InStock {
-			return nil, apperror.NewBadRequest("this item is out of stock")
-		}
-		if meta.Quantity >= 0 && meta.Quantity < input.Quantity {
-			return nil, apperror.NewBadRequest(
-				fmt.Sprintf("insufficient stock: %d available, %d requested", meta.Quantity, input.Quantity),
-			)
-		}
-
-		// Charge the listed price, never one the client sends.
-		input.PriceNumeric = meta.Price * float64(input.Quantity)
-		input.Currency = meta.Currency
-		if input.Currency == "" {
-			input.Currency = "gp"
-		}
-		input.PricePaid = strconv.FormatFloat(input.PriceNumeric, 'f', -1, 64) + " " + input.Currency
-
-		// Decrement stock (unless unlimited: quantity = -1).
-		if meta.Quantity >= 0 && s.metadataUpdater != nil {
-			stockRemaining = meta.Quantity - input.Quantity
-			updated, err := meta.withQuantity(stockRemaining)
-			if err != nil {
-				return nil, fmt.Errorf("encoding stock: %w", err)
-			}
-			if err := s.metadataUpdater.UpdateMetadata(ctx, input.RelationID, updated); err != nil {
-				return nil, fmt.Errorf("updating stock: %w", err)
-			}
-		}
+		stockRemaining = remaining
 	}
 
 	// Create the transaction record.
@@ -267,6 +234,64 @@ func (s *transactionService) ListShopTransactions(ctx context.Context, campaignI
 // ListBuyerTransactions returns transactions for a specific buyer.
 func (s *transactionService) ListBuyerTransactions(ctx context.Context, buyerEntityID string, opts TransactionListOptions) ([]Transaction, int, error) {
 	return s.repo.ListByBuyer(ctx, buyerEntityID, opts)
+}
+
+// stockAttempts bounds how often a purchase re-reads a listing that another
+// purchase changed between its read and its write.
+const stockAttempts = 5
+
+// reserveStock checks the shop listing named by input, sets input's price
+// fields from it, and takes the stock. The write only lands if the listing
+// is unchanged since it was read, so two buyers can't both take the last
+// unit. Returns the stock left, or -1 when the listing is unlimited.
+func (s *transactionService) reserveStock(ctx context.Context, campaignID string, input *CreateTransactionInput) (int, error) {
+	for attempt := 0; attempt < stockAttempts; attempt++ {
+		rel, err := s.relationFinder.GetByID(ctx, input.RelationID)
+		if err != nil {
+			return 0, fmt.Errorf("finding shop relation: %w", err)
+		}
+		if rel.CampaignID != campaignID {
+			return 0, apperror.NewNotFound("shop relation not found in this campaign")
+		}
+		if rel.SourceEntityID != input.ShopEntityID || rel.TargetEntityID != input.ItemEntityID {
+			return 0, apperror.NewNotFound("shop relation not found for this shop and item")
+		}
+
+		meta := parseShopMeta(rel.Metadata)
+		if !meta.InStock {
+			return 0, apperror.NewBadRequest("this item is out of stock")
+		}
+		if meta.Quantity >= 0 && meta.Quantity < input.Quantity {
+			return 0, apperror.NewBadRequest(
+				fmt.Sprintf("insufficient stock: %d available, %d requested", meta.Quantity, input.Quantity),
+			)
+		}
+
+		// Charge the listed price, never one the client sends.
+		input.PriceNumeric = meta.Price * float64(input.Quantity)
+		input.Currency = meta.Currency
+		if input.Currency == "" {
+			input.Currency = "gp"
+		}
+		input.PricePaid = strconv.FormatFloat(input.PriceNumeric, 'f', -1, 64) + " " + input.Currency
+
+		if meta.Quantity < 0 || s.metadataUpdater == nil {
+			return -1, nil
+		}
+		remaining := meta.Quantity - input.Quantity
+		updated, err := meta.withQuantity(remaining)
+		if err != nil {
+			return 0, fmt.Errorf("encoding stock: %w", err)
+		}
+		wrote, err := s.metadataUpdater.UpdateMetadataIf(ctx, input.RelationID, rel.Metadata, updated)
+		if err != nil {
+			return 0, fmt.Errorf("updating stock: %w", err)
+		}
+		if wrote {
+			return remaining, nil
+		}
+	}
+	return 0, apperror.NewConflict("the shop is busy; try the purchase again")
 }
 
 // shopMeta is the stock state Purchase reads from a shop→item relation's

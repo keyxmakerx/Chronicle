@@ -35,6 +35,7 @@ type RelationRepository interface {
 
 	// UpdateMetadata updates only the metadata JSON column for a relation.
 	UpdateMetadata(ctx context.Context, id int, metadata json.RawMessage) error
+	UpdateMetadataIf(ctx context.Context, id int, expected, metadata json.RawMessage) (bool, error)
 
 	// ListByCampaign returns all relations for a campaign with both source and
 	// target entity details. Used for the relations graph visualization.
@@ -209,6 +210,23 @@ func (r *relationRepository) UpdateMetadata(ctx context.Context, id int, metadat
 	}
 
 	return nil
+}
+
+// UpdateMetadataIf replaces a relation's metadata only while the stored
+// value still equals expected, so a read-check-write caller (shop stock)
+// can't overwrite a change made since its read. JSON is utf8mb4_bin in
+// MariaDB, so the comparison is byte-exact. Reports whether it wrote.
+func (r *relationRepository) UpdateMetadataIf(ctx context.Context, id int, expected, metadata json.RawMessage) (bool, error) {
+	query := `UPDATE entity_relations SET metadata = ? WHERE id = ? AND metadata = ?`
+	result, err := r.db.ExecContext(ctx, query, nullableJSON(metadata), id, []byte(expected))
+	if err != nil {
+		return false, fmt.Errorf("updating relation metadata: %w", err)
+	}
+	n, err := result.RowsAffected()
+	if err != nil {
+		return false, fmt.Errorf("checking rows affected: %w", err)
+	}
+	return n == 1, nil
 }
 
 // nullableJSON returns nil for empty/null JSON, or the raw bytes otherwise.

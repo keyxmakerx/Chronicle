@@ -58,6 +58,16 @@ func (m *mockRelationFinder) GetByID(ctx context.Context, id int) (*RelationInfo
 
 type mockMetadataUpdater struct {
 	updateFn func(ctx context.Context, id int, metadata json.RawMessage) error
+	// ifFn, when set, decides the conditional write; otherwise it always
+	// lands and is reported through updateFn.
+	ifFn func(ctx context.Context, id int, expected, metadata json.RawMessage) (bool, error)
+}
+
+func (m *mockMetadataUpdater) UpdateMetadataIf(ctx context.Context, id int, expected, metadata json.RawMessage) (bool, error) {
+	if m.ifFn != nil {
+		return m.ifFn(ctx, id, expected, metadata)
+	}
+	return true, m.UpdateMetadata(ctx, id, metadata)
 }
 
 func (m *mockMetadataUpdater) UpdateMetadata(ctx context.Context, id int, metadata json.RawMessage) error {
@@ -71,7 +81,7 @@ type mockBuyerAccess struct {
 	canFn func(ctx context.Context, entityID, userID string, role int) (bool, error)
 }
 
-func (m *mockBuyerAccess) CanUserActAsBuyer(ctx context.Context, entityID, userID string, role int) (bool, error) {
+func (m *mockBuyerAccess) CanUserActAsBuyer(ctx context.Context, _, entityID, userID string, role int) (bool, error) {
 	if m.canFn != nil {
 		return m.canFn(ctx, entityID, userID, role)
 	}
@@ -524,5 +534,35 @@ func TestPurchase_ChargesListedPrice(t *testing.T) {
 	in.RelationID = 0
 	if _, err := svc.Purchase(context.Background(), "camp-1", "user-1", 1, in); err == nil {
 		t.Error("a purchase naming no shop listing must be refused")
+	}
+}
+
+// TestPurchase_LastUnitRace pins that a purchase whose stock write loses to
+// another buyer re-reads the listing: here the other buyer took the last
+// unit, so this purchase must be refused, not oversold.
+func TestPurchase_LastUnitRace(t *testing.T) {
+	stored := json.RawMessage(`{"price":5,"quantity":1}`)
+	reads := 0
+	svc := NewTransactionService(&mockTransactionRepo{})
+	svc.SetRelationFinder(&mockRelationFinder{getByIDFn: func(_ context.Context, _ int) (*RelationInfo, error) {
+		reads++
+		return &RelationInfo{ID: 1, CampaignID: "camp-1", SourceEntityID: "shop-1", TargetEntityID: "item-1", Metadata: stored}, nil
+	}})
+	svc.SetRelationMetadataUpdater(&mockMetadataUpdater{ifFn: func(_ context.Context, _ int, expected, m json.RawMessage) (bool, error) {
+		if reads == 1 {
+			// Another buyer's write lands between this read and this write.
+			stored = json.RawMessage(`{"price":5,"quantity":0}`)
+		}
+		if string(expected) != string(stored) {
+			return false, nil
+		}
+		stored = m
+		return true, nil
+	}})
+	if _, err := svc.Purchase(context.Background(), "camp-1", "user-1", 1, buyOne()); err == nil {
+		t.Fatal("the last unit was sold twice")
+	}
+	if reads != 2 {
+		t.Errorf("reads = %d, want 2 (one retry after the lost write)", reads)
 	}
 }
