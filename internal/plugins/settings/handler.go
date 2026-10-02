@@ -124,6 +124,8 @@ func (h *Handler) SetUserStorageLimit(c echo.Context) error {
 		slog.String("by", auth.GetUserID(c)),
 	)
 
+	h.recordActivity(c, "storage.user_limit_set", "user", userID, "")
+
 	return middleware.HTMXRedirect(c, "/admin/storage")
 }
 
@@ -143,6 +145,8 @@ func (h *Handler) DeleteUserStorageLimit(c echo.Context) error {
 		slog.String("target_user", userID),
 		slog.String("by", auth.GetUserID(c)),
 	)
+
+	h.recordActivity(c, "storage.user_limit_removed", "user", userID, "")
 
 	return middleware.HTMXRedirect(c, "/admin/storage")
 }
@@ -182,6 +186,8 @@ func (h *Handler) SetCampaignStorageLimit(c echo.Context) error {
 		slog.String("by", auth.GetUserID(c)),
 	)
 
+	h.recordActivity(c, "storage.campaign_limit_set", "campaign", campaignID, "")
+
 	return middleware.HTMXRedirect(c, "/admin/storage")
 }
 
@@ -201,6 +207,8 @@ func (h *Handler) DeleteCampaignStorageLimit(c echo.Context) error {
 		slog.String("target_campaign", campaignID),
 		slog.String("by", auth.GetUserID(c)),
 	)
+
+	h.recordActivity(c, "storage.campaign_limit_removed", "campaign", campaignID, "")
 
 	return middleware.HTMXRedirect(c, "/admin/storage")
 }
@@ -245,6 +253,8 @@ func (h *Handler) SetUserBypass(c echo.Context) error {
 		slog.Time("expires_at", expiresAt),
 	)
 
+	h.recordActivity(c, "storage.user_bypass_set", "user", userID, "")
+
 	return middleware.HTMXRedirect(c, "/admin/storage")
 }
 
@@ -264,6 +274,8 @@ func (h *Handler) ClearUserBypass(c echo.Context) error {
 		slog.String("target_user", userID),
 		slog.String("by", auth.GetUserID(c)),
 	)
+
+	h.recordActivity(c, "storage.user_bypass_cleared", "user", userID, "")
 
 	return middleware.HTMXRedirect(c, "/admin/storage")
 }
@@ -316,6 +328,8 @@ func (h *Handler) SetCampaignBypass(c echo.Context) error {
 		slog.Time("expires_at", expiresAt),
 	)
 
+	h.recordActivity(c, "storage.campaign_bypass_set", "campaign", campaignID, "")
+
 	return middleware.HTMXRedirect(c, "/admin/storage")
 }
 
@@ -335,6 +349,8 @@ func (h *Handler) ClearCampaignBypass(c echo.Context) error {
 		slog.String("target_campaign", campaignID),
 		slog.String("by", auth.GetUserID(c)),
 	)
+
+	h.recordActivity(c, "storage.campaign_bypass_cleared", "campaign", campaignID, "")
 
 	return middleware.HTMXRedirect(c, "/admin/storage")
 }

@@ -1,6 +1,7 @@
 package foundry_vtt
 
 import (
+	"fmt"
 	"net/http"
 
 	"github.com/labstack/echo/v4"
@@ -53,6 +54,7 @@ func (h *Handler) AdminNotifyCampaignHandler(c echo.Context) error {
 		campaignID, version, session.UserID, c.RealIP(), c.Request().UserAgent()); err != nil {
 		return h.respondError(c, err)
 	}
+	h.recordActivity(c, "foundry.campaign_notified", "campaign", campaignID, version)
 	return c.NoContent(http.StatusNoContent)
 }
 
@@ -72,6 +74,7 @@ func (h *Handler) AdminForcePinCampaignHandler(c echo.Context) error {
 		campaignID, version, session.UserID, c.RealIP(), c.Request().UserAgent()); err != nil {
 		return h.respondError(c, err)
 	}
+	h.recordActivity(c, "foundry.campaign_force_pinned", "campaign", campaignID, version)
 	return c.NoContent(http.StatusNoContent)
 }
 
@@ -93,6 +96,7 @@ func (h *Handler) AdminNotifyOlderHandler(c echo.Context) error {
 	if err != nil {
 		return h.respondError(c, err)
 	}
+	h.recordActivity(c, "foundry.older_notified", "package", "", fmt.Sprintf("%s (%d campaigns)", version, notified))
 	return c.JSON(http.StatusOK, map[string]any{"notified": notified})
 }
 
@@ -114,6 +118,7 @@ func (h *Handler) AdminForcePinOlderHandler(c echo.Context) error {
 	if err != nil {
 		return h.respondError(c, err)
 	}
+	h.recordActivity(c, "foundry.older_force_pinned", "package", "", fmt.Sprintf("%s (%d campaigns)", version, pinned))
 	return c.JSON(http.StatusOK, map[string]any{"pinned": pinned})
 }
 

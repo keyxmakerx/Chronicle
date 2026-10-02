@@ -15,6 +15,7 @@ type WASMHandler struct {
 	manager    *PluginManager
 	dispatcher *HookDispatcher
 	extSvc     ExtensionService
+	activity   ActivityRecorder
 }
 
 // NewWASMHandler creates a new WASM handler.
@@ -63,6 +64,8 @@ func (h *WASMHandler) ReloadWASMPlugin(c echo.Context) error {
 		return apperror.NewInternal(err)
 	}
 
+	h.recordActivity(c, "extension.plugin_reloaded", "extension", extID, slug)
+
 	return c.JSON(http.StatusOK, map[string]string{"status": "reloaded"})
 }
 
@@ -75,6 +78,8 @@ func (h *WASMHandler) StopWASMPlugin(c echo.Context) error {
 	if err := h.manager.Unload(c.Request().Context(), extID, slug); err != nil {
 		return apperror.NewInternal(err)
 	}
+
+	h.recordActivity(c, "extension.plugin_stopped", "extension", extID, slug)
 
 	return c.JSON(http.StatusOK, map[string]string{"status": "stopped"})
 }

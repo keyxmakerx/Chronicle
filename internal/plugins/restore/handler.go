@@ -68,6 +68,16 @@ func (h *Handler) Run(c echo.Context) error {
 	}
 
 	ctx := c.Request().Context()
+
+	// A restore replaces the database, and the change log lives in it, so a
+	// row written only afterwards survives while one written only before is
+	// overwritten. Record both: "started" is the only trace if the restore
+	// fails or the swap is partial, "run" lands in the restored database.
+	// The IsRunning check keeps a refused concurrent attempt from logging a
+	// restore that never began.
+	if !h.svc.IsRunning() {
+		h.recordActivity(c, "restore.started", "backup", "", manifest)
+	}
 	_, err := h.svc.RunRestore(ctx, manifest)
 	if err != nil {
 		if errors.Is(err, ErrAlreadyRunning) {
