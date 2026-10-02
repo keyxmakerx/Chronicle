@@ -582,7 +582,7 @@ templ MapEditorBody(cc *campaigns.CampaignContext, data MapViewData, mapContaine
 				if (canDmOnly) {
 					vis = el('select', 'mp-input');
 					vis.appendChild(new Option('Everyone', 'everyone'));
-					vis.appendChild(new Option('Only owners and scribes', 'dm_only'));
+					vis.appendChild(new Option('Only owners and co-DMs', 'dm_only'));
 					vis.value = origVis;
 					card.appendChild(field('Who can see it', vis));
 				}
@@ -973,7 +973,7 @@ templ MapEditorBody(cc *campaigns.CampaignContext, data MapViewData, mapContaine
 				return true;
 			}
 
-			// Map settings: the gear moved out of the removed toolbar row.
+			// Map settings opens the existing settings modal; scribes only.
 			var gear = $id('mp-settings-btn');
 			if (gear) gear.addEventListener('click', function() {
 				leaveFullscreen();
