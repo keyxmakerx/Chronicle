@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"log/slog"
 	"net/http"
+	"path"
 	"path/filepath"
 	"strconv"
 	"strings"
@@ -413,10 +414,11 @@ func (a *backdropUploaderAdapter) UploadBackdrop(ctx context.Context, campaignID
 	return mf.Filename, nil
 }
 
-// OwnsFile reports whether filename (an id plus extension, as UploadBackdrop
-// returns) is a media file belonging to campaignID.
+// OwnsFile reports whether filename (the stored "YYYY/MM/<id>.<ext>" that
+// UploadBackdrop returns) is a media file belonging to campaignID.
 func (a *backdropUploaderAdapter) OwnsFile(ctx context.Context, campaignID, filename string) (bool, error) {
-	id := strings.TrimSuffix(filename, filepath.Ext(filename))
+	base := path.Base(filename)
+	id := strings.TrimSuffix(base, path.Ext(base))
 	mf, err := a.svc.GetByID(ctx, id)
 	if err != nil {
 		var ae *apperror.AppError

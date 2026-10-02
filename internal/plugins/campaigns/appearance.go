@@ -158,13 +158,21 @@ func calmColour(name, v string, deep bool) (string, error) {
 	return out, nil
 }
 
-// pictureName accepts a media filename (an id plus extension, no path) or
-// empty. Ownership is checked by the handler; this only refuses paths.
+// pictureName accepts a stored media filename, which the media service
+// files under its month ("2026/09/<id>.png"), or empty. Ownership is
+// checked by the handler; this only refuses anything that could climb out
+// of the media directory.
 func pictureName(name, v string) (string, error) {
 	if v == "" {
 		return "", nil
 	}
-	if len(v) > 255 || strings.ContainsAny(v, `/\`) || strings.Contains(v, "..") || strings.HasPrefix(v, ".") {
+	bad := len(v) > 255 || strings.ContainsRune(v, '\\')
+	for _, part := range strings.Split(v, "/") {
+		if part == "" || strings.HasPrefix(part, ".") {
+			bad = true
+		}
+	}
+	if bad {
 		return "", apperror.NewBadRequest(fmt.Sprintf("invalid %s picture", name))
 	}
 	return v, nil
