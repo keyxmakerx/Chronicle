@@ -1083,6 +1083,20 @@
     overflow: hidden;
   }
 
+  /* ---- Admin Sidebar Pin Toggle ---- */
+
+  /* Hidden until the row is hovered or the toggle is focused; touch screens
+     have no hover, so it is always shown there. A pinned page's toggle takes
+     the accent colour. */
+  .admin-pin-btn { opacity: 0; transition: opacity 120ms ease-out; }
+  .admin-nav-row:hover .admin-pin-btn,
+  .admin-nav-row:focus-within .admin-pin-btn,
+  .admin-pin-btn:focus-visible { opacity: 1; }
+  .admin-pin-btn[aria-pressed="true"] { color: var(--color-accent, #f59e0b); }
+  @media (hover: none) {
+    .admin-pin-btn { opacity: 1; }
+  }
+
   /* ---- Mobile Sidebar Toggle ---- */
   /* Uses !important to override the static -translate-x-full class,
      which Tailwind generates AFTER translate-x-0 in the stylesheet

@@ -137,6 +137,49 @@ func (t AdminNavTree) Current(path string) (sectionID, href string) {
 	return "", ""
 }
 
+// AdminNavPinnableHrefs lists the item links an admin may pin, in menu order.
+// Home is left out: it is always one click away at the top.
+func AdminNavPinnableHrefs() []string {
+	var out []string
+	for _, s := range adminNav.Sections {
+		for _, it := range s.Items {
+			out = append(out, it.Href)
+		}
+	}
+	return out
+}
+
+// adminNavPinnedItems resolves stored pin links to menu items in pin order.
+// A link that no longer names an item (the page was renamed) is skipped, so a
+// stale pin never renders a dead row.
+func adminNavPinnedItems(pins []string) []AdminNavItem {
+	byHref := map[string]AdminNavItem{}
+	for _, s := range adminNav.Sections {
+		for _, it := range s.Items {
+			byHref[it.Href] = it
+		}
+	}
+	var out []AdminNavItem
+	seen := map[string]bool{}
+	for _, h := range pins {
+		if it, ok := byHref[h]; ok && !seen[h] {
+			seen[h] = true
+			out = append(out, it)
+		}
+	}
+	return out
+}
+
+// adminNavIsPinned reports whether href is among the admin's pins.
+func adminNavIsPinned(pins []string, href string) bool {
+	for _, p := range pins {
+		if p == href {
+			return true
+		}
+	}
+	return false
+}
+
 // adminNavBadgeCount is the attention count an item carries right now.
 func adminNavBadgeCount(ctx context.Context, it AdminNavItem) int {
 	switch it.Badge {
@@ -174,6 +217,37 @@ const adminNavXData = `{
 			this.secs = Object.assign({}, this.saved);
 			var cur = this.$el.dataset.cur;
 			if (cur) { this.secs[cur] = true; }
+		},
+		// pinToggle saves the admin's pins and swaps in the re-rendered nav.
+		// The list is read from the page at click time (every pinned item
+		// shows a pressed toggle), so a stale copy never overwrites a newer
+		// one. Alpine and htmx pick up the new block on their own.
+		pinToggle(b) {
+			if (b.disabled) return;
+			var href = b.dataset.adminPin, on = b.getAttribute('aria-pressed') !== 'true';
+			var root = document.getElementById('admin-nav');
+			var pins = [].slice.call(root.querySelectorAll('[data-admin-pin][aria-pressed="true"]'))
+				.map(function (x) { return x.dataset.adminPin; })
+				.filter(function (k) { return k !== href; });
+			if (on) pins.push(href);
+			b.disabled = true;
+			Chronicle.apiFetch('/admin/nav/pins', { method: 'PUT', body: { pins: pins } })
+				.then(function (r) {
+					if (r.ok) return r.text();
+					return r.json().catch(function () { return {}; }).then(function (j) { throw { m: j.message || j.error }; });
+				})
+				.then(function (h) {
+					var t = document.createElement('template');
+					t.innerHTML = h.trim();
+					var n = t.content.firstElementChild;
+					if (!n) { window.location.reload(); return; }
+					root.replaceWith(n);
+					if (window.htmx) window.htmx.process(n);
+				})
+				.catch(function (e) {
+					b.disabled = false;
+					Chronicle.notify((e && e.m) || 'That page could not be pinned. Check your connection and try again.', 'error');
+				});
 		},
 		toggle(id) {
 			this.secs[id] = !this.secs[id];

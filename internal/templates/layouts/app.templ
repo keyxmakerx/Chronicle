@@ -234,7 +234,10 @@ templ Sidebar() {
 // adminNav data: a Home link and foldable sections.
 templ AdminSidebarNav() {
 	{{ curSection, _ := adminNav.Current(GetActivePath(ctx)) }}
+	{{ pins := GetAdminNavPins(ctx) }}
+	{{ pinned := adminNavPinnedItems(pins) }}
 	<div
+		id="admin-nav"
 		x-data={ adminNavXData }
 		data-cur={ curSection }
 		class="border-t border-gray-700 shrink-0"
@@ -258,8 +261,16 @@ templ AdminSidebarNav() {
 		<div id="admin-nav-body" class="admin-slide" :class="open && 'expanded'" x-cloak>
 			<div hx-boost="true" hx-target="#main-content" hx-select="#main-content" hx-swap="innerHTML show:window:top">
 				@adminNavLink(adminNav.Home)
+				if len(pinned) > 0 {
+					<div role="group" aria-label="Pinned admin pages">
+						<div class="px-4 pt-3 pb-1 text-[9px] font-semibold uppercase tracking-widest text-gray-500">Pinned</div>
+						for _, it := range pinned {
+							@adminNavLink(it)
+						}
+					</div>
+				}
 				for _, sec := range adminNav.Sections {
-					@adminNavSection(sec, curSection == sec.ID)
+					@adminNavSection(sec, curSection == sec.ID, pins)
 				}
 				<div class="pb-2"></div>
 			</div>
@@ -270,7 +281,7 @@ templ AdminSidebarNav() {
 // adminNavSection is one foldable group. Its fold head is a real button that
 // carries the group's attention count, so a folded group still signals
 // trouble inside it.
-templ adminNavSection(sec AdminNavSection, isCurrent bool) {
+templ adminNavSection(sec AdminNavSection, isCurrent bool, pins []string) {
 	<div x-data={ adminNavSectionXData } data-sec={ sec.ID }>
 		<button
 			type="button"
@@ -300,15 +311,48 @@ templ adminNavSection(sec AdminNavSection, isCurrent bool) {
 		</button>
 		<div id={ "admin-nav-sec-" + sec.ID } x-show="secs[id]" x-cloak>
 			for _, it := range sec.Items {
-				@adminNavLink(it)
+				@adminNavPinnableLink(it, adminNavIsPinned(pins, it.Href))
 			}
 		</div>
+	</div>
+}
+
+// adminNavPinnableLink is a section row: the page link plus its pin toggle.
+// The toggle is a sibling of the link, not inside it, so a click cannot also
+// navigate. It shows on hover or focus, and always on touch screens (see
+// .admin-pin-btn).
+templ adminNavPinnableLink(it AdminNavItem, pinned bool) {
+	<div class="admin-nav-row relative">
+		@adminNavRow(it, true)
+		<button
+			type="button"
+			class="admin-pin-btn absolute right-2 top-1/2 -translate-y-1/2 w-6 h-6 flex items-center justify-center rounded text-gray-500 hover:text-white"
+			data-admin-pin={ it.Href }
+			aria-pressed={ strconv.FormatBool(pinned) }
+			if pinned {
+				aria-label={ "Unpin " + it.Label }
+				title={ "Unpin " + it.Label }
+			} else {
+				aria-label={ "Pin " + it.Label }
+				title={ "Pin " + it.Label }
+			}
+			@click="pinToggle($el)"
+		>
+			<i class="fa-solid fa-thumbtack text-[10px]" aria-hidden="true"></i>
+		</button>
 	</div>
 }
 
 // adminNavLink is one admin page row. The current page is marked for
 // assistive tech as well as colour.
 templ adminNavLink(it AdminNavItem) {
+	@adminNavRow(it, false)
+}
+
+// adminNavRow draws the link. makeRoom keeps the right edge clear for the pin
+// toggle that sits over it; the important modifier is needed because the base
+// link class sets its own right padding.
+templ adminNavRow(it AdminNavItem, makeRoom bool) {
 	{{ active := it.Active(GetActivePath(ctx)) }}
 	<a
 		href={ templ.SafeURL(it.Href) }
@@ -317,7 +361,8 @@ templ adminNavLink(it AdminNavItem) {
 		}
 		class={ sidebarNavLink,
 			templ.KV(sidebarNavActive, active),
-			templ.KV(sidebarNavInactive, !active) }
+			templ.KV(sidebarNavInactive, !active),
+			templ.KV("!pr-10", makeRoom) }
 	>
 		<span class="w-4 h-4 mr-3 shrink-0 flex items-center justify-center">
 			<i class={ "fa-solid " + it.Icon + " text-xs" } aria-hidden="true"></i>

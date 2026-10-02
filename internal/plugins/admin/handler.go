@@ -65,6 +65,7 @@ type Handler struct {
 	pendingCounter    PendingCounter
 	addonUsageCounter AddonUsageCounter
 	baseURL           string
+	navPins           AdminNavPinService
 }
 
 // StoragePageData holds all data needed for the combined storage management page.

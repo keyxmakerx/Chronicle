@@ -2165,6 +2165,10 @@ func (a *App) RegisterRoutes() {
 
 	// Admin plugin: site-wide management (users, campaigns, SMTP settings, storage).
 	adminHandler := admin.NewHandler(authRepo, campaignService, smtpService)
+	// Each admin's own sidebar pins; the sidebar's data names which pages can
+	// be pinned, and the layout injector below reads the pins per request.
+	adminNavPinService := admin.NewAdminNavPinService(admin.NewAdminNavPinRepository(a.DB), layouts.AdminNavPinnableHrefs())
+	adminHandler.SetNavPinService(adminNavPinService)
 	// Pass a function so the storage admin page reads the LIVE limit
 	// (matching what the body-limit middleware enforces) rather than the
 	// frozen-at-startup env value.
@@ -3682,6 +3686,13 @@ func (a *App) RegisterRoutes() {
 			// Inject degraded plugin count for admin sidebar badge.
 			if session.IsAdmin {
 				ctx = layouts.SetDegradedPluginCount(ctx, len(a.PluginHealth.DegradedPlugins()))
+				// The admin's own pins, read for this admin only. A failed
+				// read leaves the Pinned group out rather than failing the page.
+				if pins, err := adminNavPinService.Pins(ctx, session.UserID); err == nil {
+					ctx = layouts.SetAdminNavPins(ctx, pins)
+				} else {
+					slog.Warn("reading admin nav pins", slog.String("user_id", session.UserID), slog.Any("error", err))
+				}
 			}
 		}
 

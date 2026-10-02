@@ -45,6 +45,7 @@ const (
 	keyTopbarStyle         ctxKey = "layout_topbar_style"
 	keyTopbarContent       ctxKey = "layout_topbar_content"
 	keyDegradedPluginCount ctxKey = "layout_degraded_plugin_count"
+	keyAdminNavPins        ctxKey = "layout_admin_nav_pins"
 	keyFontFamily          ctxKey = "layout_font_family"
 	keyUserCampaigns       ctxKey = "layout_user_campaigns"
 )
@@ -804,6 +805,18 @@ func GetTopbarContent(ctx context.Context) *TopbarContentData {
 // Used by the admin sidebar to show a warning badge on the Database link.
 func SetDegradedPluginCount(ctx context.Context, count int) context.Context {
 	return context.WithValue(ctx, keyDegradedPluginCount, count)
+}
+
+// SetAdminNavPins stores the signed-in admin's own pinned admin pages
+// (sidebar item links, in pin order).
+func SetAdminNavPins(ctx context.Context, pins []string) context.Context {
+	return context.WithValue(ctx, keyAdminNavPins, pins)
+}
+
+// GetAdminNavPins returns the admin's pinned page links, or nil.
+func GetAdminNavPins(ctx context.Context) []string {
+	pins, _ := ctx.Value(keyAdminNavPins).([]string)
+	return pins
 }
 
 // GetDegradedPluginCount returns the number of unhealthy plugins, or 0.

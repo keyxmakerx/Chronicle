@@ -25,6 +25,9 @@ func RegisterRoutes(e *echo.Echo, h *Handler, authService auth.AuthService, smtp
 	// alone cannot grant admin, lock people out or destroy data.
 	reauth := auth.RequireReauth(authService)
 
+	// The admin's own sidebar pins (the whole ordered list).
+	admin.PUT("/nav/pins", h.UpdateNavPins)
+
 	// User management.
 	admin.GET("/users", h.Users)
 	admin.PUT("/users/:id/admin", h.ToggleAdmin, reauth)

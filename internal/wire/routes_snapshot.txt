@@ -691,6 +691,7 @@ PUT	/maps/:mid/tokens/:tid	internal/plugins/maps/routes.go
 PUT	/members/:uid/character	internal/plugins/campaigns/routes.go
 PUT	/members/:uid/role	internal/plugins/campaigns/routes.go
 PUT	/nav-pins	internal/plugins/campaigns/routes.go
+PUT	/nav/pins	internal/plugins/admin/routes.go
 PUT	/notes/:nid/attachments/:aid/transcript	internal/widgets/notes/routes.go
 PUT	/notes/:noteID	internal/plugins/syncapi/routes.go
 PUT	/notes/:noteId	internal/widgets/notes/routes.go
