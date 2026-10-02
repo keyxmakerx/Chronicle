@@ -1,7 +1,6 @@
 package admin
 
 import (
-	"fmt"
 	"github.com/keyxmakerx/chronicle/internal/plugins/auth"
 	"github.com/keyxmakerx/chronicle/internal/templates/components"
 	"github.com/keyxmakerx/chronicle/internal/templates/layouts"
@@ -36,96 +35,52 @@ templ AdminUsersList(data UserListData) {
 			<input type="hidden" name="f" value={ data.View.Filter } form={ data.View.RegionID + "-search" }/>
 		}
 		@adminListChips(data.View)
-		<div class="card p-0 overflow-hidden">
-				<table class="w-full">
-					<thead>
-						<tr class="bg-surface-alt border-b border-edge">
-							<th class="text-left px-4 py-3 text-xs font-semibold text-fg-secondary uppercase tracking-wider">Name</th>
-							<th class="text-left px-4 py-3 text-xs font-semibold text-fg-secondary uppercase tracking-wider">Email</th>
-							<th class="text-left px-4 py-3 text-xs font-semibold text-fg-secondary uppercase tracking-wider">Role</th>
-							<th class="text-left px-4 py-3 text-xs font-semibold text-fg-secondary uppercase tracking-wider">Joined</th>
-							<th class="text-right px-4 py-3 text-xs font-semibold text-fg-secondary uppercase tracking-wider">Actions</th>
-						</tr>
-					</thead>
-					<tbody class="divide-y divide-edge">
-						if len(users) > 0 {
-							for _, user := range users {
-								<tr class="hover:bg-surface-alt transition-colors">
-									<td class="px-4 py-3 text-sm font-medium text-fg">{ user.DisplayName }</td>
-									<td class="px-4 py-3 text-sm text-fg-secondary">{ user.Email }</td>
-									<td class="px-4 py-3">
-										if user.IsDisabled {
-											<span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-red-50 dark:bg-red-900/30 text-red-600 dark:text-red-400">Disabled</span>
-										} else if user.IsAdmin {
-											<span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-accent/10 text-accent">Admin</span>
-										} else {
-											<span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-surface-alt text-fg-secondary">User</span>
-										}
-									</td>
-									<td class="px-4 py-3 text-sm text-fg-muted">
-										{ user.CreatedAt.Format("Jan 2, 2006") }
-									</td>
-									<td class="px-4 py-3 text-right space-x-2">
-										if user.IsAdmin {
-											<button
-												hx-put={ fmt.Sprintf("/admin/users/%s/admin", user.ID) }
-												hx-confirm="Remove admin privileges from this user?"
-												hx-headers={ fmt.Sprintf(`{"X-CSRF-Token":"%s"}`, csrfToken) }
-												class="text-sm link-danger transition-colors"
-											>
-												Remove Admin
-											</button>
-										} else {
-											<button
-												hx-put={ fmt.Sprintf("/admin/users/%s/admin", user.ID) }
-												hx-confirm="Grant admin privileges to this user?"
-												hx-headers={ fmt.Sprintf(`{"X-CSRF-Token":"%s"}`, csrfToken) }
-												class="text-sm text-accent hover:text-accent-hover transition-colors"
-											>
-												Make Admin
-											</button>
-										}
-										if !user.IsAdmin {
-											if user.IsDisabled {
-												<button
-													hx-put={ fmt.Sprintf("/admin/security/users/%s/enable", user.ID) }
-													hx-confirm="Re-enable this user account?"
-													hx-headers={ fmt.Sprintf(`{"X-CSRF-Token":"%s"}`, csrfToken) }
-													class="text-sm text-emerald-600 hover:text-emerald-800 dark:text-emerald-400 dark:hover:text-emerald-300 transition-colors"
-												>
-													Enable
-												</button>
-											} else {
-												<button
-													hx-put={ fmt.Sprintf("/admin/security/users/%s/disable", user.ID) }
-													hx-confirm="Disable this user account? They will be immediately logged out."
-													hx-headers={ fmt.Sprintf(`{"X-CSRF-Token":"%s"}`, csrfToken) }
-													class="text-sm text-orange-600 hover:text-orange-800 dark:text-orange-400 dark:hover:text-orange-300 transition-colors"
-												>
-													Disable
-												</button>
-											}
-										}
-										<button
-											hx-post={ fmt.Sprintf("/admin/security/users/%s/force-logout", user.ID) }
-											hx-confirm="Force logout all sessions for this user?"
-											hx-headers={ fmt.Sprintf(`{"X-CSRF-Token":"%s"}`, csrfToken) }
-											class="text-sm text-fg-muted hover:text-fg transition-colors"
-											title="Force logout all sessions"
-											aria-label={ "Force logout all sessions for " + user.DisplayName }
-										>
-											<i class="fa-solid fa-power-off"></i>
-										</button>
-									</td>
-								</tr>
-							}
-						} else {
-							@adminListEmpty(data.View, 5)
+		<div class="card p-0 overflow-hidden hidden md:block">
+			<table class="w-full">
+				<thead>
+					<tr class="bg-surface-alt border-b border-edge">
+						<th class="text-left px-4 py-3 text-xs font-semibold text-fg-secondary uppercase tracking-wider">Name</th>
+						<th class="text-left px-4 py-3 text-xs font-semibold text-fg-secondary uppercase tracking-wider">Email</th>
+						<th class="text-left px-4 py-3 text-xs font-semibold text-fg-secondary uppercase tracking-wider">Role</th>
+						<th class="text-left px-4 py-3 text-xs font-semibold text-fg-secondary uppercase tracking-wider">Joined</th>
+						<th class="text-right px-4 py-3 text-xs font-semibold text-fg-secondary uppercase tracking-wider">Actions</th>
+					</tr>
+				</thead>
+				<tbody class="divide-y divide-edge">
+					if len(users) > 0 {
+						for _, user := range users {
+							<tr class="hover:bg-surface-alt transition-colors">
+								<td class="px-4 py-3 text-sm font-medium text-fg">{ user.DisplayName }</td>
+								<td class="px-4 py-3 text-sm text-fg-secondary">{ user.Email }</td>
+								<td class="px-4 py-3">
+									<span class={ "inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium " + userRoleChipClass(user) }>{ userRoleLabel(user) }</span>
+								</td>
+								<td class="px-4 py-3 text-sm text-fg-muted">
+									{ user.CreatedAt.Format("Jan 2, 2006") }
+								</td>
+								<td class="px-4 py-3 text-right space-x-2">
+									for _, a := range userRowActions(user) {
+										@adminInlineAction(a, csrfToken)
+									}
+								</td>
+							</tr>
 						}
-					</tbody>
-				</table>
-			</div>
-			@components.Pagination(components.PaginationData{
+					} else {
+						@adminListEmpty(data.View, 5)
+					}
+				</tbody>
+			</table>
+		</div>
+		<div class="card p-0 divide-y divide-edge md:hidden" data-testid="users-cards">
+			if len(users) > 0 {
+				for _, user := range users {
+					@adminCardRow(avatarInitial(user.DisplayName), user.DisplayName, "", userRoleLabel(user), userRoleChipClass(user), user.Email+" · joined "+user.CreatedAt.Format("Jan 2, 2006"), csrfToken, userCardActions(user))
+				}
+			} else {
+				@adminListEmptyCard(data.View)
+			}
+		</div>
+		@components.Pagination(components.PaginationData{
 				CurrentPage: data.View.Page,
 				PerPage:     data.View.PerPage,
 				Total:       data.View.Total,
