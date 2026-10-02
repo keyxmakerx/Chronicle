@@ -16,8 +16,11 @@ import (
 // invocation is a hard reset of every shared resource. Combined with
 // the in-process single-flight, click-flooding cannot start a second
 // restore — at worst, the operator sees 409s.
-func RegisterRoutes(admin *echo.Group, h *Handler) {
+//
+// reauth runs before the rate limit so an unconfirmed attempt does not use
+// up the hour's single restore.
+func RegisterRoutes(admin *echo.Group, h *Handler, reauth echo.MiddlewareFunc) {
 	g := admin.Group("/restore")
 	g.GET("", h.Page)
-	g.POST("/run", h.Run, middleware.RateLimit(1, 1*time.Hour))
+	g.POST("/run", h.Run, reauth, middleware.RateLimit(1, 1*time.Hour))
 }

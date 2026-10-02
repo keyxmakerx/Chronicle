@@ -25,7 +25,12 @@ import (
 // CustomizePage renders the Campaign Customization Hub with tabbed interface.
 templ CustomizePage(cc *CampaignContext, entityTypes []SettingsEntityType, csrfToken string) {
 	@layouts.App(cc.Campaign.Name + " - Customize") {
-		<div class="h-full flex flex-col -mx-5 -my-4" x-data="{ tab: 'layouts' }">
+		// The page body below bleeds to the edges with negative margins, so
+		// the header gets its own padded wrapper above it.
+		<div class="px-4 pt-4 pb-6">
+			@layouts.ManageHeader("Customize", "manage:customize")
+		</div>
+		<div class="h-full flex flex-col -mx-5 -mb-4" x-data="{ tab: 'layouts' }">
 			<!-- Header -->
 			<div class="bg-surface border-b border-edge px-6 py-3 flex items-center justify-between shrink-0">
 				<div class="flex items-center gap-3">
@@ -39,7 +44,7 @@ templ CustomizePage(cc *CampaignContext, entityTypes []SettingsEntityType, csrfT
 						</svg>
 					</a>
 					<div>
-						<h1 class="text-base font-semibold text-fg">Campaign Customization</h1>
+						<h2 class="text-base font-semibold text-fg">Campaign Customization</h2>
 						<p class="text-[11px] text-fg-secondary">Layouts, templates, and appearance</p>
 					</div>
 				</div>

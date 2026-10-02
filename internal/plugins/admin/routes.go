@@ -20,10 +20,13 @@ func RegisterRoutes(e *echo.Echo, h *Handler, authService auth.AuthService, smtp
 	// Dashboard.
 	admin.GET("", h.Dashboard)
 
-	// Reauth middleware for sensitive operations — requires recent password
-	// re-confirmation (within 5 minutes). Applied to ToggleAdmin, DisableUser,
-	// EnableUser, and ForceLogoutUser.
+	// Reauth middleware for sensitive operations: requires a password
+	// re-confirmation within the last 5 minutes, so a hijacked admin session
+	// alone cannot grant admin, lock people out or destroy data.
 	reauth := auth.RequireReauth(authService)
+
+	// The admin's own sidebar pins (the whole ordered list).
+	admin.PUT("/nav/pins", h.UpdateNavPins)
 
 	// User management.
 	admin.GET("/users", h.Users)
@@ -31,9 +34,12 @@ func RegisterRoutes(e *echo.Echo, h *Handler, authService auth.AuthService, smtp
 
 	// Campaign management.
 	admin.GET("/campaigns", h.Campaigns)
-	admin.DELETE("/campaigns/:id", h.DeleteCampaign)
+	admin.DELETE("/campaigns/:id", h.DeleteCampaign, reauth)
 	admin.POST("/campaigns/:id/join", h.JoinCampaign)
 	admin.DELETE("/campaigns/:id/leave", h.LeaveCampaign)
+
+	// Site-wide log of admin changes.
+	admin.GET("/activity", h.Activity)
 
 	// Storage management.
 	admin.GET("/storage", h.Storage)
@@ -49,9 +55,9 @@ func RegisterRoutes(e *echo.Echo, h *Handler, authService auth.AuthService, smtp
 
 	// Data hygiene dashboard.
 	admin.GET("/data-hygiene", h.DataHygiene)
-	admin.DELETE("/data-hygiene/orphaned-media", h.PurgeOrphanedMediaAPI)
-	admin.DELETE("/data-hygiene/orphaned-api-keys", h.PurgeOrphanedAPIKeysAPI)
-	admin.DELETE("/data-hygiene/stale-files", h.PurgeStaleFilesAPI)
+	admin.DELETE("/data-hygiene/orphaned-media", h.PurgeOrphanedMediaAPI, reauth)
+	admin.DELETE("/data-hygiene/orphaned-api-keys", h.PurgeOrphanedAPIKeysAPI, reauth)
+	admin.DELETE("/data-hygiene/stale-files", h.PurgeStaleFilesAPI, reauth)
 
 	// System diagnostics.
 	admin.GET("/systems", h.Systems)
@@ -68,7 +74,7 @@ func RegisterRoutes(e *echo.Echo, h *Handler, authService auth.AuthService, smtp
 	admin.GET("/database", h.Database)
 	admin.GET("/database/schema", h.DatabaseSchemaAPI)
 	admin.GET("/database/status", h.DatabaseStatusAPI)
-	admin.POST("/database/migrations/apply", h.ApplyMigrationsAPI)
+	admin.POST("/database/migrations/apply", h.ApplyMigrationsAPI, reauth)
 
 	// SMTP settings (delegates to SMTP plugin handler).
 	if smtpHandler != nil {

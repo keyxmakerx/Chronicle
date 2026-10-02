@@ -119,6 +119,12 @@ func (m *mockCampaignRepoForInvites) ListByUser(context.Context, string, ListOpt
 func (m *mockCampaignRepoForInvites) ListAll(context.Context, ListOptions) ([]Campaign, int, error) {
 	return nil, 0, nil
 }
+func (m *mockCampaignRepoForInvites) SearchAll(context.Context, AdminSearchOptions) ([]Campaign, error) {
+	return nil, nil
+}
+func (m *mockCampaignRepoForInvites) CountBySystem(context.Context, string) ([]SystemCount, error) {
+	return nil, nil
+}
 func (m *mockCampaignRepoForInvites) ListPublic(context.Context, int) ([]Campaign, error) {
 	return nil, nil
 }

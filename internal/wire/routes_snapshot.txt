@@ -113,6 +113,7 @@ GET	/:typeSlug	internal/plugins/entities/routes.go
 GET	/about	internal/app/routes.go
 GET	/account	internal/plugins/auth/routes.go
 GET	/account/email/verify	internal/plugins/auth/routes.go
+GET	/activity	internal/plugins/admin/routes.go
 GET	/activity	internal/plugins/audit/routes.go
 GET	/activity/embed	internal/plugins/audit/routes.go
 GET	/activity/fragment	internal/plugins/audit/routes.go
@@ -697,6 +698,7 @@ PUT	/maps/:mid/tokens/:tid	internal/plugins/maps/routes.go
 PUT	/members/:uid/character	internal/plugins/campaigns/routes.go
 PUT	/members/:uid/role	internal/plugins/campaigns/routes.go
 PUT	/nav-pins	internal/plugins/campaigns/routes.go
+PUT	/nav/pins	internal/plugins/admin/routes.go
 PUT	/notes/:nid/attachments/:aid/transcript	internal/widgets/notes/routes.go
 PUT	/notes/:noteID	internal/plugins/syncapi/routes.go
 PUT	/notes/:noteId	internal/widgets/notes/routes.go

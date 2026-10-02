@@ -1,5 +1,5 @@
-// members.templ renders the campaign member management page with the
-// member list, add member form, and role change controls.
+// members.templ renders the People page and the member list it is built
+// around: add member form, role change and remove controls.
 
 package campaigns
 
@@ -8,16 +8,13 @@ import (
 	"github.com/keyxmakerx/chronicle/internal/templates/layouts"
 )
 
-// CampaignMembersPage renders the full members page.
-templ CampaignMembersPage(cc *CampaignContext, members []CampaignMember, csrfToken, errMsg string) {
-	@layouts.App(cc.Campaign.Name + " - Members") {
-		<div class="max-w-3xl mx-auto">
-			<div class="flex items-center justify-between mb-6">
-				<h1 class="text-2xl font-bold text-fg">Members</h1>
-				<a href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s", cc.Campaign.ID)) } class="btn-secondary text-sm">Back</a>
-			</div>
-
-			@MemberListComponent(cc, members, csrfToken, errMsg)
+// CampaignMembersPage renders the People page: the one place the owner
+// manages members, invites and ownership.
+templ CampaignMembersPage(cc *CampaignContext, members []CampaignMember, transfer *OwnershipTransfer, csrfToken, errMsg string, smtpConfigured bool) {
+	@layouts.App(cc.Campaign.Name + " - People") {
+		<div class="max-w-4xl mx-auto">
+			@layouts.ManageHeader("People", "manage:members")
+			@peopleSections(cc, members, transfer, csrfToken, errMsg, smtpConfigured)
 		</div>
 	}
 }
@@ -61,7 +58,7 @@ templ MemberListComponent(cc *CampaignContext, members []CampaignMember, csrfTok
 		}
 
 		// Member table.
-		<div class="card overflow-hidden">
+		<div class="card overflow-x-auto">
 			<table class="w-full">
 				<thead>
 					<tr class="bg-surface-alt border-b border-edge">

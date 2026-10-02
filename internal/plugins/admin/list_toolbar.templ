@@ -1,0 +1,96 @@
+package admin
+
+import "fmt"
+
+// adminListSearch is the search box of a searchable admin list. It is a plain
+// GET form, so it works without JavaScript; with HTMX it swaps only the list
+// region and keeps the URL shareable. The form sits outside the swapped
+// region so typing never loses focus.
+templ adminListSearch(v listView) {
+	<form
+		id={ v.RegionID + "-search" }
+		method="get"
+		action={ templ.SafeURL(v.BaseURL) }
+		role="search"
+		class="flex items-center gap-2"
+		hx-get={ v.BaseURL }
+		hx-target={ "#" + v.RegionID }
+		hx-swap="outerHTML"
+		hx-push-url="true"
+		hx-trigger="input delay:300ms, submit"
+	>
+		<label for={ v.RegionID + "-q" } class="sr-only">Search</label>
+		<input
+			id={ v.RegionID + "-q" }
+			type="search"
+			name="q"
+			value={ v.Query }
+			maxlength="100"
+			placeholder={ v.Placeholder }
+			autocomplete="off"
+			class="input flex-1"
+		/>
+		<button type="submit" class="btn-secondary text-sm">Search</button>
+	</form>
+}
+
+// adminListChips renders the filter chips with their counts. Each chip is a
+// real link, so it works without JavaScript and can be opened in a new tab.
+templ adminListChips(v listView) {
+	<div class="flex flex-wrap items-center gap-2" role="group" aria-label="Filter">
+		for _, chip := range v.Chips {
+			<a
+				href={ templ.SafeURL(v.ChipURL(chip.Value)) }
+				hx-get={ v.ChipURL(chip.Value) }
+				hx-target={ "#" + v.RegionID }
+				hx-swap="outerHTML"
+				hx-push-url="true"
+				if chip.Active {
+					aria-current="true"
+					class="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-sm font-medium bg-accent/10 text-accent border border-accent/30"
+				} else {
+					class="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-sm font-medium bg-surface-alt text-fg-secondary border border-edge hover:text-fg transition-colors"
+				}
+			>
+				{ chip.Label }
+				<span class="text-xs opacity-80">{ fmt.Sprintf("%d", chip.Count) }</span>
+			</a>
+		}
+	</div>
+}
+
+// adminListEmpty is the empty row of a searchable list. It says whether
+// nothing exists or nothing matches, and offers a way out of a search.
+templ adminListEmpty(v listView, colspan int) {
+	<tr>
+		<td colspan={ fmt.Sprintf("%d", colspan) } class="px-4 py-12 text-center">
+			if v.Query != "" {
+				<div class="text-fg-muted text-sm">
+					No { v.Noun } match “{ v.Query }”.
+					<a
+						href={ templ.SafeURL(v.ClearSearchURL()) }
+						hx-get={ v.ClearSearchURL() }
+						hx-target={ "#" + v.RegionID }
+						hx-swap="outerHTML"
+						hx-push-url="true"
+						class="text-accent hover:text-accent-hover ml-1"
+					>Clear search</a>
+				</div>
+			} else if v.Filter != "" {
+				<div class="text-fg-muted text-sm">
+					No { v.Noun } in this view.
+					<a
+						href={ templ.SafeURL(v.BaseURL) }
+						hx-get={ v.BaseURL }
+						hx-target={ "#" + v.RegionID }
+						hx-swap="outerHTML"
+						hx-push-url="true"
+						class="text-accent hover:text-accent-hover ml-1"
+					>Show all</a>
+				</div>
+			} else {
+				<div class="text-fg-muted text-sm">No { v.Noun } yet.</div>
+			}
+		</td>
+	</tr>
+}

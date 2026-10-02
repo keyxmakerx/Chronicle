@@ -24,6 +24,7 @@ type CORSOriginLister interface {
 // Handler handles sync API HTTP requests for both the management UI
 // (key management, dashboards) and the actual sync API endpoints.
 type Handler struct {
+	activity         ActivityRecorder
 	service          SyncAPIService
 	syncMapSvc       SyncMappingService
 	corsOriginLister CORSOriginLister
@@ -527,6 +528,8 @@ func (h *Handler) BlockIP(c echo.Context) error {
 		return err
 	}
 
+	h.recordActivity(c, "ipblock.changed", "ip_block", "", c.FormValue("ip_address"))
+
 	return middleware.HTMXRedirect(c, "/admin/api")
 }
 
@@ -540,6 +543,8 @@ func (h *Handler) UnblockIP(c echo.Context) error {
 	if err := h.service.UnblockIP(c.Request().Context(), blockID); err != nil {
 		return err
 	}
+
+	h.recordActivity(c, "ipblock.changed", "ip_block", strconv.Itoa(blockID), "")
 
 	return middleware.HTMXRedirect(c, "/admin/api")
 }
@@ -564,6 +569,8 @@ func (h *Handler) AdminToggleKey(c echo.Context) error {
 		}
 	}
 
+	h.recordActivity(c, "apikey.changed", "api_key", strconv.Itoa(keyID), "")
+
 	return middleware.HTMXRedirect(c, "/admin/api")
 }
 
@@ -578,6 +585,8 @@ func (h *Handler) AdminRevokeKey(c echo.Context) error {
 		return err
 	}
 
+	h.recordActivity(c, "apikey.changed", "api_key", strconv.Itoa(keyID), "")
+
 	return middleware.HTMXRedirect(c, "/admin/api")
 }
 
@@ -585,17 +594,17 @@ func (h *Handler) AdminRevokeKey(c echo.Context) error {
 
 // AdminDashboardData holds all data for the admin API monitoring dashboard.
 type AdminDashboardData struct {
-	Stats              *APIStats
-	RequestSeries      []TimeSeriesPoint
-	SecuritySeries     []TimeSeriesPoint
-	TopIPs             []TopEntry
-	TopPaths           []TopEntry
-	TopKeys            []TopEntry
-	SecurityEvents     []SecurityEvent
-	IPBlocks           []IPBlock
-	APIKeys            []APIKey
-	TotalKeys          int
-	CampaignSyncStats  []CampaignSyncStats
-	CORSOrigins        []string
-	CSRFToken          string
+	Stats             *APIStats
+	RequestSeries     []TimeSeriesPoint
+	SecuritySeries    []TimeSeriesPoint
+	TopIPs            []TopEntry
+	TopPaths          []TopEntry
+	TopKeys           []TopEntry
+	SecurityEvents    []SecurityEvent
+	IPBlocks          []IPBlock
+	APIKeys           []APIKey
+	TotalKeys         int
+	CampaignSyncStats []CampaignSyncStats
+	CORSOrigins       []string
+	CSRFToken         string
 }

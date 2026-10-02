@@ -78,7 +78,7 @@ func (h *Handler) builtInSettingsTabs(
 			Icon:      "fa-solid fa-gear",
 			MinRole:   RolePlayer,
 			SortOrder: 10,
-			Content:   settingsGeneralTab(cc, csrfToken, systemOptionsJSON(systemOptions)),
+			Content:   settingsGeneralTab(cc, csrfToken),
 		},
 		// Slot 20 (Features) retired; per-campaign feature toggles
 		// moved to the top-level Extensions hub.
@@ -88,7 +88,7 @@ func (h *Handler) builtInSettingsTabs(
 			Icon:      "fa-solid fa-users",
 			MinRole:   RolePlayer,
 			SortOrder: 30,
-			Content:   settingsPeopleTab(cc, members, transfer, csrfToken, smtpConfigured),
+			Content:   settingsPeopleLink(cc),
 		},
 		{
 			ID:        "integrations",

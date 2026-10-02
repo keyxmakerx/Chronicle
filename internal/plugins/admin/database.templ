@@ -12,6 +12,7 @@ import (
 	"net/url"
 	"time"
 
+	"github.com/keyxmakerx/chronicle/internal/templates/components"
 	"github.com/keyxmakerx/chronicle/internal/templates/layouts"
 )
 
@@ -20,11 +21,9 @@ templ AdminDatabasePage(core CoreMigrationStatus, statuses []PluginMigrationStat
 	@layouts.App("Database - Admin") {
 		<div class="max-w-7xl mx-auto space-y-5" x-data="{ tab: 'migrations' }">
 			<!-- Header -->
+			@components.AdminGroupHeading(components.AdminTabsHealth, "/admin/database")
 			<div class="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
 				<div>
-					<h1 class="text-xl font-bold text-fg">
-						<i class="fa-solid fa-database mr-2 text-indigo-500"></i>Database
-					</h1>
 					<p class="text-sm text-fg-secondary mt-0.5">
 						Core schema <span class="font-mono font-semibold text-fg">v{ fmt.Sprintf("%d", core.Version) }</span>
 						&middot; { fmt.Sprintf("%d", tableCount) } tables &middot; migrations, health, backups &amp; schema in one place.

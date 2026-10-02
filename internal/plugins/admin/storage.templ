@@ -6,6 +6,7 @@ import (
 	"time"
 	"github.com/keyxmakerx/chronicle/internal/plugins/auth"
 	"github.com/keyxmakerx/chronicle/internal/plugins/campaigns"
+	"github.com/keyxmakerx/chronicle/internal/templates/components"
 	"github.com/keyxmakerx/chronicle/internal/templates/layouts"
 )
 
@@ -120,11 +121,9 @@ func formatTimeRemaining(t *time.Time) string {
 templ AdminStoragePage(data StoragePageData) {
 	@layouts.App("Storage - Admin") {
 		<div class="max-w-6xl mx-auto space-y-4" x-data="{ tab: 'files' }">
-			<!-- Header with inline stats -->
-			<div class="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2">
-				<h1 class="text-xl font-bold text-fg">
-					<i class="fa-solid fa-hard-drive mr-2 text-indigo-500"></i>Storage
-				</h1>
+			@components.AdminGroupHeading(components.AdminTabsStorage, "/admin/storage")
+			<!-- Inline stats -->
+			<div class="flex flex-wrap items-center gap-2">
 				<div class="flex items-center gap-4 text-sm">
 					<span class="text-fg-secondary">
 						<i class="fa-solid fa-database mr-1"></i>

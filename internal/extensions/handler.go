@@ -14,15 +14,16 @@ import (
 
 	"github.com/keyxmakerx/chronicle/internal/apperror"
 	"github.com/keyxmakerx/chronicle/internal/middleware"
-	"github.com/keyxmakerx/chronicle/internal/systems"
 	"github.com/keyxmakerx/chronicle/internal/plugins/auth"
 	"github.com/keyxmakerx/chronicle/internal/plugins/campaigns"
+	"github.com/keyxmakerx/chronicle/internal/systems"
 )
 
 // Handler serves HTTP endpoints for extension management.
 type Handler struct {
-	svc    ExtensionService
-	extDir string // Root dir for serving extension assets.
+	activity ActivityRecorder
+	svc      ExtensionService
+	extDir   string // Root dir for serving extension assets.
 }
 
 // NewHandler creates a new extension handler.
@@ -115,6 +116,8 @@ func (h *Handler) InstallExtension(c echo.Context) error {
 		return err
 	}
 
+	h.recordActivity(c, "extension.installed", "extension", ext.ID, ext.Name)
+
 	if middleware.IsHTMX(c) {
 		// Re-render the extension list.
 		exts, _ := h.svc.List(c.Request().Context())
@@ -181,9 +184,17 @@ func (h *Handler) UpdateExtension(c echo.Context) error {
 func (h *Handler) UninstallExtension(c echo.Context) error {
 	extID := c.Param("extID")
 
+	// Read the name first: the row is gone after the uninstall.
+	var label string
+	if e, err := h.svc.GetByExtID(c.Request().Context(), extID); err == nil && e != nil {
+		label = e.Name
+	}
+
 	if err := h.svc.Uninstall(c.Request().Context(), extID); err != nil {
 		return err
 	}
+
+	h.recordActivity(c, "extension.uninstalled", "extension", extID, label)
 
 	if middleware.IsHTMX(c) {
 		exts, _ := h.svc.List(c.Request().Context())

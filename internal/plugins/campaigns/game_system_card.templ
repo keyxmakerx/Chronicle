@@ -1,0 +1,101 @@
+// game_system_card.templ — the game system picker on the Apps & game
+// system page.
+//
+// Server values (saved system id, option list, campaign id) reach Alpine
+// through data-* attributes and the x-data object is a constant string, so
+// an owner-supplied "custom:<url>" system id can never become script text.
+
+package campaigns
+
+// gameSystemCard renders the picker. Saving reuses the existing
+// PUT /campaigns/:id/system endpoint; nothing about how the choice is stored
+// changes, only where the control lives.
+templ gameSystemCard(cc *CampaignContext, systemOptionsJSON string) {
+	<section class="card p-4" aria-labelledby="game-system-heading" data-game-system-card>
+		<h2 id="game-system-heading" class="text-sm font-semibold text-fg mb-1">Game system</h2>
+		<p class="text-xs text-fg-secondary mb-3">Rules, tooltips and reference data your campaign uses.</p>
+		<div
+			data-saved-system={ cc.Campaign.ParseSettings().SystemID }
+			data-systems={ systemOptionsJSON }
+			data-campaign-id={ cc.Campaign.ID }
+			x-data="{
+				systemId: '',
+				customUrl: '',
+				isCustom: false,
+				saving: false,
+				saved: false,
+				failed: false,
+				systems: [],
+				init() {
+					var d = this.$el.dataset;
+					var saved = d.savedSystem || '';
+					try { this.systems = JSON.parse(d.systems || '[]'); } catch (e) { this.systems = []; }
+					if (saved.indexOf('custom:') === 0) {
+						this.customUrl = saved.substring(7);
+						this.isCustom = true;
+						saved = 'custom';
+					} else if (saved && !this.systems.find(function (s) { return s.id === saved; })) {
+						this.systems.push({ id: saved, name: saved + ' (not loaded)', has_error: true });
+					}
+					var self = this;
+					// Wait a tick so the option list exists before x-model selects.
+					this.$nextTick(function () { self.systemId = saved; });
+				},
+				get selectedHasError() {
+					var id = this.systemId;
+					var sel = this.systems.find(function (s) { return s.id === id; });
+					return !!(sel && sel.has_error);
+				},
+				async save() {
+					this.saving = true;
+					this.saved = false;
+					this.failed = false;
+					var id = this.systemId;
+					if (id === 'custom' && this.customUrl.trim()) {
+						id = 'custom:' + this.customUrl.trim();
+					}
+					var res = await Chronicle.apiFetch('/campaigns/' + this.$el.dataset.campaignId + '/system', {
+						method: 'PUT',
+						body: { system_id: id }
+					});
+					this.saving = false;
+					if (res.ok) {
+						this.saved = true;
+						var self = this;
+						setTimeout(function () { self.saved = false; }, 3000);
+					} else {
+						this.failed = true;
+					}
+				},
+				onChange() {
+					this.isCustom = (this.systemId === 'custom');
+					if (!this.isCustom) this.save();
+				}
+			}"
+		>
+			<label for="game-system-select" class="sr-only">Game system</label>
+			<select id="game-system-select" x-model="systemId" @change="onChange()" class="input w-full mb-2">
+				<option value="">None</option>
+				<template x-for="sys in systems" :key="sys.id">
+					<option :value="sys.id" x-text="sys.name"></option>
+				</template>
+				<option value="custom">Custom...</option>
+			</select>
+			<div x-show="selectedHasError" x-transition x-cloak class="flex items-start gap-2 p-3 rounded-lg bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800 mb-2">
+				<i class="fa-solid fa-triangle-exclamation text-amber-500 mt-0.5 shrink-0" aria-hidden="true"></i>
+				<p class="text-xs text-amber-700 dark:text-amber-300">
+					This game system failed to load. Widgets, tooltips and reference data may be unavailable. A site admin can see details under <b>Admin &gt; Systems</b>.
+				</p>
+			</div>
+			<div x-show="isCustom" x-transition x-cloak class="flex flex-wrap items-center gap-2 mt-2">
+				<input type="url" x-model="customUrl" aria-label="Custom game system manifest URL" class="input flex-1 min-w-0" placeholder="https://example.com/system/manifest.json"/>
+				<button type="button" class="btn-primary text-sm" @click="save()">Install</button>
+			</div>
+			<div class="flex items-center gap-2 pt-1" aria-live="polite">
+				<span x-show="saving" x-cloak class="text-xs text-fg-muted"><i class="fa-solid fa-spinner fa-spin" aria-hidden="true"></i> Saving...</span>
+				<span x-show="saved" x-cloak x-transition class="text-xs text-green-600">Saved</span>
+				<span x-show="failed" x-cloak class="text-xs text-red-600">Could not save. Try again.</span>
+			</div>
+		</div>
+	</section>
+}

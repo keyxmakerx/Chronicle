@@ -1292,7 +1292,7 @@ func (h *Handler) OwnerDashboard(c echo.Context) error {
 	}
 
 	csrfToken := middleware.GetCSRFToken(c)
-	return middleware.Render(c, http.StatusOK, OwnerDashboardPage(cc, recentEntities, csrfToken))
+	return middleware.Render(c, http.StatusOK, OwnerDashboardPage(cc, recentEntities, h.needsYou(c.Request().Context(), cc), csrfToken))
 }
 
 // GetOwnerDashboardLayout returns the owner dashboard layout JSON (GET /campaigns/:id/owner-dashboard-layout).
@@ -1426,8 +1426,25 @@ func (h *Handler) Members(c echo.Context) error {
 		return c.JSON(http.StatusOK, members)
 	}
 
-	// Redirect HTML requests to the unified settings page.
-	return c.Redirect(http.StatusFound, fmt.Sprintf("/campaigns/%s/settings?tab=people", cc.Campaign.ID))
+	// The JSON branch above stays open to every member (editor widgets list
+	// members for mentions), but the People page itself is the owner's.
+	if cc.MemberRole < RoleOwner {
+		return apperror.NewForbidden("insufficient permissions")
+	}
+	members, err := h.service.ListMembers(c.Request().Context(), cc.Campaign.ID)
+	if err != nil {
+		return err
+	}
+	return h.renderPeoplePage(c, cc, members, "")
+}
+
+// renderPeoplePage renders the People page. The add-member error path shares
+// it so a failed add redraws the whole page, not a bare list.
+func (h *Handler) renderPeoplePage(c echo.Context, cc *CampaignContext, members []CampaignMember, errMsg string) error {
+	ctx := c.Request().Context()
+	transfer, _ := h.service.GetPendingTransfer(ctx, cc.Campaign.ID)
+	smtpConfigured := h.smtpChecker != nil && h.smtpChecker.IsConfigured(ctx)
+	return middleware.Render(c, http.StatusOK, CampaignMembersPage(cc, members, transfer, middleware.GetCSRFToken(c), errMsg, smtpConfigured))
 }
 
 // AddMember adds a user to the campaign (POST /campaigns/:id/members).
@@ -1446,9 +1463,11 @@ func (h *Handler) AddMember(c echo.Context) error {
 	if err := h.service.AddMember(c.Request().Context(), cc.Campaign.ID, req.Email, role); err != nil {
 		// Re-render with error message.
 		members, _ := h.service.ListMembers(c.Request().Context(), cc.Campaign.ID)
-		csrfToken := middleware.GetCSRFToken(c)
 		errMsg := apperror.UserMessage(err, "failed to add member")
-		return middleware.Render(c, http.StatusOK, CampaignMembersPage(cc, members, csrfToken, errMsg))
+		if middleware.IsHTMX(c) {
+			return middleware.Render(c, http.StatusOK, MemberListComponent(cc, members, middleware.GetCSRFToken(c), errMsg))
+		}
+		return h.renderPeoplePage(c, cc, members, errMsg)
 	}
 
 	h.logAudit(c, cc.Campaign.ID, "member.joined", map[string]any{

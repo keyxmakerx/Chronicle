@@ -2,32 +2,16 @@ package admin
 
 import (
 	"fmt"
-	"strings"
 	"github.com/keyxmakerx/chronicle/internal/templates/layouts"
 )
 
 // AdminDashboardPage renders the admin overview with high-level stats.
-templ AdminDashboardPage(userCount, campaignCount, mediaFileCount int, totalStorageBytes int64, smtpConfigured bool, addonCount int, securityStats *SecurityStats, degradedPlugins []string, pendingSubmissions, registeredSystems, failedSystems int) {
+templ AdminDashboardPage(userCount, campaignCount, mediaFileCount int, totalStorageBytes int64, smtpConfigured bool, addonCount int, securityStats *SecurityStats, degradedPlugins []string, pendingSubmissions, registeredSystems, failedSystems int, needs []NeedsItem, recent []ActivityEntry) {
 	@layouts.App("Admin Dashboard") {
 		<div class="max-w-5xl mx-auto space-y-6">
 			<h1 class="text-2xl font-bold text-fg">Admin Dashboard</h1>
 
-			<!-- Degraded Plugin Alert Banner -->
-			if len(degradedPlugins) > 0 {
-				<a href="/admin/database" class="flex items-start gap-3 p-4 rounded-lg bg-red-50 dark:bg-red-950/30 border border-red-200 dark:border-red-800 hover:bg-red-100 dark:hover:bg-red-950/50 transition-colors">
-					<i class="fa-solid fa-triangle-exclamation text-red-500 mt-0.5 shrink-0"></i>
-					<div>
-						<p class="text-sm font-semibold text-red-700 dark:text-red-400">
-							{ fmt.Sprintf("%d", len(degradedPlugins)) } plugin(s) need attention
-						</p>
-						<p class="text-xs text-red-600/80 dark:text-red-400/70 mt-0.5">
-							{ strings.Join(degradedPlugins, ", ") } &mdash; pending migrations or schema errors.
-							Click to view the Database Explorer.
-						</p>
-					</div>
-					<i class="fa-solid fa-arrow-right text-red-400 mt-0.5 ml-auto shrink-0"></i>
-				</a>
-			}
+			@needsYouCard(needs)
 
 			// -- Content --
 			<div>
@@ -174,6 +158,8 @@ templ AdminDashboardPage(userCount, campaignCount, mediaFileCount int, totalStor
 				</div>
 			</div>
 
+			@recentActivityCard(recent)
+
 			<!-- Quick Actions -->
 			<div class="flex items-center gap-3 pt-2">
 				<a
@@ -187,5 +173,54 @@ templ AdminDashboardPage(userCount, campaignCount, mediaFileCount int, totalStor
 				</a>
 			</div>
 		</div>
+	}
+}
+
+// needsYouCard lists what the admin has to act on, most urgent first, each row
+// with one button to the page that fixes it.
+templ needsYouCard(items []NeedsItem) {
+	<div class="card">
+		<h2 class="text-sm font-semibold text-fg mb-3">Needs you</h2>
+		if len(items) == 0 {
+			<p class="text-sm text-fg-muted"><i class="fa-solid fa-circle-check text-emerald-500 mr-1.5"></i>Nothing needs you right now.</p>
+		} else {
+			<ul class="divide-y divide-edge">
+				for _, it := range items {
+					<li class="flex items-center gap-3 py-2.5">
+						<span class="shrink-0 min-w-[1.75rem] text-center text-xs font-semibold px-2 py-0.5 rounded-full bg-amber-100 text-amber-800 dark:bg-amber-900/40 dark:text-amber-300">{ needsCountLabel(it.Count) }</span>
+						<p class="text-sm text-fg flex-1">{ it.Text }</p>
+						<a href={ templ.SafeURL(it.Href) } class="btn-secondary text-xs shrink-0">{ it.Button }</a>
+					</li>
+				}
+			</ul>
+		}
+	</div>
+}
+
+// recentActivityCard shows the latest admin changes and links to the full log.
+templ recentActivityCard(entries []ActivityEntry) {
+	<div class="card">
+		<div class="flex items-center justify-between mb-3">
+			<h2 class="text-sm font-semibold text-fg">Recent admin changes</h2>
+			<a href="/admin/activity" class="text-xs text-fg-muted hover:text-accent transition-colors">See all changes &rarr;</a>
+		</div>
+		@activityList(entries)
+	</div>
+}
+
+// activityList renders entries as "Mara made Theo an admin" rows with a
+// relative time on the right.
+templ activityList(entries []ActivityEntry) {
+	if len(entries) == 0 {
+		<p class="text-sm text-fg-muted">No admin changes have been recorded yet.</p>
+	} else {
+		<ul class="divide-y divide-edge">
+			for _, e := range entries {
+				<li class="flex items-baseline justify-between gap-3 py-2 text-sm">
+					<span class="text-fg">{ e.Sentence() }</span>
+					<span class="text-xs text-fg-muted shrink-0" title={ e.CreatedAt.Format("2006-01-02 15:04 MST") }>{ timeAgo(e.CreatedAt) }</span>
+				</li>
+			}
+		</ul>
 	}
 }

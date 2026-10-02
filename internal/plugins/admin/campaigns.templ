@@ -7,12 +7,37 @@ import (
 	"github.com/keyxmakerx/chronicle/internal/templates/layouts"
 )
 
-// AdminCampaignsPage renders the campaign management page with all campaigns.
-templ AdminCampaignsPage(allCampaigns []campaigns.Campaign, total, page, perPage int, csrfToken string) {
+// CampaignListData is what the campaign list renders: one page of campaigns
+// plus the search/chip/pager state.
+type CampaignListData struct {
+	Campaigns []campaigns.Campaign
+	View      listView
+	CSRFToken string
+}
+
+// AdminCampaignsPage renders the campaign management page: search box and
+// the list region.
+templ AdminCampaignsPage(data CampaignListData) {
 	@layouts.App("Campaigns - Admin") {
 		<div class="max-w-4xl mx-auto space-y-6">
-			<h1 class="text-2xl font-bold text-fg">All Campaigns ({ fmt.Sprintf("%d", total) })</h1>
-			<div class="card p-0 overflow-hidden">
+			<h1 class="text-2xl font-bold text-fg">All Campaigns</h1>
+			@adminListSearch(data.View)
+			@AdminCampaignsList(data)
+		</div>
+	}
+}
+
+// AdminCampaignsList is the swappable region of the campaigns page (chips,
+// table and pager). HTMX requests get just this; the id is the swap target.
+templ AdminCampaignsList(data CampaignListData) {
+	{{ allCampaigns := data.Campaigns }}
+	{{ csrfToken := data.CSRFToken }}
+	<div id={ data.View.RegionID } class="space-y-6">
+		if data.View.Filter != "" {
+			<input type="hidden" name="f" value={ data.View.Filter } form={ data.View.RegionID + "-search" }/>
+		}
+		@adminListChips(data.View)
+		<div class="card p-0 overflow-hidden">
 				<table class="w-full">
 					<thead>
 						<tr class="bg-surface-alt border-b border-edge">
@@ -79,21 +104,17 @@ templ AdminCampaignsPage(allCampaigns []campaigns.Campaign, total, page, perPage
 								</tr>
 							}
 						} else {
-							<tr>
-								<td colspan="4" class="px-4 py-12 text-center">
-									<div class="text-fg-muted text-sm">No campaigns found.</div>
-								</td>
-							</tr>
+							@adminListEmpty(data.View, 4)
 						}
 					</tbody>
 				</table>
 			</div>
 			@components.Pagination(components.PaginationData{
-				CurrentPage: page,
-				PerPage:     perPage,
-				Total:       total,
-				BaseURL:     "/admin/campaigns",
+				CurrentPage: data.View.Page,
+				PerPage:     data.View.PerPage,
+				Total:       data.View.Total,
+				BaseURL:     data.View.BaseURL,
+				ExtraParams: data.View.PagerParams(),
 			})
 		</div>
-	}
 }

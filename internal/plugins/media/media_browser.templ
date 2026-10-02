@@ -14,6 +14,9 @@ import (
 // CampaignMediaPage renders the full media browser page.
 templ CampaignMediaPage(cc *campaigns.CampaignContext, data CampaignMediaPageData) {
 	@layouts.App("Media") {
+		<div class="max-w-6xl mx-auto pt-6 px-4">
+			@layouts.ManageHeader("Media", "manage:media")
+		</div>
 		@campaignMediaContent(cc, data)
 	}
 }
@@ -67,9 +70,9 @@ templ campaignMediaContent(cc *campaigns.CampaignContext, data CampaignMediaPage
 		>
 			<div class="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2 mb-4">
 				<div>
-					<h1 class="text-xl font-bold text-fg">
+					<h2 class="text-xl font-bold text-fg">
 						<i class="fa-solid fa-photo-film mr-2 text-accent"></i>Media
-					</h1>
+					</h2>
 					<p class="text-sm text-fg-secondary mt-1">
 						{ fmt.Sprintf("%d files", data.Stats.TotalFiles) } &middot; { formatFileSize(data.Stats.TotalBytes) } used
 					</p>

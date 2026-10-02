@@ -15,7 +15,8 @@ import (
 // Handler handles addon-related HTTP requests. Admin routes manage the global
 // registry; campaign-scoped routes manage per-campaign toggles.
 type Handler struct {
-	service AddonService
+	activity ActivityRecorder
+	service  AddonService
 }
 
 // NewHandler creates a new addon handler.
@@ -69,6 +70,8 @@ func (h *Handler) CreateAddon(c echo.Context) error {
 		return err
 	}
 
+	h.recordActivity(c, "addon.changed", "addon", input.Slug, input.Name)
+
 	return middleware.HTMXRedirect(c, "/admin/addons")
 }
 
@@ -84,6 +87,8 @@ func (h *Handler) UpdateAddonStatus(c echo.Context) error {
 		return err
 	}
 
+	h.recordActivity(c, "addon.changed", "addon", strconv.Itoa(addonID), h.addonLabel(c, addonID))
+
 	return middleware.HTMXRedirect(c, "/admin/addons")
 }
 
@@ -94,9 +99,14 @@ func (h *Handler) DeleteAddon(c echo.Context) error {
 		return apperror.NewBadRequest("invalid addon ID")
 	}
 
+	// Read the name first: the row is gone after the delete.
+	label := h.addonLabel(c, addonID)
+
 	if err := h.service.Delete(c.Request().Context(), addonID); err != nil {
 		return err
 	}
+
+	h.recordActivity(c, "addon.changed", "addon", strconv.Itoa(addonID), label)
 
 	return middleware.HTMXRedirect(c, "/admin/addons")
 }
@@ -204,4 +214,14 @@ func (h *Handler) ToggleCampaignAddon(c echo.Context) error {
 	}
 
 	return c.Redirect(http.StatusSeeOther, "/campaigns/"+cc.Campaign.ID+"/plugins")
+}
+
+// addonLabel returns an addon's name for the change log, or "" when it can't
+// be read; the id is still recorded.
+func (h *Handler) addonLabel(c echo.Context, addonID int) string {
+	a, err := h.service.GetByID(c.Request().Context(), addonID)
+	if err != nil || a == nil {
+		return ""
+	}
+	return a.Name
 }
