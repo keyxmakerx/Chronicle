@@ -814,6 +814,7 @@
       if (this.skyDock) this.skyDock.destroy();
       if (this._resizeHandler) window.removeEventListener('resize', this._resizeHandler);
       if (this._escHandler) document.removeEventListener('keydown', this._escHandler);
+      if (this._mvOffHandler) document.removeEventListener('pointerdown', this._mvOffHandler, true);
     },
 
     // --------------------------------------------------------------
@@ -1195,8 +1196,10 @@
       // simpler than the mockups' seeded crater/sea texture (a real
       // reduction in fidelity, called out in .ai.md), same silhouette
       // idea and the same --sil* custom properties for blood-moon tint.
+      // width/height keep it small until the stylesheet sizes it (see
+      // moon_silhouette.templ).
       var path = MoonMath.litPath(phase, 6);
-      return '<svg class="sil" viewBox="-7 -7 14 14" aria-hidden="true"><circle class="db" r="6"/>' + (path ? '<path class="dl" d="' + path + '"/>' : '') + '</svg>';
+      return '<svg class="sil" width="14" height="14" viewBox="-7 -7 14 14" aria-hidden="true"><circle class="db" r="6"/>' + (path ? '<path class="dl" d="' + path + '"/>' : '') + '</svg>';
     },
 
     _paintDaySkyContext: function () {
@@ -1344,6 +1347,20 @@
         if (self.wingFor) { self.closeWing(); return; }
       };
       document.addEventListener('keydown', this._escHandler);
+
+      // The moon view sits over the month, so a press anywhere else in the
+      // calendar closes it, the way the day and era cards give way to a
+      // press on the grid. Presses outside the calendar are left to the
+      // page (the almanac's click-off closes an open card itself), and
+      // presses that open the moon view again are left to do that.
+      this._mvOffHandler = function (e) {
+        if (!self.mvEl.classList.contains('open')) return;
+        var t = e.target;
+        if (!(t instanceof Element) || !self.el.contains(t) || self.mvEl.contains(t) || self.evpEl.contains(t)) return;
+        if (t.closest('#cal5-moonbtn, .msil, .mrow')) return;
+        self.closeMoonView();
+      };
+      document.addEventListener('pointerdown', this._mvOffHandler, true);
     },
 
     _moveRoving: function (delta) {
