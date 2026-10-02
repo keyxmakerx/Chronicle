@@ -5,7 +5,8 @@
  * see the "skybox" block in internal/app/routes.go, which passes the
  * calendar id straight into the mount so this widget never has to fetch
  * /calendars/list just to find it) plus its events, then draws the current
- * moment's sky with Sky2D (sky_2d.js) using SkyWorld's astronomy/palette
+ * moment's sky with the painted sky (sky_gl.js), or the basic sky (sky_2d.js)
+ * where that can't run, using SkyWorld's astronomy/palette
  * (sky_world.js), SkyLooks' weather-to-look mapping (sky_looks.js), SkyMoon's
  * body specs (sky_moon.js) and SkyEvents' payload-driven overlays
  * (sky_events.js).
@@ -37,7 +38,9 @@
     function tick(tMs) {
       if (!document.hidden) {
         insts.slice().forEach(function (inst) {
-          if (inst.onScreen !== false) inst.render(tMs / 1000);
+          // One failing sky must not stop the loop for the others.
+          try { if (inst.onScreen !== false) inst.render(tMs / 1000, true); }
+          catch (e) { LOOP.remove(inst); if (window.console) console.error('[sky-pane] render failed', e); }
         });
       }
       if (insts.length) requestAnimationFrame(tick);
@@ -48,6 +51,9 @@
       remove: function (inst) { var i = insts.indexOf(inst); if (i >= 0) insts.splice(i, 1); }
     };
   })();
+
+  // A sky where only clouds drift and stars twinkle is painted 12 times a second.
+  var IDLE_S = 1 / 12;
 
   function reducedMotion() {
     try { return !!(window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches); }
@@ -82,10 +88,12 @@
   }
   function hashSeed(s) { s = String(s || ''); var v = 0; for (var i = 0; i < s.length; i++) v = (v * 131 + s.charCodeAt(i)) >>> 0; return v || 1; }
 
-  // buildState(model, tSeconds): the per-frame render state Sky2D.draw
-  // consumes. Mirrors the design contract's Surface.prototype.state, minus
-  // every field only the WebGL uniforms needed.
-  function buildState(model, tSeconds) {
+  // buildState(model, tSeconds, dt): the per-frame render state both
+  // painters consume. Mirrors the design contract's Surface.prototype.state.
+  // dt (seconds since the last frame) lets a weather change roll in over
+  // about a second instead of snapping.
+  var WXKEYS = ['cloud', 'dark', 'fog', 'rain', 'snow', 'hail', 'storm', 'wind'];
+  function buildState(model, tSeconds, dt) {
     var cal = model.calendar;
     var year = cal.current_year, month = cal.current_month, day = cal.current_day;
     var h24 = SW.hour24(cal, cal.current_hour || 0, cal.current_minute || 0);
@@ -119,7 +127,7 @@
     // moons once, at the height it rests at (restH), and scales them.
     var RS = model.restH ? SW.clamp(model.restH * .11, 7, 26) : R;
 
-    var moons = astro.map(function (a) {
+    var moons = astro.map(function (a, i) {
       var mo = a.mo, up = a.up, r = R * (mo.size || 1), sr = RS * (mo.size || 1);
       var blood = up && !!overlay.blood[mo.id];
       var harvest = up && !!overlay.harvest[mo.id];
@@ -128,27 +136,58 @@
       if (up && overlay.eclipse[mo.id] != null) shadow = [0, 0, r * .55, overlay.eclipse[mo.id]];
       var p = up ? PROJ_at(L, a.m.alt, a.m.az) : { x: 0, y: 0 };
       var rot = up ? SW.moonTurn(L, a.m, sun) : 0;
-      return { mo: mo, m: a.m, up: up, x: p.x, y: p.y, r: r, sr: sr, rot: rot, spec: window.SkyMoon.specFor(mo), blood: blood, shadow: shadow };
+      // i: the moon's slot in the painter's atlas; past its four slots a
+      // moon is drawn in the painted sky's drawn layer instead.
+      return { i: i < 4 ? i : -1, extra: i >= 4, mo: mo, m: a.m, up: up, x: p.x, y: p.y, r: r, sr: sr, rot: rot, spec: window.SkyMoon.specFor(mo), blood: blood, shadow: shadow };
     });
 
     var weatherSpec = LOOKS.spec(cal.weather);
-    var look = LOOKS.resolve(weatherSpec);
-    var wx = look || LOOKS.blank();
+    var look = LOOKS.resolve(weatherSpec), target = look || LOOKS.blank();
+    var wx = model.wxs;
+    if (!wx || model.reduced || !(dt > 0 && dt < 1)) { wx = model.wxs = {}; WXKEYS.forEach(function (n) { wx[n] = target[n]; }); }
+    else { var k = 1 - Math.exp(-dt / .8); WXKEYS.forEach(function (n) { wx[n] += (target[n] - wx[n]) * k; }); }
     var P = SW.paletteFor(altDeg, eve, look, wx, dark, false);
     if (overlay.magic) SW.tintPalette(P, '#8a5fe0', .3, ['zen', 'mid', 'hor', 'anti', 'clit', 'cshade', 'h0', 'h1', 'h2', 'h3']);
 
-    return {
-      P: P, L: L, W: model.width, H: model.height, wx: wx, t: tSeconds,
+    var st = {
+      P: P, L: L, W: model.width, H: model.height, wx: wx, t: tSeconds, look: look, rm: !!model.reduced, almanac: false,
       sun: sun, sp: sp, alt: sun.alt, altEff: altDeg, dark: dark, R: R,
       moons: moons, cam: cam, sidereal: SW.mod((sun.H + sun.lon) / SW.D2R, 360),
-      landSeed: model.landSeed, overlay: overlay,
+      landSeed: model.landSeed, overlay: overlay, fxItems: [],
       weatherLabel: weatherSpec.label || 'Clear skies'
     };
+    // What the painted sky adds: the scene's light, then the day's events
+    // and the look's moving things (meteors, aurora, the bleeding moon).
+    st.sl = window.SkyFX.sceneLight(st, P);
+    EV.apply(st, dayEvents);
+    st.pace = motionOf(st);
+    return st;
+  }
+  // motionOf(st): how much the painted sky moves — 2 when something visibly
+  // moves (particles, rain and snow, meteors, a storm, aurora, a bleeding
+  // moon), 1 when only clouds drift and stars twinkle, 0 under reduced
+  // motion.
+  function motionOf(st) {
+    if (st.rm) return 0;
+    var lk = st.look, moving = !!(st.met.length || st.aur.length || st.bleed || st.fxItems.length || st.airs.length ||
+      st.moons.some(function (M) { return M.conj && M.up; }) ||
+      (lk && (lk.parts.length || lk.rain + lk.snow + lk.hail > .04 || lk.storm > .1 || lk.air.length || lk.fire.length || lk.sigils.length || lk.funnel)));
+    return moving ? 2 : 1;
   }
   function PROJ_at(L, alt, az) { return SW.PROJ.at(L, alt, az); }
 
+  // paceOf(state): how often the sky must be painted. The painted sky
+  // moves as motionOf says; the basic sky moves only for a blood moon.
   function paceOf(state) {
-    return Object.keys(state.overlay.blood || {}).length > 0;
+    if (window.SkyGL && window.SkyGL.available()) return state.pace;
+    return !state.rm && Object.keys(state.overlay.blood || {}).length > 0 ? 2 : 0;
+  }
+  // paintSky: the painted sky when it can be had, the basic sky otherwise.
+  // hold keeps that sky's own drawn-layer canvases between frames.
+  function paintSky(ctx, hold, st, dpr, oy, moving) {
+    if (window.SkyGL && window.SkyGL.paint(ctx, hold, st, dpr, oy, moving)) return 'gl';
+    window.Sky2D.draw(ctx, st, dpr, oy);
+    return '2d';
   }
 
   // The moon that lights the sky most: the fullest, weighted by its size.
@@ -194,6 +233,9 @@
       this.io = new IntersectionObserver(function (es) { es.forEach(function (e) { self.onScreen = e.isIntersecting; }); }, { threshold: 0 });
       this.io.observe(this.sky);
     }
+    // The painted sky becoming ready, or giving way to the basic one, repaints.
+    this._glChange = function () { if (self.open) self.renderNow(); };
+    if (window.SkyGL) window.SkyGL.onChange(this._glChange);
     this.load();
     // A slow drift check even while closed, so the chip swatch and caption
     // never go stale across a long-open page (the world clock advances).
@@ -202,6 +244,7 @@
   Instance.prototype.destroy = function () {
     this.chip.removeEventListener('click', this._boundClick);
     this.el.removeEventListener('keydown', this._boundKeydown);
+    if (window.SkyGL) window.SkyGL.offChange(this._glChange);
     window.removeEventListener('resize', this._boundResize);
     if (this.io) this.io.disconnect();
     if (this._refreshTimer) window.clearInterval(this._refreshTimer);
@@ -264,17 +307,27 @@
     if (this.canvas.width !== W || this.canvas.height !== H) { this.canvas.width = W; this.canvas.height = H; }
     if (this.model) { this.model.width = w; this.model.height = h; }
   };
-  Instance.prototype.render = function (tSeconds) {
+  // render(t, looping): one frame. In the loop, a sky that only drifts is
+  // painted at a low idle rate rather than every frame.
+  Instance.prototype.render = function (tSeconds, looping) {
     if (!this.model || !this.open) return;
     if (!this.model.width) this.resizeCanvas();
     if (!this.model.width) return;
-    var st = buildState(this.model, tSeconds);
-    window.Sky2D.draw(this.ctx, st, this.dpr);
+    if (looping && this.pace === 1 && tSeconds - (this.lastPaint || 0) < IDLE_S) return;
+    var dt = this.lastPaint ? tSeconds - this.lastPaint : 0;
+    this.lastPaint = tSeconds;
+    this.model.reduced = this.reduced;
+    var st = buildState(this.model, tSeconds, dt);
+    this.ctx.setTransform(1, 0, 0, 1, 0, 0);
+    this.ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
+    paintSky(this.ctx, this, st, this.dpr, 0, !!looping);
+    var pace = this.reduced ? 0 : paceOf(st);
+    if (pace !== this.pace) { this.pace = pace; if (pace) LOOP.add(this); else LOOP.remove(this); }
   };
   Instance.prototype.renderNow = function () {
     this.resizeCanvas();
+    this.lastPaint = 0;
     this.render(this.reduced ? 0 : performance.now() / 1000);
-    if (!this.reduced && this.model) { if (paceOf(buildState(this.model, 0))) LOOP.add(this); }
   };
   Instance.prototype.toggle = function () {
     if (this.open) this.close(); else this.openPane();
@@ -303,7 +356,7 @@
     this.open = false;
     this.chip.setAttribute('aria-expanded', 'false');
     this.sky.classList.remove('sky-reveal');
-    LOOP.remove(this);
+    LOOP.remove(this); this.pace = 0;
     var self = this, doneAfter = this.reduced ? 0 : 320;
     var finish = function () { if (!self.open) self.wrap.classList.remove('sky-open'); };
     window.setTimeout(finish, doneAfter);
@@ -437,10 +490,10 @@
     this.canvas = this.sky.querySelector('canvas');
     this.sw = o.chip.querySelector('.sw');
     this.ctx = this.canvas.getContext('2d');
-    if (!this.ctx || !window.Sky2D || !SW || !LOOKS || !EV) throw new Error('sky: nothing to draw with');
+    if (!this.ctx || !window.Sky2D || !SW || !LOOKS || !EV || !window.SkyFX) throw new Error('sky: nothing to draw with');
     this.rm = reducedMotion();
     this.dpr = Math.max(1, Math.min(2, window.devicePixelRatio || 1));
-    this.model = null; this.paced = false; this.W = 0; this.H = 0; this.raf = 0; this.lastT = 0; this.onScreen = true;
+    this.model = null; this.pace = 0; this.tmo = 0; this.W = 0; this.H = 0; this.raf = 0; this.lastT = 0; this.onScreen = true;
     var open = !readFolded();
     this.S = { target: open ? 1 : 0, e: open ? 1 : 0, v: 0, on: false, layout: open, fade: 1, lastE: open ? 1 : 0 };
     this.wrap.classList.toggle('open', open);
@@ -448,6 +501,9 @@
     this._tick = function (tMs) { self.tick(tMs); };
     this._click = function () { self.fold(!self.S.layout); };
     this._vis = function () { self.kick(); };
+    // The painted sky becoming ready, or giving way to the basic one, repaints.
+    this._glChange = function () { if (self.S.layout && !self.S.on) self.paint(performance.now() / 1000, 0, self.H); self.kick(); };
+    if (window.SkyGL) window.SkyGL.onChange(this._glChange);
     this.chip.addEventListener('click', this._click);
     document.addEventListener('visibilitychange', this._vis);
     if ('ResizeObserver' in window) {
@@ -475,9 +531,11 @@
   // The day the sky shows: the calendar as this viewer may see it, and that
   // day's events. Players only ever get today as it is from here.
   Dock.prototype.setDay = function (cal, events) {
-    this.model = { calendar: cal, todayEvents: events || [], skym: SW.makeSkym(cal), landSeed: hashSeed(this.o.seed), width: 0, height: 0 };
-    var st = buildState({ calendar: cal, todayEvents: this.model.todayEvents, skym: this.model.skym, landSeed: this.model.landSeed, width: this.W || 640, height: this.H || 120 }, 0);
-    this.paced = paceOf(st);
+    // A new day keeps the weather it is rolling from, so a change rolls in.
+    var wxs = this.model ? this.model.wxs : null;
+    this.model = { calendar: cal, todayEvents: events || [], skym: SW.makeSkym(cal), landSeed: hashSeed(this.o.seed), width: 0, height: 0, reduced: this.rm, wxs: wxs };
+    var st = buildState({ calendar: cal, todayEvents: this.model.todayEvents, skym: this.model.skym, landSeed: this.model.landSeed, width: this.W || 640, height: this.H || 120, reduced: this.rm }, 0);
+    this.pace = paceOf(st);
     this.label(st);
     if (this.measure() && this.S.layout && !this.S.on) this.paint(performance.now() / 1000, 0, this.H);
     this.kick();
@@ -499,7 +557,11 @@
     this.ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
     if (h0 < 2) return;
     this.model.width = this.W; this.model.height = h0; this.model.restH = this.H;
-    window.Sky2D.draw(this.ctx, buildState(this.model, this.rm ? 0 : t), d, y0);
+    var dt = this.lastPaint ? t - this.lastPaint : 0;
+    this.lastPaint = t;
+    var st = buildState(this.model, this.rm ? 0 : t, dt);
+    paintSky(this.ctx, this, st, d, y0, !!this.looping);
+    this.pace = paceOf(st);
   };
   Dock.prototype.fold = function (open) {
     var S = this.S, target = open ? 1 : 0;
@@ -549,14 +611,18 @@
       // The frame a spring settles in is applied too, so the rest state lands.
       if (S.on) spring(S, dt, S.target === 1);
       this.apply(t);
-    } else if (this.paced && S.layout) this.paint(t, 0, this.H);
+    } else if (this.pace && S.layout) { this.looping = true; this.paint(t, 0, this.H); this.looping = false; }
     this.kick();
   };
   Dock.prototype.kick = function () {
-    var S = this.S, want = !document.hidden && (S.on || S.fade < 1 || (this.paced && !this.rm && S.layout && this.onScreen));
-    if (want) { if (!this.raf) this.raf = requestAnimationFrame(this._tick); return; }
+    var S = this.S, self = this, live = !document.hidden && !this.rm && S.layout && this.onScreen;
+    var want = !document.hidden && (S.on || S.fade < 1 || (live && this.pace === 2));
+    if (want) { if (this.tmo) { clearTimeout(this.tmo); this.tmo = 0; } if (!this.raf) this.raf = requestAnimationFrame(this._tick); return; }
     if (this.raf) { cancelAnimationFrame(this.raf); this.raf = 0; }
     this.lastT = 0;
+    // A sky where only clouds drift is painted at the idle rate.
+    if (live && this.pace === 1) { if (!this.tmo) this.tmo = setTimeout(function () { self.tmo = 0; if (!self.raf) self.raf = requestAnimationFrame(self._tick); }, IDLE_S * 1000); }
+    else if (this.tmo) { clearTimeout(this.tmo); this.tmo = 0; }
     // A fold that could not run its frames (a hidden tab) lands at once.
     if (S.on) { S.e = S.target; S.v = 0; S.on = false; this.apply(performance.now() / 1000); }
   };
@@ -569,6 +635,9 @@
   Dock.prototype.destroy = function () {
     if (this.raf) cancelAnimationFrame(this.raf);
     this.raf = 0;
+    if (this.tmo) clearTimeout(this.tmo);
+    this.tmo = 0;
+    if (window.SkyGL) window.SkyGL.offChange(this._glChange);
     this.chip.removeEventListener('click', this._click);
     document.removeEventListener('visibilitychange', this._vis);
     if (this.ro) this.ro.disconnect();
