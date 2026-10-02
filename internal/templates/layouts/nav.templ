@@ -360,9 +360,10 @@ templ navFixedRow(key string, label string, icon string, url string, trail strin
 }
 
 // navTrail is a row's trailing text: the open page's own name on the current
-// row, otherwise the row's count or caption.
+// row (unless the owner hid page names in Customize), otherwise the row's
+// count or caption.
 templ navTrail(key string, fallback string) {
-	if cur, page := NavCurrent(ctx); cur == key && page != "" {
+	if cur, page := NavCurrent(ctx); cur == key && page != "" && !navPageNameHidden(ctx) {
 		<span class="nav-tr is-page">{ page }</span>
 	} else if fallback != "" {
 		<span class="nav-tr">{ fallback }</span>

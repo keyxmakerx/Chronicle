@@ -89,10 +89,10 @@ templ CustomizePage(cc *CampaignContext, entityTypes []SettingsEntityType, csrfT
 					</div>
 				</div>
 
-				<!-- Appearance tab: branding, topbar, and accent color customization -->
+				<!-- Appearance tab: the look editor, one Save for every setting -->
 				<div x-show="tab === 'appearance'" x-cloak class="h-full overflow-y-auto">
-					<div class="max-w-3xl mx-auto px-6 py-4">
-						@appearanceTab(cc, csrfToken)
+					<div class="pt-4">
+						@lookTab(cc, csrfToken)
 					</div>
 				</div>
 			</div>

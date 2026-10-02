@@ -257,6 +257,13 @@ func navCount(n int) string {
 
 // navRowTrail is a row's own trailing text: a category's count, or an app's
 // caption.
+// navPageNameHidden reports whether the owner chose, in Customize, not to
+// show the open page's name beside its menu entry.
+func navPageNameHidden(ctx context.Context) bool {
+	a := GetAppearance(ctx)
+	return a != nil && a.NavPageName == "hidden"
+}
+
 func navRowTrail(row NavRowView) string {
 	if row.Kind == "category" {
 		return navCount(row.Count)

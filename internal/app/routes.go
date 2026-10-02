@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"log/slog"
 	"net/http"
+	"path"
 	"path/filepath"
 	"strconv"
 	"strings"
@@ -411,6 +412,22 @@ func (a *backdropUploaderAdapter) UploadBackdrop(ctx context.Context, campaignID
 		return "", err
 	}
 	return mf.Filename, nil
+}
+
+// OwnsFile reports whether filename (the stored "YYYY/MM/<id>.<ext>" that
+// UploadBackdrop returns) is a media file belonging to campaignID.
+func (a *backdropUploaderAdapter) OwnsFile(ctx context.Context, campaignID, filename string) (bool, error) {
+	base := path.Base(filename)
+	id := strings.TrimSuffix(base, path.Ext(base))
+	mf, err := a.svc.GetByID(ctx, id)
+	if err != nil {
+		var ae *apperror.AppError
+		if errors.As(err, &ae) && ae.Code == http.StatusNotFound {
+			return false, nil
+		}
+		return false, err
+	}
+	return mf.Filename == filename && mf.CampaignID != nil && *mf.CampaignID == campaignID, nil
 }
 
 // entityTagFetcherAdapter wraps tags.TagService to implement the
@@ -3758,6 +3775,16 @@ func (a *App) RegisterRoutes() {
 			if campaignSettings.FontFamily != "" {
 				ctx = layouts.SetFontFamily(ctx, campaignSettings.FontFamily)
 			}
+			if ap := campaignSettings.Appearance; ap != nil {
+				ad := &layouts.AppearanceData{
+					NavStyle: ap.NavStyle, NavStrength: ap.NavStrength, NavPageName: ap.NavPageName,
+					PageTone: ap.PageTone, Contrast: ap.Contrast,
+					BodyFont: ap.BodyFont, HeadingFont: ap.HeadingFont, TypeScale: ap.TypeScale,
+					ButtonStyle: ap.ButtonStyle, Elevation: ap.Elevation, MotionSpeed: ap.MotionSpeed,
+					ReduceMotion: ap.ReduceMotion,
+				}
+				ctx = layouts.SetAppearance(ctx, ad)
+			}
 			if campaignSettings.TopbarStyle != nil {
 				ctx = layouts.SetTopbarStyle(ctx, &layouts.TopbarStyleData{
 					Mode:         campaignSettings.TopbarStyle.Mode,
@@ -3766,12 +3793,14 @@ func (a *App) RegisterRoutes() {
 					GradientTo:   campaignSettings.TopbarStyle.GradientTo,
 					GradientDir:  campaignSettings.TopbarStyle.GradientDir,
 					ImagePath:    campaignSettings.TopbarStyle.ImagePath,
+					Scrim:        campaignSettings.TopbarStyle.Scrim,
 				})
 			}
 			if campaignSettings.TopbarContent != nil && campaignSettings.TopbarContent.Mode != "" && campaignSettings.TopbarContent.Mode != "none" {
 				tc := &layouts.TopbarContentData{
-					Mode:  campaignSettings.TopbarContent.Mode,
-					Quote: campaignSettings.TopbarContent.Quote,
+					Mode:    campaignSettings.TopbarContent.Mode,
+					Quote:   campaignSettings.TopbarContent.Quote,
+					Widgets: campaignSettings.TopbarContent.Widgets,
 				}
 				for _, link := range campaignSettings.TopbarContent.Links {
 					tc.Links = append(tc.Links, layouts.TopbarLinkData{
