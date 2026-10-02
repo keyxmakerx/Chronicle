@@ -3037,6 +3037,8 @@ func (a *App) RegisterRoutes() {
 	// Reuses the sync mapping service created earlier for the owner dashboard.
 	syncMappingHandler := syncapi.NewSyncHandler(syncMappingSvcEarly)
 	mapAPIHandler := syncapi.NewMapAPIHandler(syncService, mapsService, drawingService, campaignService)
+	syncChangeRepo := syncapi.NewSyncChangeRepository(a.DB)
+	syncChangesHandler := syncapi.NewSyncChangesHandler(syncChangeRepo, campaignService)
 
 	// Note API handler for sync API — uses the same note repo/service as the web handler.
 	// Created here (before RegisterAPIRoutes) so the service is available; the web
@@ -3052,7 +3054,7 @@ func (a *App) RegisterRoutes() {
 	tagAPIHandler := syncapi.NewTagAPIHandler(syncService, tagService, entityService, campaignService)
 
 	if a.PluginHealth.IsHealthy("syncapi") {
-		syncapi.RegisterAPIRoutes(e, syncAPIHandler, calendarAPIHandler, mediaAPIHandler, mapAPIHandler, noteAPIHandler, tagAPIHandler, syncMappingHandler, syncService, addonService, authService, campaignService)
+		syncapi.RegisterAPIRoutes(e, syncAPIHandler, calendarAPIHandler, mediaAPIHandler, mapAPIHandler, noteAPIHandler, tagAPIHandler, syncMappingHandler, syncChangesHandler, syncService, addonService, authService, campaignService)
 	}
 
 	// NPC plugin: gallery/hub view for revealed character entities.
@@ -4047,7 +4049,10 @@ func (a *App) RegisterRoutes() {
 	e.GET("/ws", ws.HandleUpgrade(wsHub, wsAuth, []string{a.Config.BaseURL}, wsDynamicOrigins))
 
 	// Wire EventBus into services for real-time event publishing.
-	wsEventBus := ws.NewEventBus(wsHub)
+	// The recording wrapper appends allowlisted events to the change feed
+	// before they reach the hub, so no publisher can forget to record.
+	wsEventBus := ws.EventBus(syncapi.NewRecordingEventBus(ws.NewEventBus(wsHub), syncChangeRepo))
+	go syncapi.StartChangePruner(a.ShutdownCtx, syncChangeRepo)
 
 	entityService.SetEventPublisher(&entityEventPublisherAdapter{bus: wsEventBus})
 	entityService.SetSidebarAutoAdder(&sidebarAutoAdderAdapter{campaignService: campaignService})

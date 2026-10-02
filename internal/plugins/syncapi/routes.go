@@ -73,7 +73,7 @@ func RegisterCampaignRoutes(e *echo.Echo, h *Handler, campaignSvc campaigns.Camp
 // match middleware ensures Bearer keys can only access their scoped
 // campaign (session users are naturally scoped to campaigns they belong
 // to by the membership lookup in RequireAuthOrAPIKey).
-func RegisterAPIRoutes(e *echo.Echo, api *APIHandler, calAPI *CalendarAPIHandler, mediaAPI *MediaAPIHandler, mapAPI *MapAPIHandler, noteAPI *NoteAPIHandler, tagAPI *TagAPIHandler, syncH *SyncHandler, syncSvc SyncAPIService, addonChecker AddonChecker, authSvc auth.AuthService, campaignSvc campaigns.CampaignService, opts ...func(*APIHandler)) {
+func RegisterAPIRoutes(e *echo.Echo, api *APIHandler, calAPI *CalendarAPIHandler, mediaAPI *MediaAPIHandler, mapAPI *MapAPIHandler, noteAPI *NoteAPIHandler, tagAPI *TagAPIHandler, syncH *SyncHandler, changesH *SyncChangesHandler, syncSvc SyncAPIService, addonChecker AddonChecker, authSvc auth.AuthService, campaignSvc campaigns.CampaignService, opts ...func(*APIHandler)) {
 	// Inject addon checker into API handler for system-aware endpoints.
 	api.SetAddonChecker(addonChecker)
 
@@ -284,4 +284,6 @@ func RegisterAPIRoutes(e *echo.Echo, api *APIHandler, calAPI *CalendarAPIHandler
 	cg.DELETE("/sync/mappings/:mappingID", syncH.DeleteMapping, RequirePermission(PermSync))
 	cg.GET("/sync/lookup", syncH.LookupMapping, RequirePermission(PermSync))
 	cg.GET("/sync/pull", syncH.PullMappings, RequirePermission(PermSync))
+	// Change feed: ids only, DM-equivalent callers only (checked in the handler).
+	cg.GET("/sync/changes", changesH.ListChanges, RequirePermission(PermSync))
 }

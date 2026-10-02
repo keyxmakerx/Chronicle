@@ -1656,6 +1656,61 @@ paths:
         "500":
           $ref: "#/components/responses/InternalError"
 
+  /campaigns/{campaignId}/sync/changes:
+    get:
+      tags: [Sync]
+      summary: Change feed since a sequence number
+      description: >
+        Ids of resources changed after `since`, oldest first. Owner or co-DM
+        keys only. The client refetches each resource through the normal
+        reads. `resetRequired` means `since` is older than retained history:
+        do a full resync, then resume from `next`.
+      operationId: listSyncChanges
+      parameters:
+        - $ref: "#/components/parameters/campaignId"
+        - name: since
+          in: query
+          schema:
+            type: integer
+            format: int64
+            minimum: 0
+            default: 0
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            default: 500
+            minimum: 1
+            maximum: 1000
+      responses:
+        "200":
+          description: Changes after the cursor
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  changes:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        seq: {type: integer, format: int64}
+                        type: {type: string}
+                        resourceId: {type: string}
+                        op: {type: string, enum: [created, updated, deleted]}
+                  next: {type: integer, format: int64}
+                  hasMore: {type: boolean}
+                  resetRequired: {type: boolean}
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "429":
+          $ref: "#/components/responses/RateLimited"
+
 components:
   securitySchemes:
     BearerApiKey:
