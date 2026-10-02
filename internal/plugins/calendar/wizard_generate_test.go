@@ -63,14 +63,14 @@ func TestParseGeneratedCalendarJSON_TableDriven(t *testing.T) {
 			wantErrHas: "too large",
 		},
 		{
-			name:       "malformed JSON",
-			raw:        "{not valid json",
-			wantErr:    true,
+			name:    "malformed JSON",
+			raw:     "{not valid json",
+			wantErr: true,
 		},
 		{
-			name:       "well-formed JSON that is not a calendar at all",
-			raw:        `{"hello":"world"}`,
-			wantErr:    true,
+			name:    "well-formed JSON that is not a calendar at all",
+			raw:     `{"hello":"world"}`,
+			wantErr: true,
 		},
 		{
 			name:       "structurally too large (over checkCalendarImportLimits, well under the byte cap)",
@@ -79,9 +79,9 @@ func TestParseGeneratedCalendarJSON_TableDriven(t *testing.T) {
 			wantErrHas: "months",
 		},
 		{
-			name:       "empty string",
-			raw:        "",
-			wantErr:    true,
+			name:    "empty string",
+			raw:     "",
+			wantErr: true,
 		},
 	}
 
