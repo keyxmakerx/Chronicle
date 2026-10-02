@@ -336,6 +336,11 @@ html[data-theme="dark"] .calv5 {
 .calv5-brow input[type="text"], .calv5-brow input[type="number"] { height: 32px; padding: 0 9px; border-radius: 8px; border: 1px solid var(--edge); background: var(--paper2); font: 500 12.5px/1 var(--sans, sans-serif); color: var(--ink); min-width: 0; }
 .calv5-brow input[type="text"].nm { flex: 1 1 auto; }
 .calv5-brow input[type="number"].num { width: 80px; flex: none; }
+/* Column labels over the month rows, so the two number boxes stay
+ * readable once they hold values; widths match the inputs below. */
+.calv5-bhead { font: 650 9.5px/1 var(--sans, sans-serif); letter-spacing: .12em; text-transform: uppercase; color: var(--mut, var(--ink2)); }
+.calv5-bhead .nm { flex: 1 1 auto; padding-left: 10px; }
+.calv5-bhead .num { width: 80px; flex: none; padding-left: 10px; }
 .calv5-brow .mini { flex: none; height: 32px; padding: 0 10px; border-radius: 8px; border: 1px solid var(--edge); background: var(--paper); font: 600 11.5px/1 var(--sans, sans-serif); color: var(--ink2); white-space: nowrap; }
 .calv5-brow .mini:hover:not(:disabled) { background: var(--paper2); color: var(--ink); }
 .calv5-brow .mini:disabled { opacity: 0.4; }
@@ -380,6 +385,7 @@ html[data-theme="dark"] .calv5 {
   .calv5-panel { max-width: 100% !important; }
   .calv5-brow { flex-wrap: wrap; }
   .calv5-brow input[type="text"].nm { flex-basis: 100%; }
+  .calv5-bhead { display: none; }
   .calv5-step { flex-wrap: wrap; }
 }
 

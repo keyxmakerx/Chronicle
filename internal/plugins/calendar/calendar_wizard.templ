@@ -616,11 +616,16 @@ templ structureEditorForm(cfg structureEditorConfig, csrfToken, formError string
 		<div class="calv5-bsec">
 			<h4>Months</h4>
 			<div class="calv5-blist">
+				<div class="calv5-brow calv5-bhead" aria-hidden="true">
+					<span class="nm">Name</span>
+					<span class="num">Days</span>
+					<span class="num">Leap days</span>
+				</div>
 				<template x-for="(mo, i) in months" x-bind:key="mo.key">
 					<div class="calv5-brow">
-						<input type="text" class="nm" x-model="mo.name" placeholder="Name" maxlength="100"/>
-						<input type="number" class="num" x-model.number="mo.days" min="1" max="3660" placeholder="Days"/>
-						<input type="number" class="num" x-model.number="mo.leap" min="0" max="30" placeholder="Leap days"/>
+						<input type="text" class="nm" x-model="mo.name" placeholder="Name" maxlength="100" aria-label="Month name"/>
+						<input type="number" class="num" x-model.number="mo.days" min="1" max="3660" placeholder="Days" aria-label="Days"/>
+						<input type="number" class="num" x-model.number="mo.leap" min="0" max="30" placeholder="Leap days" aria-label="Extra days in a leap year"/>
 						if cfg.ShowFlags {
 							<label class="calv5-bflag"><input type="checkbox" x-model="mo.inter"/> Festival</label>
 						}
