@@ -104,8 +104,11 @@ func (b *RecordingEventBus) Publish(msg *ws.Message) {
 // than this gets resetRequired and does a full resync.
 const changeRetention = 30 * 24 * time.Hour
 
-// StartChangePruner deletes expired feed rows once a day until ctx ends.
+// StartChangePruner deletes expired feed rows at startup and then once a
+// day until ctx ends; the startup pass keeps a server restarted more often
+// than daily from never pruning.
 func StartChangePruner(ctx context.Context, repo SyncChangeRepository) {
+	pruneChanges(ctx, repo)
 	ticker := time.NewTicker(24 * time.Hour)
 	defer ticker.Stop()
 	for {
@@ -113,12 +116,16 @@ func StartChangePruner(ctx context.Context, repo SyncChangeRepository) {
 		case <-ctx.Done():
 			return
 		case <-ticker.C:
-			n, err := repo.PruneOlderThan(ctx, time.Now().UTC().Add(-changeRetention))
-			if err != nil {
-				slog.Error("sync change pruning failed", slog.Any("error", err))
-			} else if n > 0 {
-				slog.Info("pruned sync changes", slog.Int64("rows", n))
-			}
+			pruneChanges(ctx, repo)
 		}
+	}
+}
+
+func pruneChanges(ctx context.Context, repo SyncChangeRepository) {
+	n, err := repo.PruneOlderThan(ctx, time.Now().UTC().Add(-changeRetention))
+	if err != nil {
+		slog.Error("sync change pruning failed", slog.Any("error", err))
+	} else if n > 0 {
+		slog.Info("pruned sync changes", slog.Int64("rows", n))
 	}
 }

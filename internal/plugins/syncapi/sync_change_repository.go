@@ -63,8 +63,13 @@ func (r *syncChangeRepo) Append(ctx context.Context, campaignID, resourceType, r
 
 func (r *syncChangeRepo) List(ctx context.Context, campaignID string, since int64, limit int) ([]SyncChange, error) {
 	rows, err := r.db.QueryContext(ctx,
+		// The settle window: concurrent inserts can commit out of seq order,
+		// so a just-written row may still have a lower-seq neighbour in
+		// flight. Holding back the last two seconds keeps a cursor from
+		// moving past a seq that hasn't committed yet.
 		`SELECT seq, resource_type, resource_id, op FROM sync_changes
-		 WHERE campaign_id = ? AND seq > ? ORDER BY seq ASC LIMIT ?`,
+		 WHERE campaign_id = ? AND seq > ? AND created_at < NOW(6) - INTERVAL 2 SECOND
+		 ORDER BY seq ASC LIMIT ?`,
 		campaignID, since, limit)
 	if err != nil {
 		return nil, apperror.NewInternal(fmt.Errorf("list sync changes: %w", err))
