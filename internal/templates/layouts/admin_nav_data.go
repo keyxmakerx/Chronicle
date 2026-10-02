@@ -104,8 +104,9 @@ var adminNav = AdminNavTree{
 			{Label: "Admin activity", Href: "/admin/activity", Icon: "fa-clock-rotate-left"},
 		}},
 		{ID: "site", Label: "Site & data", Items: []AdminNavItem{
-			{Label: "Storage", Href: "/admin/storage", Icon: "fa-hard-drive"},
-			{Label: "Data clean-up", Href: "/admin/data-hygiene", Icon: "fa-broom"},
+			// Storage limits and clean-up are tabs on the storage pages.
+			{Label: "Storage & cleanup", Href: "/admin/storage", Icon: "fa-hard-drive",
+				Prefixes: []string{"/admin/data-hygiene"}},
 			// Backup and restore are separate plugins sharing one slot, with a
 			// tab strip on each page to flip between them.
 			{Label: "Backups & restore", Href: "/admin/backup", Icon: "fa-box-archive",
@@ -113,9 +114,11 @@ var adminNav = AdminNavTree{
 			{Label: "Email", Href: "/admin/smtp", Icon: "fa-envelope"},
 		}},
 		{ID: "tools", Label: "Tools", Items: []AdminNavItem{
-			{Label: "Health", Href: "/admin/systems", Icon: "fa-microchip"},
-			{Label: "Database", Href: "/admin/database", Icon: "fa-database", Badge: adminBadgeDegraded},
-			{Label: "AI diagnostics", Href: "/admin/diagnostics/workspace", Icon: "fa-stethoscope"},
+			// Parts of Chronicle, Database and the AI helper are tabs on one
+			// area; the degraded-plugin count rides on the row so it is seen
+			// without opening the Database tab.
+			{Label: "Health & diagnostics", Href: "/admin/systems", Icon: "fa-microchip",
+				Prefixes: []string{"/admin/database", "/admin/diagnostics"}, Badge: adminBadgeDegraded},
 			{Label: "Design Lab", Href: "/admin/design-lab", Icon: "fa-palette"},
 		}},
 	},

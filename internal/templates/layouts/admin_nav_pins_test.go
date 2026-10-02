@@ -39,6 +39,7 @@ func TestAdminNavPinnedItems(t *testing.T) {
 		{"in pin order", []string{"/admin/storage", "/admin/users"}, []string{"/admin/storage", "/admin/users"}},
 		{"unknown skipped", []string{"/admin/renamed", "/admin/users"}, []string{"/admin/users"}},
 		{"home skipped", []string{"/admin"}, nil},
+		{"rows folded into tabs skipped", []string{"/admin/database", "/admin/data-hygiene", "/admin/diagnostics/workspace", "/admin/systems"}, []string{"/admin/systems"}},
 		{"repeat skipped", []string{"/admin/users", "/admin/users"}, []string{"/admin/users"}},
 	}
 	for _, tc := range tests {
@@ -87,7 +88,7 @@ func TestAdminSidebarNav_PinnedGroup(t *testing.T) {
 		if n := strings.Count(out, `href="/admin/storage"`); n != 2 {
 			t.Errorf("storage should be linked in Pinned and in its section, got %d", n)
 		}
-		if !strings.Contains(out, `aria-label="Unpin Storage"`) || !strings.Contains(out, `aria-pressed="true"`) {
+		if !strings.Contains(out, `aria-label="Unpin Storage &amp; cleanup"`) || !strings.Contains(out, `aria-pressed="true"`) {
 			t.Error("the pinned row's toggle must read Unpin and be pressed")
 		}
 	})

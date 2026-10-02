@@ -1,6 +1,10 @@
 package layouts
 
-import "testing"
+import (
+	"testing"
+
+	"github.com/keyxmakerx/chronicle/internal/templates/components"
+)
 
 func TestAdminNavCurrent(t *testing.T) {
 	tests := []struct {
@@ -25,14 +29,14 @@ func TestAdminNavCurrent(t *testing.T) {
 		{"/admin/activity", "security", "/admin/activity"},
 		{"/admin/storage", "site", "/admin/storage"},
 		{"/admin/storage/settings", "site", "/admin/storage"},
-		{"/admin/data-hygiene", "site", "/admin/data-hygiene"},
+		{"/admin/data-hygiene", "site", "/admin/storage"},
 		{"/admin/backup", "site", "/admin/backup"},
 		{"/admin/restore", "site", "/admin/backup"},
 		{"/admin/smtp", "site", "/admin/smtp"},
 		{"/admin/systems", "tools", "/admin/systems"},
-		{"/admin/database", "tools", "/admin/database"},
-		{"/admin/database/schema", "tools", "/admin/database"},
-		{"/admin/diagnostics/workspace", "tools", "/admin/diagnostics/workspace"},
+		{"/admin/database", "tools", "/admin/systems"},
+		{"/admin/database/schema", "tools", "/admin/systems"},
+		{"/admin/diagnostics/workspace", "tools", "/admin/systems"},
 		{"/admin/design-lab", "tools", "/admin/design-lab"},
 		// A shared leading string is not a path prefix.
 		{"/admin/apiary", "", ""},
@@ -87,6 +91,35 @@ func TestAdminNavShape(t *testing.T) {
 		for _, it := range s.Items {
 			if it.Label == "" || it.Href == "" || it.Icon == "" {
 				t.Errorf("section %q item %+v needs label, href and icon", s.ID, it)
+			}
+		}
+	}
+}
+
+// Every tab of a merged area must light up that area's single menu row, or the
+// menu and the tab strip disagree about where the admin is.
+func TestAdminNavCoversTabGroups(t *testing.T) {
+	groups := map[string]components.AdminTabGroup{
+		"/admin/systems": components.AdminTabsHealth,
+		"/admin/storage": components.AdminTabsStorage,
+		"/admin/api":     components.AdminTabsAPI,
+	}
+	for row, g := range groups {
+		for _, tab := range g.Tabs {
+			if _, href := adminNav.Current(tab.Href); href != row {
+				t.Errorf("tab %q (%s) maps to menu row %q, want %q", tab.Label, tab.Href, href, row)
+			}
+		}
+	}
+}
+
+// The degraded-plugin count belongs on the Health & diagnostics row now that
+// Database is a tab, not a row of its own.
+func TestAdminNavDegradedBadgeOnHealthRow(t *testing.T) {
+	for _, s := range adminNav.Sections {
+		for _, it := range s.Items {
+			if (it.Badge == adminBadgeDegraded) != (it.Href == "/admin/systems") {
+				t.Errorf("item %q badge = %q", it.Href, it.Badge)
 			}
 		}
 	}

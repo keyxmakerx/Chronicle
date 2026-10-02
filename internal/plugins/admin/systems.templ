@@ -6,6 +6,7 @@ package admin
 import (
 	"fmt"
 	"github.com/keyxmakerx/chronicle/internal/systems"
+	"github.com/keyxmakerx/chronicle/internal/templates/components"
 	"github.com/keyxmakerx/chronicle/internal/templates/layouts"
 )
 
@@ -25,17 +26,10 @@ type SystemDiagnosticEntry struct {
 templ AdminSystemsPage(entries []SystemDiagnosticEntry, events []systems.LoadEvent) {
 	@layouts.App("Systems - Admin") {
 		<div class="max-w-7xl mx-auto space-y-6">
-			<div class="flex items-center justify-between">
-				<div>
-					<h1 class="text-2xl font-bold text-fg">System Diagnostics</h1>
-					<p class="text-sm text-fg-secondary mt-1">
-						Game system loading status and error log.
-					</p>
-				</div>
-				<a href="/admin" class="text-sm text-fg-muted hover:text-accent">
-					<i class="fa-solid fa-arrow-left mr-1"></i> Back to Dashboard
-				</a>
-			</div>
+			@components.AdminGroupHeading(components.AdminTabsHealth, "/admin/systems")
+			<p class="text-sm text-fg-secondary">
+				Game system loading status and error log.
+			</p>
 
 			// Summary cards.
 			<div class="grid grid-cols-3 gap-4">
