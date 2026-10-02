@@ -199,6 +199,14 @@ func (f *fakeCalendarSvc) SearchCalendarEvents(context.Context, string, string, 
 	return nil, nil
 }
 
+func (f *fakeCalendarSvc) ListEventsForCalendar(context.Context, string, string, int) ([]Event, error) {
+	return nil, nil
+}
+
+func (f *fakeCalendarSvc) ListErasForCalendar(context.Context, string, string, int) ([]Era, error) {
+	return nil, nil
+}
+
 func (f *fakeCalendarSvc) PreviewImport(context.Context, []byte) (*ImportResult, error) {
 	return &ImportResult{Format: FormatChronicle, CalendarName: "Previewed Calendar"}, nil
 }

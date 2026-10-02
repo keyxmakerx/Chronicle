@@ -511,23 +511,91 @@ func (a *entityVisibilityFilterAdapter) FilterViewableEntityIDs(ctx context.Cont
 	return a.svc.FilterViewableEntityIDs(ctx, campaignID, entityIDs, role, userID)
 }
 
-// CALV5-PLACEHOLDER: V5 must re-implement ten cross-plugin bridge adapters
-// against its own service — toward the calendar: timelineForCalendarAdapter,
-// calendarSyncLinkAdapter, calendarEntityCreatorAdapter,
-// calendarRSVPNotifierAdapter, calendarAvailabilityAdapter (member zones,
-// exception dates, offered windows), calendarBenchScheduleAdapter,
-// calendarOwnWeekAdapter; away from it: calendarListerAdapter,
-// calendarEventListerAdapter, calendarEraListerAdapter (fed timeline its
-// CalendarRef/CalendarEventRef/CalendarEra — timeline nil-guards these as
-// optional, so it still builds and runs without them). Each was a narrow
-// interface owned by the consuming plugin, not a shared type — keep that
-// shape so the rebuild stays surgical rather than a cascade. TODO(#778)
+// CALV5-PLACEHOLDER: V5 must still re-implement seven cross-plugin bridge
+// adapters against its own service, toward the calendar:
+// timelineForCalendarAdapter, calendarSyncLinkAdapter,
+// calendarEntityCreatorAdapter, calendarRSVPNotifierAdapter,
+// calendarAvailabilityAdapter (member zones, exception dates, offered
+// windows), calendarBenchScheduleAdapter, calendarOwnWeekAdapter. Each is a
+// narrow interface owned by the consuming plugin, not a shared type — keep
+// that shape so the rebuild stays surgical. TODO(#778)
 //
-// calendarEventLinkListerAdapter below is a SEPARATE, newly-added seam, not
-// one of the ten above: it feeds timeline's calendar-name display and its
-// timeline_event_links -> calendar_events resolution (calendar-v5 seams,
-// #778's item 3), which needed restoring regardless of when the ten above
-// land.
+// The three below feed timeline away from the calendar (selector, event
+// picker, era bands); calendarEventLinkListerAdapter after them is a
+// separate seam, timeline's calendar-name display and its own
+// timeline_event_links -> calendar_events resolution.
+
+// calendarListerAdapter powers the create-form's calendar selector
+// (GET /campaigns/:id/timelines/calendars) — Owner-gated at the route, and
+// this interface carries no role, so it reads explicitly at Owner level.
+type calendarListerAdapter struct {
+	svc calendar.CalendarService
+}
+
+func (a *calendarListerAdapter) ListCalendars(ctx context.Context, campaignID string) ([]timeline.CalendarRef, error) {
+	cals, err := a.svc.ListCalendars(ctx, campaignID, permissions.RequestViewer(permissions.RoleOwner, ""))
+	if err != nil {
+		return nil, err
+	}
+	refs := make([]timeline.CalendarRef, len(cals))
+	for i, cal := range cals {
+		refs[i] = timeline.CalendarRef{ID: cal.ID, Name: cal.Name}
+	}
+	return refs, nil
+}
+
+// calendarEventListerAdapter powers the timeline event-picker's list of
+// linkable calendar events. CalendarService.ListEventsForCalendar already
+// scopes to campaignID and gates dm_only by role; this just reshapes.
+type calendarEventListerAdapter struct {
+	svc calendar.CalendarService
+}
+
+func (a *calendarEventListerAdapter) ListEventsForCalendar(ctx context.Context, campaignID, calendarID string, role int) ([]timeline.CalendarEventRef, error) {
+	events, err := a.svc.ListEventsForCalendar(ctx, campaignID, calendarID, role)
+	if err != nil {
+		return nil, err
+	}
+	refs := make([]timeline.CalendarEventRef, 0, len(events))
+	for _, ev := range events {
+		var category *string
+		if ev.KindSlug != "" {
+			category = &ev.KindSlug
+		}
+		refs = append(refs, timeline.CalendarEventRef{
+			ID: ev.ID, Name: ev.Name, Description: ev.Description,
+			Year: ev.Year, Month: ev.Month, Day: ev.Day,
+			EndYear: ev.EndYear, EndMonth: ev.EndMonth, EndDay: ev.EndDay,
+			Category: category, Visibility: ev.Visibility,
+			EntityID: ev.EntityID, EntityName: ev.EntityName, EntityIcon: ev.EntityIcon,
+		})
+	}
+	return refs, nil
+}
+
+// calendarEraListerAdapter powers the D3 timeline visualization's era
+// background bands. CalendarService.ListErasForCalendar gates on role alone
+// — eras are calendar structure, Owner/co-DM only regardless of the bound
+// calendar's own visibility.
+type calendarEraListerAdapter struct {
+	svc calendar.CalendarService
+}
+
+func (a *calendarEraListerAdapter) ListEras(ctx context.Context, campaignID, calendarID string, role int) ([]timeline.CalendarEra, error) {
+	eras, err := a.svc.ListErasForCalendar(ctx, campaignID, calendarID, role)
+	if err != nil {
+		return nil, err
+	}
+	refs := make([]timeline.CalendarEra, 0, len(eras))
+	for _, e := range eras {
+		refs = append(refs, timeline.CalendarEra{Name: e.Name, StartYear: e.StartYear, EndYear: e.EndYear, Color: e.Color})
+	}
+	return refs, nil
+}
+
+// calendarEventLinkListerAdapter feeds timeline's calendar-name display and
+// its timeline_event_links -> calendar_events resolution — a separate seam
+// from the three adapters above (see the CALV5-PLACEHOLDER comment).
 type calendarEventLinkListerAdapter struct {
 	svc calendar.CalendarService
 }
@@ -2763,12 +2831,15 @@ func (a *App) RegisterRoutes() {
 
 	// Timeline plugin: interactive visual timelines with zoom levels and entity grouping.
 	timelineRepo := timeline.NewTimelineRepository(a.DB)
-	// CALV5-PLACEHOLDER: V5 must restore &calendarListerAdapter{},
-	// &calendarEventListerAdapter{} and &calendarEraListerAdapter{} as the
-	// 2nd-4th arguments. Timeline nil-guards all three, so it runs on
-	// standalone events alone until then. TODO(#778): distinct from
-	// CalendarEventLinkLister below, which IS restored in this change.
-	timelineSvc := timeline.NewTimelineService(timelineRepo, nil, nil, nil)
+	// Wires the calendar selector dropdown, event picker and era
+	// visualization bands back to the calendar plugin (calendar-v5 seams,
+	// #778) — distinct from SetCalendarEventLinkLister below, restored
+	// separately.
+	timelineSvc := timeline.NewTimelineService(timelineRepo,
+		&calendarListerAdapter{svc: calendarService},
+		&calendarEventListerAdapter{svc: calendarService},
+		&calendarEraListerAdapter{svc: calendarService},
+	)
 	// Reuses the same entityVisibilityFilterAdapter maps, media, npcs and
 	// sessions wire, so a timeline event or entity-group member naming a
 	// dm_only/private entity is narrowed by entities' one canonical
@@ -2781,10 +2852,9 @@ func (a *App) RegisterRoutes() {
 	}
 	// SetCalendarEventLinkLister restores timeline's calendar-name display
 	// and calendar-linked event reads (calendar-v5 seams, #778) — a
-	// SEPARATE, newly-added seam from the three CALV5-PLACEHOLDER
-	// constructor args above (those remain deferred). Reached via a type
-	// assertion so TimelineService's interface stays unchanged, the same
-	// pattern SetBindingCleaner below uses.
+	// SEPARATE seam from the three constructor args above. Reached via a
+	// type assertion so TimelineService's interface stays unchanged, the
+	// same pattern SetBindingCleaner below uses.
 	if t, ok := timelineSvc.(interface {
 		SetCalendarEventLinkLister(timeline.CalendarEventLinkLister)
 	}); ok {

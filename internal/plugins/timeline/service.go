@@ -38,15 +38,19 @@ type CalendarRef struct {
 }
 
 // CalendarEventLister fetches calendar events for the event picker.
-// Implemented as an adapter in app/routes.go to avoid importing the calendar package.
+// Implemented as an adapter in app/routes.go to avoid importing the calendar
+// package. Takes campaignID so a calendar from another campaign never
+// resolves here.
 type CalendarEventLister interface {
-	ListEventsForCalendar(ctx context.Context, calendarID string, role int) ([]CalendarEventRef, error)
+	ListEventsForCalendar(ctx context.Context, campaignID, calendarID string, role int) ([]CalendarEventRef, error)
 }
 
-// CalendarEraLister fetches calendar eras for the D3 visualization background bands.
-// Implemented as an adapter in app/routes.go to avoid importing the calendar package.
+// CalendarEraLister fetches calendar eras for the D3 visualization background
+// bands. Implemented as an adapter in app/routes.go to avoid importing the
+// calendar package. Takes campaignID for the same cross-campaign scoping as
+// CalendarEventLister.
 type CalendarEraLister interface {
-	ListEras(ctx context.Context, calendarID string) ([]CalendarEra, error)
+	ListEras(ctx context.Context, campaignID, calendarID string, role int) ([]CalendarEra, error)
 }
 
 // CalendarScope confirms a calendar belongs to a campaign before a timeline
@@ -197,7 +201,7 @@ type TimelineService interface {
 
 	// Calendar lookup.
 	ListCalendars(ctx context.Context, campaignID string) ([]CalendarRef, error)
-	ListCalendarEras(ctx context.Context, calendarID string) ([]CalendarEra, error)
+	ListCalendarEras(ctx context.Context, campaignID, calendarID string, role int) ([]CalendarEra, error)
 }
 
 // EntityVisibilityGate resolves which of a set of entity IDs a viewer (role +
@@ -826,7 +830,7 @@ func (s *timelineService) ListAvailableEvents(ctx context.Context, timelineID st
 	}
 
 	// Get all calendar events.
-	allEvents, err := s.calEvents.ListEventsForCalendar(ctx, *t.CalendarID, role)
+	allEvents, err := s.calEvents.ListEventsForCalendar(ctx, t.CampaignID, *t.CalendarID, role)
 	if err != nil {
 		return nil, fmt.Errorf("list calendar events: %w", err)
 	}
@@ -1249,12 +1253,14 @@ func (s *timelineService) ListCalendars(ctx context.Context, campaignID string) 
 	return s.calLists.ListCalendars(ctx, campaignID)
 }
 
-// ListCalendarEras returns eras for a calendar (used by the D3 visualization).
-func (s *timelineService) ListCalendarEras(ctx context.Context, calendarID string) ([]CalendarEra, error) {
+// ListCalendarEras returns eras for a calendar (used by the D3 visualization),
+// campaign- and role-scoped so the lister below can refuse a foreign
+// calendar and gate eras on role (they are calendar structure, not content).
+func (s *timelineService) ListCalendarEras(ctx context.Context, campaignID, calendarID string, role int) ([]CalendarEra, error) {
 	if s.calEras == nil {
 		return nil, nil
 	}
-	return s.calEras.ListEras(ctx, calendarID)
+	return s.calEras.ListEras(ctx, campaignID, calendarID, role)
 }
 
 // --- Visibility Helpers ---
