@@ -10,7 +10,7 @@
 // so a dashboard/entity-page mount (routes.go's "skybox" block) is still
 // this widget's only Mount. Instead, this test drives the REAL
 // production assets end to end in a real browser:
-//   - static/js/boot.js (the real widget auto-mounter) and the six real
+//   - static/js/boot.js (the real widget auto-mounter) and the eight real
 //     static/js/widgets/sky_*.js files, read verbatim off disk — never
 //     copied or stubbed.
 //   - a page body transcribed verbatim from mount.templ's own Mount()
@@ -164,11 +164,11 @@ function reducedMotionGuardCSS() {
 }
 
 const SKY_SCRIPTS = [
-  'sky_world.js', 'sky_looks.js', 'sky_moon.js', 'sky_events.js', 'sky_2d.js', 'sky_pane.js',
+  'sky_world.js', 'sky_looks.js', 'sky_moon.js', 'sky_events.js', 'sky_2d.js', 'sky_shaders.js', 'sky_gl.js', 'sky_pane.js',
 ];
 
 function harnessHTML(campaignID, calendarID) {
-  // htmx first, then boot.js, then the six sky scripts, in base.templ's own
+  // htmx first, then boot.js, then the sky scripts, in base.templ's own
   // order — boot.js references `htmx.config` unconditionally at its own top
   // level, so loading it out of production order throws before boot.js
   // finishes defining Chronicle.apiFetch.

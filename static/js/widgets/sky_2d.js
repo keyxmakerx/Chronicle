@@ -1,31 +1,14 @@
 /*
- * sky_2d.js — the sky pane's sole renderer (window.Sky2D).
+ * sky_2d.js — the basic sky (window.Sky2D): the design contract's own 2D
+ * fallback painter, ported closely. It draws whenever the painted sky
+ * (sky_gl.js) can't: the palette's gradient and glow, stars, the sun, MOONR
+ * moon sprites turned toward the sun and eclipse-shadowed, a land
+ * silhouette, a cloud wash, a still of rain/snow, and fog, plus soft
+ * overlays for the day's sky events (blood wash, conjunction thread,
+ * harvest glow; see drawEventFX). The painted sky has the full versions.
  *
- * This IS the design contract's own signed 2D-canvas fallback painter
- * (sky-2d.js, issue #763's artifact — "the one painter every sky shares...
- * skies are drawn in 2D instead"), ported closely: the palette's gradient
- * and glow, stars, the sun, MOONR moon sprites turned toward the sun and
- * eclipse-shadowed, a land silhouette, a cloud wash, a still of rain/snow,
- * and fog — plus a small drawn layer for the day's sky events (blood tint,
- * conjunction thread, harvest glow), see drawEventFX below.
- *
- * DISCLOSED SIMPLIFICATION: the contract's drawn layer (FX.draw in the
- * saved HTML) renders an elaborate rivulets-of-blood physics simulation for
- * a blood moon (beads, gathering, running, merging trails) driven by mock
- * generator events. That is a lot of bespoke animation code for a feature
- * this PR's real data only signals as "this moon is a blood moon tonight" —
- * so blood/harvest/conjunction here are rendered as a soft wash/halo/thread
- * (still fully readable, still moving, still keyed off the same OKLab scene
- * light as the rest of the sky) rather than the full rivulet simulation. A
- * follow-up issue can port the rivulet animation verbatim if the operator
- * wants that exact effect; the CURRENT visuals are not a placeholder — they
- * are a deliberately smaller, real implementation of the same idea.
- *
- * LAND (the ridge silhouette) has no real terrain data to draw from (the
- * contract's own LAND is a fixed decorative noise silhouette, not campaign
- * geography), so it is generated from a stable per-calendar seed here, same
- * as the contract's own approach of "a hand-tuned silhouette", just seeded
- * differently so different calendars don't look identical.
+ * LAND has no terrain data to draw from, so it's generated from a stable
+ * per-calendar seed, so different calendars don't look identical.
  */
 (function () {
   'use strict';
@@ -113,7 +96,7 @@
   var X = {};
   // draw(ctx, st, dpr, oy): st is the state builder's per-frame object (see
   // sky_pane.js's buildState) — the same shape the contract's Surface.state
-  // produces, minus every field only the WebGL uniforms needed. oy (CSS px,
+  // produces; it reads only what a 2D picture can show. oy (CSS px,
   // default 0) lowers the whole picture, so a folding pane draws its sky
   // whole into the strip that shows rather than cropping a bigger one.
   X.draw = function (ctx, st, dpr, oy) {
