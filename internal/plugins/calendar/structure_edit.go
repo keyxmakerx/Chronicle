@@ -496,12 +496,12 @@ func otherStructureNotes(cal *Calendar, edit StructureEdit) []string {
 // whatever order they were read in.
 func structureFingerprint(cal *Calendar, events []Event, weather []DayDate) string {
 	h := sha256.New()
-	fmt.Fprintf(h, "leap %d %d|now %d %d %d|", cal.LeapYearEvery, cal.LeapYearOffset, cal.CurrentYear, cal.CurrentMonth, cal.CurrentDay)
+	_, _ = fmt.Fprintf(h, "leap %d %d|now %d %d %d|", cal.LeapYearEvery, cal.LeapYearOffset, cal.CurrentYear, cal.CurrentMonth, cal.CurrentDay)
 	for _, m := range cal.Months {
-		fmt.Fprintf(h, "m %q %d %d %t|", m.Name, m.Days, m.LeapYearDays, m.IsIntercalary)
+		_, _ = fmt.Fprintf(h, "m %q %d %d %t|", m.Name, m.Days, m.LeapYearDays, m.IsIntercalary)
 	}
 	for _, w := range cal.Weekdays {
-		fmt.Fprintf(h, "w %q|", w.Name)
+		_, _ = fmt.Fprintf(h, "w %q|", w.Name)
 	}
 	ptr := func(v *int) string {
 		if v == nil {
