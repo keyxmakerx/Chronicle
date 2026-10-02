@@ -16,7 +16,7 @@ func TestOwnerDashboard_ExtensionsCard(t *testing.T) {
 		MemberRole: RoleOwner,
 	}
 	var sb strings.Builder
-	if err := OwnerDashboardPage(cc, nil, "tok").Render(context.Background(), &sb); err != nil {
+	if err := OwnerDashboardPage(cc, nil, nil, "tok").Render(context.Background(), &sb); err != nil {
 		t.Fatalf("render owner dashboard: %v", err)
 	}
 	html := sb.String()

@@ -148,18 +148,11 @@ templ customDashboard(cc *CampaignContext, layout *DashboardLayout, recentEntiti
 
 // OwnerDashboardPage renders the owner-only management dashboard.
 // Separate from the campaign page (CampaignShowPage) which all members see.
-templ OwnerDashboardPage(cc *CampaignContext, recentEntities []RecentEntity, csrfToken string) {
-	@layouts.App(cc.Campaign.Name + " — Dashboard") {
+templ OwnerDashboardPage(cc *CampaignContext, recentEntities []RecentEntity, needsYou []NeedsYouItem, csrfToken string) {
+	@layouts.App(cc.Campaign.Name + " — Overview") {
 		<div class="max-w-5xl mx-auto">
-			<div class="flex items-center justify-between mb-6">
-				<div>
-					<h1 class="text-2xl font-bold text-fg">Owner Dashboard</h1>
-					<p class="text-sm text-fg-secondary mt-0.5">Campaign management and overview</p>
-				</div>
-				<a href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/customize", cc.Campaign.ID)) } class="btn-secondary text-sm">
-					<i class="fa-solid fa-palette mr-1.5 text-xs"></i> Customize
-				</a>
-			</div>
+			@layouts.ManageHeader("Overview", "manage:dashboard")
+			@NeedsYouCard(needsYou)
 
 			if layout := cc.Campaign.ParseOwnerDashboardLayout(); layout != nil {
 				@customDashboard(cc, layout, recentEntities)

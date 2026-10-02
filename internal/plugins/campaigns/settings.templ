@@ -118,13 +118,7 @@ templ CampaignSettingsPage(cc *CampaignContext, transfer *OwnershipTransfer, csr
 				}
 			}`, jsEsc(activeTab), settingsTabIDsJSON(tabs)) }
 		>
-			<div class="flex items-center justify-between mb-4">
-				<div>
-					<h1 class="text-2xl font-bold text-fg">Campaign Settings</h1>
-					<p class="text-sm text-fg-muted mt-0.5">Manage your campaign</p>
-				</div>
-				<a href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s", cc.Campaign.ID)) } class="btn-secondary text-sm">Back</a>
-			</div>
+			@layouts.ManageHeader("Settings", "manage:settings")
 			if errMsg != "" {
 				<div class="alert-error mb-4" role="alert">{ errMsg }</div>
 			}
@@ -464,8 +458,23 @@ templ settingsGeneralTab(cc *CampaignContext, csrfToken, systemOptionsJSON strin
 	</div>
 }
 
-// settingsPeopleTab renders member list, invites, DM privileges, and transfer.
-templ settingsPeopleTab(cc *CampaignContext, members []CampaignMember, transfer *OwnershipTransfer, csrfToken string, smtpConfigured bool) {
+// settingsPeopleLink is the Settings People tab. Members, invites and
+// ownership live on the People page; the tab keeps old ?tab=people links
+// landing somewhere useful instead of duplicating that page.
+templ settingsPeopleLink(cc *CampaignContext) {
+	<div class="card p-6">
+		<p class="text-sm text-fg-body">
+			Members, invites and ownership now live on the
+			<a href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/members", cc.Campaign.ID)) } class="text-accent hover:underline focus-visible:outline focus-visible:outline-2 focus-visible:outline-accent">People page</a>.
+		</p>
+	</div>
+}
+
+// peopleSections renders everything the owner manages about members: the
+// member list (add, role change, remove), the invite link, email
+// invitations, co-DM access and ownership transfer. The People page is its
+// only home; Settings links to it instead of repeating it.
+templ peopleSections(cc *CampaignContext, members []CampaignMember, transfer *OwnershipTransfer, csrfToken, errMsg string, smtpConfigured bool) {
 	<div class="space-y-6">
 		// SMTP warning.
 		if !smtpConfigured {
@@ -475,72 +484,7 @@ templ settingsPeopleTab(cc *CampaignContext, members []CampaignMember, transfer 
 			</div>
 		}
 
-		// Member list.
-		<div class="card p-6">
-			<div class="flex items-center justify-between mb-4">
-				<h2 class="text-lg font-semibold text-fg">Members</h2>
-				<span class="text-xs text-fg-muted">{ fmt.Sprintf("%d members", len(members)) }</span>
-			</div>
-			// Add member form.
-			<form
-				method="POST"
-				hx-post={ fmt.Sprintf("/campaigns/%s/members", cc.Campaign.ID) }
-				hx-swap="none"
-				class="flex flex-wrap items-end gap-3 mb-4 pb-4 border-b border-edge"
-			>
-				<input type="hidden" name="csrf_token" value={ csrfToken }/>
-				<div class="flex-1 min-w-[200px]">
-					<label class="block text-xs text-fg-secondary mb-1">Email</label>
-					<input type="email" name="email" placeholder="player@example.com" required class="input w-full"/>
-				</div>
-				<div class="w-28">
-					<label class="block text-xs text-fg-secondary mb-1">Role</label>
-					<select name="role" class="input w-full">
-						<option value="player">Player</option>
-						<option value="scribe">Scribe</option>
-					</select>
-				</div>
-				<button type="submit" class="btn-primary text-sm">Add Member</button>
-			</form>
-			// Member table.
-			<div class="space-y-2">
-				for _, m := range members {
-					<div class="flex items-center gap-3 py-2 px-3 rounded-md hover:bg-surface-alt transition-colors">
-						<div class="w-8 h-8 rounded-full bg-accent/10 flex items-center justify-center text-xs font-bold text-accent shrink-0">
-							if m.DisplayName != "" {
-								{ string([]rune(m.DisplayName)[0:1]) }
-							} else {
-								{ string([]rune(m.Email)[0:1]) }
-							}
-						</div>
-						<div class="flex-1 min-w-0">
-							<span class="text-sm font-medium text-fg truncate block">
-								if m.DisplayName != "" {
-									{ m.DisplayName }
-								} else {
-									{ m.Email }
-								}
-							</span>
-							<span class="text-xs text-fg-muted">{ m.Email }</span>
-						</div>
-						<span class={ "text-[10px] font-medium uppercase px-2 py-0.5 rounded-full",
-							templ.KV("bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400", m.Role == RoleOwner),
-							templ.KV("bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400", m.Role == RoleScribe),
-							templ.KV("bg-surface-alt text-fg-muted", m.Role == RolePlayer) }>
-							{ m.Role.DisplayName() }
-						</span>
-						if m.Role != RoleOwner {
-							<form method="POST" hx-delete={ fmt.Sprintf("/campaigns/%s/members/%s", cc.Campaign.ID, m.UserID) } hx-confirm={ fmt.Sprintf("Remove %s from the campaign?", m.DisplayName) }>
-								<input type="hidden" name="csrf_token" value={ csrfToken }/>
-								<button type="submit" class="text-fg-muted hover:text-red-400 transition-colors p-1" title="Remove">
-									<i class="fa-solid fa-xmark text-xs"></i>
-								</button>
-							</form>
-						}
-					</div>
-				}
-			</div>
-		</div>
+		@MemberListComponent(cc, members, csrfToken, errMsg)
 
 		// Shareable invite link.
 		<div class="card p-6" x-data={ fmt.Sprintf(`{

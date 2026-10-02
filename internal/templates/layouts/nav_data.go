@@ -109,11 +109,7 @@ func NavCommandsJSON(ctx context.Context) string {
 	}
 	add("All Pages", base+"/entities", "fa-layer-group")
 	for _, row := range NavManageRows(ctx) {
-		label := row.Label
-		if row.Key == "manage:dashboard" {
-			label = "Owner dashboard" // the campaign's own Dashboard is listed above
-		}
-		add(label, row.URL, row.Icon)
+		add(row.Label, row.URL, row.Icon)
 	}
 	b, err := json.Marshal(out)
 	if err != nil || out == nil {
@@ -123,22 +119,17 @@ func NavCommandsJSON(ctx context.Context) string {
 }
 
 // NavManageRows are the campaign-management pages, in the order the sidebar
-// lists them: Members for every member, the rest for the owner alone. An
-// owner viewing as a player gets a player's (GetCampaignRole is Player then),
-// and a visitor who is not a member gets none.
+// lists them. Only the owner manages a campaign, so anyone else (a Scribe, a
+// player, an owner viewing as a player whose role reads Player, a visitor)
+// gets none. The same rows feed the shared Manage header's tab strip.
 func NavManageRows(ctx context.Context) []NavRowView {
-	role := GetCampaignRole(ctx)
-	if !InCampaign(ctx) || !IsAuthenticated(ctx) || role < 1 {
+	if !InCampaign(ctx) || !IsAuthenticated(ctx) || GetCampaignRole(ctx) < 3 {
 		return nil
 	}
 	base := "/campaigns/" + GetCampaignID(ctx)
-	members := NavRowView{Key: "manage:members", Label: "Members", Icon: "fa-users", URL: base + "/members"}
-	if role < 3 {
-		return []NavRowView{members}
-	}
 	rows := []NavRowView{
-		{Key: "manage:dashboard", Label: "Dashboard", Icon: "fa-gauge", URL: base + "/dashboard"},
-		members,
+		{Key: "manage:dashboard", Label: "Overview", Icon: "fa-gauge", URL: base + "/dashboard"},
+		{Key: "manage:members", Label: "People", Icon: "fa-users", URL: base + "/members"},
 	}
 	if IsAddonEnabled(ctx, "media-gallery") {
 		rows = append(rows, NavRowView{Key: "manage:media", Label: "Media", Icon: "fa-photo-film", URL: base + "/media"})

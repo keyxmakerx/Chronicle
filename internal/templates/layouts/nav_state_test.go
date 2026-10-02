@@ -113,7 +113,7 @@ func TestResolveNavState_CurrentRow(t *testing.T) {
 		{"an owner viewing as a player does", navStateCase{role: 3, player: true, path: "/campaigns/c1/me"}, "me", ""},
 		{"the owner's Manage pages", navStateCase{role: 3, path: "/campaigns/c1/settings/general"}, "manage:settings", ""},
 		{"a player has none of the owner's Manage rows", navStateCase{role: 1, path: "/campaigns/c1/settings"}, "", ""},
-		{"a player's Members page", navStateCase{role: 1, path: "/campaigns/c1/members"}, "manage:members", ""},
+		{"the owner's People page", navStateCase{role: 3, path: "/campaigns/c1/members"}, "manage:members", ""},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -272,9 +272,13 @@ func TestCampaignNavList_ManageAndEditingAreTheOwners(t *testing.T) {
 			t.Errorf("a player's sidebar contains the owner's %q", owners)
 		}
 	}
-	// Every member keeps a Members link, under Manage.
-	if !strings.Contains(player, `data-nav-section="manage"`) || !strings.Contains(player, `href="/campaigns/c1/members"`) {
-		t.Errorf("a player's sidebar is missing Manage's Members link")
+	// Only the owner manages; a player gets no Manage section or Members row.
+	if strings.Contains(player, `data-nav-section="manage"`) || strings.Contains(player, `href="/campaigns/c1/members"`) {
+		t.Errorf("a player's sidebar must have no Manage section")
+	}
+	scribe := renderNavList(t, navStateCase{role: 2, path: "/campaigns/c1"}.ctx())
+	if strings.Contains(scribe, `data-nav-section="manage"`) {
+		t.Errorf("a scribe's sidebar must have no Manage section")
 	}
 	visitor := renderNavList(t, navStateCase{role: 0, path: "/campaigns/c1"}.ctx())
 	if strings.Contains(visitor, `data-nav-section="manage"`) {

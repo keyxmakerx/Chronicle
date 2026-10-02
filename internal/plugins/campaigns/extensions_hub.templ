@@ -32,14 +32,10 @@ import (
 templ ExtensionsHubPage(cc *CampaignContext, addons []PluginHubAddon, csrfToken string, contentPacksCard templ.Component) {
 	@layouts.App(cc.Campaign.Name + " - Extensions") {
 		<div class="max-w-5xl mx-auto px-4 py-6" data-extensions-hub>
-			<div class="flex items-center justify-between mb-6">
-				<div>
-					<h1 class="text-2xl font-bold text-fg">Extensions</h1>
-					<p class="text-sm text-fg-muted mt-1">
-						Enable or disable per-campaign features. Disabling preserves your data.
-					</p>
-				</div>
-			</div>
+			@layouts.ManageHeader("Extensions", "manage:extensions")
+			<p class="text-sm text-fg-muted -mt-3 mb-6">
+				Enable or disable per-campaign features. Disabling preserves your data.
+			</p>
 			// Hub catalog — HTMX-refreshed in place after a toggle so
 			// the card list re-renders without a full nav.
 			<div

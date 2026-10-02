@@ -88,7 +88,7 @@ func (h *Handler) builtInSettingsTabs(
 			Icon:      "fa-solid fa-users",
 			MinRole:   RolePlayer,
 			SortOrder: 30,
-			Content:   settingsPeopleTab(cc, members, transfer, csrfToken, smtpConfigured),
+			Content:   settingsPeopleLink(cc),
 		},
 		{
 			ID:        "integrations",
