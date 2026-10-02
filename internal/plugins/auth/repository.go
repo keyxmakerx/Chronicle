@@ -50,6 +50,8 @@ type UserRepository interface {
 
 	// Admin operations.
 	ListUsers(ctx context.Context, offset, limit int) ([]User, int, error)
+	SearchUsers(ctx context.Context, opts UserSearchOptions) ([]User, error)
+	CountUserFilters(ctx context.Context, query string) (UserFilterCounts, error)
 	UpdateIsAdmin(ctx context.Context, id string, isAdmin bool) error
 	UpdateIsDisabled(ctx context.Context, id string, isDisabled bool) error
 	CountUsers(ctx context.Context) (int, error)

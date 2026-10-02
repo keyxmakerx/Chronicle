@@ -118,13 +118,7 @@ templ CampaignSettingsPage(cc *CampaignContext, transfer *OwnershipTransfer, csr
 				}
 			}`, jsEsc(activeTab), settingsTabIDsJSON(tabs)) }
 		>
-			<div class="flex items-center justify-between mb-4">
-				<div>
-					<h1 class="text-2xl font-bold text-fg">Campaign Settings</h1>
-					<p class="text-sm text-fg-muted mt-0.5">Manage your campaign</p>
-				</div>
-				<a href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s", cc.Campaign.ID)) } class="btn-secondary text-sm">Back</a>
-			</div>
+			@layouts.ManageHeader("Settings", "manage:settings")
 			if errMsg != "" {
 				<div class="alert-error mb-4" role="alert">{ errMsg }</div>
 			}
@@ -200,7 +194,7 @@ templ settingsActivityTab(cc *CampaignContext) {
 }
 
 // settingsGeneralTab renders the General tab: details, MOTD, visibility, system, danger zone.
-templ settingsGeneralTab(cc *CampaignContext, csrfToken, systemOptionsJSON string) {
+templ settingsGeneralTab(cc *CampaignContext, csrfToken string) {
 	<div class="space-y-4">
 		// Top row: Campaign Details + Welcome Message side-by-side.
 		<div class="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -335,83 +329,17 @@ templ settingsGeneralTab(cc *CampaignContext, csrfToken, systemOptionsJSON strin
 			</div>
 		</div>
 
-		// Game System selector.
+		// The game system picker moved to Apps & game system; this keeps the
+		// old spot from going silent for owners who look here first.
 		<div class="card p-4">
 			<h2 class="text-sm font-semibold text-fg mb-1">Game System</h2>
-			<p class="text-xs text-fg-secondary mb-3">Reference content, tooltips, and presets.</p>
-			<div
-				x-data={ fmt.Sprintf(`{
-					_savedSystemId: '%s',
-					systemId: '',
-					customUrl: '',
-					isCustom: false,
-					saving: false,
-					saved: false,
-					systems: %s,
-					init() {
-						var saved = this._savedSystemId;
-						if (saved.startsWith('custom:')) {
-							this.customUrl = saved.substring(7);
-							this.isCustom = true;
-							this._savedSystemId = 'custom';
-						} else if (saved && !this.systems.find(s => s.id === saved)) {
-							this.systems.push({ id: saved, name: saved + ' (not loaded)', has_error: true });
-						}
-						this.$nextTick(() => {
-							this.systemId = this._savedSystemId;
-						});
-					},
-					get selectedHasError() {
-						var sel = this.systems.find(s => s.id === this.systemId);
-						return sel && sel.has_error;
-					},
-					async save() {
-						this.saving = true;
-						this.saved = false;
-						var id = this.systemId;
-						if (id === 'custom' && this.customUrl.trim()) {
-							id = 'custom:' + this.customUrl.trim();
-						}
-						const res = await Chronicle.apiFetch('/campaigns/%s/system', {
-							method: 'PUT',
-							body: { system_id: id }
-						});
-						this.saving = false;
-						if (res.ok) {
-							this.saved = true;
-							setTimeout(() => { this.saved = false; }, 3000);
-						}
-					},
-					onChange() {
-						this.isCustom = (this.systemId === 'custom');
-						if (!this.isCustom) this.save();
-					}
-				}`, jsEsc(cc.Campaign.ParseSettings().SystemID), systemOptionsJSON, cc.Campaign.ID) }
-			>
-				<select x-model="systemId" @change="onChange()" class="input w-full mb-2">
-					<option value="">None</option>
-					<template x-for="sys in systems" :key="sys.id">
-						<option :value="sys.id" x-text="sys.name"></option>
-					</template>
-					<option value="custom">Custom...</option>
-				</select>
-				<div x-show="selectedHasError" x-transition x-cloak class="flex items-start gap-2 p-3 rounded-lg bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800 mb-2">
-					<i class="fa-solid fa-triangle-exclamation text-amber-500 mt-0.5 shrink-0"></i>
-					<p class="text-xs text-amber-700 dark:text-amber-300">
-						This game system failed to load. Widgets, tooltips, and reference data may be unavailable. See <b>Admin &gt; Systems</b> { "for" } details.
-					</p>
-				</div>
-				<div x-show="isCustom" x-transition class="flex items-center gap-2 mt-2">
-					<input type="url" x-model="customUrl" class="input flex-1" placeholder="https://example.com/system/manifest.json"/>
-					<button type="button" class="btn-primary text-sm" @click="save()">Install</button>
-				</div>
-				<div class="flex items-center gap-2 pt-1">
-					<span x-show="saving" class="text-xs text-fg-muted"><i class="fa-solid fa-spinner fa-spin"></i> Saving...</span>
-					<span x-show="saved" x-transition class="text-xs text-green-600">Saved</span>
-				</div>
-			</div>
+			<p class="text-xs text-fg-secondary">
+				Choose it on
+				<a href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/extensions", cc.Campaign.ID)) } class="text-accent hover:underline focus-visible:outline focus-visible:outline-2 focus-visible:outline-accent">Apps &amp; game system</a>.
+			</p>
 		</div>
 		</div>
+
 
 		// Danger Zone.
 		<div class="card border-red-200 dark:border-red-800" x-data="{ open: false }">
@@ -464,8 +392,23 @@ templ settingsGeneralTab(cc *CampaignContext, csrfToken, systemOptionsJSON strin
 	</div>
 }
 
-// settingsPeopleTab renders member list, invites, DM privileges, and transfer.
-templ settingsPeopleTab(cc *CampaignContext, members []CampaignMember, transfer *OwnershipTransfer, csrfToken string, smtpConfigured bool) {
+// settingsPeopleLink is the Settings People tab. Members, invites and
+// ownership live on the People page; the tab keeps old ?tab=people links
+// landing somewhere useful instead of duplicating that page.
+templ settingsPeopleLink(cc *CampaignContext) {
+	<div class="card p-6">
+		<p class="text-sm text-fg-body">
+			Members, invites and ownership now live on the
+			<a href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/members", cc.Campaign.ID)) } class="text-accent hover:underline focus-visible:outline focus-visible:outline-2 focus-visible:outline-accent">People page</a>.
+		</p>
+	</div>
+}
+
+// peopleSections renders everything the owner manages about members: the
+// member list (add, role change, remove), the invite link, email
+// invitations, co-DM access and ownership transfer. The People page is its
+// only home; Settings links to it instead of repeating it.
+templ peopleSections(cc *CampaignContext, members []CampaignMember, transfer *OwnershipTransfer, csrfToken, errMsg string, smtpConfigured bool) {
 	<div class="space-y-6">
 		// SMTP warning.
 		if !smtpConfigured {
@@ -475,72 +418,7 @@ templ settingsPeopleTab(cc *CampaignContext, members []CampaignMember, transfer 
 			</div>
 		}
 
-		// Member list.
-		<div class="card p-6">
-			<div class="flex items-center justify-between mb-4">
-				<h2 class="text-lg font-semibold text-fg">Members</h2>
-				<span class="text-xs text-fg-muted">{ fmt.Sprintf("%d members", len(members)) }</span>
-			</div>
-			// Add member form.
-			<form
-				method="POST"
-				hx-post={ fmt.Sprintf("/campaigns/%s/members", cc.Campaign.ID) }
-				hx-swap="none"
-				class="flex flex-wrap items-end gap-3 mb-4 pb-4 border-b border-edge"
-			>
-				<input type="hidden" name="csrf_token" value={ csrfToken }/>
-				<div class="flex-1 min-w-[200px]">
-					<label class="block text-xs text-fg-secondary mb-1">Email</label>
-					<input type="email" name="email" placeholder="player@example.com" required class="input w-full"/>
-				</div>
-				<div class="w-28">
-					<label class="block text-xs text-fg-secondary mb-1">Role</label>
-					<select name="role" class="input w-full">
-						<option value="player">Player</option>
-						<option value="scribe">Scribe</option>
-					</select>
-				</div>
-				<button type="submit" class="btn-primary text-sm">Add Member</button>
-			</form>
-			// Member table.
-			<div class="space-y-2">
-				for _, m := range members {
-					<div class="flex items-center gap-3 py-2 px-3 rounded-md hover:bg-surface-alt transition-colors">
-						<div class="w-8 h-8 rounded-full bg-accent/10 flex items-center justify-center text-xs font-bold text-accent shrink-0">
-							if m.DisplayName != "" {
-								{ string([]rune(m.DisplayName)[0:1]) }
-							} else {
-								{ string([]rune(m.Email)[0:1]) }
-							}
-						</div>
-						<div class="flex-1 min-w-0">
-							<span class="text-sm font-medium text-fg truncate block">
-								if m.DisplayName != "" {
-									{ m.DisplayName }
-								} else {
-									{ m.Email }
-								}
-							</span>
-							<span class="text-xs text-fg-muted">{ m.Email }</span>
-						</div>
-						<span class={ "text-[10px] font-medium uppercase px-2 py-0.5 rounded-full",
-							templ.KV("bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400", m.Role == RoleOwner),
-							templ.KV("bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400", m.Role == RoleScribe),
-							templ.KV("bg-surface-alt text-fg-muted", m.Role == RolePlayer) }>
-							{ m.Role.DisplayName() }
-						</span>
-						if m.Role != RoleOwner {
-							<form method="POST" hx-delete={ fmt.Sprintf("/campaigns/%s/members/%s", cc.Campaign.ID, m.UserID) } hx-confirm={ fmt.Sprintf("Remove %s from the campaign?", m.DisplayName) }>
-								<input type="hidden" name="csrf_token" value={ csrfToken }/>
-								<button type="submit" class="text-fg-muted hover:text-red-400 transition-colors p-1" title="Remove">
-									<i class="fa-solid fa-xmark text-xs"></i>
-								</button>
-							</form>
-						}
-					</div>
-				}
-			</div>
-		</div>
+		@MemberListComponent(cc, members, csrfToken, errMsg)
 
 		// Shareable invite link.
 		<div class="card p-6" x-data={ fmt.Sprintf(`{

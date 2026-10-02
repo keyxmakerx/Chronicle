@@ -2165,6 +2165,10 @@ func (a *App) RegisterRoutes() {
 
 	// Admin plugin: site-wide management (users, campaigns, SMTP settings, storage).
 	adminHandler := admin.NewHandler(authRepo, campaignService, smtpService)
+	// Each admin's own sidebar pins; the sidebar's data names which pages can
+	// be pinned, and the layout injector below reads the pins per request.
+	adminNavPinService := admin.NewAdminNavPinService(admin.NewAdminNavPinRepository(a.DB), layouts.AdminNavPinnableHrefs())
+	adminHandler.SetNavPinService(adminNavPinService)
 	// Pass a function so the storage admin page reads the LIVE limit
 	// (matching what the body-limit middleware enforces) rather than the
 	// frozen-at-startup env value.
@@ -2175,6 +2179,13 @@ func (a *App) RegisterRoutes() {
 		return a.Config.Upload.MaxSize
 	})
 	adminHandler.SetBaseURL(a.Config.BaseURL)
+
+	// Site-wide admin change log, shown on admin Home. Other plugins write to
+	// it through the adapter so none of them import admin.
+	adminActivityService := admin.NewActivityService(admin.NewActivityRepository(a.DB))
+	adminHandler.SetActivityService(adminActivityService)
+	adminActivity := adminActivityAdapter{svc: adminActivityService}
+	smtpHandler.SetActivityRecorder(adminActivity)
 	adminGroup := admin.RegisterRoutes(e, adminHandler, authService, smtpHandler)
 
 	// Admin Backup plugin: lists backup artifacts and exposes a "Run
@@ -2185,6 +2196,7 @@ func (a *App) RegisterRoutes() {
 		BackupDir:  a.Config.BackupDir,
 	})
 	backupHandler := backup.NewHandler(backupSvc)
+	backupHandler.SetActivityRecorder(adminActivity)
 	backup.RegisterRoutes(adminGroup, backupHandler)
 
 	// Admin Restore plugin: lists backup manifests in BACKUP_DIR and
@@ -2199,7 +2211,8 @@ func (a *App) RegisterRoutes() {
 		BackupDir:  a.Config.BackupDir,
 	})
 	restoreHandler := restore.NewHandler(restoreSvc)
-	restore.RegisterRoutes(adminGroup, restoreHandler)
+	restoreHandler.SetActivityRecorder(adminActivity)
+	restore.RegisterRoutes(adminGroup, restoreHandler, auth.RequireReauth(authService))
 
 	// Settings plugin route registration. The service + repo were
 	// constructed earlier (above the media routes) so the body-limit
@@ -2207,6 +2220,7 @@ func (a *App) RegisterRoutes() {
 	// closure. Per-user/campaign quotas wired via SetStorageLimiter
 	// up there too. Here we just register the admin HTTP routes.
 	settingsHandler := settings.NewHandler(settingsService)
+	settingsHandler.SetActivityRecorder(adminActivity)
 	settings.RegisterRoutes(adminGroup, settingsHandler)
 
 	// Design Lab: admin-only page hosting the dynamic-surface demo (a live
@@ -2259,6 +2273,7 @@ func (a *App) RegisterRoutes() {
 	}
 	addonService.SetSystemFinder(&systemManifestFinderAdapter{})
 	addonHandler := addons.NewHandler(addonService)
+	addonHandler.SetActivityRecorder(adminActivity)
 	addons.RegisterAdminRoutes(adminGroup, addonHandler)
 	addons.RegisterCampaignRoutes(e, addonHandler, campaignService, authService)
 
@@ -2282,7 +2297,8 @@ func (a *App) RegisterRoutes() {
 	extService := extensions.NewExtensionService(extRepo, a.Config.ExtensionsPath)
 	extService.SetMigrationRunner(extensions.NewMigrationRunner(a.DB))
 	extHandler := extensions.NewHandler(extService, a.Config.ExtensionsPath)
-	extensions.RegisterAdminRoutes(adminGroup, extHandler)
+	extHandler.SetActivityRecorder(adminActivity)
+	extensions.RegisterAdminRoutes(adminGroup, extHandler, auth.RequireReauth(authService))
 	extensions.RegisterCampaignRoutes(e, extHandler, campaignService, authService)
 	extensions.RegisterAssetRoutes(e, extHandler)
 
@@ -2452,6 +2468,7 @@ func (a *App) RegisterRoutes() {
 	})
 
 	pkgHandler := packages.NewHandler(pkgService)
+	pkgHandler.SetActivityRecorder(adminActivity)
 	pkgOwnerHandler := packages.NewOwnerHandler(pkgService)
 	// Public package file serving — always available so Foundry VTT can
 	// fetch module.json even when the admin UI is degraded.
@@ -2460,7 +2477,7 @@ func (a *App) RegisterRoutes() {
 	packages.RegisterPublicRoutes(e, pkgServeHandler, middleware.RateLimit(300, time.Minute))
 
 	if a.PluginHealth.IsHealthy("packages") {
-		packages.RegisterRoutes(adminGroup, pkgHandler)
+		packages.RegisterRoutes(adminGroup, pkgHandler, auth.RequireReauth(authService))
 
 		// Owner-facing submission routes (authenticated, not admin-only).
 		ownerGroup := e.Group("", auth.RequireAuth(authService))
@@ -2618,7 +2635,7 @@ func (a *App) RegisterRoutes() {
 	// decision and is left alone. Best-effort: logs and never blocks startup.
 	if n, err := syncapi.ReconcileAddonEnablement(context.Background(), syncService, addonService); err != nil {
 		slog.Error("sync-api addon enablement backfill failed; campaigns that already use the "+
-			"Sync API may be refused until an owner enables Sync API on the campaign's Extensions page (sidebar → Extensions)",
+			"Sync API may be refused until an owner enables Sync API on the campaign's Apps & game system page (Manage → Apps & game system)",
 			slog.String("error", err.Error()))
 	} else if n > 0 {
 		slog.Info("sync-api addon enablement backfill complete", slog.Int("campaigns", n))
@@ -2651,6 +2668,8 @@ func (a *App) RegisterRoutes() {
 		return out, nil
 	})
 	syncHandler.SetCORSOriginLister(settingsService)
+	syncHandler.SetActivityRecorder(adminActivity)
+	adminHandler.SetAPIAlertCounter(adminAPIAlertCounter{sync: syncService})
 	syncHandler.SetBaseURL(a.Config.BaseURL)
 	if a.PluginHealth.IsHealthy("syncapi") {
 		syncapi.RegisterAdminRoutes(adminGroup, syncHandler)
@@ -3688,6 +3707,13 @@ func (a *App) RegisterRoutes() {
 			// Inject degraded plugin count for admin sidebar badge.
 			if session.IsAdmin {
 				ctx = layouts.SetDegradedPluginCount(ctx, len(a.PluginHealth.DegradedPlugins()))
+				// The admin's own pins, read for this admin only. A failed
+				// read leaves the Pinned group out rather than failing the page.
+				if pins, err := adminNavPinService.Pins(ctx, session.UserID); err == nil {
+					ctx = layouts.SetAdminNavPins(ctx, pins)
+				} else {
+					slog.Warn("reading admin nav pins", slog.String("user_id", session.UserID), slog.Any("error", err))
+				}
 			}
 		}
 

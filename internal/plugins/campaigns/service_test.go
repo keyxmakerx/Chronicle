@@ -75,6 +75,14 @@ func (m *mockCampaignRepo) ListByUser(ctx context.Context, userID string, opts L
 	return nil, 0, nil
 }
 
+func (m *mockCampaignRepo) SearchAll(ctx context.Context, opts AdminSearchOptions) ([]Campaign, error) {
+	return nil, nil
+}
+
+func (m *mockCampaignRepo) CountBySystem(ctx context.Context, query string) ([]SystemCount, error) {
+	return nil, nil
+}
+
 func (m *mockCampaignRepo) ListAll(ctx context.Context, opts ListOptions) ([]Campaign, int, error) {
 	if m.listAllFn != nil {
 		return m.listAllFn(ctx, opts)

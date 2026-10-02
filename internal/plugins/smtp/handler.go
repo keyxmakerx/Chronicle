@@ -12,7 +12,8 @@ import (
 // Handler handles HTTP requests for SMTP settings management.
 // Admin-only -- all routes require site admin middleware.
 type Handler struct {
-	service SMTPService
+	activity ActivityRecorder
+	service  SMTPService
 }
 
 // NewHandler creates a new SMTP handler.
@@ -44,6 +45,8 @@ func (h *Handler) UpdateSettings(c echo.Context) error {
 		errMsg := apperror.UserMessage(err, "failed to save settings")
 		return middleware.Render(c, http.StatusOK, SMTPSettingsPage(settings, csrfToken, errMsg))
 	}
+
+	h.recordActivity(c, "smtp.saved", "setting", "smtp", "")
 
 	// Re-render with success feedback.
 	settings, _ := h.service.GetSettings(c.Request().Context())

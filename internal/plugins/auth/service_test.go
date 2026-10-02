@@ -103,6 +103,14 @@ func (m *mockUserRepo) ListUsers(ctx context.Context, offset, limit int) ([]User
 	return nil, 0, nil
 }
 
+func (m *mockUserRepo) SearchUsers(ctx context.Context, opts UserSearchOptions) ([]User, error) {
+	return nil, nil
+}
+
+func (m *mockUserRepo) CountUserFilters(ctx context.Context, query string) (UserFilterCounts, error) {
+	return UserFilterCounts{}, nil
+}
+
 func (m *mockUserRepo) UpdateIsAdmin(ctx context.Context, id string, isAdmin bool) error {
 	if m.updateIsAdminFn != nil {
 		return m.updateIsAdminFn(ctx, id, isAdmin)

@@ -1,0 +1,31 @@
+// needs_you.templ renders the "Needs you" card at the top of the owner's
+// Overview: the few things only the owner can unblock, one button each.
+
+package campaigns
+
+// NeedsYouItem is one thing waiting on the owner.
+type NeedsYouItem struct {
+	Label  string // what is waiting, in plain words
+	Action string // the button text
+	URL    string // where the button goes
+}
+
+// NeedsYouCard lists what needs the owner, or says nothing does. The empty
+// state is explicit so an owner can tell "nothing to do" from "card broken".
+templ NeedsYouCard(items []NeedsYouItem) {
+	<section class="card p-5 mb-6" aria-labelledby="needs-you-heading">
+		<h2 id="needs-you-heading" class="text-sm font-semibold text-fg mb-3">Needs you</h2>
+		if len(items) == 0 {
+			<p class="text-sm text-fg-muted">Nothing needs you right now.</p>
+		} else {
+			<ul class="divide-y divide-edge">
+				for _, it := range items {
+					<li class="flex flex-wrap items-center justify-between gap-2 py-2">
+						<span class="text-sm text-fg-body">{ it.Label }</span>
+						<a href={ templ.SafeURL(it.URL) } class="btn-secondary text-sm focus-visible:outline focus-visible:outline-2 focus-visible:outline-accent">{ it.Action }</a>
+					</li>
+				}
+			</ul>
+		}
+	</section>
+}

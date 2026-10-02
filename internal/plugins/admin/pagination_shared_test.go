@@ -22,7 +22,11 @@ import (
 // pagination control on page 1 of many (disabled Previous, active Next).
 func TestAdminUsersPage_UsesSharedPagination(t *testing.T) {
 	users := []auth.User{{ID: "u1", Email: "a@example.com", DisplayName: "A"}}
-	component := AdminUsersPage(users, 50, 1, 10, "csrf")
+	component := AdminUsersPage(UserListData{
+		Users:     users,
+		View:      listView{BaseURL: "/admin/users", RegionID: "users-list", Total: 50, Page: 1, PerPage: 10},
+		CSRFToken: "csrf",
+	})
 
 	var buf bytes.Buffer
 	if err := component.Render(context.Background(), &buf); err != nil {
@@ -45,7 +49,11 @@ func TestAdminUsersPage_UsesSharedPagination(t *testing.T) {
 // the Campaigns list.
 func TestAdminCampaignsPage_UsesSharedPagination(t *testing.T) {
 	list := []campaigns.Campaign{{ID: "c1", Name: "Ashenmoor", Slug: "ashenmoor"}}
-	component := AdminCampaignsPage(list, 50, 1, 10, "csrf")
+	component := AdminCampaignsPage(CampaignListData{
+		Campaigns: list,
+		View:      listView{BaseURL: "/admin/campaigns", RegionID: "campaigns-list", Total: 50, Page: 1, PerPage: 10},
+		CSRFToken: "csrf",
+	})
 
 	var buf bytes.Buffer
 	if err := component.Render(context.Background(), &buf); err != nil {

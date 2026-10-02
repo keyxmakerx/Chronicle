@@ -2,6 +2,7 @@ package settings
 
 import (
 	"fmt"
+	"github.com/keyxmakerx/chronicle/internal/templates/components"
 	"github.com/keyxmakerx/chronicle/internal/templates/layouts"
 )
 
@@ -39,13 +40,11 @@ func nullableIntToStr(v *int) string {
 templ StorageSettingsPage(global *GlobalStorageLimits, userLimits []UserStorageLimitWithName, campaignLimits []CampaignStorageLimitWithName, csrfToken, errMsg, successMsg string) {
 	@layouts.App("Storage Settings - Admin") {
 		<div class="max-w-4xl mx-auto space-y-8">
-			<div>
-				<h1 class="text-2xl font-bold text-fg">Storage Settings</h1>
-				<p class="text-sm text-fg-secondary mt-1">
-					Configure global storage limits and per-user or per-campaign overrides.
-					A value of 0 means unlimited.
-				</p>
-			</div>
+			@components.AdminGroupHeading(components.AdminTabsStorage, "/admin/storage/settings")
+			<p class="text-sm text-fg-secondary">
+				Configure global storage limits and per-user or per-campaign overrides.
+				A value of 0 means unlimited.
+			</p>
 
 			<div id="storage-settings-form">
 				@StorageSettingsFormFragment(global, userLimits, campaignLimits, csrfToken, errMsg, successMsg)

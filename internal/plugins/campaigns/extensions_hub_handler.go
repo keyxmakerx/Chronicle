@@ -21,7 +21,7 @@ import (
 	"github.com/keyxmakerx/chronicle/internal/middleware"
 )
 
-// ExtensionsHub renders the top-level Extensions hub page for owners.
+// ExtensionsHub renders the owner-only "Apps & game system" page.
 //
 // Catalog source is the same `AddonLister.ListForPluginHub` the
 // Features tab + the older /plugins page use; the
@@ -62,9 +62,26 @@ func (h *Handler) ExtensionsHub(c echo.Context) error {
 		}
 	}
 
+	// Same lister the Settings page used for the picker, so the options match.
+	var systemOptions []SystemOption
+	if h.systemLister != nil {
+		systemOptions = h.systemLister.ListSystems()
+	}
+
 	csrfToken := middleware.GetCSRFToken(c)
 	return middleware.Render(c, http.StatusOK,
-		ExtensionsHubPage(cc, addons, csrfToken, contentPacksCard))
+		ExtensionsHubPage(cc, addons, csrfToken, systemOptionsJSON(systemOptions), h.hasSettingsTab(cc, "ai-workspace"), contentPacksCard))
+}
+
+// hasSettingsTab reports whether a plugin registered a Settings tab with the
+// given ID, so the page links to it only when its plugin is wired in.
+func (h *Handler) hasSettingsTab(cc *CampaignContext, id string) bool {
+	for _, factory := range h.extraSettingsTabs {
+		if factory(cc).ID == id {
+			return true
+		}
+	}
+	return false
 }
 
 // ExtensionsHubFragmentAPI returns the catalog grid as an HTMX

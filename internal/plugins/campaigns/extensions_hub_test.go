@@ -258,3 +258,32 @@ func TestPluginHubRedirect_LandsOnExtensionsHub(t *testing.T) {
 		t.Errorf("redirect Location=%q, want %q (Features-tab path is retired)", loc, want)
 	}
 }
+
+// TestExtensionsHubPage_HasSystemPickerAndConnections pins the page's
+// sections and that the AI link follows whether its plugin is wired in.
+func TestExtensionsHubPage_HasSystemPickerAndConnections(t *testing.T) {
+	cc := &CampaignContext{Campaign: &Campaign{ID: "c-1", Name: "Test"}}
+	for _, tc := range []struct {
+		name  string
+		hasAI bool
+	}{
+		{"ai wired", true},
+		{"ai absent", false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			var buf bytes.Buffer
+			if err := ExtensionsHubPage(cc, nil, "csrf", "[]", tc.hasAI, nil).Render(context.Background(), &buf); err != nil {
+				t.Fatalf("render: %v", err)
+			}
+			html := buf.String()
+			for _, want := range []string{"data-game-system-card", "data-connections-card", "tab=integrations"} {
+				if !strings.Contains(html, want) {
+					t.Errorf("page missing %q", want)
+				}
+			}
+			if got := strings.Contains(html, "tab=ai-workspace"); got != tc.hasAI {
+				t.Errorf("AI link present=%v, want %v", got, tc.hasAI)
+			}
+		})
+	}
+}
