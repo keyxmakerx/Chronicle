@@ -1145,6 +1145,9 @@
 .cal-v5 .dow .dwb{display:block;width:100%;padding:0 10px 9px;border-radius:6px 6px 0 0;font:650 9.5px/1 var(--sans);letter-spacing:.13em;text-transform:uppercase;color:var(--mut);white-space:nowrap;overflow:hidden}
 .cal-v5 .dow .dwb:hover, .cal-v5 .dow .dwb[aria-pressed="true"]{color:var(--ink);background:var(--lift)}
 .cal-v5 .dow .dwb:focus-visible{outline:1.5px solid var(--ink);outline-offset:-1.5px}
+/* The weekday label spans already carry padding; inside the button it belongs to the button. */
+.cal-v5 .dow .dwb span{padding:0}
+.cal-v5 .wkh i{font-size:11px}
 /* Ghosts: a preview drawn in place, dashed and faint; applying makes them solid where they stand. */
 .cal-v5 .mk.ghost{color:var(--ghost)}
 .cal-v5 .mk.ghost .ci{stroke-dasharray:2.2 1.5}

@@ -102,6 +102,7 @@
   }
 
   CalendarEditor.prototype.install = function () {
+    this.view._editor = this;
     this._injectEditToggle();
     this._injectHEditStrip();
     this._wrapEvpRendering();
@@ -142,7 +143,7 @@
     if (!subw) return;
     var strip = document.createElement('div');
     strip.className = 'h-edit';
-    strip.innerHTML = '<span class="etag">Editing</span><span class="ehint">Click days to choose them, or an event’s icon to edit it.</span><span class="sp"></span><button type="button" class="btn sm quiet" id="cal5-editdone">Done</button>';
+    strip.innerHTML = '<span class="etag">Editing</span><span class="ehint">Click or drag across days. Shift extends, Ctrl/Cmd adds. Touch: tap, or hold then drag.</span><span class="sp"></span><button type="button" class="btn sm quiet" id="cal5-editdone">Done</button>';
     subw.appendChild(strip);
     $('#cal5-editdone', strip).addEventListener('click', this.setEditing.bind(this, false));
   };
@@ -151,45 +152,315 @@
     this.editing = on;
     this.view.calEl.classList.toggle('editing', on);
     this.editBtn.setAttribute('aria-pressed', String(on));
+    this._endDrag();
+    // The view owns the weekday header; re-render it so the buttons go
+    // back to plain labels, then decorate again only while editing.
+    this.view.renderHeader();
     if (!on) { this.selection = {}; this._syncPicks(); this._renderBar(); }
-    this.view.say(on ? 'Editing on. Click days to choose them.' : 'Editing off.');
+    this.view.say(on ? 'Editing on. Click or drag across days to choose them.' : 'Editing off.');
   };
 
   // ------------------------------------------------------------------
-  // Select-many: while editing, clicking a day toggles it into the
-  // selection instead of opening its wing; shift-click extends from the
-  // last-clicked day (a simple range, not the mockup's press-and-drag).
-  // Captured (not bubble) so it runs before calendar_view.js's own stage
-  // click handler and can stop it with stopPropagation.
+  // Select-many. Click picks one day, Shift-click extends from the last
+  // day pressed, Ctrl/Cmd-click adds or removes. Press-and-drag across
+  // days selects a range (Ctrl/Cmd adds or removes it the same way); on
+  // touch a tap toggles a day and a ~350ms hold, then drag, selects a
+  // range so ordinary swipes still scroll the page. A weekday button
+  // picks that column of the visible month, a week handle that week.
+  // Click is captured (not bubbled) so it runs before calendar_view.js's
+  // own stage click handler and can stop it with stopPropagation; a
+  // click that ends a drag is swallowed so it does not re-select.
   // ------------------------------------------------------------------
+  var HOLD_MS = 350;
+  var HOLD_SLOP = 10;
+
   CalendarEditor.prototype._bindStageCapture = function () {
-    var self = this;
-    this.view.stageEl.addEventListener('click', function (e) {
+    var self = this, stage = this.view.stageEl;
+    this._drag = null;
+    this._swallowClick = false;
+    this._lastPointerType = 'mouse';
+
+    stage.addEventListener('click', function (e) {
       if (!self.editing) return;
+      if (self._swallowClick || self._spaceDown) { self._swallowClick = false; e.stopPropagation(); e.preventDefault(); return; }
+      var wkh = e.target.closest('.wkh');
+      if (wkh) { e.stopPropagation(); self._pickKeys(wkh.dataset.keys.split(',').filter(Boolean), e); return; }
       var day = e.target.closest('.day');
       if (!day || !day.dataset.key) return;
       e.stopPropagation();
-      var extend = e.shiftKey || e.ctrlKey || e.metaKey;
-      var keys = (e.shiftKey && self.anchorKey) ? self._rangeBetween(self.anchorKey, day.dataset.key) : [day.dataset.key];
+      var key = day.dataset.key;
+      var touch = self._lastPointerType === 'touch' && !e.shiftKey && !e.ctrlKey && !e.metaKey;
+      var extend = e.shiftKey || e.ctrlKey || e.metaKey || touch;
+      var keys = (e.shiftKey && self.anchorKey) ? self._rangeBetween(self.anchorKey, key) : [key];
       if (!extend) {
         // Plain click replaces the selection with just this one day.
         self.selection = {};
-        self.selection[day.dataset.key] = true;
+        self.selection[key] = true;
       } else {
-        // Shift/Ctrl click extends: if every key in the range/click is
-        // already selected, the gesture removes them; otherwise it adds
-        // them all. (Mirrors the mockup's applySel 'remove'/'add' — never
-        // a per-key toggle, which would leave a range half on/half off.)
+        // Shift/Ctrl click (or a touch tap) extends: if every key in the
+        // range/click is already selected, the gesture removes them;
+        // otherwise it adds them all. (Mirrors the mockup's applySel
+        // 'remove'/'add' — never a per-key toggle, which would leave a
+        // range half on/half off.)
         var allOn = keys.every(function (k) { return self.selection[k]; });
         keys.forEach(function (k) {
           if (allOn) delete self.selection[k];
           else self.selection[k] = true;
         });
       }
-      self.anchorKey = day.dataset.key;
+      self.anchorKey = key;
       self._syncPicks();
       self._renderBar();
     }, true);
+
+    stage.addEventListener('pointerdown', function (e) {
+      self._lastPointerType = e.pointerType || 'mouse';
+      self._swallowClick = false;
+      if (!self.editing || e.shiftKey) return;
+      var day = e.target.closest('.day[data-key]');
+      if (!day) return;
+      var isTouch = e.pointerType === 'touch';
+      if (!isTouch && e.button !== 0) return;
+      var mod = e.ctrlKey || e.metaKey;
+      var d = self._drag = {
+        id: e.pointerId, from: day.dataset.key, last: day.dataset.key,
+        x: e.clientX, y: e.clientY, touch: isTouch, active: false,
+        // Mouse drag replaces the selection (or edits it with Ctrl/Cmd);
+        // a touch hold only ever adds to what is already picked.
+        mode: isTouch ? 'add' : (mod ? 'toggle' : 'set'),
+        base: (isTouch || mod) ? self._copySelection() : {}
+      };
+      if (isTouch) d.timer = setTimeout(function () { self._startHold(d); }, HOLD_MS);
+    });
+
+    stage.addEventListener('pointermove', function (e) {
+      var d = self._drag;
+      if (!d || e.pointerId !== d.id) return;
+      if (d.touch && !d.active) {
+        // Moving before the hold fires means the person is scrolling.
+        if (Math.hypot(e.clientX - d.x, e.clientY - d.y) > HOLD_SLOP) self._endDrag();
+        return;
+      }
+      var key = self._keyAt(e.clientX, e.clientY);
+      if (!key || key === d.last) return;
+      if (!d.active) {
+        // First move onto another day: this is a drag, not a click. Capture
+        // only now, since capturing at press would retarget the plain click.
+        d.active = true;
+        try { stage.setPointerCapture(e.pointerId); } catch (err) { /* capture only keeps a fast drag on the grid */ }
+      }
+      d.last = key;
+      self._applyDrag(d);
+    });
+
+    var finish = function (e) {
+      var d = self._drag;
+      if (!d || (e && e.pointerId !== d.id)) return;
+      var dragged = d.active;
+      self._endDrag();
+      if (dragged) {
+        self.anchorKey = d.from;
+        // Only a pointerup is followed by a click; cancel is not.
+        self._swallowClick = !e || e.type === 'pointerup';
+      }
+    };
+    stage.addEventListener('pointerup', finish);
+    stage.addEventListener('pointercancel', finish);
+
+    // Once a hold has started, stop the page scrolling under the finger.
+    stage.addEventListener('touchmove', function (e) {
+      if (self._drag && self._drag.touch && self._drag.active && e.cancelable) e.preventDefault();
+    }, { passive: false });
+    stage.addEventListener('contextmenu', function (e) {
+      if (self.editing && self._drag && self._drag.touch) e.preventDefault();
+    });
+
+    this._bindKeys();
+    this._wrapGridRendering();
+    this.view.dowEl.addEventListener('click', function (e) {
+      var b = e.target.closest('.dwb');
+      if (!b || !self.editing) return;
+      self._pickKeys(self._columnKeys(+b.dataset.col), e);
+    });
+  };
+
+  CalendarEditor.prototype._copySelection = function () {
+    var out = {}, sel = this.selection;
+    Object.keys(sel).forEach(function (k) { if (sel[k]) out[k] = true; });
+    return out;
+  };
+
+  // Stops any drag in flight and its hold timer (edit mode turning off,
+  // pointer released, scroll detected).
+  CalendarEditor.prototype._endDrag = function () {
+    var d = this._drag;
+    if (!d) return;
+    clearTimeout(d.timer);
+    this._drag = null;
+  };
+
+  CalendarEditor.prototype._startHold = function (d) {
+    if (this._drag !== d || !this.editing) return;
+    d.active = true;
+    this._applyDrag(d);
+    this.view.say('Hold and drag to choose a range.');
+  };
+
+  // Recomputes the selection from the drag's starting selection and the
+  // range it has swept, so dragging back shrinks the range again.
+  CalendarEditor.prototype._applyDrag = function (d) {
+    var keys = this._rangeBetween(d.from, d.last), sel = d.base;
+    var next = {};
+    Object.keys(sel).forEach(function (k) { next[k] = true; });
+    var remove = d.mode === 'toggle' && keys.every(function (k) { return sel[k]; });
+    keys.forEach(function (k) { if (remove) delete next[k]; else next[k] = true; });
+    this.selection = next;
+    this._syncPicks();
+    this._renderBar();
+  };
+
+  CalendarEditor.prototype._keyAt = function (x, y) {
+    var el = document.elementFromPoint(x, y);
+    var day = el && el.closest ? el.closest('.day[data-key]') : null;
+    return day && this.view.stageEl.contains(day) && !day.closest('.month.leaving') ? day.dataset.key : null;
+  };
+
+  // A column/week gesture: plain replaces the selection, Shift/Ctrl/Cmd
+  // adds the group or, when all of it is already picked, removes it.
+  CalendarEditor.prototype._pickKeys = function (keys, e) {
+    var self = this;
+    if (!keys.length) return;
+    if (e.shiftKey || e.ctrlKey || e.metaKey) {
+      var allOn = keys.every(function (k) { return self.selection[k]; });
+      keys.forEach(function (k) { if (allOn) delete self.selection[k]; else self.selection[k] = true; });
+    } else {
+      this.selection = {};
+      keys.forEach(function (k) { self.selection[k] = true; });
+    }
+    this.anchorKey = keys[0];
+    this._syncPicks();
+    this._renderBar();
+  };
+
+  // The keyed days of the visible month in column `col`, from the rendered
+  // week rows so intercalary bands and short weeks need no special case.
+  CalendarEditor.prototype._columnKeys = function (col) {
+    var keys = [];
+    $$('.wk', this.view.stageEl).forEach(function (wk) {
+      var cells = [].filter.call(wk.children, function (c) { return c.classList.contains('day'); });
+      if (cells[col] && cells[col].dataset.key) keys.push(cells[col].dataset.key);
+    });
+    return keys;
+  };
+
+  // Weekday buttons and week handles exist only while editing and are
+  // rebuilt whenever the view redraws the header or the month.
+  CalendarEditor.prototype._wrapGridRendering = function () {
+    var self = this, view = this.view;
+    ['renderHeader', '_paintMonth'].forEach(function (name) {
+      var original = view[name];
+      view[name] = function () {
+        var r = original.apply(this, arguments);
+        if (view._editor === self) self._decorateGrid();
+        return r;
+      };
+    });
+  };
+
+  CalendarEditor.prototype._decorateGrid = function () {
+    var self = this, view = this.view;
+    $$('.wkh', view.stageEl).forEach(function (h) { h.remove(); });
+    var dow = view.dowEl;
+    if (!this.editing) {
+      dow.removeAttribute('role');
+      dow.removeAttribute('aria-label');
+      dow.setAttribute('aria-hidden', 'true');
+      return;
+    }
+    dow.removeAttribute('aria-hidden');
+    dow.setAttribute('role', 'group');
+    dow.setAttribute('aria-label', 'Weekdays');
+    [].forEach.call(dow.children, function (span, i) {
+      if (span.tagName === 'BUTTON') return;
+      var b = document.createElement('button');
+      b.type = 'button';
+      b.className = 'dwb';
+      b.dataset.col = String(i);
+      b.setAttribute('aria-label', 'Select every ' + (span.querySelector('.f') || span).textContent + ' this month');
+      b.innerHTML = span.innerHTML;
+      dow.replaceChild(b, span);
+    });
+    $$('.wk', view.stageEl).forEach(function (wk, i) {
+      var keys = $$('.day[data-key]', wk).map(function (d) { return d.dataset.key; });
+      if (!keys.length) return;
+      var h = document.createElement('button');
+      h.type = 'button';
+      h.className = 'wkh';
+      h.dataset.keys = keys.join(',');
+      h.setAttribute('aria-label', 'Select week ' + (i + 1) + ' of this month');
+      h.innerHTML = '<i class="fa-solid fa-grip-vertical" aria-hidden="true"></i>';
+      // Last child: the first .day keeps its :first-child border rule.
+      wk.appendChild(h);
+    });
+    this._syncPicks();
+  };
+
+  // Space toggles the focused day, Shift+arrows extend from the anchor,
+  // plain arrows move focus; Escape clears a selection before anything
+  // else, but yields to an open panel so Escape still closes those first.
+  CalendarEditor.prototype._bindKeys = function () {
+    var self = this, view = this.view, stage = view.stageEl;
+    stage.addEventListener('keydown', function (e) {
+      if (!self.editing) return;
+      var day = e.target.closest ? e.target.closest('.day[data-key]') : null;
+      if (!day) return;
+      if (e.key === ' ' || e.key === 'Spacebar') {
+        e.preventDefault();
+        self._spaceDown = true; // the button's own Space click follows keyup and must not re-select
+        var k = day.dataset.key;
+        if (self.selection[k]) delete self.selection[k]; else self.selection[k] = true;
+        self.anchorKey = k;
+        self._syncPicks();
+        self._renderBar();
+        return;
+      }
+      var cols = parseInt(view.calEl.style.getPropertyValue('--cols'), 10) || 7;
+      var step = { ArrowLeft: -1, ArrowRight: 1, ArrowUp: -cols, ArrowDown: cols }[e.key];
+      if (!step) return;
+      var cells = $$('.day', stage), at = cells.indexOf(day), to = cells[at + step];
+      if (!to || !to.dataset.key) return;
+      e.preventDefault();
+      to.focus();
+      if (!e.shiftKey) return;
+      var from = self.anchorKey || day.dataset.key;
+      self.anchorKey = from;
+      self.selection = {};
+      self._rangeBetween(from, to.dataset.key).forEach(function (k) { self.selection[k] = true; });
+      self._syncPicks();
+      self._renderBar();
+    });
+    stage.addEventListener('keyup', function (e) {
+      if (e.key !== ' ' && e.key !== 'Spacebar') return;
+      if (self._spaceDown) e.preventDefault();
+      setTimeout(function () { self._spaceDown = false; }, 150);
+    });
+
+    var onEsc = function (e) {
+      if (!document.contains(view.el)) { document.removeEventListener('keydown', onEsc, true); return; }
+      if (e.key !== 'Escape' || !self.editing || view._editor !== self) return;
+      if (!self._selectedKeys().length) return;
+      var panelOpen = view.evpEl.classList.contains('open') || view.mvEl.classList.contains('open') ||
+        view._pf.state !== 'closed' || view.popEl.classList.contains('open') || view.wingFor ||
+        (Chronicle.calendarEventDrawer && Chronicle.calendarEventDrawer.isOpen(view));
+      if (panelOpen) return;
+      e.stopPropagation();
+      self.selection = {};
+      self.anchorKey = null;
+      self._syncPicks();
+      self._renderBar();
+    };
+    // Capture phase so it runs ahead of the view's own document handler.
+    document.addEventListener('keydown', onEsc, true);
   };
 
   CalendarEditor.prototype._rangeBetween = function (a, b) {
@@ -205,6 +476,13 @@
     var self = this;
     $$('.day[data-key]', this.view.stageEl).forEach(function (d) {
       d.classList.toggle('pick', !!self.selection[d.dataset.key]);
+    });
+    var all = function (keys) { return keys.length > 0 && keys.every(function (k) { return self.selection[k]; }); };
+    $$('.wkh', this.view.stageEl).forEach(function (h) {
+      h.setAttribute('aria-pressed', String(all(h.dataset.keys.split(','))));
+    });
+    $$('.dwb', this.view.dowEl).forEach(function (b) {
+      b.setAttribute('aria-pressed', String(all(self._columnKeys(+b.dataset.col))));
     });
   };
 
@@ -399,7 +677,14 @@
     view.evpEl.addEventListener('click', function (e) {
       var ed = e.target.closest('[data-edit-event]');
       var del = e.target.closest('[data-delete-event]');
-      if (ed) { e.stopPropagation(); self._openEventForm(view.wingFor, view._findEvent(ed.dataset.editEvent)); }
+      if (ed) {
+        e.stopPropagation();
+        var ev = view._findEvent(ed.dataset.editEvent);
+        // The full drawer edits every field; the compact form stays as the
+        // fallback if its script did not load.
+        if (Chronicle.calendarEventDrawer) Chronicle.calendarEventDrawer.open(view, ev, null);
+        else self._openEventForm(view.wingFor, ev);
+      }
       if (del) {
         e.stopPropagation();
         if (!window.confirm('Delete this event? This cannot be undone.')) return;
@@ -449,13 +734,23 @@
       (view.canAuthorDmOnly ? '<div class="vis" role="group" aria-label="Visibility">' +
         '<button type="button" data-vis="everyone" aria-pressed="' + (!existing || existing.visibility !== 'dm_only') + '">Everyone</button>' +
         '<button type="button" data-vis="dm_only" aria-pressed="' + (!!existing && existing.visibility === 'dm_only') + '">Director only</button></div>' : '') +
-      '<div class="efoot"><button type="button" class="btn quiet" data-cancel>Cancel</button><span class="sp"></span><button type="submit" class="btn primary">' + (isNew ? 'Create' : 'Save') + '</button></div>';
+      '<div class="efoot"><button type="button" class="btn quiet" data-cancel>Cancel</button>' +
+        (isNew && Chronicle.calendarEventDrawer ? '<button type="button" class="btn quiet" data-more-opts><i class="fa-solid fa-sliders"></i> More options</button>' : '') +
+        '<span class="sp"></span><button type="submit" class="btn primary">' + (isNew ? 'Create' : 'Save') + '</button></div>';
 
     form.dataset.kindId = existing && existing.kind_id != null ? String(existing.kind_id) : '';
     form.dataset.visibility = existing ? existing.visibility : 'everyone';
 
     form.addEventListener('click', function (e) {
       if (e.target.closest('[data-cancel]')) { form.remove(); return; }
+      // Times, an end date, repeats and notes live in the full drawer; it
+      // carries over the name typed so far.
+      if (e.target.closest('[data-more-opts]')) {
+        var name = form.name.value;
+        form.remove();
+        Chronicle.calendarEventDrawer.open(view, null, { y: d[0], m: d[1], d: d[2] }, { name: name });
+        return;
+      }
       var chip = e.target.closest('[data-kind]');
       if (chip) { form.dataset.kindId = chip.dataset.kind; $$('#cal5-edkinds [data-kind]', form).forEach(function (b) { b.setAttribute('aria-pressed', String(b === chip)); }); }
       var vis = e.target.closest('[data-vis]');
