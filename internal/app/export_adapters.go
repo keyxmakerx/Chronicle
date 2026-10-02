@@ -454,8 +454,9 @@ func (a *calendarExportAdapter) exportOne(ctx context.Context, cal *calendar.Cal
 	}
 
 	for _, evt := range events {
+		// Only an event that repeats by its rule carries one out.
 		var rule json.RawMessage
-		if evt.RecurrenceRule != nil {
+		if evt.RecurrenceRule != nil && derefStr(evt.RecurrenceType) == calendar.RecurrenceByRule {
 			if rule, err = json.Marshal(evt.RecurrenceRule); err != nil {
 				return nil, fmt.Errorf("export recurrence rule: %w", err)
 			}
@@ -1506,7 +1507,7 @@ func (a *calendarImportAdapter) importOne(ctx context.Context, campaignID string
 	created := make([]string, len(data.Events))
 	for pass := 0; pass < 2; pass++ {
 		for i, evt := range data.Events {
-			if ruleHasAnchor(evt.RecurrenceRule) != (pass == 1) {
+			if ruleHasAnchor(evt) != (pass == 1) {
 				continue
 			}
 			created[i] = a.importEvent(ctx, cal.ID, campaignID, evt, idMap, kindIDBySlug, refs, report)
@@ -1600,14 +1601,16 @@ func calendarDataHasRules(data *campaigns.ExportCalendarData) bool {
 	return false
 }
 
-// ruleHasAnchor reports whether a stored rule repeats relative to another
-// event. An unreadable rule counts as anchor-free; importEvent reports it.
-func ruleHasAnchor(raw json.RawMessage) bool {
-	if len(raw) == 0 {
+// ruleHasAnchor reports whether an exported event repeats relative to
+// another event. A rule on an event of any other type is never used, so it
+// never orders the import; an unreadable rule counts as anchor-free and
+// importEvent reports it.
+func ruleHasAnchor(evt campaigns.ExportCalendarEvent) bool {
+	if len(evt.RecurrenceRule) == 0 || derefStr(evt.RecurrenceType) != calendar.RecurrenceByRule {
 		return false
 	}
 	var r calendar.RecurrenceRule
-	if err := json.Unmarshal(raw, &r); err != nil {
+	if err := json.Unmarshal(evt.RecurrenceRule, &r); err != nil {
 		return false
 	}
 	for _, c := range r.Match {
@@ -1616,6 +1619,14 @@ func ruleHasAnchor(raw json.RawMessage) bool {
 		}
 	}
 	return false
+}
+
+// derefStr is *s, or "" for nil.
+func derefStr(s *string) string {
+	if s == nil {
+		return ""
+	}
+	return *s
 }
 
 // ruleRefsFor pairs the export's moons and seasons with the ones just
@@ -1692,7 +1703,14 @@ func (a *calendarImportAdapter) importEvent(ctx context.Context, calendarID, cam
 			kindID = &id
 		}
 	}
-	rule, err := remapRule(evt.RecurrenceRule, refs)
+	// A rule left on an event of another type (an older export) is not
+	// sent: the create would drop it anyway, and an unreadable one must not
+	// cost the event.
+	var rule json.RawMessage
+	var err error
+	if derefStr(evt.RecurrenceType) == calendar.RecurrenceByRule {
+		rule, err = remapRule(evt.RecurrenceRule, refs)
+	}
 	if err != nil {
 		report.Fail(campaigns.SectionCalendar, "calendar event", evt.Name, "unreadable repeat rule")
 		return ""

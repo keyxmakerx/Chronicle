@@ -1316,9 +1316,16 @@ func buildValidatedEvent(calendarID string, input CreateEventInput) (*Event, err
 	if !IsSupportedRecurrenceType(derefString(input.RecurrenceType)) {
 		return nil, apperror.NewValidation("unsupported recurrence_type")
 	}
-	rule, err := ParseRecurrenceRule(input.RecurrenceRule)
-	if err != nil {
-		return nil, err
+	// A rule is kept only on an event that repeats by it. One sent with any
+	// other type is dropped, never stored dormant: a dormant rule would be
+	// judged again on a later save or an import, long after what it names
+	// may be gone, and refuse an event that does not even use it.
+	var rule *RecurrenceRule
+	if derefString(input.RecurrenceType) == RecurrenceByRule {
+		var err error
+		if rule, err = ParseRecurrenceRule(input.RecurrenceRule); err != nil {
+			return nil, err
+		}
 	}
 	announced := derefString(input.Announced)
 	if announced != "" && !IsSupportedAnnounced(announced) {
@@ -1689,19 +1696,26 @@ func (s *calendarService) UpdateEvent(ctx context.Context, eventID, calendarID, 
 		return apperror.NewValidation("unsupported recurrence_type")
 	}
 	// recurrence_rule follows the partial-update contract like every other
-	// field. A rule is checked against the calendar when it is sent, or when
-	// the type switches to "rule" and so starts using a stored one; an
-	// untouched stored rule is not re-judged by an unrelated edit.
-	rule := evt.RecurrenceRule
-	if raw, ok := input.RecurrenceRule.Get(); ok {
-		if rule, err = ParseRecurrenceRule(raw); err != nil {
-			return err
-		}
-	} else if input.RecurrenceRule.IsNull() {
+	// field, with one rule on top: it lives only on an event that repeats by
+	// it. Leaving the "rule" type drops it, and one sent with another type is
+	// neither parsed nor stored, as on create. A rule is checked against the
+	// calendar when it is sent, or when the type switches to "rule" and so
+	// starts using a stored one; an untouched stored rule is not re-judged
+	// by an unrelated edit.
+	rule, recheckRule := evt.RecurrenceRule, false
+	if derefString(recurrenceType) != RecurrenceByRule {
 		rule = nil
+	} else {
+		if raw, ok := input.RecurrenceRule.Get(); ok {
+			if rule, err = ParseRecurrenceRule(raw); err != nil {
+				return err
+			}
+		} else if input.RecurrenceRule.IsNull() {
+			rule = nil
+		}
+		becameRule := derefString(evt.RecurrenceType) != RecurrenceByRule
+		recheckRule = (input.RecurrenceRule.Present() && rule != nil) || becameRule
 	}
-	becameRule := derefString(recurrenceType) == RecurrenceByRule && derefString(evt.RecurrenceType) != RecurrenceByRule
-	recheckRule := (input.RecurrenceRule.Present() && rule != nil) || becameRule
 	announced := input.Announced.Ptr(evt.Announced)
 	if a := derefString(announced); a != "" && !IsSupportedAnnounced(a) {
 		return apperror.NewValidation("announced must be \"" + AnnouncedAhead + "\" or \"" + AnnouncedOnDay + "\"")

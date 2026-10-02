@@ -224,3 +224,41 @@ func TestCalendarImport_OverridesReplayInAWritableOrder(t *testing.T) {
 		})
 	}
 }
+
+// TestCalendarExportImport_RuleOnlyOnRuleType: a rule on an event that no
+// longer repeats by it is neither exported nor allowed to cost the event on
+// import, even when what it names is gone.
+func TestCalendarExportImport_RuleOnlyOnRuleType(t *testing.T) {
+	weekly := calendar.RecurrenceWeekly
+	stale := &calendar.RecurrenceRule{Match: []calendar.RuleCondition{{Kind: calendar.RuleRelativeToEvent, EventID: "deleted"}}}
+	src := &fakeCalendarService{
+		cal: &calendar.Calendar{
+			ID: "cal-1", CampaignID: "c1", Mode: calendar.ModeFantasy, Name: "Stale",
+			HoursPerDay: 24, MinutesPerHour: 60, SecondsPerMinute: 60,
+			Months: []calendar.Month{{Name: "One", Days: 30}},
+		},
+		events: []calendar.Event{{ID: "old-w", Name: "Watch", Year: 1, Month: 1, Day: 1, Visibility: "everyone",
+			IsRecurring: true, RecurrenceType: &weekly, RecurrenceRule: stale}},
+	}
+	calData, err := (&calendarExportAdapter{svc: src}).ExportCalendar(context.Background(), "c1", func(string) string { return "" })
+	if err != nil {
+		t.Fatalf("export: %v", err)
+	}
+	if len(calData.Events[0].RecurrenceRule) != 0 {
+		t.Fatalf("a weekly event exported a rule: %s", calData.Events[0].RecurrenceRule)
+	}
+
+	// An older export that still carries one: the event imports, rule-free.
+	calData.Events[0].RecurrenceRule = json.RawMessage(`{"match":[{"kind":"relative_to_event","event_id":"deleted"}]}`)
+	if ruleHasAnchor(calData.Events[0]) {
+		t.Fatal("a weekly event's leftover rule ordered the import")
+	}
+	dst := &fakeCalendarService{}
+	report := campaigns.NewImportReport()
+	if err := (&calendarImportAdapter{svc: dst}).ImportCalendar(context.Background(), "c2", calData, campaigns.NewIDMap("c2"), report); err != nil {
+		t.Fatalf("import: %v", err)
+	}
+	if report.HasFailures() || len(dst.createdEvents) != 1 || len(dst.createdEvents[0].RecurrenceRule) != 0 {
+		t.Fatalf("want the event imported without its rule: %s, %+v", report.Summary(), dst.createdEvents)
+	}
+}

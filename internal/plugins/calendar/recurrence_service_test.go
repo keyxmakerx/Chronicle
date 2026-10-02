@@ -310,6 +310,35 @@ func TestCreateEvent_RuleChecks(t *testing.T) {
 	}
 }
 
+// TestCreateEvent_RuleOnlyOnRuleType: a rule sent with any other repeat
+// type is neither checked nor stored, so it can never lie dormant.
+func TestCreateEvent_RuleOnlyOnRuleType(t *testing.T) {
+	weekly := RecurrenceWeekly
+	tests := []struct {
+		name string
+		rule json.RawMessage
+	}{
+		{"a valid rule", json.RawMessage(`{"match":[{"kind":"weekday","weekday":2}]}`)},
+		{"a rule naming a missing anchor", json.RawMessage(`{"match":[{"kind":"relative_to_event","event_id":"gone"}]}`)},
+		{"a malformed rule", json.RawMessage(`{"match":[]}`)},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			w := newRuleWorld()
+			_, err := w.svc().CreateEvent(context.Background(), "cal-1", testCampaignA, CreateEventInput{
+				Name: "Weekly", Year: 1, Month: 1, Day: 1, IsRecurring: true, RecurrenceType: &weekly,
+				RecurrenceRule: tt.rule, Author: ownerViewer("o"), CanAuthorDmOnly: true,
+			})
+			if err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
+			if w.created == nil || w.created.RecurrenceRule != nil {
+				t.Fatalf("a weekly event stored a rule: %+v", w.created)
+			}
+		})
+	}
+}
+
 func TestUpdateEvent_RecurrenceRulePartialContract(t *testing.T) {
 	byRule, weekly := RecurrenceByRule, RecurrenceWeekly
 	stored := &RecurrenceRule{Match: []RuleCondition{{Kind: RuleDayOfMonth, Day: 3}}}
@@ -324,6 +353,9 @@ func TestUpdateEvent_RecurrenceRulePartialContract(t *testing.T) {
 		{"null clears once the type moves off rule", UpdateEventInput{RecurrenceType: patch.Of(weekly), RecurrenceRule: patch.Null[json.RawMessage]()}, 0, ""},
 		{"null while still a rule event is refused", UpdateEventInput{RecurrenceRule: patch.Null[json.RawMessage]()}, http.StatusUnprocessableEntity, ""},
 		{"a bad rule is refused", UpdateEventInput{RecurrenceRule: patch.Of(json.RawMessage(`{"match":[]}`))}, http.StatusUnprocessableEntity, ""},
+		{"moving off rule drops the stored rule", UpdateEventInput{RecurrenceType: patch.Of(weekly)}, 0, ""},
+		{"a rule sent with another type is not stored", UpdateEventInput{RecurrenceType: patch.Of(weekly), RecurrenceRule: patch.Of(json.RawMessage(`{"match":[{"kind":"day_of_month","day":9}]}`))}, 0, ""},
+		{"a rule sent with another type is not judged", UpdateEventInput{RecurrenceType: patch.Of(weekly), RecurrenceRule: patch.Of(json.RawMessage(`{"match":[]}`))}, 0, ""},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
