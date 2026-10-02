@@ -703,6 +703,63 @@ func (h *Handler) SetMoonHiddenAPI(c echo.Context) error {
 	return c.NoContent(http.StatusOK)
 }
 
+// --- Day weather ---
+
+// ListDayWeatherAPI returns a year's day readings, or one month's when
+// month is given. Players get only days up to today (the service decides).
+// GET /campaigns/:id/calendars/:calid/weather/days?year=Y[&month=M]
+func (h *Handler) ListDayWeatherAPI(c echo.Context) error {
+	cc := campaigns.GetCampaignContext(c)
+	year, err := strconv.Atoi(c.QueryParam("year"))
+	if err != nil {
+		return apperror.NewBadRequest("year is required")
+	}
+	month := 0
+	if m := c.QueryParam("month"); m != "" {
+		if month, err = strconv.Atoi(m); err != nil || month < 1 {
+			return apperror.NewBadRequest("invalid month")
+		}
+	}
+	days, err := h.svc.ListDayWeather(c.Request().Context(), c.Param("calid"), cc.Campaign.ID, year, month, viewerFrom(c, cc))
+	if err != nil {
+		return err
+	}
+	return c.JSON(http.StatusOK, days)
+}
+
+// SetDayWeatherAPI paints or stores generated readings on a set of days.
+// PUT /campaigns/:id/calendars/:calid/weather/days  {"days":[{year,month,day,source,...}]}
+func (h *Handler) SetDayWeatherAPI(c echo.Context) error {
+	cc := campaigns.GetCampaignContext(c)
+	var req struct {
+		Days []DayWeatherInput `json:"days"`
+	}
+	if err := c.Bind(&req); err != nil {
+		return apperror.NewBadRequest("invalid request")
+	}
+	if err := h.svc.SetDayWeather(c.Request().Context(), c.Param("calid"), cc.Campaign.ID, req.Days); err != nil {
+		return err
+	}
+	return c.NoContent(http.StatusNoContent)
+}
+
+// ClearDayWeatherAPI removes the readings on a set of days. A POST action,
+// not DELETE, because it carries a body.
+// POST /campaigns/:id/calendars/:calid/weather/days/clear  {"days":[{year,month,day}]}
+func (h *Handler) ClearDayWeatherAPI(c echo.Context) error {
+	cc := campaigns.GetCampaignContext(c)
+	var req struct {
+		Days []DayDate `json:"days"`
+	}
+	if err := c.Bind(&req); err != nil {
+		return apperror.NewBadRequest("invalid request")
+	}
+	if err := h.svc.ClearDayWeather(c.Request().Context(), c.Param("calid"), cc.Campaign.ID, req.Days); err != nil {
+		return err
+	}
+	return c.NoContent(http.StatusNoContent)
+}
+
 // --- Calendar creation wizard (presets, import) ---
 //
 // Every route below is Owner only (routes.go): creating a calendar's

@@ -1521,6 +1521,50 @@ type WeatherInput struct {
 	Description            *string  `json:"description"`
 }
 
+// Weather sources: who wrote a day's reading. A generated write never
+// replaces a manual one, so regenerating a range keeps what was painted.
+const (
+	WeatherSourceManual    = "manual"
+	WeatherSourceGenerated = "generated"
+)
+
+// DayWeather is the weather reading for one calendar day. Players see a day
+// only once it is today or past (see CalendarService.ListDayWeather).
+type DayWeather struct {
+	Year               int            `json:"year"`
+	Month              int            `json:"month"`
+	Day                int            `json:"day"`
+	PresetID           *string        `json:"preset_id,omitempty"`
+	PresetLabel        *string        `json:"preset_label,omitempty"`
+	Icon               *string        `json:"icon,omitempty"`
+	Color              *string        `json:"color,omitempty"`
+	TemperatureCelsius *float64       `json:"temperature_celsius,omitempty"`
+	Wind               *Wind          `json:"wind,omitempty"`
+	Precipitation      *Precipitation `json:"precipitation,omitempty"`
+	ZoneID             *string        `json:"zone_id,omitempty"`
+	ZoneName           *string        `json:"zone_name,omitempty"`
+	Description        *string        `json:"description,omitempty"`
+	Source             string         `json:"source"`
+	UpdatedAt          time.Time      `json:"updated_at"`
+}
+
+// DayWeatherInput sets one day's reading: the date, the same flat fields
+// WeatherInput takes, and the source ("manual" when empty).
+type DayWeatherInput struct {
+	Year   int    `json:"year"`
+	Month  int    `json:"month"`
+	Day    int    `json:"day"`
+	Source string `json:"source"`
+	WeatherInput
+}
+
+// DayDate names one calendar day.
+type DayDate struct {
+	Year  int `json:"year"`
+	Month int `json:"month"`
+	Day   int `json:"day"`
+}
+
 // WeatherZone is a per-calendar climate region definition (e.g.
 // "temperate", "tropical", "arctic"). The zone's payload carries the
 // active presets + per-season overrides as opaque JSON — the structural

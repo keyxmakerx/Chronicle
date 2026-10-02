@@ -125,3 +125,107 @@ func TestWeatherRepository_Integration(t *testing.T) {
 		}
 	})
 }
+
+// TestWeatherRepository_Days_Integration covers the per-day table: upsert,
+// month filter, a generated write never replacing a manual one, clearing,
+// tenant isolation and the cascade from a deleted calendar.
+func TestWeatherRepository_Days_Integration(t *testing.T) {
+	if testing.Short() {
+		t.Skip("integration test requires a database; skipped under -short")
+	}
+	db := openTestDB(t)
+	t.Cleanup(func() { db.Close() })
+
+	ctx := context.Background()
+	weatherRepo := NewWeatherRepository(db)
+	calRepo := NewCalendarRepository(db)
+	fix := newTestCampaign(t, db, "weatherdays")
+	calA := newTestCalendar(testUUID(t), fix.CampaignID, "Days A")
+	calB := newTestCalendar(testUUID(t), fix.CampaignID, "Days B")
+	for _, c := range []*Calendar{calA, calB} {
+		if err := calRepo.Create(ctx, c); err != nil {
+			t.Fatalf("Create: %v", err)
+		}
+	}
+	s := func(v string) *string { return &v }
+	f := func(v float64) *float64 { return &v }
+	day := func(m, d int, source, preset string) DayWeatherInput {
+		return DayWeatherInput{Year: 3, Month: m, Day: d, Source: source,
+			WeatherInput: WeatherInput{PresetID: s(preset), TemperatureCelsius: f(12), PrecipitationType: s("rain"), PrecipitationIntensity: f(0.4)}}
+	}
+
+	if err := weatherRepo.SetDays(ctx, calA.ID, []DayWeatherInput{
+		day(1, 1, WeatherSourceManual, "clear"),
+		day(1, 2, WeatherSourceGenerated, "rain"),
+		day(2, 1, WeatherSourceGenerated, "fog"),
+	}); err != nil {
+		t.Fatalf("SetDays: %v", err)
+	}
+
+	t.Run("ListDays filters by month and folds precipitation", func(t *testing.T) {
+		got, err := weatherRepo.ListDays(ctx, calA.ID, 3, 1)
+		if err != nil || len(got) != 2 {
+			t.Fatalf("ListDays = %+v, %v; want 2 days", got, err)
+		}
+		if got[0].Day != 1 || got[0].Source != WeatherSourceManual || got[0].Precipitation == nil || *got[0].Precipitation.Type != "rain" {
+			t.Errorf("first day = %+v", got[0])
+		}
+		all, _ := weatherRepo.ListDays(ctx, calA.ID, 3, 0)
+		if len(all) != 3 {
+			t.Errorf("whole year = %d days, want 3", len(all))
+		}
+	})
+
+	t.Run("generated never replaces manual, but replaces generated", func(t *testing.T) {
+		if err := weatherRepo.SetDays(ctx, calA.ID, []DayWeatherInput{
+			day(1, 1, WeatherSourceGenerated, "snow"),
+			day(1, 2, WeatherSourceGenerated, "hail"),
+		}); err != nil {
+			t.Fatalf("SetDays: %v", err)
+		}
+		got, _ := weatherRepo.ListDays(ctx, calA.ID, 3, 1)
+		if *got[0].PresetID != "clear" || got[0].Source != WeatherSourceManual {
+			t.Errorf("manual day = %s/%s, want clear/manual", *got[0].PresetID, got[0].Source)
+		}
+		if *got[1].PresetID != "hail" {
+			t.Errorf("generated day = %s, want hail", *got[1].PresetID)
+		}
+	})
+
+	t.Run("manual replaces generated and takes its source", func(t *testing.T) {
+		if err := weatherRepo.SetDays(ctx, calA.ID, []DayWeatherInput{day(1, 2, WeatherSourceManual, "windy")}); err != nil {
+			t.Fatalf("SetDays: %v", err)
+		}
+		got, _ := weatherRepo.ListDays(ctx, calA.ID, 3, 1)
+		if *got[1].PresetID != "windy" || got[1].Source != WeatherSourceManual {
+			t.Errorf("day = %s/%s, want windy/manual", *got[1].PresetID, got[1].Source)
+		}
+	})
+
+	t.Run("days are scoped to their calendar", func(t *testing.T) {
+		got, err := weatherRepo.ListDays(ctx, calB.ID, 3, 0)
+		if err != nil || len(got) != 0 {
+			t.Fatalf("calB = %+v, %v; want none", got, err)
+		}
+	})
+
+	t.Run("ClearDays removes any source", func(t *testing.T) {
+		if err := weatherRepo.ClearDays(ctx, calA.ID, []DayDate{{3, 1, 1}, {3, 2, 1}}); err != nil {
+			t.Fatalf("ClearDays: %v", err)
+		}
+		got, _ := weatherRepo.ListDays(ctx, calA.ID, 3, 0)
+		if len(got) != 1 || got[0].Day != 2 {
+			t.Errorf("left = %+v, want only 1/2", got)
+		}
+	})
+
+	t.Run("deleting the calendar cascades", func(t *testing.T) {
+		if err := calRepo.Delete(ctx, calA.ID); err != nil {
+			t.Fatalf("Delete: %v", err)
+		}
+		var n int
+		if err := db.QueryRowContext(ctx, `SELECT COUNT(*) FROM calendar_weather_days WHERE calendar_id = ?`, calA.ID).Scan(&n); err != nil || n != 0 {
+			t.Errorf("rows after delete = %d, %v; want 0", n, err)
+		}
+	})
+}

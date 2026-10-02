@@ -19,6 +19,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"log/slog"
+	"math"
 	"regexp"
 	"time"
 	"unicode/utf8"
@@ -283,6 +284,14 @@ type CalendarService interface {
 	SetCycles(ctx context.Context, calendarID, campaignID string, cycles []CycleInput) error
 	SetFestivals(ctx context.Context, calendarID, campaignID string, festivals []FestivalInput) error
 	SetWeather(ctx context.Context, calendarID, campaignID string, input WeatherInput) error
+
+	// Day weather: one reading per calendar day. ListDayWeather gives a
+	// Player only days up to the calendar's today (future weather is the
+	// Director's alone); an Owner or co-Director sees every day. The writes
+	// are gated CanAuthorDmOnly at the route (routes.go).
+	ListDayWeather(ctx context.Context, calendarID, campaignID string, year, month int, v permissions.Viewer) ([]DayWeather, error)
+	SetDayWeather(ctx context.Context, calendarID, campaignID string, days []DayWeatherInput) error
+	ClearDayWeather(ctx context.Context, calendarID, campaignID string, dates []DayDate) error
 
 	// ListAllEventsForCalendar returns every event for a calendar with no
 	// role or per-user visibility filter — a bulk, unredacted read for
@@ -2168,17 +2177,191 @@ func (s *calendarService) SetFestivals(ctx context.Context, calendarID, campaign
 	return s.calRepo.SetFestivals(ctx, calendarID, festivals)
 }
 
-// SetWeather replaces calendarID's current weather reading. Reading a
-// calendar's weather goes through weatherRepo.Get inside loadSubresources
-// (read-only, see .ai.md "Honest gaps" — painting/generation is separate,
-// unbuilt work); SetWeather is only the plumbing the campaign-backup
-// importer needs to restore a reading a GM had already set before the
-// backup.
+// SetWeather replaces calendarID's current weather reading. Reading it goes
+// through weatherRepo.Get inside loadSubresources; SetWeather is only the
+// plumbing the campaign-backup importer needs to restore a reading a GM had
+// already set before the backup. Per-day readings are SetDayWeather's.
 func (s *calendarService) SetWeather(ctx context.Context, calendarID, campaignID string, input WeatherInput) error {
 	if _, err := s.calendarInCampaign(ctx, calendarID, campaignID); err != nil {
 		return err
 	}
 	return s.weatherRepo.Set(ctx, calendarID, input)
+}
+
+// --- Day weather ---
+
+// maxDayWeatherBatch caps one day-weather write: a long fantasy year fits,
+// an unbounded loop of upserts in one request does not.
+const maxDayWeatherBatch = 1000
+
+// Column widths of calendar_weather_days (migration 021).
+const (
+	maxWeatherPresetIDLength    = 50
+	maxWeatherPresetLabelLength = 100
+	maxWeatherIconLength        = 50
+	maxWeatherColorLength       = 20
+	maxWeatherTierLength        = 20
+	maxWeatherDirectionLength   = 5
+	maxWeatherPrecipTypeLength  = 20
+	maxWeatherZoneIDLength      = 50
+	maxWeatherZoneNameLength    = 100
+	maxWeatherDescriptionLength = 2000
+)
+
+// dayOnOrBefore reports whether (y, m, d) is on or before (cy, cm, cd).
+// Month numbers are positions in the calendar's month order, so a plain
+// tuple comparison is calendar order without loading the months.
+func dayOnOrBefore(y, m, d, cy, cm, cd int) bool {
+	if y != cy {
+		return y < cy
+	}
+	if m != cm {
+		return m < cm
+	}
+	return d <= cd
+}
+
+// ListDayWeather returns a year's (or one month's) day readings for v. A
+// viewer who cannot see dm_only content gets only days up to today: the
+// forecast switch does not open future days yet (TODO(#765)).
+func (s *calendarService) ListDayWeather(ctx context.Context, calendarID, campaignID string, year, month int, v permissions.Viewer) ([]DayWeather, error) {
+	cal, err := s.calendarInCampaignForViewer(ctx, calendarID, campaignID, v)
+	if err != nil {
+		return nil, err
+	}
+	director := v.SkipsPerUserRules()
+	if !director && year > cal.CurrentYear {
+		return []DayWeather{}, nil
+	}
+	days, err := s.weatherRepo.ListDays(ctx, calendarID, year, month)
+	if err != nil {
+		return nil, fmt.Errorf("list day weather: %w", err)
+	}
+	out := make([]DayWeather, 0, len(days))
+	for _, d := range days {
+		if director || dayOnOrBefore(d.Year, d.Month, d.Day, cal.CurrentYear, cal.CurrentMonth, cal.CurrentDay) {
+			out = append(out, d)
+		}
+	}
+	return out, nil
+}
+
+// SetDayWeather validates and stores day readings. Every date must be a real
+// day of this calendar; a generated reading never replaces a manual one
+// (WeatherRepository.SetDays).
+func (s *calendarService) SetDayWeather(ctx context.Context, calendarID, campaignID string, days []DayWeatherInput) error {
+	if len(days) > maxDayWeatherBatch {
+		return apperror.NewBadRequest(fmt.Sprintf("at most %d days can be set at once", maxDayWeatherBatch))
+	}
+	cal, err := s.calendarInCampaign(ctx, calendarID, campaignID)
+	if err != nil {
+		return err
+	}
+	if err := s.loadCalendarGeometry(ctx, cal); err != nil {
+		return err
+	}
+	seen := make(map[DayDate]bool, len(days))
+	for i := range days {
+		d := &days[i]
+		if err := validateDayDate(cal, d.Year, d.Month, d.Day); err != nil {
+			return err
+		}
+		key := DayDate{d.Year, d.Month, d.Day}
+		if seen[key] {
+			return apperror.NewBadRequest("a day can appear only once")
+		}
+		seen[key] = true
+		switch d.Source {
+		case "":
+			d.Source = WeatherSourceManual
+		case WeatherSourceManual, WeatherSourceGenerated:
+		default:
+			return apperror.NewBadRequest("source must be manual or generated")
+		}
+		if err := validateWeatherInput(d.WeatherInput); err != nil {
+			return err
+		}
+	}
+	return s.weatherRepo.SetDays(ctx, calendarID, days)
+}
+
+// ClearDayWeather removes the readings on the given days.
+func (s *calendarService) ClearDayWeather(ctx context.Context, calendarID, campaignID string, dates []DayDate) error {
+	if len(dates) > maxDayWeatherBatch {
+		return apperror.NewBadRequest(fmt.Sprintf("at most %d days can be cleared at once", maxDayWeatherBatch))
+	}
+	cal, err := s.calendarInCampaign(ctx, calendarID, campaignID)
+	if err != nil {
+		return err
+	}
+	if err := s.loadCalendarGeometry(ctx, cal); err != nil {
+		return err
+	}
+	for _, d := range dates {
+		if err := validateDayDate(cal, d.Year, d.Month, d.Day); err != nil {
+			return err
+		}
+	}
+	return s.weatherRepo.ClearDays(ctx, calendarID, dates)
+}
+
+// maxDayWeatherYear bounds a day reading's year well inside the INT column,
+// so an absurd year fails as a 400 rather than a driver error.
+const maxDayWeatherYear = 1_000_000
+
+// validateDayDate rejects a date that is not a day of cal (geometry loaded).
+func validateDayDate(cal *Calendar, year, month, day int) error {
+	if year < -maxDayWeatherYear || year > maxDayWeatherYear {
+		return apperror.NewBadRequest(fmt.Sprintf("year must be between %d and %d", -maxDayWeatherYear, maxDayWeatherYear))
+	}
+	if month < 1 || month > len(cal.Months) {
+		return apperror.NewBadRequest(fmt.Sprintf("month %d is not a month of this calendar", month))
+	}
+	if day < 1 || day > cal.MonthDays(month-1, year) {
+		return apperror.NewBadRequest(fmt.Sprintf("day %d is not a day of month %d in year %d", day, month, year))
+	}
+	return nil
+}
+
+// validateWeatherInput holds a reading to its columns' widths and to
+// physically sensible numbers, so bad input fails as a clean 400.
+func validateWeatherInput(in WeatherInput) error {
+	for _, f := range []struct {
+		name string
+		v    *string
+		max  int
+	}{
+		{"preset_id", in.PresetID, maxWeatherPresetIDLength},
+		{"preset_label", in.PresetLabel, maxWeatherPresetLabelLength},
+		{"icon", in.Icon, maxWeatherIconLength},
+		{"color", in.Color, maxWeatherColorLength},
+		{"wind_speed_tier", in.WindSpeedTier, maxWeatherTierLength},
+		{"wind_direction", in.WindDirection, maxWeatherDirectionLength},
+		{"precipitation_type", in.PrecipitationType, maxWeatherPrecipTypeLength},
+		{"zone_id", in.ZoneID, maxWeatherZoneIDLength},
+		{"zone_name", in.ZoneName, maxWeatherZoneNameLength},
+		{"description", in.Description, maxWeatherDescriptionLength},
+	} {
+		if err := validateOptionalText(f.name, f.v, f.max); err != nil {
+			return err
+		}
+	}
+	if in.Color != nil && *in.Color != "" && !hexColorPattern.MatchString(*in.Color) {
+		return apperror.NewBadRequest("color must be a hex color (#rgb or #rrggbb)")
+	}
+	if t := in.TemperatureCelsius; t != nil && (math.IsNaN(*t) || *t < -100 || *t > 100) {
+		return apperror.NewBadRequest("temperature_celsius must be between -100 and 100")
+	}
+	if w := in.WindSpeedKPH; w != nil && (math.IsNaN(*w) || *w < 0 || *w > 1000) {
+		return apperror.NewBadRequest("wind_speed_kph must be between 0 and 1000")
+	}
+	if d := in.WindDirectionDeg; d != nil && (*d < 0 || *d > 359) {
+		return apperror.NewBadRequest("wind_direction_degrees must be between 0 and 359")
+	}
+	if p := in.PrecipitationIntensity; p != nil && (math.IsNaN(*p) || *p < 0 || *p > 1) {
+		return apperror.NewBadRequest("precipitation_intensity must be between 0 and 1")
+	}
+	return nil
 }
 
 // validateMonthInputs holds a whole-list month write to the limits an

@@ -190,6 +190,15 @@ func (f *fakeCalendarSvc) SetFestivals(context.Context, string, string, []Festiv
 func (f *fakeCalendarSvc) SetWeather(context.Context, string, string, WeatherInput) error {
 	return nil
 }
+func (f *fakeCalendarSvc) ListDayWeather(context.Context, string, string, int, int, permissions.Viewer) ([]DayWeather, error) {
+	return nil, nil
+}
+func (f *fakeCalendarSvc) SetDayWeather(context.Context, string, string, []DayWeatherInput) error {
+	return nil
+}
+func (f *fakeCalendarSvc) ClearDayWeather(context.Context, string, string, []DayDate) error {
+	return nil
+}
 
 func (f *fakeCalendarSvc) ListAllEventsForCalendar(context.Context, string, string, permissions.Viewer) ([]Event, error) {
 	return nil, nil
