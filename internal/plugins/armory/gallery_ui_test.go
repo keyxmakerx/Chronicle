@@ -33,7 +33,7 @@ func TestListTagOptions(t *testing.T) {
 		{name: "owner sees every tag, deduped and name-sorted", role: permissions.RoleOwner, wantSlugs: []string{"cursed", "gm-only", "hidden-item", "magic"}, wantDmOnly: true},
 		{name: "player: lister told to exclude dm_only", role: permissions.RolePlayer, viewable: map[string]bool{"a": true, "b": true}, wantSlugs: []string{"cursed", "magic"}, wantDmOnly: false},
 		{name: "player: tags of invisible items are not offered", role: permissions.RolePlayer, viewable: map[string]bool{"b": true}, wantSlugs: []string{"cursed", "magic"}, wantDmOnly: false},
-		{name: "scribe may see dm_only tags", role: permissions.RoleScribe, viewable: map[string]bool{"a": true, "b": true, "c": true}, wantSlugs: []string{"cursed", "gm-only", "hidden-item", "magic"}, wantDmOnly: true},
+		{name: "scribe: lister told to exclude dm_only, like the tags widget", role: permissions.RoleScribe, viewable: map[string]bool{"a": true, "b": true}, wantSlugs: []string{"cursed", "magic"}, wantDmOnly: false},
 		{name: "no tag lister means no options", role: permissions.RoleOwner, noLister: true},
 	}
 	for _, tt := range tests {
@@ -220,7 +220,8 @@ func TestListItems_TagProbe(t *testing.T) {
 		{"player, public tag", permissions.RolePlayer, "magic", 1, true},
 		{"player, dm_only tag", permissions.RolePlayer, "secret", 0, false},
 		{"player, unknown tag", permissions.RolePlayer, "nope", 0, false},
-		{"scribe, dm_only tag", permissions.RoleScribe, "secret", 1, true},
+		{"scribe, dm_only tag", permissions.RoleScribe, "secret", 0, false},
+		{"owner, dm_only tag", permissions.RoleOwner, "secret", 1, true},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {

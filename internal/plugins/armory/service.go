@@ -106,7 +106,7 @@ func (s *armoryService) ListItems(ctx context.Context, campaignID string, role i
 	// Below Scribe a tag slug is honoured only if it is one the viewer is
 	// offered, so a GM-only or nonexistent slug yields the same empty result
 	// and cannot be used to probe for hidden tags.
-	if opts.Tag != "" && role < permissions.RoleScribe {
+	if opts.Tag != "" && role < permissions.RoleOwner {
 		offered, err := s.ListTagOptions(ctx, campaignID, role, userID)
 		if err != nil {
 			return nil, 0, err
@@ -178,7 +178,7 @@ func (s *armoryService) ListTagOptions(ctx context.Context, campaignID string, r
 	if err != nil || len(ids) == 0 {
 		return nil, err
 	}
-	tagMap, err := s.tagLister.ListTagsForEntities(ctx, ids, role >= permissions.RoleScribe)
+	tagMap, err := s.tagLister.ListTagsForEntities(ctx, ids, role >= permissions.RoleOwner)
 	if err != nil {
 		return nil, fmt.Errorf("listing tags for filter: %w", err)
 	}
