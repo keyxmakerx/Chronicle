@@ -1,6 +1,7 @@
 package layouts
 
 import (
+	"strings"
 	"testing"
 
 	"github.com/keyxmakerx/chronicle/internal/templates/components"
