@@ -2716,12 +2716,14 @@ func (a *App) RegisterRoutes() {
 	// The calendar's page scripts: calendar_view.js mounts on
 	// data-widget="calendar_view" (the calendar's own page, or a Calendars
 	// page preview unfolded in place), calendar_editor.js self-gates on that
-	// mount's data-can-edit="true", and calendar_almanac.js waits for a
-	// Calendars page preview. All are no-ops on every other page, same as
-	// every entry here.
+	// mount's data-can-edit="true" and opens calendar_event_drawer.js's full
+	// event editor (loaded first so it exists when the editor binds), and
+	// calendar_almanac.js waits for a Calendars page preview. All are no-ops
+	// on every other page, same as every entry here.
 	pluginBodyScripts := []string{
 		"/static/plugins/" + entities.PluginSlug + "/js/characters.js",
 		"/static/js/widgets/calendar_view.js",
+		"/static/js/widgets/calendar_event_drawer.js",
 		"/static/js/widgets/calendar_editor.js",
 		"/static/js/calendar_almanac.js",
 	}
