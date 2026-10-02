@@ -120,6 +120,11 @@ always_allowed_prefixes=(
   # it — so a non-colliding slug would leave the test asserting nothing about
   # the case it is named for.
   "internal/systems/operator_diag_campaign_test.go"
+  # The admin sidebar links every admin page by URL and groups them into
+  # sections, one of which is named after the packages area; it renders
+  # links only and imports no plugin.
+  "internal/templates/layouts/admin_nav_data.go"
+  "internal/templates/layouts/admin_nav_data_test.go"
   # sessions/migrations carries `FOREIGN KEY (calendar_id) REFERENCES
   # calendars(id)`, so a sessions row-level test needs the calendar plugin's
   # migrations applied first. It loads them off disk with os.DirFS to avoid a
