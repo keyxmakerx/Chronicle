@@ -1535,19 +1535,73 @@ func (a *entityAccessAdapter) FilterViewableEntityIDs(ctx context.Context, campa
 }
 
 // npcEntityTypeFinderAdapter wraps entities.EntityService to implement the
-// npcs.EntityTypeFinder interface. Resolves the "characters" entity type ID
-// for the NPC gallery without creating a circular import.
+// npcs.EntityTypeFinder interface. Resolves the entity types the NPC section
+// lists without creating a circular import.
 type npcEntityTypeFinderAdapter struct {
 	svc entities.EntityService
 }
 
-// FindCharacterTypeID looks up the "characters" entity type for a campaign.
-func (a *npcEntityTypeFinderAdapter) FindCharacterTypeID(ctx context.Context, campaignID string) (int, error) {
-	et, err := a.svc.GetEntityTypeBySlug(ctx, campaignID, "characters")
+// FindCharacterTypeIDs returns the campaign's NPC/monster entity types.
+func (a *npcEntityTypeFinderAdapter) FindCharacterTypeIDs(ctx context.Context, campaignID string) ([]int, error) {
+	types, err := a.svc.GetEntityTypes(ctx, campaignID)
 	if err != nil {
-		return 0, err
+		return nil, err
 	}
-	return et.ID, nil
+	return npcTypeIDs(types), nil
+}
+
+// npcTypeIDs picks the entity types whose entities are NPCs or monsters: the
+// default "character" type, the "npc"/"creature" genre types, system-pack
+// character and monster types, and every enabled sub-type nested under one of
+// them. The player-character type is left out; claimed PCs are the party.
+func npcTypeIDs(types []entities.EntityType) []int {
+	isRoot := func(et entities.EntityType) bool {
+		if et.PresetCategory != nil {
+			switch *et.PresetCategory {
+			case "character", "creature":
+				return true
+			}
+		}
+		switch et.Slug {
+		case "character", "npc", "creature":
+			return true
+		}
+		return strings.HasSuffix(et.Slug, "-character") || strings.HasSuffix(et.Slug, "-monster")
+	}
+	isPC := func(et entities.EntityType) bool {
+		return (et.PresetCategory != nil && *et.PresetCategory == entities.PresetCategoryPlayerCharacter) ||
+			et.Slug == entities.SlugPlayerCharacter
+	}
+
+	byID := make(map[int]entities.EntityType, len(types))
+	for _, et := range types {
+		byID[et.ID] = et
+	}
+	// inFamily walks up the parent chain; depth guards against a cycle.
+	inFamily := func(et entities.EntityType) bool {
+		for depth := 0; depth < 16; depth++ {
+			if isRoot(et) {
+				return true
+			}
+			if et.ParentTypeID == nil {
+				return false
+			}
+			parent, ok := byID[*et.ParentTypeID]
+			if !ok {
+				return false
+			}
+			et = parent
+		}
+		return false
+	}
+
+	var ids []int
+	for _, et := range types {
+		if et.Enabled && !isPC(et) && inFamily(et) {
+			ids = append(ids, et.ID)
+		}
+	}
+	return ids
 }
 
 // npcVisibilityTogglerAdapter wraps entities.EntityService to implement the

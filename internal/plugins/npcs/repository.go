@@ -20,14 +20,14 @@ import (
 
 // NPCRepository defines the data access contract for NPC gallery queries.
 type NPCRepository interface {
-	// ListRevealedIDs returns ALL character entity IDs matching the campaign +
-	// character type + optional search/tag filters (excluding templates), in
+	// ListRevealedIDs returns ALL unclaimed character entity IDs matching the
+	// campaign + any of the character types + optional search/tag filters (excluding templates), in
 	// the gallery's sort order, with NO visibility restriction and NO
 	// pagination applied. The service layer narrows this list to what the
 	// viewer may see (via the canonical entities visibility policy) BEFORE
 	// paginating, so the visible list and its count are always derived from
 	// the exact same filtered ID set and can never disagree.
-	ListRevealedIDs(ctx context.Context, campaignID string, characterTypeID int, opts NPCListOptions) ([]string, error)
+	ListRevealedIDs(ctx context.Context, campaignID string, characterTypeIDs []int, opts NPCListOptions) ([]string, error)
 
 	// GetNPCCardsByIDs returns full NPC card data for exactly the given IDs
 	// (in that order), scoped to campaignID. Used to fetch one page's worth of
@@ -52,12 +52,20 @@ const npcSelectColumns = `e.id, e.name, e.slug, e.image_path, e.type_label,
 	et.name, et.icon, et.color`
 
 // ListRevealedIDs fetches every character entity ID matching the campaign +
-// character type + search/tag filters, unfiltered by visibility and
+// character types + search/tag filters, unfiltered by visibility and
 // unpaginated. See the NPCRepository doc comment for why visibility is
-// deliberately absent here.
-func (r *npcRepository) ListRevealedIDs(ctx context.Context, campaignID string, characterTypeID int, opts NPCListOptions) ([]string, error) {
-	where := "WHERE e.campaign_id = ? AND e.entity_type_id = ? AND e.is_template = false"
-	args := []any{campaignID, characterTypeID}
+// deliberately absent here. Claimed entities are left out: they are player
+// characters and belong to the Characters page's party section.
+func (r *npcRepository) ListRevealedIDs(ctx context.Context, campaignID string, characterTypeIDs []int, opts NPCListOptions) ([]string, error) {
+	if len(characterTypeIDs) == 0 {
+		return nil, nil
+	}
+	typePlaceholders := strings.TrimSuffix(strings.Repeat("?,", len(characterTypeIDs)), ",")
+	where := "WHERE e.campaign_id = ? AND e.entity_type_id IN (" + typePlaceholders + ") AND e.is_template = false AND e.owner_user_id IS NULL"
+	args := []any{campaignID}
+	for _, id := range characterTypeIDs {
+		args = append(args, id)
+	}
 
 	// Optional name search.
 	if opts.Search != "" {

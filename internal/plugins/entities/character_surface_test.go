@@ -9,7 +9,7 @@ import (
 // TestCharacterSurfaceSchemaJSON pins the seeded schema: provider key, the seed
 // (name/image/editor), and non-empty fields grouped by section in order.
 func TestCharacterSurfaceSchemaJSON(t *testing.T) {
-	img := "portraits/tyne.png"
+	img := "2026/03/b7c17bb1-6563-462c-8b49-5b2e8bd57108.png" // stored path form; served by file id
 	label := "Tactician"
 	et := &EntityType{
 		Fields: []FieldDefinition{
@@ -39,8 +39,8 @@ func TestCharacterSurfaceSchemaJSON(t *testing.T) {
 	if seed["name"] != "Tyne" {
 		t.Errorf("seed name = %v", seed["name"])
 	}
-	if seed["image"] != "/media/portraits/tyne.png" {
-		t.Errorf("seed image = %v, want /media/portraits/tyne.png", seed["image"])
+	if seed["image"] != "/media/b7c17bb1-6563-462c-8b49-5b2e8bd57108" {
+		t.Errorf("seed image = %v, want /media/b7c17bb1-6563-462c-8b49-5b2e8bd57108", seed["image"])
 	}
 
 	ed := seed["editor"].(map[string]any)
