@@ -41,7 +41,13 @@ func (f *fakeRoleCapturingNPCService) CountNPCs(ctx context.Context, campaignID 
 	return 0, nil
 }
 
-func coDMContext() *campaigns.CampaignContext {
+func (f *fakeRoleCapturingNPCService) ListTags(ctx context.Context, campaignID string, role int, userID string, includeDmOnly bool) ([]NPCTagInfo, error) {
+	return nil, nil
+}
+
+func (f *fakeRoleCapturingNPCService) SetTagLister(TagLister) {}
+
+func coDMContext()*campaigns.CampaignContext {
 	return &campaigns.CampaignContext{
 		Campaign:    &campaigns.Campaign{ID: "camp-1"},
 		MemberRole:  campaigns.RolePlayer,

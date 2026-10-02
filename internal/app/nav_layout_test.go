@@ -162,14 +162,14 @@ func TestBuildNavSections_AppsFollowAccess(t *testing.T) {
 		{
 			name: "a public visitor",
 			cc:   navTestContext(nil, campaigns.RoleNone, false, true),
-			want: map[string]bool{"app:notes": false, "app:" + calendar.PluginSlug: false, "app:maps": true, "app:characters": false, "app:rulebook": false, "app:sessions": true},
+			want: map[string]bool{"app:notes": false, "app:" + calendar.PluginSlug: false, "app:maps": true, "app:characters": true, "app:rulebook": false, "app:sessions": true},
 		},
 		{
 			// /apps/calendar and /systems/:mod sit behind RequireCampaignAccess,
 			// which turns a signed-in non-member away.
 			name: "a signed-in visitor who is not a member",
 			cc:   navTestContext(nil, campaigns.RoleNone, false, false),
-			want: map[string]bool{"app:notes": false, "app:" + calendar.PluginSlug: false, "app:maps": true, "app:characters": false, "app:rulebook": false},
+			want: map[string]bool{"app:notes": false, "app:" + calendar.PluginSlug: false, "app:maps": true, "app:characters": true, "app:rulebook": false},
 		},
 		{
 			// ...but lets a site admin in, while RequireRole(RolePlayer) does not.
@@ -179,7 +179,7 @@ func TestBuildNavSections_AppsFollowAccess(t *testing.T) {
 				cc.IsSiteAdmin = true
 				return cc
 			}(),
-			want: map[string]bool{"app:notes": false, "app:" + calendar.PluginSlug: true, "app:maps": true, "app:characters": false, "app:rulebook": true},
+			want: map[string]bool{"app:notes": false, "app:" + calendar.PluginSlug: true, "app:maps": true, "app:characters": true, "app:rulebook": true},
 		},
 		{
 			name: "a player",

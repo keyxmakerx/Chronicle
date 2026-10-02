@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"log/slog"
 	"net/http"
+	"strconv"
 
 	"github.com/a-h/templ"
 	"github.com/labstack/echo/v4"
@@ -66,16 +67,71 @@ func (h *Handler) NPCSection(ctx context.Context, cc *campaigns.CampaignContext,
 	var featured []NPCCard
 	if featureTag != "" {
 		var err error
-		if featured, _, err = h.svc.ListNPCs(ctx, cid, role, userID, NPCListOptions{Page: 1, PerPage: 24, Sort: "name", Tag: featureTag}); err != nil {
+		if featured, _, err = h.svc.ListNPCs(ctx, cid, role, userID, NPCListOptions{Page: 1, PerPage: 24, Sort: "name", Tag: featureTag, IncludeDmOnlyTags: canSeeDmOnlyTags(cc)}); err != nil {
 			slog.Warn("npc section: featured list failed", slog.String("campaign_id", cid), slog.Any("error", err))
 		}
 	}
-	all, _, err := h.svc.ListNPCs(ctx, cid, role, userID, NPCListOptions{Page: 1, PerPage: 60, Sort: "name"})
+	list, err := h.buildListView(ctx, cc, userID, "", "", 1)
 	if err != nil {
 		slog.Warn("npc section: list failed", slog.String("campaign_id", cid), slog.Any("error", err))
 	}
 
-	return NPCSectionComponent(cc, featured, all, csrfToken)
+	return NPCSectionComponent(cc, featured, list, csrfToken)
+}
+
+// canSeeDmOnlyTags mirrors the tags widget's rule for who may see GM-only tags,
+// so the NPC filter and card chips never show a tag the tag manager would hide.
+func canSeeDmOnlyTags(cc *campaigns.CampaignContext) bool {
+	return cc.MemberRole >= campaigns.RoleOwner || cc.IsSiteAdmin || cc.IsDmGranted
+}
+
+// buildListView loads one page of the NPC list plus the filter options. A
+// failed tag lookup only drops the filter; the list still renders.
+func (h *Handler) buildListView(ctx context.Context, cc *campaigns.CampaignContext, userID, search, tag string, page int) (NPCListView, error) {
+	cid := cc.Campaign.ID
+	dmTags := canSeeDmOnlyTags(cc)
+
+	tags, err := h.svc.ListTags(ctx, cid, cc.VisibilityRole(), userID, dmTags)
+	if err != nil {
+		slog.Warn("npc list: tag options failed", slog.String("campaign_id", cid), slog.Any("error", err))
+		tags = nil
+	}
+	// The slug is only honoured when it is one of the offered options.
+	search, tag, page = ParseNPCSectionQuery(search, tag, strconv.Itoa(page), tags)
+
+	// Each request returns exactly page N; the client appends it to earlier pages.
+	cards, total, err := h.svc.ListNPCs(ctx, cid, cc.VisibilityRole(), userID, NPCListOptions{
+		Page: page, PerPage: NPCPageSize, Sort: "name", Search: search, Tag: tag, IncludeDmOnlyTags: dmTags,
+	})
+	if err != nil {
+		return NPCListView{Search: search, Tag: tag, Tags: tags}, err
+	}
+	return NPCListView{Cards: cards, Pager: NewNPCPager(page, NPCPageSize, total), Search: search, Tag: tag, Tags: tags}, nil
+}
+
+// SectionFragment handles GET /campaigns/:id/npcs/section?q=&tag=&page=, the
+// HTMX endpoint behind the search box, tag filter and "Show more". Page 1
+// returns the whole list part; later pages return just the next cards plus an
+// out-of-band footer so the client appends them. Direct (non-HTMX) hits go back
+// to the Characters page.
+func (h *Handler) SectionFragment(c echo.Context) error {
+	cc := campaigns.GetCampaignContext(c)
+	if cc == nil {
+		return apperror.NewMissingContext()
+	}
+	if !middleware.IsHTMX(c) {
+		return c.Redirect(http.StatusFound, fmt.Sprintf("/campaigns/%s/characters", cc.Campaign.ID))
+	}
+
+	page, _ := strconv.Atoi(c.QueryParam("page"))
+	view, err := h.buildListView(c.Request().Context(), cc, auth.GetUserID(c), c.QueryParam("q"), c.QueryParam("tag"), page)
+	if err != nil {
+		return apperror.NewInternal(err)
+	}
+	if page > 1 {
+		return middleware.Render(c, http.StatusOK, NPCMoreFragment(cc, view, middleware.GetCSRFToken(c)))
+	}
+	return middleware.Render(c, http.StatusOK, NPCResults(cc, view, middleware.GetCSRFToken(c)))
 }
 
 // ToggleReveal handles POST /campaigns/:id/npcs/:eid/reveal.

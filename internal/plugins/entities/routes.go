@@ -83,8 +83,6 @@ func RegisterRoutes(e *echo.Echo, h *Handler, campaignSvc campaigns.CampaignServ
 	// Player Character Experience (CH2 + CH3).
 	// /me — per-campaign player landing page listing the caller's characters.
 	cg.GET("/me", h.MyCharacters, campaigns.RequireRole(campaigns.RolePlayer))
-	// /characters — the campaign Cast: party (claimed PCs) + active NPCs.
-	cg.GET("/characters", h.Characters, campaigns.RequireRole(campaigns.RolePlayer))
 	// Claim flow: any campaign member can claim an unclaimed character.
 	// Type-shape gate (only character-shaped entity_types) lives in the
 	// service so the route surface stays uniform.
@@ -154,6 +152,10 @@ func RegisterRoutes(e *echo.Echo, h *Handler, campaignSvc campaigns.CampaignServ
 	pub.GET("/entities/:eid", h.Show, campaigns.RequireViewAccess())
 	pub.GET("/entities/:eid/preview", h.PreviewAPI, campaigns.RequireViewAccess())
 	pub.GET("/entities/:eid/backlinks", h.BacklinksFragment, campaigns.RequireViewAccess())
+	// /characters — the campaign Cast (party + NPCs). Public so a public
+	// campaign's cast is browsable signed out, like the old NPC gallery; the
+	// handler lists only what the viewer's visibility role allows.
+	pub.GET("/characters", h.Characters, campaigns.RequireViewAccess())
 
 	// Widget data endpoints (read-only) — needed so public campaign visitors
 	// can load editor content, attribute fields, etc. Handlers already enforce
