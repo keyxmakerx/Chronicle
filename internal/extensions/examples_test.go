@@ -1,6 +1,7 @@
 package extensions
 
 import (
+	"encoding/json"
 	"os"
 	"testing"
 )
@@ -110,5 +111,48 @@ func TestExampleWASMPluginManifests(t *testing.T) {
 				t.Errorf("timeout out of range: %d", wp.TimeoutSecs)
 			}
 		})
+	}
+}
+
+// TestHarptosExtensionSeasonsStartOnCanonMonths pins the bundled Harptos
+// data's season starts against its own 12-month list, by month name rather
+// than a hand-counted position: Winter starts at Nightal, the last month, so
+// it wraps the year boundary into Spring. A start one month early (Uktar)
+// shipped once because nothing tied the numbers to the names.
+func TestHarptosExtensionSeasonsStartOnCanonMonths(t *testing.T) {
+	data, err := os.ReadFile("../../extensions/harptos-calendar/data/harptos.json")
+	if err != nil {
+		t.Fatalf("read harptos.json: %v", err)
+	}
+	var cal struct {
+		Months []struct {
+			Name string `json:"name"`
+		} `json:"months"`
+		Seasons []struct {
+			Name       string `json:"name"`
+			StartMonth int    `json:"start_month"`
+		} `json:"seasons"`
+	}
+	if err := json.Unmarshal(data, &cal); err != nil {
+		t.Fatalf("unmarshal: %v", err)
+	}
+
+	want := map[string]string{
+		"Winter": "Nightal",
+		"Spring": "Ches",
+		"Summer": "Kythorn",
+		"Autumn": "Eleint",
+	}
+	got := map[string]string{}
+	for _, s := range cal.Seasons {
+		if s.StartMonth < 1 || s.StartMonth > len(cal.Months) {
+			t.Fatalf("season %q start_month %d outside %d months", s.Name, s.StartMonth, len(cal.Months))
+		}
+		got[s.Name] = cal.Months[s.StartMonth-1].Name
+	}
+	for season, month := range want {
+		if got[season] != month {
+			t.Errorf("season %q starts at %q, want %q", season, got[season], month)
+		}
 	}
 }

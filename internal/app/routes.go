@@ -2666,6 +2666,16 @@ func (a *App) RegisterRoutes() {
 	// triple, the entity-creator seam, the RSVP reader, and the StaticFS
 	// mount for /static/plugins/calendar/. TODO(#778)
 	calendarRepo := calendar.NewCalendarRepository(a.DB)
+	// One-time, idempotent: repair Harptos calendars created before the
+	// preset's season numbering was fixed. Only rows still exactly equal to
+	// the old preset are rewritten; best-effort, never blocks startup.
+	if store, ok := calendarRepo.(calendar.HarptosSeasonStore); ok {
+		if n, err := calendar.ReconcileHarptosSeasons(context.Background(), store); err != nil {
+			slog.Error("calendar: harptos season reconcile failed", slog.Any("error", err), slog.Int("repaired", n))
+		} else if n > 0 {
+			slog.Info("calendar: harptos season reconcile repaired calendars", slog.Int("calendars", n))
+		}
+	}
 	calendarEventRepo := calendar.NewEventRepository(a.DB)
 	calendarKindRepo := calendar.NewEventKindRepository(a.DB)
 	calendarWeatherRepo := calendar.NewWeatherRepository(a.DB)
