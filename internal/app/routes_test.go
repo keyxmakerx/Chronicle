@@ -3,6 +3,7 @@ package app
 import (
 	"testing"
 
+	"github.com/keyxmakerx/chronicle/internal/plugins/entities"
 	"github.com/keyxmakerx/chronicle/internal/plugins/maps"
 	ws "github.com/keyxmakerx/chronicle/internal/websocket"
 )
@@ -94,5 +95,24 @@ func TestPublishFogEvent_UnknownEventDropped(t *testing.T) {
 	a.PublishFogEvent("gibberish", "camp-1", "map-1", nil)
 	if bus.last != nil {
 		t.Errorf("expected unknown eventType to be dropped; got %v", bus.last)
+	}
+}
+
+// TestPublishEntityEvent_DMOnly pins that every entity message is gated to
+// DM-equivalent sockets: the payload is the unfiltered entity, so a player's
+// socket must never receive it.
+func TestPublishEntityEvent_DMOnly(t *testing.T) {
+	for _, event := range []string{"created", "updated", "deleted"} {
+		t.Run(event, func(t *testing.T) {
+			bus := &captureBus{}
+			a := &entityEventPublisherAdapter{bus: bus}
+			a.PublishEntityEvent(event, "camp-1", "ent-1", &entities.Entity{ID: "ent-1", IsPrivate: true})
+			if bus.last == nil {
+				t.Fatal("expected Publish to be called")
+			}
+			if !bus.last.RequiresDM {
+				t.Errorf("event %q: entity message must set RequiresDM", event)
+			}
+		})
 	}
 }
