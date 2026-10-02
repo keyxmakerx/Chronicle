@@ -11,6 +11,7 @@ import (
 	"net/http"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/labstack/echo/v4"
 
@@ -20,8 +21,8 @@ import (
 	"github.com/keyxmakerx/chronicle/internal/plugins/campaigns"
 	"github.com/keyxmakerx/chronicle/internal/plugins/media"
 	"github.com/keyxmakerx/chronicle/internal/plugins/settings"
-	"github.com/keyxmakerx/chronicle/internal/systems"
 	"github.com/keyxmakerx/chronicle/internal/plugins/smtp"
+	"github.com/keyxmakerx/chronicle/internal/systems"
 )
 
 // AddonCounter provides a count of registered addons for the admin dashboard.
@@ -46,30 +47,30 @@ type AddonUsageCounter interface {
 // Handler handles admin dashboard HTTP requests. Depends on other plugins'
 // services via interfaces -- no direct repo access.
 type Handler struct {
-	authRepo         auth.UserRepository
-	campaignService  campaigns.CampaignService
-	smtpService      smtp.SMTPService
-	mediaRepo        media.MediaRepository
-	mediaService     media.MediaService
+	authRepo        auth.UserRepository
+	campaignService campaigns.CampaignService
+	smtpService     smtp.SMTPService
+	mediaRepo       media.MediaRepository
+	mediaService    media.MediaService
 	// resolveMaxUploadSize returns the live max-upload-size from the
 	// settings service. Used by the storage admin page so the displayed
 	// "Max upload" matches what /media/upload's body-limit actually
 	// enforces — was previously the env-var value frozen at startup.
 	resolveMaxUploadSize func() int64
 	settingsService      settings.SettingsService
-	addonCounter     AddonCounter
-	securityService  SecurityService
-	hygieneScanner   DataHygieneScanner
-	databaseExplorer DatabaseExplorer
-	healthChecker    HealthChecker
-	backupLister     BackupLister
-	pendingCounter    PendingCounter
-	addonUsageCounter AddonUsageCounter
-	apiAlertCounter   APIAlertCounter
+	addonCounter         AddonCounter
+	securityService      SecurityService
+	hygieneScanner       DataHygieneScanner
+	databaseExplorer     DatabaseExplorer
+	healthChecker        HealthChecker
+	backupLister         BackupLister
+	pendingCounter       PendingCounter
+	addonUsageCounter    AddonUsageCounter
+	apiAlertCounter      APIAlertCounter
 	// activity is the admin change log; nil-safe so a missing log never blocks an admin action.
 	activity ActivityService
-	baseURL           string
-	navPins           AdminNavPinService
+	baseURL  string
+	navPins  AdminNavPinService
 }
 
 // StoragePageData holds all data needed for the combined storage management page.
@@ -368,38 +369,96 @@ func (h *Handler) Dashboard(c echo.Context) error {
 	})
 
 	var recent []ActivityEntry
+	changesThisWeek := -1
 	if h.activity != nil {
 		var err error
-		if recent, _, err = h.activity.List(ctx, 1, 10); err != nil {
+		if recent, _, err = h.activity.List(ctx, ActivityFilter{}, 1, 10); err != nil {
 			slog.Warn("failed to load admin activity", slog.Any("error", err))
+		}
+		weekly := ResolveActivityFilter(ActivityQuery{When: When7Days}, time.Now())
+		if _, n, err := h.activity.List(ctx, weekly, 1, 1); err != nil {
+			slog.Warn("admin dashboard: count recent changes failed", slog.Any("error", err))
+		} else {
+			changesThisWeek = n
 		}
 	}
 
-	// System counts for the Systems dashboard card.
+	// System counts for the Packages and Health tiles.
 	registeredSystems := len(systems.Registry())
 	failedSystems := registeredSystems - len(systems.AllSystems())
 	if failedSystems < 0 {
 		failedSystems = 0
 	}
 
-	return middleware.Render(c, http.StatusOK, AdminDashboardPage(userCount, campaignCount, mediaFileCount, totalStorageBytes, smtpConfigured, addonCount, securityStats, degradedPlugins, pendingSubmissions, registeredSystems, failedSystems, needs, recent))
+	in := homeInput{
+		Users: userCount, Campaigns: campaignCount, Features: addonCount,
+		APIAlerts: -1, ChangesThisWeek: changesThisWeek,
+		PendingSubmissions: pendingSubmissions,
+		RegisteredSystems:  registeredSystems, FailedSystems: failedSystems,
+		ActiveSessions: -1,
+		MediaFiles:     mediaFileCount, StorageBytes: totalStorageBytes,
+		DegradedParts:  len(degradedPlugins),
+		SMTPConfigured: smtpConfigured, SMTPKnown: h.smtpService != nil,
+		Now: time.Now(),
+	}
+	if h.addonCounter == nil {
+		in.Features = -1
+	}
+	if h.apiAlertCounter != nil {
+		in.APIAlerts = apiAlerts
+	}
+	if securityStats != nil {
+		in.ActiveSessions = securityStats.ActiveSessions
+		in.FailedLogins24h = securityStats.FailedLogins24h
+		in.DisabledUsers = securityStats.DisabledUsers
+	}
+	if h.backupLister != nil {
+		if bi, err := h.backupLister.BackupInfo(ctx); err != nil {
+			slog.Warn("admin dashboard: backup info failed", slog.Any("error", err))
+		} else {
+			in.BackupsKnown, in.BackupsEnabled = true, bi.Enabled
+			in.LastBackup = latestBackupTime(bi)
+		}
+	}
+
+	return middleware.Render(c, http.StatusOK, AdminDashboardPage(buildHomeGroups(in), needs, recent))
 }
 
-// Activity renders the full paginated admin change log (GET /admin/activity).
+// latestBackupTime is the newest backup file's time, ignoring manifests, which
+// describe a backup rather than being one. Zero when there is none.
+func latestBackupTime(bi BackupInfo) time.Time {
+	var newest time.Time
+	for _, a := range bi.Artifacts {
+		if a.Kind == "manifest" {
+			continue
+		}
+		if a.ModTime.After(newest) {
+			newest = a.ModTime
+		}
+	}
+	return newest
+}
+
+// Activity renders the filterable admin change log (GET /admin/activity).
 func (h *Handler) Activity(c echo.Context) error {
 	page, _ := strconv.Atoi(c.QueryParam("page"))
 	if page < 1 {
 		page = 1
 	}
-	var entries []ActivityEntry
-	var total int
+	q := ActivityQuery{Actor: c.QueryParam("actor"), Area: c.QueryParam("area"), When: c.QueryParam("when")}.Normalize()
+	data := ActivityPageData{Query: q, Page: page, PerPage: activityPerPage}
 	if h.activity != nil {
+		ctx := c.Request().Context()
 		var err error
-		if entries, total, err = h.activity.List(c.Request().Context(), page, activityPerPage); err != nil {
+		if data.Entries, data.Total, err = h.activity.List(ctx, ResolveActivityFilter(q, time.Now()), page, activityPerPage); err != nil {
 			return apperror.NewInternal(fmt.Errorf("listing admin activity: %w", err))
 		}
+		// A missing "who" menu must not hide the log itself.
+		if data.Actors, err = h.activity.Actors(ctx); err != nil {
+			slog.Warn("failed to load admin activity actors", slog.Any("error", err))
+		}
 	}
-	return middleware.Render(c, http.StatusOK, AdminActivityPage(entries, total, page, activityPerPage))
+	return middleware.Render(c, http.StatusOK, AdminActivityPage(data))
 }
 
 // --- Users ---
@@ -1219,4 +1278,3 @@ type SecurityPageData struct {
 	EventsFailed   bool
 	SessionsFailed bool
 }
-
