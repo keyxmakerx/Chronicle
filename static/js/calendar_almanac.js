@@ -307,7 +307,8 @@
 
   // Opening out: the side page folds away behind the month, the month moves
   // whole to where the calendar's grid lives and becomes it, and the
-  // calendar's header swings up from behind the grid's top edge.
+  // calendar's header swings open sideways on its left edge, like the card's
+  // cover, rather than rising from below the grid.
   function unfold() {
     if (S.state !== 'preview') return Promise.resolve(false);
     var tok = ++S.seq, a = S.alm, p = parts();
@@ -357,9 +358,9 @@
       });
       head.classList.add('calv5-flap');
       list.push(anim(head, [
-        { transform: 'perspective(1500px) rotateX(180deg)', offset: 0 },
-        { transform: 'perspective(1500px) rotateX(180deg)', offset: 0.6, easing: 'cubic-bezier(.3,.55,.25,1)' },
-        { transform: 'perspective(1500px) rotateX(0deg)', offset: 1 }], { duration: T, fill: 'both' }));
+        { transform: 'perspective(1500px) rotateY(90deg)', offset: 0 },
+        { transform: 'perspective(1500px) rotateY(90deg)', offset: 0.6, easing: 'cubic-bezier(.3,.55,.25,1)' },
+        { transform: 'perspective(1500px) rotateY(0deg)', offset: 1 }], { duration: T, fill: 'both' }));
       [p.bar, cap].forEach(function (el) {
         if (el) list.push(anim(el, [{ opacity: 0, offset: 0 }, { opacity: 0, offset: 0.8 }, { opacity: 1, offset: 1 }], { duration: T, fill: 'both' }));
       });
@@ -382,8 +383,8 @@
     }, function () { return false; });
   }
 
-  // Folding up runs the same way back: the header folds down behind the
-  // grid, the calendar's grid becomes the month page again, which moves
+  // Folding up runs the same way back: the header swings shut on its left
+  // edge, the calendar's grid becomes the month page again, which moves
   // home, and the side page swings out from behind it.
   function fold() {
     if (S.state !== 'full') return Promise.resolve(false);
@@ -421,9 +422,9 @@
       });
       head.classList.add('calv5-flap');
       list.push(anim(head, [
-        { transform: 'perspective(1500px) rotateX(0deg)', offset: 0, easing: 'cubic-bezier(.55,0,.75,.45)' },
-        { transform: 'perspective(1500px) rotateX(180deg)', offset: 0.4 },
-        { transform: 'perspective(1500px) rotateX(180deg)', offset: 1 }], { duration: T, fill: 'both' }));
+        { transform: 'perspective(1500px) rotateY(0deg)', offset: 0, easing: 'cubic-bezier(.55,0,.75,.45)' },
+        { transform: 'perspective(1500px) rotateY(90deg)', offset: 0.4 },
+        { transform: 'perspective(1500px) rotateY(90deg)', offset: 1 }], { duration: T, fill: 'both' }));
       grid.forEach(function (g) {
         list.push(anim(g, [{ opacity: 1, offset: 0 }, { opacity: 1, offset: 0.35 }, { opacity: 0, offset: 0.5 }, { opacity: 0, offset: 1 }], { duration: T, fill: 'both' }));
       });

@@ -204,8 +204,8 @@ html[data-theme="dark"] .calv5 {
 /* Its days take the month page's shape, so the page lands on them exactly
    (calendar_almanac.js works out the height from the width it has). */
 .calv5-alm .cal-v5 .day { min-height: var(--almCellH, var(--cellH)); }
-/* While it swings up, the calendar's header is a page of its own. */
-.calv5-alm .cal-v5 .head.calv5-flap { background: var(--pageField); border-radius: 24px 24px 0 0; transform-origin: 50% 100%; backface-visibility: hidden; }
+/* While it swings open on its left edge, the calendar's header is a page of its own. */
+.calv5-alm .cal-v5 .head.calv5-flap { background: var(--pageField); border-radius: 24px 24px 0 0; transform-origin: 0 50%; backface-visibility: hidden; }
 /* The card is the almanac's cover: it hinges open on its left edge, above the
    growing page, and stays out of sight while its almanac is open. */
 .calv5-ccard.calv5-cover { z-index: 82; transform-origin: 0 50%; backface-visibility: hidden; }
