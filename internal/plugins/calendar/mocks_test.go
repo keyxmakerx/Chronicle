@@ -243,6 +243,35 @@ type fakeEventRepo struct {
 	entitiesForCalendarFn func(ctx context.Context, calendarID string, role int, userID string) ([]EntityTieRef, error)
 	eventsForEntityFn     func(ctx context.Context, campaignID, entityID string, role int) ([]EntityEventTie, error)
 	erasForEntityFn       func(ctx context.Context, campaignID, entityID string) ([]EntityEraTie, error)
+	listRuleEventsFn      func(ctx context.Context, calendarID string) ([]Event, error)
+	setOverrideFn         func(ctx context.Context, o OccurrenceOverride) error
+	deleteOverrideFn      func(ctx context.Context, eventID string, year, month, day int) (bool, error)
+	listOverridesFn       func(ctx context.Context, eventIDs []string) (map[string][]OccurrenceOverride, error)
+}
+
+func (m *fakeEventRepo) ListRuleEvents(ctx context.Context, calendarID string) ([]Event, error) {
+	if m.listRuleEventsFn != nil {
+		return m.listRuleEventsFn(ctx, calendarID)
+	}
+	return nil, nil
+}
+func (m *fakeEventRepo) SetOccurrenceOverride(ctx context.Context, o OccurrenceOverride) error {
+	if m.setOverrideFn != nil {
+		return m.setOverrideFn(ctx, o)
+	}
+	return nil
+}
+func (m *fakeEventRepo) DeleteOccurrenceOverride(ctx context.Context, eventID string, year, month, day int) (bool, error) {
+	if m.deleteOverrideFn != nil {
+		return m.deleteOverrideFn(ctx, eventID, year, month, day)
+	}
+	return false, nil
+}
+func (m *fakeEventRepo) ListOverridesForEvents(ctx context.Context, eventIDs []string) (map[string][]OccurrenceOverride, error) {
+	if m.listOverridesFn != nil {
+		return m.listOverridesFn(ctx, eventIDs)
+	}
+	return nil, nil
 }
 
 func (m *fakeEventRepo) CreateEvent(ctx context.Context, evt *Event) error {
