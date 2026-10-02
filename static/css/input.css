@@ -4037,8 +4037,10 @@ html[data-cz-scale="roomy"] { font-size: 110%; }
   [data-cz-nav="tide"] .nav-ring::after { display: none; }
 }
 
-/* Reduce motion for everyone: the same total-disable as the device setting. */
-html[data-cz-reduce] *, html[data-cz-reduce] *::before, html[data-cz-reduce] *::after {
+/* Reduce motion for everyone: the same total-disable as the device setting.
+   The Customize editor is left out: its example site shows the owner's
+   draft, which may turn the switch off before saving. */
+html[data-cz-reduce] *:not(.czp *), html[data-cz-reduce] *:not(.czp *)::before, html[data-cz-reduce] *:not(.czp *)::after {
   animation-duration: 0.01ms !important;
   animation-iteration-count: 1 !important;
   transition-duration: 0.01ms !important;

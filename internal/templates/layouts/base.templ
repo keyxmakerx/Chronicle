@@ -39,15 +39,15 @@ templ Base(title string) {
 
 		<!-- Campaign accent color override (applied via CSS custom properties) -->
 		if css := AccentColorCSS(ctx); css != "" {
-			@accentStyleBlock(css)
+			@campaignStyleBlock(css)
 		}
 		<!-- Campaign font family override -->
 		if css := FontFamilyCSS(ctx); css != "" {
-			@fontStyleBlock(css)
+			@campaignStyleBlock(css)
 		}
 		<!-- Campaign Customize styles: page tone, readable accent, fonts, depth, motion -->
 		if css := AppearanceCSS(ctx); css != "" {
-			@fontStyleBlock(css)
+			@campaignStyleBlock(css)
 		}
 
 		<!-- Reveal body after all render-blocking CSS has loaded (FOUC guard). -->
@@ -262,8 +262,8 @@ templ Base(title string) {
 		<!-- Entity map editor (per-entity map assignment + iframe embed) -->
 		<script src={ AssetURL("/static/js/widgets/entity_map.js") } defer></script>
 
-		<!-- Appearance editor widget (campaign visual customization) -->
-		<script src={ AssetURL("/static/js/widgets/appearance_editor.js") } defer></script>
+		<!-- Customize look editor (campaign look, one Save for every setting) -->
+		<script src={ AssetURL("/static/js/widgets/customize_look.js") } defer></script>
 
 		<!-- Unified layout editor widget -->
 		<script src={ AssetURL("/static/js/widgets/layout_editor.js") } defer></script>
@@ -299,13 +299,11 @@ templ Base(title string) {
 	</html>
 }
 
-// accentStyleBlock renders a raw <style> tag with accent color CSS overrides.
-// Uses templ.Raw because Templ does not interpolate variables inside <style> tags.
-templ accentStyleBlock(css string) {
-	@templ.Raw("<style>" + css + "</style>")
+// campaignStyleBlock renders one of the campaign's own <style> blocks. The
+// data-campaign-style mark lets the Customize page swap them for a fresh
+// render after a save, so the change shows without a reload.
+templ campaignStyleBlock(css string) {
+	@templ.Raw("<style data-campaign-style>" + css + "</style>")
 }
 
-// fontStyleBlock renders a raw <style> tag with font family CSS overrides.
-templ fontStyleBlock(css string) {
-	@templ.Raw("<style>" + css + "</style>")
-}
+

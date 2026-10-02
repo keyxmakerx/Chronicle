@@ -1,0 +1,78 @@
+package campaigns
+
+import "github.com/keyxmakerx/chronicle/internal/templates/layouts"
+
+// lookTab is the Customize page's look editor: whole looks, seven sections
+// of settings, a live example site and one Save for everything. The
+// controls and the example site are built by customize_look.js from
+// data-state; this markup is the frame they fill.
+templ lookTab(cc *CampaignContext, csrfToken string) {
+	<link rel="stylesheet" href={ layouts.AssetURL("/static/css/customize.css") }/>
+	@templ.Raw("<style>" + layouts.CustomizeFontsCSS() + "</style>")
+	<div
+		class="czp"
+		data-widget="customize-look"
+		data-campaign-id={ cc.Campaign.ID }
+		data-csrf={ csrfToken }
+		data-state={ customizeStateJSON(ctx, cc) }
+	>
+		<div class="cz" id="cz">
+			<section class="looks" aria-labelledby="looks-h">
+				<div class="looks-h">
+					<h2 id="looks-h">Start from a look</h2>
+					<p>One click sets colours, type, buttons, depth, motion, the header and the menu highlight together. Your name, logo, words and pictures stay as they are. Nothing changes for your players until you save.</p>
+				</div>
+				<div class="lk-row" id="lk-row" role="radiogroup" aria-labelledby="looks-h"></div>
+			</section>
+			<div class="cz-grid">
+				<nav class="cz-tabs" aria-label="Customize sections">
+					<div class="tl" id="tl" role="tablist" aria-orientation="vertical"></div>
+					<p class="tabs-foot"><span class="chg-k"></span>Changed since your last save.</p>
+				</nav>
+				<div class="cz-panels" id="panels"></div>
+				<aside class="cz-preview" id="pv-col" aria-label="Preview">
+					<div class="pvw">
+						<div class="pv-bar">
+							<span class="pv-title"><span class="live"></span>Example site · your draft</span>
+							<div class="zseg" role="radiogroup" aria-label="Preview zoom">
+								<label><input type="radio" name="zoom" value="site" id="z-site" checked/><span>Whole site</span></label>
+								<label><input type="radio" name="zoom" value="pieces" id="z-pieces"/><span>Pieces</span></label>
+								<label><input type="radio" name="zoom" value="type" id="z-type"/><span>Type</span></label>
+							</div>
+							<div class="zseg pv-opt" role="radiogroup" aria-label="Page shown in the preview">
+								<label><input type="radio" name="dpage" value="dash" id="dp-dash" checked/><span>Dashboard</span></label>
+								<label><input type="radio" name="dpage" value="city" id="dp-city"/><span>City page</span></label>
+							</div>
+							<div class="zseg pv-opt" role="radiogroup" aria-label="Preview in light or dark mode">
+								<label><input type="radio" name="ptheme" value="light" id="pt-light" checked/><span>Light</span></label>
+								<label><input type="radio" name="ptheme" value="dark" id="pt-dark"/><span>Dark</span></label>
+							</div>
+							<button type="button" class="czb czb-g czb-sm pv-hide" id="pv-hide" aria-expanded="true" aria-controls="preview">Hide</button>
+						</div>
+						<div class="pv-frame pv" id="preview" data-zoom="site"></div>
+						<div class="pv-cap" id="pv-cap"></div>
+					</div>
+				</aside>
+			</div>
+			<div class="cz-save" id="save" role="region" aria-label="Save">
+				<div class="sv-st"><span class="sv-dot" aria-hidden="true"></span><b id="sv-t" role="status" aria-live="polite">No unsaved changes</b><span id="sv-d"></span></div>
+				<button type="button" class="czb czb-s" id="discard" disabled>Discard</button>
+				<button type="button" class="czb czb-p" id="savebtn" disabled>Save changes</button>
+			</div>
+		</div>
+		<div class="pop" id="pop" role="dialog" aria-labelledby="pop-t" hidden>
+			<div class="pop-h"><span class="pop-sw" id="pop-sw"></span><div><b id="pop-t">Custom colour</b><span id="pop-hexl">#6366F1</span></div></div>
+			<label class="pop-f" for="pop-hue">Hue<input class="rng" type="range" id="pop-hue" min="0" max="359" step="1" value="270"/></label>
+			<label class="pop-f" for="pop-tone">Tone<input class="rng" type="range" id="pop-tone" min="0" max="100" step="1" value="50"/><span class="ends"><span>Soft</span><span>Deep</span></span></label>
+			<div class="pop-f">
+				<label for="pop-hex">Exact colour</label>
+				<div class="pop-hex"><input class="inp" id="pop-hex" type="text" maxlength="7" spellcheck="false" autocomplete="off" placeholder="#5B6BE0"/><button type="button" class="czb czb-s czb-sm" id="pop-use">Use</button></div>
+			</div>
+			<p class="note" id="pop-note" hidden><svg class="i" aria-hidden="true"><use href="#cz-i-info"></use></svg><span></span></p>
+			<div class="row-h"><span class="hint">Every colour here stays easy on the eyes.</span><button type="button" class="czb czb-p czb-sm" id="pop-done">Done</button></div>
+		</div>
+		<div class="hc" id="hc" role="tooltip" hidden></div>
+		<div class="toast" id="toast"><span id="toast-t" role="status" aria-live="polite"></span><button type="button" id="toast-undo" hidden>Undo</button></div>
+		<input type="file" id="file" accept="image/*" hidden/>
+	</div>
+}

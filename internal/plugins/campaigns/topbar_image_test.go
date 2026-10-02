@@ -1,43 +1,13 @@
 package campaigns
 
-// topbar_image_test.go pins that the topbar Image control is first-class
-// server-rendered markup: TopbarImageSection renders both states with the
-// correct HTMX swap wiring, and a saved image reads back into the form.
+// topbar_image_test.go pins TopbarImageSection: both states render with the
+// correct HTMX swap wiring.
 
 import (
 	"context"
 	"strings"
 	"testing"
 )
-
-func renderAppearanceTab(t *testing.T, settings string) string {
-	t.Helper()
-	cc := &CampaignContext{
-		Campaign:   &Campaign{ID: "camp-1", Name: "Test Campaign", Settings: settings},
-		MemberRole: RoleOwner,
-	}
-	var sb strings.Builder
-	if err := appearanceTab(cc, "tok").Render(context.Background(), &sb); err != nil {
-		t.Fatalf("render appearanceTab: %v", err)
-	}
-	return sb.String()
-}
-
-// TestAppearanceTab_ImageModeIsFirstClass proves the Image button + upload panel
-// are in the server-rendered markup, not injected by JS at runtime.
-func TestAppearanceTab_ImageModeIsFirstClass(t *testing.T) {
-	html := renderAppearanceTab(t, "")
-
-	if !strings.Contains(html, `data-mode="image"`) {
-		t.Error(`Top Bar Style card must render a first-class data-mode="image" button (was JS-injected before the rescue)`)
-	}
-	if !strings.Contains(html, `id="appearance-topbar-image"`) {
-		t.Error("Top Bar Style card must render the #appearance-topbar-image panel")
-	}
-	if !strings.Contains(html, `id="appearance-topbar-image-section"`) {
-		t.Error("the image panel must contain the TopbarImageSection swap target")
-	}
-}
 
 // TestTopbarImageSection_States pins both render states + their HTMX swap wiring.
 func TestTopbarImageSection_States(t *testing.T) {
@@ -86,20 +56,4 @@ func TestTopbarImageSection_States(t *testing.T) {
 			t.Error("set state must carry the stored path in data-topbar-image-path for JS state sync")
 		}
 	})
-}
-
-// TestAppearanceTab_TopbarImageReadsBack proves a saved topbar image renders
-// back into the form (the sweep's read-back check, item (c)).
-func TestAppearanceTab_TopbarImageReadsBack(t *testing.T) {
-	const stored = "2026/09/b7c17bb1-6563-462c-8b49-5b2e8bd57108.png"
-	html := renderAppearanceTab(t, `{"topbar_style":{"mode":"image","image_path":"`+stored+`"}}`)
-	if !strings.Contains(html, `/media/b7c17bb1-6563-462c-8b49-5b2e8bd57108`) {
-		t.Error("a saved topbar image must read back into the Image panel thumbnail, through MediaURL")
-	}
-	if strings.Contains(html, "/media/"+stored) {
-		t.Errorf("read-back renders the raw stored path %q — a 404 under /media/:id", stored)
-	}
-	if !strings.Contains(html, `data-topbar-image-path="`+stored+`"`) {
-		t.Error("the saved image path must round-trip into data-topbar-image-path")
-	}
 }

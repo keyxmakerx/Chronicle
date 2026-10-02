@@ -721,7 +721,7 @@ templ Topbar() {
 							@click.outside="open = false"
 							class="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-sm font-semibold text-fg hover:bg-surface-alt transition-colors"
 						>
-							<span class="truncate max-w-[160px]">{ GetDisplayName(ctx) }</span>
+							<span class="truncate max-w-[160px]" data-topbar-name>{ GetDisplayName(ctx) }</span>
 							<svg class="w-3.5 h-3.5 text-fg-muted shrink-0" width="14" height="14" fill="none" stroke="currentColor" viewBox="0 0 24 24">
 								<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path>
 							</svg>
@@ -823,7 +823,7 @@ templ Topbar() {
 					</div>
 				}
 			} else if InCampaign(ctx) {
-				<span class="px-2.5 py-1.5 text-sm font-semibold text-fg">
+				<span class="px-2.5 py-1.5 text-sm font-semibold text-fg" data-topbar-name>
 					{ GetDisplayName(ctx) }
 				</span>
 			}
