@@ -330,7 +330,7 @@ func nonNil[T any](s []T) []T {
 // filtered for the caller exactly as the calendar pages filter them. A
 // repeating event carries its dates in the month as `occurrences` (skips and
 // moves applied), the only way a rule event's dates reach a client.
-// TODO(#766): the module places events by their own date and ignores
+// TODO(#930): the module places events by their own date and ignores
 // `occurrences`, so a rule event shows on its start date only in Foundry.
 // GET /api/v1/campaigns/:id/calendar/events?year=N&month=M
 func (h *CalendarAPIHandler) ListEvents(c echo.Context) error {
