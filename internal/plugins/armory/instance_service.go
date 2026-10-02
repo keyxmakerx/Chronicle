@@ -22,6 +22,10 @@ type InstanceService interface {
 	// narrowed to the items the viewer (role + userID) may see.
 	ListInstances(ctx context.Context, campaignID string, role int, userID string) ([]InventoryInstance, error)
 
+	// ListCollectionsForItem returns every collection with whether it holds
+	// the entity, after confirming the entity belongs to the campaign.
+	ListCollectionsForItem(ctx context.Context, campaignID string, role int, userID string, entityID string) ([]ItemCollection, error)
+
 	// GetInstance retrieves an instance by ID with campaign IDOR check.
 	GetInstance(ctx context.Context, campaignID string, instanceID int) (*InventoryInstance, error)
 
@@ -118,6 +122,51 @@ func (s *instanceService) ListInstances(ctx context.Context, campaignID string, 
 		instances[i].ItemCount = n
 	}
 	return instances, nil
+}
+
+// ListCollectionsForItem backs the item card's "Add to collection" menu. The
+// entity is campaign-checked so the endpoint cannot probe other campaigns'
+// ids; membership comes from the campaign-scoped link map, and counts reuse
+// ListInstances so they match the selector's viewer-visible numbers.
+func (s *instanceService) ListCollectionsForItem(ctx context.Context, campaignID string, role int, userID string, entityID string) ([]ItemCollection, error) {
+	if entityID == "" {
+		return nil, apperror.NewBadRequest("entity ID is required")
+	}
+	if s.entityCampaign == nil {
+		return nil, apperror.NewInternal(errors.New("entity campaign checker not configured"))
+	}
+	ok, err := s.entityCampaign.EntityBelongsToCampaign(ctx, entityID, campaignID)
+	if err != nil {
+		var appErr *apperror.AppError
+		if errors.As(err, &appErr) && appErr.Code == http.StatusNotFound {
+			return nil, apperror.NewNotFound("entity")
+		}
+		return nil, err
+	}
+	if !ok {
+		return nil, apperror.NewNotFound("entity")
+	}
+
+	instances, err := s.ListInstances(ctx, campaignID, role, userID)
+	if err != nil {
+		return nil, err
+	}
+	byInstance, err := s.repo.ListItemEntityIDsByInstance(ctx, campaignID)
+	if err != nil {
+		return nil, err
+	}
+	out := make([]ItemCollection, 0, len(instances))
+	for _, inst := range instances {
+		has := false
+		for _, id := range byInstance[inst.ID] {
+			if id == entityID {
+				has = true
+				break
+			}
+		}
+		out = append(out, ItemCollection{ID: inst.ID, Name: inst.Name, Icon: inst.Icon, Color: inst.Color, ItemCount: inst.ItemCount, HasItem: has})
+	}
+	return out, nil
 }
 
 // GetInstance retrieves and validates an instance belongs to the campaign.
