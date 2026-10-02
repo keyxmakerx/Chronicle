@@ -166,6 +166,7 @@ func TestCalendarAPI_ViewerMatchesCalendarPages(t *testing.T) {
 		{"session scribe", sessionKey(), &stubCampaignSvcForCalendarAPI{role: campaigns.RoleScribe}, 2, "user-p"},
 		{"session player with co-DM grant", sessionKey(), &stubCampaignSvcForCalendarAPI{role: campaigns.RolePlayer, granted: true}, 3, "user-p"},
 		{"member lookup fails closed", sessionKey(), &stubCampaignSvcForCalendarAPI{memberErr: errors.New("db down")}, 0, "user-p"},
+		{"grant without membership stays closed", sessionKey(), &stubCampaignSvcForCalendarAPI{memberErr: errors.New("not a member"), granted: true}, 0, "user-p"},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {

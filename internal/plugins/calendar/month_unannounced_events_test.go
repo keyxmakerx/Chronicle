@@ -32,8 +32,8 @@ func monthUnannouncedFixture(t *testing.T) (CalendarService, []Event) {
 		{ID: 1, Slug: "battle", Name: "Battle", DefaultAnnounced: AnnouncedOnDay},
 	}
 	overrideAhead := AnnouncedAhead
-	// All in month 1 so they all reach the month grid; ahead-by-default comes
-	// from having no kind (the default announcement is "ahead").
+	// All in month 1 so they all reach the month grid. An event with no kind
+	// and no override defaults to on_day, so the ahead ones say so explicitly.
 	events := []Event{
 		{ID: "evt-secret-future", CalendarID: "cal-1", Name: "Secret Future Battle",
 			Year: 1000, Month: 1, Day: 20, Visibility: "everyone", KindID: intPtr(1)},

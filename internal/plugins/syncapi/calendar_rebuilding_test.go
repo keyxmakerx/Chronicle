@@ -31,7 +31,6 @@ var calendarRoutesNotRebuilt = map[string]bool{
 	"UpdateFestivals":        true,
 	"ExportCalendar":         true,
 	"ImportCalendar":         true,
-	"CreateCalendar":         true,
 }
 
 // TestCalendarRoutes_NotRebuiltAnswerRebuilding: a route not rebuilt yet
@@ -83,5 +82,18 @@ func TestCalendarRoutes_RebuiltAreReal(t *testing.T) {
 		if strings.Contains(body, "calendarRebuilding(") {
 			t.Errorf("%s still answers calendarRebuilding; add it to calendarRoutesNotRebuilt or rebuild it", name)
 		}
+	}
+}
+
+// TestCalendarRoutes_CreateCalendarNotAvailable: the module's import button
+// shows its "no create endpoint yet" message on a 404, and only then.
+func TestCalendarRoutes_CreateCalendarNotAvailable(t *testing.T) {
+	rec := httptest.NewRecorder()
+	c := echo.New().NewContext(httptest.NewRequest(http.MethodPost, "/", nil), rec)
+	if err := (&CalendarAPIHandler{}).CreateCalendar(c); err != nil {
+		t.Fatal(err)
+	}
+	if rec.Code != http.StatusNotFound || !strings.Contains(rec.Body.String(), "calendar_import_unavailable") {
+		t.Errorf("CreateCalendar = %d %s, want 404 calendar_import_unavailable", rec.Code, rec.Body.String())
 	}
 }

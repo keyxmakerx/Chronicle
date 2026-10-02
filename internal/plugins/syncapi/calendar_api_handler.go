@@ -22,9 +22,9 @@ import (
 // another campaign's calendar and a player never receives what the
 // calendar pages would hide from them.
 //
-// The routes the module never calls (structure and settings writes, import,
-// export, world state, advance) still answer calendarRebuilding until they
-// are rebuilt. TODO(#869)
+// The rest (structure and settings writes, import, export, world state,
+// advance) still answer calendarRebuilding, and the Calendaria import
+// POST /calendar answers 404, until they are rebuilt. TODO(#869)
 type CalendarAPIHandler struct {
 	syncSvc     SyncAPIService
 	calendarSvc calendar.CalendarService
@@ -60,10 +60,12 @@ func (h *CalendarAPIHandler) viewer(c echo.Context) permissions.Viewer {
 		return permissions.RequestViewer(int(campaigns.RoleNone), "")
 	}
 	ctx := c.Request().Context()
-	role := campaigns.RoleNone
-	if member, err := h.campaignSvc.GetMember(ctx, key.CampaignID, key.UserID); err == nil && member != nil {
-		role = member.Role
+	member, err := h.campaignSvc.GetMember(ctx, key.CampaignID, key.UserID)
+	if err != nil || member == nil {
+		return permissions.RequestViewer(int(campaigns.RoleNone), key.UserID)
 	}
+	role := member.Role
+	// The grant only counts for a member, as on the web.
 	if role < campaigns.RoleOwner {
 		if granted, err := h.campaignSvc.IsUserDmGranted(ctx, key.CampaignID, key.UserID); err == nil && granted {
 			role = campaigns.RoleOwner
@@ -180,7 +182,7 @@ func (h *CalendarAPIHandler) GetCurrentDate(c echo.Context) error {
 		}
 	}
 	if len(cal.Moons) > 0 {
-		absDay := cal.CurrentAbsoluteDay()
+		absDay := cal.CurrentDayIndex() // the counter the calendar pages read moons from
 		phases := make([]map[string]any, 0, len(cal.Moons))
 		for i := range cal.Moons {
 			m := &cal.Moons[i]
@@ -606,7 +608,7 @@ func (h *CalendarAPIHandler) SetDate(c echo.Context) error {
 	})
 }
 
-// --- Not rebuilt yet: the module does not call these. TODO(#869) ---
+// --- Not rebuilt yet. TODO(#869) ---
 
 // GetEventCategories is not rebuilt yet; event kinds replaced categories.
 func (h *CalendarAPIHandler) GetEventCategories(c echo.Context) error { return calendarRebuilding(c) }
@@ -660,8 +662,17 @@ func (h *CalendarAPIHandler) ExportCalendar(c echo.Context) error { return calen
 // ImportCalendar is not rebuilt yet.
 func (h *CalendarAPIHandler) ImportCalendar(c echo.Context) error { return calendarRebuilding(c) }
 
-// CreateCalendar is not rebuilt yet.
-func (h *CalendarAPIHandler) CreateCalendar(c echo.Context) error { return calendarRebuilding(c) }
+// CreateCalendar (the module's "Import into Chronicle" button) is not
+// rebuilt yet. It answers 404, not 503: the module's import path reads 404 as
+// "this Chronicle has no create endpoint yet" and says so, where a 503 would
+// surface as "Chronicle rejected the calendar payload".
+func (h *CalendarAPIHandler) CreateCalendar(c echo.Context) error {
+	return c.JSON(http.StatusNotFound, map[string]string{
+		"error": "calendar_import_unavailable",
+		"message": "Importing a calendar from Foundry isn't available yet. " +
+			"Create the calendar in Chronicle; dates and events then sync.",
+	})
+}
 
 // --- Helpers ---
 

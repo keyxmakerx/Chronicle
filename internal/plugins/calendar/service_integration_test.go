@@ -207,6 +207,9 @@ func TestCalendarService_Integration_ListEventsForMonth_SQLRoleFilterPlusGoVisib
 		if err := eventRepo.CreateEvent(ctx, &Event{
 			ID: testUUID(t), CalendarID: cal.ID, Name: name, Year: 100, Month: 1, Day: 1,
 			Visibility: visibility, VisibilityRules: rules, CreatedBy: &fixture.UserID,
+			// Announced ahead so the not-yet-announced filter stays out of a
+			// test about the visibility layers.
+			Announced: strPtr(AnnouncedAhead),
 		}); err != nil {
 			t.Fatalf("seed event %q: %v", name, err)
 		}
@@ -301,6 +304,7 @@ func TestCalendarService_Integration_PrivateEntityNameRedacted(t *testing.T) {
 	}
 	evt, err := svc.CreateEvent(ctx, cal.ID, fixture.CampaignID, CreateEventInput{
 		Name: "Festival of Lights", Year: 5, Month: 2, Day: 3, EntityID: &entID, CreatedBy: fixture.UserID,
+		Announced: strPtr(AnnouncedAhead), // keep the announcement filter out of a redaction test
 	})
 	if err != nil {
 		t.Fatalf("create event: %v", err)
@@ -355,6 +359,7 @@ func TestCalendarService_Integration_EntityGateNotWired_FailsClosed(t *testing.T
 	}
 	evt, err := svc.CreateEvent(ctx, cal.ID, fixture.CampaignID, CreateEventInput{
 		Name: "Public Fair", Year: 5, Month: 2, Day: 3, EntityID: &entID, CreatedBy: fixture.UserID,
+		Announced: strPtr(AnnouncedAhead), // keep the announcement filter out of a redaction test
 	})
 	if err != nil {
 		t.Fatalf("create event: %v", err)
