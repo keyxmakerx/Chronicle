@@ -55,6 +55,26 @@
     });
   }
 
+  // refreshTopbar() redraws the live header's background and centre content
+  // from a fresh server render of this page. The header sits outside
+  // #main-content, so boosted navigation never redraws it and a saved change
+  // would otherwise only show after a full reload. Swapping the server's own
+  // markup keeps link sanitising and image URLs in one place (Topbar()).
+  function refreshTopbar() {
+    return fetch(window.location.href, { credentials: 'same-origin', headers: { 'Accept': 'text/html' } })
+      .then(function (res) { return res.ok ? res.text() : Promise.reject(res.status); })
+      .then(function (html) {
+        var doc = new DOMParser().parseFromString(html, 'text/html');
+        ['topbar-bg', 'topbar-content'].forEach(function (id) {
+          var fresh = doc.getElementById(id);
+          var live = document.getElementById(id);
+          if (fresh && live) live.innerHTML = fresh.innerHTML;
+        });
+      })
+      .catch(function () { /* the next full load shows it; the save itself succeeded */ });
+  }
+  Chronicle.refreshTopbar = refreshTopbar;
+
   Chronicle.register('appearance-editor', {
     destroy: function (el) {
       // No timers to clean up in draft mode.
@@ -798,6 +818,9 @@
               }
             }
             updateSaveBar();
+            if (result.succeeded.indexOf('topbarStyle') !== -1 || result.succeeded.indexOf('topbarContent') !== -1) {
+              refreshTopbar();
+            }
 
             if (result.failed.length > 0) {
               Chronicle.notify('Some changes failed to save', 'error');
@@ -1101,6 +1124,8 @@
           setActiveMode(mode);
           updateTopbarPreview();
           updateSaveBar();
+          // Upload and remove save on the server at once, so the live header follows now.
+          refreshTopbar();
         });
       }
 

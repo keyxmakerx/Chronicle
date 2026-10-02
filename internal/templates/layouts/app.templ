@@ -667,30 +667,35 @@ func safeExternalURL(url string) templ.SafeURL {
 // content area, search, notes, and user menu.
 templ Topbar() {
 	<header class="h-14 bg-surface border-b border-edge flex items-center px-3 md:px-5 shrink-0 gap-2 relative isolate">
-		if topbarHasCustomStyle(ctx) {
-			// Custom topbar background (solid / gradient / image) renders on a
-			// dedicated full-bleed layer rather than on the <header> itself.
-			// The header carries isolation:isolate ("isolate" Tailwind class), making
-			// it a stacking context. Inside that context z-index:-1 paints the brand
-			// layer above the header's own surface background but below in-flow nav
-			// content — the image/gradient is visible and the nav stays on top.
-			// Without isolate the header is not a stacking context; negative-z children
-			// escape to the nearest ancestor context and paint before the header
-			// surface, making the brand invisible (the original "saved but invisible" bug).
-			// pointer-events:none lets clicks fall through to the nav controls.
-			<div
-				style={ "position:absolute; inset:0; z-index:-1; pointer-events:none; " + topbarInlineStyle(ctx) }
-				aria-hidden="true"
-			></div>
-			if topbarStyleIsImage(ctx) {
-				// A dark scrim over the photo keeps the nav text + icons legible
-				// regardless of which image the owner uploaded.
+		// #topbar-bg is always rendered, even empty, so a save on the Customize
+		// page can swap in the new background without a reload: the header
+		// sits outside #main-content and boosted navigation never redraws it.
+		<div id="topbar-bg" class="contents">
+			if topbarHasCustomStyle(ctx) {
+				// Custom topbar background (solid / gradient / image) renders on a
+				// dedicated full-bleed layer rather than on the <header> itself.
+				// The header carries isolation:isolate ("isolate" Tailwind class), making
+				// it a stacking context. Inside that context z-index:-1 paints the brand
+				// layer above the header's own surface background but below in-flow nav
+				// content — the image/gradient is visible and the nav stays on top.
+				// Without isolate the header is not a stacking context; negative-z children
+				// escape to the nearest ancestor context and paint before the header
+				// surface, making the brand invisible (the original "saved but invisible" bug).
+				// pointer-events:none lets clicks fall through to the nav controls.
 				<div
-					style="position:absolute; inset:0; z-index:-1; pointer-events:none; background:linear-gradient(to bottom, rgba(0,0,0,0.55), rgba(0,0,0,0.25));"
+					style={ "position:absolute; inset:0; z-index:-1; pointer-events:none; " + topbarInlineStyle(ctx) }
 					aria-hidden="true"
 				></div>
+				if topbarStyleIsImage(ctx) {
+					// A dark scrim over the photo keeps the nav text + icons legible
+					// regardless of which image the owner uploaded.
+					<div
+						style="position:absolute; inset:0; z-index:-1; pointer-events:none; background:linear-gradient(to bottom, rgba(0,0,0,0.55), rgba(0,0,0,0.25));"
+						aria-hidden="true"
+					></div>
+				}
 			}
-		}
+		</div>
 		<!-- Left: Hamburger + Campaign selector -->
 		<div class="flex items-center gap-2 shrink-0">
 			<!-- Mobile hamburger -->
