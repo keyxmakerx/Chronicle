@@ -200,6 +200,47 @@ func TestListItems_WithTags(t *testing.T) {
 	}
 }
 
+// GM-only tags follow the tags widget's rule: only Owner visibility (the
+// Owner or a DM-granted co-DM) gets them, never a Scribe or Player.
+func TestListItems_DmOnlyTagsOnlyAtOwnerVisibility(t *testing.T) {
+	tests := []struct {
+		name string
+		role int
+		want bool
+	}{
+		{"player", permissions.RolePlayer, false},
+		{"scribe", permissions.RoleScribe, false},
+		{"owner or DM-granted co-DM", permissions.RoleOwner, true},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			repo := &mockArmoryRepo{
+				listIDsFn: func(_ context.Context, _ string, _ []int, _ ItemListOptions) ([]string, error) {
+					return []string{"item-1"}, nil
+				},
+			}
+			tf := &mockTypeFinder{
+				findIDsFn: func(_ context.Context, _ string) ([]int, error) { return []int{1}, nil },
+			}
+			allowAll := &mockVisibilityFilter{viewable: map[string]bool{"item-1": true}}
+			svc := newTestArmoryService(repo, tf, allowAll)
+			var got *bool
+			svc.tagLister = &mockTagLister{
+				listFn: func(_ context.Context, _ []string, includeDmOnly bool) (map[string][]TagInfo, error) {
+					got = &includeDmOnly
+					return nil, nil
+				},
+			}
+			if _, _, err := svc.ListItems(context.Background(), "camp-1", tt.role, "user-1", DefaultItemListOptions()); err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
+			if got == nil || *got != tt.want {
+				t.Errorf("includeDmOnly = %v, want %v", got, tt.want)
+			}
+		})
+	}
+}
+
 func TestCountItems_Success(t *testing.T) {
 	repo := &mockArmoryRepo{
 		listIDsFn: func(_ context.Context, _ string, _ []int, _ ItemListOptions) ([]string, error) {

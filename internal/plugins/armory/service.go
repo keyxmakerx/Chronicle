@@ -30,8 +30,9 @@ type EntityVisibilityFilter interface {
 
 // TagLister fetches tags for a set of entity IDs in batch.
 // Implemented by tags.TagService — injected to decorate item cards with tags.
-// includeDmOnly must be false for viewers below Scribe so GM-only tags never
-// reach a player's card.
+// includeDmOnly is true only at Owner visibility (the Owner or a DM-granted
+// co-DM via VisibilityRole), the same rule the tags widget applies: Players
+// and Scribes never see GM-only tags.
 type TagLister interface {
 	ListTagsForEntities(ctx context.Context, entityIDs []string, includeDmOnly bool) (map[string][]TagInfo, error)
 }
@@ -116,7 +117,7 @@ func (s *armoryService) ListItems(ctx context.Context, campaignID string, role i
 		for i := range cards {
 			ids[i] = cards[i].ID
 		}
-		tagMap, err := s.tagLister.ListTagsForEntities(ctx, ids, role >= permissions.RoleScribe)
+		tagMap, err := s.tagLister.ListTagsForEntities(ctx, ids, role >= permissions.RoleOwner)
 		if err == nil {
 			for i := range cards {
 				if infos, ok := tagMap[cards[i].ID]; ok {
