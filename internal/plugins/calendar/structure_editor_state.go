@@ -161,6 +161,7 @@ addSeason(){ var k=this.months.length?this.months[0].key:''; this.seasons.push({
 removeSeason(i){ this.seasons.splice(i,1); },
 monthPos(key){ for(var i=0;i<this.months.length;i++){ if(this.months[i].key===key) return i+1; } return 1; },
 clearPreview(){ if(!this.previewSlot) return; var el=document.getElementById(this.previewSlot); if(el) el.innerHTML=''; },
+revealPreview(){ if(!this.previewSlot) return; var el=document.getElementById(this.previewSlot); if(el&&el.firstElementChild) el.scrollIntoView({block:'start',behavior:'smooth'}); },
 buildJSON(){
   var self=this;
   var months=this.months.map(function(mo,i){ return {name:(mo.name||('Month '+(i+1))), days:Math.max(1,parseInt(mo.days,10)||1), sort_order:i, is_intercalary:!!mo.inter, leap_year_days:Math.max(0,parseInt(mo.leap,10)||0)}; });

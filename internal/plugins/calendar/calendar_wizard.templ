@@ -553,9 +553,10 @@ type structureEditorConfig struct {
 	// ClearsPreview empties the preview slot named in XData whenever the
 	// structure changes, so a preview on screen always matches the editor.
 	ClearsPreview bool
-	// AfterRequest runs once the submit's response has been swapped in;
-	// Call is rendered inline, see structureRevealPreviewOnClick.
-	AfterRequest templ.ComponentScript
+	// RevealPreview scrolls the preview slot into view once a submit's
+	// response is swapped in. It is an Alpine listener rather than hx-on
+	// because the app runs htmx with allowEval off.
+	RevealPreview bool
 }
 
 // wizardBuildBody is the "Build your own" structure editor: months,
@@ -602,8 +603,8 @@ templ structureEditorForm(cfg structureEditorConfig, csrfToken, formError string
 		hx-encoding="multipart/form-data"
 		hx-disabled-elt="#calv5-build-submit"
 		hx-indicator="#calv5-build-spinner"
-		if cfg.AfterRequest.Call != "" {
-			hx-on::after-request={ cfg.AfterRequest }
+		if cfg.RevealPreview {
+			x-on:htmx:after-request="$nextTick(() => revealPreview())"
 		}
 		x-data={ cfg.XData }
 		if cfg.ClearsPreview {

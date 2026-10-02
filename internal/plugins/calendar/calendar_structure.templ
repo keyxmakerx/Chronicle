@@ -67,7 +67,7 @@ templ StructureEditFragment(data StructureEditData) {
 							ShowSeasons:   true,
 							ShowFlags:     true,
 							ClearsPreview: true,
-							AfterRequest:  templ.ComponentScript{Name: "calv5_structureReveal", Call: structureRevealPreview},
+							RevealPreview: true,
 						}, data.CSRFToken, "")
 					}
 				</div>
@@ -76,9 +76,6 @@ templ StructureEditFragment(data StructureEditData) {
 		</div>
 	</div>
 }
-
-// structureRevealPreview brings a freshly swapped-in preview into view.
-const structureRevealPreview = "(function(){var p=document.getElementById('" + structurePreviewSlot + "');if(p&&p.firstElementChild){p.scrollIntoView({block:'start',behavior:'smooth'});}})()"
 
 // structureBackToEditing empties the preview and returns focus to the
 // editor, without touching anything typed in it.
