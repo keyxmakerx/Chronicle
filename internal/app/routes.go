@@ -775,7 +775,13 @@ func (a *entityEventPublisherAdapter) PublishEntityEvent(eventType, campaignID, 
 	default:
 		return
 	}
-	a.bus.Publish(ws.NewMessage(msgType, campaignID, entityID, entity))
+	// The payload is the whole stored entity: private pages, GM-only fields
+	// and secret text included, none of the per-viewer filtering the HTTP
+	// reads apply. So it only goes to DM-equivalent sockets; anyone else
+	// reads entities over HTTP, where that filtering happens.
+	msg := ws.NewMessage(msgType, campaignID, entityID, entity)
+	msg.RequiresDM = true
+	a.bus.Publish(msg)
 }
 
 // PublishEntityTypeEvent translates entity type domain events into WebSocket messages.

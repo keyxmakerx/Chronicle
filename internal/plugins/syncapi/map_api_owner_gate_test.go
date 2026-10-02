@@ -16,8 +16,8 @@ import (
 	"github.com/keyxmakerx/chronicle/internal/plugins/maps"
 )
 
-// stubMapSvcOwnerGate embeds maps.MapService; only GetMap and DeleteMarker
-// are reachable from the handlers under test. Every write path returns a
+// stubMapSvcOwnerGate embeds maps.MapService; only GetMap, GetMarker and
+// DeleteMarker are reachable from the handlers under test. Every write path returns a
 // nil error so a pre-fix test call reaches (and would perform) the
 // operation, proving the role floor — not a downstream failure — is what
 // blocks it.
@@ -27,6 +27,9 @@ type stubMapSvcOwnerGate struct {
 }
 
 func (s *stubMapSvcOwnerGate) GetMap(context.Context, string) (*maps.Map, error) { return s.m, nil }
+func (s *stubMapSvcOwnerGate) GetMarker(_ context.Context, id string) (*maps.Marker, error) {
+	return &maps.Marker{ID: id, MapID: s.m.ID}, nil
+}
 func (s *stubMapSvcOwnerGate) DeleteMarker(context.Context, string, *time.Time, bool) error {
 	return nil
 }
@@ -57,7 +60,7 @@ func (s *stubDrawingSvcOwnerGate) CreateFog(context.Context, maps.CreateFogInput
 	return &maps.FogRegion{}, nil
 }
 func (s *stubDrawingSvcOwnerGate) DeleteFog(context.Context, string, string) error { return nil }
-func (s *stubDrawingSvcOwnerGate) ResetFog(context.Context, string) error         { return nil }
+func (s *stubDrawingSvcOwnerGate) ResetFog(context.Context, string) error          { return nil }
 func (s *stubDrawingSvcOwnerGate) DeleteDrawing(context.Context, string, string, *time.Time) error {
 	return nil
 }
