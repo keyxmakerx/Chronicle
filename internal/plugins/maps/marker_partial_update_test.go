@@ -113,7 +113,7 @@ func TestMarker_PinCategoryAndVisibilityRules_ThreeDirections(t *testing.T) {
 		wantVis *string
 	}{
 		{"absent preserves both", UpdateMarkerInput{Name: patch.Of("renamed")}, strPtrMK("secret"), strPtrMK(`{"allowed_users":["u-1"]}`)},
-		{"present replaces", UpdateMarkerInput{PinCategory: patch.Of("landmark"), VisibilityRules: patch.Of(`{"denied_users":["u-2"]}`)}, strPtrMK("landmark"), strPtrMK(`{"denied_users":["u-2"]}`)},
+		{"present replaces", UpdateMarkerInput{PinCategory: patch.Of("danger"), VisibilityRules: patch.Of(`{"denied_users":["u-2"]}`)}, strPtrMK("danger"), strPtrMK(`{"denied_users":["u-2"]}`)},
 		{"explicit null clears", UpdateMarkerInput{PinCategory: patch.Null[string](), VisibilityRules: patch.Null[string]()}, nil, nil},
 	}
 	for _, tc := range cases {
@@ -186,5 +186,63 @@ func assertMarkerPtr(t *testing.T, field string, got, want *string) {
 		t.Errorf("%s = nil, want %q", field, *want)
 	case want != nil && got != nil && *got != *want:
 		t.Errorf("%s = %q, want %q", field, *got, *want)
+	}
+}
+
+// pin_category is a closed set. Only a value the caller SENT is checked, so a
+// legacy stored value never blocks an unrelated edit, and null still clears.
+func TestMarker_PinCategoryValidation(t *testing.T) {
+	cases := []struct {
+		name    string
+		input   UpdateMarkerInput
+		wantErr bool
+	}{
+		{"location", UpdateMarkerInput{PinCategory: patch.Of("location")}, false},
+		{"danger", UpdateMarkerInput{PinCategory: patch.Of("danger")}, false},
+		{"treasure", UpdateMarkerInput{PinCategory: patch.Of("treasure")}, false},
+		{"quest", UpdateMarkerInput{PinCategory: patch.Of("quest")}, false},
+		{"note", UpdateMarkerInput{PinCategory: patch.Of("note")}, false},
+		{"explicit null clears", UpdateMarkerInput{PinCategory: patch.Null[string]()}, false},
+		{"absent keeps a legacy stored value", UpdateMarkerInput{Name: patch.Of("renamed")}, false},
+		{"unknown value", UpdateMarkerInput{PinCategory: patch.Of("landmark")}, true},
+		{"empty string", UpdateMarkerInput{PinCategory: patch.Of("")}, true},
+		{"wrong case", UpdateMarkerInput{PinCategory: patch.Of("Danger")}, true},
+	}
+	for _, tc := range cases {
+		t.Run("update/"+tc.name, func(t *testing.T) {
+			repo := &mockMapRepo{
+				getMarkerFn:    func(_ context.Context, _ string) (*Marker, error) { return storedMarker(), nil },
+				updateMarkerFn: func(_ context.Context, _ *Marker) error { return nil },
+			}
+			err := newTestMapService(repo).UpdateMarker(context.Background(), "mk-1", tc.input, true)
+			if tc.wantErr {
+				assertAppError(t, err, 422)
+			} else if err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
+		})
+	}
+
+	createCases := []struct {
+		name    string
+		cat     *string
+		wantErr bool
+	}{
+		{"nil is fine", nil, false},
+		{"valid", strPtrMK("quest"), false},
+		{"unknown", strPtrMK("secret"), true},
+	}
+	for _, tc := range createCases {
+		t.Run("create/"+tc.name, func(t *testing.T) {
+			repo := &mockMapRepo{createMarkerFn: func(_ context.Context, _ *Marker) error { return nil }}
+			_, err := newTestMapService(repo).CreateMarker(context.Background(), CreateMarkerInput{
+				MapID: "map-1", Name: "Pin", X: 1, Y: 1, PinCategory: tc.cat,
+			})
+			if tc.wantErr {
+				assertAppError(t, err, 422)
+			} else if err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
+		})
 	}
 }
