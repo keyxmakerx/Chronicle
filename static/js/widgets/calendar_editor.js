@@ -143,7 +143,13 @@
     if (!subw) return;
     var strip = document.createElement('div');
     strip.className = 'h-edit';
-    strip.innerHTML = '<span class="etag">Editing</span><span class="ehint">Click or drag across days. Shift extends, Ctrl/Cmd adds. Touch: tap, or hold then drag.</span><span class="sp"></span><button type="button" class="btn sm quiet" id="cal5-editdone">Done</button>';
+    // The structure editor is Owner only (routes.go), so only an Owner
+    // gets the gear that leads to it.
+    var view = this.view;
+    var gear = view.role >= ROLE_OWNER && view.campaignId && view.calendarId
+      ? '<a class="btn sm quiet" id="cal5-settings" href="/campaigns/' + encodeURIComponent(view.campaignId) + '/calendars/' + encodeURIComponent(view.calendarId) + '/structure" title="Calendar settings: months, weekdays, leap years, moons and seasons"><i class="fa-solid fa-gear"></i><span>Calendar settings</span></a>'
+      : '';
+    strip.innerHTML = '<span class="etag">Editing</span><span class="ehint">Click or drag across days. Shift extends, Ctrl/Cmd adds. Touch: tap, or hold then drag.</span><span class="sp"></span>' + gear + '<button type="button" class="btn sm quiet" id="cal5-editdone">Done</button>';
     subw.appendChild(strip);
     $('#cal5-editdone', strip).addEventListener('click', this.setEditing.bind(this, false));
   };
