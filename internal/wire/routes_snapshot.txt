@@ -136,6 +136,7 @@ GET	/armory	internal/plugins/armory/routes.go
 GET	/armory/count	internal/plugins/armory/routes.go
 GET	/armory/instances	internal/plugins/armory/routes.go
 GET	/armory/instances/manage	internal/plugins/armory/routes.go
+GET	/armory/items/:eid/collections	internal/plugins/armory/routes.go
 GET	/armory/shops/:eid/transactions	internal/plugins/armory/routes.go
 GET	/armory/transactions	internal/plugins/armory/routes.go
 GET	/autopin-banner	internal/plugins/foundry_vtt/routes.go
@@ -351,6 +352,7 @@ GET	/notifications/badge	internal/plugins/sessions/routes.go
 GET	/notifications/call-to-action	internal/plugins/sessions/routes.go
 GET	/npcs	internal/plugins/npcs/routes.go
 GET	/npcs/count	internal/plugins/npcs/routes.go
+GET	/npcs/section	internal/plugins/npcs/routes.go
 GET	/owner-dashboard-layout	internal/plugins/campaigns/routes.go
 GET	/packages/:id/actions-fragment	internal/plugins/foundry_vtt/routes.go
 GET	/pending	internal/plugins/packages/routes.go
