@@ -3118,6 +3118,7 @@ func (a *App) RegisterRoutes() {
 	txSvc.SetRelationFinder(&armoryRelationFinderAdapter{svc: relService})
 	txSvc.SetBuyerAccessChecker(&armoryBuyerAccessAdapter{svc: entityService})
 	txHandler := armory.NewTransactionHandler(txSvc)
+	txHandler.SetEntityVisibility(&entityVisibilityFilterAdapter{svc: entityService})
 	armory.RegisterRoutes(e, armoryHandler, txHandler, instHandler, campaignService, authService, addonService)
 
 	// Notes widget: personal floating note-taking panel (Google Keep-style).

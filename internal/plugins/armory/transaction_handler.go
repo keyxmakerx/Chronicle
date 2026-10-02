@@ -4,6 +4,7 @@ package armory
 
 import (
 	"encoding/json"
+	"errors"
 	"net/http"
 	"strconv"
 
@@ -16,12 +17,30 @@ import (
 
 // TransactionHandler serves transaction REST endpoints.
 type TransactionHandler struct {
-	svc TransactionService
+	svc    TransactionService
+	reader TransactionReader
 }
 
-// NewTransactionHandler creates a new transaction handler.
+// NewTransactionHandler creates a new transaction handler. List endpoints go
+// through a visibility-aware reader that fails closed until
+// SetEntityVisibility wires the canonical filter.
 func NewTransactionHandler(svc TransactionService) *TransactionHandler {
-	return &TransactionHandler{svc: svc}
+	return &TransactionHandler{svc: svc, reader: NewTransactionReader(svc, nil)}
+}
+
+// SetEntityVisibility injects the entity visibility filter the list endpoints
+// use to hide names of entities the viewer cannot see.
+func (h *TransactionHandler) SetEntityVisibility(v EntityVisibilityFilter) {
+	h.reader = NewTransactionReader(h.svc, v)
+}
+
+// listError keeps domain errors (e.g. not found) intact and wraps the rest.
+func listError(err error) error {
+	var appErr *apperror.AppError
+	if errors.As(err, &appErr) {
+		return err
+	}
+	return apperror.NewInternal(err)
 }
 
 // Purchase handles POST /campaigns/:id/armory/purchase.
@@ -100,9 +119,9 @@ func (h *TransactionHandler) ListTransactions(c echo.Context) error {
 		opts.TransactionType = tt
 	}
 
-	txs, total, err := h.svc.ListTransactions(c.Request().Context(), cc.Campaign.ID, opts)
+	txs, total, err := h.reader.ListTransactions(c.Request().Context(), cc.Campaign.ID, cc.VisibilityRole(), auth.GetUserID(c), opts)
 	if err != nil {
-		return apperror.NewInternal(err)
+		return listError(err)
 	}
 
 	// Return empty array, not null.
@@ -139,9 +158,9 @@ func (h *TransactionHandler) ListShopTransactions(c echo.Context) error {
 
 	// Scope to the caller's campaign so a shop id from another campaign returns
 	// no transactions (SEC-IDOR-3).
-	txs, total, err := h.svc.ListShopTransactions(c.Request().Context(), cc.Campaign.ID, entityID, opts)
+	txs, total, err := h.reader.ListShopTransactions(c.Request().Context(), cc.Campaign.ID, entityID, cc.VisibilityRole(), auth.GetUserID(c), opts)
 	if err != nil {
-		return apperror.NewInternal(err)
+		return listError(err)
 	}
 
 	if txs == nil {
