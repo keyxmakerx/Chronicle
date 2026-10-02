@@ -1,107 +1,49 @@
-// database.templ renders the admin Database page: a single, tabbed control
-// surface for everything an operator needs to reason about the database —
-// Migrations (core + plugin schema state, with a downgrade/dirty banner),
-// Health (the same checks boot runs, live), Backups (artifacts + restorable
-// snapshots, with create/download/restore actions), and Schema (the D3 graph).
-// See ADR-045.
+// database.templ renders the admin Database page. Its three parts (updates,
+// checks, tables) are tabs of the shared Health & diagnostics strip, each a real
+// ?tab= link rendered server-side, so there is no second row of tabs and no
+// client-side tab state. Backups live in Backups & restore. See ADR-045.
 
 package admin
 
 import (
 	"fmt"
-	"net/url"
 	"time"
 
 	"github.com/keyxmakerx/chronicle/internal/templates/components"
 	"github.com/keyxmakerx/chronicle/internal/templates/layouts"
 )
 
-// AdminDatabasePage renders the tabbed Database control surface.
-templ AdminDatabasePage(core CoreMigrationStatus, statuses []PluginMigrationStatus, health *HealthResult, backups BackupInfo, tableCount int, csrfToken string) {
+// AdminDatabasePage renders the Database page for one tab (already
+// whitelisted by normalizeDatabaseTab); only that tab's panel is rendered.
+templ AdminDatabasePage(tab string, core CoreMigrationStatus, statuses []PluginMigrationStatus, health *HealthResult, backups BackupInfo, tableCount int, csrfToken string) {
 	@layouts.App("Database") {
-		<div class="max-w-7xl mx-auto space-y-5" x-data="{ tab: 'migrations' }" x-init="var t = new URLSearchParams(location.search).get('tab'); if (['migrations','health','backups','schema'].indexOf(t) !== -1) { tab = t; }">
-			<!-- Header -->
-			@components.AdminGroupHeading(components.AdminTabsHealth, "/admin/database")
-			<div class="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
-				<div>
-					<p class="text-sm text-fg-secondary mt-0.5">
-						Core schema <span class="font-mono font-semibold text-fg">v{ fmt.Sprintf("%d", core.Version) }</span>
-						&middot; { fmt.Sprintf("%d", tableCount) } tables &middot; updates, health checks, backups and the table layout in one place.
-					</p>
-				</div>
-			</div>
+		<div class="max-w-7xl mx-auto space-y-5">
+			@components.AdminGroupHeading(components.AdminTabsHealth, databaseTabHref(tab))
+			<p class="text-sm text-fg-secondary">
+				Core schema <span class="font-mono font-semibold text-fg">v{ fmt.Sprintf("%d", core.Version) }</span>
+				&middot; { fmt.Sprintf("%d", tableCount) } tables
+			</p>
 
 			<!-- At-a-glance status strip -->
 			@dbStatusStrip(core, health, backups)
+			<p class="text-sm text-fg-secondary">
+				Database backups are in <a href="/admin/backup" class="text-accent hover:underline">Backups &amp; restore</a>.
+			</p>
 
-			<!-- Tabs -->
-			<div class="border-b border-edge">
-				<nav class="flex gap-6 overflow-x-auto">
-					<button
-						@click="tab='migrations'"
-						:class="tab==='migrations' ? 'border-accent text-accent' : 'border-transparent text-fg-secondary hover:text-fg-body'"
-						class="pb-2 text-sm font-medium border-b-2 transition-colors whitespace-nowrap"
-					>
-						<i class="fa-solid fa-layer-group mr-1"></i> Migrations
-						if core.Ahead {
-							<span class="ml-1 inline-flex items-center px-1.5 py-0.5 rounded-full text-[10px] font-semibold bg-amber-100 text-amber-800 dark:bg-amber-900/40 dark:text-amber-300">newer</span>
-						} else if core.Dirty {
-							<span class="ml-1 inline-flex items-center px-1.5 py-0.5 rounded-full text-[10px] font-semibold bg-rose-100 text-rose-700 dark:bg-rose-900/40 dark:text-rose-300">needs repair</span>
-						} else if totalPending(core, statuses) > 0 {
-							<span class="ml-1 inline-flex items-center px-1.5 py-0.5 rounded-full text-[10px] font-semibold bg-indigo-100 text-indigo-800 dark:bg-indigo-900/40 dark:text-indigo-300">{ fmt.Sprintf("%d", totalPending(core, statuses)) }</span>
-						}
-					</button>
-					<button
-						@click="tab='health'"
-						:class="tab==='health' ? 'border-accent text-accent' : 'border-transparent text-fg-secondary hover:text-fg-body'"
-						class="pb-2 text-sm font-medium border-b-2 transition-colors whitespace-nowrap"
-					>
-						<i class="fa-solid fa-heart-pulse mr-1"></i> Health
-						if health != nil && health.Errors > 0 {
-							<span class="ml-1 inline-flex items-center px-1.5 py-0.5 rounded-full text-[10px] font-semibold bg-rose-100 text-rose-700 dark:bg-rose-900/40 dark:text-rose-300">{ fmt.Sprintf("%d", health.Errors) }</span>
-						} else if health != nil && health.Warns > 0 {
-							<span class="ml-1 inline-flex items-center px-1.5 py-0.5 rounded-full text-[10px] font-semibold bg-amber-100 text-amber-800 dark:bg-amber-900/40 dark:text-amber-300">{ fmt.Sprintf("%d", health.Warns) }</span>
-						} else if health != nil {
-							<i class="fa-solid fa-check ml-1 text-[10px] text-emerald-500"></i>
-						}
-					</button>
-					<button
-						@click="tab='backups'"
-						:class="tab==='backups' ? 'border-accent text-accent' : 'border-transparent text-fg-secondary hover:text-fg-body'"
-						class="pb-2 text-sm font-medium border-b-2 transition-colors whitespace-nowrap"
-					>
-						<i class="fa-solid fa-box-archive mr-1"></i> Backups
-						if !backups.Enabled {
-							<span class="ml-1 inline-flex items-center px-1.5 py-0.5 rounded-full text-[10px] font-semibold bg-surface-alt text-fg-muted">not set up</span>
-						} else if len(backups.Artifacts) > 0 {
-							<span class="ml-1 inline-flex items-center px-1.5 py-0.5 rounded-full text-[10px] font-semibold bg-surface-alt text-fg-secondary">{ fmt.Sprintf("%d", len(backups.Artifacts)) }</span>
-						}
-					</button>
-					<button
-						@click="tab='schema'; $nextTick(() => { var el = $refs.schemaMount; if (el && !el.getAttribute('data-widget') && window.Chronicle) { el.setAttribute('data-widget','db-explorer'); Chronicle.mountWidget(el); } })"
-						:class="tab==='schema' ? 'border-accent text-accent' : 'border-transparent text-fg-secondary hover:text-fg-body'"
-						class="pb-2 text-sm font-medium border-b-2 transition-colors whitespace-nowrap"
-					>
-						<i class="fa-solid fa-diagram-project mr-1"></i> Schema
-						<span class="ml-1 inline-flex items-center px-1.5 py-0.5 rounded-full text-[10px] font-semibold bg-surface-alt text-fg-secondary">{ fmt.Sprintf("%d", tableCount) }</span>
-					</button>
-				</nav>
-			</div>
-
-			<!-- Panels -->
-			<div x-show="tab==='migrations'" x-cloak>
-				@dbMigrationsTab(core, statuses, csrfToken)
-			</div>
-			<div x-show="tab==='health'" x-cloak>
-				@dbHealthTab(health)
-			</div>
-			<div x-show="tab==='backups'" x-cloak>
-				@dbBackupsTab(backups, csrfToken)
-			</div>
-			<div x-show="tab==='schema'" x-cloak>
-				@dbSchemaTab()
-			</div>
+			@dbTabPanel(tab, core, statuses, health, csrfToken)
 		</div>
+	}
+}
+
+// dbTabPanel renders the open tab's panel and nothing else.
+templ dbTabPanel(tab string, core CoreMigrationStatus, statuses []PluginMigrationStatus, health *HealthResult, csrfToken string) {
+	switch tab {
+		case DatabaseTabHealth:
+			@dbHealthTab(health)
+		case DatabaseTabSchema:
+			@dbSchemaTab()
+		default:
+			@dbMigrationsTab(core, statuses, csrfToken)
 	}
 }
 
@@ -323,131 +265,9 @@ templ dbHealthTab(health *HealthResult) {
 	}
 }
 
-// dbBackupsTab renders backup artifacts and restorable snapshots, with create,
-// download, and restore actions. It surfaces the existing backup/restore plugin
-// flows (no new engine) — including the Auto vs Manual distinction.
-templ dbBackupsTab(backups BackupInfo, csrfToken string) {
-	if !backups.Enabled {
-		<div class="card text-center py-10">
-			<i class="fa-solid fa-box-open text-3xl text-fg-muted mb-2"></i>
-			<p class="text-sm text-fg-body font-medium">Backups are not configured.</p>
-			<p class="text-xs text-fg-muted mt-1">Ask whoever runs your server to set the backup folder (<code class="font-mono">BACKUP_DIR</code>). Then Chronicle can back up before each update and on demand.</p>
-		</div>
-	} else {
-		<div class="space-y-4">
-			<!-- Action bar -->
-			<div class="flex flex-wrap items-center justify-between gap-3">
-				<div class="text-sm text-fg-secondary">
-					if backups.LastPreMigrate != nil {
-						Last automatic backup before an update
-						<span class="font-medium text-fg-body">{ dbTimeAgo(backups.LastPreMigrate.ModTime) }</span>
-						(<span class="font-mono text-xs">{ backups.LastPreMigrate.Name }</span>).
-					} else {
-						No automatic backup has run yet. One is made before the next update is applied.
-					}
-				</div>
-				<div class="flex items-center gap-2 shrink-0">
-					<a href="/admin/backup" class="btn btn-sm btn-primary"><i class="fa-solid fa-box-archive mr-1"></i> Go to Backups</a>
-				</div>
-			</div>
-
-			<!-- Restorable snapshots -->
-			<div>
-				<div class="flex items-center justify-between mb-2">
-					<h2 class="section-header">Backups you can restore</h2>
-					<a href="/admin/restore" class="text-xs text-accent hover:text-accent-hover"><i class="fa-solid fa-rotate-left mr-1"></i>Restore…</a>
-				</div>
-				if len(backups.Manifests) == 0 {
-					<div class="card text-center py-6">
-						<p class="text-sm text-fg-muted">No backups you can restore yet.</p>
-					</div>
-				} else {
-					<div class="card p-0 overflow-hidden">
-						<table class="w-full text-sm">
-							<thead>
-								<tr class="bg-surface-alt border-b border-edge text-left text-xs font-semibold text-fg-secondary uppercase tracking-wider">
-									<th class="px-4 py-2.5">Backup</th>
-									<th class="px-4 py-2.5 hidden sm:table-cell">Chronicle</th>
-									<th class="px-4 py-2.5 hidden sm:table-cell">Schema</th>
-									<th class="px-4 py-2.5">Created</th>
-								</tr>
-							</thead>
-							<tbody class="divide-y divide-edge">
-								for _, m := range backups.Manifests {
-									<tr class="hover:bg-surface-alt transition-colors">
-										<td class="px-4 py-2.5">
-											<span class="font-mono text-xs text-fg-body">{ m.Name }</span>
-											if m.ParseError != "" {
-												<span class="ml-2 inline-flex items-center px-1.5 py-0.5 rounded-full text-[10px] font-medium bg-rose-100 text-rose-700 dark:bg-rose-900/40 dark:text-rose-300" title={ m.ParseError }>unreadable</span>
-											}
-										</td>
-										<td class="px-4 py-2.5 hidden sm:table-cell text-fg-secondary">{ orDash(m.ChronicleVersion) }</td>
-										<td class="px-4 py-2.5 hidden sm:table-cell font-mono text-xs text-fg-secondary">{ orDash(m.MigrationVersion) }</td>
-										<td class="px-4 py-2.5 text-fg-muted" title={ m.ModTime.Format(time.RFC3339) }>{ dbTimeAgo(m.ModTime) }</td>
-									</tr>
-								}
-							</tbody>
-						</table>
-					</div>
-				}
-			</div>
-
-			<!-- Backup artifacts -->
-			<div>
-				<h2 class="section-header mb-2">Backup files</h2>
-				if len(backups.Artifacts) == 0 {
-					<div class="card text-center py-6">
-						<p class="text-sm text-fg-muted">No backup files yet.</p>
-					</div>
-				} else {
-					<div class="card p-0 overflow-hidden">
-						<table class="w-full text-sm">
-							<thead>
-								<tr class="bg-surface-alt border-b border-edge text-left text-xs font-semibold text-fg-secondary uppercase tracking-wider">
-									<th class="px-4 py-2.5">File</th>
-									<th class="px-4 py-2.5 hidden sm:table-cell">Contents</th>
-									<th class="px-4 py-2.5">Size</th>
-									<th class="px-4 py-2.5 hidden md:table-cell">Created</th>
-									<th class="px-4 py-2.5 text-right">Actions</th>
-								</tr>
-							</thead>
-							<tbody class="divide-y divide-edge">
-								for _, a := range backups.Artifacts {
-									<tr class="hover:bg-surface-alt transition-colors">
-										<td class="px-4 py-2.5">
-											<div class="flex items-center gap-2">
-												<span class="font-mono text-xs text-fg-body truncate max-w-[260px]" title={ a.Name }>{ a.Name }</span>
-												if a.PreMigrate {
-													<span class="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full text-[10px] font-semibold bg-indigo-100 text-indigo-700 dark:bg-indigo-900/40 dark:text-indigo-300"><i class="fa-solid fa-robot text-[8px]"></i>Auto</span>
-												} else {
-													<span class="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full text-[10px] font-semibold bg-slate-100 text-slate-600 dark:bg-slate-700/50 dark:text-slate-300"><i class="fa-solid fa-hand text-[8px]"></i>Manual</span>
-												}
-											</div>
-										</td>
-										<td class="px-4 py-2.5 hidden sm:table-cell">
-											<span class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-surface-alt text-fg-secondary">{ artifactKindLabel(a.Kind) }</span>
-										</td>
-										<td class="px-4 py-2.5 text-fg-secondary">{ formatBytes(a.SizeBytes) }</td>
-										<td class="px-4 py-2.5 text-fg-muted hidden md:table-cell" title={ a.ModTime.Format(time.RFC3339) }>{ dbTimeAgo(a.ModTime) }</td>
-										<td class="px-4 py-2.5 text-right">
-											<a href={ templ.SafeURL(fmt.Sprintf("/admin/backup/files/%s", url.PathEscape(a.Name))) } class="text-accent hover:text-accent-hover text-sm">
-												<i class="fa-solid fa-download mr-1"></i>Download
-											</a>
-										</td>
-									</tr>
-								}
-							</tbody>
-						</table>
-					</div>
-				}
-			</div>
-		</div>
-	}
-}
-
-// dbSchemaTab renders the interactive D3 schema diagram. The widget element is
-// lazily mounted on first activation (see the Schema tab button) so D3 reads a
-// real container width instead of the zero-width hidden-tab fallback.
+// dbSchemaTab renders the interactive D3 schema diagram. It is only rendered
+// when its tab is open, so the widget mounts on a visible container and D3 reads
+// a real width.
 templ dbSchemaTab() {
 	<div class="space-y-4">
 		<div class="card p-0 overflow-hidden">
@@ -456,7 +276,7 @@ templ dbSchemaTab() {
 				<span class="text-xs text-fg-muted">Scroll to zoom &middot; Drag to pan &middot; Click a table for details</span>
 			</div>
 			<div
-				x-ref="schemaMount"
+				data-widget="db-explorer"
 				data-api-url="/admin/database/schema"
 				style="min-height: 600px;"
 			></div>

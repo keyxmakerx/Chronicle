@@ -1050,7 +1050,7 @@ func (h *Handler) Database(c echo.Context) error {
 	}
 
 	csrfToken := middleware.GetCSRFToken(c)
-	return middleware.Render(c, http.StatusOK, AdminDatabasePage(core, statuses, health, backups, tableCount, csrfToken))
+	return middleware.Render(c, http.StatusOK, AdminDatabasePage(normalizeDatabaseTab(c.QueryParam("tab")), core, statuses, health, backups, tableCount, csrfToken))
 }
 
 // DatabaseStatusAPI returns core + plugin migration status as JSON
