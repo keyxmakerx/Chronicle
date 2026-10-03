@@ -11,7 +11,8 @@ func TestGameNightsTarget(t *testing.T) {
 		{"no calendar, the session's own page", "", "s1", "2026-10-08", "/campaigns/c1/sessions/s1"},
 		{"a night opens its day", "k1", "s1", "2026-10-08", "/campaigns/c1/calendars/k1/view?date=2026-10-08&night=s1"},
 		{"no night named opens the next one", "k1", "", "", "/campaigns/c1/calendars/k1/view?night=next"},
-		{"a bad date opens the next night", "k1", "s1", "Thursday", "/campaigns/c1/calendars/k1/view?night=next"},
+		{"a session with no date opens its own page", "k1", "s1", "", "/campaigns/c1/sessions/s1"},
+		{"a bad date opens the session's own page", "k1", "s1", "Thursday", "/campaigns/c1/sessions/s1"},
 		{"ids are escaped", "k/1", "s&x", "2026-10-08", "/campaigns/c1/calendars/k%2F1/view?date=2026-10-08&night=s%26x"},
 	}
 	for _, tt := range tests {

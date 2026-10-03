@@ -28,19 +28,23 @@ func (h *Handler) SetCalendarFinder(f RealWorldCalendarFinder) {
 }
 
 // gameNightsTarget is where a game-night link lands. With a calendar it is
-// that calendar's page, opened on the night's day (or on the next night);
-// without one it is the Sessions page, or the session's own page, so a
-// campaign with no real-world calendar loses nothing.
+// that calendar's page, opened on the session's night (or, with no session
+// named, on the next night); without one it is the Sessions page, or the
+// session's own page, so a campaign with no real-world calendar loses
+// nothing.
 func gameNightsTarget(campaignID, calendarID, sessionID, date string) string {
 	base := "/campaigns/" + url.PathEscape(campaignID)
+	_, dateErr := time.Parse("2006-01-02", date)
+	// A named session with no usable date has no day to open: its own page
+	// is the honest landing, not some other night.
+	if sessionID != "" && (calendarID == "" || dateErr != nil) {
+		return base + "/sessions/" + url.PathEscape(sessionID)
+	}
 	if calendarID == "" {
-		if sessionID != "" {
-			return base + "/sessions/" + url.PathEscape(sessionID)
-		}
 		return base + "/sessions"
 	}
 	q := url.Values{}
-	if _, err := time.Parse("2006-01-02", date); err == nil && sessionID != "" {
+	if sessionID != "" {
 		q.Set("date", date)
 		q.Set("night", sessionID)
 	} else {
