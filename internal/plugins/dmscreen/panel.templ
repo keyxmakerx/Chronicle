@@ -1,6 +1,9 @@
 package dmscreen
 
-import "fmt"
+import (
+	"fmt"
+	"strings"
+)
 
 // Panel is the DM Screen fragment: a header strip and three leaves (the
 // world, the party, rules and reveals). The dm-screen widget mounts it in an
@@ -163,7 +166,12 @@ templ heroRow(hero HeroView) {
 	{{ bar, chips, rest := hero.Folded() }}
 	<div class="dms-hero" data-dms-hero>
 		<button type="button" class="dms-hrow" aria-expanded="false" data-dms-hrow>
-			<span class="dms-hero-name">{ hero.Name }</span>
+			<span class="dms-hero-name">
+				{ hero.Name }
+				if n := len(hero.Conditions); n > 0 {
+					<em class="dms-cdot" title={ strings.Join(hero.Conditions, ", ") }><span class="sr-only">Conditions: </span>{ fmt.Sprint(n) }</em>
+				}
+			</span>
 			<span class="dms-mini">
 				if bar != nil {
 					<span class="dms-bar" aria-hidden="true"><span class={ templ.KV("dms-low", bar.Low) } style={ fmt.Sprintf("width:%d%%", bar.Percent) }></span></span>
@@ -179,14 +187,26 @@ templ heroRow(hero HeroView) {
 		</button>
 		<div class="dms-hmore">
 			<div class="dms-hin">
-				if hero.PlayerName != "" {
-					<span class="dms-hero-player">Played by { hero.PlayerName }</span>
+				if hero.Subtitle != "" || hero.PlayerName != "" {
+					<div class="dms-who">
+						<span>{ hero.Subtitle }</span>
+						if hero.PlayerName != "" {
+							<span>Played by { hero.PlayerName }</span>
+						}
+					</div>
 				}
 				for _, m := range rest {
 					<div class="dms-meter">
 						<span>{ m.Label }</span>
 						<span class="dms-bar" aria-hidden="true"><span class={ templ.KV("dms-low", m.Low) } style={ fmt.Sprintf("width:%d%%", m.Percent) }></span></span>
 						<span class="dms-num">{ m.Current }/{ m.Max }</span>
+					</div>
+				}
+				if len(hero.Conditions) > 0 {
+					<div class="dms-hconds">
+						for _, c := range hero.Conditions {
+							<span>{ c }</span>
+						}
 					</div>
 				}
 			</div>

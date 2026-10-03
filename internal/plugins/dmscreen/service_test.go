@@ -3,6 +3,7 @@ package dmscreen
 import (
 	"context"
 	"errors"
+	"strings"
 	"testing"
 	"time"
 
@@ -72,7 +73,9 @@ var drawSteel = &systems.SystemManifest{
 			{Label: "Recoveries", Current: "recoveries", Max: "recoveries_max"},
 			{LabelField: "heroic_resource_name", Current: "heroic_resource_current"},
 		},
-		Conditions: &systems.DMScreenConditions{Category: "rules-glossary", Property: "category", Value: "condition"},
+		HeroSubtitle:   "class",
+		HeroConditions: "conditions_json",
+		Conditions:     &systems.DMScreenConditions{Category: "rules-glossary", Property: "category", Value: "condition"},
 	},
 }
 
@@ -135,6 +138,7 @@ func TestBuild_PartyMeters(t *testing.T) {
 			"stamina_current": float64(34), "stamina_max": "42",
 			"recoveries": "6", "recoveries_max": float64(8),
 			"heroic_resource_name": "Focus", "heroic_resource_current": float64(3),
+			"class": "Tactician", "conditions_json": `["bleeding",{"name":"slowed"}]`,
 		}},
 		{ID: "b", Name: "Bren", Fields: map[string]any{"stamina_current": "11", "stamina_max": "39"}},
 	}
@@ -164,6 +168,15 @@ func TestBuild_PartyMeters(t *testing.T) {
 			for i, n := range tt.wantMeters {
 				if got := len(v.Party[i].Meters); got != n {
 					t.Fatalf("hero %d meters = %d, want %d", i, got, n)
+				}
+			}
+			if tt.wantFilled {
+				a := v.Party[0]
+				if a.Subtitle != "Tactician" || strings.Join(a.Conditions, ",") != "Bleeding,Slowed" {
+					t.Fatalf("Aria subtitle=%q conditions=%v", a.Subtitle, a.Conditions)
+				}
+				if v.Party[1].Subtitle != "" || v.Party[1].Conditions != nil {
+					t.Fatalf("Bren has no class or conditions, got %+v", v.Party[1])
 				}
 			}
 		})
@@ -242,5 +255,33 @@ func TestReveal(t *testing.T) {
 	}
 	if _, err := NewService(Sources{Hidden: h}).Reveal(context.Background(), "", "c1", Viewer{Role: 2}); err == nil {
 		t.Fatal("empty id should fail")
+	}
+}
+
+func TestHeroConditions(t *testing.T) {
+	many := make([]any, 20)
+	for i := range many {
+		many[i] = "dazed"
+	}
+	tests := []struct {
+		name string
+		raw  any
+		want string
+	}{
+		{"json list of ids", `["frightened","dazed-1"]`, "Frightened|Dazed 1"},
+		{"foundry objects", []any{map[string]any{"name": "grabbed"}, map[string]any{"severity": "x"}}, "Grabbed"},
+		{"comma string", "Prone, taunted ,", "Prone|Taunted"},
+		{"broken json", `["bleeding"`, ""},
+		{"empty", "", ""},
+		{"number", float64(3), ""},
+		{"nil", nil, ""},
+		{"capped", many, strings.TrimSuffix(strings.Repeat("Dazed|", maxHeroConditions), "|")},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := strings.Join(heroConditions(tt.raw), "|"); got != tt.want {
+				t.Fatalf("got %q, want %q", got, tt.want)
+			}
+		})
 	}
 }

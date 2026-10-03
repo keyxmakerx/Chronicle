@@ -2,6 +2,7 @@ package dmscreen
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"log/slog"
 	"math"
@@ -9,6 +10,8 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"unicode"
+	"unicode/utf8"
 
 	"github.com/keyxmakerx/chronicle/internal/apperror"
 	"github.com/keyxmakerx/chronicle/internal/systems"
@@ -93,10 +96,15 @@ func (s *service) Build(ctx context.Context, campaignID string, v Viewer) (*View
 		}
 		view.PartyFilled = len(meters) > 0
 		for _, h := range heroes {
-			view.Party = append(view.Party, HeroView{
+			hv := HeroView{
 				ID: h.ID, Name: h.Name, PlayerName: h.PlayerName,
 				Meters: buildMeters(meters, h.Fields),
-			})
+			}
+			if def != nil {
+				hv.Subtitle, _ = fieldText(h.Fields, def.HeroSubtitle)
+				hv.Conditions = heroConditions(h.Fields[def.HeroConditions])
+			}
+			view.Party = append(view.Party, hv)
 		}
 	}
 
@@ -198,6 +206,64 @@ func fieldText(fields map[string]any, key string) (string, bool) {
 	default:
 		return "", false
 	}
+}
+
+// maxHeroConditions bounds what one sheet field can put on the screen.
+const maxHeroConditions = 12
+
+// heroConditions reads the conditions a hero has from a sheet field that may
+// hold a list, a JSON-encoded list, or a comma-separated string, with each
+// entry a name or a {"name": …} object (the shape Foundry statuses sync as).
+// Status ids like "frightened" or "dazed-1" come back as readable names.
+func heroConditions(raw any) []string {
+	var items []any
+	switch v := raw.(type) {
+	case []any:
+		items = v
+	case string:
+		v = strings.TrimSpace(v)
+		if v == "" {
+			return nil
+		}
+		if strings.HasPrefix(v, "[") {
+			if err := json.Unmarshal([]byte(v), &items); err != nil {
+				return nil
+			}
+		} else {
+			for _, part := range strings.Split(v, ",") {
+				items = append(items, part)
+			}
+		}
+	default:
+		return nil
+	}
+	var out []string
+	for _, it := range items {
+		var name string
+		switch c := it.(type) {
+		case string:
+			name = c
+		case map[string]any:
+			name, _ = c["name"].(string)
+		}
+		if name = humanizeID(name); name != "" {
+			out = append(out, name)
+		}
+		if len(out) == maxHeroConditions {
+			break
+		}
+	}
+	return out
+}
+
+// humanizeID turns a status id ("taunted", "dazed_2") into a label.
+func humanizeID(id string) string {
+	id = strings.TrimSpace(strings.NewReplacer("-", " ", "_", " ").Replace(id))
+	if id == "" {
+		return ""
+	}
+	r, size := utf8.DecodeRuneInString(id)
+	return string(unicode.ToUpper(r)) + id[size:]
 }
 
 // refMarkup matches a system's inline cross-reference, {@category term} or

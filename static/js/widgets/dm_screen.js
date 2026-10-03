@@ -80,10 +80,33 @@
         hero.classList.toggle('dms-open', open);
         row.setAttribute('aria-expanded', open ? 'true' : 'false');
         setTimeout(function () {
-          if (open && hero.scrollIntoView) hero.scrollIntoView({ block: 'nearest', behavior: reduce ? 'auto' : 'smooth' });
           var list = hero.closest('[data-dms-party]');
-          if (list) partyEdges(list);
+          if (!list) return;
+          fitOpenHeroes(list);
+          if (open) showWhole(list, hero);
+          partyEdges(list);
         }, 340);
+      }
+
+      // An open hero is always shown whole: the list grows past its usual
+      // height when one hero alone wouldn't fit, and the others move aside.
+      function fitOpenHeroes(list) {
+        list.style.maxHeight = '';
+        var cap = list.clientHeight, need = 0;
+        list.querySelectorAll('[data-dms-hero].dms-open').forEach(function (h) {
+          need = Math.max(need, h.offsetHeight + 8);
+        });
+        if (need > cap) list.style.maxHeight = need + 'px';
+      }
+
+      function showWhole(list, hero) {
+        var top = hero.offsetTop, bottom = top + hero.offsetHeight;
+        var target = list.scrollTop;
+        if (bottom > list.scrollTop + list.clientHeight) target = bottom - list.clientHeight + 4;
+        if (top < target) target = Math.max(0, top - 4);
+        if (target === list.scrollTop) return;
+        if (list.scrollTo) list.scrollTo({ top: target, behavior: reduce ? 'auto' : 'smooth' });
+        else list.scrollTop = target;
       }
 
       // Fades the list edge and counts the heroes still below it.

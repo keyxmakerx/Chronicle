@@ -12,6 +12,15 @@ type DMScreenDef struct {
 	// Party lists the meters shown under each hero, in order.
 	Party []DMScreenMeter `json:"party,omitempty"`
 
+	// HeroSubtitle names the sheet field shown under a hero's name when it
+	// is folded open (a class).
+	HeroSubtitle string `json:"hero_subtitle,omitempty"`
+
+	// HeroConditions names the sheet field listing the conditions a hero
+	// has right now: a JSON list of names or {"name": …} objects, or a
+	// comma-separated string.
+	HeroConditions string `json:"hero_conditions,omitempty"`
+
 	// Conditions points at the reference entries the rules tab lists.
 	Conditions *DMScreenConditions `json:"conditions,omitempty"`
 }
@@ -76,6 +85,12 @@ func validateDMScreen(d *DMScreenDef) error {
 		if m.WarnBelow < 0 || m.WarnBelow > 1 {
 			return fmt.Errorf("party meter %d: warn_below must be between 0 and 1", i)
 		}
+	}
+	if d.HeroSubtitle != "" && !fieldKeyPattern.MatchString(d.HeroSubtitle) {
+		return fmt.Errorf("hero_subtitle must be a sheet field key")
+	}
+	if d.HeroConditions != "" && !fieldKeyPattern.MatchString(d.HeroConditions) {
+		return fmt.Errorf("hero_conditions must be a sheet field key")
 	}
 	if c := d.Conditions; c != nil {
 		if !slugPattern.MatchString(c.Category) {

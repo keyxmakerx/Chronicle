@@ -86,6 +86,10 @@ type HeroView struct {
 	ID         string
 	Name       string
 	PlayerName string
+	// Subtitle and Conditions come from the sheet fields the system's
+	// manifest names; either may be empty.
+	Subtitle   string
+	Conditions []string
 	Meters     []MeterView
 }
 

@@ -4114,7 +4114,7 @@ html[data-cz-reduce] *:not(.czp *), html[data-cz-reduce] *:not(.czp *)::before, 
   .dms-seg button[aria-pressed="true"] { background: var(--dms-ok-soft); font-weight: 700; }
   .dms-seg button:disabled { cursor: default; }
   .dms-partywrap { position: relative; }
-  .dms-party { max-height: 17rem; overflow-y: auto; display: grid; gap: .1rem; padding: .1rem .1rem .4rem; scrollbar-width: thin;
+  .dms-party { position: relative; max-height: 17rem; overflow-y: auto; display: grid; gap: .1rem; padding: .1rem .1rem .4rem; scrollbar-width: thin;
     -webkit-mask-image: linear-gradient(#000, #000 calc(100% - 1.6rem), transparent); mask-image: linear-gradient(#000, #000 calc(100% - 1.6rem), transparent); }
   .dms-party.dms-at-end { -webkit-mask-image: none; mask-image: none; }
   .dms-party.dms-scrolled { -webkit-mask-image: linear-gradient(transparent, #000 1.4rem, #000 calc(100% - 1.6rem), transparent); mask-image: linear-gradient(transparent, #000 1.4rem, #000 calc(100% - 1.6rem), transparent); }
@@ -4126,7 +4126,10 @@ html[data-cz-reduce] *:not(.czp *), html[data-cz-reduce] *:not(.czp *)::before, 
   .dms-hrow:hover { background: rgba(127,127,127,.08); }
   .dms-hrow:focus-visible { outline: 2px solid var(--dms-hinge); }
   .dms-hero-name { font-weight: 700; font-size: .9rem; }
-  .dms-hero-player { font-size: .78rem; color: var(--dms-ink-muted); }
+  .dms-who { display: flex; justify-content: space-between; gap: .5rem; font-size: .78rem; color: var(--dms-ink-muted); }
+  .dms-cdot { font-style: normal; font-size: .65rem; min-width: 1.3em; margin-left: .25rem; padding: 0 .2rem; text-align: center; border-radius: 999px; border: 1px solid var(--dms-warn); color: var(--dms-warn); }
+  .dms-hconds { display: flex; flex-wrap: wrap; gap: .25rem; }
+  .dms-hconds span { font-size: .72rem; padding: 0 .4rem; border-radius: 999px; border: 1px solid var(--dms-warn); color: var(--dms-warn); }
   .dms-mini { display: flex; align-items: center; gap: .4rem; font-size: .75rem; }
   .dms-chips { display: flex; gap: .25rem; }
   .dms-chip { font-size: .72rem; padding: 0 .45rem; border-radius: 999px; border: 1px solid var(--dms-hinge); white-space: nowrap; }

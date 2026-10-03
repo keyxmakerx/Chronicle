@@ -31,12 +31,12 @@ func TestPanel(t *testing.T) {
 		{
 			name: "heroes start folded with the bar and resource chip on the line",
 			view: View{CampaignID: "c1", PartyFilled: true, Party: []HeroView{{
-				Name: "Aria", PlayerName: "Sam", Meters: []MeterView{
+				Name: "Aria", PlayerName: "Sam", Subtitle: "Tactician", Conditions: []string{"Bleeding", "Slowed"}, Meters: []MeterView{
 					{Label: "Stamina", Current: "34", Max: "42", HasMax: true, Percent: 81},
 					{Label: "Recoveries", Current: "6", Max: "8", HasMax: true, Percent: 75},
 					{Label: "Focus", Current: "3"},
 				}}}},
-			want: []string{`aria-expanded="false"`, `data-dms-hrow`, `<span class="dms-chip">Focus 3</span>`, "34/42", "Played by Sam", "Recoveries", "data-dms-party"},
+			want: []string{`aria-expanded="false"`, `data-dms-hrow`, `<span class="dms-chip">Focus 3</span>`, "34/42", "Played by Sam", "Recoveries", "data-dms-party", "Tactician", `title="Bleeding, Slowed"`, "<span>Slowed</span>"},
 		},
 		{
 			name:    "no conditions hides the rules tab",
