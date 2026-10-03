@@ -356,6 +356,12 @@ func (s *packageService) RunRetention(ctx context.Context) (*PruneResult, error)
 		return r
 	}, false)
 	if err != nil {
+		if res != nil && len(res.Removed) > 0 {
+			slog.Warn("automatic old-version clean-up stopped part way",
+				slog.Int("removed", len(res.Removed)),
+				slog.Int64("bytes_freed", res.BytesFreed),
+				slog.Any("error", err))
+		}
 		return nil, err
 	}
 	if len(res.Removed) > 0 {

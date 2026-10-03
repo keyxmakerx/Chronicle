@@ -88,6 +88,13 @@ func (s *packageService) prune(ctx context.Context, ruleFor func(*Package) reten
 	}
 
 	res := &PruneResult{DryRun: dryRun}
+	// Deferred so folders already removed before a later package fails still
+	// drop their serve cache entries.
+	defer func() {
+		if !dryRun && len(res.Removed) > 0 && s.onServeInvalidate != nil {
+			s.onServeInvalidate()
+		}
+	}()
 	now := time.Now()
 	for i := range pkgs {
 		pkg := &pkgs[i]
@@ -101,10 +108,6 @@ func (s *packageService) prune(ctx context.Context, ruleFor func(*Package) reten
 		if err := s.pruneOnePackage(ctx, pkg, rule, now, dryRun, loaded, res); err != nil {
 			return res, err
 		}
-	}
-
-	if !dryRun && len(res.Removed) > 0 && s.onServeInvalidate != nil {
-		s.onServeInvalidate()
 	}
 	return res, nil
 }
