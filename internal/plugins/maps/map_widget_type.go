@@ -130,7 +130,11 @@ func (w *mapWidgetType) renderInner(ctx context.Context, rc widgetbindings.Block
 					slog.String("map_id", m.ID), slog.Any("error", mErr))
 				markers = nil
 			}
-			viewData := MapViewData{CampaignID: rc.CC.Campaign.ID, Map: m, Markers: markers, IsScribe: isScribe}
+			display, _ := w.svc.ResolveDisplay(ctx, m)
+			viewData := MapViewData{
+				CampaignID: rc.CC.Campaign.ID, Map: m, Markers: markers, IsScribe: isScribe,
+				IsOwner: rc.Role >= int(campaigns.RoleOwner), UserID: rc.UserID, Display: display,
+			}
 			return BlockEntityMapEmbed(rc.CC, rc.HostID, viewData, isScribe, rc.Resolution.Source)
 		}
 		if err != nil {

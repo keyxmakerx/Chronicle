@@ -457,7 +457,7 @@ func assertCleanClientError(t *testing.T, err error) {
 // (N4) proves a recurring event is narrowed to the months it actually
 // OCCURS on: the repository's recurringCandidateClause widens every
 // recurring row in as a candidate for ANY month query (event_repository.go),
-// so without the service's OccursOn-based narrowing (filterRecurringToMonth)
+// so without the service's OccursOn-based narrowing (expandMonth)
 // this would show up in every month of every later year, not just the one
 // month it actually recurs into.
 func TestCalendarService_Integration_ListEventsForMonth_RecurringEventAcrossMonths(t *testing.T) {

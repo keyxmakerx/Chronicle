@@ -39,6 +39,21 @@ func (h *InstanceHandler) ListInstances(c echo.Context) error {
 	return c.JSON(http.StatusOK, instances)
 }
 
+// ItemCollections lists every collection with whether it holds one item
+// (GET /campaigns/:id/armory/items/:eid/collections). Feeds the card menu.
+func (h *InstanceHandler) ItemCollections(c echo.Context) error {
+	cc := campaigns.GetCampaignContext(c)
+	if cc == nil {
+		return apperror.NewMissingContext()
+	}
+
+	cols, err := h.svc.ListCollectionsForItem(c.Request().Context(), cc.Campaign.ID, cc.VisibilityRole(), auth.GetUserID(c), c.Param("eid"))
+	if err != nil {
+		return err
+	}
+	return c.JSON(http.StatusOK, cols)
+}
+
 // CreateInstance creates a new inventory instance (POST /campaigns/:id/armory/instances).
 func (h *InstanceHandler) CreateInstance(c echo.Context) error {
 	cc := campaigns.GetCampaignContext(c)

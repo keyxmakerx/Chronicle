@@ -51,6 +51,9 @@ type CreateDrawingInput struct {
 	Visibility  string
 	CreatedBy   string
 	FoundryID   *string
+	// CallerRole is the caller's campaign role (permissions.Role*), used for
+	// the map's "who can draw" gate. Not a data field; 0 is refused.
+	CallerRole int
 }
 
 // UpdateDrawingInput is the validated input for updating a drawing.

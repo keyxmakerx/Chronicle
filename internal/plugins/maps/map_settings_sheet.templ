@@ -1,0 +1,169 @@
+// map_settings_sheet.templ renders the floating "Map settings" sheet opened by
+// the gear on the map page (owners only). Markup only: the controls are wired
+// by the script in MapEditorBody, which previews every change on the map behind
+// the sheet and saves them with one PUT.
+
+package maps
+
+import (
+	"fmt"
+
+	"github.com/keyxmakerx/chronicle/internal/templates/layouts"
+)
+
+// sheetChoice is one option of a segmented control.
+type sheetChoice struct {
+	Value string
+	Label string
+}
+
+// sheetChips renders a segmented control bound to one resolved-display key.
+// The pressed state is set by the script from the live settings, so the markup
+// carries no state of its own.
+templ sheetChips(key string, choices []sheetChoice) {
+	<div class="mp-chips" data-chips={ key } role="group">
+		for _, c := range choices {
+			<button type="button" class="mp-chip" data-k={ key } data-v={ c.Value } aria-pressed="false">{ c.Label }</button>
+		}
+	</div>
+}
+
+// mapSettingsSheet is the settings sheet. The background colour keeps the old
+// modal's tri-state (untouched / chosen / reset to theme) in a hidden flag so a
+// save can tell "leave it alone" from "clear it".
+templ mapSettingsSheet(data MapViewData) {
+	<div id="mp-sheet" class="mp-fl mp-sheet" role="dialog" aria-label="Map settings" hidden>
+		<div class="mp-sh">
+			<span>Map settings</span>
+			<button type="button" id="mp-sheet-x" class="mp-btn" aria-label="Close map settings"><i class="fa-solid fa-xmark" aria-hidden="true"></i></button>
+		</div>
+		<div class="mp-sh-body">
+			<section>
+				<h3>Map</h3>
+				<label class="mp-f"><span>Name</span><input type="text" id="ms-name" class="mp-input" maxlength="255" value={ data.Map.Name }/></label>
+				<label class="mp-f"><span>Description</span><textarea id="ms-description" class="mp-input" rows="2">{ derefStr(data.Map.Description) }</textarea></label>
+				<div class="mp-f">
+					<span>Picture</span>
+					<input type="hidden" id="ms-image-id" value={ derefStr(data.Map.ImageID) }/>
+					<input type="hidden" id="ms-image-width" value={ fmt.Sprintf("%d", data.Map.ImageWidth) }/>
+					<input type="hidden" id="ms-image-height" value={ fmt.Sprintf("%d", data.Map.ImageHeight) }/>
+					if data.Map.HasImage() {
+						<img id="ms-image-preview" src={ layouts.MediaURL(ctx, *data.Map.ImageID) } alt="" class="mp-preview"/>
+					} else {
+						<img id="ms-image-preview" src="" alt="" class="mp-preview" hidden/>
+					}
+					<input type="file" id="ms-image-file" accept="image/*" class="mp-input mp-file" aria-label="Upload a map picture"/>
+					<!-- The picker is opt-in; uploads stay the default. The widget
+					     mounts as a button and fires media-picker:select, which the
+					     page script turns into the same effect as an upload. -->
+					<button
+						type="button"
+						id="ms-pick-existing"
+						data-widget="media-picker"
+						data-campaign-id={ data.CampaignID }
+						data-mime-prefix="image/"
+						class="mp-cbtn"
+						title="Choose an image already in this campaign"
+					>
+						<i class="fa-solid fa-images" aria-hidden="true"></i> Choose existing
+					</button>
+					<small>JPEG, PNG or WebP. The picture's size sets the coordinate space.</small>
+				</div>
+			</section>
+			<section>
+				<h3>Look</h3>
+				<div class="mp-f">
+					<span>Frame</span>
+					<div class="mp-chips" data-chips="frame_source" role="group">
+						<button type="button" class="mp-chip" data-k="frame_source" data-v="campaign" aria-pressed="false">Campaign style (<span id="ms-campaign-frame">{ frameLabel(data.DisplayOrDefault().CampaignFrame) }</span>)</button>
+						<button type="button" class="mp-chip" data-k="frame_source" data-v="map" aria-pressed="false">Pick for this map</button>
+					</div>
+					<div class="mp-chips" id="ms-frame-pick" role="group" hidden>
+						for _, f := range FrameStyles {
+							<button type="button" class="mp-chip" data-k="frame" data-v={ f.ID } aria-pressed="false">{ f.Label }</button>
+						}
+					</div>
+					<small id="ms-frame-note">Change the campaign style on the Customize page, under Maps.</small>
+				</div>
+				<label class="mp-check"><span>Tint the map to match the frame</span><input type="checkbox" id="ms-tint"/></label>
+				<div class="mp-f">
+					<span>Sea and background colour</span>
+					<div class="mp-row">
+						<input
+							type="color"
+							id="ms-background-color"
+							class="mp-color"
+							value={ backgroundColorOrDefault(data.Map.BackgroundColor) }
+							aria-label="Sea and background colour"
+						/>
+						<input type="hidden" id="ms-background-color-set" value={ backgroundColorIsSet(data.Map.BackgroundColor) }/>
+						<button type="button" id="ms-bg-reset" class="mp-cbtn" title="Follow the light or dark theme again">
+							<i class="fa-solid fa-rotate-left" aria-hidden="true"></i> Reset to theme
+						</button>
+					</div>
+					<small>Shows around the map picture and wherever it has none.</small>
+				</div>
+			</section>
+			<section>
+				<h3>Pins</h3>
+				<div class="mp-f"><span>Pin style</span>
+					@sheetChips("pin_style", []sheetChoice{{"drop", "Drop"}, {"seal", "Seal"}, {"flag", "Flag"}, {"dot", "Dot"}})
+				</div>
+				<div class="mp-f"><span>Pin size</span>
+					@sheetChips("pin_size", []sheetChoice{{"s", "Small"}, {"m", "Medium"}, {"l", "Large"}})
+				</div>
+				<div class="mp-f"><span>Pin names on the map</span>
+					@sheetChips("pin_labels", []sheetChoice{{"always", "Always"}, {"hover", "When I point at one"}, {"never", "Never"}})
+				</div>
+				<div class="mp-f">
+					<span>Kinds of pin</span>
+					for _, k := range KindDefaults {
+						<div class="mp-kind">
+							<input type="color" data-kc={ k.ID } aria-label={ k.Label + " colour" } value={ k.Color }/>
+							<input type="text" data-kn={ k.ID } class="mp-input" maxlength="30" aria-label={ k.Label + " name" } value={ k.Label }/>
+						</div>
+					}
+					<small>Renaming and recolouring these five works here. Adding your own kinds comes later.</small>
+				</div>
+			</section>
+			<section>
+				<h3>Grid</h3>
+				@sheetChips("grid_type", []sheetChoice{{"none", "None"}, {"square", "Squares"}, {"hex", "Hexes"}})
+				<label class="mp-f"><span>Size</span><input type="range" id="ms-grid-size" min="10" max="300" step="5"/></label>
+				<label class="mp-f"><span>Strength</span><input type="range" id="ms-grid-strength" min="5" max="80"/></label>
+			</section>
+			<section>
+				<h3>Opening the map</h3>
+				<div class="mp-f"><span>Start at</span>
+					@sheetChips("open_mode", []sheetChoice{{"whole", "The whole map"}, {"last", "Where each person left off"}, {"spot", "A spot I choose"}})
+				</div>
+				<div class="mp-f" id="ms-spot" hidden>
+					<button type="button" id="ms-use-view" class="mp-cbtn"><i class="fa-solid fa-crosshairs" aria-hidden="true"></i> Use the current view</button>
+					<small id="ms-spot-note"></small>
+				</div>
+				<div class="mp-f"><span>Who can draw</span>
+					@sheetChips("draw_who", []sheetChoice{{"owners", "Owners"}, {"scribes", "Owners and scribes"}})
+					<small>Scribes can still drop pins either way.</small>
+				</div>
+			</section>
+			<section>
+				<h3>Danger zone</h3>
+				<button type="button" id="ms-delete" class="mp-danger"><i class="fa-solid fa-trash" aria-hidden="true"></i> Delete this map</button>
+			</section>
+		</div>
+		<div class="mp-sh-foot">
+			<button type="button" id="ms-cancel" class="mp-cbtn">Cancel</button>
+			<button type="button" id="ms-save" class="mp-cbtn mp-cbtn-primary"><i class="fa-solid fa-check" aria-hidden="true"></i> Save</button>
+		</div>
+	</div>
+}
+
+// frameLabel is the display name of a frame id, falling back to the id.
+func frameLabel(id string) string {
+	for _, f := range FrameStyles {
+		if f.ID == id {
+			return f.Label
+		}
+	}
+	return id
+}

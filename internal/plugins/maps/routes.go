@@ -25,6 +25,9 @@ func RegisterRoutes(e *echo.Echo, h *Handler, campaignSvc campaigns.CampaignServ
 	cg.PUT("/maps/:mid", h.UpdateMapAPI, campaigns.RequireRole(campaigns.RoleOwner))
 	cg.DELETE("/maps/:mid", h.DeleteMapAPI, campaigns.RequireRole(campaigns.RoleOwner))
 
+	// Campaign-wide map frame, set from the Customize page's Maps tab.
+	cg.PUT("/maps/frame-style", h.SetCampaignFrameAPI, campaigns.RequireRole(campaigns.RoleOwner))
+
 	// Canonical marker icon vocabulary: Chronicle is authoritative; the
 	// Foundry sync module reads this to align its icon translation table.
 	// No :mid — it's a campaign-static catalog.

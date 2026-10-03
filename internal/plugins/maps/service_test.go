@@ -24,6 +24,21 @@ type mockMapRepo struct {
 	updateMarkerFn func(ctx context.Context, mk *Marker) error
 	deleteMarkerFn func(ctx context.Context, id string) error
 	listMarkersFn  func(ctx context.Context, mapID string, role int) ([]Marker, error)
+
+	campaignFrame    string
+	getFrameErr      error
+	setCampaignFrame func(ctx context.Context, campaignID, frame string) error
+}
+
+func (m *mockMapRepo) GetCampaignFrame(context.Context, string) (string, error) {
+	return m.campaignFrame, m.getFrameErr
+}
+
+func (m *mockMapRepo) SetCampaignFrame(ctx context.Context, campaignID, frame string) error {
+	if m.setCampaignFrame != nil {
+		return m.setCampaignFrame(ctx, campaignID, frame)
+	}
+	return nil
 }
 
 func (m *mockMapRepo) CreateMap(ctx context.Context, mp *Map) error {

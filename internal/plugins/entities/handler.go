@@ -3389,7 +3389,9 @@ func (h *Handler) SetNPCSectionProvider(p NPCSectionProvider) { h.npcSection = p
 // addon is on) and NPCs/Monsters (contributed by the npcs plugin when its addon
 // is on). The page 404s when neither addon is enabled.
 //
-// Route: GET /campaigns/:id/characters  (Player+).
+// Route: GET /campaigns/:id/characters  (anyone who can view the campaign, so
+// a public campaign's cast is visible signed out; every list below is
+// visibility-filtered for that viewer).
 func (h *Handler) Characters(c echo.Context) error {
 	cc := campaigns.GetCampaignContext(c)
 	if cc == nil {
@@ -3407,8 +3409,15 @@ func (h *Handler) Characters(c echo.Context) error {
 
 	var view CastView
 	view.ShowPlayers = pcOn
+	view.IsMember = cc.MemberRole >= campaigns.RolePlayer
 	if pcOn {
 		view.Party = h.buildCastParty(ctx, cc, userID)
+		// Only a member with no party yet needs a pointer to where claiming happens.
+		if view.IsMember && len(view.Party) == 0 {
+			if types, err := h.service.GetEntityTypes(ctx, campaignID); err == nil {
+				view.ClaimTypeID = claimTypeID(types)
+			}
+		}
 	}
 	if npcsOn && h.npcSection != nil {
 		view.NPCSection = h.npcSection.NPCSection(ctx, cc, userID, middleware.GetCSRFToken(c), CastTagSlug)
@@ -3431,8 +3440,10 @@ func (h *Handler) buildCastParty(ctx context.Context, cc *campaigns.CampaignCont
 	campaignID := cc.Campaign.ID
 	role := cc.VisibilityRole()
 
+	// Player display names are for members only: a signed-out visitor (or a
+	// non-member viewing a public campaign) sees the characters, not who plays them.
 	ownerNames := map[string]string{}
-	if h.memberLister != nil {
+	if h.memberLister != nil && cc.MemberRole >= campaigns.RolePlayer {
 		if members, err := h.memberLister.ListMembers(ctx, campaignID); err == nil {
 			ownerNames = ownerDisplayNames(members)
 		}
@@ -3451,6 +3462,26 @@ func (h *Handler) buildCastParty(ctx context.Context, cc *campaigns.CampaignCont
 	}
 
 	return assembleCastParty(claimed, mine, ownerNames, userID)
+}
+
+// claimTypeID picks the entity type to send a party-less player to: the Player
+// Character sub-type when there is one, else the first claimable type, else 0
+// (no link). Pure so the choice is unit-testable.
+func claimTypeID(types []EntityType) int {
+	first := 0
+	for i := range types {
+		t := &types[i]
+		if !isClaimableType(t) {
+			continue
+		}
+		if t.Slug == SlugPlayerCharacter || (t.PresetCategory != nil && *t.PresetCategory == PresetCategoryPlayerCharacter) {
+			return t.ID
+		}
+		if first == 0 {
+			first = t.ID
+		}
+	}
+	return first
 }
 
 // assembleCastParty is the pure assembly step (no IO), split out so the

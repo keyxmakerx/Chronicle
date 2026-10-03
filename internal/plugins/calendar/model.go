@@ -290,12 +290,13 @@ func (c *Calendar) WeekLength() int {
 	return len(c.Weekdays)
 }
 
-// Recurrence type constants mirror the sessions plugin's vocabulary
-// (internal/plugins/sessions/model.go) so the two share semantics. Any other
-// or empty recurrence_type renders once at its stored date.
+// Recurrence type constants. The first five mirror the sessions plugin's
+// vocabulary (internal/plugins/sessions/model.go) so the two share semantics;
+// RecurrenceByRule is the calendar's own. Any other or empty recurrence_type
+// renders once at its stored date.
 //
 // This block is the accepted set, stated exactly once. CreateEventAPI /
-// UpdateEventAPI validate an inbound recurrence_type against these five
+// UpdateEventAPI validate an inbound recurrence_type against these
 // constants plus the empty string and reject anything else with a 400.
 // Adding a member here widens what the API accepts, so a new constant is a
 // wire-contract change, not a rename.
@@ -305,6 +306,7 @@ const (
 	RecurrenceMonthly  = "monthly"  // same day-of-month each month
 	RecurrenceCustom   = "custom"   // every N weeks (RecurrenceInterval)
 	RecurrenceYearly   = "yearly"   // same month + day-of-month each year
+	RecurrenceByRule   = "rule"     // every day the event's RecurrenceRule matches
 )
 
 // RecurrenceTypes is the accepted set as data, for the handlers' input
@@ -312,7 +314,7 @@ const (
 // so the handler stays the one validator for one set.
 var RecurrenceTypes = []string{
 	RecurrenceWeekly, RecurrenceBiWeekly, RecurrenceMonthly,
-	RecurrenceCustom, RecurrenceYearly,
+	RecurrenceCustom, RecurrenceYearly, RecurrenceByRule,
 }
 
 // IsSupportedRecurrenceType reports whether t is a recurrence_type the engine
@@ -417,6 +419,18 @@ func (c *Calendar) monthIsIntercalary(month int) bool {
 // across month boundaries via the reconciled absDayIndex, guarded against a
 // negative modulo for a year before the calendar's epoch.
 func (c *Calendar) WeekdayIndex(year, month, day int) int {
+	if c.WeekLength() <= 0 {
+		return 0
+	}
+	if c.MonthStartsNewWeek && !c.UsesRealTime() {
+		return c.weekdayAt(month, day, 0)
+	}
+	return c.weekdayAt(month, day, c.absDayIndex(year, month, day))
+}
+
+// weekdayAt is WeekdayIndex for a caller that already holds the day's
+// absDayIndex (a day-by-day walk), so both answer from the same rules.
+func (c *Calendar) weekdayAt(month, day, abs int) int {
 	wl := c.WeekLength()
 	if wl <= 0 {
 		return 0
@@ -427,7 +441,7 @@ func (c *Calendar) WeekdayIndex(year, month, day int) int {
 		}
 		return (day - 1) % wl
 	}
-	return ((c.absDayIndex(year, month, day) % wl) + wl) % wl
+	return ((abs % wl) + wl) % wl
 }
 
 // OccursOn reports whether the event lands on (year, month, day) for cal.
@@ -444,6 +458,11 @@ func (c *Calendar) WeekdayIndex(year, month, day int) int {
 //
 // Recurrence stops at the recurrence-end date (inclusive) and/or after
 // RecurrenceMaxOccurrences.
+//
+// RecurrenceByRule events answer for their base date only here: a rule can
+// depend on another event's dates, which this predicate has no way to see.
+// Their dates come from the occurrence expander (occurrences.go), which
+// every month read goes through.
 //
 // Multi-day events are not expanded here — OccursOn answers only "does the
 // rule put an instance here", not "is this day inside the stored window";
@@ -961,8 +980,12 @@ type Event struct {
 	RecurrenceEndDay         *int    `json:"recurrence_end_day,omitempty"`
 	RecurrenceMaxOccurrences *int    `json:"recurrence_max_occurrences,omitempty"`
 	RecurrenceDayOfWeek      *int    `json:"recurrence_day_of_week,omitempty"`
-	Visibility               string  `json:"visibility"`
-	VisibilityRules          *string `json:"visibility_rules,omitempty"`
+	// RecurrenceRule is the rule a RecurrenceByRule event repeats by; nil for
+	// every other event. Kept (but unused) if the type later changes, so
+	// switching back restores it.
+	RecurrenceRule  *RecurrenceRule `json:"recurrence_rule,omitempty"`
+	Visibility      string          `json:"visibility"`
+	VisibilityRules *string         `json:"visibility_rules,omitempty"`
 	// KindID references one of the campaign's calendar_event_kinds by id.
 	// Nil means no kind assigned.
 	KindID *int `json:"kind_id,omitempty"`
@@ -996,6 +1019,16 @@ type Event struct {
 	KindSlug  string `json:"kind_slug,omitempty"`
 	KindIcon  string `json:"kind_icon,omitempty"`
 	KindColor string `json:"kind_color,omitempty"`
+
+	// Occurrences are the dates a repeating event lands on within the range
+	// a month read asked for, after skips and moves, worked out on the
+	// server so a client never re-implements the rule math. Only month reads
+	// fill it; OccurrencesTruncated says a scan bound or the request's
+	// budget stopped it before the range was covered, so the list may be
+	// short or empty. omitzero, not omitempty: a truncated event still sends
+	// "occurrences": [] so a client can tell "unknown" from "not a month read".
+	Occurrences          []Occurrence `json:"occurrences,omitzero"`
+	OccurrencesTruncated bool         `json:"occurrences_truncated,omitempty"`
 }
 
 // HasTime returns true if this event has a specific start time (not all-day).
@@ -1272,8 +1305,11 @@ type CreateEventInput struct {
 	RecurrenceEndMonth       *int
 	RecurrenceEndDay         *int
 	RecurrenceMaxOccurrences *int
-	Visibility               string
-	VisibilityRules          *string
+	// RecurrenceRule is the raw rule JSON (nil or "null" for none), parsed
+	// and validated by the service so a bad rule gets a precise 400.
+	RecurrenceRule  json.RawMessage
+	Visibility      string
+	VisibilityRules *string
 	// KindID references calendar_event_kinds.id; nil = no kind.
 	KindID *int
 	// Announced: nil = inherit from the kind's default (see
@@ -1296,6 +1332,10 @@ type CreateEventInput struct {
 	// downgraded. Zero value (false) is "not authorized" — a caller that
 	// never sets it is never trusted by default.
 	CanAuthorDmOnly bool
+	// Author is the creating viewer, used only to resolve what a
+	// recurrence_rule may reference: a moon or anchor event this viewer
+	// cannot see answers as unknown. The zero Viewer sees nothing hidden.
+	Author permissions.Viewer
 }
 
 // UpdateEventInput is the validated input for updating an event.
@@ -1327,10 +1367,12 @@ type UpdateEventInput struct {
 	RecurrenceEndMonth       patch.Field[int]
 	RecurrenceEndDay         patch.Field[int]
 	RecurrenceMaxOccurrences patch.Field[int]
-	Visibility               patch.Field[string]
-	VisibilityRules          patch.Field[string]
-	KindID                   patch.Field[int]
-	Announced                patch.Field[string]
+	// RecurrenceRule carries raw rule JSON; see CreateEventInput.
+	RecurrenceRule  patch.Field[json.RawMessage]
+	Visibility      patch.Field[string]
+	VisibilityRules patch.Field[string]
+	KindID          patch.Field[int]
+	Announced       patch.Field[string]
 	// Tier — see CreateEventInput.Tier doc.
 	Tier    patch.Field[string]
 	Color   patch.Field[string]

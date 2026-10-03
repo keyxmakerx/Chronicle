@@ -230,6 +230,9 @@ type ExportCalendarWeekday struct {
 // restored moon keeps the look the GM actually picked rather than falling
 // back to the library default.
 type ExportCalendarMoon struct {
+	// Ref is the moon's id in the exporting campaign, so an event's repeat
+	// rule naming it can be pointed at the re-created moon on import.
+	Ref               int     `json:"ref,omitempty"`
 	Name              string  `json:"name"`
 	CycleDays         float64 `json:"cycle_days"`
 	PhaseOffset       float64 `json:"phase_offset"`
@@ -244,6 +247,8 @@ type ExportCalendarMoon struct {
 
 // ExportCalendarSeason is a season definition for export.
 type ExportCalendarSeason struct {
+	// Ref: as ExportCalendarMoon.Ref, for a repeat rule naming a season.
+	Ref           int     `json:"ref,omitempty"`
 	Name          string  `json:"name"`
 	StartMonth    int     `json:"start_month"`
 	StartDay      int     `json:"start_day"`
@@ -393,6 +398,25 @@ type ExportCalendarEvent struct {
 	// Payload is the raw JSON extras blob (e.g. a moon-night marker) — see
 	// calendar.Event.Payload / calendar.MoonNightPayload.
 	Payload *string `json:"payload,omitempty"`
+	// Ref is the event's id in the exporting campaign. RecurrenceRule is the
+	// event's repeat rule as stored, still naming moons, seasons and events
+	// by their exporting ids; the importer maps those through the Refs.
+	// Overrides are its "this one only" skips and moves. All additive.
+	Ref            string                        `json:"ref,omitempty"`
+	RecurrenceRule json.RawMessage               `json:"recurrence_rule,omitempty"`
+	Overrides      []ExportCalendarEventOverride `json:"overrides,omitempty"`
+}
+
+// ExportCalendarEventOverride is one skipped or moved occurrence of a
+// repeating event: the date its repeat put it on, and for a move, where to.
+type ExportCalendarEventOverride struct {
+	Year     int    `json:"year"`
+	Month    int    `json:"month"`
+	Day      int    `json:"day"`
+	Action   string `json:"action"`
+	NewYear  *int   `json:"new_year,omitempty"`
+	NewMonth *int   `json:"new_month,omitempty"`
+	NewDay   *int   `json:"new_day,omitempty"`
 }
 
 // --- Timelines ---

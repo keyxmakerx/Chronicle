@@ -11,14 +11,14 @@ import (
 )
 
 // ArmoryGalleryPage renders the full Armory gallery page with layout wrapper.
-templ ArmoryGalleryPage(cc *campaigns.CampaignContext, cards []ItemCard, total int, opts ItemListOptions, itemTypes []ItemTypeInfo, instances []InventoryInstance, selected *InventoryInstance, csrfToken string) {
+templ ArmoryGalleryPage(cc *campaigns.CampaignContext, cards []ItemCard, total int, opts ItemListOptions, itemTypes []ItemTypeInfo, instances []InventoryInstance, selected *InventoryInstance, tagOptions []ItemTagInfo, csrfToken string) {
 	@layouts.App(cc.Campaign.Name + " - Armory") {
-		@ArmoryGalleryContent(cc, cards, total, opts, itemTypes, instances, selected, csrfToken)
+		@ArmoryGalleryContent(cc, cards, total, opts, itemTypes, instances, selected, tagOptions, csrfToken)
 	}
 }
 
 // ArmoryGalleryContent renders the gallery content (HTMX partial target).
-templ ArmoryGalleryContent(cc *campaigns.CampaignContext, cards []ItemCard, total int, opts ItemListOptions, itemTypes []ItemTypeInfo, instances []InventoryInstance, selected *InventoryInstance, csrfToken string) {
+templ ArmoryGalleryContent(cc *campaigns.CampaignContext, cards []ItemCard, total int, opts ItemListOptions, itemTypes []ItemTypeInfo, instances []InventoryInstance, selected *InventoryInstance, tagOptions []ItemTagInfo, csrfToken string) {
 	<div id="armory-gallery">
 		<!-- Page header -->
 		<div class="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 mb-6">
@@ -58,8 +58,8 @@ templ ArmoryGalleryContent(cc *campaigns.CampaignContext, cards []ItemCard, tota
 					</select>
 				}
 
-				// Manage instances button (Owner only).
-				if cc.MemberRole >= campaigns.RoleOwner {
+				// Manage instances button (Scribe and Owner).
+				if cc.MemberRole >= campaigns.RoleScribe {
 					<button
 						type="button"
 						class="btn-secondary text-sm"
@@ -88,6 +88,24 @@ templ ArmoryGalleryContent(cc *campaigns.CampaignContext, cards []ItemCard, tota
 					/>
 					<i class="fa-solid fa-magnifying-glass absolute left-3 top-1/2 -translate-y-1/2 text-fg-muted text-xs"></i>
 				</div>
+
+				<!-- Tag filter. Options come from the viewer's visible items only. -->
+				if len(tagOptions) > 0 {
+					<select
+						name="tag"
+						aria-label="Filter by tag"
+						class="input py-2 text-sm"
+						hx-get={ fmt.Sprintf("/campaigns/%s/armory", cc.Campaign.ID) }
+						hx-target="#armory-gallery"
+						hx-swap="innerHTML"
+						hx-include="[name='q'],[name='type'],[name='sort'],[name='instance']"
+					>
+						<option value="">Tag: any</option>
+						for _, t := range tagOptions {
+							<option value={ t.Slug } selected?={ opts.Tag == t.Slug }>{ t.Name }</option>
+						}
+					</select>
+				}
 
 				<!-- Type filter -->
 				if len(itemTypes) > 1 {

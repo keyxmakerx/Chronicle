@@ -8,6 +8,7 @@ import (
 
 	"github.com/keyxmakerx/chronicle/internal/apperror"
 	"github.com/keyxmakerx/chronicle/internal/concurrency"
+	"github.com/keyxmakerx/chronicle/internal/permissions"
 )
 
 // validDrawingTypes enumerates allowed drawing types.
@@ -92,12 +93,17 @@ func validateTokenImagePath(path *string) error {
 // concurrent reset.
 type DrawingService interface {
 	// Drawing CRUD.
+	//
+	// CreateDrawing and UpdateDrawing enforce the map's "who can draw" setting
+	// from the caller's campaign role (input.CallerRole / the role argument), so
+	// the rule holds for the web UI, the sync API and imports alike. A role of 0
+	// is refused: an unresolved caller never draws.
 	CreateDrawing(ctx context.Context, input CreateDrawingInput) (*Drawing, error)
 	GetDrawing(ctx context.Context, id string) (*Drawing, error)
 	// mapID on the write methods is the authorization boundary from the URL
 	// path: the object must belong to that map, mirroring the read-path guard
 	// (audit-R2 Finding 2 — IDOR).
-	UpdateDrawing(ctx context.Context, id, mapID string, input UpdateDrawingInput) error
+	UpdateDrawing(ctx context.Context, id, mapID string, role int, input UpdateDrawingInput) error
 	DeleteDrawing(ctx context.Context, id, mapID string, expectedUpdatedAt *time.Time) error
 	ListDrawings(ctx context.Context, mapID string, role int, userID string) ([]Drawing, error)
 
@@ -127,6 +133,9 @@ type DrawingService interface {
 	// Wiring.
 	SetEventPublisher(pub MapEventPublisher)
 	SetMapLookup(fn func(ctx context.Context, mapID string) (string, error))
+	// SetDrawPolicyLookup wires the per-map "who can draw" value (DrawWhoOwners
+	// or DrawWhoScribes). Unwired, every map uses the default (scribes).
+	SetDrawPolicyLookup(fn func(ctx context.Context, mapID string) (string, error))
 }
 
 // MapEventPublisher emits domain events when map resources change.
@@ -158,6 +167,8 @@ type drawingService struct {
 	repo      DrawingRepository
 	events    MapEventPublisher
 	mapLookup func(ctx context.Context, mapID string) (string, error) // returns campaignID
+	// drawPolicy returns the map's "who can draw" value; nil means the default.
+	drawPolicy func(ctx context.Context, mapID string) (string, error)
 }
 
 // NewDrawingService creates a new drawing service.
@@ -175,6 +186,33 @@ func (s *drawingService) SetMapLookup(fn func(ctx context.Context, mapID string)
 	s.mapLookup = fn
 }
 
+// SetDrawPolicyLookup sets the function used to read a map's draw gate.
+func (s *drawingService) SetDrawPolicyLookup(fn func(ctx context.Context, mapID string) (string, error)) {
+	s.drawPolicy = fn
+}
+
+// requireDrawAccess is the server-side half of the map's "who can draw"
+// setting. Scribe is the floor either way (the routes already require it);
+// "owners" raises it to Owner. It fails closed on a role of 0 and on a policy
+// lookup error, so a broken lookup can never widen who may draw.
+func (s *drawingService) requireDrawAccess(ctx context.Context, mapID string, role int) error {
+	if role < permissions.RoleScribe {
+		return apperror.NewForbidden("you cannot draw on this map")
+	}
+	who := DrawWhoScribes
+	if s.drawPolicy != nil {
+		w, err := s.drawPolicy(ctx, mapID)
+		if err != nil {
+			return err
+		}
+		who = w
+	}
+	if who == DrawWhoOwners && role < permissions.RoleOwner {
+		return apperror.NewForbidden("only owners can draw on this map")
+	}
+	return nil
+}
+
 // campaignForMap resolves the campaign ID for event publishing.
 func (s *drawingService) campaignForMap(ctx context.Context, mapID string) string {
 	if s.mapLookup == nil {
@@ -188,6 +226,9 @@ func (s *drawingService) campaignForMap(ctx context.Context, mapID string) strin
 
 // CreateDrawing validates input and creates a new drawing.
 func (s *drawingService) CreateDrawing(ctx context.Context, input CreateDrawingInput) (*Drawing, error) {
+	if err := s.requireDrawAccess(ctx, input.MapID, input.CallerRole); err != nil {
+		return nil, err
+	}
 	dt := strings.TrimSpace(input.DrawingType)
 	if !validDrawingTypes[dt] {
 		return nil, apperror.NewBadRequest("invalid drawing type: " + dt)
@@ -242,7 +283,10 @@ func (s *drawingService) GetDrawing(ctx context.Context, id string) (*Drawing, e
 }
 
 // UpdateDrawing validates input and updates a drawing.
-func (s *drawingService) UpdateDrawing(ctx context.Context, id, mapID string, input UpdateDrawingInput) error {
+func (s *drawingService) UpdateDrawing(ctx context.Context, id, mapID string, role int, input UpdateDrawingInput) error {
+	if err := s.requireDrawAccess(ctx, mapID, role); err != nil {
+		return err
+	}
 	d, err := s.repo.GetDrawing(ctx, id)
 	if err != nil {
 		return err

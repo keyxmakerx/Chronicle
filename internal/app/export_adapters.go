@@ -12,6 +12,7 @@ import (
 	"log/slog"
 	"net/http"
 	"os"
+	"sort"
 
 	"github.com/keyxmakerx/chronicle/internal/apperror"
 	"github.com/keyxmakerx/chronicle/internal/patch"
@@ -379,7 +380,7 @@ func (a *calendarExportAdapter) exportOne(ctx context.Context, cal *calendar.Cal
 		// as hidden — see ExportCalendarMoon's doc comment.
 		hidden := m.HiddenFromPlayers
 		data.Moons = append(data.Moons, campaigns.ExportCalendarMoon{
-			Name: m.Name, CycleDays: m.CycleDays, PhaseOffset: m.PhaseOffset,
+			Ref: m.ID, Name: m.Name, CycleDays: m.CycleDays, PhaseOffset: m.PhaseOffset,
 			Color: m.Color, HiddenFromPlayers: &hidden,
 			BaseDesign: m.BaseDesign, Tint: m.Tint, PhaseSource: m.PhaseSource,
 			Size: m.Size, OrbitSpeed: m.OrbitSpeed,
@@ -387,7 +388,7 @@ func (a *calendarExportAdapter) exportOne(ctx context.Context, cal *calendar.Cal
 	}
 	for _, s := range cal.Seasons {
 		data.Seasons = append(data.Seasons, campaigns.ExportCalendarSeason{
-			Name: s.Name, StartMonth: s.StartMonth, StartDay: s.StartDay,
+			Ref: s.ID, Name: s.Name, StartMonth: s.StartMonth, StartDay: s.StartDay,
 			EndMonth: s.EndMonth, EndDay: s.EndDay, Description: s.Description,
 			Color: s.Color, WeatherEffect: s.WeatherEffect,
 		})
@@ -447,7 +448,26 @@ func (a *calendarExportAdapter) exportOne(ctx context.Context, cal *calendar.Cal
 		}
 	}
 
+	overrides, err := a.svc.ListOccurrenceOverrides(ctx, cal.ID, campaignID, systemViewer)
+	if err != nil {
+		return nil, err
+	}
+
 	for _, evt := range events {
+		// Only an event that repeats by its rule carries one out.
+		var rule json.RawMessage
+		if evt.RecurrenceRule != nil && derefStr(evt.RecurrenceType) == calendar.RecurrenceByRule {
+			if rule, err = json.Marshal(evt.RecurrenceRule); err != nil {
+				return nil, fmt.Errorf("export recurrence rule: %w", err)
+			}
+		}
+		var eventOverrides []campaigns.ExportCalendarEventOverride
+		for _, o := range overrides[evt.ID] {
+			eventOverrides = append(eventOverrides, campaigns.ExportCalendarEventOverride{
+				Year: o.Year, Month: o.Month, Day: o.Day, Action: o.Action,
+				NewYear: o.NewYear, NewMonth: o.NewMonth, NewDay: o.NewDay,
+			})
+		}
 		var entitySlug *string
 		if evt.EntityID != nil {
 			if s := entitySlugLookup(*evt.EntityID); s != "" {
@@ -474,6 +494,7 @@ func (a *calendarExportAdapter) exportOne(ctx context.Context, cal *calendar.Cal
 			Category:  category,
 			Announced: evt.Announced, Tier: evt.Tier, Color: evt.Color, Icon: evt.Icon,
 			AllDay: evt.AllDay, Payload: evt.Payload,
+			Ref: evt.ID, RecurrenceRule: rule, Overrides: eventOverrides,
 		})
 	}
 
@@ -1473,59 +1494,268 @@ func (a *calendarImportAdapter) importOne(ctx context.Context, campaignID string
 	// campaign restore (the export/import endpoints are Owner-only end to
 	// end), rebuilding events the campaign already had, including dm_only
 	// ones — the same trust level ExportCalendar itself was read under.
-	for _, evt := range data.Events {
-		var entityID *string
-		if evt.EntitySlug != nil {
-			if id, ok := idMap.EntitySlugToID[*evt.EntitySlug]; ok {
-				entityID = &id
+	//
+	// Repeat rules name moons, seasons and other events by their exporting
+	// ids, so those are mapped to the new ones. Events another event repeats
+	// relative to are created first (an anchor never itself repeats relative
+	// to another, so two passes always suffice), and skips and moves go on
+	// last, once every event they depend on exists.
+	refs := calendarRuleRefs{events: map[string]string{}}
+	if calendarDataHasRules(data) {
+		refs = a.ruleRefsFor(ctx, cal.ID, campaignID, data)
+	}
+	created := make([]string, len(data.Events))
+	for pass := 0; pass < 2; pass++ {
+		for i, evt := range data.Events {
+			if ruleHasAnchor(evt) != (pass == 1) {
+				continue
+			}
+			created[i] = a.importEvent(ctx, cal.ID, campaignID, evt, idMap, kindIDBySlug, refs, report)
+			if created[i] != "" && evt.Ref != "" {
+				refs.events[evt.Ref] = created[i]
 			}
 		}
-		var kindID *int
-		if evt.Category != nil {
-			if id, ok := kindIDBySlug[*evt.Category]; ok {
-				kindID = &id
-			}
-		}
-		_, err := a.svc.CreateEvent(ctx, cal.ID, campaignID, calendar.CreateEventInput{
-			Name:                     evt.Name,
-			Description:              evt.Description,
-			DescriptionHTML:          evt.DescriptionHTML,
-			EntityID:                 entityID,
-			Year:                     evt.Year,
-			Month:                    evt.Month,
-			Day:                      evt.Day,
-			StartHour:                evt.StartHour,
-			StartMinute:              evt.StartMinute,
-			EndYear:                  evt.EndYear,
-			EndMonth:                 evt.EndMonth,
-			EndDay:                   evt.EndDay,
-			EndHour:                  evt.EndHour,
-			EndMinute:                evt.EndMinute,
-			IsRecurring:              evt.IsRecurring,
-			RecurrenceType:           evt.RecurrenceType,
-			RecurrenceInterval:       evt.RecurrenceInterval,
-			RecurrenceEndYear:        evt.RecurrenceEndYear,
-			RecurrenceEndMonth:       evt.RecurrenceEndMonth,
-			RecurrenceEndDay:         evt.RecurrenceEndDay,
-			RecurrenceMaxOccurrences: evt.RecurrenceMaxOccurrences,
-			Visibility:               evt.Visibility,
-			VisibilityRules:          evt.VisibilityRules,
-			KindID:                   kindID,
-			Announced:                evt.Announced,
-			Tier:                     evt.Tier,
-			Color:                    evt.Color,
-			Icon:                     evt.Icon,
-			AllDay:                   evt.AllDay,
-			Payload:                  evt.Payload,
-			CanAuthorDmOnly:          true,
-		})
-		if err != nil {
-			slog.Warn("import: create calendar event failed", slog.String("name", evt.Name), slog.Any("error", err))
-			report.Fail(campaigns.SectionCalendar, "calendar event", evt.Name, apperror.SafeMessage(err))
+	}
+	for i, evt := range data.Events {
+		if created[i] != "" && len(evt.Overrides) > 0 {
+			a.replayOverrides(ctx, cal.ID, campaignID, created[i], evt, report)
 		}
 	}
 
 	return kindIDBySlug, nil
+}
+
+// replayOverrides re-applies one event's skips and moves. The export lists
+// them by date, which is not an order they can always be written in: moving
+// D1 onto D2 is refused while D2 still holds its own occurrence, so a
+// series where D2 was first moved away (or skipped) must have that written
+// first. Skips go first, then moves, and a move refused as a conflict is
+// retried after the others until a round makes no progress; only what is
+// still refused then is reported.
+func (a *calendarImportAdapter) replayOverrides(ctx context.Context, calendarID, campaignID, eventID string, evt campaigns.ExportCalendarEvent, report *campaigns.ImportReport) {
+	systemViewer := permissions.SystemViewer(3)
+	apply := func(o campaigns.ExportCalendarEventOverride) error {
+		input := calendar.OccurrenceOverrideInput{Action: o.Action}
+		if o.NewYear != nil && o.NewMonth != nil && o.NewDay != nil {
+			input.Year, input.Month, input.Day = *o.NewYear, *o.NewMonth, *o.NewDay
+		}
+		occ := calendar.DayDate{Year: o.Year, Month: o.Month, Day: o.Day}
+		_, err := a.svc.SetOccurrenceOverride(ctx, eventID, calendarID, campaignID, occ, input, systemViewer)
+		return err
+	}
+	fail := func(err error) {
+		slog.Warn("import: occurrence override failed", slog.String("event", evt.Name), slog.Any("error", err))
+		report.Fail(campaigns.SectionCalendar, "calendar event occurrence", evt.Name, apperror.SafeMessage(err))
+	}
+
+	var pending []campaigns.ExportCalendarEventOverride
+	for _, o := range evt.Overrides {
+		if o.Action == calendar.OverrideMove {
+			pending = append(pending, o)
+			continue
+		}
+		if err := apply(o); err != nil {
+			fail(err)
+		}
+	}
+	lastErr := map[int]error{}
+	for len(pending) > 0 {
+		var retry []campaigns.ExportCalendarEventOverride
+		for _, o := range pending {
+			err := apply(o)
+			switch {
+			case err == nil:
+			case apperror.SafeCode(err) == http.StatusConflict:
+				lastErr[len(retry)] = err
+				retry = append(retry, o)
+			default:
+				fail(err)
+			}
+		}
+		if len(retry) == len(pending) {
+			for i := range retry {
+				fail(lastErr[i])
+			}
+			return
+		}
+		pending = retry
+		lastErr = map[int]error{}
+	}
+}
+
+// calendarRuleRefs maps an export's ids (moons, seasons, events) to the ones
+// the import created, for repeat rules that name them.
+type calendarRuleRefs struct {
+	moons   map[int]int
+	seasons map[int]int
+	events  map[string]string
+}
+
+// calendarDataHasRules reports whether any event carries a repeat rule.
+func calendarDataHasRules(data *campaigns.ExportCalendarData) bool {
+	for _, e := range data.Events {
+		if len(e.RecurrenceRule) > 0 {
+			return true
+		}
+	}
+	return false
+}
+
+// ruleHasAnchor reports whether an exported event repeats relative to
+// another event. A rule on an event of any other type is never used, so it
+// never orders the import; an unreadable rule counts as anchor-free and
+// importEvent reports it.
+func ruleHasAnchor(evt campaigns.ExportCalendarEvent) bool {
+	if len(evt.RecurrenceRule) == 0 || derefStr(evt.RecurrenceType) != calendar.RecurrenceByRule {
+		return false
+	}
+	var r calendar.RecurrenceRule
+	if err := json.Unmarshal(evt.RecurrenceRule, &r); err != nil {
+		return false
+	}
+	for _, c := range r.Match {
+		if c.Kind == calendar.RuleAfterEvent || c.Kind == calendar.RuleRelativeToEvent {
+			return true
+		}
+	}
+	return false
+}
+
+// derefStr is *s, or "" for nil.
+func derefStr(s *string) string {
+	if s == nil {
+		return ""
+	}
+	return *s
+}
+
+// ruleRefsFor pairs the export's moons and seasons with the ones just
+// created, in order: SetMoons/SetSeasons insert in list order, so the new
+// rows sorted by id line up with the export's. A count mismatch (a failed
+// set) leaves that map empty and a rule naming one then fails its own
+// create, reported per event.
+func (a *calendarImportAdapter) ruleRefsFor(ctx context.Context, calendarID, campaignID string, data *campaigns.ExportCalendarData) calendarRuleRefs {
+	refs := calendarRuleRefs{moons: map[int]int{}, seasons: map[int]int{}, events: map[string]string{}}
+	cal, err := a.svc.GetCalendarForViewer(ctx, calendarID, campaignID, permissions.SystemViewer(3))
+	if err != nil {
+		slog.Warn("import: reading new calendar for rule references failed", slog.Any("error", err))
+		return refs
+	}
+	moons := append([]calendar.Moon(nil), cal.Moons...)
+	sort.Slice(moons, func(i, j int) bool { return moons[i].ID < moons[j].ID })
+	if len(moons) == len(data.Moons) {
+		for i, m := range data.Moons {
+			if m.Ref != 0 {
+				refs.moons[m.Ref] = moons[i].ID
+			}
+		}
+	}
+	seasons := append([]calendar.Season(nil), cal.Seasons...)
+	sort.Slice(seasons, func(i, j int) bool { return seasons[i].ID < seasons[j].ID })
+	if len(seasons) == len(data.Seasons) {
+		for i, s := range data.Seasons {
+			if s.Ref != 0 {
+				refs.seasons[s.Ref] = seasons[i].ID
+			}
+		}
+	}
+	return refs
+}
+
+// remapRule rewrites a stored rule's moon, season and event ids to the
+// import's. An id with no mapping is left as is, so the create refuses it
+// and the event is reported rather than repeating on the wrong thing.
+func remapRule(raw json.RawMessage, refs calendarRuleRefs) (json.RawMessage, error) {
+	if len(raw) == 0 {
+		return nil, nil
+	}
+	var r calendar.RecurrenceRule
+	if err := json.Unmarshal(raw, &r); err != nil {
+		return nil, err
+	}
+	for i := range r.Match {
+		c := &r.Match[i]
+		if id, ok := refs.moons[c.MoonID]; ok && c.MoonID != 0 {
+			c.MoonID = id
+		}
+		if id, ok := refs.seasons[c.SeasonID]; ok && c.SeasonID != 0 {
+			c.SeasonID = id
+		}
+		if id, ok := refs.events[c.EventID]; ok && c.EventID != "" {
+			c.EventID = id
+		}
+	}
+	return json.Marshal(r)
+}
+
+// importEvent creates one exported event and returns its new id, or "" when
+// it failed (reported).
+func (a *calendarImportAdapter) importEvent(ctx context.Context, calendarID, campaignID string, evt campaigns.ExportCalendarEvent, idMap *campaigns.IDMap, kindIDBySlug map[string]int, refs calendarRuleRefs, report *campaigns.ImportReport) string {
+	var entityID *string
+	if evt.EntitySlug != nil {
+		if id, ok := idMap.EntitySlugToID[*evt.EntitySlug]; ok {
+			entityID = &id
+		}
+	}
+	var kindID *int
+	if evt.Category != nil {
+		if id, ok := kindIDBySlug[*evt.Category]; ok {
+			kindID = &id
+		}
+	}
+	// A rule left on an event of another type (an older export) is not
+	// sent: the create would drop it anyway, and an unreadable one must not
+	// cost the event.
+	var rule json.RawMessage
+	var err error
+	if derefStr(evt.RecurrenceType) == calendar.RecurrenceByRule {
+		rule, err = remapRule(evt.RecurrenceRule, refs)
+	}
+	if err != nil {
+		report.Fail(campaigns.SectionCalendar, "calendar event", evt.Name, "unreadable repeat rule")
+		return ""
+	}
+	created, err := a.svc.CreateEvent(ctx, calendarID, campaignID, calendar.CreateEventInput{
+		Name:                     evt.Name,
+		Description:              evt.Description,
+		DescriptionHTML:          evt.DescriptionHTML,
+		EntityID:                 entityID,
+		Year:                     evt.Year,
+		Month:                    evt.Month,
+		Day:                      evt.Day,
+		StartHour:                evt.StartHour,
+		StartMinute:              evt.StartMinute,
+		EndYear:                  evt.EndYear,
+		EndMonth:                 evt.EndMonth,
+		EndDay:                   evt.EndDay,
+		EndHour:                  evt.EndHour,
+		EndMinute:                evt.EndMinute,
+		IsRecurring:              evt.IsRecurring,
+		RecurrenceType:           evt.RecurrenceType,
+		RecurrenceInterval:       evt.RecurrenceInterval,
+		RecurrenceEndYear:        evt.RecurrenceEndYear,
+		RecurrenceEndMonth:       evt.RecurrenceEndMonth,
+		RecurrenceEndDay:         evt.RecurrenceEndDay,
+		RecurrenceMaxOccurrences: evt.RecurrenceMaxOccurrences,
+		RecurrenceRule:           rule,
+		Visibility:               evt.Visibility,
+		VisibilityRules:          evt.VisibilityRules,
+		KindID:                   kindID,
+		Announced:                evt.Announced,
+		Tier:                     evt.Tier,
+		Color:                    evt.Color,
+		Icon:                     evt.Icon,
+		AllDay:                   evt.AllDay,
+		Payload:                  evt.Payload,
+		CanAuthorDmOnly:          true,
+		Author:                   permissions.SystemViewer(3),
+	})
+	if err != nil {
+		slog.Warn("import: create calendar event failed", slog.String("name", evt.Name), slog.Any("error", err))
+		report.Fail(campaigns.SectionCalendar, "calendar event", evt.Name, apperror.SafeMessage(err))
+		return ""
+	}
+	return created.ID
 }
 
 // eraStartMonthDay resolves an imported era's start month/day: a modern
@@ -1846,6 +2076,9 @@ func (a *mapImportAdapter) ImportMaps(ctx context.Context, campaignID, userID st
 				FillAlpha: d.FillAlpha, TextContent: d.TextContent,
 				FontSize: d.FontSize, Rotation: d.Rotation,
 				Visibility: d.Visibility, CreatedBy: userID,
+				// An import runs as the campaign's owner and writes into a map it
+				// just created, so the draw gate (which defaults to scribes) is met.
+				CallerRole: permissions.RoleOwner,
 			})
 			if err != nil {
 				slog.Warn("import: create drawing failed", slog.Any("error", err))

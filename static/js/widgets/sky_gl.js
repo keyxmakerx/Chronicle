@@ -538,7 +538,7 @@
     U.uFxLight = [1, 1, 1, wx.fog];
     var dark = document.documentElement.classList.contains('dark');
     U.uInk = PAL.hexLin(dark ? '#e9ebf2' : '#2b3040'); U.uPaper = PAL.hexLin(dark ? '#2a2d34' : '#fdfcf9');
-    U.uGrade = [.032, 0, st.almanac ? 1 : 0, 0];
+    U.uGrade = [.012, 0, st.almanac ? 1 : 0, 0];
     /* The painted palette, and moonlight on the land at night. */
     var ml = 0;
     st.moons.forEach(function(Mn){ if (Mn.up && Mn.m.alt > 0) ml = Math.max(ml, Mn.m.lit * (Mn.mo.size || 1) * smooth01(0, 12, Mn.m.alt / D2R)); });

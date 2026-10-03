@@ -913,7 +913,7 @@ var navAppCatalog = []navAppDef{
 	{slug: "calendar", label: "Calendar", icon: "fa-calendar-days", path: "/apps/calendar", addons: []string{calendar.PluginSlug}, access: campaigns.NavAccessMemberOrAdmin, pinned: true},
 	{slug: "sessions", label: "Sessions", icon: "fa-dice-d20", path: "/sessions", addons: []string{calendar.PluginSlug}, access: campaigns.NavAccessAnyone},
 	{slug: "maps", label: "Maps", icon: "fa-map", path: "/maps", addons: []string{"maps"}, access: campaigns.NavAccessAnyone},
-	{slug: "characters", label: "Characters", icon: "fa-masks-theater", path: "/characters", caption: "Party & NPCs", addons: []string{entities.AddonPlayerCharacterClaiming, "npcs"}, access: campaigns.NavAccessMember},
+	{slug: "characters", label: "Characters", icon: "fa-masks-theater", path: "/characters", caption: "Party & NPCs", addons: []string{entities.AddonPlayerCharacterClaiming, "npcs"}, access: campaigns.NavAccessAnyone},
 	{slug: "armory", label: "Armory", icon: "fa-shield-halved", path: "/armory", addons: []string{"armory"}, access: campaigns.NavAccessAnyone},
 	{slug: "timeline", label: "Timeline", icon: "fa-timeline", path: "/timelines", addons: []string{"timeline"}, access: campaigns.NavAccessAnyone},
 	{slug: "rulebook", label: "Rulebook", icon: "fa-book", system: true, access: campaigns.NavAccessMemberOrAdmin},
@@ -1638,6 +1638,30 @@ type npcVisibilityTogglerAdapter struct {
 // npcs reveal toggle can't reach across campaigns (SEC-IDOR-1).
 func (a *npcVisibilityTogglerAdapter) TogglePrivate(ctx context.Context, entityID, campaignID string) (bool, error) {
 	return a.svc.TogglePrivateInCampaign(ctx, entityID, campaignID)
+}
+
+// npcTagListerAdapter wraps tags.TagService to implement npcs.TagLister so NPC
+// cards carry tags and the Characters page can offer a tag filter. dm_only tags
+// are included only when the caller asks (the npcs handler decides by role).
+type npcTagListerAdapter struct {
+	svc tags.TagService
+}
+
+// ListTagsForEntities batch-fetches tags for the given entities.
+func (a *npcTagListerAdapter) ListTagsForEntities(ctx context.Context, entityIDs []string, includeDmOnly bool) (map[string][]npcs.TagInfo, error) {
+	tagsMap, err := a.svc.GetEntityTagsBatch(ctx, entityIDs, includeDmOnly)
+	if err != nil {
+		return nil, err
+	}
+	result := make(map[string][]npcs.TagInfo, len(tagsMap))
+	for eid, tagList := range tagsMap {
+		infos := make([]npcs.TagInfo, len(tagList))
+		for i, t := range tagList {
+			infos[i] = npcs.TagInfo{ID: t.ID, Name: t.Name, Slug: t.Slug, Color: t.Color}
+		}
+		result[eid] = infos
+	}
+	return result, nil
 }
 
 // auditEntityViewGuardAdapter wraps entities.EntityService to implement the
@@ -2868,13 +2892,15 @@ func (a *App) RegisterRoutes() {
 	// page preview unfolded in place), calendar_editor.js self-gates on that
 	// mount's data-can-edit="true" and opens calendar_event_drawer.js's full
 	// event editor and calendar_weather_sheet.js's Generate sheet (both
-	// loaded first so they exist when the editor binds), and
+	// loaded first so they exist when the editor binds; the drawer's
+	// repeat-by-rule logic is calendar_rule.js, loaded before it), and
 	// calendar_almanac.js waits for a Calendars page preview. rulebook.js
 	// mounts on the Rules page's data-widget="rulebook" when a system ships a
 	// book. All are no-ops on every other page, same as every entry here.
 	pluginBodyScripts := []string{
 		"/static/plugins/" + entities.PluginSlug + "/js/characters.js",
 		"/static/js/widgets/calendar_view.js",
+		"/static/js/widgets/calendar_rule.js",
 		"/static/js/widgets/calendar_event_drawer.js",
 		"/static/js/widgets/calendar_weather_sheet.js",
 		"/static/js/widgets/calendar_editor.js",
@@ -2960,6 +2986,9 @@ func (a *App) RegisterRoutes() {
 	entityService.SetMediaVerifier(&entityMediaVerifierAdapter{svc: mediaService})
 	if a.PluginHealth.IsHealthy("maps") {
 		maps.RegisterRoutes(e, mapsHandler, campaignService, authService, addonService)
+		// The campaign-wide map frame is a "Maps" tab on the Customize page;
+		// the campaigns plugin only hosts the tab, maps owns what is in it.
+		campaignHandler.RegisterCustomizeTab(mapsHandler.CustomizeTabFactory())
 		drawingHandler := maps.NewDrawingHandler(mapsService, drawingService)
 		maps.RegisterDrawingRoutes(e, drawingHandler, campaignService, authService, addonService)
 	} else {
@@ -3144,6 +3173,7 @@ func (a *App) RegisterRoutes() {
 	// second, hand-rolled predicate.
 	npcRepo := npcs.NewNPCRepository(a.DB)
 	npcSvc := npcs.NewNPCService(npcRepo, &npcEntityTypeFinderAdapter{svc: entityService}, &entityVisibilityFilterAdapter{svc: entityService})
+	npcSvc.SetTagLister(&npcTagListerAdapter{svc: tagService})
 	npcHandler := npcs.NewHandler(npcSvc)
 	npcHandler.SetVisibilityToggler(&npcVisibilityTogglerAdapter{svc: entityService})
 	npcs.RegisterRoutes(e, npcHandler, campaignService, authService, addonService)
@@ -4152,6 +4182,16 @@ func (a *App) RegisterRoutes() {
 			return "", err
 		}
 		return m.CampaignID, nil
+	})
+	// The per-map "who can draw" gate is read from the map's display settings.
+	// Wired here (not in NewDrawingService) so the drawing service never needs
+	// the map repository itself.
+	drawingService.SetDrawPolicyLookup(func(ctx context.Context, mapID string) (string, error) {
+		m, err := mapsService.GetMap(ctx, mapID)
+		if err != nil {
+			return "", err
+		}
+		return m.DrawWho(), nil
 	})
 	mapsService.SetEventPublisher(&mapEventPublisherAdapter{bus: wsEventBus})
 

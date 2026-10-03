@@ -13,6 +13,7 @@ import (
 	"testing"
 
 	"github.com/keyxmakerx/chronicle/internal/patch"
+	"github.com/keyxmakerx/chronicle/internal/permissions"
 )
 
 // mockDrawingRepo is a configurable DrawingRepository for these regression
@@ -265,7 +266,7 @@ func runDrawingUpdate(t *testing.T, input UpdateDrawingInput) *Drawing {
 		getDrawingFn:    func(_ context.Context, _ string) (*Drawing, error) { return storedDrawing(), nil },
 		updateDrawingFn: func(_ context.Context, d *Drawing) error { written = d; return nil },
 	}
-	if err := NewDrawingService(repo).UpdateDrawing(context.Background(), "d-1", "map-1", input); err != nil {
+	if err := NewDrawingService(repo).UpdateDrawing(context.Background(), "d-1", "map-1", permissions.RoleOwner, input); err != nil {
 		t.Fatalf("UpdateDrawing: %v", err)
 	}
 	if written == nil {

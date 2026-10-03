@@ -1,16 +1,21 @@
 // npc_section.templ renders the NPCs/Monsters section embedded in the entities
 // "Characters" page (the standalone gallery folded into it). A featured portrait
-// row (entities bearing the feature tag) sits above the full revealed list; both
-// reuse NPCCardComponent, so the DM reveal/hide toggle comes along unchanged.
+// row (entities bearing the feature tag) sits above the searchable, filterable,
+// paged list; both reuse NPCCardComponent, so the DM reveal/hide chip and the
+// quick-look button come along unchanged.
 package npcs
 
-import "github.com/keyxmakerx/chronicle/internal/plugins/campaigns"
+import (
+	"fmt"
+
+	"github.com/keyxmakerx/chronicle/internal/plugins/campaigns"
+)
 
 // NPCSectionComponent is the section body the npcs plugin contributes to the
 // Characters page via the injected provider. featured = feature-tagged NPCs
-// (portrait row); all = the full role-aware list (GM sees hidden ones too, with
-// a reveal toggle).
-templ NPCSectionComponent(cc *campaigns.CampaignContext, featured []NPCCard, all []NPCCard, csrfToken string) {
+// (portrait row); list = the first page of the full role-aware list (GM sees
+// hidden ones too, with a reveal chip) and its filter state.
+templ NPCSectionComponent(cc *campaigns.CampaignContext, featured []NPCCard, list NPCListView, csrfToken string) {
 	if len(featured) > 0 {
 		<div class="mb-5">
 			<h3 class="text-xs font-medium text-fg-muted mb-2">
@@ -23,7 +28,7 @@ templ NPCSectionComponent(cc *campaigns.CampaignContext, featured []NPCCard, all
 			</div>
 		</div>
 	}
-	if len(all) == 0 {
+	if list.Pager.Total == 0 && !list.Filtered() {
 		<div class="rounded-lg border border-edge bg-surface p-6 text-center">
 			<div class="inline-flex items-center justify-center w-10 h-10 rounded-full bg-accent/10 text-accent mb-3">
 				<i class="fa-solid fa-masks-theater"></i>
@@ -36,10 +41,105 @@ templ NPCSectionComponent(cc *campaigns.CampaignContext, featured []NPCCard, all
 			}
 		</div>
 	} else {
-		<div class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-4">
-			for i := range all {
-				@NPCCardComponent(cc, &all[i], csrfToken)
+		@npcControls(cc, list)
+		<div id="npc-results">
+			@NPCResults(cc, list, csrfToken)
+		</div>
+	}
+}
+
+// npcControls is the search box and tag filter. They live outside #npc-results
+// so a swap never replaces the input being typed in; each includes the other by
+// id so the two filters combine.
+templ npcControls(cc *campaigns.CampaignContext, list NPCListView) {
+	<div class="flex flex-wrap items-center gap-2 mb-4">
+		<div class="relative">
+			<input
+				id="npc-q"
+				type="search"
+				name="q"
+				value={ list.Search }
+				placeholder="Search NPCs…"
+				aria-label="Search NPCs"
+				autocomplete="off"
+				class="input pl-9 pr-3 py-2 w-56"
+				hx-get={ fmt.Sprintf("/campaigns/%s/npcs/section", cc.Campaign.ID) }
+				hx-trigger="input changed delay:300ms, search"
+				hx-include="#npc-tag"
+				hx-target="#npc-results"
+				hx-swap="innerHTML"
+			/>
+			<i class="fa-solid fa-magnifying-glass absolute left-3 top-1/2 -translate-y-1/2 text-fg-muted text-xs" aria-hidden="true"></i>
+		</div>
+		if len(list.Tags) > 0 {
+			<select
+				id="npc-tag"
+				name="tag"
+				aria-label="Filter NPCs by tag"
+				class="input py-2 text-sm"
+				hx-get={ fmt.Sprintf("/campaigns/%s/npcs/section", cc.Campaign.ID) }
+				hx-include="#npc-q"
+				hx-target="#npc-results"
+				hx-swap="innerHTML"
+			>
+				<option value="">Tag: any</option>
+				for _, t := range list.Tags {
+					<option value={ t.Slug } selected?={ t.Slug == list.Tag }>{ t.Name }</option>
+				}
+			</select>
+		}
+	</div>
+}
+
+// NPCResults is the list part the filter controls swap: the card grid plus the
+// "Showing X of N" footer.
+templ NPCResults(cc *campaigns.CampaignContext, list NPCListView, csrfToken string) {
+	if len(list.Cards) == 0 {
+		<div class="rounded-lg border border-edge bg-surface p-6 text-center text-sm text-fg-secondary">
+			No NPCs match your search.
+		</div>
+	} else {
+		<div id="npc-grid" class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-4">
+			for i := range list.Cards {
+				@NPCCardComponent(cc, &list.Cards[i], csrfToken)
 			}
 		</div>
 	}
+	@npcFooter(cc, list, false)
+}
+
+// NPCMoreFragment answers "Show more": the next page's cards (htmx appends them
+// to #npc-grid) and a fresh footer swapped in out of band, so the count and
+// button always describe what is now on screen.
+templ NPCMoreFragment(cc *campaigns.CampaignContext, list NPCListView, csrfToken string) {
+	for i := range list.Cards {
+		@NPCCardComponent(cc, &list.Cards[i], csrfToken)
+	}
+	@npcFooter(cc, list, true)
+}
+
+// npcFooter shows "Showing X of N" and the load-more button while there is
+// more. It is always rendered (even empty) so the out-of-band swap has a target.
+templ npcFooter(cc *campaigns.CampaignContext, list NPCListView, oob bool) {
+	<div
+		id="npc-more"
+		class="mt-4 flex flex-col items-center gap-2"
+		if oob {
+			hx-swap-oob="true"
+		}
+	>
+		if list.Pager.HasMore {
+			<p class="text-xs text-fg-muted">Showing { fmt.Sprint(list.Pager.Shown) } of { fmt.Sprint(list.Pager.Total) }</p>
+			<button
+				type="button"
+				class="btn-secondary text-sm"
+				hx-get={ sectionURL(cc.Campaign.ID, list.Search, list.Tag, list.Pager.NextPage) }
+				hx-target="#npc-grid"
+				hx-swap="beforeend"
+				hx-disabled-elt="this"
+			>
+				Show { fmt.Sprint(list.Pager.NextCount) } more
+			</button>
+		}
+	</div>
 }

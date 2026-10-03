@@ -662,6 +662,12 @@ type CastMember struct {
 type CastView struct {
 	Party       []CastMember
 	ShowPlayers bool
+	// IsMember is false for signed-out and non-member viewers of a public
+	// campaign; member-only links (My characters, claim hint) hide for them.
+	IsMember bool
+	// ClaimTypeID is the claimable type whose list the empty-party hint links
+	// to; 0 means no link.
+	ClaimTypeID int
 	NPCSection  templ.Component
 }
 

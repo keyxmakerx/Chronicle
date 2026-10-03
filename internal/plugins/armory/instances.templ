@@ -8,7 +8,7 @@ import (
 )
 
 // InstanceManagePanel renders the instance management panel (HTMX fragment).
-// Shown when an Owner clicks the gear icon on the armory page.
+// Shown when a Scribe or Owner clicks the gear icon on the armory page.
 templ InstanceManagePanel(cc *campaigns.CampaignContext, instances []InventoryInstance, csrfToken string) {
 	<div class="card p-5 mb-6">
 		<div class="flex items-center justify-between mb-4">
@@ -28,8 +28,8 @@ templ InstanceManagePanel(cc *campaigns.CampaignContext, instances []InventoryIn
 		if len(instances) > 0 {
 			<div class="space-y-2 mb-4">
 				for _, inst := range instances {
-					<div class="flex items-center justify-between p-3 rounded-lg bg-surface-alt">
-						<div class="flex items-center gap-3">
+					<div class="flex items-center justify-between gap-2 p-3 rounded-lg bg-surface-alt" data-inst-row>
+						<div class="flex items-center gap-3" data-inst-label>
 							<span
 								class="w-8 h-8 rounded-lg flex items-center justify-center"
 								style={ fmt.Sprintf("background-color: %s20; color: %s", inst.Color, inst.Color) }
@@ -37,11 +37,19 @@ templ InstanceManagePanel(cc *campaigns.CampaignContext, instances []InventoryIn
 								<i class={ "fa-solid " + inst.Icon + " text-sm" }></i>
 							</span>
 							<div>
-								<span class="text-sm font-medium text-fg">{ inst.Name }</span>
+								<span class="text-sm font-medium text-fg" data-inst-name>{ inst.Name }</span>
 								<span class="text-xs text-fg-muted ml-2">{ fmt.Sprintf("%d items", inst.ItemCount) }</span>
 							</div>
 						</div>
 						<div class="flex items-center gap-1">
+							<button
+								type="button"
+								class="text-xs text-fg-secondary hover:text-fg px-2 py-1"
+								title="Rename"
+								onclick={ renameInstanceOnClick(cc.Campaign.ID, inst.ID, inst.Name, instanceDescription(inst), inst.Icon, inst.Color) }
+							>
+								<i class="fa-solid fa-pen mr-1"></i>Rename
+							</button>
 							<form
 								hx-delete={ fmt.Sprintf("/campaigns/%s/armory/instances/%d", cc.Campaign.ID, inst.ID) }
 								hx-confirm={ fmt.Sprintf("Delete '%s'? Items will remain but won't be in this collection.", inst.Name) }

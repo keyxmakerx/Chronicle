@@ -104,6 +104,14 @@ func RegisterRoutes(e *echo.Echo, h *Handler, campaignSvc campaigns.CampaignServ
 	cg.POST("/calendars/:calid/events", h.CreateEventAPI, campaigns.RequireRole(campaigns.RoleScribe))
 	cg.PUT("/calendars/:calid/events/:eid", h.UpdateEventAPI, campaigns.RequireRole(campaigns.RoleScribe))
 	cg.DELETE("/calendars/:calid/events/:eid", h.DeleteEventAPI, campaigns.RequireRole(campaigns.RoleOwner))
+	// "This one only": skip or move one occurrence of a repeating event, or
+	// undo that. Gated like editing the event (Scribe+; the service also
+	// requires the event be visible to the caller).
+	cg.PUT("/calendars/:calid/events/:eid/occurrences/:y/:m/:d", h.SetOccurrenceAPI, campaigns.RequireRole(campaigns.RoleScribe))
+	cg.DELETE("/calendars/:calid/events/:eid/occurrences/:y/:m/:d", h.DeleteOccurrenceAPI, campaigns.RequireRole(campaigns.RoleScribe))
+	// The rule editor's "next few dates": gated like a read, writes nothing;
+	// the service refuses a rule naming anything the caller cannot see.
+	cg.POST("/calendars/:calid/recurrence/preview", h.PreviewRecurrenceAPI, campaigns.RequireRole(campaigns.RolePlayer))
 	// The dm_only toggle is gated on CanAuthorDmOnly, not a bare role
 	// minimum: the operator has decided a granted co-DM (Scribe role, plus
 	// the dm_only grant) may use this the same as the Owner, so RequireRole

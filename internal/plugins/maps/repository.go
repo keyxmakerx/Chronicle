@@ -3,6 +3,7 @@ package maps
 import (
 	"context"
 	"database/sql"
+	"encoding/json"
 	"fmt"
 	"strings"
 
@@ -18,6 +19,11 @@ type MapRepository interface {
 	DeleteMap(ctx context.Context, id string) error
 	ListMaps(ctx context.Context, campaignID string) ([]Map, error)
 	SearchMaps(ctx context.Context, campaignID, query string) ([]Map, error)
+
+	// Campaign-wide map look. GetCampaignFrame returns "" when the campaign has
+	// never chosen, so the caller applies the default in one place.
+	GetCampaignFrame(ctx context.Context, campaignID string) (string, error)
+	SetCampaignFrame(ctx context.Context, campaignID, frame string) error
 
 	// Marker CRUD.
 	CreateMarker(ctx context.Context, mk *Marker) error
@@ -39,16 +45,16 @@ func NewMapRepository(db *sql.DB) MapRepository {
 
 // mapCols is the column list for map queries.
 const mapCols = `id, campaign_id, name, description, image_id,
-       image_width, image_height, background_color, sort_order, created_at, updated_at`
+       image_width, image_height, background_color, display_settings, sort_order, created_at, updated_at`
 
-// scanMap reads a row into a Map struct. background_color is nullable
-// (most maps follow the campaign's theme); sql.NullString unwraps it
-// into the *string field on Map.
+// scanMap reads a row into a Map struct. background_color and
+// display_settings are nullable (most maps follow the campaign's theme and
+// defaults); sql.NullString unwraps them.
 func scanMap(scanner interface{ Scan(...any) error }) (*Map, error) {
 	m := &Map{}
-	var bg sql.NullString
+	var bg, display sql.NullString
 	err := scanner.Scan(&m.ID, &m.CampaignID, &m.Name, &m.Description, &m.ImageID,
-		&m.ImageWidth, &m.ImageHeight, &bg, &m.SortOrder, &m.CreatedAt, &m.UpdatedAt)
+		&m.ImageWidth, &m.ImageHeight, &bg, &display, &m.SortOrder, &m.CreatedAt, &m.UpdatedAt)
 	if err == sql.ErrNoRows {
 		return nil, nil
 	}
@@ -56,7 +62,23 @@ func scanMap(scanner interface{ Scan(...any) error }) (*Map, error) {
 		s := bg.String
 		m.BackgroundColor = &s
 	}
+	if display.Valid {
+		m.Display = ParseDisplaySettings(&display.String)
+	}
 	return m, err
+}
+
+// displayColumn is the value written to maps.display_settings: NULL when the
+// map has no settings, else the normalised document.
+func displayColumn(d *DisplaySettings) (any, error) {
+	if d.IsEmpty() {
+		return nil, nil
+	}
+	b, err := json.Marshal(d)
+	if err != nil {
+		return nil, err
+	}
+	return string(b), nil
 }
 
 // CreateMap inserts a new map.
@@ -79,13 +101,38 @@ func (r *mapRepo) GetMap(ctx context.Context, id string) (*Map, error) {
 
 // UpdateMap modifies an existing map.
 func (r *mapRepo) UpdateMap(ctx context.Context, m *Map) error {
-	_, err := r.db.ExecContext(ctx,
+	display, err := displayColumn(m.Display)
+	if err != nil {
+		return fmt.Errorf("encode display settings: %w", err)
+	}
+	_, err = r.db.ExecContext(ctx,
 		`UPDATE maps SET name = ?, description = ?, image_id = ?,
-		        image_width = ?, image_height = ?, background_color = ?
+		        image_width = ?, image_height = ?, background_color = ?,
+		        display_settings = ?
 		 WHERE id = ?`,
 		m.Name, m.Description, m.ImageID,
-		m.ImageWidth, m.ImageHeight, m.BackgroundColor, m.ID,
+		m.ImageWidth, m.ImageHeight, m.BackgroundColor, display, m.ID,
 	)
+	return err
+}
+
+// GetCampaignFrame returns the campaign's chosen frame, or "" when the
+// campaign has no row (it has never chosen).
+func (r *mapRepo) GetCampaignFrame(ctx context.Context, campaignID string) (string, error) {
+	var frame string
+	err := r.db.QueryRowContext(ctx,
+		`SELECT frame_style FROM map_campaign_settings WHERE campaign_id = ?`, campaignID).Scan(&frame)
+	if err == sql.ErrNoRows {
+		return "", nil
+	}
+	return frame, err
+}
+
+// SetCampaignFrame upserts the campaign's frame.
+func (r *mapRepo) SetCampaignFrame(ctx context.Context, campaignID, frame string) error {
+	_, err := r.db.ExecContext(ctx,
+		`INSERT INTO map_campaign_settings (campaign_id, frame_style) VALUES (?, ?)
+		 ON DUPLICATE KEY UPDATE frame_style = VALUES(frame_style)`, campaignID, frame)
 	return err
 }
 

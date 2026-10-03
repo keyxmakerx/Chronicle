@@ -6,6 +6,8 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"sort"
+	"strings"
 
 	"github.com/keyxmakerx/chronicle/internal/apperror"
 	"github.com/keyxmakerx/chronicle/internal/permissions"
@@ -32,7 +34,8 @@ type EntityVisibilityFilter interface {
 // TagLister fetches tags for a set of entity IDs in batch.
 // Implemented by tags.TagService — injected to decorate NPC cards with tags.
 type TagLister interface {
-	ListTagsForEntities(ctx context.Context, entityIDs []string) (map[string][]TagInfo, error)
+	// includeDmOnly is false for player-facing lists so GM-only tags never decorate or filter them.
+	ListTagsForEntities(ctx context.Context, entityIDs []string, includeDmOnly bool) (map[string][]TagInfo, error)
 }
 
 // TagInfo holds tag display data returned by TagLister.
@@ -50,6 +53,15 @@ type NPCService interface {
 
 	// CountNPCs returns the number of visible NPCs for badge/nav display.
 	CountNPCs(ctx context.Context, campaignID string, role int, userID string) (int, error)
+
+	// ListTags returns the distinct tags on the NPCs this viewer can see, for
+	// the list's tag filter. Derived from the visibility-narrowed set so a tag
+	// that only sits on hidden NPCs is never offered.
+	ListTags(ctx context.Context, campaignID string, role int, userID string, includeDmOnly bool) ([]NPCTagInfo, error)
+
+	// SetTagLister injects the batch tag fetcher; without it cards carry no tags
+	// and the tag filter is empty.
+	SetTagLister(tl TagLister)
 }
 
 // npcService implements NPCService.
@@ -109,7 +121,7 @@ func (s *npcService) ListNPCs(ctx context.Context, campaignID string, role int, 
 		for i := range cards {
 			ids[i] = cards[i].ID
 		}
-		tagMap, err := s.tagLister.ListTagsForEntities(ctx, ids)
+		tagMap, err := s.tagLister.ListTagsForEntities(ctx, ids, opts.IncludeDmOnlyTags)
 		if err == nil {
 			for i := range cards {
 				if infos, ok := tagMap[cards[i].ID]; ok {
@@ -141,6 +153,38 @@ func (s *npcService) CountNPCs(ctx context.Context, campaignID string, role int,
 		return 0, err
 	}
 	return len(visibleIDs), nil
+}
+
+// ListTags aggregates the tags carried by the viewer's visible NPCs, sorted by
+// name. With no tag lister wired it returns nothing (the filter just hides).
+func (s *npcService) ListTags(ctx context.Context, campaignID string, role int, userID string, includeDmOnly bool) ([]NPCTagInfo, error) {
+	if s.tagLister == nil {
+		return nil, nil
+	}
+	typeIDs, err := s.characterTypeIDs(ctx, campaignID)
+	if err != nil || len(typeIDs) == 0 {
+		return nil, err
+	}
+	ids, err := s.visibleNPCIDs(ctx, campaignID, typeIDs, role, userID, NPCListOptions{})
+	if err != nil || len(ids) == 0 {
+		return nil, err
+	}
+	tagMap, err := s.tagLister.ListTagsForEntities(ctx, ids, includeDmOnly)
+	if err != nil {
+		return nil, fmt.Errorf("listing NPC tags: %w", err)
+	}
+	seen := map[int]bool{}
+	var out []NPCTagInfo
+	for _, infos := range tagMap {
+		for _, t := range infos {
+			if !seen[t.ID] {
+				seen[t.ID] = true
+				out = append(out, NPCTagInfo(t))
+			}
+		}
+	}
+	sort.Slice(out, func(i, j int) bool { return strings.ToLower(out[i].Name) < strings.ToLower(out[j].Name) })
+	return out, nil
 }
 
 // characterTypeIDs resolves the campaign's NPC/monster entity types. A 404

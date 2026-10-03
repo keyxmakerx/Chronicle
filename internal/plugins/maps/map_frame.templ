@@ -1,0 +1,173 @@
+// map_frame.templ renders the frame ornaments (shared by the map page, the maps
+// list cards and the Customize gallery) and the "Maps" section of the Customize
+// page, where an owner picks the campaign-wide frame.
+
+package maps
+
+import (
+	"context"
+	"fmt"
+	"io"
+	"strings"
+
+
+	"github.com/keyxmakerx/chronicle/internal/plugins/campaigns"
+	"github.com/keyxmakerx/chronicle/internal/templates/layouts"
+)
+
+// mapFrameStyles links the shared frame stylesheet.
+templ mapFrameStyles() {
+	<link rel="stylesheet" href={ layouts.AssetURL("/static/css/map_frames.css") }/>
+}
+
+// mapFrameOrnaments renders every frame's decoration; the stylesheet shows only
+// the active frame's block (data-frame on the parent), so a frame can be
+// switched live without rebuilding markup. Decoration only: aria-hidden, never
+// takes pointer events. title is the map's name, used by the title plates, the
+// wax seal's initial and the futuristic readout.
+templ mapFrameOrnaments(title string) {
+	<div class="mp-orn" aria-hidden="true">
+		<div data-o="atlas">
+			for _, pos := range []string{"tl", "tr", "br", "bl"} {
+				<svg class={ pos } viewBox="0 0 30 30" fill="none" stroke="currentColor" stroke-width="1.4">
+					<path d="M2 28V9q0-7 7-7h19M6 28V12q0-6 6-6h16"></path>
+					<path d="M11 11c3 0 5 2 5 5M11 11c0 3 2 5 5 5"></path>
+					<circle cx="11" cy="11" r="1.6" fill="currentColor"></circle>
+				</svg>
+			}
+			<div class="mp-ticks">
+				for _, l := range []string{"A", "B", "C", "D", "E", "F", "G", "H"} {
+					<span>{ l }</span>
+				}
+			</div>
+			<div class="mp-side-ticks">
+				for _, n := range []string{"1", "2", "3", "4", "5", "6"} {
+					<span>{ n }</span>
+				}
+			</div>
+			<div class="mp-cart">{ title }</div>
+		</div>
+		<div data-o="arcane">
+			for _, pos := range []string{"tl", "tr", "br", "bl"} {
+				<svg class={ pos } viewBox="0 0 30 30" fill="none" stroke="currentColor" stroke-width="1.3">
+					<circle cx="15" cy="15" r="11"></circle>
+					<path d="M15 4l9.5 16.5h-19z"></path>
+					<circle cx="15" cy="15" r="3"></circle>
+				</svg>
+			}
+			<div class="mp-runes t">ᚠ ᚢ ᚦ ᚨ ᚱ ᚲ ᚷ ᚹ ᚺ ᚾ ᛁ ᛃ ᛇ ᛈ ᛉ ᛊ ᛏ ᛒ ᛖ ᛗ ᛚ ᛜ ᛞ ᛟ ᚠ ᚢ ᚦ ᚨ ᚱ ᚲ</div>
+			<div class="mp-runes b">ᛟ ᛞ ᛜ ᛚ ᛗ ᛖ ᛒ ᛏ ᛊ ᛉ ᛈ ᛇ ᛃ ᛁ ᚾ ᚺ ᚹ ᚷ ᚲ ᚱ ᚨ ᚦ ᚢ ᚠ ᛟ ᛞ ᛜ ᛚ ᛗ ᛖ</div>
+		</div>
+		<div data-o="old">
+			<div class="mp-seal">{ frameInitial(title) }</div>
+			<div class="mp-cart">{ title }</div>
+		</div>
+		<div data-o="futuristic">
+			<i class="tl"></i>
+			<i class="tr"></i>
+			<i class="br"></i>
+			<i class="bl"></i>
+			<div class="mp-hud top"><span>{ "CHART // " + strings.ToUpper(title) }</span><span>LINK OK</span></div>
+			<div class="mp-hud"><span class="mp-hudpos">X 000  Y 000</span><span class="mp-hudzoom">ZOOM 100%</span></div>
+		</div>
+	</div>
+}
+
+// mapFramePreviewArt is a small stand-in map painted in CSS/SVG for the
+// Customize gallery, which previews frames without any campaign map.
+templ mapFramePreviewArt() {
+	<div class="mp-art-wrap">
+		<svg viewBox="0 0 200 120" preserveAspectRatio="xMidYMid slice" class="mp-art" aria-hidden="true">
+			<defs>
+				<linearGradient id="mpsea" x1="0" y1="0" x2="0" y2="1">
+					<stop offset="0" stop-color="#9fc3c9"></stop>
+					<stop offset="1" stop-color="#7fa9b3"></stop>
+				</linearGradient>
+			</defs>
+			<rect width="200" height="120" fill="url(#mpsea)"></rect>
+			<path d="M52 68c-8-22 12-44 40-42 26 2 46 14 44 36-2 20-24 34-48 30-18-3-30-10-36-24z" fill="#d9c99c" stroke="#5b4a2c" stroke-width="1.6"></path>
+			<path d="M150 30c6-6 18-4 20 4s-6 14-14 12-12-8-6-16z" fill="#d9c99c" stroke="#5b4a2c" stroke-width="1.4"></path>
+			<path d="M80 60l8-12 8 12zM98 62l7-10 7 10z" fill="none" stroke="#6b5434" stroke-width="1.3"></path>
+			<circle cx="116" cy="74" r="4" fill="#dc2626" stroke="#fff" stroke-width="1.2"></circle>
+		</svg>
+	</div>
+}
+
+// mapFrameSection is the "Maps" tab body on the Customize page: pick the
+// frame every map in this campaign wears unless its own Map settings choose
+// another. It is also the HTMX response of the save, so "Saved" appears in
+// place with no reload. Every control is an HTMX form, so nothing here depends
+// on a script surviving a swap.
+templ mapFrameSection(campaignID, current string, saved bool) {
+	@mapFrameStyles()
+	<div id="map-frame-section" class="space-y-4">
+		<div>
+			<h2 class="text-base font-semibold text-fg">Map frame</h2>
+			<p class="text-sm text-fg-secondary mt-1 max-w-prose">
+				The frame drawn around every map in this campaign, on the map page and on the maps list.
+				A map can choose its own in its Map settings; every other map follows this one.
+			</p>
+			if saved {
+				<p class="text-xs mt-2 text-accent" role="status"><i class="fa-solid fa-check mr-1"></i> Saved</p>
+			}
+		</div>
+		<div class="grid gap-5" style="grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));">
+			for _, f := range FrameStyles {
+				<form
+					hx-put={ fmt.Sprintf("/campaigns/%s/maps/frame-style", campaignID) }
+					hx-target="#map-frame-section"
+					hx-swap="outerHTML"
+					class="flex flex-col gap-2 min-w-0"
+				>
+					<input type="hidden" name="frame" value={ f.ID }/>
+					<div class="mp-frame" data-frame={ f.ID } data-tint="1" style="height: 190px; flex: none;">
+						@mapFrameOrnaments("Vellmoor Isle")
+						<div class="mp-viewport">
+							@mapFramePreviewArt()
+						</div>
+					</div>
+					<div class="flex items-center gap-2">
+						<span class="text-sm font-semibold text-fg">{ f.Label }</span>
+						if f.ID == current {
+							<span class="text-[10.5px] font-semibold text-accent bg-accent/10 rounded-full px-2 py-0.5">In use</span>
+						}
+					</div>
+					<p class="text-xs text-fg-secondary">{ f.Description }</p>
+					if f.ID != current {
+						<button type="submit" class="btn-secondary text-xs self-start">Use this</button>
+					}
+				</form>
+			}
+		</div>
+	</div>
+}
+
+// frameInitial is the first letter of a map's name, for the wax seal.
+func frameInitial(title string) string {
+	for _, r := range title {
+		return strings.ToUpper(string(r))
+	}
+	return "·"
+}
+
+// CustomizeTabFactory contributes the "Maps" tab to the campaigns plugin's
+// Customize page (campaigns.Handler.RegisterCustomizeTab). The body reads the
+// campaign's current frame when it renders; a failed read shows the default
+// rather than breaking the whole Customize page.
+func (h *Handler) CustomizeTabFactory() func(*campaigns.CampaignContext) campaigns.CustomizeTab {
+	return func(cc *campaigns.CampaignContext) campaigns.CustomizeTab {
+		return campaigns.CustomizeTab{
+			ID:        "maps",
+			Label:     "Maps",
+			Icon:      "fa-solid fa-map",
+			SortOrder: 10,
+			Content: templ.ComponentFunc(func(ctx context.Context, w io.Writer) error {
+				frame, err := h.svc.GetCampaignFrame(ctx, cc.Campaign.ID)
+				if err != nil {
+					frame = DefaultFrame
+				}
+				return mapFrameSection(cc.Campaign.ID, frame, false).Render(ctx, w)
+			}),
+		}
+	}
+}

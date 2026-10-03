@@ -23,7 +23,7 @@ import (
 )
 
 // CustomizePage renders the Campaign Customization Hub with tabbed interface.
-templ CustomizePage(cc *CampaignContext, entityTypes []SettingsEntityType, csrfToken string) {
+templ CustomizePage(cc *CampaignContext, entityTypes []SettingsEntityType, csrfToken string, extraTabs []CustomizeTab) {
 	@layouts.App(cc.Campaign.Name + " - Customize") {
 		// The page body below bleeds to the edges with negative margins, so
 		// the header gets its own padded wrapper above it.
@@ -73,6 +73,16 @@ templ CustomizePage(cc *CampaignContext, entityTypes []SettingsEntityType, csrfT
 				>
 					<i class="fa-solid fa-palette mr-1.5 text-xs"></i> Appearance
 				</button>
+				// Tabs other plugins contribute (RegisterCustomizeTab).
+				for _, t := range extraTabs {
+					<button
+						class="px-4 py-2.5 text-sm font-medium border-b-2 transition-colors whitespace-nowrap"
+						x-bind:class={ "tab === '" + t.ID + "' ? 'text-accent border-accent' : 'text-fg-secondary border-transparent hover:text-fg hover:border-edge'" }
+						x-on:click={ "tab = '" + t.ID + "'" }
+					>
+						<i class={ t.Icon + " mr-1.5 text-xs" }></i> { t.Label }
+					</button>
+				}
 			</div>
 
 			<!-- Tab content -->
@@ -95,6 +105,14 @@ templ CustomizePage(cc *CampaignContext, entityTypes []SettingsEntityType, csrfT
 						@lookTab(cc, csrfToken)
 					</div>
 				</div>
+
+				for _, t := range extraTabs {
+					<div x-show={ "tab === '" + t.ID + "'" } x-cloak class="h-full overflow-y-auto">
+						<div class="max-w-4xl mx-auto px-6 py-4">
+							@t.Content
+						</div>
+					</div>
+				}
 			</div>
 		</div>
 	}
