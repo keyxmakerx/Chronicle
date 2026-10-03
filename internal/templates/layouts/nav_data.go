@@ -134,9 +134,15 @@ func NavManageRows(ctx context.Context) []NavRowView {
 	if IsAddonEnabled(ctx, "media-gallery") {
 		rows = append(rows, NavRowView{Key: "manage:media", Label: "Media", Icon: "fa-photo-film", URL: base + "/media"})
 	}
-	return append(rows,
+	rows = append(rows,
 		NavRowView{Key: "manage:customize", Label: "Customize", Icon: "fa-paintbrush", URL: base + "/customize"},
 		NavRowView{Key: "manage:extensions", Label: "Apps & game system", Icon: "fa-puzzle-piece", URL: base + "/extensions"},
+	)
+	// Sync history only means something once the campaign syncs with Foundry.
+	if IsAddonEnabled(ctx, "sync-api") {
+		rows = append(rows, NavRowView{Key: "manage:sync-history", Label: "Sync history", Icon: "fa-clock-rotate-left", URL: base + "/sync-history"})
+	}
+	return append(rows,
 		NavRowView{Key: "manage:trash", Label: "Trash", Icon: "fa-trash-can", URL: base + "/trash"},
 		NavRowView{Key: "manage:settings", Label: "Settings", Icon: "fa-gear", URL: base + "/settings"},
 	)

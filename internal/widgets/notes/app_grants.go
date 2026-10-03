@@ -91,11 +91,33 @@ type AppGrantService interface {
 	// Runs when all the user's sessions are destroyed (password reset or
 	// change, force sign-out), so a grant never outlives them.
 	RevokeAllForUser(ctx context.Context, userID string) error
+
+	// SetConnectionRevoker wires the live-socket drop that makes a revoke
+	// take effect on an open notes frame at once.
+	SetConnectionRevoker(r AppConnectionRevoker)
+}
+
+// AppConnectionRevoker closes the live sockets a grant opened. Implemented by
+// the WebSocket hub, wired in app/routes.go.
+type AppConnectionRevoker interface {
+	// RevokeNotesAppClients closes the player's notes grant sockets in the
+	// campaign.
+	RevokeNotesAppClients(campaignID, userID string)
+	// RevokeNotesAppClientsEverywhere closes the user's notes grant sockets
+	// in every campaign.
+	RevokeNotesAppClientsEverywhere(userID string)
 }
 
 type appGrantService struct {
 	repo AppGrantRepository
 	now  func() time.Time
+	// conns is nil until wired; a revoke then still stops every new request
+	// and socket, and only an already-open socket waits for its next drop.
+	conns AppConnectionRevoker
+}
+
+func (s *appGrantService) SetConnectionRevoker(r AppConnectionRevoker) {
+	s.conns = r
 }
 
 // NewAppGrantService creates the app grant service.
@@ -145,6 +167,11 @@ func (s *appGrantService) Issue(ctx context.Context, campaignID, userID, origin 
 	if err == nil && len(live) > maxAppGrantsPerUser {
 		for _, old := range live[maxAppGrantsPerUser:] {
 			_ = s.repo.Revoke(ctx, old.ID, now)
+		}
+		// Sockets aren't tied to one grant, so all the player's frames drop;
+		// those still holding a live grant reconnect on their own.
+		if s.conns != nil {
+			s.conns.RevokeNotesAppClients(campaignID, userID)
 		}
 	}
 	return token, g, nil
@@ -198,6 +225,9 @@ func (s *appGrantService) Revoke(ctx context.Context, campaignID, userID, grantI
 			if err := s.repo.Revoke(ctx, g.ID, s.now().UTC().Truncate(time.Second)); err != nil {
 				return apperror.NewInternal(err)
 			}
+			if s.conns != nil {
+				s.conns.RevokeNotesAppClients(campaignID, userID)
+			}
 			return nil
 		}
 	}
@@ -210,6 +240,9 @@ func (s *appGrantService) RevokeAllForUser(ctx context.Context, userID string) e
 	}
 	if err := s.repo.RevokeAllForUser(ctx, userID, s.now().UTC().Truncate(time.Second)); err != nil {
 		return apperror.NewInternal(err)
+	}
+	if s.conns != nil {
+		s.conns.RevokeNotesAppClientsEverywhere(userID)
 	}
 	return nil
 }

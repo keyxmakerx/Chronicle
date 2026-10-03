@@ -1,0 +1,223 @@
+// sync_history.templ renders the campaign's Sync history page: one line per
+// sync between Chronicle and Foundry, newest first, in the Trace look.
+
+package syncapi
+
+import (
+	"fmt"
+	"net/url"
+	"strconv"
+	"time"
+
+	"github.com/keyxmakerx/chronicle/internal/plugins/campaigns"
+	"github.com/keyxmakerx/chronicle/internal/templates/layouts"
+)
+
+// historyDirWord is the direction column: where the change went.
+func historyDirWord(dir string) string {
+	switch dir {
+	case DirToFoundry:
+		return "→ Foundry"
+	case DirToChronicle:
+		return "→ Chronicle"
+	}
+	return "· link"
+}
+
+func historyDirClass(dir string) string {
+	switch dir {
+	case DirToFoundry:
+		return "text-amber-600 dark:text-amber-400"
+	case DirToChronicle:
+		return "text-accent"
+	}
+	return "text-fg-muted"
+}
+
+// historyName is the row's subject, with a stand-in when nothing named it.
+func historyName(ev SyncEvent) string {
+	if ev.ResourceName != "" {
+		return ev.ResourceName
+	}
+	switch ev.Kind {
+	case "page", "character":
+		return "A page"
+	case "map":
+		return "A map"
+	case historyKindCalendar:
+		return "Calendar"
+	case "note":
+		return "A note"
+	}
+	return "Sync"
+}
+
+// historyWho is the action and the person, as "page updated · Ren".
+func historyWho(ev SyncEvent) string {
+	if ev.UserName == "" {
+		return ev.Action
+	}
+	return ev.Action + " · " + ev.UserName
+}
+
+func historyDuration(ms int) string {
+	if ms >= 1000 {
+		return strconv.FormatFloat(float64(ms)/1000, 'f', 2, 64) + " s"
+	}
+	return strconv.Itoa(ms) + " ms"
+}
+
+// historyTime is the no-JavaScript fallback; sync_history.js rewrites it in
+// the reader's own time zone.
+func historyTime(t time.Time) string {
+	return t.UTC().Format("15:04:05.000")
+}
+
+// historyLastSeen is the line by the filters: is Foundry talking right now.
+func historyLastSeen(d SyncHistoryPageData) string {
+	if d.LastSeen == nil {
+		return "Foundry never connected"
+	}
+	ago := d.Now.Sub(*d.LastSeen)
+	switch {
+	case ago < 2*time.Minute:
+		return "Foundry connected"
+	case ago < time.Hour:
+		return fmt.Sprintf("Foundry last seen %d min ago", int(ago.Minutes()))
+	case ago < 48*time.Hour:
+		return fmt.Sprintf("Foundry last seen %d h ago", int(ago.Hours()))
+	}
+	return "Foundry last seen " + d.LastSeen.UTC().Format("2 Jan")
+}
+
+// historyQuery keeps the filters on the rows requests.
+func historyQuery(f SyncHistoryFilter, extra string) string {
+	v := url.Values{}
+	v.Set("rows", "1")
+	if f.Direction != "" {
+		v.Set("direction", f.Direction)
+	}
+	if f.FailedOnly {
+		v.Set("failed", "1")
+	}
+	if f.Query != "" {
+		v.Set("q", f.Query)
+	}
+	return v.Encode() + extra
+}
+
+templ SyncHistoryPage(cc *campaigns.CampaignContext, d SyncHistoryPageData) {
+	@layouts.App(cc.Campaign.Name + " - Sync history") {
+		<div class="max-w-5xl mx-auto" id="sync-history" data-campaign={ d.CampaignID }>
+			@layouts.ManageHeader("Sync history", "manage:sync-history")
+			<form
+				class="flex flex-wrap items-center gap-2 mb-4"
+				hx-get={ fmt.Sprintf("/campaigns/%s/sync-history", d.CampaignID) }
+				hx-target="#sh-rows"
+				hx-swap="innerHTML"
+				hx-trigger="input changed delay:300ms from:#sh-q, change"
+				hx-vals='{"rows":"1"}'
+			>
+				<label class="flex items-center gap-2 border border-edge bg-surface rounded-md px-2 py-1 flex-1 min-w-[12rem] max-w-xs text-fg-muted">
+					<i class="fa-solid fa-magnifying-glass text-xs" aria-hidden="true"></i>
+					<input id="sh-q" name="q" type="search" value={ d.Filter.Query } placeholder="Search names, people, calls" aria-label="Search history" class="bg-transparent border-0 outline-none text-sm text-fg w-full p-0 focus:ring-0"/>
+				</label>
+				<select name="direction" aria-label="Direction" class="input text-sm w-auto py-1">
+					<option value="" selected?={ d.Filter.Direction == "" }>Both ways</option>
+					<option value={ DirToFoundry } selected?={ d.Filter.Direction == DirToFoundry }>→ To Foundry</option>
+					<option value={ DirToChronicle } selected?={ d.Filter.Direction == DirToChronicle }>→ To Chronicle</option>
+					<option value={ DirLink } selected?={ d.Filter.Direction == DirLink }>Connects</option>
+				</select>
+				<label class="flex items-center gap-2 text-sm text-fg-body">
+					<input type="checkbox" name="failed" value="1" checked?={ d.Filter.FailedOnly }/>
+					Failures only
+				</label>
+				<span class="sh-live ml-auto flex items-center gap-2 text-xs text-fg-muted" data-connected?={ d.LastSeen != nil && d.Now.Sub(*d.LastSeen) < 2*time.Minute }>
+					<span class="sh-dot" aria-hidden="true"></span>
+					{ historyLastSeen(d) }
+				</span>
+			</form>
+			<div id="sh-rows" class="card overflow-hidden">
+				@SyncHistoryRows(d)
+			</div>
+		</div>
+	}
+}
+
+// SyncHistoryRows is the list, also served alone for filters, live updates
+// and "Show older".
+templ SyncHistoryRows(d SyncHistoryPageData) {
+	if len(d.Events) == 0 && d.Filter.Before == 0 && d.Filter.After == 0 {
+		<p class="p-6 text-center text-sm text-fg-muted">
+			if d.Filter.Query != "" || d.Filter.Direction != "" || d.Filter.FailedOnly {
+				Nothing matches. Clear the search or the filters to see everything.
+			} else {
+				Nothing has synced yet. Changes appear here as soon as Foundry connects.
+			}
+		</p>
+	}
+	for _, ev := range d.Events {
+		@syncHistoryRow(ev, false)
+	}
+	if d.NextBefore > 0 {
+		<div class="sh-more border-t border-edge p-2 text-center">
+			<button
+				type="button"
+				class="btn-secondary btn-sm"
+				hx-get={ fmt.Sprintf("/campaigns/%s/sync-history?%s", d.CampaignID, historyQuery(d.Filter, "&before="+strconv.FormatInt(d.NextBefore, 10))) }
+				hx-target="closest .sh-more"
+				hx-swap="outerHTML"
+			>
+				Show older
+			</button>
+		</div>
+	}
+}
+
+templ syncHistoryRow(ev SyncEvent, child bool) {
+	<details
+		class={ "sh-row group border-t border-edge first:border-t-0", templ.KV("sh-kid", child), templ.KV("sh-fail", !ev.OK) }
+		data-id={ strconv.FormatInt(ev.ID, 10) }
+		data-at={ ev.OccurredAt.UTC().Format(time.RFC3339Nano) }
+	>
+		<summary class="sh-line cursor-pointer list-none px-4 py-2 text-sm hover:bg-surface-alt">
+			<time class="sh-t font-mono text-xs text-fg-muted tabular-nums" datetime={ ev.OccurredAt.UTC().Format(time.RFC3339Nano) }>{ historyTime(ev.OccurredAt) }</time>
+			<span class={ "sh-d text-xs font-medium whitespace-nowrap", historyDirClass(ev.Direction) }>{ historyDirWord(ev.Direction) }</span>
+			<span class="sh-e min-w-0 text-fg">
+				if len(ev.Children) > 0 {
+					<span class="sh-caret text-fg-faint" aria-hidden="true">▸</span>
+				}
+				{ historyName(ev) }
+				<span class="text-fg-muted text-xs">{ historyWho(ev) }</span>
+				if !ev.OK && ev.Message != "" {
+					<span class="block text-xs text-red-600 dark:text-red-400">{ ev.Message }</span>
+				}
+			</span>
+			<span class="sh-c font-mono text-xs text-fg-muted whitespace-nowrap tabular-nums">
+				<span class={ "font-medium", templ.KV("text-green-600 dark:text-green-400", ev.OK), templ.KV("text-red-600 dark:text-red-400", !ev.OK) }>{ ev.Status }</span>
+				{ historyDuration(ev.DurationMs) }
+			</span>
+		</summary>
+		<div class="sh-steps">
+			for _, ch := range ev.Children {
+				@syncHistoryRow(ch, true)
+			}
+		</div>
+		<dl class="sh-det grid grid-cols-[max-content_1fr] gap-x-3 gap-y-1 px-4 pb-3 text-xs text-fg-muted">
+			if ev.UserName != "" {
+				<dt>Who</dt>
+				<dd class="text-fg-body">{ ev.UserName }</dd>
+			}
+			<dt>Call</dt>
+			<dd class="text-fg-body font-mono break-all">{ ev.Call } · { ev.Status } · { historyDuration(ev.DurationMs) }</dd>
+			<dt>Recorded by</dt>
+			<dd class="text-fg-body">
+				if ev.ReportedBy == reportedByClient {
+					Foundry
+				} else {
+					Chronicle
+				}
+			</dd>
+		</dl>
+	</details>
+}

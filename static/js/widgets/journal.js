@@ -2737,9 +2737,15 @@
     var self = this;
     if (typeof window.WebSocket !== 'function' || this.dead) return;
     var proto = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+    var url = proto + '//' + window.location.host + '/ws?campaign=' + encodeURIComponent(this.cid);
+    // Inside an outside app's frame there is no sign-in cookie; the notes
+    // grant goes as a subprotocol, which keeps it out of the URL and logs.
+    var embed = Chronicle.embed;
     var ws;
     try {
-      ws = new WebSocket(proto + '//' + window.location.host + '/ws?campaign=' + encodeURIComponent(this.cid));
+      ws = embed && embed.token
+        ? new WebSocket(url, ['chronicle.notes', 'chronicle.grant.' + embed.token])
+        : new WebSocket(url);
     } catch (e) { return; }
     this.ws = ws;
     ws.addEventListener('message', function (ev) {
