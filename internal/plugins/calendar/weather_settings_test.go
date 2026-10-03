@@ -209,3 +209,20 @@ func TestWeatherClimates_ValidClimate(t *testing.T) {
 		t.Error("unknown ids must be refused")
 	}
 }
+
+// The settings page's readout must use the Generate sheet's words at the
+// same thresholds (continuityWords in calendar_weather_sheet.js).
+func TestContinuityWords(t *testing.T) {
+	tests := []struct {
+		v    float64
+		want string
+	}{
+		{0, "Changes daily"}, {0.24, "Changes daily"}, {0.25, "Changeable"},
+		{0.5, "Some spells"}, {0.55, "Some spells"}, {0.75, "Long spells"}, {1, "Long spells"},
+	}
+	for _, tt := range tests {
+		if got := continuityWords(tt.v); got != tt.want {
+			t.Errorf("continuityWords(%v) = %q, want %q", tt.v, got, tt.want)
+		}
+	}
+}

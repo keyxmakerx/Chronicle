@@ -331,6 +331,12 @@ html[data-theme="dark"] .calv5 {
 .calv5-bsec { margin-top: 20px; }
 .calv5-bsec:first-of-type { margin-top: 16px; }
 .calv5-bsec h4 { margin: 0 0 8px; font: 650 9.5px/1 var(--sans, sans-serif); letter-spacing: 0.14em; text-transform: uppercase; color: var(--mut); }
+/* Calendar settings' Weather section: the slider reads out its value in
+   the Generate sheet's words. */
+.calv5-wx-range { display: flex; align-items: center; gap: 10px; margin-top: 6px; }
+.calv5-wx-range input[type="range"] { flex: 1 1 auto; accent-color: var(--ink); }
+.calv5-wx-range output { flex: none; min-width: 96px; font: 500 12.5px/1 var(--sans, sans-serif); color: var(--ink2); }
+.calv5-wx-hint { margin: 6px 0 0; font: 500 12px/1.4 var(--sans, sans-serif); color: var(--mut); }
 .calv5-blist { display: flex; flex-direction: column; gap: 6px; }
 .calv5-brow { display: flex; align-items: center; gap: 6px; }
 .calv5-brow input[type="text"], .calv5-brow input[type="number"] { height: 32px; padding: 0 9px; border-radius: 8px; border: 1px solid var(--edge); background: var(--paper2); font: 500 12.5px/1 var(--sans, sans-serif); color: var(--ink); min-width: 0; }

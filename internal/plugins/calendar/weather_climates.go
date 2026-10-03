@@ -76,3 +76,20 @@ func validateWeatherSettings(s WeatherSettings) error {
 func roundContinuity(c float64) float64 {
 	return math.Round(c*100) / 100
 }
+
+// continuityWords names a "how long weather lasts" value in the words the
+// Generate sheet uses (continuityWords in calendar_weather_sheet.js);
+// continuityWordsJS is the same rule for the settings page's live readout.
+func continuityWords(v float64) string {
+	switch {
+	case v < 0.25:
+		return "Changes daily"
+	case v < 0.5:
+		return "Changeable"
+	case v < 0.75:
+		return "Some spells"
+	}
+	return "Long spells"
+}
+
+const continuityWordsJS = "c < 0.25 ? 'Changes daily' : c < 0.5 ? 'Changeable' : c < 0.75 ? 'Some spells' : 'Long spells'"
