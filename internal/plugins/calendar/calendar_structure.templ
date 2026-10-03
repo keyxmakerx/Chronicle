@@ -1,0 +1,239 @@
+// calendar_structure.templ renders an existing calendar's "Edit structure"
+// page: the same structure editor the new-calendar wizard's "Build your
+// own" step uses (structureEditorForm), prefilled from the calendar, with a
+// preview slot under it. "Preview changes" fills the slot with what the
+// save would do — months moved or removed, events re-dated or stranded,
+// the current date — and the save button in that preview is the only way
+// to write. Changing anything in the editor empties the slot again.
+package calendar
+
+import (
+	"fmt"
+
+	"github.com/keyxmakerx/chronicle/internal/templates/components"
+	"github.com/keyxmakerx/chronicle/internal/templates/layouts"
+)
+
+// structurePreviewSlot is the id of the element the preview is swapped into.
+const structurePreviewSlot = "calv5-structure-preview"
+
+// StructureEditData is the view model for the "Edit structure" page.
+type StructureEditData struct {
+	CampaignID   string
+	CampaignName string
+	Calendar     *Calendar
+	CSRFToken    string
+	// RealTime is set for a calendar that follows the real-world date: its
+	// months are the Gregorian ones, so the page explains that instead of
+	// offering the editor.
+	RealTime bool
+}
+
+// StructureEditPage is the full page (direct navigation).
+templ StructureEditPage(data StructureEditData) {
+	@layouts.App("Calendar structure") {
+		@StructureEditFragment(data)
+	}
+}
+
+// StructureEditFragment is the page body, also served alone to a boosted
+// navigation.
+templ StructureEditFragment(data StructureEditData) {
+	<link rel="stylesheet" href={ layouts.AssetURL("/static/css/calendar_v5.css") }/>
+	<div class="calv5" x-data="{}">
+		<div class="calv5-wrap">
+			@components.Breadcrumbs([]components.BreadcrumbItem{
+				{Label: data.CampaignName, Href: fmt.Sprintf("/campaigns/%s", data.CampaignID), Icon: "fa-dice-d20"},
+				{Label: "Calendars", Href: fmt.Sprintf("/campaigns/%s/calendars", data.CampaignID)},
+				{Label: data.Calendar.Name, Href: structureCalendarURL(data.CampaignID, data.Calendar.ID)},
+				{Label: "Edit structure"},
+			})
+			<div class="calv5-panel wide page">
+				<div class="calv5-body">
+					if data.RealTime {
+						<h2 class="calv5-wz-h">Edit structure</h2>
+						<p class="calv5-wz-lead">{ data.Calendar.Name } follows the real-world date, so its months, weekdays and leap years are the real ones and can't be changed here.</p>
+						<a class="btn quiet" href={ templ.SafeURL(structureCalendarURL(data.CampaignID, data.Calendar.ID)) }>Back to the calendar</a>
+					} else {
+						@structureEditorForm(structureEditorConfig{
+							Title:         "Edit structure",
+							Lead:          fmt.Sprintf("Change %s's months, weekdays, leap rule, moons and seasons. Nothing is saved until you have seen what the change does to its events and today's date.", data.Calendar.Name),
+							PostURL:       fmt.Sprintf("/campaigns/%s/calendars/%s/structure/preview", data.CampaignID, data.Calendar.ID),
+							Target:        "#" + structurePreviewSlot,
+							Swap:          "innerHTML",
+							SubmitLabel:   "Preview changes",
+							XData:         structureEditorXData(calendarEditorState(data.Calendar), structurePreviewSlot),
+							BackHref:      structureCalendarURL(data.CampaignID, data.Calendar.ID),
+							ShowSeasons:   true,
+							ShowFlags:     true,
+							ClearsPreview: true,
+							RevealPreview: true,
+						}, data.CSRFToken, "")
+					}
+				</div>
+			</div>
+			<div id={ structurePreviewSlot } class="calv5-structure-preview" aria-live="polite"></div>
+		</div>
+	</div>
+}
+
+// structureBackToEditing empties the preview and returns focus to the
+// editor, without touching anything typed in it.
+const structureBackToEditing = "(function(){var p=document.getElementById('" + structurePreviewSlot + "');if(p){p.innerHTML='';}var b=document.getElementById('calv5-build-submit');if(b){b.focus();b.scrollIntoView({block:'center'});}})()"
+
+// structureBackToEditingOnClick renders structureBackToEditing straight into
+// the onclick attribute: the preview arrives by an htmx swap, where a
+// separate script element is not reliably run, so the handler is inline.
+// A ComponentScript with no Function emits no script element.
+func structureBackToEditingOnClick() templ.ComponentScript {
+	return templ.ComponentScript{Name: "calv5_structureBack", Call: structureBackToEditing}
+}
+
+func structureCalendarURL(campaignID, calendarID string) string {
+	return fmt.Sprintf("/campaigns/%s/calendars/%s/view", campaignID, calendarID)
+}
+
+// structurePreviewBody is what a save would do, with the confirm form.
+// importJSON is the validated structure carried to the save; fingerprint
+// pins the calendar state this preview describes (see
+// CalendarService.ApplyStructureEdit). notice is set when the save found
+// the calendar had changed and this is the refreshed preview.
+templ structurePreviewBody(campaignID, calendarID, csrfToken, importJSON, notice string, p *StructurePreview) {
+	<div class="calv5-panel wide page">
+		<div class="calv5-body">
+			<h2 class="calv5-wz-h">Before you save</h2>
+			<p class="calv5-wz-lead">This is what saving the structure above does to { p.CalendarName }.</p>
+			if notice != "" {
+				<p class="calv5-err">{ notice }</p>
+			}
+			if len(p.Warnings) > 0 {
+				<div class="calv5-warnbox">
+					<i class="fa-solid fa-triangle-exclamation i"></i>
+					<div>
+						<b>Adjusted to fit</b>
+						<ul>
+							for _, w := range p.Warnings {
+								<li>{ w }</li>
+							}
+						</ul>
+					</div>
+				</div>
+			}
+			if p.StrandedTotal > 0 {
+				<div class="calv5-warnbox">
+					<i class="fa-solid fa-triangle-exclamation i"></i>
+					<div>
+						<b>{ fmt.Sprintf("%d %s will be on a day that no longer exists", p.StrandedTotal, nounFor(p.StrandedTotal, "event", "events")) }</b>
+						<p style="margin:4px 0 0">They are kept, not deleted, but the calendar can't show them until you move them or put the day back.</p>
+						<ul>
+							for _, ev := range p.Stranded {
+								<li><b>{ ev.Name }</b> ({ ev.Date }): { ev.Note }</li>
+							}
+						</ul>
+						if more := p.StrandedTotal - len(p.Stranded); more > 0 {
+							<p style="margin:4px 0 0">{ fmt.Sprintf("And %d more.", more) }</p>
+						}
+					</div>
+				</div>
+			}
+			if p.WeatherReplaced > 0 {
+				<div class="calv5-warnbox">
+					<i class="fa-solid fa-triangle-exclamation i"></i>
+					<div>
+						<b>{ fmt.Sprintf("%d day-weather %s will be deleted", p.WeatherReplaced, nounFor(p.WeatherReplaced, "reading", "readings")) }</b>
+						<p style="margin:4px 0 0">They are in months being removed, on days a moved month's own reading now takes.</p>
+					</div>
+				</div>
+			}
+			if p.RedatedTotal > 0 {
+				<div class="calv5-warnbox">
+					<i class="fa-solid fa-triangle-exclamation i"></i>
+					<div>
+						<b>{ fmt.Sprintf("%d %s will show in a different month", p.RedatedTotal, nounFor(p.RedatedTotal, "event", "events")) }</b>
+						<ul>
+							for _, ev := range p.Redated {
+								<li><b>{ ev.Name }</b> ({ ev.Date }): { ev.Note }</li>
+							}
+						</ul>
+						if more := p.RedatedTotal - len(p.Redated); more > 0 {
+							<p style="margin:4px 0 0">{ fmt.Sprintf("And %d more.", more) }</p>
+						}
+					</div>
+				</div>
+			}
+			<div class="calv5-report">
+				<div class="calv5-rgrp">
+					<h4>Months</h4>
+					<ul>
+						if len(p.MonthNotes) == 0 {
+							<li>No changes to the months.</li>
+						}
+						for _, n := range p.MonthNotes {
+							<li>{ n }</li>
+						}
+					</ul>
+				</div>
+				<div class="calv5-rgrp">
+					<h4>Events &amp; today</h4>
+					<ul>
+						if p.MovedEvents > 0 {
+							<li>{ fmt.Sprintf("%d %s follow their month to its new place.", p.MovedEvents, nounFor(p.MovedEvents, "event", "events")) }</li>
+						}
+						if p.StrandedTotal == 0 && p.RedatedTotal == 0 && p.MovedEvents == 0 {
+							<li>No events are affected.</li>
+						}
+						if p.CurrentDateClamped {
+							<li><b>{ fmt.Sprintf("Today moves from %s to %s", p.CurrentDate, p.NewCurrentDate) }</b> <small>That day won't exist any more, so today becomes the nearest day that does.</small></li>
+						} else {
+							<li>{ fmt.Sprintf("Today stays %s.", p.NewCurrentDate) }</li>
+						}
+					</ul>
+				</div>
+				<div class="calv5-rgrp">
+					<h4>Also</h4>
+					<ul>
+						if len(p.OtherNotes) == 0 {
+							<li>Nothing else changes.</li>
+						}
+						for _, n := range p.OtherNotes {
+							<li>{ n }</li>
+						}
+					</ul>
+				</div>
+			</div>
+			<form
+				hx-post={ fmt.Sprintf("/campaigns/%s/calendars/%s/structure", campaignID, calendarID) }
+				hx-target={ "#" + structurePreviewSlot }
+				hx-swap="innerHTML"
+				hx-encoding="multipart/form-data"
+				hx-disabled-elt="#calv5-structure-save"
+				hx-indicator="#calv5-structure-spinner"
+				style="margin-top:18px;display:flex;gap:8px;align-items:center"
+			>
+				<input type="hidden" name="csrf_token" value={ csrfToken }/>
+				<input type="hidden" name="import_json" value={ importJSON }/>
+				<input type="hidden" name="fingerprint" value={ p.Fingerprint }/>
+				<button type="button" class="btn quiet" onclick={ structureBackToEditingOnClick() }>Back to editing</button>
+				<span class="sp" style="flex:1"></span>
+				<i id="calv5-structure-spinner" class="fa-solid fa-spinner fa-spin htmx-indicator" aria-hidden="true"></i>
+				<button id="calv5-structure-save" type="submit" class="btn primary">
+					if p.StrandedTotal > 0 || p.RedatedTotal > 0 {
+						Save anyway
+					} else {
+						Save changes
+					}
+				</button>
+			</form>
+		</div>
+	</div>
+}
+
+// structurePreviewError fills the preview slot with why the structure
+// couldn't be previewed or saved; the editor above keeps what was typed.
+templ structurePreviewError(message string) {
+	<div class="calv5-panel wide page">
+		<div class="calv5-body">
+			<p class="calv5-err">{ message }</p>
+		</div>
+	</div>
+}

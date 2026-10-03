@@ -1331,7 +1331,8 @@
 .cal-v5 .menote2{font:500 11px/1.4 var(--sans);color:var(--mut)}
 @media (max-width:900px){.cal-v5 .gsheet, .cal-v5 .gset{width:420px}
 }
-@media (max-width:600px){.cal-v5 .h-edit{margin-top:4px}
+@media (max-width:600px){.cal-v5 #cal5-settings span{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}
+.cal-v5 .h-edit{margin-top:4px}
 /* On a phone the hint may take two lines (holding to choose a range is not guessable); Generate… keeps only its icon. */
 .cal-v5 .h-subw{min-height:34px}
 .cal-v5 .ehint{white-space:normal;font-size:11px;line-height:1.25;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical}

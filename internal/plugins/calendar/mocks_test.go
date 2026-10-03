@@ -43,6 +43,8 @@ type fakeCalendarRepo struct {
 	setFestivalsFn     func(ctx context.Context, calendarID string, festivals []FestivalInput) error
 	getFestivalsFn     func(ctx context.Context, calendarID string) ([]Festival, error)
 	applyImportFn      func(ctx context.Context, cal *Calendar, result *ImportResult) error
+	applyStructureFn   func(ctx context.Context, calendarID string, plan func(*StructureState) (*StructureWrite, error)) error
+	getStructureFn     func(ctx context.Context, calendarID string) (*StructureState, error)
 }
 
 func (m *fakeCalendarRepo) Create(ctx context.Context, cal *Calendar) error {
@@ -488,4 +490,17 @@ func newTestCalendarService(calRepo *fakeCalendarRepo, eventRepo *fakeEventRepo,
 		weatherRepo = &fakeWeatherRepo{}
 	}
 	return NewCalendarService(calRepo, eventRepo, kindRepo, weatherRepo)
+}
+
+func (m *fakeCalendarRepo) ApplyStructure(ctx context.Context, calendarID string, plan func(*StructureState) (*StructureWrite, error)) error {
+	if m.applyStructureFn != nil {
+		return m.applyStructureFn(ctx, calendarID, plan)
+	}
+	return nil
+}
+func (m *fakeCalendarRepo) GetStructureState(ctx context.Context, calendarID string) (*StructureState, error) {
+	if m.getStructureFn != nil {
+		return m.getStructureFn(ctx, calendarID)
+	}
+	return nil, apperror.NewNotFound("calendar not found")
 }

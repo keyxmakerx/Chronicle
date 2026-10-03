@@ -238,6 +238,12 @@ func (f *fakeCalendarSvc) TodayInZone(string) (int, int, int, error) { return 20
 func (f *fakeCalendarSvc) CreateCalendarFromImport(_ context.Context, campaignID string, ir *ImportResult, _ CreateCalendarFromImportOptions) (*Calendar, error) {
 	return &Calendar{ID: "cal-imported", CampaignID: campaignID, Name: ir.CalendarName}, nil
 }
+func (f *fakeCalendarSvc) PreviewStructureEdit(context.Context, string, string, StructureEdit) (*StructurePreview, error) {
+	return &StructurePreview{CalendarName: "The Secret Calendar", Fingerprint: "fp"}, nil
+}
+func (f *fakeCalendarSvc) ApplyStructureEdit(context.Context, string, string, string, StructureEdit) (*StructurePreview, error) {
+	return &StructurePreview{CalendarName: "The Secret Calendar", Fingerprint: "fp"}, nil
+}
 func (f *fakeCalendarSvc) PreviewAnchorMove(context.Context, string, string, int, int, int, time.Time) (*AnchorMovePreview, error) {
 	return &AnchorMovePreview{}, nil
 }

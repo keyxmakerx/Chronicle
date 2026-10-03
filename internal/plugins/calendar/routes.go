@@ -75,6 +75,13 @@ func RegisterRoutes(e *echo.Echo, h *Handler, campaignSvc campaigns.CampaignServ
 	cg.POST("/calendars/wizard/import/preview", h.WizardImportPreview, campaigns.RequireRole(campaigns.RoleOwner))
 	cg.POST("/calendars/wizard/create", h.WizardCreate, campaigns.RequireRole(campaigns.RoleOwner))
 
+	// Edit structure: an existing calendar's months, weekdays, leap rule,
+	// moons and seasons, previewed before saving. Owner only, the same gate
+	// as the wizard that first set them and PUT /calendars/:calid above.
+	cg.GET("/calendars/:calid/structure", h.StructureEditPage, campaigns.RequireRole(campaigns.RoleOwner))
+	cg.POST("/calendars/:calid/structure/preview", h.StructureEditPreview, campaigns.RequireRole(campaigns.RoleOwner))
+	cg.POST("/calendars/:calid/structure", h.StructureEditApply, campaigns.RequireRole(campaigns.RoleOwner))
+
 	// Calendar reads (Player) — re-registered under the public-capable group
 	// below, whose registration wins for the same path (see maps/routes.go's
 	// /maps, /maps/:mid, /maps/:mid/markers for the identical shape): kept
