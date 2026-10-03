@@ -721,3 +721,30 @@ func TestAppearancePictures_IncludesMenuBanner(t *testing.T) {
 		t.Errorf("AppearancePictures = %v, want the logo and the menu banner", got)
 	}
 }
+
+// TestApplyAppearance_EditorPayload feeds the exact JSON the editor's Save
+// sent (captured from customize_look.js) through the real decoder, so a
+// renamed key on either side fails here rather than silently dropping a
+// choice.
+func TestApplyAppearance_EditorPayload(t *testing.T) {
+	const payload = `{"look":"classic","brand":{"name":"","logo":"","welcome":"","backdrop":""},"header":{"bg":"moving","height":"tall","color":"","from":"#0f172a","to":"#1e2a5a","dir":"to-r","image":"","scrim":"medium","widgets":["search","note"],"links":[],"text":""},"colours":{"accent":"#6366f1","s1":"","s2":"","page":"cool","contrast":"standard"},"nav":{"style":"ring","strength":"calm","pageName":"row"},"type":{"body":"inter","heading":"same","scale":"standard"},"buttons":{"style":"lift"},"motion":{"elevation":"standard","speed":"standard","reduceAll":false},"sidebar":{"colour":"tinted","own":"","corner":"subtitle","subtitle":"The Drowned Crown, session 23","banner":"","glow":"own","glowColour":"#3b9fb5"}}`
+	var in AppearanceInput
+	if err := json.Unmarshal([]byte(payload), &in); err != nil {
+		t.Fatal(err)
+	}
+	var s CampaignSettings
+	if _, err := applyAppearance(&s, in); err != nil {
+		t.Fatal(err)
+	}
+	a := s.Appearance
+	if a == nil || a.HeaderHeight != "tall" || a.SidebarColour != "tinted" || a.SidebarCorner != "subtitle" ||
+		a.SidebarSubtitle != "The Drowned Crown, session 23" || a.PeekGlow != "own" || a.PeekGlowColour != "#3b9fb5" {
+		t.Errorf("Appearance = %+v", a)
+	}
+	if s.TopbarStyle == nil || s.TopbarStyle.Mode != "moving" || s.TopbarStyle.GradientDir != "to-r" {
+		t.Errorf("TopbarStyle = %+v", s.TopbarStyle)
+	}
+	if got := strings.Join(s.TopbarContent.Widgets, ","); got != "search,note" || s.TopbarContent.Mode != "widgets" {
+		t.Errorf("TopbarContent = %+v", s.TopbarContent)
+	}
+}

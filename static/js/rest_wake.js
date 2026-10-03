@@ -79,12 +79,15 @@
     function frame(t) {
       raf = 0;
       if (destroyed) return;
-      var dt = Math.min(0.05, (t - lastFrame) / 1000);
+      // A frame's timestamp is its start time, which can precede the clock
+      // read that scheduled it; a negative step would push the level below 0
+      // and read as "arrived at rest" the instant the effect woke.
+      var dt = Math.max(0, Math.min(0.05, (t - lastFrame) / 1000));
       lastFrame = t;
       if (m < target) m = Math.min(target, m + dt / (upMs / 1000));
       else if (m > target) m = Math.max(target, m - dt / (downMs / 1000));
       if (opts.onLevel) opts.onLevel(level(), dt);
-      if (m <= 0) setActive(false);
+      if (m <= 0 && target <= 0) setActive(false);
       if (m !== target) raf = window.requestAnimationFrame(frame);
     }
 

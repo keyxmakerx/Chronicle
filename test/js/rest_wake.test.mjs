@@ -17,7 +17,7 @@ const src = readFileSync(join(here, '..', '..', 'static', 'js', 'rest_wake.js'),
 
 // A world with a controllable clock. step() advances time one frame at a time,
 // firing due timers and queued animation frames in order, like a browser.
-function world({ hidden = false } = {}) {
+function world({ hidden = false, frameSkew = 0 } = {}) {
   let now = 0;
   const timers = new Map();
   let nextTimer = 1;
@@ -51,7 +51,8 @@ function world({ hidden = false } = {}) {
     now += ms;
     for (const [id, t] of [...timers]) if (t.at <= now) { timers.delete(id); t.fn(); }
     const due = frames; frames = [];
-    for (const f of due) f.fn(now);
+    // A real frame's timestamp is its start, which may precede the clock.
+    for (const f of due) f.fn(now + frameSkew);
   }
   function advance(ms) { for (let t = 0; t < ms; t += 16) step(16); }
   function fire(bucket, type) { for (const fn of [...(listeners[bucket][type] || [])]) fn({ type }); }
@@ -207,4 +208,15 @@ test('destroy removes every listener and cancels pending work', () => {
   w.fire('window', 'pointermove');
   w.advance(2000);
   assert.equal(log.levels.length, seen);
+});
+
+test('a frame stamped before the clock read that scheduled it does not undo a wake', () => {
+  const w = world({ frameSkew: -20 });
+  const { rw, log } = make(w);
+  w.advance(12000);
+  assert.ok(rw.isResting());
+  w.fire('window', 'pointermove');
+  w.advance(1200);
+  assert.equal(rw.level(), 1);
+  assert.equal(log.states.at(-1), 'active', 'the effect must not be paused while the level rises');
 });
