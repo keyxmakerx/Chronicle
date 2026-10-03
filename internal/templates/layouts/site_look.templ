@@ -1,0 +1,69 @@
+// site_look.templ renders the site's brand on the pages outside a campaign:
+// the mark on the sign-in family of pages, the stage behind them, and the
+// small mark in the default sidebar. With no saved site look every one of
+// these renders what Chronicle shipped with.
+
+package layouts
+
+// SiteAuthStage is the full-height stage behind the sign-in, register and
+// password pages. A plain background is the page colour as before; a look's
+// colours or a picture sit behind a panel so the headings stay readable.
+// extraClass carries a page's own spacing (register adds vertical padding).
+templ SiteAuthStage(extraClass string) {
+	if siteAuthPlain(ctx) {
+		<div class={ "min-h-screen flex items-center justify-center bg-surface px-4", extraClass }>
+			{ children... }
+		</div>
+	} else {
+		<div class={ "relative overflow-hidden min-h-screen flex items-center justify-center px-4", extraClass, templ.KV("bg-slate-900", siteAuthPicture(ctx) != "") } style={ siteAuthGradient(ctx) }>
+			if pic := siteAuthPicture(ctx); pic != "" {
+				<img src={ pic } alt="" aria-hidden="true" class="absolute inset-0 w-full h-full object-cover"/>
+			}
+			<div class="relative w-full max-w-md rounded-2xl bg-surface shadow-2xl px-6 py-8 sm:px-8">
+				{ children... }
+			</div>
+		</div>
+	}
+}
+
+// SiteAuthMark is the brand square above the sign-in headings: the uploaded
+// logo, else the site name's first letter on the accent colour. A site that
+// never saved a look keeps Chronicle's book icon.
+templ SiteAuthMark() {
+	{{ look := GetSiteLook(ctx) }}
+	if !look.Configured {
+		<a href="/" class="inline-flex items-center justify-center w-12 h-12 rounded-xl bg-accent/10 dark:bg-accent/20 mb-4">
+			<i class="fa-solid fa-book-open text-lg text-accent"></i>
+		</a>
+	} else if look.Logo != "" {
+		<a href="/" aria-label={ look.DisplayName() } class="inline-flex items-center justify-center w-12 h-12 rounded-xl overflow-hidden mb-4">
+			<img src={ MediaURL(ctx, look.Logo) } alt="" class="w-full h-full object-cover"/>
+		</a>
+	} else {
+		<a href="/" aria-label={ look.DisplayName() } class="inline-flex items-center justify-center w-12 h-12 rounded-xl bg-accent text-white text-xl font-bold mb-4">
+			{ look.Initial() }
+		</a>
+	}
+}
+
+// SiteWelcomeLine is the optional welcome line under the sign-in heading.
+// The text goes through templ's escaping only.
+templ SiteWelcomeLine() {
+	if w := SiteWelcome(ctx); w != "" {
+		<p class="text-fg-body mt-2" data-site-welcome>{ w }</p>
+	}
+}
+
+// SiteSidebarMark is the small brand mark beside the name in the default
+// (non-campaign) sidebar. Nothing is drawn for a site that never saved a look,
+// so its sidebar is unchanged.
+templ SiteSidebarMark() {
+	{{ look := GetSiteLook(ctx) }}
+	if look.Configured {
+		if look.Logo != "" {
+			<img src={ MediaURL(ctx, look.Logo) } alt="" class="w-6 h-6 rounded-md object-cover shrink-0"/>
+		} else {
+			<span class="w-6 h-6 rounded-md bg-accent text-white text-xs font-bold inline-flex items-center justify-center shrink-0" aria-hidden="true">{ look.Initial() }</span>
+		}
+	}
+}

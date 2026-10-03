@@ -19,6 +19,7 @@ func TestActivityAreaOf(t *testing.T) {
 		{"registration.mode_changed", AreaSecurity},
 		{"apikey.changed", AreaSecurity},
 		{"smtp.saved", AreaSite},
+		{"sitelook.saved", AreaSite},
 		{"backup.run", AreaSite},
 		{"storage.user_limit_set", AreaSite},
 		{"media.deleted", AreaSite},

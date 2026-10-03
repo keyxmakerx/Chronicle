@@ -13,6 +13,7 @@ import (
 
 	"github.com/keyxmakerx/chronicle/internal/apperror"
 	"github.com/keyxmakerx/chronicle/internal/sanitize"
+	"github.com/keyxmakerx/chronicle/internal/sitelook"
 )
 
 // transferTokenBytes is the number of random bytes in a transfer token.
@@ -150,6 +151,18 @@ type CampaignService interface {
 	// SetNavSectionsSource injects what draws a member's sidebar, which
 	// UpdateNavPins checks pins against. Until it is set, pins are refused.
 	SetNavSectionsSource(src NavSectionsSource)
+
+	// SetSiteLookSource injects the site-wide look, so a new campaign can
+	// start with it. Late-bound and nil-safe: without it new campaigns start
+	// as Classic.
+	SetSiteLookSource(src SiteLookSource)
+}
+
+// SiteLookSource reads the site-wide look an admin chose. The settings
+// service implements it; campaigns reaches it only through this interface so
+// the two plugins stay independent.
+type SiteLookSource interface {
+	GetSiteLook(ctx context.Context) (sitelook.Settings, error)
 }
 
 // NavSectionsSource draws a member's sidebar as ViewNav does, before their
@@ -204,6 +217,7 @@ type campaignService struct {
 	hookDispatcher   CampaignHookDispatcher // Dispatches WASM lifecycle events. May be nil.
 	connRevoker      ConnectionRevoker      // Drops live sockets when access is lowered. May be nil until wiring reaches it.
 	navSections      NavSectionsSource      // Draws a member's sidebar for pin checks. Pins are refused while nil.
+	siteLook         SiteLookSource         // Site-wide look new campaigns start with. May be nil.
 	baseURL          string
 }
 
@@ -246,6 +260,39 @@ func (s *campaignService) SetMediaCleaner(cleaner MediaCleaner) {
 // Called after all plugins are wired to avoid initialization order issues.
 func (s *campaignService) SetHookDispatcher(dispatcher CampaignHookDispatcher) {
 	s.hookDispatcher = dispatcher
+}
+
+// SetSiteLookSource injects the site-wide look new campaigns start with.
+func (s *campaignService) SetSiteLookSource(src SiteLookSource) {
+	s.siteLook = src
+}
+
+// newCampaignSettings is the settings JSON a new campaign is created with.
+// When the admin has set a site look, the campaign's Appearance starts from
+// that look's id so the Customize page opens on it. Classic is the Appearance
+// default and is stored as empty, like every other default. A failed read
+// only means the campaign starts as Classic: creating a campaign must not
+// depend on the site look.
+func (s *campaignService) newCampaignSettings(ctx context.Context) string {
+	if s.siteLook == nil {
+		return "{}"
+	}
+	look, err := s.siteLook.GetSiteLook(ctx)
+	if err != nil {
+		slog.Warn("reading the site look for a new campaign", slog.Any("error", err))
+		return "{}"
+	}
+	if look.Look == "" || look.Look == AppearanceLooks[0] {
+		return "{}"
+	}
+	if _, ok := sitelook.Find(look.Look); !ok {
+		return "{}"
+	}
+	b, err := json.Marshal(CampaignSettings{Appearance: &Appearance{Look: look.Look}})
+	if err != nil {
+		return "{}"
+	}
+	return string(b)
 }
 
 // SetNavSectionsSource injects what draws a member's sidebar for pin checks.
@@ -328,7 +375,7 @@ func (s *campaignService) Create(ctx context.Context, userID string, input Creat
 		Name:          name,
 		Slug:          slug,
 		Description:   descPtr,
-		Settings:      "{}",
+		Settings:      s.newCampaignSettings(ctx),
 		SidebarConfig: "{}",
 		CreatedBy:     userID,
 		CreatedAt:     now,

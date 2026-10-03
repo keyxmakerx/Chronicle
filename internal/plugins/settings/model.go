@@ -145,6 +145,25 @@ const (
 	// its campaign's Trash before it is removed for good. One of
 	// TrashRetentionChoices; anything else reads as the default.
 	KeyTrashRetentionDays = "content.trash_retention_days"
+
+	// --- Site look (pages outside a campaign) ---
+	// Stored as plain strings; internal/sitelook defines what each may hold.
+	// An absent key means "never saved", so a fresh site renders as before.
+
+	// KeySiteName is the site name ("" is Chronicle).
+	KeySiteName = "site.name"
+	// KeySiteLogo is the stored media filename of the logo ("" is the letter mark).
+	KeySiteLogo = "site.logo"
+	// KeySiteLogoFavicon is "1" to use the logo as the browser tab icon.
+	KeySiteLogoFavicon = "site.logo_as_favicon"
+	// KeySiteLook is a campaign look id, or "" to leave pages as they are.
+	KeySiteLook = "site.look"
+	// KeySiteSigninBackground is "plain", "look" or "picture".
+	KeySiteSigninBackground = "site.signin_background"
+	// KeySiteSigninPicture is the stored media filename of the sign-in picture.
+	KeySiteSigninPicture = "site.signin_picture"
+	// KeySiteWelcome is the optional welcome line on the sign-in card.
+	KeySiteWelcome = "site.welcome"
 )
 
 // TrashRetentionChoices are the retention periods the admin can pick, in

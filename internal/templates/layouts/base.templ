@@ -12,10 +12,14 @@ templ Base(title string) {
 	<head>
 		<meta charset="UTF-8"/>
 		<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-		<title>{ title } | Chronicle</title>
+		<title>{ SiteTitle(ctx, title) }</title>
 
 		<!-- Favicon -->
-		<link rel="icon" type="image/svg+xml" href={ AssetURL("/static/img/favicon.svg") }/>
+		if href, mime, ok := SiteFavicon(ctx); ok {
+			<link rel="icon" type={ mime } href={ href }/>
+		} else {
+			<link rel="icon" type="image/svg+xml" href={ AssetURL("/static/img/favicon.svg") }/>
+		}
 
 		<!-- Theme: apply dark class + inline background-color before first paint to prevent flash.
 		     A signed-in person's account choice (data-view-theme) wins over this browser's saved theme;

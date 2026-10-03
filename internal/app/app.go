@@ -151,12 +151,14 @@ func (a *App) setupMiddleware() {
 	// ~10MB cap of their own, enforced via an http.LimitReader in the
 	// calendar handler — this global 2MB limit would otherwise be the real
 	// (and silent, since it fails before the handler's own check ever runs)
-	// ceiling for every one of them.
+	// ceiling for every one of them. The Site look form carries a logo and a
+	// sign-in picture, so it skips the global limit and takes a 5M cap of its
+	// own at the route.
 	a.Echo.Use(echomw.BodyLimitWithConfig(echomw.BodyLimitConfig{
 		Limit: "2M",
 		Skipper: func(c echo.Context) bool {
 			path := c.Request().URL.Path
-			if strings.HasPrefix(path, "/media/upload") || path == "/ws" {
+			if strings.HasPrefix(path, "/media/upload") || path == "/ws" || path == "/admin/site-look" {
 				return true
 			}
 			return isCalendarImportPath(path)

@@ -58,6 +58,7 @@ var activityResourceArea = map[string]string{
 	"backup":       AreaSite,
 	"restore":      AreaSite,
 	"smtp":         AreaSite,
+	"sitelook":     AreaSite,
 	"storage":      AreaSite,
 }
 

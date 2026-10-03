@@ -71,6 +71,8 @@ type Handler struct {
 	activity ActivityService
 	baseURL  string
 	navPins  AdminNavPinService
+	// siteLook backs the Site look page; nil until wired.
+	siteLook SiteLookService
 }
 
 // StoragePageData holds all data needed for the combined storage management page.
@@ -402,6 +404,13 @@ func (h *Handler) Dashboard(c echo.Context) error {
 		DegradedParts:  len(degradedPlugins),
 		SMTPConfigured: smtpConfigured, SMTPKnown: h.smtpService != nil,
 		Now: time.Now(),
+	}
+	if h.siteLook != nil {
+		if sl, err := h.siteLook.Get(ctx); err != nil {
+			slog.Warn("admin dashboard: reading the site look failed", slog.Any("error", err))
+		} else {
+			in.SiteName, in.SiteLookSaved = sl.DisplayName(), sl.Configured
+		}
 	}
 	if h.addonCounter == nil {
 		in.Features = -1

@@ -545,6 +545,64 @@ func (a *backdropUploaderAdapter) DeletePicture(ctx context.Context, campaignID,
 	return true, nil
 }
 
+// siteMediaAdapter stores the site's logo and sign-in picture through the
+// media service. They are campaignless UsageBackdrop files, which the media
+// handler serves publicly (the sign-in page has no signed-in viewer). The only
+// other writer of UsageBackdrop always sets a campaign, so a campaignless
+// backdrop is a site picture and nothing else.
+type siteMediaAdapter struct {
+	svc media.MediaService
+}
+
+// StoreSitePicture saves a validated image with no campaign.
+func (a *siteMediaAdapter) StoreSitePicture(ctx context.Context, userID string, data []byte, originalName, mimeType string) (string, error) {
+	mf, err := a.svc.Upload(ctx, media.UploadInput{
+		UploadedBy:   userID,
+		OriginalName: originalName,
+		MimeType:     mimeType,
+		FileSize:     int64(len(data)),
+		UsageType:    media.UsageBackdrop,
+		FileBytes:    data,
+	})
+	if err != nil {
+		return "", err
+	}
+	return mf.Filename, nil
+}
+
+// site returns the media row for filename when it is a site picture.
+func (a *siteMediaAdapter) site(ctx context.Context, filename string) (*media.MediaFile, error) {
+	base := path.Base(filename)
+	id := strings.TrimSuffix(base, path.Ext(base))
+	mf, err := a.svc.GetByID(ctx, id)
+	if err != nil {
+		var ae *apperror.AppError
+		if errors.As(err, &ae) && ae.Code == http.StatusNotFound {
+			return nil, nil
+		}
+		return nil, err
+	}
+	if mf.Filename != filename || mf.UsageType != media.UsageBackdrop || mf.CampaignID != nil {
+		return nil, nil
+	}
+	return mf, nil
+}
+
+// OwnsSitePicture reports whether filename is a site picture.
+func (a *siteMediaAdapter) OwnsSitePicture(ctx context.Context, filename string) (bool, error) {
+	mf, err := a.site(ctx, filename)
+	return mf != nil, err
+}
+
+// DeleteSitePicture removes filename if it is a site picture.
+func (a *siteMediaAdapter) DeleteSitePicture(ctx context.Context, filename string) error {
+	mf, err := a.site(ctx, filename)
+	if err != nil || mf == nil {
+		return err
+	}
+	return a.svc.Delete(ctx, mf.ID)
+}
+
 // entityTagFetcherAdapter wraps tags.TagService to implement the
 // entities.EntityTagFetcher interface for batch tag loading in list views.
 // grantSvc backs the tag-grant glance methods.
@@ -2518,6 +2576,12 @@ func (a *App) RegisterRoutes() {
 	// Wire settings service into admin handler for the combined storage page.
 	adminHandler.SetSettingsDeps(settingsService)
 
+	// Site look: the admin page saves through the settings service and the
+	// media adapter; new campaigns read the same look through the campaigns
+	// service's narrow interface.
+	adminHandler.SetSiteLookService(admin.NewSiteLookService(settingsService, &siteMediaAdapter{svc: mediaService}))
+	campaignService.SetSiteLookSource(settingsService)
+
 	// Addons plugin: extension framework with per-campaign enable/disable toggles.
 	addonRepo := addons.NewAddonRepository(a.DB)
 	addonService := addons.NewAddonService(addonRepo)
@@ -4104,6 +4168,16 @@ func (a *App) RegisterRoutes() {
 		// core base.templ layout.
 		ctx = layouts.SetPluginBodyScripts(ctx, pluginBodyScripts)
 
+		// Site look (name, logo, tab icon, and for pages outside a campaign the
+		// borrowed look). A failed read leaves the shipped look rather than
+		// failing the page. A campaign page only gets the name and tab icon:
+		// ApplySiteLook does nothing inside a campaign.
+		if sl, err := settingsService.GetSiteLook(c.Request().Context()); err != nil {
+			slog.Warn("reading the site look", slog.Any("error", err))
+		} else {
+			ctx = layouts.SetSiteLook(ctx, sl)
+		}
+
 		// User info from auth session.
 		if session := auth.GetSession(c); session != nil {
 			ctx = layouts.SetIsAuthenticated(ctx, true)
@@ -4394,6 +4468,10 @@ func (a *App) RegisterRoutes() {
 				return urlSigner.SignThumb(fileID, size, viewer, media.SignedURLTTL)
 			})
 		}
+
+		// Last, so the campaign values above are already in place: a page
+		// outside a campaign borrows the site look, a campaign page does not.
+		ctx = layouts.ApplySiteLook(ctx)
 
 		return ctx
 	}
