@@ -372,13 +372,48 @@ test('Best times picks the strongest three-hour slot, with who is missing', () =
   assert.equal(best.length, 1);
   assert.equal(best[0].iso, '2026-10-08');
   assert.deepEqual({ ...best[0].w }, { start: 19, end: 22, free: 3 });
-  v.renderBest = def.renderBest;
-  v.bestEl = { hidden: true, innerHTML: '' };
-  v.renderBest();
-  assert.match(v.bestEl.innerHTML, /Thu Oct 8<\/b>, 7pm to 10pm/);
-  assert.match(v.bestEl.innerHTML, /3 of 4 free · Dee hasn’t painted hours/);
-  assert.match(v.bestEl.innerHTML, /plan_date=2026-10-08&amp;plan_time=19:00/);
-  assert.match(v.bestEl.innerHTML, /1 player hasn’t painted hours yet/);
+  const html = v._fvDirectorHTML(2026, 10, 'October');
+  assert.match(html, /Best times in October/);
+  assert.match(html, /Thu Oct 8<\/b>, 7pm to 10pm/);
+  assert.match(html, /3 of 4 free · Dee hasn’t painted hours/);
+  assert.match(html, /plan_date=2026-10-08&amp;plan_time=19:00/);
+});
+
+test('the Director’s Who’s free view lists the players, a reminder and the full planner', () => {
+  const { def } = load();
+  const v = freeView(def, overlay());
+  const html = v._fvDirectorHTML(2026, 10, 'October');
+  assert.match(html, /Jack<\/span><span class="ok">Hours given/);
+  assert.match(html, /Dee<\/span><span class="wait">No hours yet/);
+  assert.match(html, /1 player hasn’t painted hours yet\. <button type="button" class="btn sm" data-best-nudge>/);
+  assert.match(html, /<input type="checkbox" data-fv-lines checked>/, 'the lines switch, on');
+  assert.match(html, /href="\/campaigns\/c1\/availability\?tab=overlay"/, 'the full planner');
+});
+
+test('a player’s Who’s free view asks for their hours until they give them', () => {
+  const { def } = load();
+  const v = freeView(def, overlay({ includeDetail: false, members: [] }));
+  v.freeDirector = false; v.role = 1;
+  v.mine = { answered: false, blocks: [] };
+  let html = v._fvPlayerHTML(2026, 10);
+  assert.match(html, /You haven’t given your hours yet/);
+  assert.match(html, /<a class="btn fvgo" href="\/campaigns\/c1\/availability">.*Give my hours/);
+  v.mine = { answered: true, tz: 'America/Chicago', blocks: [{ dayOfWeek: 6, startMinute: 1080, endMinute: 1320 }] };
+  html = v._fvPlayerHTML(2026, 10);
+  assert.match(html, /Sat<\/span><span class="ln"><b style="left:75\.00%;width:16\.67%">/, 'Saturday 6pm to 10pm');
+  assert.match(html, /Change my hours/);
+  assert.match(html, /in America\/Chicago time/);
+  assert.doesNotMatch(html, /Jack|Julie/, 'no names for players');
+});
+
+test('a player sees how many are free at each game night this month', () => {
+  const { def } = load();
+  const v = freeView(def, overlay({ includeDetail: false, members: [] }));
+  v.freeDirector = false; v.role = 1; v.mine = { answered: true, blocks: [] };
+  v.nightsByMonth = { '2026_10': [night({ date: '2026-10-08', time: '19:00' })] };
+  const html = v._fvPlayerHTML(2026, 10);
+  assert.match(html, /data-best-open="2026_10_8"/);
+  assert.match(html, /3 of 4 free at 7pm/);
 });
 
 test('the month reads the weeks its days fall in, in the calendar zone', async () => {

@@ -1025,7 +1025,7 @@
               '<div class="todaypill" id="cal5-todaypill"></div>' +
               '<div class="h-acts">' +
                 '<button type="button" class="skybtn" id="cal5-skybtn" aria-expanded="false" aria-controls="cal5-skywrap" title="Fold or open the sky" hidden><span class="sw" aria-hidden="true"></span><span>Sky</span></button>' +
-                (this.freeDirector ? '<button type="button" class="tbtn" id="cal5-freebtn" aria-pressed="' + !!this.showFree + '" title="Show when players are free"><i class="fa-solid fa-user-clock"></i><span>Who’s free</span></button>' : '') +
+                (this.freeCan ? '<button type="button" class="tbtn" id="cal5-freebtn" aria-haspopup="dialog" aria-expanded="false" title="' + (this.freeDirector ? 'When players are free, and the best times to play' : 'Give your hours, and see who is free') + '"><i class="fa-solid fa-user-clock"></i><span>Who’s free</span></button>' : '') +
                 '<button type="button" class="tbtn" id="cal5-moonbtn" aria-haspopup="dialog" aria-expanded="false"><i class="fa-solid fa-moon"></i><span>Moons</span></button>' +
               '</div>' +
             '</div>' +
@@ -1050,13 +1050,13 @@
           '<div class="wing" id="cal5-wing" role="dialog" aria-label="Day" tabindex="-1"></div>' +
           '<div class="evp" id="cal5-evp" role="dialog" aria-label="Event" tabindex="-1"></div>' +
           '<div class="mv" id="cal5-mv" role="dialog" aria-label="Moons" tabindex="-1"></div>' +
+          '<div class="mv fv" id="cal5-fv" role="dialog" aria-label="Who’s free" tabindex="-1"></div>' +
           '<div class="flap" id="cal5-flap" role="dialog" aria-label="Era" tabindex="-1"></div>' +
           '<div class="pop" id="cal5-pop" role="dialog" aria-label="Calendars you can see" tabindex="-1"></div>' +
           '<div class="carry" id="cal5-carry" aria-hidden="true"></div>' +
           '<div class="scrim" id="cal5-scrim"></div>' +
           '<div class="dock" id="cal5-dock"></div>' +
         '</section>' +
-        '<section class="bestbox" id="cal5-best" aria-label="Best times" hidden></section>' +
         '<div class="caption" id="cal5-caption">' +
           '<p>Hover a day’s marks for a glance; click a day to open its card, then an event’s box for everything about it. Arrows move between days, T jumps to today, Page Up/Down change month.</p>' +
           '<ul class="legend" id="cal5-legend" aria-label="What the marks mean"></ul>' +
@@ -1077,7 +1077,7 @@
       this.scrimEl = $('#cal5-scrim', this.el);
       this.carryEl = $('#cal5-carry', this.el);
       this.dockEl = $('#cal5-dock', this.el);
-      this.bestEl = $('#cal5-best', this.el);
+      this.fvEl = $('#cal5-fv', this.el);
     },
 
     // action, optional: {label, run} adds a button to the toast (Undo).
@@ -1609,10 +1609,8 @@
       var self = this;
       this.showFree = !!on && this.freeDirector;
       try { window.localStorage.setItem(FREE_KEY, this.showFree ? '1' : '0'); } catch (e) { /* this page only */ }
-      var btn = $('#cal5-freebtn', this.el);
-      if (btn) btn.setAttribute('aria-pressed', String(this.showFree));
       var go = this.showFree ? this.fetchFreeMonth(this.view.y, this.view.m) : Promise.resolve();
-      go.then(function () { self._paintMonth(); self.renderBest(); self.refreshWing(); });
+      go.then(function () { self._paintMonth(); self.refreshFreeView(); self.refreshWing(); });
       this._announce(this.showFree ? 'Showing when players are free.' : 'Hiding when players are free.');
     },
 
@@ -1805,21 +1803,86 @@
       return out.slice(0, 3);
     },
 
-    renderBest: function () {
-      var el = this.bestEl;
-      if (!el) return;
-      if (!this.showFree) { el.hidden = true; el.innerHTML = ''; return; }
-      var self = this, y = this.view.y, m = this.view.m, monthName = ((this.cal.months || [])[m - 1] || {}).name || '';
-      var anyData = false, unanswered = {}, slots = this.bestTimes(y, m);
+    // --------------------------------------------------------------
+    // The Who's free view: a panel over the month, opened from the
+    // header, so everything about free hours stays inside the calendar
+    // wherever it is shown. The Director gets Best times, who still has
+    // to give hours (with a reminder), the switch for the lines on the
+    // days and the way to the full planner; a player gets their own
+    // hours, with the button that gives or changes them, and how many
+    // are free at each game night this month.
+    // --------------------------------------------------------------
+    openFreeView: function () {
+      var self = this, btn = $('#cal5-freebtn', this.el);
+      if (!this.freeCan || !btn) return;
+      if (this.wingFor) this.closeWing({ quiet: true });
+      this.fvEl.innerHTML = this._fvHTML();
+      growOpen(this.fvEl, btn, this.calEl, { center: true });
+      btn.setAttribute('aria-expanded', 'true');
+      this._updateScrim();
+      this.fvEl.focus({ preventScroll: true });
+      var reads = [this.fetchFreeMonth(this.view.y, this.view.m)];
+      if (!this.freeDirector) reads.push(this.fetchMine());
+      Promise.all(reads).then(function () { self.refreshFreeView(); });
+    },
+
+    closeFreeView: function () {
+      if (!this.fvEl.classList.contains('open')) return;
+      var btn = $('#cal5-freebtn', this.el);
+      if (btn) btn.setAttribute('aria-expanded', 'false');
+      growClose(this.fvEl, btn);
+      this._updateScrim();
+    },
+
+    refreshFreeView: function () {
+      if (!this.fvEl || !this.fvEl.classList.contains('open')) return;
+      var body = this.fvEl.querySelector('.fvbody'), top = body ? body.scrollTop : 0;
+      this.fvEl.innerHTML = this._fvHTML();
+      body = this.fvEl.querySelector('.fvbody');
+      if (body) body.scrollTop = top;
+    },
+
+    // The viewer's own painted hours (the Availability page's pattern),
+    // read once per page; a player's view says whether they have given
+    // them yet.
+    fetchMine: function () {
+      var self = this;
+      if (this._minePromise) return this._minePromise;
+      this._minePromise = Chronicle.apiFetch('/campaigns/' + encodeURIComponent(this.campaignId) + '/availability/mine')
+        .then(function (resp) { return resp.ok ? resp.json() : null; })
+        .then(function (mine) { self.mine = mine; })
+        .catch(function () { self.mine = null; });
+      return this._minePromise;
+    },
+
+    _availURL: function (tab) {
+      return '/campaigns/' + encodeURIComponent(this.campaignId) + '/availability' + (tab ? '?tab=' + tab : '');
+    },
+
+    _fvHTML: function () {
+      var y = this.view.y, m = this.view.m, monthName = ((this.cal.months || [])[m - 1] || {}).name || '';
+      var sub = [monthName + ' ' + y, this.calZone ? 'times in ' + zoneAbbr(this.calZone, y + '-' + pad2(m) + '-15') : ''].filter(Boolean).join(' · ');
+      return '<div class="grab" aria-hidden="true"></div>' +
+        '<div class="mvcrease"><div class="crease"><span class="mvt">Who’s free</span><span class="mvsub">' + esc(sub) + '</span><button type="button" class="x" data-close aria-label="Close">✕</button></div></div>' +
+        '<div class="fvbody">' + (this.freeDirector ? this._fvDirectorHTML(y, m, monthName) : this._fvPlayerHTML(y, m)) + '</div>';
+    },
+
+    // The month's roster as the overlay names it: everyone, in the same
+    // order as the lines, and whether each has painted hours. null until
+    // a week has been read.
+    _freeRoster: function (y, m) {
       for (var d = 1; d <= CalDate.monthDays(this.cal, m - 1, y); d++) {
         var data = this._freeOn(y, m, d);
-        if (!data || !data.detail) continue;
-        anyData = true;
-        data.members.forEach(function (mem) { if (!mem.answered) unanswered[mem.userId] = true; });
+        if (data && data.detail) return data.members.map(function (mem) { return { userId: mem.userId, name: mem.name, answered: mem.answered }; });
       }
-      var h = '<h3>Best times' + (monthName ? ' in ' + esc(monthName) : '') + '</h3>';
-      if (!anyData) h += '<p class="none">Loading who’s free…</p>';
-      else if (!slots.length) h += '<p class="none">No three-hour slot this month when most players are free.</p>';
+      return null;
+    },
+
+    _fvDirectorHTML: function (y, m, monthName) {
+      var self = this, slots = this.bestTimes(y, m), roster = this._freeRoster(y, m);
+      var h = '<section class="fvsec fvbest"><h4>Best times' + (monthName ? ' in ' + esc(monthName) : '') + '</h4>';
+      if (!roster) h += '<p class="none">Loading who’s free…</p>';
+      else if (!slots.length) h += '<p class="none">No three-hour slot left this month when most players are free.</p>';
       else h += '<ul class="slots">' + slots.map(function (s) {
         var night = self.nightsOnDay(s.y, s.m, s.d)[0], missing = self._freeMissing(s.data, s.w);
         var who = s.w.free === s.data.total ? 'All ' + s.data.total + ' free' : s.w.free + ' of ' + s.data.total + ' free';
@@ -1830,21 +1893,71 @@
             : '<button type="button" class="btn sm" data-best-open="' + esc(dayKey(s.y, s.m, s.d)) + '">Open</button>');
         return '<li><span><b>' + esc(realDateWords(s.iso)) + '</b>, ' + esc(self._windowWords(s.w, s.iso)) + '<small>' + esc(who) + '</small></span>' + act + '</li>';
       }).join('') + '</ul>';
-      var nUn = Object.keys(unanswered).length;
-      if (nUn) h += '<p class="fnote">' + (nUn === 1 ? '1 player hasn’t' : nUn + ' players haven’t') + ' painted hours yet. <button type="button" class="lnk" data-best-nudge>Remind them</button></p>';
-      el.innerHTML = h;
-      el.hidden = false;
+      h += '</section><section class="fvsec fvwho"><h4>Players</h4>';
+      if (roster) {
+        var silent = roster.filter(function (mem) { return !mem.answered; }).length;
+        h += '<ul class="fvroster">' + roster.map(function (mem) {
+          return '<li><span>' + esc(mem.name) + '</span><span class="' + (mem.answered ? 'ok' : 'wait') + '">' + (mem.answered ? 'Hours given' : 'No hours yet') + '</span></li>';
+        }).join('') + '</ul>';
+        if (silent) h += '<p class="fnote">' + (silent === 1 ? '1 player hasn’t' : silent + ' players haven’t') + ' painted hours yet. <button type="button" class="btn sm" data-best-nudge><i class="fa-solid fa-bell"></i> Remind them</button></p>';
+      }
+      h += '</section><section class="fvsec fvfoot">' +
+        '<label class="fvsw"><input type="checkbox" data-fv-lines' + (this.showFree ? ' checked' : '') + '><span>Show who’s free on the days</span></label>' +
+        '<span class="fvlinks"><a class="lnk" href="' + esc(this._availURL()) + '">Change my hours</a><a class="btn sm" href="' + esc(this._availURL('overlay')) + '"><i class="fa-solid fa-up-right-and-down-left-from-center"></i> Open the full planner</a></span></section>';
+      return h;
     },
 
-    _bestHandleClick: function (e) {
+    _fvPlayerHTML: function (y, m) {
+      var self = this, mine = this.mine, h = '<section class="fvsec fvmine"><h4>Your hours</h4>';
+      if (mine === undefined) h += '<p class="none">Loading your hours…</p>';
+      else if (!mine || !mine.answered) {
+        h += '<p class="fvlead">You haven’t given your hours yet. The DM uses them to pick game nights.</p>' +
+          '<a class="btn fvgo" href="' + esc(this._availURL()) + '"><i class="fa-solid fa-user-pen"></i> Give my hours</a>';
+      } else {
+        h += this._mineWeekHTML(mine) + '<a class="btn sm" href="' + esc(this._availURL()) + '"><i class="fa-solid fa-user-pen"></i> Change my hours</a>';
+      }
+      h += '</section><section class="fvsec fvnights"><h4>Game nights this month</h4>';
+      var today = this._todayIso(), rows = [];
+      for (var d = 1; d <= CalDate.monthDays(this.cal, m - 1, y); d++) {
+        this.nightsOnDay(y, m, d).forEach(function (n) {
+          if (n.date < today) return;
+          var data = self.freeByDate[n.date], hr = /^\d{2}:\d{2}$/.test(n.time || '') ? parseInt(n.time, 10) : -1;
+          var count = data && data.total && hr >= 0 ? (data.hours[hr] || 0) + ' of ' + data.total + ' free at ' + ampm(hr * 60) : '';
+          rows.push('<li><button type="button" class="fvn" data-best-open="' + esc(dayKey(y, m, d)) + '" data-best-night="' + esc(self._gnId(n)) + '"><b>' + esc(realDateWords(n.date)) + '</b><span>' + esc(n.name) + '</span><small>' + esc(count) + '</small></button></li>');
+        });
+      }
+      h += rows.length ? '<ul class="fvnl">' + rows.join('') + '</ul>' : '<p class="none">No game nights left this month.</p>';
+      return h + '<p class="fnote">Click any day for how many are free that day.</p></section>';
+    },
+
+    // A player's week as they painted it, one line a day, Monday first, in
+    // the zone they painted it in.
+    _mineWeekHTML: function (mine) {
+      var names = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'], dows = [1, 2, 3, 4, 5, 6, 0], self = this;
+      var blocks = Array.isArray(mine.blocks) ? mine.blocks : [];
+      return '<div class="flines">' + dows.map(function (dw, i) {
+        var segs = blocks.filter(function (b) { return b.dayOfWeek === dw; }).map(function (b) { return [b.startMinute, b.endMinute]; });
+        return '<div class="fr"><span class="nm">' + names[i] + '</span>' + self._lineHTML(segs) + '</div>';
+      }).join('') + '</div><div class="fticks" aria-hidden="true"><span>12am</span><span>6am</span><span>noon</span><span>6pm</span><span>12am</span></div>' +
+        (mine.tz ? '<p class="fnote">Repeats every week, in ' + esc(mine.tz.replace(/_/g, ' ')) + ' time.</p>' : '');
+    },
+
+    _fvHandleClick: function (e) {
       var self = this, open = e.target.closest('[data-best-open]'), nudge = e.target.closest('[data-best-nudge]');
-      if (open) { this.openWing(open.dataset.bestOpen, open.dataset.bestNight || null); return; }
+      if (e.target.closest('[data-close]')) { this.closeFreeView(); return; }
+      if (open) {
+        var key = open.dataset.bestOpen, night = open.dataset.bestNight || null;
+        this.closeFreeView();
+        this.openWing(key, night);
+        return;
+      }
       if (!nudge) return;
       nudge.disabled = true;
       Chronicle.apiFetch('/campaigns/' + encodeURIComponent(this.campaignId) + '/availability/nudge', { method: 'POST' })
         .then(function (resp) { return resp.ok ? resp.json() : Promise.reject(); })
         .then(function (res) {
           var n = (res && res.notified || []).length;
+          nudge.innerHTML = '<i class="fa-solid fa-check"></i> ' + (n ? 'Reminded' : 'Already asked');
           self.say(n ? 'Asked ' + n + (n === 1 ? ' player' : ' players') + ' to paint their hours.' : 'Everyone has already been asked.');
         })
         .catch(function () { nudge.disabled = false; self.say('That reminder could not be sent. Try again.'); });
@@ -1948,7 +2061,7 @@
       Promise.all([this.fetchMonth(this.view.y, this.view.m), this.fetchWeatherYear(this.view.y), this.fetchNights(this.view.y, this.view.m),
         this.showFree ? this.fetchFreeMonth(this.view.y, this.view.m) : null]).then(function () {
         self._paintMonth();
-        self.renderBest();
+        self.refreshFreeView();
         // The open day's card shows what the fetch just brought.
         self.refreshWing();
       });
@@ -2114,8 +2227,13 @@
       $('#cal5-erabtn', this.el).addEventListener('click', function () { self.toggleEra(); });
       $('#cal5-moonbtn', this.el).addEventListener('click', function () { self.openMoonView(); });
       var freeBtn = $('#cal5-freebtn', this.el);
-      if (freeBtn) freeBtn.addEventListener('click', function () { self.setShowFree(!self.showFree); });
-      this.bestEl.addEventListener('click', function (e) { self._bestHandleClick(e); });
+      if (freeBtn) freeBtn.addEventListener('click', function () {
+        if (self.fvEl.classList.contains('open')) self.closeFreeView(); else self.openFreeView();
+      });
+      this.fvEl.addEventListener('click', function (e) { self._fvHandleClick(e); });
+      this.fvEl.addEventListener('change', function (e) {
+        if (e.target.matches('[data-fv-lines]')) self.setShowFree(e.target.checked);
+      });
       this.scrimEl.addEventListener('click', function () { self.closeAllPanels(); });
 
       this.stageEl.addEventListener('click', function (e) {
@@ -2234,23 +2352,30 @@
         if (e.key !== 'Escape') return;
         if (self.evpEl.classList.contains('open')) { self.closeEventDetail(); return; }
         if (self.mvEl.classList.contains('open')) { self.closeMoonView(); return; }
+        if (self.fvEl.classList.contains('open')) { self.closeFreeView(); return; }
         if (self._pf.state !== 'closed') { self.closeFlap(); return; }
         if (self.popEl.classList.contains('open')) { self.closePop(); return; }
         if (self.wingFor) { self.closeWing(); return; }
       };
       document.addEventListener('keydown', this._escHandler);
 
-      // The moon view sits over the month, so a press anywhere else in the
-      // calendar closes it, the way the day and era cards give way to a
-      // press on the grid. Presses outside the calendar are left to the
-      // page (the almanac's click-off closes an open card itself), and
-      // presses that open the moon view again are left to do that.
+      // The moon and Who's free views sit over the month, so a press
+      // anywhere else in the calendar closes them, the way the day and era
+      // cards give way to a press on the grid; presses that open them again
+      // are left to do that. The day card also gives way to a press
+      // outside the calendar, so it never traps the page. Inside the
+      // Calendars page the almanac owns presses outside (its click-off
+      // backs out one step at a time), and a card holding a form keeps it.
+      // A press on another day is the grid's own: it moves the card.
       this._mvOffHandler = function (e) {
-        if (!self.mvEl.classList.contains('open')) return;
         var t = e.target;
-        if (!(t instanceof Element) || !self.el.contains(t) || self.mvEl.contains(t) || self.evpEl.contains(t)) return;
-        if (t.closest('#cal5-moonbtn, .msil, .mrow')) return;
-        self.closeMoonView();
+        if (!(t instanceof Element) || self.evpEl.contains(t)) return;
+        var inside = self.el.contains(t);
+        if (inside && self.mvEl.classList.contains('open') && !self.mvEl.contains(t) && !t.closest('#cal5-moonbtn, .msil, .mrow')) self.closeMoonView();
+        if (inside && self.fvEl.classList.contains('open') && !self.fvEl.contains(t) && !t.closest('#cal5-freebtn')) self.closeFreeView();
+        if (!self.wingFor || self.wingEl.contains(t) || self.wingEl.querySelector('form')) return;
+        if (inside ? !t.closest('.day[data-key], #cal5-freebtn') :
+            !self.el.closest('[data-almanac]') && !t.closest('dialog, [role="dialog"], [aria-modal="true"]')) self.closeWing();
       };
       document.addEventListener('pointerdown', this._mvOffHandler, true);
     },
@@ -2264,7 +2389,7 @@
 
     anyPanelOpen: function () {
       return !!this.wingFor || this._pf.state !== 'closed' || this.evpEl.classList.contains('open') ||
-        this.mvEl.classList.contains('open') || this.popEl.classList.contains('open');
+        this.mvEl.classList.contains('open') || this.popEl.classList.contains('open') || this.fvEl.classList.contains('open');
     },
 
     _updateScrim: function () {
@@ -2278,6 +2403,7 @@
       this.closeFlap(o);
       this.closeEventDetail();
       this.closeMoonView();
+      this.closeFreeView();
       this.closePop();
     },
 
