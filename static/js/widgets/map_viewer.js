@@ -1452,12 +1452,9 @@
 	// Drag-end position update (silent PUT).
 	async function updateMarkerPosition(mk) {
 		try {
-			// A drag means ONE thing: the marker moved. It used to
-			// echo six other fields off the local marker object to
-			// defend them from the whole-replace PUT — and still
-			// lost pin_category, visibility_rules and foundry_id,
-			// which it had no copy of. The server preserves every
-			// absent key now, so the honest body is {x, y}.
+			// A drag only moves the marker. Updates are partial (absent
+			// keys are preserved), so the body carries just {x, y} and
+			// never echoes fields this page may hold stale copies of.
 			await Chronicle.apiFetch('/campaigns/' + campaignID + '/maps/' + mapID + '/markers/' + mk.id, {
 				method: 'PUT',
 				body: { x: mk.x, y: mk.y },

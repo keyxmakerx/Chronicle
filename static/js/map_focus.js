@@ -1,7 +1,7 @@
 /**
  * Map focus view
  *
- * A framed map preview on a page (entity page, later a character sheet) opens
+ * A framed map preview on a page opens
  * the full live map "like a paper map": the panel grows out of the preview's
  * own rectangle, opening sideways first and then downward, with faint fold
  * creases that fade as it flattens. Under prefers-reduced-motion it is a plain
