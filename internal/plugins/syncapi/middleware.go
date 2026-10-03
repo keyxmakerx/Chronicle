@@ -14,6 +14,7 @@ import (
 	"github.com/labstack/echo/v4"
 
 	"github.com/keyxmakerx/chronicle/internal/apperror"
+	"github.com/keyxmakerx/chronicle/internal/changesource"
 	"github.com/keyxmakerx/chronicle/internal/plugins/auth"
 	"github.com/keyxmakerx/chronicle/internal/plugins/campaigns"
 )
@@ -688,5 +689,25 @@ func syncAPIDisabledError() *apperror.AppError {
 		Type: "sync_api_disabled",
 		Message: "the Sync API integration is switched off for this campaign; " +
 			"a campaign owner can re-enable it on the campaign's Extensions page (sidebar → Extensions)",
+	}
+}
+
+// WithChangeSource stamps the request context with where its writes come from,
+// so observers of an entity write can describe it: a real Bearer key is the
+// external sync client, while a session-authed caller (Chronicle's own browser
+// widgets on these routes) is the web UI. Mounted after the identity resolver.
+func WithChangeSource() echo.MiddlewareFunc {
+	return func(next echo.HandlerFunc) echo.HandlerFunc {
+		return func(c echo.Context) error {
+			if key := GetAPIKey(c); key != nil {
+				kind := changesource.KindFoundry
+				if key.ID == synthKeySessionID {
+					kind = changesource.KindWeb
+				}
+				ctx := changesource.With(c.Request().Context(), changesource.Source{Kind: kind, UserID: key.UserID})
+				c.SetRequest(c.Request().WithContext(ctx))
+			}
+			return next(c)
+		}
 	}
 }

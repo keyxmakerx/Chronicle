@@ -62,7 +62,9 @@ func GetAppearance(ctx context.Context) *AppearanceData {
 // AppearanceAttrs are the <html> attributes the site's CSS keys its
 // Customize styles on (input.css, "Customize: campaign styles").
 func AppearanceAttrs(ctx context.Context) templ.Attributes {
-	attrs := templ.Attributes{}
+	// The viewer's own choices ride on the same element; they are separate
+	// attributes (data-view-*), never folded into the campaign's data-cz-*.
+	attrs := ViewPrefAttrs(ctx)
 	a := GetAppearance(ctx)
 	if a == nil {
 		return attrs

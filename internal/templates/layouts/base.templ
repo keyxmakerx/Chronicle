@@ -17,9 +17,11 @@ templ Base(title string) {
 		<!-- Favicon -->
 		<link rel="icon" type="image/svg+xml" href={ AssetURL("/static/img/favicon.svg") }/>
 
-		<!-- Theme: apply dark class + inline background-color before first paint to prevent flash -->
+		<!-- Theme: apply dark class + inline background-color before first paint to prevent flash.
+		     A signed-in person's account choice (data-view-theme) wins over this browser's saved theme;
+		     "device" follows the OS. Either reduce switch (the campaign's or the person's own) sets nav-rm. -->
 		<script>
-			(function(){try{var t=localStorage.getItem('chronicle-theme');var d=t==='dark'||(t!=='light'&&window.matchMedia('(prefers-color-scheme:dark)').matches);if(d){document.documentElement.classList.add('dark');document.documentElement.style.backgroundColor='#111827'}else{document.documentElement.style.backgroundColor='#f9fafb'}if(document.documentElement.hasAttribute('data-cz-reduce'))document.documentElement.classList.add('nav-rm')}catch(e){}})();
+			(function(){try{var h=document.documentElement;var v=h.getAttribute('data-view-theme');var t=(v==='light'||v==='dark')?v:(v==='device'?null:localStorage.getItem('chronicle-theme'));var d=t==='dark'||(t!=='light'&&window.matchMedia('(prefers-color-scheme:dark)').matches);if(d){h.classList.add('dark');h.style.backgroundColor='#111827'}else{h.style.backgroundColor='#f9fafb'}if(h.hasAttribute('data-cz-reduce')||h.getAttribute('data-view-motion')==='calm')h.classList.add('nav-rm')}catch(e){}})();
 		</script>
 
 		<!-- Hide Alpine.js elements until initialized; hide body until all CSS loads (FOUC prevention). -->
@@ -99,6 +101,8 @@ templ Base(title string) {
 		<script src={ AssetURL("/static/js/recent_entities.js") } defer></script>
 		<!-- Entity favorites (localStorage-backed sidebar list + star toggle) -->
 		<script src={ AssetURL("/static/js/favorites.js") } defer></script>
+		<!-- Undo for world pages: local times in History, Undo after a delete -->
+		<script src={ AssetURL("/static/js/page_safety.js") } defer></script>
 
 		<!-- TipTap rich text editor (vendored bundle) -->
 		<script src={ AssetURL("/static/vendor/tiptap-bundle.min.js") } defer></script>
@@ -114,6 +118,8 @@ templ Base(title string) {
 		<script src={ AssetURL("/static/js/widgets/editor_slash.js") } defer></script>
 		<!-- "On this page" outline (must load before editor.js) -->
 		<script src={ AssetURL("/static/js/widgets/editor_outline.js") } defer></script>
+		<!-- Pictures inside the text (after editor_slash.js, before editor.js) -->
+		<script src={ AssetURL("/static/js/widgets/editor_image.js") } defer></script>
 		<script src={ AssetURL("/static/js/widgets/editor.js") } defer></script>
 
 		<!-- Image upload widget -->

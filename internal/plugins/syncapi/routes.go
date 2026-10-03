@@ -73,7 +73,7 @@ func RegisterCampaignRoutes(e *echo.Echo, h *Handler, campaignSvc campaigns.Camp
 // match middleware ensures Bearer keys can only access their scoped
 // campaign (session users are naturally scoped to campaigns they belong
 // to by the membership lookup in RequireAuthOrAPIKey).
-func RegisterAPIRoutes(e *echo.Echo, api *APIHandler, calAPI *CalendarAPIHandler, mediaAPI *MediaAPIHandler, mapAPI *MapAPIHandler, noteAPI *NoteAPIHandler, tagAPI *TagAPIHandler, syncH *SyncHandler, changesH *SyncChangesHandler, syncSvc SyncAPIService, addonChecker AddonChecker, authSvc auth.AuthService, campaignSvc campaigns.CampaignService, opts ...func(*APIHandler)) {
+func RegisterAPIRoutes(e *echo.Echo, api *APIHandler, calAPI *CalendarAPIHandler, mediaAPI *MediaAPIHandler, mapAPI *MapAPIHandler, noteAPI *NoteAPIHandler, tagAPI *TagAPIHandler, syncH *SyncHandler, changesH *SyncChangesHandler, stashAPI *StashAPIHandler, syncSvc SyncAPIService, addonChecker AddonChecker, authSvc auth.AuthService, campaignSvc campaigns.CampaignService, opts ...func(*APIHandler)) {
 	// Inject addon checker into API handler for system-aware endpoints.
 	api.SetAddonChecker(addonChecker)
 
@@ -109,6 +109,7 @@ func RegisterAPIRoutes(e *echo.Echo, api *APIHandler, calAPI *CalendarAPIHandler
 		RequireSyncAPIAddon(addonChecker),
 		RateLimit(syncSvc),
 		RequireJSONContentType(),
+		WithChangeSource(),
 	)
 
 	// Multipart sub-group at the same /api/v1 prefix. Same auth +
@@ -140,6 +141,12 @@ func RegisterAPIRoutes(e *echo.Echo, api *APIHandler, calAPI *CalendarAPIHandler
 	cg.GET("/entities/:entityID/relations", api.ListEntityRelations, RequirePermission(PermRead))
 	cg.GET("/entities/:entityID/permissions", api.GetEntityPermissions, RequirePermission(PermRead))
 	cg.PUT("/entities/:entityID/permissions", api.SetEntityPermissions, RequirePermission(PermWrite))
+
+	// DM Screen for the Foundry module. The provider refuses players and
+	// keeps the downtime switch owner-only; see dm_screen_api.go.
+	cg.GET("/dm-screen", api.GetDMScreen, RequirePermission(PermRead))
+	cg.POST("/dm-screen/reveal/:entityID", api.RevealDMScreenCharacter, RequirePermission(PermWrite))
+	cg.POST("/dm-screen/downtime", api.SetDMScreenDowntime, RequirePermission(PermWrite))
 
 	// Addon discovery (read).
 	cg.GET("/addons", api.ListAddons, RequirePermission(PermRead))
@@ -285,4 +292,19 @@ func RegisterAPIRoutes(e *echo.Echo, api *APIHandler, calAPI *CalendarAPIHandler
 	cg.GET("/sync/pull", syncH.PullMappings, RequirePermission(PermSync))
 	// Change feed: ids only, DM-equivalent callers only (checked in the handler).
 	cg.GET("/sync/changes", changesH.ListChanges, RequirePermission(PermSync))
+
+	// Stashes: move items and money as a named campaign member. The group is
+	// gated by the stash feature's addon (slug supplied by the wiring), and the
+	// acting member's own rules apply to each call — see StashAPIService.
+	if stashAPI != nil {
+		stashGroup := cg.Group("", RequireAddonAPI(addonChecker, stashAPI.addonSlug))
+		stashGroup.GET("/stashes/view", stashAPI.View, RequirePermission(PermRead))
+		stashGroup.GET("/stashes/history", stashAPI.History, RequirePermission(PermRead))
+		stashGroup.GET("/stashes/requests", stashAPI.Requests, RequirePermission(PermRead))
+		stashGroup.GET("/stashes/downtime", stashAPI.Downtime, RequirePermission(PermRead))
+		stashGroup.POST("/stashes/moves", stashAPI.Move, RequirePermission(PermWrite))
+		stashGroup.POST("/stashes/requests/:moveId/approve", stashAPI.Approve, RequirePermission(PermWrite))
+		stashGroup.POST("/stashes/requests/:moveId/decline", stashAPI.Decline, RequirePermission(PermWrite))
+		stashGroup.PUT("/stashes/downtime", stashAPI.SetDowntime, RequirePermission(PermWrite))
+	}
 }

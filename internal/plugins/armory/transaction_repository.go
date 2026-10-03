@@ -66,7 +66,9 @@ const txSelectColumns = `t.id, t.campaign_id, t.instance_id, t.shop_entity_id, t
 	t.price_numeric, t.transaction_type, t.notes, t.created_at, t.created_by,
 	COALESCE(es.name, ''), COALESCE(ei.name, ''), COALESCE(eb.name, '')`
 
-// txFromJoins provides entity name lookups for display.
+// txFromJoins provides entity name lookups for display. Trashed pages
+// deliberately keep their names: the ledger is a record of what happened, and
+// a restore must bring the same rows back.
 const txFromJoins = `FROM shop_transactions t
 	LEFT JOIN entities es ON es.id = t.shop_entity_id
 	LEFT JOIN entities ei ON ei.id = t.item_entity_id

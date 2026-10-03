@@ -234,6 +234,7 @@ GET	/diagnostics	internal/app/routes.go
 GET	/diagnostics/workspace	internal/plugins/admin/routes.go
 GET	/dm-grants	internal/plugins/campaigns/routes.go
 GET	/dm-screen	internal/plugins/dmscreen/routes.go
+GET	/dm-screen	internal/plugins/syncapi/routes.go
 GET	/edit	internal/plugins/campaigns/routes.go
 GET	/embed/campaigns/:id/notes/:mode	internal/widgets/notes/routes.go
 GET	/entities	internal/plugins/entities/routes.go
@@ -248,6 +249,7 @@ GET	/entities/:eid/entry	internal/plugins/entities/routes.go
 GET	/entities/:eid/fields	internal/plugins/entities/routes.go
 GET	/entities/:eid/fields	internal/plugins/entities/routes.go
 GET	/entities/:eid/history	internal/plugins/audit/routes.go
+GET	/entities/:eid/history	internal/plugins/entities/page_safety_handler.go
 GET	/entities/:eid/notes	internal/widgets/entity_notes/routes.go
 GET	/entities/:eid/notes/:nid	internal/widgets/entity_notes/routes.go
 GET	/entities/:eid/permissions	internal/plugins/entities/routes.go
@@ -417,6 +419,10 @@ GET	/sidebar-config	internal/plugins/campaigns/routes.go
 GET	/sidebar/drill/:slug	internal/plugins/campaigns/routes.go
 GET	/sidebar/sessions-rsvp	internal/plugins/sessions/routes.go
 GET	/smtp	internal/plugins/smtp/routes.go
+GET	/stashes/downtime	internal/plugins/syncapi/routes.go
+GET	/stashes/history	internal/plugins/syncapi/routes.go
+GET	/stashes/requests	internal/plugins/syncapi/routes.go
+GET	/stashes/view	internal/plugins/syncapi/routes.go
 GET	/stats	internal/plugins/bestiary/routes.go
 GET	/status	internal/systems/routes.go
 GET	/storage	internal/plugins/admin/routes.go
@@ -448,6 +454,7 @@ GET	/timelines/members	internal/plugins/timeline/routes.go
 GET	/timelines/preview	internal/plugins/timeline/routes.go
 GET	/top-rated	internal/plugins/bestiary/routes.go
 GET	/transfer	internal/plugins/campaigns/routes.go
+GET	/trash	internal/plugins/entities/page_safety_handler.go
 GET	/trending	internal/plugins/bestiary/routes.go
 GET	/users	internal/plugins/admin/routes.go
 GET	/version/:version/campaigns	internal/plugins/foundry_vtt/routes.go
@@ -533,12 +540,15 @@ POST	/content-templates	internal/plugins/entities/content_template_routes.go
 POST	/database/migrations/apply	internal/plugins/admin/routes.go
 POST	/diagnostics/workspace/parse	internal/plugins/admin/routes.go
 POST	/diagnostics/workspace/run	internal/plugins/admin/routes.go
+POST	/dm-screen/downtime	internal/plugins/syncapi/routes.go
 POST	/dm-screen/reveal/:eid	internal/plugins/dmscreen/routes.go
+POST	/dm-screen/reveal/:entityID	internal/plugins/syncapi/routes.go
 POST	/entities	internal/plugins/entities/routes.go
 POST	/entities	internal/plugins/syncapi/routes.go
 POST	/entities/:eid/claim	internal/plugins/entities/routes.go
 POST	/entities/:eid/clone	internal/plugins/entities/routes.go
 POST	/entities/:eid/favorite	internal/plugins/entities/routes.go
+POST	/entities/:eid/history/:vid/restore	internal/plugins/entities/page_safety_handler.go
 POST	/entities/:eid/notes	internal/widgets/entity_notes/routes.go
 POST	/entities/:eid/posts	internal/widgets/posts/routes.go
 POST	/entities/:eid/relations	internal/widgets/relations/routes.go
@@ -626,7 +636,11 @@ POST	/settings	internal/plugins/packages/routes.go
 POST	/sidebar-nodes	internal/plugins/entities/routes.go
 POST	/smtp/send-test	internal/plugins/smtp/routes.go
 POST	/smtp/test	internal/plugins/smtp/routes.go
+POST	/stashes/moves	internal/plugins/syncapi/routes.go
+POST	/stashes/requests/:moveId/approve	internal/plugins/syncapi/routes.go
+POST	/stashes/requests/:moveId/decline	internal/plugins/syncapi/routes.go
 POST	/storage/settings	internal/plugins/settings/routes.go
+POST	/storage/trash	internal/plugins/settings/routes.go
 POST	/submit	internal/plugins/packages/routes.go
 POST	/sync	internal/plugins/syncapi/routes.go
 POST	/sync/mappings	internal/plugins/syncapi/routes.go
@@ -642,6 +656,7 @@ POST	/timelines/:tid/groups/:gid/members	internal/plugins/timeline/routes.go
 POST	/timelines/:tid/standalone-events	internal/plugins/timeline/routes.go
 POST	/toggle-view-mode	internal/plugins/campaigns/routes.go
 POST	/transfer	internal/plugins/campaigns/routes.go
+POST	/trash/:eid/restore	internal/plugins/entities/page_safety_handler.go
 POST	/unarchive	internal/plugins/campaigns/routes.go
 POST	/upload	internal/systems/routes.go
 POST	/version/:version/force-pin-older	internal/plugins/foundry_vtt/routes.go
@@ -662,6 +677,7 @@ PUT	/account/display-name	internal/plugins/auth/routes.go
 PUT	/account/email	internal/plugins/auth/routes.go
 PUT	/account/password	internal/plugins/auth/routes.go
 PUT	/account/timezone	internal/plugins/auth/routes.go
+PUT	/account/view-prefs	internal/plugins/auth/routes.go
 PUT	/addons/:addonID/status	internal/plugins/addons/routes.go
 PUT	/addons/:addonID/toggle	internal/plugins/addons/routes.go
 PUT	/api-keys/:keyID/toggle	internal/plugins/syncapi/routes.go
@@ -768,6 +784,7 @@ PUT	/sidebar-config	internal/plugins/campaigns/routes.go
 PUT	/sidebar-nodes/:nid	internal/plugins/entities/routes.go
 PUT	/sidebar-nodes/:nid/reorder	internal/plugins/entities/routes.go
 PUT	/smtp	internal/plugins/smtp/routes.go
+PUT	/stashes/downtime	internal/plugins/syncapi/routes.go
 PUT	/system	internal/plugins/campaigns/routes.go
 PUT	/tags/:tagId	internal/plugins/syncapi/routes.go
 PUT	/tags/:tagId	internal/widgets/tags/routes.go

@@ -8,7 +8,8 @@ slow loop with the Web Animations API (transform only), its playback rate
 following the shared `MotionRest` clock and pausing once that is still.
 `Chronicle.headerMotion.drive` is the same slide for the Customize page's
 example header. Under
-prefers-reduced-motion or `html[data-cz-reduce]` it never plays.
+prefers-reduced-motion, `html[data-cz-reduce]` or the person's own
+`html[data-view-motion="calm"]` it never plays.
 
 The Customize page re-renders `#topbar-bg` after a Save and re-mounts the
 widget (`customize_look.js`, `swapFrom`), so `destroy` cancels the animation

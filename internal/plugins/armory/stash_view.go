@@ -22,6 +22,11 @@ func thingText(l MoveLine) string {
 
 // MoveSummary renders one history row as a sentence a player can read.
 func MoveSummary(l MoveLine) string {
+	// A money row from a character to itself is not a move: it records an edit
+	// of the sheet, and its stored reason already reads as a sentence.
+	if l.IsMoneyEdit() && l.Reason != "" {
+		return l.Reason
+	}
 	route := fmt.Sprintf("%s from %s to %s", thingText(l), l.FromName, l.ToName)
 	switch l.Status {
 	case MovePending:

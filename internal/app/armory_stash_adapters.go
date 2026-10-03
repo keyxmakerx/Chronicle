@@ -12,27 +12,27 @@ import (
 	"time"
 
 	"github.com/keyxmakerx/chronicle/internal/apperror"
+	"github.com/keyxmakerx/chronicle/internal/changesource"
 	"github.com/keyxmakerx/chronicle/internal/permissions"
 	"github.com/keyxmakerx/chronicle/internal/plugins/armory"
 	"github.com/keyxmakerx/chronicle/internal/plugins/campaigns"
 	"github.com/keyxmakerx/chronicle/internal/plugins/entities"
+	"github.com/keyxmakerx/chronicle/internal/plugins/syncapi"
+	ws "github.com/keyxmakerx/chronicle/internal/websocket"
 	"github.com/keyxmakerx/chronicle/internal/widgets/relations"
 )
 
-// moneyFieldKeys is the order in which a character's money field is looked
-// for: the first numeric field whose key is one of these.
-var moneyFieldKeys = []string{"gp", "coins", "gold", "money", "wealth"}
-
-// moneyFieldKey picks the money field of an entity type, or "" when it has none.
-func moneyFieldKey(fields []entities.FieldDefinition) string {
-	for _, want := range moneyFieldKeys {
+// moneyField picks the money field of an entity type, or empty strings when
+// it has none. The key order is the plugin's, shared with its history recorder.
+func moneyField(fields []entities.FieldDefinition) (key, label string) {
+	for _, want := range armory.MoneyFieldKeys {
 		for _, f := range fields {
 			if f.Key == want && f.Type == "number" {
-				return want
+				return want, f.Label
 			}
 		}
 	}
-	return ""
+	return "", ""
 }
 
 // stashTypeInfo is what the directory derives from a campaign's entity types.
@@ -41,6 +41,7 @@ type stashTypeInfo struct {
 	character map[int]bool
 	item      map[int]bool
 	money     map[int]string
+	moneyName map[int]string
 	charIDs   []int
 	itemIDs   []int
 }
@@ -75,6 +76,7 @@ func (a *armoryStashDirectoryAdapter) types(ctx context.Context, campaignID stri
 		character: map[int]bool{},
 		item:      map[int]bool{},
 		money:     map[int]string{},
+		moneyName: map[int]string{},
 	}
 	ti.charIDs = characterFamilyTypeIDs(all, true)
 	for _, id := range ti.charIDs {
@@ -85,7 +87,7 @@ func (a *armoryStashDirectoryAdapter) types(ctx context.Context, campaignID stri
 		ti.itemIDs = append(ti.itemIDs, et.ID)
 	}
 	for _, et := range all {
-		ti.money[et.ID] = moneyFieldKey(et.Fields)
+		ti.money[et.ID], ti.moneyName[et.ID] = moneyField(et.Fields)
 	}
 	a.mu.Lock()
 	if a.cache == nil {
@@ -107,6 +109,7 @@ func (a *armoryStashDirectoryAdapter) ref(ti *stashTypeInfo, e *entities.Entity)
 	}
 	if r.IsCharacter {
 		r.MoneyKey = ti.money[e.EntityTypeID]
+		r.MoneyLabel = ti.moneyName[e.EntityTypeID]
 	}
 	return r
 }
@@ -253,7 +256,10 @@ func (a *armoryEntityFieldsAdapter) GetEntityFields(ctx context.Context, entityI
 	return out, nil
 }
 
+// UpdateEntityFields marks the write as a stash move's, so the money history
+// does not log a second line for a change the move already records.
 func (a *armoryEntityFieldsAdapter) UpdateEntityFields(ctx context.Context, entityID string, fields map[string]any) error {
+	ctx = changesource.With(ctx, changesource.Source{Kind: changesource.KindStash})
 	return a.svc.MergeFields(ctx, entityID, fields)
 }
 
@@ -322,4 +328,144 @@ func (a *armoryMemberNamesAdapter) DisplayNames(ctx context.Context, campaignID 
 		out[m.UserID] = m.DisplayName
 	}
 	return out, nil
+}
+
+// armoryStashEventAdapter publishes the stash plugin's events on the
+// websocket bus. The bus is bound after construction, once it exists.
+type armoryStashEventAdapter struct {
+	bus ws.EventBus
+}
+
+// stashEventTypes is the set of event types the stash plugin may publish.
+var stashEventTypes = map[string]ws.MessageType{
+	armory.EventStashMoved:        ws.MsgStashMoved,
+	armory.EventStashRequested:    ws.MsgStashRequested,
+	armory.EventStashSettled:      ws.MsgStashSettled,
+	armory.EventStashMoneyChanged: ws.MsgStashMoneyChanged,
+	armory.EventDowntimeChanged:   ws.MsgDowntimeChanged,
+}
+
+// PublishStashEvent sends the event to DM-equivalent sockets only: the ids in
+// it can belong to hidden characters or stashes, and the only consumer is the
+// GM's Foundry client, which relays for players.
+func (a *armoryStashEventAdapter) PublishStashEvent(eventType, campaignID, resourceID string, payload map[string]any) {
+	t, ok := stashEventTypes[eventType]
+	if !ok || a.bus == nil || campaignID == "" {
+		return
+	}
+	msg := ws.NewMessage(t, campaignID, resourceID, payload)
+	msg.RequiresDM = true
+	a.bus.Publish(msg)
+}
+
+// armoryMemberDirectoryAdapter implements armory.MemberDirectory over the
+// campaigns service.
+type armoryMemberDirectoryAdapter struct {
+	svc campaigns.CampaignService
+}
+
+func (a *armoryMemberDirectoryAdapter) MemberRole(ctx context.Context, campaignID, userID string) (int, bool, error) {
+	m, err := a.svc.GetMember(ctx, campaignID, userID)
+	if err != nil {
+		var ae *apperror.AppError
+		if errors.As(err, &ae) && ae.Code == http.StatusNotFound {
+			return 0, false, nil
+		}
+		return 0, false, err
+	}
+	if m == nil {
+		return 0, false, nil
+	}
+	return int(m.Role), true, nil
+}
+
+func (a *armoryMemberDirectoryAdapter) IsDmGranted(ctx context.Context, campaignID, userID string) (bool, error) {
+	return a.svc.IsUserDmGranted(ctx, campaignID, userID)
+}
+
+// armoryMoneyObserver implements entities.FieldChangeObserver: it hands sheet
+// money edits to the stash plugin's history recorder.
+type armoryMoneyObserver struct {
+	history *armory.MoneyHistory
+}
+
+func (o *armoryMoneyObserver) FieldsChanged(ctx context.Context, e *entities.Entity, oldFields, newFields map[string]any) error {
+	return o.history.RecordFieldChange(ctx, e.CampaignID, e.ID, oldFields, newFields)
+}
+
+// syncStashAPIAdapter implements syncapi.StashAPIService over the stash
+// plugin's sync API facade, translating request shapes between the two.
+type syncStashAPIAdapter struct {
+	api *armory.StashAPI
+}
+
+var _ syncapi.StashAPIService = (*syncStashAPIAdapter)(nil)
+
+func (a *syncStashAPIAdapter) View(ctx context.Context, campaignID, keyUserID, actingUserID, characterID string) (any, error) {
+	v, err := a.api.View(ctx, campaignID, keyUserID, actingUserID, characterID)
+	if err != nil {
+		return nil, err
+	}
+	return v, nil
+}
+
+func (a *syncStashAPIAdapter) Move(ctx context.Context, campaignID, keyUserID string, req syncapi.StashMoveRequest) (any, error) {
+	v, err := a.api.Move(ctx, campaignID, keyUserID, armory.APIMoveRequest{
+		ActingUserID: req.ActingUserID, Kind: req.Kind, ItemID: req.ItemID,
+		Quantity: req.Quantity, Amount: req.Amount,
+		From: armory.APIEndpoint{Kind: req.From.Kind, ID: req.From.ID},
+		To:   armory.APIEndpoint{Kind: req.To.Kind, ID: req.To.ID},
+	})
+	if err != nil {
+		return nil, err
+	}
+	return v, nil
+}
+
+func (a *syncStashAPIAdapter) History(ctx context.Context, campaignID, keyUserID, actingUserID, characterID, stashID string) (any, error) {
+	v, err := a.api.History(ctx, campaignID, keyUserID, actingUserID, characterID, stashID)
+	if err != nil {
+		return nil, err
+	}
+	return v, nil
+}
+
+func (a *syncStashAPIAdapter) Requests(ctx context.Context, campaignID, keyUserID, actingUserID string) (any, error) {
+	v, err := a.api.Requests(ctx, campaignID, keyUserID, actingUserID)
+	if err != nil {
+		return nil, err
+	}
+	return v, nil
+}
+
+func (a *syncStashAPIAdapter) Approve(ctx context.Context, campaignID, keyUserID, actingUserID string, moveID int64) (any, error) {
+	v, err := a.api.Approve(ctx, campaignID, keyUserID, actingUserID, moveID)
+	if err != nil {
+		return nil, err
+	}
+	return v, nil
+}
+
+func (a *syncStashAPIAdapter) Decline(ctx context.Context, campaignID, keyUserID, actingUserID string, moveID int64) (any, error) {
+	v, err := a.api.Decline(ctx, campaignID, keyUserID, actingUserID, moveID)
+	if err != nil {
+		return nil, err
+	}
+	return v, nil
+}
+
+func (a *syncStashAPIAdapter) Downtime(ctx context.Context, campaignID string) (any, error) {
+	v, err := a.api.Downtime(ctx, campaignID)
+	if err != nil {
+		return nil, err
+	}
+	return v, nil
+}
+
+func (a *syncStashAPIAdapter) SetDowntime(ctx context.Context, campaignID, keyUserID, actingUserID string, open bool) (any, error) {
+	v, err := a.api.SetDowntime(ctx, campaignID, keyUserID, actingUserID, open)
+	if err != nil {
+		return nil, err
+	}
+	return v, nil
 }

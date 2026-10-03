@@ -15,6 +15,11 @@ import (
 // It parses string values from the database into typed structs and resolves
 // the override chain (per-campaign > per-user > global) for effective limits.
 type SettingsService interface {
+	// TrashRetentionDays is how long deleted world pages wait in a Trash.
+	TrashRetentionDays(ctx context.Context) int
+	// UpdateTrashRetentionDays saves it; only TrashRetentionChoices pass.
+	UpdateTrashRetentionDays(ctx context.Context, days int) error
+
 	// GetStorageLimits returns the parsed global storage limits.
 	GetStorageLimits(ctx context.Context) (*GlobalStorageLimits, error)
 
@@ -453,4 +458,39 @@ func parseInt(s string, fallback int) int {
 		return fallback
 	}
 	return v
+}
+
+// --- Trash retention ---
+
+// TrashRetentionDays returns how long deleted world pages stay in a Trash.
+// An unset, unreadable or unexpected value gives the default, never a
+// shorter period, so a bad row can't purge pages early.
+func (s *settingsService) TrashRetentionDays(ctx context.Context) int {
+	raw, err := s.repo.Get(ctx, KeyTrashRetentionDays)
+	if err != nil {
+		return DefaultTrashRetentionDays
+	}
+	days, err := strconv.Atoi(strings.TrimSpace(raw))
+	if err != nil || !IsValidTrashRetention(days) {
+		return DefaultTrashRetentionDays
+	}
+	return days
+}
+
+// UpdateTrashRetentionDays validates and saves the Trash retention.
+func (s *settingsService) UpdateTrashRetentionDays(ctx context.Context, days int) error {
+	if !IsValidTrashRetention(days) {
+		return apperror.NewBadRequest("trash retention must be 30, 60, 90, 180 or 365 days")
+	}
+	return s.repo.Set(ctx, KeyTrashRetentionDays, strconv.Itoa(days))
+}
+
+// IsValidTrashRetention reports whether days is one of the offered choices.
+func IsValidTrashRetention(days int) bool {
+	for _, d := range TrashRetentionChoices {
+		if d == days {
+			return true
+		}
+	}
+	return false
 }

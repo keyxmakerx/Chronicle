@@ -476,7 +476,9 @@ func nullPositiveInt(n int) any {
 }
 
 func nullAmount(c Cents) any {
-	if c <= 0 {
+	// Zero means "no money in this row" (items). A negative amount is real: a
+	// sheet money edit that lowered a balance is stored as its signed change.
+	if c == 0 {
 		return nil
 	}
 	return c.Decimal()

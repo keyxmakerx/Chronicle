@@ -31,6 +31,8 @@ var changeFeedTypes = map[string]string{
 	"map":            "map",
 	"relation":       "relation",
 	"calendar.event": "calendar_event",
+	"stash":          "stash",
+	"downtime":       "downtime",
 }
 
 // recordedTypes is changeFeedTypes' resource types, sorted, as the feed
@@ -61,11 +63,12 @@ func classifyChange(t ws.MessageType) (resourceType, op string, ok bool) {
 		return "", "", false
 	}
 	switch s[i+1:] {
-	case "created":
+	case "created", "requested":
 		op = "created"
-	case "updated", "moved", "metadata_updated":
-		// A token move changes the token and a relation's metadata write
-		// changes the relation; the client refetches either way.
+	case "updated", "moved", "settled", "money_changed", "changed", "metadata_updated":
+		// A token move changes the token, a relation's metadata write the
+		// relation; a stash move, a request's answer and a downtime switch
+		// change the view. The client refetches either way.
 		op = "updated"
 	case "deleted":
 		op = "deleted"
