@@ -319,6 +319,53 @@ paths:
         "500":
           $ref: "#/components/responses/InternalError"
 
+  /campaigns/{campaignId}/entities/{entityId}/system-state/{systemId}/{stateKey}:
+    get:
+      tags: [Entities]
+      summary: Get a page's per-system state
+      operationId: getEntitySystemState
+      description: >-
+        Game-system packages keep small JSON documents on a page (for example a
+        negotiation tracker). `public` is the half any viewer of the page may
+        read. `gm` is present only for callers the API treats as the DM team
+        (a stored sync key, the owner, or a member granted DM access); it is
+        omitted entirely for everyone else. A page with no stored state reads
+        as empty objects and a null `updatedAt`.
+      parameters:
+        - $ref: "#/components/parameters/campaignId"
+        - $ref: "#/components/parameters/entityId"
+        - name: systemId
+          in: path
+          required: true
+          schema: { type: string, pattern: "^[a-z0-9][a-z0-9_-]{0,63}$" }
+        - name: stateKey
+          in: path
+          required: true
+          schema: { type: string, pattern: "^[a-z0-9][a-z0-9_-]{0,63}$" }
+      responses:
+        "200":
+          description: The stored state
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [systemId, key, public, isGm, updatedAt]
+                properties:
+                  systemId: { type: string }
+                  key: { type: string }
+                  public: { type: object }
+                  gm: { type: object, description: "Only for the DM team." }
+                  isGm: { type: boolean }
+                  updatedAt: { type: string, format: date-time, nullable: true }
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "422":
+          description: The system id or key is malformed
+        "429":
+          $ref: "#/components/responses/RateLimited"
+
   /campaigns/{campaignId}/armory/shops/{entityId}/room:
     get:
       tags: [Entities]

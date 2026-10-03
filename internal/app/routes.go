@@ -47,6 +47,7 @@ import (
 	"github.com/keyxmakerx/chronicle/internal/plugins/settings"
 	"github.com/keyxmakerx/chronicle/internal/plugins/smtp"
 	"github.com/keyxmakerx/chronicle/internal/plugins/syncapi"
+	"github.com/keyxmakerx/chronicle/internal/plugins/systemstate"
 	"github.com/keyxmakerx/chronicle/internal/plugins/timeline"
 	"github.com/keyxmakerx/chronicle/internal/plugins/widgetbindings"
 	"github.com/keyxmakerx/chronicle/internal/systems"
@@ -4600,6 +4601,26 @@ func (a *App) RegisterRoutes() {
 	// "Show in Foundry" on NPC pages: npc.spotlight is not a change-feed
 	// type, so the recording wrapper passes it straight to the hub.
 	fvttHandler.SetNPCSpotlight(&npcSpotlightResolver{entities: entityService}, &npcSpotlightPublisher{bus: wsEventBus})
+
+	// Game-system widget panels under NPC page titles (manifest entity_panels).
+	entityHandler.SetSystemPanelResolver(newSystemPanelResolver(systemHandler, entityService))
+
+	// Per-page game-system state. system_state.updated is not a change-feed
+	// type, so the recording wrapper passes it straight to the hub.
+	if a.PluginHealth.IsHealthy(systemstate.PluginSlug) {
+		systemStateSvc := systemstate.NewService(
+			systemstate.NewRepository(a.DB),
+			&systemStateEntityLookup{entities: entityService},
+			&systemStateSystemChecker{systems: systemHandler},
+			&systemStatePublisher{bus: wsEventBus},
+		)
+		systemstate.RegisterRoutes(e,
+			systemstate.NewHandler(systemStateSvc, &entityAccessAdapter{svc: entityService}),
+			campaignService, authService)
+		syncAPIHandler.SetSystemStateReader(&systemStateSyncReader{svc: systemStateSvc})
+	} else {
+		slog.Warn("systemstate plugin degraded — routes not registered")
+	}
 
 	// Late-bind the entity_notes notifier now that wsEventBus exists.
 	// The service was constructed earlier with a holder.Notify reference;

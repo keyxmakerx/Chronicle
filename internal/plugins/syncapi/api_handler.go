@@ -54,6 +54,7 @@ type APIHandler struct {
 	shopRoomAddon        string
 	shopBuyer            ShopBuyAPIService
 	dmScreen             DMScreenProvider
+	systemState          SystemStateReader
 }
 
 // TagGrantLister resolves an entity's tag-derived visibility grants so the

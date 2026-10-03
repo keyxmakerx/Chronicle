@@ -261,10 +261,12 @@ GET	/entities/:eid/posts	internal/widgets/posts/routes.go
 GET	/entities/:eid/preview	internal/app/routes.go
 GET	/entities/:eid/preview	internal/plugins/entities/routes.go
 GET	/entities/:eid/relations	internal/widgets/relations/routes.go
+GET	/entities/:eid/system-state/:system/:key	internal/plugins/systemstate/routes.go
 GET	/entities/:eid/tags	internal/widgets/tags/routes.go
 GET	/entities/:entityID	internal/plugins/syncapi/routes.go
 GET	/entities/:entityID/permissions	internal/plugins/syncapi/routes.go
 GET	/entities/:entityID/relations	internal/plugins/syncapi/routes.go
+GET	/entities/:entityID/system-state/:system/:key	internal/plugins/syncapi/routes.go
 GET	/entities/members	internal/plugins/entities/routes.go
 GET	/entities/new	internal/plugins/entities/routes.go
 GET	/entities/search	internal/app/routes.go
@@ -751,6 +753,7 @@ PUT	/entities/:eid/posts/:pid	internal/widgets/posts/routes.go
 PUT	/entities/:eid/posts/reorder	internal/widgets/posts/routes.go
 PUT	/entities/:eid/relations/:rid/metadata	internal/widgets/relations/routes.go
 PUT	/entities/:eid/reorder	internal/plugins/entities/routes.go
+PUT	/entities/:eid/system-state/:system/:key	internal/plugins/systemstate/routes.go
 PUT	/entities/:eid/tags	internal/widgets/tags/routes.go
 PUT	/entities/:entityID	internal/plugins/syncapi/routes.go
 PUT	/entities/:entityID/fields	internal/plugins/syncapi/routes.go

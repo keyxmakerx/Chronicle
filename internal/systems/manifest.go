@@ -85,6 +85,28 @@ type SystemManifest struct {
 	// each hero and where this system's conditions live. Optional: without it
 	// the screen shows hero names only and hides the rules tab.
 	DMScreen *DMScreenDef `json:"dm_screen,omitempty"`
+
+	// EntityPanels declares widgets the host mounts under the title of
+	// matching entity pages, on top of whatever page renderer or layout the
+	// page already uses. Unlike Renderers it adds to a page instead of
+	// replacing it, and it is not tied to an entity type of this manifest.
+	EntityPanels []EntityPanelDef `json:"entity_panels,omitempty"`
+}
+
+// EntityPanelAppliesNPC is the only audience an entity panel can target for
+// now: pages whose type is in the NPC family (NPCs and monsters).
+const EntityPanelAppliesNPC = "npc"
+
+// EntityPanelDef mounts one of this manifest's widgets on matching pages of
+// campaigns that have the system enabled.
+type EntityPanelDef struct {
+	// Widget is the slug of a widget declared in this manifest's widgets list.
+	Widget string `json:"widget"`
+
+	// AppliesTo names which pages get the panel. Only "npc" exists today; any
+	// other value is rejected at load so a typo is loud, not a silently
+	// missing panel.
+	AppliesTo string `json:"applies_to"`
 }
 
 // RendererDef binds an entity_type slug to the widget that should render
@@ -610,6 +632,7 @@ const (
 	maxWidgets         = 10
 	maxTextRenderers   = 5
 	maxRenderers       = 10
+	maxEntityPanels    = 10
 )
 
 // slugPattern matches valid manifest IDs and preset slugs.
@@ -809,9 +832,41 @@ func ValidateManifest(m *SystemManifest) error {
 		}
 	}
 
+	if err := validateEntityPanels(m); err != nil {
+		return fmt.Errorf("entity_panels: %w", err)
+	}
+
 	// Sanitize text fields to prevent stored XSS.
 	sanitizeManifestStrings(m)
 
+	return nil
+}
+
+// validateEntityPanels checks that each panel names a widget this manifest
+// ships and a supported audience. Like renderers, a manifest may only mount its
+// own widgets, so a rename cannot leave a panel pointing at nothing.
+func validateEntityPanels(m *SystemManifest) error {
+	if len(m.EntityPanels) > maxEntityPanels {
+		return fmt.Errorf("too many entity panels (%d, max %d)", len(m.EntityPanels), maxEntityPanels)
+	}
+	widgetSlugs := make(map[string]struct{}, len(m.Widgets))
+	for _, w := range m.Widgets {
+		widgetSlugs[w.Slug] = struct{}{}
+	}
+	for i, p := range m.EntityPanels {
+		if p.Widget == "" {
+			return fmt.Errorf("panel %d: widget is required", i)
+		}
+		if !slugPattern.MatchString(p.Widget) {
+			return fmt.Errorf("panel %d: widget %q must contain only lowercase letters, numbers, hyphens, and underscores", i, p.Widget)
+		}
+		if _, ok := widgetSlugs[p.Widget]; !ok {
+			return fmt.Errorf("panel %d: widget %q must match a widgets[].slug declared in this manifest", i, p.Widget)
+		}
+		if p.AppliesTo != EntityPanelAppliesNPC {
+			return fmt.Errorf("panel %d: applies_to %q is not supported (only %q)", i, p.AppliesTo, EntityPanelAppliesNPC)
+		}
+	}
 	return nil
 }
 

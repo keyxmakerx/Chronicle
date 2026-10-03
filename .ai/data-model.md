@@ -166,8 +166,8 @@ numbered core migrations after it, tracked once each via `golang-migrate`'s
 ## Plugin schema
 
 Plugin migrations run after core, in this order (`cmd/server/main.go`):
-bestiary, calendar, maps, sessions, timeline, widgetbindings, syncapi,
-packages, foundry_vtt. A plugin's schema failing to migrate degrades that
+bestiary, calendar, maps, sessions, timeline, widgetbindings, systemstate,
+syncapi, packages, foundry_vtt. A plugin's schema failing to migrate degrades that
 plugin only (`internal/database/plugin_health.go`) — it never blocks boot.
 
 ### bestiary (`internal/plugins/bestiary/migrations/`)
@@ -280,6 +280,12 @@ Foundry module repo for the wire contract.
 | Table | Purpose | Notable columns |
 |---|---|---|
 | `widget_bindings` | Generic host ↔ widget-type ↔ data-instance binding | **FK-free by design** — `host_id`/`instance_id` are polymorphic (e.g. host = an entity now, a dashboard later; instance = a calendar now, a map/timeline later), so no single FK target exists; referential integrity is enforced in the binding service, not the schema. `UNIQUE(campaign_id, host_type, host_id, widget_type)` |
+
+### systemstate (`internal/plugins/systemstate/migrations/`)
+
+| Table | Purpose | Notable columns |
+|---|---|---|
+| `entity_system_state` | Per-page JSON documents a game-system package's widget keeps (e.g. a negotiation tracker) | `PRIMARY KEY (entity_id, system_id, state_key)`; FKs to `entities`, `campaigns` (both `ON DELETE CASCADE`) and `users` (`updated_by`, `ON DELETE SET NULL`); `public_data` (any viewer of the page) and `gm_data` (DM team only) are separate JSON columns so a partial write replaces one half |
 
 ## MariaDB-specific notes
 
