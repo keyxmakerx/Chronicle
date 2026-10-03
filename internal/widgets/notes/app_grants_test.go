@@ -76,6 +76,16 @@ func (r *fakeGrantRepo) Touch(_ context.Context, id string, at time.Time) error 
 	return nil
 }
 
+func (r *fakeGrantRepo) RevokeAllForUser(_ context.Context, userID string, at time.Time) error {
+	for _, g := range r.byHash {
+		if g.UserID == userID && g.RevokedAt == nil {
+			t := at
+			g.RevokedAt = &t
+		}
+	}
+	return nil
+}
+
 func newTestGrantService(now *time.Time) (*appGrantService, *fakeGrantRepo) {
 	repo := newFakeGrantRepo()
 	return &appGrantService{repo: repo, now: func() time.Time { return *now }}, repo
@@ -237,7 +247,7 @@ func runGrantMiddleware(t *testing.T, svc AppGrantService, authz string) (int, *
 	e.GET("/api/notes-app/campaigns/:id/notes", func(c echo.Context) error {
 		seen = auth.GetSession(c)
 		return c.NoContent(http.StatusOK)
-	}, RequireAppGrant(svc))
+	}, RequireAppGrant(svc, nil))
 	req := httptest.NewRequest(http.MethodGet, "/api/notes-app/campaigns/camp/notes", nil)
 	if authz != "" {
 		req.Header.Set("Authorization", authz)
@@ -313,5 +323,54 @@ func TestAllowRefusesAnOriginNotOnTheList(t *testing.T) {
 	}
 	if len(repo.byHash) != 0 {
 		t.Fatal("checking an origin made a grant")
+	}
+}
+
+func TestRequireAppGrant_ClosedGateRefuses(t *testing.T) {
+	now := time.Date(2026, 10, 3, 12, 0, 0, 0, time.UTC)
+	svc, _ := newTestGrantService(&now)
+	token, _, _ := svc.Issue(context.Background(), "camp", "user", "https://foundry.example")
+
+	for _, open := range []bool{true, false} {
+		e := echo.New()
+		e.HTTPErrorHandler = func(err error, c echo.Context) {
+			if ae, ok := err.(*apperror.AppError); ok {
+				_ = c.NoContent(ae.Code)
+			}
+		}
+		gate := func(context.Context, string) (bool, error) { return open, nil }
+		e.GET("/api/notes-app/campaigns/:id/notes", func(c echo.Context) error {
+			return c.NoContent(http.StatusOK)
+		}, RequireAppGrant(svc, gate))
+		req := httptest.NewRequest(http.MethodGet, "/api/notes-app/campaigns/camp/notes", nil)
+		req.Header.Set("Authorization", "Bearer "+token)
+		rec := httptest.NewRecorder()
+		e.ServeHTTP(rec, req)
+		want := http.StatusOK
+		if !open {
+			want = http.StatusForbidden
+		}
+		if rec.Code != want {
+			t.Errorf("gate open=%v: want %d, got %d", open, want, rec.Code)
+		}
+	}
+}
+
+func TestAppGrant_RevokeAllForUserEndsEveryCampaign(t *testing.T) {
+	now := time.Date(2026, 10, 3, 12, 0, 0, 0, time.UTC)
+	svc, _ := newTestGrantService(&now)
+	a, _, _ := svc.Issue(context.Background(), "camp", "user", "https://foundry.example")
+	b, _, _ := svc.Issue(context.Background(), "other-camp", "user", "https://foundry.example")
+	other, _, _ := svc.Issue(context.Background(), "camp", "someone-else", "https://foundry.example")
+	if err := svc.RevokeAllForUser(context.Background(), "user"); err != nil {
+		t.Fatal(err)
+	}
+	for _, tok := range []string{a, b} {
+		if _, err := svc.Authenticate(context.Background(), tok); err == nil {
+			t.Fatal("a grant outlived the user's sessions")
+		}
+	}
+	if _, err := svc.Authenticate(context.Background(), other); err != nil {
+		t.Fatalf("another player's grant was revoked: %v", err)
 	}
 }

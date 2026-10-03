@@ -67,6 +67,7 @@ type AppGrantRepository interface {
 	ListLive(ctx context.Context, campaignID, userID string) ([]AppGrant, error)
 	Revoke(ctx context.Context, id string, at time.Time) error
 	Touch(ctx context.Context, id string, at time.Time) error
+	RevokeAllForUser(ctx context.Context, userID string, at time.Time) error
 }
 
 // AppGrantService issues, checks and revokes app grants.
@@ -85,6 +86,11 @@ type AppGrantService interface {
 	// Revoke ends one of the player's own grants. Someone else's grant, or
 	// one in another campaign, is NotFound.
 	Revoke(ctx context.Context, campaignID, userID, grantID string) error
+
+	// RevokeAllForUser ends every grant the user holds, in every campaign.
+	// Runs when all the user's sessions are destroyed (password reset or
+	// change, force sign-out), so a grant never outlives them.
+	RevokeAllForUser(ctx context.Context, userID string) error
 }
 
 type appGrantService struct {
@@ -198,6 +204,16 @@ func (s *appGrantService) Revoke(ctx context.Context, campaignID, userID, grantI
 	return apperror.NewNotFound("connection not found")
 }
 
+func (s *appGrantService) RevokeAllForUser(ctx context.Context, userID string) error {
+	if userID == "" {
+		return nil
+	}
+	if err := s.repo.RevokeAllForUser(ctx, userID, s.now().UTC().Truncate(time.Second)); err != nil {
+		return apperror.NewInternal(err)
+	}
+	return nil
+}
+
 // --- repository ---
 
 type appGrantRepository struct {
@@ -210,6 +226,9 @@ func NewAppGrantRepository(db *sql.DB) AppGrantRepository {
 }
 
 const appGrantColumns = `id, campaign_id, user_id, origin, created_at, last_used_at, revoked_at`
+
+// appGrantColumnsG is appGrantColumns qualified for a query joining users.
+const appGrantColumnsG = `g.id, g.campaign_id, g.user_id, g.origin, g.created_at, g.last_used_at, g.revoked_at`
 
 func scanAppGrant(row interface{ Scan(...any) error }) (*AppGrant, error) {
 	var g AppGrant
@@ -240,8 +259,11 @@ func (r *appGrantRepository) Create(ctx context.Context, g *AppGrant, tokenHash 
 }
 
 func (r *appGrantRepository) FindByTokenHash(ctx context.Context, tokenHash string) (*AppGrant, error) {
+	// A disabled account's grants stop at once, as its sessions do.
 	g, err := scanAppGrant(r.db.QueryRowContext(ctx,
-		`SELECT `+appGrantColumns+` FROM notes_app_grants WHERE token_hash = ?`, tokenHash))
+		`SELECT `+appGrantColumnsG+` FROM notes_app_grants g
+		 JOIN users u ON u.id = g.user_id
+		 WHERE g.token_hash = ? AND u.is_disabled = FALSE`, tokenHash))
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil, apperror.NewNotFound("grant not found")
 	}
@@ -285,6 +307,15 @@ func (r *appGrantRepository) Touch(ctx context.Context, id string, at time.Time)
 		`UPDATE notes_app_grants SET last_used_at = ? WHERE id = ?`, at, id)
 	if err != nil {
 		return fmt.Errorf("touching notes app grant: %w", err)
+	}
+	return nil
+}
+
+func (r *appGrantRepository) RevokeAllForUser(ctx context.Context, userID string, at time.Time) error {
+	_, err := r.db.ExecContext(ctx,
+		`UPDATE notes_app_grants SET revoked_at = ? WHERE user_id = ? AND revoked_at IS NULL`, at, userID)
+	if err != nil {
+		return fmt.Errorf("revoking notes app grants for user: %w", err)
 	}
 	return nil
 }

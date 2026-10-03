@@ -13,7 +13,6 @@ import (
 type AllowAppView struct {
 	Origin        string // the opening window's address, normalised
 	OriginAllowed bool   // on the allowed list; otherwise Allow is not offered
-	UserID        string
 	DisplayName   string
 }
 
@@ -81,6 +80,14 @@ templ AllowAppPage(cc *campaigns.CampaignContext, view AllowAppView) {
 			// if that window is at the address shown above: postMessage drops
 			// it otherwise. Without an opener there is nobody to give it to,
 			// so no grant is made.
+			// Signing in on the way here can cut the link to Foundry's window
+			// (the sign-in pages keep the site's stricter opener policy), so
+			// say what to do before the player presses Allow.
+			if (allowBtn && !window.opener) {
+				root.querySelector('[data-allow-actions]').hidden = true;
+				say('You\'re signed in now. Click the notebook button in Foundry again to finish.');
+			}
+
 			if (allowBtn) allowBtn.addEventListener('click', function () {
 				if (!window.opener) {
 					say('Open this window from the notebook button in Foundry.', true);
@@ -90,6 +97,12 @@ templ AllowAppPage(cc *campaigns.CampaignContext, view AllowAppView) {
 				say('Connecting…');
 				Chronicle.apiFetch(base + '/allow-app', { method: 'POST', body: { origin: origin } })
 					.then(function (res) {
+						var type = res.headers.get('Content-Type') || '';
+						if (type.indexOf('application/json') === -1) {
+							return { ok: false, body: { message: res.status === 403
+								? 'Chronicle refused this. Reload the window and try again.'
+								: 'That didn\'t work. Try again.' } };
+						}
 						return res.json().then(function (body) { return { ok: res.ok, body: body }; });
 					})
 					.then(function (r) {

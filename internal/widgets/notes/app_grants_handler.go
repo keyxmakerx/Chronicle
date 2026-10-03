@@ -22,6 +22,11 @@ type OriginAllower interface {
 	OriginAllowed(ctx context.Context, origin string) bool
 }
 
+// AppGate says whether a campaign lets outside apps in at all. Wired to the
+// campaign's Sync API switch, so an owner who turns it off cuts off every
+// player's notebook too, as it cuts off the GM's sync.
+type AppGate func(ctx context.Context, campaignID string) (bool, error)
+
 // AppGrantHandler serves the Allow window and the player's list of grants.
 type AppGrantHandler struct {
 	grants  AppGrantService
@@ -74,7 +79,6 @@ func (h *AppGrantHandler) ShowAllow(c echo.Context) error {
 	view := AllowAppView{
 		Origin:        origin,
 		OriginAllowed: ok,
-		UserID:        auth.GetUserID(c),
 	}
 	if s := auth.GetSession(c); s != nil {
 		view.DisplayName = s.Name
@@ -148,7 +152,7 @@ func (h *AppGrantHandler) Revoke(c echo.Context) error {
 // is refused here, before the campaign's own membership check runs. Must sit
 // before campaigns.RequireCampaignAccess, which checks the player is still a
 // member at their live role.
-func RequireAppGrant(grants AppGrantService) echo.MiddlewareFunc {
+func RequireAppGrant(grants AppGrantService, gate AppGate) echo.MiddlewareFunc {
 	return func(next echo.HandlerFunc) echo.HandlerFunc {
 		return func(c echo.Context) error {
 			authz := c.Request().Header.Get("Authorization")
@@ -162,6 +166,15 @@ func RequireAppGrant(grants AppGrantService) echo.MiddlewareFunc {
 			}
 			if g.CampaignID != c.Param("id") {
 				return apperror.NewForbidden("notes access not allowed for this campaign")
+			}
+			if gate != nil {
+				open, err := gate(c.Request().Context(), g.CampaignID)
+				if err != nil {
+					return apperror.NewInternal(err)
+				}
+				if !open {
+					return apperror.NewForbidden("this campaign has outside apps turned off")
+				}
 			}
 			// A session carrying only the user id: never site admin, so the
 			// campaign check below grants exactly the player's membership.

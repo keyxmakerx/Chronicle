@@ -3274,7 +3274,18 @@ func (a *App) RegisterRoutes() {
 	// only to an address that may already call Chronicle across sites.
 	noteGrants := notes.NewAppGrantService(notes.NewAppGrantRepository(a.DB))
 	noteGrantHandler := notes.NewAppGrantHandler(noteGrants, &notesOriginAllower{baseURL: a.Config.BaseURL, settings: settingsService})
-	notes.RegisterAppGrantRoutes(e, noteHandler, noteGrantHandler, noteGrants, campaignService, authService)
+	// A grant ends whenever the player's sessions do (password reset or
+	// change, force sign-out).
+	auth.OnSessionsRevoked(authService, func(ctx context.Context, userID string) {
+		if err := noteGrants.RevokeAllForUser(ctx, userID); err != nil {
+			slog.Warn("revoking notes app grants failed", slog.String("user_id", userID), slog.Any("error", err))
+		}
+	})
+	// The campaign's Sync API switch governs outside apps, the notebook too.
+	notesAppGate := func(ctx context.Context, campaignID string) (bool, error) {
+		return addonService.IsEnabledForCampaign(ctx, campaignID, syncapi.SyncAPIAddonSlug)
+	}
+	notes.RegisterAppGrantRoutes(e, noteHandler, noteGrantHandler, noteGrants, notesAppGate, campaignService, authService)
 
 	// Relations widget routes already registered above (before REST API v1).
 

@@ -1,8 +1,11 @@
 package notes
 
 import (
+	"time"
+
 	"github.com/labstack/echo/v4"
 
+	"github.com/keyxmakerx/chronicle/internal/middleware"
 	"github.com/keyxmakerx/chronicle/internal/plugins/auth"
 	"github.com/keyxmakerx/chronicle/internal/plugins/campaigns"
 )
@@ -75,7 +78,7 @@ func registerNoteJSONRoutes(cg *echo.Group, h *Handler, player echo.MiddlewareFu
 // Bearer grant, never a cookie, so the site's cookie CSRF check does not
 // apply to them (it skips /api/). Each request still runs as the player at
 // their live campaign role through RequireCampaignAccess.
-func RegisterAppGrantRoutes(e *echo.Echo, h *Handler, gh *AppGrantHandler, grants AppGrantService, campaignSvc campaigns.CampaignService, authSvc auth.AuthService) {
+func RegisterAppGrantRoutes(e *echo.Echo, h *Handler, gh *AppGrantHandler, grants AppGrantService, gate AppGate, campaignSvc campaigns.CampaignService, authSvc auth.AuthService) {
 	player := campaigns.RequireRole(campaigns.RolePlayer)
 
 	cg := e.Group("/campaigns/:id",
@@ -87,8 +90,11 @@ func RegisterAppGrantRoutes(e *echo.Echo, h *Handler, gh *AppGrantHandler, grant
 	cg.GET("/notes/app-grants", gh.List, player)
 	cg.DELETE("/notes/app-grants/:gid", gh.Revoke, player)
 
+	// The per-IP limit runs before the token look-up, so a flood of made-up
+	// tokens can't turn into a flood of database reads.
 	ag := e.Group("/api/notes-app/campaigns/:id",
-		RequireAppGrant(grants),
+		middleware.RateLimit(600, time.Minute),
+		RequireAppGrant(grants, gate),
 		campaigns.RequireCampaignAccess(campaignSvc),
 	)
 	registerNoteJSONRoutes(ag, h, player)
