@@ -147,7 +147,7 @@
             var ed = editorRef.current;
             if (!ed || ed.isEditable || !campaignId) return;
             if (Chronicle.NoteLabels && Chronicle.NoteLabels.get(campaignId, noteId) === null) return;
-            window.location.href = '/campaigns/' + encodeURIComponent(campaignId) + '/journal/' + encodeURIComponent(noteId);
+            Chronicle.go('/campaigns/' + encodeURIComponent(campaignId) + '/journal/' + encodeURIComponent(noteId));
           },
         }));
       }

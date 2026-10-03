@@ -3056,6 +3056,9 @@ func (a *App) RegisterRoutes() {
 		"/static/js/calendar_open.js",
 		"/static/js/widgets/rulebook.js",
 		"/static/js/widgets/rulebook_editor.js",
+		// After boot.js, so Chronicle exists before a token can arrive. It
+		// does nothing on pages without #notes-embed.
+		"/static/js/notes_embed.js",
 	}
 
 	// The sidebar, campaign dashboard and Extensions hub link to
@@ -3394,6 +3397,31 @@ func (a *App) RegisterRoutes() {
 	noteHandler.SetPageNamer(notePages)
 	noteHandler.SetPageLinker(notePages)
 	notes.RegisterRoutes(e, noteHandler, campaignService, authService)
+	// A player can allow the Foundry notebook to use their notes. Grants go
+	// only to an address that may already call Chronicle across sites.
+	noteGrants := notes.NewAppGrantService(notes.NewAppGrantRepository(a.DB))
+	noteGrantHandler := notes.NewAppGrantHandler(noteGrants, &notesOriginAllower{baseURL: a.Config.BaseURL, settings: settingsService})
+	// Pictures and voice memos in the frames load through member-checked
+	// signed links, as Foundry's media does.
+	noteGrantHandler.SetMediaLinker(mediaHandler)
+	// A grant ends whenever the player's sessions do (password reset or
+	// change, force sign-out).
+	auth.OnSessionsRevoked(authService, func(ctx context.Context, userID string) {
+		if err := noteGrants.RevokeAllForUser(ctx, userID); err != nil {
+			slog.Error("revoking notes app grants failed", slog.String("user_id", userID), slog.Any("error", err))
+		}
+	})
+	// The campaign's Sync API switch governs outside apps, the notebook too.
+	notesAppGate := func(ctx context.Context, campaignID string) (bool, error) {
+		return addonService.IsEnabledForCampaign(ctx, campaignID, syncapi.SyncAPIAddonSlug)
+	}
+	noteHandler.SetJotsGate(func(ctx context.Context, campaignID string) (bool, error) {
+		return addonService.IsEnabledForCampaign(ctx, campaignID, "notes")
+	})
+	notesApp := notes.RegisterAppGrantRoutes(e, noteHandler, noteGrantHandler, noteGrants, notesAppGate, campaignService, authService)
+	// The editor's @ page picker, as the player sees pages.
+	notesApp.GET("/entities/search", entityHandler.SearchAPI, campaigns.RequireViewAccess())
+	notesApp.GET("/entities/:eid/preview", entityHandler.PreviewAPI, campaigns.RequireViewAccess())
 
 	// Relations widget routes already registered above (before REST API v1).
 
@@ -4550,4 +4578,44 @@ func (a *aiWorkspaceAuditAdapter) LogCampaignEvent(ctx context.Context, campaign
 		Action:     action,
 		Details:    details,
 	})
+}
+
+// notesOriginAllower is the notes Allow window's origin check: the site's own
+// address or an admin-allowed cross-site origin, exactly the list the CORS
+// middleware in app.go uses.
+type notesOriginAllower struct {
+	baseURL  string
+	settings settings.SettingsService
+}
+
+func (a *notesOriginAllower) AllowedOrigins(ctx context.Context) []string {
+	out := []string{strings.TrimRight(a.baseURL, "/")}
+	if a.settings != nil {
+		if list, err := a.settings.GetCORSOrigins(ctx); err == nil {
+			out = append(out, list...)
+		}
+	}
+	return out
+}
+
+func (a *notesOriginAllower) OriginAllowed(ctx context.Context, origin string) bool {
+	if origin == "" {
+		return false
+	}
+	if strings.EqualFold(strings.TrimRight(a.baseURL, "/"), origin) {
+		return true
+	}
+	if a.settings == nil {
+		return false
+	}
+	list, err := a.settings.GetCORSOrigins(ctx)
+	if err != nil {
+		return false
+	}
+	for _, o := range list {
+		if strings.EqualFold(o, origin) {
+			return true
+		}
+	}
+	return false
 }

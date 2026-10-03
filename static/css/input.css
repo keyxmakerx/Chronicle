@@ -1541,6 +1541,23 @@
       border-radius: 14px;
     }
   }
+  /* In an outside app's frame (the Foundry jot window) the frame is the
+     panel: it fills the frame edge to edge and never hides. */
+  .notes-panel.notes-panel-embed {
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    max-height: none;
+    border: 0;
+    border-radius: 0;
+    box-shadow: none;
+    transform: none;
+  }
+/* .note-btn's display beats the hidden attribute; the frame has no close,
+   pin or collapse. */
+.notes-panel-embed .notes-close,
+.notes-panel-embed .notes-pin-panel,
+.notes-panel-embed .notes-collapse-btn { display: none; }
   .notes-panel-hidden {
     opacity: 0;
     pointer-events: none;
