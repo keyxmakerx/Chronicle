@@ -64,6 +64,7 @@ type Book struct {
 	Turn       string              `json:"turn"`
 	Theme      map[string]string   `json:"theme,omitempty"`
 	IsDirector bool                `json:"isDirector"`
+	CanEdit    bool                `json:"canEdit"`
 	Terms      map[string]BookTerm `json:"terms"`
 	Parts      []BookPart          `json:"parts"`
 }
@@ -150,29 +151,36 @@ type BookStat struct {
 // reported instead of silently ignored. ---
 
 type bookIndexYAML struct {
-	Title    string            `yaml:"title"`
-	Mark     string            `yaml:"mark"`
-	Turn     string            `yaml:"turn"`
-	Glossary string            `yaml:"glossary"`
-	Theme    map[string]string `yaml:"theme"`
-	Terms    map[string]string `yaml:"terms"`
-	Parts    []struct {
-		Title    string   `yaml:"title"`
-		Director bool     `yaml:"director"`
-		Chapters []string `yaml:"chapters"`
-	} `yaml:"parts"`
+	Title    string            `yaml:"title,omitempty"`
+	Mark     string            `yaml:"mark,omitempty"`
+	Turn     string            `yaml:"turn,omitempty"`
+	Glossary string            `yaml:"glossary,omitempty"`
+	Theme    map[string]string `yaml:"theme,omitempty"`
+	Terms    map[string]string `yaml:"terms,omitempty"`
+	Parts    []bookPartYAML    `yaml:"parts"`
+}
+
+type bookPartYAML struct {
+	Title    string   `yaml:"title"`
+	Director bool     `yaml:"director,omitempty"`
+	Chapters []string `yaml:"chapters"`
 }
 
 type bookChapterYAML struct {
-	Title    string `yaml:"title"`
-	Intro    string `yaml:"intro"`
-	Director bool   `yaml:"director"`
-	Pages    []struct {
-		Title    string          `yaml:"title"`
-		Director bool            `yaml:"director"`
-		Wide     bool            `yaml:"wide"`
-		Blocks   []bookBlockYAML `yaml:"blocks"`
-	} `yaml:"pages"`
+	Title    string         `yaml:"title"`
+	Intro    string         `yaml:"intro"`
+	Director bool           `yaml:"director"`
+	Pages    []bookPageYAML `yaml:"pages"`
+}
+
+// bookPageYAML is one authored page. It is also the shape a campaign's
+// edited pages are stored and sent in (see authoredPage), so every page,
+// package or campaign, goes through the same decoder and the same checks.
+type bookPageYAML struct {
+	Title    string          `yaml:"title"`
+	Director bool            `yaml:"director"`
+	Wide     bool            `yaml:"wide"`
+	Blocks   []bookBlockYAML `yaml:"blocks"`
 }
 
 type bookBlockYAML struct {
@@ -221,12 +229,29 @@ func HasBook(sysDir string) bool {
 // rest of the book keeps working. The manifest's widget slugs are the only
 // ones a "widget" block may mount.
 func LoadBook(sysDir string, manifest *SystemManifest) (*Book, error) {
+	b, _, err := loadBookWithSource(sysDir, manifest)
+	return b, err
+}
+
+// BookSource is the authored form of the package book that loaded: the
+// cover file and, per chapter that loaded cleanly, its pages as written.
+// Campaign edits are hashed against it, compared with it and exported from
+// it, which the built Book cannot serve (it has lost the authored shape).
+type BookSource struct {
+	index    bookIndexYAML
+	chapters map[string]*bookChapterYAML
+}
+
+// loadBookWithSource is LoadBook plus the authored source of every chapter
+// that loaded. Chapters that failed to load have no entry.
+func loadBookWithSource(sysDir string, manifest *SystemManifest) (*Book, *BookSource, error) {
 	bookDir := filepath.Join(sysDir, bookDirName)
 	var idx bookIndexYAML
 	if err := decodeBookFile(filepath.Join(bookDir, bookIndexFile), &idx); err != nil {
-		return nil, fmt.Errorf("%s: %w", bookIndexFile, err)
+		return nil, nil, fmt.Errorf("%s: %w", bookIndexFile, err)
 	}
 
+	src := &BookSource{index: idx, chapters: map[string]*bookChapterYAML{}}
 	b := &Book{
 		Title: strings.TrimSpace(idx.Title),
 		Mark:  strings.TrimSpace(idx.Mark),
@@ -240,25 +265,25 @@ func LoadBook(sysDir string, manifest *SystemManifest) (*Book, error) {
 		b.Title = "Rulebook"
 	}
 	if len([]rune(b.Mark)) > 3 {
-		return nil, fmt.Errorf("%s: mark must be at most 3 letters", bookIndexFile)
+		return nil, nil, fmt.Errorf("%s: mark must be at most 3 letters", bookIndexFile)
 	}
 	switch b.Turn {
 	case "":
 		b.Turn = "flip"
 	case "flip", "slide", "fade":
 	default:
-		return nil, fmt.Errorf("%s: turn must be flip, slide or fade, not %q", bookIndexFile, b.Turn)
+		return nil, nil, fmt.Errorf("%s: turn must be flip, slide or fade, not %q", bookIndexFile, b.Turn)
 	}
 	if len(idx.Theme) > 0 {
 		b.Theme = map[string]string{}
 		for k, v := range idx.Theme {
 			pat, ok := bookThemeKeys[k]
 			if !ok {
-				return nil, fmt.Errorf("%s: theme has no setting called %q", bookIndexFile, k)
+				return nil, nil, fmt.Errorf("%s: theme has no setting called %q", bookIndexFile, k)
 			}
 			v = strings.TrimSpace(v)
 			if !pat.MatchString(v) {
-				return nil, fmt.Errorf("%s: theme %s value %q is not allowed", bookIndexFile, k, v)
+				return nil, nil, fmt.Errorf("%s: theme %s value %q is not allowed", bookIndexFile, k, v)
 			}
 			b.Theme[k] = v
 		}
@@ -266,7 +291,7 @@ func LoadBook(sysDir string, manifest *SystemManifest) (*Book, error) {
 
 	if idx.Glossary != "" {
 		if err := loadBookGlossary(sysDir, idx.Glossary, b.Terms); err != nil {
-			return nil, fmt.Errorf("%s: glossary: %w", bookIndexFile, err)
+			return nil, nil, fmt.Errorf("%s: glossary: %w", bookIndexFile, err)
 		}
 	}
 	for name, text := range idx.Terms {
@@ -288,61 +313,96 @@ func LoadBook(sysDir string, manifest *SystemManifest) (*Book, error) {
 	for i, p := range idx.Parts {
 		part := BookPart{Title: strings.TrimSpace(p.Title), Director: p.Director}
 		if part.Title == "" {
-			return nil, fmt.Errorf("%s: part %d has no title", bookIndexFile, i+1)
+			return nil, nil, fmt.Errorf("%s: part %d has no title", bookIndexFile, i+1)
 		}
 		for _, id := range p.Chapters {
 			total++
 			if total > maxBookChapters {
-				return nil, fmt.Errorf("%s: more than %d chapters", bookIndexFile, maxBookChapters)
+				return nil, nil, fmt.Errorf("%s: more than %d chapters", bookIndexFile, maxBookChapters)
 			}
-			part.Chapters = append(part.Chapters, loadBookChapter(bookDir, id, widgets))
+			ch, authored := loadBookChapter(bookDir, id, widgets)
+			if authored != nil {
+				src.chapters[id] = authored
+			}
+			part.Chapters = append(part.Chapters, ch)
 		}
 		b.Parts = append(b.Parts, part)
 	}
 	if len(b.Parts) == 0 {
-		return nil, fmt.Errorf("%s: no parts", bookIndexFile)
+		return nil, nil, fmt.Errorf("%s: no parts", bookIndexFile)
 	}
-	return b, nil
+	return b, src, nil
 }
 
-// loadBookChapter loads one chapter, turning any mistake into a problem chapter.
-func loadBookChapter(bookDir, id string, widgets map[string]bool) BookChapter {
+// loadBookChapter loads one chapter, turning any mistake into a problem
+// chapter. The authored chapter is returned only when the chapter loaded.
+func loadBookChapter(bookDir, id string, widgets map[string]bool) (BookChapter, *bookChapterYAML) {
 	file := bookChaptersDir + "/" + id + ".yaml"
 	if !bookChapterID.MatchString(id) {
-		return problemChapter(id, fmt.Sprintf("book.yaml lists a chapter called %q; chapter names use lower-case letters, digits and -", id))
+		return problemChapter(id, fmt.Sprintf("book.yaml lists a chapter called %q; chapter names use lower-case letters, digits and -", id)), nil
 	}
 	var cy bookChapterYAML
 	if err := decodeBookFile(filepath.Join(bookDir, bookChaptersDir, id+".yaml"), &cy); err != nil {
-		return problemChapter(id, fmt.Sprintf("%s: %v", file, err))
+		return problemChapter(id, fmt.Sprintf("%s: %v", file, err)), nil
 	}
 	ch := BookChapter{ID: id, Title: strings.TrimSpace(cy.Title), Intro: strings.TrimSpace(cy.Intro), Director: cy.Director}
 	if ch.Title == "" {
-		return problemChapter(id, file+": the chapter has no title")
+		return problemChapter(id, file+": the chapter has no title"), nil
 	}
 	if len(cy.Pages) == 0 {
-		return problemChapter(id, file+": the chapter has no pages")
+		return problemChapter(id, file+": the chapter has no pages"), nil
 	}
 	if len(cy.Pages) > maxBookPages {
-		return problemChapter(id, fmt.Sprintf("%s: more than %d pages", file, maxBookPages))
+		return problemChapter(id, fmt.Sprintf("%s: more than %d pages", file, maxBookPages)), nil
 	}
 	for pi, p := range cy.Pages {
-		page := BookPage{Title: strings.TrimSpace(p.Title), Director: p.Director, Wide: p.Wide}
-		if len(p.Blocks) == 0 {
-			return problemChapter(id, fmt.Sprintf("%s, page %d: the page has no blocks", file, pi+1))
-		}
-		if len(p.Blocks) > maxBookBlocks {
-			return problemChapter(id, fmt.Sprintf("%s, page %d: more than %d blocks", file, pi+1, maxBookBlocks))
-		}
-		for bi, by := range p.Blocks {
-			blk, err := buildBookBlock(by, widgets)
-			if err != nil {
-				return problemChapter(id, fmt.Sprintf("%s, page %d, block %d: %v", file, pi+1, bi+1, err))
-			}
-			page.Blocks = append(page.Blocks, blk)
+		page, perr := buildBookPage(p, widgets)
+		if perr != nil {
+			return problemChapter(id, perr.detail(fmt.Sprintf("%s, page %d", file, pi+1))), nil
 		}
 		ch.Pages = append(ch.Pages, page)
 	}
-	return ch
+	return ch, &cy
+}
+
+// bookPageError is a page that fails the book checks. Block is the 1-based
+// block at fault, or 0 when the page itself is.
+type bookPageError struct {
+	Block int
+	Msg   string
+}
+
+func (e *bookPageError) Error() string { return e.detail("page") }
+
+// detail renders the error after a caller-chosen label such as "page 2" or
+// "chapters/basics.yaml, page 2", so package files and campaign pages report
+// mistakes in the same words.
+func (e *bookPageError) detail(label string) string {
+	if e.Block > 0 {
+		return fmt.Sprintf("%s, block %d: %s", label, e.Block, e.Msg)
+	}
+	return fmt.Sprintf("%s: %s", label, e.Msg)
+}
+
+// buildBookPage checks one authored page and converts it to its wire shape.
+// It is the single definition of a valid page: package files and campaign
+// edits both pass through it.
+func buildBookPage(p bookPageYAML, widgets map[string]bool) (BookPage, *bookPageError) {
+	page := BookPage{Title: strings.TrimSpace(p.Title), Director: p.Director, Wide: p.Wide}
+	if len(p.Blocks) == 0 {
+		return page, &bookPageError{Msg: "the page has no blocks"}
+	}
+	if len(p.Blocks) > maxBookBlocks {
+		return page, &bookPageError{Msg: fmt.Sprintf("more than %d blocks", maxBookBlocks)}
+	}
+	for bi, by := range p.Blocks {
+		blk, err := buildBookBlock(by, widgets)
+		if err != nil {
+			return page, &bookPageError{Block: bi + 1, Msg: err.Error()}
+		}
+		page.Blocks = append(page.Blocks, blk)
+	}
+	return page, nil
 }
 
 // problemChapter stands in for a chapter that could not be loaded. It is for
@@ -492,6 +552,13 @@ func decodeBookFile(path string, out any) error {
 	if len(data) > maxBookFileBytes {
 		return fmt.Errorf("file is larger than %d bytes", maxBookFileBytes)
 	}
+	return decodeBookBytes(data, out)
+}
+
+// decodeBookBytes is the one strict decoder for authored book content, used
+// for package files and for pages a campaign sends (JSON is YAML). Unknown
+// keys are errors so a misspelt one is reported, not silently dropped.
+func decodeBookBytes(data []byte, out any) error {
 	dec := yaml.NewDecoder(bytes.NewReader(data))
 	dec.KnownFields(true)
 	if err := dec.Decode(out); err != nil {

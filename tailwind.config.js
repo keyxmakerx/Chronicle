@@ -39,7 +39,13 @@ module.exports = {
           DEFAULT: 'rgb(var(--color-accent-rgb, 99 102 241) / <alpha-value>)',
           hover: 'rgb(var(--color-accent-hover-rgb, 79 70 229) / <alpha-value>)',
           light: 'rgb(var(--color-accent-light-rgb, 165 180 252) / <alpha-value>)',
+          // A fill words can sit on: the accent, nudged or paired with dark
+          // words when it is too light for white (set by Customize).
+          fill: 'var(--color-accent-fill, rgb(var(--color-accent-rgb, 99 102 241)))',
+          'fill-hover': 'var(--color-accent-fill-hover, rgb(var(--color-accent-hover-rgb, 79 70 229)))',
         },
+        // Words on an accent fill: white, or dark ink on a light accent.
+        'on-accent': 'var(--color-accent-on-fill, #fff)',
 
         // Two more semantic accent slots, each falling back through the
         // slot(s) it migrates from so a campaign that customized an earlier

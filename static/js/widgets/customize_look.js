@@ -4,7 +4,8 @@
  * The owner edits a draft; the example site beside the controls shows it,
  * and one Save sends the whole draft to PUT /campaigns/:id/appearance.
  * Pictures upload to POST /campaigns/:id/appearance/picture and are only
- * used once a draft holding them is saved. The colour rules (readable(),
+ * used once a draft holding them is saved; ones the draft and the saved look
+ * no longer name are deleted again (DELETE on the same path). The colour rules (readable(),
  * fillFor(), tame()) match internal/colour, which the server applies again.
  *
  * Everything lives inside mount() so a boosted navigation away can tear the
@@ -409,6 +410,7 @@
     var draft = clone(saved);
     var memo = {};          // custom colours picked during this visit, per swatch group
     var undoDraft = null;   // what Discard threw away, for its Undo
+    var uploaded = {};      // picture names stored during this visit, not yet known to be in use
     var ui = { section:'brand', zoom:'site', page:'dash', ptheme:null, strip:true, pageAuto:true };
 
     function matchesLook(d, id){ var L = look(id); return LOOK_KEYS.every(function(k){ return same(getP(d, k), getP(L, k)); }); }
@@ -1344,7 +1346,7 @@
     function resetSection(sec){
       var t = resetTarget(sec);
       Object.keys(t).forEach(function(k){ setP(draft, k, clone(t[k])); });
-      update(); settle();
+      update(); settle(); tidyPictures();
       $('#tab-' + sec).focus();
       toast(sectionName(sec) + (sec === 'brand' ? ' is back to what is saved.' : ' is back to the ' + look(draft.look).name + ' look.'));
     }
@@ -1386,6 +1388,23 @@
       if (bad && d.header.widgets.indexOf('links') >= 0) return ['header', null, 'The link “' + bad.label.trim() + '” needs an address.'];
       return null;
     }
+    // Pictures uploaded on this page but used by no state worth keeping are
+    // deleted from the media library. The server re-checks everything
+    // (ownership, and the saved look still using it), so this only tidies;
+    // failures are ignored and the file simply stays.
+    function pictureNames(d){ return d ? [d.brand.logo, d.brand.backdrop, d.header.image] : []; }
+    function tidyPictures(){
+      var keep = {};
+      [draft, saved, undoDraft].forEach(function(d){ pictureNames(d).forEach(function(n){ keep[n] = true; }); });
+      Object.keys(uploaded).forEach(function(n){
+        if (keep[n]) return;
+        delete uploaded[n];
+        try {
+          Chronicle.apiFetch('/campaigns/' + encodeURIComponent(CID) + '/appearance/picture?name=' + encodeURIComponent(n), { method:'DELETE', csrfToken:CSRF })
+            .catch(function(){});
+        } catch (_) { /* tidying is best effort */ }
+      });
+    }
     var saving = false;
     function doSave(){
       if (saving) return;
@@ -1410,13 +1429,20 @@
           if (!alive) return;
           if (problem){ update(); toast('Not saved: ' + problem); return; }
           saved = sent; BASE = clone(sent); lookTileTheme = null;
-          ui.saved = true; undoDraft = null; update();
+          ui.saved = true; undoDraft = null; update(); tidyPictures();
           toast('Saved. Everyone in ' + CAMPAIGN + ' now sees this look.');
           refreshSite();
         });
     }
-    function doDiscard(){ clearErrors(); undoDraft = clone(draft); draft = clone(saved); if (pick) closePicker(false); update(); settle(); toast('Changes thrown away.', true); $('#tab-' + ui.section).focus(); }
-    function doUndo(){ if (!undoDraft) return; draft = undoDraft; undoDraft = null; update(); settle(); toast('Your changes are back.'); }
+    // The thrown-away draft stays restorable while the Undo toast shows, so
+    // its pictures are only tidied once that window has closed.
+    var discardT = 0;
+    function doDiscard(){
+      clearErrors(); undoDraft = clone(draft); draft = clone(saved); if (pick) closePicker(false); update(); settle(); toast('Changes thrown away.', true); $('#tab-' + ui.section).focus();
+      var mine = undoDraft; clearTimeout(discardT);
+      discardT = setTimeout(function(){ if (undoDraft === mine){ undoDraft = null; tidyPictures(); } }, 7000);
+    }
+    function doUndo(){ if (!undoDraft) return; clearTimeout(discardT); draft = undoDraft; undoDraft = null; update(); settle(); toast('Your changes are back.'); }
 
     /* ---------- Pictures ---------- */
     var UPLOAD_KIND = { 'brand.logo':'logo', 'brand.backdrop':'backdrop', 'header.image':'header', 'sidebar.banner':'menu' };
@@ -1442,8 +1468,8 @@
           if (!alive) return;
           btn.disabled = false;
           if (!r.ok || !r.b || !r.b.name){ err.hidden = false; err.textContent = (r.b && (r.b.message || r.b.error)) || 'That picture could not be uploaded.'; return; }
-          PICS[r.b.name] = r.b.url;
-          setP(draft, k, r.b.name); update(); announce('Picture added to your draft.');
+          PICS[r.b.name] = r.b.url; uploaded[r.b.name] = true;
+          setP(draft, k, r.b.name); update(); announce('Picture added to your draft.'); tidyPictures();
         });
     }
     function showPencil(){
@@ -1487,7 +1513,7 @@
       if (t.dataset.reset){ resetSection(t.dataset.reset); return; }
       if (t.dataset.pick){ if (pick && pick.btn === t) closePicker(true); else { if (pick) closePicker(false); openPicker(t); } return; }
       if (t.dataset.up){ upKey = t.dataset.up; $('#file').value = ''; $('#file').click(); return; }
-      if (t.dataset.rm){ setP(draft, t.dataset.rm, 'none'); $('#' + t.dataset.rm.replace('.', '-') + '-e').hidden = true; update(); announce('Picture removed from your draft.'); return; }
+      if (t.dataset.rm){ setP(draft, t.dataset.rm, 'none'); $('#' + t.dataset.rm.replace('.', '-') + '-e').hidden = true; update(); tidyPictures(); announce('Picture removed from your draft.'); return; }
       if (t.dataset.wact){ widgetAct(t.dataset.wact, t.dataset.w); return; }
       switch (t.id){
         case 'savebtn': doSave(); break;
@@ -1747,7 +1773,7 @@
       ringAnims.forEach(function (a) { a.forEach(function (x) { x.cancel(); }); });
       driftStop();
       clearTimeout(toastT); clearTimeout(hcTimer);
-      cancelAnimationFrame(fzRaf);
+      cancelAnimationFrame(fzRaf); clearTimeout(discardT);
       playTimers.forEach(clearTimeout);
     };
   }

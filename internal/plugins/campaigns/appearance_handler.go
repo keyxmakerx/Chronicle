@@ -130,3 +130,60 @@ func (h *Handler) UploadAppearancePictureAPI(c echo.Context) error {
 		"url":  layouts.MediaURL(c.Request().Context(), filename),
 	})
 }
+
+// DeleteAppearancePictureAPI handles DELETE /campaigns/:id/appearance/picture?name=...
+// It tidies a picture the Customize page uploaded but never saved. The page
+// calls it fire-and-forget, so every "not yours to delete" case is a quiet
+// no-op: a file the saved look still uses, another campaign's file, a file
+// that did not come from this upload path, or one that is already gone.
+// Only a malformed name is refused, since that is never a legitimate call.
+func (h *Handler) DeleteAppearancePictureAPI(c echo.Context) error {
+	cc := GetCampaignContext(c)
+	if cc == nil {
+		return apperror.NewMissingContext()
+	}
+	if cc.MemberRole < RoleOwner {
+		return apperror.NewForbidden("only campaign owners can change how the campaign looks")
+	}
+	name, err := pictureName("appearance", c.QueryParam("name"))
+	if err != nil {
+		return err
+	}
+	if name == "" {
+		return apperror.NewBadRequest("invalid appearance picture")
+	}
+	done := func(deleted bool) error {
+		return c.JSON(http.StatusOK, map[string]any{"status": "ok", "deleted": deleted})
+	}
+
+	// The request's campaign was loaded from the database for this request,
+	// so it is the saved state; a draft is never consulted.
+	if appearancePictureSaved(cc.Campaign, name) || h.mediaUploader == nil {
+		return done(false)
+	}
+	deleted, err := h.mediaUploader.DeletePicture(c.Request().Context(), cc.Campaign.ID, name)
+	if err != nil {
+		return err
+	}
+	if deleted {
+		h.logAudit(c, cc.Campaign.ID, "campaign.appearance.picture_discarded", nil)
+	}
+	return done(deleted)
+}
+
+// appearancePictureSaved reports whether the campaign's saved settings or
+// backdrop column use the picture. This is the one list of places a picture
+// can live; a new picture field must be added here and to AppearancePictures.
+func appearancePictureSaved(campaign *Campaign, name string) bool {
+	settings := campaign.ParseSettings()
+	if settings.BrandLogo == name {
+		return true
+	}
+	if settings.TopbarStyle != nil && settings.TopbarStyle.ImagePath == name {
+		return true
+	}
+	if settings.Appearance != nil && settings.Appearance.SidebarBanner == name {
+		return true
+	}
+	return campaign.BackdropPath != nil && *campaign.BackdropPath == name
+}

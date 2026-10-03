@@ -545,7 +545,7 @@
   function relRect(el, box) { var b = box.getBoundingClientRect(), r = el.getBoundingClientRect(); return { x: r.left - b.left, y: r.top - b.top, w: r.width, h: r.height }; }
 
   // The part of the calendar a card may use: what is on screen, inside
-  // whatever scrolls it (the page, or the almanac on the Calendars page).
+  // whatever scrolls it.
   // vbot is the visible edge alone, past the calendar's own bottom.
   function visBand(calEl) {
     var cr = calEl.getBoundingClientRect(), top = 0, bot = window.innerHeight;
@@ -1759,7 +1759,7 @@
       // The moon view sits over the month, so a press anywhere else in the
       // calendar closes it, the way the day and era cards give way to a
       // press on the grid. Presses outside the calendar are left to the
-      // page (the almanac's click-off closes an open card itself), and
+      // page, and
       // presses that open the moon view again are left to do that.
       this._mvOffHandler = function (e) {
         if (!self.mvEl.classList.contains('open')) return;
@@ -1787,8 +1787,7 @@
       this.scrimEl.classList.toggle('on', this.anyPanelOpen() && window.matchMedia('(max-width:600px)').matches);
     },
 
-    // o.instant takes them down without their motion (the almanac folding
-    // the whole calendar away).
+    // o.instant takes them down without their motion.
     closeAllPanels: function (o) {
       if (this.wingFor) this.closeWing(o);
       this.closeFlap(o);

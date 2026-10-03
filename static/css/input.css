@@ -3939,11 +3939,14 @@
 html[data-cz-scale="compact"] { font-size: 93.75%; }
 html[data-cz-scale="roomy"] { font-size: 110%; }
 
-/* Heading face, on page content only; the sidebar and header keep the UI face. */
+/* Heading face, on page content only; the sidebar and header keep the UI face.
+   zoom applies the face's size nudge on top of whatever size the heading
+   already has (the font size itself can't be multiplied in CSS). */
 [data-cz-heading] #main-content :is(h1, h2, h3) {
   font-family: var(--font-heading);
   font-weight: var(--cz-hw, 600);
   letter-spacing: var(--cz-hls, 0);
+  zoom: var(--cz-hz, 1);
 }
 
 /* The tall header. Unlayered, so it outranks the h-14 utility on the bar. */

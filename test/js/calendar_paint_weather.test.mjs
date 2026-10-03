@@ -1,6 +1,7 @@
 // calendar_paint_weather.test.mjs — pins the paint tray's pure pieces in
 // calendar_editor.js: the palette's six common kinds and the More weather
-// groups both match the generator's own weather list, a stored reading
+// groups both match the generator's own weather list (the owner's own kinds
+// first), a stored reading
 // flattens back to the write shape Undo sends (source kept), and the list's
 // search and escaping.
 
@@ -45,7 +46,16 @@ test('every generator category has a More weather group', () => {
   const { PAINT_GROUPS } = load();
   const groups = new Set(PAINT_GROUPS.map((g) => g[0]));
   for (const p of Object.values(byId)) assert.ok(groups.has(p.category), p.id + ' ' + p.category);
-  assert.equal(PAINT_GROUPS.slice(0, 4).map((g) => g[1]).join(','), 'Common,Stormy,Nature,Magic');
+  assert.equal(PAINT_GROUPS.map((g) => g[1]).join(','), 'Yours,Common,Stormy,Nature,Magic');
+});
+
+test("the owner's own kinds lead the More weather list, in their own colour", () => {
+  const { paintListHTML } = load();
+  const fire = { id: 'fire-rain', name: 'Fire rain', icon: 'rain', color: '#e2552b', like: 'rain', seasons: { summer: 'often' } };
+  const mine = Object.fromEntries(G.weather.presets([fire]).map((p) => [p.id, p]));
+  const html = paintListHTML(mine, '');
+  assert.ok(html.indexOf('>Yours<') >= 0 && html.indexOf('>Yours<') < html.indexOf('>Common<'));
+  assert.match(html, /data-wx="fire-rain" style="--wxc:#e2552b"/);
 });
 
 test('a stored reading flattens to the write shape, keeping its source', () => {

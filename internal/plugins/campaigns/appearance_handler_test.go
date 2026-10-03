@@ -35,12 +35,22 @@ type appearanceMediaStub struct {
 	uploads    int
 	uploadName string
 	gotMime    string
+
+	// deleteResult is what DeletePicture reports: the adapter's own
+	// ownership and usage-type check, which these handler tests stand in for.
+	deleteResult bool
+	deleteCalls  []string
 }
 
 func (m *appearanceMediaStub) UploadBackdrop(_ context.Context, _, _ string, _ []byte, _, mimeType string) (string, error) {
 	m.uploads++
 	m.gotMime = mimeType
 	return m.uploadName, nil
+}
+
+func (m *appearanceMediaStub) DeletePicture(_ context.Context, campaignID, filename string) (bool, error) {
+	m.deleteCalls = append(m.deleteCalls, campaignID+"|"+filename)
+	return m.deleteResult, nil
 }
 
 func (m *appearanceMediaStub) OwnsFile(_ context.Context, _, _ string) (bool, error) {
@@ -239,4 +249,85 @@ func TestUploadAppearancePictureAPI(t *testing.T) {
 			t.Fatalf("err = %v, want 500", err)
 		}
 	})
+}
+
+func deletePictureRequest(h *Handler, cc *CampaignContext, name string) (*httptest.ResponseRecorder, error) {
+	e := echo.New()
+	req := httptest.NewRequest(http.MethodDelete, "/campaigns/camp-1/appearance/picture?name="+name, nil)
+	rec := httptest.NewRecorder()
+	c := e.NewContext(req, rec)
+	c.Set(contextKeyCampaign, cc)
+	return rec, h.DeleteAppearancePictureAPI(c)
+}
+
+func TestDeleteAppearancePictureAPI(t *testing.T) {
+	const name = "2026/10/0f8fad5b-d9cb-469f-a165-70867728950e.png"
+	backdrop := name
+	other := "2026/10/other.png"
+	cases := []struct {
+		name         string
+		role         Role
+		query        string
+		settings     string
+		backdrop     *string
+		mediaResult  bool // what the media layer says: owned by this campaign, uploaded as an appearance picture
+		noMedia      bool
+		wantCode     int // 0 = success
+		wantDeleted  bool
+		wantMediaHit int
+	}{
+		{"owned and unreferenced is deleted", RoleOwner, name, "", nil, true, false, 0, true, 1},
+		{"unreferenced but not ours or not an appearance picture is kept", RoleOwner, name, "", nil, false, false, 0, false, 1},
+		{"saved as brand logo is kept", RoleOwner, name, `{"brand_logo":"` + name + `"}`, nil, true, false, 0, false, 0},
+		{"saved as header image is kept", RoleOwner, name,
+			`{"topbar_style":{"mode":"image","image_path":"` + name + `"}}`, nil, true, false, 0, false, 0},
+		{"saved as sidebar banner is kept", RoleOwner, name,
+			`{"appearance":{"sidebar_corner":"banner","sidebar_banner":"` + name + `"}}`, nil, true, false, 0, false, 0},
+		{"saved as backdrop column is kept", RoleOwner, name, "", &backdrop, true, false, 0, false, 0},
+		{"another saved picture does not protect this one", RoleOwner, name, `{"brand_logo":"` + other + `"}`, &other, true, false, 0, true, 1},
+		{"no media service is a no-op", RoleOwner, name, "", nil, true, true, 0, false, 0},
+		{"missing name rejected", RoleOwner, "", "", nil, true, false, http.StatusBadRequest, false, 0},
+		{"traversal rejected", RoleOwner, "../secret.png", "", nil, true, false, http.StatusBadRequest, false, 0},
+		{"dot segment rejected", RoleOwner, "2026/10/.hidden", "", nil, true, false, http.StatusBadRequest, false, 0},
+		{"empty segment rejected", RoleOwner, "2026//x.png", "", nil, true, false, http.StatusBadRequest, false, 0},
+		{"backslash rejected", RoleOwner, `a%5Cb.png`, "", nil, true, false, http.StatusBadRequest, false, 0},
+		{"scribe forbidden", RoleScribe, name, "", nil, true, false, http.StatusForbidden, false, 0},
+		{"player forbidden", RolePlayer, name, "", nil, true, false, http.StatusForbidden, false, 0},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			h := NewHandler(&appearanceSvcStub{})
+			media := &appearanceMediaStub{deleteResult: tc.mediaResult}
+			if !tc.noMedia {
+				h.SetMediaUploader(media)
+			}
+			rec, err := deletePictureRequest(h, ownerContext(tc.role, tc.settings, tc.backdrop), tc.query)
+			if tc.wantCode != 0 {
+				ae, ok := err.(*apperror.AppError)
+				if !ok || ae.Code != tc.wantCode {
+					t.Fatalf("err = %v, want code %d", err, tc.wantCode)
+				}
+			} else {
+				if err != nil {
+					t.Fatalf("unexpected error: %v", err)
+				}
+				var resp struct {
+					Status  string `json:"status"`
+					Deleted bool   `json:"deleted"`
+				}
+				if err := json.Unmarshal(rec.Body.Bytes(), &resp); err != nil {
+					t.Fatalf("response not JSON: %v", err)
+				}
+				if resp.Status != "ok" || resp.Deleted != tc.wantDeleted {
+					t.Errorf("response = %+v, want ok/deleted=%v", resp, tc.wantDeleted)
+				}
+			}
+			if len(media.deleteCalls) != tc.wantMediaHit {
+				t.Errorf("DeletePicture calls = %v, want %d", media.deleteCalls, tc.wantMediaHit)
+			}
+			if tc.wantMediaHit == 1 && media.deleteCalls[0] != "camp-1|"+tc.query {
+				t.Errorf("DeletePicture got %q, want this campaign and name", media.deleteCalls[0])
+			}
+		})
+	}
 }

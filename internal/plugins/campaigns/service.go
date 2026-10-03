@@ -52,23 +52,8 @@ type CampaignService interface {
 	GetPendingTransfer(ctx context.Context, campaignID string) (*OwnershipTransfer, error)
 
 	// Backdrop and branding
-	UpdateBackdropPath(ctx context.Context, campaignID string, path *string) error
-	UpdateAccentColor(ctx context.Context, campaignID string, color string) error
-	// UpdateAccentSurface sets a surface-pair accent (slot 1 or 2); empty
-	// color resets the slot to inherit the chrome accent.
-	UpdateAccentSurface(ctx context.Context, campaignID string, slot int, color string) error
-	// UpdateAccentAction sets the campaign's "Action highlight" accent;
-	// empty resets the slot to inherit the site accent.
-	UpdateAccentAction(ctx context.Context, campaignID string, color string) error
-	// UpdateAccentApp sets the campaign's "App accent"; empty resets the
-	// slot to inherit the legacy surface pair, then the site accent.
-	UpdateAccentApp(ctx context.Context, campaignID string, color string) error
 	// UpdateBranding sets the campaign's custom brand name and logo path.
 	UpdateBranding(ctx context.Context, campaignID, brandName, brandLogo string) error
-	// UpdateTopbarStyle sets the campaign's topbar visual customization.
-	UpdateTopbarStyle(ctx context.Context, campaignID string, style *TopbarStyle) error
-	// UpdateTopbarContent sets the campaign's topbar center content (quick-links, quote).
-	UpdateTopbarContent(ctx context.Context, campaignID string, content *TopbarContent) error
 	UpdateDmGrants(ctx context.Context, campaignID string, userIDs []string) error
 	// IsUserDmGranted reports whether the user appears in the campaign's
 	// DmGrantIDs setting. Used by the WS hub to gate RequiresDM messages
@@ -91,8 +76,6 @@ type CampaignService interface {
 	// CampaignExistsByID is a thin existence check for adapters that
 	// don't need the full Campaign struct.
 	CampaignExistsByID(ctx context.Context, campaignID string) (bool, error)
-	// UpdateFontFamily sets the campaign's body font family.
-	UpdateFontFamily(ctx context.Context, campaignID, fontFamily string) error
 	// UpdateWelcomeMessage sets the campaign's MOTD banner message.
 	UpdateWelcomeMessage(ctx context.Context, campaignID, message string) error
 	// SaveAppearance writes one Save from the Customize page, every
@@ -897,123 +880,6 @@ func (s *campaignService) GetPendingTransfer(ctx context.Context, campaignID str
 // to prevent abuse via oversized JSON payloads.
 const maxSidebarConfigEntries = 100
 
-// UpdateBackdropPath sets or clears the campaign's backdrop image path.
-func (s *campaignService) UpdateBackdropPath(ctx context.Context, campaignID string, path *string) error {
-	return s.repo.UpdateBackdropPath(ctx, campaignID, path)
-}
-
-// UpdateAccentColor sets the campaign's accent color. Accepts a hex color
-// string (e.g. "#6366f1") or empty string to reset to default.
-func (s *campaignService) UpdateAccentColor(ctx context.Context, campaignID string, color string) error {
-	// Defense in depth: reject any non-#RRGGBB value (empty resets to default).
-	// The accent reaches a raw <style> block at render, so validate at the
-	// service too — not only the handler (audit-R2 / #521).
-	if color != "" && !isValidHexColor(color) {
-		return apperror.NewBadRequest("invalid color format, expected #RRGGBB")
-	}
-
-	campaign, err := s.repo.FindByID(ctx, campaignID)
-	if err != nil {
-		return err
-	}
-
-	settings := campaign.ParseSettings()
-	settings.AccentColor = color
-
-	settingsJSON, err := json.Marshal(settings)
-	if err != nil {
-		return apperror.NewInternal(fmt.Errorf("marshaling settings: %w", err))
-	}
-
-	return s.repo.UpdateSettings(ctx, campaignID, string(settingsJSON))
-}
-
-// UpdateAccentSurface sets one of the campaign's surface-pair accents
-// (slot 1 or 2). Same contract as UpdateAccentColor: hex color string or
-// empty to reset (the surface then inherits the chrome accent via CSS
-// fallback at consumers). Load-merge-write on settings JSON.
-func (s *campaignService) UpdateAccentSurface(ctx context.Context, campaignID string, slot int, color string) error {
-	if slot != 1 && slot != 2 {
-		return apperror.NewBadRequest("invalid accent surface slot")
-	}
-	// Same strict #RRGGBB validation as the chrome accent (empty resets).
-	if color != "" && !isValidHexColor(color) {
-		return apperror.NewBadRequest("invalid color format, expected #RRGGBB")
-	}
-
-	campaign, err := s.repo.FindByID(ctx, campaignID)
-	if err != nil {
-		return err
-	}
-
-	settings := campaign.ParseSettings()
-	if slot == 1 {
-		settings.AccentSurface1 = color
-	} else {
-		settings.AccentSurface2 = color
-	}
-
-	settingsJSON, err := json.Marshal(settings)
-	if err != nil {
-		return apperror.NewInternal(fmt.Errorf("marshaling settings: %w", err))
-	}
-
-	return s.repo.UpdateSettings(ctx, campaignID, string(settingsJSON))
-}
-
-// UpdateAccentAction sets the campaign's "Action highlight" accent: primary
-// buttons, hover/press states, FABs. Same contract as UpdateAccentColor: hex
-// color string or empty to reset (the action highlight then inherits the
-// site accent via CSS fallback at consumers). Load-merge-write on settings
-// JSON.
-func (s *campaignService) UpdateAccentAction(ctx context.Context, campaignID string, color string) error {
-	// Same strict #RRGGBB validation as the other accent slots (empty resets).
-	if color != "" && !isValidHexColor(color) {
-		return apperror.NewBadRequest("invalid color format, expected #RRGGBB")
-	}
-
-	campaign, err := s.repo.FindByID(ctx, campaignID)
-	if err != nil {
-		return err
-	}
-
-	settings := campaign.ParseSettings()
-	settings.AccentAction = color
-
-	settingsJSON, err := json.Marshal(settings)
-	if err != nil {
-		return apperror.NewInternal(fmt.Errorf("marshaling settings: %w", err))
-	}
-
-	return s.repo.UpdateSettings(ctx, campaignID, string(settingsJSON))
-}
-
-// UpdateAccentApp sets the campaign's "App accent": per-app identity for
-// character pages, the calendar app, and other apps. Same contract as
-// UpdateAccentColor: hex color string or empty to reset (the app accent
-// then inherits the legacy surface-pair primary, then the site accent, via
-// CSS fallback at consumers). Load-merge-write on settings JSON.
-func (s *campaignService) UpdateAccentApp(ctx context.Context, campaignID string, color string) error {
-	if color != "" && !isValidHexColor(color) {
-		return apperror.NewBadRequest("invalid color format, expected #RRGGBB")
-	}
-
-	campaign, err := s.repo.FindByID(ctx, campaignID)
-	if err != nil {
-		return err
-	}
-
-	settings := campaign.ParseSettings()
-	settings.AccentApp = color
-
-	settingsJSON, err := json.Marshal(settings)
-	if err != nil {
-		return apperror.NewInternal(fmt.Errorf("marshaling settings: %w", err))
-	}
-
-	return s.repo.UpdateSettings(ctx, campaignID, string(settingsJSON))
-}
-
 // UpdateBranding sets the campaign's custom brand name and logo path.
 // Brand name max 40 chars. Empty strings clear the respective fields.
 func (s *campaignService) UpdateBranding(ctx context.Context, campaignID, brandName, brandLogo string) error {
@@ -1032,98 +898,6 @@ func (s *campaignService) UpdateBranding(ctx context.Context, campaignID, brandN
 	settings := campaign.ParseSettings()
 	settings.BrandName = brandName
 	settings.BrandLogo = brandLogo
-
-	settingsJSON, err := json.Marshal(settings)
-	if err != nil {
-		return apperror.NewInternal(fmt.Errorf("marshaling settings: %w", err))
-	}
-
-	return s.repo.UpdateSettings(ctx, campaignID, string(settingsJSON))
-}
-
-// UpdateTopbarStyle sets the campaign's topbar visual customization.
-// Nil style clears the customization (reverts to default).
-func (s *campaignService) UpdateTopbarStyle(ctx context.Context, campaignID string, style *TopbarStyle) error {
-	if style != nil {
-		// Validate mode.
-		switch style.Mode {
-		case "solid", "gradient", "image", "":
-			// ok
-		default:
-			return apperror.NewBadRequest("invalid topbar mode, expected solid, gradient, or image")
-		}
-		// Validate color values are valid hex (e.g. "#6366f1") or empty.
-		for _, color := range []string{style.Color, style.GradientFrom, style.GradientTo} {
-			if color != "" && !isValidHexColor(color) {
-				return apperror.NewBadRequest("invalid color format, expected #RRGGBB")
-			}
-		}
-		// Validate gradient direction.
-		if style.GradientDir != "" {
-			switch style.GradientDir {
-			case "to-r", "to-br", "to-b":
-				// ok
-			default:
-				return apperror.NewBadRequest("invalid gradient direction")
-			}
-		}
-	}
-
-	campaign, err := s.repo.FindByID(ctx, campaignID)
-	if err != nil {
-		return err
-	}
-
-	settings := campaign.ParseSettings()
-	settings.TopbarStyle = style
-
-	settingsJSON, err := json.Marshal(settings)
-	if err != nil {
-		return apperror.NewInternal(fmt.Errorf("marshaling settings: %w", err))
-	}
-
-	return s.repo.UpdateSettings(ctx, campaignID, string(settingsJSON))
-}
-
-// UpdateTopbarContent sets the campaign's topbar center content.
-// Validates mode, quote length, and link count/lengths.
-func (s *campaignService) UpdateTopbarContent(ctx context.Context, campaignID string, content *TopbarContent) error {
-	if content != nil {
-		switch content.Mode {
-		case "none", "links", "quote", "":
-			// ok
-		default:
-			return apperror.NewBadRequest("invalid topbar content mode")
-		}
-		if len(content.Quote) > 200 {
-			return apperror.NewBadRequest("quote must be 200 characters or fewer")
-		}
-		if len(content.Links) > 8 {
-			return apperror.NewBadRequest("maximum 8 topbar links")
-		}
-		for _, link := range content.Links {
-			if len(link.Label) > 30 {
-				return apperror.NewBadRequest("link label must be 30 characters or fewer")
-			}
-			if link.URL == "" {
-				return apperror.NewBadRequest("link URL is required")
-			}
-			if err := validateNavLinkURL(link.Label, link.URL); err != nil {
-				return err
-			}
-		}
-		// Same rule as the sidebar: the links are re-sent as a set, so a bad
-		// icon is dropped rather than refused.
-		normalizeNavIcons(content.Links, func(l *TopbarLink) *string { return &l.Icon })
-	}
-
-	campaign, err := s.repo.FindByID(ctx, campaignID)
-	if err != nil {
-		return err
-	}
-
-	settings := campaign.ParseSettings()
-	settings.TopbarContent = content
 
 	settingsJSON, err := json.Marshal(settings)
 	if err != nil {
@@ -1344,39 +1118,6 @@ func (s *campaignService) UpdateDmGrants(ctx context.Context, campaignID string,
 		}
 	}
 	return nil
-}
-
-// validFontFamilies defines the allowed font families for campaigns.
-var validFontFamilies = map[string]bool{
-	"":              true, // default
-	"serif":         true,
-	"sans-serif":    true,
-	"monospace":     true,
-	"georgia":       true,
-	"merriweather":  true,
-}
-
-// UpdateFontFamily sets the campaign's body font family.
-// Empty string resets to the default font.
-func (s *campaignService) UpdateFontFamily(ctx context.Context, campaignID, fontFamily string) error {
-	if !validFontFamilies[fontFamily] {
-		return apperror.NewBadRequest("invalid font family")
-	}
-
-	campaign, err := s.repo.FindByID(ctx, campaignID)
-	if err != nil {
-		return err
-	}
-
-	settings := campaign.ParseSettings()
-	settings.FontFamily = fontFamily
-
-	settingsJSON, err := json.Marshal(settings)
-	if err != nil {
-		return apperror.NewInternal(fmt.Errorf("marshaling settings: %w", err))
-	}
-
-	return s.repo.UpdateSettings(ctx, campaignID, string(settingsJSON))
 }
 
 // platformDefaultTiers is the platform-wide event tier vocabulary
