@@ -255,6 +255,28 @@ Rolling back to an older image afterwards still boots (ADR-045, §7), but the
 calendar data stays gone; restore the `chronicle_pre_migrate_db_<timestamp>.sql.gz`
 snapshot taken on that boot to get it back (§9).
 
+### Deploying alongside the Foundry module and game system packages
+
+Chronicle, the Foundry module and each game system package ship separately,
+and a Chronicle deploy changes none of the others. In this order:
+
+1. **Back up**, set `BACKUP_REQUIRED=1`, and make sure `BASE_URL` is the public
+   `https://` address. The Foundry connect line (Campaign > Apps & game
+   system > Foundry) is built from `BASE_URL`; a line made while it still says
+   `localhost` points Foundry at the wrong place. Make a new connect line after
+   fixing it. Older keys are not revoked.
+2. **Deploy Chronicle** (steps 1–5 above). New tables and columns are added at
+   boot, each guarded so a re-run is harmless; the pre-migration snapshot is
+   taken first. Confirm the running version with step 5.
+3. **Release the Foundry module** (the module repo's Actions > Release, with a
+   version), then update it inside Foundry. Chronicle shows the module version a key last reported.
+4. **Release the game system packages** (Draw Steel 0.13.14 or later, and 5e),
+   then in Admin > Packages check for updates and update each one. Updating a
+   package adds only the sheet fields that update introduced to existing
+   campaigns, never restores a field a GM deleted, and never touches pages.
+5. Match each Foundry user to their Chronicle member, then use the campaign's
+   Foundry row to check the status dot.
+
 ### Which image is actually running?
 
 Ask the process first — it's the only thing that can testify about itself:
