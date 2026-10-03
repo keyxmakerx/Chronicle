@@ -1665,7 +1665,10 @@ paths:
         Ids of resources changed after `since`, oldest first. Owner or co-DM
         keys only. The client refetches each resource through the normal
         reads. `resetRequired` means `since` is older than retained history:
-        do a full resync, then resume from `next`.
+        do a full resync, then resume from `next`. `types` lists the resource
+        types this server records; a type missing from it was never recorded,
+        so its absence from `changes` says nothing. A `relation` change's
+        `resourceId` is the relation's source entity.
       operationId: listSyncChanges
       parameters:
         - $ref: "#/components/parameters/campaignId"
@@ -1703,6 +1706,9 @@ paths:
                   next: {type: integer, format: int64}
                   hasMore: {type: boolean}
                   resetRequired: {type: boolean}
+                  types:
+                    type: array
+                    items: {type: string}
         "400":
           $ref: "#/components/responses/BadRequest"
         "401":

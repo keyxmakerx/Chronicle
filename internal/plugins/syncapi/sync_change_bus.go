@@ -3,6 +3,7 @@ package syncapi
 import (
 	"context"
 	"log/slog"
+	"sort"
 	"strings"
 	"time"
 
@@ -31,6 +32,21 @@ var changeFeedTypes = map[string]string{
 	"relation":       "relation",
 	"calendar.event": "calendar_event",
 }
+
+// recordedTypes is changeFeedTypes' resource types, sorted, as the feed
+// response reports them.
+var recordedTypes = func() []string {
+	seen := map[string]bool{}
+	out := []string{}
+	for _, t := range changeFeedTypes {
+		if !seen[t] {
+			seen[t] = true
+			out = append(out, t)
+		}
+	}
+	sort.Strings(out)
+	return out
+}()
 
 // classifyChange returns the feed resource type and op for a message type,
 // or ok=false when the type is not part of the feed.

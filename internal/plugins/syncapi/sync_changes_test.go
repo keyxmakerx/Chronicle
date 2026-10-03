@@ -6,6 +6,7 @@ import (
 	"errors"
 	"net/http"
 	"net/http/httptest"
+	"slices"
 	"testing"
 	"time"
 
@@ -138,9 +139,13 @@ func TestListChanges(t *testing.T) {
 				Next          int64        `json:"next"`
 				HasMore       bool         `json:"hasMore"`
 				ResetRequired bool         `json:"resetRequired"`
+				Types         []string     `json:"types"`
 			}
 			if err := json.Unmarshal(rec.Body.Bytes(), &got); err != nil {
 				t.Fatal(err)
+			}
+			if !slices.Contains(got.Types, "relation") || !slices.Contains(got.Types, "entity") {
+				t.Fatalf("types = %v, want the recorded resource types", got.Types)
 			}
 			if len(got.Changes) != tt.wantLen || got.Next != tt.wantNext || got.HasMore != tt.wantMore || got.ResetRequired != tt.wantReset {
 				t.Fatalf("got len=%d next=%d more=%v reset=%v; want len=%d next=%d more=%v reset=%v",
