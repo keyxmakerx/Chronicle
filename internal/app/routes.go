@@ -2655,6 +2655,9 @@ func (a *App) RegisterRoutes() {
 	} else if n > 0 {
 		slog.Info("player-character-type backfill complete", slog.Int("campaigns", n))
 	}
+	// Same for sheet fields a package gained since a campaign enabled its
+	// system; background so a large instance doesn't slow startup.
+	go reconcileSystemSheetFields(context.Background(), addonService, newPresetApplier(entityService), installedSystemSlugs())
 	addonService.SetSystemFinder(&systemManifestFinderAdapter{})
 	addonHandler := addons.NewHandler(addonService)
 	addonHandler.SetActivityRecorder(adminActivity)
@@ -2739,6 +2742,10 @@ func (a *App) RegisterRoutes() {
 		// without a restart — mirrors the boot-time reconcile.
 		reconcileFieldGMFlags(context.Background(), entityService)
 		reconcileFieldOwnerOnlyFlags(context.Background(), entityService)
+
+		// Add any newly declared sheet fields to campaigns already using the
+		// system; runs in the background since it walks every such campaign.
+		go reconcileSystemSheetFields(context.Background(), addonService, newPresetApplier(entityService), installedSystemSlugs())
 	})
 	packages.ConfigureSettings(pkgService, settingsRepo)
 	// Fail-loud installs: run the FULL loader-grade manifest validation at

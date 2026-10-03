@@ -31,6 +31,22 @@ func newPresetApplier(entityService entities.EntityService) *presetApplier {
 // campaign (avoids duplicates on re-enable). Returns the count of newly
 // created entity types.
 func (p *presetApplier) ApplySystemPresets(ctx context.Context, campaignID, systemSlug string) (int, error) {
+	return p.applyPresets(ctx, campaignID, systemSlug, true)
+}
+
+// ReconcileSystemPresets adds the preset fields a campaign's existing entity
+// types are missing, and nothing else: it never creates a type (a GM may have
+// deleted one on purpose) and never removes, renames or reorders fields.
+// Returns the number of fields added across all types.
+func (p *presetApplier) ReconcileSystemPresets(ctx context.Context, campaignID, systemSlug string) (int, error) {
+	return p.applyPresets(ctx, campaignID, systemSlug, false)
+}
+
+// applyPresets is the shared walk behind ApplySystemPresets and
+// ReconcileSystemPresets. With create=false a preset with no matching type is
+// skipped. The count is types created when create is true, fields added
+// otherwise.
+func (p *presetApplier) applyPresets(ctx context.Context, campaignID, systemSlug string, create bool) (int, error) {
 	manifest := systems.Find(systemSlug)
 	if manifest == nil {
 		// System not found in registry — may be a custom upload without
@@ -62,6 +78,7 @@ func (p *presetApplier) ApplySystemPresets(ctx context.Context, campaignID, syst
 		existingByName[strings.ToLower(et.Name)] = et
 	}
 
+	fieldsAdded := 0
 	created := 0
 	for _, preset := range manifest.EntityPresets {
 		declared := mapPresetFields(preset.Fields)
@@ -90,6 +107,7 @@ func (p *presetApplier) ApplySystemPresets(ctx context.Context, campaignID, syst
 				)
 				continue // Graceful degradation — try the other presets.
 			}
+			fieldsAdded += added
 			if added > 0 {
 				slog.Info("entity type fields upgraded from system preset",
 					slog.String("campaign_id", campaignID),
@@ -99,6 +117,10 @@ func (p *presetApplier) ApplySystemPresets(ctx context.Context, campaignID, syst
 					slog.Int("fields_added", added),
 				)
 			}
+			continue
+		}
+
+		if !create {
 			continue
 		}
 
@@ -138,6 +160,9 @@ func (p *presetApplier) ApplySystemPresets(ctx context.Context, campaignID, syst
 		created++
 	}
 
+	if !create {
+		return fieldsAdded, nil
+	}
 	return created, nil
 }
 

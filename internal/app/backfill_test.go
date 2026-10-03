@@ -3,6 +3,7 @@ package app
 import (
 	"context"
 	"errors"
+	"reflect"
 	"testing"
 
 	"github.com/keyxmakerx/chronicle/internal/plugins/entities"
@@ -105,4 +106,39 @@ func equalStrings(a, b []string) bool {
 		}
 	}
 	return true
+}
+
+type fakeSheetAddons map[string][]string
+
+func (f fakeSheetAddons) ListCampaignsUsingAddon(_ context.Context, slug string) ([]string, error) {
+	return f[slug], nil
+}
+
+type fakeSheetReconciler struct {
+	calls []string
+	fail  string
+}
+
+func (f *fakeSheetReconciler) ReconcileSystemPresets(_ context.Context, campaignID, slug string) (int, error) {
+	f.calls = append(f.calls, slug+"/"+campaignID)
+	if campaignID == f.fail {
+		return 0, errors.New("boom")
+	}
+	return 2, nil
+}
+
+func TestReconcileSystemSheetFields(t *testing.T) {
+	addons := fakeSheetAddons{"dnd5e": {"c1", "c2", "c3"}, "drawsteel": {"c9"}}
+	rec := &fakeSheetReconciler{fail: "c2"}
+
+	got := reconcileSystemSheetFields(context.Background(), addons, rec, []string{"dnd5e", "drawsteel", "none"})
+
+	// c2 fails and is skipped; the sweep carries on to the rest.
+	if got != 6 {
+		t.Errorf("fields added = %d, want 6", got)
+	}
+	want := []string{"dnd5e/c1", "dnd5e/c2", "dnd5e/c3", "drawsteel/c9"}
+	if !reflect.DeepEqual(rec.calls, want) {
+		t.Errorf("calls = %v, want %v", rec.calls, want)
+	}
 }
