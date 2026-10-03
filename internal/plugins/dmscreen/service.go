@@ -25,6 +25,15 @@ const hiddenLimit = 8
 type Service interface {
 	Build(ctx context.Context, campaignID string, v Viewer) (*View, error)
 	Reveal(ctx context.Context, entityID, campaignID string, v Viewer) (string, error)
+	SetDowntime(ctx context.Context, campaignID string, v Viewer, open bool) (DowntimeResult, error)
+}
+
+// DowntimeResult reports a downtime switch: the new state and how many
+// waiting requests went through or failed when it opened.
+type DowntimeResult struct {
+	Open    bool `json:"open"`
+	Applied int  `json:"applied"`
+	Failed  int  `json:"failed"`
 }
 
 type service struct {
@@ -144,6 +153,22 @@ func (s *service) Reveal(ctx context.Context, entityID, campaignID string, v Vie
 		return "", apperror.NewBadRequest("entity ID is required")
 	}
 	return s.src.Hidden.Reveal(ctx, entityID, campaignID)
+}
+
+// SetDowntime switches downtime from the screen. Only the owner (or a
+// DM-granted co-DM) may, the same rule the Stashes page follows.
+func (s *service) SetDowntime(ctx context.Context, campaignID string, v Viewer, open bool) (DowntimeResult, error) {
+	if !v.IsOwner() {
+		return DowntimeResult{}, apperror.NewForbidden("only the campaign owner can switch downtime")
+	}
+	if s.src.Downtime == nil {
+		return DowntimeResult{}, apperror.NewNotFound("downtime is not available")
+	}
+	applied, failed, err := s.src.Downtime.SetDowntime(ctx, campaignID, v, open)
+	if err != nil {
+		return DowntimeResult{}, err
+	}
+	return DowntimeResult{Open: open, Applied: applied, Failed: failed}, nil
 }
 
 // buildMeters reads each declared meter from a hero's sheet fields. A meter

@@ -3,6 +3,7 @@ package app
 import (
 	"context"
 	"fmt"
+	"log/slog"
 	"slices"
 	"sort"
 	"strings"
@@ -37,11 +38,30 @@ func (a *dmDowntimeAdapter) Downtime(ctx context.Context, campaignID string, v d
 	if err != nil {
 		return false, 0, false, err
 	}
+	// A failed request count must not take the switch away with it.
 	page, err := a.stash.StashesPage(ctx, campaignID, armory.Actor{UserID: v.UserID, Role: v.Role})
 	if err != nil {
-		return open, 0, true, err
+		slog.Warn("dm screen: counting pending stash requests", slog.String("campaign_id", campaignID), slog.Any("error", err))
+		return open, 0, true, nil
 	}
 	return open, len(page.Pending), true, nil
+}
+
+// SetDowntime switches downtime through the armory, which checks the owner
+// rule itself. A campaign without the armory has no downtime to switch.
+func (a *dmDowntimeAdapter) SetDowntime(ctx context.Context, campaignID string, v dmscreen.Viewer, open bool) (int, int, error) {
+	on, err := a.addons.IsEnabledForCampaign(ctx, campaignID, armory.AddonSlug)
+	if err != nil {
+		return 0, 0, err
+	}
+	if !on {
+		return 0, 0, apperror.NewNotFound("downtime is not available")
+	}
+	res, err := a.stash.SetDowntime(ctx, campaignID, armory.Actor{UserID: v.UserID, Role: v.Role}, open)
+	if err != nil {
+		return 0, 0, err
+	}
+	return res.Applied, res.Failed, nil
 }
 
 // dmWorldAdapter reads the default calendar's date and today's weather.
@@ -225,4 +245,22 @@ func (a *dmHiddenAdapter) Reveal(ctx context.Context, entityID, campaignID strin
 		return "", err
 	}
 	return e.Name, nil
+}
+
+// dmScreenSyncAPIAdapter hands the DM Screen to the sync API for the Foundry
+// module, which reads the same View the site panel draws.
+type dmScreenSyncAPIAdapter struct {
+	svc dmscreen.Service
+}
+
+func (a *dmScreenSyncAPIAdapter) Screen(ctx context.Context, campaignID, userID string, role int) (any, error) {
+	return a.svc.Build(ctx, campaignID, dmscreen.Viewer{UserID: userID, Role: role})
+}
+
+func (a *dmScreenSyncAPIAdapter) Reveal(ctx context.Context, entityID, campaignID, userID string, role int) (string, error) {
+	return a.svc.Reveal(ctx, entityID, campaignID, dmscreen.Viewer{UserID: userID, Role: role})
+}
+
+func (a *dmScreenSyncAPIAdapter) SetDowntime(ctx context.Context, campaignID, userID string, role int, open bool) (any, error) {
+	return a.svc.SetDowntime(ctx, campaignID, dmscreen.Viewer{UserID: userID, Role: role}, open)
 }

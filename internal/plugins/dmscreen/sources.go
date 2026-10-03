@@ -11,6 +11,10 @@ import (
 // wait for approval. ok is false when the campaign has no armory.
 type DowntimeSource interface {
 	Downtime(ctx context.Context, campaignID string, v Viewer) (open bool, pending int, ok bool, err error)
+
+	// SetDowntime opens or closes downtime; opening applies the requests
+	// waiting on it. The armory enforces that only the owner may switch.
+	SetDowntime(ctx context.Context, campaignID string, v Viewer, open bool) (applied, failed int, err error)
 }
 
 // WorldSource reads the default calendar's current date and today's weather.

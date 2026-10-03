@@ -4384,7 +4384,7 @@ func (a *App) RegisterRoutes() {
 	// DM Screen: the owner's and scribes' control panel. It owns no data and
 	// reads every section through the adapters in dm_screen_adapters.go;
 	// registered here because Foundry presence comes from wsHub.
-	dmScreenHandler := dmscreen.NewHandler(dmscreen.NewService(dmscreen.Sources{
+	dmScreenSvc := dmscreen.NewService(dmscreen.Sources{
 		Downtime: &dmDowntimeAdapter{stash: stashSvc, addons: addonService},
 		World:    &dmWorldAdapter{svc: calendarService},
 		Nights:   &dmNightAdapter{svc: sessionsService, members: campaignService},
@@ -4392,8 +4392,11 @@ func (a *App) RegisterRoutes() {
 		Party:    &dmPartyAdapter{entities: entityService, campaigns: campaignService},
 		Hidden:   &dmHiddenAdapter{entities: entityService},
 		System:   systemHandler,
-	}))
-	dmscreen.RegisterRoutes(e, dmScreenHandler, campaignService, authService)
+	})
+	dmscreen.RegisterRoutes(e, dmscreen.NewHandler(dmScreenSvc), campaignService, authService)
+	// The sync API routes are already registered; they answer 404 until this
+	// is set, and it is set before the server starts serving.
+	syncAPIHandler.SetDMScreen(&dmScreenSyncAPIAdapter{svc: dmScreenSvc})
 
 	wsAuth := ws.NewMultiAuthenticator(
 		syncService,
