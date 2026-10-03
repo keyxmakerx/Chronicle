@@ -2046,7 +2046,10 @@ components:
           type: boolean
         entry:
           type: string
-          description: ProseMirror JSON document
+          description: >-
+            The page body: a ProseMirror JSON document, or HTML. HTML is
+            sanitized and becomes the body (`entry_html`); the editor opens
+            it from there.
         fields_data:
           type: object
           additionalProperties: true

@@ -58,7 +58,7 @@ func TestCalendarStats_PrintsCountsAddonAndSyncState(t *testing.T) {
 		AddonEnabled:  &enabled,
 		CalendarCount: 1, EventCount: 42, MoonCount: 2, EraCount: 3, EventKindCount: 5,
 		PluginHealthy: true, MigrationVersion: 20, MigrationLatest: 20,
-		FoundrySyncState: "calendar_rebuilding — syncapi's calendar routes still answer a structured 503",
+		FoundrySyncState: "on V5: date and events served",
 	}
 	withCalendarProvider(t, &fakeCalendarProvider{stats: f}, func() {
 		got, _ := RunDiagnostic(diagnosticCatalog(), "calendar.stats", "c1")
@@ -70,7 +70,7 @@ func TestCalendarStats_PrintsCountsAddonAndSyncState(t *testing.T) {
 			"eras: **3**",
 			"event kinds: **5**",
 			"schema: **healthy**, migration `20`",
-			"calendar_rebuilding",
+			"Foundry sync: on V5: date and events served",
 		} {
 			if !strings.Contains(got, want) {
 				t.Errorf("calendar.stats missing %q:\n%s", want, got)

@@ -31,7 +31,7 @@ import (
 // `contentPacksCard` is nil if the extensions plugin is not wired in
 // this build; the hub renders cleanly without it (graceful
 // degradation, matches AddonLister/MediaUploader/SMTPChecker shape).
-templ ExtensionsHubPage(cc *CampaignContext, addons []PluginHubAddon, csrfToken, systemOptionsJSON string, hasAIWorkspace bool, contentPacksCard templ.Component) {
+templ ExtensionsHubPage(cc *CampaignContext, addons []PluginHubAddon, csrfToken, systemOptionsJSON string, hasAIWorkspace bool, contentPacksCard templ.Component, foundry FoundryRowData) {
 	@layouts.App(cc.Campaign.Name + " - Apps & game system") {
 		<div class="max-w-5xl mx-auto px-4 py-6" data-extensions-hub>
 			@layouts.ManageHeader("Apps & game system", "manage:extensions")
@@ -66,7 +66,7 @@ templ ExtensionsHubPage(cc *CampaignContext, addons []PluginHubAddon, csrfToken,
 			// card hx-gets the extension's settings page here; the GET returns a
 			// self-opening modal (ExtensionSettingsOverlay). Empty until opened.
 			<div id="extension-setup-modal"></div>
-			@connectionsCard(cc, hasAIWorkspace)
+			@connectionsCard(cc, hasAIWorkspace, foundry, csrfToken)
 			// Content Packs card — installable content from the admin
 			// install surface. Lifts the existing extensions plugin
 			// fragment so the per-pack enable/disable POSTs at
@@ -94,20 +94,24 @@ templ ExtensionsHubPage(cc *CampaignContext, addons []PluginHubAddon, csrfToken,
 	}
 }
 
-// connectionsCard links to where Foundry and the AI helper are set up. Both
-// setups still live under Settings; linking keeps this page free of a second
-// copy of their forms.
-templ connectionsCard(cc *CampaignContext, hasAIWorkspace bool) {
+// connectionsCard holds the Foundry row (status and one-paste connect line)
+// and a link to the AI helper. Full key management and the AI setup still live
+// under Settings; linking keeps this page free of a second copy of those forms.
+templ connectionsCard(cc *CampaignContext, hasAIWorkspace bool, foundry FoundryRowData, csrfToken string) {
 	<section class="card p-4 mt-6" aria-labelledby="connections-heading" data-connections-card>
 		<h2 id="connections-heading" class="text-base font-semibold text-fg mb-3">Connections</h2>
 		<ul class="divide-y divide-edge-light">
-			<li class="flex flex-wrap items-center justify-between gap-x-3 gap-y-2 py-2">
-				<div class="min-w-0">
-					<p class="text-sm font-medium text-fg">Foundry VTT</p>
-					<p class="text-xs text-fg-muted">Connection keys and sync status.</p>
-				</div>
-				<a href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/settings?tab=integrations", cc.Campaign.ID)) } class="btn-secondary text-xs">Set up</a>
-			</li>
+			if foundry.Wired {
+				@foundryConnectRow(cc, foundry, csrfToken)
+			} else {
+				<li class="flex flex-wrap items-center justify-between gap-x-3 gap-y-2 py-2">
+					<div class="min-w-0">
+						<p class="text-sm font-medium text-fg">Foundry VTT</p>
+						<p class="text-xs text-fg-muted">Connection keys and sync status.</p>
+					</div>
+					<a href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/settings?tab=integrations", cc.Campaign.ID)) } class="btn-secondary text-xs">Set up</a>
+				</li>
+			}
 			if hasAIWorkspace {
 				<li class="flex flex-wrap items-center justify-between gap-x-3 gap-y-2 py-2">
 					<div class="min-w-0">
@@ -119,6 +123,62 @@ templ connectionsCard(cc *CampaignContext, hasAIWorkspace bool) {
 			}
 		</ul>
 	</section>
+}
+
+// foundryConnectRow is the Foundry row: status, module version, the connect
+// line and the button that mints a new one. It is also the HTMX response to
+// that button, swapped over itself (outerHTML), so the id must stay stable.
+// When NewLine is set the response carries the raw key: the full line is shown
+// once in a highlighted box; otherwise only the key's stored prefix appears.
+templ foundryConnectRow(cc *CampaignContext, foundry FoundryRowData, csrfToken string) {
+	<li id="foundry-connect-row" class="py-3" data-foundry-row>
+		<div class="flex flex-wrap items-start justify-between gap-x-3 gap-y-2">
+			<div class="flex items-start gap-3 min-w-0 flex-1">
+				<span class="w-8 h-8 rounded-lg bg-accent/10 text-accent text-sm font-bold flex items-center justify-center shrink-0" aria-hidden="true">F</span>
+				<div class="min-w-0 flex-1">
+					<p class="text-sm font-medium text-fg">Foundry VTT</p>
+					<p class="text-xs text-fg-muted flex flex-wrap items-center gap-x-1.5" data-foundry-status>
+						<span class={ "inline-block w-2 h-2 rounded-full shrink-0", foundryDotClass(foundry.Status.Level) } aria-hidden="true"></span>
+						<span>{ foundry.Status.Text }</span>
+						<span aria-hidden="true">&middot;</span>
+						<span>{ foundry.moduleVersionText() }</span>
+					</p>
+					if foundry.Preview != "" {
+						<code class="mt-2 block p-2 bg-surface-alt border border-edge-light rounded text-xs font-mono text-fg break-all select-all" data-foundry-preview>{ foundry.Preview }</code>
+						<p class="mt-1 text-xs text-fg-muted">The key is hidden after it is made, so this shows only its start.</p>
+					}
+				</div>
+			</div>
+			<div class="flex items-center gap-2 shrink-0">
+				<form
+					hx-post={ fmt.Sprintf("/campaigns/%s/extensions/foundry/connect-line", cc.Campaign.ID) }
+					hx-target="#foundry-connect-row"
+					hx-swap="outerHTML"
+					hx-disabled-elt="find button"
+				>
+					<input type="hidden" name="csrf_token" value={ csrfToken }/>
+					<button type="submit" class="btn-primary text-xs focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent">{ foundry.connectButtonLabel() }</button>
+				</form>
+				<a href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/settings?tab=integrations", cc.Campaign.ID)) } class="btn-secondary text-xs focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent">All keys</a>
+			</div>
+		</div>
+		if foundry.NewLine != "" {
+			<div class="mt-3 bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 rounded-lg p-3" role="status" data-foundry-new-line>
+				<p class="text-sm text-amber-700 dark:text-amber-400 mb-2">
+					<strong>Paste this one line into Chronicle Sync's settings in Foundry.</strong>
+					It won't be shown again.
+				</p>
+				<div class="flex items-start gap-2">
+					<code id="foundry-connect-line" class="flex-1 min-w-0 p-2 bg-white dark:bg-gray-900 rounded text-xs font-mono text-fg break-all select-all">{ foundry.NewLine }</code>
+					<button
+						type="button"
+						class="btn-secondary text-xs shrink-0 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
+						onclick={ foundryCopyOnClick() }
+					>Copy</button>
+				</div>
+			</div>
+		}
+	</li>
 }
 
 // ExtensionsHubFragment renders the catalog card grid only — used as

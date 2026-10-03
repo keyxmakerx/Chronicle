@@ -40,10 +40,8 @@ type calendarDiagAdapter struct {
 func (a calendarDiagAdapter) CalendarStats(ctx context.Context, campaignID string) (systems.CalendarStatsFacts, error) {
 	out := systems.CalendarStatsFacts{
 		CampaignID: campaignID,
-		// Reported as a fact of the current build, not a live read: syncapi's
-		// calendar routes are untouched by this restoration (deliberately
-		// deferred, #778's own scope) and still answer a structured 503.
-		FoundrySyncState: "calendar_rebuilding — syncapi's calendar routes still answer a structured 503 (untouched by calendar-v5 seams, #778)",
+		// Reported as a fact of the current build, not a live read.
+		FoundrySyncState: "on V5: date, events, weather and the Calendaria import are served; pre-V5 structure routes answer 410 calendar_route_retired",
 	}
 	camp, err := a.campaigns.GetByID(ctx, campaignID)
 	if err != nil {

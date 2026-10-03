@@ -36,9 +36,22 @@ type fakeCalendarSvcForAPI struct {
 	updateArgs      [3]string
 	deleteArgs      [3]string
 	setDateArgs     []any
+
+	importCalls    int
+	importCampaign string
+	importBody     []byte
+	importCal      *calendar.Calendar
+	importWarnings []string
+	importErr      error
 }
 
-func (f *fakeCalendarSvcForAPI) GetDefaultCalendarForViewer(_ context.Context, campaignID string, v permissions.Viewer) (*calendar.Calendar, error) {
+func (f *fakeCalendarSvcForAPI) ImportFoundryCalendar(_ context.Context, campaignID string, data []byte) (*calendar.Calendar, []string, error) {
+	f.importCalls++
+	f.importCampaign, f.importBody = campaignID, data
+	return f.importCal, f.importWarnings, f.importErr
+}
+
+func (f *fakeCalendarSvcForAPI) GetPrimaryCalendarForViewer(_ context.Context, campaignID string, v permissions.Viewer) (*calendar.Calendar, error) {
 	f.defaultCampaign = campaignID
 	f.viewers = append(f.viewers, v)
 	if f.cal == nil || f.cal.CampaignID != campaignID {
@@ -398,6 +411,83 @@ func TestCalendarAPI_CurrentDateRealTimeSignal(t *testing.T) {
 			}
 			if body["tracks_real_time"] != tc.want || body["year"] != float64(1492) || body["day"] != float64(7) {
 				t.Errorf("body = %v, want tracks_real_time %v on 1492-3-7", body, tc.want)
+			}
+		})
+	}
+}
+
+// TestCalendarAPI_CreateCalendar: only an Owner may import, the path campaign
+// (never the payload) scopes it, and every refusal happens before the service
+// is called so a rejected caller cannot create or probe anything.
+func TestCalendarAPI_CreateCalendar(t *testing.T) {
+	oversize := strings.Repeat("x", maxFoundryImportBytes+1)
+	atCap := strings.Repeat(" ", maxFoundryImportBytes)
+	tests := []struct {
+		name        string
+		role        campaigns.Role
+		body        string
+		svcErr      error
+		wantStatus  int // HTTP status on the recorder when err == nil, else the error's code
+		wantErr     bool
+		wantCalls   int
+		wantWarning []string
+	}{
+		{name: "owner creates", role: campaigns.RoleOwner, body: `{"schema_version":1}`, wantStatus: http.StatusCreated, wantCalls: 1, wantWarning: []string{"check the day length"}},
+		{name: "owner with no warnings gets an empty array", role: campaigns.RoleOwner, body: `{}`, wantStatus: http.StatusCreated, wantCalls: 1},
+		{name: "scribe refused", role: campaigns.RoleScribe, body: `{}`, wantErr: true, wantStatus: http.StatusForbidden},
+		{name: "player refused", role: campaigns.RolePlayer, body: `{}`, wantErr: true, wantStatus: http.StatusForbidden},
+		{name: "service conflict passes through", role: campaigns.RoleOwner, body: `{}`, svcErr: apperror.NewConflict("already has a calendar"), wantErr: true, wantStatus: http.StatusConflict, wantCalls: 1},
+		{name: "body over the cap is a 400", role: campaigns.RoleOwner, body: oversize, wantErr: true, wantStatus: http.StatusBadRequest},
+		{name: "body exactly at the cap is passed on", role: campaigns.RoleOwner, body: atCap, wantStatus: http.StatusCreated, wantCalls: 1},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			svc := newCalendarFixture()
+			svc.importCal = &calendar.Calendar{ID: "cal-new", CampaignID: "camp-1", Name: "Imported"}
+			svc.importWarnings = tc.wantWarning
+			svc.importErr = tc.svcErr
+			h := NewCalendarAPIHandler(nil, svc, &stubCampaignSvcForCalendarAPI{role: tc.role})
+
+			rec, err := callCalendarAPI(t, h, h.CreateCalendar, http.MethodPost, "/", tc.body, bearerKey())
+
+			if svc.importCalls != tc.wantCalls {
+				t.Fatalf("ImportFoundryCalendar calls = %d, want %d", svc.importCalls, tc.wantCalls)
+			}
+			if tc.wantErr {
+				if got := statusOf(err); got != tc.wantStatus {
+					t.Fatalf("error status = %d (%v), want %d", got, err, tc.wantStatus)
+				}
+				return
+			}
+			if err != nil {
+				t.Fatal(err)
+			}
+			if rec.Code != tc.wantStatus {
+				t.Fatalf("status = %d, want %d", rec.Code, tc.wantStatus)
+			}
+			if svc.importCampaign != "camp-1" {
+				t.Errorf("campaign passed to service = %q, want the path campaign camp-1", svc.importCampaign)
+			}
+			if string(svc.importBody) != tc.body {
+				t.Errorf("body passed to service differs from the request body (%d vs %d bytes)", len(svc.importBody), len(tc.body))
+			}
+			var resp struct {
+				Calendar struct {
+					ID string `json:"id"`
+				} `json:"created"`
+				Warnings []string `json:"warnings"`
+			}
+			if err := json.Unmarshal(rec.Body.Bytes(), &resp); err != nil {
+				t.Fatalf("response is not JSON: %v: %s", err, rec.Body.String())
+			}
+			if resp.Warnings == nil {
+				t.Errorf("warnings must be an array, never null: %s", rec.Body.String())
+			}
+			if len(resp.Warnings) != len(tc.wantWarning) {
+				t.Errorf("warnings = %v, want %v", resp.Warnings, tc.wantWarning)
+			}
+			if resp.Calendar.ID != "cal-new" {
+				t.Errorf("calendar id = %q, want cal-new: %s", resp.Calendar.ID, rec.Body.String())
 			}
 		})
 	}

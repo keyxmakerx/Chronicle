@@ -27,6 +27,7 @@ type APIKey struct {
 	IPAllowlist       []string           `json:"ip_allowlist,omitempty"`
 	DeviceFingerprint *string            `json:"device_fingerprint,omitempty"`
 	DeviceBoundAt     *time.Time         `json:"device_bound_at,omitempty"`
+	ModuleVersion     *string            `json:"module_version,omitempty"` // Self-reported by the VTT module; cosmetic.
 	RateLimit         int                `json:"rate_limit"`              // Requests per minute.
 	IsActive    bool               `json:"is_active"`
 	LastUsedAt  *time.Time         `json:"last_used_at,omitempty"`
