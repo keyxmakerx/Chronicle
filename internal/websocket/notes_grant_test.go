@@ -227,16 +227,18 @@ func TestRevokeNotesAppClientsEverywhere_LeavesOtherSockets(t *testing.T) {
 	}
 }
 
-// TestJournalFrameUsesTheNotesSubprotocols pins the strings the Journal
-// frame offers to the ones AuthenticateWS reads; a drift would leave the
-// frame reconnecting forever with no live updates.
-func TestJournalFrameUsesTheNotesSubprotocols(t *testing.T) {
-	src, err := os.ReadFile("../../static/js/widgets/journal.js")
-	if err != nil {
-		t.Fatal(err)
-	}
+// TestNotesFramesUseTheNotesSubprotocols pins the strings the Journal and
+// jot panel offer in a frame to the ones AuthenticateWS reads; a drift would
+// leave the frame reconnecting forever with no live updates.
+func TestNotesFramesUseTheNotesSubprotocols(t *testing.T) {
 	want := "['" + NotesSubprotocol + "', '" + NotesGrantProtocolPrefix + "' + embed.token]"
-	if !strings.Contains(string(src), want) {
-		t.Fatalf("journal.js does not offer %s", want)
+	for _, f := range []string{"journal.js", "notes.js"} {
+		src, err := os.ReadFile("../../static/js/widgets/" + f)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if !strings.Contains(string(src), want) {
+			t.Errorf("%s does not offer %s", f, want)
+		}
 	}
 }
