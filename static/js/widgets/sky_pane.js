@@ -168,11 +168,13 @@
 
     var weatherSpec = LOOKS.spec(model.dayWeather || cal.weather);
     var look = LOOKS.resolve(weatherSpec);
-    // A blood moon brings its own weather, a dark sky with a thin red rain
-    // falling, over whatever the day's weather already is.
+    // A blood moon brings its own weather over whatever the day's already is:
+    // a dark sky with no rain, because the sky itself turns blood red and bleeds
+    // (the painted sky and the drawn layer's bleeding).
     if (moons.some(function (M) { return M.blood; })) {
       look = LOOKS.blend(look || LOOKS.blank(), LOOKS.resolve(LOOKS.spec({ preset_id: 'blood-rain', preset_label: 'Blood rain' })), .7);
-      look.cloud = Math.max(look.cloud, .66); look.dark = Math.max(look.dark, .6); look.rain = Math.max(look.rain, .75); look.stars = Math.min(look.stars, .25);
+      look.dark = Math.max(look.dark, .6); look.stars = Math.min(look.stars, .25);
+      look.rain = 0; look.cloud = .45; look.sky = ['#7a0612', .95]; look.light *= .7; look.rainTint = null;
     }
     var target = look || LOOKS.blank();
     var wx = model.wxs;
