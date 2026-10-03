@@ -104,19 +104,12 @@ func RegisterRoutes(e *echo.Echo, h *Handler, svc CampaignService, authSvc auth.
 	cg.PUT("/owner-dashboard-layout", h.UpdateOwnerDashboardLayout, RequireRole(RoleOwner))
 	cg.DELETE("/owner-dashboard-layout", h.ResetOwnerDashboardLayout, RequireRole(RoleOwner))
 
-	// Backdrop and branding (Owner only).
-	cg.POST("/backdrop", h.UploadBackdrop, RequireRole(RoleOwner))
-	cg.DELETE("/backdrop", h.RemoveBackdrop, RequireRole(RoleOwner))
-	cg.PUT("/accent-color", h.UpdateAccentColorAPI, RequireRole(RoleOwner))
+	// Branding and appearance (Owner only).
 	cg.PUT("/branding", h.UpdateBrandingAPI, RequireRole(RoleOwner))
-	cg.PUT("/topbar-style", h.UpdateTopbarStyleAPI, RequireRole(RoleOwner))
-	cg.POST("/topbar-image", h.UploadTopbarImage, RequireRole(RoleOwner))
-	cg.DELETE("/topbar-image", h.RemoveTopbarImage, RequireRole(RoleOwner))
-	cg.PUT("/topbar-content", h.UpdateTopbarContentAPI, RequireRole(RoleOwner))
-	cg.PUT("/font-family", h.UpdateFontFamilyAPI, RequireRole(RoleOwner))
 	cg.PUT("/welcome-message", h.UpdateWelcomeMessageAPI, RequireRole(RoleOwner))
 	cg.PUT("/appearance", h.SaveAppearanceAPI, RequireRole(RoleOwner))
 	cg.POST("/appearance/picture", h.UploadAppearancePictureAPI, RequireRole(RoleOwner))
+	cg.DELETE("/appearance/picture", h.DeleteAppearancePictureAPI, RequireRole(RoleOwner))
 	cg.PUT("/default-visibility", h.UpdateDefaultVisibilityAPI, RequireRole(RoleOwner))
 	// Event tier definitions per campaign: owner-only campaign-config
 	// surface, not exposed via syncapi.

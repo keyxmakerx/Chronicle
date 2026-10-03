@@ -163,6 +163,9 @@ func RegisterRoutes(e *echo.Echo, h *Handler, campaignSvc campaigns.CampaignServ
 	cg.PUT("/calendars/:calid/weather/days", h.SetDayWeatherAPI,
 		campaigns.RequireCapability(func(cc *campaigns.CampaignContext) bool { return cc.CanAuthorDmOnly() },
 			"only the campaign owner or a granted co-DM may set a day's weather"))
+	cg.GET("/calendars/:calid/weather/settings", h.GetWeatherSettingsAPI,
+		campaigns.RequireCapability(func(cc *campaigns.CampaignContext) bool { return cc.CanAuthorDmOnly() },
+			"only the campaign owner or a granted co-DM may read the weather settings"))
 	cg.POST("/calendars/:calid/weather/days/clear", h.ClearDayWeatherAPI,
 		campaigns.RequireCapability(func(cc *campaigns.CampaignContext) bool { return cc.CanAuthorDmOnly() },
 			"only the campaign owner or a granted co-DM may clear a day's weather"))

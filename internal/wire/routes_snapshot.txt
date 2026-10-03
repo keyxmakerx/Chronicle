@@ -12,10 +12,10 @@ DELETE	/addons/:addonID	internal/plugins/addons/routes.go
 DELETE	/api-keys/:keyID	internal/plugins/syncapi/routes.go
 DELETE	/api/ip-blocks/:blockID	internal/plugins/syncapi/routes.go
 DELETE	/api/keys/:keyID	internal/plugins/syncapi/routes.go
+DELETE	/appearance/picture	internal/plugins/campaigns/routes.go
 DELETE	/armory/instances/:iid	internal/plugins/armory/routes.go
 DELETE	/armory/instances/:iid/items/:eid	internal/plugins/armory/routes.go
 DELETE	/availability/exceptions/:eid	internal/plugins/sessions/routes.go
-DELETE	/backdrop	internal/plugins/campaigns/routes.go
 DELETE	/bindings	internal/plugins/widgetbindings/routes.go
 DELETE	/calendar/events/:eventID	internal/plugins/syncapi/routes.go
 DELETE	/calendars/:calid	internal/plugins/calendar/routes.go
@@ -84,7 +84,6 @@ DELETE	/timelines/:tid/events/:eid	internal/plugins/timeline/routes.go
 DELETE	/timelines/:tid/groups/:gid	internal/plugins/timeline/routes.go
 DELETE	/timelines/:tid/groups/:gid/members/:eid	internal/plugins/timeline/routes.go
 DELETE	/timelines/:tid/standalone-events/:eid	internal/plugins/timeline/routes.go
-DELETE	/topbar-image	internal/plugins/campaigns/routes.go
 DELETE	/users/:id/storage	internal/plugins/settings/routes.go
 DELETE	/users/:id/storage/bypass	internal/plugins/settings/routes.go
 DELETE	/worldbuilding-prompts/:pid	internal/plugins/entities/worldbuilding_prompt_routes.go
@@ -179,6 +178,7 @@ GET	/calendars/:calid/view	internal/plugins/calendar/routes.go
 GET	/calendars/:calid/view	internal/plugins/calendar/routes.go
 GET	/calendars/:calid/weather/days	internal/plugins/calendar/routes.go
 GET	/calendars/:calid/weather/days	internal/plugins/calendar/routes.go
+GET	/calendars/:calid/weather/settings	internal/plugins/calendar/routes.go
 GET	/calendars/event-kinds	internal/plugins/calendar/routes.go
 GET	/calendars/list	internal/plugins/calendar/routes.go
 GET	/calendars/list	internal/plugins/calendar/routes.go
@@ -465,7 +465,6 @@ POST	/armory/transactions	internal/plugins/armory/routes.go
 POST	/autopin-banner/dismiss	internal/plugins/foundry_vtt/routes.go
 POST	/availability/exceptions	internal/plugins/sessions/routes.go
 POST	/availability/nudge	internal/plugins/sessions/routes.go
-POST	/backdrop	internal/plugins/campaigns/routes.go
 POST	/bindings	internal/plugins/widgetbindings/routes.go
 POST	/bindings/create	internal/plugins/widgetbindings/routes.go
 POST	/calendar	internal/plugins/syncapi/routes.go
@@ -522,6 +521,7 @@ POST	/entity-types	internal/plugins/syncapi/routes.go
 POST	/extensions/:slug/settings/apply	internal/plugins/addons/routes.go
 POST	/extensions/:slug/settings/dismiss	internal/plugins/addons/routes.go
 POST	/extensions/foundry/connect-line	internal/plugins/campaigns/routes.go
+POST	/files/:name/link	internal/plugins/backup/routes.go
 POST	/forgot-password	internal/plugins/auth/routes.go
 POST	/foundry-vtt/token/rotate	internal/plugins/foundry_vtt/routes.go
 POST	/groups	internal/plugins/campaigns/routes.go
@@ -603,7 +603,6 @@ POST	/timelines/:tid/groups	internal/plugins/timeline/routes.go
 POST	/timelines/:tid/groups/:gid/members	internal/plugins/timeline/routes.go
 POST	/timelines/:tid/standalone-events	internal/plugins/timeline/routes.go
 POST	/toggle-view-mode	internal/plugins/campaigns/routes.go
-POST	/topbar-image	internal/plugins/campaigns/routes.go
 POST	/transfer	internal/plugins/campaigns/routes.go
 POST	/unarchive	internal/plugins/campaigns/routes.go
 POST	/upload	internal/systems/routes.go
@@ -621,7 +620,6 @@ PUT	/:id/auto-update	internal/plugins/packages/routes.go
 PUT	/:id/pin	internal/plugins/packages/routes.go
 PUT	/:id/repo	internal/plugins/packages/routes.go
 PUT	/:id/version	internal/plugins/packages/routes.go
-PUT	/accent-color	internal/plugins/campaigns/routes.go
 PUT	/account/display-name	internal/plugins/auth/routes.go
 PUT	/account/email	internal/plugins/auth/routes.go
 PUT	/account/password	internal/plugins/auth/routes.go
@@ -694,7 +692,6 @@ PUT	/entity-types/:etid/layout	internal/plugins/entities/routes.go
 PUT	/entity-types/:etid/reorder	internal/plugins/entities/routes.go
 PUT	/entity-types/:typeID	internal/plugins/syncapi/routes.go
 PUT	/event-tier-definitions	internal/plugins/campaigns/routes.go
-PUT	/font-family	internal/plugins/campaigns/routes.go
 PUT	/foundry-vtt/pin	internal/plugins/foundry_vtt/routes.go
 PUT	/groups/:gid	internal/plugins/campaigns/routes.go
 PUT	/layout-presets/:pid	internal/plugins/entities/layout_preset_routes.go
@@ -736,8 +733,6 @@ PUT	/timelines/:tid/groups/:gid	internal/plugins/timeline/routes.go
 PUT	/timelines/:tid/standalone-events/:eid	internal/plugins/timeline/routes.go
 PUT	/timelines/:tid/standalone-events/:eid/visibility	internal/plugins/timeline/routes.go
 PUT	/timelines/:tid/visibility	internal/plugins/timeline/routes.go
-PUT	/topbar-content	internal/plugins/campaigns/routes.go
-PUT	/topbar-style	internal/plugins/campaigns/routes.go
 PUT	/users/:id/admin	internal/plugins/admin/routes.go
 PUT	/users/:id/storage	internal/plugins/settings/routes.go
 PUT	/users/:id/storage/bypass	internal/plugins/settings/routes.go

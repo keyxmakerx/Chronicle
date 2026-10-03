@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"io"
 	"log/slog"
 	"net/http"
 	"strconv"
@@ -133,6 +132,10 @@ type MediaUploader interface {
 	UploadBackdrop(ctx context.Context, campaignID, userID string, fileBytes []byte, originalName, mimeType string) (filename string, err error)
 	// OwnsFile reports whether filename is a media file uploaded to campaignID.
 	OwnsFile(ctx context.Context, campaignID, filename string) (bool, error)
+	// DeletePicture removes filename only if campaignID owns it and it was
+	// uploaded as an appearance picture; it reports whether it deleted
+	// anything. Any other file is left alone and is not an error.
+	DeletePicture(ctx context.Context, campaignID, filename string) (bool, error)
 }
 
 // SMTPChecker reports whether SMTP email delivery is configured.
@@ -463,233 +466,6 @@ func (h *Handler) Delete(c echo.Context) error {
 
 // --- Backdrop & Branding ---
 
-// UploadBackdrop handles POST /campaigns/:id/backdrop. Accepts an image file,
-// stores it via the media service, and sets the campaign's backdrop_path.
-func (h *Handler) UploadBackdrop(c echo.Context) error {
-	cc := GetCampaignContext(c)
-	if cc == nil {
-		return apperror.NewMissingContext()
-	}
-
-	if cc.MemberRole < RoleOwner {
-		return apperror.NewForbidden("only campaign owners can change the backdrop")
-	}
-
-	if h.mediaUploader == nil {
-		return apperror.NewInternal(nil)
-	}
-
-	file, err := c.FormFile("file")
-	if err != nil {
-		return apperror.NewBadRequest("no file provided")
-	}
-
-	src, err := file.Open()
-	if err != nil {
-		return apperror.NewInternal(err)
-	}
-	defer func() { _ = src.Close() }()
-
-	fileBytes, err := io.ReadAll(src)
-	if err != nil {
-		return apperror.NewBadRequest("failed to read file")
-	}
-
-	mimeType := http.DetectContentType(fileBytes)
-
-	filename, err := h.mediaUploader.UploadBackdrop(
-		c.Request().Context(), cc.Campaign.ID,
-		auth.GetUserID(c), fileBytes, file.Filename, mimeType,
-	)
-	if err != nil {
-		return err
-	}
-
-	if err := h.service.UpdateBackdropPath(c.Request().Context(), cc.Campaign.ID, &filename); err != nil {
-		return err
-	}
-
-	h.logAudit(c, cc.Campaign.ID, "campaign.backdrop.uploaded", nil)
-
-	if middleware.IsHTMX(c) {
-		c.Response().Header().Set("HX-Trigger", "backdrop-updated")
-		return middleware.Render(c, http.StatusOK, BackdropUploadSection(cc.Campaign.ID, &filename, middleware.GetCSRFToken(c)))
-	}
-	return c.Redirect(http.StatusSeeOther, "/campaigns/"+cc.Campaign.ID+"/settings")
-}
-
-// RemoveBackdrop handles DELETE /campaigns/:id/backdrop. Clears the campaign's
-// backdrop image.
-func (h *Handler) RemoveBackdrop(c echo.Context) error {
-	cc := GetCampaignContext(c)
-	if cc == nil {
-		return apperror.NewMissingContext()
-	}
-
-	if cc.MemberRole < RoleOwner {
-		return apperror.NewForbidden("only campaign owners can change the backdrop")
-	}
-
-	if err := h.service.UpdateBackdropPath(c.Request().Context(), cc.Campaign.ID, nil); err != nil {
-		return err
-	}
-
-	h.logAudit(c, cc.Campaign.ID, "campaign.backdrop.removed", nil)
-
-	if middleware.IsHTMX(c) {
-		c.Response().Header().Set("HX-Trigger", "backdrop-updated")
-		return middleware.Render(c, http.StatusOK, BackdropUploadSection(cc.Campaign.ID, nil, middleware.GetCSRFToken(c)))
-	}
-	return c.Redirect(http.StatusSeeOther, "/campaigns/"+cc.Campaign.ID+"/settings")
-}
-
-// UploadTopbarImage handles POST /campaigns/:id/topbar-image. Accepts an image
-// file, stores it via the media service, and sets the topbar style to image mode.
-func (h *Handler) UploadTopbarImage(c echo.Context) error {
-	cc := GetCampaignContext(c)
-	if cc == nil {
-		return apperror.NewMissingContext()
-	}
-	if cc.MemberRole < RoleOwner {
-		return apperror.NewForbidden("only campaign owners can change the topbar")
-	}
-	if h.mediaUploader == nil {
-		return apperror.NewInternal(nil)
-	}
-
-	file, err := c.FormFile("file")
-	if err != nil {
-		return apperror.NewBadRequest("no file provided")
-	}
-	src, err := file.Open()
-	if err != nil {
-		return apperror.NewInternal(err)
-	}
-	defer func() { _ = src.Close() }()
-
-	fileBytes, err := io.ReadAll(src)
-	if err != nil {
-		return apperror.NewBadRequest("failed to read file")
-	}
-	mimeType := http.DetectContentType(fileBytes)
-
-	// Reuse backdrop upload logic for media storage.
-	filename, err := h.mediaUploader.UploadBackdrop(
-		c.Request().Context(), cc.Campaign.ID,
-		auth.GetUserID(c), fileBytes, file.Filename, mimeType,
-	)
-	if err != nil {
-		return err
-	}
-
-	// Update topbar style to image mode with the uploaded file.
-	style := TopbarStyle{Mode: "image", ImagePath: filename}
-	if err := h.service.UpdateTopbarStyle(c.Request().Context(), cc.Campaign.ID, &style); err != nil {
-		return err
-	}
-
-	h.logAudit(c, cc.Campaign.ID, "campaign.topbar_image.uploaded", nil)
-
-	// HTMX callers (the appearance editor) get the swapped fragment so
-	// the upload applies in place with no page reload. The HX-Trigger
-	// lets the editor JS sync its draft/saved state and mode buttons
-	// from the new path.
-	if middleware.IsHTMX(c) {
-		c.Response().Header().Set("HX-Trigger", "topbar-image-updated")
-		return middleware.Render(c, http.StatusOK, TopbarImageSection(cc.Campaign.ID, filename, middleware.GetCSRFToken(c)))
-	}
-	return c.JSON(http.StatusOK, map[string]string{"status": "ok", "image_path": filename})
-}
-
-// RemoveTopbarImage handles DELETE /campaigns/:id/topbar-image. Resets topbar
-// style to default (no image).
-func (h *Handler) RemoveTopbarImage(c echo.Context) error {
-	cc := GetCampaignContext(c)
-	if cc == nil {
-		return apperror.NewMissingContext()
-	}
-	if cc.MemberRole < RoleOwner {
-		return apperror.NewForbidden("only campaign owners can change the topbar")
-	}
-
-	style := TopbarStyle{Mode: ""}
-	if err := h.service.UpdateTopbarStyle(c.Request().Context(), cc.Campaign.ID, &style); err != nil {
-		return err
-	}
-
-	h.logAudit(c, cc.Campaign.ID, "campaign.topbar_image.removed", nil)
-
-	if middleware.IsHTMX(c) {
-		c.Response().Header().Set("HX-Trigger", "topbar-image-updated")
-		return middleware.Render(c, http.StatusOK, TopbarImageSection(cc.Campaign.ID, "", middleware.GetCSRFToken(c)))
-	}
-	return c.JSON(http.StatusOK, map[string]string{"status": "ok"})
-}
-
-// UpdateAccentColorAPI handles PUT /campaigns/:id/accent-color. Sets the
-// campaign's accent color for branding customization.
-func (h *Handler) UpdateAccentColorAPI(c echo.Context) error {
-	cc := GetCampaignContext(c)
-	if cc == nil {
-		return apperror.NewMissingContext()
-	}
-
-	if cc.MemberRole < RoleOwner {
-		return apperror.NewForbidden("only campaign owners can change branding")
-	}
-
-	color := c.FormValue("accent_color")
-	// Validate the hex color strictly (all digits must be hex; empty resets).
-	// The accent value is emitted into a raw <style> block via templ.Raw at
-	// render, so a loose len/prefix check was the last CSS-injection gap (#521).
-	if color != "" && !isValidHexColor(color) {
-		return apperror.NewBadRequest("invalid color format, expected #RRGGBB")
-	}
-
-	// Optional slot selects which accent this write targets: "" = the site
-	// accent (legacy chrome), "1"/"2" = the legacy surface pair (kept for
-	// back-compat), "action"/"app" = the two semantic slots. String keys
-	// for the new slots avoid colliding with the numeric surface-pair
-	// values.
-	slot := c.FormValue("slot")
-	switch slot {
-	case "":
-		if err := h.service.UpdateAccentColor(c.Request().Context(), cc.Campaign.ID, color); err != nil {
-			return err
-		}
-	case "1", "2":
-		slotNum := 1
-		if slot == "2" {
-			slotNum = 2
-		}
-		if err := h.service.UpdateAccentSurface(c.Request().Context(), cc.Campaign.ID, slotNum, color); err != nil {
-			return err
-		}
-	case "action":
-		if err := h.service.UpdateAccentAction(c.Request().Context(), cc.Campaign.ID, color); err != nil {
-			return err
-		}
-	case "app":
-		if err := h.service.UpdateAccentApp(c.Request().Context(), cc.Campaign.ID, color); err != nil {
-			return err
-		}
-	default:
-		return apperror.NewBadRequest("invalid accent slot, expected 1, 2, action, or app")
-	}
-
-	h.logAudit(c, cc.Campaign.ID, "campaign.accent_color.updated", map[string]any{"color": color, "slot": slot})
-
-	// HTMX and API (Accept: application/json) callers get a direct response;
-	// plain browser navigation gets a redirect back to settings.
-	if middleware.IsHTMX(c) {
-		return c.NoContent(http.StatusNoContent)
-	}
-	if c.Request().Header.Get("Accept") == "application/json" {
-		return c.JSON(http.StatusOK, map[string]string{"accent_color": color})
-	}
-	return c.Redirect(http.StatusSeeOther, "/campaigns/"+cc.Campaign.ID+"/settings")
-}
-
 // UpdateBrandingAPI handles PUT /campaigns/:id/branding. Sets the campaign's
 // custom brand name and optional logo path.
 func (h *Handler) UpdateBrandingAPI(c echo.Context) error {
@@ -717,67 +493,6 @@ func (h *Handler) UpdateBrandingAPI(c echo.Context) error {
 	h.logAudit(c, cc.Campaign.ID, "campaign.branding.updated", map[string]any{
 		"brand_name": req.BrandName,
 		"brand_logo": req.BrandLogo,
-	})
-
-	return c.JSON(http.StatusOK, map[string]string{"status": "ok"})
-}
-
-// UpdateTopbarContentAPI handles PUT /campaigns/:id/topbar-content. Sets the
-// campaign's topbar center content (quick-links, quote text).
-func (h *Handler) UpdateTopbarContentAPI(c echo.Context) error {
-	cc := GetCampaignContext(c)
-	if cc == nil {
-		return apperror.NewMissingContext()
-	}
-	if cc.MemberRole < RoleOwner {
-		return apperror.NewForbidden("only campaign owners can change topbar content")
-	}
-
-	var content TopbarContent
-	if err := c.Bind(&content); err != nil {
-		return apperror.NewBadRequest("invalid request body")
-	}
-
-	if err := h.service.UpdateTopbarContent(c.Request().Context(), cc.Campaign.ID, &content); err != nil {
-		return err
-	}
-
-	h.logAudit(c, cc.Campaign.ID, "campaign.topbar_content.updated", map[string]any{
-		"mode": content.Mode,
-	})
-
-	return c.JSON(http.StatusOK, map[string]string{"status": "ok"})
-}
-
-// UpdateTopbarStyleAPI handles PUT /campaigns/:id/topbar-style. Sets the
-// campaign's topbar visual customization (solid color, gradient, or image).
-func (h *Handler) UpdateTopbarStyleAPI(c echo.Context) error {
-	cc := GetCampaignContext(c)
-	if cc == nil {
-		return apperror.NewMissingContext()
-	}
-
-	if cc.MemberRole < RoleOwner {
-		return apperror.NewForbidden("only campaign owners can change topbar style")
-	}
-
-	var style TopbarStyle
-	if err := c.Bind(&style); err != nil {
-		return apperror.NewBadRequest("invalid request body")
-	}
-
-	// Empty mode means clear/reset.
-	var stylePtr *TopbarStyle
-	if style.Mode != "" {
-		stylePtr = &style
-	}
-
-	if err := h.service.UpdateTopbarStyle(c.Request().Context(), cc.Campaign.ID, stylePtr); err != nil {
-		return err
-	}
-
-	h.logAudit(c, cc.Campaign.ID, "campaign.topbar_style.updated", map[string]any{
-		"mode": style.Mode,
 	})
 
 	return c.JSON(http.StatusOK, map[string]string{"status": "ok"})
@@ -830,33 +545,6 @@ func (h *Handler) GetDmGrantsAPI(c echo.Context) error {
 	}
 
 	return c.JSON(http.StatusOK, map[string]any{"user_ids": ids})
-}
-
-// UpdateFontFamilyAPI handles PUT /campaigns/:id/font-family. Sets the
-// campaign's body font family for visual customization.
-func (h *Handler) UpdateFontFamilyAPI(c echo.Context) error {
-	cc := GetCampaignContext(c)
-	if cc == nil {
-		return apperror.NewMissingContext()
-	}
-
-	if cc.MemberRole < RoleOwner {
-		return apperror.NewForbidden("only campaign owners can change font settings")
-	}
-
-	var req struct {
-		FontFamily string `json:"font_family"`
-	}
-	if err := c.Bind(&req); err != nil {
-		return apperror.NewBadRequest("invalid request body")
-	}
-
-	if err := h.service.UpdateFontFamily(c.Request().Context(), cc.Campaign.ID, req.FontFamily); err != nil {
-		return err
-	}
-
-	h.logAudit(c, cc.Campaign.ID, "campaign.font_family.updated", map[string]any{"font_family": req.FontFamily})
-	return c.JSON(http.StatusOK, map[string]string{"status": "ok"})
 }
 
 // GetEventTierDefinitionsAPI handles GET /campaigns/:id/event-tier-definitions.
