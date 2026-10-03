@@ -55,7 +55,7 @@ func TestClassifyHistoryCall(t *testing.T) {
 		{"read the server failed is", "GET", "/api/v1/campaigns/:id/entities", 500, true, "entities", "read failed"},
 		{"token drag skipped", "PATCH", "/api/v1/campaigns/:id/maps/:mapID/tokens/:tokenID/position", 200, false, "", ""},
 		{"module reports skipped", "POST", "/api/v1/campaigns/:id/sync/history", 200, false, "", ""},
-		{"unlisted write gets a generic name", "POST", "/api/v1/campaigns/:id/armory/items", 201, true, "armory", "armory created"},
+		{"unlisted write gets a generic name", "POST", "/api/v1/campaigns/:id/handouts/items", 201, true, "handouts", "handouts created"},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
