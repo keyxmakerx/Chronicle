@@ -39,6 +39,21 @@ func TestArmoryFieldsAdapter_MarksStashSource(t *testing.T) {
 	}
 }
 
+// A shop purchase keeps its own mark, so the coins it spends show in the
+// money history as spent at a shop.
+func TestArmoryFieldsAdapter_KeepsShopSource(t *testing.T) {
+	svc := &mergeCapture{}
+	a := &armoryEntityFieldsAdapter{svc: svc}
+	outer := armory.ShopPurchaseSource(context.Background(), "u1", "")
+	if err := a.UpdateEntityFields(outer, "c1", map[string]any{"gp": 3.0}); err != nil {
+		t.Fatal(err)
+	}
+	got, ok := changesource.From(svc.ctx)
+	if !ok || got.Kind != changesource.KindShop || got.UserID != "u1" {
+		t.Fatalf("source = %+v, %v; want shop by u1", got, ok)
+	}
+}
+
 type stashCaptureBus struct{ msgs []*ws.Message }
 
 func (b *stashCaptureBus) Publish(m *ws.Message) { b.msgs = append(b.msgs, m) }

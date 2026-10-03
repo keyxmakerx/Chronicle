@@ -701,14 +701,14 @@ func (a *entityVisibilityFilterAdapter) FilterViewableEntityIDs(ctx context.Cont
 	return a.svc.FilterViewableEntityIDs(ctx, campaignID, entityIDs, role, userID)
 }
 
-// CALV5-PLACEHOLDER: V5 must still re-implement seven cross-plugin bridge
+// CALV5-PLACEHOLDER: V5 must still re-implement six cross-plugin bridge
 // adapters against its own service, toward the calendar:
 // timelineForCalendarAdapter, calendarSyncLinkAdapter,
-// calendarEntityCreatorAdapter, calendarRSVPNotifierAdapter,
-// calendarAvailabilityAdapter (member zones, exception dates, offered
-// windows), calendarBenchScheduleAdapter, calendarOwnWeekAdapter. Each is a
-// narrow interface owned by the consuming plugin, not a shared type — keep
-// that shape so the rebuild stays surgical. TODO(#778)
+// calendarEntityCreatorAdapter, calendarAvailabilityAdapter (member
+// zones, exception dates, offered windows), calendarBenchScheduleAdapter,
+// calendarOwnWeekAdapter. Each is a narrow interface owned by the consuming
+// plugin, not a shared type — keep that shape so the rebuild stays
+// surgical. TODO(#778)
 //
 // The three below feed timeline away from the calendar (selector, event
 // picker, era bands); calendarEventLinkListerAdapter after them is a
@@ -2110,6 +2110,8 @@ func (a *armoryRelationFinderAdapter) GetByID(ctx context.Context, id int) (*arm
 		CampaignID:     rel.CampaignID,
 		SourceEntityID: rel.SourceEntityID,
 		TargetEntityID: rel.TargetEntityID,
+		RelationType:   rel.RelationType,
+		DmOnly:         rel.DmOnly,
 	}, nil
 }
 
@@ -3064,9 +3066,10 @@ func (a *App) RegisterRoutes() {
 	// Calendar plugin: service + handler over the repositories, routed below
 	// (after the rebuild-notice group) once migrations report healthy.
 	//
-	// CALV5-PLACEHOLDER: V5 must still restore the RSVP repo/service/handler
-	// triple, the entity-creator seam, the RSVP reader, and the StaticFS
-	// mount for /static/plugins/calendar/. TODO(#778)
+	// CALV5-PLACEHOLDER: V5 must still restore the entity-creator seam and
+	// the StaticFS mount for /static/plugins/calendar/. The old per-event
+	// RSVP is not coming back: game-night answers live in the sessions
+	// plugin, which the calendar reads over HTTP. TODO(#778)
 	calendarRepo := calendar.NewCalendarRepository(a.DB)
 	// One-time, idempotent: repair Harptos calendars created before the
 	// preset's season numbering was fixed. Only rows still exactly equal to
@@ -3183,9 +3186,8 @@ func (a *App) RegisterRoutes() {
 	// regardless of plugin health (a 302 to a 404 is still clearer than a
 	// notice claiming the feature is merely rebuilding).
 	//
-	// CALV5-PLACEHOLDER: V5 must still restore calendar.RegisterRSVPRoutes
-	// and the public Foundry-facing calendar API (token-verified through
-	// fvttService, rate limited 300/min) behind the schema health gate. That
+	// CALV5-PLACEHOLDER: V5 must still restore the public Foundry-facing
+	// calendar API (token-verified through fvttService, rate limited 300/min) behind the schema health gate. That
 	// public API overlapped syncapi's calendar surface — rebuild only
 	// syncapi's, the one the module's contract documents. TODO(#778)
 	if a.PluginHealth.IsHealthy(calendar.PluginSlug) {
@@ -3264,9 +3266,9 @@ func (a *App) RegisterRoutes() {
 	if a.PluginHealth.IsHealthy(calendar.PluginSlug) {
 		sessionsHandler.SetCalendarFinder(&realWorldCalendarFinderAdapter{svc: calendarService})
 	}
-	// CALV5-PLACEHOLDER: V5 must restore four post-construction setters —
-	// SetRSVPNotifier, SetAvailabilityWriter (member zones + exception
-	// dates), SetScheduleReader and SetOwnWeekReader — all nil-safe on the
+	// CALV5-PLACEHOLDER: V5 must restore three post-construction setters —
+	// SetAvailabilityWriter (member zones + exception dates),
+	// SetScheduleReader and SetOwnWeekReader — all nil-safe on the
 	// calendar side, so a degraded neighbour never takes the calendar down.
 	// TODO(#778)
 
@@ -3407,8 +3409,9 @@ func (a *App) RegisterRoutes() {
 		},
 		stashEvents,
 	)})
+	stashAPI := armory.NewStashAPI(stashSvc, &armoryMemberDirectoryAdapter{svc: campaignService})
 	stashAPIHandler := syncapi.NewStashAPIHandler(
-		&syncStashAPIAdapter{api: armory.NewStashAPI(stashSvc, &armoryMemberDirectoryAdapter{svc: campaignService})},
+		&syncStashAPIAdapter{api: stashAPI},
 		"armory",
 	)
 
@@ -3499,6 +3502,14 @@ func (a *App) RegisterRoutes() {
 	txHandler.SetEntityVisibility(&entityVisibilityFilterAdapter{svc: entityService})
 	// Stashes and moves: the service is built earlier, before the sync API.
 	stashHandler := armory.NewStashHandler(stashSvc)
+	// Buying shares the stash service's campaign lock, so a purchase and a
+	// stash move can't spend the same coins.
+	shopBuySvc := armory.NewShopBuyService(stashSvc, txSvc, &armoryShopCheckerAdapter{svc: entityService})
+	shopBuyHandler := armory.NewShopBuyHandler(shopBuySvc)
+	// The Foundry module buys through the sync API as the player at the table,
+	// with the same service and acting-as rule as the stash calls. Its routes
+	// are registered above and read this at request time.
+	syncAPIHandler.SetShopBuyer(&syncShopBuyAPIAdapter{actors: stashAPI, buy: shopBuySvc})
 	entityHandler.SetCharacterPagePanel(entities.PagePanel{
 		Addon: "armory",
 		URL: func(campaignID, entityID string) string {
@@ -3506,7 +3517,7 @@ func (a *App) RegisterRoutes() {
 		},
 	})
 	shopRoomHandler := armory.NewShopRoomHandler(shopRoomService)
-	armory.RegisterRoutes(e, armoryHandler, txHandler, instHandler, stashHandler, shopRoomHandler, campaignService, authService, addonService)
+	armory.RegisterRoutes(e, armoryHandler, txHandler, instHandler, stashHandler, shopRoomHandler, shopBuyHandler, campaignService, authService, addonService)
 
 	// Notes widget: personal floating note-taking panel (Google Keep-style).
 	// noteSvc was created above (before REST API v1 registration).

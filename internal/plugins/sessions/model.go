@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/keyxmakerx/chronicle/internal/patch"
+	"github.com/keyxmakerx/chronicle/internal/timeutil"
 )
 
 // Session status constants.
@@ -277,6 +278,29 @@ func (s *Session) FormatScheduledDate() string {
 	out := t.Format("Mon, Jan 2, 2006")
 	if tl := s.FormatScheduledTime(); tl != "" {
 		out += " · " + tl
+	}
+	return out
+}
+
+// FormatScheduledWhen is FormatScheduledDate plus the zone the time was set
+// in ("Sat, Oct 10, 2026 · 7:00 PM CDT"), for places like the invite email
+// that a reader sees outside Chronicle, with no page converting the time to
+// theirs. Without a stored zone or time it is FormatScheduledDate unchanged.
+func (s *Session) FormatScheduledWhen() string {
+	out := s.FormatScheduledDate()
+	if out == "" || s.ScheduledTZ == nil || s.ScheduledTime == nil || *s.ScheduledTime == "" {
+		return out
+	}
+	loc, err := time.LoadLocation(*s.ScheduledTZ)
+	if err != nil {
+		return out
+	}
+	at, err := time.ParseInLocation("2006-01-02 15:04", *s.ScheduledDate+" "+*s.ScheduledTime, loc)
+	if err != nil {
+		return out
+	}
+	if abbr := timeutil.ZoneAbbrevOrEmpty(*s.ScheduledTZ, at); abbr != "" {
+		out += " " + abbr
 	}
 	return out
 }
