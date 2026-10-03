@@ -376,7 +376,26 @@ test('Best times picks the strongest three-hour slot, with who is missing', () =
   assert.match(html, /Best times in October/);
   assert.match(html, /Thu Oct 8<\/b>, 7pm to 10pm/);
   assert.match(html, /3 of 4 free · Dee hasn’t painted hours/);
-  assert.match(html, /plan_date=2026-10-08&amp;plan_time=19:00/);
+  assert.match(html, /data-best-plan="2026-10-08" data-plan-at="19"/, 'Plan it plans inside the calendar');
+});
+
+test('the Director plans a game night inside the day’s card', () => {
+  const { def } = load();
+  const v = freeView(def, overlay());
+  v.calZone = 'America/Chicago';
+  let wing = v._freeWingHTML({ y: 2026, m: 10, d: 8 });
+  assert.match(wing, /<button type="button" class="btn sm" data-plan="2026-10-08" data-plan-at="19">.*Plan a game night at 7pm/);
+  v._planFor = { iso: '2026-10-08', start: 19 };
+  wing = v._freeWingHTML({ y: 2026, m: 10, d: 8 });
+  assert.match(wing, /<form class="gnplan" data-plan-form="2026-10-08">/);
+  assert.match(wing, /Starts \(CDT\)<\/span><input type="time" name="time" value="19:00"/);
+  assert.match(wing, /More options<\/a>/);
+  assert.match(wing, /plan_date=2026-10-08&amp;plan_time=19:00/, 'More options is the Sessions page form');
+  assert.deepEqual({ ...v._planFields('2026-10-08', { name: ' Night one ', time: '19:30', repeat: 'weekly' }) }, {
+    name: 'Night one', scheduled_date: '2026-10-08', scheduled_time: '19:30', scheduled_tz: 'America/Chicago',
+    is_recurring: '1', recurrence_type: 'weekly',
+  });
+  assert.equal(v._planFields('2026-10-08', { name: 'x', time: '19:00', repeat: '' }).is_recurring, undefined);
 });
 
 test('the Director’s Who’s free view lists the players, a reminder and the full planner', () => {

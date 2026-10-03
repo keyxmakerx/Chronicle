@@ -617,7 +617,7 @@
   // and opacity move, and a leaf only shows while its face is towards
   // us, so every frame shows each leaf whole or not at all.
   // ---------------------------------------------------------------
-  var FOLD = { d: 1100, lead: [30, 330], trail: [100, 390], rest: 490, fade: 80, cut: 76, shut: 450, back: 0.86, pressBack: 250, shade: 0.3 };
+  var FOLD = { d: 1100, lead: [30, 330], trail: [100, 390], rest: 490, fade: 80, cut: 76, shut: 450, back: 0.86, pressBack: 250, shade: 0.3, leafMin: 170, leafRatio: 1.5, letDown: 300, takeUp: 180 };
   var SPRING = 'cubic-bezier(.34,1.3,.4,1)';
   var EASE = 'cubic-bezier(.22,.8,.24,1)';
   function isPhone() { return window.matchMedia('(max-width:600px)').matches; }
@@ -691,6 +691,23 @@
     else { F.A = { x: 0, y: head ? 0 : H }; F.s1 = head ? -1 : 1; }
     F.O = { lead: { x: 0, y: head ? 0 : h1 }, trail: { x: 0, y: head ? h1 : 0 } };
     return F;
+  }
+  // A card beside its day turns on a vertical hinge, and a tall second
+  // leaf swinging through a turn reads as a stretched sheet rather than
+  // paper. So a long card folds with its second leaf held to about the
+  // head's proportions, then lets the rest down once it lies flat, and
+  // takes it back up before folding away. Returns the leaf and its
+  // heights, or null when the card is short enough to fold whole.
+  function foldShort(P) {
+    var g = P.g, L1 = P.el.querySelector('.lf1'), L2 = P.el.querySelector('.lf2');
+    if (!g || (g.side !== 'right' && g.side !== 'left') || !L1 || !L2) return null;
+    var cap = Math.round(Math.max(FOLD.leafMin, L1.offsetHeight * FOLD.leafRatio)), full = L2.offsetHeight;
+    return full > cap + 24 ? { L2: L2, cap: cap, full: full } : null;
+  }
+  function holdLeaf(h, px) { h.L2.style.maxHeight = px + 'px'; h.L2.style.overflow = 'hidden'; }
+  function freeLeaf(h) { h.L2.style.maxHeight = ''; h.L2.style.overflow = ''; }
+  function slideLeaf(h, from, to, dur) {
+    return anim(h.L2, [{ maxHeight: from + 'px' }, { maxHeight: to + 'px' }], { duration: dur, easing: EASE, fill: 'none' }).finished;
   }
   function foldEase(u) { u = clampN(u, 0, 1); return 1 - Math.pow(1 - u, 3); }
   function foldRot(ax, a, v) {
@@ -863,6 +880,8 @@
     } else {
       // The marks are aimed at the card as it will lie, before its leaves
       // turn; each lands after its leaf lies flat.
+      var held = foldShort(P);
+      if (held) holdLeaf(held, held.cap);
       var F = foldGeo(P, calEl), marks = fly(P, false, { delay: 110, dur: 390, stagger: 30 }, calEl);
       pressIn(P.press);
       run = settleAll(foldRun(F, false, 1).concat(marks));
@@ -871,6 +890,7 @@
       if (tok !== P.seq) throw new Error('superseded');
       stopAnims(el, true);
       land(P, false);
+      if (held) { freeLeaf(held); slideLeaf(held, held.cap, held.full, FOLD.letDown); }
       P.state = 'open';
       el.classList.add('open');
       return true;
@@ -904,10 +924,13 @@
       anim(el, [{ opacity: 1 }, { opacity: 1, offset: 0.9 }, { opacity: 0 }], { duration: 280 / sp, delay: 60 / sp, easing: 'linear', fill: 'both' });
       pressIn(P.press, { delay: 300 / sp, dur: 280 / sp, soft: true });
     } else {
-      var marks = fly(P, true, { delay: 0, dur: 340 / sp, stagger: 24 / sp }, calEl);
-      run = settleAll(foldRun(foldGeo(P, calEl), true, sp).concat(marks));
+      var marks = fly(P, true, { delay: 0, dur: 340 / sp, stagger: 24 / sp }, calEl), held = foldShort(P);
+      var up = held ? FOLD.takeUp / sp : 0;
+      var folded = (held ? slideLeaf(held, held.full, held.cap, up).then(function () { holdLeaf(held, held.cap); }) : Promise.resolve())
+        .then(function () { return settleAll(foldRun(foldGeo(P, calEl), true, sp)); });
+      run = Promise.all([folded, settleAll(marks)]);
       // The card tucks back into what it came from, which gives a little.
-      pressIn(P.press, { delay: FOLD.pressBack / sp, dur: 300 / sp, soft: true });
+      pressIn(P.press, { delay: up + FOLD.pressBack / sp, dur: 300 / sp, soft: true });
     }
     return run.then(function () { return true; }, function () { return false; }).then(function () {
       if (tok !== P.seq) return false;
@@ -1777,9 +1800,73 @@
       }
       h += '<div class="fsum">' + esc(summary) + '</div>';
       if (w && this.role >= 2 && iso >= this._todayIso() && !this.nightsOnDay(d.y, d.m, d.d).length) {
-        h += '<a class="btn sm" href="' + esc(this._sessionsPlanURL(iso, w.start)) + '"><i class="fa-solid fa-dice-d20"></i> Plan a game night at ' + esc(ampm(w.start * 60)) + '</a>';
+        h += this._planFor && this._planFor.iso === iso ? this._planFormHTML(iso, this._planFor.start)
+          : '<button type="button" class="btn sm" data-plan="' + esc(iso) + '" data-plan-at="' + w.start + '"><i class="fa-solid fa-dice-d20"></i> Plan a game night at ' + esc(ampm(w.start * 60)) + '</button>';
       }
       return h + '<div class="fmine">' + mine + '</div></div>';
+    },
+
+    // Planning a game night, inside the day's card: a name, the start (in
+    // the calendar's zone) and whether it repeats weekly. "More options"
+    // is the Sessions page's full form, filled in the same way.
+    _planFormHTML: function (iso, startHour) {
+      var z = zoneAbbr(this.calZone, iso);
+      return '<form class="gnplan" data-plan-form="' + esc(iso) + '">' +
+        '<div class="gph"><b>Plan a game night</b><span>' + esc(realDateWords(iso)) + '</span></div>' +
+        '<label class="fld"><span>Name</span><input type="text" name="name" value="Game night" maxlength="200" required></label>' +
+        '<div class="gprow"><label class="fld"><span>Starts' + (z ? ' (' + esc(z) + ')' : '') + '</span><input type="time" name="time" value="' + pad2(startHour) + ':00" required></label>' +
+        '<label class="fld"><span>Repeats</span><select name="repeat"><option value="">Just this day</option><option value="weekly">Every week</option><option value="biweekly">Every 2 weeks</option></select></label></div>' +
+        '<p class="gpn">Everyone in the campaign is asked if they can come.</p>' +
+        '<div class="gpa"><button type="submit" class="btn sm primary">Plan it</button><button type="button" class="btn sm quiet" data-plan-cancel>Cancel</button>' +
+        '<a class="lnk" href="' + esc(this._sessionsPlanURL(iso, startHour)) + '">More options</a></div>' +
+        '<p class="gperr" role="alert" hidden></p></form>';
+    },
+
+    // What a planned night sends: the New Session form's own fields, so the
+    // server path is the one the Sessions page already uses.
+    _planFields: function (iso, f) {
+      var out = { name: (f.name || '').trim(), scheduled_date: iso, scheduled_time: f.time || '' };
+      if (this.calZone && out.scheduled_time) out.scheduled_tz = this.calZone;
+      if (f.repeat === 'weekly' || f.repeat === 'biweekly') { out.is_recurring = '1'; out.recurrence_type = f.repeat; }
+      return out;
+    },
+
+    _openPlan: function (iso, startHour) {
+      this._planFor = { iso: iso, start: startHour };
+      this.refreshWing();
+      var name = this.wingEl.querySelector('.gnplan input[name="name"]');
+      if (name) { name.focus({ preventScroll: true }); name.select(); name.closest('.gnplan').scrollIntoView({ block: 'nearest' }); }
+    },
+
+    _closePlan: function () {
+      this._planFor = null;
+      var f = this.wingEl.querySelector('.gnplan');
+      if (f) f.remove();
+      this.refreshWing();
+    },
+
+    _submitPlan: function (form) {
+      var self = this, iso = form.dataset.planForm, err = form.querySelector('.gperr');
+      var fields = this._planFields(iso, { name: form.elements.name.value, time: form.elements.time.value, repeat: form.elements.repeat.value });
+      if (!fields.name) { err.textContent = 'Give the game night a name.'; err.hidden = false; return; }
+      var body = new FormData();
+      Object.keys(fields).forEach(function (k) { body.append(k, fields[k]); });
+      $$('button, input, select', form).forEach(function (c) { c.disabled = true; });
+      // HX-Request asks the server for its no-redirect answer (204), so the
+      // calendar stays where it is.
+      Chronicle.apiFetch('/campaigns/' + encodeURIComponent(this.campaignId) + '/sessions', { method: 'POST', body: body, headers: { 'HX-Request': 'true' } })
+        .then(function (resp) {
+          if (!resp.ok) return resp.json().catch(function () { return {}; }).then(function (j) { return Promise.reject(j && j.error); });
+          self._planFor = null;
+          form.remove();
+          self.say('Game night planned. Everyone has been asked if they can come.');
+          return self.fetchNights(self.view.y, self.view.m, { fresh: true }).then(function () { self._paintMonth(); self.refreshWing(); });
+        })
+        .catch(function (msg) {
+          $$('button, input, select', form).forEach(function (c) { c.disabled = false; });
+          err.textContent = (typeof msg === 'string' && msg) || 'That game night could not be planned. Try again.';
+          err.hidden = false;
+        });
     },
 
     _todayIso: function () {
@@ -1889,7 +1976,7 @@
         if (missing.length && missing.length <= 2) who += ' · ' + missing.map(function (mem) { return mem.name + (mem.answered ? ' away' : ' hasn’t painted hours'); }).join(', ');
         if (night) who += ' · already a game night';
         var act = night ? '<button type="button" class="btn sm" data-best-open="' + esc(dayKey(s.y, s.m, s.d)) + '" data-best-night="' + esc(self._gnId(night)) + '">Open</button>'
-          : (self.role >= 2 ? '<a class="btn sm" href="' + esc(self._sessionsPlanURL(s.iso, s.w.start)) + '"><i class="fa-solid fa-dice-d20"></i> Plan it</a>'
+          : (self.role >= 2 ? '<button type="button" class="btn sm" data-best-open="' + esc(dayKey(s.y, s.m, s.d)) + '" data-best-plan="' + esc(s.iso) + '" data-plan-at="' + s.w.start + '"><i class="fa-solid fa-dice-d20"></i> Plan it</button>'
             : '<button type="button" class="btn sm" data-best-open="' + esc(dayKey(s.y, s.m, s.d)) + '">Open</button>');
         return '<li><span><b>' + esc(realDateWords(s.iso)) + '</b>, ' + esc(self._windowWords(s.w, s.iso)) + '<small>' + esc(who) + '</small></span>' + act + '</li>';
       }).join('') + '</ul>';
@@ -1947,6 +2034,7 @@
       if (e.target.closest('[data-close]')) { this.closeFreeView(); return; }
       if (open) {
         var key = open.dataset.bestOpen, night = open.dataset.bestNight || null;
+        this._planFor = open.dataset.bestPlan ? { iso: open.dataset.bestPlan, start: parseInt(open.dataset.planAt, 10) || 19 } : null;
         this.closeFreeView();
         this.openWing(key, night);
         return;
@@ -2264,8 +2352,15 @@
         self.hideGlance();
       }, true);
 
+      this.wingEl.addEventListener('submit', function (e) {
+        var form = e.target.closest('[data-plan-form]');
+        if (form) { e.preventDefault(); self._submitPlan(form); }
+      });
       this.wingEl.addEventListener('click', function (e) {
         if (e.target.closest('[data-close]')) { self.closeWing(); return; }
+        var plan = e.target.closest('[data-plan]');
+        if (plan) { self._openPlan(plan.dataset.plan, parseInt(plan.dataset.planAt, 10) || 19); return; }
+        if (e.target.closest('[data-plan-cancel]')) { self._closePlan(); return; }
         if (self._gnHandleClick(e)) return;
         var mr = e.target.closest('.mrow');
         if (mr) { self.mvMoonId = mr.dataset.moon; self.openMoonView(); return; }
@@ -2504,6 +2599,7 @@
       o = o || {};
       var self = this, P = this._pw;
       if (!this.wingFor) return Promise.resolve();
+      this._planFor = null;
       if (P.state === 'opening' && !o.instant) return new Promise(function (res) { P.next = function () { self.closeWing(o).then(res); }; });
       if (P.state === 'closing' && !o.instant) return P.closing || Promise.resolve();
       if (this.evpEl.classList.contains('open')) this.closeEventDetail();
