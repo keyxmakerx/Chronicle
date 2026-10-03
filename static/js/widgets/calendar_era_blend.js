@@ -161,6 +161,22 @@
     return [w, h];
   }
 
+  // daysClip is the outline of the month's real day cells, in box px: the
+  // canvas is drawn coarse and scaled up, so its soft edge is cut here to
+  // the cells' own edges. Null when the scene has no grid to follow.
+  function daysClip(sc) {
+    var rows = sc && sc.rows, cols = sc && sc.cols;
+    if (!rows || !rows.length || !cols || !sc.days) return null;
+    var W = sc.box.width, p = W / cols, first = sc.off || 0, last = first + sc.days - 1;
+    var r0 = Math.floor(first / cols), rL = Math.min(rows.length - 1, Math.floor(last / cols));
+    if (r0 > rL) return null;
+    var c0 = first - r0 * cols, cL = rL === Math.floor(last / cols) ? last % cols : cols - 1;
+    var top = function (r) { return rows[r].top; }, bot = function (r) { return rows[r].top + rows[r].height; };
+    var x0 = c0 * p, xL = (cL + 1) * p;
+    if (r0 === rL) return [[x0, top(r0)], [xL, top(r0)], [xL, bot(r0)], [x0, bot(r0)]];
+    return [[x0, top(r0)], [W, top(r0)], [W, bot(rL - 1)], [xL, bot(rL - 1)], [xL, bot(rL)], [0, bot(rL)], [0, bot(r0)], [x0, bot(r0)]];
+  }
+
   /* ---------- the painter ---------- */
   // One shared input watcher wakes every painter; each painter keeps its
   // own ease so a calendar and its settings preview rest independently.
@@ -255,7 +271,7 @@
       this.fade.width = this.cv.width; this.fade.height = this.cv.height;
       this.fctx.drawImage(this.cv, 0, 0);
       this.fade.style.transition = 'none'; this.fade.style.opacity = '1';
-      this._placeEl(this.fade, this.scene.box);
+      this._placeEl(this.fade, this.scene);
       void this.fade.offsetWidth;
       this.fade.style.transition = 'opacity .6s ease'; this.fade.style.opacity = '0';
     }
@@ -266,10 +282,13 @@
   };
   Painter.prototype.setLook = function (look) { this.look = normalizeLook(look); this.refresh(); };
 
-  Painter.prototype._placeEl = function (el, box) {
+  Painter.prototype._placeEl = function (el, sc) {
+    var box = sc.box;
     if (el.parentNode !== this.host) this.host.insertBefore(el, this.host.firstChild);
     el.style.left = box.left + 'px'; el.style.top = box.top + 'px';
     el.style.width = box.width + 'px'; el.style.height = box.height + 'px';
+    var clip = daysClip(sc);
+    el.style.clipPath = clip ? 'polygon(' + clip.map(function (p) { return p[0] + 'px ' + p[1] + 'px'; }).join(',') + ')' : '';
   };
 
   // refresh re-reads everything that shapes a frame (size, theme, motion
@@ -279,8 +298,8 @@
     var show = !!(sc && sc.eras.length && this.look.colors_on && sc.box.width > 0);
     this.cv.style.opacity = show ? '' : '0';
     if (!sc) return;
-    this._placeEl(this.cv, sc.box);
-    this._placeEl(this.fade, sc.box);
+    this._placeEl(this.cv, sc);
+    this._placeEl(this.fade, sc);
     var size = canvasSize(sc.box.width, sc.box.height, this.light());
     if (this.cv.width !== size[0] || this.cv.height !== size[1] || !this.img) {
       this.cv.width = size[0]; this.cv.height = size[1];
@@ -312,6 +331,7 @@
     var tend = still ? 0 : 0.55;        // how far tendrils reach across the seam, in cells
     var sharp = still ? 0.55 : 0.08;    // softness of the era interface
     var EDGE_ROWS = 0.2, surf = this.surf;
+    var clipped = !!daysClip(sc);
     function alphaOf(s) { return sstep(0.3, 0.5, s) * (1 - sstep(days + 0.5, days + 0.7, s)); }
     var i = 0, row = 0;
     for (var y = 0; y < H; y++) {
@@ -328,7 +348,10 @@
         var xc = (x + 0.5) * cw / W, colF = xc / pitchX, u = xc / UNIT_PX;
         // s runs along the day sequence: a cell's centre is its day number.
         var sA = row * cols + colF - off + 0.5, sB = nb * cols + colF - off + 0.5;
-        var alpha = alphaOf(sA) * (1 - wnb) + alphaOf(sB) * wnb;
+        // With the outline clip (daysClip) every pixel is opaque: a clear
+        // pixel next to a day would be smeared into it when the coarse
+        // canvas is scaled up. Without one, the pixel's own cell decides.
+        var alpha = clipped ? 1 : alphaOf(sA);
         if (alpha <= 0) { d[i] = d[i + 1] = d[i + 2] = d[i + 3] = 0; i += 4; continue; }
         var r, g, b, mr, mg, mb, seam = 0, mix = 0, w = 0;
         if (split === null) {
@@ -448,7 +471,7 @@
     IDLE_MS: IDLE_MS,
     hexRGB: hexRGB, soften: soften, normalizeLook: normalizeLook, feelOf: feelOf, matchPreset: matchPreset,
     wordI: wordI, wordS: wordS, noise: noise, fbm: fbm, sample: sample, sampleStill: sampleStill,
-    deviceIsLimited: deviceIsLimited, canvasSize: canvasSize,
+    deviceIsLimited: deviceIsLimited, canvasSize: canvasSize, daysClip: daysClip,
     create: function (host, opts) { return new Painter(host, opts); }
   };
   if (typeof window !== 'undefined') {

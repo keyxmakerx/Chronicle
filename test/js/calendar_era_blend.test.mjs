@@ -80,6 +80,16 @@ const scene = (eras, split = null) => ({
 const gas = { key: 1, color: '#6e1a2a', color_2: '#d6893a', style: 'gas', feel: null };
 const ink = { key: 2, color: '#1d3f6e', color_2: '#5aa6a0', style: 'ink', feel: null };
 
+test('daysClip outlines only the real day cells, leading and trailing cells left out', () => {
+  const { api } = loadBlend();
+  const pts = (sc) => JSON.parse(JSON.stringify(api.daysClip(sc)));
+  // 30 days from column 2 of a 7-wide grid: rows 0-4, last day in column 3 of row 4.
+  assert.deepEqual(pts(scene([gas])), [[80, 0], [280, 0], [280, 160], [160, 160], [160, 200], [0, 200], [0, 40], [80, 40]]);
+  // A month that fits one row is a plain rectangle.
+  assert.deepEqual(pts({ ...scene([gas]), off: 1, days: 3 }), [[40, 0], [160, 0], [160, 40], [40, 40]]);
+  assert.equal(api.daysClip({ ...scene([gas]), rows: [] }), null);
+});
+
 test('normalizeLook fills and clamps what the server or a hand edit sends', () => {
   const { api } = loadBlend();
   assert.deepEqual({ ...api.normalizeLook(null) }, { colors_on: true, feel: 'subtle', intensity: 1, speed: 1 });

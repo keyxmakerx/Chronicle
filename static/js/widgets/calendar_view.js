@@ -848,6 +848,10 @@
   // player never has an era hidden until it begins, and the era before one
   // reads as still going.
   // ================================================================
+  // A page, drawn inline so the era panel's lore row never shows an empty
+  // box when the icon font is slow or blocked.
+  var PAGE_GLYPH = '<svg width="13" height="15" viewBox="0 0 13 15" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linejoin="round" stroke-linecap="round"><path d="M2 1h6l3 3v10H2z"/><path d="M8 1v3h3M4.5 7.5h4M4.5 10h4"/></svg>';
+
   var EraMath = {
     startOf: function (e) { return { y: e.start_year, m: e.start_month || 1, d: e.start_day || 1 }; },
     // An end year with no month/day is the whole year, as on the server.
@@ -954,6 +958,7 @@
   Chronicle.calendarEras = EraMath;
   Chronicle.calendarPanel = { growOpen: growOpen, growClose: growClose };
   Chronicle.calendarColor = sanitizeColor;
+  Chronicle.calendarPageGlyph = PAGE_GLYPH;
   Chronicle.calendarWeatherIcon = weatherIcon;
   Chronicle.calendarWindWords = windWords;
 
@@ -1796,25 +1801,31 @@
         tip.style.left = clampN(c.x, 8, Math.max(8, cw - tw - 8)) + 'px';
         tip.style.top = (c.y + c.h + 6) + 'px';
       };
-      this._hideEraTip = function () { clearTimeout(tipTimer); self.eraTipEl.hidden = true; };
+      // A press or Escape puts the tooltip away until the pointer leaves the
+      // chips: pressing re-renders the chips under a resting pointer, which
+      // would otherwise bring it straight back over the opening panel.
+      var tipMuted = false;
+      this._hideEraTip = function (mute) { clearTimeout(tipTimer); self.eraTipEl.hidden = true; if (mute) tipMuted = true; };
       this.eraChipsEl.addEventListener('mouseover', function (e) {
         var chip = e.target.closest('.erachip');
-        if (!chip) return;
+        if (!chip || tipMuted) return;
         clearTimeout(tipTimer);
         tipTimer = setTimeout(function () { showTip(chip); }, 180);
       });
       this.eraChipsEl.addEventListener('mouseout', function (e) {
-        if (!e.relatedTarget || !self.eraChipsEl.contains(e.relatedTarget)) self._hideEraTip();
+        if (!e.relatedTarget || !self.eraChipsEl.contains(e.relatedTarget)) { tipMuted = false; self._hideEraTip(); }
       });
       this.eraChipsEl.addEventListener('focusin', function (e) {
         var chip = e.target.closest('.erachip');
+        // Focus handed back by Escape stays quiet; the next move shows it.
+        if (tipMuted) { tipMuted = false; return; }
         if (chip && chip.matches(':focus-visible')) showTip(chip);
       });
       this.eraChipsEl.addEventListener('focusout', function () { self._hideEraTip(); });
       this.eraChipsEl.addEventListener('click', function (e) {
         var chip = e.target.closest('.erachip');
         if (!chip) return;
-        self._hideEraTip();
+        self._hideEraTip(true);
         if (self._eraOpen != null && String(self._eraOpen) === chip.dataset.era) self.closeEraPanel({ refocus: chip });
         else self.openEraPanel(chip.dataset.era, chip);
       });
@@ -1850,6 +1861,7 @@
       var r = this._eraRow(id), el = this.eraPanelEl, wasOpen = this._eraOpen != null;
       if (!r) return;
       this.hideGlance();
+      if (this._hideEraTip) this._hideEraTip();
       this._eraOpen = r.era.id;
       this._eraOpener = opener || null;
       this._eraShowAll = false;
@@ -1899,7 +1911,7 @@
       }).join('');
       var desc = e.description ? String(e.description).split(/\n{2,}/).map(function (p) { return '<p>' + esc(p).replace(/\n/g, '<br>') + '</p>'; }).join('') : '';
       var lore = e.lore_entity_id && e.lore_entity_name
-        ? '<a class="ep-lore" href="/campaigns/' + encodeURIComponent(this.campaignId) + '/entities/' + encodeURIComponent(e.lore_entity_id) + '"><span class="li"><i class="fa-solid fa-book-open"></i></span><span class="lt">' + esc(e.lore_entity_name) + '<small>Lore page</small></span><span class="lg" aria-hidden="true">›</span></a>'
+        ? '<a class="ep-lore" href="/campaigns/' + encodeURIComponent(this.campaignId) + '/entities/' + encodeURIComponent(e.lore_entity_id) + '"><span class="li" aria-hidden="true">' + PAGE_GLYPH + '</span><span class="lt">' + esc(e.lore_entity_name) + '<small>Lore page</small></span><span class="lg" aria-hidden="true">›</span></a>'
         : '';
       var note = e.dm_note ? '<div class="ep-note"><div class="nh"><i class="fa-solid fa-lock"></i>Director’s note, players never see this</div>' + esc(e.dm_note) + '</div>' : '';
       var manage = this.canAuthorDmOnly && this.openEraManager ? '<button type="button" class="ep-manage" data-era-manage><i class="fa-solid fa-pencil"></i>Edit eras</button>' : '';
@@ -2022,7 +2034,7 @@
       var r = this._eraRows().filter(function (x) { return x.startK === k; }).pop();
       if (!r) return '';
       var b = sanitizeColor(r.era.color_2) || sanitizeColor(r.era.color) || '#888';
-      return '<span class="erastart" data-era-start="' + esc(r.era.id) + '" style="--es:' + b + '" title="About this era">' + esc(r.era.name) + ' begins</span>';
+      return '<span class="erastart" data-era-start="' + esc(r.era.id) + '" style="--es:' + b + '" title="' + esc(r.era.name) + ' begins"><span class="esl">' + esc(r.era.name) + ' begins</span><span class="ess" aria-hidden="true">New era</span></span>';
     },
 
     // --------------------------------------------------------------
@@ -2180,6 +2192,7 @@
       // one layer at a time rather than closing everything at once.
       this._escHandler = function (e) {
         if (e.key !== 'Escape') return;
+        if (self._hideEraTip) self._hideEraTip(true);
         if (self.evpEl.classList.contains('open')) { self.closeEventDetail(); return; }
         if (self.mvEl.classList.contains('open')) { self.closeMoonView(); return; }
         if (self._pf.state !== 'closed') { self.closeFlap(); return; }
