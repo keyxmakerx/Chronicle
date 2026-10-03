@@ -1,8 +1,8 @@
-// page_routes_test.go covers the calendar list, preview and wizard routes end to end
+// page_routes_test.go covers the calendar list and wizard routes end to end
 // through the same access-test harness access_test.go builds (real
 // RegisterRoutes, real middleware chain, fakeCalendarSvc standing in for the
 // business logic service_test.go already covers): the calendars list page,
-// the per-card preview fragment, and the new-calendar wizard's Start step.
+// each card's link and month peek, and the new-calendar wizard's Start step.
 package calendar
 
 import (
@@ -127,48 +127,36 @@ func TestCalendarsListPage_FullPageVsHTMXFragment(t *testing.T) {
 	}
 }
 
-func TestCalendarPreview_Unauthenticated(t *testing.T) {
-	e, _ := newAccessTestRouter(false, true, map[string]campaigns.Role{})
-	rec := doRequest(e, http.MethodGet, "/campaigns/camp-1/calendars/cal-1/preview", "")
-	if !isLoginRedirect(rec) {
-		t.Fatalf("expected a login redirect for an unauthenticated request, got %d: %s", rec.Code, rec.Body.String())
-	}
-}
-
-func TestCalendarPreview_PlayerAndOwnerCanOpenIt(t *testing.T) {
+// TestCalendarsListPage_CardsLinkToTheCalendarAndPeek: each card is a plain
+// link to its calendar's own page (calendar_open.js animates following it;
+// without script it is ordinary navigation) with its month's peek beside it.
+// The old in-place preview route is gone.
+func TestCalendarsListPage_CardsLinkToTheCalendarAndPeek(t *testing.T) {
 	roles := map[string]campaigns.Role{"u-player": campaigns.RolePlayer, "u-owner": campaigns.RoleOwner}
 	e, _ := newAccessTestRouter(false, true, roles)
 
-	cases := []struct {
-		user    string
-		canEdit string
-	}{
-		{"u-player", `data-can-edit="false"`},
-		{"u-owner", `data-can-edit="true"`},
-	}
-	for _, tc := range cases {
-		rec := doRequest(e, http.MethodGet, "/campaigns/camp-1/calendars/cal-1/preview", tc.user)
+	for _, user := range []string{"u-player", "u-owner"} {
+		rec := doRequest(e, http.MethodGet, "/campaigns/camp-1/calendars", user)
 		if rec.Code != http.StatusOK {
-			t.Errorf("%s must be able to open the preview, got %d: %s", tc.user, rec.Code, rec.Body.String())
-			continue
+			t.Fatalf("%s: list page got %d: %s", user, rec.Code, rec.Body.String())
 		}
 		body := rec.Body.String()
-		for _, want := range []string{"The Secret Calendar", `data-alm="unfold"`, `data-api-base="/campaigns/camp-1/calendars/cal-1"`, tc.canEdit} {
+		for _, want := range []string{
+			`href="/campaigns/camp-1/calendars/cal-1/view"`,
+			"data-cal-open",
+			`class="calv5-peek" aria-hidden="true"`,
+			"calv5-pk-grid",
+		} {
 			if !strings.Contains(body, want) {
-				t.Errorf("%s: the preview is missing %q, body:\n%s", tc.user, want, body)
+				t.Errorf("%s: the list page is missing %q, body:\n%s", user, want, body)
 			}
 		}
-		// The calendar waits inside the template, so it mounts only when the
-		// preview unfolds, never as the preview itself is swapped in.
-		open, mount, shut := strings.Index(body, `<template id="calv5-alm-tpl">`), strings.Index(body, `data-widget="calendar_view"`), strings.Index(body, "</template>")
-		if open < 0 || mount < open || shut < mount {
-			t.Errorf("%s: the calendar's mount must sit inside the preview's template, body:\n%s", tc.user, body)
+		if strings.Contains(body, "/calendars/cal-1/preview") || strings.Contains(body, "calv5-preview-root") {
+			t.Errorf("%s: the card must not open the old preview any more, body:\n%s", user, body)
 		}
-		if strings.Contains(body, `href="/campaigns/camp-1/calendars/cal-1/view"`) {
-			t.Errorf("%s: the preview unfolds into the calendar in place; it must not link away to it, body:\n%s", tc.user, body)
-		}
-		if strings.Contains(body, "coming soon") {
-			t.Errorf("%s: the full calendar view exists; the preview must not call it coming soon, body:\n%s", tc.user, body)
+
+		if rec := doRequest(e, http.MethodGet, "/campaigns/camp-1/calendars/cal-1/preview", user); rec.Code == http.StatusOK {
+			t.Errorf("%s: the old preview route must be gone, got %d", user, rec.Code)
 		}
 	}
 }
@@ -215,5 +203,28 @@ func TestWizardStart_GateAndContent(t *testing.T) {
 	}
 	if tiles := body[start:end]; strings.Contains(tiles, "fa-") {
 		t.Errorf("no tile may carry a decorative icon (fa-*), tiles region:\n%s", tiles)
+	}
+}
+
+// TestCalendarViewPage_BackControlStartsHidden: the calendar's own page
+// carries "Back to calendars" as a real link to the list, hidden until
+// calendar_open.js opens the calendar from its card, so a direct visit
+// looks exactly as it did before the opening existed.
+func TestCalendarViewPage_BackControlStartsHidden(t *testing.T) {
+	main := castSwappedRegion(t, renderCalendarViewPage(t))
+	at := strings.Index(main, "data-cal-back")
+	if at < 0 {
+		t.Fatalf("the page must carry the Back to calendars control, got:\n%s", main)
+	}
+	start := strings.LastIndex(main[:at], "<a ")
+	end := strings.Index(main[at:], ">")
+	if start < 0 || end < 0 {
+		t.Fatalf("the Back control must be a link, got:\n%s", main)
+	}
+	tag := main[start : at+end]
+	for _, want := range []string{`href="/campaigns/camp1/calendars"`, "hidden"} {
+		if !strings.Contains(tag, want) {
+			t.Errorf("the Back control is missing %q: %s", want, tag)
+		}
 	}
 }
