@@ -60,13 +60,14 @@ func bindStructureEdit(c echo.Context) (StructureEdit, string, error) {
 	return StructureEditFromImport(ir), string(raw), nil
 }
 
-// bindWeatherCarry reads the editor's two weather fields against the stored
-// settings. Neither sent keeps what is stored (an older form, or a client
-// that only sends structure); one sent fills the other from storage. Invalid
+// bindWeatherCarry reads the editor's three weather fields against the stored
+// settings. None sent keeps what is stored (an older form, or a client that
+// only sends structure); any sent fills the others from storage, so an
+// absent weather_kinds keeps the stored kinds and "[]" clears them. Invalid
 // values are a bad-request the owner reads in the preview slot.
 func (h *Handler) bindWeatherCarry(c echo.Context, cc *campaigns.CampaignContext, calID string) (weatherCarry, error) {
-	climate, cont := c.FormValue("weather_climate"), c.FormValue("weather_continuity")
-	if climate == "" && cont == "" {
+	climate, cont, kindsRaw := c.FormValue("weather_climate"), c.FormValue("weather_continuity"), c.FormValue("weather_kinds")
+	if climate == "" && cont == "" && kindsRaw == "" {
 		return weatherCarry{}, nil
 	}
 	cur, err := h.svc.GetWeatherSettings(c.Request().Context(), calID, cc.Campaign.ID, viewerFrom(c, cc))
@@ -74,6 +75,13 @@ func (h *Handler) bindWeatherCarry(c echo.Context, cc *campaigns.CampaignContext
 		return weatherCarry{}, err
 	}
 	next := *cur
+	if kindsRaw != "" {
+		parsed, perr := parseWeatherKinds(kindsRaw)
+		if perr != nil {
+			return weatherCarry{}, perr
+		}
+		next.Kinds = parsed
+	}
 	if climate != "" {
 		next.Climate = climate
 	}
@@ -88,10 +96,16 @@ func (h *Handler) bindWeatherCarry(c echo.Context, cc *campaigns.CampaignContext
 		return weatherCarry{}, err
 	}
 	next.Continuity = roundContinuity(next.Continuity)
+	cleaned, err := validateWeatherKinds(next.Kinds)
+	if err != nil {
+		return weatherCarry{}, err
+	}
 	wx := weatherCarry{
 		Sent:       true,
 		Climate:    next.Climate,
 		Continuity: strconv.FormatFloat(next.Continuity, 'f', -1, 64),
+		Kinds:      cleaned,
+		KindsJSON:  encodeWeatherKinds(cleaned),
 	}
 	if next.Climate != cur.Climate {
 		wx.Notes = append(wx.Notes, fmt.Sprintf("Weather: the climate changes to %s.", climateName(next.Climate)))
@@ -102,6 +116,7 @@ func (h *Handler) bindWeatherCarry(c echo.Context, cc *campaigns.CampaignContext
 	case next.Continuity < cur.Continuity:
 		wx.Notes = append(wx.Notes, "Weather: weather changes more often.")
 	}
+	wx.Notes = append(wx.Notes, weatherKindNotes(cur.Kinds, cleaned)...)
 	return wx, nil
 }
 
@@ -165,7 +180,7 @@ func (h *Handler) StructureEditApply(c echo.Context) error {
 			if wx.Sent {
 				cont, _ := strconv.ParseFloat(wx.Continuity, 64)
 				err = h.svc.SetWeatherSettings(c.Request().Context(), calID, cc.Campaign.ID,
-					WeatherSettings{Climate: wx.Climate, Continuity: cont})
+					WeatherSettings{Climate: wx.Climate, Continuity: cont, Kinds: wx.Kinds})
 			}
 			if err == nil {
 				return middleware.HTMXRedirect(c, structureCalendarURL(cc.Campaign.ID, calID))

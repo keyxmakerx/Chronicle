@@ -8,6 +8,7 @@ package calendar
 import (
 	"context"
 	"database/sql"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"strings"
@@ -296,14 +297,24 @@ func (r *weatherRepo) ClearDays(ctx context.Context, calendarID string, dates []
 // so the service decides the defaults.
 func (r *weatherRepo) GetSettings(ctx context.Context, calendarID string) (*WeatherSettings, error) {
 	s := &WeatherSettings{}
+	var kinds sql.NullString
 	err := r.db.QueryRowContext(ctx,
-		`SELECT climate, continuity FROM calendar_weather_settings WHERE calendar_id = ?`, calendarID,
-	).Scan(&s.Climate, &s.Continuity)
+		`SELECT climate, continuity, kinds FROM calendar_weather_settings WHERE calendar_id = ?`, calendarID,
+	).Scan(&s.Climate, &s.Continuity, &kinds)
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil, nil
 	}
 	if err != nil {
 		return nil, err
+	}
+	// A column that does not parse reads as no kinds: the owner's list is
+	// re-saved whole from the editor, and the page must still open.
+	s.Kinds = []WeatherKind{}
+	if kinds.Valid && kinds.String != "" {
+		var stored []WeatherKind
+		if json.Unmarshal([]byte(kinds.String), &stored) == nil && stored != nil {
+			s.Kinds = stored
+		}
 	}
 	return s, nil
 }
@@ -311,8 +322,8 @@ func (r *weatherRepo) GetSettings(ctx context.Context, calendarID string) (*Weat
 // SetSettings upserts the calendar's climate settings.
 func (r *weatherRepo) SetSettings(ctx context.Context, calendarID string, s WeatherSettings) error {
 	_, err := r.db.ExecContext(ctx,
-		`INSERT INTO calendar_weather_settings (calendar_id, climate, continuity) VALUES (?, ?, ?)
-		 ON DUPLICATE KEY UPDATE climate = VALUES(climate), continuity = VALUES(continuity)`,
-		calendarID, s.Climate, s.Continuity)
+		`INSERT INTO calendar_weather_settings (calendar_id, climate, continuity, kinds) VALUES (?, ?, ?, ?)
+		 ON DUPLICATE KEY UPDATE climate = VALUES(climate), continuity = VALUES(continuity), kinds = VALUES(kinds)`,
+		calendarID, s.Climate, s.Continuity, encodeWeatherKinds(s.Kinds))
 	return err
 }

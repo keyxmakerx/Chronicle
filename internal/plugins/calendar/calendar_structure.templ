@@ -41,7 +41,10 @@ type weatherCarry struct {
 	Sent       bool
 	Climate    string
 	Continuity string
-	Notes      []string
+	// Kinds is the cleaned own-weather list, KindsJSON its carried form.
+	Kinds     []WeatherKind
+	KindsJSON string
+	Notes     []string
 }
 
 // StructureEditPage is the full page (direct navigation).
@@ -137,7 +140,127 @@ templ weatherSettingsSection(w WeatherSettings, climates []WeatherClimate) {
 			<output for="calv5-weather-continuity" x-text={ continuityWordsJS }>{ continuityWords(w.Continuity) }</output>
 		</div>
 		<p id="calv5-weather-continuity-hint" class="calv5-wx-hint">Left changes every day; right settles into long spells.</p>
-		<p class="calv5-wx-hint">Generate starts from this climate. Your own kinds of weather will join here later.</p>
+		<p class="calv5-wx-hint">Generate starts from this climate and from your own weather below.</p>
+		@weatherKindsEditor(w)
+	</div>
+}
+
+// weatherKindsEditor is "Your own weather": a list of the owner's kinds, each
+// opening its fields in place. All of it is Alpine state (weatherKindsXData)
+// that serializes into the one hidden weather_kinds input, so the form sends
+// the whole list or, when the editor is untouched, the stored list back.
+// The radio groups sit outside the form (form="calv5-wk-none") so only
+// weather_kinds is submitted.
+templ weatherKindsEditor(w WeatherSettings) {
+	<div class="calv5-wk" x-data={ weatherKindsXData(w.Kinds) } @input="touch(); clearPreview()" @change="touch(); clearPreview()">
+		<h5 class="calv5-wk-h" id="calv5-wk-h">Your own weather</h5>
+		<input type="hidden" name="weather_kinds" value={ encodeWeatherKinds(w.Kinds) } :value="out"/>
+		<p class="calv5-wx-hint" x-show="kinds.length === 0">Add weather of your own, like acid rain or a mana storm. It joins the built-in weather when you generate.</p>
+		<ul class="calv5-wk-list" aria-labelledby="calv5-wk-h">
+			<template x-for="k in kinds" :key="k.key">
+				<li class="calv5-wk-item">
+					<div class="calv5-wk-row" x-show="editing !== k.key">
+						<span class="calv5-wk-dot" :style="'background:' + dot(k)" aria-hidden="true"></span>
+						<i :class="'fa-solid ' + icons[k.icon]" aria-hidden="true"></i>
+						<b x-text="k.name.trim() || 'New weather'"></b>
+						<span class="calv5-wk-sum" x-text="summary(k)"></span>
+						<button type="button" class="btn quiet" :id="'calv5-wk-edit-' + k.key" :aria-label="'Edit ' + (k.name.trim() || 'new weather')" @click="edit(k)">Edit</button>
+					</div>
+					<div class="calv5-wk-form" x-show="editing === k.key" style="display:none">
+						<label class="calv5-fld">
+							<span>Name</span>
+							<input type="text" maxlength="40" autocomplete="off" x-model="k.name" :id="'calv5-wk-name-' + k.key" @keydown.enter.prevent="done(k)"/>
+						</label>
+						<p class="calv5-err" role="alert" x-show="k.missing && !k.name.trim()">Give your weather a name.</p>
+						<fieldset class="calv5-wk-set">
+							<legend>Icon</legend>
+							<div class="calv5-wk-icons">
+								for _, ic := range weatherKindIconOptions {
+									<button
+										type="button"
+										class="calv5-wk-ic"
+										aria-label={ ic.Label }
+										title={ ic.Label }
+										:aria-pressed={ "k.icon === '" + ic.ID + "' ? 'true' : 'false'" }
+										:class={ "{on: k.icon === '" + ic.ID + "'}" }
+										@click={ "pick(k, '" + ic.ID + "'); clearPreview()" }
+									><i class={ "fa-solid " + ic.Class } aria-hidden="true"></i></button>
+								}
+							</div>
+						</fieldset>
+						<label class="calv5-fld">
+							<span>Colour</span>
+							<input type="color" x-model="k.color" :id="'calv5-wk-color-' + k.key"/>
+						</label>
+						<label class="calv5-fld">
+							<span>Behaves like</span>
+							<select x-model="k.like" :aria-describedby="'calv5-wk-like-' + k.key">
+								for _, p := range weatherPresets {
+									<option value={ p.ID }>{ p.Label }</option>
+								}
+							</select>
+						</label>
+						<p class="calv5-wx-hint" :id="'calv5-wk-like-' + k.key">its temperature, wind and wetness</p>
+						<fieldset class="calv5-wk-set">
+							<legend>How often</legend>
+							for _, s := range weatherKindSeasons {
+								<fieldset class="calv5-wk-seasonrow">
+									<legend>{ s.Label }</legend>
+									<span class="calv5-wk-segs">
+										for _, l := range weatherKindLevelOptions {
+											<label class="calv5-wk-seg">
+												<input type="radio" form="calv5-wk-none" :name={ "'wk' + k.key + '-" + s.ID + "'" } value={ l.ID } x-model={ "k.s." + s.ID }/>
+												<span>{ l.Label }</span>
+											</label>
+										}
+									</span>
+								</fieldset>
+							}
+						</fieldset>
+						<details class="calv5-wk-more">
+							<summary>More</summary>
+							<fieldset class="calv5-wk-set">
+								<legend>What the day says</legend>
+								<p class="calv5-wx-hint">Up to 8 short lines, one is picked for each day. Optional.</p>
+								<template x-for="i in 8" :key="i">
+									<input type="text" maxlength="34" autocomplete="off" class="calv5-inp" :aria-label="'Line ' + i" x-model="k.words[i - 1]" @keydown.enter.prevent/>
+								</template>
+							</fieldset>
+							<fieldset class="calv5-wk-set">
+								<legend>How long it lingers</legend>
+								<span class="calv5-wk-segs">
+									for _, l := range weatherKindLastsOptions {
+										<label class="calv5-wk-seg">
+											<input type="radio" form="calv5-wk-none" :name="'wk' + k.key + '-lasts'" value={ l.ID } x-model="k.lasts"/>
+											<span>{ l.Label }</span>
+										</label>
+									}
+								</span>
+							</fieldset>
+							<label class="calv5-toggle-row">
+								<input type="checkbox" x-model="k.magic"/>
+								Magic
+							</label>
+							<label class="calv5-fld">
+								<span>Sky effect</span>
+								<select x-model="k.effect">
+									<option value="">Same as the weather it's like</option>
+									for _, e := range weatherEffects {
+										<option value={ e.ID }>{ e.Label }</option>
+									}
+								</select>
+							</label>
+						</details>
+						<div class="calv5-wk-btns">
+							<button type="button" class="btn quiet" @click="remove(k); clearPreview()">Delete</button>
+							<button type="button" class="btn primary" @click="done(k)">Done</button>
+						</div>
+					</div>
+				</li>
+			</template>
+		</ul>
+		<button type="button" class="btn quiet" id="calv5-wk-add" :disabled="kinds.length >= max" @click="add(); clearPreview()">+ Add weather</button>
+		<p class="calv5-wx-hint" x-show="kinds.length >= max">That is the most weathers you can have.</p>
 	</div>
 }
 
@@ -283,6 +406,7 @@ templ structurePreviewBody(campaignID, calendarID, csrfToken, importJSON, notice
 				if wx.Sent {
 					<input type="hidden" name="weather_climate" value={ wx.Climate }/>
 					<input type="hidden" name="weather_continuity" value={ wx.Continuity }/>
+					<input type="hidden" name="weather_kinds" value={ wx.KindsJSON }/>
 				}
 				<button type="button" class="btn quiet" onclick={ structureBackToEditingOnClick() }>Back to editing</button>
 				<span class="sp" style="flex:1"></span>

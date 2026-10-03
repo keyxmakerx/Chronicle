@@ -4,7 +4,7 @@
 // painted days are never in what Apply saves and never previewed over,
 // kept days survive "Reroll the rest", the same seed gives the same
 // weather, Apply's write is the per-day API's shape marked generated, and
-// the sheet starts from the calendar's stored climate.
+// the sheet starts from the calendar's stored climate and own kinds.
 
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
@@ -116,59 +116,56 @@ test('closing clears the grid preview', () => {
   assert.equal(s.view.wxPreview, null);
 });
 
-function withSettings(sb, body, ok = true) {
-  sb.Chronicle.apiFetch = (url) => {
-    sb.lastURL = url;
-    return Promise.resolve({ ok, json: () => Promise.resolve(body) });
-  };
-  const s = sheet(sb);
-  s.view.apiBase = '/api/c';
-  s._render = () => {};
-  s._settingsAsked = false;
-  s._picked = false;
-  return s;
-}
-const settle = () => new Promise((r) => setTimeout(r, 0));
+const fire = { id: 'fire-rain', name: 'Fire rain', icon: 'rain', color: '#e2552b', like: 'rain', seasons: { winter: 'often', spring: 'often', summer: 'often', autumn: 'often' } };
 
-test("the calendar's climate becomes the sheet's starting point", async () => {
-  const sb = load();
-  const s = withSettings(sb, { climate: 'ashlands', continuity: 0.9 });
-  const before = JSON.stringify(s.state.days);
-  s._loadSettings();
-  await settle();
-  assert.equal(sb.lastURL, '/api/c/weather/settings');
+test("the calendar's climate becomes the sheet's starting point", () => {
+  const s = sheet(load());
+  s._useSettings({ climate: 'ashlands', continuity: 0.9, kinds: [] });
   assert.equal(s._climate, 'ashlands');
   assert.equal(s._continuity, 0.9);
-  assert.notEqual(JSON.stringify(s.state.days), before);
 });
 
-test('a climate the owner picked here, or kept days, are not overridden', async () => {
-  const sb = load();
-  const s = withSettings(sb, { climate: 'ashlands', continuity: 0.9 });
+test('a climate the owner picked here is kept; own kinds still arrive', () => {
+  const s = sheet(load());
   s._picked = true;
-  s._loadSettings();
-  await settle();
+  s._useSettings({ climate: 'ashlands', continuity: 0.9, kinds: [fire] });
   assert.equal(s._climate, 'temperate');
-
-  const k = withSettings(load(), { climate: 'desert', continuity: 0.2 });
-  k.state.kept['100_2_1'] = true;
-  const before = JSON.stringify(k.state.days);
-  k._loadSettings();
-  await settle();
-  assert.equal(k._climate, 'desert');
-  assert.equal(JSON.stringify(k.state.days), before);
+  assert.equal(s._kinds.length, 1);
 });
 
-test('an unknown climate or a failed read keeps the defaults', async () => {
-  const s = withSettings(load(), { climate: 'moon', continuity: 7 });
-  s._loadSettings();
-  await settle();
+test('an unknown climate or no settings keeps the defaults', () => {
+  const s = sheet(load());
+  s._useSettings({ climate: 'moon', continuity: 7 });
   assert.equal(s._climate, 'temperate');
   assert.equal(s._continuity, 0.55);
-  const f = withSettings(load(), null, false);
-  f._loadSettings();
-  await settle();
-  assert.equal(f._climate, 'temperate');
+  s._useSettings(null);
+  assert.equal(s._climate, 'temperate');
+});
+
+test("the owner's own kinds are generated, kept when painted, and a bad one is dropped", () => {
+  const sb = load();
+  const { ownKinds } = sb.module.exports;
+  const bad = { id: 'Bad Id', name: '', icon: 'lava', color: 'red', like: 'nope' };
+  assert.equal(ownKinds([fire, bad]).length, 1);
+  assert.equal(ownKinds('nope').length, 0);
+
+  const s = sheet(sb);
+  s._useSettings({ climate: 'ashlands', continuity: 0.2, kinds: [fire, bad] });
+  s._generate();
+  assert.equal(s.state.error, null, String(s.state.error));
+  // Every season is "often", so a fortnight-plus run is sure to see it.
+  const long = Array.from({ length: 30 }, (_, i) => ({ year: 100, month: 3, day: i + 1 }));
+  s.state.dates = long;
+  s._generate();
+  const days = Object.values(s.state.days);
+  const own = days.filter((d) => d.preset_id === 'fire-rain');
+  assert.ok(own.length > 0, 'no fire rain in 30 days: ' + days.map((d) => d.preset_id).join(','));
+  assert.equal(own[0].color, '#e2552b');
+  assert.equal(own[0].preset_label, 'Fire rain');
+
+  // A day painted with an own kind stays a lock rather than being dropped.
+  s.state.stored = { '100_3_5': { year: 100, month: 3, day: 5, source: 'manual', preset_id: 'fire-rain', preset_label: 'Fire rain', icon: 'rain', color: '#e2552b' } };
+  assert.ok(s._locks(false).some((d) => d.preset_id === 'fire-rain'));
 });
 
 test("the settings form's climates are the generator's climates", () => {
@@ -177,4 +174,20 @@ test("the settings form's climates are the generator's climates", () => {
   const fromJS = load().ChronicleGen.weather.climates().map((c) => `${c.id}|${c.name}|${c.magic}`);
   assert.ok(fromGo.length > 0);
   assert.equal(fromGo.join(','), fromJS.join(','));
+});
+
+// The server checks an own kind's "behaves like" and sky effect against its
+// own copies of the generator's lists; they must stay the same lists.
+function goList(src, name) {
+  const block = src.slice(src.indexOf('var ' + name + ' = '), src.indexOf('\n}\n', src.indexOf('var ' + name + ' = ')));
+  return [...block.matchAll(/\{ID: "([^"]+)", Label: "([^"]+)"\}/g)].map((m) => m[1] + '|' + m[2]);
+}
+
+test("the server's built-in weathers and sky effects are the generator's", () => {
+  const go = readFileSync(path.join(root, 'internal', 'plugins', 'calendar', 'weather_kinds.go'), 'utf8');
+  const G = load().ChronicleGen;
+  const presets = goList(go, 'weatherPresets'), effects = goList(go, 'weatherEffects');
+  assert.ok(presets.length > 0 && effects.length > 0);
+  assert.equal(presets.join(','), G.weather.presets().map((p) => p.id + '|' + p.label).join(','));
+  assert.equal(effects.join(','), G.weather.effects().list.map((e) => e.id + '|' + e.label).join(','));
 });

@@ -6,6 +6,7 @@ package calendar
 
 import (
 	"context"
+	"reflect"
 	"testing"
 )
 
@@ -267,7 +268,39 @@ func TestWeatherRepository_Settings_Integration(t *testing.T) {
 	if got == nil || got.Climate != "ashlands" || got.Continuity != 1 {
 		t.Fatalf("after update = %+v; want ashlands 1", got)
 	}
+	if got.Kinds == nil || len(got.Kinds) != 0 {
+		t.Fatalf("a row saved without kinds must read as an empty list, got %#v", got.Kinds)
+	}
 	if s, _ := repo.GetSettings(ctx, calB.ID); s != nil {
 		t.Fatalf("calendar B must not see A's settings, got %+v", s)
+	}
+
+	// Own kinds round-trip through the JSON column and are replaced whole.
+	rich := fireRainClean
+	rich.Lasts, rich.Words, rich.Magic = "stable", []string{"Embers fall"}, true
+	rich.Look = &WeatherKindLook{Effect: "embers"}
+	want := []WeatherKind{fireRainClean, kindWith(func(k *WeatherKind) { k.ID, k.Name = "mana-storm", "Mana storm" }), rich}
+	want[2].ID, want[2].Name = "ember-fall", "Ember fall"
+	if err := repo.SetSettings(ctx, calA.ID, WeatherSettings{Climate: "desert", Continuity: 0.5, Kinds: want}); err != nil {
+		t.Fatalf("SetSettings with kinds: %v", err)
+	}
+	got, err = repo.GetSettings(ctx, calA.ID)
+	if err != nil || got == nil || !reflect.DeepEqual(got.Kinds, want) {
+		t.Fatalf("kinds round trip = %+v, %v; want %+v", got, err, want)
+	}
+	if err := repo.SetSettings(ctx, calA.ID, WeatherSettings{Climate: "desert", Continuity: 0.5}); err != nil {
+		t.Fatalf("SetSettings clearing kinds: %v", err)
+	}
+	got, _ = repo.GetSettings(ctx, calA.ID)
+	if got == nil || got.Kinds == nil || len(got.Kinds) != 0 {
+		t.Fatalf("after clearing, kinds = %#v; want empty list", got)
+	}
+	// A NULL column (a row written before kinds existed) also reads as none.
+	if _, err := db.ExecContext(ctx, `UPDATE calendar_weather_settings SET kinds = NULL WHERE calendar_id = ?`, calA.ID); err != nil {
+		t.Fatalf("null kinds: %v", err)
+	}
+	got, _ = repo.GetSettings(ctx, calA.ID)
+	if got == nil || got.Kinds == nil || len(got.Kinds) != 0 {
+		t.Fatalf("NULL kinds = %#v; want empty list", got)
 	}
 }

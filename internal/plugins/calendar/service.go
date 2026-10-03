@@ -2452,11 +2452,18 @@ func (s *calendarService) GetWeatherSettings(ctx context.Context, calendarID, ca
 	if err != nil {
 		return nil, fmt.Errorf("get weather settings: %w", err)
 	}
-	if got == nil || !validClimate(got.Climate) {
+	if got == nil {
+		return &WeatherSettings{Climate: DefaultWeatherClimate, Continuity: DefaultWeatherContinuity, Kinds: []WeatherKind{}}, nil
+	}
+	// Kinds that no longer validate are dropped, not an error: a built-in
+	// added since they were saved must not break the page.
+	kinds := keepValidWeatherKinds(got.Kinds)
+	if !validClimate(got.Climate) {
 		// A stored id this build no longer lists falls back rather than
 		// handing the generator an id it can't resolve.
-		return &WeatherSettings{Climate: DefaultWeatherClimate, Continuity: DefaultWeatherContinuity}, nil
+		return &WeatherSettings{Climate: DefaultWeatherClimate, Continuity: DefaultWeatherContinuity, Kinds: kinds}, nil
 	}
+	got.Kinds = kinds
 	return got, nil
 }
 
@@ -2470,6 +2477,7 @@ func (s *calendarService) SetWeatherSettings(ctx context.Context, calendarID, ca
 		return err
 	}
 	in.Continuity = roundContinuity(in.Continuity)
+	in.Kinds, _ = validateWeatherKinds(in.Kinds) // checked above; this is the cleaned copy
 	if err := s.weatherRepo.SetSettings(ctx, calendarID, in); err != nil {
 		return fmt.Errorf("set weather settings: %w", err)
 	}

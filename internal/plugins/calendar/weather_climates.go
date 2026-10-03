@@ -59,7 +59,8 @@ func climateName(id string) string {
 	return id
 }
 
-// validateWeatherSettings is the one rule for a climate and a continuity,
+// validateWeatherSettings is the one rule for a climate, a continuity and the
+// own kinds of weather,
 // shared by the service's save and the settings form's preview so the
 // preview never accepts what the save would refuse.
 func validateWeatherSettings(s WeatherSettings) error {
@@ -68,6 +69,9 @@ func validateWeatherSettings(s WeatherSettings) error {
 	}
 	if math.IsNaN(s.Continuity) || s.Continuity < 0 || s.Continuity > 1 {
 		return apperror.NewBadRequest("how long weather lasts must be between 0 and 1")
+	}
+	if _, err := validateWeatherKinds(s.Kinds); err != nil {
+		return err
 	}
 	return nil
 }
