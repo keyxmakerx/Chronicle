@@ -146,6 +146,10 @@ templ Base(title string) {
 		<!-- Shop inventory widget (item list with price/quantity/stock) -->
 		<script src={ AssetURL("/static/js/widgets/shop_inventory.js") } defer></script>
 
+		<!-- Shop room widget (isometric room above the inventory); icons list first. -->
+		<script src={ AssetURL("/static/js/widgets/shop_room_icons.js") } defer></script>
+		<script src={ AssetURL("/static/js/widgets/shop_room.js") } defer></script>
+
 		<!-- Character inventory widget ("Has Item" relations with qty/equipped/attuned).
 		     Sibling of shop_inventory above; its mount is the `inventory` entity
 		     block (entities/show.templ blockInventory). -->
