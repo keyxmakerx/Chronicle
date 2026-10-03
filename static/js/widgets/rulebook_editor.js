@@ -206,9 +206,18 @@
   }
 
   // Sets a value at a path like "blocks.2.items.0.title" inside a page model.
+  // Paths come from the form's own data attributes, but a key that could
+  // reach an object's prototype is refused anyway, and only existing own
+  // properties are walked.
+  var UNSAFE_KEY = { '__proto__': true, 'constructor': true, 'prototype': true };
   function setPath(model, path, value) {
-    var keys = path.split('.'), o = model, i;
-    for (i = 0; i < keys.length - 1; i++) { o = o[keys[i]]; if (o == null) return false; }
+    var keys = String(path).split('.'), o = model, i;
+    for (i = 0; i < keys.length; i++) { if (UNSAFE_KEY[keys[i]]) return false; }
+    for (i = 0; i < keys.length - 1; i++) {
+      if (o == null || typeof o !== 'object' || !Object.prototype.hasOwnProperty.call(o, keys[i])) return false;
+      o = o[keys[i]];
+    }
+    if (o == null || typeof o !== 'object') return false;
     o[keys[keys.length - 1]] = value;
     return true;
   }
