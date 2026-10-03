@@ -32,7 +32,7 @@ func (s *stubMapSvcMarkerScope) UpdateMarker(context.Context, string, maps.Updat
 	s.wrote = true
 	return nil
 }
-func (s *stubMapSvcMarkerScope) DeleteMarker(context.Context, string, *time.Time, bool) error {
+func (s *stubMapSvcMarkerScope) DeleteMarker(context.Context, string, *time.Time, bool, string, int) error {
 	s.wrote = true
 	return nil
 }

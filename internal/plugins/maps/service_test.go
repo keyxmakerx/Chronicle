@@ -752,7 +752,7 @@ func TestDeleteMarker_Success(t *testing.T) {
 	}
 	svc := newTestMapService(repo)
 
-	err := svc.DeleteMarker(context.Background(), "mk-1", nil, true)
+	err := svc.DeleteMarker(context.Background(), "mk-1", nil, true, "", 3)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -768,7 +768,7 @@ func TestDeleteMarker_NotFound(t *testing.T) {
 		},
 	}
 	svc := newTestMapService(repo)
-	err := svc.DeleteMarker(context.Background(), "nonexistent", nil, true)
+	err := svc.DeleteMarker(context.Background(), "nonexistent", nil, true, "", 3)
 	assertAppError(t, err, 404)
 }
 
