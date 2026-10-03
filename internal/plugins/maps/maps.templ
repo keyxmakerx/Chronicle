@@ -672,7 +672,9 @@ templ MapEditorBody(cc *campaigns.CampaignContext, data MapViewData, mapContaine
 				var save = el('button', 'mp-cbtn mp-cbtn-primary', 'Save');
 				save.type = 'button';
 				row.appendChild(save);
-				if (isNew || isOwner) {
+				// The server allows a scribe to remove only pins they created
+				// (created_by is the server's own field), owners any pin.
+				if (isNew || isOwner || (isScribe && userID && mk.created_by === userID)) {
 					var rm = el('button', 'mp-cbtn', 'Remove');
 					rm.type = 'button';
 					row.appendChild(rm);
@@ -1553,7 +1555,10 @@ templ MapEditorBody(cc *campaigns.CampaignContext, data MapViewData, mapContaine
 				document.getElementById('mk-modal-title').textContent = 'Edit Marker';
 				document.getElementById('mk-submit-icon').className = 'fa-solid fa-check mr-1';
 				document.getElementById('mk-submit-text').textContent = 'Save Changes';
-				document.getElementById('mk-delete-zone').classList.remove('hidden');
+				// Same rule as the pin card's Remove: owners any marker, a scribe
+				// only their own; the server enforces it either way.
+				var canRemove = isOwner || (isScribe && userID && mk.created_by === userID);
+				document.getElementById('mk-delete-zone').classList.toggle('hidden', !canRemove);
 				document.getElementById('marker-modal').classList.remove('hidden');
 			};
 

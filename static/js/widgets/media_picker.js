@@ -82,10 +82,10 @@
         '<header class="px-4 py-3 border-b border-edge flex items-center gap-2 shrink-0">' +
           '<h2 class="text-sm font-semibold text-fg flex-1">Choose from campaign</h2>' +
           '<div class="flex items-center gap-1 border border-edge rounded-md p-0.5" role="tablist" aria-label="View mode">' +
-            '<button class="text-xs px-2 py-1 rounded data-[active=true]:bg-accent data-[active=true]:text-white text-fg-secondary hover:text-fg" data-action="picker-view" data-view="grid" data-active="true" title="Grid view">' +
+            '<button class="text-xs px-2 py-1 rounded data-[active=true]:bg-accent-fill data-[active=true]:text-on-accent text-fg-secondary hover:text-fg" data-action="picker-view" data-view="grid" data-active="true" title="Grid view">' +
               '<i class="fa-solid fa-grid"></i>' +
             '</button>' +
-            '<button class="text-xs px-2 py-1 rounded data-[active=true]:bg-accent data-[active=true]:text-white text-fg-secondary hover:text-fg" data-action="picker-view" data-view="list" title="List view">' +
+            '<button class="text-xs px-2 py-1 rounded data-[active=true]:bg-accent-fill data-[active=true]:text-on-accent text-fg-secondary hover:text-fg" data-action="picker-view" data-view="list" title="List view">' +
               '<i class="fa-solid fa-list"></i>' +
             '</button>' +
           '</div>' +

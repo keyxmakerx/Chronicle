@@ -15,7 +15,7 @@ import (
 // Public-capable routes use AllowPublicCampaignAccess so public campaigns
 // show items to unauthenticated visitors. All routes are gated behind the
 // "armory" addon — campaign owners can enable/disable via the Plugin Hub.
-func RegisterRoutes(e *echo.Echo, h *Handler, th *TransactionHandler, ih *InstanceHandler, campaignSvc campaigns.CampaignService, authSvc auth.AuthService, addonSvc addons.AddonService) {
+func RegisterRoutes(e *echo.Echo, h *Handler, th *TransactionHandler, ih *InstanceHandler, sh *StashHandler, campaignSvc campaigns.CampaignService, authSvc auth.AuthService, addonSvc addons.AddonService) {
 	// Public-capable routes: gallery view (Player+).
 	pub := e.Group("/campaigns/:id",
 		auth.OptionalAuth(authSvc),
@@ -53,4 +53,23 @@ func RegisterRoutes(e *echo.Echo, h *Handler, th *TransactionHandler, ih *Instan
 	cg.POST("/armory/transactions", th.CreateTransaction, campaigns.RequireRole(campaigns.RoleScribe))
 	cg.GET("/armory/transactions", th.ListTransactions, campaigns.RequireRole(campaigns.RolePlayer))
 	cg.GET("/armory/shops/:eid/transactions", th.ListShopTransactions, campaigns.RequireRole(campaigns.RolePlayer))
+
+	// Stashes and moves. Player+ reaches every route; what a caller may see or
+	// change is decided in the service (stash visibility, acting as a
+	// character, and Owner-only answers), never by the route role alone, so a
+	// DM-granted co-DM is not shut out by a raw-role gate.
+	cg.GET("/armory/stashes", sh.Page, campaigns.RequireRole(campaigns.RolePlayer))
+	cg.POST("/armory/stashes", sh.CreateStash, campaigns.RequireRole(campaigns.RolePlayer))
+	cg.PUT("/armory/stashes/:sid", sh.UpdateStash, campaigns.RequireRole(campaigns.RolePlayer))
+	cg.DELETE("/armory/stashes/:sid", sh.DeleteStash, campaigns.RequireRole(campaigns.RolePlayer))
+	cg.PUT("/armory/stashes/:sid/viewers", sh.SetViewers, campaigns.RequireRole(campaigns.RolePlayer))
+	cg.POST("/armory/stashes/:sid/items", sh.AddItem, campaigns.RequireRole(campaigns.RolePlayer))
+	cg.GET("/armory/stashes/:sid/history", sh.StashHistory, campaigns.RequireRole(campaigns.RolePlayer))
+	cg.GET("/armory/move", sh.MoveDialog, campaigns.RequireRole(campaigns.RolePlayer))
+	cg.POST("/armory/moves", sh.Move, campaigns.RequireRole(campaigns.RolePlayer))
+	cg.POST("/armory/moves/:mid/approve", sh.Approve, campaigns.RequireRole(campaigns.RolePlayer))
+	cg.POST("/armory/moves/:mid/decline", sh.Decline, campaigns.RequireRole(campaigns.RolePlayer))
+	cg.POST("/armory/downtime", sh.SetDowntime, campaigns.RequireRole(campaigns.RolePlayer))
+	cg.GET("/armory/characters/:eid/panel", sh.CharacterPanel, campaigns.RequireRole(campaigns.RolePlayer))
+	cg.GET("/armory/characters/:eid/history", sh.CharacterHistory, campaigns.RequireRole(campaigns.RolePlayer))
 }

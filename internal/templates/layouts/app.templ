@@ -904,11 +904,11 @@ templ Topbar() {
 						@click.outside="open = false"
 						class="flex items-center gap-1.5 px-1.5 py-1 rounded-lg hover:bg-surface-alt transition-colors"
 					>
-						<div class="w-7 h-7 rounded-full bg-accent flex items-center justify-center overflow-hidden">
+						<div class="w-7 h-7 rounded-full bg-accent-fill flex items-center justify-center overflow-hidden">
 							if avatarPath := GetUserAvatarPath(ctx); avatarPath != "" {
 								<img src={ MediaThumbURL(ctx, avatarPath, "300") } class="w-full h-full object-cover" alt=""/>
 							} else {
-								<span class="text-[10px] font-semibold text-white">
+								<span class="text-[10px] font-semibold text-on-accent">
 									{ userInitials(ctx) }
 								</span>
 							}

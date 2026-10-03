@@ -234,10 +234,10 @@
           notifyCount();
           return;
         }
-        // Drawing deletion is Owner-only on the server; say so rather than
-        // silently leaving the shape on the map.
+        // The server lets a scribe delete only drawings they created (owners
+        // delete any); say so rather than silently leaving the shape on the map.
         var msg = res && res.status === 403
-          ? 'Only owners can delete drawings'
+          ? 'You can only delete drawings you created'
           : 'Could not undo that drawing';
         Chronicle.notify(msg, 'error');
       });

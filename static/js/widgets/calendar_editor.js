@@ -1571,8 +1571,8 @@
     if (mount.calendarView) attach(mount.calendarView);
     else mount.addEventListener('calendarv5:ready', function (e) { attach(e.detail); });
   }
-  // A calendar mounted after this script ran (a Calendars page preview
-  // unfolding in place) announces itself the same way. The event doesn't
+  // A calendar mounted after this script ran (one opened in place from its
+  // card on the Calendars page) announces itself the same way. The event doesn't
   // bubble, but a capturing listener on the document still sees it.
   document.addEventListener('calendarv5:ready', function (e) {
     var m = e.target;
