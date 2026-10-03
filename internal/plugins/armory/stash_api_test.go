@@ -71,6 +71,11 @@ func TestActorFor(t *testing.T) {
 		{"co-DM grant promotes to Owner visibility", "gm", "co", "co", rOwner, 0},
 		{"non-member is not found", "gm", "stranger", "", 0, http.StatusNotFound},
 		{"former member key holder is not found", "ghost", "", "", 0, http.StatusNotFound},
+		{"co-DM caller may name a player", "co", "u1", "u1", rPlayer, 0},
+		{"player caller may not name the GM", "u1", "gm", "", 0, http.StatusForbidden},
+		{"scribe caller may not name the GM", "sc", "gm", "", 0, http.StatusForbidden},
+		{"player caller may not name another player", "u1", "co", "", 0, http.StatusForbidden},
+		{"player naming themselves is fine", "u1", "u1", "u1", rPlayer, 0},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {

@@ -33,8 +33,9 @@ tags:
       member. Needs the Armory addon. Every call may carry `actingUserId`
       (query for GET, body for POST/PUT); it must be a current member, else 404.
       The call then runs under THAT member's real role and co-DM grant, never
-      the key's Owner role: the key holder is the GM and can already do
-      anything, so naming a player only narrows what the call may do.
+      the key's Owner role. Only a caller who is themselves Owner or co-DM may
+      name someone else (anyone else gets 403), so naming a player only narrows
+      what the call may do.
 
 paths:
   # --- Campaigns ---
@@ -1825,6 +1826,7 @@ paths:
         cannot see are replaced, and other people's pending requests are left out
         for non-GM actors. A money edit made on a sheet appears as a row whose
         two ends are the same character, with the sentence in `summary`.
+        Returns at most the 50 newest rows.
       operationId: getStashHistory
       parameters:
         - $ref: "#/components/parameters/campaignId"

@@ -2,11 +2,11 @@
 // but speaks for whichever player is at the table, so every call can name the
 // member it acts for and is then answered under THAT member's rules.
 //
-// Why a named member is safe: the key holder is the GM, who can already do
-// anything here. Naming a player can only narrow what the call may do (their
-// stashes, their characters, their need for approval); it can never grant more
-// than the key itself holds. A name that is not a current member is refused as
-// not found, so the call cannot be steered at an outsider.
+// Why a named member is safe: only a caller who is Owner or co-DM may name
+// someone else, and such a caller can already do anything here. Naming a player
+// can only narrow what the call may do (their stashes, their characters, their
+// need for approval). A name that is not a current member is refused as not
+// found, so the call cannot be steered at an outsider.
 package armory
 
 import (
@@ -41,14 +41,29 @@ func NewStashAPI(svc StashService, members MemberDirectory) *StashAPI {
 }
 
 // ActorFor builds the Actor a call runs as: the named member when actingUserID
-// is set, else the key holder. The role is the member's real campaign role,
-// promoted to Owner visibility only by a real co-DM grant, exactly as the web
-// layer's VisibilityRole does. A non-member is NotFound.
+// is set, else the caller. Roles are real campaign roles, promoted to Owner
+// visibility only by a real co-DM grant, exactly as the web layer's
+// VisibilityRole does. A non-member is NotFound.
+//
+// Only a caller who is themselves Owner or co-DM may name someone else: the
+// same routes also answer browser sessions, where the caller can be a player,
+// and naming the GM must never lift a player to the GM's rights.
 func (a *StashAPI) ActorFor(ctx context.Context, campaignID, keyUserID, actingUserID string) (Actor, error) {
-	uid := actingUserID
-	if uid == "" {
-		uid = keyUserID
+	caller, err := a.memberActor(ctx, campaignID, keyUserID)
+	if err != nil {
+		return Actor{}, err
 	}
+	if actingUserID == "" || actingUserID == keyUserID {
+		return caller, nil
+	}
+	if !caller.IsOwner() {
+		return Actor{}, forbidden()
+	}
+	return a.memberActor(ctx, campaignID, actingUserID)
+}
+
+// memberActor resolves one user's real role in the campaign.
+func (a *StashAPI) memberActor(ctx context.Context, campaignID, uid string) (Actor, error) {
 	if uid == "" {
 		return Actor{}, notFound("member")
 	}

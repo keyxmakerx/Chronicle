@@ -321,3 +321,15 @@ func TestClassifyChange_StashAndDowntime(t *testing.T) {
 		})
 	}
 }
+
+// A browser session must reach the service as its own user, never as the key
+// it rides on, so the armory's rule that only a GM may name someone else holds.
+func TestStashRoutes_SessionCallerIsTheSessionUser(t *testing.T) {
+	f := newStashRouteFixture(t, allPerms, allAddons())
+	if rec := f.do("GET", base+"/view?characterId=c1&actingUserId=gm-user", "", true); rec.Code != 200 {
+		t.Fatalf("code = %d (%s)", rec.Code, rec.Body.String())
+	}
+	if len(f.svc.calls) != 1 || !strings.Contains(f.svc.calls[0], ":member-user:gm-user:") {
+		t.Fatalf("calls = %v, want the session user as caller", f.svc.calls)
+	}
+}
