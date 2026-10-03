@@ -29,6 +29,7 @@ templ MapListFragment(cc *campaigns.CampaignContext, data MapListData) {
 // mapListContent renders the map list body.
 templ mapListContent(cc *campaigns.CampaignContext, data MapListData) {
 	<div class="max-w-4xl mx-auto py-6 px-4">
+		@mapFrameStyles()
 		@components.Breadcrumbs([]components.BreadcrumbItem{
 			{Label: cc.Campaign.Name, Href: fmt.Sprintf("/campaigns/%s", cc.Campaign.ID), Icon: "fa-dice-d20"},
 			{Label: "Maps"},
@@ -60,19 +61,24 @@ templ mapListContent(cc *campaigns.CampaignContext, data MapListData) {
 						href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/maps/%s", data.CampaignID, m.ID)) }
 						class="card p-4 hover:ring-2 hover:ring-accent/30 transition-all group"
 					>
-						if m.HasImage() {
-							<div class="aspect-video bg-surface-alt rounded-md mb-3 overflow-hidden">
-								<img
-									src={ layouts.MediaURL(ctx, *m.ImageID) }
-									alt={ m.Name }
-									class="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
-								/>
+						// The campaign's frame in small form: the same stylesheet and
+						// ornament blocks as the map page, switched by data-frame.
+						<div class="mp-frame mp-mini mb-3" data-frame={ data.CampaignFrame } data-tint="1" style="aspect-ratio: 16 / 9; flex: none;">
+							@mapFrameOrnaments(m.Name)
+							<div class="mp-viewport">
+								<div class="mp-art-wrap">
+									if m.HasImage() {
+										<img
+											src={ layouts.MediaURL(ctx, *m.ImageID) }
+											alt={ m.Name }
+											class="mp-art group-hover:scale-105 transition-transform duration-300"
+										/>
+									} else {
+										<i class="fa-solid fa-map text-3xl text-fg-muted"></i>
+									}
+								</div>
 							</div>
-						} else {
-							<div class="aspect-video bg-surface-alt rounded-md mb-3 flex items-center justify-center">
-								<i class="fa-solid fa-map text-3xl text-fg-muted"></i>
-							</div>
-						}
+						</div>
 						<h3 class="text-sm font-semibold text-fg truncate">{ m.Name }</h3>
 						if m.Description != nil && *m.Description != "" {
 							<p class="text-xs text-fg-secondary mt-1 line-clamp-2">{ *m.Description }</p>
@@ -191,33 +197,14 @@ templ mapShowContent(cc *campaigns.CampaignContext, data MapViewData) {
 			</div>
 		</div>
 
-		<!-- The map sits in an Atlas plate: a mat around the viewport, a double
-		     rule, corner flourishes, grid letters across the top and numbers down
-		     the left, and a title plate at the bottom. Decoration only: it is
-		     aria-hidden and never takes pointer events. The viewport is the
-		     positioning context the editor body fills. -->
+		<!-- The map sits in the campaign's frame (or this map's own pick): a mat
+		     and ornaments around the viewport, switched by data-frame. The
+		     ornaments are decoration only: aria-hidden and never take pointer
+		     events. The viewport is the positioning context the editor body fills. -->
+		@mapFrameStyles()
 		<div class="mp-stage">
-			<div class="mp-frame" data-frame="atlas">
-				<div class="mp-orn" aria-hidden="true">
-					for _, pos := range []string{"tl", "tr", "br", "bl"} {
-						<svg class={ pos } viewBox="0 0 30 30" fill="none" stroke="currentColor" stroke-width="1.4">
-							<path d="M2 28V9q0-7 7-7h19M6 28V12q0-6 6-6h16"></path>
-							<path d="M11 11c3 0 5 2 5 5M11 11c0 3 2 5 5 5"></path>
-							<circle cx="11" cy="11" r="1.6" fill="currentColor"></circle>
-						</svg>
-					}
-					<div class="mp-ticks">
-						for _, l := range []string{"A", "B", "C", "D", "E", "F", "G", "H"} {
-							<span>{ l }</span>
-						}
-					</div>
-					<div class="mp-side-ticks">
-						for _, n := range []string{"1", "2", "3", "4", "5", "6"} {
-							<span>{ n }</span>
-						}
-					</div>
-					<div class="mp-cart">{ data.Map.Name }</div>
-				</div>
+			<div class="mp-frame" id="mp-frame" data-frame={ data.DisplayOrDefault().Frame } data-tint={ boolDigit(data.DisplayOrDefault().Tint) }>
+				@mapFrameOrnaments(data.Map.Name)
 				<div class="mp-viewport">
 					@MapEditorBody(cc, data, "absolute inset-0", "")
 				</div>
@@ -232,7 +219,7 @@ templ mapShowContent(cc *campaigns.CampaignContext, data MapViewData) {
 // The class and style parameters size the wrapper. Reusable in two contexts:
 //
 //   1. The dedicated map page (mapShowContent), mapContainerClass="absolute
-//      inset-0" so the wrapper fills the Atlas frame's viewport.
+//      inset-0" so the wrapper fills the frame's viewport.
 //   2. The per-entity Map Editor block (BlockEntityMapEmbed), with a fixed
 //      mapContainerStyle="height: 600px;" embed.
 //
@@ -260,7 +247,6 @@ templ MapEditorBody(cc *campaigns.CampaignContext, data MapViewData, mapContaine
 
 	if data.IsScribe {
 		@markerModal(data)
-		@mapSettingsModal(data)
 	}
 
 	<!-- Server-rendered map data, read by the script below.
@@ -279,6 +265,9 @@ templ MapEditorBody(cc *campaigns.CampaignContext, data MapViewData, mapContaine
 		data-is-scribe={ fmt.Sprintf("%t", data.IsScribe) }
 		data-is-owner={ fmt.Sprintf("%t", cc.MemberRole >= campaigns.RoleOwner || cc.IsSiteAdmin) }
 		data-can-dm-only={ fmt.Sprintf("%t", cc.CanAuthorDmOnly() || cc.IsSiteAdmin) }
+		data-can-draw={ fmt.Sprintf("%t", data.CanDraw()) }
+		data-user-id={ data.UserID }
+		data-display={ mustMarshalDisplay(data.DisplayOrDefault()) }
 		data-markers={ mustMarshalMarkers(data.Markers) }
 	></div>
 
@@ -295,6 +284,16 @@ templ MapEditorBody(cc *campaigns.CampaignContext, data MapViewData, mapContaine
 			var isScribe = cfg.dataset.isScribe === 'true';
 			var isOwner = cfg.dataset.isOwner === 'true';
 			var canDmOnly = cfg.dataset.canDmOnly === 'true';
+			// canDraw is what the viewer is OFFERED; the server enforces the
+			// map's "who can draw" setting on every drawing write regardless.
+			var canDraw = cfg.dataset.canDraw === 'true';
+			var userID = cfg.dataset.userId || '';
+			// The map's display settings, resolved server-side with every
+			// default filled in, so the defaults live in one place (Go).
+			var D;
+			try { D = JSON.parse(cfg.dataset.display || '{}'); } catch (e) { D = {}; }
+			if (!D || typeof D !== 'object') D = {};
+			var savedD = JSON.parse(JSON.stringify(D));
 			// Coerce defensively: JSON.parse('null') returns null and would
 			// crash on every markers.length / markers.forEach below. Server
 			// now returns "[]" for empty (mustMarshalMarkers), but keep this
@@ -331,7 +330,40 @@ templ MapEditorBody(cc *campaigns.CampaignContext, data MapViewData, mapContaine
 			if (imageID) {
 				L.imageOverlay(mapImageURL, bounds).addTo(map);
 			}
-			map.fitBounds(bounds);
+
+			// ---- Opening view: the whole map, where this person left off, or a
+			// spot the owner chose. "Left off" is stored in this browser per
+			// user and map, never on the server. A stored spot is percent of the
+			// image plus a zoom relative to the whole-map view, so it means the
+			// same on any screen. ----
+			var viewKey = 'chronicle.mapview.' + (userID || 'anon') + '.' + mapID;
+			var viewReady = false;
+			var viewTimer = null;
+			function savedView() {
+				try {
+					var v = JSON.parse(localStorage.getItem(viewKey));
+					if (v && isFinite(v.x) && isFinite(v.y) && isFinite(v.z)) return v;
+				} catch (e) { /* storage blocked or corrupt: open on the whole map */ }
+				return null;
+			}
+			function applyOpening() {
+				var v = null;
+				if (D.open_mode === 'last') v = savedView();
+				else if (D.open_mode === 'spot') v = { x: D.open_x, y: D.open_y, z: D.open_zoom };
+				if (!v) { map.fitBounds(bounds); return; }
+				map.setView(pinLatLng(v.x, v.y), fitZoom() + v.z, { animate: false });
+			}
+			// Remember where the person is, once layout has settled (before that
+			// the view is a pre-layout guess and must not overwrite a good one).
+			map.on('moveend', function() {
+				if (!viewReady) return;
+				clearTimeout(viewTimer);
+				viewTimer = setTimeout(function() {
+					var c = latLngToPercent(map.getCenter());
+					try { localStorage.setItem(viewKey, JSON.stringify({ x: c.x, y: c.y, z: map.getZoom() - fitZoom() })); } catch (e) { /* not worth failing for */ }
+				}, 300);
+			});
+			applyOpening();
 
 			// Re-measure once layout settles. This inline IIFE runs during
 			// parse, before the flex-sized container (dedicated page) or a
@@ -344,7 +376,8 @@ templ MapEditorBody(cc *campaigns.CampaignContext, data MapViewData, mapContaine
 			// (map_widget.js). Harmless when the size was already correct.
 			setTimeout(function () {
 				map.invalidateSize();
-				map.fitBounds(bounds);
+				applyOpening();
+				viewReady = true;
 			}, 100);
 
 			// Track placed Leaflet markers by ID for removal/update.
@@ -382,15 +415,16 @@ templ MapEditorBody(cc *campaigns.CampaignContext, data MapViewData, mapContaine
 
 			// Pin kinds. The five ids are the server's pin_category set (and the
 			// Foundry module's pin types); 'other' is the client-only bucket for
-			// markers that have none. Colours are shown on the kind dots and given
-			// to a pin created from the quick card, so a kind is visible at a glance.
-			var KINDS = [
-				{ id: 'location', label: 'Places', one: 'Place', color: '#2563eb' },
-				{ id: 'danger', label: 'Danger', one: 'Danger', color: '#dc2626' },
-				{ id: 'treasure', label: 'Treasure', one: 'Treasure', color: '#d97706' },
-				{ id: 'quest', label: 'Quests', one: 'Quest', color: '#7c3aed' },
-				{ id: 'note', label: 'Notes', one: 'Note', color: '#0d9488' }
-			];
+			// markers that have none. Labels and colours come from this map's
+			// display settings (renamed/recoloured in Map settings), and a pin
+			// created from the quick card gets its kind's colour.
+			var KINDS = (D.kinds && D.kinds.length ? D.kinds : [
+				{ id: 'location', label: 'Places', color: '#2563eb' },
+				{ id: 'danger', label: 'Danger', color: '#dc2626' },
+				{ id: 'treasure', label: 'Treasure', color: '#d97706' },
+				{ id: 'quest', label: 'Quests', color: '#7c3aed' },
+				{ id: 'note', label: 'Notes', color: '#0d9488' }
+			]).map(function(k) { return { id: k.id, label: k.label, one: k.label, color: k.color }; });
 			var OTHER_KIND = { id: 'other', label: 'Other', one: 'Other', color: '#6b7280' };
 			function kindInfo(id) {
 				for (var i = 0; i < KINDS.length; i++) if (KINDS[i].id === id) return KINDS[i];
@@ -412,14 +446,61 @@ templ MapEditorBody(cc *campaigns.CampaignContext, data MapViewData, mapContaine
 				return true;
 			}
 
+			// ---- Pin shape, size and name. The shape is drawn around the marker's
+			// own Font Awesome icon; the colour is the marker's. Metrics are per
+			// style because each shape's tip (the point on the map) is elsewhere. ----
+			var PIN_SCALE = { s: 0.75, m: 1, l: 1.35 };
+			// cx, cy: where the icon sits in the 30x38 box; fs: icon size; ax, ay: the
+			// map point (the tip of a drop, the foot of a flag, the middle of a dot).
+			var PIN_SHAPE = {
+				drop: { cx: 15, cy: 15, fs: 12, ax: 15, ay: 37 },
+				seal: { cx: 15, cy: 22, fs: 12, ax: 15, ay: 37 },
+				flag: { cx: 17, cy: 11, fs: 8, ax: 8, ay: 37 },
+				dot: { cx: 15, cy: 19, fs: 11, ax: 15, ay: 19 }
+			};
+			function pinMetrics() {
+				var k = PIN_SCALE[D.pin_size] || 1;
+				var sh = PIN_SHAPE[D.pin_style] || PIN_SHAPE.drop;
+				return { k: k, sh: sh, w: 30 * k, h: 38 * k, ax: sh.ax * k, ay: sh.ay * k };
+			}
+			function pinShapeSvg(style, color, dashed) {
+				var c = escapeAttr(color);
+				var dash = dashed ? ' stroke-dasharray="3 2"' : '';
+				if (style === 'seal') return '<svg viewBox="0 0 30 38" aria-hidden="true"><path d="M15 34v4" stroke="' + c + '" stroke-width="2"/><circle cx="15" cy="22" r="12" fill="' + c + '" stroke="#fff" stroke-width="2"' + dash + '/><circle cx="15" cy="22" r="8" fill="none" stroke="rgba(255,255,255,.55)" stroke-width="1.2"/></svg>';
+				if (style === 'flag') return '<svg viewBox="0 0 30 38" aria-hidden="true"><path d="M8 37V4" stroke="#3b2f1e" stroke-width="2.4"/><path d="M9 5h17l-4 6 4 6H9z" fill="' + c + '" stroke="#fff" stroke-width="1.5"' + dash + '/></svg>';
+				if (style === 'dot') return '<svg viewBox="0 0 30 38" aria-hidden="true"><circle cx="15" cy="19" r="10" fill="' + c + '" stroke="#fff" stroke-width="2.5"' + dash + '/></svg>';
+				return '<svg viewBox="0 0 30 38" aria-hidden="true"><path d="M15 37s-12-12.5-12-22a12 12 0 0124 0c0 9.5-12 22-12 22z" fill="' + c + '" stroke="#fff" stroke-width="2"' + dash + '/></svg>';
+			}
 			function markerIcon(mk) {
-				var badge = mk.visibility === 'dm_only'
+				var m = pinMetrics();
+				var hidden = mk.visibility === 'dm_only';
+				var badge = hidden
 					? '<span class="mp-pin-badge" title="Hidden from players"><i class="fa-solid fa-eye-slash"></i></span>' : '';
+				var ico = '<i class="fa-solid ' + escapeAttr(mk.icon) + ' mp-pin-ico" style="left:' + (m.sh.cx * m.k) + 'px;top:' + (m.sh.cy * m.k) + 'px;font-size:' + (m.sh.fs * m.k) + 'px"></i>';
+				// A name shown always sits under the pin; otherwise it appears above.
+				var below = D.pin_labels === 'always';
 				return L.divIcon({
 					className: 'chronicle-marker',
-					html: '<div style="color:' + escapeAttr(mk.color) + ';font-size:20px;text-shadow:0 1px 3px rgba(0,0,0,0.5);position:relative;"><i class="fa-solid ' + escapeAttr(mk.icon) + '"></i>' + badge + '</div>',
-					iconSize: [24, 24],
-					iconAnchor: [12, 24],
+					html: '<div class="mp-pin" style="width:' + m.w + 'px;height:' + m.h + 'px">' + pinShapeSvg(D.pin_style, mk.color, hidden) + ico + badge + '</div>',
+					iconSize: [m.w, m.h],
+					iconAnchor: [m.ax, m.ay],
+					tooltipAnchor: [m.w / 2 - m.ax, below ? m.h - m.ay + 2 : -m.ay]
+				});
+			}
+			// The name shown on the map: always, when pointed at, or never.
+			function bindLabel(lm, mk) {
+				lm.unbindTooltip();
+				if (D.pin_labels === 'never') return;
+				var always = D.pin_labels === 'always';
+				lm.bindTooltip(escapeHtml(mk.name), { direction: always ? 'bottom' : 'top', permanent: always, className: 'mp-name' });
+			}
+			// Re-draw every pin after a style, size, name or kind change.
+			function refreshPins() {
+				markers.forEach(function(mk) {
+					var lm = leafletMarkers[mk.id];
+					if (!lm) return;
+					lm.setIcon(markerIcon(mk));
+					bindLabel(lm, mk);
 				});
 			}
 
@@ -439,8 +520,8 @@ templ MapEditorBody(cc *campaigns.CampaignContext, data MapViewData, mapContaine
 				var lm = L.marker([lat, lng], { icon: markerIcon(mk), draggable: isScribe });
 				if (pinShown(mk)) (clusterGroup || map).addLayer(lm);
 
-				// Tooltip with marker name (escaped to prevent HTML injection).
-				lm.bindTooltip(escapeHtml(mk.name), { direction: 'top', offset: [0, -24] });
+				// The name on the map (escaped to prevent HTML injection).
+				bindLabel(lm, mk);
 
 				// A click opens the read card; scribes reach editing from there.
 				lm.on('click', function() { openCard(mk, 'read'); });
@@ -622,6 +703,8 @@ templ MapEditorBody(cc *campaigns.CampaignContext, data MapViewData, mapContaine
 					if (isNew) openCreateMarker(draftState.x, draftState.y); else openEditMarker(mk);
 					if (carry.name) document.getElementById('mk-name').value = carry.name;
 					document.getElementById('mk-kind').value = carry.kind;
+					// A new pin starts in its kind's colour, as the quick card's does.
+					if (isNew && carry.kind) document.getElementById('mk-color').value = kindInfo(carry.kind).color;
 					document.getElementById('mk-visibility').value = carry.vis;
 				});
 				return card;
@@ -668,7 +751,7 @@ templ MapEditorBody(cc *campaigns.CampaignContext, data MapViewData, mapContaine
 						if ('pin_category' in body) { if (body.pin_category) mk.pin_category = body.pin_category; else delete mk.pin_category; }
 						if ('visibility' in body) mk.visibility = body.visibility;
 						var lm = leafletMarkers[mk.id];
-						if (lm) { lm.setIcon(markerIcon(mk)); lm.setTooltipContent(escapeHtml(mk.name)); }
+						if (lm) { lm.setIcon(markerIcon(mk)); bindLabel(lm, mk); }
 						syncMarkerVisibility(mk);
 						renderPanel();
 						openCard(mk, 'read');
@@ -697,11 +780,7 @@ templ MapEditorBody(cc *campaigns.CampaignContext, data MapViewData, mapContaine
 				removeDraft();
 				var ll = pinLatLng(x, y);
 				var marker = L.marker(ll, {
-					icon: L.divIcon({
-						className: 'chronicle-marker',
-						html: '<div style="color:' + KINDS[0].color + ';font-size:20px;text-shadow:0 1px 3px rgba(0,0,0,0.5);"><i class="fa-solid fa-map-pin"></i></div>',
-						iconSize: [24, 24], iconAnchor: [12, 24]
-					}),
+					icon: markerIcon({ icon: 'fa-map-pin', color: KINDS[0].color, visibility: 'everyone' }),
 					interactive: false, keyboard: false
 				}).addTo(map);
 				draft = { x: x, y: y, marker: marker };
@@ -763,9 +842,21 @@ templ MapEditorBody(cc *campaigns.CampaignContext, data MapViewData, mapContaine
 			// Zoom: 100% is the whole map fitted to the view, so the number means
 			// the same thing on every map regardless of image size.
 			function fitZoom() { return map.getBoundsZoom(bounds, false); }
+			// The Futuristic frame's live readout shares the zoom figure and the
+			// pointer position (percent of the image in thousandths, so it reads
+			// 000-1000 on any map). Both elements only exist inside that frame.
+			var frameEl = document.getElementById('mp-frame');
+			var hudZoom = frameEl && frameEl.querySelector('.mp-hudzoom');
+			var hudPos = frameEl && frameEl.querySelector('.mp-hudpos');
+			function pad3(n) { n = Math.round(n); return (n < 100 ? (n < 10 ? '00' : '0') : '') + n; }
+			if (hudPos) map.on('mousemove', function(e) {
+				var p = latLngToPercent(e.latlng);
+				hudPos.textContent = 'X ' + pad3(p.x * 10) + '  Y ' + pad3(p.y * 10);
+			});
 			function updateZoomLabel() {
 				var pct = Math.round(Math.pow(2, map.getZoom() - fitZoom()) * 100);
 				$id('mp-zoom-level').textContent = pct + '%';
+				if (hudZoom) hudZoom.textContent = 'ZOOM ' + pct + '%';
 			}
 			map.on('zoom zoomend resize', updateZoomLabel);
 			updateZoomLabel();
@@ -866,6 +957,9 @@ templ MapEditorBody(cc *campaigns.CampaignContext, data MapViewData, mapContaine
 						setTool(tool === t && t !== 'move' ? 'move' : t);
 					});
 				});
+			}
+			// Drawing tools exist only when the viewer may draw on this map.
+			if (canDraw) {
 				document.querySelectorAll('[data-shape]').forEach(function(b) {
 					b.addEventListener('click', function() { startShape(b.dataset.shape); });
 				});
@@ -962,6 +1056,7 @@ templ MapEditorBody(cc *campaigns.CampaignContext, data MapViewData, mapContaine
 			});
 			layersBtn.addEventListener('click', function() {
 				var open = panel.hidden;
+				if (open && window.__mpCloseSheet) window.__mpCloseSheet();
 				panel.hidden = !open;
 				layersBtn.setAttribute('aria-expanded', open ? 'true' : 'false');
 				if (open) renderPanel();
@@ -973,12 +1068,347 @@ templ MapEditorBody(cc *campaigns.CampaignContext, data MapViewData, mapContaine
 				return true;
 			}
 
-			// Map settings opens the existing settings modal; scribes only.
+			// ---- Grid overlay: an SVG laid over the map picture in map
+			// coordinates (a Leaflet layer, not CSS), so it scales and pans with
+			// the map. Size is measured as if the map were 1000 wide, so the same
+			// number looks the same on any picture. The line keeps a constant
+			// 1px width at every zoom (non-scaling stroke). ----
+			var gridLayer = null;
+			var gridPending = null;
+			map.createPane('mpGrid');
+			map.getPane('mpGrid').style.zIndex = 405;
+			map.getPane('mpGrid').style.pointerEvents = 'none';
+			function gridPath(kind, cell) {
+				var d = '', x, y;
+				if (kind === 'square') {
+					for (x = 0; x <= w; x += cell) d += 'M' + x.toFixed(1) + ' 0V' + h;
+					for (y = 0; y <= h; y += cell) d += 'M0 ' + y.toFixed(1) + 'H' + w;
+					return d;
+				}
+				var r = cell / 2, hw = Math.sqrt(3) * r;
+				for (var row = 0; row * 1.5 * r < h + r; row++) {
+					for (var col = 0; col * hw < w + hw; col++) {
+						var cx = col * hw + (row % 2 ? hw / 2 : 0), cy = row * 1.5 * r;
+						d += 'M' + cx.toFixed(1) + ' ' + (cy - r).toFixed(1);
+						for (var i = 1; i <= 6; i++) {
+							var a = Math.PI / 3 * i - Math.PI / 2;
+							d += 'L' + (cx + r * Math.cos(a)).toFixed(1) + ' ' + (cy + r * Math.sin(a)).toFixed(1);
+						}
+					}
+				}
+				return d;
+			}
+			function drawGrid() {
+				if (gridLayer) { map.removeLayer(gridLayer); gridLayer = null; }
+				if (D.grid_type !== 'square' && D.grid_type !== 'hex') return;
+				var cell = D.grid_size * w / 1000;
+				// A guard against a degenerate picture shape making millions of cells.
+				var cells = (w / cell + 2) * (h / (cell * (D.grid_type === 'hex' ? 0.75 : 1)) + 2);
+				if (!(cell >= 2) || cells > 60000) return;
+				var ns = 'http://www.w3.org/2000/svg';
+				var svg = document.createElementNS(ns, 'svg');
+				svg.setAttribute('xmlns', ns);
+				svg.setAttribute('viewBox', '0 0 ' + w + ' ' + h);
+				svg.setAttribute('preserveAspectRatio', 'none');
+				var path = document.createElementNS(ns, 'path');
+				path.setAttribute('d', gridPath(D.grid_type, cell));
+				path.setAttribute('fill', 'none');
+				path.setAttribute('stroke', '#241c10');
+				path.setAttribute('stroke-opacity', String(D.grid_strength / 100));
+				path.setAttribute('stroke-width', '1');
+				path.setAttribute('vector-effect', 'non-scaling-stroke');
+				svg.appendChild(path);
+				gridLayer = L.svgOverlay(svg, bounds, { pane: 'mpGrid', interactive: false, className: 'mp-grid' }).addTo(map);
+			}
+			// Slider drags redraw at most once a frame.
+			function drawGridSoon() {
+				if (gridPending) return;
+				gridPending = requestAnimationFrame(function() { gridPending = null; drawGrid(); });
+			}
+			drawGrid();
+
+			// ---- Map settings sheet (owners). Every change previews on the map
+			// behind it straight away; Save sends the changed groups in one PUT
+			// (display_settings is partial per group), Cancel puts the map back. ----
+			var sheet = $id('mp-sheet');
 			var gear = $id('mp-settings-btn');
-			if (gear) gear.addEventListener('click', function() {
-				leaveFullscreen();
-				document.getElementById('map-settings-modal').classList.remove('hidden');
-			});
+			var mapContainerEl = $id('map-container');
+			var themeBg = mapContainerEl.style.backgroundColor;
+			function cloneD(o) { return JSON.parse(JSON.stringify(o)); }
+
+			// What each display_settings group looks like for a given resolved state.
+			// Values equal to the default are stored as nothing by the server, so
+			// these send the person's choice as it is.
+			function groupsOf(R) {
+				return {
+					frame: { style: R.frame_source === 'map' ? R.frame : '', tint: R.tint },
+					pins: { style: R.pin_style, size: R.pin_size, labels: R.pin_labels },
+					kinds: (function() {
+						var o = {};
+						R.kinds.forEach(function(k) { o[k.id] = { label: k.label, color: k.color }; });
+						return o;
+					})(),
+					grid: { type: R.grid_type, size: R.grid_size, strength: R.grid_strength },
+					open: R.open_mode === 'spot'
+						? { mode: 'spot', x: R.open_x, y: R.open_y, zoom: R.open_zoom }
+						: { mode: R.open_mode },
+					draw: { who: R.draw_who }
+				};
+			}
+
+			function syncKindSelects() {
+				var sel = document.getElementById('mk-kind');
+				if (!sel) return;
+				KINDS.forEach(function(k) {
+					for (var i = 0; i < sel.options.length; i++) {
+						if (sel.options[i].value === k.id) sel.options[i].textContent = k.label;
+					}
+				});
+			}
+			syncKindSelects();
+
+			// Push D onto the live map: frame, tint, pins, kinds and grid.
+			function applyDisplay() {
+				if (frameEl) {
+					frameEl.setAttribute('data-frame', D.frame);
+					frameEl.setAttribute('data-tint', D.tint ? '1' : '0');
+				}
+				refreshPins();
+				syncKindSelects();
+				renderPanel();
+				drawGridSoon();
+			}
+
+			if (sheet) {
+				var sInputs = {
+					name: $id('ms-name'), desc: $id('ms-description'),
+					tint: $id('ms-tint'), gridSize: $id('ms-grid-size'), gridStrength: $id('ms-grid-strength')
+				};
+				var bgPicker = $id('ms-background-color');
+				var bgFlag = $id('ms-background-color-set');
+				var imgChanged = false;
+				var origName = sInputs.name.value;
+				var origDesc = sInputs.desc.value;
+
+				function viewNow() {
+					var c = latLngToPercent(map.getCenter());
+					return { x: c.x, y: c.y, zoom: map.getZoom() - fitZoom() };
+				}
+				function useCurrentView() {
+					var v = viewNow();
+					D.open_x = v.x; D.open_y = v.y; D.open_zoom = v.zoom;
+					syncSheet();
+				}
+
+				// Reflect D into the controls.
+				function syncSheet() {
+					sheet.querySelectorAll('.mp-chip').forEach(function(b) {
+						b.setAttribute('aria-pressed', String(D[b.dataset.k]) === b.dataset.v ? 'true' : 'false');
+					});
+					$id('ms-frame-pick').hidden = D.frame_source !== 'map';
+					$id('ms-frame-note').hidden = D.frame_source === 'map';
+					sInputs.tint.checked = !!D.tint;
+					sInputs.gridSize.value = D.grid_size;
+					sInputs.gridStrength.value = D.grid_strength;
+					var noGrid = D.grid_type === 'none';
+					sInputs.gridSize.disabled = noGrid;
+					sInputs.gridStrength.disabled = noGrid;
+					D.kinds.forEach(function(k) {
+						var c = sheet.querySelector('[data-kc="' + k.id + '"]');
+						var n = sheet.querySelector('[data-kn="' + k.id + '"]');
+						if (c && c.value !== k.color) c.value = k.color;
+						if (n && n.value !== k.label && document.activeElement !== n) n.value = k.label;
+					});
+					$id('ms-spot').hidden = D.open_mode !== 'spot';
+					$id('ms-spot-note').textContent = 'Centre ' + Math.round(D.open_x) + '% across, ' + Math.round(D.open_y) + '% down, at '
+						+ Math.round(Math.pow(2, D.open_zoom) * 100) + '% zoom.';
+				}
+
+				// Segmented controls.
+				sheet.addEventListener('click', function(e) {
+					var b = e.target.closest ? e.target.closest('.mp-chip') : null;
+					if (!b || !sheet.contains(b)) return;
+					var k = b.dataset.k, v = b.dataset.v;
+					if (k === 'frame_source') {
+						D.frame_source = v;
+						if (v === 'campaign') D.frame = D.campaign_frame;
+					} else if (k === 'frame') {
+						D.frame = v;
+						D.frame_source = 'map';
+					} else if (k === 'open_mode') {
+						// Choosing a spot starts from where the map is now.
+						var wasSpot = D.open_mode === 'spot';
+						D.open_mode = v;
+						if (v === 'spot' && !wasSpot) { var vw = viewNow(); D.open_x = vw.x; D.open_y = vw.y; D.open_zoom = vw.zoom; }
+					} else {
+						D[k] = v;
+					}
+					syncSheet();
+					applyDisplay();
+				});
+				sInputs.tint.addEventListener('change', function() { D.tint = this.checked; applyDisplay(); });
+				sInputs.gridSize.addEventListener('input', function() {
+					D.grid_size = parseInt(this.value, 10);
+					if (D.grid_type === 'none') { D.grid_type = 'square'; syncSheet(); }
+					applyDisplay();
+				});
+				sInputs.gridStrength.addEventListener('input', function() {
+					D.grid_strength = parseInt(this.value, 10);
+					if (D.grid_type === 'none') { D.grid_type = 'square'; syncSheet(); }
+					applyDisplay();
+				});
+				sheet.querySelectorAll('[data-kc]').forEach(function(i) {
+					i.addEventListener('input', function() {
+						D.kinds.forEach(function(k) { if (k.id === i.dataset.kc) k.color = i.value; });
+						applyDisplay();
+					});
+				});
+				sheet.querySelectorAll('[data-kn]').forEach(function(i) {
+					i.addEventListener('input', function() {
+						D.kinds.forEach(function(k) {
+							if (k.id === i.dataset.kn) { k.label = i.value.trim() || savedLabel(k.id); k.one = k.label; }
+						});
+						KINDS.forEach(function(k) { if (k.id === i.dataset.kn) { k.label = i.value.trim() || savedLabel(k.id); k.one = k.label; } });
+						applyDisplay();
+					});
+				});
+				// A blank name falls back to the last saved one, never to nothing.
+				function savedLabel(id) {
+					var out = id;
+					savedD.kinds.forEach(function(k) { if (k.id === id) out = k.label; });
+					return out;
+				}
+				$id('ms-use-view').addEventListener('click', useCurrentView);
+
+				// Background colour: untouched / chosen / reset to theme.
+				bgPicker.addEventListener('input', function() { bgFlag.value = 'true'; mapContainerEl.style.backgroundColor = bgPicker.value; });
+				$id('ms-bg-reset').addEventListener('click', function() { bgFlag.value = 'false'; mapContainerEl.style.backgroundColor = ''; });
+
+				// Picture: an upload, or one already in the campaign (media picker).
+				function setPicture(id, url) {
+					$id('ms-image-id').value = id;
+					var preview = $id('ms-image-preview');
+					preview.src = url;
+					preview.hidden = false;
+					imgChanged = true;
+					var img = new Image();
+					img.onload = function() {
+						$id('ms-image-width').value = img.naturalWidth;
+						$id('ms-image-height').value = img.naturalHeight;
+					};
+					img.src = url;
+				}
+				sheet.addEventListener('media-picker:select', function(ev) {
+					var d = ev.detail || {};
+					if (!d.id || !d.url) return;
+					setPicture(d.id, d.url);
+					Chronicle.notify('Picture chosen. Save to apply it.', 'success');
+				});
+				// The picker's slide-out lives outside the full-screen element.
+				$id('ms-pick-existing').addEventListener('click', leaveFullscreen);
+				$id('ms-image-file').addEventListener('change', async function() {
+					if (!this.files || !this.files[0]) return;
+					var fd = new FormData();
+					fd.append('file', this.files[0]);
+					fd.append('campaign_id', campaignID);
+					fd.append('usage_type', 'attachment');
+					try {
+						var resp = await Chronicle.apiFetch('/media/upload', { method: 'POST', body: fd });
+						if (resp.ok) {
+							var data = await resp.json();
+							setPicture(data.id, data.url);
+							Chronicle.notify('Picture uploaded. Save to apply it.', 'success');
+						} else {
+							// Surface the server's specific reason (too large, type not
+							// allowed, quota) instead of a generic failure.
+							var errData = await resp.json().catch(function() { return {}; });
+							Chronicle.notify(errData.message || ('Upload failed (HTTP ' + resp.status + ')'), 'error');
+						}
+					} catch (err) {
+						Chronicle.notify('Network error during upload: ' + err.message, 'error');
+					}
+				});
+
+				// Save: only what changed. name is required by the endpoint (it
+				// rejects a blank one) so it always travels; everything else is
+				// sent only if the person touched it.
+				async function saveSheet() {
+					var name = sInputs.name.value.trim();
+					if (!name) { sInputs.name.focus(); Chronicle.notify('Give the map a name', 'error'); return; }
+					var body = { name: name };
+					if (sInputs.desc.value !== origDesc) body.description = sInputs.desc.value || null;
+					if (imgChanged) {
+						body.image_id = $id('ms-image-id').value;
+						body.image_width = parseInt($id('ms-image-width').value, 10) || 0;
+						body.image_height = parseInt($id('ms-image-height').value, 10) || 0;
+					}
+					if (bgFlag.value === 'true') body.background_color = bgPicker.value;
+					else if (bgFlag.value === 'false') body.background_color = '';
+					var now = groupsOf(D), was = groupsOf(savedD), ds = {}, any = false;
+					Object.keys(now).forEach(function(g) {
+						if (JSON.stringify(now[g]) !== JSON.stringify(was[g])) { ds[g] = now[g]; any = true; }
+					});
+					if (any) body.display_settings = ds;
+					var btn = $id('ms-save');
+					btn.disabled = true;
+					try {
+						var resp = await Chronicle.apiFetch('/campaigns/' + campaignID + '/maps/' + mapID, { method: 'PUT', body: body });
+						if (resp.ok) { window.location.reload(); return; }
+						var data = await resp.json().catch(function() { return {}; });
+						Chronicle.notify(data.message || 'Failed to save settings', 'error');
+					} catch (err) {
+						Chronicle.notify('Network error: ' + err.message, 'error');
+					}
+					btn.disabled = false;
+				}
+				$id('ms-save').addEventListener('click', saveSheet);
+
+				$id('ms-delete').addEventListener('click', async function() {
+					if (!confirm('Delete this map and all its markers? This cannot be undone.')) return;
+					try {
+						var resp = await Chronicle.apiFetch('/campaigns/' + campaignID + '/maps/' + mapID, { method: 'DELETE' });
+						if (resp.ok) { window.location.href = '/campaigns/' + campaignID + '/maps'; return; }
+						var delData = await resp.json().catch(function() { return {}; });
+						Chronicle.notify(delData.message || ('Failed to delete map (HTTP ' + resp.status + ')'), 'error');
+					} catch (err) {
+						Chronicle.notify('Network error during delete: ' + err.message, 'error');
+					}
+				});
+
+				// Open and close. Closing without saving puts every previewed
+				// change back, including the map picture's background colour.
+				function openSheet() {
+					leaveFullscreen();
+					closePanel();
+					D = cloneD(savedD);
+					KINDS.forEach(function(k) { D.kinds.forEach(function(d) { if (d.id === k.id) { k.label = d.label; k.one = d.label; k.color = d.color; } }); });
+					syncSheet();
+					sheet.hidden = false;
+					gear.setAttribute('aria-expanded', 'true');
+					sInputs.name.focus();
+				}
+				function closeSheet(revert) {
+					if (sheet.hidden) return false;
+					sheet.hidden = true;
+					gear.setAttribute('aria-expanded', 'false');
+					if (revert) {
+						D = cloneD(savedD);
+						KINDS.forEach(function(k) { D.kinds.forEach(function(d) { if (d.id === k.id) { k.label = d.label; k.one = d.label; k.color = d.color; } }); });
+						applyDisplay();
+						sInputs.name.value = origName;
+						sInputs.desc.value = origDesc;
+						mapContainerEl.style.backgroundColor = themeBg;
+						bgFlag.value = bgFlag.defaultValue;
+						bgPicker.value = bgPicker.defaultValue;
+					}
+					return true;
+				}
+				window.__mpCloseSheet = function() { return closeSheet(true); };
+				gear.addEventListener('click', function() { if (sheet.hidden) openSheet(); else closeSheet(true); });
+				$id('mp-sheet-x').addEventListener('click', function() { closeSheet(true); });
+				$id('ms-cancel').addEventListener('click', function() { closeSheet(true); });
+				syncSheet();
+			}
 
 			// ---- Search ----
 			(function() {
@@ -1068,8 +1498,7 @@ templ MapEditorBody(cc *campaigns.CampaignContext, data MapViewData, mapContaine
 			}
 			function modalOpen() {
 				var m = document.getElementById('marker-modal');
-				var s = document.getElementById('map-settings-modal');
-				return (m && !m.classList.contains('hidden')) || (s && !s.classList.contains('hidden'));
+				return m && !m.classList.contains('hidden');
 			}
 			function onKey(e) {
 				// The page may have been swapped away; stop listening if so.
@@ -1079,16 +1508,18 @@ templ MapEditorBody(cc *campaigns.CampaignContext, data MapViewData, mapContaine
 					// Close the nearest thing first: results, popover, panel, card, then the tool.
 					if (window.__mpCloseResults && window.__mpCloseResults()) return;
 					if (closePopovers()) return;
+					if (window.__mpCloseSheet && window.__mpCloseSheet()) return;
 					if (closePanel()) return;
 					if (map._popup && map._popup.isOpen && map._popup.isOpen()) { map.closePopup(); return; }
 					if (tool !== 'move') setTool('move');
 					return;
 				}
-				if (!isScribe || typing(e.target)) return;
+				// Letters inside the settings sheet belong to its controls.
+				if (!isScribe || typing(e.target) || (e.target.closest && e.target.closest('#mp-sheet'))) return;
 				var k = e.key.toLowerCase();
 				if (k === 'v') { setTool('move'); e.preventDefault(); }
 				else if (k === 'p') { setTool('pin'); e.preventDefault(); }
-				else if (k === 'd') { openPopover(flyDraw, document.querySelector('[data-tool="draw"]')); e.preventDefault(); }
+				else if (k === 'd' && canDraw) { openPopover(flyDraw, document.querySelector('[data-tool="draw"]')); e.preventDefault(); }
 			}
 			document.addEventListener('keydown', onKey);
 
@@ -1144,6 +1575,13 @@ templ MapEditorBody(cc *campaigns.CampaignContext, data MapViewData, mapContaine
 				document.getElementById('mk-delete-zone').classList.add('hidden');
 				hideMarkerDeleteConfirm();
 			}
+
+			// Choosing a kind for a NEW pin in the full editor sets its colour too.
+			var kindSel = document.getElementById('mk-kind');
+			if (kindSel) kindSel.addEventListener('change', function() {
+				var creating = !document.getElementById('mk-id').value;
+				if (creating && this.value) document.getElementById('mk-color').value = kindInfo(this.value).color;
+			});
 
 			// Form submit — create or update.
 			// The modal markup is Scribe+ only; players have no form to wire, and a
@@ -1259,154 +1697,6 @@ templ MapEditorBody(cc *campaigns.CampaignContext, data MapViewData, mapContaine
 				}
 			};
 
-			// Background-color reset: clears the override + flips the
-			// hidden "is set" flag so saveMapSettings sends the empty
-			// string to the server (which the service layer treats as
-			// "revert to theme").
-			window.resetMapBackgroundColor = function () {
-				var setEl = document.getElementById('ms-background-color-set');
-				if (setEl) setEl.value = 'false';
-				if (Chronicle.notify) {
-					Chronicle.notify('Background color will revert to theme on save.', 'success');
-				}
-			};
-
-			// Detect when the operator interacts with the color picker
-			// (any click/change implies they want a custom color, not
-			// theme follow-through). Flip the "is set" flag so the save
-			// path sends the chosen color through.
-			(function () {
-				var picker = document.getElementById('ms-background-color');
-				var setEl = document.getElementById('ms-background-color-set');
-				if (!picker || !setEl) return;
-				picker.addEventListener('input', function () { setEl.value = 'true'; });
-			})();
-
-			// Map settings: image upload + name/description + background.
-			window.saveMapSettings = async function() {
-				var name = document.getElementById('ms-name').value;
-				var desc = document.getElementById('ms-description').value;
-				var imgID = document.getElementById('ms-image-id').value;
-				var imgW = parseInt(document.getElementById('ms-image-width').value) || 0;
-				var imgH = parseInt(document.getElementById('ms-image-height').value) || 0;
-
-				var body = { name: name, image_width: imgW, image_height: imgH };
-				body.description = desc || null;  // absent = preserve; null = clear (partial-update contract)
-				if (imgID) body.image_id = imgID;
-
-				// Background color tri-state: omit the field entirely if
-				// neither the picker nor the reset button was touched.
-				// Server treats omitted-pointer as "leave unchanged" and
-				// empty-string as "clear to theme default".
-				var bgSet = document.getElementById('ms-background-color-set').value;
-				var bgVal = document.getElementById('ms-background-color').value;
-				if (bgSet === 'true') {
-					body.background_color = bgVal;
-				} else if (bgSet === 'false') {
-					body.background_color = '';
-				}
-
-				try {
-					var resp = await Chronicle.apiFetch('/campaigns/' + campaignID + '/maps/' + mapID, {
-						method: 'PUT', body: body,
-					});
-					if (resp.ok) {
-						document.getElementById('map-settings-modal').classList.add('hidden');
-						window.location.reload();
-					} else {
-						var data = await resp.json().catch(function() { return {}; });
-						Chronicle.notify(data.message || 'Failed to save settings', 'error');
-					}
-				} catch (err) {
-					Chronicle.notify('Network error: ' + err.message, 'error');
-				}
-			};
-
-			// Listen for the media-picker's selection event. Same effect
-			// as a successful upload — sets ms-image-id, refreshes the
-			// preview, derives the natural dimensions — but skips the
-			// /media/upload round-trip entirely (the file already exists
-			// in the campaign). The picker fires the event on the button
-			// it was opened from; we listen on the modal so a re-render
-			// of the modal doesn't strand the listener.
-			(function () {
-				var modal = document.getElementById('map-settings-modal');
-				if (!modal) return;
-				modal.addEventListener('media-picker:select', function (ev) {
-					var d = ev.detail || {};
-					if (!d.id || !d.url) return;
-					document.getElementById('ms-image-id').value = d.id;
-					var preview = document.getElementById('ms-image-preview');
-					preview.src = d.url;
-					preview.classList.remove('hidden');
-					var img = new Image();
-					img.onload = function () {
-						document.getElementById('ms-image-width').value = img.naturalWidth;
-						document.getElementById('ms-image-height').value = img.naturalHeight;
-					};
-					img.src = d.url;
-					if (Chronicle.notify) {
-						Chronicle.notify('Image selected — Save Settings to apply.', 'success');
-					}
-				});
-			})();
-
-			// Image upload handler for map settings.
-			window.uploadMapImage = async function(input) {
-				if (!input.files || !input.files[0]) return;
-				var file = input.files[0];
-				var fd = new FormData();
-				fd.append('file', file);
-				fd.append('campaign_id', campaignID);
-				fd.append('usage_type', 'attachment');
-
-				try {
-					var resp = await Chronicle.apiFetch('/media/upload', {
-						method: 'POST', body: fd,
-					});
-					if (resp.ok) {
-						var data = await resp.json();
-						document.getElementById('ms-image-id').value = data.id;
-						document.getElementById('ms-image-preview').src = data.url;
-						document.getElementById('ms-image-preview').classList.remove('hidden');
-						// Read natural image dimensions for coordinate mapping.
-						var img = new Image();
-						img.onload = function() {
-							document.getElementById('ms-image-width').value = img.naturalWidth;
-							document.getElementById('ms-image-height').value = img.naturalHeight;
-						};
-						img.src = data.url;
-					} else {
-						// Surface the server's specific message — Upload returns
-						// concrete reasons like "file too large", "MIME type not
-						// allowed", "campaign quota exceeded". The old generic
-						// "Upload failed" hid all of that, leading to "i can't
-						// upload an image" reports with no diagnostic info.
-						var errData = await resp.json().catch(function() { return {}; });
-						Chronicle.notify(errData.message || ('Upload failed (HTTP ' + resp.status + ')'), 'error');
-					}
-				} catch (err) {
-					Chronicle.notify('Network error during upload: ' + err.message, 'error');
-				}
-			};
-
-			// Delete map.
-			window.deleteMap = async function() {
-				if (!confirm('Delete this map and all its markers? This cannot be undone.')) return;
-				try {
-					var resp = await Chronicle.apiFetch('/campaigns/' + campaignID + '/maps/' + mapID, {
-						method: 'DELETE',
-					});
-					if (resp.ok) {
-						window.location.href = '/campaigns/' + campaignID + '/maps';
-					} else {
-						var delData = await resp.json().catch(function() { return {}; });
-						Chronicle.notify(delData.message || ('Failed to delete map (HTTP ' + resp.status + ')'), 'error');
-					}
-				} catch (err) {
-					Chronicle.notify('Network error during delete: ' + err.message, 'error');
-				}
-			};
 			// Expose map context for drawing tools.
 			window.chronicleMap = {
 				map: map,
@@ -1415,6 +1705,9 @@ templ MapEditorBody(cc *campaigns.CampaignContext, data MapViewData, mapContaine
 				imageW: w,
 				imageH: h,
 				isScribe: isScribe,
+				// canDraw is what the drawing module builds its tools from; the
+				// server enforces the map's "who can draw" rule regardless.
+				canDraw: canDraw,
 				isOwner: isOwner,
 				// Callbacks the drawing module calls so the panel counts and the
 				// undo button stay in step with what is on the map.
@@ -1445,12 +1738,20 @@ templ MapEditorBody(cc *campaigns.CampaignContext, data MapViewData, mapContaine
 			border-radius: 50%; box-shadow: 0 1px 4px rgba(0,0,0,0.3);
 		}
 		.map-text-annotation { background: none !important; border: none !important; }
+		.mp-pin { position: relative; }
+		.mp-pin svg { position: absolute; inset: 0; width: 100%; height: 100%; overflow: visible; filter: drop-shadow(0 2px 2px rgb(0 0 0 / 0.35)); }
+		.mp-pin-ico { position: absolute; transform: translate(-50%, -50%); color: #fff; line-height: 1; filter: drop-shadow(0 0 1px rgb(0 0 0 / 0.55)); pointer-events: none; }
 		.mp-pin-badge {
 			position: absolute; top: -4px; right: -8px; width: 14px; height: 14px;
 			display: grid; place-items: center; border-radius: 50%;
 			background: #111827; color: #fff; font-size: 8px; text-shadow: none;
 			border: 1px solid #fff;
 		}
+		.mp-pin-badge i { position: static; transform: none; font-size: 8px; filter: none; }
+		/* The pin's name: a light label that reads on any map picture. */
+		.leaflet-tooltip.mp-name { background: var(--color-card-bg); color: var(--color-text-primary); border: 1px solid var(--color-border); border-radius: 6px; box-shadow: var(--mp-shadow); font-size: 12px; padding: 2px 7px; }
+		.leaflet-tooltip.mp-name::before { display: none; }
+		.mp-grid { pointer-events: none; }
 
 		#map-wrap {
 			--mp-accent: rgb(var(--color-accent-rgb, 99 102 241));
@@ -1560,36 +1861,43 @@ templ MapEditorBody(cc *campaigns.CampaignContext, data MapViewData, mapContaine
 			.mp-pill span { display: none; }
 			.mp-pill { padding: 0; width: 36px; justify-content: center; }
 		}
+
+		/* Map settings sheet: floats at the right edge over the map, scrolls on
+		   its own, and keeps its title and Save row in view. */
+		.mp-sheet { top: 12px; right: 12px; bottom: 12px; width: 300px; z-index: 1150; display: flex; flex-direction: column; font-size: 13px; overflow: hidden; }
+		.mp-sheet[hidden] { display: none; }
+		.mp-sh { display: flex; align-items: center; justify-content: space-between; padding: 8px 8px 8px 14px; border-bottom: 1px solid var(--color-border); color: var(--color-text-primary); font-weight: 600; flex: none; }
+		.mp-sh-body { flex: 1; overflow: auto; min-height: 0; }
+		.mp-sh-body section { padding: 12px 14px; border-bottom: 1px solid var(--color-border); display: flex; flex-direction: column; gap: 9px; }
+		.mp-sh-body h3 { margin: 0; font-size: 11px; text-transform: uppercase; letter-spacing: 0.07em; color: var(--color-text-secondary); font-weight: 600; }
+		.mp-sh-foot { display: flex; justify-content: flex-end; gap: 8px; padding: 10px 14px; border-top: 1px solid var(--color-border); flex: none; }
+		.mp-f { display: flex; flex-direction: column; gap: 5px; font-size: 12px; color: var(--color-text-body); }
+		.mp-f small { font-size: 11px; color: var(--color-text-secondary); }
+		.mp-row { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+		.mp-chips { display: flex; flex-wrap: wrap; gap: 4px; }
+		.mp-chip { border: 1px solid var(--color-border); background: var(--color-card-bg); border-radius: 999px; padding: 3px 10px; font-size: 12px; color: var(--color-text-body); }
+		.mp-chip:hover { background: var(--color-bg-tertiary); }
+		.mp-chip[aria-pressed="true"] { background: var(--mp-accent); border-color: var(--mp-accent); color: #fff; }
+		.mp-check { display: flex; align-items: center; justify-content: space-between; gap: 8px; font-size: 12.5px; color: var(--color-text-body); }
+		.mp-check input { accent-color: var(--mp-accent); width: 16px; height: 16px; }
+		.mp-sheet input[type=range] { width: 100%; accent-color: var(--mp-accent); }
+		.mp-sheet input[type=range]:disabled { opacity: 0.45; }
+		.mp-color { width: 44px; height: 28px; padding: 1px; border: 1px solid var(--color-border); border-radius: 6px; background: var(--color-card-bg); }
+		.mp-kind { display: flex; align-items: center; gap: 8px; }
+		.mp-kind input[type=color] { width: 28px; height: 26px; padding: 0; border: 0; background: none; flex: none; }
+		.mp-kind .mp-input { flex: 1; min-width: 0; }
+		.mp-preview { width: 100%; max-height: 140px; object-fit: contain; border-radius: 6px; background: var(--color-bg-tertiary); }
+		.mp-file { font-size: 11.5px; padding: 3px; }
+		.mp-danger { align-self: flex-start; border: 0; background: none; padding: 4px 6px; border-radius: 6px; font-size: 12px; color: #dc2626; }
+		.mp-danger:hover { background: rgb(220 38 38 / 0.1); }
+		@media (max-width: 760px) {
+			.mp-sheet { left: 12px; width: auto; }
+		}
 		@media (prefers-reduced-motion: reduce) {
 			.mp-tip { transition: none; }
 			.leaflet-fade-anim .leaflet-popup, .leaflet-zoom-anim .leaflet-zoom-animated { transition: none !important; }
 		}
 
-		/* Atlas frame (dedicated map page): a printed plate with a double rule,
-		   corner flourishes, grid letters and numbers, and a title plate. */
-		.mp-stage { flex: 1; min-height: 360px; padding: 18px; display: flex; }
-		.mp-frame {
-			--mp-mat: #eef0f4; --mp-rule: #8b7a5a;
-			position: relative; flex: 1; min-width: 0; display: flex;
-			padding: 26px 26px 34px; border-radius: 14px; border: 1px solid var(--color-border);
-			background: var(--mp-mat); box-shadow: 0 1px 2px rgb(15 17 23 / 0.06), 0 8px 24px rgb(15 17 23 / 0.10);
-		}
-		.dark .mp-frame { --mp-mat: #161e2b; --mp-rule: #a8956c; }
-		.mp-viewport { position: relative; flex: 1; min-width: 0; min-height: 0; overflow: hidden; border-radius: 2px; box-shadow: 0 0 0 1px var(--mp-rule), 0 0 0 5px var(--mp-mat), 0 0 0 6px var(--mp-rule); }
-		.mp-orn { position: absolute; inset: 0; pointer-events: none; color: var(--mp-rule); z-index: 2; }
-		.mp-orn svg { position: absolute; width: 30px; height: 30px; }
-		.mp-orn .tl { top: 3px; left: 3px; }
-		.mp-orn .tr { top: 3px; right: 3px; transform: rotate(90deg); }
-		.mp-orn .br { bottom: 3px; right: 3px; transform: rotate(180deg); }
-		.mp-orn .bl { bottom: 3px; left: 3px; transform: rotate(270deg); }
-		.mp-ticks { position: absolute; left: 44px; right: 44px; top: 8px; display: flex; justify-content: space-between; font: 10px ui-monospace, monospace; letter-spacing: 0.08em; }
-		.mp-side-ticks { position: absolute; top: 44px; bottom: 44px; left: 9px; display: flex; flex-direction: column; justify-content: space-between; font: 10px ui-monospace, monospace; }
-		.mp-cart { position: absolute; left: 50%; bottom: 10px; transform: translateX(-50%); max-width: 60%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font: 600 10.5px/1 Georgia, "Palatino Linotype", serif; letter-spacing: 0.32em; text-transform: uppercase; background: var(--mp-mat); padding: 4px 14px; border: 1px solid var(--mp-rule); outline: 1px solid var(--mp-rule); outline-offset: 2px; }
-		@media (max-width: 760px) {
-			.mp-stage { padding: 8px; }
-			.mp-frame { padding: 14px 14px 30px; }
-			.mp-ticks, .mp-side-ticks { display: none; }
-		}
 	</style>
 }
 
@@ -1621,6 +1929,7 @@ templ mapControls(data MapViewData) {
 				<i class="fa-solid fa-location-dot" aria-hidden="true"></i>
 				<span class="mp-tip">Drop a pin <kbd>P</kbd></span>
 			</button>
+			if data.CanDraw() {
 			<div class="mp-item">
 				<button type="button" class="mp-btn" data-tool="draw" aria-pressed="false" aria-expanded="false" aria-label="Draw (D)">
 					<i class="fa-solid fa-pen" aria-hidden="true"></i>
@@ -1656,11 +1965,12 @@ templ mapControls(data MapViewData) {
 				<i class="fa-solid fa-rotate-left" aria-hidden="true"></i>
 				<span class="mp-tip">Undo last drawing</span>
 			</button>
+			}
 		</div>
 	}
 	<div class="mp-topright">
-		if data.IsScribe {
-			<button type="button" id="mp-settings-btn" class="mp-fl mp-pill mp-pill-icon" aria-label="Map settings" title="Map settings">
+		if data.IsOwner {
+			<button type="button" id="mp-settings-btn" class="mp-fl mp-pill mp-pill-icon" aria-label="Map settings" title="Map settings" aria-expanded="false" aria-controls="mp-sheet">
 				<i class="fa-solid fa-gear" aria-hidden="true"></i>
 			</button>
 		}
@@ -1670,6 +1980,9 @@ templ mapControls(data MapViewData) {
 		</button>
 	</div>
 	<div id="mp-layers" class="mp-fl mp-panel" hidden></div>
+	if data.IsOwner {
+		@mapSettingsSheet(data)
+	}
 	<div class="mp-fl mp-zoom">
 		<button type="button" id="mp-zoom-in" class="mp-btn" aria-label="Zoom in"><i class="fa-solid fa-plus" aria-hidden="true"></i></button>
 		<div id="mp-zoom-level" class="mp-lvl" aria-live="polite">100%</div>
@@ -1796,120 +2109,6 @@ templ markerModal(data MapViewData) {
 	</div>
 }
 
-// mapSettingsModal renders the map settings/image upload modal.
-templ mapSettingsModal(data MapViewData) {
-	<div
-		id="map-settings-modal"
-		class="hidden fixed inset-0 z-[9999] flex items-center justify-center bg-black/50"
-		onclick="if(event.target===this)this.classList.add('hidden')"
-	>
-		<div class="card p-6 w-full max-w-md space-y-4">
-			<div class="flex items-center justify-between">
-				<h2 class="text-lg font-semibold text-fg">Map Settings</h2>
-				<button class="text-fg-muted hover:text-fg" onclick="document.getElementById('map-settings-modal').classList.add('hidden')">
-					<i class="fa-solid fa-xmark"></i>
-				</button>
-			</div>
-			<div class="space-y-3">
-				<div>
-					<label class="block text-xs font-medium text-fg-body mb-1">Map Name</label>
-					<input type="text" id="ms-name" class="input w-full" value={ data.Map.Name }/>
-				</div>
-				<div>
-					<label class="block text-xs font-medium text-fg-body mb-1">Description</label>
-					<textarea id="ms-description" class="input w-full" rows="2">{ derefStr(data.Map.Description) }</textarea>
-				</div>
-				<div>
-					<label class="block text-xs font-medium text-fg-body mb-1">Map Image</label>
-					<input type="hidden" id="ms-image-id" value={ derefStr(data.Map.ImageID) }/>
-					<input type="hidden" id="ms-image-width" value={ fmt.Sprintf("%d", data.Map.ImageWidth) }/>
-					<input type="hidden" id="ms-image-height" value={ fmt.Sprintf("%d", data.Map.ImageHeight) }/>
-					if data.Map.HasImage() {
-						<img id="ms-image-preview" src={ layouts.MediaURL(ctx, *data.Map.ImageID) } class="w-full rounded-md mb-2 max-h-48 object-contain bg-surface-alt"/>
-					} else {
-						<img id="ms-image-preview" src="" class="hidden w-full rounded-md mb-2 max-h-48 object-contain bg-surface-alt"/>
-					}
-					<div class="flex items-center gap-2 flex-wrap">
-						<input
-							type="file"
-							accept="image/*"
-							class="input flex-1 min-w-0 text-xs"
-							onchange="uploadMapImage(this)"
-						/>
-						<!-- Picker is opt-in; uploads stay the default. The
-						     widget mounts as a button — clicking it opens
-						     the slideout. The map-settings IIFE listens for
-						     the media-picker:select event below to update
-						     ms-image-id + the preview without uploading. -->
-						<button
-							type="button"
-							id="ms-pick-existing"
-							data-widget="media-picker"
-							data-campaign-id={ data.CampaignID }
-							data-mime-prefix="image/"
-							class="btn-secondary text-xs whitespace-nowrap"
-							title="Choose an image already in this campaign"
-						>
-							<i class="fa-solid fa-images mr-1"></i> Choose existing
-						</button>
-					</div>
-					<p class="text-xs text-fg-muted mt-1">Upload a map image (JPEG, PNG, WebP) or choose one already in this campaign. Image dimensions set the coordinate space.</p>
-				</div>
-				<!-- Background color override.
-				     Default (no override) follows the campaign theme — the
-				     map canvas uses bg-surface-alt which CSS-var-swaps
-				     between dark and light. Setting a color here forces a
-				     fixed canvas color regardless of theme (useful for
-				     "this dungeon is always pitch black" or "this map's
-				     parchment background must show through transparent
-				     PNGs"). The hidden input carries the tri-state to the
-				     save flow: empty string = clear; any value = set. -->
-				<div>
-					<label class="block text-xs font-medium text-fg-body mb-1">Background color</label>
-					<div class="flex items-center gap-2">
-						<input
-							type="color"
-							id="ms-background-color"
-							value={ backgroundColorOrDefault(data.Map.BackgroundColor) }
-							class="w-10 h-10 rounded border border-edge cursor-pointer"
-							title="Click to override the canvas background color"
-						/>
-						<input type="hidden" id="ms-background-color-set" value={ backgroundColorIsSet(data.Map.BackgroundColor) }/>
-						<button
-							type="button"
-							class="btn-secondary text-xs"
-							onclick="resetMapBackgroundColor()"
-							title="Revert to the campaign theme (light/dark adaptive)"
-						>
-							<i class="fa-solid fa-rotate-left mr-1"></i> Reset to theme
-						</button>
-					</div>
-					<p class="text-xs text-fg-muted mt-1">
-						if data.Map.BackgroundColor != nil {
-							Custom color set — the canvas ignores theme switches.
-						} else {
-							Following theme — canvas adapts to light/dark mode.
-						}
-					</p>
-				</div>
-				<div class="flex items-center justify-between pt-2">
-					<button type="button" class="text-xs text-red-400 hover:text-red-300 hover:bg-red-500/10 px-2 py-1 rounded transition-colors" onclick="deleteMap()">
-						<i class="fa-solid fa-trash mr-1"></i> Delete Map
-					</button>
-					<div class="flex gap-2">
-						<button type="button" class="btn-secondary text-xs" onclick="document.getElementById('map-settings-modal').classList.add('hidden')">
-							Cancel
-						</button>
-						<button type="button" class="btn-primary text-xs" onclick="saveMapSettings()">
-							<i class="fa-solid fa-check mr-1"></i> Save
-						</button>
-					</div>
-				</div>
-			</div>
-		</div>
-	</div>
-}
-
 // derefStr safely dereferences a *string, returning "" for nil.
 // mapDrawColors are the seven swatches offered for drawings: a small, legible
 // set that reads on both light and dark map art, replacing a free colour input.
@@ -1963,6 +2162,25 @@ func mapImageSignedURL(ctx context.Context, imageID *string) string {
 		return ""
 	}
 	return layouts.MediaURL(ctx, *imageID)
+}
+
+// boolDigit renders a bool as "1"/"0" for a data attribute CSS selects on.
+func boolDigit(b bool) string {
+	if b {
+		return "1"
+	}
+	return "0"
+}
+
+// mustMarshalDisplay serialises the resolved display settings for the page
+// script. Falls back to "{}" on a marshal error (cannot happen for this type),
+// which the script treats as all defaults.
+func mustMarshalDisplay(d ResolvedDisplay) string {
+	b, err := json.Marshal(d)
+	if err != nil {
+		return "{}"
+	}
+	return string(b)
 }
 
 // mustMarshalMarkers serializes markers to JSON for the JS initialization.

@@ -38,7 +38,9 @@
     var mapID = ctx.mapID;
     var w = ctx.imageW;
     var h = ctx.imageH;
-    var isScribe = ctx.isScribe;
+    // canDraw is the page's per-map draw gate; isScribe is the fallback for
+    // embeds that predate it.
+    var isScribe = ctx.canDraw !== undefined ? ctx.canDraw : ctx.isScribe;
 
     if (!map) return;
 

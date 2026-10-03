@@ -706,6 +706,7 @@ PUT	/maps/:mid/drawings/:did	internal/plugins/maps/routes.go
 PUT	/maps/:mid/layers/:lid	internal/plugins/maps/routes.go
 PUT	/maps/:mid/markers/:mkid	internal/plugins/maps/routes.go
 PUT	/maps/:mid/tokens/:tid	internal/plugins/maps/routes.go
+PUT	/maps/frame-style	internal/plugins/maps/routes.go
 PUT	/members/:uid/character	internal/plugins/campaigns/routes.go
 PUT	/members/:uid/role	internal/plugins/campaigns/routes.go
 PUT	/nav-pins	internal/plugins/campaigns/routes.go

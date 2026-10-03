@@ -85,10 +85,13 @@ type Map struct {
 	// canvas color (bg-surface-alt, which adapts to dark/light via CSS
 	// vars) with a fixed CSS color (e.g. "#000000"). Nil means "follow
 	// theme" — the renderer falls back to the Tailwind class.
-	BackgroundColor *string   `json:"background_color,omitempty"`
-	SortOrder       int       `json:"sort_order"`
-	CreatedAt       time.Time `json:"created_at"`
-	UpdatedAt       time.Time `json:"updated_at"`
+	BackgroundColor *string `json:"background_color,omitempty"`
+	// Display is the per-map display settings (frame override, pins, grid,
+	// opening view, draw gate); nil means every default. See display_settings.go.
+	Display   *DisplaySettings `json:"display_settings,omitempty"`
+	SortOrder int              `json:"sort_order"`
+	CreatedAt time.Time        `json:"created_at"`
+	UpdatedAt time.Time        `json:"updated_at"`
 
 	// Eager-loaded (populated by service, not every query).
 	Markers []Marker `json:"markers,omitempty"`
@@ -157,6 +160,10 @@ type CreateMapInput struct {
 // = clear the override, any other value = set it — that sentinel, not a
 // JSON null, is the contract the caller and service use.
 //
+// DisplaySettings is group-level partial too (MergeDisplaySettings): the whole
+// key absent preserves, null clears every group, and an object replaces only
+// the groups it names (a group set to null clears just that group).
+//
 // Name is a plain string; UpdateMap 400s on a blank merged name so an
 // absent name fails loudly rather than overwriting silently.
 //
@@ -170,6 +177,7 @@ type UpdateMapInput struct {
 	ImageWidth        patch.Field[int]
 	ImageHeight       patch.Field[int]
 	BackgroundColor   *string
+	DisplaySettings   patch.Field[json.RawMessage]
 	ExpectedUpdatedAt *time.Time
 }
 
@@ -223,6 +231,25 @@ type MapViewData struct {
 	Map        *Map
 	Markers    []Marker
 	IsScribe   bool
+	// IsOwner gates the Map settings sheet: the PUT behind it is Owner-only,
+	// so offering it to a scribe could only end in a refusal.
+	IsOwner bool
+	// UserID is the viewer's own id (empty when anonymous). The page uses it
+	// only to key the per-person "where I left off" view in the browser.
+	UserID string
+	// Display is the resolved look of this map. The zero value is replaced by
+	// defaults at render (see DisplayOrDefault), so a caller that builds
+	// MapViewData by hand never has to fill it.
+	Display ResolvedDisplay
+}
+
+// DisplayOrDefault returns Display, or the all-defaults resolution when the
+// caller did not set one.
+func (d MapViewData) DisplayOrDefault() ResolvedDisplay {
+	if d.Display.Frame == "" {
+		return ResolveDisplay(d.Map, "")
+	}
+	return d.Display
 }
 
 // MapListData holds all data needed to render the map list page.
@@ -232,4 +259,19 @@ type MapListData struct {
 	IsOwner    bool
 	IsScribe   bool
 	CSRFToken  string
+	// CampaignFrame is the campaign-wide frame the list cards wear in small form.
+	CampaignFrame string
+}
+
+// CanDraw reports whether this viewer gets the drawing tools: a scribe or
+// above, and an owner when the map restricts drawing to owners. This only
+// decides what is offered; DrawingService enforces the rule on the server.
+func (d MapViewData) CanDraw() bool {
+	if !d.IsScribe {
+		return false
+	}
+	if d.DisplayOrDefault().DrawWho == DrawWhoOwners {
+		return d.IsOwner
+	}
+	return true
 }

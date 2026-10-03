@@ -112,6 +112,7 @@ func (h *DrawingHandler) CreateDrawing(c echo.Context) error {
 		Visibility:  req.Visibility,
 		CreatedBy:   getUserID(c),
 		FoundryID:   req.FoundryID,
+		CallerRole:  int(cc.MemberRole),
 	})
 	if err != nil {
 		return err
@@ -167,7 +168,7 @@ func (h *DrawingHandler) UpdateDrawing(c echo.Context) error {
 		return apperror.NewBadRequest("invalid request body")
 	}
 
-	if err := h.drawingSvc.UpdateDrawing(c.Request().Context(), c.Param("did"), c.Param("mid"), UpdateDrawingInput{
+	if err := h.drawingSvc.UpdateDrawing(c.Request().Context(), c.Param("did"), c.Param("mid"), int(cc.MemberRole), UpdateDrawingInput{
 		Points:            req.Points,
 		StrokeColor:       req.StrokeColor,
 		StrokeWidth:       req.StrokeWidth,

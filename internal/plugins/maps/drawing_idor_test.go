@@ -8,6 +8,8 @@ import (
 	"context"
 	"net/http"
 	"testing"
+
+	"github.com/keyxmakerx/chronicle/internal/permissions"
 )
 
 // idorRepo is a minimal DrawingRepository that hands back objects pinned to
@@ -65,7 +67,7 @@ func TestDrawingWrites_CrossMapRejected(t *testing.T) {
 		call func(svc DrawingService) error
 	}{
 		{"UpdateDrawing", func(s DrawingService) error {
-			return s.UpdateDrawing(context.Background(), "d-1", wrongMap, UpdateDrawingInput{})
+			return s.UpdateDrawing(context.Background(), "d-1", wrongMap, permissions.RoleOwner, UpdateDrawingInput{})
 		}},
 		{"DeleteDrawing", func(s DrawingService) error {
 			return s.DeleteDrawing(context.Background(), "d-1", wrongMap, nil)
@@ -114,7 +116,7 @@ func TestDrawingWrites_SameMapAllowed(t *testing.T) {
 		call func(svc DrawingService) error
 	}{
 		{"UpdateDrawing", func(s DrawingService) error {
-			return s.UpdateDrawing(context.Background(), "d-1", rightMap, UpdateDrawingInput{})
+			return s.UpdateDrawing(context.Background(), "d-1", rightMap, permissions.RoleOwner, UpdateDrawingInput{})
 		}},
 		{"DeleteDrawing", func(s DrawingService) error {
 			return s.DeleteDrawing(context.Background(), "d-1", rightMap, nil)

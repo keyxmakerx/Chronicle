@@ -2984,6 +2984,9 @@ func (a *App) RegisterRoutes() {
 	entityService.SetMediaVerifier(&entityMediaVerifierAdapter{svc: mediaService})
 	if a.PluginHealth.IsHealthy("maps") {
 		maps.RegisterRoutes(e, mapsHandler, campaignService, authService, addonService)
+		// The campaign-wide map frame is a "Maps" tab on the Customize page;
+		// the campaigns plugin only hosts the tab, maps owns what is in it.
+		campaignHandler.RegisterCustomizeTab(mapsHandler.CustomizeTabFactory())
 		drawingHandler := maps.NewDrawingHandler(mapsService, drawingService)
 		maps.RegisterDrawingRoutes(e, drawingHandler, campaignService, authService, addonService)
 	} else {
@@ -4177,6 +4180,16 @@ func (a *App) RegisterRoutes() {
 			return "", err
 		}
 		return m.CampaignID, nil
+	})
+	// The per-map "who can draw" gate is read from the map's display settings.
+	// Wired here (not in NewDrawingService) so the drawing service never needs
+	// the map repository itself.
+	drawingService.SetDrawPolicyLookup(func(ctx context.Context, mapID string) (string, error) {
+		m, err := mapsService.GetMap(ctx, mapID)
+		if err != nil {
+			return "", err
+		}
+		return m.DrawWho(), nil
 	})
 	mapsService.SetEventPublisher(&mapEventPublisherAdapter{bus: wsEventBus})
 

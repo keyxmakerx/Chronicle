@@ -1,6 +1,7 @@
 package maps
 
 import (
+	"encoding/json"
 	"fmt"
 	"net/http"
 	"time"
@@ -38,12 +39,20 @@ func (h *Handler) Index(c echo.Context) error {
 		return err
 	}
 
+	// A failed frame lookup must not take the list down: the cards fall back
+	// to the default frame.
+	frame, err := h.svc.GetCampaignFrame(ctx, cc.Campaign.ID)
+	if err != nil {
+		frame = DefaultFrame
+	}
+
 	data := MapListData{
-		CampaignID: cc.Campaign.ID,
-		Maps:       mapList,
-		IsOwner:    cc.MemberRole >= campaigns.RoleOwner,
-		IsScribe:   cc.MemberRole >= campaigns.RoleScribe,
-		CSRFToken:  middleware.GetCSRFToken(c),
+		CampaignID:    cc.Campaign.ID,
+		Maps:          mapList,
+		IsOwner:       cc.MemberRole >= campaigns.RoleOwner,
+		IsScribe:      cc.MemberRole >= campaigns.RoleScribe,
+		CSRFToken:     middleware.GetCSRFToken(c),
+		CampaignFrame: frame,
 	}
 
 	if middleware.IsHTMX(c) {
@@ -97,11 +106,18 @@ func (h *Handler) Show(c echo.Context) error {
 		return err
 	}
 
+	// ResolveDisplay returns usable defaults alongside any error, so a failed
+	// campaign-frame lookup degrades to the default frame instead of a 500.
+	display, _ := h.svc.ResolveDisplay(c.Request().Context(), m)
+
 	data := MapViewData{
 		CampaignID: cc.Campaign.ID,
 		Map:        m,
 		Markers:    markers,
 		IsScribe:   cc.MemberRole >= campaigns.RoleScribe,
+		IsOwner:    cc.MemberRole >= campaigns.RoleOwner,
+		UserID:     userID,
+		Display:    display,
 	}
 
 	if middleware.IsHTMX(c) {
@@ -203,8 +219,12 @@ func (h *Handler) UpdateMapAPI(c echo.Context) error {
 		// background_color is tri-state: omitted (nil) leaves the
 		// stored value unchanged; "" clears the override (revert to
 		// theme); any CSS color sets the override.
-		BackgroundColor   *string    `json:"background_color"`
-		ExpectedUpdatedAt *time.Time `json:"expected_updated_at"`
+		BackgroundColor *string `json:"background_color"`
+		// display_settings follows the same contract, by group: absent keeps
+		// the stored settings, null clears them all, and an object replaces
+		// only the groups it names (see MergeDisplaySettings).
+		DisplaySettings   patch.Field[json.RawMessage] `json:"display_settings"`
+		ExpectedUpdatedAt *time.Time                   `json:"expected_updated_at"`
 	}
 	if err := c.Bind(&req); err != nil {
 		return apperror.NewBadRequest("invalid request")
@@ -217,6 +237,7 @@ func (h *Handler) UpdateMapAPI(c echo.Context) error {
 		ImageWidth:        req.ImageWidth,
 		ImageHeight:       req.ImageHeight,
 		BackgroundColor:   req.BackgroundColor,
+		DisplaySettings:   req.DisplaySettings,
 		ExpectedUpdatedAt: req.ExpectedUpdatedAt,
 	})
 }
@@ -496,4 +517,29 @@ func (h *Handler) MarkerIconsAPI(c echo.Context) error {
 		"icons":   MarkerIconCatalog(),
 		"groups":  MarkerIconGroups(),
 	})
+}
+
+// SetCampaignFrameAPI stores the campaign-wide map frame, chosen on the
+// Customize page's Maps tab (Owner only, enforced by the route). It answers an
+// HTMX request with the refreshed section so "Saved" shows in place, and a
+// plain request with 204 so the endpoint is also usable without the page.
+// PUT /campaigns/:id/maps/frame-style
+func (h *Handler) SetCampaignFrameAPI(c echo.Context) error {
+	cc := campaigns.GetCampaignContext(c)
+	ctx := c.Request().Context()
+
+	// The page posts a form; an API caller may send JSON. Bind handles both.
+	var req struct {
+		Frame string `json:"frame" form:"frame"`
+	}
+	if err := c.Bind(&req); err != nil {
+		return apperror.NewBadRequest("invalid request")
+	}
+	if err := h.svc.SetCampaignFrame(ctx, cc.Campaign.ID, req.Frame); err != nil {
+		return err
+	}
+	if middleware.IsHTMX(c) {
+		return middleware.Render(c, http.StatusOK, mapFrameSection(cc.Campaign.ID, req.Frame, true))
+	}
+	return c.NoContent(http.StatusNoContent)
 }

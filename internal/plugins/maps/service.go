@@ -63,6 +63,14 @@ type MapService interface {
 	ListMaps(ctx context.Context, campaignID string) ([]Map, error)
 	SearchMaps(ctx context.Context, campaignID, query string) ([]map[string]string, error)
 
+	// Map look. GetCampaignFrame returns the campaign-wide frame (the default
+	// when the campaign has never chosen); SetCampaignFrame validates and
+	// stores it; ResolveDisplay is a map's settings with every default filled,
+	// including the campaign frame it follows.
+	GetCampaignFrame(ctx context.Context, campaignID string) (string, error)
+	SetCampaignFrame(ctx context.Context, campaignID, frame string) error
+	ResolveDisplay(ctx context.Context, m *Map) (ResolvedDisplay, error)
+
 	// Marker CRUD. UpdateMarker and DeleteMarker take canAuthorDmOnly (Owner
 	// or a co-DM grant, campaigns.CampaignContext.CanAuthorDmOnly) so a
 	// caller who cannot author dm_only content gets the same NotFound a
@@ -209,8 +217,25 @@ func (s *mapService) UpdateMap(ctx context.Context, id string, input UpdateMapIn
 		if *input.BackgroundColor == "" {
 			m.BackgroundColor = nil
 		} else {
+			if !colorPattern.MatchString(*input.BackgroundColor) {
+				return apperror.NewValidation("background_color must be a valid hex colour (e.g., #1f2937)")
+			}
 			s := *input.BackgroundColor
 			m.BackgroundColor = &s
+		}
+	}
+	// Display settings: absent preserves, null clears every group, an object
+	// replaces the groups it names (MergeDisplaySettings).
+	if input.DisplaySettings.Present() {
+		if input.DisplaySettings.IsNull() {
+			m.Display = nil
+		} else {
+			raw, _ := input.DisplaySettings.Get()
+			next, err := MergeDisplaySettings(m.Display, raw)
+			if err != nil {
+				return err
+			}
+			m.Display = next
 		}
 	}
 
@@ -218,6 +243,46 @@ func (s *mapService) UpdateMap(ctx context.Context, id string, input UpdateMapIn
 		return fmt.Errorf("update map: %w", err)
 	}
 	return nil
+}
+
+// GetCampaignFrame returns the campaign-wide frame style, or the default when
+// the campaign has not chosen or its stored value is no longer a known frame.
+func (s *mapService) GetCampaignFrame(ctx context.Context, campaignID string) (string, error) {
+	frame, err := s.repo.GetCampaignFrame(ctx, campaignID)
+	if err != nil {
+		return "", fmt.Errorf("get campaign frame: %w", err)
+	}
+	if !IsValidFrame(frame) {
+		return DefaultFrame, nil
+	}
+	return frame, nil
+}
+
+// SetCampaignFrame stores the campaign-wide frame style.
+func (s *mapService) SetCampaignFrame(ctx context.Context, campaignID, frame string) error {
+	if campaignID == "" {
+		return apperror.NewValidation("campaign ID is required")
+	}
+	if !IsValidFrame(frame) {
+		return apperror.NewValidation("frame must be one of: atlas, arcane, old, modern, futuristic, gilded")
+	}
+	if err := s.repo.SetCampaignFrame(ctx, campaignID, frame); err != nil {
+		return fmt.Errorf("set campaign frame: %w", err)
+	}
+	return nil
+}
+
+// ResolveDisplay returns the map's settings with defaults filled in.
+func (s *mapService) ResolveDisplay(ctx context.Context, m *Map) (ResolvedDisplay, error) {
+	campaignID := ""
+	if m != nil {
+		campaignID = m.CampaignID
+	}
+	frame, err := s.GetCampaignFrame(ctx, campaignID)
+	if err != nil {
+		return ResolveDisplay(m, DefaultFrame), err
+	}
+	return ResolveDisplay(m, frame), nil
 }
 
 // DeleteMap removes a map and its markers.
