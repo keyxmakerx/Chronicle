@@ -4,6 +4,7 @@ import (
 	"errors"
 	"log/slog"
 	"net/http"
+	"net/url"
 
 	"github.com/labstack/echo/v4"
 
@@ -16,10 +17,28 @@ import (
 type Handler struct {
 	activity ActivityRecorder
 	svc      Service
+	signer   *downloadSigner
+	userID   func(echo.Context) string
 }
 
-// NewHandler constructs a Handler against the given Service.
-func NewHandler(svc Service) *Handler { return &Handler{svc: svc} }
+// NewHandler constructs a Handler against the given Service. Downloads fail
+// closed until SetDownloadAuth supplies the identity lookup.
+func NewHandler(svc Service) *Handler {
+	return &Handler{svc: svc, signer: newRandomDownloadSigner(), userID: func(echo.Context) string { return "" }}
+}
+
+// SetDownloadAuth wires the signing secret and the current-user lookup used
+// to bind download tokens to the admin who re-confirmed. The lookup is
+// injected so this plugin does not import the auth plugin. An empty secret
+// keeps the per-process random key.
+func (h *Handler) SetDownloadAuth(secret string, userID func(echo.Context) string) {
+	if secret != "" {
+		h.signer.key = []byte(secret)
+	}
+	if userID != nil {
+		h.userID = userID
+	}
+}
 
 // Page renders the backup dashboard (GET /admin/backup).
 func (h *Handler) Page(c echo.Context) error {
@@ -29,12 +48,12 @@ func (h *Handler) Page(c echo.Context) error {
 		// operator can at least try to start a backup. Surface the error
 		// inline so they know why the table is empty.
 		return middleware.Render(c, http.StatusOK, BackupPage(BackupPageData{
-			BackupDir:    h.svc.BackupDir(),
-			Artifacts:    nil,
-			ListError:    err.Error(),
-			LastRun:      h.svc.LastRun(),
-			RunningNow:   h.svc.IsRunning(),
-			CSRFToken:    middleware.GetCSRFToken(c),
+			BackupDir:  h.svc.BackupDir(),
+			Artifacts:  nil,
+			ListError:  err.Error(),
+			LastRun:    h.svc.LastRun(),
+			RunningNow: h.svc.IsRunning(),
+			CSRFToken:  middleware.GetCSRFToken(c),
 		}))
 	}
 	return middleware.Render(c, http.StatusOK, BackupPage(BackupPageData{
@@ -70,8 +89,27 @@ func (h *Handler) Run(c echo.Context) error {
 	return middleware.HTMXRedirect(c, "/admin/backup")
 }
 
+// DownloadLink mints a short-lived download URL (POST
+// /admin/backup/files/:name/link). The route sits behind the reauth
+// middleware, so a token only exists after a recent password confirmation.
+// The name is validated exactly as Download does.
+func (h *Handler) DownloadLink(c echo.Context) error {
+	name := c.Param("name")
+	if _, err := ResolveArtifactPath(h.svc.BackupDir(), name); err != nil {
+		return echo.NewHTTPError(http.StatusBadRequest, err.Error())
+	}
+	uid := h.userID(c)
+	if uid == "" {
+		return echo.NewHTTPError(http.StatusForbidden, "Sign in again to download this file.")
+	}
+	target := "/admin/backup/files/" + url.PathEscape(name) + "?t=" + url.QueryEscape(h.signer.Issue(uid, name))
+	return middleware.HTMXRedirect(c, target)
+}
+
 // Download serves a single artifact file (GET /admin/backup/files/:name).
-// The :name parameter is validated against BACKUP_DIR; any attempt at
+// It requires a valid token from DownloadLink for this user and file name,
+// so the file cannot be fetched without a recent re-confirmation. The :name
+// parameter is validated against BACKUP_DIR; any attempt at
 // path traversal is rejected with 400.
 //
 // Uses echo.Context.Attachment which RFC 5987-encodes the filename in
@@ -85,6 +123,9 @@ func (h *Handler) Download(c echo.Context) error {
 	full, err := ResolveArtifactPath(h.svc.BackupDir(), name)
 	if err != nil {
 		return echo.NewHTTPError(http.StatusBadRequest, err.Error())
+	}
+	if !h.signer.Verify(c.QueryParam("t"), h.userID(c), name) {
+		return echo.NewHTTPError(http.StatusForbidden, "This download link is missing or has expired. Use the Download button on the Backups page.")
 	}
 	return c.Attachment(full, name)
 }
