@@ -442,7 +442,7 @@
 
   // ---------------------------------------------------------------
   // Generic "grow from anchor" panel open/close, shared by every fold-out
-  // (day wing, era flap, event detail, moon view, hub popover). The panel
+  // (day wing, era manager, event detail, moon view, hub popover). The panel
   // is laid out at full size first (server/JS builds its final DOM before
   // any animation starts, scrollbars included per the motion rules), and
   // only transform + opacity animate — never width/height, so text never
