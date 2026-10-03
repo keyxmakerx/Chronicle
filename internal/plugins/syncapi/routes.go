@@ -126,7 +126,11 @@ func RegisterAPIRoutes(e *echo.Echo, api *APIHandler, calAPI *CalendarAPIHandler
 	)
 
 	// Campaign-scoped routes with campaign match enforcement.
-	cg := v1.Group("/campaigns/:id", RequireCampaignMatch(campaignSvc))
+	campaignMW := []echo.MiddlewareFunc{RequireCampaignMatch(campaignSvc)}
+	if api.history != nil {
+		campaignMW = append(campaignMW, RecordSyncHistory(api.history.repo, api))
+	}
+	cg := v1.Group("/campaigns/:id", campaignMW...)
 
 	// Read endpoints (require "read" permission).
 	cg.GET("", api.GetCampaign, RequirePermission(PermRead))
@@ -303,6 +307,12 @@ func RegisterAPIRoutes(e *echo.Echo, api *APIHandler, calAPI *CalendarAPIHandler
 	cg.GET("/sync/pull", syncH.PullMappings, RequirePermission(PermSync))
 	// Change feed: ids only, DM-equivalent callers only (checked in the handler).
 	cg.GET("/sync/changes", changesH.ListChanges, RequirePermission(PermSync))
+	// Sync history: what synced, which way, who and what failed. Owner or
+	// DM access only (checked in the handler), like the change feed.
+	if api.history != nil {
+		cg.GET("/sync/history", api.history.ListHistory, RequirePermission(PermSync))
+		cg.POST("/sync/history", api.history.ReportHistory, RequirePermission(PermSync))
+	}
 
 	// Stashes: move items and money as a named campaign member. The group is
 	// gated by the stash feature's addon (slug supplied by the wiring), and the

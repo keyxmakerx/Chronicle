@@ -3460,8 +3460,16 @@ func (a *App) RegisterRoutes() {
 	// Tag API handler for sync API — exposes tag CRUD and bulk tag operations.
 	tagAPIHandler := syncapi.NewTagAPIHandler(syncService, tagService, entityService, campaignService)
 
+	// Sync history: one record of both directions, read by the Manage page
+	// and the Foundry module's History tab.
+	syncHistoryRepo := syncapi.NewSyncHistoryRepository(a.DB)
+	syncHistoryHandler := syncapi.NewSyncHistoryHandler(syncHistoryRepo, campaignService, syncService,
+		syncHistoryEditorAdapter{audit: audit.NewAuditService(audit.NewAuditRepository(a.DB))})
+
 	if a.PluginHealth.IsHealthy("syncapi") {
-		syncapi.RegisterAPIRoutes(e, syncAPIHandler, calendarAPIHandler, mediaAPIHandler, mapAPIHandler, noteAPIHandler, tagAPIHandler, syncMappingHandler, syncChangesHandler, stashAPIHandler, syncService, addonService, authService, campaignService)
+		syncapi.RegisterAPIRoutes(e, syncAPIHandler, calendarAPIHandler, mediaAPIHandler, mapAPIHandler, noteAPIHandler, tagAPIHandler, syncMappingHandler, syncChangesHandler, stashAPIHandler, syncService, addonService, authService, campaignService, syncapi.WithSyncHistory(syncHistoryHandler))
+		syncapi.RegisterSyncHistoryPageRoutes(e, syncHistoryHandler, campaignService, authService)
+		go syncapi.StartHistoryPruner(a.ShutdownCtx, syncHistoryRepo)
 	}
 
 	// NPC plugin: gallery/hub view for revealed character entities.

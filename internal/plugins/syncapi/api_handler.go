@@ -54,6 +54,7 @@ type APIHandler struct {
 	shopRoomAddon        string
 	shopBuyer            ShopBuyAPIService
 	dmScreen             DMScreenProvider
+	history              *SyncHistoryHandler
 }
 
 // TagGrantLister resolves an entity's tag-derived visibility grants so the
@@ -559,6 +560,7 @@ func (h *APIHandler) CreateEntity(c echo.Context) error {
 		return err
 	}
 
+	noteSyncResource(c, entity.ID, entity.Name)
 	return c.JSON(http.StatusCreated, entity)
 }
 
@@ -617,6 +619,7 @@ func (h *APIHandler) UpdateEntity(c echo.Context) error {
 		return err
 	}
 
+	noteSyncResource(c, updated.ID, updated.Name)
 	return c.JSON(http.StatusOK, updated)
 }
 
@@ -739,6 +742,7 @@ func (h *APIHandler) DeleteEntity(c echo.Context) error {
 		slog.Error("api: failed to delete entity", slog.Any("error", err))
 		return apperror.NewInternal(fmt.Errorf("failed to delete entity"))
 	}
+	noteSyncResource(c, entity.ID, entity.Name)
 
 	return c.NoContent(http.StatusNoContent)
 }

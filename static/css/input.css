@@ -4475,3 +4475,29 @@ html[data-view-motion="calm"] *:not(.czp *), html[data-view-motion="calm"] *:not
 @media (prefers-reduced-motion: reduce) {
   .sl-panel, .sl-win [data-sl-focus] { transition: none; }
 }
+
+/* Sync history (Manage › Sync history): one trace line per sync. */
+.sh-line { display: grid; grid-template-columns: 6.5rem 6.25rem minmax(0, 1fr) auto; gap: 0 0.75rem; align-items: baseline; }
+.sh-line::-webkit-details-marker { display: none; }
+.sh-fail > .sh-line { background: rgb(220 38 38 / 0.06); }
+.sh-row:not([open]) > .sh-det, .sh-row:not([open]) > .sh-steps { display: none; }
+.sh-row[open] > .sh-line .sh-caret { display: inline-block; transform: rotate(90deg); }
+.sh-steps .sh-row { border-top: 1px solid var(--color-border); }
+.sh-kid > .sh-line { padding-left: 2rem; }
+.sh-kid > .sh-line .sh-e { position: relative; padding-left: 1.1rem; }
+.sh-kid > .sh-line .sh-e::before { content: ""; position: absolute; left: 0.15rem; top: -0.9rem; bottom: 0.55rem; border-left: 1px solid var(--color-border); }
+.sh-kid > .sh-line .sh-e::after { content: ""; position: absolute; left: 0.15rem; top: 0.6rem; width: 0.6rem; border-top: 1px solid var(--color-border); }
+.sh-day { padding: 0.3rem 1rem; font-size: 0.75rem; font-weight: 600; color: var(--color-text-muted); background: var(--color-bg-tertiary); border-top: 1px solid var(--color-border); }
+.sh-day:first-child { border-top: 0; }
+.sh-new > .sh-line { animation: sh-arrive 1.6s ease-out; }
+@keyframes sh-arrive { from { background: rgb(99 102 241 / 0.14); } to { background: transparent; } }
+.sh-dot { position: relative; width: 0.5rem; height: 0.5rem; border-radius: 999px; background: var(--color-text-faint); }
+.sh-live[data-connected] .sh-dot { background: #16a34a; }
+.sh-live[data-connected] .sh-dot::after { content: ""; position: absolute; inset: -4px; border-radius: 999px; border: 2px solid #16a34a; opacity: 0; animation: sh-ping 2s ease-out infinite; }
+.sh-live.is-resting .sh-dot::after { animation-play-state: paused; opacity: 0; }
+@keyframes sh-ping { 0% { transform: scale(0.5); opacity: 0.7; } 100% { transform: scale(1.6); opacity: 0; } }
+@media (prefers-reduced-motion: reduce) { .sh-dot::after, .sh-new > .sh-line { animation: none !important; } }
+@media (max-width: 640px) {
+  .sh-line { grid-template-columns: 5rem minmax(0, 1fr); }
+  .sh-e, .sh-c { grid-column: 1 / -1; }
+}
