@@ -22,6 +22,13 @@ func RegisterRoutes(e *echo.Echo, h *Handler, campaignSvc campaigns.CampaignServ
 	cg.GET("/journal", h.ShowJournal, player)
 	cg.GET("/journal/:noteId", h.ShowJournal, player)
 
+	registerNoteJSONRoutes(cg, h, player)
+}
+
+// registerNoteJSONRoutes mounts the notes JSON routes on g. The same set
+// serves the site (session) and an app the player allowed (notes grant), so
+// the two can never drift apart.
+func registerNoteJSONRoutes(cg *echo.Group, h *Handler, player echo.MiddlewareFunc) {
 	// Members API for share-with-players picker.
 	cg.GET("/notes/members", h.MembersAPI, player)
 
@@ -59,4 +66,30 @@ func RegisterRoutes(e *echo.Echo, h *Handler, campaignSvc campaigns.CampaignServ
 	cg.POST("/notes/:nid/attachments", h.UploadAttachment, player)
 	cg.DELETE("/notes/:nid/attachments/:aid", h.DeleteAttachment, player)
 	cg.PUT("/notes/:nid/attachments/:aid/transcript", h.UpdateTranscript, player)
+}
+
+// RegisterAppGrantRoutes mounts the Allow window, the player's list of
+// grants, and the notes JSON routes for an allowed app.
+//
+// The app routes live under /api/ because they are authenticated by a
+// Bearer grant, never a cookie, so the site's cookie CSRF check does not
+// apply to them (it skips /api/). Each request still runs as the player at
+// their live campaign role through RequireCampaignAccess.
+func RegisterAppGrantRoutes(e *echo.Echo, h *Handler, gh *AppGrantHandler, grants AppGrantService, campaignSvc campaigns.CampaignService, authSvc auth.AuthService) {
+	player := campaigns.RequireRole(campaigns.RolePlayer)
+
+	cg := e.Group("/campaigns/:id",
+		auth.RequireAuth(authSvc),
+		campaigns.RequireCampaignAccess(campaignSvc),
+	)
+	cg.GET("/notes/allow-app", gh.ShowAllow, player)
+	cg.POST("/notes/allow-app", gh.Allow, player)
+	cg.GET("/notes/app-grants", gh.List, player)
+	cg.DELETE("/notes/app-grants/:gid", gh.Revoke, player)
+
+	ag := e.Group("/api/notes-app/campaigns/:id",
+		RequireAppGrant(grants),
+		campaigns.RequireCampaignAccess(campaignSvc),
+	)
+	registerNoteJSONRoutes(ag, h, player)
 }

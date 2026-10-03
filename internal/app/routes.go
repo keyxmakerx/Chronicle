@@ -3270,6 +3270,11 @@ func (a *App) RegisterRoutes() {
 	noteHandler.SetPageNamer(notePages)
 	noteHandler.SetPageLinker(notePages)
 	notes.RegisterRoutes(e, noteHandler, campaignService, authService)
+	// A player can allow the Foundry notebook to use their notes. Grants go
+	// only to an address that may already call Chronicle across sites.
+	noteGrants := notes.NewAppGrantService(notes.NewAppGrantRepository(a.DB))
+	noteGrantHandler := notes.NewAppGrantHandler(noteGrants, &notesOriginAllower{baseURL: a.Config.BaseURL, settings: settingsService})
+	notes.RegisterAppGrantRoutes(e, noteHandler, noteGrantHandler, noteGrants, campaignService, authService)
 
 	// Relations widget routes already registered above (before REST API v1).
 
@@ -4406,4 +4411,34 @@ func (a *aiWorkspaceAuditAdapter) LogCampaignEvent(ctx context.Context, campaign
 		Action:     action,
 		Details:    details,
 	})
+}
+
+// notesOriginAllower is the notes Allow window's origin check: the site's own
+// address or an admin-allowed cross-site origin, exactly the list the CORS
+// middleware in app.go uses.
+type notesOriginAllower struct {
+	baseURL  string
+	settings settings.SettingsService
+}
+
+func (a *notesOriginAllower) OriginAllowed(ctx context.Context, origin string) bool {
+	if origin == "" {
+		return false
+	}
+	if strings.EqualFold(strings.TrimRight(a.baseURL, "/"), origin) {
+		return true
+	}
+	if a.settings == nil {
+		return false
+	}
+	list, err := a.settings.GetCORSOrigins(ctx)
+	if err != nil {
+		return false
+	}
+	for _, o := range list {
+		if strings.EqualFold(o, origin) {
+			return true
+		}
+	}
+	return false
 }

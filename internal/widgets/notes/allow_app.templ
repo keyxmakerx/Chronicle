@@ -1,0 +1,161 @@
+// allow_app.templ renders the small window the Foundry notebook opens the
+// first time a player uses it: one question, Allow or Not now, and the
+// player's existing connections with a Disconnect for each.
+
+package notes
+
+import (
+	"github.com/keyxmakerx/chronicle/internal/plugins/campaigns"
+	"github.com/keyxmakerx/chronicle/internal/templates/layouts"
+)
+
+// AllowAppView is what the Allow window needs from the server.
+type AllowAppView struct {
+	Origin        string // the opening window's address, normalised
+	OriginAllowed bool   // on the allowed list; otherwise Allow is not offered
+	UserID        string
+	DisplayName   string
+}
+
+// AllowAppPage renders the Allow window.
+templ AllowAppPage(cc *campaigns.CampaignContext, view AllowAppView) {
+	@layouts.Base("Allow Foundry") {
+		<main
+			class="min-h-screen flex items-center justify-center bg-surface px-4 py-8"
+			id="allow-app"
+			data-campaign-id={ cc.Campaign.ID }
+			data-origin={ view.Origin }
+		>
+			<div class="w-full max-w-md card p-6 space-y-4">
+				<p class="text-xs uppercase tracking-wider text-fg-secondary">{ cc.Campaign.Name }</p>
+				if !view.OriginAllowed {
+					<h1 class="text-xl font-bold text-fg">This address can't use your notes</h1>
+					if view.Origin == "" {
+						<p class="text-fg-secondary">Open this window from the notebook button in Foundry.</p>
+					} else {
+						<p class="text-fg-secondary">
+							<span class="font-mono text-fg">{ view.Origin }</span> isn't on this Chronicle site's list of allowed addresses. Ask the site admin to add it under Admin, then try again.
+						</p>
+					}
+				} else {
+					<h1 class="text-xl font-bold text-fg">Let Foundry use your notes?</h1>
+					<p class="text-fg-secondary">
+						Foundry at <span class="font-mono text-fg">{ view.Origin }</span> will see and edit your notes and jots in this campaign, as <span class="text-fg">{ view.DisplayName }</span>. Nothing else of yours.
+					</p>
+					<div class="flex gap-3 items-center" data-allow-actions>
+						<button type="button" class="btn-primary" data-allow>Allow</button>
+						<button type="button" class="btn-secondary" data-not-now>Not now</button>
+					</div>
+					<p class="text-sm" role="status" aria-live="polite" data-allow-status></p>
+				}
+				<section class="pt-2 border-t border-edge space-y-2" data-connections hidden>
+					<h2 class="text-sm font-semibold text-fg">Already connected</h2>
+					<ul class="space-y-1 text-sm" data-connection-list></ul>
+					<p class="text-xs text-fg-secondary">Disconnect stops that Foundry from using your notes at once.</p>
+				</section>
+			</div>
+		</main>
+		<script>
+		(function () {
+			var root = document.getElementById('allow-app');
+			if (!root) return;
+			var campaignID = root.dataset.campaignId;
+			var origin = root.dataset.origin;
+			var base = '/campaigns/' + encodeURIComponent(campaignID) + '/notes';
+			var status = root.querySelector('[data-allow-status]');
+			var allowBtn = root.querySelector('[data-allow]');
+			var notNow = root.querySelector('[data-not-now]');
+
+			function say(text, bad) {
+				if (!status) return;
+				status.textContent = text;
+				status.className = 'text-sm ' + (bad ? 'text-red-600 dark:text-red-400' : 'text-fg-secondary');
+			}
+
+			function ready(fn) {
+				if (window.Chronicle && Chronicle.apiFetch) return fn();
+				document.addEventListener('DOMContentLoaded', fn);
+			}
+
+			// The token goes only to the window that opened this one, and only
+			// if that window is at the address shown above: postMessage drops
+			// it otherwise. Without an opener there is nobody to give it to,
+			// so no grant is made.
+			if (allowBtn) allowBtn.addEventListener('click', function () {
+				if (!window.opener) {
+					say('Open this window from the notebook button in Foundry.', true);
+					return;
+				}
+				allowBtn.disabled = true;
+				say('Connecting…');
+				Chronicle.apiFetch(base + '/allow-app', { method: 'POST', body: { origin: origin } })
+					.then(function (res) {
+						return res.json().then(function (body) { return { ok: res.ok, body: body }; });
+					})
+					.then(function (r) {
+						if (!r.ok) {
+							allowBtn.disabled = false;
+							say((r.body && r.body.message) || 'That didn\'t work. Try again.', true);
+							return;
+						}
+						window.opener.postMessage({
+							type: 'chronicle:notes-grant',
+							token: r.body.token,
+							userId: r.body.userId,
+							campaignId: r.body.campaignId
+						}, origin);
+						say('Connected. You can close this window.');
+						root.querySelector('[data-allow-actions]').hidden = true;
+						setTimeout(function () { window.close(); }, 800);
+					})
+					.catch(function () {
+						allowBtn.disabled = false;
+						say('Chronicle couldn\'t be reached. Try again.', true);
+					});
+			});
+
+			if (notNow) notNow.addEventListener('click', function () {
+				if (window.opener && origin) {
+					window.opener.postMessage({ type: 'chronicle:notes-grant-declined' }, origin);
+				}
+				window.close();
+			});
+
+			function loadConnections() {
+				var box = root.querySelector('[data-connections]');
+				var list = root.querySelector('[data-connection-list]');
+				Chronicle.apiFetch(base + '/app-grants').then(function (res) {
+					return res.ok ? res.json() : [];
+				}).then(function (grants) {
+					list.textContent = '';
+					box.hidden = !grants.length;
+					grants.forEach(function (g) {
+						var li = document.createElement('li');
+						li.className = 'flex items-center gap-2';
+						var where = document.createElement('span');
+						where.className = 'font-mono text-fg truncate';
+						where.textContent = g.origin;
+						var when = document.createElement('span');
+						when.className = 'text-fg-secondary text-xs';
+						when.textContent = 'since ' + new Date(g.createdAt).toLocaleDateString();
+						var btn = document.createElement('button');
+						btn.type = 'button';
+						btn.className = 'ml-auto text-xs underline text-fg-secondary hover:text-fg';
+						btn.textContent = 'Disconnect';
+						btn.addEventListener('click', function () {
+							btn.disabled = true;
+							Chronicle.apiFetch(base + '/app-grants/' + encodeURIComponent(g.id), { method: 'DELETE' })
+								.then(loadConnections);
+						});
+						li.appendChild(where);
+						li.appendChild(when);
+						li.appendChild(btn);
+						list.appendChild(li);
+					});
+				}).catch(function () {});
+			}
+			ready(loadConnections);
+		})();
+		</script>
+	}
+}

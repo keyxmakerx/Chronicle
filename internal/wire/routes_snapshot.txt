@@ -69,6 +69,7 @@ DELETE	/members/:uid	internal/plugins/campaigns/routes.go
 DELETE	/notes/:nid/attachments/:aid	internal/widgets/notes/routes.go
 DELETE	/notes/:noteID	internal/plugins/syncapi/routes.go
 DELETE	/notes/:noteId	internal/widgets/notes/routes.go
+DELETE	/notes/app-grants/:gid	internal/widgets/notes/routes.go
 DELETE	/owner-dashboard-layout	internal/plugins/campaigns/routes.go
 DELETE	/prune	internal/plugins/packages/routes.go
 DELETE	/relations/:relationId	internal/plugins/syncapi/routes.go
@@ -352,6 +353,8 @@ GET	/notes/:noteId	internal/widgets/notes/routes.go
 GET	/notes/:noteId/backlinks	internal/widgets/notes/routes.go
 GET	/notes/:noteId/versions	internal/widgets/notes/routes.go
 GET	/notes/:noteId/versions/:vid	internal/widgets/notes/routes.go
+GET	/notes/allow-app	internal/widgets/notes/routes.go
+GET	/notes/app-grants	internal/widgets/notes/routes.go
 GET	/notes/index	internal/widgets/notes/routes.go
 GET	/notes/labels	internal/widgets/notes/routes.go
 GET	/notes/members	internal/widgets/notes/routes.go
@@ -575,6 +578,7 @@ POST	/notes/:noteId/send-to-journal	internal/widgets/notes/routes.go
 POST	/notes/:noteId/toggle	internal/widgets/notes/routes.go
 POST	/notes/:noteId/unlock	internal/widgets/notes/routes.go
 POST	/notes/:noteId/versions/:vid/restore	internal/widgets/notes/routes.go
+POST	/notes/allow-app	internal/widgets/notes/routes.go
 POST	/notes/bulk	internal/widgets/notes/routes.go
 POST	/notifications/:nid/read	internal/plugins/sessions/routes.go
 POST	/notifications/read-all	internal/plugins/sessions/routes.go
