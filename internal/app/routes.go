@@ -1604,6 +1604,13 @@ func (a *npcEntityTypeFinderAdapter) FindCharacterTypeIDs(ctx context.Context, c
 // character and monster types, and every enabled sub-type nested under one of
 // them. The player-character type is left out; claimed PCs are the party.
 func npcTypeIDs(types []entities.EntityType) []int {
+	return characterFamilyTypeIDs(types, false)
+}
+
+// characterFamilyTypeIDs is the shared walk behind npcTypeIDs. includePC keeps
+// the player-character type: the NPC gallery leaves it out (claimed PCs are the
+// party), while stashes and moves are mostly about the players' own characters.
+func characterFamilyTypeIDs(types []entities.EntityType, includePC bool) []int {
 	isRoot := func(et entities.EntityType) bool {
 		if et.PresetCategory != nil {
 			switch *et.PresetCategory {
@@ -1646,7 +1653,7 @@ func npcTypeIDs(types []entities.EntityType) []int {
 
 	var ids []int
 	for _, et := range types {
-		if et.Enabled && !isPC(et) && inFamily(et) {
+		if et.Enabled && (includePC || !isPC(et)) && inFamily(et) {
 			ids = append(ids, et.ID)
 		}
 	}
@@ -2922,7 +2929,9 @@ func (a *App) RegisterRoutes() {
 	// repeat-by-rule logic is calendar_rule.js, loaded before it), and
 	// calendar_open.js peeks and opens the Calendars page's cards. rulebook.js
 	// mounts on the Rules page's data-widget="rulebook" when a system ships a
-	// book. All are no-ops on every other page, same as every entry here.
+	// book, and rulebook_editor.js on the editor page's
+	// data-widget="rulebook-editor". All are no-ops on every other page, same
+	// as every entry here.
 	pluginBodyScripts := []string{
 		"/static/plugins/" + entities.PluginSlug + "/js/characters.js",
 		"/static/js/widgets/calendar_view.js",
@@ -2932,6 +2941,7 @@ func (a *App) RegisterRoutes() {
 		"/static/js/widgets/calendar_editor.js",
 		"/static/js/calendar_open.js",
 		"/static/js/widgets/rulebook.js",
+		"/static/js/widgets/rulebook_editor.js",
 	}
 
 	// The sidebar, campaign dashboard and Extensions hub link to
@@ -3229,7 +3239,25 @@ func (a *App) RegisterRoutes() {
 	txSvc.SetBuyerAccessChecker(&armoryBuyerAccessAdapter{svc: entityService})
 	txHandler := armory.NewTransactionHandler(txSvc)
 	txHandler.SetEntityVisibility(&entityVisibilityFilterAdapter{svc: entityService})
-	armory.RegisterRoutes(e, armoryHandler, txHandler, instHandler, campaignService, authService, addonService)
+	// Stashes and moves: the service reaches entities, relations and members
+	// only through the adapters in armory_stash_adapters.go.
+	stashSvc := armory.NewStashService(armory.StashDeps{
+		Repo:       armory.NewStashRepository(a.DB),
+		Directory:  &armoryStashDirectoryAdapter{svc: entityService},
+		Visibility: &entityVisibilityFilterAdapter{svc: entityService},
+		Actor:      &armoryCharacterActorAdapter{svc: entityService},
+		Fields:     &armoryEntityFieldsAdapter{svc: entityService},
+		Relations:  &armoryHasItemAdapter{svc: relService},
+		UserNames:  &armoryMemberNamesAdapter{svc: campaignService},
+	})
+	stashHandler := armory.NewStashHandler(stashSvc)
+	entityHandler.SetCharacterPagePanel(entities.PagePanel{
+		Addon: "armory",
+		URL: func(campaignID, entityID string) string {
+			return "/campaigns/" + campaignID + "/armory/characters/" + entityID + "/panel"
+		},
+	})
+	armory.RegisterRoutes(e, armoryHandler, txHandler, instHandler, stashHandler, campaignService, authService, addonService)
 
 	// Notes widget: personal floating note-taking panel (Google Keep-style).
 	// noteSvc was created above (before REST API v1 registration).
@@ -3816,6 +3844,7 @@ func (a *App) RegisterRoutes() {
 	systemHandler := systems.NewSystemHandler()
 	systemHandler.SetCampaignSystems(campaignSystemMgr)
 	systemHandler.SetAddonService(addonService)
+	systemHandler.SetBookEdits(systems.NewBookEditService(systems.NewBookEditRepository(a.DB)))
 	systems.RegisterRoutes(e, systemHandler, addonService, authService, campaignService)
 
 	// Admin-only deployment-health diagnostic: read-only fingerprints of the

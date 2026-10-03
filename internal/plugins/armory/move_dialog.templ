@@ -1,0 +1,138 @@
+// move_dialog.templ renders the dialog that moves one item or some money. It
+// is an HTMX fragment swapped into #armory-move-modal; the form posts to the
+// moves route and the page reloads its panels when the answer comes back.
+package armory
+
+import "fmt"
+
+// MoveDialog asks where a holding should go and how much of it. The line under
+// the form says plainly whether the move happens now or waits for the GM.
+templ MoveDialog(v *MoveDialogView, csrfToken string) {
+	<div
+		class="fixed inset-0 z-50 flex items-start justify-center p-4 pt-16 bg-black/50 overflow-y-auto"
+		role="dialog"
+		aria-modal="true"
+		aria-labelledby="armory-move-title"
+		onkeydown={ closeMoveDialogOnKey() }
+	>
+		<div class="card w-full max-w-md p-5">
+			<h2 id="armory-move-title" class="text-lg font-semibold text-fg mb-1">
+				if v.Kind == "item" {
+					Move { v.ItemName }
+				} else {
+					Move money
+				}
+			</h2>
+			<p class="text-sm text-fg-secondary mb-4">From { v.FromName }</p>
+			if (v.Kind == "item" && v.Max < 1) || (v.Kind == "money" && v.MaxMoney < 1) {
+				<p class="text-sm text-fg-muted mb-4">
+					if v.Kind == "item" {
+						There is none of this left to move.
+					} else {
+						There is no money to move.
+					}
+				</p>
+				<div class="flex justify-end">
+					<button type="button" class="btn-secondary text-sm" onclick={ closeMoveDialogOnClick() }>Close</button>
+				</div>
+			} else if len(v.Destinations) == 0 {
+				<p class="text-sm text-fg-muted mb-4">There is nowhere to move this to yet.</p>
+				<div class="flex justify-end">
+					<button type="button" class="btn-secondary text-sm" onclick={ closeMoveDialogOnClick() }>Close</button>
+				</div>
+			} else {
+				<form
+					hx-post={ movesURL(v.CampaignID) }
+					hx-swap="none"
+					hx-disabled-elt="find button[type='submit']"
+					class="space-y-4"
+				>
+					<input type="hidden" name="_csrf" value={ csrfToken }/>
+					<input type="hidden" name="kind" value={ v.Kind }/>
+					<input type="hidden" name="item_id" value={ v.ItemID }/>
+					<input type="hidden" name="from_kind" value={ v.From.Kind }/>
+					<input type="hidden" name="from_id" value={ v.From.ID }/>
+					if v.Kind == "item" {
+						<div>
+							<label for="armory-move-qty" class="block text-xs font-medium text-fg-body mb-1">How many</label>
+							<input
+								id="armory-move-qty"
+								type="number"
+								name="quantity"
+								min="1"
+								max={ fmt.Sprintf("%d", v.Max) }
+								value="1"
+								required
+								autofocus
+								class="input w-full text-sm"
+							/>
+							<p class="text-xs text-fg-muted mt-1">{ fmt.Sprintf("%d", v.Max) } available</p>
+						</div>
+					} else {
+						<div>
+							<label for="armory-move-amount" class="block text-xs font-medium text-fg-body mb-1">How much</label>
+							<input
+								id="armory-move-amount"
+								type="text"
+								inputmode="decimal"
+								name="amount"
+								required
+								autofocus
+								autocomplete="off"
+								class="input w-full text-sm"
+							/>
+							<p class="text-xs text-fg-muted mt-1">{ v.MaxMoney.String() } available</p>
+						</div>
+					}
+					<div>
+						<label for="armory-move-to" class="block text-xs font-medium text-fg-body mb-1">To</label>
+						<select id="armory-move-to" name="to" required class="input w-full text-sm">
+							<option value="">Choose where it goes...</option>
+							@destinationGroup(v, "Stashes")
+							@destinationGroup(v, "Characters")
+						</select>
+					</div>
+					if v.Immediate {
+						<p class="text-sm text-fg-secondary">Downtime is open, so this happens now.</p>
+					} else {
+						<p class="text-sm text-fg-secondary">Not in downtime. Your GM has to approve this; the item stays with you until then.</p>
+					}
+					<div class="flex justify-end gap-2">
+						<button type="button" class="btn-secondary text-sm" onclick={ closeMoveDialogOnClick() }>Cancel</button>
+						<button type="submit" class="btn-primary text-sm">
+							if v.Immediate {
+								Move
+							} else {
+								Ask the GM
+							}
+						</button>
+					</div>
+				</form>
+			}
+		</div>
+	</div>
+}
+
+// destinationGroup renders the options of one group, skipping an empty group
+// so the select has no bare heading.
+templ destinationGroup(v *MoveDialogView, group string) {
+	if destinationsIn(v, group) > 0 {
+		<optgroup label={ group }>
+			for _, d := range v.Destinations {
+				if d.Group == group {
+					<option value={ destValue(d.Endpoint) }>{ d.Label }</option>
+				}
+			}
+		</optgroup>
+	}
+}
+
+func destinationsIn(v *MoveDialogView, group string) int {
+	n := 0
+	for _, d := range v.Destinations {
+		if d.Group == group {
+			n++
+		}
+	}
+	return n
+}

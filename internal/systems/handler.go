@@ -30,6 +30,7 @@ type addonChecker interface {
 type SystemHandler struct {
 	campaignSystems *CampaignSystemManager
 	addonSvc        addonChecker
+	bookEdits       BookEditService
 }
 
 // NewSystemHandler creates a new system handler.
@@ -40,6 +41,13 @@ func NewSystemHandler() *SystemHandler {
 // SetCampaignSystems wires the per-campaign custom system manager.
 func (h *SystemHandler) SetCampaignSystems(mgr *CampaignSystemManager) {
 	h.campaignSystems = mgr
+}
+
+// SetBookEdits wires the service holding a campaign's edits to a system's
+// book. Without it the book is served exactly as the package ships it and
+// the editor routes answer 404.
+func (h *SystemHandler) SetBookEdits(svc BookEditService) {
+	h.bookEdits = svc
 }
 
 // SetAddonService wires the addon service for checking which system is
@@ -527,7 +535,7 @@ func (h *SystemHandler) BookAPI(c echo.Context) error {
 		return apperror.NewNotFound("this system has no book")
 	}
 	manifest := mod.Info()
-	book, err := LoadBook(sysDir, manifest)
+	pkg, err := LoadBookPackage(sysDir, manifest)
 	if err != nil {
 		slog.Warn("rulebook book failed to load",
 			slog.String("system", manifest.ID), slog.Any("error", err))
@@ -538,8 +546,18 @@ func (h *SystemHandler) BookAPI(c echo.Context) error {
 		}
 		return apperror.NewBadRequest(msg)
 	}
+	book := pkg.Book
+	if h.bookEdits != nil {
+		// The campaign's edits are merged in BEFORE the filter, so a
+		// Director-only flag on an edited page or block is honoured.
+		if book, err = h.bookEdits.Edition(c.Request().Context(), cc.Campaign.ID, pkg); err != nil {
+			return err
+		}
+	}
 	c.Response().Header().Set("Cache-Control", "private, no-store")
-	return c.JSON(http.StatusOK, FilterBook(book, bookViewerIsDirector(cc)))
+	out := FilterBook(book, bookViewerIsDirector(cc))
+	out.CanEdit = h.bookEdits != nil && bookEditorAllowed(cc)
+	return c.JSON(http.StatusOK, out)
 }
 
 // bookViewerIsDirector: the campaign owner, or a member the owner granted
