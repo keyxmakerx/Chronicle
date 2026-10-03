@@ -259,8 +259,6 @@
   var FX = (function(){
     var TAU = Math.PI * 2;
     function hash(n){ var x = Math.sin(n * 127.1 + 311.7) * 43758.5453; return x - Math.floor(x); }
-    function easeOut(t){ return 1 - Math.pow(1 - t, 3); }
-    function smoothstep(a, b, x){ var t = clamp((x - a) / (b - a), 0, 1); return t * t * (3 - 2 * t); }
     function hexOklch(hex){
       var n = parseInt(hex.slice(1), 16), c = [(n >> 16) & 255, (n >> 8) & 255, n & 255].map(function(v){ v /= 255; return v <= .04045 ? v / 12.92 : Math.pow((v + .055) / 1.055, 2.4); });
       var l = Math.cbrt(.4122214708 * c[0] + .5363325363 * c[1] + .0514459929 * c[2]), m = Math.cbrt(.2119034982 * c[0] + .6806995451 * c[1] + .1073969566 * c[2]), s = Math.cbrt(.0883024619 * c[0] + .2817188376 * c[1] + .6299787005 * c[2]);
@@ -270,100 +268,96 @@
     /* A moon's colour at a set lightness: its own hue, never its lightness, so pale moons don't blow out (moon view). */
     function ok(mo, l, cm, a){ var o = mo._ok || (mo._ok = hexOklch(/^#[0-9a-fA-F]{6}$/.test(mo.color || '') ? mo.color : '#d9e1ec')); o.cc = clamp(o.C, .045, .13); return 'oklch(' + l + ' ' + (o.cc * cm).toFixed(3) + ' ' + o.h.toFixed(1) + (a === undefined ? '' : ' / ' + a) + ')'; }
 
-    function bead(ctx, x, y, rx, ry, al){
-      var g = ctx.createRadialGradient(x - rx * .3, y - ry * .35, 0, x, y, Math.max(rx, ry) * 1.15);
-      g.addColorStop(0, 'rgba(158,22,32,' + al + ')'); g.addColorStop(.5, 'rgba(96,6,16,' + al + ')'); g.addColorStop(1, 'rgba(42,2,8,' + al + ')');
-      ctx.fillStyle = g; ctx.beginPath(); ctx.ellipse(x, y, rx, ry, 0, 0, TAU); ctx.fill();
-      ctx.fillStyle = 'rgba(255,226,230,' + (.6 * al).toFixed(3) + ')'; ctx.beginPath(); ctx.ellipse(x - rx * .36, y - ry * .4, Math.max(.35, rx * .25), Math.max(.3, ry * .2), -.5, 0, TAU); ctx.fill();
-    }
-    var NECK = 'rgba(112,5,16,.96)';
-    /* ── Blood: the sky bleeds as if it were a pane of glass. The moon is the source, congealed and heavier at its lowest
-       point, where drops gather and let go under the screen's own gravity. They do not fall free: they run down the
-       glass as rivulets, thick near the moon and thinning as they go. They bead, hesitate, then run; they wander a
-       little sideways, and one that meets a wetter trail joins it. Some start from the top of the sky, thinner, so the
-       whole sky reads as bleeding with the moon at its heart. Each has a darker core and a wet edge that catches the
-       sky's light; the trail it leaves dries to a faint stain and is gone within half a minute, so the sky never fills. ── */
-    var RIV = [], RIV_LIFE = 28, RIV_MAX = 12;
-    function rivPlan(k){
-      while (RIV.length <= k){
-        var j = RIV.length, prev = RIV[j - 1], t0 = prev ? prev.t0 + .7 + hash(j * 3.17 + .5) * 1.9 : .2;
-        RIV.push({k:j, t0:t0, moon:hash(j * 5.33 + 1) < .62, u:hash(j * 7.13 + 2), w:.55 + hash(j * 2.91 + 7) * .9, len:.3 + hash(j * 4.07 + 3) * .5,
-          s1:hash(j * 1.9 + 11) * TAU, s2:hash(j * 8.3 + 13) * TAU, amp:.6 + hash(j * 9.7 + 17) * 1.2});
+    /* ── Blood: under a blood moon the sky itself bleeds. Here and there a patch of the red sky darkens and thickens,
+       gathers into a hanging bead, and lets go. Most are a single small drop; now and then a short stream pours; rarely a river of
+       blood runs for a couple of seconds. Blood falls heavily but not fast, like something thick, and splashes on the
+       land. Like the lightning, it is a plan made from a seed, so any moment of it can be drawn again exactly. ── */
+    var CLOTS = [];
+    function clotPlan(upTo){
+      while (!CLOTS.length || CLOTS[CLOTS.length - 1].t0 <= upTo + 6){
+        var j = CLOTS.length, prev = CLOTS[j - 1], h = function(s){ return hash(j * 7.13 + s); };
+        var roll = h(1.1), kind = roll < .08 ? 2 : roll < .3 ? 1 : 0;
+        CLOTS.push({t0:prev ? prev.t0 + .3 + h(2.2) * 1.0 : .2, kind:kind, x:.05 + .9 * h(3.3), y:.03 + .3 * h(4.4) * h(4.9),
+          gather:[1.2 + h(5.5), 2 + h(5.5), 3 + 1.5 * h(5.5)][kind], pour:[0, .6 + .6 * h(6.6), 1.5 + 1.3 * h(6.6)][kind],
+          size:[.6 + 1.1 * h(7.7), 1.7 + .6 * h(7.7), 3.2 + 1.2 * h(7.7)][kind]});
       }
-      return RIV[k];
+      return CLOTS;
     }
-    /* How far a rivulet's head has run by age tau, as a share of the sky's height, and the moments it passed each
-       point: it gathers, then runs and hesitates in turn, slower as it thins, and stops when its blood is spent. */
-    function runOf(R, tau){
-      var gather = R.moon ? 1.1 : .55, d = 0, t = gather, marks = [[gather, 0]], state = 'gather', i = 0;
-      if (tau <= gather) return {d:0, marks:marks, state:state, g:tau / gather};
-      for (;;){
-        var runT = .35 + hash(R.k * 13.1 + i * 1.7) * .55, step = (.07 + .09 * hash(R.k * 5.9 + i * 2.3)) * runT * (1 - .55 * d / R.len);
-        if (t + runT >= tau){ var f = (tau - t) / runT; d += step * f * f * (3 - 2 * f); marks.push([tau, d]); state = 'run'; break; }
-        d += step; t += runT; marks.push([t, d]);
-        if (d >= R.len){ d = R.len; state = 'spent'; break; }
-        var wait = .3 + hash(R.k * 7.7 + i * 3.1) * .9;
-        if (t + wait >= tau){ d += (tau - t) * .004; marks.push([tau, d]); state = 'bead'; break; }
-        t += wait; d += wait * .004; marks.push([t, d]); i++;
+    /* A thick fall: it gathers speed for about half a second, then holds a heavy, unhurried pace. */
+    function fallBy(tf, H){ var vt = H * .6, tau = .45; return tf <= 0 ? 0 : vt * (tf - tau * (1 - Math.exp(-tf / tau))); }
+    function fallV(tf, H){ return tf <= 0 ? 0 : H * .6 * (1 - Math.exp(-tf / .45)); }
+    function clots(ctx, st, t, k, sc){
+      var W = st.W, H = st.H, ground = H * .84, P = clotPlan(t);
+      ctx.save(); ctx.lineCap = 'round';
+      for (var e = 0; e < P.length; e++){
+        var C = P[e], age = t - C.t0;
+        if (age < 0) break;
+        var fallT = ground / (H * .6) + 1.4;
+        if (age > C.gather + C.pour + fallT + .8) continue;
+        var x0 = W * C.x, y0 = H * C.y, r = C.size * sc, u = Math.min(1, age / C.gather);
+        var release = age - C.gather, drain = C.pour ? clamp(release / C.pour, 0, 1) : (release > 0 ? 1 : 0);
+        /* The patch of sky thickens: a soft dark stain that deepens as it gathers, and fades once it has bled out. */
+        var fade = release > 0 ? Math.max(0, 1 - (release - C.pour) / .8) : 1, a = u * u * (3 - 2 * u) * fade;
+        if (a > 0){
+          var R = r * (5 + 3 * u) * (1 - .3 * drain);
+          var stain = ctx.createRadialGradient(x0, y0, 0, x0, y0, R);
+          stain.addColorStop(0, 'rgba(55,0,6,' + (.9 * a * k).toFixed(3) + ')'); stain.addColorStop(.55, 'rgba(70,0,8,' + (.45 * a * k).toFixed(3) + ')'); stain.addColorStop(1, 'rgba(70,0,8,0)');
+          ctx.fillStyle = stain; ctx.beginPath(); ctx.ellipse(x0, y0, R, R * .8, 0, 0, TAU); ctx.fill();
+        }
+        /* It gathers into a bead that sags lower and lower before it lets go. */
+        var lip = y0 + r * 2.5 * u;
+        if (release < 0){
+          var bead = r * (.3 + .7 * u);
+          if (u > .25) drop(ctx, x0, lip, bead, H * .25 * Math.max(0, u - .5), k * Math.min(1, (u - .25) * 3));
+          continue;
+        }
+        if (!C.kind){
+          var y = lip + fallBy(release, H);
+          if (y < ground) drop(ctx, x0, y, r, fallV(release, H), k);
+          else splash(ctx, x0, ground, r, (release - tHit(ground - lip, H)) / .6, k);
+          continue;
+        }
+        /* A stream or a river: its head falls from the moment it lets go, its tail from the moment it runs dry. */
+        var yh = lip + fallBy(release, H), yt = lip + fallBy(release - C.pour, H), yb = Math.min(yh, ground);
+        if (yt < yb){
+          var steps = 18, wid = r * (C.kind === 2 ? 2.4 : 1.6) * (1 - .5 * Math.max(0, release - C.pour * .6) / Math.max(.3, C.pour)), L = [], Rr = [], Hl = [];
+          wid = Math.max(r * .6, wid);
+          for (var q = 0; q <= steps; q++){
+            var ya = yt + (yb - yt) * q / steps, f = clamp((ya - lip) / (ground - lip), 0, 1);
+            var cx = x0 + Math.sin(ya * .07 + t * 5 + e) * r * .35 * f, wq = Math.max(1, wid * (1 - .45 * f)) * .5;
+            L.push([cx - wq, ya]); Rr.push([cx + wq, ya]); Hl.push([cx - wq * .45, ya]);
+          }
+          ctx.fillStyle = 'rgba(120,4,16,' + (.95 * k).toFixed(3) + ')';
+          ctx.beginPath(); L.forEach(function(P2, i){ i ? ctx.lineTo(P2[0], P2[1]) : ctx.moveTo(P2[0], P2[1]); });
+          for (q = Rr.length - 1; q >= 0; q--) ctx.lineTo(Rr[q][0], Rr[q][1]);
+          ctx.closePath(); ctx.fill();
+          ctx.strokeStyle = 'rgba(255,110,110,' + (.35 * k).toFixed(3) + ')'; ctx.lineWidth = Math.max(.5, wid * .12);
+          ctx.beginPath(); Hl.forEach(function(P2, i){ i ? ctx.lineTo(P2[0], P2[1]) : ctx.moveTo(P2[0], P2[1]); }); ctx.stroke();
+          /* Its head breaks into drops. */
+          for (var bd = 0; bd < 3; bd++){ var yd = yh + r * (2 + bd * 3); if (yd < ground) drop(ctx, x0 + (hash(e * 3 + bd) - .5) * r * 1.5, yd, r * (.6 - bd * .12), fallV(release, H), k); }
+          if (yt > lip + 2 && yt < ground) drop(ctx, x0, yt, r * .5, fallV(release - C.pour, H), k);
+        }
+        var hit = tHit(ground - lip, H);
+        /* While it pours, the splash keeps churning; once it runs dry, the splash settles. */
+        if (release > hit) splash(ctx, x0, ground, r * (C.kind === 2 ? 2 : 1.3), release - hit < C.pour ? .15 + .08 * Math.sin(t * 23 + e) : .23 + (release - hit - C.pour) / .7, k);
       }
-      return {d:Math.min(d, R.len), marks:marks, state:state, g:1};
+      ctx.restore();
     }
-    function passedAt(marks, d){
-      for (var i = 1; i < marks.length; i++) if (marks[i][1] >= d){ var a = marks[i - 1], b = marks[i]; return a[0] + (b[0] - a[0]) * (b[1] > a[1] ? (d - a[1]) / (b[1] - a[1]) : 0); }
-      return marks[marks.length - 1][0];
+    /* How long a thick fall takes to cover a distance. */
+    function tHit(d, H){ var lo = 0, hi = 10; for (var i = 0; i < 30; i++){ var m = (lo + hi) / 2; if (fallBy(m, H) < d) lo = m; else hi = m; } return lo; }
+    function drop(ctx, x, y, r, v, k){
+      var st = Math.min(r * 4, v * .03);
+      ctx.fillStyle = 'rgba(145,8,22,' + (.96 * k).toFixed(3) + ')';
+      ctx.beginPath(); ctx.ellipse(x, y - st * .5, r * .8, r + st * .5, 0, 0, TAU); ctx.fill();
+      ctx.fillStyle = 'rgba(255,120,120,' + (.55 * k).toFixed(3) + ')';
+      ctx.beginPath(); ctx.ellipse(x - r * .3, y - st * .5 - r * .3, r * .22, r * .3 + st * .15, 0, 0, TAU); ctx.fill();
     }
-    /* The small jogs a drop makes on glass, finding its way round what it meets: the same jogs every time it is drawn,
-       none at its source. */
-    function wig(R, yy, H, sc){
-      var s = yy / (H * .055), i = Math.floor(s), f = s - i, u = f * f * (3 - 2 * f), a = hash(R.k * 3.31 + i * 7.17) - .5, b = hash(R.k * 3.31 + (i + 1) * 7.17) - .5;
-      return (a + (b - a) * u) * 5.5 * sc * Math.min(1, yy / (H * .04));
-    }
-    /* A rivulet's course and its width along it, in the sky's own pixels. */
-    function course(R, tau, M, W, H, sc){
-      var run = runOf(R, tau), x0, y0;
-      if (R.moon){ var off = (R.u - .5) * .9 * M.r; x0 = M.x + off; y0 = M.y + Math.sqrt(Math.max(0, M.r * M.r - off * off)) - .8; }
-      else { x0 = R.u * W; y0 = -2; }
-      var w0 = R.w * (R.moon ? 2.3 : 1.15) * sc, L = R.len * H, dpx = run.d * H, pts = [];
-      for (var y = 0; ; y += 4){
-        var yy = Math.min(y, dpx), x = x0 + R.amp * sc * (2.2 * Math.sin(yy / (H * .23) + R.s1) + .8 * Math.sin(yy / (H * .09) + R.s2)) - R.amp * sc * 2.2 * Math.sin(R.s1) + wig(R, yy, H, sc);
-        var w = w0 * (1 - .65 * yy / L) * (.85 + .15 * Math.sin(yy * .21 + R.s1)), wet = Math.exp(-(tau - passedAt(run.marks, yy / H)) / 6);
-        pts.push([x, y0 + yy, w, wet]);
-        if (yy >= dpx) break;
-      }
-      return {R:R, run:run, pts:pts, w0:w0, x0:x0, y0:y0, tau:tau, end:pts.length};
-    }
-    /* One rivulet: a dried stain where it has been, a wet body with a darker core, a bright wet edge on the side the
-       sky lights, and a bead at its head that swells while it hesitates. */
-    function drawRiv(ctx, C, k, lite){
-      var P = C.pts, n = C.end, age = C.tau, dry = 1 - smoothstep(RIV_LIFE * .55, RIV_LIFE, age);
-      if (n < 2 && C.run.state !== 'gather') return;
-      for (var i = 0; i + 1 < n; i++){
-        var a = P[i], b = P[i + 1], wet = a[3], al = k * (wet * .9 + (1 - wet) * .16 * dry);
-        if (al < .01) continue;
-        ctx.fillStyle = 'rgba(' + Math.round(96 - 40 * (1 - wet)) + ',' + Math.round(8 + 6 * (1 - wet)) + ',' + Math.round(16 + 2 * (1 - wet)) + ',' + al.toFixed(3) + ')';
-        ctx.beginPath(); ctx.moveTo(a[0] - a[2] / 2, a[1]); ctx.lineTo(b[0] - b[2] / 2, b[1] + .6); ctx.lineTo(b[0] + b[2] / 2, b[1] + .6); ctx.lineTo(a[0] + a[2] / 2, a[1]); ctx.closePath(); ctx.fill();
-      }
-      ctx.lineCap = 'round'; ctx.lineJoin = 'round';
-      for (i = 0; i + 1 < n; i++){
-        var p = P[i], q = P[i + 1], w2 = p[3] * k;
-        if (w2 < .03) continue;
-        ctx.strokeStyle = 'rgba(34,2,6,' + (.85 * w2).toFixed(3) + ')'; ctx.lineWidth = Math.max(.5, p[2] * .38);
-        ctx.beginPath(); ctx.moveTo(p[0], p[1]); ctx.lineTo(q[0], q[1]); ctx.stroke();
-        ctx.strokeStyle = 'rgba(' + lite + ',' + (.5 * w2).toFixed(3) + ')'; ctx.lineWidth = Math.max(.4, p[2] * .14);
-        ctx.beginPath(); ctx.moveTo(p[0] - p[2] * .3, p[1]); ctx.lineTo(q[0] - q[2] * .3, q[1]); ctx.stroke();
-      }
-      if (C.merged) return;
-      var hd = P[n - 1], st = C.run.state;
-      if (st === 'gather'){
-        /* Still gathering on the rim (or at the top of the glass): a bead grows and necks before it runs. */
-        var s = easeOut(C.run.g), r = C.w0 * (.3 + .7 * s);
-        if (C.R.moon){ ctx.fillStyle = NECK; ctx.beginPath(); ctx.moveTo(C.x0 - r * .8, C.y0 - .2); ctx.quadraticCurveTo(C.x0 - r * .95, C.y0 + r * .7, C.x0, C.y0 + r * 1.7); ctx.quadraticCurveTo(C.x0 + r * .95, C.y0 + r * .7, C.x0 + r * .8, C.y0 - .2); ctx.fill(); }
-        bead(ctx, C.x0, C.y0 + r * .82, r, r * 1.05, k);
-        return;
-      }
-      if (st === 'spent' && hd[3] < .2) return;
-      var sw = st === 'bead' ? 1.28 : st === 'spent' ? .9 : 1.08, rb = Math.max(.9, hd[2] * .62 * sw);
-      bead(ctx, hd[0], hd[1] + rb * .2, rb, rb * (st === 'run' ? 1.22 : 1.05), k * Math.max(.35, hd[3]));
+    function splash(ctx, x, y, r, u, k){
+      if (u < 0 || u > 1) return;
+      var a = (1 - u) * k;
+      ctx.fillStyle = 'rgba(95,3,10,' + (.8 * a).toFixed(3) + ')';
+      ctx.beginPath(); ctx.ellipse(x, y, r * (1.5 + 3 * u), r * (.35 + .5 * u), 0, 0, TAU); ctx.fill();
+      for (var i = 0; i < 4; i++){ var ang = Math.PI * (1.15 + .7 * i / 3), d = r * (1 + 6 * u); ctx.beginPath(); ctx.arc(x + Math.cos(ang) * d, y + Math.sin(ang) * d * .6 - r * 4 * u * (1 - u), r * .3 * (1 - u), 0, TAU); ctx.fill(); }
     }
     /* The moon's own wet sheen: a soft light off its upper side that drifts round very slowly; it never brightens. */
     function sheen(ctx, M, t, lite){
@@ -374,27 +368,10 @@
       ctx.fillStyle = g; ctx.fillRect(M.x - M.r, M.y - M.r, 2 * M.r, 2 * M.r); ctx.restore();
     }
     function bleed(ctx, st, t, rm){
-      var B = st.bleed, M = B.M, W = st.W, H = st.H, sc = clamp(H / 150, .6, 1.5), k = clamp(B.k, 0, 1), tt = rm ? 12.4 : t;
-      /* The wet light is the sky's own: cool under the moon, warmer toward dusk. */
-      var sl = st.sl, lite = sl ? sl.col.map(function(v){ return Math.round(clamp(170 + 70 * v, 0, 255)); }).join(',') : '236,218,222';
-      sheen(ctx, M, tt, lite);
-      var live = [];
-      for (var j = 0; ; j++){ var R = rivPlan(j); if (R.t0 > tt) break; if (tt - R.t0 <= RIV_LIFE) live.push(R); }
-      live = live.slice(-RIV_MAX).map(function(R){ return course(R, tt - R.t0, M, W, H, sc); });
-      /* A younger rivulet that runs into an older, wetter trail joins it and ends there. */
-      for (var a = live.length - 1; a > 0; a--){
-        var A = live[a];
-        for (var b = 0; b < a && !A.merged; b++){
-          var Bc = live[b];
-          for (var i = 3; i < A.end; i += 2){
-            var p = A.pts[i], y = p[1], jb = Math.round((y - Bc.y0) / 4);
-            if (jb < 0 || jb >= Bc.end) continue;
-            var q = Bc.pts[jb];
-            if (q[3] > .35 && Math.abs(p[0] - q[0]) < (p[2] + q[2]) * .55){ A.end = i + 1; A.merged = true; break; }
-          }
-        }
-      }
-      live.forEach(function(C){ drawRiv(ctx, C, k, lite); });
+      var B = st.bleed, M = B.M, H = st.H, sc = clamp(H / 150, .6, 1.5), k = clamp(B.k, 0, 1), tt = rm ? 12.4 : t;
+      /* The moon's wet light is crimson: it sits in a blood-red sky. */
+      sheen(ctx, M, tt, '255,96,96');
+      clots(ctx, st, tt, k, sc);
     }
 
     /* ── The Twin Lanterns: a filament of light joins the two full moons; a soft pulse travels along it (moon view).
