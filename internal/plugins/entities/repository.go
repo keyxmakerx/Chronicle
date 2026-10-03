@@ -817,6 +817,21 @@ type entityRepository struct {
 	db *sql.DB
 }
 
+// notFoundUnlessExists turns a zero-row UPDATE into a not-found only when the
+// entity is really missing. Without clientFoundRows MariaDB counts changed
+// rows, not matched ones, and updated_at has one-second precision, so writing
+// the same values twice within a second changes nothing and reports zero.
+func (r *entityRepository) notFoundUnlessExists(ctx context.Context, id string) error {
+	var exists bool
+	if err := r.db.QueryRowContext(ctx, `SELECT EXISTS(SELECT 1 FROM entities WHERE id = ?)`, id).Scan(&exists); err != nil {
+		return fmt.Errorf("checking entity exists: %w", err)
+	}
+	if !exists {
+		return apperror.NewNotFound("entity not found")
+	}
+	return nil
+}
+
 // NewEntityRepository creates a new entity repository.
 func NewEntityRepository(db *sql.DB) EntityRepository {
 	return &entityRepository{db: db}
@@ -956,7 +971,7 @@ func (r *entityRepository) Update(ctx context.Context, entity *Entity) error {
 		return fmt.Errorf("checking rows affected: %w", err)
 	}
 	if rows == 0 {
-		return apperror.NewNotFound("entity not found")
+		return r.notFoundUnlessExists(ctx, entity.ID)
 	}
 	return nil
 }
@@ -976,7 +991,7 @@ func (r *entityRepository) UpdateEntry(ctx context.Context, id, entryJSON, entry
 		return fmt.Errorf("checking rows affected: %w", err)
 	}
 	if rows == 0 {
-		return apperror.NewNotFound("entity not found")
+		return r.notFoundUnlessExists(ctx, id)
 	}
 	return nil
 }
@@ -996,7 +1011,7 @@ func (r *entityRepository) UpdatePlayerNotes(ctx context.Context, id, notesJSON,
 		return fmt.Errorf("checking rows affected: %w", err)
 	}
 	if rows == 0 {
-		return apperror.NewNotFound("entity not found")
+		return r.notFoundUnlessExists(ctx, id)
 	}
 	return nil
 }
@@ -1021,7 +1036,7 @@ func (r *entityRepository) UpdateFields(ctx context.Context, id string, fieldsDa
 		return fmt.Errorf("checking rows affected: %w", err)
 	}
 	if rows == 0 {
-		return apperror.NewNotFound("entity not found")
+		return r.notFoundUnlessExists(ctx, id)
 	}
 	return nil
 }
@@ -1049,7 +1064,7 @@ func (r *entityRepository) UpdateFieldOverrides(ctx context.Context, id string, 
 		return fmt.Errorf("checking rows affected: %w", err)
 	}
 	if rows == 0 {
-		return apperror.NewNotFound("entity not found")
+		return r.notFoundUnlessExists(ctx, id)
 	}
 	return nil
 }
@@ -1073,7 +1088,7 @@ func (r *entityRepository) UpdateImage(ctx context.Context, id, imagePath string
 		return fmt.Errorf("checking rows affected: %w", err)
 	}
 	if rows == 0 {
-		return apperror.NewNotFound("entity not found")
+		return r.notFoundUnlessExists(ctx, id)
 	}
 	return nil
 }
@@ -1097,7 +1112,7 @@ func (r *entityRepository) UpdateCoverImage(ctx context.Context, id, coverImageP
 		return fmt.Errorf("checking rows affected: %w", err)
 	}
 	if rows == 0 {
-		return apperror.NewNotFound("entity not found")
+		return r.notFoundUnlessExists(ctx, id)
 	}
 	return nil
 }
@@ -2143,7 +2158,18 @@ func (r *entityPermissionRepository) UpdateVisibility(ctx context.Context, entit
 		return fmt.Errorf("checking rows affected: %w", err)
 	}
 	if rows == 0 {
-		return apperror.NewNotFound("entity not found")
+		// Without clientFoundRows MariaDB counts changed rows, not matched
+		// ones: the same visibility within the same second as the entity's
+		// last write changes nothing and reports zero. Only a missing row is
+		// a not-found.
+		var exists bool
+		if err := r.db.QueryRowContext(ctx,
+			`SELECT EXISTS(SELECT 1 FROM entities WHERE id = ?)`, entityID).Scan(&exists); err != nil {
+			return fmt.Errorf("checking entity exists: %w", err)
+		}
+		if !exists {
+			return apperror.NewNotFound("entity not found")
+		}
 	}
 	return nil
 }

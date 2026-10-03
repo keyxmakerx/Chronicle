@@ -83,7 +83,7 @@
     // (most total) blood moon currently up — the disc itself already turns
     // to congealed blood via MOONR's own `blood` shading; this adds the
     // "the sky bleeds with it" atmosphere at a fraction of the contract's
-    // full rivulet simulation.
+    // full bleeding sky.
     var bloodIDs = Object.keys(ov.blood || {});
     if (bloodIDs.length) {
       var pulse = .5 + .5 * Math.sin(st.t * .6);

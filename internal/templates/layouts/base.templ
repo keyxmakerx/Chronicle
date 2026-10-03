@@ -148,6 +148,10 @@ templ Base(title string) {
 		<!-- Shop inventory widget (item list with price/quantity/stock) -->
 		<script src={ AssetURL("/static/js/widgets/shop_inventory.js") } defer></script>
 
+		<!-- Shop room widget (isometric room above the inventory); icons list first. -->
+		<script src={ AssetURL("/static/js/widgets/shop_room_icons.js") } defer></script>
+		<script src={ AssetURL("/static/js/widgets/shop_room.js") } defer></script>
+
 		<!-- Character inventory widget ("Has Item" relations with qty/equipped/attuned).
 		     Sibling of shop_inventory above; its mount is the `inventory` entity
 		     block (entities/show.templ blockInventory). -->
@@ -193,6 +197,11 @@ templ Base(title string) {
 
 		<!-- Entity manager widget (sortable, filterable entity list block) -->
 		<script src={ AssetURL("/static/js/widgets/entity_manager.js") } defer></script>
+
+		<!-- The rest clock every looping animation reads its time from, so they
+		     all ease to a standstill when the viewer steps away and wake
+		     together when they come back. Loaded before anything that loops. -->
+		<script src={ AssetURL("/static/js/motion_rest.js") } defer></script>
 
 		<!-- Sky pane widget (issue #763): the "skybox" dashboard/template
 		     block's ambient sky — moons, stars, weather, celestial events.
@@ -261,8 +270,14 @@ templ Base(title string) {
 		<!-- Entity notes (per-user player notes with audience ACL — player-notes addon) -->
 		<script src={ AssetURL("/static/js/widgets/entity_notes.js") } defer></script>
 
-		<!-- Entity map editor (per-entity map assignment + iframe embed) -->
+		<!-- Entity map block (per-entity map assignment) -->
 		<script src={ AssetURL("/static/js/widgets/entity_map.js") } defer></script>
+
+		<!-- Live map viewer (the map page's viewer; also what the focus view mounts) -->
+		<script src={ AssetURL("/static/js/widgets/map_viewer.js") } defer></script>
+
+		<!-- Map focus view: a framed map preview unfolds into the live viewer -->
+		<script src={ AssetURL("/static/js/map_focus.js") } defer></script>
 
 		<!-- Customize look editor (campaign look, one Save for every setting) -->
 		<script src={ AssetURL("/static/js/widgets/customize_look.js") } defer></script>

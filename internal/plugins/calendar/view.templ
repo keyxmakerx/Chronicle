@@ -82,6 +82,7 @@ templ calendarViewMount(data CalendarViewData) {
 			class="hidden"
 			data-calendar={ mustMarshalCalendar(data.Calendar) }
 			data-events={ mustMarshalEvents(data.CurrentMonthEvents) }
+			data-zone={ data.Zone }
 		></div>
 	</div>
 }

@@ -834,6 +834,10 @@
           // entry is ProseMirror JSON stored as a string.
           var content = typeof data.entry === 'string' ? JSON.parse(data.entry) : data.entry;
           state.editor.commands.setContent(content);
+        } else if (data.entry_html) {
+          // A body written as HTML (e.g. synced from Foundry) has no editor
+          // JSON yet; open the HTML so editing starts from what the page shows.
+          state.editor.commands.setContent(data.entry_html);
         }
         if (typeof data.rev === 'number') state.rev = data.rev;
         state.dirty = false;

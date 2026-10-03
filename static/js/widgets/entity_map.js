@@ -1,11 +1,11 @@
 /**
  * Entity Map widget
  *
- * Wires the per-entity Map Editor block, Scribe+ only: picker mode (no
- * map yet) PUTs /campaigns/:id/entities/:eid/map on card click; embed
- * mode's "Change map" swaps the iframe back to the picker. Reloads the
- * page after assign rather than swapping templ fragments, since the
- * iframe has to fully tear down anyway.
+ * Wires the per-entity Map block's Scribe+ actions: picker mode (no map
+ * yet) PUTs /campaigns/:id/entities/:eid/map on card click; embed mode's
+ * "Change map" returns to the picker. Reloads the page after assign rather
+ * than swapping templ fragments. Opening the framed preview is not handled
+ * here: the preview carries its own inline handler (see map_focus.js).
  *
  * Mount: data-widget="entity-map" with data-entity-id, data-campaign-id,
  * data-map-id, data-is-scribe, data-csrf (picker mount only).
@@ -80,7 +80,7 @@
             );
           }
           // Hard reload: the block's render branch swaps (picker
-          // → iframe or vice versa) and the iframe needs a fresh
+          // → preview or vice versa) and the page needs a fresh
           // load anyway.
           window.location.reload();
         })
