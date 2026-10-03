@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"strings"
+	"unicode"
 	"unicode/utf8"
 
 	"github.com/keyxmakerx/chronicle/internal/apperror"
@@ -28,6 +29,15 @@ type Appearance struct {
 	Elevation    string `json:"elevation,omitempty"`     // "flat", "standard" or "dramatic".
 	MotionSpeed  string `json:"motion_speed,omitempty"`  // "snappy", "standard" or "leisurely".
 	ReduceMotion bool   `json:"reduce_motion,omitempty"` // Calmer motion for every member of the campaign.
+
+	SidebarColour   string `json:"sidebar_colour,omitempty"`   // Menu colour: "charcoal" (default), "ink", "tinted" or "own".
+	SidebarOwn      string `json:"sidebar_own,omitempty"`      // The owner's menu colour, used when SidebarColour is "own".
+	SidebarCorner   string `json:"sidebar_corner,omitempty"`   // Menu's top-left corner: "plain", "subtitle" or "banner".
+	SidebarSubtitle string `json:"sidebar_subtitle,omitempty"` // The subtitle line under the name (corner "subtitle").
+	SidebarBanner   string `json:"sidebar_banner,omitempty"`   // Banner picture behind the name (corner "banner").
+	PeekGlow        string `json:"peek_glow,omitempty"`        // Hidden-menu edge glow: "accent" (default) or "own".
+	PeekGlowColour  string `json:"peek_glow_colour,omitempty"` // The glow's own colour, used when PeekGlow is "own".
+	HeaderHeight    string `json:"header_height,omitempty"`    // "slim" (default) or "tall".
 }
 
 // The allowed values of each Appearance choice. The first entry is the
@@ -46,7 +56,11 @@ var (
 	AppearanceElevations   = []string{"standard", "flat", "dramatic"}
 	AppearanceSpeeds       = []string{"standard", "snappy", "leisurely"}
 	AppearanceScrims       = []string{"medium", "light", "strong"}
-	AppearanceWidgets      = []string{"links", "text"}
+	AppearanceWidgets      = []string{"links", "text", "note", "search"}
+	AppearanceSidebars     = []string{"charcoal", "ink", "tinted", "own"}
+	AppearanceCorners      = []string{"plain", "subtitle", "banner"}
+	AppearanceGlows        = []string{"accent", "own"}
+	AppearanceHeights      = []string{"slim", "tall"}
 )
 
 // Text limits the Customize page shows. Brand name and welcome keep their
@@ -55,6 +69,11 @@ var (
 const (
 	appearanceWelcomeMax = 500
 	appearanceTextMax    = 200
+	// appearanceWidgetMax is how many widgets the header holds: past four the
+	// centre of the bar has no room on a laptop.
+	appearanceWidgetMax = 4
+	// appearanceSubtitleMax keeps the menu's subtitle to one short line.
+	appearanceSubtitleMax = 40
 )
 
 // AppearanceInput is one Save from the Customize page: the whole draft, so
@@ -82,6 +101,20 @@ type AppearanceInput struct {
 		Speed     string `json:"speed"`
 		ReduceAll bool   `json:"reduceAll"`
 	} `json:"motion"`
+	Sidebar AppearanceSidebarInput `json:"sidebar"`
+}
+
+// AppearanceSidebarInput is the Sidebar section. Colour is the menu colour
+// choice; Own, GlowColour and Banner only matter while the choice that uses
+// them is selected, and are dropped otherwise so nothing stale is stored.
+type AppearanceSidebarInput struct {
+	Colour     string `json:"colour"`
+	Own        string `json:"own"`
+	Corner     string `json:"corner"`
+	Subtitle   string `json:"subtitle"`
+	Banner     string `json:"banner"`
+	Glow       string `json:"glow"`
+	GlowColour string `json:"glowColour"`
 }
 
 // AppearanceBrandInput is the Brand section. Pictures are media filenames
@@ -97,6 +130,7 @@ type AppearanceBrandInput struct {
 // that matches the page.
 type AppearanceHeaderInput struct {
 	Bg      string       `json:"bg"`
+	Height  string       `json:"height"`
 	Color   string       `json:"color"`
 	From    string       `json:"from"`
 	To      string       `json:"to"`
@@ -122,7 +156,7 @@ type AppearanceColourInput struct {
 // handler can check each belongs to this campaign before the service runs.
 func (in *AppearanceInput) AppearancePictures() []string {
 	var out []string
-	for _, p := range []string{in.Brand.Logo, in.Brand.Backdrop, in.Header.Image} {
+	for _, p := range []string{in.Brand.Logo, in.Brand.Backdrop, in.Header.Image, in.Sidebar.Banner} {
 		if p != "" {
 			out = append(out, p)
 		}
@@ -216,8 +250,10 @@ func applyAppearance(s *CampaignSettings, in AppearanceInput) (*string, error) {
 		if style.Color == "" {
 			return fail(apperror.NewBadRequest("a solid header needs a colour"))
 		}
-	case "gradient":
-		style.Mode = "gradient"
+	case "gradient", "moving":
+		// Moving is the same two colours and direction, drifting; the page
+		// decides whether it may move.
+		style.Mode = h.Bg
 		if style.GradientFrom, err = calmColour("gradient start", h.From, true); err != nil {
 			return fail(err)
 		}
@@ -248,8 +284,11 @@ func applyAppearance(s *CampaignSettings, in AppearanceInput) (*string, error) {
 		return fail(apperror.NewBadRequest("invalid header background"))
 	}
 
-	// Header widgets: links and one line of text, in the owner's order.
+	// Header widgets, in the owner's order, at most appearanceWidgetMax.
 	content := &TopbarContent{Mode: "none", Widgets: []string{}}
+	if len(h.Widgets) > appearanceWidgetMax {
+		return fail(apperror.NewBadRequest("the header holds at most 4 widgets"))
+	}
 	seen := map[string]bool{}
 	for _, w := range h.Widgets {
 		if _, err := oneOf("header widget", w, append([]string{""}, AppearanceWidgets...)); err != nil || w == "" || seen[w] {
@@ -286,8 +325,13 @@ func applyAppearance(s *CampaignSettings, in AppearanceInput) (*string, error) {
 	content.Links = links
 	content.Quote = strings.TrimSpace(h.Text)
 	// Mode keeps older readers working: the first widget, in its old name.
+	// Widgets that older readers never knew show as "widgets", which they
+	// ignore, so a rollback hides them rather than misreading them.
 	if len(content.Widgets) > 0 {
-		content.Mode = map[string]string{"links": "links", "text": "quote"}[content.Widgets[0]]
+		content.Mode = "widgets"
+		if m, ok := map[string]string{"links": "links", "text": "quote"}[content.Widgets[0]]; ok {
+			content.Mode = m
+		}
 	}
 
 	// Colours. Buttons follow the chrome accent and apps follow Surface A,
@@ -321,6 +365,10 @@ func applyAppearance(s *CampaignSettings, in AppearanceInput) (*string, error) {
 		{&a.ButtonStyle, "button style", in.Buttons.Style, AppearanceButtonStyles},
 		{&a.Elevation, "elevation", in.Motion.Elevation, AppearanceElevations},
 		{&a.MotionSpeed, "motion speed", in.Motion.Speed, AppearanceSpeeds},
+		{&a.HeaderHeight, "header height", h.Height, AppearanceHeights},
+		{&a.SidebarColour, "menu colour", in.Sidebar.Colour, AppearanceSidebars},
+		{&a.SidebarCorner, "menu corner", in.Sidebar.Corner, AppearanceCorners},
+		{&a.PeekGlow, "peek glow", in.Sidebar.Glow, AppearanceGlows},
 	}
 	for _, c := range checks {
 		if *c.dst, err = oneOf(c.name, c.v, c.allowed); err != nil {
@@ -328,6 +376,9 @@ func applyAppearance(s *CampaignSettings, in AppearanceInput) (*string, error) {
 		}
 	}
 	a.ReduceMotion = in.Motion.ReduceAll
+	if err := applySidebar(&a, in.Sidebar); err != nil {
+		return fail(err)
+	}
 
 	s.BrandName = name
 	s.BrandLogo = logo
@@ -351,6 +402,49 @@ func applyAppearance(s *CampaignSettings, in AppearanceInput) (*string, error) {
 		return nil, nil
 	}
 	return &backdrop, nil
+}
+
+// applySidebar validates the choices that go with the menu colour, corner and
+// glow already normalised into a. A companion value (own colour, banner,
+// subtitle, glow colour) is kept only while the choice that uses it is
+// selected, and a choice that needs its companion is refused without one.
+func applySidebar(a *Appearance, in AppearanceSidebarInput) error {
+	var err error
+	if a.SidebarColour == "own" {
+		if a.SidebarOwn, err = calmColour("menu colour", in.Own, true); err != nil {
+			return err
+		}
+		if a.SidebarOwn == "" {
+			return apperror.NewBadRequest("your own menu colour needs a colour")
+		}
+	}
+	switch a.SidebarCorner {
+	case "subtitle":
+		sub := strings.TrimSpace(in.Subtitle)
+		if utf8.RuneCountInString(sub) > appearanceSubtitleMax {
+			return apperror.NewBadRequest("the menu subtitle must be 40 characters or fewer")
+		}
+		if strings.IndexFunc(sub, unicode.IsControl) >= 0 {
+			return apperror.NewBadRequest("the menu subtitle must be one line of text")
+		}
+		a.SidebarSubtitle = sub
+	case "banner":
+		if a.SidebarBanner, err = pictureName("menu banner", in.Banner); err != nil {
+			return err
+		}
+		if a.SidebarBanner == "" {
+			return apperror.NewBadRequest("a banner corner needs a picture")
+		}
+	}
+	if a.PeekGlow == "own" {
+		if a.PeekGlowColour, err = calmColour("glow colour", in.GlowColour, false); err != nil {
+			return err
+		}
+		if a.PeekGlowColour == "" {
+			return apperror.NewBadRequest("your own glow needs a colour")
+		}
+	}
+	return nil
 }
 
 // SaveAppearance writes one Customize page Save: every setting at once, so

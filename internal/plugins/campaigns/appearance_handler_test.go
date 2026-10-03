@@ -105,6 +105,12 @@ func TestSaveAppearanceAPI(t *testing.T) {
 			map[string]any{"brand": map[string]any{"logo": "new.png"}}, true, true, http.StatusBadRequest, 0, 0},
 		{"one foreign picture among stored ones refused", RoleOwner, `{"brand_logo":"logo.png"}`, nil,
 			map[string]any{"brand": map[string]any{"logo": "logo.png", "backdrop": "foreign.png"}}, false, false, http.StatusBadRequest, 0, 1},
+		{"unowned menu banner refused before service", RoleOwner, "", nil,
+			map[string]any{"sidebar": map[string]any{"corner": "banner", "banner": "foreign.png"}}, false, false, http.StatusBadRequest, 0, 1},
+		{"owned menu banner accepted", RoleOwner, "", nil,
+			map[string]any{"sidebar": map[string]any{"corner": "banner", "banner": "mine.png"}}, true, false, 0, 1, 1},
+		{"menu banner equal to stored skips ownership check", RoleOwner, `{"appearance":{"sidebar_banner":"menu.png"}}`, nil,
+			map[string]any{"sidebar": map[string]any{"corner": "banner", "banner": "menu.png"}}, false, false, 0, 1, 0},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -180,6 +186,8 @@ func TestUploadAppearancePictureAPI(t *testing.T) {
 		{"logo over 1 MB", RoleOwner, "logo", pngBytes(1<<20 + 1), "a.png", http.StatusBadRequest},
 		{"backdrop over 4 MB", RoleOwner, "backdrop", pngBytes(4<<20 + 1), "a.png", http.StatusBadRequest},
 		{"header over 1.5 MB", RoleOwner, "header", pngBytes(3<<19 + 1), "a.png", http.StatusBadRequest},
+		{"menu banner over 1.5 MB", RoleOwner, "menu", pngBytes(3<<19 + 1), "a.png", http.StatusBadRequest},
+		{"menu banner ok", RoleOwner, "menu", pngBytes(1 << 20), "a.png", 0},
 		{"non-image bytes", RoleOwner, "logo", []byte("just some text, definitely not a picture"), "a.png", http.StatusBadRequest},
 		{"html disguised as png", RoleOwner, "logo", []byte("<html><script>alert(1)</script></html>"), "a.png", http.StatusBadRequest},
 		{"logo png ok", RoleOwner, "logo", pngBytes(100), "a.png", 0},

@@ -18,6 +18,7 @@ var appearancePictureLimits = map[string]int64{
 	"logo":     1 << 20,
 	"backdrop": 4 << 20,
 	"header":   3 << 19, // 1.5 MB
+	"menu":     3 << 19, // 1.5 MB: the menu's banner corner
 }
 
 // SaveAppearanceAPI handles PUT /campaigns/:id/appearance: one Save from
@@ -43,6 +44,9 @@ func (h *Handler) SaveAppearanceAPI(c echo.Context) error {
 	stored[settings.BrandLogo] = true
 	if settings.TopbarStyle != nil {
 		stored[settings.TopbarStyle.ImagePath] = true
+	}
+	if settings.Appearance != nil {
+		stored[settings.Appearance.SidebarBanner] = true
 	}
 	if cc.Campaign.BackdropPath != nil {
 		stored[*cc.Campaign.BackdropPath] = true
