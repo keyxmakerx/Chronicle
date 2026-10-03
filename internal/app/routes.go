@@ -3922,7 +3922,11 @@ func (a *App) RegisterRoutes() {
 					PageTone: ap.PageTone, Contrast: ap.Contrast,
 					BodyFont: ap.BodyFont, HeadingFont: ap.HeadingFont, TypeScale: ap.TypeScale,
 					ButtonStyle: ap.ButtonStyle, Elevation: ap.Elevation, MotionSpeed: ap.MotionSpeed,
-					ReduceMotion: ap.ReduceMotion,
+					ReduceMotion:  ap.ReduceMotion,
+					HeaderHeight:  ap.HeaderHeight,
+					SidebarColour: ap.SidebarColour, SidebarOwn: ap.SidebarOwn,
+					SidebarCorner: ap.SidebarCorner, SidebarSubtitle: ap.SidebarSubtitle, SidebarBanner: ap.SidebarBanner,
+					PeekGlow: ap.PeekGlow, PeekGlowColour: ap.PeekGlowColour,
 				}
 				ctx = layouts.SetAppearance(ctx, ad)
 			}

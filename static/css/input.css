@@ -2783,12 +2783,14 @@
 @layer components {
   .nav-sb {
     --nav-bg: var(--color-sidebar-bg, #1a1c23);
-    --nav-hover: #262a33;
-    --nav-press: #15171d;
-    --nav-raised: #22252e;
-    --nav-text: #cbd5e1;
-    --nav-text-2: #8b93a1;
-    --nav-text-3: #5f6776;
+    /* The --cz-sb-* tokens come from a campaign's menu colour (Customize);
+       Charcoal is every fallback, so a campaign that never set one is unchanged. */
+    --nav-hover: var(--cz-sb-hover, #262a33);
+    --nav-press: var(--cz-sb-press, #15171d);
+    --nav-raised: var(--cz-sb-raised, #22252e);
+    --nav-text: var(--cz-sb-text, #cbd5e1);
+    --nav-text-2: var(--cz-sb-text-2, #8b93a1);
+    --nav-text-3: var(--cz-sb-text-3, #5f6776);
     --nav-hi: #ffffff;
     --nav-strong: #f3f4f6;
     --nav-line: rgb(255 255 255 / 0.07);
@@ -2814,6 +2816,32 @@
     box-shadow: inset 0 1px 0 rgb(255 255 255 / 0.25);
   }
   .nav-brand-name { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 13.5px; font-weight: 700; }
+  /* The name and the optional subtitle stack; a plain corner has only the name. */
+  .nav-brand-text { min-width: 0; flex: 1; display: flex; flex-direction: column; justify-content: center; }
+  .nav-brand-sub {
+    min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+    font-size: 11px; font-weight: 500; color: var(--nav-text-2);
+  }
+  /* The banner picture sits behind the row, under a shade that keeps the
+     name readable on any picture. It is empty (and takes no room) for the
+     other corners. */
+  .nav-brand { position: relative; }
+  .nav-brand-bg { position: absolute; inset: 0; z-index: 0; overflow: hidden; pointer-events: none; }
+  .nav-brand-bg:empty { display: none; }
+  .nav-banner { width: 100%; height: 100%; object-fit: cover; display: block; }
+  .nav-brand-bg:not(:empty)::after {
+    content: ""; position: absolute; inset: 0;
+    background: linear-gradient(transparent 30%, rgb(0 0 0 / 0.65));
+  }
+  .nav-brand > :not(.nav-brand-bg) { position: relative; z-index: 1; }
+  [data-cz-corner="banner"] .nav-brand { height: 6rem; align-items: flex-end; padding-bottom: 10px; }
+  [data-cz-corner="banner"] .nav-brand-name { text-shadow: 0 1px 3px rgb(0 0 0 / 0.6); }
+  [data-cz-corner="banner"] .nav-brand-sub { color: rgb(255 255 255 / 0.8); }
+  /* The tall header and the menu's brand row share their bottom edge. */
+  [data-cz-hdr="tall"] .nav-brand { height: 6rem; }
+  /* Peeking or folded to icons, the menu shows only the logo. */
+  #sidebar.sidebar-peeking .nav-brand-text, #sidebar.sidebar-peeking .nav-brand-bg,
+  .sidebar-collapsed .nav-brand-text, .sidebar-collapsed .nav-brand-bg { display: none; }
   .nav-ibtn {
     width: 32px; height: 32px; flex: none; border-radius: 8px; display: grid; place-items: center;
     color: var(--nav-text-2); transition: transform 120ms var(--nav-ease);
@@ -3917,6 +3945,9 @@ html[data-cz-scale="roomy"] { font-size: 110%; }
   font-weight: var(--cz-hw, 600);
   letter-spacing: var(--cz-hls, 0);
 }
+
+/* The tall header. Unlayered, so it outranks the h-14 utility on the bar. */
+[data-cz-hdr="tall"] #app-topbar { height: 6rem; }
 
 /* A custom header that needs light words gets the light ink set inside it. */
 .cz-hdr-light {

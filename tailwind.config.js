@@ -27,7 +27,8 @@ module.exports = {
       colors: {
         // Sidebar dark theme
         sidebar: {
-          bg: '#1a1c23',
+          // A variable so the campaign's menu colour (Customize) reaches bg-sidebar-bg.
+          bg: 'var(--color-sidebar-bg, #1a1c23)',
           hover: '#2d2f3a',
           text: '#9ca3af',
           active: '#e5e7eb',

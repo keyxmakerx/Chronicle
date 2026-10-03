@@ -31,6 +31,19 @@ type AppearanceData struct {
 	Elevation    string
 	MotionSpeed  string
 	ReduceMotion bool
+
+	// HeaderHeight is "tall" for the taller header; "" is the slim default.
+	HeaderHeight string
+	// SidebarColour is "ink", "tinted" or "own"; "" is Chronicle's charcoal.
+	SidebarColour string
+	SidebarOwn    string
+	// SidebarCorner is "subtitle" or "banner"; "" is the plain logo and name.
+	SidebarCorner   string
+	SidebarSubtitle string
+	SidebarBanner   string
+	// PeekGlow is "own" for a glow colour of its own; "" follows the accent.
+	PeekGlow       string
+	PeekGlowColour string
 }
 
 const keyAppearance ctxKey = "layout_appearance"
@@ -71,7 +84,37 @@ func AppearanceAttrs(ctx context.Context) templ.Attributes {
 	if a.ReduceMotion {
 		attrs["data-cz-reduce"] = "1"
 	}
+	// Sizes the header and the menu's corner by CSS alone, so a Customize
+	// save can restyle both by swapping attributes.
+	if a.HeaderHeight == "tall" {
+		attrs["data-cz-hdr"] = "tall"
+	}
+	if a.SidebarCorner == "subtitle" || a.SidebarCorner == "banner" {
+		attrs["data-cz-corner"] = a.SidebarCorner
+	}
 	return attrs
+}
+
+// NavCorner is what the menu's top-left corner shows: its kind ("plain",
+// "subtitle" or "banner"), the subtitle line and the banner picture. A
+// corner whose own content is missing falls back to the plain one rather
+// than showing an empty strip.
+func NavCorner(ctx context.Context) (kind, subtitle, banner string) {
+	a := GetAppearance(ctx)
+	if a == nil {
+		return "plain", "", ""
+	}
+	switch a.SidebarCorner {
+	case "subtitle":
+		if a.SidebarSubtitle != "" {
+			return "subtitle", a.SidebarSubtitle, ""
+		}
+	case "banner":
+		if a.SidebarBanner != "" {
+			return "banner", "", a.SidebarBanner
+		}
+	}
+	return "plain", "", ""
 }
 
 // czTone is one page tone in one theme, in Chronicle's own token names.
@@ -122,6 +165,50 @@ func toneVars(t czTone, dark bool) string {
 		"--color-text-primary:%s;--color-text-body:%s;--color-text-secondary:%s;--color-text-muted:%s;--color-text-faint:%s;",
 		t.bg, t.card, t.card, t.alt, t.line, borderLight, t.line2, input,
 		t.text, t.body, t.muted, colour.Mix(t.muted, t.bg, 0.35), colour.Mix(t.muted, t.bg, 0.6))
+}
+
+// czMenu is one menu colour with the shades the menu derives from it.
+type czMenu struct{ bg, hover, press, raised, text, text2, text3 string }
+
+// czMenuInk is Ink's own set of words: cooler than Charcoal's, to sit on its
+// blue-black. Charcoal's are the stylesheet's defaults, so nothing is emitted
+// for it. Must match SIDEBARS in customize_look.js.
+var czMenuInk = czMenu{bg: "#0e1424", text: "#cdd5e3", text2: "#8a95aa", text3: "#66728a"}
+
+// menu resolves the menu colour: ok is false for Charcoal, which the
+// stylesheet already draws. Tinted and own colours pass through
+// colour.MenuDark, so white menu words keep 7:1 whatever was chosen.
+func (a *AppearanceData) menu(accent string) (m czMenu, ok bool) {
+	switch a.SidebarColour {
+	case "ink":
+		m = czMenuInk
+	case "tinted":
+		if accent == "" || !colour.ValidHex(accent) {
+			accent = "#6366f1"
+		}
+		m = czMenu{bg: colour.MenuTinted(accent)}
+	case "own":
+		if !colour.ValidHex(a.SidebarOwn) {
+			return czMenu{}, false
+		}
+		m = czMenu{bg: colour.MenuDark(a.SidebarOwn)}
+	default:
+		return czMenu{}, false
+	}
+	if m.text == "" {
+		m.text, m.text2, m.text3 = "#cbd5e1", "#8b93a1", "#5f6776"
+	}
+	m.hover = colour.Mix(m.bg, "#ffffff", 0.07)
+	m.raised = colour.Mix(m.bg, "#ffffff", 0.045)
+	m.press = colour.Mix(m.bg, "#000000", 0.25)
+	return m, true
+}
+
+// menuVars writes the menu's tokens. The stylesheet falls back to
+// Charcoal's values wherever one is missing.
+func menuVars(m czMenu) string {
+	return fmt.Sprintf("--color-sidebar-bg:%s;--cz-sb-hover:%s;--cz-sb-press:%s;--cz-sb-raised:%s;--cz-sb-text:%s;--cz-sb-text-2:%s;--cz-sb-text-3:%s;",
+		m.bg, m.hover, m.press, m.raised, m.text, m.text2, m.text3)
 }
 
 // czElevation is each elevation's resting and hover shadow, light then
@@ -234,6 +321,16 @@ func AppearanceCSS(ctx context.Context) string {
 		}
 		fmt.Fprintf(&root, "--color-accent-link:%s;", colour.Readable(accent, []string{light.bg, light.card}, 4.5, true).Hex)
 		fmt.Fprintf(&dark, "--color-accent-link:%s;", colour.Readable(accent, []string{night.bg, night.card}, 4.5, false).Hex)
+	}
+
+	// The menu is dark in both themes, so its tokens go in both blocks: the
+	// stylesheet's own dark-theme rule would otherwise out-rank :root.
+	if m, ok := a.menu(accent); ok {
+		root.WriteString(menuVars(m))
+		dark.WriteString(menuVars(m))
+	}
+	if a.PeekGlow == "own" && colour.ValidHex(a.PeekGlowColour) {
+		fmt.Fprintf(&root, "--peek-glow-rgb:%s;", colour.RGBChannels(a.PeekGlowColour))
 	}
 
 	if e, ok := czElevation[a.Elevation]; ok {
