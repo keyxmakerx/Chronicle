@@ -4,10 +4,6 @@
 
 Chronicle gives game masters and players a shared space to build worlds, track lore, and run campaigns — all on your own server, with no paywall, no forced public content, and full control over your data.
 
-> **Calendar is being rebuilt.** Chronicle's calendar and real-time date sync
-> are offline for a ground-up rewrite (#741) and unavailable in this version.
-> Timeline still works for calendar-free (standalone) events.
-
 ---
 
 ## Why Chronicle?
@@ -27,6 +23,12 @@ Chronicle is purpose-built for tabletop RPGs, open source, and designed to be se
 - **Custom Attributes** — Per-category field templates (text, number, select, checkbox, URL) with per-entity overrides
 - **Drag-and-Drop Page Layouts** — Visual layout editor for entity profile pages — no other tool has this
 
+### Calendar
+- **Custom Calendars** — Months, weekdays, moons, seasons and eras of your own, or the real-world calendar; import from Calendaria, Simple Calendar and Fantasy Calendar
+- **Events** — Kinds of event, repeats by rule with skipped or moved dates, and pages tied to events and eras
+- **Weather** — Climate-based generation, locked days and an optional player forecast
+- **Game Nights** — Plan a game night in the calendar, with a "Who's free" view of when everyone is available
+
 ### Timeline
 - **Interactive D3 Visualization** — SVG-rendered timeline with zoom, pan, and minimap
 - **Standalone Events** — Calendar-free events, organized into swim-lanes by entity group
@@ -37,14 +39,23 @@ Chronicle is purpose-built for tabletop RPGs, open source, and designed to be se
 - **Entity-Linked Markers** — Pin entities to map locations with click-through navigation
 - **DM-Only Markers** — Hide map pins from players
 
+### Armory, Shops & Stashes
+- **Armory** — Item galleries with tag filters, collections and character money history
+- **Shops** — Shop pages with a walk-in shop room; players buy as their character, or ask the GM to when downtime is closed
+- **Stashes** — Shared hoards of items and money, with GM-approved moves and a downtime switch
+
+### DM Screen
+- **GM Control Panel** — A three-leaf screen for owners and scribes: party at a glance, the world's date and weather, conditions and NPC reveals
+
 ### Game Sessions
 - **Session Scheduling** — Plan game nights with date, location, and status tracking
 - **RSVP** — Going / Maybe / Can't buttons with attendee tracking
 - **Entity Linking** — Tag which pages were relevant to each session
 
 ### Campaign Management
-- **Roles** — Owner (GM), Scribe (co-GM), and Player roles with granular permissions
+- **Roles** — Owner (GM), Scribe, and Player roles with granular permissions
 - **Customizable Dashboards** — Drag-and-drop dashboard blocks (recent pages, maps, stats)
+- **Site and Campaign Look** — Admin > Site look sets the name, logo and sign-in background; each person's My view sets light/dark, calmer motion, text size and contrast
 - **Customizable Sidebar** — Reorder, rename, and add custom navigation links
 - **Category Dashboards** — Per-category landing pages with their own layouts
 - **Public Campaigns** — Optionally make campaigns publicly viewable
@@ -54,6 +65,7 @@ Chronicle is purpose-built for tabletop RPGs, open source, and designed to be se
 - **Per-Entity Notes** — Private notes attached to any page
 - **Shared Notes** — Share notes with the campaign (with edit locking)
 - **Version History** — View and restore previous note versions
+- **Page History and Trash** — Every page keeps its text history; deleted pages wait in Trash and save clashes are caught instead of overwritten
 - **Checklists** — Quick checklist blocks within notes
 
 ### REST API
@@ -61,7 +73,7 @@ Chronicle is purpose-built for tabletop RPGs, open source, and designed to be se
 - **API Key Auth** — Per-campaign API keys with read/write/sync permissions and device fingerprint binding
 - **Addon Discovery** — External tools can detect which features are enabled per campaign
 - **Bulk Operations** — Bulk tag assignment and entity type reassignment (up to 200 per request)
-- **Sync Protocol** — Sync mappings, WebSocket real-time events, and bidirectional Foundry VTT integration
+- **Sync Protocol** — Sync mappings, WebSocket real-time events, and bidirectional Foundry VTT integration through the Chronicle Sync module (journals, characters, maps, shops, stashes, player notes)
 
 ### Admin & Security
 - **Startup Health Checks** — Automatic migration validation, schema verification, DB connectivity checks, and security audit on every server start

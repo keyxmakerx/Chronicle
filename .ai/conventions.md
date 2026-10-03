@@ -223,7 +223,7 @@ Avoid: restating the code (`// Set name to the request name`), unexplained comme
 | Groups | Owner | Owner | Owner | Owner | -- |
 
 \* Player sees content unless dm_only or custom permissions restrict it.
-\+ Notes: own notes, plus notes shared with the party, with you by name, or (for the Owner and co-DMs) with the GM. A private note is private from the GM too.
+\+ Notes: own notes, plus notes shared with the party, with you by name, or (for the Owner and members with DM access) with the GM. A private note is private from the GM too.
 
 **dm_only rules:** only Owners can create or toggle dm_only on any resource; only Owners can see dm_only content (default; per-campaign config is a later phase). Handlers silently strip dm_only from non-Owner requests (not a 403). Use `permissions.CanSeeDmOnly(role)` / `permissions.CanSetDmOnly(role)`.
 
