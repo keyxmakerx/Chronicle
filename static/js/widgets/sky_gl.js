@@ -82,6 +82,8 @@
         gl.pixelStorei(gl.UNPACK_PREMULTIPLY_ALPHA_WEBGL, true);
       }
       build();
+      /* Canvases come in premultiplied; raw arrays are uploaded as they are, which Firefox requires of them. */
+      function raw(up){ gl.pixelStorei(gl.UNPACK_PREMULTIPLY_ALPHA_WEBGL, false); up(); gl.pixelStorei(gl.UNPACK_PREMULTIPLY_ALPHA_WEBGL, true); }
       canvas.addEventListener('webglcontextlost', function(e){ e.preventDefault(); S.lost = true; });
       canvas.addEventListener('webglcontextrestored', function(){ S.lost = false; build(); S.onRestore && S.onRestore(); });
 
@@ -92,7 +94,9 @@
         if (need > S.slotPx){
           S.slotPx = need; S.slots = {};
           gl.bindTexture(gl.TEXTURE_2D, S.atlas);
-          gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, (need + 2) * 4, need + 2, 0, gl.RGBA, gl.UNSIGNED_BYTE, null);
+          /* Allocated as zeros, not left empty: Firefox warns and clears an empty texture itself before the first slot
+             is written into it. */
+          raw(function(){ gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, (need + 2) * 4, need + 2, 0, gl.RGBA, gl.UNSIGNED_BYTE, new Uint8Array((need + 2) * 4 * (need + 2) * 4)); });
         }
         var k = key + ':' + need;
         if (S.slots[i] !== k){
@@ -100,7 +104,7 @@
           gl.bindTexture(gl.TEXTURE_2D, S.atlas);
           /* The slot is cleared first: a smaller moon in a slot a larger one used leaves nothing of it at its edge. */
           if (!S.zero || S.zero.length !== sp * sp * 4) S.zero = new Uint8Array(sp * sp * 4);
-          gl.texSubImage2D(gl.TEXTURE_2D, 0, i * sp, 0, sp, sp, gl.RGBA, gl.UNSIGNED_BYTE, S.zero);
+          raw(function(){ gl.texSubImage2D(gl.TEXTURE_2D, 0, i * sp, 0, sp, sp, gl.RGBA, gl.UNSIGNED_BYTE, S.zero); });
           gl.texSubImage2D(gl.TEXTURE_2D, 0, i * sp + 1, 1, gl.RGBA, gl.UNSIGNED_BYTE, cv);
           S.slots[i] = k;
         }
@@ -113,9 +117,7 @@
       S.landUpload = function(key, data, w){
         if (S.landKey === key) return;
         gl.bindTexture(gl.TEXTURE_2D, S.land);
-        gl.pixelStorei(gl.UNPACK_PREMULTIPLY_ALPHA_WEBGL, false);
-        gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA32F, w, 2, 0, gl.RGBA, gl.FLOAT, data);
-        gl.pixelStorei(gl.UNPACK_PREMULTIPLY_ALPHA_WEBGL, true);
+        raw(function(){ gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA32F, w, 2, 0, gl.RGBA, gl.FLOAT, data); });
         S.landKey = key;
       };
 
