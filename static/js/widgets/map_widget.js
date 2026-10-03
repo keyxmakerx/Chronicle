@@ -110,6 +110,7 @@
         minZoom: -3,
         maxZoom: 3,
         zoomSnap: 0.25,
+        wheelPxPerZoomLevel: 120, // Matches the full viewer's gentler scroll zoom.
         zoomControl: false, // Compact view — hide zoom controls.
         attributionControl: false,
         dragging: true,

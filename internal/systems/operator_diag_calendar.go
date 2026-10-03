@@ -42,11 +42,9 @@ type CalendarStatsFacts struct {
 	MigrationVersion int
 	MigrationLatest  int
 
-	// FoundrySyncState is reported honestly rather than inferred: the sync
-	// API's own calendar routes still answer a structured 503
-	// (`calendar_rebuilding`) regardless of how live the calendar plugin
-	// itself now is — syncapi is untouched, deliberately later work (#778's
-	// own scope excludes it). See internal/plugins/syncapi/calendar_api_handler.go.
+	// FoundrySyncState is a fact of the current build, not a live probe: which
+	// of the sync API's calendar routes serve the V5 calendar. See
+	// internal/plugins/syncapi/calendar_api_handler.go.
 	FoundrySyncState string
 
 	Notes []string

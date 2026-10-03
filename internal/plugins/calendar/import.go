@@ -105,6 +105,10 @@ type ImportedToday struct {
 	Year  int  `json:"year"`
 	Month *int `json:"month,omitempty"`
 	Day   *int `json:"day,omitempty"`
+	// Hour and Minute are the time of day, 0 for every format but the Foundry
+	// module's payload, which carries the world's current time.
+	Hour   int `json:"hour,omitempty"`
+	Minute int `json:"minute,omitempty"`
 }
 
 // ImportedSettings holds calendar-level settings extracted from the import.
@@ -116,8 +120,10 @@ type ImportedSettings struct {
 	// CreateCalendar call defaults an empty Mode to ModeFantasy — the same
 	// default CreateCalendar already applies to a manual create with no
 	// mode specified.
-	Mode             string  `json:"mode,omitempty"`
-	EpochName        *string `json:"epoch_name,omitempty"`
+	Mode      string  `json:"mode,omitempty"`
+	EpochName *string `json:"epoch_name,omitempty"`
+	// Description is only carried by the Foundry module's payload.
+	Description      *string `json:"description,omitempty"`
 	CurrentYear      int     `json:"current_year"`
 	HoursPerDay      int     `json:"hours_per_day"`
 	MinutesPerHour   int     `json:"minutes_per_hour"`

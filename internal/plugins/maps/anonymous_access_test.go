@@ -47,6 +47,9 @@ type guardMapSvc struct {
 func (guardMapSvc) GetMap(_ context.Context, id string) (*Map, error) {
 	return &Map{ID: id, CampaignID: "camp-1"}, nil
 }
+func (guardMapSvc) ResolveDisplay(_ context.Context, m *Map) (ResolvedDisplay, error) {
+	return ResolveDisplay(m, ""), nil
+}
 func (guardMapSvc) ListMarkers(_ context.Context, _, _ string, _ int, _ string) ([]Marker, error) {
 	return []Marker{}, nil
 }

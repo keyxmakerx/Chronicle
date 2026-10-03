@@ -59,7 +59,7 @@ function fakeEl(extra = {}) {
   return el;
 }
 
-function loadSky({ reduced = false, stored = null, apiFetch = null } = {}) {
+function loadSky({ reduced = false, stored = null, apiFetch = null, rest = null } = {}) {
   const frames = [], store = new Map(stored ? [['chronicle.calendar.sky', stored]] : []);
   let now = 0;
   const document = {
@@ -86,6 +86,7 @@ function loadSky({ reduced = false, stored = null, apiFetch = null } = {}) {
     Chronicle: { register() {}, apiFetch: apiFetch || (() => Promise.reject(new Error('no server'))) },
     addEventListener() {}, removeEventListener() {},
   };
+  if (rest) sandbox.MotionRest = rest;
   sandbox.window = sandbox;
   vm.createContext(sandbox);
   for (const f of ['sky_world.js', 'sky_looks.js', 'sky_moon.js', 'sky_events.js', 'sky_2d.js', 'sky_pane.js']) {
@@ -304,4 +305,33 @@ test('without campaign and calendar ids the dock asks for nothing', async () => 
   dock(env, { cal: WITH_CURRENT });
   await settle();
   assert.equal(asked, 0);
+});
+
+// A stand-in for motion_rest.js: the test says when the viewer has stepped away.
+function fakeRest() {
+  const wakers = [];
+  const r = {
+    away: false,
+    now: () => 10, speed: () => (r.away ? 0 : 1), still: () => r.away,
+    onWake: (fn) => wakers.push(fn), offWake: (fn) => { const i = wakers.indexOf(fn); if (i >= 0) wakers.splice(i, 1); },
+    wake: () => { r.away = false; wakers.slice().forEach((fn) => fn()); },
+  };
+  return r;
+}
+
+test('a moving sky asks for no frames while the viewer is away, and starts again when they are back', () => {
+  const rest = fakeRest();
+  const env = loadSky({ rest });
+  const { d } = dock(env);
+  // This harness has no WebGL, so a painted frame would mark the sky as still; the test holds a moving pace instead.
+  d.pace = 2; d.kick();
+  assert.ok(env.pending() > 0, 'a moving sky asks for frames');
+  rest.away = true;
+  d.kick();
+  assert.equal(env.pending(), 0, 'at rest the last frame stays up and nothing more is asked for');
+  rest.wake();
+  assert.ok(env.pending() > 0, 'coming back asks for frames again');
+  d.destroy();
+  rest.away = true; rest.wake();
+  assert.equal(env.pending(), 0, 'a destroyed dock does not wake');
 });
