@@ -220,7 +220,7 @@ func apiLines(in []MoveLine) []APIMoveLine {
 	for _, l := range in {
 		// Purchase requests share the web history but are not moves: their ids
 		// are not move ids and they have no kind, so the API leaves them out.
-		if l.Move.Kind == "" {
+		if l.Kind == "" {
 			continue
 		}
 		out = append(out, APIMoveLine{
