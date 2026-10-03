@@ -127,6 +127,17 @@
   new MutationObserver(queueMedia).observe(body, {
     childList: true, subtree: true, attributes: true, attributeFilter: ['src']
   });
+  // A link that ran out mid-recording (a long pause, then a seek) gets a
+  // fresh one; error events don't bubble, so listen while capturing.
+  body.addEventListener('error', function (e) {
+    var el = e.target;
+    // Twice at most, so a file that can't play doesn't loop.
+    if (el && el.dataset && el.dataset.mediaSigned && (+el.dataset.mediaRetries || 0) < 2) {
+      el.dataset.mediaRetries = (+el.dataset.mediaRetries || 0) + 1;
+      el.dataset.mediaSigned = '';
+      queueMedia();
+    }
+  }, true);
   setInterval(function () {
     Array.prototype.forEach.call(body.querySelectorAll('audio[data-media-signed],video[data-media-signed]'), function (el) {
       if (el.readyState < 2) el.dataset.mediaSigned = '';

@@ -34,16 +34,11 @@ func (h *Handler) SignedLinksForMember(ctx context.Context, campaignID, userID s
 	if !h.memberChecker.IsCampaignMember(campaignID, userID) {
 		return out
 	}
-	seen := map[string]bool{}
+	// Each distinct file (and thumbnail size) is checked once, however many
+	// spellings of its path arrive, and the cap counts files, not strings:
+	// the access check can be a campaign-wide scan.
+	done := map[string]string{}
 	for _, raw := range paths {
-		if len(seen) >= maxMemberLinks {
-			break
-		}
-		if seen[raw] {
-			continue
-		}
-		seen[raw] = true
-
 		path, _, _ := strings.Cut(raw, "?")
 		m := memberLinkPath.FindStringSubmatch(path)
 		if m == nil {
@@ -53,6 +48,18 @@ func (h *Handler) SignedLinksForMember(ctx context.Context, campaignID, userID s
 		if err != nil {
 			continue
 		}
+		key := id.String() + "/" + m[2]
+		if link, ok := done[key]; ok {
+			if link != "" {
+				out[raw] = link
+			}
+			continue
+		}
+		if len(done) >= maxMemberLinks {
+			break
+		}
+		done[key] = ""
+
 		file, err := h.service.GetByID(ctx, id.String())
 		if err != nil || file.CampaignID == nil || *file.CampaignID != campaignID {
 			continue
@@ -70,11 +77,12 @@ func (h *Handler) SignedLinksForMember(ctx context.Context, campaignID, userID s
 		if !allowed {
 			continue
 		}
+		link := h.signer.Sign(file.ID, ViewerAPIKey, SignedURLTTL)
 		if m[2] != "" {
-			out[raw] = h.signer.SignThumb(file.ID, m[2], ViewerAPIKey, SignedURLTTL)
-		} else {
-			out[raw] = h.signer.Sign(file.ID, ViewerAPIKey, SignedURLTTL)
+			link = h.signer.SignThumb(file.ID, m[2], ViewerAPIKey, SignedURLTTL)
 		}
+		done[key] = link
+		out[raw] = link
 	}
 	return out
 }

@@ -111,6 +111,23 @@ func TestSignedLinksForMember_OpenWithoutACookie(t *testing.T) {
 	}
 }
 
+// Many spellings of one file cost one look-up and all get the link.
+func TestSignedLinksForMember_OneLookUpPerFile(t *testing.T) {
+	h := newLinkHandler()
+	svc := h.service.(*linkFilesService)
+	paths := make([]string, 0, 300)
+	for i := 0; i < 300; i++ {
+		paths = append(paths, "/media/"+linkNoteAudio+"?n="+string(rune('a'+i%26))+string(rune('a'+i/26)))
+	}
+	got := h.SignedLinksForMember(context.Background(), "camp-l", "player", paths)
+	if len(got) != len(paths) {
+		t.Fatalf("want every spelling linked, got %d of %d", len(got), len(paths))
+	}
+	if svc.findReferencesCalls != 1 {
+		t.Fatalf("want one access check, got %d", svc.findReferencesCalls)
+	}
+}
+
 // A failing visibility check leaves the file out rather than signing it.
 func TestSignedLinksForMember_FailsClosed(t *testing.T) {
 	h := newLinkHandler()
