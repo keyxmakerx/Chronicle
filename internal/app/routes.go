@@ -3592,21 +3592,22 @@ func (a *App) RegisterRoutes() {
 
 	// Maps plugin blocks (requires "maps" addon).
 	//
-	// map_editor — per-entity Map Editor block. Reads from entities.map_id
-	// (NOT from block config) so the choice lives on the entity itself, not
-	// a shared entity-type layout. Template context only. Three render
-	// branches: entity has map_id → full inline editor (Scribe+ can change
-	// it, Players view-only); no map_id + Scribe+ → thumbnail picker grid;
-	// no map_id + Player → friendly empty state.
+	// map_editor — per-entity Map block. The map is resolved from a widget
+	// binding, else the legacy entities.map_id (NOT block config), so the
+	// choice lives on the entity itself, not a shared entity-type layout.
+	// Template context only. Three render branches: a resolved map → framed
+	// preview that unfolds into the live viewer on click (Scribe+ can change
+	// it); none + Scribe+ → create-or-pick prompt; none + Player → friendly
+	// empty state.
 	blockRegistry.Register(entities.BlockMeta{
 		Type: "map_editor", Label: "Map Editor", Icon: "fa-map-location-dot",
-		Description: "Full per-entity map (markers, drawings, settings)",
+		Description: "Framed map preview that opens the full map",
 		Addon:       "maps", Contexts: []string{"template"},
 		// No ConfigFields — the source of truth is entity.MapID. The
 		// picker is rendered by the block itself, not the layout editor.
-		// Singleton: only one map_editor per layout — the IIFE inside
-		// MapEditorBody binds fixed DOM IDs that would collide with
-		// multiple instances. See BlockMeta.Singleton docstring.
+		// Singleton: only one map_editor per layout — every instance would
+		// resolve to the same entity-bound map, and the live viewer it opens
+		// binds fixed DOM IDs. See BlockMeta.Singleton docstring.
 		Singleton: true,
 	}, func(rc entities.BlockRenderContext) templ.Component {
 		// Resolve + render via maps.mapWidgetType.RenderBlock. A

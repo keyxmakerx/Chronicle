@@ -87,11 +87,44 @@ func (h *Handler) requireMarkerInCampaign(c echo.Context, markerID, campaignID s
 // GET /campaigns/:id/maps/:mid
 func (h *Handler) Show(c echo.Context) error {
 	cc := campaigns.GetCampaignContext(c)
+	data, err := h.mapViewData(c, cc)
+	if err != nil {
+		return err
+	}
+
+	if middleware.IsHTMX(c) {
+		return middleware.Render(c, http.StatusOK, MapShowFragment(cc, data))
+	}
+	return middleware.Render(c, http.StatusOK, MapShowPage(cc, data))
+}
+
+// Viewer renders the bare framed viewer (no page chrome) that the focus view
+// fetches when a map preview on another page is opened.
+// GET /campaigns/:id/maps/:mid/viewer
+//
+// It is registered in the same group, with the same access check, as Show and
+// builds its data through the same mapViewData, so what a viewer receives here
+// (role-filtered markers, tool gates, resolved frame) is by construction what
+// the map page gives them; there is no second copy of the rules to drift.
+func (h *Handler) Viewer(c echo.Context) error {
+	cc := campaigns.GetCampaignContext(c)
+	data, err := h.mapViewData(c, cc)
+	if err != nil {
+		return err
+	}
+	return middleware.Render(c, http.StatusOK, MapViewerFragment(cc, data))
+}
+
+// mapViewData loads everything the viewer needs for the :mid map, scoped to the
+// request's campaign and filtered for the requester's role. Shared by the map
+// page and the focus-view fragment so the two cannot disagree about who sees
+// what.
+func (h *Handler) mapViewData(c echo.Context, cc *campaigns.CampaignContext) (MapViewData, error) {
 	mapID := c.Param("mid")
 
 	m, err := h.requireMapInCampaign(c, mapID, cc.Campaign.ID)
 	if err != nil {
-		return err
+		return MapViewData{}, err
 	}
 
 	role := cc.VisibilityRole()
@@ -103,14 +136,14 @@ func (h *Handler) Show(c echo.Context) error {
 	}
 	markers, err := h.svc.ListMarkers(c.Request().Context(), cc.Campaign.ID, mapID, role, userID)
 	if err != nil {
-		return err
+		return MapViewData{}, err
 	}
 
 	// ResolveDisplay returns usable defaults alongside any error, so a failed
 	// campaign-frame lookup degrades to the default frame instead of a 500.
 	display, _ := h.svc.ResolveDisplay(c.Request().Context(), m)
 
-	data := MapViewData{
+	return MapViewData{
 		CampaignID: cc.Campaign.ID,
 		Map:        m,
 		Markers:    markers,
@@ -118,12 +151,7 @@ func (h *Handler) Show(c echo.Context) error {
 		IsOwner:    cc.MemberRole >= campaigns.RoleOwner,
 		UserID:     userID,
 		Display:    display,
-	}
-
-	if middleware.IsHTMX(c) {
-		return middleware.Render(c, http.StatusOK, MapShowFragment(cc, data))
-	}
-	return middleware.Render(c, http.StatusOK, MapShowPage(cc, data))
+	}, nil
 }
 
 // CreateMapAPI creates a new map.
