@@ -310,6 +310,42 @@ paths:
         "500":
           $ref: "#/components/responses/InternalError"
 
+  /campaigns/{campaignId}/armory/shops/{entityId}/room:
+    get:
+      tags: [Entities]
+      summary: Get a shop's room as players see it
+      operationId: getShopRoom
+      description: >-
+        Requires the armory addon. Returns the saved room layout (null when the
+        shop has none, so the client generates one from defaults) and the shop's
+        "sells" relations a plain player can see.
+      parameters:
+        - $ref: "#/components/parameters/campaignId"
+        - $ref: "#/components/parameters/entityId"
+      responses:
+        "200":
+          description: Room layout and player-visible goods
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  layout:
+                    type: object
+                    nullable: true
+                  goods:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/Relation"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "429":
+          $ref: "#/components/responses/RateLimited"
+        "500":
+          $ref: "#/components/responses/InternalError"
+
   # --- Calendar ---
   /campaigns/{campaignId}/calendar:
     get:

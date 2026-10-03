@@ -264,6 +264,11 @@ func RegisterAPIRoutes(e *echo.Echo, api *APIHandler, calAPI *CalendarAPIHandler
 	mapGroup.DELETE("/maps/:mapID/fog/:fogID", mapAPI.DeleteFog, RequirePermission(PermWrite))
 	mapGroup.DELETE("/maps/:mapID/fog", mapAPI.ResetFog, RequirePermission(PermWrite))
 
+	// Shop room read endpoint (require "read" permission + armory addon): the
+	// Foundry module shows the room to its players.
+	shopGroup := cg.Group("", RequireAddonAPI(addonChecker, "armory"))
+	shopGroup.GET("/armory/shops/:eid/room", api.GetShopRoom, RequirePermission(PermRead))
+
 	// Note read endpoints (require "read" permission).
 	cg.GET("/notes", noteAPI.ListNotes, RequirePermission(PermRead))
 	cg.GET("/notes/:noteID", noteAPI.GetNote, RequirePermission(PermRead))
