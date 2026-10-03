@@ -85,7 +85,7 @@ func (r *favoriteRepository) List(ctx context.Context, userID, campaignID string
 	          FROM entity_favorites f
 	          INNER JOIN entities e ON e.id = f.entity_id
 	          INNER JOIN entity_types et ON et.id = e.entity_type_id
-	          WHERE f.user_id = ? AND f.campaign_id = ?
+	          WHERE f.user_id = ? AND f.campaign_id = ? AND e.deleted_at IS NULL
 	          ORDER BY f.created_at DESC`
 
 	rows, err := r.db.QueryContext(ctx, query, userID, campaignID)

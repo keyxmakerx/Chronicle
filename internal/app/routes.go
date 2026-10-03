@@ -3343,6 +3343,15 @@ func (a *App) RegisterRoutes() {
 	entityHandler.SetGroupLister(groupService)
 	entityHandler.SetCache(a.Redis)
 
+	// --- Undo for world pages: History, Trash, save clashes ---
+	// Wired here, after settings exists, because the Trash's retention is a
+	// site setting. Until SetPageSafety runs, deletes are permanent.
+	pageSafetyRepo := entities.NewPageSafetyRepository(a.DB)
+	entityService.SetPageSafety(pageSafetyRepo)
+	pageSafetyService := entities.NewPageSafetyService(pageSafetyRepo, entityRepo, entityService, settingsService)
+	entities.RegisterPageSafetyRoutes(e, entities.NewPageSafetyHandler(pageSafetyService, entityService, campaignService), campaignService, authService)
+	go pageSafetyService.StartPurger(a.ShutdownCtx)
+
 	// --- Entity Block Registry ---
 	// Create the block registry and let each plugin register its block types.
 	// This drives validation, rendering, and the template editor palette.

@@ -171,7 +171,7 @@ const markerCols = `m.id, m.map_id, m.name, m.description,
        COALESCE(ent.name, ''), COALESCE(et.icon, '')`
 
 // markerJoins is the LEFT JOIN clause for entity display data.
-const markerJoins = `LEFT JOIN entities ent ON ent.id = m.entity_id
+const markerJoins = `LEFT JOIN entities ent ON ent.id = m.entity_id AND ent.deleted_at IS NULL
      LEFT JOIN entity_types et ON et.id = ent.entity_type_id`
 
 // scanMarker reads a row into a Marker struct.

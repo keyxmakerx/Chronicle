@@ -1,0 +1,250 @@
+package entities
+
+import (
+	"fmt"
+	"time"
+
+	"github.com/keyxmakerx/chronicle/internal/plugins/campaigns"
+	"github.com/keyxmakerx/chronicle/internal/templates/layouts"
+)
+
+// HistoryPanelData is what the History panel shows.
+type HistoryPanelData struct {
+	CampaignID string
+	Entity     *Entity
+	Versions   []VersionView
+	Selected   int
+	ViewerID   string
+	Roles      map[string]string // user id -> role word
+	Now        time.Time
+}
+
+// TrashPageData is what the Trash page shows.
+type TrashPageData struct {
+	CampaignID string
+	Items      []TrashItem
+	Retention  int
+	ViewerID   string
+	Now        time.Time
+	Restored   string // id of a page just restored, for the "Open it" link
+}
+
+// whenLabel is the server's fallback for a time; page_safety.js rewrites it
+// in the reader's own time zone ("Today 21:14", "Yesterday 18:02", "28 Sep").
+func whenLabel(t, now time.Time) string {
+	t, now = t.UTC(), now.UTC()
+	y1, m1, d1 := t.Date()
+	y2, m2, d2 := now.Date()
+	switch {
+	case y1 == y2 && m1 == m2 && d1 == d2:
+		return "Today " + t.Format("15:04")
+	case t.AddDate(0, 0, 1).Format("2006-01-02") == now.Format("2006-01-02"):
+		return "Yesterday " + t.Format("15:04")
+	case y1 == y2:
+		return t.Format("2 Jan")
+	}
+	return t.Format("2 Jan 2006")
+}
+
+// versionAuthor is "You", "Sam (scribe)", or a stand-in when the author is
+// unknown (a baseline, an import, a deleted account).
+func versionAuthor(v VersionView, d HistoryPanelData) string {
+	if v.Kind == VersionBaseline {
+		return "Earlier version"
+	}
+	if v.UserID == nil {
+		return "Someone"
+	}
+	if *v.UserID == d.ViewerID {
+		return "You"
+	}
+	name := v.UserName
+	if name == "" {
+		name = "A former member"
+	}
+	if role, ok := d.Roles[*v.UserID]; ok && role != "" {
+		return name + " (" + role + ")"
+	}
+	return name
+}
+
+// versionChange is the right-hand summary of a history row.
+func versionChange(v VersionView) string {
+	switch {
+	case v.Kind == VersionCreated:
+		return "created"
+	case v.First:
+		return ""
+	case v.Added == 0 && v.Removed == 0:
+		if v.Kind == VersionRestore {
+			return "restored"
+		}
+		return "no text changes"
+	}
+	s := ""
+	if v.Added > 0 {
+		s = fmt.Sprintf("+%d %s", v.Added, plural(v.Added, "line", "lines"))
+	}
+	if v.Removed > 0 {
+		if s != "" {
+			s += " "
+		}
+		if v.Added > 0 {
+			s += fmt.Sprintf("−%d", v.Removed)
+		} else {
+			s += fmt.Sprintf("−%d %s", v.Removed, plural(v.Removed, "line", "lines"))
+		}
+	}
+	if v.Kind == VersionRestore {
+		s = "restored · " + s
+	}
+	return s
+}
+
+func plural(n int, one, many string) string {
+	if n == 1 {
+		return one
+	}
+	return many
+}
+
+func trashWho(t TrashItem, viewerID string) string {
+	if t.DeletedBy != nil && *t.DeletedBy == viewerID {
+		return "deleted by you"
+	}
+	if t.DeletedByName != "" {
+		return "deleted by " + t.DeletedByName
+	}
+	return "deleted"
+}
+
+func daysLeftLabel(t TrashItem, retention int, now time.Time) string {
+	n := DaysLeft(t.DeletedAt, retention, now)
+	switch n {
+	case 0:
+		return "going today"
+	case 1:
+		return "1 day left"
+	}
+	return fmt.Sprintf("%d days left", n)
+}
+
+// HistoryPanel is the History box opened from a page's History button. It
+// replaces itself when a version is picked, so it needs no script of its own.
+templ HistoryPanel(d HistoryPanelData) {
+	<section id="page-history" class="mt-4 card p-4 text-sm" aria-label="Page history">
+		<div class="flex items-center justify-between mb-2">
+			<h2 class="text-base font-semibold text-fg">History of &ldquo;{ d.Entity.Name }&rdquo;</h2>
+			<button type="button" class="btn-ghost btn-sm" onclick="document.getElementById('page-history').remove()" aria-label="Close history">
+				<i class="fa-solid fa-xmark"></i>
+			</button>
+		</div>
+		if len(d.Versions) == 0 {
+			<p class="text-fg-muted">No versions yet. Each save from now on is kept here, and any of them can be put back.</p>
+		} else {
+			<ul class="divide-y divide-edge" role="listbox" aria-label="Versions">
+				for i, v := range d.Versions {
+					<li>
+						<button
+							type="button"
+							role="option"
+							aria-selected={ fmt.Sprintf("%t", i == d.Selected) }
+							hx-get={ fmt.Sprintf("/campaigns/%s/entities/%s/history?v=%s", d.CampaignID, d.Entity.ID, v.ID) }
+							hx-target="#page-history"
+							hx-swap="outerHTML"
+							class={ "w-full flex items-center justify-between gap-2 py-1.5 px-1.5 rounded text-left hover:bg-surface-alt",
+								templ.KV("bg-accent/10", i == d.Selected) }
+						>
+							<span>
+								<time datetime={ v.UpdatedAt.UTC().Format(time.RFC3339) } data-page-time>{ whenLabel(v.UpdatedAt, d.Now) }</time>
+								&middot; { versionAuthor(v, d) }
+							</span>
+							<span class="text-xs text-fg-muted whitespace-nowrap">{ versionChange(v) }</span>
+						</button>
+					</li>
+				}
+			</ul>
+			@historyDiff(d)
+		}
+	</section>
+}
+
+// historyDiff shows what the selected version changed, word by word, and
+// offers to put it back. The newest version is the page as it is now, so it
+// has nothing to restore.
+templ historyDiff(d HistoryPanelData) {
+	{{ v := d.Versions[d.Selected] }}
+	<div class="mt-2 rounded border border-edge p-3 whitespace-pre-wrap break-words leading-relaxed">
+		for _, p := range v.Diff {
+			switch p.Op {
+				case '+':
+					<ins class="no-underline bg-green-500/20 rounded-sm">{ p.Text }</ins>
+				case '-':
+					<del class="bg-red-500/20 rounded-sm">{ p.Text }</del>
+				default:
+					{ p.Text }
+			}
+		}
+	</div>
+	<div class="mt-2 flex flex-wrap items-center gap-2">
+		if d.Selected == 0 {
+			<span class="text-xs text-fg-muted">This is the page as it is now.</span>
+		} else {
+			<button
+				type="button"
+				class="btn-primary btn-sm"
+				hx-post={ fmt.Sprintf("/campaigns/%s/entities/%s/history/%s/restore", d.CampaignID, d.Entity.ID, v.ID) }
+			>
+				Restore this version
+			</button>
+			<span class="text-xs text-fg-muted">Restoring saves a new version, so it can be undone too.</span>
+		}
+	</div>
+}
+
+// TrashPage is the campaign Trash under Manage.
+templ TrashPage(cc *campaigns.CampaignContext, d TrashPageData) {
+	@layouts.App(cc.Campaign.Name + " - Trash") {
+		<div class="max-w-4xl mx-auto">
+			@layouts.ManageHeader("Trash", "manage:trash")
+			<p class="text-sm text-fg-secondary mb-4">
+				Deleted pages wait here for { fmt.Sprint(d.Retention) } days, then are gone for good.
+				Restoring a page brings back its sub-pages, links and pictures with it. Players never see the Trash.
+			</p>
+			if d.Restored != "" {
+				<div class="mb-4 rounded border border-edge p-3 text-sm" role="status">
+					Page restored. <a class="text-accent hover:underline" href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/entities/%s", d.CampaignID, d.Restored)) }>Open it</a>
+				</div>
+			}
+			if len(d.Items) == 0 {
+				<div class="card p-6 text-center text-sm text-fg-muted">The Trash is empty.</div>
+			} else {
+				<ul class="card divide-y divide-edge">
+					for _, t := range d.Items {
+						<li class="flex flex-wrap items-center justify-between gap-2 px-4 py-3 text-sm">
+							<span class="min-w-0">
+								<i class={ "fa-solid " + t.TypeIcon + " text-fg-muted mr-1" } aria-hidden="true"></i>
+								<span class="font-medium text-fg">{ t.Name }</span>
+								<span class="text-fg-muted">({ t.TypeName })</span>
+								&middot; <span class="text-fg-secondary">{ trashWho(t, d.ViewerID) }</span>
+								if t.SubPages > 0 {
+									<span class="text-fg-muted"> &middot; with { fmt.Sprint(t.SubPages) } { plural(t.SubPages, "sub-page", "sub-pages") }</span>
+								}
+							</span>
+							<span class="flex items-center gap-3">
+								<span class="text-xs text-fg-muted">{ daysLeftLabel(t, d.Retention, d.Now) }</span>
+								<button
+									type="button"
+									class="btn-secondary btn-sm"
+									hx-post={ fmt.Sprintf("/campaigns/%s/trash/%s/restore", d.CampaignID, t.ID) }
+								>
+									Restore
+								</button>
+							</span>
+						</li>
+					}
+				</ul>
+			}
+		</div>
+	}
+}
