@@ -258,6 +258,15 @@ templ blockTitle(cc *campaigns.CampaignContext, entity *Entity, csrfToken string
 				// show handler injected (nil when none was computed). The
 				// DM-team gate lives inside visibilityGlance itself (ADR-057).
 				@effectiveVisibilityBadge(cc, entity, GetEffectiveVisibility(ctx))
+				// "Show in Foundry" for NPC pages. foundry_vtt owns it and
+				// answers empty for anything else, so this stays VTT-agnostic.
+				if cc.CanAuthorDmOnly() {
+					<span
+						hx-get={ fmt.Sprintf("/campaigns/%s/foundry-vtt/npc-spotlight/%s", cc.Campaign.ID, entity.ID) }
+						hx-trigger="load"
+						hx-swap="outerHTML"
+					></span>
+				}
 			</div>
 			// Aliases widget: displays alternative names for this entity.
 			<div

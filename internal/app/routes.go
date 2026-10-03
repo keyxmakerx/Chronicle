@@ -2983,6 +2983,7 @@ func (a *App) RegisterRoutes() {
 		)
 		foundry_vtt.RegisterOwnerRoutes(fvttCampaignAuthed, fvttHandler,
 			campaigns.RequireRole(campaigns.RoleOwner))
+		foundry_vtt.RegisterDMTeamRoutes(fvttCampaignAuthed, fvttHandler)
 
 		// Public manifest + download. Same rate limit as the packages
 		// public endpoints — manifest hits are frequent (every Foundry
@@ -4582,6 +4583,10 @@ func (a *App) RegisterRoutes() {
 	stashEvents.bus = wsEventBus
 	entityService.SetSidebarAutoAdder(&sidebarAutoAdderAdapter{campaignService: campaignService})
 	noteSvc.SetEventPublisher(&noteEventPublisherAdapter{bus: wsEventBus})
+
+	// "Show in Foundry" on NPC pages: npc.spotlight is not a change-feed
+	// type, so the recording wrapper passes it straight to the hub.
+	fvttHandler.SetNPCSpotlight(&npcSpotlightResolver{entities: entityService}, &npcSpotlightPublisher{bus: wsEventBus})
 
 	// Late-bind the entity_notes notifier now that wsEventBus exists.
 	// The service was constructed earlier with a holder.Notify reference;

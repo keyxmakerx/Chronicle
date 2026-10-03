@@ -2,6 +2,8 @@ package foundry_vtt
 
 import (
 	"github.com/labstack/echo/v4"
+
+	"github.com/keyxmakerx/chronicle/internal/plugins/campaigns"
 )
 
 // RegisterOwnerRoutes mounts per-campaign owner endpoints under a
@@ -36,6 +38,17 @@ func RegisterOwnerRoutes(cg *echo.Group, h *Handler, requireOwner echo.Middlewar
 	// it has shipped at this path since PR #298; renaming would break
 	// callers. Member access is enforced by the parent group.
 	cg.GET("/foundry-presence", h.GetFoundryPresenceAPI)
+}
+
+// RegisterDMTeamRoutes mounts the NPC "Show in Foundry" button and its
+// action for the campaign owner and members given DM access. Caller
+// passes the same campaign-member group as RegisterOwnerRoutes.
+func RegisterDMTeamRoutes(cg *echo.Group, h *Handler) {
+	dmTeam := campaigns.RequireCapability(func(cc *campaigns.CampaignContext) bool {
+		return cc.CanAuthorDmOnly()
+	}, "only the campaign owner or a member with DM access may do this")
+	cg.GET("/foundry-vtt/npc-spotlight/:eid", h.NPCSpotlightButtonHandler, dmTeam)
+	cg.POST("/foundry-vtt/npc-spotlight/:eid", h.NPCSpotlightAPI, dmTeam)
 }
 
 // RegisterAdminRoutes mounts the admin endpoints for the "Campaigns
