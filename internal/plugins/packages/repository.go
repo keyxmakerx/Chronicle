@@ -39,6 +39,12 @@ type PackageRepository interface {
 	// bookkeeping can't clobber unrelated fields and works even on paths
 	// where the full row wasn't loaded.
 	SetLastError(ctx context.Context, id, msg string) error
+
+	// SetRetention stores the per-package old-version override: nil clears
+	// it (use the site rule), a value means keep the newest N. Separate from
+	// UpdatePackage so the many read-modify-write callers can never echo a
+	// stale override back over a fresh one.
+	SetRetention(ctx context.Context, id string, keepNewest *int) error
 }
 
 // packageRepository is the MariaDB implementation.
@@ -64,6 +70,7 @@ const packageColumns = `id, type, slug, name, repo_url, COALESCE(description,'')
 // scanPackage scans a row into a Package struct. Column order must match packageColumns.
 func scanPackage(scanner interface{ Scan(dest ...any) error }) (*Package, error) {
 	var p Package
+	var keepNewest sql.NullInt64
 	err := scanner.Scan(
 		&p.ID, &p.Type, &p.Slug, &p.Name, &p.RepoURL,
 		&p.Description, &p.InstalledVersion, &p.PinnedVersion,
@@ -76,6 +83,10 @@ func scanPackage(scanner interface{ Scan(dest ...any) error }) (*Package, error)
 	)
 	if err != nil {
 		return nil, err
+	}
+	if keepNewest.Valid {
+		n := int(keepNewest.Int64)
+		p.RetentionKeepNewest = &n
 	}
 	return &p, nil
 }
@@ -188,6 +199,19 @@ func (r *packageRepository) SetLastError(ctx context.Context, id, msg string) er
 		msg, msg, id)
 	if err != nil {
 		return fmt.Errorf("setting last_error for package %s: %w", id, err)
+	}
+	return nil
+}
+
+// SetRetention writes (or with nil clears) the per-package override.
+func (r *packageRepository) SetRetention(ctx context.Context, id string, keepNewest *int) error {
+	var v any
+	if keepNewest != nil {
+		v = *keepNewest
+	}
+	if _, err := r.db.ExecContext(ctx,
+		`UPDATE packages SET retention_keep_newest = ? WHERE id = ?`, v, id); err != nil {
+		return fmt.Errorf("setting retention for package %s: %w", id, err)
 	}
 	return nil
 }

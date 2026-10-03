@@ -17,6 +17,7 @@ type pageSource interface {
 	GetUsage(ctx context.Context, packageID string) ([]PackageUsage, error)
 	ListPendingSubmissions(ctx context.Context) ([]Package, error)
 	GetSecuritySettings(ctx context.Context) (*PackageSecuritySettings, error)
+	GetRetentionSettings(ctx context.Context) (*RetentionSettings, error)
 }
 
 // buildPackagesPage loads what the requested tab needs. The summary strip and
@@ -40,6 +41,16 @@ func buildPackagesPage(ctx context.Context, src pageSource, q packagesQuery, csr
 		Now:          now,
 		Pending:      pending,
 		PendingCount: len(pending),
+	}
+
+	// The panel's Settings tab and the Versions hint name the site rule, so it
+	// is needed on every tab; a failed read degrades to the manual default
+	// (which deletes nothing) rather than failing the page.
+	data.Retention = DefaultRetentionSettings()
+	if r, err := src.GetRetentionSettings(ctx); err != nil {
+		slog.Warn("packages page: reading old-version rule failed", slog.Any("error", err))
+	} else if r != nil {
+		data.Retention = *r
 	}
 
 	for _, p := range pkgs {

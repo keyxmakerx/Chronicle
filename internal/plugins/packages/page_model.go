@@ -485,6 +485,15 @@ func plural(n int, noun string) string {
 	return strconv.Itoa(n) + " " + noun + "s"
 }
 
+// ownKeepNewest pre-fills the per-package number box: the stored value, or the
+// site default when the package follows the site rule.
+func ownKeepNewest(v *int) string {
+	if v == nil {
+		return strconv.Itoa(DefaultRetentionKeepNewest)
+	}
+	return strconv.Itoa(*v)
+}
+
 // campaignCount renders "3 campaigns" for the usage count of a row.
 func campaignCount(n int) string { return plural(n, "campaign") }
 
@@ -560,4 +569,6 @@ type PackagesPageData struct {
 	PendingCount int
 	// Settings is loaded for the Settings tab only.
 	Settings *PackageSecuritySettings
+	// Retention is the site-wide old-version rule, loaded for every tab.
+	Retention RetentionSettings
 }

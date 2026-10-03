@@ -18,9 +18,9 @@ import (
 	"log/slog"
 	"os"
 	"path/filepath"
-	"sort"
 	"strconv"
 	"strings"
+	"time"
 )
 
 // StaleVersion is one on-disk version folder the cleanup may reclaim.
@@ -49,18 +49,28 @@ func SetLoadedDirsProvider(svc PackageService, fn func() map[string]bool) {
 	}
 }
 
-// PruneStaleVersions scans each installed system package's version folders
-// and (unless dryRun) deletes those that are safe to reclaim. Protected —
-// never deleted — are: the top keepNewest versions by semver (always
-// includes the newest), the DB-installed version, and any dir the loader
-// is currently serving. keepNewest < 1 is treated as 1. Idempotent: after
-// an execute, a re-run reclaims nothing.
+// PruneStaleVersions is the admin's manual clean-up: keep the newest
+// keepNewest folders of every system package and delete the rest that are
+// safe. keepNewest < 1 is treated as 1. dryRun previews without deleting.
 func (s *packageService) PruneStaleVersions(ctx context.Context, keepNewest int, dryRun bool) (*PruneResult, error) {
-	if s.loadedDirsFn == nil {
-		return nil, fmt.Errorf("cannot prune: loaded-dirs provider not wired (fail closed)")
-	}
 	if keepNewest < 1 {
 		keepNewest = 1
+	}
+	rule := retentionRule{Mode: RetentionKeepNewest, KeepNewest: keepNewest}
+	return s.prune(ctx, func(*Package) retentionRule { return rule }, dryRun)
+}
+
+// prune is the one deletion path for both the manual card and the automatic
+// rule, so there is exactly one protected set. Never deleted, whatever the
+// rule: the DB-installed version, a pinned version, any dir the loader is
+// serving, and every foundry-module folder (pin-served to campaigns).
+// Campaigns record no system version of their own (campaign_addons holds only
+// the enabled system), so "the version a campaign is on" is the installed one
+// the loader serves. ruleFor returns the rule per package; a manual rule skips
+// the package. Fails closed when the loader signal is unwired.
+func (s *packageService) prune(ctx context.Context, ruleFor func(*Package) retentionRule, dryRun bool) (*PruneResult, error) {
+	if s.loadedDirsFn == nil {
+		return nil, fmt.Errorf("cannot prune: loaded-dirs provider not wired (fail closed)")
 	}
 	loaded := s.loadedDirsFn()
 
@@ -70,12 +80,17 @@ func (s *packageService) PruneStaleVersions(ctx context.Context, keepNewest int,
 	}
 
 	res := &PruneResult{DryRun: dryRun}
+	now := time.Now()
 	for i := range pkgs {
 		pkg := &pkgs[i]
 		if pkg.Type == PackageTypeFoundryModule || pkg.InstalledVersion == "" {
 			continue // foundry dirs are pin-served; uninstalled packages have nothing to keep safe
 		}
-		s.pruneOnePackage(pkg, keepNewest, dryRun, loaded, res)
+		rule := ruleFor(pkg)
+		if rule.Mode == RetentionManual {
+			continue
+		}
+		s.pruneOnePackage(ctx, pkg, rule, now, dryRun, loaded, res)
 	}
 
 	if !dryRun && len(res.Removed) > 0 && s.onServeInvalidate != nil {
@@ -92,38 +107,48 @@ func (s *packageService) PruneStaleVersions(ctx context.Context, keepNewest int,
 // either fully committed (then protected as InstalledVersion) or not yet on
 // disk before we ReadDir. Different packages don't contend; the lock is
 // released (deferred) before the caller moves to the next package.
-func (s *packageService) pruneOnePackage(pkg *Package, keepNewest int, dryRun bool, loaded map[string]bool, res *PruneResult) {
+func (s *packageService) pruneOnePackage(ctx context.Context, pkg *Package, rule retentionRule, now time.Time, dryRun bool, loaded map[string]bool, res *PruneResult) {
 	mu := s.lockForPackage(pkg.ID)
 	mu.Lock()
 	defer mu.Unlock()
+
+	// Re-read under the lock: the row the caller listed may predate an
+	// install or pin that finished while we waited for the mutex.
+	if fresh, err := s.repo.GetPackage(ctx, pkg.ID); err == nil && fresh != nil {
+		pkg = fresh
+	}
 
 	slugDir := filepath.Join(s.packagesDir(), "systems", pkg.Slug)
 	entries, err := os.ReadDir(slugDir)
 	if err != nil {
 		return // no dir / unreadable → nothing to reclaim
 	}
-	var vers []string
-	for _, e := range entries {
-		if e.IsDir() {
-			vers = append(vers, e.Name())
+
+	published := map[string]time.Time{}
+	if vs, err := s.repo.ListVersions(ctx, pkg.ID); err == nil {
+		for _, v := range vs {
+			published[v.Version] = v.PublishedAt
 		}
 	}
-	if len(vers) <= keepNewest {
-		return
-	}
-	sort.Slice(vers, func(a, b int) bool { return pruneVersionLess(vers[b], vers[a]) })
 
-	protected := make(map[string]bool, keepNewest+2)
-	for j := 0; j < keepNewest && j < len(vers); j++ {
-		protected[vers[j]] = true
-	}
-	protected[pkg.InstalledVersion] = true
-
-	for _, v := range vers {
-		full := filepath.Join(slugDir, v)
-		if protected[v] || loaded[full] {
+	var folders []versionFolder
+	for _, e := range entries {
+		if !e.IsDir() {
 			continue
 		}
+		f := versionFolder{
+			Name:      e.Name(),
+			Published: published[e.Name()],
+			Served:    loaded[filepath.Join(slugDir, e.Name())],
+		}
+		if info, err := e.Info(); err == nil {
+			f.Modified = info.ModTime()
+		}
+		folders = append(folders, f)
+	}
+
+	for _, v := range selectRemovable(folders, pkg.InstalledVersion, pkg.PinnedVersion, rule, now) {
+		full := filepath.Join(slugDir, v)
 		sv := StaleVersion{Slug: pkg.Slug, Version: v, Path: full, Size: dirSize(full)}
 		res.Reclaimable = append(res.Reclaimable, sv)
 		if dryRun {
@@ -131,7 +156,7 @@ func (s *packageService) pruneOnePackage(pkg *Package, keepNewest int, dryRun bo
 		}
 		// Re-assert protection immediately before deletion (defense in
 		// depth against a concurrent install changing the picture).
-		if protected[v] || s.loadedDirsFn()[full] {
+		if v == pkg.InstalledVersion || (pkg.PinnedVersion != "" && v == pkg.PinnedVersion) || s.loadedDirsFn()[full] {
 			continue
 		}
 		if err := os.RemoveAll(full); err != nil {
@@ -141,7 +166,7 @@ func (s *packageService) pruneOnePackage(pkg *Package, keepNewest int, dryRun bo
 		}
 		slog.Info("prune: removed stale package version",
 			slog.String("package", pkg.Slug), slog.String("version", v),
-			slog.Int64("bytes", sv.Size))
+			slog.String("rule", string(rule.Mode)), slog.Int64("bytes", sv.Size))
 		res.Removed = append(res.Removed, sv)
 		res.BytesFreed += sv.Size
 	}

@@ -695,6 +695,7 @@ PUT	/:id	internal/plugins/bestiary/routes.go
 PUT	/:id/auto-update	internal/plugins/packages/routes.go
 PUT	/:id/pin	internal/plugins/packages/routes.go
 PUT	/:id/repo	internal/plugins/packages/routes.go
+PUT	/:id/retention	internal/plugins/packages/routes.go
 PUT	/:id/version	internal/plugins/packages/routes.go
 PUT	/account/display-name	internal/plugins/auth/routes.go
 PUT	/account/email	internal/plugins/auth/routes.go

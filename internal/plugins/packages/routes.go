@@ -25,6 +25,7 @@ func RegisterRoutes(admin *echo.Group, h *Handler, reauth echo.MiddlewareFunc) {
 	g.PUT("/:id/pin", h.SetPinnedVersion)
 	g.DELETE("/:id/pin", h.ClearPinnedVersion)
 	g.PUT("/:id/auto-update", h.SetAutoUpdate)
+	g.PUT("/:id/retention", h.SetRetention)
 	g.POST("/:id/check", h.CheckForUpdates)
 
 	// Usage tracking.

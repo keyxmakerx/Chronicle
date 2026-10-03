@@ -106,6 +106,19 @@ type PackageService interface {
 	// and any currently-loaded dir. dryRun previews without deleting.
 	PruneStaleVersions(ctx context.Context, keepNewest int, dryRun bool) (*PruneResult, error)
 
+	// GetRetentionSettings / SaveRetentionSettings are the site-wide
+	// automatic old-version rule (default: manual, nothing automatic).
+	GetRetentionSettings(ctx context.Context) (*RetentionSettings, error)
+	SaveRetentionSettings(ctx context.Context, r RetentionSettings) error
+
+	// SetPackageRetention sets (non-nil) or clears (nil) one package's own
+	// "keep the newest N" rule, which overrides the site rule.
+	SetPackageRetention(ctx context.Context, packageID string, keepNewest *int) error
+
+	// RunRetention applies the effective rule to every package through the
+	// same protected-set code path as PruneStaleVersions.
+	RunRetention(ctx context.Context) (*PruneResult, error)
+
 	// InstalledPackagePath returns the on-disk install path for the active
 	// (installed + approved) package matching the given type and slug.
 	// Returns empty string if no matching package is installed.
@@ -652,6 +665,14 @@ func (s *packageService) installVersion(ctx context.Context, packageID, version 
 		slog.String("path", destDir),
 	)
 
+	// The replaced version's folder time becomes "unused since now", which
+	// is what the unused-for-N-days rule measures (nothing else records when
+	// a version stopped being the installed one). Best effort.
+	if previousVersion != "" && previousVersion != version {
+		now := time.Now()
+		_ = os.Chtimes(s.installDir(pkg.Type, pkg.Slug, previousVersion), now, now)
+	}
+
 	// Notify system registry to rescan after a system package install,
 	// passing the installed dir so the app layer can force-load it
 	// (rollbacks must beat the rescan's highest-version policy).
@@ -902,6 +923,12 @@ func (s *packageService) StartAutoUpdateWorker(ctx context.Context) {
 		case <-ticker.C:
 			if err := s.RunAutoUpdates(ctx); err != nil {
 				slog.Error("auto-update run failed", slog.Any("error", err))
+			}
+			// Clean-up runs after the update pass so a freshly replaced
+			// version is already "previous" when the rule looks at it. A
+			// failure here is logged and never stops the loop.
+			if _, err := s.RunRetention(ctx); err != nil {
+				slog.Warn("automatic old-version clean-up failed", slog.Any("error", err))
 			}
 		}
 	}
