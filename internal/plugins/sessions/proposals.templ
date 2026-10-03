@@ -197,7 +197,7 @@ templ respondButton(cc *campaigns.CampaignContext, proposalID, optionID, value, 
 		hx-target="closest [data-proposal-root]"
 		hx-swap="outerHTML"
 		class={ "text-sm font-semibold px-3 py-1.5 rounded-md border transition-colors",
-			templ.KV("bg-accent text-white border-accent", myResponse == value),
+			templ.KV("bg-accent-fill text-on-accent border-accent", myResponse == value),
 			templ.KV("bg-surface-alt text-fg-secondary border-edge hover:bg-surface-raised", myResponse != value) }
 		aria-pressed={ boolAttr(myResponse == value) }
 	>
