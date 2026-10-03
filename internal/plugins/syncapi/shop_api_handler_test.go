@@ -6,6 +6,7 @@ import (
 	"errors"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 
 	"github.com/labstack/echo/v4"
@@ -144,6 +145,94 @@ func TestGetShopRoom(t *testing.T) {
 			}
 			if len(tc.rels) > 0 && (ents.gotRole != int(campaigns.RolePlayer) || ents.gotUser != "") {
 				t.Errorf("goods visibility asked role=%d user=%q, want a plain Player with no user", ents.gotRole, ents.gotUser)
+			}
+		})
+	}
+}
+
+type stubShopBuyer struct {
+	gotKey, gotActing, gotShop, gotCamp string
+	gotBody                             string
+	calls                               int
+}
+
+func (s *stubShopBuyer) Buyers(_ context.Context, campaignID, keyUserID, actingUserID, shopEntityID string) (any, error) {
+	s.calls++
+	s.gotCamp, s.gotKey, s.gotActing, s.gotShop = campaignID, keyUserID, actingUserID, shopEntityID
+	return map[string]any{"buyers": []any{}}, nil
+}
+
+func (s *stubShopBuyer) Buy(_ context.Context, campaignID, keyUserID, actingUserID, shopEntityID string, body json.RawMessage) (any, error) {
+	s.calls++
+	s.gotCamp, s.gotKey, s.gotActing, s.gotShop, s.gotBody = campaignID, keyUserID, actingUserID, shopEntityID, string(body)
+	return map[string]any{"status": "bought"}, nil
+}
+
+func newShopBuyContext(method, target, body string) (echo.Context, *httptest.ResponseRecorder) {
+	e := echo.New()
+	req := httptest.NewRequest(method, target, strings.NewReader(body))
+	rec := httptest.NewRecorder()
+	c := e.NewContext(req, rec)
+	c.SetParamNames("id", "eid")
+	c.SetParamValues("camp-1", "shop-1")
+	c.Set(apiKeyContextKey, &APIKey{ID: 42, CampaignID: "camp-1", UserID: "owner-1", IsActive: true})
+	return c, rec
+}
+
+func TestShopBuyRoutes(t *testing.T) {
+	basket := `{"actingUserId":"player-1","buyerEntityId":"char-1","items":[{"relationId":7,"quantity":2}]}`
+	cases := []struct {
+		name       string
+		wired      bool
+		call       func(h *APIHandler, c echo.Context) error
+		method     string
+		target     string
+		body       string
+		wantCode   int
+		wantActing string
+	}{
+		{"buyers names the acting member from the query", true, (*APIHandler).GetShopBuyers, http.MethodGet,
+			"/api/v1/campaigns/camp-1/armory/shops/shop-1/buyers?actingUserId=player-1", "", http.StatusOK, "player-1"},
+		{"buyers without a member runs as the key holder", true, (*APIHandler).GetShopBuyers, http.MethodGet,
+			"/api/v1/campaigns/camp-1/armory/shops/shop-1/buyers", "", http.StatusOK, ""},
+		{"buy names the acting member from the body and passes the basket on", true, (*APIHandler).BuyFromShop, http.MethodPost,
+			"/api/v1/campaigns/camp-1/armory/shops/shop-1/buy", basket, http.StatusOK, "player-1"},
+		{"buy refuses a body that is not JSON", true, (*APIHandler).BuyFromShop, http.MethodPost,
+			"/api/v1/campaigns/camp-1/armory/shops/shop-1/buy", "nope", http.StatusBadRequest, ""},
+		{"buy refuses an oversize body", true, (*APIHandler).BuyFromShop, http.MethodPost,
+			"/api/v1/campaigns/camp-1/armory/shops/shop-1/buy", `{"x":"` + strings.Repeat("a", maxShopBuyBodyBytes) + `"}`, http.StatusBadRequest, ""},
+		{"unwired buyers is not found", false, (*APIHandler).GetShopBuyers, http.MethodGet,
+			"/api/v1/campaigns/camp-1/armory/shops/shop-1/buyers", "", http.StatusNotFound, ""},
+		{"unwired buy is not found", false, (*APIHandler).BuyFromShop, http.MethodPost,
+			"/api/v1/campaigns/camp-1/armory/shops/shop-1/buy", basket, http.StatusNotFound, ""},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			h := NewAPIHandler(nil, nil, nil, nil)
+			buyer := &stubShopBuyer{}
+			if tc.wired {
+				h.SetShopBuyer(buyer)
+			}
+			c, rec := newShopBuyContext(tc.method, tc.target, tc.body)
+			err := tc.call(h, c)
+			if tc.wantCode != http.StatusOK {
+				var appErr *apperror.AppError
+				if !errors.As(err, &appErr) || appErr.Code != tc.wantCode {
+					t.Fatalf("want %d AppError, got %#v", tc.wantCode, err)
+				}
+				if buyer.calls != 0 {
+					t.Fatalf("service called on a refused request")
+				}
+				return
+			}
+			if err != nil || rec.Code != http.StatusOK {
+				t.Fatalf("err=%v code=%d", err, rec.Code)
+			}
+			if buyer.gotKey != "owner-1" || buyer.gotActing != tc.wantActing || buyer.gotShop != "shop-1" || buyer.gotCamp != "camp-1" {
+				t.Errorf("service got key=%q acting=%q shop=%q camp=%q", buyer.gotKey, buyer.gotActing, buyer.gotShop, buyer.gotCamp)
+			}
+			if tc.method == http.MethodPost && buyer.gotBody != tc.body {
+				t.Errorf("basket body = %s, want it passed on unchanged", buyer.gotBody)
 			}
 		})
 	}

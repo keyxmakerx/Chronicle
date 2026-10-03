@@ -52,6 +52,7 @@ type APIHandler struct {
 	tagGrantLister       TagGrantLister
 	shopRoomReader       ShopRoomReader
 	shopRoomAddon        string
+	shopBuyer            ShopBuyAPIService
 	dmScreen             DMScreenProvider
 }
 

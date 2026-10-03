@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"log/slog"
 	"net/http"
 
@@ -101,4 +102,72 @@ func (h *APIHandler) playerVisibleGoods(ctx context.Context, campaignID string, 
 		}
 	}
 	return out, nil
+}
+
+// ShopBuyAPIService is shop buying as the sync API needs it. The
+// implementation lives behind internal/app so this plugin names no other
+// plugin's types; answers are opaque and serialised as given.
+//
+// Like the stash calls, every call names the key holder and, optionally, the
+// member it is made for, and is answered under that member's rules: who they
+// may buy for, whether downtime lets them buy now, and which shops and goods
+// they can see. Naming a member only ever narrows the key's own power.
+type ShopBuyAPIService interface {
+	Buyers(ctx context.Context, campaignID, keyUserID, actingUserID, shopEntityID string) (any, error)
+	// Buy applies a basket. body is the request body as sent; the service
+	// decodes the basket from it so its own checks stay the only ones.
+	Buy(ctx context.Context, campaignID, keyUserID, actingUserID, shopEntityID string, body json.RawMessage) (any, error)
+}
+
+// maxShopBuyBodyBytes bounds a basket body, matching the web buy route.
+const maxShopBuyBodyBytes = 32 << 10
+
+// SetShopBuyer wires shop buying. It shares the shop room's addon gate.
+// Unwired, the buy routes answer 404.
+func (h *APIHandler) SetShopBuyer(s ShopBuyAPIService) {
+	h.shopBuyer = s
+}
+
+// GetShopBuyers lists the characters the acting member may buy for at a shop.
+// GET /api/v1/campaigns/:id/armory/shops/:eid/buyers?actingUserId=
+func (h *APIHandler) GetShopBuyers(c echo.Context) error {
+	if h.shopBuyer == nil {
+		return apperror.NewNotFound("shop")
+	}
+	uid, err := keyUser(c)
+	if err != nil {
+		return err
+	}
+	out, err := h.shopBuyer.Buyers(c.Request().Context(), c.Param("id"), uid, c.QueryParam("actingUserId"), c.Param("eid"))
+	if err != nil {
+		return err
+	}
+	return c.JSON(http.StatusOK, out)
+}
+
+// BuyFromShop buys a basket as the acting member.
+// POST /api/v1/campaigns/:id/armory/shops/:eid/buy
+// Body: {"actingUserId"?, "buyerEntityId", "items":[{"relationId","quantity"}]}
+func (h *APIHandler) BuyFromShop(c echo.Context) error {
+	if h.shopBuyer == nil {
+		return apperror.NewNotFound("shop")
+	}
+	uid, err := keyUser(c)
+	if err != nil {
+		return err
+	}
+	// Read one byte past the cap so an oversize body is refused, not truncated.
+	raw, err := io.ReadAll(io.LimitReader(c.Request().Body, maxShopBuyBodyBytes+1))
+	if err != nil || len(raw) > maxShopBuyBodyBytes {
+		return apperror.NewBadRequest("invalid request body")
+	}
+	var acting actingBody
+	if err := json.Unmarshal(raw, &acting); err != nil {
+		return apperror.NewBadRequest("invalid JSON body")
+	}
+	out, err := h.shopBuyer.Buy(c.Request().Context(), c.Param("id"), uid, acting.ActingUserID, c.Param("eid"), raw)
+	if err != nil {
+		return err
+	}
+	return c.JSON(http.StatusOK, out)
 }

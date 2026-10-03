@@ -355,6 +355,130 @@ paths:
         "500":
           $ref: "#/components/responses/InternalError"
 
+  /campaigns/{campaignId}/armory/shops/{entityId}/buyers:
+    get:
+      tags: [Entities]
+      summary: List who the acting member may buy for at a shop
+      operationId: getShopBuyers
+      description: >-
+        Requires the armory addon. Runs as the member actingUserId names (only
+        an Owner or co-DM key may name someone else) or as the key holder.
+      parameters:
+        - $ref: "#/components/parameters/campaignId"
+        - $ref: "#/components/parameters/entityId"
+        - name: actingUserId
+          in: query
+          required: false
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Downtime state and the characters the member may buy for
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  downtimeOpen:
+                    type: boolean
+                  canBuyNow:
+                    type: boolean
+                  buyers:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        id:
+                          type: string
+                        name:
+                          type: string
+                        moneyKey:
+                          type: string
+                        money:
+                          type: number
+                          nullable: true
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "429":
+          $ref: "#/components/responses/RateLimited"
+        "500":
+          $ref: "#/components/responses/InternalError"
+
+  /campaigns/{campaignId}/armory/shops/{entityId}/buy:
+    post:
+      tags: [Entities]
+      summary: Buy a basket from a shop as the acting member
+      operationId: buyFromShop
+      description: >-
+        Requires the armory addon. Takes the coins off the buying character's
+        sheet and puts the goods in its inventory. Prices come from the shop's
+        listings, never the request. Runs as the member actingUserId names
+        (only an Owner or co-DM key may name someone else) or as the key holder;
+        a player can buy only for a character they claimed, and only while
+        downtime is open (409 otherwise).
+      parameters:
+        - $ref: "#/components/parameters/campaignId"
+        - $ref: "#/components/parameters/entityId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [buyerEntityId, items]
+              properties:
+                actingUserId:
+                  type: string
+                buyerEntityId:
+                  type: string
+                items:
+                  type: array
+                  maxItems: 50
+                  items:
+                    type: object
+                    required: [relationId, quantity]
+                    properties:
+                      relationId:
+                        type: integer
+                      quantity:
+                        type: integer
+                        minimum: 1
+                        maximum: 99
+      responses:
+        "200":
+          description: The basket was bought
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                  spent:
+                    type: number
+                  currency:
+                    type: string
+                  moneyLeft:
+                    type: number
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          description: Downtime is closed, so a player cannot buy now
+        "429":
+          $ref: "#/components/responses/RateLimited"
+        "500":
+          $ref: "#/components/responses/InternalError"
+
   # --- Calendar ---
   /campaigns/{campaignId}/calendar:
     get:
