@@ -468,3 +468,18 @@ func parseIntField(s string) (int, error) {
 	}
 	return v, nil
 }
+
+// UpdateTrashRetention saves how long deleted pages stay in a campaign's
+// Trash (POST /admin/storage/trash).
+func (h *Handler) UpdateTrashRetention(c echo.Context) error {
+	days, err := strconv.Atoi(strings.TrimSpace(c.FormValue("trash_retention_days")))
+	if err != nil {
+		return apperror.NewBadRequest("invalid trash retention")
+	}
+	if err := h.service.UpdateTrashRetentionDays(c.Request().Context(), days); err != nil {
+		return err
+	}
+	h.recordActivity(c, "storage.trash_retention_changed", "setting", "trash", strconv.Itoa(days))
+	slog.Info("trash retention updated", slog.String("by", auth.GetUserID(c)), slog.Int("days", days))
+	return middleware.HTMXRedirect(c, "/admin/storage?tab=limits")
+}

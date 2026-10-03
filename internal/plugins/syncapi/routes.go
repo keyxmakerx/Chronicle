@@ -142,6 +142,12 @@ func RegisterAPIRoutes(e *echo.Echo, api *APIHandler, calAPI *CalendarAPIHandler
 	cg.GET("/entities/:entityID/permissions", api.GetEntityPermissions, RequirePermission(PermRead))
 	cg.PUT("/entities/:entityID/permissions", api.SetEntityPermissions, RequirePermission(PermWrite))
 
+	// DM Screen for the Foundry module. The provider refuses players and
+	// keeps the downtime switch owner-only; see dm_screen_api.go.
+	cg.GET("/dm-screen", api.GetDMScreen, RequirePermission(PermRead))
+	cg.POST("/dm-screen/reveal/:entityID", api.RevealDMScreenCharacter, RequirePermission(PermWrite))
+	cg.POST("/dm-screen/downtime", api.SetDMScreenDowntime, RequirePermission(PermWrite))
+
 	// Addon discovery (read).
 	cg.GET("/addons", api.ListAddons, RequirePermission(PermRead))
 

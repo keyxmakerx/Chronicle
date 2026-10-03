@@ -502,7 +502,7 @@ func (r *sessionRepository) ListSessionEntities(ctx context.Context, sessionID s
 	query := `SELECT se.id, se.session_id, se.entity_id, se.role,
 	                 e.name, e.slug
 	          FROM session_entities se
-	          INNER JOIN entities e ON e.id = se.entity_id
+	          INNER JOIN entities e ON e.id = se.entity_id AND e.deleted_at IS NULL
 	          WHERE se.session_id = ?
 	          ORDER BY FIELD(se.role, 'key', 'encountered', 'mentioned'), e.name`
 

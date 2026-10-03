@@ -635,3 +635,119 @@ func TestTopbarNewWidgets(t *testing.T) {
 		}
 	})
 }
+
+func TestTopbarWidgetShown_LiveWidgets(t *testing.T) {
+	full := &TopbarLiveData{
+		Date: "14 Frostfall 1203", Weather: "Clear, 4°",
+		Moons:     []TopbarMoon{{Name: "Selûne", Phase: "Waxing Crescent"}},
+		NextNight: TopbarNight{Label: "Session Fri 7 pm", Title: "Friday"},
+	}
+	cases := []struct {
+		name string
+		live *TopbarLiveData
+		w    string
+		want bool
+	}{
+		{"date with data", full, "date", true},
+		{"weather with data", full, "weather", true},
+		{"moon with data", full, "moon", true},
+		{"session with data", full, "session", true},
+		{"no live data at all", nil, "date", false},
+		{"no live data, weather", nil, "weather", false},
+		{"no live data, moon", nil, "moon", false},
+		{"no live data, session", nil, "session", false},
+		{"date empty", &TopbarLiveData{Weather: "x"}, "date", false},
+		{"weather empty (no reading today)", &TopbarLiveData{Date: "x"}, "weather", false},
+		{"moon empty (no moons)", &TopbarLiveData{Date: "x"}, "moon", false},
+		{"session empty (no upcoming night)", &TopbarLiveData{Date: "x"}, "session", false},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			content := &TopbarContentData{Mode: "widgets", Widgets: []string{tc.w}, Live: tc.live}
+			if got := topbarWidgetShown(context.Background(), content, tc.w); got != tc.want {
+				t.Errorf("shown = %v, want %v", got, tc.want)
+			}
+		})
+	}
+}
+
+func TestTopbarRendersLiveWidgets(t *testing.T) {
+	live := &TopbarLiveData{
+		Date: "DATE-MARKER", Weather: "WEATHER-MARKER",
+		Moons:     []TopbarMoon{{Name: "Selûne", Phase: "Waxing Crescent"}, {Name: "Luna", Phase: "Full Moon"}},
+		NextNight: TopbarNight{Label: "NIGHT-MARKER", Title: "NIGHT-TITLE"},
+	}
+	render := func(widgets []string, l *TopbarLiveData) string {
+		ctx := SetCampaignID(context.Background(), "camp-1")
+		ctx = SetTopbarContent(ctx, &TopbarContentData{Mode: "widgets", Widgets: widgets, Live: l})
+		var buf bytes.Buffer
+		if err := Topbar().Render(ctx, &buf); err != nil {
+			t.Fatal(err)
+		}
+		return buf.String()
+	}
+	cases := []struct {
+		name    string
+		widgets []string
+		live    *TopbarLiveData
+		want    []string
+		absent  []string
+		plusN   string // expected "+N" text of the phone button, "" when no button text
+	}{
+		{"all four draw", []string{"date", "weather", "moon", "session"}, live,
+			[]string{"DATE-MARKER", "WEATHER-MARKER", "Selûne waxing crescent · Luna full moon", "NIGHT-MARKER", `title="NIGHT-TITLE"`}, nil, "+3"},
+		{"only chosen ones draw", []string{"moon"}, live,
+			[]string{"Selûne waxing crescent"}, []string{"DATE-MARKER", "WEATHER-MARKER", "NIGHT-MARKER"}, ""},
+		{"no data draws nothing and adds no bar", []string{"date", "weather", "moon", "session"}, nil,
+			nil, []string{"DATE-MARKER", "topbar-tray", "fa-calendar-days", "fa-moon"}, ""},
+		{"empty widgets do not count toward +N", []string{"date", "weather", "session"}, &TopbarLiveData{Date: "DATE-MARKER"},
+			[]string{"DATE-MARKER"}, []string{"WEATHER-MARKER", "NIGHT-MARKER"}, ""},
+		{"a partial set counts only what drew", []string{"date", "weather", "moon"}, &TopbarLiveData{Date: "DATE-MARKER", Weather: "WEATHER-MARKER"},
+			[]string{"DATE-MARKER", "WEATHER-MARKER"}, []string{"fa-moon"}, "+1"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			html := render(tc.widgets, tc.live)
+			for _, w := range tc.want {
+				if !strings.Contains(html, w) {
+					t.Errorf("missing %q", w)
+				}
+			}
+			for _, w := range tc.absent {
+				if strings.Contains(html, w) {
+					t.Errorf("unexpected %q", w)
+				}
+			}
+			if tc.plusN != "" && !strings.Contains(html, `<span class="tb-n">`+tc.plusN+`</span>`) {
+				t.Errorf("missing phone count %s", tc.plusN)
+			}
+		})
+	}
+}
+
+func TestTopbarMoonText(t *testing.T) {
+	m := func(n int) []TopbarMoon {
+		out := make([]TopbarMoon, n)
+		for i := range out {
+			out[i] = TopbarMoon{Name: string(rune('A' + i)), Phase: "Full Moon"}
+		}
+		return out
+	}
+	cases := []struct {
+		name  string
+		moons []TopbarMoon
+		want  string
+	}{
+		{"one", m(1), "A full moon"},
+		{"three fit", m(3), "A full moon · B full moon · C full moon"},
+		{"four are capped and counted", m(4), "A full moon · B full moon · C full moon · +1 more"},
+		{"none", nil, ""},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := topbarMoonText(tc.moons); got != tc.want {
+				t.Errorf("got %q, want %q", got, tc.want)
+			}
+		})
+	}
+}

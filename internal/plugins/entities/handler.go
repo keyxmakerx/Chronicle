@@ -7,6 +7,7 @@ import (
 	"io"
 	"log/slog"
 	"net/http"
+	"net/url"
 	"regexp"
 	"sort"
 	"strconv"
@@ -822,7 +823,8 @@ func (h *Handler) Delete(c echo.Context) error {
 
 	h.logAudit(c, cc.Campaign.ID, audit.ActionEntityDeleted, entityID, entity.Name)
 
-	return middleware.HTMXRedirect(c, "/campaigns/"+cc.Campaign.ID+"/entities")
+	// ?trashed= lets the list page offer Undo for the page that just went.
+	return middleware.HTMXRedirect(c, "/campaigns/"+cc.Campaign.ID+"/entities?trashed="+url.QueryEscape(entityID))
 }
 
 // SearchPageHandler renders the dedicated search page with real-time filtering.
@@ -1755,6 +1757,13 @@ func (h *Handler) GetEntry(c echo.Context) error {
 		"entry":      entry,
 		"entry_html": entryHTML,
 	}
+	// rev is what the editor saves against, so a save on top of someone
+	// else's newer text is caught. Only editors save.
+	if cc.MemberRole >= campaigns.RoleScribe {
+		if rev, err := h.service.EntryRev(c.Request().Context(), entity.ID); err == nil {
+			response["rev"] = rev
+		}
+	}
 	return c.JSON(http.StatusOK, response)
 }
 
@@ -1776,22 +1785,45 @@ func (h *Handler) UpdateEntryAPI(c echo.Context) error {
 	if entity.CampaignID != cc.Campaign.ID {
 		return apperror.NewNotFound("entity not found")
 	}
+	// A clash answer carries the stored text, so the caller must be allowed
+	// to see and edit this page, as on the page itself.
+	access, err := h.service.CheckEntityAccess(c.Request().Context(), entity.ID, int(cc.VisibilityRole()), auth.GetUserID(c))
+	if err != nil || !access.CanView {
+		return apperror.NewNotFound("entity not found")
+	}
+	if !access.CanEdit {
+		return apperror.NewForbidden("you can't edit this page")
+	}
 
 	var body struct {
 		Entry     string `json:"entry"`
 		EntryHTML string `json:"entry_html"`
+		// BaseRev is the text revision the editor loaded; absent from older
+		// clients, which then save as before (last save wins).
+		BaseRev *int `json:"base_rev"`
 	}
 	if err := json.NewDecoder(c.Request().Body).Decode(&body); err != nil {
 		return apperror.NewBadRequest("invalid JSON body")
 	}
 
-	if err := h.service.UpdateEntry(c.Request().Context(), entityID, body.Entry, body.EntryHTML); err != nil {
+	rev, conflict, err := h.service.SaveEntry(c.Request().Context(), entityID, body.Entry, body.EntryHTML, body.BaseRev)
+	if err != nil {
 		return err
+	}
+	if conflict != nil {
+		return c.JSON(http.StatusConflict, map[string]any{
+			"error":      "edit_conflict",
+			"rev":        conflict.Rev,
+			"entry":      conflict.Entry,
+			"entry_html": conflict.EntryHTML,
+			"by_name":    conflict.ByName,
+			"at":         conflict.At,
+		})
 	}
 
 	h.logAudit(c, cc.Campaign.ID, audit.ActionEntityUpdated, entityID, entity.Name)
 
-	return c.JSON(http.StatusOK, map[string]string{"status": "ok"})
+	return c.JSON(http.StatusOK, map[string]any{"status": "ok", "rev": rev})
 }
 
 // --- Player Notes API ---

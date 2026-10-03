@@ -566,6 +566,12 @@ func bookViewerIsDirector(cc *campaigns.CampaignContext) bool {
 	return cc.VisibilityRole() >= int(campaigns.RoleOwner)
 }
 
+// EnabledSystem returns the System enabled for a campaign, or nil. Other
+// plugins (the DM Screen) read a system's manifest through it.
+func (h *SystemHandler) EnabledSystem(ctx context.Context, campaignID string) System {
+	return h.resolveEnabledSystem(ctx, campaignID)
+}
+
 // resolveEnabledSystem returns the System enabled for the given campaign,
 // checking both built-in addon systems and campaign custom systems.
 func (h *SystemHandler) resolveEnabledSystem(ctx context.Context, campaignID string) System {
