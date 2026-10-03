@@ -29,6 +29,16 @@ func TestPanel(t *testing.T) {
 			want: []string{"Only the campaign owner can switch this.", "1 request waiting on you", "/campaigns/c1/armory/stashes"},
 		},
 		{
+			name: "heroes start folded with the bar and resource chip on the line",
+			view: View{CampaignID: "c1", PartyFilled: true, Party: []HeroView{{
+				Name: "Aria", PlayerName: "Sam", Meters: []MeterView{
+					{Label: "Stamina", Current: "34", Max: "42", HasMax: true, Percent: 81},
+					{Label: "Recoveries", Current: "6", Max: "8", HasMax: true, Percent: 75},
+					{Label: "Focus", Current: "3"},
+				}}}},
+			want: []string{`aria-expanded="false"`, `data-dms-hrow`, `<span class="dms-chip">Focus 3</span>`, "34/42", "Played by Sam", "Recoveries", "data-dms-party"},
+		},
+		{
 			name:    "no conditions hides the rules tab",
 			view:    View{CampaignID: "c1"},
 			want:    []string{`data-dms-tab="reveal"`, "Nothing hidden right now."},
@@ -62,6 +72,37 @@ func TestPanel(t *testing.T) {
 				if strings.Contains(html, w) {
 					t.Errorf("unexpected %q", w)
 				}
+			}
+		})
+	}
+}
+
+func TestHeroView_Folded(t *testing.T) {
+	stam := MeterView{Label: "Stamina", HasMax: true}
+	rec := MeterView{Label: "Recoveries", HasMax: true}
+	res := MeterView{Label: "Focus"}
+	ac := MeterView{Label: "AC"}
+	tests := []struct {
+		name      string
+		meters    []MeterView
+		wantBar   string
+		wantChips int
+		wantRest  int
+	}{
+		{"draw steel: stamina bar, resource chip, recoveries fold away", []MeterView{stam, rec, res}, "Stamina", 1, 1},
+		{"5e: hit points bar, armour class chip", []MeterView{stam, ac}, "Stamina", 1, 0},
+		{"chips only: no bar", []MeterView{res, ac}, "", 2, 0},
+		{"no meters", nil, "", 0, 0},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			bar, chips, rest := HeroView{Meters: tt.meters}.Folded()
+			got := ""
+			if bar != nil {
+				got = bar.Label
+			}
+			if got != tt.wantBar || len(chips) != tt.wantChips || len(rest) != tt.wantRest {
+				t.Fatalf("bar=%q chips=%d rest=%d, want %q %d %d", got, len(chips), len(rest), tt.wantBar, tt.wantChips, tt.wantRest)
 			}
 		})
 	}

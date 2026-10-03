@@ -97,23 +97,14 @@ templ Panel(v *View, csrf string) {
 				if len(v.Party) == 0 {
 					<p class="dms-small">No player characters yet.</p>
 				}
-				for _, hero := range v.Party {
-					<div class="dms-hero">
-						<span class="dms-hero-name">{ hero.Name }</span>
-						if hero.PlayerName != "" {
-							<span class="dms-hero-player">{ hero.PlayerName }</span>
-						}
-						for _, m := range hero.Meters {
-							<div class="dms-meter">
-								<span>{ m.Label }</span>
-								if m.HasMax {
-									<span class="dms-bar" aria-hidden="true"><span class={ templ.KV("dms-low", m.Low) } style={ fmt.Sprintf("width:%d%%", m.Percent) }></span></span>
-									<span class="dms-num">{ m.Current }/{ m.Max }</span>
-								} else {
-									<span class="dms-num">{ m.Current }</span>
-								}
-							</div>
-						}
+				if len(v.Party) > 0 {
+					<div class="dms-partywrap">
+						<div class="dms-party" data-dms-party>
+							for _, hero := range v.Party {
+								@heroRow(hero)
+							}
+						</div>
+						<span class="dms-more" data-dms-more hidden></span>
 					</div>
 				}
 				if len(v.Party) > 0 && !v.PartyFilled {
@@ -164,4 +155,41 @@ func plural(n int, one, many string) string {
 		return fmt.Sprintf("%d %s", n, one)
 	}
 	return fmt.Sprintf("%d %s", n, many)
+}
+
+// heroRow is one hero folded to a single line (bar and chips); clicking it
+// folds the player's name and the remaining meters open below.
+templ heroRow(hero HeroView) {
+	{{ bar, chips, rest := hero.Folded() }}
+	<div class="dms-hero" data-dms-hero>
+		<button type="button" class="dms-hrow" aria-expanded="false" data-dms-hrow>
+			<span class="dms-hero-name">{ hero.Name }</span>
+			<span class="dms-mini">
+				if bar != nil {
+					<span class="dms-bar" aria-hidden="true"><span class={ templ.KV("dms-low", bar.Low) } style={ fmt.Sprintf("width:%d%%", bar.Percent) }></span></span>
+					<span class="dms-num"><span class="sr-only">{ bar.Label } </span>{ bar.Current }/{ bar.Max }</span>
+				}
+			</span>
+			<span class="dms-chips">
+				for _, c := range chips {
+					<span class="dms-chip">{ c.Label } { c.Current }</span>
+				}
+			</span>
+			<span class="dms-chev" aria-hidden="true">▾</span>
+		</button>
+		<div class="dms-hmore">
+			<div class="dms-hin">
+				if hero.PlayerName != "" {
+					<span class="dms-hero-player">Played by { hero.PlayerName }</span>
+				}
+				for _, m := range rest {
+					<div class="dms-meter">
+						<span>{ m.Label }</span>
+						<span class="dms-bar" aria-hidden="true"><span class={ templ.KV("dms-low", m.Low) } style={ fmt.Sprintf("width:%d%%", m.Percent) }></span></span>
+						<span class="dms-num">{ m.Current }/{ m.Max }</span>
+					</div>
+				}
+			</div>
+		</div>
+	</div>
 }

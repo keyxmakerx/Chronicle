@@ -89,6 +89,24 @@ type HeroView struct {
 	Meters     []MeterView
 }
 
+// Folded splits a hero's meters for the one-line folded row: the first
+// meter with a max becomes the bar, and every meter without a max (a class
+// resource, an armour class) becomes a chip. Rest is what folds open.
+func (h HeroView) Folded() (bar *MeterView, chips, rest []MeterView) {
+	for i := range h.Meters {
+		m := h.Meters[i]
+		switch {
+		case !m.HasMax:
+			chips = append(chips, m)
+		case bar == nil:
+			bar = &h.Meters[i]
+		default:
+			rest = append(rest, m)
+		}
+	}
+	return bar, chips, rest
+}
+
 // MeterView is one number on a hero. HasMax draws it as a bar.
 type MeterView struct {
 	Label   string

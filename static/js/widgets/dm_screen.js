@@ -56,7 +56,14 @@
           if (e.target.closest('[data-dms-close]') || e.target.hasAttribute('data-dms-dim') || e.target.hasAttribute('data-dms-stage')) { close(); return; }
           var tab = e.target.closest('[data-dms-tab]');
           if (tab) selectTab(tab);
+          var hrow = e.target.closest('[data-dms-hrow]');
+          if (hrow) toggleHero(hrow);
         });
+        o.addEventListener('scroll', function (e) {
+          if (e.target.hasAttribute && e.target.hasAttribute('data-dms-party')) partyEdges(e.target);
+        }, true);
+        // A refresh after an Armory change swaps the panel in place.
+        o.addEventListener('htmx:afterSettle', refreshParty);
         o.addEventListener('input', function (e) {
           if (e.target.hasAttribute('data-dms-filter')) filterConditions(e.target);
         });
@@ -65,6 +72,39 @@
       }
 
       function root() { return st.overlay && st.overlay.querySelector('[data-dms-root]'); }
+
+      // Heroes start folded to one line; a click folds the rest open.
+      function toggleHero(row) {
+        var hero = row.closest('[data-dms-hero]');
+        var open = !hero.classList.contains('dms-open');
+        hero.classList.toggle('dms-open', open);
+        row.setAttribute('aria-expanded', open ? 'true' : 'false');
+        setTimeout(function () {
+          if (open && hero.scrollIntoView) hero.scrollIntoView({ block: 'nearest', behavior: reduce ? 'auto' : 'smooth' });
+          var list = hero.closest('[data-dms-party]');
+          if (list) partyEdges(list);
+        }, 340);
+      }
+
+      // Fades the list edge and counts the heroes still below it.
+      function partyEdges(list) {
+        var more = list.parentNode.querySelector('[data-dms-more]');
+        var end = list.scrollTop + list.clientHeight >= list.scrollHeight - 2;
+        list.classList.toggle('dms-at-end', end);
+        list.classList.toggle('dms-scrolled', list.scrollTop > 2);
+        var below = 0, bottom = list.getBoundingClientRect().bottom;
+        list.querySelectorAll('[data-dms-hero]').forEach(function (h) {
+          if (h.getBoundingClientRect().top > bottom - 12) below++;
+        });
+        if (!more) return;
+        more.hidden = end || !below;
+        more.textContent = below + ' more below';
+      }
+
+      function refreshParty() {
+        var r = root(); if (!r) return;
+        r.querySelectorAll('[data-dms-party]').forEach(partyEdges);
+      }
 
       function selectTab(tab) {
         var r = root(); if (!r) return;
@@ -121,6 +161,7 @@
       function setPlaying(on) {
         st.playing = on;
         if (st.overlay) st.overlay.querySelector('.dms-skip').hidden = !on;
+        if (!on) refreshParty();
       }
 
       function load() {
