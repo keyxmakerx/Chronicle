@@ -1008,6 +1008,13 @@
     destroy: function (el) {
       if (this.eraField) this.eraField.destroy();
       if (this._eraRO) this._eraRO.disconnect();
+      // boot.js reuses this one object for every mount, so a remount must
+      // build a fresh painter on the new stage, not reuse the dead one.
+      this.eraField = null;
+      this._eraRO = null;
+      this._eraScene = null;
+      this._eraOpen = null;
+      this._eraOpener = null;
       if (this.skyDock) this.skyDock.destroy();
       if (this._eventDrawer) this._eventDrawer.destroy();
       if (this._resizeHandler) window.removeEventListener('resize', this._resizeHandler);
