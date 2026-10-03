@@ -121,6 +121,8 @@
     var H = st.H, L = st.L, TRAIN = 2.2, u = age / mp.dur, dx = Math.cos(mp.ang), dy = Math.sin(mp.ang), d0 = mp.d0 * H, ln = mp.len * H;
     if (u > 1) {
       var v = (age - mp.dur) / (TRAIN * mp.train), a0 = d0 + ln * .3, a1 = d0 + ln * .92;
+      // The train has faded out; past here its fade would be a fractional power of a negative number.
+      if (v >= 1) return;
       if (rp.y + dy * a1 > L.hor + 4 && rp.y + dy * a0 > L.hor + 4) return;
       st.met.push([rp.x + dx * a1, rp.y + dy * a1, rp.x + dx * a0, rp.y + dy * a0, col[0], col[1], col[2], -Math.pow(1 - v, 1.6) * .5 * mp.train * gain]);
       return;
