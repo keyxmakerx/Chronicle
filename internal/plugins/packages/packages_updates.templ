@@ -1,0 +1,71 @@
+// packages_updates.templ is the Updates tab: one row per package with a newer
+// version ready.
+package packages
+
+import "fmt"
+
+// updatesTab lists what can be updated. There is no site-wide "check all" or
+// "install all" endpoint, so each row installs on its own and the empty state
+// offers a check per package.
+templ updatesTab(data PackagesPageData) {
+	if len(data.Updates) == 0 {
+		<section class="card space-y-3">
+			<p class="text-base text-fg">Everything is up to date.</p>
+			if at := latestCheck(data.Rows); at != nil {
+				<p class="text-xs text-fg-muted">Last checked { agoLabel(data.Now, at) }.</p>
+			}
+			@checkEachList(data)
+		</section>
+	} else {
+		<section class="card p-0 overflow-hidden">
+			<h2 class="px-4 py-3 border-b border-edge text-base font-semibold text-fg">
+				{ fmt.Sprintf("%d %s ready", len(data.Updates), pluralWord(len(data.Updates), "update", "updates")) }
+			</h2>
+			<ul class="divide-y divide-edge">
+				for _, r := range data.Updates {
+					<li class="grid grid-cols-[2.25rem_minmax(0,1fr)_auto] gap-x-3 px-4 py-3">
+						<span class="grid h-9 w-9 place-items-center rounded-lg bg-accent/10 font-bold text-accent" aria-hidden="true">{ iconLetter(r.Name) }</span>
+						<div class="min-w-0">
+							<p class="text-fg">
+								<a href={ templ.SafeURL(pkgHref(PackagesTabInstalled, FilterActive, "", r.ID, PanelTabOverview)) } class="font-semibold hover:underline">{ r.Name }</a>
+								<span class="ml-1 text-xs text-fg-secondary tabular-nums">{ r.InstalledVersion } → <b>{ r.Newer.Version }</b></span>
+							</p>
+							if lines := releaseNoteLines(r.Newer.ReleaseNotes, 3); len(lines) > 0 {
+								<ul class="mt-1.5 list-disc pl-5 text-sm text-fg-secondary">
+									for _, l := range lines {
+										<li class="break-words">{ l }</li>
+									}
+								</ul>
+							}
+						</div>
+						<div>
+							@installButton(r.ID, r.Newer.Version, data.CSRFToken, "Install", "btn-primary btn-sm")
+						</div>
+					</li>
+				}
+			</ul>
+		</section>
+	}
+}
+
+// checkEachList offers a Check now button per active package, the only way to
+// ask for a check from this page.
+templ checkEachList(data PackagesPageData) {
+	{{ active := filterRows(data.Rows, FilterActive, "") }}
+	if len(active) > 0 {
+		<ul class="divide-y divide-edge rounded-lg border border-edge">
+			for _, r := range active {
+				<li class="flex flex-wrap items-center gap-2 px-3 py-2 text-sm">
+					<span class="flex-1 min-w-36 text-fg">{ r.Name }</span>
+					<span class="text-xs text-fg-muted">checked { agoLabel(data.Now, r.LastCheckedAt) }</span>
+					<button
+						type="button"
+						hx-post={ "/admin/packages/" + r.ID + "/check" }
+						hx-headers={ csrfHeaders(data.CSRFToken) }
+						class="btn-secondary btn-sm"
+					>Check now</button>
+				</li>
+			}
+		</ul>
+	}
+}

@@ -5,6 +5,7 @@ import (
 	"log/slog"
 	"net/http"
 	"strconv"
+	"time"
 
 	"github.com/labstack/echo/v4"
 
@@ -24,16 +25,32 @@ func NewHandler(service PackageService) *Handler {
 }
 
 // ListPackages renders the package management page (GET /admin/packages).
+// The tab, filter, search and open package are query parameters, so every view
+// is a link and survives a reload.
 func (h *Handler) ListPackages(c echo.Context) error {
-	ctx := c.Request().Context()
+	q := parsePackagesQuery(
+		c.QueryParam("tab"), c.QueryParam("f"), c.QueryParam("q"),
+		c.QueryParam("pkg"), c.QueryParam("ptab"),
+	)
 
-	pkgs, err := h.service.ListPackages(ctx)
+	data, err := buildPackagesPage(c.Request().Context(), h.service, q, middleware.GetCSRFToken(c), time.Now())
 	if err != nil {
 		return err
 	}
+	return middleware.Render(c, http.StatusOK, PackagesPage(*data))
+}
 
-	csrfToken := middleware.GetCSRFToken(c)
-	return middleware.Render(c, http.StatusOK, PackagesPage(pkgs, csrfToken))
+// backToPage answers a write by sending the admin back to the page they were
+// on, so acting from the open panel does not close it.
+func (h *Handler) backToPage(c echo.Context) error {
+	return middleware.HTMXRedirect(c, packagesReturnURL(c.Request().Header.Get("HX-Current-URL")))
+}
+
+// wantsFullPage reports whether the request is a browser navigation, as
+// opposed to an HTMX fragment fetch or an API call, which keep their old
+// responses.
+func wantsFullPage(c echo.Context) bool {
+	return !middleware.IsHTMX(c) && !middleware.IsAPIRequest(c)
 }
 
 // AddPackage registers a new GitHub repository (POST /admin/packages).
@@ -57,7 +74,7 @@ func (h *Handler) AddPackage(c echo.Context) error {
 
 	h.recordActivity(c, "package.added", "package", pkg.ID, pkg.Name)
 
-	return middleware.HTMXRedirect(c, "/admin/packages")
+	return h.backToPage(c)
 }
 
 // PrunePreview renders the stale-version cleanup card as a lazy HTMX
@@ -85,7 +102,7 @@ func (h *Handler) PruneExecute(c echo.Context) error {
 		slog.Int64("bytes_freed", res.BytesFreed),
 	)
 	h.recordActivity(c, "package.pruned", "package", "", "")
-	return middleware.HTMXRedirect(c, "/admin/packages")
+	return h.backToPage(c)
 }
 
 // RemovePackage deletes a package (DELETE /admin/packages/:id).
@@ -102,7 +119,7 @@ func (h *Handler) RemovePackage(c echo.Context) error {
 
 	h.recordActivity(c, "package.removed", "package", id, label)
 
-	return middleware.HTMXRedirect(c, "/admin/packages")
+	return h.backToPage(c)
 }
 
 // ListVersions returns available versions for a package (GET /admin/packages/:id/versions).
@@ -144,7 +161,7 @@ func (h *Handler) InstallVersion(c echo.Context) error {
 
 	h.recordActivity(c, "package.version_installed", "package", id, h.packageLabel(ctx, id))
 
-	return middleware.HTMXRedirect(c, "/admin/packages")
+	return h.backToPage(c)
 }
 
 // SetPinnedVersion pins a package to a version (PUT /admin/packages/:id/pin).
@@ -163,7 +180,7 @@ func (h *Handler) SetPinnedVersion(c echo.Context) error {
 
 	h.recordActivity(c, "package.version_pinned", "package", id, h.packageLabel(ctx, id))
 
-	return middleware.HTMXRedirect(c, "/admin/packages")
+	return h.backToPage(c)
 }
 
 // ClearPinnedVersion unpins a package (DELETE /admin/packages/:id/pin).
@@ -177,7 +194,7 @@ func (h *Handler) ClearPinnedVersion(c echo.Context) error {
 
 	h.recordActivity(c, "package.version_pinned", "package", id, h.packageLabel(ctx, id))
 
-	return middleware.HTMXRedirect(c, "/admin/packages")
+	return h.backToPage(c)
 }
 
 // SetAutoUpdate changes the auto-update policy (PUT /admin/packages/:id/auto-update).
@@ -197,7 +214,7 @@ func (h *Handler) SetAutoUpdate(c echo.Context) error {
 
 	h.recordActivity(c, "package.auto_update", "package", id, h.packageLabel(ctx, id))
 
-	return middleware.HTMXRedirect(c, "/admin/packages")
+	return h.backToPage(c)
 }
 
 // CheckForUpdates triggers an update check (POST /admin/packages/:id/check).
@@ -209,7 +226,7 @@ func (h *Handler) CheckForUpdates(c echo.Context) error {
 		return echo.NewHTTPError(http.StatusBadRequest, err.Error())
 	}
 
-	return middleware.HTMXRedirect(c, "/admin/packages")
+	return h.backToPage(c)
 }
 
 // GetUsage shows which campaigns use a package (GET /admin/packages/:id/usage).
@@ -237,6 +254,10 @@ func (h *Handler) GetUsage(c echo.Context) error {
 
 // ListPendingSubmissions shows packages awaiting approval (GET /admin/packages/pending).
 func (h *Handler) ListPendingSubmissions(c echo.Context) error {
+	// The page lives in the Review tab now; the old address still works.
+	if wantsFullPage(c) {
+		return c.Redirect(http.StatusSeeOther, tabHref(PackagesTabReview))
+	}
 	ctx := c.Request().Context()
 
 	pkgs, err := h.service.ListPendingSubmissions(ctx)
@@ -269,7 +290,7 @@ func (h *Handler) ReviewPackage(c echo.Context) error {
 
 	h.recordActivity(c, "package.reviewed", "package", id, h.packageLabel(ctx, id))
 
-	return middleware.HTMXRedirect(c, "/admin/packages")
+	return h.backToPage(c)
 }
 
 // UpdateRepoURL changes a package's repository URL (PUT /admin/packages/:id/repo).
@@ -288,7 +309,7 @@ func (h *Handler) UpdateRepoURL(c echo.Context) error {
 
 	h.recordActivity(c, "package.repo_changed", "package", id, h.packageLabel(ctx, id))
 
-	return middleware.HTMXRedirect(c, "/admin/packages")
+	return h.backToPage(c)
 }
 
 // DeprecatePackage marks a package as EOL (POST /admin/packages/:id/deprecate).
@@ -307,7 +328,7 @@ func (h *Handler) DeprecatePackage(c echo.Context) error {
 
 	h.recordActivity(c, "package.deprecated", "package", id, h.packageLabel(ctx, id))
 
-	return middleware.HTMXRedirect(c, "/admin/packages")
+	return h.backToPage(c)
 }
 
 // UndeprecatePackage clears deprecation (DELETE /admin/packages/:id/deprecate).
@@ -327,7 +348,7 @@ func (h *Handler) UndeprecatePackage(c echo.Context) error {
 
 	h.recordActivity(c, "package.deprecated", "package", id, h.packageLabel(ctx, id))
 
-	return middleware.HTMXRedirect(c, "/admin/packages")
+	return h.backToPage(c)
 }
 
 // ArchivePackage hides a package (POST /admin/packages/:id/archive).
@@ -341,7 +362,7 @@ func (h *Handler) ArchivePackage(c echo.Context) error {
 
 	h.recordActivity(c, "package.archived", "package", id, h.packageLabel(ctx, id))
 
-	return middleware.HTMXRedirect(c, "/admin/packages")
+	return h.backToPage(c)
 }
 
 // UnarchivePackage restores an archived package (DELETE /admin/packages/:id/archive).
@@ -355,13 +376,17 @@ func (h *Handler) UnarchivePackage(c echo.Context) error {
 
 	h.recordActivity(c, "package.archived", "package", id, h.packageLabel(ctx, id))
 
-	return middleware.HTMXRedirect(c, "/admin/packages")
+	return h.backToPage(c)
 }
 
 // --- Package Security Settings ---
 
 // GetSecuritySettings renders the settings page (GET /admin/packages/settings).
 func (h *Handler) GetSecuritySettings(c echo.Context) error {
+	// The page lives in the Settings tab now; the old address still works.
+	if wantsFullPage(c) {
+		return c.Redirect(http.StatusSeeOther, tabHref(PackagesTabSettings))
+	}
 	ctx := c.Request().Context()
 
 	secSettings, err := h.service.GetSecuritySettings(ctx)

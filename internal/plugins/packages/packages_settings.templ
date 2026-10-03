@@ -1,0 +1,115 @@
+// packages_settings.templ is the Settings tab and the body of the old
+// standalone package-rules page.
+package packages
+
+import (
+	"fmt"
+	"github.com/keyxmakerx/chronicle/internal/templates/layouts"
+)
+
+// settingsTab is the site-wide package rules plus the old-version clean-up.
+templ settingsTab(data PackagesPageData) {
+	<div class="space-y-4">
+		if data.Settings != nil {
+			@securitySettingsForm(*data.Settings, data.CSRFToken)
+		}
+		<!-- Stale-version cleanup wizard. Lazy fragment so the disk walk
+		     (per-version folder sizes) never slows the page load; the
+		     handler renders nothing when there is nothing to reclaim. -->
+		<div
+			hx-get="/admin/packages/prune"
+			hx-trigger="load"
+			hx-swap="innerHTML"
+		></div>
+	</div>
+}
+
+// securitySettingsForm is the one form behind POST /admin/packages/settings:
+// where packages can come from, who may send them in, and the safety checks.
+templ securitySettingsForm(settings PackageSecuritySettings, csrfToken string) {
+	<form method="POST" action="/admin/packages/settings" class="space-y-4">
+		<input type="hidden" name="_csrf" value={ csrfToken }/>
+		<div class="grid gap-4 lg:grid-cols-2 items-start">
+			<section class="card space-y-2">
+				<h2 class="text-base font-semibold text-fg">Where packages can come from</h2>
+				<p class="text-xs text-fg-muted">Which repository addresses are accepted for packages.</p>
+				@settingRadio("repo_policy", RepoPolicyGitHubOnly, "GitHub only", "Only accept repositories hosted on GitHub.com. Recommended.", settings.RepoPolicy == RepoPolicyGitHubOnly)
+				@settingRadio("repo_policy", RepoPolicyAnyGit, "GitHub, GitLab, Bitbucket, Codeberg and SourceHut", "Allow the well-known git hosts.", settings.RepoPolicy == RepoPolicyAnyGit)
+				@settingRadio("repo_policy", RepoPolicyAllowAll, "Any https address", "Private addresses are still blocked. Only if you trust every admin.", settings.RepoPolicy == RepoPolicyAllowAll)
+			</section>
+			<section class="card space-y-2">
+				<h2 class="text-base font-semibold text-fg">Owners sending in packages</h2>
+				<p class="text-xs text-fg-muted">Whether campaign owners can send in GitHub addresses and upload custom game system ZIPs. Sent-in GitHub packages always land in the Review tab; only Not allowed blocks them outright.</p>
+				@settingRadio("owner_upload_policy", OwnerUploadAutoApprove, "Allowed", "Owners can send in GitHub addresses (you still review before install) and upload custom system ZIPs (installed straight away for that owner).", settings.OwnerUploadPolicy == OwnerUploadAutoApprove)
+				@settingRadio("owner_upload_policy", OwnerUploadRequireApproval, "Allowed, you review", "Works like Allowed today. Reserved for also holding custom ZIP installs for review.", settings.OwnerUploadPolicy == OwnerUploadRequireApproval)
+				@settingRadio("owner_upload_policy", OwnerUploadDisabled, "Not allowed", "Owners cannot send in packages or upload ZIPs. Only packages you add are available.", settings.OwnerUploadPolicy == OwnerUploadDisabled)
+				@settingToggle("require_approval", "Hold submissions for approval", "Submissions from campaign owners must be approved before they are fetched.", settings.RequireApproval)
+			</section>
+			<section class="card space-y-2 lg:col-span-2">
+				<h2 class="text-base font-semibold text-fg">Safety checks on every install</h2>
+				@settingToggle("validate_manifest", "Check the package file", "Require a valid manifest.json at the package root with id and name.", settings.ValidateManifest)
+				@settingToggle("scan_content", "Scan the files", "Refuse packages containing executables, symlinks or suspicious file types.", settings.ScanContent)
+				<div class="rounded-lg border border-edge p-3">
+					<label for="max_file_size_mb" class="block text-sm font-medium text-fg">Size limit</label>
+					<p class="text-xs text-fg-muted mb-2">Refuse any single file larger than this.</p>
+					<div class="flex items-center gap-2">
+						<input
+							type="number"
+							id="max_file_size_mb"
+							name="max_file_size_mb"
+							value={ fmt.Sprintf("%d", settings.MaxFileSize/(1024*1024)) }
+							min="1"
+							max="500"
+							class="input w-28"
+						/>
+						<span class="text-sm text-fg-secondary">MB</span>
+					</div>
+				</div>
+			</section>
+		</div>
+		<div class="flex justify-end">
+			<button type="submit" class="btn-primary text-sm">Save settings</button>
+		</div>
+	</form>
+}
+
+// settingRadio is one choice of a radio group.
+templ settingRadio(name, value, title, desc string, checked bool) {
+	<label class="flex items-start gap-3 rounded-lg border border-edge p-2.5 cursor-pointer hover:bg-surface-alt">
+		<input type="radio" name={ name } value={ value } checked?={ checked } class="mt-1 text-accent"/>
+		<span>
+			<span class="block text-sm font-medium text-fg">{ title }</span>
+			<span class="block text-xs text-fg-muted">{ desc }</span>
+		</span>
+	</label>
+}
+
+// settingToggle is an on/off switch posting "true" when on.
+templ settingToggle(name, title, desc string, checked bool) {
+	<div class="flex items-center justify-between gap-3 rounded-lg border border-edge p-3">
+		<div>
+			<span class="block text-sm font-medium text-fg">{ title }</span>
+			<span class="block text-xs text-fg-muted">{ desc }</span>
+		</div>
+		<label class="relative inline-flex items-center cursor-pointer shrink-0">
+			<input type="checkbox" name={ name } value="true" checked?={ checked } class="sr-only peer"/>
+			<div class="w-11 h-6 bg-gray-200 rounded-full peer dark:bg-gray-700 peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all dark:border-gray-600 peer-checked:bg-accent"></div>
+		</label>
+	</div>
+}
+
+// SecuritySettingsPage is the standalone settings page, kept for HTMX callers;
+// a full-page visit is redirected to the Settings tab.
+templ SecuritySettingsPage(settings PackageSecuritySettings, csrfToken string) {
+	@layouts.App("Package Security - Admin") {
+		<div class="max-w-3xl mx-auto space-y-6">
+			<div>
+				<h1 class="text-2xl font-bold text-fg">Package Security Settings</h1>
+				<p class="text-sm text-fg-secondary mt-1">
+					Configure security policies for package submissions and downloads.
+				</p>
+			</div>
+			@securitySettingsForm(settings, csrfToken)
+		</div>
+	}
+}

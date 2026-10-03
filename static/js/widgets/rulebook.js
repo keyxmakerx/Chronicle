@@ -133,6 +133,7 @@
       turn: TURN_MS[turn] ? turn : 'flip',
       theme: isObj(json.theme) ? json.theme : {},
       isDirector: json.isDirector === true,
+      canEdit: json.canEdit === true,
       terms: terms,
       parts: json.parts.filter(isObj).map(function (part) {
         return {
@@ -310,12 +311,15 @@
         '<button type="button" data-act="view" data-view="player" aria-pressed="false">Player view</button>' +
         '<button type="button" data-act="view" data-view="director" aria-pressed="false">Director view</button></div>';
     }
+    var edit = d.canEdit && this.url
+      ? '<button type="button" class="rb-btn" data-act="edit" data-href="' + esc(this.url.replace(/[?#].*$/, '').replace(/\/+$/, '') + '/edit') + '">Edit</button>'
+      : '';
     return '<div class="rb-bar">' +
       '<div class="rb-brand">' + (d.mark ? '<span class="rb-mark" aria-hidden="true">' + esc(d.mark) + '</span>' : '') +
       '<div class="rb-name"><span class="rb-title">' + esc(d.title) + '</span>' +
       (d.systemName ? '<small>' + esc(d.systemName) + '</small>' : '') + '</div></div>' +
       '<button type="button" class="rb-btn" data-act="toc" aria-expanded="false" aria-label="Open the contents"><span aria-hidden="true">☰</span> Contents</button>' +
-      '<span class="rb-where"></span><span class="rb-sp"></span>' + seg + '</div>' +
+      '<span class="rb-where"></span><span class="rb-sp"></span>' + edit + seg + '</div>' +
       '<div class="rb-book">' +
       '<article class="rb-page l"></article><div class="rb-spine" aria-hidden="true"></div><article class="rb-page r"></article>' +
       '<button type="button" class="rb-curl l" data-act="prev" aria-label="Previous page"></button>' +
@@ -515,13 +519,19 @@
       }
     } else {
       label = item.p.title || item.ch.title;
-      var self = this;
-      h = '<p class="rb-kicker">' + esc(item.ch.title) + (item.p.director ? ' ' + this.dirTag() : '') + '</p>' +
-        (item.p.title ? '<h2>' + esc(item.p.title) + '</h2>' : '') +
-        '<div class="rb-blocks">' + item.p.blocks.map(function (b) { return self.blockHTML(b); }).join('') + '</div>';
+      h = this.pageBodyHTML(item.ch.title, item.p);
     }
     return '<div class="rb-scroll" tabindex="0" role="region" aria-label="Page ' + (item.n + 1) + ': ' + esc(label) + '">' + h + '</div>' +
       '<div class="rb-foot"><span class="rb-folio">' + (item.n + 1) + '</span></div>';
+  };
+
+  // The kicker, title and blocks of one page, shared with the page editor's
+  // live preview so the preview is the real renderer.
+  Rulebook.prototype.pageBodyHTML = function (chapterTitle, p) {
+    var self = this;
+    return '<p class="rb-kicker">' + esc(chapterTitle) + (p.director ? ' ' + this.dirTag() : '') + '</p>' +
+      (p.title ? '<h2>' + esc(p.title) + '</h2>' : '') +
+      '<div class="rb-blocks">' + arr(p.blocks).filter(isObj).map(function (b) { return self.blockHTML(b); }).join('') + '</div>';
   };
 
   // --- Blocks ----------------------------------------------------------------
@@ -940,6 +950,7 @@
       switch (x.getAttribute('data-act')) {
         case 'prev': this.turnTo(this.at - 1); break;
         case 'next': this.turnTo(this.at + 1); break;
+        case 'edit': window.location.assign(x.getAttribute('data-href')); break;
         case 'toc': if (this.drawerOpen()) this.closeDrawer(true); else this.openDrawer(); break;
         case 'view': this.setView(x.getAttribute('data-view')); break;
         case 'roll': this.doRoll(x.closest('[data-roll]')); break;
@@ -981,6 +992,33 @@
     if (!s || this.drawerOpen()) return;
     var dx = p.clientX - s.x, dy = p.clientY - s.y;
     if (Math.abs(dx) >= SWIPE_PX && Math.abs(dy) < Math.abs(dx) * 0.6) this.turnTo(this.at + (dx < 0 ? 1 : -1));
+  };
+
+  // Reuse by the page editor: draws one wire-format page (the same shape the
+  // book JSON carries) with the book's own block renderers. ctx: { terms,
+  // director } where director=false previews the player view. The result is
+  // static markup; widget blocks are not mounted.
+  window.ChronicleRulebook = {
+    renderPage: function (page, ctx) {
+      ctx = ctx || {};
+      var r = new Rulebook(document.createElement('div'), {});
+      var terms = {};
+      if (isObj(ctx.terms)) {
+        Object.keys(ctx.terms).forEach(function (k) {
+          var t = ctx.terms[k];
+          if (isObj(t) && str(t.text)) terms[k.toLowerCase()] = { name: str(t.name) || k, text: str(t.text) };
+        });
+      }
+      r.data = { terms: terms, isDirector: true };
+      r.view = ctx.director === false ? 'player' : 'director';
+      return r.pageBodyHTML(str(ctx.chapterTitle), isObj(page) ? page : {});
+    },
+    // Sets the --book-* theme variables on el, through the same allow-list.
+    applyTheme: function (el, theme) {
+      var r = new Rulebook(el, {});
+      r.data = { turn: 'flip' };
+      r.applyTheme(isObj(theme) ? theme : {});
+    }
   };
 
   Chronicle.register('rulebook', {

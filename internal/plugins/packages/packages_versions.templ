@@ -1,0 +1,115 @@
+// packages_versions.templ is the Versions tab and the GET /:id/versions
+// fragment: both render the same list.
+package packages
+
+import "fmt"
+
+// VersionList renders a package's versions, newest first, with Install /
+// switch, Pin and release-notes controls. It is the panel's Versions tab and
+// the body of GET /admin/packages/:id/versions.
+templ VersionList(pkg *Package, versions []PackageVersion, csrfToken string) {
+	<div class="space-y-3">
+		<p class="text-xs text-fg-muted">
+			Install or switch to any version. Pinning a version stops automatic updates for this package.
+		</p>
+		if len(versions) == 0 {
+			<p class="text-sm text-fg-secondary">No versions found. Press Check now on the Settings tab.</p>
+		} else {
+			<div class="rounded-lg border border-edge divide-y divide-edge overflow-hidden">
+				for _, v := range versions {
+					<div class={ "px-3 py-2.5 text-sm", templ.KV("bg-green-500/5", v.Version == pkg.InstalledVersion) }>
+						<div class="flex flex-wrap items-center gap-x-3 gap-y-1.5">
+							<span class="font-mono font-bold text-fg">{ v.Version }</span>
+							<span class="text-xs text-fg-muted">{ v.PublishedAt.Format("2 Jan 2006") }</span>
+							if v.Prerelease {
+								<span class="badge-primary">pre-release</span>
+							}
+							if v.Version == pkg.InstalledVersion {
+								<span class="badge-green">Installed</span>
+							}
+							if v.Version == pkg.PinnedVersion {
+								<span class="badge-amber">Pinned</span>
+							}
+							<span class="ml-auto flex flex-wrap items-center gap-1.5">
+								if v.Version != pkg.InstalledVersion {
+									{{ upgrade := pkg.InstalledVersion == "" || versionIsNewerThanInstalled(pkg.InstalledVersion, v.Version) }}
+									<button
+										type="button"
+										hx-put={ fmt.Sprintf("/admin/packages/%s/version", pkg.ID) }
+										hx-vals={ versionVals(v.Version) }
+										hx-headers={ csrfHeaders(csrfToken) }
+										hx-confirm={ fmt.Sprintf("Install version %s?", v.Version) }
+										class={ "btn-sm", templ.KV("btn-primary", upgrade), templ.KV("btn-secondary", !upgrade) }
+									>
+										if upgrade {
+											Install
+										} else {
+											Switch to this
+										}
+									</button>
+								}
+								if v.Version != pkg.PinnedVersion {
+									<button
+										type="button"
+										hx-put={ fmt.Sprintf("/admin/packages/%s/pin", pkg.ID) }
+										hx-vals={ versionVals(v.Version) }
+										hx-headers={ csrfHeaders(csrfToken) }
+										class="btn-secondary btn-sm"
+										title="Pin to this version"
+									>
+										<i class="fa-solid fa-thumbtack mr-1"></i>
+										Pin
+									</button>
+								} else {
+									@unpinButton(pkg.ID, csrfToken)
+								}
+								// A foundry-module package gets a per-version
+								// Campaigns expand that lazy-loads the owning
+								// plugin's "campaigns using this version" card.
+								// The URL is hardcoded rather than dispatched
+								// through an interface; see the packages .ai.md
+								// extension-points note on per-type embed URLs.
+								//
+								// The button carries a stable ID
+								// (fvtt-campaigns-trigger-{sanitized-version}) so
+								// the autopin banner's "Show affected campaigns"
+								// inline IIFE can locate and click it after an
+								// install. Version-scoped only, since deployments
+								// have at most one such package; a multi-package
+								// deployment would need to revisit the selector.
+								if pkg.Type == PackageTypeFoundryModule {
+									<button
+										type="button"
+										id={ fmt.Sprintf("fvtt-campaigns-trigger-%s", sanitizeForID(v.Version)) }
+										hx-get={ fmt.Sprintf("/admin/foundry-vtt/version/%s/campaigns", v.Version) }
+										hx-target={ fmt.Sprintf("#fvtt-campaigns-%s-%s", pkg.ID, sanitizeForID(v.Version)) }
+										hx-swap="innerHTML"
+										class="btn-secondary btn-sm"
+										title="Show campaigns pinned to this version + admin actions"
+									>
+										<i class="fa-solid fa-chevron-down mr-1"></i>
+										Campaigns
+									</button>
+								}
+							</span>
+						</div>
+						<details class="mt-1.5">
+							<summary class="cursor-pointer text-xs text-fg-muted hover:text-fg">Release notes</summary>
+							if v.ReleaseNotes != "" {
+								<p class="mt-1.5 whitespace-pre-wrap break-words text-xs text-fg-secondary">{ v.ReleaseNotes }</p>
+							} else {
+								<p class="mt-1.5 text-xs text-fg-muted">This release has no notes.</p>
+							}
+							if v.ReleaseURL != "" {
+								<a href={ templ.SafeURL(v.ReleaseURL) } target="_blank" rel="noopener noreferrer" class="mt-1 inline-block text-xs text-accent hover:underline">Open the release on GitHub</a>
+							}
+						</details>
+						if pkg.Type == PackageTypeFoundryModule {
+							<div id={ fmt.Sprintf("fvtt-campaigns-%s-%s", pkg.ID, sanitizeForID(v.Version)) }></div>
+						}
+					</div>
+				}
+			</div>
+		}
+	</div>
+}

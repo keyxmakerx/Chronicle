@@ -142,10 +142,13 @@ var czSpeeds = map[string]struct{ micro, std, large int }{
 	"leisurely": {200, 330, 460},
 }
 
-// czHeadingFaces is each heading face's weight and letter-spacing.
-var czHeadingFaces = map[string]struct{ weight, spacing string }{
-	"cinzel": {"600", ".02em"}, "marcellus": {"400", ".01em"}, "imfell": {"400", "0"}, "cormorant": {"600", "0"},
-	"fraunces": {"600", "-.01em"}, "playfair": {"600", "0"}, "josefin": {"600", ".01em"}, "chakra": {"600", "0"},
+// czHeadingFaces is each heading face's weight, letter-spacing and size
+// nudge. Some faces run large or small at the same font size; the nudge
+// (matching the Customize example site) makes every face read the same size.
+// An empty size means no nudge.
+var czHeadingFaces = map[string]struct{ weight, spacing, size string }{
+	"cinzel": {"600", ".02em", ".9"}, "marcellus": {"400", ".01em", ""}, "imfell": {"400", "0", "1.06"}, "cormorant": {"600", "0", "1.14"},
+	"fraunces": {"600", "-.01em", ""}, "playfair": {"600", "0", ""}, "josefin": {"600", ".01em", "1.02"}, "chakra": {"600", "0", ""},
 }
 
 // czFontStacks pairs each face with fallbacks close in shape.
@@ -256,6 +259,9 @@ func AppearanceCSS(ctx context.Context) string {
 	if h, ok := czHeadingFaces[a.HeadingFont]; ok {
 		extra.WriteString(fontFaceCSS(a.HeadingFont))
 		fmt.Fprintf(&root, "--font-heading:%s;--cz-hw:%s;--cz-hls:%s;", czFontStacks[a.HeadingFont], h.weight, h.spacing)
+		if h.size != "" {
+			fmt.Fprintf(&root, "--cz-hz:%s;", h.size)
+		}
 	}
 
 	var out strings.Builder

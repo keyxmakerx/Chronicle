@@ -1,0 +1,137 @@
+// packages_installed.templ is the Installed tab: the package list on one side
+// and the open package's panel (or a prompt to choose one) on the other.
+package packages
+
+import "fmt"
+
+// installedTab lays the list and the panel side by side from lg up. The list
+// keeps its column whether or not a package is open, so rows never stretch
+// across the page. Below lg an open package takes the whole width and the
+// list is hidden, with a back link in the panel; with nothing open the list
+// fills the screen and the placeholder panel is hidden.
+templ installedTab(data PackagesPageData) {
+	<div class="grid gap-4 items-start lg:grid-cols-[minmax(0,1fr)_minmax(0,1.15fr)]">
+		<section class={ "card p-0 overflow-hidden", templ.KV("hidden lg:block", data.Selected != nil) } aria-label="Packages">
+			@packageListTools(data)
+			if len(data.Visible) == 0 {
+				<p class="p-4 text-sm text-fg-secondary">
+					if len(data.Rows) == 0 {
+						No packages yet. Use Add package above to register a GitHub repository.
+					} else {
+						Nothing matches. Try another filter.
+					}
+				</p>
+			} else {
+				<ul>
+					for _, row := range data.Visible {
+						<li class="border-t border-edge first:border-t-0">
+							@packageListRow(data, row)
+						</li>
+					}
+				</ul>
+			}
+		</section>
+		if data.Selected != nil {
+			@packagePanel(data)
+		} else {
+			@emptyPanel(data)
+		}
+	</div>
+}
+
+// packageListTools is the search box and the filter chips, a plain GET form
+// plus links so filtering works without JavaScript.
+templ packageListTools(data PackagesPageData) {
+	<div class="flex flex-wrap items-center gap-2 p-3 border-b border-edge">
+		<form method="GET" action="/admin/packages" class="flex-1 basis-44 min-w-0" role="search">
+			if data.Query.Filter != FilterActive {
+				<input type="hidden" name="f" value={ data.Query.Filter }/>
+			}
+			<input
+				type="search"
+				name="q"
+				value={ data.Query.Search }
+				class="input w-full"
+				placeholder="Search packages"
+				aria-label="Search packages"
+			/>
+		</form>
+		<div class="flex flex-wrap gap-1.5">
+			@filterChip(data.Query, FilterActive, "Active", data.Counts.Active)
+			@filterChip(data.Query, FilterSystems, "Game systems", data.Counts.Systems)
+			@filterChip(data.Query, FilterFoundry, "Foundry module", data.Counts.Foundry)
+			@filterChip(data.Query, FilterProblems, "Problems", data.Counts.Problems)
+			@filterChip(data.Query, FilterRetired, "Retired", data.Counts.Retired)
+		</div>
+	</div>
+}
+
+// filterChip is one filter link with its count.
+templ filterChip(q packagesQuery, filter, label string, n int) {
+	<a
+		href={ templ.SafeURL(q.filterHref(filter)) }
+		class={ "inline-flex items-center gap-1 rounded-full border px-2.5 py-1 text-xs font-semibold focus-visible:outline focus-visible:outline-2 focus-visible:outline-accent",
+			templ.KV("border-transparent bg-accent/10 text-accent", q.Filter == filter),
+			templ.KV("border-edge text-fg-secondary hover:bg-surface-alt", q.Filter != filter) }
+		if q.Filter == filter {
+			aria-current="true"
+		}
+	>
+		{ label }
+		<span class="tabular-nums opacity-70">{ fmt.Sprintf("%d", n) }</span>
+	</a>
+}
+
+// packageListRow is one compact row: icon letter, name, type, repo, running
+// version and status pill. The whole row is the link that opens the panel.
+templ packageListRow(data PackagesPageData, row PackageRow) {
+	<a
+		href={ templ.SafeURL(data.Query.rowHref(row.ID)) }
+		class={ "grid grid-cols-[2.25rem_minmax(0,1fr)_auto] items-center gap-x-3 gap-y-0.5 px-3 py-2.5 hover:bg-surface-alt focus-visible:outline focus-visible:outline-2 focus-visible:outline-accent",
+			templ.KV("bg-accent/10", data.Selected != nil && data.Selected.ID == row.ID) }
+		if data.Selected != nil && data.Selected.ID == row.ID {
+			aria-current="true"
+		}
+	>
+		<span
+			class={ "row-span-2 grid h-9 w-9 place-items-center rounded-lg font-bold",
+			templ.KV("bg-accent/10 text-accent", !row.IsFoundryModule()),
+			templ.KV("bg-sky-500/10 text-sky-600", row.IsFoundryModule()) }
+			aria-hidden="true"
+		>
+			{ iconLetter(row.Name) }
+		</span>
+		<span class="flex flex-wrap items-center gap-x-2 min-w-0">
+			<span class="font-semibold text-fg truncate">{ row.Name }</span>
+			<span class="badge-gray">{ typeLabel(row.Type) }</span>
+		</span>
+		<span class="row-span-2 justify-self-end">
+			@statusPill(row)
+		</span>
+		<span class="col-start-2 text-xs text-fg-secondary truncate">
+			{ repoLabel(row.RepoURL) }
+			if row.InstalledVersion != "" {
+				<span class="tabular-nums">· { row.InstalledVersion }</span>
+			}
+			if row.UsageKnown {
+				<span>· used by { campaignCount(len(row.Usage)) }</span>
+			}
+		</span>
+	</a>
+}
+
+// emptyPanel is the right side when nothing is open: a prompt plus shortcuts
+// to what needs attention.
+templ emptyPanel(data PackagesPageData) {
+	<section class="card hidden lg:block" aria-label="No package chosen">
+		<div class="flex flex-col gap-3 min-h-[14rem] justify-center">
+			<p class="text-base text-fg">Choose a package on the left to see its details.</p>
+			<p class="text-xs text-fg-muted">Or start with what needs you:</p>
+			<div class="flex flex-wrap gap-2">
+				<a href={ templ.SafeURL(tabHref(PackagesTabUpdates)) } class="btn-secondary btn-sm">{ fmt.Sprintf("%d updates ready", len(data.Updates)) }</a>
+				<a href={ templ.SafeURL(tabHref(PackagesTabReview)) } class="btn-secondary btn-sm">{ fmt.Sprintf("%d waiting for review", data.PendingCount) }</a>
+				<a href={ templ.SafeURL(pkgHref(PackagesTabInstalled, FilterProblems, "", "", "")) } class="btn-secondary btn-sm">{ fmt.Sprintf("%d %s", data.Counts.Problems, pluralWord(data.Counts.Problems, "problem", "problems")) }</a>
+			</div>
+		</div>
+	</section>
+}

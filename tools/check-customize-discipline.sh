@@ -23,7 +23,6 @@ set -euo pipefail
 # own, and a silent miss is worse than a short list that has to be kept
 # honest.
 TEMPL_FILES=(
-  "internal/plugins/campaigns/branding.templ"
   "internal/plugins/campaigns/customize.templ"
   "internal/plugins/campaigns/customize_look.templ"
 )
@@ -101,7 +100,7 @@ manual_json_hits() {
 # js_injected_ui_hits <file>
 #   Flags JS constructing a `data-mode="..."` control or a `type="file"`
 #   input as a string/DOM-build: the topbar Image mode's button and upload
-#   panel belong in branding.templ's server-rendered markup (TopbarImageSection),
+#   panel belong in the page's server-rendered templ markup,
 #   never assembled here. This file only ever READS data-mode
 #   (`querySelectorAll('button[data-mode]')`, `getAttribute('data-mode')` —
 #   neither has `=` immediately after `data-mode`), so a write signature here

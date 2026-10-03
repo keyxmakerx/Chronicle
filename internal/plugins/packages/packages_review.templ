@@ -1,0 +1,92 @@
+// packages_review.templ is the Review tab and the body of the old standalone
+// pending-submissions page.
+package packages
+
+import (
+	"fmt"
+	"github.com/keyxmakerx/chronicle/internal/templates/layouts"
+)
+
+// reviewTab shows the submissions waiting for the admin.
+templ reviewTab(data PackagesPageData) {
+	@reviewList(data.Pending, data.CSRFToken)
+}
+
+// reviewList renders pending submissions as review rows, or the empty state.
+// Approving fetches and installs the submitted code, so POST /:id/review sits
+// behind password re-confirmation like the other code-changing writes.
+templ reviewList(pkgs []Package, csrfToken string) {
+	if len(pkgs) == 0 {
+		<section class="card">
+			<p class="text-base text-fg">Nothing waiting for review.</p>
+		</section>
+	} else {
+		<div class="space-y-3">
+			<p class="text-sm text-fg-secondary">Campaign owners can send in their own game systems. Nothing is installed until you approve it.</p>
+			<section class="card p-0 overflow-hidden">
+				<ul class="divide-y divide-edge">
+					for _, pkg := range pkgs {
+						<li class="grid grid-cols-[2.25rem_minmax(0,1fr)] gap-x-3 px-4 py-3">
+							<span class="grid h-9 w-9 place-items-center rounded-lg bg-accent/10 font-bold text-accent" aria-hidden="true">{ iconLetter(pkg.Name) }</span>
+							<div class="min-w-0">
+								<p class="flex flex-wrap items-center gap-2">
+									<b class="text-fg">{ pkg.Name }</b>
+									@packageTypeBadge(pkg.Type)
+								</p>
+								<p class="mt-0.5 text-xs text-fg-secondary break-all">
+									{ pkg.RepoURL } · sent { pkg.CreatedAt.Format("2 Jan 2006 15:04") }
+								</p>
+								<form class="mt-3 flex flex-wrap items-end gap-2">
+									<div class="flex-1 min-w-48">
+										<label class="block text-xs font-medium text-fg-body mb-1" for={ fmt.Sprintf("note-%s", pkg.ID) }>Note to keep (optional)</label>
+										<input
+											type="text"
+											id={ fmt.Sprintf("note-%s", pkg.ID) }
+											name="note"
+											class="input w-full"
+											placeholder="Reason for approving or declining"
+										/>
+									</div>
+									<button
+										type="button"
+										hx-post={ fmt.Sprintf("/admin/packages/%s/review", pkg.ID) }
+										hx-include="closest form"
+										hx-vals='{"action":"approve"}'
+										hx-headers={ csrfHeaders(csrfToken) }
+										hx-confirm={ fmt.Sprintf("Approve %s?", pkg.Name) }
+										class="btn-primary btn-sm"
+									>Approve</button>
+									<button
+										type="button"
+										hx-post={ fmt.Sprintf("/admin/packages/%s/review", pkg.ID) }
+										hx-include="closest form"
+										hx-vals='{"action":"reject"}'
+										hx-headers={ csrfHeaders(csrfToken) }
+										hx-confirm={ fmt.Sprintf("Decline %s?", pkg.Name) }
+										class="btn-secondary btn-sm text-red-600"
+									>Decline</button>
+								</form>
+							</div>
+						</li>
+					}
+				</ul>
+			</section>
+		</div>
+	}
+}
+
+// PendingSubmissionsList is the standalone pending page, kept for HTMX
+// callers; a full-page visit is redirected to the Review tab.
+templ PendingSubmissionsList(pkgs []Package, csrfToken string) {
+	@layouts.App("Pending Submissions - Admin") {
+		<div class="max-w-5xl mx-auto space-y-6">
+			<div>
+				<h1 class="text-2xl font-bold text-fg">Pending Submissions</h1>
+				<p class="text-sm text-fg-secondary mt-1">
+					Review and approve or reject package submissions from campaign owners.
+				</p>
+			</div>
+			@reviewList(pkgs, csrfToken)
+		</div>
+	}
+}

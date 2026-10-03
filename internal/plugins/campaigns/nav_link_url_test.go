@@ -16,33 +16,6 @@ var dangerousURLs = []string{
 	"//evil.com", // protocol-relative open redirect
 }
 
-func TestUpdateTopbarContent_RejectsDangerousURLs(t *testing.T) {
-	for _, u := range dangerousURLs {
-		var saved string
-		svc := &campaignService{repo: tierTestRepo("{}", &saved)}
-		err := svc.UpdateTopbarContent(context.Background(), "camp-1",
-			&TopbarContent{Mode: "links", Links: []TopbarLink{{Label: "Evil", URL: u}}})
-		if err == nil {
-			t.Errorf("UpdateTopbarContent should reject %q", u)
-		}
-		if saved != "" {
-			t.Errorf("rejected URL %q must short-circuit before repo write", u)
-		}
-	}
-	// Valid URLs are accepted + persisted.
-	for _, u := range []string{"https://example.com/x", "http://example.com", "/campaigns/abc"} {
-		var saved string
-		svc := &campaignService{repo: tierTestRepo("{}", &saved)}
-		if err := svc.UpdateTopbarContent(context.Background(), "camp-1",
-			&TopbarContent{Mode: "links", Links: []TopbarLink{{Label: "OK", URL: u}}}); err != nil {
-			t.Errorf("UpdateTopbarContent should accept %q: %v", u, err)
-		}
-		if saved == "" {
-			t.Errorf("accepted URL %q should have been persisted", u)
-		}
-	}
-}
-
 func TestUpdateSidebarConfig_RejectsDangerousURLs(t *testing.T) {
 	newSvc := func(saved *string) *campaignService {
 		return &campaignService{repo: &mockCampaignRepo{

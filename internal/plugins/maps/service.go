@@ -79,7 +79,7 @@ type MapService interface {
 	CreateMarker(ctx context.Context, input CreateMarkerInput) (*Marker, error)
 	GetMarker(ctx context.Context, id string) (*Marker, error)
 	UpdateMarker(ctx context.Context, id string, input UpdateMarkerInput, canAuthorDmOnly bool) error
-	DeleteMarker(ctx context.Context, id string, expectedUpdatedAt *time.Time, canAuthorDmOnly bool) error
+	DeleteMarker(ctx context.Context, id string, expectedUpdatedAt *time.Time, canAuthorDmOnly bool, actorID string, role int) error
 	// ListMarkers takes campaignID so non-owner results can be narrowed by
 	// EntityVisibilityGate: the marker's own visibility is repo-filtered, but
 	// a linked entity's visibility is a separate check the caller must supply.
@@ -459,8 +459,24 @@ func (s *mapService) UpdateMarker(ctx context.Context, id string, input UpdateMa
 	return nil
 }
 
-// DeleteMarker removes a marker.
-func (s *mapService) DeleteMarker(ctx context.Context, id string, expectedUpdatedAt *time.Time, canAuthorDmOnly bool) error {
+// canDeleteOwn is the shared delete rule for scribe-authored map content:
+// Owners delete anything; a Scribe only what they created; lower roles nothing. An empty actor
+// or a missing creator never matches, so rows without provenance stay
+// owner-only.
+func canDeleteOwn(role int, actorID string, createdBy *string) bool {
+	if role >= permissions.RoleOwner {
+		return true
+	}
+	if role < permissions.RoleScribe {
+		return false
+	}
+	return actorID != "" && createdBy != nil && *createdBy == actorID
+}
+
+// DeleteMarker removes a marker. Owners may delete any marker; a lower role
+// may delete only a marker it created. A marker with no recorded creator is
+// owner-only so legacy rows fail closed.
+func (s *mapService) DeleteMarker(ctx context.Context, id string, expectedUpdatedAt *time.Time, canAuthorDmOnly bool, actorID string, role int) error {
 	mk, err := s.repo.GetMarker(ctx, id)
 	if err != nil {
 		return fmt.Errorf("get marker for delete: %w", err)
@@ -472,6 +488,9 @@ func (s *mapService) DeleteMarker(ctx context.Context, id string, expectedUpdate
 	// missing id would to a caller who cannot author dm_only content.
 	if mk.Visibility == "dm_only" && !canAuthorDmOnly {
 		return apperror.NewNotFound("marker not found")
+	}
+	if !canDeleteOwn(role, actorID, mk.CreatedBy) {
+		return apperror.NewForbidden("you can only delete markers you created")
 	}
 	if err := concurrency.Check(mk.UpdatedAt, expectedUpdatedAt, "marker"); err != nil {
 		return err

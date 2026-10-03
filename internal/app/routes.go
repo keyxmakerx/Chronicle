@@ -430,6 +430,31 @@ func (a *backdropUploaderAdapter) OwnsFile(ctx context.Context, campaignID, file
 	return mf.Filename == filename && mf.CampaignID != nil && *mf.CampaignID == campaignID, nil
 }
 
+// DeletePicture deletes an appearance picture the Customize page uploaded
+// and never saved. UsageBackdrop is what UploadBackdrop stamps on every file
+// this adapter stores, so a campaign's other media (attachments, entity
+// images, avatars) can never match, even by guessing a name.
+func (a *backdropUploaderAdapter) DeletePicture(ctx context.Context, campaignID, filename string) (bool, error) {
+	base := path.Base(filename)
+	id := strings.TrimSuffix(base, path.Ext(base))
+	mf, err := a.svc.GetByID(ctx, id)
+	if err != nil {
+		var ae *apperror.AppError
+		if errors.As(err, &ae) && ae.Code == http.StatusNotFound {
+			return false, nil
+		}
+		return false, err
+	}
+	if mf.Filename != filename || mf.UsageType != media.UsageBackdrop ||
+		mf.CampaignID == nil || *mf.CampaignID != campaignID {
+		return false, nil
+	}
+	if err := a.svc.Delete(ctx, mf.ID); err != nil {
+		return false, err
+	}
+	return true, nil
+}
+
 // entityTagFetcherAdapter wraps tags.TagService to implement the
 // entities.EntityTagFetcher interface for batch tag loading in list views.
 // grantSvc backs the tag-grant glance methods.
@@ -1579,6 +1604,13 @@ func (a *npcEntityTypeFinderAdapter) FindCharacterTypeIDs(ctx context.Context, c
 // character and monster types, and every enabled sub-type nested under one of
 // them. The player-character type is left out; claimed PCs are the party.
 func npcTypeIDs(types []entities.EntityType) []int {
+	return characterFamilyTypeIDs(types, false)
+}
+
+// characterFamilyTypeIDs is the shared walk behind npcTypeIDs. includePC keeps
+// the player-character type: the NPC gallery leaves it out (claimed PCs are the
+// party), while stashes and moves are mostly about the players' own characters.
+func characterFamilyTypeIDs(types []entities.EntityType, includePC bool) []int {
 	isRoot := func(et entities.EntityType) bool {
 		if et.PresetCategory != nil {
 			switch *et.PresetCategory {
@@ -1621,7 +1653,7 @@ func npcTypeIDs(types []entities.EntityType) []int {
 
 	var ids []int
 	for _, et := range types {
-		if et.Enabled && !isPC(et) && inFamily(et) {
+		if et.Enabled && (includePC || !isPC(et)) && inFamily(et) {
 			ids = append(ids, et.ID)
 		}
 	}
@@ -2341,7 +2373,8 @@ func (a *App) RegisterRoutes() {
 	})
 	backupHandler := backup.NewHandler(backupSvc)
 	backupHandler.SetActivityRecorder(adminActivity)
-	backup.RegisterRoutes(adminGroup, backupHandler)
+	backupHandler.SetDownloadAuth(signingSecret, auth.GetUserID)
+	backup.RegisterRoutes(adminGroup, backupHandler, auth.RequireReauth(authService))
 
 	// Admin Restore plugin: lists backup manifests in BACKUP_DIR and
 	// shells out to scripts/restore.sh under a typed-RESTORE
@@ -2888,22 +2921,27 @@ func (a *App) RegisterRoutes() {
 	// htmx:afterSettle/htmx:load and no-ops when its mount is absent.
 	//
 	// The calendar's page scripts: calendar_view.js mounts on
-	// data-widget="calendar_view" (the calendar's own page, or a Calendars
-	// page preview unfolded in place), calendar_editor.js self-gates on that
+	// data-widget="calendar_view" (the calendar's own page, however it was
+	// reached), calendar_editor.js self-gates on that
 	// mount's data-can-edit="true" and opens calendar_event_drawer.js's full
-	// event editor (loaded first so it exists when the editor binds; the
-	// drawer's repeat-by-rule logic is calendar_rule.js, loaded before it), and
-	// calendar_almanac.js waits for a Calendars page preview. rulebook.js
+	// event editor and calendar_weather_sheet.js's Generate sheet (both
+	// loaded first so they exist when the editor binds; the drawer's
+	// repeat-by-rule logic is calendar_rule.js, loaded before it), and
+	// calendar_open.js peeks and opens the Calendars page's cards. rulebook.js
 	// mounts on the Rules page's data-widget="rulebook" when a system ships a
-	// book. All are no-ops on every other page, same as every entry here.
+	// book, and rulebook_editor.js on the editor page's
+	// data-widget="rulebook-editor". All are no-ops on every other page, same
+	// as every entry here.
 	pluginBodyScripts := []string{
 		"/static/plugins/" + entities.PluginSlug + "/js/characters.js",
 		"/static/js/widgets/calendar_view.js",
 		"/static/js/widgets/calendar_rule.js",
 		"/static/js/widgets/calendar_event_drawer.js",
+		"/static/js/widgets/calendar_weather_sheet.js",
 		"/static/js/widgets/calendar_editor.js",
-		"/static/js/calendar_almanac.js",
+		"/static/js/calendar_open.js",
 		"/static/js/widgets/rulebook.js",
+		"/static/js/widgets/rulebook_editor.js",
 	}
 
 	// The sidebar, campaign dashboard and Extensions hub link to
@@ -3201,7 +3239,25 @@ func (a *App) RegisterRoutes() {
 	txSvc.SetBuyerAccessChecker(&armoryBuyerAccessAdapter{svc: entityService})
 	txHandler := armory.NewTransactionHandler(txSvc)
 	txHandler.SetEntityVisibility(&entityVisibilityFilterAdapter{svc: entityService})
-	armory.RegisterRoutes(e, armoryHandler, txHandler, instHandler, campaignService, authService, addonService)
+	// Stashes and moves: the service reaches entities, relations and members
+	// only through the adapters in armory_stash_adapters.go.
+	stashSvc := armory.NewStashService(armory.StashDeps{
+		Repo:       armory.NewStashRepository(a.DB),
+		Directory:  &armoryStashDirectoryAdapter{svc: entityService},
+		Visibility: &entityVisibilityFilterAdapter{svc: entityService},
+		Actor:      &armoryCharacterActorAdapter{svc: entityService},
+		Fields:     &armoryEntityFieldsAdapter{svc: entityService},
+		Relations:  &armoryHasItemAdapter{svc: relService},
+		UserNames:  &armoryMemberNamesAdapter{svc: campaignService},
+	})
+	stashHandler := armory.NewStashHandler(stashSvc)
+	entityHandler.SetCharacterPagePanel(entities.PagePanel{
+		Addon: "armory",
+		URL: func(campaignID, entityID string) string {
+			return "/campaigns/" + campaignID + "/armory/characters/" + entityID + "/panel"
+		},
+	})
+	armory.RegisterRoutes(e, armoryHandler, txHandler, instHandler, stashHandler, campaignService, authService, addonService)
 
 	// Notes widget: personal floating note-taking panel (Google Keep-style).
 	// noteSvc was created above (before REST API v1 registration).
@@ -3787,6 +3843,7 @@ func (a *App) RegisterRoutes() {
 	systemHandler := systems.NewSystemHandler()
 	systemHandler.SetCampaignSystems(campaignSystemMgr)
 	systemHandler.SetAddonService(addonService)
+	systemHandler.SetBookEdits(systems.NewBookEditService(systems.NewBookEditRepository(a.DB)))
 	systems.RegisterRoutes(e, systemHandler, addonService, authService, campaignService)
 
 	// Admin-only deployment-health diagnostic: read-only fingerprints of the

@@ -33,10 +33,19 @@ templ CalendarViewPage(cc *campaigns.CampaignContext, data CalendarViewData) {
 templ calendarViewContent(cc *campaigns.CampaignContext, data CalendarViewData) {
 	<link rel="stylesheet" href={ layouts.AssetURL("/static/css/calendar-view.css") }/>
 	<div class="max-w-5xl mx-auto py-6 px-4">
-		@components.Breadcrumbs([]components.BreadcrumbItem{
-			{Label: cc.Campaign.Name, Href: fmt.Sprintf("/campaigns/%s", data.CampaignID), Icon: "fa-dice-d20"},
-			{Label: data.Calendar.Name},
-		})
+		<div class="cal5-crumbs">
+			<!-- Shown only by calendar_open.js, on a calendar opened from its
+			     card, so a direct visit looks exactly as it always has. A real
+			     link, so it still works if the script stops. -->
+			<a class="cal5-back" href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/calendars", data.CampaignID)) } data-cal-back hidden>
+				<i class="fa-solid fa-chevron-left" aria-hidden="true"></i>
+				Back to calendars
+			</a>
+			@components.Breadcrumbs([]components.BreadcrumbItem{
+				{Label: cc.Campaign.Name, Href: fmt.Sprintf("/campaigns/%s", data.CampaignID), Icon: "fa-dice-d20"},
+				{Label: data.Calendar.Name},
+			})
+		</div>
 		@calendarViewMount(data)
 	</div>
 	<!-- No script tag here on purpose: a page templ's own script element
@@ -50,10 +59,8 @@ templ calendarViewContent(cc *campaigns.CampaignContext, data CalendarViewData) 
 	     data-can-edit="true". -->
 }
 
-// calendarViewMount is the widget's mount and its first-paint config. The
-// calendar's own page renders it, and so does the Calendars page's preview,
-// inside a <template>, so the preview can unfold into this same calendar
-// without leaving the page.
+// calendarViewMount is the widget's mount and its first-paint config, on
+// the calendar's own page.
 templ calendarViewMount(data CalendarViewData) {
 	<div
 		class="cal-v5"
@@ -64,6 +71,7 @@ templ calendarViewMount(data CalendarViewData) {
 		data-can-author-dm-only={ fmt.Sprintf("%t", data.CanAuthorDmOnly) }
 		data-role={ fmt.Sprintf("%d", data.ViewerRole) }
 		data-api-base={ fmt.Sprintf("/campaigns/%s/calendars/%s", data.CampaignID, data.CalendarID) }
+		data-engine-src={ layouts.AssetURL("/static/js/widgets/chronicle_gen.js") }
 	>
 		<!-- Server-rendered config, read by calendar_view.js. A hidden div's
 		     dataset is the simplest stable channel for a JSON blob this size

@@ -1,0 +1,317 @@
+// stashes.templ renders the stashes page: the requests waiting on the GM, the
+// downtime switch, and every stash the viewer can see. Management controls
+// (rename, viewers, add items, delete) appear for Owner and Scribe only; the
+// service enforces the same rule, so hiding a control is never the safeguard.
+package armory
+
+import (
+	"fmt"
+
+	"github.com/keyxmakerx/chronicle/internal/plugins/campaigns"
+	"github.com/keyxmakerx/chronicle/internal/templates/layouts"
+)
+
+// StashesPage renders the full page inside the app layout.
+templ StashesPage(cc *campaigns.CampaignContext, v *StashesPageView, csrfToken string) {
+	@layouts.App(cc.Campaign.Name + " - Stashes") {
+		@StashesContent(cc, v, csrfToken)
+	}
+}
+
+// StashesContent is the page body and the HTMX reload target. It reloads
+// itself when a move, an answer or a switch change lands.
+templ StashesContent(cc *campaigns.CampaignContext, v *StashesPageView, csrfToken string) {
+	<div
+		id="armory-stashes"
+		hx-get={ stashesURL(v.CampaignID) }
+		hx-trigger="armory-moved from:body"
+		hx-swap="outerHTML"
+	>
+		<div class="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 mb-6">
+			<div>
+				<h1 class="text-2xl font-bold text-fg">
+					<i class="fa-solid fa-box-archive mr-2 text-fg-muted"></i>Stashes
+				</h1>
+				<p class="text-sm text-fg-secondary mt-0.5">
+					<a href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/armory", v.CampaignID)) } class="hover:underline">Back to the Armory</a>
+				</p>
+			</div>
+		</div>
+
+		if v.CanApprove {
+			@downtimeSwitch(v, csrfToken)
+			@requestsPanel(v, csrfToken)
+		}
+
+		if v.CanManage {
+			<form
+				hx-post={ stashesURL(v.CampaignID) }
+				hx-swap="none"
+				class="card p-4 mb-6 flex flex-wrap items-end gap-3"
+			>
+				<input type="hidden" name="_csrf" value={ csrfToken }/>
+				<div class="flex-1 min-w-[10rem]">
+					<label for="new-stash-name" class="block text-xs font-medium text-fg-body mb-1">New stash</label>
+					<input id="new-stash-name" type="text" name="name" required maxlength="120" class="input w-full text-sm" placeholder="e.g., Party chest"/>
+				</div>
+				<div class="flex-1 min-w-[10rem]">
+					<label for="new-stash-location" class="block text-xs font-medium text-fg-body mb-1">Where it is</label>
+					<input id="new-stash-location" type="text" name="location" maxlength="200" class="input w-full text-sm" placeholder="e.g., Under the inn's cellar"/>
+				</div>
+				<button type="submit" class="btn-primary text-sm shrink-0">
+					<i class="fa-solid fa-plus mr-1"></i>Add stash
+				</button>
+			</form>
+		}
+
+		if len(v.Stashes) == 0 {
+			<div class="card p-8 text-center">
+				<p class="text-sm text-fg-muted">
+					if v.CanManage {
+						No stashes yet. Add one above, then choose which characters can see it.
+					} else {
+						Your characters can't see any stashes yet.
+					}
+				</p>
+			</div>
+		} else {
+			<div class="grid grid-cols-1 lg:grid-cols-2 gap-4">
+				for _, st := range v.Stashes {
+					@stashCard(v, st, csrfToken)
+				}
+			</div>
+		}
+
+		<div id="armory-move-modal"></div>
+	</div>
+}
+
+// downtimeSwitch is the Open / Closed control, shown at Owner visibility only.
+// It posts to the downtime route; the answer reloads the whole page body, so
+// the requests below reflect whatever opening let through. Self-contained so it
+// can move into a GM panel later.
+templ downtimeSwitch(v *StashesPageView, csrfToken string) {
+	<form
+		id="armory-downtime-switch"
+		hx-post={ downtimeURL(v.CampaignID) }
+		hx-swap="none"
+		class="card p-4 mb-4"
+		if !v.DowntimeOpen && len(v.Pending) > 0 {
+			hx-confirm={ fmt.Sprintf("Open downtime? The %d waiting requests go through now.", len(v.Pending)) }
+		}
+	>
+		<input type="hidden" name="_csrf" value={ csrfToken }/>
+		<div class="flex flex-wrap items-center gap-3">
+			<span class="text-sm font-semibold text-fg">Downtime</span>
+			<div class="inline-flex rounded-lg overflow-hidden border border-border" role="group" aria-label="Downtime">
+				<button
+					type="submit"
+					name="open"
+					value="true"
+					aria-pressed={ fmt.Sprintf("%t", v.DowntimeOpen) }
+					class={ "px-3 py-1.5 text-sm", templ.KV("bg-accent text-white", v.DowntimeOpen), templ.KV("bg-surface text-fg-secondary hover:text-fg", !v.DowntimeOpen) }
+				>Open</button>
+				<button
+					type="submit"
+					name="open"
+					value="false"
+					aria-pressed={ fmt.Sprintf("%t", !v.DowntimeOpen) }
+					class={ "px-3 py-1.5 text-sm border-l border-border", templ.KV("bg-accent text-white", !v.DowntimeOpen), templ.KV("bg-surface text-fg-secondary hover:text-fg", v.DowntimeOpen) }
+				>Closed</button>
+			</div>
+		</div>
+		<p class="text-xs text-fg-muted mt-2">Open: players move things and shop straight away. Opening also lets through the requests below.</p>
+	</form>
+}
+
+// requestsPanel lists the moves waiting for an answer.
+templ requestsPanel(v *StashesPageView, csrfToken string) {
+	<section class="card p-4 mb-6" aria-labelledby="armory-requests-title">
+		<h2 id="armory-requests-title" class="text-sm font-semibold text-fg mb-2">
+			Requests waiting on you ({ fmt.Sprintf("%d", len(v.Pending)) })
+		</h2>
+		if len(v.Pending) == 0 {
+			<p class="text-xs text-fg-muted">Nothing is waiting.</p>
+		} else {
+			<ul class="divide-y divide-border">
+				for _, l := range v.Pending {
+					<li class="py-2 flex flex-wrap items-center justify-between gap-2">
+						<div class="min-w-0">
+							<p class="text-sm text-fg">
+								<span class="font-medium">{ l.RequesterName }</span>:
+								{ thingText(l) } &rarr; { l.ToName }
+							</p>
+							<p class="text-xs text-fg-muted">
+								from { l.FromName } &middot;
+								<time datetime={ l.CreatedAt.Format("2006-01-02T15:04:05Z07:00") } title={ l.CreatedAt.Format("2 Jan 2006 15:04") }>{ moveAgo(l.CreatedAt) }</time>
+							</p>
+						</div>
+						<div class="flex items-center gap-2 shrink-0">
+							<form hx-post={ fmt.Sprintf("%s/%d/approve", movesURL(v.CampaignID), l.ID) } hx-swap="none" hx-disabled-elt="find button">
+								<input type="hidden" name="_csrf" value={ csrfToken }/>
+								<button type="submit" class="btn-primary text-xs">Approve</button>
+							</form>
+							<form hx-post={ fmt.Sprintf("%s/%d/decline", movesURL(v.CampaignID), l.ID) } hx-swap="none" hx-disabled-elt="find button">
+								<input type="hidden" name="_csrf" value={ csrfToken }/>
+								<button type="submit" class="btn-secondary text-xs">Turn down</button>
+							</form>
+						</div>
+					</li>
+				}
+			</ul>
+		}
+	</section>
+}
+
+// stashCard shows one stash with its contents and, for the GM, its controls.
+templ stashCard(v *StashesPageView, st StashView, csrfToken string) {
+	{{ self := StashEndpoint(st.ID) }}
+	<article class="card p-4" aria-labelledby={ fmt.Sprintf("stash-title-%d", st.ID) }>
+		<div class="flex items-start justify-between gap-2 mb-1">
+			<h2 id={ fmt.Sprintf("stash-title-%d", st.ID) } class="text-base font-semibold text-fg">{ st.Name }</h2>
+			if st.Hidden() {
+				<span class="badge-gray" title="No characters can see this stash">Hidden</span>
+			}
+		</div>
+		<p class="text-xs text-fg-secondary">
+			Seen by:
+			if st.Hidden() {
+				nobody (GM only)
+			} else {
+				for i, vw := range st.Viewers {
+					if i > 0 {
+						,&nbsp;
+					}
+					{ vw.Name }
+				}
+			}
+		</p>
+		if st.Location != "" {
+			<p class="text-xs text-fg-muted mt-0.5"><i class="fa-solid fa-location-dot mr-1"></i>{ st.Location }</p>
+		}
+
+		if len(st.Items) == 0 {
+			<p class="text-xs text-fg-muted mt-3">No items.</p>
+		} else {
+			<ul class="divide-y divide-border mt-3">
+				for _, it := range st.Items {
+					<li class="flex items-center justify-between gap-2 py-1.5 text-sm">
+						<span class="text-fg truncate">
+							{ it.Name }
+							if it.Quantity > 1 {
+								<span class="text-fg-muted">&times; { fmt.Sprintf("%d", it.Quantity) }</span>
+							}
+						</span>
+						<button
+							type="button"
+							class="text-xs text-accent hover:underline shrink-0"
+							hx-get={ moveDialogURL(v.CampaignID, "item", self, it.ItemID) }
+							hx-target="#armory-move-modal"
+							hx-swap="innerHTML"
+						>Move&hellip;</button>
+					</li>
+				}
+			</ul>
+		}
+
+		<div class="flex items-center justify-between gap-2 py-1.5 text-sm border-t border-border mt-2">
+			<span class="text-fg">Money <span class="text-fg-body font-medium ml-1">{ st.Money.String() }</span></span>
+			if st.Money > 0 {
+				<button
+					type="button"
+					class="text-xs text-accent hover:underline shrink-0"
+					hx-get={ moveDialogURL(v.CampaignID, "money", self, "") }
+					hx-target="#armory-move-modal"
+					hx-swap="innerHTML"
+				>Move&hellip;</button>
+			}
+		</div>
+
+		if v.CanManage {
+			@stashManage(v, st, csrfToken)
+		}
+	</article>
+}
+
+// stashManage holds the GM controls behind a disclosure, so the card stays
+// readable for everyone and needs no script to open.
+templ stashManage(v *StashesPageView, st StashView, csrfToken string) {
+	<details class="mt-3 pt-3 border-t border-border">
+		<summary class="text-xs font-medium text-fg-secondary cursor-pointer hover:text-fg">Manage this stash</summary>
+		<div class="mt-3 space-y-4">
+			<form hx-put={ stashURL(v.CampaignID, st.ID) } hx-swap="none" class="flex flex-wrap items-end gap-2">
+				<input type="hidden" name="_csrf" value={ csrfToken }/>
+				<div class="flex-1 min-w-[8rem]">
+					<label class="block text-xs font-medium text-fg-body mb-1" for={ fmt.Sprintf("stash-name-%d", st.ID) }>Name</label>
+					<input id={ fmt.Sprintf("stash-name-%d", st.ID) } type="text" name="name" value={ st.Name } required maxlength="120" class="input w-full text-sm"/>
+				</div>
+				<div class="flex-1 min-w-[8rem]">
+					<label class="block text-xs font-medium text-fg-body mb-1" for={ fmt.Sprintf("stash-loc-%d", st.ID) }>Where it is</label>
+					<input id={ fmt.Sprintf("stash-loc-%d", st.ID) } type="text" name="location" value={ st.Location } maxlength="200" class="input w-full text-sm"/>
+				</div>
+				<button type="submit" class="btn-secondary text-xs">Save</button>
+			</form>
+
+			<form hx-put={ stashURL(v.CampaignID, st.ID) + "/viewers" } hx-swap="none">
+				<input type="hidden" name="_csrf" value={ csrfToken }/>
+				<fieldset>
+					<legend class="text-xs font-medium text-fg-body mb-1">Who can see it</legend>
+					if len(v.Characters) == 0 {
+						<p class="text-xs text-fg-muted">There are no characters yet.</p>
+					} else {
+						<div class="max-h-40 overflow-y-auto grid grid-cols-1 sm:grid-cols-2 gap-x-3">
+							for _, ch := range v.Characters {
+								<label class="flex items-center gap-2 py-0.5 text-sm text-fg cursor-pointer">
+									<input type="checkbox" name="viewer" value={ ch.ID } checked?={ stashHasViewer(st, ch.ID) }/>
+									<span class="truncate">{ ch.Name }</span>
+								</label>
+							}
+						</div>
+					}
+					<p class="text-xs text-fg-muted mt-1">With nobody ticked, only the GM sees it.</p>
+				</fieldset>
+				<button type="submit" class="btn-secondary text-xs mt-2">Save who can see it</button>
+			</form>
+
+			if len(v.Items) > 0 {
+				<form hx-post={ stashURL(v.CampaignID, st.ID) + "/items" } hx-swap="none" class="flex flex-wrap items-end gap-2">
+					<input type="hidden" name="_csrf" value={ csrfToken }/>
+					<div class="flex-1 min-w-[8rem]">
+						<label class="block text-xs font-medium text-fg-body mb-1" for={ fmt.Sprintf("stash-add-%d", st.ID) }>Add an item</label>
+						<select id={ fmt.Sprintf("stash-add-%d", st.ID) } name="item_id" required class="input w-full text-sm">
+							<option value="">Choose an item...</option>
+							for _, it := range v.Items {
+								<option value={ it.ID }>{ it.Name }</option>
+							}
+						</select>
+					</div>
+					<div class="w-20">
+						<label class="block text-xs font-medium text-fg-body mb-1" for={ fmt.Sprintf("stash-qty-%d", st.ID) }>How many</label>
+						<input id={ fmt.Sprintf("stash-qty-%d", st.ID) } type="number" name="quantity" min="1" value="1" required class="input w-full text-sm"/>
+					</div>
+					<button type="submit" class="btn-secondary text-xs">Add</button>
+				</form>
+			}
+
+			<form
+				hx-delete={ stashURL(v.CampaignID, st.ID) }
+				hx-swap="none"
+				hx-confirm={ fmt.Sprintf("Delete the stash '%s'? Everything in it is lost.", st.Name) }
+			>
+				<input type="hidden" name="_csrf" value={ csrfToken }/>
+				<button type="submit" class="text-xs text-red-500 hover:text-red-600">
+					<i class="fa-solid fa-trash mr-1"></i>Delete this stash
+				</button>
+			</form>
+		</div>
+	</details>
+}
+
+func stashHasViewer(st StashView, characterID string) bool {
+	for _, v := range st.Viewers {
+		if v.ID == characterID {
+			return true
+		}
+	}
+	return false
+}
