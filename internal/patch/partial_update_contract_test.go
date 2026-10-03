@@ -56,6 +56,7 @@ var contractGoverned = map[string]string{
 	"maps.UpdateMapInput":          "PUT /campaigns/:id/maps/:mid — a rename-only push unlinked the map's image and wiped its description; ImageID/Description were already *string and STILL blindly overwritten, because a plain pointer bound from JSON can't tell absent from null either",
 	"timeline.UpdateTimelineInput": "PUT /campaigns/:id/timelines/:tid — fired on EVERY settings save, not just a narrow push: the request struct has no visibility_rules/description_html member at all, so both were unconditionally blanked and canUserView() treats an absent VisibilityRules as visible to everyone",
 	"tags.UpdateTagInput":          "tagService.Update — the worst finding of the 2026-09-12 toggle-truth sweep (ADR-056): Color/DmOnly were plain value types, so ANY rename necessarily also sent DmOnly's zero value and turned a DM-only tag public",
+	"armory.UpdateStashInput":      "PUT /campaigns/:id/armory/stashes/:sid — a rename must not clear the stash location; only an explicit null does",
 	"tags.UpdateTagRequest":        "PUT /campaigns/:id/tags/:tagId — the wire-bound twin of UpdateTagInput above; same incident, same fix",
 }
 
@@ -70,13 +71,13 @@ var governedFieldExceptions = map[string]string{
 	"maps.UpdateLayerInput.Name": "value-typed by choice: UpdateLayer only assigns Name when it is non-empty, so an absent/blank name already preserved the stored one before this fix.",
 	// On these three, Name is required — Update rejects a blank merged name
 	// with 400, failing loudly instead of silently overwriting.
-	"maps.UpdateMapInput.Name":          "value-typed by choice: UpdateMap validates the merged name is non-empty and rejects the whole call with 400 when it is blank, so an absent name fails loudly rather than silently overwriting.",
-	"timeline.UpdateTimelineInput.Name": "value-typed by choice: UpdateTimeline validates the merged name is non-empty and rejects the whole call with 400 when it is blank, so an absent name fails loudly rather than silently overwriting.",
-	"tags.UpdateTagInput.Name":          "value-typed by choice: tagService.Update validates the merged name is non-empty and rejects the whole call with 400 when it is blank, so an absent name fails loudly rather than silently overwriting.",
-	"tags.UpdateTagRequest.Name":        "value-typed by choice: the same required-name validation applies via UpdateTagInput.Name above — this is the wire-bound twin.",
-	"calendar.UpdateCalendarInput.Name":   "value-typed by choice: UpdateCalendar validates the merged name is non-empty and rejects the whole call with 400 when it is blank, so an absent name fails loudly rather than silently overwriting.",
-	"calendar.UpdateEraInput.Name":        "value-typed by choice: UpdateEra validates the merged name is non-empty and rejects the whole call with 400 when it is blank, so an absent name fails loudly rather than silently overwriting.",
-	"calendar.UpdateEventKindInput.Name":  "value-typed by choice: UpdateEventKind validates the merged name is non-empty and rejects the whole call with 400 when it is blank, so an absent name fails loudly rather than silently overwriting.",
+	"maps.UpdateMapInput.Name":           "value-typed by choice: UpdateMap validates the merged name is non-empty and rejects the whole call with 400 when it is blank, so an absent name fails loudly rather than silently overwriting.",
+	"timeline.UpdateTimelineInput.Name":  "value-typed by choice: UpdateTimeline validates the merged name is non-empty and rejects the whole call with 400 when it is blank, so an absent name fails loudly rather than silently overwriting.",
+	"tags.UpdateTagInput.Name":           "value-typed by choice: tagService.Update validates the merged name is non-empty and rejects the whole call with 400 when it is blank, so an absent name fails loudly rather than silently overwriting.",
+	"tags.UpdateTagRequest.Name":         "value-typed by choice: the same required-name validation applies via UpdateTagInput.Name above — this is the wire-bound twin.",
+	"calendar.UpdateCalendarInput.Name":  "value-typed by choice: UpdateCalendar validates the merged name is non-empty and rejects the whole call with 400 when it is blank, so an absent name fails loudly rather than silently overwriting.",
+	"calendar.UpdateEraInput.Name":       "value-typed by choice: UpdateEra validates the merged name is non-empty and rejects the whole call with 400 when it is blank, so an absent name fails loudly rather than silently overwriting.",
+	"calendar.UpdateEventKindInput.Name": "value-typed by choice: UpdateEventKind validates the merged name is non-empty and rejects the whole call with 400 when it is blank, so an absent name fails loudly rather than silently overwriting.",
 
 	// These are action endpoints ("set visibility"), not general settings
 	// saves — every call states the new visibility outright, so there is no

@@ -102,6 +102,7 @@ type WidgetBlockLister interface {
 // Handler handles HTTP requests for entity operations. Handlers are thin:
 // bind request, call service, render response. No business logic lives here.
 type Handler struct {
+	characterPanel     *PagePanel // Optional panel under character pages; see page_panel.go.
 	service            EntityService
 	auditSvc           audit.AuditService
 	tagFetcher         EntityTagFetcher
@@ -682,6 +683,13 @@ func (h *Handler) Show(c echo.Context) error {
 		}
 		ev := ComputeEffectiveVisibility(entity, grants)
 		ctx = WithEffectiveVisibility(ctx, &ev)
+	}
+
+	// Optional panel another plugin hangs under character pages (items and
+	// money). Only the cheap type pre-filter and the addon switch run here.
+	if p := h.characterPanel; p != nil && p.URL != nil && mayHoldCharacterPanel(entityType) &&
+		h.isAddonEnabled(c.Request().Context(), cc.Campaign.ID, p.Addon) {
+		ctx = withPagePanelURL(ctx, p.URL(cc.Campaign.ID, entity.ID))
 	}
 
 	c.SetRequest(c.Request().WithContext(ctx))
