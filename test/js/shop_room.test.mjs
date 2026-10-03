@@ -149,3 +149,51 @@ test('basket: currency labels match regardless of case and spacing', () => {
   const its = [{ id: 1, p: 1, cur: 'gp', out: false }, { id: 2, p: 1, cur: ' GP', out: false }];
   assert.equal(SR.basketSummary({ 1: 1, 2: 1 }, its, { id: 'k', money: 5 }).mixed, false);
 });
+
+test('basket: a purse compares the basket in copper, so silver prices are not read as gold', () => {
+  const its = [{ id: 1, p: 5, cur: 'sp', out: false }, { id: 2, p: 10, cur: 'gp', out: false }];
+  const purse = { id: 'p', moneyKey: 'gp', kind: 'purse', money: 10.23, moneyCp: 1023, purse: { cp: 3, sp: 2, ep: 0, gp: 10, pp: 0 } };
+  let sm = SR.basketSummary({ 1: 1 }, its.slice(0, 1), purse);
+  assert.equal(sm.short, false);
+  assert.equal(sm.moneyText, '10 gp 2 sp 3 cp');
+  // 20 sp = 200 cp fits; 21 gp does not even though 21 > 10.23 gp.
+  assert.equal(SR.basketSummary({ 1: 20 }, its.slice(0, 1), purse).short, false);
+  assert.equal(SR.basketSummary({ 2: 2 }, its.slice(1), purse).short, true);
+  assert.equal(SR.basketSummary({ 2: 1 }, its.slice(1), purse).short, false);
+});
+
+test('basket: a gold-only sheet converts a silver price to gold', () => {
+  const its = [{ id: 1, p: 5, cur: 'sp', out: false }];
+  const gold = { id: 'g', moneyKey: 'gp', kind: 'coins', money: 0.5, moneyCp: 50 };
+  assert.equal(SR.basketSummary({ 1: 1 }, its, gold).short, false);
+  assert.equal(SR.basketSummary({ 1: 2 }, its, gold).short, true);
+  assert.equal(SR.basketSummary({ 1: 1 }, its, gold).moneyText, '0.5 gp');
+  // A currency that is not a coin keeps the plain comparison.
+  const odd = [{ id: 1, p: 2, cur: 'credits', out: false }];
+  assert.equal(SR.basketSummary({ 1: 1 }, odd, gold).short, true);
+});
+
+test('basket: half a copper rounds up to a whole copper', () => {
+  const its = [{ id: 1, p: 0.5, cur: 'cp', out: false }];
+  assert.equal(SR.basketSummary({ 1: 1 }, its, { id: 'g', moneyKey: 'gp', kind: 'coins', money: 0, moneyCp: 0 }).short, true);
+  assert.equal(SR.basketSummary({ 1: 1 }, its, { id: 'g', moneyKey: 'gp', kind: 'coins', money: 0.01, moneyCp: 1 }).short, false);
+});
+
+test('basket: Wealth needs the dearest unit price, not the total', () => {
+  const its = [{ id: 1, p: 2, cur: 'gp', out: false }, { id: 2, p: 4, cur: 'gp', out: false }];
+  const hero = { id: 'h', moneyKey: 'wealth', kind: 'wealth', money: 3 };
+  let sm = SR.basketSummary({ 1: 5 }, its, hero);
+  assert.equal(sm.short, false);
+  assert.equal(sm.need, 2);
+  assert.equal(sm.moneyText, 'Wealth 3, needs 2');
+  sm = SR.basketSummary({ 1: 1, 2: 1 }, its, hero);
+  assert.equal(sm.short, true);
+  assert.equal(sm.need, 4);
+  assert.equal(SR.basketSummary({}, its, hero).moneyText, 'Wealth 3');
+  assert.equal(SR.basketSummary({}, its, hero).short, false);
+});
+
+test('formatPurse lists coins largest first and skips empty ones', () => {
+  assert.equal(SR.formatPurse({ cp: 3, sp: 7, gp: 9 }), '9 gp 7 sp 3 cp');
+  assert.equal(SR.formatPurse({ gp: 0 }), '0 gp');
+});

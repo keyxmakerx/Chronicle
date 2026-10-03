@@ -715,23 +715,52 @@
     });
   }
 
+  // 5e coin values in copper. The server rounds a price up to a whole copper
+  // the same way, so the short check here agrees with what it will accept.
+  var COIN_CP = { cp: 1, sp: 10, ep: 50, gp: 100, pp: 1000 };
+  var COIN_ORDER = ['pp', 'gp', 'ep', 'sp', 'cp'];
+  function formatPurse(p) {
+    var parts = [];
+    COIN_ORDER.forEach(function (c) { if (p && p[c] > 0) parts.push(p[c] + ' ' + c); });
+    return parts.length ? parts.join(' ') : '0 gp';
+  }
+  function basketCp(total, cur) {
+    var rate = COIN_CP[cur];
+    return rate ? Math.ceil(Math.round(total * 100) * rate / 100) : null;
+  }
+
   // What the basket adds up to for one payer. Prices here are for display
-  // only; the server prices the sale again from the inventory.
+  // only; the server prices the sale again from the inventory. A buyer's kind
+  // says how they pay: "wealth" needs Wealth at least the dearest unit price,
+  // "purse" and a gp "coins" sheet compare in copper when the listing is in a
+  // 5e coin, anything else compares the plain numbers.
   function basketSummary(basket, its, buyer) {
-    var count = 0, total = 0, curs = [];
+    var count = 0, total = 0, curs = [], top = 0;
     its.forEach(function (it) {
       var q = basket[String(it.id)] || 0; if (!q || it.out) return;
       var cur = String(it.cur || 'gp').trim().toLowerCase();
       count += q; total += it.p * q; if (curs.indexOf(cur) < 0) curs.push(cur);
+      if (it.p > top) top = it.p;
     });
     var money = buyer && typeof buyer.money === 'number' ? buyer.money : null;
+    var cur0 = curs[0] || 'gp', kind = buyer && buyer.kind || 'coins';
+    var short = money !== null && total > money, need = 0, moneyText = null, unit = cur0;
+    if (kind === 'wealth') {
+      need = top; short = money !== null && money < need; unit = '';
+      moneyText = money === null ? null : 'Wealth ' + money + (need ? ', needs ' + need : '');
+    } else if (money !== null) {
+      var have = buyer && typeof buyer.moneyCp === 'number' ? buyer.moneyCp : null, want = basketCp(total, cur0);
+      if (have !== null && want !== null) short = want > have;
+      if (kind === 'purse') { unit = 'gp'; moneyText = formatPurse(buyer.purse); }
+      else { if (buyer.moneyKey === 'gp') unit = 'gp'; moneyText = money + ' ' + unit; }
+    }
     return {
-      count: count, total: Math.round(total * 100) / 100, currency: curs[0] || 'gp', mixed: curs.length > 1,
-      noField: !!buyer && money === null, short: money !== null && total > money, money: money
+      count: count, total: Math.round(total * 100) / 100, currency: cur0, mixed: curs.length > 1,
+      noField: !!buyer && money === null, short: short, money: money, kind: kind, need: need, moneyText: moneyText
     };
   }
 
-  window.ShopRoom = { createRoom: createRoom, toLayout: toLayout, fromLayout: fromLayout, shopItems: shopItems, basketSummary: basketSummary, keyOf: keyOf, ROOM_TYPES: ROOM_TYPES };
+  window.ShopRoom = { createRoom: createRoom, toLayout: toLayout, fromLayout: fromLayout, shopItems: shopItems, basketSummary: basketSummary, formatPurse: formatPurse, keyOf: keyOf, ROOM_TYPES: ROOM_TYPES };
   if (!window.Chronicle || !window.document) return;
 
   var FX_KEY = 'chronicle.shopRoom.fx';
@@ -963,11 +992,11 @@
         if (!buy || !buy.buyers.length) { bk.innerHTML = ''; return; }
         var who = buyer(), sm = basketSummary(basket, S.its, who), h = '';
         h += sm.count ? '<span>' + sm.count + ' in basket · <span class="shr-price">' + esc(sm.total + ' ' + sm.currency) + '</span></span><button type="button" class="shr-add" data-empty="1">Empty</button>' : '<span>Basket is empty</span>';
-        var money = sm.money === null ? '' : ' · ' + esc(sm.money + ' ' + sm.currency);
+        var money = sm.moneyText === null ? '' : ' · ' + esc(sm.moneyText);
         if (buy.buyers.length > 1) {
           h += '<label>Paying: <select data-payer="1">' + buy.buyers.map(function (b) { return '<option value="' + esc(b.id) + '"' + (b.id === payer ? ' selected' : '') + '>' + esc(b.name) + '</option>'; }).join('') + '</select>' + money + '</label>';
-        } else if (who) h += '<span>' + esc(who.name) + (sm.money === null ? '' : ' has ' + esc(sm.money + ' ' + sm.currency)) + '</span>';
-        var why = sm.noField ? 'This sheet has no coin field' : who && who.moneyKey === 'wealth' ? 'Wealth isn’t spent like coins' : sm.mixed ? 'Mixed currencies' : sm.short ? 'Not enough coin' : '';
+        } else if (who) h += '<span>' + esc(who.name) + (sm.moneyText === null ? '' : (sm.kind === 'wealth' ? ' · ' : ' has ') + esc(sm.moneyText)) + '</span>';
+        var why = sm.noField ? 'This sheet has no coin field' : sm.mixed ? 'Mixed currencies' : sm.short ? (sm.kind === 'wealth' ? 'Needs Wealth ' + sm.need : 'Not enough coin') : '';
         // Outside downtime a player asks; the GM approves it on the Stashes page.
         var closed = !buy.canBuyNow, label = why || (busy ? (closed ? 'Asking…' : 'Buying…') : closed ? 'Ask to buy' : 'Buy');
         h += '<button type="button" class="shr-buy" data-buy="1"' + (!sm.count || why || busy ? ' disabled' : '') + '>' + label + '</button>';
@@ -998,8 +1027,14 @@
           return r.json().catch(function () { return {}; }).then(function (j) {
             if (!r.ok) throw new Error((j && (j.message || j.error)) || 'That didn’t go through. Try again.');
             var who = buyer(), name = who ? who.name : 'They';
-            note = j.status === 'requested' ? 'Asked the GM for ' + sm.count + (sm.count === 1 ? ' item.' : ' items.')
-              : 'Bought ' + sm.count + (sm.count === 1 ? ' item' : ' items') + ' for ' + j.spent + ' ' + j.currency + '. ' + name + ' has ' + j.moneyLeft + ' ' + j.currency + ' left.';
+            var what = sm.count + (sm.count === 1 ? ' item' : ' items');
+            if (j.status === 'requested') note = 'Asked the GM for ' + what + '.';
+            else if (sm.kind === 'wealth') note = 'Bought ' + what + '. Wealth stays at ' + j.moneyLeft + '.';
+            else {
+              // A gp sheet is charged in gp whatever the shop's coin, so its balance reads in gp.
+              var left = j.purseLeft ? j.purseLeft : j.moneyLeft + ' ' + (who && who.moneyKey === 'gp' ? 'gp' : j.currency);
+              note = 'Bought ' + what + ' for ' + j.spent + ' ' + j.currency + '. ' + name + ' has ' + left + ' left.' + (j.change ? ' Change: ' + j.change + '.' : '');
+            }
             basket = {};
             return Promise.all([loadGoods(), loadBuyers()]);
           });
