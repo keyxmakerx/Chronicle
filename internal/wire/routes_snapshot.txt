@@ -12,6 +12,7 @@ DELETE	/addons/:addonID	internal/plugins/addons/routes.go
 DELETE	/api-keys/:keyID	internal/plugins/syncapi/routes.go
 DELETE	/api/ip-blocks/:blockID	internal/plugins/syncapi/routes.go
 DELETE	/api/keys/:keyID	internal/plugins/syncapi/routes.go
+DELETE	/appearance/picture	internal/plugins/campaigns/routes.go
 DELETE	/armory/instances/:iid	internal/plugins/armory/routes.go
 DELETE	/armory/instances/:iid/items/:eid	internal/plugins/armory/routes.go
 DELETE	/availability/exceptions/:eid	internal/plugins/sessions/routes.go

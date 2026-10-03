@@ -132,6 +132,10 @@ type MediaUploader interface {
 	UploadBackdrop(ctx context.Context, campaignID, userID string, fileBytes []byte, originalName, mimeType string) (filename string, err error)
 	// OwnsFile reports whether filename is a media file uploaded to campaignID.
 	OwnsFile(ctx context.Context, campaignID, filename string) (bool, error)
+	// DeletePicture removes filename only if campaignID owns it and it was
+	// uploaded as an appearance picture; it reports whether it deleted
+	// anything. Any other file is left alone and is not an error.
+	DeletePicture(ctx context.Context, campaignID, filename string) (bool, error)
 }
 
 // SMTPChecker reports whether SMTP email delivery is configured.

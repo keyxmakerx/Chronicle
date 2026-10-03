@@ -106,6 +106,7 @@ func RegisterRoutes(e *echo.Echo, h *Handler, svc CampaignService, authSvc auth.
 	cg.PUT("/welcome-message", h.UpdateWelcomeMessageAPI, RequireRole(RoleOwner))
 	cg.PUT("/appearance", h.SaveAppearanceAPI, RequireRole(RoleOwner))
 	cg.POST("/appearance/picture", h.UploadAppearancePictureAPI, RequireRole(RoleOwner))
+	cg.DELETE("/appearance/picture", h.DeleteAppearancePictureAPI, RequireRole(RoleOwner))
 	cg.PUT("/default-visibility", h.UpdateDefaultVisibilityAPI, RequireRole(RoleOwner))
 	// Event tier definitions per campaign: owner-only campaign-config
 	// surface, not exposed via syncapi.

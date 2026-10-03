@@ -430,6 +430,31 @@ func (a *backdropUploaderAdapter) OwnsFile(ctx context.Context, campaignID, file
 	return mf.Filename == filename && mf.CampaignID != nil && *mf.CampaignID == campaignID, nil
 }
 
+// DeletePicture deletes an appearance picture the Customize page uploaded
+// and never saved. UsageBackdrop is what UploadBackdrop stamps on every file
+// this adapter stores, so a campaign's other media (attachments, entity
+// images, avatars) can never match, even by guessing a name.
+func (a *backdropUploaderAdapter) DeletePicture(ctx context.Context, campaignID, filename string) (bool, error) {
+	base := path.Base(filename)
+	id := strings.TrimSuffix(base, path.Ext(base))
+	mf, err := a.svc.GetByID(ctx, id)
+	if err != nil {
+		var ae *apperror.AppError
+		if errors.As(err, &ae) && ae.Code == http.StatusNotFound {
+			return false, nil
+		}
+		return false, err
+	}
+	if mf.Filename != filename || mf.UsageType != media.UsageBackdrop ||
+		mf.CampaignID == nil || *mf.CampaignID != campaignID {
+		return false, nil
+	}
+	if err := a.svc.Delete(ctx, mf.ID); err != nil {
+		return false, err
+	}
+	return true, nil
+}
+
 // entityTagFetcherAdapter wraps tags.TagService to implement the
 // entities.EntityTagFetcher interface for batch tag loading in list views.
 // grantSvc backs the tag-grant glance methods.
