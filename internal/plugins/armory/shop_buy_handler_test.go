@@ -18,6 +18,9 @@ type fakeBuySvc struct {
 	actor Actor
 	calls int
 	err   error
+	// answered is the request id of the last approve or decline.
+	answered     int64
+	answerStatus string
 }
 
 func (f *fakeBuySvc) Buyers(_ context.Context, _, _ string, a Actor) (*BuyersView, error) {
@@ -29,6 +32,16 @@ func (f *fakeBuySvc) Buy(_ context.Context, _, _ string, a Actor, in BuyInput) (
 	f.calls++
 	f.in, f.actor = in, a
 	return &BuyResult{Status: BuyStatusRequested}, f.err
+}
+
+func (f *fakeBuySvc) ApproveRequest(_ context.Context, _ string, a Actor, id int64) (*PurchaseRequest, error) {
+	f.actor, f.answered = a, id
+	return &PurchaseRequest{ID: id, Status: f.answerStatus}, f.err
+}
+
+func (f *fakeBuySvc) DeclineRequest(_ context.Context, _ string, a Actor, id int64) (*PurchaseRequest, error) {
+	f.actor, f.answered = a, id
+	return &PurchaseRequest{ID: id, Status: PurchaseDeclined}, f.err
 }
 
 func TestShopBuyHandler_Buy(t *testing.T) {

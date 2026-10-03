@@ -935,10 +935,10 @@
           h += '<label>Paying: <select data-payer="1">' + buy.buyers.map(function (b) { return '<option value="' + esc(b.id) + '"' + (b.id === payer ? ' selected' : '') + '>' + esc(b.name) + '</option>'; }).join('') + '</select>' + money + '</label>';
         } else if (who) h += '<span>' + esc(who.name) + (sm.money === null ? '' : ' has ' + esc(sm.money + ' ' + sm.currency)) + '</span>';
         var why = sm.noField ? 'This sheet has no coin field' : who && who.moneyKey === 'wealth' ? 'Wealth isn’t spent like coins' : sm.mixed ? 'Mixed currencies' : sm.short ? 'Not enough coin' : '';
-        // Outside downtime players browse; the shop opens when the GM opens downtime.
-        var closed = !buy.canBuyNow, label = why || (busy ? 'Buying…' : closed ? 'Buying opens in downtime' : 'Buy');
-        h += '<button type="button" class="shr-buy" data-buy="1"' + (!sm.count || why || busy || closed ? ' disabled' : '') + '>' + label + '</button>';
-        var n = note || (closed ? 'Buying opens when the GM opens downtime.' : '');
+        // Outside downtime a player asks; the GM approves it on the Stashes page.
+        var closed = !buy.canBuyNow, label = why || (busy ? (closed ? 'Asking…' : 'Buying…') : closed ? 'Ask to buy' : 'Buy');
+        h += '<button type="button" class="shr-buy" data-buy="1"' + (!sm.count || why || busy ? ' disabled' : '') + '>' + label + '</button>';
+        var n = note || (closed ? 'It’s not downtime, so the GM approves this on the Stashes page.' : '');
         if (n) h += '<span class="shr-note">' + esc(n) + '</span>';
         bk.innerHTML = h;
       }

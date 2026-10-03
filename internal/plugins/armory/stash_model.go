@@ -250,6 +250,9 @@ type MoveLine struct {
 	FromName      string
 	ToName        string
 	RequesterName string
+	// Summary, when set, is the whole sentence for the row. Purchase requests
+	// share the history list and carry their own wording here.
+	Summary string
 }
 
 // HeldItem is one line of what a character carries.
@@ -301,10 +304,16 @@ type StashesPageView struct {
 	CanManage    bool // Owner or Scribe.
 	CanApprove   bool // Owner visibility.
 	Pending      []MoveLine
-	Stashes      []StashView
-	Characters   []NamedRef // Character-family entities, for the viewer picker.
-	Items        []NamedRef // Catalogue items the GM can drop into a stash.
+	// PendingPurchases are shop baskets waiting for the Owner, listed beside
+	// the move requests.
+	PendingPurchases []PurchaseRequestLine
+	Stashes          []StashView
+	Characters       []NamedRef // Character-family entities, for the viewer picker.
+	Items            []NamedRef // Catalogue items the GM can drop into a stash.
 }
+
+// WaitingCount is every request waiting on the Owner: moves and purchases.
+func (v *StashesPageView) WaitingCount() int { return len(v.Pending) + len(v.PendingPurchases) }
 
 // MoveDestination is one choice in the "To" select.
 type MoveDestination struct {

@@ -3503,7 +3503,7 @@ func (a *App) RegisterRoutes() {
 	stashHandler := armory.NewStashHandler(stashSvc)
 	// Buying shares the stash service's campaign lock, so a purchase and a
 	// stash move can't spend the same coins.
-	shopBuyHandler := armory.NewShopBuyHandler(armory.NewShopBuyService(stashSvc, txSvc, &armoryShopCheckerAdapter{svc: entityService}))
+	shopBuyHandler := armory.NewShopBuyHandler(armory.NewShopBuyService(stashSvc, txSvc, &armoryShopCheckerAdapter{svc: entityService}, armory.NewPurchaseRequestRepository(a.DB)))
 	entityHandler.SetCharacterPagePanel(entities.PagePanel{
 		Addon: "armory",
 		URL: func(campaignID, entityID string) string {

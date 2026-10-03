@@ -58,6 +58,10 @@ func RegisterRoutes(e *echo.Echo, h *Handler, th *TransactionHandler, ih *Instan
 	// buy for which character and hides a shop the caller cannot see (404).
 	cg.GET("/armory/shops/:eid/buyers", bh.Buyers, campaigns.RequireRole(campaigns.RolePlayer))
 	cg.POST("/armory/shops/:eid/buy", bh.Buy, campaigns.RequireRole(campaigns.RolePlayer))
+	// Answering a waiting purchase: Player+ at the route like the move answers;
+	// the service lets only Owner visibility through.
+	cg.POST("/armory/purchase-requests/:rid/approve", bh.ApproveRequest, campaigns.RequireRole(campaigns.RolePlayer))
+	cg.POST("/armory/purchase-requests/:rid/decline", bh.DeclineRequest, campaigns.RequireRole(campaigns.RolePlayer))
 
 	// Transaction routes.
 	// Purchase is the player-initiated buy path: a Player buys an item from
