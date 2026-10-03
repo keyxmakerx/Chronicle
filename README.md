@@ -59,10 +59,10 @@ Chronicle is purpose-built for tabletop RPGs, open source, and designed to be se
 ### REST API
 - **API v1** — Full CRUD for entities, entity types, tags, relations, maps, drawings, tokens, layers, fog, media, and notes
 - **API Key Auth** — Per-campaign API keys with read/write/sync permissions and device fingerprint binding
+- **Sync History** — One record of what synced in both directions, with who, when and any failure (Manage › Sync history, for the owner and members with DM access); the Foundry module's History tab reads the same list
 - **Addon Discovery** — External tools can detect which features are enabled per campaign
 - **Bulk Operations** — Bulk tag assignment and entity type reassignment (up to 200 per request)
 - **Sync Protocol** — Sync mappings, WebSocket real-time events, and bidirectional Foundry VTT integration
-- **Sync History** — One record of what synced in both directions, with who, when and any failure (Manage › Sync history, for the owner and members with DM access); the Foundry module's History tab reads the same list
 
 ### Admin & Security
 - **Startup Health Checks** — Automatic migration validation, schema verification, DB connectivity checks, and security audit on every server start
