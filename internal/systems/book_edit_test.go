@@ -480,7 +480,7 @@ func TestBookEditService_RequestPageValidation(t *testing.T) {
 		{"widget not in manifest", `{"blocks":[{"type":"widget","widget":"evil"}]}`, "not one of this package's widgets"},
 		{"unknown block type", `{"blocks":[{"type":"rol"}]}`, `no block type "rol"`},
 		{"no blocks", `{"title":"x","blocks":[]}`, "no blocks"},
-		{"empty text block", `{"blocks":[{"text":""}]}`, "needs text"},
+		{"bad block after an empty one", `{"blocks":[{"text":""},{"type":"rol"}]}`, `block 2: there is no block type "rol"`},
 		{"too long", `{"blocks":[{"text":"` + strings.Repeat("x", maxBookString+1) + `"}]}`, "longer than"},
 		{"null page", `null`, "no blocks"},
 		{"not an object", `[1,2]`, ""},
@@ -767,5 +767,45 @@ func TestBookEditService_EditionSizeLimit(t *testing.T) {
 	}
 	if _, err := svc.SavePage(ctx, testCampaign, "u1", pkg, "basics", "o1", page); err != nil {
 		t.Fatalf("shrinking a page at the limit must succeed: %v", err)
+	}
+}
+
+// A text block nobody has written in yet is a draft, not a mistake: a new
+// page or a title-only change saves, and the empty box is kept for the editor.
+func TestBookEditService_EmptyTextBlocksAreDrafts(t *testing.T) {
+	pkg := testPackage(t, nil)
+	repo := &fakeBookRepo{}
+	svc := newTestService(repo)
+	ctx := context.Background()
+
+	ch, err := svc.CreateChapter(ctx, testCampaign, "u1", pkg, "Table customs")
+	if err != nil {
+		t.Fatalf("CreateChapter: %v", err)
+	}
+	key := ch.Pages[0].Key
+	if _, err := svc.SavePage(ctx, testCampaign, "u1", pkg, ch.ID, key, []byte(`{"title":"First","blocks":[{"text":""}]}`)); err != nil {
+		t.Fatalf("title-only save of a starter page: %v", err)
+	}
+	added, err := svc.AddPage(ctx, testCampaign, "u1", pkg, ch.ID, []byte(`{"title":"New page","blocks":[{"text":""}]}`))
+	if err != nil {
+		t.Fatalf("adding a new empty page: %v", err)
+	}
+	if len(added.Page.Blocks) != 1 {
+		t.Errorf("the empty box must be kept for the editor, got %d blocks", len(added.Page.Blocks))
+	}
+	if _, err := svc.SavePage(ctx, testCampaign, "u1", pkg, ch.ID, added.Key, []byte(`{"blocks":[{"text":"Phones away"},{"text":"  "}]}`)); err != nil {
+		t.Fatalf("a written block beside an empty one: %v", err)
+	}
+	book, err := svc.Edition(ctx, testCampaign, pkg)
+	if err != nil {
+		t.Fatalf("Edition: %v", err)
+	}
+	got := chapterOf(t, book, ch.ID)
+	for _, p := range got.Pages {
+		for _, b := range p.Blocks {
+			if b.Type == "problem" || (b.Type == "text" && strings.TrimSpace(b.Text) == "") {
+				t.Errorf("readers got an empty or problem block: %+v", b)
+			}
+		}
 	}
 }

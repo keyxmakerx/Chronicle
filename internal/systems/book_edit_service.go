@@ -307,21 +307,35 @@ func problemPage(detail string) BookPage {
 	}
 }
 
-// buildStoredPage is buildBookPage for a page already in the database. A page
-// whose only blocks are empty text blocks (a new chapter's starter page) is
-// fine to keep and shows nothing; everything else must pass the book checks.
+// buildStoredPage is buildBookPage for a campaign's page. A text block with
+// no text yet is a Director's unfinished draft, not a mistake: it is kept in
+// the stored page (so the editor still shows the empty box) and simply shows
+// nothing, while every other block must pass the book checks. Block numbers
+// in errors still count the empty blocks, so they match what the editor shows.
 func buildStoredPage(p bookPageYAML, widgets map[string]bool) (BookPage, *bookPageError) {
-	onlyEmpty := len(p.Blocks) > 0
-	for _, b := range p.Blocks {
-		if (b.Type != "" && b.Type != "text") || strings.TrimSpace(b.Text) != "" {
-			onlyEmpty = false
-			break
+	page := BookPage{Title: strings.TrimSpace(p.Title), Director: p.Director, Wide: p.Wide, Blocks: []BookBlock{}}
+	if len(p.Blocks) == 0 {
+		return page, &bookPageError{Msg: "the page has no blocks"}
+	}
+	if len(p.Blocks) > maxBookBlocks {
+		return page, &bookPageError{Msg: fmt.Sprintf("more than %d blocks", maxBookBlocks)}
+	}
+	for bi, by := range p.Blocks {
+		if isEmptyTextBlock(by) {
+			continue
 		}
+		blk, err := buildBookBlock(by, widgets)
+		if err != nil {
+			return page, &bookPageError{Block: bi + 1, Msg: err.Error()}
+		}
+		page.Blocks = append(page.Blocks, blk)
 	}
-	if onlyEmpty {
-		return BookPage{Title: strings.TrimSpace(p.Title), Director: p.Director, Wide: p.Wide, Blocks: []BookBlock{}}, nil
-	}
-	return buildBookPage(p, widgets)
+	return page, nil
+}
+
+// isEmptyTextBlock reports a text block nobody has written in yet.
+func isEmptyTextBlock(b bookBlockYAML) bool {
+	return (b.Type == "" || b.Type == "text") && strings.TrimSpace(b.Text) == ""
 }
 
 // book renders the merged edition as the reader's Book (before FilterBook,
@@ -594,7 +608,7 @@ func checkRequestPage(raw []byte, widgets map[string]bool, position int) (bookPa
 	if err := decodeBookBytes(raw, &p); err != nil {
 		return p, "", apperror.NewValidation(fmt.Sprintf("page %d: %s", position, friendlyDecodeError(err)))
 	}
-	if _, perr := buildBookPage(p, widgets); perr != nil {
+	if _, perr := buildStoredPage(p, widgets); perr != nil {
 		return p, "", apperror.NewValidation(perr.detail(fmt.Sprintf("page %d", position)))
 	}
 	stored, err := json.Marshal(toAuthored(p))
