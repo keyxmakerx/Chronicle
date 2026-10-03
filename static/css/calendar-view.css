@@ -442,6 +442,18 @@
 .cal-v5 .roster .st{margin-left:auto;padding-top:3px;color:var(--mut);white-space:nowrap}
 .cal-v5 .roster .st.yes{color:var(--ink)}
 .cal-v5 .rnote{margin-top:9px;font:500 11px/1.45 var(--sans);color:var(--mut)}
+/* A game night's own note on an answer, and the field that writes it. */
+.cal-v5 .gnnote{display:flex;align-items:flex-start;flex-wrap:wrap;gap:2px 6px;margin-top:7px;font:450 12px/1.45 var(--sans);color:var(--ink2)}
+.cal-v5 .gnnote q{font-style:italic;flex:1 1 auto;min-width:0;overflow-wrap:anywhere}
+.cal-v5 .lnk{font:600 11px/1 var(--sans);color:var(--ink2);padding:4px 6px;border-radius:6px}
+.cal-v5 .lnk:hover{background:var(--hair2);color:var(--ink)}
+.cal-v5 .gnnoteed{display:flex;gap:6px;margin-top:7px;align-items:center}
+.cal-v5 .gnnoteed input{flex:1;min-width:0;height:30px;padding:0 9px;border-radius:8px;border:1px solid var(--edge);background:var(--paper2);font:500 12.5px/1 var(--sans);color:var(--ink)}
+.cal-v5 .gnnoteed input:focus{outline:1.5px solid var(--ink);outline-offset:0}
+.cal-v5 .btn.sm{height:26px;padding:0 9px;font-size:11.5px}
+.cal-v5 .rsvp .sw{margin-top:8px;padding-bottom:0}
+/* Game nights have no event kind, so their dice mark takes the ink. */
+.cal-v5 .mk.gnm, .cal-v5 .gnb .ric{color:var(--ink2);font-size:12px}
 /* Quick edits in the day's card (Director): titles and times edit in place, small controls sit at the row's end. */
 .cal-v5 .evh .qt{font:600 13.5px/1.3 var(--sans);color:var(--ink);min-width:0;flex:0 1 auto;overflow-wrap:anywhere}
 .cal-v5 .qt{text-align:left;border-radius:6px;padding:2px 4px;margin:-2px -4px;cursor:text}

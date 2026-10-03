@@ -94,6 +94,9 @@ type SessionService interface {
 	// ListOccurrenceAttendees is ListAttendees' per-occurrence twin for a
 	// recurring session's one specific night.
 	ListOccurrenceAttendees(ctx context.Context, sessionID, occurrenceDate string) ([]OccurrenceRSVP, error)
+	// ListGameNights lists every planned night in [from, to] with each
+	// member's answer, for the calendar's day card.
+	ListGameNights(ctx context.Context, campaignID, from, to, today string, members []NightMember) ([]GameNight, error)
 
 	// "Suggest another time" (see ValidateAndRecordSuggestion's doc comment
 	// for the validate-before-consume ordering this fixes).
