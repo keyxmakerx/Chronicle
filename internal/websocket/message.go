@@ -85,6 +85,15 @@ const (
 	MsgEntityNoteDeleted MessageType = "entity_note.deleted"
 )
 
+// Stash and downtime messages. Payloads carry ids and statuses only.
+const (
+	MsgStashMoved        MessageType = "stash.moved"
+	MsgStashRequested    MessageType = "stash.requested"
+	MsgStashSettled      MessageType = "stash.settled"
+	MsgStashMoneyChanged MessageType = "stash.money_changed"
+	MsgDowntimeChanged   MessageType = "downtime.changed"
+)
+
 // Sync control messages.
 const (
 	MsgSyncStatus   MessageType = "sync.status"

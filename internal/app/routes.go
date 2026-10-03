@@ -17,6 +17,7 @@ import (
 	"github.com/labstack/echo/v4"
 
 	"github.com/keyxmakerx/chronicle/internal/apperror"
+	"github.com/keyxmakerx/chronicle/internal/changesource"
 	"github.com/keyxmakerx/chronicle/internal/extensions"
 	"github.com/keyxmakerx/chronicle/internal/middleware"
 	"github.com/keyxmakerx/chronicle/internal/permissions"
@@ -3284,6 +3285,38 @@ func (a *App) RegisterRoutes() {
 	// syncapi permissions endpoint (SetTagGrantLister) the same tag-grant view.
 	tagFetcherAdapter := &entityTagFetcherAdapter{svc: tagService, grantSvc: tagGrantService}
 
+	// Stashes and moves: the service reaches entities, relations and members
+	// only through the adapters in armory_stash_adapters.go. It is built before
+	// the sync API so the API's stash endpoints can use it; the event bus does
+	// not exist yet, so events bind to it later through stashEvents.
+	stashEvents := &armoryStashEventAdapter{}
+	stashRepo := armory.NewStashRepository(a.DB)
+	stashDirectory := &armoryStashDirectoryAdapter{svc: entityService}
+	stashSvc := armory.NewStashService(armory.StashDeps{
+		Repo:       stashRepo,
+		Directory:  stashDirectory,
+		Visibility: &entityVisibilityFilterAdapter{svc: entityService},
+		Actor:      &armoryCharacterActorAdapter{svc: entityService},
+		Fields:     &armoryEntityFieldsAdapter{svc: entityService},
+		Relations:  &armoryHasItemAdapter{svc: relService},
+		UserNames:  &armoryMemberNamesAdapter{svc: campaignService},
+		Events:     stashEvents,
+	})
+	// A money change made on a sheet (web, Foundry, extension) leaves a line in
+	// the character's history, like a move would.
+	entityService.SetFieldChangeObserver(&armoryMoneyObserver{history: armory.NewMoneyHistory(
+		stashRepo, stashDirectory,
+		func(ctx context.Context, campaignID string) bool {
+			on, err := addonService.IsEnabledForCampaign(ctx, campaignID, "armory")
+			return err == nil && on
+		},
+		stashEvents,
+	)})
+	stashAPIHandler := syncapi.NewStashAPIHandler(
+		&syncStashAPIAdapter{api: armory.NewStashAPI(stashSvc, &armoryMemberDirectoryAdapter{svc: campaignService})},
+		"armory",
+	)
+
 	// REST API v1: versioned endpoints for external clients (Foundry VTT, etc.).
 	// Authenticates via API keys, not browser sessions.
 	syncAPIHandler := syncapi.NewAPIHandler(syncService, entityService, campaignService, relService)
@@ -3321,7 +3354,7 @@ func (a *App) RegisterRoutes() {
 	tagAPIHandler := syncapi.NewTagAPIHandler(syncService, tagService, entityService, campaignService)
 
 	if a.PluginHealth.IsHealthy("syncapi") {
-		syncapi.RegisterAPIRoutes(e, syncAPIHandler, calendarAPIHandler, mediaAPIHandler, mapAPIHandler, noteAPIHandler, tagAPIHandler, syncMappingHandler, syncChangesHandler, syncService, addonService, authService, campaignService)
+		syncapi.RegisterAPIRoutes(e, syncAPIHandler, calendarAPIHandler, mediaAPIHandler, mapAPIHandler, noteAPIHandler, tagAPIHandler, syncMappingHandler, syncChangesHandler, stashAPIHandler, syncService, addonService, authService, campaignService)
 	}
 
 	// NPC plugin: gallery/hub view for revealed character entities.
@@ -3361,17 +3394,7 @@ func (a *App) RegisterRoutes() {
 	txSvc.SetBuyerAccessChecker(&armoryBuyerAccessAdapter{svc: entityService})
 	txHandler := armory.NewTransactionHandler(txSvc)
 	txHandler.SetEntityVisibility(&entityVisibilityFilterAdapter{svc: entityService})
-	// Stashes and moves: the service reaches entities, relations and members
-	// only through the adapters in armory_stash_adapters.go.
-	stashSvc := armory.NewStashService(armory.StashDeps{
-		Repo:       armory.NewStashRepository(a.DB),
-		Directory:  &armoryStashDirectoryAdapter{svc: entityService},
-		Visibility: &entityVisibilityFilterAdapter{svc: entityService},
-		Actor:      &armoryCharacterActorAdapter{svc: entityService},
-		Fields:     &armoryEntityFieldsAdapter{svc: entityService},
-		Relations:  &armoryHasItemAdapter{svc: relService},
-		UserNames:  &armoryMemberNamesAdapter{svc: campaignService},
-	})
+	// Stashes and moves: the service is built earlier, before the sync API.
 	stashHandler := armory.NewStashHandler(stashSvc)
 	entityHandler.SetCharacterPagePanel(entities.PagePanel{
 		Addon: "armory",
@@ -3922,6 +3945,7 @@ func (a *App) RegisterRoutes() {
 			if err := json.Unmarshal(fieldsData, &fields); err != nil {
 				return fmt.Errorf("invalid fields JSON: %w", err)
 			}
+			ctx = changesource.With(ctx, changesource.Source{Kind: changesource.KindExtension})
 			return entityService.UpdateFields(ctx, entityID, fields)
 		},
 	))
@@ -4425,6 +4449,7 @@ func (a *App) RegisterRoutes() {
 	go syncapi.StartChangePruner(a.ShutdownCtx, syncChangeRepo)
 
 	entityService.SetEventPublisher(&entityEventPublisherAdapter{bus: wsEventBus})
+	stashEvents.bus = wsEventBus
 	entityService.SetSidebarAutoAdder(&sidebarAutoAdderAdapter{campaignService: campaignService})
 	noteSvc.SetEventPublisher(&noteEventPublisherAdapter{bus: wsEventBus})
 

@@ -419,6 +419,10 @@ GET	/sidebar-config	internal/plugins/campaigns/routes.go
 GET	/sidebar/drill/:slug	internal/plugins/campaigns/routes.go
 GET	/sidebar/sessions-rsvp	internal/plugins/sessions/routes.go
 GET	/smtp	internal/plugins/smtp/routes.go
+GET	/stashes/downtime	internal/plugins/syncapi/routes.go
+GET	/stashes/history	internal/plugins/syncapi/routes.go
+GET	/stashes/requests	internal/plugins/syncapi/routes.go
+GET	/stashes/view	internal/plugins/syncapi/routes.go
 GET	/stats	internal/plugins/bestiary/routes.go
 GET	/status	internal/systems/routes.go
 GET	/storage	internal/plugins/admin/routes.go
@@ -632,6 +636,9 @@ POST	/settings	internal/plugins/packages/routes.go
 POST	/sidebar-nodes	internal/plugins/entities/routes.go
 POST	/smtp/send-test	internal/plugins/smtp/routes.go
 POST	/smtp/test	internal/plugins/smtp/routes.go
+POST	/stashes/moves	internal/plugins/syncapi/routes.go
+POST	/stashes/requests/:moveId/approve	internal/plugins/syncapi/routes.go
+POST	/stashes/requests/:moveId/decline	internal/plugins/syncapi/routes.go
 POST	/storage/settings	internal/plugins/settings/routes.go
 POST	/storage/trash	internal/plugins/settings/routes.go
 POST	/submit	internal/plugins/packages/routes.go
@@ -776,6 +783,7 @@ PUT	/sidebar-config	internal/plugins/campaigns/routes.go
 PUT	/sidebar-nodes/:nid	internal/plugins/entities/routes.go
 PUT	/sidebar-nodes/:nid/reorder	internal/plugins/entities/routes.go
 PUT	/smtp	internal/plugins/smtp/routes.go
+PUT	/stashes/downtime	internal/plugins/syncapi/routes.go
 PUT	/system	internal/plugins/campaigns/routes.go
 PUT	/tags/:tagId	internal/plugins/syncapi/routes.go
 PUT	/tags/:tagId	internal/widgets/tags/routes.go

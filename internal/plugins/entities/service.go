@@ -237,6 +237,17 @@ type EntityService interface {
 	SetEventPublisher(pub EntityEventPublisher)
 	SetBlockRegistry(reg *BlockRegistry)
 	SetSidebarAutoAdder(adder SidebarAutoAdder)
+	SetFieldChangeObserver(obs FieldChangeObserver)
+}
+
+// FieldChangeObserver is told after an entity's custom fields were written.
+// It lets another plugin react to field writes (for example to keep a history)
+// without the entities plugin knowing it exists.
+type FieldChangeObserver interface {
+	// FieldsChanged receives the entity as stored after the write, the fields
+	// as they were before it and the fields now. A returned error is logged by
+	// the caller and never fails the write that already succeeded.
+	FieldsChanged(ctx context.Context, e *Entity, oldFields, newFields map[string]any) error
 }
 
 // EntityEventPublisher emits domain events when entities or entity types change.
@@ -324,6 +335,7 @@ type entityService struct {
 	mediaVerifier MediaCampaignVerifier
 	addonChecker  AddonChecker
 	safety        PageSafetyRepository // nil: no history, no Trash (tests)
+	fieldObserver FieldChangeObserver
 }
 
 // NewEntityService creates a new entity service with the given dependencies.
@@ -383,6 +395,34 @@ func (s *entityService) isAddonEnabled(ctx context.Context, campaignID, slug str
 // SetEventPublisher sets the event publisher for real-time sync.
 func (s *entityService) SetEventPublisher(pub EntityEventPublisher) {
 	s.events = pub
+}
+
+// SetFieldChangeObserver wires the observer told after field writes. Optional;
+// without one, writes behave exactly as before.
+func (s *entityService) SetFieldChangeObserver(obs FieldChangeObserver) {
+	s.fieldObserver = obs
+}
+
+// notifyFieldsChanged tells the observer about a completed field write. The
+// write has already happened, so a failing observer is logged, not returned.
+func (s *entityService) notifyFieldsChanged(ctx context.Context, e *Entity, oldFields, newFields map[string]any) {
+	if s.fieldObserver == nil || e == nil {
+		return
+	}
+	if err := s.fieldObserver.FieldsChanged(ctx, e, oldFields, newFields); err != nil {
+		slog.Warn("entity field observer failed",
+			slog.String("entity_id", e.ID), slog.Any("error", err))
+	}
+}
+
+// cloneFields copies a fields map so a later in-place edit of the entity
+// cannot change what the observer is shown as "before".
+func cloneFields(m map[string]any) map[string]any {
+	out := make(map[string]any, len(m))
+	for k, v := range m {
+		out[k] = v
+	}
+	return out
 }
 
 // SetBlockRegistry sets the block registry for layout validation.
@@ -697,7 +737,12 @@ func (s *entityService) Update(ctx context.Context, entityID string, input Updat
 		}
 	}
 
-	if input.FieldsData != nil {
+	// The pre-write fields are kept only when this write replaces them, so the
+	// observer is told about field changes and nothing else.
+	var oldFields map[string]any
+	fieldsWritten := input.FieldsData != nil
+	if fieldsWritten {
+		oldFields = cloneFields(entity.FieldsData)
 		entity.FieldsData = input.FieldsData
 	}
 
@@ -711,6 +756,9 @@ func (s *entityService) Update(ctx context.Context, entityID string, input Updat
 		s.recordVersion(ctx, &before, entity, VersionEdit)
 	}
 	s.events.PublishEntityEvent("updated", entity.CampaignID, entity.ID, entity)
+	if fieldsWritten {
+		s.notifyFieldsChanged(ctx, entity, oldFields, entity.FieldsData)
+	}
 	return entity, nil
 }
 
@@ -996,8 +1044,10 @@ func (s *entityService) UpdateFields(ctx context.Context, entityID string, field
 	// Carry the new fields on the payload; best-effort (only when the entity
 	// loaded), matching this method's existing tolerance of a load failure.
 	if entity != nil {
+		oldFields := cloneFields(entity.FieldsData)
 		entity.FieldsData = fieldsData
 		s.events.PublishEntityEvent("updated", entity.CampaignID, entityID, entity)
+		s.notifyFieldsChanged(ctx, entity, oldFields, fieldsData)
 	}
 	slog.Info("entity fields updated", slog.String("entity_id", entityID))
 	return nil

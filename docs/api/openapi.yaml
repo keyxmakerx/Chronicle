@@ -27,6 +27,15 @@ tags:
     description: Interactive maps, drawings, tokens, layers, and fog of war
   - name: Sync
     description: Bidirectional sync and external system mapping
+  - name: Stashes
+    description: >
+      Move items and money between characters and stashes, as a named campaign
+      member. Needs the Armory addon. Every call may carry `actingUserId`
+      (query for GET, body for POST/PUT); it must be a current member, else 404.
+      The call then runs under THAT member's real role and co-DM grant, never
+      the key's Owner role. Only a caller who is themselves Owner or co-DM may
+      name someone else (anyone else gets 403), so naming a player only narrows
+      what the call may do.
 
 paths:
   # --- Campaigns ---
@@ -1712,6 +1721,262 @@ paths:
         "429":
           $ref: "#/components/responses/RateLimited"
 
+  # --- Stashes ---
+  /campaigns/{campaignId}/stashes/view:
+    get:
+      tags: [Stashes]
+      summary: A character's items and money, the stashes the acting member sees, and where a move can go
+      operationId: getStashView
+      parameters:
+        - $ref: "#/components/parameters/campaignId"
+        - {name: characterId, in: query, required: true, schema: {type: string}}
+        - {name: actingUserId, in: query, schema: {type: string}}
+      responses:
+        "200":
+          description: View computed as the acting member (same rules and redaction as the web panel)
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  downtimeOpen: {type: boolean}
+                  canApprove: {type: boolean}
+                  character:
+                    type: object
+                    properties:
+                      id: {type: string}
+                      name: {type: string}
+                      moneyKey: {type: string, description: Empty when the character's system has no money field}
+                      money: {type: number}
+                      items:
+                        type: array
+                        items: {$ref: "#/components/schemas/StashItem"}
+                  stashes:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        id: {type: string}
+                        name: {type: string}
+                        money: {type: number}
+                        items:
+                          type: array
+                          items: {$ref: "#/components/schemas/StashItem"}
+                  destinations:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        kind: {type: string, enum: [character, stash]}
+                        id: {type: string}
+                        name: {type: string}
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /campaigns/{campaignId}/stashes/moves:
+    post:
+      tags: [Stashes]
+      summary: Move an item or money; applies at once or becomes a request
+      description: >
+        Owner/Scribe actors, and any actor while downtime is open, apply at
+        once (`status` applied). A player outside downtime leaves a request
+        (`status` pending) for an approver. A player cannot move from a
+        character they do not control (403) or touch a stash they cannot see (404).
+      operationId: createStashMove
+      parameters:
+        - $ref: "#/components/parameters/campaignId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [kind, from, to]
+              properties:
+                actingUserId: {type: string}
+                kind: {type: string, enum: [item, money]}
+                itemId: {type: string, description: Items only}
+                quantity: {type: integer, minimum: 1, description: Items only}
+                amount: {description: "Money only; a number or numeral string with at most two decimals", oneOf: [{type: number}, {type: string}]}
+                from: {$ref: "#/components/schemas/StashEndpoint"}
+                to: {$ref: "#/components/schemas/StashEndpoint"}
+      responses:
+        "200":
+          description: Applied or queued
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/StashMoveResult"}
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          description: The source no longer holds enough, or the move could not be applied
+
+  /campaigns/{campaignId}/stashes/history:
+    get:
+      tags: [Stashes]
+      summary: Move history of one character or one stash
+      description: >
+        Give exactly one of `characterId` and `stashId`. Names the acting member
+        cannot see are replaced, and other people's pending requests are left out
+        for non-GM actors. A money edit made on a sheet appears as a row whose
+        two ends are the same character, with the sentence in `summary`.
+        Returns at most the 50 newest rows.
+      operationId: getStashHistory
+      parameters:
+        - $ref: "#/components/parameters/campaignId"
+        - {name: characterId, in: query, schema: {type: string}}
+        - {name: stashId, in: query, schema: {type: string}}
+        - {name: actingUserId, in: query, schema: {type: string}}
+      responses:
+        "200":
+          description: Newest first
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  history:
+                    type: array
+                    items: {$ref: "#/components/schemas/StashMoveLine"}
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /campaigns/{campaignId}/stashes/requests:
+    get:
+      tags: [Stashes]
+      summary: Pending requests (the acting member must be able to approve)
+      operationId: listStashRequests
+      parameters:
+        - $ref: "#/components/parameters/campaignId"
+        - {name: actingUserId, in: query, schema: {type: string}}
+      responses:
+        "200":
+          description: Oldest first
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  requests:
+                    type: array
+                    items: {$ref: "#/components/schemas/StashMoveLine"}
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /campaigns/{campaignId}/stashes/requests/{moveId}/approve:
+    post:
+      tags: [Stashes]
+      summary: Approve a pending request (acting member must be Owner or co-DM)
+      operationId: approveStashRequest
+      parameters:
+        - $ref: "#/components/parameters/campaignId"
+        - {name: moveId, in: path, required: true, schema: {type: integer, format: int64}}
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                actingUserId: {type: string}
+      responses:
+        "200":
+          description: Settled (status applied, or failed when the source no longer holds enough)
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/StashMoveResult"}
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          description: Already answered
+
+  /campaigns/{campaignId}/stashes/requests/{moveId}/decline:
+    post:
+      tags: [Stashes]
+      summary: Decline a pending request (acting member must be Owner or co-DM)
+      operationId: declineStashRequest
+      parameters:
+        - $ref: "#/components/parameters/campaignId"
+        - {name: moveId, in: path, required: true, schema: {type: integer, format: int64}}
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                actingUserId: {type: string}
+      responses:
+        "200":
+          description: Declined
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/StashMoveResult"}
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          description: Already answered
+
+  /campaigns/{campaignId}/stashes/downtime:
+    get:
+      tags: [Stashes]
+      summary: Whether downtime is open
+      operationId: getStashDowntime
+      parameters:
+        - $ref: "#/components/parameters/campaignId"
+      responses:
+        "200":
+          description: The campaign-wide switch
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  open: {type: boolean}
+    put:
+      tags: [Stashes]
+      summary: Open or close downtime (approver only); opening applies waiting requests
+      operationId: setStashDowntime
+      parameters:
+        - $ref: "#/components/parameters/campaignId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [open]
+              properties:
+                open: {type: boolean}
+                actingUserId: {type: string}
+      responses:
+        "200":
+          description: New state; applied and failed count the requests swept when opening
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  open: {type: boolean}
+                  applied: {type: integer}
+                  failed: {type: integer}
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+
 components:
   securitySchemes:
     BearerApiKey:
@@ -1851,6 +2116,48 @@ components:
                 example: "Chronicle's calendar is being rebuilt and is temporarily unavailable. Calendar sync is paused; maps, actors, items and notes are unaffected."
 
   schemas:
+    StashItem:
+      type: object
+      properties:
+        itemId: {type: string}
+        name: {type: string}
+        quantity: {type: integer}
+    StashEndpoint:
+      type: object
+      required: [kind, id]
+      properties:
+        kind: {type: string, enum: [character, stash]}
+        id: {description: A character id, or a stash id as a string or number, oneOf: [{type: string}, {type: integer}]}
+    StashMove:
+      type: object
+      properties:
+        id: {type: integer, format: int64}
+        kind: {type: string, enum: [item, money]}
+        itemId: {type: string}
+        quantity: {type: integer}
+        amount: {type: number, description: "Signed for a sheet money edit (new minus old)"}
+        from: {type: object, properties: {kind: {type: string}, id: {type: string}}}
+        to: {type: object, properties: {kind: {type: string}, id: {type: string}}}
+        status: {type: string, enum: [applied, pending, declined, failed]}
+        reason: {type: string}
+        requestedBy: {type: string}
+        decidedBy: {type: string}
+        createdAt: {type: string, format: date-time}
+    StashMoveResult:
+      type: object
+      properties:
+        status: {type: string, enum: [applied, pending, declined, failed]}
+        move: {$ref: "#/components/schemas/StashMove"}
+    StashMoveLine:
+      allOf:
+        - $ref: "#/components/schemas/StashMove"
+        - type: object
+          properties:
+            itemName: {type: string}
+            fromName: {type: string}
+            toName: {type: string}
+            requesterName: {type: string}
+            summary: {type: string, description: A readable sentence for the row}
     Error:
       type: object
       properties:
