@@ -11,6 +11,7 @@ import (
 	"github.com/labstack/echo/v4"
 
 	"github.com/keyxmakerx/chronicle/internal/apperror"
+	"github.com/keyxmakerx/chronicle/internal/middleware"
 	"github.com/keyxmakerx/chronicle/internal/plugins/auth"
 )
 
@@ -384,8 +385,9 @@ func TestAppGrant_RevokeAllForUserEndsEveryCampaign(t *testing.T) {
 }
 
 func TestFrameAncestors(t *testing.T) {
-	got := frameAncestors([]string{"https://foundry.example", "https://x.example/path", "javascript:x", "https://Other.Example:30000"})
-	want := "frame-ancestors 'self' https://foundry.example https://other.example:30000"
+	got := frameAncestors([]string{"https://foundry.example", "https://x.example/path", "javascript:x", "https://Other.Example:30000",
+		"https://*", "https://a.example;x", "https://*.example", "http://[::1]:8080"})
+	want := "frame-ancestors 'self' https://foundry.example https://other.example:30000 http://[::1]:8080"
 	if got != want {
 		t.Fatalf("got %q, want %q", got, want)
 	}
@@ -410,14 +412,9 @@ func TestShowEmbed_FramableOnlyByAllowedOrigins(t *testing.T) {
 					_ = c.NoContent(ae.Code)
 				}
 			}
-			// Stand-in for the site-wide headers the real middleware sets.
-			e.Use(func(next echo.HandlerFunc) echo.HandlerFunc {
-				return func(c echo.Context) error {
-					c.Response().Header().Set("Content-Security-Policy", "default-src 'self'; frame-ancestors 'none'; base-uri 'self'")
-					c.Response().Header().Set("X-Frame-Options", "DENY")
-					return next(c)
-				}
-			})
+			// The real site-wide headers, so a change to their wording that
+			// stops the swap shows up here.
+			e.Use(middleware.SecurityHeaders())
 			e.GET("/embed/campaigns/:id/notes/:mode", h.ShowEmbed)
 			rec := httptest.NewRecorder()
 			e.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, tt.path, nil))

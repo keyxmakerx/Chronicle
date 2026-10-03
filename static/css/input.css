@@ -1504,6 +1504,11 @@
     box-shadow: none;
     transform: none;
   }
+/* .note-btn's display beats the hidden attribute; the frame has no close,
+   pin or collapse. */
+.notes-panel-embed .notes-close,
+.notes-panel-embed .notes-pin-panel,
+.notes-panel-embed .notes-collapse-btn { display: none; }
   .notes-panel-hidden {
     opacity: 0;
     pointer-events: none;

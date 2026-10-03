@@ -4,6 +4,7 @@ import (
 	"context"
 	"net/http"
 	"net/url"
+	"regexp"
 	"strings"
 
 	"github.com/labstack/echo/v4"
@@ -41,6 +42,11 @@ func NewAppGrantHandler(grants AppGrantService, origins OriginAllower) *AppGrant
 	return &AppGrantHandler{grants: grants, origins: origins}
 }
 
+// originHost is a plain host name or IP with an optional port. url.Parse
+// accepts hosts such as "*" or "a.com;x", which in a CSP source list would
+// mean "any site" or break the policy, so anything else is refused.
+var originHost = regexp.MustCompile(`^([a-z0-9-]+(\.[a-z0-9-]+)*|\[[0-9a-f:.]+\])(:[0-9]{1,5})?$`)
+
 // normalizeOrigin returns raw as a bare scheme://host[:port] origin, or ""
 // when it is not one. Paths, queries, credentials and fragments are refused
 // rather than stripped, so what the player is shown is exactly what gets
@@ -48,6 +54,9 @@ func NewAppGrantHandler(grants AppGrantService, origins OriginAllower) *AppGrant
 func normalizeOrigin(raw string) string {
 	u, err := url.Parse(strings.TrimSpace(raw))
 	if err != nil || u.Host == "" || u.User != nil {
+		return ""
+	}
+	if !originHost.MatchString(strings.ToLower(u.Host)) {
 		return ""
 	}
 	if u.Scheme != "https" && u.Scheme != "http" {
@@ -164,10 +173,15 @@ func (h *AppGrantHandler) ShowEmbed(c echo.Context) error {
 	if h.origins != nil {
 		origins = h.origins.AllowedOrigins(c.Request().Context())
 	}
+	// Loosen framing only by swapping the site-wide directive. If that
+	// directive ever changes shape the page stays unframeable, which the
+	// header test catches, rather than being framable by anyone.
 	hdr := c.Response().Header()
-	hdr.Set("Content-Security-Policy", strings.Replace(hdr.Get("Content-Security-Policy"),
-		"frame-ancestors 'none'", frameAncestors(origins), 1))
-	hdr.Del("X-Frame-Options")
+	csp := hdr.Get("Content-Security-Policy")
+	if loosened := strings.Replace(csp, "frame-ancestors 'none'", frameAncestors(origins), 1); loosened != csp {
+		hdr.Set("Content-Security-Policy", loosened)
+		hdr.Del("X-Frame-Options")
+	}
 	return middleware.Render(c, http.StatusOK, NotesEmbedPage(id, mode))
 }
 

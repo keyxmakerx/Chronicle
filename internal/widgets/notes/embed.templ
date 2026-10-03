@@ -1,7 +1,9 @@
 // embed.templ renders the Journal and Jot notes for an outside app (the
 // Foundry notebook) to show in a frame. The page itself is an empty shell:
 // it learns who is viewing only from the notes grant its parent window
-// hands it, then fetches the real content over the grant's routes.
+// hands it, then fetches the real content over the grant's routes. Its
+// script, notes_embed.js, is a page body script (internal/app/routes.go),
+// so it runs after boot.js.
 
 package notes
 
@@ -22,7 +24,6 @@ templ NotesEmbedPage(campaignID, mode string) {
 			<p class="notes-embed-status text-sm text-fg-secondary p-6" role="status" aria-live="polite" data-embed-status>Connecting to Chronicle…</p>
 			<div class="notes-embed-body h-full" data-embed-body></div>
 		</main>
-		<script src={ layouts.AssetURL("/static/js/notes_embed.js") } defer></script>
 	}
 }
 

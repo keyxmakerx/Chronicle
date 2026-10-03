@@ -2942,6 +2942,9 @@ func (a *App) RegisterRoutes() {
 		"/static/js/calendar_open.js",
 		"/static/js/widgets/rulebook.js",
 		"/static/js/widgets/rulebook_editor.js",
+		// After boot.js, so Chronicle exists before a token can arrive. It
+		// does nothing on pages without #notes-embed.
+		"/static/js/notes_embed.js",
 	}
 
 	// The sidebar, campaign dashboard and Extensions hub link to
@@ -3291,6 +3294,7 @@ func (a *App) RegisterRoutes() {
 	notesApp := notes.RegisterAppGrantRoutes(e, noteHandler, noteGrantHandler, noteGrants, notesAppGate, campaignService, authService)
 	// The editor's @ page picker, as the player sees pages.
 	notesApp.GET("/entities/search", entityHandler.SearchAPI, campaigns.RequireViewAccess())
+	notesApp.GET("/entities/:eid/preview", entityHandler.PreviewAPI, campaigns.RequireViewAccess())
 
 	// Relations widget routes already registered above (before REST API v1).
 

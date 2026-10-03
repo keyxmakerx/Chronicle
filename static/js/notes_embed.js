@@ -12,6 +12,7 @@
  *   frame -> parent  chronicle:embed-ready     {mode}      ready for a token
  *   parent -> frame  chronicle:notes-token     {token, entityId?}
  *   parent -> frame  chronicle:jots-page       {entityId}  the page in view
+ *   parent -> frame  chronicle:open-note       {noteId}    show this note (Journal)
  *   frame -> parent  chronicle:open-note       {noteId}    open in the notebook
  *   frame -> parent  chronicle:grant-rejected  {}          token no longer works
  * The token is accepted only from window.parent. Messages to the parent
@@ -28,6 +29,7 @@
   var status = root.querySelector('[data-embed-status]');
   var body = root.querySelector('[data-embed-body]');
   var entityId = '';
+  var pendingNote = '';
   var loading = 0;
 
   // The frame sits in Foundry's dark windows.
@@ -72,6 +74,11 @@
     else window.open(u.href, '_blank', 'noopener');
   });
 
+  // A note asked for before the Journal has mounted opens once it has.
+  function openPending() {
+    if (pendingNote && Chronicle.openJournalNote && Chronicle.openJournalNote(pendingNote)) pendingNote = '';
+  }
+
   function load() {
     var seq = ++loading;
     var q = '?mode=' + encodeURIComponent(mode);
@@ -97,6 +104,7 @@
         body.innerHTML = html;
         say('');
         Chronicle.mountWidgets(body);
+        openPending();
       });
     }).catch(function () {
       if (seq === loading) say('Chronicle couldn\'t be reached. It will try again when you reopen this window.');
@@ -116,6 +124,9 @@
         entityId = next;
         load();
       }
+    } else if (d.type === 'chronicle:open-note' && mode === 'journal' && typeof d.noteId === 'string' && d.noteId) {
+      pendingNote = d.noteId;
+      openPending();
     }
   });
 

@@ -247,6 +247,7 @@ GET	/entities/:eid/notes/:nid	internal/widgets/entity_notes/routes.go
 GET	/entities/:eid/permissions	internal/plugins/entities/routes.go
 GET	/entities/:eid/player-notes	internal/plugins/entities/routes.go
 GET	/entities/:eid/posts	internal/widgets/posts/routes.go
+GET	/entities/:eid/preview	internal/app/routes.go
 GET	/entities/:eid/preview	internal/plugins/entities/routes.go
 GET	/entities/:eid/relations	internal/widgets/relations/routes.go
 GET	/entities/:eid/tags	internal/widgets/tags/routes.go

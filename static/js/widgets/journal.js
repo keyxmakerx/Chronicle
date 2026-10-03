@@ -2441,7 +2441,7 @@
       if (!href || href.charAt(0) !== '/') return;
       e.preventDefault();
       self.flushSave();
-      window.location.href = href;
+      Chronicle.go(href);
     });
   };
 
