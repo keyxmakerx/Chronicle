@@ -2759,20 +2759,6 @@ func (s *calendarService) ListErasForCalendar(ctx context.Context, campaignID, c
 
 // --- Shared validation helpers ---
 
-// validateImportCurrentDate checks month/day (already resolved from either
-// the import file or a caller override — see CreateCalendarFromImport)
-// against the import's OWN month structure (ir.Months), the same shape
-// CalendarRepository.ApplyImport is about to write. It duplicates the shape
-// of Calendar.MonthDays' leap-year arithmetic rather than calling it,
-// because at this point in CreateCalendarFromImport no *Calendar with
-// Months loaded exists yet — the bare row isn't even created until after
-// this check passes.
-//
-// A month/day pair that looks fine to the human confirming it in the wizard
-// but doesn't fit the structure that same import describes (an off-by-one
-// in a hand-edited file, or a malicious upload) is rejected here rather
-// than silently landing in current_month/current_day, where every later
-// date computation trusts it unchecked.
 // validateImportCurrentTime checks the imported time of day against the day
 // length the calendar will be created with (CreateCalendar's own 24/60
 // defaults when the import leaves them 0).
@@ -2793,6 +2779,20 @@ func validateImportCurrentTime(ir *ImportResult) error {
 	return nil
 }
 
+// validateImportCurrentDate checks month/day (already resolved from either
+// the import file or a caller override — see CreateCalendarFromImport)
+// against the import's OWN month structure (ir.Months), the same shape
+// CalendarRepository.ApplyImport is about to write. It duplicates the shape
+// of Calendar.MonthDays' leap-year arithmetic rather than calling it,
+// because at this point in CreateCalendarFromImport no *Calendar with
+// Months loaded exists yet — the bare row isn't even created until after
+// this check passes.
+//
+// A month/day pair that looks fine to the human confirming it in the wizard
+// but doesn't fit the structure that same import describes (an off-by-one
+// in a hand-edited file, or a malicious upload) is rejected here rather
+// than silently landing in current_month/current_day, where every later
+// date computation trusts it unchecked.
 func validateImportCurrentDate(ir *ImportResult, year, month, day int) error {
 	n := len(ir.Months)
 	if n == 0 {

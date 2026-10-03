@@ -49,9 +49,9 @@ func TestImportFoundryCalendar(t *testing.T) {
 		{name: "other source is a bad request", payload: `{"schema_version":1,"source":"simple-calendar","months":[{"name":"M","days":30}]}`, wantCode: http.StatusBadRequest},
 		{name: "no months is a bad request", payload: `{"schema_version":1,"source":"calendaria","months":[]}`, wantCode: http.StatusBadRequest},
 		{name: "oversized structure is a bad request", payload: `{"schema_version":1,"source":"calendaria","months":[` + repeatJSON(`{"name":"M","days":1}`, 500) + `]}`, wantCode: http.StatusBadRequest},
-		{name: "hour out of range is a validation error", payload: withTime(foundryServicePayload, 24, 0), wantCode: http.StatusUnprocessableEntity},
-		{name: "negative minute is a validation error", payload: withTime(foundryServicePayload, 5, -1), wantCode: http.StatusUnprocessableEntity},
-		{name: "minute 60 is a validation error", payload: withTime(foundryServicePayload, 5, 60), wantCode: http.StatusUnprocessableEntity},
+		{name: "hour past the day is clamped, not refused", payload: withTime(foundryServicePayload, 24, 0), wantCreated: 1},
+		{name: "negative minute is clamped, not refused", payload: withTime(foundryServicePayload, 5, -1), wantCreated: 1},
+		{name: "minute 60 is clamped, not refused", payload: withTime(foundryServicePayload, 5, 60), wantCreated: 1},
 		{name: "last valid time of day", payload: withTime(foundryServicePayload, 23, 59), wantCreated: 1},
 	}
 	for _, tc := range tests {

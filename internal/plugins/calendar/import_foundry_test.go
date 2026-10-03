@@ -1,6 +1,7 @@
 package calendar
 
 import (
+	"fmt"
 	"strings"
 	"testing"
 )
@@ -392,4 +393,61 @@ func hasWarning(warnings []string, fragment string) bool {
 		}
 	}
 	return false
+}
+
+// TestParseFoundryImport_TimeClamped: the payload carries no day length, so a
+// time from a longer Calendaria day lands on the last minute that exists, with
+// a warning, instead of failing the whole import.
+func TestParseFoundryImport_TimeClamped(t *testing.T) {
+	tests := []struct {
+		name              string
+		hour, minute      int
+		wantHour, wantMin int
+		wantWarning       bool
+	}{
+		{"in range kept", 23, 59, 23, 59, false},
+		{"hour past a 24-hour day", 26, 10, 23, 10, true},
+		{"minute past the hour", 5, 75, 5, 59, true},
+		{"negative minute", 5, -1, 5, 0, true},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			payload := fmt.Sprintf(`{"schema_version":1,"source":"calendaria","name":"X","current_month":1,"current_day":1,"current_hour":%d,"current_minute":%d,"months":[{"name":"M","days":30}]}`, tc.hour, tc.minute)
+			ir, err := ParseFoundryImport([]byte(payload))
+			if err != nil {
+				t.Fatal(err)
+			}
+			if ir.Today.Hour != tc.wantHour || ir.Today.Minute != tc.wantMin {
+				t.Errorf("time = %d:%02d, want %d:%02d", ir.Today.Hour, ir.Today.Minute, tc.wantHour, tc.wantMin)
+			}
+			found := false
+			for _, w := range ir.Warnings {
+				if strings.Contains(w, "time of day") {
+					found = true
+				}
+			}
+			if found != tc.wantWarning {
+				t.Errorf("time warning = %v, want %v (%v)", found, tc.wantWarning, ir.Warnings)
+			}
+		})
+	}
+}
+
+// TestParseFoundryImport_SeasonMonthsZeroBased: Calendaria's live API counts
+// months from 0, so a calendar whose first season starts in its third month
+// is not misread as 1-based.
+func TestParseFoundryImport_SeasonMonthsZeroBased(t *testing.T) {
+	months := `[{"name":"A","days":30},{"name":"B","days":30},{"name":"C","days":30},{"name":"D","days":30},{"name":"E","days":30},{"name":"F","days":30}]`
+	payload := `{"schema_version":1,"source":"calendaria","name":"X","current_month":1,"current_day":1,"months":` + months +
+		`,"seasons":[{"name":"Spring","month_start":2,"month_end":3},{"name":"Autumn","month_start":4,"month_end":5}]}`
+	ir, err := ParseFoundryImport([]byte(payload))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := ir.Seasons[0]; got.StartMonth != 3 || got.EndMonth != 4 {
+		t.Errorf("Spring = months %d-%d, want 3-4", got.StartMonth, got.EndMonth)
+	}
+	if got := ir.Seasons[1]; got.StartMonth != 5 || got.EndMonth != 6 {
+		t.Errorf("Autumn = months %d-%d, want 5-6", got.StartMonth, got.EndMonth)
+	}
 }

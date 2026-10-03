@@ -180,9 +180,6 @@ func RegisterAPIRoutes(e *echo.Echo, api *APIHandler, calAPI *CalendarAPIHandler
 	calGroup.GET("/calendar/event-categories", retiredCalendarRoute(retiredEventCategories))
 	calGroup.GET("/calendar/structure", calAPI.GetStructure, RequirePermission(PermRead))
 	calGroup.GET("/calendar/weather", calAPI.GetWeather, RequirePermission(PermRead))
-	// The Bearer-group mirror of the web route's GET /calendar/world-state.
-	// Same seed, same dm_only gating — the role resolved from the key is
-	// what filters celestial events.
 	calGroup.GET("/calendar/world-state", retiredCalendarRoute("GET /calendar/date carries the current season, moon phases and weather."))
 	calGroup.GET("/calendar/cycles", calAPI.GetCycles, RequirePermission(PermRead))
 	calGroup.GET("/calendar/festivals", calAPI.GetFestivals, RequirePermission(PermRead))

@@ -647,7 +647,7 @@ func (h *CalendarAPIHandler) CreateCalendar(c echo.Context) error {
 		return err
 	}
 	return c.JSON(http.StatusCreated, map[string]any{
-		"calendar": cal,
+		"created":  cal,
 		"warnings": nonNil(warnings),
 	})
 }

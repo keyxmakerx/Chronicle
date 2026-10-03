@@ -474,7 +474,7 @@ func TestCalendarAPI_CreateCalendar(t *testing.T) {
 			var resp struct {
 				Calendar struct {
 					ID string `json:"id"`
-				} `json:"calendar"`
+				} `json:"created"`
 				Warnings []string `json:"warnings"`
 			}
 			if err := json.Unmarshal(rec.Body.Bytes(), &resp); err != nil {

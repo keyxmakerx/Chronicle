@@ -160,7 +160,11 @@ func ParseFoundryImport(data []byte) (*ImportResult, error) {
 			MonthEnd:   s.MonthEnd,
 		})
 	}
-	monthRanged, monthBase := calendariaSeasonMonthBase(seasons)
+	// Calendaria's live API indexes months from 0 (the module adds 1 to the
+	// current month for the same reason), so the base is known here, unlike a
+	// file where calendariaSeasonMonthBase has to guess it.
+	monthRanged, _ := calendariaSeasonMonthBase(seasons)
+	const monthBase = 0
 	for _, s := range seasons {
 		var startMonth, startDay, endMonth, endDay int
 		if monthRanged {
@@ -212,13 +216,20 @@ func ParseFoundryImport(data []byte) (*ImportResult, error) {
 		}))
 	}
 
+	// The day length isn't sent, so a world on a longer day can be past
+	// 23:59 here; land on the nearest time that exists rather than refuse.
+	hour := clampInt(p.CurrentHour, 0, ir.Settings.HoursPerDay-1)
+	minute := clampInt(p.CurrentMinute, 0, ir.Settings.MinutesPerHour-1)
+	if hour != p.CurrentHour || minute != p.CurrentMinute {
+		ir.Warnings = append(ir.Warnings, fmt.Sprintf("Foundry's time of day %d:%02d doesn't fit a 24-hour day, so the calendar starts at %d:%02d.", p.CurrentHour, p.CurrentMinute, hour, minute))
+	}
 	month, day := p.CurrentMonth, p.CurrentDay
 	ir.Today = ImportedToday{
 		Year:   p.CurrentYear,
 		Month:  &month,
 		Day:    &day,
-		Hour:   p.CurrentHour,
-		Minute: p.CurrentMinute,
+		Hour:   hour,
+		Minute: minute,
 	}
 
 	if err := clampCalendarStructure(ir); err != nil {
