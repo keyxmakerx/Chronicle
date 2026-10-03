@@ -241,6 +241,25 @@ func (h *Handler) ListEventsAPI(c echo.Context) error {
 	return c.JSON(http.StatusOK, events)
 }
 
+// ListEraEventsAPI returns the events dated within one era, for the era
+// panel's key events.
+// GET /campaigns/:id/calendars/:calid/eras/:eraID/events
+func (h *Handler) ListEraEventsAPI(c echo.Context) error {
+	cc := campaigns.GetCampaignContext(c)
+	eraID, err := strconv.Atoi(c.Param("eraID"))
+	if err != nil {
+		return apperror.NewBadRequest("invalid era id")
+	}
+	events, total, err := h.svc.ListEraEventsForViewer(c.Request().Context(), eraID, c.Param("calid"), cc.Campaign.ID, viewerFrom(c, cc))
+	if err != nil {
+		return err
+	}
+	if events == nil {
+		events = []Event{}
+	}
+	return c.JSON(http.StatusOK, map[string]any{"data": events, "total": total})
+}
+
 // GetEventAPI returns one event.
 // GET /campaigns/:id/calendars/:calid/events/:eid
 func (h *Handler) GetEventAPI(c echo.Context) error {

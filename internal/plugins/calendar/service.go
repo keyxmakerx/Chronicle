@@ -21,6 +21,7 @@ import (
 	"log/slog"
 	"math"
 	"regexp"
+	"sort"
 	"time"
 	"unicode/utf8"
 
@@ -231,6 +232,11 @@ type CalendarService interface {
 	// ListEventsForMonth applies the same player filtering as
 	// ListUpcomingEvents, including dropping future events not yet announced.
 	ListEventsForMonth(ctx context.Context, calendarID, campaignID string, year, month int, v permissions.Viewer) ([]Event, error)
+	// ListEraEventsForViewer returns the events dated within one era, as the
+	// viewer may see that era (its end may be cleared, or the era withheld
+	// entirely, by erasForPlayer) and filtered like ListEventsForMonth.
+	// Oldest first, at most maxEraEvents; total counts every match.
+	ListEraEventsForViewer(ctx context.Context, eraID int, calendarID, campaignID string, v permissions.Viewer) (events []Event, total int, err error)
 	// ListUpcomingEvents returns up to limit events on or after the
 	// calendar's current date, chronological, viewer-filtered exactly like
 	// ListEventsForMonth (SQL role filter + per-user visibility_rules +
@@ -1685,6 +1691,84 @@ func (s *calendarService) ListEventsForMonth(ctx context.Context, calendarID, ca
 		return nil, err
 	}
 	return events, nil
+}
+
+// maxEraEvents caps one era's event list: the era panel shows a handful of
+// key events and offers the rest, so a long era cannot make the read heavy.
+const maxEraEvents = 500
+
+// ListEraEventsForViewer: see the interface doc comment. An era the viewer
+// may not see is NotFound, exactly like one in another calendar.
+func (s *calendarService) ListEraEventsForViewer(ctx context.Context, eraID int, calendarID, campaignID string, v permissions.Viewer) ([]Event, int, error) {
+	cal, err := s.calendarInCampaignForViewer(ctx, calendarID, campaignID, v)
+	if err != nil {
+		return nil, 0, err
+	}
+	if err := s.loadCalendarGeometry(ctx, cal); err != nil {
+		return nil, 0, err
+	}
+	if cal.Eras, err = s.calRepo.GetEras(ctx, cal.ID); err != nil {
+		return nil, 0, fmt.Errorf("load eras: %w", err)
+	}
+	eras := cal.Eras
+	if !v.SkipsPerUserRules() {
+		eras = erasForPlayer(cal)
+	}
+	sort.SliceStable(eras, func(i, j int) bool {
+		return cal.AbsoluteDay(eras[i].StartYear, eras[i].StartMonth, eras[i].StartDay) <
+			cal.AbsoluteDay(eras[j].StartYear, eras[j].StartMonth, eras[j].StartDay)
+	})
+	idx := -1
+	for i := range eras {
+		if eras[i].ID == eraID {
+			idx = i
+		}
+	}
+	if idx < 0 {
+		return nil, 0, apperror.NewNotFound("era not found in calendar")
+	}
+	era := &eras[idx]
+	from := cal.AbsoluteDay(era.StartYear, era.StartMonth, era.StartDay)
+	to := math.MaxInt
+	switch {
+	case era.EndYear != nil:
+		to = eraEndDay(cal, era)
+	case idx+1 < len(eras):
+		// An open era runs until the next one the viewer can see begins.
+		next := &eras[idx+1]
+		to = cal.AbsoluteDay(next.StartYear, next.StartMonth, next.StartDay) - 1
+	}
+
+	events, err := s.eventRepo.ListAllEvents(ctx, calendarID)
+	if err != nil {
+		return nil, 0, fmt.Errorf("list events for era: %w", err)
+	}
+	events = filterEventsByUser(events, v)
+	if !v.SkipsPerUserRules() {
+		if events, err = s.hideFromPlayer(ctx, cal, campaignID, events); err != nil {
+			return nil, 0, err
+		}
+	}
+	inEra := make([]Event, 0, len(events))
+	for _, e := range events {
+		if d := cal.AbsoluteDay(e.Year, e.Month, e.Day); d >= from && d <= to {
+			inEra = append(inEra, e)
+		}
+	}
+	sort.SliceStable(inEra, func(i, j int) bool {
+		return cal.AbsoluteDay(inEra[i].Year, inEra[i].Month, inEra[i].Day) < cal.AbsoluteDay(inEra[j].Year, inEra[j].Month, inEra[j].Day)
+	})
+	total := len(inEra)
+	if total > maxEraEvents {
+		inEra = inEra[:maxEraEvents]
+	}
+	if err := s.redactHiddenEntityLinks(ctx, campaignID, inEra, v); err != nil {
+		return nil, 0, err
+	}
+	if err := s.redactRuleRefs(ctx, cal, campaignID, inEra, v); err != nil {
+		return nil, 0, err
+	}
+	return inEra, total, nil
 }
 
 // upcomingEventsOverfetchFactor/upcomingEventsMaxFetch: see

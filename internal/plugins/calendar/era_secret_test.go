@@ -7,6 +7,7 @@ package calendar
 
 import (
 	"context"
+	"encoding/json"
 	"net/http"
 	"strings"
 	"testing"
@@ -158,6 +159,7 @@ func TestEraSecret_NeverReachesPlayers(t *testing.T) {
 		{"Calendars page", base},
 		{"month of the secret era", base + "/" + eraCalendarID + "/events?year=1040&month=1"},
 		{"upcoming events", base + "/upcoming"},
+		{"events of the era before the secret one", base + "/" + eraCalendarID + "/eras/2/events"},
 	}
 	for _, viewer := range []string{"u-player", "u-scribe"} {
 		e := newEraRouter(cal, eras, events, false)
@@ -170,6 +172,13 @@ func TestEraSecret_NeverReachesPlayers(t *testing.T) {
 				assertNoSecrets(t, r.path, rec.Body.String())
 			})
 		}
+		t.Run(viewer+"/the secret era's events", func(t *testing.T) {
+			rec := doRequest(e, http.MethodGet, base+"/"+eraCalendarID+"/eras/3/events", viewer)
+			if rec.Code != http.StatusNotFound {
+				t.Errorf("got %d, want 404: %s", rec.Code, rec.Body.String())
+			}
+			assertNoSecrets(t, "secret era events", rec.Body.String())
+		})
 		t.Run(viewer+"/the secret event by id", func(t *testing.T) {
 			rec := doRequest(e, http.MethodGet, base+"/"+eraCalendarID+"/events/ev-secret", viewer)
 			if rec.Code != http.StatusNotFound {
@@ -219,6 +228,10 @@ func TestEraSecret_DirectorSeesEverything(t *testing.T) {
 		if !strings.Contains(rec.Body.String(), want) {
 			t.Errorf("Owner's calendar should carry %q", want)
 		}
+	}
+	rec = doRequest(e, http.MethodGet, "/campaigns/"+eraCampaignID+"/calendars/"+eraCalendarID+"/eras/3/events", "u-owner")
+	if !strings.Contains(rec.Body.String(), secretEvent) {
+		t.Errorf("Owner should see the secret era's events: %s", rec.Body.String())
 	}
 	rec = doRequest(e, http.MethodGet, "/campaigns/"+eraCampaignID+"/calendars/"+eraCalendarID+"/events/ev-secret", "u-owner")
 	if rec.Code != http.StatusOK {
@@ -331,6 +344,47 @@ func TestRedactEraLore(t *testing.T) {
 				if (eras[i].LoreEntityID != nil) != keep || (eras[i].LoreEntityName != "") != keep {
 					t.Errorf("era %d lore kept = %v, want %v", i+1, eras[i].LoreEntityID != nil, keep)
 				}
+			}
+		})
+	}
+}
+
+func TestListEraEvents_RangeAndCount(t *testing.T) {
+	cal, eras, _ := eraFixture()
+	events := []Event{
+		{ID: "a", CalendarID: eraCalendarID, Name: "Hatching", Year: 3, Month: 1, Day: 1, Visibility: "everyone"},
+		{ID: "b", CalendarID: eraCalendarID, Name: "Last flight", Year: 1022, Month: 6, Day: 17, Visibility: "everyone"},
+		{ID: "c", CalendarID: eraCalendarID, Name: "First council", Year: 1022, Month: 6, Day: 18, Visibility: "everyone"},
+		{ID: "d", CalendarID: eraCalendarID, Name: "Council of the few", Year: 1022, Month: 7, Day: 2, Visibility: "dm_only"},
+	}
+	e := newEraRouter(cal, eras, events, false)
+	tests := []struct {
+		name, viewer, era string
+		want              []string
+	}{
+		{"first era stops at its end", "u-player", "1", []string{"Hatching", "Last flight"}},
+		{"second era for a player", "u-player", "2", []string{"First council"}},
+		{"second era for the Owner", "u-owner", "2", []string{"First council", "Council of the few"}},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			rec := doRequest(e, http.MethodGet, "/campaigns/"+eraCampaignID+"/calendars/"+eraCalendarID+"/eras/"+tt.era+"/events", tt.viewer)
+			if rec.Code != http.StatusOK {
+				t.Fatalf("got %d: %s", rec.Code, rec.Body.String())
+			}
+			var body struct {
+				Data  []Event `json:"data"`
+				Total int     `json:"total"`
+			}
+			if err := json.Unmarshal(rec.Body.Bytes(), &body); err != nil {
+				t.Fatal(err)
+			}
+			var got []string
+			for _, ev := range body.Data {
+				got = append(got, ev.Name)
+			}
+			if strings.Join(got, ",") != strings.Join(tt.want, ",") || body.Total != len(tt.want) {
+				t.Errorf("got %v (total %d), want %v", got, body.Total, tt.want)
 			}
 		})
 	}

@@ -179,6 +179,8 @@ GET	/calendars	internal/plugins/calendar/routes.go
 GET	/calendars	internal/plugins/syncapi/routes.go
 GET	/calendars/:calid	internal/plugins/calendar/routes.go
 GET	/calendars/:calid	internal/plugins/calendar/routes.go
+GET	/calendars/:calid/eras/:eraID/events	internal/plugins/calendar/routes.go
+GET	/calendars/:calid/eras/:eraID/events	internal/plugins/calendar/routes.go
 GET	/calendars/:calid/events	internal/plugins/calendar/routes.go
 GET	/calendars/:calid/events	internal/plugins/calendar/routes.go
 GET	/calendars/:calid/events/:eid	internal/plugins/calendar/routes.go
