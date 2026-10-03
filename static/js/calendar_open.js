@@ -292,8 +292,12 @@
     if (!main || S.phase !== 'idle' || !main.contains(link)) return false;
     var seq = ++S.seq;
     S.phase = 'loading';
-    load(url).then(function (html) {
-      if (seq !== S.seq || !link.isConnected) return;
+    var loading = load(url);
+    // Use a prefetched page once only: reopening after edits must show them.
+    pre = null;
+    loading.then(function (html) {
+      if (seq !== S.seq) return;
+      if (!link.isConnected) { S.phase = 'idle'; return; }
       var page = pageFrom(html);
       if (!page) throw new Error('not the calendar');
       mount(link, page, url, fromHistory);
@@ -514,6 +518,7 @@
     var main = mainEl(), list = S.list;
     if (!main || !list) return;
     stop();
+    pre = null;
     S.phase = 'closing';
     Array.prototype.forEach.call(main.querySelectorAll('[data-widget]'), function (el) {
       if (window.Chronicle && Chronicle.destroyWidget) Chronicle.destroyWidget(el);
@@ -588,6 +593,9 @@
     }
     var link = e.target.closest('a[data-cal-open]');
     if (!link || !isPlainClick(e) || !sameDoc(link.href)) return;
+    // Mid-opening or mid-closing, a second click would navigate away and
+    // lose the animation; swallow it.
+    if (S.phase !== 'idle') { e.preventDefault(); return; }
     var slot = link.closest('.calv5-slot');
     if (tapAction(lastPointer, !!(slot && slot.classList.contains('peeking'))) === 'peek') {
       e.preventDefault();
