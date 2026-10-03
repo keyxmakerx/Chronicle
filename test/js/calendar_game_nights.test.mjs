@@ -1,7 +1,10 @@
 // calendar_game_nights.test.mjs — pins how calendar_view.js shows game
 // nights and takes answers: silence reads as "no answer yet" (never a no),
 // each night of a series answers for its own date, stored text is escaped,
-// and only the organiser or owner gets the "count me" switch.
+// only the organiser or owner gets the "count me" switch, an anchored world
+// calendar places nights on the right world day, times read in the
+// calendar's zone with the viewer's one press away, and a game-night link
+// opens the right night.
 
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
@@ -13,22 +16,32 @@ import vm from 'node:vm';
 const here = path.dirname(fileURLToPath(import.meta.url));
 const src = readFileSync(path.join(here, '..', '..', 'static', 'js', 'widgets', 'calendar_view.js'), 'utf8');
 
-function load() {
+// o.zone is the browser's own zone; o.search the page's query string;
+// o.nights(url) answers a nights read.
+function load(o = {}) {
   const defs = {};
   const calls = [];
+  const RealDTF = Intl.DateTimeFormat;
   const sandbox = {
     module: { exports: {} },
     console,
     Promise,
-    Intl,
+    URLSearchParams,
+    // A plain function, so `new Intl.DateTimeFormat(...)` still works.
+    Intl: o.zone ? { DateTimeFormat: function (loc, opts) { return new RealDTF(loc, { timeZone: o.zone, ...(opts || {}) }); } } : Intl,
+    window: { location: { search: o.search || '' } },
     Chronicle: {
       register(name, def) { defs[name] = def; },
-      apiFetch(url, opts) { calls.push({ url, opts }); return Promise.resolve({ ok: true, json: () => Promise.resolve([]) }); },
+      apiFetch(url, opts) {
+        calls.push({ url, opts });
+        const body = o.nights ? o.nights(url) : [];
+        return Promise.resolve({ ok: true, json: () => Promise.resolve(body) });
+      },
     },
   };
   vm.createContext(sandbox);
   vm.runInContext(src, sandbox);
-  return { def: defs.calendar_view, calls };
+  return { def: defs.calendar_view, calls, Chronicle: sandbox.Chronicle };
 }
 
 // A view with just enough state for the game-night methods; the DOM bits
@@ -156,4 +169,111 @@ test('a time set in a zone carries its label', () => {
   assert.equal(v._gnTime(night({ time: '' })), '');
   assert.equal(v._gnTime(night()), '19:00');
   assert.match(v._gnTime(night({ tz: 'America/Chicago' })), /^19:00 (CDT|GMT-5)$/);
+});
+
+// Harptos-like: twelve 30-day months. World 1492-5-8 is real 2026-10-08.
+function harptos(over) {
+  return Object.assign({
+    mode: 'fantasy', months: Array.from({ length: 12 }, (_, i) => ({ name: 'M' + (i + 1), days: 30 })),
+    anchor_year: 1492, anchor_month: 5, anchor_day: 8, anchor_real_date: '2026-10-08T00:00:00Z',
+  }, over || {});
+}
+
+function anchoredView(def, Chronicle, nights) {
+  const v = view(def, []);
+  v.cal = harptos();
+  v._anchor = Chronicle.calendarRealAnchor(v.cal);
+  v.view = { y: 1492, m: 5 };
+  v.nightsByMonth = { '1492_5': nights };
+  return v;
+}
+
+test('an anchored world calendar places a night on its world day', () => {
+  const { def, Chronicle } = load();
+  const v = anchoredView(def, Chronicle, [night()]);
+  assert.equal(v._realIso(1492, 5, 8), '2026-10-08');
+  assert.equal(v._realIso(1492, 6, 1), '2026-10-31');
+  assert.equal(v.nightsOnDay(1492, 5, 8).length, 1);
+  assert.equal(v.nightsOnDay(1492, 5, 9).length, 0);
+  assert.match(v._gnBoxHTML(night()), /Real date: Thu Oct 8 · 19:00/);
+});
+
+test('without a whole anchor, a world calendar has no real dates', () => {
+  const { Chronicle } = load();
+  assert.equal(Chronicle.calendarRealAnchor(harptos({ anchor_day: null })), null);
+  assert.equal(Chronicle.calendarRealAnchor({ mode: 'reallife', tracks_real_time: true }), null);
+  const { def } = load();
+  const v = view(def, [night()]);
+  v.cal = harptos({ anchor_real_date: null });
+  v._anchor = null;
+  assert.equal(v._realIso(1492, 5, 8), '');
+});
+
+test('an anchored month asks for the real days it covers', async () => {
+  const { def, calls, Chronicle } = load();
+  const v = anchoredView(def, Chronicle, []);
+  v.nightsByMonth = {};
+  await v.fetchNights(1492, 5);
+  assert.equal(calls.length, 1);
+  assert.match(calls[0].url, /from=2026-10-01&to=2026-10-30$/);
+});
+
+test('times read in the calendar zone, with your own one press away', () => {
+  const { def } = load({ zone: 'America/Los_Angeles' });
+  const v = view(def, []);
+  v.calZone = 'America/Chicago';
+  const n = night({ tz: 'America/Chicago' });
+  assert.equal(v._gnTime(n), '19:00 CDT');
+  assert.match(v._gnZoneHTML(n), /The calendar’s time/);
+  assert.match(v._gnZoneHTML(n), /Show in my time \(PDT\)/);
+  v._gnSetZoneMode('mine');
+  assert.equal(v._gnTime(n), '17:00 PDT');
+  assert.match(v._gnZoneHTML(n), /Your time.*Show the calendar’s time/);
+  // A night set with no zone of its own is read in the calendar's.
+  assert.equal(v._gnTime(night({ tz: '' })), '17:00 PDT');
+});
+
+test('no switch when your zone reads the same as the calendar', () => {
+  const { def } = load({ zone: 'America/Chicago' });
+  const v = view(def, []);
+  v.calZone = 'America/Chicago';
+  assert.equal(v._gnZoneHTML(night({ tz: 'America/Chicago' })), '');
+});
+
+test('a night that falls on another day in your zone says which', () => {
+  const { def } = load({ zone: 'Europe/Berlin' });
+  const v = view(def, []);
+  v.calZone = 'America/Chicago';
+  v._gnZoneMode = 'mine';
+  assert.match(v._gnTime(night({ tz: 'America/Chicago' })), /^Fri 02:00 /);
+});
+
+test('a game-night link names the night, or asks for the next one', () => {
+  const cases = [
+    ['?night=s1&date=2026-10-08', { sessionId: 's1', date: '2026-10-08' }],
+    ['?night=next', { next: true }],
+    ['?night=s1&date=soon', { next: true }],
+    ['', null],
+  ];
+  for (const [search, want] of cases) {
+    const { def } = load({ search });
+    const v = view(def, []);
+    assert.deepEqual(v._linkTarget() && { ...v._linkTarget() }, want, search);
+  }
+  const { def } = load({ search: '?night=next' });
+  const v = view(def, []);
+  v.showNights = false;
+  assert.equal(v._linkTarget(), null, 'a viewer shown no nights is not jumped anywhere');
+});
+
+test('the next night is the first not yet played, across months', async () => {
+  const { def } = load({
+    nights: (url) => url.includes('from=2026-10-01') ? [night({ date: '2026-10-02', past: true })]
+      : url.includes('from=2026-11-01') ? [night({ sessionId: 's2', date: '2026-11-20' }), night({ sessionId: 's3', date: '2026-11-06' })] : [],
+  });
+  const v = view(def, []);
+  v.cal = { mode: 'reallife', tracks_real_time: true, current_year: 2026, current_month: 10, months: Array.from({ length: 12 }, () => ({ days: 31 })) };
+  v.nightsByMonth = {};
+  const n = await v._nextNight();
+  assert.equal(n.sessionId, 's3');
 });

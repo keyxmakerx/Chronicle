@@ -29,9 +29,11 @@ type MailSender interface {
 type Handler struct {
 	svc          SessionService
 	memberLister campaigns.MemberLister
-	mailer       MailSender
-	baseURL      string        // Application base URL for RSVP links (e.g. "https://chronicle.example.com").
-	userDir      UserDirectory // Resolves a user's stored IANA timezone for the availability overlay.
+	// calendarFinder sends game-night links to the real-world calendar.
+	calendarFinder RealWorldCalendarFinder
+	mailer         MailSender
+	baseURL        string        // Application base URL for RSVP links (e.g. "https://chronicle.example.com").
+	userDir        UserDirectory // Resolves a user's stored IANA timezone for the availability overlay.
 	// campaignReader is the one-read source of the co-DM grant set the overlay
 	// roster's role column needs. Nil-safe.
 	campaignReader CampaignReader
@@ -986,7 +988,7 @@ func (h *Handler) SidebarRSVP(c echo.Context) error {
 	}
 
 	return middleware.Render(c, http.StatusOK,
-		SidebarSessionsRSVP(cc.Campaign.ID, planned, userID))
+		SidebarSessionsRSVP(cc.Campaign.ID, planned, userID, gameNightsToday()))
 }
 
 // EmbedSessions returns an HTMX fragment for the dashboard session tracker block.

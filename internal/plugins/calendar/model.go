@@ -168,8 +168,9 @@ type Calendar struct {
 	// stored-not-computed. RealTimeZone is the IANA anchor, required at enable.
 	// TracksRealTime is wire-exposed (UsesRealTime gates MonthDays/absDayIndex/
 	// WeekdayIndex on it, not on Mode alone, so the browser's CalDate/SkyWorld
-	// mirrors need it to pick the same branch); RealTimeZone stays
-	// server-only, nothing client-side reads it.
+	// mirrors need it to pick the same branch). RealTimeZone stays off the
+	// wire; the calendar page hands it to members alone, for game-night
+	// times (CalendarViewData.Zone).
 	TracksRealTime bool    `json:"tracks_real_time"`
 	RealTimeZone   *string `json:"-"`
 	// The real-date anchor: one in-world date and the Gregorian date it

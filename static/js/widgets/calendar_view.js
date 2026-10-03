@@ -354,6 +354,66 @@
   function dayKey(y, m, d) { return y + '_' + m + '_' + d; }
   function parseDayKey(k) { var p = k.split('_'); return { y: +p[0], m: +p[1], d: +p[2] }; }
   function pad2(n) { return (n < 10 ? '0' : '') + n; }
+  // realAnchor reads a world calendar's real-date anchor (one world day and
+  // the real date it equals) into {abs, ms}: every other day's real date
+  // follows by day count, the arithmetic the server's anchor uses
+  // (AbsoluteDay, not the real-time counter). A real-time calendar needs
+  // none, and a partial anchor maps nothing, so both return null.
+  function realAnchor(cal) {
+    if (CalDate.usesRealTime(cal)) return null;
+    if (cal.anchor_year == null || cal.anchor_month == null || cal.anchor_day == null || !cal.anchor_real_date) return null;
+    var m = /^(\d{4})-(\d{2})-(\d{2})/.exec(String(cal.anchor_real_date));
+    if (!m) return null;
+    return { abs: CalDate.absoluteDay(cal, cal.anchor_year, cal.anchor_month, cal.anchor_day), ms: Date.UTC(+m[1], +m[2] - 1, +m[3]) };
+  }
+
+  // Game-night times: a night is stored as a wall time in the zone it was
+  // set in; these turn it into the same moment in another zone with Intl,
+  // which knows each zone's daylight-saving rules.
+  function zoneParts(zone, ms) {
+    var o = {};
+    new Intl.DateTimeFormat('en-US', { timeZone: zone, hourCycle: 'h23', year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', timeZoneName: 'short' })
+      .formatToParts(new Date(ms)).forEach(function (p) { o[p.type] = p.value; });
+    return o;
+  }
+  function zoneOffsetMin(zone, ms) {
+    var p = zoneParts(zone, ms);
+    return Math.round((Date.UTC(+p.year, +p.month - 1, +p.day, +p.hour % 24, +p.minute) - Math.floor(ms / 60000) * 60000) / 60000);
+  }
+  // zonedToMs: the instant a wall time in zone names. The second pass
+  // settles a guess that landed across a daylight-saving change.
+  function zonedToMs(dateIso, hm, zone) {
+    var d = dateIso.split('-'), t = hm.split(':');
+    var guess = Date.UTC(+d[0], +d[1] - 1, +d[2], +t[0], +t[1]);
+    var off = zoneOffsetMin(zone, guess), off2 = zoneOffsetMin(zone, guess - off * 60000);
+    return guess - off2 * 60000;
+  }
+  // zonedShow: a night set at dateIso hm in src, as seen in ref:
+  // {hm, abbr, date}, or null when a zone is unknown to this browser.
+  function zonedShow(dateIso, hm, src, ref) {
+    try {
+      var p = zoneParts(ref, zonedToMs(dateIso, hm, src));
+      return { hm: pad2(+p.hour % 24) + ':' + p.minute, abbr: p.timeZoneName || '', date: p.year + '-' + p.month + '-' + p.day };
+    } catch (e) { return null; }
+  }
+  function browserZone() {
+    try { return Intl.DateTimeFormat().resolvedOptions().timeZone || ''; } catch (e) { return ''; }
+  }
+  // "Thu Oct 8" for a YYYY-MM-DD real date.
+  function realDateWords(iso) {
+    try {
+      return new Date(iso + 'T12:00:00Z').toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric', timeZone: 'UTC' }).replace(',', '');
+    } catch (e) { return iso; }
+  }
+  // Which zone a viewer reads game-night times in: 'mine' or the
+  // calendar's. The browser remembers it; nothing breaks without storage.
+  var GN_ZONE_KEY = 'chronicle.calendar.nightZone';
+  function readZoneMode() {
+    try { return window.localStorage.getItem(GN_ZONE_KEY) === 'mine' ? 'mine' : 'cal'; } catch (e) { return 'cal'; }
+  }
+  function writeZoneMode(mode) {
+    try { window.localStorage.setItem(GN_ZONE_KEY, mode); } catch (e) { /* remembered for this page only */ }
+  }
   function reducedMotion() { return window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches; }
 
   // Event category icon: an event's own icon (FontAwesome-style token from
@@ -851,6 +911,7 @@
   Chronicle.calendarColor = sanitizeColor;
   Chronicle.calendarWeatherIcon = weatherIcon;
   Chronicle.calendarWindWords = windWords;
+  Chronicle.calendarRealAnchor = realAnchor;
 
   // ================================================================
   Chronicle.register('calendar_view', {
@@ -875,8 +936,12 @@
       this.weatherByYear = {}; // year -> {'m_d': reading}, filled by fetchWeatherYear
       this.nightsByMonth = {}; // 'y_m' -> game nights, filled by fetchNights
       // Game nights are real-world dates, so only a calendar that follows
-      // the real clock can place them, and only members see who is coming.
-      this.showNights = CalDate.usesRealTime(this.cal) && this.role >= 1;
+      // the real clock, or a world calendar anchored to a real date, can
+      // place them; only members see who is coming.
+      this._anchor = realAnchor(this.cal);
+      this.showNights = this.role >= 1 && (CalDate.usesRealTime(this.cal) || !!this._anchor);
+      this.calZone = cfgEl.dataset.zone || ''; // the real-world calendar's zone, members only
+      this._gnZoneMode = readZoneMode();
       this._gnNoteFor = null; // the night whose note is being written
       this.eventsByMonth[this.cal.current_year + '_' + this.cal.current_month] = initialEvents;
 
@@ -893,6 +958,7 @@
       this.renderMonth();
       this.renderToday();
       this.renderLegend();
+      this._openFromLink();
 
       // Hand the instance to calendar_editor.js (loaded only for an
       // Owner/co-Director viewer) without assuming load order.
@@ -1137,17 +1203,36 @@
     // --------------------------------------------------------------
     nightsFor: function (y, m) { return this.nightsByMonth[this.monthKey(y, m)] || []; },
 
+    // _realIso is the real date (YYYY-MM-DD) a calendar day falls on: the
+    // day itself on a real-world calendar, the anchor's count on an anchored
+    // world calendar, '' when the calendar has no real dates.
+    _realIso: function (y, m, d) {
+      if (CalDate.usesRealTime(this.cal)) return y + '-' + pad2(m) + '-' + pad2(d);
+      if (!this._anchor) return '';
+      try {
+        var iso = new Date(this._anchor.ms + (CalDate.absoluteDay(this.cal, y, m, d) - this._anchor.abs) * 86400000).toISOString().slice(0, 10);
+        return /^\d{4}-\d{2}-\d{2}$/.test(iso) ? iso : '';
+      } catch (e) { return ''; }
+    },
+
     // fetchNights loads (and caches) a month's game nights. o.fresh skips
-    // the cache, after an answer is saved. Returns a Promise.
+    // the cache, after an answer is saved. A world month longer than one
+    // read allows is read in pieces. Returns a Promise.
     fetchNights: function (y, m, o) {
       var self = this, key = this.monthKey(y, m);
       if (!this.showNights) return Promise.resolve([]);
       if (this.nightsByMonth[key] && !(o && o.fresh)) return Promise.resolve(this.nightsByMonth[key]);
-      var from = y + '-' + pad2(m) + '-01', to = y + '-' + pad2(m) + '-' + pad2(CalDate.monthDaysNative(y, m));
-      return Chronicle.apiFetch('/campaigns/' + encodeURIComponent(this.campaignId) + '/sessions/nights?from=' + from + '&to=' + to)
-        .then(function (resp) { return resp.ok ? resp.json() : []; })
-        .then(function (list) {
-          if (!Array.isArray(list)) list = [];
+      var last = CalDate.monthDays(this.cal, m - 1, y), reads = [];
+      for (var start = 1; start <= last; start += 60) {
+        var from = this._realIso(y, m, start), to = this._realIso(y, m, Math.min(last, start + 59));
+        if (!from || !to) continue;
+        reads.push(Chronicle.apiFetch('/campaigns/' + encodeURIComponent(this.campaignId) + '/sessions/nights?from=' + from + '&to=' + to)
+          .then(function (resp) { return resp.ok ? resp.json() : []; })
+          .then(function (list) { return Array.isArray(list) ? list : []; }));
+      }
+      return Promise.all(reads)
+        .then(function (parts) {
+          var list = [].concat.apply([], parts);
           self.nightsByMonth[key] = list;
           return list;
         })
@@ -1155,8 +1240,53 @@
     },
 
     nightsOnDay: function (y, m, d) {
-      var iso = y + '-' + pad2(m) + '-' + pad2(d);
-      return this.nightsFor(y, m).filter(function (n) { return n.date === iso; });
+      if (!this.showNights) return [];
+      var iso = this._realIso(y, m, d);
+      return iso ? this.nightsFor(y, m).filter(function (n) { return n.date === iso; }) : [];
+    },
+
+    // A game-night link (the sidebar's "Game nights", the RSVP card) lands
+    // here with ?night=<session>&date=<day>, or ?night=next, and opens that
+    // night's day with its box picked out. Only a real-world calendar is
+    // linked to, so the date is the grid's own.
+    _linkTarget: function () {
+      if (!this.showNights || !CalDate.usesRealTime(this.cal)) return null;
+      var q;
+      try { q = new URLSearchParams(window.location.search); } catch (e) { return null; }
+      var night = q.get('night'), date = q.get('date') || '';
+      if (!night) return null;
+      if (night === 'next') return { next: true };
+      return /^\d{4}-\d{2}-\d{2}$/.test(date) ? { sessionId: night, date: date } : { next: true };
+    },
+
+    // _nextNight finds the first game night not yet played, from this month
+    // through the two after it. Resolves to the night or null.
+    _nextNight: function () {
+      var self = this, y = this.cal.current_year, m = this.cal.current_month, months = [];
+      for (var i = 0; i < 3; i++) {
+        months.push({ y: y, m: m });
+        m++;
+        if (m > 12) { m = 1; y++; }
+      }
+      return Promise.all(months.map(function (o) { return self.fetchNights(o.y, o.m); })).then(function (lists) {
+        var all = [].concat.apply([], lists).filter(function (n) { return !n.past; });
+        all.sort(function (a, b) { return a.date < b.date ? -1 : a.date > b.date ? 1 : 0; });
+        return all[0] || null;
+      });
+    },
+
+    _openFromLink: function () {
+      var self = this, t = this._linkTarget();
+      if (!t) return;
+      (t.next ? this._nextNight() : Promise.resolve(t)).then(function (n) {
+        if (!n) return null;
+        var p = n.date.split('-'), y = +p[0], m = +p[1], d = +p[2];
+        if (self.view.y !== y || self.view.m !== m) { self.view = { y: y, m: m }; self.renderMonth(); }
+        return self.fetchNights(y, m).then(function () {
+          self._paintMonth();
+          self.openWing(dayKey(y, m, d), 'gn:' + n.sessionId + ':' + n.date);
+        });
+      }).catch(function () { /* the calendar still shows; only the jump is lost */ });
     },
 
     // A game night's id in the grid and the cards: "gn:" + session + date,
@@ -1168,18 +1298,69 @@
       return this.nightsFor(this.view.y, this.view.m).filter(function (n) { return self._gnId(n) === id; })[0] || null;
     },
 
-    // The night's start in the zone it was set in, labelled like "19:00 CDT".
-    // Until members can save their own zone, this is the time the organiser
-    // set; the label keeps it honest.
+    // _gnWhen is a night's start as this viewer reads it: in the calendar's
+    // zone (or, on a calendar with none, the zone the night was set in),
+    // labelled like "19:00 CDT", or in the viewer's own zone once they ask.
+    // canSwitch is false when both read the same, so no switch is offered.
+    // A night set without a zone shows its bare time: there is nothing to
+    // convert from.
+    _gnWhen: function (n) {
+      if (!n.time) return null;
+      var hm = String(n.time).slice(0, 5), src = n.tz || this.calZone;
+      if (!src) return { text: hm, canSwitch: false };
+      var self = this, ref = this.calZone || src, mineZ = browserZone();
+      function show(zone) {
+        var o = zonedShow(n.date, hm, src, zone);
+        if (!o) return null;
+        var t = o.hm + (o.abbr ? ' ' + o.abbr : '');
+        return o.date !== n.date ? realDateWords(o.date).split(' ')[0] + ' ' + t : t;
+      }
+      var calText = show(ref);
+      if (calText == null) return { text: hm, canSwitch: false };
+      var mineText = mineZ ? show(mineZ) : null, canSwitch = mineText != null && mineText !== calText;
+      var useMine = canSwitch && self._gnZoneMode === 'mine';
+      return {
+        text: useMine ? mineText : calText,
+        mine: useMine,
+        canSwitch: canSwitch,
+        mineAbbr: canSwitch ? (zonedShow(n.date, hm, src, mineZ) || {}).abbr || '' : '',
+        refLabel: this.calZone ? 'the calendar’s time' : 'the organiser’s time'
+      };
+    },
+
     _gnTime: function (n) {
-      if (!n.time) return '';
-      if (!n.tz) return n.time;
-      var abbr = '';
-      try {
-        var parts = new Intl.DateTimeFormat('en-US', { timeZone: n.tz, timeZoneName: 'short' }).formatToParts(new Date(n.date + 'T12:00:00Z'));
-        parts.forEach(function (p) { if (p.type === 'timeZoneName') abbr = p.value; });
-      } catch (e) { abbr = ''; }
-      return n.time + (abbr ? ' ' + abbr : '');
+      var w = this._gnWhen(n);
+      return w ? w.text : '';
+    },
+
+    // The one-press switch between the calendar's time and the viewer's.
+    _gnZoneHTML: function (n) {
+      var w = this._gnWhen(n);
+      if (!w || !w.canSwitch) return '';
+      return '<div class="gnz">' + (w.mine
+        ? '<span>Your time</span><button type="button" class="lnk" data-gn-zone="cal">Show ' + esc(w.refLabel) + '</button>'
+        : '<span>' + esc(w.refLabel.charAt(0).toUpperCase() + w.refLabel.slice(1)) + '</span><button type="button" class="gnpill" data-gn-zone="mine">Show in my time' + (w.mineAbbr ? ' (' + esc(w.mineAbbr) + ')' : '') + '</button>') +
+        '</div>';
+    },
+
+    _gnSetZoneMode: function (mode) {
+      this._gnZoneMode = mode === 'mine' ? 'mine' : 'cal';
+      writeZoneMode(this._gnZoneMode);
+      var openId = this.evpEl.classList.contains('open') ? this.evpEl.dataset.ev : '';
+      this.refreshWing();
+      if (openId && openId.indexOf('gn:') === 0) {
+        var n = this._findNight(openId);
+        if (n) this.evpEl.innerHTML = this._gnPageHTML(n);
+      }
+      this._announce(this._gnZoneMode === 'mine' ? 'Times now show in your time.' : 'Times now show in the calendar’s time.');
+    },
+
+    // On an anchored world calendar the box says which real day the night
+    // is, since the grid's date is the world's.
+    _gnRealLine: function (n) {
+      if (!this._anchor) return '';
+      var t = this._gnTime(n);
+      return '<div class="gnreal">Real date: ' + esc(realDateWords(n.date)) + (t ? ' · ' + esc(t) : '') + '</div>';
     },
 
     _gnTally: function (n) {
@@ -1236,11 +1417,13 @@
     },
 
     _gnBoxHTML: function (n, highlightId) {
-      var id = this._gnId(n), hl = highlightId === id ? ' hl' : '', time = this._gnTime(n);
+      var id = this._gnId(n), hl = highlightId === id ? ' hl' : '', time = this._anchor ? '' : this._gnTime(n);
       var h = '<div class="evd go gnb' + hl + '" data-ev="' + esc(id) + '">' +
         '<div class="evh"><span class="ric"><i class="fa-solid fa-dice-d20"></i></span><span class="qt0">' + esc(n.name) + '</span></div>' +
+        this._gnRealLine(n) +
         '<div class="evm">' + (n.past ? '<span class="mi">Played</span>' : '') + (time ? '<span class="mi">' + esc(time) + '</span>' : '') +
-          (n.recurring ? '<span class="mi"><i class="fa-solid fa-rotate"></i> Repeats</span>' : '') + '</div>';
+          (n.recurring ? '<span class="mi"><i class="fa-solid fa-rotate"></i> Repeats</span>' : '') + '</div>' +
+        (n.past ? '' : this._gnZoneHTML(n));
       if (n.summary) h += '<p class="brief">' + esc(n.summary) + '</p>';
       if (!n.past) h += this._gnRsvpHTML(n, false);
       else h += '<div class="rsvp"><div class="rcount">' + esc((n.tally && n.tally.going) || 0) + ' said they’d come</div></div>';
@@ -1249,13 +1432,14 @@
 
     _gnPageHTML: function (n) {
       var time = this._gnTime(n);
-      var label = n.date + (time ? ' · ' + time : '');
+      var label = (this._anchor ? 'Real date: ' : '') + realDateWords(n.date) + (time ? ' · ' + time : '');
       var link = '/campaigns/' + encodeURIComponent(this.campaignId) + '/sessions/' + encodeURIComponent(n.sessionId);
       return '<div class="grab" aria-hidden="true"></div>' +
         '<div class="ein"><div class="crease"><button type="button" class="back" data-close><i class="fa-solid fa-arrow-left"></i><span>Day</span></button></div>' +
         '<div class="epb">' +
           '<h3 class="ept">' + esc(n.name) + ' <span class="dirnote">' + (n.past ? 'Played' : 'Game night') + '</span></h3>' +
           '<div class="espan">' + esc(label) + (n.recurring ? ' · repeats' : '') + '</div>' +
+          (n.past ? '' : this._gnZoneHTML(n)) +
           (n.tz && time ? '<div class="espan">Set by ' + esc(n.organizerName || 'the organiser') + ' in ' + esc(n.tz.replace(/_/g, ' ')) + ' time.</div>' : '') +
           (n.summary ? '<div class="notes"><p>' + esc(n.summary) + '</p></div>' : '') +
           '<section class="eps"><h4>Who’s coming</h4>' + (n.past ? this._gnRosterHTML(n) : this._gnRsvpHTML(n, true)) + '</section>' +
@@ -1349,6 +1533,8 @@
     // Handles a press inside a night's answer block, in the day's card or
     // on its page. Returns true when the press was one of these controls.
     _gnHandleClick: function (e) {
+      var zone = e.target.closest('[data-gn-zone]');
+      if (zone) { this._gnSetZoneMode(zone.dataset.gnZone); return true; }
       var box = e.target.closest('.rsvp[data-gnr]');
       if (!box) return false;
       var id = box.dataset.gnr;

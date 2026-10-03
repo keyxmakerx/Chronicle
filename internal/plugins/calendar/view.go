@@ -46,6 +46,10 @@ type CalendarViewData struct {
 	// editing surface (deleting an event) separately from CanEdit's broader
 	// co-Director allowance.
 	ViewerRole int
+	// Zone is the real-world calendar's own IANA zone, which game-night
+	// times are shown in until a member asks for their own. Members only:
+	// they are the ones shown game nights.
+	Zone string
 }
 
 // CalendarViewPage handles GET /campaigns/:id/calendars/:calid/view.
@@ -89,5 +93,15 @@ func calendarViewDataFor(cc *campaigns.CampaignContext, cal *Calendar, events []
 		CanEdit:            cc.MemberRole >= campaigns.RoleOwner || cc.CanAuthorDmOnly(),
 		CanAuthorDmOnly:    cc.CanAuthorDmOnly(),
 		ViewerRole:         int(cc.MemberRole),
+		Zone:               viewerZone(cc, cal),
 	}
+}
+
+// viewerZone is the zone game-night times start in, for a member looking at
+// a real-world calendar; "" otherwise.
+func viewerZone(cc *campaigns.CampaignContext, cal *Calendar) string {
+	if cc.MemberRole < campaigns.RolePlayer || !cal.UsesRealTime() || cal.RealTimeZone == nil {
+		return ""
+	}
+	return *cal.RealTimeZone
 }

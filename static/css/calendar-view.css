@@ -454,6 +454,14 @@
 .cal-v5 .rsvp .sw{margin-top:8px;padding-bottom:0}
 /* Game nights have no event kind, so their dice mark takes the ink. */
 .cal-v5 .mk.gnm, .cal-v5 .gnb .ric{color:var(--ink2);font-size:12px}
+/* Game-night times: the real date on an anchored world calendar, and the
+   one-press switch between the calendar's time and the viewer's own. */
+.cal-v5 .gnreal{margin:3px 0 0 30px;font:600 11.5px/1.4 var(--sans);color:var(--ink2)}
+.cal-v5 .gnz{display:flex;align-items:center;flex-wrap:wrap;gap:3px 8px;margin:4px 0 0 30px;font:500 11.5px/1.4 var(--sans);color:var(--mut)}
+.cal-v5 .espan + .gnz, .cal-v5 .epb > .gnz{margin-left:0}
+.cal-v5 .gnpill{font:600 11px/1 var(--sans);color:var(--ink2);padding:4px 9px;border-radius:99px;border:1px solid var(--edge)}
+.cal-v5 .gnpill:hover{background:var(--hair2);color:var(--ink)}
+.cal-v5 .gnpill:focus-visible, .cal-v5 .lnk:focus-visible{outline:1.5px solid var(--ink);outline-offset:1px}
 /* Quick edits in the day's card (Director): titles and times edit in place, small controls sit at the row's end. */
 .cal-v5 .evh .qt{font:600 13.5px/1.3 var(--sans);color:var(--ink);min-width:0;flex:0 1 auto;overflow-wrap:anywhere}
 .cal-v5 .qt{text-align:left;border-radius:6px;padding:2px 4px;margin:-2px -4px;cursor:text}

@@ -5,6 +5,7 @@ package sessions
 
 import (
 	"fmt"
+	"net/url"
 	"github.com/keyxmakerx/chronicle/internal/plugins/campaigns"
 	"github.com/keyxmakerx/chronicle/internal/templates/components"
 	"github.com/keyxmakerx/chronicle/internal/templates/layouts"
@@ -762,7 +763,9 @@ func jsEsc(s string) string {
 
 // SidebarSessionsRSVP renders a collapsible sidebar section showing planned sessions
 // with RSVP status counts. Collapsed by default, state persisted in localStorage.
-templ SidebarSessionsRSVP(campaignID string, sessions []Session, userID string) {
+// Each link opens the calendar on that session's next night, where members
+// answer (GameNightsLink).
+templ SidebarSessionsRSVP(campaignID string, sessions []Session, userID string, today string) {
 	<div
 		x-data={ fmt.Sprintf(`{ open: JSON.parse(localStorage.getItem('chronicle_sidebar_rsvp_%s') || 'false') }`, campaignID) }
 		class="py-1"
@@ -773,7 +776,7 @@ templ SidebarSessionsRSVP(campaignID string, sessions []Session, userID string) 
 		>
 			<span class="flex items-center gap-1.5">
 				<i class="fa-solid fa-dice-d20 text-[10px]"></i>
-				Sessions
+				Game nights
 			</span>
 			<i class="fa-solid fa-chevron-right text-[9px] transition-transform duration-200" :class="open && 'rotate-90'"></i>
 		</button>
@@ -781,7 +784,7 @@ templ SidebarSessionsRSVP(campaignID string, sessions []Session, userID string) 
 			<nav class="px-2 pb-1 space-y-0.5" hx-boost="true" hx-target="#main-content" hx-select="#main-content" hx-swap="innerHTML show:window:top">
 				for _, s := range sessions {
 					<a
-						href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/sessions/%s", campaignID, s.ID)) }
+						href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/game-nights?session=%s&date=%s", campaignID, url.QueryEscape(s.ID), url.QueryEscape(sidebarNightDate(s, today)))) }
 						class="flex items-center gap-2 px-2 py-1.5 rounded text-sm text-fg-muted hover:bg-sidebar-hover hover:text-fg transition-colors group"
 					>
 						<span class="flex-1 truncate">{ s.Name }</span>
