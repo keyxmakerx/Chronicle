@@ -17,15 +17,30 @@ import "strconv"
 // campaignNavBrand is the sidebar's top row: the campaign's logo and name,
 // and, on a phone, close. Editing the sidebar lives in the footer instead,
 // so this row stays the owner's to customise (logo, name) without it.
+// Beyond the plain logo and name the owner may add a subtitle line or a
+// banner picture behind the name; the picture sits in its own wrapper,
+// always rendered, so a Customize save can swap it without a reload. A
+// peeking or folded menu shows only the logo (input.css).
 templ campaignNavBrand() {
+	{{ _, subtitle, banner := NavCorner(ctx) }}
 	<div class="nav-brand">
+		<span class="nav-brand-bg" aria-hidden="true">
+			if banner != "" {
+				<img src={ MediaURL(ctx, banner) } alt="" class="nav-banner"/>
+			}
+		</span>
 		<a href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s", GetCampaignID(ctx))) } class="nav-brand-link">
 			if GetBrandLogo(ctx) != "" {
 				<img src={ MediaURL(ctx, GetBrandLogo(ctx)) } alt="" class="nav-logo"/>
 			} else {
 				<span class="nav-logo nav-logo-letter" aria-hidden="true">{ navInitial(GetDisplayName(ctx)) }</span>
 			}
-			<span class="nav-brand-name">{ GetDisplayName(ctx) }</span>
+			<span class="nav-brand-text">
+				<span class="nav-brand-name">{ GetDisplayName(ctx) }</span>
+				if subtitle != "" {
+					<span class="nav-brand-sub">{ subtitle }</span>
+				}
+			</span>
 		</a>
 		<button
 			type="button"

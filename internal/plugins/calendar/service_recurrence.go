@@ -70,8 +70,8 @@ func (s *calendarService) loadRuleGeometry(ctx context.Context, cal *Calendar) e
 }
 
 // visibleAnchors returns, of the events with the given ids on cal, the ones
-// v may see, by id: the same per-event and not-yet-announced gates a single
-// event read applies.
+// v may see, by id: the same per-event, not-yet-announced and secret-era
+// gates a single event read applies.
 func (s *calendarService) visibleAnchors(ctx context.Context, cal *Calendar, campaignID string, ids []string, v permissions.Viewer) (map[string]Event, error) {
 	stored, err := s.eventRepo.GetEventsByIDs(ctx, cal.ID, ids)
 	if err != nil {
@@ -84,7 +84,7 @@ func (s *calendarService) visibleAnchors(ctx context.Context, cal *Calendar, cam
 		}
 	}
 	if !v.SkipsPerUserRules() {
-		if visible, err = s.dropUnannouncedFutureEvents(ctx, cal, campaignID, visible); err != nil {
+		if visible, err = s.hideFromPlayer(ctx, cal, campaignID, visible); err != nil {
 			return nil, err
 		}
 	}

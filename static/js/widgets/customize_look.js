@@ -15,7 +15,7 @@
 (function () {
   'use strict';
 
-  var SPRITE = "<svg width=\"0\" height=\"0\" style=\"position:absolute\" aria-hidden=\"true\" focusable=\"false\"><defs><symbol id=\"cz-i-home\" viewBox=\"0 0 24 24\"><path d=\"M3.5 11.5 12 4.5l8.5 7\"/><path d=\"M5.5 10v9.5h13V10\"/><path d=\"M10 19.5v-5h4v5\"/></symbol><symbol id=\"cz-i-journal\" viewBox=\"0 0 24 24\"><path d=\"M12 6.5C10.3 5 7.4 4.5 4 5v13.5c3.4-.5 6.3 0 8 1.5 1.7-1.5 4.6-2 8-1.5V5c-3.4-.5-6.3 0-8 1.5z\"/><path d=\"M12 6.5V20\"/></symbol><symbol id=\"cz-i-cal\" viewBox=\"0 0 24 24\"><rect x=\"4\" y=\"5.5\" width=\"16\" height=\"14.5\" rx=\"2\"/><path d=\"M4 10h16M8.5 3.5v4M15.5 3.5v4M8 14h2M14 14h2M8 17h2\"/></symbol><symbol id=\"cz-i-d20\" viewBox=\"0 0 24 24\"><path d=\"M12 3 20 7.5v9L12 21l-8-4.5v-9z\"/><path d=\"M12 3 7.5 13.5h9zM4 7.5l3.5 6M20 7.5l-3.5 6M7.5 13.5 12 21l4.5-7.5\"/></symbol><symbol id=\"cz-i-map\" viewBox=\"0 0 24 24\"><path d=\"M9 4.5 3.5 6.5v13L9 17.5l6 2 5.5-2v-13L15 6.5z\"/><path d=\"M9 4.5v13M15 6.5v13\"/></symbol><symbol id=\"cz-i-users\" viewBox=\"0 0 24 24\"><circle cx=\"9\" cy=\"8.5\" r=\"3.2\"/><path d=\"M3.5 19c.6-3.2 2.8-5 5.5-5s4.9 1.8 5.5 5\"/><circle cx=\"16.5\" cy=\"9.5\" r=\"2.6\"/><path d=\"M16 14.2c2.4.1 4 1.7 4.5 4.3\"/></symbol><symbol id=\"cz-i-layers\" viewBox=\"0 0 24 24\"><path d=\"M12 4 20.5 8.5 12 13 3.5 8.5z\"/><path d=\"m3.5 12.5 8.5 4.5 8.5-4.5M3.5 16.5 12 21l8.5-4.5\"/></symbol><symbol id=\"cz-i-mappin\" viewBox=\"0 0 24 24\"><path d=\"M12 21s-6.5-5.6-6.5-11a6.5 6.5 0 0 1 13 0c0 5.4-6.5 11-6.5 11z\"/><circle cx=\"12\" cy=\"10\" r=\"2.3\"/></symbol><symbol id=\"cz-i-banner\" viewBox=\"0 0 24 24\"><path d=\"M6.5 3.5v17M6.5 4.5h11v10.5l-5.5-3-5.5 3\"/></symbol><symbol id=\"cz-i-gem\" viewBox=\"0 0 24 24\"><path d=\"M7 4.5h10l3.5 5-8.5 10-8.5-10z\"/><path d=\"M3.5 9.5h17M9.5 4.5 8 9.5l4 10 4-10-1.5-5\"/></symbol><symbol id=\"cz-i-scroll\" viewBox=\"0 0 24 24\"><path d=\"M8 4h9.5a2 2 0 0 1 0 4H17v10a2 2 0 0 1-2 2H6.5a2 2 0 0 1 0-4H8z\"/><path d=\"M8 16V6a2 2 0 0 0-4 0v1M11 9h3M11 12.5h3\"/></symbol><symbol id=\"cz-i-tack\" viewBox=\"0 0 24 24\"><path d=\"M9.5 3.5h5l-.8 5.3 3.3 3.2H7l3.3-3.2z\"/><path d=\"M12 12v8.5\"/></symbol><symbol id=\"cz-i-pencil\" viewBox=\"0 0 24 24\"><path d=\"M16.9 4.5a2.1 2.1 0 1 1 3 3L8 19.3l-4 1 1-4z\"/><path d=\"M14.5 7l2.5 2.5\"/></symbol><symbol id=\"cz-i-chev\" viewBox=\"0 0 24 24\"><path d=\"m6 9 6 6 6-6\"/></symbol><symbol id=\"cz-i-chev-r\" viewBox=\"0 0 24 24\"><path d=\"m9 6 6 6-6 6\"/></symbol><symbol id=\"cz-i-search\" viewBox=\"0 0 24 24\"><circle cx=\"11\" cy=\"11\" r=\"6.5\"/><path d=\"m20 20-4.2-4.2\"/></symbol><symbol id=\"cz-i-mask\" viewBox=\"0 0 24 24\"><path d=\"M4 5h8v7c0 3-2 6-4 6s-4-3-4-6zM12 5h8v7c0 3-2 6-4 6s-4-3-4-6z\"/></symbol><symbol id=\"cz-i-bell\" viewBox=\"0 0 24 24\"><path d=\"M6 16V11a6 6 0 0 1 12 0v5l1.5 2h-15z\"/><path d=\"M10 21h4\"/></symbol><symbol id=\"cz-i-note\" viewBox=\"0 0 24 24\"><path d=\"M5 4h14v11l-5 5H5z\"/><path d=\"M14 20v-5h5\"/></symbol><symbol id=\"cz-i-flame\" viewBox=\"0 0 24 24\"><path d=\"M12 21c-3.6 0-6-2.4-6-5.6 0-3.6 3.2-5.2 3.7-9.4 2.2 1.3 3.4 3.4 3.3 5.6 1-.5 1.7-1.5 2-2.8 1.7 1.5 3 3.6 3 6.4 0 3.4-2.4 5.8-6 5.8z\"/></symbol><symbol id=\"cz-i-check\" viewBox=\"0 0 24 24\"><path d=\"M5 12.5 10 17.5 19.5 7\"/></symbol><symbol id=\"cz-i-plus\" viewBox=\"0 0 24 24\"><path d=\"M12 5.5v13M5.5 12h13\"/></symbol><symbol id=\"cz-i-x\" viewBox=\"0 0 24 24\"><path d=\"M6.5 6.5l11 11M17.5 6.5l-11 11\"/></symbol><symbol id=\"cz-i-up\" viewBox=\"0 0 24 24\"><path d=\"M12 19V5M6 11l6-6 6 6\"/></symbol><symbol id=\"cz-i-down\" viewBox=\"0 0 24 24\"><path d=\"M12 5v14M6 13l6 6 6-6\"/></symbol><symbol id=\"cz-i-gear\" viewBox=\"0 0 24 24\"><circle cx=\"12\" cy=\"12\" r=\"3\"/><path d=\"M12 2.5v3M12 18.5v3M2.5 12h3M18.5 12h3M5.3 5.3l2.1 2.1M16.6 16.6l2.1 2.1M5.3 18.7l2.1-2.1M16.6 7.4l2.1-2.1\"/></symbol><symbol id=\"cz-i-undo\" viewBox=\"0 0 24 24\"><path d=\"M9 6.5 4.5 11 9 15.5\"/><path d=\"M4.5 11H14a5 5 0 0 1 0 10h-2.5\"/></symbol><symbol id=\"cz-i-info\" viewBox=\"0 0 24 24\"><circle cx=\"12\" cy=\"12\" r=\"8.5\"/><path d=\"M12 11v5M12 8v.01\"/></symbol><symbol id=\"cz-i-upload\" viewBox=\"0 0 24 24\"><path d=\"M12 15.5V4.5M7.5 9 12 4.5 16.5 9\"/><path d=\"M4.5 15v3.5A1.5 1.5 0 0 0 6 20h12a1.5 1.5 0 0 0 1.5-1.5V15\"/></symbol><symbol id=\"cz-i-trash\" viewBox=\"0 0 24 24\"><path d=\"M4.5 7h15M9.5 7V4.5h5V7M6.5 7l1 13h9l1-13\"/></symbol><symbol id=\"cz-i-image\" viewBox=\"0 0 24 24\"><rect x=\"3.5\" y=\"5\" width=\"17\" height=\"14\" rx=\"2\"/><circle cx=\"9\" cy=\"10\" r=\"1.6\"/><path d=\"m5 17 4.5-4.5 3 3 2.5-2.5 4 4\"/></symbol><symbol id=\"cz-i-link\" viewBox=\"0 0 24 24\"><path d=\"M10 14a4 4 0 0 0 5.7 0l3-3a4 4 0 0 0-5.7-5.7l-1 1\"/><path d=\"M14 10a4 4 0 0 0-5.7 0l-3 3a4 4 0 0 0 5.7 5.7l1-1\"/></symbol><symbol id=\"cz-i-spark\" viewBox=\"0 0 24 24\"><path d=\"M11 3.5l1.9 5.1 5.1 1.9-5.1 1.9L11 17.5l-1.9-5.1L4 10.5l5.1-1.9z\"/><path d=\"M18.5 15.5v5M16 18h5\"/></symbol><symbol id=\"cz-i-tag\" viewBox=\"0 0 24 24\"><path d=\"M3.5 12V4h8l9 9-8 8z\"/><circle cx=\"7.8\" cy=\"8.2\" r=\"1.3\"/></symbol><symbol id=\"cz-i-topbar\" viewBox=\"0 0 24 24\"><rect x=\"3.5\" y=\"4.5\" width=\"17\" height=\"15\" rx=\"2\"/><path d=\"M3.5 9.5h17M6.5 7h4\"/></symbol><symbol id=\"cz-i-nav\" viewBox=\"0 0 24 24\"><rect x=\"3.5\" y=\"4.5\" width=\"17\" height=\"15\" rx=\"2\"/><path d=\"M9.5 4.5v15M5.8 8.5h1.6M5.8 12h1.6M5.8 15.5h1.6\"/></symbol><symbol id=\"cz-i-palette\" viewBox=\"0 0 24 24\"><path d=\"M12 3.5a8.5 8.5 0 1 0 0 17c1 0 1.7-.8 1.7-1.7 0-.5-.2-.9-.5-1.2-.3-.3-.5-.7-.5-1.2 0-.9.8-1.7 1.7-1.7h2c2.3 0 4.1-1.8 4.1-4.1 0-4-3.8-7.1-8.5-7.1z\"/><circle cx=\"7.8\" cy=\"11\" r=\"1.1\"/><circle cx=\"10.5\" cy=\"7.6\" r=\"1.1\"/><circle cx=\"15\" cy=\"8\" r=\"1.1\"/></symbol><symbol id=\"cz-i-type\" viewBox=\"0 0 24 24\"><path d=\"M3.5 18.5 8 6h1.5L14 18.5M5.2 14h7.1\"/><path d=\"M20.5 18.5v-5a2.5 2.5 0 0 0-4.7-1.2M20.5 15.2c-3-.4-4.9.3-4.9 1.8 0 1.4 1.8 1.9 3.3 1.1\"/></symbol><symbol id=\"cz-i-cursor\" viewBox=\"0 0 24 24\"><path d=\"M6 3.5 18.5 12l-5.3 1.3 2.9 5.9-2.3 1.1-2.8-5.9L7 17.5z\"/></symbol><symbol id=\"cz-i-depth\" viewBox=\"0 0 24 24\"><rect x=\"8.5\" y=\"8.5\" width=\"12\" height=\"12\" rx=\"2\"/><path d=\"M15.5 5.5H6A2.5 2.5 0 0 0 3.5 8v9.5\"/></symbol><symbol id=\"cz-i-moon\" viewBox=\"0 0 24 24\"><path d=\"M20 14.5A8 8 0 0 1 9.5 4a8 8 0 1 0 10.5 10.5z\"/></symbol><symbol id=\"cz-i-lock\" viewBox=\"0 0 24 24\"><rect x=\"5\" y=\"10.5\" width=\"14\" height=\"10\" rx=\"2\"/><path d=\"M8 10.5V8a4 4 0 0 1 8 0v2.5\"/></symbol><symbol id=\"cz-i-eyeoff\" viewBox=\"0 0 24 24\"><path d=\"M3.5 3.5l17 17M10.6 10.6a2 2 0 0 0 2.8 2.8M9.9 5.7A9.5 9.5 0 0 1 12 5.5c6 0 9.5 6.5 9.5 6.5a15 15 0 0 1-3.1 3.8M6.4 6.9C4 8.6 2.5 12 2.5 12S6 18.5 12 18.5a9 9 0 0 0 4-1\"/></symbol></defs></svg>";
+  var SPRITE = "<svg width=\"0\" height=\"0\" style=\"position:absolute\" aria-hidden=\"true\" focusable=\"false\"><defs><symbol id=\"cz-i-home\" viewBox=\"0 0 24 24\"><path d=\"M3.5 11.5 12 4.5l8.5 7\"/><path d=\"M5.5 10v9.5h13V10\"/><path d=\"M10 19.5v-5h4v5\"/></symbol><symbol id=\"cz-i-journal\" viewBox=\"0 0 24 24\"><path d=\"M12 6.5C10.3 5 7.4 4.5 4 5v13.5c3.4-.5 6.3 0 8 1.5 1.7-1.5 4.6-2 8-1.5V5c-3.4-.5-6.3 0-8 1.5z\"/><path d=\"M12 6.5V20\"/></symbol><symbol id=\"cz-i-cal\" viewBox=\"0 0 24 24\"><rect x=\"4\" y=\"5.5\" width=\"16\" height=\"14.5\" rx=\"2\"/><path d=\"M4 10h16M8.5 3.5v4M15.5 3.5v4M8 14h2M14 14h2M8 17h2\"/></symbol><symbol id=\"cz-i-d20\" viewBox=\"0 0 24 24\"><path d=\"M12 3 20 7.5v9L12 21l-8-4.5v-9z\"/><path d=\"M12 3 7.5 13.5h9zM4 7.5l3.5 6M20 7.5l-3.5 6M7.5 13.5 12 21l4.5-7.5\"/></symbol><symbol id=\"cz-i-map\" viewBox=\"0 0 24 24\"><path d=\"M9 4.5 3.5 6.5v13L9 17.5l6 2 5.5-2v-13L15 6.5z\"/><path d=\"M9 4.5v13M15 6.5v13\"/></symbol><symbol id=\"cz-i-users\" viewBox=\"0 0 24 24\"><circle cx=\"9\" cy=\"8.5\" r=\"3.2\"/><path d=\"M3.5 19c.6-3.2 2.8-5 5.5-5s4.9 1.8 5.5 5\"/><circle cx=\"16.5\" cy=\"9.5\" r=\"2.6\"/><path d=\"M16 14.2c2.4.1 4 1.7 4.5 4.3\"/></symbol><symbol id=\"cz-i-layers\" viewBox=\"0 0 24 24\"><path d=\"M12 4 20.5 8.5 12 13 3.5 8.5z\"/><path d=\"m3.5 12.5 8.5 4.5 8.5-4.5M3.5 16.5 12 21l8.5-4.5\"/></symbol><symbol id=\"cz-i-mappin\" viewBox=\"0 0 24 24\"><path d=\"M12 21s-6.5-5.6-6.5-11a6.5 6.5 0 0 1 13 0c0 5.4-6.5 11-6.5 11z\"/><circle cx=\"12\" cy=\"10\" r=\"2.3\"/></symbol><symbol id=\"cz-i-banner\" viewBox=\"0 0 24 24\"><path d=\"M6.5 3.5v17M6.5 4.5h11v10.5l-5.5-3-5.5 3\"/></symbol><symbol id=\"cz-i-gem\" viewBox=\"0 0 24 24\"><path d=\"M7 4.5h10l3.5 5-8.5 10-8.5-10z\"/><path d=\"M3.5 9.5h17M9.5 4.5 8 9.5l4 10 4-10-1.5-5\"/></symbol><symbol id=\"cz-i-scroll\" viewBox=\"0 0 24 24\"><path d=\"M8 4h9.5a2 2 0 0 1 0 4H17v10a2 2 0 0 1-2 2H6.5a2 2 0 0 1 0-4H8z\"/><path d=\"M8 16V6a2 2 0 0 0-4 0v1M11 9h3M11 12.5h3\"/></symbol><symbol id=\"cz-i-tack\" viewBox=\"0 0 24 24\"><path d=\"M9.5 3.5h5l-.8 5.3 3.3 3.2H7l3.3-3.2z\"/><path d=\"M12 12v8.5\"/></symbol><symbol id=\"cz-i-pencil\" viewBox=\"0 0 24 24\"><path d=\"M16.9 4.5a2.1 2.1 0 1 1 3 3L8 19.3l-4 1 1-4z\"/><path d=\"M14.5 7l2.5 2.5\"/></symbol><symbol id=\"cz-i-chev\" viewBox=\"0 0 24 24\"><path d=\"m6 9 6 6 6-6\"/></symbol><symbol id=\"cz-i-chev-r\" viewBox=\"0 0 24 24\"><path d=\"m9 6 6 6-6 6\"/></symbol><symbol id=\"cz-i-search\" viewBox=\"0 0 24 24\"><circle cx=\"11\" cy=\"11\" r=\"6.5\"/><path d=\"m20 20-4.2-4.2\"/></symbol><symbol id=\"cz-i-mask\" viewBox=\"0 0 24 24\"><path d=\"M4 5h8v7c0 3-2 6-4 6s-4-3-4-6zM12 5h8v7c0 3-2 6-4 6s-4-3-4-6z\"/></symbol><symbol id=\"cz-i-bell\" viewBox=\"0 0 24 24\"><path d=\"M6 16V11a6 6 0 0 1 12 0v5l1.5 2h-15z\"/><path d=\"M10 21h4\"/></symbol><symbol id=\"cz-i-note\" viewBox=\"0 0 24 24\"><path d=\"M5 4h14v11l-5 5H5z\"/><path d=\"M14 20v-5h5\"/></symbol><symbol id=\"cz-i-flame\" viewBox=\"0 0 24 24\"><path d=\"M12 21c-3.6 0-6-2.4-6-5.6 0-3.6 3.2-5.2 3.7-9.4 2.2 1.3 3.4 3.4 3.3 5.6 1-.5 1.7-1.5 2-2.8 1.7 1.5 3 3.6 3 6.4 0 3.4-2.4 5.8-6 5.8z\"/></symbol><symbol id=\"cz-i-check\" viewBox=\"0 0 24 24\"><path d=\"M5 12.5 10 17.5 19.5 7\"/></symbol><symbol id=\"cz-i-plus\" viewBox=\"0 0 24 24\"><path d=\"M12 5.5v13M5.5 12h13\"/></symbol><symbol id=\"cz-i-x\" viewBox=\"0 0 24 24\"><path d=\"M6.5 6.5l11 11M17.5 6.5l-11 11\"/></symbol><symbol id=\"cz-i-up\" viewBox=\"0 0 24 24\"><path d=\"M12 19V5M6 11l6-6 6 6\"/></symbol><symbol id=\"cz-i-down\" viewBox=\"0 0 24 24\"><path d=\"M12 5v14M6 13l6 6 6-6\"/></symbol><symbol id=\"cz-i-gear\" viewBox=\"0 0 24 24\"><circle cx=\"12\" cy=\"12\" r=\"3\"/><path d=\"M12 2.5v3M12 18.5v3M2.5 12h3M18.5 12h3M5.3 5.3l2.1 2.1M16.6 16.6l2.1 2.1M5.3 18.7l2.1-2.1M16.6 7.4l2.1-2.1\"/></symbol><symbol id=\"cz-i-undo\" viewBox=\"0 0 24 24\"><path d=\"M9 6.5 4.5 11 9 15.5\"/><path d=\"M4.5 11H14a5 5 0 0 1 0 10h-2.5\"/></symbol><symbol id=\"cz-i-info\" viewBox=\"0 0 24 24\"><circle cx=\"12\" cy=\"12\" r=\"8.5\"/><path d=\"M12 11v5M12 8v.01\"/></symbol><symbol id=\"cz-i-upload\" viewBox=\"0 0 24 24\"><path d=\"M12 15.5V4.5M7.5 9 12 4.5 16.5 9\"/><path d=\"M4.5 15v3.5A1.5 1.5 0 0 0 6 20h12a1.5 1.5 0 0 0 1.5-1.5V15\"/></symbol><symbol id=\"cz-i-trash\" viewBox=\"0 0 24 24\"><path d=\"M4.5 7h15M9.5 7V4.5h5V7M6.5 7l1 13h9l1-13\"/></symbol><symbol id=\"cz-i-image\" viewBox=\"0 0 24 24\"><rect x=\"3.5\" y=\"5\" width=\"17\" height=\"14\" rx=\"2\"/><circle cx=\"9\" cy=\"10\" r=\"1.6\"/><path d=\"m5 17 4.5-4.5 3 3 2.5-2.5 4 4\"/></symbol><symbol id=\"cz-i-link\" viewBox=\"0 0 24 24\"><path d=\"M10 14a4 4 0 0 0 5.7 0l3-3a4 4 0 0 0-5.7-5.7l-1 1\"/><path d=\"M14 10a4 4 0 0 0-5.7 0l-3 3a4 4 0 0 0 5.7 5.7l1-1\"/></symbol><symbol id=\"cz-i-spark\" viewBox=\"0 0 24 24\"><path d=\"M11 3.5l1.9 5.1 5.1 1.9-5.1 1.9L11 17.5l-1.9-5.1L4 10.5l5.1-1.9z\"/><path d=\"M18.5 15.5v5M16 18h5\"/></symbol><symbol id=\"cz-i-tag\" viewBox=\"0 0 24 24\"><path d=\"M3.5 12V4h8l9 9-8 8z\"/><circle cx=\"7.8\" cy=\"8.2\" r=\"1.3\"/></symbol><symbol id=\"cz-i-topbar\" viewBox=\"0 0 24 24\"><rect x=\"3.5\" y=\"4.5\" width=\"17\" height=\"15\" rx=\"2\"/><path d=\"M3.5 9.5h17M6.5 7h4\"/></symbol><symbol id=\"cz-i-sidebar\" viewBox=\"0 0 24 24\"><rect x=\"3.5\" y=\"4.5\" width=\"17\" height=\"15\" rx=\"2\"/><path d=\"M5.5 4.5H9.5v15H5.5a2 2 0 0 1-2-2v-11a2 2 0 0 1 2-2z\" fill=\"currentColor\" fill-opacity=\".4\"/></symbol><symbol id=\"cz-i-nav\" viewBox=\"0 0 24 24\"><rect x=\"3.5\" y=\"4.5\" width=\"17\" height=\"15\" rx=\"2\"/><path d=\"M9.5 4.5v15M5.8 8.5h1.6M5.8 12h1.6M5.8 15.5h1.6\"/></symbol><symbol id=\"cz-i-palette\" viewBox=\"0 0 24 24\"><path d=\"M12 3.5a8.5 8.5 0 1 0 0 17c1 0 1.7-.8 1.7-1.7 0-.5-.2-.9-.5-1.2-.3-.3-.5-.7-.5-1.2 0-.9.8-1.7 1.7-1.7h2c2.3 0 4.1-1.8 4.1-4.1 0-4-3.8-7.1-8.5-7.1z\"/><circle cx=\"7.8\" cy=\"11\" r=\"1.1\"/><circle cx=\"10.5\" cy=\"7.6\" r=\"1.1\"/><circle cx=\"15\" cy=\"8\" r=\"1.1\"/></symbol><symbol id=\"cz-i-type\" viewBox=\"0 0 24 24\"><path d=\"M3.5 18.5 8 6h1.5L14 18.5M5.2 14h7.1\"/><path d=\"M20.5 18.5v-5a2.5 2.5 0 0 0-4.7-1.2M20.5 15.2c-3-.4-4.9.3-4.9 1.8 0 1.4 1.8 1.9 3.3 1.1\"/></symbol><symbol id=\"cz-i-cursor\" viewBox=\"0 0 24 24\"><path d=\"M6 3.5 18.5 12l-5.3 1.3 2.9 5.9-2.3 1.1-2.8-5.9L7 17.5z\"/></symbol><symbol id=\"cz-i-depth\" viewBox=\"0 0 24 24\"><rect x=\"8.5\" y=\"8.5\" width=\"12\" height=\"12\" rx=\"2\"/><path d=\"M15.5 5.5H6A2.5 2.5 0 0 0 3.5 8v9.5\"/></symbol><symbol id=\"cz-i-moon\" viewBox=\"0 0 24 24\"><path d=\"M20 14.5A8 8 0 0 1 9.5 4a8 8 0 1 0 10.5 10.5z\"/></symbol><symbol id=\"cz-i-lock\" viewBox=\"0 0 24 24\"><rect x=\"5\" y=\"10.5\" width=\"14\" height=\"10\" rx=\"2\"/><path d=\"M8 10.5V8a4 4 0 0 1 8 0v2.5\"/></symbol><symbol id=\"cz-i-eyeoff\" viewBox=\"0 0 24 24\"><path d=\"M3.5 3.5l17 17M10.6 10.6a2 2 0 0 0 2.8 2.8M9.9 5.7A9.5 9.5 0 0 1 12 5.5c6 0 9.5 6.5 9.5 6.5a15 15 0 0 1-3.1 3.8M6.4 6.9C4 8.6 2.5 12 2.5 12S6 18.5 12 18.5a9 9 0 0 0 4-1\"/></symbol></defs></svg>";
 
   // refreshTopbar() redraws the live header's background, centre content
   // and name from a fresh server render of this page. The header sits
@@ -26,7 +26,12 @@
   function swapFrom(doc) {
     ['topbar-bg', 'topbar-content'].forEach(function (id) {
       var fresh = doc.getElementById(id), live = document.getElementById(id);
-      if (fresh && live) live.innerHTML = fresh.innerHTML;
+      if (!fresh || !live) return;
+      // Widgets inside (the moving background) are torn down and mounted
+      // again, since boot.js only scans on page load and htmx swaps.
+      if (Chronicle.destroyWidget) Array.prototype.forEach.call(live.querySelectorAll('[data-widget]'), Chronicle.destroyWidget);
+      live.innerHTML = fresh.innerHTML;
+      if (Chronicle.mountWidgets) Chronicle.mountWidgets(live);
     });
     // The header's word colour follows its background.
     var freshBar = doc.getElementById('app-topbar'), liveBar = document.getElementById('app-topbar');
@@ -60,6 +65,9 @@
       swapFrom(doc);
       var brand = doc.querySelector('.nav-brand-link'), liveBrand = document.querySelector('.nav-brand-link');
       if (brand && liveBrand) liveBrand.innerHTML = brand.innerHTML;
+      // The banner picture lives beside the link, not in it.
+      var bg = doc.querySelector('.nav-brand-bg'), liveBg = document.querySelector('.nav-brand-bg');
+      if (bg && liveBg) liveBg.innerHTML = bg.innerHTML;
     }).catch(function () { /* the next full load shows it; the save itself succeeded */ });
   }
 
@@ -163,6 +171,16 @@
     function fromPicker(h, t, deep){ var L = 0.80 - t / 100 * toneSpan(deep); return lchHex(L, Math.min(deep ? 0.14 : 0.19, chromaCap(L)), h); }
     function toPicker(hex, deep){ var c = oklch(hex); return { h:Math.round(c[2]) % 360, t:Math.round(clamp((0.80 - c[0]) / toneSpan(deep) * 100, 0, 100)) }; }
 
+    // The menu keeps white words at 7:1 and its grey secondary words at 4.5:1
+    // on any colour it is given, by moving the colour toward black. Mirrors
+    // colour.MenuDark and colour.MenuTinted.
+    function menuDark(hex){
+      var out = String(hex).toLowerCase();
+      for (var i = 0; i < 24 && (contrast(out, '#ffffff') < 7 || contrast(out, '#8b93a1') < 4.5); i++) out = mix(out, '#000000', 0.12);
+      return out;
+    }
+    function menuTinted(accent){ return menuDark(mix(accent, '#0b0b12', 0.72)); }
+
     /* ---------- Data ---------- */
     var PRESETS = [['Indigo', '#6366f1'], ['Blue', '#3b82f6'], ['Cyan', '#06b6d4'], ['Emerald', '#10b981'], ['Amber', '#f59e0b'], ['Rose', '#f43f5e'], ['Purple', '#a855f7'], ['Orange', '#f97316']];
     var HDR_COLOURS = [['Night', '#0f172a'], ['Deep blue', '#1e2a5a'], ['Slate', '#1f2937'], ['Umber', '#3b2a1c'], ['Pine', '#14352a'], ['Moss', '#2f4a2c'], ['Oxblood', '#4a1512'], ['Plum', '#3b1d5e']];
@@ -244,7 +262,12 @@
       standard:  { name:'Standard', d:180, d2:260, ease:'cubic-bezier(.16,1,.3,1)' },
       leisurely: { name:'Leisurely', d:300, d2:440, ease:'cubic-bezier(.22,.8,.3,1)' }
     };
-    var HDR_MODES = [['solid', 'Solid'], ['gradient', 'Gradient'], ['animated', 'Animated gradient'], ['image', 'Image'], ['sky', 'Sky']];
+    var HDR_MODES = [['solid', 'Solid'], ['gradient', 'Gradient'], ['moving', 'Moving colour'], ['image', 'Image'], ['sky', 'Sky']];
+    var HDR_HEIGHTS = [['slim', 'Slim'], ['tall', 'Tall']];
+    // Corners of the menu and the choices that go with them.
+    var CORNERS = [['plain', 'Logo and name', 'As today'], ['subtitle', 'Logo, name and a subtitle', 'A short line under the name'], ['banner', 'Banner picture', 'A picture behind the name']];
+    var MENU_COLOURS = [['charcoal', 'Charcoal', 'Chronicle as it is today'], ['ink', 'Ink', 'A deep blue-black'], ['tinted', 'Tinted', 'A dark shade of your chrome accent'], ['own', 'Your own colour', 'Kept dark enough to read']];
+    var GLOWS = [['accent', 'Follow the accent colour', 'Changes with the look'], ['own', 'Its own colour', 'Pick any colour']];
     var HDR_DIRS = { r:['to right', 'Left to right'], br:['to bottom right', 'Diagonal'], b:['to bottom', 'Top to bottom'] };
     var SCRIMS = { light:[.32, 'Light'], medium:[.5, 'Medium'], strong:[.68, 'Strong'] };
 
@@ -287,21 +310,25 @@
     ];
     function look(id){ return LOOKS.filter(function(l){ return l.id === id; })[0]; }
     var LOOK_KEYS = ['header.bg', 'header.solid', 'header.from', 'header.to', 'header.dir', 'nav.style', 'nav.strength',
-      'colours.accent', 'colours.s1', 'colours.s2', 'colours.page', 'colours.contrast',
+      'colours.accent', 'colours.s1', 'colours.s2', 'colours.sidebar', 'colours.page', 'colours.contrast',
       'type.body', 'type.heading', 'type.scale', 'buttons.style', 'motion.elevation', 'motion.speed'];
 
+    // The header holds up to WIDGET_SLOTS of these, in the owner's order. The
+    // "later" ones are shown as coming, never offered.
     var WIDGETS = {
-      era:    { name:'Era pill', desc:'The current timeline era', later:true },
       links:  { name:'Quick links', desc:'' },
-      text:   { name:'Custom text', desc:'One line your table sees' },
-      note:   { name:'Quick note', desc:'A button that opens your notes', later:true },
-      search: { name:'Search', desc:'A search box in the header', later:true }
+      text:   { name:'A line of text', desc:'One line your table sees' },
+      note:   { name:'Quick note', desc:'Jot a note without leaving the page' },
+      search: { name:'Search box', desc:'A wide search box instead of the icon' }
     };
-    var WIDGET_SLOTS = 6;
+    var WIDGET_ORDER = ['links', 'text', 'note', 'search'];
+    var LATER = ['In-world date', 'Weather', 'Moon', 'Next game night', 'Era'];
+    var WIDGET_SLOTS = 4;
 
     var SECTIONS = [
       { id:'brand', name:'Brand', icon:'i-tag', desc:'Your campaign’s name, logo, welcome message and backdrop. Looks never change these.' },
       { id:'header', name:'Header', icon:'i-topbar', desc:'The bar across the top of every page: its background and the widgets in it.' },
+      { id:'sidebar', name:'Sidebar', icon:'i-sidebar', desc:'The menu down the left of every page: its colour, what fills its top-left corner, and the glow that shows when it is hidden.' },
       { id:'nav', name:'Navigation', icon:'i-nav', desc:'How the menu shows the page you are on.' },
       { id:'colours', name:'Colours', icon:'i-palette', desc:'The site’s own colour, the two colours your pages use, and the tones behind them.' },
       { id:'type', name:'Type', icon:'i-type', desc:'The fonts for text and headings, and how large everything reads.' },
@@ -310,7 +337,8 @@
     ];
     var SEC_KEYS = {
       brand:['brand.name', 'brand.logo', 'brand.welcome', 'brand.backdrop'],
-      header:['header.bg', 'header.solid', 'header.from', 'header.to', 'header.dir', 'header.image', 'header.scrim', 'header.widgets', 'header.links', 'header.text'],
+      header:['header.bg', 'header.height', 'header.solid', 'header.from', 'header.to', 'header.dir', 'header.image', 'header.scrim', 'header.widgets', 'header.links', 'header.text'],
+      sidebar:['colours.sidebar', 'sidebar.own', 'sidebar.corner', 'sidebar.subtitle', 'sidebar.banner', 'sidebar.glow', 'sidebar.glowColour'],
       nav:['nav.style', 'nav.strength', 'nav.pageName'],
       colours:['colours.accent', 'colours.s1', 'colours.s2', 'colours.page', 'colours.contrast'],
       type:['type.body', 'type.heading', 'type.scale'],
@@ -371,6 +399,7 @@
       d = clone(d);
       ['logo', 'backdrop'].forEach(function(k){ if (!d.brand[k]) d.brand[k] = 'none'; });
       if (!d.header.image) d.header.image = 'none';
+      if (!d.sidebar.banner) d.sidebar.banner = 'none';
       d.header.links = (d.header.links || []).map(function(l){ return { label:l.label || '', url:l.url || '', icon:l.icon || '' }; });
       while (d.header.links.length < LINK_ROWS) d.header.links.push({ label:'', url:'', icon:'' });
       return d;
@@ -411,10 +440,13 @@
       if (d.colours.contrast === 'high'){ T.muted = T.body; T.body = T.text; T.line = T.line2; T.line2 = mix(T.line2, T.text, 0.3); }
       return T;
     }
-    // The menu keeps Chronicle's own charcoal until sidebar colours get their
-    // own settings (#882).
+    // The menu: Charcoal, Ink, a dark shade of the accent, or the owner's own
+    // colour. Tinted and own colours are darkened until white words keep 7:1,
+    // the same rule the real menu applies (colour.MenuDark).
     function sidebarTone(d){
-      var s = clone(SIDEBARS.charcoal);
+      var mode = d.colours.sidebar, s = clone(mode === 'ink' ? SIDEBARS.ink : SIDEBARS.charcoal);
+      if (mode === 'tinted') s.bg = menuTinted(d.colours.accent);
+      else if (mode === 'own') s.bg = menuDark(d.sidebar.own);
       if (d.colours.contrast === 'high'){ s.text = mix(s.text, '#ffffff', 0.55); s.text2 = mix(s.text2, '#ffffff', 0.4); s.text3 = mix(s.text3, '#ffffff', 0.35); }
       return s;
     }
@@ -434,7 +466,7 @@
         var a = col(h.from), b = col(h.to);
         bg = 'linear-gradient(' + HDR_DIRS[h.dir][0] + ', ' + a + ', ' + b + ')';
         light = words([a, b]);
-        if (mode === 'animated') rep = 'repeating-linear-gradient(' + (h.dir === 'b' ? '180deg' : '90deg') + ', ' + a + ' 0%, ' + b + ' 16.6667%, ' + a + ' 33.3333%)';
+        if (mode === 'moving') rep = 'repeating-linear-gradient(' + (h.dir === 'b' ? '180deg' : '90deg') + ', ' + a + ' 0%, ' + b + ' 16.6667%, ' + a + ' 33.3333%)';
       }
       return light
         ? { bg:bg, rep:rep, text:'#f9fafb', text2:'#c9d1dd', chip:'rgb(255 255 255 / .07)', line:'rgb(255 255 255 / .13)' }
@@ -506,7 +538,9 @@
       s2:    { k:'colours.s2', list:PRESETS, follow:true, label:'Surface B' },
       hsolid:{ k:'header.solid', list:HDR_COLOURS, page:true, label:'Header colour', deep:true },
       hfrom: { k:'header.from', list:HDR_COLOURS, label:'Gradient start', deep:true },
-      hto:   { k:'header.to', list:HDR_COLOURS, label:'Gradient end', deep:true }
+      hto:   { k:'header.to', list:HDR_COLOURS, label:'Gradient end', deep:true },
+      sbown: { k:'sidebar.own', list:HDR_COLOURS, label:'Menu colour', deep:true },
+      glow:  { k:'sidebar.glowColour', list:PRESETS, label:'Glow colour' }
     };
     function inList(g, v){ return GROUPS[g].list.some(function(x){ return x[1] === v; }); }
     function fld(id, label, sub, body){
@@ -573,6 +607,13 @@
         '<button type="button" class="czb czb-g czb-sm" data-rm="' + k + '">' + IC('i-trash') + 'Remove</button></div>' +
         '<p class="hint">' + hint + '</p><p class="err" id="' + id + '-e" role="alert" hidden></p>';
     }
+    // Charcoal and Ink are fixed colours; Tinted and the owner's own are
+    // painted into their chips as the draft changes (syncControls).
+    function menuColourOpts(){
+      return opts('sb-col', 'colours.sidebar', 'sb-col-l', MENU_COLOURS.map(function(c){
+        return [c[0], c[1], c[0] === 'charcoal' ? SIDEBARS.charcoal.bg : c[0] === 'ink' ? SIDEBARS.ink.bg : '#2a2e3a', null, 'menu:' + c[0]];
+      }));
+    }
     function panelBody(id){
       if (id === 'brand') return (
         fld('b-name', 'Name', 'Up to 40 characters',
@@ -585,16 +626,33 @@
         fld('brand-backdrop', 'Backdrop', 'Behind the welcome', imgSlot('brand.backdrop', '', 'Upload', 'A soft shade keeps the welcome message readable over any picture. Up to 4 MB.')));
       if (id === 'header') return (
         fld('h-bg', 'Background', null,
-          opts('h-bg', 'header.bg', 'h-bg-l', HDR_MODES.map(function(m){ return m[0] === 'sky' ? [m[0], m[1], null, true, 'hint:sky', 'Sky project'] : m[0] === 'animated' ? [m[0], m[1], null, true, 'hint:hdrproj', 'Header project'] : [m[0], m[1]]; })) +
+          opts('h-bg', 'header.bg', 'h-bg-l', HDR_MODES.map(function(m){ return m[0] === 'sky' ? [m[0], m[1], null, true, 'hint:sky', 'Coming soon'] : [m[0], m[1]]; })) +
           '<div class="ctl" id="h-solid"><span class="hint" id="h-solid-l">Colour</span>' + swatches('hsolid', 'h-solid-l') + '</div>' +
           '<div class="ctl" id="h-grad"><span class="hint" id="h-from-l">From</span>' + swatches('hfrom', 'h-from-l') + '<span class="hint" id="h-to-l">To</span>' + swatches('hto', 'h-to-l') +
             '<span class="hint" id="h-dir-l">Direction</span>' + opts('h-dir', 'header.dir', 'h-dir-l', Object.keys(HDR_DIRS).map(function(k){ return [k, HDR_DIRS[k][1]]; })) +
-            '<p class="hint" id="h-anim-h">The colours drift slowly across the bar. It holds still for anyone who asks for less motion.</p></div>' +
+            '<p class="hint" id="h-anim-h">The two colours drift slowly from side to side. They slow to a stop when nobody is using the page, and hold still for anyone who asks for less motion.</p></div>' +
           '<div class="ctl" id="h-img">' + imgSlot('header.image', '', 'Replace', 'Still or animated, 1.5 MB at most. The shade keeps the header’s words readable.') +
             '<span class="hint" id="h-scrim-l">Shade</span>' + opts('h-scrim', 'header.scrim', 'h-scrim-l', Object.keys(SCRIMS).map(function(k){ return [k, SCRIMS[k][1]]; })) + '</div>' +
-          '<p class="hint">Sky is the living world backdrop. It arrives with the sky project.</p>') +
-        fld('h-w', 'Widgets', WIDGET_SLOTS + ' slots', '<div class="wl" id="wl" aria-labelledby="h-w-l"></div><div class="wadd" id="wadd"></div>' +
-          '<div class="tape-note"><span class="tape" aria-hidden="true"></span><p><b>Under construction.</b> The era pill, quick note, search and animated backgrounds come with the header project, which gets its own design. For now the header holds quick links and a line of text.</p></div>'));
+          '<p class="hint">Words and buttons switch to white on dark backgrounds and pictures by themselves.</p>') +
+        fld('h-height', 'Height', 'How tall the bar is', opts('h-height', 'header.height', 'h-height-l', HDR_HEIGHTS) +
+          '<p class="hint">Slim is today’s bar. Tall gives pictures and moving colour more room.</p>') +
+        fld('h-w', 'Widgets', 'Up to ' + WIDGET_SLOTS, '<p class="hint" id="w-full" aria-live="polite"></p><div class="wl" id="wl" aria-labelledby="h-w-l"></div>' +
+          '<p class="hint">On a phone the bar shows the first widget and a +N button that opens the rest.</p>' +
+          '<div class="tape-note"><span class="tape" aria-hidden="true"></span><p><b>Under construction.</b> These are on their way. The date and weather will only ever show today in your world, never days ahead.</p>' +
+          '<div class="later-row"><span class="w-later">Sky background</span>' + LATER.map(function(n){ return '<span class="w-later">' + esc(n) + '</span>'; }).join('') + '</div></div>'));
+      if (id === 'sidebar') return (
+        fld('sb-col', 'Colour', 'The menu stays dark', menuColourOpts() +
+          '<div class="ctl" id="sb-own"><span class="hint" id="sb-own-l">Your colour</span>' + swatches('sbown', 'sb-own-l') + '<p class="note" id="sb-own-note" hidden><svg class="i" aria-hidden="true"><use href="#cz-i-info"/></svg><span></span></p></div>' +
+          '<p class="hint">The words in the menu pick their own shade. A whole look from the top of the page sets this too; changing it here makes the look Custom.</p>') +
+        fld('sb-corner', 'Top-left corner', 'Above the menu', opts('sb-corner', 'sidebar.corner', 'sb-corner-l', CORNERS.map(function(c){ return [c[0], c[1]]; })) +
+          '<div class="ctl" id="sb-sub-wrap"><label class="hint" for="sb-sub">Subtitle</label><input class="inp" id="sb-sub" type="text" maxlength="40" data-k="sidebar.subtitle" placeholder="The Drowned Crown, session 23" aria-describedby="sb-sub-c">' +
+            '<div class="row-h"><span class="hint">One short line under the name. Up to 40 characters.</span><span class="cnt" id="sb-sub-c"></span></div></div>' +
+          '<div class="ctl" id="sb-bnr-wrap">' + imgSlot('sidebar.banner', '', 'Upload', 'A picture behind the name, up to 1.5 MB. A soft shade keeps the name readable.') + '</div>' +
+          '<p class="hint">Clicking the corner still goes to the dashboard. When the menu peeks out, only the logo shows.</p>') +
+        fld('sb-glow', 'Peek glow', 'When the menu is hidden', opts('sb-glow', 'sidebar.glow', 'sb-glow-l', GLOWS.map(function(g){ return [g[0], g[1]]; })) +
+          '<div class="ctl" id="sb-glow-own"><span class="hint" id="sb-glowc-l">Glow colour</span>' + swatches('glow', 'sb-glowc-l') + '</div>' +
+          '<div class="glow-demo" aria-hidden="true"><i id="sb-glow-bar"></i><span>The light that grows when you rest the pointer on the left edge</span></div>' +
+          '<p class="hint">Hide the menu with the arrow at its foot, then rest the pointer on the window’s left edge to see it.</p>'));
       if (id === 'nav') return (
         fld('n-style', 'Highlight', 'On the page you are on',
           '<div role="radiogroup" aria-labelledby="n-style-l" class="ctl"><p class="grp-l">Moving</p><div class="tiles two">' + tilesNav('moving') + '</div>' +
@@ -667,7 +725,7 @@
       return real ? '<button type="button" class="pbtn ' + kind + '"><span class="f">' + label + '</span></button>' : '<span class="pbtn ' + kind + '"><span class="f">' + label + '</span></span>';
     }
     function siteHTML(){
-      var sb = '<div class="s-sb"><div class="s-brand"><span class="s-logo" id="d-logo"></span><span class="s-bname" id="d-bname"></span><span class="s-bchev">' + IC('i-chev') + '</span><span class="s-pen" id="d-pen">' + IC('i-pencil') + '</span></div><div class="s-list">' +
+      var sb = '<div class="s-sb"><div class="s-brand"><span class="s-bnr" id="d-bnr"></span><span class="s-logo" id="d-logo"></span><span class="s-btext"><span class="s-bname" id="d-bname"></span><span class="s-bsub" id="d-bsub"></span></span><span class="s-bchev">' + IC('i-chev') + '</span><span class="s-pen" id="d-pen">' + IC('i-pencil') + '</span></div><div class="s-list">' +
         srow('dash', 'i-home', 'Dashboard', null, null, true) +
         '<div class="s-gh">' + IC('i-tack') + 'Pinned</div>' +
         srow('journal', 'i-journal', 'Journal') + srow('calendar', 'i-cal', 'Calendar') + srow('sessions', 'i-d20', 'Sessions') + srow('maps', 'i-map', 'Maps') +
@@ -743,14 +801,14 @@
         if (w === 'era') return '<div class="rw"><span class="k">Era</span><span class="v">Age of Ash</span></div>';
         if (w === 'links') return '<div class="rw"><span class="k">Links</span><span class="v">' + esc(d.header.links.map(function(l){ return l.label.trim(); }).filter(Boolean).join(' · ') || 'No links yet') + '</span></div>';
         if (w === 'text') return '<div class="rw q"><span class="k">Note</span><span class="v">' + esc(d.header.text.trim() || 'Nothing written yet') + '</span></div>';
-        if (w === 'search') return '<div class="rw srch">' + IC('i-search') + '<span>Search Ashfall…</span></div>';
+        if (w === 'search') return '<div class="rw srch">' + IC('i-search') + '<span>Search ' + esc(CAMPAIGN) + '…</span></div>';
+        if (w === 'note') return '<div class="rw srch nt">' + IC('i-note') + '<span>Quick note</span></div>';
         return '';
       }).join('');
-      return h + '<div class="rw dim" style="flex-shrink:3"><span class="k">World date</span><span class="v">after the calendar rebuild</span></div>';
+      return h;
     }
     function toolsHTML(d){
       var w = d.header.widgets, h = '';
-      if (w.indexOf('note') >= 0) h += '<span class="s-tool qb">' + IC('i-note') + '</span>';
       if (w.indexOf('search') < 0) h += '<span class="s-tool">' + IC('i-search') + '</span>';
       return h + '<span class="s-tool">' + IC('i-mask') + '</span><span class="s-tool">' + IC('i-bell') + '<span class="s-badge">2</span></span><span class="s-av">GM</span>';
     }
@@ -761,6 +819,8 @@
       pv.dataset.strength = d.nav.strength;
       pv.dataset.btn = d.buttons.style;
       pv.dataset.hdr = d.header.bg === 'sky' ? 'solid' : d.header.bg;
+      pv.dataset.hdrh = d.header.height;
+      pv.dataset.corner = d.sidebar.corner;
       pv.dataset.reduce = reduce ? '1' : '0';
       pv.dataset.theme = theme;
       pv.dataset.elev = d.motion.elevation;
@@ -777,6 +837,8 @@
       $('#d-banner').classList.toggle('noimg', !burl);
       setText($('#d-welcome'), d.brand.welcome.trim());
       setBg($('#d-ebanner'), IMG.dusk);
+      setBg($('#d-bnr'), d.sidebar.corner === 'banner' ? imgURL(d.sidebar.banner) : '');
+      setText($('#d-bsub'), d.sidebar.corner === 'subtitle' ? d.sidebar.subtitle.trim() : '');
       setBg($('#d-himg'), imgURL(d.header.image));
       setHTML($('#d-path'), ui.page === 'dash' ? '<b>Dashboard</b>' : '<span>Locations</span>' + IC('i-chev-r') + '<span>Cities</span>' + IC('i-chev-r') + '<b>Emberfall</b>');
       setHTML($('#d-rail'), railHTML(d));
@@ -820,14 +882,31 @@
       ['accent', 's1', 's2'].forEach(function(g){ var n = guardNote(g, d), el = $('#' + g + '-note'); el.hidden = !n; setText($('span', el), n); });
       var bg = d.header.bg;
       $('#h-solid').hidden = bg !== 'solid';
-      $('#h-grad').hidden = bg !== 'gradient' && bg !== 'animated';
-      $('#h-anim-h').hidden = bg !== 'animated';
+      $('#h-grad').hidden = bg !== 'gradient' && bg !== 'moving';
+      $('#h-anim-h').hidden = bg !== 'moving';
       $('#h-img').hidden = bg !== 'image';
       var lg = logoHTML(d), lt = $('#brand-logo-t');
       if (!imgURL(d.brand.logo)){ lt.className = 'thumb sq'; setHTML(lt, IC('i-image')); lt.style.backgroundImage = ''; lt._bg = ''; }
       else { lt.className = 'thumb sq'; setHTML(lt, '<span class="' + lg[0] + '" style="width:44px;height:44px;border-radius:9px">' + lg[1] + '</span>'); }
       $('#brand-logo-t').setAttribute('aria-label', imgURL(d.brand.logo) ? 'Current logo' : 'No logo');
-      [['brand.backdrop'], ['header.image']].forEach(function(x){
+      // Sidebar section: the choices that go with each selection.
+      var sbc = d.colours.sidebar, sbOwn = menuDark(d.sidebar.own);
+      $('#sb-own').hidden = sbc !== 'own';
+      $('#sb-sub-wrap').hidden = d.sidebar.corner !== 'subtitle';
+      $('#sb-bnr-wrap').hidden = d.sidebar.corner !== 'banner';
+      $('#sb-glow-own').hidden = d.sidebar.glow !== 'own';
+      setText($('#sb-sub-c'), d.sidebar.subtitle.length + ' / 40');
+      syncText('#sb-sub', d.sidebar.subtitle);
+      $$('input[name="sb-col"]').forEach(function(i){
+        var chip = $('.chip', i.parentNode);
+        if (i.value === 'tinted') chip.style.setProperty('--c', menuTinted(d.colours.accent));
+        else if (i.value === 'own') chip.style.setProperty('--c', sbOwn);
+      });
+      var ownNote = $('#sb-own-note'), darkened = sbOwn !== d.sidebar.own.toLowerCase();
+      ownNote.hidden = !(sbc === 'own' && darkened);
+      setText($('span', ownNote), 'Darkened a little so the menu stays readable.');
+      $('#sb-glow-bar').style.setProperty('--g', d.sidebar.glow === 'own' ? d.sidebar.glowColour : d.colours.accent);
+      [['brand.backdrop'], ['header.image'], ['sidebar.banner']].forEach(function(x){
         var id = x[0].replace('.', '-'), url = imgURL(getP(d, x[0])), t = $('#' + id + '-t');
         setBg(t, url); setHTML(t, url ? '' : IC('i-image')); t.setAttribute('aria-label', url ? 'Current picture' : 'No picture');
       });
@@ -861,7 +940,8 @@
     function resetCaption(sec){
       var L = look(draft.look).name;
       if (sec === 'brand') return 'Back to what is saved';
-      if (sec === 'header') return 'Background to ' + L + ', widgets as saved';
+      if (sec === 'header') return 'Background to ' + L + ', height and widgets as saved';
+      if (sec === 'sidebar') return 'Colour to ' + L + ', corner and glow as saved';
       return 'Back to the ' + L + ' look';
     }
     function syncStatus(){
@@ -955,9 +1035,22 @@
       var reduce = reduceAll();
       $$('#preview .hl').forEach(function(hl){ hlMotion(hl, !reduce && !hl.closest('.zp.off') && hl.offsetParent !== null); });
       $$('.nt-s .hl').forEach(function(hl){ var vis = hl.offsetParent !== null; hlMotion(hl, vis && !reducedDevice() && !!hl.closest('.nav-tile.play'), vis && !reducedDevice()); });
-      var drift = $('#d-drift');
-      drift.classList.toggle('v', draft.header.dir === 'b');
-      drift.classList.toggle('run', draft.header.bg === 'animated' && !reduce);
+      driftSync();
+    }
+
+    /* ---------- The moving header, in the example ----------
+       The same slide the real header makes (header_motion.js), on the shared
+       MotionRest clock, so it rests when nobody is using the page. */
+    var drift = null;
+    function driftStop(){ if (drift){ if (drift.run) drift.run.destroy(); drift = null; } }
+    function driftSync(){
+      var el = $('#d-drift'), vertical = draft.header.dir === 'b';
+      el.classList.toggle('v', vertical);
+      var want = draft.header.bg === 'moving' && !reduceAll() && !!(window.Chronicle && Chronicle.headerMotion);
+      if (!want){ driftStop(); return; }
+      if (drift && drift.vertical === vertical) return;
+      driftStop();
+      drift = { run:Chronicle.headerMotion.drive(el, vertical), vertical:vertical };
     }
 
     /* ---------- One-shot plays: show a motion setting without a pointer ---------- */
@@ -996,7 +1089,10 @@
         { duration:still ? 380 : 600, easing:'cubic-bezier(.2,.7,.3,1)' });
     }
 
-    /* ---------- Header widgets ---------- */
+    /* ---------- Header widgets ----------
+       header.widgets is the enabled widgets in order. The list shows those
+       first, then the ones that are off; the header holds WIDGET_SLOTS, and a
+       full header disables the switches of the rest. */
     var openW = null;
     function widgetDesc(w, d){
       if (w === 'links') return d.header.links.map(function(l){ return l.label.trim(); }).filter(Boolean).join(' · ') || 'No links yet';
@@ -1011,48 +1107,58 @@
       return '<label class="wset-l" for="wt-text">Text</label><input class="inp" id="wt-text" maxlength="80" data-wtext="1"><p class="hint">One line, up to 80 characters.</p>';
     }
     function renderWidgets(){
-      var d = draft, list = d.header.widgets, wl = $('#wl');
-      if (openW && list.indexOf(openW) < 0){ openW = null; dropLayer('wset'); }
-      var sig = list.join(',') + '|' + openW;
+      var d = draft, on = d.header.widgets, full = on.length >= WIDGET_SLOTS, wl = $('#wl');
+      var rows = on.concat(WIDGET_ORDER.filter(function(w){ return on.indexOf(w) < 0; }));
+      if (openW && on.indexOf(openW) < 0){ openW = null; dropLayer('wset'); }
+      var sig = on.join(',') + '|' + openW;
       if (wl._sig !== sig){
         wl._sig = sig;
-        wl.innerHTML = list.map(function(w, i){
-          var W = WIDGETS[w], set = w === 'links' || w === 'text';
-          return '<div class="wr" data-w="' + w + '">' +
-            '<button type="button" class="ib" data-wact="up" data-w="' + w + '" aria-label="Move ' + W.name + ' up"' + (i === 0 ? ' disabled' : '') + '>' + IC('i-up') + '</button>' +
-            '<button type="button" class="ib" data-wact="down" data-w="' + w + '" aria-label="Move ' + W.name + ' down"' + (i === list.length - 1 ? ' disabled' : '') + '>' + IC('i-down') + '</button>' +
-            '<span class="wr-t"><b>' + W.name + '</b><span data-wdesc="' + w + '"></span></span>' +
+        wl.innerHTML = rows.map(function(w){
+          var W = WIDGETS[w], i = on.indexOf(w), isOn = i >= 0, set = isOn && (w === 'links' || w === 'text');
+          return '<div class="wr' + (isOn ? '' : ' off') + '" data-w="' + w + '">' +
+            '<input type="checkbox" class="wtog" id="wtog-' + w + '" data-wtog="' + w + '" aria-label="Show ' + W.name + ' in the header"' + (isOn ? ' checked' : '') + (!isOn && full ? ' disabled' : '') + '>' +
+            '<label class="wr-t" for="wtog-' + w + '"><b>' + W.name + '</b><span data-wdesc="' + w + '"></span></label>' +
+            '<button type="button" class="ib" data-wact="up" data-w="' + w + '" aria-label="Move ' + W.name + ' up"' + (i <= 0 ? ' disabled' : '') + '>' + IC('i-up') + '</button>' +
+            '<button type="button" class="ib" data-wact="down" data-w="' + w + '" aria-label="Move ' + W.name + ' down"' + (!isOn || i === on.length - 1 ? ' disabled' : '') + '>' + IC('i-down') + '</button>' +
             (set ? '<button type="button" class="ib" data-wact="set" data-w="' + w + '" aria-expanded="' + (openW === w) + '" aria-controls="wset-' + w + '" aria-label="' + W.name + ' settings">' + IC('i-gear') + '</button>' : '') +
-            '<button type="button" class="ib" data-wact="rm" data-w="' + w + '" aria-label="Remove ' + W.name + '">' + IC('i-x') + '</button></div>' +
+            '</div>' +
             (set ? '<div class="wset" id="wset-' + w + '"' + (openW === w ? '' : ' hidden') + '>' + wsetBody(w) + '</div>' : '');
-        }).join('') + '<div class="wr declared"><span class="wr-t"><b>World date</b><span>Declared. It fills in after the calendar rebuild.</span></span></div>';
-        var free = Object.keys(WIDGETS).filter(function(w){ return list.indexOf(w) < 0; });
-        $('#wadd').innerHTML = (list.length < WIDGET_SLOTS ? free.filter(function(w){ return !WIDGETS[w].later; }).map(function(w){
-          return '<button type="button" class="czb czb-sm" data-wact="add" data-w="' + w + '">' + IC('i-plus') + WIDGETS[w].name + '</button>';
-        }).join('') : '') + Object.keys(WIDGETS).filter(function(w){ return WIDGETS[w].later; }).map(function(w){
-          return '<span class="w-later">' + WIDGETS[w].name + '</span>';
-        }).join('') + '<span class="slots">' + list.length + ' of ' + WIDGET_SLOTS + ' slots used</span>';
+        }).join('');
       }
-      list.forEach(function(w){ setText($('[data-wdesc="' + w + '"]'), widgetDesc(w, d)); });
+      var fullEl = $('#w-full');
+      fullEl.classList.toggle('is-full', full);
+      setHTML(fullEl, full ? '<b>The header is full: ' + on.length + ' of ' + WIDGET_SLOTS + '.</b> Switch one off to add another.' : 'Showing <b>' + on.length + ' of ' + WIDGET_SLOTS + '</b>. Switch widgets on, and use the arrows to put them in order.');
+      rows.forEach(function(w){ setText($('[data-wdesc="' + w + '"]'), widgetDesc(w, d)); });
       d.header.links.forEach(function(l, i){ syncText('#wl-' + i + '-label', l.label); syncText('#wl-' + i + '-url', l.url); });
       syncText('#wt-text', d.header.text);
     }
     function focusW(sel){ var b = $(sel); if (b && !b.disabled){ b.focus(); return true; } return false; }
-    function widgetAct(act, w, btn){
+    // A switch changes the list; the list's sig changes, so the rows are
+    // rebuilt and focus is put back on the same switch.
+    function widgetToggle(w, want){
+      var list = draft.header.widgets.slice(), i = list.indexOf(w), name = WIDGETS[w].name;
+      if (want && i < 0){
+        if (list.length >= WIDGET_SLOTS){ update(); announce('The header is full: ' + WIDGET_SLOTS + ' of ' + WIDGET_SLOTS + '.'); return; }
+        list.push(w);
+      } else if (!want && i >= 0){
+        list.splice(i, 1);
+        if (openW === w){ openW = null; dropLayer('wset'); }
+      } else return;
+      draft.header.widgets = list;
+      update();
+      focusW('#wtog-' + w);
+      announce(name + (want ? ' added to the header, place ' + list.length + ' of ' + WIDGET_SLOTS + '.' : ' removed from the header.'));
+    }
+    function widgetAct(act, w){
       if (act === 'set'){ toggleWset(w); return; }
       var list = draft.header.widgets.slice(), i = list.indexOf(w), name = WIDGETS[w].name;
       if (act === 'up' && i > 0){ list.splice(i, 1); list.splice(i - 1, 0, w); }
-      else if (act === 'down' && i < list.length - 1){ list.splice(i, 1); list.splice(i + 1, 0, w); }
-      else if (act === 'rm'){ list.splice(i, 1); if (openW === w){ openW = null; dropLayer('wset'); } }
-      else if (act === 'add' && list.length < WIDGET_SLOTS) list.push(w);
+      else if (act === 'down' && i >= 0 && i < list.length - 1){ list.splice(i, 1); list.splice(i + 1, 0, w); }
       else return;
       draft.header.widgets = list;
       update();
-      if (act === 'up' || act === 'down'){
-        focusW('[data-wact="' + act + '"][data-w="' + w + '"]') || focusW('[data-wact="' + (act === 'up' ? 'down' : 'up') + '"][data-w="' + w + '"]');
-        announce(name + ' moved to place ' + (list.indexOf(w) + 1) + '.');
-      } else if (act === 'rm'){ focusW('#wadd [data-w="' + w + '"]') || focusW('#wl .ib:not(:disabled)'); announce(name + ' removed from the header.'); }
-      else { focusW('[data-wact="rm"][data-w="' + w + '"]'); announce(name + ' added to the header.'); }
+      focusW('[data-wact="' + act + '"][data-w="' + w + '"]') || focusW('[data-wact="' + (act === 'up' ? 'down' : 'up') + '"][data-w="' + w + '"]');
+      announce(name + ' moved to place ' + (list.indexOf(w) + 1) + '.');
     }
     function toggleWset(w){
       if (openW === w){ closeWset(true); return; }
@@ -1153,8 +1259,8 @@
         return '<b>' + esc(s[1]) + '</b><span>' + esc(s[3]) + (STILL_OF[s[0]] ? ' With less motion it shows as ' + navName(STILL_OF[s[0]]).toLowerCase() + '.' : '') + '</span>';
       }
       if (t === 'btn'){ var b = BTN_STYLES.filter(function(x){ return x[0] === p[1]; })[0]; return '<b>' + esc(b[1]) + '</b><span>' + esc(b[2]) + '</span>'; }
-      if (t === 'hint' && p[1] === 'hdrproj') return '<b>Coming with the header project</b><span>Animated backgrounds and more header widgets get their own design next.</span>';
-      if (t === 'hint') return '<b>Sky</b><span>The living world backdrop: the sky over your world as it is in the story right now. It arrives with the sky project.</span>';
+      if (t === 'menu'){ var mc = MENU_COLOURS.filter(function(x){ return x[0] === p[1]; })[0]; return '<b>' + esc(mc[1]) + '</b><span>' + esc(mc[2]) + '</span>'; }
+      if (t === 'hint') return '<b>Sky</b><span>Coming soon: the living sky over your world as it is in the story right now.</span>';
       return '';
     }
     function hcCtl(el){ return el.matches('input, button') ? el : ($('input, button', el) || el); }
@@ -1257,20 +1363,27 @@
     function pic(v){ return v && v !== 'none' ? v : ''; }
     function toInput(d){
       var h = d.header, bg = h.bg === 'solid' ? (h.solid === 'page' ? '' : 'solid') : h.bg;
+      var drift = bg === 'gradient' || bg === 'moving', sb = d.sidebar;
       return {
         look:d.look,
         brand:{ name:d.brand.name.trim(), logo:pic(d.brand.logo), welcome:d.brand.welcome, backdrop:pic(d.brand.backdrop) },
-        header:{ bg:bg, color:bg === 'solid' ? h.solid : '', from:bg === 'gradient' ? h.from : '', to:bg === 'gradient' ? h.to : '',
-          dir:bg === 'gradient' ? 'to-' + h.dir : '', image:bg === 'image' ? pic(h.image) : '', scrim:h.scrim,
+        header:{ bg:bg, height:h.height, color:bg === 'solid' ? h.solid : '', from:drift ? h.from : '', to:drift ? h.to : '',
+          dir:drift ? 'to-' + h.dir : '', image:bg === 'image' ? pic(h.image) : '', scrim:h.scrim,
           widgets:h.widgets.slice(), links:h.links.filter(function(l){ return l.label.trim() || l.url.trim(); }), text:h.text },
         colours:{ accent:d.colours.accent, s1:d.colours.s1 || '', s2:d.colours.s2 || '', page:d.colours.page, contrast:d.colours.contrast },
-        nav:clone(d.nav), type:clone(d.type), buttons:clone(d.buttons), motion:clone(d.motion)
+        nav:clone(d.nav), type:clone(d.type), buttons:clone(d.buttons), motion:clone(d.motion),
+        // The companion of each choice is sent only while that choice is
+        // selected, so nothing stale is stored.
+        sidebar:{ colour:d.colours.sidebar, own:d.colours.sidebar === 'own' ? sb.own : '', corner:sb.corner,
+          subtitle:sb.corner === 'subtitle' ? sb.subtitle.trim() : '', banner:sb.corner === 'banner' ? pic(sb.banner) : '',
+          glow:sb.glow, glowColour:sb.glow === 'own' ? sb.glowColour : '' }
       };
     }
     // A problem the page can name before asking the server: it opens the
     // section and says what is missing, next to the setting.
     function preSaveProblem(d){
       if (d.header.bg === 'image' && !pic(d.header.image)) return ['header', 'header-image-e', 'Choose a picture for the header, or pick another background.'];
+      if (d.sidebar.corner === 'banner' && !pic(d.sidebar.banner)) return ['sidebar', 'sidebar-banner-e', 'Choose a picture for the banner, or pick another corner.'];
       var bad = d.header.links.filter(function(l){ return l.label.trim() && !l.url.trim(); })[0];
       if (bad && d.header.widgets.indexOf('links') >= 0) return ['header', null, 'The link “' + bad.label.trim() + '” needs an address.'];
       return null;
@@ -1332,8 +1445,8 @@
     function doUndo(){ if (!undoDraft) return; clearTimeout(discardT); draft = undoDraft; undoDraft = null; update(); settle(); toast('Your changes are back.'); }
 
     /* ---------- Pictures ---------- */
-    var UPLOAD_KIND = { 'brand.logo':'logo', 'brand.backdrop':'backdrop', 'header.image':'header' };
-    var upKey = null, LIMITS = { 'brand.logo':[1, 'The logo'], 'brand.backdrop':[4, 'The backdrop'], 'header.image':[1.5, 'The header'] };
+    var UPLOAD_KIND = { 'brand.logo':'logo', 'brand.backdrop':'backdrop', 'header.image':'header', 'sidebar.banner':'menu' };
+    var upKey = null, LIMITS = { 'brand.logo':[1, 'The logo'], 'brand.backdrop':[4, 'The backdrop'], 'header.image':[1.5, 'The header'], 'sidebar.banner':[1.5, 'The banner'] };
     function onFile(input){
       var f = input.files && input.files[0], k = upKey;
       if (!f || !k) return;
@@ -1374,6 +1487,7 @@
       if (t.name === 'dpage'){ setPage(t.value); return; }
       if (t.name === 'ptheme'){ ui.ptheme = t.value; update(); return; }
       if (t.id === 'file'){ onFile(t); return; }
+      if (t.dataset.wtog){ widgetToggle(t.dataset.wtog, t.checked); return; }
       var k = t.dataset.k, v;
       if (!k) return;
       if (t.type === 'checkbox') v = t.checked;
@@ -1400,7 +1514,7 @@
       if (t.dataset.pick){ if (pick && pick.btn === t) closePicker(true); else { if (pick) closePicker(false); openPicker(t); } return; }
       if (t.dataset.up){ upKey = t.dataset.up; $('#file').value = ''; $('#file').click(); return; }
       if (t.dataset.rm){ setP(draft, t.dataset.rm, 'none'); $('#' + t.dataset.rm.replace('.', '-') + '-e').hidden = true; update(); tidyPictures(); announce('Picture removed from your draft.'); return; }
-      if (t.dataset.wact){ widgetAct(t.dataset.wact, t.dataset.w, t); return; }
+      if (t.dataset.wact){ widgetAct(t.dataset.wact, t.dataset.w); return; }
       switch (t.id){
         case 'savebtn': doSave(); break;
         case 'discard': doDiscard(); break;
@@ -1462,6 +1576,7 @@
     var FZ = {
       brand:  { dash:['.s-brand', '#d-banner'], city:['.s-brand'], tip:'Your name, logo, welcome and backdrop' },
       header: { all:['.s-hdr'], tip:'The bar across the top' },
+      sidebar:{ all:['.s-sb'], tip:'The menu’s colour and top-left corner' },
       nav:    { all:['.s-list'], tip:'How the menu shows where you are' },
       colours:{ all:['.p-link', '.tag', '.chipe', '.czbadge', '.band', '.tev.now', '.av'], tip:'Links, tags, events and badges' },
       type:   { dash:['.d-title .h1', '.c-h'], city:['.e-head', '.e-body p'], tip:'Headings and text' },
@@ -1470,9 +1585,9 @@
     };
     // Most specific first: a button inside a card is a button.
     var FZ_HIT = [['.pbtn', 'buttons'], ['.p-link, .tag, .chipe, .czbadge, .band, .tev.now, .av', 'colours'],
-      ['.h1, .c-h, .e-head, .e-body p', 'type'], ['.s-brand, #d-banner', 'brand'], ['.s-hdr', 'header'], ['.s-list', 'nav'],
+      ['.h1, .c-h, .e-head, .e-body p', 'type'], ['.s-bnr, .s-bsub', 'sidebar'], ['.s-brand, #d-banner', 'brand'], ['.s-hdr', 'header'], ['.s-list', 'nav'], ['.s-sb', 'sidebar'],
       ['.pcard', 'motion'], ['.s-page', 'colours']];
-    var FZ_OF = { brand:'brand', header:'header', nav:'nav', colours:'colours', type:'type', buttons:'buttons', motion:'motion' };
+    var FZ_OF = { brand:'brand', header:'header', sidebar:'sidebar', nav:'nav', colours:'colours', type:'type', buttons:'buttons', motion:'motion' };
     var fzLock = false, fzLastFlash = {}, fzRaf = 0, fzHovSec = null;
     function fzSite(){ return $('#site-wrap .site'); }
     function fzRects(sec){
@@ -1550,7 +1665,7 @@
     }
     function fzFlash(k){
       if (ui.zoom !== 'site' || reduceAll()) return;
-      var secs = k === '*' ? [] : [FZ_OF[String(k).split('.')[0]]];
+      var secs = k === '*' ? [] : [k === 'colours.sidebar' ? 'sidebar' : FZ_OF[String(k).split('.')[0]]];
       secs.forEach(function(sec){
         if (!sec || Date.now() - (fzLastFlash[sec] || 0) < 900) return;
         fzLastFlash[sec] = Date.now();
@@ -1656,6 +1771,7 @@
       if (ro) ro.disconnect();
       if (mo) mo.disconnect();
       ringAnims.forEach(function (a) { a.forEach(function (x) { x.cancel(); }); });
+      driftStop();
       clearTimeout(toastT); clearTimeout(hcTimer);
       cancelAnimationFrame(fzRaf); clearTimeout(discardT);
       playTimers.forEach(clearTimeout);

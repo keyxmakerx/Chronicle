@@ -172,14 +172,17 @@ type ExportCalendarData struct {
 	// guard's own doc comment says a new zone-carrying field must
 	// consciously EXTEND that pin, not be routed around it — a security
 	// sign-off call for a human reviewer.
-	Hemisphere         *string                 `json:"hemisphere,omitempty"`
-	ForecastsEnabled   bool                    `json:"forecasts_enabled,omitempty"`
-	MonthStartsNewWeek bool                    `json:"month_starts_new_week,omitempty"`
-	Months             []ExportCalendarMonth   `json:"months"`
-	Weekdays           []ExportCalendarWeekday `json:"weekdays"`
-	Moons              []ExportCalendarMoon    `json:"moons,omitempty"`
-	Seasons            []ExportCalendarSeason  `json:"seasons,omitempty"`
-	Eras               []ExportCalendarEra     `json:"eras,omitempty"`
+	Hemisphere         *string `json:"hemisphere,omitempty"`
+	ForecastsEnabled   bool    `json:"forecasts_enabled,omitempty"`
+	MonthStartsNewWeek bool    `json:"month_starts_new_week,omitempty"`
+	// EraLook is the calendar's era colours setting; nil in a backup from
+	// before it existed, which keeps the defaults on restore.
+	EraLook  *ExportCalendarEraLook  `json:"era_look,omitempty"`
+	Months   []ExportCalendarMonth   `json:"months"`
+	Weekdays []ExportCalendarWeekday `json:"weekdays"`
+	Moons    []ExportCalendarMoon    `json:"moons,omitempty"`
+	Seasons  []ExportCalendarSeason  `json:"seasons,omitempty"`
+	Eras     []ExportCalendarEra     `json:"eras,omitempty"`
 	// Cycles/Festivals/Weather are additive sub-resources, the same
 	// "restored config the GM set, not silently reset to nothing" case as
 	// the settings above.
@@ -281,6 +284,23 @@ type ExportCalendarEra struct {
 	Description *string `json:"description,omitempty"`
 	Color       string  `json:"color"`
 	SortOrder   int     `json:"sort_order"`
+	// Additive: the era's look and lore (calendar.Era). LoreEntitySlug names
+	// the lore page by slug, re-pointed at the restored page on import, the
+	// way an event's linked page is.
+	Color2            *string `json:"color_2,omitempty"`
+	Style             string  `json:"style,omitempty"`
+	Feel              *string `json:"feel,omitempty"`
+	LoreEntitySlug    *string `json:"lore_entity_slug,omitempty"`
+	DMNote            *string `json:"dm_note,omitempty"`
+	HiddenUntilBegins bool    `json:"hidden_until_begins,omitempty"`
+}
+
+// ExportCalendarEraLook is a calendar's era colours setting for export.
+type ExportCalendarEraLook struct {
+	ColorsOn  bool    `json:"colors_on"`
+	Feel      string  `json:"feel"`
+	Intensity float64 `json:"intensity"`
+	Speed     float64 `json:"speed"`
 }
 
 // ExportCalendarCycle is a repeating named cycle (a zodiac of years, say)

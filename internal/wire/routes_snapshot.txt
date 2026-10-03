@@ -69,6 +69,7 @@ DELETE	/members/:uid	internal/plugins/campaigns/routes.go
 DELETE	/notes/:nid/attachments/:aid	internal/widgets/notes/routes.go
 DELETE	/notes/:noteID	internal/plugins/syncapi/routes.go
 DELETE	/notes/:noteId	internal/widgets/notes/routes.go
+DELETE	/notes/app-grants/:gid	internal/widgets/notes/routes.go
 DELETE	/owner-dashboard-layout	internal/plugins/campaigns/routes.go
 DELETE	/prune	internal/plugins/packages/routes.go
 DELETE	/relations/:relationId	internal/plugins/syncapi/routes.go
@@ -180,6 +181,8 @@ GET	/calendars	internal/plugins/calendar/routes.go
 GET	/calendars	internal/plugins/syncapi/routes.go
 GET	/calendars/:calid	internal/plugins/calendar/routes.go
 GET	/calendars/:calid	internal/plugins/calendar/routes.go
+GET	/calendars/:calid/eras/:eraID/events	internal/plugins/calendar/routes.go
+GET	/calendars/:calid/eras/:eraID/events	internal/plugins/calendar/routes.go
 GET	/calendars/:calid/events	internal/plugins/calendar/routes.go
 GET	/calendars/:calid/events	internal/plugins/calendar/routes.go
 GET	/calendars/:calid/events/:eid	internal/plugins/calendar/routes.go
@@ -228,7 +231,9 @@ GET	/design-lab	internal/plugins/designlab/routes.go
 GET	/diagnostics	internal/app/routes.go
 GET	/diagnostics/workspace	internal/plugins/admin/routes.go
 GET	/dm-grants	internal/plugins/campaigns/routes.go
+GET	/dm-screen	internal/plugins/dmscreen/routes.go
 GET	/edit	internal/plugins/campaigns/routes.go
+GET	/embed/campaigns/:id/notes/:mode	internal/widgets/notes/routes.go
 GET	/entities	internal/plugins/entities/routes.go
 GET	/entities	internal/plugins/syncapi/routes.go
 GET	/entities/:eid	internal/plugins/entities/routes.go
@@ -247,6 +252,7 @@ GET	/entities/:eid/notes/:nid	internal/widgets/entity_notes/routes.go
 GET	/entities/:eid/permissions	internal/plugins/entities/routes.go
 GET	/entities/:eid/player-notes	internal/plugins/entities/routes.go
 GET	/entities/:eid/posts	internal/widgets/posts/routes.go
+GET	/entities/:eid/preview	internal/app/routes.go
 GET	/entities/:eid/preview	internal/plugins/entities/routes.go
 GET	/entities/:eid/relations	internal/widgets/relations/routes.go
 GET	/entities/:eid/tags	internal/widgets/tags/routes.go
@@ -255,6 +261,7 @@ GET	/entities/:entityID/permissions	internal/plugins/syncapi/routes.go
 GET	/entities/:entityID/relations	internal/plugins/syncapi/routes.go
 GET	/entities/members	internal/plugins/entities/routes.go
 GET	/entities/new	internal/plugins/entities/routes.go
+GET	/entities/search	internal/app/routes.go
 GET	/entities/search	internal/plugins/entities/routes.go
 GET	/entities/types	internal/plugins/entities/routes.go
 GET	/entity-names	internal/plugins/entities/routes.go
@@ -356,6 +363,9 @@ GET	/notes/:noteId	internal/widgets/notes/routes.go
 GET	/notes/:noteId/backlinks	internal/widgets/notes/routes.go
 GET	/notes/:noteId/versions	internal/widgets/notes/routes.go
 GET	/notes/:noteId/versions/:vid	internal/widgets/notes/routes.go
+GET	/notes/allow-app	internal/widgets/notes/routes.go
+GET	/notes/app-grants	internal/widgets/notes/routes.go
+GET	/notes/embed	internal/widgets/notes/routes.go
 GET	/notes/index	internal/widgets/notes/routes.go
 GET	/notes/labels	internal/widgets/notes/routes.go
 GET	/notes/members	internal/widgets/notes/routes.go
@@ -522,6 +532,7 @@ POST	/content-templates	internal/plugins/entities/content_template_routes.go
 POST	/database/migrations/apply	internal/plugins/admin/routes.go
 POST	/diagnostics/workspace/parse	internal/plugins/admin/routes.go
 POST	/diagnostics/workspace/run	internal/plugins/admin/routes.go
+POST	/dm-screen/reveal/:eid	internal/plugins/dmscreen/routes.go
 POST	/entities	internal/plugins/entities/routes.go
 POST	/entities	internal/plugins/syncapi/routes.go
 POST	/entities/:eid/claim	internal/plugins/entities/routes.go
@@ -582,7 +593,9 @@ POST	/notes/:noteId/send-to-journal	internal/widgets/notes/routes.go
 POST	/notes/:noteId/toggle	internal/widgets/notes/routes.go
 POST	/notes/:noteId/unlock	internal/widgets/notes/routes.go
 POST	/notes/:noteId/versions/:vid/restore	internal/widgets/notes/routes.go
+POST	/notes/allow-app	internal/widgets/notes/routes.go
 POST	/notes/bulk	internal/widgets/notes/routes.go
+POST	/notes/media-links	internal/widgets/notes/routes.go
 POST	/notifications/:nid/read	internal/plugins/sessions/routes.go
 POST	/notifications/read-all	internal/plugins/sessions/routes.go
 POST	/npcs/:eid/reveal	internal/plugins/npcs/routes.go
@@ -680,6 +693,7 @@ PUT	/calendar/weather	internal/plugins/syncapi/routes.go
 PUT	/calendar/weekdays	internal/plugins/syncapi/routes.go
 PUT	/calendars/:calid	internal/plugins/calendar/routes.go
 PUT	/calendars/:calid/default	internal/plugins/calendar/routes.go
+PUT	/calendars/:calid/era-look	internal/plugins/calendar/routes.go
 PUT	/calendars/:calid/eras/:eraID	internal/plugins/calendar/routes.go
 PUT	/calendars/:calid/events/:eid	internal/plugins/calendar/routes.go
 PUT	/calendars/:calid/events/:eid/occurrences/:y/:m/:d	internal/plugins/calendar/routes.go

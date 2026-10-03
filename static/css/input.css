@@ -772,6 +772,55 @@
     background: var(--color-bg-primary);
   }
 
+  /* ---- "On this page" outline (editor_outline.js) ----
+     Wide editors: a sticky column beside the text. Narrow ones: a folded
+     button above it. overflow: clip (not hidden) keeps the rounded corners
+     without making the editor a scroll box, which would stop sticky. */
+  .chronicle-editor--outlined {
+    overflow: clip;
+    container-type: inline-size;
+  }
+  .chronicle-editor--outlined .chronicle-editor__content {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .chronicle-outline {
+    order: -1;
+    @apply px-4 pt-3;
+  }
+  .chronicle-outline__label { @apply hidden; }
+  .chronicle-outline__toggle {
+    @apply inline-flex items-center gap-1.5 px-2.5 py-1 text-xs font-medium rounded-md
+           border border-edge text-fg-secondary hover:text-fg hover:bg-surface-alt cursor-pointer;
+  }
+  .chronicle-outline__list { @apply hidden mt-2 mb-0 pl-0 list-none text-sm; }
+  .chronicle-outline.is-open .chronicle-outline__list { @apply block; }
+  .chronicle-outline__item button {
+    @apply block w-full text-left py-1 text-fg-secondary hover:text-fg cursor-pointer
+           bg-transparent border-0 rounded;
+  }
+  .chronicle-outline__item--d1 button { @apply pl-3; }
+  .chronicle-outline__item--d2 button { @apply pl-6; }
+  .chronicle-outline__item button.is-current { @apply text-accent font-semibold; }
+  .chronicle-outline__item button:focus-visible { @apply outline-none ring-2 ring-accent/40; }
+  .chronicle-editor--outlined .tiptap :is(h1, h2, h3) { scroll-margin-top: 1rem; }
+
+  @container (min-width: 44rem) {
+    .chronicle-editor--outlined .chronicle-editor__content {
+      grid-template-columns: minmax(0, 1fr) 12rem;
+    }
+    .chronicle-outline {
+      order: 1;
+      @apply px-3 py-4 border-l border-edge-light;
+    }
+    .chronicle-outline__inner { position: sticky; top: 0.5rem; }
+    .chronicle-outline__toggle { @apply hidden; }
+    .chronicle-outline__label {
+      @apply block mb-1 text-xs font-semibold uppercase tracking-wider text-fg-muted;
+    }
+    .chronicle-outline__list { @apply block mt-0; }
+  }
+
   /* ---- Find/Replace Bar ---- */
   .chronicle-find-bar {
     @apply flex flex-col gap-1 px-3 py-2 border-b border-edge-light;
@@ -1507,6 +1556,23 @@
       border-radius: 14px;
     }
   }
+  /* In an outside app's frame (the Foundry jot window) the frame is the
+     panel: it fills the frame edge to edge and never hides. */
+  .notes-panel.notes-panel-embed {
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    max-height: none;
+    border: 0;
+    border-radius: 0;
+    box-shadow: none;
+    transform: none;
+  }
+/* .note-btn's display beats the hidden attribute; the frame has no close,
+   pin or collapse. */
+.notes-panel-embed .notes-close,
+.notes-panel-embed .notes-pin-panel,
+.notes-panel-embed .notes-collapse-btn { display: none; }
   .notes-panel-hidden {
     opacity: 0;
     pointer-events: none;
@@ -2798,12 +2864,14 @@
 @layer components {
   .nav-sb {
     --nav-bg: var(--color-sidebar-bg, #1a1c23);
-    --nav-hover: #262a33;
-    --nav-press: #15171d;
-    --nav-raised: #22252e;
-    --nav-text: #cbd5e1;
-    --nav-text-2: #8b93a1;
-    --nav-text-3: #5f6776;
+    /* The --cz-sb-* tokens come from a campaign's menu colour (Customize);
+       Charcoal is every fallback, so a campaign that never set one is unchanged. */
+    --nav-hover: var(--cz-sb-hover, #262a33);
+    --nav-press: var(--cz-sb-press, #15171d);
+    --nav-raised: var(--cz-sb-raised, #22252e);
+    --nav-text: var(--cz-sb-text, #cbd5e1);
+    --nav-text-2: var(--cz-sb-text-2, #8b93a1);
+    --nav-text-3: var(--cz-sb-text-3, #5f6776);
     --nav-hi: #ffffff;
     --nav-strong: #f3f4f6;
     --nav-line: rgb(255 255 255 / 0.07);
@@ -2829,6 +2897,32 @@
     box-shadow: inset 0 1px 0 rgb(255 255 255 / 0.25);
   }
   .nav-brand-name { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 13.5px; font-weight: 700; }
+  /* The name and the optional subtitle stack; a plain corner has only the name. */
+  .nav-brand-text { min-width: 0; flex: 1; display: flex; flex-direction: column; justify-content: center; }
+  .nav-brand-sub {
+    min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+    font-size: 11px; font-weight: 500; color: var(--nav-text-2);
+  }
+  /* The banner picture sits behind the row, under a shade that keeps the
+     name readable on any picture. It is empty (and takes no room) for the
+     other corners. */
+  .nav-brand { position: relative; }
+  .nav-brand-bg { position: absolute; inset: 0; z-index: 0; overflow: hidden; pointer-events: none; }
+  .nav-brand-bg:empty { display: none; }
+  .nav-banner { width: 100%; height: 100%; object-fit: cover; display: block; }
+  .nav-brand-bg:not(:empty)::after {
+    content: ""; position: absolute; inset: 0;
+    background: linear-gradient(transparent 30%, rgb(0 0 0 / 0.65));
+  }
+  .nav-brand > :not(.nav-brand-bg) { position: relative; z-index: 1; }
+  [data-cz-corner="banner"] .nav-brand { height: 6rem; align-items: flex-end; padding-bottom: 10px; }
+  [data-cz-corner="banner"] .nav-brand-name { text-shadow: 0 1px 3px rgb(0 0 0 / 0.6); }
+  [data-cz-corner="banner"] .nav-brand-sub { color: rgb(255 255 255 / 0.8); }
+  /* The tall header and the menu's brand row share their bottom edge. */
+  [data-cz-hdr="tall"] .nav-brand { height: 6rem; }
+  /* Peeking or folded to icons, the menu shows only the logo. */
+  #sidebar.sidebar-peeking .nav-brand-text, #sidebar.sidebar-peeking .nav-brand-bg,
+  .sidebar-collapsed .nav-brand-text, .sidebar-collapsed .nav-brand-bg { display: none; }
   .nav-ibtn {
     width: 32px; height: 32px; flex: none; border-radius: 8px; display: grid; place-items: center;
     color: var(--nav-text-2); transition: transform 120ms var(--nav-ease);
@@ -3936,6 +4030,9 @@ html[data-cz-scale="roomy"] { font-size: 110%; }
   zoom: var(--cz-hz, 1);
 }
 
+/* The tall header. Unlayered, so it outranks the h-14 utility on the bar. */
+[data-cz-hdr="tall"] #app-topbar { height: 6rem; }
+
 /* A custom header that needs light words gets the light ink set inside it. */
 .cz-hdr-light {
   --color-text-primary: #f9fafb;
@@ -3945,6 +4042,40 @@ html[data-cz-scale="roomy"] { font-size: 110%; }
   --color-bg-tertiary: rgb(255 255 255 / 0.10);
   --color-border: rgb(255 255 255 / 0.13);
   border-bottom-color: rgb(255 255 255 / 0.13);
+}
+
+/* The header's "+N" tray opens over the page, so it keeps the page's own ink
+   rather than the light ink above. The snapshot is taken on <html>, where the
+   page tones and dark mode set these, so it follows both. */
+:root {
+  --cz-page-ink-1: var(--color-text-primary);
+  --cz-page-ink-2: var(--color-text-body);
+  --cz-page-ink-3: var(--color-text-secondary);
+  --cz-page-ink-4: var(--color-text-muted);
+  --cz-page-fill: var(--color-bg-tertiary);
+  --cz-page-line: var(--color-border);
+}
+/* Header widgets below md: when the bar can't fit even the first widget,
+   it joins the rest in the tray and the button counts it (app.templ,
+   topbarCenterContent). A lone widget gets the button only then. */
+.tb-slot { container: tbslot / inline-size; }
+.tb-first-copy, .tb-n-all, .tb-solo { display: none; }
+@container tbslot (max-width: 8rem) {
+  .tb-first { display: none; }
+  .tb-first-copy { display: contents; }
+  .tb-n { display: none; }
+  .tb-n-all { display: inline; }
+  .tb-solo { display: inline-flex; }
+}
+@media (min-width: 768px) { .tb-solo { display: none; } }
+
+.cz-hdr-light #topbar-tray {
+  --color-text-primary: var(--cz-page-ink-1);
+  --color-text-body: var(--cz-page-ink-2);
+  --color-text-secondary: var(--cz-page-ink-3);
+  --color-text-muted: var(--cz-page-ink-4);
+  --color-bg-tertiary: var(--cz-page-fill);
+  --color-border: var(--cz-page-line);
 }
 
 /* Elevation: cards take the chosen shadow; cards that open something lift. */
@@ -4077,4 +4208,110 @@ html[data-cz-reduce] *:not(.czp *), html[data-cz-reduce] *:not(.czp *)::before, 
   animation-iteration-count: 1 !important;
   transition-duration: 0.01ms !important;
   scroll-behavior: auto !important;
+}
+
+/* ============================================================ */
+/* DM Screen (internal/plugins/dmscreen, static/js/widgets/dm_screen.js).
+   A full-window overlay; the panel is three parchment leaves joined by
+   hinges, like a paper GM screen. The opening is driven from JS with the
+   Web Animations API, so the reduced-motion guard above doesn't cover it;
+   the widget checks prefers-reduced-motion itself. */
+@layer components {
+  .dms-overlay {
+    position: fixed; inset: 0; z-index: 60;
+    --dms-leaf: #fbf7ee; --dms-leaf-edge: #c9b998; --dms-ink: #2b2418; --dms-ink-muted: #6e624c;
+    --dms-hinge: #8a7650; --dms-ok: #16a34a; --dms-ok-soft: rgba(22,163,74,.15); --dms-warn: #b45309;
+    --dms-die: var(--color-accent, #6366f1);
+  }
+  .dark .dms-overlay {
+    --dms-leaf: #2a251d; --dms-leaf-edge: #5c4f37; --dms-ink: #efe6d2; --dms-ink-muted: #b8a986;
+    --dms-hinge: #a08a5c; --dms-ok: #4ade80; --dms-ok-soft: rgba(74,222,128,.16); --dms-warn: #f59e0b;
+  }
+  .dms-dim { position: absolute; inset: 0; background: rgba(10,10,20,.5); }
+  .dms-stage {
+    position: absolute; inset: 0; display: flex; justify-content: center; align-items: flex-start;
+    padding: 4.5rem 1rem 1rem; overflow-y: auto;
+  }
+  .dms { width: min(980px, 100%); color: var(--dms-ink); }
+  .dms-head { display: flex; align-items: center; justify-content: space-between; margin: 0 .25rem .4rem; color: #fff; }
+  .dms-head h2 { font-size: 1.05rem; font-weight: 700; letter-spacing: .06em; text-shadow: 0 1px 2px rgba(0,0,0,.5); }
+  .dms-close { background: rgba(0,0,0,.35); border: 1px solid rgba(255,255,255,.3); color: #fff; border-radius: .5rem; padding: .15rem .7rem; }
+  .dms-close:focus-visible, .dms button:focus-visible, .dms a:focus-visible, .dms summary:focus-visible { outline: 2px solid var(--color-accent, #6366f1); outline-offset: 2px; }
+  .dms-strip { display: flex; flex-wrap: wrap; gap: .3rem 1rem; align-items: center; background: rgba(0,0,0,.5); color: #fff; border-radius: .5rem; padding: .35rem .75rem; margin: 0 .25rem .4rem; font-size: .85rem; }
+  .dms-dot { display: inline-block; width: .5rem; height: .5rem; border-radius: 50%; border: 1px solid #fff; margin-right: .35rem; }
+  .dms-dot-on { background: #4ade80; border-color: #4ade80; }
+  .dms-leaves { display: flex; perspective: 1400px; transform-style: preserve-3d; }
+  .dms-leaf {
+    flex: 1 1 0; min-width: 0; display: grid; gap: .65rem; align-content: start; padding: .9rem;
+    background: var(--dms-leaf); border: 1px solid var(--dms-leaf-edge); min-height: 24rem;
+    box-shadow: 0 12px 30px rgba(0,0,0,.28); backface-visibility: hidden;
+  }
+  .dms-leaf-l { border-radius: .6rem 0 0 .6rem; transform-origin: right center; }
+  .dms-leaf-m { transform-origin: center bottom; border-left: 3px double var(--dms-hinge); border-right: 3px double var(--dms-hinge); }
+  .dms-leaf-r { border-radius: 0 .6rem .6rem 0; transform-origin: left center; }
+  .dms-leaf h3 { font-weight: 700; letter-spacing: .04em; border-bottom: 1px solid var(--dms-leaf-edge); padding-bottom: .25rem; }
+  .dms-blk { display: grid; gap: .3rem; }
+  .dms-lbl { font-size: .7rem; text-transform: uppercase; letter-spacing: .08em; font-weight: 700; color: var(--dms-ink-muted); }
+  .dms-small { font-size: .85rem; color: var(--dms-ink-muted); }
+  .dms-big { font-size: 1.1rem; font-weight: 700; font-variant-numeric: tabular-nums; }
+  .dms-link { font-size: .85rem; text-decoration: underline; text-underline-offset: 2px; }
+  .dms-seg { display: grid; grid-template-columns: 1fr 1fr; border: 1px solid var(--dms-leaf-edge); border-radius: .5rem; overflow: hidden; }
+  .dms-seg button { padding: .4rem; font-size: .88rem; color: var(--dms-ink); }
+  .dms-seg button[aria-pressed="true"] { background: var(--dms-ok-soft); font-weight: 700; }
+  .dms-seg button:disabled { cursor: default; }
+  .dms-partywrap { position: relative; }
+  .dms-party { position: relative; max-height: 17rem; overflow-y: auto; display: grid; gap: .1rem; padding: .1rem .1rem .4rem; scrollbar-width: thin;
+    -webkit-mask-image: linear-gradient(#000, #000 calc(100% - 1.6rem), transparent); mask-image: linear-gradient(#000, #000 calc(100% - 1.6rem), transparent); }
+  .dms-party.dms-at-end { -webkit-mask-image: none; mask-image: none; }
+  .dms-party.dms-scrolled { -webkit-mask-image: linear-gradient(transparent, #000 1.4rem, #000 calc(100% - 1.6rem), transparent); mask-image: linear-gradient(transparent, #000 1.4rem, #000 calc(100% - 1.6rem), transparent); }
+  .dms-party.dms-scrolled.dms-at-end { -webkit-mask-image: linear-gradient(transparent, #000 1.4rem); mask-image: linear-gradient(transparent, #000 1.4rem); }
+  .dms-more { position: absolute; left: 50%; bottom: -.25rem; transform: translateX(-50%); font-size: .72rem; color: var(--dms-ink-muted); pointer-events: none; white-space: nowrap; }
+  .dms-hero { border-radius: .4rem; transition: background-color .2s; }
+  .dms-hero.dms-open { background: rgba(127,127,127,.09); }
+  .dms-hrow { width: 100%; display: grid; grid-template-columns: minmax(4.5em, auto) 1fr auto 1em; align-items: center; gap: .5rem; padding: .3rem .4rem; border-radius: .4rem; text-align: left; color: var(--dms-ink); }
+  .dms-hrow:hover { background: rgba(127,127,127,.08); }
+  .dms-hrow:focus-visible { outline: 2px solid var(--dms-hinge); }
+  .dms-hero-name { font-weight: 700; font-size: .9rem; }
+  .dms-who { display: flex; justify-content: space-between; gap: .5rem; font-size: .78rem; color: var(--dms-ink-muted); }
+  .dms-cdot { font-style: normal; font-size: .65rem; min-width: 1.3em; margin-left: .25rem; padding: 0 .2rem; text-align: center; border-radius: 999px; border: 1px solid var(--dms-warn); color: var(--dms-warn); }
+  .dms-hconds { display: flex; flex-wrap: wrap; gap: .25rem; }
+  .dms-hconds span { font-size: .72rem; padding: 0 .4rem; border-radius: 999px; border: 1px solid var(--dms-warn); color: var(--dms-warn); }
+  .dms-mini { display: flex; align-items: center; gap: .4rem; font-size: .75rem; }
+  .dms-chips { display: flex; gap: .25rem; }
+  .dms-chip { font-size: .72rem; padding: 0 .45rem; border-radius: 999px; border: 1px solid var(--dms-hinge); white-space: nowrap; }
+  .dms-chev { font-size: .75rem; color: var(--dms-ink-muted); transition: transform .3s cubic-bezier(.2,.8,.2,1); }
+  .dms-hero.dms-open .dms-chev { transform: rotate(180deg); }
+  .dms-hmore { display: grid; grid-template-rows: 0fr; transition: grid-template-rows .32s cubic-bezier(.2,.8,.2,1); }
+  .dms-hero.dms-open .dms-hmore { grid-template-rows: 1fr; }
+  .dms-hin { overflow: hidden; display: grid; gap: .2rem; padding: 0 .4rem; transform-origin: top; transform: perspective(500px) rotateX(-70deg); opacity: 0; transition: transform .32s cubic-bezier(.2,.8,.2,1), opacity .25s; }
+  .dms-hero.dms-open .dms-hin { transform: none; opacity: 1; padding-bottom: .4rem; }
+  @media (prefers-reduced-motion: reduce) { .dms-hmore, .dms-hin, .dms-chev { transition: none; } }
+  .dms-meter { display: flex; align-items: center; gap: .5rem; font-size: .78rem; color: var(--dms-ink-muted); }
+  .dms-bar { flex: 1; height: .45rem; border-radius: .25rem; background: rgba(127,127,127,.25); overflow: hidden; }
+  .dms-bar > span { display: block; height: 100%; background: var(--dms-ok); }
+  .dms-bar > span.dms-low { background: var(--dms-warn); }
+  .dms-num { font-variant-numeric: tabular-nums; color: var(--dms-ink); }
+  .dms-tabs { display: flex; gap: .25rem; border-bottom: 1px solid var(--dms-leaf-edge); }
+  .dms-tabs button { padding: .25rem .55rem; font-size: .85rem; color: var(--dms-ink-muted); border-bottom: 2px solid transparent; }
+  .dms-tabs button[aria-selected="true"] { color: var(--dms-ink); border-bottom-color: var(--dms-hinge); font-weight: 700; }
+  .dms-search { width: 100%; font-size: .85rem; border: 1px solid var(--dms-leaf-edge); border-radius: .4rem; background: transparent; color: var(--dms-ink); padding: .3rem .5rem; }
+  .dms-cond { border-top: 1px dashed var(--dms-leaf-edge); padding: .3rem 0; font-size: .88rem; }
+  .dms-cond summary { cursor: pointer; font-weight: 600; }
+  .dms-cond p { margin-top: .25rem; color: var(--dms-ink-muted); white-space: pre-line; }
+  .dms-row { display: flex; justify-content: space-between; align-items: center; gap: .5rem; font-size: .88rem; border-top: 1px dashed var(--dms-leaf-edge); padding-top: .4rem; }
+  .dms-row button { font-size: .78rem; border: 1px solid var(--dms-leaf-edge); border-radius: .35rem; padding: .1rem .45rem; color: var(--dms-ink); }
+  .dms-done { font-size: .78rem; color: var(--dms-ok); }
+  .dms-overlay [hidden], .dms-overlay[hidden] { display: none; }
+  .dms-skip { position: absolute; right: .75rem; bottom: .75rem; font-size: .85rem; color: #fff; background: rgba(0,0,0,.5); border-radius: .4rem; padding: .15rem .5rem; }
+  .dms-die { position: absolute; width: 120px; height: 120px; pointer-events: none; z-index: 2; }
+  .dms-piece { position: absolute; inset: 0; background: var(--dms-die); will-change: transform, opacity; }
+  .dms-piece b { position: absolute; left: 0; right: 0; top: 41%; text-align: center; color: #fff; font: 700 24px/1 system-ui, sans-serif; }
+  @media (max-width: 700px) {
+    .dms-stage { padding-top: 3.75rem; }
+    .dms-leaves { flex-direction: column; }
+    .dms-leaf { flex: none; min-height: 0; }
+    .dms-leaf-l { border-radius: .6rem .6rem 0 0; transform-origin: center bottom; }
+    .dms-leaf-m { border-left: 1px solid var(--dms-leaf-edge); border-right: 1px solid var(--dms-leaf-edge); border-top: 3px double var(--dms-hinge); border-bottom: 3px double var(--dms-hinge); }
+    .dms-leaf-r { border-radius: 0 0 .6rem .6rem; transform-origin: center top; }
+  }
 }
