@@ -23,7 +23,7 @@ test('the layout loads media_uploader.js before Alpine', () => {
 });
 
 test('the Media page carries no inline uploader script', () => {
-  assert.doesNotMatch(read('internal/plugins/media/media_browser.templ'), /<script>/);
+  assert.doesNotMatch(read('internal/plugins/media/media_browser.templ'), /<script\b/i);
 });
 
 test('mediaUploader returns the state the template binds', () => {
