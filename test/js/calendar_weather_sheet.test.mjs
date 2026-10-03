@@ -3,7 +3,8 @@
 // generator (chronicle_gen.js) and calendar maths (calendar_view.js):
 // painted days are never in what Apply saves and never previewed over,
 // kept days survive "Reroll the rest", the same seed gives the same
-// weather, and Apply's write is the per-day API's shape marked generated.
+// weather, Apply's write is the per-day API's shape marked generated, and
+// the sheet starts from the calendar's stored climate.
 
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
@@ -113,4 +114,67 @@ test('closing clears the grid preview', () => {
   s.view.dockEl = { classList: { remove() {} } };
   s.close(true);
   assert.equal(s.view.wxPreview, null);
+});
+
+function withSettings(sb, body, ok = true) {
+  sb.Chronicle.apiFetch = (url) => {
+    sb.lastURL = url;
+    return Promise.resolve({ ok, json: () => Promise.resolve(body) });
+  };
+  const s = sheet(sb);
+  s.view.apiBase = '/api/c';
+  s._render = () => {};
+  s._settingsAsked = false;
+  s._picked = false;
+  return s;
+}
+const settle = () => new Promise((r) => setTimeout(r, 0));
+
+test("the calendar's climate becomes the sheet's starting point", async () => {
+  const sb = load();
+  const s = withSettings(sb, { climate: 'ashlands', continuity: 0.9 });
+  const before = JSON.stringify(s.state.days);
+  s._loadSettings();
+  await settle();
+  assert.equal(sb.lastURL, '/api/c/weather/settings');
+  assert.equal(s._climate, 'ashlands');
+  assert.equal(s._continuity, 0.9);
+  assert.notEqual(JSON.stringify(s.state.days), before);
+});
+
+test('a climate the owner picked here, or kept days, are not overridden', async () => {
+  const sb = load();
+  const s = withSettings(sb, { climate: 'ashlands', continuity: 0.9 });
+  s._picked = true;
+  s._loadSettings();
+  await settle();
+  assert.equal(s._climate, 'temperate');
+
+  const k = withSettings(load(), { climate: 'desert', continuity: 0.2 });
+  k.state.kept['100_2_1'] = true;
+  const before = JSON.stringify(k.state.days);
+  k._loadSettings();
+  await settle();
+  assert.equal(k._climate, 'desert');
+  assert.equal(JSON.stringify(k.state.days), before);
+});
+
+test('an unknown climate or a failed read keeps the defaults', async () => {
+  const s = withSettings(load(), { climate: 'moon', continuity: 7 });
+  s._loadSettings();
+  await settle();
+  assert.equal(s._climate, 'temperate');
+  assert.equal(s._continuity, 0.55);
+  const f = withSettings(load(), null, false);
+  f._loadSettings();
+  await settle();
+  assert.equal(f._climate, 'temperate');
+});
+
+test("the settings form's climates are the generator's climates", () => {
+  const go = readFileSync(path.join(root, 'internal', 'plugins', 'calendar', 'weather_climates.go'), 'utf8');
+  const fromGo = [...go.matchAll(/\{ID: "([^"]+)", Name: "([^"]+)"(, Magic: true)?\}/g)].map((m) => `${m[1]}|${m[2]}|${!!m[3]}`);
+  const fromJS = load().ChronicleGen.weather.climates().map((c) => `${c.id}|${c.name}|${c.magic}`);
+  assert.ok(fromGo.length > 0);
+  assert.equal(fromGo.join(','), fromJS.join(','));
 });

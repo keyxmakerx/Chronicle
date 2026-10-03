@@ -61,8 +61,33 @@
     this.state = null;
     this._climate = 'temperate';
     this._continuity = 0.55;
+    // The calendar's own climate (Calendar settings) replaces these defaults
+    // once it arrives, unless the owner already picked something here.
+    this._settingsAsked = false;
+    this._picked = false;
     this._bind();
   }
+
+  Sheet.prototype._loadSettings = function () {
+    var self = this, view = this.view;
+    if (this._settingsAsked || !view.apiBase || !window.Chronicle || !Chronicle.apiFetch) return;
+    this._settingsAsked = true;
+    Chronicle.apiFetch(view.apiBase + '/weather/settings').then(function (resp) {
+      return resp.ok ? resp.json() : null;
+    }).then(function (s) {
+      if (!s || self._picked) return;
+      var known = window.ChronicleGen.weather.climates().some(function (c) { return c.id === s.climate; });
+      var cont = +s.continuity;
+      if (known) self._climate = s.climate;
+      if (isFinite(cont) && cont >= 0 && cont <= 1) self._continuity = cont;
+      var S = self.state;
+      // Only redraw a preview nobody has worked on yet: kept or rerolled
+      // days stay as they are.
+      if (!S || S.busy || S.nonce || Object.keys(S.kept).length) return;
+      self._generate();
+      self._render();
+    }).catch(function () { self._settingsAsked = false; });
+  };
 
   Sheet.prototype.isOpen = function () { return this.el.classList.contains('open'); };
 
@@ -85,6 +110,7 @@
     };
     this._generate();
     this._render();
+    this._loadSettings();
     void this.el.offsetWidth;
     this.el.classList.add('open');
     view.dockEl.classList.add('on');
@@ -317,8 +343,8 @@
     el.addEventListener('change', function (e) {
       var S = self.state, t = e.target;
       if (!S || S.busy) return;
-      if (t.id === 'cal5-gsClim') self._climate = t.value;
-      else if (t.id === 'cal5-gsCont') self._continuity = +t.value;
+      if (t.id === 'cal5-gsClim') { self._climate = t.value; self._picked = true; }
+      else if (t.id === 'cal5-gsCont') { self._continuity = +t.value; self._picked = true; }
       else if (t.id === 'cal5-gsSeed') S.seed = t.value.trim() || randomSeed();
       else return;
       self._generate();
