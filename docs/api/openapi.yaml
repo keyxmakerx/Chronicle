@@ -1048,6 +1048,33 @@ paths:
         "429":
           $ref: "#/components/responses/RateLimited"
 
+  /campaigns/{campaignId}/maps/{mapId}/player-image:
+    get:
+      tags: [Maps]
+      summary: Get the player copy of a map picture
+      operationId: getMapPlayerImage
+      description: >
+        The map picture with its shadowed areas smudged in. A sync client shows
+        players this copy, never the original, for any map whose
+        `player_image_url` is set.
+      parameters:
+        - $ref: "#/components/parameters/campaignId"
+        - $ref: "#/components/parameters/mapId"
+      responses:
+        "200":
+          description: JPEG image
+          content:
+            image/jpeg:
+              schema:
+                type: string
+                format: binary
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "429":
+          $ref: "#/components/responses/RateLimited"
+
   /campaigns/{campaignId}/maps/{mapId}/drawings:
     get:
       tags: [Maps]
@@ -2625,6 +2652,16 @@ components:
         image_id:
           type: string
           nullable: true
+          description: Absent for a key below owner when the map has a shadow.
+        image_url:
+          type: string
+          description: Web address of the player copy, set instead of image_id for a key below owner when the map has a shadow.
+        player_image_url:
+          type: string
+          description: >
+            Set for every key when the map has a shadow: this API's address of
+            the player copy (GET .../player-image). Its `v` query changes
+            whenever the picture or a shadow does.
         image_width:
           type: integer
         image_height:

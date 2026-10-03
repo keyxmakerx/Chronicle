@@ -312,6 +312,7 @@ GET	/maps/:mapID/fog	internal/plugins/syncapi/routes.go
 GET	/maps/:mapID/layers	internal/plugins/syncapi/routes.go
 GET	/maps/:mapID/markers	internal/plugins/syncapi/routes.go
 GET	/maps/:mapID/markers/:markerID	internal/plugins/syncapi/routes.go
+GET	/maps/:mapID/player-image	internal/plugins/syncapi/routes.go
 GET	/maps/:mapID/tokens	internal/plugins/syncapi/routes.go
 GET	/maps/:mid	internal/plugins/maps/routes.go
 GET	/maps/:mid/drawings	internal/plugins/maps/routes.go

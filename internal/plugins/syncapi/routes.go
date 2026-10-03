@@ -239,6 +239,7 @@ func RegisterAPIRoutes(e *echo.Echo, api *APIHandler, calAPI *CalendarAPIHandler
 	mapGroup := cg.Group("", RequireAddonAPI(addonChecker, "maps"))
 	mapGroup.GET("/maps", mapAPI.ListMaps, RequirePermission(PermRead))
 	mapGroup.GET("/maps/:mapID", mapAPI.GetMap, RequirePermission(PermRead))
+	mapGroup.GET("/maps/:mapID/player-image", mapAPI.PlayerImage, RequirePermission(PermRead))
 	mapGroup.GET("/maps/:mapID/drawings", mapAPI.ListDrawings, RequirePermission(PermRead))
 	mapGroup.GET("/maps/:mapID/tokens", mapAPI.ListTokens, RequirePermission(PermRead))
 	mapGroup.GET("/maps/:mapID/layers", mapAPI.ListLayers, RequirePermission(PermRead))

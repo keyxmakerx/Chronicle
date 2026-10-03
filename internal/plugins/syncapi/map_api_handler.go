@@ -5,6 +5,7 @@
 package syncapi
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"log/slog"
@@ -141,14 +142,59 @@ func (h *MapAPIHandler) ListMaps(c echo.Context) error {
 		slog.Error("api: list maps failed", slog.Any("error", err))
 		return apperror.NewInternal(fmt.Errorf("failed to list maps"))
 	}
+	// The player-copy address is worked out from the stored maps, before
+	// ForViewerList strips the original id from a below-owner key's copy.
+	apiURLs := make([]string, len(result))
+	for i := range result {
+		if apiURLs[i], err = h.playerImageAPIURL(ctx, &result[i]); err != nil {
+			slog.Error("api: prepare map pictures failed", slog.Any("error", err))
+			return apperror.NewInternal(fmt.Errorf("failed to list maps"))
+		}
+	}
 	// A key whose user is below owner gets the player copy's address, never the
 	// original picture of a map that has a shadow.
-	result, err = h.mapSvc.ForViewerList(ctx, result, h.viewRole(c))
+	viewed, err := h.mapSvc.ForViewerList(ctx, result, h.viewRole(c))
 	if err != nil {
 		slog.Error("api: prepare map pictures failed", slog.Any("error", err))
 		return apperror.NewInternal(fmt.Errorf("failed to list maps"))
 	}
-	return c.JSON(http.StatusOK, result)
+	// Copy so the service's maps are never mutated.
+	out := make([]maps.Map, len(viewed))
+	copy(out, viewed)
+	for i := range out {
+		out[i].PlayerImageAPIURL = apiURLs[i]
+	}
+	return c.JSON(http.StatusOK, out)
+}
+
+// playerImageAPIURL is the sync API address of the player copy of a stored map
+// that has a shadow, or "". It is set for every key: the module syncs with the
+// owner's key, which still reads the original, and this is the picture it must
+// hand to players instead.
+func (h *MapAPIHandler) playerImageAPIURL(ctx context.Context, m *maps.Map) (string, error) {
+	v, err := h.mapSvc.PlayerImageVersion(ctx, m)
+	if err != nil || v == "" {
+		return "", err
+	}
+	return fmt.Sprintf("/api/v1/campaigns/%s/maps/%s/player-image?v=%s", m.CampaignID, m.ID, v), nil
+}
+
+// PlayerImage serves the map's picture with its shadowed areas smudged in, to
+// any key that may read the map. Any failure to produce the copy is an error,
+// never the original.
+// GET /api/v1/campaigns/:id/maps/:mapID/player-image
+func (h *MapAPIHandler) PlayerImage(c echo.Context) error {
+	m, err := h.requireMapInCampaign(c)
+	if err != nil {
+		return err
+	}
+	data, err := h.mapSvc.PlayerImage(c.Request().Context(), m)
+	if err != nil {
+		return err
+	}
+	c.Response().Header().Set("Cache-Control", "private, max-age=86400")
+	c.Response().Header().Set("X-Content-Type-Options", "nosniff")
+	return c.Blob(http.StatusOK, "image/jpeg", data)
 }
 
 // GetMap returns a single map with its markers.
@@ -174,6 +220,11 @@ func (h *MapAPIHandler) GetMap(c echo.Context) error {
 		slog.Error("api: list markers failed", slog.Any("error", err))
 		return apperror.NewInternal(fmt.Errorf("failed to load markers"))
 	}
+	apiURL, err := h.playerImageAPIURL(ctx, m)
+	if err != nil {
+		slog.Error("api: prepare map picture failed", slog.Any("error", err))
+		return apperror.NewInternal(fmt.Errorf("failed to load map"))
+	}
 	vm, err := h.mapSvc.ForViewer(ctx, m, role)
 	if err != nil {
 		slog.Error("api: prepare map picture failed", slog.Any("error", err))
@@ -183,6 +234,7 @@ func (h *MapAPIHandler) GetMap(c echo.Context) error {
 	// never mutated.
 	out := *vm
 	out.Markers = markers
+	out.PlayerImageAPIURL = apiURL
 
 	return c.JSON(http.StatusOK, out)
 }

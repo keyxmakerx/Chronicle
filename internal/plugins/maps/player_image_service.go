@@ -103,6 +103,22 @@ func (s *mapService) ForViewer(ctx context.Context, m *Map, role int) (*Map, err
 	return &cp, nil
 }
 
+// PlayerImageVersion implements MapService. The version is the start of the
+// cache key, so it changes whenever the picture or any shadow does.
+func (s *mapService) PlayerImageVersion(ctx context.Context, m *Map) (string, error) {
+	if m == nil || m.ImageID == nil || *m.ImageID == "" {
+		return "", nil
+	}
+	areas, err := s.shadowedAreas(ctx, m.ID)
+	if err != nil {
+		return "", fmt.Errorf("list shadow areas: %w", err)
+	}
+	if len(areas) == 0 {
+		return "", nil
+	}
+	return playerImageKey(*m.ImageID, m.ID, areas)[:16], nil
+}
+
 // ForViewerList is ForViewer over a list.
 func (s *mapService) ForViewerList(ctx context.Context, ms []Map, role int) ([]Map, error) {
 	if !shadowHidingApplies(role) {

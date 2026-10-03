@@ -83,8 +83,12 @@ type Map struct {
 	// original (a map with a shadow): the address of the picture with the shadows
 	// smudged in. Never stored; set only by MapService.ForViewer.
 	PlayerImageURL string `json:"image_url,omitempty"`
-	ImageWidth     int    `json:"image_width"`
-	ImageHeight    int    `json:"image_height"`
+	// PlayerImageAPIURL is the sync API address of the player copy, set on maps
+	// the sync API returns when the map has a shadow, for every key: an owner key
+	// still reads the original, but must hand players this copy instead.
+	PlayerImageAPIURL string `json:"player_image_url,omitempty"`
+	ImageWidth        int    `json:"image_width"`
+	ImageHeight       int    `json:"image_height"`
 	// BackgroundColor optionally overrides the default theme-following
 	// canvas color (bg-surface-alt, which adapts to dark/light via CSS
 	// vars) with a fixed CSS color (e.g. "#000000"). Nil means "follow

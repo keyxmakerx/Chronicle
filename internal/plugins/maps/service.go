@@ -99,6 +99,9 @@ type MapService interface {
 	// PlayerImage renders (or reads from cache) the player copy of the map's
 	// picture as JPEG. It errors rather than ever returning the original.
 	PlayerImage(ctx context.Context, m *Map) ([]byte, error)
+	// PlayerImageVersion is the version of the map's player copy, or "" when the
+	// map has no picture or no shadow (players then see the original).
+	PlayerImageVersion(ctx context.Context, m *Map) (string, error)
 	// IsShadowedMapImage tells the media plugin whether a file is the picture of
 	// a map that has a shadow (media.MapImageGuard); IsMapPicture whether it is
 	// the picture of any map at all.
