@@ -2413,7 +2413,7 @@ func dayOnOrBefore(y, m, d, cy, cm, cd int) bool {
 
 // ListDayWeather returns a year's (or one month's) day readings for v. A
 // viewer who cannot see dm_only content gets only days up to today: the
-// forecast switch does not open future days yet (TODO(#765)).
+// forecast switch does not open future days yet (TODO(#917)).
 func (s *calendarService) ListDayWeather(ctx context.Context, calendarID, campaignID string, year, month int, v permissions.Viewer) ([]DayWeather, error) {
 	cal, err := s.calendarInCampaignForViewer(ctx, calendarID, campaignID, v)
 	if err != nil {

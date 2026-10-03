@@ -70,3 +70,11 @@ test('unknown icon falls back, stored text is escaped, bad colour is stripped', 
   assert.doesNotMatch(mark, /;background/);
   assert.doesNotMatch(weatherFactHTML(odd, false), /<b>/);
 });
+
+test('a Generate preview draws a faint ghost mark, never the hand tint', () => {
+  const { weatherPaintHTML } = load();
+  const html = weatherPaintHTML(rain, true, true);
+  assert.match(html, /class="cpt ghost"/);
+  assert.match(html, /class="cwx ghost dir"/);
+  assert.doesNotMatch(html, /hand/);
+});

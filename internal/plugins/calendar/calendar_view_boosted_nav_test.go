@@ -80,8 +80,8 @@ func TestCalendarViewPageMountsNoScriptInsideTheSwappedRegion(t *testing.T) {
 }
 
 // TestCalendarScriptsShipFromThePluginBodyScriptRegistry pins that
-// calendar_view.js, calendar_rule.js, calendar_event_drawer.js, calendar_editor.js and
-// calendar_almanac.js load via the plugin
+// calendar_view.js, calendar_rule.js, calendar_event_drawer.js,
+// calendar_weather_sheet.js, calendar_editor.js and calendar_almanac.js load via the plugin
 // body-script registry, not a `<script src>` inside the page body; without
 // this, the previous test would pass trivially by deleting the tag and
 // orphaning both scripts. It reads the source directly since
@@ -107,7 +107,7 @@ func TestCalendarScriptsShipFromThePluginBodyScriptRegistry(t *testing.T) {
 	}
 	slice := rest[:end]
 
-	for _, script := range []string{"/static/js/widgets/calendar_view.js", "/static/js/widgets/calendar_rule.js", "/static/js/widgets/calendar_event_drawer.js", "/static/js/widgets/calendar_editor.js", "/static/js/calendar_almanac.js"} {
+	for _, script := range []string{"/static/js/widgets/calendar_view.js", "/static/js/widgets/calendar_rule.js", "/static/js/widgets/calendar_event_drawer.js", "/static/js/widgets/calendar_weather_sheet.js", "/static/js/widgets/calendar_editor.js", "/static/js/calendar_almanac.js"} {
 		if !strings.Contains(slice, script) {
 			t.Errorf("the plugin body-script registry does not mount %s — the calendar page reached "+
 				"through the sidebar would render with the widget stripped, and look identical while "+
