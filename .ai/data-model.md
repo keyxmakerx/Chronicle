@@ -258,7 +258,7 @@ Foundry module repo for the wire contract.
 | `sync_mappings` | Chronicle object ↔ external-tool object, bidirectional | `UNIQUE(campaign_id, chronicle_type, chronicle_id, external_system)`; `sync_version` (conflict detection) |
 | `api_ip_blocklist` | Admin-managed IP blocks for the REST API | `expires_at` nullable (permanent if NULL) |
 | `api_security_events` | Auth failures, IP blocks, device mismatches, rate-limit hits | `resolved`/`resolved_by`/`resolved_at` |
-| `sync_calendar_date_beacons` | Per-campaign "date Foundry last saw / last applied" | PK `campaign_id`; `last_served_*` (a Bearer-authed GET was served) vs `applied_*` (Foundry confirmed it set its own date via `POST .../confirm`) — distinct claims, filled independently. Calendar sync routes currently return `503 {"error":"calendar_rebuilding"}` (#741), so this table sits idle until V5. |
+| `sync_calendar_date_beacons` | Per-campaign "date Foundry last saw / last applied" | PK `campaign_id`; `last_served_*` (a Bearer-authed GET was served) vs `applied_*` (Foundry confirmed it set its own date via `POST .../confirm`) — distinct claims, filled independently. |
 
 ### packages (`internal/plugins/packages/migrations/`)
 

@@ -17,9 +17,11 @@ import (
 	"context"
 	"crypto/rand"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"log/slog"
 	"math"
+	"net/http"
 	"regexp"
 	"time"
 	"unicode/utf8"
@@ -194,6 +196,20 @@ type CalendarService interface {
 	// real-world calendar whose date follows the real one.
 	TodayInZone(zone string) (year, month, day int, err error)
 	CreateCalendarFromImport(ctx context.Context, campaignID string, ir *ImportResult, opts CreateCalendarFromImportOptions) (*Calendar, error)
+	// ImportFoundryCalendar creates a campaign's first calendar from the
+	// Foundry module's Calendaria payload (ParseFoundryImport) and makes it
+	// the default. A campaign that already has any calendar gets a conflict
+	// (409), so a repeated or doubled import never makes a second copy; an
+	// unreadable payload is a bad request (400). The returned warnings say
+	// what the import filled in or left out.
+	ImportFoundryCalendar(ctx context.Context, campaignID string, data []byte) (*Calendar, []string, error)
+	// GetPrimaryCalendarForViewer is "the campaign's calendar" for a caller
+	// that can only follow one: the default, or when no calendar is marked
+	// default, the first by sort order. Gated like GetCalendarForViewer, and
+	// NotFound when the campaign has none or the viewer may not see it. The
+	// fallback never picks a different calendar for a viewer who can't see
+	// the default.
+	GetPrimaryCalendarForViewer(ctx context.Context, campaignID string, v permissions.Viewer) (*Calendar, error)
 
 	// Events. CreateEvent has no stored row to weigh a viewer against, so it
 	// takes no Viewer: authorization for its one viewer-dependent decision
@@ -666,8 +682,12 @@ func (s *calendarService) CreateCalendar(ctx context.Context, campaignID string,
 		LeapYearOffset:   input.LeapYearOffset,
 		Visibility:       visibility,
 		VisibilityRules:  input.VisibilityRules,
+		IsDefault:        input.IsDefault,
 	}
 	if err := s.calRepo.Create(ctx, cal); err != nil {
+		if input.IsDefault && isDuplicateEntry(err) {
+			return nil, apperror.NewConflict("this campaign already has a default calendar")
+		}
 		return nil, fmt.Errorf("create calendar: %w", err)
 	}
 	return cal, nil
@@ -1061,10 +1081,14 @@ func (s *calendarService) CreateCalendarFromImport(ctx context.Context, campaign
 	if err := validateImportCurrentDate(ir, year, *month, *day); err != nil {
 		return nil, err
 	}
+	if err := validateImportCurrentTime(ir); err != nil {
+		return nil, err
+	}
 
 	cal, err := s.CreateCalendar(ctx, campaignID, CreateCalendarInput{
 		Mode:             ir.Settings.Mode,
 		Name:             name,
+		Description:      ir.Settings.Description,
 		EpochName:        ir.Settings.EpochName,
 		CurrentYear:      year,
 		HoursPerDay:      ir.Settings.HoursPerDay,
@@ -1072,6 +1096,7 @@ func (s *calendarService) CreateCalendarFromImport(ctx context.Context, campaign
 		SecondsPerMinute: ir.Settings.SecondsPerMinute,
 		LeapYearEvery:    ir.Settings.LeapYearEvery,
 		LeapYearOffset:   ir.Settings.LeapYearOffset,
+		IsDefault:        opts.MakeDefault,
 	})
 	if err != nil {
 		return nil, err
@@ -1097,6 +1122,8 @@ func (s *calendarService) CreateCalendarFromImport(ctx context.Context, campaign
 
 	cal.CurrentMonth = *month
 	cal.CurrentDay = *day
+	cal.CurrentHour = ir.Today.Hour
+	cal.CurrentMinute = ir.Today.Minute
 	// Chronicle-only settings CreateCalendarInput has no field for: carried
 	// onto the row here (rather than lost) so re-importing a Chronicle
 	// export restores them — the same fields UpdateCalendar lets an owner
@@ -1132,6 +1159,60 @@ func (s *calendarService) CreateCalendarFromImport(ctx context.Context, campaign
 		return nil, err
 	}
 	return cal, nil
+}
+
+// ImportFoundryCalendar implements CalendarService (see the interface doc).
+// The "no calendar yet" check reads every calendar regardless of visibility,
+// and MakeDefault makes the insert itself refuse a second default, so two
+// imports racing past the check still leave one calendar.
+func (s *calendarService) ImportFoundryCalendar(ctx context.Context, campaignID string, data []byte) (*Calendar, []string, error) {
+	ir, err := ParseFoundryImport(data)
+	if err != nil {
+		var ae *apperror.AppError
+		if errors.As(err, &ae) {
+			return nil, nil, err
+		}
+		return nil, nil, apperror.NewBadRequest(err.Error())
+	}
+	existing, err := s.calRepo.ListByCampaignID(ctx, campaignID)
+	if err != nil {
+		return nil, nil, fmt.Errorf("list calendars: %w", err)
+	}
+	if len(existing) > 0 {
+		return nil, nil, apperror.NewConflict("this campaign already has a calendar; Foundry syncs its date and events with that one")
+	}
+	cal, err := s.CreateCalendarFromImport(ctx, campaignID, ir, CreateCalendarFromImportOptions{MakeDefault: true})
+	if err != nil {
+		var ae *apperror.AppError
+		if errors.As(err, &ae) && ae.Code == http.StatusConflict {
+			return nil, nil, apperror.NewConflict("this campaign already has a calendar; Foundry syncs its date and events with that one")
+		}
+		return nil, nil, err
+	}
+	return cal, ir.Warnings, nil
+}
+
+// GetPrimaryCalendarForViewer implements CalendarService (see the interface
+// doc).
+func (s *calendarService) GetPrimaryCalendarForViewer(ctx context.Context, campaignID string, v permissions.Viewer) (*Calendar, error) {
+	cal, err := s.calRepo.GetDefaultByCampaignID(ctx, campaignID)
+	if err != nil {
+		return nil, err
+	}
+	if cal == nil {
+		all, err := s.calRepo.ListByCampaignID(ctx, campaignID)
+		if err != nil {
+			return nil, err
+		}
+		if len(all) == 0 {
+			return nil, apperror.NewNotFound("calendar not found")
+		}
+		cal = &all[0]
+	}
+	if cal.CampaignID != campaignID || !calendarVisibleToViewer(*cal, v) {
+		return nil, apperror.NewNotFound("calendar not found")
+	}
+	return s.finishCalendarForViewer(ctx, cal, v)
 }
 
 // applyImportedEvents recreates ir.Events (Chronicle-only, #779) on the
@@ -2692,6 +2773,26 @@ func (s *calendarService) ListErasForCalendar(ctx context.Context, campaignID, c
 // in a hand-edited file, or a malicious upload) is rejected here rather
 // than silently landing in current_month/current_day, where every later
 // date computation trusts it unchecked.
+// validateImportCurrentTime checks the imported time of day against the day
+// length the calendar will be created with (CreateCalendar's own 24/60
+// defaults when the import leaves them 0).
+func validateImportCurrentTime(ir *ImportResult) error {
+	hours, minutes := ir.Settings.HoursPerDay, ir.Settings.MinutesPerHour
+	if hours <= 0 {
+		hours = 24
+	}
+	if minutes <= 0 {
+		minutes = 60
+	}
+	if ir.Today.Hour < 0 || ir.Today.Hour >= hours {
+		return apperror.NewValidation(fmt.Sprintf("current_hour must be between 0 and %d", hours-1))
+	}
+	if ir.Today.Minute < 0 || ir.Today.Minute >= minutes {
+		return apperror.NewValidation(fmt.Sprintf("current_minute must be between 0 and %d", minutes-1))
+	}
+	return nil
+}
+
 func validateImportCurrentDate(ir *ImportResult, year, month, day int) error {
 	n := len(ir.Months)
 	if n == 0 {

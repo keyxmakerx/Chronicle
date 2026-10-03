@@ -120,6 +120,12 @@ func (f *fakeCalendarSvc) ListCalendars(_ context.Context, _ string, v permissio
 func (f *fakeCalendarSvc) SetCurrentDate(context.Context, string, string, int, int, int, int, int) error {
 	return nil
 }
+func (f *fakeCalendarSvc) GetPrimaryCalendarForViewer(ctx context.Context, campaignID string, v permissions.Viewer) (*Calendar, error) {
+	return f.GetDefaultCalendarForViewer(ctx, campaignID, v)
+}
+func (f *fakeCalendarSvc) ImportFoundryCalendar(context.Context, string, []byte) (*Calendar, []string, error) {
+	return nil, nil, nil
+}
 func (f *fakeCalendarSvc) UpdateCalendar(context.Context, string, string, UpdateCalendarInput) error {
 	return nil
 }
