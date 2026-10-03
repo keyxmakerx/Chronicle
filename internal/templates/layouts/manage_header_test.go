@@ -33,6 +33,19 @@ func TestNavManageRows_OwnerOnly(t *testing.T) {
 	}
 }
 
+// Sync history joins the owner's Manage rows only when the campaign syncs.
+func TestNavManageRows_SyncHistoryNeedsSyncAPI(t *testing.T) {
+	ctx := SetEnabledAddons(navStateCase{role: 3, path: "/campaigns/c1"}.ctx(), map[string]bool{"sync-api": true})
+	var got []string
+	for _, r := range NavManageRows(ctx) {
+		got = append(got, r.Label)
+	}
+	want := "Overview,People,Customize,Apps & game system,Sync history,Trash,Settings"
+	if strings.Join(got, ",") != want {
+		t.Fatalf("rows = %v, want %s", got, want)
+	}
+}
+
 func TestManageHeader_MarksCurrentPage(t *testing.T) {
 	var buf bytes.Buffer
 	ctx := navStateCase{role: 3, path: "/campaigns/c1/members"}.ctx()

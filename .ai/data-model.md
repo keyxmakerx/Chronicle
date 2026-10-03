@@ -291,6 +291,7 @@ Foundry module repo for the wire contract.
 | `sync_changes` | The change feed Foundry reads on connect (`GET /sync/changes`) | `seq` autoincrement is the cursor; `resource_type`, `resource_id`, `op` enum(`created`,`updated`,`deleted`); rows are pruned by age |
 | `sync_change_watermarks` | How far the feed was pruned, so a stale cursor is told to resync | PK `campaign_id`; `pruned_through` |
 | `sync_calendar_date_beacons` | Per-campaign "date Foundry last saw / last applied" | PK `campaign_id`; `last_served_*` (a Bearer-authed GET was served) vs `applied_*` (Foundry confirmed it set its own date via `POST .../confirm`) — distinct claims, filled independently. |
+| `sync_events` | Sync history: one row per thing that synced, either direction, read by Manage › Sync history and the module's History tab | `direction` enum(`to_chronicle`,`to_foundry`,`link`); `reported_by` enum(`chronicle`,`client`); `parent_id` groups a catch-up run's steps; names, ids, call and answer only, never page text; pruned after 90 days |
 
 ### packages (`internal/plugins/packages/migrations/`)
 
