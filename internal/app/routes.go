@@ -944,6 +944,37 @@ func (a *wsCampaignRoleAdapter) IsUserDmGranted(ctx context.Context, campaignID,
 //   RequiresDM = true — the dm_only worldstate payload must never reach a
 //   player's socket.)
 
+// relationEventPublisherAdapter bridges the websocket.EventBus to the
+// relations.RelationEventPublisher interface.
+type relationEventPublisherAdapter struct {
+	bus ws.EventBus
+}
+
+// PublishRelationEvent translates a relation row write into a WebSocket
+// message keyed on the row's source entity.
+func (a *relationEventPublisherAdapter) PublishRelationEvent(eventType string, rel *relations.Relation) {
+	if rel == nil || rel.CampaignID == "" {
+		return
+	}
+	var msgType ws.MessageType
+	switch eventType {
+	case relations.RelationEventCreated:
+		msgType = ws.MsgRelationCreated
+	case relations.RelationEventDeleted:
+		msgType = ws.MsgRelationDeleted
+	case relations.RelationEventMetadataUpdated:
+		msgType = ws.MsgRelationMetadataUpdated
+	default:
+		return
+	}
+	// A relation can name a private entity or be dm_only, and the row
+	// carries none of the per-viewer filtering the HTTP reads apply, so it
+	// only goes to DM-equivalent sockets, like entity events.
+	msg := ws.NewMessage(msgType, rel.CampaignID, rel.SourceEntityID, rel)
+	msg.RequiresDM = true
+	a.bus.Publish(msg)
+}
+
 // entityEventPublisherAdapter bridges the websocket.EventBus to the
 // entities.EntityEventPublisher interface.
 type entityEventPublisherAdapter struct {
@@ -4542,6 +4573,7 @@ func (a *App) RegisterRoutes() {
 	go syncapi.StartChangePruner(a.ShutdownCtx, syncChangeRepo)
 
 	entityService.SetEventPublisher(&entityEventPublisherAdapter{bus: wsEventBus})
+	relService.SetEventPublisher(&relationEventPublisherAdapter{bus: wsEventBus})
 	stashEvents.bus = wsEventBus
 	entityService.SetSidebarAutoAdder(&sidebarAutoAdderAdapter{campaignService: campaignService})
 	noteSvc.SetEventPublisher(&noteEventPublisherAdapter{bus: wsEventBus})
