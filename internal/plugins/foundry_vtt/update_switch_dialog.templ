@@ -1,0 +1,34 @@
+// update_switch_dialog.templ is the "Use another version" picker on the Apps &
+// game system row.
+
+package foundry_vtt
+
+// updateSwitchDialog lists the installed versions. Switching keeps the
+// campaign on the pick; a newer version stays on offer until Update is
+// pressed.
+templ updateSwitchDialog(v *OwnerUpdateView, csrfToken string) {
+	<dialog id={ updateDialogID("switch", updateViewRow) } class="rounded-lg shadow-xl bg-surface border border-edge p-0 w-full max-w-md backdrop:bg-black/50">
+		<form
+			hx-post={ updateActionURL(v.CampaignID, "/switch") }
+			hx-headers={ hxCSRFHeaders(csrfToken) }
+			hx-target={ updateTargetSelector(updateViewRow) }
+			hx-swap="outerHTML"
+			class="p-6 space-y-3"
+		>
+			<input type="hidden" name="view" value={ updateViewRow }/>
+			<h2 class="text-lg font-semibold text-fg">Use another version of { v.Package }</h2>
+			<p class="text-sm text-fg-secondary">
+				For when a new version causes trouble. The campaign stays on the one you pick until you press Update again.
+			</p>
+			<select name="version" class="input w-full" aria-label="Version">
+				for _, ver := range v.Versions {
+					<option value={ ver } selected?={ ver == v.Running }>{ ver }</option>
+				}
+			</select>
+			<div class="flex justify-end gap-2">
+				<button type="button" class="btn-secondary text-sm" onclick={ closeDialogOnClick() }>Cancel</button>
+				<button type="submit" class="btn-primary text-sm">Switch</button>
+			</div>
+		</form>
+	</dialog>
+}

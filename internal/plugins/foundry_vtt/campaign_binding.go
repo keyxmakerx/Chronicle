@@ -90,6 +90,11 @@ func (b *campaignBinding) PackageType() packages.PackageType {
 	return packages.PackageTypeFoundryModule
 }
 
+// AsksByDefault makes every campaign ask before a new module version reaches
+// it: Foundry worlds load the module from their own campaign's URL, and an
+// update that arrives unannounced can break a running world.
+func (b *campaignBinding) AsksByDefault() bool { return true }
+
 // UsedBy is true for any existing campaign: the module is offered to all of
 // them through their own install URL.
 func (b *campaignBinding) UsedBy(ctx context.Context, campaignID string, _ *packages.Package) (bool, error) {

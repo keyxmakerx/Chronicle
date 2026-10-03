@@ -3121,6 +3121,10 @@ func (a *App) RegisterRoutes() {
 	)
 	fvttHandler := foundry_vtt.NewHandler(fvttService)
 	fvttHandler.SetActivityRecorder(adminActivity)
+	if pkgUpdateSvc != nil {
+		// Owners are asked before a new module version reaches their campaign.
+		fvttHandler.SetOwnerUpdates(foundry_vtt.NewOwnerUpdates(pkgUpdateSvc, pkgService))
+	}
 	// The campaign show page lazy-loads /foundry-vtt/show-banner-fragment
 	// rather than using a banner adapter wire.
 	if a.PluginHealth.IsHealthy(foundry_vtt.PluginHealthKey) && a.PluginHealth.IsHealthy("packages") {

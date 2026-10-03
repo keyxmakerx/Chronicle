@@ -159,6 +159,10 @@ type CampaignUpdateService interface {
 	// owner's behalf passes true.
 	ApproveHeld(ctx context.Context, campaignID, packageID string, actor ActorInfo) (*CampaignPackageState, error)
 
+	// ApproveVersion is ApproveHeld for a caller that names the version it was
+	// shown: it fails if a different one is waiting by now.
+	ApproveVersion(ctx context.Context, campaignID, packageID, version string, actor ActorInfo) (*CampaignPackageState, error)
+
 	// SwitchVersion keeps a campaign on a version the caller picked (an owner
 	// going back from a new version, or an admin moving it). The version must
 	// be a known release whose folder is on disk. An owner is refused while a
@@ -474,6 +478,20 @@ func (s *campaignUpdateService) SetMode(ctx context.Context, in SetUpdateModeInp
 }
 
 func (s *campaignUpdateService) ApproveHeld(ctx context.Context, campaignID, packageID string, actor ActorInfo) (*CampaignPackageState, error) {
+	return s.approve(ctx, campaignID, packageID, "", actor)
+}
+
+func (s *campaignUpdateService) ApproveVersion(ctx context.Context, campaignID, packageID, version string, actor ActorInfo) (*CampaignPackageState, error) {
+	if version == "" {
+		return nil, apperror.NewValidation("say which version to update to")
+	}
+	return s.approve(ctx, campaignID, packageID, version, actor)
+}
+
+// approve moves a campaign onto its waiting version. When expect is set the
+// waiting version must still be that one, so a page that was open while a
+// newer version arrived cannot approve a version its owner never saw.
+func (s *campaignUpdateService) approve(ctx context.Context, campaignID, packageID, expect string, actor ActorInfo) (*CampaignPackageState, error) {
 	pkg, b, err := s.loadPackage(ctx, packageID)
 	if err != nil {
 		return nil, err
@@ -491,6 +509,9 @@ func (s *campaignUpdateService) ApproveHeld(ctx context.Context, campaignID, pac
 	}
 	if !holds(b, cur.Mode) || cur.HeldVersion == "" {
 		return nil, apperror.NewConflict("no update is waiting for approval")
+	}
+	if expect != "" && cur.HeldVersion != expect {
+		return nil, apperror.NewConflict("a different version is waiting now. Reload the page to see it")
 	}
 	if !ValidVersionString(cur.HeldVersion) {
 		return nil, apperror.NewValidation("the held version is not a valid version")

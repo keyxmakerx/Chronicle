@@ -1,0 +1,31 @@
+// update_confirm_dialog.templ is the "Update?" confirmation both owner screens
+// open before a campaign moves onto the waiting version.
+
+package foundry_vtt
+
+// updateConfirmDialog asks before moving the campaign. The version it carries
+// is the one the owner was shown, so a page that went stale while a newer
+// version arrived is refused instead of approving something unseen.
+templ updateConfirmDialog(v *OwnerUpdateView, view, csrfToken string) {
+	<dialog id={ updateDialogID("update", view) } class="rounded-lg shadow-xl bg-surface border border-edge p-0 w-full max-w-md backdrop:bg-black/50">
+		<form
+			hx-post={ updateActionURL(v.CampaignID, "") }
+			hx-headers={ hxCSRFHeaders(csrfToken) }
+			hx-target={ updateTargetSelector(view) }
+			hx-swap="outerHTML"
+			class="p-6 space-y-3"
+		>
+			<input type="hidden" name="version" value={ v.Ready }/>
+			<input type="hidden" name="view" value={ view }/>
+			<h2 class="text-lg font-semibold text-fg">{ "Update " + v.Package + " for " + v.CampaignName + "?" }</h2>
+			<p class="text-sm text-fg-secondary">
+				Your Foundry world picks up { v.Ready } the next time it starts. If something looks wrong,
+				Use another version on Apps &amp; game system takes you back.
+			</p>
+			<div class="flex justify-end gap-2">
+				<button type="button" class="btn-secondary text-sm" onclick={ closeDialogOnClick() }>Cancel</button>
+				<button type="submit" class="btn-primary text-sm">Update</button>
+			</div>
+		</form>
+	</dialog>
+}

@@ -10,10 +10,11 @@ import (
 // group that already enforces campaign membership. Caller passes
 // the campaigns Group (`/campaigns/:id`) plus the RoleOwner gate.
 //
-// All four endpoints are owner-only — the campaign owner controls
-// which version Foundry installs and can rotate the URL.
+// Every endpoint is owner-only — the campaign owner controls which version
+// Foundry installs and can rotate the URL. There is no endpoint that writes the
+// version directly: it moves only through the update actions below, which an
+// admin's hold can refuse.
 func RegisterOwnerRoutes(cg *echo.Group, h *Handler, requireOwner echo.MiddlewareFunc) {
-	cg.PUT("/foundry-vtt/pin", h.SetPinAPI, requireOwner)
 	cg.POST("/foundry-vtt/token/rotate", h.RotateTokenAPI, requireOwner)
 	cg.GET("/foundry-vtt/install-url", h.InstallURLAPI, requireOwner)
 	cg.GET("/foundry-vtt/settings-tab", h.OwnerTabFragmentHandler, requireOwner)
@@ -26,9 +27,13 @@ func RegisterOwnerRoutes(cg *echo.Group, h *Handler, requireOwner echo.Middlewar
 	// /sync-status fetch is owner-gated by syncapi.
 	cg.GET("/foundry-vtt/dashboard-sync-block", h.DashboardSyncBlockHandler)
 
-	// "Newer module version available" banner for the campaign show
-	// page. Renders nothing when HasUpdate is false.
+	// "New module version is ready" line for the campaign home page and the
+	// Foundry row of Apps & game system, with the owner's answers to them.
 	cg.GET("/foundry-vtt/show-banner-fragment", h.CampaignShowBannerHandler, requireOwner)
+	cg.GET("/foundry-vtt/apps-row", h.AppsUpdateRowHandler, requireOwner)
+	cg.POST("/foundry-vtt/update", h.OwnerUpdateHandler, requireOwner)
+	cg.POST("/foundry-vtt/update/later", h.OwnerUpdateLaterHandler, requireOwner)
+	cg.POST("/foundry-vtt/update/switch", h.OwnerUpdateSwitchHandler, requireOwner)
 
 	// "Connected to Foundry" presence pill for the map title,
 	// lazy-loaded by maps/maps.templ. Campaign-member access.

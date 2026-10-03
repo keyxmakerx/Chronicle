@@ -120,23 +120,6 @@ func forcePinOlderOnClick(version string) templ.ComponentScript {
 	return inlineOnClick("fvtt_forcePinOlder", body)
 }
 
-// pinSaveOnClick returns the inline IIFE for the owner's "Save Pin"
-// button. Reads the selected value from the version dropdown and
-// PUTs to the pin endpoint.
-func pinSaveOnClick(campaignID string) templ.ComponentScript {
-	cid := jsStr(campaignID)
-	body := fmt.Sprintf(
-		`(function(){`+
-			`var sel=document.getElementById('fvtt-pin-selector');if(!sel)return;`+
-			`var version=sel.value;`+
-			`Chronicle.apiFetch('/campaigns/'+encodeURIComponent(%s)+'/foundry-vtt/pin',{method:'PUT',body:JSON.stringify({version:version}),headers:{'Content-Type':'application/json'}})`+
-			`.then(function(){window.Chronicle.notify(version?('Pinned to '+version):'Set to auto-update','success');setTimeout(function(){window.location.reload();},600);})`+
-			`.catch(function(err){window.Chronicle.notify('Pin failed: '+((err&&err.message)||''),'error');});`+
-			`})()`,
-		cid)
-	return inlineOnClick("fvtt_pinSave", body)
-}
-
 // rotateTokenOnClick returns the inline IIFE for the owner's
 // "Rotate Token" button. Confirm dialog because rotation invalidates
 // every previously-issued install URL.

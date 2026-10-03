@@ -20,7 +20,7 @@ import (
 // project conventions — bind, validate, call service, render.
 //
 // Three responsibilities:
-//   - Owner endpoints: pin / rotate / install-url / owner-tab fragment
+//   - Owner endpoints: update screens / rotate / install-url / owner-tab fragment
 //   - Public endpoints: per-campaign manifest + download
 //   - Error mapping: foundry_vtt.Error → categorized JSON response
 type Handler struct {
@@ -29,6 +29,7 @@ type Handler struct {
 	activity       ActivityRecorder
 	npcResolver    NPCResolver
 	spotlight      SpotlightPublisher
+	owner          OwnerUpdates
 }
 
 // PresenceLookup is the narrow contract the presence-pill fragment
@@ -191,50 +192,7 @@ func (h *Handler) resolvePresence(campaignID string) PresenceView {
 	return PresenceView{Connected: connected, LastSeen: last}
 }
 
-// CampaignShowBannerHandler serves the "newer Foundry module version
-// available" banner at the top of the campaign show page. Lazy-loaded
-// by campaigns/show.templ; owner-gated by the route's requireOwner
-// middleware. Renders nothing when HasUpdate is false, so the lazy-load
-// slot resolves to an invisible empty state.
-//
-// GET /campaigns/:id/foundry-vtt/show-banner-fragment
-func (h *Handler) CampaignShowBannerHandler(c echo.Context) error {
-	cc := campaigns.GetCampaignContext(c)
-	if cc == nil {
-		return apperror.NewMissingContext()
-	}
-	status, err := h.svc.GetBannerStatus(c.Request().Context(), cc.Campaign.ID)
-	if err != nil {
-		// Banner is supplementary; never fail the page-load chain over
-		// a banner-read issue. Empty body lets the slot resolve to
-		// invisible state.
-		return c.NoContent(http.StatusOK)
-	}
-	return middleware.Render(c, http.StatusOK, CampaignShowFoundryBanner(cc.Campaign.ID, status))
-}
-
-// --- owner: pin / rotate / install-url ---
-
-// SetPinAPI updates the calling campaign's FoundryModulePin.
-// PUT /campaigns/:id/foundry-vtt/pin   Body: { "version": "v0.1.5" }
-//
-// Empty version clears the pin (latest-tracking mode).
-func (h *Handler) SetPinAPI(c echo.Context) error {
-	cc := campaigns.GetCampaignContext(c)
-	if cc == nil {
-		return apperror.NewMissingContext()
-	}
-	var req struct {
-		Version string `json:"version"`
-	}
-	if err := c.Bind(&req); err != nil {
-		return apperror.NewBadRequest("invalid request body")
-	}
-	if err := h.svc.SetPinnedVersion(c.Request().Context(), cc.Campaign.ID, req.Version); err != nil {
-		return h.respondError(c, err)
-	}
-	return c.NoContent(http.StatusNoContent)
-}
+// --- owner: rotate / install-url ---
 
 // RotateTokenAPI bumps the per-campaign signing version and
 // returns the freshly-minted install URL.
