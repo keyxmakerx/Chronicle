@@ -1,0 +1,70 @@
+// packages_panel.templ is the side panel for the open package: header, panel
+// tabs and the body of the chosen tab. The Overview, Campaigns and Settings
+// bodies are their own components in sibling files.
+package packages
+
+// packagePanel renders the open package. Below lg it is the whole screen, so
+// the header carries an "All packages" link back to the list.
+templ packagePanel(data PackagesPageData) {
+	{{ r := *data.Selected }}
+	<section class="card p-0 overflow-hidden lg:sticky lg:top-3" aria-label={ r.Name + " details" }>
+		<div class="flex flex-wrap items-center gap-3 px-4 py-3 border-b border-edge">
+			<a href={ templ.SafeURL(data.Query.closeHref()) } class="btn-secondary btn-sm lg:hidden">
+				<i class="fa-solid fa-arrow-left mr-1"></i>
+				All packages
+			</a>
+			<div class="min-w-40 flex-1">
+				<h2 class="text-lg font-semibold text-fg">{ r.Name }</h2>
+				<p class="text-xs text-fg-muted break-all">{ repoLabel(r.RepoURL) }</p>
+			</div>
+			@statusPill(r)
+			<!-- Per-type actions fragment slot. The panel stays generic: a
+			     package type's own links load via HTMX from the plugin that
+			     owns the type, with a pulsing skeleton while they load. Types
+			     without a fragment URL render no slot. -->
+			if url := actionsFragmentURLFor(r.Package); url != "" {
+				<span
+					hx-get={ url }
+					hx-trigger="load"
+					hx-swap="outerHTML"
+				>
+					<span class="inline-block w-9 h-8 rounded bg-fg-secondary/10 animate-pulse" aria-hidden="true"></span>
+				</span>
+			}
+			<a href={ templ.SafeURL(data.Query.closeHref()) } class="btn-secondary btn-sm hidden lg:inline-flex" aria-label="Close details">
+				<i class="fa-solid fa-xmark"></i>
+			</a>
+		</div>
+		<nav class="flex gap-1 px-2 border-b border-edge overflow-x-auto text-sm whitespace-nowrap" aria-label="Package sections">
+			@panelTab(data.Query, PanelTabOverview, "Overview")
+			@panelTab(data.Query, PanelTabVersions, "Versions")
+			@panelTab(data.Query, PanelTabCampaigns, "Campaigns")
+			@panelTab(data.Query, PanelTabSettings, "Settings")
+		</nav>
+		<div class="p-4 space-y-4">
+			switch data.Query.PanelTab {
+				case PanelTabVersions:
+					@VersionList(&r.Package, r.Versions, data.CSRFToken)
+				case PanelTabCampaigns:
+					@CampaignsPanel(&r.Package, r.Usage, r.UsageKnown)
+				case PanelTabSettings:
+					@panelSettings(r, data.CSRFToken)
+				default:
+					@panelOverview(r, data)
+			}
+		</div>
+	</section>
+}
+
+// panelTab is one tab link in the panel.
+templ panelTab(q packagesQuery, tab, label string) {
+	<a
+		href={ templ.SafeURL(q.panelHref(tab)) }
+		class={ "px-3 py-2 border-b-2 -mb-px focus-visible:outline focus-visible:outline-2 focus-visible:outline-accent",
+			templ.KV("border-accent text-fg font-medium", q.PanelTab == tab),
+			templ.KV("border-transparent text-fg-muted hover:text-fg", q.PanelTab != tab) }
+		if q.PanelTab == tab {
+			aria-current="page"
+		}
+	>{ label }</a>
+}

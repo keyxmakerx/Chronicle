@@ -1,0 +1,30 @@
+// packages_usage.templ is the Campaigns tab and the GET /:id/usage fragment.
+package packages
+
+// UsageTable is the body of GET /admin/packages/:id/usage.
+templ UsageTable(pkg *Package, usage []PackageUsage) {
+	@CampaignsPanel(pkg, usage, true)
+}
+
+// CampaignsPanel lists the campaigns that use a package and since when. Which
+// version each campaign runs is not recorded per campaign, so none is shown;
+// known is false when the lookup failed, so a failure never reads as "unused".
+templ CampaignsPanel(pkg *Package, usage []PackageUsage, known bool) {
+	<div class="space-y-3">
+		if !known {
+			<p class="text-sm text-fg-secondary">Campaign usage could not be read right now. Reload the page to try again.</p>
+		} else if len(usage) == 0 {
+			<p class="text-sm text-fg">No campaign uses this package.</p>
+		} else {
+			<ul class="divide-y divide-edge rounded-lg border border-edge">
+				for _, u := range usage {
+					<li class="flex flex-wrap items-center gap-x-3 px-3 py-2 text-sm">
+						<span class="flex-1 min-w-36 font-medium text-fg">{ u.CampaignName }</span>
+						<span class="text-xs text-fg-muted">since { u.EnabledAt.Format("2 Jan 2006") }</span>
+					</li>
+				}
+			</ul>
+		}
+		<p class="text-xs text-fg-muted">Choosing how each campaign gets updates (automatic, ask first, or pinned) is coming.</p>
+	</div>
+}
