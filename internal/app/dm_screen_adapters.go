@@ -44,7 +44,7 @@ func (a *dmDowntimeAdapter) Downtime(ctx context.Context, campaignID string, v d
 		slog.Warn("dm screen: counting pending stash requests", slog.String("campaign_id", campaignID), slog.Any("error", err))
 		return open, 0, true, nil
 	}
-	return open, len(page.Pending), true, nil
+	return open, page.WaitingCount(), true, nil
 }
 
 // SetDowntime switches downtime through the armory, which checks the owner
