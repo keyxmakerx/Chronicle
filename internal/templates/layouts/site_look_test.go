@@ -261,3 +261,65 @@ func TestSiteAuthStage_SignedPictureURL(t *testing.T) {
 		t.Errorf("signed URL mangled: %s", out)
 	}
 }
+
+func TestSiteAuthStage_Moving(t *testing.T) {
+	tests := []struct {
+		name    string
+		look    sitelook.Settings
+		want    []string
+		notWant []string
+	}{
+		{"gradient drifts", sitelook.Settings{Configured: true, Look: "ember", Background: sitelook.BackgroundLook, Move: true},
+			[]string{`data-widget="header-motion"`, `data-axis="x"`, "repeating-linear-gradient(90deg, #1f2937 0%, #4a1512 16.6667%, #1f2937 33.3333%)", "width:300%"}, []string{`data-pan`}},
+		{"gradient still when off", sitelook.Settings{Configured: true, Look: "ember", Background: sitelook.BackgroundLook},
+			nil, []string{"header-motion", "repeating-linear-gradient"}},
+		{"picture pans", sitelook.Settings{Configured: true, Background: sitelook.BackgroundPicture, Picture: "2026/10/bg.jpg", Move: true},
+			[]string{`data-widget="header-motion" data-pan="1"`}, []string{"repeating-linear-gradient"}},
+		{"picture still when off", sitelook.Settings{Configured: true, Background: sitelook.BackgroundPicture, Picture: "2026/10/bg.jpg"},
+			nil, []string{"header-motion", "data-pan"}},
+		{"move over plain does nothing", sitelook.Settings{Configured: true, Look: "ember", Background: sitelook.BackgroundPlain, Move: true},
+			nil, []string{"header-motion", "data-pan"}},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			out := renderToString(t, templ.WithChildren(SetSiteLook(context.Background(), tc.look), plainBody()), SiteAuthStage(""))
+			for _, w := range tc.want {
+				if !strings.Contains(out, w) {
+					t.Errorf("missing %q in %s", w, out)
+				}
+			}
+			for _, n := range tc.notWant {
+				if strings.Contains(out, n) {
+					t.Errorf("unexpected %q in %s", n, out)
+				}
+			}
+		})
+	}
+}
+
+func TestApplySiteLook_MovingTopbar(t *testing.T) {
+	tests := []struct {
+		name string
+		look sitelook.Settings
+		want string
+	}{
+		{"off is a plain gradient", sitelook.Settings{Configured: true, Look: "ember", Background: sitelook.BackgroundLook}, "gradient"},
+		{"on drifts", sitelook.Settings{Configured: true, Look: "ember", Background: sitelook.BackgroundLook, Move: true}, "moving"},
+	}
+	for _, tc := range tests {
+		ctx := ApplySiteLook(SetSiteLook(context.Background(), tc.look))
+		if got := GetTopbarStyle(ctx); got == nil || got.Mode != tc.want {
+			t.Errorf("%s: topbar = %+v, want mode %s", tc.name, got, tc.want)
+		}
+	}
+	// The campaign page still gets nothing, moving or not.
+	ctx := SetCampaignID(SetSiteLook(context.Background(), sitelook.Settings{Configured: true, Look: "ember", Background: sitelook.BackgroundLook, Move: true}), "c1")
+	if GetTopbarStyle(ApplySiteLook(ctx)) != nil {
+		t.Error("a campaign page picked up the site's moving top bar")
+	}
+	// And the rendered page carries the header-motion widget on the top bar.
+	out := renderToString(t, ApplySiteLook(SetSiteLook(context.Background(), sitelook.Settings{Configured: true, Look: "ember", Background: sitelook.BackgroundLook, Move: true})), App("Discover"))
+	if !strings.Contains(out, `data-widget="header-motion"`) {
+		t.Error("the outside-campaign top bar should drift when Move is on")
+	}
+}

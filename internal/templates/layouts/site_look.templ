@@ -16,8 +16,19 @@ templ SiteAuthStage(extraClass string) {
 		</div>
 	} else {
 		<div class={ "relative overflow-hidden min-h-screen flex items-center justify-center px-4", extraClass, templ.KV("bg-slate-900", siteAuthPicture(ctx) != "") } style={ siteAuthGradient(ctx) }>
+			if mv := siteAuthMovingStyle(ctx); mv != "" {
+				// The look's gradient drifts: an over-wide strip that the
+				// header-motion widget slides, easing to a stop at rest.
+				<div class="absolute inset-0 overflow-hidden" aria-hidden="true">
+					<div data-widget="header-motion" data-axis="x" style={ mv }></div>
+				</div>
+			}
 			if pic := siteAuthPicture(ctx); pic != "" {
-				<img src={ pic } alt="" aria-hidden="true" class="absolute inset-0 w-full h-full object-cover"/>
+				if siteAuthPictureMoves(ctx) {
+					<img src={ pic } alt="" aria-hidden="true" class="absolute inset-0 w-full h-full object-cover" data-widget="header-motion" data-pan="1"/>
+				} else {
+					<img src={ pic } alt="" aria-hidden="true" class="absolute inset-0 w-full h-full object-cover"/>
+				}
 			}
 			<div class="relative w-full max-w-md rounded-2xl bg-surface shadow-2xl px-6 py-8 sm:px-8">
 				{ children... }

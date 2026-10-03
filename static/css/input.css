@@ -4408,3 +4408,70 @@ html[data-view-motion="calm"] *:not(.czp *), html[data-view-motion="calm"] *:not
 @media (max-width: 640px) {
   .ce-img { float: none !important; width: 100% !important; margin: 1rem 0; }
 }
+
+/* Site look preview (Admin > Site look): a small window drawing the sign-in
+   page, Discover and the browser tab from the form's values. --sa is the
+   site accent, --hd1/--hd2 the look's top bar colours, --hf its heading font;
+   all are set from the fixed look table. Light-only on purpose: it shows the
+   pages outside a campaign as a signed-out visitor sees them. */
+.sl-win { --sa: #6366f1; --hd1: #ffffff; --hd2: #ffffff; --hf: inherit; position: relative; display: flex; flex-direction: column; min-height: 430px; overflow: hidden; border: 1px solid var(--color-border, #e5e7eb); border-radius: 12px; background: #f9fafb; color: #111827; }
+.sl-win [hidden] { display: none !important; }
+.sl-bar { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px; padding: 8px 12px; background: var(--color-card-bg, #fff); border-bottom: 1px solid var(--color-border, #e5e7eb); }
+.sl-seg { display: inline-flex; flex-wrap: wrap; overflow: hidden; border: 1px solid var(--color-border, #e5e7eb); border-radius: 8px; }
+.sl-seg button { border: 0; background: none; padding: 6px 12px; font: 500 .8rem inherit; color: #374151; cursor: pointer; }
+.sl-seg button[aria-pressed="true"] { background: var(--sa); color: #fff; }
+.sl-seg button:focus-visible, .sl-win [data-sl-focus]:focus-visible { outline: 2px solid var(--sa); outline-offset: 2px; }
+.sl-hint { font-size: .75rem; color: #6b7280; }
+.sl-win [data-sl-focus] { cursor: pointer; border-radius: 8px; outline: 2px dashed transparent; outline-offset: 3px; transition: outline-color .15s; }
+.sl-win [data-sl-focus]:hover { outline-color: color-mix(in srgb, var(--sa) 60%, transparent); }
+.sl-mark { width: 40px; height: 40px; border-radius: 10px; background: var(--sa); color: #fff; display: inline-grid; place-items: center; overflow: hidden; font-weight: 700; font-size: 1.1rem; flex-shrink: 0; }
+.sl-mark img { width: 100%; height: 100%; object-fit: cover; }
+.sl-name { font-family: var(--hf), system-ui, sans-serif; font-weight: 600; }
+
+.sl-signin { position: relative; flex: 1; display: grid; place-items: center; padding: 28px 16px; overflow: hidden; }
+.sl-bgfill { position: absolute; inset: 0; overflow: hidden; background: #f9fafb; }
+.sl-bg-look .sl-bgfill { background: linear-gradient(135deg, var(--hd1), var(--hd2)); }
+.sl-bg-picture .sl-bgfill { background: #0f172a; }
+.sl-pic { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; }
+.sl-flow { position: absolute; top: 0; bottom: 0; left: 0; width: 300%; will-change: transform; background: repeating-linear-gradient(90deg, var(--hd1) 0%, var(--hd2) 16.6667%, var(--hd1) 33.3333%); }
+.sl-signin .sl-flow { display: none; }
+.sl-win[data-sl-moving="on"] .sl-bg-look .sl-flow { display: block; }
+.sl-card { position: relative; width: min(340px, 100%); display: grid; gap: 12px; padding: 22px; border-radius: 14px; background: #fff; color: #111827; box-shadow: 0 20px 40px -18px rgba(0, 0, 0, .45); }
+.sl-top { display: flex; align-items: center; gap: 12px; }
+.sl-card .sl-name { font-size: 1.25rem; }
+.sl-welcome { margin: 0; font-size: .85rem; color: #4b5563; line-height: 1.45; }
+.sl-field { border: 1px solid #d1d5db; border-radius: 8px; padding: 9px 11px; font-size: .84rem; color: #9ca3af; }
+.sl-go { border-radius: 8px; padding: 10px; text-align: center; font-weight: 600; font-size: .88rem; background: var(--sa); color: #fff; }
+
+.sl-disc { flex: 1; display: flex; flex-direction: column; }
+.sl-dtop { position: relative; display: flex; align-items: center; gap: 10px; height: 56px; padding: 0 16px; overflow: hidden; background: #fff; color: #111827; border-bottom: 1px solid #e5e7eb; }
+.sl-win[data-sl-look="on"] .sl-dtop { background: linear-gradient(90deg, var(--hd1), var(--hd2)); color: #fff; border-bottom: 0; }
+.sl-dflow-clip { position: absolute; inset: 0; overflow: hidden; display: none; }
+.sl-win[data-sl-look="on"][data-sl-moving="on"] .sl-dflow-clip { display: block; }
+.sl-dtop > :not(.sl-dflow-clip) { position: relative; }
+.sl-brand { display: inline-flex; align-items: center; gap: 10px; }
+.sl-dtop .sl-mark { width: 30px; height: 30px; font-size: .9rem; border-radius: 8px; }
+.sl-nav { margin-left: auto; display: flex; gap: 14px; font-size: .8rem; opacity: .9; }
+.sl-dbody { display: grid; gap: 14px; padding: 20px 16px; }
+.sl-h { margin: 0; justify-self: start; font-family: var(--hf), system-ui, sans-serif; font-size: 1.3rem; }
+.sl-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(160px, 1fr)); gap: 12px; }
+.sl-camp { overflow: hidden; border: 1px solid #e5e7eb; border-radius: 10px; background: #fff; font-size: .82rem; color: #374151; }
+.sl-camp p { margin: 0; padding: 8px 10px; }
+.sl-camp b { display: block; color: #111827; }
+.sl-art { height: 64px; }
+.sl-chip { display: inline-block; margin-top: 4px; padding: 2px 8px; border-radius: 999px; font-size: .7rem; font-weight: 600; background: color-mix(in srgb, var(--sa) 14%, #fff); color: color-mix(in srgb, var(--sa) 80%, #000); }
+
+.sl-tabs { flex: 1; display: grid; gap: 14px; align-content: start; padding: 24px 16px; background: #e5e7eb; }
+.sl-chrome { display: flex; gap: 4px; padding: 8px 8px 0; border-radius: 10px 10px 0 0; background: #dee1e6; }
+.sl-tab { display: flex; align-items: center; gap: 8px; max-width: 240px; padding: 8px 12px; border-radius: 8px 8px 0 0; background: #fff; font-size: .8rem; color: #202124; }
+.sl-tab-off { background: transparent; color: #5f6368; }
+.sl-fav { width: 16px; height: 16px; border-radius: 4px; display: inline-grid; place-items: center; overflow: hidden; background: #6366f1; color: #fff; font-size: .6rem; font-weight: 700; flex-shrink: 0; }
+.sl-fav .sl-mark { width: 16px; height: 16px; border-radius: 4px; font-size: .6rem; }
+.sl-fav-def { background: #9ca3af; }
+.sl-addr { margin-top: -14px; padding: 10px 12px; border-radius: 0 0 10px 10px; background: #fff; font-size: .8rem; color: #5f6368; }
+
+.sl-panel { transition: box-shadow .25s, border-color .25s; }
+.sl-panel.sl-focus { border-color: var(--color-accent, #6366f1); box-shadow: 0 0 0 3px rgb(99 102 241 / .18); }
+@media (prefers-reduced-motion: reduce) {
+  .sl-panel, .sl-win [data-sl-focus] { transition: none; }
+}

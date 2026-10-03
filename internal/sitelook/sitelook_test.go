@@ -38,6 +38,11 @@ func TestValidate(t *testing.T) {
 		{"svg logo refused", Settings{Logo: "2026/10/abc.svg"}, Settings{}, true},
 		{"traversal logo refused", Settings{Logo: "../etc/passwd.png"}, Settings{}, true},
 		{"css-breaking picture refused", Settings{Background: BackgroundPicture, Picture: "2026/10/a');x.png"}, Settings{}, true},
+		{"move kept over the look's colours", Settings{Look: "arcane", Background: BackgroundLook, Move: true}, Settings{Configured: true, Look: "arcane", Background: BackgroundLook, Move: true}, false},
+		{"move kept over a picture", Settings{Background: BackgroundPicture, Picture: "2026/10/abc.jpg", Move: true},
+			Settings{Configured: true, Background: BackgroundPicture, Picture: "2026/10/abc.jpg", Move: true}, false},
+		{"move dropped over a plain background", Settings{Background: BackgroundPlain, Move: true}, Settings{Configured: true, Background: BackgroundPlain}, false},
+		{"move dropped when no background is chosen", Settings{Move: true}, Settings{Configured: true, Background: BackgroundPlain}, false},
 		{"favicon flag kept", Settings{LogoAsFavicon: true, Logo: "2026/10/l.webp"}, Settings{Configured: true, LogoAsFavicon: true, Logo: "2026/10/l.webp", Background: BackgroundPlain}, false},
 	}
 	for _, tc := range tests {

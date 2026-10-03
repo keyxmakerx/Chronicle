@@ -1,6 +1,7 @@
 package admin
 
 import (
+	"context"
 	"errors"
 	"io"
 	"net/http"
@@ -12,6 +13,7 @@ import (
 	"github.com/keyxmakerx/chronicle/internal/middleware"
 	"github.com/keyxmakerx/chronicle/internal/plugins/auth"
 	"github.com/keyxmakerx/chronicle/internal/sitelook"
+	"github.com/keyxmakerx/chronicle/internal/templates/layouts"
 )
 
 // SiteLookPageData is everything the Site look page renders. Draft is what
@@ -62,6 +64,7 @@ func (h *Handler) SaveSiteLook(c echo.Context) error {
 			Look:          c.FormValue("look"),
 			Background:    c.FormValue("background"),
 			Welcome:       c.FormValue("welcome"),
+			Move:          c.FormValue("move") == "1",
 		},
 		RemoveLogo:    c.FormValue("remove_logo") == "1",
 		RemovePicture: c.FormValue("remove_picture") == "1",
@@ -128,6 +131,43 @@ func formUpload(c echo.Context, field string, limit int64) (*SiteLookUpload, err
 		return nil, apperror.NewBadRequest("that picture is too large")
 	}
 	return &SiteLookUpload{Name: fh.Filename, Data: data}, nil
+}
+
+// siteLookBg is the sign-in background the preview shows: the chosen one, with
+// "look" falling back to plain while no look is picked, as the real page does.
+func siteLookBg(s sitelook.Settings) string {
+	switch {
+	case s.Background == sitelook.BackgroundLook && s.Look != "":
+		return sitelook.BackgroundLook
+	case s.Background == sitelook.BackgroundPicture && s.Picture != "":
+		return sitelook.BackgroundPicture
+	}
+	return sitelook.BackgroundPlain
+}
+
+// siteLookVars is the preview's colour variables for the chosen look, from the
+// fixed sitelook table, with Chronicle's shipped accent when none is chosen.
+func siteLookVars(s sitelook.Settings) string {
+	if l, ok := s.ActiveLook(); ok {
+		return "--sa:" + l.Accent + ";--hd1:" + l.HeaderFrom + ";--hd2:" + l.HeaderTo
+	}
+	return "--sa:#6366f1"
+}
+
+// siteLookOn is "on" or "off", the preview's state attributes.
+func siteLookOn(b bool) string {
+	if b {
+		return "on"
+	}
+	return "off"
+}
+
+// siteLookURL is the URL of a stored site picture, or "" for none.
+func siteLookURL(ctx context.Context, name string) string {
+	if name == "" {
+		return ""
+	}
+	return layouts.MediaURL(ctx, name)
 }
 
 // itoa formats a pixel size for the page's templates.

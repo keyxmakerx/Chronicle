@@ -164,6 +164,9 @@ const (
 	KeySiteSigninPicture = "site.signin_picture"
 	// KeySiteWelcome is the optional welcome line on the sign-in card.
 	KeySiteWelcome = "site.welcome"
+	// KeySiteMove is "1" to let the sign-in background and the top bar drift
+	// slowly. Absent or anything else is off.
+	KeySiteMove = "site.move"
 )
 
 // TrashRetentionChoices are the retention periods the admin can pick, in

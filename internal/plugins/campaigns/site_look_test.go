@@ -35,13 +35,14 @@ func TestCreate_StartsWithSiteLook(t *testing.T) {
 		name     string
 		source   SiteLookSource
 		wantLook string // Appearance.Look of the new campaign's settings; "" for none.
-		wantJSON string
+		wantJSON string // Exact settings, when it is the empty default.
 	}{
 		{"no source wired", nil, "", "{}"},
 		{"never saved", fakeSiteLook{}, "", "{}"},
 		{"look left as it is", fakeSiteLook{look: sitelook.Settings{Configured: true}}, "", "{}"},
-		{"ember", fakeSiteLook{look: sitelook.Settings{Configured: true, Look: "ember"}}, "ember", `{"appearance":{"look":"ember"}}`},
-		{"classic is the default so nothing is stored", fakeSiteLook{look: sitelook.Settings{Configured: true, Look: "classic"}}, "", "{}"},
+		{"ember", fakeSiteLook{look: sitelook.Settings{Configured: true, Look: "ember"}}, "ember", ""},
+		{"parchment", fakeSiteLook{look: sitelook.Settings{Configured: true, Look: "parchment"}}, "parchment", ""},
+		{"classic is the default so only the accent defaults are stored", fakeSiteLook{look: sitelook.Settings{Configured: true, Look: "classic"}}, "", "{}"},
 		{"unknown stored look ignored", fakeSiteLook{look: sitelook.Settings{Look: "neon"}}, "", "{}"},
 		{"read failure does not block creation", fakeSiteLook{err: errors.New("db down")}, "", "{}"},
 	}
@@ -59,15 +60,23 @@ func TestCreate_StartsWithSiteLook(t *testing.T) {
 			if created == nil {
 				t.Fatal("repo.Create not called")
 			}
-			if created.Settings != tc.wantJSON {
+			if tc.wantJSON != "" && created.Settings != tc.wantJSON {
 				t.Errorf("settings = %s, want %s", created.Settings, tc.wantJSON)
 			}
 			var got string
-			if a := created.ParseSettings().Appearance; a != nil {
-				got = a.Look
+			s := created.ParseSettings()
+			if s.Appearance != nil {
+				got = s.Appearance.Look
 			}
 			if got != tc.wantLook {
 				t.Errorf("appearance look = %q, want %q", got, tc.wantLook)
+			}
+			if tc.wantLook == "ember" {
+				// The full look, so the campaign renders in it at once.
+				if s.AccentColor != "#c2410c" || s.TopbarStyle == nil || s.TopbarStyle.Mode != "gradient" ||
+					s.Appearance.HeadingFont != "cinzel" || s.Appearance.ButtonStyle != "press" || s.Appearance.Elevation != "dramatic" {
+					t.Errorf("ember not fully seeded: accent=%q topbar=%+v appearance=%+v", s.AccentColor, s.TopbarStyle, s.Appearance)
+				}
 			}
 		})
 	}

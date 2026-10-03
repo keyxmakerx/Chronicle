@@ -88,6 +88,10 @@ type Settings struct {
 	Background string // One of Backgrounds.
 	Picture    string // Stored media filename, used when Background is "picture".
 	Welcome    string // Optional line on the sign-in card.
+
+	// Move lets the sign-in background and the top bar outside a campaign
+	// drift slowly. Off unless ticked, and meaningless over a plain background.
+	Move bool
 }
 
 // DisplayName is the name to show: the saved one or "Chronicle".
@@ -210,6 +214,9 @@ func Validate(in Settings) (Settings, error) {
 	default:
 		return Settings{}, apperror.NewBadRequest("invalid sign-in background")
 	}
+	// Moving needs something to move: a plain background has nothing, so the
+	// choice is dropped rather than stored dormant.
+	out.Move = in.Move && out.Background != BackgroundPlain
 	// A picture the background doesn't use is dropped, so nothing stale is kept.
 	if out.Background != BackgroundPicture {
 		out.Picture = ""

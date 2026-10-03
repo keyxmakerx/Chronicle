@@ -36,8 +36,13 @@ func ApplySiteLook(ctx context.Context) context.Context {
 		return ctx
 	}
 	ctx = SetAccentColor(ctx, look.Accent)
+	mode := "gradient"
+	if s.Move {
+		// The top bar's own moving background, on the shared rest clock.
+		mode = "moving"
+	}
 	ctx = SetTopbarStyle(ctx, &TopbarStyleData{
-		Mode:         "gradient",
+		Mode:         mode,
 		GradientFrom: look.HeaderFrom,
 		GradientTo:   look.HeaderTo,
 		GradientDir:  "to-r",
@@ -114,4 +119,45 @@ func siteAuthPicture(ctx context.Context) string {
 		return ""
 	}
 	return MediaURL(ctx, s.Picture)
+}
+
+// siteAuthMovingStyle sizes the drifting strip behind the sign-in panel three
+// panels wide and paints the look's two colours repeating once per panel
+// width, so the header-motion widget sliding it by a third loops seamlessly.
+// Both colours come from the fixed sitelook table.
+func siteAuthMovingStyle(ctx context.Context) string {
+	s := GetSiteLook(ctx)
+	look, ok := s.ActiveLook()
+	if !ok || !s.Move || s.Background != sitelook.BackgroundLook {
+		return ""
+	}
+	return fmt.Sprintf("position:absolute; left:0; top:0; width:300%%; height:100%%; will-change:transform; "+
+		"background:repeating-linear-gradient(90deg, %s 0%%, %s 16.6667%%, %s 33.3333%%);",
+		look.HeaderFrom, look.HeaderTo, look.HeaderFrom)
+}
+
+// siteAuthPictureMoves reports whether the sign-in picture pans slowly.
+func siteAuthPictureMoves(ctx context.Context) bool {
+	return siteAuthPicture(ctx) != "" && GetSiteLook(ctx).Move
+}
+
+// HeadingFontStack is the CSS font stack for a campaign heading face id, or ""
+// for none, so the Site look preview can show a look's heading font.
+func HeadingFontStack(id string) string {
+	if _, ok := czHeadingFaces[id]; !ok {
+		return ""
+	}
+	return czFontStacks[id]
+}
+
+// SiteLookFontsCSS is @font-face rules for the heading faces the looks use,
+// served from Chronicle, for the Site look preview.
+func SiteLookFontsCSS() string {
+	var b strings.Builder
+	for _, l := range sitelook.Looks {
+		if l.HeadingFont != "" {
+			b.WriteString(fontFaceCSS(l.HeadingFont))
+		}
+	}
+	return b.String()
 }

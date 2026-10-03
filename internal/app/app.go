@@ -151,18 +151,25 @@ func (a *App) setupMiddleware() {
 	// ~10MB cap of their own, enforced via an http.LimitReader in the
 	// calendar handler — this global 2MB limit would otherwise be the real
 	// (and silent, since it fails before the handler's own check ever runs)
-	// ceiling for every one of them. The Site look form carries a logo and a
-	// sign-in picture, so it skips the global limit and takes a 5M cap of its
-	// own at the route.
+	// ceiling for every one of them.
 	a.Echo.Use(echomw.BodyLimitWithConfig(echomw.BodyLimitConfig{
 		Limit: "2M",
 		Skipper: func(c echo.Context) bool {
 			path := c.Request().URL.Path
-			if strings.HasPrefix(path, "/media/upload") || path == "/ws" || path == "/admin/site-look" {
+			if strings.HasPrefix(path, "/media/upload") || path == "/ws" || path == siteLookPath {
 				return true
 			}
 			return isCalendarImportPath(path)
 		},
+	}))
+	// The Site look form carries a logo and a sign-in picture, so it gets a
+	// larger cap of its own. It is a global middleware, ahead of CSRF, because
+	// the CSRF check reads the form field and so parses the multipart body
+	// before any route-level middleware runs; a limit set only at the route
+	// would come too late.
+	a.Echo.Use(echomw.BodyLimitWithConfig(echomw.BodyLimitConfig{
+		Limit:   siteLookBodyLimit,
+		Skipper: func(c echo.Context) bool { return c.Request().URL.Path != siteLookPath },
 	}))
 
 	// Request logging -- log every request with method, path, status, latency.
@@ -207,6 +214,13 @@ func (a *App) setupMiddleware() {
 // that position.
 var calendarImportPathPattern = regexp.MustCompile(
 	`^/campaigns/[^/]+/calendars/(wizard/import/preview|wizard/build/preview|wizard/create|import/preview|import)$`)
+
+// siteLookPath is the Site look form's URL, and siteLookBodyLimit its request
+// size cap: room for a 1 MB logo and a 3 MB picture plus the other fields.
+const (
+	siteLookPath      = "/admin/site-look"
+	siteLookBodyLimit = "5M"
+)
 
 // isCalendarImportPath reports whether path is one of the calendar import
 // routes the global body limit above must not apply to (see its own

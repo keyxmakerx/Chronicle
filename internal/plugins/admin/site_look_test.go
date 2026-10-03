@@ -231,7 +231,7 @@ func doReq(e *echo.Echo, method, path, token, contentType string, body []byte) *
 }
 
 func TestSiteLookRoutes_AdminOnly(t *testing.T) {
-	form := url.Values{"name": {"Hold"}, "look": {"ember"}, "background": {"look"}}.Encode()
+	form := url.Values{"name": {"Hold"}, "look": {"ember"}, "background": {"look"}, "move": {"1"}}.Encode()
 	tests := []struct {
 		name       string
 		method     string
@@ -263,7 +263,7 @@ func TestSiteLookRoutes_AdminOnly(t *testing.T) {
 			if (set.updates > 0) != tc.wantWrite {
 				t.Errorf("settings written = %v, want %v", set.updates > 0, tc.wantWrite)
 			}
-			if tc.wantWrite && (set.cur.Name != "Hold" || set.cur.Look != "ember" || set.cur.Background != "look") {
+			if tc.wantWrite && (set.cur.Name != "Hold" || set.cur.Look != "ember" || set.cur.Background != "look" || !set.cur.Move) {
 				t.Errorf("saved %+v", set.cur)
 			}
 		})
@@ -360,5 +360,55 @@ func TestSiteLookTile(t *testing.T) {
 	site := findTile(buildHomeGroups(homeInput{}), "Site look")
 	if site.Href != "/admin/site-look" {
 		t.Errorf("the Site group has no Site look tile: %+v", site)
+	}
+}
+
+func TestSaveSiteLook_Move(t *testing.T) {
+	tests := []struct {
+		name string
+		form url.Values
+		want bool
+	}{
+		{"ticked over the look's colours", url.Values{"look": {"ember"}, "background": {"look"}, "move": {"1"}}, true},
+		{"unticked is off", url.Values{"look": {"ember"}, "background": {"look"}}, false},
+		{"ticked over plain is dropped", url.Values{"background": {"plain"}, "move": {"1"}}, false},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			set := &fakeSiteSettings{}
+			rec := doReq(siteLookTestServer(set, &fakeSiteMedia{}), "POST", "/admin/site-look", "admin-token", "application/x-www-form-urlencoded", []byte(tc.form.Encode()))
+			if rec.Code != http.StatusSeeOther {
+				t.Fatalf("status = %d", rec.Code)
+			}
+			if set.cur.Move != tc.want {
+				t.Errorf("Move = %v, want %v", set.cur.Move, tc.want)
+			}
+		})
+	}
+}
+
+// TestSiteLookPage_PreviewContract checks the markup the site-look widget
+// relies on: the mount, the preview window, the panels it focuses, and the
+// look colours rendered from the Go table into data attributes.
+func TestSiteLookPage_PreviewContract(t *testing.T) {
+	set := &fakeSiteSettings{cur: sitelook.Settings{Configured: true, Name: "Hold", Look: "ember", Background: sitelook.BackgroundLook, Move: true}}
+	body := doReq(siteLookTestServer(set, &fakeSiteMedia{}), "GET", "/admin/site-look", "admin-token", "", nil).Body.String()
+	for _, want := range []string{
+		`data-widget="site-look"`, `data-sl-win`, `data-sl-switcher hidden`,
+		`data-sl-view="signin"`, `data-sl-view="disc"`, `data-sl-view="tabs"`,
+		`data-sl-focus="sl-p-id"`, `data-sl-focus="sl-p-look"`, `data-sl-focus="sl-p-bg"`,
+		`id="sl-p-id"`, `id="sl-p-look"`, `id="sl-p-bg"`,
+		`data-accent="#c2410c" data-from="#1f2937" data-to="#4a1512"`, `data-sl-moving="on"`, `data-sl-look="on"`,
+		`name="move" value="1" checked`, `--sa:#c2410c;--hd1:#1f2937;--hd2:#4a1512`, `sl-bg-look`,
+	} {
+		if !strings.Contains(body, want) {
+			t.Errorf("page missing %q", want)
+		}
+	}
+	// Plain background: the box is disabled and the preview is not moving.
+	set.cur = sitelook.Settings{Configured: true, Background: sitelook.BackgroundPlain}
+	body = doReq(siteLookTestServer(set, &fakeSiteMedia{}), "GET", "/admin/site-look", "admin-token", "", nil).Body.String()
+	if !strings.Contains(body, `name="move" value="1" disabled`) || !strings.Contains(body, `data-sl-moving="off"`) {
+		t.Error("over a plain background the Move box should be disabled and the preview still")
 	}
 }

@@ -268,8 +268,9 @@ func (s *campaignService) SetSiteLookSource(src SiteLookSource) {
 }
 
 // newCampaignSettings is the settings JSON a new campaign is created with.
-// When the admin has set a site look, the campaign's Appearance starts from
-// that look's id so the Customize page opens on it. Classic is the Appearance
+// When the admin has set a site look, the campaign is seeded with that look's
+// full style, the same values picking it on Customize and saving would store,
+// so it renders in the site look at once and Customize opens on it. Classic is the Appearance
 // default and is stored as empty, like every other default. A failed read
 // only means the campaign starts as Classic: creating a campaign must not
 // depend on the site look.
@@ -285,10 +286,11 @@ func (s *campaignService) newCampaignSettings(ctx context.Context) string {
 	if look.Look == "" || look.Look == AppearanceLooks[0] {
 		return "{}"
 	}
-	if _, ok := sitelook.Find(look.Look); !ok {
+	var settings CampaignSettings
+	if !seedLook(&settings, look.Look) {
 		return "{}"
 	}
-	b, err := json.Marshal(CampaignSettings{Appearance: &Appearance{Look: look.Look}})
+	b, err := json.Marshal(settings)
 	if err != nil {
 		return "{}"
 	}

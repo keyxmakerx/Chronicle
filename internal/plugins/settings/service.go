@@ -538,6 +538,7 @@ func (s *settingsService) GetSiteLook(ctx context.Context) (sitelook.Settings, e
 		Background: all[KeySiteSigninBackground],
 		Picture:    all[KeySiteSigninPicture],
 		Welcome:    all[KeySiteWelcome],
+		Move:       all[KeySiteMove] == "1",
 		// On unless the admin turned it off, so the box starts ticked.
 		LogoAsFavicon: all[KeySiteLogoFavicon] != "0",
 	}
@@ -565,7 +566,12 @@ func (s *settingsService) UpdateSiteLook(ctx context.Context, in sitelook.Settin
 	if v.LogoAsFavicon {
 		favicon = "1"
 	}
+	move := "0"
+	if v.Move {
+		move = "1"
+	}
 	rows := []struct{ key, value string }{
+		{KeySiteMove, move},
 		{KeySiteLogo, v.Logo},
 		{KeySiteLogoFavicon, favicon},
 		{KeySiteLook, v.Look},
