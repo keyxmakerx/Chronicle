@@ -654,18 +654,15 @@ func (s *entityService) Update(ctx context.Context, entityID string, input Updat
 		entity.Entry = nil
 		entity.EntryHTML = nil
 	} else if entry := strings.TrimSpace(input.Entry.Val("")); entry != "" {
+		// Plain HTML (the sync API's clients send their page text this way)
+		// leaves entry empty: that column only holds editor JSON, so the HTML
+		// is the body from now on and the editor opens it from entry_html.
+		entity.Entry = nil
 		if isEditorDoc(entry) {
 			entity.Entry = &entry
-			sanitized := sanitize.HTML(entry)
-			entity.EntryHTML = &sanitized
-		} else {
-			// Plain HTML (the sync API's clients send their page text this
-			// way). The entry column only holds editor JSON, so the HTML is
-			// the body from now on and the editor opens it from entry_html.
-			entity.Entry = nil
-			sanitized := sanitize.HTML(entry)
-			entity.EntryHTML = &sanitized
 		}
+		sanitized := sanitize.HTML(entry)
+		entity.EntryHTML = &sanitized
 	}
 
 	// Update player-facing notes if provided.
