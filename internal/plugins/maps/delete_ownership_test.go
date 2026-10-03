@@ -88,7 +88,7 @@ func TestDeleteDrawing_Ownership(t *testing.T) {
 	for _, tc := range deleteCases() {
 		t.Run(tc.name, func(t *testing.T) {
 			repo := &drawingOwnershipRepo{d: &Drawing{ID: "d-1", MapID: "map-1", CreatedBy: tc.createdBy, Visibility: tc.visibil}}
-			err := NewDrawingService(repo).DeleteDrawing(context.Background(), "d-1", "map-1", nil, tc.actor, tc.role)
+			err := NewDrawingService(repo).DeleteDrawing(context.Background(), "d-1", "map-1", nil, tc.actor, tc.role, false)
 			if tc.wantCode == 0 {
 				if err != nil || !repo.deleted {
 					t.Fatalf("want delete, got err=%v deleted=%v", err, repo.deleted)
@@ -105,7 +105,7 @@ func TestDeleteDrawing_Ownership(t *testing.T) {
 
 func TestDeleteDrawing_DmOnlyOfOthersIsNotFoundForScribe(t *testing.T) {
 	repo := &drawingOwnershipRepo{d: &Drawing{ID: "d-1", MapID: "map-1", CreatedBy: strPtr("owner-1"), Visibility: "dm_only"}}
-	err := NewDrawingService(repo).DeleteDrawing(context.Background(), "d-1", "map-1", nil, "scribe-1", permissions.RoleScribe)
+	err := NewDrawingService(repo).DeleteDrawing(context.Background(), "d-1", "map-1", nil, "scribe-1", permissions.RoleScribe, false)
 	assertAppError(t, err, http.StatusNotFound)
 	if repo.deleted {
 		t.Error("must not delete")

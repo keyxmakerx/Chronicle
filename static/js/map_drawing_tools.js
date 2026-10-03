@@ -2,7 +2,7 @@
  * map_drawing_tools.js -- Chronicle Map Drawing Tools
  *
  * Renders saved drawings for everyone and, for Scribe+, provides the drawing
- * tools (freehand, rectangle, polygon, ellipse, text) on Leaflet's native APIs
+ * tools (freehand, rectangle, polygon, ellipse, text, shadow) on Leaflet's native APIs
  * (no Leaflet.Draw dependency). It owns no UI: the map page's floating tool rail
  * drives it through `window.chronicleMap.draw`, so there is one control surface.
  *
@@ -10,7 +10,8 @@
  *   { map, campaignID, mapID, imageW, imageH, isScribe,
  *     onDrawingsChange(count), onUndoChange(count) }
  * and publishes `window.chronicleMap.draw` =
- *   { start(shape), cancel(), setStyle({color,width}), undo(), setVisible(bool), count() }
+ *   { start(shape), cancel(), setStyle({color,width}), setShadowStrength(alpha), undo(),
+ *     setVisible(bool), count() }
  *
  * Drawings are persisted via the REST API:
  *   POST /campaigns/:id/maps/:mid/drawings
@@ -54,6 +55,13 @@
 
     var activeTool = null;
     var drawingLayer = L.layerGroup().addTo(map);
+    // Shadowed areas are drawn by their own module (smoke, motion rules). It is
+    // optional: without it a shadow is simply not drawn, and the server still
+    // withholds what lies under it.
+    var shadows = window.ChronicleMapShadow ? window.ChronicleMapShadow.attach(map, { toLatLng: toLatLng }) : null;
+    ctx.onDestroy = function () { if (shadows) shadows.destroy(); };
+    // How much a new shadow hides: 0.5 "A hint", 0.85 "Almost nothing".
+    var shadowStrength = 0.5;
     var currentPoints = [];
     var currentShape = null;
     var drawColor = '#2563eb';
@@ -151,6 +159,10 @@
           if (latlngs.length >= 2) {
             layer = L.rectangle([latlngs[0], latlngs[1]], opts);
           }
+          break;
+        case 'shadow':
+          // Only the owner and co-DMs see through it; scribes are hidden like players.
+          if (shadows) layer = shadows.add(d, !!ctx.canShadow);
           break;
         case 'ellipse':
           if (latlngs.length >= 2) {
@@ -342,6 +354,53 @@
       map._drawCleanup = cleanup;
     }
 
+    // Hide under shadow: drag a box. Unlike the rectangle tool this is one
+    // press-drag-release, which is how a person sweeps an area to cover.
+    function startShadow() {
+      setTool('shadow');
+      var startLL = null;
+      var rect = null;
+
+      function onDown(e) {
+        if (activeTool !== 'shadow') return cleanup();
+        startLL = e.latlng;
+        rect = L.rectangle([startLL, startLL], {
+          color: '#ffffff', weight: 1.5, fillColor: '#0a0c12', fillOpacity: 0.25, dashArray: '5,5', interactive: false
+        }).addTo(map);
+        map.dragging.disable();
+      }
+
+      function onMove(e) {
+        if (rect && startLL) rect.setBounds([startLL, e.latlng]);
+      }
+
+      function onUp(e) {
+        if (!startLL) return;
+        var a = toPercent(startLL);
+        var b = toPercent(e.latlng);
+        startLL = null;
+        map.dragging.enable();
+        if (rect) { map.removeLayer(rect); rect = null; }
+        // A click or a sliver is not a box worth saving.
+        if (Math.abs(a.x - b.x) < 1 || Math.abs(a.y - b.y) < 1) return;
+        saveDrawing('shadow', [a, b], { fill_color: '#0a0c12', fill_alpha: shadowStrength, stroke_width: 1 }).then(addSaved);
+      }
+
+      function cleanup() {
+        map.off('mousedown', onDown);
+        map.off('mousemove', onMove);
+        map.off('mouseup', onUp);
+        map.dragging.enable();
+        if (rect) { map.removeLayer(rect); rect = null; }
+        startLL = null;
+      }
+
+      map.on('mousedown', onDown);
+      map.on('mousemove', onMove);
+      map.on('mouseup', onUp);
+      map._drawCleanup = cleanup;
+    }
+
     function startPolygon() {
       setTool('polygon');
       var points = [];
@@ -464,11 +523,13 @@
       rectangle: startRectangle,
       ellipse: startCircle,
       polygon: startPolygon,
-      text: startText
+      text: startText,
+      shadow: startShadow
     };
 
     ctx.draw = {
       start: function (shape) {
+        if (shape === 'shadow' && !ctx.canShadow) return;
         if (isScribe && starters[shape]) starters[shape]();
       },
       cancel: cancelTool,
@@ -476,6 +537,7 @@
         if (st.color) drawColor = st.color;
         if (st.width) drawWidth = st.width;
       },
+      setShadowStrength: function (a) { shadowStrength = a >= 0.7 ? 0.85 : 0.5; },
       undo: undoLast,
       setVisible: function (on) {
         if (on) map.addLayer(drawingLayer); else map.removeLayer(drawingLayer);

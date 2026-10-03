@@ -36,7 +36,8 @@ func (r *mockDrawingRepo) GetDrawing(ctx context.Context, id string) (*Drawing, 
 func (r *mockDrawingRepo) UpdateDrawing(ctx context.Context, d *Drawing) error {
 	return r.updateDrawingFn(ctx, d)
 }
-func (r *mockDrawingRepo) DeleteDrawing(context.Context, string) error { return nil }
+func (r *mockDrawingRepo) DeleteDrawing(context.Context, string) error            { return nil }
+func (r *mockDrawingRepo) ListShadows(context.Context, string) ([]Drawing, error) { return nil, nil }
 func (r *mockDrawingRepo) ListDrawings(context.Context, string, int, string) ([]Drawing, error) {
 	return nil, nil
 }
@@ -266,7 +267,7 @@ func runDrawingUpdate(t *testing.T, input UpdateDrawingInput) *Drawing {
 		getDrawingFn:    func(_ context.Context, _ string) (*Drawing, error) { return storedDrawing(), nil },
 		updateDrawingFn: func(_ context.Context, d *Drawing) error { written = d; return nil },
 	}
-	if err := NewDrawingService(repo).UpdateDrawing(context.Background(), "d-1", "map-1", permissions.RoleOwner, input); err != nil {
+	if err := NewDrawingService(repo).UpdateDrawing(context.Background(), "d-1", "map-1", permissions.RoleOwner, true, input); err != nil {
 		t.Fatalf("UpdateDrawing: %v", err)
 	}
 	if written == nil {

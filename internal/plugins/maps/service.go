@@ -84,9 +84,38 @@ type MapService interface {
 	// EntityVisibilityGate: the marker's own visibility is repo-filtered, but
 	// a linked entity's visibility is a separate check the caller must supply.
 	ListMarkers(ctx context.Context, campaignID, mapID string, role int, userID string) ([]Marker, error)
+	// IsMarkerShadowed reports whether a viewer of this role must not receive
+	// the marker because it lies under a shadow area. By-id reads use it so
+	// they cannot reveal what ListMarkers withholds.
+	IsMarkerShadowed(ctx context.Context, mk *Marker, role int) (bool, error)
+
+	// ForViewer returns the map as a viewer of this (promoted visibility) role
+	// may receive it. For anyone who is not owner/DM-equivalent and a map with a
+	// shadow, the original image id is removed and the address of the player copy
+	// (the picture with the shadows smudged into the pixels) is set instead.
+	// Every handler that sends a map to a user passes it through here.
+	ForViewer(ctx context.Context, m *Map, role int) (*Map, error)
+	ForViewerList(ctx context.Context, ms []Map, role int) ([]Map, error)
+	// PlayerImage renders (or reads from cache) the player copy of the map's
+	// picture as JPEG. It errors rather than ever returning the original.
+	PlayerImage(ctx context.Context, m *Map) ([]byte, error)
+	// PlayerImageVersion is the version of the map's player copy, or "" when the
+	// map has no picture or no shadow (players then see the original).
+	PlayerImageVersion(ctx context.Context, m *Map) (string, error)
+	// IsShadowedMapImage tells the media plugin whether a file is the picture of
+	// a map that has a shadow (media.MapImageGuard); IsMapPicture whether it is
+	// the picture of any map at all.
+	IsShadowedMapImage(ctx context.Context, campaignID, mediaID string) (bool, error)
+	IsMapPicture(ctx context.Context, campaignID, mediaID string) (bool, error)
 
 	// Wiring.
 	SetEventPublisher(pub MapEventPublisher)
+	// SetShadowLookup is on the interface (not reached by type assertion) so a
+	// wiring that stops matching fails to compile instead of silently showing
+	// players every pin.
+	SetShadowLookup(l ShadowLookup)
+	// SetPlayerImageSource is on the interface for the same reason.
+	SetPlayerImageSource(src MediaImageSource, cacheDir string)
 }
 
 // EntityVisibilityGate resolves which of a set of entity IDs a viewer (role +
@@ -100,12 +129,22 @@ type EntityVisibilityGate interface {
 	FilterViewableEntityIDs(ctx context.Context, campaignID string, entityIDs []string, role int, userID string) (map[string]bool, error)
 }
 
+// ShadowLookup returns the shadow areas of a map. Implemented by the drawing
+// service, which owns drawings; the map service only applies the rule to pins.
+type ShadowLookup interface {
+	ShadowAreas(ctx context.Context, mapID string) ([]ShadowArea, error)
+}
+
 // mapService is the default MapService implementation.
 type mapService struct {
 	repo           MapRepository
 	events         MapEventPublisher
 	bindingCleaner BindingCleaner
 	entityGate     EntityVisibilityGate
+	shadows        ShadowLookup
+	images         MediaImageSource
+	imageCacheDir  string
+	pictureCache   *pictureStatusCache
 }
 
 // BindingCleaner sweeps a deleted instance's widget bindings. Implemented by
@@ -117,7 +156,7 @@ type BindingCleaner interface {
 
 // NewMapService creates a MapService backed by the given repository.
 func NewMapService(repo MapRepository) MapService {
-	return &mapService{repo: repo, events: NoopMapEventPublisher{}}
+	return &mapService{repo: repo, events: NoopMapEventPublisher{}, pictureCache: newPictureStatusCache()}
 }
 
 // SetBindingCleaner injects the widget-binding cleanup hook (wired at app
@@ -132,6 +171,43 @@ func (s *mapService) SetBindingCleaner(c BindingCleaner) { s.bindingCleaner = c 
 // fails closed and blanks every entity-linked marker's name/icon rather than
 // risk showing one nothing verified as viewable.
 func (s *mapService) SetEntityVisibilityGate(g EntityVisibilityGate) { s.entityGate = g }
+
+// SetShadowLookup injects the shadow source (wired post-construction because
+// the drawing service is built after this one). Unwired means no shadows are
+// known, which is correct only for tests and installs without drawings.
+//
+// A source that can announce its writes (the drawing service) is hooked so the
+// picture cache is dropped on every shadow change; changing the source drops it
+// too.
+func (s *mapService) SetShadowLookup(l ShadowLookup) {
+	s.shadows = l
+	s.pictureCache.invalidate("")
+	if n, ok := l.(shadowChangeNotifier); ok {
+		n.SetShadowChangeHook(s.InvalidateMapPictures)
+	}
+}
+
+// shadowAreasFor returns the map's shadows for a viewer subject to hiding, or
+// nil when the viewer is exempt or nothing is wired.
+func (s *mapService) shadowAreasFor(ctx context.Context, mapID string, role int) ([]ShadowArea, error) {
+	if s.shadows == nil || !shadowHidingApplies(role) {
+		return nil, nil
+	}
+	return s.shadows.ShadowAreas(ctx, mapID)
+}
+
+// IsMarkerShadowed implements MapService. On a lookup error it answers true
+// alongside the error, so a caller that ignores the error still fails closed.
+func (s *mapService) IsMarkerShadowed(ctx context.Context, mk *Marker, role int) (bool, error) {
+	if mk == nil {
+		return false, nil
+	}
+	areas, err := s.shadowAreasFor(ctx, mk.MapID, role)
+	if err != nil {
+		return true, err
+	}
+	return MarkerUnderShadow(areas, mk), nil
+}
 
 // SetEventPublisher sets the event publisher for real-time marker sync.
 func (s *mapService) SetEventPublisher(pub MapEventPublisher) {
@@ -168,6 +244,7 @@ func (s *mapService) CreateMap(ctx context.Context, input CreateMapInput) (*Map,
 	if err := s.repo.CreateMap(ctx, m); err != nil {
 		return nil, fmt.Errorf("create map: %w", err)
 	}
+	s.InvalidateMapPictures(m.CampaignID)
 	return m, nil
 }
 
@@ -242,6 +319,7 @@ func (s *mapService) UpdateMap(ctx context.Context, id string, input UpdateMapIn
 	if err := s.repo.UpdateMap(ctx, m); err != nil {
 		return fmt.Errorf("update map: %w", err)
 	}
+	s.InvalidateMapPictures(m.CampaignID)
 	return nil
 }
 
@@ -300,6 +378,7 @@ func (s *mapService) DeleteMap(ctx context.Context, id string, expectedUpdatedAt
 	if err := s.repo.DeleteMap(ctx, id); err != nil {
 		return fmt.Errorf("delete map: %w", err)
 	}
+	s.InvalidateMapPictures(m.CampaignID)
 	// Widget-binding delete hook: sweep this map's widget_bindings rows.
 	// Best-effort — the render-time orphan guard + Sweep backstop it. The
 	// legacy entity.map_id is independently SET-NULLed by the
@@ -519,6 +598,14 @@ func (s *mapService) ListMarkers(ctx context.Context, campaignID, mapID string, 
 	if permissions.CanSeeDmOnly(role) {
 		return markers, nil
 	}
+
+	// Pins under a shadow are dropped before anything else so their linked
+	// entities are never even looked up for this viewer.
+	areas, err := s.shadowAreasFor(ctx, mapID, role)
+	if err != nil {
+		return nil, fmt.Errorf("list shadow areas: %w", err)
+	}
+	markers = filterMarkersByShadow(areas, markers)
 
 	entityIDs := make([]string, 0, len(markers))
 	seen := make(map[string]bool, len(markers))

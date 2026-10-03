@@ -9,11 +9,13 @@ import (
 
 // Drawing represents a freehand drawing, shape, or text annotation on a map.
 // Coordinates use percentage-based positioning (0-100) for resolution independence.
+// A "shadow" drawing is not a visible shape for players: it is an area whose
+// contents the server withholds from them (see shadow.go).
 type Drawing struct {
 	ID          string          `json:"id"`
 	MapID       string          `json:"map_id"`
 	LayerID     *string         `json:"layer_id,omitempty"`
-	DrawingType string          `json:"drawing_type"` // freehand, rectangle, ellipse, polygon, text
+	DrawingType string          `json:"drawing_type"` // freehand, rectangle, ellipse, polygon, text, shadow (two corners; fill_alpha is its strength, see shadow.go)
 	Points      json.RawMessage `json:"points"`       // Array of {x, y} coordinate pairs.
 	StrokeColor string          `json:"stroke_color"`
 	StrokeWidth float64         `json:"stroke_width"`
@@ -54,6 +56,9 @@ type CreateDrawingInput struct {
 	// CallerRole is the caller's campaign role (permissions.Role*), used for
 	// the map's "who can draw" gate. Not a data field; 0 is refused.
 	CallerRole int
+	// CallerIsDM is true for an owner or co-DM. Only they may create a shadow;
+	// it is not a data field.
+	CallerIsDM bool
 }
 
 // UpdateDrawingInput is the validated input for updating a drawing.
