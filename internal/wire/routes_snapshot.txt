@@ -677,6 +677,7 @@ PUT	/account/display-name	internal/plugins/auth/routes.go
 PUT	/account/email	internal/plugins/auth/routes.go
 PUT	/account/password	internal/plugins/auth/routes.go
 PUT	/account/timezone	internal/plugins/auth/routes.go
+PUT	/account/view-prefs	internal/plugins/auth/routes.go
 PUT	/addons/:addonID/status	internal/plugins/addons/routes.go
 PUT	/addons/:addonID/toggle	internal/plugins/addons/routes.go
 PUT	/api-keys/:keyID/toggle	internal/plugins/syncapi/routes.go
