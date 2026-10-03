@@ -395,6 +395,7 @@ GET	/storage	internal/plugins/admin/routes.go
 GET	/storage/settings	internal/plugins/settings/routes.go
 GET	/submit	internal/plugins/packages/routes.go
 GET	/sync-status	internal/plugins/syncapi/routes.go
+GET	/sync/changes	internal/plugins/syncapi/routes.go
 GET	/sync/lookup	internal/plugins/syncapi/routes.go
 GET	/sync/mappings	internal/plugins/syncapi/routes.go
 GET	/sync/mappings/:mappingID	internal/plugins/syncapi/routes.go

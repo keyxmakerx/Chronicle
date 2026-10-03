@@ -621,7 +621,7 @@ type apiUpdateFieldsRequest struct {
 	FieldsData map[string]any `json:"fields_data"`
 }
 
-// UpdateEntityFields updates only the custom fields for an entity.
+// UpdateEntityFields merges the sent custom fields into an entity's fields.
 // PUT /api/v1/campaigns/:id/entities/:entityID/fields
 func (h *APIHandler) UpdateEntityFields(c echo.Context) error {
 	entityID := c.Param("entityID")
@@ -641,7 +641,9 @@ func (h *APIHandler) UpdateEntityFields(c echo.Context) error {
 		return apperror.NewBadRequest("invalid request body")
 	}
 
-	if err := h.entitySvc.UpdateFields(ctx, entityID, req.FieldsData); err != nil {
+	// Partial update, like every other sync API write: fields the client
+	// doesn't send are kept, null clears one.
+	if err := h.entitySvc.MergeFields(ctx, entityID, req.FieldsData); err != nil {
 		return err
 	}
 
