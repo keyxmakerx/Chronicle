@@ -757,6 +757,55 @@
   .chronicle-editor__status--unsaved { @apply text-amber-600; }
   .chronicle-editor__status--error { @apply text-red-600; }
 
+  /* ---- "On this page" outline (editor_outline.js) ----
+     Wide editors: a sticky column beside the text. Narrow ones: a folded
+     button above it. overflow: clip (not hidden) keeps the rounded corners
+     without making the editor a scroll box, which would stop sticky. */
+  .chronicle-editor--outlined {
+    overflow: clip;
+    container-type: inline-size;
+  }
+  .chronicle-editor--outlined .chronicle-editor__content {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .chronicle-outline {
+    order: -1;
+    @apply px-4 pt-3;
+  }
+  .chronicle-outline__label { @apply hidden; }
+  .chronicle-outline__toggle {
+    @apply inline-flex items-center gap-1.5 px-2.5 py-1 text-xs font-medium rounded-md
+           border border-edge text-fg-secondary hover:text-fg hover:bg-surface-alt cursor-pointer;
+  }
+  .chronicle-outline__list { @apply hidden mt-2 mb-0 pl-0 list-none text-sm; }
+  .chronicle-outline.is-open .chronicle-outline__list { @apply block; }
+  .chronicle-outline__item button {
+    @apply block w-full text-left py-1 text-fg-secondary hover:text-fg cursor-pointer
+           bg-transparent border-0 rounded;
+  }
+  .chronicle-outline__item--d1 button { @apply pl-3; }
+  .chronicle-outline__item--d2 button { @apply pl-6; }
+  .chronicle-outline__item button.is-current { @apply text-accent font-semibold; }
+  .chronicle-outline__item button:focus-visible { @apply outline-none ring-2 ring-accent/40; }
+  .chronicle-editor--outlined .tiptap :is(h1, h2, h3) { scroll-margin-top: 1rem; }
+
+  @container (min-width: 44rem) {
+    .chronicle-editor--outlined .chronicle-editor__content {
+      grid-template-columns: minmax(0, 1fr) 12rem;
+    }
+    .chronicle-outline {
+      order: 1;
+      @apply px-3 py-4 border-l border-edge-light;
+    }
+    .chronicle-outline__inner { position: sticky; top: 0.5rem; }
+    .chronicle-outline__toggle { @apply hidden; }
+    .chronicle-outline__label {
+      @apply block mb-1 text-xs font-semibold uppercase tracking-wider text-fg-muted;
+    }
+    .chronicle-outline__list { @apply block mt-0; }
+  }
+
   /* ---- Find/Replace Bar ---- */
   .chronicle-find-bar {
     @apply flex flex-col gap-1 px-3 py-2 border-b border-edge-light;
