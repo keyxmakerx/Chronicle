@@ -9,11 +9,12 @@
 // chrome on every step; that chrome is a few hundred bytes, not a real cost
 // at this scale.
 //
-// No DECORATIVE icons anywhere in this file (the operator's own
-// instruction, already applied to this wizard once — see the close-button/
-// spinner/warning-triangle exceptions noted where wizardShell is defined
-// below): every structure-editor control (reorder, remove, add) is a
-// labelled text button, never a glyph standing in for one.
+// No DECORATIVE icons in this file (the operator's own instruction): every
+// structure-editor control (reorder, remove, add) is a labelled text
+// button, never a glyph standing in for one. The close button, spinner and
+// warning triangle are the exceptions; so are the Generate step's keep pin
+// and reroll dice, which match the weather generator by the operator's
+// sign-off.
 //
 // Out of scope for this wizard: "Give it a past" does not exist here.
 package calendar
@@ -26,17 +27,33 @@ import (
 )
 
 // wizardShell is the dialog chrome every step renders inside.
+//
+// Closing (backdrop, the close button, Escape) is guarded: once a step has
+// changed something (any input, or a step dispatching calv5-dirty), a close
+// attempt shakes the panel and shows "Not saved yet" with Discard instead
+// of throwing the work away. A step swap replaces this whole shell, so the
+// flag resets with each step.
 templ wizardShell(stepLabel string, body templ.Component) {
-	<div id="calv5-wizard-root" class="calv5" x-data="{open:true}" x-show="open" x-cloak>
-		<div class="calv5-overlay" @click.self="open=false; if(window.__calv5Opener)window.__calv5Opener.focus()">
+	<div
+		id="calv5-wizard-root"
+		class="calv5"
+		x-data="{open:true,dirty:false,nag:false,close(){this.open=false;if(window.__calv5Opener)window.__calv5Opener.focus()},tryClose(){if(!this.dirty){this.close();return}this.nag=false;var p=this.$refs.panel;p.classList.remove('nag');void p.offsetWidth;p.classList.add('nag');this.$nextTick(()=>{this.nag=true})}}"
+		x-show="open"
+		x-cloak
+	>
+		<div class="calv5-overlay" @click.self="tryClose()">
 			<div
 				class="calv5-panel wide"
 				role="dialog"
 				aria-modal="true"
 				aria-label="New calendar"
 				tabindex="-1"
+				x-ref="panel"
 				x-init="$nextTick(() => $el.focus())"
-				@keydown.escape.window="open=false; if(window.__calv5Opener)window.__calv5Opener.focus()"
+				@keydown.escape.window="tryClose()"
+				@input="dirty=true;nag=false"
+				@calv5-dirty="dirty=true;nag=false"
+				@animationend="$el.classList.remove('nag')"
 			>
 				<div class="calv5-crease">
 					<span>New calendar</span>
@@ -47,13 +64,18 @@ templ wizardShell(stepLabel string, body templ.Component) {
 						class="x"
 						style="margin-left:auto"
 						aria-label="Close"
-						@click="open=false; if(window.__calv5Opener)window.__calv5Opener.focus()"
+						@click="tryClose()"
 					>
 						<i class="fa-solid fa-xmark"></i>
 					</button>
 				</div>
 				<div class="calv5-body">
 					@body
+				</div>
+				<div class="calv5-unsaved" role="alert" x-show="nag" x-cloak>
+					<i class="fa-solid fa-triangle-exclamation" aria-hidden="true"></i>
+					<span>Not saved yet</span>
+					<button type="button" class="btn sm quiet" @click="close()">Discard</button>
 				</div>
 			</div>
 		</div>

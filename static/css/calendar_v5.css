@@ -370,6 +370,23 @@ html[data-theme="dark"] .calv5 {
 .calv5-phead { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin: 18px 0 8px; }
 .calv5-phead h4 { margin: 0; font: 650 9.5px/1 var(--sans, sans-serif); letter-spacing: 0.14em; text-transform: uppercase; color: var(--mut); }
 .calv5-pbtns { display: flex; gap: 4px; flex: none; }
+/* The generators' shared icon buttons: keep pin (gold while kept), reroll
+ * dice, minus/plus. The same look as the weather generator's rows. */
+.calv5 .calv5-ib { display: inline-grid; place-items: center; width: 30px; height: 30px; padding: 0; border: 0; border-radius: 8px; background: transparent; color: var(--ink2); cursor: pointer; transition: background 0.15s var(--ease), color 0.15s var(--ease), transform 0.15s var(--ease); }
+.calv5 .calv5-ib:hover:not(:disabled) { background: var(--paper2); color: var(--ink); transform: translateY(-1px); }
+.calv5 .calv5-ib:focus-visible { outline: 2px solid var(--ink); outline-offset: 1px; }
+.calv5 .calv5-ib:disabled { opacity: 0.35; cursor: default; }
+.calv5 .calv5-ib.keep[aria-pressed="true"] { color: var(--gold); background: var(--goldBg); }
+.calv5-pvhead { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 8px; }
+.calv5-pvhead h4 { margin: 0; font: 650 9.5px/1 var(--sans, sans-serif); letter-spacing: 0.14em; text-transform: uppercase; color: var(--mut); }
+/* A close attempt with unsaved work: the panel shakes and the warning
+ * slides in at its foot (the reduced-motion rule below stills both). */
+.calv5-panel.nag { animation: calv5Nag 0.42s cubic-bezier(0.36, 0.07, 0.19, 0.97); }
+@keyframes calv5Nag { 0%, 100% { translate: 0; } 20% { translate: -9px; } 40% { translate: 7px; } 60% { translate: -4px; } 80% { translate: 2px; } }
+.calv5-unsaved { display: flex; align-items: center; gap: 8px; flex: none; margin: 0 14px 14px; padding: 6px 6px 6px 12px; border-radius: 10px; background: var(--goldBg); box-shadow: inset 0 0 0 1px var(--goldRing); font: 600 12.5px/1.3 var(--sans, sans-serif); color: var(--ink); animation: calv5WarnIn 0.28s var(--spring) both; }
+.calv5-unsaved .fa-triangle-exclamation { color: var(--gold); }
+.calv5-unsaved .btn { margin-left: auto; }
+@keyframes calv5WarnIn { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
 .calv5-seedrow { display: flex; align-items: center; gap: 8px; margin-top: 12px; }
 .calv5-seedrow code { padding: 6px 10px; border-radius: 8px; background: var(--paper2); font: 500 12px/1 var(--mono, monospace); color: var(--ink2); }
 .calv5-meta { font: 500 11.5px/1 var(--sans, sans-serif); color: var(--mut); white-space: nowrap; }

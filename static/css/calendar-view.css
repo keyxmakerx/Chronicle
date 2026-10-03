@@ -1285,7 +1285,7 @@
 .cal-v5 .bbb .i{width:15px;height:15px}
 .cal-v5 .bbar .x{margin-left:2px}
 /* The tray: a paint palette, a shift or a clear, floating just above the bar. */
-.cal-v5 .btray{position:absolute;left:0;right:0;bottom:calc(22px + var(--barH,48px));margin:0 auto;width:-moz-fit-content;width:fit-content;max-width:min(560px,calc(100% - 24px));padding:12px 14px 12px;border-radius:14px;background:var(--paper);border:1px solid var(--edge);box-shadow:var(--shadow-l);pointer-events:auto}
+.cal-v5 .btray{position:absolute;z-index:4;left:0;right:0;bottom:calc(22px + var(--barH,48px));margin:0 auto;width:-moz-fit-content;width:fit-content;max-width:min(560px,calc(100% - 24px));padding:12px 14px 12px;border-radius:14px;background:var(--paper);border:1px solid var(--edge);box-shadow:var(--shadow-l);pointer-events:auto}
 .cal-v5 .trh{font:600 12.5px/1.35 var(--sans);color:var(--ink)}
 .cal-v5 .trh small{display:block;font-weight:500;font-size:11.5px;color:var(--mut);margin-top:2px}
 .cal-v5 .trf{display:flex;flex-wrap:wrap;align-items:center;gap:6px;margin-top:10px}
@@ -1559,7 +1559,7 @@
 .cal-v5 .trrow .pmore{display:inline-flex;align-items:center;gap:6px;height:30px;padding:0 11px 0 9px;border-radius:99px;font:550 12px/1 var(--sans)}
 .cal-v5 .trrow .pmore .i{width:14px;height:14px}
 .cal-v5 .pal button.added:not([aria-checked="true"]){box-shadow:none;outline:1px dashed var(--mut);outline-offset:-1px}
-.cal-v5 .bmore{position:absolute;left:0;right:0;bottom:calc(22px + var(--barH,48px) + var(--trayH,52px));margin:0 auto;width:min(380px,calc(100% - 24px));max-height:min(420px,52vh);display:flex;flex-direction:column;padding:10px 10px 6px;border-radius:14px;background:var(--paper);border:1px solid var(--edge);box-shadow:var(--shadow-l);pointer-events:auto}
+.cal-v5 .bmore{position:absolute;z-index:4;left:0;right:0;bottom:calc(22px + var(--barH,48px) + var(--trayH,52px));margin:0 auto;width:min(380px,calc(100% - 24px));max-height:min(420px,52vh);display:flex;flex-direction:column;padding:10px 10px 6px;border-radius:14px;background:var(--paper);border:1px solid var(--edge);box-shadow:var(--shadow-l);pointer-events:auto}
 .cal-v5 .bmore .wxl{flex:1;min-height:0;max-height:none}
 .cal-v5 .bmore .wxq, .cal-v5 .bmore .pmh{flex:none}
 .cal-v5 .bmore .pmh{display:flex;align-items:center;justify-content:space-between;gap:8px;margin:0 0 8px 2px;font:600 12.5px/1.3 var(--sans);color:var(--ink)}
