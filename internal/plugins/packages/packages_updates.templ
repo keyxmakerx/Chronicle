@@ -2,7 +2,10 @@
 // version ready.
 package packages
 
-import "fmt"
+import (
+	"fmt"
+	"strconv"
+)
 
 // updatesTab lists what can be updated. There is no site-wide "check all" or
 // "install all" endpoint, so each row installs on its own and the empty state
@@ -37,9 +40,18 @@ templ updatesTab(data PackagesPageData) {
 									}
 								</ul>
 							}
+							if r.CampaignsKnown {
+								{{ asked, held := askedAndHeld(r.Campaigns) }}
+								<p class="mt-2 flex flex-wrap items-center gap-2 text-xs">
+									<span class="badge-gray">{ plural(asked, "owner") } will be asked</span>
+									if held > 0 {
+										<span class="badge-primary">{ strconv.Itoa(held) } held by you</span>
+									}
+								</p>
+							}
 						</div>
 						<div>
-							@installButton(r.ID, r.Newer.Version, data.CSRFToken, "Install", "btn-primary btn-sm")
+							@installButton(r.ID, r.Newer.Version, data.CSRFToken, "Install", "btn-primary btn-sm", installConfirmText(r.Type, r.Newer.Version))
 						</div>
 					</li>
 				}

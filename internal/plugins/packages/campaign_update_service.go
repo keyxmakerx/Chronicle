@@ -557,6 +557,9 @@ func (s *campaignUpdateService) SwitchVersion(ctx context.Context, campaignID, p
 	mu.Lock()
 	defer mu.Unlock()
 
+	if err := s.requireUses(ctx, b, campaignID, pkg); err != nil {
+		return nil, err
+	}
 	cur, err := s.stateOf(ctx, b, campaignID, pkg)
 	if err != nil {
 		return nil, err
@@ -623,6 +626,9 @@ func (s *campaignUpdateService) SetAdminHold(ctx context.Context, campaignID, pa
 	mu.Lock()
 	defer mu.Unlock()
 
+	if err := s.requireUses(ctx, b, campaignID, pkg); err != nil {
+		return nil, err
+	}
 	cur, err := s.stateOf(ctx, b, campaignID, pkg)
 	if err != nil {
 		return nil, err
@@ -652,6 +658,19 @@ func (s *campaignUpdateService) SetAdminHold(ctx context.Context, campaignID, pa
 		"hold": hold, "version": cur.EffectiveVersion,
 	})
 	return s.CampaignState(ctx, campaignID, packageID)
+}
+
+// requireUses refuses a campaign id the package does not apply to, so an id
+// typed into a request cannot create a row for something that is not there.
+func (s *campaignUpdateService) requireUses(ctx context.Context, b CampaignBinding, campaignID string, pkg *Package) error {
+	used, err := b.UsedBy(ctx, campaignID, pkg)
+	if err != nil {
+		return apperror.NewInternal(fmt.Errorf("checking package use: %w", err))
+	}
+	if !used {
+		return apperror.NewNotFound("that campaign does not use this package")
+	}
+	return nil
 }
 
 // requireInstalled checks a requested version before it is stored: a valid

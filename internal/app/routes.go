@@ -1618,6 +1618,23 @@ func (a *foundryCampaignOwnerLookupAdapter) GetCampaignOwnerEmail(ctx context.Co
 	return user.Email, display, nil
 }
 
+// packageOwnerReminder lets the admin Packages page remind an owner that a
+// version is waiting, through the Foundry module's own notify path (an audit
+// event and a best-effort email). It lives here so the packages plugin never
+// imports the Foundry one.
+type packageOwnerReminder struct {
+	fvtt foundry_vtt.Service
+}
+
+// RemindOwner reminds the owner of a Foundry module campaign; other package
+// types have no way to reach an owner yet.
+func (r packageOwnerReminder) RemindOwner(ctx context.Context, pkg *packages.Package, campaignID, version string, actor packages.ActorInfo) error {
+	if pkg.Type != packages.PackageTypeFoundryModule {
+		return apperror.NewBadRequest("owners of this package cannot be reminded")
+	}
+	return r.fvtt.NotifyCampaignOfUpdate(ctx, campaignID, version, actor.UserID, actor.IP, actor.UserAgent)
+}
+
 // avatarUploaderAdapter wraps media.MediaService to implement the
 // auth.AvatarUploader interface without creating a circular import: media
 // already imports auth (for auth.GetUserID and friends), so auth cannot
@@ -3041,15 +3058,17 @@ func (a *App) RegisterRoutes() {
 	adminHandler.SetSecurityService(securityService)
 
 	// Per-campaign update modes (automatic / stay on a version / ask first).
-	// Server side only for now: no route reads it yet. The service holds the
-	// game-system binding; the Foundry binding joins below if that plugin is
-	// healthy. When the packages tables are degraded none of this is wired,
-	// and clean-up stays refused because its campaign-versions provider is
-	// unset (fail closed).
+	// The service holds the game-system binding; the Foundry binding joins
+	// below if that plugin is healthy, and its owners are then asked before a
+	// campaign moves. Game systems have no screens for it yet. When the
+	// packages tables are degraded none of this is wired, and clean-up stays
+	// refused because its campaign-versions provider is unset (fail closed).
 	var pkgUpdateSvc packages.CampaignUpdateService
 	if a.PluginHealth.IsHealthy("packages") {
 		pkgUpdateSvc = packages.NewCampaignUpdateService(
 			packages.NewCampaignUpdateRepository(a.DB), pkgService, securityService)
+		// Admin Packages page: per-campaign state, hold, move.
+		pkgHandler.SetCampaignUpdates(pkgUpdateSvc)
 		// Clean-up must never delete a version some campaign is on.
 		packages.SetCampaignVersionsProvider(pkgService, pkgUpdateSvc.KeptVersions)
 		// Freeze pinned / ask-first campaigns when a system installs.
@@ -3124,6 +3143,7 @@ func (a *App) RegisterRoutes() {
 	if pkgUpdateSvc != nil {
 		// Owners are asked before a new module version reaches their campaign.
 		fvttHandler.SetOwnerUpdates(foundry_vtt.NewOwnerUpdates(pkgUpdateSvc, pkgService))
+		pkgHandler.SetOwnerReminder(packageOwnerReminder{fvtt: fvttService})
 	}
 	// The campaign show page lazy-loads /foundry-vtt/show-banner-fragment
 	// rather than using a banner adapter wire.

@@ -46,7 +46,11 @@ templ packagePanel(data PackagesPageData) {
 				case PanelTabVersions:
 					@VersionList(&r.Package, r.Versions, RetentionSummary(data.Retention, &r.Package), data.CSRFToken)
 				case PanelTabCampaigns:
-					@CampaignsPanel(&r.Package, r.Usage, r.UsageKnown)
+					if r.CampaignsKnown {
+						@campaignUpdatesPanel(r, data)
+					} else {
+						@CampaignsPanel(&r.Package, r.Usage, r.UsageKnown)
+					}
 				case PanelTabSettings:
 					@panelSettings(r, data.Retention, data.CSRFToken)
 				default:

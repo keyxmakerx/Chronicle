@@ -6,9 +6,10 @@ import "github.com/labstack/echo/v4"
 // All routes require site admin authentication (enforced by the parent group).
 // reauth guards the writes that change which code the site runs or delete
 // package files: adding, removing or re-pointing a package, pruning,
-// reviewing a submission (approving one fetches and installs its code), and
-// the settings that decide what may be deleted or accepted (the site settings
-// form, which carries the old-version rule, and a package's own rule).
+// reviewing a submission (approving one fetches and installs its code), the
+// settings that decide what may be deleted or accepted (the site settings
+// form, which carries the old-version rule, and a package's own rule), and
+// the actions that hold or move a campaign against its owner's choice.
 func RegisterRoutes(admin *echo.Group, h *Handler, reauth echo.MiddlewareFunc) {
 	g := admin.Group("/packages")
 
@@ -32,6 +33,14 @@ func RegisterRoutes(admin *echo.Group, h *Handler, reauth echo.MiddlewareFunc) {
 
 	// Usage tracking.
 	g.GET("/:id/usage", h.GetUsage)
+
+	// Per-campaign update actions. Hold, release and move override what an
+	// owner chose, so they need the password again; a reminder changes
+	// nothing and does not.
+	g.POST("/:id/campaigns/:cid/hold", h.HoldCampaign, reauth)
+	g.DELETE("/:id/campaigns/:cid/hold", h.ReleaseCampaign, reauth)
+	g.PUT("/:id/campaigns/:cid/version", h.MoveCampaign, reauth)
+	g.POST("/:id/campaigns/:cid/remind", h.RemindCampaignOwner)
 
 	// Submission review.
 	g.GET("/pending", h.ListPendingSubmissions)

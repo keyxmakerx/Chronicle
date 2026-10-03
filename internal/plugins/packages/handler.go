@@ -18,6 +18,10 @@ import (
 type Handler struct {
 	activity ActivityRecorder
 	service  PackageService
+	// updates and reminder are optional: without them the Campaigns tab shows
+	// the plain usage list and the per-campaign actions are not available.
+	updates  CampaignUpdateService
+	reminder OwnerReminder
 }
 
 // NewHandler creates a new package manager handler.
@@ -34,10 +38,11 @@ func (h *Handler) ListPackages(c echo.Context) error {
 		c.QueryParam("pkg"), c.QueryParam("ptab"),
 	)
 
-	data, err := buildPackagesPage(c.Request().Context(), h.service, q, middleware.GetCSRFToken(c), time.Now())
+	data, err := buildPackagesPage(c.Request().Context(), h.service, h.updates, q, middleware.GetCSRFToken(c), time.Now())
 	if err != nil {
 		return err
 	}
+	data.CanRemind = h.reminder != nil
 	return middleware.Render(c, http.StatusOK, PackagesPage(*data))
 }
 

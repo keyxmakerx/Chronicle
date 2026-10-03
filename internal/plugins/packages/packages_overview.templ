@@ -26,7 +26,7 @@ templ panelOverview(r PackageRow, data PackagesPageData) {
 					<p class="mt-1 text-fg-secondary break-words">{ lines[0] }</p>
 				}
 				<div class="mt-2 flex flex-wrap gap-2">
-					@installButton(r.ID, r.Newer.Version, data.CSRFToken, "Install "+r.Newer.Version, "btn-primary btn-sm")
+					@installButton(r.ID, r.Newer.Version, data.CSRFToken, "Install "+r.Newer.Version, "btn-primary btn-sm", installConfirmText(r.Type, r.Newer.Version))
 					<a href={ templ.SafeURL(tabHref(PackagesTabUpdates)) } class="btn-secondary btn-sm">See what changes</a>
 				</div>
 			</div>
@@ -35,7 +35,7 @@ templ panelOverview(r PackageRow, data PackagesPageData) {
 				<p class="font-semibold">Not installed yet.</p>
 				if latest := latestStableVersion(r.Versions); latest != nil {
 					<div class="mt-2">
-						@installButton(r.ID, latest.Version, data.CSRFToken, "Install "+latest.Version, "btn-primary btn-sm")
+						@installButton(r.ID, latest.Version, data.CSRFToken, "Install "+latest.Version, "btn-primary btn-sm", installConfirmText(r.Type, latest.Version))
 					</div>
 				} else {
 					<p class="mt-1 text-fg-secondary">No versions found yet. Press Check now on the Settings tab.</p>
@@ -108,13 +108,13 @@ templ panelOverview(r PackageRow, data PackagesPageData) {
 }
 
 // installButton installs a version through the existing PUT endpoint.
-templ installButton(id, version, csrfToken, label, class string) {
+templ installButton(id, version, csrfToken, label, class, confirm string) {
 	<button
 		type="button"
 		hx-put={ "/admin/packages/" + id + "/version" }
 		hx-vals={ versionVals(version) }
 		hx-headers={ csrfHeaders(csrfToken) }
-		hx-confirm={ "Install version " + version + "?" }
+		hx-confirm={ confirm }
 		class={ class }
 	>{ label }</button>
 }

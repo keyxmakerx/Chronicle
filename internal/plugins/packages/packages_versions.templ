@@ -41,7 +41,7 @@ templ VersionList(pkg *Package, versions []PackageVersion, ruleText, csrfToken s
 										hx-put={ fmt.Sprintf("/admin/packages/%s/version", pkg.ID) }
 										hx-vals={ versionVals(v.Version) }
 										hx-headers={ csrfHeaders(csrfToken) }
-										hx-confirm={ fmt.Sprintf("Install version %s?", v.Version) }
+										hx-confirm={ installConfirmText(pkg.Type, v.Version) }
 										class={ "btn-sm", templ.KV("btn-primary", upgrade), templ.KV("btn-secondary", !upgrade) }
 									>
 										if upgrade {

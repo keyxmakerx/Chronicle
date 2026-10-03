@@ -1,0 +1,104 @@
+// packages_campaigns.templ is the Campaigns tab for a package whose owners are
+// asked before a campaign moves (the Foundry module): each campaign with its
+// version, where its update stands, and the admin's actions on it.
+package packages
+
+// campaignUpdatesPanel lists the campaigns with a state chip and a menu. Hold,
+// release and move ask for the password again (the routes sit behind reauth);
+// the page's HTMX shell re-sends the refused request once it is confirmed.
+templ campaignUpdatesPanel(r PackageRow, data PackagesPageData) {
+	<div class="space-y-3">
+		if len(r.Campaigns) == 0 {
+			<p class="text-sm text-fg">No campaign uses this package.</p>
+		} else {
+			<p class="text-xs text-fg-muted">When you install a new version, each owner is asked. A campaign stays on its version until its owner presses Update.</p>
+			<ul class="divide-y divide-edge rounded-lg border border-edge">
+				for _, st := range r.Campaigns {
+					@campaignUpdateRow(r, st, data)
+				}
+			</ul>
+			<p class="text-xs text-fg-muted">Hold keeps a campaign back even if its owner presses Update, for example while a new version has a known problem.</p>
+		}
+	</div>
+}
+
+// campaignUpdateRow is one campaign: name, version, chip and its menu.
+templ campaignUpdateRow(r PackageRow, st CampaignPackageState, data PackagesPageData) {
+	{{ chip := campaignChip(st, data.Now) }}
+	<li class="flex flex-wrap items-center gap-x-3 gap-y-1 px-3 py-2 text-sm">
+		<span class="flex-1 min-w-36 font-medium text-fg">{ st.CampaignName }</span>
+		<span class="tabular-nums text-fg-secondary">{ st.EffectiveVersion }</span>
+		<span class={ chip.Class }>{ chip.Label }</span>
+		if chip.Hint != "" {
+			<span class="text-xs text-fg-muted">{ chip.Hint }</span>
+		}
+		<details class="relative ml-auto">
+			<summary class="btn-secondary btn-sm cursor-pointer list-none" aria-label={ "Actions for " + st.CampaignName }>
+				<i class="fa-solid fa-ellipsis" aria-hidden="true"></i>
+			</summary>
+			<div class="absolute right-0 z-10 mt-1 w-52 rounded-lg border border-edge bg-surface p-1 shadow-lg" role="menu">
+				if st.AdminHold {
+					<button
+						type="button"
+						role="menuitem"
+						hx-delete={ campaignActionURL(r.ID, st.CampaignID, "hold") }
+						hx-headers={ csrfHeaders(data.CSRFToken) }
+						class="block w-full rounded px-3 py-1.5 text-left text-sm hover:bg-surface-alt"
+					>Stop holding</button>
+				} else {
+					<button
+						type="button"
+						role="menuitem"
+						hx-post={ campaignActionURL(r.ID, st.CampaignID, "hold") }
+						hx-headers={ csrfHeaders(data.CSRFToken) }
+						class="block w-full rounded px-3 py-1.5 text-left text-sm hover:bg-surface-alt"
+					>Hold on { st.EffectiveVersion }</button>
+				}
+				if len(r.MovableVersions) > 0 {
+					<button
+						type="button"
+						role="menuitem"
+						onclick={ openDialogScript(moveDialogID(st.CampaignID)) }
+						class="block w-full rounded px-3 py-1.5 text-left text-sm hover:bg-surface-alt"
+					>Move to a version&hellip;</button>
+				}
+				if data.CanRemind && chip.Asked {
+					<button
+						type="button"
+						role="menuitem"
+						hx-post={ campaignActionURL(r.ID, st.CampaignID, "remind") }
+						hx-headers={ csrfHeaders(data.CSRFToken) }
+						class="block w-full rounded px-3 py-1.5 text-left text-sm hover:bg-surface-alt"
+					>Remind owner</button>
+				}
+			</div>
+		</details>
+		if len(r.MovableVersions) > 0 {
+			@moveCampaignDialog(r, st, data.CSRFToken)
+		}
+	</li>
+}
+
+// moveCampaignDialog picks a version for one campaign. Moving does not ask the
+// owner, so the dialog says so.
+templ moveCampaignDialog(r PackageRow, st CampaignPackageState, csrfToken string) {
+	<dialog id={ moveDialogID(st.CampaignID) } class="rounded-lg shadow-xl bg-surface border border-edge p-0 w-full max-w-md backdrop:bg-black/50">
+		<form
+			hx-put={ campaignActionURL(r.ID, st.CampaignID, "version") }
+			hx-headers={ csrfHeaders(csrfToken) }
+			class="p-6 space-y-3"
+		>
+			<h2 class="text-lg font-semibold text-fg">{ "Move " + st.CampaignName + " to a version" }</h2>
+			<p class="text-sm text-fg-secondary">The campaign moves now and its owner is not asked.</p>
+			<select name="version" class="input w-full" aria-label="Version">
+				for _, v := range r.MovableVersions {
+					<option value={ v } selected?={ v == st.EffectiveVersion }>{ v }</option>
+				}
+			</select>
+			<div class="flex justify-end gap-2">
+				<button type="button" class="btn-secondary text-sm" onclick={ closeDialogScript() }>Cancel</button>
+				<button type="submit" class="btn-primary text-sm">Move</button>
+			</div>
+		</form>
+	</dialog>
+}
