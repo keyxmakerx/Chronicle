@@ -1720,7 +1720,10 @@ type DayWeather struct {
 	ZoneName           *string        `json:"zone_name,omitempty"`
 	Description        *string        `json:"description,omitempty"`
 	Source             string         `json:"source"`
-	UpdatedAt          time.Time      `json:"updated_at"`
+	// Locked is set only for a viewer who can author Director-only content;
+	// a player's reading omits the key so they never learn a day is locked.
+	Locked    *bool     `json:"locked,omitempty"`
+	UpdatedAt time.Time `json:"updated_at"`
 }
 
 // DayWeatherInput sets one day's reading: the date, the same flat fields
@@ -1740,6 +1743,12 @@ type WeatherSettings struct {
 	Climate    string        `json:"climate"`
 	Continuity float64       `json:"continuity"`
 	Kinds      []WeatherKind `json:"kinds"`
+	// ForecastDays is how many days ahead a player's forecast reaches
+	// (1..MaxForecastDays). ForecastsEnabled mirrors calendars.forecasts_enabled:
+	// the service fills it on read and writes it through UpdateCalendar, so
+	// the switch has one home and the repository never owns it.
+	ForecastDays     int  `json:"forecast_days"`
+	ForecastsEnabled bool `json:"forecasts_enabled"`
 }
 
 // MarshalJSON writes Kinds as [] rather than null when there are none, so a

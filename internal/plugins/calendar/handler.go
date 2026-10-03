@@ -946,6 +946,39 @@ func (h *Handler) ClearDayWeatherAPI(c echo.Context) error {
 	return c.NoContent(http.StatusNoContent)
 }
 
+// LockDayWeatherAPI locks or unlocks the readings on a set of days. Only days
+// that already hold a reading change; the answer says how many did. A POST
+// action like clear. "locked" must be present so an omitted field can never
+// read as an unlock.
+// POST /campaigns/:id/calendars/:calid/weather/days/lock  {"days":[{year,month,day}],"locked":true}
+func (h *Handler) LockDayWeatherAPI(c echo.Context) error {
+	cc := campaigns.GetCampaignContext(c)
+	var req struct {
+		Days   []DayDate `json:"days"`
+		Locked *bool     `json:"locked"`
+	}
+	if err := c.Bind(&req); err != nil || req.Locked == nil {
+		return apperror.NewBadRequest("days and locked are required")
+	}
+	n, err := h.svc.LockDayWeather(c.Request().Context(), c.Param("calid"), cc.Campaign.ID, req.Days, *req.Locked)
+	if err != nil {
+		return err
+	}
+	return c.JSON(http.StatusOK, map[string]int{"changed": n})
+}
+
+// ListWeatherForecastAPI returns the blurred outlook for the days after
+// today, the same for every viewer who can see the calendar.
+// GET /campaigns/:id/calendars/:calid/weather/forecast
+func (h *Handler) ListWeatherForecastAPI(c echo.Context) error {
+	cc := campaigns.GetCampaignContext(c)
+	out, err := h.svc.ListWeatherForecast(c.Request().Context(), c.Param("calid"), cc.Campaign.ID, viewerFrom(c, cc))
+	if err != nil {
+		return err
+	}
+	return c.JSON(http.StatusOK, out)
+}
+
 // --- Calendar creation wizard (presets, import) ---
 //
 // Every route below is Owner only (routes.go): creating a calendar's

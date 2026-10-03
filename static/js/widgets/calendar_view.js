@@ -485,9 +485,55 @@
   function weatherPaintHTML(w, future, ghost) {
     if (!w) return '';
     var hand = !ghost && w.source !== 'generated', c = sanitizeColor(w.color), tone = hand ? ' hand' : (ghost ? ' ghost' : '');
+    var locked = !ghost && w.locked === true;
     return ((hand || ghost) && c ? '<span class="cpt' + tone + '" style="--wxc:color-mix(in oklch,' + c + ' 26%,transparent)"></span>' : '') +
-      '<span class="cwx' + tone + (future ? ' dir' : '') + '"' + (c ? ' style="color:' + c + '"' : '') + ' aria-hidden="true">' +
-      '<i class="fa-solid ' + weatherIcon(w) + ' i"></i></span>';
+      '<span class="cwx' + tone + (future ? ' dir' : '') + (locked ? ' lkd' : '') + '"' + (c ? ' style="color:' + c + '"' : '') + (locked ? '' : ' aria-hidden="true"') + '>' +
+      '<i class="fa-solid ' + weatherIcon(w) + ' i"' + (locked ? ' aria-hidden="true"' : '') + '></i>' +
+      (locked ? '<i class="fa-solid fa-lock lk" aria-hidden="true"></i><span class="fcsr">locked</span>' : '') + '</span>';
+  }
+
+  // ---- Player forecast ----
+  // A forecast entry's words (the server's own wording), or a neutral fallback.
+  function forecastWords(e) { return String((e && e.words) || 'Forecast'); }
+
+  // The grid/band mark for a forecast day: dashed outline always, faded when
+  // the forecast is unsure. The words are visible; the sr text says it is a
+  // forecast, not a reading.
+  function forecastMarkHTML(e) {
+    if (!e) return '';
+    var words = forecastWords(e), faded = typeof e.confidence === 'number' && e.confidence < 0.55;
+    return '<span class="wxm fc' + (faded ? ' faded' : '') + '" title="' + esc('Forecast: ' + words) + '">' +
+      '<i class="fa-solid ' + weatherIcon({ icon: e.icon }) + '" aria-hidden="true"></i>' +
+      '<span class="fcw" aria-hidden="true">' + esc(words) + '</span>' +
+      '<span class="fcsr">' + esc('Forecast: ' + words) + '</span></span>';
+  }
+
+  // "8°C to 14°C · 70% chance of rain"; either part is left out when unknown.
+  function forecastDetailText(e) {
+    if (!e) return '';
+    var parts = [], lo = e.temp_low, hi = e.temp_high;
+    if (lo != null && hi != null) parts.push(lo + '°C to ' + hi + '°C');
+    else if (lo != null || hi != null) parts.push((lo != null ? lo : hi) + '°C');
+    var pc = Number(e.precip_chance);
+    if (pc > 0) {
+      var noun = e.icon === 'snow' ? 'snow' : (e.icon === 'storm' ? 'storms' : 'rain');
+      parts.push(Math.round(pc) + '% chance of ' + noun);
+    }
+    return parts.join(' · ');
+  }
+
+  // The day card's forecast block for a player (never a real reading).
+  function forecastFactHTML(e) {
+    if (!e) return '';
+    var detail = forecastDetailText(e);
+    return '<div class="row wxf fcf"><i class="fa-solid ' + weatherIcon({ icon: e.icon }) + '" aria-hidden="true"></i><span class="tt"><b>' + esc(forecastWords(e)) + '</b>' +
+      (detail ? '<small>' + esc(detail) + '</small>' : '') +
+      '<small>A forecast, not a promise. The real weather shows on the day.</small></span></div>';
+  }
+
+  // The Director's one-line note of what players are told for the day.
+  function playersSeeHTML(e) {
+    return e ? '<div class="row wxf fcps"><span class="tt"><small>' + esc('Players see: ' + forecastWords(e)) + '</small></span></div>' : '';
   }
 
   var WIND_DIRS = { N: 'north', NNE: 'north', NE: 'northeast', ENE: 'east', E: 'east', ESE: 'east', SE: 'southeast', SSE: 'south',
@@ -1089,6 +1135,7 @@
       if (!Array.isArray(initialEvents)) initialEvents = [];
 
       this.eventsByMonth = {};
+      this.forecastByDay = {};
       this.weatherByYear = {}; // year -> {'m_d': reading}, filled by fetchWeatherYear
       this.nightsByMonth = {}; // 'y_m' -> game nights, filled by fetchNights
       // Game nights are real-world dates, so only a calendar that follows
@@ -1373,6 +1420,35 @@
 
     // The day's weather reading, or null. Today falls back to the calendar's
     // single current reading, which predates per-day weather.
+    // fetchForecast loads the player forecast once (again when force). An
+    // empty list means the forecast is off.
+    fetchForecast: function (force) {
+      var self = this;
+      if (this._forecastP && !force) return this._forecastP;
+      this._forecastP = Chronicle.apiFetch(this.apiBase + '/weather/forecast')
+        .then(function (resp) { return resp.ok ? resp.json() : []; })
+        .then(function (list) {
+          var by = {};
+          (Array.isArray(list) ? list : []).forEach(function (e) { by[e.year + '_' + e.month + '_' + e.day] = e; });
+          self.forecastByDay = by;
+          return by;
+        })
+        .catch(function () { self.forecastByDay = {}; return {}; });
+      return this._forecastP;
+    },
+
+    // The forecast entry for a day, or null.
+    forecastOn: function (y, m, d) {
+      return (this.forecastByDay && this.forecastByDay[y + '_' + m + '_' + d]) || null;
+    },
+
+    // What a player sees on a future day with no visible reading: the
+    // forecast entry. The Director never gets this mark (real weather shows).
+    forecastMarkOn: function (y, m, d, future) {
+      if (this.canAuthorDmOnly || !future || this.weatherOnDay(y, m, d)) return '';
+      return forecastMarkHTML(this.forecastOn(y, m, d));
+    },
+
     weatherOnDay: function (y, m, d) {
       var byDay = this.weatherByYear[y], w = byDay && byDay[m + '_' + d];
       if (w) return w;
@@ -2521,7 +2597,7 @@
     renderMonth: function () {
       var self = this, cal = this.cal;
       this.renderHeader();
-      Promise.all([this.fetchMonth(this.view.y, this.view.m), this.fetchWeatherYear(this.view.y), this.fetchNights(this.view.y, this.view.m),
+      Promise.all([this.fetchMonth(this.view.y, this.view.m), this.fetchWeatherYear(this.view.y), this.fetchForecast(), this.fetchNights(this.view.y, this.view.m),
         this.showFree ? this.fetchFreeMonth(this.view.y, this.view.m) : null]).then(function () {
         self._paintMonth();
         self.refreshFreeView();
@@ -2592,7 +2668,7 @@
       var label = esc(monthDef.name) + (totalDays > 1 ? ', day ' + d : '');
       return '<div class="band' + (isToday ? ' today' : '') + '">' +
         '<button type="button" class="day" data-key="' + dayKey(y, m, d) + '" style="width:100%">' +
-          '<div class="dc"><span class="bn">' + label + '</span>' + weatherMarkHTML(this.weatherOnDay(y, m, d), isFuture) + marks + this._eraStartHTML(y, m, d) + '</div>' +
+          '<div class="dc"><span class="bn">' + label + '</span>' + weatherMarkHTML(this.weatherOnDay(y, m, d), isFuture) + this.forecastMarkOn(y, m, d, isFuture) + marks + this._eraStartHTML(y, m, d) + '</div>' +
           (this.canAuthorDmOnly ? this._paintMarkHTML(y, m, d, isFuture) : '') +
         '</button></div>';
     },
@@ -2603,7 +2679,7 @@
     _paintMarkHTML: function (y, m, d, future) {
       var stored = (this.weatherByYear[y] || {})[m + '_' + d];
       var pv = this.wxPreview && this.wxPreview[dayKey(y, m, d)];
-      if (pv && !(stored && stored.source !== 'generated')) return weatherPaintHTML(pv, future, true);
+      if (pv && !(stored && (stored.source !== 'generated' || stored.locked === true))) return weatherPaintHTML(pv, future, true);
       return weatherPaintHTML(stored, future);
     },
 
@@ -2619,7 +2695,7 @@
         moonHTML = '<span class="msil" data-moon-day="' + key + '" title="' + esc(moon.name + ', ' + MoonMath.name(phase)) + '">' + this._moonSilSVG(phase) + '</span>';
       }
       return '<button type="button" class="day' + (isToday ? ' today' : '') + (isPast ? ' past' : '') + '" data-key="' + key + '">' +
-        moonHTML + weatherMarkHTML(this.weatherOnDay(y, m, d), !isPast && !isToday) +
+        moonHTML + weatherMarkHTML(this.weatherOnDay(y, m, d), !isPast && !isToday) + this.forecastMarkOn(y, m, d, !isPast && !isToday) +
         (this.canAuthorDmOnly ? this._paintMarkHTML(y, m, d, !isPast && !isToday) : '') +
         '<div class="dc"><span class="num">' + d + '</span>' + this._marksHTML(y, m, d) + '</div>' +
         this._eraStartHTML(y, m, d) +
@@ -3373,7 +3449,9 @@
       var label = (monthDef ? monthDef.name : d.m) + ' ' + d.d + ', ' + d.y;
       var isToday = d.y === cal.current_year && d.m === cal.current_month && d.d === cal.current_day;
       var isFuture = CalDate.dayIndex(cal, d.y, d.m, d.d) > CalDate.dayIndex(cal, cal.current_year, cal.current_month, cal.current_day);
-      var weatherFact = weatherFactHTML(this.weatherOnDay(d.y, d.m, d.d), isFuture);
+      var reading = this.weatherOnDay(d.y, d.m, d.d), fc = this.forecastOn(d.y, d.m, d.d);
+      var isForecast = !this.canAuthorDmOnly && isFuture && !reading && !!fc;
+      var weatherFact = isForecast ? forecastFactHTML(fc) : weatherFactHTML(reading, isFuture) + (this.canAuthorDmOnly && fc ? playersSeeHTML(fc) : '');
       var moonRows = (cal.moons || []).map(function (mo) {
         var abs = CalDate.dayIndex(cal, d.y, d.m, d.d), phase = MoonMath.phase(mo, abs);
         return '<button type="button" class="mrow" data-moon="' + esc(mo.id) + '"><span class="mt"><b>' + esc(mo.name) + '</b><small>' + esc(MoonMath.name(phase)) + ' · ' + MoonMath.litPct(phase) + '% lit</small></span><i class="fa-solid fa-chevron-right chev"></i></button>';
@@ -3401,7 +3479,7 @@
       var moonCount = (cal.moons || []).length;
       return '<div class="leaf lf1"><div class="grab" aria-hidden="true"></div>' +
           '<div class="crease"><span>Day</span><button type="button" class="x" data-close aria-label="Close">✕</button></div>' +
-          '<div class="wb wbh"><h3 class="wdate">' + esc(label) + '</h3>' +
+          '<div class="wb wbh"><h3 class="wdate">' + esc(label) + '</h3>' + (isForecast ? '<span class="wxtag fctag">Forecast</span>' : '') +
           (weatherFact ? '<div class="facts">' + weatherFact + '</div>' : '') + '</div>' +
         '</div>' +
         '<div class="leaf lf2"><div class="lscroll"><div class="wb wbr">' + gnHTML + this._freeWingHTML(d) +
@@ -3732,6 +3810,6 @@
   // Go model's own values without a browser DOM. `module` is undefined when
   // loaded via <script>, so this is a no-op in the browser.
   if (typeof module !== 'undefined' && module.exports) {
-    module.exports = { CalDate: CalDate, MoonMath: MoonMath, EraMath: EraMath, weatherMarkHTML: weatherMarkHTML, weatherFactHTML: weatherFactHTML, weatherPaintHTML: weatherPaintHTML, weatherIcon: weatherIcon };
+    module.exports = { CalDate: CalDate, MoonMath: MoonMath, EraMath: EraMath, weatherMarkHTML: weatherMarkHTML, weatherFactHTML: weatherFactHTML, weatherPaintHTML: weatherPaintHTML, forecastMarkHTML: forecastMarkHTML, forecastFactHTML: forecastFactHTML, forecastDetailText: forecastDetailText, playersSeeHTML: playersSeeHTML, weatherIcon: weatherIcon };
   }
 })();
