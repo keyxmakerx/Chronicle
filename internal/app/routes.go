@@ -1892,6 +1892,26 @@ func (a *armoryBuyerAccessAdapter) CanUserActAsBuyer(ctx context.Context, campai
 	return perm.CanEdit, nil
 }
 
+// armoryShopCheckerAdapter wraps entities.EntityService to implement
+// armory.ShopEntityChecker: an entity counts as a shop only when it is in the
+// campaign and its entity type slug is "shop".
+type armoryShopCheckerAdapter struct {
+	svc entities.EntityService
+}
+
+// IsShopInCampaign reports false (not an error) for a missing entity.
+func (a *armoryShopCheckerAdapter) IsShopInCampaign(ctx context.Context, campaignID, entityID string) (bool, error) {
+	ent, err := a.svc.GetByID(ctx, entityID)
+	if err != nil {
+		var appErr *apperror.AppError
+		if errors.As(err, &appErr) && appErr.Code == http.StatusNotFound {
+			return false, nil
+		}
+		return false, err
+	}
+	return ent.CampaignID == campaignID && ent.TypeSlug == "shop", nil
+}
+
 // armoryRelationFinderAdapter wraps the relations service to implement
 // armory.RelationFinder. Used by the transaction service to validate stock
 // before a purchase.
@@ -3257,7 +3277,12 @@ func (a *App) RegisterRoutes() {
 			return "/campaigns/" + campaignID + "/armory/characters/" + entityID + "/panel"
 		},
 	})
-	armory.RegisterRoutes(e, armoryHandler, txHandler, instHandler, stashHandler, campaignService, authService, addonService)
+	shopRoomHandler := armory.NewShopRoomHandler(armory.NewShopRoomService(
+		armory.NewShopRoomRepository(a.DB),
+		&armoryShopCheckerAdapter{svc: entityService},
+		&entityVisibilityFilterAdapter{svc: entityService},
+	))
+	armory.RegisterRoutes(e, armoryHandler, txHandler, instHandler, stashHandler, shopRoomHandler, campaignService, authService, addonService)
 
 	// Notes widget: personal floating note-taking panel (Google Keep-style).
 	// noteSvc was created above (before REST API v1 registration).

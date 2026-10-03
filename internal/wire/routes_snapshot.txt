@@ -143,6 +143,7 @@ GET	/armory/instances	internal/plugins/armory/routes.go
 GET	/armory/instances/manage	internal/plugins/armory/routes.go
 GET	/armory/items/:eid/collections	internal/plugins/armory/routes.go
 GET	/armory/move	internal/plugins/armory/routes.go
+GET	/armory/shops/:eid/room	internal/plugins/armory/routes.go
 GET	/armory/shops/:eid/transactions	internal/plugins/armory/routes.go
 GET	/armory/stashes	internal/plugins/armory/routes.go
 GET	/armory/stashes/:sid/history	internal/plugins/armory/routes.go
@@ -649,6 +650,7 @@ PUT	/api/keys/:keyID/toggle	internal/plugins/syncapi/routes.go
 PUT	/api/security/:eventID/resolve	internal/plugins/syncapi/routes.go
 PUT	/appearance	internal/plugins/campaigns/routes.go
 PUT	/armory/instances/:iid	internal/plugins/armory/routes.go
+PUT	/armory/shops/:eid/room	internal/plugins/armory/routes.go
 PUT	/armory/stashes/:sid	internal/plugins/armory/routes.go
 PUT	/armory/stashes/:sid/viewers	internal/plugins/armory/routes.go
 PUT	/availability/exceptions	internal/plugins/sessions/routes.go
