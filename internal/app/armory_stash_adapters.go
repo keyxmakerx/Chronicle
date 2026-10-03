@@ -6,6 +6,7 @@ package app
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"net/http"
 	"sync"
@@ -464,6 +465,46 @@ func (a *syncStashAPIAdapter) Downtime(ctx context.Context, campaignID string) (
 
 func (a *syncStashAPIAdapter) SetDowntime(ctx context.Context, campaignID, keyUserID, actingUserID string, open bool) (any, error) {
 	v, err := a.api.SetDowntime(ctx, campaignID, keyUserID, actingUserID, open)
+	if err != nil {
+		return nil, err
+	}
+	return v, nil
+}
+
+// syncShopBuyAPIAdapter implements syncapi.ShopBuyAPIService over the shop
+// buy service, acting as the member the call names. Who the call runs as is
+// decided by StashAPI.ActorFor, the same rule the stash calls use, so a key
+// can only ever buy as itself or, when its holder is Owner or co-DM, as a
+// current member under that member's own rights.
+type syncShopBuyAPIAdapter struct {
+	actors *armory.StashAPI
+	buy    armory.ShopBuyService
+}
+
+var _ syncapi.ShopBuyAPIService = (*syncShopBuyAPIAdapter)(nil)
+
+func (a *syncShopBuyAPIAdapter) Buyers(ctx context.Context, campaignID, keyUserID, actingUserID, shopEntityID string) (any, error) {
+	actor, err := a.actors.ActorFor(ctx, campaignID, keyUserID, actingUserID)
+	if err != nil {
+		return nil, err
+	}
+	v, err := a.buy.Buyers(ctx, campaignID, shopEntityID, actor)
+	if err != nil {
+		return nil, err
+	}
+	return v, nil
+}
+
+func (a *syncShopBuyAPIAdapter) Buy(ctx context.Context, campaignID, keyUserID, actingUserID, shopEntityID string, body json.RawMessage) (any, error) {
+	actor, err := a.actors.ActorFor(ctx, campaignID, keyUserID, actingUserID)
+	if err != nil {
+		return nil, err
+	}
+	var in armory.BuyInput
+	if err := json.Unmarshal(body, &in); err != nil {
+		return nil, apperror.NewBadRequest("invalid JSON body")
+	}
+	v, err := a.buy.Buy(ctx, campaignID, shopEntityID, actor, in)
 	if err != nil {
 		return nil, err
 	}
