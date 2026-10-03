@@ -419,6 +419,7 @@ GET	/settings	internal/plugins/packages/routes.go
 GET	/sidebar-config	internal/plugins/campaigns/routes.go
 GET	/sidebar/drill/:slug	internal/plugins/campaigns/routes.go
 GET	/sidebar/sessions-rsvp	internal/plugins/sessions/routes.go
+GET	/site-look	internal/plugins/admin/routes.go
 GET	/smtp	internal/plugins/smtp/routes.go
 GET	/stashes/downtime	internal/plugins/syncapi/routes.go
 GET	/stashes/history	internal/plugins/syncapi/routes.go
@@ -635,6 +636,7 @@ POST	/sessions/feed/token	internal/plugins/sessions/routes.go
 POST	/sessions/feed/token/replace	internal/plugins/sessions/routes.go
 POST	/settings	internal/plugins/packages/routes.go
 POST	/sidebar-nodes	internal/plugins/entities/routes.go
+POST	/site-look	internal/plugins/admin/routes.go
 POST	/smtp/send-test	internal/plugins/smtp/routes.go
 POST	/smtp/test	internal/plugins/smtp/routes.go
 POST	/stashes/moves	internal/plugins/syncapi/routes.go

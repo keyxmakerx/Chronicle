@@ -12,10 +12,14 @@ templ Base(title string) {
 	<head>
 		<meta charset="UTF-8"/>
 		<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-		<title>{ title } | Chronicle</title>
+		<title>{ SiteTitle(ctx, title) }</title>
 
 		<!-- Favicon -->
-		<link rel="icon" type="image/svg+xml" href={ AssetURL("/static/img/favicon.svg") }/>
+		if href, mime, ok := SiteFavicon(ctx); ok {
+			<link rel="icon" type={ mime } href={ href }/>
+		} else {
+			<link rel="icon" type="image/svg+xml" href={ AssetURL("/static/img/favicon.svg") }/>
+		}
 
 		<!-- Theme: apply dark class + inline background-color before first paint to prevent flash.
 		     A signed-in person's account choice (data-view-theme) wins over this browser's saved theme;
@@ -288,6 +292,9 @@ templ Base(title string) {
 
 		<!-- Map focus view: a framed map preview unfolds into the live viewer -->
 		<script src={ AssetURL("/static/js/map_focus.js") } defer></script>
+
+		<!-- Admin > Site look: the live preview layered on the plain form -->
+		<script src={ AssetURL("/static/js/widgets/site_look.js") } defer></script>
 
 		<!-- Customize look editor (campaign look, one Save for every setting) -->
 		<script src={ AssetURL("/static/js/widgets/customize_look.js") } defer></script>

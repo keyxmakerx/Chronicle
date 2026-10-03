@@ -6,9 +6,11 @@ import (
 	"fmt"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/keyxmakerx/chronicle/internal/apperror"
+	"github.com/keyxmakerx/chronicle/internal/sitelook"
 )
 
 // SettingsService handles business logic for site settings and storage limits.
@@ -81,12 +83,31 @@ type SettingsService interface {
 
 	// UpdateRegistrationMode validates and persists the site registration mode.
 	UpdateRegistrationMode(ctx context.Context, mode string) error
+
+	// GetSiteLook returns the saved site look. A site that never saved one
+	// gets the zero value (Configured false), which renders as before. Reads
+	// are cached briefly because every page render asks for it.
+	GetSiteLook(ctx context.Context) (sitelook.Settings, error)
+
+	// UpdateSiteLook validates and persists the site look and returns the
+	// normalised values that were stored.
+	UpdateSiteLook(ctx context.Context, in sitelook.Settings) (sitelook.Settings, error)
 }
 
 // settingsService implements SettingsService.
 type settingsService struct {
 	repo SettingsRepository
+
+	// siteLook caches the site look: the layout reads it on every render, and
+	// it changes only when an admin saves. The TTL bounds staleness if another
+	// instance wrote it; a local save drops the cache at once.
+	siteLookMu     sync.Mutex
+	siteLook       sitelook.Settings
+	siteLookExpiry time.Time
 }
+
+// siteLookTTL is how long a cached site look is trusted.
+const siteLookTTL = 15 * time.Second
 
 // NewSettingsService creates a new settings service.
 func NewSettingsService(repo SettingsRepository) SettingsService {
@@ -493,4 +514,81 @@ func IsValidTrashRetention(days int) bool {
 		}
 	}
 	return false
+}
+
+// --- Site look ---
+
+// GetSiteLook reads the site look from site_settings, through a short cache.
+func (s *settingsService) GetSiteLook(ctx context.Context) (sitelook.Settings, error) {
+	s.siteLookMu.Lock()
+	defer s.siteLookMu.Unlock()
+	if time.Now().Before(s.siteLookExpiry) {
+		return s.siteLook, nil
+	}
+	all, err := s.repo.GetAll(ctx)
+	if err != nil {
+		return sitelook.Settings{}, err
+	}
+	_, saved := all[KeySiteName]
+	look := sitelook.Settings{
+		Configured: saved,
+		Name:       all[KeySiteName],
+		Logo:       all[KeySiteLogo],
+		Look:       all[KeySiteLook],
+		Background: all[KeySiteSigninBackground],
+		Picture:    all[KeySiteSigninPicture],
+		Welcome:    all[KeySiteWelcome],
+		Move:       all[KeySiteMove] == "1",
+		// On unless the admin turned it off, so the box starts ticked.
+		LogoAsFavicon: all[KeySiteLogoFavicon] != "0",
+	}
+	// Stored values were validated on save, but the table is editable by
+	// hand: anything no longer valid falls back to the unconfigured look
+	// rather than reaching a page.
+	if saved {
+		if v, verr := sitelook.Validate(look); verr == nil {
+			look = v
+		} else {
+			look = sitelook.Settings{}
+		}
+	}
+	s.siteLook, s.siteLookExpiry = look, time.Now().Add(siteLookTTL)
+	return look, nil
+}
+
+// UpdateSiteLook validates and persists the site look, one row per value.
+func (s *settingsService) UpdateSiteLook(ctx context.Context, in sitelook.Settings) (sitelook.Settings, error) {
+	v, err := sitelook.Validate(in)
+	if err != nil {
+		return sitelook.Settings{}, err
+	}
+	favicon := "0"
+	if v.LogoAsFavicon {
+		favicon = "1"
+	}
+	move := "0"
+	if v.Move {
+		move = "1"
+	}
+	rows := []struct{ key, value string }{
+		{KeySiteMove, move},
+		{KeySiteLogo, v.Logo},
+		{KeySiteLogoFavicon, favicon},
+		{KeySiteLook, v.Look},
+		{KeySiteSigninBackground, v.Background},
+		{KeySiteSigninPicture, v.Picture},
+		{KeySiteWelcome, v.Welcome},
+		// The name goes last: its presence is what marks the look as saved,
+		// so a failure part-way leaves the site unconfigured, not half-set.
+		{KeySiteName, v.Name},
+	}
+	for _, r := range rows {
+		if err := s.repo.Set(ctx, r.key, r.value); err != nil {
+			return sitelook.Settings{}, fmt.Errorf("persisting %s: %w", r.key, err)
+		}
+	}
+	s.siteLookMu.Lock()
+	s.siteLookExpiry = time.Time{}
+	s.siteLookMu.Unlock()
+	return v, nil
 }

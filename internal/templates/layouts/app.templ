@@ -188,7 +188,10 @@ templ Sidebar() {
 			<!-- Logo / Brand -->
 			<div class="h-16 flex items-center px-4 border-b border-gray-700 shrink-0">
 				<a href="/campaigns" class="flex items-center flex-1 min-w-0 gap-2 hover:opacity-80 transition-opacity">
-					<span class="text-lg font-bold text-white tracking-tight truncate sidebar-hide-collapsed">Chronicle</span>
+					<span class="sidebar-hide-collapsed contents">
+						@SiteSidebarMark()
+					</span>
+					<span class="text-lg font-bold text-white tracking-tight truncate sidebar-hide-collapsed">{ SiteName(ctx) }</span>
 					<!-- Collapsed state: book icon -->
 					<span class="hidden items-center justify-center w-5 h-5 shrink-0" :class="{ '!flex': !pinned && !hovered }">
 						<i class="fa-solid fa-book-open text-white text-sm"></i>
