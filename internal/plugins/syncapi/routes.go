@@ -277,6 +277,10 @@ func RegisterAPIRoutes(e *echo.Echo, api *APIHandler, calAPI *CalendarAPIHandler
 	// its players.
 	shopGroup := cg.Group("", RequireAddonAPI(addonChecker, api.shopRoomAddon))
 	shopGroup.GET("/armory/shops/:eid/room", api.GetShopRoom, RequirePermission(PermRead))
+	// Buying acts as the member the call names (actingUserId); see
+	// ShopBuyAPIService for why that can only narrow the key's power.
+	shopGroup.GET("/armory/shops/:eid/buyers", api.GetShopBuyers, RequirePermission(PermRead))
+	shopGroup.POST("/armory/shops/:eid/buy", api.BuyFromShop, RequirePermission(PermWrite))
 
 	// Note read endpoints (require "read" permission).
 	cg.GET("/notes", noteAPI.ListNotes, RequirePermission(PermRead))
