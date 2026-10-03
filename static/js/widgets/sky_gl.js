@@ -200,28 +200,43 @@
      and a still one agree. A strike flickers twice at most, strikes are seconds apart, and only the bolt and the cloud
      round it light up, so a storm never flashes more than three times a second or over a large area. */
   var PLANS = {bolt:[]};
+  /* A bolt shaped like a photographed one: a main channel that wanders sharply in short kinks, with
+     forks that leave it at narrow angles, run down and outward, and die out in the air; a fork may fork again. The
+     main channel is laid first, then the forks, so the painter can thin them by their place in the list. Its x is
+     measured from the strike point in the same unit as its height, so its kinks keep their shape on any width. */
+  function jag(rnd, a, b, levels, rough){
+    var pts = [a, b];
+    for (var lv = 0; lv < levels; lv++){
+      var nx = [pts[0]];
+      for (var i = 0; i < pts.length - 1; i++){
+        var p = pts[i], q = pts[i + 1], dy = q[1] - p[1];
+        nx.push([(p[0] + q[0]) / 2 + (rnd() - .5) * dy * rough * (lv ? 1 : .3), (p[1] + q[1]) / 2 + (rnd() - .5) * dy * .15], q);
+      }
+      pts = nx;
+    }
+    return pts;
+  }
+  function boltShape(rnd, seg, br){
+    var main = jag(rnd, [0, .26 + rnd() * .08], [(rnd() - .5) * .3, 1.0], 4, .68);
+    for (var i = 0; i < main.length - 1; i++) seg.push(main[i].concat(main[i + 1]));
+    var forks = 2 + Math.floor(rnd() * 3), left = 24;
+    for (var f = 0; f < forks && left > 1; f++){
+      var at = main[2 + Math.floor(rnd() * (main.length * .55))], dir = rnd() < .5 ? -1 : 1, len = .12 + rnd() * .22;
+      var end = [at[0] + dir * len * (.35 + rnd() * .5), at[1] + len], pts = jag(rnd, at, end, 3, .5);
+      for (i = 0; i < pts.length - 1 && left > 0; i++, left--) br.push(pts[i].concat(pts[i + 1]));
+      if (left > 3 && rnd() < .6){
+        var s0 = pts[2 + Math.floor(rnd() * 3)], e2 = [s0[0] + dir * (.04 + rnd() * .08), s0[1] + .05 + rnd() * .07], p2 = jag(rnd, s0, e2, 2, .5);
+        for (i = 0; i < p2.length - 1 && left > 0; i++, left--) br.push(p2[i].concat(p2[i + 1]));
+      }
+    }
+  }
   function boltPlan(k){
     var P = PLANS.bolt;
     while (P.length <= k){
-      var j = P.length, prev = P[j - 1], t0 = prev ? prev.t0 + 2.6 + hashN(j * 3.1 + .4) * 5.5 : 1.2;
+      var j = P.length, prev = P[j - 1], t0 = prev ? prev.t0 + 1.2 + hashN(j * 3.1 + .4) * 3.0 : 1.2;
       var x0 = .12 + hashN(j * 5.7 + 1) * .76, seg = [], br = [], rnd = MOONR.rng(900 + j);
-      var hasBolt = hashN(j * 2.3 + 9) < .6;
-      if (hasBolt){
-        /* Midpoint displacement from the cloud to the ground: jagged at every scale, never a zig-zag of equal steps. */
-        var pts = [[x0, .26 + rnd() * .1], [x0 + (rnd() - .5) * .12, 1.0]];
-        for (var lv = 0; lv < 4; lv++){
-          var nx = [pts[0]];
-          for (var i = 0; i < pts.length - 1; i++){
-            var a = pts[i], b = pts[i + 1], dy = b[1] - a[1];
-            nx.push([(a[0] + b[0]) / 2 + (rnd() - .5) * dy * .34, (a[1] + b[1]) / 2 + (rnd() - .5) * dy * .12], b);
-          }
-          pts = nx;
-        }
-        for (i = 0; i < pts.length - 1; i++) seg.push(pts[i].concat(pts[i + 1]));
-        var bi = 4 + Math.floor(rnd() * 6), bp = pts[bi], dir = rnd() < .5 ? -1 : 1, q = [bp];
-        for (i = 1; i <= 7; i++){ var pv = q[q.length - 1]; q.push([pv[0] + dir * (.006 + rnd() * .012), pv[1] + .035 + rnd() * .03]); }
-        for (i = 0; i < q.length - 1; i++) br.push(q[i].concat(q[i + 1]));
-      }
+      var hasBolt = hashN(j * 2.3 + 9) < .82;
+      if (hasBolt) boltShape(rnd, seg, br);
       P.push({t0:t0, x:x0, seg:seg, br:br, bolt:hasBolt, pulses:[[0, 1], [.2 + hashN(j) * .1, .55 + hashN(j + .5) * .25]]});
     }
     return P[k];
@@ -471,6 +486,9 @@
       if (!M || !M.up){ mv.push(0, 0, 0, 0); ma.push(0, 0, 0, 0); mk.push(0, 0, 0, 0); mc.push(0, 0, 0); me.push(0, 0, 0, 0); continue; }
       var blood = !!M.blood, rect = rects[i];
       var through = (1 - wx.cloud * .9) * (1 - wx.fog * .75);
+      /* A storm hides the moon's disc, leaving its light on the cloud edges; a blood moon shows through its own thin
+         weather. */
+      through = blood ? Math.max(through, .85) : through * (1 - .75 * wx.storm);
       mv.push(M.x, M.y, M.r, M.rot); ma.push(rect[0], rect[1], rect[2], rect[3]);
       /* A moon under the horizon throws no glow above it; one in the world's shadow throws little. */
       mk.push(clamp(through, .04, 1), M.m.lit * (1 - (M.shadowCover || 0) * .85), blood ? .55 * (M.bloodK || 1) : 0, (1 + wx.fog * 2.2 + wx.cloud * .5 * (1 - wx.dark)) * smooth01(-4, 1, M.m.alt / D2R));
@@ -488,18 +506,20 @@
     U.uPrecipK = [lk && lk.rainTint ? lk.rainTint[1] : 0, lk ? lk.slant : 0, lk ? lk.heavy : 0, wx.hail];
     U.uPrecipC = lk && lk.rainTint ? PAL.hexLin(lk.rainTint[0]) : [1, 1, 1];
     /* Lightning: the bolt and the cloud round it, never the whole sky. */
-    var storm = Math.max(wx.storm, lk ? lk.flash.lightning : 0), fl = storm > .3 && !st.rm ? flashAt(t) : {s:0}, bolt = [], nb = 0, bb = [0, 0];
+    var storm = Math.max(wx.storm, lk ? lk.flash.lightning : 0) * (st.motion != null ? st.motion * st.motion : 1), fl = storm > .3 && !st.rm ? flashAt(t) : {s:0}, bolt = [], nb = 0, bb = [0, 0];
     if (fl.s > .01 && fl.strike && fl.strike.bolt && fl.u < .45){
       var Sk = fl.strike, groundY = H * .86, y0 = H * .22, lx = Infinity, rx = -Infinity;
+      /* The plan's unit is the strike's height, across as well as down. */
+      var u = (groundY - y0) / .74, X = function(x){ return Sk.x * W + x * u; };
       Sk.seg.concat(Sk.br).forEach(function(s){
         if (nb >= 40) return;
-        var a = [s[0] * W, y0 + (s[1] - .26) / .74 * (groundY - y0)], b = [s[2] * W, y0 + (s[3] - .26) / .74 * (groundY - y0)];
+        var a = [X(s[0]), y0 + (s[1] - .26) * u], b = [X(s[2]), y0 + (s[3] - .26) * u];
         bolt.push(a[0], a[1], b[0], b[1]); nb++; lx = Math.min(lx, a[0], b[0]); rx = Math.max(rx, a[0], b[0]);
       });
       bb = [lx - H * .3, rx + H * .3];
     }
     while (bolt.length < 160) bolt.push(0, 0, 0, 0);
-    U.uFlash = [fl.x ? fl.x * W : W / 2, H * .3, clamp(fl.s, 0, 1.4) * storm, 0];
+    U.uFlash = [fl.x ? fl.x * W : W / 2, H * .3, clamp(fl.s, 0, 1.4) * storm, fl.strike ? Math.min(fl.strike.seg.length, 40) : 0];
     U.uBolt = bolt; U.uBoltK = [nb, nb ? clamp(fl.s, 0, 1.2) * storm : 0, bb[0], bb[1]];
     var met = [], metk = [];
     st.met.slice(0, 8).forEach(function(m){ met.push(m[0], m[1], m[2], m[3]); metk.push(m[4], m[5], m[6], m[7]); });

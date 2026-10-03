@@ -30,24 +30,33 @@
 
   var SW = window.SkyWorld, LOOKS = window.SkyLooks, EV = window.SkyEvents;
 
+  // The sky's time is the page's rest clock (motion_rest.js): it slows to a
+  // standstill when the viewer steps away and resumes where it stopped.
+  function clock() { return window.MotionRest ? window.MotionRest.now() : performance.now() / 1000; }
+  function resting() { return !!(window.MotionRest && window.MotionRest.still()); }
+
   // ── One shared render loop for every sky-pane instance on the page, so N
   // panes cost one rAF, not N. An instance only receives ticks while it opts
   // in (continuousInstances) — see PACE below. ──
   var LOOP = (function () {
     var insts = [], running = false;
-    function tick(tMs) {
+    function tick() {
       if (!document.hidden) {
+        var t = clock();
         insts.slice().forEach(function (inst) {
           // One failing sky must not stop the loop for the others.
-          try { if (inst.onScreen !== false) inst.render(tMs / 1000, true); }
+          try { if (inst.onScreen !== false) inst.render(t, true); }
           catch (e) { LOOP.remove(inst); if (window.console) console.error('[sky-pane] render failed', e); }
         });
       }
-      if (insts.length) requestAnimationFrame(tick);
+      // At rest the last frame stays up and no frames are asked for until the viewer is back.
+      if (insts.length && !resting()) requestAnimationFrame(tick);
       else running = false;
     }
+    function start() { if (!running && insts.length) { running = true; requestAnimationFrame(tick); } }
+    if (window.MotionRest) window.MotionRest.onWake(start);
     return {
-      add: function (inst) { if (insts.indexOf(inst) < 0) insts.push(inst); if (!running) { running = true; requestAnimationFrame(tick); } },
+      add: function (inst) { if (insts.indexOf(inst) < 0) insts.push(inst); start(); },
       remove: function (inst) { var i = insts.indexOf(inst); if (i >= 0) insts.splice(i, 1); }
     };
   })();
@@ -158,7 +167,14 @@
     });
 
     var weatherSpec = LOOKS.spec(model.dayWeather || cal.weather);
-    var look = LOOKS.resolve(weatherSpec), target = look || LOOKS.blank();
+    var look = LOOKS.resolve(weatherSpec);
+    // A blood moon brings its own weather, a dark sky with a thin red rain
+    // falling, over whatever the day's weather already is.
+    if (moons.some(function (M) { return M.blood; })) {
+      look = LOOKS.blend(look || LOOKS.blank(), LOOKS.resolve(LOOKS.spec({ preset_id: 'blood-rain', preset_label: 'Blood rain' })), .7);
+      look.cloud = Math.max(look.cloud, .66); look.dark = Math.max(look.dark, .6); look.rain = Math.max(look.rain, .75); look.stars = Math.min(look.stars, .25);
+    }
+    var target = look || LOOKS.blank();
     var wx = model.wxs;
     if (!wx || model.reduced || !(dt > 0 && dt < 1)) { wx = model.wxs = {}; WXKEYS.forEach(function (n) { wx[n] = target[n]; }); }
     else { var k = 1 - Math.exp(-dt / .8); WXKEYS.forEach(function (n) { wx[n] += (target[n] - wx[n]) * k; }); }
@@ -170,7 +186,9 @@
       sun: sun, sp: sp, alt: sun.alt, altEff: altDeg, dark: dark, R: R,
       moons: moons, cam: cam, sidereal: SW.mod((sun.H + sun.lon) / SW.D2R, 360),
       landSeed: model.landSeed, overlay: overlay, fxItems: [],
-      weatherLabel: weatherSpec.label || 'Clear skies'
+      weatherLabel: weatherSpec.label || 'Clear skies',
+      // How fast the sky is moving: below 1 while it comes to rest, when lightning fades rather than freezing mid-flash.
+      motion: window.MotionRest ? window.MotionRest.speed() : 1
     };
     // What the painted sky adds: the scene's light, then the day's events
     // and the look's moving things (meteors, aurora, the bleeding moon).
@@ -314,7 +332,7 @@
       // and it only runs while a blood-moon-style overlay effect is active
       // (see paceOf) — so a resize/rotation would otherwise leave the sky
       // blank until the next such effect. Force one paint here instead.
-      self.render(self.reduced ? 0 : performance.now() / 1000);
+      self.render(self.reduced ? 0 : clock());
     }, 100);
   };
   Instance.prototype.resizeCanvas = function () {
@@ -344,7 +362,7 @@
   Instance.prototype.renderNow = function () {
     this.resizeCanvas();
     this.lastPaint = 0;
-    this.render(this.reduced ? 0 : performance.now() / 1000);
+    this.render(this.reduced ? 0 : clock());
   };
   Instance.prototype.toggle = function () {
     if (this.open) this.close(); else this.openPane();
@@ -519,8 +537,10 @@
     this._tick = function (tMs) { self.tick(tMs); };
     this._click = function () { self.fold(!self.S.layout); };
     this._vis = function () { self.kick(); };
+    // Back from rest: start drawing again.
+    if (window.MotionRest) window.MotionRest.onWake(this._vis);
     // The painted sky becoming ready, or giving way to the basic one, repaints.
-    this._glChange = function () { if (self.S.layout && !self.S.on) self.paint(performance.now() / 1000, 0, self.H); self.kick(); };
+    this._glChange = function () { if (self.S.layout && !self.S.on) self.paint(clock(), 0, self.H); self.kick(); };
     if (window.SkyGL) window.SkyGL.onChange(this._glChange);
     this.chip.addEventListener('click', this._click);
     document.addEventListener('visibilitychange', this._vis);
@@ -569,7 +589,7 @@
     var st = buildState({ calendar: m.calendar, todayEvents: m.todayEvents, dayWeather: m.dayWeather, skym: m.skym, landSeed: m.landSeed, width: this.W || 640, height: this.H || 120, reduced: this.rm }, 0);
     this.pace = paceOf(st);
     this.label(st);
-    if (this.measure() && this.S.layout && !this.S.on) this.paint(performance.now() / 1000, 0, this.H);
+    if (this.measure() && this.S.layout && !this.S.on) this.paint(clock(), 0, this.H);
     this.kick();
   };
   // The chip's swatch is the sky now, in two colours, with its brightest body
@@ -609,7 +629,7 @@
     else { S.e = target; S.v = 0; S.on = false; S.fade = open && this.rm ? 0 : 1; }
     this.measure();
     this.geo = cardGeo(this.card);
-    this.apply(performance.now() / 1000);
+    this.apply(clock());
     this.kick();
     if (this.o.say) this.o.say(open ? 'Sky open' : 'Sky folded into its chip');
   };
@@ -636,7 +656,7 @@
   };
   Dock.prototype.tick = function (tMs) {
     this.raf = 0;
-    var S = this.S, dt = this.lastT ? Math.min(.05, (tMs - this.lastT) / 1000) : 1 / 60, t = tMs / 1000;
+    var S = this.S, dt = this.lastT ? Math.min(.05, (tMs - this.lastT) / 1000) : 1 / 60, t = clock();
     this.lastT = tMs;
     if (S.on || S.fade < 1) {
       if (S.fade < 1) S.fade = Math.min(1, S.fade + dt / .18);
@@ -647,7 +667,7 @@
     this.kick();
   };
   Dock.prototype.kick = function () {
-    var S = this.S, self = this, live = !document.hidden && !this.rm && S.layout && this.onScreen;
+    var S = this.S, self = this, live = !document.hidden && !this.rm && S.layout && this.onScreen && !resting();
     var want = !document.hidden && (S.on || S.fade < 1 || (live && this.pace === 2));
     if (want) { if (this.tmo) { clearTimeout(this.tmo); this.tmo = 0; } if (!this.raf) this.raf = requestAnimationFrame(this._tick); return; }
     if (this.raf) { cancelAnimationFrame(this.raf); this.raf = 0; }
@@ -656,13 +676,13 @@
     if (live && this.pace === 1) { if (!this.tmo) this.tmo = setTimeout(function () { self.tmo = 0; if (!self.raf) self.raf = requestAnimationFrame(self._tick); }, IDLE_S * 1000); }
     else if (this.tmo) { clearTimeout(this.tmo); this.tmo = 0; }
     // A fold that could not run its frames (a hidden tab) lands at once.
-    if (S.on) { S.e = S.target; S.v = 0; S.on = false; this.apply(performance.now() / 1000); }
+    if (S.on) { S.e = S.target; S.v = 0; S.on = false; this.apply(clock()); }
   };
   Dock.prototype.resized = function () {
     var S = this.S;
     if (S.on) { S.e = S.target; S.v = 0; S.on = false; }
     if (!this.measure()) return;
-    this.apply(performance.now() / 1000);
+    this.apply(clock());
   };
   Dock.prototype.destroy = function () {
     this.destroyed = true;
@@ -673,6 +693,7 @@
     if (window.SkyGL) window.SkyGL.offChange(this._glChange);
     this.chip.removeEventListener('click', this._click);
     document.removeEventListener('visibilitychange', this._vis);
+    if (window.MotionRest) window.MotionRest.offWake(this._vis);
     if (this.ro) this.ro.disconnect();
     if (this._resize) window.removeEventListener('resize', this._resize);
     if (this.io) this.io.disconnect();
