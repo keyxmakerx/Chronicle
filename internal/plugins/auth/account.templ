@@ -5,13 +5,14 @@ package auth
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"github.com/keyxmakerx/chronicle/internal/templates/layouts"
 	"github.com/keyxmakerx/chronicle/internal/timeutil"
 )
 
 // AccountPage renders the full account settings page.
-templ AccountPage(user *User, csrfToken string, timezones []timeutil.Zone) {
+templ AccountPage(user *User, csrfToken string, timezones []timeutil.Zone, prefs ViewPrefs) {
 	@layouts.App("Account Settings") {
 		<div class="max-w-2xl mx-auto">
 			<div class="mb-6">
@@ -141,6 +142,34 @@ templ AccountPage(user *User, csrfToken string, timezones []timeutil.Zone) {
 						</button>
 					</div>
 				</div>
+			</div>
+			<!-- My view: personal look, saved to the account, per viewer only -->
+			<div class="card p-6 mb-6" x-data={ viewPrefsData(prefs) } id="my-view">
+				<h2 class="text-lg font-semibold text-fg mb-1">My view</h2>
+				<p class="text-sm text-fg-secondary mb-4">Only changes what you see. Owners and other players never see your choices.</p>
+				<div class="space-y-4">
+					for _, g := range viewPrefGroups {
+						<div>
+							<p class="text-sm font-medium text-fg-body mb-1" id={ "vp-label-" + g.Key }>{ g.Label }</p>
+							<div class="inline-flex flex-wrap border border-edge rounded-lg overflow-hidden bg-surface" role="group" aria-labelledby={ "vp-label-" + g.Key }>
+								for _, o := range g.Options {
+									<button
+										type="button"
+										class="px-3 py-1.5 text-sm font-medium text-fg-body"
+										x-bind:class={ fmt.Sprintf("v.%s === %q ? 'bg-accent text-white' : 'hover:bg-surface-alt'", g.Key, o.Value) }
+										x-bind:aria-pressed={ fmt.Sprintf("(v.%s === %q).toString()", g.Key, o.Value) }
+										@click={ fmt.Sprintf("save(%q, %q)", g.Key, o.Value) }
+									>{ o.Label }</button>
+								}
+							</div>
+						</div>
+					}
+				</div>
+				<p class="text-xs mt-4 min-h-4" aria-live="polite">
+					<span x-show="status === 'saved'" class="text-fg-muted">Saved to your account</span>
+					<span x-show="status === 'saving'" class="text-fg-muted">Saving...</span>
+					<span x-show="status === 'error'" class="text-red-500" x-text="error"></span>
+				</p>
 			</div>
 			<!-- Timezone Setting -->
 			<div class="card p-6" x-data={ timezoneData(user) }>
@@ -342,4 +371,49 @@ templ EmailVerifyResultPage(success bool, errMsg, csrfToken string) {
 			</div>
 		</div>
 	}
+}
+
+// viewPrefOption is one button of a segmented choice on the My view card.
+type viewPrefOption struct{ Value, Label string }
+
+// viewPrefGroup is one segmented choice. Key is the JSON key the PUT sends,
+// Options[0] is the default, matching the allowed lists in view_prefs.go.
+type viewPrefGroup struct {
+	Key, Label string
+	Options    []viewPrefOption
+}
+
+// viewPrefGroups lists the four choices in the order the signed design shows them.
+var viewPrefGroups = []viewPrefGroup{
+	{"theme", "Light or dark", []viewPrefOption{{"light", "Light"}, {"dark", "Dark"}, {"device", "Match my device"}}},
+	{"motion", "Motion", []viewPrefOption{{"owner", "As the owner set it"}, {"calm", "Calmer"}}},
+	{"textSize", "Text size", []viewPrefOption{{"standard", "Standard"}, {"larger", "Larger"}, {"largest", "Largest"}}},
+	{"contrast", "Contrast", []viewPrefOption{{"standard", "Standard"}, {"high", "High"}}},
+}
+
+// viewPrefsData returns the Alpine.js x-data for the My view card. A tap
+// applies the choice to this page at once (the same attributes the layout
+// writes server-side, so what the person sees now is what every page shows
+// next) and saves only that one key, so the other three are never echoed back.
+func viewPrefsData(prefs ViewPrefs) string {
+	cur, _ := json.Marshal(prefs)
+	return fmt.Sprintf(`{
+		v: %s,
+		status: '',
+		error: '',
+		save(key, value) {
+			var prev = this.v[key];
+			this.v[key] = value;
+			this.status = 'saving'; this.error = '';
+			Chronicle.applyViewPref && Chronicle.applyViewPref(key, value);
+			var body = {}; body[key] = value;
+			Chronicle.apiFetch('/account/view-prefs', { method: 'PUT', body: body })
+			.then(r => { if (!r.ok) throw new Error('Could not save that choice'); this.status = 'saved'; })
+			.catch(e => {
+				this.v[key] = prev;
+				Chronicle.applyViewPref && Chronicle.applyViewPref(key, prev);
+				this.status = 'error'; this.error = e.message;
+			});
+		}
+	}`, cur)
 }

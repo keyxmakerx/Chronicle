@@ -9,7 +9,8 @@
  * while still, and eases back when they return.
  *
  * It does nothing at all, leaving the strip still, under prefers-reduced-motion
- * or the campaign's own reduce switch (html[data-cz-reduce]).
+ * the campaign's own reduce switch (html[data-cz-reduce]) or the person's own
+ * Calmer choice (html[data-view-motion="calm"]).
  */
 (function () {
   'use strict';
@@ -18,7 +19,8 @@
 
   function reduced() {
     var mq = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)');
-    return !!(mq && mq.matches) || document.documentElement.hasAttribute('data-cz-reduce');
+    var root = document.documentElement;
+    return !!(mq && mq.matches) || root.hasAttribute('data-cz-reduce') || root.getAttribute('data-view-motion') === 'calm';
   }
 
   // drive slides el and keeps its rate in step with MotionRest. The

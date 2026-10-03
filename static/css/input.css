@@ -4005,6 +4005,27 @@
 html[data-cz-scale="compact"] { font-size: 93.75%; }
 html[data-cz-scale="roomy"] { font-size: 110%; }
 
+/* My view (account-level, per viewer): text size and contrast. Declared after
+   the campaign's own scale so the person's larger size wins; Standard writes
+   no attribute and so leaves the campaign's size alone. */
+html[data-view-text="larger"] { font-size: 115%; }
+html[data-view-text="largest"] { font-size: 130%; }
+
+/* High contrast: darker secondary text and stronger borders, derived from the
+   page's own text and background tokens so a warm or paper campaign keeps its
+   hue. More specific than the campaign's :root / :root.dark token blocks, so
+   it layers on top of any look. */
+html[data-view-contrast="high"],
+html.dark[data-view-contrast="high"] { /* the second out-ranks a campaign's :root.dark block */
+  --color-text-body: var(--color-text-primary);
+  --color-text-secondary: color-mix(in srgb, var(--color-text-primary) 84%, var(--color-bg-primary));
+  --color-text-muted: color-mix(in srgb, var(--color-text-primary) 72%, var(--color-bg-primary));
+  --color-text-faint: color-mix(in srgb, var(--color-text-primary) 58%, var(--color-bg-primary));
+  --color-border: color-mix(in srgb, var(--color-text-primary) 45%, var(--color-bg-primary));
+  --color-border-light: color-mix(in srgb, var(--color-text-primary) 30%, var(--color-bg-primary));
+  --color-input-border: color-mix(in srgb, var(--color-text-primary) 55%, var(--color-bg-primary));
+}
+
 /* Heading face, on page content only; the sidebar and header keep the UI face.
    zoom applies the face's size nudge on top of whatever size the heading
    already has (the font size itself can't be multiplied in CSS). */
@@ -4185,10 +4206,14 @@ html[data-cz-scale="roomy"] { font-size: 110%; }
   [data-cz-nav="tide"] .nav-ring::after { display: none; }
 }
 
-/* Reduce motion for everyone: the same total-disable as the device setting.
+/* Reduce motion: the same total-disable as the device setting, for everyone
+   when the owner switches it on (data-cz-reduce) and for one person when they
+   pick Calmer in My view (data-view-motion). The person's choice only adds to
+   the owner's; it can never turn the owner's setting off.
    The Customize editor is left out: its example site shows the owner's
    draft, which may turn the switch off before saving. */
-html[data-cz-reduce] *:not(.czp *), html[data-cz-reduce] *:not(.czp *)::before, html[data-cz-reduce] *:not(.czp *)::after {
+html[data-cz-reduce] *:not(.czp *), html[data-cz-reduce] *:not(.czp *)::before, html[data-cz-reduce] *:not(.czp *)::after,
+html[data-view-motion="calm"] *:not(.czp *), html[data-view-motion="calm"] *:not(.czp *)::before, html[data-view-motion="calm"] *:not(.czp *)::after {
   animation-duration: 0.01ms !important;
   animation-iteration-count: 1 !important;
   transition-duration: 0.01ms !important;

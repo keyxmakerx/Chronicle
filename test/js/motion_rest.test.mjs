@@ -17,14 +17,19 @@ const here = dirname(fileURLToPath(import.meta.url));
 const src = readFileSync(join(here, '..', '..', 'static', 'js', 'motion_rest.js'), 'utf8');
 
 // A page with a hand-driven clock: timers and frames run only when the test moves time on.
-function load() {
+function load(attrs = {}) {
   let now = 0;
   const timers = [], frames = [], on = {}, rootOn = {}, docOn = {};
   const listen = (map) => (ev, fn) => { (map[ev] = map[ev] || []).push(fn); };
   const fire = (map, ev) => (map[ev] || []).slice().forEach((fn) => fn({ type: ev }));
-  const document = { hidden: false, addEventListener: listen(docOn), documentElement: { addEventListener: listen(rootOn) } };
+  const observers = [];
+  const documentElement = {
+    nodeType: 1, addEventListener: listen(rootOn),
+    hasAttribute: (k) => k in attrs, getAttribute: (k) => (k in attrs ? attrs[k] : null),
+  };
+  const document = { hidden: false, addEventListener: listen(docOn), documentElement };
   const sandbox = {
-    console, Math, performance: { now: () => now }, document,
+    console, Math, MutationObserver: function (cb) { this.observe = () => observers.push(cb); }, performance: { now: () => now }, document,
     addEventListener: listen(on),
     requestAnimationFrame: (fn) => { frames.push(fn); return frames.length; },
     setTimeout: (fn, ms) => { timers.push({ at: now + ms, fn }); return timers.length; },
@@ -43,7 +48,7 @@ function load() {
     }
   };
   return {
-    R: sandbox.MotionRest, advance,
+    R: sandbox.MotionRest, advance, attrs, attrChanged: () => observers.forEach((cb) => cb()),
     input: (ev = 'pointermove') => fire(on, ev),
     hide: (h) => { document.hidden = h; fire(docOn, 'visibilitychange'); },
     blur: () => fire(on, 'blur'), focus: () => fire(on, 'focus'),
@@ -137,4 +142,37 @@ test('a waker that throws does not stop the others', () => {
     R.simulate(true); R.simulate(false);
   } finally { console.error = err; }
   assert.equal(ran, 1);
+});
+
+// The campaign's reduce switch and a person's own Calmer choice hold the clock
+// at rest for good, so every loop reading it stays still.
+for (const [name, attrs] of [
+  ['the campaign reduce switch', { 'data-cz-reduce': '1' }],
+  ['the personal Calmer choice', { 'data-view-motion': 'calm' }],
+]) {
+  test(`${name} holds the clock still from the first frame, whatever the viewer does`, () => {
+    const { R, advance, input } = load(attrs);
+    assert.equal(R.speed(), 0);
+    assert.equal(R.still(), true);
+    advance(2); input(); advance(2);
+    assert.equal(R.speed(), 0, 'input does not wake it');
+    assert.equal(R.still(), true);
+  });
+}
+
+test('data-view-motion other than calm leaves motion running', () => {
+  const { R } = load({ 'data-view-motion': 'owner' });
+  assert.equal(R.speed(), 1);
+});
+
+test('switching Calmer on after load eases the clock to rest, and off again wakes it', () => {
+  const { R, advance, attrs, attrChanged } = load();
+  advance(1);
+  assert.equal(R.speed(), 1);
+  attrs['data-view-motion'] = 'calm'; attrChanged();
+  advance(3);
+  assert.equal(R.still(), true);
+  delete attrs['data-view-motion']; attrChanged();
+  advance(2);
+  assert.equal(R.speed(), 1);
 });

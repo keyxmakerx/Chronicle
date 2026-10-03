@@ -4080,6 +4080,17 @@ func (a *App) RegisterRoutes() {
 			ctx = layouts.SetUserAvatarPath(ctx, session.AvatarPath)
 			ctx = layouts.SetIsAdmin(ctx, session.IsAdmin)
 
+			// The person's own look. HTMX swaps never replace <html>, so only
+			// full-page renders need it. A failed read leaves the default look
+			// rather than failing the page.
+			if !middleware.IsHTMX(c) {
+				if vp, err := authService.GetViewPrefs(ctx, session.UserID); err == nil {
+					ctx = layouts.SetViewPrefs(ctx, &layouts.ViewPrefsData{Theme: vp.Theme, Motion: vp.Motion, TextSize: vp.TextSize, Contrast: vp.Contrast})
+				} else {
+					slog.Warn("reading view prefs", slog.String("user_id", session.UserID), slog.Any("error", err))
+				}
+			}
+
 			// Inject degraded plugin count for admin sidebar badge.
 			if session.IsAdmin {
 				ctx = layouts.SetDegradedPluginCount(ctx, len(a.PluginHealth.DegradedPlugins()))

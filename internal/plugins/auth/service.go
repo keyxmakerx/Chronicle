@@ -105,6 +105,8 @@ type AuthService interface {
 	// User profile.
 	GetUser(ctx context.Context, userID string) (*User, error)
 	UpdateTimezone(ctx context.Context, userID, timezone string) error
+	GetViewPrefs(ctx context.Context, userID string) (ViewPrefs, error)
+	UpdateViewPrefs(ctx context.Context, userID string, input UpdateViewPrefsInput) (ViewPrefs, error)
 	UpdateDisplayName(ctx context.Context, userID, displayName string) error
 	UpdateAvatarPath(ctx context.Context, userID string, avatarPath *string) error
 	ChangePassword(ctx context.Context, userID, currentPassword, newPassword string) error
@@ -949,6 +951,37 @@ func (s *authService) UpdateTimezone(ctx context.Context, userID, timezone strin
 		}
 	}
 	return s.repo.UpdateTimezone(ctx, userID, timezone)
+}
+
+// GetViewPrefs returns the person's own viewing choices, defaults filled in.
+func (s *authService) GetViewPrefs(ctx context.Context, userID string) (ViewPrefs, error) {
+	raw, err := s.repo.GetViewPrefs(ctx, userID)
+	if err != nil {
+		return DefaultViewPrefs(), err
+	}
+	return ParseViewPrefs(raw), nil
+}
+
+// UpdateViewPrefs merges a partial change into the person's stored choices
+// and returns the result. Only this user's row is written; campaign settings
+// and other members are never touched.
+func (s *authService) UpdateViewPrefs(ctx context.Context, userID string, input UpdateViewPrefsInput) (ViewPrefs, error) {
+	cur, err := s.GetViewPrefs(ctx, userID)
+	if err != nil {
+		return cur, err
+	}
+	next, err := input.ApplyTo(cur)
+	if err != nil {
+		return cur, err
+	}
+	raw, err := json.Marshal(next)
+	if err != nil {
+		return cur, apperror.NewInternal(err)
+	}
+	if err := s.repo.SetViewPrefs(ctx, userID, raw); err != nil {
+		return cur, err
+	}
+	return next, nil
 }
 
 // UpdateDisplayName sets the user's display name with validation.

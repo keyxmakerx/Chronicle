@@ -65,7 +65,13 @@
   var IDLE_S = 1 / 12;
 
   function reducedMotion() {
-    try { return !!(window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches); }
+    // Either reduce switch counts too: the campaign's (data-cz-reduce) and the
+    // person's own Calmer choice (data-view-motion), so the sky holds still.
+    try {
+      var root = document.documentElement;
+      return !!(window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches) ||
+        root.hasAttribute('data-cz-reduce') || root.getAttribute('data-view-motion') === 'calm';
+    }
     catch (e) { return false; }
   }
 
