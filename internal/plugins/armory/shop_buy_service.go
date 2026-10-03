@@ -22,7 +22,10 @@ import (
 )
 
 const (
-	noCoinFieldMessage   = "This sheet has no coin field"
+	noCoinFieldMessage = "This sheet has no coin field"
+	// Wealth (Draw Steel) is a standing, not a purse; how shops use it is
+	// still being decided, so it is never spent like coins.
+	wealthMessage        = "Wealth isn’t spent like coins"
 	notEnoughCoinMessage = "Not enough coin"
 	mixedCurrencyMessage = "Items are priced in different currencies"
 	// buyClosedMessage is shown to a player while downtime is closed. Only the
@@ -194,6 +197,9 @@ func (s *shopBuyService) Buy(ctx context.Context, campaignID, shopEntityID strin
 	}
 	if buyer.MoneyKey == "" {
 		return nil, apperror.NewBadRequest(noCoinFieldMessage)
+	}
+	if buyer.MoneyKey == "wealth" {
+		return nil, apperror.NewBadRequest(wealthMessage)
 	}
 
 	unlock := s.stash.locks.lock(campaignID)
