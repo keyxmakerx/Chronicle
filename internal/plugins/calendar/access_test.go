@@ -95,6 +95,10 @@ func (g guardCampaignSvc) GetMember(_ context.Context, _, userID string) (*campa
 // (role, user id, anonymity) straight from the HTTP request.
 type fakeCalendarSvc struct {
 	lastViewer permissions.Viewer
+	// weather is what GetWeatherSettings reports (defaults when nil);
+	// savedWeather records the last SetWeatherSettings.
+	weather      *WeatherSettings
+	savedWeather *WeatherSettings
 }
 
 const secretCalendarID = "cal-secret"
@@ -203,6 +207,17 @@ func (f *fakeCalendarSvc) ListDayWeather(context.Context, string, string, int, i
 	return nil, nil
 }
 func (f *fakeCalendarSvc) SetDayWeather(context.Context, string, string, []DayWeatherInput) error {
+	return nil
+}
+func (f *fakeCalendarSvc) GetWeatherSettings(context.Context, string, string, permissions.Viewer) (*WeatherSettings, error) {
+	if f.weather != nil {
+		w := *f.weather
+		return &w, nil
+	}
+	return &WeatherSettings{Climate: DefaultWeatherClimate, Continuity: DefaultWeatherContinuity}, nil
+}
+func (f *fakeCalendarSvc) SetWeatherSettings(_ context.Context, _, _ string, s WeatherSettings) error {
+	f.savedWeather = &s
 	return nil
 }
 func (f *fakeCalendarSvc) ClearDayWeather(context.Context, string, string, []DayDate) error {
@@ -475,6 +490,7 @@ func TestRouteGates_StructureWritesCanAuthorDmOnly(t *testing.T) {
 		{"update era", http.MethodPut, "/campaigns/camp-1/calendars/cal-1/eras/1", http.StatusOK},
 		{"delete era", http.MethodDelete, "/campaigns/camp-1/calendars/cal-1/eras/1", http.StatusOK},
 		{"set moon hidden", http.MethodPut, "/campaigns/camp-1/calendars/cal-1/moons/1/hidden", http.StatusOK},
+		{"read weather settings", http.MethodGet, "/campaigns/camp-1/calendars/cal-1/weather/settings", http.StatusOK},
 	}
 
 	const userID = "u-caller"

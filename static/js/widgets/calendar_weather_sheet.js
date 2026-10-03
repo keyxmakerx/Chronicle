@@ -61,13 +61,40 @@
     this.state = null;
     this._climate = 'temperate';
     this._continuity = 0.55;
+    // The owner's own kinds of weather, from Calendar settings.
+    this._kinds = [];
+    // Set once the owner changes the climate or continuity here, so the
+    // calendar's own settings stop replacing them for this page.
+    this._picked = false;
     this._bind();
   }
+
+  // ownKinds keeps the kinds the generator accepts, so one bad stored kind
+  // costs only itself rather than failing every run.
+  function ownKinds(list) {
+    if (!Array.isArray(list)) return [];
+    var check = window.ChronicleGen.weather.validateKind;
+    return list.filter(function (k) { return check(k, list).ok; });
+  }
+
+  // _useSettings starts the sheet from the calendar's Weather settings
+  // (climate, how long weather lasts, own kinds), or keeps the defaults when
+  // they could not be read.
+  Sheet.prototype._useSettings = function (s) {
+    if (!s) return;
+    this._kinds = ownKinds(s.kinds);
+    if (this._picked) return;
+    var known = window.ChronicleGen.weather.climates().some(function (c) { return c.id === s.climate; });
+    var cont = +s.continuity;
+    if (known) this._climate = s.climate;
+    if (isFinite(cont) && cont >= 0 && cont <= 1) this._continuity = cont;
+  };
 
   Sheet.prototype.isOpen = function () { return this.el.classList.contains('open'); };
 
   // opts: {dates: [{year, month, day}], stored: {'y_m_d': reading} for
-  // every loaded day of the years touched, apply: function (days) -> Promise}.
+  // every loaded day of the years touched, settings: the calendar's Weather
+  // settings or null, apply: function (days) -> Promise}.
   Sheet.prototype.open = function (opts) {
     var view = this.view, back = document.activeElement;
     view.closeAllPanels({ instant: true });
@@ -83,6 +110,7 @@
       context: Object.keys(stored).filter(function (k) { return !inScope[k]; }).map(function (k) { return asEngineDay(stored[k]); }),
       seed: randomSeed(), nonce: 0, kept: {}, days: {}, summary: '', warnings: [], error: null, showAll: false, busy: false
     };
+    this._useSettings(opts.settings);
     this._generate();
     this._render();
     void this.el.offsetWidth;
@@ -114,7 +142,7 @@
   // would refuse the run); Apply still leaves that day alone.
   Sheet.prototype._locks = function (keepKept) {
     var S = this.state, self = this, known = {};
-    window.ChronicleGen.weather.presets().forEach(function (p) { known[p.id] = true; });
+    window.ChronicleGen.weather.presets(this._kinds).forEach(function (p) { known[p.id] = true; });
     return S.dates.map(dkey).filter(function (k) {
       return self._isPainted(k) || (keepKept && S.kept[k] && S.days[k]);
     }).map(function (k) {
@@ -129,7 +157,7 @@
     try {
       var res = window.ChronicleGen.run('weather', {
         calendar: view.cal, recipe: this._recipe(), seed: S.seed,
-        scope: { days: S.dates }, locked: this._locks(true), context: { weather: S.context }
+        scope: { days: S.dates }, locked: this._locks(true), context: { weather: S.context }, kinds: this._kinds
       });
       this._take(res.days);
       S.summary = res.summary;
@@ -163,7 +191,7 @@
       var rr = window.ChronicleGen.mass.reroll({
         generator: 'weather', calendar: view.cal, recipe: this._recipe(), seed: S.seed,
         scope: { days: targets.map(function (k) { var p = k.split('_').map(Number); return { year: p[0], month: p[1], day: p[2] }; }) },
-        existing: existing, nonce: 'r' + (++S.nonce)
+        existing: existing, nonce: 'r' + (++S.nonce), kinds: this._kinds
       });
       var fresh = {};
       targets.forEach(function (k) { fresh[k] = true; });
@@ -317,8 +345,8 @@
     el.addEventListener('change', function (e) {
       var S = self.state, t = e.target;
       if (!S || S.busy) return;
-      if (t.id === 'cal5-gsClim') self._climate = t.value;
-      else if (t.id === 'cal5-gsCont') self._continuity = +t.value;
+      if (t.id === 'cal5-gsClim') { self._climate = t.value; self._picked = true; }
+      else if (t.id === 'cal5-gsCont') { self._continuity = +t.value; self._picked = true; }
       else if (t.id === 'cal5-gsSeed') S.seed = t.value.trim() || randomSeed();
       else return;
       self._generate();
@@ -345,6 +373,22 @@
   };
 
   window.Chronicle = window.Chronicle || {};
+  // calendarWeatherSettings reads the calendar's Weather settings once per
+  // page for the paint tray and the Generate sheet; resolves null (and asks
+  // again next time) when they can't be read. Calendar settings is its own
+  // page, so a change there reloads this one.
+  Chronicle.calendarWeatherSettings = function (view) {
+    if (!view._wxSettings) {
+      view._wxSettings = Chronicle.apiFetch(view.apiBase + '/weather/settings').then(function (resp) {
+        return resp.ok ? resp.json() : null;
+      }).catch(function () { return null; }).then(function (s) {
+        if (!s) view._wxSettings = null;
+        return s;
+      });
+    }
+    return view._wxSettings;
+  };
+  Chronicle.calendarWeatherOwnKinds = ownKinds;
   Chronicle.calendarWeatherSheet = {
     open: function (view, opts) {
       if (!view._weatherSheet) view._weatherSheet = new Sheet(view);
@@ -352,5 +396,5 @@
     },
     isOpen: function (view) { return !!(view._weatherSheet && view._weatherSheet.isOpen()); }
   };
-  if (typeof module !== 'undefined' && module.exports) module.exports = { Sheet: Sheet, continuityWords: continuityWords, asEngineDay: asEngineDay };
+  if (typeof module !== 'undefined' && module.exports) module.exports = { Sheet: Sheet, continuityWords: continuityWords, asEngineDay: asEngineDay, ownKinds: ownKinds };
 })();

@@ -685,7 +685,7 @@
   // Undo puts back exactly what the days held before the last paint or clear.
   // ------------------------------------------------------------------
   var PAINT_COMMON = ['clear', 'partly-cloudy', 'cloudy', 'rain', 'snow', 'fog'];
-  var PAINT_GROUPS = [['Standard', 'Common'], ['Severe', 'Stormy'], ['Environmental', 'Nature'], ['Fantasy', 'Magic'], ['Yours', 'Yours']];
+  var PAINT_GROUPS = [['Yours', 'Yours'], ['Standard', 'Common'], ['Severe', 'Stormy'], ['Environmental', 'Nature'], ['Fantasy', 'Magic']];
 
   // loadEngine runs cb once chronicle_gen.js is on the page, injecting it
   // the first time; onFail runs if it cannot load.
@@ -746,10 +746,14 @@
       if (e.target.closest('[data-paint-undo]')) self._undoPaint();
     });
     loadEngine(view.engineSrc, function () {
-      if (self._paintTray !== tray) return;
-      self._presets = {};
-      window.ChronicleGen.weather.presets().forEach(function (p) { self._presets[p.id] = p; });
-      self._renderPalette();
+      Chronicle.calendarWeatherSettings(view).then(function (s) {
+        if (self._paintTray !== tray) return;
+        var kinds = Chronicle.calendarWeatherOwnKinds(s && s.kinds);
+        self._presets = {};
+        self._paintOwn = kinds.map(function (k) { return k.id; });
+        window.ChronicleGen.weather.presets(kinds).forEach(function (p) { self._presets[p.id] = p; });
+        self._renderPalette();
+      });
     }, function () {
       if (self._paintTray !== tray) return;
       $('#cal5-pal', tray).innerHTML = '<span class="trnote">The weather list could not load. Check your connection and try again.</span>';
@@ -765,13 +769,18 @@
     var self = this, pal = this._paintTray && $('#cal5-pal', this._paintTray);
     if (!pal || !this._presets) return;
     this._paintAdded = this._paintAdded || [];
-    var ids = PAINT_COMMON.concat(this._paintAdded.filter(function (id) { return PAINT_COMMON.indexOf(id) < 0; }));
+    var own = this._paintOwn || [];
+    var ids = PAINT_COMMON.concat(this._paintAdded.filter(function (id) { return PAINT_COMMON.indexOf(id) < 0 && own.indexOf(id) < 0; }));
+    var button = function (id) {
+      var p = self._presets[id];
+      return p ? paintButtonHTML(p, id === self._paintLast, PAINT_COMMON.indexOf(id) < 0 && own.indexOf(id) < 0) : '';
+    };
     pal.setAttribute('role', 'radiogroup');
     pal.setAttribute('aria-label', 'Weather');
-    pal.innerHTML = ids.map(function (id) {
-      var p = self._presets[id];
-      return p ? paintButtonHTML(p, id === self._paintLast, PAINT_COMMON.indexOf(id) < 0) : '';
-    }).join('') + '<button type="button" class="pmore" data-pmore aria-expanded="' + !!this._paintMore + '"><i class="fa-solid fa-ellipsis i" aria-hidden="true"></i>More weather…</button>';
+    // The owner's own kinds lead the palette under their own heading
+    // (Calendar settings → Weather), the built-in common ones follow.
+    pal.innerHTML = (own.length ? '<span class="trgh" aria-hidden="true">Yours</span>' + own.map(button).join('') + '<span class="trgh" aria-hidden="true">Common</span>' : '') +
+      ids.map(button).join('') + '<button type="button" class="pmore" data-pmore aria-expanded="' + !!this._paintMore + '"><i class="fa-solid fa-ellipsis i" aria-hidden="true"></i>More weather…</button>';
     pal.classList.add('trrow');
   };
 
@@ -975,14 +984,14 @@
     this._closeShiftTray();
     var fail = function () { view.say('The weather generator could not load. Check your connection and try again.'); };
     loadEngine(view.engineSrc, function () {
-      self._snapshot(dates).then(function () {
+      Promise.all([self._snapshot(dates), Chronicle.calendarWeatherSettings(view)]).then(function (got) {
         var stored = {};
         yearsOf(dates).forEach(function (y) {
           var byDay = view.weatherByYear[y] || {};
           Object.keys(byDay).forEach(function (md) { stored[y + '_' + md] = byDay[md]; });
         });
         Chronicle.calendarWeatherSheet.open(view, {
-          dates: dates, stored: stored,
+          dates: dates, stored: stored, settings: got[1],
           apply: function (days) { return self._applyGenerated(days); }
         });
       }).catch(function () { view.say("Couldn't load the weather already on those days. Try again."); });
