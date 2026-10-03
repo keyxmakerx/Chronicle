@@ -1399,7 +1399,7 @@
       if (t.dataset.reset){ resetSection(t.dataset.reset); return; }
       if (t.dataset.pick){ if (pick && pick.btn === t) closePicker(true); else { if (pick) closePicker(false); openPicker(t); } return; }
       if (t.dataset.up){ upKey = t.dataset.up; $('#file').value = ''; $('#file').click(); return; }
-      if (t.dataset.rm){ setP(draft, t.dataset.rm, 'none'); $('#' + t.dataset.rm.replace('.', '-') + '-e').hidden = true; update(); announce('Picture removed from your draft.'); return; }
+      if (t.dataset.rm){ setP(draft, t.dataset.rm, 'none'); $('#' + t.dataset.rm.replace('.', '-') + '-e').hidden = true; update(); tidyPictures(); announce('Picture removed from your draft.'); return; }
       if (t.dataset.wact){ widgetAct(t.dataset.wact, t.dataset.w, t); return; }
       switch (t.id){
         case 'savebtn': doSave(); break;
@@ -1657,7 +1657,7 @@
       if (mo) mo.disconnect();
       ringAnims.forEach(function (a) { a.forEach(function (x) { x.cancel(); }); });
       clearTimeout(toastT); clearTimeout(hcTimer);
-      cancelAnimationFrame(fzRaf);
+      cancelAnimationFrame(fzRaf); clearTimeout(discardT);
       playTimers.forEach(clearTimeout);
     };
   }
