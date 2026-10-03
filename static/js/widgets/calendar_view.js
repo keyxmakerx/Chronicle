@@ -982,6 +982,7 @@
       this.view = { y: this.cal.current_year || 1, m: this.cal.current_month || 1 };
       this.rm = reducedMotion();
       this.wingFor = null; // key of the day whose wing is open, or null
+      this._wingStale = null; // the open day's card, redrawn once it finishes unfolding
       this.selection = {}; // edit-mode multi-select, keyed by dayKey -> true
 
       this._buildShell();
@@ -1706,9 +1707,12 @@
       }).join('') + '</span>';
     },
 
+    // The band is "everyone who has painted hours is free": a player who
+    // never answered would otherwise hide it on every day of the month.
     _bandHTML: function (data, cls) {
-      if (!data.total) return '';
-      return this._freeRuns(data.hours, data.total).map(function (r) {
+      var k = data.detail ? data.members.filter(function (mem) { return mem.answered; }).length : data.total;
+      if (!k) return '';
+      return this._freeRuns(data.hours, k).map(function (r) {
         return '<span class="' + cls + '" style="left:' + (r[0] / 0.24).toFixed(2) + '%;width:' + ((r[1] - r[0]) / 0.24).toFixed(2) + '%"></span>';
       }).join('');
     },
@@ -1758,7 +1762,7 @@
       if (!data) {
         // Read the week, then redraw this card if it is still open on it.
         var key = dayKey(d.y, d.m, d.d);
-        if (iso) this.fetchFreeWeek(isoMonday(iso)).then(function () { if (self.wingFor === key && self.freeByDate[iso]) self.refreshWing(); });
+        if (iso) this.fetchFreeWeek(isoMonday(iso)).then(function () { if (self.wingFor === key && self.freeByDate[iso]) self._refreshWingOnceOpen(); });
         return '';
       }
       var mine = '<a class="lnk" href="/campaigns/' + encodeURIComponent(this.campaignId) + '/availability">Change my hours</a>';
@@ -2325,6 +2329,7 @@
       this._updateScrim();
       openCard(P, this.calEl).then(function (ok) {
         if (!ok) return;
+        if (self._wingStale === self.wingFor) { self._wingStale = null; self.refreshWing(); }
         self.wingEl.focus({ preventScroll: true });
         if (row && row.isConnected) row.classList.add('pulse');
         var n = P.next; P.next = null; if (n) n();
@@ -2352,6 +2357,13 @@
 
     // Redraws the open card's words in place (after an edit or a fetch
     // re-renders the month), keeping where its list was scrolled to.
+    // A read that lands while the card is still unfolding would be dropped
+    // by refreshWing, so it waits for the card to finish opening instead.
+    _refreshWingOnceOpen: function () {
+      if (this._pw.state === 'opening') this._wingStale = this.wingFor;
+      else this.refreshWing();
+    },
+
     refreshWing: function () {
       // Never under a form being filled in: its own save refreshes after.
       if (!this.wingFor || this._pw.state !== 'open' || this.wingEl.querySelector('form')) return;

@@ -337,6 +337,12 @@ test('the band marks only the hours when everyone is free', () => {
   assert.doesNotMatch(v._freeCellHTML(2026, 10, 9), /class="fband"/);
 });
 
+test('a player who never painted hours does not hide the band', () => {
+  const { def } = load();
+  const v = freeView(def, overlay());
+  assert.match(v._freeCellHTML(2026, 10, 8), /class="fband" style="left:79\.17%;width:12\.50%"/, 'Dee has not answered');
+});
+
 test('hovering names each player and their hours', () => {
   const { def } = load();
   const v = freeView(def, overlay());
@@ -385,4 +391,19 @@ test('the month reads the weeks its days fall in, in the calendar zone', async (
   assert.match(calls[0].url, /tz=America%2FChicago/);
   await v.fetchFreeMonth(2026, 10);
   assert.equal(calls.length, 5, 'a week is read once');
+});
+
+test('a week read that lands while the day card unfolds redraws it once open', () => {
+  const { def } = load();
+  const v = freeView(def, overlay());
+  let redraws = 0;
+  v.refreshWing = () => { redraws++; };
+  v.wingFor = '2026_10_8';
+  v._pw = { state: 'opening' };
+  v._refreshWingOnceOpen();
+  assert.equal(redraws, 0, 'not while unfolding');
+  assert.equal(v._wingStale, '2026_10_8', 'remembered for when it opens');
+  v._pw.state = 'open';
+  v._refreshWingOnceOpen();
+  assert.equal(redraws, 1);
 });
