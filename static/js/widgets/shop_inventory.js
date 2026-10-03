@@ -276,7 +276,7 @@ Chronicle.register('shop_inventory', {
 
     function renderItem(item) {
       var meta = item.metadata || {};
-      var isCustom = !item.targetEntityID;
+      var isCustom = !item.targetEntityId;
       var row = document.createElement('div');
       row.className = 'shop-inv-item';
 
@@ -307,7 +307,7 @@ Chronicle.register('shop_inventory', {
       } else {
         var nameLink = document.createElement('a');
         nameLink.className = 'shop-inv-item-name';
-        nameLink.href = campaignUrl + '/entities/' + item.targetEntitySlug;
+        nameLink.href = campaignUrl + '/entities/' + item.targetEntityId;
         nameLink.setAttribute('data-hx-boost', 'true');
         nameLink.textContent = item.targetEntityName;
         info.appendChild(nameLink);
@@ -517,7 +517,7 @@ Chronicle.register('shop_inventory', {
       for (var i = 0; i < state.searchResults.length; i++) {
         var result = state.searchResults[i];
         // Skip items already in inventory.
-        var alreadyAdded = state.items.some(function (item) { return item.targetEntityID === result.id; });
+        var alreadyAdded = state.items.some(function (item) { return item.targetEntityId === result.id; });
         if (alreadyAdded) continue;
 
         var row = document.createElement('div');
@@ -600,6 +600,7 @@ Chronicle.register('shop_inventory', {
         })
         .catch(function (err) {
           console.error('Shop inventory: failed to add item', err);
+          Chronicle.notify('Could not add the item to the shop.', 'error');
         });
     }
 
@@ -613,6 +614,7 @@ Chronicle.register('shop_inventory', {
         })
         .catch(function (err) {
           console.error('Shop inventory: failed to remove item', err);
+          Chronicle.notify('Could not remove the item from the shop.', 'error');
         });
     }
 
@@ -621,8 +623,12 @@ Chronicle.register('shop_inventory', {
         method: 'PUT',
         body: { metadata: meta },
       })
+        .then(function (res) {
+          if (!res.ok) throw new Error('Failed to save: ' + res.status);
+        })
         .catch(function (err) {
           console.error('Shop inventory: failed to update metadata', err);
+          Chronicle.notify('Could not save the change to this item.', 'error');
         });
     }
 
@@ -633,7 +639,12 @@ Chronicle.register('shop_inventory', {
           return res.json();
         })
         .then(function (data) {
-          state.searchResults = data.results || data || [];
+          // Search also returns maps, timelines and events; only entity pages
+          // can be stocked, since a relation needs an entity on both ends.
+          var results = (data && data.results) || [];
+          state.searchResults = results.filter(function (r) {
+            return typeof r.url === 'string' && r.url.indexOf('/entities/') !== -1;
+          });
           var resultsDiv = el.querySelector('.shop-inv-search-results');
           if (resultsDiv) renderSearchResults(resultsDiv);
         })

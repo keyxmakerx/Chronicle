@@ -60,10 +60,15 @@ func itemIDsWhereAndJoins(campaignID string, itemTypeIDs []int, opts ItemListOpt
 	where = "WHERE e.campaign_id = ? AND e.is_template = false"
 	args = []any{campaignID}
 
-	// Filter by item type IDs (or a specific type if TypeID set).
+	// A specific type narrows the item types but must never widen them: an
+	// arbitrary entity type id would otherwise list non-item entities here.
 	if opts.TypeID > 0 {
-		where += " AND e.entity_type_id = ?"
-		args = append(args, opts.TypeID)
+		if containsInt(itemTypeIDs, opts.TypeID) {
+			where += " AND e.entity_type_id = ?"
+			args = append(args, opts.TypeID)
+		} else {
+			where += " AND 1 = 0"
+		}
 	} else if len(itemTypeIDs) > 0 {
 		placeholders := make([]string, len(itemTypeIDs))
 		for i, id := range itemTypeIDs {
@@ -186,4 +191,14 @@ func scanItemCard(rows *sql.Rows) (*ItemCard, error) {
 		}
 	}
 	return c, nil
+}
+
+// containsInt reports whether v is in xs.
+func containsInt(xs []int, v int) bool {
+	for _, x := range xs {
+		if x == v {
+			return true
+		}
+	}
+	return false
 }

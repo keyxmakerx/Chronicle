@@ -31,9 +31,9 @@ func NewHandler(service SettingsService) *Handler {
 }
 
 // StorageSettings redirects to the combined storage page (GET /admin/storage/settings).
-// Settings are now shown on the unified /admin/storage page under the Limits tab.
+// Limits live on the unified /admin/storage page under the Limits tab.
 func (h *Handler) StorageSettings(c echo.Context) error {
-	return c.Redirect(http.StatusSeeOther, "/admin/storage")
+	return c.Redirect(http.StatusSeeOther, "/admin/storage?tab=limits")
 }
 
 // UpdateStorageSettings saves global storage limits (POST /admin/storage/settings).
@@ -84,7 +84,7 @@ func (h *Handler) UpdateStorageSettings(c echo.Context) error {
 	)
 
 	// Redirect back to the combined storage page.
-	return middleware.HTMXRedirect(c, "/admin/storage")
+	return middleware.HTMXRedirect(c, "/admin/storage?tab=limits")
 }
 
 // SetUserStorageLimit creates or updates a per-user storage override
@@ -126,7 +126,7 @@ func (h *Handler) SetUserStorageLimit(c echo.Context) error {
 
 	h.recordActivity(c, "storage.user_limit_set", "user", userID, "")
 
-	return middleware.HTMXRedirect(c, "/admin/storage")
+	return middleware.HTMXRedirect(c, "/admin/storage?tab=limits")
 }
 
 // DeleteUserStorageLimit removes a per-user storage override
@@ -148,7 +148,7 @@ func (h *Handler) DeleteUserStorageLimit(c echo.Context) error {
 
 	h.recordActivity(c, "storage.user_limit_removed", "user", userID, "")
 
-	return middleware.HTMXRedirect(c, "/admin/storage")
+	return middleware.HTMXRedirect(c, "/admin/storage?tab=limits")
 }
 
 // SetCampaignStorageLimit creates or updates a per-campaign storage override
@@ -188,7 +188,7 @@ func (h *Handler) SetCampaignStorageLimit(c echo.Context) error {
 
 	h.recordActivity(c, "storage.campaign_limit_set", "campaign", campaignID, "")
 
-	return middleware.HTMXRedirect(c, "/admin/storage")
+	return middleware.HTMXRedirect(c, "/admin/storage?tab=limits")
 }
 
 // DeleteCampaignStorageLimit removes a per-campaign storage override
@@ -210,7 +210,7 @@ func (h *Handler) DeleteCampaignStorageLimit(c echo.Context) error {
 
 	h.recordActivity(c, "storage.campaign_limit_removed", "campaign", campaignID, "")
 
-	return middleware.HTMXRedirect(c, "/admin/storage")
+	return middleware.HTMXRedirect(c, "/admin/storage?tab=limits")
 }
 
 // --- Temporary Bypass Handlers ---
@@ -255,7 +255,7 @@ func (h *Handler) SetUserBypass(c echo.Context) error {
 
 	h.recordActivity(c, "storage.user_bypass_set", "user", userID, "")
 
-	return middleware.HTMXRedirect(c, "/admin/storage")
+	return middleware.HTMXRedirect(c, "/admin/storage?tab=limits")
 }
 
 // ClearUserBypass removes a temporary bypass from a user's storage limits
@@ -277,7 +277,7 @@ func (h *Handler) ClearUserBypass(c echo.Context) error {
 
 	h.recordActivity(c, "storage.user_bypass_cleared", "user", userID, "")
 
-	return middleware.HTMXRedirect(c, "/admin/storage")
+	return middleware.HTMXRedirect(c, "/admin/storage?tab=limits")
 }
 
 // SetCampaignBypass sets a temporary bypass on a campaign's storage limits
@@ -330,7 +330,7 @@ func (h *Handler) SetCampaignBypass(c echo.Context) error {
 
 	h.recordActivity(c, "storage.campaign_bypass_set", "campaign", campaignID, "")
 
-	return middleware.HTMXRedirect(c, "/admin/storage")
+	return middleware.HTMXRedirect(c, "/admin/storage?tab=limits")
 }
 
 // ClearCampaignBypass removes a temporary bypass from a campaign's storage limits
@@ -352,7 +352,7 @@ func (h *Handler) ClearCampaignBypass(c echo.Context) error {
 
 	h.recordActivity(c, "storage.campaign_bypass_cleared", "campaign", campaignID, "")
 
-	return middleware.HTMXRedirect(c, "/admin/storage")
+	return middleware.HTMXRedirect(c, "/admin/storage?tab=limits")
 }
 
 // GetCORSOrigins returns the current CORS origin whitelist as JSON

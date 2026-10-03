@@ -101,6 +101,11 @@ type Message struct {
 	SenderID   string          `json:"senderId,omitempty"`   // Connection ID of sender (for echo suppression).
 	Payload    json.RawMessage `json:"payload,omitempty"`    // Type-specific data.
 
+	// Seq is the change-feed sequence number, stamped by the recording bus for
+	// allowlisted types. A client that tracks the highest seq it has seen can
+	// resume from GET /sync/changes?since=<seq> after a dropped connection.
+	Seq int64 `json:"seq,omitempty"`
+
 	// RequiresDM marks a message that must only be delivered to clients
 	// with DM-equivalent visibility (campaign Owner or IsDmGranted=true).
 	// Set by emitters whose source row carries dm_only / hidden state (a

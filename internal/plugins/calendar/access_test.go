@@ -136,6 +136,12 @@ func (f *fakeCalendarSvc) GetEventForViewer(_ context.Context, eventID, calendar
 	}
 	return &Event{ID: eventID, CalendarID: calendarID, Name: "The Secret Event"}, nil
 }
+func (f *fakeCalendarSvc) ListEventsByIDsForViewer(context.Context, string, string, []string, permissions.Viewer) ([]Event, error) {
+	return nil, nil
+}
+func (f *fakeCalendarSvc) GetCalendarNameForViewer(context.Context, string, string, permissions.Viewer) (string, error) {
+	return "", nil
+}
 func (f *fakeCalendarSvc) ListEventsForMonth(_ context.Context, calendarID, _ string, _, _ int, v permissions.Viewer) ([]Event, error) {
 	f.lastViewer = v
 	return []Event{{ID: "evt-1", CalendarID: calendarID}}, nil
@@ -231,6 +237,12 @@ func (f *fakeCalendarSvc) PreviewRealWorld(context.Context) (*ImportResult, erro
 func (f *fakeCalendarSvc) TodayInZone(string) (int, int, int, error) { return 2026, 1, 1, nil }
 func (f *fakeCalendarSvc) CreateCalendarFromImport(_ context.Context, campaignID string, ir *ImportResult, _ CreateCalendarFromImportOptions) (*Calendar, error) {
 	return &Calendar{ID: "cal-imported", CampaignID: campaignID, Name: ir.CalendarName}, nil
+}
+func (f *fakeCalendarSvc) PreviewStructureEdit(context.Context, string, string, StructureEdit) (*StructurePreview, error) {
+	return &StructurePreview{CalendarName: "The Secret Calendar", Fingerprint: "fp"}, nil
+}
+func (f *fakeCalendarSvc) ApplyStructureEdit(context.Context, string, string, string, StructureEdit) (*StructurePreview, error) {
+	return &StructurePreview{CalendarName: "The Secret Calendar", Fingerprint: "fp"}, nil
 }
 func (f *fakeCalendarSvc) PreviewAnchorMove(context.Context, string, string, int, int, int, time.Time) (*AnchorMovePreview, error) {
 	return &AnchorMovePreview{}, nil

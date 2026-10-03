@@ -5,173 +5,27 @@ import (
 	"github.com/keyxmakerx/chronicle/internal/templates/layouts"
 )
 
-// AdminDashboardPage renders the admin overview with high-level stats.
-templ AdminDashboardPage(userCount, campaignCount, mediaFileCount int, totalStorageBytes int64, smtpConfigured bool, addonCount int, securityStats *SecurityStats, degradedPlugins []string, pendingSubmissions, registeredSystems, failedSystems int, needs []NeedsItem, recent []ActivityEntry) {
-	@layouts.App("Admin Dashboard") {
+// AdminDashboardPage renders the admin overview: what needs attention, then one
+// row of tiles per admin menu section.
+templ AdminDashboardPage(groups []HomeGroup, needs []NeedsItem, recent []ActivityEntry) {
+	@layouts.App("Home - Admin") {
 		<div class="max-w-5xl mx-auto space-y-6">
-			<h1 class="text-2xl font-bold text-fg">Admin Dashboard</h1>
+			<h1 class="text-2xl font-bold text-fg">Home</h1>
 
 			@needsYouCard(needs)
 
-			// -- Content --
-			<div>
-				<h2 class="text-xs font-semibold uppercase tracking-wider text-fg-muted mb-3">Content</h2>
-				<div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-					<a href="/admin/users" class="card hover:shadow-md transition-shadow group">
-						<div class="flex items-center justify-between">
-							<p class="text-sm font-medium text-fg-secondary">Users</p>
-							<span class="w-10 h-10 rounded-lg bg-accent/10 flex items-center justify-center">
-								<i class="fa-solid fa-users text-accent"></i>
-							</span>
-						</div>
-						<p class="text-3xl font-bold text-fg mt-2">{ fmt.Sprintf("%d", userCount) }</p>
-						<p class="text-xs text-fg-muted mt-1 group-hover:text-accent transition-colors">Manage users &rarr;</p>
-					</a>
-					<a href="/admin/campaigns" class="card hover:shadow-md transition-shadow group">
-						<div class="flex items-center justify-between">
-							<p class="text-sm font-medium text-fg-secondary">Campaigns</p>
-							<span class="stat-icon-blue"><i class="fa-solid fa-book-open"></i></span>
-						</div>
-						<p class="text-3xl font-bold text-fg mt-2">{ fmt.Sprintf("%d", campaignCount) }</p>
-						<p class="text-xs text-fg-muted mt-1 group-hover:text-accent transition-colors">Manage campaigns &rarr;</p>
-					</a>
-					<a href="/admin/addons" class="card hover:shadow-md transition-shadow group">
-						<div class="flex items-center justify-between">
-							<p class="text-sm font-medium text-fg-secondary">Features</p>
-							<span class="stat-icon-teal"><i class="fa-solid fa-plug"></i></span>
-						</div>
-						<p class="text-3xl font-bold text-fg mt-2">{ fmt.Sprintf("%d", addonCount) }</p>
-						<p class="text-xs text-fg-muted mt-1 group-hover:text-accent transition-colors">Manage features &rarr;</p>
-					</a>
-					<a href="/admin/packages" class="card hover:shadow-md transition-shadow group">
-						<div class="flex items-center justify-between">
-							<p class="text-sm font-medium text-fg-secondary">Packages</p>
-							<span class="stat-icon-emerald"><i class="fa-solid fa-box"></i></span>
-						</div>
-						if pendingSubmissions > 0 {
-							<p class="text-lg font-semibold text-amber-600 dark:text-amber-400 mt-2">{ fmt.Sprintf("%d", pendingSubmissions) } pending</p>
-						} else {
-							<p class="text-lg font-semibold text-fg mt-2">Package Manager</p>
+			for _, g := range groups {
+				<div>
+					<h2 class="text-xs font-semibold uppercase tracking-wider text-fg-muted mb-3">{ g.Label }</h2>
+					<div class="grid grid-cols-2 lg:grid-cols-3 gap-3 sm:gap-4">
+						for _, t := range g.Tiles {
+							@homeTile(t)
 						}
-						<p class="text-xs text-fg-muted mt-1 group-hover:text-accent transition-colors">Manage packages &amp; Foundry module &rarr;</p>
-					</a>
-					<a href="/admin/systems" class="card hover:shadow-md transition-shadow group">
-						<div class="flex items-center justify-between">
-							<p class="text-sm font-medium text-fg-secondary">Game Systems</p>
-							<span class="stat-icon-purple"><i class="fa-solid fa-microchip"></i></span>
-						</div>
-						<p class="text-3xl font-bold text-fg mt-2">{ fmt.Sprintf("%d", registeredSystems) }</p>
-						if failedSystems > 0 {
-							<p class="text-xs text-amber-600 dark:text-amber-400 mt-1">{ fmt.Sprintf("%d", failedSystems) } failed</p>
-						} else if registeredSystems > 0 {
-							<p class="text-xs text-emerald-600 dark:text-emerald-400 mt-1">All loaded</p>
-						} else {
-							<p class="text-xs text-fg-muted mt-1">None installed</p>
-						}
-						<p class="text-xs text-fg-muted group-hover:text-accent transition-colors">Diagnostics &rarr;</p>
-					</a>
-					<a href="/admin/diagnostics/workspace" class="card hover:shadow-md transition-shadow group">
-						<div class="flex items-center justify-between">
-							<p class="text-sm font-medium text-fg-secondary">Diagnostics</p>
-							<span class="stat-icon-slate"><i class="fa-solid fa-stethoscope"></i></span>
-						</div>
-						<p class="text-lg font-semibold text-fg mt-2">AI Workspace</p>
-						<p class="text-xs text-fg-muted group-hover:text-accent transition-colors">Copy functions, run a batch &rarr;</p>
-					</a>
+					</div>
 				</div>
-			</div>
-
-			// -- Infrastructure --
-			<div>
-				<h2 class="text-xs font-semibold uppercase tracking-wider text-fg-muted mb-3">Infrastructure</h2>
-				<div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-					<a href="/admin/storage" class="card hover:shadow-md transition-shadow group">
-						<div class="flex items-center justify-between">
-							<p class="text-sm font-medium text-fg-secondary">Storage</p>
-							<span class="stat-icon-indigo"><i class="fa-solid fa-hard-drive"></i></span>
-						</div>
-						<p class="text-2xl font-bold text-fg mt-2">{ formatBytes(totalStorageBytes) }</p>
-						<p class="text-xs text-fg-muted mt-1">{ fmt.Sprintf("%d", mediaFileCount) } files</p>
-						<p class="text-xs text-fg-muted group-hover:text-accent transition-colors">Manage storage &rarr;</p>
-					</a>
-					<a href="/admin/database" class="card hover:shadow-md transition-shadow group">
-						<div class="flex items-center justify-between">
-							<p class="text-sm font-medium text-fg-secondary">Database</p>
-							<span class="stat-icon-slate"><i class="fa-solid fa-database"></i></span>
-						</div>
-						if len(degradedPlugins) > 0 {
-							<p class="text-lg font-semibold text-amber-600 dark:text-amber-400 mt-2">{ fmt.Sprintf("%d", len(degradedPlugins)) } degraded</p>
-						} else {
-							<p class="text-lg font-semibold text-emerald-600 dark:text-emerald-400 mt-2">All Healthy</p>
-						}
-						<p class="text-xs text-fg-muted group-hover:text-accent transition-colors">Schema explorer &rarr;</p>
-					</a>
-					<a href="/admin/smtp" class="card hover:shadow-md transition-shadow group">
-						<div class="flex items-center justify-between">
-							<p class="text-sm font-medium text-fg-secondary">SMTP</p>
-							<span class="stat-icon-emerald"><i class="fa-solid fa-envelope"></i></span>
-						</div>
-						if smtpConfigured {
-							<p class="text-lg font-semibold text-emerald-600 dark:text-emerald-400 mt-2">Configured</p>
-						} else {
-							<p class="text-lg font-semibold text-amber-600 dark:text-amber-400 mt-2">Not Configured</p>
-						}
-						<p class="text-xs text-fg-muted mt-1 group-hover:text-accent transition-colors">SMTP settings &rarr;</p>
-					</a>
-					<a href="/admin/api" class="card hover:shadow-md transition-shadow group">
-						<div class="flex items-center justify-between">
-							<p class="text-sm font-medium text-fg-secondary">Sync API</p>
-							<span class="stat-icon-cyan"><i class="fa-solid fa-satellite-dish"></i></span>
-						</div>
-						<p class="text-lg font-semibold text-fg mt-2">API Monitor</p>
-						<p class="text-xs text-fg-muted mt-1 group-hover:text-accent transition-colors">View dashboard &rarr;</p>
-					</a>
-				</div>
-			</div>
-
-			// -- Security & Maintenance --
-			<div>
-				<h2 class="text-xs font-semibold uppercase tracking-wider text-fg-muted mb-3">Security &amp; Maintenance</h2>
-				<div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-					<a href="/admin/security" class="card hover:shadow-md transition-shadow group">
-						<div class="flex items-center justify-between">
-							<p class="text-sm font-medium text-fg-secondary">Security</p>
-							<span class="stat-icon-red"><i class="fa-solid fa-shield-halved"></i></span>
-						</div>
-						if securityStats != nil && securityStats.FailedLogins24h > 0 {
-							<p class="text-lg font-semibold text-red-600 dark:text-red-400 mt-2">{ fmt.Sprintf("%d", securityStats.FailedLogins24h) } failed login(s)</p>
-							<p class="text-xs text-fg-muted mt-1">in last 24 hours</p>
-						} else {
-							<p class="text-lg font-semibold text-emerald-600 dark:text-emerald-400 mt-2">All Clear</p>
-							<p class="text-xs text-fg-muted mt-1">No failed logins (24h)</p>
-						}
-						<p class="text-xs text-fg-muted group-hover:text-accent transition-colors">Security dashboard &rarr;</p>
-					</a>
-					<a href="/admin/data-hygiene" class="card hover:shadow-md transition-shadow group">
-						<div class="flex items-center justify-between">
-							<p class="text-sm font-medium text-fg-secondary">Data Hygiene</p>
-							<span class="stat-icon-amber"><i class="fa-solid fa-broom"></i></span>
-						</div>
-						<p class="text-lg font-semibold text-fg mt-2">Orphan Cleanup</p>
-						<p class="text-xs text-fg-muted mt-1 group-hover:text-accent transition-colors">Scan &amp; clean &rarr;</p>
-					</a>
-				</div>
-			</div>
+			}
 
 			@recentActivityCard(recent)
-
-			<!-- Quick Actions -->
-			<div class="flex items-center gap-3 pt-2">
-				<a
-					href="/admin/design-lab"
-					target="_blank"
-					class="text-xs text-fg-muted hover:text-accent transition-colors inline-flex items-center gap-1.5"
-				>
-					<i class="fa-solid fa-wand-magic-sparkles text-[10px]"></i>
-					Open Surface Demo
-					<i class="fa-solid fa-arrow-up-right-from-square text-[8px]"></i>
-				</a>
-			</div>
 		</div>
 	}
 }
@@ -217,10 +71,36 @@ templ activityList(entries []ActivityEntry) {
 		<ul class="divide-y divide-edge">
 			for _, e := range entries {
 				<li class="flex items-baseline justify-between gap-3 py-2 text-sm">
-					<span class="text-fg">{ e.Sentence() }</span>
+					<span class="text-fg min-w-0 break-words">
+						<i class={ "fa-solid " + e.AreaMeta().Icon + " w-5 text-center text-fg-muted mr-1" } title={ e.AreaMeta().Label } aria-hidden="true"></i>
+						<span class="sr-only">{ e.AreaMeta().Label }: </span>
+						{ e.Sentence() }
+					</span>
 					<span class="text-xs text-fg-muted shrink-0" title={ e.CreatedAt.Format("2006-01-02 15:04 MST") }>{ timeAgo(e.CreatedAt) }</span>
 				</li>
 			}
 		</ul>
 	}
+}
+
+// countOrDash shows a dash when the count could not be loaded (negative), so a
+// failed lookup never reads as "0".
+func countOrDash(n int) string {
+	if n < 0 {
+		return "—"
+	}
+	return fmt.Sprintf("%d", n)
+}
+
+// homeTile is one uniform tile: figure, menu label, one line, optional dot.
+templ homeTile(t HomeTile) {
+	<a href={ templ.SafeURL(t.Href) } class="card relative min-w-0 hover:shadow-md transition-shadow group">
+		if t.Attention {
+			<span class="absolute top-3 right-3 w-2.5 h-2.5 rounded-full bg-amber-500" aria-hidden="true"></span>
+			<span class="sr-only">Needs a look</span>
+		}
+		<p class="text-2xl font-bold text-fg break-words">{ t.Big }</p>
+		<p class="text-sm font-medium text-fg-secondary mt-1 break-words">{ t.Label }</p>
+		<p class="text-xs text-fg-muted mt-0.5 break-words group-hover:text-accent transition-colors">{ t.Line }</p>
+	</a>
 }

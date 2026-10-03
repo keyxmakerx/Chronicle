@@ -95,6 +95,9 @@ type CampaignService interface {
 	UpdateFontFamily(ctx context.Context, campaignID, fontFamily string) error
 	// UpdateWelcomeMessage sets the campaign's MOTD banner message.
 	UpdateWelcomeMessage(ctx context.Context, campaignID, message string) error
+	// SaveAppearance writes one Save from the Customize page, every
+	// setting at once.
+	SaveAppearance(ctx context.Context, campaignID string, in AppearanceInput) error
 
 	// GetEventTierDefinitions returns the campaign's event tier vocabulary.
 	// Returns the platform default trio (major/standard/detail) when the

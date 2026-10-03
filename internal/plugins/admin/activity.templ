@@ -4,27 +4,87 @@ import (
 	"fmt"
 	"github.com/keyxmakerx/chronicle/internal/templates/components"
 	"github.com/keyxmakerx/chronicle/internal/templates/layouts"
+	"net/url"
 )
 
-// AdminActivityPage renders the full, paginated log of admin changes.
-templ AdminActivityPage(entries []ActivityEntry, total, page, perPage int) {
+// ActivityPageData is everything the activity page renders.
+type ActivityPageData struct {
+	Entries []ActivityEntry
+	Actors  []ActivityActor
+	Query   ActivityQuery // normalized, so the form shows what is applied
+	Total   int
+	Page    int
+	PerPage int
+}
+
+// extraParams carries the filters into the pager links, encoded.
+func (d ActivityPageData) extraParams() string {
+	v := url.Values{}
+	if d.Query.Actor != "" {
+		v.Set("actor", d.Query.Actor)
+	}
+	if d.Query.Area != "" {
+		v.Set("area", d.Query.Area)
+	}
+	v.Set("when", d.Query.When)
+	return v.Encode()
+}
+
+// AdminActivityPage renders the filterable, paginated log of admin changes.
+// The filters are a plain GET form so they work without JavaScript and the
+// result is a shareable link.
+templ AdminActivityPage(d ActivityPageData) {
 	@layouts.App("Admin activity - Admin") {
 		<div class="max-w-4xl mx-auto space-y-6">
 			<div>
 				<h1 class="text-2xl font-bold text-fg">Admin activity</h1>
 				<p class="text-sm text-fg-muted mt-1">
-					Every change made from the admin area, newest first, and who made it.
-					{ fmt.Sprintf("%d", total) } recorded so far.
+					Changes made from the admin area, newest first, and who made them.
+					{ fmt.Sprintf("%d", d.Total) } match.
 				</p>
 			</div>
 			<div class="card">
-				@activityList(entries)
+				<form method="get" action="/admin/activity" class="flex flex-wrap items-end gap-3 mb-4">
+					<label class="flex flex-col gap-1 text-xs text-fg-muted w-full sm:w-auto">
+						Who
+						<select name="actor" class="input text-sm w-full sm:w-auto">
+							<option value="">Anyone</option>
+							for _, a := range d.Actors {
+								<option value={ a.ID } selected?={ a.ID == d.Query.Actor }>{ a.Name }</option>
+							}
+						</select>
+					</label>
+					<label class="flex flex-col gap-1 text-xs text-fg-muted w-full sm:w-auto">
+						Area
+						<select name="area" class="input text-sm w-full sm:w-auto">
+							<option value="">All areas</option>
+							for _, a := range activityAreas {
+								<option value={ a.Key } selected?={ a.Key == d.Query.Area }>{ a.Label }</option>
+							}
+						</select>
+					</label>
+					<label class="flex flex-col gap-1 text-xs text-fg-muted w-full sm:w-auto">
+						When
+						<select name="when" class="input text-sm w-full sm:w-auto">
+							for _, w := range activityWhens {
+								<option value={ w.Key } selected?={ w.Key == d.Query.When }>{ w.Label }</option>
+							}
+						</select>
+					</label>
+					<button type="submit" class="btn-primary text-sm w-full sm:w-auto">Apply</button>
+				</form>
+				if len(d.Entries) == 0 {
+					<p class="text-sm text-fg-muted">Nothing matches these filters.</p>
+				} else {
+					@activityList(d.Entries)
+				}
 			</div>
 			@components.Pagination(components.PaginationData{
-				CurrentPage: page,
-				PerPage:     perPage,
-				Total:       total,
+				CurrentPage: d.Page,
+				PerPage:     d.PerPage,
+				Total:       d.Total,
 				BaseURL:     "/admin/activity",
+				ExtraParams: d.extraParams(),
 			})
 		</div>
 	}

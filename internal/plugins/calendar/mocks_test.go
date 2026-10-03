@@ -43,6 +43,8 @@ type fakeCalendarRepo struct {
 	setFestivalsFn     func(ctx context.Context, calendarID string, festivals []FestivalInput) error
 	getFestivalsFn     func(ctx context.Context, calendarID string) ([]Festival, error)
 	applyImportFn      func(ctx context.Context, cal *Calendar, result *ImportResult) error
+	applyStructureFn   func(ctx context.Context, calendarID string, plan func(*StructureState) (*StructureWrite, error)) error
+	getStructureFn     func(ctx context.Context, calendarID string) (*StructureState, error)
 }
 
 func (m *fakeCalendarRepo) Create(ctx context.Context, cal *Calendar) error {
@@ -219,6 +221,7 @@ func (m *fakeCalendarRepo) ApplyImport(ctx context.Context, cal *Calendar, resul
 type fakeEventRepo struct {
 	createEventFn         func(ctx context.Context, evt *Event) error
 	getEventFn            func(ctx context.Context, id string) (*Event, error)
+	getEventsByIDsFn      func(ctx context.Context, calendarID string, ids []string) ([]Event, error)
 	updateEventFn         func(ctx context.Context, evt *Event) error
 	deleteEventFn         func(ctx context.Context, id string) error
 	listForMonthFn        func(ctx context.Context, calendarID string, year, month, role int) ([]Event, error)
@@ -251,6 +254,12 @@ func (m *fakeEventRepo) CreateEvent(ctx context.Context, evt *Event) error {
 func (m *fakeEventRepo) GetEvent(ctx context.Context, id string) (*Event, error) {
 	if m.getEventFn != nil {
 		return m.getEventFn(ctx, id)
+	}
+	return nil, nil
+}
+func (m *fakeEventRepo) GetEventsByIDs(ctx context.Context, calendarID string, ids []string) ([]Event, error) {
+	if m.getEventsByIDsFn != nil {
+		return m.getEventsByIDsFn(ctx, calendarID, ids)
 	}
 	return nil, nil
 }
@@ -481,4 +490,17 @@ func newTestCalendarService(calRepo *fakeCalendarRepo, eventRepo *fakeEventRepo,
 		weatherRepo = &fakeWeatherRepo{}
 	}
 	return NewCalendarService(calRepo, eventRepo, kindRepo, weatherRepo)
+}
+
+func (m *fakeCalendarRepo) ApplyStructure(ctx context.Context, calendarID string, plan func(*StructureState) (*StructureWrite, error)) error {
+	if m.applyStructureFn != nil {
+		return m.applyStructureFn(ctx, calendarID, plan)
+	}
+	return nil
+}
+func (m *fakeCalendarRepo) GetStructureState(ctx context.Context, calendarID string) (*StructureState, error) {
+	if m.getStructureFn != nil {
+		return m.getStructureFn(ctx, calendarID)
+	}
+	return nil, apperror.NewNotFound("calendar not found")
 }

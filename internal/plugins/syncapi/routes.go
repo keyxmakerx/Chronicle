@@ -8,8 +8,10 @@ import (
 )
 
 // RegisterAdminRoutes adds API monitoring routes to the admin group.
-// These routes require site admin privileges.
-func RegisterAdminRoutes(adminGroup *echo.Group, h *Handler) {
+// These routes require site admin privileges. reauth guards the writes that
+// change who can reach the API: blocking or unblocking an address, and
+// switching off or revoking a key.
+func RegisterAdminRoutes(adminGroup *echo.Group, h *Handler, reauth echo.MiddlewareFunc) {
 	// Dashboard.
 	adminGroup.GET("/api", h.AdminDashboard)
 
@@ -21,12 +23,12 @@ func RegisterAdminRoutes(adminGroup *echo.Group, h *Handler) {
 	adminGroup.PUT("/api/security/:eventID/resolve", h.ResolveEvent)
 
 	// IP blocklist management.
-	adminGroup.POST("/api/ip-blocks", h.BlockIP)
-	adminGroup.DELETE("/api/ip-blocks/:blockID", h.UnblockIP)
+	adminGroup.POST("/api/ip-blocks", h.BlockIP, reauth)
+	adminGroup.DELETE("/api/ip-blocks/:blockID", h.UnblockIP, reauth)
 
 	// Admin key management (can act on any key).
-	adminGroup.PUT("/api/keys/:keyID/toggle", h.AdminToggleKey)
-	adminGroup.DELETE("/api/keys/:keyID", h.AdminRevokeKey)
+	adminGroup.PUT("/api/keys/:keyID/toggle", h.AdminToggleKey, reauth)
+	adminGroup.DELETE("/api/keys/:keyID", h.AdminRevokeKey, reauth)
 }
 
 // RegisterCampaignRoutes adds API key management routes for campaign owners.
@@ -71,7 +73,7 @@ func RegisterCampaignRoutes(e *echo.Echo, h *Handler, campaignSvc campaigns.Camp
 // match middleware ensures Bearer keys can only access their scoped
 // campaign (session users are naturally scoped to campaigns they belong
 // to by the membership lookup in RequireAuthOrAPIKey).
-func RegisterAPIRoutes(e *echo.Echo, api *APIHandler, calAPI *CalendarAPIHandler, mediaAPI *MediaAPIHandler, mapAPI *MapAPIHandler, noteAPI *NoteAPIHandler, tagAPI *TagAPIHandler, syncH *SyncHandler, syncSvc SyncAPIService, addonChecker AddonChecker, authSvc auth.AuthService, campaignSvc campaigns.CampaignService, opts ...func(*APIHandler)) {
+func RegisterAPIRoutes(e *echo.Echo, api *APIHandler, calAPI *CalendarAPIHandler, mediaAPI *MediaAPIHandler, mapAPI *MapAPIHandler, noteAPI *NoteAPIHandler, tagAPI *TagAPIHandler, syncH *SyncHandler, changesH *SyncChangesHandler, syncSvc SyncAPIService, addonChecker AddonChecker, authSvc auth.AuthService, campaignSvc campaigns.CampaignService, opts ...func(*APIHandler)) {
 	// Inject addon checker into API handler for system-aware endpoints.
 	api.SetAddonChecker(addonChecker)
 
@@ -282,4 +284,6 @@ func RegisterAPIRoutes(e *echo.Echo, api *APIHandler, calAPI *CalendarAPIHandler
 	cg.DELETE("/sync/mappings/:mappingID", syncH.DeleteMapping, RequirePermission(PermSync))
 	cg.GET("/sync/lookup", syncH.LookupMapping, RequirePermission(PermSync))
 	cg.GET("/sync/pull", syncH.PullMappings, RequirePermission(PermSync))
+	// Change feed: ids only, DM-equivalent callers only (checked in the handler).
+	cg.GET("/sync/changes", changesH.ListChanges, RequirePermission(PermSync))
 }

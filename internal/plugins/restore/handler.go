@@ -2,6 +2,7 @@ package restore
 
 import (
 	"errors"
+	"log/slog"
 	"net/http"
 
 	"github.com/labstack/echo/v4"
@@ -83,7 +84,8 @@ func (h *Handler) Run(c echo.Context) error {
 		if errors.Is(err, ErrAlreadyRunning) {
 			return echo.NewHTTPError(http.StatusConflict, "a restore is already running; wait for it to finish")
 		}
-		return echo.NewHTTPError(http.StatusInternalServerError, err.Error())
+		slog.Error("restore run failed", slog.Any("error", err))
+		return echo.NewHTTPError(http.StatusInternalServerError, "The restore could not be completed. Open the technical details on this page, or check the server log.")
 	}
 	h.recordActivity(c, "restore.run", "backup", "", manifest)
 	return middleware.HTMXRedirect(c, "/admin/restore")

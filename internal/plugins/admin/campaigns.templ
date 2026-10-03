@@ -20,7 +20,7 @@ type CampaignListData struct {
 templ AdminCampaignsPage(data CampaignListData) {
 	@layouts.App("Campaigns - Admin") {
 		<div class="max-w-4xl mx-auto space-y-6">
-			<h1 class="text-2xl font-bold text-fg">All Campaigns</h1>
+			<h1 class="text-2xl font-bold text-fg">Campaigns</h1>
 			@adminListSearch(data.View)
 			@AdminCampaignsList(data)
 		</div>
@@ -37,79 +37,55 @@ templ AdminCampaignsList(data CampaignListData) {
 			<input type="hidden" name="f" value={ data.View.Filter } form={ data.View.RegionID + "-search" }/>
 		}
 		@adminListChips(data.View)
-		<div class="card p-0 overflow-hidden">
-				<table class="w-full">
-					<thead>
-						<tr class="bg-surface-alt border-b border-edge">
-							<th class="text-left px-4 py-3 text-xs font-semibold text-fg-secondary uppercase tracking-wider">Name</th>
-							<th class="text-left px-4 py-3 text-xs font-semibold text-fg-secondary uppercase tracking-wider">Slug</th>
-							<th class="text-left px-4 py-3 text-xs font-semibold text-fg-secondary uppercase tracking-wider">Created</th>
-							<th class="text-right px-4 py-3 text-xs font-semibold text-fg-secondary uppercase tracking-wider">Actions</th>
-						</tr>
-					</thead>
-					<tbody class="divide-y divide-edge">
-						if len(allCampaigns) > 0 {
-							for _, c := range allCampaigns {
-								<tr class="hover:bg-surface-alt transition-colors">
-									<td class="px-4 py-3">
-										<a href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s", c.ID)) } class="text-sm font-medium text-accent hover:text-accent-hover transition-colors">
-											{ c.Name }
-										</a>
-									</td>
-									<td class="px-4 py-3 text-sm text-fg-muted">{ c.Slug }</td>
-									<td class="px-4 py-3 text-sm text-fg-muted">
-										{ c.CreatedAt.Format("Jan 2, 2006") }
-									</td>
-									<td class="px-4 py-3 text-right">
-										<div class="flex items-center justify-end gap-3">
-											<!-- Join as... dropdown -->
-											<div class="relative" x-data="{ open: false }">
-												<button
-													@click="open = !open"
-													@click.outside="open = false"
-													class="text-sm text-accent hover:text-accent-hover transition-colors"
-												>
-													Join as...
-												</button>
-												<div
-													x-show="open"
-													x-transition
-													class="absolute right-0 mt-1 w-36 bg-surface rounded-lg shadow-lg border border-edge z-10 overflow-hidden"
-												>
-													<form hx-post={ fmt.Sprintf("/admin/campaigns/%s/join", c.ID) } hx-headers={ fmt.Sprintf(`{"X-CSRF-Token":"%s"}`, csrfToken) }>
-														<input type="hidden" name="csrf_token" value={ csrfToken }/>
-														<button type="submit" name="role" value="player" class="block w-full text-left px-4 py-2 text-sm text-fg-body hover:bg-surface-alt transition-colors">Player</button>
-														<button type="submit" name="role" value="scribe" class="block w-full text-left px-4 py-2 text-sm text-fg-body hover:bg-surface-alt transition-colors">Scribe</button>
-														<button type="submit" name="role" value="owner" class="block w-full text-left px-4 py-2 text-sm text-amber-600 hover:bg-surface-alt transition-colors">Owner (transfers)</button>
-													</form>
-												</div>
-											</div>
-											<button
-												hx-delete={ fmt.Sprintf("/admin/campaigns/%s/leave", c.ID) }
-												hx-headers={ fmt.Sprintf(`{"X-CSRF-Token":"%s"}`, csrfToken) }
-												class="text-sm text-fg-muted hover:text-fg-body transition-colors"
-											>
-												Leave
-											</button>
-											<button
-												hx-delete={ fmt.Sprintf("/admin/campaigns/%s", c.ID) }
-												hx-confirm="Permanently delete this campaign and all its data?"
-												hx-headers={ fmt.Sprintf(`{"X-CSRF-Token":"%s"}`, csrfToken) }
-												class="text-sm link-danger transition-colors"
-											>
-												Delete
-											</button>
-										</div>
-									</td>
-								</tr>
-							}
-						} else {
-							@adminListEmpty(data.View, 4)
+		<div class="card p-0 overflow-hidden hidden md:block">
+			<table class="w-full">
+				<thead>
+					<tr class="bg-surface-alt border-b border-edge">
+						<th class="text-left px-4 py-3 text-xs font-semibold text-fg-secondary uppercase tracking-wider">Name</th>
+						<th class="text-left px-4 py-3 text-xs font-semibold text-fg-secondary uppercase tracking-wider">Slug</th>
+						<th class="text-left px-4 py-3 text-xs font-semibold text-fg-secondary uppercase tracking-wider">Created</th>
+						<th class="text-right px-4 py-3 text-xs font-semibold text-fg-secondary uppercase tracking-wider">Actions</th>
+					</tr>
+				</thead>
+				<tbody class="divide-y divide-edge">
+					if len(allCampaigns) > 0 {
+						for _, c := range allCampaigns {
+							<tr class="hover:bg-surface-alt transition-colors">
+								<td class="px-4 py-3">
+									<a href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s", c.ID)) } class="text-sm font-medium text-accent hover:text-accent-hover transition-colors">
+										{ c.Name }
+									</a>
+								</td>
+								<td class="px-4 py-3 text-sm text-fg-muted">{ c.Slug }</td>
+								<td class="px-4 py-3 text-sm text-fg-muted">
+									{ c.CreatedAt.Format("Jan 2, 2006") }
+								</td>
+								<td class="px-4 py-3 text-right">
+									<div class="flex items-center justify-end gap-3">
+										@adminActionMenu("Join as...", "", csrfToken, campaignJoinActions(c, csrfToken))
+										for _, a := range campaignRowActions(c) {
+											@adminInlineAction(a, csrfToken)
+										}
+									</div>
+								</td>
+							</tr>
 						}
-					</tbody>
-				</table>
-			</div>
-			@components.Pagination(components.PaginationData{
+					} else {
+						@adminListEmpty(data.View, 4)
+					}
+				</tbody>
+			</table>
+		</div>
+		<div class="card p-0 divide-y divide-edge md:hidden" data-testid="campaigns-cards">
+			if len(allCampaigns) > 0 {
+				for _, c := range allCampaigns {
+					@adminCardRow(avatarInitial(c.Name), c.Name, fmt.Sprintf("/campaigns/%s", c.ID), campaignVisibilityLabel(c), "bg-surface-alt text-fg-secondary", c.Slug+" · created "+c.CreatedAt.Format("Jan 2, 2006"), csrfToken, campaignCardActions(c, csrfToken))
+				}
+			} else {
+				@adminListEmptyCard(data.View)
+			}
+		</div>
+		@components.Pagination(components.PaginationData{
 				CurrentPage: data.View.Page,
 				PerPage:     data.View.PerPage,
 				Total:       data.View.Total,

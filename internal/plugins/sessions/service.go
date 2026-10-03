@@ -44,6 +44,11 @@ type SessionService interface {
 	// ListPlannedSessions returns only planned (upcoming) sessions for a campaign.
 	ListPlannedSessions(ctx context.Context, campaignID string) ([]Session, error)
 	ListSessionsForDateRange(ctx context.Context, campaignID, startDate, endDate string) ([]Session, error)
+	// ListPlannedSessionsInWorldDateRange returns planned sessions whose
+	// in-world date falls in [from, to] inclusive, soonest first, capped at
+	// limit (<=0: no cap). Lets the calendar name the sessions an anchor
+	// move would re-date. Only identity, name and in-world date are filled.
+	ListPlannedSessionsInWorldDateRange(ctx context.Context, campaignID string, from, to WorldDate, limit int) ([]Session, error)
 	// UpdateSession validates and updates a session. If a recurring session is
 	// completed, auto-generates the next occurrence and returns it. Returns nil
 	// if no new session was created.
@@ -89,6 +94,9 @@ type SessionService interface {
 	// ListOccurrenceAttendees is ListAttendees' per-occurrence twin for a
 	// recurring session's one specific night.
 	ListOccurrenceAttendees(ctx context.Context, sessionID, occurrenceDate string) ([]OccurrenceRSVP, error)
+	// ListGameNights lists every planned night in [from, to] with each
+	// member's answer, for the calendar's day card.
+	ListGameNights(ctx context.Context, campaignID, from, to, today string, members []NightMember) ([]GameNight, error)
 
 	// "Suggest another time" (see ValidateAndRecordSuggestion's doc comment
 	// for the validate-before-consume ordering this fixes).
@@ -573,6 +581,16 @@ func (s *sessionService) ListSessionsForDateRange(ctx context.Context, campaignI
 		if err == nil {
 			sessions[i].Attendees = attendees
 		}
+	}
+	return sessions, nil
+}
+
+// ListPlannedSessionsInWorldDateRange implements the sessions side of the
+// calendar's anchor-move preview.
+func (s *sessionService) ListPlannedSessionsInWorldDateRange(ctx context.Context, campaignID string, from, to WorldDate, limit int) ([]Session, error) {
+	sessions, err := s.repo.ListPlannedByWorldDateRange(ctx, campaignID, from, to, limit)
+	if err != nil {
+		return nil, apperror.NewInternal(fmt.Errorf("listing sessions for world date range: %w", err))
 	}
 	return sessions, nil
 }

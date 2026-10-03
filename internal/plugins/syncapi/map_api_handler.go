@@ -95,6 +95,22 @@ func (h *MapAPIHandler) requireMapInCampaign(c echo.Context) (*maps.Map, error) 
 	return m, nil
 }
 
+// requireMarkerOnMap loads a marker and checks it sits on the map the URL
+// names, which requireMapInCampaign has already tied to the key's campaign.
+// The map service looks markers up by id alone, so without this a marker id
+// from another campaign would be readable and writable through this route.
+// A mismatch answers the same NotFound as a missing id.
+func (h *MapAPIHandler) requireMarkerOnMap(c echo.Context, m *maps.Map) (*maps.Marker, error) {
+	mk, err := h.mapSvc.GetMarker(c.Request().Context(), c.Param("markerID"))
+	if err != nil {
+		return nil, err
+	}
+	if mk.MapID != m.ID {
+		return nil, apperror.NewNotFound("marker not found")
+	}
+	return mk, nil
+}
+
 // --- Map CRUD ---
 
 // ListMaps returns all maps for a campaign.
@@ -772,14 +788,18 @@ func (h *MapAPIHandler) ListMarkers(c echo.Context) error {
 // GetMarker returns a single marker.
 // GET /api/v1/campaigns/:id/maps/:mapID/markers/:markerID
 func (h *MapAPIHandler) GetMarker(c echo.Context) error {
-	if _, err := h.requireMapInCampaign(c); err != nil {
-		return err
-	}
-	markerID := c.Param("markerID")
-
-	marker, err := h.mapSvc.GetMarker(c.Request().Context(), markerID)
+	m, err := h.requireMapInCampaign(c)
 	if err != nil {
 		return err
+	}
+	marker, err := h.requireMarkerOnMap(c, m)
+	if err != nil {
+		return err
+	}
+	// Same rule as update and delete: a dm_only marker answers NotFound to a
+	// key that can't author dm_only content.
+	if marker.Visibility == "dm_only" && !h.canAuthorDmOnly(c) {
+		return apperror.NewNotFound("marker not found")
 	}
 	return c.JSON(http.StatusOK, marker)
 }
@@ -825,7 +845,11 @@ func (h *MapAPIHandler) CreateMarker(c echo.Context) error {
 // UpdateMarker updates an existing marker.
 // PUT /api/v1/campaigns/:id/maps/:mapID/markers/:markerID
 func (h *MapAPIHandler) UpdateMarker(c echo.Context) error {
-	if _, err := h.requireMapInCampaign(c); err != nil {
+	m, err := h.requireMapInCampaign(c)
+	if err != nil {
+		return err
+	}
+	if _, err := h.requireMarkerOnMap(c, m); err != nil {
 		return err
 	}
 	markerID := c.Param("markerID")
@@ -835,7 +859,7 @@ func (h *MapAPIHandler) UpdateMarker(c echo.Context) error {
 		return apperror.NewBadRequest("invalid request body")
 	}
 
-	err := h.mapSvc.UpdateMarker(c.Request().Context(), markerID, maps.UpdateMarkerInput{
+	err = h.mapSvc.UpdateMarker(c.Request().Context(), markerID, maps.UpdateMarkerInput{
 		Name:              req.Name,
 		Description:       req.Description,
 		X:                 req.X,
@@ -858,10 +882,14 @@ func (h *MapAPIHandler) UpdateMarker(c echo.Context) error {
 // DeleteMarker removes a marker.
 // DELETE /api/v1/campaigns/:id/maps/:mapID/markers/:markerID
 func (h *MapAPIHandler) DeleteMarker(c echo.Context) error {
-	if _, err := h.requireMapInCampaign(c); err != nil {
+	m, err := h.requireMapInCampaign(c)
+	if err != nil {
 		return err
 	}
 	if err := h.requireOwnerRole(c); err != nil {
+		return err
+	}
+	if _, err := h.requireMarkerOnMap(c, m); err != nil {
 		return err
 	}
 	if err := h.mapSvc.DeleteMarker(c.Request().Context(), c.Param("markerID"), maps.ParseExpectedUpdatedAt(c), h.canAuthorDmOnly(c)); err != nil {

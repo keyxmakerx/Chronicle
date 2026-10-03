@@ -46,7 +46,7 @@ func topEntriesJSON(entries []TopEntry) string {
 
 // AdminAPIDashboardTempl renders the full admin API monitoring dashboard.
 templ AdminAPIDashboardTempl(data AdminDashboardData) {
-	@layouts.App("API Monitor - Admin") {
+	@layouts.App("API & access - Admin") {
 		<div class="max-w-7xl mx-auto space-y-6">
 			<div class="flex items-center justify-between">
 				<div>
@@ -174,7 +174,7 @@ templ AdminAPIDashboardTempl(data AdminDashboardData) {
 										</td>
 										<td class="py-2">
 											if !e.Resolved {
-												<form method="POST" hx-put={ fmt.Sprintf("/admin/api/security/%d/resolve", e.ID) } class="inline">
+												<form method="POST" hx-put={ fmt.Sprintf("/admin/api/security/%d/resolve", e.ID) } hx-confirm="Mark this event as resolved?" class="inline">
 													<input type="hidden" name="csrf_token" value={ data.CSRFToken }/>
 													<button type="submit" class="text-xs text-accent hover:underline">Resolve</button>
 												</form>
@@ -208,7 +208,7 @@ templ AdminAPIDashboardTempl(data AdminDashboardData) {
 											<p class="text-xs text-fg-muted">{ *b.Reason }</p>
 										}
 									</div>
-									<form method="POST" hx-delete={ fmt.Sprintf("/admin/api/ip-blocks/%d", b.ID) } class="inline">
+									<form method="POST" hx-delete={ fmt.Sprintf("/admin/api/ip-blocks/%d", b.ID) } hx-confirm={ "Unblock " + b.IPAddress + "? It will be able to use the API again." } class="inline">
 										<input type="hidden" name="csrf_token" value={ data.CSRFToken }/>
 										<button type="submit" class="text-xs text-red-500 hover:text-red-600" title="Unblock">
 											<i class="fa-solid fa-unlock"></i> Unblock
@@ -260,19 +260,19 @@ templ AdminAPIDashboardTempl(data AdminDashboardData) {
 											<input type="hidden" name="csrf_token" value={ data.CSRFToken }/>
 											if k.IsActive {
 												<input type="hidden" name="action" value="deactivate"/>
-												<button type="submit" class="text-xs px-2 py-1 rounded bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400" title="Deactivate">
-													On
+												<button type="submit" class="text-xs px-2 py-1 rounded bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400" title="Deactivate" aria-label={ "Disable key " + k.Name }>
+													Active
 												</button>
 											} else {
 												<input type="hidden" name="action" value="activate"/>
-												<button type="submit" class="text-xs px-2 py-1 rounded bg-surface-alt text-fg-muted border border-edge" title="Activate">
-													Off
+												<button type="submit" class="text-xs px-2 py-1 rounded bg-surface-alt text-fg-muted border border-edge" title="Activate" aria-label={ "Activate key " + k.Name }>
+													Disabled
 												</button>
 											}
 										</form>
 										<form method="POST" hx-delete={ fmt.Sprintf("/admin/api/keys/%d", k.ID) } hx-confirm="Revoke this API key?" class="inline">
 											<input type="hidden" name="csrf_token" value={ data.CSRFToken }/>
-											<button type="submit" class="text-xs text-red-500 hover:text-red-600 px-1" title="Revoke">
+											<button type="submit" class="text-xs text-red-500 hover:text-red-600 px-1" title="Revoke" aria-label={ "Revoke key " + k.Name }>
 												<i class="fa-solid fa-trash"></i>
 											</button>
 										</form>
@@ -280,6 +280,9 @@ templ AdminAPIDashboardTempl(data AdminDashboardData) {
 								</div>
 							}
 						</div>
+						if data.TotalKeys > len(data.APIKeys) {
+							<p class="text-xs text-fg-muted mt-3">{ fmt.Sprintf("Showing %d of %d keys.", len(data.APIKeys), data.TotalKeys) }</p>
+						}
 					} else {
 						<p class="text-sm text-fg-muted italic">No API keys registered.</p>
 					}
@@ -298,11 +301,11 @@ templ AdminAPIDashboardTempl(data AdminDashboardData) {
 							<div>
 								<p class="font-medium text-fg mb-1">Event Types</p>
 								<ul class="space-y-1 text-xs">
-									<li><strong>rate_limit</strong> — Client exceeded their per-minute request quota</li>
-									<li><strong>auth_failure</strong> — Invalid or missing API key</li>
-									<li><strong>ip_blocked</strong> — Request from a blocklisted IP</li>
-									<li><strong>key_expired</strong> — Attempt to use an expired key</li>
-									<li><strong>suspicious</strong> — Unusual pattern detected</li>
+									<li><strong>Rate Limit</strong> — Client exceeded their per-minute request quota</li>
+									<li><strong>Auth Failure</strong> — Invalid or missing API key</li>
+									<li><strong>IP Blocked</strong> — Request from a blocklisted IP</li>
+									<li><strong>Key Expired</strong> — Attempt to use an expired key</li>
+									<li><strong>Suspicious</strong> — Unusual pattern detected</li>
 								</ul>
 							</div>
 							<div>
@@ -359,7 +362,7 @@ templ adminStatCard(label, value, icon, bgClass, iconColor string) {
 			<i class={ "fa-solid " + icon + " text-sm " + iconColor }></i>
 		</div>
 		<p class="text-lg font-bold text-fg">{ value }</p>
-		<p class="text-[10px] text-fg-muted">{ label }</p>
+		<p class="text-xs text-fg-muted">{ label }</p>
 	</div>
 }
 

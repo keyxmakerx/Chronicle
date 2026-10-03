@@ -1,8 +1,11 @@
 package entities
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
+
+	"github.com/keyxmakerx/chronicle/internal/templates/layouts"
 )
 
 // character_surface.go builds the dynamic-surface mount schema for the
@@ -76,7 +79,9 @@ func CharacterSurfaceSchemaJSON(entity *Entity, entityType *EntityType, campaign
 		},
 	}
 	if entity.ImagePath != nil && *entity.ImagePath != "" {
-		seed.Image = "/media/" + *entity.ImagePath
+		// MediaURL reduces a stored "2026/03/<id>.jpg" path to the file id the
+		// /media/:id route expects. No signer here: members load it unsigned.
+		seed.Image = layouts.MediaURL(context.Background(), *entity.ImagePath)
 	}
 	if entity.TypeLabel != nil {
 		seed.TypeLabel = *entity.TypeLabel

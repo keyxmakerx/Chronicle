@@ -7,6 +7,7 @@ package app
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"testing"
 
 	"github.com/keyxmakerx/chronicle/internal/apperror"
@@ -25,9 +26,15 @@ type fakeCalendarService struct {
 	// --- export-side fixture ---
 	cal    *calendar.Calendar
 	events []calendar.Event
+	// extraCals/extraEvents are the campaign's non-default calendars and
+	// their events, keyed by calendar id.
+	extraCals   []*calendar.Calendar
+	extraEvents map[string][]calendar.Event
 
 	// --- import-side captured state ---
 	created       *calendar.Calendar
+	allCreated    []*calendar.Calendar
+	defaultSets   int
 	defaultSetFor string
 	months        []calendar.MonthInput
 	weekdays      []calendar.WeekdayInput
@@ -53,19 +60,31 @@ func (f *fakeCalendarService) ListCalendars(_ context.Context, _ string, _ permi
 	if f.cal == nil {
 		return nil, nil
 	}
-	return []calendar.Calendar{*f.cal}, nil
+	out := []calendar.Calendar{*f.cal}
+	for _, c := range f.extraCals {
+		out = append(out, *c)
+	}
+	return out, nil
 }
 
-func (f *fakeCalendarService) GetCalendarForViewer(_ context.Context, _ string, _ string, _ permissions.Viewer) (*calendar.Calendar, error) {
+func (f *fakeCalendarService) GetCalendarForViewer(_ context.Context, id string, _ string, _ permissions.Viewer) (*calendar.Calendar, error) {
+	for _, c := range f.extraCals {
+		if c.ID == id {
+			return c, nil
+		}
+	}
 	if f.cal == nil {
 		return nil, apperror.NewNotFound("calendar not found")
 	}
 	return f.cal, nil
 }
 
-func (f *fakeCalendarService) ListAllEventsForCalendar(_ context.Context, _ string, _ string, v permissions.Viewer) ([]calendar.Event, error) {
+func (f *fakeCalendarService) ListAllEventsForCalendar(_ context.Context, calID string, _ string, v permissions.Viewer) ([]calendar.Event, error) {
 	if !v.IsSystem() {
 		return nil, apperror.NewForbidden("system access only")
+	}
+	if evts, ok := f.extraEvents[calID]; ok {
+		return evts, nil
 	}
 	return f.events, nil
 }
@@ -76,7 +95,7 @@ func (f *fakeCalendarService) CreateCalendar(_ context.Context, campaignID strin
 		visibility = "everyone"
 	}
 	f.created = &calendar.Calendar{
-		ID: "new-cal", CampaignID: campaignID,
+		ID: fmt.Sprintf("new-cal-%d", len(f.allCreated)+1), CampaignID: campaignID,
 		Mode: input.Mode, Name: input.Name, Description: input.Description,
 		EpochName: input.EpochName, CurrentYear: input.CurrentYear,
 		HoursPerDay: input.HoursPerDay, MinutesPerHour: input.MinutesPerHour,
@@ -85,11 +104,13 @@ func (f *fakeCalendarService) CreateCalendar(_ context.Context, campaignID strin
 		Visibility:      visibility,
 		VisibilityRules: input.VisibilityRules,
 	}
+	f.allCreated = append(f.allCreated, f.created)
 	return f.created, nil
 }
 
 func (f *fakeCalendarService) SetDefaultCalendar(_ context.Context, _ string, calendarID string) error {
 	f.defaultSetFor = calendarID
+	f.defaultSets++
 	return nil
 }
 

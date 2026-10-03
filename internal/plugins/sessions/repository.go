@@ -20,6 +20,11 @@ type SessionRepository interface {
 	FindByIDIncludingDeleted(ctx context.Context, id string) (*Session, error)
 	ListByCampaign(ctx context.Context, campaignID string) ([]Session, error)
 	ListByDateRange(ctx context.Context, campaignID, startDate, endDate string) ([]Session, error)
+	// ListPlannedByWorldDateRange returns planned sessions whose in-world
+	// date (calendar_year/month/day) lies in [from, to] inclusive, soonest
+	// first, up to limit rows (limit<=0: no cap). Only ID, CampaignID, Name
+	// and the Calendar* fields are populated.
+	ListPlannedByWorldDateRange(ctx context.Context, campaignID string, from, to WorldDate, limit int) ([]Session, error)
 	SearchByCampaign(ctx context.Context, campaignID, query string) ([]Session, error)
 	Update(ctx context.Context, s *Session) error
 	UpdateRecap(ctx context.Context, id string, recap, recapHTML *string) error
@@ -522,6 +527,44 @@ func (r *sessionRepository) ListSessionEntities(ctx context.Context, sessionID s
 }
 
 // --- Date Range Queries (for calendar integration) ---
+
+// ListPlannedByWorldDateRange backs the calendar's anchor-move warning. The
+// bounds compare as (year, month, day) tuples, which is chronological order
+// for any calendar since month and day are 1-based positions within a year.
+// Sessions missing any part of the in-world date are excluded: they have no
+// world date for an anchor move to re-map.
+func (r *sessionRepository) ListPlannedByWorldDateRange(ctx context.Context, campaignID string, from, to WorldDate, limit int) ([]Session, error) {
+	query := `SELECT s.id, s.campaign_id, s.name, s.calendar_year, s.calendar_month, s.calendar_day
+	          FROM sessions s
+	          WHERE s.campaign_id = ?
+	            AND s.deleted_at IS NULL
+	            AND s.status = 'planned'
+	            AND s.calendar_year IS NOT NULL AND s.calendar_month IS NOT NULL AND s.calendar_day IS NOT NULL
+	            AND (s.calendar_year, s.calendar_month, s.calendar_day) >= (?, ?, ?)
+	            AND (s.calendar_year, s.calendar_month, s.calendar_day) <= (?, ?, ?)
+	          ORDER BY s.calendar_year, s.calendar_month, s.calendar_day, s.sort_order, s.created_at`
+	args := []any{campaignID, from.Year, from.Month, from.Day, to.Year, to.Month, to.Day}
+	if limit > 0 {
+		query += ` LIMIT ?`
+		args = append(args, limit)
+	}
+
+	rows, err := r.db.QueryContext(ctx, query, args...)
+	if err != nil {
+		return nil, fmt.Errorf("listing sessions by world date range: %w", err)
+	}
+	defer rows.Close()
+
+	var sessions []Session
+	for rows.Next() {
+		var s Session
+		if err := rows.Scan(&s.ID, &s.CampaignID, &s.Name, &s.CalendarYear, &s.CalendarMonth, &s.CalendarDay); err != nil {
+			return nil, fmt.Errorf("scanning world-dated session row: %w", err)
+		}
+		sessions = append(sessions, s)
+	}
+	return sessions, rows.Err()
+}
 
 // ListByDateRange returns sessions in a campaign that fall within a date range.
 // Used by the calendar to display sessions on the grid. Includes both exact

@@ -67,6 +67,10 @@ func (m *mockRelationRepo) UpdateMetadata(_ context.Context, _ int, _ json.RawMe
 	return nil
 }
 
+func (m *mockRelationRepo) UpdateMetadataIf(_ context.Context, _ int, _, _ json.RawMessage) (bool, error) {
+	return true, nil
+}
+
 func (m *mockRelationRepo) ListByCampaign(_ context.Context, campaignID string) ([]GraphRelation, error) {
 	if m.listByCampaignFn != nil {
 		return m.listByCampaignFn(campaignID)

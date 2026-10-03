@@ -143,11 +143,17 @@
     if (!subw) return;
     var strip = document.createElement('div');
     strip.className = 'h-edit';
-    // Generate… here works without choosing days: it fills the shown month.
-    var gen = this.view.canAuthorDmOnly && Chronicle.calendarWeatherSheet;
+    // The structure editor is Owner only (routes.go), so only an Owner
+    // gets the gear that leads to it. Generate… here works without choosing
+    // days: it fills the shown month.
+    var view = this.view;
+    var gear = view.role >= ROLE_OWNER && view.campaignId && view.calendarId
+      ? '<a class="btn sm quiet" id="cal5-settings" href="/campaigns/' + encodeURIComponent(view.campaignId) + '/calendars/' + encodeURIComponent(view.calendarId) + '/structure" title="Calendar settings: months, weekdays, leap years, moons and seasons"><i class="fa-solid fa-gear"></i><span>Calendar settings</span></a>'
+      : '';
+    var gen = view.canAuthorDmOnly && Chronicle.calendarWeatherSheet;
     strip.innerHTML = '<span class="etag">Editing</span><span class="ehint">Click or drag across days. Shift extends, Ctrl/Cmd adds. Touch: tap, or hold then drag.</span><span class="sp"></span>' +
       (gen ? '<button type="button" class="btn sm quiet" id="edGen" aria-haspopup="dialog" aria-label="Generate weather"><i class="fa-solid fa-wand-magic-sparkles"></i><span class="btxt"> Generate…</span></button>' : '') +
-      '<button type="button" class="btn sm quiet" id="cal5-editdone">Done</button>';
+      gear + '<button type="button" class="btn sm quiet" id="cal5-editdone">Done</button>';
     subw.appendChild(strip);
     $('#cal5-editdone', strip).addEventListener('click', this.setEditing.bind(this, false));
     var self = this;
@@ -1016,7 +1022,13 @@
     view.wingEl.addEventListener('click', function (e) {
       if (e.target.closest('[data-add-event]')) {
         e.stopPropagation();
-        self._openEventForm(view.wingFor, null);
+        // New events open in the full drawer like edits do, so times, an
+        // end date and repeats are there from the start; the compact form
+        // is only the fallback if the drawer's script did not load.
+        if (Chronicle.calendarEventDrawer) {
+          var d = view.wingFor.split('_').map(Number);
+          Chronicle.calendarEventDrawer.open(view, null, { y: d[0], m: d[1], d: d[2] });
+        } else self._openEventForm(view.wingFor, null);
       }
     }, true);
   };
@@ -1101,7 +1113,6 @@
         '<button type="button" data-vis="everyone" aria-pressed="' + (!existing || existing.visibility !== 'dm_only') + '">Everyone</button>' +
         '<button type="button" data-vis="dm_only" aria-pressed="' + (!!existing && existing.visibility === 'dm_only') + '">Director only</button></div>' : '') +
       '<div class="efoot"><button type="button" class="btn quiet" data-cancel>Cancel</button>' +
-        (isNew && Chronicle.calendarEventDrawer ? '<button type="button" class="btn quiet" data-more-opts><i class="fa-solid fa-sliders"></i> More options</button>' : '') +
         '<span class="sp"></span><button type="submit" class="btn primary">' + (isNew ? 'Create' : 'Save') + '</button></div>';
 
     form.dataset.kindId = existing && existing.kind_id != null ? String(existing.kind_id) : '';
@@ -1109,14 +1120,6 @@
 
     form.addEventListener('click', function (e) {
       if (e.target.closest('[data-cancel]')) { form.remove(); return; }
-      // Times, an end date, repeats and notes live in the full drawer; it
-      // carries over the name typed so far.
-      if (e.target.closest('[data-more-opts]')) {
-        var name = form.name.value;
-        form.remove();
-        Chronicle.calendarEventDrawer.open(view, null, { y: d[0], m: d[1], d: d[2] }, { name: name });
-        return;
-      }
       var chip = e.target.closest('[data-kind]');
       if (chip) { form.dataset.kindId = chip.dataset.kind; $$('#cal5-edkinds [data-kind]', form).forEach(function (b) { b.setAttribute('aria-pressed', String(b === chip)); }); }
       var vis = e.target.closest('[data-vis]');

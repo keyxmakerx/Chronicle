@@ -524,107 +524,111 @@ templ wizardRealWorldReviewBody(campaignID, csrfToken, backURL, formError, defau
 	</form>
 }
 
-// wizardBuildXData is the "Build your own" step's entire Alpine x-data
-// object literal: sensible starting defaults (12 months, 7 weekdays, one
-// moon, one era) plus the add/remove/reorder/serialize methods its buttons
-// call. It is pure client-side state — HTMX only ever sees buildJSON()'s
-// output, in the hidden import_json field wizardBuildBody renders — so there
-// is no server-side mirror of this shape to keep in sync; WizardBuildPreview
-// re-validates whatever buildJSON() produced exactly like an uploaded
-// file's structure (parseWizardImportJSON — see that function and
-// WizardBuildPreview's own doc comments).
-//
-// The default months/weekdays/moon are JSON-marshaled (so their string
-// fields are correctly quoted/escaped) and spliced into an otherwise-static
-// JS object-literal template; JSON syntax is a valid subset of JS object/
-// array literal syntax, so the result is one ordinary Alpine x-data
-// expression, no different in kind from jsMonthDayCounts' array literal
-// above — just larger. Numbers are parsed defensively (parseInt/parseFloat
-// with a fallback) in buildJSON so a field the owner left blank or typed
-// text into still serializes to something clampCalendarStructure can clamp,
-// rather than a literal NaN reaching the server.
-func wizardBuildXData() string {
-	months := make([]map[string]any, 12)
-	for i := range months {
-		months[i] = map[string]any{"name": fmt.Sprintf("Month %d", i+1), "days": 30, "leap": 0}
-	}
-	weekdays := make([]map[string]any, 7)
-	for i := range weekdays {
-		weekdays[i] = map[string]any{"name": fmt.Sprintf("Day %d", i+1)}
-	}
-	moons := []map[string]any{{"name": "Moon", "cycle": 29.5}}
-	monthsJSON, _ := json.Marshal(months)
-	weekdaysJSON, _ := json.Marshal(weekdays)
-	moonsJSON, _ := json.Marshal(moons)
-
-	return fmt.Sprintf(`{
-months: %s,
-weekdays: %s,
-moons: %s,
-leapOn: false,
-leapEvery: 4,
-eraName: 'Age 1',
-eraYear: 1,
-addMonth(){ this.months.push({name:'Month '+(this.months.length+1), days:30, leap:0}); },
-removeMonth(i){ if(this.months.length>1){ this.months.splice(i,1); } },
-moveMonth(i,dir){ var j=i+dir; if(j<0||j>=this.months.length) return; var t=this.months.splice(i,1)[0]; this.months.splice(j,0,t); },
-addWeekday(){ this.weekdays.push({name:'Day '+(this.weekdays.length+1)}); },
-removeWeekday(i){ if(this.weekdays.length>1){ this.weekdays.splice(i,1); } },
-moveWeekday(i,dir){ var j=i+dir; if(j<0||j>=this.weekdays.length) return; var t=this.weekdays.splice(i,1)[0]; this.weekdays.splice(j,0,t); },
-addMoon(){ this.moons.push({name:'Moon '+(this.moons.length+1), cycle:29.5}); },
-removeMoon(i){ this.moons.splice(i,1); },
-buildJSON(){
-  var months=this.months.map(function(mo,i){ return {name:(mo.name||('Month '+(i+1))), days:Math.max(1,parseInt(mo.days,10)||1), sort_order:i, is_intercalary:false, leap_year_days:Math.max(0,parseInt(mo.leap,10)||0)}; });
-  var weekdays=this.weekdays.map(function(w,i){ return {name:(w.name||('Day '+(i+1))), sort_order:i, is_rest_day:false}; });
-  var moons=this.moons.map(function(mo){ return {name:(mo.name||'Moon'), cycle_days:(parseFloat(mo.cycle)||29.5), phase_offset:0, color:'#c0c0c0'}; });
-  var eras=this.eraName?[{name:this.eraName, start_year:(parseInt(this.eraYear,10)||1), start_month:1, start_day:1, color:'#6366f1'}]:[];
-  var year=parseInt(this.eraYear,10)||1;
-  return JSON.stringify({format:'built', calendar_name:'My calendar', months:months, weekdays:weekdays, moons:moons, seasons:[], eras:eras,
-    settings:{mode:'fantasy', current_year:year, hours_per_day:24, minutes_per_hour:60, seconds_per_minute:60, leap_year_every:(this.leapOn?(parseInt(this.leapEvery,10)||0):0), leap_year_offset:0},
-    today:{year:year}});
-}
-}`, monthsJSON, weekdaysJSON, moonsJSON)
+// structureEditorConfig is what differs between the two places the
+// structure editor appears: the new-calendar wizard's "Build your own" step
+// and an existing calendar's "Edit structure" page. The form, its rows and
+// its look are shared; only the copy, where it submits and which optional
+// sections show change.
+type structureEditorConfig struct {
+	Title       string
+	Lead        string
+	PostURL     string
+	Target      string
+	Swap        string
+	SubmitLabel string
+	// XData is the editor's Alpine state (structureEditorXData).
+	XData string
+	// BackGet is an hx-get URL swapped into Target (the wizard's Start
+	// step); BackHref is a plain link instead (the calendar's own page).
+	BackGet  string
+	BackHref string
+	// ShowEra shows the single starting era (a new calendar); ShowSeasons
+	// shows the season rows (an existing calendar, whose eras have their
+	// own manager on the calendar page).
+	ShowEra     bool
+	ShowSeasons bool
+	// ShowFlags shows each month's "Festival" and each weekday's "Rest day"
+	// checkboxes, so an existing calendar's flags are visible and kept.
+	ShowFlags bool
+	// ClearsPreview empties the preview slot named in XData whenever the
+	// structure changes, so a preview on screen always matches the editor.
+	ClearsPreview bool
+	// RevealPreview scrolls the preview slot into view once a submit's
+	// response is swapped in. It is an Alpine listener rather than hx-on
+	// because the app runs htmx with allowEval off.
+	RevealPreview bool
 }
 
 // wizardBuildBody is the "Build your own" structure editor: months,
 // weekdays, an optional leap rule, optional moons and a single era, each
 // with sensible starting defaults the owner is expected to rename/reshape.
 // Simplified from the signed structure editor's look to what this wizard
-// needs: no drag-and-drop (up/down
-// buttons reorder instead), no color pickers or per-moon render params —
-// this step only ever produces an ImportResult, and CreateCalendarFromImport
-// fills in every cosmetic default (color, etc.) the same way an import with
-// none of its own would. "Continue" hands the built structure to the
-// existing Review step (WizardBuildPreview), exactly like a parsed upload
-// does. formError is set only by WizardBuildPreview's failure branch (see
-// its own doc comment for why that path is realistically unreached by a
-// normal session) and, unlike every other step's formError, cannot redisplay
-// the owner's in-progress edits — the editor restarts from its own defaults.
+// needs: no drag-and-drop (up/down buttons reorder instead), no color
+// pickers or per-moon render params — this step only ever produces an
+// ImportResult, and CreateCalendarFromImport fills in every cosmetic
+// default (color, etc.) the same way an import with none of its own would.
+// "Continue" hands the built structure to the existing Review step
+// (WizardBuildPreview), exactly like a parsed upload does. formError is set
+// only by WizardBuildPreview's failure branch (see its own doc comment for
+// why that path is realistically unreached by a normal session) and, unlike
+// every other step's formError, cannot redisplay the owner's in-progress
+// edits — the editor restarts from its own defaults.
 templ wizardBuildBody(campaignID, csrfToken, formError string) {
-	<h2 class="calv5-wz-h">Build your own</h2>
-	<p class="calv5-wz-lead">Set this calendar's months, weekdays, an optional leap rule, moons and era. Everything here can be changed again later.</p>
+	@structureEditorForm(structureEditorConfig{
+		Title:       "Build your own",
+		Lead:        "Set this calendar's months, weekdays, an optional leap rule, moons and era. Everything here can be changed again later.",
+		PostURL:     fmt.Sprintf("/campaigns/%s/calendars/wizard/build/preview", campaignID),
+		Target:      "#calv5-wizard-root",
+		Swap:        "outerHTML",
+		SubmitLabel: "Continue",
+		XData:       structureEditorXData(newCalendarEditorState(), ""),
+		BackGet:     fmt.Sprintf("/campaigns/%s/calendars/wizard", campaignID),
+		ShowEra:     true,
+	}, csrfToken, formError)
+}
+
+// structureEditorForm is the structure editor itself, shared by the wizard
+// and the "Edit structure" page (see structureEditorConfig). Every control
+// is a labelled text button, no icons.
+templ structureEditorForm(cfg structureEditorConfig, csrfToken, formError string) {
+	<h2 class="calv5-wz-h">{ cfg.Title }</h2>
+	<p class="calv5-wz-lead">{ cfg.Lead }</p>
 	if formError != "" {
 		<p class="calv5-err">{ formError }</p>
 	}
 	<form
-		hx-post={ fmt.Sprintf("/campaigns/%s/calendars/wizard/build/preview", campaignID) }
-		hx-target="#calv5-wizard-root"
-		hx-swap="outerHTML"
+		hx-post={ cfg.PostURL }
+		hx-target={ cfg.Target }
+		hx-swap={ cfg.Swap }
 		hx-encoding="multipart/form-data"
 		hx-disabled-elt="#calv5-build-submit"
 		hx-indicator="#calv5-build-spinner"
-		x-data={ wizardBuildXData() }
+		if cfg.RevealPreview {
+			x-on:htmx:after-request="$nextTick(() => revealPreview())"
+		}
+		x-data={ cfg.XData }
+		if cfg.ClearsPreview {
+			x-effect="buildJSON(); clearPreview()"
+		}
 	>
 		<input type="hidden" name="csrf_token" value={ csrfToken }/>
 		<input type="hidden" name="import_json" x-bind:value="buildJSON()"/>
 		<div class="calv5-bsec">
 			<h4>Months</h4>
 			<div class="calv5-blist">
-				<template x-for="(mo, i) in months" x-bind:key="i">
+				<div class="calv5-brow calv5-bhead" aria-hidden="true">
+					<span class="nm">Name</span>
+					<span class="num">Days</span>
+					<span class="num">Leap days</span>
+				</div>
+				<template x-for="(mo, i) in months" x-bind:key="mo.key">
 					<div class="calv5-brow">
-						<input type="text" class="nm" x-model="mo.name" placeholder="Name" maxlength="100"/>
-						<input type="number" class="num" x-model.number="mo.days" min="1" max="3660" placeholder="Days"/>
-						<input type="number" class="num" x-model.number="mo.leap" min="0" max="30" placeholder="Leap days"/>
+						<input type="text" class="nm" x-model="mo.name" placeholder="Name" maxlength="100" aria-label="Month name"/>
+						<input type="number" class="num" x-model.number="mo.days" min="1" max="3660" placeholder="Days" aria-label="Days"/>
+						<input type="number" class="num" x-model.number="mo.leap" min="0" max="30" placeholder="Leap days" aria-label="Extra days in a leap year"/>
+						if cfg.ShowFlags {
+							<label class="calv5-bflag"><input type="checkbox" x-model="mo.inter"/> Festival</label>
+						}
 						<button type="button" class="mini" @click="moveMonth(i,-1)" x-bind:disabled="i===0">Up</button>
 						<button type="button" class="mini" @click="moveMonth(i,1)" x-bind:disabled="i===months.length-1">Down</button>
 						<button type="button" class="mini" @click="removeMonth(i)" x-bind:disabled="months.length<=1">Remove</button>
@@ -639,6 +643,9 @@ templ wizardBuildBody(campaignID, csrfToken, formError string) {
 				<template x-for="(w, i) in weekdays" x-bind:key="i">
 					<div class="calv5-brow">
 						<input type="text" class="nm" x-model="w.name" placeholder="Name" maxlength="100"/>
+						if cfg.ShowFlags {
+							<label class="calv5-bflag"><input type="checkbox" x-model="w.rest"/> Rest day</label>
+						}
 						<button type="button" class="mini" @click="moveWeekday(i,-1)" x-bind:disabled="i===0">Up</button>
 						<button type="button" class="mini" @click="moveWeekday(i,1)" x-bind:disabled="i===weekdays.length-1">Down</button>
 						<button type="button" class="mini" @click="removeWeekday(i)" x-bind:disabled="weekdays.length<=1">Remove</button>
@@ -674,32 +681,59 @@ templ wizardBuildBody(campaignID, csrfToken, formError string) {
 			</div>
 			<button type="button" class="btn sm quiet" @click="addMoon()" x-bind:disabled="moons.length>=20">Add moon</button>
 		</div>
-		<div class="calv5-bsec">
-			<h4>Era</h4>
-			<div class="calv5-rv-date">
-				<label class="calv5-fld">
-					<span>Era name</span>
-					<input class="calv5-inp" type="text" x-model="eraName" maxlength="100"/>
-				</label>
-				<label class="calv5-fld">
-					<span>Starting year</span>
-					<input class="calv5-inp" type="number" x-model.number="eraYear"/>
-				</label>
+		if cfg.ShowSeasons {
+			<div class="calv5-bsec">
+				<h4>Seasons</h4>
+				<div class="calv5-blist">
+					<template x-for="(se, i) in seasons" x-bind:key="i">
+						<div class="calv5-brow">
+							<input type="text" class="nm" x-model="se.name" placeholder="Name" maxlength="100"/>
+							<select x-model="se.startKey" aria-label="Starts in">
+								<template x-for="mo in months" x-bind:key="mo.key">
+									<option x-bind:value="mo.key" x-bind:selected="mo.key===se.startKey" x-text="mo.name"></option>
+								</template>
+							</select>
+							<input type="number" class="num" x-model.number="se.startDay" min="1" max="3660" placeholder="Day" aria-label="Start day"/>
+							<span class="calv5-bto">to</span>
+							<select x-model="se.endKey" aria-label="Ends in">
+								<template x-for="mo in months" x-bind:key="mo.key">
+									<option x-bind:value="mo.key" x-bind:selected="mo.key===se.endKey" x-text="mo.name"></option>
+								</template>
+							</select>
+							<input type="number" class="num" x-model.number="se.endDay" min="1" max="3660" placeholder="Day" aria-label="End day"/>
+							<button type="button" class="mini" @click="removeSeason(i)">Remove</button>
+						</div>
+					</template>
+				</div>
+				<button type="button" class="btn sm quiet" @click="addSeason()" x-bind:disabled="seasons.length>=20">Add season</button>
 			</div>
-		</div>
+		}
+		if cfg.ShowEra {
+			<div class="calv5-bsec">
+				<h4>Era</h4>
+				<div class="calv5-rv-date">
+					<label class="calv5-fld">
+						<span>Era name</span>
+						<input class="calv5-inp" type="text" x-model="eraName" maxlength="100"/>
+					</label>
+					<label class="calv5-fld">
+						<span>Starting year</span>
+						<input class="calv5-inp" type="number" x-model.number="eraYear"/>
+					</label>
+				</div>
+			</div>
+		}
 		<div style="margin-top:18px;display:flex;gap:8px;align-items:center">
-			<button
-				type="button"
-				class="btn quiet"
-				hx-get={ fmt.Sprintf("/campaigns/%s/calendars/wizard", campaignID) }
-				hx-target="#calv5-wizard-root"
-				hx-swap="outerHTML"
-			>
-				Back
-			</button>
+			if cfg.BackGet != "" {
+				<button type="button" class="btn quiet" hx-get={ cfg.BackGet } hx-target={ cfg.Target } hx-swap={ cfg.Swap }>
+					Back
+				</button>
+			} else if cfg.BackHref != "" {
+				<a class="btn quiet" href={ templ.SafeURL(cfg.BackHref) }>Back to the calendar</a>
+			}
 			<span class="sp" style="flex:1"></span>
 			<i id="calv5-build-spinner" class="fa-solid fa-spinner fa-spin htmx-indicator" aria-hidden="true"></i>
-			<button id="calv5-build-submit" type="submit" class="btn primary">Continue</button>
+			<button id="calv5-build-submit" type="submit" class="btn primary">{ cfg.SubmitLabel }</button>
 		</div>
 	</form>
 }

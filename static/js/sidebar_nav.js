@@ -324,7 +324,9 @@
     if (row) {
       row.setAttribute('aria-current', 'page');
       var tr = row.querySelector('.nav-tr');
-      if (tr && page) {
+      // The owner can hide page names in Customize (data-cz-pagename on <html>).
+      var hidden = document.documentElement.getAttribute('data-cz-pagename') === 'hidden';
+      if (tr && page && !hidden) {
         tr.textContent = page;
         tr.classList.add('is-page');
       }

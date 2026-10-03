@@ -150,6 +150,38 @@ func TestTopbarHeaderIsolate(t *testing.T) {
 	t.Fatalf("<header> classes %q must include \"isolate\" — without it z-index:-1 brand layers escape the stacking context and paint behind the header surface", classVal)
 }
 
+// TestTopbarSwapTargetsAlwaysRender pins the background swap target the
+// Customize page fills after a save. It must exist with and without a custom
+// style: a campaign
+// going from the default header to a coloured one has nothing to swap into
+// otherwise, and the change would only show after a reload.
+func TestTopbarSwapTargetsAlwaysRender(t *testing.T) {
+	cases := []struct {
+		name  string
+		style *TopbarStyleData
+	}{
+		{"default header", nil},
+		{"solid colour", &TopbarStyleData{Mode: "solid", Color: "#1e2a5a"}},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			var buf bytes.Buffer
+			if err := Topbar().Render(ctxWithTopbarStyle(tc.style), &buf); err != nil {
+				t.Fatalf("render Topbar: %v", err)
+			}
+			html := buf.String()
+			if !strings.Contains(html, `id="topbar-bg"`) {
+				t.Fatal(`Topbar() is missing id="topbar-bg"`)
+			}
+			bg := html[strings.Index(html, `id="topbar-bg"`):]
+			bg = bg[:strings.Index(bg, "<!--")]
+			if hasLayer := strings.Contains(bg, "background-color: #1e2a5a"); hasLayer != (tc.style != nil) {
+				t.Errorf("background layer inside #topbar-bg = %v, want %v", hasLayer, tc.style != nil)
+			}
+		})
+	}
+}
+
 // TestNotesWidgetVisible pins the notesWidgetVisible predicate that gates the
 // Jot notes tab and panel.
 func TestNotesWidgetVisible(t *testing.T) {

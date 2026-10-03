@@ -5,11 +5,13 @@ package admin
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"log/slog"
 	"net/http"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/labstack/echo/v4"
 
@@ -19,8 +21,8 @@ import (
 	"github.com/keyxmakerx/chronicle/internal/plugins/campaigns"
 	"github.com/keyxmakerx/chronicle/internal/plugins/media"
 	"github.com/keyxmakerx/chronicle/internal/plugins/settings"
-	"github.com/keyxmakerx/chronicle/internal/systems"
 	"github.com/keyxmakerx/chronicle/internal/plugins/smtp"
+	"github.com/keyxmakerx/chronicle/internal/systems"
 )
 
 // AddonCounter provides a count of registered addons for the admin dashboard.
@@ -45,30 +47,30 @@ type AddonUsageCounter interface {
 // Handler handles admin dashboard HTTP requests. Depends on other plugins'
 // services via interfaces -- no direct repo access.
 type Handler struct {
-	authRepo         auth.UserRepository
-	campaignService  campaigns.CampaignService
-	smtpService      smtp.SMTPService
-	mediaRepo        media.MediaRepository
-	mediaService     media.MediaService
+	authRepo        auth.UserRepository
+	campaignService campaigns.CampaignService
+	smtpService     smtp.SMTPService
+	mediaRepo       media.MediaRepository
+	mediaService    media.MediaService
 	// resolveMaxUploadSize returns the live max-upload-size from the
 	// settings service. Used by the storage admin page so the displayed
 	// "Max upload" matches what /media/upload's body-limit actually
 	// enforces — was previously the env-var value frozen at startup.
 	resolveMaxUploadSize func() int64
 	settingsService      settings.SettingsService
-	addonCounter     AddonCounter
-	securityService  SecurityService
-	hygieneScanner   DataHygieneScanner
-	databaseExplorer DatabaseExplorer
-	healthChecker    HealthChecker
-	backupLister     BackupLister
-	pendingCounter    PendingCounter
-	addonUsageCounter AddonUsageCounter
-	apiAlertCounter   APIAlertCounter
+	addonCounter         AddonCounter
+	securityService      SecurityService
+	hygieneScanner       DataHygieneScanner
+	databaseExplorer     DatabaseExplorer
+	healthChecker        HealthChecker
+	backupLister         BackupLister
+	pendingCounter       PendingCounter
+	addonUsageCounter    AddonUsageCounter
+	apiAlertCounter      APIAlertCounter
 	// activity is the admin change log; nil-safe so a missing log never blocks an admin action.
 	activity ActivityService
-	baseURL           string
-	navPins           AdminNavPinService
+	baseURL  string
+	navPins  AdminNavPinService
 }
 
 // StoragePageData holds all data needed for the combined storage management page.
@@ -85,6 +87,8 @@ type StoragePageData struct {
 	Users          []auth.User
 	Campaigns      []campaigns.Campaign
 	CSRFToken      string
+	// LimitsTab selects the limits view (?tab=limits) instead of the file list.
+	LimitsTab bool
 }
 
 // NewHandler creates a new admin handler.
@@ -214,24 +218,28 @@ func (h *Handler) DataHygiene(c echo.Context) error {
 		stats, err := h.hygieneScanner.GetDiskUsageStats(ctx)
 		if err != nil {
 			slog.Warn("failed to get hygiene stats", slog.Any("error", err))
+			data.ScanFailed = true
 		}
 		data.Stats = stats
 
 		orphanedMedia, err := h.hygieneScanner.ScanOrphanedMedia(ctx)
 		if err != nil {
 			slog.Warn("failed to scan orphaned media", slog.Any("error", err))
+			data.ScanFailed = true
 		}
 		data.OrphanedMedia = orphanedMedia
 
 		orphanedKeys, err := h.hygieneScanner.ScanOrphanedAPIKeys(ctx)
 		if err != nil {
 			slog.Warn("failed to scan orphaned API keys", slog.Any("error", err))
+			data.ScanFailed = true
 		}
 		data.OrphanedAPIKeys = orphanedKeys
 
 		staleFiles, err := h.hygieneScanner.ScanStaleFiles(ctx)
 		if err != nil {
 			slog.Warn("failed to scan stale files", slog.Any("error", err))
+			data.ScanFailed = true
 		}
 		data.StaleFiles = staleFiles
 	}
@@ -250,7 +258,7 @@ func (h *Handler) PurgeOrphanedMediaAPI(c echo.Context) error {
 	}
 	slog.Info("admin purged orphaned media", slog.Int("purged", purged))
 	h.record(c, "hygiene.purged", "hygiene", "", fmt.Sprintf("%d orphaned files", purged))
-	return c.Redirect(http.StatusSeeOther, "/admin/data-hygiene")
+	return middleware.HTMXRedirect(c, "/admin/data-hygiene")
 }
 
 // PurgeOrphanedAPIKeysAPI handles DELETE /admin/data-hygiene/orphaned-api-keys.
@@ -264,7 +272,7 @@ func (h *Handler) PurgeOrphanedAPIKeysAPI(c echo.Context) error {
 	}
 	slog.Info("admin purged orphaned API keys", slog.Int("purged", purged))
 	h.record(c, "hygiene.purged", "hygiene", "", fmt.Sprintf("%d orphaned API keys", purged))
-	return c.Redirect(http.StatusSeeOther, "/admin/data-hygiene")
+	return middleware.HTMXRedirect(c, "/admin/data-hygiene")
 }
 
 // PurgeStaleFilesAPI handles DELETE /admin/data-hygiene/stale-files.
@@ -278,7 +286,7 @@ func (h *Handler) PurgeStaleFilesAPI(c echo.Context) error {
 	}
 	slog.Info("admin purged stale files", slog.Int("purged", purged))
 	h.record(c, "hygiene.purged", "hygiene", "", fmt.Sprintf("%d stale files", purged))
-	return c.Redirect(http.StatusSeeOther, "/admin/data-hygiene")
+	return middleware.HTMXRedirect(c, "/admin/data-hygiene")
 }
 
 // --- Dashboard ---
@@ -287,8 +295,17 @@ func (h *Handler) PurgeStaleFilesAPI(c echo.Context) error {
 func (h *Handler) Dashboard(c echo.Context) error {
 	ctx := c.Request().Context()
 
-	userCount, _ := h.authRepo.CountUsers(ctx)
-	campaignCount, _ := h.campaignService.CountAll(ctx)
+	// A failed count is -1 so the tile shows a dash instead of a false 0.
+	userCount, err := h.authRepo.CountUsers(ctx)
+	if err != nil {
+		slog.Warn("admin dashboard: count users failed", slog.Any("error", err))
+		userCount = -1
+	}
+	campaignCount, err := h.campaignService.CountAll(ctx)
+	if err != nil {
+		slog.Warn("admin dashboard: count campaigns failed", slog.Any("error", err))
+		campaignCount = -1
+	}
 
 	var smtpConfigured bool
 	if h.smtpService != nil {
@@ -352,38 +369,96 @@ func (h *Handler) Dashboard(c echo.Context) error {
 	})
 
 	var recent []ActivityEntry
+	changesThisWeek := -1
 	if h.activity != nil {
 		var err error
-		if recent, _, err = h.activity.List(ctx, 1, 10); err != nil {
+		if recent, _, err = h.activity.List(ctx, ActivityFilter{}, 1, 10); err != nil {
 			slog.Warn("failed to load admin activity", slog.Any("error", err))
+		}
+		weekly := ResolveActivityFilter(ActivityQuery{When: When7Days}, time.Now())
+		if _, n, err := h.activity.List(ctx, weekly, 1, 1); err != nil {
+			slog.Warn("admin dashboard: count recent changes failed", slog.Any("error", err))
+		} else {
+			changesThisWeek = n
 		}
 	}
 
-	// System counts for the Systems dashboard card.
+	// System counts for the Packages and Health tiles.
 	registeredSystems := len(systems.Registry())
 	failedSystems := registeredSystems - len(systems.AllSystems())
 	if failedSystems < 0 {
 		failedSystems = 0
 	}
 
-	return middleware.Render(c, http.StatusOK, AdminDashboardPage(userCount, campaignCount, mediaFileCount, totalStorageBytes, smtpConfigured, addonCount, securityStats, degradedPlugins, pendingSubmissions, registeredSystems, failedSystems, needs, recent))
+	in := homeInput{
+		Users: userCount, Campaigns: campaignCount, Features: addonCount,
+		APIAlerts: -1, ChangesThisWeek: changesThisWeek,
+		PendingSubmissions: pendingSubmissions,
+		RegisteredSystems:  registeredSystems, FailedSystems: failedSystems,
+		ActiveSessions: -1,
+		MediaFiles:     mediaFileCount, StorageBytes: totalStorageBytes,
+		DegradedParts:  len(degradedPlugins),
+		SMTPConfigured: smtpConfigured, SMTPKnown: h.smtpService != nil,
+		Now: time.Now(),
+	}
+	if h.addonCounter == nil {
+		in.Features = -1
+	}
+	if h.apiAlertCounter != nil {
+		in.APIAlerts = apiAlerts
+	}
+	if securityStats != nil {
+		in.ActiveSessions = securityStats.ActiveSessions
+		in.FailedLogins24h = securityStats.FailedLogins24h
+		in.DisabledUsers = securityStats.DisabledUsers
+	}
+	if h.backupLister != nil {
+		if bi, err := h.backupLister.BackupInfo(ctx); err != nil {
+			slog.Warn("admin dashboard: backup info failed", slog.Any("error", err))
+		} else {
+			in.BackupsKnown, in.BackupsEnabled = true, bi.Enabled
+			in.LastBackup = latestBackupTime(bi)
+		}
+	}
+
+	return middleware.Render(c, http.StatusOK, AdminDashboardPage(buildHomeGroups(in), needs, recent))
 }
 
-// Activity renders the full paginated admin change log (GET /admin/activity).
+// latestBackupTime is the newest backup file's time, ignoring manifests, which
+// describe a backup rather than being one. Zero when there is none.
+func latestBackupTime(bi BackupInfo) time.Time {
+	var newest time.Time
+	for _, a := range bi.Artifacts {
+		if a.Kind == "manifest" {
+			continue
+		}
+		if a.ModTime.After(newest) {
+			newest = a.ModTime
+		}
+	}
+	return newest
+}
+
+// Activity renders the filterable admin change log (GET /admin/activity).
 func (h *Handler) Activity(c echo.Context) error {
 	page, _ := strconv.Atoi(c.QueryParam("page"))
 	if page < 1 {
 		page = 1
 	}
-	var entries []ActivityEntry
-	var total int
+	q := ActivityQuery{Actor: c.QueryParam("actor"), Area: c.QueryParam("area"), When: c.QueryParam("when")}.Normalize()
+	data := ActivityPageData{Query: q, Page: page, PerPage: activityPerPage}
 	if h.activity != nil {
+		ctx := c.Request().Context()
 		var err error
-		if entries, total, err = h.activity.List(c.Request().Context(), page, activityPerPage); err != nil {
+		if data.Entries, data.Total, err = h.activity.List(ctx, ResolveActivityFilter(q, time.Now()), page, activityPerPage); err != nil {
 			return apperror.NewInternal(fmt.Errorf("listing admin activity: %w", err))
 		}
+		// A missing "who" menu must not hide the log itself.
+		if data.Actors, err = h.activity.Actors(ctx); err != nil {
+			slog.Warn("failed to load admin activity actors", slog.Any("error", err))
+		}
 	}
-	return middleware.Render(c, http.StatusOK, AdminActivityPage(entries, total, page, activityPerPage))
+	return middleware.Render(c, http.StatusOK, AdminActivityPage(data))
 }
 
 // --- Users ---
@@ -659,6 +734,7 @@ func (h *Handler) Storage(c echo.Context) error {
 		Users:          allUsers,
 		Campaigns:      allCampaigns,
 		CSRFToken:      csrfToken,
+		LimitsTab:      c.QueryParam("tab") == "limits",
 	}
 	return middleware.Render(c, http.StatusOK, AdminStoragePage(data))
 }
@@ -699,19 +775,53 @@ func (h *Handler) Security(c echo.Context) error {
 
 	ctx := c.Request().Context()
 
-	stats, _ := h.securityService.GetStats(ctx)
+	tab := normalizeSecurityTab(c.QueryParam("tab"))
 
-	// Load recent security events (first page).
+	// A failed read shows an inline notice, not an empty-looking section.
+	stats, statsErr := h.securityService.GetStats(ctx)
+	if statsErr != nil {
+		slog.Warn("security page: load stats failed", slog.Any("error", statsErr))
+	}
+
+	// Only the open tab's list is read; the others are one click away.
 	eventType := c.QueryParam("type")
 	page, _ := strconv.Atoi(c.QueryParam("page"))
 	if page < 1 {
 		page = 1
 	}
 
-	events, totalEvents, _ := h.securityService.ListEvents(ctx, eventType, page)
+	var (
+		events      []SecurityEvent
+		totalEvents int
+		eventsErr   error
+		watch       []WatchItem
+	)
+	switch tab {
+	case SecurityTabLog:
+		events, totalEvents, eventsErr = h.securityService.ListEvents(ctx, eventType, page)
+		if eventsErr != nil {
+			slog.Warn("security page: load events failed", slog.Any("error", eventsErr))
+		}
+	case SecurityTabOverview:
+		var recent []SecurityEvent
+		recent, _, eventsErr = h.securityService.ListEvents(ctx, EventLoginFailed, 1)
+		if eventsErr != nil {
+			slog.Warn("security page: load recent failures failed", slog.Any("error", eventsErr))
+		} else {
+			watch = worthALook(recent, time.Now())
+		}
+	}
 
-	// Load active sessions.
-	sessions, _ := h.securityService.GetActiveSessions(ctx)
+	var (
+		sessions    []auth.SessionInfo
+		sessionsErr error
+	)
+	if tab == SecurityTabSessions {
+		sessions, sessionsErr = h.securityService.GetActiveSessions(ctx)
+		if sessionsErr != nil {
+			slog.Warn("security page: load sessions failed", slog.Any("error", sessionsErr))
+		}
+	}
 
 	csrfToken := middleware.GetCSRFToken(c)
 
@@ -725,6 +835,8 @@ func (h *Handler) Security(c echo.Context) error {
 	}
 
 	data := SecurityPageData{
+		Tab:              tab,
+		WatchItems:       watch,
 		Stats:            stats,
 		Events:           events,
 		TotalEvents:      totalEvents,
@@ -734,6 +846,9 @@ func (h *Handler) Security(c echo.Context) error {
 		Sessions:         sessions,
 		CSRFToken:        csrfToken,
 		RegistrationMode: registrationMode,
+		StatsFailed:      statsErr != nil,
+		EventsFailed:     eventsErr != nil,
+		SessionsFailed:   sessionsErr != nil,
 	}
 
 	return middleware.Render(c, http.StatusOK, AdminSecurityPage(data))
@@ -749,9 +864,9 @@ func (h *Handler) UpdateRegistrationMode(c echo.Context) error {
 	if err := h.settingsService.UpdateRegistrationMode(c.Request().Context(), mode); err != nil {
 		return err
 	}
-	h.record(c, "registration.mode_changed", "setting", "registration_mode", mode)
+	h.record(c, "registration.mode_changed", "setting", "registration_mode", registrationModeLabel(mode))
 	slog.Info("registration mode updated", slog.String("mode", mode))
-	c.Response().Header().Set("HX-Redirect", "/admin/security")
+	c.Response().Header().Set("HX-Redirect", securityTabHref(SecurityTabSignup))
 	return c.NoContent(http.StatusOK)
 }
 
@@ -772,14 +887,37 @@ func (h *Handler) TerminateSession(c echo.Context) error {
 
 	_ = h.securityService.LogEvent(c.Request().Context(), EventSessionTerminated,
 		"", currentUserID, c.RealIP(), c.Request().UserAgent(),
-		map[string]any{"token_hash": tokenHash})
+		map[string]any{"token_hint": tokenHint(tokenHash)})
 
 	h.record(c, "session.terminated", "session", "", "")
 	slog.Info("admin terminated session",
 		slog.String("by", currentUserID),
 	)
 
-	return middleware.HTMXRedirect(c, "/admin/security")
+	return middleware.HTMXRedirect(c, securityTabHref(SecurityTabSessions))
+}
+
+// registrationModeLabel is the plain-language mode name the activity sentence
+// ("changed who can sign up to open") reads with.
+func registrationModeLabel(mode string) string {
+	switch mode {
+	case settings.RegistrationOpen:
+		return "open"
+	case settings.RegistrationInvite:
+		return "invite only"
+	case settings.RegistrationClosed:
+		return "closed"
+	}
+	return mode
+}
+
+// tokenHint is the short prefix shown in the event log; the full hash would
+// let a log reader address that session.
+func tokenHint(hash string) string {
+	if len(hash) > 8 {
+		return hash[:8]
+	}
+	return hash
 }
 
 // ForceLogoutUser destroys all sessions for a user (POST /admin/security/users/:id/force-logout).
@@ -912,7 +1050,7 @@ func (h *Handler) Database(c echo.Context) error {
 	}
 
 	csrfToken := middleware.GetCSRFToken(c)
-	return middleware.Render(c, http.StatusOK, AdminDatabasePage(core, statuses, health, backups, tableCount, csrfToken))
+	return middleware.Render(c, http.StatusOK, AdminDatabasePage(normalizeDatabaseTab(c.QueryParam("tab")), core, statuses, health, backups, tableCount, csrfToken))
 }
 
 // DatabaseStatusAPI returns core + plugin migration status as JSON
@@ -958,28 +1096,62 @@ func (h *Handler) ApplyMigrationsAPI(c echo.Context) error {
 		return apperror.NewInternal(fmt.Errorf("database explorer not configured"))
 	}
 
-	results, err := h.databaseExplorer.ApplyPendingMigrations(c.Request().Context())
+	ctx := c.Request().Context()
+
+	// Snapshot what was pending first: the results list every plugin, healthy
+	// or not, so only this lets us say which ones actually applied something.
+	pendingBefore := map[string]int{}
+	if statuses, err := h.databaseExplorer.GetMigrationStatus(ctx); err == nil {
+		for _, s := range statuses {
+			pendingBefore[s.Slug] = s.Pending
+		}
+	}
+
+	results, err := h.databaseExplorer.ApplyPendingMigrations(ctx)
 	if err != nil {
 		return apperror.NewInternal(fmt.Errorf("applying migrations: %w", err))
 	}
 
+	var applied, failed []string
 	for _, r := range results {
 		if r.Healthy {
-			slog.Info("migration applied via admin",
-				slog.String("plugin", r.Slug),
-				slog.Int("version", r.Version),
-			)
-		} else {
-			slog.Error("migration failed via admin",
-				slog.String("plugin", r.Slug),
-				slog.Any("error", r.Error),
-			)
+			if pendingBefore[r.Slug] > 0 {
+				applied = append(applied, r.Slug)
+				slog.Info("migration applied via admin",
+					slog.String("plugin", r.Slug),
+					slog.Int("version", r.Version),
+				)
+			}
+			continue
 		}
+		failed = append(failed, r.Slug)
+		slog.Error("migration failed via admin",
+			slog.String("plugin", r.Slug),
+			slog.Any("error", r.Error),
+		)
 	}
 
-	h.record(c, "migrations.applied", "database", "", "")
+	if len(applied) > 0 {
+		h.record(c, "migrations.applied", "database", "", strings.Join(applied, ", "))
+	}
 
-	return middleware.HTMXRedirect(c, "/admin/database")
+	if len(failed) == 0 {
+		return middleware.HTMXRedirect(c, "/admin/database")
+	}
+
+	// A redirect would drop the toast, so stay on the page and say what
+	// failed; the server log has the technical error.
+	msg := "These parts could not be updated: " + strings.Join(failed, ", ") + ". Check the server log, then reload this page."
+	if len(applied) > 0 {
+		msg = "Updated " + strings.Join(applied, ", ") + ". " + msg
+	}
+	if payload, jerr := json.Marshal(map[string]any{"chronicle:notify": map[string]string{"message": msg, "type": "error"}}); jerr == nil {
+		c.Response().Header().Set("HX-Trigger", string(payload))
+	}
+	if !middleware.IsHTMX(c) {
+		return middleware.HTMXRedirect(c, "/admin/database")
+	}
+	return c.NoContent(http.StatusNoContent)
 }
 
 // Systems renders the system diagnostics page (GET /admin/systems).
@@ -1115,6 +1287,10 @@ func (h *Handler) DiagnosticsWorkspaceRun(c echo.Context) error {
 
 // SecurityPageData holds all data needed for the security dashboard page.
 type SecurityPageData struct {
+	// Tab is the open tab, already whitelisted (see normalizeSecurityTab).
+	Tab string
+	// WatchItems feeds the overview's "Worth a look" list.
+	WatchItems []WatchItem
 	Stats       *SecurityStats
 	Events      []SecurityEvent
 	TotalEvents int
@@ -1126,5 +1302,9 @@ type SecurityPageData struct {
 	// RegistrationMode is the current site registration gate ("open", "invite",
 	// "closed"). Rendered as a select on the security page (B-R4).
 	RegistrationMode string
+	// StatsFailed, EventsFailed and SessionsFailed mark sections whose read
+	// errored, so the page says so instead of rendering an empty state.
+	StatsFailed    bool
+	EventsFailed   bool
+	SessionsFailed bool
 }
-

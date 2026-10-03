@@ -18,6 +18,27 @@ import (
 // color field which is rendered into CSS style attributes.
 var colorPattern = regexp.MustCompile(`^#([0-9a-fA-F]{3}|[0-9a-fA-F]{6})$`)
 
+// pinCategories is the closed set of pin kinds. The map page's kind picker and
+// the Foundry module's pin-type table both speak exactly these five, so a value
+// outside the set could never be shown or round-tripped.
+var pinCategories = map[string]struct{}{
+	"location": {}, "danger": {}, "treasure": {}, "quest": {}, "note": {},
+}
+
+// validatePinCategory rejects a pin_category outside the allowed set. A nil
+// pointer (no kind) is valid. It is applied only to a value the caller sent:
+// a stored legacy value is left alone, so an unrelated edit of an old marker
+// is never blocked by data written before the set was enforced.
+func validatePinCategory(c *string) error {
+	if c == nil {
+		return nil
+	}
+	if _, ok := pinCategories[*c]; !ok {
+		return apperror.NewValidation("pin_category must be one of: location, danger, treasure, quest, note")
+	}
+	return nil
+}
+
 // generateID creates a random UUID v4 string.
 func generateID() string {
 	b := make([]byte, 16)
@@ -244,6 +265,9 @@ func (s *mapService) CreateMarker(ctx context.Context, input CreateMarkerInput) 
 	if input.X < 0 || input.X > 100 || input.Y < 0 || input.Y > 100 {
 		return nil, apperror.NewValidation("marker coordinates must be 0-100")
 	}
+	if err := validatePinCategory(input.PinCategory); err != nil {
+		return nil, err
+	}
 	if input.Visibility == "" {
 		input.Visibility = "everyone"
 	}
@@ -331,6 +355,11 @@ func (s *mapService) UpdateMarker(ctx context.Context, id string, input UpdateMa
 	x, y := input.X.Val(mk.X), input.Y.Val(mk.Y)
 	if x < 0 || x > 100 || y < 0 || y > 100 {
 		return apperror.NewValidation("marker coordinates must be 0-100")
+	}
+	if pc, sent := input.PinCategory.Get(); sent {
+		if err := validatePinCategory(&pc); err != nil {
+			return err
+		}
 	}
 
 	// Validate icon and color to prevent XSS (these are rendered into HTML).

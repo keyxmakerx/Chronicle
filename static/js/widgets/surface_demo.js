@@ -180,10 +180,11 @@
     injectDemoStyles();
 
     var root = document.getElementById('surface-demo-root');
-    if (root) surface.mount(root, schema(HERO));
+    // Clear the server-rendered loading note; mount() only appends.
+    if (root) { root.textContent = ''; surface.mount(root, schema(HERO)); }
 
     var miniSlot = document.getElementById('surface-demo-mini');
-    if (miniSlot) miniSlot.appendChild(buildMiniCard(surface));
+    if (miniSlot) { miniSlot.textContent = ''; miniSlot.appendChild(buildMiniCard(surface)); }
     return true;
   }
 

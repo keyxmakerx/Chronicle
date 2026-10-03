@@ -14,7 +14,7 @@ func TestAdminGroupHeading(t *testing.T) {
 		wantCurrent int
 		wantNav     bool
 	}{
-		{"marks only the open tab", AdminTabsStorage, "/admin/storage/settings", 1, true},
+		{"marks only the open tab", AdminTabsStorage, "/admin/storage?tab=limits", 1, true},
 		{"unknown page marks none", AdminTabsHealth, "/admin/elsewhere", 0, true},
 		{"single page has no strip", AdminTabsAPI, "/admin/api", 0, false},
 	}

@@ -188,6 +188,13 @@ type ExportCalendarData struct {
 	Weather         *ExportCalendarWeather   `json:"weather,omitempty"`
 	EventCategories []ExportEventCategory    `json:"event_categories,omitempty"`
 	Events          []ExportCalendarEvent    `json:"events,omitempty"`
+	// AdditionalCalendars are the campaign's non-default calendars. They live
+	// under the primary rather than as a second envelope key so a file
+	// written by this version still reads in an importer that only knows the
+	// singular "calendar"; such an importer simply drops the extras. Only the
+	// primary carries EventCategories, because event kinds are campaign-wide
+	// and extras reference them by slug.
+	AdditionalCalendars []ExportCalendarData `json:"additional_calendars,omitempty"`
 }
 
 // ExportCalendarMonth is a month definition for export.

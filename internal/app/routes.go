@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"log/slog"
 	"net/http"
+	"path"
 	"path/filepath"
 	"strconv"
 	"strings"
@@ -413,6 +414,22 @@ func (a *backdropUploaderAdapter) UploadBackdrop(ctx context.Context, campaignID
 	return mf.Filename, nil
 }
 
+// OwnsFile reports whether filename (the stored "YYYY/MM/<id>.<ext>" that
+// UploadBackdrop returns) is a media file belonging to campaignID.
+func (a *backdropUploaderAdapter) OwnsFile(ctx context.Context, campaignID, filename string) (bool, error) {
+	base := path.Base(filename)
+	id := strings.TrimSuffix(base, path.Ext(base))
+	mf, err := a.svc.GetByID(ctx, id)
+	if err != nil {
+		var ae *apperror.AppError
+		if errors.As(err, &ae) && ae.Code == http.StatusNotFound {
+			return false, nil
+		}
+		return false, err
+	}
+	return mf.Filename == filename && mf.CampaignID != nil && *mf.CampaignID == campaignID, nil
+}
+
 // entityTagFetcherAdapter wraps tags.TagService to implement the
 // entities.EntityTagFetcher interface for batch tag loading in list views.
 // grantSvc backs the tag-grant glance methods.
@@ -619,11 +636,11 @@ func (a *calendarEventLinkListerAdapter) CalendarName(ctx context.Context, campa
 		return ""
 	}
 	v := permissions.RequestViewer(role, "")
-	cal, err := a.svc.GetCalendarForViewer(ctx, calendarID, campaignID, v)
-	if err != nil || cal == nil {
+	name, err := a.svc.GetCalendarNameForViewer(ctx, calendarID, campaignID, v)
+	if err != nil {
 		return ""
 	}
-	return cal.Name
+	return name
 }
 
 // EventsByIDs implements timeline.CalendarEventLinkLister. Built as a plain
@@ -633,22 +650,23 @@ func (a *calendarEventLinkListerAdapter) CalendarName(ctx context.Context, campa
 // check, never looser, since it also runs a calendar event's own
 // visibility_rules and redacts a hidden linked entity, both of which the old
 // SQL never touched.
-//
-// One GetEventForViewer call per id — no batch read exists on
-// CalendarService yet — acceptable for the handful of events a timeline
-// typically links; a real batch method is the natural follow-up if that
-// stops being true.
+// One batch read serves every id, so cost no longer grows with link count.
 func (a *calendarEventLinkListerAdapter) EventsByIDs(ctx context.Context, calendarID, campaignID string, eventIDs []string, role int) ([]timeline.CalendarEventRef, error) {
 	if calendarID == "" || len(eventIDs) == 0 {
 		return nil, nil
 	}
 	v := permissions.RequestViewer(role, "")
-	refs := make([]timeline.CalendarEventRef, 0, len(eventIDs))
-	for _, id := range eventIDs {
-		evt, err := a.svc.GetEventForViewer(ctx, id, calendarID, campaignID, v)
-		if err != nil {
-			continue // not found, or not visible to this role — simply absent
+	events, err := a.svc.ListEventsByIDsForViewer(ctx, calendarID, campaignID, eventIDs, v)
+	if err != nil {
+		if isNotFound(err) {
+			// Calendar missing or hidden from this role: no event resolves.
+			return nil, nil
 		}
+		return nil, err
+	}
+	refs := make([]timeline.CalendarEventRef, 0, len(events))
+	for i := range events {
+		evt := &events[i]
 		var category *string
 		if evt.KindSlug != "" {
 			category = &evt.KindSlug
@@ -775,7 +793,13 @@ func (a *entityEventPublisherAdapter) PublishEntityEvent(eventType, campaignID, 
 	default:
 		return
 	}
-	a.bus.Publish(ws.NewMessage(msgType, campaignID, entityID, entity))
+	// The payload is the whole stored entity: private pages, GM-only fields
+	// and secret text included, none of the per-viewer filtering the HTTP
+	// reads apply. So it only goes to DM-equivalent sockets; anyone else
+	// reads entities over HTTP, where that filtering happens.
+	msg := ws.NewMessage(msgType, campaignID, entityID, entity)
+	msg.RequiresDM = true
+	a.bus.Publish(msg)
 }
 
 // PublishEntityTypeEvent translates entity type domain events into WebSocket messages.
@@ -1535,19 +1559,73 @@ func (a *entityAccessAdapter) FilterViewableEntityIDs(ctx context.Context, campa
 }
 
 // npcEntityTypeFinderAdapter wraps entities.EntityService to implement the
-// npcs.EntityTypeFinder interface. Resolves the "characters" entity type ID
-// for the NPC gallery without creating a circular import.
+// npcs.EntityTypeFinder interface. Resolves the entity types the NPC section
+// lists without creating a circular import.
 type npcEntityTypeFinderAdapter struct {
 	svc entities.EntityService
 }
 
-// FindCharacterTypeID looks up the "characters" entity type for a campaign.
-func (a *npcEntityTypeFinderAdapter) FindCharacterTypeID(ctx context.Context, campaignID string) (int, error) {
-	et, err := a.svc.GetEntityTypeBySlug(ctx, campaignID, "characters")
+// FindCharacterTypeIDs returns the campaign's NPC/monster entity types.
+func (a *npcEntityTypeFinderAdapter) FindCharacterTypeIDs(ctx context.Context, campaignID string) ([]int, error) {
+	types, err := a.svc.GetEntityTypes(ctx, campaignID)
 	if err != nil {
-		return 0, err
+		return nil, err
 	}
-	return et.ID, nil
+	return npcTypeIDs(types), nil
+}
+
+// npcTypeIDs picks the entity types whose entities are NPCs or monsters: the
+// default "character" type, the "npc"/"creature" genre types, system-pack
+// character and monster types, and every enabled sub-type nested under one of
+// them. The player-character type is left out; claimed PCs are the party.
+func npcTypeIDs(types []entities.EntityType) []int {
+	isRoot := func(et entities.EntityType) bool {
+		if et.PresetCategory != nil {
+			switch *et.PresetCategory {
+			case "character", "creature":
+				return true
+			}
+		}
+		switch et.Slug {
+		case "character", "npc", "creature":
+			return true
+		}
+		return strings.HasSuffix(et.Slug, "-character") || strings.HasSuffix(et.Slug, "-monster")
+	}
+	isPC := func(et entities.EntityType) bool {
+		return (et.PresetCategory != nil && *et.PresetCategory == entities.PresetCategoryPlayerCharacter) ||
+			et.Slug == entities.SlugPlayerCharacter
+	}
+
+	byID := make(map[int]entities.EntityType, len(types))
+	for _, et := range types {
+		byID[et.ID] = et
+	}
+	// inFamily walks up the parent chain; depth guards against a cycle.
+	inFamily := func(et entities.EntityType) bool {
+		for depth := 0; depth < 16; depth++ {
+			if isRoot(et) {
+				return true
+			}
+			if et.ParentTypeID == nil {
+				return false
+			}
+			parent, ok := byID[*et.ParentTypeID]
+			if !ok {
+				return false
+			}
+			et = parent
+		}
+		return false
+	}
+
+	var ids []int
+	for _, et := range types {
+		if et.Enabled && !isPC(et) && inFamily(et) {
+			ids = append(ids, et.ID)
+		}
+	}
+	return ids
 }
 
 // npcVisibilityTogglerAdapter wraps entities.EntityService to implement the
@@ -1622,6 +1700,30 @@ func (a *armoryItemTypeFinderAdapter) FindItemTypes(ctx context.Context, campaig
 	return infos, nil
 }
 
+// armoryTagListerAdapter wraps tags.TagService to implement armory.TagLister,
+// so gallery cards carry their tags. Whether GM-only tags are included is the
+// caller's decision, passed through.
+type armoryTagListerAdapter struct {
+	svc tags.TagService
+}
+
+// ListTagsForEntities batch-fetches tags for the given entities.
+func (a *armoryTagListerAdapter) ListTagsForEntities(ctx context.Context, entityIDs []string, includeDmOnly bool) (map[string][]armory.TagInfo, error) {
+	tagsMap, err := a.svc.GetEntityTagsBatch(ctx, entityIDs, includeDmOnly)
+	if err != nil {
+		return nil, err
+	}
+	result := make(map[string][]armory.TagInfo, len(tagsMap))
+	for eid, tagList := range tagsMap {
+		infos := make([]armory.TagInfo, len(tagList))
+		for i, t := range tagList {
+			infos[i] = armory.TagInfo{ID: t.ID, Name: t.Name, Slug: t.Slug, Color: t.Color}
+		}
+		result[eid] = infos
+	}
+	return result, nil
+}
+
 // armoryRelationMetadataAdapter wraps the relations service to implement
 // armory.RelationMetadataUpdater. Used by the transaction service to decrement
 // shop stock when a purchase is made.
@@ -1632,6 +1734,11 @@ type armoryRelationMetadataAdapter struct {
 // UpdateMetadata updates the metadata JSON for a relation.
 func (a *armoryRelationMetadataAdapter) UpdateMetadata(ctx context.Context, id int, metadata json.RawMessage) error {
 	return a.svc.UpdateMetadata(ctx, id, metadata)
+}
+
+// UpdateMetadataIf delegates the conditional write used for shop stock.
+func (a *armoryRelationMetadataAdapter) UpdateMetadataIf(ctx context.Context, id int, expected, metadata json.RawMessage) (bool, error) {
+	return a.svc.UpdateMetadataIf(ctx, id, expected, metadata)
 }
 
 // entityMapVerifierAdapter wraps maps.MapService to implement
@@ -1707,7 +1814,18 @@ type armoryBuyerAccessAdapter struct {
 
 // CanUserActAsBuyer returns true if the user has edit-level access to the
 // buyer entity. Owners short-circuit true at the entity-service layer.
-func (a *armoryBuyerAccessAdapter) CanUserActAsBuyer(ctx context.Context, entityID, userID string, role int) (bool, error) {
+func (a *armoryBuyerAccessAdapter) CanUserActAsBuyer(ctx context.Context, campaignID, entityID, userID string, role int) (bool, error) {
+	ent, err := a.svc.GetByID(ctx, entityID)
+	if err != nil {
+		var appErr *apperror.AppError
+		if errors.As(err, &appErr) && appErr.Code == http.StatusNotFound {
+			return false, nil
+		}
+		return false, err
+	}
+	if ent.CampaignID != campaignID {
+		return false, nil
+	}
 	perm, err := a.svc.CheckEntityAccess(ctx, entityID, role, userID)
 	if err != nil {
 		return false, err
@@ -1732,9 +1850,11 @@ func (a *armoryRelationFinderAdapter) GetByID(ctx context.Context, id int) (*arm
 		return nil, err
 	}
 	return &armory.RelationInfo{
-		ID:         rel.ID,
-		Metadata:   rel.Metadata,
-		CampaignID: rel.CampaignID,
+		ID:             rel.ID,
+		Metadata:       rel.Metadata,
+		CampaignID:     rel.CampaignID,
+		SourceEntityID: rel.SourceEntityID,
+		TargetEntityID: rel.TargetEntityID,
 	}, nil
 }
 
@@ -2274,7 +2394,7 @@ func (a *App) RegisterRoutes() {
 	addonService.SetSystemFinder(&systemManifestFinderAdapter{})
 	addonHandler := addons.NewHandler(addonService)
 	addonHandler.SetActivityRecorder(adminActivity)
-	addons.RegisterAdminRoutes(adminGroup, addonHandler)
+	addons.RegisterAdminRoutes(adminGroup, addonHandler, auth.RequireReauth(authService))
 	addons.RegisterCampaignRoutes(e, addonHandler, campaignService, authService)
 
 	// Campaign media browser routes (gated behind media-gallery addon).
@@ -2673,7 +2793,7 @@ func (a *App) RegisterRoutes() {
 	adminHandler.SetAPIAlertCounter(adminAPIAlertCounter{sync: syncService})
 	syncHandler.SetBaseURL(a.Config.BaseURL)
 	if a.PluginHealth.IsHealthy("syncapi") {
-		syncapi.RegisterAdminRoutes(adminGroup, syncHandler)
+		syncapi.RegisterAdminRoutes(adminGroup, syncHandler, auth.RequireReauth(authService))
 		syncapi.RegisterCampaignRoutes(e, syncHandler, campaignService, authService)
 	} else {
 		slog.Warn("syncapi plugin degraded — routes not registered")
@@ -2850,6 +2970,14 @@ func (a *App) RegisterRoutes() {
 	// Entity campaign checker prevents cross-campaign entity linking (IDOR).
 	sessionsRepo := sessions.NewSessionRepository(a.DB)
 	sessionsService := sessions.NewSessionService(sessionsRepo, &entityCampaignCheckerAdapter{svc: entityService}, &entityVisibilityFilterAdapter{svc: entityService})
+	// The calendar's anchor-move preview names the sessions it would re-date
+	// through this lookup; without it the owner's warning would always read
+	// "no sessions affected".
+	if wired, ok := calendarService.(interface {
+		SetGameNightsAffectedByAnchorMove(calendar.GameNightsAffectedByAnchorMove)
+	}); ok {
+		wired.SetGameNightsAffectedByAnchorMove(&gameNightsAnchorMoveAdapter{svc: sessionsService})
+	}
 	sessionsHandler := sessions.NewHandler(sessionsService)
 	sessionsHandler.SetMemberLister(campaignService)
 	sessionsHandler.SetMailSender(smtpService, a.Config.BaseURL)
@@ -2989,6 +3117,8 @@ func (a *App) RegisterRoutes() {
 	// Reuses the sync mapping service created earlier for the owner dashboard.
 	syncMappingHandler := syncapi.NewSyncHandler(syncMappingSvcEarly)
 	mapAPIHandler := syncapi.NewMapAPIHandler(syncService, mapsService, drawingService, campaignService)
+	syncChangeRepo := syncapi.NewSyncChangeRepository(a.DB)
+	syncChangesHandler := syncapi.NewSyncChangesHandler(syncChangeRepo, campaignService)
 
 	// Note API handler for sync API — uses the same note repo/service as the web handler.
 	// Created here (before RegisterAPIRoutes) so the service is available; the web
@@ -3004,7 +3134,7 @@ func (a *App) RegisterRoutes() {
 	tagAPIHandler := syncapi.NewTagAPIHandler(syncService, tagService, entityService, campaignService)
 
 	if a.PluginHealth.IsHealthy("syncapi") {
-		syncapi.RegisterAPIRoutes(e, syncAPIHandler, calendarAPIHandler, mediaAPIHandler, mapAPIHandler, noteAPIHandler, tagAPIHandler, syncMappingHandler, syncService, addonService, authService, campaignService)
+		syncapi.RegisterAPIRoutes(e, syncAPIHandler, calendarAPIHandler, mediaAPIHandler, mapAPIHandler, noteAPIHandler, tagAPIHandler, syncMappingHandler, syncChangesHandler, syncService, addonService, authService, campaignService)
 	}
 
 	// NPC plugin: gallery/hub view for revealed character entities.
@@ -3026,11 +3156,12 @@ func (a *App) RegisterRoutes() {
 	// Same visibility-gate reasoning as the NPC plugin above.
 	armoryRepo := armory.NewArmoryRepository(a.DB)
 	armorySvc := armory.NewArmoryService(armoryRepo, &armoryItemTypeFinderAdapter{svc: entityService}, &entityVisibilityFilterAdapter{svc: entityService})
+	armorySvc.SetTagLister(&armoryTagListerAdapter{svc: tagService})
 	armoryHandler := armory.NewHandler(armorySvc)
 
 	// Instance service: named inventory collections per campaign.
 	instRepo := armory.NewInstanceRepository(a.DB)
-	instSvc := armory.NewInstanceService(instRepo)
+	instSvc := armory.NewInstanceService(instRepo, &entityVisibilityFilterAdapter{svc: entityService}, &entityCampaignCheckerAdapter{svc: entityService})
 	instHandler := armory.NewInstanceHandler(instSvc)
 	armoryHandler.SetInstanceService(instSvc)
 
@@ -3041,6 +3172,7 @@ func (a *App) RegisterRoutes() {
 	txSvc.SetRelationFinder(&armoryRelationFinderAdapter{svc: relService})
 	txSvc.SetBuyerAccessChecker(&armoryBuyerAccessAdapter{svc: entityService})
 	txHandler := armory.NewTransactionHandler(txSvc)
+	txHandler.SetEntityVisibility(&entityVisibilityFilterAdapter{svc: entityService})
 	armory.RegisterRoutes(e, armoryHandler, txHandler, instHandler, campaignService, authService, addonService)
 
 	// Notes widget: personal floating note-taking panel (Google Keep-style).
@@ -3754,6 +3886,16 @@ func (a *App) RegisterRoutes() {
 			if campaignSettings.FontFamily != "" {
 				ctx = layouts.SetFontFamily(ctx, campaignSettings.FontFamily)
 			}
+			if ap := campaignSettings.Appearance; ap != nil {
+				ad := &layouts.AppearanceData{
+					NavStyle: ap.NavStyle, NavStrength: ap.NavStrength, NavPageName: ap.NavPageName,
+					PageTone: ap.PageTone, Contrast: ap.Contrast,
+					BodyFont: ap.BodyFont, HeadingFont: ap.HeadingFont, TypeScale: ap.TypeScale,
+					ButtonStyle: ap.ButtonStyle, Elevation: ap.Elevation, MotionSpeed: ap.MotionSpeed,
+					ReduceMotion: ap.ReduceMotion,
+				}
+				ctx = layouts.SetAppearance(ctx, ad)
+			}
 			if campaignSettings.TopbarStyle != nil {
 				ctx = layouts.SetTopbarStyle(ctx, &layouts.TopbarStyleData{
 					Mode:         campaignSettings.TopbarStyle.Mode,
@@ -3762,12 +3904,14 @@ func (a *App) RegisterRoutes() {
 					GradientTo:   campaignSettings.TopbarStyle.GradientTo,
 					GradientDir:  campaignSettings.TopbarStyle.GradientDir,
 					ImagePath:    campaignSettings.TopbarStyle.ImagePath,
+					Scrim:        campaignSettings.TopbarStyle.Scrim,
 				})
 			}
 			if campaignSettings.TopbarContent != nil && campaignSettings.TopbarContent.Mode != "" && campaignSettings.TopbarContent.Mode != "none" {
 				tc := &layouts.TopbarContentData{
-					Mode:  campaignSettings.TopbarContent.Mode,
-					Quote: campaignSettings.TopbarContent.Quote,
+					Mode:    campaignSettings.TopbarContent.Mode,
+					Quote:   campaignSettings.TopbarContent.Quote,
+					Widgets: campaignSettings.TopbarContent.Widgets,
 				}
 				for _, link := range campaignSettings.TopbarContent.Links {
 					tc.Links = append(tc.Links, layouts.TopbarLinkData{
@@ -3987,7 +4131,10 @@ func (a *App) RegisterRoutes() {
 	e.GET("/ws", ws.HandleUpgrade(wsHub, wsAuth, []string{a.Config.BaseURL}, wsDynamicOrigins))
 
 	// Wire EventBus into services for real-time event publishing.
-	wsEventBus := ws.NewEventBus(wsHub)
+	// The recording wrapper appends allowlisted events to the change feed
+	// before they reach the hub, so no publisher can forget to record.
+	wsEventBus := ws.EventBus(syncapi.NewRecordingEventBus(ws.NewEventBus(wsHub), syncChangeRepo))
+	go syncapi.StartChangePruner(a.ShutdownCtx, syncChangeRepo)
 
 	entityService.SetEventPublisher(&entityEventPublisherAdapter{bus: wsEventBus})
 	entityService.SetSidebarAutoAdder(&sidebarAutoAdderAdapter{campaignService: campaignService})

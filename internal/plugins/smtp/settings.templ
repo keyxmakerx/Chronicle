@@ -7,10 +7,10 @@ import (
 
 // SMTPSettingsPage renders the full SMTP settings page (admin only).
 templ SMTPSettingsPage(settings *SMTPSettings, csrfToken, errMsg string) {
-	@layouts.App("SMTP Settings - Admin") {
+	@layouts.App("Email - Admin") {
 		<div class="max-w-2xl mx-auto">
 			<div class="mb-6">
-				<h1 class="text-2xl font-bold text-fg">SMTP Settings</h1>
+				<h1 class="text-2xl font-bold text-fg">Email</h1>
 				<p class="text-sm text-fg-secondary mt-1">
 					Configure outbound email for password resets and campaign transfer notifications.
 				</p>
@@ -22,16 +22,36 @@ templ SMTPSettingsPage(settings *SMTPSettings, csrfToken, errMsg string) {
 	}
 }
 
-// SMTPFormComponent renders the SMTP settings form. Used for full page and HTMX partial swaps.
+// emailStatus summarises the saved settings in plain words. It reflects what
+// is saved, not a delivery check: nothing records when mail last went out, so
+// no "last sent" time is claimed.
+func emailStatus(s *SMTPSettings) (text string, ok bool) {
+	switch {
+	case s.Enabled && s.Host != "":
+		return "Email is working.", true
+	case s.Host != "":
+		return "Email is set up.", false
+	default:
+		return "Email isn't set up yet.", false
+	}
+}
+
+// SMTPFormComponent renders the whole swappable region: status line, the Mail
+// server form and the separate test card. The test controls sit outside the
+// settings form so pressing Enter there never saves. Used for the full page
+// and HTMX partial swaps.
 templ SMTPFormComponent(settings *SMTPSettings, csrfToken, errMsg, successMsg string) {
-	<form
-		hx-put="/admin/smtp"
-		hx-target="#smtp-form-container"
-		hx-swap="innerHTML"
-		hx-headers={ fmt.Sprintf(`{"X-CSRF-Token":"%s"}`, csrfToken) }
-		class="card space-y-6"
-	>
-		<input type="hidden" name="csrf_token" value={ csrfToken }/>
+	{{ statusText, statusOK := emailStatus(settings) }}
+	<div class="space-y-4">
+		<div class="card flex flex-wrap items-baseline gap-x-2 gap-y-1" role="status">
+			<span class={ "font-semibold", templ.KV("text-emerald-700 dark:text-emerald-300", statusOK), templ.KV("text-fg", !statusOK) }>
+				if statusOK {
+					<i class="fa-solid fa-check mr-1"></i>
+				}
+				{ statusText }
+			</span>
+			<span class="text-xs text-fg-muted">Based on the saved settings. Use "Send a test" to check delivery.</span>
+		</div>
 		if errMsg != "" {
 			<div class="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-md text-sm" role="alert">
 				{ errMsg }
@@ -42,6 +62,22 @@ templ SMTPFormComponent(settings *SMTPSettings, csrfToken, errMsg, successMsg st
 				{ successMsg }
 			</div>
 		}
+		@smtpSettingsForm(settings, csrfToken)
+		@smtpTestCard(csrfToken)
+	</div>
+}
+
+// smtpSettingsForm is the Mail server form; Save is its only action.
+templ smtpSettingsForm(settings *SMTPSettings, csrfToken string) {
+	<form
+		hx-put="/admin/smtp"
+		hx-target="#smtp-form-container"
+		hx-swap="innerHTML"
+		hx-headers={ fmt.Sprintf(`{"X-CSRF-Token":"%s"}`, csrfToken) }
+		class="card space-y-6"
+	>
+		<h2 class="text-lg font-semibold text-fg">Mail server</h2>
+		<input type="hidden" name="csrf_token" value={ csrfToken }/>
 		<!-- Host -->
 		<div>
 			<label for="host" class="block text-sm font-medium text-fg-body mb-1">SMTP Host</label>
@@ -144,57 +180,51 @@ templ SMTPFormComponent(settings *SMTPSettings, csrfToken, errMsg, successMsg st
 			/>
 			<label for="enabled" class="text-sm font-medium text-fg-body">Enable SMTP</label>
 		</div>
-		<!-- Actions -->
 		<div class="flex items-center gap-3 pt-4 border-t border-edge">
 			<button
 				type="submit"
 				class="btn-primary"
 			>
-				Save Settings
+				Save
 			</button>
+		</div>
+	</form>
+}
+
+// smtpTestCard holds the checks that use the saved settings. It is its own
+// form so Enter in the address box sends a test, and never saves the settings.
+templ smtpTestCard(csrfToken string) {
+	<form
+		hx-post="/admin/smtp/send-test"
+		hx-target="#smtp-form-container"
+		hx-swap="innerHTML"
+		hx-headers={ fmt.Sprintf(`{"X-CSRF-Token":"%s"}`, csrfToken) }
+		class="card space-y-3"
+	>
+		<div>
+			<h2 class="text-lg font-semibold text-fg">Send a test</h2>
+			<p class="text-xs text-fg-muted mt-1">Uses the saved settings, so save any changes first.</p>
+		</div>
+		<div class="flex flex-wrap items-center gap-3">
+			<label for="test_email" class="sr-only">Send test to</label>
+			<input
+				type="email"
+				id="test_email"
+				name="test_email"
+				placeholder="you@example.com"
+				class="input flex-1 min-w-0"
+			/>
+			<button type="submit" class="btn-secondary whitespace-nowrap">Send test email</button>
 			<button
 				type="button"
 				hx-post="/admin/smtp/test"
 				hx-target="#smtp-form-container"
 				hx-swap="innerHTML"
-				hx-include="closest form"
 				hx-headers={ fmt.Sprintf(`{"X-CSRF-Token":"%s"}`, csrfToken) }
-				class="btn-secondary"
+				class="btn-secondary whitespace-nowrap"
 			>
-				Test Connection
+				Test connection
 			</button>
-			<a
-				href="/admin"
-				class="text-sm text-fg-secondary hover:text-fg transition-colors ml-auto"
-			>
-				Cancel
-			</a>
-		</div>
-		<!-- Send Test Email -->
-		<div class="pt-4 border-t border-edge">
-			<label class="block text-sm font-medium text-fg-body mb-2">Send Test Email</label>
-			<div class="flex items-center gap-3">
-				<input
-					type="email"
-					name="test_email"
-					placeholder="recipient@example.com"
-					class="input flex-1"
-				/>
-				<button
-					type="button"
-					hx-post="/admin/smtp/send-test"
-					hx-target="#smtp-form-container"
-					hx-swap="innerHTML"
-					hx-include="closest form"
-					hx-headers={ fmt.Sprintf(`{"X-CSRF-Token":"%s"}`, csrfToken) }
-					class="btn-secondary whitespace-nowrap"
-				>
-					Send Test
-				</button>
-			</div>
-			<p class="text-xs text-fg-muted mt-1">
-				Sends a real email to verify the full delivery pipeline.
-			</p>
 		</div>
 	</form>
 }

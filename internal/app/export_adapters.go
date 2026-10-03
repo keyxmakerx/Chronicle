@@ -262,15 +262,10 @@ func isNotFound(err error) bool {
 // events, hidden moons and GM-only calendars, or a restore silently loses
 // content the campaign actually had.
 //
-// campaigns.ExportCalendarData (and campaigns.IDMap.CalendarID) is SINGULAR,
-// a V4-era shape that predates calendar-v5's multi-calendar-per-campaign
-// model (see calendar.Calendar's package doc: "Each campaign can have
-// multiple calendars"). This adapter exports the campaign's DEFAULT calendar,
-// falling back to the first one (by sort order) if none is marked default —
-// any additional calendars in the same campaign are NOT backed up. Widening
-// the export envelope to carry every calendar is a real gap, but a bigger
-// wire-format change than this restoration pass should make unreviewed;
-// left as a follow-up rather than silently ignored (see the PR description).
+// The envelope's "calendar" key stays singular for backward compatibility:
+// it holds the campaign's DEFAULT calendar (the first by sort order if none
+// is marked default), and any further calendars ride on its
+// AdditionalCalendars. campaigns.IDMap.CalendarID still names the default.
 func (a *calendarExportAdapter) ExportCalendar(ctx context.Context, campaignID string, entitySlugLookup func(string) string) (*campaigns.ExportCalendarData, error) {
 	const ownerRole = 3
 	systemViewer := permissions.SystemViewer(ownerRole)
@@ -298,6 +293,39 @@ func (a *calendarExportAdapter) ExportCalendar(ctx context.Context, campaignID s
 		}
 	}
 
+	data, err := a.exportOne(ctx, cal, campaignID, systemViewer, entitySlugLookup, true)
+	if err != nil {
+		return nil, err
+	}
+
+	// Every other calendar rides on the primary's AdditionalCalendars so the
+	// envelope stays one singular "calendar" key that older importers still
+	// read; they simply ignore the extras.
+	others, err := a.svc.ListCalendars(ctx, campaignID, systemViewer)
+	if err != nil {
+		return nil, err
+	}
+	for _, o := range others {
+		if o.ID == cal.ID {
+			continue
+		}
+		full, err := a.svc.GetCalendarForViewer(ctx, o.ID, campaignID, systemViewer)
+		if err != nil {
+			return nil, err
+		}
+		extra, err := a.exportOne(ctx, full, campaignID, systemViewer, entitySlugLookup, false)
+		if err != nil {
+			return nil, err
+		}
+		data.AdditionalCalendars = append(data.AdditionalCalendars, *extra)
+	}
+	return data, nil
+}
+
+// exportOne walks a single calendar. Event kinds are campaign-scoped, so only
+// the primary calendar (withKinds) carries them; repeating them on every
+// calendar would make the import create each kind once per calendar.
+func (a *calendarExportAdapter) exportOne(ctx context.Context, cal *calendar.Calendar, campaignID string, systemViewer permissions.Viewer, entitySlugLookup func(string) string, withKinds bool) (*campaigns.ExportCalendarData, error) {
 	events, err := a.svc.ListAllEventsForCalendar(ctx, cal.ID, campaignID, systemViewer)
 	if err != nil {
 		return nil, err
@@ -372,6 +400,9 @@ func (a *calendarExportAdapter) ExportCalendar(ctx context.Context, campaignID s
 		})
 	}
 	for _, k := range cal.EventKinds {
+		if !withKinds {
+			break
+		}
 		data.EventCategories = append(data.EventCategories, campaigns.ExportEventCategory{
 			Slug: k.Slug, Name: k.Name, Icon: k.Icon, Color: k.Color, SortOrder: k.SortOrder,
 			DefaultAnnounced: k.DefaultAnnounced,
@@ -1212,6 +1243,28 @@ type calendarImportAdapter struct {
 // import still gets created, just with no KindID — rather than losing the
 // era or the event outright.
 func (a *calendarImportAdapter) ImportCalendar(ctx context.Context, campaignID string, data *campaigns.ExportCalendarData, idMap *campaigns.IDMap, report *campaigns.ImportReport) error {
+	kindIDBySlug, err := a.importOne(ctx, campaignID, data, idMap, report, true, nil)
+	if err != nil {
+		return err
+	}
+	// Extras are best-effort: a failing one is reported and the rest still
+	// import, so one bad calendar never costs the others.
+	for i := range data.AdditionalCalendars {
+		extra := &data.AdditionalCalendars[i]
+		if _, err := a.importOne(ctx, campaignID, extra, idMap, report, false, kindIDBySlug); err != nil {
+			slog.Warn("import: additional calendar failed", slog.String("name", extra.Name), slog.Any("error", err))
+			report.Fail(campaigns.SectionCalendar, campaigns.KindCalendar, extra.Name, apperror.SafeMessage(err))
+		}
+	}
+	return nil
+}
+
+// importOne rebuilds a single calendar. isPrimary controls the things that
+// are per-campaign rather than per-calendar: only the primary becomes the
+// default and idMap.CalendarID (timelines bind to it), and only it creates
+// the campaign-scoped event kinds, which sharedKinds hands to later calendars
+// so their events still resolve a category. It returns the slug-to-kind map.
+func (a *calendarImportAdapter) importOne(ctx context.Context, campaignID string, data *campaigns.ExportCalendarData, idMap *campaigns.IDMap, report *campaigns.ImportReport, isPrimary bool, sharedKinds map[string]int) (map[string]int, error) {
 	months := make([]calendar.MonthInput, len(data.Months))
 	for i, m := range data.Months {
 		months[i] = calendar.MonthInput{
@@ -1239,17 +1292,20 @@ func (a *calendarImportAdapter) ImportCalendar(ctx context.Context, campaignID s
 		VisibilityRules:  data.VisibilityRules,
 	})
 	if err != nil {
-		return fmt.Errorf("create calendar: %w", err)
+		return nil, fmt.Errorf("create calendar: %w", err)
 	}
-	idMap.CalendarID = cal.ID
+	if isPrimary {
+		idMap.CalendarID = cal.ID
+	}
 
-	// This is the campaign's first (only, per ExportCalendarData's singular
-	// shape) calendar, so it becomes the default — every default-calendar
+	// The primary is the campaign's first calendar, so it becomes the default — every default-calendar
 	// reader (GetDefaultCalendarForViewer, the skybox/dashboard/category
 	// blocks) needs one marked, and CreateCalendar itself never sets it.
-	if err := a.svc.SetDefaultCalendar(ctx, campaignID, cal.ID); err != nil {
-		slog.Warn("import: set default calendar failed", slog.Any("error", err))
-		report.Fail(campaigns.SectionCalendar, campaigns.KindCalendar, data.Name, apperror.SafeMessage(err))
+	if isPrimary {
+		if err := a.svc.SetDefaultCalendar(ctx, campaignID, cal.ID); err != nil {
+			slog.Warn("import: set default calendar failed", slog.Any("error", err))
+			report.Fail(campaigns.SectionCalendar, campaigns.KindCalendar, data.Name, apperror.SafeMessage(err))
+		}
 	}
 
 	if len(months) > 0 {
@@ -1373,7 +1429,10 @@ func (a *calendarImportAdapter) ImportCalendar(ctx context.Context, campaignID s
 	// Event kinds (categories), by slug — an event referencing a slug whose
 	// kind failed to import (see the icon-validation note above) is still
 	// created below, just with no KindID.
-	kindIDBySlug := make(map[string]int, len(data.EventCategories))
+	kindIDBySlug := make(map[string]int, len(data.EventCategories)+len(sharedKinds))
+	for slug, id := range sharedKinds {
+		kindIDBySlug[slug] = id
+	}
 	for _, c := range data.EventCategories {
 		kind, err := a.svc.CreateEventKind(ctx, campaignID, calendar.EventKindInput{
 			Slug: c.Slug, Name: c.Name, Icon: c.Icon, Color: c.Color, SortOrder: c.SortOrder,
@@ -1466,7 +1525,7 @@ func (a *calendarImportAdapter) ImportCalendar(ctx context.Context, campaignID s
 		}
 	}
 
-	return nil
+	return kindIDBySlug, nil
 }
 
 // eraStartMonthDay resolves an imported era's start month/day: a modern

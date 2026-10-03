@@ -19,6 +19,14 @@ type mockInstanceRepo struct {
 	addItemFn         func(ctx context.Context, instanceID int, entityID string, quantity int) error
 	removeItemFn      func(ctx context.Context, instanceID int, entityID string) error
 	countItemsFn      func(ctx context.Context, instanceID int) (int, error)
+	entityIDsFn       func(ctx context.Context, campaignID string) (map[int][]string, error)
+}
+
+func (m *mockInstanceRepo) ListItemEntityIDsByInstance(ctx context.Context, campaignID string) (map[int][]string, error) {
+	if m.entityIDsFn != nil {
+		return m.entityIDsFn(ctx, campaignID)
+	}
+	return nil, nil
 }
 
 func (m *mockInstanceRepo) Create(ctx context.Context, campaignID, name, slug, desc, icon, color string) (*InventoryInstance, error) {
@@ -78,7 +86,21 @@ func (m *mockInstanceRepo) CountInstanceItems(ctx context.Context, instanceID in
 }
 
 func newTestInstanceService(repo *mockInstanceRepo) *instanceService {
-	return &instanceService{repo: repo}
+	return &instanceService{repo: repo, entityCampaign: fakeEntityCampaign{inCampaign: map[string]bool{"entity-1": true}}}
+}
+
+// fakeEntityCampaign answers membership from a fixed set; an id present in
+// errs returns that error.
+type fakeEntityCampaign struct {
+	inCampaign map[string]bool
+	errs       map[string]error
+}
+
+func (f fakeEntityCampaign) EntityBelongsToCampaign(_ context.Context, entityID, _ string) (bool, error) {
+	if err := f.errs[entityID]; err != nil {
+		return false, err
+	}
+	return f.inCampaign[entityID], nil
 }
 
 func isAppError(err error) bool {

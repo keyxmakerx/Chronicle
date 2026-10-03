@@ -39,6 +39,10 @@ type RelationService interface {
 	// Used by the shop inventory widget to update price/quantity/stock.
 	UpdateMetadata(ctx context.Context, id int, metadata json.RawMessage) error
 
+	// UpdateMetadataIf updates the metadata only while it still equals
+	// expected, reporting whether it wrote.
+	UpdateMetadataIf(ctx context.Context, id int, expected, metadata json.RawMessage) (bool, error)
+
 	// GetGraphData returns the relations graph data (nodes + edges) for a
 	// campaign. Used by the relations graph visualization widget.
 	// When includeDmOnly is false, dm_only relations are excluded from the graph.
@@ -205,6 +209,11 @@ func (s *relationService) GetCommonTypes() []RelationTypePair {
 // UpdateMetadata updates the metadata JSON for a relation.
 func (s *relationService) UpdateMetadata(ctx context.Context, id int, metadata json.RawMessage) error {
 	return s.repo.UpdateMetadata(ctx, id, metadata)
+}
+
+// UpdateMetadataIf updates the metadata only while it still equals expected.
+func (s *relationService) UpdateMetadataIf(ctx context.Context, id int, expected, metadata json.RawMessage) (bool, error) {
+	return s.repo.UpdateMetadataIf(ctx, id, expected, metadata)
 }
 
 // GetGraphData builds the relations graph for a campaign by fetching all

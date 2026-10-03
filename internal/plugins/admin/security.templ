@@ -2,6 +2,7 @@ package admin
 
 import (
 	"fmt"
+	"net/url"
 	"strings"
 	"time"
 	"github.com/keyxmakerx/chronicle/internal/plugins/auth"
@@ -60,64 +61,172 @@ func shortUA(ua string) string {
 	}
 }
 
-// AdminSecurityPage renders the security dashboard with stats, event log,
-// and active sessions management.
+// AdminSecurityPage renders Sign-ins & sessions as four server-rendered tabs
+// so each part fits one screen and every tab is a plain link.
 templ AdminSecurityPage(data SecurityPageData) {
-	@layouts.App("Security - Admin") {
-		<div class="max-w-6xl mx-auto space-y-8">
-			<div class="flex items-center justify-between">
-				<h1 class="text-2xl font-bold text-fg">Security Dashboard</h1>
+	@layouts.App("Sign-ins & sessions - Admin") {
+		<div class="max-w-6xl mx-auto space-y-6">
+			<div>
+				<h1 class="text-2xl font-bold text-fg">Sign-ins &amp; sessions</h1>
+				@securityTabs(data)
 			</div>
-
-			<!-- Stats Cards -->
-			if data.Stats != nil {
-				@securityStatsCards(data.Stats)
-			}
-
-			<!-- Registration gate (B-R4) -->
-			@registrationGateCard(data.RegistrationMode, data.CSRFToken)
-
-			<!-- Active Sessions -->
-			<div class="space-y-4">
-				<h2 class="text-lg font-semibold text-fg flex items-center gap-2">
-					<i class="fa-solid fa-tower-broadcast text-accent"></i>
-					Active Sessions
-					<span class="text-sm font-normal text-fg-muted">({ fmt.Sprintf("%d", len(data.Sessions)) })</span>
-				</h2>
-				@activeSessionsTable(data.Sessions, data.CSRFToken)
-			</div>
-
-			<!-- Security Event Log -->
-			<div class="space-y-4">
-				<div class="flex items-center justify-between">
-					<h2 class="text-lg font-semibold text-fg flex items-center gap-2">
-						<i class="fa-solid fa-shield-halved text-accent"></i>
-						Security Event Log
-						<span class="text-sm font-normal text-fg-muted">({ fmt.Sprintf("%d", data.TotalEvents) } total)</span>
-					</h2>
-					<!-- Event type filter -->
-					<div class="flex items-center gap-2">
-						<select
-							onchange="window.location.href='/admin/security?type='+this.value"
-							class="text-sm rounded-lg border border-edge bg-surface px-3 py-1.5 text-fg"
-						>
-							<option value="" selected?={ data.EventFilter == "" }>All Events</option>
-							<option value="login.success" selected?={ data.EventFilter == "login.success" }>Logins</option>
-							<option value="login.failed" selected?={ data.EventFilter == "login.failed" }>Failed Logins</option>
-							<option value="logout" selected?={ data.EventFilter == "logout" }>Logouts</option>
-							<option value="password.reset_initiated" selected?={ data.EventFilter == "password.reset_initiated" }>Password Resets</option>
-							<option value="admin.privilege_changed" selected?={ data.EventFilter == "admin.privilege_changed" }>Admin Changes</option>
-							<option value="admin.user_disabled" selected?={ data.EventFilter == "admin.user_disabled" }>User Disabled</option>
-							<option value="admin.user_enabled" selected?={ data.EventFilter == "admin.user_enabled" }>User Enabled</option>
-							<option value="admin.session_terminated" selected?={ data.EventFilter == "admin.session_terminated" }>Session Terminated</option>
-							<option value="admin.force_logout" selected?={ data.EventFilter == "admin.force_logout" }>Force Logout</option>
-						</select>
+			switch data.Tab {
+				case SecurityTabSessions:
+					<div class="space-y-4">
+						if data.SessionsFailed {
+							@loadFailedNotice("signed-in sessions")
+						} else {
+							@activeSessionsTable(data.Sessions, data.CSRFToken)
+						}
 					</div>
-				</div>
-				@securityEventLog(data.Events, data.TotalEvents, data.Page, data.PerPage, data.EventFilter)
-			</div>
+				case SecurityTabLog:
+					@securityLogTab(data)
+				case SecurityTabSignup:
+					@registrationGateCard(data.RegistrationMode, data.CSRFToken)
+				default:
+					@securityOverviewTab(data)
+			}
 		</div>
 	}
+}
+
+// securityTabCount is the number shown on the "Signed in now" tab: the open
+// tab's own list when loaded, otherwise the summary figure; -1 hides it.
+func securityTabCount(data SecurityPageData) int {
+	if data.Tab == SecurityTabSessions && !data.SessionsFailed {
+		return len(data.Sessions)
+	}
+	if data.Stats != nil && !data.StatsFailed {
+		return data.Stats.ActiveSessions
+	}
+	return -1
+}
+
+// securityTabs renders the tab strip. It scrolls inside itself so a narrow
+// phone never scrolls the page sideways.
+templ securityTabs(data SecurityPageData) {
+	<nav class="mt-3 -mx-1 overflow-x-auto border-b border-edge" aria-label="Sign-ins and sessions sections">
+		<ul class="flex gap-1 px-1 text-sm whitespace-nowrap">
+			@securityTab(data.Tab, SecurityTabOverview, "Overview")
+			if n := securityTabCount(data); n >= 0 {
+				@securityTab(data.Tab, SecurityTabSessions, fmt.Sprintf("Signed in now (%d)", n))
+			} else {
+				@securityTab(data.Tab, SecurityTabSessions, "Signed in now")
+			}
+			@securityTab(data.Tab, SecurityTabLog, "Sign-in log")
+			@securityTab(data.Tab, SecurityTabSignup, "Who can sign up")
+		</ul>
+	</nav>
+}
+
+templ securityTab(current, tab, label string) {
+	<li>
+		if current == tab {
+			<a href={ templ.SafeURL(securityTabHref(tab)) } aria-current="page" class="inline-block px-3 py-2 border-b-2 border-accent text-fg font-medium rounded-t focus-visible:outline focus-visible:outline-2 focus-visible:outline-accent">{ label }</a>
+		} else {
+			<a href={ templ.SafeURL(securityTabHref(tab)) } class="inline-block px-3 py-2 border-b-2 border-transparent text-fg-muted hover:text-fg rounded-t focus-visible:outline focus-visible:outline-2 focus-visible:outline-accent">{ label }</a>
+		}
+	</li>
+}
+
+// registrationModeSentence names the mode in plain words for the overview.
+func registrationModeSentence(mode string) string {
+	switch mode {
+	case "invite":
+		return "invite only"
+	case "closed":
+		return "closed to new accounts"
+	default:
+		return "open to anyone"
+	}
+}
+
+// securityOverviewTab shows three figures, anything worth a look, and the
+// current sign-up mode. "Accounts turned off" stands in for "locked" because
+// Chronicle has no automatic lockout; turned-off accounts are the nearest
+// real figure.
+templ securityOverviewTab(data SecurityPageData) {
+	<div class="space-y-6">
+		if data.StatsFailed {
+			@loadFailedNotice("the sign-in summary")
+		} else if data.Stats != nil {
+			<div class="grid grid-cols-1 sm:grid-cols-3 gap-4">
+				<div class="card text-center">
+					<p class="text-2xl font-bold text-fg">{ fmt.Sprintf("%d", data.Stats.ActiveSessions) }</p>
+					<p class="text-xs text-fg-muted mt-1">signed in now</p>
+				</div>
+				<div class="card text-center">
+					<p class={ "text-2xl font-bold", templ.KV("text-red-600 dark:text-red-400", data.Stats.FailedLogins24h > 0), templ.KV("text-fg", data.Stats.FailedLogins24h == 0) }>{ fmt.Sprintf("%d", data.Stats.FailedLogins24h) }</p>
+					<p class="text-xs text-fg-muted mt-1">wrong passwords in the last 24 hours</p>
+				</div>
+				<div class="card text-center">
+					<p class="text-2xl font-bold text-fg">{ fmt.Sprintf("%d", data.Stats.DisabledUsers) }</p>
+					<p class="text-xs text-fg-muted mt-1">accounts turned off</p>
+				</div>
+			</div>
+		}
+		<section class="card p-0 overflow-hidden" aria-labelledby="worth-a-look">
+			<div class="px-4 py-3 border-b border-edge">
+				<h2 id="worth-a-look" class="text-lg font-semibold text-fg">Worth a look</h2>
+			</div>
+			if data.EventsFailed {
+				<p class="p-4 text-sm text-amber-700 dark:text-amber-300" role="alert">Couldn't read recent sign-in attempts. Reload the page to try again.</p>
+			} else if len(data.WatchItems) == 0 {
+				<p class="px-4 py-6 text-sm text-fg-muted">Nothing unusual in the last 24 hours.</p>
+			} else {
+				<ul class="divide-y divide-edge">
+					for _, it := range data.WatchItems {
+						<li class="flex flex-wrap items-center justify-between gap-2 px-4 py-3">
+							<div class="min-w-0">
+								<p class="text-sm font-medium text-fg break-words">{ it.Title }</p>
+								<p class="text-xs text-fg-muted">{ it.Detail }</p>
+							</div>
+							<a href="/admin/security?tab=log&type=login.failed" class="btn-secondary text-sm">See in log</a>
+						</li>
+					}
+				</ul>
+			}
+		</section>
+		<p class="text-sm text-fg-secondary">
+			Sign-ups are <strong>{ registrationModeSentence(data.RegistrationMode) }</strong>.
+			<a href={ templ.SafeURL(securityTabHref(SecurityTabSignup)) } class="text-accent hover:underline">Change it on "Who can sign up"</a>.
+		</p>
+	</div>
+}
+
+// securityLogTab is the filterable, paged sign-in and admin event log.
+templ securityLogTab(data SecurityPageData) {
+	<div class="space-y-4">
+		<div class="flex flex-wrap items-center justify-between gap-2">
+			<p class="text-sm text-fg-muted">{ fmt.Sprintf("%d", data.TotalEvents) } events</p>
+			<select
+				aria-label="Filter events by type"
+				onchange="window.location.href='/admin/security?tab=log&type='+encodeURIComponent(this.value)"
+				class="text-sm rounded-lg border border-edge bg-surface px-3 py-1.5 text-fg"
+			>
+				<option value="" selected?={ data.EventFilter == "" }>All Events</option>
+				<option value="login.success" selected?={ data.EventFilter == "login.success" }>Logins</option>
+				<option value="login.failed" selected?={ data.EventFilter == "login.failed" }>Failed Logins</option>
+				<option value="logout" selected?={ data.EventFilter == "logout" }>Logouts</option>
+				<option value="password.reset_initiated" selected?={ data.EventFilter == "password.reset_initiated" }>Password Resets</option>
+				<option value="admin.privilege_changed" selected?={ data.EventFilter == "admin.privilege_changed" }>Admin Changes</option>
+				<option value="admin.user_disabled" selected?={ data.EventFilter == "admin.user_disabled" }>User Disabled</option>
+				<option value="admin.user_enabled" selected?={ data.EventFilter == "admin.user_enabled" }>User Enabled</option>
+				<option value="admin.session_terminated" selected?={ data.EventFilter == "admin.session_terminated" }>Session Terminated</option>
+				<option value="admin.force_logout" selected?={ data.EventFilter == "admin.force_logout" }>Force Logout</option>
+				<option value="password.reset_completed" selected?={ data.EventFilter == "password.reset_completed" }>Password Reset Completed</option>
+				<option value="admin.diagnostics_batch_run" selected?={ data.EventFilter == "admin.diagnostics_batch_run" }>Diagnostics Batch Run</option>
+				<option value="media.uploaded" selected?={ data.EventFilter == "media.uploaded" }>Media Uploaded</option>
+				<option value="media.deleted" selected?={ data.EventFilter == "media.deleted" }>Media Deleted</option>
+				<option value="media.quota_exceeded" selected?={ data.EventFilter == "media.quota_exceeded" }>Media Quota Exceeded</option>
+			</select>
+		</div>
+		if data.EventsFailed {
+			@loadFailedNotice("the event log")
+		} else {
+			@securityEventLog(data.Events, data.TotalEvents, data.Page, data.PerPage, data.EventFilter)
+		}
+	</div>
 }
 
 // registrationGateCard renders the site registration-mode control (B-R4):
@@ -126,7 +235,7 @@ templ registrationGateCard(mode, csrfToken string) {
 	<div class="card p-6 space-y-4">
 		<div class="flex items-center gap-2">
 			<i class="fa-solid fa-user-lock text-accent"></i>
-			<h2 class="text-lg font-semibold text-fg">Registration</h2>
+			<h2 class="text-lg font-semibold text-fg">Who can sign up</h2>
 		</div>
 		<p class="text-sm text-fg-secondary">
 			Control who can create new accounts. The first account on a fresh
@@ -154,70 +263,6 @@ templ registrationGateCard(mode, csrfToken string) {
 			</div>
 			<button type="submit" class="btn-primary py-2 px-4">Save</button>
 		</form>
-	</div>
-}
-
-// securityStatsCards renders the top-level security statistics.
-templ securityStatsCards(stats *SecurityStats) {
-	<div class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
-		<!-- Active Sessions -->
-		<div class="card text-center">
-			<div class="w-8 h-8 mx-auto rounded-lg bg-accent/10 flex items-center justify-center mb-2">
-				<i class="fa-solid fa-tower-broadcast text-accent text-sm"></i>
-			</div>
-			<p class="text-2xl font-bold text-fg">{ fmt.Sprintf("%d", stats.ActiveSessions) }</p>
-			<p class="text-xs text-fg-muted mt-1">Active Sessions</p>
-		</div>
-		<!-- Successful Logins (24h) -->
-		<div class="card text-center">
-			<div class="w-8 h-8 mx-auto rounded-lg bg-emerald-50 dark:bg-emerald-900/30 flex items-center justify-center mb-2">
-				<i class="fa-solid fa-right-to-bracket text-emerald-500 text-sm"></i>
-			</div>
-			<p class="text-2xl font-bold text-fg">{ fmt.Sprintf("%d", stats.SuccessfulLogins24h) }</p>
-			<p class="text-xs text-fg-muted mt-1">Logins (24h)</p>
-		</div>
-		<!-- Failed Logins (24h) -->
-		<div class="card text-center">
-			<div class={ "w-8 h-8 mx-auto rounded-lg flex items-center justify-center mb-2",
-				templ.KV("bg-red-50 dark:bg-red-900/30", stats.FailedLogins24h > 0),
-				templ.KV("bg-surface-alt", stats.FailedLogins24h == 0) }>
-				<i class={ "fa-solid fa-triangle-exclamation text-sm",
-					templ.KV("text-red-500", stats.FailedLogins24h > 0),
-					templ.KV("text-fg-muted", stats.FailedLogins24h == 0) }></i>
-			</div>
-			<p class={ "text-2xl font-bold",
-				templ.KV("text-red-600 dark:text-red-400", stats.FailedLogins24h > 0),
-				templ.KV("text-fg", stats.FailedLogins24h == 0) }>{ fmt.Sprintf("%d", stats.FailedLogins24h) }</p>
-			<p class="text-xs text-fg-muted mt-1">Failed Logins (24h)</p>
-		</div>
-		<!-- Unique IPs (24h) -->
-		<div class="card text-center">
-			<div class="w-8 h-8 mx-auto rounded-lg bg-blue-50 dark:bg-blue-900/30 flex items-center justify-center mb-2">
-				<i class="fa-solid fa-globe text-blue-500 text-sm"></i>
-			</div>
-			<p class="text-2xl font-bold text-fg">{ fmt.Sprintf("%d", stats.UniqueIPs24h) }</p>
-			<p class="text-xs text-fg-muted mt-1">Unique IPs (24h)</p>
-		</div>
-		<!-- Total Events -->
-		<div class="card text-center">
-			<div class="w-8 h-8 mx-auto rounded-lg bg-purple-50 dark:bg-purple-900/30 flex items-center justify-center mb-2">
-				<i class="fa-solid fa-list-check text-purple-500 text-sm"></i>
-			</div>
-			<p class="text-2xl font-bold text-fg">{ fmt.Sprintf("%d", stats.TotalEvents) }</p>
-			<p class="text-xs text-fg-muted mt-1">Total Events</p>
-		</div>
-		<!-- Disabled Users -->
-		<div class="card text-center">
-			<div class={ "w-8 h-8 mx-auto rounded-lg flex items-center justify-center mb-2",
-				templ.KV("bg-amber-50 dark:bg-amber-900/30", stats.DisabledUsers > 0),
-				templ.KV("bg-surface-alt", stats.DisabledUsers == 0) }>
-				<i class={ "fa-solid fa-user-slash text-sm",
-					templ.KV("text-amber-500", stats.DisabledUsers > 0),
-					templ.KV("text-fg-muted", stats.DisabledUsers == 0) }></i>
-			</div>
-			<p class="text-2xl font-bold text-fg">{ fmt.Sprintf("%d", stats.DisabledUsers) }</p>
-			<p class="text-xs text-fg-muted mt-1">Disabled Users</p>
-		</div>
 	</div>
 }
 
@@ -267,6 +312,7 @@ templ activeSessionsTable(sessions []auth.SessionInfo, csrfToken string) {
 										hx-delete={ fmt.Sprintf("/admin/security/sessions/%s", s.TokenHash) }
 										hx-confirm="Terminate this session? The user will be logged out."
 										hx-headers={ fmt.Sprintf(`{"X-CSRF-Token":"%s"}`, csrfToken) }
+										aria-label={ "Terminate session for " + s.Name }
 										class="text-xs link-danger transition-colors"
 									>
 										Terminate
@@ -348,7 +394,7 @@ templ securityEventLog(events []SecurityEvent, total, page, perPage int, eventFi
 		<div class="flex justify-center items-center gap-4 mt-4">
 			if page > 1 {
 				<a
-					href={ templ.SafeURL(fmt.Sprintf("/admin/security?page=%d&type=%s", page-1, eventFilter)) }
+					href={ templ.SafeURL(fmt.Sprintf("/admin/security?tab=log&page=%d&type=%s", page-1, url.QueryEscape(eventFilter))) }
 					class="btn-secondary text-sm"
 				>
 					Previous
@@ -361,7 +407,7 @@ templ securityEventLog(events []SecurityEvent, total, page, perPage int, eventFi
 			</span>
 			if page*perPage < total {
 				<a
-					href={ templ.SafeURL(fmt.Sprintf("/admin/security?page=%d&type=%s", page+1, eventFilter)) }
+					href={ templ.SafeURL(fmt.Sprintf("/admin/security?tab=log&page=%d&type=%s", page+1, url.QueryEscape(eventFilter))) }
 					class="btn-secondary text-sm"
 				>
 					Next
@@ -390,9 +436,18 @@ templ eventDetails(e SecurityEvent) {
 			}
 		case EventSessionTerminated:
 			if hint, ok := e.Details["token_hint"]; ok {
-				<span>Token: { fmt.Sprintf("%v", hint) }...</span>
+				<span>Session ending { fmt.Sprintf("%v", hint) }...</span>
 			}
 		default:
 			<span>-</span>
 	}
+}
+
+// loadFailedNotice stands in for a section whose data could not be read, so an
+// outage is not mistaken for "nothing happened".
+templ loadFailedNotice(what string) {
+	<div class="card p-4 text-sm text-amber-700 dark:text-amber-300" role="alert">
+		<i class="fa-solid fa-triangle-exclamation mr-1.5"></i>
+		Couldn't load { what }. Reload the page to try again.
+	</div>
 }
