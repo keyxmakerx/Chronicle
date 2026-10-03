@@ -126,7 +126,7 @@ func TestWizardGenerateStep_GateAndContent(t *testing.T) {
 		t.Fatalf("Owner must be able to open the generate step, got %d: %s", rec.Code, rec.Body.String())
 	}
 	body := rec.Body.String()
-	for _, want := range []string{"Generate a calendar", "Recipe", "Familiar", "Work it out from the sky", "Naming culture", "Reroll all"} {
+	for _, want := range []string{"Generate a calendar", "Recipe", "Familiar", "Work it out from the sky", "Naming culture", "Reroll the rest", "Not saved yet"} {
 		if !strings.Contains(body, want) {
 			t.Errorf("expected the generate step to mention %q, body:\n%s", want, body)
 		}
@@ -134,8 +134,13 @@ func TestWizardGenerateStep_GateAndContent(t *testing.T) {
 	if !strings.Contains(body, `name="generated_json"`) {
 		t.Errorf("expected the hidden generated_json field the engine serializes into, body:\n%s", body)
 	}
-	if strings.Contains(body, "fa-solid fa-dice") || strings.Contains(body, "fa-solid fa-reroll") {
-		t.Errorf("the generate step must carry no decorative icons, body:\n%s", body)
+	// The keep pin and reroll dice are icon-only (the weather generator's
+	// look, signed off by the operator), so each must carry its own name
+	// for screen readers.
+	for _, want := range []string{`aria-label="Keep Name"`, `aria-label="Reroll Name"`, `aria-label="Fewer"`, `aria-label="More"`} {
+		if !strings.Contains(body, want) {
+			t.Errorf("expected the icon button labelled %s, body:\n%s", want, body)
+		}
 	}
 }
 
