@@ -144,6 +144,7 @@ GET	/armory/instances	internal/plugins/armory/routes.go
 GET	/armory/instances/manage	internal/plugins/armory/routes.go
 GET	/armory/items/:eid/collections	internal/plugins/armory/routes.go
 GET	/armory/move	internal/plugins/armory/routes.go
+GET	/armory/shops/:eid/buyers	internal/plugins/armory/routes.go
 GET	/armory/shops/:eid/room	internal/plugins/armory/routes.go
 GET	/armory/shops/:eid/room	internal/plugins/syncapi/routes.go
 GET	/armory/shops/:eid/transactions	internal/plugins/armory/routes.go
@@ -500,6 +501,7 @@ POST	/armory/moves	internal/plugins/armory/routes.go
 POST	/armory/moves/:mid/approve	internal/plugins/armory/routes.go
 POST	/armory/moves/:mid/decline	internal/plugins/armory/routes.go
 POST	/armory/purchase	internal/plugins/armory/routes.go
+POST	/armory/shops/:eid/buy	internal/plugins/armory/routes.go
 POST	/armory/stashes	internal/plugins/armory/routes.go
 POST	/armory/stashes/:sid/items	internal/plugins/armory/routes.go
 POST	/armory/transactions	internal/plugins/armory/routes.go

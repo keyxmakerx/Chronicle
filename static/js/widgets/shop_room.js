@@ -711,7 +711,23 @@
     });
   }
 
-  window.ShopRoom = { createRoom: createRoom, toLayout: toLayout, fromLayout: fromLayout, shopItems: shopItems, keyOf: keyOf, ROOM_TYPES: ROOM_TYPES };
+  // What the basket adds up to for one payer. Prices here are for display
+  // only; the server prices the sale again from the inventory.
+  function basketSummary(basket, its, buyer) {
+    var count = 0, total = 0, curs = [];
+    its.forEach(function (it) {
+      var q = basket[String(it.id)] || 0; if (!q || it.out) return;
+      var cur = String(it.cur || 'gp').trim().toLowerCase();
+      count += q; total += it.p * q; if (curs.indexOf(cur) < 0) curs.push(cur);
+    });
+    var money = buyer && typeof buyer.money === 'number' ? buyer.money : null;
+    return {
+      count: count, total: Math.round(total * 100) / 100, currency: curs[0] || 'gp', mixed: curs.length > 1,
+      noField: !!buyer && money === null, short: money !== null && total > money, money: money
+    };
+  }
+
+  window.ShopRoom = { createRoom: createRoom, toLayout: toLayout, fromLayout: fromLayout, shopItems: shopItems, basketSummary: basketSummary, keyOf: keyOf, ROOM_TYPES: ROOM_TYPES };
   if (!window.Chronicle || !window.document) return;
 
   var FX_KEY = 'chronicle.shopRoom.fx';
@@ -750,6 +766,14 @@
     '.shr-wbtn span{color:var(--color-text-secondary,#6b7280);font-weight:400}',
     '.shr-chev{display:inline-block;transition:transform .25s}',
     '.shr.open .shr-chev{transform:rotate(180deg)}',
+    '.shr-bk{margin-left:auto;display:flex;align-items:center;gap:8px;flex-wrap:wrap;font-size:.84rem;color:var(--color-text-secondary,#6b7280)}',
+    '.shr-bk:empty{display:none}',
+    '.shr-bk select{font:inherit;font-size:.82rem;padding:3px 6px;border:1px solid var(--color-border,#e5e7eb);border-radius:6px;background:var(--color-bg-primary,#fff);color:var(--color-text-primary,#111827)}',
+    '.shr-bk .shr-note{flex-basis:100%;text-align:right;font-size:.78rem}',
+    '.shr-add,.shr-buy{border:1px solid var(--color-border,#e5e7eb);background:transparent;color:var(--color-text-primary,#111827);border-radius:6px;padding:4px 10px;cursor:pointer;font-size:.8rem;white-space:nowrap}',
+    '.shr-buy{background:var(--shr-acc);border-color:var(--shr-acc);color:#fff;font-weight:600}',
+    '.shr-add:disabled,.shr-buy:disabled{opacity:.5;cursor:default}',
+    '.shr.arr .shr-add,.shr.arr .shr-bk{display:none}',
     '.shr-fx{margin-left:auto;display:inline-flex;align-items:center;gap:6px;font-size:.78rem;color:var(--color-text-secondary,#6b7280)}',
     '.shr-seg{display:inline-grid;grid-auto-flow:column;grid-auto-columns:1fr;border:1px solid var(--color-border,#e5e7eb);border-radius:6px;overflow:hidden}',
     '.shr-seg button{border:0;background:transparent;color:var(--color-text-secondary,#6b7280);padding:4px 8px;cursor:pointer;font-size:.8rem}',
@@ -762,7 +786,7 @@
     '.shr-tab{border:0;background:transparent;color:var(--color-text-secondary,#6b7280);padding:5px 10px;border-radius:6px;cursor:pointer}',
     '.shr-tab[aria-pressed="true"]{color:var(--shr-acc);background:color-mix(in srgb,var(--shr-acc) 12%,transparent);font-weight:600}',
     '.shr-list{display:grid;gap:2px;max-height:320px;overflow:auto}',
-    '.shr-row{display:grid;grid-template-columns:34px minmax(0,1fr) auto auto;gap:10px;align-items:center;padding:6px 8px;border-radius:6px}',
+    '.shr-row{display:grid;grid-template-columns:34px minmax(0,1fr) auto auto auto;gap:10px;align-items:center;padding:6px 8px;border-radius:6px}',
     '.shr-row:hover,.shr-row.hl{background:var(--color-bg-tertiary,#f3f4f6)}',
     '.shr-row.out{opacity:.55}',
     '.shr-ic{width:30px;height:30px;border-radius:6px;display:grid;place-items:center;background:color-mix(in srgb,var(--c) 18%,transparent);color:color-mix(in srgb,var(--c),var(--color-text-primary,#111827) 25%)}',
@@ -825,10 +849,11 @@
       injectStyle();
       var ds = el.dataset, canArrange = ds.canArrange === 'true', campaignUrl = ds.campaignUrl || '';
       var eid = (ds.roomEndpoint || '').split('/shops/')[1] || '';
+      var buyersEndpoint = (ds.roomEndpoint || '').replace(/\/room$/, '/buyers'), buyEndpoint = (ds.roomEndpoint || '').replace(/\/room$/, '/buy');
       var S = { roomType: 'general', pal: 'oak', setting: 'room', fx: readFx(), size: 'm', full: 'normal', deco: 'some', keep: true,
         seeds: { room: 1, goods: 1, deco: 1 }, pieces: [], ov: {}, portrait: null, lines: [], mode: 'shop', its: [],
         key: keyOf(eid), name: ds.shopName || 'Shop', dark: document.documentElement.classList.contains('dark') };
-      var room = createRoom(S), ICONS = room.ICONS, rels = [], relsOk = false, tab = 'All', open = false, line = 0, saveT = 0, dirty = false;
+      var room = createRoom(S), ICONS = room.ICONS, rels = [], relsOk = false, buy = null, basket = {}, payer = '', busy = false, note = '', tab = 'All', open = false, line = 0, saveT = 0, dirty = false;
       el.hidden = true;
 
       // ---- Skeleton ----
@@ -836,7 +861,7 @@
         '<div class="shr-top"><b></b><span class="shr-sub">Shop</span>' + (canArrange ? '<span class="shr-mode" role="group" aria-label="Mode"><button type="button" data-mode="shop" aria-pressed="true">Shop</button><button type="button" data-mode="arr" aria-pressed="false">Arrange</button></span>' : '') + '</div>' +
         '<div class="shr-scene"><svg class="shr-iso" role="img"></svg><div class="shr-grain"><svg width="100%" height="100%" aria-hidden="true"><filter id="shr-grn"><feTurbulence type="fractalNoise" baseFrequency=".85" numOctaves="2" stitchTiles="stitch"/><feColorMatrix type="saturate" values="0"/></filter><rect width="100%" height="100%" filter="url(#shr-grn)"/></svg></div>' +
         '<button type="button" class="shr-keeper"></button><div class="shr-plate"></div></div>' +
-        '<div class="shr-bar"><button type="button" class="shr-wbtn" aria-expanded="false">Wares <span></span><i class="shr-chev" aria-hidden="true">▾</i></button>' +
+        '<div class="shr-bar"><button type="button" class="shr-wbtn" aria-expanded="false">Wares <span></span><i class="shr-chev" aria-hidden="true">▾</i></button><div class="shr-bk" aria-live="polite"></div>' +
         '<span class="shr-fx">Shadows <span class="shr-seg" role="group" aria-label="Shadows and light"><button type="button" data-fx="full">Full</button><button type="button" data-fx="light">Light</button></span></span></div>' +
         '<div class="shr-wares"><div><div class="shr-wp"><div class="shr-tabs"></div><div class="shr-list"></div></div></div></div></div></div>';
       var root = el.firstChild, svg = root.querySelector('.shr-iso'), scene = root.querySelector('.shr-scene'), keeper = root.querySelector('.shr-keeper'), plate = root.querySelector('.shr-plate');
@@ -883,10 +908,69 @@
         var rows = S.its.filter(function (it) { return tab === 'All' || it.k === tab; }).map(function (it) {
           var name = it.entityId ? '<a class="shr-nm" href="' + esc(campaignUrl + '/entities/' + it.entityId) + '" data-hx-boost="true">' + esc(it.n) + '</a>' : '<span class="shr-nm">' + esc(it.n) + '</span>';
           var stock = it.out ? 'Sold out' : it.qty === null ? '' : it.qty + ' left';
-          return '<div class="shr-row' + (it.out ? ' out' : '') + '" data-row="' + it.id + '"><span class="shr-ic" style="--c:' + it.c + '">' + iconSvg(it.ic, ICONS) + '</span><span>' + name + '<br><span class="shr-m">' + esc(it.k) + '</span></span><span class="shr-price">' + esc(it.price) + '</span><span class="shr-stock">' + stock + '</span></div>';
+          return '<div class="shr-row' + (it.out ? ' out' : '') + '" data-row="' + it.id + '"><span class="shr-ic" style="--c:' + it.c + '">' + iconSvg(it.ic, ICONS) + '</span><span>' + name + '<br><span class="shr-m">' + esc(it.k) + '</span></span><span class="shr-price">' + esc(it.price) + '</span><span class="shr-stock">' + stock + '</span>' + addBtn(it) + '</div>';
         });
         root.querySelector('.shr-list').innerHTML = rows.join('') || '<p class="shr-empty">' + (canArrange ? 'Nothing for sale yet. Add goods in the shop inventory below.' : 'Nothing for sale right now.') + '</p>';
         root.querySelectorAll('.shr-fx button').forEach(function (b) { b.setAttribute('aria-pressed', b.dataset.fx === S.fx); });
+        renderBasket();
+      }
+      function addBtn(it) {
+        if (!buy || !buy.buyers.length) return '<span></span>';
+        var q = basket[String(it.id)] || 0;
+        // Only what the server will sell: priced, in stock, and no more than is left.
+        var max = Math.min(99, it.qty === null ? 99 : it.qty);
+        if (it.out) return '<button type="button" class="shr-add" disabled>Sold out</button>';
+        if (!(it.p > 0)) return '<button type="button" class="shr-add" disabled>No price</button>';
+        return '<button type="button" class="shr-add" data-add="' + esc(it.id) + '"' + (q >= max ? ' disabled' : '') + '>' + (q ? 'Add another (' + q + ')' : 'Add') + '</button>';
+      }
+      function buyer() { var b = null; (buy ? buy.buyers : []).forEach(function (x) { if (x.id === payer) b = x; }); return b; }
+      // The basket line in the bar: what's in it, who pays, and Buy.
+      function renderBasket() {
+        var bk = root.querySelector('.shr-bk');
+        if (!buy || !buy.buyers.length) { bk.innerHTML = ''; return; }
+        var who = buyer(), sm = basketSummary(basket, S.its, who), h = '';
+        h += sm.count ? '<span>' + sm.count + ' in basket · <span class="shr-price">' + esc(sm.total + ' ' + sm.currency) + '</span></span><button type="button" class="shr-add" data-empty="1">Empty</button>' : '<span>Basket is empty</span>';
+        var money = sm.money === null ? '' : ' · ' + esc(sm.money + ' ' + sm.currency);
+        if (buy.buyers.length > 1) {
+          h += '<label>Paying: <select data-payer="1">' + buy.buyers.map(function (b) { return '<option value="' + esc(b.id) + '"' + (b.id === payer ? ' selected' : '') + '>' + esc(b.name) + '</option>'; }).join('') + '</select>' + money + '</label>';
+        } else if (who) h += '<span>' + esc(who.name) + (sm.money === null ? '' : ' has ' + esc(sm.money + ' ' + sm.currency)) + '</span>';
+        var why = sm.noField ? 'This sheet has no coin field' : who && who.moneyKey === 'wealth' ? 'Wealth isn’t spent like coins' : sm.mixed ? 'Mixed currencies' : sm.short ? 'Not enough coin' : '';
+        // Outside downtime players browse; the shop opens when the GM opens downtime.
+        var closed = !buy.canBuyNow, label = why || (busy ? 'Buying…' : closed ? 'Buying opens in downtime' : 'Buy');
+        h += '<button type="button" class="shr-buy" data-buy="1"' + (!sm.count || why || busy || closed ? ' disabled' : '') + '>' + label + '</button>';
+        var n = note || (closed ? 'Buying opens when the GM opens downtime.' : '');
+        if (n) h += '<span class="shr-note">' + esc(n) + '</span>';
+        bk.innerHTML = h;
+      }
+      function loadBuyers() {
+        return Chronicle.apiFetch(buyersEndpoint).then(function (r) { return r.ok ? r.json() : null; }).catch(function () { return null; }).then(function (j) {
+          buy = j && Array.isArray(j.buyers) ? { canBuyNow: !!j.canBuyNow, buyers: j.buyers } : null;
+          if (buy && !buyer()) payer = buy.buyers.length ? buy.buyers[0].id : '';
+        });
+      }
+      function loadGoods() {
+        return Chronicle.apiFetch(ds.relationsEndpoint).then(function (r) { if (r.ok) { relsOk = true; return r.json(); } return []; }).catch(function () { return []; }).then(function (j) {
+          rels = (Array.isArray(j) ? j : (j && j.data) || []).filter(function (r) { return r.relationType === 'sells'; }).map(function (r) {
+            if (typeof r.metadata === 'string') { try { r.metadata = JSON.parse(r.metadata); } catch (e) { r.metadata = {}; } }
+            r.metadata = r.metadata || {}; return r;
+          });
+        });
+      }
+      function doBuy() {
+        var sm = basketSummary(basket, S.its, buyer());
+        var items = S.its.filter(function (it) { return basket[String(it.id)] && !it.out; }).map(function (it) { return { relationId: it.id, quantity: basket[String(it.id)] }; });
+        if (!items.length || busy) return;
+        busy = true; note = ''; renderBasket();
+        Chronicle.apiFetch(buyEndpoint, { method: 'POST', body: { buyerEntityId: payer, items: items }, csrfToken: ds.csrfToken }).then(function (r) {
+          return r.json().catch(function () { return {}; }).then(function (j) {
+            if (!r.ok) throw new Error((j && (j.message || j.error)) || 'That didn’t go through. Try again.');
+            var who = buyer(), name = who ? who.name : 'They';
+            note = j.status === 'requested' ? 'Asked the GM for ' + sm.count + (sm.count === 1 ? ' item.' : ' items.')
+              : 'Bought ' + sm.count + (sm.count === 1 ? ' item' : ' items') + ' for ' + j.spent + ' ' + j.currency + '. ' + name + ' has ' + j.moneyLeft + ' ' + j.currency + ' left.';
+            basket = {};
+            return Promise.all([loadGoods(), loadBuyers()]);
+          });
+        }).catch(function (e) { note = e.message; }).then(function () { busy = false; draw(); renderList(); });
       }
       function setOpen(v) { open = v; root.classList.toggle('open', v); root.querySelector('.shr-wbtn').setAttribute('aria-expanded', v); }
 
@@ -1038,6 +1122,9 @@
         if (b.dataset.mode) { S.mode = b.dataset.mode; setMode(); return; }
         if (b.dataset.fx) { S.fx = b.dataset.fx; saveFx(S.fx); root.classList.toggle('fxlight', S.fx !== 'full'); draw(); renderList(); return; }
         if (b.dataset.tab) { tab = b.dataset.tab; renderList(); return; }
+        if (b.dataset.add) { basket[b.dataset.add] = (basket[b.dataset.add] || 0) + 1; note = ''; renderList(); return; }
+        if (b.dataset.empty) { basket = {}; note = ''; renderList(); return; }
+        if (b.dataset.buy) { doBuy(); return; }
         if (b.classList.contains('shr-wbtn')) { setOpen(!open); return; }
         if (b === keeper) { onKeeperClick(); return; }
         if (!canArrange) return;
@@ -1052,6 +1139,7 @@
       }
       function onRootChange(e) {
         var t = e.target;
+        if (t.dataset.payer) { payer = t.value; note = ''; renderBasket(); return; }
         if (t.dataset.sel) { S[t.dataset.sel] = t.value; if (t.dataset.sel === 'setting') S.portrait = null; room.generate(); draw(); renderPanel(); save(); }
         else if (t.dataset.keep) S.keep = t.checked;
         else if (t.dataset.lines) { S.lines = t.value.split('\n').map(function (s) { return s.trim().slice(0, 200); }).filter(Boolean).slice(0, 10); save(); }
@@ -1096,12 +1184,9 @@
       // the endpoint is a 404 and the shop page keeps just its inventory list.
       Promise.all([
         Chronicle.apiFetch(ds.roomEndpoint).then(function (r) { if (!r.ok) throw new Error('room ' + r.status); return r.json(); }),
-        Chronicle.apiFetch(ds.relationsEndpoint).then(function (r) { if (r.ok) { relsOk = true; return r.json(); } return []; }).catch(function () { return []; })
+        loadGoods(),
+        loadBuyers()
       ]).then(function (res) {
-        rels = (Array.isArray(res[1]) ? res[1] : (res[1] && res[1].data) || []).filter(function (r) { return r.relationType === 'sells'; }).map(function (r) {
-          if (typeof r.metadata === 'string') { try { r.metadata = JSON.parse(r.metadata); } catch (e) { r.metadata = {}; } }
-          r.metadata = r.metadata || {}; return r;
-        });
         if (fromLayout(S, res[0] && res[0].layout)) room.geometry(); else room.generate();
         el.hidden = false;
         draw(); renderList();

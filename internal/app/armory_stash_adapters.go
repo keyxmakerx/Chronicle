@@ -257,9 +257,13 @@ func (a *armoryEntityFieldsAdapter) GetEntityFields(ctx context.Context, entityI
 }
 
 // UpdateEntityFields marks the write as a stash move's, so the money history
-// does not log a second line for a change the move already records.
+// does not log a second line for a change the move already records. A shop
+// purchase keeps its own mark: the history is the only place a character's
+// coins show what they were spent on.
 func (a *armoryEntityFieldsAdapter) UpdateEntityFields(ctx context.Context, entityID string, fields map[string]any) error {
-	ctx = changesource.With(ctx, changesource.Source{Kind: changesource.KindStash})
+	if src, ok := changesource.From(ctx); !ok || src.Kind != changesource.KindShop {
+		ctx = changesource.With(ctx, changesource.Source{Kind: changesource.KindStash})
+	}
 	return a.svc.MergeFields(ctx, entityID, fields)
 }
 

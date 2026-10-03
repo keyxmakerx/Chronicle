@@ -135,8 +135,9 @@ type stashService struct {
 	locks campaignLocks
 }
 
-// NewStashService creates the stash service.
-func NewStashService(deps StashDeps) StashService {
+// NewStashService creates the stash service. It returns the concrete type so
+// the shop-buy service can take the same per-campaign lock as the stash moves.
+func NewStashService(deps StashDeps) *stashService {
 	return &stashService{StashDeps: deps}
 }
 
