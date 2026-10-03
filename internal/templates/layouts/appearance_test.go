@@ -141,7 +141,9 @@ func TestAppearanceCSSFonts(t *testing.T) {
 	}{
 		{"heading same", AppearanceData{HeadingFont: "same"}, nil, []string{"@font-face", "--font-heading"}},
 		{"heading cinzel", AppearanceData{HeadingFont: "cinzel"},
-			[]string{"@font-face{font-family:'Cinzel'", "--font-heading:'Cinzel'", "--cz-hw:600"}, nil},
+			[]string{"@font-face{font-family:'Cinzel'", "--font-heading:'Cinzel'", "--cz-hw:600", "--cz-hz:.9;"}, nil},
+		{"heading cormorant runs small", AppearanceData{HeadingFont: "cormorant"}, []string{"--cz-hz:1.14;"}, nil},
+		{"heading playfair needs no nudge", AppearanceData{HeadingFont: "playfair"}, []string{"--font-heading:'Playfair Display'"}, []string{"--cz-hz"}},
 		{"body inter adds nothing", AppearanceData{BodyFont: "inter"}, nil, []string{"@font-face", "--font-campaign"}},
 		{"body lora", AppearanceData{BodyFont: "lora"}, []string{"@font-face{font-family:'Lora'", "--font-campaign:'Lora'"}, nil},
 	}
