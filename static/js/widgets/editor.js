@@ -4,7 +4,8 @@
  * TipTap-based WYSIWYG editor with autosave, mounted on
  * data-widget="editor". Config: data-endpoint (required),
  * data-campaign-id (required for @mentions), data-editable
- * (default false), data-autosave seconds (default 30, 0 disables).
+ * (default false), data-autosave seconds (default 30, 0 disables),
+ * data-outline (an "On this page" outline, editor_outline.js).
  *
  * Content is stored as ProseMirror JSON in `entry` and pre-rendered to
  * `entry_html` for display. When editor_mention.js is loaded and a
@@ -322,6 +323,12 @@
         });
       }
 
+      // "On this page" outline, for the main page entry only. It watches
+      // the rendered headings, so it fills in once content loads.
+      if (config.outline === true && Chronicle.EditorOutline) {
+        state.outline = Chronicle.EditorOutline.attach(el, contentEl, editor.view.dom);
+      }
+
       // Load initial content from API.
       if (endpoint) {
         loadContent(state);
@@ -364,6 +371,10 @@
       var insertMenu = el.querySelector('.chronicle-editor__insert-wrapper');
       if (insertMenu && insertMenu._closeDropdownHandler) {
         document.removeEventListener('click', insertMenu._closeDropdownHandler);
+      }
+
+      if (state.outline) {
+        state.outline.destroy();
       }
 
       if (state.editor) {

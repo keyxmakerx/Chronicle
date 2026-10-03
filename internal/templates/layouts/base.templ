@@ -112,6 +112,8 @@ templ Base(title string) {
 		<script src={ AssetURL("/static/js/widgets/editor_autolink.js") } defer></script>
 		<!-- Slash command menu (must load before editor.js so Chronicle.SlashCommands is available) -->
 		<script src={ AssetURL("/static/js/widgets/editor_slash.js") } defer></script>
+		<!-- "On this page" outline (must load before editor.js) -->
+		<script src={ AssetURL("/static/js/widgets/editor_outline.js") } defer></script>
 		<script src={ AssetURL("/static/js/widgets/editor.js") } defer></script>
 
 		<!-- Image upload widget -->
