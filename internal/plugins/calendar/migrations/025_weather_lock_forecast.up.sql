@@ -1,4 +1,4 @@
--- 024_weather_lock_forecast — a lock on a day's weather, and how far ahead
+-- 025_weather_lock_forecast — a lock on a day's weather, and how far ahead
 -- players are shown a forecast.
 --
 -- calendar_weather_days.locked: a locked day keeps its reading when weather
