@@ -272,6 +272,7 @@ templ MapEditorBody(cc *campaigns.CampaignContext, data MapViewData, mapContaine
 		data-cluster-src={ layouts.AssetURL("/static/vendor/leaflet.markercluster.js") }
 		data-draw-src={ layouts.AssetURL("/static/js/map_drawing_tools.js") }
 		data-shadow-src={ layouts.AssetURL("/static/js/map_shadow.js") }
+		data-pictures-src={ layouts.AssetURL("/static/js/map_pictures.js") }
 		data-map-id={ data.Map.ID }
 		data-image-id={ derefStr(data.Map.ImageID) }
 		data-image-url={ mapImageSrc(ctx, data.Map) }
@@ -524,6 +525,20 @@ templ mapControls(data MapViewData) {
 				</div>
 			</div>
 			}
+			<!-- The campaign media picker mounts on this button and reports the choice
+			     as media-picker:select, which the viewer hands to the drawing module. -->
+			<button
+				type="button"
+				id="mp-add-picture"
+				class="mp-btn"
+				data-widget="media-picker"
+				data-campaign-id={ data.CampaignID }
+				data-mime-prefix="image/"
+				aria-label="Add a picture (I)"
+			>
+				<i class="fa-solid fa-image" aria-hidden="true"></i>
+				<span class="mp-tip">Add a picture <kbd>I</kbd></span>
+			</button>
 			<div class="mp-sep"></div>
 			<div class="mp-item">
 				<button type="button" id="mp-style-btn" class="mp-btn" aria-expanded="false" aria-label="Colour and line">

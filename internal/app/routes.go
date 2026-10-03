@@ -2155,6 +2155,32 @@ func (a *entityMediaVerifierAdapter) MediaExistsInCampaign(ctx context.Context, 
 	return f.CampaignID != nil && *f.CampaignID == campaignID, nil
 }
 
+// mapMediaVerifierAdapter wraps media.MediaService to implement
+// maps.MediaVerifier. A picture placed on a map must be an image of the map's
+// own campaign, or one campaign could pull another's artwork onto its map by
+// guessing a media id.
+type mapMediaVerifierAdapter struct {
+	svc media.MediaService
+}
+
+// ImageInCampaign is true only for an existing image file of the campaign.
+// Not-found is a clean false so the caller answers the same for "no such
+// file" and "someone else's file".
+func (a *mapMediaVerifierAdapter) ImageInCampaign(ctx context.Context, mediaID, campaignID string) (bool, error) {
+	f, err := a.svc.GetByID(ctx, mediaID)
+	if err != nil {
+		var ae *apperror.AppError
+		if errors.As(err, &ae) && ae.Code == http.StatusNotFound {
+			return false, nil
+		}
+		return false, err
+	}
+	if f == nil || f.CampaignID == nil || *f.CampaignID != campaignID {
+		return false, nil
+	}
+	return strings.HasPrefix(f.MimeType, "image/"), nil
+}
+
 // armoryBuyerAccessAdapter wraps entities.EntityService to implement
 // armory.BuyerAccessChecker. Used by the transaction service to verify
 // the calling user can act on the buyer entity (own / shared / Owner /
@@ -4784,6 +4810,7 @@ func (a *App) RegisterRoutes() {
 		}
 		return m.DrawWho(), nil
 	})
+	drawingService.SetMediaVerifier(&mapMediaVerifierAdapter{svc: mediaService})
 	mapsService.SetEventPublisher(mapEvents)
 
 	// --- Module Routes ---
