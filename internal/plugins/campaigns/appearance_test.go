@@ -103,6 +103,9 @@ func appearanceFieldCases() []fieldCase {
 		{"button style", func(in *AppearanceInput, v string) { in.Buttons.Style = v }, func(a *Appearance) string { return a.ButtonStyle }, "ink"},
 		{"elevation", func(in *AppearanceInput, v string) { in.Motion.Elevation = v }, func(a *Appearance) string { return a.Elevation }, "dramatic"},
 		{"motion speed", func(in *AppearanceInput, v string) { in.Motion.Speed = v }, func(a *Appearance) string { return a.MotionSpeed }, "leisurely"},
+		{"header height", func(in *AppearanceInput, v string) { in.Header.Height = v }, func(a *Appearance) string { return a.HeaderHeight }, "tall"},
+		{"menu colour", func(in *AppearanceInput, v string) { in.Sidebar.Colour = v }, func(a *Appearance) string { return a.SidebarColour }, "ink"},
+		{"menu corner", func(in *AppearanceInput, v string) { in.Sidebar.Corner = v }, func(a *Appearance) string { return a.SidebarCorner }, "subtitle"},
 	}
 }
 
@@ -351,6 +354,12 @@ func TestApplyAppearance_Widgets(t *testing.T) {
 		{"links then text", []string{"links", "text"}, "links", []string{"links", "text"}, false},
 		{"text then links keeps order", []string{"text", "links"}, "quote", []string{"text", "links"}, false},
 		{"text only", []string{"text"}, "quote", []string{"text"}, false},
+		{"note first reads as widgets to older code", []string{"note", "links"}, "widgets", []string{"note", "links"}, false},
+		{"search alone", []string{"search"}, "widgets", []string{"search"}, false},
+		{"four is the cap", []string{"links", "text", "note", "search"}, "links", []string{"links", "text", "note", "search"}, false},
+		{"five is over the cap", []string{"links", "text", "note", "search", "links"}, "", nil, true},
+		{"five distinct names do not exist", []string{"links", "text", "note", "search", "era"}, "", nil, true},
+		{"era is not built yet", []string{"era"}, "", nil, true},
 		{"links only", []string{"links"}, "links", []string{"links"}, false},
 		{"duplicate", []string{"links", "links"}, "", nil, true},
 		{"unknown", []string{"banner"}, "", nil, true},
@@ -577,5 +586,165 @@ func TestPictureName(t *testing.T) {
 		if (err == nil) != c.valid {
 			t.Errorf("pictureName(%q): err=%v, want valid=%v", c.in, err, c.valid)
 		}
+	}
+}
+
+func TestApplyAppearance_Sidebar(t *testing.T) {
+	const pic = "2026/09/menu-banner.png"
+	cases := []struct {
+		name    string
+		in      AppearanceSidebarInput
+		wantErr bool
+		check   func(t *testing.T, a *Appearance)
+	}{
+		{"defaults store nothing", AppearanceSidebarInput{Colour: "charcoal", Corner: "plain", Glow: "accent",
+			Own: "#2b4a3a", Banner: pic, Subtitle: "left over", GlowColour: "#22d3ee"}, false, func(t *testing.T, a *Appearance) {
+			if a != nil {
+				t.Errorf("a default menu must store nothing, got %+v", a)
+			}
+		}},
+		{"ink", AppearanceSidebarInput{Colour: "ink"}, false, func(t *testing.T, a *Appearance) {
+			if a.SidebarColour != "ink" || a.SidebarOwn != "" {
+				t.Errorf("got %+v", a)
+			}
+		}},
+		{"tinted drops a stale own colour", AppearanceSidebarInput{Colour: "tinted", Own: "#2b4a3a"}, false, func(t *testing.T, a *Appearance) {
+			if a.SidebarColour != "tinted" || a.SidebarOwn != "" {
+				t.Errorf("got %+v", a)
+			}
+		}},
+		{"own colour is stored tamed", AppearanceSidebarInput{Colour: "own", Own: "#2B4A3A"}, false, func(t *testing.T, a *Appearance) {
+			if a.SidebarColour != "own" || a.SidebarOwn != "#2b4a3a" {
+				t.Errorf("got %+v", a)
+			}
+		}},
+		{"own colour needs a colour", AppearanceSidebarInput{Colour: "own"}, true, nil},
+		{"own colour must be a hex", AppearanceSidebarInput{Colour: "own", Own: "green"}, true, nil},
+		{"unknown colour", AppearanceSidebarInput{Colour: "white"}, true, nil},
+		{"light menu is not offered", AppearanceSidebarInput{Colour: "light"}, true, nil},
+		{"subtitle trimmed", AppearanceSidebarInput{Corner: "subtitle", Subtitle: "  Session 23  "}, false, func(t *testing.T, a *Appearance) {
+			if a.SidebarCorner != "subtitle" || a.SidebarSubtitle != "Session 23" {
+				t.Errorf("got %+v", a)
+			}
+		}},
+		{"subtitle of 40 runes", AppearanceSidebarInput{Corner: "subtitle", Subtitle: strings.Repeat("é", 40)}, false, nil},
+		{"subtitle of 41 runes", AppearanceSidebarInput{Corner: "subtitle", Subtitle: strings.Repeat("é", 41)}, true, nil},
+		{"subtitle with a line break", AppearanceSidebarInput{Corner: "subtitle", Subtitle: "one\ntwo"}, true, nil},
+		{"subtitle dropped for a plain corner", AppearanceSidebarInput{Corner: "plain", Subtitle: "stale"}, false, func(t *testing.T, a *Appearance) {
+			if a != nil {
+				t.Errorf("got %+v", a)
+			}
+		}},
+		{"banner", AppearanceSidebarInput{Corner: "banner", Banner: pic}, false, func(t *testing.T, a *Appearance) {
+			if a.SidebarCorner != "banner" || a.SidebarBanner != pic {
+				t.Errorf("got %+v", a)
+			}
+		}},
+		{"banner needs a picture", AppearanceSidebarInput{Corner: "banner"}, true, nil},
+		{"banner path climbing out", AppearanceSidebarInput{Corner: "banner", Banner: "../secret.png"}, true, nil},
+		{"banner dropped for a subtitle corner", AppearanceSidebarInput{Corner: "subtitle", Banner: pic}, false, func(t *testing.T, a *Appearance) {
+			if a.SidebarBanner != "" {
+				t.Errorf("stale banner kept: %+v", a)
+			}
+		}},
+		{"unknown corner", AppearanceSidebarInput{Corner: "logo-only"}, true, nil},
+		{"own glow", AppearanceSidebarInput{Glow: "own", GlowColour: "#3B9FB5"}, false, func(t *testing.T, a *Appearance) {
+			if a.PeekGlow != "own" || a.PeekGlowColour != "#3b9fb5" {
+				t.Errorf("got %+v", a)
+			}
+		}},
+		{"own glow needs a colour", AppearanceSidebarInput{Glow: "own"}, true, nil},
+		{"glow colour must be a hex", AppearanceSidebarInput{Glow: "own", GlowColour: "cyan"}, true, nil},
+		{"glow colour dropped while following the accent", AppearanceSidebarInput{Glow: "accent", GlowColour: "#3b9fb5"}, false, func(t *testing.T, a *Appearance) {
+			if a != nil {
+				t.Errorf("got %+v", a)
+			}
+		}},
+		{"unknown glow", AppearanceSidebarInput{Glow: "rainbow"}, true, nil},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			in := AppearanceInput{Sidebar: tc.in}
+			var s CampaignSettings
+			_, err := applyAppearance(&s, in)
+			if tc.wantErr {
+				requireBadRequest(t, err)
+				return
+			}
+			if err != nil {
+				t.Fatal(err)
+			}
+			if tc.check != nil {
+				tc.check(t, s.Appearance)
+			}
+		})
+	}
+}
+
+func TestApplyAppearance_MovingHeader(t *testing.T) {
+	cases := []struct {
+		name    string
+		h       AppearanceHeaderInput
+		wantErr bool
+	}{
+		{"two colours", AppearanceHeaderInput{Bg: "moving", From: "#0f172a", To: "#3b1d5e", Dir: "to-r"}, false},
+		{"direction optional", AppearanceHeaderInput{Bg: "moving", From: "#0f172a", To: "#3b1d5e"}, false},
+		{"needs both colours", AppearanceHeaderInput{Bg: "moving", From: "#0f172a"}, true},
+		{"colours must be hex", AppearanceHeaderInput{Bg: "moving", From: "red", To: "blue"}, true},
+		{"bad direction", AppearanceHeaderInput{Bg: "moving", From: "#0f172a", To: "#3b1d5e", Dir: "diagonal"}, true},
+		{"sky is not built yet", AppearanceHeaderInput{Bg: "sky"}, true},
+		{"animated is the editor's old name, not a stored mode", AppearanceHeaderInput{Bg: "animated", From: "#0f172a", To: "#3b1d5e"}, true},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			var s CampaignSettings
+			_, err := applyAppearance(&s, AppearanceInput{Header: tc.h})
+			if tc.wantErr {
+				requireBadRequest(t, err)
+				return
+			}
+			if err != nil {
+				t.Fatal(err)
+			}
+			if s.TopbarStyle == nil || s.TopbarStyle.Mode != "moving" || s.TopbarStyle.GradientFrom != "#0f172a" || s.TopbarStyle.GradientTo != "#3b1d5e" {
+				t.Errorf("TopbarStyle = %+v", s.TopbarStyle)
+			}
+		})
+	}
+}
+
+func TestAppearancePictures_IncludesMenuBanner(t *testing.T) {
+	var in AppearanceInput
+	in.Brand.Logo, in.Sidebar.Banner = "a.png", "b.png"
+	got := in.AppearancePictures()
+	if len(got) != 2 || got[0] != "a.png" || got[1] != "b.png" {
+		t.Errorf("AppearancePictures = %v, want the logo and the menu banner", got)
+	}
+}
+
+// TestApplyAppearance_EditorPayload feeds the exact JSON the editor's Save
+// sent (captured from customize_look.js) through the real decoder, so a
+// renamed key on either side fails here rather than silently dropping a
+// choice.
+func TestApplyAppearance_EditorPayload(t *testing.T) {
+	const payload = `{"look":"classic","brand":{"name":"","logo":"","welcome":"","backdrop":""},"header":{"bg":"moving","height":"tall","color":"","from":"#0f172a","to":"#1e2a5a","dir":"to-r","image":"","scrim":"medium","widgets":["search","note"],"links":[],"text":""},"colours":{"accent":"#6366f1","s1":"","s2":"","page":"cool","contrast":"standard"},"nav":{"style":"ring","strength":"calm","pageName":"row"},"type":{"body":"inter","heading":"same","scale":"standard"},"buttons":{"style":"lift"},"motion":{"elevation":"standard","speed":"standard","reduceAll":false},"sidebar":{"colour":"tinted","own":"","corner":"subtitle","subtitle":"The Drowned Crown, session 23","banner":"","glow":"own","glowColour":"#3b9fb5"}}`
+	var in AppearanceInput
+	if err := json.Unmarshal([]byte(payload), &in); err != nil {
+		t.Fatal(err)
+	}
+	var s CampaignSettings
+	if _, err := applyAppearance(&s, in); err != nil {
+		t.Fatal(err)
+	}
+	a := s.Appearance
+	if a == nil || a.HeaderHeight != "tall" || a.SidebarColour != "tinted" || a.SidebarCorner != "subtitle" ||
+		a.SidebarSubtitle != "The Drowned Crown, session 23" || a.PeekGlow != "own" || a.PeekGlowColour != "#3b9fb5" {
+		t.Errorf("Appearance = %+v", a)
+	}
+	if s.TopbarStyle == nil || s.TopbarStyle.Mode != "moving" || s.TopbarStyle.GradientDir != "to-r" {
+		t.Errorf("TopbarStyle = %+v", s.TopbarStyle)
+	}
+	if got := strings.Join(s.TopbarContent.Widgets, ","); got != "search,note" || s.TopbarContent.Mode != "widgets" {
+		t.Errorf("TopbarContent = %+v", s.TopbarContent)
 	}
 }

@@ -2783,12 +2783,14 @@
 @layer components {
   .nav-sb {
     --nav-bg: var(--color-sidebar-bg, #1a1c23);
-    --nav-hover: #262a33;
-    --nav-press: #15171d;
-    --nav-raised: #22252e;
-    --nav-text: #cbd5e1;
-    --nav-text-2: #8b93a1;
-    --nav-text-3: #5f6776;
+    /* The --cz-sb-* tokens come from a campaign's menu colour (Customize);
+       Charcoal is every fallback, so a campaign that never set one is unchanged. */
+    --nav-hover: var(--cz-sb-hover, #262a33);
+    --nav-press: var(--cz-sb-press, #15171d);
+    --nav-raised: var(--cz-sb-raised, #22252e);
+    --nav-text: var(--cz-sb-text, #cbd5e1);
+    --nav-text-2: var(--cz-sb-text-2, #8b93a1);
+    --nav-text-3: var(--cz-sb-text-3, #5f6776);
     --nav-hi: #ffffff;
     --nav-strong: #f3f4f6;
     --nav-line: rgb(255 255 255 / 0.07);
@@ -2814,6 +2816,32 @@
     box-shadow: inset 0 1px 0 rgb(255 255 255 / 0.25);
   }
   .nav-brand-name { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 13.5px; font-weight: 700; }
+  /* The name and the optional subtitle stack; a plain corner has only the name. */
+  .nav-brand-text { min-width: 0; flex: 1; display: flex; flex-direction: column; justify-content: center; }
+  .nav-brand-sub {
+    min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+    font-size: 11px; font-weight: 500; color: var(--nav-text-2);
+  }
+  /* The banner picture sits behind the row, under a shade that keeps the
+     name readable on any picture. It is empty (and takes no room) for the
+     other corners. */
+  .nav-brand { position: relative; }
+  .nav-brand-bg { position: absolute; inset: 0; z-index: 0; overflow: hidden; pointer-events: none; }
+  .nav-brand-bg:empty { display: none; }
+  .nav-banner { width: 100%; height: 100%; object-fit: cover; display: block; }
+  .nav-brand-bg:not(:empty)::after {
+    content: ""; position: absolute; inset: 0;
+    background: linear-gradient(transparent 30%, rgb(0 0 0 / 0.65));
+  }
+  .nav-brand > :not(.nav-brand-bg) { position: relative; z-index: 1; }
+  [data-cz-corner="banner"] .nav-brand { height: 6rem; align-items: flex-end; padding-bottom: 10px; }
+  [data-cz-corner="banner"] .nav-brand-name { text-shadow: 0 1px 3px rgb(0 0 0 / 0.6); }
+  [data-cz-corner="banner"] .nav-brand-sub { color: rgb(255 255 255 / 0.8); }
+  /* The tall header and the menu's brand row share their bottom edge. */
+  [data-cz-hdr="tall"] .nav-brand { height: 6rem; }
+  /* Peeking or folded to icons, the menu shows only the logo. */
+  #sidebar.sidebar-peeking .nav-brand-text, #sidebar.sidebar-peeking .nav-brand-bg,
+  .sidebar-collapsed .nav-brand-text, .sidebar-collapsed .nav-brand-bg { display: none; }
   .nav-ibtn {
     width: 32px; height: 32px; flex: none; border-radius: 8px; display: grid; place-items: center;
     color: var(--nav-text-2); transition: transform 120ms var(--nav-ease);
@@ -3921,6 +3949,9 @@ html[data-cz-scale="roomy"] { font-size: 110%; }
   zoom: var(--cz-hz, 1);
 }
 
+/* The tall header. Unlayered, so it outranks the h-14 utility on the bar. */
+[data-cz-hdr="tall"] #app-topbar { height: 6rem; }
+
 /* A custom header that needs light words gets the light ink set inside it. */
 .cz-hdr-light {
   --color-text-primary: #f9fafb;
@@ -3930,6 +3961,40 @@ html[data-cz-scale="roomy"] { font-size: 110%; }
   --color-bg-tertiary: rgb(255 255 255 / 0.10);
   --color-border: rgb(255 255 255 / 0.13);
   border-bottom-color: rgb(255 255 255 / 0.13);
+}
+
+/* The header's "+N" tray opens over the page, so it keeps the page's own ink
+   rather than the light ink above. The snapshot is taken on <html>, where the
+   page tones and dark mode set these, so it follows both. */
+:root {
+  --cz-page-ink-1: var(--color-text-primary);
+  --cz-page-ink-2: var(--color-text-body);
+  --cz-page-ink-3: var(--color-text-secondary);
+  --cz-page-ink-4: var(--color-text-muted);
+  --cz-page-fill: var(--color-bg-tertiary);
+  --cz-page-line: var(--color-border);
+}
+/* Header widgets below md: when the bar can't fit even the first widget,
+   it joins the rest in the tray and the button counts it (app.templ,
+   topbarCenterContent). A lone widget gets the button only then. */
+.tb-slot { container: tbslot / inline-size; }
+.tb-first-copy, .tb-n-all, .tb-solo { display: none; }
+@container tbslot (max-width: 8rem) {
+  .tb-first { display: none; }
+  .tb-first-copy { display: contents; }
+  .tb-n { display: none; }
+  .tb-n-all { display: inline; }
+  .tb-solo { display: inline-flex; }
+}
+@media (min-width: 768px) { .tb-solo { display: none; } }
+
+.cz-hdr-light #topbar-tray {
+  --color-text-primary: var(--cz-page-ink-1);
+  --color-text-body: var(--cz-page-ink-2);
+  --color-text-secondary: var(--cz-page-ink-3);
+  --color-text-muted: var(--cz-page-ink-4);
+  --color-bg-tertiary: var(--cz-page-fill);
+  --color-border: var(--cz-page-line);
 }
 
 /* Elevation: cards take the chosen shadow; cards that open something lift. */

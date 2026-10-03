@@ -20,8 +20,9 @@ type customizeDraft struct {
 		Backdrop string `json:"backdrop"`
 	} `json:"brand"`
 	Header struct {
-		Bg      string       `json:"bg"`    // "solid", "gradient" or "image".
-		Solid   string       `json:"solid"` // A colour, or "page" for the header that matches the page.
+		Bg      string       `json:"bg"`     // "solid", "gradient", "moving" or "image".
+		Height  string       `json:"height"` // "slim" or "tall".
+		Solid   string       `json:"solid"`  // A colour, or "page" for the header that matches the page.
 		From    string       `json:"from"`
 		To      string       `json:"to"`
 		Dir     string       `json:"dir"` // "r", "br" or "b".
@@ -42,7 +43,16 @@ type customizeDraft struct {
 		S2       *string `json:"s2"`
 		Page     string  `json:"page"`
 		Contrast string  `json:"contrast"`
+		Sidebar  string  `json:"sidebar"` // Menu colour: "charcoal", "ink", "tinted" or "own".
 	} `json:"colours"`
+	Sidebar struct {
+		Own        string `json:"own"` // Used while the menu colour is "own"; a starting colour otherwise.
+		Corner     string `json:"corner"`
+		Subtitle   string `json:"subtitle"`
+		Banner     string `json:"banner"`
+		Glow       string `json:"glow"`
+		GlowColour string `json:"glowColour"` // Used while the glow is "own"; a starting colour otherwise.
+	} `json:"sidebar"`
 	Type struct {
 		Body    string `json:"body"`
 		Heading string `json:"heading"`
@@ -67,6 +77,13 @@ type customizeState struct {
 
 // Chronicle's own default chrome accent, as the Classic look shows it.
 const classicAccent = "#6366f1"
+
+// Starting colours the editor offers before the owner picks their own menu
+// or glow colour; never stored unless that choice is selected and saved.
+const (
+	startMenuOwn = "#1a2a22"
+	startGlowOwn = "#3b9fb5"
+)
 
 // legacyBodyFonts maps the older font_family choice to the nearest text
 // face, so a campaign that picked one sees it selected rather than reset.
@@ -131,9 +148,9 @@ func buildCustomizeState(ctx context.Context, cc *CampaignContext) customizeStat
 			if isValidHexColor(ts.Color) {
 				h.Solid = ts.Color
 			}
-		case "gradient":
+		case "gradient", "moving":
 			if isValidHexColor(ts.GradientFrom) && isValidHexColor(ts.GradientTo) {
-				h.Bg, h.From, h.To = "gradient", ts.GradientFrom, ts.GradientTo
+				h.Bg, h.From, h.To = ts.Mode, ts.GradientFrom, ts.GradientTo
 				h.Dir = map[string]string{"to-br": "br", "to-b": "b"}[ts.GradientDir]
 				if h.Dir == "" {
 					h.Dir = "r"
@@ -147,6 +164,7 @@ func buildCustomizeState(ctx context.Context, cc *CampaignContext) customizeStat
 			}
 		}
 	}
+	h.Height = orDefault(a.HeaderHeight, AppearanceHeights)
 	h.Widgets = []string{}
 	h.Links = []TopbarLink{}
 	if tc := s.TopbarContent; tc != nil {
@@ -171,6 +189,21 @@ func buildCustomizeState(ctx context.Context, cc *CampaignContext) customizeStat
 	d.Colours.S2 = optColour(s.AccentSurface2)
 	d.Colours.Page = orDefault(a.PageTone, AppearancePageTones)
 	d.Colours.Contrast = orDefault(a.Contrast, AppearanceContrasts)
+
+	d.Colours.Sidebar = orDefault(a.SidebarColour, AppearanceSidebars)
+	sb := &d.Sidebar
+	sb.Own = startMenuOwn
+	if isValidHexColor(a.SidebarOwn) {
+		sb.Own = a.SidebarOwn
+	}
+	sb.Corner = orDefault(a.SidebarCorner, AppearanceCorners)
+	sb.Subtitle = a.SidebarSubtitle
+	sb.Banner = picture(a.SidebarBanner)
+	sb.Glow = orDefault(a.PeekGlow, AppearanceGlows)
+	sb.GlowColour = startGlowOwn
+	if isValidHexColor(a.PeekGlowColour) {
+		sb.GlowColour = a.PeekGlowColour
+	}
 
 	d.Type.Body = a.BodyFont
 	if d.Type.Body == "" {
