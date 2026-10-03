@@ -145,6 +145,27 @@ func TestShopBuy_PurseRollbackRestoresExactly(t *testing.T) {
 	}
 }
 
+// When the change is gone before a failed purchase is undone, the coins paid
+// still come back: the buyer is never out of pocket.
+func TestShopBuy_PurseRollbackAfterChangeSpent(t *testing.T) {
+	f := newBuyFx()
+	f.openDowntime()
+	f.listings.rels[11] = sells("shop-1", "i1", `{"price":5,"currency":"sp","quantity":5}`)
+	f.purseSheet(0, 0, 0, 10, 0)
+	f.fields.afterUpdate = func() {
+		f.fields.afterUpdate = nil
+		f.fields.data["c1"]["sp"] = 0.0 // the 5 sp change is spent at once
+	}
+	f.rels.fail = true
+	if _, err := f.svc.Buy(context.Background(), "camp", "shop-1", pU1, basket("c1", [2]int{11, 1}, [2]int{2, 1})); err == nil {
+		t.Fatal("want failure")
+	}
+	want := map[string]float64{"cp": 0, "sp": 0, "ep": 0, "gp": 10, "pp": 0}
+	if got := f.coins("c1"); !reflect.DeepEqual(got, want) {
+		t.Errorf("purse = %v, want the gold paid back %v", got, want)
+	}
+}
+
 func TestShopBuy_Wealth(t *testing.T) {
 	cases := []struct {
 		name   string

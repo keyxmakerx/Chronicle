@@ -438,7 +438,20 @@ func (s *shopBuyService) applyBasket(ctx context.Context, campaignID, shopEntity
 			for coin, d := range deltas {
 				inverse[coin] = -d
 			}
-			if _, err := s.stash.adjustPurse(mctx, buyer, inverse); err != nil {
+			ok, err := s.stash.adjustPurse(mctx, buyer, inverse)
+			if err == nil && !ok {
+				// The change was spent or edited away meanwhile, so taking it
+				// back would go below zero. Return the coins paid at least:
+				// the buyer is never out of pocket for a failed purchase.
+				refund := make(map[string]int64, len(inverse))
+				for coin, d := range inverse {
+					if d > 0 {
+						refund[coin] = d
+					}
+				}
+				ok, err = s.stash.adjustPurse(mctx, buyer, refund)
+			}
+			if err != nil || !ok {
 				slog.Error("shop buy: RESTORE FAILED, character's purse is short",
 					slog.String("character_id", buyer.ID), slog.String("campaign_id", campaignID), slog.Any("error", err))
 			}
