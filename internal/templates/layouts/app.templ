@@ -532,15 +532,18 @@ templ SidebarDrillPanel(campaignID string, et SidebarEntityType, count int) {
 			<span class="nav-drill-name">{ et.NamePlural }</span>
 		</a>
 		<span class="nav-drill-count">{ strconv.Itoa(count) }</span>
-		<a
-			href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/entities/new?type=%d", campaignID, et.ID)) }
-			class="nav-drill-new"
-			title={ fmt.Sprintf("New %s", et.Slug) }
-			aria-label={ fmt.Sprintf("New %s", et.Slug) }
-			hx-boost="false"
-		>
-			<i class="fa-solid fa-plus" aria-hidden="true"></i>
-		</a>
+		// Creating a page needs Scribe; a Player would get a 403.
+		if GetCampaignRole(ctx) >= 2 {
+			<a
+				href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/entities/new?type=%d", campaignID, et.ID)) }
+				class="nav-drill-new"
+				title={ fmt.Sprintf("New %s", et.Slug) }
+				aria-label={ fmt.Sprintf("New %s", et.Slug) }
+				hx-boost="false"
+			>
+				<i class="fa-solid fa-plus" aria-hidden="true"></i>
+			</a>
+		}
 	</div>
 	<div class="nav-drill-search">
 		<i class="fa-solid fa-magnifying-glass" aria-hidden="true"></i>
