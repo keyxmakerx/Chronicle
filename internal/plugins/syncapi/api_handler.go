@@ -50,6 +50,8 @@ type APIHandler struct {
 	systemEnabler        SystemEnabler
 	campaignSystemLister CampaignSystemLister
 	tagGrantLister       TagGrantLister
+	shopRoomReader       ShopRoomReader
+	shopRoomAddon        string
 	dmScreen             DMScreenProvider
 }
 

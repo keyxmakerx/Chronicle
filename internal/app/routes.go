@@ -3325,6 +3325,14 @@ func (a *App) RegisterRoutes() {
 	// ownership sync, reusing the entities glance adapter.
 	syncAPIHandler.SetTagGrantLister(tagFetcherAdapter)
 	syncAPIHandler.SetSystemEnabler(addonService)
+	// The shop room service is shared with the armory web routes below, so the
+	// Foundry module reads the same layout and visibility rules.
+	shopRoomService := armory.NewShopRoomService(
+		armory.NewShopRoomRepository(a.DB),
+		&armoryShopCheckerAdapter{svc: entityService},
+		&entityVisibilityFilterAdapter{svc: entityService},
+	)
+	syncAPIHandler.SetShopRoomReader(shopRoomService, "armory")
 	calendarAPIHandler := syncapi.NewCalendarAPIHandler(syncService, calendarService, campaignService)
 	mediaAPIHandler := syncapi.NewMediaAPIHandler(syncService, mediaService)
 	if urlSigner != nil {
@@ -3402,11 +3410,7 @@ func (a *App) RegisterRoutes() {
 			return "/campaigns/" + campaignID + "/armory/characters/" + entityID + "/panel"
 		},
 	})
-	shopRoomHandler := armory.NewShopRoomHandler(armory.NewShopRoomService(
-		armory.NewShopRoomRepository(a.DB),
-		&armoryShopCheckerAdapter{svc: entityService},
-		&entityVisibilityFilterAdapter{svc: entityService},
-	))
+	shopRoomHandler := armory.NewShopRoomHandler(shopRoomService)
 	armory.RegisterRoutes(e, armoryHandler, txHandler, instHandler, stashHandler, shopRoomHandler, campaignService, authService, addonService)
 
 	// Notes widget: personal floating note-taking panel (Google Keep-style).

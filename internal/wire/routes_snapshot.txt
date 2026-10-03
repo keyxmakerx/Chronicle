@@ -145,6 +145,7 @@ GET	/armory/instances/manage	internal/plugins/armory/routes.go
 GET	/armory/items/:eid/collections	internal/plugins/armory/routes.go
 GET	/armory/move	internal/plugins/armory/routes.go
 GET	/armory/shops/:eid/room	internal/plugins/armory/routes.go
+GET	/armory/shops/:eid/room	internal/plugins/syncapi/routes.go
 GET	/armory/shops/:eid/transactions	internal/plugins/armory/routes.go
 GET	/armory/stashes	internal/plugins/armory/routes.go
 GET	/armory/stashes/:sid/history	internal/plugins/armory/routes.go
