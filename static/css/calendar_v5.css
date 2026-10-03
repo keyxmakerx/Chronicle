@@ -331,6 +331,42 @@ html[data-theme="dark"] .calv5 {
 .calv5-bsec { margin-top: 20px; }
 .calv5-bsec:first-of-type { margin-top: 16px; }
 .calv5-bsec h4 { margin: 0 0 8px; font: 650 9.5px/1 var(--sans, sans-serif); letter-spacing: 0.14em; text-transform: uppercase; color: var(--mut); }
+/* Calendar settings' Weather section: the slider reads out its value in
+   the Generate sheet's words. */
+.calv5-wx-range { display: flex; align-items: center; gap: 10px; margin-top: 6px; }
+.calv5-wx-range input[type="range"] { flex: 1 1 auto; accent-color: var(--ink); }
+.calv5-wx-range output { flex: none; min-width: 96px; font: 500 12.5px/1 var(--sans, sans-serif); color: var(--ink2); }
+.calv5-wx-hint { margin: 6px 0 0; font: 500 12px/1.4 var(--sans, sans-serif); color: var(--mut); }
+/* "Your own weather": a list of kinds, each opening its fields in place.
+   No transitions: the fields appear and disappear at once. */
+.calv5-wk { margin-top: 20px; }
+.calv5-wk-h { margin: 0 0 8px; font: 650 9.5px/1 var(--sans, sans-serif); letter-spacing: 0.14em; text-transform: uppercase; color: var(--mut); }
+.calv5-wk-list { margin: 0 0 10px; padding: 0; list-style: none; display: flex; flex-direction: column; gap: 6px; }
+.calv5-wk-item { border-radius: 11px; background: var(--paper2); box-shadow: inset 0 0 0 1px var(--hair); }
+.calv5-wk-row { display: flex; align-items: center; gap: 9px; padding: 8px 10px; font: 500 13px/1.3 var(--sans, sans-serif); color: var(--ink2); }
+.calv5-wk-row b { font-weight: 650; color: var(--ink); }
+.calv5-wk-dot { width: 12px; height: 12px; border-radius: 50%; flex: none; box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.25); }
+.calv5-wk-sum { flex: 1 1 auto; min-width: 0; color: var(--mut); font-size: 12px; }
+.calv5-wk-form { display: flex; flex-direction: column; gap: 10px; padding: 12px; }
+.calv5-wk-form .calv5-fld input[type="color"] { width: 64px; padding: 2px; }
+.calv5-wk-set { margin: 0; padding: 0; border: 0; min-width: 0; display: flex; flex-direction: column; gap: 6px; }
+.calv5-wk-set > legend { padding: 0; margin-bottom: 6px; font: 600 11px/1 var(--sans, sans-serif); color: var(--mut); }
+.calv5-wk-icons { display: flex; gap: 6px; flex-wrap: wrap; }
+.calv5-wk-ic { width: 38px; height: 34px; border-radius: 9px; border: 1px solid var(--edge); background: var(--paper2); color: var(--ink2); cursor: pointer; }
+.calv5-wk-ic.on { background: var(--ink); color: var(--paper); border-color: var(--ink); }
+.calv5-wk-ic:focus-visible, .calv5-wk-more > summary:focus-visible { outline: 1.5px solid var(--ink); outline-offset: 2px; }
+.calv5-wk-seasonrow { margin: 0; padding: 0; border: 0; display: flex; align-items: center; gap: 10px; min-width: 0; }
+.calv5-wk-seasonrow > legend { float: left; width: 64px; padding: 0; font: 500 12.5px/1.4 var(--sans, sans-serif); color: var(--ink2); }
+.calv5-wk-segs { display: inline-flex; border-radius: 9px; box-shadow: inset 0 0 0 1px var(--edge); overflow: hidden; }
+.calv5-wk-seg { position: relative; display: block; cursor: pointer; }
+.calv5-wk-seg input { position: absolute; opacity: 0; inset: 0; margin: 0; cursor: pointer; }
+.calv5-wk-seg span { display: block; padding: 7px 11px; font: 500 12px/1 var(--sans, sans-serif); color: var(--ink2); }
+.calv5-wk-seg input:checked + span { background: var(--ink); color: var(--paper); }
+.calv5-wk-seg input:focus-visible + span { outline: 1.5px solid var(--ink); outline-offset: -3px; }
+.calv5-wk-more > summary { cursor: pointer; font: 600 12px/1.4 var(--sans, sans-serif); color: var(--ink2); }
+.calv5-wk-more[open] > summary { margin-bottom: 10px; }
+.calv5-wk-more > .calv5-wk-set, .calv5-wk-more > .calv5-fld, .calv5-wk-more > .calv5-toggle-row { margin-top: 10px; }
+.calv5-wk-btns { display: flex; justify-content: space-between; gap: 8px; }
 .calv5-blist { display: flex; flex-direction: column; gap: 6px; }
 .calv5-brow { display: flex; align-items: center; gap: 6px; }
 .calv5-brow input[type="text"], .calv5-brow input[type="number"] { height: 32px; padding: 0 9px; border-radius: 8px; border: 1px solid var(--edge); background: var(--paper2); font: 500 12.5px/1 var(--sans, sans-serif); color: var(--ink); min-width: 0; }

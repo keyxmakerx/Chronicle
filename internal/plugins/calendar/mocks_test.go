@@ -469,6 +469,9 @@ type fakeWeatherRepo struct {
 	listDaysFn  func(ctx context.Context, calendarID string, year, month int) ([]DayWeather, error)
 	setDaysFn   func(ctx context.Context, calendarID string, days []DayWeatherInput) error
 	clearDaysFn func(ctx context.Context, calendarID string, dates []DayDate) error
+
+	getSettingsFn func(ctx context.Context, calendarID string) (*WeatherSettings, error)
+	setSettingsFn func(ctx context.Context, calendarID string, s WeatherSettings) error
 }
 
 func (m *fakeWeatherRepo) Get(ctx context.Context, calendarID string) (*Weather, error) {
@@ -499,6 +502,19 @@ func (m *fakeWeatherRepo) SetDays(ctx context.Context, calendarID string, days [
 func (m *fakeWeatherRepo) ClearDays(ctx context.Context, calendarID string, dates []DayDate) error {
 	if m.clearDaysFn != nil {
 		return m.clearDaysFn(ctx, calendarID, dates)
+	}
+	return nil
+}
+
+func (m *fakeWeatherRepo) GetSettings(ctx context.Context, calendarID string) (*WeatherSettings, error) {
+	if m.getSettingsFn != nil {
+		return m.getSettingsFn(ctx, calendarID)
+	}
+	return nil, nil
+}
+func (m *fakeWeatherRepo) SetSettings(ctx context.Context, calendarID string, s WeatherSettings) error {
+	if m.setSettingsFn != nil {
+		return m.setSettingsFn(ctx, calendarID, s)
 	}
 	return nil
 }

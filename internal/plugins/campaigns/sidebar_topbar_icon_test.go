@@ -1,5 +1,5 @@
 // sidebar_topbar_icon_test.go pins the icon name check on the sidebar config
-// and topbar content paths: the editor re-sends every stored item, so an
+// and topbar content (Customize) paths: the editor re-sends every stored item, so an
 // invalid icon is dropped (the save still succeeds) and a valid one is kept.
 package campaigns
 
@@ -53,22 +53,21 @@ func TestUpdateSidebarConfig_ItemIcon(t *testing.T) {
 	}
 }
 
-func TestUpdateTopbarContent_LinkIcon(t *testing.T) {
+func TestApplyAppearance_LinkIcon(t *testing.T) {
 	cases := map[string]string{"fa-dragon": "fa-dragon", "": ""}
 	for _, bad := range badSidebarTopbarIconNames {
 		cases[bad] = ""
 	}
 	for in, want := range cases {
 		t.Run(in, func(t *testing.T) {
-			var saved string
-			svc := &campaignService{repo: tierTestRepo("{}", &saved)}
-			if err := svc.UpdateTopbarContent(context.Background(), "camp-1",
-				&TopbarContent{Mode: "links", Links: []TopbarLink{{Label: "Link", URL: "/x", Icon: in}}}); err != nil {
+			var input AppearanceInput
+			input.Header.Links = []TopbarLink{{Label: "Link", URL: "/x", Icon: in}}
+			var settings CampaignSettings
+			if _, err := applyAppearance(&settings, input); err != nil {
 				t.Fatalf("save must succeed, got %v", err)
 			}
-			var settings CampaignSettings
-			if err := json.Unmarshal([]byte(saved), &settings); err != nil || settings.TopbarContent == nil || len(settings.TopbarContent.Links) != 1 {
-				t.Fatalf("saved settings unreadable: %q (%v)", saved, err)
+			if settings.TopbarContent == nil || len(settings.TopbarContent.Links) != 1 {
+				t.Fatalf("links not applied: %+v", settings.TopbarContent)
 			}
 			if got := settings.TopbarContent.Links[0].Icon; got != want {
 				t.Errorf("stored icon = %q, want %q", got, want)

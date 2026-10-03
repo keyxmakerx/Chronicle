@@ -9,6 +9,7 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"strconv"
 
 	"github.com/labstack/echo/v4"
 
@@ -31,7 +32,13 @@ func (h *Handler) StructureEditPage(c echo.Context) error {
 		Calendar:     cal,
 		CSRFToken:    middleware.GetCSRFToken(c),
 		RealTime:     cal.UsesRealTime(),
+		Climates:     WeatherClimates,
 	}
+	ws, err := h.svc.GetWeatherSettings(c.Request().Context(), cal.ID, cc.Campaign.ID, viewerFrom(c, cc))
+	if err != nil {
+		return err
+	}
+	data.Weather = *ws
 	if middleware.IsHTMX(c) {
 		return middleware.Render(c, http.StatusOK, StructureEditFragment(data))
 	}
@@ -51,6 +58,66 @@ func bindStructureEdit(c echo.Context) (StructureEdit, string, error) {
 		return StructureEdit{}, "", apperror.NewInternal(fmt.Errorf("marshal structure: %w", err))
 	}
 	return StructureEditFromImport(ir), string(raw), nil
+}
+
+// bindWeatherCarry reads the editor's three weather fields against the stored
+// settings. None sent keeps what is stored (an older form, or a client that
+// only sends structure); any sent fills the others from storage, so an
+// absent weather_kinds keeps the stored kinds and "[]" clears them. Invalid
+// values are a bad-request the owner reads in the preview slot.
+func (h *Handler) bindWeatherCarry(c echo.Context, cc *campaigns.CampaignContext, calID string) (weatherCarry, error) {
+	climate, cont, kindsRaw := c.FormValue("weather_climate"), c.FormValue("weather_continuity"), c.FormValue("weather_kinds")
+	if climate == "" && cont == "" && kindsRaw == "" {
+		return weatherCarry{}, nil
+	}
+	cur, err := h.svc.GetWeatherSettings(c.Request().Context(), calID, cc.Campaign.ID, viewerFrom(c, cc))
+	if err != nil {
+		return weatherCarry{}, err
+	}
+	next := *cur
+	if kindsRaw != "" {
+		parsed, perr := parseWeatherKinds(kindsRaw)
+		if perr != nil {
+			return weatherCarry{}, perr
+		}
+		next.Kinds = parsed
+	}
+	if climate != "" {
+		next.Climate = climate
+	}
+	if cont != "" {
+		f, perr := strconv.ParseFloat(cont, 64)
+		if perr != nil {
+			return weatherCarry{}, apperror.NewBadRequest("how long weather lasts must be a number between 0 and 1")
+		}
+		next.Continuity = f
+	}
+	if err := validateWeatherSettings(next); err != nil {
+		return weatherCarry{}, err
+	}
+	next.Continuity = roundContinuity(next.Continuity)
+	cleaned, err := validateWeatherKinds(next.Kinds)
+	if err != nil {
+		return weatherCarry{}, err
+	}
+	wx := weatherCarry{
+		Sent:       true,
+		Climate:    next.Climate,
+		Continuity: strconv.FormatFloat(next.Continuity, 'f', -1, 64),
+		Kinds:      cleaned,
+		KindsJSON:  encodeWeatherKinds(cleaned),
+	}
+	if next.Climate != cur.Climate {
+		wx.Notes = append(wx.Notes, fmt.Sprintf("Weather: the climate changes to %s.", climateName(next.Climate)))
+	}
+	switch {
+	case next.Continuity > cur.Continuity:
+		wx.Notes = append(wx.Notes, "Weather: weather lasts longer.")
+	case next.Continuity < cur.Continuity:
+		wx.Notes = append(wx.Notes, "Weather: weather changes more often.")
+	}
+	wx.Notes = append(wx.Notes, weatherKindNotes(cur.Kinds, cleaned)...)
+	return wx, nil
 }
 
 // isOwnerFacingError reports whether err is a refusal the owner should read
@@ -74,12 +141,16 @@ func (h *Handler) StructureEditPreview(c echo.Context) error {
 	cc := campaigns.GetCampaignContext(c)
 	calID := c.Param("calid")
 	edit, raw, err := bindStructureEdit(c)
+	var wx weatherCarry
+	if err == nil {
+		wx, err = h.bindWeatherCarry(c, cc, calID)
+	}
 	if err == nil {
 		var p *StructurePreview
 		p, err = h.svc.PreviewStructureEdit(c.Request().Context(), calID, cc.Campaign.ID, edit)
 		if err == nil {
 			return middleware.Render(c, http.StatusOK,
-				structurePreviewBody(cc.Campaign.ID, calID, middleware.GetCSRFToken(c), raw, "", p))
+				structurePreviewBody(cc.Campaign.ID, calID, middleware.GetCSRFToken(c), raw, "", p, wx))
 		}
 	}
 	if isOwnerFacingError(err) {
@@ -96,15 +167,27 @@ func (h *Handler) StructureEditApply(c echo.Context) error {
 	cc := campaigns.GetCampaignContext(c)
 	calID := c.Param("calid")
 	edit, raw, err := bindStructureEdit(c)
+	var wx weatherCarry
+	if err == nil {
+		// Validated before the structure write so a bad climate can't leave
+		// the structure saved and the weather refused.
+		wx, err = h.bindWeatherCarry(c, cc, calID)
+	}
 	if err == nil {
 		var p *StructurePreview
 		p, err = h.svc.ApplyStructureEdit(c.Request().Context(), calID, cc.Campaign.ID, c.FormValue("fingerprint"), edit)
 		if err == nil {
-			return middleware.HTMXRedirect(c, structureCalendarURL(cc.Campaign.ID, calID))
-		}
-		if apperror.SafeCode(err) == http.StatusConflict && p != nil {
+			if wx.Sent {
+				cont, _ := strconv.ParseFloat(wx.Continuity, 64)
+				err = h.svc.SetWeatherSettings(c.Request().Context(), calID, cc.Campaign.ID,
+					WeatherSettings{Climate: wx.Climate, Continuity: cont, Kinds: wx.Kinds})
+			}
+			if err == nil {
+				return middleware.HTMXRedirect(c, structureCalendarURL(cc.Campaign.ID, calID))
+			}
+		} else if apperror.SafeCode(err) == http.StatusConflict && p != nil {
 			return middleware.Render(c, http.StatusOK,
-				structurePreviewBody(cc.Campaign.ID, calID, middleware.GetCSRFToken(c), raw, apperror.UserMessage(err, ""), p))
+				structurePreviewBody(cc.Campaign.ID, calID, middleware.GetCSRFToken(c), raw, apperror.UserMessage(err, ""), p, wx))
 		}
 	}
 	if isOwnerFacingError(err) {

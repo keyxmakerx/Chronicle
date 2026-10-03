@@ -8,6 +8,8 @@ package calendar
 import (
 	"context"
 	"database/sql"
+	"encoding/json"
+	"errors"
 	"fmt"
 	"strings"
 )
@@ -25,6 +27,12 @@ type WeatherRepository interface {
 	SetDays(ctx context.Context, calendarID string, days []DayWeatherInput) error
 	// ClearDays deletes the readings on the given days, whatever their source.
 	ClearDays(ctx context.Context, calendarID string, dates []DayDate) error
+
+	// GetSettings returns the calendar's climate settings, or (nil, nil)
+	// when none were ever stored.
+	GetSettings(ctx context.Context, calendarID string) (*WeatherSettings, error)
+	// SetSettings creates or replaces the calendar's climate settings.
+	SetSettings(ctx context.Context, calendarID string, s WeatherSettings) error
 }
 
 // weatherRepo is the MariaDB implementation of WeatherRepository.
@@ -283,4 +291,39 @@ func (r *weatherRepo) ClearDays(ctx context.Context, calendarID string, dates []
 		}
 	}
 	return tx.Commit()
+}
+
+// GetSettings reads the calendar's climate settings; no row is (nil, nil)
+// so the service decides the defaults.
+func (r *weatherRepo) GetSettings(ctx context.Context, calendarID string) (*WeatherSettings, error) {
+	s := &WeatherSettings{}
+	var kinds sql.NullString
+	err := r.db.QueryRowContext(ctx,
+		`SELECT climate, continuity, kinds FROM calendar_weather_settings WHERE calendar_id = ?`, calendarID,
+	).Scan(&s.Climate, &s.Continuity, &kinds)
+	if errors.Is(err, sql.ErrNoRows) {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+	// A column that does not parse reads as no kinds: the owner's list is
+	// re-saved whole from the editor, and the page must still open.
+	s.Kinds = []WeatherKind{}
+	if kinds.Valid && kinds.String != "" {
+		var stored []WeatherKind
+		if json.Unmarshal([]byte(kinds.String), &stored) == nil && stored != nil {
+			s.Kinds = stored
+		}
+	}
+	return s, nil
+}
+
+// SetSettings upserts the calendar's climate settings.
+func (r *weatherRepo) SetSettings(ctx context.Context, calendarID string, s WeatherSettings) error {
+	_, err := r.db.ExecContext(ctx,
+		`INSERT INTO calendar_weather_settings (calendar_id, climate, continuity, kinds) VALUES (?, ?, ?, ?)
+		 ON DUPLICATE KEY UPDATE climate = VALUES(climate), continuity = VALUES(continuity), kinds = VALUES(kinds)`,
+		calendarID, s.Climate, s.Continuity, encodeWeatherKinds(s.Kinds))
+	return err
 }
