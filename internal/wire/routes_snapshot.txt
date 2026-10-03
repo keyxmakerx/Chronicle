@@ -287,6 +287,7 @@ GET	/foundry-vtt/presence-pill-fragment	internal/plugins/foundry_vtt/routes.go
 GET	/foundry-vtt/settings-tab	internal/plugins/foundry_vtt/routes.go
 GET	/foundry-vtt/setup-guide-fragment	internal/plugins/foundry_vtt/routes.go
 GET	/foundry-vtt/show-banner-fragment	internal/plugins/foundry_vtt/routes.go
+GET	/game-nights	internal/plugins/sessions/routes.go
 GET	/groups	internal/plugins/campaigns/routes.go
 GET	/groups/:gid	internal/plugins/campaigns/routes.go
 GET	/groups/manage	internal/plugins/campaigns/routes.go
