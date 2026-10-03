@@ -582,7 +582,7 @@ func (h *Handler) sendRSVPEmails(ctx context.Context, session *Session, campaign
 
 		dateStr := "TBD"
 		if session.ScheduledDate != nil {
-			dateStr = session.FormatScheduledDate()
+			dateStr = session.FormatScheduledWhen()
 		}
 
 		subject := fmt.Sprintf("Session Invite: %s — %s", session.Name, campaignName)
