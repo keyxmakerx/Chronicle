@@ -9,6 +9,7 @@ package calendar
 
 import (
 	"fmt"
+	"strconv"
 
 	"github.com/keyxmakerx/chronicle/internal/templates/components"
 	"github.com/keyxmakerx/chronicle/internal/templates/layouts"
@@ -27,6 +28,20 @@ type StructureEditData struct {
 	// months are the Gregorian ones, so the page explains that instead of
 	// offering the editor.
 	RealTime bool
+	// Weather and Climates feed the Weather section of the editor.
+	Weather  WeatherSettings
+	Climates []WeatherClimate
+}
+
+// weatherCarry is the weather part of a structure save: the values the
+// owner submitted (carried to the save as hidden fields) and a note for each
+// that differs from what is stored. Sent is false when the form had neither
+// field, in which case nothing weather-related is written.
+type weatherCarry struct {
+	Sent       bool
+	Climate    string
+	Continuity string
+	Notes      []string
 }
 
 // StructureEditPage is the full page (direct navigation).
@@ -68,12 +83,57 @@ templ StructureEditFragment(data StructureEditData) {
 							ShowFlags:     true,
 							ClearsPreview: true,
 							RevealPreview: true,
+							Extra:         weatherSettingsSection(data.Weather, data.Climates),
 						}, data.CSRFToken, "")
 					}
 				</div>
 			</div>
 			<div id={ structurePreviewSlot } class="calv5-structure-preview" aria-live="polite"></div>
 		</div>
+	</div>
+}
+
+// weatherSettingsSection is the editor's Weather section: the world's climate
+// and how long weather lasts. Both controls empty a stale preview like the
+// rest of the editor, since the preview carries them to the save.
+templ weatherSettingsSection(w WeatherSettings, climates []WeatherClimate) {
+	<div class="calv5-bsec">
+		<h4>Weather</h4>
+		<label class="calv5-fld">
+			<span>Climate</span>
+			<select class="calv5-inp" name="weather_climate" @change="clearPreview()">
+				<optgroup label="Natural">
+					for _, c := range climates {
+						if !c.Magic {
+							<option value={ c.ID } selected?={ c.ID == w.Climate }>{ c.Name }</option>
+						}
+					}
+				</optgroup>
+				<optgroup label="Magic">
+					for _, c := range climates {
+						if c.Magic {
+							<option value={ c.ID } selected?={ c.ID == w.Climate }>{ c.Name }</option>
+						}
+					}
+				</optgroup>
+			</select>
+		</label>
+		<label class="calv5-fld" for="calv5-weather-continuity">
+			<span>How long weather lasts</span>
+		</label>
+		<input
+			id="calv5-weather-continuity"
+			type="range"
+			name="weather_continuity"
+			min="0"
+			max="1"
+			step="0.05"
+			value={ strconv.FormatFloat(w.Continuity, 'f', -1, 64) }
+			aria-describedby="calv5-weather-continuity-hint"
+			@change="clearPreview()"
+		/>
+		<p id="calv5-weather-continuity-hint" class="calv5-hint">Left changes every day; right settles into long spells.</p>
+		<p class="calv5-hint">Generate starts from this climate. Your own kinds of weather will join here later.</p>
 	</div>
 }
 
@@ -98,7 +158,7 @@ func structureCalendarURL(campaignID, calendarID string) string {
 // pins the calendar state this preview describes (see
 // CalendarService.ApplyStructureEdit). notice is set when the save found
 // the calendar had changed and this is the refreshed preview.
-templ structurePreviewBody(campaignID, calendarID, csrfToken, importJSON, notice string, p *StructurePreview) {
+templ structurePreviewBody(campaignID, calendarID, csrfToken, importJSON, notice string, p *StructurePreview, wx weatherCarry) {
 	<div class="calv5-panel wide page">
 		<div class="calv5-body">
 			<h2 class="calv5-wz-h">Before you save</h2>
@@ -192,10 +252,13 @@ templ structurePreviewBody(campaignID, calendarID, csrfToken, importJSON, notice
 				<div class="calv5-rgrp">
 					<h4>Also</h4>
 					<ul>
-						if len(p.OtherNotes) == 0 {
+						if len(p.OtherNotes) == 0 && len(wx.Notes) == 0 {
 							<li>Nothing else changes.</li>
 						}
 						for _, n := range p.OtherNotes {
+							<li>{ n }</li>
+						}
+						for _, n := range wx.Notes {
 							<li>{ n }</li>
 						}
 					</ul>
@@ -213,6 +276,10 @@ templ structurePreviewBody(campaignID, calendarID, csrfToken, importJSON, notice
 				<input type="hidden" name="csrf_token" value={ csrfToken }/>
 				<input type="hidden" name="import_json" value={ importJSON }/>
 				<input type="hidden" name="fingerprint" value={ p.Fingerprint }/>
+				if wx.Sent {
+					<input type="hidden" name="weather_climate" value={ wx.Climate }/>
+					<input type="hidden" name="weather_continuity" value={ wx.Continuity }/>
+				}
 				<button type="button" class="btn quiet" onclick={ structureBackToEditingOnClick() }>Back to editing</button>
 				<span class="sp" style="flex:1"></span>
 				<i id="calv5-structure-spinner" class="fa-solid fa-spinner fa-spin htmx-indicator" aria-hidden="true"></i>

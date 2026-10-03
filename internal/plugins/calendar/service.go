@@ -330,6 +330,12 @@ type CalendarService interface {
 	SetDayWeather(ctx context.Context, calendarID, campaignID string, days []DayWeatherInput) error
 	ClearDayWeather(ctx context.Context, calendarID, campaignID string, dates []DayDate) error
 
+	// Weather settings: the world's climate and how long weather lasts.
+	// Get never returns nil (defaults when unset); Set validates and
+	// stores.
+	GetWeatherSettings(ctx context.Context, calendarID, campaignID string, v permissions.Viewer) (*WeatherSettings, error)
+	SetWeatherSettings(ctx context.Context, calendarID, campaignID string, s WeatherSettings) error
+
 	// ListAllEventsForCalendar returns every event for a calendar with no
 	// role or per-user visibility filter — a bulk, unredacted read for
 	// SYSTEM-ONLY callers that apply their own gating afterward: the
@@ -2434,6 +2440,40 @@ func (s *calendarService) ListDayWeather(ctx context.Context, calendarID, campai
 		}
 	}
 	return out, nil
+}
+
+// GetWeatherSettings returns the calendar's climate settings, or the
+// defaults when none were stored, so a caller never handles nil.
+func (s *calendarService) GetWeatherSettings(ctx context.Context, calendarID, campaignID string, v permissions.Viewer) (*WeatherSettings, error) {
+	if _, err := s.calendarInCampaignForViewer(ctx, calendarID, campaignID, v); err != nil {
+		return nil, err
+	}
+	got, err := s.weatherRepo.GetSettings(ctx, calendarID)
+	if err != nil {
+		return nil, fmt.Errorf("get weather settings: %w", err)
+	}
+	if got == nil || !validClimate(got.Climate) {
+		// A stored id this build no longer lists falls back rather than
+		// handing the generator an id it can't resolve.
+		return &WeatherSettings{Climate: DefaultWeatherClimate, Continuity: DefaultWeatherContinuity}, nil
+	}
+	return got, nil
+}
+
+// SetWeatherSettings validates and stores the calendar's climate settings.
+// Continuity is rounded to the two decimals the column keeps.
+func (s *calendarService) SetWeatherSettings(ctx context.Context, calendarID, campaignID string, in WeatherSettings) error {
+	if err := validateWeatherSettings(in); err != nil {
+		return err
+	}
+	if _, err := s.calendarInCampaign(ctx, calendarID, campaignID); err != nil {
+		return err
+	}
+	in.Continuity = roundContinuity(in.Continuity)
+	if err := s.weatherRepo.SetSettings(ctx, calendarID, in); err != nil {
+		return fmt.Errorf("set weather settings: %w", err)
+	}
+	return nil
 }
 
 // SetDayWeather validates and stores day readings. Every date must be a real

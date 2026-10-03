@@ -1600,6 +1600,14 @@ type DayWeatherInput struct {
 	WeatherInput
 }
 
+// WeatherSettings is a calendar's world climate and how long weather lasts
+// (0 changes every day, 1 settles into long spells). The Generate sheet
+// starts from these.
+type WeatherSettings struct {
+	Climate    string  `json:"climate"`
+	Continuity float64 `json:"continuity"`
+}
+
 // DayDate names one calendar day.
 type DayDate struct {
 	Year  int `json:"year"`

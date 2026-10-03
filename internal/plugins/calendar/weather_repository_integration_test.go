@@ -229,3 +229,45 @@ func TestWeatherRepository_Days_Integration(t *testing.T) {
 		}
 	})
 }
+
+func TestWeatherRepository_Settings_Integration(t *testing.T) {
+	if testing.Short() {
+		t.Skip("integration test requires a database; skipped under -short")
+	}
+	db := openTestDB(t)
+	t.Cleanup(func() { db.Close() })
+
+	ctx := context.Background()
+	repo := NewWeatherRepository(db)
+	calRepo := NewCalendarRepository(db)
+
+	fix := newTestCampaign(t, db, "wxsettings")
+	calA := newTestCalendar(testUUID(t), fix.CampaignID, "Settings A")
+	calB := newTestCalendar(testUUID(t), fix.CampaignID, "Settings B")
+	for _, c := range []*Calendar{calA, calB} {
+		if err := calRepo.Create(ctx, c); err != nil {
+			t.Fatalf("Create %s: %v", c.Name, err)
+		}
+	}
+
+	if s, err := repo.GetSettings(ctx, calA.ID); err != nil || s != nil {
+		t.Fatalf("GetSettings with no row = %+v, %v; want (nil, nil)", s, err)
+	}
+	if err := repo.SetSettings(ctx, calA.ID, WeatherSettings{Climate: "desert", Continuity: 0.35}); err != nil {
+		t.Fatalf("SetSettings: %v", err)
+	}
+	got, err := repo.GetSettings(ctx, calA.ID)
+	if err != nil || got == nil || got.Climate != "desert" || got.Continuity != 0.35 {
+		t.Fatalf("GetSettings = %+v, %v; want desert 0.35", got, err)
+	}
+	if err := repo.SetSettings(ctx, calA.ID, WeatherSettings{Climate: "ashlands", Continuity: 1}); err != nil {
+		t.Fatalf("SetSettings update: %v", err)
+	}
+	got, _ = repo.GetSettings(ctx, calA.ID)
+	if got == nil || got.Climate != "ashlands" || got.Continuity != 1 {
+		t.Fatalf("after update = %+v; want ashlands 1", got)
+	}
+	if s, _ := repo.GetSettings(ctx, calB.ID); s != nil {
+		t.Fatalf("calendar B must not see A's settings, got %+v", s)
+	}
+}

@@ -8,6 +8,7 @@ package calendar
 import (
 	"context"
 	"database/sql"
+	"errors"
 	"fmt"
 	"strings"
 )
@@ -25,6 +26,12 @@ type WeatherRepository interface {
 	SetDays(ctx context.Context, calendarID string, days []DayWeatherInput) error
 	// ClearDays deletes the readings on the given days, whatever their source.
 	ClearDays(ctx context.Context, calendarID string, dates []DayDate) error
+
+	// GetSettings returns the calendar's climate settings, or (nil, nil)
+	// when none were ever stored.
+	GetSettings(ctx context.Context, calendarID string) (*WeatherSettings, error)
+	// SetSettings creates or replaces the calendar's climate settings.
+	SetSettings(ctx context.Context, calendarID string, s WeatherSettings) error
 }
 
 // weatherRepo is the MariaDB implementation of WeatherRepository.
@@ -283,4 +290,29 @@ func (r *weatherRepo) ClearDays(ctx context.Context, calendarID string, dates []
 		}
 	}
 	return tx.Commit()
+}
+
+// GetSettings reads the calendar's climate settings; no row is (nil, nil)
+// so the service decides the defaults.
+func (r *weatherRepo) GetSettings(ctx context.Context, calendarID string) (*WeatherSettings, error) {
+	s := &WeatherSettings{}
+	err := r.db.QueryRowContext(ctx,
+		`SELECT climate, continuity FROM calendar_weather_settings WHERE calendar_id = ?`, calendarID,
+	).Scan(&s.Climate, &s.Continuity)
+	if errors.Is(err, sql.ErrNoRows) {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+	return s, nil
+}
+
+// SetSettings upserts the calendar's climate settings.
+func (r *weatherRepo) SetSettings(ctx context.Context, calendarID string, s WeatherSettings) error {
+	_, err := r.db.ExecContext(ctx,
+		`INSERT INTO calendar_weather_settings (calendar_id, climate, continuity) VALUES (?, ?, ?)
+		 ON DUPLICATE KEY UPDATE climate = VALUES(climate), continuity = VALUES(continuity)`,
+		calendarID, s.Climate, s.Continuity)
+	return err
 }
