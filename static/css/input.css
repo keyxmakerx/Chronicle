@@ -4315,3 +4315,71 @@ html[data-cz-reduce] *:not(.czp *), html[data-cz-reduce] *:not(.czp *)::before, 
     .dms-leaf-r { border-radius: 0 0 .6rem .6rem; transform-origin: center top; }
   }
 }
+
+/* ---- Pictures inside editor text (editor_image.js) ----
+   Kept outside @layer so the width classes, which the script builds from a
+   number, survive Tailwind's unused-class purge. Phones show every picture
+   full width. */
+.ce-img { position: relative; margin: 1rem auto; max-width: 100%; }
+.ce-img img { display: block; width: 100%; height: auto; margin: 0; border-radius: 0.375rem; }
+.ce-img figcaption { margin-top: 0.35rem; font-size: 0.8rem; text-align: center; color: var(--color-text-muted); }
+.ce-img--left { float: left; margin: 0.25rem 1.25rem 0.75rem 0; }
+.ce-img--right { float: right; margin: 0.25rem 0 0.75rem 1.25rem; }
+.ce-img--center { clear: both; }
+.ce-img--w100 { float: none; margin-inline: 0; }
+.ce-img--w10 { width: 10%; }
+.ce-img--w15 { width: 15%; }
+.ce-img--w20 { width: 20%; }
+.ce-img--w25 { width: 25%; }
+.ce-img--w30 { width: 30%; }
+.ce-img--w35 { width: 35%; }
+.ce-img--w40 { width: 40%; }
+.ce-img--w45 { width: 45%; }
+.ce-img--w50 { width: 50%; }
+.ce-img--w55 { width: 55%; }
+.ce-img--w60 { width: 60%; }
+.ce-img--w65 { width: 65%; }
+.ce-img--w70 { width: 70%; }
+.ce-img--w75 { width: 75%; }
+.ce-img--w80 { width: 80%; }
+.ce-img--w85 { width: 85%; }
+.ce-img--w90 { width: 90%; }
+.ce-img--w95 { width: 95%; }
+.ce-img--w100 { width: 100%; }
+.chronicle-editor__content .tiptap::after { content: ""; display: table; clear: both; }
+.ce-img__gm-badge { display: none; }
+.ce-img--gm { outline: 2px dashed rgb(217 119 6 / 0.6); outline-offset: 3px; border-radius: 0.375rem; }
+.ce-img--gm .ce-img__gm-badge {
+  display: block; position: absolute; top: 0.4rem; left: 0.4rem; padding: 0.05rem 0.4rem;
+  font-size: 0.7rem; font-weight: 600; border-radius: 0.25rem; background: rgb(217 119 6); color: #fff;
+}
+.ce-img__tools, .ce-img__handle { display: none; }
+.chronicle-editor--editing .ce-img.is-selected { outline: 2px solid var(--color-accent, #6366f1); outline-offset: 3px; border-radius: 0.375rem; }
+.chronicle-editor--editing .ce-img.is-selected .ce-img__tools {
+  display: flex; flex-wrap: wrap; gap: 0.25rem; align-items: center;
+  position: absolute; left: 0; top: calc(100% + 0.4rem); z-index: 5; width: max-content; max-width: min(28rem, 90vw);
+  padding: 0.3rem; border: 1px solid var(--color-border); border-radius: 0.5rem;
+  background: var(--color-bg-primary); box-shadow: 0 4px 14px rgb(0 0 0 / 0.15);
+}
+.chronicle-editor--editing .ce-img--right.is-selected .ce-img__tools { left: auto; right: 0; }
+.ce-img__btn {
+  min-width: 1.9rem; height: 1.9rem; padding: 0 0.45rem; border: 0; border-radius: 0.375rem;
+  font-size: 0.75rem; color: var(--color-text-secondary); background: transparent; cursor: pointer;
+}
+.ce-img__btn:hover { background: var(--color-bg-tertiary); color: var(--color-text-primary); }
+.ce-img__btn.is-on { background: rgb(99 102 241 / 0.12); color: var(--color-accent, #6366f1); }
+.ce-img__btn--gm.is-on { background: rgb(217 119 6 / 0.15); color: rgb(180 83 9); }
+.ce-img__btn:focus-visible, .ce-img__handle:focus-visible, .ce-img__caption-input:focus-visible { outline: 2px solid var(--color-accent, #6366f1); outline-offset: 1px; }
+.ce-img__caption-input {
+  flex: 1 1 8rem; min-width: 6rem; height: 1.9rem; padding: 0 0.5rem; font-size: 0.8rem;
+  border: 1px solid var(--color-border); border-radius: 0.375rem; background: var(--color-bg-primary); color: inherit;
+}
+.chronicle-editor--editing .ce-img.is-selected .ce-img__handle {
+  display: block; position: absolute; right: -0.45rem; bottom: -0.45rem; width: 0.9rem; height: 0.9rem;
+  border-radius: 999px; background: var(--color-accent, #6366f1); border: 2px solid var(--color-bg-primary);
+  cursor: nwse-resize; touch-action: none;
+}
+.chronicle-editor--editing .ce-img--right.is-selected .ce-img__handle { right: auto; left: -0.45rem; cursor: nesw-resize; }
+@media (max-width: 640px) {
+  .ce-img { float: none !important; width: 100% !important; margin: 1rem 0; }
+}

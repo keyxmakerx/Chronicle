@@ -3,7 +3,7 @@
  *
  * TipTap-based WYSIWYG editor with autosave, mounted on
  * data-widget="editor". Config: data-endpoint (required),
- * data-campaign-id (required for @mentions), data-editable
+ * data-campaign-id (required for @mentions and pictures), data-editable
  * (default false), data-autosave seconds (default 30, 0 disables),
  * data-outline (an "On this page" outline, editor_outline.js).
  *
@@ -136,6 +136,12 @@
         extensions.push(Chronicle.SecretMark);
       }
 
+      // Pictures inside the text. Always in the schema so a page holding
+      // one loads for every reader; only editors can add them.
+      if (Chronicle.EditorImage) {
+        extensions.push(Chronicle.EditorImage.extension);
+      }
+
       // [[links]] to notes. Always in the schema, so a body holding one
       // loads anywhere; reading, a click opens the Journal at the note,
       // unless this reader can't see it. While editing a click selects it.
@@ -167,6 +173,26 @@
       var wikiExtRef = { current: null };
       var slashExtRef = { current: null };
 
+      // Pasting or dropping picture files uploads them into the campaign.
+      if (canEdit && campaignId && Chronicle.EditorImage) {
+        var takeImages = function (view, files, pos) {
+          if (!files.length || !view.editable) return false;
+          Chronicle.EditorImage.uploadAndInsert(editorRef.current, campaignId, files, pos);
+          return true;
+        };
+        editorProps.handlePaste = function (view, event) {
+          return takeImages(view, Chronicle.EditorImage.imageFiles(event.clipboardData));
+        };
+        editorProps.handleDrop = function (view, event, slice, moved) {
+          if (moved) return false;
+          var files = Chronicle.EditorImage.imageFiles(event.dataTransfer);
+          if (!files.length) return false;
+          event.preventDefault();
+          var at = view.posAtCoords({ left: event.clientX, top: event.clientY });
+          return takeImages(view, files, at ? at.pos : undefined);
+        };
+      }
+
       if (canEdit) {
         editorProps.handleKeyDown = function (view, event) {
           // Let mention popup handle keys first (if active).
@@ -194,6 +220,8 @@
         editorProps: editorProps,
       });
       editorRef.current = editor;
+      // Read by the slash menu's Picture command.
+      editor.chronicleCampaignId = campaignId;
 
       // --- @Mention Extension ---
       // Initialize mention support if the extension module is loaded and we
@@ -635,6 +663,7 @@
       { action: 'blockquote',     icon: 'fa-circle-info',     label: 'Callout Block',   hint: '>' },
       { action: 'code',           icon: 'fa-code',            label: 'Code Block',      hint: '```' },
       { action: 'table',          icon: 'fa-table',           label: 'Insert Table',    hint: '' },
+      { action: 'picture',        icon: 'fa-image',           label: 'Picture',         hint: '/picture' },
       { action: 'autolink',       icon: 'fa-wand-magic-sparkles', label: 'Auto-link Entities', hint: 'Ctrl+Shift+L' },
     ];
 
@@ -753,6 +782,10 @@
         if (editor.can().insertTable) {
           editor.chain().focus().insertTable({ rows: 3, cols: 3, withHeaderRow: true }).run();
         }
+        break;
+
+      case 'picture':
+        if (Chronicle.EditorImage) Chronicle.EditorImage.pickAndInsert(editor, state.campaignId);
         break;
 
       case 'autolink':
