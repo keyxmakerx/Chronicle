@@ -22,10 +22,12 @@ func (f *fakeActivityRepo) Insert(_ context.Context, e *ActivityEntry) error {
 	return nil
 }
 
-func (f *fakeActivityRepo) List(_ context.Context, limit, offset int) ([]ActivityEntry, int, error) {
+func (f *fakeActivityRepo) List(_ context.Context, _ ActivityFilter, limit, offset int) ([]ActivityEntry, int, error) {
 	f.gotLimit, f.gotOffset = limit, offset
 	return nil, 0, nil
 }
+
+func (f *fakeActivityRepo) Actors(_ context.Context) ([]ActivityActor, error) { return nil, nil }
 
 func TestActivityService_Record(t *testing.T) {
 	tests := []struct {
@@ -79,7 +81,7 @@ func TestActivityService_ListPaging(t *testing.T) {
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
 			repo := &fakeActivityRepo{}
-			if _, _, err := NewActivityService(repo).List(context.Background(), tc.page, tc.perPage); err != nil {
+			if _, _, err := NewActivityService(repo).List(context.Background(), ActivityFilter{}, tc.page, tc.perPage); err != nil {
 				t.Fatal(err)
 			}
 			if repo.gotLimit != tc.wantLimit || repo.gotOffset != tc.wantOffset {

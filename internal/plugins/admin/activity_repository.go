@@ -13,9 +13,12 @@ type ActivityRepository interface {
 	// Insert stores one entry; a zero CreatedAt is stamped with the current time.
 	Insert(ctx context.Context, e *ActivityEntry) error
 
-	// List returns entries newest first with the actor's display name joined in,
-	// plus the total row count for pagination.
-	List(ctx context.Context, limit, offset int) ([]ActivityEntry, int, error)
+	// List returns entries matching the filter, newest first, with the actor's
+	// display name joined in, plus the matching row count for pagination.
+	List(ctx context.Context, f ActivityFilter, limit, offset int) ([]ActivityEntry, int, error)
+
+	// Actors lists everyone with at least one logged change, by name.
+	Actors(ctx context.Context) ([]ActivityActor, error)
 }
 
 type activityRepository struct {
@@ -57,9 +60,10 @@ func (r *activityRepository) Insert(ctx context.Context, e *ActivityEntry) error
 
 // List returns one page of entries, newest first. LEFT JOIN keeps rows whose
 // actor account has since been deleted.
-func (r *activityRepository) List(ctx context.Context, limit, offset int) ([]ActivityEntry, int, error) {
+func (r *activityRepository) List(ctx context.Context, f ActivityFilter, limit, offset int) ([]ActivityEntry, int, error) {
+	where, args := buildActivityWhere(f)
 	var total int
-	if err := r.db.QueryRowContext(ctx, `SELECT COUNT(*) FROM admin_activity`).Scan(&total); err != nil {
+	if err := r.db.QueryRowContext(ctx, `SELECT COUNT(*) FROM admin_activity a`+where, args...).Scan(&total); err != nil {
 		return nil, 0, fmt.Errorf("counting admin activity: %w", err)
 	}
 
@@ -67,9 +71,9 @@ func (r *activityRepository) List(ctx context.Context, limit, offset int) ([]Act
 		`SELECT a.id, a.actor_user_id, a.action, a.target_type, a.target_id, a.target_label,
 		        a.detail, a.created_at, COALESCE(u.display_name, '')
 		 FROM admin_activity a
-		 LEFT JOIN users u ON u.id = a.actor_user_id
+		 LEFT JOIN users u ON u.id = a.actor_user_id`+where+`
 		 ORDER BY a.created_at DESC, a.id DESC
-		 LIMIT ? OFFSET ?`, limit, offset)
+		 LIMIT ? OFFSET ?`, append(args, limit, offset)...)
 	if err != nil {
 		return nil, 0, fmt.Errorf("listing admin activity: %w", err)
 	}
@@ -95,4 +99,27 @@ func (r *activityRepository) List(ctx context.Context, limit, offset int) ([]Act
 		return nil, 0, fmt.Errorf("iterating admin activity: %w", err)
 	}
 	return out, total, nil
+}
+
+// Actors returns each distinct actor once. Accounts deleted since are skipped:
+// the filter has no name to show and the id would mean nothing to the reader.
+func (r *activityRepository) Actors(ctx context.Context) ([]ActivityActor, error) {
+	rows, err := r.db.QueryContext(ctx,
+		`SELECT u.id, u.display_name
+		 FROM users u
+		 WHERE u.id IN (SELECT DISTINCT actor_user_id FROM admin_activity WHERE actor_user_id IS NOT NULL)
+		 ORDER BY u.display_name`)
+	if err != nil {
+		return nil, fmt.Errorf("listing admin activity actors: %w", err)
+	}
+	defer rows.Close()
+	var out []ActivityActor
+	for rows.Next() {
+		var a ActivityActor
+		if err := rows.Scan(&a.ID, &a.Name); err != nil {
+			return nil, fmt.Errorf("scanning admin activity actor: %w", err)
+		}
+		out = append(out, a)
+	}
+	return out, rows.Err()
 }

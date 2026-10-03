@@ -27,8 +27,12 @@ type ActivityService interface {
 	// callers that care (tests, tools) can see it.
 	Record(ctx context.Context, entry ActivityEntry) error
 
-	// List returns one page (1-based) of entries newest first and the total.
-	List(ctx context.Context, page, perPage int) ([]ActivityEntry, int, error)
+	// List returns one page (1-based) of entries matching the filter, newest
+	// first, and the matching total.
+	List(ctx context.Context, f ActivityFilter, page, perPage int) ([]ActivityEntry, int, error)
+
+	// Actors lists the people who appear in the log, for the "who" menu.
+	Actors(ctx context.Context) ([]ActivityActor, error)
 }
 
 type activityService struct {
@@ -82,7 +86,7 @@ func (s *activityService) RecordActivity(ctx context.Context, actorUserID, actio
 
 // List clamps paging so a bad query string can't produce a negative offset or
 // an unbounded read.
-func (s *activityService) List(ctx context.Context, page, perPage int) ([]ActivityEntry, int, error) {
+func (s *activityService) List(ctx context.Context, f ActivityFilter, page, perPage int) ([]ActivityEntry, int, error) {
 	if page < 1 {
 		page = 1
 	}
@@ -92,5 +96,10 @@ func (s *activityService) List(ctx context.Context, page, perPage int) ([]Activi
 	if perPage > 100 {
 		perPage = 100
 	}
-	return s.repo.List(ctx, perPage, (page-1)*perPage)
+	return s.repo.List(ctx, f, perPage, (page-1)*perPage)
+}
+
+// Actors passes through; kept on the service so handlers never see the repo.
+func (s *activityService) Actors(ctx context.Context) ([]ActivityActor, error) {
+	return s.repo.Actors(ctx)
 }

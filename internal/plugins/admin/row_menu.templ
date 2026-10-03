@@ -1,0 +1,108 @@
+package admin
+
+// adminActionMenu is the "⋯" (or text) button and its popup of row actions.
+// The popup is position:fixed and placed from the button's rectangle, so no
+// card or table wrapper can clip it; it flips above the button near the
+// bottom edge and closes on outside click, Escape, scroll, resize or Tab.
+// x-data is a constant string: nothing from the row is spliced into script.
+templ adminActionMenu(trigger, aria, csrf string, acts []rowAction) {
+	<div
+		class="relative inline-block"
+		x-data="{ open: false, top: 0, left: 0,
+			place() { const r = $refs.btn.getBoundingClientRect(), m = $refs.menu, h = m.offsetHeight, w = m.offsetWidth;
+				this.top = (r.bottom + h + 8 > innerHeight && r.top - h - 8 > 0) ? r.top - h - 4 : r.bottom + 4;
+				this.left = Math.max(8, Math.min(r.right - w, innerWidth - w - 8)); },
+			show(focusFirst) { this.open = true; this.$nextTick(() => { this.place(); if (focusFirst) this.items()[0]?.focus(); }); },
+			items() { return [...$refs.menu.querySelectorAll('[role=menuitem]')]; },
+			move(d) { const i = this.items(), n = i.indexOf(document.activeElement); i[(n + d + i.length) % i.length]?.focus(); } }"
+		@click.outside="open = false"
+		@keydown.escape.window="if (open) { open = false; $refs.btn.focus(); }"
+		@keydown.tab="open = false"
+		@scroll.window.capture="open = false"
+		@resize.window="open = false"
+	>
+		<button
+			type="button"
+			x-ref="btn"
+			aria-haspopup="menu"
+			aria-expanded="false"
+			:aria-expanded="open ? 'true' : 'false'"
+			@click="open ? open = false : show(false)"
+			@keydown.arrow-down.prevent="show(true)"
+			if trigger == "" {
+				class="inline-flex items-center justify-center w-11 h-11 rounded-lg text-fg-secondary hover:bg-surface-alt hover:text-fg transition-colors"
+				aria-label={ aria }
+			} else {
+				class="text-sm text-accent hover:text-accent-hover transition-colors"
+			}
+		>
+			if trigger == "" {
+				<span aria-hidden="true" class="text-xl leading-none">⋯</span>
+			} else {
+				{ trigger }
+			}
+		</button>
+		<div
+			x-ref="menu"
+			x-show="open"
+			role="menu"
+			:style="'top:' + top + 'px;left:' + left + 'px'"
+			@keydown.arrow-down.prevent="move(1)"
+			@keydown.arrow-up.prevent="move(-1)"
+			class="fixed z-50 w-60 max-w-[calc(100vw-1rem)] py-1 bg-surface rounded-lg shadow-lg border border-edge"
+			style="display:none"
+		>
+			for _, a := range acts {
+				if a.DividerBefore {
+					<hr class="my-1 border-edge" role="separator"/>
+				}
+				<button
+					type="button"
+					role="menuitem"
+					{ a.attrs(csrf)... }
+					class={ "block w-full text-left px-4 py-3 text-sm hover:bg-surface-alt focus:bg-surface-alt focus:outline-none transition-colors " + rowMenuToneClass(a.Tone) }
+				>{ a.MenuLabel }</button>
+			}
+		</div>
+	</div>
+}
+
+// adminInlineAction is a row action as a plain text or icon button in the
+// desktop table.
+templ adminInlineAction(a rowAction, csrf string) {
+	<button
+		type="button"
+		{ a.attrs(csrf)... }
+		class={ "text-sm transition-colors " + rowToneClass(a.Tone) }
+		if a.Icon {
+			title={ a.Label }
+			aria-label={ a.Aria }
+		}
+	>
+		if a.Icon {
+			<i class="fa-solid fa-power-off"></i>
+		} else {
+			{ a.Label }
+		}
+	</button>
+}
+
+// adminCardRow is one short phone card: avatar, name, a chip and one line of
+// detail, and the actions menu. A non-empty nameHref makes the name a link.
+templ adminCardRow(initial, name, nameHref, chip, chipClass, detail, csrf string, acts []rowAction) {
+	<div class="flex items-center gap-3 px-3 py-2">
+		<span class="flex-none w-9 h-9 rounded-full bg-accent/10 text-accent text-sm font-semibold inline-flex items-center justify-center" aria-hidden="true">{ initial }</span>
+		<div class="min-w-0 flex-1">
+			if nameHref != "" {
+				<a href={ templ.SafeURL(nameHref) } class="block truncate text-sm font-medium text-accent hover:text-accent-hover">{ name }</a>
+			} else {
+				<div class="truncate text-sm font-medium text-fg">{ name }</div>
+			}
+			<div class="flex items-center gap-2 min-w-0 mt-0.5">
+				<span class={ "flex-none inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium " + chipClass }>{ chip }</span>
+				<span class="truncate text-xs text-fg-muted">{ detail }</span>
+			</div>
+		</div>
+		@adminActionMenu("", "Actions for "+name, csrf, acts)
+	</div>
+}

@@ -28,7 +28,7 @@ templ adminListSearch(v listView) {
 			maxlength="100"
 			placeholder={ v.Placeholder }
 			autocomplete="off"
-			class="input flex-1"
+			class="input flex-1 min-w-0"
 		/>
 		<button type="submit" class="btn-secondary text-sm">Search</button>
 	</form>
@@ -64,7 +64,21 @@ templ adminListChips(v listView) {
 templ adminListEmpty(v listView, colspan int) {
 	<tr>
 		<td colspan={ fmt.Sprintf("%d", colspan) } class="px-4 py-12 text-center">
-			if v.Query != "" {
+			@adminListEmptyMessage(v)
+		</td>
+	</tr>
+}
+
+// adminListEmptyCard is the same empty state inside the phone card list.
+templ adminListEmptyCard(v listView) {
+	<div class="px-4 py-12 text-center">
+		@adminListEmptyMessage(v)
+	</div>
+}
+
+// adminListEmptyMessage is the wording shared by both empty states.
+templ adminListEmptyMessage(v listView) {
+	if v.Query != "" {
 				<div class="text-fg-muted text-sm">
 					No { v.Noun } match “{ v.Query }”.
 					<a
@@ -91,6 +105,4 @@ templ adminListEmpty(v listView, colspan int) {
 			} else {
 				<div class="text-fg-muted text-sm">No { v.Noun } yet.</div>
 			}
-		</td>
-	</tr>
 }
