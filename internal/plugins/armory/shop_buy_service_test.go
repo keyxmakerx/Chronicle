@@ -153,6 +153,7 @@ func TestShopBuy_Refusals(t *testing.T) {
 		{"buyer not a character", pU1, true, basket("i1", [2]int{1, 1}), nil, 404, ""},
 		{"buyer in no campaign", pU1, true, basket("ghost", [2]int{1, 1}), nil, 404, ""},
 		{"sheet without coin field", pU3, true, basket("c3", [2]int{1, 1}), nil, 400, "This sheet has no coin field"},
+		{"wealth is never spent like coins", pU1, true, basket("c1", [2]int{1, 1}), func(f *buyFx) { f.dir.ents["c1"].MoneyKey = "wealth"; f.fields.data["c1"]["wealth"] = 50.0 }, 400, "Wealth isn’t spent like coins"},
 		{"downtime closed, player", pU1, false, basket("c1", [2]int{1, 1}), nil, 409, "Buying opens when the GM opens downtime."},
 		{"sold out", pU1, true, basket("c1", [2]int{6, 1}), nil, 400, "stock"},
 		{"more than in stock", pU1, true, basket("c1", [2]int{1, 6}), func(f *buyFx) { f.fields.data["c1"]["gp"] = 5000.0 }, 400, "insufficient stock"},

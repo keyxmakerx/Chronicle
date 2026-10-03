@@ -18,10 +18,14 @@ import (
 	"strings"
 
 	"github.com/keyxmakerx/chronicle/internal/apperror"
+	"github.com/keyxmakerx/chronicle/internal/changesource"
 )
 
 const (
-	noCoinFieldMessage   = "This sheet has no coin field"
+	noCoinFieldMessage = "This sheet has no coin field"
+	// Wealth (Draw Steel) is a standing, not a purse; how shops use it is
+	// still being decided, so it is never spent like coins.
+	wealthMessage        = "Wealth isn’t spent like coins"
 	notEnoughCoinMessage = "Not enough coin"
 	mixedCurrencyMessage = "Items are priced in different currencies"
 	// buyClosedMessage is shown to a player while downtime is closed. Only the
@@ -194,6 +198,9 @@ func (s *shopBuyService) Buy(ctx context.Context, campaignID, shopEntityID strin
 	if buyer.MoneyKey == "" {
 		return nil, apperror.NewBadRequest(noCoinFieldMessage)
 	}
+	if buyer.MoneyKey == "wealth" {
+		return nil, apperror.NewBadRequest(wealthMessage)
+	}
 
 	unlock := s.stash.locks.lock(campaignID)
 	defer unlock()
@@ -227,6 +234,11 @@ func (s *shopBuyService) Buy(ctx context.Context, campaignID, shopEntityID strin
 	// From here on the basket is applied even if the client disconnects: a
 	// cancelled request must not strand a half-applied purchase.
 	mctx := context.WithoutCancel(ctx)
+	// The coin change reads "at a shop" in the character's money history,
+	// unless a caller (the Foundry route) already labelled it as a purchase.
+	if src, ok := changesource.From(mctx); !ok || src.Kind != changesource.KindShop {
+		mctx = ShopPurchaseSource(mctx, a.UserID, "")
+	}
 	var undo []func()
 	rollback := func() {
 		for i := len(undo) - 1; i >= 0; i-- {

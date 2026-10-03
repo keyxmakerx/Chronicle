@@ -488,3 +488,42 @@ func TestProposalEmail_NeverPrintsABlankZone(t *testing.T) {
 		})
 	}
 }
+
+// The invite email is read outside Chronicle, where nothing converts the time
+// to the reader's zone, so a time set in a known zone must say which one.
+func TestFormatScheduledWhen(t *testing.T) {
+	str := func(v string) *string { return &v }
+	tests := []struct {
+		name string
+		s    Session
+		want string
+	}{
+		{"zone in summer", Session{ScheduledDate: str("2026-07-18"), ScheduledTime: str("19:00"), ScheduledTZ: str("America/Chicago")}, "Sat, Jul 18, 2026 · 7:00 PM CDT"},
+		{"zone in winter", Session{ScheduledDate: str("2026-12-05"), ScheduledTime: str("19:00"), ScheduledTZ: str("America/Chicago")}, "Sat, Dec 5, 2026 · 7:00 PM CST"},
+		{"no zone", Session{ScheduledDate: str("2026-07-18"), ScheduledTime: str("19:00")}, "Sat, Jul 18, 2026 · 7:00 PM"},
+		{"no time", Session{ScheduledDate: str("2026-07-18"), ScheduledTZ: str("America/Chicago")}, "Sat, Jul 18, 2026"},
+		{"bad zone", Session{ScheduledDate: str("2026-07-18"), ScheduledTime: str("19:00"), ScheduledTZ: str("Not/AZone")}, "Sat, Jul 18, 2026 · 7:00 PM"},
+		{"no date", Session{}, ""},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := tt.s.FormatScheduledWhen(); got != tt.want {
+				t.Errorf("FormatScheduledWhen() = %q, want %q", got, tt.want)
+			}
+		})
+	}
+}
+
+func TestRSVPEmail_LabelsTheZone(t *testing.T) {
+	mailer := &captureMailer{}
+	repo := &mockSessionRepo{createRSVPTokenFn: func(_ context.Context, _ *RSVPToken) error { return nil }}
+	h := &Handler{svc: NewSessionService(repo, nil, nil), mailer: mailer, baseURL: "https://x.test"}
+	date, at, tz := "2026-07-18", "19:00", "America/Chicago"
+	session := &Session{ID: "s1", Name: "Night", ScheduledDate: &date, ScheduledTime: &at, ScheduledTZ: &tz}
+	h.sendRSVPEmails(context.Background(), session, "Camp", []campaigns.CampaignMember{{UserID: "u1", Email: "a@b.test"}})
+	for _, body := range []string{mailer.lastPlain, mailer.lastHTML} {
+		if !strings.Contains(body, "7:00 PM CDT") {
+			t.Errorf("invite email should label the time with its zone; body=%s", body)
+		}
+	}
+}

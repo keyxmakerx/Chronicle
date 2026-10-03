@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	"github.com/keyxmakerx/chronicle/internal/apperror"
+	"github.com/keyxmakerx/chronicle/internal/changesource"
 	"github.com/keyxmakerx/chronicle/internal/permissions"
 	"github.com/keyxmakerx/chronicle/internal/plugins/armory"
 )
@@ -25,6 +26,7 @@ func (m shopBuyMembers) IsDmGranted(context.Context, string, string) (bool, erro
 type shopBuyRecorder struct {
 	actor armory.Actor
 	in    armory.BuyInput
+	src   changesource.Source
 	calls int
 }
 
@@ -34,8 +36,9 @@ func (r *shopBuyRecorder) Buyers(_ context.Context, _, _ string, a armory.Actor)
 	return &armory.BuyersView{Buyers: []armory.Buyer{}}, nil
 }
 
-func (r *shopBuyRecorder) Buy(_ context.Context, _, _ string, a armory.Actor, in armory.BuyInput) (*armory.BuyResult, error) {
+func (r *shopBuyRecorder) Buy(ctx context.Context, _, _ string, a armory.Actor, in armory.BuyInput) (*armory.BuyResult, error) {
 	r.calls++
+	r.src, _ = changesource.From(ctx)
 	r.actor, r.in = a, in
 	return &armory.BuyResult{Status: armory.BuyStatusBought}, nil
 }
@@ -85,6 +88,9 @@ func TestSyncShopBuyAdapter_ActsAsMember(t *testing.T) {
 			}
 			if tc.wantCode == 0 && (rec.in.BuyerEntityID != "char-1" || len(rec.in.Items) != 1 || rec.in.Items[0].RelationID != 7 || rec.in.Items[0].Quantity != 2) {
 				t.Fatalf("basket = %+v", rec.in)
+			}
+			if tc.wantCode == 0 && (rec.src.Kind != changesource.KindShop || rec.src.UserID != tc.wantActor.UserID || rec.src.Label != foundryShopLabel) {
+				t.Fatalf("purchase source = %+v, want a Foundry shop purchase by %s", rec.src, tc.wantActor.UserID)
 			}
 		})
 	}
