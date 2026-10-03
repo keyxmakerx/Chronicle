@@ -659,7 +659,13 @@ func (s *entityService) Update(ctx context.Context, entityID string, input Updat
 		entity.Entry = nil
 		entity.EntryHTML = nil
 	} else if entry := strings.TrimSpace(input.Entry.Val("")); entry != "" {
-		entity.Entry = &entry
+		// Plain HTML (the sync API's clients send their page text this way)
+		// leaves entry empty: that column only holds editor JSON, so the HTML
+		// is the body from now on and the editor opens it from entry_html.
+		entity.Entry = nil
+		if isEditorDoc(entry) {
+			entity.Entry = &entry
+		}
 		sanitized := sanitize.HTML(entry)
 		entity.EntryHTML = &sanitized
 	}
@@ -3009,4 +3015,11 @@ func layoutContainsBlockType(layout EntityTypeLayout, blockType string) bool {
 		}
 	}
 	return false
+}
+
+// isEditorDoc reports whether an entry body is editor JSON (a JSON object)
+// rather than HTML or plain text. A bare JSON scalar such as "2024" is page
+// text, not a document.
+func isEditorDoc(entry string) bool {
+	return strings.HasPrefix(entry, "{") && json.Valid([]byte(entry))
 }

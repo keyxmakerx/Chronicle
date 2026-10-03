@@ -68,7 +68,7 @@ type SyncAPIService interface {
 
 	// Authentication.
 	AuthenticateKey(ctx context.Context, rawKey string) (*APIKey, error)
-	UpdateKeyLastUsed(ctx context.Context, id int, ip string) error
+	UpdateKeyLastUsed(ctx context.Context, id int, ip, moduleVersion string) error
 	BindDevice(ctx context.Context, keyID int, fingerprint string) error
 	UnbindDevice(ctx context.Context, keyID int) error
 
@@ -444,9 +444,10 @@ func (s *syncAPIService) AuthenticateKey(ctx context.Context, rawKey string) (*A
 	return key, nil
 }
 
-// UpdateKeyLastUsed records the last-used timestamp and IP for an API key.
-func (s *syncAPIService) UpdateKeyLastUsed(ctx context.Context, id int, ip string) error {
-	return s.repo.UpdateKeyLastUsed(ctx, id, ip)
+// UpdateKeyLastUsed records the last-used timestamp and IP for an API key, and
+// the client's self-reported module version when it sent a valid one.
+func (s *syncAPIService) UpdateKeyLastUsed(ctx context.Context, id int, ip, moduleVersion string) error {
+	return s.repo.UpdateKeyLastUsed(ctx, id, ip, moduleVersion)
 }
 
 // BindDevice records a device fingerprint on an API key. Once bound, only

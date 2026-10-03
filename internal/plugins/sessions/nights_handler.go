@@ -3,7 +3,6 @@ package sessions
 import (
 	"errors"
 	"net/http"
-	"time"
 
 	"github.com/labstack/echo/v4"
 
@@ -32,9 +31,9 @@ func (h *Handler) ListGameNightsAPI(c echo.Context) error {
 		members = append(members, NightMember{UserID: m.UserID, Name: m.DisplayName})
 	}
 
-	// A night counts as played only once its date has ended in every zone
-	// (UTC-14 is the last), so nobody sees "Played" while still at the table.
-	today := time.Now().UTC().Add(-14 * time.Hour).Format("2006-01-02")
+	// A night counts as played only once its date has ended everywhere, so
+	// nobody sees "Played" while still at the table.
+	today := gameNightsToday()
 	nights, err := h.svc.ListGameNights(ctx, cc.Campaign.ID, c.QueryParam("from"), c.QueryParam("to"), today, members)
 	if err != nil {
 		return err

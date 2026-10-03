@@ -168,8 +168,9 @@ type Calendar struct {
 	// stored-not-computed. RealTimeZone is the IANA anchor, required at enable.
 	// TracksRealTime is wire-exposed (UsesRealTime gates MonthDays/absDayIndex/
 	// WeekdayIndex on it, not on Mode alone, so the browser's CalDate/SkyWorld
-	// mirrors need it to pick the same branch); RealTimeZone stays
-	// server-only, nothing client-side reads it.
+	// mirrors need it to pick the same branch). RealTimeZone stays off the
+	// wire; the calendar page hands it to members alone, for game-night
+	// times (CalendarViewData.Zone).
 	TracksRealTime bool    `json:"tracks_real_time"`
 	RealTimeZone   *string `json:"-"`
 	// The real-date anchor: one in-world date and the Gregorian date it
@@ -1215,6 +1216,10 @@ type CreateCalendarInput struct {
 	LeapYearOffset   int
 	Visibility       string
 	VisibilityRules  *string
+	// IsDefault creates the calendar already marked as the campaign's
+	// default. The one-default-per-campaign unique index then refuses a
+	// second one atomically, which CreateCalendar reports as a conflict.
+	IsDefault bool
 }
 
 // CreateCalendarFromImportOptions carries the caller's explicit choice for
@@ -1232,6 +1237,9 @@ type CreateCalendarFromImportOptions struct {
 	CurrentYear  *int
 	CurrentMonth *int
 	CurrentDay   *int
+	// MakeDefault creates the calendar as the campaign's default, failing
+	// with a conflict if the campaign already has one.
+	MakeDefault bool
 }
 
 // UpdateCalendarInput is the validated input for updating calendar settings.

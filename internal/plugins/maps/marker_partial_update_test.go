@@ -16,7 +16,6 @@ package maps
 
 import (
 	"context"
-	"os"
 	"strings"
 	"testing"
 
@@ -143,11 +142,7 @@ func TestMarker_ValidatorsReadTheMergedRow(t *testing.T) {
 // entity link only when it changed: a link to a page the viewer can't see
 // arrives blank, and echoing that blank back would unlink it.
 func TestMarkerClients_SendOnlyWhatTheyMean(t *testing.T) {
-	src, err := os.ReadFile("maps.templ")
-	if err != nil {
-		t.Fatalf("read maps.templ: %v", err)
-	}
-	text := string(src)
+	text := templSource(t) + viewerScript(t)
 	if !strings.Contains(text, "body: { x: mk.x, y: mk.y },") {
 		t.Error("the drag-end PUT no longer sends exactly {x, y}; echoing other fields is the pattern the ruling replaced, and it never covered pin_category / visibility_rules / foundry_id anyway")
 	}

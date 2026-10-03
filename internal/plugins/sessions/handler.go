@@ -17,6 +17,7 @@ import (
 	"github.com/keyxmakerx/chronicle/internal/patch"
 	"github.com/keyxmakerx/chronicle/internal/plugins/auth"
 	"github.com/keyxmakerx/chronicle/internal/plugins/campaigns"
+	"github.com/keyxmakerx/chronicle/internal/timeutil"
 )
 
 // MailSender sends email notifications. Wraps the SMTP service interface.
@@ -29,9 +30,11 @@ type MailSender interface {
 type Handler struct {
 	svc          SessionService
 	memberLister campaigns.MemberLister
-	mailer       MailSender
-	baseURL      string        // Application base URL for RSVP links (e.g. "https://chronicle.example.com").
-	userDir      UserDirectory // Resolves a user's stored IANA timezone for the availability overlay.
+	// calendarFinder sends game-night links to the real-world calendar.
+	calendarFinder RealWorldCalendarFinder
+	mailer         MailSender
+	baseURL        string        // Application base URL for RSVP links (e.g. "https://chronicle.example.com").
+	userDir        UserDirectory // Resolves a user's stored IANA timezone for the availability overlay.
 	// campaignReader is the one-read source of the co-DM grant set the overlay
 	// roster's role column needs. Nil-safe.
 	campaignReader CampaignReader
@@ -68,13 +71,18 @@ func (h *Handler) ListSessions(c echo.Context) error {
 	isOwner := cc.MemberRole >= campaigns.RoleOwner
 	isScribe := cc.MemberRole >= campaigns.RoleScribe
 	userID := auth.GetUserID(c)
+	// The calendar's "Plan it" lands here with the slot it suggested.
+	var plan SessionPlan
+	if isScribe {
+		plan = sessionPlanFrom(c.QueryParam("plan_date"), c.QueryParam("plan_time"), c.QueryParam("plan_tz"))
+	}
 
 	if middleware.IsHTMX(c) {
 		return middleware.Render(c, http.StatusOK,
-			SessionListFragment(cc, sessionList, csrfToken, isOwner, isScribe, userID))
+			SessionListFragment(cc, sessionList, csrfToken, isOwner, isScribe, userID, plan))
 	}
 	return middleware.Render(c, http.StatusOK,
-		SessionListPage(cc, sessionList, csrfToken, isOwner, isScribe, userID))
+		SessionListPage(cc, sessionList, csrfToken, isOwner, isScribe, userID, plan))
 }
 
 // ShowSession renders a session detail page.
@@ -141,6 +149,12 @@ func (h *Handler) CreateSession(c echo.Context) error {
 	if scheduledTime != "" {
 		timePtr = &scheduledTime
 	}
+	// The zone the time was picked in, sent only when the calendar planned
+	// it; a zone that does not resolve is dropped rather than stored.
+	var tzPtr *string
+	if tz := c.FormValue("scheduled_tz"); timePtr != nil && tz != "" && timeutil.IsValidLocation(tz) {
+		tzPtr = &tz
+	}
 
 	// Parse optional calendar date fields.
 	var calYear, calMonth, calDay *int
@@ -179,6 +193,7 @@ func (h *Handler) CreateSession(c echo.Context) error {
 		Summary:            summaryPtr,
 		ScheduledDate:      datePtr,
 		ScheduledTime:      timePtr,
+		ScheduledTZ:        tzPtr,
 		CalendarYear:       calYear,
 		CalendarMonth:      calMonth,
 		CalendarDay:        calDay,
@@ -986,7 +1001,7 @@ func (h *Handler) SidebarRSVP(c echo.Context) error {
 	}
 
 	return middleware.Render(c, http.StatusOK,
-		SidebarSessionsRSVP(cc.Campaign.ID, planned, userID))
+		SidebarSessionsRSVP(cc.Campaign.ID, planned, userID, gameNightsToday()))
 }
 
 // EmbedSessions returns an HTMX fragment for the dashboard session tracker block.
