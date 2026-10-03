@@ -89,6 +89,10 @@ templ Base(title string) {
 		     registered before boot.js auto-mounts the dynamic-surface widget. -->
 		<script src={ AssetURL("/static/js/widgets/character_surface.js") } defer></script>
 
+		<!-- Media page uploader (Alpine x-data="mediaUploader(...)"); before
+		     Alpine so the component exists when Alpine first evaluates it. -->
+		<script src={ AssetURL("/static/js/media_uploader.js") } defer></script>
+
 		<!-- Alpine.js: loaded AFTER boot.js so Chronicle.apiFetch/notify exist
 		     when Alpine initializes and evaluates x-data attributes. -->
 		<script src={ AssetURL("/static/vendor/alpine-collapse.min.js") } defer></script>
