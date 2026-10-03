@@ -34,6 +34,7 @@ import (
 	"github.com/keyxmakerx/chronicle/internal/plugins/calendar"
 	"github.com/keyxmakerx/chronicle/internal/plugins/campaigns"
 	"github.com/keyxmakerx/chronicle/internal/plugins/designlab"
+	"github.com/keyxmakerx/chronicle/internal/plugins/dmscreen"
 	"github.com/keyxmakerx/chronicle/internal/plugins/entities"
 	"github.com/keyxmakerx/chronicle/internal/plugins/foundry_vtt"
 	"github.com/keyxmakerx/chronicle/internal/plugins/maps"
@@ -4318,6 +4319,20 @@ func (a *App) RegisterRoutes() {
 	// page); both read through foundry_vtt.PresenceLookup, so a single
 	// SetPresenceLookup call covers them.
 	fvttHandler.SetPresenceLookup(wsHub)
+
+	// DM Screen: the owner's and scribes' control panel. It owns no data and
+	// reads every section through the adapters in dm_screen_adapters.go;
+	// registered here because Foundry presence comes from wsHub.
+	dmScreenHandler := dmscreen.NewHandler(dmscreen.NewService(dmscreen.Sources{
+		Downtime: &dmDowntimeAdapter{stash: stashSvc, addons: addonService},
+		World:    &dmWorldAdapter{svc: calendarService},
+		Nights:   &dmNightAdapter{svc: sessionsService, members: campaignService},
+		Foundry:  wsHub,
+		Party:    &dmPartyAdapter{entities: entityService, campaigns: campaignService},
+		Hidden:   &dmHiddenAdapter{entities: entityService},
+		System:   systemHandler,
+	}))
+	dmscreen.RegisterRoutes(e, dmScreenHandler, campaignService, authService)
 
 	wsAuth := ws.NewMultiAuthenticator(
 		syncService,
