@@ -16,6 +16,8 @@ import (
 
 	gorillaWs "github.com/gorilla/websocket"
 	"github.com/labstack/echo/v4"
+
+	"github.com/keyxmakerx/chronicle/internal/plugins/foundry_vtt"
 )
 
 type fakeNotesGrants map[string][2]string // token -> campaign, user
@@ -211,7 +213,7 @@ func TestRevokeNotesAppClientsEverywhere_LeavesOtherSockets(t *testing.T) {
 	srv := newRevokeTestServer(t, h)
 	frame1 := dialTestClient(t, srv, "camp-1", "u-target", NotesAppSource)
 	frame2 := dialTestClient(t, srv, "camp-2", "u-target", NotesAppSource)
-	sync := dialTestClient(t, srv, "camp-1", "u-target", "foundry-module")
+	sync := dialTestClient(t, srv, "camp-1", "u-target", foundry_vtt.ModuleSource)
 	waitForClientCount(t, h, "camp-1", 2)
 	waitForClientCount(t, h, "camp-2", 1)
 
