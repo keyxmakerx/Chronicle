@@ -119,6 +119,12 @@ templ EntityShowPage(cc *campaigns.CampaignContext, entity *Entity, entityType *
 				}
 			}
 
+			// Panel another plugin contributes to character pages. It loads
+			// itself and replaces this placeholder; an empty answer removes it.
+			if u := pagePanelURL(ctx); u != "" {
+				<div hx-get={ u } hx-trigger="load" hx-swap="outerHTML"></div>
+			}
+
 			// Children section: shown below the layout if this entity has children.
 			if len(children) > 0 || cc.MemberRole >= campaigns.RoleScribe {
 				@blockChildren(cc, entity, children)

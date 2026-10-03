@@ -1,0 +1,25 @@
+// move_history.templ renders move history lines, shared by the character panel
+// and the full-history fragments.
+package armory
+
+// MoveHistoryList renders every given line, newest first.
+templ MoveHistoryList(lines []MoveLine) {
+	if len(lines) == 0 {
+		<p class="text-xs text-fg-muted">Nothing has been moved yet.</p>
+	} else {
+		<ul class="space-y-1.5">
+			for _, l := range lines {
+				@moveHistoryLine(l)
+			}
+		</ul>
+	}
+}
+
+// moveHistoryLine is one sentence with its relative time.
+templ moveHistoryLine(l MoveLine) {
+	<li class="text-xs text-fg-secondary flex flex-wrap items-baseline gap-x-2">
+		<span class={ moveStatusClass(l.Status) }>{ moveStatusLabel(l.Status) }</span>
+		<span class="text-fg-body">{ MoveSummary(l) }</span>
+		<time class="text-fg-muted" datetime={ l.CreatedAt.Format("2006-01-02T15:04:05Z07:00") } title={ l.CreatedAt.Format("2 Jan 2006 15:04") }>{ moveAgo(l.CreatedAt) }</time>
+	</li>
+}
