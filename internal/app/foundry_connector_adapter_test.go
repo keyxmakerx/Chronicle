@@ -69,6 +69,14 @@ func TestFoundryConnectorAdapter_FoundryConnection(t *testing.T) {
 			fakeHub{}, true, "chron_new", "1.4.2", true, false,
 		},
 		{
+			"custom-tagged keys belong to other tools and are ignored",
+			[]syncapi.APIKey{
+				{KeyPrefix: "chron_bot", IsActive: true, VTTTag: strp("custom"), LastUsedAt: at(time.Minute), ModuleVersion: strp("6.6.6")},
+				{KeyPrefix: "chron_fvtt", IsActive: true, VTTTag: strp("foundry"), LastUsedAt: at(72 * time.Hour), ModuleVersion: strp("1.4.2")},
+			},
+			fakeHub{}, true, "chron_fvtt", "1.4.2", true, false,
+		},
+		{
 			"hub presence passes through",
 			[]syncapi.APIKey{{KeyPrefix: "chron_aa", IsActive: true}},
 			fakeHub{seen: at(time.Second), connected: true}, true, "chron_aa", "", false, true,

@@ -406,6 +406,11 @@ func (a *foundryConnectorAdapter) FoundryConnection(ctx context.Context, campaig
 		if !k.IsActive || k.IsExpired() {
 			continue
 		}
+		// A key labelled "custom" belongs to some other tool (a bot, a
+		// script); counting it would show that tool's activity as Foundry's.
+		if k.VTTTag != nil && *k.VTTTag == "custom" {
+			continue
+		}
 		if !conn.HasKey {
 			conn.HasKey = true
 			conn.KeyPrefix = k.KeyPrefix
