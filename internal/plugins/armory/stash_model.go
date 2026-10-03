@@ -241,6 +241,11 @@ type EntityRef struct {
 	MoneyKey string
 	// MoneyLabel is that field's display label, empty when it has none.
 	MoneyLabel string
+	// Purse maps each 5e coin (cp, sp, ep, gp, pp) to the sheet field that
+	// holds it. It is set only when the type has numeric gp plus at least one
+	// other coin; MoneyKey stays "gp" so stash moves keep treating gp as the
+	// character's money.
+	Purse map[string]string
 }
 
 // MoveLine is a history row with names resolved for display.

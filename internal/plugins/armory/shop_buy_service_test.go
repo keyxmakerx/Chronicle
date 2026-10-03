@@ -156,7 +156,8 @@ func TestShopBuy_Refusals(t *testing.T) {
 		{"buyer not a character", pU1, true, basket("i1", [2]int{1, 1}), nil, 404, ""},
 		{"buyer in no campaign", pU1, true, basket("ghost", [2]int{1, 1}), nil, 404, ""},
 		{"sheet without coin field", pU3, true, basket("c3", [2]int{1, 1}), nil, 400, "This sheet has no coin field"},
-		{"wealth is never spent like coins", pU1, true, basket("c1", [2]int{1, 1}), func(f *buyFx) { f.dir.ents["c1"].MoneyKey = "wealth"; f.fields.data["c1"]["wealth"] = 50.0 }, 400, "Wealth isn’t spent like coins"},
+		{"wealth below the price", pU1, true, basket("c1", [2]int{1, 1}), func(f *buyFx) { f.dir.ents["c1"].MoneyKey = "wealth"; f.fields.data["c1"]["wealth"] = 5.0 }, 400, "Needs Wealth 10"},
+		{"wealth below the dearest of several goods", pU1, true, basket("c1", [2]int{1, 1}, [2]int{2, 1}), func(f *buyFx) { f.dir.ents["c1"].MoneyKey = "wealth"; f.fields.data["c1"]["wealth"] = 9.0 }, 400, "Needs Wealth 10"},
 		{"sold out", pU1, true, basket("c1", [2]int{6, 1}), nil, 400, "stock"},
 		{"more than in stock", pU1, true, basket("c1", [2]int{1, 6}), func(f *buyFx) { f.fields.data["c1"]["gp"] = 5000.0 }, 400, "insufficient stock"},
 		{"unpriced good", pU1, true, basket("c1", [2]int{8, 1}), nil, 400, "no price"},
@@ -479,8 +480,8 @@ func TestShopBuy_Buyers(t *testing.T) {
 		raw, _ := json.Marshal(v)
 		got := string(raw)
 		for _, want := range []string{
-			`{"id":"c1","name":"Thorin","moneyKey":"gp","money":50}`,
-			`{"id":"c2","name":"Mira","moneyKey":"gp","money":10}`,
+			`{"id":"c1","name":"Thorin","moneyKey":"gp","money":50,"moneyCp":5000,"kind":"coins"}`,
+			`{"id":"c2","name":"Mira","moneyKey":"gp","money":10,"moneyCp":1000,"kind":"coins"}`,
 			`{"id":"c3","name":"Grub","moneyKey":"","money":null}`,
 			`"downtimeOpen":false`, `"canBuyNow":true`,
 		} {

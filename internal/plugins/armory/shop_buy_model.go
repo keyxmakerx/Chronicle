@@ -65,21 +65,41 @@ type BuyInput struct {
 }
 
 // BuyResult is the buy response. A bought basket reports what was charged; a
-// request reports only its status.
+// request reports only its status. A Wealth buy spends nothing, so Spent and
+// Currency are absent and MoneyLeft is the unchanged Wealth.
 type BuyResult struct {
 	Status    string   `json:"status"`
 	Spent     *float64 `json:"spent,omitempty"`
 	Currency  string   `json:"currency,omitempty"`
 	MoneyLeft *float64 `json:"moneyLeft,omitempty"`
+	// PurseLeft is the whole purse after a purse buy ("9 gp 7 sp 3 cp") and
+	// Change the coins handed back, empty when there was none.
+	PurseLeft string `json:"purseLeft,omitempty"`
+	Change    string `json:"change,omitempty"`
 }
 
+// How a buyer pays, reported to the widget as Buyer.Kind.
+const (
+	// BuyKindCoins is one number on the sheet (gp, or another single field).
+	BuyKindCoins = "coins"
+	// BuyKindPurse is a 5e sheet with several coin fields.
+	BuyKindPurse = "purse"
+	// BuyKindWealth is Draw Steel's Wealth: a threshold, never spent.
+	BuyKindWealth = "wealth"
+)
+
 // Buyer is one character the caller may buy for. Money is null when the sheet
-// has no money field (or holds a non-number).
+// has no money field (or holds a non-number); for a purse it is the gp
+// equivalent of every coin. MoneyCp is the same value in copper, set only for
+// sheets whose money is 5e coin (gp or a purse).
 type Buyer struct {
-	ID       string   `json:"id"`
-	Name     string   `json:"name"`
-	MoneyKey string   `json:"moneyKey"`
-	Money    *float64 `json:"money"`
+	ID       string             `json:"id"`
+	Name     string             `json:"name"`
+	MoneyKey string             `json:"moneyKey"`
+	Money    *float64           `json:"money"`
+	Purse    map[string]float64 `json:"purse,omitempty"`
+	MoneyCp  *int64             `json:"moneyCp,omitempty"`
+	Kind     string             `json:"kind,omitempty"`
 }
 
 // BuyersView is the response of the buyers endpoint.
