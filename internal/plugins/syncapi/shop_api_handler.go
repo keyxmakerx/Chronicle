@@ -20,10 +20,13 @@ type ShopRoomReader interface {
 	GetRoom(ctx context.Context, campaignID, shopEntityID string, role int, userID string) (json.RawMessage, error)
 }
 
-// SetShopRoomReader wires the armory room reader. Without it the shop room
-// route answers 404, as if the armory addon were off.
-func (h *APIHandler) SetShopRoomReader(r ShopRoomReader) {
+// SetShopRoomReader wires the armory room reader and the addon that gates
+// it. The slug comes from the app wiring so this plugin names no other
+// plugin. Unwired, the route refuses every call: the addon check fails
+// closed on an empty slug and the handler answers 404.
+func (h *APIHandler) SetShopRoomReader(r ShopRoomReader, addonSlug string) {
 	h.shopRoomReader = r
+	h.shopRoomAddon = addonSlug
 }
 
 // shopRoomAPIResponse is what the Foundry module shows to its players: the

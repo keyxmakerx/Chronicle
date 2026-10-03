@@ -99,7 +99,7 @@ func TestGetShopRoom(t *testing.T) {
 				&stubCampaignSvcForDmGrant{role: campaigns.RoleOwner},
 				&stubRelationSvcForShop{rels: tc.rels})
 			if tc.reader != nil {
-				h.SetShopRoomReader(tc.reader)
+				h.SetShopRoomReader(tc.reader, "armory")
 			}
 			c, rec := newShopRoomContext()
 

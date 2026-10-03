@@ -3290,7 +3290,7 @@ func (a *App) RegisterRoutes() {
 		&armoryShopCheckerAdapter{svc: entityService},
 		&entityVisibilityFilterAdapter{svc: entityService},
 	)
-	syncAPIHandler.SetShopRoomReader(shopRoomService)
+	syncAPIHandler.SetShopRoomReader(shopRoomService, "armory")
 	calendarAPIHandler := syncapi.NewCalendarAPIHandler(syncService, calendarService, campaignService)
 	mediaAPIHandler := syncapi.NewMediaAPIHandler(syncService, mediaService)
 	if urlSigner != nil {

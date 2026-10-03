@@ -51,6 +51,7 @@ type APIHandler struct {
 	campaignSystemLister CampaignSystemLister
 	tagGrantLister       TagGrantLister
 	shopRoomReader       ShopRoomReader
+	shopRoomAddon        string
 }
 
 // TagGrantLister resolves an entity's tag-derived visibility grants so the
