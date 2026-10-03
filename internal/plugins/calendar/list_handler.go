@@ -1,6 +1,6 @@
 // Package calendar — list_handler.go serves the campaign calendars list
-// page and the per-card preview fragment. Thin handlers only:
-// bind, call the service, render — see CLAUDE.md's layering rule.
+// page. Thin handlers only: bind, call the service, render — see
+// CLAUDE.md's layering rule.
 package calendar
 
 import (
@@ -13,16 +13,17 @@ import (
 	"github.com/keyxmakerx/chronicle/internal/plugins/campaigns"
 )
 
-// upcomingEventsLimit caps the preview dialog's "Coming up" list.
-const upcomingEventsLimit = 5
-
 // CalendarsListData is the view model for the calendars list page.
 type CalendarsListData struct {
 	CampaignID   string
 	CampaignName string
 	Calendars    []Calendar
-	IsOwner      bool
-	CSRFToken    string
+	// MonthEvents is each calendar's current-month events, keyed by
+	// calendar id, for the month its card peeks on hover. A calendar whose
+	// read failed is absent and peeks with no marks.
+	MonthEvents map[string][]Event
+	IsOwner     bool
+	CSRFToken   string
 	// JustCreated/NewCalendarID announce the calendar the wizard just made
 	// (its redirect carries ?new=<id>). Both are "" unless that id is one of
 	// the calendars listed here; the name is the stored one, never taken from
@@ -50,7 +51,10 @@ func (h *Handler) Index(c echo.Context) error {
 	// page exists to pick ONE calendar to work with — so an extra
 	// GetCalendarForViewer per card is an acceptable trade against adding a
 	// batch-load path only this page would ever use.
+	// The same goes for each card's peek, which needs that calendar's
+	// current month of events.
 	full := make([]Calendar, 0, len(cals))
+	monthEvents := make(map[string][]Event, len(cals))
 	for _, summary := range cals {
 		detailed, err := h.svc.GetCalendarForViewer(ctx, summary.ID, cc.Campaign.ID, v)
 		if err != nil {
@@ -65,12 +69,24 @@ func (h *Handler) Index(c echo.Context) error {
 			continue
 		}
 		full = append(full, *detailed)
+		events, err := h.svc.ListEventsForMonth(ctx, detailed.ID, cc.Campaign.ID, detailed.CurrentYear, detailed.CurrentMonth, v)
+		if err != nil {
+			// The peek is a glance; it shows the month without its marks
+			// rather than taking the page down.
+			slog.Error("calendar: failed to load a card's month of events for its peek",
+				slog.String("calendar_id", detailed.ID),
+				slog.String("campaign_id", cc.Campaign.ID),
+				slog.Any("error", err))
+			continue
+		}
+		monthEvents[detailed.ID] = events
 	}
 
 	data := CalendarsListData{
 		CampaignID:   cc.Campaign.ID,
 		CampaignName: cc.Campaign.Name,
 		Calendars:    full,
+		MonthEvents:  monthEvents,
 		IsOwner:      cc.MemberRole >= campaigns.RoleOwner,
 		CSRFToken:    middleware.GetCSRFToken(c),
 	}
@@ -86,51 +102,4 @@ func (h *Handler) Index(c echo.Context) error {
 		return middleware.Render(c, http.StatusOK, CalendarsListFragment(data))
 	}
 	return middleware.Render(c, http.StatusOK, CalendarsListPage(data))
-}
-
-// CalendarPreviewData is the view model for the per-card preview dialog.
-type CalendarPreviewData struct {
-	CampaignID string
-	Calendar   *Calendar
-	Upcoming   []Event
-	// MonthEvents is the current month's events (for the grid's event-count
-	// dots) — cheap to include since ListEventsForMonth already exists and
-	// this dialog only ever shows the current month (see calendar_preview.templ).
-	MonthEvents []Event
-	// View is the calendar the preview unfolds into: the same widget config
-	// its own page renders, built for the same viewer.
-	View CalendarViewData
-}
-
-// Preview renders the calendar preview fragment
-// (GET /campaigns/:id/calendars/:calid/preview), opened from a card on the
-// Calendars page. Fragment-only: "Open calendar" unfolds it in place into
-// the calendar itself, whose own page (/calendars/:calid/view) still serves
-// links and reloads.
-func (h *Handler) Preview(c echo.Context) error {
-	cc := campaigns.GetCampaignContext(c)
-	ctx := c.Request().Context()
-	v := viewerFrom(c, cc)
-
-	cal, err := h.svc.GetCalendarForViewer(ctx, c.Param("calid"), cc.Campaign.ID, v)
-	if err != nil {
-		return err
-	}
-	upcoming, err := h.svc.ListUpcomingEvents(ctx, cal.ID, cc.Campaign.ID, upcomingEventsLimit, v)
-	if err != nil {
-		return err
-	}
-	monthEvents, err := h.svc.ListEventsForMonth(ctx, cal.ID, cc.Campaign.ID, cal.CurrentYear, cal.CurrentMonth, v)
-	if err != nil {
-		return err
-	}
-
-	data := CalendarPreviewData{
-		CampaignID:  cc.Campaign.ID,
-		Calendar:    cal,
-		Upcoming:    upcoming,
-		MonthEvents: monthEvents,
-		View:        calendarViewDataFor(cc, cal, monthEvents),
-	}
-	return middleware.Render(c, http.StatusOK, CalendarPreviewFragment(data))
 }

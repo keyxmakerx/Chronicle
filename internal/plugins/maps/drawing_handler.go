@@ -195,7 +195,7 @@ func (h *DrawingHandler) DeleteDrawing(c echo.Context) error {
 		return err
 	}
 
-	if err := h.drawingSvc.DeleteDrawing(c.Request().Context(), c.Param("did"), c.Param("mid"), ParseExpectedUpdatedAt(c)); err != nil {
+	if err := h.drawingSvc.DeleteDrawing(c.Request().Context(), c.Param("did"), c.Param("mid"), ParseExpectedUpdatedAt(c), getUserID(c), int(cc.MemberRole)); err != nil {
 		return err
 	}
 	return c.NoContent(http.StatusOK)

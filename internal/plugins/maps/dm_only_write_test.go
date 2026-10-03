@@ -183,7 +183,7 @@ func TestDeleteMarkerAPI_StoredDmOnly_RequiresCanAuthorDmOnly(t *testing.T) {
 			c.Set("campaign_context", dmWriteCampaignCtx(tc.role, tc.dmGranted))
 
 			err := h.DeleteMarkerAPI(c)
-			if tc.canAuthorDmOnly {
+			if tc.role == campaigns.RoleOwner {
 				if err != nil {
 					t.Fatalf("%s: expected success, got %v", tc.name, err)
 				}
@@ -192,6 +192,13 @@ func TestDeleteMarkerAPI_StoredDmOnly_RequiresCanAuthorDmOnly(t *testing.T) {
 				}
 				if !deleted {
 					t.Errorf("%s: expected DeleteMarker to reach the repo", tc.name)
+				}
+			} else if tc.canAuthorDmOnly {
+				// A co-DM sees the marker but is not an Owner and created
+				// none of these rows, so the ownership rule refuses it.
+				assertAppError(t, err, http.StatusForbidden)
+				if deleted {
+					t.Errorf("%s: co-DM must not delete a marker it did not create", tc.name)
 				}
 			} else {
 				assertAppError(t, err, http.StatusNotFound)
@@ -276,7 +283,18 @@ func TestDeleteMarkerAPI_StoredEveryone_AlwaysReachesRepo(t *testing.T) {
 			c.SetParamValues("camp-1", "map-1", "mk-public")
 			c.Set("campaign_context", dmWriteCampaignCtx(tc.role, tc.dmGranted))
 
-			if err := h.DeleteMarkerAPI(c); err != nil {
+			err := h.DeleteMarkerAPI(c)
+			if tc.role != campaigns.RoleOwner {
+				// The fixture marker has no creator, so only an Owner may
+				// delete it (fail closed); creator-match cases live in
+				// delete_ownership_test.go.
+				assertAppError(t, err, http.StatusForbidden)
+				if deleted {
+					t.Errorf("%s: a non-owner must not delete a creatorless marker", tc.name)
+				}
+				return
+			}
+			if err != nil {
 				t.Fatalf("%s: expected success deleting a non-dm_only marker, got %v", tc.name, err)
 			}
 			if rec.Code != http.StatusOK {

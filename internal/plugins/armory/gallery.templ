@@ -58,6 +58,16 @@ templ ArmoryGalleryContent(cc *campaigns.CampaignContext, cards []ItemCard, tota
 					</select>
 				}
 
+				// Stashes page (any signed-in member; the page decides what each sees).
+				if cc.MemberRole >= campaigns.RolePlayer {
+					<a
+						href={ templ.SafeURL(stashesURL(cc.Campaign.ID)) }
+						class="btn-secondary text-sm"
+					>
+						<i class="fa-solid fa-box-archive text-xs mr-1"></i>Stashes
+					</a>
+				}
+
 				// Manage instances button (Scribe and Owner).
 				if cc.MemberRole >= campaigns.RoleScribe {
 					<button

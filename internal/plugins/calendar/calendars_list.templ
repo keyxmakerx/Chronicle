@@ -1,6 +1,5 @@
 // calendars_list.templ renders the campaign calendars list: header, card
-// grid, empty state, and the (initially empty) preview/wizard dialog mount
-// points. Ported from the signed mockup's dashboard section — see
+// grid, empty state, and the (initially empty) wizard dialog mount point. Ported from the signed mockup's dashboard section — see
 // static/css/calendar_v5.css's own doc comment for what's scoped out.
 package calendar
 
@@ -23,7 +22,9 @@ templ CalendarsListPage(data CalendarsListData) {
 // IsHTMX-branch convention this mirrors.
 templ CalendarsListFragment(data CalendarsListData) {
 	<link rel="stylesheet" href={ layouts.AssetURL("/static/css/calendar_v5.css") }/>
-	<!-- The calendar a preview unfolds into is styled by its own page's sheet. -->
+	<!-- A card opens in place into its calendar's own page, styled by that
+	     page's sheet; loading it here means the calendar's first frame is
+	     already styled. -->
 	<link rel="stylesheet" href={ layouts.AssetURL("/static/css/calendar-view.css") }/>
 	<div
 		class="calv5"
@@ -72,10 +73,9 @@ templ CalendarsListFragment(data CalendarsListData) {
 				</div>
 			}
 			<p class="caption" style="margin-top:20px;font-size:12px;color:var(--mut);text-align:center">
-				Each card is a calendar in this campaign. Open one to see today's date, tonight's moons and what's coming up, or manage it from its menu.
+				Each card is a calendar in this campaign. Hover over or tap one to peek at its month, open it to see the whole calendar, or manage it from its menu.
 			</p>
 		</div>
-		<div id="calv5-preview-root"></div>
 		<div id="calv5-wizard-root"></div>
 	</div>
 }
@@ -120,8 +120,17 @@ templ calendarsEmptyState(data CalendarsListData) {
 }
 
 // calendarCard renders one calendar's card: badge, main moon, name, world
-// date, visibility line, and (owner only) its menu.
+// date, visibility line, and (owner only) its menu, with its month's peek
+// tucked underneath. The peek comes first so the card paints over it.
 templ calendarCard(data CalendarsListData, cal Calendar) {
+	<div class="calv5-slot">
+		@calendarPeek(&cal, data.MonthEvents[cal.ID])
+		@calendarCardFace(data, cal)
+	</div>
+}
+
+// calendarCardFace is the card itself.
+templ calendarCardFace(data CalendarsListData, cal Calendar) {
 	<div
 		class={ "calv5-ccard", templ.KV("enter", data.NewCalendarID == cal.ID) }
 		data-card-id={ cal.ID }
@@ -138,18 +147,13 @@ templ calendarCard(data CalendarsListData, cal Calendar) {
 				<span class="calv5-blankmoon"><i class="fa-solid fa-moon i"></i></span>
 			}
 		</div>
-		<button
-			type="button"
-			class="calv5-cc-open"
-			hx-get={ fmt.Sprintf("/campaigns/%s/calendars/%s/preview", data.CampaignID, cal.ID) }
-			hx-target="#calv5-preview-root"
-			hx-swap="outerHTML"
-			hx-sync="this:drop"
-			onclick="window.__calv5Opener=this"
-		>
+		<!-- A plain link to the calendar's own page: calendar_open.js turns
+		     following it into the opening, and without script it is ordinary
+		     navigation. -->
+		<a class="calv5-cc-open" href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/calendars/%s/view", data.CampaignID, cal.ID)) } data-cal-open>
 			<span class="calv5-cc-name">{ cal.Name }</span>
 			<span class="calv5-cc-date">{ cal.FullDateLabel() }</span>
-		</button>
+		</a>
 		<div class="calv5-cc-foot">
 			<i class="fa-solid fa-eye i"></i>
 			<span>{ visibilityLabel(cal) }</span>
