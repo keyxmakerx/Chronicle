@@ -104,25 +104,39 @@ type StructurePreview struct {
 	WeatherRedated  int
 	WeatherReplaced int
 	WeatherStranded int
-	Warnings        []string
-	Fingerprint     string
+	// Repeat rules that name months follow them (RulesUpdated); rules that
+	// name a removed month, or a removed moon or season, are left as written
+	// and named in OtherNotes. One-off changes to repeats follow their month
+	// (OverridesMoved), stay in a removed month (OverridesRemoved), or give
+	// way to a moved one on the same date (OverridesReplaced).
+	RulesUpdated      int
+	RulesRemovedMonth int
+	RulesRemovedRef   int
+	OverridesMoved    int
+	OverridesRemoved  int
+	OverridesReplaced int
+	Warnings          []string
+	Fingerprint       string
 }
 
 // StructureState is everything a structure save is planned from, as
 // CalendarRepository reads it: the calendar with Months, Weekdays, Moons,
-// Seasons and Eras loaded, every event's dates, and every day-weather
-// reading's date.
+// Seasons and Eras loaded, every event's dates, every day-weather
+// reading's date, every rule event's stored rule and every override.
 type StructureState struct {
 	Calendar    *Calendar
 	Events      []Event
 	WeatherDays []DayDate
+	Rules       []StructureRule
+	Overrides   []StructureOverride
 }
 
 // StructureWrite is one atomic structure save for CalendarRepository.
 // MonthRemap maps an old month position (1-based) to its new one, holding
 // only positions that change; every month column that stores a position
-// (events, their end and recurrence-end dates, eras, day weather) is
-// remapped through it.
+// (events, their end and recurrence-end dates, eras, day weather, and
+// overrides) is remapped through it. RuleUpdates are the rewritten rules,
+// which name months inside their JSON.
 type StructureWrite struct {
 	Months        []MonthInput
 	Weekdays      []WeekdayInput
@@ -132,6 +146,7 @@ type StructureWrite struct {
 	CurrentMonth  int
 	CurrentDay    int
 	MonthRemap    map[int]int
+	RuleUpdates   []RuleUpdate
 }
 
 // structurePlan is planStructureEdit's result: the preview plus what the
@@ -141,6 +156,7 @@ type structurePlan struct {
 	remap        map[int]int
 	currentMonth int
 	currentDay   int
+	ruleUpdates  []RuleUpdate
 }
 
 // reconcileMonths maps each old month (0-based) to its new 1-based
@@ -202,7 +218,7 @@ func dateLabel(cal *Calendar, year, month, day int) string {
 // months, its events and its current date. cal must have Months, Weekdays,
 // Moons and Seasons loaded. Pure: no I/O, so the preview and the save
 // compute exactly the same thing from the same state.
-func planStructureEdit(cal *Calendar, events []Event, weather []DayDate, edit StructureEdit) structurePlan {
+func planStructureEdit(cal *Calendar, events []Event, weather []DayDate, rules []StructureRule, overrides []StructureOverride, edit StructureEdit) structurePlan {
 	next := &Calendar{
 		Mode:           cal.Mode,
 		LeapYearEvery:  edit.LeapYearEvery,
@@ -355,7 +371,13 @@ func planStructureEdit(cal *Calendar, events []Event, weather []DayDate, edit St
 	planWeather(p, cal, next, weather, place, exists)
 	p.OtherNotes = append(p.OtherNotes, weatherNotes(p)...)
 
-	p.Fingerprint = structureFingerprint(cal, events, weather)
+	rp := planRepeats(cal, next, edit, rules, overrides, place)
+	plan.ruleUpdates = rp.updates
+	p.RulesUpdated, p.RulesRemovedMonth, p.RulesRemovedRef = rp.rulesUpdated, rp.rulesRemovedMonth, rp.rulesRemovedRef
+	p.OverridesMoved, p.OverridesRemoved, p.OverridesReplaced = rp.overridesMoved, rp.overridesRemoved, rp.overridesReplaced
+	p.OtherNotes = append(p.OtherNotes, repeatNotes(rp)...)
+
+	p.Fingerprint = structureFingerprint(cal, events, weather, rules, overrides)
 	return plan
 }
 
@@ -494,7 +516,7 @@ func otherStructureNotes(cal *Calendar, edit StructureEdit) []string {
 // save can tell that the calendar, its events or its weather changed after
 // the preview was shown. Lists are hashed in a fixed order of their own,
 // whatever order they were read in.
-func structureFingerprint(cal *Calendar, events []Event, weather []DayDate) string {
+func structureFingerprint(cal *Calendar, events []Event, weather []DayDate, rules []StructureRule, overrides []StructureOverride) string {
 	h := sha256.New()
 	_, _ = fmt.Fprintf(h, "leap %d %d|now %d %d %d|", cal.LeapYearEvery, cal.LeapYearOffset, cal.CurrentYear, cal.CurrentMonth, cal.CurrentDay)
 	for _, m := range cal.Months {
@@ -526,6 +548,12 @@ func structureFingerprint(cal *Calendar, events []Event, weather []DayDate) stri
 	}
 	for _, w := range weather {
 		lines = append(lines, fmt.Sprintf("d %d %d %d", w.Year, w.Month, w.Day))
+	}
+	for _, r := range rules {
+		lines = append(lines, fmt.Sprintf("x %s %q", r.EventID, r.Raw))
+	}
+	for _, o := range overrides {
+		lines = append(lines, fmt.Sprintf("v %s %d %d %d %s", o.EventID, o.Year, o.Month, o.Day, ptr(o.NewMonth)))
 	}
 	sort.Strings(lines)
 	for _, l := range lines {
@@ -614,7 +642,7 @@ func (s *calendarService) PreviewStructureEdit(ctx context.Context, calendarID, 
 	if err != nil {
 		return nil, err
 	}
-	plan := planStructureEdit(st.Calendar, st.Events, st.WeatherDays, edit)
+	plan := planStructureEdit(st.Calendar, st.Events, st.WeatherDays, st.Rules, st.Overrides, edit)
 	return &plan.preview, nil
 }
 
@@ -637,7 +665,7 @@ func (s *calendarService) ApplyStructureEdit(ctx context.Context, calendarID, ca
 		if err := refuseRealTime(st.Calendar); err != nil {
 			return nil, err
 		}
-		plan := planStructureEdit(st.Calendar, st.Events, st.WeatherDays, edit)
+		plan := planStructureEdit(st.Calendar, st.Events, st.WeatherDays, st.Rules, st.Overrides, edit)
 		preview = &plan.preview
 		if fingerprint != plan.preview.Fingerprint {
 			return nil, apperror.NewConflict("this calendar changed after the preview was made; check the updated preview before saving")
@@ -687,5 +715,6 @@ func structureWriteFor(edit StructureEdit, plan structurePlan) *StructureWrite {
 		CurrentMonth:  plan.currentMonth,
 		CurrentDay:    plan.currentDay,
 		MonthRemap:    plan.remap,
+		RuleUpdates:   plan.ruleUpdates,
 	}
 }

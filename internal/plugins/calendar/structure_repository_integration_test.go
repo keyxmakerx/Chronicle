@@ -2,6 +2,7 @@ package calendar
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"strings"
@@ -221,6 +222,157 @@ func TestApplyStructure_Integration(t *testing.T) {
 		want := []string{"1/5 gamma", "2/5 alpha", "2/7 beta"}
 		if strings.Join(got, ", ") != strings.Join(want, ", ") {
 			t.Errorf("weather = %v, want %v (alpha moved onto Beta 5's day, which gave way)", got, want)
+		}
+	})
+
+	// realSave saves edit through the real planner, so the rewritten rules and
+	// the override moves come from the same code a user's save runs.
+	realSave := func(t *testing.T, cal *Calendar, edit StructureEdit) *StructurePreview {
+		t.Helper()
+		var preview *StructurePreview
+		err := repo.ApplyStructure(ctx, cal.ID, func(st *StructureState) (*StructureWrite, error) {
+			plan := planStructureEdit(st.Calendar, st.Events, st.WeatherDays, st.Rules, st.Overrides, edit)
+			preview = &plan.preview
+			return structureWriteFor(edit, plan), nil
+		})
+		if err != nil {
+			t.Fatalf("ApplyStructure: %v", err)
+		}
+		return preview
+	}
+	editOf := func(t *testing.T, cal *Calendar, months ...string) StructureEdit {
+		t.Helper()
+		moons, _ := repo.GetMoons(ctx, cal.ID)
+		seasons, _ := repo.GetSeasons(ctx, cal.ID)
+		e := StructureEdit{Weekdays: []WeekdayInput{{Name: "One"}}, Seasons: seasons, LeapYearEvery: cal.LeapYearEvery}
+		for _, m := range moons {
+			id := m.ID
+			e.Moons = append(e.Moons, MoonInput{ID: &id, Name: m.Name, CycleDays: m.CycleDays})
+		}
+		for _, n := range months {
+			e.Months = append(e.Months, MonthInput{Name: n, Days: 30})
+		}
+		return e
+	}
+	ruleEvent := func(t *testing.T, cal *Calendar, name, rule string) *Event {
+		t.Helper()
+		typ := RecurrenceByRule
+		e := &Event{ID: testUUID(t), CalendarID: cal.ID, Name: name, Year: 5, Month: 1, Day: 2, Visibility: "everyone", AllDay: true,
+			IsRecurring: true, RecurrenceType: &typ}
+		parsed, err := ParseRecurrenceRule([]byte(rule))
+		if err != nil {
+			t.Fatalf("ParseRecurrenceRule: %v", err)
+		}
+		e.RecurrenceRule = parsed
+		if err := events.CreateEvent(ctx, e); err != nil {
+			t.Fatalf("CreateEvent: %v", err)
+		}
+		return e
+	}
+	storedRule := func(t *testing.T, id string) string {
+		t.Helper()
+		e, err := events.GetEvent(ctx, id)
+		if err != nil {
+			t.Fatalf("GetEvent: %v", err)
+		}
+		b, _ := json.Marshal(e.RecurrenceRule)
+		return string(b)
+	}
+	overrideRows := func(t *testing.T, calID string) string {
+		t.Helper()
+		rows, err := db.Query(`SELECT o.event_id, o.occurrence_month, o.occurrence_day, o.action, COALESCE(o.new_month, 0)
+			FROM calendar_event_overrides o JOIN calendar_events e ON e.id = o.event_id
+			WHERE e.calendar_id = ? ORDER BY o.occurrence_month, o.occurrence_day`, calID)
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer rows.Close()
+		var out []string
+		for rows.Next() {
+			var id, action string
+			var m, d, nm int
+			if err := rows.Scan(&id, &m, &d, &action, &nm); err != nil {
+				t.Fatal(err)
+			}
+			out = append(out, fmt.Sprintf("%d/%d %s->%d", m, d, action, nm))
+		}
+		return strings.Join(out, ", ")
+	}
+
+	t.Run("a swapped pair of months carries a month rule and its overrides", func(t *testing.T) {
+		cal, _, _ := setup(t)
+		withMonth := ruleEvent(t, cal, "harvest", `{"match":[{"kind":"month","month":1},{"kind":"weekday","weekday":0}]}`)
+		withList := ruleEvent(t, cal, "list", `{"match":[{"kind":"months","months":[1,2]}]}`)
+		// Alpha 2 is skipped; Gamma 4 moves to Alpha 9.
+		mustExec(t, db, `INSERT INTO calendar_event_overrides (event_id, occurrence_year, occurrence_month, occurrence_day, action, new_year, new_month, new_day) VALUES
+			(?, 5, 1, 2, 'skip', NULL, NULL, NULL), (?, 5, 3, 4, 'move', 5, 1, 9)`, withMonth.ID, withMonth.ID)
+
+		p := realSave(t, cal, editOf(t, cal, "Gamma", "Beta", "Alpha"))
+		if p.RulesUpdated != 2 || p.OverridesMoved != 2 {
+			t.Errorf("preview = %d rules updated, %d overrides moved; want 2 and 2", p.RulesUpdated, p.OverridesMoved)
+		}
+		if got, want := storedRule(t, withMonth.ID), `{"match":[{"kind":"month","month":3},{"kind":"weekday","weekday":0}]}`; got != want {
+			t.Errorf("month rule = %s, want %s", got, want)
+		}
+		if got, want := storedRule(t, withList.ID), `{"match":[{"kind":"months","months":[3,2]}]}`; got != want {
+			t.Errorf("months rule = %s, want %s", got, want)
+		}
+		if got, want := overrideRows(t, cal.ID), "1/4 move->3, 3/2 skip->0"; got != want {
+			t.Errorf("overrides = %q, want %q (keys swapped, the move's target follows Alpha)", got, want)
+		}
+	})
+
+	t.Run("a removed month leaves its rule and overrides as they are", func(t *testing.T) {
+		cal, _, _ := setup(t)
+		inBeta := ruleEvent(t, cal, "in beta", `{"match":[{"kind":"month","month":2}]}`)
+		inGamma := ruleEvent(t, cal, "in gamma", `{"match":[{"kind":"month","month":3}]}`)
+		// Beta 9 is skipped (Beta goes); Gamma 5 is skipped and follows Gamma.
+		mustExec(t, db, `INSERT INTO calendar_event_overrides (event_id, occurrence_year, occurrence_month, occurrence_day, action) VALUES
+			(?, 5, 2, 9, 'skip'), (?, 5, 3, 5, 'skip')`, inBeta.ID, inGamma.ID)
+
+		p := realSave(t, cal, editOf(t, cal, "Alpha", "Gamma"))
+		if p.RulesRemovedMonth != 1 || p.OverridesRemoved != 1 || p.OverridesMoved != 1 {
+			t.Errorf("preview = %d rules naming a removed month, %d overrides removed, %d moved; want 1, 1, 1",
+				p.RulesRemovedMonth, p.OverridesRemoved, p.OverridesMoved)
+		}
+		if got, want := storedRule(t, inBeta.ID), `{"match":[{"kind":"month","month":2}]}`; got != want {
+			t.Errorf("removed month's rule = %s, want it left as %s", got, want)
+		}
+		if got, want := storedRule(t, inGamma.ID), `{"match":[{"kind":"month","month":2}]}`; got != want {
+			t.Errorf("Gamma's rule = %s, want %s", got, want)
+		}
+		if got, want := overrideRows(t, cal.ID), "2/5 skip->0, 2/9 skip->0"; got != want {
+			t.Errorf("overrides = %q, want %q", got, want)
+		}
+	})
+
+	t.Run("a moved override takes the date of one left in a removed month", func(t *testing.T) {
+		cal, _, _ := setup(t)
+		e := ruleEvent(t, cal, "weekly", `{"match":[{"kind":"weekday","weekday":0}]}`)
+		mustExec(t, db, `INSERT INTO calendar_event_overrides (event_id, occurrence_year, occurrence_month, occurrence_day, action) VALUES
+			(?, 5, 2, 5, 'skip'), (?, 5, 3, 5, 'skip')`, e.ID, e.ID)
+		p := realSave(t, cal, editOf(t, cal, "Alpha", "Gamma"))
+		if p.OverridesReplaced != 1 {
+			t.Errorf("replaced = %d, want 1", p.OverridesReplaced)
+		}
+		if got, want := overrideRows(t, cal.ID), "2/5 skip->0"; got != want {
+			t.Errorf("overrides = %q, want %q", got, want)
+		}
+	})
+
+	t.Run("a removed moon is named and its rule is kept untouched", func(t *testing.T) {
+		cal, _, _ := setup(t)
+		moons, _ := repo.GetMoons(ctx, cal.ID)
+		rule := fmt.Sprintf(`{"match":[{"kind":"moon_phase","moon_id":%d,"phase":"full"}]}`, moons[0].ID)
+		e := ruleEvent(t, cal, "full moon", rule)
+		edit := editOf(t, cal, "Alpha", "Beta", "Gamma")
+		edit.Moons = nil
+		p := realSave(t, cal, edit)
+		if p.RulesRemovedRef != 1 || !strings.Contains(strings.Join(p.OtherNotes, "\n"), `"full moon" repeats by the moon Luna you're removing`) {
+			t.Errorf("preview = %d rules on a removed moon, notes %q", p.RulesRemovedRef, p.OtherNotes)
+		}
+		if got := storedRule(t, e.ID); got != rule {
+			t.Errorf("rule = %s, want it kept as %s", got, rule)
 		}
 	})
 

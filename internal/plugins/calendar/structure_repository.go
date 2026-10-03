@@ -99,7 +99,34 @@ func loadStructureState(ctx context.Context, ex dbExecutor, calendarID string, l
 	if err != nil {
 		return nil, fmt.Errorf("load day weather: %w", err)
 	}
-	return &StructureState{Calendar: cal, Events: events, WeatherDays: weather}, nil
+	// Only a rule event's rule is read: a rule left on an event of another
+	// type is dormant and is never expanded.
+	rules, err := queryStructureRows(ctx, ex,
+		`SELECT id, name, recurrence_rule FROM calendar_events
+		 WHERE calendar_id = ? AND recurrence_type = 'rule' AND recurrence_rule IS NOT NULL ORDER BY id`, calendarID,
+		func(sc interface{ Scan(...any) error }) (*StructureRule, error) {
+			var r StructureRule
+			var raw []byte
+			err := sc.Scan(&r.EventID, &r.Name, &raw)
+			r.Raw = string(raw)
+			return &r, err
+		})
+	if err != nil {
+		return nil, fmt.Errorf("load repeat rules: %w", err)
+	}
+	overrides, err := queryStructureRows(ctx, ex,
+		`SELECT o.event_id, o.occurrence_year, o.occurrence_month, o.occurrence_day, o.new_month
+		 FROM calendar_event_overrides o JOIN calendar_events e ON e.id = o.event_id
+		 WHERE e.calendar_id = ? ORDER BY o.event_id, o.occurrence_year, o.occurrence_month, o.occurrence_day`, calendarID,
+		func(sc interface{ Scan(...any) error }) (*StructureOverride, error) {
+			var o StructureOverride
+			err := sc.Scan(&o.EventID, &o.Year, &o.Month, &o.Day, &o.NewMonth)
+			return &o, err
+		})
+	if err != nil {
+		return nil, fmt.Errorf("load overrides: %w", err)
+	}
+	return &StructureState{Calendar: cal, Events: events, WeatherDays: weather, Rules: rules, Overrides: overrides}, nil
 }
 
 // GetStructureState reads the state a structure save is planned from,
@@ -176,6 +203,17 @@ func (r *calendarRepo) ApplyStructure(ctx context.Context, calendarID string, pl
 	}
 	if err := remapWeatherDays(ctx, tx, calendarID, w.MonthRemap); err != nil {
 		return fmt.Errorf("remap day weather: %w", err)
+	}
+	for _, u := range w.RuleUpdates {
+		if _, err := tx.ExecContext(ctx,
+			`UPDATE calendar_events SET recurrence_rule = ? WHERE id = ? AND calendar_id = ?`,
+			u.JSON, u.EventID, calendarID,
+		); err != nil {
+			return fmt.Errorf("rewrite repeat rule: %w", err)
+		}
+	}
+	if err := remapOverrides(ctx, tx, calendarID, w.MonthRemap); err != nil {
+		return fmt.Errorf("remap overrides: %w", err)
 	}
 	return tx.Commit()
 }
@@ -320,6 +358,72 @@ func remapWeatherDays(ctx context.Context, ex dbExecutor, calendarID string, rem
 	if _, err := ex.ExecContext(ctx,
 		`UPDATE calendar_weather_days SET month = -month WHERE calendar_id = ? AND month < 0`, calendarID); err != nil {
 		return fmt.Errorf("place moved readings: %w", err)
+	}
+	return nil
+}
+
+// remapOverrides moves one-off repeat changes with their month. The
+// occurrence month is part of the primary key, so it is parked on negative
+// months and flipped back exactly like day weather; an override left in a
+// month with no counterpart stays put unless a moved one now claims its
+// date, where the moved one wins. new_month is not a key column and is one
+// plain CASE.
+func remapOverrides(ctx context.Context, ex dbExecutor, calendarID string, remap map[int]int) error {
+	if len(remap) == 0 {
+		return nil
+	}
+	olds := make([]int, 0, len(remap))
+	for o := range remap {
+		olds = append(olds, o)
+	}
+	sort.Ints(olds)
+	in := strings.TrimSuffix(strings.Repeat("?,", len(olds)), ",")
+	caseFor := func(col string, sign int) (string, []any) {
+		var b strings.Builder
+		args := make([]any, 0, len(olds)*2)
+		for _, o := range olds {
+			b.WriteString(" WHEN ? THEN ?")
+			args = append(args, o, sign*remap[o])
+		}
+		return "CASE " + col + b.String() + " END", args
+	}
+	inArgs := func(args []any) []any {
+		args = append(args, calendarID)
+		for _, o := range olds {
+			args = append(args, o)
+		}
+		return args
+	}
+
+	cs, args := caseFor("o.occurrence_month", -1)
+	if _, err := ex.ExecContext(ctx,
+		`UPDATE calendar_event_overrides o JOIN calendar_events e ON e.id = o.event_id
+		 SET o.occurrence_month = `+cs+`
+		 WHERE e.calendar_id = ? AND o.occurrence_month IN (`+in+`)`, inArgs(args)...); err != nil {
+		return fmt.Errorf("park moved overrides: %w", err)
+	}
+	if _, err := ex.ExecContext(ctx,
+		`DELETE o FROM calendar_event_overrides o
+		 JOIN calendar_events e ON e.id = o.event_id
+		 JOIN calendar_event_overrides n
+		   ON n.event_id = o.event_id AND n.occurrence_year = o.occurrence_year
+		  AND n.occurrence_day = o.occurrence_day AND n.occurrence_month = -o.occurrence_month
+		 WHERE e.calendar_id = ? AND o.occurrence_month > 0`, calendarID); err != nil {
+		return fmt.Errorf("drop displaced overrides: %w", err)
+	}
+	if _, err := ex.ExecContext(ctx,
+		`UPDATE calendar_event_overrides o JOIN calendar_events e ON e.id = o.event_id
+		 SET o.occurrence_month = -o.occurrence_month
+		 WHERE e.calendar_id = ? AND o.occurrence_month < 0`, calendarID); err != nil {
+		return fmt.Errorf("place moved overrides: %w", err)
+	}
+
+	cs, args = caseFor("o.new_month", 1)
+	if _, err := ex.ExecContext(ctx,
+		`UPDATE calendar_event_overrides o JOIN calendar_events e ON e.id = o.event_id
+		 SET o.new_month = `+cs+`
+		 WHERE e.calendar_id = ? AND o.new_month IN (`+in+`)`, inArgs(args)...); err != nil {
+		return fmt.Errorf("remap move targets: %w", err)
 	}
 	return nil
 }
