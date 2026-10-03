@@ -253,7 +253,7 @@ Foundry module repo for the wire contract.
 
 | Table | Purpose | Notable columns |
 |---|---|---|
-| `api_keys` | Bearer tokens scoped to a campaign | `key_hash` (bcrypt), `key_prefix` UNIQUE; `permissions`/`ip_allowlist` JSON; `device_fingerprint`/`device_bound_at`; `vtt_tag` (cosmetic, e.g. "foundry") |
+| `api_keys` | Bearer tokens scoped to a campaign | `key_hash` (bcrypt), `key_prefix` UNIQUE; `permissions`/`ip_allowlist` JSON; `device_fingerprint`/`device_bound_at`; `vtt_tag` (cosmetic, e.g. "foundry"); `module_version` (nullable, self-reported by the VTT module in `X-Chronicle-Module-Version`) |
 | `api_request_log` | Per-request audit trail | `api_key_id`, `status_code`, `duration_ms`, indexed by key/campaign/created/ip/status |
 | `sync_mappings` | Chronicle object ↔ external-tool object, bidirectional | `UNIQUE(campaign_id, chronicle_type, chronicle_id, external_system)`; `sync_version` (conflict detection) |
 | `api_ip_blocklist` | Admin-managed IP blocks for the REST API | `expires_at` nullable (permanent if NULL) |

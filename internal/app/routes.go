@@ -366,6 +366,89 @@ func (a *addonListerAdapter) ListForPluginHub(ctx context.Context, campaignID st
 	return result, nil
 }
 
+// foundryConnectorAdapter implements campaigns.FoundryConnector over the sync
+// service (keys), the websocket hub (live presence) and the configured base
+// URL, so the campaigns plugin never reaches into either plugin's internals.
+type foundryConnectorAdapter struct {
+	keys syncapi.SyncAPIService
+	hub  interface {
+		FoundryPresence(campaignID string) (*time.Time, bool)
+	}
+	baseURL string
+}
+
+// foundryConnectKeyName and foundryConnectVTTTag mark keys minted from the
+// Apps & game system page; the tag matches the value the Integrations form's
+// Foundry option stores, so these keys group with hand-made Foundry keys.
+const (
+	foundryConnectKeyName = "Foundry connect line"
+	foundryConnectVTTTag  = "foundry"
+)
+
+// FoundryConnection gathers the hub presence and the campaign's active keys.
+// "Active" means enabled and unexpired; a revoked or lapsed key says nothing
+// about whether Foundry is connected today.
+func (a *foundryConnectorAdapter) FoundryConnection(ctx context.Context, campaignID string) (campaigns.FoundryConnection, error) {
+	keys, err := a.keys.ListKeysByCampaign(ctx, campaignID)
+	if err != nil {
+		return campaigns.FoundryConnection{}, err
+	}
+	conn := campaigns.FoundryConnection{}
+	if a.hub != nil {
+		conn.HubLastSeen, conn.Connected = a.hub.FoundryPresence(campaignID)
+	}
+
+	// Keys arrive newest-created first, so the first active key is the one the
+	// preview describes. Module version follows the most recently *used* key.
+	var newestUse *time.Time
+	for i := range keys {
+		k := &keys[i]
+		if !k.IsActive || k.IsExpired() {
+			continue
+		}
+		if !conn.HasKey {
+			conn.HasKey = true
+			conn.KeyPrefix = k.KeyPrefix
+		}
+		if k.LastUsedAt != nil && (newestUse == nil || k.LastUsedAt.After(*newestUse)) {
+			newestUse = k.LastUsedAt
+			conn.KeyLastUsed = k.LastUsedAt
+			conn.ModuleVersion = ""
+			if k.ModuleVersion != nil {
+				conn.ModuleVersion = *k.ModuleVersion
+			}
+		}
+	}
+	if conn.HasKey {
+		// The prefix is stored in clear for display; the ellipsis is appended
+		// after escaping so it stays a literal character.
+		if line, err := campaigns.BuildFoundryConnectLine(a.baseURL, campaignID, conn.KeyPrefix); err == nil {
+			conn.LinePreview = line + "\u2026"
+		}
+	}
+	return conn, nil
+}
+
+// NewFoundryConnectLine mints a read/write/sync key and returns the full
+// connect line. Existing keys are left untouched. The base URL is checked
+// before minting: the raw key is shown once, so a key minted and then lost to a
+// line-building failure could never be recovered.
+func (a *foundryConnectorAdapter) NewFoundryConnectLine(ctx context.Context, campaignID, userID string) (string, error) {
+	if _, err := campaigns.BuildFoundryConnectLine(a.baseURL, campaignID, "probe"); err != nil {
+		return "", apperror.NewInternal(fmt.Errorf("base url cannot form a connect line: %w", err))
+	}
+	result, err := a.keys.CreateKey(ctx, userID, syncapi.CreateAPIKeyInput{
+		Name:        foundryConnectKeyName,
+		VTTTag:      foundryConnectVTTTag,
+		CampaignID:  campaignID,
+		Permissions: []syncapi.APIKeyPermission{syncapi.PermRead, syncapi.PermWrite, syncapi.PermSync},
+	})
+	if err != nil {
+		return "", err
+	}
+	return campaigns.BuildFoundryConnectLine(a.baseURL, campaignID, result.RawKey)
+}
+
 // addonListerAPIAdapter wraps the addon service to implement the
 // syncapi.AddonLister interface for the REST API addon discovery endpoint.
 type addonListerAPIAdapter struct {
@@ -4127,6 +4210,7 @@ func (a *App) RegisterRoutes() {
 	// Real-time bidirectional sync for Foundry VTT and browser clients.
 	wsHub := ws.NewHub()
 	go wsHub.Run()
+	campaignHandler.SetFoundryConnector(&foundryConnectorAdapter{keys: syncService, hub: wsHub, baseURL: a.Config.BaseURL})
 
 	// Late-bind now that wsHub exists — see wsRevokerHolder above. From
 	// here on, every wired revoke path force-disconnects the sockets it

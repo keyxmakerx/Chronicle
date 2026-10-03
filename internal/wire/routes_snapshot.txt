@@ -521,6 +521,7 @@ POST	/entity-types	internal/plugins/entities/routes.go
 POST	/entity-types	internal/plugins/syncapi/routes.go
 POST	/extensions/:slug/settings/apply	internal/plugins/addons/routes.go
 POST	/extensions/:slug/settings/dismiss	internal/plugins/addons/routes.go
+POST	/extensions/foundry/connect-line	internal/plugins/campaigns/routes.go
 POST	/forgot-password	internal/plugins/auth/routes.go
 POST	/foundry-vtt/token/rotate	internal/plugins/foundry_vtt/routes.go
 POST	/groups	internal/plugins/campaigns/routes.go

@@ -78,6 +78,9 @@ func RegisterRoutes(e *echo.Echo, h *Handler, svc CampaignService, authSvc auth.
 	// redirect_to=extensions-hub.
 	cg.GET("/extensions", h.ExtensionsHub, RequireRole(RoleOwner))
 	cg.GET("/extensions/fragment", h.ExtensionsHubFragmentAPI, RequireRole(RoleOwner))
+	// Mints a Foundry connect line (a new API key) and swaps the hub's Foundry
+	// row. Owner only: it issues a credential.
+	cg.POST("/extensions/foundry/connect-line", h.NewFoundryConnectLine, RequireRole(RoleOwner))
 	// Per-extension inline dashboard fragment: hub cards with
 	// HasDashboard=true hx-get this on expand. Disabled / unknown-slug
 	// paths render safe placeholders, never a 4xx.
