@@ -38,6 +38,7 @@ type fakeCalendarRepo struct {
 	deleteEraFn        func(ctx context.Context, calendarID string, eraID int) error
 	getEraByIDFn       func(ctx context.Context, eraID int) (*Era, error)
 	getErasFn          func(ctx context.Context, calendarID string) ([]Era, error)
+	saveEraLookFn      func(ctx context.Context, calendarID string, look EraLook, eras []EraLookWrite) error
 	setCyclesFn        func(ctx context.Context, calendarID string, cycles []CycleInput) error
 	getCyclesFn        func(ctx context.Context, calendarID string) ([]Cycle, error)
 	setFestivalsFn     func(ctx context.Context, calendarID string, festivals []FestivalInput) error
@@ -184,6 +185,12 @@ func (m *fakeCalendarRepo) GetEras(ctx context.Context, calendarID string) ([]Er
 		return m.getErasFn(ctx, calendarID)
 	}
 	return nil, nil
+}
+func (m *fakeCalendarRepo) SaveEraLook(ctx context.Context, calendarID string, look EraLook, eras []EraLookWrite) error {
+	if m.saveEraLookFn != nil {
+		return m.saveEraLookFn(ctx, calendarID, look, eras)
+	}
+	return nil
 }
 func (m *fakeCalendarRepo) SetCycles(ctx context.Context, calendarID string, cycles []CycleInput) error {
 	if m.setCyclesFn != nil {

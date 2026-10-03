@@ -525,7 +525,7 @@
 
   // ---------------------------------------------------------------
   // Generic "grow from anchor" panel open/close, shared by every fold-out
-  // (day wing, era flap, event detail, moon view, hub popover). The panel
+  // (day wing, era manager, event detail, moon view, hub popover). The panel
   // is laid out at full size first (server/JS builds its final DOM before
   // any animation starts, scrollbars included per the motion rules), and
   // only transform + opacity animate — never width/height, so text never
@@ -947,14 +947,124 @@
     });
   }
 
+  // ================================================================
+  // EraMath: where each era sits on the day counter, which era a day
+  // belongs to, and how an era's span reads. Pure, so the node suite can
+  // pin it. Eras arrive already filtered for the viewer by the server: a
+  // player never has an era hidden until it begins, and the era before one
+  // reads as still going.
+  // ================================================================
+  // A page, drawn inline so the era panel's lore row never shows an empty
+  // box when the icon font is slow or blocked.
+  var PAGE_GLYPH = '<svg width="13" height="15" viewBox="0 0 13 15" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linejoin="round" stroke-linecap="round"><path d="M2 1h6l3 3v10H2z"/><path d="M8 1v3h3M4.5 7.5h4M4.5 10h4"/></svg>';
+
+  var EraMath = {
+    startOf: function (e) { return { y: e.start_year, m: e.start_month || 1, d: e.start_day || 1 }; },
+    // An end year with no month/day is the whole year, as on the server.
+    explicitEndOf: function (cal, e) {
+      if (e.end_year == null) return null;
+      if (e.end_month == null || e.end_day == null) {
+        var mc = CalDate.monthCount(cal);
+        return { y: e.end_year, m: mc, d: CalDate.monthDays(cal, mc - 1, e.end_year) };
+      }
+      return { y: e.end_year, m: e.end_month, d: e.end_day };
+    },
+    idx: function (cal, t) { return CalDate.dayIndex(cal, t.y, t.m, t.d); },
+    // sorted returns the eras oldest first, each with its start and
+    // (explicit or implied by the next era) end resolved.
+    sorted: function (cal) {
+      var list = (cal.eras || []).map(function (e) {
+        var s = EraMath.startOf(e), x = EraMath.explicitEndOf(cal, e);
+        return { era: e, start: s, startK: EraMath.idx(cal, s), end: x, endK: x ? EraMath.idx(cal, x) : null, explicitEnd: !!x };
+      });
+      list.sort(function (a, b) { return a.startK - b.startK || (a.era.sort_order || 0) - (b.era.sort_order || 0); });
+      for (var i = 0; i < list.length; i++) {
+        if (list[i].end || i + 1 >= list.length) continue;
+        list[i].end = CalDate.addDays(cal, list[i + 1].start, -1);
+        list[i].endK = list[i + 1].startK - 1;
+      }
+      return list;
+    },
+    // at returns the era a day belongs to: the latest-starting era that has
+    // begun and has not explicitly ended (an implied end never cuts it off,
+    // since the next era has taken over by then anyway).
+    at: function (list, k) {
+      var hit = null;
+      for (var i = 0; i < list.length; i++) {
+        var r = list[i];
+        if (r.startK > k) continue;
+        if (r.explicitEnd && r.endK < k) continue;
+        hit = r;
+      }
+      return hit;
+    },
+    // month describes one month's eras: the one it opens in, the one it
+    // closes in (when different, the day that one takes over), and any era
+    // that begins inside it.
+    month: function (cal, list, y, m) {
+      var mc = CalDate.monthCount(cal), m0 = ((m - 1) % mc + mc) % mc;
+      var days = CalDate.monthDays(cal, m0, y), k0 = CalDate.dayIndex(cal, y, m, 1), k1 = k0 + days - 1;
+      var first = EraMath.at(list, k0), last = EraMath.at(list, k1);
+      var info = { days: days, first: first, last: last, change: null, begins: [] };
+      for (var i = 0; i < list.length; i++) {
+        if (list[i].startK >= k0 && list[i].startK <= k1) info.begins.push({ day: list[i].startK - k0 + 1, row: list[i] });
+      }
+      if (first && last && first !== last) info.change = last.startK - k0 + 1;
+      return info;
+    },
+    // span reads a day count as years, months and days of this calendar
+    // (two parts at most; days only when under a year).
+    span: function (cal, n) {
+      var yl = CalDate.yearLength(cal) || 365, ml = yl / CalDate.monthCount(cal);
+      var y = Math.floor(n / yl), rest = n - y * yl, mo = Math.floor(rest / ml), d = Math.round(rest - mo * ml), p = [];
+      if (y) p.push(y.toLocaleString('en') + (y === 1 ? ' year' : ' years'));
+      if (mo) p.push(mo + (mo === 1 ? ' month' : ' months'));
+      if (d && !y) p.push(d + (d === 1 ? ' day' : ' days'));
+      return p.slice(0, 2).join(', ') || 'one day';
+    },
+    fmt: function (cal, t) {
+      var mo = (cal.months || [])[t.m - 1];
+      return t.d + ' ' + (mo ? mo.name : 'Month ' + t.m) + ' ' + t.y;
+    },
+    // when is the era's dates and length, measured against the calendar's
+    // current date ("today" in the world).
+    when: function (cal, r) {
+      var today = CalDate.dayIndex(cal, cal.current_year, cal.current_month, cal.current_day);
+      if (r.startK > today) return { range: 'From ' + EraMath.fmt(cal, r.start), len: 'Begins in ' + EraMath.span(cal, r.startK - today) };
+      if (r.end && r.endK < today) return { range: EraMath.fmt(cal, r.start) + ' – ' + EraMath.fmt(cal, r.end), len: 'Lasted ' + EraMath.span(cal, r.endK - r.startK + 1) };
+      return { range: EraMath.fmt(cal, r.start) + ' – today', len: EraMath.span(cal, today - r.startK + 1) + ' so far' };
+    },
+    // ribbon gives each era's share of the ribbon: square-root lengths with
+    // a floor, so a short recent era is still easy to hit.
+    ribbon: function (cal, list) {
+      var today = CalDate.dayIndex(cal, cal.current_year, cal.current_month, cal.current_day), yl = CalDate.yearLength(cal) || 365;
+      var lens = list.map(function (r) {
+        if (r.end) return Math.max(1, r.endK - r.startK + 1);
+        return r.startK > today ? 5 * yl : Math.max(1, Math.round((today - r.startK + 1) / 0.72));
+      });
+      var roots = lens.map(Math.sqrt), sum = roots.reduce(function (a, b) { return a + b; }, 0) || 1, MIN = 18;
+      var rest = Math.max(0, 100 - MIN * list.length);
+      return list.map(function (r, i) {
+        var here = r.startK <= today && (r.endK == null || r.endK >= today) ? Math.min(1, (today - r.startK + 1) / lens[i]) : null;
+        return { flex: MIN + rest * roots[i] / sum, len: lens[i], here: here };
+      });
+    },
+    // secret marks an era the Director sees but players don't yet.
+    secret: function (cal, r) {
+      return !!r.era.hidden_until_begins && r.startK > CalDate.dayIndex(cal, cal.current_year, cal.current_month, cal.current_day);
+    }
+  };
+
   // Exposed for calendar_editor.js (a separate script/closure loaded only
   // for a CanEdit viewer — see that file's header) so the date-math port
   // is written once and both files stay in agreement with the server, and
   // so a canEdit override of view.showFlap/etc. can open/close a panel with
   // the exact same grow-from-anchor motion as every other panel here.
   Chronicle.calendarDate = CalDate;
+  Chronicle.calendarEras = EraMath;
   Chronicle.calendarPanel = { growOpen: growOpen, growClose: growClose };
   Chronicle.calendarColor = sanitizeColor;
+  Chronicle.calendarPageGlyph = PAGE_GLYPH;
   Chronicle.calendarWeatherIcon = weatherIcon;
   Chronicle.calendarWindWords = windWords;
   Chronicle.calendarRealAnchor = realAnchor;
@@ -1025,6 +1135,15 @@
     },
 
     destroy: function (el) {
+      if (this.eraField) this.eraField.destroy();
+      if (this._eraRO) this._eraRO.disconnect();
+      // boot.js reuses this one object for every mount, so a remount must
+      // build a fresh painter on the new stage, not reuse the dead one.
+      this.eraField = null;
+      this._eraRO = null;
+      this._eraScene = null;
+      this._eraOpen = null;
+      this._eraOpener = null;
       if (this.skyDock) this.skyDock.destroy();
       if (this._eventDrawer) this._eventDrawer.destroy();
       if (this._resizeHandler) window.removeEventListener('resize', this._resizeHandler);
@@ -1063,11 +1182,13 @@
             '</div>' +
             '<div class="h-row h-subw">' +
               '<div class="h-row h-sub" id="cal5-hsub">' +
-                '<button type="button" class="erabtn" id="cal5-erabtn" aria-haspopup="dialog" aria-expanded="false"><span id="cal5-eraname"></span><i class="fa-solid fa-chevron-down"></i></button>' +
+                '<span class="erachips" id="cal5-erachips"></span>' +
                 '<span class="season" id="cal5-season"></span>' +
               '</div>' +
             '</div>' +
           '</header>' +
+          '<div class="eratip" id="cal5-eratip" role="tooltip" hidden></div>' +
+          '<div class="erapanel" id="cal5-erapanel" role="region" aria-label="Era" hidden></div>' +
           '<div class="dow" id="cal5-dow" aria-hidden="true"></div>' +
           '<div class="stage" id="cal5-stage"></div>' +
           '<div class="hc" id="cal5-hc" aria-hidden="true"></div>' +
@@ -1101,6 +1222,9 @@
       this.scrimEl = $('#cal5-scrim', this.el);
       this.carryEl = $('#cal5-carry', this.el);
       this.dockEl = $('#cal5-dock', this.el);
+      this.eraChipsEl = $('#cal5-erachips', this.el);
+      this.eraTipEl = $('#cal5-eratip', this.el);
+      this.eraPanelEl = $('#cal5-erapanel', this.el);
       this.fvEl = $('#cal5-fv', this.el);
     },
 
@@ -2350,17 +2474,11 @@
       return null;
     },
 
+    // eraForDate is the era a day belongs to (EraMath.at): when eras
+    // overlap, the one that began most recently.
     eraForDate: function (year, month, day) {
-      var eras = this.cal.eras || [];
-      function less(y1, m1, d1, y2, m2, d2) { if (y1 !== y2) return y1 < y2; if (m1 !== m2) return m1 < m2; return d1 < d2; }
-      for (var i = 0; i < eras.length; i++) {
-        var e = eras[i];
-        if (less(year, month, day, e.start_year, e.start_month, e.start_day)) continue;
-        if (e.end_year == null) return e;
-        if (e.end_month == null || e.end_day == null) { if (year <= e.end_year) return e; continue; }
-        if (!less(e.end_year, e.end_month, e.end_day, year, month, day)) return e;
-      }
-      return null;
+      var r = EraMath.at(EraMath.sorted(this.cal), CalDate.dayIndex(this.cal, year, month, day));
+      return r ? r.era : null;
     },
 
     // --------------------------------------------------------------
@@ -2372,8 +2490,7 @@
       var mtitle = $('#cal5-mtitle', this.el);
       mtitle.innerHTML = esc(monthDef ? monthDef.name : ('Month ' + this.view.m)) + ' <span class="myear">' + esc(this.view.y) + '</span>';
 
-      var era = this.eraForDate(this.view.y, this.view.m, 1);
-      $('#cal5-eraname', this.el).textContent = era ? era.name : 'No era set';
+      this._renderEraChips();
       var season = this.seasonForDate(this.view.m, 15);
       $('#cal5-season', this.el).innerHTML = season ? ('<b>' + esc(season.name) + '</b>') : '';
 
@@ -2441,6 +2558,7 @@
         // from the first column") rather than leaning on a guard elsewhere
         // that could change.
         if (firstCol < 0) firstCol = 0;
+        this._gridOff = firstCol;
         var cells = [];
         for (var i = 0; i < firstCol; i++) cells.push(null);
         for (var d = 1; d <= days; d++) cells.push(d);
@@ -2461,7 +2579,8 @@
         this._markOpenDay(open);
         if (this._pw.carried) open.classList.add('packed');
       }
-      this._paintDaySkyContext();
+      this._paintEraField(this._eraFade ? { crossfade: true } : null);
+      this._eraFade = false;
       this._skyDay();
     },
 
@@ -2473,7 +2592,7 @@
       var label = esc(monthDef.name) + (totalDays > 1 ? ', day ' + d : '');
       return '<div class="band' + (isToday ? ' today' : '') + '">' +
         '<button type="button" class="day" data-key="' + dayKey(y, m, d) + '" style="width:100%">' +
-          '<div class="dc"><span class="bn">' + label + '</span>' + weatherMarkHTML(this.weatherOnDay(y, m, d), isFuture) + marks + '</div>' +
+          '<div class="dc"><span class="bn">' + label + '</span>' + weatherMarkHTML(this.weatherOnDay(y, m, d), isFuture) + marks + this._eraStartHTML(y, m, d) + '</div>' +
           (this.canAuthorDmOnly ? this._paintMarkHTML(y, m, d, isFuture) : '') +
         '</button></div>';
     },
@@ -2503,6 +2622,7 @@
         moonHTML + weatherMarkHTML(this.weatherOnDay(y, m, d), !isPast && !isToday) +
         (this.canAuthorDmOnly ? this._paintMarkHTML(y, m, d, !isPast && !isToday) : '') +
         '<div class="dc"><span class="num">' + d + '</span>' + this._marksHTML(y, m, d) + '</div>' +
+        this._eraStartHTML(y, m, d) +
         this._freeCellHTML(y, m, d) +
         '</button>';
     },
@@ -2538,9 +2658,323 @@
       return '<svg class="sil" width="14" height="14" viewBox="-7 -7 14 14" aria-hidden="true"><circle class="db" r="6"/>' + (path ? '<path class="dl" d="' + path + '"/>' : '') + '</svg>';
     },
 
-    _paintDaySkyContext: function () {
-      // No ambient backdrop-field animation is ported (the mockups' era/
-      // season colour wash) — a deliberate simplification, see .ai.md.
+    // --------------------------------------------------------------
+    // The era field: calendar_era_blend.js paints the eras' colours behind
+    // the shown month's days. Without that script it stays missing.
+    // --------------------------------------------------------------
+    _paintEraField: function (o) {
+      var blend = Chronicle.calendarEraBlend, month = this.stageEl.querySelector('.month');
+      if (!blend || !month) return;
+      var self = this, cal = this.cal;
+      if (!this.eraField) {
+        this.eraField = blend.create(this.stageEl, {
+          surface: function () { return getComputedStyle(self.calEl).backgroundColor; }
+        });
+        if ('ResizeObserver' in window) {
+          this._eraRO = new ResizeObserver(function () { if (self.eraField && self._eraScene) self._paintEraField(); });
+          this._eraRO.observe(this.stageEl);
+        }
+      }
+      var info = EraMath.month(cal, EraMath.sorted(cal), this.view.y, this.view.m);
+      var eras = [];
+      if (info.first) eras.push(info.first.era);
+      if (info.last && info.last !== info.first) eras.push(info.last.era);
+      var band = !!month.querySelector('.band');
+      var rowEls = $$(band ? '.band' : '.wk', month);
+      var scene = {
+        box: { left: month.offsetLeft, top: month.offsetTop, width: month.offsetWidth, height: month.offsetHeight },
+        rows: rowEls.map(function (r) { return { top: r.offsetTop, height: r.offsetHeight }; }),
+        cols: band ? 1 : CalDate.weekLen(cal),
+        off: band ? 0 : (this._gridOff || 0),
+        days: info.days,
+        split: eras.length > 1 ? info.change : null,
+        eras: eras.map(function (e) { return { key: e.id, color: e.color, color_2: e.color_2, style: e.style, feel: e.feel }; })
+      };
+      this._eraScene = scene;
+      this.eraField.setLook(cal.era_look);
+      this.eraField.setScene(scene, o);
+    },
+
+    // --------------------------------------------------------------
+    // Eras in the header: the month's era is a chip (two, with an arrow,
+    // when an era begins mid-month). Hover or focus shows a tooltip; a
+    // press unfolds the era panel under the header, which pushes the grid
+    // down rather than covering it.
+    // --------------------------------------------------------------
+    _eraRows: function () { return EraMath.sorted(this.cal); },
+    _eraRow: function (id) { return this._eraRows().filter(function (r) { return String(r.era.id) === String(id); })[0] || null; },
+    _eraSwatch: function (e) {
+      var a = sanitizeColor(e.color) || '#888', b = sanitizeColor(e.color_2) || a;
+      return 'background:linear-gradient(90deg,' + a + ',' + b + ')';
+    },
+
+    _renderEraChips: function () {
+      var self = this, cal = this.cal, info = EraMath.month(cal, this._eraRows(), this.view.y, this.view.m);
+      var chip = function (r, note) {
+        var open = self._eraOpen != null && String(self._eraOpen) === String(r.era.id);
+        return '<button type="button" class="erachip" data-era="' + esc(r.era.id) + '" aria-expanded="' + open + '" aria-controls="cal5-erapanel" aria-describedby="cal5-eratip">' +
+          '<i class="esw" style="' + self._eraSwatch(r.era) + '"></i><span class="en">' + esc(r.era.name) + '</span>' +
+          (EraMath.secret(cal, r) ? '<i class="fa-solid fa-eye-slash eh" aria-label="Hidden from players until it begins"></i>' : '') +
+          (note ? '<small>' + esc(note) + '</small>' : '') +
+          '<i class="fa-solid fa-chevron-down ev" aria-hidden="true"></i></button>';
+      };
+      var html = '';
+      if (info.change) {
+        html = chip(info.first, 'days 1–' + (info.change - 1)) + '<span class="earrow" aria-hidden="true">→</span>' + chip(info.last, 'from day ' + info.change);
+      } else if (info.last) {
+        html = chip(info.last, info.first ? '' : (info.begins.length ? 'from day ' + info.begins[0].day : ''));
+      }
+      this.eraChipsEl.innerHTML = html;
+      this._markRibbon();
+    },
+
+    _bindEras: function () {
+      var self = this, tipTimer = 0;
+      var showTip = function (chip) {
+        var r = self._eraRow(chip.dataset.era);
+        if (!r) return;
+        var w = EraMath.when(self.cal, r), tip = self.eraTipEl;
+        tip.innerHTML = '<b>' + esc(r.era.name) + '</b><span>' + esc(w.range) + '</span><span>' + esc(w.len) +
+          (EraMath.secret(self.cal, r) ? ' · hidden from players' : '') + '</span>';
+        tip.hidden = false;
+        var c = relRect(chip, self.calEl), cw = self.calEl.clientWidth, tw = tip.offsetWidth;
+        tip.style.left = clampN(c.x, 8, Math.max(8, cw - tw - 8)) + 'px';
+        tip.style.top = (c.y + c.h + 6) + 'px';
+      };
+      // A press or Escape puts the tooltip away until the pointer leaves the
+      // chips: pressing re-renders the chips under a resting pointer, which
+      // would otherwise bring it straight back over the opening panel.
+      var tipMuted = false;
+      this._hideEraTip = function (mute) { clearTimeout(tipTimer); self.eraTipEl.hidden = true; if (mute) tipMuted = true; };
+      this.eraChipsEl.addEventListener('mouseover', function (e) {
+        var chip = e.target.closest('.erachip');
+        if (!chip || tipMuted) return;
+        clearTimeout(tipTimer);
+        tipTimer = setTimeout(function () { showTip(chip); }, 180);
+      });
+      this.eraChipsEl.addEventListener('mouseout', function (e) {
+        if (!e.relatedTarget || !self.eraChipsEl.contains(e.relatedTarget)) { tipMuted = false; self._hideEraTip(); }
+      });
+      this.eraChipsEl.addEventListener('focusin', function (e) {
+        var chip = e.target.closest('.erachip');
+        // Focus handed back by Escape stays quiet; the next move shows it.
+        if (tipMuted) { tipMuted = false; return; }
+        if (chip && chip.matches(':focus-visible')) showTip(chip);
+      });
+      this.eraChipsEl.addEventListener('focusout', function () { self._hideEraTip(); });
+      this.eraChipsEl.addEventListener('click', function (e) {
+        var chip = e.target.closest('.erachip');
+        if (!chip) return;
+        self._hideEraTip(true);
+        if (self._eraOpen != null && String(self._eraOpen) === chip.dataset.era) self.closeEraPanel({ refocus: chip });
+        else self.openEraPanel(chip.dataset.era, chip);
+      });
+      this.eraPanelEl.addEventListener('click', function (e) {
+        var t = e.target;
+        if (t.closest('[data-era-close]')) { self.closeEraPanel({ refocus: true }); return; }
+        var seg = t.closest('.rseg');
+        if (seg) { self._eraJump(seg.dataset.era); return; }
+        var ev = t.closest('[data-era-ev]');
+        if (ev) { self._eraEventJump(ev); return; }
+        if (t.closest('[data-era-all]')) { self._eraShowAll = true; self._renderEraEvents(); return; }
+        if (t.closest('[data-era-manage]') && self.openEraManager) { self.closeEraPanel({ instant: true }); self.openEraManager(); }
+      });
+      var segTip = function (seg) {
+        var r = self._eraRow(seg.dataset.era), tip = self.eraPanelEl.querySelector('.rtip');
+        if (!r || !tip) return;
+        tip.innerHTML = '<b>' + esc(r.era.name) + '</b><span>' + esc(EraMath.when(self.cal, r).range) + (EraMath.secret(self.cal, r) ? ' · hidden from players' : '') + '</span>';
+        tip.hidden = false;
+        var wrap = tip.parentNode, W = wrap.clientWidth, c = seg.offsetLeft + seg.offsetWidth / 2, tw = tip.offsetWidth;
+        tip.style.left = clampN(c, tw / 2, Math.max(tw / 2, W - tw / 2)) + 'px';
+      };
+      var segHide = function () { var tip = self.eraPanelEl.querySelector('.rtip'); if (tip) tip.hidden = true; };
+      this.eraPanelEl.addEventListener('mouseover', function (e) { var seg = e.target.closest('.rseg'); if (seg) segTip(seg); });
+      this.eraPanelEl.addEventListener('mouseout', function (e) { if (e.target.closest('.rseg')) segHide(); });
+      this.eraPanelEl.addEventListener('focusin', function (e) { var seg = e.target.closest('.rseg'); if (seg) segTip(seg); });
+      this.eraPanelEl.addEventListener('focusout', segHide);
+    },
+
+    // openEraPanel unfolds the panel about one era, or switches an open
+    // panel to it. The ribbon above the card shows every era the viewer may
+    // see, with "you are here".
+    openEraPanel: function (id, opener) {
+      var r = this._eraRow(id), el = this.eraPanelEl, wasOpen = this._eraOpen != null;
+      if (!r) return;
+      this.hideGlance();
+      if (this._hideEraTip) this._hideEraTip();
+      this._eraOpen = r.era.id;
+      this._eraOpener = opener || null;
+      this._eraShowAll = false;
+      var before = wasOpen ? el.offsetHeight : 0;
+      el.innerHTML = this._eraPanelHTML(r);
+      el.style.setProperty('--ea', sanitizeColor(r.era.color) || '#888');
+      el.hidden = false;
+      this._placeRibbonMarks();
+      this._renderEraChips();
+      this._loadEraEvents(r);
+      var h = el.offsetHeight;
+      stopAnims(el);
+      if (!reducedMotion() && before !== h) {
+        anim(el, [{ height: before + 'px', opacity: wasOpen ? 1 : 0 }, { height: h + 'px', opacity: 1 }], { duration: wasOpen ? 200 : 280, easing: 'cubic-bezier(.22,.8,.24,1)', fill: 'none' });
+      }
+      var head = el.querySelector('.ep-name');
+      if (head && !wasOpen) head.focus({ preventScroll: true });
+      if (this.eraField) this.eraField.wake();
+      this._announce(r.era.name + ' era. ' + EraMath.when(this.cal, r).range + '.');
+    },
+
+    closeEraPanel: function (o) {
+      o = o || {};
+      var self = this, el = this.eraPanelEl;
+      if (this._eraOpen == null) return;
+      var opener = this._eraOpener, id = this._eraOpen;
+      this._eraOpen = null;
+      this._eraOpener = null;
+      this._renderEraChips();
+      var done = function () { el.hidden = true; el.innerHTML = ''; if (self.eraField) self._paintEraField(); };
+      stopAnims(el);
+      if (o.instant || reducedMotion()) done();
+      else anim(el, [{ height: el.offsetHeight + 'px', opacity: 1 }, { height: '0px', opacity: 0 }], { duration: 220, easing: 'cubic-bezier(.22,.8,.24,1)' }).finished.then(done, done);
+      if (o.refocus) {
+        var back = o.refocus !== true ? o.refocus : (opener && opener.isConnected ? opener : this.eraChipsEl.querySelector('.erachip[data-era="' + id + '"]') || this.eraChipsEl.querySelector('.erachip'));
+        if (back) back.focus({ preventScroll: true });
+      }
+    },
+
+    _eraPanelHTML: function (r) {
+      var self = this, cal = this.cal, list = this._eraRows(), shares = EraMath.ribbon(cal, list), w = EraMath.when(cal, r), e = r.era;
+      var segs = list.map(function (x, i) {
+        var a = sanitizeColor(x.era.color) || '#888', b = sanitizeColor(x.era.color_2) || a;
+        return '<button type="button" class="rseg' + (EraMath.secret(cal, x) ? ' hid' : '') + (x === r ? ' cur' : '') + '" data-era="' + esc(x.era.id) + '" data-here="' + (shares[i].here == null ? '' : shares[i].here) + '"' +
+          ' style="flex:' + shares[i].flex.toFixed(2) + ' 1 0px;--g:linear-gradient(90deg,' + a + ',' + b + ');--c:' + a + '"' +
+          ' aria-label="' + esc(x.era.name + ', ' + EraMath.when(cal, x).range + '. Go to its first month.') + '"' + (x === r ? ' aria-current="true"' : '') + '></button>';
+      }).join('');
+      var desc = e.description ? String(e.description).split(/\n{2,}/).map(function (p) { return '<p>' + esc(p).replace(/\n/g, '<br>') + '</p>'; }).join('') : '';
+      var lore = e.lore_entity_id && e.lore_entity_name
+        ? '<a class="ep-lore" href="/campaigns/' + encodeURIComponent(this.campaignId) + '/entities/' + encodeURIComponent(e.lore_entity_id) + '"><span class="li" aria-hidden="true">' + PAGE_GLYPH + '</span><span class="lt">' + esc(e.lore_entity_name) + '<small>Lore page</small></span><span class="lg" aria-hidden="true">›</span></a>'
+        : '';
+      var note = e.dm_note ? '<div class="ep-note"><div class="nh"><i class="fa-solid fa-lock"></i>Director’s note, players never see this</div>' + esc(e.dm_note) + '</div>' : '';
+      var manage = this.canAuthorDmOnly && this.openEraManager ? '<button type="button" class="ep-manage" data-era-manage><i class="fa-solid fa-pencil"></i>Edit eras</button>' : '';
+      return '<div class="ep-ribbon"><div class="rtrack" role="group" aria-label="Eras, oldest to newest">' + segs + '</div><div class="raxis" aria-hidden="true"></div><div class="rtip" role="tooltip" hidden></div></div>' +
+        '<div class="ep-card">' +
+          '<div class="ep-head"><i class="esw" style="' + self._eraSwatch(e) + '"></i><div class="ep-main">' +
+            '<h3 class="ep-name" tabindex="-1">' + esc(e.name) + '</h3>' +
+            '<div class="ep-dates"><b>' + esc(w.range) + '</b><span>' + esc(w.len) + '</span></div>' +
+            (EraMath.secret(cal, r) ? '<div class="ep-badge"><i class="fa-solid fa-eye-slash"></i>Hidden from players until it begins</div>' : '') +
+          '</div><button type="button" class="ep-x" data-era-close aria-label="Close era"><i class="fa-solid fa-xmark"></i></button></div>' +
+          '<div class="ep-body">' +
+            '<div class="ep-col">' + (desc ? '<div class="ep-desc">' + desc + '</div>' : '') + lore + note + manage + '</div>' +
+            '<div class="ep-col ep-events" aria-live="polite"><div class="ep-sh"><span>Key events</span><span class="cnt"></span></div><p class="ep-none">Loading…</p></div>' +
+          '</div>' +
+        '</div>';
+    },
+
+    // The ribbon's year labels and "you are here" need the laid-out widths.
+    _placeRibbonMarks: function () {
+      var wrap = this.eraPanelEl.querySelector('.ep-ribbon');
+      if (!wrap) return;
+      var cal = this.cal, ax = wrap.querySelector('.raxis'), W = wrap.clientWidth, prevRight = -99, self = this;
+      ax.innerHTML = '';
+      $$('.rhere', wrap).forEach(function (n) { n.remove(); });
+      $$('.rseg', wrap).forEach(function (seg, p) {
+        var r = self._eraRow(seg.dataset.era), x = seg.offsetLeft;
+        if (!r) return;
+        var lab = document.createElement('span');
+        lab.textContent = (p === 0 ? 'Year ' : '') + r.start.y;
+        ax.appendChild(lab);
+        lab.style.left = x + 'px';
+        if (x < prevRight + 8) lab.remove(); else prevRight = x + lab.offsetWidth;
+        if (seg.dataset.here !== '') {
+          var hx = x + seg.offsetWidth * +seg.dataset.here, h = document.createElement('div'), t = document.createElement('span');
+          h.className = 'rhere'; t.textContent = 'you are here';
+          h.appendChild(t); h.style.left = hx + 'px'; wrap.appendChild(h);
+          t.style.left = Math.max(-hx, Math.min(W - hx - t.offsetWidth, -t.offsetWidth / 2)) + 'px';
+        }
+      });
+      this._markRibbon();
+    },
+    // The eras the shown month belongs to are outlined on the ribbon.
+    _markRibbon: function () {
+      if (!this.eraPanelEl || this._eraOpen == null) return;
+      var info = EraMath.month(this.cal, this._eraRows(), this.view.y, this.view.m), ids = {};
+      if (info.first) ids[info.first.era.id] = 1;
+      if (info.last) ids[info.last.era.id] = 1;
+      $$('.rseg', this.eraPanelEl).forEach(function (s) { s.classList.toggle('showing', !!ids[s.dataset.era]); });
+    },
+
+    _eraJump: function (id) {
+      var r = this._eraRow(id);
+      if (!r) return;
+      if (this.wingFor) this.closeWing({ instant: true, quiet: true });
+      this.view = { y: r.start.y, m: r.start.m };
+      this._eraFade = true;
+      this.renderMonth();
+      this.openEraPanel(r.era.id, this.eraChipsEl.querySelector('.erachip[data-era="' + r.era.id + '"]'));
+      var seg = this.eraPanelEl.querySelector('.rseg[data-era="' + r.era.id + '"]');
+      if (seg) seg.focus({ preventScroll: true });
+    },
+
+    _loadEraEvents: function (r) {
+      var self = this, id = r.era.id;
+      this._eraEvents = null;
+      Chronicle.apiFetch(this.apiBase + '/eras/' + encodeURIComponent(id) + '/events')
+        .then(function (resp) { return resp.ok ? resp.json() : null; })
+        .then(function (body) {
+          if (String(self._eraOpen) !== String(id)) return;
+          self._eraEvents = body && Array.isArray(body.data) ? body : { data: [], total: 0, failed: !body };
+          self._renderEraEvents();
+        })
+        .catch(function () {
+          if (String(self._eraOpen) !== String(id)) return;
+          self._eraEvents = { data: [], total: 0, failed: true };
+          self._renderEraEvents();
+        });
+    },
+
+    // Key events are the era's major-tier events; without any, its latest
+    // events stand in. "Show all" lists everything the read returned.
+    _renderEraEvents: function () {
+      var box = this.eraPanelEl.querySelector('.ep-events'), body = this._eraEvents, cal = this.cal;
+      if (!box || !body) return;
+      var evs = body.data, keys = evs.filter(function (e) { return e.tier === 'major'; });
+      var shown = this._eraShowAll ? evs : (keys.length ? keys : evs).slice(-4);
+      var cnt = body.total + (body.total === 1 ? ' event' : ' events') + (keys.length ? ', ' + keys.length + ' key' : '');
+      var h = '<div class="ep-sh"><span>Key events</span><span class="cnt">' + (body.failed ? '' : esc(cnt)) + '</span></div>';
+      if (body.failed) h += '<p class="ep-none">Could not load this era’s events.</p>';
+      else if (!evs.length) h += '<p class="ep-none">Nothing recorded in this era yet.</p>';
+      else {
+        h += '<ul class="ep-evs">' + shown.map(function (e) {
+          return '<li><button type="button" data-era-ev="' + esc(e.id) + '" data-y="' + e.year + '" data-m="' + e.month + '" data-d="' + e.day + '">' +
+            '<span class="t">' + esc(e.name) + (e.tier === 'major' ? '<span class="k" aria-label="key event">◆</span>' : '') + '</span>' +
+            '<span class="w">' + esc(EraMath.fmt(cal, { y: e.year, m: e.month, d: e.day })) + '</span></button></li>';
+        }).join('') + '</ul>';
+        if (!this._eraShowAll && evs.length > shown.length) h += '<button type="button" class="ep-all" data-era-all>Show all ' + evs.length + ' events</button>';
+        if (body.total > evs.length) h += '<p class="ep-none">Showing the first ' + evs.length + '.</p>';
+      }
+      box.innerHTML = h;
+    },
+
+    // An event in the panel goes to its day: the panel folds away and the
+    // day's card opens on that event.
+    _eraEventJump: function (btn) {
+      var self = this, y = +btn.dataset.y, m = +btn.dataset.m, d = +btn.dataset.d, id = btn.dataset.eraEv;
+      this.closeEraPanel({ instant: true });
+      if (this.wingFor) this.closeWing({ instant: true, quiet: true });
+      this.view = { y: y, m: m };
+      this.renderMonth();
+      this.fetchMonth(y, m).then(function () {
+        if (self.view.y !== y || self.view.m !== m) return;
+        self.openWing(dayKey(y, m, d), id);
+      });
+    },
+
+    // The label on an era's first day: it opens the era panel too.
+    _eraStartHTML: function (y, m, d) {
+      var cal = this.cal, k = CalDate.dayIndex(cal, y, m, d);
+      var r = this._eraRows().filter(function (x) { return x.startK === k; }).pop();
+      if (!r) return '';
+      var b = sanitizeColor(r.era.color_2) || sanitizeColor(r.era.color) || '#888';
+      return '<span class="erastart" data-era-start="' + esc(r.era.id) + '" style="--es:' + b + '" title="' + esc(r.era.name) + ' begins"><span class="esl">' + esc(r.era.name) + ' begins</span><span class="ess" aria-hidden="true">New era</span></span>';
     },
 
     // --------------------------------------------------------------
@@ -2551,12 +2985,14 @@
       if (this.wingFor) this.closeWing({ instant: true, quiet: true });
       var next = CalDate.shiftMonth(this.cal, this.view.y, this.view.m, delta);
       this.view = next;
+      this._eraFade = true;
       this.renderMonth();
     },
 
     goToday: function () {
       if (this.wingFor) this.closeWing({ instant: true, quiet: true });
       this.view = { y: this.cal.current_year, m: this.cal.current_month };
+      this._eraFade = true;
       this.renderMonth();
       this.say('Jumped to today.');
     },
@@ -2570,7 +3006,7 @@
       $('#cal5-next', this.el).addEventListener('click', function () { self.goMonth(1); });
       $('#cal5-todaybtn', this.el).addEventListener('click', function () { self.goToday(); });
       $('#cal5-hub', this.el).addEventListener('click', function () { self.toggleHub(); });
-      $('#cal5-erabtn', this.el).addEventListener('click', function () { self.toggleEra(); });
+      this._bindEras();
       $('#cal5-moonbtn', this.el).addEventListener('click', function () { self.openMoonView(); });
       var freeBtn = $('#cal5-freebtn', this.el);
       if (freeBtn) freeBtn.addEventListener('click', function () {
@@ -2583,6 +3019,12 @@
       this.scrimEl.addEventListener('click', function () { self.closeAllPanels(); });
 
       this.stageEl.addEventListener('click', function (e) {
+        var es = e.target.closest('[data-era-start]');
+        if (es && !self.calEl.classList.contains('editing')) {
+          e.stopPropagation();
+          self.openEraPanel(es.dataset.eraStart, es.closest('.day'));
+          return;
+        }
         var mk = e.target.closest('.mk');
         var msil = e.target.closest('.msil');
         var day = e.target.closest('.day');
@@ -2694,6 +3136,8 @@
       this._resizeHandler = function () {
         if (self.wingFor) self.closeWing({ instant: true, quiet: true });
         if (self._pf.state !== 'closed') self.closeFlap({ instant: true, quiet: true });
+        if (self._hideEraTip) self._hideEraTip();
+        self._placeRibbonMarks();
       };
       window.addEventListener('resize', this._resizeHandler);
 
@@ -2703,6 +3147,7 @@
       // one layer at a time rather than closing everything at once.
       this._escHandler = function (e) {
         if (e.key !== 'Escape') return;
+        if (self._hideEraTip) self._hideEraTip(true);
         if (self.plannerOpen()) { self.closePlanner(); return; }
         if (self.evpEl.classList.contains('open')) { self.closeEventDetail(); return; }
         if (self.mvEl.classList.contains('open')) { self.closeMoonView(); return; }
@@ -2710,6 +3155,7 @@
         if (self._pf.state !== 'closed') { self.closeFlap(); return; }
         if (self.popEl.classList.contains('open')) { self.closePop(); return; }
         if (self.wingFor) { self.closeWing(); return; }
+        if (self._eraOpen != null) { self.closeEraPanel({ refocus: true }); return; }
       };
       document.addEventListener('keydown', this._escHandler);
 
@@ -2752,6 +3198,7 @@
     // o.instant takes them down without their motion.
     closeAllPanels: function (o) {
       if (this.wingFor) this.closeWing(o);
+      this.closeEraPanel({ instant: o && o.instant });
       this.closeFlap(o);
       this.closeEventDetail();
       this.closeMoonView();
@@ -3062,8 +3509,10 @@
     },
 
     // --------------------------------------------------------------
-    // Era flap (read-only timeline — the signed mockups never designed
-    // Owner era editing; see .ai.md "Honest gaps").
+    // The era manager's card. Everyone reads eras through the era panel
+    // above; calendar_editor.js gives an Owner or co-Director an "Eras"
+    // button in the edit strip (#cal5-erabtn) whose card manages them,
+    // replacing showFlap below.
     // --------------------------------------------------------------
     toggleEra: function () {
       var self = this, P = this._pf;
@@ -3077,14 +3526,14 @@
     showFlap: function () {
       var era = this.eraForDate(this.view.y, this.view.m, 1);
       if (!era) { this.say('No era set for this month.'); return; }
-      this._showFlapHTML(this._eraHTML(era));
+      this.openEraPanel(era.id);
     },
 
-    // Opens the era's card with the given leaves; calendar_editor.js's era
-    // manager opens through here too, so both fold the same way.
+    // Opens the era manager's card (calendar_editor.js) with the given
+    // leaves, folding out of its Eras button like every other card here.
     _showFlapHTML: function (html) {
       var self = this, P = this._pf, btn = $('#cal5-erabtn', this.el);
-      if (P.state !== 'closed') return;
+      if (P.state !== 'closed' || !btn) return;
       resetCard(this.flapEl);
       this.flapEl.innerHTML = html;
       var g = isPhone() ? null : eraGeometry(this.flapEl, btn, this.calEl);
@@ -3119,17 +3568,6 @@
       });
       this._updateScrim();
       return P.closing;
-    },
-
-    // The era's card: its name and span in the head leaf, its description
-    // (when it has one) below.
-    _eraHTML: function (era) {
-      var span = esc(era.start_year) + (era.end_year != null ? '–' + esc(era.end_year) : '–present');
-      return '<div class="leaf lf1"><div class="grab" aria-hidden="true"></div>' +
-          '<div class="crease"><span>Era</span><button type="button" class="x" data-close aria-label="Close">✕</button></div>' +
-          '<div class="fb fbh"><h3 class="ename">' + esc(era.name) + '</h3><div class="espan"><span>' + span + '</span></div></div>' +
-        '</div>' +
-        (era.description ? '<div class="leaf lf2"><div class="lscroll"><div class="fb fbr"><p class="edesc">' + esc(era.description) + '</p></div></div></div>' : '');
     },
 
     // --------------------------------------------------------------
@@ -3294,6 +3732,6 @@
   // Go model's own values without a browser DOM. `module` is undefined when
   // loaded via <script>, so this is a no-op in the browser.
   if (typeof module !== 'undefined' && module.exports) {
-    module.exports = { CalDate: CalDate, MoonMath: MoonMath, weatherMarkHTML: weatherMarkHTML, weatherFactHTML: weatherFactHTML, weatherPaintHTML: weatherPaintHTML, weatherIcon: weatherIcon };
+    module.exports = { CalDate: CalDate, MoonMath: MoonMath, EraMath: EraMath, weatherMarkHTML: weatherMarkHTML, weatherFactHTML: weatherFactHTML, weatherPaintHTML: weatherPaintHTML, weatherIcon: weatherIcon };
   }
 })();
