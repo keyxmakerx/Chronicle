@@ -114,6 +114,13 @@ const (
 	// MsgNPCSpotlight asks Foundry to spotlight the NPC page's token.
 	// ResourceID is the entity id; always published RequiresDM.
 	MsgNPCSpotlight MessageType = "npc.spotlight"
+
+	// MsgSystemStateUpdated tells the GM side that a page's per-system
+	// state changed. ResourceID is the entity id; the payload names the
+	// system and key only, never the state. Always published RequiresDM
+	// and deliberately not a change-feed type: the state is read through
+	// its own route, not replayed from the feed.
+	MsgSystemStateUpdated MessageType = "system_state.updated"
 )
 
 // Sync control messages.

@@ -104,7 +104,8 @@ type WidgetBlockLister interface {
 // Handler handles HTTP requests for entity operations. Handlers are thin:
 // bind request, call service, render response. No business logic lives here.
 type Handler struct {
-	characterPanel     *PagePanel // Optional panel under character pages; see page_panel.go.
+	characterPanel     *PagePanel          // Optional panel under character pages; see page_panel.go.
+	systemPanels       SystemPanelResolver // Optional game-system panels under the title; see system_panels.go.
 	service            EntityService
 	auditSvc           audit.AuditService
 	tagFetcher         EntityTagFetcher
@@ -692,6 +693,14 @@ func (h *Handler) Show(c echo.Context) error {
 	if p := h.characterPanel; p != nil && p.URL != nil && mayHoldCharacterPanel(entityType) &&
 		h.isAddonEnabled(c.Request().Context(), cc.Campaign.ID, p.Addon) {
 		ctx = withPagePanelURL(ctx, p.URL(cc.Campaign.ID, entity.ID))
+	}
+
+	// Widget panels the enabled game system mounts under the title. The
+	// resolver owns the system and page-type rules; this only carries the result.
+	if r := h.systemPanels; r != nil {
+		if panels := r(c.Request().Context(), cc.Campaign.ID, entityType); len(panels) > 0 {
+			ctx = withSystemPanels(ctx, panels)
+		}
 	}
 
 	c.SetRequest(c.Request().WithContext(ctx))

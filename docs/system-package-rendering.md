@@ -263,6 +263,48 @@ the renderer registry. Every entry must satisfy:
   numbers, hyphens, underscores).
 - A manifest declares no more than 10 renderers.
 
+### Adding a panel to NPC pages (`entity_panels`)
+
+A renderer replaces a page; a panel adds to one. To mount a widget under the
+title of every NPC or monster page in campaigns that have your system enabled,
+declare it in `entity_panels`:
+
+```json
+"widgets": [
+  { "slug": "drawsteel-negotiation", "name": "Negotiation",
+    "script_file": "widgets/negotiation.js" }
+],
+"entity_panels": [
+  { "widget": "drawsteel-negotiation", "applies_to": "npc" }
+]
+```
+
+- `widget` must match one of this manifest's `widgets[].slug`.
+- `applies_to` must be `"npc"`, the only audience for now. Any other value is
+  rejected at install so a typo is loud. "NPC" is the same family as the NPC
+  gallery: the character, npc and creature types, system `-character` and
+  `-monster` types and their sub-types, but not the player-character type.
+- A manifest declares no more than 10 panels.
+
+The host emits `<div data-widget="…" data-campaign-id="…" data-entity-id="…"
+data-system-id="…" data-is-gm="true|false">`. `data-is-gm` is true for the
+campaign owner and members granted DM access; use it to decide whether to show
+GM-only controls, and never rely on it to protect data. Your widget script is
+loaded the same way as any other widget of the enabled system.
+
+To keep state for the panel, use the page-state API (the owner/DM team writes,
+anyone who can view the page reads the public half):
+
+- `GET|PUT /campaigns/:id/entities/:eid/system-state/:system/:key` with the
+  session. `PUT` takes `{"public": {…}?, "gm": {…}?}`; an absent half keeps what
+  is stored and a present half replaces it. Each half must be a JSON object of
+  at most 16 KiB. `GET` returns `{systemId, key, public, gm?, isGm, updatedAt}`,
+  and `gm` is present only for the DM team.
+- `system` is your manifest `id` and must be enabled for the campaign; `system`
+  and `key` match `^[a-z0-9][a-z0-9_-]{0,63}$`.
+- Writes publish `system_state.updated` (`{systemId, key}`, no content) to the
+  GM side only, so a DM's other tabs and the Foundry module can re-read.
+
 ### Lifecycle and overrides
 
 The manifest path uses the same V1 lifecycle as the Go-side path: registration

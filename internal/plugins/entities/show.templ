@@ -76,6 +76,9 @@ templ EntityShowPage(cc *campaigns.CampaignContext, entity *Entity, entityType *
 				CSRFToken:      csrfToken,
 				UserID:         userID,
 			}); comp != nil {
+				// A page renderer replaces the layout, and with it the title
+				// block that normally carries the panels, so mount them here.
+				@entitySystemPanels(cc, entity)
 				@comp
 			} else {
 				<!-- Dynamic layout from entity type template -->
@@ -385,6 +388,7 @@ templ blockTitle(cc *campaigns.CampaignContext, entity *Entity, csrfToken string
 				</div>
 			</div>
 		}
+		@entitySystemPanels(cc, entity)
 	</div>
 }
 
