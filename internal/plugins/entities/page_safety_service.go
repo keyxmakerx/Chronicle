@@ -30,6 +30,10 @@ func (s *entityService) recordVersion(ctx context.Context, before, after *Entity
 	}
 	if k, ok := ctx.Value(versionKindKey{}).(string); ok {
 		kind = k
+	} else if kind == VersionEdit {
+		if isSync, _ := ctx.Value(syncKey{}).(bool); isSync || actorFrom(ctx) == "" {
+			kind = VersionSync
+		}
 	}
 	now := time.Now().UTC()
 	var actor *string
@@ -60,8 +64,11 @@ func (s *entityService) recordVersion(ctx context.Context, before, after *Entity
 		}
 	}
 
-	if kind == VersionEdit && latest != nil && latest.Kind == VersionEdit &&
-		sameActor(latest.UserID, actor) && now.Sub(latest.UpdatedAt) < versionCoalesceWindow {
+	// Only plain saves fold together; a created, restore or baseline row
+	// always stays as it was.
+	if (kind == VersionEdit || kind == VersionSync) && latest != nil && latest.Kind == kind &&
+		sameActor(latest.UserID, actor) && now.Sub(latest.UpdatedAt) < versionCoalesceWindow &&
+		now.Sub(latest.CreatedAt) < versionMaxSpan {
 		latest.Name, latest.Entry, latest.EntryHTML, latest.UpdatedAt = after.Name, after.Entry, after.EntryHTML, now
 		if err := s.safety.ReplaceVersionContent(ctx, latest); err != nil {
 			slog.Warn("page history: updating version", slog.String("entity_id", after.ID), slog.Any("error", err))
@@ -122,16 +129,11 @@ func (s *entityService) SaveEntry(ctx context.Context, entityID, entryJSON, entr
 	}
 	searchText := buildSearchText(entryHTML, before.FieldsData)
 
-	rev, ok, err := s.safety.SaveEntryAtRev(ctx, entityID, entryJSON, entryHTML, searchText, *baseRev)
+	rev, conflict, err := s.safety.SaveEntryAtRev(ctx, entityID, entryJSON, entryHTML, searchText, *baseRev)
 	if err != nil {
 		return 0, nil, err
 	}
-	if !ok {
-		current, err := s.entities.FindByID(ctx, entityID)
-		if err != nil {
-			return 0, nil, err
-		}
-		conflict := &EntryConflict{Rev: rev, Entry: current.Entry, EntryHTML: current.EntryHTML, At: current.UpdatedAt}
+	if conflict != nil {
 		if latest, err := s.safety.LatestVersion(ctx, entityID); err == nil && latest != nil {
 			conflict.ByName = latest.UserName
 			conflict.At = latest.UpdatedAt
@@ -152,9 +154,12 @@ func (s *entityService) SaveEntry(ctx context.Context, entityID, entryJSON, entr
 
 // PageSafetyService serves the History panel and the Trash page.
 type PageSafetyService interface {
-	// History returns a page's versions, newest first, each with what
-	// changed since the one before it.
-	History(ctx context.Context, entityID string) ([]VersionView, error)
+	// History returns a page's versions, newest first, each with how many
+	// lines changed since the one before it, and the index of the version
+	// picked by selectedID (the newest when empty or unknown). Only that
+	// version carries a word diff: it is the only one shown, and diffing
+	// every version of a long page on each open is costly.
+	History(ctx context.Context, entityID, selectedID string) ([]VersionView, int, error)
 	// RestoreVersion puts a version's title and text back on the page,
 	// saved as a new version so the restore can be undone too.
 	RestoreVersion(ctx context.Context, entityID, versionID string) error
@@ -192,25 +197,36 @@ func NewPageSafetyService(repo PageSafetyRepository, entities EntityRepository, 
 	return &pageSafetyService{repo: repo, entities: entities, svc: es, retention: retention}
 }
 
-func (p *pageSafetyService) History(ctx context.Context, entityID string) ([]VersionView, error) {
+func (p *pageSafetyService) History(ctx context.Context, entityID, selectedID string) ([]VersionView, int, error) {
 	versions, err := p.repo.ListVersions(ctx, entityID, MaxVersionsPerPage)
 	if err != nil {
-		return nil, apperror.NewInternal(err)
+		return nil, 0, apperror.NewInternal(err)
+	}
+	selected := 0
+	for i := range versions {
+		if versions[i].ID == selectedID {
+			selected = i
+		}
+	}
+	texts := make([]string, len(versions))
+	for i := range versions {
+		texts[i] = versionText(&versions[i])
 	}
 	out := make([]VersionView, len(versions))
 	for i := range versions {
 		out[i].EntityVersion = versions[i]
-		newer := versionText(&versions[i])
+		older := ""
 		if i+1 < len(versions) {
-			older := versionText(&versions[i+1])
-			out[i].Diff = DiffWords(older, newer)
-			out[i].Added, out[i].Removed = CountLineChanges(older, newer)
+			older = texts[i+1]
+			out[i].Added, out[i].Removed = CountLineChanges(older, texts[i])
 		} else {
 			out[i].First = true
-			out[i].Diff = DiffWords("", newer)
+		}
+		if i == selected {
+			out[i].Diff = DiffWords(older, texts[i])
 		}
 	}
-	return out, nil
+	return out, selected, nil
 }
 
 // versionText is what a version's diff compares: its title then its text,
@@ -266,12 +282,16 @@ func (s *entityService) restoreVersion(ctx context.Context, entityID string, v *
 	if err := s.entities.Update(ctx, entity); err != nil {
 		return nil, apperror.NewInternal(err)
 	}
+	// Update leaves search_text alone, so refresh it, or search would still
+	// find the text the restore took away.
 	if entity.Entry != nil {
-		// Update leaves search_text alone; UpdateEntry refreshes it.
 		if err := s.entities.UpdateEntry(ctx, entityID, *entity.Entry, *entity.EntryHTML,
 			buildSearchText(*entity.EntryHTML, entity.FieldsData)); err != nil {
 			return nil, err
 		}
+	} else if err := s.entities.UpdateFields(ctx, entityID, entity.FieldsData,
+		buildSearchText("", entity.FieldsData)); err != nil {
+		return nil, err
 	}
 	s.recordVersion(withVersionKind(ctx, VersionRestore), &before, entity, VersionRestore)
 	s.events.PublishEntityEvent("updated", entity.CampaignID, entityID, entity)

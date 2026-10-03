@@ -52,8 +52,8 @@ func versionAuthor(v VersionView, d HistoryPanelData) string {
 	if v.Kind == VersionBaseline {
 		return "Earlier version"
 	}
-	if v.UserID == nil {
-		return "Someone"
+	if v.Kind == VersionSync || v.UserID == nil {
+		return "Sync or import"
 	}
 	if *v.UserID == d.ViewerID {
 		return "You"

@@ -42,15 +42,26 @@ func RegisterPageSafetyRoutes(e *echo.Echo, h *PageSafetyHandler, campaignSvc ca
 	cg.POST("/trash/:eid/restore", h.RestoreFromTrash, owner)
 }
 
-// pageInCampaign loads a live page and checks it belongs to the campaign in
-// the URL, so an id from another campaign reads as not found.
-func (h *PageSafetyHandler) pageInCampaign(c echo.Context, cc *campaigns.CampaignContext) (*Entity, error) {
-	entity, err := h.entities.GetByID(c.Request().Context(), c.Param("eid"))
+// pageInCampaign loads a live page the caller may see, so an id from another
+// campaign, or a page hidden from this scribe, reads as not found. History
+// holds every past text of the page, so it is gated like the page itself;
+// edit says the caller must also be allowed to change it.
+func (h *PageSafetyHandler) pageInCampaign(c echo.Context, cc *campaigns.CampaignContext, edit bool) (*Entity, error) {
+	ctx := c.Request().Context()
+	entity, err := h.entities.GetByID(ctx, c.Param("eid"))
 	if err != nil {
 		return nil, err
 	}
 	if entity.CampaignID != cc.Campaign.ID {
 		return nil, apperror.NewNotFound("entity not found")
+	}
+	// VisibilityRole, as on the page itself, so a Co-DM sees what the owner sees.
+	access, err := h.entities.CheckEntityAccess(ctx, entity.ID, int(cc.VisibilityRole()), auth.GetUserID(c))
+	if err != nil || !access.CanView {
+		return nil, apperror.NewNotFound("entity not found")
+	}
+	if edit && !access.CanEdit {
+		return nil, apperror.NewForbidden("you can't edit this page")
 	}
 	return entity, nil
 }
@@ -62,22 +73,14 @@ func (h *PageSafetyHandler) History(c echo.Context) error {
 	if cc == nil {
 		return apperror.NewMissingContext()
 	}
-	entity, err := h.pageInCampaign(c, cc)
+	entity, err := h.pageInCampaign(c, cc, false)
 	if err != nil {
 		return err
 	}
 	ctx := c.Request().Context()
-	versions, err := h.svc.History(ctx, entity.ID)
+	versions, selected, err := h.svc.History(ctx, entity.ID, c.QueryParam("v"))
 	if err != nil {
 		return err
-	}
-	selected := 0
-	if v := c.QueryParam("v"); v != "" {
-		for i := range versions {
-			if versions[i].ID == v {
-				selected = i
-			}
-		}
 	}
 	data := HistoryPanelData{
 		CampaignID: cc.Campaign.ID,
@@ -115,7 +118,7 @@ func (h *PageSafetyHandler) RestoreVersion(c echo.Context) error {
 	if cc == nil {
 		return apperror.NewMissingContext()
 	}
-	entity, err := h.pageInCampaign(c, cc)
+	entity, err := h.pageInCampaign(c, cc, true)
 	if err != nil {
 		return err
 	}

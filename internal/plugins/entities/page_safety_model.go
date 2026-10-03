@@ -16,6 +16,9 @@ const (
 	VersionEdit = "edit"
 	// VersionRestore is the state a restore from history saved.
 	VersionRestore = "restore"
+	// VersionSync is a save by a sync client (Foundry) or an import, shown
+	// as "Sync or import" rather than under the key owner's name.
+	VersionSync = "sync"
 	// VersionBaseline is the state a page had before history was kept: the
 	// first save of a page created before this feature records it, so that
 	// save can be undone too. Who wrote it is unknown.
@@ -23,8 +26,12 @@ const (
 )
 
 // versionCoalesceWindow is how long one person's saves keep landing on the
-// same history row. Ten minutes covers an editing session with autosave.
-const versionCoalesceWindow = 10 * time.Minute
+// same history row. Ten minutes covers an editing session with autosave;
+// versionMaxSpan stops a long sitting from folding into one row forever.
+const (
+	versionCoalesceWindow = 10 * time.Minute
+	versionMaxSpan        = time.Hour
+)
 
 // MaxVersionsPerPage caps how many versions a page keeps; the oldest go first.
 const MaxVersionsPerPage = 100
@@ -89,6 +96,15 @@ type actorKey struct{}
 // WithActor returns ctx marked with the user whose request is saving a page.
 func WithActor(ctx context.Context, userID string) context.Context {
 	return context.WithValue(ctx, actorKey{}, userID)
+}
+
+// syncKey marks a save as coming from a sync client or an import.
+type syncKey struct{}
+
+// WithSyncActor is WithActor for a sync client (the API key's user): its
+// saves are listed in history as "Sync or import".
+func WithSyncActor(ctx context.Context, userID string) context.Context {
+	return context.WithValue(WithActor(ctx, userID), syncKey{}, true)
 }
 
 // actorFrom returns the user set by WithActor, or "" when the save has no

@@ -31,9 +31,13 @@ type PageSafetyRepository interface {
 	// EntryRev returns a live page's text revision.
 	EntryRev(ctx context.Context, entityID string) (int, error)
 	// SaveEntryAtRev writes the text only if the stored revision is still
-	// baseRev, and returns the new revision; ok is false when someone else
-	// saved first.
-	SaveEntryAtRev(ctx context.Context, entityID, entryJSON, entryHTML, searchText string, baseRev int) (newRev int, ok bool, err error)
+	// baseRev, and returns the new revision. When someone else saved first it
+	// writes nothing and returns the stored text and revision instead, read
+	// together so they match (ByName is left for the caller).
+	SaveEntryAtRev(ctx context.Context, entityID, entryJSON, entryHTML, searchText string, baseRev int) (newRev int, conflict *EntryConflict, err error)
+
+	// CountTrashedByType counts a page kind's pages waiting in the Trash.
+	CountTrashedByType(ctx context.Context, entityTypeID int) (int, error)
 
 	// TrashSubtree moves a live page and its live sub-pages to the Trash as
 	// one item, and returns the ids that moved, the page first.
@@ -173,24 +177,43 @@ func (r *pageSafetyRepository) EntryRev(ctx context.Context, entityID string) (i
 }
 
 // SaveEntryAtRev is one conditional UPDATE, so two saves racing on the same
-// revision can't both win.
-func (r *pageSafetyRepository) SaveEntryAtRev(ctx context.Context, entityID, entryJSON, entryHTML, searchText string, baseRev int) (int, bool, error) {
+// revision can't both win. The new revision is baseRev+1 by construction;
+// re-reading it could pick up a third save and hide that save's clash.
+func (r *pageSafetyRepository) SaveEntryAtRev(ctx context.Context, entityID, entryJSON, entryHTML, searchText string, baseRev int) (int, *EntryConflict, error) {
 	res, err := r.db.ExecContext(ctx, `UPDATE entities
 		SET entry = ?, entry_html = ?, search_text = ?, entry_rev = entry_rev + 1, updated_at = NOW()
 		WHERE id = ? AND entry_rev = ? AND deleted_at IS NULL`,
 		entryJSON, entryHTML, searchText, entityID, baseRev)
 	if err != nil {
-		return 0, false, fmt.Errorf("saving entity entry: %w", err)
+		return 0, nil, fmt.Errorf("saving entity entry: %w", err)
 	}
 	n, err := res.RowsAffected()
 	if err != nil {
-		return 0, false, fmt.Errorf("checking rows affected: %w", err)
+		return 0, nil, fmt.Errorf("checking rows affected: %w", err)
 	}
-	rev, err := r.EntryRev(ctx, entityID)
+	if n == 1 {
+		return baseRev + 1, nil, nil
+	}
+	c := &EntryConflict{}
+	err = r.db.QueryRowContext(ctx, `SELECT entry_rev, entry, entry_html, updated_at FROM entities
+		WHERE id = ? AND deleted_at IS NULL`, entityID).Scan(&c.Rev, &c.Entry, &c.EntryHTML, &c.At)
+	if errors.Is(err, sql.ErrNoRows) {
+		return 0, nil, apperror.NewNotFound("entity not found")
+	}
 	if err != nil {
-		return 0, false, err
+		return 0, nil, fmt.Errorf("reading stored entry: %w", err)
 	}
-	return rev, n == 1, nil
+	return c.Rev, c, nil
+}
+
+func (r *pageSafetyRepository) CountTrashedByType(ctx context.Context, entityTypeID int) (int, error) {
+	var n int
+	err := r.db.QueryRowContext(ctx, `SELECT COUNT(*) FROM entities
+		WHERE entity_type_id = ? AND deleted_at IS NOT NULL`, entityTypeID).Scan(&n)
+	if err != nil {
+		return 0, fmt.Errorf("counting trashed pages of a kind: %w", err)
+	}
+	return n, nil
 }
 
 // maxTrashDepth bounds the sub-page walk, as FindAncestors bounds its own.

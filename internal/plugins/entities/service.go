@@ -2130,6 +2130,18 @@ func (s *entityService) DeleteEntityType(ctx context.Context, id int) error {
 		return apperror.NewConflict(fmt.Sprintf("cannot delete entity type: %d entities still use it", count))
 	}
 
+	// Pages in the Trash still belong to the kind; deleting it would take them
+	// with it before anyone could restore them.
+	if s.safety != nil {
+		trashed, err := s.safety.CountTrashedByType(ctx, id)
+		if err != nil {
+			return apperror.NewInternal(err)
+		}
+		if trashed > 0 {
+			return apperror.NewConflict(fmt.Sprintf("cannot delete entity type: %d of its pages are in the Trash; restore them or wait until they expire", trashed))
+		}
+	}
+
 	if err := s.types.Delete(ctx, id); err != nil {
 		return apperror.NewInternal(fmt.Errorf("deleting entity type: %w", err))
 	}

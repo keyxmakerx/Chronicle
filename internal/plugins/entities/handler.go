@@ -1784,6 +1784,15 @@ func (h *Handler) UpdateEntryAPI(c echo.Context) error {
 	if entity.CampaignID != cc.Campaign.ID {
 		return apperror.NewNotFound("entity not found")
 	}
+	// A clash answer carries the stored text, so the caller must be allowed
+	// to see and edit this page, as on the page itself.
+	access, err := h.service.CheckEntityAccess(c.Request().Context(), entity.ID, int(cc.VisibilityRole()), auth.GetUserID(c))
+	if err != nil || !access.CanView {
+		return apperror.NewNotFound("entity not found")
+	}
+	if !access.CanEdit {
+		return apperror.NewForbidden("you can't edit this page")
+	}
 
 	var body struct {
 		Entry     string `json:"entry"`

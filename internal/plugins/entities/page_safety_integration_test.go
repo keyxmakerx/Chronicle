@@ -73,7 +73,7 @@ func TestPageSafety_Integration(t *testing.T) {
 		if err := svc.UpdateEntry(asKim, mill.ID, j, h); err != nil {
 			t.Fatal(err)
 		}
-		hist, err := safety.History(ctx, mill.ID)
+		hist, _, err := safety.History(ctx, mill.ID, "")
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -137,7 +137,7 @@ func TestPageSafety_Integration(t *testing.T) {
 	})
 
 	t.Run("restore puts an old version back as a new version", func(t *testing.T) {
-		hist, _ := safety.History(ctx, mill.ID)
+		hist, _, _ := safety.History(ctx, mill.ID, "")
 		var sams *VersionView
 		for i := range hist {
 			if hist[i].UserName == "Sam" && strings.Contains(derefStr(hist[i].EntryHTML), "Lamp oil") &&
@@ -209,6 +209,40 @@ func TestPageSafety_Integration(t *testing.T) {
 		}
 	})
 
+	t.Run("a page kind with pages in the Trash can't be deleted", func(t *testing.T) {
+		kind := &EntityType{
+			CampaignID: campaignID, Slug: "ruins", Name: "Ruin", NamePlural: "Ruins",
+			Icon: "fa-dungeon", Color: "#222222", Fields: []FieldDefinition{}, Layout: DefaultLayout(),
+			SortOrder: 2, Enabled: true,
+		}
+		mustCreate(t, typeRepo, ctx, kind)
+		ruin, err := svc.Create(asSam, campaignID, sam, CreateEntityInput{Name: "Old Tower", EntityTypeID: kind.ID})
+		if err != nil {
+			t.Fatal(err)
+		}
+		if err := svc.Delete(asSam, ruin.ID); err != nil {
+			t.Fatal(err)
+		}
+		var ae *apperror.AppError
+		err = svc.DeleteEntityType(ctx, kind.ID)
+		if !errors.As(err, &ae) || ae.Code != 409 || !strings.Contains(ae.Message, "1 of its pages are in the Trash") {
+			t.Fatalf("want a 409 naming the trashed page, got %v", err)
+		}
+	})
+
+	t.Run("a refused save returns the stored text and revision", func(t *testing.T) {
+		rev, _ := svc.EntryRev(ctx, cellar.ID)
+		j, h := doc("first")
+		if _, c, err := svc.SaveEntry(asSam, cellar.ID, j, h, &rev); err != nil || c != nil {
+			t.Fatalf("save: conflict=%+v err=%v", c, err)
+		}
+		j2, h2 := doc("second")
+		_, c, err := svc.SaveEntry(asKim, cellar.ID, j2, h2, &rev)
+		if err != nil || c == nil || c.Rev != rev+1 || derefStr(c.EntryHTML) != h {
+			t.Fatalf("want conflict at rev %d with %q, got %+v err=%v", rev+1, h, c, err)
+		}
+	})
+
 	t.Run("purge removes pages that waited out the retention", func(t *testing.T) {
 		mustExec(t, db, `UPDATE entities SET deleted_at = ? WHERE id = ?`, time.Now().UTC().AddDate(0, 0, -31), mill.ID)
 		safety.(*pageSafetyService).purgeOnce(ctx)
@@ -233,7 +267,7 @@ func TestPageSafety_Integration(t *testing.T) {
 		if err := svc.UpdateEntry(asKim, id, j, h); err != nil {
 			t.Fatal(err)
 		}
-		hist, _ := safety.History(ctx, id)
+		hist, _, _ := safety.History(ctx, id, "")
 		if len(hist) != 2 || hist[1].Kind != VersionBaseline || derefStr(hist[1].EntryHTML) != "<p>old text</p>" {
 			t.Errorf("want edit + baseline of the old text, got %+v", hist)
 		}
