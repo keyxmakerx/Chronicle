@@ -207,6 +207,12 @@ type packageService struct {
 	// must not import systems). PruneStaleVersions FAILS CLOSED when nil.
 	loadedDirsFn func() map[string]bool
 
+	// campaignVersionsFn returns, per system package slug, every version some
+	// campaign is on or holds for approval; injected via
+	// SetCampaignVersionsProvider. PruneStaleVersions FAILS CLOSED when it is
+	// nil or returns an error.
+	campaignVersionsFn func(ctx context.Context) (map[string]map[string]bool, error)
+
 	// postInstallVerifier, when set, checks AFTER a system install (and
 	// the registry rescan) that the loader is actually SERVING the newly
 	// installed dir+version. Injected from the app layer over

@@ -17,6 +17,8 @@ func prunePkgEnv(t *testing.T, installedVersion string, versions []string) (*pac
 	mediaDir := t.TempDir()
 	svcIface := NewPackageService(repo, newOfflineGitHubClient(), mediaDir, "http://x")
 	svc := svcIface.(*packageService)
+	// No campaign is on any version unless a test says so.
+	svc.campaignVersionsFn = func(context.Context) (map[string]map[string]bool, error) { return nil, nil }
 
 	slugDir := filepath.Join(svc.packagesDir(), "systems", "drawsteel")
 	for _, v := range versions {

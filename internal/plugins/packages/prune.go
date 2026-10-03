@@ -63,16 +63,25 @@ func (s *packageService) PruneStaleVersions(ctx context.Context, keepNewest int,
 // prune is the one deletion path for both the manual card and the automatic
 // rule, so there is exactly one protected set. Never deleted, whatever the
 // rule: the DB-installed version, a pinned version, any dir the loader is
-// serving, and every foundry-module folder (pin-served to campaigns).
-// Campaigns record no system version of their own (campaign_addons holds only
-// the enabled system), so "the version a campaign is on" is the installed one
-// the loader serves. ruleFor returns the rule per package; a manual rule skips
-// the package. Fails closed when the loader signal is unwired.
+// serving, every version a campaign is on or holds for approval, and every
+// foundry-module folder (pin-served to campaigns).
+// ruleFor returns the rule per package; a manual rule skips the package.
+// Fails closed when the loader signal or the campaign versions provider is
+// unwired, or when reading campaign versions errors: a campaign's version
+// missing from the answer would be deleted from under it.
 func (s *packageService) prune(ctx context.Context, ruleFor func(*Package) retentionRule, dryRun bool) (*PruneResult, error) {
 	if s.loadedDirsFn == nil {
 		return nil, fmt.Errorf("cannot prune: loaded-dirs provider not wired (fail closed)")
 	}
 	loaded := s.loadedDirsFn()
+
+	if s.campaignVersionsFn == nil {
+		return nil, fmt.Errorf("cannot prune: campaign versions provider not wired (fail closed)")
+	}
+	kept, err := s.campaignVersionsFn(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("cannot prune: reading campaign versions failed, keeping everything: %w", err)
+	}
 
 	pkgs, err := s.repo.ListPackages(ctx)
 	if err != nil {
@@ -90,7 +99,7 @@ func (s *packageService) prune(ctx context.Context, ruleFor func(*Package) reten
 		if rule.Mode == RetentionManual {
 			continue
 		}
-		s.pruneOnePackage(ctx, pkg, rule, now, dryRun, loaded, res)
+		s.pruneOnePackage(ctx, pkg, rule, now, dryRun, loaded, kept[pkg.Slug], res)
 	}
 
 	if !dryRun && len(res.Removed) > 0 && s.onServeInvalidate != nil {
@@ -107,7 +116,7 @@ func (s *packageService) prune(ctx context.Context, ruleFor func(*Package) reten
 // either fully committed (then protected as InstalledVersion) or not yet on
 // disk before we ReadDir. Different packages don't contend; the lock is
 // released (deferred) before the caller moves to the next package.
-func (s *packageService) pruneOnePackage(ctx context.Context, pkg *Package, rule retentionRule, now time.Time, dryRun bool, loaded map[string]bool, res *PruneResult) {
+func (s *packageService) pruneOnePackage(ctx context.Context, pkg *Package, rule retentionRule, now time.Time, dryRun bool, loaded map[string]bool, campaignKept map[string]bool, res *PruneResult) {
 	mu := s.lockForPackage(pkg.ID)
 	mu.Lock()
 	defer mu.Unlock()
@@ -148,6 +157,9 @@ func (s *packageService) pruneOnePackage(ctx context.Context, pkg *Package, rule
 	}
 
 	for _, v := range selectRemovable(folders, pkg.InstalledVersion, pkg.PinnedVersion, rule, now) {
+		if campaignKept[v] {
+			continue // a campaign is on this version or holds it for approval
+		}
 		full := filepath.Join(slugDir, v)
 		sv := StaleVersion{Slug: pkg.Slug, Version: v, Path: full, Size: dirSize(full)}
 		res.Reclaimable = append(res.Reclaimable, sv)

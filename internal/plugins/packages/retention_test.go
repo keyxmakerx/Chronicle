@@ -441,3 +441,38 @@ func TestPinTakesPackageLockAndProtectsPinned(t *testing.T) {
 		t.Error("a pinned version must survive the clean-up")
 	}
 }
+
+// Automatic clean-up shares prune() with the manual card, so a version a
+// campaign is on or holds for approval survives it too, and a failed
+// campaign lookup deletes nothing.
+func TestRunRetentionKeepsCampaignVersions(t *testing.T) {
+	svc, _, slugDir := retentionEnv(t, nil)
+	svc.settings = memSettings{settingRetentionMode: "keep_newest", settingRetentionKeepNewest: "1"}
+	svc.campaignVersionsFn = func(context.Context) (map[string]map[string]bool, error) {
+		return map[string]map[string]bool{"drawsteel": {"1.0.0": true}}, nil
+	}
+	if _, err := svc.RunRetention(context.Background()); err != nil {
+		t.Fatalf("RunRetention: %v", err)
+	}
+	got := existing(t, slugDir, "1.0.0", "1.1.0")
+	if !got["1.0.0"] {
+		t.Error("version a campaign is on must survive automatic clean-up")
+	}
+	if got["1.1.0"] {
+		t.Error("unprotected old version should be removed")
+	}
+}
+
+func TestRunRetentionFailsClosedWhenCampaignLookupFails(t *testing.T) {
+	svc, _, slugDir := retentionEnv(t, nil)
+	svc.settings = memSettings{settingRetentionMode: "keep_newest", settingRetentionKeepNewest: "1"}
+	svc.campaignVersionsFn = func(context.Context) (map[string]map[string]bool, error) {
+		return nil, errors.New("db down")
+	}
+	if _, err := svc.RunRetention(context.Background()); err == nil {
+		t.Fatal("must fail closed")
+	}
+	if got := existing(t, slugDir, "1.0.0", "1.1.0"); !got["1.0.0"] || !got["1.1.0"] {
+		t.Error("nothing may be deleted when campaign versions are unknown")
+	}
+}

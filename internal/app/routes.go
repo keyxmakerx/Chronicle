@@ -3039,6 +3039,24 @@ func (a *App) RegisterRoutes() {
 	securityRepo := admin.NewSecurityEventRepository(a.DB)
 	securityService := admin.NewSecurityService(securityRepo, authRepo, authService)
 	adminHandler.SetSecurityService(securityService)
+
+	// Per-campaign update modes (automatic / stay on a version / ask first).
+	// Server side only for now: no route reads it yet. The service holds the
+	// game-system binding; the Foundry binding joins below if that plugin is
+	// healthy. When the packages tables are degraded none of this is wired,
+	// and clean-up stays refused because its campaign-versions provider is
+	// unset (fail closed).
+	var pkgUpdateSvc packages.CampaignUpdateService
+	if a.PluginHealth.IsHealthy("packages") {
+		pkgUpdateSvc = packages.NewCampaignUpdateService(
+			packages.NewCampaignUpdateRepository(a.DB), pkgService, securityService)
+		// Clean-up must never delete a version some campaign is on.
+		packages.SetCampaignVersionsProvider(pkgService, pkgUpdateSvc.KeptVersions)
+		// Freeze pinned / ask-first campaigns when a system installs.
+		packages.RegisterPostInstallHook(pkgService,
+			packages.NewUpdateModeHook(pkgUpdateSvc, packages.PackageTypeSystem))
+	}
+
 	// Drops a disabled account's live sockets in every campaign, so a
 	// socket that authenticated before the disable can't keep receiving.
 	// See wsRevokerHolder — wsHub itself is constructed further down.
@@ -3113,6 +3131,15 @@ func (a *App) RegisterRoutes() {
 		// foundry-module install so the admin sees the version spread
 		// instead of silently bumping everyone.
 		packages.RegisterPostInstallHook(pkgService, foundry_vtt.NewAutoPinHook(fvttService))
+		// Update modes for the Foundry module read the same pin and pin mode.
+		// Registered AFTER the auto-pin hook: it reads the state that hook
+		// leaves behind and then handles ask-first campaigns.
+		if pkgUpdateSvc != nil {
+			pkgUpdateSvc.RegisterBinding(foundry_vtt.NewCampaignBinding(
+				fvttService, fvttCampaignAdapter, foundry_vtt.NewCampaignPinLister(a.DB)))
+			packages.RegisterPostInstallHook(pkgService,
+				packages.NewUpdateModeHook(pkgUpdateSvc, packages.PackageTypeFoundryModule))
+		}
 
 		// One-time auto-pin migration for pre-feature campaigns: pins all
 		// auto-tracking campaigns to the currently-installed version so
@@ -3147,6 +3174,19 @@ func (a *App) RegisterRoutes() {
 		foundry_vtt.RegisterPublicRoutes(e, fvttHandler, middleware.RateLimit(300, time.Minute))
 	} else {
 		slog.Warn("foundry_vtt plugin degraded — routes not registered")
+	}
+
+	// Idempotent boot pass for the update modes: held versions agree with the
+	// installed version, empty rows go. Best effort; a failure is retried on
+	// the next boot and changes nothing a campaign is served.
+	if pkgUpdateSvc != nil {
+		if res, err := pkgUpdateSvc.Reconcile(context.Background()); err != nil {
+			slog.Error("update modes reconcile failed", slog.Any("error", err))
+		} else {
+			slog.Info("update modes reconciled",
+				slog.Int("held_set", res.HeldSet), slog.Int("held_cleared", res.HeldCleared),
+				slog.Int64("rows_removed", res.RowsRemoved))
+		}
 	}
 
 	// Sync API plugin: external tool integration with API key auth,
