@@ -10,10 +10,16 @@ import (
 
 // NPCCardComponent renders a single NPC card with portrait and metadata.
 templ NPCCardComponent(cc *campaigns.CampaignContext, card *NPCCard, csrfToken string) {
-	<div class="card p-0 overflow-hidden group relative">
+	<div
+		class="card p-0 overflow-hidden group relative"
+		data-cast-card="true"
+		data-entity-name={ card.Name }
+		data-preview-url={ fmt.Sprintf("/campaigns/%s/entities/%s/preview", cc.Campaign.ID, card.ID) }
+	>
 		<!-- Link to entity page -->
 		<a
 			href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/entities/%s", cc.Campaign.ID, card.ID)) }
+			data-cast-link="true"
 			class="block"
 		>
 			<!-- Portrait -->
@@ -63,41 +69,48 @@ templ NPCCardComponent(cc *campaigns.CampaignContext, card *NPCCard, csrfToken s
 			</div>
 		</a>
 
-		<!-- Reveal toggle (Scribe+ only) -->
+		<!-- Reveal chip (Scribe+ only); anonymous and player viewers have MemberRole < Scribe -->
 		if cc.MemberRole >= campaigns.RoleScribe {
-			<div class="absolute top-2 right-2" id={ fmt.Sprintf("reveal-%s", card.ID) }>
+			<div class="absolute top-2 left-2 z-10" id={ fmt.Sprintf("reveal-%s", card.ID) }>
 				@RevealBadge(card.ID, cc.Campaign.ID, card.IsPrivate, csrfToken)
 			</div>
 		}
+		<!-- Quick look: same hook the party cards use, wired by characters.js -->
+		<button
+			type="button"
+			data-cast-peek="true"
+			title="Quick look"
+			aria-label={ "Quick look at " + card.Name }
+			class="absolute top-2 right-2 z-10 inline-flex items-center justify-center w-7 h-7 rounded-md bg-surface/90 border border-edge text-fg-muted opacity-0 group-hover:opacity-100 focus-visible:opacity-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent hover:text-accent hover:border-accent transition-all"
+		>
+			<i class="fa-solid fa-expand text-xs"></i>
+		</button>
 	</div>
 }
 
-// RevealBadge renders the visibility toggle button for an NPC.
-// Swapped via HTMX when toggled. Private = eye-slash (hidden), public = eye (revealed).
+// RevealBadge renders the labelled shown/hidden chip for an NPC. Swapped via
+// HTMX when toggled; aria-pressed is true while the NPC is shown to players.
 templ RevealBadge(entityID string, campaignID string, isPrivate bool, csrfToken string) {
-	if isPrivate {
-		<button
-			class="w-7 h-7 rounded-full flex items-center justify-center bg-black/50 text-white/70 hover:text-white hover:bg-red-600/80 transition-colors backdrop-blur-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white"
-			title="Hidden from players — click to reveal"
-			aria-label="Reveal this NPC to players"
-			hx-post={ fmt.Sprintf("/campaigns/%s/npcs/%s/reveal", campaignID, entityID) }
-			hx-headers={ fmt.Sprintf(`{"X-CSRF-Token":"%s"}`, csrfToken) }
-			hx-target={ fmt.Sprintf("#reveal-%s", entityID) }
-			hx-swap="innerHTML"
-		>
-			<i class="fa-solid fa-eye-slash text-[10px]"></i>
-		</button>
-	} else {
-		<button
-			class="w-7 h-7 rounded-full flex items-center justify-center bg-black/50 text-emerald-400 hover:text-white hover:bg-emerald-600/80 transition-colors backdrop-blur-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white"
-			title="Visible to players — click to hide"
-			aria-label="Hide this NPC from players"
-			hx-post={ fmt.Sprintf("/campaigns/%s/npcs/%s/reveal", campaignID, entityID) }
-			hx-headers={ fmt.Sprintf(`{"X-CSRF-Token":"%s"}`, csrfToken) }
-			hx-target={ fmt.Sprintf("#reveal-%s", entityID) }
-			hx-swap="innerHTML"
-		>
-			<i class="fa-solid fa-eye text-[10px]"></i>
-		</button>
-	}
+	<button
+		type="button"
+		class={ "inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-semibold backdrop-blur-sm transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white",
+			templ.KV("bg-black/60 text-white/80 hover:bg-black/80", isPrivate),
+			templ.KV("bg-emerald-600/90 text-white hover:bg-emerald-700", !isPrivate) }
+		aria-pressed={ fmt.Sprintf("%t", !isPrivate) }
+		if isPrivate {
+			title="Hidden from players. Click to show them."
+		} else {
+			title="Shown to players. Click to hide."
+		}
+		hx-post={ fmt.Sprintf("/campaigns/%s/npcs/%s/reveal", campaignID, entityID) }
+		hx-headers={ fmt.Sprintf(`{"X-CSRF-Token":"%s"}`, csrfToken) }
+		hx-target={ fmt.Sprintf("#reveal-%s", entityID) }
+		hx-swap="innerHTML"
+	>
+		if isPrivate {
+			<span aria-hidden="true">&#9675;</span> Hidden
+		} else {
+			<span aria-hidden="true">&#9679;</span> Shown
+		}
+	</button>
 }

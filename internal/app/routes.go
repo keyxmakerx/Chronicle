@@ -913,7 +913,7 @@ var navAppCatalog = []navAppDef{
 	{slug: "calendar", label: "Calendar", icon: "fa-calendar-days", path: "/apps/calendar", addons: []string{calendar.PluginSlug}, access: campaigns.NavAccessMemberOrAdmin, pinned: true},
 	{slug: "sessions", label: "Sessions", icon: "fa-dice-d20", path: "/sessions", addons: []string{calendar.PluginSlug}, access: campaigns.NavAccessAnyone},
 	{slug: "maps", label: "Maps", icon: "fa-map", path: "/maps", addons: []string{"maps"}, access: campaigns.NavAccessAnyone},
-	{slug: "characters", label: "Characters", icon: "fa-masks-theater", path: "/characters", caption: "Party & NPCs", addons: []string{entities.AddonPlayerCharacterClaiming, "npcs"}, access: campaigns.NavAccessMember},
+	{slug: "characters", label: "Characters", icon: "fa-masks-theater", path: "/characters", caption: "Party & NPCs", addons: []string{entities.AddonPlayerCharacterClaiming, "npcs"}, access: campaigns.NavAccessAnyone},
 	{slug: "armory", label: "Armory", icon: "fa-shield-halved", path: "/armory", addons: []string{"armory"}, access: campaigns.NavAccessAnyone},
 	{slug: "timeline", label: "Timeline", icon: "fa-timeline", path: "/timelines", addons: []string{"timeline"}, access: campaigns.NavAccessAnyone},
 	{slug: "rulebook", label: "Rulebook", icon: "fa-book", system: true, access: campaigns.NavAccessMemberOrAdmin},
@@ -1638,6 +1638,30 @@ type npcVisibilityTogglerAdapter struct {
 // npcs reveal toggle can't reach across campaigns (SEC-IDOR-1).
 func (a *npcVisibilityTogglerAdapter) TogglePrivate(ctx context.Context, entityID, campaignID string) (bool, error) {
 	return a.svc.TogglePrivateInCampaign(ctx, entityID, campaignID)
+}
+
+// npcTagListerAdapter wraps tags.TagService to implement npcs.TagLister so NPC
+// cards carry tags and the Characters page can offer a tag filter. dm_only tags
+// are included only when the caller asks (the npcs handler decides by role).
+type npcTagListerAdapter struct {
+	svc tags.TagService
+}
+
+// ListTagsForEntities batch-fetches tags for the given entities.
+func (a *npcTagListerAdapter) ListTagsForEntities(ctx context.Context, entityIDs []string, includeDmOnly bool) (map[string][]npcs.TagInfo, error) {
+	tagsMap, err := a.svc.GetEntityTagsBatch(ctx, entityIDs, includeDmOnly)
+	if err != nil {
+		return nil, err
+	}
+	result := make(map[string][]npcs.TagInfo, len(tagsMap))
+	for eid, tagList := range tagsMap {
+		infos := make([]npcs.TagInfo, len(tagList))
+		for i, t := range tagList {
+			infos[i] = npcs.TagInfo{ID: t.ID, Name: t.Name, Slug: t.Slug, Color: t.Color}
+		}
+		result[eid] = infos
+	}
+	return result, nil
 }
 
 // auditEntityViewGuardAdapter wraps entities.EntityService to implement the
@@ -3144,6 +3168,7 @@ func (a *App) RegisterRoutes() {
 	// second, hand-rolled predicate.
 	npcRepo := npcs.NewNPCRepository(a.DB)
 	npcSvc := npcs.NewNPCService(npcRepo, &npcEntityTypeFinderAdapter{svc: entityService}, &entityVisibilityFilterAdapter{svc: entityService})
+	npcSvc.SetTagLister(&npcTagListerAdapter{svc: tagService})
 	npcHandler := npcs.NewHandler(npcSvc)
 	npcHandler.SetVisibilityToggler(&npcVisibilityTogglerAdapter{svc: entityService})
 	npcs.RegisterRoutes(e, npcHandler, campaignService, authService, addonService)

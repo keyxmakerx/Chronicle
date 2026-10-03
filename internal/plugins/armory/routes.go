@@ -32,12 +32,14 @@ func RegisterRoutes(e *echo.Echo, h *Handler, th *TransactionHandler, ih *Instan
 		addons.RequireAddon(addonSvc, "armory"),
 	)
 
-	// Instance management (Owner for create/update/delete, Player for list).
+	// Instance management: Scribe+ (owner included) creates, renames, deletes
+	// collections and edits their items; Player may only list.
 	cg.GET("/armory/instances", ih.ListInstances, campaigns.RequireRole(campaigns.RolePlayer))
-	cg.GET("/armory/instances/manage", h.ManageInstances, campaigns.RequireRole(campaigns.RoleOwner))
-	cg.POST("/armory/instances", ih.CreateInstance, campaigns.RequireRole(campaigns.RoleOwner))
-	cg.PUT("/armory/instances/:iid", ih.UpdateInstance, campaigns.RequireRole(campaigns.RoleOwner))
-	cg.DELETE("/armory/instances/:iid", ih.DeleteInstance, campaigns.RequireRole(campaigns.RoleOwner))
+	cg.GET("/armory/instances/manage", h.ManageInstances, campaigns.RequireRole(campaigns.RoleScribe))
+	cg.POST("/armory/instances", ih.CreateInstance, campaigns.RequireRole(campaigns.RoleScribe))
+	cg.PUT("/armory/instances/:iid", ih.UpdateInstance, campaigns.RequireRole(campaigns.RoleScribe))
+	cg.DELETE("/armory/instances/:iid", ih.DeleteInstance, campaigns.RequireRole(campaigns.RoleScribe))
+	cg.GET("/armory/items/:eid/collections", ih.ItemCollections, campaigns.RequireRole(campaigns.RoleScribe))
 	cg.POST("/armory/instances/:iid/items", ih.AddItem, campaigns.RequireRole(campaigns.RoleScribe))
 	cg.DELETE("/armory/instances/:iid/items/:eid", ih.RemoveItem, campaigns.RequireRole(campaigns.RoleScribe))
 

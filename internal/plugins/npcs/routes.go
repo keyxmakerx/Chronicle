@@ -31,4 +31,5 @@ func RegisterRoutes(e *echo.Echo, h *Handler, campaignSvc campaigns.CampaignServ
 	)
 	pub.GET("/npcs", h.Index, campaigns.RequireViewAccess())
 	pub.GET("/npcs/count", h.CountAPI, campaigns.RequireViewAccess())
+	pub.GET("/npcs/section", h.SectionFragment, campaigns.RequireViewAccess())
 }

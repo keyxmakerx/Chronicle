@@ -29,6 +29,10 @@ func (stubNPCSvc) ListNPCs(context.Context, string, int, string, NPCListOptions)
 	return nil, 0, nil
 }
 func (stubNPCSvc) CountNPCs(context.Context, string, int, string) (int, error) { return 0, nil }
+func (stubNPCSvc) ListTags(context.Context, string, int, string, bool) ([]NPCTagInfo, error) {
+	return nil, nil
+}
+func (stubNPCSvc) SetTagLister(TagLister) {}
 
 type stubCampaignSvc struct {
 	campaigns.CampaignService

@@ -97,12 +97,15 @@ func (h *Handler) Index(c echo.Context) error {
 		selectedInstance, _ = h.instSvc.GetInstance(c.Request().Context(), cc.Campaign.ID, opts.InstanceID)
 	}
 
+	// A failed tag lookup only hides the filter; the gallery still works.
+	tagOptions, _ := h.svc.ListTagOptions(c.Request().Context(), cc.Campaign.ID, cc.VisibilityRole(), userID)
+
 	csrfToken := middleware.GetCSRFToken(c)
 
 	if middleware.IsHTMX(c) {
-		return middleware.Render(c, http.StatusOK, ArmoryGalleryContent(cc, cards, total, opts, itemTypes, instances, selectedInstance, csrfToken))
+		return middleware.Render(c, http.StatusOK, ArmoryGalleryContent(cc, cards, total, opts, itemTypes, instances, selectedInstance, tagOptions, csrfToken))
 	}
-	return middleware.Render(c, http.StatusOK, ArmoryGalleryPage(cc, cards, total, opts, itemTypes, instances, selectedInstance, csrfToken))
+	return middleware.Render(c, http.StatusOK, ArmoryGalleryPage(cc, cards, total, opts, itemTypes, instances, selectedInstance, tagOptions, csrfToken))
 }
 
 // CountAPI returns the item count as JSON at GET /campaigns/:id/armory/count.
@@ -125,7 +128,7 @@ func (h *Handler) CountAPI(c echo.Context) error {
 }
 
 // ManageInstances renders the instance management panel (HTMX fragment).
-// GET /campaigns/:id/armory/instances/manage (Owner only).
+// GET /campaigns/:id/armory/instances/manage (Scribe+).
 func (h *Handler) ManageInstances(c echo.Context) error {
 	cc := campaigns.GetCampaignContext(c)
 	if cc == nil {

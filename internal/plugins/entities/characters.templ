@@ -41,7 +41,7 @@ templ CharactersContent(cc *campaigns.CampaignContext, view CastView) {
 			<h1 class="text-2xl font-bold text-fg">Characters</h1>
 			<p class="mt-1 text-sm text-fg-secondary">The cast of { cc.Campaign.Name }.</p>
 		</div>
-		if view.ShowPlayers {
+		if view.ShowPlayers && view.IsMember {
 			<a
 				href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/me", cc.Campaign.ID)) }
 				class="text-sm text-fg-secondary hover:text-fg whitespace-nowrap"
@@ -55,7 +55,11 @@ templ CharactersContent(cc *campaigns.CampaignContext, view CastView) {
 		<section class="mb-8">
 			<h2 class="section-header mb-3">The Party</h2>
 			if len(view.Party) == 0 {
-				@castEmpty("fa-users", "No player characters yet", "Claimed characters appear here. Players can claim a character from its page.")
+				if view.ClaimTypeID != 0 {
+					@castEmptyLink("fa-users", "No player characters yet", "Claimed characters appear here.", "Find a character to claim →", fmt.Sprintf("/campaigns/%s/entities?type=%d", cc.Campaign.ID, view.ClaimTypeID))
+				} else {
+					@castEmpty("fa-users", "No player characters yet", "Claimed characters appear here. Players can claim a character from its page.")
+				}
 			} else {
 				<div class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-4">
 					for _, m := range view.Party {
@@ -137,6 +141,18 @@ templ castCard(campaignID string, m CastMember) {
 		>
 			<i class="fa-solid fa-expand text-xs"></i>
 		</button>
+	</div>
+}
+
+// castEmptyLink is castEmpty plus a link to where the action happens.
+templ castEmptyLink(icon, title, desc, linkText, href string) {
+	<div class="rounded-lg border border-edge bg-surface p-6 text-center">
+		<div class="inline-flex items-center justify-center w-10 h-10 rounded-full bg-accent/10 text-accent mb-3">
+			<i class={ "fa-solid " + icon }></i>
+		</div>
+		<h3 class="text-sm font-semibold text-fg mb-1">{ title }</h3>
+		<p class="text-xs text-fg-secondary max-w-sm mx-auto">{ desc }</p>
+		<a href={ templ.SafeURL(href) } class="inline-block mt-3 text-xs font-medium text-accent hover:underline">{ linkText }</a>
 	</div>
 }
 

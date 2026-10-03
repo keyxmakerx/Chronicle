@@ -106,6 +106,17 @@ type InventoryInstance struct {
 	UpdatedAt   time.Time `json:"updated_at"`
 }
 
+// ItemCollection describes one collection from the viewpoint of a single
+// item, so the card menu can tick the collections that already hold it.
+type ItemCollection struct {
+	ID        int    `json:"id"`
+	Name      string `json:"name"`
+	Icon      string `json:"icon"`
+	Color     string `json:"color"`
+	ItemCount int    `json:"itemCount"`
+	HasItem   bool   `json:"hasItem"`
+}
+
 // CreateInstanceInput is the request payload for creating/updating an instance.
 type CreateInstanceInput struct {
 	Name        string `json:"name"`

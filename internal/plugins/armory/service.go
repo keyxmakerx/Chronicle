@@ -5,6 +5,8 @@ package armory
 import (
 	"context"
 	"fmt"
+	"sort"
+	"strings"
 
 	"github.com/keyxmakerx/chronicle/internal/permissions"
 )
@@ -56,6 +58,11 @@ type ArmoryService interface {
 	// GetItemTypes returns all item-category entity types for filter dropdowns.
 	GetItemTypes(ctx context.Context, campaignID string) ([]ItemTypeInfo, error)
 
+	// ListTagOptions returns the distinct tags on the items the viewer may
+	// see, for the gallery's tag filter. GM-only tags are excluded below
+	// Scribe, so the filter can never reveal a hidden tag's existence.
+	ListTagOptions(ctx context.Context, campaignID string, role int, userID string) ([]ItemTagInfo, error)
+
 	// SetTagLister injects the tag batch fetcher that decorates item cards.
 	SetTagLister(tl TagLister)
 }
@@ -96,6 +103,26 @@ func (s *armoryService) ListItems(ctx context.Context, campaignID string, role i
 		return nil, 0, nil
 	}
 
+	// Below Scribe a tag slug is honoured only if it is one the viewer is
+	// offered, so a GM-only or nonexistent slug yields the same empty result
+	// and cannot be used to probe for hidden tags.
+	if opts.Tag != "" && role < permissions.RoleOwner {
+		offered, err := s.ListTagOptions(ctx, campaignID, role, userID)
+		if err != nil {
+			return nil, 0, err
+		}
+		found := false
+		for _, t := range offered {
+			if t.Slug == opts.Tag {
+				found = true
+				break
+			}
+		}
+		if !found {
+			return nil, 0, nil
+		}
+	}
+
 	visibleIDs, err := s.visibleItemIDs(ctx, campaignID, typeIDs, role, userID, opts)
 	if err != nil {
 		return nil, 0, err
@@ -130,6 +157,50 @@ func (s *armoryService) ListItems(ctx context.Context, campaignID string, role i
 	}
 
 	return cards, total, nil
+}
+
+// ListTagOptions collects tags from the viewer's visible items (not just the
+// current page) so the filter offers every reachable tag. It reuses the
+// visibility path and the card tag fetcher, which already applies the
+// dm_only rule, instead of adding a second tag source to keep in sync.
+func (s *armoryService) ListTagOptions(ctx context.Context, campaignID string, role int, userID string) ([]ItemTagInfo, error) {
+	if s.tagLister == nil {
+		return nil, nil
+	}
+	typeIDs, err := s.typeFinder.FindItemTypeIDs(ctx, campaignID)
+	if err != nil {
+		return nil, fmt.Errorf("resolving item types: %w", err)
+	}
+	if len(typeIDs) == 0 {
+		return nil, nil
+	}
+	ids, err := s.visibleItemIDs(ctx, campaignID, typeIDs, role, userID, ItemListOptions{})
+	if err != nil || len(ids) == 0 {
+		return nil, err
+	}
+	tagMap, err := s.tagLister.ListTagsForEntities(ctx, ids, role >= permissions.RoleOwner)
+	if err != nil {
+		return nil, fmt.Errorf("listing tags for filter: %w", err)
+	}
+	seen := make(map[string]bool)
+	var out []ItemTagInfo
+	for _, infos := range tagMap {
+		for _, t := range infos {
+			if t.Slug == "" || seen[t.Slug] {
+				continue
+			}
+			seen[t.Slug] = true
+			out = append(out, ItemTagInfo(t))
+		}
+	}
+	sort.Slice(out, func(i, j int) bool {
+		a, b := strings.ToLower(out[i].Name), strings.ToLower(out[j].Name)
+		if a != b {
+			return a < b
+		}
+		return out[i].Slug < out[j].Slug
+	})
+	return out, nil
 }
 
 // CountItems resolves item types and returns the visible count, computed
