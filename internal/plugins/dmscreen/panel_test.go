@@ -29,6 +29,17 @@ func TestPanel(t *testing.T) {
 			want: []string{"Only the campaign owner can switch this.", "1 request waiting on you", "/campaigns/c1/armory/stashes"},
 		},
 		{
+			name:    "scribe gets no confirm and nothing that posts",
+			view:    View{CampaignID: "c1", Downtime: &DowntimeView{CanToggle: false}},
+			notWant: []string{"data-dms-confirm", "armory/downtime"},
+		},
+		{
+			name: "owner's switch only asks; the confirm's yes button posts",
+			view: View{CampaignID: "c1", Downtime: &DowntimeView{Open: false, CanToggle: true, Pending: 2}},
+			want: []string{"data-dms-ask", "data-dms-confirm", "Start downtime? 2 waiting requests go through now and shops open.",
+				`hx-post="/campaigns/c1/armory/downtime"`, `hx-vals="{&#34;open&#34;:&#34;true&#34;}"`, "data-dms-cancel"},
+		},
+		{
 			name: "heroes start folded with the bar and resource chip on the line",
 			view: View{CampaignID: "c1", PartyFilled: true, Party: []HeroView{{
 				Name: "Aria", PlayerName: "Sam", Subtitle: "Tactician", Conditions: []string{"Bleeding", "Slowed"}, Meters: []MeterView{
@@ -103,6 +114,28 @@ func TestHeroView_Folded(t *testing.T) {
 			}
 			if got != tt.wantBar || len(chips) != tt.wantChips || len(rest) != tt.wantRest {
 				t.Fatalf("bar=%q chips=%d rest=%d, want %q %d %d", got, len(chips), len(rest), tt.wantBar, tt.wantChips, tt.wantRest)
+			}
+		})
+	}
+}
+
+func TestDowntimeConfirm(t *testing.T) {
+	tests := []struct {
+		name     string
+		d        DowntimeView
+		wantText string
+		wantYes  string
+	}{
+		{"open ends it", DowntimeView{Open: true}, "End downtime? Moves will need your OK again and shops close.", "End downtime"},
+		{"nothing waiting", DowntimeView{}, "Start downtime? Moves will happen at once and shops open.", "Start downtime"},
+		{"one waiting", DowntimeView{Pending: 1}, "Start downtime? 1 waiting request goes through now and shops open.", "Start downtime"},
+		{"several waiting", DowntimeView{Pending: 3}, "Start downtime? 3 waiting requests go through now and shops open.", "Start downtime"},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			text, yes := tc.d.Confirm()
+			if text != tc.wantText || yes != tc.wantYes {
+				t.Fatalf("got %q / %q", text, yes)
 			}
 		})
 	}
