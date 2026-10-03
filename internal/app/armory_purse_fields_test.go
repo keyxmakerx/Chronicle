@@ -26,6 +26,8 @@ func TestPurseFields(t *testing.T) {
 		{"silver without gold has no purse", num("sp", "cp"), nil},
 		{"a text coin field does not count", append(num("gp"), entities.FieldDefinition{Key: "sp", Type: "text"}), nil},
 		{"wealth sheet", num("wealth"), nil},
+		{"gold and platinum cannot give change", num("gp", "pp"), nil},
+		{"no copper means no purse", num("gp", "sp", "ep"), nil},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {

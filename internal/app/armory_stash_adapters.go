@@ -37,7 +37,7 @@ func moneyField(fields []entities.FieldDefinition) (key, label string) {
 }
 
 // purseFields maps each 5e coin to its sheet field when the type has numeric
-// gp plus at least one of cp, sp, ep or pp. A gold-only type has no purse and
+// gp, sp and cp (ep and pp join when present). Any other type has no purse and
 // keeps paying from gp alone.
 func purseFields(fields []entities.FieldDefinition) map[string]string {
 	have := map[string]bool{}
@@ -46,17 +46,16 @@ func purseFields(fields []entities.FieldDefinition) map[string]string {
 			have[f.Key] = true
 		}
 	}
-	if !have["gp"] {
+	// Change is given in gp, sp and cp, so a purse needs all three; without
+	// them the sheet pays from gold alone and keeps fractions there.
+	if !have["gp"] || !have["sp"] || !have["cp"] {
 		return nil
 	}
-	purse := map[string]string{"gp": "gp"}
-	for _, coin := range []string{"cp", "sp", "ep", "pp"} {
+	purse := map[string]string{"gp": "gp", "sp": "sp", "cp": "cp"}
+	for _, coin := range []string{"ep", "pp"} {
 		if have[coin] {
 			purse[coin] = coin
 		}
-	}
-	if len(purse) == 1 {
-		return nil
 	}
 	return purse
 }
