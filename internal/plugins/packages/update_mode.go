@@ -8,6 +8,7 @@ package packages
 import (
 	"fmt"
 	"strings"
+	"time"
 )
 
 // UpdateMode is how one campaign follows one package.
@@ -75,8 +76,21 @@ type CampaignPackageState struct {
 	EffectiveVersion string
 
 	// HeldVersion is a newly installed version waiting for approval. Set only
-	// in approve_first mode.
+	// for a mode that holds (see holds): approve_first, and pinned for a
+	// package type that asks by default.
 	HeldVersion string
+
+	// HeldAt is when HeldVersion was first offered; nil when nothing waits.
+	HeldAt *time.Time
+
+	// DismissedVersion is the waiting version the owner answered "Later" to.
+	// The owner's prompt is hidden while it equals HeldVersion.
+	DismissedVersion string
+
+	// AdminHold is true while a site admin is keeping the campaign on
+	// EffectiveVersion. The owner cannot approve or switch while it is set.
+	AdminHold   bool
+	AdminHoldAt *time.Time
 
 	// Explicit is true when the campaign's mode was chosen through the update
 	// modes themselves rather than derived from older stored data. Install

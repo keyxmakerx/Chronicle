@@ -17,6 +17,7 @@ import (
 	"fmt"
 	"log/slog"
 	"os"
+	"sort"
 	"sync"
 
 	"github.com/keyxmakerx/chronicle/internal/apperror"
@@ -28,6 +29,12 @@ const (
 	EventCampaignUpdateModeSet  = "packages.campaign_update_mode_set"
 	EventCampaignUpdateHeld     = "packages.campaign_update_held"
 	EventCampaignUpdateApproved = "packages.campaign_update_approved"
+
+	// EventCampaignUpdateSwitched is a move to a version the owner or an admin
+	// picked rather than the one that was waiting.
+	EventCampaignUpdateSwitched  = "packages.campaign_update_switched"
+	EventCampaignUpdateDismissed = "packages.campaign_update_dismissed"
+	EventCampaignUpdateAdminHold = "packages.campaign_update_admin_hold"
 )
 
 // AuditLogger writes one audit row per action. Same shape as the security
@@ -92,6 +99,16 @@ type CampaignBinding interface {
 	Freeze(ctx context.Context, campaignID string, pkg *Package, mode UpdateMode, version string) error
 }
 
+// AsksByDefaultBinding is implemented by a binding whose package type never
+// moves a campaign to a new version on its own. For such a type a campaign
+// with no choice of its own is frozen where it is the first time a version
+// would move it, and a pinned campaign is offered the waiting version too,
+// so every campaign ends up either on its version or asked. Game systems do
+// not implement it and keep following the installed version.
+type AsksByDefaultBinding interface {
+	AsksByDefault() bool
+}
+
 // SetUpdateModeInput is the owner's request to change one package's mode.
 type SetUpdateModeInput struct {
 	CampaignID string
@@ -141,6 +158,25 @@ type CampaignUpdateService interface {
 	// owner calls it with actor.Admin false; a site admin approving on the
 	// owner's behalf passes true.
 	ApproveHeld(ctx context.Context, campaignID, packageID string, actor ActorInfo) (*CampaignPackageState, error)
+
+	// SwitchVersion keeps a campaign on a version the caller picked (an owner
+	// going back from a new version, or an admin moving it). The version must
+	// be a known release whose folder is on disk. An owner is refused while a
+	// site admin holds the campaign; an admin (actor.Admin) is not.
+	SwitchVersion(ctx context.Context, campaignID, packageID, version string, actor ActorInfo) (*CampaignPackageState, error)
+
+	// DismissHeld records that the owner answered "Later" to the waiting
+	// version, which must still be the one waiting.
+	DismissHeld(ctx context.Context, campaignID, packageID, version string) (*CampaignPackageState, error)
+
+	// SetAdminHold keeps a campaign on its current version against its
+	// owner's Update, or lets go. A campaign that has no version of its own
+	// yet is frozen on the one it runs first.
+	SetAdminHold(ctx context.Context, campaignID, packageID string, hold bool, actor ActorInfo) (*CampaignPackageState, error)
+
+	// InstalledVersions lists the package's known releases whose folder is on
+	// disk, newest first: the versions a campaign can be moved to.
+	InstalledVersions(ctx context.Context, packageID string) ([]string, error)
 
 	// CampaignsOnPackage lists every campaign on a package with its mode,
 	// version and any held update (the admin panel's Campaigns tab).
@@ -241,11 +277,46 @@ func (s *campaignUpdateService) stateOf(ctx context.Context, b CampaignBinding, 
 	if err != nil {
 		return CampaignPackageState{}, apperror.NewInternal(err)
 	}
-	if row != nil && st.Mode == UpdateModeApproveFirst {
-		st.HeldVersion = row.HeldVersion
+	if row != nil {
+		applyRow(&st, b, row)
 	}
 	decorate(&st, pkg)
 	return st, nil
+}
+
+// asksByDefault reports whether the binding's package type never moves a
+// campaign on its own.
+func asksByDefault(b CampaignBinding) bool {
+	a, ok := b.(AsksByDefaultBinding)
+	return ok && a.AsksByDefault()
+}
+
+// holds reports whether a campaign in this mode is offered a waiting version:
+// ask-first always, and pinned for a type that asks by default (an owner who
+// pinned a version still wants to know a newer one is ready).
+func holds(b CampaignBinding, mode UpdateMode) bool {
+	return mode == UpdateModeApproveFirst || (mode == UpdateModePinned && asksByDefault(b))
+}
+
+// applyRow copies the stored row's waiting version, dismissal and admin hold
+// onto a state. A waiting version only counts while the mode still holds.
+func applyRow(st *CampaignPackageState, b CampaignBinding, row *CampaignUpdateRow) {
+	if holds(b, st.Mode) {
+		st.HeldVersion = row.HeldVersion
+		st.HeldAt = row.HeldAt
+	}
+	st.DismissedVersion = row.DismissedVersion
+	st.AdminHold = row.AdminHold
+	st.AdminHoldAt = row.AdminHoldAt
+}
+
+// ownerMayMove refuses an owner's move while a site admin holds the campaign.
+// The admin's own actions pass.
+func ownerMayMove(st CampaignPackageState, actor ActorInfo) error {
+	if st.AdminHold && !actor.Admin {
+		return apperror.NewForbidden(fmt.Sprintf("The site admin is keeping this campaign on %s.", st.EffectiveVersion))
+	}
+	return nil
 }
 
 // decorate fills the package-derived fields of a state.
@@ -415,7 +486,10 @@ func (s *campaignUpdateService) ApproveHeld(ctx context.Context, campaignID, pac
 	if err != nil {
 		return nil, err
 	}
-	if cur.Mode != UpdateModeApproveFirst || cur.HeldVersion == "" {
+	if err := ownerMayMove(cur, actor); err != nil {
+		return nil, err
+	}
+	if !holds(b, cur.Mode) || cur.HeldVersion == "" {
 		return nil, apperror.NewConflict("no update is waiting for approval")
 	}
 	if !ValidVersionString(cur.HeldVersion) {
@@ -433,7 +507,8 @@ func (s *campaignUpdateService) ApproveHeld(ctx context.Context, campaignID, pac
 	if !s.versionOnDisk(pkg, cur.HeldVersion) {
 		return nil, apperror.NewBadRequest(fmt.Sprintf("version %s is not installed on this server", cur.HeldVersion))
 	}
-	if err := b.Apply(ctx, campaignID, pkg, UpdateModeApproveFirst, cur.HeldVersion, actor); err != nil {
+	// The campaign keeps the mode it had: a pinned campaign stays pinned.
+	if err := b.Apply(ctx, campaignID, pkg, cur.Mode, cur.HeldVersion, actor); err != nil {
 		return nil, apperror.NewInternal(fmt.Errorf("applying held version: %w", err))
 	}
 	// If clearing fails the campaign is already on the version, and the
@@ -449,6 +524,170 @@ func (s *campaignUpdateService) ApproveHeld(ctx context.Context, campaignID, pac
 	return s.CampaignState(ctx, campaignID, packageID)
 }
 
+func (s *campaignUpdateService) SwitchVersion(ctx context.Context, campaignID, packageID, version string, actor ActorInfo) (*CampaignPackageState, error) {
+	if !ValidVersionString(version) {
+		return nil, apperror.NewValidation("that is not a valid version")
+	}
+	pkg, b, err := s.loadPackage(ctx, packageID)
+	if err != nil {
+		return nil, err
+	}
+	mu := s.pkgs.lockForPackage(pkg.ID)
+	mu.Lock()
+	defer mu.Unlock()
+
+	cur, err := s.stateOf(ctx, b, campaignID, pkg)
+	if err != nil {
+		return nil, err
+	}
+	if err := ownerMayMove(cur, actor); err != nil {
+		return nil, err
+	}
+	if err := s.requireInstalled(ctx, pkg, version); err != nil {
+		return nil, err
+	}
+	// Going to a version keeps the campaign there, so a campaign that followed
+	// the installed version now asks first like every other.
+	mode := cur.Mode
+	if !mode.KeepsVersion() {
+		mode = UpdateModeApproveFirst
+	}
+	if err := b.Apply(ctx, campaignID, pkg, mode, version, actor); err != nil {
+		return nil, apperror.NewInternal(fmt.Errorf("moving campaign to %s: %w", version, err))
+	}
+	// Newer versions stay on offer, and the one it just moved onto no longer is.
+	if err := s.repo.SetHeld(ctx, campaignID, pkg.ID, wantHeld(b, pkg, mode, version)); err != nil {
+		return nil, apperror.NewInternal(err)
+	}
+	s.log(ctx, EventCampaignUpdateSwitched, actor, map[string]any{
+		"campaign_id": campaignID, "package_id": pkg.ID, "package": pkg.Slug,
+		"from": cur.EffectiveVersion, "to": version, "by_admin": actor.Admin,
+	})
+	return s.CampaignState(ctx, campaignID, packageID)
+}
+
+func (s *campaignUpdateService) DismissHeld(ctx context.Context, campaignID, packageID, version string) (*CampaignPackageState, error) {
+	pkg, b, err := s.loadPackage(ctx, packageID)
+	if err != nil {
+		return nil, err
+	}
+	mu := s.pkgs.lockForPackage(pkg.ID)
+	mu.Lock()
+	defer mu.Unlock()
+
+	cur, err := s.stateOf(ctx, b, campaignID, pkg)
+	if err != nil {
+		return nil, err
+	}
+	// Answering a version that is no longer the waiting one (the page was
+	// stale) must not silence the one that is.
+	if cur.HeldVersion == "" || cur.HeldVersion != version {
+		return nil, apperror.NewConflict("that update is no longer waiting")
+	}
+	if err := s.repo.SetDismissed(ctx, campaignID, pkg.ID, version); err != nil {
+		return nil, apperror.NewInternal(err)
+	}
+	s.log(ctx, EventCampaignUpdateDismissed, ActorInfo{}, map[string]any{
+		"campaign_id": campaignID, "package_id": pkg.ID, "package": pkg.Slug, "version": version,
+	})
+	return s.CampaignState(ctx, campaignID, packageID)
+}
+
+func (s *campaignUpdateService) SetAdminHold(ctx context.Context, campaignID, packageID string, hold bool, actor ActorInfo) (*CampaignPackageState, error) {
+	pkg, b, err := s.loadPackage(ctx, packageID)
+	if err != nil {
+		return nil, err
+	}
+	mu := s.pkgs.lockForPackage(pkg.ID)
+	mu.Lock()
+	defer mu.Unlock()
+
+	cur, err := s.stateOf(ctx, b, campaignID, pkg)
+	if err != nil {
+		return nil, err
+	}
+	if hold && (!cur.Mode.KeepsVersion() || cur.Version == "") {
+		// A hold is a version the campaign stays on, so one that still
+		// follows the installed version is frozen on it first.
+		mode := cur.Mode
+		if !mode.KeepsVersion() {
+			mode = UpdateModeApproveFirst
+		}
+		if err := s.requireInstalled(ctx, pkg, cur.EffectiveVersion); err != nil {
+			return nil, err
+		}
+		if err := b.Apply(ctx, campaignID, pkg, mode, cur.EffectiveVersion, actor); err != nil {
+			return nil, apperror.NewInternal(fmt.Errorf("freezing campaign before hold: %w", err))
+		}
+		if err := s.repo.SetHeld(ctx, campaignID, pkg.ID, wantHeld(b, pkg, mode, cur.EffectiveVersion)); err != nil {
+			return nil, apperror.NewInternal(err)
+		}
+	}
+	if err := s.repo.SetAdminHold(ctx, campaignID, pkg.ID, hold); err != nil {
+		return nil, apperror.NewInternal(err)
+	}
+	s.log(ctx, EventCampaignUpdateAdminHold, actor, map[string]any{
+		"campaign_id": campaignID, "package_id": pkg.ID, "package": pkg.Slug,
+		"hold": hold, "version": cur.EffectiveVersion,
+	})
+	return s.CampaignState(ctx, campaignID, packageID)
+}
+
+// requireInstalled checks a requested version before it is stored: a valid
+// string, a known release, and a folder that is still on disk (so clean-up has
+// not removed it).
+func (s *campaignUpdateService) requireInstalled(ctx context.Context, pkg *Package, version string) error {
+	if !ValidVersionString(version) {
+		return apperror.NewValidation("that is not a valid version")
+	}
+	known, err := s.knownRelease(ctx, pkg, version)
+	if err != nil {
+		return apperror.NewInternal(fmt.Errorf("listing versions: %w", err))
+	}
+	if !known {
+		return apperror.NewBadRequest(fmt.Sprintf("version %s is not a known release of this package", version))
+	}
+	if !s.versionOnDisk(pkg, version) {
+		return apperror.NewBadRequest(fmt.Sprintf("version %s is not installed on this server", version))
+	}
+	return nil
+}
+
+func (s *campaignUpdateService) InstalledVersions(ctx context.Context, packageID string) ([]string, error) {
+	pkg, err := s.pkgs.GetPackage(ctx, packageID)
+	if err != nil {
+		return nil, apperror.NewInternal(fmt.Errorf("loading package: %w", err))
+	}
+	if pkg == nil {
+		return nil, apperror.NewNotFound("package not found")
+	}
+	vers, err := s.pkgs.ListVersions(ctx, pkg.ID)
+	if err != nil {
+		return nil, apperror.NewInternal(fmt.Errorf("listing versions: %w", err))
+	}
+	seen := map[string]bool{}
+	var out []string
+	for _, v := range vers {
+		if seen[v.Version] || !s.versionOnDisk(pkg, v.Version) {
+			continue
+		}
+		seen[v.Version] = true
+		out = append(out, v.Version)
+	}
+	sort.Slice(out, func(i, j int) bool { return versionLess(out[j], out[i]) })
+	return out, nil
+}
+
+// wantHeld is the one correct waiting version for a campaign on version in
+// mode: the installed version when the campaign is offered updates and is
+// behind it, otherwise nothing.
+func wantHeld(b CampaignBinding, pkg *Package, mode UpdateMode, version string) string {
+	if holds(b, mode) && version != "" && versionLess(version, pkg.InstalledVersion) {
+		return pkg.InstalledVersion
+	}
+	return ""
+}
+
 func (s *campaignUpdateService) CampaignsOnPackage(ctx context.Context, packageID string) ([]CampaignPackageState, error) {
 	pkg, b, err := s.loadPackage(ctx, packageID)
 	if err != nil {
@@ -462,15 +701,18 @@ func (s *campaignUpdateService) CampaignsOnPackage(ctx context.Context, packageI
 	if err != nil {
 		return nil, apperror.NewInternal(err)
 	}
-	held := map[string]string{}
-	for _, r := range rows {
-		held[r.CampaignID] = r.HeldVersion
+	byCampaign := map[string]*CampaignUpdateRow{}
+	for i := range rows {
+		byCampaign[rows[i].CampaignID] = &rows[i]
 	}
 	for i := range states {
-		decorate(&states[i], pkg)
-		if states[i].Mode == UpdateModeApproveFirst {
-			states[i].HeldVersion = held[states[i].CampaignID]
+		if states[i].Mode == "" {
+			states[i].Mode = UpdateModeAutomatic
 		}
+		if row := byCampaign[states[i].CampaignID]; row != nil {
+			applyRow(&states[i], b, row)
+		}
+		decorate(&states[i], pkg)
 	}
 	return states, nil
 }
@@ -490,7 +732,7 @@ func (s *campaignUpdateService) HeldUpdates(ctx context.Context) ([]CampaignPack
 		if err != nil {
 			return nil, err
 		}
-		if st.Mode != UpdateModeApproveFirst || st.HeldVersion == "" {
+		if st.HeldVersion == "" {
 			continue // stale hold, the reconciler clears it
 		}
 		st.CampaignName = r.CampaignName
@@ -543,6 +785,20 @@ func (s *campaignUpdateService) OnInstall(ctx context.Context, pkg *Package, pre
 
 	var failures []error
 	for _, st := range states {
+		if asksByDefault(b) && st.Mode == UpdateModeAutomatic {
+			// Nothing was chosen for it: it asks like the rest, from the
+			// version it was running. A previous version that is no longer on
+			// disk was not being served, so there is nothing to hold it on.
+			if !s.versionOnDisk(pkg, previousVersion) {
+				slog.Warn("update modes: previous version is not on disk, leaving a campaign as it was",
+					slog.String("campaign_id", st.CampaignID), slog.String("package", pkg.Slug))
+				continue
+			}
+			if err := b.Apply(ctx, st.CampaignID, pkg, UpdateModeApproveFirst, previousVersion, ActorInfo{}); err != nil {
+				failures = append(failures, fmt.Errorf("campaign %s: %w", st.CampaignID, err))
+			}
+			continue
+		}
 		if !st.Mode.KeepsVersion() || st.Version != "" {
 			continue // follows the installed version, or already on its own
 		}
@@ -603,6 +859,7 @@ func (s *campaignUpdateService) Reconcile(ctx context.Context) (ReconcileResult,
 		if _, ok := s.bindings[pkg.Type]; !ok || pkg.InstalledVersion == "" {
 			continue
 		}
+		s.adoptDefaults(ctx, pkg)
 		r, _, err := s.reconcilePackage(ctx, pkg)
 		res.HeldSet += r.HeldSet
 		res.HeldCleared += r.HeldCleared
@@ -616,6 +873,31 @@ func (s *campaignUpdateService) Reconcile(ctx context.Context) (ReconcileResult,
 	}
 	res.RowsRemoved = n
 	return res, nil
+}
+
+// adoptDefaults moves every campaign of an ask-by-default package that has no
+// choice of its own onto ask-first, frozen on the installed version, so a
+// campaign created or restored since the last install is covered too. It is
+// best effort: a campaign it cannot freeze is logged and retried next boot.
+func (s *campaignUpdateService) adoptDefaults(ctx context.Context, pkg *Package) {
+	b, ok := s.bindings[pkg.Type]
+	if !ok || !asksByDefault(b) || !s.versionOnDisk(pkg, pkg.InstalledVersion) {
+		return
+	}
+	states, err := b.Campaigns(ctx, pkg)
+	if err != nil {
+		slog.Warn("update modes: could not list campaigns to adopt", slog.String("package", pkg.Slug), slog.Any("error", err))
+		return
+	}
+	for _, st := range states {
+		if st.Mode != UpdateModeAutomatic {
+			continue
+		}
+		if err := b.Apply(ctx, st.CampaignID, pkg, UpdateModeApproveFirst, pkg.InstalledVersion, ActorInfo{}); err != nil {
+			slog.Warn("update modes: could not freeze a campaign on the installed version",
+				slog.String("campaign_id", st.CampaignID), slog.String("package", pkg.Slug), slog.Any("error", err))
+		}
+	}
 }
 
 // reconcilePackage makes one package's holds agree with its installed
@@ -644,10 +926,7 @@ func (s *campaignUpdateService) reconcilePackage(ctx context.Context, pkg *Packa
 		seen[st.CampaignID] = true
 		// The one correct value: the installed version, if this campaign is
 		// asking first and is behind it; otherwise nothing.
-		want := ""
-		if st.Mode == UpdateModeApproveFirst && st.Version != "" && versionLess(st.Version, pkg.InstalledVersion) {
-			want = pkg.InstalledVersion
-		}
+		want := wantHeld(b, pkg, st.Mode, st.Version)
 		if want == held[st.CampaignID] {
 			continue
 		}

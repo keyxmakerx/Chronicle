@@ -8,6 +8,7 @@ import (
 	"sort"
 	"sync"
 	"testing"
+	"time"
 )
 
 // --- fakes ---
@@ -91,14 +92,50 @@ func (f *fakeUpdateRepo) SetHeld(_ context.Context, c, p, held string) error {
 		r = &CampaignUpdateRow{CampaignID: c, PackageID: p, Mode: UpdateModeAutomatic}
 		f.rows[ukey(c, p)] = r
 	}
+	if r.HeldVersion != held {
+		now := time.Now()
+		r.HeldAt = &now
+	}
+	if held == "" {
+		r.HeldAt = nil
+	}
 	r.HeldVersion = held
+	return nil
+}
+
+func (f *fakeUpdateRepo) row(c, p string) *CampaignUpdateRow {
+	r := f.rows[ukey(c, p)]
+	if r == nil {
+		r = &CampaignUpdateRow{CampaignID: c, PackageID: p, Mode: UpdateModeAutomatic}
+		f.rows[ukey(c, p)] = r
+	}
+	return r
+}
+
+func (f *fakeUpdateRepo) SetDismissed(_ context.Context, c, p, v string) error {
+	f.row(c, p).DismissedVersion = v
+	return nil
+}
+
+func (f *fakeUpdateRepo) SetAdminHold(_ context.Context, c, p string, hold bool) error {
+	if !hold && f.rows[ukey(c, p)] == nil {
+		return nil
+	}
+	r := f.row(c, p)
+	r.AdminHold = hold
+	if hold {
+		now := time.Now()
+		r.AdminHoldAt = &now
+	} else {
+		r.AdminHoldAt = nil
+	}
 	return nil
 }
 
 func (f *fakeUpdateRepo) DeleteDefaultRows(_ context.Context) (int64, error) {
 	var n int64
 	for k, r := range f.rows {
-		if r.Mode == UpdateModeAutomatic && r.Version == "" && r.HeldVersion == "" {
+		if r.Mode == UpdateModeAutomatic && r.Version == "" && r.HeldVersion == "" && r.DismissedVersion == "" && !r.AdminHold {
 			delete(f.rows, k)
 			n++
 		}

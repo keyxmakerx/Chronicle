@@ -520,6 +520,10 @@ func releaseNoteLines(notes string, n int) []string {
 	return out
 }
 
+// ReleaseNoteLines is releaseNoteLines for another plugin's page, so a
+// campaign owner reads release notes the same way the admin does.
+func ReleaseNoteLines(notes string, n int) []string { return releaseNoteLines(notes, n) }
+
 // latestCheck is the most recent update check across all rows, or nil if none
 // has ever run.
 func latestCheck(rows []PackageRow) *time.Time {
