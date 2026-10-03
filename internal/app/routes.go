@@ -916,6 +916,32 @@ func (a *wsCampaignRoleAdapter) IsUserDmGranted(ctx context.Context, campaignID,
 	return a.svc.IsUserDmGranted(ctx, campaignID, userID)
 }
 
+// wsNotesGrantAdapter checks a notes grant for a WebSocket upgrade the same
+// way notes.RequireAppGrant checks it for a request: a live grant, in a
+// campaign whose outside apps are on.
+type wsNotesGrantAdapter struct {
+	grants notes.AppGrantService
+	gate   notes.AppGate
+}
+
+// AuthenticateNotesGrantForWS returns the grant's campaign and player.
+func (a *wsNotesGrantAdapter) AuthenticateNotesGrantForWS(ctx context.Context, token string) (string, string, error) {
+	g, err := a.grants.Authenticate(ctx, token)
+	if err != nil {
+		return "", "", err
+	}
+	if a.gate != nil {
+		open, err := a.gate(ctx, g.CampaignID)
+		if err != nil {
+			return "", "", err
+		}
+		if !open {
+			return "", "", apperror.NewForbidden("this campaign has outside apps turned off")
+		}
+	}
+	return g.CampaignID, g.UserID, nil
+}
+
 // CALV5-PLACEHOLDER: V5 must rebuild calendarEventPublisherAdapter — the
 // bridge from the calendar's PublishCalendarEvent to the websocket bus.
 // Nothing publishes calendar events now.
@@ -1250,6 +1276,18 @@ func (h *wsRevokerHolder) RevokeAPIKeyClients(campaignID string) {
 func (h *wsRevokerHolder) RevokeUser(campaignID, userID string) {
 	if h.hub != nil {
 		h.hub.RevokeUser(campaignID, userID)
+	}
+}
+
+func (h *wsRevokerHolder) RevokeNotesAppClients(campaignID, userID string) {
+	if h.hub != nil {
+		h.hub.RevokeNotesAppClients(campaignID, userID)
+	}
+}
+
+func (h *wsRevokerHolder) RevokeNotesAppClientsEverywhere(userID string) {
+	if h.hub != nil {
+		h.hub.RevokeNotesAppClientsEverywhere(userID)
 	}
 }
 
@@ -3541,6 +3579,8 @@ func (a *App) RegisterRoutes() {
 	// A player can allow the Foundry notebook to use their notes. Grants go
 	// only to an address that may already call Chronicle across sites.
 	noteGrants := notes.NewAppGrantService(notes.NewAppGrantRepository(a.DB))
+	// See wsRevokerHolder: wsHub itself is constructed further down.
+	noteGrants.SetConnectionRevoker(wsRevoker)
 	noteGrantHandler := notes.NewAppGrantHandler(noteGrants, &notesOriginAllower{baseURL: a.Config.BaseURL, settings: settingsService})
 	// Pictures and voice memos in the frames load through member-checked
 	// signed links, as Foundry's media does.
@@ -4570,6 +4610,8 @@ func (a *App) RegisterRoutes() {
 		&wsSessionAuthAdapter{svc: authService},
 		&wsCampaignRoleAdapter{svc: campaignService},
 	)
+	// The Foundry notebook's frames hold a notes grant, not a sign-in.
+	wsAuth.SetNotesGrantAuth(&wsNotesGrantAdapter{grants: noteGrants, gate: notesAppGate})
 	// Dynamic CORS origins for WebSocket — reuse the same settings service
 	// that backs the HTTP CORS middleware so the admin whitelist applies to
 	// both REST API and WebSocket connections.
