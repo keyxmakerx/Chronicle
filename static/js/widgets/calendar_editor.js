@@ -152,12 +152,18 @@
       ? '<a class="btn sm quiet" id="cal5-settings" href="/campaigns/' + encodeURIComponent(view.campaignId) + '/calendars/' + encodeURIComponent(view.calendarId) + '/structure" title="Calendar settings: months, weekdays, leap years, moons and seasons"><i class="fa-solid fa-gear"></i><span>Calendar settings</span></a>'
       : '';
     var gen = view.canAuthorDmOnly && Chronicle.calendarWeatherSheet;
+    // Era authors (Owner or co-Director) manage eras from here; the card
+    // folds out of this button.
+    var eras = view.canAuthorDmOnly
+      ? '<button type="button" class="btn sm quiet" id="cal5-erabtn" aria-haspopup="dialog" aria-expanded="false"><i class="fa-solid fa-timeline"></i><span class="btxt"> Eras</span></button>'
+      : '';
     strip.innerHTML = '<span class="etag">Editing</span><span class="ehint">Click or drag across days. Shift extends, Ctrl/Cmd adds. Touch: tap, or hold then drag.</span><span class="sp"></span>' +
       (gen ? '<button type="button" class="btn sm quiet" id="edGen" aria-haspopup="dialog" aria-label="Generate weather"><i class="fa-solid fa-wand-magic-sparkles"></i><span class="btxt"> Generate…</span></button>' : '') +
-      gear + '<button type="button" class="btn sm quiet" id="cal5-editdone">Done</button>';
+      eras + gear + '<button type="button" class="btn sm quiet" id="cal5-editdone">Done</button>';
     subw.appendChild(strip);
     $('#cal5-editdone', strip).addEventListener('click', this.setEditing.bind(this, false));
     var self = this;
+    if (eras) $('#cal5-erabtn', strip).addEventListener('click', function () { view.toggleEra(); });
     if (gen) $('#edGen', strip).addEventListener('click', function () { self._openGenerate(true); });
   };
 
@@ -1422,6 +1428,12 @@
       self._eraFormFor = undefined;
       view._showFlapHTML(self._eraManagerHTML());
     };
+    // The era panel's "Edit eras" lands here: edit mode on, then the
+    // manager folds out of the strip's Eras button once it is showing.
+    view.openEraManager = function () {
+      if (!self.editing) self.setEditing(true);
+      requestAnimationFrame(function () { if (view._pf.state === 'closed') view.showFlap(); });
+    };
   };
 
   CalendarEditor.prototype._refreshFlap = function () {
@@ -1437,7 +1449,7 @@
     var rows = eras.map(function (e) {
       var span = e.start_year + (e.end_year != null ? '–' + e.end_year : '–present');
       return '<div class="etl-seg' + (current && e.id === current.id ? ' cur' : '') + '">' +
-        '<span>' + esc(e.name) + '<small>' + esc(span) + '</small></span>' +
+        '<span>' + esc(e.name) + (e.hidden_until_begins ? ' <i class="fa-solid fa-eye-slash" title="Hidden from players until it begins" aria-label="Hidden from players until it begins"></i>' : '') + '<small>' + esc(span) + '</small></span>' +
         '<span class="acts">' +
           '<button type="button" class="qi" data-edit-era="' + e.id + '" aria-label="Edit ' + esc(e.name) + '"><i class="fa-solid fa-pencil"></i></button>' +
           '<button type="button" class="qi" data-del-era="' + e.id + '" aria-label="Delete ' + esc(e.name) + '"><i class="fa-solid fa-trash"></i></button>' +
@@ -1466,10 +1478,45 @@
           '<div class="erow" data-end-fields' + (!era || era.end_year == null ? ' hidden' : '') + '><span class="rl">Y</span><input type="number" name="end_year" value="' + esc(era && era.end_year != null ? era.end_year : '') + '"/><input type="number" name="end_month" min="1" placeholder="M" value="' + esc(era && era.end_month != null ? era.end_month : '') + '"/><input type="number" name="end_day" min="1" placeholder="D" value="' + esc(era && era.end_day != null ? era.end_day : '') + '"/></div></div>' +
       '</div>' +
       '<div class="fld"><textarea name="description" rows="2" placeholder="Optional description">' + esc(era && era.description ? era.description : '') + '</textarea></div>' +
+      '<div class="fld"><label class="check"><input type="checkbox" name="hidden_until_begins"' + (era && era.hidden_until_begins ? ' checked' : '') + '/> Hide from players until it begins</label>' +
+        '<small class="fhint">Until then players see the era before it carry on, and nothing dated inside it.</small></div>' +
+      '<div class="fld">Lore page<div class="lorepick" data-lore-pick>' + this._lorePickHTML(era ? era.lore_entity_id : null, era ? era.lore_entity_name : '') + '</div></div>' +
+      '<div class="fld">Director’s note<textarea name="dm_note" rows="2" placeholder="Only you and co-Directors ever see this">' + esc(era && era.dm_note ? era.dm_note : '') + '</textarea></div>' +
       '<div class="efoot"><button type="button" class="btn quiet" data-cancel-era>Cancel</button><span class="sp"></span>' +
         (isNew ? '' : '<button type="button" class="btn danger" data-del-era="' + era.id + '">Delete</button>') +
         '<button type="submit" class="btn primary">' + (isNew ? 'Create' : 'Save') + '</button></div>' +
       '</form>';
+  };
+
+  // The lore page picker: a chosen page with Change/Remove, or a search box
+  // over the campaign's pages. The chosen id rides on the picker itself.
+  CalendarEditor.prototype._lorePickHTML = function (id, name) {
+    if (id) {
+      return '<input type="hidden" name="lore_entity_id" value="' + esc(id) + '"/>' +
+        '<span class="lp-cur"><i class="fa-solid fa-book-open"></i>' + esc(name || 'Linked page') + '</span>' +
+        '<button type="button" class="btn sm quiet" data-lore-change>Change</button><button type="button" class="btn sm quiet" data-lore-clear>Remove</button>';
+    }
+    return '<input type="hidden" name="lore_entity_id" value=""/>' +
+      '<input type="search" class="lp-q" data-lore-q placeholder="Search pages to link" aria-label="Search pages to link" autocomplete="off"/>' +
+      '<ul class="lp-res" data-lore-res role="listbox" aria-label="Pages" hidden></ul>';
+  };
+
+  CalendarEditor.prototype._loreSearch = function (input) {
+    var view = this.view, q = input.value.trim(), res = input.parentNode.querySelector('[data-lore-res]'), seq = (this._loreSeq || 0) + 1;
+    this._loreSeq = seq;
+    if (q.length < 2) { res.hidden = true; res.innerHTML = ''; return; }
+    var self = this;
+    Chronicle.apiFetch('/campaigns/' + encodeURIComponent(view.campaignId) + '/entities/search?q=' + encodeURIComponent(q))
+      .then(function (resp) { return resp.ok ? resp.json() : { results: [] }; })
+      .then(function (body) {
+        if (self._loreSeq !== seq) return;
+        // Only pages: the search also returns other kinds of result.
+        var pages = (body.results || []).filter(function (r) { return r.id && /\/entities\//.test(r.url || ''); }).slice(0, 8);
+        res.innerHTML = pages.length
+          ? pages.map(function (r) { return '<li><button type="button" role="option" data-lore-id="' + esc(r.id) + '" data-lore-name="' + esc(r.name) + '">' + esc(r.name) + (r.type_name ? '<small>' + esc(r.type_name) + '</small>' : '') + '</button></li>'; }).join('')
+          : '<li class="none">No pages match.</li>';
+        res.hidden = false;
+      });
   };
 
   CalendarEditor.prototype._bindFlapCapture = function () {
@@ -1481,6 +1528,14 @@
       var del = e.target.closest('[data-del-era]');
       var cancel = e.target.closest('[data-cancel-era]');
       var ongoing = e.target.closest('[name="ongoing"]');
+      var pick = e.target.closest('[data-lore-id]');
+      var lp = e.target.closest('[data-lore-pick]');
+      if (pick && lp) { lp.innerHTML = self._lorePickHTML(pick.dataset.loreId, pick.dataset.loreName); return; }
+      if (lp && e.target.closest('[data-lore-clear], [data-lore-change]')) {
+        lp.innerHTML = self._lorePickHTML(null, '');
+        var q = lp.querySelector('[data-lore-q]'); if (q) q.focus();
+        return;
+      }
       if (add) { self._eraFormFor = 'new'; self._refreshFlap(); }
       else if (edit) { self._eraFormFor = edit.dataset.editEra; self._refreshFlap(); }
       else if (cancel) { self._eraFormFor = undefined; self._refreshFlap(); }
@@ -1492,12 +1547,19 @@
           view.cal.eras = (view.cal.eras || []).filter(function (er) { return String(er.id) !== String(del.dataset.delEra); });
           self._eraFormFor = undefined;
           self._refreshFlap();
+          view.renderMonth();
           view.say('Era deleted.');
         });
       } else if (ongoing) {
         var fields = view.flapEl.querySelector('[data-end-fields]');
         if (fields) fields.hidden = ongoing.checked;
       }
+    });
+    var loreTimer = 0;
+    view.flapEl.addEventListener('input', function (e) {
+      if (!e.target.matches('[data-lore-q]')) return;
+      clearTimeout(loreTimer);
+      loreTimer = setTimeout(function () { self._loreSearch(e.target); }, 220);
     });
     view.flapEl.addEventListener('change', function (e) {
       if (e.target.name === 'ongoing') {
@@ -1520,25 +1582,47 @@
         end_month: ongoing ? null : (f.end_month.value ? +f.end_month.value : null),
         end_day: ongoing ? null : (f.end_day.value ? +f.end_day.value : null),
         description: f.description.value || null,
-        color: '#8b5cf6',
-        sort_order: (view.cal.eras || []).length
+        hidden_until_begins: f.hidden_until_begins.checked,
+        dm_note: f.dm_note.value.trim() || null
       };
       var isNew = self._eraFormFor === 'new';
+      var prior = isNew ? null : (view.cal.eras || []).filter(function (er) { return String(er.id) === String(self._eraFormFor); })[0];
+      var lore = f.lore_entity_id.value || null;
+      // A lore page is sent only when it changed: the server checks a newly
+      // chosen page, and an unchanged one should never fail that check.
+      if (isNew || (prior && (prior.lore_entity_id || null) !== lore)) body.lore_entity_id = lore;
+      if (isNew) {
+        // A new era starts on the next suggested palette; the Era look
+        // settings change it. Colours and order are left alone on edit.
+        var pals = (Chronicle.calendarEraBlend && Chronicle.calendarEraBlend.PALETTES) || [['', '#8b5cf6', '#c4b5fd']];
+        var pal = pals[(view.cal.eras || []).length % pals.length];
+        body.color = pal[1];
+        body.color_2 = pal[2];
+        body.sort_order = (view.cal.eras || []).length;
+      }
       var req = isNew
         ? Chronicle.apiFetch(view.apiBase + '/eras', { method: 'POST', body: body })
         : Chronicle.apiFetch(view.apiBase + '/eras/' + self._eraFormFor, { method: 'PUT', body: body });
       req.then(function (resp) {
-        if (!resp.ok) { view.say('Could not save the era.'); return null; }
-        return isNew ? resp.json() : null;
+        if (!resp.ok) {
+          return resp.json().catch(function () { return {}; }).then(function (j) {
+            view.say('Could not save the era' + (j && j.message ? ': ' + j.message : '.'));
+            return false;
+          });
+        }
+        return isNew ? resp.json() : true;
       }).then(function (created) {
-        if (isNew && created) {
+        if (!created) return;
+        if (isNew) {
+          if (created.lore_entity_id) created.lore_entity_name = (f.querySelector('.lp-cur') || {}).textContent || '';
           view.cal.eras = (view.cal.eras || []).concat([created]);
-        } else if (!isNew) {
-          var existing = (view.cal.eras || []).filter(function (er) { return String(er.id) === String(self._eraFormFor); })[0];
-          if (existing) { for (var k in body) existing[k] = body[k]; }
+        } else if (prior) {
+          for (var k in body) prior[k] = body[k];
+          if ('lore_entity_id' in body) prior.lore_entity_name = body.lore_entity_id ? (f.querySelector('.lp-cur') || {}).textContent || '' : '';
         }
         self._eraFormFor = undefined;
         self._refreshFlap();
+        view.renderMonth();
         view.say(isNew ? 'Era created.' : 'Era saved.');
       });
     });

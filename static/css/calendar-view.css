@@ -1569,3 +1569,111 @@
 
 }
 
+
+/* ---- Eras: the colour field, the header chips, their tooltip and the era panel ---- */
+/* Era tokens: the Director-only colouring of a note and a hidden-era badge. */
+:root{--eraDmBg:oklch(.96 .035 85);--eraDmLine:oklch(.82 .07 85);--eraDmFg:oklch(.45 .08 75);--eraChip:oklch(1 0 0 / .72)}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){--eraDmBg:oklch(.8 .1 85 / .08);--eraDmLine:oklch(.8 .1 85 / .24);--eraDmFg:oklch(.86 .08 85);--eraChip:oklch(.22 .01 265 / .72)}}
+:root[data-theme="dark"]{--eraDmBg:oklch(.8 .1 85 / .08);--eraDmLine:oklch(.8 .1 85 / .24);--eraDmFg:oklch(.86 .08 85);--eraChip:oklch(.22 .01 265 / .72)}
+/* The field sits under every day in the stage's own layer, so a day's hover and selection still paint over it. */
+.cal-v5 .stage>.era-field{position:absolute;z-index:-2;display:block;pointer-events:none;transition:opacity .35s ease}
+.cal-v5 .stage>.era-fade{z-index:-1;opacity:0}
+.cal-v5 .erachips{display:inline-flex;flex-wrap:wrap;align-items:center;gap:2px 6px;min-width:0;max-width:100%}
+.cal-v5 .erachip{display:inline-flex;align-items:center;gap:6px;min-width:0;max-width:100%;padding:4px 8px 4px 6px;margin-left:-6px;border-radius:8px;font:600 12.5px/1.2 var(--sans);color:var(--ink);box-shadow:inset 0 0 0 1px transparent;transition:background-color .15s,box-shadow .15s}
+.cal-v5 .earrow + .erachip{margin-left:0}
+.cal-v5 .erachip:hover, .cal-v5 .erachip[aria-expanded="true"]{background:var(--lift);box-shadow:inset 0 0 0 1px var(--edge)}
+.cal-v5 .erachip:focus-visible{outline:1.5px solid var(--ink);outline-offset:2px}
+.cal-v5 .erachip .en{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;min-width:0}
+.cal-v5 .erachip small{font:500 12px/1.2 var(--sans);color:var(--mut);white-space:nowrap}
+.cal-v5 .erachip .eh{font-size:11px;color:var(--mut)}
+.cal-v5 .erachip .ev{font-size:10px;color:var(--mut);transition:transform .25s var(--ease)}
+.cal-v5 .erachip[aria-expanded="true"] .ev{transform:rotate(180deg)}
+.cal-v5 .earrow{color:var(--mut);font-size:12px}
+.cal-v5 .esw{display:inline-block;width:14px;height:10px;border-radius:3px;flex:none;box-shadow:inset 0 0 0 1px oklch(0 0 0 / .12)}
+.cal-v5 .eratip{position:absolute;z-index:45;max-width:min(280px,calc(100% - 16px));padding:6px 9px;border-radius:8px;background:var(--ink);color:var(--paper);font:500 12px/1.35 var(--sans);box-shadow:var(--shadow-s);pointer-events:none;animation:cal5-fadeIn .12s ease both}
+.cal-v5 .eratip b{display:block;font-weight:650}
+.cal-v5 .eratip span{display:block;opacity:.8}
+/* The panel unfolds under the header and pushes the grid down. */
+.cal-v5 .erapanel{position:relative;z-index:1;overflow:hidden;margin:2px var(--gx) 10px;border-radius:14px;background:linear-gradient(180deg,color-mix(in srgb,var(--ea,#888) 7%,var(--paper)),var(--paper) 70px);box-shadow:inset 0 0 0 1px var(--edge),var(--shadow-s);color:var(--ink)}
+.cal-v5 .ep-ribbon{position:relative;padding:20px 16px 2px}
+.cal-v5 .rtrack{display:flex;gap:3px;height:20px;align-items:center}
+.cal-v5 .rseg{position:relative;height:20px;min-width:0;border-radius:4px}
+.cal-v5 .rseg::before{content:"";position:absolute;left:0;right:0;top:6px;height:8px;border-radius:4px;background:var(--g);opacity:.6;transition:opacity .15s,top .15s,height .15s}
+.cal-v5 .rseg:hover::before, .cal-v5 .rseg:focus-visible::before{opacity:.95;top:5px;height:10px}
+.cal-v5 .rseg:focus-visible{outline:1.5px solid var(--ink);outline-offset:1px}
+.cal-v5 .rseg.showing::before{opacity:.9;box-shadow:0 0 0 1.5px var(--paper),0 0 0 2.5px color-mix(in srgb,var(--ink) 35%,transparent)}
+.cal-v5 .rseg.hid::before{background:repeating-linear-gradient(135deg,color-mix(in srgb,var(--c) 55%,transparent) 0 4px,transparent 4px 7px);opacity:.8;box-shadow:inset 0 0 0 1px color-mix(in srgb,var(--c) 60%,transparent)}
+.cal-v5 .rhere{position:absolute;top:6px;bottom:16px;width:0;pointer-events:none}
+.cal-v5 .rhere::before{content:"";position:absolute;left:-1px;top:13px;width:2px;height:16px;border-radius:1px;background:var(--ink)}
+.cal-v5 .rhere span{position:absolute;top:-1px;font:650 10.5px/1.2 var(--sans);color:var(--ink);white-space:nowrap}
+.cal-v5 .raxis{position:relative;height:14px;margin-top:1px;font:500 10.5px/1.3 var(--sans);color:var(--mut);overflow:hidden}
+.cal-v5 .raxis span{position:absolute;top:0;white-space:nowrap;font-variant-numeric:tabular-nums}
+.cal-v5 .rtip{position:absolute;z-index:2;top:-12px;transform:translateX(-50%);padding:4px 8px;border-radius:7px;background:var(--ink);color:var(--paper);font:500 11.5px/1.3 var(--sans);white-space:nowrap;pointer-events:none}
+.cal-v5 .rtip b{font-weight:650;margin-right:6px}
+.cal-v5 .rtip span{opacity:.8}
+.cal-v5 .ep-card{padding:8px 16px 14px}
+.cal-v5 .ep-head{display:flex;align-items:flex-start;gap:10px}
+.cal-v5 .ep-head .esw{width:22px;height:16px;border-radius:5px;margin-top:5px}
+.cal-v5 .ep-main{flex:1;min-width:0}
+.cal-v5 .ep-name{margin:0;font:500 20px/1.2 var(--serif);color:var(--ink);overflow-wrap:anywhere}
+.cal-v5 .ep-name:focus{outline:none}
+.cal-v5 .ep-dates{font:500 12.5px/1.4 var(--sans);color:var(--mut);margin-top:2px}
+.cal-v5 .ep-dates b{display:block;font-weight:550;color:var(--ink2)}
+.cal-v5 .ep-badge{display:inline-flex;align-items:center;gap:6px;margin-top:6px;padding:2px 8px;border-radius:6px;font:550 11.5px/1.4 var(--sans);color:var(--eraDmFg);background:var(--eraDmBg);box-shadow:inset 0 0 0 1px var(--eraDmLine)}
+.cal-v5 .ep-x{flex:none;width:32px;height:32px;border-radius:9px;display:grid;place-items:center;color:var(--ink2)}
+.cal-v5 .ep-x:hover{background:var(--lift);box-shadow:0 0 0 1px var(--hair);color:var(--ink)}
+.cal-v5 .ep-x:focus-visible, .cal-v5 .ep-lore:focus-visible, .cal-v5 .ep-evs button:focus-visible, .cal-v5 .ep-all:focus-visible, .cal-v5 .ep-manage:focus-visible{outline:1.5px solid var(--ink);outline-offset:1px}
+.cal-v5 .ep-body{display:grid;grid-template-columns:minmax(0,1.15fr) minmax(0,1fr);gap:6px 22px;margin-top:10px}
+.cal-v5 .ep-col{min-width:0}
+.cal-v5 .ep-desc{font:400 13.5px/1.55 var(--sans);color:var(--ink);overflow-wrap:anywhere}
+.cal-v5 .ep-desc p{margin:0 0 8px}
+.cal-v5 .ep-lore{display:flex;align-items:center;gap:9px;margin:4px 0 10px;padding:8px 10px;border-radius:10px;box-shadow:inset 0 0 0 1px var(--edge);background:var(--paper);color:var(--ink);text-decoration:none;font:500 13px/1.3 var(--sans)}
+.cal-v5 .ep-lore:hover{box-shadow:inset 0 0 0 1px var(--mut)}
+.cal-v5 .ep-lore .li{width:26px;height:26px;border-radius:7px;display:grid;place-items:center;background:var(--paper2);color:var(--mut);flex:none;font-size:12px}
+.cal-v5 .ep-lore .lt{flex:1;min-width:0;overflow-wrap:anywhere}
+.cal-v5 .ep-lore .lt small{display:block;color:var(--mut);font-size:11.5px}
+.cal-v5 .ep-lore .lg{color:var(--mut)}
+.cal-v5 .ep-note{margin:4px 0 10px;padding:9px 11px;border-radius:10px;background:var(--eraDmBg);box-shadow:inset 0 0 0 1px var(--eraDmLine);font:400 13px/1.5 var(--sans);color:var(--ink);white-space:pre-wrap;overflow-wrap:anywhere}
+.cal-v5 .ep-note .nh{display:flex;align-items:center;gap:6px;margin-bottom:3px;font:650 10.5px/1.3 var(--sans);letter-spacing:.06em;text-transform:uppercase;color:var(--eraDmFg);white-space:normal}
+.cal-v5 .ep-sh{display:flex;align-items:baseline;justify-content:space-between;gap:8px;margin:0 0 4px;font:650 10.5px/1.3 var(--sans);letter-spacing:.08em;text-transform:uppercase;color:var(--mut)}
+.cal-v5 .ep-sh .cnt{text-transform:none;letter-spacing:0;font-weight:500;font-size:12px}
+.cal-v5 .ep-none{margin:4px 0;font:400 12.5px/1.45 var(--sans);color:var(--mut)}
+.cal-v5 .ep-evs{list-style:none;margin:0;padding:0}
+.cal-v5 .ep-evs li + li{border-top:1px solid var(--hair)}
+.cal-v5 .ep-evs button{display:flex;width:100%;align-items:baseline;gap:10px;padding:6px 4px;border-radius:6px;font:500 13px/1.35 var(--sans);color:var(--ink)}
+.cal-v5 .ep-evs button:hover{background:var(--lift)}
+.cal-v5 .ep-evs .t{flex:1;min-width:0;overflow-wrap:anywhere}
+.cal-v5 .ep-evs .k{margin-left:5px;font-size:9.5px;color:var(--mut)}
+.cal-v5 .ep-evs .w{flex:none;font-size:12px;color:var(--mut);font-variant-numeric:tabular-nums;white-space:nowrap}
+.cal-v5 .ep-all, .cal-v5 .ep-manage{display:inline-flex;align-items:center;gap:6px;margin-top:6px;padding:4px 2px;border-radius:6px;font:550 12.5px/1.3 var(--sans);color:var(--ink2);text-decoration:underline;text-decoration-color:var(--edge);text-underline-offset:3px}
+.cal-v5 .ep-all:hover, .cal-v5 .ep-manage:hover{color:var(--ink)}
+/* The label on the first day of an era: a small chip in the cell's corner that opens the era panel. */
+.cal-v5 .erastart{position:absolute;left:4px;right:4px;bottom:4px;z-index:1;padding:2px 6px;border-radius:5px;background:var(--eraChip);box-shadow:0 1px 2px oklch(0 0 0 / .08);font:650 10.5px/1.25 var(--sans);color:var(--ink);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;cursor:pointer}
+.cal-v5 .erastart::before{content:"";display:inline-block;width:6px;height:6px;margin-right:5px;border-radius:2px;vertical-align:1px;background:var(--es,#888);transform:rotate(45deg)}
+.cal-v5 .erastart:hover{box-shadow:0 1px 2px oklch(0 0 0 / .08),inset 0 0 0 1px var(--edge)}
+.cal-v5 .band .erastart{position:static;flex:none;margin-left:8px}
+.cal-v5 .cal.editing .erastart{opacity:.3;pointer-events:none}
+/* The era manager's lore page picker. */
+.cal-v5 .fhint{font:500 11.5px/1.4 var(--sans);color:var(--mut)}
+.cal-v5 .lorepick{position:relative;display:flex;flex-wrap:wrap;align-items:center;gap:6px;font:500 13px/1.3 var(--sans);color:var(--ink)}
+.cal-v5 .lorepick .lp-cur{display:inline-flex;align-items:center;gap:6px;flex:1;min-width:0;overflow-wrap:anywhere}
+.cal-v5 .lorepick .lp-cur i{color:var(--mut)}
+.cal-v5 .lorepick .lp-q{flex:1 1 100%}
+.cal-v5 .lp-res{list-style:none;margin:0;padding:4px;flex:1 1 100%;border-radius:9px;background:var(--paper);box-shadow:inset 0 0 0 1px var(--edge)}
+.cal-v5 .lp-res button{display:flex;width:100%;justify-content:space-between;gap:8px;padding:6px 8px;border-radius:6px;font:500 13px/1.3 var(--sans);color:var(--ink)}
+.cal-v5 .lp-res button:hover, .cal-v5 .lp-res button:focus-visible{background:var(--lift);outline:none;box-shadow:inset 0 0 0 1px var(--edge)}
+.cal-v5 .lp-res small{color:var(--mut)}
+.cal-v5 .lp-res .none{padding:6px 8px;color:var(--mut)}
+@media (max-width:600px){.cal-v5 .erachips{flex-direction:column;align-items:flex-start;gap:1px}
+.cal-v5 .earrow{display:none}
+.cal-v5 .erachip{flex-wrap:wrap;column-gap:6px;margin-left:-6px}
+.cal-v5 .erapanel{margin:2px 8px 10px;border-radius:12px}
+.cal-v5 .ep-ribbon{padding:20px 12px 2px}
+.cal-v5 .ep-card{padding:8px 12px 12px}
+.cal-v5 .ep-body{grid-template-columns:minmax(0,1fr)}
+.cal-v5 .erastart{left:auto;right:2px;bottom:2px;width:16px;height:16px;padding:0;font-size:0;display:grid;place-items:center}
+.cal-v5 .erastart::before{margin:0}
+}
+@media (prefers-reduced-motion:reduce){.cal-v5 .eratip{animation:none}
+.cal-v5 .erachip .ev, .cal-v5 .rseg::before, .cal-v5 .stage>.era-field{transition:none}
+}

@@ -2920,7 +2920,9 @@ func (a *App) RegisterRoutes() {
 	// both paths deliver the same scripts; each re-inits on
 	// htmx:afterSettle/htmx:load and no-ops when its mount is absent.
 	//
-	// The calendar's page scripts: calendar_view.js mounts on
+	// The calendar's page scripts: calendar_era_blend.js (loaded first)
+	// paints the era colours for calendar_view.js and for the structure
+	// editor's Era look preview; calendar_view.js mounts on
 	// data-widget="calendar_view" (the calendar's own page, however it was
 	// reached), calendar_editor.js self-gates on that
 	// mount's data-can-edit="true" and opens calendar_event_drawer.js's full
@@ -2934,6 +2936,7 @@ func (a *App) RegisterRoutes() {
 	// as every entry here.
 	pluginBodyScripts := []string{
 		"/static/plugins/" + entities.PluginSlug + "/js/characters.js",
+		"/static/js/widgets/calendar_era_blend.js",
 		"/static/js/widgets/calendar_view.js",
 		"/static/js/widgets/calendar_rule.js",
 		"/static/js/widgets/calendar_event_drawer.js",
