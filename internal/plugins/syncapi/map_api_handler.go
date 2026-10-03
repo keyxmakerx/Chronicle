@@ -52,7 +52,8 @@ func (h *MapAPIHandler) resolveRole(c echo.Context) int {
 
 // requireOwnerRole enforces the same Owner-only floor internal/plugins/maps
 // applies to GM-only map operations (fog of war, layer structure, and
-// marker/drawing/token deletion) on the web: RequirePermission(PermWrite)
+// token deletion; marker and drawing deletion is Scribe+ with the service
+// limiting a Scribe to its own items) on the web: RequirePermission(PermWrite)
 // alone also admits a Scribe key, which the web route refuses for these
 // actions. Fails closed — an unresolved role (resolveRole's 0) is refused
 // same as any role below Owner.
@@ -291,10 +292,16 @@ func (h *MapAPIHandler) DeleteDrawing(c echo.Context) error {
 	if _, err := h.requireMapInCampaign(c); err != nil {
 		return err
 	}
-	if err := h.requireOwnerRole(c); err != nil {
-		return err
+	// Scribe keys may delete only drawings their user created; the service
+	// enforces that from the key owner's resolved role and user id.
+	key := GetAPIKey(c)
+	if key == nil {
+		return apperror.NewForbidden("api key required")
 	}
-	if err := h.drawingSvc.DeleteDrawing(c.Request().Context(), c.Param("drawingID"), c.Param("mapID"), maps.ParseExpectedUpdatedAt(c)); err != nil {
+	if campaigns.Role(h.resolveRole(c)) < campaigns.RoleScribe {
+		return apperror.NewForbidden("scribe role required to delete drawings")
+	}
+	if err := h.drawingSvc.DeleteDrawing(c.Request().Context(), c.Param("drawingID"), c.Param("mapID"), maps.ParseExpectedUpdatedAt(c), key.UserID, h.resolveRole(c)); err != nil {
 		return err
 	}
 	return c.NoContent(http.StatusNoContent)
@@ -887,13 +894,19 @@ func (h *MapAPIHandler) DeleteMarker(c echo.Context) error {
 	if err != nil {
 		return err
 	}
-	if err := h.requireOwnerRole(c); err != nil {
-		return err
+	// Scribe keys may delete only markers their user created; the service
+	// enforces that from the key owner's resolved role and user id.
+	key := GetAPIKey(c)
+	if key == nil {
+		return apperror.NewForbidden("api key required")
+	}
+	if campaigns.Role(h.resolveRole(c)) < campaigns.RoleScribe {
+		return apperror.NewForbidden("scribe role required to delete markers")
 	}
 	if _, err := h.requireMarkerOnMap(c, m); err != nil {
 		return err
 	}
-	if err := h.mapSvc.DeleteMarker(c.Request().Context(), c.Param("markerID"), maps.ParseExpectedUpdatedAt(c), h.canAuthorDmOnly(c)); err != nil {
+	if err := h.mapSvc.DeleteMarker(c.Request().Context(), c.Param("markerID"), maps.ParseExpectedUpdatedAt(c), h.canAuthorDmOnly(c), key.UserID, h.resolveRole(c)); err != nil {
 		return err
 	}
 	return c.NoContent(http.StatusNoContent)

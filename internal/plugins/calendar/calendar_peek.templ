@@ -1,0 +1,44 @@
+// calendar_peek.templ renders the month a calendar's card peeks on the
+// Calendars page: this month's name and a miniature grid, today filled in,
+// a mark on each day with an event. It is decoration for sighted pointer
+// and keyboard users (the card's own text already says today's date), so
+// it is hidden from assistive technology. calendar_open.js and
+// calendar_v5.css slide it out from under the card.
+package calendar
+
+import "fmt"
+
+// calendarPeek is one card's peek. monthEvents is that calendar's current
+// month (CalendarsListData.MonthEvents); nil draws the month with no marks.
+templ calendarPeek(cal *Calendar, monthEvents []Event) {
+	<div class="calv5-peek" aria-hidden="true" style={ fmt.Sprintf("--cols:%d", peekCols(cal)) }>
+		<p class="calv5-pk-h">
+			{ cal.CurrentMonthName() } <span>{ fmt.Sprintf("%d", cal.CurrentYear) }</span>
+		</p>
+		<div class="calv5-pk-grid">
+			for _, week := range peekGridRows(cal, monthEvents) {
+				for _, day := range week {
+					<i class={ templ.KV("b", day.Blank), templ.KV("t", day.IsToday), templ.KV("p", day.IsPast && !day.Blank), templ.KV("e", day.EventCount > 0) }></i>
+				}
+			}
+		</div>
+	</div>
+}
+
+// peekCols is the peek grid's column count: the calendar's own week, the
+// same length buildMonthGrid lays its rows out in, so a 10-day week (Harptos)
+// or a 6-day one (Dwarven) lines up. A calendar with no weekdays falls back
+// to 7, as buildMonthGrid does, and never to 0, which would hide the grid.
+func peekCols(cal *Calendar) int {
+	if wl := cal.WeekLength(); wl > 0 {
+		return wl
+	}
+	return 7
+}
+
+// peekGridRows lays out the calendar's current month with its event marks
+// (recurrence-aware, via countEventsByDay).
+func peekGridRows(cal *Calendar, monthEvents []Event) [][]monthGridCell {
+	counts := countEventsByDay(cal, monthEvents, cal.CurrentYear, cal.CurrentMonth)
+	return buildMonthGrid(cal, cal.CurrentYear, cal.CurrentMonth, counts, nil)
+}

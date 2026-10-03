@@ -33,11 +33,12 @@ func RegisterRoutes(e *echo.Echo, h *Handler, campaignSvc campaigns.CampaignServ
 	// No :mid — it's a campaign-static catalog.
 	cg.GET("/maps/marker-icons", h.MarkerIconsAPI, campaigns.RequireRole(campaigns.RolePlayer))
 
-	// Marker CRUD (Player can list, Scribe+ can create/edit, Owner can delete).
+	// Marker CRUD (Player can list, Scribe+ can create/edit; delete is Scribe+ but the service limits a
+	// Scribe to markers it created, Owner deletes any).
 	cg.GET("/maps/:mid/markers", h.ListMarkersAPI, campaigns.RequireRole(campaigns.RolePlayer))
 	cg.POST("/maps/:mid/markers", h.CreateMarkerAPI, campaigns.RequireRole(campaigns.RoleScribe))
 	cg.PUT("/maps/:mid/markers/:mkid", h.UpdateMarkerAPI, campaigns.RequireRole(campaigns.RoleScribe))
-	cg.DELETE("/maps/:mid/markers/:mkid", h.DeleteMarkerAPI, campaigns.RequireRole(campaigns.RoleOwner))
+	cg.DELETE("/maps/:mid/markers/:mkid", h.DeleteMarkerAPI, campaigns.RequireRole(campaigns.RoleScribe))
 
 	// Public-capable views: map list and map viewer.
 	pub := e.Group("/campaigns/:id",
@@ -68,12 +69,13 @@ func RegisterDrawingRoutes(e *echo.Echo, dh *DrawingHandler, campaignSvc campaig
 		addons.RequireAddon(addonSvc, "maps"),
 	)
 
-	// Drawings (Scribe+ can create/edit, Owner can delete).
+	// Drawings (Scribe+ can create/edit; delete is Scribe+ but the service limits a
+	// Scribe to drawings it created, Owner deletes any).
 	cg.GET("/maps/:mid/drawings", dh.ListDrawings, campaigns.RequireRole(campaigns.RolePlayer))
 	cg.POST("/maps/:mid/drawings", dh.CreateDrawing, campaigns.RequireRole(campaigns.RoleScribe))
 	cg.GET("/maps/:mid/drawings/:did", dh.GetDrawing, campaigns.RequireRole(campaigns.RolePlayer))
 	cg.PUT("/maps/:mid/drawings/:did", dh.UpdateDrawing, campaigns.RequireRole(campaigns.RoleScribe))
-	cg.DELETE("/maps/:mid/drawings/:did", dh.DeleteDrawing, campaigns.RequireRole(campaigns.RoleOwner))
+	cg.DELETE("/maps/:mid/drawings/:did", dh.DeleteDrawing, campaigns.RequireRole(campaigns.RoleScribe))
 
 	// Tokens (Scribe+ can create/edit/move, Owner can delete).
 	cg.GET("/maps/:mid/tokens", dh.ListTokens, campaigns.RequireRole(campaigns.RolePlayer))

@@ -58,11 +58,10 @@ func RegisterRoutes(e *echo.Echo, h *Handler, campaignSvc campaigns.CampaignServ
 	// collide with a real (UUID) :calid the same way "list" and "presets"
 	// already don't (see this file's earlier comments). Every wizard route
 	// is Owner only, matching the calendar CRUD block above: creating a
-	// calendar's initial structure is calendar structure. The list page and
-	// the per-card preview are Player+ (read access, filtered by the
-	// service's own viewer-aware visibility — see list_handler.go).
+	// calendar's initial structure is calendar structure. The list page is
+	// Player+ (read access, filtered by the service's own viewer-aware
+	// visibility — see list_handler.go).
 	cg.GET("/calendars", h.Index, campaigns.RequireRole(campaigns.RolePlayer))
-	cg.GET("/calendars/:calid/preview", h.Preview, campaigns.RequireRole(campaigns.RolePlayer))
 	cg.GET("/calendars/wizard", h.WizardStart, campaigns.RequireRole(campaigns.RoleOwner))
 	cg.GET("/calendars/wizard/presets", h.WizardPresets, campaigns.RequireRole(campaigns.RoleOwner))
 	cg.GET("/calendars/wizard/presets/:name", h.WizardPresetReview, campaigns.RequireRole(campaigns.RoleOwner))

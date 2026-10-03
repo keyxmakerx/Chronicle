@@ -1,5 +1,5 @@
 // Package calendar — view_helpers.go holds small, pure presentation-shaping
-// helpers shared by the calendars list, the per-card preview, and the
+// helpers shared by the calendars list (and its cards' month peeks) and the
 // new-calendar wizard Templ pages. None of these decide authorization or
 // business rules (that stays in service.go) — they only reshape
 // already-authorized data for rendering.
@@ -29,7 +29,7 @@ func visibilityLabel(cal Calendar) string {
 	return "Everyone in the campaign"
 }
 
-// mainMoon returns a calendar's "main" moon for card/preview display — the
+// mainMoon returns a calendar's "main" moon for card display — the
 // first entry in Moons. The real schema has no explicit primary-moon flag
 // (unlike the mockup's fictional mo.main), so "first in stored order" is the
 // stand-in; a future structure editor letting an owner reorder moons would
@@ -41,9 +41,9 @@ func mainMoon(cal *Calendar) *Moon {
 	return &cal.Moons[0]
 }
 
-// monthGridCell is one day cell in the calendar preview's simplified month
+// monthGridCell is one day cell in a card's month peek, a simplified month
 // grid (current month only, no prev/next paging, no festival banding — see
-// calendar_preview.templ's own doc comment for what's out of scope).
+// calendar_peek.templ).
 type monthGridCell struct {
 	Day        int
 	Blank      bool // a leading/trailing pad cell so every row is a full week
