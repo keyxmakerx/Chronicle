@@ -2019,6 +2019,8 @@ func (a *armoryRelationFinderAdapter) GetByID(ctx context.Context, id int) (*arm
 		CampaignID:     rel.CampaignID,
 		SourceEntityID: rel.SourceEntityID,
 		TargetEntityID: rel.TargetEntityID,
+		RelationType:   rel.RelationType,
+		DmOnly:         rel.DmOnly,
 	}, nil
 }
 
@@ -3364,6 +3366,9 @@ func (a *App) RegisterRoutes() {
 		UserNames:  &armoryMemberNamesAdapter{svc: campaignService},
 	})
 	stashHandler := armory.NewStashHandler(stashSvc)
+	// Buying shares the stash service's campaign lock, so a purchase and a
+	// stash move can't spend the same coins.
+	shopBuyHandler := armory.NewShopBuyHandler(armory.NewShopBuyService(stashSvc, txSvc, &armoryShopCheckerAdapter{svc: entityService}))
 	entityHandler.SetCharacterPagePanel(entities.PagePanel{
 		Addon: "armory",
 		URL: func(campaignID, entityID string) string {
@@ -3375,7 +3380,7 @@ func (a *App) RegisterRoutes() {
 		&armoryShopCheckerAdapter{svc: entityService},
 		&entityVisibilityFilterAdapter{svc: entityService},
 	))
-	armory.RegisterRoutes(e, armoryHandler, txHandler, instHandler, stashHandler, shopRoomHandler, campaignService, authService, addonService)
+	armory.RegisterRoutes(e, armoryHandler, txHandler, instHandler, stashHandler, shopRoomHandler, shopBuyHandler, campaignService, authService, addonService)
 
 	// Notes widget: personal floating note-taking panel (Google Keep-style).
 	// noteSvc was created above (before REST API v1 registration).

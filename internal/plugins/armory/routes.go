@@ -15,7 +15,7 @@ import (
 // Public-capable routes use AllowPublicCampaignAccess so public campaigns
 // show items to unauthenticated visitors. All routes are gated behind the
 // "armory" addon — campaign owners can enable/disable via the Plugin Hub.
-func RegisterRoutes(e *echo.Echo, h *Handler, th *TransactionHandler, ih *InstanceHandler, sh *StashHandler, rh *ShopRoomHandler, campaignSvc campaigns.CampaignService, authSvc auth.AuthService, addonSvc addons.AddonService) {
+func RegisterRoutes(e *echo.Echo, h *Handler, th *TransactionHandler, ih *InstanceHandler, sh *StashHandler, rh *ShopRoomHandler, bh *ShopBuyHandler, campaignSvc campaigns.CampaignService, authSvc auth.AuthService, addonSvc addons.AddonService) {
 	// Public-capable routes: gallery view (Player+).
 	pub := e.Group("/campaigns/:id",
 		auth.OptionalAuth(authSvc),
@@ -49,6 +49,11 @@ func RegisterRoutes(e *echo.Echo, h *Handler, th *TransactionHandler, ih *Instan
 
 	// Only the campaign Owner arranges a shop room.
 	cg.PUT("/armory/shops/:eid/room", rh.Put, campaigns.RequireRole(campaigns.RoleOwner))
+
+	// Buying from a shop with a character's coins. The service decides who may
+	// buy for which character and hides a shop the caller cannot see (404).
+	cg.GET("/armory/shops/:eid/buyers", bh.Buyers, campaigns.RequireRole(campaigns.RolePlayer))
+	cg.POST("/armory/shops/:eid/buy", bh.Buy, campaigns.RequireRole(campaigns.RolePlayer))
 
 	// Transaction routes.
 	// Purchase is the player-initiated buy path: a Player buys an item from

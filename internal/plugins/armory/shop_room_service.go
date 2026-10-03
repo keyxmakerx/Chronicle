@@ -41,7 +41,11 @@ func NewShopRoomService(repo ShopRoomRepository, shops ShopEntityChecker, visibi
 }
 
 func (s *shopRoomService) requireShop(ctx context.Context, campaignID, shopEntityID string) error {
-	ok, err := s.shops.IsShopInCampaign(ctx, campaignID, shopEntityID)
+	return requireShopInCampaign(ctx, s.shops, campaignID, shopEntityID)
+}
+
+func requireShopInCampaign(ctx context.Context, shops ShopEntityChecker, campaignID, shopEntityID string) error {
+	ok, err := shops.IsShopInCampaign(ctx, campaignID, shopEntityID)
 	if err != nil {
 		return apperror.NewInternal(err)
 	}
@@ -51,22 +55,33 @@ func (s *shopRoomService) requireShop(ctx context.Context, campaignID, shopEntit
 	return nil
 }
 
-func (s *shopRoomService) GetRoom(ctx context.Context, campaignID, shopEntityID string, role int, userID string) (json.RawMessage, error) {
-	if err := s.requireShop(ctx, campaignID, shopEntityID); err != nil {
-		return nil, err
+// requireViewableShop is the one gate for every read or purchase of a shop:
+// the shop must be in the campaign and visible to the viewer, and a hidden
+// shop is reported exactly like a missing one.
+func requireViewableShop(ctx context.Context, shops ShopEntityChecker, visibility EntityVisibilityFilter, campaignID, shopEntityID string, role int, userID string) error {
+	if err := requireShopInCampaign(ctx, shops, campaignID, shopEntityID); err != nil {
+		return err
 	}
 	// Owner visibility sees every entity, as in the transaction reader.
-	if role < permissions.RoleOwner {
-		if s.visibility == nil {
-			return nil, apperror.NewNotFound("shop")
-		}
-		viewable, err := s.visibility.FilterViewableEntityIDs(ctx, campaignID, []string{shopEntityID}, role, userID)
-		if err != nil {
-			return nil, apperror.NewInternal(err)
-		}
-		if !viewable[shopEntityID] {
-			return nil, apperror.NewNotFound("shop")
-		}
+	if role >= permissions.RoleOwner {
+		return nil
+	}
+	if visibility == nil {
+		return apperror.NewNotFound("shop")
+	}
+	viewable, err := visibility.FilterViewableEntityIDs(ctx, campaignID, []string{shopEntityID}, role, userID)
+	if err != nil {
+		return apperror.NewInternal(err)
+	}
+	if !viewable[shopEntityID] {
+		return apperror.NewNotFound("shop")
+	}
+	return nil
+}
+
+func (s *shopRoomService) GetRoom(ctx context.Context, campaignID, shopEntityID string, role int, userID string) (json.RawMessage, error) {
+	if err := requireViewableShop(ctx, s.shops, s.visibility, campaignID, shopEntityID, role, userID); err != nil {
+		return nil, err
 	}
 	return s.repo.Get(ctx, campaignID, shopEntityID)
 }
