@@ -38,6 +38,11 @@ func (h *Handler) Index(c echo.Context) error {
 	if err != nil {
 		return err
 	}
+	// The cards show each map's picture, so they get the viewer's version of it.
+	mapList, err = h.svc.ForViewerList(ctx, mapList, cc.VisibilityRole())
+	if err != nil {
+		return err
+	}
 
 	// A failed frame lookup must not take the list down: the cards fall back
 	// to the default frame.
@@ -143,12 +148,20 @@ func (h *Handler) mapViewData(c echo.Context, cc *campaigns.CampaignContext) (Ma
 	// campaign-frame lookup degrades to the default frame instead of a 500.
 	display, _ := h.svc.ResolveDisplay(c.Request().Context(), m)
 
+	// From here on the page only ever holds the viewer's version of the map, so
+	// no template can reach the original picture of a shadowed map.
+	m, err = h.svc.ForViewer(c.Request().Context(), m, role)
+	if err != nil {
+		return MapViewData{}, err
+	}
+
 	return MapViewData{
 		CampaignID: cc.Campaign.ID,
 		Map:        m,
 		Markers:    markers,
 		IsScribe:   cc.MemberRole >= campaigns.RoleScribe,
 		IsOwner:    cc.MemberRole >= campaigns.RoleOwner,
+		IsDM:       cc.CanAuthorDmOnly(),
 		UserID:     userID,
 		Display:    display,
 	}, nil
@@ -495,14 +508,41 @@ func (h *Handler) GetMapMetaAPI(c echo.Context) error {
 	if markers == nil {
 		markers = []Marker{}
 	}
+	m, err = h.svc.ForViewer(ctx, m, role)
+	if err != nil {
+		return err
+	}
 	return c.JSON(http.StatusOK, map[string]any{
 		"id":           m.ID,
 		"name":         m.Name,
 		"image_id":     m.ImageID,
+		"image_url":    m.PlayerImageURL,
 		"image_width":  m.ImageWidth,
 		"image_height": m.ImageHeight,
 		"markers":      markers,
 	})
+}
+
+// PlayerImage serves the map's picture with its shadowed areas smudged into the
+// pixels, for viewers who must not receive the original. It is registered beside
+// the map page with the same access check, and any failure to produce the copy
+// is an error, never the original.
+// GET /campaigns/:id/maps/:mid/player-image
+func (h *Handler) PlayerImage(c echo.Context) error {
+	cc := campaigns.GetCampaignContext(c)
+	m, err := h.requireMapInCampaign(c, c.Param("mid"), cc.Campaign.ID)
+	if err != nil {
+		return err
+	}
+	data, err := h.svc.PlayerImage(c.Request().Context(), m)
+	if err != nil {
+		return err
+	}
+	// The address carries the shadow version, so a copy never goes stale; private
+	// because it is for this campaign's viewers only.
+	c.Response().Header().Set("Cache-Control", "private, max-age=86400")
+	c.Response().Header().Set("X-Content-Type-Options", "nosniff")
+	return c.Blob(http.StatusOK, "image/jpeg", data)
 }
 
 // ListMarkersAPI returns all markers for a map as JSON.

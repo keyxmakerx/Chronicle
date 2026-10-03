@@ -54,11 +54,13 @@
           return res.json();
         })
         .then(function (m) {
-          if (!m || !m.image_id || !m.image_width || !m.image_height) {
+          if (!m || !(m.image_id || m.image_url) || !m.image_width || !m.image_height) {
             self._renderEmpty(mapId);
             return;
           }
-          var imageUrl = '/media/' + encodeURIComponent(m.image_id);
+          // image_url stands in for image_id when the server will not hand this
+          // viewer the original (a map with shadowed areas).
+          var imageUrl = m.image_url || ('/media/' + encodeURIComponent(m.image_id));
           var markers = Array.isArray(m.markers) ? m.markers : [];
           self._renderLeaflet(imageUrl, m.image_width, m.image_height, markers, mapId);
         })

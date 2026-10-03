@@ -34,7 +34,7 @@ type recordingDeleteDrawingSvc struct {
 	hit   bool
 }
 
-func (s *recordingDeleteDrawingSvc) DeleteDrawing(_ context.Context, _, _ string, _ *time.Time, actor string, role int) error {
+func (s *recordingDeleteDrawingSvc) DeleteDrawing(_ context.Context, _, _ string, _ *time.Time, actor string, role int, _ bool) error {
 	s.hit, s.actor, s.role = true, actor, role
 	return nil
 }

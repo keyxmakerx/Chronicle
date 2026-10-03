@@ -16,15 +16,18 @@ import (
 type recordingDrawingSvc struct {
 	maps.DrawingService
 	createRole, updateRole int
+	createIsDM, updateIsDM bool
 }
 
 func (s *recordingDrawingSvc) CreateDrawing(_ context.Context, in maps.CreateDrawingInput) (*maps.Drawing, error) {
 	s.createRole = in.CallerRole
+	s.createIsDM = in.CallerIsDM
 	return &maps.Drawing{}, nil
 }
 
-func (s *recordingDrawingSvc) UpdateDrawing(_ context.Context, _, _ string, role int, _ maps.UpdateDrawingInput) error {
+func (s *recordingDrawingSvc) UpdateDrawing(_ context.Context, _, _ string, role int, isDM bool, _ maps.UpdateDrawingInput) error {
 	s.updateRole = role
+	s.updateIsDM = isDM
 	return nil
 }
 
@@ -42,6 +45,11 @@ func TestMapAPIHandler_DrawingWrites_ForwardTheKeyOwnersRole(t *testing.T) {
 		if rec.createRole != int(role) {
 			t.Errorf("role %d: create forwarded role %d", role, rec.createRole)
 		}
+		// Scribes are not DM-equivalent, so they may not author shadows.
+		wantDM := role == campaigns.RoleOwner
+		if rec.createIsDM != wantDM {
+			t.Errorf("role %d: create forwarded isDM=%v, want %v", role, rec.createIsDM, wantDM)
+		}
 
 		c, _ = newMapAPIContext(http.MethodPut, "/", key)
 		c.SetParamNames("id", "mapID", "drawingID")
@@ -49,6 +57,9 @@ func TestMapAPIHandler_DrawingWrites_ForwardTheKeyOwnersRole(t *testing.T) {
 		_ = h.UpdateDrawing(c)
 		if rec.updateRole != int(role) {
 			t.Errorf("role %d: update forwarded role %d", role, rec.updateRole)
+		}
+		if rec.updateIsDM != wantDM {
+			t.Errorf("role %d: update forwarded isDM=%v, want %v", role, rec.updateIsDM, wantDM)
 		}
 	}
 }

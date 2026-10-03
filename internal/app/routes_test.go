@@ -31,7 +31,7 @@ func TestPublishLayerEvent_RoutesByEventType(t *testing.T) {
 	for _, tc := range cases {
 		t.Run(tc.event, func(t *testing.T) {
 			bus := &captureBus{}
-			a := &mapEventPublisherAdapter{bus: bus}
+			a := &mapEventPublisherAdapter{bus: bus, shadows: fixedShadowLookup{}}
 			a.PublishLayerEvent(tc.event, "camp-1", &maps.Layer{ID: "layer-1"})
 			if bus.last == nil {
 				t.Fatal("expected Publish to be called")
@@ -48,7 +48,7 @@ func TestPublishLayerEvent_RoutesByEventType(t *testing.T) {
 // the adapter should drop it (silent return) rather than guessing.
 func TestPublishLayerEvent_UnknownEventDropped(t *testing.T) {
 	bus := &captureBus{}
-	a := &mapEventPublisherAdapter{bus: bus}
+	a := &mapEventPublisherAdapter{bus: bus, shadows: fixedShadowLookup{}}
 	a.PublishLayerEvent("gibberish", "camp-1", &maps.Layer{ID: "layer-1"})
 	if bus.last != nil {
 		t.Errorf("expected unknown eventType to be dropped; got %v", bus.last)
@@ -73,7 +73,7 @@ func TestPublishFogEvent_RoutesByEventType(t *testing.T) {
 	for _, tc := range cases {
 		t.Run(tc.event, func(t *testing.T) {
 			bus := &captureBus{}
-			a := &mapEventPublisherAdapter{bus: bus}
+			a := &mapEventPublisherAdapter{bus: bus, shadows: fixedShadowLookup{}}
 			a.PublishFogEvent(tc.event, "camp-1", "map-1", &maps.FogRegion{ID: "fog-1"})
 			if bus.last == nil {
 				t.Fatal("expected Publish to be called")
@@ -91,7 +91,7 @@ func TestPublishFogEvent_RoutesByEventType(t *testing.T) {
 // TestPublishFogEvent_UnknownEventDropped mirrors the layer guard.
 func TestPublishFogEvent_UnknownEventDropped(t *testing.T) {
 	bus := &captureBus{}
-	a := &mapEventPublisherAdapter{bus: bus}
+	a := &mapEventPublisherAdapter{bus: bus, shadows: fixedShadowLookup{}}
 	a.PublishFogEvent("gibberish", "camp-1", "map-1", nil)
 	if bus.last != nil {
 		t.Errorf("expected unknown eventType to be dropped; got %v", bus.last)

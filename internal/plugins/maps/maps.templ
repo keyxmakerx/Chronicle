@@ -69,7 +69,7 @@ templ mapListContent(cc *campaigns.CampaignContext, data MapListData) {
 								<div class="mp-art-wrap">
 									if m.HasImage() {
 										<img
-											src={ layouts.MediaURL(ctx, *m.ImageID) }
+											src={ mapImageSrc(ctx, &m) }
 											alt={ m.Name }
 											class="mp-art group-hover:scale-105 transition-transform duration-300"
 										/>
@@ -271,15 +271,17 @@ templ MapEditorBody(cc *campaigns.CampaignContext, data MapViewData, mapContaine
 		data-leaflet-src={ layouts.AssetURL("/static/vendor/leaflet.js") }
 		data-cluster-src={ layouts.AssetURL("/static/vendor/leaflet.markercluster.js") }
 		data-draw-src={ layouts.AssetURL("/static/js/map_drawing_tools.js") }
+		data-shadow-src={ layouts.AssetURL("/static/js/map_shadow.js") }
 		data-map-id={ data.Map.ID }
 		data-image-id={ derefStr(data.Map.ImageID) }
-		data-image-url={ mapImageSignedURL(ctx, data.Map.ImageID) }
+		data-image-url={ mapImageSrc(ctx, data.Map) }
 		data-image-width={ fmt.Sprintf("%d", data.Map.ImageWidth) }
 		data-image-height={ fmt.Sprintf("%d", data.Map.ImageHeight) }
 		data-is-scribe={ fmt.Sprintf("%t", data.IsScribe) }
 		data-is-owner={ fmt.Sprintf("%t", cc.MemberRole >= campaigns.RoleOwner || cc.IsSiteAdmin) }
 		data-can-dm-only={ fmt.Sprintf("%t", cc.CanAuthorDmOnly() || cc.IsSiteAdmin) }
 		data-can-draw={ fmt.Sprintf("%t", data.CanDraw()) }
+		data-can-shadow={ fmt.Sprintf("%t", data.CanShadow()) }
 		data-user-id={ data.UserID }
 		data-display={ mustMarshalDisplay(data.DisplayOrDefault()) }
 		data-markers={ mustMarshalMarkers(data.Markers) }
@@ -509,6 +511,19 @@ templ mapControls(data MapViewData) {
 					<button type="button" class="mp-btn" data-shape="text" aria-pressed="false" aria-label="Text"><i class="fa-solid fa-font" aria-hidden="true"></i></button>
 				</div>
 			</div>
+			if data.CanShadow() {
+			<div class="mp-item">
+				<button type="button" class="mp-btn" data-tool="shadow" aria-pressed="false" aria-expanded="false" aria-label="Hide under shadow (B)">
+					<i class="fa-solid fa-cloud" aria-hidden="true"></i>
+					<span class="mp-tip">Hide under shadow <kbd>B</kbd></span>
+				</button>
+				<div id="mp-fly-shadow" class="mp-fl mp-fly" hidden>
+					<div class="mp-fly-label">Hide under shadow</div>
+					<button type="button" class="mp-wd" data-shadow-strength="0.5">A hint</button>
+					<button type="button" class="mp-wd" data-shadow-strength="0.85">Almost nothing</button>
+				</div>
+			</div>
+			}
 			<div class="mp-sep"></div>
 			<div class="mp-item">
 				<button type="button" id="mp-style-btn" class="mp-btn" aria-expanded="false" aria-label="Colour and line">
@@ -720,13 +735,22 @@ func mapBackgroundStyle(s *string) string {
 	return "background-color: " + *s + ";"
 }
 
-// mapImageSignedURL returns a signed media URL for the map image, or an
-// empty string if imageID is nil. Used to pass the URL to JavaScript.
-func mapImageSignedURL(ctx context.Context, imageID *string) string {
-	if imageID == nil || *imageID == "" {
+// mapImageSrc is the one place a template turns a map into a picture address:
+// the player copy when the viewer's version of the map carries one, else the
+// signed media URL of the original, or "" when there is no picture. Every
+// template goes through it so none can build an original URL from an id that
+// the viewer should not have.
+func mapImageSrc(ctx context.Context, m *Map) string {
+	if m == nil {
 		return ""
 	}
-	return layouts.MediaURL(ctx, *imageID)
+	if m.PlayerImageURL != "" {
+		return m.PlayerImageURL
+	}
+	if m.ImageID == nil || *m.ImageID == "" {
+		return ""
+	}
+	return layouts.MediaURL(ctx, *m.ImageID)
 }
 
 // boolDigit renders a bool as "1"/"0" for a data attribute CSS selects on.

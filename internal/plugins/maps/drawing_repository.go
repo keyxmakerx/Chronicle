@@ -20,6 +20,11 @@ type DrawingRepository interface {
 	// drawings whose visibility_rules admit userID, matching ListMarkers'
 	// signature and semantics exactly.
 	ListDrawings(ctx context.Context, mapID string, role int, userID string) ([]Drawing, error)
+	// ListShadows returns every shadow drawing on a map regardless of its own
+	// visibility: a shadow hides what is under it from everyone who cannot see
+	// the shadow's author's view, so the rule must not depend on whether this
+	// particular viewer was allowed to receive the shadow itself.
+	ListShadows(ctx context.Context, mapID string) ([]Drawing, error)
 
 	// Token CRUD.
 	CreateToken(ctx context.Context, t *Token) error
@@ -149,6 +154,28 @@ func scanDrawing(rows *sql.Rows) (Drawing, error) {
 		&d.CreatedBy, &d.FoundryID, &d.CreatedAt, &d.UpdatedAt,
 	)
 	return d, err
+}
+
+// ListShadows returns the shadow drawings of a map; see the interface.
+func (r *drawingRepo) ListShadows(ctx context.Context, mapID string) ([]Drawing, error) {
+	rows, err := r.db.QueryContext(ctx,
+		`SELECT `+drawingCols+`
+		 FROM map_drawings WHERE map_id = ? AND drawing_type = 'shadow'
+		 ORDER BY created_at ASC`, mapID)
+	if err != nil {
+		return nil, apperror.NewInternal(err)
+	}
+	defer rows.Close()
+
+	var drawings []Drawing
+	for rows.Next() {
+		d, err := scanDrawing(rows)
+		if err != nil {
+			return nil, apperror.NewInternal(err)
+		}
+		drawings = append(drawings, d)
+	}
+	return drawings, rows.Err()
 }
 
 // ListDrawings returns all drawings for a map, filtered by role AND user.

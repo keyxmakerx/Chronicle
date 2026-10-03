@@ -2,6 +2,7 @@ package maps
 
 import (
 	"context"
+	"encoding/json"
 	"regexp"
 	"strings"
 	"time"
@@ -18,6 +19,7 @@ var validDrawingTypes = map[string]bool{
 	"ellipse":   true,
 	"polygon":   true,
 	"text":      true,
+	"shadow":    true,
 }
 
 // validLayerTypes enumerates allowed layer types.
@@ -103,9 +105,18 @@ type DrawingService interface {
 	// mapID on the write methods is the authorization boundary from the URL
 	// path: the object must belong to that map, mirroring the read-path guard
 	// (audit-R2 Finding 2 — IDOR).
-	UpdateDrawing(ctx context.Context, id, mapID string, role int, input UpdateDrawingInput) error
-	DeleteDrawing(ctx context.Context, id, mapID string, expectedUpdatedAt *time.Time, actorID string, role int) error
+	//
+	// isDM (owner or co-DM, CampaignContext.CanAuthorDmOnly) is separate from
+	// role: only a DM may create, change or delete a shadow, while role keeps
+	// driving the "who can draw" gate unchanged.
+	UpdateDrawing(ctx context.Context, id, mapID string, role int, isDM bool, input UpdateDrawingInput) error
+	DeleteDrawing(ctx context.Context, id, mapID string, expectedUpdatedAt *time.Time, actorID string, role int, isDM bool) error
+	// ListDrawings also withholds, from viewers subject to shadow hiding,
+	// non-shadow drawings lying wholly under a shadow area.
 	ListDrawings(ctx context.Context, mapID string, role int, userID string) ([]Drawing, error)
+	// IsDrawingShadowed answers the same question for one drawing fetched by
+	// id, so a by-id read cannot reveal what the list withholds.
+	IsDrawingShadowed(ctx context.Context, d *Drawing, role int) (bool, error)
 
 	// Token CRUD.
 	CreateToken(ctx context.Context, input CreateTokenInput) (*Token, error)
@@ -129,6 +140,10 @@ type DrawingService interface {
 	DeleteFog(ctx context.Context, id, mapID string) error
 	ListFog(ctx context.Context, mapID string) ([]FogRegion, error)
 	ResetFog(ctx context.Context, mapID string) error
+
+	// ShadowAreas makes every DrawingService a ShadowLookup, checked at compile
+	// time where it is wired.
+	ShadowAreas(ctx context.Context, mapID string) ([]ShadowArea, error)
 
 	// Wiring.
 	SetEventPublisher(pub MapEventPublisher)
@@ -162,6 +177,8 @@ func (NoopMapEventPublisher) PublishLayerEvent(string, string, *Layer)          
 func (NoopMapEventPublisher) PublishFogEvent(string, string, string, *FogRegion)               {}
 func (NoopMapEventPublisher) PublishMarkerEvent(string, string, *Marker)                       {}
 
+var _ ShadowLookup = DrawingService(nil)
+
 // drawingService implements DrawingService.
 type drawingService struct {
 	repo      DrawingRepository
@@ -169,6 +186,9 @@ type drawingService struct {
 	mapLookup func(ctx context.Context, mapID string) (string, error) // returns campaignID
 	// drawPolicy returns the map's "who can draw" value; nil means the default.
 	drawPolicy func(ctx context.Context, mapID string) (string, error)
+	// onShadowChange tells the map service a shadow was written, so cached
+	// answers about shadowed map pictures are dropped.
+	onShadowChange func(campaignID string)
 }
 
 // NewDrawingService creates a new drawing service.
@@ -189,6 +209,21 @@ func (s *drawingService) SetMapLookup(fn func(ctx context.Context, mapID string)
 // SetDrawPolicyLookup sets the function used to read a map's draw gate.
 func (s *drawingService) SetDrawPolicyLookup(fn func(ctx context.Context, mapID string) (string, error)) {
 	s.drawPolicy = fn
+}
+
+// SetShadowChangeHook registers the callback run after every shadow write.
+func (s *drawingService) SetShadowChangeHook(fn func(campaignID string)) {
+	s.onShadowChange = fn
+}
+
+// shadowChanged runs the hook for a shadow write. An unresolved campaign is
+// passed as "", which the receiver treats as "everything", so a failed lookup
+// can never leave a stale "not shadowed" answer behind.
+func (s *drawingService) shadowChanged(ctx context.Context, d *Drawing) {
+	if s.onShadowChange == nil || d == nil || d.DrawingType != DrawingTypeShadow {
+		return
+	}
+	s.onShadowChange(s.campaignForMap(ctx, d.MapID))
 }
 
 // requireDrawAccess is the server-side half of the map's "who can draw"
@@ -233,11 +268,22 @@ func (s *drawingService) CreateDrawing(ctx context.Context, input CreateDrawingI
 	if !validDrawingTypes[dt] {
 		return nil, apperror.NewBadRequest("invalid drawing type: " + dt)
 	}
+	if dt == DrawingTypeShadow {
+		if err := requireShadowAuthor(input.CallerIsDM); err != nil {
+			return nil, err
+		}
+		input.FillAlpha = normalizeShadowAlpha(input.FillAlpha)
+	}
 	if len(input.Points) == 0 {
 		return nil, apperror.NewBadRequest("points are required")
 	}
 	if len(input.Points) > 10000 {
 		return nil, apperror.NewBadRequest("too many points (maximum 10,000)")
+	}
+	if dt == DrawingTypeShadow {
+		if err := validateShadowPoints(input.Points); err != nil {
+			return nil, err
+		}
 	}
 
 	vis := input.Visibility
@@ -273,6 +319,7 @@ func (s *drawingService) CreateDrawing(ctx context.Context, input CreateDrawingI
 	if err := s.repo.CreateDrawing(ctx, d); err != nil {
 		return nil, err
 	}
+	s.shadowChanged(ctx, d)
 	s.events.PublishDrawingEvent("created", s.campaignForMap(ctx, d.MapID), d)
 	return d, nil
 }
@@ -283,7 +330,7 @@ func (s *drawingService) GetDrawing(ctx context.Context, id string) (*Drawing, e
 }
 
 // UpdateDrawing validates input and updates a drawing.
-func (s *drawingService) UpdateDrawing(ctx context.Context, id, mapID string, role int, input UpdateDrawingInput) error {
+func (s *drawingService) UpdateDrawing(ctx context.Context, id, mapID string, role int, isDM bool, input UpdateDrawingInput) error {
 	if err := s.requireDrawAccess(ctx, mapID, role); err != nil {
 		return err
 	}
@@ -295,6 +342,11 @@ func (s *drawingService) UpdateDrawing(ctx context.Context, id, mapID string, ro
 	// URL path. NotFound (not Forbidden) so existence isn't leaked.
 	if d.MapID != mapID {
 		return apperror.NewNotFound("drawing not found")
+	}
+	if d.DrawingType == DrawingTypeShadow {
+		if err := requireShadowAuthor(isDM); err != nil {
+			return err
+		}
 	}
 
 	if err := concurrency.Check(d.UpdatedAt, input.ExpectedUpdatedAt, "drawing"); err != nil {
@@ -314,9 +366,19 @@ func (s *drawingService) UpdateDrawing(ctx context.Context, id, mapID string, ro
 	d.Rotation = input.Rotation.Val(d.Rotation)
 	d.Visibility = input.Visibility.Val(d.Visibility)
 
+	// A shadow keeps its shape and strength rules on every write, so an edit
+	// cannot leave a box players cannot interpret or hide a pin unpredictably.
+	if d.DrawingType == DrawingTypeShadow {
+		if err := validateShadowPoints(d.Points); err != nil {
+			return err
+		}
+		d.FillAlpha = normalizeShadowAlpha(d.FillAlpha)
+	}
+
 	if err := s.repo.UpdateDrawing(ctx, d); err != nil {
 		return err
 	}
+	s.shadowChanged(ctx, d)
 	s.events.PublishDrawingEvent("updated", s.campaignForMap(ctx, d.MapID), d)
 	return nil
 }
@@ -324,8 +386,8 @@ func (s *drawingService) UpdateDrawing(ctx context.Context, id, mapID string, ro
 // DeleteDrawing removes a drawing. Owners may delete any drawing; a lower
 // role only one it created (nil creator is owner-only). A dm_only drawing the
 // caller did not create answers NotFound, so a scribe cannot probe for hidden
-// drawings.
-func (s *drawingService) DeleteDrawing(ctx context.Context, id, mapID string, expectedUpdatedAt *time.Time, actorID string, role int) error {
+// drawings. Shadows are DM-only on top of that.
+func (s *drawingService) DeleteDrawing(ctx context.Context, id, mapID string, expectedUpdatedAt *time.Time, actorID string, role int, isDM bool) error {
 	d, err := s.repo.GetDrawing(ctx, id)
 	if err != nil {
 		return err
@@ -333,11 +395,17 @@ func (s *drawingService) DeleteDrawing(ctx context.Context, id, mapID string, ex
 	if d.MapID != mapID { // IDOR guard (audit-R2 Finding 2)
 		return apperror.NewNotFound("drawing not found")
 	}
-	if !canDeleteOwn(role, actorID, d.CreatedBy) {
+	// A co-DM grant counts as DM here, whatever the member role.
+	if !isDM && !canDeleteOwn(role, actorID, d.CreatedBy) {
 		if d.Visibility == "dm_only" {
 			return apperror.NewNotFound("drawing not found")
 		}
 		return apperror.NewForbidden("you can only delete drawings you created")
+	}
+	if d.DrawingType == DrawingTypeShadow {
+		if err := requireShadowAuthor(isDM); err != nil {
+			return err
+		}
 	}
 	if err := concurrency.Check(d.UpdatedAt, expectedUpdatedAt, "drawing"); err != nil {
 		return err
@@ -345,6 +413,7 @@ func (s *drawingService) DeleteDrawing(ctx context.Context, id, mapID string, ex
 	if err := s.repo.DeleteDrawing(ctx, id); err != nil {
 		return err
 	}
+	s.shadowChanged(ctx, d)
 	s.events.PublishDrawingEvent("deleted", s.campaignForMap(ctx, d.MapID), d)
 	return nil
 }
@@ -352,7 +421,56 @@ func (s *drawingService) DeleteDrawing(ctx context.Context, id, mapID string, ex
 // ListDrawings returns all drawings for a map, filtered by role and user
 // (S1 — matches ListMarkers).
 func (s *drawingService) ListDrawings(ctx context.Context, mapID string, role int, userID string) ([]Drawing, error) {
-	return s.repo.ListDrawings(ctx, mapID, role, userID)
+	drawings, err := s.repo.ListDrawings(ctx, mapID, role, userID)
+	if err != nil || !shadowHidingApplies(role) {
+		return drawings, err
+	}
+	areas, err := s.ShadowAreas(ctx, mapID)
+	if err != nil {
+		// Fail closed: a drawing that might be under a shadow is not sent.
+		return nil, err
+	}
+	return filterDrawingsByShadow(areas, drawings), nil
+}
+
+// ShadowAreas returns the boxes of every shadow on a map. It is on the
+// concrete service (wired into the map service and the event publisher by
+// type assertion) so the rule lives here once and the map service never needs
+// the drawing repository.
+func (s *drawingService) ShadowAreas(ctx context.Context, mapID string) ([]ShadowArea, error) {
+	shadows, err := s.repo.ListShadows(ctx, mapID)
+	if err != nil {
+		return nil, err
+	}
+	areas := make([]ShadowArea, 0, len(shadows))
+	for _, d := range shadows {
+		if a, ok := shadowAreaFromDrawing(d); ok {
+			areas = append(areas, a)
+		}
+	}
+	return areas, nil
+}
+
+// IsDrawingShadowed reports whether a viewer of this role must not receive d.
+func (s *drawingService) IsDrawingShadowed(ctx context.Context, d *Drawing, role int) (bool, error) {
+	if d == nil || !shadowHidingApplies(role) {
+		return false, nil
+	}
+	areas, err := s.ShadowAreas(ctx, d.MapID)
+	if err != nil {
+		return true, err
+	}
+	return DrawingUnderShadow(areas, d), nil
+}
+
+// validateShadowPoints requires exactly two finite corners; a shadow is a box,
+// and anything else would be stored but could never be drawn or enforced.
+func validateShadowPoints(raw json.RawMessage) error {
+	pts, ok := parsePoints(raw)
+	if !ok || len(pts) != 2 {
+		return apperror.NewBadRequest("a shadow needs exactly two corner points")
+	}
+	return nil
 }
 
 // --- Token ---

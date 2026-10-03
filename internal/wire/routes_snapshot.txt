@@ -323,6 +323,7 @@ GET	/maps/:mid/layers/:lid	internal/plugins/maps/routes.go
 GET	/maps/:mid/markers	internal/plugins/maps/routes.go
 GET	/maps/:mid/markers	internal/plugins/maps/routes.go
 GET	/maps/:mid/meta	internal/plugins/maps/routes.go
+GET	/maps/:mid/player-image	internal/plugins/maps/routes.go
 GET	/maps/:mid/tokens	internal/plugins/maps/routes.go
 GET	/maps/:mid/tokens	internal/plugins/maps/routes.go
 GET	/maps/:mid/tokens/:tid	internal/plugins/maps/routes.go

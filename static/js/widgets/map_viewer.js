@@ -43,6 +43,13 @@
       return loadScript(cfg.clusterSrc).catch(function () { /* clustering is a nicety */ });
     });
   }
+  // The shadow module must be in before the drawing module starts, because the
+  // drawing module looks for it when it renders a shadow. Optional like the
+  // drawing module itself.
+  function ensureShadow(cfg) {
+    if (window.ChronicleMapShadow) return Promise.resolve();
+    return loadScript(cfg.shadowSrc).catch(function () { /* shadows simply do not render */ });
+  }
   function ensureDrawing(cfg) {
     if (window.ChronicleMapDrawing) return Promise.resolve();
     return loadScript(cfg.drawSrc).catch(function () { /* drawings simply do not render */ });
@@ -66,7 +73,6 @@
 	var destroyed = false;
 	function listen(target, evt, fn) { target.addEventListener(evt, fn); cleanups.push(function() { target.removeEventListener(evt, fn); }); }
 	var mapID = cfg.dataset.mapId;
-	var imageID = cfg.dataset.imageId;
 	var mapImageURL = cfg.dataset.imageUrl;
 	var imageW = cfg.dataset.imageWidth;
 	var imageH = cfg.dataset.imageHeight;
@@ -76,6 +82,9 @@
 	// canDraw is what the viewer is OFFERED; the server enforces the
 	// map's "who can draw" setting on every drawing write regardless.
 	var canDraw = cfg.dataset.canDraw === 'true';
+	// Shadows decide what players may know, so the tool is for the owner and
+	// co-DMs only; the server refuses everyone else regardless.
+	var canShadow = cfg.dataset.canShadow === 'true';
 	var userID = cfg.dataset.userId || '';
 	// The map's display settings, resolved server-side with every
 	// default filled in, so the defaults live in one place (Go).
@@ -117,9 +126,11 @@
 		doubleClickZoom: false,
 	});
 
-	// Set image bounds and add overlay if image exists.
+	// Set image bounds and add overlay if image exists. The address is the
+	// original's for the owner and the player copy's for everyone the shadows hide
+	// it from, so presence of the address, not of an image id, is the test.
 	var bounds = [[0, 0], [h, w]];
-	if (imageID) {
+	if (mapImageURL) {
 		L.imageOverlay(mapImageURL, bounds).addTo(map);
 	}
 
@@ -625,6 +636,7 @@
 	var drawColor = '#2563eb';
 	var drawWidth = 4;
 	var SHAPE_ICON = { freehand: 'fa-pen', rectangle: 'fa-vector-square', ellipse: 'fa-circle', polygon: 'fa-draw-polygon', text: 'fa-font' };
+	var SHADOW_HINT = 'Drag a box over what players should not make out';
 	var SHAPE_HINT = {
 		freehand: 'Drag to draw a line',
 		rectangle: 'Click one corner, then the opposite corner',
@@ -690,13 +702,15 @@
 	// Popovers beside the tool rail (draw shapes, colour and line).
 	var flyDraw = $id('mp-fly-draw');
 	var flyStyle = $id('mp-fly-style');
+	var flyShadow = $id('mp-fly-shadow');
 	function closePopovers() {
 		var any = false;
-		[flyDraw, flyStyle].forEach(function(f) {
+		[flyDraw, flyStyle, flyShadow].forEach(function(f) {
 			if (f && !f.hidden) { f.hidden = true; any = true; }
 		});
-		var db = document.querySelector('[data-tool="draw"]');
-		if (db) db.setAttribute('aria-expanded', 'false');
+		document.querySelectorAll('[data-tool="draw"], [data-tool="shadow"]').forEach(function(b) {
+			b.setAttribute('aria-expanded', 'false');
+		});
 		var sb = $id('mp-style-btn');
 		if (sb) sb.setAttribute('aria-expanded', 'false');
 		return any;
@@ -726,10 +740,11 @@
 	function setTool(t) {
 		if (!isScribe) t = 'move';
 		closePopovers();
-		if (t !== 'draw' && draw()) draw().cancel();
+		if (t !== 'draw' && t !== 'shadow' && draw()) draw().cancel();
 		tool = t;
 		if (t === 'pin') setHint('Click the map to drop a pin');
 		else if (t === 'draw') setHint(SHAPE_HINT[drawShape]);
+		else if (t === 'shadow') setHint(SHADOW_HINT);
 		else setHint('');
 		syncRail();
 	}
@@ -744,13 +759,30 @@
 		syncRail();
 	}
 
+	// Hide under shadow: the strength is chosen in the flyout, which then
+	// starts the drag-a-box tool in the drawing module.
+	function startShadow(strength) {
+		if (!draw()) { Chronicle.notify('Drawing tools are still loading', 'error'); return; }
+		closePopovers();
+		draw().setShadowStrength(strength);
+		tool = 'shadow';
+		draw().start('shadow');
+		setHint(SHADOW_HINT);
+		syncRail();
+	}
 	if (isScribe) {
 		document.querySelectorAll('[data-tool]').forEach(function(b) {
 			b.addEventListener('click', function() {
 				var t = b.dataset.tool;
 				if (t === 'draw') { openPopover(flyDraw, b); return; }
+				if (t === 'shadow') { openPopover(flyShadow, b); return; }
 				setTool(tool === t && t !== 'move' ? 'move' : t);
 			});
+		});
+	}
+	if (canShadow) {
+		document.querySelectorAll('[data-shadow-strength]').forEach(function(b) {
+			b.addEventListener('click', function() { startShadow(parseFloat(b.dataset.shadowStrength)); });
 		});
 	}
 	// Drawing tools exist only when the viewer may draw on this map.
@@ -1280,12 +1312,12 @@
 	// while a drawing tool is active: the polygon tool finishes on
 	// double-click and must not also leave a pin behind.
 	map.on('dblclick', function(e) {
-		if (!isScribe || tool === 'draw') return;
+		if (!isScribe || tool === 'draw' || tool === 'shadow') return;
 		var p = latLngToPercent(e.latlng);
 		startDraft(p.x, p.y);
 	});
 
-	// ---- Keys: V move, P pin, D draw, Esc steps back ----
+	// ---- Keys: V move, P pin, D draw, B hide under shadow, Esc steps back ----
 	function typing(t) {
 		if (!t || !t.tagName) return false;
 		var n = t.tagName;
@@ -1321,6 +1353,7 @@
 		if (k === 'v') { setTool('move'); e.preventDefault(); }
 		else if (k === 'p') { setTool('pin'); e.preventDefault(); }
 		else if (k === 'd' && canDraw) { openPopover(flyDraw, document.querySelector('[data-tool="draw"]')); e.preventDefault(); }
+		else if (k === 'b' && canShadow) { openPopover(flyShadow, document.querySelector('[data-tool="shadow"]')); e.preventDefault(); }
 	}
 	listen(document, 'keydown', onKey);
 
@@ -1509,6 +1542,7 @@
 		// canDraw is what the drawing module builds its tools from; the
 		// server enforces the map's "who can draw" rule regardless.
 		canDraw: canDraw,
+		canShadow: canShadow,
 		isOwner: isOwner,
 		// Callbacks the drawing module calls so the panel counts and the
 		// undo button stay in step with what is on the map.
@@ -1532,6 +1566,7 @@
 			if (destroyed) return;
 			destroyed = true;
 			clearTimeout(viewTimer);
+			if (typeof ctx.onDestroy === 'function') { try { ctx.onDestroy(); } catch (e) { /* drawing add-on already gone */ } }
 			cleanups.forEach(function(fn) { fn(); });
 			leaveFullscreen();
 			try { map.remove(); } catch (e) { /* container already gone */ }
@@ -1551,7 +1586,9 @@
         if (cfgEl.__mapViewerDestroyed) return null;
         var handle = mountViewer(cfgEl, opts);
         cfgEl.__mapViewerHandle = handle;
-        return ensureDrawing({ drawSrc: d.drawSrc }).then(function () {
+        return ensureShadow({ shadowSrc: d.shadowSrc }).then(function () {
+          return ensureDrawing({ drawSrc: d.drawSrc });
+        }).then(function () {
           // The drawing module only polls once, at load; later mounts are
           // started explicitly.
           if (!cfgEl.__mapViewerDestroyed && window.ChronicleMapDrawing && handle.ctx) {

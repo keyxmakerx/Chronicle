@@ -14,7 +14,6 @@ import (
 	"fmt"
 	"github.com/keyxmakerx/chronicle/internal/plugins/campaigns"
 	"github.com/keyxmakerx/chronicle/internal/plugins/widgetbindings"
-	"github.com/keyxmakerx/chronicle/internal/templates/layouts"
 )
 
 // BlockEntityMapEmbed renders the per-entity map preview: the shared Scribe+
@@ -75,7 +74,7 @@ templ BlockEntityMapEmbed(cc *campaigns.CampaignContext, entityID string, data M
 			<div class="mp-viewport">
 				<div class="mp-art-wrap">
 					if data.Map.HasImage() {
-						<img src={ layouts.MediaURL(ctx, *data.Map.ImageID) } alt="" class="mp-art" loading="lazy"/>
+						<img src={ mapImageSrc(ctx, data.Map) } alt="" class="mp-art" loading="lazy"/>
 					} else {
 						<i class="fa-solid fa-map text-3xl text-fg-muted" aria-hidden="true"></i>
 					}

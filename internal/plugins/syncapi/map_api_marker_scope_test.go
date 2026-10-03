@@ -22,11 +22,18 @@ type stubMapSvcMarkerScope struct {
 	m      *maps.Map
 	marker *maps.Marker
 	wrote  bool
+	// shadowed is what IsMarkerShadowed answers; shadowRole records the role asked about.
+	shadowed   bool
+	shadowRole int
 }
 
 func (s *stubMapSvcMarkerScope) GetMap(context.Context, string) (*maps.Map, error) { return s.m, nil }
 func (s *stubMapSvcMarkerScope) GetMarker(context.Context, string) (*maps.Marker, error) {
 	return s.marker, nil
+}
+func (s *stubMapSvcMarkerScope) IsMarkerShadowed(_ context.Context, _ *maps.Marker, role int) (bool, error) {
+	s.shadowRole = role
+	return s.shadowed, nil
 }
 func (s *stubMapSvcMarkerScope) UpdateMarker(context.Context, string, maps.UpdateMarkerInput, bool) error {
 	s.wrote = true
@@ -121,4 +128,35 @@ type stubCampaignSvcMarkerScope struct {
 
 func (s *stubCampaignSvcMarkerScope) IsUserDmGranted(context.Context, string, string) (bool, error) {
 	return false, nil
+}
+
+// A pin the service reports as under a shadow answers NotFound, and the check
+// is made with the role the key resolves to.
+func TestMapAPIHandler_GetMarker_HidesShadowedPin(t *testing.T) {
+	for _, shadowed := range []bool{true, false} {
+		svc := &stubMapSvcMarkerScope{
+			m:        &maps.Map{ID: "map-1", CampaignID: "camp-1"},
+			marker:   &maps.Marker{ID: "mk-1", MapID: "map-1", Visibility: "everyone"},
+			shadowed: shadowed,
+		}
+		camp := &stubCampaignSvcMarkerScope{stubCampaignSvcOwnerGate{role: campaigns.RolePlayer}}
+		h := NewMapAPIHandler(nil, svc, &stubDrawingSvcOwnerGate{}, camp)
+		key := &APIKey{ID: 1, CampaignID: "camp-1", UserID: "player-1", IsActive: true, Permissions: []APIKeyPermission{PermRead}}
+		c, _ := newMapAPIContext(http.MethodGet, "/api/v1/campaigns/camp-1/maps/map-1/markers/mk-1", key)
+		c.SetParamNames("id", "mapID", "markerID")
+		c.SetParamValues("camp-1", "map-1", "mk-1")
+
+		err := h.GetMarker(c)
+		var ae *apperror.AppError
+		if shadowed {
+			if !errors.As(err, &ae) || ae.Code != http.StatusNotFound {
+				t.Fatalf("shadowed: want 404, got %v", err)
+			}
+		} else if err != nil {
+			t.Fatalf("not shadowed: want success, got %v", err)
+		}
+		if svc.shadowRole != int(campaigns.RolePlayer) {
+			t.Errorf("asked about role %d, want the key's role", svc.shadowRole)
+		}
+	}
 }

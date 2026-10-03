@@ -50,6 +50,22 @@ func (h *MapAPIHandler) resolveRole(c echo.Context) int {
 	return int(member.Role)
 }
 
+// viewRole is the role the web applies when deciding what a viewer may see
+// (campaigns.CampaignContext.VisibilityRole): the member role, promoted to
+// owner for a co-DM grant. A failed grant lookup leaves the raw role, which only
+// ever hides more. Writes keep using resolveRole.
+func (h *MapAPIHandler) viewRole(c echo.Context) int {
+	role := h.resolveRole(c)
+	key := GetAPIKey(c)
+	if key == nil || role >= int(campaigns.RoleOwner) {
+		return role
+	}
+	if granted, err := h.campaignSvc.IsUserDmGranted(c.Request().Context(), key.CampaignID, key.UserID); err == nil && granted {
+		return int(campaigns.RoleOwner)
+	}
+	return role
+}
+
 // requireOwnerRole enforces the same Owner-only floor internal/plugins/maps
 // applies to GM-only map operations (fog of war, layer structure, and
 // token deletion; marker and drawing deletion is Scribe+ with the service
@@ -125,6 +141,13 @@ func (h *MapAPIHandler) ListMaps(c echo.Context) error {
 		slog.Error("api: list maps failed", slog.Any("error", err))
 		return apperror.NewInternal(fmt.Errorf("failed to list maps"))
 	}
+	// A key whose user is below owner gets the player copy's address, never the
+	// original picture of a map that has a shadow.
+	result, err = h.mapSvc.ForViewerList(ctx, result, h.viewRole(c))
+	if err != nil {
+		slog.Error("api: prepare map pictures failed", slog.Any("error", err))
+		return apperror.NewInternal(fmt.Errorf("failed to list maps"))
+	}
 	return c.JSON(http.StatusOK, result)
 }
 
@@ -136,7 +159,7 @@ func (h *MapAPIHandler) GetMap(c echo.Context) error {
 		return err
 	}
 
-	role := h.resolveRole(c)
+	role := h.viewRole(c)
 	ctx := c.Request().Context()
 
 	// Resolve user ID from API key for per-player filtering.
@@ -151,9 +174,17 @@ func (h *MapAPIHandler) GetMap(c echo.Context) error {
 		slog.Error("api: list markers failed", slog.Any("error", err))
 		return apperror.NewInternal(fmt.Errorf("failed to load markers"))
 	}
-	m.Markers = markers
+	vm, err := h.mapSvc.ForViewer(ctx, m, role)
+	if err != nil {
+		slog.Error("api: prepare map picture failed", slog.Any("error", err))
+		return apperror.NewInternal(fmt.Errorf("failed to load map"))
+	}
+	// Set on the viewer's copy, so the stored map the service handed back is
+	// never mutated.
+	out := *vm
+	out.Markers = markers
 
-	return c.JSON(http.StatusOK, m)
+	return c.JSON(http.StatusOK, out)
 }
 
 // --- Drawing CRUD ---
@@ -181,7 +212,7 @@ func (h *MapAPIHandler) ListDrawings(c echo.Context) error {
 	if err != nil {
 		return err
 	}
-	role := h.resolveRole(c)
+	role := h.viewRole(c)
 
 	// Resolve user ID from API key for per-player visibility_rules
 	// filtering (S1 — matches ListMarkers above; ListDrawings previously
@@ -232,6 +263,7 @@ func (h *MapAPIHandler) CreateDrawing(c echo.Context) error {
 		CreatedBy:   key.UserID,
 		FoundryID:   req.FoundryID,
 		CallerRole:  h.resolveRole(c),
+		CallerIsDM:  h.canAuthorDmOnly(c),
 	})
 	if err != nil {
 		return err
@@ -268,7 +300,7 @@ func (h *MapAPIHandler) UpdateDrawing(c echo.Context) error {
 		return apperror.NewBadRequest("invalid request body")
 	}
 
-	err := h.drawingSvc.UpdateDrawing(c.Request().Context(), drawingID, c.Param("mapID"), h.resolveRole(c), maps.UpdateDrawingInput{
+	err := h.drawingSvc.UpdateDrawing(c.Request().Context(), drawingID, c.Param("mapID"), h.resolveRole(c), h.canAuthorDmOnly(c), maps.UpdateDrawingInput{
 		Points:            req.Points,
 		StrokeColor:       req.StrokeColor,
 		StrokeWidth:       req.StrokeWidth,
@@ -301,7 +333,7 @@ func (h *MapAPIHandler) DeleteDrawing(c echo.Context) error {
 	if campaigns.Role(h.resolveRole(c)) < campaigns.RoleScribe {
 		return apperror.NewForbidden("scribe role required to delete drawings")
 	}
-	if err := h.drawingSvc.DeleteDrawing(c.Request().Context(), c.Param("drawingID"), c.Param("mapID"), maps.ParseExpectedUpdatedAt(c), key.UserID, h.resolveRole(c)); err != nil {
+	if err := h.drawingSvc.DeleteDrawing(c.Request().Context(), c.Param("drawingID"), c.Param("mapID"), maps.ParseExpectedUpdatedAt(c), key.UserID, h.resolveRole(c), h.canAuthorDmOnly(c)); err != nil {
 		return err
 	}
 	return c.NoContent(http.StatusNoContent)
@@ -779,7 +811,7 @@ func (h *MapAPIHandler) ListMarkers(c echo.Context) error {
 	if err != nil {
 		return err
 	}
-	role := h.resolveRole(c)
+	role := h.viewRole(c)
 
 	userID := ""
 	if key := GetAPIKey(c); key != nil {
@@ -807,6 +839,15 @@ func (h *MapAPIHandler) GetMarker(c echo.Context) error {
 	// Same rule as update and delete: a dm_only marker answers NotFound to a
 	// key that can't author dm_only content.
 	if marker.Visibility == "dm_only" && !h.canAuthorDmOnly(c) {
+		return apperror.NewNotFound("marker not found")
+	}
+	// A pin under a shadow area answers NotFound to the roles the list hides
+	// it from, using the same role the list endpoint resolves.
+	shadowed, err := h.mapSvc.IsMarkerShadowed(c.Request().Context(), marker, h.viewRole(c))
+	if err != nil {
+		return err
+	}
+	if shadowed {
 		return apperror.NewNotFound("marker not found")
 	}
 	return c.JSON(http.StatusOK, marker)

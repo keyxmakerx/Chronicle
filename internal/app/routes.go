@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"log/slog"
 	"net/http"
+	"os"
 	"path"
 	"path/filepath"
 	"strconv"
@@ -1178,6 +1179,83 @@ func (h *wsRevokerHolder) RevokeCampaign(campaignID string) {
 // interface, translating domain events into WebSocket messages.
 type mapEventPublisherAdapter struct {
 	bus ws.EventBus
+	// shadows resolves a map's shadow areas so a pin or drawing under one is
+	// published to DM-equivalent clients only. Nil fails closed: with no way to
+	// tell, every pin and drawing event is restricted.
+	shadows maps.ShadowLookup
+}
+
+// wireMapShadows gives the map service its shadow source. A named helper so a
+// test can prove the production wiring sets it; without it every player would
+// see every pin.
+func wireMapShadows(mapsService maps.MapService, drawingService maps.DrawingService) {
+	mapsService.SetShadowLookup(drawingService)
+}
+
+// wireMapPictures gives the map service the media plugin's originals to render
+// player copies from, and the media server the check that refuses the original
+// of a shadowed map to anyone who may not see under the shadows. A named helper
+// so a test can prove the production wiring sets both; without the guard the
+// original stays one right-click away.
+//
+// Copies are cached in a sibling of the media root, not inside it: the media
+// orphan sweep deletes every file under the root that has no database row.
+func wireMapPictures(mapsService maps.MapService, mediaService media.MediaService, mediaHandler *media.Handler, mediaPath string) {
+	mapsService.SetPlayerImageSource(&mapImageSourceAdapter{svc: mediaService},
+		filepath.Join(filepath.Dir(filepath.Clean(mediaPath)), "map-player-images"))
+	mediaHandler.SetMapImageGuard(mapsService)
+}
+
+// mapImageSourceAdapter reads a campaign picture's original bytes for the maps
+// plugin, which has no access to media storage itself.
+type mapImageSourceAdapter struct {
+	svc media.MediaService
+}
+
+// ReadImage returns the file's bytes only for an image that belongs to the
+// campaign, so a map cannot be pointed at another campaign's media.
+func (a *mapImageSourceAdapter) ReadImage(ctx context.Context, campaignID, mediaID string) ([]byte, error) {
+	file, err := a.svc.GetByID(ctx, mediaID)
+	if err != nil {
+		return nil, err
+	}
+	if file.CampaignID == nil || *file.CampaignID != campaignID || !file.IsImage() {
+		return nil, apperror.NewNotFound("media file not found")
+	}
+	data, err := os.ReadFile(a.svc.FilePath(file))
+	if err != nil {
+		return nil, apperror.NewInternal(err)
+	}
+	return data, nil
+}
+
+// newMapEventPublisher builds the WebSocket publisher with its shadow lookup.
+func newMapEventPublisher(bus ws.EventBus, drawingService maps.DrawingService) *mapEventPublisherAdapter {
+	return &mapEventPublisherAdapter{bus: bus, shadows: drawingService}
+}
+
+// underShadow reports whether an event about a pin or drawing on mapID must be
+// restricted to DM-equivalent clients because the item lies under a shadow
+// area. The publisher has no request context, so it uses a short bounded one;
+// on a lookup failure it answers true, because withholding a live update is
+// recoverable and leaking a hidden pin is not.
+//
+// The hub gates by DM-equivalence, which is exactly who the HTTP paths exempt
+// (owner or co-DM); scribes are hidden like players on both.
+func (a *mapEventPublisherAdapter) underShadow(mapID string, check func([]maps.ShadowArea) bool) bool {
+	if a.shadows == nil {
+		slog.Error("maps: shadow lookup not wired; restricting map events to DMs", slog.String("map_id", mapID))
+		return true
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+	defer cancel()
+	areas, err := a.shadows.ShadowAreas(ctx, mapID)
+	if err != nil {
+		slog.Error("maps: shadow lookup failed while publishing; restricting event to DMs",
+			slog.String("map_id", mapID), slog.Any("error", err))
+		return true
+	}
+	return check(areas)
 }
 
 // publishWithAudience wraps ws.NewMessage with the audience derived from
@@ -1217,7 +1295,10 @@ func (a *mapEventPublisherAdapter) PublishDrawingEvent(eventType string, campaig
 	default:
 		return
 	}
-	a.publishWithAudience(msgType, campaignID, drawing.ID, drawing, drawing.Visibility == "dm_only", maps.ParseVisibilityRules(drawing.VisibilityRules))
+	dmOnly := drawing.Visibility == "dm_only" ||
+		(drawing.DrawingType != maps.DrawingTypeShadow &&
+			a.underShadow(drawing.MapID, func(areas []maps.ShadowArea) bool { return maps.DrawingUnderShadow(areas, drawing) }))
+	a.publishWithAudience(msgType, campaignID, drawing.ID, drawing, dmOnly, maps.ParseVisibilityRules(drawing.VisibilityRules))
 }
 
 // PublishTokenEvent translates map token domain events into WebSocket messages.
@@ -1325,7 +1406,9 @@ func (a *mapEventPublisherAdapter) PublishMarkerEvent(eventType string, campaign
 	default:
 		return
 	}
-	a.publishWithAudience(msgType, campaignID, marker.ID, marker, marker.IsDMOnly(), maps.ParseVisibilityRules(marker.VisibilityRules))
+	dmOnly := marker.IsDMOnly() ||
+		a.underShadow(marker.MapID, func(areas []maps.ShadowArea) bool { return maps.MarkerUnderShadow(areas, marker) })
+	a.publishWithAudience(msgType, campaignID, marker.ID, marker, dmOnly, maps.ParseVisibilityRules(marker.VisibilityRules))
 }
 
 // (The campaigns show page lazy-loads the Foundry banner via
@@ -3120,6 +3203,10 @@ func (a *App) RegisterRoutes() {
 	mapsHandler := maps.NewHandler(mapsService)
 	drawingRepo := maps.NewDrawingRepository(a.DB)
 	drawingService := maps.NewDrawingService(drawingRepo)
+	// Pins under a shadow area are withheld from players; the map service asks
+	// the drawing service (which owns drawings) where the shadows are.
+	wireMapShadows(mapsService, drawingService)
+	wireMapPictures(mapsService, mediaService, mediaHandler, a.Config.Upload.MediaPath)
 	// Wire the map-existence + same-campaign check used by AssignMap on
 	// entities, as a post-construction dependency (mapsService doesn't
 	// exist yet when entityService is constructed).
@@ -3290,6 +3377,7 @@ func (a *App) RegisterRoutes() {
 	}
 	// Needed to resolve the caller's role for ListMedia's Scribe+ gate.
 	mediaAPIHandler.SetCampaignService(campaignService)
+	mediaAPIHandler.SetMapImageGuard(mapsService)
 
 	// Sync mapping handler for Foundry VTT bidirectional sync.
 	// Reuses the sync mapping service created earlier for the owner dashboard.
@@ -4350,7 +4438,8 @@ func (a *App) RegisterRoutes() {
 	// setting holder.bus here makes future mutations broadcast over WS.
 	entityNotesNotifier.bus = wsEventBus
 
-	drawingService.SetEventPublisher(&mapEventPublisherAdapter{bus: wsEventBus})
+	mapEvents := newMapEventPublisher(wsEventBus, drawingService)
+	drawingService.SetEventPublisher(mapEvents)
 	drawingService.SetMapLookup(func(ctx context.Context, mapID string) (string, error) {
 		m, err := mapsService.GetMap(ctx, mapID)
 		if err != nil {
@@ -4368,7 +4457,7 @@ func (a *App) RegisterRoutes() {
 		}
 		return m.DrawWho(), nil
 	})
-	mapsService.SetEventPublisher(&mapEventPublisherAdapter{bus: wsEventBus})
+	mapsService.SetEventPublisher(mapEvents)
 
 	// --- Module Routes ---
 	// Game system reference pages and tooltip APIs.

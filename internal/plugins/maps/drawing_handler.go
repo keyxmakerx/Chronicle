@@ -113,6 +113,7 @@ func (h *DrawingHandler) CreateDrawing(c echo.Context) error {
 		CreatedBy:   getUserID(c),
 		FoundryID:   req.FoundryID,
 		CallerRole:  int(cc.MemberRole),
+		CallerIsDM:  cc.CanAuthorDmOnly(),
 	})
 	if err != nil {
 		return err
@@ -135,6 +136,15 @@ func (h *DrawingHandler) GetDrawing(c echo.Context) error {
 		return err
 	}
 	if d.MapID != mapID {
+		return apperror.NewNotFound("drawing not found")
+	}
+	// A by-id read must not reveal what the list withholds; NotFound so the
+	// answer matches a missing drawing.
+	shadowed, err := h.drawingSvc.IsDrawingShadowed(c.Request().Context(), d, cc.VisibilityRole())
+	if err != nil {
+		return err
+	}
+	if shadowed {
 		return apperror.NewNotFound("drawing not found")
 	}
 	return c.JSON(http.StatusOK, d)
@@ -168,7 +178,7 @@ func (h *DrawingHandler) UpdateDrawing(c echo.Context) error {
 		return apperror.NewBadRequest("invalid request body")
 	}
 
-	if err := h.drawingSvc.UpdateDrawing(c.Request().Context(), c.Param("did"), c.Param("mid"), int(cc.MemberRole), UpdateDrawingInput{
+	if err := h.drawingSvc.UpdateDrawing(c.Request().Context(), c.Param("did"), c.Param("mid"), int(cc.MemberRole), cc.CanAuthorDmOnly(), UpdateDrawingInput{
 		Points:            req.Points,
 		StrokeColor:       req.StrokeColor,
 		StrokeWidth:       req.StrokeWidth,
@@ -195,7 +205,7 @@ func (h *DrawingHandler) DeleteDrawing(c echo.Context) error {
 		return err
 	}
 
-	if err := h.drawingSvc.DeleteDrawing(c.Request().Context(), c.Param("did"), c.Param("mid"), ParseExpectedUpdatedAt(c), getUserID(c), int(cc.MemberRole)); err != nil {
+	if err := h.drawingSvc.DeleteDrawing(c.Request().Context(), c.Param("did"), c.Param("mid"), ParseExpectedUpdatedAt(c), getUserID(c), int(cc.MemberRole), cc.CanAuthorDmOnly()); err != nil {
 		return err
 	}
 	return c.NoContent(http.StatusOK)

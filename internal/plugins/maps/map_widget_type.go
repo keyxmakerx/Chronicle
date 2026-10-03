@@ -125,6 +125,14 @@ func (w *mapWidgetType) renderInner(ctx context.Context, rc widgetbindings.Block
 			// No markers: the preview is a picture. The live viewer fetches its own,
 			// role-filtered, when it is opened.
 			display, _ := w.svc.ResolveDisplay(ctx, m)
+			// The preview is a picture, so it gets the viewer's version of it.
+			vm, verr := w.svc.ForViewer(ctx, m, rc.Role)
+			if verr != nil {
+				slog.Error("map widget RenderBlock: cannot prepare the map picture",
+					slog.String("map_id", mapID), slog.Any("error", verr))
+				return templ.NopComponent
+			}
+			m = vm
 			viewData := MapViewData{
 				CampaignID: rc.CC.Campaign.ID, Map: m, IsScribe: isScribe,
 				IsOwner: rc.Role >= int(campaigns.RoleOwner), UserID: rc.UserID, Display: display,
