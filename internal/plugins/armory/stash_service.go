@@ -75,6 +75,8 @@ type StashDeps struct {
 	Fields    EntityFieldUpdater
 	Relations HasItemStore
 	UserNames UserNamer
+	// Events announces finished moves and downtime changes; optional.
+	Events StashEventPublisher
 }
 
 // Actor is the calling user as the service sees them. Role is the campaign's
@@ -105,6 +107,12 @@ type StashService interface {
 	Move(ctx context.Context, campaignID string, a Actor, in MoveInput) (*MoveOutcome, error)
 	Approve(ctx context.Context, campaignID string, a Actor, moveID int64) (*Move, error)
 	Decline(ctx context.Context, campaignID string, a Actor, moveID int64) (*Move, error)
+
+	// Destinations lists the places the actor may send a move to from `from`.
+	Destinations(ctx context.Context, campaignID string, a Actor, kind string, from Endpoint) ([]MoveDestination, error)
+	// PendingRequests lists the requests waiting for an answer, with names
+	// redacted for the actor. Only Owner visibility may ask.
+	PendingRequests(ctx context.Context, campaignID string, a Actor) ([]MoveLine, error)
 
 	IsDowntimeOpen(ctx context.Context, campaignID string) (bool, error)
 	SetDowntime(ctx context.Context, campaignID string, a Actor, open bool) (DowntimeResult, error)
@@ -615,6 +623,17 @@ func ownPending(a Actor, moves []Move) []Move {
 		out = append(out, m)
 	}
 	return out
+}
+
+func (s *stashService) PendingRequests(ctx context.Context, campaignID string, a Actor) ([]MoveLine, error) {
+	if !a.IsOwner() {
+		return nil, forbidden()
+	}
+	pending, err := s.Repo.ListPending(ctx, campaignID)
+	if err != nil {
+		return nil, err
+	}
+	return s.lines(ctx, campaignID, a, pending)
 }
 
 func (s *stashService) CharacterHistory(ctx context.Context, campaignID string, a Actor, characterID string) ([]MoveLine, error) {

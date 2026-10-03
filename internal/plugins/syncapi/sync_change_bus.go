@@ -29,6 +29,8 @@ var changeFeedTypes = map[string]string{
 	"fog":            "fog",
 	"map":            "map",
 	"calendar.event": "calendar_event",
+	"stash":          "stash",
+	"downtime":       "downtime",
 }
 
 // classifyChange returns the feed resource type and op for a message type,
@@ -44,10 +46,12 @@ func classifyChange(t ws.MessageType) (resourceType, op string, ok bool) {
 		return "", "", false
 	}
 	switch s[i+1:] {
-	case "created":
+	case "created", "requested":
 		op = "created"
-	case "updated", "moved":
+	case "updated", "moved", "settled", "money_changed", "changed":
 		// A token move changes the token; the client refetches it either way.
+		// The same holds for a stash move, a request's answer and a
+		// downtime switch: the client refetches the view.
 		op = "updated"
 	case "deleted":
 		op = "deleted"

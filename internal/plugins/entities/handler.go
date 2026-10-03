@@ -18,6 +18,7 @@ import (
 	"github.com/redis/go-redis/v9"
 
 	"github.com/keyxmakerx/chronicle/internal/apperror"
+	"github.com/keyxmakerx/chronicle/internal/changesource"
 	"github.com/keyxmakerx/chronicle/internal/middleware"
 	"github.com/keyxmakerx/chronicle/internal/patch"
 	"github.com/keyxmakerx/chronicle/internal/plugins/audit"
@@ -775,7 +776,7 @@ func (h *Handler) Update(c echo.Context) error {
 		ExpectedUpdatedAt: req.ExpectedUpdatedAt,
 	}
 
-	_, err = h.service.Update(c.Request().Context(), entityID, input)
+	_, err = h.service.Update(webWriteContext(c), entityID, input)
 	if err != nil {
 		entityTypes, _ := h.service.GetEntityTypes(c.Request().Context(), cc.Campaign.ID)
 		entityType, _ := h.service.GetEntityTypeByID(c.Request().Context(), entity.EntityTypeID)
@@ -1927,6 +1928,14 @@ func (h *Handler) GetFieldsAPI(c echo.Context) error {
 	return c.JSON(http.StatusOK, response)
 }
 
+// webWriteContext marks a field write as coming from the web UI, so observers
+// can tell it apart from a sync client's or an extension's write.
+func webWriteContext(c echo.Context) context.Context {
+	return changesource.With(c.Request().Context(), changesource.Source{
+		Kind: changesource.KindWeb, UserID: auth.GetUserID(c),
+	})
+}
+
 // UpdateFieldsAPI saves the entity's custom field values from the attributes widget.
 // PUT /campaigns/:id/entities/:eid/fields
 func (h *Handler) UpdateFieldsAPI(c echo.Context) error {
@@ -1952,7 +1961,7 @@ func (h *Handler) UpdateFieldsAPI(c echo.Context) error {
 		return apperror.NewBadRequest("invalid JSON body")
 	}
 
-	if err := h.service.UpdateFields(c.Request().Context(), entityID, body.FieldsData); err != nil {
+	if err := h.service.UpdateFields(webWriteContext(c), entityID, body.FieldsData); err != nil {
 		return err
 	}
 

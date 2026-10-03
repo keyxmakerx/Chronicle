@@ -156,7 +156,7 @@ func newAddonGateFixture(t *testing.T, keyID int, campaignID string) *addonGateF
 	// method values, and the single route these tests call lives on the
 	// APIHandler, which tolerates its optional collaborators being unset.
 	api := NewAPIHandler(syncSvc, nil, campSvc, nil)
-	RegisterAPIRoutes(e, api, nil, nil, nil, nil, nil, nil, nil, syncSvc, gate, authSvc, campSvc)
+	RegisterAPIRoutes(e, api, nil, nil, nil, nil, nil, nil, nil, nil, syncSvc, gate, authSvc, campSvc)
 
 	return &addonGateFixture{echo: e, gate: gate, rawKey: rawKey}
 }
