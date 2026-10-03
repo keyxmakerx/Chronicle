@@ -3960,6 +3960,40 @@ html[data-cz-scale="roomy"] { font-size: 110%; }
   border-bottom-color: rgb(255 255 255 / 0.13);
 }
 
+/* The header's "+N" tray opens over the page, so it keeps the page's own ink
+   rather than the light ink above. The snapshot is taken on <html>, where the
+   page tones and dark mode set these, so it follows both. */
+:root {
+  --cz-page-ink-1: var(--color-text-primary);
+  --cz-page-ink-2: var(--color-text-body);
+  --cz-page-ink-3: var(--color-text-secondary);
+  --cz-page-ink-4: var(--color-text-muted);
+  --cz-page-fill: var(--color-bg-tertiary);
+  --cz-page-line: var(--color-border);
+}
+/* Header widgets below md: when the bar can't fit even the first widget,
+   it joins the rest in the tray and the button counts it (app.templ,
+   topbarCenterContent). A lone widget gets the button only then. */
+.tb-slot { container: tbslot / inline-size; }
+.tb-first-copy, .tb-n-all, .tb-solo { display: none; }
+@container tbslot (max-width: 8rem) {
+  .tb-first { display: none; }
+  .tb-first-copy { display: contents; }
+  .tb-n { display: none; }
+  .tb-n-all { display: inline; }
+  .tb-solo { display: inline-flex; }
+}
+@media (min-width: 768px) { .tb-solo { display: none; } }
+
+.cz-hdr-light #topbar-tray {
+  --color-text-primary: var(--cz-page-ink-1);
+  --color-text-body: var(--cz-page-ink-2);
+  --color-text-secondary: var(--cz-page-ink-3);
+  --color-text-muted: var(--cz-page-ink-4);
+  --color-bg-tertiary: var(--cz-page-fill);
+  --color-border: var(--cz-page-line);
+}
+
 /* Elevation: cards take the chosen shadow; cards that open something lift. */
 [data-cz-elev] .card { box-shadow: var(--elev-resting); }
 [data-cz-elev] :is(a.card, .card-elev):hover {

@@ -1036,30 +1036,18 @@
     }
 
     /* ---------- The moving header, in the example ----------
-       The same slide the real header makes: a transform on an over-wide strip,
-       eased to a stop by Chronicle.restWake when nobody is using the page. */
+       The same slide the real header makes (header_motion.js), on the shared
+       MotionRest clock, so it rests when nobody is using the page. */
     var drift = null;
-    function driftStop(){ if (drift){ drift.rw.destroy(); drift.anim.cancel(); drift = null; } }
+    function driftStop(){ if (drift){ if (drift.run) drift.run.destroy(); drift = null; } }
     function driftSync(){
       var el = $('#d-drift'), vertical = draft.header.dir === 'b';
       el.classList.toggle('v', vertical);
-      var want = draft.header.bg === 'moving' && !reduceAll() && !!el.animate && !!(window.Chronicle && Chronicle.restWake);
+      var want = draft.header.bg === 'moving' && !reduceAll() && !!(window.Chronicle && Chronicle.headerMotion);
       if (!want){ driftStop(); return; }
       if (drift && drift.vertical === vertical) return;
       driftStop();
-      var anim = el.animate(
-        vertical ? [{ transform:'translateY(0)' }, { transform:'translateY(-33.3333%)' }] : [{ transform:'translateX(0)' }, { transform:'translateX(-33.3333%)' }],
-        { duration:36000, iterations:Infinity, easing:'linear' });
-      anim.pause();
-      var rw = null;
-      rw = Chronicle.restWake.create({
-        reduced:reduceAll,
-        onLevel:function(level){ if (level > 0) anim.playbackRate = level; },
-        onState:function(state){
-          if (state === 'active'){ anim.playbackRate = Math.max(0.02, rw ? rw.level() : 0); anim.play(); } else anim.pause();
-        }
-      });
-      drift = { anim:anim, rw:rw, vertical:vertical };
+      drift = { run:Chronicle.headerMotion.drive(el, vertical), vertical:vertical };
     }
 
     /* ---------- One-shot plays: show a motion setting without a pointer ---------- */

@@ -691,7 +691,7 @@ templ Topbar() {
 							@click.outside="open = false"
 							class="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-sm font-semibold text-fg hover:bg-surface-alt transition-colors"
 						>
-							<span class="truncate max-w-[160px]" data-topbar-name>{ GetDisplayName(ctx) }</span>
+							<span class="truncate max-w-[110px] md:max-w-[160px]" data-topbar-name>{ GetDisplayName(ctx) }</span>
 							<svg class="w-3.5 h-3.5 text-fg-muted shrink-0" width="14" height="14" fill="none" stroke="currentColor" viewBox="0 0 24 24">
 								<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path>
 							</svg>
@@ -801,7 +801,7 @@ templ Topbar() {
 
 		<!-- Center: Customizable content area (quick-links, quote, or empty) -->
 		if InCampaign(ctx) {
-			<div id="topbar-content" class="flex-1 flex items-center justify-center min-w-0 overflow-hidden transition-all duration-200">
+			<div id="topbar-content" class="tb-slot flex-1 flex items-center justify-center min-w-0 overflow-hidden transition-all duration-200">
 				@topbarCenterContent(ctx)
 			</div>
 
@@ -1024,7 +1024,9 @@ func isExternalURL(url string) bool {
 // topbarCenterContent renders the header's widgets in the owner's order. At
 // md and wider every widget shows; below that the first stays and the rest
 // move into a tray under the header behind a "+N" button, because a phone's
-// bar has room for one.
+// bar has room for one. When the bar is too narrow even for that one, a
+// container query (input.css, "tb-") moves it into the tray too, so no widget
+// is ever unreachable.
 templ topbarCenterContent(ctx context.Context) {
 	if tc := GetTopbarContent(ctx); tc != nil {
 		if ws := topbarShownWidgets(ctx, tc); len(ws) > 0 {
@@ -1036,36 +1038,42 @@ templ topbarCenterContent(ctx context.Context) {
 			>
 				for i, w := range ws {
 					if i == 0 {
-						@topbarWidget(ctx, tc, w)
+						<div class="tb-first flex items-center min-w-0">
+							@topbarWidget(ctx, tc, w)
+						</div>
 					} else {
 						<div class="hidden md:flex items-center min-w-0">
 							@topbarWidget(ctx, tc, w)
 						</div>
 					}
 				}
-				if len(ws) > 1 {
-					<button
-						type="button"
-						x-ref="moreBtn"
-						@click="more = !more"
-						:aria-expanded="more ? 'true' : 'false'"
-						aria-controls="topbar-tray"
-						aria-label={ fmt.Sprintf("%d more header items", len(ws)-1) }
-						class="md:hidden shrink-0 inline-flex items-center px-2.5 py-1 rounded-full border border-edge bg-surface-alt text-xs font-semibold text-fg"
-					>
-						+{ strconv.Itoa(len(ws) - 1) }
-					</button>
-					<div
-						id="topbar-tray"
-						x-show="more"
-						x-cloak
-						class="md:hidden absolute left-2 right-2 top-full mt-1.5 z-50 flex flex-wrap items-center gap-2 p-2.5 rounded-lg border border-edge bg-surface text-fg shadow-xl"
-					>
-						for _, w := range ws[1:] {
-							@topbarWidget(ctx, tc, w)
-						}
+				<button
+					type="button"
+					x-ref="moreBtn"
+					@click="more = !more"
+					:aria-expanded="more ? 'true' : 'false'"
+					aria-controls="topbar-tray"
+					aria-label="More header items"
+					class={ "md:hidden shrink-0 inline-flex items-center px-2.5 py-1 rounded-full border border-edge bg-surface-alt text-xs font-semibold text-fg", templ.KV("tb-solo", len(ws) == 1) }
+				>
+					if len(ws) > 1 {
+						<span class="tb-n">+{ strconv.Itoa(len(ws) - 1) }</span>
+					}
+					<span class="tb-n-all">+{ strconv.Itoa(len(ws)) }</span>
+				</button>
+				<div
+					id="topbar-tray"
+					x-show="more"
+					x-cloak
+					class="md:hidden absolute left-2 right-2 top-full mt-1.5 z-50 flex flex-wrap items-center gap-2 p-2.5 rounded-lg border border-edge bg-surface text-fg shadow-xl"
+				>
+					<div class="tb-first-copy">
+						@topbarWidget(ctx, tc, ws[0])
 					</div>
-				}
+					for _, w := range ws[1:] {
+						@topbarWidget(ctx, tc, w)
+					}
+				</div>
 			</div>
 		}
 	}
@@ -1120,7 +1128,7 @@ func topbarHasWidget(ctx context.Context, w string) bool {
 // keyboard shortcuts and icon do.
 templ topbarWidget(ctx context.Context, tc *TopbarContentData, w string) {
 	if w == "links" && len(tc.Links) > 0 {
-		<div class="flex items-center gap-1.5 flex-wrap justify-center">
+		<div class="flex items-center gap-1.5 justify-center min-w-0">
 			for _, link := range tc.Links {
 				<a
 					href={ safeExternalURL(link.URL) }
@@ -1134,7 +1142,7 @@ templ topbarWidget(ctx context.Context, tc *TopbarContentData, w string) {
 			}
 		</div>
 	} else if w == "text" && tc.Quote != "" {
-		<div class="text-xs text-fg-muted italic truncate px-4 max-w-md text-center">
+		<div class="text-xs text-fg-muted italic truncate px-1 md:px-4 max-w-md text-center min-w-0">
 			{ tc.Quote }
 		</div>
 	} else if w == "note" && topbarWidgetShown(ctx, tc, "note") {

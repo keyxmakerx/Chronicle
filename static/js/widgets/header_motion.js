@@ -3,9 +3,10 @@
  *
  * The server renders an over-wide strip of the owner's two colours inside the
  * header (app.templ, topbarMovingStyle); this widget slides it one bar-length
- * along its axis, forever, with a transform only. Chronicle.restWake (the
- * shared helper) eases the slide to a stop when the person steps away and back
- * up when they return, so the page draws nothing while it rests.
+ * along its axis, forever, with a transform only. The slide's speed follows
+ * MotionRest (static/js/motion_rest.js), the clock every looping animation
+ * shares, so it eases to a stop when the person steps away, stops drawing
+ * while still, and eases back when they return.
  *
  * It does nothing at all, leaving the strip still, under prefers-reduced-motion
  * or the campaign's own reduce switch (html[data-cz-reduce]).
@@ -20,40 +21,49 @@
     return !!(mq && mq.matches) || document.documentElement.hasAttribute('data-cz-reduce');
   }
 
+  // drive slides el and keeps its rate in step with MotionRest. The
+  // Customize page's example header uses it too, so both move the same way.
+  function drive(el, vertical) {
+    var MR = window.MotionRest;
+    if (!el.animate || !MR) return null;
+    var anim = el.animate(
+      vertical
+        ? [{ transform: 'translateY(0)' }, { transform: 'translateY(-33.3333%)' }]
+        : [{ transform: 'translateX(0)' }, { transform: 'translateX(-33.3333%)' }],
+      { duration: LOOP_MS, iterations: Infinity, easing: 'linear' }
+    );
+    var raf = 0, gone = false;
+    // A playback rate of 0 is a stop in disguise, so at rest it pauses instead.
+    function tick() {
+      raf = 0;
+      if (gone) return;
+      if (MR.still()) { anim.pause(); return; }
+      anim.playbackRate = Math.max(0.02, MR.speed());
+      if (anim.playState !== 'running') anim.play();
+      raf = requestAnimationFrame(tick);
+    }
+    function wake() { if (!raf && !gone) raf = requestAnimationFrame(tick); }
+    MR.onWake(wake);
+    tick();
+    return {
+      destroy: function () {
+        gone = true;
+        if (raf) cancelAnimationFrame(raf);
+        MR.offWake(wake);
+        anim.cancel();
+      }
+    };
+  }
+
+  Chronicle.headerMotion = { drive: drive };
+
   Chronicle.register('header-motion', {
     init: function (el) {
-      if (!el.animate || !Chronicle.restWake) return;
-      var vertical = el.getAttribute('data-axis') === 'y';
-      var anim = el.animate(
-        vertical
-          ? [{ transform: 'translateY(0)' }, { transform: 'translateY(-33.3333%)' }]
-          : [{ transform: 'translateX(0)' }, { transform: 'translateX(-33.3333%)' }],
-        { duration: LOOP_MS, iterations: Infinity, easing: 'linear' }
-      );
-      // Held until the helper decides: reduced motion leaves it here for good.
-      anim.pause();
-      var rw = null; // not yet assigned when the helper's first wake fires
-      rw = Chronicle.restWake.create({
-        reduced: reduced,
-        // A playback rate of exactly 0 is a stop in disguise; the helper
-        // pauses at rest, so only positive rates are ever set.
-        onLevel: function (level) { if (level > 0) anim.playbackRate = level; },
-        onState: function (state) {
-          if (state === 'active') {
-            anim.playbackRate = Math.max(0.02, rw ? rw.level() : 0);
-            anim.play();
-          } else {
-            anim.pause();
-          }
-        }
-      });
-      el._headerMotion = { anim: anim, rw: rw };
+      if (reduced()) return;
+      el._headerMotion = drive(el, el.getAttribute('data-axis') === 'y');
     },
     destroy: function (el) {
-      var h = el._headerMotion;
-      if (!h) return;
-      h.rw.destroy();
-      h.anim.cancel();
+      if (el._headerMotion) el._headerMotion.destroy();
       el._headerMotion = null;
     }
   });

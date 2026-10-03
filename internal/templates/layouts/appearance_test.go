@@ -581,10 +581,15 @@ func TestTopbarNewWidgets(t *testing.T) {
 			t.Errorf("a signed-out visitor must not be offered quick notes: %s", html)
 		}
 	})
-	t.Run("a one-widget header has no tray", func(t *testing.T) {
+	t.Run("a one-widget header keeps its button only for a too-narrow bar", func(t *testing.T) {
+		// The button is always rendered but tb-solo keeps it hidden unless the
+		// container query finds no room for the widget itself.
 		html := render(true, 1, "search")
-		if strings.Contains(html, `id="topbar-tray"`) || strings.Contains(html, `x-ref="moreBtn"`) {
-			t.Error("one widget needs no +N button or tray")
+		if !strings.Contains(html, "tb-solo") {
+			t.Error("a lone widget's button must carry tb-solo so it stays hidden while the widget fits")
+		}
+		if strings.Contains(html, `class="tb-n"`) {
+			t.Error("a lone widget has no +N-1 count")
 		}
 	})
 	t.Run("empty widgets don't count toward +N", func(t *testing.T) {
@@ -594,8 +599,9 @@ func TestTopbarNewWidgets(t *testing.T) {
 		if err := Topbar().Render(ctx, &buf); err != nil {
 			t.Fatal(err)
 		}
-		if strings.Contains(buf.String(), `id="topbar-tray"`) {
-			t.Error("links with no links and empty text draw nothing, so there is nothing to tray")
+		html := buf.String()
+		if !strings.Contains(html, "tb-solo") || !strings.Contains(html, `<span class="tb-n-all">+1</span>`) {
+			t.Error("links with no links and empty text draw nothing, so only the search box counts")
 		}
 	})
 	t.Run("narrow screens: first widget stays, the rest go behind +N", func(t *testing.T) {
@@ -614,8 +620,16 @@ func TestTopbarNewWidgets(t *testing.T) {
 		if n := strings.Count(html, "fa-pen"); n != 2 {
 			t.Errorf("note appears %d times (bar + tray), want 2", n)
 		}
-		if n := strings.Count(html, "LINK-MARKER"); n != 1 {
-			t.Errorf("the first widget appears %d times, want once", n)
+		// The first widget appears in the bar and once more as the tray copy
+		// a too-narrow bar falls back to.
+		if n := strings.Count(html, "LINK-MARKER"); n != 2 {
+			t.Errorf("the first widget appears %d times, want 2 (bar + tray copy)", n)
+		}
+		if !strings.Contains(html, `class="tb-first-copy"`) || !strings.Contains(html, `<span class="tb-n-all">+4</span>`) {
+			t.Error("a too-narrow bar needs the tray copy of the first widget and a +4 count")
+		}
+		if strings.Contains(html, "tb-solo") {
+			t.Error("with several widgets the +N button is shown on every narrow screen")
 		}
 	})
 }
