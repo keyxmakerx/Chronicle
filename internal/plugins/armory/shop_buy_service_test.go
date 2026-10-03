@@ -63,7 +63,7 @@ type buyFx struct {
 	*fx
 	listings *fakeShopRels
 	txRows   []*Transaction
-	svc      ShopBuyService
+	svc      ShopRequestService
 	reqs     *fakePurchaseRepo
 }
 

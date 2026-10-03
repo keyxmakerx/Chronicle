@@ -40,6 +40,13 @@ type ShopBuyService interface {
 	// records the purchases. While downtime is closed a player's basket is
 	// stored as a request instead (status "requested") and nothing is spent.
 	Buy(ctx context.Context, campaignID, shopEntityID string, a Actor, in BuyInput) (*BuyResult, error)
+}
+
+// ShopRequestService is the buy flow plus the GM's answers to waiting
+// purchase requests. It is separate so callers that only buy, like the sync
+// API, depend on the smaller interface.
+type ShopRequestService interface {
+	ShopBuyService
 	// ApproveRequest applies a waiting purchase request now. Owner visibility only.
 	ApproveRequest(ctx context.Context, campaignID string, a Actor, requestID int64) (*PurchaseRequest, error)
 	// DeclineRequest turns a waiting purchase request down. Owner visibility only.
@@ -62,7 +69,7 @@ type shopBuyService struct {
 // the downtime-open sweep and the stashes page. Opening downtime lives in the
 // stash service and runs under the campaign lock, so the sweep must be
 // reachable from there without the stash service importing this one.
-func NewShopBuyService(stash *stashService, tx *transactionService, shops ShopEntityChecker, requests PurchaseRequestRepository) ShopBuyService {
+func NewShopBuyService(stash *stashService, tx *transactionService, shops ShopEntityChecker, requests PurchaseRequestRepository) ShopRequestService {
 	s := &shopBuyService{stash: stash, tx: tx, shops: shops, requests: requests}
 	stash.purchases = s
 	return s
