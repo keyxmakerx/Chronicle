@@ -12,7 +12,6 @@ import (
 	"log/slog"
 
 	"github.com/keyxmakerx/chronicle/internal/plugins/entities"
-	"github.com/keyxmakerx/chronicle/internal/systems"
 )
 
 // pcBackfillAddons is the slice of the addon service the player-character-type
@@ -59,18 +58,19 @@ func backfillPlayerCharacterTypes(ctx context.Context, addonSvc pcBackfillAddons
 // sheetFieldReconciler is the slice of the preset applier the sheet-field
 // sweep needs.
 type sheetFieldReconciler interface {
-	ReconcileSystemPresets(ctx context.Context, campaignID, systemSlug string) (int, error)
+	ReconcileSystemPresets(ctx context.Context, campaignID, systemSlug string, known presetFieldKeys) (int, error)
 }
 
-// reconcileSystemSheetFields adds newly declared package fields to the sheets of
-// every campaign that already uses each given game system, so a package update
-// reaches existing campaigns without the GM toggling the system. It only adds
-// missing fields (see ReconcileSystemPresets), so it is safe on every boot and
-// after every package install. Per-campaign failures are logged and skipped.
-// Returns the total fields added.
-func reconcileSystemSheetFields(ctx context.Context, addonSvc pcBackfillAddons, rec sheetFieldReconciler, systemSlugs []string) int {
+// reconcileSystemSheetFields adds the fields a package update introduced to the
+// sheets of every campaign already using that system, so the GM doesn't have to
+// toggle the system. before is the pre-update snapshot: only fields absent from
+// it are added, so a field a GM deleted is never brought back, and a system
+// with no earlier version loaded is skipped (enabling it applies everything).
+// It only adds (see ReconcileSystemPresets). Per-campaign failures are logged
+// and skipped. Returns the total fields added.
+func reconcileSystemSheetFields(ctx context.Context, addonSvc pcBackfillAddons, rec sheetFieldReconciler, before map[string]presetFieldKeys) int {
 	total := 0
-	for _, slug := range systemSlugs {
+	for slug, known := range before {
 		campaignIDs, err := addonSvc.ListCampaignsUsingAddon(ctx, slug)
 		if err != nil {
 			slog.Warn("sheet-field sync: listing campaigns failed",
@@ -78,7 +78,7 @@ func reconcileSystemSheetFields(ctx context.Context, addonSvc pcBackfillAddons, 
 			continue
 		}
 		for _, campaignID := range campaignIDs {
-			n, err := rec.ReconcileSystemPresets(ctx, campaignID, slug)
+			n, err := rec.ReconcileSystemPresets(ctx, campaignID, slug, known)
 			if err != nil {
 				slog.Warn("sheet-field sync: reconcile failed for campaign",
 					slog.String("campaign_id", campaignID),
@@ -90,18 +90,8 @@ func reconcileSystemSheetFields(ctx context.Context, addonSvc pcBackfillAddons, 
 		}
 	}
 	if total > 0 {
-		slog.Info("sheet-field sync added package fields to existing campaigns",
+		slog.Info("sheet-field sync added new package fields to existing campaigns",
 			slog.Int("fields_added", total))
 	}
 	return total
-}
-
-// installedSystemSlugs lists the game systems currently served by the loader.
-func installedSystemSlugs() []string {
-	infos := systems.AddonInfos()
-	slugs := make([]string, 0, len(infos))
-	for _, info := range infos {
-		slugs = append(slugs, info.Slug)
-	}
-	return slugs
 }

@@ -2655,9 +2655,6 @@ func (a *App) RegisterRoutes() {
 	} else if n > 0 {
 		slog.Info("player-character-type backfill complete", slog.Int("campaigns", n))
 	}
-	// Same for sheet fields a package gained since a campaign enabled its
-	// system; background so a large instance doesn't slow startup.
-	go reconcileSystemSheetFields(context.Background(), addonService, newPresetApplier(entityService), installedSystemSlugs())
 	addonService.SetSystemFinder(&systemManifestFinderAdapter{})
 	addonHandler := addons.NewHandler(addonService)
 	addonHandler.SetActivityRecorder(adminActivity)
@@ -2706,6 +2703,9 @@ func (a *App) RegisterRoutes() {
 	// is installed or updated, so it appears in the campaign Settings >
 	// Game System dropdown immediately without requiring a server restart.
 	packages.SetOnSystemInstall(pkgService, func(installPath string) {
+		// Taken before the rescan swaps manifests, to tell which sheet fields
+		// this install introduces.
+		presetsBefore := snapshotPresetFieldKeys()
 		systems.ScanPackageDir(filepath.Join(a.Config.Upload.MediaPath, "packages", "systems"))
 		// Force-load the exact dir that was just installed. The rescan
 		// above applies "highest version wins", which silently ignores a
@@ -2743,9 +2743,9 @@ func (a *App) RegisterRoutes() {
 		reconcileFieldGMFlags(context.Background(), entityService)
 		reconcileFieldOwnerOnlyFlags(context.Background(), entityService)
 
-		// Add any newly declared sheet fields to campaigns already using the
-		// system; runs in the background since it walks every such campaign.
-		go reconcileSystemSheetFields(context.Background(), addonService, newPresetApplier(entityService), installedSystemSlugs())
+		// Add the sheet fields this install introduced to campaigns already
+		// using the system; background since it walks every such campaign.
+		go reconcileSystemSheetFields(context.Background(), addonService, newPresetApplier(entityService), presetsBefore)
 	})
 	packages.ConfigureSettings(pkgService, settingsRepo)
 	// Fail-loud installs: run the FULL loader-grade manifest validation at

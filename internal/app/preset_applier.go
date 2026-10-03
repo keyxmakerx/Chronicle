@@ -31,22 +31,49 @@ func newPresetApplier(entityService entities.EntityService) *presetApplier {
 // campaign (avoids duplicates on re-enable). Returns the count of newly
 // created entity types.
 func (p *presetApplier) ApplySystemPresets(ctx context.Context, campaignID, systemSlug string) (int, error) {
-	return p.applyPresets(ctx, campaignID, systemSlug, true)
+	return p.applyPresets(ctx, campaignID, systemSlug, true, nil)
 }
 
 // ReconcileSystemPresets adds the preset fields a campaign's existing entity
 // types are missing, and nothing else: it never creates a type (a GM may have
 // deleted one on purpose) and never removes, renames or reorders fields.
-// Returns the number of fields added across all types.
-func (p *presetApplier) ReconcileSystemPresets(ctx context.Context, campaignID, systemSlug string) (int, error) {
-	return p.applyPresets(ctx, campaignID, systemSlug, false)
+// known is the previous package version's field keys per preset slug; fields
+// in it are skipped so a field a GM deleted stays deleted, and only fields the
+// update introduced are added. Returns the number of fields added.
+func (p *presetApplier) ReconcileSystemPresets(ctx context.Context, campaignID, systemSlug string, known presetFieldKeys) (int, error) {
+	return p.applyPresets(ctx, campaignID, systemSlug, false, known)
+}
+
+// presetFieldKeys maps preset slug → set of field keys a package version declares.
+type presetFieldKeys map[string]map[string]bool
+
+// snapshotPresetFieldKeys records every installed system's preset field keys
+// (system slug → preset slug → keys), taken before a package update replaces
+// the loaded manifest.
+func snapshotPresetFieldKeys() map[string]presetFieldKeys {
+	out := map[string]presetFieldKeys{}
+	for _, m := range systems.Registry() {
+		if m == nil {
+			continue
+		}
+		keys := presetFieldKeys{}
+		for _, preset := range m.EntityPresets {
+			set := map[string]bool{}
+			for _, f := range preset.Fields {
+				set[f.Key] = true
+			}
+			keys[preset.Slug] = set
+		}
+		out[m.ID] = keys
+	}
+	return out
 }
 
 // applyPresets is the shared walk behind ApplySystemPresets and
 // ReconcileSystemPresets. With create=false a preset with no matching type is
-// skipped. The count is types created when create is true, fields added
-// otherwise.
-func (p *presetApplier) applyPresets(ctx context.Context, campaignID, systemSlug string, create bool) (int, error) {
+// skipped. A non-nil known drops those previously-declared fields from the
+// merge. The count is types created when create is true, fields added otherwise.
+func (p *presetApplier) applyPresets(ctx context.Context, campaignID, systemSlug string, create bool, known presetFieldKeys) (int, error) {
 	manifest := systems.Find(systemSlug)
 	if manifest == nil {
 		// System not found in registry — may be a custom upload without
@@ -82,6 +109,15 @@ func (p *presetApplier) applyPresets(ctx context.Context, campaignID, systemSlug
 	created := 0
 	for _, preset := range manifest.EntityPresets {
 		declared := mapPresetFields(preset.Fields)
+		if known != nil {
+			kept := declared[:0:0]
+			for _, f := range declared {
+				if !known[preset.Slug][f.Key] {
+					kept = append(kept, f)
+				}
+			}
+			declared = kept
+		}
 
 		// Does a type for this preset already exist? Prefer a preset-category
 		// match (stable across renames); fall back to a name match.
