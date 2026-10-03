@@ -17,6 +17,8 @@ DELETE	/armory/instances/:iid/items/:eid	internal/plugins/armory/routes.go
 DELETE	/availability/exceptions/:eid	internal/plugins/sessions/routes.go
 DELETE	/backdrop	internal/plugins/campaigns/routes.go
 DELETE	/bindings	internal/plugins/widgetbindings/routes.go
+DELETE	/book/chapters/:chapter	internal/systems/routes.go
+DELETE	/book/chapters/:chapter/pages/:key	internal/systems/routes.go
 DELETE	/calendar/events/:eventID	internal/plugins/syncapi/routes.go
 DELETE	/calendars/:calid	internal/plugins/calendar/routes.go
 DELETE	/calendars/:calid/eras/:eraID	internal/plugins/calendar/routes.go
@@ -148,6 +150,9 @@ GET	/availability/mine	internal/plugins/sessions/routes.go
 GET	/availability/overlay	internal/plugins/sessions/routes.go
 GET	/bindings/picker	internal/plugins/widgetbindings/routes.go
 GET	/book	internal/systems/routes.go
+GET	/book/edit	internal/systems/routes.go
+GET	/book/export	internal/systems/routes.go
+GET	/book/source	internal/systems/routes.go
 GET	/browse	internal/plugins/packages/routes.go
 GET	/calendar	internal/app/routes.go
 GET	/calendar	internal/plugins/syncapi/routes.go
@@ -468,6 +473,9 @@ POST	/availability/nudge	internal/plugins/sessions/routes.go
 POST	/backdrop	internal/plugins/campaigns/routes.go
 POST	/bindings	internal/plugins/widgetbindings/routes.go
 POST	/bindings/create	internal/plugins/widgetbindings/routes.go
+POST	/book/chapters	internal/systems/routes.go
+POST	/book/chapters/:chapter/pages	internal/systems/routes.go
+POST	/book/chapters/:chapter/pages/:key/keep	internal/systems/routes.go
 POST	/calendar	internal/plugins/syncapi/routes.go
 POST	/calendar/advance	internal/plugins/syncapi/routes.go
 POST	/calendar/advance-time	internal/plugins/syncapi/routes.go
@@ -634,6 +642,8 @@ PUT	/appearance	internal/plugins/campaigns/routes.go
 PUT	/armory/instances/:iid	internal/plugins/armory/routes.go
 PUT	/availability/exceptions	internal/plugins/sessions/routes.go
 PUT	/availability/mine	internal/plugins/sessions/routes.go
+PUT	/book/chapters/:chapter	internal/systems/routes.go
+PUT	/book/chapters/:chapter/pages/:key	internal/systems/routes.go
 PUT	/branding	internal/plugins/campaigns/routes.go
 PUT	/calendar/cycles	internal/plugins/syncapi/routes.go
 PUT	/calendar/date	internal/plugins/syncapi/routes.go

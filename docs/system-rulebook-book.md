@@ -140,6 +140,21 @@ check what players get. Players are sent only the player view: Director-only
 parts, chapters, pages, blocks, creature numbers and notes never leave the
 server.
 
+## Editing a campaign's copy
+
+The files above are the package's book. A campaign's Directors (the owner and
+any member given Director visibility) can change their own campaign's copy
+inside Chronicle: the Rules page shows an **Edit** link to them. They can
+rewrite a page, add pages to a chapter and add a chapter of house rules. The
+package files are never touched, so updating the package does not overwrite
+anything a campaign wrote; a page a campaign edited that the package has since
+changed is flagged so the Director can choose which text to keep.
+
+A campaign's copy can be downloaded from the editor as a zip of these same
+files (`book/book.yaml` and `book/chapters/*.yaml`), with house-rules chapters
+added as `house-<name>` files in a "House rules" part, so a package author can
+fold a campaign's changes back into the package.
+
 ## When something is wrong
 
 Chronicle checks every file when the Rules page opens. A chapter with a mistake

@@ -2896,7 +2896,9 @@ func (a *App) RegisterRoutes() {
 	// repeat-by-rule logic is calendar_rule.js, loaded before it), and
 	// calendar_almanac.js waits for a Calendars page preview. rulebook.js
 	// mounts on the Rules page's data-widget="rulebook" when a system ships a
-	// book. All are no-ops on every other page, same as every entry here.
+	// book, and rulebook_editor.js on the editor page's
+	// data-widget="rulebook-editor". All are no-ops on every other page, same
+	// as every entry here.
 	pluginBodyScripts := []string{
 		"/static/plugins/" + entities.PluginSlug + "/js/characters.js",
 		"/static/js/widgets/calendar_view.js",
@@ -2906,6 +2908,7 @@ func (a *App) RegisterRoutes() {
 		"/static/js/widgets/calendar_editor.js",
 		"/static/js/calendar_almanac.js",
 		"/static/js/widgets/rulebook.js",
+		"/static/js/widgets/rulebook_editor.js",
 	}
 
 	// The sidebar, campaign dashboard and Extensions hub link to
@@ -3789,6 +3792,7 @@ func (a *App) RegisterRoutes() {
 	systemHandler := systems.NewSystemHandler()
 	systemHandler.SetCampaignSystems(campaignSystemMgr)
 	systemHandler.SetAddonService(addonService)
+	systemHandler.SetBookEdits(systems.NewBookEditService(systems.NewBookEditRepository(a.DB)))
 	systems.RegisterRoutes(e, systemHandler, addonService, authService, campaignService)
 
 	// Admin-only deployment-health diagnostic: read-only fingerprints of the
