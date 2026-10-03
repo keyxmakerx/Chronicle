@@ -99,6 +99,9 @@ type fakeCalendarSvc struct {
 	// savedWeather records the last SetWeatherSettings.
 	weather      *WeatherSettings
 	savedWeather *WeatherSettings
+	// lockedDays/lockedTo record the last LockDayWeather call.
+	lockedDays []DayDate
+	lockedTo   *bool
 }
 
 const secretCalendarID = "cal-secret"
@@ -214,7 +217,7 @@ func (f *fakeCalendarSvc) GetWeatherSettings(context.Context, string, string, pe
 		w := *f.weather
 		return &w, nil
 	}
-	return &WeatherSettings{Climate: DefaultWeatherClimate, Continuity: DefaultWeatherContinuity}, nil
+	return &WeatherSettings{Climate: DefaultWeatherClimate, Continuity: DefaultWeatherContinuity, ForecastDays: DefaultForecastDays}, nil
 }
 func (f *fakeCalendarSvc) SetWeatherSettings(_ context.Context, _, _ string, s WeatherSettings) error {
 	f.savedWeather = &s
@@ -222,6 +225,13 @@ func (f *fakeCalendarSvc) SetWeatherSettings(_ context.Context, _, _ string, s W
 }
 func (f *fakeCalendarSvc) ClearDayWeather(context.Context, string, string, []DayDate) error {
 	return nil
+}
+func (f *fakeCalendarSvc) LockDayWeather(_ context.Context, _, _ string, dates []DayDate, locked bool) (int, error) {
+	f.lockedDays, f.lockedTo = dates, &locked
+	return len(dates), nil
+}
+func (f *fakeCalendarSvc) ListWeatherForecast(context.Context, string, string, permissions.Viewer) ([]ForecastEntry, error) {
+	return []ForecastEntry{}, nil
 }
 
 func (f *fakeCalendarSvc) ListAllEventsForCalendar(context.Context, string, string, permissions.Viewer) ([]Event, error) {
@@ -481,16 +491,18 @@ func TestRouteGates_StructureWritesCanAuthorDmOnly(t *testing.T) {
 		name   string
 		method string
 		path   string
-		wantOK int // response code for a caller who passes CanAuthorDmOnly
+		body   string // JSON body, for a route that needs one to reach the service
+		wantOK int    // response code for a caller who passes CanAuthorDmOnly
 	}{
-		{"create event kind", http.MethodPost, "/campaigns/camp-1/calendars/event-kinds", http.StatusCreated},
-		{"update event kind", http.MethodPut, "/campaigns/camp-1/calendars/event-kinds/1", http.StatusOK},
-		{"delete event kind", http.MethodDelete, "/campaigns/camp-1/calendars/event-kinds/1", http.StatusOK},
-		{"create era", http.MethodPost, "/campaigns/camp-1/calendars/cal-1/eras", http.StatusCreated},
-		{"update era", http.MethodPut, "/campaigns/camp-1/calendars/cal-1/eras/1", http.StatusOK},
-		{"delete era", http.MethodDelete, "/campaigns/camp-1/calendars/cal-1/eras/1", http.StatusOK},
-		{"set moon hidden", http.MethodPut, "/campaigns/camp-1/calendars/cal-1/moons/1/hidden", http.StatusOK},
-		{"read weather settings", http.MethodGet, "/campaigns/camp-1/calendars/cal-1/weather/settings", http.StatusOK},
+		{"create event kind", http.MethodPost, "/campaigns/camp-1/calendars/event-kinds", "", http.StatusCreated},
+		{"update event kind", http.MethodPut, "/campaigns/camp-1/calendars/event-kinds/1", "", http.StatusOK},
+		{"delete event kind", http.MethodDelete, "/campaigns/camp-1/calendars/event-kinds/1", "", http.StatusOK},
+		{"create era", http.MethodPost, "/campaigns/camp-1/calendars/cal-1/eras", "", http.StatusCreated},
+		{"update era", http.MethodPut, "/campaigns/camp-1/calendars/cal-1/eras/1", "", http.StatusOK},
+		{"delete era", http.MethodDelete, "/campaigns/camp-1/calendars/cal-1/eras/1", "", http.StatusOK},
+		{"set moon hidden", http.MethodPut, "/campaigns/camp-1/calendars/cal-1/moons/1/hidden", "", http.StatusOK},
+		{"read weather settings", http.MethodGet, "/campaigns/camp-1/calendars/cal-1/weather/settings", "", http.StatusOK},
+		{"lock day weather", http.MethodPost, "/campaigns/camp-1/calendars/cal-1/weather/days/lock", `{"days":[{"year":1,"month":1,"day":1}],"locked":true}`, http.StatusOK},
 	}
 
 	const userID = "u-caller"
@@ -509,7 +521,7 @@ func TestRouteGates_StructureWritesCanAuthorDmOnly(t *testing.T) {
 						settings = `{"dm_grant_ids":["` + userID + `"]}`
 					}
 					e, _ := newAccessTestRouterWithSettings(false, true, roles, settings)
-					rec := doRequest(e, rt.method, rt.path, userID)
+					rec := doRequestWithBody(e, rt.method, rt.path, userID, rt.body)
 
 					canAuthor := c.role >= campaigns.RoleOwner || c.granted
 					want := http.StatusForbidden

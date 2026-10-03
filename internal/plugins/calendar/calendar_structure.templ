@@ -44,7 +44,11 @@ type weatherCarry struct {
 	// Kinds is the cleaned own-weather list, KindsJSON its carried form.
 	Kinds     []WeatherKind
 	KindsJSON string
-	Notes     []string
+	// Forecast and ForecastDays are the player-forecast switch and how many
+	// days it covers, carried to the save alongside the rest.
+	Forecast     bool
+	ForecastDays string
+	Notes        []string
 }
 
 // StructureEditPage is the full page (direct navigation).
@@ -142,6 +146,30 @@ templ weatherSettingsSection(w WeatherSettings, climates []WeatherClimate) {
 		<p id="calv5-weather-continuity-hint" class="calv5-wx-hint">Left changes every day; right settles into long spells.</p>
 		<p class="calv5-wx-hint">Generate starts from this climate and from your own weather below.</p>
 		@weatherKindsEditor(w)
+		@weatherForecastFields(w)
+	</div>
+}
+
+// weatherForecastFields is the player-forecast switch and its reach. The
+// hidden weather_forecast_sent marker lets the server tell an unchecked box
+// (forecast off) from a form that never had the control (leave it as stored),
+// since a browser sends nothing for an unchecked checkbox.
+templ weatherForecastFields(w WeatherSettings) {
+	<div class="calv5-wf">
+		<input type="hidden" name="weather_forecast_sent" value="1"/>
+		<label class="calv5-toggle-row">
+			<input type="checkbox" name="weather_forecast" value="on" checked?={ w.ForecastsEnabled } @change="clearPreview()"/>
+			<span>Show players a forecast</span>
+		</label>
+		<label class="calv5-fld" for="calv5-weather-forecast-days">
+			<span>Days ahead</span>
+		</label>
+		<select id="calv5-weather-forecast-days" class="calv5-inp" name="weather_forecast_days" aria-describedby="calv5-weather-forecast-hint" @change="clearPreview()">
+			for n := 1; n <= MaxForecastDays; n++ {
+				<option value={ strconv.Itoa(n) } selected?={ n == w.ForecastDays }>{ strconv.Itoa(n) }</option>
+			}
+		</select>
+		<p id="calv5-weather-forecast-hint" class="calv5-wx-hint">Players see a guess that can be wrong. You always see the real weather.</p>
 	</div>
 }
 
@@ -407,6 +435,11 @@ templ structurePreviewBody(campaignID, calendarID, csrfToken, importJSON, notice
 					<input type="hidden" name="weather_climate" value={ wx.Climate }/>
 					<input type="hidden" name="weather_continuity" value={ wx.Continuity }/>
 					<input type="hidden" name="weather_kinds" value={ wx.KindsJSON }/>
+					<input type="hidden" name="weather_forecast_sent" value="1"/>
+					if wx.Forecast {
+						<input type="hidden" name="weather_forecast" value="on"/>
+					}
+					<input type="hidden" name="weather_forecast_days" value={ wx.ForecastDays }/>
 				}
 				<button type="button" class="btn quiet" onclick={ structureBackToEditingOnClick() }>Back to editing</button>
 				<span class="sp" style="flex:1"></span>

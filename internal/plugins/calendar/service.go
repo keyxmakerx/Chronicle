@@ -329,6 +329,13 @@ type CalendarService interface {
 	ListDayWeather(ctx context.Context, calendarID, campaignID string, year, month int, v permissions.Viewer) ([]DayWeather, error)
 	SetDayWeather(ctx context.Context, calendarID, campaignID string, days []DayWeatherInput) error
 	ClearDayWeather(ctx context.Context, calendarID, campaignID string, dates []DayDate) error
+	// LockDayWeather sets or clears the lock on days that already hold a
+	// reading and returns how many changed. A locked day is skipped by
+	// generated writes; a painted write clears the lock.
+	LockDayWeather(ctx context.Context, calendarID, campaignID string, dates []DayDate, locked bool) (int, error)
+	// ListWeatherForecast is the blurred outlook players are shown for the
+	// days after the calendar's today. Empty when forecasts are off.
+	ListWeatherForecast(ctx context.Context, calendarID, campaignID string, v permissions.Viewer) ([]ForecastEntry, error)
 
 	// Weather settings: the world's climate and how long weather lasts.
 	// Get never returns nil (defaults when unset); Set validates and
@@ -2418,8 +2425,9 @@ func dayOnOrBefore(y, m, d, cy, cm, cd int) bool {
 }
 
 // ListDayWeather returns a year's (or one month's) day readings for v. A
-// viewer who cannot see dm_only content gets only days up to today: the
-// forecast switch does not open future days yet (TODO(#917)).
+// viewer who cannot see dm_only content gets only days up to today, and no
+// lock state: future days reach players only as a blurred forecast
+// (ListWeatherForecast), never as the stored reading.
 func (s *calendarService) ListDayWeather(ctx context.Context, calendarID, campaignID string, year, month int, v permissions.Viewer) ([]DayWeather, error) {
 	cal, err := s.calendarInCampaignForViewer(ctx, calendarID, campaignID, v)
 	if err != nil {
@@ -2436,6 +2444,10 @@ func (s *calendarService) ListDayWeather(ctx context.Context, calendarID, campai
 	out := make([]DayWeather, 0, len(days))
 	for _, d := range days {
 		if director || dayOnOrBefore(d.Year, d.Month, d.Day, cal.CurrentYear, cal.CurrentMonth, cal.CurrentDay) {
+			if !director {
+				// A player never learns a day is locked.
+				d.Locked = nil
+			}
 			out = append(out, d)
 		}
 	}
@@ -2445,15 +2457,25 @@ func (s *calendarService) ListDayWeather(ctx context.Context, calendarID, campai
 // GetWeatherSettings returns the calendar's climate settings, or the
 // defaults when none were stored, so a caller never handles nil.
 func (s *calendarService) GetWeatherSettings(ctx context.Context, calendarID, campaignID string, v permissions.Viewer) (*WeatherSettings, error) {
-	if _, err := s.calendarInCampaignForViewer(ctx, calendarID, campaignID, v); err != nil {
+	cal, err := s.calendarInCampaignForViewer(ctx, calendarID, campaignID, v)
+	if err != nil {
 		return nil, err
 	}
 	got, err := s.weatherRepo.GetSettings(ctx, calendarID)
 	if err != nil {
 		return nil, fmt.Errorf("get weather settings: %w", err)
 	}
+	// ForecastsEnabled lives on the calendar row, not the settings row.
+	defaults := WeatherSettings{
+		Climate: DefaultWeatherClimate, Continuity: DefaultWeatherContinuity, Kinds: []WeatherKind{},
+		ForecastDays: DefaultForecastDays, ForecastsEnabled: cal.ForecastsEnabled,
+	}
 	if got == nil {
-		return &WeatherSettings{Climate: DefaultWeatherClimate, Continuity: DefaultWeatherContinuity, Kinds: []WeatherKind{}}, nil
+		return &defaults, nil
+	}
+	got.ForecastsEnabled = cal.ForecastsEnabled
+	if got.ForecastDays < 1 || got.ForecastDays > MaxForecastDays {
+		got.ForecastDays = DefaultForecastDays
 	}
 	// Kinds that no longer validate are dropped, not an error: a built-in
 	// added since they were saved must not break the page.
@@ -2461,7 +2483,9 @@ func (s *calendarService) GetWeatherSettings(ctx context.Context, calendarID, ca
 	if !validClimate(got.Climate) {
 		// A stored id this build no longer lists falls back rather than
 		// handing the generator an id it can't resolve.
-		return &WeatherSettings{Climate: DefaultWeatherClimate, Continuity: DefaultWeatherContinuity, Kinds: kinds}, nil
+		defaults.Kinds = kinds
+		defaults.ForecastDays = got.ForecastDays
+		return &defaults, nil
 	}
 	got.Kinds = kinds
 	return got, nil
@@ -2473,7 +2497,8 @@ func (s *calendarService) SetWeatherSettings(ctx context.Context, calendarID, ca
 	if err := validateWeatherSettings(in); err != nil {
 		return err
 	}
-	if _, err := s.calendarInCampaign(ctx, calendarID, campaignID); err != nil {
+	cal, err := s.calendarInCampaign(ctx, calendarID, campaignID)
+	if err != nil {
 		return err
 	}
 	in.Continuity = roundContinuity(in.Continuity)
@@ -2481,7 +2506,101 @@ func (s *calendarService) SetWeatherSettings(ctx context.Context, calendarID, ca
 	if err := s.weatherRepo.SetSettings(ctx, calendarID, in); err != nil {
 		return fmt.Errorf("set weather settings: %w", err)
 	}
+	// The forecast switch is a calendar setting, so it goes through the same
+	// partial update the settings page uses; sending only this field keeps
+	// every other calendar field as stored.
+	if in.ForecastsEnabled != cal.ForecastsEnabled {
+		return s.UpdateCalendar(ctx, calendarID, campaignID, UpdateCalendarInput{
+			Name:             cal.Name,
+			ForecastsEnabled: patch.Of(in.ForecastsEnabled),
+		})
+	}
 	return nil
+}
+
+// LockDayWeather sets or clears the lock on days that already hold a
+// reading. Dates are checked like a clear's; a day with no reading is
+// skipped by the repository, never created.
+func (s *calendarService) LockDayWeather(ctx context.Context, calendarID, campaignID string, dates []DayDate, locked bool) (int, error) {
+	if len(dates) > maxDayWeatherBatch {
+		return 0, apperror.NewBadRequest(fmt.Sprintf("at most %d days can be locked at once", maxDayWeatherBatch))
+	}
+	cal, err := s.calendarInCampaign(ctx, calendarID, campaignID)
+	if err != nil {
+		return 0, err
+	}
+	if err := s.loadCalendarGeometry(ctx, cal); err != nil {
+		return 0, err
+	}
+	for _, d := range dates {
+		if err := validateDayDate(cal, d.Year, d.Month, d.Day); err != nil {
+			return 0, err
+		}
+	}
+	n, err := s.weatherRepo.LockDays(ctx, calendarID, dates, locked)
+	if err != nil {
+		return 0, fmt.Errorf("lock day weather: %w", err)
+	}
+	return n, nil
+}
+
+// ListWeatherForecast returns the forecast for the days after the calendar's
+// today, as many as the calendar's forecast setting allows. It is empty when
+// forecasts are off or today is not a real day of the calendar. A day with no
+// stored reading has nothing to forecast and is skipped. Anyone who can see
+// the calendar gets the same entries; the Director's real readings come from
+// ListDayWeather and are never replaced by these.
+func (s *calendarService) ListWeatherForecast(ctx context.Context, calendarID, campaignID string, v permissions.Viewer) ([]ForecastEntry, error) {
+	cal, err := s.calendarInCampaignForViewer(ctx, calendarID, campaignID, v)
+	if err != nil {
+		return nil, err
+	}
+	out := []ForecastEntry{}
+	if !cal.ForecastsEnabled {
+		return out, nil
+	}
+	if err := s.loadCalendarGeometry(ctx, cal); err != nil {
+		return nil, err
+	}
+	today := DayDate{Year: cal.CurrentYear, Month: cal.CurrentMonth, Day: cal.CurrentDay}
+	if validateDayDate(cal, today.Year, today.Month, today.Day) != nil {
+		return out, nil
+	}
+	settings, err := s.weatherRepo.GetSettings(ctx, calendarID)
+	if err != nil {
+		return nil, fmt.Errorf("get weather settings: %w", err)
+	}
+	horizon := DefaultForecastDays
+	if settings != nil && settings.ForecastDays >= 1 && settings.ForecastDays <= MaxForecastDays {
+		horizon = settings.ForecastDays
+	}
+
+	// A month's readings are fetched once however many forecast days land in it.
+	type monthKey struct{ year, month int }
+	byMonth := map[monthKey]map[int]DayWeather{}
+	for lead := 1; lead <= horizon; lead++ {
+		date, ok := cal.addDays(today, lead)
+		if !ok {
+			break
+		}
+		key := monthKey{date.Year, date.Month}
+		days, seen := byMonth[key]
+		if !seen {
+			rows, err := s.weatherRepo.ListDays(ctx, calendarID, date.Year, date.Month)
+			if err != nil {
+				return nil, fmt.Errorf("list day weather: %w", err)
+			}
+			days = make(map[int]DayWeather, len(rows))
+			for _, r := range rows {
+				days[r.Day] = r
+			}
+			byMonth[key] = days
+		}
+		if real, ok := days[date.Day]; ok {
+			out = append(out, buildForecastEntry(calendarID, date, lead, real))
+		}
+	}
+	return out, nil
 }
 
 // SetDayWeather validates and stores day readings. Every date must be a real

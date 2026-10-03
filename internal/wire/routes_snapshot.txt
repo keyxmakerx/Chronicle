@@ -188,6 +188,8 @@ GET	/calendars/:calid/view	internal/plugins/calendar/routes.go
 GET	/calendars/:calid/view	internal/plugins/calendar/routes.go
 GET	/calendars/:calid/weather/days	internal/plugins/calendar/routes.go
 GET	/calendars/:calid/weather/days	internal/plugins/calendar/routes.go
+GET	/calendars/:calid/weather/forecast	internal/plugins/calendar/routes.go
+GET	/calendars/:calid/weather/forecast	internal/plugins/calendar/routes.go
 GET	/calendars/:calid/weather/settings	internal/plugins/calendar/routes.go
 GET	/calendars/event-kinds	internal/plugins/calendar/routes.go
 GET	/calendars/list	internal/plugins/calendar/routes.go
@@ -500,6 +502,7 @@ POST	/calendars/:calid/recurrence/preview	internal/plugins/calendar/routes.go
 POST	/calendars/:calid/structure	internal/plugins/calendar/routes.go
 POST	/calendars/:calid/structure/preview	internal/plugins/calendar/routes.go
 POST	/calendars/:calid/weather/days/clear	internal/plugins/calendar/routes.go
+POST	/calendars/:calid/weather/days/lock	internal/plugins/calendar/routes.go
 POST	/calendars/event-kinds	internal/plugins/calendar/routes.go
 POST	/calendars/import	internal/plugins/calendar/routes.go
 POST	/calendars/import/preview	internal/plugins/calendar/routes.go

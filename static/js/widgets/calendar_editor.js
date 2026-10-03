@@ -526,9 +526,21 @@
   // gate the single-event visibility route already uses) and Shift events
   // (moves every event touching the selection by N days), plus Paint
   // weather, which sets a weather on every chosen day, and Generate…, which
-  // opens calendar_weather_sheet.js for them. The mockup's Lock action is
-  // not wired yet (TODO(#918)).
+  // opens calendar_weather_sheet.js for them; Lock keeps the chosen days'
+  // weather safe from Generate.
   // ------------------------------------------------------------------
+  // lockState is the Lock button's face for the chosen days' stored readings
+  // (null where a day has none): Unlock once every reading is locked, and
+  // disabled when no chosen day has weather to lock.
+  function lockState(readings) {
+    var have = (readings || []).filter(Boolean);
+    var allLocked = have.length > 0 && have.every(function (w) { return w.locked === true; });
+    return { label: allLocked ? 'Unlock' : 'Lock', icon: allLocked ? 'fa-lock-open' : 'fa-lock', disabled: !have.length, unlocking: allLocked };
+  }
+  function lockButtonHTML(st) {
+    return '<button type="button" class="bbb" data-bb="lock"' + (st.disabled ? ' disabled' : '') + '><i class="fa-solid ' + st.icon + '" aria-hidden="true"></i><span>' + st.label + '</span></button>';
+  }
+
   CalendarEditor.prototype._buildBulkBar = function () {
     var wrap = document.createElement('div');
     wrap.className = 'bbw';
@@ -545,6 +557,7 @@
       else if (a === 'shift') self._toggleShiftTray();
       else if (a === 'paint') self._togglePaintTray();
       else if (a === 'gen') self._openGenerate();
+      else if (a === 'lock') self._lockDays();
     });
   };
 
@@ -556,7 +569,7 @@
     // to it without needing :has().
     this.view.calEl.classList.toggle('bar-up', !!n);
     if (!n) { this.bbar.hidden = true; this.bbar.innerHTML = ''; this._closeShiftTray(); this._closePaintTray(); return; }
-    var canVis = this.view.canAuthorDmOnly;
+    var canVis = this.view.canAuthorDmOnly, self = this;
     this.bbar.hidden = false;
     this.bbar.innerHTML =
       '<div class="bbl"><b>' + (n === 1 ? '1 day' : n + ' days') + ' chosen</b><span>' + this._eventsInSelection().length + ' events touched</span></div>' +
@@ -564,7 +577,8 @@
         (canVis ? '<button type="button" class="bbb" data-bb="hide"><i class="fa-solid fa-eye-slash"></i><span>Hide</span></button><button type="button" class="bbb" data-bb="reveal"><i class="fa-solid fa-eye"></i><span>Reveal</span></button>' : '') +
         '<button type="button" class="bbb" data-bb="shift" aria-expanded="' + !!this._shiftTray + '"><i class="fa-solid fa-arrows-left-right"></i><span>Shift events</span></button>' +
         (canVis ? '<button type="button" class="bbb" data-bb="paint" aria-expanded="' + !!this._paintTray + '"><i class="fa-solid fa-paintbrush"></i><span>Paint weather</span></button>' +
-          (Chronicle.calendarWeatherSheet ? '<button type="button" class="bbb" data-bb="gen" aria-haspopup="dialog"><i class="fa-solid fa-wand-magic-sparkles"></i><span>Generate…</span></button>' : '') : '') +
+          (Chronicle.calendarWeatherSheet ? '<button type="button" class="bbb" data-bb="gen" aria-haspopup="dialog"><i class="fa-solid fa-wand-magic-sparkles"></i><span>Generate…</span></button>' : '') +
+          lockButtonHTML(lockState(this._selectedDates().map(function (d) { return (self.view.weatherByYear[d.year] || {})[d.month + '_' + d.day] || null; }))) : '') +
       '</div>' +
       '<button type="button" class="x" data-bb="none" aria-label="Choose no days">✕</button>';
     if (this._paintTray) this._paintCount();
@@ -878,7 +892,7 @@
       years.forEach(function (y) { if (!view.weatherByYear[y]) throw new Error('weather not loaded'); });
       return dates.map(function (d) {
         var w = (view.weatherByYear[d.year] || {})[d.month + '_' + d.day];
-        return { date: d, prev: w ? dayInput(w) : null };
+        return { date: d, prev: w ? dayInput(w) : null, locked: !!(w && w.locked) };
       });
     });
   };
@@ -886,7 +900,9 @@
   // _refreshWeather reloads the touched years and then redraws, so the grid
   // shows what the server actually holds without flashing empty meanwhile.
   CalendarEditor.prototype._refreshWeather = function (dates) {
-    var view = this.view;
+    var view = this.view, self = this;
+    // The Director's "Players see" line follows the saved weather.
+    if (view.canAuthorDmOnly && view.fetchForecast) view.fetchForecast(true);
     return Promise.all(yearsOf(dates).map(function (y) {
       var old = view.weatherByYear[y];
       delete view.weatherByYear[y];
@@ -896,6 +912,7 @@
     })).then(function () {
       view.renderMonth();
       view.refreshWing();
+      self._renderBar();
     });
   };
 
@@ -945,6 +962,45 @@
     });
   };
 
+  // _lockDays locks (or unlocks) the chosen days that hold weather. Undo
+  // sends the opposite for exactly the days that changed.
+  CalendarEditor.prototype._lockDays = function () {
+    var self = this, view = this.view, dates = this._selectedDates();
+    if (!dates.length || this._paintBusy) return;
+    this._paintBusy = true;
+    var send = function (days, locked) {
+      return Chronicle.apiFetch(view.apiBase + '/weather/days/lock', { method: 'POST', body: { days: days, locked: locked } }).then(function (resp) {
+        if (!resp.ok) throw new Error('lock failed');
+        return resp.json();
+      });
+    };
+    this._snapshot(dates).then(function (snap) {
+      // The snapshot's write shape drops the lock flag, so read the stored readings.
+      snap.forEach(function (s) { s.prev = (view.weatherByYear[s.date.year] || {})[s.date.month + '_' + s.date.day] || null; });
+      var have = snap.filter(function (s) { return s.prev; });
+      var st = lockState(snap.map(function (s) { return s.prev; }));
+      if (st.disabled) { view.say('The chosen days have no weather to lock.'); return; }
+      var toggle = have.filter(function (s) { return (s.prev.locked === true) === st.unlocking; });
+      var days = (toggle.length ? toggle : have).map(function (s) { return s.date; });
+      var locked = !st.unlocking;
+      return send(days, locked).then(function (out) {
+        var n = out && typeof out.changed === 'number' ? out.changed : days.length;
+        self._refreshWeather(days);
+        view.say((locked ? 'Locked ' : 'Unlocked ') + (n === 1 ? '1 day' : n + ' days') + '.', { label: 'Undo', run: function () {
+          if (self._paintBusy) return;
+          self._paintBusy = true;
+          send(days, !locked).then(function () { view.say('Undone.'); }).catch(function () {
+            view.say("Couldn't undo. The calendar shows what is saved now.");
+          }).then(function () { self._paintBusy = false; self._refreshWeather(days); });
+        } });
+      });
+    }).catch(function () {
+      view.say("Couldn't lock those days. Nothing changed.");
+    }).then(function () {
+      self._paintBusy = false;
+    });
+  };
+
   // _undoPaint clears the touched days, then writes back the readings they
   // held. Clearing first lets a generated reading return to a day just
   // painted by hand, which a generated write alone may not replace.
@@ -960,6 +1016,12 @@
       return Chronicle.apiFetch(view.apiBase + '/weather/days', { method: 'PUT', body: { days: restore } });
     }).then(function (resp) {
       if (!resp.ok) throw new Error('undo restore failed');
+      // Painting over a locked day clears its lock; Undo puts that back too.
+      var relock = snap.filter(function (s) { return s.prev && s.locked; }).map(function (s) { return s.date; });
+      if (!relock.length) return resp;
+      return Chronicle.apiFetch(view.apiBase + '/weather/days/lock', { method: 'POST', body: { days: relock, locked: true } });
+    }).then(function (resp) {
+      if (!resp.ok) throw new Error('undo relock failed');
       self._paintUndo = null;
       view.say('Undone.');
     }).catch(function () {
@@ -1563,7 +1625,7 @@
   // not a function" the instant a canEdit viewer loads the page.
   // Pure helpers, exposed for test/js/calendar_paint_weather.test.mjs.
   if (typeof module !== 'undefined' && module.exports) {
-    module.exports = { PAINT_COMMON: PAINT_COMMON, PAINT_GROUPS: PAINT_GROUPS, dayInput: dayInput, paintButtonHTML: paintButtonHTML, paintListHTML: paintListHTML };
+    module.exports = { PAINT_COMMON: PAINT_COMMON, PAINT_GROUPS: PAINT_GROUPS, dayInput: dayInput, lockState: lockState, lockButtonHTML: lockButtonHTML, paintButtonHTML: paintButtonHTML, paintListHTML: paintListHTML };
   }
 
   var mount = document.querySelector('[data-widget="calendar_view"]');

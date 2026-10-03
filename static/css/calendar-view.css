@@ -1193,6 +1193,17 @@
 .cal-v5 .wxf small{display:block;color:var(--mut);font-size:11px}
 .cal-v5 .wxf.fut{opacity:.6;padding:4px 6px;margin:-4px -6px;border:1px dashed var(--edge);border-radius:7px}
 .cal-v5 .wxtag{display:inline-block;margin-top:3px;padding:1px 7px;border-radius:99px;font-size:10.5px;color:var(--mut);box-shadow:inset 0 0 0 1px var(--edge)}
+/* A player's forecast for a future day: dashed, and fainter when the forecast is unsure. */
+.cal-v5 .wxm.fc{display:inline-flex;align-items:center;gap:3px;max-width:calc(100% - 12px);padding:1px 5px;border-radius:99px;border:1px dashed var(--edge);font:500 10px/1.2 var(--sans);color:var(--ink2)}
+.cal-v5 .wxm.fc .fcw{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.cal-v5 .wxm.fc.faded{opacity:.55}
+.cal-v5 .band .wxm.fc{max-width:none}
+.cal-v5 .fcsr{position:absolute;width:1px;height:1px;margin:-1px;padding:0;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap;border:0}
+.cal-v5 .wxtag.fctag{margin:0 0 0 8px;vertical-align:middle;color:var(--ink2)}
+.cal-v5 .wxf.fcf b{font-weight:650;color:var(--ink)}
+.cal-v5 .wxf.fcps small{margin-top:0}
+/* Edit mode's lock on a locked day, a small monochrome glyph at the mark's corner. */
+.cal-v5 .cwx .lk{position:absolute;right:-3px;top:-3px;font-size:8px;line-height:1;color:var(--mut)}
 /* A day's weather, shown while editing or generating; painted days carry their weather's tint. */
 .cal-v5 .cwx{position:absolute;right:5px;bottom:5px;z-index:2;width:20px;height:20px;display:none;place-items:center;border-radius:50%;color:var(--mut);pointer-events:none}
 .cal-v5 .cal.wxon .cwx{display:grid}

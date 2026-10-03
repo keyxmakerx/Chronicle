@@ -23,10 +23,16 @@ type WeatherRepository interface {
 	// it when month > 0, in date order.
 	ListDays(ctx context.Context, calendarID string, year, month int) ([]DayWeather, error)
 	// SetDays upserts day readings in one transaction. A generated reading
-	// never replaces a stored manual one; a manual reading replaces anything.
+	// never replaces a stored manual one or a locked one; a manual reading
+	// replaces anything and clears the lock.
 	SetDays(ctx context.Context, calendarID string, days []DayWeatherInput) error
 	// ClearDays deletes the readings on the given days, whatever their source.
 	ClearDays(ctx context.Context, calendarID string, dates []DayDate) error
+
+	// LockDays sets the lock on the stored readings on the given days and
+	// returns how many rows changed. A day with no reading is skipped, never
+	// created.
+	LockDays(ctx context.Context, calendarID string, dates []DayDate, locked bool) (int, error)
 
 	// GetSettings returns the calendar's climate settings, or (nil, nil)
 	// when none were ever stored.
@@ -156,7 +162,7 @@ const weatherDayCols = `year, month, day, preset_id, preset_label, icon, color,
         temperature_celsius, wind_speed_kph, wind_speed_tier,
         wind_direction, wind_direction_degrees,
         precipitation_type, precipitation_intensity,
-        zone_id, zone_name, description, source, updated_at`
+        zone_id, zone_name, description, source, locked, updated_at`
 
 func scanDayWeather(scanner interface{ Scan(...any) error }) (DayWeather, error) {
 	var w DayWeather
@@ -165,14 +171,16 @@ func scanDayWeather(scanner interface{ Scan(...any) error }) (DayWeather, error)
 	var windDirDeg sql.NullInt32
 	var precipType sql.NullString
 	var precipIntensity sql.NullFloat64
+	var locked bool
 	err := scanner.Scan(&w.Year, &w.Month, &w.Day, &w.PresetID, &w.PresetLabel, &w.Icon, &w.Color,
 		&w.TemperatureCelsius, &windSpeedKPH, &windSpeedTier,
 		&windDir, &windDirDeg,
 		&precipType, &precipIntensity,
-		&w.ZoneID, &w.ZoneName, &w.Description, &w.Source, &w.UpdatedAt)
+		&w.ZoneID, &w.ZoneName, &w.Description, &w.Source, &locked, &w.UpdatedAt)
 	if err != nil {
 		return w, err
 	}
+	w.Locked = &locked
 	w.Wind, w.Precipitation = foldWindPrecip(windSpeedKPH, windSpeedTier, windDir, windDirDeg, precipType, precipIntensity)
 	return w, nil
 }
@@ -210,11 +218,13 @@ var dayWeatherDataCols = []string{"preset_id", "preset_label", "icon", "color",
 	"precipitation_type", "precipitation_intensity",
 	"zone_id", "zone_name", "description"}
 
-// upsertManualDaySQL replaces whatever a day holds. upsertGeneratedDaySQL
-// leaves a manual row untouched: every assignment keeps the stored value
-// while source is 'manual', and source itself is assigned last because
-// MariaDB applies ON DUPLICATE KEY assignments left to right, so the
-// earlier IF()s must still see the stored source.
+// upsertManualDaySQL replaces whatever a day holds and clears its lock,
+// since painting is the owner saying what the day is. upsertGeneratedDaySQL
+// leaves a manual or locked row untouched: every assignment keeps the stored
+// value while source is 'manual' or locked is set, and source itself is
+// assigned last because MariaDB applies ON DUPLICATE KEY assignments left to
+// right, so the earlier IF()s must still see the stored source. locked is
+// never assigned by a generated write, so it stays as stored.
 var upsertManualDaySQL, upsertGeneratedDaySQL = buildDayUpserts()
 
 func buildDayUpserts() (manual, generated string) {
@@ -225,8 +235,9 @@ func buildDayUpserts() (manual, generated string) {
 	var m, g []string
 	for _, c := range append(append([]string{}, dayWeatherDataCols...), "source") {
 		m = append(m, fmt.Sprintf("%s = VALUES(%s)", c, c))
-		g = append(g, fmt.Sprintf("%s = IF(source = '%s', %s, VALUES(%s))", c, WeatherSourceManual, c, c))
+		g = append(g, fmt.Sprintf("%s = IF(source = '%s' OR locked, %s, VALUES(%s))", c, WeatherSourceManual, c, c))
 	}
+	m = append(m, "locked = FALSE")
 	return insert + strings.Join(m, ", "), insert + strings.Join(g, ", ")
 }
 
@@ -293,14 +304,50 @@ func (r *weatherRepo) ClearDays(ctx context.Context, calendarID string, dates []
 	return tx.Commit()
 }
 
+// LockDays flips the lock on existing readings in one transaction. The count
+// is rows whose lock actually changed (MariaDB reports changed rows, not
+// matched ones), so locking an already-locked day counts nothing.
+func (r *weatherRepo) LockDays(ctx context.Context, calendarID string, dates []DayDate, locked bool) (int, error) {
+	if len(dates) == 0 {
+		return 0, nil
+	}
+	tx, err := r.db.BeginTx(ctx, nil)
+	if err != nil {
+		return 0, err
+	}
+	defer tx.Rollback() //nolint:errcheck // no-op after Commit
+	stmt, err := tx.PrepareContext(ctx,
+		`UPDATE calendar_weather_days SET locked = ? WHERE calendar_id = ? AND year = ? AND month = ? AND day = ?`)
+	if err != nil {
+		return 0, err
+	}
+	defer func() { _ = stmt.Close() }()
+	changed := 0
+	for _, d := range dates {
+		res, err := stmt.ExecContext(ctx, locked, calendarID, d.Year, d.Month, d.Day)
+		if err != nil {
+			return 0, err
+		}
+		n, err := res.RowsAffected()
+		if err != nil {
+			return 0, err
+		}
+		changed += int(n)
+	}
+	if err := tx.Commit(); err != nil {
+		return 0, err
+	}
+	return changed, nil
+}
+
 // GetSettings reads the calendar's climate settings; no row is (nil, nil)
 // so the service decides the defaults.
 func (r *weatherRepo) GetSettings(ctx context.Context, calendarID string) (*WeatherSettings, error) {
 	s := &WeatherSettings{}
 	var kinds sql.NullString
 	err := r.db.QueryRowContext(ctx,
-		`SELECT climate, continuity, kinds FROM calendar_weather_settings WHERE calendar_id = ?`, calendarID,
-	).Scan(&s.Climate, &s.Continuity, &kinds)
+		`SELECT climate, continuity, kinds, forecast_days FROM calendar_weather_settings WHERE calendar_id = ?`, calendarID,
+	).Scan(&s.Climate, &s.Continuity, &kinds, &s.ForecastDays)
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil, nil
 	}
@@ -322,8 +369,9 @@ func (r *weatherRepo) GetSettings(ctx context.Context, calendarID string) (*Weat
 // SetSettings upserts the calendar's climate settings.
 func (r *weatherRepo) SetSettings(ctx context.Context, calendarID string, s WeatherSettings) error {
 	_, err := r.db.ExecContext(ctx,
-		`INSERT INTO calendar_weather_settings (calendar_id, climate, continuity, kinds) VALUES (?, ?, ?, ?)
-		 ON DUPLICATE KEY UPDATE climate = VALUES(climate), continuity = VALUES(continuity), kinds = VALUES(kinds)`,
-		calendarID, s.Climate, s.Continuity, encodeWeatherKinds(s.Kinds))
+		`INSERT INTO calendar_weather_settings (calendar_id, climate, continuity, kinds, forecast_days) VALUES (?, ?, ?, ?, ?)
+		 ON DUPLICATE KEY UPDATE climate = VALUES(climate), continuity = VALUES(continuity), kinds = VALUES(kinds),
+		        forecast_days = VALUES(forecast_days)`,
+		calendarID, s.Climate, s.Continuity, encodeWeatherKinds(s.Kinds), s.ForecastDays)
 	return err
 }

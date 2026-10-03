@@ -156,7 +156,7 @@ func RegisterRoutes(e *echo.Echo, h *Handler, campaignSvc campaigns.CampaignServ
 
 	// Day weather: one reading per day. Read Player (the service hides
 	// future days from anyone who can't see dm_only content); painting,
-	// storing generated weather and clearing are gated CanAuthorDmOnly like
+	// storing generated weather, clearing and locking are gated CanAuthorDmOnly like
 	// the moon hidden flag above, since a write can reveal future weather.
 	cg.GET("/calendars/:calid/weather/days", h.ListDayWeatherAPI, campaigns.RequireRole(campaigns.RolePlayer))
 	cg.PUT("/calendars/:calid/weather/days", h.SetDayWeatherAPI,
@@ -168,6 +168,12 @@ func RegisterRoutes(e *echo.Echo, h *Handler, campaignSvc campaigns.CampaignServ
 	cg.POST("/calendars/:calid/weather/days/clear", h.ClearDayWeatherAPI,
 		campaigns.RequireCapability(func(cc *campaigns.CampaignContext) bool { return cc.CanAuthorDmOnly() },
 			"only the campaign owner or a granted co-DM may clear a day's weather"))
+	cg.POST("/calendars/:calid/weather/days/lock", h.LockDayWeatherAPI,
+		campaigns.RequireCapability(func(cc *campaigns.CampaignContext) bool { return cc.CanAuthorDmOnly() },
+			"only the campaign owner or a granted co-DM may lock a day's weather"))
+	// The forecast is the one future weather a player may read, blurred by
+	// the service; it has the same gate as the day readings it is built from.
+	cg.GET("/calendars/:calid/weather/forecast", h.ListWeatherForecastAPI, campaigns.RequireRole(campaigns.RolePlayer))
 
 	// Real-date anchor preview: read-only, Owner only (moving the anchor
 	// re-dates every session scheduled by in-world date at once, so the
@@ -197,6 +203,7 @@ func RegisterRoutes(e *echo.Echo, h *Handler, campaignSvc campaigns.CampaignServ
 	pub.GET("/calendars/:calid/events", h.ListEventsAPI, campaigns.RequireViewAccess())
 	pub.GET("/calendars/:calid/events/:eid", h.GetEventAPI, campaigns.RequireViewAccess())
 	pub.GET("/calendars/:calid/weather/days", h.ListDayWeatherAPI, campaigns.RequireViewAccess())
+	pub.GET("/calendars/:calid/weather/forecast", h.ListWeatherForecastAPI, campaigns.RequireViewAccess())
 
 	// --- Calendar page (V5 part A, #741) ---
 	// The month grid / day-card / era-card / event / moon page. A real page a
