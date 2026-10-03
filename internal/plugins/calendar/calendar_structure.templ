@@ -4,7 +4,8 @@
 // preview slot under it. "Preview changes" fills the slot with what the
 // save would do — months moved or removed, events re-dated or stranded,
 // the current date — and the save button in that preview is the only way
-// to write. Changing anything in the editor empties the slot again.
+// to write. Changing anything in the editor empties the slot again. The
+// Era look part (calendar_era_look.templ) follows, with its own save.
 package calendar
 
 import (
@@ -79,7 +80,7 @@ templ StructureEditFragment(data StructureEditData) {
 					} else {
 						@structureEditorForm(structureEditorConfig{
 							Title:         "Edit structure",
-							Lead:          fmt.Sprintf("Change %s's months, weekdays, leap rule, moons and seasons. Nothing is saved until you have seen what the change does to its events and today's date.", data.Calendar.Name),
+							Lead:          fmt.Sprintf("Change %s's months, weekdays, leap rule, moons and seasons. Nothing is saved until you have seen what the change does to its events and today's date. How its eras look is further down, under Era look.", data.Calendar.Name),
 							PostURL:       fmt.Sprintf("/campaigns/%s/calendars/%s/structure/preview", data.CampaignID, data.Calendar.ID),
 							Target:        "#" + structurePreviewSlot,
 							Swap:          "innerHTML",
@@ -96,6 +97,7 @@ templ StructureEditFragment(data StructureEditData) {
 				</div>
 			</div>
 			<div id={ structurePreviewSlot } class="calv5-structure-preview" aria-live="polite"></div>
+			@eraLookPart(data)
 		</div>
 	</div>
 }

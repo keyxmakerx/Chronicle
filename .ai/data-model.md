@@ -131,6 +131,7 @@ numbered core migrations after it, tracked once each via `golang-migrate`'s
 | `notes` | Journal notes (no page) and per-page jots, with folders and live-edit locking | `parent_id` self-FK (folder nesting); `is_folder`; `content` JSON (legacy block array) + `entry`/`entry_html`; audience in `is_shared` (party) / `shared_with` JSON user ids / `shared_with_gm`; `archived_at`; `linked_note_id` (jot → Journal note, no FK); `locked_by`/`locked_at` (edit lock) |
 | `note_versions` | Snapshot history on each save | FK→`notes` CASCADE; mirrors `notes`' content columns |
 | `note_attachments` | Audio + transcript attachments on a note | `duration_secs`, `transcript` LONGTEXT |
+| `notes_app_grants` | A player's grant for an outside app (the Foundry notebook) to use their notes in one campaign | stores only the token's SHA-256; `origin`, `last_used_at`, `revoked_at` |
 
 ### Templates & prompts
 
@@ -253,12 +254,12 @@ Foundry module repo for the wire contract.
 
 | Table | Purpose | Notable columns |
 |---|---|---|
-| `api_keys` | Bearer tokens scoped to a campaign | `key_hash` (bcrypt), `key_prefix` UNIQUE; `permissions`/`ip_allowlist` JSON; `device_fingerprint`/`device_bound_at`; `vtt_tag` (cosmetic, e.g. "foundry") |
+| `api_keys` | Bearer tokens scoped to a campaign | `key_hash` (bcrypt), `key_prefix` UNIQUE; `permissions`/`ip_allowlist` JSON; `device_fingerprint`/`device_bound_at`; `vtt_tag` (cosmetic, e.g. "foundry"); `module_version` (nullable, self-reported by the VTT module in `X-Chronicle-Module-Version`) |
 | `api_request_log` | Per-request audit trail | `api_key_id`, `status_code`, `duration_ms`, indexed by key/campaign/created/ip/status |
 | `sync_mappings` | Chronicle object ↔ external-tool object, bidirectional | `UNIQUE(campaign_id, chronicle_type, chronicle_id, external_system)`; `sync_version` (conflict detection) |
 | `api_ip_blocklist` | Admin-managed IP blocks for the REST API | `expires_at` nullable (permanent if NULL) |
 | `api_security_events` | Auth failures, IP blocks, device mismatches, rate-limit hits | `resolved`/`resolved_by`/`resolved_at` |
-| `sync_calendar_date_beacons` | Per-campaign "date Foundry last saw / last applied" | PK `campaign_id`; `last_served_*` (a Bearer-authed GET was served) vs `applied_*` (Foundry confirmed it set its own date via `POST .../confirm`) — distinct claims, filled independently. Calendar sync routes currently return `503 {"error":"calendar_rebuilding"}` (#741), so this table sits idle until V5. |
+| `sync_calendar_date_beacons` | Per-campaign "date Foundry last saw / last applied" | PK `campaign_id`; `last_served_*` (a Bearer-authed GET was served) vs `applied_*` (Foundry confirmed it set its own date via `POST .../confirm`) — distinct claims, filled independently. |
 
 ### packages (`internal/plugins/packages/migrations/`)
 

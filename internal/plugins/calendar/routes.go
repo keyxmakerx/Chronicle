@@ -18,7 +18,8 @@ import (
 //     Scribe, delete Owner, the dm_only toggle gated on CanAuthorDmOnly
 //     (the Owner or a granted co-DM, never a plain Scribe).
 //   - Event kinds, eras and the moon hidden flag are calendar STRUCTURE (no
-//     Player read route for any of the three). Listing event kinds stays
+//     Player read route for any of the three; eras reach a player only
+//     inside the calendar read, filtered). Listing event kinds stays
 //     Owner only; creating/editing/deleting an event kind or an era, and
 //     the moon hidden flag, are gated CanAuthorDmOnly like the event
 //     visibility toggle above — the Owner or a granted co-Director, never a
@@ -100,6 +101,7 @@ func RegisterRoutes(e *echo.Echo, h *Handler, campaignSvc campaigns.CampaignServ
 	// Events: view Player, create/edit Scribe, delete + visibility Owner.
 	cg.GET("/calendars/:calid/events", h.ListEventsAPI, campaigns.RequireRole(campaigns.RolePlayer))
 	cg.GET("/calendars/:calid/events/:eid", h.GetEventAPI, campaigns.RequireRole(campaigns.RolePlayer))
+	cg.GET("/calendars/:calid/eras/:eraID/events", h.ListEraEventsAPI, campaigns.RequireRole(campaigns.RolePlayer))
 	cg.POST("/calendars/:calid/events", h.CreateEventAPI, campaigns.RequireRole(campaigns.RoleScribe))
 	cg.PUT("/calendars/:calid/events/:eid", h.UpdateEventAPI, campaigns.RequireRole(campaigns.RoleScribe))
 	cg.DELETE("/calendars/:calid/events/:eid", h.DeleteEventAPI, campaigns.RequireRole(campaigns.RoleOwner))
@@ -135,9 +137,10 @@ func RegisterRoutes(e *echo.Echo, h *Handler, campaignSvc campaigns.CampaignServ
 		campaigns.RequireCapability(func(cc *campaigns.CampaignContext) bool { return cc.CanAuthorDmOnly() },
 			"only the campaign owner or a granted co-DM may delete an event kind"))
 
-	// Eras: calendar structure (no Player read route; a viewer's own current
-	// era ships inside the calendar's own read instead). Gated CanAuthorDmOnly,
-	// same reasoning as the event-kind writes above.
+	// Eras: no read route of their own; they ship inside the calendar's own
+	// read, filtered for the viewer (an era hidden until it begins, and the
+	// Director's notes, never reach a player). Writes are gated
+	// CanAuthorDmOnly, same reasoning as the event-kind writes above.
 	cg.POST("/calendars/:calid/eras", h.CreateEraAPI,
 		campaigns.RequireCapability(func(cc *campaigns.CampaignContext) bool { return cc.CanAuthorDmOnly() },
 			"only the campaign owner or a granted co-DM may create an era"))
@@ -147,6 +150,10 @@ func RegisterRoutes(e *echo.Echo, h *Handler, campaignSvc campaigns.CampaignServ
 	cg.DELETE("/calendars/:calid/eras/:eraID", h.DeleteEraAPI,
 		campaigns.RequireCapability(func(cc *campaigns.CampaignContext) bool { return cc.CanAuthorDmOnly() },
 			"only the campaign owner or a granted co-DM may delete an era"))
+	// The era look (colours behind the days, feel, each era's colours and
+	// style) is part of the calendar settings, so Owner only like PUT
+	// /calendars/:calid and the structure editor.
+	cg.PUT("/calendars/:calid/era-look", h.SaveEraLookAPI, campaigns.RequireRole(campaigns.RoleOwner))
 
 	// Moon hidden flag: calendar structure, gated CanAuthorDmOnly like the
 	// event-kind and era writes above.
@@ -186,8 +193,9 @@ func RegisterRoutes(e *echo.Echo, h *Handler, campaignSvc campaigns.CampaignServ
 	// the embeddable calendar widget / entity-calendar blocks on public
 	// campaigns. Role/visibility filtering happens in the service
 	// (permissions.Viewer, ADR-049) and is empty-userID safe for anonymous
-	// visitors. Never dm_only data, never hidden moons, never event kinds or
-	// eras (those stay Owner-only regardless of campaign visibility).
+	// visitors. Never dm_only data, never hidden moons, never event kinds
+	// (Owner-only regardless of campaign visibility), never an era hidden
+	// until it begins or a Director's era note.
 	pub := e.Group("/campaigns/:id",
 		auth.OptionalAuth(authSvc),
 		campaigns.AllowPublicCampaignAccess(campaignSvc),
@@ -202,6 +210,7 @@ func RegisterRoutes(e *echo.Echo, h *Handler, campaignSvc campaigns.CampaignServ
 	pub.GET("/calendars/:calid", h.GetCalendarAPI, campaigns.RequireViewAccess())
 	pub.GET("/calendars/:calid/events", h.ListEventsAPI, campaigns.RequireViewAccess())
 	pub.GET("/calendars/:calid/events/:eid", h.GetEventAPI, campaigns.RequireViewAccess())
+	pub.GET("/calendars/:calid/eras/:eraID/events", h.ListEraEventsAPI, campaigns.RequireViewAccess())
 	pub.GET("/calendars/:calid/weather/days", h.ListDayWeatherAPI, campaigns.RequireViewAccess())
 	pub.GET("/calendars/:calid/weather/forecast", h.ListWeatherForecastAPI, campaigns.RequireViewAccess())
 

@@ -4,9 +4,12 @@ import (
 	"bytes"
 	"context"
 	"os"
+	"regexp"
 	"strings"
 	"sync"
 	"testing"
+
+	"github.com/keyxmakerx/chronicle/internal/colour"
 )
 
 // withTestFonts points the font list at the real static tree and resets the
@@ -308,4 +311,327 @@ func TestTopbarRendersWidgetsInOrder(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestAppearanceAttrs_HeaderAndCorner(t *testing.T) {
+	cases := []struct {
+		name string
+		a    AppearanceData
+		want map[string]string
+	}{
+		{"slim header, plain corner add nothing", AppearanceData{}, map[string]string{}},
+		{"tall header", AppearanceData{HeaderHeight: "tall"}, map[string]string{"data-cz-hdr": "tall"}},
+		{"unknown height ignored", AppearanceData{HeaderHeight: "huge"}, map[string]string{}},
+		{"subtitle corner", AppearanceData{SidebarCorner: "subtitle"}, map[string]string{"data-cz-corner": "subtitle"}},
+		{"banner corner", AppearanceData{SidebarCorner: "banner"}, map[string]string{"data-cz-corner": "banner"}},
+		{"unknown corner ignored", AppearanceData{SidebarCorner: "mural"}, map[string]string{}},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			a := tc.a
+			got := AppearanceAttrs(SetAppearance(context.Background(), &a))
+			if len(got) != len(tc.want) {
+				t.Fatalf("attrs = %v, want %v", got, tc.want)
+			}
+			for k, v := range tc.want {
+				if got[k] != v {
+					t.Errorf("attr %s = %v, want %q", k, got[k], v)
+				}
+			}
+		})
+	}
+}
+
+func TestAppearanceCSSMenu(t *testing.T) {
+	cases := []struct {
+		name     string
+		a        AppearanceData
+		accent   string
+		wantBg   string // "" means no menu tokens at all
+		wantText string
+	}{
+		{"charcoal is the stylesheet's own", AppearanceData{}, "", "", ""},
+		{"charcoal named", AppearanceData{SidebarColour: "charcoal"}, "", "", ""},
+		{"ink", AppearanceData{SidebarColour: "ink"}, "", "#0e1424", "#cdd5e3"},
+		{"tinted follows the accent", AppearanceData{SidebarColour: "tinted"}, "#10b981", colour.MenuTinted("#10b981"), "#cbd5e1"},
+		{"tinted without an accent uses Chronicle's", AppearanceData{SidebarColour: "tinted"}, "", colour.MenuTinted("#6366f1"), "#cbd5e1"},
+		{"own is darkened", AppearanceData{SidebarColour: "own", SidebarOwn: "#9a4a26"}, "", colour.MenuDark("#9a4a26"), "#cbd5e1"},
+		{"own that already reads is kept", AppearanceData{SidebarColour: "own", SidebarOwn: "#1a2a22"}, "", "#1a2a22", "#cbd5e1"},
+		{"own without a colour draws nothing", AppearanceData{SidebarColour: "own"}, "", "", ""},
+		{"own with a bad colour draws nothing", AppearanceData{SidebarColour: "own", SidebarOwn: "green"}, "", "", ""},
+		{"unknown choice draws nothing", AppearanceData{SidebarColour: "light"}, "", "", ""},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			a := tc.a
+			ctx := SetAppearance(context.Background(), &a)
+			if tc.accent != "" {
+				ctx = SetAccentColor(ctx, tc.accent)
+			}
+			css := AppearanceCSS(ctx)
+			if tc.wantBg == "" {
+				if strings.Contains(css, "--color-sidebar-bg") {
+					t.Errorf("unexpected menu tokens in %q", css)
+				}
+				return
+			}
+			want := "--color-sidebar-bg:" + tc.wantBg + ";"
+			// Both themes: the stylesheet's own :root.dark rule would
+			// out-rank a :root-only token.
+			if n := strings.Count(css, want); n != 2 {
+				t.Errorf("menu colour %s appears %d times in %q, want in :root and :root.dark", tc.wantBg, n, css)
+			}
+			if !strings.Contains(css, "--cz-sb-text:"+tc.wantText+";") {
+				t.Errorf("menu words %s missing in %q", tc.wantText, css)
+			}
+			if c := colour.Contrast(tc.wantBg, "#ffffff"); c < 7 {
+				t.Errorf("menu colour %s has only %.2f:1 against white words", tc.wantBg, c)
+			}
+		})
+	}
+
+	t.Run("any own colour keeps white words at 7:1", func(t *testing.T) {
+		for _, hex := range []string{"#ffffff", "#f59e0b", "#fde68a", "#6366f1", "#10b981", "#808080", "#000000"} {
+			a := AppearanceData{SidebarColour: "own", SidebarOwn: hex}
+			css := AppearanceCSS(SetAppearance(context.Background(), &a))
+			m := regexp.MustCompile(`--color-sidebar-bg:(#[0-9a-f]{6});`).FindStringSubmatch(css)
+			if m == nil {
+				t.Fatalf("%s: no menu colour in %q", hex, css)
+			}
+			if c := colour.Contrast(m[1], "#ffffff"); c < 7 {
+				t.Errorf("%s -> %s has only %.2f:1", hex, m[1], c)
+			}
+		}
+	})
+}
+
+func TestAppearanceCSSPeekGlow(t *testing.T) {
+	cases := []struct {
+		name string
+		a    AppearanceData
+		want string
+	}{
+		{"follows the accent by default", AppearanceData{}, ""},
+		{"accent named", AppearanceData{PeekGlow: "accent", PeekGlowColour: "#3b9fb5"}, ""},
+		{"own colour", AppearanceData{PeekGlow: "own", PeekGlowColour: "#3b9fb5"}, "--peek-glow-rgb:59 159 181;"},
+		{"own without a colour", AppearanceData{PeekGlow: "own"}, ""},
+		{"own with a bad colour", AppearanceData{PeekGlow: "own", PeekGlowColour: "teal"}, ""},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			a := tc.a
+			css := AppearanceCSS(SetAppearance(context.Background(), &a))
+			if tc.want == "" {
+				if strings.Contains(css, "--peek-glow-rgb") {
+					t.Errorf("unexpected glow token in %q", css)
+				}
+			} else if !strings.Contains(css, tc.want) {
+				t.Errorf("css %q missing %q", css, tc.want)
+			}
+		})
+	}
+}
+
+func TestNavCorner(t *testing.T) {
+	cases := []struct {
+		name                   string
+		ctx                    context.Context
+		kind, subtitle, banner string
+	}{
+		{"no appearance", context.Background(), "plain", "", ""},
+		{"empty", SetAppearance(context.Background(), &AppearanceData{}), "plain", "", ""},
+		{"subtitle", SetAppearance(context.Background(), &AppearanceData{SidebarCorner: "subtitle", SidebarSubtitle: "Session 23"}), "subtitle", "Session 23", ""},
+		{"subtitle with no words falls back to plain", SetAppearance(context.Background(), &AppearanceData{SidebarCorner: "subtitle"}), "plain", "", ""},
+		{"banner", SetAppearance(context.Background(), &AppearanceData{SidebarCorner: "banner", SidebarBanner: "2026/09/b.png"}), "banner", "", "2026/09/b.png"},
+		{"banner with no picture falls back to plain", SetAppearance(context.Background(), &AppearanceData{SidebarCorner: "banner"}), "plain", "", ""},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			k, s, b := NavCorner(tc.ctx)
+			if k != tc.kind || s != tc.subtitle || b != tc.banner {
+				t.Errorf("NavCorner = %q %q %q, want %q %q %q", k, s, b, tc.kind, tc.subtitle, tc.banner)
+			}
+		})
+	}
+}
+
+func TestNavBrandRendersCorner(t *testing.T) {
+	cases := []struct {
+		name    string
+		a       *AppearanceData
+		want    []string
+		notWant []string
+	}{
+		{"plain", nil, []string{`class="nav-brand-name"`, `class="nav-brand-bg"`}, []string{"nav-brand-sub", "nav-banner"}},
+		{"subtitle", &AppearanceData{SidebarCorner: "subtitle", SidebarSubtitle: `The <Drowned> Crown`},
+			[]string{`class="nav-brand-sub"`, "The &lt;Drowned&gt; Crown"}, []string{"nav-banner"}},
+		{"banner", &AppearanceData{SidebarCorner: "banner", SidebarBanner: "2026/09/b.png"},
+			[]string{`class="nav-banner"`}, []string{"nav-brand-sub"}},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			ctx := SetCampaignName(SetCampaignID(context.Background(), "camp-1"), "Ashfall")
+			if tc.a != nil {
+				ctx = SetAppearance(ctx, tc.a)
+			}
+			var buf bytes.Buffer
+			if err := campaignNavBrand().Render(ctx, &buf); err != nil {
+				t.Fatal(err)
+			}
+			html := buf.String()
+			for _, w := range tc.want {
+				if !strings.Contains(html, w) {
+					t.Errorf("missing %q in %s", w, html)
+				}
+			}
+			for _, w := range tc.notWant {
+				if strings.Contains(html, w) {
+					t.Errorf("unexpected %q in %s", w, html)
+				}
+			}
+			if !strings.Contains(html, `href="/campaigns/camp-1"`) {
+				t.Errorf("the corner must still link to the dashboard: %s", html)
+			}
+		})
+	}
+}
+
+func TestTopbarMovingBackground(t *testing.T) {
+	cases := []struct {
+		name     string
+		style    *TopbarStyleData
+		wantAxis string // "" means no moving strip
+		wantGrad string
+	}{
+		{"horizontal", &TopbarStyleData{Mode: "moving", GradientFrom: "#0f172a", GradientTo: "#3b1d5e", GradientDir: "to-r"}, "x", "repeating-linear-gradient(90deg, #0f172a 0%, #3b1d5e 16.6667%, #0f172a 33.3333%)"},
+		{"diagonal drifts sideways", &TopbarStyleData{Mode: "moving", GradientFrom: "#0f172a", GradientTo: "#3b1d5e", GradientDir: "to-br"}, "x", "90deg"},
+		{"vertical", &TopbarStyleData{Mode: "moving", GradientFrom: "#0f172a", GradientTo: "#3b1d5e", GradientDir: "to-b"}, "y", "repeating-linear-gradient(180deg"},
+		{"plain gradient is still", &TopbarStyleData{Mode: "gradient", GradientFrom: "#0f172a", GradientTo: "#3b1d5e"}, "", ""},
+		{"moving without colours draws nothing", &TopbarStyleData{Mode: "moving"}, "", ""},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			ctx := SetCampaignID(context.Background(), "camp-1")
+			ctx = SetTopbarStyle(ctx, tc.style)
+			var buf bytes.Buffer
+			if err := Topbar().Render(ctx, &buf); err != nil {
+				t.Fatal(err)
+			}
+			html := buf.String()
+			has := strings.Contains(html, `data-widget="header-motion"`)
+			if (tc.wantAxis != "") != has {
+				t.Fatalf("header-motion present = %v, want %v", has, tc.wantAxis != "")
+			}
+			if tc.wantAxis == "" {
+				return
+			}
+			if !strings.Contains(html, `data-axis="`+tc.wantAxis+`"`) {
+				t.Errorf("axis %q missing in %s", tc.wantAxis, html)
+			}
+			if !strings.Contains(html, tc.wantGrad) {
+				t.Errorf("gradient %q missing", tc.wantGrad)
+			}
+			if !strings.Contains(html, "cz-hdr-light") {
+				t.Error("two dark colours need light header words")
+			}
+		})
+	}
+}
+
+func TestTopbarNewWidgets(t *testing.T) {
+	const noteMarker = "Chronicle.openQuickCapture"
+	const searchMarker = "Search Ashfall"
+	render := func(authed bool, role int, widgets ...string) string {
+		ctx := SetCampaignName(SetCampaignID(context.Background(), "camp-1"), "Ashfall")
+		ctx = SetIsAuthenticated(ctx, authed)
+		ctx = SetCampaignRole(ctx, role)
+		ctx = SetTopbarContent(ctx, &TopbarContentData{Mode: "widgets", Widgets: widgets,
+			Quote: "TEXT-MARKER", Links: []TopbarLinkData{{Label: "LINK-MARKER", URL: "/x"}}})
+		var buf bytes.Buffer
+		if err := Topbar().Render(ctx, &buf); err != nil {
+			t.Fatal(err)
+		}
+		return buf.String()
+	}
+
+	t.Run("a member sees the note button and the search box", func(t *testing.T) {
+		html := render(true, 1, "note", "search")
+		for _, w := range []string{noteMarker, searchMarker, "Quick note"} {
+			if !strings.Contains(html, w) {
+				t.Errorf("missing %q", w)
+			}
+		}
+	})
+	t.Run("the search icon steps aside for the search box", func(t *testing.T) {
+		with := render(true, 1, "search")
+		without := render(true, 1, "note")
+		iconTag := func(html string) string {
+			i := strings.Index(html, `id="topbar-search-trigger"`)
+			j := strings.Index(html[i:], ">")
+			return html[i : i+j]
+		}
+		if !strings.Contains(iconTag(with), "md:hidden") {
+			t.Errorf("the icon should hide at md+ beside a search box: %s", iconTag(with))
+		}
+		if strings.Contains(iconTag(without), "md:hidden") {
+			t.Errorf("the icon stays without a search box: %s", iconTag(without))
+		}
+	})
+	t.Run("a visitor gets no note button", func(t *testing.T) {
+		html := render(false, 0, "note")
+		if strings.Contains(html, noteMarker) || strings.Contains(html, "topbar-tray") {
+			t.Errorf("a signed-out visitor must not be offered quick notes: %s", html)
+		}
+	})
+	t.Run("a one-widget header keeps its button only for a too-narrow bar", func(t *testing.T) {
+		// The button is always rendered but tb-solo keeps it hidden unless the
+		// container query finds no room for the widget itself.
+		html := render(true, 1, "search")
+		if !strings.Contains(html, "tb-solo") {
+			t.Error("a lone widget's button must carry tb-solo so it stays hidden while the widget fits")
+		}
+		if strings.Contains(html, `class="tb-n"`) {
+			t.Error("a lone widget has no +N-1 count")
+		}
+	})
+	t.Run("empty widgets don't count toward +N", func(t *testing.T) {
+		ctx := SetCampaignID(context.Background(), "camp-1")
+		ctx = SetTopbarContent(ctx, &TopbarContentData{Mode: "widgets", Widgets: []string{"links", "text", "search"}})
+		var buf bytes.Buffer
+		if err := Topbar().Render(ctx, &buf); err != nil {
+			t.Fatal(err)
+		}
+		html := buf.String()
+		if !strings.Contains(html, "tb-solo") || !strings.Contains(html, `<span class="tb-n-all">+1</span>`) {
+			t.Error("links with no links and empty text draw nothing, so only the search box counts")
+		}
+	})
+	t.Run("narrow screens: first widget stays, the rest go behind +N", func(t *testing.T) {
+		html := render(true, 1, "links", "text", "note", "search")
+		for _, w := range []string{`+3`, `id="topbar-tray"`, `aria-controls="topbar-tray"`, `:aria-expanded="more ? 'true' : 'false'"`,
+			`@keydown.escape.window`, `$refs.moreBtn.focus()`, `@click.outside="more = false"`} {
+			if !strings.Contains(html, w) {
+				t.Errorf("missing %q", w)
+			}
+		}
+		// The first widget is shown at every width; the others are wrapped to
+		// appear from md up, and repeated once in the tray.
+		if n := strings.Count(html, "hidden md:flex"); n != 3 {
+			t.Errorf("%d desktop-only wrappers, want 3", n)
+		}
+		if n := strings.Count(html, "fa-pen"); n != 2 {
+			t.Errorf("note appears %d times (bar + tray), want 2", n)
+		}
+		// The first widget appears in the bar and once more as the tray copy
+		// a too-narrow bar falls back to.
+		if n := strings.Count(html, "LINK-MARKER"); n != 2 {
+			t.Errorf("the first widget appears %d times, want 2 (bar + tray copy)", n)
+		}
+		if !strings.Contains(html, `class="tb-first-copy"`) || !strings.Contains(html, `<span class="tb-n-all">+4</span>`) {
+			t.Error("a too-narrow bar needs the tray copy of the first widget and a +4 count")
+		}
+		if strings.Contains(html, "tb-solo") {
+			t.Error("with several widgets the +N button is shown on every narrow screen")
+		}
+	})
 }

@@ -1,7 +1,10 @@
 package colour
 
 import (
+	"encoding/json"
 	"math"
+	"os"
+	"path/filepath"
 	"testing"
 )
 
@@ -287,5 +290,64 @@ func TestValidHex(t *testing.T) {
 func TestLower(t *testing.T) {
 	if got := Lower("#ABCDEF"); got != "#abcdef" {
 		t.Errorf("Lower = %s", got)
+	}
+}
+
+// menuPins are the JS-generated expectations shared with
+// test/js/customize_menu_colour.test.mjs, so the editor preview and the real
+// menu are pinned to the same hexes.
+type menuPins struct {
+	Dark   map[string]string `json:"dark"`
+	Tinted map[string]string `json:"tinted"`
+}
+
+func loadMenuPins(t *testing.T) menuPins {
+	t.Helper()
+	b, err := os.ReadFile(filepath.Join("..", "..", "test", "js", "fixtures", "menu_colour_pins.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	var p menuPins
+	if err := json.Unmarshal(b, &p); err != nil {
+		t.Fatal(err)
+	}
+	return p
+}
+
+func TestMenuDark(t *testing.T) {
+	pins := loadMenuPins(t)
+	for in, want := range pins.Dark {
+		t.Run(in, func(t *testing.T) {
+			got := MenuDark(in)
+			if got != want {
+				t.Errorf("MenuDark(%s) = %s, want %s", in, got, want)
+			}
+			if c := Contrast(got, "#ffffff"); c < 7 {
+				t.Errorf("MenuDark(%s) = %s has contrast %.2f, want >= 7", in, got, c)
+			}
+			if c := Contrast(got, menuSecondary); c < 4.5 {
+				t.Errorf("MenuDark(%s) = %s gives secondary words %.2f, want >= 4.5", in, got, c)
+			}
+			if again := MenuDark(got); again != got {
+				t.Errorf("not idempotent: %s -> %s", got, again)
+			}
+		})
+	}
+	if got := MenuDark("#6366F1"); got != pins.Dark["#6366f1"] {
+		t.Errorf("upper-case input = %s, want the lower-case result", got)
+	}
+}
+
+func TestMenuTinted(t *testing.T) {
+	for in, want := range loadMenuPins(t).Tinted {
+		t.Run(in, func(t *testing.T) {
+			got := MenuTinted(in)
+			if got != want {
+				t.Errorf("MenuTinted(%s) = %s, want %s", in, got, want)
+			}
+			if c := Contrast(got, "#ffffff"); c < 7 {
+				t.Errorf("MenuTinted(%s) = %s has contrast %.2f, want >= 7", in, got, c)
+			}
+		})
 	}
 }

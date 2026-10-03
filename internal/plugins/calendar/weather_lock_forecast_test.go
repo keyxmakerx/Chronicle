@@ -33,7 +33,6 @@ func doRequestForm(e http.Handler, path, userID string, form url.Values) *httpte
 	return rec
 }
 
-func strp(s string) *string     { return &s }
 func f64p(f float64) *float64   { return &f }
 func boolp(b bool) *bool        { return &b }
 func badRequest(err error) bool { return apperror.SafeCode(err) == http.StatusBadRequest }

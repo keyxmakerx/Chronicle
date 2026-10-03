@@ -32,7 +32,15 @@
   // Auto-clear after 10s if map never initializes.
   setTimeout(function () { clearInterval(checkInterval); }, 10000);
 
+  // The script loads once per page but a viewer can be mounted more than once
+  // (the focus view over an entity page opens and closes), so a host calls
+  // init for each mount. Both this and the load-time poll above may reach the
+  // same context, hence the once-per-context guard.
+  window.ChronicleMapDrawing = { init: initDrawingTools };
+
   function initDrawingTools(ctx) {
+    if (!ctx || ctx.drawingInitialised) return;
+    ctx.drawingInitialised = true;
     var map = ctx.map;
     var campaignID = ctx.campaignID;
     var mapID = ctx.mapID;

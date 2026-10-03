@@ -11,25 +11,33 @@ import (
 	"github.com/keyxmakerx/chronicle/internal/plugins/campaigns"
 )
 
+// AddonSlug is the addon that gates every Armory feature; other plugins
+// check it through this constant rather than repeating the name.
+const AddonSlug = "armory"
+
 // RegisterRoutes sets up Armory gallery routes on the Echo instance.
 // Public-capable routes use AllowPublicCampaignAccess so public campaigns
 // show items to unauthenticated visitors. All routes are gated behind the
 // "armory" addon — campaign owners can enable/disable via the Plugin Hub.
-func RegisterRoutes(e *echo.Echo, h *Handler, th *TransactionHandler, ih *InstanceHandler, sh *StashHandler, campaignSvc campaigns.CampaignService, authSvc auth.AuthService, addonSvc addons.AddonService) {
+func RegisterRoutes(e *echo.Echo, h *Handler, th *TransactionHandler, ih *InstanceHandler, sh *StashHandler, rh *ShopRoomHandler, campaignSvc campaigns.CampaignService, authSvc auth.AuthService, addonSvc addons.AddonService) {
 	// Public-capable routes: gallery view (Player+).
 	pub := e.Group("/campaigns/:id",
 		auth.OptionalAuth(authSvc),
 		campaigns.AllowPublicCampaignAccess(campaignSvc),
-		addons.RequireAddon(addonSvc, "armory"),
+		addons.RequireAddon(addonSvc, AddonSlug),
 	)
 	pub.GET("/armory", h.Index, campaigns.RequireViewAccess())
 	pub.GET("/armory/count", h.CountAPI, campaigns.RequireViewAccess())
+
+	// A shop's room layout is readable wherever the shop is; the service hides
+	// it from viewers who cannot see the shop entity.
+	pub.GET("/armory/shops/:eid/room", rh.Get, campaigns.RequireViewAccess())
 
 	// Authenticated routes for instances and transactions.
 	cg := e.Group("/campaigns/:id",
 		auth.RequireAuth(authSvc),
 		campaigns.RequireCampaignAccess(campaignSvc),
-		addons.RequireAddon(addonSvc, "armory"),
+		addons.RequireAddon(addonSvc, AddonSlug),
 	)
 
 	// Instance management: Scribe+ (owner included) creates, renames, deletes
@@ -42,6 +50,9 @@ func RegisterRoutes(e *echo.Echo, h *Handler, th *TransactionHandler, ih *Instan
 	cg.GET("/armory/items/:eid/collections", ih.ItemCollections, campaigns.RequireRole(campaigns.RoleScribe))
 	cg.POST("/armory/instances/:iid/items", ih.AddItem, campaigns.RequireRole(campaigns.RoleScribe))
 	cg.DELETE("/armory/instances/:iid/items/:eid", ih.RemoveItem, campaigns.RequireRole(campaigns.RoleScribe))
+
+	// Only the campaign Owner arranges a shop room.
+	cg.PUT("/armory/shops/:eid/room", rh.Put, campaigns.RequireRole(campaigns.RoleOwner))
 
 	// Transaction routes.
 	// Purchase is the player-initiated buy path: a Player buys an item from

@@ -59,6 +59,8 @@
   --arcT:oklch(.5 .15 295); --arcS:oklch(.6 .14 295 / .55); --tsB:.46; --tsS:.4; --tsL:.97; --mring:oklch(.24 .02 265 / .14);
   --eclT:oklch(.46 .07 50); --eclS:oklch(.5 .07 50 / .5); --hvtT:oklch(.52 .12 75); --hvtS:oklch(.66 .13 78 / .6);
   --gold:oklch(.50 .10 75); --goldBg:oklch(.86 .085 85 / .4); --goldRing:oklch(.62 .10 80 / .5);
+  /* Who's free: a player's free hours, and the band where everyone is free. */
+  --free:oklch(.56 .11 152); --freeTrack:oklch(.5 .01 265 / .14); --freeBand:oklch(.62 .11 152 / .18);
 }
 @media (prefers-color-scheme:dark){:root:not([data-theme="light"]){color-scheme:dark;
     --page:oklch(.16 .008 265); --ink:oklch(.94 .006 265); --ink2:oklch(.82 .008 265); --mut:oklch(.68 .01 265);
@@ -75,7 +77,8 @@
     --bldB:oklch(.34 .1 25); --bldS:oklch(.66 .19 25 / .7); --bldL:oklch(.66 .2 26); --bldT:oklch(.72 .16 25);
     --arcT:oklch(.8 .12 295); --arcS:oklch(.7 .13 295 / .5); --tsB:.34; --tsS:.8; --tsL:.93; --mring:oklch(.94 .01 265 / .12);
     --eclT:oklch(.76 .07 52); --eclS:oklch(.68 .07 52 / .5); --hvtT:oklch(.84 .12 80); --hvtS:oklch(.76 .12 80 / .5);
-    --gold:oklch(.84 .10 85); --goldBg:oklch(.70 .10 85 / .15); --goldRing:oklch(.78 .10 85 / .38);}
+    --gold:oklch(.84 .10 85); --goldBg:oklch(.70 .10 85 / .15); --goldRing:oklch(.78 .10 85 / .38);
+    --free:oklch(.74 .12 152); --freeTrack:oklch(.94 .01 265 / .1); --freeBand:oklch(.74 .12 152 / .16);}
 
 }
 :root[data-theme="dark"]{color-scheme:dark;
@@ -93,7 +96,8 @@
   --bldB:oklch(.34 .1 25); --bldS:oklch(.66 .19 25 / .7); --bldL:oklch(.66 .2 26); --bldT:oklch(.72 .16 25);
   --arcT:oklch(.8 .12 295); --arcS:oklch(.7 .13 295 / .5); --tsB:.34; --tsS:.8; --tsL:.93; --mring:oklch(.94 .01 265 / .12);
   --eclT:oklch(.76 .07 52); --eclS:oklch(.68 .07 52 / .5); --hvtT:oklch(.84 .12 80); --hvtS:oklch(.76 .12 80 / .5);
-  --gold:oklch(.84 .10 85); --goldBg:oklch(.70 .10 85 / .15); --goldRing:oklch(.78 .10 85 / .38);}
+  --gold:oklch(.84 .10 85); --goldBg:oklch(.70 .10 85 / .15); --goldRing:oklch(.78 .10 85 / .38);
+    --free:oklch(.74 .12 152); --freeTrack:oklch(.94 .01 265 / .1); --freeBand:oklch(.74 .12 152 / .16);}
 .cal-v5 *, .cal-v5 *::before, .cal-v5 *::after{box-sizing:border-box}
 .cal-v5 html, .cal-v5 body{margin:0}
 .cal-v5 body{background:var(--page);color:var(--ink);font:14px/1.45 var(--sans);-webkit-font-smoothing:antialiased;overflow-x:hidden}
@@ -464,6 +468,14 @@
 .cal-v5 .rsvp .sw{margin-top:8px;padding-bottom:0}
 /* Game nights have no event kind, so their dice mark takes the ink. */
 .cal-v5 .mk.gnm, .cal-v5 .gnb .ric{color:var(--ink2);font-size:12px}
+/* Game-night times: the real date on an anchored world calendar, and the
+   one-press switch between the calendar's time and the viewer's own. */
+.cal-v5 .gnreal{margin:3px 0 0 30px;font:600 11.5px/1.4 var(--sans);color:var(--ink2)}
+.cal-v5 .gnz{display:flex;align-items:center;flex-wrap:wrap;gap:3px 8px;margin:4px 0 0 30px;font:500 11.5px/1.4 var(--sans);color:var(--mut)}
+.cal-v5 .espan + .gnz, .cal-v5 .epb > .gnz{margin-left:0}
+.cal-v5 .gnpill{font:600 11px/1 var(--sans);color:var(--ink2);padding:4px 9px;border-radius:99px;border:1px solid var(--edge)}
+.cal-v5 .gnpill:hover{background:var(--hair2);color:var(--ink)}
+.cal-v5 .gnpill:focus-visible, .cal-v5 .lnk:focus-visible{outline:1.5px solid var(--ink);outline-offset:1px}
 /* Quick edits in the day's card (Director): titles and times edit in place, small controls sit at the row's end. */
 .cal-v5 .evh .qt{font:600 13.5px/1.3 var(--sans);color:var(--ink);min-width:0;flex:0 1 auto;overflow-wrap:anywhere}
 .cal-v5 .qt{text-align:left;border-radius:6px;padding:2px 4px;margin:-2px -4px;cursor:text}
@@ -1580,3 +1592,273 @@
 
 }
 
+
+/* ---- Eras: the colour field, the header chips, their tooltip and the era panel ---- */
+/* Era tokens: the Director-only colouring of a note and a hidden-era badge. */
+:root{--eraDmBg:oklch(.96 .035 85);--eraDmLine:oklch(.82 .07 85);--eraDmFg:oklch(.45 .08 75);--eraChip:oklch(1 0 0 / .72)}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){--eraDmBg:oklch(.8 .1 85 / .08);--eraDmLine:oklch(.8 .1 85 / .24);--eraDmFg:oklch(.86 .08 85);--eraChip:oklch(.22 .01 265 / .72)}}
+:root[data-theme="dark"]{--eraDmBg:oklch(.8 .1 85 / .08);--eraDmLine:oklch(.8 .1 85 / .24);--eraDmFg:oklch(.86 .08 85);--eraChip:oklch(.22 .01 265 / .72)}
+/* The field sits under every day in the stage's own layer, so a day's hover and selection still paint over it. */
+.cal-v5 .stage>.era-field{position:absolute;z-index:-2;display:block;pointer-events:none;transition:opacity .35s ease}
+.cal-v5 .stage>.era-fade{z-index:-1;opacity:0}
+/* The row, not the chip, steps out to the left by the chip's padding: a negative margin on the chip itself would
+   shrink the row's measured width and cut the era's name short. */
+.cal-v5 .erachips{display:inline-flex;flex-wrap:wrap;align-items:center;gap:2px 6px;min-width:0;max-width:calc(100% + 6px);margin-left:-6px}
+.cal-v5 .erachip{display:inline-flex;align-items:center;gap:6px;min-width:0;max-width:100%;padding:4px 8px 4px 6px;border-radius:8px;font:600 12.5px/1.2 var(--sans);color:var(--ink);box-shadow:inset 0 0 0 1px transparent;transition:background-color .15s,box-shadow .15s}
+.cal-v5 .erachip:hover, .cal-v5 .erachip[aria-expanded="true"]{background:var(--lift);box-shadow:inset 0 0 0 1px var(--edge)}
+.cal-v5 .erachip:focus-visible{outline:1.5px solid var(--ink);outline-offset:2px}
+.cal-v5 .erachip .en{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;min-width:0}
+.cal-v5 .erachip small{font:500 12px/1.2 var(--sans);color:var(--mut);white-space:nowrap}
+.cal-v5 .erachip .eh{font-size:11px;color:var(--mut)}
+.cal-v5 .erachip .ev{font-size:10px;color:var(--mut);transition:transform .25s var(--ease)}
+.cal-v5 .erachip[aria-expanded="true"] .ev{transform:rotate(180deg)}
+.cal-v5 .earrow{color:var(--mut);font-size:12px}
+.cal-v5 .esw{display:inline-block;width:14px;height:10px;border-radius:3px;flex:none;box-shadow:inset 0 0 0 1px oklch(0 0 0 / .12)}
+.cal-v5 .eratip{position:absolute;z-index:45;max-width:min(280px,calc(100% - 16px));padding:6px 9px;border-radius:8px;background:var(--ink);color:var(--paper);font:500 12px/1.35 var(--sans);box-shadow:var(--shadow-s);pointer-events:none;animation:cal5-fadeIn .12s ease both}
+.cal-v5 .eratip b{display:block;font-weight:650}
+.cal-v5 .eratip span{display:block;opacity:.8}
+/* The panel unfolds under the header and pushes the grid down. */
+.cal-v5 .erapanel{position:relative;z-index:1;overflow:hidden;margin:2px var(--gx) 10px;border-radius:14px;background:linear-gradient(180deg,color-mix(in srgb,var(--ea,#888) 7%,var(--paper)),var(--paper) 70px);box-shadow:inset 0 0 0 1px var(--edge),var(--shadow-s);color:var(--ink)}
+.cal-v5 .ep-ribbon{position:relative;padding:20px 16px 2px}
+.cal-v5 .rtrack{display:flex;gap:3px;height:20px;align-items:center}
+.cal-v5 .rseg{position:relative;height:20px;min-width:0;border-radius:4px}
+.cal-v5 .rseg::before{content:"";position:absolute;left:0;right:0;top:6px;height:8px;border-radius:4px;background:var(--g);opacity:.6;transition:opacity .15s,top .15s,height .15s}
+.cal-v5 .rseg:hover::before, .cal-v5 .rseg:focus-visible::before{opacity:.95;top:5px;height:10px}
+.cal-v5 .rseg:focus-visible{outline:1.5px solid var(--ink);outline-offset:1px}
+.cal-v5 .rseg.showing::before{opacity:.9;box-shadow:0 0 0 1.5px var(--paper),0 0 0 2.5px color-mix(in srgb,var(--ink) 35%,transparent)}
+.cal-v5 .rseg.hid::before{background:repeating-linear-gradient(135deg,color-mix(in srgb,var(--c) 55%,transparent) 0 4px,transparent 4px 7px);opacity:.8;box-shadow:inset 0 0 0 1px color-mix(in srgb,var(--c) 60%,transparent)}
+.cal-v5 .rhere{position:absolute;top:6px;bottom:16px;width:0;pointer-events:none}
+.cal-v5 .rhere::before{content:"";position:absolute;left:-1px;top:13px;width:2px;height:16px;border-radius:1px;background:var(--ink)}
+.cal-v5 .rhere span{position:absolute;top:-1px;font:650 10.5px/1.2 var(--sans);color:var(--ink);white-space:nowrap}
+.cal-v5 .raxis{position:relative;height:14px;margin-top:1px;font:500 10.5px/1.3 var(--sans);color:var(--mut);overflow:hidden}
+.cal-v5 .raxis span{position:absolute;top:0;white-space:nowrap;font-variant-numeric:tabular-nums}
+/* Below the ribbon: above it the panel's own edge would cut it off. */
+.cal-v5 .rtip{position:absolute;z-index:2;top:calc(100% + 4px);transform:translateX(-50%);padding:4px 8px;border-radius:7px;background:var(--ink);color:var(--paper);font:500 11.5px/1.3 var(--sans);white-space:nowrap;pointer-events:none}
+.cal-v5 .rtip b{font-weight:650;margin-right:6px}
+.cal-v5 .rtip span{opacity:.8}
+.cal-v5 .ep-card{padding:8px 16px 14px}
+.cal-v5 .ep-head{display:flex;align-items:flex-start;gap:10px}
+.cal-v5 .ep-head .esw{width:22px;height:16px;border-radius:5px;margin-top:5px}
+.cal-v5 .ep-main{flex:1;min-width:0}
+.cal-v5 .ep-name{margin:0;font:500 20px/1.2 var(--serif);color:var(--ink);overflow-wrap:anywhere}
+.cal-v5 .ep-name:focus{outline:none}
+.cal-v5 .ep-dates{font:500 12.5px/1.4 var(--sans);color:var(--mut);margin-top:2px}
+.cal-v5 .ep-dates b{display:block;font-weight:550;color:var(--ink2)}
+.cal-v5 .ep-badge{display:inline-flex;align-items:center;gap:6px;margin-top:6px;padding:2px 8px;border-radius:6px;font:550 11.5px/1.4 var(--sans);color:var(--eraDmFg);background:var(--eraDmBg);box-shadow:inset 0 0 0 1px var(--eraDmLine)}
+.cal-v5 .ep-x{flex:none;width:32px;height:32px;border-radius:9px;display:grid;place-items:center;color:var(--ink2)}
+.cal-v5 .ep-x:hover{background:var(--lift);box-shadow:0 0 0 1px var(--hair);color:var(--ink)}
+.cal-v5 .ep-x:focus-visible, .cal-v5 .ep-lore:focus-visible, .cal-v5 .ep-evs button:focus-visible, .cal-v5 .ep-all:focus-visible, .cal-v5 .ep-manage:focus-visible{outline:1.5px solid var(--ink);outline-offset:1px}
+.cal-v5 .ep-body{display:grid;grid-template-columns:minmax(0,1.15fr) minmax(0,1fr);gap:6px 22px;margin-top:10px}
+.cal-v5 .ep-col{min-width:0}
+.cal-v5 .ep-desc{font:400 13.5px/1.55 var(--sans);color:var(--ink);overflow-wrap:anywhere}
+.cal-v5 .ep-desc p{margin:0 0 8px}
+.cal-v5 .ep-lore{display:flex;align-items:center;gap:9px;margin:4px 0 10px;padding:8px 10px;border-radius:10px;box-shadow:inset 0 0 0 1px var(--edge);background:var(--paper);color:var(--ink);text-decoration:none;font:500 13px/1.3 var(--sans)}
+.cal-v5 .ep-lore:hover{box-shadow:inset 0 0 0 1px var(--mut)}
+.cal-v5 .ep-lore .li{width:26px;height:26px;border-radius:7px;display:grid;place-items:center;background:var(--paper2);box-shadow:inset 0 0 0 1px var(--hair);color:var(--ink2);flex:none}
+.cal-v5 .ep-lore .lt{flex:1;min-width:0;overflow-wrap:anywhere}
+.cal-v5 .ep-lore .lt small{display:block;color:var(--mut);font-size:11.5px}
+.cal-v5 .ep-lore .lg{color:var(--mut)}
+.cal-v5 .ep-note{margin:4px 0 10px;padding:9px 11px;border-radius:10px;background:var(--eraDmBg);box-shadow:inset 0 0 0 1px var(--eraDmLine);font:400 13px/1.5 var(--sans);color:var(--ink);white-space:pre-wrap;overflow-wrap:anywhere}
+.cal-v5 .ep-note .nh{display:flex;align-items:center;gap:6px;margin-bottom:3px;font:650 10.5px/1.3 var(--sans);letter-spacing:.06em;text-transform:uppercase;color:var(--eraDmFg);white-space:normal}
+.cal-v5 .ep-sh{display:flex;align-items:baseline;justify-content:space-between;gap:8px;margin:0 0 4px;font:650 10.5px/1.3 var(--sans);letter-spacing:.08em;text-transform:uppercase;color:var(--mut)}
+.cal-v5 .ep-sh .cnt{text-transform:none;letter-spacing:0;font-weight:500;font-size:12px}
+.cal-v5 .ep-none{margin:4px 0;font:400 12.5px/1.45 var(--sans);color:var(--mut)}
+.cal-v5 .ep-evs{list-style:none;margin:0;padding:0}
+.cal-v5 .ep-evs li + li{border-top:1px solid var(--hair)}
+.cal-v5 .ep-evs button{display:flex;width:100%;align-items:baseline;gap:10px;padding:6px 4px;border-radius:6px;font:500 13px/1.35 var(--sans);color:var(--ink)}
+.cal-v5 .ep-evs button:hover{background:var(--lift)}
+.cal-v5 .ep-evs .t{flex:1;min-width:0;overflow-wrap:anywhere}
+.cal-v5 .ep-evs .k{margin-left:5px;font-size:9.5px;color:var(--mut)}
+.cal-v5 .ep-evs .w{flex:none;font-size:12px;color:var(--mut);font-variant-numeric:tabular-nums;white-space:nowrap}
+.cal-v5 .ep-all, .cal-v5 .ep-manage{display:inline-flex;align-items:center;gap:6px;margin-top:6px;padding:4px 2px;border-radius:6px;font:550 12.5px/1.3 var(--sans);color:var(--ink2);text-decoration:underline;text-decoration-color:var(--edge);text-underline-offset:3px}
+.cal-v5 .ep-all:hover, .cal-v5 .ep-manage:hover{color:var(--ink)}
+/* The label on the first day of an era: a small chip in the cell's corner that opens the era panel. */
+/* It wraps rather than cut the era's name short; the era's colour is its left edge. */
+.cal-v5 .erastart{position:absolute;left:4px;right:4px;bottom:4px;z-index:1;padding:2px 6px;border-radius:5px;background:var(--eraChip);box-shadow:0 1px 2px oklch(0 0 0 / .08);font:650 10.5px/1.25 var(--sans);color:var(--ink);cursor:pointer;border-left:3px solid var(--es,#888)}
+.cal-v5 .erastart .esl{display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:3;overflow:hidden}
+.cal-v5 .erastart .ess{display:none}
+.cal-v5 .erastart:hover{box-shadow:0 1px 2px oklch(0 0 0 / .08),inset 0 0 0 1px var(--edge)}
+.cal-v5 .band .erastart{position:static;flex:none;margin-left:8px}
+.cal-v5 .band .erastart .esl{display:block;white-space:nowrap}
+.cal-v5 .cal.editing .erastart{opacity:.3;pointer-events:none}
+/* The era manager's lore page picker. */
+.cal-v5 .fhint{font:500 11.5px/1.4 var(--sans);color:var(--mut)}
+.cal-v5 .lorepick{position:relative;display:flex;flex-wrap:wrap;align-items:center;gap:6px;font:500 13px/1.3 var(--sans);color:var(--ink)}
+.cal-v5 .lorepick .lp-cur{display:inline-flex;align-items:center;gap:6px;flex:1;min-width:0;overflow-wrap:anywhere}
+.cal-v5 .lorepick .lp-cur svg{flex:none;color:var(--mut)}
+.cal-v5 .lorepick .lp-q{flex:1 1 100%}
+.cal-v5 .lp-res{list-style:none;margin:0;padding:4px;flex:1 1 100%;border-radius:9px;background:var(--paper);box-shadow:inset 0 0 0 1px var(--edge)}
+.cal-v5 .lp-res button{display:flex;width:100%;justify-content:space-between;gap:8px;padding:6px 8px;border-radius:6px;font:500 13px/1.3 var(--sans);color:var(--ink)}
+.cal-v5 .lp-res button:hover, .cal-v5 .lp-res button:focus-visible{background:var(--lift);outline:none;box-shadow:inset 0 0 0 1px var(--edge)}
+.cal-v5 .lp-res small{color:var(--mut)}
+.cal-v5 .lp-res .none{padding:6px 8px;color:var(--mut)}
+/* The era manager: the list of eras, the row of eras over an open form, the form in the event editor's sections,
+   and the form's buttons, which stay put while the form scrolls. */
+.cal-v5 .eram{padding-top:2px}
+.cal-v5 .eral{list-style:none;margin:0;padding:0}
+.cal-v5 .eral li + li{border-top:1px solid var(--hair)}
+.cal-v5 .erali{display:flex;align-items:center;gap:10px;width:100%;padding:9px 6px;border-radius:8px;text-align:left;font:600 13px/1.3 var(--sans);color:var(--ink)}
+.cal-v5 .erali:hover, .cal-v5 .erali:focus-visible{background:var(--lift);outline:none}
+.cal-v5 .erali .en{flex:1;min-width:0;overflow-wrap:anywhere}
+.cal-v5 .erali .lg{color:var(--mut)}
+.cal-v5 .erali small, .cal-v5 .eratab small{display:block;margin-top:1px;font:500 11.5px/1.3 var(--sans);color:var(--mut);font-variant-numeric:tabular-nums}
+.cal-v5 .erali .eh, .cal-v5 .eratab .eh{margin-left:4px;font-size:10.5px;color:var(--mut)}
+.cal-v5 .eratabs{position:relative;display:flex;gap:6px;overflow-x:auto;overscroll-behavior-x:contain;scrollbar-width:thin;margin:0 -18px;padding:2px 18px 12px;scroll-padding:0 18px;
+  -webkit-mask-image:linear-gradient(90deg,transparent,#000 14px,#000 calc(100% - 22px),transparent);mask-image:linear-gradient(90deg,transparent,#000 14px,#000 calc(100% - 22px),transparent)}
+.cal-v5 .eratab{flex:none;display:flex;align-items:flex-start;gap:7px;max-width:210px;padding:7px 10px;border-radius:9px;box-shadow:inset 0 0 0 1px var(--edge);background:var(--paper);text-align:left;font:600 12px/1.25 var(--sans);color:var(--ink2);white-space:nowrap}
+.cal-v5 .eratab>span{min-width:0;overflow:hidden;text-overflow:ellipsis}
+.cal-v5 .eratab .esw{margin-top:2px}
+.cal-v5 .eratab:hover{color:var(--ink);background:var(--paper2)}
+.cal-v5 .eratab:focus-visible{outline:1.5px solid var(--ink);outline-offset:1px}
+.cal-v5 .eratab[aria-pressed="true"]{color:var(--ink);background:var(--paper2);box-shadow:inset 0 0 0 1.5px var(--ink)}
+.cal-v5 .eratab.add{align-self:stretch;align-items:center;color:var(--mut);box-shadow:none;border:1px dashed var(--edge)}
+.cal-v5 .eratab.add[aria-pressed="true"]{color:var(--ink);border-color:var(--ink)}
+.cal-v5 .eraform{display:flex;flex-direction:column}
+.cal-v5 .eraform>.fld:first-child{margin-bottom:4px}
+.cal-v5 .eraform .esec:last-child{padding-bottom:6px}
+.cal-v5 .erow.ecap{margin-bottom:-5px}
+.cal-v5 .erow.ecap span{font:600 10.5px/1 var(--sans);color:var(--mut)}
+.cal-v5 .erow[hidden]{display:none}
+.cal-v5 .erafoot{flex:none;background:var(--paper);border-bottom-left-radius:inherit;border-bottom-right-radius:inherit}
+@media (max-width:600px){.cal-v5 .erafoot{position:sticky;bottom:0;z-index:2}}
+@media (max-width:600px){.cal-v5 .erachips{flex-direction:column;align-items:flex-start;gap:1px}
+.cal-v5 .earrow{display:none}
+.cal-v5 .erachip{flex-wrap:wrap;column-gap:6px}
+.cal-v5 .erapanel{margin:2px 8px 10px;border-radius:12px}
+.cal-v5 .ep-ribbon{padding:20px 12px 2px}
+.cal-v5 .ep-card{padding:8px 12px 12px}
+.cal-v5 .ep-body{grid-template-columns:minmax(0,1fr)}
+/* A phone's cell is too narrow for the era's name: a short tag in the era's colour, named in full for screen readers. */
+.cal-v5 .erastart{left:2px;right:2px;bottom:2px;padding:2px 1px;border-radius:4px;border-left:0;border-top:2.5px solid var(--es,#888);font:700 8.5px/1.1 var(--sans);text-align:center}
+.cal-v5 .erastart .esl{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}
+.cal-v5 .erastart .ess{display:block}
+.cal-v5 .band .erastart{border-top:0;border-left:3px solid var(--es,#888);padding:2px 6px;font:650 10.5px/1.25 var(--sans)}
+.cal-v5 .band .erastart .esl{position:static;width:auto;height:auto;clip:auto}
+.cal-v5 .band .erastart .ess{display:none}
+}
+@media (prefers-reduced-motion:reduce){.cal-v5 .eratip{animation:none}
+.cal-v5 .erachip .ev, .cal-v5 .rseg::before, .cal-v5 .stage>.era-field{transition:none}
+}
+
+/* Who's free. In a day of the month: one line per player along the bottom,
+   midnight to midnight, green where they are free, with a soft band where
+   everyone is. Static, so nothing here needs easing to still. */
+.cal-v5 .avl{position:absolute;left:8px;right:8px;bottom:6px;display:flex;flex-direction:column;gap:2px;pointer-events:auto}
+.cal-v5 .avl .ln{height:3px}
+.cal-v5 .avl.many{gap:1px}
+.cal-v5 .avl.many .ln{height:2px}
+.cal-v5 .ln{position:relative;display:block;flex:none;border-radius:2px;background:var(--freeTrack)}
+.cal-v5 .ln b{position:absolute;top:0;bottom:0;border-radius:inherit;background:var(--free)}
+.cal-v5 .avl .fband{position:absolute;top:-2px;bottom:-2px;border-radius:3px;background:var(--freeBand)}
+.cal-v5 .gfree{list-style:none;margin:6px 0 0;padding:0;font:500 11.5px/1.45 var(--sans);color:var(--ink2)}
+.cal-v5 .gfree li{display:flex;justify-content:space-between;gap:10px}
+.cal-v5 .gfree li span:last-child{color:var(--mut);text-align:right}
+/* In the day's card: the same lines, larger, with names and hours. */
+.cal-v5 .flines{position:relative;margin-top:4px}
+.cal-v5 .flines .fr{position:relative;z-index:1;display:flex;align-items:center;gap:8px;margin:5px 0}
+.cal-v5 .flines .nm{flex:0 0 64px;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font:500 11.5px/1.2 var(--sans);color:var(--ink2)}
+.cal-v5 .flines .ln{flex:1;height:8px;border-radius:4px}
+.cal-v5 .flines .bandwrap{position:absolute;top:0;bottom:0;left:72px;right:0}
+.cal-v5 .flines .band2{position:absolute;top:0;bottom:0;border-radius:6px;background:var(--freeBand)}
+.cal-v5 .fticks{display:flex;justify-content:space-between;margin:2px 0 0 72px;font:500 9.5px/1 var(--sans);color:var(--mut)}
+.cal-v5 .fsum{margin:8px 0 6px;font:550 12px/1.4 var(--sans);color:var(--ink)}
+.cal-v5 .fmine{margin-top:4px}
+/* The Who's free view: the moon view's panel, holding Best times, the players and their hours, and the way to the
+   full planner. */
+.cal-v5 .fvbody{flex:1;min-height:0;overflow:auto;overscroll-behavior:contain;display:grid;grid-template-columns:minmax(0,1.35fr) minmax(0,1fr);gap:16px 24px;padding:14px 18px 16px}
+.cal-v5 .fvsec{min-width:0}
+.cal-v5 .fvsec h4{margin:0 0 6px;font:650 9.5px/1 var(--sans);letter-spacing:.14em;text-transform:uppercase;color:var(--mut)}
+.cal-v5 .fvfoot{grid-column:1/-1;display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:10px 16px;padding-top:12px;border-top:1px solid var(--hair)}
+.cal-v5 .fvbody .none{margin:4px 0;font:500 12px/1.4 var(--sans);color:var(--mut)}
+.cal-v5 .fvbody .slots, .cal-v5 .fvroster, .cal-v5 .fvnl{list-style:none;margin:0;padding:0}
+.cal-v5 .fvbody .slots li{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:8px 0;border-top:1px solid var(--hair)}
+.cal-v5 .fvbody .slots li:first-child{border-top:0}
+.cal-v5 .fvbody .slots li span{font:500 12.5px/1.4 var(--sans);color:var(--ink2);min-width:0}
+.cal-v5 .fvbody .slots li b{color:var(--ink);font-weight:600}
+.cal-v5 .fvbody small{display:block;font:500 11.5px/1.35 var(--sans);color:var(--mut)}
+.cal-v5 .fvroster li{display:flex;justify-content:space-between;gap:10px;padding:5px 0;font:500 12.5px/1.3 var(--sans);color:var(--ink)}
+.cal-v5 .fvroster .ok{color:var(--mut)}
+.cal-v5 .fvroster .wait{color:var(--ink2);font-weight:600}
+.cal-v5 .fvbody .fnote{margin:8px 0 0;display:flex;flex-wrap:wrap;align-items:center;gap:6px 10px;font:500 11.5px/1.4 var(--sans);color:var(--mut)}
+.cal-v5 .fvsw{display:inline-flex;align-items:center;gap:8px;font:550 12.5px/1.2 var(--sans);color:var(--ink);cursor:pointer}
+.cal-v5 .fvsw input{width:16px;height:16px;accent-color:var(--free)}
+.cal-v5 .fvlinks{display:inline-flex;flex-wrap:wrap;align-items:center;gap:8px 14px}
+.cal-v5 .fvlead{margin:2px 0 10px;font:500 13px/1.45 var(--sans);color:var(--ink2)}
+.cal-v5 .btn.fvgo{height:36px;padding:0 14px;font-size:13px}
+.cal-v5 .fvmine .flines{margin-bottom:2px}
+.cal-v5 .fvmine .fticks{margin-bottom:8px}
+.cal-v5 .fvn{display:grid;grid-template-columns:auto minmax(0,1fr);column-gap:10px;width:100%;padding:7px 8px;margin:0 -8px;border-radius:10px;text-align:left;font:500 12.5px/1.35 var(--sans);color:var(--ink2)}
+.cal-v5 .fvn:hover{background:var(--paper2)}
+.cal-v5 .fvn:focus-visible{outline:1.5px solid var(--ink);outline-offset:1px}
+.cal-v5 .fvn b{color:var(--ink);font-weight:600}
+.cal-v5 .fvn small{grid-column:2}
+.cal-v5 a.btn, .cal-v5 a.lnk{text-decoration:none}
+/* The full planner: the event editor's drawer, holding a week of everyone's hours, the month's game nights, Best times,
+   the players, and the painter for one's own weekly hours. */
+.cal-v5 .fvd{width:480px}
+.cal-v5 .fvd>.crease{display:flex;align-items:center;gap:10px}
+.cal-v5 .fvd>.crease #cal5-pltitle{flex:1;min-width:0}
+.cal-v5 .fvtabs button{height:24px}
+.cal-v5 .plweek{display:flex;align-items:center;gap:6px;margin-bottom:6px}
+.cal-v5 .plweek h4{flex:1;margin:0;text-align:center}
+.cal-v5 .plweek .ib{width:28px;height:28px}
+.cal-v5 .plday{padding:8px 0;border-top:1px solid var(--hair)}
+.cal-v5 .plday:first-of-type{border-top:0}
+.cal-v5 .pldh{display:flex;align-items:baseline;justify-content:space-between;gap:10px;font:500 11.5px/1.3 var(--sans);color:var(--mut)}
+.cal-v5 .pldh .lnk{padding:0;font:600 12.5px/1.3 var(--sans);color:var(--ink)}
+.cal-v5 .pltk{margin-top:6px}
+.cal-v5 .plnights{list-style:none;margin:0;padding:0}
+.cal-v5 .plnights li{padding:8px 0;border-top:1px solid var(--hair)}
+.cal-v5 .plnights li:first-child{border-top:0}
+.cal-v5 .plnb{display:block;width:100%;text-align:left;font:500 12.5px/1.35 var(--sans);color:var(--ink2);padding:0}
+.cal-v5 .plnb b{color:var(--ink);font-weight:600}
+.cal-v5 .plnb small{display:block;font-size:11.5px;color:var(--mut)}
+.cal-v5 .plnb:hover b{text-decoration:underline}
+.cal-v5 .plwho{display:flex;flex-wrap:wrap;gap:4px;margin-top:6px}
+.cal-v5 .plw{padding:3px 7px;border-radius:99px;font:550 10.5px/1 var(--sans);box-shadow:inset 0 0 0 1px var(--edge);color:var(--mut)}
+.cal-v5 .plw.y{color:var(--ink);background:var(--freeBand);box-shadow:inset 0 0 0 1px var(--free)}
+.cal-v5 .plw.m{color:var(--ink2);box-shadow:inset 0 0 0 1px var(--ink2)}
+.cal-v5 .plw.n{text-decoration:line-through}
+.cal-v5 .plquick{display:flex;flex-direction:column}
+.cal-v5 .plquick .fvsec{padding:14px 0;border-top:1px solid var(--hair)}
+.cal-v5 .plfoot{display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:10px}
+.cal-v5 .pltools{margin:10px 0}
+.cal-v5 .pltools button{display:inline-flex;align-items:center;gap:6px}
+.cal-v5 .pltools .plsw{display:inline-block;width:10px;height:10px;padding:0;border-radius:3px;background:var(--freeTrack)}
+.cal-v5 .pltools .plsw.available{background:var(--free)}
+.cal-v5 .pltools .plsw.preferred{background:var(--free);box-shadow:0 0 0 1.5px var(--gold)}
+.cal-v5 .plgrid{display:flex;flex-direction:column;gap:3px;user-select:none;touch-action:none}
+.cal-v5 .plgh{display:grid;grid-template-columns:40px repeat(4,1fr);font:500 9.5px/1 var(--sans);color:var(--mut)}
+.cal-v5 .plrow{display:flex;align-items:center;gap:6px}
+.cal-v5 .plrow .nm{flex:0 0 34px;font:550 11.5px/1 var(--sans);color:var(--ink2)}
+.cal-v5 .plcells{flex:1;display:grid;grid-template-columns:repeat(24,1fr);gap:1px}
+.cal-v5 .plc{height:22px;padding:0;border-radius:3px;background:var(--freeTrack);cursor:pointer}
+.cal-v5 .plc:nth-child(6n+1){margin-left:1px}
+.cal-v5 .plc[data-st="available"]{background:var(--free)}
+.cal-v5 .plc[data-st="preferred"]{background:var(--free);box-shadow:inset 0 0 0 2px var(--gold)}
+.cal-v5 .plc:hover{outline:1.5px solid var(--ink);outline-offset:-1px}
+.cal-v5 .plc:focus-visible{outline:2px solid var(--ink);outline-offset:0}
+.cal-v5 .plsave{display:flex;align-items:center;gap:12px;margin-top:12px}
+.cal-v5 .plstat{font:500 12px/1.4 var(--sans);color:var(--mut)}
+@media (max-width:600px){.cal-v5 .fvd{width:auto}}
+/* Planning a game night, in the day's card. */
+.cal-v5 .gnplan{display:flex;flex-direction:column;gap:9px;margin:4px 0 8px;padding:11px 12px 12px;border:1px solid var(--edge);border-radius:12px;background:var(--paper2)}
+.cal-v5 .gph{display:flex;align-items:baseline;justify-content:space-between;gap:8px;font:600 12.5px/1.2 var(--sans);color:var(--ink)}
+.cal-v5 .gph span{font-weight:500;font-size:11.5px;color:var(--mut)}
+.cal-v5 .gnplan .fld input, .cal-v5 .gnplan .fld select{height:30px;background:var(--paper);font-size:12.5px}
+.cal-v5 .gprow{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1.2fr);gap:8px}
+.cal-v5 .gpn{margin:0;font:500 11.5px/1.4 var(--sans);color:var(--mut)}
+.cal-v5 .gpa{display:flex;flex-wrap:wrap;align-items:center;gap:6px 8px}
+.cal-v5 .gpa .lnk{margin-left:auto;font:550 11.5px/1 var(--sans);color:var(--ink2)}
+.cal-v5 .gperr{margin:0;font:550 11.5px/1.4 var(--sans);color:var(--bldT)}
+@media (max-width:600px){
+  .cal-v5 .fvbody{display:block;padding:12px 14px 16px}
+  .cal-v5 .fvsec + .fvsec{margin-top:16px}
+  .cal-v5 .avl{left:3px;right:3px;bottom:4px;gap:1px}
+  .cal-v5 .avl .ln, .cal-v5 .avl.many .ln{height:2px}
+}
+
+/* A day can carry both the "era begins" label and Who's free lines, which
+   share the bottom edge; the label steps up above the lines. */
+.cal-v5 .day:has(.avl) .erastart{bottom:26px}
+@media (max-width:600px){.cal-v5 .day:has(.avl) .erastart{bottom:16px}}

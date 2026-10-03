@@ -3,6 +3,7 @@
 // Routes (registered in `internal/plugins/campaigns/routes.go`):
 //   - GET /campaigns/:id/extensions          → ExtensionsHub (owner)
 //   - GET /campaigns/:id/extensions/fragment → ExtensionsHubFragmentAPI (owner)
+//   - POST /campaigns/:id/extensions/foundry/connect-line → NewFoundryConnectLine (owner)
 //
 // The hub owns the bare /campaigns/:id/extensions path; Content Packs
 // renders as a card inside the hub via the `ContentPacksCardRenderer`
@@ -11,14 +12,17 @@
 package campaigns
 
 import (
+	"context"
 	"log/slog"
 	"net/http"
+	"time"
 
 	"github.com/a-h/templ"
 	"github.com/labstack/echo/v4"
 
 	"github.com/keyxmakerx/chronicle/internal/apperror"
 	"github.com/keyxmakerx/chronicle/internal/middleware"
+	"github.com/keyxmakerx/chronicle/internal/plugins/auth"
 )
 
 // ExtensionsHub renders the owner-only "Apps & game system" page.
@@ -70,7 +74,56 @@ func (h *Handler) ExtensionsHub(c echo.Context) error {
 
 	csrfToken := middleware.GetCSRFToken(c)
 	return middleware.Render(c, http.StatusOK,
-		ExtensionsHubPage(cc, addons, csrfToken, systemOptionsJSON(systemOptions), h.hasSettingsTab(cc, "ai-workspace"), contentPacksCard))
+		ExtensionsHubPage(cc, addons, csrfToken, systemOptionsJSON(systemOptions), h.hasSettingsTab(cc, "ai-workspace"), contentPacksCard,
+			h.foundryRow(ctx, cc.Campaign.ID)))
+}
+
+// foundryRow loads the Foundry row's view model. A missing connector or a
+// failed read degrades to the plain settings link rather than failing the page.
+func (h *Handler) foundryRow(ctx context.Context, campaignID string) FoundryRowData {
+	if h.foundryConnector == nil {
+		return FoundryRowData{}
+	}
+	conn, err := h.foundryConnector.FoundryConnection(ctx, campaignID)
+	if err != nil {
+		slog.Warn("extensions hub: foundry connection read failed",
+			slog.String("campaign_id", campaignID),
+			slog.Any("error", err),
+		)
+		return FoundryRowData{}
+	}
+	return newFoundryRowData(time.Now(), conn)
+}
+
+// NewFoundryConnectLine handles POST /campaigns/:id/extensions/foundry/connect-line
+// (owner only): mints a new key and swaps the Foundry row for one that shows the
+// full connect line once. Older keys keep working; nothing is revoked.
+//
+// The response carries the raw key, so it is marked no-store and the line is
+// never logged.
+func (h *Handler) NewFoundryConnectLine(c echo.Context) error {
+	cc := GetCampaignContext(c)
+	if cc == nil {
+		return apperror.NewMissingContext()
+	}
+	if h.foundryConnector == nil {
+		return apperror.NewNotFound("foundry connection is not available")
+	}
+	ctx := c.Request().Context()
+
+	line, err := h.foundryConnector.NewFoundryConnectLine(ctx, cc.Campaign.ID, auth.GetUserID(c))
+	if err != nil {
+		return err
+	}
+
+	row := h.foundryRow(ctx, cc.Campaign.ID)
+	row.Wired = true
+	row.NewLine = line
+	row.Preview = "" // the full line replaces the prefix-only preview
+
+	c.Response().Header().Set(echo.HeaderCacheControl, "no-store")
+	return middleware.Render(c, http.StatusOK,
+		foundryConnectRow(cc, row, middleware.GetCSRFToken(c)))
 }
 
 // hasSettingsTab reports whether a plugin registered a Settings tab with the
