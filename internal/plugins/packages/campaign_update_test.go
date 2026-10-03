@@ -6,6 +6,7 @@ import (
 	"os"
 	"path/filepath"
 	"sort"
+	"sync"
 	"testing"
 )
 
@@ -107,10 +108,21 @@ func (f *fakeUpdateRepo) DeleteDefaultRows(_ context.Context) (int64, error) {
 
 // fakeUpdatePkgs is an updatePackageSource over a temp dir of version folders.
 type fakeUpdatePkgs struct {
-	root  string
-	pkgs  []Package
-	usage map[string][]PackageUsage
+	root     string
+	pkgs     []Package
+	usage    map[string][]PackageUsage
+	versions []string // known releases, filled by mkVersions
+	mu       sync.Mutex
 }
+
+func (f *fakeUpdatePkgs) ListVersions(context.Context, string) ([]PackageVersion, error) {
+	var out []PackageVersion
+	for _, v := range f.versions {
+		out = append(out, PackageVersion{Version: v})
+	}
+	return out, nil
+}
+func (f *fakeUpdatePkgs) lockForPackage(string) *sync.Mutex { return &f.mu }
 
 func (f *fakeUpdatePkgs) ListPackages(context.Context) ([]Package, error) { return f.pkgs, nil }
 func (f *fakeUpdatePkgs) GetPackage(_ context.Context, id string) (*Package, error) {
@@ -135,6 +147,7 @@ func (f *fakeUpdatePkgs) InstallDirForVersion(_ PackageType, slug, v string) str
 func (f *fakeUpdatePkgs) mkVersions(t *testing.T, slug string, versions ...string) {
 	t.Helper()
 	for _, v := range versions {
+		f.versions = append(f.versions, v)
 		if err := os.MkdirAll(filepath.Join(f.root, slug, v), 0o755); err != nil {
 			t.Fatal(err)
 		}
@@ -250,6 +263,10 @@ func TestSetMode(t *testing.T) {
 		{"automatic", SetUpdateModeInput{CampaignID: "c1", PackageID: "p1", Mode: "automatic"}, false, UpdateModeAutomatic, ""},
 		{"pinned to an installed older version", SetUpdateModeInput{CampaignID: "c1", PackageID: "p1", Mode: "pinned", Version: "1.0.0"}, false, UpdateModePinned, "1.0.0"},
 		{"pinned with no version uses the current one", SetUpdateModeInput{CampaignID: "c1", PackageID: "p1", Mode: "pinned"}, false, UpdateModePinned, "2.0.0"},
+		{"path traversal", SetUpdateModeInput{CampaignID: "c1", PackageID: "p1", Mode: "pinned", Version: "../../x"}, true, "", ""},
+		{"path separator", SetUpdateModeInput{CampaignID: "c1", PackageID: "p1", Mode: "pinned", Version: "1.0.0/../2.0.0"}, true, "", ""},
+		{"dot dot only", SetUpdateModeInput{CampaignID: "c1", PackageID: "p1", Mode: "pinned", Version: ".."}, true, "", ""},
+		{"valid format but not a known release", SetUpdateModeInput{CampaignID: "c1", PackageID: "p1", Mode: "pinned", Version: "9.9.9"}, true, "", ""},
 		{"pinned to a version that is not on disk", SetUpdateModeInput{CampaignID: "c1", PackageID: "p1", Mode: "pinned", Version: "0.0.1"}, true, "", ""},
 		{"approve first stays where it is", SetUpdateModeInput{CampaignID: "c1", PackageID: "p1", Mode: "approve_first", Version: "1.0.0"}, false, UpdateModeApproveFirst, "2.0.0"},
 		{"unknown mode", SetUpdateModeInput{CampaignID: "c1", PackageID: "p1", Mode: "sometimes"}, true, "", ""},
@@ -348,6 +365,13 @@ func TestOnInstallPerMode(t *testing.T) {
 			if err := e.svc.OnInstall(ctx(), &pkg, tc.prev, tc.next); err != nil {
 				t.Fatal(err)
 			}
+			if len(e.repo.rows) > 0 && e.repo.rows[ukey("c1", "p1")].HeldVersion != "" {
+				t.Fatal("OnInstall must not write holds; that waits for the commit")
+			}
+			pkg.InstalledVersion = tc.next // the install committed
+			if err := e.svc.OnInstalled(ctx(), &pkg, tc.prev, tc.next); err != nil {
+				t.Fatal(err)
+			}
 			got := e.repo.rows[ukey("c1", "p1")]
 			if tc.wantNoChange {
 				if got != nil {
@@ -365,24 +389,37 @@ func TestOnInstallPerMode(t *testing.T) {
 // A campaign that cannot be frozen must fail the install, so it is refused
 // instead of silently moving onto the new version.
 func TestOnInstallFailsClosedWhenACampaignCannotBeFrozen(t *testing.T) {
-	cases := []struct {
-		name    string
-		onDisk  []string
-		failSet bool
-	}{
-		{"previous folder missing", []string{"2.0.0"}, false},
-		{"hold could not be stored", []string{"1.0.0", "2.0.0"}, true},
+	e := newUpdEnv(t, "1.0.0", []string{"2.0.0"}, "c1", "c2") // 1.0.0 folder is gone
+	e.repo.rows[ukey("c1", "p1")] = &CampaignUpdateRow{CampaignID: "c1", PackageID: "p1", Mode: UpdateModeApproveFirst}
+	e.repo.rows[ukey("c2", "p1")] = &CampaignUpdateRow{CampaignID: "c2", PackageID: "p1", Mode: UpdateModeApproveFirst, Version: "1.0.0"}
+	pkg := e.pkgs.pkgs[0]
+	if err := e.svc.OnInstall(ctx(), &pkg, "1.0.0", "2.0.0"); err == nil {
+		t.Fatal("expected the install to be refused")
 	}
-	for _, tc := range cases {
-		t.Run(tc.name, func(t *testing.T) {
-			e := newUpdEnv(t, "1.0.0", tc.onDisk, "c1")
-			e.repo.rows[ukey("c1", "p1")] = &CampaignUpdateRow{CampaignID: "c1", PackageID: "p1", Mode: UpdateModeApproveFirst}
-			e.repo.failSet = tc.failSet
-			pkg := e.pkgs.pkgs[0]
-			if err := e.svc.OnInstall(ctx(), &pkg, "1.0.0", "2.0.0"); err == nil {
-				t.Fatal("expected the install to be refused")
-			}
-		})
+	// A refused install leaves no hold and no audit row behind, not even for
+	// the campaign that could have been held.
+	for k, r := range e.repo.rows {
+		if r.HeldVersion != "" {
+			t.Errorf("%s holds %q after a refused install", k, r.HeldVersion)
+		}
+	}
+	if len(e.audit.events) != 0 {
+		t.Errorf("a refused install must write no audit rows, got %+v", e.audit.events)
+	}
+}
+
+func TestOnInstalledWritesHoldAndAuditAfterCommit(t *testing.T) {
+	e := newUpdEnv(t, "2.0.0", []string{"1.0.0", "2.0.0"}, "c1")
+	e.repo.rows[ukey("c1", "p1")] = &CampaignUpdateRow{CampaignID: "c1", PackageID: "p1", Mode: UpdateModeApproveFirst, Version: "1.0.0"}
+	pkg := e.pkgs.pkgs[0]
+	if err := e.svc.OnInstalled(ctx(), &pkg, "1.0.0", "2.0.0"); err != nil {
+		t.Fatal(err)
+	}
+	if e.repo.rows[ukey("c1", "p1")].HeldVersion != "2.0.0" {
+		t.Error("hold missing after commit")
+	}
+	if len(e.audit.events) != 1 || e.audit.events[0]["event"] != EventCampaignUpdateHeld {
+		t.Errorf("want one held audit event, got %+v", e.audit.events)
 	}
 }
 
@@ -631,7 +668,17 @@ func TestPrune_FailsClosedOnCampaignVersionsProblem(t *testing.T) {
 // outside campaign_package_updates (the Foundry module's settings): only the
 // held version is kept by the service.
 type storedElsewhereBinding struct {
-	states map[string]*CampaignPackageState
+	states     map[string]*CampaignPackageState
+	failFreeze bool
+	applies    int // Apply calls: a freeze must never go through Apply
+}
+
+func (b *storedElsewhereBinding) Freeze(_ context.Context, id string, _ *Package, _ UpdateMode, v string) error {
+	if b.failFreeze {
+		return errors.New("pin write failed")
+	}
+	b.states[id].Version = v // only the version; the stored mode is untouched
+	return nil
 }
 
 func (b *storedElsewhereBinding) PackageType() PackageType { return PackageTypeFoundryModule }
@@ -651,6 +698,7 @@ func (b *storedElsewhereBinding) Campaigns(context.Context, *Package) ([]Campaig
 	return out, nil
 }
 func (b *storedElsewhereBinding) Apply(_ context.Context, id string, _ *Package, m UpdateMode, v string, _ ActorInfo) error {
+	b.applies++
 	b.states[id] = &CampaignPackageState{Mode: m, Version: v}
 	return nil
 }
@@ -666,12 +714,19 @@ func TestOnInstallWithABindingThatStoresModeElsewhere(t *testing.T) {
 		"preserve": {Mode: UpdateModePinned},                          // legacy preserve, no pin yet
 		"pinned":   {Mode: UpdateModePinned, Version: "1.0.0"},        // has its own pin
 		"asking":   {Mode: UpdateModeApproveFirst, Version: "1.0.0"},  // pinned and asking first
-		"fresh":    {Mode: UpdateModeApproveFirst},                    // asking first, tracking latest
+		"fresh":    {Mode: UpdateModeApproveFirst, Explicit: true},    // asking first, tracking latest
 	}}
 	svc.RegisterBinding(bind)
 
 	pkg := pkgs.pkgs[0]
 	if err := svc.OnInstall(ctx(), &pkg, "1.0.0", "2.0.0"); err != nil {
+		t.Fatal(err)
+	}
+	if bind.applies != 0 {
+		t.Error("freezing must set only the version, never rewrite a stored mode")
+	}
+	pkg.InstalledVersion = "2.0.0"
+	if err := svc.OnInstalled(ctx(), &pkg, "1.0.0", "2.0.0"); err != nil {
 		t.Fatal(err)
 	}
 	wantVersion := map[string]string{"auto": "", "preserve": "1.0.0", "pinned": "1.0.0", "asking": "1.0.0", "fresh": "1.0.0"}
@@ -700,5 +755,36 @@ func TestOnInstallWithABindingThatStoresModeElsewhere(t *testing.T) {
 	}
 	if repo.rows[ukey("asking", "f1")].HeldVersion != "" {
 		t.Error("approval must clear the hold")
+	}
+}
+
+// A campaign whose mode is derived from older stored data keeps the older
+// best-effort rule: a failed freeze is logged, not a refused install. One set
+// through the update modes fails closed.
+func TestOnInstallFreezeFailureLegacyVersusExplicit(t *testing.T) {
+	cases := []struct {
+		name     string
+		explicit bool
+		wantErr  bool
+	}{
+		{"derived from older data: carry on", false, false},
+		{"explicitly set: refuse the install", true, true},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			pkgs := &fakeUpdatePkgs{root: t.TempDir(), usage: map[string][]PackageUsage{}}
+			pkgs.pkgs = []Package{{ID: "f1", Type: PackageTypeFoundryModule, Slug: "mod", InstalledVersion: "1.0.0", Status: StatusApproved}}
+			pkgs.mkVersions(t, "mod", "1.0.0", "2.0.0")
+			svc := newCampaignUpdateService(newFakeUpdateRepo(), pkgs, nil)
+			svc.RegisterBinding(&storedElsewhereBinding{
+				failFreeze: true,
+				states:     map[string]*CampaignPackageState{"c": {Mode: UpdateModePinned, Explicit: tc.explicit}},
+			})
+			pkg := pkgs.pkgs[0]
+			err := svc.OnInstall(ctx(), &pkg, "1.0.0", "2.0.0")
+			if (err != nil) != tc.wantErr {
+				t.Fatalf("err = %v, wantErr %v", err, tc.wantErr)
+			}
+		})
 	}
 }

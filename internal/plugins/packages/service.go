@@ -164,6 +164,14 @@ type PostInstallHook interface {
 	AfterInstall(ctx context.Context, pkg *Package, version, previousVersion, destDir string) error
 }
 
+// PostCommitHook is an optional extension of PostInstallHook: AfterCommit runs
+// once the install is committed (DB row updated). Failures are logged, never
+// fatal, because the install is already done. Use it for state that must not
+// exist for an install that was refused.
+type PostCommitHook interface {
+	AfterCommit(ctx context.Context, pkg *Package, version, previousVersion string) error
+}
+
 // packageService implements PackageService.
 type packageService struct {
 	repo           PackageRepository
@@ -677,6 +685,17 @@ func (s *packageService) installVersion(ctx context.Context, packageID, version 
 	if previousVersion != "" && previousVersion != version {
 		now := time.Now()
 		_ = os.Chtimes(s.installDir(pkg.Type, pkg.Slug, previousVersion), now, now)
+	}
+
+	for _, hook := range s.postInstallHooks {
+		pc, ok := hook.(PostCommitHook)
+		if !ok || hook.PackageType() != pkg.Type {
+			continue
+		}
+		if err := pc.AfterCommit(ctx, pkg, version, previousVersion); err != nil {
+			slog.Error("post-commit hook failed (install is done)",
+				slog.String("package", pkg.Slug), slog.Any("error", err))
+		}
 	}
 
 	// Notify system registry to rescan after a system package install,

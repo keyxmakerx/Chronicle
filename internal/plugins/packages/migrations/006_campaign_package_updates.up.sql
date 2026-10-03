@@ -1,4 +1,4 @@
--- 005_campaign_package_updates: per-campaign update choice for a package.
+-- 006_campaign_package_updates: per-campaign update choice for a package.
 --
 -- One row per (campaign, package) records how that campaign follows the
 -- package: update_mode (automatic | pinned | approve_first), the version it

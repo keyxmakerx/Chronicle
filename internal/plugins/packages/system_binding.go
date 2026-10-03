@@ -23,7 +23,7 @@ func stateFromRow(row *CampaignUpdateRow) CampaignPackageState {
 	if row == nil || !row.Mode.Valid() {
 		return CampaignPackageState{Mode: UpdateModeAutomatic}
 	}
-	st := CampaignPackageState{Mode: row.Mode}
+	st := CampaignPackageState{Mode: row.Mode, Explicit: true}
 	if row.Mode.KeepsVersion() {
 		st.Version = row.Version
 	}
@@ -96,5 +96,11 @@ func (b *systemBinding) Apply(ctx context.Context, campaignID string, pkg *Packa
 	if !mode.KeepsVersion() {
 		version = ""
 	}
+	return b.repo.UpsertModeVersion(ctx, campaignID, pkg.ID, mode, version)
+}
+
+// Freeze stores the version a campaign was running without touching anything
+// else about its choice.
+func (b *systemBinding) Freeze(ctx context.Context, campaignID string, pkg *Package, mode UpdateMode, version string) error {
 	return b.repo.UpsertModeVersion(ctx, campaignID, pkg.ID, mode, version)
 }

@@ -105,7 +105,7 @@ func (b *campaignBinding) State(ctx context.Context, campaignID string, _ *packa
 	// maps to pinned.
 	pinMode, _ := b.settings.GetFoundryModulePinMode(ctx, campaignID)
 	mode, version := UpdateModeFromLegacy(pin, pinMode)
-	return packages.CampaignPackageState{CampaignID: campaignID, Mode: mode, Version: version}, nil
+	return packages.CampaignPackageState{CampaignID: campaignID, Mode: mode, Version: version, Explicit: pinMode == PinModeApproveFirst}, nil
 }
 
 func (b *campaignBinding) Campaigns(ctx context.Context, _ *packages.Package) ([]packages.CampaignPackageState, error) {
@@ -118,7 +118,7 @@ func (b *campaignBinding) Campaigns(ctx context.Context, _ *packages.Package) ([
 		mode, version := UpdateModeFromLegacy(r.Pin, r.PinMode)
 		out = append(out, packages.CampaignPackageState{
 			CampaignID: r.CampaignID, CampaignName: r.CampaignName, OwnerName: r.OwnerName,
-			Mode: mode, Version: version,
+			Mode: mode, Version: version, Explicit: r.PinMode == PinModeApproveFirst,
 		})
 	}
 	return out, nil
@@ -153,4 +153,10 @@ func (b *campaignBinding) Apply(ctx context.Context, campaignID string, _ *packa
 	default:
 		return fmt.Errorf("unknown update mode %q", mode)
 	}
+}
+
+// Freeze sets only the pin. The stored pin mode is left exactly as it was, so
+// a "preserve" campaign stays "preserve".
+func (b *campaignBinding) Freeze(ctx context.Context, campaignID string, _ *packages.Package, _ packages.UpdateMode, version string) error {
+	return b.svc.SetPinnedVersion(ctx, campaignID, version)
 }

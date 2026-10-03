@@ -77,6 +77,12 @@ type CampaignPackageState struct {
 	// HeldVersion is a newly installed version waiting for approval. Set only
 	// in approve_first mode.
 	HeldVersion string
+
+	// Explicit is true when the campaign's mode was chosen through the update
+	// modes themselves rather than derived from older stored data. Install
+	// refuses to move an explicit campaign it cannot hold; a derived one keeps
+	// the older best-effort behaviour.
+	Explicit bool
 }
 
 // ActorInfo says who is asking, for the audit trail and the admin

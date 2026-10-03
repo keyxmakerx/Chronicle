@@ -2,6 +2,7 @@ package packages
 
 import (
 	"context"
+	"errors"
 	"os"
 	"path/filepath"
 	"testing"
@@ -175,5 +176,50 @@ func TestPrune_TakesPerPackageInstallLock(t *testing.T) {
 	}
 	if _, err := os.Stat(filepath.Join(slugDir, "0.0.7")); !os.IsNotExist(err) {
 		t.Errorf("prune should have reclaimed 0.0.7 after lock release, stat err = %v", err)
+	}
+}
+
+// The campaign versions are read again under the package lock; a failure at
+// that point still keeps everything.
+func TestPrune_RereadsCampaignVersionsUnderLockAndFailsClosed(t *testing.T) {
+	svc, slugDir := prunePkgEnv(t, "0.13.4", []string{"0.0.7", "0.13.4"})
+	svc.loadedDirsFn = func() map[string]bool { return nil }
+	calls := 0
+	svc.campaignVersionsFn = func(context.Context) (map[string]map[string]bool, error) {
+		calls++
+		if calls == 1 {
+			return nil, nil // the up-front check passes
+		}
+		return nil, errors.New("db went away")
+	}
+	if _, err := svc.PruneStaleVersions(context.Background(), 1, false); err == nil {
+		t.Fatal("a failed re-read must refuse")
+	}
+	if calls < 2 {
+		t.Errorf("expected a second read under the lock, got %d call(s)", calls)
+	}
+	if _, err := os.Stat(filepath.Join(slugDir, "0.0.7")); err != nil {
+		t.Error("nothing may be deleted when the re-read fails")
+	}
+}
+
+// A version a campaign picks between the up-front read and the delete is seen
+// by the re-read and kept.
+func TestPrune_KeepsVersionChosenAfterTheFirstRead(t *testing.T) {
+	svc, slugDir := prunePkgEnv(t, "0.13.4", []string{"0.0.7", "0.13.4"})
+	svc.loadedDirsFn = func() map[string]bool { return nil }
+	calls := 0
+	svc.campaignVersionsFn = func(context.Context) (map[string]map[string]bool, error) {
+		calls++
+		if calls == 1 {
+			return nil, nil
+		}
+		return map[string]map[string]bool{"drawsteel": {"0.0.7": true}}, nil
+	}
+	if _, err := svc.PruneStaleVersions(context.Background(), 1, false); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := os.Stat(filepath.Join(slugDir, "0.0.7")); err != nil {
+		t.Error("0.0.7 was chosen by a campaign and must survive")
 	}
 }

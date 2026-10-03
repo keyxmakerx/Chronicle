@@ -197,3 +197,26 @@ func TestCampaignBindingApplyPinFailureWritesNoMode(t *testing.T) {
 		t.Errorf("a failed pin must leave the settings alone, got pin=%q mode=%q", st.pin, st.pinMode)
 	}
 }
+
+// Freezing sets only the pin: a campaign stored as "preserve" stays
+// "preserve", and a derived mode is not marked explicit.
+func TestCampaignBindingFreezeLeavesPinModeAlone(t *testing.T) {
+	b, svc, st := newBinding("", PinModePreserve)
+	before, _ := b.State(context.Background(), "x", &packages.Package{})
+	if before.Explicit {
+		t.Error("preserve is derived from older data, not explicit")
+	}
+	if err := b.Freeze(context.Background(), "x", &packages.Package{}, packages.UpdateModePinned, "0.1.0"); err != nil {
+		t.Fatal(err)
+	}
+	if st.pin != "0.1.0" || st.pinMode != PinModePreserve {
+		t.Errorf("pin=%q mode=%q, want pin 0.1.0 and mode still preserve", st.pin, st.pinMode)
+	}
+	if len(svc.forced) != 0 {
+		t.Error("a freeze is not an admin force-pin")
+	}
+	ask, _, _ := newBinding("0.1.0", PinModeApproveFirst)
+	if s, _ := ask.State(context.Background(), "x", &packages.Package{}); !s.Explicit {
+		t.Error("approve_first is explicit")
+	}
+}

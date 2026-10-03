@@ -78,8 +78,7 @@ func (s *packageService) prune(ctx context.Context, ruleFor func(*Package) reten
 	if s.campaignVersionsFn == nil {
 		return nil, fmt.Errorf("cannot prune: campaign versions provider not wired (fail closed)")
 	}
-	kept, err := s.campaignVersionsFn(ctx)
-	if err != nil {
+	if _, err := s.campaignVersionsFn(ctx); err != nil {
 		return nil, fmt.Errorf("cannot prune: reading campaign versions failed, keeping everything: %w", err)
 	}
 
@@ -99,7 +98,9 @@ func (s *packageService) prune(ctx context.Context, ruleFor func(*Package) reten
 		if rule.Mode == RetentionManual {
 			continue
 		}
-		s.pruneOnePackage(ctx, pkg, rule, now, dryRun, loaded, kept[pkg.Slug], res)
+		if err := s.pruneOnePackage(ctx, pkg, rule, now, dryRun, loaded, res); err != nil {
+			return res, err
+		}
 	}
 
 	if !dryRun && len(res.Removed) > 0 && s.onServeInvalidate != nil {
@@ -116,7 +117,7 @@ func (s *packageService) prune(ctx context.Context, ruleFor func(*Package) reten
 // either fully committed (then protected as InstalledVersion) or not yet on
 // disk before we ReadDir. Different packages don't contend; the lock is
 // released (deferred) before the caller moves to the next package.
-func (s *packageService) pruneOnePackage(ctx context.Context, pkg *Package, rule retentionRule, now time.Time, dryRun bool, loaded map[string]bool, campaignKept map[string]bool, res *PruneResult) {
+func (s *packageService) pruneOnePackage(ctx context.Context, pkg *Package, rule retentionRule, now time.Time, dryRun bool, loaded map[string]bool, res *PruneResult) error {
 	mu := s.lockForPackage(pkg.ID)
 	mu.Lock()
 	defer mu.Unlock()
@@ -127,10 +128,19 @@ func (s *packageService) pruneOnePackage(ctx context.Context, pkg *Package, rule
 		pkg = fresh
 	}
 
+	// Re-read what campaigns are on now that the lock is held: a campaign
+	// choosing a version takes this same lock, so the answer cannot change
+	// until we are done. Any failure keeps everything.
+	keptNow, err := s.campaignVersionsFn(ctx)
+	if err != nil {
+		return fmt.Errorf("cannot prune %s: reading campaign versions failed, keeping everything: %w", pkg.Slug, err)
+	}
+	campaignKept := keptNow[pkg.Slug]
+
 	slugDir := filepath.Join(s.packagesDir(), "systems", pkg.Slug)
 	entries, err := os.ReadDir(slugDir)
 	if err != nil {
-		return // no dir / unreadable → nothing to reclaim
+		return nil // no dir / unreadable → nothing to reclaim
 	}
 
 	published := map[string]time.Time{}
@@ -188,6 +198,7 @@ func (s *packageService) pruneOnePackage(ctx context.Context, pkg *Package, rule
 		res.Removed = append(res.Removed, sv)
 		res.BytesFreed += sv.Size
 	}
+	return nil
 }
 
 // prettyBytes renders a byte count for the cleanup card ("312.4 MB").

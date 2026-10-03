@@ -17,6 +17,7 @@ import (
 	"fmt"
 	"log/slog"
 	"os"
+	"sync"
 
 	"github.com/keyxmakerx/chronicle/internal/apperror"
 )
@@ -42,6 +43,25 @@ type updatePackageSource interface {
 	GetPackage(ctx context.Context, id string) (*Package, error)
 	GetUsage(ctx context.Context, packageID string) ([]PackageUsage, error)
 	InstallDirForVersion(pkgType PackageType, slug, version string) string
+	ListVersions(ctx context.Context, packageID string) ([]PackageVersion, error)
+	// lockForPackage is the per-package mutex install and clean-up already
+	// share; taking it keeps a check-then-write on a version folder atomic
+	// against clean-up.
+	lockForPackage(packageID string) *sync.Mutex
+}
+
+// pkgSource adapts a PackageService to updatePackageSource. Only the real
+// service has the shared lock; any other implementation gets a private one.
+type pkgSource struct {
+	PackageService
+	fallback sync.Mutex
+}
+
+func (p *pkgSource) lockForPackage(id string) *sync.Mutex {
+	if s, ok := p.PackageService.(*packageService); ok {
+		return s.lockForPackage(id)
+	}
+	return &p.fallback
 }
 
 // CampaignBinding is how one package type stores a campaign's mode and
@@ -65,6 +85,11 @@ type CampaignBinding interface {
 	// Apply stores mode and version. The service has already validated them
 	// (mode known, version installed on disk); version is "" for automatic.
 	Apply(ctx context.Context, campaignID string, pkg *Package, mode UpdateMode, version string, actor ActorInfo) error
+
+	// Freeze records the version a campaign was running at install time and
+	// nothing else: it must not rewrite any stored mode, so a campaign whose
+	// mode is derived from older data keeps that data as it was.
+	Freeze(ctx context.Context, campaignID string, pkg *Package, mode UpdateMode, version string) error
 }
 
 // SetUpdateModeInput is the owner's request to change one package's mode.
@@ -129,12 +154,19 @@ type CampaignUpdateService interface {
 	// version, which is what every campaign was served before modes existed.
 	ServedVersion(ctx context.Context, campaignID string, pkg *Package) ServedVersion
 
-	// OnInstall runs when a new version is installed: pinned and approve_first
-	// campaigns are frozen on the version they were running, and approve_first
-	// campaigns are handed the new one to approve. Automatic campaigns are
-	// untouched. A campaign that cannot be frozen fails the call so the
-	// install is refused rather than silently moving it.
+	// OnInstall runs before an install is committed: pinned and approve_first
+	// campaigns are frozen on the version they were running. It writes no
+	// holds and no audit rows, so a refused install leaves none behind. A
+	// campaign whose mode was set explicitly and cannot be frozen fails the
+	// call so the install is refused rather than silently moving it; a
+	// campaign whose mode is derived from older data is logged and skipped,
+	// as before.
 	OnInstall(ctx context.Context, pkg *Package, previousVersion, newVersion string) error
+
+	// OnInstalled runs after the install is committed and hands approve_first
+	// campaigns the new version to approve (writing the hold and its audit
+	// event). pkg.InstalledVersion is the new version.
+	OnInstalled(ctx context.Context, pkg *Package, previousVersion, newVersion string) error
 
 	// KeptVersions is every system version some campaign is on or holds,
 	// keyed by package slug, for the clean-up protected set.
@@ -158,7 +190,7 @@ type campaignUpdateService struct {
 // NewCampaignUpdateService wires the service with the game-system binding
 // already registered. audit may be nil.
 func NewCampaignUpdateService(repo CampaignUpdateRepository, pkgs PackageService, audit AuditLogger) CampaignUpdateService {
-	return newCampaignUpdateService(repo, pkgs, audit)
+	return newCampaignUpdateService(repo, &pkgSource{PackageService: pkgs}, audit)
 }
 
 func newCampaignUpdateService(repo CampaignUpdateRepository, pkgs updatePackageSource, audit AuditLogger) *campaignUpdateService {
@@ -272,12 +304,30 @@ func (s *campaignUpdateService) CampaignStates(ctx context.Context, campaignID s
 
 // versionOnDisk reports whether a version's folder exists.
 func (s *campaignUpdateService) versionOnDisk(pkg *Package, version string) bool {
+	if !ValidVersionString(version) {
+		return false
+	}
 	dir := s.pkgs.InstallDirForVersion(pkg.Type, pkg.Slug, version)
 	if dir == "" {
 		return false
 	}
 	info, err := os.Stat(dir)
 	return err == nil && info.IsDir()
+}
+
+// knownRelease reports whether version is one of the package's known releases
+// (package_versions), so a free-form string never reaches a path.
+func (s *campaignUpdateService) knownRelease(ctx context.Context, pkg *Package, version string) (bool, error) {
+	vers, err := s.pkgs.ListVersions(ctx, pkg.ID)
+	if err != nil {
+		return false, err
+	}
+	for _, v := range vers {
+		if v.Version == version {
+			return true, nil
+		}
+	}
+	return false, nil
 }
 
 func (s *campaignUpdateService) SetMode(ctx context.Context, in SetUpdateModeInput, actor ActorInfo) (*CampaignPackageState, error) {
@@ -289,6 +339,12 @@ func (s *campaignUpdateService) SetMode(ctx context.Context, in SetUpdateModeInp
 	if err != nil {
 		return nil, err
 	}
+	// The folder check and the write are one step as far as clean-up is
+	// concerned: it takes this lock too.
+	mu := s.pkgs.lockForPackage(pkg.ID)
+	mu.Lock()
+	defer mu.Unlock()
+
 	cur, err := s.stateOf(ctx, b, in.CampaignID, pkg)
 	if err != nil {
 		return nil, err
@@ -300,6 +356,17 @@ func (s *campaignUpdateService) SetMode(ctx context.Context, in SetUpdateModeInp
 		version = in.Version
 		if version == "" {
 			version = cur.EffectiveVersion
+		} else {
+			if !ValidVersionString(version) {
+				return nil, apperror.NewValidation("that is not a valid version")
+			}
+			known, err := s.knownRelease(ctx, pkg, version)
+			if err != nil {
+				return nil, apperror.NewInternal(fmt.Errorf("listing versions: %w", err))
+			}
+			if !known {
+				return nil, apperror.NewBadRequest(fmt.Sprintf("version %s is not a known release of this package", version))
+			}
 		}
 	case UpdateModeApproveFirst:
 		// Ask-first holds the campaign where it is; the version it is
@@ -307,6 +374,9 @@ func (s *campaignUpdateService) SetMode(ctx context.Context, in SetUpdateModeInp
 		version = cur.EffectiveVersion
 	}
 	if mode.KeepsVersion() {
+		if version != "" && !ValidVersionString(version) {
+			return nil, apperror.NewValidation("that is not a valid version")
+		}
 		if version == "" {
 			return nil, apperror.NewBadRequest("this package has no installed version to stay on")
 		}
@@ -337,12 +407,26 @@ func (s *campaignUpdateService) ApproveHeld(ctx context.Context, campaignID, pac
 	if err != nil {
 		return nil, err
 	}
+	mu := s.pkgs.lockForPackage(pkg.ID)
+	mu.Lock()
+	defer mu.Unlock()
+
 	cur, err := s.stateOf(ctx, b, campaignID, pkg)
 	if err != nil {
 		return nil, err
 	}
 	if cur.Mode != UpdateModeApproveFirst || cur.HeldVersion == "" {
 		return nil, apperror.NewConflict("no update is waiting for approval")
+	}
+	if !ValidVersionString(cur.HeldVersion) {
+		return nil, apperror.NewValidation("the held version is not a valid version")
+	}
+	known, err := s.knownRelease(ctx, pkg, cur.HeldVersion)
+	if err != nil {
+		return nil, apperror.NewInternal(fmt.Errorf("listing versions: %w", err))
+	}
+	if !known {
+		return nil, apperror.NewBadRequest(fmt.Sprintf("version %s is not a known release of this package", cur.HeldVersion))
 	}
 	// Moving onto a folder that is gone would break the campaign; the update
 	// stays held instead.
@@ -459,40 +543,26 @@ func (s *campaignUpdateService) OnInstall(ctx context.Context, pkg *Package, pre
 
 	var failures []error
 	for _, st := range states {
-		if !st.Mode.KeepsVersion() {
+		if !st.Mode.KeepsVersion() || st.Version != "" {
+			continue // follows the installed version, or already on its own
+		}
+		// Not frozen yet: freeze on what it was running.
+		var ferr error
+		if !s.versionOnDisk(pkg, previousVersion) {
+			ferr = fmt.Errorf("previous version %s is not on disk", previousVersion)
+		} else {
+			ferr = b.Freeze(ctx, st.CampaignID, pkg, st.Mode, previousVersion)
+		}
+		if ferr == nil {
 			continue
 		}
-		version := st.Version
-		if version == "" {
-			// Not frozen yet: freeze on what it was running. Refusing here
-			// beats letting the campaign slide onto the new version.
-			if !s.versionOnDisk(pkg, previousVersion) {
-				failures = append(failures, fmt.Errorf("campaign %s: previous version %s is not on disk", st.CampaignID, previousVersion))
-				continue
-			}
-			if err := b.Apply(ctx, st.CampaignID, pkg, st.Mode, previousVersion, ActorInfo{}); err != nil {
-				failures = append(failures, fmt.Errorf("campaign %s: %w", st.CampaignID, err))
-				continue
-			}
-			version = previousVersion
-		}
-		if st.Mode != UpdateModeApproveFirst {
+		if st.Explicit {
+			failures = append(failures, fmt.Errorf("campaign %s: %w", st.CampaignID, ferr))
 			continue
 		}
-		held := ""
-		if versionLess(version, newVersion) {
-			held = newVersion // a rollback to something older is not an update to offer
-		}
-		if err := s.repo.SetHeld(ctx, st.CampaignID, pkg.ID, held); err != nil {
-			failures = append(failures, fmt.Errorf("campaign %s: holding %s: %w", st.CampaignID, newVersion, err))
-			continue
-		}
-		if held != "" {
-			s.log(ctx, EventCampaignUpdateHeld, ActorInfo{}, map[string]any{
-				"campaign_id": st.CampaignID, "package_id": pkg.ID, "package": pkg.Slug,
-				"on": version, "held": held,
-			})
-		}
+		// Derived from older stored data: the older best-effort rule applies.
+		slog.Warn("update modes: could not freeze a campaign on install, leaving it as before",
+			slog.String("campaign_id", st.CampaignID), slog.String("package", pkg.Slug), slog.Any("error", ferr))
 	}
 	if len(failures) > 0 {
 		return fmt.Errorf("could not hold %d campaign(s) on %s, install refused so none moves silently: %w",
@@ -501,9 +571,26 @@ func (s *campaignUpdateService) OnInstall(ctx context.Context, pkg *Package, pre
 	return nil
 }
 
+func (s *campaignUpdateService) OnInstalled(ctx context.Context, pkg *Package, previousVersion, newVersion string) error {
+	if previousVersion == "" || previousVersion == newVersion {
+		return nil
+	}
+	_, set, err := s.reconcilePackage(ctx, pkg)
+	for _, h := range set {
+		s.log(ctx, EventCampaignUpdateHeld, ActorInfo{}, map[string]any{
+			"campaign_id": h.campaignID, "package_id": pkg.ID, "package": pkg.Slug,
+			"on": h.on, "held": h.held,
+		})
+	}
+	return err
+}
+
 func (s *campaignUpdateService) KeptVersions(ctx context.Context) (map[string]map[string]bool, error) {
 	return s.repo.ListKeptVersions(ctx)
 }
+
+// holdSet is one hold written by reconcilePackage.
+type holdSet struct{ campaignID, on, held string }
 
 func (s *campaignUpdateService) Reconcile(ctx context.Context) (ReconcileResult, error) {
 	var res ReconcileResult
@@ -513,50 +600,14 @@ func (s *campaignUpdateService) Reconcile(ctx context.Context) (ReconcileResult,
 	}
 	for i := range pkgs {
 		pkg := &pkgs[i]
-		b, ok := s.bindings[pkg.Type]
-		if !ok || pkg.InstalledVersion == "" {
+		if _, ok := s.bindings[pkg.Type]; !ok || pkg.InstalledVersion == "" {
 			continue
 		}
-		states, err := b.Campaigns(ctx, pkg)
-		if err != nil {
-			return res, fmt.Errorf("listing campaigns for %s: %w", pkg.Slug, err)
-		}
-		rows, err := s.repo.ListByPackage(ctx, pkg.ID)
+		r, _, err := s.reconcilePackage(ctx, pkg)
+		res.HeldSet += r.HeldSet
+		res.HeldCleared += r.HeldCleared
 		if err != nil {
 			return res, err
-		}
-		held := map[string]string{}
-		for _, r := range rows {
-			held[r.CampaignID] = r.HeldVersion
-		}
-		seen := map[string]bool{}
-		for _, st := range states {
-			seen[st.CampaignID] = true
-			// The one correct value: the installed version, if this
-			// campaign is asking first and is behind it; otherwise nothing.
-			want := ""
-			if st.Mode == UpdateModeApproveFirst && st.Version != "" && versionLess(st.Version, pkg.InstalledVersion) {
-				want = pkg.InstalledVersion
-			}
-			if want == held[st.CampaignID] {
-				continue
-			}
-			if err := s.repo.SetHeld(ctx, st.CampaignID, pkg.ID, want); err != nil {
-				return res, err
-			}
-			if want == "" {
-				res.HeldCleared++
-			} else {
-				res.HeldSet++
-			}
-		}
-		for id, h := range held {
-			if h != "" && !seen[id] {
-				if err := s.repo.SetHeld(ctx, id, pkg.ID, ""); err != nil {
-					return res, err
-				}
-				res.HeldCleared++
-			}
 		}
 	}
 	n, err := s.repo.DeleteDefaultRows(ctx)
@@ -565,6 +616,60 @@ func (s *campaignUpdateService) Reconcile(ctx context.Context) (ReconcileResult,
 	}
 	res.RowsRemoved = n
 	return res, nil
+}
+
+// reconcilePackage makes one package's holds agree with its installed
+// version and reports the holds it set.
+func (s *campaignUpdateService) reconcilePackage(ctx context.Context, pkg *Package) (ReconcileResult, []holdSet, error) {
+	var res ReconcileResult
+	var set []holdSet
+	b, ok := s.bindings[pkg.Type]
+	if !ok || pkg.InstalledVersion == "" {
+		return res, nil, nil
+	}
+	states, err := b.Campaigns(ctx, pkg)
+	if err != nil {
+		return res, nil, fmt.Errorf("listing campaigns for %s: %w", pkg.Slug, err)
+	}
+	rows, err := s.repo.ListByPackage(ctx, pkg.ID)
+	if err != nil {
+		return res, nil, err
+	}
+	held := map[string]string{}
+	for _, r := range rows {
+		held[r.CampaignID] = r.HeldVersion
+	}
+	seen := map[string]bool{}
+	for _, st := range states {
+		seen[st.CampaignID] = true
+		// The one correct value: the installed version, if this campaign is
+		// asking first and is behind it; otherwise nothing.
+		want := ""
+		if st.Mode == UpdateModeApproveFirst && st.Version != "" && versionLess(st.Version, pkg.InstalledVersion) {
+			want = pkg.InstalledVersion
+		}
+		if want == held[st.CampaignID] {
+			continue
+		}
+		if err := s.repo.SetHeld(ctx, st.CampaignID, pkg.ID, want); err != nil {
+			return res, set, err
+		}
+		if want == "" {
+			res.HeldCleared++
+		} else {
+			res.HeldSet++
+			set = append(set, holdSet{st.CampaignID, st.Version, want})
+		}
+	}
+	for id, h := range held {
+		if h != "" && !seen[id] {
+			if err := s.repo.SetHeld(ctx, id, pkg.ID, ""); err != nil {
+				return res, set, err
+			}
+			res.HeldCleared++
+		}
+	}
+	return res, set, nil
 }
 
 // log writes an audit row; a missing or failing sink never blocks the action.
@@ -596,6 +701,12 @@ func (h *updateModeHook) PackageType() PackageType { return h.typ }
 
 func (h *updateModeHook) AfterInstall(ctx context.Context, pkg *Package, version, previousVersion, _ string) error {
 	return h.svc.OnInstall(ctx, pkg, previousVersion, version)
+}
+
+// AfterCommit hands approve_first campaigns the new version once the install
+// is committed (see PostCommitHook).
+func (h *updateModeHook) AfterCommit(ctx context.Context, pkg *Package, version, previousVersion string) error {
+	return h.svc.OnInstalled(ctx, pkg, previousVersion, version)
 }
 
 // SetCampaignVersionsProvider wires the set of versions campaigns are on into
