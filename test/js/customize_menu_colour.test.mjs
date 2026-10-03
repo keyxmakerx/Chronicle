@@ -26,7 +26,8 @@ const api = vm.runInNewContext(
 const DARK = [
   ['#1a1c23', '#1a1c23'], // Charcoal already passes and is untouched
   ['#0e1424', '#0e1424'],
-  ['#2b4a3a', '#2b4a3a'],
+  ['#1a2a22', '#1a2a22'],
+  ['#2b4a3a', null], // white reads, but the grey secondary words would not
   ['#ffffff', null],
   ['#6366f1', null],
   ['#f59e0b', null],
@@ -39,6 +40,7 @@ test('menuDark leaves a passing colour alone and darkens the rest', () => {
     const got = api.menuDark(input);
     if (want) assert.equal(got, want, input);
     assert.ok(api.contrast(got, '#ffffff') >= 7, `${input} -> ${got} must reach 7:1`);
+    assert.ok(api.contrast(got, '#8b93a1') >= 4.5, `${input} -> ${got}: secondary words must reach 4.5:1`);
   }
 });
 

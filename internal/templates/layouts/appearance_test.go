@@ -354,7 +354,7 @@ func TestAppearanceCSSMenu(t *testing.T) {
 		{"tinted follows the accent", AppearanceData{SidebarColour: "tinted"}, "#10b981", colour.MenuTinted("#10b981"), "#cbd5e1"},
 		{"tinted without an accent uses Chronicle's", AppearanceData{SidebarColour: "tinted"}, "", colour.MenuTinted("#6366f1"), "#cbd5e1"},
 		{"own is darkened", AppearanceData{SidebarColour: "own", SidebarOwn: "#9a4a26"}, "", colour.MenuDark("#9a4a26"), "#cbd5e1"},
-		{"own that already reads is kept", AppearanceData{SidebarColour: "own", SidebarOwn: "#2b4a3a"}, "", "#2b4a3a", "#cbd5e1"},
+		{"own that already reads is kept", AppearanceData{SidebarColour: "own", SidebarOwn: "#1a2a22"}, "", "#1a2a22", "#cbd5e1"},
 		{"own without a colour draws nothing", AppearanceData{SidebarColour: "own"}, "", "", ""},
 		{"own with a bad colour draws nothing", AppearanceData{SidebarColour: "own", SidebarOwn: "green"}, "", "", ""},
 		{"unknown choice draws nothing", AppearanceData{SidebarColour: "light"}, "", "", ""},

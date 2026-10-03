@@ -1053,13 +1053,13 @@ templ topbarCenterContent(ctx context.Context) {
 					@click="more = !more"
 					:aria-expanded="more ? 'true' : 'false'"
 					aria-controls="topbar-tray"
-					aria-label="More header items"
 					class={ "md:hidden shrink-0 inline-flex items-center px-2.5 py-1 rounded-full border border-edge bg-surface-alt text-xs font-semibold text-fg", templ.KV("tb-solo", len(ws) == 1) }
 				>
 					if len(ws) > 1 {
 						<span class="tb-n">+{ strconv.Itoa(len(ws) - 1) }</span>
 					}
 					<span class="tb-n-all">+{ strconv.Itoa(len(ws)) }</span>
+					<span class="sr-only">more header items</span>
 				</button>
 				<div
 					id="topbar-tray"

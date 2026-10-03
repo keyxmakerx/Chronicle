@@ -170,11 +170,12 @@
     function fromPicker(h, t, deep){ var L = 0.80 - t / 100 * toneSpan(deep); return lchHex(L, Math.min(deep ? 0.14 : 0.19, chromaCap(L)), h); }
     function toPicker(hex, deep){ var c = oklch(hex); return { h:Math.round(c[2]) % 360, t:Math.round(clamp((0.80 - c[0]) / toneSpan(deep) * 100, 0, 100)) }; }
 
-    // The menu keeps white words at 7:1 on any colour it is given, by moving
-    // the colour toward black. Mirrors colour.MenuDark and colour.MenuTinted.
+    // The menu keeps white words at 7:1 and its grey secondary words at 4.5:1
+    // on any colour it is given, by moving the colour toward black. Mirrors
+    // colour.MenuDark and colour.MenuTinted.
     function menuDark(hex){
       var out = String(hex).toLowerCase();
-      for (var i = 0; i < 24 && contrast(out, '#ffffff') < 7; i++) out = mix(out, '#000000', 0.12);
+      for (var i = 0; i < 24 && (contrast(out, '#ffffff') < 7 || contrast(out, '#8b93a1') < 4.5); i++) out = mix(out, '#000000', 0.12);
       return out;
     }
     function menuTinted(accent){ return menuDark(mix(accent, '#0b0b12', 0.72)); }

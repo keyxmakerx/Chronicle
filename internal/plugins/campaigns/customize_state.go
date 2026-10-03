@@ -81,7 +81,7 @@ const classicAccent = "#6366f1"
 // Starting colours the editor offers before the owner picks their own menu
 // or glow colour; never stored unless that choice is selected and saved.
 const (
-	startMenuOwn = "#2b4a3a"
+	startMenuOwn = "#1a2a22"
 	startGlowOwn = "#3b9fb5"
 )
 

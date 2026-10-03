@@ -325,6 +325,9 @@ func TestMenuDark(t *testing.T) {
 			if c := Contrast(got, "#ffffff"); c < 7 {
 				t.Errorf("MenuDark(%s) = %s has contrast %.2f, want >= 7", in, got, c)
 			}
+			if c := Contrast(got, menuSecondary); c < 4.5 {
+				t.Errorf("MenuDark(%s) = %s gives secondary words %.2f, want >= 4.5", in, got, c)
+			}
 			if again := MenuDark(got); again != got {
 				t.Errorf("not idempotent: %s -> %s", got, again)
 			}
