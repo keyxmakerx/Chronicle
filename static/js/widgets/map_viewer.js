@@ -101,6 +101,9 @@
 		minZoom: -3,
 		maxZoom: 3,
 		zoomSnap: 0.25,
+		// Twice Leaflet's default scroll distance per zoom level: one wheel
+		// flick shouldn't jump from the whole map to a close-up.
+		wheelPxPerZoomLevel: 120,
 		attributionControl: false,
 		// Zoom lives in the bottom-right control cluster; Leaflet's own
 		// top-left control would sit under the search box and tool rail.
