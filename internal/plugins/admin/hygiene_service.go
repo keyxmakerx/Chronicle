@@ -135,7 +135,8 @@ func (s *hygieneService) ScanOrphanedMedia(ctx context.Context) ([]OrphanedMedia
 }
 
 // countMediaReferences checks if any entity references a media filename
-// via image_path or embedded in entry_html content.
+// via image_path or embedded in entry_html content. Trashed pages deliberately
+// still count so cleanup never removes a file a restore would need.
 func (s *hygieneService) countMediaReferences(ctx context.Context, filename string) (int, error) {
 	var count int
 	escaped := strings.NewReplacer("%", "\\%", "_", "\\_").Replace(filename)

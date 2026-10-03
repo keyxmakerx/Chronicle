@@ -17,6 +17,7 @@ func RegisterRoutes(e *echo.Echo, h *Handler, campaignSvc campaigns.CampaignServ
 	cg := e.Group("/campaigns/:id",
 		auth.RequireAuth(authSvc),
 		campaigns.RequireCampaignAccess(campaignSvc),
+		withActorMiddleware,
 	)
 
 	// Entry API (JSON endpoints for editor widget).
@@ -174,4 +175,16 @@ func RegisterRoutes(e *echo.Echo, h *Handler, campaignSvc campaigns.CampaignServ
 		c.Set("entity_type_slug", c.Param("typeSlug"))
 		return h.Index(c)
 	}, campaigns.RequireViewAccess())
+}
+
+// withActorMiddleware marks the request context with the signed-in user, so
+// page history credits saves and the Trash records who deleted a page.
+func withActorMiddleware(next echo.HandlerFunc) echo.HandlerFunc {
+	return func(c echo.Context) error {
+		if uid := auth.GetUserID(c); uid != "" {
+			req := c.Request()
+			c.SetRequest(req.WithContext(WithActor(req.Context(), uid)))
+		}
+		return next(c)
+	}
 }

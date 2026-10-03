@@ -156,10 +156,11 @@ func (r *auditRepository) GetCampaignStats(ctx context.Context, campaignID strin
 	stats := &CampaignStats{}
 
 	// Entity count and approximate word count from entities table.
-	// Word count = number of spaces + 1 for each non-empty entry.
+	// Word count = number of spaces + 1 for each non-empty entry. Trashed pages
+	// are excluded: the stat describes the live campaign.
 	entityQuery := `SELECT COUNT(*),
 	                       COALESCE(SUM(LENGTH(entry_html) - LENGTH(REPLACE(entry_html, ' ', '')) + 1), 0)
-	                FROM entities WHERE campaign_id = ?`
+	                FROM entities WHERE campaign_id = ? AND deleted_at IS NULL`
 	if err := r.db.QueryRowContext(ctx, entityQuery, campaignID).Scan(
 		&stats.TotalEntities, &stats.TotalWords,
 	); err != nil {

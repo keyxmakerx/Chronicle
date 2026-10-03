@@ -757,6 +757,21 @@
   .chronicle-editor__status--unsaved { @apply text-amber-600; }
   .chronicle-editor__status--error { @apply text-red-600; }
 
+  /* ---- Save clash bar: someone else saved while this editor was open ---- */
+  .chronicle-editor__conflict {
+    @apply mx-3 my-2 px-3 py-2 rounded-lg text-sm border border-yellow-500/60 bg-yellow-500/10 text-fg;
+  }
+  .chronicle-editor__conflict-msg { @apply m-0; }
+  .chronicle-editor__conflict-actions { @apply flex flex-wrap gap-2 mt-2; }
+  .chronicle-editor__conflict-btn {
+    @apply px-2 py-0.5 rounded-md border border-edge text-xs text-fg bg-transparent cursor-pointer;
+  }
+  .chronicle-editor__conflict-btn--primary { @apply ring-2 ring-accent; }
+  .chronicle-editor__conflict-preview {
+    @apply mt-2 p-2 rounded border border-edge-light text-sm max-h-64 overflow-auto;
+    background: var(--color-bg-primary);
+  }
+
   /* ---- "On this page" outline (editor_outline.js) ----
      Wide editors: a sticky column beside the text. Narrow ones: a folded
      button above it. overflow: clip (not hidden) keeps the rounded corners
