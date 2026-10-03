@@ -115,9 +115,9 @@
 
   // buildState(model, tSeconds, dt): the per-frame render state both
   // painters consume. Mirrors the design contract's Surface.prototype.state.
-  // dt (seconds since the last frame) lets a weather change roll in over
-  // about a second instead of snapping.
-  var WXKEYS = ['cloud', 'dark', 'fog', 'rain', 'snow', 'hail', 'storm', 'wind'];
+  // dt (seconds since the last frame) lets a weather change roll in instead
+  // of snapping: each dial with an ease glides at its own pace.
+  var GLIDE = LOOKS.DIALS.filter(function (d) { return d.ease; });
   function buildState(model, tSeconds, dt) {
     var cal = model.calendar;
     var year = cal.current_year, month = cal.current_month, day = cal.current_day;
@@ -178,8 +178,8 @@
     }
     var target = look || LOOKS.blank();
     var wx = model.wxs;
-    if (!wx || model.reduced || !(dt > 0 && dt < 1)) { wx = model.wxs = {}; WXKEYS.forEach(function (n) { wx[n] = target[n]; }); }
-    else { var k = 1 - Math.exp(-dt / .8); WXKEYS.forEach(function (n) { wx[n] += (target[n] - wx[n]) * k; }); }
+    if (!wx || model.reduced || !(dt > 0 && dt < 1)) { wx = model.wxs = {}; GLIDE.forEach(function (d) { wx[d.n] = target[d.n]; }); }
+    else GLIDE.forEach(function (d) { wx[d.n] += (target[d.n] - wx[d.n]) * (1 - Math.exp(-dt / d.ease)); });
     var P = SW.paletteFor(altDeg, eve, look, wx, dark, false);
     if (overlay.magic) SW.tintPalette(P, '#8a5fe0', .3, ['zen', 'mid', 'hor', 'anti', 'clit', 'cshade', 'h0', 'h1', 'h2', 'h3']);
 
