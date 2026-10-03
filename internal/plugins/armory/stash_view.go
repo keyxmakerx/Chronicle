@@ -77,6 +77,8 @@ func stashURL(campaignID string, stashID int) string {
 
 func movesURL(campaignID string) string { return "/campaigns/" + campaignID + "/armory/moves" }
 
+func downtimeURL(campaignID string) string { return "/campaigns/" + campaignID + "/armory/downtime" }
+
 func panelURL(campaignID, characterID string) string {
 	return "/campaigns/" + campaignID + "/armory/characters/" + url.PathEscape(characterID) + "/panel"
 }

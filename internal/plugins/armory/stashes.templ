@@ -39,6 +39,7 @@ templ StashesContent(cc *campaigns.CampaignContext, v *StashesPageView, csrfToke
 		</div>
 
 		if v.CanApprove {
+			@downtimeSwitch(v, csrfToken)
 			@requestsPanel(v, csrfToken)
 		}
 
@@ -83,6 +84,44 @@ templ StashesContent(cc *campaigns.CampaignContext, v *StashesPageView, csrfToke
 
 		<div id="armory-move-modal"></div>
 	</div>
+}
+
+// downtimeSwitch is the Open / Closed control, shown at Owner visibility only.
+// It posts to the downtime route; the answer reloads the whole page body, so
+// the requests below reflect whatever opening let through. Self-contained so it
+// can move into a GM panel later.
+templ downtimeSwitch(v *StashesPageView, csrfToken string) {
+	<form
+		id="armory-downtime-switch"
+		hx-post={ downtimeURL(v.CampaignID) }
+		hx-swap="none"
+		class="card p-4 mb-4"
+		if !v.DowntimeOpen && len(v.Pending) > 0 {
+			hx-confirm={ fmt.Sprintf("Open downtime? The %d waiting requests go through now.", len(v.Pending)) }
+		}
+	>
+		<input type="hidden" name="_csrf" value={ csrfToken }/>
+		<div class="flex flex-wrap items-center gap-3">
+			<span class="text-sm font-semibold text-fg">Downtime</span>
+			<div class="inline-flex rounded-lg overflow-hidden border border-border" role="group" aria-label="Downtime">
+				<button
+					type="submit"
+					name="open"
+					value="true"
+					aria-pressed={ fmt.Sprintf("%t", v.DowntimeOpen) }
+					class={ "px-3 py-1.5 text-sm", templ.KV("bg-accent text-white", v.DowntimeOpen), templ.KV("bg-surface text-fg-secondary hover:text-fg", !v.DowntimeOpen) }
+				>Open</button>
+				<button
+					type="submit"
+					name="open"
+					value="false"
+					aria-pressed={ fmt.Sprintf("%t", !v.DowntimeOpen) }
+					class={ "px-3 py-1.5 text-sm border-l border-border", templ.KV("bg-accent text-white", !v.DowntimeOpen), templ.KV("bg-surface text-fg-secondary hover:text-fg", v.DowntimeOpen) }
+				>Closed</button>
+			</div>
+		</div>
+		<p class="text-xs text-fg-muted mt-2">Open: players move things and shop straight away. Opening also lets through the requests below.</p>
+	</form>
 }
 
 // requestsPanel lists the moves waiting for an answer.

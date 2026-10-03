@@ -608,6 +608,22 @@ func (s *stashService) lines(ctx context.Context, campaignID string, a Actor, mo
 	return out, nil
 }
 
+// ownPending drops other people's pending requests for viewers who are not
+// GM; applied, declined and failed rows stay.
+func ownPending(a Actor, moves []Move) []Move {
+	if a.IsGM() {
+		return moves
+	}
+	out := moves[:0:0]
+	for _, m := range moves {
+		if m.Status == MovePending && m.RequestedBy != a.UserID {
+			continue
+		}
+		out = append(out, m)
+	}
+	return out
+}
+
 func (s *stashService) CharacterHistory(ctx context.Context, campaignID string, a Actor, characterID string) ([]MoveLine, error) {
 	ref, err := s.loadCharacter(ctx, campaignID, characterID)
 	if err != nil {
@@ -625,7 +641,7 @@ func (s *stashService) CharacterHistory(ctx context.Context, campaignID string, 
 	if err != nil {
 		return nil, err
 	}
-	return s.lines(ctx, campaignID, a, moves)
+	return s.lines(ctx, campaignID, a, ownPending(a, moves))
 }
 
 func (s *stashService) StashHistory(ctx context.Context, campaignID string, a Actor, stashID int) ([]MoveLine, error) {
@@ -637,7 +653,7 @@ func (s *stashService) StashHistory(ctx context.Context, campaignID string, a Ac
 	if err != nil {
 		return nil, err
 	}
-	return s.lines(ctx, campaignID, a, moves)
+	return s.lines(ctx, campaignID, a, ownPending(a, moves))
 }
 
 // --- character panel ---
@@ -689,7 +705,7 @@ func (s *stashService) CharacterPanel(ctx context.Context, campaignID string, a 
 		view.HistoryMore = true
 		moves = moves[:panelHistorySize]
 	}
-	if view.History, err = s.lines(ctx, campaignID, a, moves); err != nil {
+	if view.History, err = s.lines(ctx, campaignID, a, ownPending(a, moves)); err != nil {
 		return nil, err
 	}
 	return view, nil

@@ -30,6 +30,8 @@ const (
 	// relationRetries bounds how often a compare-and-set on a Has Item
 	// relation is retried when the inventory widget changes it concurrently.
 	relationRetries = 4
+	// maxPendingPerUser bounds how many requests one player can leave waiting.
+	maxPendingPerUser = 20
 )
 
 // moveRefs are the character entities a move touches (nil for stash ends).
@@ -87,12 +89,18 @@ func withCarriedQuantity(fields map[string]json.RawMessage, q int) ([]byte, erro
 	return json.Marshal(out)
 }
 
-func (s *stashService) hasItem(ctx context.Context, campaignID, characterID, itemID string) (*HasItemRelation, error) {
+// hasItem finds the character's Has Item line for an item. A DM-only line is
+// invisible to anyone but the GM: for them it is as if the item isn't held, so
+// a refusal can't reveal it exists.
+func (s *stashService) hasItem(ctx context.Context, campaignID, characterID, itemID string, allowDM bool) (*HasItemRelation, error) {
 	rels, err := s.Relations.ListByCharacter(ctx, campaignID, characterID)
 	if err != nil {
 		return nil, err
 	}
 	for i := range rels {
+		if rels[i].DmOnly && !allowDM {
+			continue
+		}
 		if rels[i].ItemEntityID == itemID {
 			return &rels[i], nil
 		}
@@ -137,13 +145,33 @@ func (s *stashService) carried(ctx context.Context, campaignID string, a Actor, 
 	return out, nil
 }
 
+// dropEmptyCarried removes a line left at quantity 0 by a take that kept it.
+func (s *stashService) dropEmptyCarried(ctx context.Context, campaignID, characterID, itemID string) {
+	rel, err := s.hasItem(ctx, campaignID, characterID, itemID, true)
+	if err != nil || rel == nil {
+		return
+	}
+	if q, _ := parseCarried(rel.Metadata); q != 0 {
+		return
+	}
+	if err := s.Relations.Delete(ctx, rel.ID); err != nil {
+		// Harmless: a 0-quantity line is hidden from the panel and re-used by
+		// the next credit.
+		slog.Warn("stash move: could not remove an emptied line", slog.Any("error", err))
+	}
+}
+
 // adjustCarried changes a character's quantity of an item by delta (negative
 // takes). Taking reports false, changing nothing, when they hold too little.
+// keepZero leaves a line that reaches 0 in place (quantity 0) instead of
+// deleting it, so the original metadata (notes, attuned, equipped, dm_only)
+// survives until the move is certain; dropEmptyCarried removes it afterwards.
+// allowDM lets the call see DM-only lines (GM only).
 // The write is a compare-and-set on the relation's metadata so the inventory
 // widget editing the same line at the same moment cannot be overwritten.
-func (s *stashService) adjustCarried(ctx context.Context, campaignID, characterID, itemID, createdBy string, delta int) (bool, error) {
+func (s *stashService) adjustCarried(ctx context.Context, campaignID, characterID, itemID, createdBy string, delta int, allowDM, keepZero bool) (bool, error) {
 	for attempt := 0; attempt < relationRetries; attempt++ {
-		rel, err := s.hasItem(ctx, campaignID, characterID, itemID)
+		rel, err := s.hasItem(ctx, campaignID, characterID, itemID, allowDM)
 		if err != nil {
 			return false, err
 		}
@@ -169,7 +197,7 @@ func (s *stashService) adjustCarried(ctx context.Context, campaignID, characterI
 		if next < 0 {
 			return false, nil
 		}
-		if next == 0 {
+		if next == 0 && !keepZero {
 			if err := s.Relations.Delete(ctx, rel.ID); err != nil {
 				return false, err
 			}
@@ -272,7 +300,7 @@ func (s *stashService) adjustCharacterMoney(ctx context.Context, ref *EntityRef,
 func (s *stashService) holds(ctx context.Context, m *Move, refs moveRefs) (bool, error) {
 	switch {
 	case m.Kind == MoveKindItem && m.From.Kind == EndpointCharacter:
-		rel, err := s.hasItem(ctx, m.CampaignID, m.From.ID, m.ItemEntityID)
+		rel, err := s.hasItem(ctx, m.CampaignID, m.From.ID, m.ItemEntityID, m.byGM)
 		if err != nil || rel == nil {
 			return false, err
 		}
@@ -307,7 +335,7 @@ func (s *stashService) holds(ctx context.Context, m *Move, refs moveRefs) (bool,
 func (s *stashService) debit(ctx context.Context, m *Move, end Endpoint, ref *EntityRef) (bool, error) {
 	switch {
 	case m.Kind == MoveKindItem && end.Kind == EndpointCharacter:
-		return s.adjustCarried(ctx, m.CampaignID, end.ID, m.ItemEntityID, m.RequestedBy, -m.Quantity)
+		return s.adjustCarried(ctx, m.CampaignID, end.ID, m.ItemEntityID, m.RequestedBy, -m.Quantity, m.byGM, true)
 	case m.Kind == MoveKindItem:
 		sid, _ := end.StashID()
 		return s.Repo.DebitItem(ctx, m.CampaignID, sid, m.ItemEntityID, m.Quantity)
@@ -323,7 +351,7 @@ func (s *stashService) debit(ctx context.Context, m *Move, end Endpoint, ref *En
 func (s *stashService) credit(ctx context.Context, m *Move, end Endpoint, ref *EntityRef) error {
 	switch {
 	case m.Kind == MoveKindItem && end.Kind == EndpointCharacter:
-		ok, err := s.adjustCarried(ctx, m.CampaignID, end.ID, m.ItemEntityID, m.RequestedBy, m.Quantity)
+		ok, err := s.adjustCarried(ctx, m.CampaignID, end.ID, m.ItemEntityID, m.RequestedBy, m.Quantity, m.byGM, false)
 		if err == nil && !ok {
 			err = errors.New("credit refused")
 		}
@@ -365,6 +393,9 @@ func (s *stashService) run(ctx context.Context, m *Move, refs moveRefs) (status,
 		}
 		return MoveFailed, creditFailReason
 	}
+	if m.Kind == MoveKindItem && m.From.Kind == EndpointCharacter {
+		s.dropEmptyCarried(ctx, m.CampaignID, m.From.ID, m.ItemEntityID)
+	}
 	return MoveApplied, ""
 }
 
@@ -381,7 +412,7 @@ func insufficientMessage(m *Move) string {
 // Nothing here changes any data.
 func (s *stashService) validate(ctx context.Context, campaignID string, a Actor, in MoveInput) (*Move, moveRefs, error) {
 	var refs moveRefs
-	m := &Move{CampaignID: campaignID, Kind: in.Kind, From: in.From, To: in.To, RequestedBy: a.UserID}
+	m := &Move{CampaignID: campaignID, Kind: in.Kind, From: in.From, To: in.To, RequestedBy: a.UserID, byGM: a.IsGM()}
 
 	if !in.From.Valid() || !in.To.Valid() {
 		return nil, refs, apperror.NewBadRequest("Choose where it is going.")
@@ -506,14 +537,40 @@ func (s *stashService) Move(ctx context.Context, campaignID string, a Actor, in 
 	}
 
 	if a.IsGM() || open {
-		m.Status, m.Reason = s.run(ctx, m, refs)
+		// Record the move as pending BEFORE touching any balance, then settle
+		// it. If the insert fails nothing has moved; if the settle fails after
+		// the move, it is logged loudly rather than silently unrecorded.
+		m.Status = MovePending
 		if err := s.Repo.InsertMove(ctx, m); err != nil {
 			return nil, err
+		}
+		m.Status, m.Reason = s.run(ctx, m, refs)
+		wrote, err := s.Repo.SettleMove(ctx, campaignID, m.ID, m.Status, m.Reason, "")
+		if err == nil && !wrote {
+			err = errors.New("move was no longer pending")
+		}
+		if err != nil {
+			// One retry; after that the row stays pending although the move
+			// ran, so say so where an operator will see it.
+			if wrote, err = s.Repo.SettleMove(ctx, campaignID, m.ID, m.Status, m.Reason, ""); err != nil || !wrote {
+				slog.Error("stash move: APPLIED BUT NOT RECORDED, move row still pending",
+					slog.Int64("move_id", m.ID), slog.String("campaign_id", campaignID),
+					slog.String("status", m.Status), slog.Any("error", err))
+				return nil, apperror.NewInternal(fmt.Errorf("recording move %d: %w", m.ID, err))
+			}
 		}
 		if m.Status != MoveApplied {
 			return nil, apperror.NewConflict(m.Reason)
 		}
 		return &MoveOutcome{Move: *m, Applied: true}, nil
+	}
+
+	mine, err := s.Repo.ListMoves(ctx, campaignID, MoveFilter{RequestedBy: a.UserID, Status: MovePending, Limit: maxPendingPerUser + 1})
+	if err != nil {
+		return nil, err
+	}
+	if len(mine) >= maxPendingPerUser {
+		return nil, apperror.NewBadRequest(fmt.Sprintf("You have %d requests waiting for the GM already.", maxPendingPerUser))
 	}
 
 	m.Status = MovePending
@@ -686,7 +743,7 @@ func (s *stashService) MoveDialog(ctx context.Context, campaignID string, a Acto
 		}
 		view.ItemID, view.ItemName = ref.ID, ref.Name
 		m.ItemEntityID, m.Quantity = ref.ID, 1
-		max, err := s.heldItemQuantity(ctx, campaignID, from, ref.ID)
+		max, err := s.heldItemQuantity(ctx, campaignID, from, ref.ID, a.IsGM())
 		if err != nil {
 			return nil, err
 		}
@@ -743,9 +800,9 @@ func (s *stashService) MoveDialog(ctx context.Context, campaignID string, a Acto
 	return view, nil
 }
 
-func (s *stashService) heldItemQuantity(ctx context.Context, campaignID string, from Endpoint, itemID string) (int, error) {
+func (s *stashService) heldItemQuantity(ctx context.Context, campaignID string, from Endpoint, itemID string, allowDM bool) (int, error) {
 	if from.Kind == EndpointCharacter {
-		rel, err := s.hasItem(ctx, campaignID, from.ID, itemID)
+		rel, err := s.hasItem(ctx, campaignID, from.ID, itemID, allowDM)
 		if err != nil || rel == nil {
 			return 0, err
 		}

@@ -102,7 +102,7 @@ type WidgetBlockLister interface {
 // Handler handles HTTP requests for entity operations. Handlers are thin:
 // bind request, call service, render response. No business logic lives here.
 type Handler struct {
-	characterPanel *PagePanel // Optional panel under character pages; see page_panel.go.
+	characterPanel     *PagePanel // Optional panel under character pages; see page_panel.go.
 	service            EntityService
 	auditSvc           audit.AuditService
 	tagFetcher         EntityTagFetcher

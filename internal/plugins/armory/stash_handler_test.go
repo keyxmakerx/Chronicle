@@ -73,3 +73,45 @@ func TestStashHandler_Update_JSONAndForm(t *testing.T) {
 		})
 	}
 }
+
+// TestStashesContent_DowntimeSwitchOwnerOnly renders the page body and checks
+// that only Owner visibility gets the switch.
+func TestStashesContent_DowntimeSwitchOwnerOnly(t *testing.T) {
+	tests := []struct {
+		name       string
+		canApprove bool
+		open       bool
+	}{
+		{"owner, closed", true, false},
+		{"owner, open", true, true},
+		{"player", false, false},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			cc := &campaigns.CampaignContext{Campaign: &campaigns.Campaign{ID: "camp"}}
+			v := &StashesPageView{CampaignID: "camp", CanApprove: tc.canApprove, DowntimeOpen: tc.open}
+			var sb strings.Builder
+			if err := StashesContent(cc, v, "tok").Render(t.Context(), &sb); err != nil {
+				t.Fatal(err)
+			}
+			out := sb.String()
+			has := strings.Contains(out, `id="armory-downtime-switch"`)
+			if has != tc.canApprove {
+				t.Fatalf("switch present=%v want %v", has, tc.canApprove)
+			}
+			if tc.canApprove {
+				if !strings.Contains(out, "/armory/downtime") || !strings.Contains(out, "Opening also lets through the requests below.") {
+					t.Fatal("switch missing its action or help line")
+				}
+				if tc.open && !strings.Contains(out, `aria-pressed="true"`) {
+					t.Fatal("current state not selected")
+				}
+				if strings.Index(out, "armory-downtime-switch") > strings.Index(out, "Requests waiting on you") {
+					t.Fatal("switch must sit above the requests panel")
+				}
+			} else if strings.Contains(out, "Downtime</span>") {
+				t.Fatal("player sees the switch label")
+			}
+		})
+	}
+}

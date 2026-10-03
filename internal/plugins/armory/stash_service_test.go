@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"sort"
 	"strconv"
+	"strings"
 	"testing"
 
 	"github.com/keyxmakerx/chronicle/internal/apperror"
@@ -23,6 +24,7 @@ type fakeStashRepo struct {
 	items      map[int]map[string]int
 	moves      []*Move
 	downtime   bool
+	failInsert bool
 	failCredit bool // makes every credit fail, to exercise the restore path
 }
 
@@ -121,6 +123,9 @@ func (r *fakeStashRepo) DebitMoney(_ context.Context, _ string, sid int, a Cents
 	return true, nil
 }
 func (r *fakeStashRepo) InsertMove(_ context.Context, m *Move) error {
+	if r.failInsert {
+		return errors.New("db down")
+	}
 	r.nextMove++
 	m.ID = r.nextMove
 	c := *m
@@ -153,6 +158,12 @@ func (r *fakeStashRepo) ListMoves(_ context.Context, campaignID string, f MoveFi
 			continue
 		}
 		if f.Endpoint != nil && m.From != *f.Endpoint && m.To != *f.Endpoint {
+			continue
+		}
+		if f.RequestedBy != "" && m.RequestedBy != f.RequestedBy {
+			continue
+		}
+		if f.Status != "" && m.Status != f.Status {
 			continue
 		}
 		out = append(out, *m)
@@ -255,9 +266,10 @@ func (f *fakeFields) UpdateEntityFields(_ context.Context, id string, p map[stri
 }
 
 type fakeRels struct {
-	next int
-	rels map[string][]*HasItemRelation // character id -> relations
-	fail bool
+	next           int
+	rels           map[string][]*HasItemRelation // character id -> relations
+	fail           bool
+	createConflict bool // Create reports a duplicate, like the unique key
 }
 
 func (f *fakeRels) ListByCharacter(_ context.Context, _, cid string) ([]HasItemRelation, error) {
@@ -270,6 +282,9 @@ func (f *fakeRels) ListByCharacter(_ context.Context, _, cid string) ([]HasItemR
 func (f *fakeRels) Create(_ context.Context, _, cid, item, _ string, meta []byte) (int, error) {
 	if f.fail {
 		return 0, errors.New("boom")
+	}
+	if f.createConflict {
+		return 0, apperror.NewConflict("exists")
 	}
 	f.next++
 	f.rels[cid] = append(f.rels[cid], &HasItemRelation{ID: f.next, ItemEntityID: item, ItemName: item, Metadata: meta})
@@ -919,4 +934,130 @@ func TestMoveSummary(t *testing.T) {
 		}
 	}
 	_ = strconv.Itoa
+}
+
+func TestHistory_HidesOthersPendingFromPlayers(t *testing.T) {
+	f := newFx()
+	sid := f.stash(t, "Chest", "c1", "c2")
+	ctx := context.Background()
+	mine, _ := f.svc.Move(ctx, "camp", Actor{"u1", rPlayer}, MoveInput{Kind: MoveKindItem, ItemEntityID: "i1", Quantity: 1, From: charEP("c1"), To: StashEndpoint(sid)})
+	f.repo.moves = append(f.repo.moves, &Move{ID: 99, CampaignID: "camp", Kind: MoveKindMoney, Amount: 100, From: StashEndpoint(sid), To: charEP("c2"), Status: MovePending, RequestedBy: "u2"})
+	f.repo.moves = append(f.repo.moves, &Move{ID: 98, CampaignID: "camp", Kind: MoveKindMoney, Amount: 100, From: StashEndpoint(sid), To: charEP("c2"), Status: MoveFailed, RequestedBy: "u2"})
+	for name, get := range map[string]func(Actor) ([]MoveLine, error){
+		"stash":     func(a Actor) ([]MoveLine, error) { return f.svc.StashHistory(ctx, "camp", a, sid) },
+		"character": func(a Actor) ([]MoveLine, error) { return f.svc.CharacterHistory(ctx, "camp", a, "c1") },
+	} {
+		lines, err := get(Actor{"u1", rPlayer})
+		if err != nil {
+			t.Fatal(err)
+		}
+		for _, l := range lines {
+			if l.Status == MovePending && l.RequestedBy != "u1" {
+				t.Fatalf("%s: leaked another player's pending request", name)
+			}
+		}
+		if name == "stash" {
+			if len(lines) != 2 { // own pending + others' failed
+				t.Fatalf("stash lines %d", len(lines))
+			}
+			if gm, _ := get(Actor{"gm", rScribe}); len(gm) != 3 {
+				t.Fatalf("gm sees %d", len(gm))
+			}
+		}
+	}
+	_ = mine
+}
+
+func TestMove_DmOnlyRelation(t *testing.T) {
+	f := newFx()
+	f.repo.downtime = true
+	f.rels.rels["c1"][0].DmOnly = true
+	in := MoveInput{Kind: MoveKindItem, ItemEntityID: "i1", Quantity: 1, From: charEP("c1"), To: charEP("c2")}
+	_, err := f.svc.Move(context.Background(), "camp", Actor{"u1", rPlayer}, in)
+	if code(err) != http.StatusBadRequest || f.carried("c1", "i1") != 3 {
+		t.Fatalf("player took from a DM-only line: %v", err)
+	}
+	// Same message as an item they simply don't hold.
+	in2 := in
+	in2.ItemEntityID = "i2"
+	_, err2 := f.svc.Move(context.Background(), "camp", Actor{"u1", rPlayer}, in2)
+	if err == nil || err2 == nil || err.Error() != err2.Error() {
+		t.Fatalf("messages differ: %v / %v", err, err2)
+	}
+	// The GM can.
+	if _, err := f.svc.Move(context.Background(), "camp", Actor{"gm", rScribe}, in); err != nil {
+		t.Fatal(err)
+	}
+	// A player's credit never merges into a DM-only line.
+	f.rels.rels["c2"] = []*HasItemRelation{{ID: 500, ItemEntityID: "i1", DmOnly: true, Metadata: []byte(`{"quantity":1}`)}}
+	f.rels.rels["c1"] = []*HasItemRelation{{ID: 501, ItemEntityID: "i1", Metadata: []byte(`{"quantity":2}`)}}
+	f.rels.createConflict = true
+	_, _ = f.svc.Move(context.Background(), "camp", Actor{"u1", rPlayer}, in)
+	if q, _ := parseCarried(f.rels.find(500).Metadata); q != 1 {
+		t.Fatalf("merged into DM-only line: %d", q)
+	}
+	if f.carried("c1", "i1") != 2 {
+		t.Fatalf("source not restored: %d", f.carried("c1", "i1"))
+	}
+}
+
+func TestMove_FullStackFailedCreditRestoresMetadata(t *testing.T) {
+	f := newFx()
+	f.repo.downtime = true
+	sid := f.stash(t, "Chest", "c1")
+	f.repo.failCredit = true
+	orig := string(f.rels.rels["c1"][0].Metadata)
+	_, err := f.svc.Move(context.Background(), "camp", Actor{"u1", rPlayer}, MoveInput{Kind: MoveKindItem, ItemEntityID: "i1", Quantity: 3, From: charEP("c1"), To: StashEndpoint(sid)})
+	if code(err) != http.StatusConflict {
+		t.Fatal(err)
+	}
+	rels := f.rels.rels["c1"]
+	if len(rels) != 1 || rels[0].ID != 100 {
+		t.Fatalf("relation replaced: %+v", rels)
+	}
+	var a, b map[string]any
+	_ = json.Unmarshal([]byte(orig), &a)
+	_ = json.Unmarshal(rels[0].Metadata, &b)
+	if b["equipped"] != a["equipped"] || b["quantity"] != a["quantity"] {
+		t.Fatalf("metadata %s vs %s", rels[0].Metadata, orig)
+	}
+	// And on success the emptied line is removed.
+	f.repo.failCredit = false
+	if _, err := f.svc.Move(context.Background(), "camp", Actor{"u1", rPlayer}, MoveInput{Kind: MoveKindItem, ItemEntityID: "i1", Quantity: 3, From: charEP("c1"), To: StashEndpoint(sid)}); err != nil {
+		t.Fatal(err)
+	}
+	if len(f.rels.rels["c1"]) != 0 {
+		t.Fatal("emptied line left behind")
+	}
+}
+
+func TestMove_PendingCap(t *testing.T) {
+	f := newFx()
+	sid := f.stash(t, "Chest", "c1", "c2")
+	in := MoveInput{Kind: MoveKindItem, ItemEntityID: "i1", Quantity: 1, From: charEP("c1"), To: StashEndpoint(sid)}
+	for i := 0; i < 20; i++ {
+		if _, err := f.svc.Move(context.Background(), "camp", Actor{"u1", rPlayer}, in); err != nil {
+			t.Fatalf("request %d: %v", i+1, err)
+		}
+	}
+	_, err := f.svc.Move(context.Background(), "camp", Actor{"u1", rPlayer}, in)
+	if code(err) != http.StatusBadRequest || err.Error() == "" || !strings.Contains(err.Error(), "You have 20 requests waiting for the GM already.") {
+		t.Fatalf("21st: %v", err)
+	}
+	// Another player is unaffected by u1's queue.
+	f.rels.rels["c2"] = []*HasItemRelation{{ID: 600, ItemEntityID: "i1", Metadata: []byte(`{"quantity":1}`)}}
+	if _, err := f.svc.Move(context.Background(), "camp", Actor{"u2", rPlayer}, MoveInput{Kind: MoveKindItem, ItemEntityID: "i1", Quantity: 1, From: charEP("c2"), To: StashEndpoint(sid)}); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestMove_InsertFailureMovesNothing(t *testing.T) {
+	f := newFx()
+	f.repo.downtime = true
+	f.repo.failInsert = true
+	sid := f.stash(t, "Chest", "c1")
+	_, err := f.svc.Move(context.Background(), "camp", Actor{"u1", rPlayer}, MoveInput{Kind: MoveKindItem, ItemEntityID: "i1", Quantity: 1, From: charEP("c1"), To: StashEndpoint(sid)})
+	if err == nil || f.carried("c1", "i1") != 3 || f.repo.items[sid]["i1"] != 0 {
+		t.Fatalf("moved without a record: %v", err)
+	}
 }
