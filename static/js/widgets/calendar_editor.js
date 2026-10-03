@@ -1460,6 +1460,11 @@
     var body = formFor !== undefined
       ? this._eraFormHTML(formFor === 'new' ? null : eras.filter(function (e) { return String(e.id) === String(formFor); })[0])
       : '<button type="button" class="addev" data-add-era><i class="fa-solid fa-plus"></i>Add an era</button>';
+    // Colours, style and feel are set in the Era look part of the calendar
+    // settings, which is Owner only like the rest of that page.
+    if (formFor === undefined && view.role >= ROLE_OWNER && view.campaignId && view.calendarId) {
+      body += '<a class="addev" href="/campaigns/' + encodeURIComponent(view.campaignId) + '/calendars/' + encodeURIComponent(view.calendarId) + '/structure#era-look"><i class="fa-solid fa-palette"></i>Colours and feel: Era look</a>';
+    }
 
     // Two leaves, as calendar_view.js's era card: the bar, then the list and
     // its form, which scroll.

@@ -239,3 +239,22 @@ test('EraMath: ribbon shares have a floor and mark today in the current era', ()
   assert.ok(r[1].here > 0 && r[1].here <= 1);
   assert.equal(r[2].here, null);
 });
+
+/* ---------- the Era look part's save (calendar_era_look.js) ---------- */
+test('Era look save sends only the eras and fields that changed; null clears', () => {
+  const src = readFileSync(path.join(widgets, 'calendar_era_look.js'), 'utf8');
+  const sandbox = { module: { exports: {} }, console };
+  vm.createContext(sandbox);
+  vm.runInContext(src, sandbox);
+  const { changedEras } = sandbox.module.exports;
+  const saved = [
+    { id: 1, color: '#111111', color_2: '#222222', style: 'gas', feel: null },
+    { id: 2, color: '#333333', color_2: null, style: 'ink', feel: 'lively' }
+  ];
+  const now = [
+    { id: 1, color: '#111111', color_2: '#222222', style: 'gas', feel: null },
+    { id: 2, color: '#333333', color_2: '#444444', style: 'ink', feel: null }
+  ];
+  assert.equal(JSON.stringify(changedEras(saved, now)), JSON.stringify([{ id: 2, color_2: '#444444', feel: null }]));
+  assert.equal(changedEras(saved, saved).length, 0);
+});
