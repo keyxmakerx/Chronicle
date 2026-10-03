@@ -1934,6 +1934,85 @@ paths:
         "429":
           $ref: "#/components/responses/RateLimited"
 
+  /campaigns/{campaignId}/sync/history:
+    get:
+      tags: [Sync]
+      summary: Sync history, newest first
+      description: >
+        One row per sync in either direction; a catch-up run carries its steps
+        in `children`. Owner keys and keys of members with DM access only. A
+        filter matches a run when any of its steps does.
+      operationId: listSyncHistory
+      parameters:
+        - $ref: "#/components/parameters/campaignId"
+        - {name: before, in: query, schema: {type: integer, format: int64, minimum: 0}}
+        - {name: after, in: query, schema: {type: integer, format: int64, minimum: 0}}
+        - {name: limit, in: query, schema: {type: integer, default: 50, minimum: 1, maximum: 200}}
+        - {name: direction, in: query, schema: {type: string, enum: [to_chronicle, to_foundry, link]}}
+        - {name: failed, in: query, schema: {type: string, enum: ["1", "true"]}}
+        - {name: q, in: query, schema: {type: string, maxLength: 100}}
+      responses:
+        "200":
+          description: History rows
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/SyncHistoryEvent"
+                  nextBefore: {type: integer, format: int64}
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "429":
+          $ref: "#/components/responses/RateLimited"
+    post:
+      tags: [Sync]
+      summary: Report sync events seen by the client
+      description: >
+        Changes the client applied on its side, its connects and catch-up runs.
+        At most 50 events per call and 200 steps per event. A time more than
+        5 minutes ahead or 7 days back is replaced by the server's time.
+      operationId: reportSyncHistory
+      parameters:
+        - $ref: "#/components/parameters/campaignId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [events]
+              properties:
+                events:
+                  type: array
+                  maxItems: 50
+                  items:
+                    $ref: "#/components/schemas/SyncHistoryReport"
+      responses:
+        "200":
+          description: Stored
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  stored: {type: integer}
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "429":
+          $ref: "#/components/responses/RateLimited"
+
   # --- Stashes ---
   /campaigns/{campaignId}/stashes/view:
     get:
@@ -2329,6 +2408,48 @@ components:
                 example: "Chronicle's calendar is being rebuilt and is temporarily unavailable. Calendar sync is paused; maps, actors, items and notes are unaffected."
 
   schemas:
+    SyncHistoryEvent:
+      type: object
+      properties:
+        id: {type: integer, format: int64}
+        parentId: {type: integer, format: int64}
+        at: {type: string, format: date-time}
+        direction: {type: string, enum: [to_chronicle, to_foundry, link]}
+        reportedBy: {type: string, enum: [chronicle, client]}
+        kind: {type: string}
+        resourceId: {type: string}
+        name: {type: string}
+        action: {type: string}
+        call: {type: string}
+        status: {type: string}
+        ok: {type: boolean}
+        durationMs: {type: integer}
+        message: {type: string}
+        who: {type: string, description: Display name of the person behind the change}
+        children:
+          type: array
+          items:
+            $ref: "#/components/schemas/SyncHistoryEvent"
+    SyncHistoryReport:
+      type: object
+      required: [direction]
+      properties:
+        at: {type: string, format: date-time}
+        direction: {type: string, enum: [to_chronicle, to_foundry, link]}
+        kind: {type: string, maxLength: 20}
+        resourceId: {type: string, maxLength: 64}
+        name: {type: string, maxLength: 200}
+        action: {type: string, maxLength: 80}
+        call: {type: string, maxLength: 200}
+        status: {type: string, maxLength: 16}
+        ok: {type: boolean, default: true}
+        durationMs: {type: integer, minimum: 0}
+        message: {type: string, maxLength: 500}
+        children:
+          type: array
+          maxItems: 200
+          items:
+            $ref: "#/components/schemas/SyncHistoryReport"
     StashItem:
       type: object
       properties:

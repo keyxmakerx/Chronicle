@@ -223,7 +223,7 @@ Avoid: restating the code (`// Set name to the request name`), unexplained comme
 | Groups | Owner | Owner | Owner | Owner | -- |
 
 \* Player sees content unless dm_only or custom permissions restrict it.
-\+ Notes: own notes, plus notes shared with the party, with you by name, or (for the Owner and co-DMs) with the GM. A private note is private from the GM too.
+\+ Notes: own notes, plus notes shared with the party, with you by name, or (for the Owner and members with DM access) with the GM. A private note is private from the GM too.
 
 **dm_only rules:** only Owners can create or toggle dm_only on any resource; only Owners can see dm_only content (default; per-campaign config is a later phase). Handlers silently strip dm_only from non-Owner requests (not a 403). Use `permissions.CanSeeDmOnly(role)` / `permissions.CanSetDmOnly(role)`.
 
@@ -288,6 +288,7 @@ Campaign middleware proves the caller belongs to the campaign in the URL. It pro
 - Take a `permissions.Viewer`; bypass only on `v.SkipsPerUserRules()` (`system || CanSeeDmOnly(role)`). Never test the user id yourself.
 - Build it with `permissions.RequestViewer(role, userID)` at the handler/service boundary — it cannot produce a trusted viewer (`system` is unexported).
 - A genuinely trusted caller (an export walking its own rows, an already-authorized picker) uses `permissions.SystemViewer(role)` at that call site, with a comment justifying the trust.
+- **"Every caller" means every path to the rule, not every grep hit.** When a change or audit says it covers every caller of a gate, search for the behaviour (which pages and lists reach the same visibility rule, including through helpers such as child lists, graph and dashboard queries) as well as for the gate's name. A list built from one function's name misses the paths that reach the rule another way.
 - Never synthesise an identity for an anonymous request (no `"anonymous"` user, no per-IP key) — a shared anonymous identity is a shared write target.
 
 ### Auth surfaces — four canonical shapes

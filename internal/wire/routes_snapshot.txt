@@ -436,8 +436,10 @@ GET	/status	internal/systems/routes.go
 GET	/storage	internal/plugins/admin/routes.go
 GET	/storage/settings	internal/plugins/settings/routes.go
 GET	/submit	internal/plugins/packages/routes.go
+GET	/sync-history	internal/plugins/syncapi/sync_history_handler.go
 GET	/sync-status	internal/plugins/syncapi/routes.go
 GET	/sync/changes	internal/plugins/syncapi/routes.go
+GET	/sync/history	internal/plugins/syncapi/routes.go
 GET	/sync/lookup	internal/plugins/syncapi/routes.go
 GET	/sync/mappings	internal/plugins/syncapi/routes.go
 GET	/sync/mappings/:mappingID	internal/plugins/syncapi/routes.go
@@ -657,6 +659,7 @@ POST	/storage/settings	internal/plugins/settings/routes.go
 POST	/storage/trash	internal/plugins/settings/routes.go
 POST	/submit	internal/plugins/packages/routes.go
 POST	/sync	internal/plugins/syncapi/routes.go
+POST	/sync/history	internal/plugins/syncapi/routes.go
 POST	/sync/mappings	internal/plugins/syncapi/routes.go
 POST	/tags	internal/plugins/syncapi/routes.go
 POST	/tags	internal/widgets/tags/routes.go

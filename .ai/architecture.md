@@ -29,7 +29,7 @@ System or Widget (see root `CLAUDE.md` for what each tier is).
 │  │  settings/  timeline/  sessions/  packages/            │    │
 │  │  smtp/  armory/  bestiary/  designlab/  npcs/          │    │
 │  │  ai_workspace/  backup/  foundry_vtt/  restore/        │    │
-│  │  widgetbindings/  systemstate/                         │    │
+│  │  widgetbindings/  dmscreen/  systemstate/              │    │
 │  └──────────────────────────────────────────────────────┘    │
 │                                                               │
 │  ┌──────────────────────────────────────────────────────┐    │

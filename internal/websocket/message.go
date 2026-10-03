@@ -85,6 +85,11 @@ const (
 	MsgNoteDeleted MessageType = "note.deleted"
 )
 
+// isNoteMessage reports whether t is one of the note.* events above.
+func isNoteMessage(t MessageType) bool {
+	return t == MsgNoteCreated || t == MsgNoteUpdated || t == MsgNoteDeleted
+}
+
 // Entity notes sync messages (player-notes addon). Distinct from note.*
 // because the data model + audience semantics are different — these
 // fire from internal/widgets/entity_notes, those from internal/widgets/notes.
