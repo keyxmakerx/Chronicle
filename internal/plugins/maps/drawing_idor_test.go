@@ -70,7 +70,7 @@ func TestDrawingWrites_CrossMapRejected(t *testing.T) {
 			return s.UpdateDrawing(context.Background(), "d-1", wrongMap, permissions.RoleOwner, UpdateDrawingInput{})
 		}},
 		{"DeleteDrawing", func(s DrawingService) error {
-			return s.DeleteDrawing(context.Background(), "d-1", wrongMap, nil)
+			return s.DeleteDrawing(context.Background(), "d-1", wrongMap, nil, "", 3)
 		}},
 		{"UpdateToken", func(s DrawingService) error {
 			return s.UpdateToken(context.Background(), "t-1", wrongMap, UpdateTokenInput{})
@@ -119,7 +119,7 @@ func TestDrawingWrites_SameMapAllowed(t *testing.T) {
 			return s.UpdateDrawing(context.Background(), "d-1", rightMap, permissions.RoleOwner, UpdateDrawingInput{})
 		}},
 		{"DeleteDrawing", func(s DrawingService) error {
-			return s.DeleteDrawing(context.Background(), "d-1", rightMap, nil)
+			return s.DeleteDrawing(context.Background(), "d-1", rightMap, nil, "", 3)
 		}},
 		{"UpdateToken", func(s DrawingService) error {
 			return s.UpdateToken(context.Background(), "t-1", rightMap, UpdateTokenInput{})

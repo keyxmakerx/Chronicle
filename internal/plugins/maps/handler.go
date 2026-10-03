@@ -431,7 +431,7 @@ func (h *Handler) DeleteMarkerAPI(c echo.Context) error {
 	}
 
 	canAuthorDmOnly := cc.CanAuthorDmOnly() || cc.IsSiteAdmin
-	if err := h.svc.DeleteMarker(ctx, markerID, ParseExpectedUpdatedAt(c), canAuthorDmOnly); err != nil {
+	if err := h.svc.DeleteMarker(ctx, markerID, ParseExpectedUpdatedAt(c), canAuthorDmOnly, getUserID(c), int(cc.MemberRole)); err != nil {
 		return err
 	}
 	return c.NoContent(http.StatusOK)
