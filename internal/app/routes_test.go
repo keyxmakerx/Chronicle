@@ -6,6 +6,7 @@ import (
 	"github.com/keyxmakerx/chronicle/internal/plugins/entities"
 	"github.com/keyxmakerx/chronicle/internal/plugins/maps"
 	ws "github.com/keyxmakerx/chronicle/internal/websocket"
+	"github.com/keyxmakerx/chronicle/internal/widgets/relations"
 )
 
 // captureBus implements ws.EventBus by storing the most recent Publish.
@@ -95,6 +96,38 @@ func TestPublishFogEvent_UnknownEventDropped(t *testing.T) {
 	a.PublishFogEvent("gibberish", "camp-1", "map-1", nil)
 	if bus.last != nil {
 		t.Errorf("expected unknown eventType to be dropped; got %v", bus.last)
+	}
+}
+
+// TestPublishRelationEvent pins the message type per event, the source
+// entity as resourceId (a character's inventory is its own relations) and
+// the DM-only gate: a relation can name a private entity.
+func TestPublishRelationEvent(t *testing.T) {
+	rel := &relations.Relation{ID: 7, CampaignID: "camp-1", SourceEntityID: "hero", TargetEntityID: "item", RelationType: "Has Item"}
+	for event, want := range map[string]ws.MessageType{
+		relations.RelationEventCreated:         ws.MsgRelationCreated,
+		relations.RelationEventDeleted:         ws.MsgRelationDeleted,
+		relations.RelationEventMetadataUpdated: ws.MsgRelationMetadataUpdated,
+	} {
+		t.Run(event, func(t *testing.T) {
+			bus := &captureBus{}
+			(&relationEventPublisherAdapter{bus: bus}).PublishRelationEvent(event, rel)
+			if bus.last == nil {
+				t.Fatal("expected Publish to be called")
+			}
+			if bus.last.Type != want || bus.last.ResourceID != "hero" || bus.last.CampaignID != "camp-1" {
+				t.Errorf("got %s %s %s", bus.last.Type, bus.last.CampaignID, bus.last.ResourceID)
+			}
+			if !bus.last.RequiresDM {
+				t.Error("relation message must set RequiresDM")
+			}
+		})
+	}
+	bus := &captureBus{}
+	(&relationEventPublisherAdapter{bus: bus}).PublishRelationEvent("gibberish", rel)
+	(&relationEventPublisherAdapter{bus: bus}).PublishRelationEvent(relations.RelationEventCreated, &relations.Relation{})
+	if bus.last != nil {
+		t.Errorf("unknown event or missing campaign must be dropped; got %v", bus.last)
 	}
 }
 

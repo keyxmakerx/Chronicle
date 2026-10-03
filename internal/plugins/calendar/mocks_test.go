@@ -38,6 +38,7 @@ type fakeCalendarRepo struct {
 	deleteEraFn        func(ctx context.Context, calendarID string, eraID int) error
 	getEraByIDFn       func(ctx context.Context, eraID int) (*Era, error)
 	getErasFn          func(ctx context.Context, calendarID string) ([]Era, error)
+	saveEraLookFn      func(ctx context.Context, calendarID string, look EraLook, eras []EraLookWrite) error
 	setCyclesFn        func(ctx context.Context, calendarID string, cycles []CycleInput) error
 	getCyclesFn        func(ctx context.Context, calendarID string) ([]Cycle, error)
 	setFestivalsFn     func(ctx context.Context, calendarID string, festivals []FestivalInput) error
@@ -184,6 +185,12 @@ func (m *fakeCalendarRepo) GetEras(ctx context.Context, calendarID string) ([]Er
 		return m.getErasFn(ctx, calendarID)
 	}
 	return nil, nil
+}
+func (m *fakeCalendarRepo) SaveEraLook(ctx context.Context, calendarID string, look EraLook, eras []EraLookWrite) error {
+	if m.saveEraLookFn != nil {
+		return m.saveEraLookFn(ctx, calendarID, look, eras)
+	}
+	return nil
 }
 func (m *fakeCalendarRepo) SetCycles(ctx context.Context, calendarID string, cycles []CycleInput) error {
 	if m.setCyclesFn != nil {
@@ -469,6 +476,7 @@ type fakeWeatherRepo struct {
 	listDaysFn  func(ctx context.Context, calendarID string, year, month int) ([]DayWeather, error)
 	setDaysFn   func(ctx context.Context, calendarID string, days []DayWeatherInput) error
 	clearDaysFn func(ctx context.Context, calendarID string, dates []DayDate) error
+	lockDaysFn  func(ctx context.Context, calendarID string, dates []DayDate, locked bool) (int, error)
 
 	getSettingsFn func(ctx context.Context, calendarID string) (*WeatherSettings, error)
 	setSettingsFn func(ctx context.Context, calendarID string, s WeatherSettings) error
@@ -504,6 +512,13 @@ func (m *fakeWeatherRepo) ClearDays(ctx context.Context, calendarID string, date
 		return m.clearDaysFn(ctx, calendarID, dates)
 	}
 	return nil
+}
+
+func (m *fakeWeatherRepo) LockDays(ctx context.Context, calendarID string, dates []DayDate, locked bool) (int, error) {
+	if m.lockDaysFn != nil {
+		return m.lockDaysFn(ctx, calendarID, dates, locked)
+	}
+	return 0, nil
 }
 
 func (m *fakeWeatherRepo) GetSettings(ctx context.Context, calendarID string) (*WeatherSettings, error) {

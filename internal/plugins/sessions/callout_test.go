@@ -45,7 +45,7 @@ func TestCallout_SaysNothingWhenThereIsNothingToSay(t *testing.T) {
 // rather than an announcement, and it is the difference between a banner that
 // people trust and one they learn to ignore.
 func TestCallout_AReadNotificationNoLongerCounts(t *testing.T) {
-	got := BuildCallout([]Notification{note(NotifCalendarRSVP, true, "/x")}, true, time.Now())
+	got := BuildCallout([]Notification{note(NotifProposalCreated, true, "/x")}, true, time.Now())
 	if got.Kind != CalloutNone {
 		t.Fatalf("a read RSVP still raised %q — the banner would never go away", got.Kind)
 	}
@@ -69,7 +69,7 @@ func TestCallout_IgnoresNotificationsThatAreNewsRatherThanRequests(t *testing.T)
 }
 
 func TestCallout_RaisesOnAnUnansweredRequest(t *testing.T) {
-	for _, ntype := range []string{NotifProposalCreated, NotifCalendarRSVP} {
+	for _, ntype := range []string{NotifProposalCreated} {
 		got := BuildCallout([]Notification{note(ntype, false, "/campaigns/c1/proposals/p1")}, true, time.Now())
 		if got.Kind != CalloutRSVP {
 			t.Fatalf("%s: Kind = %q, want %q", ntype, got.Kind, CalloutRSVP)
@@ -87,10 +87,10 @@ func TestCallout_RaisesOnAnUnansweredRequest(t *testing.T) {
 // arrives newest-first, so "first with a link wins" is that rule.
 func TestCallout_CountsSeveralAndLinksToTheNewest(t *testing.T) {
 	got := BuildCallout([]Notification{
-		note(NotifCalendarRSVP, false, "/newest"),
+		note(NotifProposalCreated, false, "/newest"),
 		note(NotifProposalConfirmed, false, "/news-not-a-request"),
 		note(NotifProposalCreated, false, "/older"),
-		note(NotifCalendarRSVP, true, "/already-answered"),
+		note(NotifProposalCreated, true, "/already-answered"),
 	}, true, time.Now())
 
 	if got.Count != 2 {
@@ -109,7 +109,7 @@ func TestCallout_CountsSeveralAndLinksToTheNewest(t *testing.T) {
 // until tomorrow. Showing both at once was rejected: two stacked banners is how
 // a shell starts eating the screen.
 func TestCallout_AnUnansweredRequestOutranksTheTimezoneAsk(t *testing.T) {
-	got := BuildCallout([]Notification{note(NotifCalendarRSVP, false, "/x")}, false, time.Now())
+	got := BuildCallout([]Notification{note(NotifProposalCreated, false, "/x")}, false, time.Now())
 	if got.Kind != CalloutRSVP {
 		t.Fatalf("Kind = %q, want the time-limited one to win", got.Kind)
 	}

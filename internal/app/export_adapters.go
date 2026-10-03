@@ -393,11 +393,23 @@ func (a *calendarExportAdapter) exportOne(ctx context.Context, cal *calendar.Cal
 			Color: s.Color, WeatherEffect: s.WeatherEffect,
 		})
 	}
+	data.EraLook = &campaigns.ExportCalendarEraLook{
+		ColorsOn: cal.EraLook.ColorsOn, Feel: cal.EraLook.Feel,
+		Intensity: cal.EraLook.Intensity, Speed: cal.EraLook.Speed,
+	}
 	for _, e := range cal.Eras {
+		var loreSlug *string
+		if e.LoreEntityID != nil {
+			if s := entitySlugLookup(*e.LoreEntityID); s != "" {
+				loreSlug = &s
+			}
+		}
 		data.Eras = append(data.Eras, campaigns.ExportCalendarEra{
 			Name: e.Name, StartYear: e.StartYear, StartMonth: e.StartMonth, StartDay: e.StartDay,
 			EndYear: e.EndYear, EndMonth: e.EndMonth, EndDay: e.EndDay,
 			Description: e.Description, Color: e.Color, SortOrder: e.SortOrder,
+			Color2: e.Color2, Style: e.Style, Feel: e.Feel, LoreEntitySlug: loreSlug,
+			DMNote: e.DMNote, HiddenUntilBegins: e.HiddenUntilBegins,
 		})
 	}
 	for _, k := range cal.EventKinds {
@@ -1437,13 +1449,29 @@ func (a *calendarImportAdapter) importOne(ctx context.Context, campaignID string
 				endDay = &d
 			}
 		}
+		var loreID *string
+		if e.LoreEntitySlug != nil {
+			if id, ok := idMap.EntitySlugToID[*e.LoreEntitySlug]; ok {
+				loreID = &id
+			}
+		}
 		if _, err := a.svc.CreateEra(ctx, cal.ID, campaignID, calendar.EraInput{
 			Name: e.Name, StartYear: e.StartYear, StartMonth: startMonth, StartDay: startDay,
 			EndYear: e.EndYear, EndMonth: endMonth, EndDay: endDay,
 			Description: e.Description, Color: e.Color, SortOrder: e.SortOrder,
+			Color2: e.Color2, Style: e.Style, Feel: e.Feel, LoreEntityID: loreID,
+			DMNote: e.DMNote, HiddenUntilBegins: e.HiddenUntilBegins,
 		}); err != nil {
 			slog.Warn("import: create era failed", slog.String("name", e.Name), slog.Any("error", err))
 			report.Fail(campaigns.SectionCalendar, "era", e.Name, apperror.SafeMessage(err))
+		}
+	}
+	if l := data.EraLook; l != nil {
+		if err := a.svc.SaveEraLook(ctx, cal.ID, campaignID, calendar.EraLook{
+			ColorsOn: l.ColorsOn, Feel: l.Feel, Intensity: l.Intensity, Speed: l.Speed,
+		}, nil); err != nil {
+			slog.Warn("import: set era look failed", slog.Any("error", err))
+			report.Fail(campaigns.SectionCalendar, campaigns.KindCalendar, data.Name, apperror.SafeMessage(err))
 		}
 	}
 

@@ -13,9 +13,10 @@
 > This file is a derived summary — regenerate the parts that changed whenever
 > a migration is added.
 
-Chronicle has 87 live tables: 45 core and 42 spread across the nine plugins
-below that have their own `migrations/` directory. Every other plugin (addons,
-admin, ai_workspace, armory, audit, auth, backup, campaigns, designlab,
+Chronicle has 121 live tables: 57 core and 64 spread across the nine plugins
+below that have their own `migrations/` directory (counted by replaying every
+`CREATE`/`DROP TABLE` in migration order). Every other plugin (addons, admin,
+ai_workspace, armory, audit, auth, backup, campaigns, designlab, dmscreen,
 entities, media, npcs, restore, settings, smtp) reuses core tables and owns
 none of its own (ADR-028).
 
@@ -82,7 +83,7 @@ numbered core migrations after it, tracked once each via `golang-migrate`'s
 
 | Table | Purpose | Notable columns |
 |---|---|---|
-| `users` | Accounts | `email` UNIQUE; `password_hash` (argon2id); `totp_secret`/`totp_enabled`; `is_admin`, `is_disabled`; `pending_email`/`email_verify_token` (email-change flow) |
+| `users` | Accounts | `email` UNIQUE; `password_hash` (argon2id); `totp_secret`/`totp_enabled`; `is_admin`, `is_disabled`; `pending_email`/`email_verify_token` (email-change flow); `admin_nav_pins`, `view_prefs` JSON (the person's own pins and My view choices) |
 | `password_reset_tokens` | Forgot-password flow | `token_hash` UNIQUE; FK→`users` CASCADE; 1h expiry |
 | `security_events` | Site-wide security audit log | `event_type`, `user_id`/`actor_id` nullable; `details` JSON; indexed by type/user/ip/actor + `created_at` |
 | `site_settings` | Global key/value settings | `setting_key` PK |
@@ -106,7 +107,8 @@ numbered core migrations after it, tracked once each via `golang-migrate`'s
 | Table | Purpose | Notable columns |
 |---|---|---|
 | `entity_types` | Per-campaign content categories (Character, Location, ...) | `UNIQUE(campaign_id, slug)`; `fields`/`layout_json`/`dashboard_layout`/`pinned_entity_ids` JSON; `preset_category` (system-preset origin); `parent_type_id` self-FK (sub-types, SET NULL); `claimable` tri-state BOOLEAN (NULL = heuristic, see `isClaimableType`) |
-| `entities` | The core worldbuilding content unit | `UNIQUE(campaign_id, slug)`; `entity_type_id` FK; `parent_id` self-FK **or** `parent_node_id` FK→`sidebar_nodes` (mutually exclusive nesting); `owner_user_id` FK→`users` SET NULL (claim); `map_id` FK→`maps` SET NULL (cross-plugin FK added by maps plugin migration 005, since core can't reference a plugin table); `entry`/`entry_html`, `player_notes`/`player_notes_html` JSON+HTML pairs; `fields_data`/`field_overrides`/`popup_config` JSON; `search_text` FULLTEXT (backfilled from `entry_html`+`fields_data`); `visibility` enum; `is_private` legacy flag; `FULLTEXT(name)` |
+| `entities` | The core worldbuilding content unit | `UNIQUE(campaign_id, slug)`; `entity_type_id` FK; `parent_id` self-FK **or** `parent_node_id` FK→`sidebar_nodes` (mutually exclusive nesting); `owner_user_id` FK→`users` SET NULL (claim); `map_id` FK→`maps` SET NULL (cross-plugin FK added by maps plugin migration 005, since core can't reference a plugin table); `entry`/`entry_html`, `player_notes`/`player_notes_html` JSON+HTML pairs; `fields_data`/`field_overrides`/`popup_config` JSON; `search_text` FULLTEXT (backfilled from `entry_html`+`fields_data`); `visibility` enum; `is_private` legacy flag; `FULLTEXT(name)`; `deleted_at`/`deleted_by`/`trash_root_id` (Trash, ADR-060: every read excludes `deleted_at IS NOT NULL`); `entry_rev` (text revision for save clashes) |
+| `entity_versions` | A page's title and text history | FK→`entities` CASCADE; `kind` (`created`/`edit`/`restore`/`baseline`); `user_id` no FK (history outlives the account); `DATETIME(6)` times |
 | `entity_aliases` | Alternate names an entity is searchable/linkable by | `UNIQUE(entity_id, alias)`; `FULLTEXT(alias)` |
 | `sidebar_nodes` | Pure organizational folders in the sidebar tree (no page content) | `node_type` enum(`folder`); self-nestable via `parent_id` |
 | `entity_favorites` | Per-user sidebar bookmarks | composite PK `(user_id, entity_id)` |
@@ -131,6 +133,7 @@ numbered core migrations after it, tracked once each via `golang-migrate`'s
 | `notes` | Journal notes (no page) and per-page jots, with folders and live-edit locking | `parent_id` self-FK (folder nesting); `is_folder`; `content` JSON (legacy block array) + `entry`/`entry_html`; audience in `is_shared` (party) / `shared_with` JSON user ids / `shared_with_gm`; `archived_at`; `linked_note_id` (jot → Journal note, no FK); `locked_by`/`locked_at` (edit lock) |
 | `note_versions` | Snapshot history on each save | FK→`notes` CASCADE; mirrors `notes`' content columns |
 | `note_attachments` | Audio + transcript attachments on a note | `duration_secs`, `transcript` LONGTEXT |
+| `notes_app_grants` | A player's grant for an outside app (the Foundry notebook) to use their notes in one campaign | stores only the token's SHA-256; `origin`, `last_used_at`, `revoked_at` |
 
 ### Templates & prompts
 
@@ -147,6 +150,26 @@ numbered core migrations after it, tracked once each via `golang-migrate`'s
 | `shop_transactions` | Historical record of purchases/sales/transfers/gifts between entities | `transaction_type`; `price_paid` (display string) + `price_numeric` DECIMAL (aggregation); `instance_id` FK→`inventory_instances` (nullable) |
 | `inventory_instances` | Named item collections ("Party Loot", a shop's stock) | `UNIQUE(campaign_id, slug)` |
 | `inventory_items` | Instance ↔ entity junction with quantity | `UNIQUE(instance_id, entity_id)` |
+
+| `shop_rooms` | A shop page's walk-in room layout | PK `shop_entity_id` FK→`entities` CASCADE; `layout` LONGTEXT (a normalized JSON document; goods stay in `entity_relations`) |
+| `shop_purchase_requests` | A player's ask to buy a basket outside downtime, answered by the GM | `basket` JSON; `quoted_total` + `quoted_currency` (the price the player saw); `status` enum(`pending`,`applied`,`declined`,`failed`); `buyer_entity_id` is the character paying |
+
+### Stashes & downtime
+
+| Table | Purpose | Notable columns |
+|---|---|---|
+| `stashes` | A shared hoard of items and money, outside any character | `UNIQUE(campaign_id, name)`; `money` DECIMAL with `CHECK (money >= 0)` |
+| `stash_viewers` | Which characters may see a stash | composite PK `(stash_id, character_entity_id)`; both FKs CASCADE |
+| `stash_items` | Items held by a stash | composite PK `(stash_id, item_entity_id)`; `CHECK (quantity > 0)` |
+| `item_moves` | Ledger of every item or money move between characters and stashes, and the GM's answers to requests | `kind` enum(`item`,`money`); `from_kind`/`to_kind` enum(`character`,`stash`); `status` enum(`applied`,`pending`,`declined`,`failed`); `requested_by`, `decided_by` carry no FK |
+| `campaign_downtime` | Whether the campaign's downtime is open (players may move and buy without asking) | PK `campaign_id`; `is_open`; absent row = closed |
+
+### Rulebook edits
+
+| Table | Purpose | Notable columns |
+|---|---|---|
+| `campaign_book_chapters` | A campaign's own chapters in an installed system's Rulebook | PK `(campaign_id, system_id, chapter_id)`; `director` marks a Director-only chapter; ids start `house_` |
+| `campaign_book_pages` | The campaign's edited or added pages in those chapters | `page_json`; `package_index` (0-based position of the package page it replaces, NULL for a page the campaign added); `base_hash` (hash of the package page it was copied from, so a later package change is noticed) |
 
 ### Media, addons & extensions
 
@@ -181,23 +204,30 @@ Community-shared creature stat blocks, instance-wide (not campaign-scoped).
 | `bestiary_flags` | Per-user abuse flags (dedups repeat flags) | composite PK `(user_id, publication_id)` |
 | `bestiary_moderation_log` | Moderator action history | `action` enum(`approve`,`flag`,`unflag`,`archive`,`restore`) |
 
-### calendar (`internal/plugins/calendar/migrations/`) — rebuilding, #741
+### calendar (`internal/plugins/calendar/migrations/`)
 
-The calendar plugin's UI, routes and handlers were deleted (#595); only a
-domain layer (`model.go`, `gregorian.go`, `presets.go`, import/export code) and
-its migrations remain until the V5 rebuild. Migration 019 dropped every table
-the plugin had created in 001–018 **except two**, which survive as permanently
-**empty stubs** because other plugins' migrations hold immutable foreign keys
-into them (migrations are append-only, so those FKs cannot be dropped):
+Migrations 001–018 built the old calendar; `019_calv5_clean_slate` emptied
+`calendars` and `calendar_events` and dropped every other table, and
+`020_calv5_schema` onward is the V5 rebuild (#741). `019` and its two
+siblings are one-way (see `docs/deployment.md` §6). `calendars` and
+`calendar_events` are the same tables `sessions` and `timelines` still hold
+foreign keys into (migrations are append-only, so those FKs stay). What the
+plugin does with them: `internal/plugins/calendar/.ai.md`.
 
-| Table | Kept because |
-|---|---|
-| `calendars` | `sessions.calendar_id` and `timelines.calendar_id` FK it, `ON DELETE SET NULL` |
-| `calendar_events` | `timeline_event_links.event_id` FKs it, `ON DELETE CASCADE` |
-
-Both tables are truncated of data, not dropped; no live feature reads or
-writes them. See `internal/database/.ai.md` for the full mechanics and why 019
-had to empty rather than drop them.
+| Table | Purpose | Notable columns |
+|---|---|---|
+| `calendars` | A campaign's calendar | visibility columns; real-world date anchor and time zone; `hemisphere`, `forecasts_enabled`, `month_starts_new_week`; era look: `era_colors_on`, `era_feel`, `era_intensity`, `era_speed` (migration 024) |
+| `calendar_months`, `calendar_weekdays` | The year's shape | `sort_order`; months carry `is_intercalary`, `leap_year_days`; weekdays `is_rest_day` |
+| `calendar_moons`, `calendar_seasons` | Moons (cycle, offset, look, `hidden_from_players`) and seasons (start/end month and day) | per calendar, FK CASCADE |
+| `calendar_eras` | Named stretches of years | `start_*`/`end_*`; look: `color`, `color_2`, `style`, `feel`; `lore_entity_id`, `dm_note`, `hidden_until_begins` (migration 024) |
+| `calendar_cycles`, `calendar_cycle_entries`, `calendar_festivals` | Repeating year-cycles and their entries; named festival days | `cycle_length`; festival `month`/`day` or `after_month` |
+| `calendar_event_kinds` | Per-campaign kinds of event (name, icon, colour, default announcement) | `UNIQUE`-slug per `campaign_id` |
+| `calendar_events` | Events | `kind_id`, `announced`, `payload` JSON; `recurrence_rule` JSON, the "repeats by rule" shape (migration 022) |
+| `calendar_event_overrides` | Skip or move one occurrence of a repeating event | PK `(event_id, occurrence_year, occurrence_month, occurrence_day)`; `action` enum(`skip`,`move`) with `new_*` date |
+| `calendar_weather` | The calendar's current-weather snapshot | one row per calendar |
+| `calendar_weather_days` | Weather for one date, generated or set by hand | PK `(calendar_id, year, month, day)`; `source` (`manual` by default); `locked` keeps Generate from replacing it (migration 025) |
+| `calendar_weather_settings` | The world's climate and how long weather lasts | PK `calendar_id`; `climate`, `continuity`, `kinds` (the owner's own kinds of weather), `forecast_days` (migration 025) |
+| `entity_era_links`, `entity_event_links` | Pages tied to an era or an event | `participation_role` |
 
 ### maps (`internal/plugins/maps/migrations/`)
 
@@ -258,7 +288,10 @@ Foundry module repo for the wire contract.
 | `sync_mappings` | Chronicle object ↔ external-tool object, bidirectional | `UNIQUE(campaign_id, chronicle_type, chronicle_id, external_system)`; `sync_version` (conflict detection) |
 | `api_ip_blocklist` | Admin-managed IP blocks for the REST API | `expires_at` nullable (permanent if NULL) |
 | `api_security_events` | Auth failures, IP blocks, device mismatches, rate-limit hits | `resolved`/`resolved_by`/`resolved_at` |
+| `sync_changes` | The change feed Foundry reads on connect (`GET /sync/changes`) | `seq` autoincrement is the cursor; `resource_type`, `resource_id`, `op` enum(`created`,`updated`,`deleted`); rows are pruned by age |
+| `sync_change_watermarks` | How far the feed was pruned, so a stale cursor is told to resync | PK `campaign_id`; `pruned_through` |
 | `sync_calendar_date_beacons` | Per-campaign "date Foundry last saw / last applied" | PK `campaign_id`; `last_served_*` (a Bearer-authed GET was served) vs `applied_*` (Foundry confirmed it set its own date via `POST .../confirm`) — distinct claims, filled independently. |
+| `sync_events` | Sync history: one row per thing that synced, either direction, read by Manage › Sync history and the module's History tab | `direction` enum(`to_chronicle`,`to_foundry`,`link`); `reported_by` enum(`chronicle`,`client`); `parent_id` groups a catch-up run's steps; names, ids, call and answer only, never page text; pruned after 90 days |
 
 ### packages (`internal/plugins/packages/migrations/`)
 

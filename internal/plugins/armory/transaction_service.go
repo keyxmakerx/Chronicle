@@ -35,9 +35,14 @@ type RelationInfo struct {
 	CampaignID     string
 	SourceEntityID string
 	TargetEntityID string
+	// RelationType is the stored forward type ("sells" for a shop good).
+	RelationType string
+	// DmOnly marks a relation hidden from players.
+	DmOnly bool
 }
 
-// EntityFieldUpdater updates entity fields. Used to deduct currency from buyer.
+// EntityFieldUpdater updates entity fields. The legacy purchase route does not
+// charge coins; shop buys take them through the stash service instead.
 // Implemented by entities.EntityService.
 type EntityFieldUpdater interface {
 	GetEntityFields(ctx context.Context, entityID string) (map[string]any, error)
@@ -151,7 +156,7 @@ func (s *transactionService) Purchase(ctx context.Context, campaignID, userID st
 		return nil, apperror.NewBadRequest("relation_id is required to buy from a shop")
 	}
 	if input.RelationID > 0 && s.relationFinder != nil {
-		remaining, err := s.reserveStock(ctx, campaignID, &input)
+		remaining, err := s.reserveStock(ctx, campaignID, &input, false)
 		if err != nil {
 			return nil, err
 		}
@@ -244,7 +249,9 @@ const stockAttempts = 5
 // fields from it, and takes the stock. The write only lands if the listing
 // is unchanged since it was read, so two buyers can't both take the last
 // unit. Returns the stock left, or -1 when the listing is unlimited.
-func (s *transactionService) reserveStock(ctx context.Context, campaignID string, input *CreateTransactionInput) (int, error) {
+// requireSells additionally refuses a relation that is not a shop's "sells"
+// listing; the legacy purchase path predates that check and leaves it off.
+func (s *transactionService) reserveStock(ctx context.Context, campaignID string, input *CreateTransactionInput, requireSells bool) (int, error) {
 	for attempt := 0; attempt < stockAttempts; attempt++ {
 		rel, err := s.relationFinder.GetByID(ctx, input.RelationID)
 		if err != nil {
@@ -254,6 +261,10 @@ func (s *transactionService) reserveStock(ctx context.Context, campaignID string
 			return 0, apperror.NewNotFound("shop relation not found in this campaign")
 		}
 		if rel.SourceEntityID != input.ShopEntityID || rel.TargetEntityID != input.ItemEntityID {
+			return 0, apperror.NewNotFound("shop relation not found for this shop and item")
+		}
+
+		if requireSells && rel.RelationType != shopSellsRelation {
 			return 0, apperror.NewNotFound("shop relation not found for this shop and item")
 		}
 
@@ -362,4 +373,60 @@ func (m shopMeta) withQuantity(q int) (json.RawMessage, error) {
 	}
 	out["quantity"] = qJSON
 	return json.Marshal(out)
+}
+
+// shopSellsRelation is the relation type that lists a good in a shop.
+const shopSellsRelation = "sells"
+
+// releaseStock gives back units taken by reserveStock when a basket fails
+// part-way. It is a compare-and-set like the reservation, so a concurrent
+// restock is not overwritten. An unlimited listing never lost any stock.
+func (s *transactionService) releaseStock(ctx context.Context, relationID, quantity int) error {
+	if s.metadataUpdater == nil || s.relationFinder == nil {
+		return nil
+	}
+	for attempt := 0; attempt < stockAttempts; attempt++ {
+		rel, err := s.relationFinder.GetByID(ctx, relationID)
+		if err != nil {
+			return fmt.Errorf("finding shop relation: %w", err)
+		}
+		meta := parseShopMeta(rel.Metadata)
+		if meta.Quantity < 0 {
+			return nil
+		}
+		updated, err := meta.withQuantity(meta.Quantity + quantity)
+		if err != nil {
+			return fmt.Errorf("encoding stock: %w", err)
+		}
+		wrote, err := s.metadataUpdater.UpdateMetadataIf(ctx, relationID, rel.Metadata, updated)
+		if err != nil {
+			return fmt.Errorf("restoring stock: %w", err)
+		}
+		if wrote {
+			return nil
+		}
+	}
+	return apperror.NewConflict("could not restore stock")
+}
+
+// recordPurchase writes one purchase row from fields reserveStock has already
+// priced from the listing.
+func (s *transactionService) recordPurchase(ctx context.Context, campaignID, userID string, input CreateTransactionInput) error {
+	tx := &Transaction{
+		CampaignID:      campaignID,
+		ShopEntityID:    input.ShopEntityID,
+		ItemEntityID:    input.ItemEntityID,
+		BuyerEntityID:   strPtr(input.BuyerEntityID),
+		RelationID:      intPtr(input.RelationID),
+		Quantity:        input.Quantity,
+		PricePaid:       strPtr(input.PricePaid),
+		Currency:        input.Currency,
+		PriceNumeric:    floatPtr(input.PriceNumeric),
+		TransactionType: TxPurchase,
+		CreatedBy:       strPtr(userID),
+	}
+	if err := s.repo.Create(ctx, tx); err != nil {
+		return fmt.Errorf("creating transaction: %w", err)
+	}
+	return nil
 }

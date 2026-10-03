@@ -61,6 +61,27 @@ type RelationService interface {
 	// SetEntityViewFilter injects the entity-visibility filter used to hide
 	// private-entity nodes from the graph. Called during app wiring.
 	SetEntityViewFilter(f EntityViewFilter)
+
+	// SetEventPublisher injects the publisher that announces relation
+	// writes to live clients and the sync change feed. Called during app
+	// wiring; without one, writes are silent.
+	SetEventPublisher(p RelationEventPublisher)
+}
+
+// Relation event types passed to RelationEventPublisher.
+const (
+	RelationEventCreated         = "created"
+	RelationEventDeleted         = "deleted"
+	RelationEventMetadataUpdated = "metadata_updated"
+)
+
+// RelationEventPublisher announces a write to one relation row. Each
+// direction of a pair is its own row and its own event, so a listener keyed
+// on the row's source entity (a Foundry character's inventory) sees every
+// change to that entity's relations. Implemented by a WebSocket adapter in
+// routes.go.
+type RelationEventPublisher interface {
+	PublishRelationEvent(eventType string, rel *Relation)
 }
 
 // relationService implements RelationService with validation and
@@ -69,6 +90,34 @@ type relationService struct {
 	repo             RelationRepository
 	mentionProvider  MentionLinkProvider
 	entityViewFilter EntityViewFilter
+	publisher        RelationEventPublisher
+}
+
+// SetEventPublisher implements RelationService.
+func (s *relationService) SetEventPublisher(p RelationEventPublisher) {
+	s.publisher = p
+}
+
+// publish announces a write when a publisher is wired.
+func (s *relationService) publish(eventType string, rel *Relation) {
+	if s.publisher != nil && rel != nil {
+		s.publisher.PublishRelationEvent(eventType, rel)
+	}
+}
+
+// publishByID re-reads a row after a metadata write so the event carries
+// its source entity and campaign. The read happens only when a publisher is
+// wired; a failed read loses the live event but never the write.
+func (s *relationService) publishByID(ctx context.Context, eventType string, id int) {
+	if s.publisher == nil {
+		return
+	}
+	rel, err := s.repo.FindByID(ctx, id)
+	if err != nil {
+		slog.Warn("relation written but not announced", slog.Int("relation_id", id), slog.Any("error", err))
+		return
+	}
+	s.publish(eventType, rel)
 }
 
 // NewRelationService creates a new RelationService backed by the given
@@ -153,10 +202,15 @@ func (s *relationService) Create(ctx context.Context, campaignID, sourceEntityID
 		if _, ok := err.(*apperror.AppError); ok {
 			// Conflict means reverse already exists; silently continue.
 		} else {
+			// The forward row is already written, so it is still announced.
+			s.publish(RelationEventCreated, forward)
 			return nil, fmt.Errorf("creating reverse relation: %w", err)
 		}
+	} else {
+		s.publish(RelationEventCreated, reverse)
 	}
 
+	s.publish(RelationEventCreated, forward)
 	return forward, nil
 }
 
@@ -189,11 +243,17 @@ func (s *relationService) Delete(ctx context.Context, id int) error {
 				slog.Int("reverse_id", reverse.ID),
 				slog.Any("error", err),
 			)
+		} else {
+			s.publish(RelationEventDeleted, reverse)
 		}
 	}
 
 	// Delete the forward relation.
-	return s.repo.Delete(ctx, id)
+	if err := s.repo.Delete(ctx, id); err != nil {
+		return err
+	}
+	s.publish(RelationEventDeleted, rel)
+	return nil
 }
 
 // GetByID retrieves a single relation by its primary key.
@@ -208,12 +268,20 @@ func (s *relationService) GetCommonTypes() []RelationTypePair {
 
 // UpdateMetadata updates the metadata JSON for a relation.
 func (s *relationService) UpdateMetadata(ctx context.Context, id int, metadata json.RawMessage) error {
-	return s.repo.UpdateMetadata(ctx, id, metadata)
+	if err := s.repo.UpdateMetadata(ctx, id, metadata); err != nil {
+		return err
+	}
+	s.publishByID(ctx, RelationEventMetadataUpdated, id)
+	return nil
 }
 
 // UpdateMetadataIf updates the metadata only while it still equals expected.
 func (s *relationService) UpdateMetadataIf(ctx context.Context, id int, expected, metadata json.RawMessage) (bool, error) {
-	return s.repo.UpdateMetadataIf(ctx, id, expected, metadata)
+	ok, err := s.repo.UpdateMetadataIf(ctx, id, expected, metadata)
+	if err == nil && ok {
+		s.publishByID(ctx, RelationEventMetadataUpdated, id)
+	}
+	return ok, err
 }
 
 // GetGraphData builds the relations graph for a campaign by fetching all

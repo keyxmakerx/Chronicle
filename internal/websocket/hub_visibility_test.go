@@ -34,11 +34,17 @@ func newVisibilityTestHub(t *testing.T) *Hub {
 // websocket.Conn, which the audience gate under test never touches.
 func registerTestClient(t *testing.T, h *Hub, campaignID, userID string, role int, dmGranted bool) *Client {
 	t.Helper()
+	return registerTestClientAs(t, h, "browser", campaignID, userID, role, dmGranted)
+}
+
+// registerTestClientAs is registerTestClient for a given connection source.
+func registerTestClientAs(t *testing.T, h *Hub, source, campaignID, userID string, role int, dmGranted bool) *Client {
+	t.Helper()
 	c := &Client{
 		ID:          campaignID + ":" + userID,
 		CampaignID:  campaignID,
 		UserID:      userID,
-		Source:      "browser",
+		Source:      source,
 		Role:        role,
 		IsDmGranted: dmGranted,
 		hub:         h,

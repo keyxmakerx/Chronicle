@@ -18,6 +18,7 @@ import (
 	"github.com/labstack/echo/v4"
 
 	"github.com/keyxmakerx/chronicle/internal/apperror"
+	"github.com/keyxmakerx/chronicle/internal/changesource"
 	"github.com/keyxmakerx/chronicle/internal/extensions"
 	"github.com/keyxmakerx/chronicle/internal/middleware"
 	"github.com/keyxmakerx/chronicle/internal/permissions"
@@ -35,6 +36,7 @@ import (
 	"github.com/keyxmakerx/chronicle/internal/plugins/calendar"
 	"github.com/keyxmakerx/chronicle/internal/plugins/campaigns"
 	"github.com/keyxmakerx/chronicle/internal/plugins/designlab"
+	"github.com/keyxmakerx/chronicle/internal/plugins/dmscreen"
 	"github.com/keyxmakerx/chronicle/internal/plugins/entities"
 	"github.com/keyxmakerx/chronicle/internal/plugins/foundry_vtt"
 	"github.com/keyxmakerx/chronicle/internal/plugins/maps"
@@ -544,6 +546,64 @@ func (a *backdropUploaderAdapter) DeletePicture(ctx context.Context, campaignID,
 	return true, nil
 }
 
+// siteMediaAdapter stores the site's logo and sign-in picture through the
+// media service. They are campaignless UsageBackdrop files, which the media
+// handler serves publicly (the sign-in page has no signed-in viewer). The only
+// other writer of UsageBackdrop always sets a campaign, so a campaignless
+// backdrop is a site picture and nothing else.
+type siteMediaAdapter struct {
+	svc media.MediaService
+}
+
+// StoreSitePicture saves a validated image with no campaign.
+func (a *siteMediaAdapter) StoreSitePicture(ctx context.Context, userID string, data []byte, originalName, mimeType string) (string, error) {
+	mf, err := a.svc.Upload(ctx, media.UploadInput{
+		UploadedBy:   userID,
+		OriginalName: originalName,
+		MimeType:     mimeType,
+		FileSize:     int64(len(data)),
+		UsageType:    media.UsageBackdrop,
+		FileBytes:    data,
+	})
+	if err != nil {
+		return "", err
+	}
+	return mf.Filename, nil
+}
+
+// site returns the media row for filename when it is a site picture.
+func (a *siteMediaAdapter) site(ctx context.Context, filename string) (*media.MediaFile, error) {
+	base := path.Base(filename)
+	id := strings.TrimSuffix(base, path.Ext(base))
+	mf, err := a.svc.GetByID(ctx, id)
+	if err != nil {
+		var ae *apperror.AppError
+		if errors.As(err, &ae) && ae.Code == http.StatusNotFound {
+			return nil, nil
+		}
+		return nil, err
+	}
+	if mf.Filename != filename || mf.UsageType != media.UsageBackdrop || mf.CampaignID != nil {
+		return nil, nil
+	}
+	return mf, nil
+}
+
+// OwnsSitePicture reports whether filename is a site picture.
+func (a *siteMediaAdapter) OwnsSitePicture(ctx context.Context, filename string) (bool, error) {
+	mf, err := a.site(ctx, filename)
+	return mf != nil, err
+}
+
+// DeleteSitePicture removes filename if it is a site picture.
+func (a *siteMediaAdapter) DeleteSitePicture(ctx context.Context, filename string) error {
+	mf, err := a.site(ctx, filename)
+	if err != nil || mf == nil {
+		return err
+	}
+	return a.svc.Delete(ctx, mf.ID)
+}
+
 // entityTagFetcherAdapter wraps tags.TagService to implement the
 // entities.EntityTagFetcher interface for batch tag loading in list views.
 // grantSvc backs the tag-grant glance methods.
@@ -642,14 +702,14 @@ func (a *entityVisibilityFilterAdapter) FilterViewableEntityIDs(ctx context.Cont
 	return a.svc.FilterViewableEntityIDs(ctx, campaignID, entityIDs, role, userID)
 }
 
-// CALV5-PLACEHOLDER: V5 must still re-implement seven cross-plugin bridge
+// CALV5-PLACEHOLDER: V5 must still re-implement six cross-plugin bridge
 // adapters against its own service, toward the calendar:
 // timelineForCalendarAdapter, calendarSyncLinkAdapter,
-// calendarEntityCreatorAdapter, calendarRSVPNotifierAdapter,
-// calendarAvailabilityAdapter (member zones, exception dates, offered
-// windows), calendarBenchScheduleAdapter, calendarOwnWeekAdapter. Each is a
-// narrow interface owned by the consuming plugin, not a shared type — keep
-// that shape so the rebuild stays surgical. TODO(#778)
+// calendarEntityCreatorAdapter, calendarAvailabilityAdapter (member
+// zones, exception dates, offered windows), calendarBenchScheduleAdapter,
+// calendarOwnWeekAdapter. Each is a narrow interface owned by the consuming
+// plugin, not a shared type — keep that shape so the rebuild stays
+// surgical. TODO(#778)
 //
 // The three below feed timeline away from the calendar (selector, event
 // picker, era bands); calendarEventLinkListerAdapter after them is a
@@ -857,6 +917,32 @@ func (a *wsCampaignRoleAdapter) IsUserDmGranted(ctx context.Context, campaignID,
 	return a.svc.IsUserDmGranted(ctx, campaignID, userID)
 }
 
+// wsNotesGrantAdapter checks a notes grant for a WebSocket upgrade the same
+// way notes.RequireAppGrant checks it for a request: a live grant, in a
+// campaign whose outside apps are on.
+type wsNotesGrantAdapter struct {
+	grants notes.AppGrantService
+	gate   notes.AppGate
+}
+
+// AuthenticateNotesGrantForWS returns the grant's campaign and player.
+func (a *wsNotesGrantAdapter) AuthenticateNotesGrantForWS(ctx context.Context, token string) (string, string, error) {
+	g, err := a.grants.Authenticate(ctx, token)
+	if err != nil {
+		return "", "", err
+	}
+	if a.gate != nil {
+		open, err := a.gate(ctx, g.CampaignID)
+		if err != nil {
+			return "", "", err
+		}
+		if !open {
+			return "", "", apperror.NewForbidden("this campaign has outside apps turned off")
+		}
+	}
+	return g.CampaignID, g.UserID, nil
+}
+
 // CALV5-PLACEHOLDER: V5 must rebuild calendarEventPublisherAdapter — the
 // bridge from the calendar's PublishCalendarEvent to the websocket bus.
 // Nothing publishes calendar events now.
@@ -884,6 +970,37 @@ func (a *wsCampaignRoleAdapter) IsUserDmGranted(ctx context.Context, campaignID,
 //   (calendar.worldstate.changed also had a DM-gated twin that set
 //   RequiresDM = true — the dm_only worldstate payload must never reach a
 //   player's socket.)
+
+// relationEventPublisherAdapter bridges the websocket.EventBus to the
+// relations.RelationEventPublisher interface.
+type relationEventPublisherAdapter struct {
+	bus ws.EventBus
+}
+
+// PublishRelationEvent translates a relation row write into a WebSocket
+// message keyed on the row's source entity.
+func (a *relationEventPublisherAdapter) PublishRelationEvent(eventType string, rel *relations.Relation) {
+	if rel == nil || rel.CampaignID == "" {
+		return
+	}
+	var msgType ws.MessageType
+	switch eventType {
+	case relations.RelationEventCreated:
+		msgType = ws.MsgRelationCreated
+	case relations.RelationEventDeleted:
+		msgType = ws.MsgRelationDeleted
+	case relations.RelationEventMetadataUpdated:
+		msgType = ws.MsgRelationMetadataUpdated
+	default:
+		return
+	}
+	// A relation can name a private entity or be dm_only, and the row
+	// carries none of the per-viewer filtering the HTTP reads apply, so it
+	// only goes to DM-equivalent sockets, like entity events.
+	msg := ws.NewMessage(msgType, rel.CampaignID, rel.SourceEntityID, rel)
+	msg.RequiresDM = true
+	a.bus.Publish(msg)
+}
 
 // entityEventPublisherAdapter bridges the websocket.EventBus to the
 // entities.EntityEventPublisher interface.
@@ -1160,6 +1277,18 @@ func (h *wsRevokerHolder) RevokeAPIKeyClients(campaignID string) {
 func (h *wsRevokerHolder) RevokeUser(campaignID, userID string) {
 	if h.hub != nil {
 		h.hub.RevokeUser(campaignID, userID)
+	}
+}
+
+func (h *wsRevokerHolder) RevokeNotesAppClients(campaignID, userID string) {
+	if h.hub != nil {
+		h.hub.RevokeNotesAppClients(campaignID, userID)
+	}
+}
+
+func (h *wsRevokerHolder) RevokeNotesAppClientsEverywhere(userID string) {
+	if h.hub != nil {
+		h.hub.RevokeNotesAppClientsEverywhere(userID)
 	}
 }
 
@@ -2102,6 +2231,8 @@ func (a *armoryRelationFinderAdapter) GetByID(ctx context.Context, id int) (*arm
 		CampaignID:     rel.CampaignID,
 		SourceEntityID: rel.SourceEntityID,
 		TargetEntityID: rel.TargetEntityID,
+		RelationType:   rel.RelationType,
+		DmOnly:         rel.DmOnly,
 	}, nil
 }
 
@@ -2599,6 +2730,12 @@ func (a *App) RegisterRoutes() {
 	// Wire settings service into admin handler for the combined storage page.
 	adminHandler.SetSettingsDeps(settingsService)
 
+	// Site look: the admin page saves through the settings service and the
+	// media adapter; new campaigns read the same look through the campaigns
+	// service's narrow interface.
+	adminHandler.SetSiteLookService(admin.NewSiteLookService(settingsService, &siteMediaAdapter{svc: mediaService}))
+	campaignService.SetSiteLookSource(settingsService)
+
 	// Addons plugin: extension framework with per-campaign enable/disable toggles.
 	addonRepo := addons.NewAddonRepository(a.DB)
 	addonService := addons.NewAddonService(addonRepo)
@@ -2687,6 +2824,9 @@ func (a *App) RegisterRoutes() {
 	// is installed or updated, so it appears in the campaign Settings >
 	// Game System dropdown immediately without requiring a server restart.
 	packages.SetOnSystemInstall(pkgService, func(installPath string) {
+		// Taken before the rescan swaps manifests, to tell which sheet fields
+		// this install introduces.
+		presetsBefore := snapshotPresetFieldKeys()
 		systems.ScanPackageDir(filepath.Join(a.Config.Upload.MediaPath, "packages", "systems"))
 		// Force-load the exact dir that was just installed. The rescan
 		// above applies "highest version wins", which silently ignores a
@@ -2723,6 +2863,10 @@ func (a *App) RegisterRoutes() {
 		// without a restart — mirrors the boot-time reconcile.
 		reconcileFieldGMFlags(context.Background(), entityService)
 		reconcileFieldOwnerOnlyFlags(context.Background(), entityService)
+
+		// Add the sheet fields this install introduced to campaigns already
+		// using the system; background since it walks every such campaign.
+		go reconcileSystemSheetFields(context.Background(), addonService, newPresetApplier(entityService), presetsBefore)
 	})
 	packages.ConfigureSettings(pkgService, settingsRepo)
 	// Fail-loud installs: run the FULL loader-grade manifest validation at
@@ -2967,6 +3111,7 @@ func (a *App) RegisterRoutes() {
 		)
 		foundry_vtt.RegisterOwnerRoutes(fvttCampaignAuthed, fvttHandler,
 			campaigns.RequireRole(campaigns.RoleOwner))
+		foundry_vtt.RegisterDMTeamRoutes(fvttCampaignAuthed, fvttHandler)
 
 		// Public manifest + download. Same rate limit as the packages
 		// public endpoints — manifest hits are frequent (every Foundry
@@ -3050,9 +3195,10 @@ func (a *App) RegisterRoutes() {
 	// Calendar plugin: service + handler over the repositories, routed below
 	// (after the rebuild-notice group) once migrations report healthy.
 	//
-	// CALV5-PLACEHOLDER: V5 must still restore the RSVP repo/service/handler
-	// triple, the entity-creator seam, the RSVP reader, and the StaticFS
-	// mount for /static/plugins/calendar/. TODO(#778)
+	// CALV5-PLACEHOLDER: V5 must still restore the entity-creator seam and
+	// the StaticFS mount for /static/plugins/calendar/. The old per-event
+	// RSVP is not coming back: game-night answers live in the sessions
+	// plugin, which the calendar reads over HTTP. TODO(#778)
 	calendarRepo := calendar.NewCalendarRepository(a.DB)
 	// One-time, idempotent: repair Harptos calendars created before the
 	// preset's season numbering was fixed. Only rows still exactly equal to
@@ -3111,7 +3257,10 @@ func (a *App) RegisterRoutes() {
 	// both paths deliver the same scripts; each re-inits on
 	// htmx:afterSettle/htmx:load and no-ops when its mount is absent.
 	//
-	// The calendar's page scripts: calendar_view.js mounts on
+	// The calendar's page scripts: calendar_era_blend.js (loaded first)
+	// paints the era colours for calendar_view.js and for the structure
+	// editor's Era look part (calendar_era_look.js, which mounts on that
+	// page's data-widget="calendar_era_look"); calendar_view.js mounts on
 	// data-widget="calendar_view" (the calendar's own page, however it was
 	// reached), calendar_editor.js self-gates on that
 	// mount's data-can-edit="true" and opens calendar_event_drawer.js's full
@@ -3125,6 +3274,8 @@ func (a *App) RegisterRoutes() {
 	// as every entry here.
 	pluginBodyScripts := []string{
 		"/static/plugins/" + entities.PluginSlug + "/js/characters.js",
+		"/static/js/widgets/calendar_era_blend.js",
+		"/static/js/widgets/calendar_era_look.js",
 		"/static/js/widgets/calendar_view.js",
 		"/static/js/widgets/calendar_rule.js",
 		"/static/js/widgets/calendar_event_drawer.js",
@@ -3133,6 +3284,9 @@ func (a *App) RegisterRoutes() {
 		"/static/js/calendar_open.js",
 		"/static/js/widgets/rulebook.js",
 		"/static/js/widgets/rulebook_editor.js",
+		// After boot.js, so Chronicle exists before a token can arrive. It
+		// does nothing on pages without #notes-embed.
+		"/static/js/notes_embed.js",
 	}
 
 	// The sidebar, campaign dashboard and Extensions hub link to
@@ -3161,9 +3315,8 @@ func (a *App) RegisterRoutes() {
 	// regardless of plugin health (a 302 to a 404 is still clearer than a
 	// notice claiming the feature is merely rebuilding).
 	//
-	// CALV5-PLACEHOLDER: V5 must still restore calendar.RegisterRSVPRoutes
-	// and the public Foundry-facing calendar API (token-verified through
-	// fvttService, rate limited 300/min) behind the schema health gate. That
+	// CALV5-PLACEHOLDER: V5 must still restore the public Foundry-facing
+	// calendar API (token-verified through fvttService, rate limited 300/min) behind the schema health gate. That
 	// public API overlapped syncapi's calendar surface — rebuild only
 	// syncapi's, the one the module's contract documents. TODO(#778)
 	if a.PluginHealth.IsHealthy(calendar.PluginSlug) {
@@ -3246,9 +3399,9 @@ func (a *App) RegisterRoutes() {
 	if a.PluginHealth.IsHealthy(calendar.PluginSlug) {
 		sessionsHandler.SetCalendarFinder(&realWorldCalendarFinderAdapter{svc: calendarService})
 	}
-	// CALV5-PLACEHOLDER: V5 must restore four post-construction setters —
-	// SetRSVPNotifier, SetAvailabilityWriter (member zones + exception
-	// dates), SetScheduleReader and SetOwnWeekReader — all nil-safe on the
+	// CALV5-PLACEHOLDER: V5 must restore three post-construction setters —
+	// SetAvailabilityWriter (member zones + exception dates),
+	// SetScheduleReader and SetOwnWeekReader — all nil-safe on the
 	// calendar side, so a degraded neighbour never takes the calendar down.
 	// TODO(#778)
 
@@ -3362,6 +3515,39 @@ func (a *App) RegisterRoutes() {
 	// syncapi permissions endpoint (SetTagGrantLister) the same tag-grant view.
 	tagFetcherAdapter := &entityTagFetcherAdapter{svc: tagService, grantSvc: tagGrantService}
 
+	// Stashes and moves: the service reaches entities, relations and members
+	// only through the adapters in armory_stash_adapters.go. It is built before
+	// the sync API so the API's stash endpoints can use it; the event bus does
+	// not exist yet, so events bind to it later through stashEvents.
+	stashEvents := &armoryStashEventAdapter{}
+	stashRepo := armory.NewStashRepository(a.DB)
+	stashDirectory := &armoryStashDirectoryAdapter{svc: entityService}
+	stashSvc := armory.NewStashService(armory.StashDeps{
+		Repo:       stashRepo,
+		Directory:  stashDirectory,
+		Visibility: &entityVisibilityFilterAdapter{svc: entityService},
+		Actor:      &armoryCharacterActorAdapter{svc: entityService},
+		Fields:     &armoryEntityFieldsAdapter{svc: entityService},
+		Relations:  &armoryHasItemAdapter{svc: relService},
+		UserNames:  &armoryMemberNamesAdapter{svc: campaignService},
+		Events:     stashEvents,
+	})
+	// A money change made on a sheet (web, Foundry, extension) leaves a line in
+	// the character's history, like a move would.
+	entityService.SetFieldChangeObserver(&armoryMoneyObserver{history: armory.NewMoneyHistory(
+		stashRepo, stashDirectory,
+		func(ctx context.Context, campaignID string) bool {
+			on, err := addonService.IsEnabledForCampaign(ctx, campaignID, "armory")
+			return err == nil && on
+		},
+		stashEvents,
+	)})
+	stashAPI := armory.NewStashAPI(stashSvc, &armoryMemberDirectoryAdapter{svc: campaignService})
+	stashAPIHandler := syncapi.NewStashAPIHandler(
+		&syncStashAPIAdapter{api: stashAPI},
+		"armory",
+	)
+
 	// REST API v1: versioned endpoints for external clients (Foundry VTT, etc.).
 	// Authenticates via API keys, not browser sessions.
 	syncAPIHandler := syncapi.NewAPIHandler(syncService, entityService, campaignService, relService)
@@ -3370,6 +3556,14 @@ func (a *App) RegisterRoutes() {
 	// ownership sync, reusing the entities glance adapter.
 	syncAPIHandler.SetTagGrantLister(tagFetcherAdapter)
 	syncAPIHandler.SetSystemEnabler(addonService)
+	// The shop room service is shared with the armory web routes below, so the
+	// Foundry module reads the same layout and visibility rules.
+	shopRoomService := armory.NewShopRoomService(
+		armory.NewShopRoomRepository(a.DB),
+		&armoryShopCheckerAdapter{svc: entityService},
+		&entityVisibilityFilterAdapter{svc: entityService},
+	)
+	syncAPIHandler.SetShopRoomReader(shopRoomService, "armory")
 	calendarAPIHandler := syncapi.NewCalendarAPIHandler(syncService, calendarService, campaignService)
 	mediaAPIHandler := syncapi.NewMediaAPIHandler(syncService, mediaService)
 	if urlSigner != nil {
@@ -3399,8 +3593,16 @@ func (a *App) RegisterRoutes() {
 	// Tag API handler for sync API — exposes tag CRUD and bulk tag operations.
 	tagAPIHandler := syncapi.NewTagAPIHandler(syncService, tagService, entityService, campaignService)
 
+	// Sync history: one record of both directions, read by the Manage page
+	// and the Foundry module's History tab.
+	syncHistoryRepo := syncapi.NewSyncHistoryRepository(a.DB)
+	syncHistoryHandler := syncapi.NewSyncHistoryHandler(syncHistoryRepo, campaignService, syncService,
+		syncHistoryEditorAdapter{audit: audit.NewAuditService(audit.NewAuditRepository(a.DB))})
+
 	if a.PluginHealth.IsHealthy("syncapi") {
-		syncapi.RegisterAPIRoutes(e, syncAPIHandler, calendarAPIHandler, mediaAPIHandler, mapAPIHandler, noteAPIHandler, tagAPIHandler, syncMappingHandler, syncChangesHandler, syncService, addonService, authService, campaignService)
+		syncapi.RegisterAPIRoutes(e, syncAPIHandler, calendarAPIHandler, mediaAPIHandler, mapAPIHandler, noteAPIHandler, tagAPIHandler, syncMappingHandler, syncChangesHandler, stashAPIHandler, syncService, addonService, authService, campaignService, syncapi.WithSyncHistory(syncHistoryHandler))
+		syncapi.RegisterSyncHistoryPageRoutes(e, syncHistoryHandler, campaignService, authService)
+		go syncapi.StartHistoryPruner(a.ShutdownCtx, syncHistoryRepo)
 	}
 
 	// NPC plugin: gallery/hub view for revealed character entities.
@@ -3440,30 +3642,24 @@ func (a *App) RegisterRoutes() {
 	txSvc.SetBuyerAccessChecker(&armoryBuyerAccessAdapter{svc: entityService})
 	txHandler := armory.NewTransactionHandler(txSvc)
 	txHandler.SetEntityVisibility(&entityVisibilityFilterAdapter{svc: entityService})
-	// Stashes and moves: the service reaches entities, relations and members
-	// only through the adapters in armory_stash_adapters.go.
-	stashSvc := armory.NewStashService(armory.StashDeps{
-		Repo:       armory.NewStashRepository(a.DB),
-		Directory:  &armoryStashDirectoryAdapter{svc: entityService},
-		Visibility: &entityVisibilityFilterAdapter{svc: entityService},
-		Actor:      &armoryCharacterActorAdapter{svc: entityService},
-		Fields:     &armoryEntityFieldsAdapter{svc: entityService},
-		Relations:  &armoryHasItemAdapter{svc: relService},
-		UserNames:  &armoryMemberNamesAdapter{svc: campaignService},
-	})
+	// Stashes and moves: the service is built earlier, before the sync API.
 	stashHandler := armory.NewStashHandler(stashSvc)
+	// Buying shares the stash service's campaign lock, so a purchase and a
+	// stash move can't spend the same coins.
+	shopBuySvc := armory.NewShopBuyService(stashSvc, txSvc, &armoryShopCheckerAdapter{svc: entityService}, armory.NewPurchaseRequestRepository(a.DB))
+	shopBuyHandler := armory.NewShopBuyHandler(shopBuySvc)
+	// The Foundry module buys through the sync API as the player at the table,
+	// with the same service and acting-as rule as the stash calls. Its routes
+	// are registered above and read this at request time.
+	syncAPIHandler.SetShopBuyer(&syncShopBuyAPIAdapter{actors: stashAPI, buy: shopBuySvc})
 	entityHandler.SetCharacterPagePanel(entities.PagePanel{
 		Addon: "armory",
 		URL: func(campaignID, entityID string) string {
 			return "/campaigns/" + campaignID + "/armory/characters/" + entityID + "/panel"
 		},
 	})
-	shopRoomHandler := armory.NewShopRoomHandler(armory.NewShopRoomService(
-		armory.NewShopRoomRepository(a.DB),
-		&armoryShopCheckerAdapter{svc: entityService},
-		&entityVisibilityFilterAdapter{svc: entityService},
-	))
-	armory.RegisterRoutes(e, armoryHandler, txHandler, instHandler, stashHandler, shopRoomHandler, campaignService, authService, addonService)
+	shopRoomHandler := armory.NewShopRoomHandler(shopRoomService)
+	armory.RegisterRoutes(e, armoryHandler, txHandler, instHandler, stashHandler, shopRoomHandler, shopBuyHandler, campaignService, authService, addonService)
 
 	// Notes widget: personal floating note-taking panel (Google Keep-style).
 	// noteSvc was created above (before REST API v1 registration).
@@ -3476,6 +3672,33 @@ func (a *App) RegisterRoutes() {
 	noteHandler.SetPageNamer(notePages)
 	noteHandler.SetPageLinker(notePages)
 	notes.RegisterRoutes(e, noteHandler, campaignService, authService)
+	// A player can allow the Foundry notebook to use their notes. Grants go
+	// only to an address that may already call Chronicle across sites.
+	noteGrants := notes.NewAppGrantService(notes.NewAppGrantRepository(a.DB))
+	// See wsRevokerHolder: wsHub itself is constructed further down.
+	noteGrants.SetConnectionRevoker(wsRevoker)
+	noteGrantHandler := notes.NewAppGrantHandler(noteGrants, &notesOriginAllower{baseURL: a.Config.BaseURL, settings: settingsService})
+	// Pictures and voice memos in the frames load through member-checked
+	// signed links, as Foundry's media does.
+	noteGrantHandler.SetMediaLinker(mediaHandler)
+	// A grant ends whenever the player's sessions do (password reset or
+	// change, force sign-out).
+	auth.OnSessionsRevoked(authService, func(ctx context.Context, userID string) {
+		if err := noteGrants.RevokeAllForUser(ctx, userID); err != nil {
+			slog.Error("revoking notes app grants failed", slog.String("user_id", userID), slog.Any("error", err))
+		}
+	})
+	// The campaign's Sync API switch governs outside apps, the notebook too.
+	notesAppGate := func(ctx context.Context, campaignID string) (bool, error) {
+		return addonService.IsEnabledForCampaign(ctx, campaignID, syncapi.SyncAPIAddonSlug)
+	}
+	noteHandler.SetJotsGate(func(ctx context.Context, campaignID string) (bool, error) {
+		return addonService.IsEnabledForCampaign(ctx, campaignID, "notes")
+	})
+	notesApp := notes.RegisterAppGrantRoutes(e, noteHandler, noteGrantHandler, noteGrants, notesAppGate, campaignService, authService)
+	// The editor's @ page picker, as the player sees pages.
+	notesApp.GET("/entities/search", entityHandler.SearchAPI, campaigns.RequireViewAccess())
+	notesApp.GET("/entities/:eid/preview", entityHandler.PreviewAPI, campaigns.RequireViewAccess())
 
 	// Relations widget routes already registered above (before REST API v1).
 
@@ -3548,6 +3771,15 @@ func (a *App) RegisterRoutes() {
 	entityHandler.SetMemberLister(campaignService)
 	entityHandler.SetGroupLister(groupService)
 	entityHandler.SetCache(a.Redis)
+
+	// --- Undo for world pages: History, Trash, save clashes ---
+	// Wired here, after settings exists, because the Trash's retention is a
+	// site setting. Until SetPageSafety runs, deletes are permanent.
+	pageSafetyRepo := entities.NewPageSafetyRepository(a.DB)
+	entityService.SetPageSafety(pageSafetyRepo)
+	pageSafetyService := entities.NewPageSafetyService(pageSafetyRepo, entityRepo, entityService, settingsService)
+	entities.RegisterPageSafetyRoutes(e, entities.NewPageSafetyHandler(pageSafetyService, entityService, campaignService), campaignService, authService)
+	go pageSafetyService.StartPurger(a.ShutdownCtx)
 
 	// --- Entity Block Registry ---
 	// Create the block registry and let each plugin register its block types.
@@ -3967,6 +4199,7 @@ func (a *App) RegisterRoutes() {
 			if err := json.Unmarshal(fieldsData, &fields); err != nil {
 				return fmt.Errorf("invalid fields JSON: %w", err)
 			}
+			ctx = changesource.With(ctx, changesource.Source{Kind: changesource.KindExtension})
 			return entityService.UpdateFields(ctx, entityID, fields)
 		},
 	))
@@ -4125,6 +4358,16 @@ func (a *App) RegisterRoutes() {
 		// core base.templ layout.
 		ctx = layouts.SetPluginBodyScripts(ctx, pluginBodyScripts)
 
+		// Site look (name, logo, tab icon, and for pages outside a campaign the
+		// borrowed look). A failed read leaves the shipped look rather than
+		// failing the page. A campaign page only gets the name and tab icon:
+		// ApplySiteLook does nothing inside a campaign.
+		if sl, err := settingsService.GetSiteLook(c.Request().Context()); err != nil {
+			slog.Warn("reading the site look", slog.Any("error", err))
+		} else {
+			ctx = layouts.SetSiteLook(ctx, sl)
+		}
+
 		// User info from auth session.
 		if session := auth.GetSession(c); session != nil {
 			ctx = layouts.SetIsAuthenticated(ctx, true)
@@ -4133,6 +4376,17 @@ func (a *App) RegisterRoutes() {
 			ctx = layouts.SetUserEmail(ctx, session.Email)
 			ctx = layouts.SetUserAvatarPath(ctx, session.AvatarPath)
 			ctx = layouts.SetIsAdmin(ctx, session.IsAdmin)
+
+			// The person's own look. HTMX swaps never replace <html>, so only
+			// full-page renders need it. A failed read leaves the default look
+			// rather than failing the page.
+			if !middleware.IsHTMX(c) {
+				if vp, err := authService.GetViewPrefs(ctx, session.UserID); err == nil {
+					ctx = layouts.SetViewPrefs(ctx, &layouts.ViewPrefsData{Theme: vp.Theme, Motion: vp.Motion, TextSize: vp.TextSize, Contrast: vp.Contrast})
+				} else {
+					slog.Warn("reading view prefs", slog.String("user_id", session.UserID), slog.Any("error", err))
+				}
+			}
 
 			// Inject degraded plugin count for admin sidebar badge.
 			if session.IsAdmin {
@@ -4184,7 +4438,11 @@ func (a *App) RegisterRoutes() {
 					PageTone: ap.PageTone, Contrast: ap.Contrast,
 					BodyFont: ap.BodyFont, HeadingFont: ap.HeadingFont, TypeScale: ap.TypeScale,
 					ButtonStyle: ap.ButtonStyle, Elevation: ap.Elevation, MotionSpeed: ap.MotionSpeed,
-					ReduceMotion: ap.ReduceMotion,
+					ReduceMotion:  ap.ReduceMotion,
+					HeaderHeight:  ap.HeaderHeight,
+					SidebarColour: ap.SidebarColour, SidebarOwn: ap.SidebarOwn,
+					SidebarCorner: ap.SidebarCorner, SidebarSubtitle: ap.SidebarSubtitle, SidebarBanner: ap.SidebarBanner,
+					PeekGlow: ap.PeekGlow, PeekGlowColour: ap.PeekGlowColour,
 				}
 				ctx = layouts.SetAppearance(ctx, ad)
 			}
@@ -4313,6 +4571,25 @@ func (a *App) RegisterRoutes() {
 			// here, where calendar.PluginSlug is already in scope.
 			ctx = layouts.SetUpcomingEventsAvailable(ctx, enabledSlugs[calendar.PluginSlug] && calendarHealthy)
 
+			// The header's data-backed widgets (date, weather, moon, game
+			// night) read today's world from the calendar and sessions. This
+			// sits here because it needs the enabled addons resolved above;
+			// a fragment swap never draws the bar, so it skips the reads.
+			if tc := layouts.GetTopbarContent(ctx); tc != nil && !middleware.IsHTMX(c) {
+				liveCtx, cancel := context.WithTimeout(reqCtx, headerLiveTimeout)
+				tc.Live = buildTopbarLive(liveCtx, calendarService, sessionsService, headerLiveRequest{
+					CampaignID: cc.Campaign.ID,
+					Viewer:     permissions.RequestViewer(cc.VisibilityRole(), layoutUserID),
+					Widgets:    tc.TopbarWidgets(),
+					Calendar:   enabledSlugs[calendar.PluginSlug] && calendarHealthy,
+					// Game nights are the table's own business: members only,
+					// never a public-campaign visitor.
+					Nights: cc.IsMember && enabledSlugs[calendar.PluginSlug],
+					Now:    time.Now(),
+				})
+				cancel()
+			}
+
 			// Extension widget scripts for campaign pages.
 			if widgetURLs := extHandler.GetWidgetScriptURLs(reqCtx, cc.Campaign.ID); len(widgetURLs) > 0 {
 				ctx = layouts.SetExtWidgetScripts(ctx, widgetURLs)
@@ -4382,6 +4659,10 @@ func (a *App) RegisterRoutes() {
 			})
 		}
 
+		// Last, so the campaign values above are already in place: a page
+		// outside a campaign borrows the site look, a campaign page does not.
+		ctx = layouts.ApplySiteLook(ctx)
+
 		return ctx
 	}
 
@@ -4403,11 +4684,30 @@ func (a *App) RegisterRoutes() {
 	// SetPresenceLookup call covers them.
 	fvttHandler.SetPresenceLookup(wsHub)
 
+	// DM Screen: the owner's and scribes' control panel. It owns no data and
+	// reads every section through the adapters in dm_screen_adapters.go;
+	// registered here because Foundry presence comes from wsHub.
+	dmScreenSvc := dmscreen.NewService(dmscreen.Sources{
+		Downtime: &dmDowntimeAdapter{stash: stashSvc, addons: addonService},
+		World:    &dmWorldAdapter{svc: calendarService},
+		Nights:   &dmNightAdapter{svc: sessionsService, members: campaignService},
+		Foundry:  wsHub,
+		Party:    &dmPartyAdapter{entities: entityService, campaigns: campaignService},
+		Hidden:   &dmHiddenAdapter{entities: entityService},
+		System:   systemHandler,
+	})
+	dmscreen.RegisterRoutes(e, dmscreen.NewHandler(dmScreenSvc), campaignService, authService)
+	// The sync API routes are already registered; they answer 404 until this
+	// is set, and it is set before the server starts serving.
+	syncAPIHandler.SetDMScreen(&dmScreenSyncAPIAdapter{svc: dmScreenSvc})
+
 	wsAuth := ws.NewMultiAuthenticator(
 		syncService,
 		&wsSessionAuthAdapter{svc: authService},
 		&wsCampaignRoleAdapter{svc: campaignService},
 	)
+	// The Foundry notebook's frames hold a notes grant, not a sign-in.
+	wsAuth.SetNotesGrantAuth(&wsNotesGrantAdapter{grants: noteGrants, gate: notesAppGate})
 	// Dynamic CORS origins for WebSocket — reuse the same settings service
 	// that backs the HTTP CORS middleware so the admin whitelist applies to
 	// both REST API and WebSocket connections.
@@ -4430,8 +4730,14 @@ func (a *App) RegisterRoutes() {
 	go syncapi.StartChangePruner(a.ShutdownCtx, syncChangeRepo)
 
 	entityService.SetEventPublisher(&entityEventPublisherAdapter{bus: wsEventBus})
+	relService.SetEventPublisher(&relationEventPublisherAdapter{bus: wsEventBus})
+	stashEvents.bus = wsEventBus
 	entityService.SetSidebarAutoAdder(&sidebarAutoAdderAdapter{campaignService: campaignService})
 	noteSvc.SetEventPublisher(&noteEventPublisherAdapter{bus: wsEventBus})
+
+	// "Show in Foundry" on NPC pages: npc.spotlight is not a change-feed
+	// type, so the recording wrapper passes it straight to the hub.
+	fvttHandler.SetNPCSpotlight(&npcSpotlightResolver{entities: entityService}, &npcSpotlightPublisher{bus: wsEventBus})
 
 	// Late-bind the entity_notes notifier now that wsEventBus exists.
 	// The service was constructed earlier with a holder.Notify reference;
@@ -4615,4 +4921,44 @@ func (a *aiWorkspaceAuditAdapter) LogCampaignEvent(ctx context.Context, campaign
 		Action:     action,
 		Details:    details,
 	})
+}
+
+// notesOriginAllower is the notes Allow window's origin check: the site's own
+// address or an admin-allowed cross-site origin, exactly the list the CORS
+// middleware in app.go uses.
+type notesOriginAllower struct {
+	baseURL  string
+	settings settings.SettingsService
+}
+
+func (a *notesOriginAllower) AllowedOrigins(ctx context.Context) []string {
+	out := []string{strings.TrimRight(a.baseURL, "/")}
+	if a.settings != nil {
+		if list, err := a.settings.GetCORSOrigins(ctx); err == nil {
+			out = append(out, list...)
+		}
+	}
+	return out
+}
+
+func (a *notesOriginAllower) OriginAllowed(ctx context.Context, origin string) bool {
+	if origin == "" {
+		return false
+	}
+	if strings.EqualFold(strings.TrimRight(a.baseURL, "/"), origin) {
+		return true
+	}
+	if a.settings == nil {
+		return false
+	}
+	list, err := a.settings.GetCORSOrigins(ctx)
+	if err != nil {
+		return false
+	}
+	for _, o := range list {
+		if strings.EqualFold(o, origin) {
+			return true
+		}
+	}
+	return false
 }

@@ -96,8 +96,8 @@ templ downtimeSwitch(v *StashesPageView, csrfToken string) {
 		hx-post={ downtimeURL(v.CampaignID) }
 		hx-swap="none"
 		class="card p-4 mb-4"
-		if !v.DowntimeOpen && len(v.Pending) > 0 {
-			hx-confirm={ fmt.Sprintf("Open downtime? The %d waiting requests go through now.", len(v.Pending)) }
+		if !v.DowntimeOpen && v.WaitingCount() > 0 {
+			hx-confirm={ fmt.Sprintf("Open downtime? The %d waiting requests go through now.", v.WaitingCount()) }
 		}
 	>
 		<input type="hidden" name="_csrf" value={ csrfToken }/>
@@ -128,9 +128,9 @@ templ downtimeSwitch(v *StashesPageView, csrfToken string) {
 templ requestsPanel(v *StashesPageView, csrfToken string) {
 	<section class="card p-4 mb-6" aria-labelledby="armory-requests-title">
 		<h2 id="armory-requests-title" class="text-sm font-semibold text-fg mb-2">
-			Requests waiting on you ({ fmt.Sprintf("%d", len(v.Pending)) })
+			Requests waiting on you ({ fmt.Sprintf("%d", v.WaitingCount()) })
 		</h2>
-		if len(v.Pending) == 0 {
+		if v.WaitingCount() == 0 {
 			<p class="text-xs text-fg-muted">Nothing is waiting.</p>
 		} else {
 			<ul class="divide-y divide-border">
@@ -157,6 +157,9 @@ templ requestsPanel(v *StashesPageView, csrfToken string) {
 							</form>
 						</div>
 					</li>
+				}
+				for _, p := range v.PendingPurchases {
+					@purchaseRequestRow(v.CampaignID, p, csrfToken)
 				}
 			</ul>
 		}

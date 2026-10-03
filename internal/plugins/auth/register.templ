@@ -13,14 +13,12 @@ import "github.com/keyxmakerx/chronicle/internal/templates/layouts"
 // registrant returns to the invite after their account is created.
 templ RegisterPage(csrfToken string, req *RegisterRequest, errMsg, redirect string, gated bool, mode string) {
 	@layouts.Base("Register") {
-		<div class="min-h-screen flex items-center justify-center bg-surface px-4 py-12">
+		@layouts.SiteAuthStage("py-12") {
 			<div class="w-full max-w-md">
 				<div class="text-center mb-8">
-					<a href="/" class="inline-flex items-center justify-center w-12 h-12 rounded-xl bg-accent/10 dark:bg-accent/20 mb-4">
-						<i class="fa-solid fa-book-open text-lg text-accent"></i>
-					</a>
+					@layouts.SiteAuthMark()
 					<h1 class="text-3xl font-bold text-fg">Get started</h1>
-					<p class="text-fg-secondary mt-2">Create your Chronicle account</p>
+					<p class="text-fg-secondary mt-2">Create your { layouts.SiteName(ctx) } account</p>
 				</div>
 				if gated {
 					@registrationGatedPanel(mode, redirect)
@@ -28,7 +26,7 @@ templ RegisterPage(csrfToken string, req *RegisterRequest, errMsg, redirect stri
 					@RegisterFormComponent(csrfToken, req, errMsg, redirect)
 				}
 			</div>
-		</div>
+		}
 	}
 }
 

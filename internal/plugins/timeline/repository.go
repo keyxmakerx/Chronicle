@@ -393,7 +393,7 @@ const standaloneEventCols = `te.id, te.timeline_id, te.entity_id, te.name, te.de
        COALESCE(ent.name, ''), COALESCE(et.icon, '')`
 
 // standaloneEventJoins is the JOIN clause for standalone event queries.
-const standaloneEventJoins = `LEFT JOIN entities ent ON ent.id = te.entity_id
+const standaloneEventJoins = `LEFT JOIN entities ent ON ent.id = te.entity_id AND ent.deleted_at IS NULL
      LEFT JOIN entity_types et ON et.id = ent.entity_type_id`
 
 // scanStandaloneEvent reads a row into a TimelineEvent struct.
@@ -604,7 +604,7 @@ func (r *timelineRepo) listGroupMembers(ctx context.Context, groupID int) ([]Ent
 		`SELECT m.id, m.group_id, m.entity_id,
 		        COALESCE(e.name, ''), COALESCE(et.icon, '')
 		 FROM timeline_entity_group_members m
-		 LEFT JOIN entities e ON e.id = m.entity_id
+		 LEFT JOIN entities e ON e.id = m.entity_id AND e.deleted_at IS NULL
 		 LEFT JOIN entity_types et ON et.id = e.entity_type_id
 		 WHERE m.group_id = ?
 		 ORDER BY e.name`,

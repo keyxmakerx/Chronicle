@@ -50,6 +50,11 @@ type APIHandler struct {
 	systemEnabler        SystemEnabler
 	campaignSystemLister CampaignSystemLister
 	tagGrantLister       TagGrantLister
+	shopRoomReader       ShopRoomReader
+	shopRoomAddon        string
+	shopBuyer            ShopBuyAPIService
+	dmScreen             DMScreenProvider
+	history              *SyncHistoryHandler
 }
 
 // TagGrantLister resolves an entity's tag-derived visibility grants so the
@@ -555,6 +560,7 @@ func (h *APIHandler) CreateEntity(c echo.Context) error {
 		return err
 	}
 
+	noteSyncResource(c, entity.ID, entity.Name)
 	return c.JSON(http.StatusCreated, entity)
 }
 
@@ -599,7 +605,7 @@ func (h *APIHandler) UpdateEntity(c echo.Context) error {
 	// is_private: absent (and an explicit null, which a NOT NULL column has
 	// no room for) yields a nil pointer, which the service reads as
 	// "preserve"; a present true/false is written.
-	updated, err := h.entitySvc.Update(ctx, entityID, entities.UpdateEntityInput{
+	updated, err := h.entitySvc.Update(entities.WithSyncActor(ctx, h.resolveUserID(c)), entityID, entities.UpdateEntityInput{
 		Name:              req.Name,
 		TypeLabel:         req.TypeLabel,
 		ParentID:          req.ParentID,
@@ -613,6 +619,7 @@ func (h *APIHandler) UpdateEntity(c echo.Context) error {
 		return err
 	}
 
+	noteSyncResource(c, updated.ID, updated.Name)
 	return c.JSON(http.StatusOK, updated)
 }
 
@@ -731,10 +738,11 @@ func (h *APIHandler) DeleteEntity(c echo.Context) error {
 		return apperror.NewForbidden("only campaign owners can delete entities")
 	}
 
-	if err := h.entitySvc.Delete(ctx, entityID); err != nil {
+	if err := h.entitySvc.Delete(entities.WithSyncActor(ctx, h.resolveUserID(c)), entityID); err != nil {
 		slog.Error("api: failed to delete entity", slog.Any("error", err))
 		return apperror.NewInternal(fmt.Errorf("failed to delete entity"))
 	}
+	noteSyncResource(c, entity.ID, entity.Name)
 
 	return c.NoContent(http.StatusNoContent)
 }
@@ -935,7 +943,7 @@ func (h *APIHandler) Sync(c echo.Context) error {
 				// single-entity PUT: absent preserves, a present value
 				// writes. is_private absent yields a nil pointer, which the
 				// service preserves.
-				_, err := h.entitySvc.Update(ctx, change.EntityID, entities.UpdateEntityInput{
+				_, err := h.entitySvc.Update(entities.WithSyncActor(ctx, h.resolveUserID(c)), change.EntityID, entities.UpdateEntityInput{
 					Name:       change.Name,
 					TypeLabel:  change.TypeLabel,
 					ParentID:   change.ParentID,
@@ -958,7 +966,7 @@ func (h *APIHandler) Sync(c echo.Context) error {
 				result.Status = "error"
 				result.Error = "entity not found"
 			} else {
-				if err := h.entitySvc.Delete(ctx, change.EntityID); err != nil {
+				if err := h.entitySvc.Delete(entities.WithSyncActor(ctx, h.resolveUserID(c)), change.EntityID); err != nil {
 					result.Status = "error"
 					result.Error = apperror.SafeMessage(err)
 				} else {

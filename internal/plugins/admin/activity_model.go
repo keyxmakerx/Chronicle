@@ -53,6 +53,7 @@ var activityPhrases = map[string]string{
 	"backup.run":                      "started a backup",
 	"restore.run":                     "restored the site from a backup",
 	"smtp.saved":                      "changed the email settings",
+	"sitelook.saved":                  "changed the site look",
 	"addon.changed":                   "changed the feature %s",
 	"extension.installed":             "installed the extension %s",
 	"extension.uninstalled":           "removed the extension %s",

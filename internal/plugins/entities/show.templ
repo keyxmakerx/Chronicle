@@ -258,6 +258,15 @@ templ blockTitle(cc *campaigns.CampaignContext, entity *Entity, csrfToken string
 				// show handler injected (nil when none was computed). The
 				// DM-team gate lives inside visibilityGlance itself (ADR-057).
 				@effectiveVisibilityBadge(cc, entity, GetEffectiveVisibility(ctx))
+				// "Show in Foundry" for NPC pages. foundry_vtt owns it and
+				// answers empty for anything else, so this stays VTT-agnostic.
+				if cc.CanAuthorDmOnly() {
+					<span
+						hx-get={ fmt.Sprintf("/campaigns/%s/foundry-vtt/npc-spotlight/%s", cc.Campaign.ID, entity.ID) }
+						hx-trigger="load"
+						hx-swap="outerHTML"
+					></span>
+				}
 			</div>
 			// Aliases widget: displays alternative names for this entity.
 			<div
@@ -288,12 +297,21 @@ templ blockTitle(cc *campaigns.CampaignContext, entity *Entity, csrfToken string
 							<i class="fa-regular fa-clone mr-1"></i> Clone
 						</button>
 					</form>
+					<button
+						type="button"
+						class="btn-ghost btn-sm"
+						hx-get={ fmt.Sprintf("/campaigns/%s/entities/%s/history", cc.Campaign.ID, entity.ID) }
+						hx-target="#page-history-slot"
+						title="See earlier versions of this page and put one back"
+					>
+						<i class="fa-solid fa-clock-rotate-left mr-1"></i> History
+					</button>
 					if cc.MemberRole >= campaigns.RoleOwner {
 						<form
 							method="POST"
 							action={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/entities/%s", cc.Campaign.ID, entity.ID)) }
 							hx-delete={ fmt.Sprintf("/campaigns/%s/entities/%s", cc.Campaign.ID, entity.ID) }
-							hx-confirm="Are you sure you want to delete this page?"
+							hx-confirm="Move this page and its sub-pages to the Trash? You can restore them from Manage > Trash."
 							class="inline"
 						>
 							<input type="hidden" name="_method" value="DELETE"/>
@@ -306,6 +324,11 @@ templ blockTitle(cc *campaigns.CampaignContext, entity *Entity, csrfToken string
 				</div>
 			}
 		</div>
+
+		// The History panel loads here when History is clicked.
+		if cc.MemberRole >= campaigns.RoleScribe {
+			<div id="page-history-slot"></div>
+		}
 
 		// Inline metadata edit panel (Scribe+).
 		if cc.MemberRole >= campaigns.RoleScribe {
@@ -422,6 +445,7 @@ templ blockEntry(cc *campaigns.CampaignContext, entity *Entity, csrfToken string
 			data-editable="true"
 		}
 		data-autosave="30"
+		data-outline="true"
 		data-csrf-token={ csrfToken }
 	></div>
 }

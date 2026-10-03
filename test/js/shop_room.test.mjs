@@ -122,3 +122,30 @@ test('every icon name the server accepts exists in the widget', () => {
   for (const n of names) assert.ok(room.ICONS[n], `icon ${n}`);
   assert.equal(Object.keys(room.ICONS).length, names.length, 'and the widget offers no icon the server would refuse');
 });
+
+test('basket: totals, sold-out lines skipped, and why Buy is off', () => {
+  const its = [
+    { id: 1, p: 10, cur: 'gp', out: false },
+    { id: 2, p: 2.5, cur: 'gp', out: false },
+    { id: 3, p: 99, cur: 'gp', out: true },
+    { id: 4, p: 5, cur: 'sp', out: false },
+  ];
+  const kaela = { id: 'k', name: 'Kaela', money: 30 };
+  let sm = SR.basketSummary({ 1: 2, 2: 2, 3: 1 }, its, kaela);
+  assert.equal(sm.count, 4);
+  assert.equal(sm.total, 25);
+  assert.equal(sm.currency, 'gp');
+  assert.equal(sm.short, false);
+  assert.equal(sm.mixed, false);
+  assert.equal(SR.basketSummary({ 1: 4 }, its, kaela).short, true);
+  assert.equal(SR.basketSummary({ 1: 1, 4: 1 }, its, kaela).mixed, true);
+  sm = SR.basketSummary({ 1: 1 }, its, { id: 'x', name: 'X', money: null });
+  assert.equal(sm.noField, true);
+  assert.equal(sm.short, false);
+  assert.equal(SR.basketSummary({}, its, kaela).count, 0);
+});
+
+test('basket: currency labels match regardless of case and spacing', () => {
+  const its = [{ id: 1, p: 1, cur: 'gp', out: false }, { id: 2, p: 1, cur: ' GP', out: false }];
+  assert.equal(SR.basketSummary({ 1: 1, 2: 1 }, its, { id: 'k', money: 5 }).mixed, false);
+});
