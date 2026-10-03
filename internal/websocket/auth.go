@@ -7,6 +7,8 @@ import (
 	"strings"
 	"time"
 
+	gorillaWs "github.com/gorilla/websocket"
+
 	"github.com/keyxmakerx/chronicle/internal/plugins/foundry_vtt"
 )
 
@@ -36,13 +38,41 @@ type CampaignRoleLookup interface {
 	IsUserDmGranted(ctx context.Context, campaignID, userID string) (bool, error)
 }
 
-// MultiAuthenticator combines API key and session authentication for WS upgrades.
-// It checks the query parameter "token" for API key auth first, then falls back
-// to session cookie auth. A "campaign" query parameter is required for session auth.
+// NotesGrantAuthenticator authenticates a player's notes grant, the token an
+// outside app's notes frame holds instead of a sign-in. Implemented in
+// internal/app over the notes widget's grant service and the campaign's
+// outside-apps switch.
+type NotesGrantAuthenticator interface {
+	// AuthenticateNotesGrantForWS returns the grant's campaign and player,
+	// or an error when the token is unknown, revoked, idle too long, or the
+	// campaign has outside apps turned off.
+	AuthenticateNotesGrantForWS(ctx context.Context, token string) (campaignID, userID string, err error)
+}
+
+// NotesAppSource tags a socket opened with a notes grant. The hub sends such
+// a socket note events only, since the grant reaches nothing else.
+const NotesAppSource = "notes-app"
+
+// NotesSubprotocol is the WebSocket subprotocol a notes frame asks for, and
+// the one the server answers with. The grant itself travels as a second
+// offered subprotocol, NotesGrantProtocolPrefix + token: a browser can't set
+// headers on a WebSocket, and a token in the URL would land in access logs.
+const NotesSubprotocol = "chronicle.notes"
+
+// NotesGrantProtocolPrefix prefixes the offered subprotocol carrying the
+// grant token. Grant tokens are base64url, which is valid in a subprotocol.
+const NotesGrantProtocolPrefix = "chronicle.grant."
+
+// MultiAuthenticator combines API key, notes grant and session
+// authentication for WS upgrades. It checks the query parameter "token" for
+// API key auth first, then a notes grant offered as a subprotocol, then
+// falls back to session cookie auth. A "campaign" query parameter is
+// required for session auth.
 type MultiAuthenticator struct {
 	apiKeyAuth  APIKeyAuthenticator
 	sessionAuth SessionAuthenticator
 	roleLookup  CampaignRoleLookup
+	notesAuth   NotesGrantAuthenticator
 }
 
 // NewMultiAuthenticator creates an authenticator that supports both auth methods.
@@ -54,8 +84,56 @@ func NewMultiAuthenticator(apiKey APIKeyAuthenticator, session SessionAuthentica
 	}
 }
 
+// SetNotesGrantAuth enables notes grant sockets. Without it a grant offered
+// as a subprotocol is refused.
+func (a *MultiAuthenticator) SetNotesGrantAuth(n NotesGrantAuthenticator) {
+	a.notesAuth = n
+}
+
+// notesGrantToken returns the grant token a notes frame offered as a
+// subprotocol, and whether it offered the notes subprotocol at all.
+func notesGrantToken(r *http.Request) (token string, offered bool) {
+	for _, p := range gorillaWs.Subprotocols(r) {
+		if p == NotesSubprotocol {
+			offered = true
+		} else if t, ok := strings.CutPrefix(p, NotesGrantProtocolPrefix); ok && token == "" {
+			token = t
+		}
+	}
+	return token, offered
+}
+
+// authenticateNotesGrant checks a notes grant socket. The player must still
+// be a member of the grant's campaign at upgrade time, as the grant's HTTP
+// routes require on every request; a campaign named in the URL must be the
+// grant's own. The key expiry stays nil: a grant has no fixed end, and
+// revoking it closes the socket (Hub.RevokeNotesAppClients).
+func (a *MultiAuthenticator) authenticateNotesGrant(r *http.Request, token string) (campaignID, userID, source string, role int, isDmGranted bool, expiresAt *time.Time, err error) {
+	ctx := r.Context()
+	if a.notesAuth == nil || a.roleLookup == nil {
+		return "", "", "", 0, false, nil, fmt.Errorf("notes grant auth not configured")
+	}
+	campaignID, userID, err = a.notesAuth.AuthenticateNotesGrantForWS(ctx, token)
+	if err != nil {
+		return "", "", "", 0, false, nil, fmt.Errorf("notes grant auth: %w", err)
+	}
+	if want := r.URL.Query().Get("campaign"); want != "" && want != campaignID {
+		return "", "", "", 0, false, nil, fmt.Errorf("notes grant is for another campaign")
+	}
+	role, err = a.roleLookup.GetUserCampaignRole(ctx, campaignID, userID)
+	if err != nil {
+		return "", "", "", 0, false, nil, fmt.Errorf("role lookup: %w", err)
+	}
+	if role == 0 {
+		return "", "", "", 0, false, nil, fmt.Errorf("user is not a member of campaign %s", campaignID)
+	}
+	isDmGranted = a.lookupDmGranted(ctx, campaignID, userID)
+	return campaignID, userID, NotesAppSource, role, isDmGranted, nil, nil
+}
+
 // AuthenticateWS implements the Authenticator interface.
-// Priority: API key (via ?token= query param) > Session cookie.
+// Priority: API key (via ?token= query param) > notes grant (subprotocol) >
+// Session cookie.
 func (a *MultiAuthenticator) AuthenticateWS(r *http.Request) (campaignID, userID, source string, role int, isDmGranted bool, expiresAt *time.Time, err error) {
 	ctx := r.Context()
 
@@ -85,6 +163,16 @@ func (a *MultiAuthenticator) AuthenticateWS(r *http.Request) (campaignID, userID
 		}
 		isDmGranted = a.lookupDmGranted(ctx, campaignID, userID)
 		return campaignID, userID, foundrySource(), role, isDmGranted, expiresAt, nil
+	}
+
+	// A notes frame has no session cookie (it is a cross-site frame), so it
+	// never falls through to session auth: asking for the notes subprotocol
+	// commits it to the grant.
+	if grant, offered := notesGrantToken(r); offered || grant != "" {
+		if grant == "" || !offered {
+			return "", "", "", 0, false, nil, fmt.Errorf("notes grant: incomplete subprotocol offer")
+		}
+		return a.authenticateNotesGrant(r, grant)
 	}
 
 	// Fall back to session cookie auth (browser clients).

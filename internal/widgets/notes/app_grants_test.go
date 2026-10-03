@@ -511,3 +511,74 @@ func TestMediaLinks_SignsAsTheGrantsPlayer(t *testing.T) {
 		t.Fatalf("headers %v body %s", rec.Header(), rec.Body.String())
 	}
 }
+
+type recordingConnRevoker struct{ calls []string }
+
+func (r *recordingConnRevoker) RevokeNotesAppClients(campaignID, userID string) {
+	r.calls = append(r.calls, "notes:"+campaignID+":"+userID)
+}
+
+func (r *recordingConnRevoker) RevokeNotesAppClientsEverywhere(userID string) {
+	r.calls = append(r.calls, "everywhere:"+userID)
+}
+
+func TestAppGrant_RevokeClosesOpenSockets(t *testing.T) {
+	tests := []struct {
+		name   string
+		revoke func(svc *appGrantService, grantID string) error
+		want   []string
+	}{
+		{"one grant drops the player's notes sockets in that campaign",
+			func(svc *appGrantService, id string) error {
+				return svc.Revoke(context.Background(), "camp", "user", id)
+			},
+			[]string{"notes:camp:user"}},
+		{"someone else's grant drops nothing",
+			func(svc *appGrantService, id string) error {
+				return svc.Revoke(context.Background(), "camp", "intruder", id)
+			},
+			nil},
+		{"all grants with the sessions drop the user's notes sockets everywhere",
+			func(svc *appGrantService, _ string) error { return svc.RevokeAllForUser(context.Background(), "user") },
+			[]string{"everywhere:user"}},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			now := time.Date(2026, 10, 3, 12, 0, 0, 0, time.UTC)
+			svc, _ := newTestGrantService(&now)
+			rec := &recordingConnRevoker{}
+			svc.SetConnectionRevoker(rec)
+			_, g, err := svc.Issue(context.Background(), "camp", "user", "https://foundry.example")
+			if err != nil {
+				t.Fatal(err)
+			}
+			_ = tt.revoke(svc, g.ID)
+			if strings.Join(rec.calls, ",") != strings.Join(tt.want, ",") {
+				t.Fatalf("socket drops %v, want %v", rec.calls, tt.want)
+			}
+		})
+	}
+}
+
+func TestAppGrant_CapEvictionClosesOpenSockets(t *testing.T) {
+	now := time.Date(2026, 10, 3, 12, 0, 0, 0, time.UTC)
+	svc, _ := newTestGrantService(&now)
+	rec := &recordingConnRevoker{}
+	svc.SetConnectionRevoker(rec)
+	for i := 0; i < maxAppGrantsPerUser; i++ {
+		now = now.Add(time.Second)
+		if _, _, err := svc.Issue(context.Background(), "camp", "user", "https://foundry.example"); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if len(rec.calls) != 0 {
+		t.Fatalf("sockets dropped before the cap was passed: %v", rec.calls)
+	}
+	now = now.Add(time.Second)
+	if _, _, err := svc.Issue(context.Background(), "camp", "user", "https://foundry.example"); err != nil {
+		t.Fatal(err)
+	}
+	if strings.Join(rec.calls, ",") != "notes:camp:user" {
+		t.Fatalf("socket drops %v after a grant was evicted", rec.calls)
+	}
+}
