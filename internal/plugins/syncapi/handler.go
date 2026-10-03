@@ -3,6 +3,7 @@ package syncapi
 import (
 	"context"
 	"fmt"
+	"log/slog"
 	"net/http"
 	"strconv"
 	"strings"
@@ -403,7 +404,12 @@ func (h *Handler) AdminDashboard(c echo.Context) error {
 	// Fetch per-campaign sync stats if sync mapping service is available.
 	var campaignSyncStats []CampaignSyncStats
 	if h.syncMapSvc != nil {
-		campaignSyncStats, _ = h.syncMapSvc.ListCampaignSyncStats(ctx)
+		// The table is optional on this page, so a failure leaves it empty
+		// rather than failing the dashboard; logged so it is never silent.
+		var err error
+		if campaignSyncStats, err = h.syncMapSvc.ListCampaignSyncStats(ctx); err != nil {
+			slog.Warn("admin dashboard: per-campaign sync stats failed", slog.Any("error", err))
+		}
 	}
 
 	// Fetch CORS origins for the whitelist display.

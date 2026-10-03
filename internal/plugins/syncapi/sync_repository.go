@@ -348,7 +348,7 @@ func (r *syncMappingRepo) ListCampaignSyncStats(ctx context.Context) ([]Campaign
 		FROM campaigns c
 		LEFT JOIN (
 			SELECT campaign_id, COUNT(*) AS active_keys
-			FROM sync_api_keys WHERE is_active = 1
+			FROM api_keys WHERE is_active = 1
 			GROUP BY campaign_id
 		) ak ON ak.campaign_id = c.id
 		LEFT JOIN (
@@ -360,7 +360,7 @@ func (r *syncMappingRepo) ListCampaignSyncStats(ctx context.Context) ([]Campaign
 		) sm ON sm.campaign_id = c.id
 		LEFT JOIN (
 			SELECT campaign_id, COUNT(*) AS recent_errors
-			FROM api_request_logs
+			FROM api_request_log
 			WHERE status_code >= 400 AND created_at > DATE_SUB(NOW(), INTERVAL 24 HOUR)
 			GROUP BY campaign_id
 		) rl ON rl.campaign_id = c.id
