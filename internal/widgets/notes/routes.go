@@ -83,6 +83,7 @@ func registerNoteJSONRoutes(cg *echo.Group, h *Handler, player echo.MiddlewareFu
 // the notes editor needs (page search), wired in app/routes.go.
 func RegisterAppGrantRoutes(e *echo.Echo, h *Handler, gh *AppGrantHandler, grants AppGrantService, gate AppGate, campaignSvc campaigns.CampaignService, authSvc auth.AuthService) *echo.Group {
 	player := campaigns.RequireRole(campaigns.RolePlayer)
+	gh.gate = gate
 
 	cg := e.Group("/campaigns/:id",
 		auth.RequireAuth(authSvc),

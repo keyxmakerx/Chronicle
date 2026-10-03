@@ -35,6 +35,9 @@ type AppGate func(ctx context.Context, campaignID string) (bool, error)
 type AppGrantHandler struct {
 	grants  AppGrantService
 	origins OriginAllower
+	// gate is the campaign's switch for outside apps; set by
+	// RegisterAppGrantRoutes so a grant can't be made while it is off.
+	gate AppGate
 }
 
 // NewAppGrantHandler creates the handler for the Allow window.
@@ -116,6 +119,15 @@ func (h *AppGrantHandler) Allow(c echo.Context) error {
 	origin, ok := h.allowedOrigin(c, req.Origin)
 	if !ok {
 		return apperror.NewForbidden("this address isn't allowed to use Chronicle notes; ask your site admin to add it")
+	}
+	if h.gate != nil {
+		on, err := h.gate(c.Request().Context(), cc.Campaign.ID)
+		if err != nil {
+			return apperror.NewInternal(err)
+		}
+		if !on {
+			return apperror.NewForbidden("this campaign's owner has turned off outside apps (Sync API), so Foundry can't use notes here")
+		}
 	}
 	userID := auth.GetUserID(c)
 	token, g, err := h.grants.Issue(c.Request().Context(), cc.Campaign.ID, userID, origin)

@@ -3281,7 +3281,7 @@ func (a *App) RegisterRoutes() {
 	// change, force sign-out).
 	auth.OnSessionsRevoked(authService, func(ctx context.Context, userID string) {
 		if err := noteGrants.RevokeAllForUser(ctx, userID); err != nil {
-			slog.Warn("revoking notes app grants failed", slog.String("user_id", userID), slog.Any("error", err))
+			slog.Error("revoking notes app grants failed", slog.String("user_id", userID), slog.Any("error", err))
 		}
 	})
 	// The campaign's Sync API switch governs outside apps, the notebook too.

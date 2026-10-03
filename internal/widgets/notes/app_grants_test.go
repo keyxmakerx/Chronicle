@@ -2,6 +2,7 @@ package notes
 
 import (
 	"context"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -13,6 +14,7 @@ import (
 	"github.com/keyxmakerx/chronicle/internal/apperror"
 	"github.com/keyxmakerx/chronicle/internal/middleware"
 	"github.com/keyxmakerx/chronicle/internal/plugins/auth"
+	"github.com/keyxmakerx/chronicle/internal/plugins/campaigns"
 )
 
 // fakeGrantRepo is an in-memory AppGrantRepository.
@@ -435,5 +437,37 @@ func TestShowEmbed_FramableOnlyByAllowedOrigins(t *testing.T) {
 				t.Fatalf("the rest of the policy was lost: %q", csp)
 			}
 		})
+	}
+}
+
+func TestAllow_ClosedGateMakesNoGrant(t *testing.T) {
+	now := time.Date(2026, 10, 3, 12, 0, 0, 0, time.UTC)
+	for _, open := range []bool{true, false} {
+		svc, repo := newTestGrantService(&now)
+		h := NewAppGrantHandler(svc, staticOrigins{"https://foundry.example": true})
+		h.gate = func(context.Context, string) (bool, error) { return open, nil }
+
+		e := echo.New()
+		req := httptest.NewRequest(http.MethodPost, "/", strings.NewReader(`{"origin":"https://foundry.example"}`))
+		req.Header.Set("Content-Type", "application/json")
+		rec := httptest.NewRecorder()
+		c := e.NewContext(req, rec)
+		c.Set("campaign_context", &campaigns.CampaignContext{Campaign: &campaigns.Campaign{ID: "camp"}})
+		auth.SetSession(c, &auth.Session{UserID: "user"})
+
+		err := h.Allow(c)
+		if open {
+			if err != nil || rec.Code != http.StatusCreated || len(repo.byHash) != 1 {
+				t.Fatalf("open gate: err=%v code=%d grants=%d", err, rec.Code, len(repo.byHash))
+			}
+			continue
+		}
+		var ae *apperror.AppError
+		if !errors.As(err, &ae) || ae.Code != http.StatusForbidden {
+			t.Fatalf("closed gate: want 403, got %v", err)
+		}
+		if len(repo.byHash) != 0 {
+			t.Fatal("closed gate still made a grant")
+		}
 	}
 }
