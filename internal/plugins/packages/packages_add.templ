@@ -1,0 +1,51 @@
+// packages_add.templ is the Add package disclosure in the page header.
+package packages
+
+// addPackageDisclosure is a <details> popover, not a dialog: it needs no
+// script, closes with the page reload that follows a successful add, and the
+// form inside is the same POST /admin/packages as before (behind password
+// re-confirmation).
+templ addPackageDisclosure(csrfToken string) {
+	<details class="relative">
+		<summary class="btn-primary text-sm cursor-pointer list-none">
+			<i class="fa-solid fa-plus mr-1"></i>
+			Add package
+		</summary>
+		<div class="card absolute right-0 z-20 mt-2 w-[min(26rem,calc(100vw-2rem))] p-4 shadow-lg">
+			<h2 class="text-base font-semibold text-fg">Add a package</h2>
+			<p class="text-xs text-fg-muted mt-1 mb-3">Paste the GitHub address of a game system or the Foundry module. Chronicle reads its releases and installs the newest stable one.</p>
+			<form
+				method="POST"
+				action="/admin/packages"
+				hx-post="/admin/packages"
+				class="space-y-3"
+			>
+				<input type="hidden" name="csrf_token" value={ csrfToken }/>
+				<div>
+					<label for="repo_url" class="block text-sm font-medium text-fg-body mb-1">GitHub repository address</label>
+					<input
+						type="url"
+						id="repo_url"
+						name="repo_url"
+						required
+						class="input w-full"
+						placeholder="https://github.com/owner/repo"
+					/>
+				</div>
+				<div>
+					<label for="type" class="block text-sm font-medium text-fg-body mb-1">Type</label>
+					<select id="type" name="type" class="input w-full">
+						<option value="system">Game system</option>
+						<option value={ string(PackageTypeFoundryModule) }>Foundry module</option>
+					</select>
+				</div>
+				<div class="flex justify-end">
+					<button type="submit" class="btn-primary text-sm">
+						<i class="fa-solid fa-plus mr-1"></i>
+						Add package
+					</button>
+				</div>
+			</form>
+		</div>
+	</details>
+}

@@ -1,0 +1,134 @@
+// packages_overview.templ is the panel's Overview tab: one plain-language
+// statement of where the package stands, then the facts.
+package packages
+
+// panelOverview leads with the state (failure, update ready, pinned, retired
+// or fine) and follows with facts. Writes reuse the existing endpoints.
+templ panelOverview(r PackageRow, data PackagesPageData) {
+	switch r.Status {
+		case statusProblem:
+			<div class="rounded-lg border border-red-500/40 bg-red-500/5 p-3 text-sm text-fg">
+				<p class="font-semibold">Last update failed.</p>
+				<p class="mt-1 text-fg-secondary break-words">{ r.LastError }</p>
+				<div class="mt-2">
+					<button
+						type="button"
+						hx-post={ "/admin/packages/" + r.ID + "/check" }
+						hx-headers={ csrfHeaders(data.CSRFToken) }
+						class="btn-secondary btn-sm"
+					>Try again</button>
+				</div>
+			</div>
+		case statusUpdateReady:
+			<div class="rounded-lg border border-green-500/40 bg-green-500/5 p-3 text-sm text-fg">
+				<p class="font-semibold">{ r.Newer.Version } is ready.</p>
+				if lines := releaseNoteLines(r.Newer.ReleaseNotes, 1); len(lines) > 0 {
+					<p class="mt-1 text-fg-secondary break-words">{ lines[0] }</p>
+				}
+				<div class="mt-2 flex flex-wrap gap-2">
+					@installButton(r.ID, r.Newer.Version, data.CSRFToken, "Install "+r.Newer.Version, "btn-primary btn-sm")
+					<a href={ templ.SafeURL(tabHref(PackagesTabUpdates)) } class="btn-secondary btn-sm">See what changes</a>
+				</div>
+			</div>
+		case statusNotInstalled:
+			<div class="rounded-lg border border-yellow-500/40 bg-yellow-500/5 p-3 text-sm text-fg">
+				<p class="font-semibold">Not installed yet.</p>
+				if latest := latestStableVersion(r.Versions); latest != nil {
+					<div class="mt-2">
+						@installButton(r.ID, latest.Version, data.CSRFToken, "Install "+latest.Version, "btn-primary btn-sm")
+					</div>
+				} else {
+					<p class="mt-1 text-fg-secondary">No versions found yet. Press Check now on the Settings tab.</p>
+				}
+			</div>
+		case statusPinned:
+			<div class="rounded-lg border border-edge p-3 text-sm text-fg">
+				<p class="font-semibold">Pinned to { r.PinnedVersion }.</p>
+				<p class="mt-1 text-fg-secondary">Automatic updates are paused while a version is pinned.</p>
+				<div class="mt-2">
+					@unpinButton(r.ID, data.CSRFToken)
+				</div>
+			</div>
+		case statusRetired:
+			<p class="text-sm text-fg">
+				if r.Package.Status == StatusDeprecated {
+					Deprecated: it still runs, but it is marked as nearing its end.
+					if r.DeprecationMsg != "" {
+						<span class="block mt-1 text-fg-secondary break-words">{ r.DeprecationMsg }</span>
+					}
+				} else {
+					Retired: it is hidden from the active list. Use Settings to bring it back.
+				}
+			</p>
+		case statusDeclined:
+			<p class="text-sm text-fg">
+				Declined submission.
+				if r.ReviewNote != "" {
+					<span class="block mt-1 text-fg-secondary break-words">{ r.ReviewNote }</span>
+				}
+			</p>
+		default:
+			<p class="text-sm text-fg">Up to date. Checked { agoLabel(data.Now, r.LastCheckedAt) }.</p>
+	}
+	if r.IsFoundryModule() {
+		<p class="rounded-lg border border-sky-500/30 bg-sky-500/5 p-3 text-sm text-fg-secondary">
+			Foundry worlds load this module straight from Chronicle, not from GitHub.
+		</p>
+	}
+	<dl class="grid grid-cols-[max-content_minmax(0,1fr)] gap-x-4 gap-y-2 text-sm">
+		<dt class="text-fg-secondary">Comes from</dt>
+		<dd class="text-fg break-all">{ r.RepoURL }</dd>
+		<dt class="text-fg-secondary">Running</dt>
+		<dd class="text-fg">
+			if r.InstalledVersion == "" {
+				Nothing installed
+			} else {
+				<span class="tabular-nums">{ r.InstalledVersion }</span>
+				if r.LastInstalledAt != nil {
+					, installed { dateLabel(r.LastInstalledAt) }
+				}
+			}
+		</dd>
+		<dt class="text-fg-secondary">Gets new versions</dt>
+		<dd class="text-fg">
+			{ updatePolicyLabel(r.AutoUpdate) }
+			<a href={ templ.SafeURL(data.Query.panelHref(PanelTabSettings)) } class="btn-secondary btn-sm ml-2">Change</a>
+		</dd>
+		<dt class="text-fg-secondary">Last checked</dt>
+		<dd class="text-fg">{ agoLabel(data.Now, r.LastCheckedAt) }</dd>
+		if size := installedVersionSize(r); size > 0 {
+			<dt class="text-fg-secondary">Size</dt>
+			<dd class="text-fg">{ prettyBytes(size) }</dd>
+		}
+		if r.UsageKnown {
+			<dt class="text-fg-secondary">Used by</dt>
+			<dd class="text-fg">{ campaignCount(len(r.Usage)) }</dd>
+		}
+	</dl>
+}
+
+// installButton installs a version through the existing PUT endpoint.
+templ installButton(id, version, csrfToken, label, class string) {
+	<button
+		type="button"
+		hx-put={ "/admin/packages/" + id + "/version" }
+		hx-vals={ versionVals(version) }
+		hx-headers={ csrfHeaders(csrfToken) }
+		hx-confirm={ "Install version " + version + "?" }
+		class={ class }
+	>{ label }</button>
+}
+
+// unpinButton clears a pin through the existing DELETE endpoint.
+templ unpinButton(id, csrfToken string) {
+	<button
+		type="button"
+		hx-delete={ "/admin/packages/" + id + "/pin" }
+		hx-headers={ csrfHeaders(csrfToken) }
+		hx-confirm="Unpin this package and allow auto-updates?"
+		class="btn-secondary btn-sm"
+	>
+		<i class="fa-solid fa-thumbtack mr-1"></i>
+		Unpin
+	</button>
+}
