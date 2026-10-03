@@ -1,8 +1,11 @@
 package sessions
 
 import (
+	"context"
+	"errors"
 	"reflect"
 	"testing"
+	"time"
 )
 
 func TestOccurrenceDates(t *testing.T) {
@@ -120,6 +123,57 @@ func TestGameNightForViewer(t *testing.T) {
 			}
 			if n.CanExclude != tt.wantExcl {
 				t.Fatalf("CanExclude = %v, want %v", n.CanExclude, tt.wantExcl)
+			}
+		})
+	}
+}
+
+func TestNextGameNight(t *testing.T) {
+	// Saturday 2026-10-03 18:00 UTC.
+	now := time.Date(2026, 10, 3, 18, 0, 0, 0, time.UTC)
+	weekly := func(date, tm string) Session {
+		s := Session{ID: "w", Name: "Weekly", ScheduledDate: strp(date), IsRecurring: true, RecurrenceType: strp(RecurrenceWeekly)}
+		if tm != "" {
+			s.ScheduledTime = strp(tm)
+		}
+		return s
+	}
+	tests := []struct {
+		name     string
+		sessions []Session
+		repoErr  error
+		wantDate string // "" means no next night
+		wantErr  bool
+	}{
+		{"nothing scheduled", nil, nil, "", false},
+		{"tonight, not started", []Session{{ID: "a", Name: "A", ScheduledDate: strp("2026-10-03"), ScheduledTime: strp("19:00")}}, nil, "2026-10-03", false},
+		{"tonight already started rolls to next week", []Session{weekly("2026-09-26", "17:00")}, nil, "2026-10-10", false},
+		{"no time counts as all day", []Session{{ID: "a", Name: "A", ScheduledDate: strp("2026-10-03")}}, nil, "2026-10-03", false},
+		{"soonest of several", []Session{
+			{ID: "late", Name: "Late", ScheduledDate: strp("2026-10-20")},
+			{ID: "soon", Name: "Soon", ScheduledDate: strp("2026-10-05"), ScheduledTime: strp("20:00")},
+		}, nil, "2026-10-05", false},
+		{"zone far west is still ahead after UTC rolls over", []Session{{ID: "a", Name: "A", ScheduledDate: strp("2026-10-03"), ScheduledTime: strp("20:00"), ScheduledTZ: strp("America/Los_Angeles")}}, nil, "2026-10-03", false},
+		{"repo failure surfaces as an error", nil, errors.New("db down"), "", true},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			repo := &mockSessionRepo{listByDateRangeFn: func(context.Context, string, string, string) ([]Session, error) {
+				return tt.sessions, tt.repoErr
+			}}
+			svc := &sessionService{repo: repo}
+			got, err := svc.NextGameNight(context.Background(), "c1", now)
+			if (err != nil) != tt.wantErr {
+				t.Fatalf("err = %v, wantErr %v", err, tt.wantErr)
+			}
+			if tt.wantDate == "" {
+				if got != nil {
+					t.Fatalf("got %+v, want no next night", got)
+				}
+				return
+			}
+			if got == nil || got.Date != tt.wantDate {
+				t.Fatalf("got %+v, want date %s", got, tt.wantDate)
 			}
 		})
 	}

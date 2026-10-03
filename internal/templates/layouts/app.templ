@@ -1092,9 +1092,37 @@ func topbarWidgetShown(ctx context.Context, tc *TopbarContentData, w string) boo
 		return IsAuthenticated(ctx) && GetCampaignRole(ctx) >= 1
 	case "search":
 		return true
+	case "date":
+		return tc.Live != nil && tc.Live.Date != ""
+	case "weather":
+		return tc.Live != nil && tc.Live.Weather != ""
+	case "moon":
+		return tc.Live != nil && len(tc.Live.Moons) > 0
+	case "session":
+		return tc.Live != nil && tc.Live.NextNight.Label != ""
 	}
 	return false
 }
+
+// topbarMoonText joins each moon's name and phase for the moon chip, capped
+// at three so a world with many moons can't crowd the bar; the rest are
+// counted.
+func topbarMoonText(moons []TopbarMoon) string {
+	const shown = 3
+	parts := make([]string, 0, shown+1)
+	for i, m := range moons {
+		if i == shown {
+			parts = append(parts, fmt.Sprintf("+%d more", len(moons)-shown))
+			break
+		}
+		parts = append(parts, m.Name+" "+strings.ToLower(m.Phase))
+	}
+	return strings.Join(parts, " · ")
+}
+
+// topbarChipClass is the shared pill for the data-backed widgets: the Quick
+// note button's look without being a button, since these only report.
+const topbarChipClass = "inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full border border-edge bg-surface-alt text-xs font-medium text-fg-secondary whitespace-nowrap min-w-0 max-w-[16rem] sm:max-w-[22rem]"
 
 // topbarShownWidgets is the header's widgets, in order, that have something
 // to draw.
@@ -1155,6 +1183,26 @@ templ topbarWidget(ctx context.Context, tc *TopbarContentData, w string) {
 			<i class="fa-solid fa-pen text-[10px]" aria-hidden="true"></i>
 			Quick note
 		</button>
+	} else if w == "date" && topbarWidgetShown(ctx, tc, "date") {
+		<span class={ topbarChipClass } title="Today in your world">
+			<i class="fa-solid fa-calendar-days text-[10px] shrink-0" aria-hidden="true"></i>
+			<span class="truncate">{ tc.Live.Date }</span>
+		</span>
+	} else if w == "weather" && topbarWidgetShown(ctx, tc, "weather") {
+		<span class={ topbarChipClass } title="Today's weather">
+			<i class="fa-solid fa-cloud-sun text-[10px] shrink-0" aria-hidden="true"></i>
+			<span class="truncate">{ tc.Live.Weather }</span>
+		</span>
+	} else if w == "moon" && topbarWidgetShown(ctx, tc, "moon") {
+		<span class={ topbarChipClass } title="Today's moon">
+			<i class="fa-solid fa-moon text-[10px] shrink-0" aria-hidden="true"></i>
+			<span class="truncate">{ topbarMoonText(tc.Live.Moons) }</span>
+		</span>
+	} else if w == "session" && topbarWidgetShown(ctx, tc, "session") {
+		<span class={ topbarChipClass } title={ tc.Live.NextNight.Title }>
+			<i class="fa-solid fa-clock text-[10px] shrink-0" aria-hidden="true"></i>
+			<span class="truncate">{ tc.Live.NextNight.Label }</span>
+		</span>
 	} else if w == "search" {
 		<button
 			type="button"

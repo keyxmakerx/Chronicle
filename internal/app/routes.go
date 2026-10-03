@@ -4229,6 +4229,25 @@ func (a *App) RegisterRoutes() {
 			// here, where calendar.PluginSlug is already in scope.
 			ctx = layouts.SetUpcomingEventsAvailable(ctx, enabledSlugs[calendar.PluginSlug] && calendarHealthy)
 
+			// The header's data-backed widgets (date, weather, moon, game
+			// night) read today's world from the calendar and sessions. This
+			// sits here because it needs the enabled addons resolved above;
+			// a fragment swap never draws the bar, so it skips the reads.
+			if tc := layouts.GetTopbarContent(ctx); tc != nil && !middleware.IsHTMX(c) {
+				liveCtx, cancel := context.WithTimeout(reqCtx, headerLiveTimeout)
+				tc.Live = buildTopbarLive(liveCtx, calendarService, sessionsService, headerLiveRequest{
+					CampaignID: cc.Campaign.ID,
+					Viewer:     permissions.RequestViewer(cc.VisibilityRole(), layoutUserID),
+					Widgets:    tc.TopbarWidgets(),
+					Calendar:   enabledSlugs[calendar.PluginSlug] && calendarHealthy,
+					// Game nights are the table's own business: members only,
+					// never a public-campaign visitor.
+					Nights: cc.IsMember && enabledSlugs[calendar.PluginSlug],
+					Now:    time.Now(),
+				})
+				cancel()
+			}
+
 			// Extension widget scripts for campaign pages.
 			if widgetURLs := extHandler.GetWidgetScriptURLs(reqCtx, cc.Campaign.ID); len(widgetURLs) > 0 {
 				ctx = layouts.SetExtWidgetScripts(ctx, widgetURLs)
