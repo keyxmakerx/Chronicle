@@ -24,7 +24,7 @@ type mockSyncAPIRepo struct {
 	listCampaignIDsWithKeysFn func(ctx context.Context) ([]string, error)
 	listAllKeysFn             func(ctx context.Context, limit, offset int) ([]APIKey, int, error)
 	updateKeyActiveFn         func(ctx context.Context, id int, active bool) error
-	updateKeyLastUsedFn       func(ctx context.Context, id int, ip string) error
+	updateKeyLastUsedFn       func(ctx context.Context, id int, ip, moduleVersion string) error
 	deleteKeyFn               func(ctx context.Context, id int) error
 	logRequestFn              func(ctx context.Context, log *APIRequestLog) error
 	listRequestLogsFn         func(ctx context.Context, filter RequestLogFilter) ([]APIRequestLog, int, error)
@@ -113,9 +113,9 @@ func (m *mockSyncAPIRepo) UpdateKeyActive(ctx context.Context, id int, active bo
 	return nil
 }
 
-func (m *mockSyncAPIRepo) UpdateKeyLastUsed(ctx context.Context, id int, ip string) error {
+func (m *mockSyncAPIRepo) UpdateKeyLastUsed(ctx context.Context, id int, ip, moduleVersion string) error {
 	if m.updateKeyLastUsedFn != nil {
-		return m.updateKeyLastUsedFn(ctx, id, ip)
+		return m.updateKeyLastUsedFn(ctx, id, ip, moduleVersion)
 	}
 	return nil
 }

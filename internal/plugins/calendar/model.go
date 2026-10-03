@@ -1216,6 +1216,10 @@ type CreateCalendarInput struct {
 	LeapYearOffset   int
 	Visibility       string
 	VisibilityRules  *string
+	// IsDefault creates the calendar already marked as the campaign's
+	// default. The one-default-per-campaign unique index then refuses a
+	// second one atomically, which CreateCalendar reports as a conflict.
+	IsDefault bool
 }
 
 // CreateCalendarFromImportOptions carries the caller's explicit choice for
@@ -1233,6 +1237,9 @@ type CreateCalendarFromImportOptions struct {
 	CurrentYear  *int
 	CurrentMonth *int
 	CurrentDay   *int
+	// MakeDefault creates the calendar as the campaign's default, failing
+	// with a conflict if the campaign already has one.
+	MakeDefault bool
 }
 
 // UpdateCalendarInput is the validated input for updating calendar settings.

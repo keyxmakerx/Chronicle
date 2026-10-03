@@ -165,6 +165,7 @@ type Handler struct {
 	recentLister       RecentEntityLister
 	auditLogger        AuditLogger
 	addonLister        AddonLister
+	foundryConnector   FoundryConnector
 	systemAddonEnabler SystemAddonEnabler
 	mediaUploader      MediaUploader
 	smtpChecker        SMTPChecker
@@ -224,6 +225,13 @@ func (h *Handler) SetAuditLogger(logger AuditLogger) {
 // SetAddonLister sets the addon lister for the plugin hub page.
 func (h *Handler) SetAddonLister(lister AddonLister) {
 	h.addonLister = lister
+}
+
+// SetFoundryConnector wires the Foundry connection status and connect-line
+// source for the Apps & game system page. Late-bound because the websocket hub
+// it reads is built after the campaign handler.
+func (h *Handler) SetFoundryConnector(c FoundryConnector) {
+	h.foundryConnector = c
 }
 
 // SetSystemAddonEnabler sets the addon enabler for auto-enabling game system
