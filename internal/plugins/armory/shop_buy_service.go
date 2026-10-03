@@ -60,9 +60,6 @@ type buyLine struct {
 	quantity   int
 	unit       Cents
 	input      CreateTransactionInput
-	// release is how many units of stock this line holds from the shop; zero
-	// when nothing was taken (unlimited listing or not yet reserved).
-	release int
 }
 
 func (s *shopBuyService) Buyers(ctx context.Context, campaignID, shopEntityID string, a Actor) (*BuyersView, error) {
