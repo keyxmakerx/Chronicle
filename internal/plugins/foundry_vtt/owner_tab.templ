@@ -144,7 +144,7 @@ templ ownerVersionSelector(data OwnerTabData) {
 				<button
 					type="button"
 					onclick={ pinSaveOnClick(data.CampaignID) }
-					class="px-4 py-1.5 text-sm rounded-md bg-accent text-white hover:bg-accent/90"
+					class="px-4 py-1.5 text-sm rounded-md bg-accent-fill text-on-accent hover:bg-accent-fill-hover"
 				>
 					Save Pin
 				</button>
@@ -177,7 +177,7 @@ templ ownerInstallURLBlock(data OwnerTabData) {
 			<button
 				type="button"
 				onclick="(function(b){var t=document.getElementById('fvtt-install-url');if(t&&navigator.clipboard){navigator.clipboard.writeText(t.value).then(function(){var html=b.innerHTML;b.innerHTML='<i class=\'fa-solid fa-check text-emerald-500\'></i> Copied';setTimeout(function(){b.innerHTML=html;},2000);})}})(this)"
-				class="px-4 py-2 text-sm rounded-md bg-accent text-white hover:bg-accent/90 whitespace-nowrap"
+				class="px-4 py-2 text-sm rounded-md bg-accent-fill text-on-accent hover:bg-accent-fill-hover whitespace-nowrap"
 				title="Copy install URL to clipboard"
 			>
 				<i class="fa-solid fa-copy"></i> Copy

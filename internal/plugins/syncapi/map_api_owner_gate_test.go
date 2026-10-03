@@ -30,7 +30,7 @@ func (s *stubMapSvcOwnerGate) GetMap(context.Context, string) (*maps.Map, error)
 func (s *stubMapSvcOwnerGate) GetMarker(_ context.Context, id string) (*maps.Marker, error) {
 	return &maps.Marker{ID: id, MapID: s.m.ID}, nil
 }
-func (s *stubMapSvcOwnerGate) DeleteMarker(context.Context, string, *time.Time, bool) error {
+func (s *stubMapSvcOwnerGate) DeleteMarker(context.Context, string, *time.Time, bool, string, int) error {
 	return nil
 }
 
@@ -61,7 +61,7 @@ func (s *stubDrawingSvcOwnerGate) CreateFog(context.Context, maps.CreateFogInput
 }
 func (s *stubDrawingSvcOwnerGate) DeleteFog(context.Context, string, string) error { return nil }
 func (s *stubDrawingSvcOwnerGate) ResetFog(context.Context, string) error          { return nil }
-func (s *stubDrawingSvcOwnerGate) DeleteDrawing(context.Context, string, string, *time.Time) error {
+func (s *stubDrawingSvcOwnerGate) DeleteDrawing(context.Context, string, string, *time.Time, string, int) error {
 	return nil
 }
 func (s *stubDrawingSvcOwnerGate) DeleteToken(context.Context, string, string, *time.Time) error {
@@ -100,7 +100,7 @@ func newMapAPIContext(method, path string, key *APIKey) (echo.Context, *httptest
 // invariant for the six/seven map endpoints internal/plugins/maps/routes.go
 // (RegisterDrawingRoutes) restricts to RoleOwner: fog of war (read, write,
 // delete, reset), layer structure (create, update, delete), and
-// marker/drawing/token deletion. A Scribe holds PermWrite — the API's only
+// token deletion. A Scribe holds PermWrite — the API's only
 // gate before this fix — so it could reach every one of these; the web twin
 // requires Owner. A Scribe-scoped key must get 403 here too.
 func TestMapAPIHandler_OwnerOnlyRoutes_MatchWebRoleFloor(t *testing.T) {
@@ -126,8 +126,6 @@ func TestMapAPIHandler_OwnerOnlyRoutes_MatchWebRoleFloor(t *testing.T) {
 		{"CreateLayer", func(h *MapAPIHandler, c echo.Context) error { return h.CreateLayer(c) }},
 		{"UpdateLayer", func(h *MapAPIHandler, c echo.Context) error { return h.UpdateLayer(c) }},
 		{"DeleteLayer", func(h *MapAPIHandler, c echo.Context) error { return h.DeleteLayer(c) }},
-		{"DeleteMarker", func(h *MapAPIHandler, c echo.Context) error { return h.DeleteMarker(c) }},
-		{"DeleteDrawing", func(h *MapAPIHandler, c echo.Context) error { return h.DeleteDrawing(c) }},
 		{"DeleteToken", func(h *MapAPIHandler, c echo.Context) error { return h.DeleteToken(c) }},
 	}
 

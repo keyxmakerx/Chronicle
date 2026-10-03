@@ -104,7 +104,7 @@ type DrawingService interface {
 	// path: the object must belong to that map, mirroring the read-path guard
 	// (audit-R2 Finding 2 — IDOR).
 	UpdateDrawing(ctx context.Context, id, mapID string, role int, input UpdateDrawingInput) error
-	DeleteDrawing(ctx context.Context, id, mapID string, expectedUpdatedAt *time.Time) error
+	DeleteDrawing(ctx context.Context, id, mapID string, expectedUpdatedAt *time.Time, actorID string, role int) error
 	ListDrawings(ctx context.Context, mapID string, role int, userID string) ([]Drawing, error)
 
 	// Token CRUD.
@@ -321,14 +321,23 @@ func (s *drawingService) UpdateDrawing(ctx context.Context, id, mapID string, ro
 	return nil
 }
 
-// DeleteDrawing removes a drawing.
-func (s *drawingService) DeleteDrawing(ctx context.Context, id, mapID string, expectedUpdatedAt *time.Time) error {
+// DeleteDrawing removes a drawing. Owners may delete any drawing; a lower
+// role only one it created (nil creator is owner-only). A dm_only drawing the
+// caller did not create answers NotFound, so a scribe cannot probe for hidden
+// drawings.
+func (s *drawingService) DeleteDrawing(ctx context.Context, id, mapID string, expectedUpdatedAt *time.Time, actorID string, role int) error {
 	d, err := s.repo.GetDrawing(ctx, id)
 	if err != nil {
 		return err
 	}
 	if d.MapID != mapID { // IDOR guard (audit-R2 Finding 2)
 		return apperror.NewNotFound("drawing not found")
+	}
+	if !canDeleteOwn(role, actorID, d.CreatedBy) {
+		if d.Visibility == "dm_only" {
+			return apperror.NewNotFound("drawing not found")
+		}
+		return apperror.NewForbidden("you can only delete drawings you created")
 	}
 	if err := concurrency.Check(d.UpdatedAt, expectedUpdatedAt, "drawing"); err != nil {
 		return err

@@ -9,7 +9,7 @@
 // real service's calendarInCampaignForViewer/filterCalendarsByUser rules.
 // This file closes that gap: it proves, through the real HTTP router and
 // the real service, that a Director-only calendar is excluded from a
-// Player's list/preview responses, and that a calendar id belonging to a
+// Player's list and calendar-page responses, and that a calendar id belonging to a
 // different campaign 404s instead of leaking.
 package calendar
 
@@ -108,13 +108,14 @@ func TestRealService_DirectorOnlyCalendarExcludedFromPlayerList(t *testing.T) {
 	}
 }
 
-// TestRealService_DirectorOnlyCalendarPreview404sForPlayer is the same
-// invariant at the per-card preview route: a Player fetching the dm_only
-// calendar's preview directly (not just omitted from the list) must get a
-// real NotFound, and an Owner must succeed.
-func TestRealService_DirectorOnlyCalendarPreview404sForPlayer(t *testing.T) {
+// TestRealService_DirectorOnlyCalendarPage404sForPlayer is the same
+// invariant at the calendar's own page, which a card opens (directly, or
+// fetched in place by calendar_open.js): a Player fetching the dm_only
+// calendar's page directly (not just omitted from the list) must get a real
+// NotFound, and an Owner must succeed.
+func TestRealService_DirectorOnlyCalendarPage404sForPlayer(t *testing.T) {
 	const campaignID = "camp-real-b"
-	secret := Calendar{ID: "cal-secret-preview", CampaignID: campaignID, Name: "Directors Eyes Only",
+	secret := Calendar{ID: "cal-secret-page", CampaignID: campaignID, Name: "Directors Eyes Only",
 		Mode: ModeFantasy, HoursPerDay: 24, MinutesPerHour: 60, SecondsPerMinute: 60, Visibility: "dm_only"}
 
 	calRepo := &fakeCalendarRepo{
@@ -129,14 +130,14 @@ func TestRealService_DirectorOnlyCalendarPreview404sForPlayer(t *testing.T) {
 	roles := map[string]campaigns.Role{"u-player": campaigns.RolePlayer, "u-owner": campaigns.RoleOwner}
 	e := newRealServiceTestRouter(calRepo, roles)
 
-	rec := doRequest(e, http.MethodGet, "/campaigns/"+campaignID+"/calendars/"+secret.ID+"/preview", "u-player")
+	rec := doRequest(e, http.MethodGet, "/campaigns/"+campaignID+"/calendars/"+secret.ID+"/view", "u-player")
 	if rec.Code != http.StatusNotFound {
-		t.Errorf("Player previewing a dm_only calendar: got %d, want 404, body: %s", rec.Code, rec.Body.String())
+		t.Errorf("Player opening a dm_only calendar: got %d, want 404, body: %s", rec.Code, rec.Body.String())
 	}
 
-	rec = doRequest(e, http.MethodGet, "/campaigns/"+campaignID+"/calendars/"+secret.ID+"/preview", "u-owner")
+	rec = doRequest(e, http.MethodGet, "/campaigns/"+campaignID+"/calendars/"+secret.ID+"/view", "u-owner")
 	if rec.Code != http.StatusOK {
-		t.Errorf("Owner previewing the same calendar: got %d, want 200, body: %s", rec.Code, rec.Body.String())
+		t.Errorf("Owner opening the same calendar: got %d, want 200, body: %s", rec.Code, rec.Body.String())
 	}
 }
 
@@ -163,12 +164,12 @@ func TestRealService_AllowListedCalendarHidesFromNonAllowedPlayer(t *testing.T) 
 	roles := map[string]campaigns.Role{"u-outsider": campaigns.RolePlayer, "u-ally": campaigns.RolePlayer}
 	e := newRealServiceTestRouter(calRepo, roles)
 
-	rec := doRequest(e, http.MethodGet, "/campaigns/"+campaignID+"/calendars/"+restricted.ID+"/preview", "u-outsider")
+	rec := doRequest(e, http.MethodGet, "/campaigns/"+campaignID+"/calendars/"+restricted.ID+"/view", "u-outsider")
 	if rec.Code != http.StatusNotFound {
 		t.Errorf("a Player not on the allow-list: got %d, want 404, body: %s", rec.Code, rec.Body.String())
 	}
 
-	rec = doRequest(e, http.MethodGet, "/campaigns/"+campaignID+"/calendars/"+restricted.ID+"/preview", "u-ally")
+	rec = doRequest(e, http.MethodGet, "/campaigns/"+campaignID+"/calendars/"+restricted.ID+"/view", "u-ally")
 	if rec.Code != http.StatusOK {
 		t.Errorf("the allow-listed Player: got %d, want 200, body: %s", rec.Code, rec.Body.String())
 	}
@@ -196,7 +197,7 @@ func TestRealService_CalendarFromDifferentCampaign404sNotLeak(t *testing.T) {
 	roles := map[string]campaigns.Role{"u-owner": campaigns.RoleOwner}
 	e := newRealServiceTestRouter(calRepo, roles)
 
-	rec := doRequest(e, http.MethodGet, "/campaigns/"+requestedCampaign+"/calendars/"+elsewhere.ID+"/preview", "u-owner")
+	rec := doRequest(e, http.MethodGet, "/campaigns/"+requestedCampaign+"/calendars/"+elsewhere.ID+"/view", "u-owner")
 	if rec.Code != http.StatusNotFound {
 		t.Errorf("a calendar id from a different campaign: got %d, want 404, body: %s", rec.Code, rec.Body.String())
 	}
@@ -205,7 +206,7 @@ func TestRealService_CalendarFromDifferentCampaign404sNotLeak(t *testing.T) {
 	}
 
 	// Control: the SAME id through its real campaign succeeds.
-	rec = doRequest(e, http.MethodGet, "/campaigns/"+actualCampaign+"/calendars/"+elsewhere.ID+"/preview", "u-owner")
+	rec = doRequest(e, http.MethodGet, "/campaigns/"+actualCampaign+"/calendars/"+elsewhere.ID+"/view", "u-owner")
 	if rec.Code != http.StatusOK {
 		t.Errorf("the same calendar through its own campaign: got %d, want 200, body: %s", rec.Code, rec.Body.String())
 	}

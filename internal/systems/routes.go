@@ -35,9 +35,27 @@ func RegisterRoutes(e *echo.Echo, h *SystemHandler, addonSvc addons.AddonService
 	mg.GET("/data/:file", h.SystemDataAPI)
 	// The Rulebook book, filtered per viewer (static segment, before /:cat).
 	mg.GET("/book", h.BookAPI)
+	registerBookEditorRoutes(mg, h)
 	mg.GET("/:cat", h.CategoryList)
 	mg.GET("/:cat/:item", h.ItemDetail)
 	mg.GET("/:cat/:item/tooltip", h.TooltipAPI)
+}
+
+// registerBookEditorRoutes mounts the Rulebook editor. Every handler checks the
+// editor rule itself (owner or co-Director), the page included, so the group's
+// campaign-access middleware is never the only gate. Static segments, so they
+// sit ahead of the /:cat param routes without colliding.
+func registerBookEditorRoutes(mg *echo.Group, h *SystemHandler) {
+	mg.GET("/book/edit", h.BookEditPage)
+	mg.GET("/book/source", h.BookSourceAPI)
+	mg.GET("/book/export", h.BookExport)
+	mg.POST("/book/chapters", h.BookChapterCreate)
+	mg.PUT("/book/chapters/:chapter", h.BookChapterUpdate)
+	mg.DELETE("/book/chapters/:chapter", h.BookChapterDelete)
+	mg.POST("/book/chapters/:chapter/pages", h.BookPageAdd)
+	mg.PUT("/book/chapters/:chapter/pages/:key", h.BookPageSave)
+	mg.DELETE("/book/chapters/:chapter/pages/:key", h.BookPageDelete)
+	mg.POST("/book/chapters/:chapter/pages/:key/keep", h.BookPageKeep)
 }
 
 // RegisterCustomSystemRoutes sets up campaign owner routes for uploading

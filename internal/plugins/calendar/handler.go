@@ -820,6 +820,19 @@ func (h *Handler) ListDayWeatherAPI(c echo.Context) error {
 	return c.JSON(http.StatusOK, days)
 }
 
+// GetWeatherSettingsAPI returns the calendar's climate and how long weather
+// lasts, for the Generate sheet. Same gate as the day-weather writes, since
+// only those who can store generated weather need it.
+// GET /campaigns/:id/calendars/:calid/weather/settings
+func (h *Handler) GetWeatherSettingsAPI(c echo.Context) error {
+	cc := campaigns.GetCampaignContext(c)
+	s, err := h.svc.GetWeatherSettings(c.Request().Context(), c.Param("calid"), cc.Campaign.ID, viewerFrom(c, cc))
+	if err != nil {
+		return err
+	}
+	return c.JSON(http.StatusOK, s)
+}
+
 // SetDayWeatherAPI paints or stores generated readings on a set of days.
 // PUT /campaigns/:id/calendars/:calid/weather/days  {"days":[{year,month,day,source,...}]}
 func (h *Handler) SetDayWeatherAPI(c echo.Context) error {

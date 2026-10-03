@@ -628,7 +628,7 @@
   function relRect(el, box) { var b = box.getBoundingClientRect(), r = el.getBoundingClientRect(); return { x: r.left - b.left, y: r.top - b.top, w: r.width, h: r.height }; }
 
   // The part of the calendar a card may use: what is on screen, inside
-  // whatever scrolls it (the page, or the almanac on the Calendars page).
+  // whatever scrolls it.
   // vbot is the visible edge alone, past the calendar's own bottom.
   function visBand(calEl) {
     var cr = calEl.getBoundingClientRect(), top = 0, bot = window.innerHeight;
@@ -2363,10 +2363,9 @@
       // anywhere else in the calendar closes them, the way the day and era
       // cards give way to a press on the grid; presses that open them again
       // are left to do that. The day card also gives way to a press
-      // outside the calendar, so it never traps the page. Inside the
-      // Calendars page the almanac owns presses outside (its click-off
-      // backs out one step at a time), and a card holding a form keeps it.
-      // A press on another day is the grid's own: it moves the card.
+      // outside the calendar, so it never traps the page, unless it holds
+      // a form being filled in. A press on another day is the grid's own:
+      // it moves the card.
       this._mvOffHandler = function (e) {
         var t = e.target;
         if (!(t instanceof Element) || self.evpEl.contains(t)) return;
@@ -2375,7 +2374,7 @@
         if (inside && self.fvEl.classList.contains('open') && !self.fvEl.contains(t) && !t.closest('#cal5-freebtn')) self.closeFreeView();
         if (!self.wingFor || self.wingEl.contains(t) || self.wingEl.querySelector('form')) return;
         if (inside ? !t.closest('.day[data-key], #cal5-freebtn') :
-            !self.el.closest('[data-almanac]') && !t.closest('dialog, [role="dialog"], [aria-modal="true"]')) self.closeWing();
+            !t.closest('dialog, [role="dialog"], [aria-modal="true"]')) self.closeWing();
       };
       document.addEventListener('pointerdown', this._mvOffHandler, true);
     },
@@ -2396,8 +2395,7 @@
       this.scrimEl.classList.toggle('on', this.anyPanelOpen() && window.matchMedia('(max-width:600px)').matches);
     },
 
-    // o.instant takes them down without their motion (the almanac folding
-    // the whole calendar away).
+    // o.instant takes them down without their motion.
     closeAllPanels: function (o) {
       if (this.wingFor) this.closeWing(o);
       this.closeFlap(o);

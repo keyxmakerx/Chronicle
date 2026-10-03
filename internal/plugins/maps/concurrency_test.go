@@ -76,13 +76,13 @@ func TestDeleteMarker_StaleConflict(t *testing.T) {
 	}
 	svc := newTestMapService(repo)
 
-	if err := svc.DeleteMarker(context.Background(), "mk-1", &stale, true); err == nil {
+	if err := svc.DeleteMarker(context.Background(), "mk-1", &stale, true, "", 3); err == nil {
 		t.Fatal("expected stale-timestamp delete to be rejected with conflict")
 	} else {
 		assertAppError(t, err, http.StatusConflict)
 	}
 
-	if err := svc.DeleteMarker(context.Background(), "mk-1", &rowUpdated, true); err != nil {
+	if err := svc.DeleteMarker(context.Background(), "mk-1", &rowUpdated, true, "", 3); err != nil {
 		t.Fatalf("expected matching-timestamp delete to succeed, got: %v", err)
 	}
 }

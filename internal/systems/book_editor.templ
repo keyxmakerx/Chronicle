@@ -1,0 +1,36 @@
+// book_editor.templ renders the Rulebook editor page: the same full-bleed
+// mount as the book itself, with the editor widget in place of the reader.
+
+package systems
+
+import (
+	"github.com/keyxmakerx/chronicle/internal/plugins/campaigns"
+	"github.com/keyxmakerx/chronicle/internal/templates/layouts"
+)
+
+// BookEditorPage renders the full editor page. base is the system's page URL
+// (/campaigns/:id/systems/:mod), which the editor returns to when done.
+templ BookEditorPage(cc *campaigns.CampaignContext, manifest *SystemManifest, base string) {
+	@layouts.App("Edit " + manifest.Name + " rulebook - " + cc.Campaign.Name) {
+		@BookEditorContent(cc, manifest, base)
+	}
+}
+
+// BookEditorContent is the editor mount (also the HTMX swap). The widget
+// script comes from the layout's body-script registry, not from here: htmx
+// strips script tags from a boosted page fragment.
+templ BookEditorContent(cc *campaigns.CampaignContext, manifest *SystemManifest, base string) {
+	<div id="module-content">
+		<div class="-mx-3 -my-3 md:-mx-5 md:-my-4 min-h-full" data-rulebook-fullbleed>
+			<link rel="stylesheet" href={ layouts.AssetURL("/static/css/rulebook.css") }/>
+			<link rel="stylesheet" href={ layouts.AssetURL("/static/css/rulebook-editor.css") }/>
+			<div
+				data-widget="rulebook-editor"
+				data-campaign-id={ cc.Campaign.ID }
+				data-system-id={ manifest.ID }
+				data-source-url={ base + "/book/source" }
+				data-done-url={ base }
+			></div>
+		</div>
+	</div>
+}
