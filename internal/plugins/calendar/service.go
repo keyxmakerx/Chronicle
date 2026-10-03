@@ -277,6 +277,10 @@ type CalendarService interface {
 	CreateEra(ctx context.Context, calendarID, campaignID string, input EraInput) (*Era, error)
 	UpdateEra(ctx context.Context, eraID int, calendarID, campaignID string, input UpdateEraInput) error
 	DeleteEra(ctx context.Context, eraID int, calendarID, campaignID string) error
+	// SaveEraLook writes the calendar's era look and its eras' colours,
+	// styles and feels at once (the Era look part of the calendar settings).
+	// Owner only at the route, like the rest of the calendar settings.
+	SaveEraLook(ctx context.Context, calendarID, campaignID string, look EraLook, eras []EraLookEra) error
 
 	// Moon. Calendar structure; the hidden flag is gated CanAuthorDmOnly
 	// (Owner or a granted co-Director) at the route (routes.go).
@@ -714,19 +718,137 @@ func (s *calendarService) finishCalendarForViewer(ctx context.Context, cal *Cale
 		return nil, err
 	}
 	if !v.SkipsPerUserRules() {
-		// Event kinds and eras are calendar STRUCTURE (Owner-only end to
-		// end, see .ai/conventions.md's permission table); a Player never
-		// learns of their existence through the calendar read either.
-		// Moons are content — only the hidden ones are stripped.
+		// Event kinds are calendar STRUCTURE (Owner-only end to end, see
+		// .ai/conventions.md's permission table); a Player never learns of
+		// them through the calendar read either. Moons and eras are content:
+		// only hidden moons, eras still hidden until they begin, and the
+		// Director's own era notes are taken out.
 		cal.EventKinds = nil
-		cal.Eras = nil
 		cal.Moons = filterMoonsForViewer(cal.Moons, v)
+		cal.Eras = erasForPlayer(cal)
+	}
+	if err := s.redactEraLore(ctx, cal.CampaignID, cal.Eras, v); err != nil {
+		return nil, err
 	}
 	return cal, nil
 }
 
+// erasForPlayer is what a viewer below the Director sees of cal.Eras
+// (loaded unfiltered, Months too): an era still secret (Calendar.
+// EraIsSecret) is left out whole, every Director's note is dropped, and an
+// era that ends where a secret one begins has its end cleared, so the
+// player sees it carry on through the secret era's months rather than a
+// gap that gives the secret away.
+func erasForPlayer(cal *Calendar) []Era {
+	var secret []Era
+	out := make([]Era, 0, len(cal.Eras))
+	for _, e := range cal.Eras {
+		if cal.EraIsSecret(&e) {
+			secret = append(secret, e)
+			continue
+		}
+		e.DMNote = nil
+		out = append(out, e)
+	}
+	for i := range out {
+		e := &out[i]
+		if e.EndYear == nil {
+			continue
+		}
+		end := eraEndDay(cal, e)
+		for j := range secret {
+			sec := &secret[j]
+			start := cal.AbsoluteDay(sec.StartYear, sec.StartMonth, sec.StartDay)
+			if end >= start-1 && (sec.EndYear == nil || end <= eraEndDay(cal, sec)) {
+				e.EndYear, e.EndMonth, e.EndDay = nil, nil, nil
+				break
+			}
+		}
+	}
+	return out
+}
+
+// eraEndDay is an ended era's last day on the AbsoluteDay counter; an end
+// year with no month/day is the whole year (Era.ContainsDate's reading).
+func eraEndDay(cal *Calendar, e *Era) int {
+	if e.EndMonth == nil || e.EndDay == nil {
+		return cal.AbsoluteDay(*e.EndYear+1, 1, 1) - 1
+	}
+	return cal.AbsoluteDay(*e.EndYear, *e.EndMonth, *e.EndDay)
+}
+
+// redactEraLore blanks an era's lore page (id and name) for a viewer who
+// may not see that page, the same treatment redactHiddenEntityLinks gives
+// an event's page, and fails closed the same way when no gate is wired.
+func (s *calendarService) redactEraLore(ctx context.Context, campaignID string, eras []Era, v permissions.Viewer) error {
+	if v.SkipsPerUserRules() {
+		return nil
+	}
+	var ids []string
+	for _, e := range eras {
+		if e.LoreEntityID != nil && *e.LoreEntityID != "" {
+			ids = append(ids, *e.LoreEntityID)
+		}
+	}
+	if len(ids) == 0 {
+		return nil
+	}
+	viewable := map[string]bool{}
+	if s.entityGate == nil {
+		slog.Error("calendar: entity visibility gate not configured; blanking all era lore pages",
+			slog.String("campaign_id", campaignID))
+	} else {
+		var err error
+		if viewable, err = s.entityGate.FilterViewableEntityIDs(ctx, campaignID, ids, v.Role(), v.UserID()); err != nil {
+			return fmt.Errorf("filter viewable era lore pages: %w", err)
+		}
+	}
+	for i := range eras {
+		e := &eras[i]
+		if e.LoreEntityID != nil && !viewable[*e.LoreEntityID] {
+			e.LoreEntityID = nil
+			e.LoreEntityName = ""
+		}
+	}
+	return nil
+}
+
+// dropSecretEraEvents removes events dated inside an era still hidden from
+// players (Calendar.EraIsSecret), so a player cannot learn of the era from
+// what happens in it. An event is judged by its own date: a repeating event
+// that began before the era keeps its dates, as the era's predecessor
+// seems to carry on. Callers that skip per-user rules never call this.
+func (s *calendarService) dropSecretEraEvents(ctx context.Context, cal *Calendar, events []Event) ([]Event, error) {
+	if len(events) == 0 {
+		return events, nil
+	}
+	eras, err := s.calRepo.GetEras(ctx, cal.ID)
+	if err != nil {
+		return nil, fmt.Errorf("load eras: %w", err)
+	}
+	probe := *cal
+	probe.Eras = eras
+	kept := events[:0]
+	for _, e := range events {
+		if !probe.InSecretEra(e.Year, e.Month, e.Day) {
+			kept = append(kept, e)
+		}
+	}
+	return kept, nil
+}
+
+// hideFromPlayer is every "not yet knowable" filter a non-author's event
+// read applies: unannounced future events, then events in a secret era.
+func (s *calendarService) hideFromPlayer(ctx context.Context, cal *Calendar, campaignID string, events []Event) ([]Event, error) {
+	events, err := s.dropUnannouncedFutureEvents(ctx, cal, campaignID, events)
+	if err != nil {
+		return nil, err
+	}
+	return s.dropSecretEraEvents(ctx, cal, events)
+}
+
 // loadSubresources eager-loads every sub-resource onto cal, unfiltered.
-// Viewer-gating (stripping Eras/EventKinds, filtering hidden Moons) is the
+// Viewer-gating (filtering Eras and Moons, stripping EventKinds) is the
 // caller's job — see GetCalendarForViewer.
 func (s *calendarService) loadSubresources(ctx context.Context, cal *Calendar) error {
 	var err error
@@ -1449,7 +1571,7 @@ func (s *calendarService) GetEventForViewer(ctx context.Context, eventID, calend
 	}
 	events := []Event{*evt}
 	if !v.SkipsPerUserRules() {
-		if events, err = s.dropUnannouncedFutureEvents(ctx, cal, campaignID, events); err != nil {
+		if events, err = s.hideFromPlayer(ctx, cal, campaignID, events); err != nil {
 			return nil, err
 		}
 		if len(events) == 0 {
@@ -1503,7 +1625,7 @@ func (s *calendarService) ListEventsByIDsForViewer(ctx context.Context, calendar
 		}
 	}
 	if !v.SkipsPerUserRules() {
-		if events, err = s.dropUnannouncedFutureEvents(ctx, cal, campaignID, events); err != nil {
+		if events, err = s.hideFromPlayer(ctx, cal, campaignID, events); err != nil {
 			return nil, err
 		}
 	}
@@ -1552,7 +1674,7 @@ func (s *calendarService) ListEventsForMonth(ctx context.Context, calendarID, ca
 		return nil, err
 	}
 	if !v.SkipsPerUserRules() {
-		if events, err = s.dropUnannouncedFutureEvents(ctx, cal, campaignID, events); err != nil {
+		if events, err = s.hideFromPlayer(ctx, cal, campaignID, events); err != nil {
 			return nil, err
 		}
 	}
@@ -1599,7 +1721,7 @@ func (s *calendarService) ListUpcomingEvents(ctx context.Context, calendarID, ca
 	}
 	events = filterEventsByUser(events, v)
 	if !v.SkipsPerUserRules() {
-		if events, err = s.dropUnannouncedFutureEvents(ctx, cal, campaignID, events); err != nil {
+		if events, err = s.hideFromPlayer(ctx, cal, campaignID, events); err != nil {
 			return nil, err
 		}
 	}
@@ -2013,6 +2135,16 @@ func (s *calendarService) CreateEra(ctx context.Context, calendarID, campaignID 
 	if err := validateEraShape(input.Name, input.Description, input.Color, input.StartYear, input.StartMonth, input.StartDay, input.EndYear, input.EndMonth, input.EndDay); err != nil {
 		return nil, err
 	}
+	input.Style = eraStyleOrDefault(input.Style)
+	if err := validateEraLookFields(input.Color2, input.Style, input.Feel); err != nil {
+		return nil, err
+	}
+	if err := validateOptionalText("dm_note", input.DMNote, apperror.MaxDescriptionLength); err != nil {
+		return nil, err
+	}
+	if err := s.checkLoreEntity(ctx, campaignID, input.LoreEntityID); err != nil {
+		return nil, err
+	}
 	era, err := s.calRepo.CreateEra(ctx, calendarID, input)
 	if err != nil {
 		return nil, fmt.Errorf("create era: %w", err)
@@ -2063,16 +2195,35 @@ func (s *calendarService) UpdateEra(ctx context.Context, eraID int, calendarID, 
 	}
 
 	merged := EraInput{
-		Name:        name,
-		StartYear:   startYear,
-		StartMonth:  startMonth,
-		StartDay:    startDay,
-		EndYear:     endYear,
-		EndMonth:    endMonth,
-		EndDay:      endDay,
-		Description: description,
-		Color:       color,
-		SortOrder:   input.SortOrder.Val(era.SortOrder),
+		Name:              name,
+		StartYear:         startYear,
+		StartMonth:        startMonth,
+		StartDay:          startDay,
+		EndYear:           endYear,
+		EndMonth:          endMonth,
+		EndDay:            endDay,
+		Description:       description,
+		Color:             color,
+		SortOrder:         input.SortOrder.Val(era.SortOrder),
+		Color2:            input.Color2.Ptr(era.Color2),
+		Style:             eraStyleOrDefault(input.Style.Val(era.Style)),
+		Feel:              input.Feel.Ptr(era.Feel),
+		LoreEntityID:      input.LoreEntityID.Ptr(era.LoreEntityID),
+		DMNote:            input.DMNote.Ptr(era.DMNote),
+		HiddenUntilBegins: input.HiddenUntilBegins.Val(era.HiddenUntilBegins),
+	}
+	if err := validateEraLookFields(merged.Color2, merged.Style, merged.Feel); err != nil {
+		return err
+	}
+	if err := validateOptionalText("dm_note", merged.DMNote, apperror.MaxDescriptionLength); err != nil {
+		return err
+	}
+	// Only a newly chosen page is checked: one already linked stays valid
+	// even if the page has since been hidden from the writer.
+	if input.LoreEntityID.Present() {
+		if err := s.checkLoreEntity(ctx, campaignID, merged.LoreEntityID); err != nil {
+			return err
+		}
 	}
 	// UpdateEra is itself scoped to calendarID (WHERE id = ? AND
 	// calendar_id = ?) and returns apperror.NewNotFound on no match.
@@ -2088,6 +2239,95 @@ func (s *calendarService) DeleteEra(ctx context.Context, eraID int, calendarID, 
 	}
 	if err := s.calRepo.DeleteEra(ctx, calendarID, eraID); err != nil {
 		return err
+	}
+	return nil
+}
+
+// validateEraLookFields checks an era's second colour, style and own feel.
+func validateEraLookFields(color2 *string, style string, feel *string) error {
+	if color2 != nil && !hexColorPattern.MatchString(*color2) {
+		return apperror.NewBadRequest("color_2 must be a hex color (#rgb or #rrggbb)")
+	}
+	if style != EraStyleGas && style != EraStyleInk {
+		return apperror.NewBadRequest("style must be gas or ink")
+	}
+	if feel != nil && !isEraPresetFeel(*feel) {
+		return apperror.NewBadRequest("feel must be still, subtle or lively")
+	}
+	return nil
+}
+
+// checkLoreEntity confirms a lore page id names a page in this campaign.
+// It asks as the Owner (every era writer is the Owner or a co-Director),
+// and refuses when no gate is wired rather than store an unchecked id.
+func (s *calendarService) checkLoreEntity(ctx context.Context, campaignID string, id *string) error {
+	if id == nil {
+		return nil
+	}
+	if s.entityGate != nil {
+		ok, err := s.entityGate.FilterViewableEntityIDs(ctx, campaignID, []string{*id}, permissions.RoleOwner, "")
+		if err != nil {
+			return fmt.Errorf("check lore page: %w", err)
+		}
+		if ok[*id] {
+			return nil
+		}
+	}
+	return apperror.NewBadRequest("lore page not found in this campaign")
+}
+
+// SaveEraLook validates and writes the era look in one transaction. Each
+// era's fields are partial: an absent one keeps what is stored.
+func (s *calendarService) SaveEraLook(ctx context.Context, calendarID, campaignID string, look EraLook, eras []EraLookEra) error {
+	if _, err := s.calendarInCampaign(ctx, calendarID, campaignID); err != nil {
+		return err
+	}
+	if err := validateEraLook(look); err != nil {
+		return err
+	}
+	stored, err := s.calRepo.GetEras(ctx, calendarID)
+	if err != nil {
+		return fmt.Errorf("load eras: %w", err)
+	}
+	byID := make(map[int]*Era, len(stored))
+	for i := range stored {
+		byID[stored[i].ID] = &stored[i]
+	}
+	writes := make([]EraLookWrite, 0, len(eras))
+	for _, in := range eras {
+		e, ok := byID[in.ID]
+		if !ok {
+			return apperror.NewNotFound("era not found in calendar")
+		}
+		w := EraLookWrite{
+			ID:     in.ID,
+			Color:  in.Color.Val(e.Color),
+			Color2: in.Color2.Ptr(e.Color2),
+			Style:  eraStyleOrDefault(in.Style.Val(e.Style)),
+			Feel:   in.Feel.Ptr(e.Feel),
+		}
+		if !hexColorPattern.MatchString(w.Color) {
+			return apperror.NewBadRequest("color must be a hex color (#rgb or #rrggbb)")
+		}
+		if err := validateEraLookFields(w.Color2, w.Style, w.Feel); err != nil {
+			return err
+		}
+		writes = append(writes, w)
+	}
+	return s.calRepo.SaveEraLook(ctx, calendarID, look, writes)
+}
+
+// validateEraLook checks the calendar-wide era look: a known feel and
+// numbers inside the fine-tune sliders' range.
+func validateEraLook(l EraLook) error {
+	if l.Feel != EraFeelCustom && !isEraPresetFeel(l.Feel) {
+		return apperror.NewBadRequest("feel must be still, subtle, lively or custom")
+	}
+	if math.IsNaN(l.Intensity) || l.Intensity < minEraIntensity || l.Intensity > maxEraIntensity {
+		return apperror.NewBadRequest(fmt.Sprintf("intensity must be between %g and %g", float64(minEraIntensity), float64(maxEraIntensity)))
+	}
+	if math.IsNaN(l.Speed) || l.Speed < minEraSpeed || l.Speed > maxEraSpeed {
+		return apperror.NewBadRequest(fmt.Sprintf("speed must be between %g and %g", float64(minEraSpeed), float64(maxEraSpeed)))
 	}
 	return nil
 }
@@ -2666,7 +2906,13 @@ func (s *calendarService) SearchCalendarEvents(ctx context.Context, campaignID, 
 		if err != nil {
 			return nil, fmt.Errorf("search calendar events: search calendar %s: %w", cal.ID, err)
 		}
-		for _, evt := range filterEventsByUser(events, v) {
+		events = filterEventsByUser(events, v)
+		if !v.SkipsPerUserRules() {
+			if events, err = s.dropSecretEraEvents(ctx, &cal, events); err != nil {
+				return nil, fmt.Errorf("search calendar events: %w", err)
+			}
+		}
+		for _, evt := range events {
 			icon := evt.KindIcon
 			if icon == "" {
 				icon = "fa-calendar-day"
@@ -2691,7 +2937,8 @@ func (s *calendarService) SearchCalendarEvents(ctx context.Context, campaignID, 
 // blanked the same way every other event read here blanks them.
 func (s *calendarService) ListEventsForCalendar(ctx context.Context, campaignID, calendarID string, role int) ([]Event, error) {
 	v := permissions.RequestViewer(role, "")
-	if _, err := s.calendarInCampaignForViewer(ctx, calendarID, campaignID, v); err != nil {
+	cal, err := s.calendarInCampaignForViewer(ctx, calendarID, campaignID, v)
+	if err != nil {
 		if isCalendarNotFound(err) {
 			return nil, nil
 		}
@@ -2702,6 +2949,11 @@ func (s *calendarService) ListEventsForCalendar(ctx context.Context, campaignID,
 		return nil, fmt.Errorf("list events for calendar: %w", err)
 	}
 	events = filterEventsByUser(events, v)
+	if !v.SkipsPerUserRules() {
+		if events, err = s.dropSecretEraEvents(ctx, cal, events); err != nil {
+			return nil, err
+		}
+	}
 	if err := s.redactHiddenEntityLinks(ctx, campaignID, events, v); err != nil {
 		return nil, err
 	}

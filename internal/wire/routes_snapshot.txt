@@ -670,6 +670,7 @@ PUT	/calendar/weather	internal/plugins/syncapi/routes.go
 PUT	/calendar/weekdays	internal/plugins/syncapi/routes.go
 PUT	/calendars/:calid	internal/plugins/calendar/routes.go
 PUT	/calendars/:calid/default	internal/plugins/calendar/routes.go
+PUT	/calendars/:calid/era-look	internal/plugins/calendar/routes.go
 PUT	/calendars/:calid/eras/:eraID	internal/plugins/calendar/routes.go
 PUT	/calendars/:calid/events/:eid	internal/plugins/calendar/routes.go
 PUT	/calendars/:calid/events/:eid/occurrences/:y/:m/:d	internal/plugins/calendar/routes.go

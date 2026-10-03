@@ -185,6 +185,9 @@ func (f *fakeCalendarSvc) UpdateEra(context.Context, int, string, string, Update
 	return nil
 }
 func (f *fakeCalendarSvc) DeleteEra(context.Context, int, string, string) error { return nil }
+func (f *fakeCalendarSvc) SaveEraLook(context.Context, string, string, EraLook, []EraLookEra) error {
+	return nil
+}
 
 func (f *fakeCalendarSvc) SetMoonHidden(context.Context, int, string, string, bool) error { return nil }
 
