@@ -177,13 +177,10 @@ func RegisterAPIRoutes(e *echo.Echo, api *APIHandler, calAPI *CalendarAPIHandler
 	calGroup.GET("/calendar/seasons", calAPI.GetSeasons, RequirePermission(PermRead))
 	calGroup.GET("/calendar/moons", calAPI.GetMoons, RequirePermission(PermRead))
 	calGroup.GET("/calendar/eras", calAPI.GetEras, RequirePermission(PermRead))
-	calGroup.GET("/calendar/event-categories", calAPI.GetEventCategories, RequirePermission(PermRead))
+	calGroup.GET("/calendar/event-categories", retiredCalendarRoute(retiredEventCategories))
 	calGroup.GET("/calendar/structure", calAPI.GetStructure, RequirePermission(PermRead))
 	calGroup.GET("/calendar/weather", calAPI.GetWeather, RequirePermission(PermRead))
-	// The Bearer-group mirror of the web route's GET /calendar/world-state.
-	// Same seed, same dm_only gating — the role resolved from the key is
-	// what filters celestial events.
-	calGroup.GET("/calendar/world-state", calAPI.GetWorldState, RequirePermission(PermRead))
+	calGroup.GET("/calendar/world-state", retiredCalendarRoute("GET /calendar/date carries the current season, moon phases and weather."))
 	calGroup.GET("/calendar/cycles", calAPI.GetCycles, RequirePermission(PermRead))
 	calGroup.GET("/calendar/festivals", calAPI.GetFestivals, RequirePermission(PermRead))
 	calGroup.GET("/calendar/events", calAPI.ListEvents, RequirePermission(PermRead))
@@ -197,27 +194,29 @@ func RegisterAPIRoutes(e *echo.Echo, api *APIHandler, calAPI *CalendarAPIHandler
 	cg.DELETE("/entities/:entityID", api.DeleteEntity, RequirePermission(PermWrite))
 
 	// Calendar write endpoints (require "write" permission + calendar addon).
-	// POST /calendar imports a Calendaria-shaped payload as a new
-	// Chronicle calendar.
+	// POST /calendar creates a campaign's first calendar from the module's
+	// Calendaria payload. The structure, advance and import routes after it
+	// are retired: the module never called them, and V5 edits structure only
+	// in Chronicle's calendar.
 	calGroup.POST("/calendar", calAPI.CreateCalendar, RequirePermission(PermWrite))
 	calGroup.POST("/calendar/events", calAPI.CreateEvent, RequirePermission(PermWrite))
 	calGroup.PUT("/calendar/events/:eventID", calAPI.UpdateEvent, RequirePermission(PermWrite))
 	calGroup.DELETE("/calendar/events/:eventID", calAPI.DeleteEvent, RequirePermission(PermWrite))
-	calGroup.PUT("/calendar/settings", calAPI.UpdateCalendarSettings, RequirePermission(PermWrite))
-	calGroup.PUT("/calendar/months", calAPI.UpdateMonths, RequirePermission(PermWrite))
-	calGroup.PUT("/calendar/weekdays", calAPI.UpdateWeekdays, RequirePermission(PermWrite))
-	calGroup.PUT("/calendar/moons", calAPI.UpdateMoons, RequirePermission(PermWrite))
-	calGroup.PUT("/calendar/eras", calAPI.UpdateEras, RequirePermission(PermWrite))
-	calGroup.PUT("/calendar/seasons", calAPI.UpdateSeasons, RequirePermission(PermWrite))
-	calGroup.PUT("/calendar/event-categories", calAPI.UpdateEventCategories, RequirePermission(PermWrite))
-	calGroup.PUT("/calendar/weather", calAPI.SetWeather, RequirePermission(PermWrite))
-	calGroup.PUT("/calendar/cycles", calAPI.UpdateCycles, RequirePermission(PermWrite))
-	calGroup.PUT("/calendar/festivals", calAPI.UpdateFestivals, RequirePermission(PermWrite))
-	calGroup.POST("/calendar/advance", calAPI.AdvanceDate, RequirePermission(PermWrite))
+	calGroup.PUT("/calendar/settings", retiredCalendarRoute(retiredStructure))
+	calGroup.PUT("/calendar/months", retiredCalendarRoute(retiredStructure))
+	calGroup.PUT("/calendar/weekdays", retiredCalendarRoute(retiredStructure))
+	calGroup.PUT("/calendar/moons", retiredCalendarRoute(retiredStructure))
+	calGroup.PUT("/calendar/eras", retiredCalendarRoute(retiredStructure))
+	calGroup.PUT("/calendar/seasons", retiredCalendarRoute(retiredStructure))
+	calGroup.PUT("/calendar/event-categories", retiredCalendarRoute(retiredEventCategories))
+	calGroup.PUT("/calendar/weather", retiredCalendarRoute("Weather is set per day in Chronicle's calendar; GET /calendar/weather still reads it."))
+	calGroup.PUT("/calendar/cycles", retiredCalendarRoute(retiredStructure))
+	calGroup.PUT("/calendar/festivals", retiredCalendarRoute(retiredStructure))
+	calGroup.POST("/calendar/advance", retiredCalendarRoute(retiredAdvance))
 	calGroup.PUT("/calendar/date", calAPI.SetDate, RequirePermission(PermWrite))
-	calGroup.POST("/calendar/advance-time", calAPI.AdvanceTime, RequirePermission(PermWrite))
-	calGroup.GET("/calendar/export", calAPI.ExportCalendar, RequirePermission(PermRead))
-	calGroup.POST("/calendar/import", calAPI.ImportCalendar, RequirePermission(PermWrite))
+	calGroup.POST("/calendar/advance-time", retiredCalendarRoute(retiredAdvance))
+	calGroup.GET("/calendar/export", retiredCalendarRoute("Calendars are included in the campaign export."))
+	calGroup.POST("/calendar/import", retiredCalendarRoute("Create a calendar from a file with Chronicle's new-calendar wizard, or a campaign's first calendar from Foundry with POST /calendar."))
 
 	// Media read endpoints (require "read" permission).
 	cg.GET("/media", mediaAPI.ListMedia, RequirePermission(PermRead))

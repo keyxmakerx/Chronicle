@@ -1,26 +1,29 @@
-// entity_map_block.templ renders the per-entity Map Editor block. The
-// block reads from entities.map_id: if set, the full inline map editor
-// renders directly on the entity page; otherwise Scribe+ users see a
-// thumbnail picker and players see a friendly empty state.
+// entity_map_block.templ renders the per-entity Map block. The block reads
+// the resolved map (a widget binding, else the legacy entities.map_id): if one
+// is set the page shows the map as a framed PREVIEW in the map's frame style;
+// otherwise Scribe+ users see the create-or-pick prompt and players a friendly
+// empty state.
 //
-// Rendered inline via the shared MapEditorBody templ, not an iframe: the
-// app's Content-Security-Policy sets `frame-ancestors 'none'`, which blocks
-// a same-origin iframe silently.
+// The preview is a picture, not a live map: clicking it unfolds the real viewer
+// over the page (static/js/map_focus.js fetching MapViewerFragment), so a page
+// with several maps does not run several Leaflet instances and carries no
+// marker data in its own HTML.
 package maps
 
 import (
 	"fmt"
 	"github.com/keyxmakerx/chronicle/internal/plugins/campaigns"
 	"github.com/keyxmakerx/chronicle/internal/plugins/widgetbindings"
+	"github.com/keyxmakerx/chronicle/internal/templates/layouts"
 )
 
-// BlockEntityMapEmbed renders the per-entity map inline (full editor for
-// Scribe+, view-only for players — the role gate lives inside
-// MapEditorBody). Above the editor: the shared Scribe+ "Change map" binding
-// affordance plus a slim header with the map name and "Open" (jump to the
-// dedicated map page). source is the resolved binding layer (own/default)
+// BlockEntityMapEmbed renders the per-entity map preview: the shared Scribe+
+// "Change map" binding affordance, a slim header with the map name and "Open map
+// page", and the map in its resolved frame (data.Display.Frame: the map's own
+// pick, else the campaign's). source is the resolved binding layer (own/default)
 // for the badge.
 templ BlockEntityMapEmbed(cc *campaigns.CampaignContext, entityID string, data MapViewData, isScribe bool, source string) {
+	@mapFrameStyles()
 	<div
 		data-widget="entity-map"
 		data-entity-id={ entityID }
@@ -43,20 +46,43 @@ templ BlockEntityMapEmbed(cc *campaigns.CampaignContext, entityID string, data M
 			</h2>
 			<div class="flex items-center gap-2">
 				<a
-					href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/maps/%s", cc.Campaign.ID, data.Map.ID)) }
+					href={ templ.SafeURL(mapPageURL(cc.Campaign.ID, data.Map.ID)) }
 					class="text-xs text-accent hover:underline"
 					title="Open the full map page"
 				>
-					<i class="fa-solid fa-arrow-up-right-from-square mr-1"></i>Open
+					<i class="fa-solid fa-arrow-up-right-from-square mr-1"></i>Open map page
 				</a>
 			</div>
 		</div>
-		<!-- Inline editor body. Fixed 600px height for the embed (vs.
-		     flex-fill on the dedicated page). The player-vs-Scribe gate
-		     is handled inside MapEditorBody via data.IsScribe — players
-		     get clickable markers with name+description popups, Scribe+
-		     gets the full marker/drawing/settings affordances. -->
-		@MapEditorBody(cc, data, "relative bg-surface-alt rounded-lg border border-edge overflow-hidden", "height: 600px;"+mapBackgroundStyle(data.Map.BackgroundColor))
+		<!-- The preview: the same frame stylesheet and ornament blocks as the map
+		     page, in small form. role=button + inline handlers (not a delegated
+		     listener) so it works after an HTMX swap of this block. -->
+		<div
+			class="mp-frame mp-mini mp-preview"
+			role="button"
+			tabindex="0"
+			aria-label={ "Open map: " + data.Map.Name }
+			data-frame={ data.DisplayOrDefault().Frame }
+			data-tint={ boolDigit(data.DisplayOrDefault().Tint) }
+			data-viewer-url={ mapViewerURL(cc.Campaign.ID, data.Map.ID) }
+			data-page-url={ mapPageURL(cc.Campaign.ID, data.Map.ID) }
+			data-map-name={ data.Map.Name }
+			onclick={ unfoldOnClick() }
+			onkeydown={ unfoldOnClick() }
+			style="aspect-ratio: 16 / 10; max-height: 380px; flex: none;"
+		>
+			@mapFrameOrnaments(data.Map.Name)
+			<div class="mp-viewport">
+				<div class="mp-art-wrap">
+					if data.Map.HasImage() {
+						<img src={ layouts.MediaURL(ctx, *data.Map.ImageID) } alt="" class="mp-art" loading="lazy"/>
+					} else {
+						<i class="fa-solid fa-map text-3xl text-fg-muted" aria-hidden="true"></i>
+					}
+				</div>
+			</div>
+		</div>
+		<p class="text-xs text-fg-muted mt-2">Click the map to open it.</p>
 	</div>
 }
 

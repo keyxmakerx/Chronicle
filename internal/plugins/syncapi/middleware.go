@@ -5,6 +5,7 @@ import (
 	"log/slog"
 	"net"
 	"net/http"
+	"regexp"
 	"strconv"
 	"strings"
 	"sync"
@@ -141,6 +142,37 @@ func tryAuthFromSession(c echo.Context, authSvc auth.AuthService, campaignSvc ca
 	}, true
 }
 
+// moduleVersionHeader carries the Chronicle Sync module's own version on
+// every REST request so the owner can see which build last connected.
+const moduleVersionHeader = "X-Chronicle-Module-Version"
+
+// moduleVersionPattern bounds what a client can make us store: the value is
+// self-reported and later rendered, so anything beyond a plain version string
+// (letters, digits, dot, plus, hyphen; at most 32) is dropped rather than
+// escaped.
+var moduleVersionPattern = regexp.MustCompile(`^[0-9A-Za-z.+\-]{1,32}$`)
+
+// moduleVersionFromHeader returns the reported module version, or "" when the
+// header is absent or malformed. "" means "leave the stored value alone",
+// never "clear it".
+func moduleVersionFromHeader(h http.Header) string {
+	v := h.Get(moduleVersionHeader)
+	if !moduleVersionPattern.MatchString(v) {
+		return ""
+	}
+	return v
+}
+
+// recordKeyUsage stamps last-used time/IP and the reported module version on
+// a stored key. The session door's synthetic key has no api_keys row, so it
+// is never written.
+func recordKeyUsage(ctx context.Context, service SyncAPIService, key *APIKey, ip, moduleVersion string) error {
+	if key == nil || key.ID == synthKeySessionID {
+		return nil
+	}
+	return service.UpdateKeyLastUsed(ctx, key.ID, ip, moduleVersion)
+}
+
 // RequireAPIKey returns middleware that authenticates requests via API key.
 // Extracts the key from the Authorization header, validates it with bcrypt,
 // checks the IP blocklist, verifies IP allowlist, and records the request.
@@ -241,8 +273,9 @@ func RequireAPIKey(service SyncAPIService) echo.MiddlewareFunc {
 			// Update last-used timestamp (fire-and-forget).
 			// Use background context since the request context may be cancelled
 			// before the goroutine completes.
+			moduleVersion := moduleVersionFromHeader(c.Request().Header)
 			go func() {
-				_ = service.UpdateKeyLastUsed(context.Background(), key.ID, ip)
+				_ = recordKeyUsage(context.Background(), service, key, ip, moduleVersion)
 			}()
 
 			// Execute the handler and log the request.

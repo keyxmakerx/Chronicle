@@ -140,3 +140,42 @@
   .mp-ticks, .mp-side-ticks { display: none; }
   .mp-hud { left: 10px; right: 10px; }
 }
+
+/* ---- Framed preview on a page, and the focus view it unfolds into
+   (static/js/map_focus.js). The preview is the small-form frame; hovering does
+   nothing, clicking opens the live map over the page. ---- */
+.mp-preview { cursor: pointer; }
+.mp-preview:focus-visible { outline: 2px solid var(--color-accent); outline-offset: 3px; }
+
+.mf-focus { position: fixed; inset: 0; z-index: 70; display: flex; }
+.mf-scrim { position: absolute; inset: 0; background: rgb(6 7 11 / 0.55); }
+.mf-panel {
+  position: relative; flex: 1; min-width: 0; margin: 18px; display: flex; flex-direction: column;
+  background: var(--color-bg-primary); border-radius: 14px; overflow: hidden;
+  box-shadow: 0 20px 60px rgb(0 0 0 / 0.45); transform-origin: 0 0;
+}
+.mf-bar { display: flex; align-items: center; gap: 10px; padding: 10px 14px; background: var(--color-card-bg); border-bottom: 1px solid var(--color-border); }
+.mf-ico { color: var(--color-text-secondary); }
+.mf-title { color: var(--color-text-primary); font-size: 15px; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.mf-sp { flex: 1; }
+.mf-btn {
+  display: inline-flex; align-items: center; gap: 6px; padding: 6px 10px; border-radius: 8px;
+  border: 1px solid var(--color-border); background: var(--color-card-bg); color: var(--color-text-body);
+  font-size: 13px; line-height: 1.2; cursor: pointer; text-decoration: none;
+}
+.mf-btn:hover { background: var(--color-bg-secondary); color: var(--color-text-primary); }
+.mf-btn:focus-visible { outline: 2px solid var(--color-accent); outline-offset: 2px; }
+.mf-host { flex: 1; min-height: 0; display: flex; flex-direction: column; }
+.mf-host .mp-stage { flex: 1; min-height: 0; }
+.mf-note { margin: auto; color: var(--color-text-muted); font-size: 14px; }
+/* The folds of a paper map: two vertical, one horizontal, gone by the time it is flat. */
+.mf-creases {
+  position: absolute; inset: 0; pointer-events: none; z-index: 60;
+  background:
+    repeating-linear-gradient(90deg, transparent 0 calc(33.33% - 1px), rgb(0 0 0 / 0.25) calc(33.33% - 1px) 33.33%),
+    repeating-linear-gradient(180deg, transparent 0 calc(50% - 1px), rgb(0 0 0 / 0.25) calc(50% - 1px) 50%);
+}
+@media (max-width: 760px) {
+  .mf-panel { margin: 6px; }
+  .mf-btn span { display: none; }
+}

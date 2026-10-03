@@ -9,6 +9,7 @@ import (
 	"testing"
 
 	"github.com/keyxmakerx/chronicle/internal/patch"
+	"github.com/keyxmakerx/chronicle/internal/sanitize"
 )
 
 // parentedEntity is the stored row every case starts from: parented, with a
@@ -151,6 +152,41 @@ func TestUpdate_Entry_EmptyStringPreserves_NullClears(t *testing.T) {
 	}
 	if got.Entry != nil || got.EntryHTML != nil {
 		t.Errorf("Entry/EntryHTML = %v/%v, want both nil on an explicit null", got.Entry, got.EntryHTML)
+	}
+}
+
+// An HTML body (what the Foundry module sends) must not land in the entry
+// column, which only holds editor JSON: MariaDB rejects it there and the
+// whole update fails. It becomes the HTML body instead; JSON still goes to
+// entry as before.
+func TestUpdate_Entry_HTMLGoesToEntryHTML_JSONToEntry(t *testing.T) {
+	doc := `{"type":"doc","content":[]}`
+	cases := []struct {
+		name      string
+		in        string
+		wantEntry *string
+		wantHTML  string
+	}{
+		{"html", "<p>Hello <b>there</b></p>", nil, "<p>Hello <b>there</b></p>"},
+		{"plain text", "just words", nil, "just words"},
+		{"text that is also a JSON number", "2024", nil, "2024"},
+		// JSON keeps its existing handling byte-for-byte.
+		{"prosemirror json", doc, &doc, sanitize.HTML(doc)},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			svc := newTestService(parentedEntityRepo(), &mockEntityTypeRepo{})
+			got, err := svc.Update(context.Background(), "ent-1", UpdateEntityInput{Entry: patch.Of(tc.in)})
+			if err != nil {
+				t.Fatalf("Update: %v", err)
+			}
+			if (got.Entry == nil) != (tc.wantEntry == nil) || (got.Entry != nil && *got.Entry != *tc.wantEntry) {
+				t.Errorf("Entry = %v, want %v", got.Entry, tc.wantEntry)
+			}
+			if got.EntryHTML == nil || *got.EntryHTML != tc.wantHTML {
+				t.Errorf("EntryHTML = %v, want %q", got.EntryHTML, tc.wantHTML)
+			}
+		})
 	}
 }
 
