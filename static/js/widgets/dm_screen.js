@@ -56,6 +56,10 @@
           if (e.target.closest('[data-dms-close]') || e.target.hasAttribute('data-dms-dim') || e.target.hasAttribute('data-dms-stage')) { close(); return; }
           var tab = e.target.closest('[data-dms-tab]');
           if (tab) selectTab(tab);
+          // The downtime switch asks first; its yes button does the post.
+          var ask = e.target.closest('[data-dms-ask]');
+          if (ask) showConfirm(true);
+          if (e.target.closest('[data-dms-cancel]')) showConfirm(false);
           var hrow = e.target.closest('[data-dms-hrow]');
           if (hrow) toggleHero(hrow);
         });
@@ -69,6 +73,13 @@
         });
         st.overlay = o;
         return o;
+      }
+
+      function showConfirm(on) {
+        var box = st.overlay && st.overlay.querySelector('[data-dms-confirm]');
+        if (!box) return;
+        box.hidden = !on;
+        if (on) { var c = box.querySelector('[data-dms-cancel]'); if (c) c.focus({ preventScroll: true }); }
       }
 
       function root() { return st.overlay && st.overlay.querySelector('[data-dms-root]'); }

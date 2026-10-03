@@ -49,12 +49,27 @@ templ Panel(v *View, csrf string) {
 									type="button"
 									aria-pressed={ fmt.Sprint(v.Downtime.Open == opt.Open) }
 									disabled?={ !v.Downtime.CanToggle || v.Downtime.Open == opt.Open }
-									hx-post={ fmt.Sprintf("/campaigns/%s/armory/downtime", v.CampaignID) }
-									hx-vals={ fmt.Sprintf(`{"open":"%t"}`, opt.Open) }
-									hx-headers={ fmt.Sprintf(`{"X-CSRF-Token":"%s"}`, csrf) }
+									data-dms-ask
 								>{ opt.Label }</button>
 							}
 						</div>
+						if v.Downtime.CanToggle {
+							{{ text, yes := v.Downtime.Confirm() }}
+							<div class="dms-confirm" data-dms-confirm role="alertdialog" aria-label={ yes } hidden>
+								<p>{ text }</p>
+								<div class="dms-confirm-btns">
+									<button
+										type="button"
+										class="dms-confirm-yes"
+										hx-post={ fmt.Sprintf("/campaigns/%s/armory/downtime", v.CampaignID) }
+										hx-vals={ fmt.Sprintf(`{"open":"%t"}`, !v.Downtime.Open) }
+										hx-headers={ fmt.Sprintf(`{"X-CSRF-Token":"%s"}`, csrf) }
+										hx-disabled-elt="this"
+									>{ yes }</button>
+									<button type="button" data-dms-cancel>Cancel</button>
+								</div>
+							</div>
+						}
 						<span class="dms-small">
 							if v.Downtime.Open {
 								Moves happen at once. Shops are open.

@@ -5,7 +5,10 @@
 // fails is left out rather than failing the whole screen.
 package dmscreen
 
-import "time"
+import (
+	"fmt"
+	"time"
+)
 
 // Viewer is the person opening the screen.
 type Viewer struct {
@@ -54,6 +57,22 @@ type DowntimeView struct {
 	Open      bool `json:"open"`
 	CanToggle bool `json:"can_toggle"`
 	Pending   int  `json:"pending"`
+}
+
+// Confirm is the question the switch asks before changing anything, and
+// its yes button. Starting downtime puts every waiting request through at
+// once, so a stray click must not do it.
+func (d DowntimeView) Confirm() (text, yes string) {
+	if d.Open {
+		return "End downtime? Moves will need your OK again and shops close.", "End downtime"
+	}
+	switch d.Pending {
+	case 0:
+		return "Start downtime? Moves will happen at once and shops open.", "Start downtime"
+	case 1:
+		return "Start downtime? 1 waiting request goes through now and shops open.", "Start downtime"
+	}
+	return fmt.Sprintf("Start downtime? %d waiting requests go through now and shops open.", d.Pending), "Start downtime"
 }
 
 // WorldView is the in-world date and today's weather.
