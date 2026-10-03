@@ -103,6 +103,14 @@ const (
 	MsgDowntimeChanged   MessageType = "downtime.changed"
 )
 
+// Foundry table messages. Sent to the campaign's Foundry module only to
+// act at the table; never recorded in the sync change feed.
+const (
+	// MsgNPCSpotlight asks Foundry to spotlight the NPC page's token.
+	// ResourceID is the entity id; always published RequiresDM.
+	MsgNPCSpotlight MessageType = "npc.spotlight"
+)
+
 // Sync control messages.
 const (
 	MsgSyncStatus   MessageType = "sync.status"

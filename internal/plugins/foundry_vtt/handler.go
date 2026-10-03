@@ -24,9 +24,11 @@ import (
 //   - Public endpoints: per-campaign manifest + download
 //   - Error mapping: foundry_vtt.Error → categorized JSON response
 type Handler struct {
-	svc             Service
-	presenceLookup  PresenceLookup
-	activity        ActivityRecorder
+	svc            Service
+	presenceLookup PresenceLookup
+	activity       ActivityRecorder
+	npcResolver    NPCResolver
+	spotlight      SpotlightPublisher
 }
 
 // PresenceLookup is the narrow contract the presence-pill fragment

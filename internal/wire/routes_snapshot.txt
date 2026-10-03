@@ -298,6 +298,7 @@ GET	/forgot-password	internal/plugins/auth/routes.go
 GET	/foundry-presence	internal/plugins/foundry_vtt/routes.go
 GET	/foundry-vtt/dashboard-sync-block	internal/plugins/foundry_vtt/routes.go
 GET	/foundry-vtt/install-url	internal/plugins/foundry_vtt/routes.go
+GET	/foundry-vtt/npc-spotlight/:eid	internal/plugins/foundry_vtt/routes.go
 GET	/foundry-vtt/presence-pill-fragment	internal/plugins/foundry_vtt/routes.go
 GET	/foundry-vtt/settings-tab	internal/plugins/foundry_vtt/routes.go
 GET	/foundry-vtt/setup-guide-fragment	internal/plugins/foundry_vtt/routes.go
@@ -578,6 +579,7 @@ POST	/extensions/:slug/settings/dismiss	internal/plugins/addons/routes.go
 POST	/extensions/foundry/connect-line	internal/plugins/campaigns/routes.go
 POST	/files/:name/link	internal/plugins/backup/routes.go
 POST	/forgot-password	internal/plugins/auth/routes.go
+POST	/foundry-vtt/npc-spotlight/:eid	internal/plugins/foundry_vtt/routes.go
 POST	/foundry-vtt/token/rotate	internal/plugins/foundry_vtt/routes.go
 POST	/groups	internal/plugins/campaigns/routes.go
 POST	/groups/:gid/members	internal/plugins/campaigns/routes.go
