@@ -1,12 +1,16 @@
 /**
  * map_drawing_tools.js -- Chronicle Map Drawing Tools
  *
- * Adds interactive drawing tools to the Leaflet map viewer. Uses Leaflet's
- * native APIs (no Leaflet.Draw dependency) for freehand, rectangle, polygon,
- * ellipse, and text annotation tools.
+ * Renders saved drawings for everyone and, for Scribe+, provides the drawing
+ * tools (freehand, rectangle, polygon, ellipse, text) on Leaflet's native APIs
+ * (no Leaflet.Draw dependency). It owns no UI: the map page's floating tool rail
+ * drives it through `window.chronicleMap.draw`, so there is one control surface.
  *
  * Expects a global `window.chronicleMap` object set by the map show page:
- *   { map, campaignID, mapID, imageW, imageH, isScribe }
+ *   { map, campaignID, mapID, imageW, imageH, isScribe,
+ *     onDrawingsChange(count), onUndoChange(count) }
+ * and publishes `window.chronicleMap.draw` =
+ *   { start(shape), cancel(), setStyle({color,width}), undo(), setVisible(bool), count() }
  *
  * Drawings are persisted via the REST API:
  *   POST /campaigns/:id/maps/:mid/drawings
@@ -36,14 +40,25 @@
     var h = ctx.imageH;
     var isScribe = ctx.isScribe;
 
-    if (!isScribe || !map) return;
+    if (!map) return;
 
     var activeTool = null;
     var drawingLayer = L.layerGroup().addTo(map);
     var currentPoints = [];
     var currentShape = null;
-    var drawColor = '#3b82f6';
-    var drawWidth = 3;
+    var drawColor = '#2563eb';
+    var drawWidth = 4;
+    // Layers by drawing id, and the ids created in THIS page session in order.
+    // Undo only ever walks the session stack, so it can never reach back and
+    // delete a drawing someone else made earlier.
+    var layersByID = {};
+    var sessionStack = [];
+    var drawingCount = 0;
+
+    function notifyCount() {
+      if (typeof ctx.onDrawingsChange === 'function') ctx.onDrawingsChange(drawingCount);
+      if (typeof ctx.onUndoChange === 'function') ctx.onUndoChange(sessionStack.length);
+    }
 
     // --- Coordinate Conversion ---
 
@@ -97,7 +112,10 @@
         .then(function (drawings) {
           if (!drawings || !Array.isArray(drawings)) return;
           drawingLayer.clearLayers();
+          layersByID = {};
+          drawingCount = 0;
           drawings.forEach(function (d) { renderDrawing(d); });
+          notifyCount();
         });
     }
 
@@ -162,20 +180,65 @@
         layer._drawingID = d.id;
         layer._drawingData = d;
 
-        // Right-click to delete (Scribe+).
-        layer.on('contextmenu', function (e) {
-          L.DomEvent.stopPropagation(e);
-          if (confirm('Delete this drawing?')) {
-            deleteDrawing(d.id).then(function (res) {
-              if (res && res.ok) {
-                drawingLayer.removeLayer(layer);
-              }
-            });
-          }
-        });
+        // Right-click to delete (Scribe+ sees the prompt; the server still
+        // decides who may delete).
+        if (isScribe) {
+          layer.on('contextmenu', function (e) {
+            L.DomEvent.stopPropagation(e);
+            if (confirm('Delete this drawing?')) {
+              deleteDrawing(d.id).then(function (res) {
+                if (res && res.ok) {
+                  forget(d.id);
+                  notifyCount();
+                }
+              });
+            }
+          });
+        }
 
+        layersByID[d.id] = layer;
+        drawingCount++;
         drawingLayer.addLayer(layer);
       }
+    }
+
+    // Drops a drawing from the map and from the bookkeeping once it is gone
+    // server-side.
+    function forget(id) {
+      var layer = layersByID[id];
+      if (layer) {
+        drawingLayer.removeLayer(layer);
+        delete layersByID[id];
+        drawingCount = Math.max(0, drawingCount - 1);
+      }
+      var i = sessionStack.indexOf(id);
+      if (i !== -1) sessionStack.splice(i, 1);
+    }
+
+    // A freshly saved drawing: render it and remember it for undo.
+    function addSaved(d) {
+      if (!d) return;
+      renderDrawing(d);
+      sessionStack.push(d.id);
+      notifyCount();
+    }
+
+    function undoLast() {
+      if (!sessionStack.length) return;
+      var id = sessionStack[sessionStack.length - 1];
+      deleteDrawing(id).then(function (res) {
+        if (res && res.ok) {
+          forget(id);
+          notifyCount();
+          return;
+        }
+        // Drawing deletion is Owner-only on the server; say so rather than
+        // silently leaving the shape on the map.
+        var msg = res && res.status === 403
+          ? 'Only owners can delete drawings'
+          : 'Could not undo that drawing';
+        Chronicle.notify(msg, 'error');
+      });
     }
 
     // --- Drawing Handlers ---
@@ -209,7 +272,7 @@
           saveDrawing('freehand', currentPoints).then(function (d) {
             if (currentShape) map.removeLayer(currentShape);
             currentShape = null;
-            if (d) renderDrawing(d);
+            addSaved(d);
           });
         } else {
           if (currentShape) map.removeLayer(currentShape);
@@ -246,7 +309,7 @@
           var pts = [toPercent(startLL), toPercent(e.latlng)];
           saveDrawing('rectangle', pts, { fill_color: drawColor, fill_alpha: 0.15 }).then(function (d) {
             if (rect) map.removeLayer(rect);
-            if (d) renderDrawing(d);
+            addSaved(d);
             startLL = null; rect = null;
           });
         }
@@ -289,7 +352,7 @@
           var pts = points.map(toPercent);
           saveDrawing('polygon', pts, { fill_color: drawColor, fill_alpha: 0.2 }).then(function (d) {
             if (preview) map.removeLayer(preview);
-            if (d) renderDrawing(d);
+            addSaved(d);
             points = []; preview = null;
           });
         }
@@ -323,7 +386,7 @@
           var pts = [toPercent(center), toPercent(e.latlng)];
           saveDrawing('ellipse', pts, { fill_color: drawColor, fill_alpha: 0.15 }).then(function (d) {
             if (circ) map.removeLayer(circ);
-            if (d) renderDrawing(d);
+            addSaved(d);
             center = null; circ = null;
           });
         }
@@ -356,7 +419,7 @@
         if (!text || !text.trim()) return;
         var pt = toPercent(e.latlng);
         saveDrawing('text', [pt], { text_content: text.trim() }).then(function (d) {
-          if (d) renderDrawing(d);
+          addSaved(d);
         });
       }
 
@@ -377,100 +440,41 @@
         map._drawCleanup = null;
       }
       activeTool = tool;
-      updateToolbar();
-      document.getElementById('map-container').style.cursor = tool ? 'crosshair' : '';
+      map.getContainer().style.cursor = tool ? 'crosshair' : '';
     }
 
     function cancelTool() {
       setTool(null);
     }
 
-    // --- Toolbar UI ---
+    // --- Public API (driven by the page's tool rail) ---
 
-    function createToolbar() {
-      var bar = document.createElement('div');
-      bar.id = 'map-draw-toolbar';
-      bar.className = 'absolute top-3 left-3 z-[1000] bg-surface border border-edge rounded-lg shadow-lg p-1 flex flex-col gap-1';
+    var starters = {
+      freehand: startFreehand,
+      rectangle: startRectangle,
+      ellipse: startCircle,
+      polygon: startPolygon,
+      text: startText
+    };
 
-      var tools = [
-        { id: 'freehand', icon: 'fa-pen', label: 'Freehand', fn: startFreehand },
-        { id: 'rectangle', icon: 'fa-vector-square', label: 'Rectangle', fn: startRectangle },
-        { id: 'ellipse', icon: 'fa-circle', label: 'Circle', fn: startCircle },
-        { id: 'polygon', icon: 'fa-draw-polygon', label: 'Polygon', fn: startPolygon },
-        { id: 'text', icon: 'fa-font', label: 'Text', fn: startText },
-      ];
-
-      tools.forEach(function (t) {
-        var btn = document.createElement('button');
-        btn.type = 'button';
-        btn.className = 'map-draw-btn w-9 h-9 flex items-center justify-center rounded-md text-sm text-fg-secondary hover:bg-surface-alt hover:text-fg transition-colors';
-        btn.dataset.tool = t.id;
-        btn.title = t.label;
-        btn.innerHTML = '<i class="fa-solid ' + t.icon + '"></i>';
-        btn.addEventListener('click', function () {
-          if (activeTool === t.id) {
-            cancelTool();
-          } else {
-            t.fn();
-          }
-        });
-        bar.appendChild(btn);
-      });
-
-      // Separator.
-      var sep = document.createElement('div');
-      sep.className = 'w-full h-px bg-edge my-0.5';
-      bar.appendChild(sep);
-
-      // Color picker.
-      var colorBtn = document.createElement('div');
-      colorBtn.className = 'w-9 h-9 flex items-center justify-center';
-      colorBtn.innerHTML = '<input type="color" value="' + drawColor + '" class="w-7 h-7 rounded border border-edge cursor-pointer" title="Draw color"/>';
-      colorBtn.querySelector('input').addEventListener('input', function () {
-        drawColor = this.value;
-      });
-      bar.appendChild(colorBtn);
-
-      // Width control.
-      var widthBtn = document.createElement('button');
-      widthBtn.type = 'button';
-      widthBtn.className = 'w-9 h-9 flex items-center justify-center rounded-md text-[10px] text-fg-secondary hover:bg-surface-alt hover:text-fg transition-colors font-mono';
-      widthBtn.title = 'Stroke width';
-      widthBtn.textContent = drawWidth + 'px';
-      widthBtn.addEventListener('click', function () {
-        drawWidth = drawWidth >= 8 ? 1 : drawWidth + 1;
-        widthBtn.textContent = drawWidth + 'px';
-      });
-      bar.appendChild(widthBtn);
-
-      var container = document.getElementById('map-container');
-      if (container) container.appendChild(bar);
-    }
-
-    function updateToolbar() {
-      var btns = document.querySelectorAll('.map-draw-btn');
-      btns.forEach(function (btn) {
-        if (btn.dataset.tool === activeTool) {
-          btn.classList.add('bg-accent/20', 'text-accent');
-          btn.classList.remove('text-fg-secondary');
-        } else {
-          btn.classList.remove('bg-accent/20', 'text-accent');
-          btn.classList.add('text-fg-secondary');
-        }
-      });
-    }
-
-    // --- Keyboard Shortcuts ---
-
-    document.addEventListener('keydown', function (e) {
-      if (e.key === 'Escape' && activeTool) {
-        cancelTool();
-      }
-    });
+    ctx.draw = {
+      start: function (shape) {
+        if (isScribe && starters[shape]) starters[shape]();
+      },
+      cancel: cancelTool,
+      setStyle: function (st) {
+        if (st.color) drawColor = st.color;
+        if (st.width) drawWidth = st.width;
+      },
+      undo: undoLast,
+      setVisible: function (on) {
+        if (on) map.addLayer(drawingLayer); else map.removeLayer(drawingLayer);
+      },
+      count: function () { return drawingCount; }
+    };
 
     // --- Init ---
 
-    createToolbar();
     loadDrawings();
   }
 })();
