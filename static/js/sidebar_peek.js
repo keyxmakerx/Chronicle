@@ -49,10 +49,11 @@
   }
 
   // A soft body of light plus a brighter crest at its rim; as the radius
-  // grows the crest travels up and down the edge like a wave. The accent is
-  // the site's customizable one.
+  // grows the crest travels up and down the edge like a wave. The colour is
+  // the campaign's own glow colour when it set one (--peek-glow-rgb from
+  // Customize), otherwise the site's customizable accent.
   function paint(r) {
-    var a = 'var(--color-accent-rgb, 99 102 241)';
+    var a = 'var(--peek-glow-rgb, var(--color-accent-rgb, 99 102 241))';
     var at = 'at 0 ' + armY + 'px';
     glow.style.background =
       'radial-gradient(ellipse 24px ' + r + 'px ' + at + ', transparent 64%, rgb(' + a + ' / 0.30) 84%, transparent 97%),' +

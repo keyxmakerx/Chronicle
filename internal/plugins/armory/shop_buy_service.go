@@ -18,6 +18,7 @@ import (
 	"strings"
 
 	"github.com/keyxmakerx/chronicle/internal/apperror"
+	"github.com/keyxmakerx/chronicle/internal/changesource"
 )
 
 const (
@@ -227,6 +228,11 @@ func (s *shopBuyService) Buy(ctx context.Context, campaignID, shopEntityID strin
 	// From here on the basket is applied even if the client disconnects: a
 	// cancelled request must not strand a half-applied purchase.
 	mctx := context.WithoutCancel(ctx)
+	// The coin change reads "at a shop" in the character's money history,
+	// unless a caller (the Foundry route) already labelled it as a purchase.
+	if src, ok := changesource.From(mctx); !ok || src.Kind != changesource.KindShop {
+		mctx = ShopPurchaseSource(mctx, a.UserID, "")
+	}
 	var undo []func()
 	rollback := func() {
 		for i := len(undo) - 1; i >= 0; i-- {

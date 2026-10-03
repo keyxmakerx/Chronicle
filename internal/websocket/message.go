@@ -69,6 +69,15 @@ const (
 	MsgEntityTypeDeleted MessageType = "entity_type.deleted"
 )
 
+// Relation sync messages, one per relation row written. ResourceID is the
+// row's source entity, so a client can follow one entity's relations (a
+// character's inventory) and the change feed collapses them per entity.
+const (
+	MsgRelationCreated         MessageType = "relation.created"
+	MsgRelationDeleted         MessageType = "relation.deleted"
+	MsgRelationMetadataUpdated MessageType = "relation.metadata_updated"
+)
+
 // Note sync messages.
 const (
 	MsgNoteCreated MessageType = "note.created"
@@ -83,6 +92,15 @@ const (
 	MsgEntityNoteCreated MessageType = "entity_note.created"
 	MsgEntityNoteUpdated MessageType = "entity_note.updated"
 	MsgEntityNoteDeleted MessageType = "entity_note.deleted"
+)
+
+// Stash and downtime messages. Payloads carry ids and statuses only.
+const (
+	MsgStashMoved        MessageType = "stash.moved"
+	MsgStashRequested    MessageType = "stash.requested"
+	MsgStashSettled      MessageType = "stash.settled"
+	MsgStashMoneyChanged MessageType = "stash.money_changed"
+	MsgDowntimeChanged   MessageType = "downtime.changed"
 )
 
 // Sync control messages.

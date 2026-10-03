@@ -16,6 +16,13 @@ One-shot transitions do not use it: drawers, the sky's fold, card openings.
 Speed eases from 1 to 0 over 2 seconds. Any input eases it back to 1 over
 1 second.
 
+**Held at rest.** Under either reduce switch, the campaign's
+`html[data-cz-reduce]` or a person's own Calmer choice
+`html[data-view-motion="calm"]`, the clock starts at speed 0 and stays there:
+input never wakes it, so every loop that reads it holds still. A
+`MutationObserver` re-evaluates when either attribute changes, so the My view
+card takes effect without a reload.
+
 **API**
 - `now()`: rest time in seconds, which a loop uses as its clock instead of
   `performance.now() / 1000`. It runs at `speed()`, so motion slows smoothly

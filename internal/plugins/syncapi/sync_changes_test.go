@@ -6,6 +6,7 @@ import (
 	"errors"
 	"net/http"
 	"net/http/httptest"
+	"slices"
 	"testing"
 	"time"
 
@@ -138,9 +139,13 @@ func TestListChanges(t *testing.T) {
 				Next          int64        `json:"next"`
 				HasMore       bool         `json:"hasMore"`
 				ResetRequired bool         `json:"resetRequired"`
+				Types         []string     `json:"types"`
 			}
 			if err := json.Unmarshal(rec.Body.Bytes(), &got); err != nil {
 				t.Fatal(err)
+			}
+			if !slices.Contains(got.Types, "relation") || !slices.Contains(got.Types, "entity") {
+				t.Fatalf("types = %v, want the recorded resource types", got.Types)
 			}
 			if len(got.Changes) != tt.wantLen || got.Next != tt.wantNext || got.HasMore != tt.wantMore || got.ResetRequired != tt.wantReset {
 				t.Fatalf("got len=%d next=%d more=%v reset=%v; want len=%d next=%d more=%v reset=%v",
@@ -167,6 +172,9 @@ func TestRecordingEventBus(t *testing.T) {
 		{name: "map updated", msg: ws.NewMessage(ws.MsgMapUpdated, "c1", "m1", nil), wantRecorded: &SyncChange{Seq: 1, Type: "map", ResourceID: "m1", Op: "updated"}, wantSeq: 1},
 		{name: "calendar event deleted", msg: ws.NewMessage(ws.MsgCalendarEventDeleted, "c1", "ev1", nil), wantRecorded: &SyncChange{Seq: 1, Type: "calendar_event", ResourceID: "ev1", Op: "deleted"}, wantSeq: 1},
 		{name: "entity_type is its own type", msg: ws.NewMessage(ws.MsgEntityTypeUpdated, "c1", "3", nil), wantRecorded: &SyncChange{Seq: 1, Type: "entity_type", ResourceID: "3", Op: "updated"}, wantSeq: 1},
+		{name: "relation keyed on its source entity", msg: ws.NewMessage(ws.MsgRelationCreated, "c1", "hero", nil), wantRecorded: &SyncChange{Seq: 1, Type: "relation", ResourceID: "hero", Op: "created"}, wantSeq: 1},
+		{name: "relation metadata write is update", msg: ws.NewMessage(ws.MsgRelationMetadataUpdated, "c1", "hero", nil), wantRecorded: &SyncChange{Seq: 1, Type: "relation", ResourceID: "hero", Op: "updated"}, wantSeq: 1},
+		{name: "relation deleted", msg: ws.NewMessage(ws.MsgRelationDeleted, "c1", "hero", nil), wantRecorded: &SyncChange{Seq: 1, Type: "relation", ResourceID: "hero", Op: "deleted"}, wantSeq: 1},
 		{name: "entity_note not allowlisted", msg: ws.NewMessage(ws.MsgEntityNoteCreated, "c1", "n1", nil)},
 		{name: "calendar date not allowlisted", msg: ws.NewMessage(ws.MsgCalendarDateAdvanced, "c1", "", nil)},
 		{name: "sync control not allowlisted", msg: ws.NewMessage(ws.MsgSyncStatus, "c1", "", nil)},

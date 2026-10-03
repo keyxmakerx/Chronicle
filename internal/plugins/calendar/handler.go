@@ -241,6 +241,25 @@ func (h *Handler) ListEventsAPI(c echo.Context) error {
 	return c.JSON(http.StatusOK, events)
 }
 
+// ListEraEventsAPI returns the events dated within one era, for the era
+// panel's key events.
+// GET /campaigns/:id/calendars/:calid/eras/:eraID/events
+func (h *Handler) ListEraEventsAPI(c echo.Context) error {
+	cc := campaigns.GetCampaignContext(c)
+	eraID, err := strconv.Atoi(c.Param("eraID"))
+	if err != nil {
+		return apperror.NewBadRequest("invalid era id")
+	}
+	events, total, err := h.svc.ListEraEventsForViewer(c.Request().Context(), eraID, c.Param("calid"), cc.Campaign.ID, viewerFrom(c, cc))
+	if err != nil {
+		return err
+	}
+	if events == nil {
+		events = []Event{}
+	}
+	return c.JSON(http.StatusOK, map[string]any{"data": events, "total": total})
+}
+
 // GetEventAPI returns one event.
 // GET /campaigns/:id/calendars/:calid/events/:eid
 func (h *Handler) GetEventAPI(c echo.Context) error {
@@ -642,31 +661,43 @@ func (h *Handler) DeleteEventKindAPI(c echo.Context) error {
 
 func bindEraInput(c echo.Context) (EraInput, error) {
 	var req struct {
-		Name        string  `json:"name"`
-		StartYear   int     `json:"start_year"`
-		StartMonth  int     `json:"start_month"`
-		StartDay    int     `json:"start_day"`
-		EndYear     *int    `json:"end_year"`
-		EndMonth    *int    `json:"end_month"`
-		EndDay      *int    `json:"end_day"`
-		Description *string `json:"description"`
-		Color       string  `json:"color"`
-		SortOrder   int     `json:"sort_order"`
+		Name              string  `json:"name"`
+		StartYear         int     `json:"start_year"`
+		StartMonth        int     `json:"start_month"`
+		StartDay          int     `json:"start_day"`
+		EndYear           *int    `json:"end_year"`
+		EndMonth          *int    `json:"end_month"`
+		EndDay            *int    `json:"end_day"`
+		Description       *string `json:"description"`
+		Color             string  `json:"color"`
+		SortOrder         int     `json:"sort_order"`
+		Color2            *string `json:"color_2"`
+		Style             string  `json:"style"`
+		Feel              *string `json:"feel"`
+		LoreEntityID      *string `json:"lore_entity_id"`
+		DMNote            *string `json:"dm_note"`
+		HiddenUntilBegins bool    `json:"hidden_until_begins"`
 	}
 	if err := c.Bind(&req); err != nil {
 		return EraInput{}, apperror.NewBadRequest("invalid request")
 	}
 	return EraInput{
-		Name:        req.Name,
-		StartYear:   req.StartYear,
-		StartMonth:  req.StartMonth,
-		StartDay:    req.StartDay,
-		EndYear:     req.EndYear,
-		EndMonth:    req.EndMonth,
-		EndDay:      req.EndDay,
-		Description: req.Description,
-		Color:       req.Color,
-		SortOrder:   req.SortOrder,
+		Name:              req.Name,
+		StartYear:         req.StartYear,
+		StartMonth:        req.StartMonth,
+		StartDay:          req.StartDay,
+		EndYear:           req.EndYear,
+		EndMonth:          req.EndMonth,
+		EndDay:            req.EndDay,
+		Description:       req.Description,
+		Color:             req.Color,
+		SortOrder:         req.SortOrder,
+		Color2:            req.Color2,
+		Style:             req.Style,
+		Feel:              req.Feel,
+		LoreEntityID:      req.LoreEntityID,
+		DMNote:            req.DMNote,
+		HiddenUntilBegins: req.HiddenUntilBegins,
 	}, nil
 }
 
@@ -696,32 +727,81 @@ func (h *Handler) UpdateEraAPI(c echo.Context) error {
 		return apperror.NewBadRequest("invalid era id")
 	}
 	var req struct {
-		Name        string              `json:"name"`
-		StartYear   patch.Field[int]    `json:"start_year"`
-		StartMonth  patch.Field[int]    `json:"start_month"`
-		StartDay    patch.Field[int]    `json:"start_day"`
-		EndYear     patch.Field[int]    `json:"end_year"`
-		EndMonth    patch.Field[int]    `json:"end_month"`
-		EndDay      patch.Field[int]    `json:"end_day"`
-		Description patch.Field[string] `json:"description"`
-		Color       patch.Field[string] `json:"color"`
-		SortOrder   patch.Field[int]    `json:"sort_order"`
+		Name              string              `json:"name"`
+		StartYear         patch.Field[int]    `json:"start_year"`
+		StartMonth        patch.Field[int]    `json:"start_month"`
+		StartDay          patch.Field[int]    `json:"start_day"`
+		EndYear           patch.Field[int]    `json:"end_year"`
+		EndMonth          patch.Field[int]    `json:"end_month"`
+		EndDay            patch.Field[int]    `json:"end_day"`
+		Description       patch.Field[string] `json:"description"`
+		Color             patch.Field[string] `json:"color"`
+		SortOrder         patch.Field[int]    `json:"sort_order"`
+		Color2            patch.Field[string] `json:"color_2"`
+		Style             patch.Field[string] `json:"style"`
+		Feel              patch.Field[string] `json:"feel"`
+		LoreEntityID      patch.Field[string] `json:"lore_entity_id"`
+		DMNote            patch.Field[string] `json:"dm_note"`
+		HiddenUntilBegins patch.Field[bool]   `json:"hidden_until_begins"`
 	}
 	if err := c.Bind(&req); err != nil {
 		return apperror.NewBadRequest("invalid request")
 	}
 	if err := h.svc.UpdateEra(c.Request().Context(), eraID, c.Param("calid"), cc.Campaign.ID, UpdateEraInput{
-		Name:        req.Name,
-		StartYear:   req.StartYear,
-		StartMonth:  req.StartMonth,
-		StartDay:    req.StartDay,
-		EndYear:     req.EndYear,
-		EndMonth:    req.EndMonth,
-		EndDay:      req.EndDay,
-		Description: req.Description,
-		Color:       req.Color,
-		SortOrder:   req.SortOrder,
+		Color2:            req.Color2,
+		Style:             req.Style,
+		Feel:              req.Feel,
+		LoreEntityID:      req.LoreEntityID,
+		DMNote:            req.DMNote,
+		HiddenUntilBegins: req.HiddenUntilBegins,
+		Name:              req.Name,
+		StartYear:         req.StartYear,
+		StartMonth:        req.StartMonth,
+		StartDay:          req.StartDay,
+		EndYear:           req.EndYear,
+		EndMonth:          req.EndMonth,
+		EndDay:            req.EndDay,
+		Description:       req.Description,
+		Color:             req.Color,
+		SortOrder:         req.SortOrder,
 	}); err != nil {
+		return err
+	}
+	return c.NoContent(http.StatusOK)
+}
+
+// SaveEraLookAPI saves the calendar's era look and its eras' colours,
+// styles and feels together. Owner only, like the other calendar settings.
+// Each era entry is partial (absent keeps, null clears); the calendar-wide
+// look is sent whole.
+// PUT /campaigns/:id/calendars/:calid/era-look
+func (h *Handler) SaveEraLookAPI(c echo.Context) error {
+	cc := campaigns.GetCampaignContext(c)
+	var req struct {
+		ColorsOn  bool    `json:"colors_on"`
+		Feel      string  `json:"feel"`
+		Intensity float64 `json:"intensity"`
+		Speed     float64 `json:"speed"`
+		Eras      []struct {
+			ID     int                 `json:"id"`
+			Color  patch.Field[string] `json:"color"`
+			Color2 patch.Field[string] `json:"color_2"`
+			Style  patch.Field[string] `json:"style"`
+			Feel   patch.Field[string] `json:"feel"`
+		} `json:"eras"`
+	}
+	if err := c.Bind(&req); err != nil {
+		return apperror.NewBadRequest("invalid request")
+	}
+	if len(req.Eras) > maxCalendarEras {
+		return apperror.NewBadRequest("too many eras")
+	}
+	eras := make([]EraLookEra, 0, len(req.Eras))
+	for _, e := range req.Eras {
+		eras = append(eras, EraLookEra{ID: e.ID, Color: e.Color, Color2: e.Color2, Style: e.Style, Feel: e.Feel})
+	}
+	look := EraLook{ColorsOn: req.ColorsOn, Feel: req.Feel, Intensity: req.Intensity, Speed: req.Speed}
+	if err := h.svc.SaveEraLook(c.Request().Context(), c.Param("calid"), cc.Campaign.ID, look, eras); err != nil {
 		return err
 	}
 	return c.NoContent(http.StatusOK)
@@ -864,6 +944,39 @@ func (h *Handler) ClearDayWeatherAPI(c echo.Context) error {
 		return err
 	}
 	return c.NoContent(http.StatusNoContent)
+}
+
+// LockDayWeatherAPI locks or unlocks the readings on a set of days. Only days
+// that already hold a reading change; the answer says how many did. A POST
+// action like clear. "locked" must be present so an omitted field can never
+// read as an unlock.
+// POST /campaigns/:id/calendars/:calid/weather/days/lock  {"days":[{year,month,day}],"locked":true}
+func (h *Handler) LockDayWeatherAPI(c echo.Context) error {
+	cc := campaigns.GetCampaignContext(c)
+	var req struct {
+		Days   []DayDate `json:"days"`
+		Locked *bool     `json:"locked"`
+	}
+	if err := c.Bind(&req); err != nil || req.Locked == nil {
+		return apperror.NewBadRequest("days and locked are required")
+	}
+	n, err := h.svc.LockDayWeather(c.Request().Context(), c.Param("calid"), cc.Campaign.ID, req.Days, *req.Locked)
+	if err != nil {
+		return err
+	}
+	return c.JSON(http.StatusOK, map[string]int{"changed": n})
+}
+
+// ListWeatherForecastAPI returns the blurred outlook for the days after
+// today, the same for every viewer who can see the calendar.
+// GET /campaigns/:id/calendars/:calid/weather/forecast
+func (h *Handler) ListWeatherForecastAPI(c echo.Context) error {
+	cc := campaigns.GetCampaignContext(c)
+	out, err := h.svc.ListWeatherForecast(c.Request().Context(), c.Param("calid"), cc.Campaign.ID, viewerFrom(c, cc))
+	if err != nil {
+		return err
+	}
+	return c.JSON(http.StatusOK, out)
 }
 
 // --- Calendar creation wizard (presets, import) ---

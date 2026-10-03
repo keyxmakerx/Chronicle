@@ -1,0 +1,215 @@
+package dmscreen
+
+import (
+	"fmt"
+	"strings"
+)
+
+// Panel is the DM Screen fragment: a header strip and three leaves (the
+// world, the party, rules and reveals). The dm-screen widget mounts it in an
+// overlay and plays the opening; the markup itself is static so a reduced-
+// motion or no-JS-animation path still reads correctly.
+templ Panel(v *View, csrf string) {
+	<div
+		class="dms"
+		data-dms-root
+		role="dialog"
+		aria-modal="true"
+		aria-labelledby="dms-title"
+		hx-get={ fmt.Sprintf("/campaigns/%s/dm-screen", v.CampaignID) }
+		hx-trigger="armory-moved from:body"
+		hx-swap="outerHTML"
+	>
+		<div class="dms-head">
+			<h2 id="dms-title">DM Screen</h2>
+			<button type="button" class="dms-close" data-dms-close>Close</button>
+		</div>
+		<div class="dms-strip">
+			if v.Night != nil {
+				<span><b>Next game night:</b> { v.Night.Name }, { v.Night.When }</span>
+				<span>{ fmt.Sprintf("%d coming · %d maybe · %d no answer", v.Night.Going, v.Night.Maybe, v.Night.NoAnswer) }</span>
+			} else {
+				<span>No game night planned</span>
+			}
+			if v.Foundry.Connected {
+				<span><span class="dms-dot dms-dot-on" aria-hidden="true"></span>Foundry connected</span>
+			} else if !v.Foundry.NeverSeen {
+				<span><span class="dms-dot" aria-hidden="true"></span>Foundry not connected</span>
+			}
+		</div>
+		<div class="dms-leaves">
+			<section class="dms-leaf dms-leaf-l" data-dms-leaf="l" aria-label="The world">
+				<h3>The world</h3>
+				if v.Downtime != nil {
+					<div class="dms-blk">
+						<span class="dms-lbl">Game state</span>
+						<div class="dms-seg" role="group" aria-label="Game state">
+							for _, opt := range []struct{ Label string; Open bool }{{"In session", false}, {"Downtime", true}} {
+								<button
+									type="button"
+									aria-pressed={ fmt.Sprint(v.Downtime.Open == opt.Open) }
+									disabled?={ !v.Downtime.CanToggle || v.Downtime.Open == opt.Open }
+									hx-post={ fmt.Sprintf("/campaigns/%s/armory/downtime", v.CampaignID) }
+									hx-vals={ fmt.Sprintf(`{"open":"%t"}`, opt.Open) }
+									hx-headers={ fmt.Sprintf(`{"X-CSRF-Token":"%s"}`, csrf) }
+								>{ opt.Label }</button>
+							}
+						</div>
+						<span class="dms-small">
+							if v.Downtime.Open {
+								Moves happen at once. Shops are open.
+							} else {
+								Moves need your OK. Shops are closed.
+							}
+							if !v.Downtime.CanToggle {
+								{ " " }Only the campaign owner can switch this.
+							}
+						</span>
+						if v.Downtime.Pending > 0 {
+							<a class="dms-link" href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/armory/stashes", v.CampaignID)) }>
+								{ plural(v.Downtime.Pending, "request", "requests") } waiting on you
+							</a>
+						}
+					</div>
+				}
+				if v.World != nil {
+					<div class="dms-blk">
+						<span class="dms-lbl">In the world</span>
+						<span class="dms-big">{ v.World.DateLabel }
+							if v.World.TimeLabel != "" {
+								{ " · " + v.World.TimeLabel }
+							}
+						</span>
+						<a class="dms-link" href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/calendars/%s", v.CampaignID, v.World.CalendarID)) }>Open the calendar</a>
+					</div>
+					<div class="dms-blk">
+						<span class="dms-lbl">Weather today</span>
+						if v.World.Weather != "" {
+							<span>{ v.World.Weather }</span>
+						} else {
+							<span class="dms-small">No weather set for today.</span>
+						}
+					</div>
+				}
+				if v.Downtime == nil && v.World == nil {
+					<p class="dms-small">Add a calendar or turn on the Armory to see the world's date and game state here.</p>
+				}
+			</section>
+			<section class="dms-leaf dms-leaf-m" data-dms-leaf="m" aria-label="The party">
+				<h3>The party</h3>
+				if len(v.Party) == 0 {
+					<p class="dms-small">No player characters yet.</p>
+				}
+				if len(v.Party) > 0 {
+					<div class="dms-partywrap">
+						<div class="dms-party" data-dms-party>
+							for _, hero := range v.Party {
+								@heroRow(hero)
+							}
+						</div>
+						<span class="dms-more" data-dms-more hidden></span>
+					</div>
+				}
+				if len(v.Party) > 0 && !v.PartyFilled {
+					<p class="dms-small">
+						if v.SystemName != "" {
+							{ v.SystemName } doesn't fill in hero numbers yet.
+						} else {
+							Turn on a game system to see each hero's numbers here.
+						}
+					</p>
+				}
+			</section>
+			<section class="dms-leaf dms-leaf-r" data-dms-leaf="r" aria-label="Rules and reveals">
+				<div class="dms-tabs" role="tablist">
+					if len(v.Conditions) > 0 {
+						<button type="button" role="tab" aria-selected="true" data-dms-tab="rules">Rules</button>
+					}
+					<button type="button" role="tab" aria-selected={ fmt.Sprint(len(v.Conditions) == 0) } data-dms-tab="reveal">Reveal</button>
+				</div>
+				if len(v.Conditions) > 0 {
+					<div class="dms-blk" data-dms-pane="rules">
+						<input type="search" class="dms-search" placeholder="Find a condition" aria-label="Find a condition" data-dms-filter/>
+						for _, cond := range v.Conditions {
+							<details class="dms-cond" data-dms-cond={ cond.Name }>
+								<summary>{ cond.Name }</summary>
+								<p>{ cond.Text }</p>
+							</details>
+						}
+					</div>
+				}
+				<div class="dms-blk" data-dms-pane="reveal" hidden?={ len(v.Conditions) > 0 }>
+					<span class="dms-lbl">Hidden from players</span>
+					if len(v.Hidden) == 0 {
+						<p class="dms-small">Nothing hidden right now.</p>
+					}
+					for _, h := range v.Hidden {
+						@HiddenRow(v.CampaignID, h, csrf)
+					}
+				</div>
+			</section>
+		</div>
+	</div>
+}
+
+// plural renders "1 request" / "3 requests".
+func plural(n int, one, many string) string {
+	if n == 1 {
+		return fmt.Sprintf("%d %s", n, one)
+	}
+	return fmt.Sprintf("%d %s", n, many)
+}
+
+// heroRow is one hero folded to a single line (bar and chips); clicking it
+// folds the player's name and the remaining meters open below.
+templ heroRow(hero HeroView) {
+	{{ bar, chips, rest := hero.Folded() }}
+	<div class="dms-hero" data-dms-hero>
+		<button type="button" class="dms-hrow" aria-expanded="false" data-dms-hrow>
+			<span class="dms-hero-name">
+				{ hero.Name }
+				if n := len(hero.Conditions); n > 0 {
+					<em class="dms-cdot" title={ strings.Join(hero.Conditions, ", ") }><span class="sr-only">Conditions: </span>{ fmt.Sprint(n) }</em>
+				}
+			</span>
+			<span class="dms-mini">
+				if bar != nil {
+					<span class="dms-bar" aria-hidden="true"><span class={ templ.KV("dms-low", bar.Low) } style={ fmt.Sprintf("width:%d%%", bar.Percent) }></span></span>
+					<span class="dms-num"><span class="sr-only">{ bar.Label } </span>{ bar.Current }/{ bar.Max }</span>
+				}
+			</span>
+			<span class="dms-chips">
+				for _, c := range chips {
+					<span class="dms-chip">{ c.Label } { c.Current }</span>
+				}
+			</span>
+			<span class="dms-chev" aria-hidden="true">▾</span>
+		</button>
+		<div class="dms-hmore">
+			<div class="dms-hin">
+				if hero.Subtitle != "" || hero.PlayerName != "" {
+					<div class="dms-who">
+						<span>{ hero.Subtitle }</span>
+						if hero.PlayerName != "" {
+							<span>Played by { hero.PlayerName }</span>
+						}
+					</div>
+				}
+				for _, m := range rest {
+					<div class="dms-meter">
+						<span>{ m.Label }</span>
+						<span class="dms-bar" aria-hidden="true"><span class={ templ.KV("dms-low", m.Low) } style={ fmt.Sprintf("width:%d%%", m.Percent) }></span></span>
+						<span class="dms-num">{ m.Current }/{ m.Max }</span>
+					</div>
+				}
+				if len(hero.Conditions) > 0 {
+					<div class="dms-hconds">
+						for _, c := range hero.Conditions {
+							<span>{ c }</span>
+						}
+					</div>
+				}
+			</div>
+		</div>
+	</div>
+}

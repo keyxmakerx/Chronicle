@@ -517,6 +517,9 @@ func (s *stashService) Move(ctx context.Context, campaignID string, a Actor, in 
 		return nil, err
 	}
 
+	// Registered before the lock so the events go out after it is released.
+	var ev eventBatch
+	defer ev.flush(s.Events, campaignID)
 	unlock := s.locks.lock(campaignID)
 	defer unlock()
 
@@ -559,6 +562,7 @@ func (s *stashService) Move(ctx context.Context, campaignID string, a Actor, in 
 				return nil, apperror.NewInternal(fmt.Errorf("recording move %d: %w", m.ID, err))
 			}
 		}
+		ev.moved(m)
 		if m.Status != MoveApplied {
 			return nil, apperror.NewConflict(m.Reason)
 		}
@@ -577,6 +581,7 @@ func (s *stashService) Move(ctx context.Context, campaignID string, a Actor, in 
 	if err := s.Repo.InsertMove(ctx, m); err != nil {
 		return nil, err
 	}
+	ev.requested(m)
 	return &MoveOutcome{Move: *m}, nil
 }
 
@@ -599,6 +604,8 @@ func (s *stashService) Approve(ctx context.Context, campaignID string, a Actor, 
 	if _, err := s.answerable(ctx, campaignID, a, moveID); err != nil {
 		return nil, err
 	}
+	var ev eventBatch
+	defer ev.flush(s.Events, campaignID)
 	unlock := s.locks.lock(campaignID)
 	defer unlock()
 	// Re-read under the lock: another answer may have landed while we waited.
@@ -609,6 +616,8 @@ func (s *stashService) Approve(ctx context.Context, campaignID string, a Actor, 
 	if err := s.settlePending(ctx, m, a.UserID, ""); err != nil {
 		return nil, err
 	}
+	ev.moved(m)
+	ev.settled(m)
 	return m, nil
 }
 
@@ -638,6 +647,8 @@ func (s *stashService) Decline(ctx context.Context, campaignID string, a Actor, 
 	if _, err := s.answerable(ctx, campaignID, a, moveID); err != nil {
 		return nil, err
 	}
+	var ev eventBatch
+	defer ev.flush(s.Events, campaignID)
 	unlock := s.locks.lock(campaignID)
 	defer unlock()
 	m, err := s.answerable(ctx, campaignID, a, moveID)
@@ -652,6 +663,7 @@ func (s *stashService) Decline(ctx context.Context, campaignID string, a Actor, 
 		return nil, apperror.NewConflict("That request has already been answered.")
 	}
 	m.Status, m.DecidedBy = MoveDeclined, a.UserID
+	ev.settled(m)
 	return m, nil
 }
 
@@ -660,11 +672,14 @@ func (s *stashService) SetDowntime(ctx context.Context, campaignID string, a Act
 	if !a.IsOwner() {
 		return res, forbidden()
 	}
+	var ev eventBatch
+	defer ev.flush(s.Events, campaignID)
 	unlock := s.locks.lock(campaignID)
 	defer unlock()
 	if err := s.Repo.SetDowntime(ctx, campaignID, open, a.UserID); err != nil {
 		return res, err
 	}
+	ev.downtimeChanged(open)
 	if !open {
 		return res, nil
 	}
@@ -681,6 +696,8 @@ func (s *stashService) SetDowntime(ctx context.Context, campaignID string, a Act
 			res.Failed++
 			continue
 		}
+		ev.moved(&m)
+		ev.settled(&m)
 		if m.Status == MoveApplied {
 			res.Applied++
 		} else {
@@ -756,7 +773,25 @@ func (s *stashService) MoveDialog(ctx context.Context, campaignID string, a Acto
 		view.MaxMoney = bal
 	}
 
-	// Destinations: stashes the actor sees, then characters they can view.
+	dests, err := s.Destinations(ctx, campaignID, a, kind, from)
+	if err != nil {
+		return nil, err
+	}
+	view.Destinations = dests
+
+	open, err := s.IsDowntimeOpen(ctx, campaignID)
+	if err != nil {
+		return nil, err
+	}
+	view.Immediate = a.IsGM() || open
+	return view, nil
+}
+
+// Destinations lists where the actor may send a move from `from`: stashes they
+// see, then characters they can view. For money, characters with no money
+// field are left out because the move would be refused.
+func (s *stashService) Destinations(ctx context.Context, campaignID string, a Actor, kind string, from Endpoint) ([]MoveDestination, error) {
+	var out []MoveDestination
 	stashes, err := s.Repo.ListStashes(ctx, campaignID)
 	if err != nil {
 		return nil, err
@@ -775,7 +810,7 @@ func (s *stashService) MoveDialog(ctx context.Context, campaignID string, a Acto
 		} else if !ok {
 			continue
 		}
-		view.Destinations = append(view.Destinations, MoveDestination{Endpoint: ep, Label: st.Name, Group: "Stashes"})
+		out = append(out, MoveDestination{Endpoint: ep, Label: st.Name, Group: "Stashes"})
 	}
 	chars, err := s.Directory.ListCharacters(ctx, campaignID, a.Role, a.UserID)
 	if err != nil {
@@ -788,16 +823,10 @@ func (s *stashService) MoveDialog(ctx context.Context, campaignID string, a Acto
 		if kind == MoveKindMoney && c.MoneyKey == "" {
 			continue
 		}
-		view.Destinations = append(view.Destinations, MoveDestination{
+		out = append(out, MoveDestination{
 			Endpoint: Endpoint{Kind: EndpointCharacter, ID: c.ID}, Label: c.Name, Group: "Characters"})
 	}
-
-	open, err := s.IsDowntimeOpen(ctx, campaignID)
-	if err != nil {
-		return nil, err
-	}
-	view.Immediate = a.IsGM() || open
-	return view, nil
+	return out, nil
 }
 
 func (s *stashService) heldItemQuantity(ctx context.Context, campaignID string, from Endpoint, itemID string, allowDM bool) (int, error) {

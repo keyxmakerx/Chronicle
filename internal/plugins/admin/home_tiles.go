@@ -32,9 +32,12 @@ type homeInput struct {
 	RegisteredSystems, FailedSystems                       int
 	ActiveSessions, FailedLogins24h                        int
 	MediaFiles                                             int
-	StorageBytes                                           int64
-	DegradedParts                                          int
-	SMTPConfigured, SMTPKnown                              bool
+	// SiteName is the saved site name; "" when the look lookup failed.
+	SiteName                  string
+	SiteLookSaved             bool
+	StorageBytes              int64
+	DegradedParts             int
+	SMTPConfigured, SMTPKnown bool
 	// Backup state: BackupsKnown is false when the lister isn't wired;
 	// BackupsEnabled is whether a backup folder is configured; LastBackup is
 	// the newest backup file's time, zero when there is none.
@@ -107,12 +110,26 @@ func buildHomeGroups(in homeInput) []HomeGroup {
 			{Big: formatBytes(in.StorageBytes), Label: "Storage & cleanup", Href: "/admin/storage", Line: fmt.Sprintf("in %d files", in.MediaFiles)},
 			backupTile(in),
 			email,
+			siteLookTile(in),
 		}},
 		{Label: "Tools", Tiles: []HomeTile{
 			health,
 			{Big: "—", Label: "Design Lab", Href: "/admin/design-lab", Line: "try out page styles"},
 		}},
 	}
+}
+
+// siteLookTile shows the site name, or a dash when it can't be read. The line
+// says whether an admin has set the look yet.
+func siteLookTile(in homeInput) HomeTile {
+	t := HomeTile{Big: "—", Label: "Site look", Href: "/admin/site-look", Line: "name, logo and look outside campaigns"}
+	if in.SiteName != "" {
+		t.Big = in.SiteName
+		if !in.SiteLookSaved {
+			t.Line = "not set up yet, pages look as shipped"
+		}
+	}
+	return t
 }
 
 // backupTile reports the age of the newest backup file. The dot appears only

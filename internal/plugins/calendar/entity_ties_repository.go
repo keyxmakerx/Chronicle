@@ -25,7 +25,7 @@ func (r *eventRepo) LinkEntityEvent(ctx context.Context, entityID, eventID, role
 		 SELECT ?, ?, ?
 		 FROM calendar_events ev
 		 JOIN calendars c ON c.id = ev.calendar_id
-		 JOIN entities ent ON ent.id = ? AND ent.campaign_id = c.campaign_id
+		 JOIN entities ent ON ent.id = ? AND ent.campaign_id = c.campaign_id AND ent.deleted_at IS NULL
 		 WHERE ev.id = ?
 		 ON DUPLICATE KEY UPDATE participation_role = VALUES(participation_role)`,
 		entityID, eventID, role, entityID, eventID,
@@ -61,7 +61,7 @@ func (r *eventRepo) LinkEntityEra(ctx context.Context, entityID string, eraID in
 		 SELECT ?, ?, ?
 		 FROM calendar_eras er
 		 JOIN calendars c ON c.id = er.calendar_id
-		 JOIN entities ent ON ent.id = ? AND ent.campaign_id = c.campaign_id
+		 JOIN entities ent ON ent.id = ? AND ent.campaign_id = c.campaign_id AND ent.deleted_at IS NULL
 		 WHERE er.id = ?
 		 ON DUPLICATE KEY UPDATE participation_role = VALUES(participation_role)`,
 		entityID, eraID, role, entityID, eraID,
@@ -181,7 +181,7 @@ func (r *eventRepo) EntitiesForCalendar(ctx context.Context, calendarID string, 
 		     WHERE er.calendar_id = ?
 		 ) tied
 		 JOIN calendars c ON c.id = ?
-		 JOIN entities e ON e.id = tied.entity_id AND e.campaign_id = c.campaign_id
+		 JOIN entities e ON e.id = tied.entity_id AND e.campaign_id = c.campaign_id AND e.deleted_at IS NULL
 		 LEFT JOIN entity_types et ON et.id = e.entity_type_id
 		 WHERE 1=1`+visFilter+`
 		 ORDER BY e.name`, args...)
@@ -215,7 +215,7 @@ func (r *eventRepo) EntitiesForEvent(ctx context.Context, eventID string, role i
 		 FROM entity_event_links l
 		 JOIN calendar_events ev ON ev.id = l.event_id
 		 JOIN calendars c ON c.id = ev.calendar_id
-		 JOIN entities e ON e.id = l.entity_id AND e.campaign_id = c.campaign_id
+		 JOIN entities e ON e.id = l.entity_id AND e.campaign_id = c.campaign_id AND e.deleted_at IS NULL
 		 LEFT JOIN entity_types et ON et.id = e.entity_type_id
 		 WHERE l.event_id = ?`+visFilter+`
 		 ORDER BY e.name`, args...)
@@ -237,7 +237,7 @@ func (r *eventRepo) EntitiesForEra(ctx context.Context, eraID int, role int, use
 		 FROM entity_era_links l
 		 JOIN calendar_eras er ON er.id = l.era_id
 		 JOIN calendars c ON c.id = er.calendar_id
-		 JOIN entities e ON e.id = l.entity_id AND e.campaign_id = c.campaign_id
+		 JOIN entities e ON e.id = l.entity_id AND e.campaign_id = c.campaign_id AND e.deleted_at IS NULL
 		 LEFT JOIN entity_types et ON et.id = e.entity_type_id
 		 WHERE l.era_id = ?`+visFilter+`
 		 ORDER BY e.name`, args...)

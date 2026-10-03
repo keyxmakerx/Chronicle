@@ -550,7 +550,7 @@ func (r *campaignRepository) ListMembers(ctx context.Context, campaignID string)
 	                 e.name
 	          FROM campaign_members cm
 	          INNER JOIN users u ON u.id = cm.user_id
-	          LEFT JOIN entities e ON e.id = cm.character_entity_id
+	          LEFT JOIN entities e ON e.id = cm.character_entity_id AND e.deleted_at IS NULL
 	          WHERE cm.campaign_id = ?
 	          ORDER BY FIELD(cm.role, 'owner', 'scribe', 'player'), u.display_name`
 

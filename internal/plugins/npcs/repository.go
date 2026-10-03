@@ -61,7 +61,7 @@ func (r *npcRepository) ListRevealedIDs(ctx context.Context, campaignID string, 
 		return nil, nil
 	}
 	typePlaceholders := strings.TrimSuffix(strings.Repeat("?,", len(characterTypeIDs)), ",")
-	where := "WHERE e.campaign_id = ? AND e.entity_type_id IN (" + typePlaceholders + ") AND e.is_template = false AND e.owner_user_id IS NULL"
+	where := "WHERE e.campaign_id = ? AND e.entity_type_id IN (" + typePlaceholders + ") AND e.is_template = false AND e.owner_user_id IS NULL AND e.deleted_at IS NULL"
 	args := []any{campaignID}
 	for _, id := range characterTypeIDs {
 		args = append(args, id)
@@ -125,7 +125,7 @@ func (r *npcRepository) GetNPCCardsByIDs(ctx context.Context, campaignID string,
 	query := fmt.Sprintf(`SELECT %s
 		FROM entities e
 		INNER JOIN entity_types et ON et.id = e.entity_type_id
-		WHERE e.campaign_id = ? AND e.id IN (%s)
+		WHERE e.campaign_id = ? AND e.deleted_at IS NULL AND e.id IN (%s)
 		ORDER BY FIELD(e.id, %s)`, npcSelectColumns, inClause, inClause)
 
 	rows, err := r.db.QueryContext(ctx, query, args...)

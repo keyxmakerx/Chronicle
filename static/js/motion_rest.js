@@ -14,6 +14,12 @@
  * while easing), so everything driven by it slows smoothly and resumes exactly
  * where it stopped. MotionRest.still() says when to stop requesting frames, and
  * MotionRest.onWake(fn) calls fn when motion starts again, to restart a loop.
+ *
+ * Under either reduce switch (the campaign's html[data-cz-reduce] or the
+ * person's own html[data-view-motion="calm"]) the clock is held at rest for
+ * good: speed 0 from the first frame, never waking, so every loop that reads
+ * it stays still without needing its own check. Flipping the attribute live
+ * (the My view card does) takes effect at once.
  */
 (function () {
   'use strict';
@@ -22,7 +28,14 @@
   // How long without input counts as stepping away, and how long the easing takes each way.
   var IDLE_MS = 8000, DOWN_S = 2, UP_S = 1;
 
-  var speed = 1, from = 1, to = 1, easeT0 = 0, easeDur = 0;
+  // Either reduce switch holds everything still; read live so a toggle needs no reload.
+  function calm() {
+    var r = document.documentElement;
+    return !!(r && r.hasAttribute && (r.hasAttribute('data-cz-reduce') || r.getAttribute('data-view-motion') === 'calm'));
+  }
+
+  // Starts at rest under a reduce switch, so nothing moves even for the first frames.
+  var speed = calm() ? 0 : 1, from = speed, to = speed, easeT0 = 0, easeDur = 0;
   // The rest clock: its value at the last fold point and the real time it was taken.
   var base = 0, baseReal = now0(), raf = 0;
   var hidden = !!document.hidden, blurred = false, pointerOut = false, idle = false, forced = null;
@@ -46,7 +59,7 @@
   }
   function nowRest() { fold(now0()); return base; }
 
-  function away() { return forced != null ? forced : (hidden || blurred || pointerOut || idle); }
+  function away() { return calm() || (forced != null ? forced : (hidden || blurred || pointerOut || idle)); }
   function update() {
     var r = now0(); fold(r);
     var target = away() ? 0 : 1;
@@ -75,6 +88,10 @@
   document.documentElement.addEventListener('mouseleave', function () { pointerOut = true; update(); });
   document.documentElement.addEventListener('mouseenter', function () { pointerOut = false; poke(); update(); });
   poke();
+  // The attribute can change after load (My view); re-evaluate when it does.
+  if (typeof MutationObserver === 'function' && document.documentElement && document.documentElement.nodeType) {
+    new MutationObserver(update).observe(document.documentElement, { attributes: true, attributeFilter: ['data-cz-reduce', 'data-view-motion'] });
+  }
 
   window.MotionRest = {
     now: nowRest,

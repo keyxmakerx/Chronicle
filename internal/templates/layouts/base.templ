@@ -12,14 +12,20 @@ templ Base(title string) {
 	<head>
 		<meta charset="UTF-8"/>
 		<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-		<title>{ title } | Chronicle</title>
+		<title>{ SiteTitle(ctx, title) }</title>
 
 		<!-- Favicon -->
-		<link rel="icon" type="image/svg+xml" href={ AssetURL("/static/img/favicon.svg") }/>
+		if href, mime, ok := SiteFavicon(ctx); ok {
+			<link rel="icon" type={ mime } href={ href }/>
+		} else {
+			<link rel="icon" type="image/svg+xml" href={ AssetURL("/static/img/favicon.svg") }/>
+		}
 
-		<!-- Theme: apply dark class + inline background-color before first paint to prevent flash -->
+		<!-- Theme: apply dark class + inline background-color before first paint to prevent flash.
+		     A signed-in person's account choice (data-view-theme) wins over this browser's saved theme;
+		     "device" follows the OS. Either reduce switch (the campaign's or the person's own) sets nav-rm. -->
 		<script>
-			(function(){try{var t=localStorage.getItem('chronicle-theme');var d=t==='dark'||(t!=='light'&&window.matchMedia('(prefers-color-scheme:dark)').matches);if(d){document.documentElement.classList.add('dark');document.documentElement.style.backgroundColor='#111827'}else{document.documentElement.style.backgroundColor='#f9fafb'}if(document.documentElement.hasAttribute('data-cz-reduce'))document.documentElement.classList.add('nav-rm')}catch(e){}})();
+			(function(){try{var h=document.documentElement;var v=h.getAttribute('data-view-theme');var t=(v==='light'||v==='dark')?v:(v==='device'?null:localStorage.getItem('chronicle-theme'));var d=t==='dark'||(t!=='light'&&window.matchMedia('(prefers-color-scheme:dark)').matches);if(d){h.classList.add('dark');h.style.backgroundColor='#111827'}else{h.style.backgroundColor='#f9fafb'}if(h.hasAttribute('data-cz-reduce')||h.getAttribute('data-view-motion')==='calm')h.classList.add('nav-rm')}catch(e){}})();
 		</script>
 
 		<!-- Hide Alpine.js elements until initialized; hide body until all CSS loads (FOUC prevention). -->
@@ -99,6 +105,8 @@ templ Base(title string) {
 		<script src={ AssetURL("/static/js/recent_entities.js") } defer></script>
 		<!-- Entity favorites (localStorage-backed sidebar list + star toggle) -->
 		<script src={ AssetURL("/static/js/favorites.js") } defer></script>
+		<!-- Undo for world pages: local times in History, Undo after a delete -->
+		<script src={ AssetURL("/static/js/page_safety.js") } defer></script>
 
 		<!-- TipTap rich text editor (vendored bundle) -->
 		<script src={ AssetURL("/static/vendor/tiptap-bundle.min.js") } defer></script>
@@ -112,6 +120,10 @@ templ Base(title string) {
 		<script src={ AssetURL("/static/js/widgets/editor_autolink.js") } defer></script>
 		<!-- Slash command menu (must load before editor.js so Chronicle.SlashCommands is available) -->
 		<script src={ AssetURL("/static/js/widgets/editor_slash.js") } defer></script>
+		<!-- "On this page" outline (must load before editor.js) -->
+		<script src={ AssetURL("/static/js/widgets/editor_outline.js") } defer></script>
+		<!-- Pictures inside the text (after editor_slash.js, before editor.js) -->
+		<script src={ AssetURL("/static/js/widgets/editor_image.js") } defer></script>
 		<script src={ AssetURL("/static/js/widgets/editor.js") } defer></script>
 
 		<!-- Image upload widget -->
@@ -183,6 +195,7 @@ templ Base(title string) {
 
 		<!-- Notification bell (C-SCHED-P2): topbar dropdown; badge polled via HTMX. -->
 		<script src={ AssetURL("/static/js/widgets/notification_bell.js") } defer></script>
+		<script src={ AssetURL("/static/js/widgets/dm_screen.js") } defer></script>
 
 		<!-- Player call-to-action (C-RSVP-P10): the banner above the page for the
 		     one thing a player must ACT on. Server-rendered and polled; this
@@ -271,11 +284,17 @@ templ Base(title string) {
 		<!-- Entity map block (per-entity map assignment) -->
 		<script src={ AssetURL("/static/js/widgets/entity_map.js") } defer></script>
 
+		<!-- The header's moving background, on the shared rest clock -->
+		<script src={ AssetURL("/static/js/widgets/header_motion.js") } defer></script>
+
 		<!-- Live map viewer (the map page's viewer; also what the focus view mounts) -->
 		<script src={ AssetURL("/static/js/widgets/map_viewer.js") } defer></script>
 
 		<!-- Map focus view: a framed map preview unfolds into the live viewer -->
 		<script src={ AssetURL("/static/js/map_focus.js") } defer></script>
+
+		<!-- Admin > Site look: the live preview layered on the plain form -->
+		<script src={ AssetURL("/static/js/widgets/site_look.js") } defer></script>
 
 		<!-- Customize look editor (campaign look, one Save for every setting) -->
 		<script src={ AssetURL("/static/js/widgets/customize_look.js") } defer></script>

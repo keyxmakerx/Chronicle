@@ -114,7 +114,7 @@ const eventCols = `e.id, e.calendar_id, e.entity_id, e.name, e.description, e.de
 // UpdateEvent validate it, but the guard keeps a query honest even against
 // old or hand-edited rows, rather than trusting the write path alone.
 const eventJoins = `JOIN calendars c ON c.id = e.calendar_id
-     LEFT JOIN entities ent ON ent.id = e.entity_id AND ent.campaign_id = c.campaign_id
+     LEFT JOIN entities ent ON ent.id = e.entity_id AND ent.campaign_id = c.campaign_id AND ent.deleted_at IS NULL
      LEFT JOIN entity_types et ON et.id = ent.entity_type_id
      LEFT JOIN calendar_event_kinds k ON k.id = e.kind_id AND k.campaign_id = c.campaign_id`
 
@@ -163,7 +163,7 @@ func validateEventRefs(ctx context.Context, db *sql.DB, campaignID string, kindI
 	if entityID != nil {
 		var exists bool
 		if err := db.QueryRowContext(ctx,
-			`SELECT EXISTS(SELECT 1 FROM entities WHERE id = ? AND campaign_id = ?)`,
+			`SELECT EXISTS(SELECT 1 FROM entities WHERE id = ? AND campaign_id = ? AND deleted_at IS NULL)`,
 			*entityID, campaignID).Scan(&exists); err != nil {
 			return err
 		}
@@ -216,7 +216,7 @@ func (r *eventRepo) CreateEvent(ctx context.Context, evt *Event) error {
 		 FROM calendars c
 		 WHERE c.id = ?
 		   AND (? IS NULL OR EXISTS (SELECT 1 FROM calendar_event_kinds k WHERE k.id = ? AND k.campaign_id = c.campaign_id))
-		   AND (? IS NULL OR EXISTS (SELECT 1 FROM entities en WHERE en.id = ? AND en.campaign_id = c.campaign_id))`,
+		   AND (? IS NULL OR EXISTS (SELECT 1 FROM entities en WHERE en.id = ? AND en.campaign_id = c.campaign_id AND en.deleted_at IS NULL))`,
 		evt.ID, evt.EntityID, evt.Name, evt.Description, evt.DescriptionHTML,
 		evt.Year, evt.Month, evt.Day, evt.StartHour, evt.StartMinute,
 		evt.EndYear, evt.EndMonth, evt.EndDay, evt.EndHour, evt.EndMinute,

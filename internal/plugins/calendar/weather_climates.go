@@ -5,6 +5,7 @@
 package calendar
 
 import (
+	"fmt"
 	"math"
 
 	"github.com/keyxmakerx/chronicle/internal/apperror"
@@ -15,6 +16,10 @@ const (
 	// with no stored setting reports.
 	DefaultWeatherClimate    = "temperate"
 	DefaultWeatherContinuity = 0.55
+	// DefaultForecastDays and MaxForecastDays bound how far ahead a player's
+	// forecast reaches: past ten days a guess carries no information.
+	DefaultForecastDays = 5
+	MaxForecastDays     = 10
 )
 
 // WeatherClimate is one selectable climate. Magic climates are listed apart
@@ -69,6 +74,9 @@ func validateWeatherSettings(s WeatherSettings) error {
 	}
 	if math.IsNaN(s.Continuity) || s.Continuity < 0 || s.Continuity > 1 {
 		return apperror.NewBadRequest("how long weather lasts must be between 0 and 1")
+	}
+	if s.ForecastDays < 1 || s.ForecastDays > MaxForecastDays {
+		return apperror.NewBadRequest(fmt.Sprintf("the forecast can cover 1 to %d days", MaxForecastDays))
 	}
 	if _, err := validateWeatherKinds(s.Kinds); err != nil {
 		return err

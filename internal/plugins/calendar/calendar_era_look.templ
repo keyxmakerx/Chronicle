@@ -1,0 +1,28 @@
+// calendar_era_look.templ renders the structure editor's "Era look" part:
+// how the eras' colours show behind the calendar's days, for everyone who
+// opens it. calendar_era_look.js builds the controls and the live preview
+// from the config below and saves through PUT .../era-look; this part has
+// its own Cancel and Save, apart from the structure form above it, since
+// the look never re-dates anything and needs no preview of consequences.
+package calendar
+
+import "fmt"
+
+// eraLookPartID is the part's anchor, so a link can land on it.
+const eraLookPartID = "era-look"
+
+templ eraLookPart(data StructureEditData) {
+	<section id={ eraLookPartID } class="calv5-panel wide page calv5-eralook" aria-labelledby="calv5-eralook-h">
+		<div class="calv5-body">
+			<h2 class="calv5-wz-h" id="calv5-eralook-h" tabindex="-1">Era look</h2>
+			<p class="calv5-wz-lead">How the eras’ colours show behind the days of { data.Calendar.Name }, for everyone who opens it. The preview shows your changes as you make them; nothing changes on the calendar until you save.</p>
+			<div
+				data-widget="calendar_era_look"
+				data-endpoint={ fmt.Sprintf("/campaigns/%s/calendars/%s/era-look", data.CampaignID, data.Calendar.ID) }
+				data-config={ eraLookConfigJSON(data.Calendar) }
+			>
+				<p class="calv5-wz-lead">Loading the era look…</p>
+			</div>
+		</div>
+	</section>
+}

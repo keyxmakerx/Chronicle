@@ -82,7 +82,7 @@ numbered core migrations after it, tracked once each via `golang-migrate`'s
 
 | Table | Purpose | Notable columns |
 |---|---|---|
-| `users` | Accounts | `email` UNIQUE; `password_hash` (argon2id); `totp_secret`/`totp_enabled`; `is_admin`, `is_disabled`; `pending_email`/`email_verify_token` (email-change flow) |
+| `users` | Accounts | `email` UNIQUE; `password_hash` (argon2id); `totp_secret`/`totp_enabled`; `is_admin`, `is_disabled`; `pending_email`/`email_verify_token` (email-change flow); `admin_nav_pins`, `view_prefs` JSON (the person's own pins and My view choices) |
 | `password_reset_tokens` | Forgot-password flow | `token_hash` UNIQUE; FK→`users` CASCADE; 1h expiry |
 | `security_events` | Site-wide security audit log | `event_type`, `user_id`/`actor_id` nullable; `details` JSON; indexed by type/user/ip/actor + `created_at` |
 | `site_settings` | Global key/value settings | `setting_key` PK |
@@ -106,7 +106,8 @@ numbered core migrations after it, tracked once each via `golang-migrate`'s
 | Table | Purpose | Notable columns |
 |---|---|---|
 | `entity_types` | Per-campaign content categories (Character, Location, ...) | `UNIQUE(campaign_id, slug)`; `fields`/`layout_json`/`dashboard_layout`/`pinned_entity_ids` JSON; `preset_category` (system-preset origin); `parent_type_id` self-FK (sub-types, SET NULL); `claimable` tri-state BOOLEAN (NULL = heuristic, see `isClaimableType`) |
-| `entities` | The core worldbuilding content unit | `UNIQUE(campaign_id, slug)`; `entity_type_id` FK; `parent_id` self-FK **or** `parent_node_id` FK→`sidebar_nodes` (mutually exclusive nesting); `owner_user_id` FK→`users` SET NULL (claim); `map_id` FK→`maps` SET NULL (cross-plugin FK added by maps plugin migration 005, since core can't reference a plugin table); `entry`/`entry_html`, `player_notes`/`player_notes_html` JSON+HTML pairs; `fields_data`/`field_overrides`/`popup_config` JSON; `search_text` FULLTEXT (backfilled from `entry_html`+`fields_data`); `visibility` enum; `is_private` legacy flag; `FULLTEXT(name)` |
+| `entities` | The core worldbuilding content unit | `UNIQUE(campaign_id, slug)`; `entity_type_id` FK; `parent_id` self-FK **or** `parent_node_id` FK→`sidebar_nodes` (mutually exclusive nesting); `owner_user_id` FK→`users` SET NULL (claim); `map_id` FK→`maps` SET NULL (cross-plugin FK added by maps plugin migration 005, since core can't reference a plugin table); `entry`/`entry_html`, `player_notes`/`player_notes_html` JSON+HTML pairs; `fields_data`/`field_overrides`/`popup_config` JSON; `search_text` FULLTEXT (backfilled from `entry_html`+`fields_data`); `visibility` enum; `is_private` legacy flag; `FULLTEXT(name)`; `deleted_at`/`deleted_by`/`trash_root_id` (Trash, ADR-060: every read excludes `deleted_at IS NOT NULL`); `entry_rev` (text revision for save clashes) |
+| `entity_versions` | A page's title and text history | FK→`entities` CASCADE; `kind` (`created`/`edit`/`restore`/`baseline`); `user_id` no FK (history outlives the account); `DATETIME(6)` times |
 | `entity_aliases` | Alternate names an entity is searchable/linkable by | `UNIQUE(entity_id, alias)`; `FULLTEXT(alias)` |
 | `sidebar_nodes` | Pure organizational folders in the sidebar tree (no page content) | `node_type` enum(`folder`); self-nestable via `parent_id` |
 | `entity_favorites` | Per-user sidebar bookmarks | composite PK `(user_id, entity_id)` |
@@ -131,6 +132,7 @@ numbered core migrations after it, tracked once each via `golang-migrate`'s
 | `notes` | Journal notes (no page) and per-page jots, with folders and live-edit locking | `parent_id` self-FK (folder nesting); `is_folder`; `content` JSON (legacy block array) + `entry`/`entry_html`; audience in `is_shared` (party) / `shared_with` JSON user ids / `shared_with_gm`; `archived_at`; `linked_note_id` (jot → Journal note, no FK); `locked_by`/`locked_at` (edit lock) |
 | `note_versions` | Snapshot history on each save | FK→`notes` CASCADE; mirrors `notes`' content columns |
 | `note_attachments` | Audio + transcript attachments on a note | `duration_secs`, `transcript` LONGTEXT |
+| `notes_app_grants` | A player's grant for an outside app (the Foundry notebook) to use their notes in one campaign | stores only the token's SHA-256; `origin`, `last_used_at`, `revoked_at` |
 
 ### Templates & prompts
 

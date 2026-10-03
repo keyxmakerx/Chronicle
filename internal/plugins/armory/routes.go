@@ -11,6 +11,10 @@ import (
 	"github.com/keyxmakerx/chronicle/internal/plugins/campaigns"
 )
 
+// AddonSlug is the addon that gates every Armory feature; other plugins
+// check it through this constant rather than repeating the name.
+const AddonSlug = "armory"
+
 // RegisterRoutes sets up Armory gallery routes on the Echo instance.
 // Public-capable routes use AllowPublicCampaignAccess so public campaigns
 // show items to unauthenticated visitors. All routes are gated behind the
@@ -20,7 +24,7 @@ func RegisterRoutes(e *echo.Echo, h *Handler, th *TransactionHandler, ih *Instan
 	pub := e.Group("/campaigns/:id",
 		auth.OptionalAuth(authSvc),
 		campaigns.AllowPublicCampaignAccess(campaignSvc),
-		addons.RequireAddon(addonSvc, "armory"),
+		addons.RequireAddon(addonSvc, AddonSlug),
 	)
 	pub.GET("/armory", h.Index, campaigns.RequireViewAccess())
 	pub.GET("/armory/count", h.CountAPI, campaigns.RequireViewAccess())
@@ -33,7 +37,7 @@ func RegisterRoutes(e *echo.Echo, h *Handler, th *TransactionHandler, ih *Instan
 	cg := e.Group("/campaigns/:id",
 		auth.RequireAuth(authSvc),
 		campaigns.RequireCampaignAccess(campaignSvc),
-		addons.RequireAddon(addonSvc, "armory"),
+		addons.RequireAddon(addonSvc, AddonSlug),
 	)
 
 	// Instance management: Scribe+ (owner included) creates, renames, deletes

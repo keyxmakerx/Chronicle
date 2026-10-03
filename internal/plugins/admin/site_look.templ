@@ -1,0 +1,275 @@
+package admin
+
+import (
+	"github.com/keyxmakerx/chronicle/internal/sitelook"
+	"github.com/keyxmakerx/chronicle/internal/templates/layouts"
+)
+
+// SiteLookPage renders Admin > Site > Site look: the name, logo and look of
+// the pages outside a campaign, and the sign-in page's background. It is one
+// plain form, so it needs no script and nothing here can fail to run after an
+// HTMX swap. The look's swatch colours come only from the fixed sitelook
+// table; the name and welcome line are text nodes and input values, escaped
+// by templ.
+templ SiteLookPage(d SiteLookPageData) {
+	@layouts.App("Site look - Admin") {
+		@templ.Raw("<style>" + layouts.SiteLookFontsCSS() + "</style>")
+		<div class="max-w-6xl mx-auto space-y-6" data-widget="site-look">
+			<div>
+				<p class="text-xs uppercase tracking-wide text-fg-muted">Admin / Site</p>
+				<h1 class="text-2xl font-bold text-fg">Site look</h1>
+				<p class="text-sm text-fg-muted mt-1 max-w-3xl">
+					The site's name and logo, and one look for the sign-in page and every other page outside a campaign.
+					Campaigns keep their own looks; nothing here changes them.
+				</p>
+			</div>
+			if d.Error != "" {
+				<div class="alert-error" role="alert">{ d.Error }</div>
+			}
+			if d.Notice != "" {
+				<div class="alert-success" role="status">{ d.Notice }</div>
+			}
+			@siteLookPreview(d)
+			<form method="post" action="/admin/site-look" enctype="multipart/form-data" class="space-y-4">
+				<input type="hidden" name="csrf_token" value={ d.CSRFToken }/>
+				<div class="grid gap-4 lg:grid-cols-3">
+					@siteLookIdentityPanel(d)
+					@siteLookLookPanel(d)
+					@siteLookSigninPanel(d)
+				</div>
+				<div class="flex flex-wrap items-center justify-end gap-3">
+					<span class="text-sm text-fg-muted">Takes effect for everyone on the next page load</span>
+					<button type="submit" class="btn-primary">Save</button>
+				</div>
+			</form>
+		</div>
+	}
+}
+
+// siteLookPreview is the preview window of the signed mockup: the sign-in
+// page, Discover campaigns and the browser tab, drawn from the form's current
+// values. Rendered here it shows the saved look and works without a script;
+// the site-look widget then redraws it live as the form is edited, shows the
+// view switcher, and focuses the panel behind whatever is clicked. Colours
+// come only from the fixed sitelook table; every name and line is a text node.
+templ siteLookPreview(d SiteLookPageData) {
+	{{ s := d.Draft }}
+	{{ vars := siteLookVars(s) }}
+	<div
+		class="sl-win"
+		data-sl-win
+		data-sl-look={ siteLookOn(s.Look != "") }
+		data-sl-moving={ siteLookOn(s.Move && siteLookBg(s) != "plain") }
+		data-sl-saved-logo={ siteLookURL(ctx, d.Saved.Logo) }
+		data-sl-saved-picture={ siteLookURL(ctx, d.Saved.Picture) }
+		style={ vars }
+		aria-label="Preview"
+	>
+		<div class="sl-bar">
+			<div class="sl-seg" role="group" aria-label="Which page to show" data-sl-switcher hidden>
+				<button type="button" data-sl-switch="signin" aria-pressed="true">Sign-in page</button>
+				<button type="button" data-sl-switch="disc" aria-pressed="false">Discover campaigns</button>
+				<button type="button" data-sl-switch="tabs" aria-pressed="false">Browser tab</button>
+			</div>
+			<span class="sl-hint">Shows your edits before you save</span>
+		</div>
+		<section class={ "sl-signin", "sl-bg-" + siteLookBg(s) } data-sl-view="signin" aria-label="Sign-in page example">
+			<div class="sl-bgfill" data-sl-focus="sl-p-bg">
+				<div class="sl-flow" data-sl-flow></div>
+				<img class="sl-pic" alt="" data-sl-pic hidden/>
+			</div>
+			<div class="sl-card">
+				<div class="sl-top" data-sl-focus="sl-p-id">
+					@siteLookPreviewMark(s)
+					<span class="sl-name" data-sl-name>{ s.DisplayName() }</span>
+				</div>
+				<p class="sl-welcome" data-sl-focus="sl-p-bg" data-sl-welcome hidden?={ s.Welcome == "" }>{ s.Welcome }</p>
+				<div class="sl-field">Email</div>
+				<div class="sl-field">Password</div>
+				<div class="sl-go" data-sl-focus="sl-p-look">Sign in</div>
+			</div>
+		</section>
+		<section class="sl-disc" data-sl-view="disc" hidden aria-label="Discover page example">
+			<div class="sl-dtop" data-sl-focus="sl-p-look">
+				<div class="sl-dflow-clip" aria-hidden="true"><div class="sl-flow" data-sl-flow-top></div></div>
+				<span data-sl-focus="sl-p-id" class="sl-brand">
+					@siteLookPreviewMark(s)
+					<span class="sl-name" data-sl-name>{ s.DisplayName() }</span>
+				</span>
+				<span class="sl-nav"><span>Discover</span><span>My campaigns</span></span>
+			</div>
+			<div class="sl-dbody">
+				<h3 class="sl-h" data-sl-focus="sl-p-look">Discover campaigns</h3>
+				<div class="sl-grid">
+					<div class="sl-camp"><div class="sl-art" style="background:linear-gradient(135deg,#14352a,#2f4a2c)"></div><p><b>The Shattered Coast</b>Tides, smugglers and a drowned god.<span class="sl-chip">Open to join</span></p></div>
+					<div class="sl-camp"><div class="sl-art" style="background:linear-gradient(135deg,#3b2a1c,#4a1512)"></div><p><b>Ashes of Varn</b>A war campaign in a burning empire.<span class="sl-chip">Open to join</span></p></div>
+					<div class="sl-camp"><div class="sl-art" style="background:linear-gradient(135deg,#0f172a,#3b1d5e)"></div><p><b>Starfall Academy</b>Wizard school, one term at a time.<span class="sl-chip">Full</span></p></div>
+				</div>
+			</div>
+		</section>
+		<section class="sl-tabs" data-sl-view="tabs" hidden aria-label="Browser tab example">
+			<div class="sl-chrome">
+				<div class="sl-tab" data-sl-focus="sl-p-id">
+					<span class="sl-fav" data-sl-fav>
+						@siteLookPreviewMark(s)
+					</span>
+					<span data-sl-tabtitle>Discover campaigns | { s.DisplayName() }</span>
+				</div>
+				<div class="sl-tab sl-tab-off"><span class="sl-fav sl-fav-def">G</span>Inbox</div>
+			</div>
+			<div class="sl-addr">your-site.example/discover</div>
+			<p class="sl-hint">The tab shows the site name after the page name, and the logo as the tab's icon when that box is ticked.</p>
+		</section>
+	</div>
+}
+
+// siteLookPreviewMark is the brand square in the preview: the logo, or the
+// name's first letter on the accent colour. The widget swaps its content.
+templ siteLookPreviewMark(s sitelook.Settings) {
+	<span class="sl-mark" data-sl-mark>
+		if s.Logo != "" {
+			<img src={ layouts.MediaURL(ctx, s.Logo) } alt=""/>
+		} else {
+			{ s.Initial() }
+		}
+	</span>
+}
+
+// siteLookMark draws the logo, or the name's first letter on an accent square.
+// size is in pixels and comes from the templates above, never from a request.
+templ siteLookMark(s sitelook.Settings, size int) {
+	if s.Logo != "" {
+		<img src={ layouts.MediaURL(ctx, s.Logo) } alt="" width={ itoa(size) } height={ itoa(size) } class="rounded-md object-cover shrink-0"/>
+	} else {
+		<span class="rounded-md bg-accent text-white font-bold inline-flex items-center justify-center shrink-0" style={ "width:" + itoa(size) + "px;height:" + itoa(size) + "px;font-size:" + itoa(size*5/9) + "px" } aria-hidden="true">{ s.Initial() }</span>
+	}
+}
+
+// siteLookIdentityPanel is panel one: name, logo and tab icon.
+templ siteLookIdentityPanel(d SiteLookPageData) {
+	<section class="card space-y-4 sl-panel" id="sl-p-id" aria-labelledby="sl-id">
+		<div>
+			<span class="text-xs uppercase tracking-wide text-fg-muted">Name and logo</span>
+			<h2 id="sl-id" class="text-base font-semibold text-fg">Who this site is</h2>
+		</div>
+		<label class="block text-sm font-medium text-fg-body">
+			Site name
+			<input type="text" name="name" value={ d.Draft.DisplayName() } maxlength="40" class="input w-full mt-1.5" autocomplete="off"/>
+			<span class="block text-xs font-normal text-fg-muted mt-1">Up to 40 characters. Shown in the browser tab and on the sign-in pages.</span>
+		</label>
+		<div class="space-y-2">
+			<span class="block text-sm font-medium text-fg-body">Logo</span>
+			<div class="flex items-center gap-3">
+				@siteLookMark(d.Saved, 40)
+				<span class="text-sm text-fg-secondary">
+					if d.Saved.Logo != "" {
+						Your uploaded logo
+					} else {
+						The first letter of the site name
+					}
+				</span>
+			</div>
+			<input type="file" name="logo_file" accept="image/png,image/jpeg,image/webp" class="block w-full text-sm text-fg-body" aria-label="Upload a logo"/>
+			<p class="text-xs text-fg-muted">Square or close to it, up to 1 MB. PNG, JPEG or WebP.</p>
+			if d.Saved.Logo != "" {
+				<label class="flex items-center gap-2 text-sm text-fg-body">
+					<input type="checkbox" name="remove_logo" value="1"/>
+					Remove the logo and use the letter
+				</label>
+			}
+		</div>
+		<label class="flex items-start gap-2 text-sm text-fg-body">
+			<input type="checkbox" name="favicon" value="1" checked?={ d.Draft.LogoAsFavicon || !d.Draft.Configured } class="mt-0.5"/>
+			<span>Use the logo as the browser tab icon</span>
+		</label>
+	</section>
+}
+
+// siteLookLookPanel is panel two: one of the eight looks.
+templ siteLookLookPanel(d SiteLookPageData) {
+	<section class="card space-y-4 sl-panel" id="sl-p-look" aria-labelledby="sl-look">
+		<div>
+			<span class="text-xs uppercase tracking-wide text-fg-muted">Look</span>
+			<h2 id="sl-look" class="text-base font-semibold text-fg">Colours and type</h2>
+		</div>
+		<p class="text-xs text-fg-muted">
+			The same eight looks campaigns use. Only the accent colour, the top bar colours and the heading font carry over; pages outside a campaign keep their own menu.
+		</p>
+		<fieldset class="space-y-1.5">
+			<legend class="sr-only">Look</legend>
+			<label class="flex items-center gap-3 rounded-lg border border-edge px-3 py-2 text-sm text-fg-body cursor-pointer">
+				<input type="radio" name="look" value="" checked?={ d.Draft.Look == "" } data-accent="#6366f1"/>
+				<span>
+					Leave pages as they are
+					<span class="block text-xs text-fg-muted">The shipped look, as before</span>
+				</span>
+			</label>
+			for _, l := range sitelook.Looks {
+				<label class="flex items-center gap-3 rounded-lg border border-edge px-3 py-2 text-sm text-fg-body cursor-pointer">
+					<input type="radio" name="look" value={ l.ID } checked?={ d.Draft.Look == l.ID } data-accent={ l.Accent } data-from={ l.HeaderFrom } data-to={ l.HeaderTo } data-font={ layouts.HeadingFontStack(l.HeadingFont) }/>
+					<span class="w-5 h-5 rounded shrink-0" style={ "background:linear-gradient(135deg," + l.Accent + "," + l.HeaderTo + ")" } aria-hidden="true"></span>
+					<span>{ l.Name }</span>
+				</label>
+			}
+		</fieldset>
+	</section>
+}
+
+// siteLookSigninPanel is panel three: sign-in background and welcome line.
+templ siteLookSigninPanel(d SiteLookPageData) {
+	<section class="card space-y-4 sl-panel" id="sl-p-bg" aria-labelledby="sl-bg">
+		<div>
+			<span class="text-xs uppercase tracking-wide text-fg-muted">Sign-in page</span>
+			<h2 id="sl-bg" class="text-base font-semibold text-fg">Behind the sign-in box</h2>
+		</div>
+		<fieldset class="space-y-1.5">
+			<legend class="sr-only">Background</legend>
+			<label class="flex items-center gap-3 rounded-lg border border-edge px-3 py-2 text-sm text-fg-body cursor-pointer">
+				<input type="radio" name="background" value="plain" checked?={ d.Draft.Background == "" || d.Draft.Background == "plain" }/>
+				<span>
+					Plain
+					<span class="block text-xs text-fg-muted">The page colour, as today</span>
+				</span>
+			</label>
+			<label class="flex items-center gap-3 rounded-lg border border-edge px-3 py-2 text-sm text-fg-body cursor-pointer">
+				<input type="radio" name="background" value="look" checked?={ d.Draft.Background == "look" }/>
+				<span>
+					The look's colours
+					<span class="block text-xs text-fg-muted">A gradient from the look's top bar. Needs a look.</span>
+				</span>
+			</label>
+			<label class="flex items-center gap-3 rounded-lg border border-edge px-3 py-2 text-sm text-fg-body cursor-pointer">
+				<input type="radio" name="background" value="picture" checked?={ d.Draft.Background == "picture" }/>
+				<span>
+					A picture
+					<span class="block text-xs text-fg-muted">Wider than tall, up to 3 MB</span>
+				</span>
+			</label>
+		</fieldset>
+		<div class="space-y-2">
+			if d.Saved.Picture != "" {
+				<img src={ layouts.MediaURL(ctx, d.Saved.Picture) } alt="The saved sign-in picture" class="w-full h-24 object-cover rounded-lg border border-edge"/>
+			}
+			<input type="file" name="picture_file" accept="image/png,image/jpeg,image/webp" class="block w-full text-sm text-fg-body" aria-label="Upload a sign-in picture"/>
+			<p class="text-xs text-fg-muted">PNG, JPEG or WebP. Used only when "A picture" is chosen.</p>
+			if d.Saved.Picture != "" {
+				<label class="flex items-center gap-2 text-sm text-fg-body">
+					<input type="checkbox" name="remove_picture" value="1"/>
+					Remove the saved picture
+				</label>
+			}
+		</div>
+		<label class="flex items-start gap-2 text-sm text-fg-body">
+			<input type="checkbox" name="move" value="1" checked?={ d.Draft.Move } disabled?={ siteLookBg(d.Draft) == "plain" } class="mt-0.5"/>
+			<span>
+				Move slowly
+				<span class="block text-xs text-fg-muted">The look's colours drift or the picture pans, and the top bar on other pages drifts too. It settles to still when nobody is using the page, and never moves for anyone who has reduced motion on. Off unless ticked; not available over a plain background.</span>
+			</span>
+		</label>
+		<label class="block text-sm font-medium text-fg-body">
+			Welcome line (optional)
+			<input type="text" name="welcome" value={ d.Draft.Welcome } maxlength="80" class="input w-full mt-1.5" autocomplete="off"/>
+			<span class="block text-xs font-normal text-fg-muted mt-1">Up to 80 characters, shown on the sign-in card.</span>
+		</label>
+	</section>
+}

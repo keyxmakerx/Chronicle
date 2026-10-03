@@ -137,6 +137,12 @@
 
   Sheet.prototype._isPainted = function (k) { return painted(this.state.stored[k]); };
 
+  // A locked stored day is protected exactly like a hand-painted one.
+  Sheet.prototype._isKept = function (k) {
+    var w = this.state.stored[k];
+    return painted(w) || (!!w && w.locked === true);
+  };
+
   // Painted days, plus kept days when keepKept, as the generator's locks.
   // A painted kind the generator doesn't know is left out of the locks (it
   // would refuse the run); Apply still leaves that day alone.
@@ -144,9 +150,9 @@
     var S = this.state, self = this, known = {};
     window.ChronicleGen.weather.presets(this._kinds).forEach(function (p) { known[p.id] = true; });
     return S.dates.map(dkey).filter(function (k) {
-      return self._isPainted(k) || (keepKept && S.kept[k] && S.days[k]);
+      return self._isKept(k) || (keepKept && S.kept[k] && S.days[k]);
     }).map(function (k) {
-      return self._isPainted(k) ? asEngineDay(S.stored[k]) : S.days[k];
+      return self._isKept(k) ? asEngineDay(S.stored[k]) : S.days[k];
     }).filter(function (d) { return !d.preset_id || known[d.preset_id]; });
   };
 
@@ -175,10 +181,10 @@
   // kept or painted), meeting the days either side without a jump.
   Sheet.prototype._reroll = function (keys) {
     var S = this.state, self = this, view = this.view;
-    var targets = (keys || S.dates.map(dkey)).filter(function (k) { return !S.kept[k] && !self._isPainted(k); });
+    var targets = (keys || S.dates.map(dkey)).filter(function (k) { return !S.kept[k] && !self._isKept(k); });
     if (!targets.length || S.error) return;
     var existing = S.dates.map(dkey).map(function (k) {
-      var d = self._isPainted(k) ? asEngineDay(S.stored[k]) : S.days[k];
+      var d = self._isKept(k) ? asEngineDay(S.stored[k]) : S.days[k];
       if (!d) return null;
       var c = {};
       Object.keys(d).forEach(function (f) { c[f] = d[f]; });
@@ -215,7 +221,7 @@
     else {
       view.wxPreview = {};
       S.dates.map(dkey).forEach(function (k) {
-        if (S.days[k] && !self._isPainted(k)) view.wxPreview[k] = S.days[k];
+        if (S.days[k] && !self._isKept(k)) view.wxPreview[k] = S.days[k];
       });
     }
     if (view._paintMonth) view._paintMonth();
@@ -224,7 +230,7 @@
   // ---- applying ----
   Sheet.prototype._applyDays = function () {
     var S = this.state, self = this, G = window.ChronicleGen;
-    return S.dates.map(dkey).filter(function (k) { return S.days[k] && !self._isPainted(k); }).map(function (k) {
+    return S.dates.map(dkey).filter(function (k) { return S.days[k] && !self._isKept(k); }).map(function (k) {
       var d = S.days[k], body = G.weather.toWeatherInput(d);
       body.year = d.year; body.month = d.month; body.day = d.day; body.source = 'generated';
       return body;
@@ -255,7 +261,7 @@
   Sheet.prototype._cardHTML = function (k) {
     var S = this.state, view = this.view, cal = view.cal;
     var p = k.split('_').map(Number), date = { year: p[0], month: p[1], day: p[2] };
-    var hand = this._isPainted(k), w = hand ? S.stored[k] : S.days[k];
+    var hand = this._isKept(k), locked = hand && !this._isPainted(k), w = hand ? S.stored[k] : S.days[k];
     if (!w) return '';
     var c = Chronicle.calendarColor(w.color), kept = !hand && !!S.kept[k];
     var CalDate = Chronicle.calendarDate;
@@ -265,7 +271,8 @@
     if (w.temperature_celsius != null) facts.push(w.temperature_celsius + '°C');
     var wind = Chronicle.calendarWindWords(w.wind);
     if (wind) facts.push(wind);
-    if (hand) facts.push('painted by hand, stays');
+    if (locked) facts.push('Locked');
+    else if (hand) facts.push('painted by hand, stays');
     return '<div class="rc' + (kept ? ' kept' : '') + (future ? ' dir' : '') + '" data-key="' + esc(k) + '">' +
       '<span class="rci"' + (c ? ' style="color:' + c + '"' : '') + '><i class="fa-solid ' + Chronicle.calendarWeatherIcon(w) + ' i" aria-hidden="true"></i></span>' +
       '<span class="rct"><b>' + esc(label) + '</b><small>' + esc(facts.join(' · ')) + '</small></span>' +
@@ -282,7 +289,8 @@
     var blurb = (climates.filter(function (c) { return c.id === cur; })[0] || {}).blurb || '';
     var keys = S.dates.map(dkey), n = keys.length;
     var handN = keys.filter(function (k) { return self._isPainted(k); }).length;
-    var keptN = keys.filter(function (k) { return S.kept[k] && !self._isPainted(k); }).length;
+    var lockN = keys.filter(function (k) { return self._isKept(k) && !self._isPainted(k); }).length;
+    var keptN = keys.filter(function (k) { return S.kept[k] && !self._isKept(k); }).length;
     var applyN = this._applyDays().length;
     var shown = S.showAll ? keys : keys.slice(0, SHOWN);
     var opt = function (c) { return '<option value="' + esc(c.id) + '"' + (c.id === cur ? ' selected' : '') + '>' + esc(c.name) + '</option>'; };
@@ -304,8 +312,8 @@
       h += '<p class="gnone" role="alert">' + esc(S.error) + '</p>';
     } else {
       h += '<div class="gpv"><span><b>' + (n === 1 ? '1 day' : n + ' days') + '</b>' +
-        (keptN ? ' · ' + keptN + ' kept' : '') + (handN ? ' · ' + handN + ' painted' : '') + '</span><span class="sp"></span>' +
-        '<button type="button" class="btn sm quiet" data-gs="rest"' + (n - keptN - handN > 0 ? '' : ' disabled') + '><i class="fa-solid fa-dice"></i> Reroll the rest</button></div>' +
+        (keptN ? ' · ' + keptN + ' kept' : '') + (handN ? ' · ' + handN + ' painted' : '') + (lockN ? ' · ' + lockN + ' locked' : '') + '</span><span class="sp"></span>' +
+        '<button type="button" class="btn sm quiet" data-gs="rest"' + (n - keptN - handN - lockN > 0 ? '' : ' disabled') + '><i class="fa-solid fa-dice"></i> Reroll the rest</button></div>' +
         '<div class="rcs" id="cal5-gsCards">' + shown.map(function (k) { return self._cardHTML(k); }).join('') + '</div>' +
         (n > SHOWN && !S.showAll ? '<button type="button" class="btn sm quiet rcmore" data-gs="all">Show all ' + n + ' days</button>' : '') +
         '<div class="gseed"><label for="cal5-gsSeed">Seed</label><input id="cal5-gsSeed" value="' + esc(S.seed) + '" maxlength="40" spellcheck="false">' +
@@ -316,6 +324,7 @@
     if (!S.error && S.summary) {
       h += '<p class="gsum">' + esc(S.summary) +
         (handN ? '<span class="gw">Days you painted by hand stay as they are.</span>' : '') +
+        (lockN ? '<span class="gw">Locked days stay as they are.</span>' : '') +
         S.warnings.map(function (w) { return '<span class="gw">' + esc(w) + '</span>'; }).join('') + '</p>';
     }
     h += '</div><div class="efoot gfoot"><span class="gfa">' +

@@ -175,6 +175,13 @@ type Move struct {
 	byGM bool
 }
 
+// IsMoneyEdit reports whether the row records a character's money being
+// changed on its sheet rather than a move: a money row whose two ends are the
+// same character.
+func (m Move) IsMoneyEdit() bool {
+	return m.Kind == MoveKindMoney && m.From.Kind == EndpointCharacter && m.From == m.To
+}
+
 // MoveFilter narrows a history query. Zero values mean "no restriction".
 type MoveFilter struct {
 	// Endpoint, when set, keeps moves that touch it on either side.
@@ -232,6 +239,8 @@ type EntityRef struct {
 	// MoneyKey is the character's money field key, empty when its entity type
 	// has no usable numeric money field.
 	MoneyKey string
+	// MoneyLabel is that field's display label, empty when it has none.
+	MoneyLabel string
 }
 
 // MoveLine is a history row with names resolved for display.
