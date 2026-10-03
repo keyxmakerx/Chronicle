@@ -445,7 +445,13 @@ func RenderCalendarEvents(
 	eraFor := func(year int) string {
 		// Eras sorted by start year; pick the matching one. Era.EndYear
 		// nil = ongoing.
-		for _, era := range cal.Eras {
+		for i := range cal.Eras {
+			era := &cal.Eras[i]
+			// Safe mode is the player's view: an era still hidden until it
+			// begins is not named.
+			if opts.Privacy == PrivacyModeSafe && cal.EraIsSecret(era) {
+				continue
+			}
 			if year >= era.StartYear && (era.EndYear == nil || year <= *era.EndYear) {
 				return era.Name
 			}
@@ -475,6 +481,9 @@ func RenderCalendarEvents(
 			eventAbsDay := cal.AbsoluteDay(e.Year, e.Month, e.Day)
 			if announced == calendar.AnnouncedOnDay && eventAbsDay > currentAbsDay {
 				continue // hasn't happened yet, and players have no advance word
+			}
+			if cal.InSecretEra(e.Year, e.Month, e.Day) {
+				continue // inside an era players don't know of yet
 			}
 		}
 		k := ymKey{e.Year, e.Month}

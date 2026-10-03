@@ -57,7 +57,7 @@ const itemSelectColumns = `e.id, e.name, e.slug, e.image_path, e.type_label,
 // search/tag/instance filters can never drift between the id pass and a full
 // row fetch. Returns the join fragments, the WHERE clause, and its args.
 func itemIDsWhereAndJoins(campaignID string, itemTypeIDs []int, opts ItemListOptions) (instanceJoin, tagJoin, where string, args []any) {
-	where = "WHERE e.campaign_id = ? AND e.is_template = false"
+	where = "WHERE e.campaign_id = ? AND e.is_template = false AND e.deleted_at IS NULL"
 	args = []any{campaignID}
 
 	// A specific type narrows the item types but must never widen them: an
@@ -151,7 +151,7 @@ func (r *armoryRepository) GetItemCardsByIDs(ctx context.Context, campaignID str
 	query := fmt.Sprintf(`SELECT %s
 		FROM entities e
 		INNER JOIN entity_types et ON et.id = e.entity_type_id
-		WHERE e.campaign_id = ? AND e.id IN (%s)
+		WHERE e.campaign_id = ? AND e.deleted_at IS NULL AND e.id IN (%s)
 		ORDER BY FIELD(e.id, %s)`, itemSelectColumns, inClause, inClause)
 
 	rows, err := r.db.QueryContext(ctx, query, args...)

@@ -261,8 +261,9 @@ func (h *CalendarAPIHandler) GetMoons(c echo.Context) error {
 	return c.JSON(http.StatusOK, map[string]any{"data": nonNil(cal.Moons)})
 }
 
-// GetEras returns the default calendar's eras; empty for a player, since
-// eras are calendar structure only the Owner sees.
+// GetEras returns the default calendar's eras as the viewer may see them:
+// for a player, eras hidden until they begin are withheld and Director
+// notes stripped (the calendar service's viewer read does both).
 // GET /api/v1/campaigns/:id/calendar/eras
 func (h *CalendarAPIHandler) GetEras(c echo.Context) error {
 	cal, err := h.defaultCalendar(c, h.viewer(c))

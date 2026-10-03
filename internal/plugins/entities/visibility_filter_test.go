@@ -11,10 +11,19 @@ import (
 // entities visibility filter. This is the most security-sensitive query in
 // the product — a drift here is a data-leak.
 func TestVisibilityFilter(t *testing.T) {
-	t.Run("owner is unfiltered (sees all, including dm_only)", func(t *testing.T) {
+	t.Run("owner sees everything but trashed pages (including dm_only)", func(t *testing.T) {
 		frag, args := visibilityFilter(permissions.RoleOwner, "owner-1")
-		if frag != "" || args != nil {
-			t.Fatalf("owner must get no filter; got frag=%q args=%v", frag, args)
+		if frag != liveOnly || args != nil {
+			t.Fatalf("owner must get only the trashed-page exclusion; got frag=%q args=%v", frag, args)
+		}
+	})
+
+	t.Run("every role excludes trashed pages", func(t *testing.T) {
+		for _, role := range []int{permissions.RoleNone, permissions.RolePlayer, permissions.RoleScribe, permissions.RoleOwner} {
+			frag, _ := visibilityFilter(role, "u")
+			if !strings.HasPrefix(frag, " AND e.deleted_at IS NULL") {
+				t.Errorf("role %d: filter must start with the trashed-page exclusion; got %q", role, frag)
+			}
 		}
 	})
 

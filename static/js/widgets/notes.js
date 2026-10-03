@@ -23,6 +23,9 @@ Chronicle.register('notes', {
     var campaignId = config.campaignId || '';
     var entityId = config.entityId || '';
     var currentUserId = config.userId || '';
+    // In an outside app's frame (the Foundry jot window) the frame is the
+    // panel: always open, filling it, with no tab, close, pin or resize.
+    var embedded = config.embed === 'true' || config.embed === true;
 
     var HEARTBEAT_INTERVAL = 2 * 60 * 1000; // 2 minutes
     var STORAGE_KEY = 'chronicle_notes_size';
@@ -199,6 +202,7 @@ Chronicle.register('notes', {
     }
 
     function closePanel() {
+      if (embedded) return;
       state.open = false;
       flushAutosave();
       panel.classList.add('notes-panel-hidden');
@@ -220,6 +224,15 @@ Chronicle.register('notes', {
     });
 
     closeBtn.addEventListener('click', closePanel);
+
+    if (embedded) {
+      fab.hidden = true;
+      panel.classList.add('notes-panel-embed');
+      closeBtn.hidden = true;
+      pinPanelBtn.hidden = true;
+      collapseBtn.hidden = true;
+      resizeHandle.hidden = true;
+    }
 
     // A pinned panel opens again by itself on the next page.
     function paintPinPanel() {
@@ -335,7 +348,7 @@ Chronicle.register('notes', {
         if (!note) return;
         if (!note.entityId) {
           if (Chronicle.openJournalNote && Chronicle.openJournalNote(note.id)) return;
-          window.location.href = journalUrl(note.id);
+          Chronicle.go(journalUrl(note.id));
           return;
         }
         if (!state.open) openPanel();
@@ -579,7 +592,7 @@ Chronicle.register('notes', {
     function openInJournal(noteId) {
       flushAutosave();
       if (Chronicle.openJournalNote && Chronicle.openJournalNote(noteId)) return;
-      window.location.href = journalUrl(noteId);
+      Chronicle.go(journalUrl(noteId));
     }
 
     // --- Locking API ---
@@ -1553,7 +1566,7 @@ Chronicle.register('notes', {
     window.addEventListener('beforeunload', flushAutosave);
 
     // A pinned panel reopens on the next page; otherwise just count this page.
-    if (isPinnedOpen()) openPanel(); else loadCount();
+    if (embedded || isPinnedOpen()) openPanel(); else loadCount();
 
     // Store references for cleanup.
     el._notesState = state;

@@ -6,6 +6,7 @@ import (
 	"time"
 	"github.com/keyxmakerx/chronicle/internal/plugins/auth"
 	"github.com/keyxmakerx/chronicle/internal/plugins/campaigns"
+	"github.com/keyxmakerx/chronicle/internal/plugins/settings"
 	"github.com/keyxmakerx/chronicle/internal/templates/components"
 	"github.com/keyxmakerx/chronicle/internal/templates/layouts"
 )
@@ -384,6 +385,9 @@ templ storageLimitsTab(data StoragePageData) {
 					</button>
 				</div>
 			</form>
+		}
+		if data.TrashRetentionDays > 0 {
+			@trashRetentionCard(data)
 		}
 
 		<!-- Overrides: User + Campaign side by side -->
@@ -845,4 +849,42 @@ templ campaignBypassForm(allCampaigns []campaigns.Campaign) {
 			</button>
 		</form>
 	</div>
+}
+
+// trashRetentionLabel names a retention choice the way the picker shows it.
+func trashRetentionLabel(days int) string {
+	if days == 365 {
+		return "1 year"
+	}
+	return fmt.Sprintf("%d days", days)
+}
+
+// trashRetentionCard sets how long deleted world pages wait in each
+// campaign's Trash before they are removed for good.
+templ trashRetentionCard(data StoragePageData) {
+	<form
+		hx-post="/admin/storage/trash"
+		hx-headers={ fmt.Sprintf(`{"X-CSRF-Token":"%s"}`, data.CSRFToken) }
+		class="card"
+	>
+		<div class="flex items-center gap-3 mb-3">
+			<span class="w-8 h-8 rounded-lg bg-red-50 dark:bg-red-900/30 flex items-center justify-center">
+				<i class="fa-solid fa-trash-can text-red-500 text-sm"></i>
+			</span>
+			<h2 class="text-base font-semibold text-fg">Trash</h2>
+		</div>
+		<input type="hidden" name="csrf_token" value={ data.CSRFToken }/>
+		<label for="trash_retention_days" class="block text-xs font-medium text-fg-secondary mb-1">
+			Keep deleted pages for
+		</label>
+		<div class="flex flex-wrap items-center gap-3">
+			<select id="trash_retention_days" name="trash_retention_days" class="input text-sm w-auto">
+				for _, d := range settings.TrashRetentionChoices {
+					<option value={ fmt.Sprint(d) } selected?={ d == data.TrashRetentionDays }>{ trashRetentionLabel(d) }</option>
+				}
+			</select>
+			<button type="submit" class="btn-primary text-sm">Save</button>
+		</div>
+		<p class="text-xs text-fg-muted mt-2">After this, a page deleted in any campaign is gone for good. Shortening it also removes pages that have already waited longer.</p>
+	</form>
 }

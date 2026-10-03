@@ -158,6 +158,11 @@ type authService struct {
 	// in routes.go after the media service exists (ConfigureAvatarUploader);
 	// nil only in a test that constructs authService directly.
 	avatarUploader AvatarUploader
+
+	// onSessionsRevoked runs whenever all of a user's sessions are destroyed
+	// (password reset or change, force sign-out), so credentials kept outside
+	// sessions, like a player's notes grants, end with them.
+	onSessionsRevoked []func(ctx context.Context, userID string)
 }
 
 // Registration modes. These mirror the settings plugin's canonical constants;
@@ -219,6 +224,15 @@ func ConfigureMailSender(svc AuthService, mail MailSender, baseURL string) {
 func ConfigureAvatarUploader(svc AuthService, uploader AvatarUploader) {
 	if s, ok := svc.(*authService); ok {
 		s.avatarUploader = uploader
+	}
+}
+
+// OnSessionsRevoked registers fn to run whenever all of a user's sessions are
+// destroyed. Other plugins use it to end their own credentials for that user
+// without auth importing them.
+func OnSessionsRevoked(svc AuthService, fn func(ctx context.Context, userID string)) {
+	if s, ok := svc.(*authService); ok && fn != nil {
+		s.onSessionsRevoked = append(s.onSessionsRevoked, fn)
 	}
 }
 
@@ -721,6 +735,9 @@ func (s *authService) ListAllSessions(ctx context.Context) ([]SessionInfo, error
 // DestroyAllUserSessions removes all active sessions for a user from Redis.
 // Returns the number of sessions destroyed. Used by admin force-logout.
 func (s *authService) DestroyAllUserSessions(ctx context.Context, userID string) (int, error) {
+	for _, fn := range s.onSessionsRevoked {
+		fn(ctx, userID)
+	}
 	if s.redis == nil {
 		return 0, nil
 	}
@@ -882,6 +899,9 @@ func hashToken(token string) string {
 // destroyUserSessions removes all active sessions for a user from Redis.
 // Called on password reset to invalidate any compromised sessions.
 func (s *authService) destroyUserSessions(ctx context.Context, userID string) {
+	for _, fn := range s.onSessionsRevoked {
+		fn(ctx, userID)
+	}
 	if s.redis == nil {
 		return
 	}

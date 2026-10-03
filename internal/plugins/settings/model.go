@@ -140,7 +140,20 @@ const (
 	// Values: "open" (default), "invite", "closed". Enforced in the auth service;
 	// the first-user-admin bootstrap always works regardless of mode.
 	KeyRegistrationMode = "auth.registration_mode"
+
+	// KeyTrashRetentionDays is how many days a deleted world page waits in
+	// its campaign's Trash before it is removed for good. One of
+	// TrashRetentionChoices; anything else reads as the default.
+	KeyTrashRetentionDays = "content.trash_retention_days"
 )
+
+// TrashRetentionChoices are the retention periods the admin can pick, in
+// days. They match the entities plugin's list, which reads this setting
+// through an adapter (plugins don't import each other).
+var TrashRetentionChoices = []int{30, 60, 90, 180, 365}
+
+// DefaultTrashRetentionDays applies while the setting is unset.
+const DefaultTrashRetentionDays = 30
 
 // Registration mode values for KeyRegistrationMode. Defined here as the canonical
 // source of truth for the site setting; the auth service compares against its own
