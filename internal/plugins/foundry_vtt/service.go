@@ -4,12 +4,14 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"log/slog"
 	"os"
 	"path/filepath"
 	"sort"
 	"strings"
 	"time"
 
+	"github.com/keyxmakerx/chronicle/internal/apperror"
 	"github.com/keyxmakerx/chronicle/internal/plugins/packages"
 )
 
@@ -448,6 +450,13 @@ func (s *service) resolveCampaignManifest(ctx context.Context, campaignID string
 		return DownloadParams{}, ErrInternal("get_campaign_pin", err)
 	}
 	version := pin
+	if pin != "" && !packages.ValidVersionString(pin) {
+		// A stored pin that fails validation is never turned into a path;
+		// it is handled like a pin whose folder is missing.
+		slog.Warn("ignoring invalid stored foundry module pin",
+			slog.String("campaign_id", campaignID))
+		return DownloadParams{}, ErrPinnedVersionNotInstalled(version)
+	}
 	if version == "" {
 		// Latest-tracking: use whatever's currently installed.
 		version = pkg.InstalledVersion
@@ -576,12 +585,31 @@ func (s *service) GetPackageByID(ctx context.Context, id string) (*packages.Pack
 // the campaigns adapter.
 func (s *service) SetPinnedVersion(ctx context.Context, campaignID, version string) error {
 	if version != "" {
+		if !packages.ValidVersionString(version) {
+			return apperror.NewValidation("invalid module version")
+		}
 		pkg, err := s.FindFoundryPackage(ctx)
 		if err != nil {
 			return err
 		}
 		if pkg == nil {
 			return ErrNoPackageRegistered()
+		}
+		// Only versions the packages plugin knows about can be pinned, in
+		// addition to the folder existing on disk.
+		known, err := s.pkgs.ListVersions(ctx, pkg.ID)
+		if err != nil {
+			return ErrInternal("list_package_versions", err)
+		}
+		found := false
+		for _, v := range known {
+			if v.Version == version {
+				found = true
+				break
+			}
+		}
+		if !found {
+			return ErrPinnedVersionNotInstalled(version)
 		}
 		installDir := s.pkgs.InstallDirForVersion(packages.PackageTypeFoundryModule, pkg.Slug, version)
 		if installDir == "" {
@@ -684,7 +712,7 @@ func (s *service) listInstalledVersionsOnDisk(slug string) []string {
 	// we re-derive the root from InstallDirForVersion by
 	// stripping a sentinel version. This avoids re-encoding the
 	// "media/packages/foundry-module/" path here.
-	sentinelDir := s.pkgs.InstallDirForVersion(packages.PackageTypeFoundryModule, slug, "__list__")
+	sentinelDir := s.pkgs.InstallDirForVersion(packages.PackageTypeFoundryModule, slug, "0")
 	if sentinelDir == "" {
 		return nil
 	}
@@ -902,6 +930,12 @@ func (s *service) AutoPinOnInstall(ctx context.Context, previousVersion, newVers
 		return 0, nil
 	}
 
+	if !packages.ValidVersionString(previousVersion) {
+		// Never persist a pin that could not later be resolved safely.
+		slog.Warn("skipping auto-pin: previous version is not a valid version string")
+		return 0, nil
+	}
+
 	campaigns, err := s.repo.CampaignsWithEmptyPin(ctx)
 	if err != nil {
 		return 0, ErrInternal("campaigns_with_empty_pin", err)
@@ -969,6 +1003,9 @@ func (s *service) AutoPinOnInstall(ctx context.Context, previousVersion, newVers
 func (s *service) MigrateAutoPinToVersion(ctx context.Context, version string) (int, error) {
 	if version == "" {
 		return 0, fmt.Errorf("MigrateAutoPinToVersion: empty version")
+	}
+	if !packages.ValidVersionString(version) {
+		return 0, fmt.Errorf("MigrateAutoPinToVersion: invalid version")
 	}
 	campaigns, err := s.repo.CampaignsWithEmptyPin(ctx)
 	if err != nil {
