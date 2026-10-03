@@ -713,6 +713,13 @@ func (s *packageService) SetPinnedVersion(ctx context.Context, packageID, versio
 	if !ValidVersionString(version) {
 		return apperror.NewValidation("invalid package version")
 	}
+
+	// Same per-package lock as install and prune, so a clean-up that already
+	// chose its deletions cannot race a pin on one of them.
+	mu := s.lockForPackage(packageID)
+	mu.Lock()
+	defer mu.Unlock()
+
 	pkg, err := s.repo.GetPackage(ctx, packageID)
 	if err != nil {
 		return fmt.Errorf("fetching package: %w", err)
@@ -735,6 +742,10 @@ func (s *packageService) SetPinnedVersion(ctx context.Context, packageID, versio
 
 // ClearPinnedVersion removes the version pin, allowing auto-updates again.
 func (s *packageService) ClearPinnedVersion(ctx context.Context, packageID string) error {
+	mu := s.lockForPackage(packageID)
+	mu.Lock()
+	defer mu.Unlock()
+
 	pkg, err := s.repo.GetPackage(ctx, packageID)
 	if err != nil {
 		return fmt.Errorf("fetching package: %w", err)

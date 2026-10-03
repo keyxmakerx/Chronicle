@@ -27,7 +27,13 @@ templ settingsTab(data PackagesPageData) {
 // securitySettingsForm is the one form behind POST /admin/packages/settings:
 // where packages can come from, who may send them in, and the safety checks.
 templ securitySettingsForm(settings PackageSecuritySettings, retention RetentionSettings, csrfToken string) {
-	<form method="POST" action="/admin/packages/settings" class="space-y-4">
+	<form
+		method="POST"
+		action="/admin/packages/settings"
+		hx-post="/admin/packages/settings"
+		hx-headers={ csrfHeaders(csrfToken) }
+		class="space-y-4"
+	>
 		<input type="hidden" name="_csrf" value={ csrfToken }/>
 		<div class="grid gap-4 lg:grid-cols-2 items-start">
 			<section class="card space-y-2">
@@ -48,7 +54,7 @@ templ securitySettingsForm(settings PackageSecuritySettings, retention Retention
 			<section class="card space-y-2 lg:col-span-2">
 				<h2 class="text-base font-semibold text-fg">Old versions, site-wide</h2>
 				<p class="text-xs text-fg-muted">What happens to the folders of versions you have moved on from. A package can use its own rule on its Settings tab.</p>
-				@retentionRadio(RetentionManual, "Only when I click Clean up", "Nothing is removed automatically. Use the Clean up card below.", retention.Mode == RetentionManual)
+				@retentionRadio(RetentionManual, "Only when I click Clean up", "Nothing is removed automatically, unless a package has its own rule. Use the Clean up card below.", retention.Mode == RetentionManual)
 				<label class="flex items-start gap-3 rounded-lg border border-edge p-2.5 cursor-pointer hover:bg-surface-alt">
 					<input type="radio" name="retention_mode" value={ string(RetentionKeepNewest) } checked?={ retention.Mode == RetentionKeepNewest } class="mt-1 text-accent"/>
 					<span class="flex-1">

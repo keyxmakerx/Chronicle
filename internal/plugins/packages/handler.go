@@ -492,6 +492,11 @@ func (h *Handler) SaveSecuritySettings(c echo.Context) error {
 
 	slog.Info("security settings updated")
 
+	// The form submits by HTMX so a re-auth challenge can be retried; an
+	// HTMX caller is sent back to its own page, a plain post to the tab.
+	if middleware.IsHTMX(c) {
+		return h.backToPage(c)
+	}
 	return c.Redirect(http.StatusSeeOther, "/admin/packages/settings")
 }
 

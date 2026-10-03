@@ -156,7 +156,13 @@ func (s *packageService) pruneOnePackage(ctx context.Context, pkg *Package, rule
 		}
 		// Re-assert protection immediately before deletion (defense in
 		// depth against a concurrent install changing the picture).
-		if v == pkg.InstalledVersion || (pkg.PinnedVersion != "" && v == pkg.PinnedVersion) || s.loadedDirsFn()[full] {
+		// Re-read the row so a pin made after the scan is honoured; if it
+		// cannot be read, fail closed and keep the folder.
+		cur, err := s.repo.GetPackage(ctx, pkg.ID)
+		if err != nil || cur == nil {
+			continue
+		}
+		if v == cur.InstalledVersion || (cur.PinnedVersion != "" && v == cur.PinnedVersion) || s.loadedDirsFn()[full] {
 			continue
 		}
 		if err := os.RemoveAll(full); err != nil {

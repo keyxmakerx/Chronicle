@@ -65,6 +65,7 @@ const packageColumns = `id, type, slug, name, repo_url, COALESCE(description,'')
 	COALESCE(reviewed_by,''), reviewed_at, COALESCE(review_note,''),
 	deprecated_at, COALESCE(deprecation_msg,''),
 	COALESCE(last_error,''), last_error_at,
+	retention_keep_newest,
 	created_at, updated_at`
 
 // scanPackage scans a row into a Package struct. Column order must match packageColumns.
@@ -79,6 +80,7 @@ func scanPackage(scanner interface{ Scan(dest ...any) error }) (*Package, error)
 		&p.ReviewedBy, &p.ReviewedAt, &p.ReviewNote,
 		&p.DeprecatedAt, &p.DeprecationMsg,
 		&p.LastError, &p.LastErrorAt,
+		&keepNewest,
 		&p.CreatedAt, &p.UpdatedAt,
 	)
 	if err != nil {

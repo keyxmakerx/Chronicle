@@ -82,7 +82,7 @@ func TestEffectiveRetentionPrecedence(t *testing.T) {
 		site RetentionSettings
 		want retentionRule
 	}{
-		{"site rule applies", Package{Type: PackageTypeSystem}, site, retentionRule{RetentionUnusedDays, 2, 30}},
+		{"site rule applies", Package{Type: PackageTypeSystem}, site, retentionRule{Mode: RetentionUnusedDays, KeepNewest: 2, UnusedDays: 30}},
 		{"override beats site", Package{Type: PackageTypeSystem, RetentionKeepNewest: intp(4)}, site, retentionRule{Mode: RetentionKeepNewest, KeepNewest: 4}},
 		{"override applies even when site is manual", Package{Type: PackageTypeSystem, RetentionKeepNewest: intp(1)}, DefaultRetentionSettings(), retentionRule{Mode: RetentionKeepNewest, KeepNewest: 1}},
 		{"foundry ignores site rule", Package{Type: PackageTypeFoundryModule}, site, retentionRule{Mode: RetentionManual}},
@@ -153,6 +153,8 @@ func TestSelectRemovable(t *testing.T) {
 		{"unused: exactly at cut-off is removed", "2.0.0", "", retentionRule{Mode: RetentionUnusedDays, UnusedDays: 40}, folders, []string{"1.0.0", "1.1.0", "1.0.5"}},
 		{"unused: one day inside cut-off is kept", "2.0.0", "", retentionRule{Mode: RetentionUnusedDays, UnusedDays: 41}, folders, []string{"1.0.0", "1.1.0"}},
 		{"unused: installed and pinned protected", "1.0.0", "1.1.0", retentionRule{Mode: RetentionUnusedDays, UnusedDays: 30}, folders, []string{"1.0.5"}},
+		{"unused: since later than mtime wins", "2.0.0", "", retentionRule{Mode: RetentionUnusedDays, UnusedDays: 30, Since: ago(10)}, folders, nil},
+		{"unused: since earlier than mtime is ignored", "2.0.0", "", retentionRule{Mode: RetentionUnusedDays, UnusedDays: 30, Since: ago(1000)}, folders, []string{"1.0.0", "1.1.0", "1.0.5"}},
 		{"unused: unknown mtime kept", "2.0.0", "", retentionRule{Mode: RetentionUnusedDays, UnusedDays: 1}, []versionFolder{{Name: "1.0.0"}, {Name: "2.0.0"}}, nil},
 		{"undated folder ranks newest (kept)", "2.0.0", "", retentionRule{Mode: RetentionKeepNewest, KeepNewest: 2}, []versionFolder{
 			{Name: "0.9.0"}, {Name: "1.0.0", Published: ago(10)}, {Name: "2.0.0", Published: ago(5)},
@@ -228,9 +230,14 @@ func TestRunRetention(t *testing.T) {
 	}{
 		{"default manual deletes nothing", memSettings{}, nil, nil},
 		{"site keep newest 1", memSettings{settingRetentionMode: "keep_newest", settingRetentionKeepNewest: "1"}, nil, []string{"1.0.0", "1.1.0"}},
-		{"site unused 30 days", memSettings{settingRetentionMode: "unused_days", settingRetentionUnusedDays: "30"}, nil, []string{"1.0.0"}},
+		{"site unused 30 days", memSettings{settingRetentionMode: "unused_days", settingRetentionUnusedDays: "30", settingRetentionSince: "2020-01-01T00:00:00Z"}, nil, []string{"1.0.0"}},
+		{"unused days just enabled: nothing is old yet", memSettings{settingRetentionMode: "unused_days", settingRetentionUnusedDays: "30", settingRetentionSince: time.Now().Format(time.RFC3339)}, nil, nil},
+		{"unused days without start stamp fails closed", memSettings{settingRetentionMode: "unused_days", settingRetentionUnusedDays: "30"}, nil, nil},
+		{"unused days unparsable stamp fails closed", memSettings{settingRetentionMode: "unused_days", settingRetentionUnusedDays: "30", settingRetentionSince: "garbage"}, nil, nil},
+		{"keep newest with missing number fails closed", memSettings{settingRetentionMode: "keep_newest"}, nil, nil},
+		{"override still runs when stamp missing", memSettings{settingRetentionMode: "unused_days", settingRetentionUnusedDays: "30"}, func(p *Package) { p.RetentionKeepNewest = intp(2) }, []string{"1.0.0"}},
 		{"override beats manual site", memSettings{}, func(p *Package) { p.RetentionKeepNewest = intp(2) }, []string{"1.0.0"}},
-		{"override beats site rule", memSettings{settingRetentionMode: "unused_days", settingRetentionUnusedDays: "1"}, func(p *Package) { p.RetentionKeepNewest = intp(3) }, nil},
+		{"override beats site rule", memSettings{settingRetentionMode: "unused_days", settingRetentionUnusedDays: "1", settingRetentionSince: "2020-01-01T00:00:00Z"}, func(p *Package) { p.RetentionKeepNewest = intp(3) }, nil},
 		{"pinned survives", memSettings{settingRetentionMode: "keep_newest", settingRetentionKeepNewest: "1"}, func(p *Package) { p.PinnedVersion = "1.0.0" }, []string{"1.1.0"}},
 		{"foundry untouched", memSettings{settingRetentionMode: "keep_newest", settingRetentionKeepNewest: "1"}, func(p *Package) { p.Type = PackageTypeFoundryModule }, nil},
 		{"invalid stored rule falls back to manual", memSettings{settingRetentionMode: "keep_newest", settingRetentionKeepNewest: "0"}, nil, nil},
@@ -317,5 +324,120 @@ func TestSaveAndSetRetention(t *testing.T) {
 	repo.packages["p1"].Type = PackageTypeFoundryModule
 	if err := svc.SetPackageRetention(ctx, "p1", intp(2)); err == nil {
 		t.Error("foundry module override must be refused")
+	}
+}
+
+// failingGet errors on one key and serves the rest, standing in for a
+// transient settings-store failure.
+type failingGet struct {
+	memSettings
+	failKey string
+}
+
+func (f failingGet) Get(ctx context.Context, k string) (string, error) {
+	if k == f.failKey {
+		return "", errors.New("db down")
+	}
+	return f.memSettings.Get(ctx, k)
+}
+
+func TestGetRetentionSettingsFailsClosed(t *testing.T) {
+	tests := []struct {
+		name     string
+		store    SettingsReader
+		wantMode RetentionMode
+	}{
+		{"keep newest ok", memSettings{settingRetentionMode: "keep_newest", settingRetentionKeepNewest: "3"}, RetentionKeepNewest},
+		{"keep newest number read error", failingGet{memSettings{settingRetentionMode: "keep_newest", settingRetentionKeepNewest: "3"}, settingRetentionKeepNewest}, RetentionManual},
+		{"keep newest number missing", memSettings{settingRetentionMode: "keep_newest"}, RetentionManual},
+		{"keep newest number invalid", memSettings{settingRetentionMode: "keep_newest", settingRetentionKeepNewest: "0"}, RetentionManual},
+		{"unused number read error", failingGet{memSettings{settingRetentionMode: "unused_days", settingRetentionUnusedDays: "30"}, settingRetentionUnusedDays}, RetentionManual},
+		{"mode read error", failingGet{memSettings{settingRetentionMode: "keep_newest", settingRetentionKeepNewest: "3"}, settingRetentionMode}, RetentionManual},
+		{"other mode's number error is irrelevant", failingGet{memSettings{settingRetentionMode: "keep_newest", settingRetentionKeepNewest: "3", settingRetentionUnusedDays: "9"}, settingRetentionUnusedDays}, RetentionKeepNewest},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			svc := NewPackageService(newFakeRepo(), newOfflineGitHubClient(), t.TempDir(), "http://x").(*packageService)
+			svc.settings = tc.store
+			got, _ := svc.GetRetentionSettings(context.Background())
+			if got.Mode != tc.wantMode {
+				t.Errorf("mode = %q, want %q", got.Mode, tc.wantMode)
+			}
+		})
+	}
+}
+
+// orderedWriter records Set calls in order.
+type orderedWriter struct {
+	memSettings
+	order []string
+}
+
+func (o *orderedWriter) Set(ctx context.Context, k, v string) error {
+	o.order = append(o.order, k)
+	return o.memSettings.Set(ctx, k, v)
+}
+
+func TestSaveRetentionWritesModeLastAndStampsUnusedDays(t *testing.T) {
+	tests := []struct {
+		name      string
+		start     memSettings
+		save      RetentionSettings
+		wantSince bool
+	}{
+		{"keep newest", memSettings{}, RetentionSettings{RetentionKeepNewest, 2, 30}, false},
+		{"first enable of unused days stamps", memSettings{}, RetentionSettings{RetentionUnusedDays, 2, 30}, true},
+		{"switch from keep newest to unused days stamps", memSettings{settingRetentionMode: "keep_newest", settingRetentionKeepNewest: "2"}, RetentionSettings{RetentionUnusedDays, 2, 30}, true},
+		{"re-saving unused days keeps the stamp", memSettings{settingRetentionMode: "unused_days", settingRetentionUnusedDays: "30", settingRetentionSince: "2020-01-01T00:00:00Z"}, RetentionSettings{RetentionUnusedDays, 2, 45}, false},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			w := &orderedWriter{memSettings: tc.start}
+			svc := NewPackageService(newFakeRepo(), newOfflineGitHubClient(), t.TempDir(), "http://x").(*packageService)
+			svc.settings, svc.settingsWriter = w.memSettings, w
+			if err := svc.SaveRetentionSettings(context.Background(), tc.save); err != nil {
+				t.Fatal(err)
+			}
+			if len(w.order) == 0 || w.order[len(w.order)-1] != settingRetentionMode {
+				t.Errorf("mode must be written last, order = %v", w.order)
+			}
+			stamped := false
+			for _, k := range w.order {
+				if k == settingRetentionSince {
+					stamped = true
+				}
+			}
+			if stamped != tc.wantSince {
+				t.Errorf("stamped = %v, want %v (order %v)", stamped, tc.wantSince, w.order)
+			}
+		})
+	}
+}
+
+// TestPinTakesPackageLockAndProtectsPinned: pinning takes the per-package
+// lock, and a pinned version is never removed by the clean-up.
+func TestPinTakesPackageLockAndProtectsPinned(t *testing.T) {
+	svc, repo, slugDir := retentionEnv(t, nil)
+	repo.versions["p1@1.0.0"] = &PackageVersion{Version: "1.0.0"}
+	svc.settings = memSettings{settingRetentionMode: "keep_newest", settingRetentionKeepNewest: "1"}
+
+	mu := svc.lockForPackage("p1")
+	mu.Lock()
+	done := make(chan error, 1)
+	go func() { done <- svc.SetPinnedVersion(context.Background(), "p1", "1.0.0") }()
+	select {
+	case <-done:
+		t.Fatal("pin completed while the package lock was held")
+	case <-time.After(100 * time.Millisecond):
+	}
+	mu.Unlock()
+	if err := <-done; err != nil {
+		t.Fatal(err)
+	}
+	if _, err := svc.RunRetention(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	if !existing(t, slugDir, "1.0.0")["1.0.0"] {
+		t.Error("a pinned version must survive the clean-up")
 	}
 }

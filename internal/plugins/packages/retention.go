@@ -44,6 +44,9 @@ const (
 	settingRetentionMode       = "packages.retention_mode"
 	settingRetentionKeepNewest = "packages.retention_keep_newest"
 	settingRetentionUnusedDays = "packages.retention_unused_days"
+	// settingRetentionSince is when the unused-days mode was last switched
+	// on; unused time never counts from before it.
+	settingRetentionSince = "packages.retention_since"
 )
 
 // RetentionSettings is the site-wide rule. Both numbers are always kept so
@@ -122,6 +125,9 @@ type retentionRule struct {
 	Mode       RetentionMode
 	KeepNewest int
 	UnusedDays int
+	// Since is the earliest instant unused time may count from (when the
+	// unused-days mode was switched on).
+	Since time.Time
 }
 
 // effectiveRetention resolves a package's rule: a per-package override wins
@@ -135,7 +141,7 @@ func effectiveRetention(site RetentionSettings, pkg *Package) retentionRule {
 	if pkg.RetentionKeepNewest != nil {
 		return retentionRule{Mode: RetentionKeepNewest, KeepNewest: *pkg.RetentionKeepNewest}
 	}
-	return retentionRule(site)
+	return retentionRule{Mode: site.Mode, KeepNewest: site.KeepNewest, UnusedDays: site.UnusedDays}
 }
 
 // RetentionSummary is the plain-words sentence the Versions tab shows.
@@ -206,7 +212,11 @@ func selectRemovable(folders []versionFolder, installed, pinned string, rule ret
 				continue
 			}
 		case RetentionUnusedDays:
-			if f.Modified.IsZero() || now.Sub(f.Modified) < time.Duration(rule.UnusedDays)*24*time.Hour {
+			ref := f.Modified
+			if rule.Since.After(ref) {
+				ref = rule.Since
+			}
+			if ref.IsZero() || now.Sub(ref) < time.Duration(rule.UnusedDays)*24*time.Hour {
 				continue
 			}
 		}
@@ -222,33 +232,47 @@ func (s *packageService) GetRetentionSettings(ctx context.Context) (*RetentionSe
 	if s.settings == nil {
 		return &out, nil
 	}
+	// Fail closed: the active mode runs only if its own number was read
+	// successfully and is valid. Any read error (missing key or a transient
+	// store failure) leaves the rule manual for this call, never a default
+	// number on a live rule. The other number is read for the form only.
 	if v, err := s.settings.Get(ctx, settingRetentionMode); err == nil {
 		switch m := RetentionMode(v); m {
 		case RetentionKeepNewest, RetentionUnusedDays:
 			out.Mode = m
 		}
 	}
-	// A stored number that is unusable leaves the default in place for the
-	// form, but a rule whose own number is unusable must not run at all.
-	keepOK, daysOK := true, true
+	keepOK, daysOK := false, false
 	if v, err := s.settings.Get(ctx, settingRetentionKeepNewest); err == nil {
-		n, perr := strconv.Atoi(v)
-		keepOK = perr == nil && ValidateRetentionCount(n, "") == nil
-		if keepOK {
-			out.KeepNewest = n
+		if n, perr := strconv.Atoi(v); perr == nil && ValidateRetentionCount(n, "") == nil {
+			out.KeepNewest, keepOK = n, true
 		}
 	}
 	if v, err := s.settings.Get(ctx, settingRetentionUnusedDays); err == nil {
-		n, perr := strconv.Atoi(v)
-		daysOK = perr == nil && ValidateRetentionCount(n, "") == nil
-		if daysOK {
-			out.UnusedDays = n
+		if n, perr := strconv.Atoi(v); perr == nil && ValidateRetentionCount(n, "") == nil {
+			out.UnusedDays, daysOK = n, true
 		}
 	}
 	if (out.Mode == RetentionKeepNewest && !keepOK) || (out.Mode == RetentionUnusedDays && !daysOK) {
 		out.Mode = RetentionManual
 	}
 	return &out, nil
+}
+
+// retentionSince reads the stamp; ok=false when missing or unparsable.
+func (s *packageService) retentionSince(ctx context.Context) (time.Time, bool) {
+	if s.settings == nil {
+		return time.Time{}, false
+	}
+	v, err := s.settings.Get(ctx, settingRetentionSince)
+	if err != nil {
+		return time.Time{}, false
+	}
+	t, err := time.Parse(time.RFC3339, v)
+	if err != nil {
+		return time.Time{}, false
+	}
+	return t, true
 }
 
 // SaveRetentionSettings validates and stores the site rule.
@@ -259,14 +283,23 @@ func (s *packageService) SaveRetentionSettings(ctx context.Context, r RetentionS
 	if s.settingsWriter == nil {
 		return fmt.Errorf("settings writer not configured")
 	}
-	pairs := map[string]string{
-		settingRetentionMode:       string(r.Mode),
-		settingRetentionKeepNewest: strconv.Itoa(r.KeepNewest),
-		settingRetentionUnusedDays: strconv.Itoa(r.UnusedDays),
+	// Numbers first, the mode key LAST: a failure part-way leaves the old
+	// mode (or manual) in force, never a new mode over a stale number.
+	// "Unused for N days" counts from when that mode was switched on, so a
+	// first enable cannot judge folders by their unpack time; the stamp is
+	// written before the mode for the same reason.
+	cur, _ := s.GetRetentionSettings(ctx)
+	writes := []struct{ k, v string }{
+		{settingRetentionKeepNewest, strconv.Itoa(r.KeepNewest)},
+		{settingRetentionUnusedDays, strconv.Itoa(r.UnusedDays)},
 	}
-	for k, v := range pairs {
-		if err := s.settingsWriter.Set(ctx, k, v); err != nil {
-			return fmt.Errorf("saving %s: %w", k, err)
+	if r.Mode == RetentionUnusedDays && (cur == nil || cur.Mode != RetentionUnusedDays) {
+		writes = append(writes, struct{ k, v string }{settingRetentionSince, time.Now().UTC().Format(time.RFC3339)})
+	}
+	writes = append(writes, struct{ k, v string }{settingRetentionMode, string(r.Mode)})
+	for _, w := range writes {
+		if err := s.settingsWriter.Set(ctx, w.k, w.v); err != nil {
+			return fmt.Errorf("saving %s: %w", w.k, err)
 		}
 	}
 	return nil
@@ -306,7 +339,22 @@ func (s *packageService) RunRetention(ctx context.Context) (*PruneResult, error)
 	if err != nil {
 		return nil, err
 	}
-	res, err := s.prune(ctx, func(p *Package) retentionRule { return effectiveRetention(*site, p) }, false)
+	// Fail closed on the stamp: without it unused time cannot be judged, so
+	// the site rule is treated as manual for this run.
+	eff := *site
+	var since time.Time
+	if eff.Mode == RetentionUnusedDays {
+		var ok bool
+		if since, ok = s.retentionSince(ctx); !ok {
+			slog.Warn("old-version clean-up skipped: unused-days start time unreadable")
+			eff.Mode = RetentionManual
+		}
+	}
+	res, err := s.prune(ctx, func(p *Package) retentionRule {
+		r := effectiveRetention(eff, p)
+		r.Since = since
+		return r
+	}, false)
 	if err != nil {
 		return nil, err
 	}
