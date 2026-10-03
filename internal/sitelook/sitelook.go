@@ -144,7 +144,7 @@ func PictureName(label, v string) (string, error) {
 		}
 	}
 	for _, r := range v {
-		if !(r >= 'a' && r <= 'z' || r >= 'A' && r <= 'Z' || r >= '0' && r <= '9' || r == '/' || r == '.' || r == '-' || r == '_') {
+		if !safePathRune(r) {
 			bad = true
 		}
 	}
@@ -222,4 +222,14 @@ func Validate(in Settings) (Settings, error) {
 		out.Picture = ""
 	}
 	return out, nil
+}
+
+// safePathRune reports whether r may appear in a stored media path: ASCII
+// letters and digits, the separator, and . - _ only.
+func safePathRune(r rune) bool {
+	switch {
+	case r >= 'a' && r <= 'z', r >= 'A' && r <= 'Z', r >= '0' && r <= '9':
+		return true
+	}
+	return r == '/' || r == '.' || r == '-' || r == '_'
 }
