@@ -1,0 +1,146 @@
+// packages_panel_settings.templ is the panel's Settings tab: how the package
+// gets new versions, where it comes from, and retiring or removing it.
+package packages
+
+// panelSettings groups the per-package controls. Each one is an existing
+// endpoint; the page reloads to the same panel after a change.
+templ panelSettings(r PackageRow, csrfToken string) {
+	<div class="space-y-6">
+		<section class="space-y-2" aria-labelledby="pkg-get-new">
+			<h3 id="pkg-get-new" class="text-xs font-bold uppercase tracking-wide text-fg-secondary">Get new versions</h3>
+			<form
+				hx-put={ "/admin/packages/" + r.ID + "/auto-update" }
+				hx-headers={ csrfHeaders(csrfToken) }
+				hx-trigger="change"
+				class="space-y-2"
+			>
+				for _, p := range updatePolicies {
+					<label class="flex items-start gap-3 rounded-lg border border-edge p-2.5 cursor-pointer hover:bg-surface-alt">
+						<input type="radio" name="policy" value={ string(p) } checked?={ r.AutoUpdate == p } class="mt-1 text-accent"/>
+						<span>
+							<span class="block text-sm font-medium text-fg">{ updatePolicyLabel(p) }</span>
+							if hint := updatePolicyHint(p); hint != "" {
+								<span class="block text-xs text-fg-muted">{ hint }</span>
+							}
+						</span>
+					</label>
+				}
+			</form>
+			<button
+				type="button"
+				hx-post={ "/admin/packages/" + r.ID + "/check" }
+				hx-headers={ csrfHeaders(csrfToken) }
+				class="btn-secondary btn-sm"
+			>
+				<i class="fa-solid fa-rotate mr-1"></i>
+				Check now
+			</button>
+		</section>
+		<section class="space-y-2" aria-labelledby="pkg-source">
+			<h3 id="pkg-source" class="text-xs font-bold uppercase tracking-wide text-fg-secondary">Where it comes from</h3>
+			<form
+				hx-put={ "/admin/packages/" + r.ID + "/repo" }
+				hx-headers={ csrfHeaders(csrfToken) }
+				class="flex flex-wrap gap-2"
+			>
+				<input
+					type="url"
+					name="repo_url"
+					value={ r.RepoURL }
+					required
+					class="input flex-1 min-w-48"
+					aria-label="Repository address"
+				/>
+				<button type="submit" class="btn-secondary btn-sm">Save</button>
+			</form>
+		</section>
+		<section class="space-y-2" aria-labelledby="pkg-retire">
+			<h3 id="pkg-retire" class="text-xs font-bold uppercase tracking-wide text-fg-secondary">Retire or remove</h3>
+			<div class="rounded-lg border border-red-500/30 divide-y divide-edge">
+				<div class="flex flex-wrap items-center gap-2 p-3">
+					<div class="flex-1 min-w-48">
+						<p class="text-sm font-medium text-fg">
+							if r.Package.Status == StatusArchived {
+								Retired
+							} else {
+								Retire
+							}
+						</p>
+						<p class="text-xs text-fg-muted">
+							if r.Package.Status == StatusArchived {
+								Hidden from the active list. Campaigns already on it keep working.
+							} else {
+								Hides it from the active list. Campaigns already on it keep working.
+							}
+						</p>
+					</div>
+					if r.Package.Status == StatusArchived {
+						<button
+							type="button"
+							hx-delete={ "/admin/packages/" + r.ID + "/archive" }
+							hx-headers={ csrfHeaders(csrfToken) }
+							class="btn-secondary btn-sm"
+						>Undo</button>
+					} else {
+						<button
+							type="button"
+							hx-post={ "/admin/packages/" + r.ID + "/archive" }
+							hx-headers={ csrfHeaders(csrfToken) }
+							hx-confirm={ "Retire " + r.Name + "?" }
+							class="btn-secondary btn-sm"
+						>Retire</button>
+					}
+				</div>
+				<div class="p-3">
+					<p class="text-sm font-medium text-fg">Mark as nearing its end</p>
+					<p class="text-xs text-fg-muted">It keeps running; the message below is what people are told.</p>
+					if r.Package.Status == StatusDeprecated {
+						<div class="mt-2 flex flex-wrap items-center gap-2">
+							if r.DeprecationMsg != "" {
+								<span class="text-xs text-fg-secondary break-words">{ r.DeprecationMsg }</span>
+							}
+							<button
+								type="button"
+								hx-delete={ "/admin/packages/" + r.ID + "/deprecate" }
+								hx-headers={ csrfHeaders(csrfToken) }
+								class="btn-secondary btn-sm"
+							>Undo</button>
+						</div>
+					} else {
+						<form
+							hx-post={ "/admin/packages/" + r.ID + "/deprecate" }
+							hx-headers={ csrfHeaders(csrfToken) }
+							class="mt-2 flex flex-wrap gap-2"
+						>
+							<input type="text" name="message" class="input flex-1 min-w-48" placeholder="Message, e.g. use the new package instead" aria-label="Message"/>
+							<button type="submit" class="btn-secondary btn-sm">Mark</button>
+						</form>
+					}
+				</div>
+				<div class="flex flex-wrap items-center gap-2 p-3">
+					<div class="flex-1 min-w-48">
+						<p class="text-sm font-medium text-fg">Remove</p>
+						<p class="text-xs text-fg-muted">
+							if r.UsageKnown && len(r.Usage) > 0 {
+								{ "Blocked while " + campaignCount(len(r.Usage)) + " use it. Move them to another package first." }
+							} else {
+								Deletes the package and all its files.
+							}
+						</p>
+					</div>
+					if r.UsageKnown && len(r.Usage) > 0 {
+						<button type="button" class="btn-danger btn-sm opacity-50 cursor-not-allowed" disabled>Remove</button>
+					} else {
+						<button
+							type="button"
+							hx-delete={ "/admin/packages/" + r.ID }
+							hx-confirm={ "Remove " + r.Name + " and all its data?" }
+							hx-headers={ csrfHeaders(csrfToken) }
+							class="btn-danger btn-sm"
+						>Remove</button>
+					}
+				</div>
+			</div>
+		</section>
+	</div>
+}

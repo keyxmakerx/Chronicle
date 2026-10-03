@@ -1,4 +1,5 @@
-// packages.templ renders the admin package management page.
+// packages.templ renders the admin Packages page: header, summary strip, tabs.
+// The tabs' own content lives in packages_*.templ, one component per file.
 package packages
 
 import (
@@ -6,48 +7,33 @@ import (
 	"github.com/keyxmakerx/chronicle/internal/templates/layouts"
 )
 
-// PackagesPage renders the main package management admin page.
-//
-// Layout: two sections. The Foundry module version catalog (managed
-// inside Chronicle, not pulled from GitHub) comes first, since that's
-// where the operator's most-frequent workflow — uploading a new module
-// .zip, pinning campaigns — lives. The external-package repository list
-// (game systems + the chronicle-sync GitHub mirror) comes below. Both
-// have their own card shapes; no shared abstraction, since packages are
-// repo-backed with auto-update policies while modules are admin-uploaded
-// version rows.
-templ PackagesPage(packages []Package, csrfToken string) {
+// PackagesPage renders /admin/packages. Page state is in the URL (see
+// packagesQuery), so every control is a plain link and the page works
+// without JavaScript; HTMX only carries the writes.
+templ PackagesPage(data PackagesPageData) {
 	@layouts.App("Packages - Admin") {
-		<div class="max-w-5xl mx-auto space-y-6">
-			<div class="flex items-center justify-between">
+		<div class="max-w-6xl mx-auto space-y-5">
+			<div class="flex flex-wrap items-end justify-between gap-3">
 				<div>
 					<h1 class="text-2xl font-bold text-fg">Packages</h1>
-					<p class="text-sm text-fg-secondary mt-1">
-						Manage Foundry module versions, external game system repositories, and the chronicle-sync GitHub mirror.
+					<p class="text-sm text-fg-secondary mt-1 max-w-prose">
+						Game systems and the Foundry module your campaigns use. Install, update, review submissions and set the rules, all here.
 					</p>
 				</div>
+				@addPackageDisclosure(data.CSRFToken)
 			</div>
-
-			<!-- Foundry module versions appear in the unified package list
-			     below (any package whose Type=foundry-module). Per-version
-			     "campaigns using this version" cards are rendered inline by
-			     the foundry_vtt plugin via hx-get hooks on each version row;
-			     see the VersionList templ further down. -->
-
-			<!-- Auto-pin install banner. foundry_vtt's banner
+			<!-- Auto-pin install banner. The Foundry plugin's banner
 			     handler returns the banner card if an unread install
 			     summary exists, or empty content if not. Packages plugin
-			     stays foundry-agnostic — it just embeds the fragment via
-			     hx-get. If foundry_vtt isn't healthy, the 404 leaves the
-			     placeholder div empty (no banner displayed; same outcome
-			     as "no unread summary"). The banner self-renders its own
+			     stays Foundry-agnostic: it just embeds the fragment via
+			     hx-get. If that plugin isn't healthy, the 404 leaves the
+			     placeholder div empty. The banner self-renders its own
 			     Dismiss button using inline IIFE. -->
 			<div
 				hx-get="/admin/foundry-vtt/autopin-banner"
 				hx-trigger="load"
 				hx-swap="innerHTML"
 			></div>
-
 			<!-- Durable failure banners: one per package with a persisted
 			     last_error (failed install, failed update check, or
 			     installed-but-not-serving from the post-install verifier).
@@ -55,234 +41,117 @@ templ PackagesPage(packages []Package, csrfToken string) {
 			     survive restarts and page reloads until resolved — a toast
 			     is transient, this is not. Resolves on the next verified
 			     successful install/check (last_error cleared). -->
-			for _, pkg := range packages {
-				if pkg.LastError != "" {
+			for _, row := range data.Rows {
+				if row.LastError != "" {
 					<div class="card p-4 border border-red-500/40 bg-red-500/5">
 						<div class="flex items-start gap-3">
 							<i class="fa-solid fa-triangle-exclamation text-red-500 mt-0.5"></i>
 							<div class="min-w-0">
-								<p class="text-sm font-semibold text-fg">{ pkg.Name }: needs attention</p>
-								<p class="text-sm text-fg-secondary break-words">{ pkg.LastError }</p>
+								<p class="text-sm font-semibold text-fg">{ row.Name }: needs attention</p>
+								<p class="text-sm text-fg-secondary break-words">{ row.LastError }</p>
 							</div>
 						</div>
 					</div>
 				}
 			}
-
-			<!-- Stale-version cleanup wizard. Lazy fragment so the disk walk
-			     (per-version folder sizes) never slows the page load; the
-			     handler renders nothing when there is nothing to reclaim. -->
-			<div
-				hx-get="/admin/packages/prune"
-				hx-trigger="load"
-				hx-swap="innerHTML"
-			></div>
-
-			<!-- External package repositories (game systems + Foundry modules). -->
-			<div class="card p-5">
-				<h2 class="text-lg font-semibold text-fg mb-3">Add Package Repository</h2>
-				<form
-					method="POST"
-					action="/admin/packages"
-					hx-post="/admin/packages"
-					class="flex items-end gap-3"
-				>
-					<input type="hidden" name="csrf_token" value={ csrfToken }/>
-					<div class="flex-1">
-						<label for="repo_url" class="block text-sm font-medium text-fg-body mb-1">GitHub Repository URL</label>
-						<input
-							type="url"
-							id="repo_url"
-							name="repo_url"
-							required
-							class="input w-full"
-							placeholder="https://github.com/owner/repo"
-						/>
-					</div>
-					<div class="w-48">
-						<label for="type" class="block text-sm font-medium text-fg-body mb-1">Type</label>
-						<select id="type" name="type" class="input w-full">
-							<option value="system">Game System</option>
-							<option value={ string(PackageTypeFoundryModule) }>Foundry Module</option>
-						</select>
-					</div>
-					<button type="submit" class="btn-primary text-sm">
-						<i class="fa-solid fa-plus mr-1"></i>
-						Add Package
-					</button>
-				</form>
+			@summaryStrip(data)
+			<div id="pkg-main" class="space-y-4">
+				@packagesTabNav(data)
+				switch data.Query.Tab {
+					case PackagesTabUpdates:
+						@updatesTab(data)
+					case PackagesTabReview:
+						@reviewTab(data)
+					case PackagesTabSettings:
+						@settingsTab(data)
+					default:
+						@installedTab(data)
+				}
 			</div>
-
-			<!-- Package List -->
-			if len(packages) == 0 {
-				<div class="card p-8 text-center">
-					<i class="fa-solid fa-box-open text-4xl text-fg-muted mb-3"></i>
-					<p class="text-fg-secondary">No external package repositories registered yet.</p>
-					<p class="text-sm text-fg-muted mt-1">Add a GitHub repository URL above to get started.</p>
-				</div>
-			} else {
-				<div class="space-y-4">
-					for _, pkg := range packages {
-						@packageCard(pkg, csrfToken)
-					}
-				</div>
+			<!-- A hidden stand-in for the Foundry module's Versions list. The
+			     auto-pin banner's "Show affected campaigns" button looks for
+			     [data-fvtt-versions-trigger], clicks it and waits for the swap
+			     into its hx-target; here that swap reloads the tab area with
+			     the module's Versions tab open, whose rows carry the campaign
+			     buttons the banner then clicks. TODO(#721): hook the banner
+			     up without a DOM scrape. -->
+			if fr := firstFoundryRow(data.Rows); fr != nil {
+				<button
+					type="button"
+					hidden
+					data-fvtt-versions-trigger="true"
+					hx-get={ pkgHref(PackagesTabInstalled, FilterActive, "", fr.ID, PanelTabVersions) }
+					hx-target="#pkg-main"
+					hx-select="#pkg-main > *"
+					hx-swap="innerHTML"
+					hx-push-url="true"
+				></button>
 			}
 		</div>
 	}
 }
 
-// packageCard renders a single package with its controls.
-templ packageCard(pkg Package, csrfToken string) {
-	<div class="card p-5">
-		<div class="flex items-start justify-between gap-4">
-			<div class="flex-1 min-w-0">
-				<div class="flex items-center gap-2 mb-1">
-					<h3 class="text-lg font-semibold text-fg truncate">{ pkg.Name }</h3>
-					@packageTypeBadge(pkg.Type)
-					if pkg.PinnedVersion != "" {
-						<span class="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-yellow-500/10 text-yellow-600">
-							<i class="fa-solid fa-thumbtack mr-1"></i>
-							Pinned: { pkg.PinnedVersion }
-						</span>
-					}
-					if pkg.LastError != "" {
-						<span
-							class="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-red-500/10 text-red-600"
-							title={ pkg.LastError }
-						>
-							<i class="fa-solid fa-triangle-exclamation mr-1"></i>
-							Needs attention
-						</span>
-					}
-				</div>
-				<p class="text-sm text-fg-muted mb-2">{ pkg.RepoURL }</p>
-				<div class="flex items-center gap-4 text-sm text-fg-secondary">
-					if pkg.InstalledVersion != "" {
-						<span>
-							<i class="fa-solid fa-check-circle text-green-500 mr-1"></i>
-							Installed: { pkg.InstalledVersion }
-						</span>
-					} else {
-						<span class="text-fg-muted">
-							<i class="fa-solid fa-circle-xmark text-red-400 mr-1"></i>
-							Not installed
-						</span>
-					}
-					<span>
-						<i class="fa-solid fa-arrows-rotate mr-1"></i>
-						Auto-update: { string(pkg.AutoUpdate) }
-					</span>
-					if pkg.LastCheckedAt != nil {
-						<span>
-							<i class="fa-regular fa-clock mr-1"></i>
-							Checked: { pkg.LastCheckedAt.Format("Jan 2 15:04") }
-						</span>
-					}
-				</div>
-			</div>
-			<div class="flex items-center gap-2 shrink-0">
-				<!-- Check for Updates -->
-				<button
-					hx-post={ fmt.Sprintf("/admin/packages/%s/check", pkg.ID) }
-					hx-headers={ fmt.Sprintf(`{"X-CSRF-Token":"%s"}`, csrfToken) }
-					class="btn-secondary text-sm"
-					title="Check for updates"
-				>
-					<i class="fa-solid fa-rotate"></i>
-				</button>
-				<!-- Per-type actions fragment slot. packageCard stays
-				     generic. Each package type's type-specific links and
-				     buttons live in the owning plugin and load via HTMX,
-				     with a pulsing skeleton during load. Only types with a
-				     registered fragment URL render the slot; system
-				     packages skip it entirely. -->
-				if url := actionsFragmentURLFor(pkg); url != "" {
-					<span
-						hx-get={ url }
-						hx-trigger="load"
-						hx-swap="outerHTML"
-					>
-						<!-- skeleton: one pill-shaped placeholder
-						     matching an eventual icon button. -->
-						<span class="inline-block w-9 h-8 rounded bg-fg-secondary/10 animate-pulse" aria-hidden="true"></span>
-					</span>
-				}
-				<!-- Version Picker. data-fvtt-versions-trigger lets the
-				     autopin banner's IIFE scrape for this attribute and
-				     programmatically click the Versions button after an
-				     install. Moving this fully into the per-type fragment
-				     would need a JS-bridge, or moving the button itself
-				     into the fragment — which would duplicate the generic
-				     Versions button packages renders here. TODO(#721): refactor
-				     the autopin banner's selector strategy to avoid the
-				     scrape. -->
-				<button
-					hx-get={ fmt.Sprintf("/admin/packages/%s/versions", pkg.ID) }
-					hx-target={ fmt.Sprintf("#versions-%s", pkg.ID) }
-					hx-swap="innerHTML"
-					class="btn-secondary text-sm"
-					if pkg.Type == PackageTypeFoundryModule {
-						data-fvtt-versions-trigger="true"
-					}
-				>
-					<i class="fa-solid fa-code-branch mr-1"></i>
-					Versions
-				</button>
-				<!-- Usage -->
-				<button
-					hx-get={ fmt.Sprintf("/admin/packages/%s/usage", pkg.ID) }
-					hx-target={ fmt.Sprintf("#usage-%s", pkg.ID) }
-					hx-swap="innerHTML"
-					class="btn-secondary text-sm"
-				>
-					<i class="fa-solid fa-chart-bar mr-1"></i>
-					Usage
-				</button>
-				<!-- Delete -->
-				<button
-					hx-delete={ fmt.Sprintf("/admin/packages/%s", pkg.ID) }
-					hx-confirm={ fmt.Sprintf("Remove %s and all its data?", pkg.Name) }
-					hx-headers={ fmt.Sprintf(`{"X-CSRF-Token":"%s"}`, csrfToken) }
-					class="text-sm text-red-600 hover:text-red-800 transition-colors p-2"
-					title="Remove package"
-				>
-					<i class="fa-solid fa-trash"></i>
-				</button>
-			</div>
-		</div>
-
-		<!-- Auto-update Policy -->
-		<div class="mt-3 pt-3 border-t border-gray-200 dark:border-gray-700 flex items-center gap-3">
-			<span class="text-sm text-fg-secondary">Auto-update:</span>
-			<form
-				hx-put={ fmt.Sprintf("/admin/packages/%s/auto-update", pkg.ID) }
-				hx-headers={ fmt.Sprintf(`{"X-CSRF-Token":"%s"}`, csrfToken) }
-				class="flex items-center gap-2"
-			>
-				<select name="policy" class="input text-sm py-1" onchange="this.form.requestSubmit()">
-					<option value="off" selected?={ pkg.AutoUpdate == UpdateOff }>Off</option>
-					<option value="nightly" selected?={ pkg.AutoUpdate == UpdateNightly }>Nightly</option>
-					<option value="weekly" selected?={ pkg.AutoUpdate == UpdateWeekly }>Weekly</option>
-					<option value="on_release" selected?={ pkg.AutoUpdate == UpdateOnRelease }>On Release</option>
-				</select>
-			</form>
-			if pkg.PinnedVersion != "" {
-				<button
-					hx-delete={ fmt.Sprintf("/admin/packages/%s/pin", pkg.ID) }
-					hx-headers={ fmt.Sprintf(`{"X-CSRF-Token":"%s"}`, csrfToken) }
-					hx-confirm="Unpin this package and allow auto-updates?"
-					class="text-sm text-yellow-600 hover:text-yellow-800 transition-colors"
-				>
-					<i class="fa-solid fa-thumbtack mr-1"></i>
-					Unpin
-				</button>
-			}
-		</div>
-
-		<!-- Expandable Sections -->
-		<div id={ fmt.Sprintf("versions-%s", pkg.ID) } class="mt-3"></div>
-		<div id={ fmt.Sprintf("usage-%s", pkg.ID) } class="mt-3"></div>
+// summaryStrip shows what needs the admin, each count a link to where it is
+// handled. Problems counts active packages with a persisted last_error.
+templ summaryStrip(data PackagesPageData) {
+	<div class="flex flex-wrap gap-2">
+		@summaryChip(tabHref(PackagesTabUpdates), len(data.Updates), "updates ready", "text-yellow-700 dark:text-yellow-400")
+		@summaryChip(tabHref(PackagesTabReview), data.PendingCount, "waiting for review", "text-accent")
+		@summaryChip(pkgHref(PackagesTabInstalled, FilterProblems, "", "", ""), data.Counts.Problems, pluralWord(data.Counts.Problems, "problem", "problems"), "text-red-600 dark:text-red-400")
 	</div>
+}
+
+// summaryChip is one count in the strip; a zero count is muted so the strip
+// reads at a glance.
+templ summaryChip(href string, n int, label, tone string) {
+	<a
+		href={ templ.SafeURL(href) }
+		class="inline-flex items-center gap-2 rounded-lg border border-edge bg-surface px-3 py-2 text-sm text-fg hover:bg-surface-alt focus-visible:outline focus-visible:outline-2 focus-visible:outline-accent"
+	>
+		<b class={ "text-base tabular-nums", templ.KV(tone, n > 0), templ.KV("text-fg-muted", n == 0) }>{ fmt.Sprintf("%d", n) }</b>
+		{ label }
+	</a>
+}
+
+// packagesTabNav is the tab strip. It scrolls inside itself so a narrow phone
+// never scrolls the page sideways.
+templ packagesTabNav(data PackagesPageData) {
+	<nav class="-mx-1 overflow-x-auto border-b border-edge" aria-label="Packages sections">
+		<ul class="flex gap-1 px-1 text-sm whitespace-nowrap">
+			@packagesTab(data.Query.Tab, PackagesTabInstalled, "Installed", 0)
+			@packagesTab(data.Query.Tab, PackagesTabUpdates, "Updates", len(data.Updates))
+			@packagesTab(data.Query.Tab, PackagesTabReview, "Review", data.PendingCount)
+			@packagesTab(data.Query.Tab, PackagesTabSettings, "Settings", 0)
+		</ul>
+	</nav>
+}
+
+// packagesTab is one tab link; badge is shown only when above zero.
+templ packagesTab(current, tab, label string, badge int) {
+	<li>
+		<a
+			href={ templ.SafeURL(tabHref(tab)) }
+			class={ "inline-flex items-center gap-1.5 px-3 py-2 border-b-2 rounded-t focus-visible:outline focus-visible:outline-2 focus-visible:outline-accent",
+				templ.KV("border-accent text-fg font-medium", current == tab),
+				templ.KV("border-transparent text-fg-muted hover:text-fg", current != tab) }
+			if current == tab {
+				aria-current="page"
+			}
+		>
+			{ label }
+			if badge > 0 {
+				<span class="badge-amber text-[11px] px-1.5 py-0">{ fmt.Sprintf("%d", badge) }</span>
+			}
+		</a>
+	</li>
+}
+
+// pluralWord picks the singular or plural noun for a count.
+func pluralWord(n int, one, many string) string {
+	if n == 1 {
+		return one
+	}
+	return many
 }
 
 // packageTypeBadge renders a type indicator badge.
@@ -290,108 +159,18 @@ templ packageTypeBadge(t PackageType) {
 	if t == PackageTypeFoundryModule {
 		<span class="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-purple-500/10 text-purple-600">
 			<i class="fa-solid fa-cube mr-1"></i>
-			Foundry Module
+			Foundry module
 		</span>
 	} else {
 		<span class="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-blue-500/10 text-blue-600">
 			<i class="fa-solid fa-dice-d20 mr-1"></i>
-			Game System
+			Game system
 		</span>
 	}
 }
 
-// VersionList renders the expandable version list for a package (HTMX fragment).
-templ VersionList(pkg *Package, versions []PackageVersion, csrfToken string) {
-	<div class="border-t border-gray-200 dark:border-gray-700 pt-3">
-		<h4 class="text-sm font-semibold text-fg mb-2">
-			Available Versions ({ fmt.Sprintf("%d", len(versions)) })
-		</h4>
-		if len(versions) == 0 {
-			<p class="text-sm text-fg-muted">No versions found. Try checking for updates.</p>
-		} else {
-			<div class="space-y-1 max-h-64 overflow-y-auto">
-				for _, v := range versions {
-					<div class={ "py-2 px-3 rounded text-sm",
-						templ.KV("bg-green-50 dark:bg-green-900/20", v.Version == pkg.InstalledVersion) }>
-						<div class="flex items-center justify-between">
-							<div class="flex items-center gap-3">
-								<span class="font-mono font-medium text-fg">{ v.Version }</span>
-								<span class="text-fg-muted">{ v.TagName }</span>
-								if v.Prerelease {
-									<span class="text-xs text-purple-600 font-medium bg-purple-500/10 px-1.5 py-0.5 rounded">pre-release</span>
-								}
-								if v.Version == pkg.InstalledVersion {
-									<span class="text-xs text-green-600 font-medium">installed</span>
-								}
-								if v.Version == pkg.PinnedVersion {
-									<span class="text-xs text-yellow-600 font-medium">pinned</span>
-								}
-								<span class="text-xs text-fg-muted">{ v.PublishedAt.Format("Jan 2, 2006") }</span>
-							</div>
-							<div class="flex items-center gap-2">
-								if v.Version != pkg.InstalledVersion {
-									<button
-										hx-put={ fmt.Sprintf("/admin/packages/%s/version", pkg.ID) }
-										hx-vals={ fmt.Sprintf(`{"version":"%s"}`, v.Version) }
-										hx-headers={ fmt.Sprintf(`{"X-CSRF-Token":"%s"}`, csrfToken) }
-										hx-confirm={ fmt.Sprintf("Install version %s?", v.Version) }
-										class="text-xs text-accent hover:text-accent/80 transition-colors"
-									>
-										Install
-									</button>
-								}
-								if v.Version != pkg.PinnedVersion {
-									<button
-										hx-put={ fmt.Sprintf("/admin/packages/%s/pin", pkg.ID) }
-										hx-vals={ fmt.Sprintf(`{"version":"%s"}`, v.Version) }
-										hx-headers={ fmt.Sprintf(`{"X-CSRF-Token":"%s"}`, csrfToken) }
-										class="text-xs text-yellow-600 hover:text-yellow-800 transition-colors"
-										title="Pin to this version"
-									>
-										Pin
-									</button>
-								}
-								// foundry-module typed packages get a per-version
-								// "Campaigns" expand that lazy-loads the
-								// foundry_vtt plugin's "campaigns using v0.X.Y"
-								// card. Hardcoded URL (not a dispatch interface)
-								// is a deliberate trade-off — see packages/.ai.md
-								// Extension points note about per-type embed URLs.
-								//
-								// The button carries a stable ID
-								// (fvtt-campaigns-trigger-{sanitized-version}) so
-								// the autopin banner's "Show affected campaigns"
-								// inline IIFE can locate and click it after an
-								// install. Version-scoped only, since deployments
-								// have at most one foundry-module package; a
-								// multi-package deployment would need to revisit
-								// the selector.
-								if pkg.Type == PackageTypeFoundryModule {
-									<button
-										id={ fmt.Sprintf("fvtt-campaigns-trigger-%s", sanitizeForID(v.Version)) }
-										hx-get={ fmt.Sprintf("/admin/foundry-vtt/version/%s/campaigns", v.Version) }
-										hx-target={ fmt.Sprintf("#fvtt-campaigns-%s-%s", pkg.ID, sanitizeForID(v.Version)) }
-										hx-swap="innerHTML"
-										class="text-xs text-fg-muted hover:text-fg transition-colors"
-										title="Show campaigns pinned to this version + admin actions"
-									>
-										<i class="fa-solid fa-chevron-down mr-1"></i>
-										Campaigns
-									</button>
-								}
-							</div>
-						</div>
-						if pkg.Type == PackageTypeFoundryModule {
-							<div id={ fmt.Sprintf("fvtt-campaigns-%s-%s", pkg.ID, sanitizeForID(v.Version)) }></div>
-						}
-					</div>
-				}
-			</div>
-		}
-	</div>
-}
-
-// statusBadge renders a colored status badge for a package.
+// statusBadge renders a colored lifecycle badge for a package; the owner's
+// My submissions page uses it.
 templ statusBadge(status PackageStatus) {
 	switch status {
 		case StatusPending:
@@ -422,247 +201,9 @@ templ statusBadge(status PackageStatus) {
 	}
 }
 
-// PendingSubmissionsList renders the admin page for reviewing pending submissions.
-templ PendingSubmissionsList(pkgs []Package, csrfToken string) {
-	@layouts.App("Pending Submissions - Admin") {
-		<div class="max-w-5xl mx-auto space-y-6">
-			<div>
-				<h1 class="text-2xl font-bold text-fg">Pending Submissions</h1>
-				<p class="text-sm text-fg-secondary mt-1">
-					Review and approve or reject package submissions from campaign owners.
-				</p>
-			</div>
-
-			if len(pkgs) == 0 {
-				<div class="card p-8 text-center">
-					<i class="fa-solid fa-inbox text-4xl text-fg-muted mb-3"></i>
-					<p class="text-fg-secondary">No pending submissions.</p>
-					<p class="text-sm text-fg-muted mt-1">All submissions have been reviewed.</p>
-				</div>
-			} else {
-				<div class="space-y-4">
-					for _, pkg := range pkgs {
-						<div class="card p-5">
-							<div class="flex items-start justify-between gap-4">
-								<div class="flex-1 min-w-0">
-									<div class="flex items-center gap-2 mb-1">
-										<h3 class="text-lg font-semibold text-fg truncate">{ pkg.Name }</h3>
-										@packageTypeBadge(pkg.Type)
-										@statusBadge(pkg.Status)
-									</div>
-									<p class="text-sm text-fg-muted mb-2">{ pkg.RepoURL }</p>
-									<p class="text-xs text-fg-muted">
-										Submitted { pkg.CreatedAt.Format("Jan 2, 2006 15:04") }
-									</p>
-								</div>
-							</div>
-							<div class="mt-4 pt-3 border-t border-gray-200 dark:border-gray-700">
-								<form class="flex items-end gap-3">
-									<div class="flex-1">
-										<label class="block text-sm font-medium text-fg-body mb-1">Review Note (optional)</label>
-										<input
-											type="text"
-											name="note"
-											class="input w-full"
-											placeholder="Reason for approval or rejection..."
-										/>
-									</div>
-									<button
-										type="button"
-										hx-post={ fmt.Sprintf("/admin/packages/%s/review", pkg.ID) }
-										hx-include="closest form"
-										hx-vals='{"action":"approve"}'
-										hx-headers={ fmt.Sprintf(`{"X-CSRF-Token":"%s"}`, csrfToken) }
-										hx-confirm={ fmt.Sprintf("Approve %s?", pkg.Name) }
-										class="btn-primary text-sm"
-									>
-										<i class="fa-solid fa-check mr-1"></i>
-										Approve
-									</button>
-									<button
-										type="button"
-										hx-post={ fmt.Sprintf("/admin/packages/%s/review", pkg.ID) }
-										hx-include="closest form"
-										hx-vals='{"action":"reject"}'
-										hx-headers={ fmt.Sprintf(`{"X-CSRF-Token":"%s"}`, csrfToken) }
-										hx-confirm={ fmt.Sprintf("Reject %s?", pkg.Name) }
-										class="text-sm text-red-600 hover:text-red-800 border border-red-300 rounded px-3 py-1.5 transition-colors"
-									>
-										<i class="fa-solid fa-xmark mr-1"></i>
-										Reject
-									</button>
-								</form>
-							</div>
-						</div>
-					}
-				</div>
-			}
-		</div>
-	}
-}
-
-// SecuritySettingsPage renders the package security settings admin page.
-templ SecuritySettingsPage(settings PackageSecuritySettings, csrfToken string) {
-	@layouts.App("Package Security - Admin") {
-		<div class="max-w-3xl mx-auto space-y-6">
-			<div>
-				<h1 class="text-2xl font-bold text-fg">Package Security Settings</h1>
-				<p class="text-sm text-fg-secondary mt-1">
-					Configure security policies for package submissions and downloads.
-				</p>
-			</div>
-
-			<form method="POST" action="/admin/packages/settings" class="space-y-6">
-				<input type="hidden" name="_csrf" value={ csrfToken }/>
-
-				<div class="card p-5 space-y-6">
-					<!-- Repository Policy -->
-					<div>
-						<label class="block text-sm font-semibold text-fg mb-2">Repository Source Policy</label>
-						<p class="text-xs text-fg-muted mb-2">Controls which repository URLs are accepted for package submissions.</p>
-						<div class="space-y-2">
-							<label class="flex items-center gap-3 p-3 rounded border border-gray-200 dark:border-gray-700 cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-800">
-								<input type="radio" name="repo_policy" value="github_only" checked?={ settings.RepoPolicy == RepoPolicyGitHubOnly } class="text-accent"/>
-								<div>
-									<span class="text-sm font-medium text-fg">GitHub Only</span>
-									<span class="text-xs text-fg-muted block">Only accept repositories hosted on GitHub.com</span>
-								</div>
-							</label>
-							<label class="flex items-center gap-3 p-3 rounded border border-gray-200 dark:border-gray-700 cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-800">
-								<input type="radio" name="repo_policy" value="any_git" checked?={ settings.RepoPolicy == RepoPolicyAnyGit } class="text-accent"/>
-								<div>
-									<span class="text-sm font-medium text-fg">Known Git Hosts</span>
-									<span class="text-xs text-fg-muted block">Allow GitHub, GitLab, Bitbucket, Codeberg, and SourceHut</span>
-								</div>
-							</label>
-							<label class="flex items-center gap-3 p-3 rounded border border-gray-200 dark:border-gray-700 cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-800">
-								<input type="radio" name="repo_policy" value="allow_all" checked?={ settings.RepoPolicy == RepoPolicyAllowAll } class="text-accent"/>
-								<div>
-									<span class="text-sm font-medium text-fg">Allow All HTTPS</span>
-									<span class="text-xs text-fg-muted block">Accept any HTTPS URL (private IPs are still blocked)</span>
-								</div>
-							</label>
-						</div>
-					</div>
-
-					<!-- Require Admin Approval -->
-					<div class="flex items-center justify-between p-3 rounded border border-gray-200 dark:border-gray-700">
-						<div>
-							<span class="text-sm font-semibold text-fg">Require Admin Approval</span>
-							<span class="text-xs text-fg-muted block">Submissions from campaign owners must be approved before fetching</span>
-						</div>
-						<label class="relative inline-flex items-center cursor-pointer">
-							<input type="checkbox" name="require_approval" value="true" checked?={ settings.RequireApproval } class="sr-only peer"/>
-							<div class="w-11 h-6 bg-gray-200 rounded-full peer dark:bg-gray-700 peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all dark:border-gray-600 peer-checked:bg-accent"></div>
-						</label>
-					</div>
-
-					<!-- Owner Upload Policy -->
-					<div>
-						<label class="block text-sm font-semibold text-fg mb-2">Campaign Owner Upload Policy</label>
-						<p class="text-xs text-fg-muted mb-2">Controls whether campaign owners can submit GitHub package URLs and upload custom game system ZIPs. GitHub submissions always land in the admin review queue at <code class="text-[11px]">/admin/packages</code> regardless of which option is selected here — only Disabled blocks them outright.</p>
-						<div class="space-y-2">
-							<label class="flex items-center gap-3 p-3 rounded border border-gray-200 dark:border-gray-700 cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-800">
-								<input type="radio" name="owner_upload_policy" value="auto_approve" checked?={ settings.OwnerUploadPolicy == OwnerUploadAutoApprove } class="text-accent"/>
-								<div>
-									<span class="text-sm font-medium text-fg">Allow</span>
-									<span class="text-xs text-fg-muted block">Owners can submit GitHub URLs (admin still reviews before install) and upload custom system ZIPs (installed immediately for the uploading owner).</span>
-								</div>
-							</label>
-							<label class="flex items-center gap-3 p-3 rounded border border-gray-200 dark:border-gray-700 cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-800">
-								<input type="radio" name="owner_upload_policy" value="require_approval" checked?={ settings.OwnerUploadPolicy == OwnerUploadRequireApproval } class="text-accent"/>
-								<div>
-									<span class="text-sm font-medium text-fg">Allow, Require Admin Review</span>
-									<span class="text-xs text-fg-muted block">Equivalent to Allow in the current release. Reserved for a future option that gates custom system ZIP installs behind admin review too.</span>
-								</div>
-							</label>
-							<label class="flex items-center gap-3 p-3 rounded border border-gray-200 dark:border-gray-700 cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-800">
-								<input type="radio" name="owner_upload_policy" value="disabled" checked?={ settings.OwnerUploadPolicy == OwnerUploadDisabled } class="text-accent"/>
-								<div>
-									<span class="text-sm font-medium text-fg">Disabled</span>
-									<span class="text-xs text-fg-muted block">Campaign owners cannot submit GitHub URLs or upload custom system ZIPs. Only admin-curated packages are available.</span>
-								</div>
-							</label>
-						</div>
-					</div>
-
-					<!-- Validate Manifest -->
-					<div class="flex items-center justify-between p-3 rounded border border-gray-200 dark:border-gray-700">
-						<div>
-							<span class="text-sm font-semibold text-fg">Validate Manifest</span>
-							<span class="text-xs text-fg-muted block">Require valid manifest.json at package root with id and name fields</span>
-						</div>
-						<label class="relative inline-flex items-center cursor-pointer">
-							<input type="checkbox" name="validate_manifest" value="true" checked?={ settings.ValidateManifest } class="sr-only peer"/>
-							<div class="w-11 h-6 bg-gray-200 rounded-full peer dark:bg-gray-700 peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all dark:border-gray-600 peer-checked:bg-accent"></div>
-						</label>
-					</div>
-
-					<!-- Scan Content -->
-					<div class="flex items-center justify-between p-3 rounded border border-gray-200 dark:border-gray-700">
-						<div>
-							<span class="text-sm font-semibold text-fg">Scan Package Content</span>
-							<span class="text-xs text-fg-muted block">Reject packages containing executables, symlinks, or suspicious file types</span>
-						</div>
-						<label class="relative inline-flex items-center cursor-pointer">
-							<input type="checkbox" name="scan_content" value="true" checked?={ settings.ScanContent } class="sr-only peer"/>
-							<div class="w-11 h-6 bg-gray-200 rounded-full peer dark:bg-gray-700 peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all dark:border-gray-600 peer-checked:bg-accent"></div>
-						</label>
-					</div>
-
-					<!-- Max File Size -->
-					<div>
-						<label class="block text-sm font-semibold text-fg mb-2">Maximum File Size</label>
-						<p class="text-xs text-fg-muted mb-2">Reject individual files larger than this size (in MB).</p>
-						<div class="flex items-center gap-2">
-							<input
-								type="number"
-								name="max_file_size_mb"
-								value={ fmt.Sprintf("%d", settings.MaxFileSize / (1024*1024)) }
-								min="1"
-								max="500"
-								class="input w-32"
-							/>
-							<span class="text-sm text-fg-secondary">MB</span>
-						</div>
-					</div>
-				</div>
-
-				<div class="flex justify-end">
-					<button type="submit" class="btn btn-primary">Save Settings</button>
-				</div>
-			</form>
-		</div>
-	}
-}
-
-// UsageTable renders the campaign usage for a package (HTMX fragment).
-templ UsageTable(pkg *Package, usage []PackageUsage) {
-	<div class="border-t border-gray-200 dark:border-gray-700 pt-3">
-		<h4 class="text-sm font-semibold text-fg mb-2">Campaign Usage</h4>
-		if len(usage) == 0 {
-			<p class="text-sm text-fg-muted">No campaigns are currently using this package.</p>
-		} else {
-			<table class="w-full text-sm">
-				<thead>
-					<tr class="text-left text-fg-muted border-b border-gray-200 dark:border-gray-700">
-						<th class="pb-2 font-medium">Campaign</th>
-						<th class="pb-2 font-medium">System</th>
-						<th class="pb-2 font-medium">Enabled</th>
-					</tr>
-				</thead>
-				<tbody>
-					for _, u := range usage {
-						<tr class="border-b border-gray-100 dark:border-gray-800">
-							<td class="py-2 text-fg">{ u.CampaignName }</td>
-							<td class="py-2 text-fg-secondary">{ u.SystemID }</td>
-							<td class="py-2 text-fg-muted">{ u.EnabledAt.Format("Jan 2, 2006") }</td>
-						</tr>
-					}
-				</tbody>
-			</table>
-		}
-	</div>
+// statusPill renders a row's one-word state.
+templ statusPill(r PackageRow) {
+	<span class={ "badge", statusClass(r.Status) }>{ statusLabel(r) }</span>
 }
 
 // PruneCard is the stale-version cleanup wizard: a dry-run table of the
@@ -689,7 +230,7 @@ templ PruneCard(res *PruneResult, csrfToken string) {
 					class="btn-danger text-sm whitespace-nowrap"
 					hx-delete="/admin/packages/prune"
 					hx-confirm={ fmt.Sprintf("Delete %d stale version folder(s), reclaiming %s? The newest, installed, and currently-served versions are kept. This cannot be undone.", len(res.Reclaimable), prettyBytes(pruneTotal(res))) }
-					hx-headers={ fmt.Sprintf(`{"X-CSRF-Token":"%s"}`, csrfToken) }
+					hx-headers={ csrfHeaders(csrfToken) }
 				>
 					<i class="fa-solid fa-trash-can mr-1"></i>
 					Clean up
