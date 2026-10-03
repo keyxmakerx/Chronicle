@@ -2146,7 +2146,9 @@ func (h *Handler) PreviewAPI(c echo.Context) error {
 	// Resolve image path when popup config allows it.
 	var imagePath string
 	if cfg.ShowImage && entity.ImagePath != nil && *entity.ImagePath != "" {
-		imagePath = fmt.Sprintf("/media/%s", *entity.ImagePath)
+		// MediaURL, not "/media/"+path: a stored path like "2026/03/<id>.jpg"
+		// has to be reduced to the file id or the route never matches.
+		imagePath = layouts.MediaURL(c.Request().Context(), *entity.ImagePath)
 	}
 
 	// Build attributes list: field label + value pairs for the first few fields.

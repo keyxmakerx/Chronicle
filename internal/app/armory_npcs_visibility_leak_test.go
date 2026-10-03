@@ -118,10 +118,13 @@ func TestNPCGallery_CustomVisibilityLeak(t *testing.T) {
 	fx := newGalleryFixture(t, db)
 	defer fx.cleanup()
 
-	charTypeID := fx.entityType("characters", "Character", "", "characters")
+	charTypeID := fx.entityType("character", "Character", "", "")
 	publicNPCID := fx.entity(charTypeID, "Visible Guard", "visible-guard", "default")
 	restrictedNPCID := fx.entity(charTypeID, "Secret Spy", "secret-spy", "custom")
 	fx.grantView(restrictedNPCID, "user", fx.otherUserID)
+	// A claimed character is a PC: it belongs to the party, never the NPC list.
+	claimedPCID := fx.entity(charTypeID, "Claimed Hero", "claimed-hero", "default")
+	mustGalleryExec(t, db, `UPDATE entities SET owner_user_id = ? WHERE id = ?`, fx.otherUserID, claimedPCID)
 
 	entityService := fx.entityService()
 	npcRepo := npcs.NewNPCRepository(db)
@@ -152,6 +155,9 @@ func TestNPCGallery_CustomVisibilityLeak(t *testing.T) {
 			got := map[string]bool{}
 			for _, c := range cards {
 				got[c.ID] = true
+			}
+			if got[claimedPCID] {
+				t.Errorf("claimed PC %q listed as an NPC for %s", claimedPCID, tc.name)
 			}
 			if got[restrictedNPCID] && !tc.wantIDs[restrictedNPCID] {
 				t.Errorf("LEAK: restricted NPC %q returned to %s (role=%d); got IDs=%v", restrictedNPCID, tc.name, tc.role, got)

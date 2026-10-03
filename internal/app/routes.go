@@ -1559,19 +1559,73 @@ func (a *entityAccessAdapter) FilterViewableEntityIDs(ctx context.Context, campa
 }
 
 // npcEntityTypeFinderAdapter wraps entities.EntityService to implement the
-// npcs.EntityTypeFinder interface. Resolves the "characters" entity type ID
-// for the NPC gallery without creating a circular import.
+// npcs.EntityTypeFinder interface. Resolves the entity types the NPC section
+// lists without creating a circular import.
 type npcEntityTypeFinderAdapter struct {
 	svc entities.EntityService
 }
 
-// FindCharacterTypeID looks up the "characters" entity type for a campaign.
-func (a *npcEntityTypeFinderAdapter) FindCharacterTypeID(ctx context.Context, campaignID string) (int, error) {
-	et, err := a.svc.GetEntityTypeBySlug(ctx, campaignID, "characters")
+// FindCharacterTypeIDs returns the campaign's NPC/monster entity types.
+func (a *npcEntityTypeFinderAdapter) FindCharacterTypeIDs(ctx context.Context, campaignID string) ([]int, error) {
+	types, err := a.svc.GetEntityTypes(ctx, campaignID)
 	if err != nil {
-		return 0, err
+		return nil, err
 	}
-	return et.ID, nil
+	return npcTypeIDs(types), nil
+}
+
+// npcTypeIDs picks the entity types whose entities are NPCs or monsters: the
+// default "character" type, the "npc"/"creature" genre types, system-pack
+// character and monster types, and every enabled sub-type nested under one of
+// them. The player-character type is left out; claimed PCs are the party.
+func npcTypeIDs(types []entities.EntityType) []int {
+	isRoot := func(et entities.EntityType) bool {
+		if et.PresetCategory != nil {
+			switch *et.PresetCategory {
+			case "character", "creature":
+				return true
+			}
+		}
+		switch et.Slug {
+		case "character", "npc", "creature":
+			return true
+		}
+		return strings.HasSuffix(et.Slug, "-character") || strings.HasSuffix(et.Slug, "-monster")
+	}
+	isPC := func(et entities.EntityType) bool {
+		return (et.PresetCategory != nil && *et.PresetCategory == entities.PresetCategoryPlayerCharacter) ||
+			et.Slug == entities.SlugPlayerCharacter
+	}
+
+	byID := make(map[int]entities.EntityType, len(types))
+	for _, et := range types {
+		byID[et.ID] = et
+	}
+	// inFamily walks up the parent chain; depth guards against a cycle.
+	inFamily := func(et entities.EntityType) bool {
+		for depth := 0; depth < 16; depth++ {
+			if isRoot(et) {
+				return true
+			}
+			if et.ParentTypeID == nil {
+				return false
+			}
+			parent, ok := byID[*et.ParentTypeID]
+			if !ok {
+				return false
+			}
+			et = parent
+		}
+		return false
+	}
+
+	var ids []int
+	for _, et := range types {
+		if et.Enabled && !isPC(et) && inFamily(et) {
+			ids = append(ids, et.ID)
+		}
+	}
+	return ids
 }
 
 // npcVisibilityTogglerAdapter wraps entities.EntityService to implement the
@@ -1644,6 +1698,30 @@ func (a *armoryItemTypeFinderAdapter) FindItemTypes(ctx context.Context, campaig
 		}
 	}
 	return infos, nil
+}
+
+// armoryTagListerAdapter wraps tags.TagService to implement armory.TagLister,
+// so gallery cards carry their tags. Whether GM-only tags are included is the
+// caller's decision, passed through.
+type armoryTagListerAdapter struct {
+	svc tags.TagService
+}
+
+// ListTagsForEntities batch-fetches tags for the given entities.
+func (a *armoryTagListerAdapter) ListTagsForEntities(ctx context.Context, entityIDs []string, includeDmOnly bool) (map[string][]armory.TagInfo, error) {
+	tagsMap, err := a.svc.GetEntityTagsBatch(ctx, entityIDs, includeDmOnly)
+	if err != nil {
+		return nil, err
+	}
+	result := make(map[string][]armory.TagInfo, len(tagsMap))
+	for eid, tagList := range tagsMap {
+		infos := make([]armory.TagInfo, len(tagList))
+		for i, t := range tagList {
+			infos[i] = armory.TagInfo{ID: t.ID, Name: t.Name, Slug: t.Slug, Color: t.Color}
+		}
+		result[eid] = infos
+	}
+	return result, nil
 }
 
 // armoryRelationMetadataAdapter wraps the relations service to implement
@@ -3074,11 +3152,12 @@ func (a *App) RegisterRoutes() {
 	// Same visibility-gate reasoning as the NPC plugin above.
 	armoryRepo := armory.NewArmoryRepository(a.DB)
 	armorySvc := armory.NewArmoryService(armoryRepo, &armoryItemTypeFinderAdapter{svc: entityService}, &entityVisibilityFilterAdapter{svc: entityService})
+	armorySvc.SetTagLister(&armoryTagListerAdapter{svc: tagService})
 	armoryHandler := armory.NewHandler(armorySvc)
 
 	// Instance service: named inventory collections per campaign.
 	instRepo := armory.NewInstanceRepository(a.DB)
-	instSvc := armory.NewInstanceService(instRepo)
+	instSvc := armory.NewInstanceService(instRepo, &entityVisibilityFilterAdapter{svc: entityService}, &entityCampaignCheckerAdapter{svc: entityService})
 	instHandler := armory.NewInstanceHandler(instSvc)
 	armoryHandler.SetInstanceService(instSvc)
 
@@ -3089,6 +3168,7 @@ func (a *App) RegisterRoutes() {
 	txSvc.SetRelationFinder(&armoryRelationFinderAdapter{svc: relService})
 	txSvc.SetBuyerAccessChecker(&armoryBuyerAccessAdapter{svc: entityService})
 	txHandler := armory.NewTransactionHandler(txSvc)
+	txHandler.SetEntityVisibility(&entityVisibilityFilterAdapter{svc: entityService})
 	armory.RegisterRoutes(e, armoryHandler, txHandler, instHandler, campaignService, authService, addonService)
 
 	// Notes widget: personal floating note-taking panel (Google Keep-style).

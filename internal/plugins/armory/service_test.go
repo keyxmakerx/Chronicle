@@ -62,12 +62,12 @@ func (m *mockTypeFinder) FindItemTypes(ctx context.Context, campaignID string) (
 }
 
 type mockTagLister struct {
-	listFn func(ctx context.Context, entityIDs []string) (map[string][]TagInfo, error)
+	listFn func(ctx context.Context, entityIDs []string, includeDmOnly bool) (map[string][]TagInfo, error)
 }
 
-func (m *mockTagLister) ListTagsForEntities(ctx context.Context, entityIDs []string) (map[string][]TagInfo, error) {
+func (m *mockTagLister) ListTagsForEntities(ctx context.Context, entityIDs []string, includeDmOnly bool) (map[string][]TagInfo, error) {
 	if m.listFn != nil {
-		return m.listFn(ctx, entityIDs)
+		return m.listFn(ctx, entityIDs, includeDmOnly)
 	}
 	return nil, nil
 }
@@ -182,7 +182,7 @@ func TestListItems_WithTags(t *testing.T) {
 	}
 	svc := newTestArmoryService(repo, tf, nil)
 	svc.tagLister = &mockTagLister{
-		listFn: func(_ context.Context, ids []string) (map[string][]TagInfo, error) {
+		listFn: func(_ context.Context, ids []string, _ bool) (map[string][]TagInfo, error) {
 			return map[string][]TagInfo{
 				"item-1": {{Name: "Weapon", Color: "#ff0000"}},
 			}, nil
@@ -197,6 +197,47 @@ func TestListItems_WithTags(t *testing.T) {
 	}
 	if len(cards[1].Tags) != 0 {
 		t.Errorf("expected 0 tags on item-2, got %d", len(cards[1].Tags))
+	}
+}
+
+// GM-only tags follow the tags widget's rule: only Owner visibility (the
+// Owner or a DM-granted co-DM) gets them, never a Scribe or Player.
+func TestListItems_DmOnlyTagsOnlyAtOwnerVisibility(t *testing.T) {
+	tests := []struct {
+		name string
+		role int
+		want bool
+	}{
+		{"player", permissions.RolePlayer, false},
+		{"scribe", permissions.RoleScribe, false},
+		{"owner or DM-granted co-DM", permissions.RoleOwner, true},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			repo := &mockArmoryRepo{
+				listIDsFn: func(_ context.Context, _ string, _ []int, _ ItemListOptions) ([]string, error) {
+					return []string{"item-1"}, nil
+				},
+			}
+			tf := &mockTypeFinder{
+				findIDsFn: func(_ context.Context, _ string) ([]int, error) { return []int{1}, nil },
+			}
+			allowAll := &mockVisibilityFilter{viewable: map[string]bool{"item-1": true}}
+			svc := newTestArmoryService(repo, tf, allowAll)
+			var got *bool
+			svc.tagLister = &mockTagLister{
+				listFn: func(_ context.Context, _ []string, includeDmOnly bool) (map[string][]TagInfo, error) {
+					got = &includeDmOnly
+					return nil, nil
+				},
+			}
+			if _, _, err := svc.ListItems(context.Background(), "camp-1", tt.role, "user-1", DefaultItemListOptions()); err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
+			if got == nil || *got != tt.want {
+				t.Errorf("includeDmOnly = %v, want %v", got, tt.want)
+			}
+		})
 	}
 }
 

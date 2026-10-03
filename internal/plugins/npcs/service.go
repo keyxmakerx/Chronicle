@@ -11,10 +11,11 @@ import (
 	"github.com/keyxmakerx/chronicle/internal/permissions"
 )
 
-// EntityTypeFinder resolves entity types by slug for a campaign.
-// Implemented by the entities.EntityService — injected to avoid circular imports.
+// EntityTypeFinder resolves which of a campaign's entity types hold NPCs and
+// monsters. Implemented by an adapter over entities.EntityService (injected to
+// avoid circular imports). An empty result means the campaign has none.
 type EntityTypeFinder interface {
-	FindCharacterTypeID(ctx context.Context, campaignID string) (int, error)
+	FindCharacterTypeIDs(ctx context.Context, campaignID string) ([]int, error)
 }
 
 // EntityVisibilityFilter resolves which of a set of entity IDs a viewer
@@ -72,24 +73,22 @@ func (s *npcService) SetTagLister(tl TagLister) {
 	s.tagLister = tl
 }
 
-// ListNPCs resolves the character type, narrows the campaign's matching
+// ListNPCs resolves the character types, narrows the campaign's matching
 // characters to what the viewer may see, and returns one page of cards.
-// Returns an empty list if no character entity type exists for the campaign.
+// Returns an empty list if the campaign has no character entity types.
 // The total is the size of that SAME narrowed set (see visibleNPCIDs), so a
 // filtered list and its count can never disagree (ADR-055 rule 3: an
 // inflated count is itself a leak).
 func (s *npcService) ListNPCs(ctx context.Context, campaignID string, role int, userID string, opts NPCListOptions) ([]NPCCard, int, error) {
-	typeID, err := s.typeFinder.FindCharacterTypeID(ctx, campaignID)
+	typeIDs, err := s.characterTypeIDs(ctx, campaignID)
 	if err != nil {
-		// No character entity type yet — return empty gallery instead of erroring.
-		var appErr *apperror.AppError
-		if errors.As(err, &appErr) && appErr.Code == 404 {
-			return nil, 0, nil
-		}
-		return nil, 0, fmt.Errorf("resolving character type: %w", err)
+		return nil, 0, err
+	}
+	if len(typeIDs) == 0 {
+		return nil, 0, nil
 	}
 
-	visibleIDs, err := s.visibleNPCIDs(ctx, campaignID, typeID, role, userID, opts)
+	visibleIDs, err := s.visibleNPCIDs(ctx, campaignID, typeIDs, role, userID, opts)
 	if err != nil {
 		return nil, 0, err
 	}
@@ -125,36 +124,49 @@ func (s *npcService) ListNPCs(ctx context.Context, campaignID string, role int, 
 	return cards, total, nil
 }
 
-// CountNPCs resolves the character type and returns the revealed count,
+// CountNPCs resolves the character types and returns the revealed count,
 // computed from the exact same visibleNPCIDs path ListNPCs uses — never a
 // separate SQL COUNT that could drift from what the list actually shows.
-// Returns 0 if no character entity type exists for the campaign.
+// Returns 0 if the campaign has no character entity types.
 func (s *npcService) CountNPCs(ctx context.Context, campaignID string, role int, userID string) (int, error) {
-	typeID, err := s.typeFinder.FindCharacterTypeID(ctx, campaignID)
+	typeIDs, err := s.characterTypeIDs(ctx, campaignID)
 	if err != nil {
-		var appErr *apperror.AppError
-		if errors.As(err, &appErr) && appErr.Code == 404 {
-			return 0, nil
-		}
-		return 0, fmt.Errorf("resolving character type: %w", err)
+		return 0, err
 	}
-	visibleIDs, err := s.visibleNPCIDs(ctx, campaignID, typeID, role, userID, NPCListOptions{})
+	if len(typeIDs) == 0 {
+		return 0, nil
+	}
+	visibleIDs, err := s.visibleNPCIDs(ctx, campaignID, typeIDs, role, userID, NPCListOptions{})
 	if err != nil {
 		return 0, err
 	}
 	return len(visibleIDs), nil
 }
 
+// characterTypeIDs resolves the campaign's NPC/monster entity types. A 404
+// from the finder means none exist yet: an empty gallery, not an error.
+func (s *npcService) characterTypeIDs(ctx context.Context, campaignID string) ([]int, error) {
+	ids, err := s.typeFinder.FindCharacterTypeIDs(ctx, campaignID)
+	if err != nil {
+		var appErr *apperror.AppError
+		if errors.As(err, &appErr) && appErr.Code == 404 {
+			return nil, nil
+		}
+		return nil, fmt.Errorf("resolving character types: %w", err)
+	}
+	return ids, nil
+}
+
 // visibleNPCIDs returns the character entity IDs matching opts' search/tag
-// filters for characterTypeID, narrowed to the viewer's visibility.
+// filters for characterTypeIDs, narrowed to the viewer's visibility.
 //
 // Only an OWNER is unrestricted here (role >= permissions.RoleOwner).
 // Everyone below Owner, Scribes included, is narrowed through the SAME
 // canonical visibility policy the entities plugin itself applies
 // (EntityVisibilityFilter), so this gallery can't disagree with the entity
 // page about what is hidden.
-func (s *npcService) visibleNPCIDs(ctx context.Context, campaignID string, characterTypeID, role int, userID string, opts NPCListOptions) ([]string, error) {
-	allIDs, err := s.repo.ListRevealedIDs(ctx, campaignID, characterTypeID, opts)
+func (s *npcService) visibleNPCIDs(ctx context.Context, campaignID string, characterTypeIDs []int, role int, userID string, opts NPCListOptions) ([]string, error) {
+	allIDs, err := s.repo.ListRevealedIDs(ctx, campaignID, characterTypeIDs, opts)
 	if err != nil {
 		return nil, err
 	}

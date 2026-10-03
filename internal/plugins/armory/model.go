@@ -12,7 +12,7 @@ type ItemListOptions struct {
 	Page       int    // 1-indexed page number.
 	PerPage    int    // Items per page (default 24).
 	Sort       string // "name" (default), "updated", "created".
-	Search     string // Optional name search (prefix match).
+	Search     string // Optional name search (substring match).
 	Tag        string // Optional tag slug filter.
 	TypeID     int    // Optional entity type ID filter (0 = all item types).
 	InstanceID int    // Optional inventory instance filter (0 = all items).
@@ -101,7 +101,7 @@ type InventoryInstance struct {
 	Icon        string    `json:"icon"`
 	Color       string    `json:"color"`
 	SortOrder   int       `json:"sort_order"`
-	ItemCount   int       `json:"item_count"` // Populated by COUNT join.
+	ItemCount   int       `json:"item_count"` // Viewer-visible items; set by the service, not the raw SQL count.
 	CreatedAt   time.Time `json:"created_at"`
 	UpdatedAt   time.Time `json:"updated_at"`
 }

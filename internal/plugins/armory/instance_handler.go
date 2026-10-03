@@ -10,6 +10,7 @@ import (
 
 	"github.com/keyxmakerx/chronicle/internal/apperror"
 	"github.com/keyxmakerx/chronicle/internal/middleware"
+	"github.com/keyxmakerx/chronicle/internal/plugins/auth"
 	"github.com/keyxmakerx/chronicle/internal/plugins/campaigns"
 )
 
@@ -30,7 +31,7 @@ func (h *InstanceHandler) ListInstances(c echo.Context) error {
 		return apperror.NewMissingContext()
 	}
 
-	instances, err := h.svc.ListInstances(c.Request().Context(), cc.Campaign.ID)
+	instances, err := h.svc.ListInstances(c.Request().Context(), cc.Campaign.ID, cc.VisibilityRole(), auth.GetUserID(c))
 	if err != nil {
 		return apperror.NewInternal(err)
 	}

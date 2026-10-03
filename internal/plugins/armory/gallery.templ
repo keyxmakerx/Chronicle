@@ -5,6 +5,7 @@ package armory
 
 import (
 	"fmt"
+	"net/url"
 	"github.com/keyxmakerx/chronicle/internal/plugins/campaigns"
 	"github.com/keyxmakerx/chronicle/internal/templates/layouts"
 )
@@ -83,7 +84,7 @@ templ ArmoryGalleryContent(cc *campaigns.CampaignContext, cards []ItemCard, tota
 						hx-target="#armory-gallery"
 						hx-swap="innerHTML"
 						hx-trigger="input changed delay:300ms"
-						hx-include="[name='sort'],[name='tag'],[name='type']"
+						hx-include="[name='sort'],[name='tag'],[name='type'],[name='instance']"
 					/>
 					<i class="fa-solid fa-magnifying-glass absolute left-3 top-1/2 -translate-y-1/2 text-fg-muted text-xs"></i>
 				</div>
@@ -96,7 +97,7 @@ templ ArmoryGalleryContent(cc *campaigns.CampaignContext, cards []ItemCard, tota
 						hx-get={ fmt.Sprintf("/campaigns/%s/armory", cc.Campaign.ID) }
 						hx-target="#armory-gallery"
 						hx-swap="innerHTML"
-						hx-include="[name='q'],[name='sort'],[name='tag']"
+						hx-include="[name='q'],[name='sort'],[name='tag'],[name='instance']"
 					>
 						<option value="">All types</option>
 						for _, it := range itemTypes {
@@ -114,7 +115,7 @@ templ ArmoryGalleryContent(cc *campaigns.CampaignContext, cards []ItemCard, tota
 					hx-get={ fmt.Sprintf("/campaigns/%s/armory", cc.Campaign.ID) }
 					hx-target="#armory-gallery"
 					hx-swap="innerHTML"
-					hx-include="[name='q'],[name='tag'],[name='type']"
+					hx-include="[name='q'],[name='tag'],[name='type'],[name='instance']"
 				>
 					<option value="name" selected?={ opts.Sort == "name" }>Name</option>
 					<option value="updated" selected?={ opts.Sort == "updated" }>Recently Updated</option>
@@ -131,7 +132,7 @@ templ ArmoryGalleryContent(cc *campaigns.CampaignContext, cards []ItemCard, tota
 			<div class="text-center py-16">
 				<i class="fa-solid fa-shield-halved text-4xl text-fg-muted mb-4"></i>
 				<h3 class="text-lg font-semibold text-fg-secondary mb-1">No items found</h3>
-				if opts.Search != "" || opts.Tag != "" || opts.TypeID > 0 {
+				if opts.Search != "" || opts.Tag != "" || opts.TypeID > 0 || opts.InstanceID > 0 {
 					<p class="text-sm text-fg-muted">Try adjusting your search or filters.</p>
 				} else if cc.MemberRole >= campaigns.RoleScribe {
 					<p class="text-sm text-fg-muted">
@@ -161,20 +162,20 @@ templ ArmoryGalleryContent(cc *campaigns.CampaignContext, cards []ItemCard, tota
 
 // armoryPageURL builds a gallery URL with all current filter params.
 func armoryPageURL(campaignID string, page int, opts ItemListOptions) string {
-	url := fmt.Sprintf("/campaigns/%s/armory?page=%d&sort=%s", campaignID, page, opts.Sort)
+	u := fmt.Sprintf("/campaigns/%s/armory?page=%d&sort=%s", campaignID, page, url.QueryEscape(opts.Sort))
 	if opts.Search != "" {
-		url += "&q=" + opts.Search
+		u += "&q=" + url.QueryEscape(opts.Search)
 	}
 	if opts.Tag != "" {
-		url += "&tag=" + opts.Tag
+		u += "&tag=" + url.QueryEscape(opts.Tag)
 	}
 	if opts.TypeID > 0 {
-		url += fmt.Sprintf("&type=%d", opts.TypeID)
+		u += fmt.Sprintf("&type=%d", opts.TypeID)
 	}
 	if opts.InstanceID > 0 {
-		url += fmt.Sprintf("&instance=%d", opts.InstanceID)
+		u += fmt.Sprintf("&instance=%d", opts.InstanceID)
 	}
-	return url
+	return u
 }
 
 // armoryPagination renders pagination controls for the Armory gallery.

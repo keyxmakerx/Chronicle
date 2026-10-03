@@ -18,14 +18,14 @@ import (
 // and keeps ListNPCs/CountNPCs in agreement.
 
 type mockNPCRepo struct {
-	listIDsFn    func(ctx context.Context, campaignID string, characterTypeID int, opts NPCListOptions) ([]string, error)
+	listIDsFn    func(ctx context.Context, campaignID string, characterTypeIDs []int, opts NPCListOptions) ([]string, error)
 	getByIDsFn   func(ctx context.Context, campaignID string, ids []string) ([]NPCCard, error)
 	lastByIDsArg []string // records the ids GetNPCCardsByIDs was called with, for pagination assertions
 }
 
-func (m *mockNPCRepo) ListRevealedIDs(ctx context.Context, campaignID string, characterTypeID int, opts NPCListOptions) ([]string, error) {
+func (m *mockNPCRepo) ListRevealedIDs(ctx context.Context, campaignID string, characterTypeIDs []int, opts NPCListOptions) ([]string, error) {
 	if m.listIDsFn != nil {
-		return m.listIDsFn(ctx, campaignID, characterTypeID, opts)
+		return m.listIDsFn(ctx, campaignID, characterTypeIDs, opts)
 	}
 	return nil, nil
 }
@@ -47,8 +47,11 @@ type mockTypeFinder struct {
 	err    error
 }
 
-func (m *mockTypeFinder) FindCharacterTypeID(_ context.Context, _ string) (int, error) {
-	return m.typeID, m.err
+func (m *mockTypeFinder) FindCharacterTypeIDs(_ context.Context, _ string) ([]int, error) {
+	if m.err != nil || m.typeID == 0 {
+		return nil, m.err
+	}
+	return []int{m.typeID}, nil
 }
 
 // mockVisibilityFilter records every call it receives and returns a
@@ -78,9 +81,9 @@ func (m *mockVisibilityFilter) FilterViewableEntityIDs(_ context.Context, _ stri
 
 func TestListNPCs_ReturnsCards(t *testing.T) {
 	repo := &mockNPCRepo{
-		listIDsFn: func(_ context.Context, _ string, typeID int, _ NPCListOptions) ([]string, error) {
-			if typeID != 42 {
-				t.Fatalf("expected typeID=42, got %d", typeID)
+		listIDsFn: func(_ context.Context, _ string, typeIDs []int, _ NPCListOptions) ([]string, error) {
+			if len(typeIDs) != 1 || typeIDs[0] != 42 {
+				t.Fatalf("expected typeIDs=[42], got %v", typeIDs)
 			}
 			return []string{"npc-1", "npc-2"}, nil
 		},
@@ -122,9 +125,24 @@ func TestListNPCs_EmptyWhenNoCharacterType(t *testing.T) {
 	}
 }
 
+// A campaign with no character types is an empty gallery, never a repo call
+// with an empty IN () list.
+func TestListNPCs_EmptyWhenNoCharacterTypes(t *testing.T) {
+	repo := &mockNPCRepo{listIDsFn: func(_ context.Context, _ string, _ []int, _ NPCListOptions) ([]string, error) {
+		t.Fatal("repository must not be queried with no character types")
+		return nil, nil
+	}}
+	svc := NewNPCService(repo, &mockTypeFinder{}, nil)
+
+	cards, total, err := svc.ListNPCs(context.Background(), "campaign-1", permissions.RoleOwner, "owner-1", DefaultNPCListOptions())
+	if err != nil || total != 0 || len(cards) != 0 {
+		t.Fatalf("got cards=%v total=%d err=%v, want empty and no error", cards, total, err)
+	}
+}
+
 func TestCountNPCs(t *testing.T) {
 	repo := &mockNPCRepo{
-		listIDsFn: func(_ context.Context, _ string, typeID int, _ NPCListOptions) ([]string, error) {
+		listIDsFn: func(_ context.Context, _ string, _ []int, _ NPCListOptions) ([]string, error) {
 			ids := make([]string, 7)
 			for i := range ids {
 				ids[i] = string(rune('a' + i))
@@ -241,7 +259,7 @@ func (m *mockToggler) TogglePrivate(_ context.Context, _ string) (bool, error) {
 func TestVisibleNPCIDs_OnlyOwnerBypassesFilter(t *testing.T) {
 	t.Run("owner bypasses entirely", func(t *testing.T) {
 		repo := &mockNPCRepo{
-			listIDsFn: func(_ context.Context, _ string, _ int, _ NPCListOptions) ([]string, error) {
+			listIDsFn: func(_ context.Context, _ string, _ []int, _ NPCListOptions) ([]string, error) {
 				return []string{"public-npc", "restricted-npc"}, nil
 			},
 		}
@@ -249,7 +267,7 @@ func TestVisibleNPCIDs_OnlyOwnerBypassesFilter(t *testing.T) {
 		svc := &npcService{repo: repo, typeFinder: &mockTypeFinder{}, entityVisibility: vf}
 
 		role := permissions.RoleOwner
-		ids, err := svc.visibleNPCIDs(context.Background(), "camp-1", 1, role, "u1", NPCListOptions{})
+		ids, err := svc.visibleNPCIDs(context.Background(), "camp-1", []int{1}, role, "u1", NPCListOptions{})
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
@@ -263,7 +281,7 @@ func TestVisibleNPCIDs_OnlyOwnerBypassesFilter(t *testing.T) {
 
 	t.Run("scribe is filtered, not bypassed", func(t *testing.T) {
 		repo := &mockNPCRepo{
-			listIDsFn: func(_ context.Context, _ string, _ int, _ NPCListOptions) ([]string, error) {
+			listIDsFn: func(_ context.Context, _ string, _ []int, _ NPCListOptions) ([]string, error) {
 				return []string{"public-npc", "restricted-npc"}, nil
 			},
 		}
@@ -274,7 +292,7 @@ func TestVisibleNPCIDs_OnlyOwnerBypassesFilter(t *testing.T) {
 		svc := &npcService{repo: repo, typeFinder: &mockTypeFinder{}, entityVisibility: vf}
 
 		role := permissions.RoleScribe
-		ids, err := svc.visibleNPCIDs(context.Background(), "camp-1", 1, role, "u1", NPCListOptions{})
+		ids, err := svc.visibleNPCIDs(context.Background(), "camp-1", []int{1}, role, "u1", NPCListOptions{})
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
@@ -302,14 +320,14 @@ func TestVisibleNPCIDs_PlayerAndAnonymousUseCanonicalFilter(t *testing.T) {
 		{permissions.RoleNone, ""},
 	} {
 		repo := &mockNPCRepo{
-			listIDsFn: func(_ context.Context, _ string, _ int, _ NPCListOptions) ([]string, error) {
+			listIDsFn: func(_ context.Context, _ string, _ []int, _ NPCListOptions) ([]string, error) {
 				return []string{"public-npc", "restricted-npc"}, nil
 			},
 		}
 		vf := &mockVisibilityFilter{viewable: map[string]bool{"public-npc": true}}
 		svc := &npcService{repo: repo, typeFinder: &mockTypeFinder{}, entityVisibility: vf}
 
-		ids, err := svc.visibleNPCIDs(context.Background(), "camp-1", 1, tc.role, tc.userID, NPCListOptions{})
+		ids, err := svc.visibleNPCIDs(context.Background(), "camp-1", []int{1}, tc.role, tc.userID, NPCListOptions{})
 		if err != nil {
 			t.Fatalf("role %d: unexpected error: %v", tc.role, err)
 		}
@@ -330,12 +348,12 @@ func TestVisibleNPCIDs_PlayerAndAnonymousUseCanonicalFilter(t *testing.T) {
 // viewer, the result must be EMPTY, never "everything".
 func TestVisibleNPCIDs_FailsClosedWithNoFilterWired(t *testing.T) {
 	repo := &mockNPCRepo{
-		listIDsFn: func(_ context.Context, _ string, _ int, _ NPCListOptions) ([]string, error) {
+		listIDsFn: func(_ context.Context, _ string, _ []int, _ NPCListOptions) ([]string, error) {
 			return []string{"npc-1"}, nil
 		},
 	}
 	svc := &npcService{repo: repo, typeFinder: &mockTypeFinder{}, entityVisibility: nil}
-	ids, err := svc.visibleNPCIDs(context.Background(), "camp-1", 1, permissions.RolePlayer, "player-1", NPCListOptions{})
+	ids, err := svc.visibleNPCIDs(context.Background(), "camp-1", []int{1}, permissions.RolePlayer, "player-1", NPCListOptions{})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -361,7 +379,7 @@ func TestListAndCountNPCs_NeverDisagree(t *testing.T) {
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			repo := &mockNPCRepo{
-				listIDsFn: func(_ context.Context, _ string, _ int, _ NPCListOptions) ([]string, error) {
+				listIDsFn: func(_ context.Context, _ string, _ []int, _ NPCListOptions) ([]string, error) {
 					return candidateIDs, nil
 				},
 			}
@@ -389,7 +407,7 @@ func TestListAndCountNPCs_NeverDisagree(t *testing.T) {
 // had.
 func TestListNPCs_PaginatesTheFilteredSet(t *testing.T) {
 	repo := &mockNPCRepo{
-		listIDsFn: func(_ context.Context, _ string, _ int, _ NPCListOptions) ([]string, error) {
+		listIDsFn: func(_ context.Context, _ string, _ []int, _ NPCListOptions) ([]string, error) {
 			return []string{"a", "restricted", "b", "c"}, nil
 		},
 	}

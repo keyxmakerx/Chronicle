@@ -33,6 +33,11 @@ type InstanceRepository interface {
 
 	// CountInstanceItems returns the number of items in an instance.
 	CountInstanceItems(ctx context.Context, instanceID int) (int, error)
+
+	// ListItemEntityIDsByInstance returns, per instance of the campaign, the
+	// IDs of the non-template entities in that same campaign linked to it.
+	// No visibility is applied; the service narrows per viewer.
+	ListItemEntityIDsByInstance(ctx context.Context, campaignID string) (map[int][]string, error)
 }
 
 // instanceRepository implements InstanceRepository with MariaDB.
@@ -174,4 +179,31 @@ func (r *instanceRepository) CountInstanceItems(ctx context.Context, instanceID 
 		return 0, fmt.Errorf("counting instance items: %w", err)
 	}
 	return count, nil
+}
+
+// ListItemEntityIDsByInstance groups linked entity IDs by instance. Joining
+// both sides on campaign_id keeps a link whose entity belongs to another
+// campaign from being counted, and skips template entities the gallery never
+// lists.
+func (r *instanceRepository) ListItemEntityIDsByInstance(ctx context.Context, campaignID string) (map[int][]string, error) {
+	query := `SELECT ii.instance_id, ii.entity_id
+		FROM inventory_items ii
+		INNER JOIN inventory_instances i ON i.id = ii.instance_id AND i.campaign_id = ?
+		INNER JOIN entities e ON e.id = ii.entity_id AND e.campaign_id = ? AND e.is_template = false`
+	rows, err := r.db.QueryContext(ctx, query, campaignID, campaignID)
+	if err != nil {
+		return nil, fmt.Errorf("listing instance item ids: %w", err)
+	}
+	defer rows.Close()
+
+	out := make(map[int][]string)
+	for rows.Next() {
+		var instanceID int
+		var entityID string
+		if err := rows.Scan(&instanceID, &entityID); err != nil {
+			return nil, fmt.Errorf("scanning instance item id: %w", err)
+		}
+		out[instanceID] = append(out[instanceID], entityID)
+	}
+	return out, rows.Err()
 }
