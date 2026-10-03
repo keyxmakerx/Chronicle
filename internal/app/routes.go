@@ -2341,7 +2341,8 @@ func (a *App) RegisterRoutes() {
 	})
 	backupHandler := backup.NewHandler(backupSvc)
 	backupHandler.SetActivityRecorder(adminActivity)
-	backup.RegisterRoutes(adminGroup, backupHandler)
+	backupHandler.SetDownloadAuth(signingSecret, auth.GetUserID)
+	backup.RegisterRoutes(adminGroup, backupHandler, auth.RequireReauth(authService))
 
 	// Admin Restore plugin: lists backup manifests in BACKUP_DIR and
 	// shells out to scripts/restore.sh under a typed-RESTORE

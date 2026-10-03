@@ -4,6 +4,7 @@ import (
 	"context"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"os"
 	"path/filepath"
 	"strings"
@@ -51,10 +52,10 @@ func TestDownload_QuoteInBasenameIsEncoded(t *testing.T) {
 		t.Skipf("filesystem rejected weird filename (this is fine, skipping): %v", err)
 	}
 
-	h := NewHandler(&stubService{dir: dir})
+	h := newTestHandler(&stubService{dir: dir})
 
 	e := echo.New()
-	req := httptest.NewRequest(http.MethodGet, "/admin/backup/files/"+weirdName, nil)
+	req := httptest.NewRequest(http.MethodGet, "/admin/backup/files/"+weirdName+"?t="+url.QueryEscape(h.signer.Issue(testUser, weirdName)), nil)
 	rec := httptest.NewRecorder()
 	c := e.NewContext(req, rec)
 	c.SetParamNames("name")

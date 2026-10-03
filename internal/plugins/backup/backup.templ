@@ -150,14 +150,16 @@ templ artifactList(d BackupPageData) {
 							<td class="py-2 text-right text-fg-muted">{ humanBytes(a.SizeBytes) }</td>
 							<td class="py-2 text-fg-muted">{ a.ModTime.Format("2006-01-02 15:04") }</td>
 							<td class="py-2 text-right">
-								<a
-									href={ templ.SafeURL("/admin/backup/files/" + url.PathEscape(a.Name)) }
+								<button
+									type="button"
+									hx-post={ "/admin/backup/files/" + url.PathEscape(a.Name) + "/link" }
+									hx-headers={ fmt.Sprintf(`{"X-CSRF-Token":"%s"}`, d.CSRFToken) }
 									class="btn-secondary text-xs inline-flex items-center gap-1"
 									title="Download this file"
 								>
 									<i class="fa-solid fa-download"></i>
 									Download
-								</a>
+								</button>
 							</td>
 						</tr>
 					}
