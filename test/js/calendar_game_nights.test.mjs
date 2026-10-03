@@ -406,7 +406,7 @@ test('the Director’s Who’s free view lists the players, a reminder and the f
   assert.match(html, /Dee<\/span><span class="wait">No hours yet/);
   assert.match(html, /1 player hasn’t painted hours yet\. <button type="button" class="btn sm" data-best-nudge>/);
   assert.match(html, /<input type="checkbox" data-fv-lines checked>/, 'the lines switch, on');
-  assert.match(html, /href="\/campaigns\/c1\/availability\?tab=overlay"/, 'the full planner');
+  assert.match(html, /data-fv-planner="team">.*Open the full planner/, 'the full planner, inside the calendar');
 });
 
 test('a player’s Who’s free view asks for their hours until they give them', () => {
@@ -416,7 +416,7 @@ test('a player’s Who’s free view asks for their hours until they give them',
   v.mine = { answered: false, blocks: [] };
   let html = v._fvPlayerHTML(2026, 10);
   assert.match(html, /You haven’t given your hours yet/);
-  assert.match(html, /<a class="btn fvgo" href="\/campaigns\/c1\/availability">.*Give my hours/);
+  assert.match(html, /<button type="button" class="btn fvgo" data-fv-planner="mine">.*Give my hours/);
   v.mine = { answered: true, tz: 'America/Chicago', blocks: [{ dayOfWeek: 6, startMinute: 1080, endMinute: 1320 }] };
   html = v._fvPlayerHTML(2026, 10);
   assert.match(html, /Sat<\/span><span class="ln"><b style="left:75\.00%;width:16\.67%">/, 'Saturday 6pm to 10pm');
@@ -460,4 +460,42 @@ test('a week read that lands while the day card unfolds redraws it once open', (
   v._pw.state = 'open';
   v._refreshWingOnceOpen();
   assert.equal(redraws, 1);
+});
+
+test('the full planner shows the week day by day, the month’s nights with who is coming, and Best times', () => {
+  const { def } = load();
+  const v = freeView(def, overlay());
+  v._plWeek = '2026-10-05';
+  v.nightsByMonth = { '2026_10': [night({ date: '2026-10-08' })] };
+  const html = v._plTeamHTML();
+  assert.match(html, /Week of Oct 5 – Oct 11/);
+  assert.match(html, /data-pl-day="2026_10_8"><b>Thu Oct 8<\/b>/);
+  assert.match(html, /Julie<\/span><span class="ln"><b style="left:75\.00%;width:16\.67%">/);
+  assert.match(html, /Game nights in M10/);
+  assert.match(html, /1 going · 0 maybe · 0 can’t · 2 no answer/);
+  assert.match(html, /<span class="plw y">Kael<\/span>/);
+  assert.match(html, /Best times in M10/);
+  assert.doesNotMatch(html, /Open the full planner/, 'the drawer does not link to itself');
+});
+
+test('painting your hours keeps alternating weeks and saves the every-week pattern', () => {
+  const { def } = load();
+  const v = freeView(def, overlay());
+  v.mine = { answered: true, tz: 'America/Chicago', blocks: [
+    { dayOfWeek: 6, startMinute: 1080, endMinute: 1320, state: 'available', weekCadence: 0 },
+    { dayOfWeek: 2, startMinute: 600, endMinute: 720, state: 'preferred', weekCadence: 1 },
+  ] };
+  v._plLoadGrid();
+  assert.equal(v._plGrid[5][18], 'available', 'Saturday 6pm, Monday first');
+  assert.equal(v._plGrid[1][10], '', 'the alternating Tuesday is not on the every-week grid');
+  v._plGrid[0][19] = 'preferred'; v._plGrid[0][20] = 'preferred';
+  const blocks = JSON.parse(JSON.stringify(v._plBlocks()));
+  assert.deepEqual(blocks, [
+    { dayOfWeek: 1, startMinute: 1140, endMinute: 1260, state: 'preferred', weekCadence: 0 },
+    { dayOfWeek: 6, startMinute: 1080, endMinute: 1320, state: 'available', weekCadence: 0 },
+    { dayOfWeek: 2, startMinute: 600, endMinute: 720, state: 'preferred', weekCadence: 1 },
+  ]);
+  v._plPaint = true; v._plTool = 'available';
+  assert.match(v._plMineHTML(), /data-c="5" data-h="18" data-st="available"/);
+  assert.match(v._plMineHTML(), /alternating-week hours are kept/);
 });

@@ -1635,6 +1635,54 @@
 .cal-v5 .fvn b{color:var(--ink);font-weight:600}
 .cal-v5 .fvn small{grid-column:2}
 .cal-v5 a.btn, .cal-v5 a.lnk{text-decoration:none}
+/* The full planner: the event editor's drawer, holding a week of everyone's hours, the month's game nights, Best times,
+   the players, and the painter for one's own weekly hours. */
+.cal-v5 .fvd{width:480px}
+.cal-v5 .fvd>.crease{display:flex;align-items:center;gap:10px}
+.cal-v5 .fvd>.crease #cal5-pltitle{flex:1;min-width:0}
+.cal-v5 .fvtabs button{height:24px}
+.cal-v5 .plweek{display:flex;align-items:center;gap:6px;margin-bottom:6px}
+.cal-v5 .plweek h4{flex:1;margin:0;text-align:center}
+.cal-v5 .plweek .ib{width:28px;height:28px}
+.cal-v5 .plday{padding:8px 0;border-top:1px solid var(--hair)}
+.cal-v5 .plday:first-of-type{border-top:0}
+.cal-v5 .pldh{display:flex;align-items:baseline;justify-content:space-between;gap:10px;font:500 11.5px/1.3 var(--sans);color:var(--mut)}
+.cal-v5 .pldh .lnk{padding:0;font:600 12.5px/1.3 var(--sans);color:var(--ink)}
+.cal-v5 .pltk{margin-top:6px}
+.cal-v5 .plnights{list-style:none;margin:0;padding:0}
+.cal-v5 .plnights li{padding:8px 0;border-top:1px solid var(--hair)}
+.cal-v5 .plnights li:first-child{border-top:0}
+.cal-v5 .plnb{display:block;width:100%;text-align:left;font:500 12.5px/1.35 var(--sans);color:var(--ink2);padding:0}
+.cal-v5 .plnb b{color:var(--ink);font-weight:600}
+.cal-v5 .plnb small{display:block;font-size:11.5px;color:var(--mut)}
+.cal-v5 .plnb:hover b{text-decoration:underline}
+.cal-v5 .plwho{display:flex;flex-wrap:wrap;gap:4px;margin-top:6px}
+.cal-v5 .plw{padding:3px 7px;border-radius:99px;font:550 10.5px/1 var(--sans);box-shadow:inset 0 0 0 1px var(--edge);color:var(--mut)}
+.cal-v5 .plw.y{color:var(--ink);background:var(--freeBand);box-shadow:inset 0 0 0 1px var(--free)}
+.cal-v5 .plw.m{color:var(--ink2);box-shadow:inset 0 0 0 1px var(--ink2)}
+.cal-v5 .plw.n{text-decoration:line-through}
+.cal-v5 .plquick{display:flex;flex-direction:column}
+.cal-v5 .plquick .fvsec{padding:14px 0;border-top:1px solid var(--hair)}
+.cal-v5 .plfoot{display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:10px}
+.cal-v5 .pltools{margin:10px 0}
+.cal-v5 .pltools button{display:inline-flex;align-items:center;gap:6px}
+.cal-v5 .pltools .plsw{display:inline-block;width:10px;height:10px;padding:0;border-radius:3px;background:var(--freeTrack)}
+.cal-v5 .pltools .plsw.available{background:var(--free)}
+.cal-v5 .pltools .plsw.preferred{background:var(--free);box-shadow:0 0 0 1.5px var(--gold)}
+.cal-v5 .plgrid{display:flex;flex-direction:column;gap:3px;user-select:none;touch-action:none}
+.cal-v5 .plgh{display:grid;grid-template-columns:40px repeat(4,1fr);font:500 9.5px/1 var(--sans);color:var(--mut)}
+.cal-v5 .plrow{display:flex;align-items:center;gap:6px}
+.cal-v5 .plrow .nm{flex:0 0 34px;font:550 11.5px/1 var(--sans);color:var(--ink2)}
+.cal-v5 .plcells{flex:1;display:grid;grid-template-columns:repeat(24,1fr);gap:1px}
+.cal-v5 .plc{height:22px;padding:0;border-radius:3px;background:var(--freeTrack);cursor:pointer}
+.cal-v5 .plc:nth-child(6n+1){margin-left:1px}
+.cal-v5 .plc[data-st="available"]{background:var(--free)}
+.cal-v5 .plc[data-st="preferred"]{background:var(--free);box-shadow:inset 0 0 0 2px var(--gold)}
+.cal-v5 .plc:hover{outline:1.5px solid var(--ink);outline-offset:-1px}
+.cal-v5 .plc:focus-visible{outline:2px solid var(--ink);outline-offset:0}
+.cal-v5 .plsave{display:flex;align-items:center;gap:12px;margin-top:12px}
+.cal-v5 .plstat{font:500 12px/1.4 var(--sans);color:var(--mut)}
+@media (max-width:600px){.cal-v5 .fvd{width:auto}}
 /* Planning a game night, in the day's card. */
 .cal-v5 .gnplan{display:flex;flex-direction:column;gap:9px;margin:4px 0 8px;padding:11px 12px 12px;border:1px solid var(--edge);border-radius:12px;background:var(--paper2)}
 .cal-v5 .gph{display:flex;align-items:baseline;justify-content:space-between;gap:8px;font:600 12.5px/1.2 var(--sans);color:var(--ink)}

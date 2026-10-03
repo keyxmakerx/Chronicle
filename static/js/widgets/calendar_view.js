@@ -1030,6 +1030,7 @@
       if (this._resizeHandler) window.removeEventListener('resize', this._resizeHandler);
       if (this._escHandler) document.removeEventListener('keydown', this._escHandler);
       if (this._mvOffHandler) document.removeEventListener('pointerdown', this._mvOffHandler, true);
+      if (this._plUp) document.removeEventListener('pointerup', this._plUp);
     },
 
     // --------------------------------------------------------------
@@ -1990,7 +1991,7 @@
       }
       h += '</section><section class="fvsec fvfoot">' +
         '<label class="fvsw"><input type="checkbox" data-fv-lines' + (this.showFree ? ' checked' : '') + '><span>Show who’s free on the days</span></label>' +
-        '<span class="fvlinks"><a class="lnk" href="' + esc(this._availURL()) + '">Change my hours</a><a class="btn sm" href="' + esc(this._availURL('overlay')) + '"><i class="fa-solid fa-up-right-and-down-left-from-center"></i> Open the full planner</a></span></section>';
+        '<span class="fvlinks"><button type="button" class="lnk" data-fv-planner="mine">Change my hours</button><button type="button" class="btn sm" data-fv-planner="team"><i class="fa-solid fa-up-right-and-down-left-from-center"></i> Open the full planner</button></span></section>';
       return h;
     },
 
@@ -1999,9 +2000,9 @@
       if (mine === undefined) h += '<p class="none">Loading your hours…</p>';
       else if (!mine || !mine.answered) {
         h += '<p class="fvlead">You haven’t given your hours yet. The DM uses them to pick game nights.</p>' +
-          '<a class="btn fvgo" href="' + esc(this._availURL()) + '"><i class="fa-solid fa-user-pen"></i> Give my hours</a>';
+          '<button type="button" class="btn fvgo" data-fv-planner="mine"><i class="fa-solid fa-user-pen"></i> Give my hours</button>';
       } else {
-        h += this._mineWeekHTML(mine) + '<a class="btn sm" href="' + esc(this._availURL()) + '"><i class="fa-solid fa-user-pen"></i> Change my hours</a>';
+        h += this._mineWeekHTML(mine) + '<button type="button" class="btn sm" data-fv-planner="mine"><i class="fa-solid fa-user-pen"></i> Change my hours</button>';
       }
       h += '</section><section class="fvsec fvnights"><h4>Game nights this month</h4>';
       var today = this._todayIso(), rows = [];
@@ -2029,9 +2030,266 @@
         (mine.tz ? '<p class="fnote">Repeats every week, in ' + esc(mine.tz.replace(/_/g, ' ')) + ' time.</p>' : '');
     },
 
+    // --------------------------------------------------------------
+    // The full planner: a drawer out of the calendar's right edge, like
+    // the full event editor, so the whole of Who's free stays inside the
+    // calendar. The Director sees a week of everyone's hours, day by day,
+    // the month's game nights with who is coming, Best times and the
+    // players; anyone can paint their own weekly hours here, which is the
+    // Availability page's every-week pattern (alternating weeks and
+    // one-off days stay on that page, and are kept as they are).
+    // --------------------------------------------------------------
+    openPlanner: function (o) {
+      var self = this;
+      o = o || {};
+      if (!this.freeCan) return;
+      var back = document.activeElement;
+      this.closeAllPanels({ instant: true });
+      if (!this.plEl) {
+        var dock = this.dockEl;
+        this.plScrim = $('.dscrim', dock);
+        if (!this.plScrim) { this.plScrim = document.createElement('div'); this.plScrim.className = 'dscrim'; dock.appendChild(this.plScrim); }
+        this.plEl = document.createElement('aside');
+        this.plEl.className = 'drawer ded fvd';
+        this.plEl.setAttribute('role', 'dialog');
+        this.plEl.setAttribute('aria-label', 'Who’s free');
+        this.plEl.tabIndex = -1;
+        dock.appendChild(this.plEl);
+        this.plEl.addEventListener('click', function (e) { self._plClick(e); });
+        this.plEl.addEventListener('pointerdown', function (e) { self._paintStart(e); });
+        this.plEl.addEventListener('pointerover', function (e) { self._paintMove(e); });
+        this._plUp = function () { self._paintEnd(); };
+        document.addEventListener('pointerup', this._plUp);
+        this.plScrim.addEventListener('click', function () { if (self.plannerOpen()) self.closePlanner(); });
+      }
+      this._plBack = back;
+      this._plWeek = this._plWeek || isoMonday(this._todayIso() || (this.view.y + '-' + pad2(this.view.m) + '-01'));
+      this._plPaint = o.paint || !this.freeDirector;
+      this.plEl.innerHTML = this._plHTML();
+      this.plEl.classList.add('open');
+      this.dockEl.classList.add('on');
+      setTimeout(function () { self.plEl.focus({ preventScroll: true }); }, reducedMotion() ? 20 : 260);
+      var reads = [this.fetchFreeWeek(this._plWeek), this.fetchFreeMonth(this.view.y, this.view.m), this.fetchMine()];
+      Promise.all(reads).then(function () { self._plLoadGrid(); self.refreshPlanner(); });
+    },
+
+    plannerOpen: function () { return !!(this.plEl && this.plEl.classList.contains('open')); },
+
+    closePlanner: function (quiet) {
+      if (!this.plannerOpen()) return;
+      this.plEl.classList.remove('open');
+      this.dockEl.classList.remove('on');
+      this._painting = null;
+      if (!quiet && this._plBack && this._plBack.isConnected) this._plBack.focus({ preventScroll: true });
+    },
+
+    refreshPlanner: function () {
+      if (!this.plannerOpen()) return;
+      var body = this.plEl.querySelector('.dbody'), top = body ? body.scrollTop : 0;
+      this.plEl.innerHTML = this._plHTML();
+      body = this.plEl.querySelector('.dbody');
+      if (body) body.scrollTop = top;
+    },
+
+    _plWeekWords: function (monday) {
+      var a = realDateWords(monday), b = realDateWords(isoAddDays(monday, 6));
+      return a.replace(/^\w+ /, '') + ' – ' + b.replace(/^\w+ /, '');
+    },
+
+    _plHTML: function () {
+      var dir = this.freeDirector, paint = this._plPaint;
+      var tabs = dir ? '<div class="rseg fvtabs" role="tablist"><button type="button" role="tab" data-pl-tab="team" aria-pressed="' + !paint + '">Everyone</button>' +
+        '<button type="button" role="tab" data-pl-tab="mine" aria-pressed="' + !!paint + '">My hours</button></div>' : '';
+      return '<div class="crease"><span id="cal5-pltitle">Who’s free</span>' + tabs + '<button type="button" class="x" data-pl-close aria-label="Close">✕</button></div>' +
+        '<div class="dbody">' + (paint ? this._plMineHTML() : this._plTeamHTML()) + '</div>';
+    },
+
+    _plTeamHTML: function () {
+      var self = this, monday = this._plWeek, y = this.view.y, m = this.view.m, monthName = ((this.cal.months || [])[m - 1] || {}).name || '';
+      var h = '<section class="dsec"><div class="plweek"><button type="button" class="ib" data-pl-week="-1" aria-label="Previous week"><i class="fa-solid fa-chevron-left"></i></button>' +
+        '<h4>Week of ' + esc(this._plWeekWords(monday)) + '</h4><button type="button" class="ib" data-pl-week="1" aria-label="Next week"><i class="fa-solid fa-chevron-right"></i></button></div>';
+      var any = false;
+      for (var i = 0; i < 7; i++) {
+        var iso = isoAddDays(monday, i), data = this.freeByDate[iso];
+        if (!data || !data.detail) continue;
+        any = true;
+        var all = this._freeRuns(data.hours, data.members.filter(function (mem) { return mem.answered; }).length)[0];
+        var w = all ? { start: all[0], end: all[1], free: data.total } : this._bestWindow(data, 1);
+        var p = iso.split('-'), key = dayKey(+p[0], +p[1], +p[2]);
+        h += '<div class="plday"><div class="pldh"><button type="button" class="lnk" data-pl-day="' + esc(key) + '"><b>' + esc(realDateWords(iso)) + '</b></button>' +
+          '<span>' + esc(!w ? 'Nobody free' : (w.free === data.total ? 'Everyone ' : w.free + ' of ' + data.total + ' ') + this._windowWords(w, iso)) + '</span></div>' +
+          '<div class="flines"><span class="bandwrap" aria-hidden="true">' + this._bandHTML(data, 'band2') + '</span>' + data.members.map(function (mem) {
+            return '<div class="fr"><span class="nm">' + esc(mem.name) + '</span>' + self._lineHTML(mem.segs) + '<span class="sr">' + esc(mem.name + ': ' + self._segsWords(mem)) + '</span></div>';
+          }).join('') + '</div></div>';
+      }
+      if (!any) h += '<p class="none">Loading who’s free…</p>';
+      else h += '<div class="fticks pltk" aria-hidden="true"><span>12am</span><span>6am</span><span>noon</span><span>6pm</span><span>12am</span></div>';
+      h += '</section>';
+      // The month's game nights, with who is coming to each.
+      var nights = [], today = this._todayIso();
+      for (var d = 1; d <= CalDate.monthDays(this.cal, m - 1, y); d++) {
+        this.nightsOnDay(y, m, d).forEach(function (n) { if (n.date >= today) nights.push({ n: n, key: dayKey(y, m, d) }); });
+      }
+      h += '<section class="dsec"><h4>Game nights in ' + esc(monthName) + '</h4>';
+      h += nights.length ? '<ul class="plnights">' + nights.map(function (x) {
+        var n = x.n, t = n.tally || {}, who = (n.roster || []).filter(function (a) { return !a.excluded; }).map(function (a) {
+          return '<span class="plw ' + (a.answer === 'yes' ? 'y' : a.answer === 'maybe' ? 'm' : a.answer === 'no' ? 'n' : 'q') + '">' + esc(a.name) + '</span>';
+        }).join('');
+        return '<li><button type="button" class="plnb" data-pl-day="' + esc(x.key) + '" data-pl-night="' + esc(self._gnId(n)) + '"><b>' + esc(realDateWords(n.date)) + '</b> · ' + esc(n.name) +
+          '<small>' + (t.going || 0) + ' going · ' + (t.maybe || 0) + ' maybe · ' + (t.cant || 0) + ' can’t · ' + (t.noAnswer || 0) + ' no answer</small></button><div class="plwho">' + who + '</div></li>';
+      }).join('') + '</ul>' : '<p class="none">No game nights left this month.</p>';
+      h += '</section>';
+      // Best times and the players, as in the quick view.
+      var quick = this._fvDirectorHTML(y, m, monthName).replace(/<section class="fvsec fvfoot">[\s\S]*$/, '');
+      h += '<div class="plquick">' + quick + '</div>';
+      h += '<section class="dsec plfoot"><label class="fvsw"><input type="checkbox" data-fv-lines' + (this.showFree ? ' checked' : '') + '><span>Show who’s free on the days</span></label>' +
+        '<a class="lnk" href="' + esc(this._availURL('overlay')) + '">Polls and alternating weeks</a></section>';
+      return h;
+    },
+
+    // --- Painting your own weekly hours ---------------------------------
+    // grid[col 0..6, Monday first][hour 0..23] = '' | available | preferred,
+    // the Availability page's every-week layer at the same one-hour grain.
+    _plLoadGrid: function () {
+      var mine = this.mine || {}, grid = [], keep = [];
+      for (var c = 0; c < 7; c++) { grid.push([]); for (var h = 0; h < 24; h++) grid[c].push(''); }
+      (mine.blocks || []).forEach(function (b) {
+        if (b.weekCadence === 1 || b.weekCadence === 2) { keep.push(b); return; }
+        var col = (b.dayOfWeek + 6) % 7;
+        for (var hh = Math.floor(b.startMinute / 60); hh < Math.ceil(b.endMinute / 60) && hh < 24; hh++) grid[col][hh] = b.state || 'available';
+      });
+      this._plGrid = grid;
+      this._plKeep = keep; // alternating-week blocks, sent back untouched
+      this._plTool = this._plTool || 'available';
+      this._plDirty = false;
+    },
+
+    _plBlocks: function () {
+      var out = [], g = this._plGrid;
+      for (var c = 0; c < 7; c++) {
+        var run = null;
+        for (var h = 0; h <= 24; h++) {
+          var st = h < 24 ? g[c][h] : '';
+          if (run && run.st === st) continue;
+          if (run) out.push({ dayOfWeek: (c + 1) % 7, startMinute: run.h * 60, endMinute: h * 60, state: run.st, weekCadence: 0 });
+          run = st ? { st: st, h: h } : null;
+        }
+      }
+      return out.concat(this._plKeep || []);
+    },
+
+    _plMineHTML: function () {
+      if (!this._plGrid) return '<section class="dsec"><p class="none">Loading your hours…</p></section>';
+      var self = this, names = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'], zone = (this.mine && this.mine.tz) || browserZone() || '';
+      var tools = [['available', 'Free'], ['preferred', 'Best'], ['', 'Clear']];
+      var h = '<section class="dsec"><h4>Your hours</h4>' +
+        '<p class="dnote">Drag across the hours you can usually play. They repeat every week' + (zone ? ', in ' + esc(zone.replace(/_/g, ' ')) + ' time' : '') + '.</p>' +
+        '<div class="rseg pltools" role="group" aria-label="Paint">' + tools.map(function (t) {
+          return '<button type="button" data-pl-tool="' + t[0] + '" aria-pressed="' + (self._plTool === t[0]) + '"><span class="plsw ' + (t[0] || 'none') + '"></span>' + t[1] + '</button>';
+        }).join('') + '</div>' +
+        '<div class="plgrid" role="grid" aria-label="Your weekly hours"><div class="plgh" aria-hidden="true"><span></span><span>12am</span><span>6am</span><span>noon</span><span>6pm</span></div>';
+      for (var c = 0; c < 7; c++) {
+        h += '<div class="plrow" role="row"><span class="nm">' + names[c] + '</span><span class="plcells">';
+        for (var hr = 0; hr < 24; hr++) {
+          var st = this._plGrid[c][hr];
+          h += '<button type="button" class="plc" role="gridcell" data-c="' + c + '" data-h="' + hr + '" data-st="' + st + '" aria-label="' + names[c] + ' ' + ampm(hr * 60) + (st ? ', ' + (st === 'preferred' ? 'best' : 'free') : '') + '"></button>';
+        }
+        h += '</span></div>';
+      }
+      h += '</div><div class="plsave"><button type="button" class="btn primary" data-pl-save' + (this._plDirty ? '' : ' disabled') + '>Save my hours</button><span class="plstat" role="status">' + esc(this._plStatus || '') + '</span></div>';
+      if ((this._plKeep || []).length) h += '<p class="dnote">Your alternating-week hours are kept as they are.</p>';
+      h += '<p class="dnote"><a class="lnk" href="' + esc(this._availURL()) + '">Alternating weeks and one-off days</a></p></section>';
+      return h;
+    },
+
+    _paintStart: function (e) {
+      var c = e.target.closest && e.target.closest('.plc');
+      if (!c || !this._plGrid) return;
+      e.preventDefault();
+      var col = +c.dataset.c, hr = +c.dataset.h, cur = this._plGrid[col][hr];
+      this._painting = { v: cur === this._plTool ? '' : this._plTool };
+      this._paintCell(c);
+    },
+    _paintMove: function (e) {
+      if (!this._painting) return;
+      var c = e.target.closest && e.target.closest('.plc');
+      if (c) this._paintCell(c);
+    },
+    _paintEnd: function () {
+      if (!this._painting) return;
+      this._painting = null;
+      var btn = this.plEl && this.plEl.querySelector('[data-pl-save]');
+      if (btn) btn.disabled = !this._plDirty;
+    },
+    _paintCell: function (c) {
+      var col = +c.dataset.c, hr = +c.dataset.h, v = this._painting.v;
+      if (this._plGrid[col][hr] === v) return;
+      this._plGrid[col][hr] = v;
+      c.dataset.st = v;
+      this._plDirty = true;
+      this._plStatus = '';
+    },
+
+    _plSave: function (btn) {
+      var self = this, zone = (this.mine && this.mine.tz) || browserZone() || 'UTC';
+      btn.disabled = true;
+      this._setPlStatus('Saving…');
+      Chronicle.apiFetch('/campaigns/' + encodeURIComponent(this.campaignId) + '/availability/mine', { method: 'PUT', body: { tz: zone, blocks: this._plBlocks() } })
+        .then(function (resp) {
+          if (!resp.ok) return Promise.reject();
+          self._plDirty = false;
+          self.mine = { answered: true, tz: zone, blocks: self._plBlocks() };
+          // Everyone's lines include this viewer's, so the weeks are read again.
+          self._freeWeeks = {};
+          self.freeByDate = {};
+          self._plStatus = 'Saved. The DM sees your new hours.';
+          return Promise.all([self.fetchFreeWeek(self._plWeek), self.fetchFreeMonth(self.view.y, self.view.m)]);
+        })
+        .then(function () { self._paintMonth(); self.refreshPlanner(); self.say('Your hours are saved.'); })
+        .catch(function () { btn.disabled = false; self._setPlStatus('Your hours could not be saved. Try again.'); });
+    },
+    _setPlStatus: function (msg) {
+      this._plStatus = msg;
+      var st = this.plEl && this.plEl.querySelector('.plstat');
+      if (st) st.textContent = msg;
+    },
+
+    _plClick: function (e) {
+      var self = this, t = e.target;
+      if (t.closest('[data-pl-close]')) { this.closePlanner(); return; }
+      var tab = t.closest('[data-pl-tab]');
+      if (tab) { this._plPaint = tab.dataset.plTab === 'mine'; this.refreshPlanner(); return; }
+      var tool = t.closest('[data-pl-tool]');
+      if (tool) { this._plTool = tool.dataset.plTool; this.refreshPlanner(); return; }
+      if (t.closest('[data-pl-save]')) { this._plSave(t.closest('[data-pl-save]')); return; }
+      var wk = t.closest('[data-pl-week]');
+      if (wk) {
+        this._plWeek = isoAddDays(this._plWeek, 7 * +wk.dataset.plWeek);
+        this.refreshPlanner();
+        this.fetchFreeWeek(this._plWeek).then(function () { self.refreshPlanner(); });
+        return;
+      }
+      var lines = t.closest('[data-fv-lines]');
+      if (lines) { this.setShowFree(lines.checked); return; }
+      var nudge = t.closest('[data-best-nudge]');
+      if (nudge) { this._fvHandleClick(e); return; }
+      var go = t.closest('[data-pl-day], [data-best-open]');
+      if (go) {
+        var key = go.dataset.plDay || go.dataset.bestOpen, night = go.dataset.plNight || go.dataset.bestNight || null;
+        var plan = go.dataset.bestPlan ? { iso: go.dataset.bestPlan, start: parseInt(go.dataset.planAt, 10) || 19 } : null;
+        var k = parseDayKey(key);
+        this.closePlanner(true);
+        if (k.y !== this.view.y || k.m !== this.view.m) { this.view = { y: k.y, m: k.m }; this.renderMonth(); }
+        this._planFor = plan;
+        setTimeout(function () { self._planFor = plan; self.openWing(key, night); }, reducedMotion() ? 20 : 300);
+      }
+    },
+
     _fvHandleClick: function (e) {
       var self = this, open = e.target.closest('[data-best-open]'), nudge = e.target.closest('[data-best-nudge]');
       if (e.target.closest('[data-close]')) { this.closeFreeView(); return; }
+      var pl = e.target.closest('[data-fv-planner]');
+      if (pl) { this.openPlanner({ paint: pl.dataset.fvPlanner === 'mine' }); return; }
       if (open) {
         var key = open.dataset.bestOpen, night = open.dataset.bestNight || null;
         this._planFor = open.dataset.bestPlan ? { iso: open.dataset.bestPlan, start: parseInt(open.dataset.planAt, 10) || 19 } : null;
@@ -2445,6 +2703,7 @@
       // one layer at a time rather than closing everything at once.
       this._escHandler = function (e) {
         if (e.key !== 'Escape') return;
+        if (self.plannerOpen()) { self.closePlanner(); return; }
         if (self.evpEl.classList.contains('open')) { self.closeEventDetail(); return; }
         if (self.mvEl.classList.contains('open')) { self.closeMoonView(); return; }
         if (self.fvEl.classList.contains('open')) { self.closeFreeView(); return; }
@@ -2497,6 +2756,7 @@
       this.closeEventDetail();
       this.closeMoonView();
       this.closeFreeView();
+      this.closePlanner(true);
       this.closePop();
     },
 
