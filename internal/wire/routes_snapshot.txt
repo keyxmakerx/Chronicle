@@ -339,6 +339,7 @@ GET	/maps/:mid/tokens	internal/plugins/maps/routes.go
 GET	/maps/:mid/tokens	internal/plugins/maps/routes.go
 GET	/maps/:mid/tokens/:tid	internal/plugins/maps/routes.go
 GET	/maps/:mid/viewer	internal/plugins/maps/routes.go
+GET	/maps/look	internal/plugins/syncapi/routes.go
 GET	/maps/marker-icons	internal/plugins/maps/routes.go
 GET	/marker-icons	internal/extensions/routes.go
 GET	/me	internal/plugins/entities/routes.go
