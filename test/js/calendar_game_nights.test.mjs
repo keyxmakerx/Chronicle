@@ -277,3 +277,112 @@ test('the next night is the first not yet played, across months', async () => {
   const n = await v._nextNight();
   assert.equal(n.sessionId, 's3');
 });
+
+// Who's free: a week as the availability overlay sends it, for the
+// Director (with names and lanes).
+function overlay(over) {
+  const days = Array.from({ length: 7 }, (_, i) => ({
+    date: '2026-10-' + String(5 + i).padStart(2, '0'),
+    hours: Array.from({ length: 24 }, (_, h) => ({ free: 0 })),
+  }));
+  // Thu Oct 8 (day 3): everyone 19-22, Jack all day, Julie 18-22.
+  const lanes = {
+    jack: [{ day: 3, start: 0, end: 1440 }],
+    julie: [{ day: 3, start: 1080, end: 1320 }],
+    bryn: [{ day: 3, start: 1140, end: 1380 }],
+  };
+  for (let h = 0; h < 24; h++) {
+    let n = 1; // Jack
+    if (h >= 18 && h < 22) n++;
+    if (h >= 19 && h < 23) n++;
+    days[3].hours[h].free = n;
+  }
+  return Object.assign({
+    weekStart: '2026-10-05', totalMembers: 4, includeDetail: true, days,
+    members: [
+      { userId: 'jack', name: 'Jack', hasAnswered: true, lanes: lanes.jack },
+      { userId: 'julie', name: 'Julie', hasAnswered: true, lanes: lanes.julie },
+      { userId: 'bryn', name: 'Bryn', hasAnswered: true, lanes: lanes.bryn },
+      { userId: 'dee', name: 'Dee', hasAnswered: false, lanes: [] },
+    ],
+  }, over || {});
+}
+
+function freeView(def, ov) {
+  const v = view(def, []);
+  v.cal = { mode: 'reallife', tracks_real_time: true, current_year: 2026, current_month: 10, current_day: 3, months: Array.from({ length: 12 }, (_, i) => ({ name: 'M' + (i + 1), days: 31 })) };
+  v.freeCan = true; v.freeDirector = true; v.showFree = true; v.role = 3;
+  v.freeByDate = {}; v._freeWeeks = {};
+  if (ov) v._fileFreeWeek(ov);
+  return v;
+}
+
+test('each day draws one line per player, green where they are free', () => {
+  const { def } = load();
+  const v = freeView(def, overlay());
+  const html = v._freeCellHTML(2026, 10, 8);
+  assert.equal((html.match(/class="ln"/g) || []).length, 4);
+  assert.match(html, /left:0\.00%;width:100\.00%/, 'Jack is free all day');
+  assert.match(html, /left:75\.00%;width:16\.67%/, 'Julie is free 6pm to 10pm');
+  v.showFree = false;
+  assert.equal(v._freeCellHTML(2026, 10, 8), '', 'nothing drawn with the switch off');
+});
+
+test('the band marks only the hours when everyone is free', () => {
+  const { def } = load();
+  const ov = overlay({ totalMembers: 3, members: overlay().members.slice(0, 3) });
+  const v = freeView(def, ov);
+  const html = v._freeCellHTML(2026, 10, 8);
+  assert.match(html, /class="fband" style="left:79\.17%;width:12\.50%"/, '7pm to 10pm');
+  assert.doesNotMatch(v._freeCellHTML(2026, 10, 9), /class="fband"/);
+});
+
+test('hovering names each player and their hours', () => {
+  const { def } = load();
+  const v = freeView(def, overlay());
+  const html = v._freeGlanceHTML('2026-10-08');
+  assert.match(html, /Jack<\/span><span>free all day/);
+  assert.match(html, /Julie<\/span><span>6pm to 10pm/);
+  assert.match(html, /Dee<\/span><span>hasn’t painted hours yet/);
+});
+
+test('a player sees counts, never names', () => {
+  const { def } = load();
+  const ov = overlay({ includeDetail: false, members: [] });
+  const v = freeView(def, ov);
+  v.freeDirector = false; v.showFree = false; v.role = 1;
+  assert.equal(v._freeCellHTML(2026, 10, 8), '');
+  const wing = v._freeWingHTML({ y: 2026, m: 10, d: 8 });
+  assert.match(wing, /3 of 4 free 7pm to 10pm/);
+  assert.doesNotMatch(wing, /Julie|class="flines"/);
+  assert.match(wing, /Change my hours/);
+  assert.doesNotMatch(wing, /Plan a game night/);
+});
+
+test('Best times picks the strongest three-hour slot, with who is missing', () => {
+  const { def } = load();
+  const v = freeView(def, overlay());
+  const best = v.bestTimes(2026, 10);
+  assert.equal(best.length, 1);
+  assert.equal(best[0].iso, '2026-10-08');
+  assert.deepEqual({ ...best[0].w }, { start: 19, end: 22, free: 3 });
+  v.renderBest = def.renderBest;
+  v.bestEl = { hidden: true, innerHTML: '' };
+  v.renderBest();
+  assert.match(v.bestEl.innerHTML, /Thu Oct 8<\/b>, 7pm to 10pm/);
+  assert.match(v.bestEl.innerHTML, /3 of 4 free · Dee hasn’t painted hours/);
+  assert.match(v.bestEl.innerHTML, /plan_date=2026-10-08&amp;plan_time=19:00/);
+  assert.match(v.bestEl.innerHTML, /1 player hasn’t painted hours yet/);
+});
+
+test('the month reads the weeks its days fall in, in the calendar zone', async () => {
+  const { def, calls } = load();
+  const v = freeView(def);
+  v.calZone = 'America/Chicago';
+  await v.fetchFreeMonth(2026, 10);
+  const weeks = calls.map((c) => c.url.match(/week=([\d-]+)/)[1]);
+  assert.deepEqual(weeks, ['2026-09-28', '2026-10-05', '2026-10-12', '2026-10-19', '2026-10-26']);
+  assert.match(calls[0].url, /tz=America%2FChicago/);
+  await v.fetchFreeMonth(2026, 10);
+  assert.equal(calls.length, 5, 'a week is read once');
+});

@@ -11,6 +11,7 @@ import (
 	"github.com/keyxmakerx/chronicle/internal/middleware"
 	"github.com/keyxmakerx/chronicle/internal/plugins/auth"
 	"github.com/keyxmakerx/chronicle/internal/plugins/campaigns"
+	"github.com/keyxmakerx/chronicle/internal/timeutil"
 )
 
 // RealWorldCalendarFinder names the calendar game nights are answered in:
@@ -88,4 +89,33 @@ func sidebarNightDate(s Session, today string) string {
 // uses.
 func gameNightsToday() string {
 	return time.Now().UTC().Add(-14 * time.Hour).Format("2006-01-02")
+}
+
+// SessionPlan pre-fills the New Session form when the calendar's "Plan it"
+// opens the Sessions page: a date, a start time and the zone that time is
+// in. The zero value is no plan, and the form opens empty as before.
+type SessionPlan struct {
+	Date string
+	Time string
+	TZ   string
+}
+
+// Active reports whether there is a plan to open the form with.
+func (p SessionPlan) Active() bool { return p.Date != "" }
+
+// sessionPlanFrom reads ?plan_date=&plan_time=&plan_tz= and keeps only
+// well-formed values: a bad date drops the whole plan, a bad time or zone
+// drops just that field.
+func sessionPlanFrom(date, clock, tz string) SessionPlan {
+	if _, err := time.Parse("2006-01-02", date); err != nil {
+		return SessionPlan{}
+	}
+	p := SessionPlan{Date: date}
+	if _, err := time.Parse("15:04", clock); err == nil {
+		p.Time = clock
+	}
+	if tz != "" && timeutil.IsValidLocation(tz) {
+		p.TZ = tz
+	}
+	return p
 }

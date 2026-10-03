@@ -12,20 +12,20 @@ import (
 )
 
 // SessionListPage renders the full sessions page.
-templ SessionListPage(cc *campaigns.CampaignContext, sessions []Session, csrfToken string, isOwner, isScribe bool, userID string) {
+templ SessionListPage(cc *campaigns.CampaignContext, sessions []Session, csrfToken string, isOwner, isScribe bool, userID string, plan SessionPlan) {
 	@layouts.App(cc.Campaign.Name + " - Sessions") {
 		<div class="max-w-4xl mx-auto">
 			@components.Breadcrumbs([]components.BreadcrumbItem{
 				{Label: cc.Campaign.Name, Href: fmt.Sprintf("/campaigns/%s", cc.Campaign.ID), Icon: "fa-dice-d20"},
 				{Label: "Sessions"},
 			})
-			@SessionListFragment(cc, sessions, csrfToken, isOwner, isScribe, userID)
+			@SessionListFragment(cc, sessions, csrfToken, isOwner, isScribe, userID, plan)
 		</div>
 	}
 }
 
 // SessionListFragment renders just the session list content (for HTMX).
-templ SessionListFragment(cc *campaigns.CampaignContext, sessions []Session, csrfToken string, isOwner, isScribe bool, userID string) {
+templ SessionListFragment(cc *campaigns.CampaignContext, sessions []Session, csrfToken string, isOwner, isScribe bool, userID string, plan SessionPlan) {
 	<div class="flex items-center justify-between mb-6">
 		<div>
 			<h1 class="text-2xl font-bold text-fg">Sessions</h1>
@@ -135,7 +135,7 @@ templ SessionListFragment(cc *campaigns.CampaignContext, sessions []Session, csr
 		}
 	}
 	if isScribe {
-		@createSessionModal(cc, csrfToken)
+		@createSessionModal(cc, csrfToken, plan)
 	}
 }
 
@@ -156,15 +156,26 @@ templ sessionStatusBadge(status string) {
 	}
 }
 
-// createSessionModal renders the create session dialog.
-templ createSessionModal(cc *campaigns.CampaignContext, csrfToken string) {
-	<dialog id="create-session-modal" class="rounded-lg shadow-xl bg-surface border border-edge p-0 w-full max-w-md backdrop:bg-black/50">
+// createSessionModal renders the create session dialog. With a plan (the
+// calendar's "Plan it") it opens at once with the day and time filled in.
+templ createSessionModal(cc *campaigns.CampaignContext, csrfToken string, plan SessionPlan) {
+	<dialog
+		id="create-session-modal"
+		class="rounded-lg shadow-xl bg-surface border border-edge p-0 w-full max-w-md backdrop:bg-black/50"
+		if plan.Active() {
+			x-data
+			x-init="$el.showModal()"
+		}
+	>
 		<form
 			method="POST"
 			action={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/sessions", cc.Campaign.ID)) }
 			class="p-6"
 		>
 			<input type="hidden" name="csrf_token" value={ csrfToken }/>
+			if plan.TZ != "" {
+				<input type="hidden" name="scheduled_tz" value={ plan.TZ }/>
+			}
 			<h2 class="text-lg font-semibold text-fg mb-4">New Session</h2>
 			<div class="space-y-4" x-data="{ recurring: false, recType: '' }">
 				<div>
@@ -174,11 +185,11 @@ templ createSessionModal(cc *campaigns.CampaignContext, csrfToken string) {
 				<div class="grid grid-cols-2 gap-3">
 					<div>
 						<label class="block text-sm font-medium text-fg-body mb-1">Scheduled Date</label>
-						<input type="date" name="scheduled_date" class="input w-full"/>
+						<input type="date" name="scheduled_date" class="input w-full" value={ plan.Date }/>
 					</div>
 					<div>
 						<label class="block text-sm font-medium text-fg-body mb-1">Time <span class="text-fg-muted font-normal">(optional)</span></label>
-						<input type="time" name="scheduled_time" class="input w-full"/>
+						<input type="time" name="scheduled_time" class="input w-full" value={ plan.Time }/>
 					</div>
 					<p class="text-xs text-fg-muted mt-1 col-span-2">When does this session happen in real life?</p>
 				</div>

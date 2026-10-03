@@ -42,3 +42,24 @@ func TestSidebarNightDate(t *testing.T) {
 		})
 	}
 }
+
+func TestSessionPlanFrom(t *testing.T) {
+	tests := []struct {
+		name            string
+		date, clock, tz string
+		want            SessionPlan
+	}{
+		{"whole plan", "2026-10-08", "19:00", "America/Chicago", SessionPlan{"2026-10-08", "19:00", "America/Chicago"}},
+		{"no date, no plan", "", "19:00", "America/Chicago", SessionPlan{}},
+		{"bad date, no plan", "Thursday", "19:00", "", SessionPlan{}},
+		{"bad time dropped", "2026-10-08", "7pm", "", SessionPlan{Date: "2026-10-08"}},
+		{"unknown zone dropped", "2026-10-08", "19:00", "Mars/Olympus", SessionPlan{Date: "2026-10-08", Time: "19:00"}},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := sessionPlanFrom(tt.date, tt.clock, tt.tz); got != tt.want {
+				t.Fatalf("got %+v, want %+v", got, tt.want)
+			}
+		})
+	}
+}
