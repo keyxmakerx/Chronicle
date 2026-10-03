@@ -2914,13 +2914,13 @@ func (a *App) RegisterRoutes() {
 	// htmx:afterSettle/htmx:load and no-ops when its mount is absent.
 	//
 	// The calendar's page scripts: calendar_view.js mounts on
-	// data-widget="calendar_view" (the calendar's own page, or a Calendars
-	// page preview unfolded in place), calendar_editor.js self-gates on that
+	// data-widget="calendar_view" (the calendar's own page, however it was
+	// reached), calendar_editor.js self-gates on that
 	// mount's data-can-edit="true" and opens calendar_event_drawer.js's full
 	// event editor and calendar_weather_sheet.js's Generate sheet (both
 	// loaded first so they exist when the editor binds; the drawer's
 	// repeat-by-rule logic is calendar_rule.js, loaded before it), and
-	// calendar_almanac.js waits for a Calendars page preview. rulebook.js
+	// calendar_open.js peeks and opens the Calendars page's cards. rulebook.js
 	// mounts on the Rules page's data-widget="rulebook" when a system ships a
 	// book. All are no-ops on every other page, same as every entry here.
 	pluginBodyScripts := []string{
@@ -2930,7 +2930,7 @@ func (a *App) RegisterRoutes() {
 		"/static/js/widgets/calendar_event_drawer.js",
 		"/static/js/widgets/calendar_weather_sheet.js",
 		"/static/js/widgets/calendar_editor.js",
-		"/static/js/calendar_almanac.js",
+		"/static/js/calendar_open.js",
 		"/static/js/widgets/rulebook.js",
 	}
 
