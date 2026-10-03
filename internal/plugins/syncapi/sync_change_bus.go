@@ -28,6 +28,7 @@ var changeFeedTypes = map[string]string{
 	"layer":          "layer",
 	"fog":            "fog",
 	"map":            "map",
+	"relation":       "relation",
 	"calendar.event": "calendar_event",
 }
 
@@ -46,8 +47,9 @@ func classifyChange(t ws.MessageType) (resourceType, op string, ok bool) {
 	switch s[i+1:] {
 	case "created":
 		op = "created"
-	case "updated", "moved":
-		// A token move changes the token; the client refetches it either way.
+	case "updated", "moved", "metadata_updated":
+		// A token move changes the token and a relation's metadata write
+		// changes the relation; the client refetches either way.
 		op = "updated"
 	case "deleted":
 		op = "deleted"

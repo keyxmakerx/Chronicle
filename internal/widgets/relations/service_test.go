@@ -18,6 +18,7 @@ type mockRelationRepo struct {
 	deleteFn      func(ctx context.Context, id int) error
 	findReverseFn func(ctx context.Context, sourceEntityID, targetEntityID, relationType string) (*Relation, error)
 	listByCampaignFn func(campaignID string) ([]GraphRelation, error)
+	updateIfFn       func() (bool, error)
 }
 
 func (m *mockRelationRepo) Create(ctx context.Context, rel *Relation) error {
@@ -68,6 +69,9 @@ func (m *mockRelationRepo) UpdateMetadata(_ context.Context, _ int, _ json.RawMe
 }
 
 func (m *mockRelationRepo) UpdateMetadataIf(_ context.Context, _ int, _, _ json.RawMessage) (bool, error) {
+	if m.updateIfFn != nil {
+		return m.updateIfFn()
+	}
 	return true, nil
 }
 

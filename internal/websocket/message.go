@@ -69,6 +69,15 @@ const (
 	MsgEntityTypeDeleted MessageType = "entity_type.deleted"
 )
 
+// Relation sync messages, one per relation row written. ResourceID is the
+// row's source entity, so a client can follow one entity's relations (a
+// character's inventory) and the change feed collapses them per entity.
+const (
+	MsgRelationCreated         MessageType = "relation.created"
+	MsgRelationDeleted         MessageType = "relation.deleted"
+	MsgRelationMetadataUpdated MessageType = "relation.metadata_updated"
+)
+
 // Note sync messages.
 const (
 	MsgNoteCreated MessageType = "note.created"
