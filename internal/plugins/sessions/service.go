@@ -97,6 +97,9 @@ type SessionService interface {
 	// ListGameNights lists every planned night in [from, to] with each
 	// member's answer, for the calendar's day card.
 	ListGameNights(ctx context.Context, campaignID, from, to, today string, members []NightMember) ([]GameNight, error)
+	// NextGameNight is the soonest planned night not yet started, without a
+	// roster, for the header's countdown; nil when none is scheduled.
+	NextGameNight(ctx context.Context, campaignID string, now time.Time) (*NextNight, error)
 
 	// "Suggest another time" (see ValidateAndRecordSuggestion's doc comment
 	// for the validate-before-consume ordering this fixes).

@@ -40,19 +40,22 @@ type ExportCalendar struct {
 	// Preserves whether the calendar is wall-clock authoritative and which
 	// IANA zone anchors it, so export/re-import round-trips it. RealTimeZone is
 	// omitted when unset (manual).
-	TracksRealTime     bool             `json:"tracks_real_time"`
-	RealTimeZone       *string          `json:"real_time_zone,omitempty"`
-	Hemisphere         *string          `json:"hemisphere,omitempty"`
-	ForecastsEnabled   bool             `json:"forecasts_enabled"`
-	MonthStartsNewWeek bool             `json:"month_starts_new_week"`
-	Months             []ExportMonth    `json:"months"`
-	Weekdays           []ExportWeekday  `json:"weekdays"`
-	Moons              []ExportMoon     `json:"moons,omitempty"`
-	Seasons            []ExportSeason   `json:"seasons,omitempty"`
-	Eras               []ExportEra      `json:"eras,omitempty"`
-	Cycles             []ExportCycle    `json:"cycles,omitempty"`
-	Festivals          []ExportFestival `json:"festivals,omitempty"`
-	Weather            *WeatherInput    `json:"weather,omitempty"`
+	TracksRealTime     bool    `json:"tracks_real_time"`
+	RealTimeZone       *string `json:"real_time_zone,omitempty"`
+	Hemisphere         *string `json:"hemisphere,omitempty"`
+	ForecastsEnabled   bool    `json:"forecasts_enabled"`
+	MonthStartsNewWeek bool    `json:"month_starts_new_week"`
+	// EraLook is nil in a file written before era looks existed; the import
+	// then keeps the defaults.
+	EraLook   *EraLook         `json:"era_look,omitempty"`
+	Months    []ExportMonth    `json:"months"`
+	Weekdays  []ExportWeekday  `json:"weekdays"`
+	Moons     []ExportMoon     `json:"moons,omitempty"`
+	Seasons   []ExportSeason   `json:"seasons,omitempty"`
+	Eras      []ExportEra      `json:"eras,omitempty"`
+	Cycles    []ExportCycle    `json:"cycles,omitempty"`
+	Festivals []ExportFestival `json:"festivals,omitempty"`
+	Weather   *WeatherInput    `json:"weather,omitempty"`
 }
 
 // ExportMonth is a month definition for export.
@@ -114,6 +117,15 @@ type ExportEra struct {
 	Description *string `json:"description,omitempty"`
 	Color       string  `json:"color"`
 	SortOrder   int     `json:"sort_order"`
+	// The era's look and lore (see Era). LoreEntityID is never written: a
+	// page id means nothing in another campaign, and parseChronicle drops
+	// one a file carries anyway.
+	Color2            *string `json:"color_2,omitempty"`
+	Style             string  `json:"style,omitempty"`
+	Feel              *string `json:"feel,omitempty"`
+	LoreEntityID      *string `json:"lore_entity_id,omitempty"`
+	DMNote            *string `json:"dm_note,omitempty"`
+	HiddenUntilBegins bool    `json:"hidden_until_begins,omitempty"`
 }
 
 // ExportCycle is a cycle definition for export.
@@ -187,6 +199,7 @@ type ExportEvent struct {
 // BuildExport creates a ChronicleExport from a fully-loaded Calendar and
 // optional events. The calendar must have sub-resources eager-loaded.
 func BuildExport(cal *Calendar, events []Event, includeEvents bool) *ChronicleExport {
+	look := cal.EraLook
 	export := &ChronicleExport{
 		Format:  "chronicle-calendar-v1",
 		Version: 2,
@@ -210,6 +223,7 @@ func BuildExport(cal *Calendar, events []Event, includeEvents bool) *ChronicleEx
 			Hemisphere:         cal.Hemisphere,
 			ForecastsEnabled:   cal.ForecastsEnabled,
 			MonthStartsNewWeek: cal.MonthStartsNewWeek,
+			EraLook:            &look,
 		},
 	}
 
@@ -263,16 +277,21 @@ func BuildExport(cal *Calendar, events []Event, includeEvents bool) *ChronicleEx
 	// Eras.
 	for _, e := range cal.Eras {
 		export.Calendar.Eras = append(export.Calendar.Eras, ExportEra{
-			Name:        e.Name,
-			StartYear:   e.StartYear,
-			StartMonth:  e.StartMonth,
-			StartDay:    e.StartDay,
-			EndYear:     e.EndYear,
-			EndMonth:    e.EndMonth,
-			EndDay:      e.EndDay,
-			Description: e.Description,
-			Color:       e.Color,
-			SortOrder:   e.SortOrder,
+			Name:              e.Name,
+			StartYear:         e.StartYear,
+			StartMonth:        e.StartMonth,
+			StartDay:          e.StartDay,
+			EndYear:           e.EndYear,
+			EndMonth:          e.EndMonth,
+			EndDay:            e.EndDay,
+			Description:       e.Description,
+			Color:             e.Color,
+			SortOrder:         e.SortOrder,
+			Color2:            e.Color2,
+			Style:             e.Style,
+			Feel:              e.Feel,
+			DMNote:            e.DMNote,
+			HiddenUntilBegins: e.HiddenUntilBegins,
 		})
 	}
 

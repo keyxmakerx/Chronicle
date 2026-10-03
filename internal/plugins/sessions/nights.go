@@ -270,3 +270,81 @@ func (s *sessionService) ListGameNights(ctx context.Context, campaignID, from, t
 	}
 	return out, nil
 }
+
+// nextNightWindowDays bounds how far ahead NextGameNight looks. A night
+// further out than a season is not a "next game night" worth counting down
+// to, and the bound caps the recurrence walk for a pathological series.
+const nextNightWindowDays = 120
+
+// NextNight is the soonest game night still ahead, with no roster: the header
+// widget needs only a name and a moment, and building a roster costs a read
+// per member per night on every page load.
+type NextNight struct {
+	SessionID string
+	Name      string
+	// Date is YYYY-MM-DD and Time is "HH:MM" ("" when the night has no start
+	// time), both on the wall clock of TZ.
+	Date string
+	Time string
+	// TZ is the IANA zone the night was scheduled in; "" means UTC.
+	TZ string
+	// At is the night's start instant (end of day when no time is set), so a
+	// caller can say "in 3 days" without redoing the zone arithmetic.
+	At time.Time
+}
+
+// nightInstant turns a night's wall-clock date and optional time into an
+// instant in its own zone. A night with no time counts as lasting all day, so
+// it stays "next" until the day is over; an unknown zone falls back to UTC
+// rather than dropping a night the table still plans to play.
+func nightInstant(date, hhmm, tz string) (time.Time, bool) {
+	loc := time.UTC
+	if tz != "" {
+		if l, err := time.LoadLocation(tz); err == nil {
+			loc = l
+		}
+	}
+	day, err := time.ParseInLocation("2006-01-02", date, loc)
+	if err != nil {
+		return time.Time{}, false
+	}
+	if hhmm == "" {
+		return day.Add(24*time.Hour - time.Second), true
+	}
+	t, err := time.ParseInLocation("2006-01-02 15:04", date+" "+hhmm, loc)
+	if err != nil {
+		return day.Add(24*time.Hour - time.Second), true
+	}
+	return t, true
+}
+
+// NextGameNight returns the soonest planned night that has not started, or
+// nil when nothing is scheduled. now is passed in so the choice is testable
+// and one request sees one clock.
+func (s *sessionService) NextGameNight(ctx context.Context, campaignID string, now time.Time) (*NextNight, error) {
+	// A night in a zone far west of UTC can still be ahead when UTC's date has
+	// rolled over, so the window opens a day early; nightInstant does the
+	// exact cut.
+	from := now.UTC().AddDate(0, 0, -1).Format("2006-01-02")
+	to := now.UTC().AddDate(0, 0, nextNightWindowDays).Format("2006-01-02")
+	sessions, err := s.repo.ListByDateRange(ctx, campaignID, from, to)
+	if err != nil {
+		return nil, apperror.NewInternal(fmt.Errorf("finding the next game night: %w", err))
+	}
+	var best *NextNight
+	for _, sess := range sessions {
+		for _, d := range occurrenceDates(sess, from, to) {
+			at, ok := nightInstant(d, strPtrVal(sess.ScheduledTime), strPtrVal(sess.ScheduledTZ))
+			if !ok || at.Before(now) {
+				continue
+			}
+			if best == nil || at.Before(best.At) {
+				best = &NextNight{
+					SessionID: sess.ID, Name: sess.Name, Date: d,
+					Time: strPtrVal(sess.ScheduledTime), TZ: strPtrVal(sess.ScheduledTZ), At: at,
+				}
+			}
+		}
+	}
+	return best, nil
+}

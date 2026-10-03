@@ -58,6 +58,9 @@ type CalendarRepository interface {
 	DeleteEra(ctx context.Context, calendarID string, eraID int) error
 	GetEraByID(ctx context.Context, eraID int) (*Era, error)
 	GetEras(ctx context.Context, calendarID string) ([]Era, error)
+	// SaveEraLook writes the calendar's era look and the listed eras' look
+	// fields together; see its doc comment.
+	SaveEraLook(ctx context.Context, calendarID string, look EraLook, eras []EraLookWrite) error
 
 	// Cycles (with their entries).
 	SetCycles(ctx context.Context, calendarID string, cycles []CycleInput) error
@@ -117,7 +120,8 @@ const calendarCols = `id, campaign_id, mode, name, description, epoch_name, curr
         hemisphere, forecasts_enabled, month_starts_new_week,
         visibility, visibility_rules,
         tracks_real_time, real_time_zone,
-        anchor_year, anchor_month, anchor_day, anchor_real_date`
+        anchor_year, anchor_month, anchor_day, anchor_real_date,
+        era_colors_on, era_feel, era_intensity, era_speed`
 
 // scanCalendar reads a row into a Calendar struct. Returns (nil, nil) when
 // the row doesn't exist, so callers that treat "no default calendar yet" as
@@ -137,7 +141,8 @@ func scanCalendar(scanner interface{ Scan(...any) error }) (*Calendar, error) {
 		&cal.Hemisphere, &cal.ForecastsEnabled, &cal.MonthStartsNewWeek,
 		&cal.Visibility, &cal.VisibilityRules,
 		&cal.TracksRealTime, &cal.RealTimeZone,
-		&cal.AnchorYear, &cal.AnchorMonth, &cal.AnchorDay, &cal.AnchorRealDate)
+		&cal.AnchorYear, &cal.AnchorMonth, &cal.AnchorDay, &cal.AnchorRealDate,
+		&cal.EraLook.ColorsOn, &cal.EraLook.Feel, &cal.EraLook.Intensity, &cal.EraLook.Speed)
 	if err == sql.ErrNoRows {
 		return nil, nil
 	}
@@ -714,7 +719,8 @@ func (r *calendarRepo) GetSeasons(ctx context.Context, calendarID string) ([]Sea
 
 // eraCols is the column list for era queries.
 const eraCols = `id, calendar_id, name, start_year, start_month, start_day,
-        end_year, end_month, end_day, description, color, sort_order`
+        end_year, end_month, end_day, description, color, sort_order,
+        color_2, style, feel, lore_entity_id, dm_note, hidden_until_begins`
 
 // eraColsQualified is eraCols qualified with the calendar_eras alias `er`,
 // for a query that also joins another table sharing a column name with it
@@ -722,14 +728,16 @@ const eraCols = `id, calendar_id, name, start_year, start_month, start_day,
 // "ambiguous column" from the database. Same order, so eraDests still
 // applies; used by ErasForEntity in entity_ties_repository.go.
 const eraColsQualified = `er.id, er.calendar_id, er.name, er.start_year, er.start_month, er.start_day,
-        er.end_year, er.end_month, er.end_day, er.description, er.color, er.sort_order`
+        er.end_year, er.end_month, er.end_day, er.description, er.color, er.sort_order,
+        er.color_2, er.style, er.feel, er.lore_entity_id, er.dm_note, er.hidden_until_begins`
 
 // eraDests returns the Scan destination list for eraCols/eraColsQualified,
 // in the same order, so scanEra and ErasForEntity's scan (which appends one
 // trailing extra destination) read the exact same list and can't drift apart.
 func eraDests(e *Era) []any {
 	return []any{&e.ID, &e.CalendarID, &e.Name, &e.StartYear, &e.StartMonth, &e.StartDay,
-		&e.EndYear, &e.EndMonth, &e.EndDay, &e.Description, &e.Color, &e.SortOrder}
+		&e.EndYear, &e.EndMonth, &e.EndDay, &e.Description, &e.Color, &e.SortOrder,
+		&e.Color2, &e.Style, &e.Feel, &e.LoreEntityID, &e.DMNote, &e.HiddenUntilBegins}
 }
 
 func scanEra(scanner interface{ Scan(...any) error }) (*Era, error) {
@@ -756,21 +764,20 @@ func upsertEras(ctx context.Context, ex dbExecutor, calendarID string, eras []Er
 		if e.ID != nil && existing[*e.ID] {
 			if _, err := ex.ExecContext(ctx,
 				`UPDATE calendar_eras SET name = ?, start_year = ?, start_month = ?, start_day = ?,
-				        end_year = ?, end_month = ?, end_day = ?, description = ?, color = ?, sort_order = ?
+				        end_year = ?, end_month = ?, end_day = ?, description = ?, color = ?, sort_order = ?,
+				        color_2 = ?, style = ?, feel = ?, lore_entity_id = ?, dm_note = ?, hidden_until_begins = ?
 				 WHERE id = ? AND calendar_id = ?`,
 				e.Name, e.StartYear, e.StartMonth, e.StartDay, e.EndYear, e.EndMonth, e.EndDay,
-				e.Description, e.Color, e.SortOrder, *e.ID, calendarID,
+				e.Description, e.Color, e.SortOrder,
+				e.Color2, eraStyleOrDefault(e.Style), e.Feel, e.LoreEntityID, e.DMNote, e.HiddenUntilBegins,
+				*e.ID, calendarID,
 			); err != nil {
 				return err
 			}
 			keep[*e.ID] = true
 			continue
 		}
-		res, err := ex.ExecContext(ctx,
-			`INSERT INTO calendar_eras (calendar_id, name, start_year, start_month, start_day, end_year, end_month, end_day, description, color, sort_order)
-			 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-			calendarID, e.Name, e.StartYear, e.StartMonth, e.StartDay, e.EndYear, e.EndMonth, e.EndDay, e.Description, e.Color, e.SortOrder,
-		)
+		res, err := ex.ExecContext(ctx, insertEraSQL, insertEraArgs(calendarID, e)...)
 		if err != nil {
 			return err
 		}
@@ -817,12 +824,7 @@ func (r *calendarRepo) CreateEra(ctx context.Context, calendarID string, input E
 			input.SortOrder = int(maxSort.Int64) + 1
 		}
 	}
-	res, err := r.db.ExecContext(ctx,
-		`INSERT INTO calendar_eras (calendar_id, name, start_year, start_month, start_day, end_year, end_month, end_day, description, color, sort_order)
-		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-		calendarID, input.Name, input.StartYear, input.StartMonth, input.StartDay,
-		input.EndYear, input.EndMonth, input.EndDay, input.Description, input.Color, input.SortOrder,
-	)
+	res, err := r.db.ExecContext(ctx, insertEraSQL, insertEraArgs(calendarID, input)...)
 	if err != nil {
 		return nil, err
 	}
@@ -846,11 +848,14 @@ func (r *calendarRepo) UpdateEra(ctx context.Context, calendarID string, eraID i
 		`UPDATE calendar_eras
 		   SET name = ?, start_year = ?, start_month = ?, start_day = ?,
 		       end_year = ?, end_month = ?, end_day = ?,
-		       description = ?, color = ?, sort_order = ?
+		       description = ?, color = ?, sort_order = ?,
+		       color_2 = ?, style = ?, feel = ?, lore_entity_id = ?, dm_note = ?, hidden_until_begins = ?
 		 WHERE id = ? AND calendar_id = ?`,
 		input.Name, input.StartYear, input.StartMonth, input.StartDay,
 		input.EndYear, input.EndMonth, input.EndDay,
-		input.Description, input.Color, input.SortOrder, eraID, calendarID,
+		input.Description, input.Color, input.SortOrder,
+		input.Color2, eraStyleOrDefault(input.Style), input.Feel, input.LoreEntityID, input.DMNote, input.HiddenUntilBegins,
+		eraID, calendarID,
 	)
 	if err != nil {
 		return err
@@ -926,10 +931,18 @@ func (r *calendarRepo) GetEraByID(ctx context.Context, eraID int) (*Era, error) 
 	return e, err
 }
 
-// GetEras returns all eras for a calendar ordered by sort_order.
+// GetEras returns all eras for a calendar ordered by sort_order, each with
+// its lore page's name. The page is joined only within the calendar's own
+// campaign, so a stray id from elsewhere reads as no name. Who may see the
+// page is the service's question (redactEraLore), not this query's.
 func (r *calendarRepo) GetEras(ctx context.Context, calendarID string) ([]Era, error) {
 	rows, err := r.db.QueryContext(ctx,
-		`SELECT `+eraCols+` FROM calendar_eras WHERE calendar_id = ? ORDER BY sort_order, start_year, start_month, start_day`, calendarID)
+		`SELECT `+eraColsQualified+`, COALESCE(ent.name, '')
+		 FROM calendar_eras er
+		 JOIN calendars c ON c.id = er.calendar_id
+		 LEFT JOIN entities ent ON ent.id = er.lore_entity_id AND ent.campaign_id = c.campaign_id
+		 WHERE er.calendar_id = ?
+		 ORDER BY er.sort_order, er.start_year, er.start_month, er.start_day`, calendarID)
 	if err != nil {
 		return nil, err
 	}
@@ -937,13 +950,61 @@ func (r *calendarRepo) GetEras(ctx context.Context, calendarID string) ([]Era, e
 
 	var eras []Era
 	for rows.Next() {
-		e, err := scanEra(rows)
-		if err != nil {
+		var e Era
+		if err := rows.Scan(append(eraDests(&e), &e.LoreEntityName)...); err != nil {
 			return nil, err
 		}
-		eras = append(eras, *e)
+		eras = append(eras, e)
 	}
 	return eras, rows.Err()
+}
+
+// SaveEraLook writes the calendar's era look and each listed era's look
+// fields in one transaction, so Save in the settings either keeps all of
+// it or none. Every era update is scoped to calendarID, so an id from
+// another calendar matches no row (the service refuses one before this).
+func (r *calendarRepo) SaveEraLook(ctx context.Context, calendarID string, look EraLook, eras []EraLookWrite) error {
+	tx, err := r.db.BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+
+	if _, err := tx.ExecContext(ctx,
+		`UPDATE calendars SET era_colors_on = ?, era_feel = ?, era_intensity = ?, era_speed = ? WHERE id = ?`,
+		look.ColorsOn, look.Feel, look.Intensity, look.Speed, calendarID); err != nil {
+		return err
+	}
+	for _, e := range eras {
+		if _, err := tx.ExecContext(ctx,
+			`UPDATE calendar_eras SET color = ?, color_2 = ?, style = ?, feel = ? WHERE id = ? AND calendar_id = ?`,
+			e.Color, e.Color2, eraStyleOrDefault(e.Style), e.Feel, e.ID, calendarID); err != nil {
+			return err
+		}
+	}
+	return tx.Commit()
+}
+
+// insertEraSQL/insertEraArgs are the one INSERT every era write path
+// (CreateEra, SetEras, ApplyImport) shares, so a new column can't be
+// written by one and forgotten by another.
+const insertEraSQL = `INSERT INTO calendar_eras (calendar_id, name, start_year, start_month, start_day,
+        end_year, end_month, end_day, description, color, sort_order,
+        color_2, style, feel, lore_entity_id, dm_note, hidden_until_begins)
+	 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+
+func insertEraArgs(calendarID string, e EraInput) []any {
+	return []any{calendarID, e.Name, e.StartYear, e.StartMonth, e.StartDay,
+		e.EndYear, e.EndMonth, e.EndDay, e.Description, e.Color, e.SortOrder,
+		e.Color2, eraStyleOrDefault(e.Style), e.Feel, e.LoreEntityID, e.DMNote, e.HiddenUntilBegins}
+}
+
+// eraStyleOrDefault stores an unset style as the column's own default.
+func eraStyleOrDefault(style string) string {
+	if style == "" {
+		return EraStyleGas
+	}
+	return style
 }
 
 // --- Cycles ---
@@ -1145,6 +1206,13 @@ func (r *calendarRepo) ApplyImport(ctx context.Context, cal *Calendar, result *I
 		cal.TracksRealTime, cal.RealTimeZone, cal.ID,
 	); err != nil {
 		return fmt.Errorf("update calendar: %w", err)
+	}
+	if l := result.Settings.EraLook; l != nil {
+		if _, err := tx.ExecContext(ctx,
+			`UPDATE calendars SET era_colors_on = ?, era_feel = ?, era_intensity = ?, era_speed = ? WHERE id = ?`,
+			l.ColorsOn, l.Feel, l.Intensity, l.Speed, cal.ID); err != nil {
+			return fmt.Errorf("update era look: %w", err)
+		}
 	}
 
 	if len(result.Months) > 0 {

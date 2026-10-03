@@ -80,6 +80,11 @@ type SystemManifest struct {
 	// at system-load time so JSON-only system packages don't need a
 	// Chronicle Go release to ship a custom renderer.
 	Renderers []RendererDef `json:"renderers,omitempty"`
+
+	// DMScreen tells the DM Screen which character-sheet numbers to show for
+	// each hero and where this system's conditions live. Optional: without it
+	// the screen shows hero names only and hides the rules tab.
+	DMScreen *DMScreenDef `json:"dm_screen,omitempty"`
 }
 
 // RendererDef binds an entity_type slug to the widget that should render
@@ -745,6 +750,10 @@ func ValidateManifest(m *SystemManifest) error {
 		if strings.Contains(tr.File, "..") {
 			return fmt.Errorf("text_renderer %d (%s): file must not contain path traversal", i, tr.Slug)
 		}
+	}
+
+	if err := validateDMScreen(m.DMScreen); err != nil {
+		return fmt.Errorf("dm_screen: %w", err)
 	}
 
 	// Validate renderers. Each renderer.slug must reference an entity preset

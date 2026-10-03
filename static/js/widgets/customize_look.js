@@ -319,10 +319,23 @@
       links:  { name:'Quick links', desc:'' },
       text:   { name:'A line of text', desc:'One line your table sees' },
       note:   { name:'Quick note', desc:'Jot a note without leaving the page' },
-      search: { name:'Search box', desc:'A wide search box instead of the icon' }
+      search: { name:'Search box', desc:'A wide search box instead of the icon' },
+      date:    { name:'In-world date', desc:'Today in your world, from the calendar' },
+      weather: { name:'Weather', desc:'Today’s weather from the calendar' },
+      moon:    { name:'Moon', desc:'Tonight’s moon phase' },
+      session: { name:'Next game night', desc:'Counts down to the next session' }
     };
-    var WIDGET_ORDER = ['links', 'text', 'note', 'search'];
-    var LATER = ['In-world date', 'Weather', 'Moon', 'Next game night', 'Era'];
+    var WIDGET_ORDER = ['links', 'text', 'note', 'search', 'date', 'weather', 'moon', 'session'];
+    // Sample text the preview shows for the data-backed widgets; the live
+    // header reads the real calendar and sessions, and a widget with nothing
+    // to show there simply does not appear.
+    var WIDGET_SAMPLE = {
+      date:    ['Date', '14 Frostfall 1203'],
+      weather: ['Weather', 'Clear, 4°'],
+      moon:    ['Moon', 'Selûne waxing crescent'],
+      session: ['Next', 'Fri 7 pm']
+    };
+    var LATER = ['Era'];
     var WIDGET_SLOTS = 4;
 
     var SECTIONS = [
@@ -638,7 +651,7 @@
           '<p class="hint">Slim is today’s bar. Tall gives pictures and moving colour more room.</p>') +
         fld('h-w', 'Widgets', 'Up to ' + WIDGET_SLOTS, '<p class="hint" id="w-full" aria-live="polite"></p><div class="wl" id="wl" aria-labelledby="h-w-l"></div>' +
           '<p class="hint">On a phone the bar shows the first widget and a +N button that opens the rest.</p>' +
-          '<div class="tape-note"><span class="tape" aria-hidden="true"></span><p><b>Under construction.</b> These are on their way. The date and weather will only ever show today in your world, never days ahead.</p>' +
+          '<div class="tape-note"><span class="tape" aria-hidden="true"></span><p><b>Under construction.</b> These are on their way. The date, weather and moon widgets above only ever show today in your world, never days ahead, and stay out of the bar when your calendar has nothing for today.</p>' +
           '<div class="later-row"><span class="w-later">Sky background</span>' + LATER.map(function(n){ return '<span class="w-later">' + esc(n) + '</span>'; }).join('') + '</div></div>'));
       if (id === 'sidebar') return (
         fld('sb-col', 'Colour', 'The menu stays dark', menuColourOpts() +
@@ -803,6 +816,7 @@
         if (w === 'text') return '<div class="rw q"><span class="k">Note</span><span class="v">' + esc(d.header.text.trim() || 'Nothing written yet') + '</span></div>';
         if (w === 'search') return '<div class="rw srch">' + IC('i-search') + '<span>Search ' + esc(CAMPAIGN) + '…</span></div>';
         if (w === 'note') return '<div class="rw srch nt">' + IC('i-note') + '<span>Quick note</span></div>';
+        if (WIDGET_SAMPLE[w]) return '<div class="rw"><span class="k">' + esc(WIDGET_SAMPLE[w][0]) + '</span><span class="v">' + esc(WIDGET_SAMPLE[w][1]) + '</span></div>';
         return '';
       }).join('');
       return h;

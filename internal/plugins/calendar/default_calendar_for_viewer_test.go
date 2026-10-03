@@ -66,7 +66,8 @@ func TestGetDefaultCalendarForViewer(t *testing.T) {
 				return []Moon{visibleMoon, hiddenMoon}, nil
 			},
 			getErasFn: func(_ context.Context, _ string) ([]Era, error) {
-				return []Era{{ID: 1, Name: "Secret Era"}}, nil
+				return []Era{{ID: 1, Name: "Known Era", StartYear: 1, StartMonth: 1, StartDay: 1},
+					{ID: 2, Name: "Secret Era", StartYear: 5, StartMonth: 1, StartDay: 1, HiddenUntilBegins: true}}, nil
 			},
 		}
 		kindRepo := &fakeEventKindRepo{
@@ -83,15 +84,15 @@ func TestGetDefaultCalendarForViewer(t *testing.T) {
 		if len(playerCal.Moons) != 1 || playerCal.Moons[0].ID != visibleMoon.ID {
 			t.Errorf("player must see only the non-hidden moon, got %+v", playerCal.Moons)
 		}
-		if playerCal.Eras != nil || playerCal.EventKinds != nil {
-			t.Errorf("player must not see eras/event kinds, got eras=%+v kinds=%+v", playerCal.Eras, playerCal.EventKinds)
+		if len(playerCal.Eras) != 1 || playerCal.Eras[0].Name != "Known Era" || playerCal.EventKinds != nil {
+			t.Errorf("player must see only the unhidden era and no event kinds, got eras=%+v kinds=%+v", playerCal.Eras, playerCal.EventKinds)
 		}
 
 		ownerCal, err := svc.GetDefaultCalendarForViewer(context.Background(), testCampaignA, ownerViewer("u-owner"))
 		if err != nil {
 			t.Fatalf("GetDefaultCalendarForViewer (owner): %v", err)
 		}
-		if len(ownerCal.Moons) != 2 || len(ownerCal.Eras) != 1 || len(ownerCal.EventKinds) != 1 {
+		if len(ownerCal.Moons) != 2 || len(ownerCal.Eras) != 2 || len(ownerCal.EventKinds) != 1 {
 			t.Errorf("owner must see everything, got moons=%+v eras=%+v kinds=%+v", ownerCal.Moons, ownerCal.Eras, ownerCal.EventKinds)
 		}
 	})

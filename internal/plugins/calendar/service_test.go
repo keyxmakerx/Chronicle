@@ -277,16 +277,18 @@ func TestGetCalendarForViewer_HiddenMoonsFilteredForPlayerNotForOwner(t *testing
 	}
 }
 
-// TestGetCalendarForViewer_ErasAndEventKindsStrippedForPlayer pins that
-// event kinds and eras (calendar STRUCTURE, Owner-only end to end) never
-// reach a Player through the nested calendar read either.
-func TestGetCalendarForViewer_ErasAndEventKindsStrippedForPlayer(t *testing.T) {
+// TestGetCalendarForViewer_ErasFilteredAndEventKindsStrippedForPlayer pins
+// that event kinds (Owner-only structure) never reach a Player through the
+// nested calendar read, and that eras reach them filtered: an era hidden
+// until it begins is withheld until the calendar's date reaches it.
+func TestGetCalendarForViewer_ErasFilteredAndEventKindsStrippedForPlayer(t *testing.T) {
 	calRepo := &fakeCalendarRepo{
 		getByIDFn: func(_ context.Context, id string) (*Calendar, error) {
 			return &Calendar{ID: id, CampaignID: testCampaignA, Visibility: "everyone"}, nil
 		},
 		getErasFn: func(_ context.Context, _ string) ([]Era, error) {
-			return []Era{{ID: 1, Name: "Secret Era"}}, nil
+			return []Era{{ID: 1, Name: "Known Era", StartYear: 1, StartMonth: 1, StartDay: 1},
+				{ID: 2, Name: "Secret Era", StartYear: 5, StartMonth: 1, StartDay: 1, HiddenUntilBegins: true}}, nil
 		},
 	}
 	kindRepo := &fakeEventKindRepo{
@@ -300,8 +302,8 @@ func TestGetCalendarForViewer_ErasAndEventKindsStrippedForPlayer(t *testing.T) {
 	if err != nil {
 		t.Fatalf("GetCalendarForViewer (player): %v", err)
 	}
-	if playerCal.Eras != nil {
-		t.Errorf("player must not see eras (calendar structure, Owner only), got %+v", playerCal.Eras)
+	if len(playerCal.Eras) != 1 || playerCal.Eras[0].Name != "Known Era" {
+		t.Errorf("player must see only the era that is not hidden, got %+v", playerCal.Eras)
 	}
 	if playerCal.EventKinds != nil {
 		t.Errorf("player must not see event kinds (calendar structure, Owner only), got %+v", playerCal.EventKinds)
@@ -311,7 +313,7 @@ func TestGetCalendarForViewer_ErasAndEventKindsStrippedForPlayer(t *testing.T) {
 	if err != nil {
 		t.Fatalf("GetCalendarForViewer (owner): %v", err)
 	}
-	if len(ownerCal.Eras) != 1 || len(ownerCal.EventKinds) != 1 {
+	if len(ownerCal.Eras) != 2 || len(ownerCal.EventKinds) != 1 {
 		t.Errorf("owner must see eras and event kinds, got eras=%+v kinds=%+v", ownerCal.Eras, ownerCal.EventKinds)
 	}
 }

@@ -676,7 +676,31 @@
     };
     if (body !== undefined) fetchOpts.body = body;
     if (opts.signal) fetchOpts.signal = opts.signal;
+    if (opts.keepalive) fetchOpts.keepalive = true;
+
+    // Inside an outside app's frame (notes_embed.js) there is no session
+    // cookie: campaign routes go to the notes grant's routes with its token.
+    var embed = Chronicle.embed;
+    if (embed && embed.token && typeof url === 'string' && url.indexOf('/campaigns/') === 0) {
+      url = '/api/notes-app' + url;
+      headers['Authorization'] = 'Bearer ' + embed.token;
+      fetchOpts.credentials = 'omit';
+    }
 
     return fetch(url, fetchOpts);
+  };
+
+  /**
+   * Go to a Chronicle address. On the site this is a plain navigation;
+   * inside an outside app's frame, Chronicle.embed.go decides (a page opens
+   * in a new tab, a Journal note in the app's notebook).
+   * @param {string} url
+   */
+  Chronicle.go = function (url) {
+    if (Chronicle.embed && Chronicle.embed.go) {
+      Chronicle.embed.go(url);
+      return;
+    }
+    window.location.href = url;
   };
 })();
