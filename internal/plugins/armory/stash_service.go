@@ -9,8 +9,6 @@ package armory
 
 import (
 	"context"
-	"errors"
-	"net/http"
 	"sort"
 	"strings"
 	"sync"
@@ -154,11 +152,6 @@ func forbidden() error { return apperror.NewForbidden("You can't do that.") }
 
 // notFound hides whether an id exists in another campaign.
 func notFound(what string) error { return apperror.NewNotFound(what) }
-
-func isNotFound(err error) bool {
-	var ae *apperror.AppError
-	return errors.As(err, &ae) && ae.Code == http.StatusNotFound
-}
 
 // loadCharacter returns a character-family entity in the campaign, else NotFound.
 func (s *stashService) loadCharacter(ctx context.Context, campaignID, id string) (*EntityRef, error) {

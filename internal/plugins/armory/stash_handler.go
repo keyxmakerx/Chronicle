@@ -99,7 +99,7 @@ type updateStashRequest struct {
 }
 
 func (r updateStashRequest) input() UpdateStashInput {
-	return UpdateStashInput{Name: r.Name, Location: r.Location}
+	return UpdateStashInput(r)
 }
 
 // UpdateStash handles PUT /armory/stashes/:sid.
