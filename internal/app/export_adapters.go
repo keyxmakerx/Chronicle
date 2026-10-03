@@ -1846,6 +1846,9 @@ func (a *mapImportAdapter) ImportMaps(ctx context.Context, campaignID, userID st
 				FillAlpha: d.FillAlpha, TextContent: d.TextContent,
 				FontSize: d.FontSize, Rotation: d.Rotation,
 				Visibility: d.Visibility, CreatedBy: userID,
+				// An import runs as the campaign's owner and writes into a map it
+				// just created, so the draw gate (which defaults to scribes) is met.
+				CallerRole: permissions.RoleOwner,
 			})
 			if err != nil {
 				slog.Warn("import: create drawing failed", slog.Any("error", err))

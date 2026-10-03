@@ -171,7 +171,10 @@ type Handler struct {
 	// Each factory is invoked per-request with the live
 	// CampaignContext so plugin-side tab content can bind
 	// cc.Campaign.ID into form URLs and similar.
-	extraSettingsTabs    []func(*CampaignContext) SettingsTab
+	extraSettingsTabs []func(*CampaignContext) SettingsTab
+	// extraCustomizeTabs is the same idea for the Customize page
+	// (RegisterCustomizeTab, customize_tabs.go).
+	extraCustomizeTabs   []func(*CampaignContext) CustomizeTab
 	baseURL              string
 	contentPacksRenderer ContentPacksCardRenderer
 	// Per-extension inline dashboard registry + enable-state check.
@@ -1048,7 +1051,7 @@ func (h *Handler) Customize(c echo.Context) error {
 		entityTypes, _ = h.entityLister.GetEntityTypesForSettings(c.Request().Context(), cc.Campaign.ID)
 	}
 
-	return middleware.Render(c, http.StatusOK, CustomizePage(cc, entityTypes, csrfToken))
+	return middleware.Render(c, http.StatusOK, CustomizePage(cc, entityTypes, csrfToken, h.customizeTabs(cc)))
 }
 
 // LayoutEditorFragment returns an HTMX fragment containing the template-editor

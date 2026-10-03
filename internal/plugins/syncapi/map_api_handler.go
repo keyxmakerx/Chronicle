@@ -230,6 +230,7 @@ func (h *MapAPIHandler) CreateDrawing(c echo.Context) error {
 		Visibility:  req.Visibility,
 		CreatedBy:   key.UserID,
 		FoundryID:   req.FoundryID,
+		CallerRole:  h.resolveRole(c),
 	})
 	if err != nil {
 		return err
@@ -266,7 +267,7 @@ func (h *MapAPIHandler) UpdateDrawing(c echo.Context) error {
 		return apperror.NewBadRequest("invalid request body")
 	}
 
-	err := h.drawingSvc.UpdateDrawing(c.Request().Context(), drawingID, c.Param("mapID"), maps.UpdateDrawingInput{
+	err := h.drawingSvc.UpdateDrawing(c.Request().Context(), drawingID, c.Param("mapID"), h.resolveRole(c), maps.UpdateDrawingInput{
 		Points:            req.Points,
 		StrokeColor:       req.StrokeColor,
 		StrokeWidth:       req.StrokeWidth,
