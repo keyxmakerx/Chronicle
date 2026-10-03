@@ -75,8 +75,10 @@ func (s *service) Build(ctx context.Context, campaignID string, v Viewer) (*View
 	var sys systems.System
 	if s.src.System != nil {
 		if sys = s.src.System.EnabledSystem(ctx, campaignID); sys != nil {
-			view.SystemName = sys.Info().Name
-			def = sys.Info().DMScreen
+			if info := sys.Info(); info != nil {
+				view.SystemName = info.Name
+				def = info.DMScreen
+			}
 		}
 	}
 
@@ -108,12 +110,16 @@ func (s *service) Build(ctx context.Context, campaignID string, v Viewer) (*View
 		}
 	}
 
+	// A package whose data failed to load has no provider; the Rules tab is
+	// then simply left out.
 	if sys != nil && def != nil && def.Conditions != nil {
-		items, err := sys.DataProvider().List(def.Conditions.Category)
-		if err != nil {
-			warn("conditions", err)
+		if dp := sys.DataProvider(); dp != nil {
+			items, err := dp.List(def.Conditions.Category)
+			if err != nil {
+				warn("conditions", err)
+			}
+			view.Conditions = pickConditions(items, def.Conditions)
 		}
-		view.Conditions = pickConditions(items, def.Conditions)
 	}
 	return view, nil
 }

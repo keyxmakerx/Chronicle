@@ -21,6 +21,8 @@ templ HiddenRow(campaignID string, h HiddenView, csrf string) {
 				hx-headers={ fmt.Sprintf(`{"X-CSRF-Token":"%s"}`, csrf) }
 				hx-target="closest .dms-row"
 				hx-swap="outerHTML"
+				hx-sync="this:drop"
+				hx-disabled-elt="this"
 			>Reveal</button>
 		}
 	</div>

@@ -3,6 +3,7 @@ package app
 import (
 	"context"
 	"fmt"
+	"slices"
 	"sort"
 	"strings"
 	"time"
@@ -199,8 +200,9 @@ func (a *dmHiddenAdapter) HiddenCharacters(ctx context.Context, campaignID strin
 	return out, nil
 }
 
-// Reveal only ever un-hides: the entities service exposes a toggle, so an
-// entity that is already visible is left alone rather than flipped back.
+// Reveal only ever un-hides, and only the NPC and creature types the panel
+// lists: setting the flag (never toggling it) keeps a double-click from
+// hiding the entity again.
 func (a *dmHiddenAdapter) Reveal(ctx context.Context, entityID, campaignID string) (string, error) {
 	e, err := a.entities.GetByID(ctx, entityID)
 	if err != nil {
@@ -209,10 +211,17 @@ func (a *dmHiddenAdapter) Reveal(ctx context.Context, entityID, campaignID strin
 	if e.CampaignID != campaignID {
 		return "", apperror.NewNotFound("entity not found")
 	}
+	types, err := a.entities.GetEntityTypes(ctx, campaignID)
+	if err != nil {
+		return "", err
+	}
+	if !slices.Contains(npcTypeIDs(types), e.EntityTypeID) {
+		return "", apperror.NewNotFound("entity not found")
+	}
 	if !e.IsPrivate {
 		return e.Name, nil
 	}
-	if _, err := a.entities.TogglePrivateInCampaign(ctx, entityID, campaignID); err != nil {
+	if err := a.entities.SetPrivateInCampaign(ctx, entityID, campaignID, false); err != nil {
 		return "", err
 	}
 	return e.Name, nil

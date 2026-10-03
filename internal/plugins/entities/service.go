@@ -136,6 +136,11 @@ type EntityService interface {
 	// toggle — SEC-IDOR-1).
 	TogglePrivateInCampaign(ctx context.Context, entityID, campaignID string) (newPrivate bool, err error)
 
+	// SetPrivateInCampaign sets is_private to the given value only when the
+	// entity belongs to campaignID (NotFound otherwise). Unlike the toggle it
+	// is idempotent, so a repeated request can never flip the flag back.
+	SetPrivateInCampaign(ctx context.Context, entityID, campaignID string, private bool) error
+
 	// ListByOwner returns entities in a campaign owned by the given user,
 	// ordered most-recently-updated first. Powers the player landing page
 	// ("My Characters") at GET /campaigns/:id/me. No visibility filter:
@@ -1115,6 +1120,28 @@ func (s *entityService) togglePrivate(ctx context.Context, entityID, campaignID 
 	s.events.PublishEntityEvent("updated", entity.CampaignID, entityID, entity)
 
 	return newPrivate, nil
+}
+
+// SetPrivateInCampaign sets is_private to private when the entity belongs to
+// campaignID. An entity already in that state is left untouched and no event
+// is published.
+func (s *entityService) SetPrivateInCampaign(ctx context.Context, entityID, campaignID string, private bool) error {
+	entity, err := s.entities.FindByID(ctx, entityID)
+	if err != nil {
+		return err
+	}
+	if entity.CampaignID != campaignID {
+		return apperror.NewNotFound("entity not found")
+	}
+	if entity.IsPrivate == private {
+		return nil
+	}
+	if err := s.entities.UpdatePrivate(ctx, entityID, private); err != nil {
+		return err
+	}
+	entity.IsPrivate = private
+	s.events.PublishEntityEvent("updated", entity.CampaignID, entityID, entity)
+	return nil
 }
 
 // ListByOwner returns entities in a campaign owned by the given user.
