@@ -800,12 +800,36 @@
 .czp.rm .s-pen.pulse::after,
 .czp [data-reduce="1"] .s-pen.pulse::after{ animation-name:czk-pen-fade; }
 @keyframes czk-pen-fade{ 0%, 100%{ opacity:0; } 50%{ opacity:1; } }
-   .czp opacity animate,
-.czp and nothing moves when motion is reduced. */
-.mk-new{ font-size:11px; font-weight:650; padding:2px 8px; border-radius:99px; background:var(--accent-wash); color:var(--accent-ink); white-space:nowrap; }
+/* ---------- Click to focus: the example site answers a click ----------
+   Pointing at a part outlines everything one section controls; a click
+   opens that section and zooms the example to it. Only transform and
+   opacity animate, and nothing moves when motion is reduced. */
 .czp .site{ transition:transform 460ms var(--ease-out); }
-.czp.rm .site,
-.czp .pv[data-reduce="1"] .site{ transition:none; }
+.czp.rm .site, .czp .pv[data-reduce="1"] .site{ transition:none; }
+.czp .site-wrap.fz-ok .site{ cursor:pointer; }
+.czp .fz{ position:absolute; left:0; top:0; width:880px; height:520px; z-index:30; pointer-events:none; overflow:visible; }
+.czp .fz-dim{ fill:rgb(6 8 14 / .52); opacity:0; transition:opacity 260ms ease; }
+.czp .fz.on .fz-dim{ opacity:1; }
+.czp .fz rect{ vector-effect:non-scaling-stroke; }
+.czp .fz-ring rect{ fill:none; stroke:rgb(var(--p-accent-l-rgb)); stroke-width:2; opacity:0; transition:opacity 220ms ease; }
+.czp .fz.on .fz-ring rect{ opacity:1; }
+.czp .fz-hov rect{ fill:rgb(var(--p-accent-rgb) / .10); stroke:rgb(var(--p-accent-rgb)); stroke-width:1.5; stroke-dasharray:5 3; }
+.czp .fz-flash rect{ fill:rgb(var(--p-accent-l-rgb) / .14); stroke:rgb(var(--p-accent-l-rgb)); stroke-width:2; opacity:0; animation:czk-fz-flash 1000ms ease-out both; }
+@keyframes czk-fz-flash{ 0%{ opacity:0; } 18%{ opacity:1; } 100%{ opacity:0; } }
+.czp .fz-tip{
+  position:absolute; z-index:40; left:0; top:0; display:flex; align-items:center; gap:6px; padding:4px 9px; border-radius:8px;
+  background:var(--hc-bg); color:var(--hc-fg); font:600 11.5px/1.3 var(--font-ui); white-space:nowrap; pointer-events:none;
+  box-shadow:var(--shadow-2); opacity:0; transition:opacity 120ms ease;
+}
+.czp .fz-tip.on{ opacity:1; }
+.czp .fz-tip span{ font-weight:450; color:var(--hc-muted); }
+.czp .fz-bar{
+  position:absolute; z-index:45; right:8px; top:8px; display:flex; align-items:center; gap:8px; padding:4px 4px 4px 10px; border-radius:10px;
+  background:var(--surface); border:1px solid var(--line); box-shadow:var(--shadow-2); font:12px/1.3 var(--font-ui); color:var(--body);
+  opacity:0; transform:translateY(-4px); pointer-events:none; transition:opacity 180ms ease, transform 220ms var(--ease-out);
+}
+.czp .fz-bar.on{ opacity:1; transform:none; pointer-events:auto; }
+.czp .fz-bar b{ color:var(--text); font-weight:650; }
 .czp .tape-note{ display:grid; gap:7px; padding:9px 10px 10px; border-radius:9px; background:var(--surface-2); }
 .czp .tape{ display:block; height:7px; border-radius:3px; background:repeating-linear-gradient(-45deg, #f5b301 0 9px, #1f2937 9px 18px); }
 .czp .tape-note p{ margin:0; font-size:11.5px; line-height:1.45; color:var(--body); }

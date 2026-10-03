@@ -883,10 +883,11 @@
       setHTML($('#pv-cap'),
         '<span class="pill">' + IC('i-spark') + esc(cur ? look(cur).name + ' look' : 'Custom, from ' + look(draft.look).name) + '</span>' +
         (draft.motion.reduceAll ? '<span class="pill">' + IC('i-depth') + 'Reduced motion for everyone</span>' : '') +
-        '<span>Only you see this draft. Save changes to show it to everyone.</span>');
+        '<span>Click any part of the example site to change it. Save changes to show your draft to everyone.</span>');
     }
     function update(){
       var theme = previewTheme(), vars = derive(draft, theme);
+      fzQueue();
       $$('.pv').forEach(function(el){ setVars(el, vars); });
       renderPreview(theme);
       syncControls(theme);
@@ -1204,6 +1205,7 @@
       $$('#preview .zp').forEach(function(p){ var on = p.dataset.z === z; p.classList.toggle('off', !on); p.inert = !on; });
       $('#preview').dataset.zoom = z;
       $$('input[name="dpage"]').forEach(function(i){ i.disabled = z !== 'site'; });
+      if (z !== 'site'){ fzHover(null); fzSet(null); }
       runMotion();
     }
     function clearErrors(){ $$('.err').forEach(function(e){ e.hidden = true; }); }
@@ -1227,9 +1229,10 @@
         if (tl.scrollWidth > tl.clientWidth + 1) tl.scrollLeft = tab.offsetLeft - tl.offsetLeft - (tl.clientWidth - tab.offsetWidth) / 2;
       }
       if (focus) tab.focus();
+      fzSection(id);
     }
     function chooseLook(id){
-      applyLook(draft, id); settle(); update();
+      applyLook(draft, id); settle(); update(); fzFlash('*');
       announce('Previewing the ' + look(id).name + ' look. Save changes to use it.');
     }
     function resetSection(sec){
@@ -1352,12 +1355,13 @@
       else return;
       setP(draft, k, v);
       update();
+      fzFlash(k);
       if (k === 'buttons.style') play('btn');
       else if (k === 'motion.elevation' || k === 'motion.speed') play('card');
     });
     on(ROOT, 'input', function(e){
       var t = e.target;
-      if (t.dataset.k && (t.type === 'text' || t.tagName === 'TEXTAREA')){ setP(draft, t.dataset.k, t.value); update(); }
+      if (t.dataset.k && (t.type === 'text' || t.tagName === 'TEXTAREA')){ setP(draft, t.dataset.k, t.value); update(); fzFlash(t.dataset.k); }
       else if (t.dataset.link){ var p = t.dataset.link.split('.'); draft.header.links[+p[0]][p[1]] = t.value; update(); }
       else if (t.dataset.wtext){ draft.header.text = t.value; update(); }
       else if (t.id === 'pop-hue' || t.id === 'pop-tone') applyPick(fromPicker(+$('#pop-hue').value, +$('#pop-tone').value, pickDeep()));
@@ -1379,6 +1383,7 @@
         case 'pop-done': closePicker(true); break;
         case 'pop-use': useHex(); break;
         case 'pv-hide': toggleStrip(); break;
+        case 'fz-all': fzSet(null); $('#tab-' + ui.section).focus(); break;
       }
     });
     on(ROOT, 'keydown', function(e){
@@ -1386,6 +1391,7 @@
         if (hcOn){ hcHide(); e.preventDefault(); return; }
         var top = layers[layers.length - 1];
         if (top){ e.preventDefault(); top.close(true); return; }
+        if (ui.focus){ e.preventDefault(); fzSet(null); }
         return;
       }
       if (e.target.id === 'pop-hex' && e.key === 'Enter'){ e.preventDefault(); useHex(); return; }
@@ -1418,8 +1424,153 @@
     function measure(){
       var wrap = $('#site-wrap');
       if (wrap && wrap.clientWidth) wrap.style.setProperty('--k', (wrap.clientWidth / 880).toFixed(4));
+      if (ui.focus) fzQueue();
       if (!phone() && !ui.strip) toggleStrip();
       ROOT.style.setProperty('--strip-h', phone() ? $('#pv-col').offsetHeight + 'px' : '0px');
+    }
+
+    /* ---------- Click to focus ----------
+       Each section owns some parts of the example site. Pointing outlines
+       them, a click opens the section and zooms in, Whole site zooms out.
+       A changed setting flashes the parts it touched. */
+    var FZ = {
+      brand:  { dash:['.s-brand', '#d-banner'], city:['.s-brand'], tip:'Your name, logo, welcome and backdrop' },
+      header: { all:['.s-hdr'], tip:'The bar across the top' },
+      nav:    { all:['.s-list'], tip:'How the menu shows where you are' },
+      colours:{ all:['.p-link', '.tag', '.chipe', '.czbadge', '.band', '.tev.now', '.av'], tip:'Links, tags, events and badges' },
+      type:   { dash:['.d-title .h1', '.c-h'], city:['.e-head', '.e-body p'], tip:'Headings and text' },
+      buttons:{ all:['.pbtn'], tip:'Every button' },
+      motion: { all:['.pcard'], tip:'Cards and how they lift' }
+    };
+    // Most specific first: a button inside a card is a button.
+    var FZ_HIT = [['.pbtn', 'buttons'], ['.p-link, .tag, .chipe, .czbadge, .band, .tev.now, .av', 'colours'],
+      ['.h1, .c-h, .e-head, .e-body p', 'type'], ['.s-brand, #d-banner', 'brand'], ['.s-hdr', 'header'], ['.s-list', 'nav'],
+      ['.pcard', 'motion'], ['.s-page', 'colours']];
+    var FZ_OF = { brand:'brand', header:'header', nav:'nav', colours:'colours', type:'type', buttons:'buttons', motion:'motion' };
+    var fzLock = false, fzLastFlash = {}, fzRaf = 0, fzHovSec = null;
+    function fzSite(){ return $('#site-wrap .site'); }
+    function fzRects(sec){
+      var site = fzSite(), F = FZ[sec], sel = F[ui.page] || F.all, sr = site.getBoundingClientRect(), s = sr.width / 880, out = [];
+      if (!s) return out;
+      sel.forEach(function(q){
+        $$(q, site).forEach(function(el){
+          if (el.offsetParent === null || el.closest('.s-page[hidden]')) return;
+          var r = el.getBoundingClientRect(); if (!r.width || !r.height) return;
+          var x = (r.left - sr.left) / s, y = (r.top - sr.top) / s, w = r.width / s, h = r.height / s;
+          var x2 = Math.min(880, x + w), y2 = Math.min(520, y + h); x = Math.max(0, x); y = Math.max(0, y);
+          if (x2 - x > 1 && y2 - y > 1) out.push({ x:x, y:y, w:x2 - x, h:y2 - y });
+        });
+      });
+      return out;
+    }
+    function fzUnion(rs){
+      var x = Infinity, y = Infinity, X = -Infinity, Y = -Infinity;
+      rs.forEach(function(r){ x = Math.min(x, r.x); y = Math.min(y, r.y); X = Math.max(X, r.x + r.w); Y = Math.max(Y, r.y + r.h); });
+      return { x:x, y:y, w:X - x, h:Y - y };
+    }
+    function fzRectsSVG(rs, pad, rad){
+      return rs.map(function(r){
+        return '<rect x="' + (r.x - pad).toFixed(1) + '" y="' + (r.y - pad).toFixed(1) + '" width="' + (r.w + pad * 2).toFixed(1) + '" height="' + (r.h + pad * 2).toFixed(1) + '" rx="' + rad + '"/>';
+      }).join('');
+    }
+    function fzHoles(rs, pad){
+      return 'M0 0H880V520H0Z' + rs.map(function(r){
+        var x = r.x - pad, y = r.y - pad, w = r.w + pad * 2, h = r.h + pad * 2;
+        return 'M' + x.toFixed(1) + ' ' + y.toFixed(1) + 'h' + w.toFixed(1) + 'v' + h.toFixed(1) + 'h' + (-w).toFixed(1) + 'Z';
+      }).join('');
+    }
+    function fzK(){ return parseFloat($('#site-wrap').style.getPropertyValue('--k')) || 0.6; }
+    // The example zooms only when the parts are small enough to be worth it.
+    function fzZoom(rs){
+      var site = fzSite(), k = fzK();
+      if (!rs || !rs.length){ site.style.transform = ''; return; }
+      var u = fzUnion(rs), pad = 22, f = Math.min(880 / (u.w + pad * 2), 520 / (u.h + pad * 2), 1.8);
+      if (f < 1.12){ site.style.transform = ''; return; }
+      var tx = clamp(440 - (u.x + u.w / 2) * f, 880 - 880 * f, 0), ty = clamp(260 - (u.y + u.h / 2) * f, 520 - 520 * f, 0);
+      site.style.transform = 'scale(' + k + ') translate(' + tx.toFixed(1) + 'px, ' + ty.toFixed(1) + 'px) scale(' + f.toFixed(3) + ')';
+    }
+    // Rects are measured with no zoom applied, so a redraw never chases its own transform.
+    function fzMeasure(sec){
+      var site = fzSite(), t = site.style.transform, tr = site.style.transition;
+      site.style.transition = 'none'; site.style.transform = '';
+      var rs = fzRects(sec);
+      site.style.transform = t; void site.offsetWidth; site.style.transition = tr;
+      return rs;
+    }
+    function fzDraw(){
+      var svg = $('#fz'), sec = ui.focus;
+      if (!svg) return;
+      if (!sec || ui.zoom !== 'site'){ svg.classList.remove('on'); $('#fz-bar').classList.remove('on'); fzZoom(null); return; }
+      var rs = fzMeasure(sec);
+      $('.fz-dim', svg).setAttribute('d', fzHoles(rs, 4));
+      setHTML($('.fz-ring', svg), fzRectsSVG(rs, 4, 6));
+      svg.classList.add('on');
+      setText($('#fz-name'), sectionName(sec));
+      $('#fz-bar').classList.add('on');
+      fzZoom(rs);
+    }
+    function fzQueue(){ cancelAnimationFrame(fzRaf); fzRaf = requestAnimationFrame(function(){ fzDraw(); if (fzHovSec) fzHover(fzHovSec, true); }); }
+    function fzSet(sec){
+      ui.focus = sec;
+      if (sec && ui.section !== sec){ fzLock = true; selectSection(sec); fzLock = false; }
+      fzDraw();
+      if (sec) announce('Showing ' + sectionName(sec) + ' in the example site. Press Escape for the whole site.');
+    }
+    // Opening a section from its tab keeps a focus going, or briefly shows its parts.
+    function fzSection(id){
+      if (fzLock) return;
+      if (ui.focus){ ui.focus = id; fzQueue(); }
+      else if (ui.zoom === 'site') fzFlash(id + '.');
+    }
+    function fzFlash(k){
+      if (ui.zoom !== 'site' || reduceAll()) return;
+      var secs = k === '*' ? [] : [FZ_OF[String(k).split('.')[0]]];
+      secs.forEach(function(sec){
+        if (!sec || Date.now() - (fzLastFlash[sec] || 0) < 900) return;
+        fzLastFlash[sec] = Date.now();
+        requestAnimationFrame(function(){
+          var g = $('#fz .fz-flash'), rs = fzMeasure(sec);
+          g.innerHTML = fzRectsSVG(rs, 4, 6);
+          clearTimeout(g._t); g._t = setTimeout(function(){ g.innerHTML = ''; }, 1050);
+        });
+      });
+    }
+    function fzSecAt(el){
+      if (!el || !el.closest) return null;
+      for (var i = 0; i < FZ_HIT.length; i++) if (el.closest(FZ_HIT[i][0])) return FZ_HIT[i][1];
+      return null;
+    }
+    function fzHover(sec, keep){
+      var g = $('#fz .fz-hov'), tip = $('#fz-tip');
+      if (!g) return;
+      fzHovSec = sec;
+      if (!sec || sec === ui.focus){ g.innerHTML = ''; tip.classList.remove('on'); return; }
+      if (!keep) setHTML(tip, '<b>' + esc(sectionName(sec)) + '</b><span>' + esc(FZ[sec].tip) + ' · click to change</span>');
+      g.innerHTML = fzRectsSVG(fzMeasure(sec), 4, 6);
+      tip.classList.add('on');
+    }
+    function fzInit(){
+      var site = fzSite(), wrap = $('#site-wrap');
+      site.insertAdjacentHTML('beforeend', '<svg class="fz" id="fz" viewBox="0 0 880 520" aria-hidden="true"><path class="fz-dim" fill-rule="evenodd" d="M0 0H880V520H0Z"/><g class="fz-ring"></g><g class="fz-hov"></g><g class="fz-flash"></g></svg>');
+      wrap.insertAdjacentHTML('beforeend', '<div class="fz-tip" id="fz-tip"></div>');
+      wrap.classList.add('fz-ok');
+      $('[data-z="site"]').insertAdjacentHTML('beforeend', '<div class="fz-bar" id="fz-bar"><span>Showing <b id="fz-name"></b></span><button type="button" class="czb czb-s czb-sm" id="fz-all">Whole site</button></div>');
+      on(wrap, 'pointermove', function(e){
+        if (e.pointerType === 'touch' || ui.zoom !== 'site') return;
+        var sec = fzSecAt(e.target);
+        if (sec !== fzHovSec) fzHover(sec);
+        var tip = $('#fz-tip'), wr = wrap.getBoundingClientRect();
+        tip.style.transform = 'translate(' + clamp(e.clientX - wr.left + 14, 4, wr.width - tip.offsetWidth - 4).toFixed(0) + 'px, ' + clamp(e.clientY - wr.top + 16, 4, wr.height - tip.offsetHeight - 4).toFixed(0) + 'px)';
+      });
+      on(wrap, 'pointerleave', function(){ fzHover(null); });
+      on(wrap, 'click', function(e){
+        if (ui.zoom !== 'site') return;
+        var sec = fzSecAt(e.target);
+        if (!sec) return;
+        e.preventDefault();
+        fzHover(null);
+        fzSet(sec);
+      });
     }
 
     /* ---------- Start ---------- */
@@ -1451,6 +1602,7 @@
       pv.addEventListener('keyup', function(e){ var b = e.target.closest ? e.target.closest('button.pbtn') : null; if (b) b.classList.remove('prs'); });
       pv.addEventListener('focusout', function(e){ var b = e.target.closest ? e.target.closest('button.pbtn') : null; if (b) b.classList.remove('prs'); });
       applyRM(); syncThemeRadio();
+      fzInit();
       update(); setZoom('site'); measure();
       if (window.ResizeObserver){ ro = new ResizeObserver(function(){ measure(); runMotion(); }); ro.observe($('#site-wrap')); ro.observe($('#pv-col')); }
       on(window, 'resize', measure);
@@ -1479,6 +1631,7 @@
       if (mo) mo.disconnect();
       ringAnims.forEach(function (a) { a.forEach(function (x) { x.cancel(); }); });
       clearTimeout(toastT); clearTimeout(hcTimer);
+      cancelAnimationFrame(fzRaf);
       playTimers.forEach(clearTimeout);
     };
   }
