@@ -251,14 +251,14 @@
       function confirmDelete() {
         var ids = getSelectedIds();
         if (ids.length === 0) return;
-        if (!confirm('Delete ' + ids.length + ' entities? This cannot be undone.')) return;
+        if (!confirm('Move ' + ids.length + ' pages and their sub-pages to the Trash? You can restore them from Manage > Trash.')) return;
 
         Chronicle.apiFetch('/campaigns/' + campaignId + '/entities/bulk-delete', {
           method: 'POST',
           body: { entity_ids: ids }
         }).then(function (res) {
           if (res.ok) {
-            Chronicle.notify('Deleted ' + ids.length + ' entities', 'success');
+            Chronicle.notify('Moved ' + ids.length + ' pages to the Trash', 'success');
             clearSelection();
             window.location.reload();
           } else {

@@ -89,6 +89,8 @@ type StoragePageData struct {
 	CSRFToken      string
 	// LimitsTab selects the limits view (?tab=limits) instead of the file list.
 	LimitsTab bool
+	// TrashRetentionDays is how long deleted world pages stay in a Trash.
+	TrashRetentionDays int
 }
 
 // NewHandler creates a new admin handler.
@@ -735,6 +737,9 @@ func (h *Handler) Storage(c echo.Context) error {
 		Campaigns:      allCampaigns,
 		CSRFToken:      csrfToken,
 		LimitsTab:      c.QueryParam("tab") == "limits",
+	}
+	if h.settingsService != nil {
+		data.TrashRetentionDays = h.settingsService.TrashRetentionDays(ctx)
 	}
 	return middleware.Render(c, http.StatusOK, AdminStoragePage(data))
 }

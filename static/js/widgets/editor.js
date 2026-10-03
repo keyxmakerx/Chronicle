@@ -3,7 +3,7 @@
  *
  * TipTap-based WYSIWYG editor with autosave, mounted on
  * data-widget="editor". Config: data-endpoint (required),
- * data-campaign-id (required for @mentions), data-editable
+ * data-campaign-id (required for @mentions and pictures), data-editable
  * (default false), data-autosave seconds (default 30, 0 disables),
  * data-outline (an "On this page" outline, editor_outline.js).
  *
@@ -136,6 +136,12 @@
         extensions.push(Chronicle.SecretMark);
       }
 
+      // Pictures inside the text. Always in the schema so a page holding
+      // one loads for every reader; only editors can add them.
+      if (Chronicle.EditorImage) {
+        extensions.push(Chronicle.EditorImage.extension);
+      }
+
       // [[links]] to notes. Always in the schema, so a body holding one
       // loads anywhere; reading, a click opens the Journal at the note,
       // unless this reader can't see it. While editing a click selects it.
@@ -167,6 +173,26 @@
       var wikiExtRef = { current: null };
       var slashExtRef = { current: null };
 
+      // Pasting or dropping picture files uploads them into the campaign.
+      if (canEdit && campaignId && Chronicle.EditorImage) {
+        var takeImages = function (view, files, pos) {
+          if (!files.length || !view.editable) return false;
+          Chronicle.EditorImage.uploadAndInsert(editorRef.current, campaignId, files, pos);
+          return true;
+        };
+        editorProps.handlePaste = function (view, event) {
+          return takeImages(view, Chronicle.EditorImage.imageFiles(event.clipboardData));
+        };
+        editorProps.handleDrop = function (view, event, slice, moved) {
+          if (moved) return false;
+          var files = Chronicle.EditorImage.imageFiles(event.dataTransfer);
+          if (!files.length) return false;
+          event.preventDefault();
+          var at = view.posAtCoords({ left: event.clientX, top: event.clientY });
+          return takeImages(view, files, at ? at.pos : undefined);
+        };
+      }
+
       if (canEdit) {
         editorProps.handleKeyDown = function (view, event) {
           // Let mention popup handle keys first (if active).
@@ -194,6 +220,8 @@
         editorProps: editorProps,
       });
       editorRef.current = editor;
+      // Read by the slash menu's Picture command.
+      editor.chronicleCampaignId = campaignId;
 
       // --- @Mention Extension ---
       // Initialize mention support if the extension module is loaded and we
@@ -274,6 +302,9 @@
         isEditing: false, // tracks current edit mode state
         el: el,
         autosaveInterval: autosaveInterval,
+        contentEl: contentEl,
+        rev: null, // text revision this editor is based on (see saveContent)
+        conflict: null, // set while someone else's save is waiting on a choice
       };
 
       editors.set(el, state);
@@ -632,6 +663,7 @@
       { action: 'blockquote',     icon: 'fa-circle-info',     label: 'Callout Block',   hint: '>' },
       { action: 'code',           icon: 'fa-code',            label: 'Code Block',      hint: '```' },
       { action: 'table',          icon: 'fa-table',           label: 'Insert Table',    hint: '' },
+      { action: 'picture',        icon: 'fa-image',           label: 'Picture',         hint: '/picture' },
       { action: 'autolink',       icon: 'fa-wand-magic-sparkles', label: 'Auto-link Entities', hint: 'Ctrl+Shift+L' },
     ];
 
@@ -752,6 +784,10 @@
         }
         break;
 
+      case 'picture':
+        if (Chronicle.EditorImage) Chronicle.EditorImage.pickAndInsert(editor, state.campaignId);
+        break;
+
       case 'autolink':
         // Auto-link entity names in the editor content.
         if (Chronicle.autoLinkEntities && state.campaignId) {
@@ -847,6 +883,7 @@
           // JSON yet; open the HTML so editing starts from what the page shows.
           state.editor.commands.setContent(data.entry_html);
         }
+        if (typeof data.rev === 'number') state.rev = data.rev;
         state.dirty = false;
         if (state.editor.isEditable) {
           setStatus(state.statusEl, 'saved');
@@ -863,22 +900,37 @@
    * Save content to the API endpoint.
    */
   function saveContent(state) {
-    if (state.saving) return;
+    // While a clash is open, nothing saves until the person picks an option.
+    if (state.saving || state.conflict) return;
     state.saving = true;
     setStatus(state.statusEl, 'saving');
 
     var json = state.editor.getJSON();
     var html = state.editor.getHTML();
+    var body = { entry: JSON.stringify(json), entry_html: html };
+    // base_rev makes the server refuse to overwrite text someone else saved
+    // after this editor loaded; endpoints that don't send a rev skip it.
+    if (state.rev !== null) body.base_rev = state.rev;
 
     Chronicle.apiFetch(state.endpoint, {
       method: 'PUT',
-      body: {
-        entry: JSON.stringify(json),
-        entry_html: html,
-      },
+      body: body,
     })
       .then(function (res) {
+        if (res.status === 409) {
+          return res.json().then(function (data) {
+            if (!data || data.error !== 'edit_conflict') throw new Error('Save failed: 409');
+            state.saving = false;
+            showConflict(state, data);
+            return null;
+          });
+        }
         if (!res.ok) throw new Error('Save failed: ' + res.status);
+        return res.json().catch(function () { return {}; });
+      })
+      .then(function (data) {
+        if (data === null) return; // a clash; the bar is showing
+        if (data && typeof data.rev === 'number' && state.rev !== null) state.rev = data.rev;
         state.dirty = false;
         state.saving = false;
         setStatus(state.statusEl, 'saved');
@@ -891,6 +943,102 @@
         state.saving = false;
         setStatus(state.statusEl, 'error', 'Failed to save');
       });
+  }
+
+  // --- Save clashes ---
+
+  /**
+   * Someone else saved this page while this editor had unsaved changes.
+   * Nothing of ours is lost: the bar holds the save until the person
+   * chooses to see their changes, keep both, or use theirs over ours.
+   */
+  function showConflict(state, data) {
+    state.conflict = data;
+    setStatus(state.statusEl, 'error', 'Not saved: someone else saved first');
+    clearConflictBar(state);
+
+    var who = data.by_name || 'Someone else';
+    var bar = document.createElement('div');
+    bar.className = 'chronicle-editor__conflict';
+    bar.setAttribute('role', 'alert');
+
+    var msg = document.createElement('p');
+    msg.className = 'chronicle-editor__conflict-msg';
+    msg.appendChild(document.createTextNode(who + ' saved this page while you were editing. '));
+    var strong = document.createElement('strong');
+    strong.textContent = "Your changes aren't saved yet.";
+    msg.appendChild(strong);
+    bar.appendChild(msg);
+
+    var actions = document.createElement('div');
+    actions.className = 'chronicle-editor__conflict-actions';
+    var preview = document.createElement('div');
+    preview.className = 'chronicle-editor__conflict-preview';
+    preview.hidden = true;
+
+    var see = conflictButton(data.by_name ? 'See ' + data.by_name + "'s changes" : 'See their changes', false);
+    see.addEventListener('click', function () {
+      if (preview.hidden && !preview.hasChildNodes()) {
+        // entry_html was sanitized by the server when it was saved.
+        preview.innerHTML = data.entry_html || '<p><em>The page is now empty.</em></p>';
+      }
+      preview.hidden = !preview.hidden;
+      see.setAttribute('aria-expanded', String(!preview.hidden));
+    });
+    var both = conflictButton('Keep both (mine on top)', true);
+    both.addEventListener('click', function () {
+      var mine = state.editor.getJSON();
+      var theirs = parseEntry(data.entry);
+      var merged = (mine.content || []).slice();
+      if (theirs && theirs.content && theirs.content.length) {
+        merged.push({ type: 'horizontalRule' });
+        merged = merged.concat(theirs.content);
+      }
+      state.editor.commands.setContent({ type: 'doc', content: merged });
+      resolveConflict(state, data.rev);
+    });
+    var useMine = conflictButton('Use mine', false);
+    useMine.addEventListener('click', function () {
+      resolveConflict(state, data.rev);
+    });
+    actions.appendChild(see);
+    actions.appendChild(both);
+    actions.appendChild(useMine);
+    bar.appendChild(actions);
+    bar.appendChild(preview);
+
+    state.el.insertBefore(bar, state.contentEl);
+    state.conflictBar = bar;
+  }
+
+  function conflictButton(label, primary) {
+    var b = document.createElement('button');
+    b.type = 'button';
+    b.className = 'chronicle-editor__conflict-btn' + (primary ? ' chronicle-editor__conflict-btn--primary' : '');
+    b.textContent = label;
+    return b;
+  }
+
+  function parseEntry(entry) {
+    if (!entry) return null;
+    if (typeof entry !== 'string') return entry;
+    try { return JSON.parse(entry); } catch (e) { return null; }
+  }
+
+  /** Save the editor's content on top of the other person's revision. */
+  function resolveConflict(state, rev) {
+    state.rev = rev;
+    state.conflict = null;
+    clearConflictBar(state);
+    state.dirty = true;
+    saveContent(state);
+  }
+
+  function clearConflictBar(state) {
+    if (state.conflictBar && state.conflictBar.parentNode) {
+      state.conflictBar.parentNode.removeChild(state.conflictBar);
+    }
+    state.conflictBar = null;
   }
 
   // --- Status ---

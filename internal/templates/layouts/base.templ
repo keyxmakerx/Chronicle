@@ -101,6 +101,8 @@ templ Base(title string) {
 		<script src={ AssetURL("/static/js/recent_entities.js") } defer></script>
 		<!-- Entity favorites (localStorage-backed sidebar list + star toggle) -->
 		<script src={ AssetURL("/static/js/favorites.js") } defer></script>
+		<!-- Undo for world pages: local times in History, Undo after a delete -->
+		<script src={ AssetURL("/static/js/page_safety.js") } defer></script>
 
 		<!-- TipTap rich text editor (vendored bundle) -->
 		<script src={ AssetURL("/static/vendor/tiptap-bundle.min.js") } defer></script>
@@ -116,6 +118,8 @@ templ Base(title string) {
 		<script src={ AssetURL("/static/js/widgets/editor_slash.js") } defer></script>
 		<!-- "On this page" outline (must load before editor.js) -->
 		<script src={ AssetURL("/static/js/widgets/editor_outline.js") } defer></script>
+		<!-- Pictures inside the text (after editor_slash.js, before editor.js) -->
+		<script src={ AssetURL("/static/js/widgets/editor_image.js") } defer></script>
 		<script src={ AssetURL("/static/js/widgets/editor.js") } defer></script>
 
 		<!-- Image upload widget -->

@@ -46,6 +46,16 @@ func (f fakeDowntime) Downtime(context.Context, string, Viewer) (bool, int, bool
 	return f.open, f.pending, f.ok, f.err
 }
 
+func (f fakeDowntime) SetDowntime(_ context.Context, _ string, _ Viewer, open bool) (int, int, error) {
+	if f.err != nil {
+		return 0, 0, f.err
+	}
+	if open {
+		return f.pending, 0, nil
+	}
+	return 0, 0, nil
+}
+
 type fakeFoundry struct {
 	last      *time.Time
 	connected bool
@@ -281,6 +291,34 @@ func TestHeroConditions(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			if got := strings.Join(heroConditions(tt.raw), "|"); got != tt.want {
 				t.Fatalf("got %q, want %q", got, tt.want)
+			}
+		})
+	}
+}
+
+func TestSetDowntime(t *testing.T) {
+	tests := []struct {
+		name    string
+		src     Sources
+		role    int
+		open    bool
+		wantErr bool
+		want    DowntimeResult
+	}{
+		{"owner opens and waiting requests apply", Sources{Downtime: fakeDowntime{ok: true, pending: 2}}, 3, true, false, DowntimeResult{Open: true, Applied: 2}},
+		{"owner closes", Sources{Downtime: fakeDowntime{ok: true}}, 3, false, false, DowntimeResult{}},
+		{"scribe refused", Sources{Downtime: fakeDowntime{ok: true}}, 2, true, true, DowntimeResult{}},
+		{"no armory", Sources{}, 3, true, true, DowntimeResult{}},
+		{"armory error passes through", Sources{Downtime: fakeDowntime{err: errors.New("boom")}}, 3, true, true, DowntimeResult{}},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got, err := NewService(tt.src).SetDowntime(context.Background(), "c1", Viewer{Role: tt.role}, tt.open)
+			if (err != nil) != tt.wantErr {
+				t.Fatalf("err = %v, wantErr %v", err, tt.wantErr)
+			}
+			if got != tt.want {
+				t.Fatalf("got %+v, want %+v", got, tt.want)
 			}
 		})
 	}

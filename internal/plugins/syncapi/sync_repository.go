@@ -255,6 +255,8 @@ func (r *syncMappingRepo) LastSyncActivity(ctx context.Context, campaignID strin
 
 // ListMappingsWithNames returns sync mappings joined with entity/map names
 // for display in the owner dashboard, with search, type filter, and sorting.
+// Trashed pages deliberately keep their mapping and name here: a trashed page
+// is not an orphan, and a restore must find the pairing intact.
 func (r *syncMappingRepo) ListMappingsWithNames(ctx context.Context, campaignID string, opts SyncMappingListOptions) ([]SyncMappingRow, int, error) {
 	// Build WHERE clause.
 	where := "sm.campaign_id = ?"

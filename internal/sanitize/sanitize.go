@@ -113,17 +113,24 @@ func HTMLPtr(p *string) *string {
 // a more robust secondary defense for the JSON storage path.
 var secretSpanRe = regexp.MustCompile(`(?s)<span[^>]*\bdata-secret\b[^>]*>.*?</span>`)
 
-// StripSecretsHTML removes all <span data-secret>...</span> elements from HTML,
-// used to hide GM-only inline secrets from players.
+// gmPictureRe matches a GM-only picture from the editor: a <figure> whose
+// class list holds ce-img--gm. The editor writes a figure as one img plus an
+// optional plain-text figcaption, never a nested figure, so the lazy match
+// ends at its own closing tag.
+var gmPictureRe = regexp.MustCompile(`(?s)<figure\b[^>]*\bclass="[^"]*\bce-img--gm\b[^"]*"[^>]*>.*?</figure>`)
+
+// StripSecretsHTML removes all <span data-secret>...</span> elements and
+// GM-only pictures from HTML, used to hide GM-only content from players.
 func StripSecretsHTML(html string) string {
 	if html == "" {
 		return ""
 	}
+	html = gmPictureRe.ReplaceAllString(html, "")
 	return secretSpanRe.ReplaceAllString(html, "")
 }
 
-// StripSecretsJSON removes nodes marked with the "secret" mark from
-// ProseMirror JSON content. Returns the modified JSON string. If the input
+// StripSecretsJSON removes nodes marked with the "secret" mark, and GM-only
+// pictures, from ProseMirror JSON content. Returns the modified JSON string. If the input
 // is not valid ProseMirror JSON, it is returned unchanged.
 func StripSecretsJSON(jsonStr string) string {
 	if jsonStr == "" {
@@ -161,7 +168,7 @@ func stripSecretNodes(node map[string]interface{}) {
 			continue
 		}
 
-		if hasSecretMark(childMap) {
+		if hasSecretMark(childMap) || isGMPicture(childMap) {
 			continue // strip this node
 		}
 
@@ -170,6 +177,16 @@ func stripSecretNodes(node map[string]interface{}) {
 		filtered = append(filtered, childMap)
 	}
 	node["content"] = filtered
+}
+
+// isGMPicture reports whether a node is an editor picture marked GM-only.
+func isGMPicture(node map[string]interface{}) bool {
+	if node["type"] != "chronicleImage" {
+		return false
+	}
+	attrs, _ := node["attrs"].(map[string]interface{})
+	gm, _ := attrs["gmOnly"].(bool)
+	return gm
 }
 
 // hasSecretMark returns true if a ProseMirror node has a mark of type "secret".

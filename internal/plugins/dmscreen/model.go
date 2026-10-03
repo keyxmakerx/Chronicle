@@ -18,79 +18,80 @@ type Viewer struct {
 // as the downtime switch.
 func (v Viewer) IsOwner() bool { return v.Role >= 3 }
 
-// View is everything the panel template draws.
+// View is everything the panel template draws. The Foundry module gets the
+// same data as JSON from the sync API, so the field tags are a wire contract.
 type View struct {
-	CampaignID string
+	CampaignID string `json:"campaign_id"`
 
 	// Downtime is nil when the campaign has no armory (no downtime switch).
-	Downtime *DowntimeView
+	Downtime *DowntimeView `json:"downtime,omitempty"`
 
 	// World is nil when the campaign has no calendar the viewer can see.
-	World *WorldView
+	World *WorldView `json:"world,omitempty"`
 
 	// Night is nil when no game night is coming up.
-	Night *NightView
+	Night *NightView `json:"night,omitempty"`
 
-	Foundry FoundryView
+	Foundry FoundryView `json:"foundry"`
 
 	// SystemName is the enabled game system, empty when none.
-	SystemName string
+	SystemName string `json:"system_name"`
 
 	// PartyFilled is true when the game system declares party meters; when
 	// false the party panel lists names only and says why.
-	PartyFilled bool
-	Party       []HeroView
+	PartyFilled bool       `json:"party_filled"`
+	Party       []HeroView `json:"party,omitempty"`
 
 	// Hidden lists characters players can't see yet, newest first.
-	Hidden []HiddenView
+	Hidden []HiddenView `json:"hidden,omitempty"`
 
 	// Conditions is empty when the system declares none; the tab is hidden.
-	Conditions []ConditionView
+	Conditions []ConditionView `json:"conditions,omitempty"`
 }
 
 // DowntimeView is the downtime switch's state plus requests waiting on the GM.
 type DowntimeView struct {
-	Open      bool
-	CanToggle bool
-	Pending   int
+	Open      bool `json:"open"`
+	CanToggle bool `json:"can_toggle"`
+	Pending   int  `json:"pending"`
 }
 
 // WorldView is the in-world date and today's weather.
 type WorldView struct {
-	CalendarID string
-	DateLabel  string
-	TimeLabel  string
+	CalendarID string `json:"calendar_id"`
+	DateLabel  string `json:"date_label"`
+	TimeLabel  string `json:"time_label"`
 	// Weather is a one-line description, empty when none is set for today.
-	Weather string
+	Weather string `json:"weather"`
 }
 
 // NightView is the next game night and its answers so far.
 type NightView struct {
-	Name     string
-	When     string
-	Going    int
-	Maybe    int
-	Cant     int
-	NoAnswer int
+	Name     string `json:"name"`
+	When     string `json:"when"`
+	Going    int    `json:"going"`
+	Maybe    int    `json:"maybe"`
+	Cant     int    `json:"cant"`
+	NoAnswer int    `json:"no_answer"`
 }
 
 // FoundryView says whether the campaign's Foundry world is connected.
 type FoundryView struct {
-	Connected bool
-	NeverSeen bool
-	LastSeen  *time.Time
+	Connected bool       `json:"connected"`
+	NeverSeen bool       `json:"never_seen"`
+	LastSeen  *time.Time `json:"last_seen,omitempty"`
 }
 
 // HeroView is one player character with the meters the system declares.
 type HeroView struct {
-	ID         string
-	Name       string
-	PlayerName string
+	ID         string `json:"id"`
+	Name       string `json:"name"`
+	PlayerName string `json:"player_name"`
 	// Subtitle and Conditions come from the sheet fields the system's
 	// manifest names; either may be empty.
-	Subtitle   string
-	Conditions []string
-	Meters     []MeterView
+	Subtitle   string      `json:"subtitle"`
+	Conditions []string    `json:"conditions,omitempty"`
+	Meters     []MeterView `json:"meters,omitempty"`
 }
 
 // Folded splits a hero's meters for the one-line folded row: the first
@@ -113,25 +114,25 @@ func (h HeroView) Folded() (bar *MeterView, chips, rest []MeterView) {
 
 // MeterView is one number on a hero. HasMax draws it as a bar.
 type MeterView struct {
-	Label   string
-	Current string
-	Max     string
-	HasMax  bool
+	Label   string `json:"label"`
+	Current string `json:"current"`
+	Max     string `json:"max"`
+	HasMax  bool   `json:"has_max"`
 	// Percent is 0-100 for the bar width.
-	Percent int
-	Low     bool
+	Percent int  `json:"percent"`
+	Low     bool `json:"low"`
 }
 
 // HiddenView is a character the GM can reveal from the screen.
 type HiddenView struct {
-	ID       string
-	Name     string
-	TypeName string
-	Revealed bool
+	ID       string `json:"id"`
+	Name     string `json:"name"`
+	TypeName string `json:"type_name"`
+	Revealed bool   `json:"revealed"`
 }
 
 // ConditionView is one condition and its rule text, markup flattened.
 type ConditionView struct {
-	Name string
-	Text string
+	Name string `json:"name"`
+	Text string `json:"text"`
 }
