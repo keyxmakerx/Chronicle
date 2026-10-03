@@ -1,0 +1,27 @@
+package dmscreen
+
+import "fmt"
+
+// HiddenRow is one hidden character with its Reveal button; after a reveal
+// the handler redraws it with the button replaced by a confirmation.
+templ HiddenRow(campaignID string, h HiddenView, csrf string) {
+	<div class="dms-row">
+		<span>
+			{ h.Name }
+			if h.TypeName != "" {
+				<span class="dms-small">{ h.TypeName }</span>
+			}
+		</span>
+		if h.Revealed {
+			<span class="dms-done">Shown to players</span>
+		} else {
+			<button
+				type="button"
+				hx-post={ fmt.Sprintf("/campaigns/%s/dm-screen/reveal/%s", campaignID, h.ID) }
+				hx-headers={ fmt.Sprintf(`{"X-CSRF-Token":"%s"}`, csrf) }
+				hx-target="closest .dms-row"
+				hx-swap="outerHTML"
+			>Reveal</button>
+		}
+	</div>
+}
