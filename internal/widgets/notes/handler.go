@@ -44,11 +44,18 @@ type Handler struct {
 	characterLister CharacterLister
 	pageNamer       PageNamer
 	pageLinker      PageLinker
+	jotsGate        AppGate
 }
 
 // NewHandler creates a new note handler backed by the given service.
 func NewHandler(service NoteService) *Handler {
 	return &Handler{service: service}
+}
+
+// SetJotsGate sets the check for whether Jot notes are on in a campaign
+// (the "notes" addon), for the frames an outside app shows.
+func (h *Handler) SetJotsGate(g AppGate) {
+	h.jotsGate = g
 }
 
 // SetAttachmentService sets the attachment service for audio upload support.
@@ -567,6 +574,38 @@ func (h *Handler) ShowJournal(c echo.Context) error {
 		return middleware.Render(c, http.StatusOK, JournalFragment(cc, view))
 	}
 	return middleware.Render(c, http.StatusOK, JournalPage(cc, view))
+}
+
+// EmbedFragment returns the Journal or the Jot notes panel as an HTML
+// fragment for the frame an allowed app shows
+// (GET /api/notes-app/campaigns/:id/notes/embed?mode=journal|jots&entity=).
+// The same templates as the site, so the frame has every Journal feature.
+func (h *Handler) EmbedFragment(c echo.Context) error {
+	cc := campaigns.GetCampaignContext(c)
+	if cc == nil {
+		return apperror.NewMissingContext()
+	}
+	switch c.QueryParam("mode") {
+	case "journal":
+		return middleware.Render(c, http.StatusOK, JournalFragment(cc, h.journalView(c, cc)))
+	case "jots":
+		if h.jotsGate != nil {
+			on, err := h.jotsGate(c.Request().Context(), cc.Campaign.ID)
+			if err != nil {
+				return apperror.NewInternal(err)
+			}
+			if !on {
+				return apperror.NewForbidden("Jot notes are turned off in this campaign")
+			}
+		}
+		entityID := c.QueryParam("entity")
+		if entityID != "" && !idPattern.MatchString(entityID) {
+			entityID = ""
+		}
+		return middleware.Render(c, http.StatusOK, JotsEmbedFragment(cc, entityID))
+	default:
+		return apperror.NewBadRequest("mode must be journal or jots")
+	}
 }
 
 // journalView gathers the page's server-side inputs. The deep-linked id is

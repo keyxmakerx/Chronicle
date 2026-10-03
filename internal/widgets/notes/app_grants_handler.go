@@ -20,6 +20,9 @@ import (
 // a Foundry address cannot have players' notes handed to it.
 type OriginAllower interface {
 	OriginAllowed(ctx context.Context, origin string) bool
+	// AllowedOrigins lists them, for the frame-ancestors of the notes pages
+	// an app shows in a frame.
+	AllowedOrigins(ctx context.Context) []string
 }
 
 // AppGate says whether a campaign lets outside apps in at all. Wired to the
@@ -144,6 +147,41 @@ func (h *AppGrantHandler) Revoke(c echo.Context) error {
 		return err
 	}
 	return c.NoContent(http.StatusNoContent)
+}
+
+// ShowEmbed renders the empty shell an allowed app frames
+// (GET /embed/campaigns/:id/notes/:mode, mode journal or jots). It needs no
+// sign-in and shows nothing about the campaign: the content arrives later
+// over the grant the parent window hands it. Only the allowed origins may
+// frame it; everywhere else the site stays unframeable.
+func (h *AppGrantHandler) ShowEmbed(c echo.Context) error {
+	id := c.Param("id")
+	mode := c.Param("mode")
+	if !idPattern.MatchString(id) || (mode != "journal" && mode != "jots") {
+		return apperror.NewNotFound("page not found")
+	}
+	var origins []string
+	if h.origins != nil {
+		origins = h.origins.AllowedOrigins(c.Request().Context())
+	}
+	hdr := c.Response().Header()
+	hdr.Set("Content-Security-Policy", strings.Replace(hdr.Get("Content-Security-Policy"),
+		"frame-ancestors 'none'", frameAncestors(origins), 1))
+	hdr.Del("X-Frame-Options")
+	return middleware.Render(c, http.StatusOK, NotesEmbedPage(id, mode))
+}
+
+// frameAncestors is the CSP directive for the embed pages: the site itself
+// plus each allowed origin that is a bare origin (anything else could widen
+// or break the policy, so it is dropped).
+func frameAncestors(origins []string) string {
+	parts := []string{"frame-ancestors 'self'"}
+	for _, o := range origins {
+		if n := normalizeOrigin(o); n != "" {
+			parts = append(parts, n)
+		}
+	}
+	return strings.Join(parts, " ")
 }
 
 // RequireAppGrant authenticates a request by a notes grant token in

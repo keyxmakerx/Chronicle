@@ -722,11 +722,8 @@
   /** A same-origin write that survives the page unloading. */
   Journal.prototype.beacon = function (url, method, body) {
     try {
-      fetch(url, {
-        method: method, keepalive: true, credentials: 'same-origin',
-        headers: { 'Content-Type': 'application/json', 'Accept': 'application/json', 'X-CSRF-Token': Chronicle.getCsrf() || '' },
-        body: body ? JSON.stringify(body) : undefined
-      }).catch(function () { /* the page is going; nothing to tell */ });
+      Chronicle.apiFetch(url, { method: method, keepalive: true, body: body || undefined })
+        .catch(function () { /* the page is going; nothing to tell */ });
     } catch (e) { /* ditto */ }
   };
 
@@ -1513,7 +1510,7 @@
       if (seq !== self.openSeq || self.dead) return false;
       if (note.entityId) {
         // A jot lives on its page, not in the Journal.
-        window.location.href = '/campaigns/' + encodeURIComponent(self.cid) + '/entities/' + encodeURIComponent(note.entityId);
+        Chronicle.go('/campaigns/' + encodeURIComponent(self.cid) + '/entities/' + encodeURIComponent(note.entityId));
         return false;
       }
       if (note.isFolder) return false;
@@ -1542,6 +1539,9 @@
   };
 
   Journal.prototype.setUrl = function (id) {
+    // In an outside app's frame the address is the frame's own; a reload
+    // must land back on the frame, not the cookie-only Journal page.
+    if (Chronicle.embed) return;
     var path = '/campaigns/' + encodeURIComponent(this.cid) + '/journal' + (id ? '/' + encodeURIComponent(id) : '');
     try {
       if (window.location.pathname !== path) window.history.replaceState(window.history.state, '', path);
@@ -2365,7 +2365,7 @@
       if ((b = e.target.closest('[data-goto-note]'))) { self.open(b.getAttribute('data-goto-note')); return; }
       if ((b = e.target.closest('[data-goto-page]'))) {
         self.flushSave();
-        window.location.href = '/campaigns/' + encodeURIComponent(self.cid) + '/entities/' + encodeURIComponent(b.getAttribute('data-goto-page'));
+        Chronicle.go('/campaigns/' + encodeURIComponent(self.cid) + '/entities/' + encodeURIComponent(b.getAttribute('data-goto-page')));
         return;
       }
       if (e.target.closest('[data-backlinks-all]')) { self.filterByLinksTo(self.active.id, self.active.title || 'this note'); return; }

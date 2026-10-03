@@ -297,6 +297,14 @@ type staticOrigins map[string]bool
 
 func (s staticOrigins) OriginAllowed(_ context.Context, o string) bool { return s[o] }
 
+func (s staticOrigins) AllowedOrigins(context.Context) []string {
+	var out []string
+	for o := range s {
+		out = append(out, o)
+	}
+	return out
+}
+
 func TestAllowRefusesAnOriginNotOnTheList(t *testing.T) {
 	now := time.Date(2026, 10, 3, 12, 0, 0, 0, time.UTC)
 	svc, repo := newTestGrantService(&now)
@@ -372,5 +380,63 @@ func TestAppGrant_RevokeAllForUserEndsEveryCampaign(t *testing.T) {
 	}
 	if _, err := svc.Authenticate(context.Background(), other); err != nil {
 		t.Fatalf("another player's grant was revoked: %v", err)
+	}
+}
+
+func TestFrameAncestors(t *testing.T) {
+	got := frameAncestors([]string{"https://foundry.example", "https://x.example/path", "javascript:x", "https://Other.Example:30000"})
+	want := "frame-ancestors 'self' https://foundry.example https://other.example:30000"
+	if got != want {
+		t.Fatalf("got %q, want %q", got, want)
+	}
+}
+
+func TestShowEmbed_FramableOnlyByAllowedOrigins(t *testing.T) {
+	h := NewAppGrantHandler(nil, staticOrigins{"https://foundry.example": true})
+	tests := []struct {
+		name, path string
+		wantCode   int
+	}{
+		{"journal", "/embed/campaigns/0b9f2c1e-1111-2222-3333-444455556666/notes/journal", http.StatusOK},
+		{"jots", "/embed/campaigns/0b9f2c1e-1111-2222-3333-444455556666/notes/jots", http.StatusOK},
+		{"unknown mode", "/embed/campaigns/0b9f2c1e-1111-2222-3333-444455556666/notes/admin", http.StatusNotFound},
+		{"bad id", "/embed/campaigns/not-an-id!/notes/journal", http.StatusNotFound},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			e := echo.New()
+			e.HTTPErrorHandler = func(err error, c echo.Context) {
+				if ae, ok := err.(*apperror.AppError); ok {
+					_ = c.NoContent(ae.Code)
+				}
+			}
+			// Stand-in for the site-wide headers the real middleware sets.
+			e.Use(func(next echo.HandlerFunc) echo.HandlerFunc {
+				return func(c echo.Context) error {
+					c.Response().Header().Set("Content-Security-Policy", "default-src 'self'; frame-ancestors 'none'; base-uri 'self'")
+					c.Response().Header().Set("X-Frame-Options", "DENY")
+					return next(c)
+				}
+			})
+			e.GET("/embed/campaigns/:id/notes/:mode", h.ShowEmbed)
+			rec := httptest.NewRecorder()
+			e.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, tt.path, nil))
+			if rec.Code != tt.wantCode {
+				t.Fatalf("want %d, got %d", tt.wantCode, rec.Code)
+			}
+			if rec.Code != http.StatusOK {
+				return
+			}
+			csp := rec.Header().Get("Content-Security-Policy")
+			if !strings.Contains(csp, "frame-ancestors 'self' https://foundry.example;") {
+				t.Fatalf("frame-ancestors not set to the allowed origins: %q", csp)
+			}
+			if strings.Contains(csp, "'none'") || rec.Header().Get("X-Frame-Options") != "" {
+				t.Fatalf("still unframeable: %q / %q", csp, rec.Header().Get("X-Frame-Options"))
+			}
+			if !strings.Contains(csp, "default-src 'self'") {
+				t.Fatalf("the rest of the policy was lost: %q", csp)
+			}
+		})
 	}
 }

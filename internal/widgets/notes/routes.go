@@ -78,7 +78,10 @@ func registerNoteJSONRoutes(cg *echo.Group, h *Handler, player echo.MiddlewareFu
 // Bearer grant, never a cookie, so the site's cookie CSRF check does not
 // apply to them (it skips /api/). Each request still runs as the player at
 // their live campaign role through RequireCampaignAccess.
-func RegisterAppGrantRoutes(e *echo.Echo, h *Handler, gh *AppGrantHandler, grants AppGrantService, gate AppGate, campaignSvc campaigns.CampaignService, authSvc auth.AuthService) {
+//
+// It returns the app group so other plugins can add the few read-only routes
+// the notes editor needs (page search), wired in app/routes.go.
+func RegisterAppGrantRoutes(e *echo.Echo, h *Handler, gh *AppGrantHandler, grants AppGrantService, gate AppGate, campaignSvc campaigns.CampaignService, authSvc auth.AuthService) *echo.Group {
 	player := campaigns.RequireRole(campaigns.RolePlayer)
 
 	cg := e.Group("/campaigns/:id",
@@ -98,4 +101,10 @@ func RegisterAppGrantRoutes(e *echo.Echo, h *Handler, gh *AppGrantHandler, grant
 		campaigns.RequireCampaignAccess(campaignSvc),
 	)
 	registerNoteJSONRoutes(ag, h, player)
+	ag.GET("/notes/embed", h.EmbedFragment, player)
+
+	// The frame shell: no sign-in, no campaign data; framable only by the
+	// allowed origins.
+	e.GET("/embed/campaigns/:id/notes/:mode", gh.ShowEmbed)
+	return ag
 }

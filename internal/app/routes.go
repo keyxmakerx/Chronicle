@@ -3285,7 +3285,12 @@ func (a *App) RegisterRoutes() {
 	notesAppGate := func(ctx context.Context, campaignID string) (bool, error) {
 		return addonService.IsEnabledForCampaign(ctx, campaignID, syncapi.SyncAPIAddonSlug)
 	}
-	notes.RegisterAppGrantRoutes(e, noteHandler, noteGrantHandler, noteGrants, notesAppGate, campaignService, authService)
+	noteHandler.SetJotsGate(func(ctx context.Context, campaignID string) (bool, error) {
+		return addonService.IsEnabledForCampaign(ctx, campaignID, "notes")
+	})
+	notesApp := notes.RegisterAppGrantRoutes(e, noteHandler, noteGrantHandler, noteGrants, notesAppGate, campaignService, authService)
+	// The editor's @ page picker, as the player sees pages.
+	notesApp.GET("/entities/search", entityHandler.SearchAPI, campaigns.RequireViewAccess())
 
 	// Relations widget routes already registered above (before REST API v1).
 
@@ -4430,6 +4435,16 @@ func (a *aiWorkspaceAuditAdapter) LogCampaignEvent(ctx context.Context, campaign
 type notesOriginAllower struct {
 	baseURL  string
 	settings settings.SettingsService
+}
+
+func (a *notesOriginAllower) AllowedOrigins(ctx context.Context) []string {
+	out := []string{strings.TrimRight(a.baseURL, "/")}
+	if a.settings != nil {
+		if list, err := a.settings.GetCORSOrigins(ctx); err == nil {
+			out = append(out, list...)
+		}
+	}
+	return out
 }
 
 func (a *notesOriginAllower) OriginAllowed(ctx context.Context, origin string) bool {
