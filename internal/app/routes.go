@@ -3277,6 +3277,9 @@ func (a *App) RegisterRoutes() {
 	// only to an address that may already call Chronicle across sites.
 	noteGrants := notes.NewAppGrantService(notes.NewAppGrantRepository(a.DB))
 	noteGrantHandler := notes.NewAppGrantHandler(noteGrants, &notesOriginAllower{baseURL: a.Config.BaseURL, settings: settingsService})
+	// Pictures and voice memos in the frames load through member-checked
+	// signed links, as Foundry's media does.
+	noteGrantHandler.SetMediaLinker(mediaHandler)
 	// A grant ends whenever the player's sessions do (password reset or
 	// change, force sign-out).
 	auth.OnSessionsRevoked(authService, func(ctx context.Context, userID string) {

@@ -102,6 +102,7 @@ func RegisterAppGrantRoutes(e *echo.Echo, h *Handler, gh *AppGrantHandler, grant
 		campaigns.RequireCampaignAccess(campaignSvc),
 	)
 	registerNoteJSONRoutes(ag, h, player)
+	ag.POST("/notes/media-links", gh.MediaLinks, player)
 	ag.GET("/notes/embed", h.EmbedFragment, player)
 
 	// The frame shell: no sign-in, no campaign data; framable only by the

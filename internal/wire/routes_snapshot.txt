@@ -584,6 +584,7 @@ POST	/notes/:noteId/unlock	internal/widgets/notes/routes.go
 POST	/notes/:noteId/versions/:vid/restore	internal/widgets/notes/routes.go
 POST	/notes/allow-app	internal/widgets/notes/routes.go
 POST	/notes/bulk	internal/widgets/notes/routes.go
+POST	/notes/media-links	internal/widgets/notes/routes.go
 POST	/notifications/:nid/read	internal/plugins/sessions/routes.go
 POST	/notifications/read-all	internal/plugins/sessions/routes.go
 POST	/npcs/:eid/reveal	internal/plugins/npcs/routes.go

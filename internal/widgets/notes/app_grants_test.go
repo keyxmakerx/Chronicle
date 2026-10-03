@@ -2,6 +2,7 @@ package notes
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"net/http"
 	"net/http/httptest"
@@ -469,5 +470,44 @@ func TestAllow_ClosedGateMakesNoGrant(t *testing.T) {
 		if len(repo.byHash) != 0 {
 			t.Fatal("closed gate still made a grant")
 		}
+	}
+}
+
+type fakeLinker struct {
+	campaignID, userID string
+	paths              []string
+}
+
+func (f *fakeLinker) SignedLinksForMember(_ context.Context, campaignID, userID string, paths []string) map[string]string {
+	f.campaignID, f.userID, f.paths = campaignID, userID, paths
+	return map[string]string{paths[0]: paths[0] + "?expires=1&sig=x"}
+}
+
+func TestMediaLinks_SignsAsTheGrantsPlayer(t *testing.T) {
+	h := NewAppGrantHandler(nil, nil)
+	l := &fakeLinker{}
+	h.SetMediaLinker(l)
+
+	many := make([]string, 150)
+	for i := range many {
+		many[i] = "/media/x"
+	}
+	body, _ := json.Marshal(map[string]any{"paths": many})
+	e := echo.New()
+	req := httptest.NewRequest(http.MethodPost, "/", strings.NewReader(string(body)))
+	req.Header.Set("Content-Type", "application/json")
+	rec := httptest.NewRecorder()
+	c := e.NewContext(req, rec)
+	c.Set("campaign_context", &campaigns.CampaignContext{Campaign: &campaigns.Campaign{ID: "camp"}})
+	auth.SetSession(c, &auth.Session{UserID: "player"})
+
+	if err := h.MediaLinks(c); err != nil || rec.Code != http.StatusOK {
+		t.Fatalf("err=%v code=%d", err, rec.Code)
+	}
+	if l.campaignID != "camp" || l.userID != "player" || len(l.paths) != maxMediaLinkPaths {
+		t.Fatalf("signed for %q/%q with %d paths", l.campaignID, l.userID, len(l.paths))
+	}
+	if rec.Header().Get("Cache-Control") != "no-store" || !strings.Contains(rec.Body.String(), `"links"`) {
+		t.Fatalf("headers %v body %s", rec.Header(), rec.Body.String())
 	}
 }

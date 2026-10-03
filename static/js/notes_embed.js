@@ -74,6 +74,66 @@
     else window.open(u.href, '_blank', 'noopener');
   });
 
+  // Pictures and voice memos: an <img> or <audio> here can't send the
+  // grant, so each /media/ address is swapped for a short-lived link
+  // Chronicle signs for this player (only for files they may open). Links
+  // last 15 minutes, so audio not yet played is re-signed every 10.
+  var MEDIA = 'img[src],audio[src],video[src],source[src]';
+  var mediaTimer = 0;
+
+  function mediaPath(src) {
+    try {
+      var u = new URL(src, window.location.origin);
+      if (u.origin !== window.location.origin || u.pathname.indexOf('/media/') !== 0) return '';
+      return u.pathname;
+    } catch (e) { return ''; }
+  }
+
+  function signMedia() {
+    mediaTimer = 0;
+    if (!Chronicle.embed) return;
+    var els = [];
+    var paths = [];
+    Array.prototype.forEach.call(body.querySelectorAll(MEDIA), function (el) {
+      var src = el.getAttribute('src');
+      if (el.dataset.mediaSigned === src) return;
+      var p = mediaPath(src);
+      if (!p) return;
+      el.dataset.mediaPath = p;
+      els.push(el);
+      if (paths.indexOf(p) === -1) paths.push(p);
+    });
+    if (!paths.length) return;
+    Chronicle.apiFetch('/campaigns/' + encodeURIComponent(cid) + '/notes/media-links', {
+      method: 'POST', body: { paths: paths.slice(0, 100) }
+    }).then(function (res) {
+      return res.ok ? res.json() : {};
+    }).then(function (d) {
+      var links = (d && d.links) || {};
+      els.forEach(function (el) {
+        var link = links[el.dataset.mediaPath];
+        if (!link) return;
+        el.dataset.mediaSigned = link;
+        el.setAttribute('src', link);
+        if (el.tagName === 'SOURCE' && el.parentNode && el.parentNode.load) el.parentNode.load();
+      });
+    }).catch(function () { /* stays as it was; tried again on the next change */ });
+  }
+
+  function queueMedia() {
+    if (!mediaTimer) mediaTimer = setTimeout(signMedia, 50);
+  }
+
+  new MutationObserver(queueMedia).observe(body, {
+    childList: true, subtree: true, attributes: true, attributeFilter: ['src']
+  });
+  setInterval(function () {
+    Array.prototype.forEach.call(body.querySelectorAll('audio[data-media-signed],video[data-media-signed]'), function (el) {
+      if (el.readyState < 2) el.dataset.mediaSigned = '';
+    });
+    queueMedia();
+  }, 10 * 60 * 1000);
+
   // A note asked for before the Journal has mounted opens once it has.
   function openPending() {
     if (pendingNote && Chronicle.openJournalNote && Chronicle.openJournalNote(pendingNote)) pendingNote = '';

@@ -38,6 +38,8 @@ type AppGrantHandler struct {
 	// gate is the campaign's switch for outside apps; set by
 	// RegisterAppGrantRoutes so a grant can't be made while it is off.
 	gate AppGate
+	// links signs media for the frames; nil leaves pictures unsigned.
+	links MediaLinker
 }
 
 // NewAppGrantHandler creates the handler for the Allow window.
@@ -247,4 +249,46 @@ func RequireAppGrant(grants AppGrantService, gate AppGate) echo.MiddlewareFunc {
 			return next(c)
 		}
 	}
+}
+
+// MediaLinker signs media paths a member may open so a page with no
+// session cookie (the frames) can load them. Implemented by the media
+// plugin and wired in app/routes.go.
+type MediaLinker interface {
+	SignedLinksForMember(ctx context.Context, campaignID, userID string, paths []string) map[string]string
+}
+
+// SetMediaLinker wires the media plugin's signer for MediaLinks.
+func (h *AppGrantHandler) SetMediaLinker(l MediaLinker) {
+	h.links = l
+}
+
+// maxMediaLinkPaths bounds one MediaLinks request body.
+const maxMediaLinkPaths = 100
+
+// MediaLinks returns short-lived signed addresses for the pictures and
+// voice memos in the notes a frame shows
+// (POST /api/notes-app/campaigns/:id/notes/media-links). The frame's <img>
+// and <audio> can't send the grant, so each gets a link instead; only files
+// the player may open on the site are signed, the rest are left out.
+func (h *AppGrantHandler) MediaLinks(c echo.Context) error {
+	cc := campaigns.GetCampaignContext(c)
+	if cc == nil {
+		return apperror.NewMissingContext()
+	}
+	var req struct {
+		Paths []string `json:"paths"`
+	}
+	if err := c.Bind(&req); err != nil {
+		return apperror.NewBadRequest("invalid request")
+	}
+	if len(req.Paths) > maxMediaLinkPaths {
+		req.Paths = req.Paths[:maxMediaLinkPaths]
+	}
+	links := map[string]string{}
+	if h.links != nil && len(req.Paths) > 0 {
+		links = h.links.SignedLinksForMember(c.Request().Context(), cc.Campaign.ID, auth.GetUserID(c), req.Paths)
+	}
+	c.Response().Header().Set("Cache-Control", "no-store")
+	return c.JSON(http.StatusOK, map[string]any{"links": links})
 }
