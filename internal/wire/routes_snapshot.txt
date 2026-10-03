@@ -232,6 +232,7 @@ GET	/diagnostics	internal/app/routes.go
 GET	/diagnostics/workspace	internal/plugins/admin/routes.go
 GET	/dm-grants	internal/plugins/campaigns/routes.go
 GET	/dm-screen	internal/plugins/dmscreen/routes.go
+GET	/dm-screen	internal/plugins/syncapi/routes.go
 GET	/edit	internal/plugins/campaigns/routes.go
 GET	/embed/campaigns/:id/notes/:mode	internal/widgets/notes/routes.go
 GET	/entities	internal/plugins/entities/routes.go
@@ -530,7 +531,9 @@ POST	/content-templates	internal/plugins/entities/content_template_routes.go
 POST	/database/migrations/apply	internal/plugins/admin/routes.go
 POST	/diagnostics/workspace/parse	internal/plugins/admin/routes.go
 POST	/diagnostics/workspace/run	internal/plugins/admin/routes.go
+POST	/dm-screen/downtime	internal/plugins/syncapi/routes.go
 POST	/dm-screen/reveal/:eid	internal/plugins/dmscreen/routes.go
+POST	/dm-screen/reveal/:entityID	internal/plugins/syncapi/routes.go
 POST	/entities	internal/plugins/entities/routes.go
 POST	/entities	internal/plugins/syncapi/routes.go
 POST	/entities/:eid/claim	internal/plugins/entities/routes.go
