@@ -18,11 +18,11 @@ const maxBuyBodyBytes = 32 << 10
 // ShopBuyHandler serves the shop-room buy endpoints. Thin: the service owns
 // every rule.
 type ShopBuyHandler struct {
-	svc ShopBuyService
+	svc ShopRequestService
 }
 
 // NewShopBuyHandler creates the handler.
-func NewShopBuyHandler(svc ShopBuyService) *ShopBuyHandler {
+func NewShopBuyHandler(svc ShopRequestService) *ShopBuyHandler {
 	return &ShopBuyHandler{svc: svc}
 }
 

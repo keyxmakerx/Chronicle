@@ -704,6 +704,13 @@ func (s *stashService) SetDowntime(ctx context.Context, campaignID string, a Act
 			res.Failed++
 		}
 	}
+	// Waiting purchase requests go through the same lock and the same Buy
+	// logic, after the moves so any coins a move delivers are counted.
+	if s.purchases != nil {
+		applied, failed := s.purchases.sweepRequests(ctx, campaignID, a.UserID)
+		res.Applied += applied
+		res.Failed += failed
+	}
 	return res, nil
 }
 

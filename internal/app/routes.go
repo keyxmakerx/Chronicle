@@ -3504,7 +3504,7 @@ func (a *App) RegisterRoutes() {
 	stashHandler := armory.NewStashHandler(stashSvc)
 	// Buying shares the stash service's campaign lock, so a purchase and a
 	// stash move can't spend the same coins.
-	shopBuySvc := armory.NewShopBuyService(stashSvc, txSvc, &armoryShopCheckerAdapter{svc: entityService})
+	shopBuySvc := armory.NewShopBuyService(stashSvc, txSvc, &armoryShopCheckerAdapter{svc: entityService}, armory.NewPurchaseRequestRepository(a.DB))
 	shopBuyHandler := armory.NewShopBuyHandler(shopBuySvc)
 	// The Foundry module buys through the sync API as the player at the table,
 	// with the same service and acting-as rule as the stash calls. Its routes

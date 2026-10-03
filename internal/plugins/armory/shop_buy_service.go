@@ -26,11 +26,9 @@ const (
 	// Wealth (Draw Steel) is a standing, not a purse; how shops use it is
 	// still being decided, so it is never spent like coins.
 	wealthMessage        = "Wealth isn’t spent like coins"
+	priceWentUpMessage   = "The price went up since you asked."
 	notEnoughCoinMessage = "Not enough coin"
 	mixedCurrencyMessage = "Items are priced in different currencies"
-	// buyClosedMessage is shown to a player while downtime is closed. Only the
-	// Owner may buy then.
-	buyClosedMessage = "Buying opens when the GM opens downtime."
 )
 
 // ShopBuyService reads who can buy at a shop and applies a basket.
@@ -39,22 +37,48 @@ type ShopBuyService interface {
 	// would apply at once. A shop the caller cannot see is NotFound.
 	Buyers(ctx context.Context, campaignID, shopEntityID string, a Actor) (*BuyersView, error)
 	// Buy charges the buyer's coins, takes the stock, gives the items and
-	// records the purchases.
+	// records the purchases. While downtime is closed a player's basket is
+	// stored as a request instead (status "requested") and nothing is spent.
 	Buy(ctx context.Context, campaignID, shopEntityID string, a Actor, in BuyInput) (*BuyResult, error)
 }
 
+// ShopRequestService is the buy flow plus the GM's answers to waiting
+// purchase requests. It is separate so callers that only buy, like the sync
+// API, depend on the smaller interface.
+type ShopRequestService interface {
+	ShopBuyService
+	// ApproveRequest applies a waiting purchase request now. Owner visibility only.
+	ApproveRequest(ctx context.Context, campaignID string, a Actor, requestID int64) (*PurchaseRequest, error)
+	// DeclineRequest turns a waiting purchase request down. Owner visibility only.
+	DeclineRequest(ctx context.Context, campaignID string, a Actor, requestID int64) (*PurchaseRequest, error)
+}
+
 type shopBuyService struct {
-	stash *stashService
-	tx    *transactionService
-	shops ShopEntityChecker
+	stash    *stashService
+	tx       *transactionService
+	shops    ShopEntityChecker
+	requests PurchaseRequestRepository
 }
 
 // NewShopBuyService wires the buy flow. It takes the concrete stash and
 // transaction services because it must share the stash service's campaign
 // lock and its money and inventory helpers; a second copy of those would let
 // the two paths drift apart.
-func NewShopBuyService(stash *stashService, tx *transactionService, shops ShopEntityChecker) ShopBuyService {
-	return &shopBuyService{stash: stash, tx: tx, shops: shops}
+//
+// It also hands the stash service the two hooks that need purchase requests:
+// the downtime-open sweep and the stashes page. Opening downtime lives in the
+// stash service and runs under the campaign lock, so the sweep must be
+// reachable from there without the stash service importing this one.
+func NewShopBuyService(stash *stashService, tx *transactionService, shops ShopEntityChecker, requests PurchaseRequestRepository) ShopRequestService {
+	s := &shopBuyService{stash: stash, tx: tx, shops: shops, requests: requests}
+	stash.purchases = s
+	return s
+}
+
+// basketQuote is the total a queued request was asked at.
+type basketQuote struct {
+	total    Cents
+	currency string
 }
 
 // buyLine is one priced basket line.
@@ -195,32 +219,51 @@ func (s *shopBuyService) Buy(ctx context.Context, campaignID, shopEntityID strin
 	if err := s.authorizeBuyer(ctx, campaignID, a, buyer.ID); err != nil {
 		return nil, err
 	}
-	if buyer.MoneyKey == "" {
-		return nil, apperror.NewBadRequest(noCoinFieldMessage)
-	}
-	if buyer.MoneyKey == "wealth" {
-		return nil, apperror.NewBadRequest(wealthMessage)
+	if err := checkBuyerSheet(buyer); err != nil {
+		return nil, err
 	}
 
 	unlock := s.stash.locks.lock(campaignID)
 	defer unlock()
 
 	// The switch is read under the lock, like a stash move, so a basket cannot
-	// be judged against a downtime state that has since changed.
+	// be judged against a downtime state that has since changed. Opening
+	// downtime sweeps the queue under the same lock, so a request stored here
+	// can never miss that sweep.
 	open, err := s.stash.IsDowntimeOpen(ctx, campaignID)
 	if err != nil {
 		return nil, err
 	}
 	if !open && !a.IsOwner() {
-		// A waiting purchase would need somewhere to be stored; the request
-		// queue (item_moves) can only hold an item or money move between
-		// characters and stashes, so for now the player is told to wait.
-		return nil, apperror.NewConflict(buyClosedMessage)
+		return s.queueRequest(ctx, campaignID, shopEntityID, a, buyer, in)
 	}
+	return s.applyBasket(ctx, campaignID, shopEntityID, a, buyer, in, nil)
+}
 
+// checkBuyerSheet refuses a character that has no coins to spend.
+func checkBuyerSheet(buyer *EntityRef) error {
+	if buyer.MoneyKey == "" {
+		return apperror.NewBadRequest(noCoinFieldMessage)
+	}
+	if buyer.MoneyKey == "wealth" {
+		return apperror.NewBadRequest(wealthMessage)
+	}
+	return nil
+}
+
+// applyBasket prices the basket from the listings, then charges, takes stock
+// and gives the items. The caller holds the campaign lock and has already
+// decided that buying is allowed now (downtime open, the Owner, or a request
+// the Owner approved), so this never looks at the downtime switch.
+func (s *shopBuyService) applyBasket(ctx context.Context, campaignID, shopEntityID string, a Actor, buyer *EntityRef, in BuyInput, quote *basketQuote) (*BuyResult, error) {
 	lines, currency, total, err := s.priceBasket(ctx, campaignID, shopEntityID, a, in)
 	if err != nil {
 		return nil, err
+	}
+	// A request is honoured only at or below the total the player saw: a
+	// higher or differently-denominated price is refused, never charged.
+	if quote != nil && (currency != quote.currency || total > quote.total) {
+		return nil, apperror.NewConflict(priceWentUpMessage)
 	}
 	// Read the coins under the lock so two baskets can't both spend them.
 	have, err := s.stash.characterMoney(ctx, buyer)

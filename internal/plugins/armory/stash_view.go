@@ -22,6 +22,9 @@ func thingText(l MoveLine) string {
 
 // MoveSummary renders one history row as a sentence a player can read.
 func MoveSummary(l MoveLine) string {
+	if l.Summary != "" {
+		return l.Summary
+	}
 	// A money row from a character to itself is not a move: it records an edit
 	// of the sheet, and its stored reason already reads as a sentence.
 	if l.IsMoneyEdit() && l.Reason != "" {
@@ -81,6 +84,24 @@ func stashURL(campaignID string, stashID int) string {
 }
 
 func movesURL(campaignID string) string { return "/campaigns/" + campaignID + "/armory/moves" }
+
+func purchaseRequestsURL(campaignID string) string {
+	return "/campaigns/" + campaignID + "/armory/purchase-requests"
+}
+
+// purchaseRequestText is the tail of a waiting purchase row after the
+// requester's name: "wants to buy 2 items at The Gilded Cup for 35 gp". The
+// price is omitted when the basket can no longer be priced from the listings.
+func purchaseRequestText(p PurchaseRequestLine) string {
+	text := fmt.Sprintf("wants to buy %s at %s", plural(p.ItemCount(), "item"), p.ShopName)
+	if p.Total != nil {
+		text += fmt.Sprintf(" for %s %s", p.Total.String(), p.Currency)
+		if p.PriceRose {
+			text += ", but the price has gone up since they asked"
+		}
+	}
+	return text
+}
 
 func downtimeURL(campaignID string) string { return "/campaigns/" + campaignID + "/armory/downtime" }
 
