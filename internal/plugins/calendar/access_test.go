@@ -225,6 +225,25 @@ func (f *fakeCalendarSvc) ListErasForCalendar(context.Context, string, string, i
 	return nil, nil
 }
 
+func (f *fakeCalendarSvc) SetOccurrenceOverride(_ context.Context, _, _, _ string, _ DayDate, _ OccurrenceOverrideInput, v permissions.Viewer) (*OccurrenceOverride, error) {
+	f.lastViewer = v
+	return &OccurrenceOverride{}, nil
+}
+
+func (f *fakeCalendarSvc) DeleteOccurrenceOverride(_ context.Context, _, _, _ string, _ DayDate, v permissions.Viewer) error {
+	f.lastViewer = v
+	return nil
+}
+
+func (f *fakeCalendarSvc) PreviewRecurrence(_ context.Context, _, _ string, _ RecurrencePreviewInput, v permissions.Viewer) (*RecurrencePreview, error) {
+	f.lastViewer = v
+	return &RecurrencePreview{Dates: []DayDate{}}, nil
+}
+
+func (f *fakeCalendarSvc) ListOccurrenceOverrides(context.Context, string, string, permissions.Viewer) (map[string][]OccurrenceOverride, error) {
+	return nil, nil
+}
+
 func (f *fakeCalendarSvc) PreviewImport(context.Context, []byte) (*ImportResult, error) {
 	return &ImportResult{Format: FormatChronicle, CalendarName: "Previewed Calendar"}, nil
 }

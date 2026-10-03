@@ -222,9 +222,38 @@
       return (y2 - y1) * mc + (m2 - m1);
     },
 
+    // The month read gives each repeating event its own dates in
+    // `occurrences` (rules, skips and moves already applied by the server).
+    // When they are there they are the whole truth for that month; the
+    // arithmetic below is only the fallback for an event that came without.
+    hasExpansion: function (e) {
+      return Array.isArray(e.occurrences) || e.occurrences_truncated === true;
+    },
+
+    // The occurrence of e on (year, month, day), or null. A skipped one is
+    // returned (flagged) only to viewers the server sent it to. When the
+    // server could not finish counting (occurrences_truncated) and sent no
+    // list at all, the event keeps its own start date. Once a list is given
+    // (even empty) the start date is never put back: a player's list has
+    // skipped dates stripped out, and a moved start date lives elsewhere.
+    occurrenceOn: function (e, year, month, day) {
+      var list = Array.isArray(e.occurrences) ? e.occurrences : [];
+      for (var i = 0; i < list.length; i++) {
+        var o = list[i];
+        if (o.year === year && o.month === month && o.day === day) return o;
+      }
+      if (e.occurrences_truncated === true && !Array.isArray(e.occurrences) && e.year === year && e.month === month && e.day === day) {
+        var moved = list.some(function (o) { return o.moved_from && o.moved_from.year === year && o.moved_from.month === month && o.moved_from.day === day; });
+        if (!moved) return { year: year, month: month, day: day };
+      }
+      return null;
+    },
+
     // occursOn mirrors Event.OccursOn exactly (model.go), including its
-    // early-outs and its "recurrence only moves forward" rule.
+    // early-outs and its "recurrence only moves forward" rule, for an event
+    // that arrived without occurrences.
     occursOn: function (cal, e, year, month, day) {
+      if (CalDate.hasExpansion(e)) return CalDate.occurrenceOn(e, year, month, day) !== null;
       var onBase = e.year === year && e.month === month && e.day === day;
       if (!e.is_recurring || !e.recurrence_type) return onBase;
       var rt = e.recurrence_type;
@@ -857,6 +886,7 @@
 
     destroy: function (el) {
       if (this.skyDock) this.skyDock.destroy();
+      if (this._eventDrawer) this._eventDrawer.destroy();
       if (this._resizeHandler) window.removeEventListener('resize', this._resizeHandler);
       if (this._escHandler) document.removeEventListener('keydown', this._escHandler);
       if (this._mvOffHandler) document.removeEventListener('pointerdown', this._mvOffHandler, true);
@@ -1320,6 +1350,7 @@
       // recurring/spanning WHERE clause already includes those
       // candidates), so no extra fetch is needed here.
       return list.filter(function (e) {
+        if (CalDate.hasExpansion(e)) return CalDate.occurrenceOn(e, y, m, d) !== null;
         if (e.year === y && e.month === m && e.day === d) return true;
         if (e.is_recurring && CalDate.occursOn(cal, e, y, m, d)) return true;
         if (!e.is_recurring && CalDate.withinSpan(cal, e, y, m, d)) return true;
@@ -1503,7 +1534,8 @@
       var cap = Math.max(0, 4 - gn.length), shown = evs.slice(0, cap), extra = evs.length - shown.length;
       var html = '<div class="marks">' + gn.join('') + shown.map(function (e) {
         var dirRing = self.canAuthorDmOnly && e.visibility === 'dm_only' ? ' dir' : '';
-        return '<span class="mk' + dirRing + '" data-ev="' + esc(e.id) + '" style="' + eventColorStyle(e) + '" title="' + esc(e.name) + '">' + esc(eventGlyph(e)) + '</span>';
+        var occ = CalDate.occurrenceOn(e, y, m, d), skipped = occ && occ.skipped;
+        return '<span class="mk' + dirRing + (skipped ? ' skip' : '') + '" data-ev="' + esc(e.id) + '" style="' + eventColorStyle(e) + '" title="' + esc(e.name + (skipped ? ' (skipped)' : '')) + '">' + esc(eventGlyph(e)) + '</span>';
       }).join('');
       if (extra > 0) html += '<span class="more">+' + extra + '</span>';
       html += '</div>';
@@ -1832,8 +1864,48 @@
       return P.closing;
     },
 
+    // What an event's repeat says in words: a rule as its sentence, a plain
+    // repeat as its type.
+    repeatText: function (ev) {
+      var R = Chronicle.calendarRule;
+      if (ev.recurrence_type === 'rule') {
+        if (!ev.recurrence_rule || !R) return 'Repeats by a rule';
+        return 'Repeats: ' + R.summaryInline(R.fromRule(ev.recurrence_rule), this.ruleEnv(ev.id));
+      }
+      return 'Repeats ' + ev.recurrence_type;
+    },
+
+    // What the rule editor and sentences may name on this calendar: its
+    // moons, seasons, weekdays, months and the events seen so far (the
+    // months visited; the API lists events a month at a time). An event
+    // that repeats relative to another cannot be an anchor, so it is not
+    // offered, and neither is the event being edited.
+    ruleEnv: function (exceptId) {
+      var self = this, seen = {}, all = [], names = this._eventNames || (this._eventNames = {});
+      Object.keys(this.eventsByMonth).forEach(function (k) {
+        (self.eventsByMonth[k] || []).forEach(function (e) {
+          if (seen[e.id]) return;
+          seen[e.id] = true;
+          names[e.id] = e.name;
+          all.push(e);
+        });
+      });
+      var events = all.filter(function (e) {
+        if (e.id === exceptId) return false;
+        var r = e.recurrence_type === 'rule' && e.recurrence_rule;
+        return !(r && (r.match || []).some(function (c) { return c.kind === 'relative_to_event' || c.kind === 'after_event'; }));
+      }).map(function (e) { return { id: e.id, name: e.name }; });
+      return { cal: this.cal, events: events, hiddenOk: this.canAuthorDmOnly === true, eventName: function (id) { return names[id]; } };
+    },
+
+    // "14 Harvestide" (with the year when it is not the calendar's own).
+    _dateLabel: function (y, m, d) {
+      var cal = this.cal, mo = (cal.months || [])[m - 1];
+      return d + ' ' + (mo ? mo.name : m) + (y !== cal.current_year ? ' ' + y : '');
+    },
+
     _wingHTML: function (d, highlightEventId) {
-      var cal = this.cal;
+      var self = this, cal = this.cal;
       var mc = CalDate.monthCount(cal), m0 = ((d.m - 1) % mc + mc) % mc, monthDef = (cal.months || [])[m0];
       var label = (monthDef ? monthDef.name : d.m) + ' ' + d.d + ', ' + d.y;
       var isToday = d.y === cal.current_year && d.m === cal.current_month && d.d === cal.current_day;
@@ -1848,9 +1920,11 @@
       var evHTML = evs.length ? evs.map(function (e) {
         var hl = highlightEventId && e.id === highlightEventId ? ' hl' : '';
         var time = e.all_day ? '' : (e.start_hour != null ? pad2(e.start_hour) + ':' + pad2(e.start_minute || 0) : '');
-        return '<div class="evd go' + hl + '" data-ev="' + esc(e.id) + '">' +
+        var occ = CalDate.occurrenceOn(e, d.y, d.m, d.d) || {};
+        var note = occ.skipped ? 'Skipped. Players don’t see it.' : (occ.moved_from ? 'Moved from ' + self._dateLabel(occ.moved_from.year, occ.moved_from.month, occ.moved_from.day) : '');
+        return '<div class="evd go' + hl + (occ.skipped ? ' skip' : '') + '" data-ev="' + esc(e.id) + '">' +
           '<div class="evh"><span class="ric" style="' + eventColorStyle(e) + '">' + esc(eventGlyph(e)) + '</span><span class="qt0">' + esc(e.name) + '</span></div>' +
-          (time ? '<div class="evm">' + esc(time) + '</div>' : '') +
+          (time || note ? '<div class="evm">' + (time ? '<span>' + esc(time) + '</span>' : '') + (note ? '<span>' + esc(note) + '</span>' : '') + '</div>' : '') +
           '</div>';
       }).join('') : '<div class="none">Nothing on the calendar today.</div>';
       var self = this, nights = this.nightsOnDay(d.y, d.m, d.d);
@@ -1952,7 +2026,7 @@
         (ev.end_hour != null ? '–' + pad2(ev.end_hour) + ':' + pad2(ev.end_minute || 0) : '') : '');
       var recur = '';
       if (ev.is_recurring && ev.recurrence_type) {
-        recur = '<div class="row"><i class="fa-solid fa-rotate"></i><span class="tt">Repeats ' + esc(ev.recurrence_type) + '</span></div>';
+        recur = '<div class="row"><i class="fa-solid fa-rotate"></i><span class="tt">' + esc(this.repeatText(ev)) + '</span></div>';
       }
       var entity = ev.entity_id ? '<div class="row"><i class="fa-solid fa-link"></i><a class="tt" href="/campaigns/' + esc(this.campaignId) + '/entities/' + esc(ev.entity_id) + '">' + esc(ev.entity_name || 'Linked page') + '</a></div>' : '';
       var visBadge = (this.canAuthorDmOnly && ev.visibility === 'dm_only') ? '<span class="dirnote"><i class="fa-solid fa-eye-slash"></i>Director only</span>' : '';

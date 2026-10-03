@@ -5,6 +5,7 @@
 package calendar
 
 import (
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
@@ -258,36 +259,37 @@ func (h *Handler) GetEventAPI(c echo.Context) error {
 func (h *Handler) CreateEventAPI(c echo.Context) error {
 	cc := campaigns.GetCampaignContext(c)
 	var req struct {
-		Name                     string  `json:"name"`
-		Description              *string `json:"description"`
-		DescriptionHTML          *string `json:"description_html"`
-		EntityID                 *string `json:"entity_id"`
-		Year                     int     `json:"year"`
-		Month                    int     `json:"month"`
-		Day                      int     `json:"day"`
-		StartHour                *int    `json:"start_hour"`
-		StartMinute              *int    `json:"start_minute"`
-		EndYear                  *int    `json:"end_year"`
-		EndMonth                 *int    `json:"end_month"`
-		EndDay                   *int    `json:"end_day"`
-		EndHour                  *int    `json:"end_hour"`
-		EndMinute                *int    `json:"end_minute"`
-		IsRecurring              bool    `json:"is_recurring"`
-		RecurrenceType           *string `json:"recurrence_type"`
-		RecurrenceInterval       *int    `json:"recurrence_interval"`
-		RecurrenceEndYear        *int    `json:"recurrence_end_year"`
-		RecurrenceEndMonth       *int    `json:"recurrence_end_month"`
-		RecurrenceEndDay         *int    `json:"recurrence_end_day"`
-		RecurrenceMaxOccurrences *int    `json:"recurrence_max_occurrences"`
-		Visibility               string  `json:"visibility"`
-		VisibilityRules          *string `json:"visibility_rules"`
-		KindID                   *int    `json:"kind_id"`
-		Announced                *string `json:"announced"`
-		Tier                     *string `json:"tier"`
-		Color                    *string `json:"color"`
-		Icon                     *string `json:"icon"`
-		AllDay                   bool    `json:"all_day"`
-		Payload                  *string `json:"payload"`
+		Name                     string          `json:"name"`
+		Description              *string         `json:"description"`
+		DescriptionHTML          *string         `json:"description_html"`
+		EntityID                 *string         `json:"entity_id"`
+		Year                     int             `json:"year"`
+		Month                    int             `json:"month"`
+		Day                      int             `json:"day"`
+		StartHour                *int            `json:"start_hour"`
+		StartMinute              *int            `json:"start_minute"`
+		EndYear                  *int            `json:"end_year"`
+		EndMonth                 *int            `json:"end_month"`
+		EndDay                   *int            `json:"end_day"`
+		EndHour                  *int            `json:"end_hour"`
+		EndMinute                *int            `json:"end_minute"`
+		IsRecurring              bool            `json:"is_recurring"`
+		RecurrenceType           *string         `json:"recurrence_type"`
+		RecurrenceInterval       *int            `json:"recurrence_interval"`
+		RecurrenceEndYear        *int            `json:"recurrence_end_year"`
+		RecurrenceEndMonth       *int            `json:"recurrence_end_month"`
+		RecurrenceEndDay         *int            `json:"recurrence_end_day"`
+		RecurrenceMaxOccurrences *int            `json:"recurrence_max_occurrences"`
+		RecurrenceRule           json.RawMessage `json:"recurrence_rule"`
+		Visibility               string          `json:"visibility"`
+		VisibilityRules          *string         `json:"visibility_rules"`
+		KindID                   *int            `json:"kind_id"`
+		Announced                *string         `json:"announced"`
+		Tier                     *string         `json:"tier"`
+		Color                    *string         `json:"color"`
+		Icon                     *string         `json:"icon"`
+		AllDay                   bool            `json:"all_day"`
+		Payload                  *string         `json:"payload"`
 	}
 	if err := c.Bind(&req); err != nil {
 		return apperror.NewBadRequest("invalid request")
@@ -295,6 +297,8 @@ func (h *Handler) CreateEventAPI(c echo.Context) error {
 
 	evt, err := h.svc.CreateEvent(c.Request().Context(), c.Param("calid"), cc.Campaign.ID, CreateEventInput{
 		CanAuthorDmOnly:          viewerFrom(c, cc).SkipsPerUserRules(),
+		Author:                   viewerFrom(c, cc),
+		RecurrenceRule:           req.RecurrenceRule,
 		Name:                     req.Name,
 		Description:              req.Description,
 		DescriptionHTML:          req.DescriptionHTML,
@@ -342,36 +346,37 @@ func (h *Handler) CreateEventAPI(c echo.Context) error {
 func (h *Handler) UpdateEventAPI(c echo.Context) error {
 	cc := campaigns.GetCampaignContext(c)
 	var req struct {
-		Name                     patch.Field[string] `json:"name"`
-		Description              patch.Field[string] `json:"description"`
-		DescriptionHTML          patch.Field[string] `json:"description_html"`
-		EntityID                 patch.Field[string] `json:"entity_id"`
-		Year                     patch.Field[int]    `json:"year"`
-		Month                    patch.Field[int]    `json:"month"`
-		Day                      patch.Field[int]    `json:"day"`
-		StartHour                patch.Field[int]    `json:"start_hour"`
-		StartMinute              patch.Field[int]    `json:"start_minute"`
-		EndYear                  patch.Field[int]    `json:"end_year"`
-		EndMonth                 patch.Field[int]    `json:"end_month"`
-		EndDay                   patch.Field[int]    `json:"end_day"`
-		EndHour                  patch.Field[int]    `json:"end_hour"`
-		EndMinute                patch.Field[int]    `json:"end_minute"`
-		IsRecurring              patch.Field[bool]   `json:"is_recurring"`
-		RecurrenceType           patch.Field[string] `json:"recurrence_type"`
-		RecurrenceInterval       patch.Field[int]    `json:"recurrence_interval"`
-		RecurrenceEndYear        patch.Field[int]    `json:"recurrence_end_year"`
-		RecurrenceEndMonth       patch.Field[int]    `json:"recurrence_end_month"`
-		RecurrenceEndDay         patch.Field[int]    `json:"recurrence_end_day"`
-		RecurrenceMaxOccurrences patch.Field[int]    `json:"recurrence_max_occurrences"`
-		Visibility               patch.Field[string] `json:"visibility"`
-		VisibilityRules          patch.Field[string] `json:"visibility_rules"`
-		KindID                   patch.Field[int]    `json:"kind_id"`
-		Announced                patch.Field[string] `json:"announced"`
-		Tier                     patch.Field[string] `json:"tier"`
-		Color                    patch.Field[string] `json:"color"`
-		Icon                     patch.Field[string] `json:"icon"`
-		AllDay                   patch.Field[bool]   `json:"all_day"`
-		Payload                  patch.Field[string] `json:"payload"`
+		Name                     patch.Field[string]          `json:"name"`
+		Description              patch.Field[string]          `json:"description"`
+		DescriptionHTML          patch.Field[string]          `json:"description_html"`
+		EntityID                 patch.Field[string]          `json:"entity_id"`
+		Year                     patch.Field[int]             `json:"year"`
+		Month                    patch.Field[int]             `json:"month"`
+		Day                      patch.Field[int]             `json:"day"`
+		StartHour                patch.Field[int]             `json:"start_hour"`
+		StartMinute              patch.Field[int]             `json:"start_minute"`
+		EndYear                  patch.Field[int]             `json:"end_year"`
+		EndMonth                 patch.Field[int]             `json:"end_month"`
+		EndDay                   patch.Field[int]             `json:"end_day"`
+		EndHour                  patch.Field[int]             `json:"end_hour"`
+		EndMinute                patch.Field[int]             `json:"end_minute"`
+		IsRecurring              patch.Field[bool]            `json:"is_recurring"`
+		RecurrenceType           patch.Field[string]          `json:"recurrence_type"`
+		RecurrenceInterval       patch.Field[int]             `json:"recurrence_interval"`
+		RecurrenceEndYear        patch.Field[int]             `json:"recurrence_end_year"`
+		RecurrenceEndMonth       patch.Field[int]             `json:"recurrence_end_month"`
+		RecurrenceEndDay         patch.Field[int]             `json:"recurrence_end_day"`
+		RecurrenceMaxOccurrences patch.Field[int]             `json:"recurrence_max_occurrences"`
+		RecurrenceRule           patch.Field[json.RawMessage] `json:"recurrence_rule"`
+		Visibility               patch.Field[string]          `json:"visibility"`
+		VisibilityRules          patch.Field[string]          `json:"visibility_rules"`
+		KindID                   patch.Field[int]             `json:"kind_id"`
+		Announced                patch.Field[string]          `json:"announced"`
+		Tier                     patch.Field[string]          `json:"tier"`
+		Color                    patch.Field[string]          `json:"color"`
+		Icon                     patch.Field[string]          `json:"icon"`
+		AllDay                   patch.Field[bool]            `json:"all_day"`
+		Payload                  patch.Field[string]          `json:"payload"`
 	}
 	if err := c.Bind(&req); err != nil {
 		return apperror.NewBadRequest("invalid request")
@@ -399,6 +404,7 @@ func (h *Handler) UpdateEventAPI(c echo.Context) error {
 		RecurrenceEndMonth:       req.RecurrenceEndMonth,
 		RecurrenceEndDay:         req.RecurrenceEndDay,
 		RecurrenceMaxOccurrences: req.RecurrenceMaxOccurrences,
+		RecurrenceRule:           req.RecurrenceRule,
 		Visibility:               req.Visibility,
 		VisibilityRules:          req.VisibilityRules,
 		KindID:                   req.KindID,
@@ -409,6 +415,93 @@ func (h *Handler) UpdateEventAPI(c echo.Context) error {
 		AllDay:                   req.AllDay,
 		Payload:                  req.Payload,
 	}, viewerFrom(c, cc))
+}
+
+// occurrenceDate reads the :y/:m/:d path segments naming one occurrence.
+func occurrenceDate(c echo.Context) (DayDate, error) {
+	y, errY := strconv.Atoi(c.Param("y"))
+	m, errM := strconv.Atoi(c.Param("m"))
+	d, errD := strconv.Atoi(c.Param("d"))
+	if errY != nil || errM != nil || errD != nil {
+		return DayDate{}, apperror.NewBadRequest("occurrence date must be numbers")
+	}
+	return DayDate{Year: y, Month: m, Day: d}, nil
+}
+
+// SetOccurrenceAPI skips or moves one occurrence of a repeating event
+// ("this one only"). Scribe+, and the event must be visible to the caller.
+// Body: {"action":"skip"} or {"action":"move","year":Y,"month":M,"day":D}.
+// PUT /campaigns/:id/calendars/:calid/events/:eid/occurrences/:y/:m/:d
+func (h *Handler) SetOccurrenceAPI(c echo.Context) error {
+	cc := campaigns.GetCampaignContext(c)
+	occ, err := occurrenceDate(c)
+	if err != nil {
+		return err
+	}
+	var req struct {
+		Action string `json:"action"`
+		Year   int    `json:"year"`
+		Month  int    `json:"month"`
+		Day    int    `json:"day"`
+	}
+	if err := c.Bind(&req); err != nil {
+		return apperror.NewBadRequest("invalid request")
+	}
+	o, err := h.svc.SetOccurrenceOverride(c.Request().Context(), c.Param("eid"), c.Param("calid"), cc.Campaign.ID, occ,
+		OccurrenceOverrideInput{Action: req.Action, Year: req.Year, Month: req.Month, Day: req.Day}, viewerFrom(c, cc))
+	if err != nil {
+		return err
+	}
+	return c.JSON(http.StatusOK, o)
+}
+
+// DeleteOccurrenceAPI puts one skipped or moved occurrence back.
+// DELETE /campaigns/:id/calendars/:calid/events/:eid/occurrences/:y/:m/:d
+func (h *Handler) DeleteOccurrenceAPI(c echo.Context) error {
+	cc := campaigns.GetCampaignContext(c)
+	occ, err := occurrenceDate(c)
+	if err != nil {
+		return err
+	}
+	if err := h.svc.DeleteOccurrenceOverride(c.Request().Context(), c.Param("eid"), c.Param("calid"), cc.Campaign.ID, occ, viewerFrom(c, cc)); err != nil {
+		return err
+	}
+	return c.NoContent(http.StatusOK)
+}
+
+// PreviewRecurrenceAPI lists the next dates a draft rule gives, for the
+// event editor. Read-gated; writes nothing.
+// POST /campaigns/:id/calendars/:calid/recurrence/preview
+func (h *Handler) PreviewRecurrenceAPI(c echo.Context) error {
+	cc := campaigns.GetCampaignContext(c)
+	var req struct {
+		RecurrenceRule           json.RawMessage `json:"recurrence_rule"`
+		Year                     int             `json:"year"`
+		Month                    int             `json:"month"`
+		Day                      int             `json:"day"`
+		Count                    int             `json:"count"`
+		RecurrenceMaxOccurrences *int            `json:"recurrence_max_occurrences"`
+		RecurrenceEndYear        *int            `json:"recurrence_end_year"`
+		RecurrenceEndMonth       *int            `json:"recurrence_end_month"`
+		RecurrenceEndDay         *int            `json:"recurrence_end_day"`
+	}
+	if err := c.Bind(&req); err != nil {
+		return apperror.NewBadRequest("invalid request")
+	}
+	input := RecurrencePreviewInput{
+		Rule:                     req.RecurrenceRule,
+		Start:                    DayDate{Year: req.Year, Month: req.Month, Day: req.Day},
+		Count:                    req.Count,
+		RecurrenceMaxOccurrences: req.RecurrenceMaxOccurrences,
+	}
+	if req.RecurrenceEndYear != nil && req.RecurrenceEndMonth != nil && req.RecurrenceEndDay != nil {
+		input.RecurrenceEnd = &DayDate{Year: *req.RecurrenceEndYear, Month: *req.RecurrenceEndMonth, Day: *req.RecurrenceEndDay}
+	}
+	out, err := h.svc.PreviewRecurrence(c.Request().Context(), c.Param("calid"), cc.Campaign.ID, input, viewerFrom(c, cc))
+	if err != nil {
+		return err
+	}
+	return c.JSON(http.StatusOK, out)
 }
 
 // DeleteEventAPI deletes an event. Owner only.

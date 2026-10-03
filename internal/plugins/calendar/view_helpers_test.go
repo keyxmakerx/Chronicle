@@ -80,6 +80,44 @@ func TestCountEventsByDay_RecurrenceAware(t *testing.T) {
 	}
 }
 
+// A month read hands each repeating event its own dates; the dots follow
+// them, not OccursOn.
+func TestCountEventsByDay_UsesOccurrences(t *testing.T) {
+	cal := twoMonthCalendar()
+	byRule := RecurrenceByRule
+	weekly := RecurrenceWeekly
+	events := []Event{
+		{ID: "rule", Year: 1, Month: 1, Day: 1, IsRecurring: true, RecurrenceType: &byRule,
+			Occurrences: []Occurrence{{Year: 1, Month: 1, Day: 3}, {Year: 1, Month: 1, Day: 4, Skipped: true}, {Year: 1, Month: 2, Day: 4}}},
+		// A weekly event whose first date was skipped and moved onto day 2.
+		{ID: "weekly", Year: 1, Month: 1, Day: 1, IsRecurring: true, RecurrenceType: &weekly,
+			Occurrences: []Occurrence{{Year: 1, Month: 1, Day: 1, Skipped: true}, {Year: 1, Month: 1, Day: 2}}},
+		// The read hit its bound: nothing found, but the start date is still known.
+		{ID: "cut", Year: 1, Month: 1, Day: 5, IsRecurring: true, RecurrenceType: &byRule, OccurrencesTruncated: true},
+		// Truncated with a skipped start date: not counted again as the fallback.
+		{ID: "cutskip", Year: 1, Month: 1, Day: 4, IsRecurring: true, RecurrenceType: &byRule, OccurrencesTruncated: true,
+			Occurrences: []Occurrence{{Year: 1, Month: 1, Day: 4, Skipped: true}}},
+		// A player's truncated read: the list was given (skips stripped), so the
+		// start date, which may have been one of them, is not put back.
+		{ID: "player", Year: 1, Month: 1, Day: 3, IsRecurring: true, RecurrenceType: &byRule, OccurrencesTruncated: true, Occurrences: []Occurrence{}},
+		// A truncated read whose start date was moved to day 4.
+		{ID: "movedstart", Year: 1, Month: 1, Day: 1, IsRecurring: true, RecurrenceType: &byRule, OccurrencesTruncated: true,
+			Occurrences: []Occurrence{{Year: 1, Month: 1, Day: 4, MovedFrom: &DayDate{Year: 1, Month: 1, Day: 1}}}},
+		// Repeats, but nothing lands in this month.
+		{ID: "none", Year: 1, Month: 1, Day: 3, IsRecurring: true, RecurrenceType: &byRule, Occurrences: []Occurrence{}},
+	}
+	got := countEventsByDay(cal, events, 1, 1)
+	want := map[int]int{2: 1, 3: 1, 4: 1, 5: 1}
+	if len(got) != len(want) {
+		t.Fatalf("counts = %v, want %v", got, want)
+	}
+	for d, n := range want {
+		if got[d] != n {
+			t.Errorf("day %d: got %d, want %d (counts %v)", d, got[d], n, got)
+		}
+	}
+}
+
 // hugeMonthCalendar is a calendar whose one month claims more days than
 // clampCalendarStructure would ever let an import store — standing in for a
 // calendar_months row that reached that value some other way (a pre-fix

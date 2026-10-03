@@ -43,6 +43,7 @@
   // A form that grows inside a card can run past the edge of whatever is
   // scrolling it (the page, or a calendar opened out on the Calendars page),
   // so it is brought into view as it opens.
+  function reducedMotionNow() { return !!(window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches); }
   function reveal(el) {
     var still = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
     el.scrollIntoView({ block: 'nearest', behavior: still ? 'auto' : 'smooth' });
@@ -573,15 +574,15 @@
   // write's per-event requests succeeded. verb is past tense ("Hid",
   // "Revealed", "Shifted"); tail is an optional clause inserted before the
   // event count's trailing punctuation (e.g. " by 2 days").
-  CalendarEditor.prototype._reportBulkResult = function (oks, verb, tail) {
+  CalendarEditor.prototype._reportBulkResult = function (oks, verb, tail, note) {
     var view = this.view, okCount = oks.filter(Boolean).length, failCount = oks.length - okCount;
     view.eventsByMonth = {}; // simplest correct invalidation: refetch on next paint
     view.renderMonth();
     tail = tail || '';
     if (!failCount) {
-      view.say(verb + ' ' + okCount + (okCount === 1 ? ' event' : ' events') + tail + '.');
+      view.say(verb + ' ' + okCount + (okCount === 1 ? ' event' : ' events') + tail + '.' + (note || ''));
     } else {
-      view.say(verb + ' ' + okCount + ' of ' + oks.length + ' events' + tail + '; ' + failCount + " couldn't be saved.");
+      view.say(verb + ' ' + okCount + ' of ' + oks.length + ' events' + tail + '; ' + failCount + " couldn't be saved." + (note || ''));
     }
   };
 
@@ -628,6 +629,20 @@
   CalendarEditor.prototype._applyShift = function () {
     var self = this, view = this.view, cal = view.cal, delta = this._shiftN, events = this._eventsInSelection();
     if (!delta || !events.length) { this._closeShiftTray(); return; }
+    // A rule event's dates come from its rule and a repeating event with
+    // skips or moves is keyed by dates a shift would orphan; both are left
+    // as they are, and the result says so.
+    var left = events.filter(function (e) {
+      if (e.recurrence_type === 'rule') return true;
+      return (e.occurrences || []).some(function (o) { return o.skipped || o.moved_from; });
+    });
+    events = events.filter(function (e) { return left.indexOf(e) < 0; });
+    var note = left.length ? ' ' + left.length + (left.length === 1 ? ' event repeats' : ' events repeat') + ' by a rule or has changed dates, and was left as it is.' : '';
+    if (!events.length) {
+      self._closeShiftTray();
+      view.say('Nothing shifted.' + note);
+      return;
+    }
     settleAll(events.map(function (e) {
       var start = CalDate.addDays(cal, { y: e.year, m: e.month, d: e.day }, delta);
       var body = { year: start.y, month: start.m, day: start.d };
@@ -639,7 +654,7 @@
     })).then(function (oks) {
       self._closeShiftTray();
       var tail = ' by ' + delta + (Math.abs(delta) === 1 ? ' day' : ' days');
-      self._reportBulkResult(oks, 'Shifted', tail);
+      self._reportBulkResult(oks, 'Shifted', tail, note);
     });
   };
 
@@ -676,15 +691,115 @@
     view._evpHTML = function (ev) {
       var html = original(ev);
       var canDelete = view.role >= ROLE_OWNER;
-      var foot = '<div class="efoot"><button type="button" class="btn quiet" data-edit-event="' + esc(ev.id) + '"><i class="fa-solid fa-pencil"></i> Edit</button><span class="sp"></span>' +
+      var foot = self._occurrenceHTML(ev) + '<div class="efoot"><button type="button" class="btn quiet" data-edit-event="' + esc(ev.id) + '"><i class="fa-solid fa-pencil"></i> Edit</button><span class="sp"></span>' +
         (canDelete ? '<button type="button" class="btn danger" data-delete-event="' + esc(ev.id) + '"><i class="fa-solid fa-trash"></i> Delete</button>' : '') + '</div>';
       return html.replace('<!--EVP_FOOT-->', foot);
     };
   };
 
+  // "Move this one / Skip this one / Undo" for the date the card was opened
+  // on. An override is keyed by the date the series put the occurrence on,
+  // which for a moved one is where it came from, so that date is carried on
+  // the block (data-oy/om/od) and every request uses it.
+  CalendarEditor.prototype._occurrenceHTML = function (ev) {
+    var view = this.view, day = view.wingFor && view.wingFor.split('_').map(Number);
+    if (!day || !CalDate.hasExpansion(ev)) return '';
+    var occ = CalDate.occurrenceOn(ev, day[0], day[1], day[2]);
+    if (!occ) return '';
+    var key = occ.moved_from ? { y: occ.moved_from.year, m: occ.moved_from.month, d: occ.moved_from.day } : { y: day[0], m: day[1], d: day[2] };
+    var note = occ.skipped ? 'Skipped on this date. Players don’t see it.'
+      : (occ.moved_from ? 'Moved here from ' + view._dateLabel(key.y, key.m, key.d) + '.' : 'Change just this date. The others stay as they are.');
+    var buttons = occ.skipped
+      ? '<button type="button" class="btn" data-occ="undo">Undo</button>'
+      : '<button type="button" class="btn" data-occ="move">Move this one</button>' +
+        '<button type="button" class="btn" data-occ="skip">Skip this one</button>' +
+        (occ.moved_from ? '<button type="button" class="btn quiet" data-occ="undo">Undo</button>' : '');
+    var edit = ev.recurrence_type === 'rule' ? '<span class="sp"></span><button type="button" class="btn quiet" data-edit-event="' + esc(ev.id) + '">Edit the rule</button>' : '';
+    var mo = (view.cal.months || []).map(function (m, i) {
+      return '<option value="' + (i + 1) + '"' + (i + 1 === day[1] ? ' selected' : '') + '>' + esc(m.name) + '</option>';
+    }).join('');
+    return '<div class="occ" data-occ-ev="' + esc(ev.id) + '" data-oy="' + key.y + '" data-om="' + key.m + '" data-od="' + key.d + '">' +
+      '<div class="oct">' + esc(note) + '</div>' +
+      '<div class="orow">' + buttons + edit + '</div>' +
+      '<div class="omv" hidden><select data-occ-f="m" aria-label="Move to month">' + mo + '</select>' +
+        '<select data-occ-f="d" aria-label="Move to day">' + this._dayOptions(day[0], day[1], day[2]) + '</select>' +
+        '<input type="number" data-occ-f="y" aria-label="Move to year" value="' + day[0] + '">' +
+        '<button type="button" class="btn primary" data-occ="go">Move</button><button type="button" class="btn quiet" data-occ="cancel">Cancel</button></div>' +
+      '<div class="ost" role="status"></div></div>';
+  };
+
+  CalendarEditor.prototype._dayOptions = function (y, m, sel) {
+    var n = CalDate.monthDays(this.view.cal, m - 1, y), h = '';
+    for (var d = 1; d <= n; d++) h += '<option value="' + d + '"' + (d === sel ? ' selected' : '') + '>' + d + '</option>';
+    return h;
+  };
+
+  CalendarEditor.prototype._occurrenceAction = function (btn) {
+    var self = this, view = this.view, box = btn.closest('.occ'), act = btn.dataset.occ;
+    var st = $('.ost', box), mv = $('.omv', box);
+    var say = function (msg, bad) { st.textContent = msg; st.classList.toggle('err', !!bad); };
+    if (act === 'move') {
+      mv.hidden = false;
+      say('Pick the date for just this one. The other dates stay as they are.');
+      $('[data-occ-f="m"]', mv).focus();
+      return;
+    }
+    if (act === 'cancel') { mv.hidden = true; say(''); $('[data-occ="move"]', box).focus(); return; }
+    var url = view.apiBase + '/events/' + encodeURIComponent(box.dataset.occEv) + '/occurrences/' + box.dataset.oy + '/' + box.dataset.om + '/' + box.dataset.od;
+    var req, done;
+    if (act === 'skip') {
+      req = { method: 'PUT', body: { action: 'skip' } };
+      done = 'This one is skipped. It shows struck through for you, and players don’t see it.';
+    } else if (act === 'undo') {
+      req = { method: 'DELETE' };
+      done = 'Back on its usual date.';
+    } else if (act === 'go') {
+      var y = parseInt($('[data-occ-f="y"]', mv).value, 10), m = +$('[data-occ-f="m"]', mv).value, d = +$('[data-occ-f="d"]', mv).value;
+      if (isNaN(y)) { say('Write the year as a number.', true); return; }
+      req = { method: 'PUT', body: { action: 'move', year: y, month: m, day: d } };
+      done = 'Moved to ' + view._dateLabel(y, m, d) + '. The other dates stay as they are.';
+    } else return;
+    var buttons = $$('button', box);
+    buttons.forEach(function (b) { b.disabled = true; });
+    say('');
+    Chronicle.apiFetch(url, req).then(function (resp) {
+      if (resp.ok) {
+        var dayKey = view.wingFor;
+        view.eventsByMonth = {};
+        view.closeEventDetail();
+        view.renderMonth();
+        view.say(done);
+        // Back to the day the card was for, once the month is redrawn.
+        view.fetchMonth(view.view.y, view.view.m).then(function () {
+          var cell = dayKey && view.stageEl.querySelector('.day[data-key="' + dayKey + '"]');
+          var row = view.wingEl.querySelector('.evd');
+          setTimeout(function () { var t = row || cell; if (!t) return; if (!t.hasAttribute('tabindex')) t.setAttribute('tabindex', '-1'); t.focus({ preventScroll: true }); }, reducedMotionNow() ? 0 : 400);
+        });
+        return;
+      }
+      buttons.forEach(function (b) { b.disabled = false; });
+      return resp.json().then(function (j) { say((j && (j.message || j.error)) || 'That didn’t save. Try again.', true); },
+        function () { say('That didn’t save. Try again.', true); });
+    }, function () {
+      buttons.forEach(function (b) { b.disabled = false; });
+      say('That didn’t save. Check your connection and try again.', true);
+    });
+  };
+
   CalendarEditor.prototype._bindEvpCapture = function () {
     var self = this, view = this.view;
+    // Days of the month being moved to follow its month and year.
+    view.evpEl.addEventListener('change', function (e) {
+      var t = e.target;
+      if (!t.dataset || (t.dataset.occF !== 'm' && t.dataset.occF !== 'y')) return;
+      var mv = t.closest('.omv'), dSel = $('[data-occ-f="d"]', mv);
+      var y = parseInt($('[data-occ-f="y"]', mv).value, 10) || view.cal.current_year, m = +$('[data-occ-f="m"]', mv).value;
+      var keep = +dSel.value;
+      dSel.innerHTML = self._dayOptions(y, m, keep);
+    });
     view.evpEl.addEventListener('click', function (e) {
+      var oc = e.target.closest('[data-occ]');
+      if (oc) { e.stopPropagation(); self._occurrenceAction(oc); return; }
       var ed = e.target.closest('[data-edit-event]');
       var del = e.target.closest('[data-delete-event]');
       if (ed) {

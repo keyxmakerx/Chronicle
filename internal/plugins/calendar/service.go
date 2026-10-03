@@ -250,6 +250,15 @@ type CalendarService interface {
 	// is repeated here (v.SkipsPerUserRules()) rather than trusted blindly.
 	SetEventVisibility(ctx context.Context, eventID, calendarID, campaignID string, input UpdateEventVisibilityInput, v permissions.Viewer) error
 
+	// Repeat rules and "this one only" (service_recurrence.go). The override
+	// writes are gated like editing the event (Scribe+ at the route, the
+	// event visible to v); the preview is gated like a read and writes
+	// nothing. ListOccurrenceOverrides is system-only, for the export.
+	SetOccurrenceOverride(ctx context.Context, eventID, calendarID, campaignID string, occ DayDate, input OccurrenceOverrideInput, v permissions.Viewer) (*OccurrenceOverride, error)
+	DeleteOccurrenceOverride(ctx context.Context, eventID, calendarID, campaignID string, occ DayDate, v permissions.Viewer) error
+	PreviewRecurrence(ctx context.Context, calendarID, campaignID string, input RecurrencePreviewInput, v permissions.Viewer) (*RecurrencePreview, error)
+	ListOccurrenceOverrides(ctx context.Context, calendarID, campaignID string, v permissions.Viewer) (map[string][]OccurrenceOverride, error)
+
 	// Event kinds. Campaign-scoped (shared by every calendar in the
 	// campaign, see EventKind's doc comment) — calendar structure, not
 	// content a Player ever reads directly. Listing is Owner only end to
@@ -1172,71 +1181,28 @@ func (s *calendarService) applyImportedEvents(ctx context.Context, calendarID, c
 		slugToID[k.Slug] = k.ID
 	}
 
+	rules, err := s.newImportedRules(ctx, calendarID, ir)
+	if err != nil {
+		return err
+	}
+
+	// Events another event's rule names go first, so the rule can point at
+	// the re-created one; an anchor never itself repeats relative to another,
+	// so two passes always suffice.
 	created := 0
-	for _, ee := range ir.Events {
-		var kindID *int
-		if ee.Kind != nil && *ee.Kind != "" {
-			if id, ok := slugToID[*ee.Kind]; ok {
-				kindID = &id
-			} else {
-				ir.Warnings = append(ir.Warnings, fmt.Sprintf(
-					"event %q referenced kind %q, which does not exist in this campaign; imported without a kind",
-					ee.Name, *ee.Kind))
+	for pass := 0; pass < 2; pass++ {
+		for _, ee := range ir.Events {
+			if rules.hasAnchor(ee) != (pass == 1) {
+				continue
+			}
+			ok, err := s.applyImportedEvent(ctx, calendarID, ee, slugToID, rules, ir)
+			if err != nil {
+				return err
+			}
+			if ok {
+				created++
 			}
 		}
-
-		// normalizeColor: the same defensive clamp import.go applies to
-		// month/season/moon/era colors, so a color value that doesn't
-		// survive the round-trip fails validation cleanly below rather than
-		// crashing the DB write under strict SQL mode. An absent or blank
-		// color is left alone (nil/"" means "inherit from kind").
-		color := ee.Color
-		if color != nil && *color != "" {
-			normalized := normalizeColor(*color)
-			color = &normalized
-		}
-
-		input := CreateEventInput{
-			Name:                     ee.Name,
-			Description:              ee.Description,
-			DescriptionHTML:          ee.DescriptionHTML,
-			Year:                     ee.Year,
-			Month:                    ee.Month,
-			Day:                      ee.Day,
-			StartHour:                ee.StartHour,
-			StartMinute:              ee.StartMinute,
-			EndYear:                  ee.EndYear,
-			EndMonth:                 ee.EndMonth,
-			EndDay:                   ee.EndDay,
-			EndHour:                  ee.EndHour,
-			EndMinute:                ee.EndMinute,
-			IsRecurring:              ee.IsRecurring,
-			RecurrenceType:           ee.RecurrenceType,
-			RecurrenceInterval:       ee.RecurrenceInterval,
-			RecurrenceEndYear:        ee.RecurrenceEndYear,
-			RecurrenceEndMonth:       ee.RecurrenceEndMonth,
-			RecurrenceEndDay:         ee.RecurrenceEndDay,
-			RecurrenceMaxOccurrences: ee.RecurrenceMaxOccurrences,
-			Visibility:               "dm_only", // fail closed — see doc comment above
-			CanAuthorDmOnly:          true,      // the fixed import default, not a per-event author escalation
-			KindID:                   kindID,
-			Announced:                ee.Announced,
-			Color:                    color,
-			Icon:                     ee.Icon,
-			AllDay:                   ee.AllDay,
-			Payload:                  ee.Payload,
-		}
-
-		evt, err := buildValidatedEvent(calendarID, input)
-		if err != nil {
-			ir.Warnings = append(ir.Warnings, fmt.Sprintf(
-				"event %q failed validation and was skipped: %v", ee.Name, err))
-			continue
-		}
-		if err := s.eventRepo.CreateEvent(ctx, evt); err != nil {
-			return fmt.Errorf("create imported event %q: %w", ee.Name, err)
-		}
-		created++
 	}
 
 	if created > 0 {
@@ -1244,6 +1210,78 @@ func (s *calendarService) applyImportedEvents(ctx context.Context, calendarID, c
 			"Imported events default to Director-only visibility; share individually if players should see them.")
 	}
 	return nil
+}
+
+// applyImportedEvent creates one imported event (see applyImportedEvents),
+// reporting whether it was created. A validation failure is a warning on
+// ir; only a storage error is returned.
+func (s *calendarService) applyImportedEvent(ctx context.Context, calendarID string, ee ExportEvent, slugToID map[string]int, rules *importedRules, ir *ImportResult) (bool, error) {
+	var kindID *int
+	if ee.Kind != nil && *ee.Kind != "" {
+		if id, ok := slugToID[*ee.Kind]; ok {
+			kindID = &id
+		} else {
+			ir.Warnings = append(ir.Warnings, fmt.Sprintf(
+				"event %q referenced kind %q, which does not exist in this campaign; imported without a kind",
+				ee.Name, *ee.Kind))
+		}
+	}
+
+	// normalizeColor: the same defensive clamp import.go applies to
+	// month/season/moon/era colors, so a color value that doesn't
+	// survive the round-trip fails validation cleanly below rather than
+	// crashing the DB write under strict SQL mode. An absent or blank
+	// color is left alone (nil/"" means "inherit from kind").
+	color := ee.Color
+	if color != nil && *color != "" {
+		normalized := normalizeColor(*color)
+		color = &normalized
+	}
+
+	input := CreateEventInput{
+		Name:                     ee.Name,
+		Description:              ee.Description,
+		DescriptionHTML:          ee.DescriptionHTML,
+		Year:                     ee.Year,
+		Month:                    ee.Month,
+		Day:                      ee.Day,
+		StartHour:                ee.StartHour,
+		StartMinute:              ee.StartMinute,
+		EndYear:                  ee.EndYear,
+		EndMonth:                 ee.EndMonth,
+		EndDay:                   ee.EndDay,
+		EndHour:                  ee.EndHour,
+		EndMinute:                ee.EndMinute,
+		IsRecurring:              ee.IsRecurring,
+		RecurrenceType:           ee.RecurrenceType,
+		RecurrenceInterval:       ee.RecurrenceInterval,
+		RecurrenceEndYear:        ee.RecurrenceEndYear,
+		RecurrenceEndMonth:       ee.RecurrenceEndMonth,
+		RecurrenceEndDay:         ee.RecurrenceEndDay,
+		RecurrenceMaxOccurrences: ee.RecurrenceMaxOccurrences,
+		Visibility:               "dm_only", // fail closed — see doc comment above
+		CanAuthorDmOnly:          true,      // the fixed import default, not a per-event author escalation
+		KindID:                   kindID,
+		Announced:                ee.Announced,
+		Color:                    color,
+		Icon:                     ee.Icon,
+		AllDay:                   ee.AllDay,
+		Payload:                  ee.Payload,
+	}
+
+	rules.prepare(&input, ee, ir)
+	evt, err := buildValidatedEvent(calendarID, input)
+	if err != nil {
+		ir.Warnings = append(ir.Warnings, fmt.Sprintf(
+			"event %q failed validation and was skipped: %v", ee.Name, err))
+		return false, nil
+	}
+	rules.check(evt, ee, ir)
+	if err := s.eventRepo.CreateEvent(ctx, evt); err != nil {
+		return false, fmt.Errorf("create imported event %q: %w", ee.Name, err)
+	}
+	rules.created(ee, evt)
+	return true, nil
 }
 
 // --- Events ---
@@ -1261,6 +1299,9 @@ func (s *calendarService) CreateEvent(ctx context.Context, calendarID, campaignI
 	}
 	evt, err := buildValidatedEvent(calendarID, input)
 	if err != nil {
+		return nil, err
+	}
+	if err := s.validateEventRule(ctx, calendarID, campaignID, "", evt, true, input.Author); err != nil {
 		return nil, err
 	}
 	if err := s.eventRepo.CreateEvent(ctx, evt); err != nil {
@@ -1303,6 +1344,17 @@ func buildValidatedEvent(calendarID string, input CreateEventInput) (*Event, err
 	}
 	if !IsSupportedRecurrenceType(derefString(input.RecurrenceType)) {
 		return nil, apperror.NewValidation("unsupported recurrence_type")
+	}
+	// A rule is kept only on an event that repeats by it. One sent with any
+	// other type is dropped, never stored dormant: a dormant rule would be
+	// judged again on a later save or an import, long after what it names
+	// may be gone, and refuse an event that does not even use it.
+	var rule *RecurrenceRule
+	if derefString(input.RecurrenceType) == RecurrenceByRule {
+		var err error
+		if rule, err = ParseRecurrenceRule(input.RecurrenceRule); err != nil {
+			return nil, err
+		}
 	}
 	announced := derefString(input.Announced)
 	if announced != "" && !IsSupportedAnnounced(announced) {
@@ -1357,6 +1409,7 @@ func buildValidatedEvent(calendarID string, input CreateEventInput) (*Event, err
 		RecurrenceEndMonth:       input.RecurrenceEndMonth,
 		RecurrenceEndDay:         input.RecurrenceEndDay,
 		RecurrenceMaxOccurrences: input.RecurrenceMaxOccurrences,
+		RecurrenceRule:           rule,
 		Visibility:               visibility,
 		VisibilityRules:          input.VisibilityRules,
 		KindID:                   input.KindID,
@@ -1398,6 +1451,9 @@ func (s *calendarService) GetEventForViewer(ctx context.Context, eventID, calend
 		}
 	}
 	if err := s.redactHiddenEntityLinks(ctx, campaignID, events, v); err != nil {
+		return nil, err
+	}
+	if err := s.redactRuleRefs(ctx, cal, campaignID, events, v); err != nil {
 		return nil, err
 	}
 	result := events[0]
@@ -1448,6 +1504,9 @@ func (s *calendarService) ListEventsByIDsForViewer(ctx context.Context, calendar
 	if err := s.redactHiddenEntityLinks(ctx, campaignID, events, v); err != nil {
 		return nil, err
 	}
+	if err := s.redactRuleRefs(ctx, cal, campaignID, events, v); err != nil {
+		return nil, err
+	}
 	return events, nil
 }
 
@@ -1465,10 +1524,11 @@ func (s *calendarService) GetCalendarNameForViewer(ctx context.Context, calendar
 // role-filtered by SQL (dm_only) and per-user-filtered in Go
 // (visibility_rules) on top, then narrowed to the events that actually
 // OCCUR in this month: the repository widens in every recurring candidate
-// from anywhere in the calendar (recurringCandidateClause) so Event.OccursOn
-// can decide exact placement in Go — this is that placement step, so a
-// weekly event recurring into a DIFFERENT month never appears here as a
-// false positive.
+// from anywhere in the calendar (recurringCandidateClause) so the
+// occurrence expander can decide exact placement in Go — this is that
+// placement step, so a weekly event recurring into a DIFFERENT month never
+// appears here as a false positive. Each repeating event carries its
+// Occurrences in the month, skips and moves applied (see expandMonth).
 func (s *calendarService) ListEventsForMonth(ctx context.Context, calendarID, campaignID string, year, month int, v permissions.Viewer) ([]Event, error) {
 	cal, err := s.calendarInCampaignForViewer(ctx, calendarID, campaignID, v)
 	if err != nil {
@@ -1482,7 +1542,9 @@ func (s *calendarService) ListEventsForMonth(ctx context.Context, calendarID, ca
 	if err := s.loadCalendarGeometry(ctx, cal); err != nil {
 		return nil, err
 	}
-	events = filterRecurringToMonth(events, cal, year, month)
+	if events, err = s.expandMonth(ctx, cal, events, year, month, v); err != nil {
+		return nil, err
+	}
 	if !v.SkipsPerUserRules() {
 		if events, err = s.dropUnannouncedFutureEvents(ctx, cal, campaignID, events); err != nil {
 			return nil, err
@@ -1491,37 +1553,10 @@ func (s *calendarService) ListEventsForMonth(ctx context.Context, calendarID, ca
 	if err := s.redactHiddenEntityLinks(ctx, campaignID, events, v); err != nil {
 		return nil, err
 	}
+	if err := s.redactRuleRefs(ctx, cal, campaignID, events, v); err != nil {
+		return nil, err
+	}
 	return events, nil
-}
-
-// filterRecurringToMonth drops a recurring candidate that does not actually
-// land on any day of (year, month) — see ListEventsForMonth's doc comment.
-// Non-recurring (including multi-day spanning) events pass through
-// unchanged: OccursOn only answers a single-day placement question for a
-// recurring rule, not "does this stored [start,end] window overlap this
-// month", which the repository's spanningCandidateClause already answers in
-// SQL (see event_repository.go).
-func filterRecurringToMonth(events []Event, cal *Calendar, year, month int) []Event {
-	filtered := events[:0]
-	for _, e := range events {
-		if e.IsRecurring && !occursSomewhereInMonth(e, cal, year, month) {
-			continue
-		}
-		filtered = append(filtered, e)
-	}
-	return filtered
-}
-
-// occursSomewhereInMonth reports whether e has at least one occurrence on
-// some day of (year, month) per Event.OccursOn.
-func occursSomewhereInMonth(e Event, cal *Calendar, year, month int) bool {
-	days := cal.MonthDays(month-1, year)
-	for day := 1; day <= days; day++ {
-		if e.OccursOn(cal, year, month, day) {
-			return true
-		}
-	}
-	return false
 }
 
 // upcomingEventsOverfetchFactor/upcomingEventsMaxFetch: see
@@ -1566,6 +1601,9 @@ func (s *calendarService) ListUpcomingEvents(ctx context.Context, calendarID, ca
 		events = events[:limit]
 	}
 	if err := s.redactHiddenEntityLinks(ctx, campaignID, events, v); err != nil {
+		return nil, err
+	}
+	if err := s.redactRuleRefs(ctx, cal, campaignID, events, v); err != nil {
 		return nil, err
 	}
 	return events, nil
@@ -1686,6 +1724,27 @@ func (s *calendarService) UpdateEvent(ctx context.Context, eventID, calendarID, 
 	if !IsSupportedRecurrenceType(derefString(recurrenceType)) {
 		return apperror.NewValidation("unsupported recurrence_type")
 	}
+	// recurrence_rule follows the partial-update contract like every other
+	// field, with one rule on top: it lives only on an event that repeats by
+	// it. Leaving the "rule" type drops it, and one sent with another type is
+	// neither parsed nor stored, as on create. A rule is checked against the
+	// calendar when it is sent, or when the type switches to "rule" and so
+	// starts using a stored one; an untouched stored rule is not re-judged
+	// by an unrelated edit.
+	rule, recheckRule := evt.RecurrenceRule, false
+	if derefString(recurrenceType) != RecurrenceByRule {
+		rule = nil
+	} else {
+		if raw, ok := input.RecurrenceRule.Get(); ok {
+			if rule, err = ParseRecurrenceRule(raw); err != nil {
+				return err
+			}
+		} else if input.RecurrenceRule.IsNull() {
+			rule = nil
+		}
+		becameRule := derefString(evt.RecurrenceType) != RecurrenceByRule
+		recheckRule = (input.RecurrenceRule.Present() && rule != nil) || becameRule
+	}
 	announced := input.Announced.Ptr(evt.Announced)
 	if a := derefString(announced); a != "" && !IsSupportedAnnounced(a) {
 		return apperror.NewValidation("announced must be \"" + AnnouncedAhead + "\" or \"" + AnnouncedOnDay + "\"")
@@ -1739,6 +1798,10 @@ func (s *calendarService) UpdateEvent(ctx context.Context, eventID, calendarID, 
 	evt.RecurrenceEndMonth = input.RecurrenceEndMonth.Ptr(evt.RecurrenceEndMonth)
 	evt.RecurrenceEndDay = input.RecurrenceEndDay.Ptr(evt.RecurrenceEndDay)
 	evt.RecurrenceMaxOccurrences = input.RecurrenceMaxOccurrences.Ptr(evt.RecurrenceMaxOccurrences)
+	evt.RecurrenceRule = rule
+	if err := s.validateEventRule(ctx, calendarID, campaignID, evt.ID, evt, recheckRule, v); err != nil {
+		return err
+	}
 	evt.Visibility = visibility
 	evt.VisibilityRules = visRules
 	evt.KindID = input.KindID.Ptr(evt.KindID)

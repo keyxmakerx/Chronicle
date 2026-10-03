@@ -47,6 +47,19 @@ type EventRepository interface {
 
 	UpdateEventVisibility(ctx context.Context, eventID string, visibility string, visRules *string) error
 
+	// ListRuleEvents returns a calendar's RecurrenceByRule events, unfiltered,
+	// for the anchor-cycle check (an event other rules repeat relative to may
+	// not itself repeat relative to another).
+	ListRuleEvents(ctx context.Context, calendarID string) ([]Event, error)
+
+	// Occurrence overrides ("this one only"). Upsert is keyed on (event,
+	// occurrence date); delete reports whether a row was there.
+	SetOccurrenceOverride(ctx context.Context, o OccurrenceOverride) error
+	DeleteOccurrenceOverride(ctx context.Context, eventID string, year, month, day int) (bool, error)
+	// ListOverridesForEvents batch-reads the overrides of the given events in
+	// chunked queries, keyed by event id; events with none are absent.
+	ListOverridesForEvents(ctx context.Context, eventIDs []string) (map[string][]OccurrenceOverride, error)
+
 	// Entity ties. Cascade on entity/event/era delete is DB-enforced (ON
 	// DELETE CASCADE), so there is no unlink-all.
 	LinkEntityEvent(ctx context.Context, entityID, eventID, role string) error
@@ -88,6 +101,7 @@ const eventCols = `e.id, e.calendar_id, e.entity_id, e.name, e.description, e.de
        e.is_recurring, e.recurrence_type,
        e.recurrence_interval, e.recurrence_end_year, e.recurrence_end_month,
        e.recurrence_end_day, e.recurrence_max_occurrences, e.recurrence_day_of_week,
+       e.recurrence_rule,
        e.visibility, e.visibility_rules, e.kind_id, e.announced, e.tier,
        e.color, e.icon, e.all_day, e.payload,
        e.created_by, e.created_at, e.updated_at,
@@ -187,6 +201,7 @@ func (r *eventRepo) CreateEvent(ctx context.Context, evt *Event) error {
 		        is_recurring, recurrence_type,
 		        recurrence_interval, recurrence_end_year, recurrence_end_month,
 		        recurrence_end_day, recurrence_max_occurrences, recurrence_day_of_week,
+		        recurrence_rule,
 		        visibility, visibility_rules, kind_id, announced, tier,
 		        color, icon, all_day, payload, created_by)
 		 SELECT ?, c.id, ?, ?, ?, ?,
@@ -195,6 +210,7 @@ func (r *eventRepo) CreateEvent(ctx context.Context, evt *Event) error {
 		        ?, ?,
 		        ?, ?, ?,
 		        ?, ?, ?,
+		        ?,
 		        ?, ?, ?, ?, ?,
 		        ?, ?, ?, ?, ?
 		 FROM calendars c
@@ -207,6 +223,7 @@ func (r *eventRepo) CreateEvent(ctx context.Context, evt *Event) error {
 		evt.IsRecurring, evt.RecurrenceType,
 		evt.RecurrenceInterval, evt.RecurrenceEndYear, evt.RecurrenceEndMonth,
 		evt.RecurrenceEndDay, evt.RecurrenceMaxOccurrences, evt.RecurrenceDayOfWeek,
+		ruleValue(evt.RecurrenceRule),
 		evt.Visibility, evt.VisibilityRules, evt.KindID, evt.Announced, evt.Tier,
 		evt.Color, evt.Icon, evt.AllDay, evt.Payload, evt.CreatedBy,
 		evt.CalendarID,
@@ -238,6 +255,7 @@ func eventDests(evt *Event) []any {
 		&evt.IsRecurring, &evt.RecurrenceType,
 		&evt.RecurrenceInterval, &evt.RecurrenceEndYear, &evt.RecurrenceEndMonth,
 		&evt.RecurrenceEndDay, &evt.RecurrenceMaxOccurrences, &evt.RecurrenceDayOfWeek,
+		ruleColumn{&evt.RecurrenceRule},
 		&evt.Visibility, &evt.VisibilityRules, &evt.KindID, &evt.Announced, &evt.Tier,
 		&evt.Color, &evt.Icon, &evt.AllDay, &evt.Payload,
 		&evt.CreatedBy, &evt.CreatedAt, &evt.UpdatedAt,
@@ -339,6 +357,7 @@ func (r *eventRepo) UpdateEvent(ctx context.Context, evt *Event) error {
 		     is_recurring = ?, recurrence_type = ?,
 		     recurrence_interval = ?, recurrence_end_year = ?, recurrence_end_month = ?,
 		     recurrence_end_day = ?, recurrence_max_occurrences = ?, recurrence_day_of_week = ?,
+		     recurrence_rule = ?,
 		     visibility = ?, visibility_rules = ?, kind_id = ?, announced = ?, tier = ?,
 		     color = ?, icon = ?, all_day = ?, payload = ?
 		 WHERE id = ?`,
@@ -349,6 +368,7 @@ func (r *eventRepo) UpdateEvent(ctx context.Context, evt *Event) error {
 		evt.IsRecurring, evt.RecurrenceType,
 		evt.RecurrenceInterval, evt.RecurrenceEndYear, evt.RecurrenceEndMonth,
 		evt.RecurrenceEndDay, evt.RecurrenceMaxOccurrences, evt.RecurrenceDayOfWeek,
+		ruleValue(evt.RecurrenceRule),
 		evt.Visibility, evt.VisibilityRules, evt.KindID, evt.Announced, evt.Tier,
 		evt.Color, evt.Icon, evt.AllDay, evt.Payload, evt.ID,
 	)
@@ -641,4 +661,82 @@ func (r *eventRepo) SearchEvents(ctx context.Context, calendarID, query string, 
 	defer rows.Close()
 
 	return scanEvents(rows)
+}
+
+// ListRuleEvents returns every RecurrenceByRule event on a calendar.
+func (r *eventRepo) ListRuleEvents(ctx context.Context, calendarID string) ([]Event, error) {
+	rows, err := r.db.QueryContext(ctx,
+		`SELECT `+eventCols+`
+		 FROM calendar_events e `+eventJoins+`
+		 WHERE e.calendar_id = ? AND e.recurrence_type = ?`, calendarID, RecurrenceByRule)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	return scanEvents(rows)
+}
+
+// SetOccurrenceOverride stores one override, replacing any earlier one for
+// the same occurrence.
+func (r *eventRepo) SetOccurrenceOverride(ctx context.Context, o OccurrenceOverride) error {
+	_, err := r.db.ExecContext(ctx,
+		`INSERT INTO calendar_event_overrides
+		        (event_id, occurrence_year, occurrence_month, occurrence_day, action, new_year, new_month, new_day)
+		 VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+		 ON DUPLICATE KEY UPDATE action = VALUES(action), new_year = VALUES(new_year),
+		        new_month = VALUES(new_month), new_day = VALUES(new_day)`,
+		o.EventID, o.Year, o.Month, o.Day, o.Action, o.NewYear, o.NewMonth, o.NewDay)
+	return err
+}
+
+// DeleteOccurrenceOverride removes one override.
+func (r *eventRepo) DeleteOccurrenceOverride(ctx context.Context, eventID string, year, month, day int) (bool, error) {
+	res, err := r.db.ExecContext(ctx,
+		`DELETE FROM calendar_event_overrides
+		 WHERE event_id = ? AND occurrence_year = ? AND occurrence_month = ? AND occurrence_day = ?`,
+		eventID, year, month, day)
+	if err != nil {
+		return false, err
+	}
+	n, err := res.RowsAffected()
+	return n > 0, err
+}
+
+// ListOverridesForEvents reads every override of the given events.
+func (r *eventRepo) ListOverridesForEvents(ctx context.Context, eventIDs []string) (map[string][]OccurrenceOverride, error) {
+	out := map[string][]OccurrenceOverride{}
+	for start := 0; start < len(eventIDs); start += eventIDsChunk {
+		end := min(start+eventIDsChunk, len(eventIDs))
+		chunk := eventIDs[start:end]
+		ph := make([]string, len(chunk))
+		args := make([]any, len(chunk))
+		for i, id := range chunk {
+			ph[i] = "?"
+			args[i] = id
+		}
+		rows, err := r.db.QueryContext(ctx,
+			`SELECT event_id, occurrence_year, occurrence_month, occurrence_day, action,
+			        new_year, new_month, new_day, created_at
+			 FROM calendar_event_overrides
+			 WHERE event_id IN (`+strings.Join(ph, ",")+`)
+			 ORDER BY event_id, occurrence_year, occurrence_month, occurrence_day`, args...)
+		if err != nil {
+			return nil, err
+		}
+		for rows.Next() {
+			var o OccurrenceOverride
+			if err := rows.Scan(&o.EventID, &o.Year, &o.Month, &o.Day, &o.Action,
+				&o.NewYear, &o.NewMonth, &o.NewDay, &o.CreatedAt); err != nil {
+				rows.Close()
+				return nil, err
+			}
+			out[o.EventID] = append(out[o.EventID], o)
+		}
+		err = rows.Err()
+		rows.Close()
+		if err != nil {
+			return nil, err
+		}
+	}
+	return out, nil
 }

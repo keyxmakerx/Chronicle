@@ -277,7 +277,7 @@ func TestPlanStructureEdit(t *testing.T) {
 			cal := structureFixture()
 			edit := editFrom(cal)
 			tt.change(&edit)
-			plan := planStructureEdit(cal, tt.events, tt.weather, edit)
+			plan := planStructureEdit(cal, tt.events, tt.weather, nil, nil, edit)
 			p := plan.preview
 
 			if !reflect.DeepEqual(plan.remap, tt.remap) {

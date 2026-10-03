@@ -675,6 +675,62 @@
 .cal-v5 .repend .fields{margin-top:0}
 .cal-v5 .repend .rn{display:flex;align-items:center;gap:8px;font:500 12.5px/1 var(--sans);color:var(--ink2)}
 .cal-v5 .repend .rn input{width:70px;height:32px;padding:0 9px;border-radius:8px;border:1px solid var(--edge);background:var(--paper);font:500 13px/1 var(--sans);color:var(--ink)}
+/* Repeating by a rule: a plain sentence, one row per condition, the next five dates. */
+.cal-v5 .rbox{display:flex;flex-direction:column;gap:10px}
+.cal-v5 .rbox[hidden]{display:none}
+.cal-v5 .rlock{margin:0;font:500 12px/1.4 var(--sans);color:var(--mut)}
+.cal-v5 .rsum{font:500 15px/1.35 var(--serif);color:var(--ink);padding:2px 0}
+.cal-v5 .rbadge{display:inline-block;margin-left:2px;padding:3px 6px;border-radius:99px;border:1px solid var(--hair);background:var(--paper2);font:650 9.5px/1 var(--sans);letter-spacing:.1em;text-transform:uppercase;color:var(--mut);vertical-align:2px}
+.cal-v5 .rrows{display:flex;flex-direction:column;gap:6px}
+.cal-v5 .rrow{position:relative;display:flex;flex-wrap:wrap;align-items:center;gap:6px;padding:8px 38px 8px 10px;border-radius:10px;background:var(--paper2);border:1px solid var(--hair);font:500 13px/1.3 var(--sans);color:var(--ink)}
+.cal-v5 .rrow .rand{flex:none;width:34px;font:650 9.5px/1 var(--sans);letter-spacing:.12em;text-transform:uppercase;color:var(--mut)}
+.cal-v5 .rrow select{height:30px;max-width:100%;padding:0 8px;border-radius:8px;border:1px solid var(--edge);background:var(--paper);font:500 12.5px/1 var(--sans);color:var(--ink)}
+.cal-v5 .rrow select:focus-visible, .cal-v5 .rthen select:focus-visible, .cal-v5 .rthen input:focus-visible{outline:1.5px solid var(--ink);outline-offset:1px}
+.cal-v5 .rraw{color:var(--ink2)}
+.cal-v5 .rraw small{color:var(--mut)}
+.cal-v5 .rrm{position:absolute;right:6px;top:7px;width:26px;height:26px;display:grid;place-items:center;font:500 16px/1 var(--sans);border-radius:7px;border:1px solid transparent;background:transparent;color:var(--mut)}
+.cal-v5 .rrm:hover{border-color:var(--edge);color:var(--ink)}
+.cal-v5 .rrm:focus-visible, .cal-v5 .radd:focus-visible, .cal-v5 .rmore summary:focus-visible, .cal-v5 .rchips button:focus-visible, .cal-v5 .rretry:focus-visible{outline:1.5px solid var(--ink);outline-offset:2px}
+.cal-v5 .rchips{display:flex;flex-wrap:wrap;gap:4px}
+.cal-v5 .rchips button{height:26px;padding:0 8px;border-radius:7px;border:1px solid var(--edge);background:var(--paper);font:550 11.5px/1 var(--sans);color:var(--ink2)}
+.cal-v5 .rchips button[aria-pressed="true"]{border-color:var(--ink);color:var(--ink);box-shadow:inset 0 0 0 .5px var(--ink)}
+.cal-v5 .radd{align-self:flex-start;height:28px;padding:0 10px;border-radius:8px;border:1px dashed var(--edge);background:transparent;font:600 12px/1 var(--sans);color:var(--ink2)}
+.cal-v5 .radd:hover{color:var(--ink);border-style:solid}
+.cal-v5 .radd[hidden]{display:none}
+@media (max-width:480px){.cal-v5 .rrow .rand{width:100%}}
+.cal-v5 .rmore summary{cursor:pointer;list-style:none;font:600 12px/1.3 var(--sans);color:var(--ink2)}
+.cal-v5 .rmore summary::-webkit-details-marker{display:none}
+.cal-v5 .rmore summary::before{content:"\25B8  ";color:var(--mut)}
+.cal-v5 .rmore[open] summary::before{content:"\25BE  "}
+.cal-v5 .rthen{display:flex;flex-wrap:wrap;align-items:center;gap:6px;margin-top:8px;font:500 13px/1.3 var(--sans);color:var(--ink2)}
+.cal-v5 .rthen select, .cal-v5 .rthen input{height:30px;padding:0 8px;border-radius:8px;border:1px solid var(--edge);background:var(--paper2);font:500 12.5px/1 var(--sans);color:var(--ink)}
+.cal-v5 .rthen input{width:60px}
+.cal-v5 .rnext{display:flex;flex-direction:column;gap:5px;padding-top:8px;border-top:1px solid var(--hair)}
+.cal-v5 .rnext b{font:650 9.5px/1 var(--sans);letter-spacing:.14em;text-transform:uppercase;color:var(--mut)}
+.cal-v5 .rnext ol{margin:0;padding:0;list-style:none;display:flex;flex-wrap:wrap;gap:5px;transition:opacity .2s}
+.cal-v5 .rnext.busy ol{opacity:.5}
+.cal-v5 .rnext li{padding:5px 8px;border-radius:99px;border:1px solid var(--hair);background:var(--paper2);font:500 11.5px/1 var(--sans);font-variant-numeric:tabular-nums;color:var(--ink)}
+.cal-v5 .rnext li.rphase::before{content:"\25CF";margin-right:4px;color:oklch(var(--mkL) var(--mkC) 85)}
+.cal-v5 .rhint{margin:0;font:500 12px/1.3 var(--sans);color:var(--mut)}
+.cal-v5 .rhint:empty{display:none}
+.cal-v5 .rretry{margin-left:4px;padding:0;border:0;background:transparent;font:600 12px/1.3 var(--sans);color:var(--ink);text-decoration:underline}
+@media (prefers-reduced-motion:reduce){.cal-v5 .rnext ol{transition:none}}
+/* An occurrence skipped for this date: struck through for editors (players are never sent it). */
+.cal-v5 .mk.skip{opacity:.6;background:linear-gradient(to top right,transparent calc(50% - 1px),currentColor calc(50% - 1px),currentColor calc(50% + 1px),transparent calc(50% + 1px))}
+.cal-v5 .evd.skip .qt0{text-decoration:line-through;color:var(--mut)}
+/* "Move this one / Skip this one" on a repeating event's card. */
+.cal-v5 .occ{display:flex;flex-direction:column;gap:8px;margin-top:12px;padding:10px;border-radius:12px;background:var(--paper2);border:1px solid var(--hair)}
+.cal-v5 .occ .oct{font:500 12px/1.4 var(--sans);color:var(--ink2)}
+.cal-v5 .occ .orow{display:flex;flex-wrap:wrap;align-items:center;gap:6px}
+.cal-v5 .occ .sp{flex:1}
+.cal-v5 .occ .omv{display:flex;flex-wrap:wrap;align-items:center;gap:6px}
+.cal-v5 .occ .omv[hidden]{display:none}
+.cal-v5 .occ select, .cal-v5 .occ input{height:30px;padding:0 8px;border-radius:8px;border:1px solid var(--edge);background:var(--paper);font:500 12.5px/1 var(--sans);color:var(--ink)}
+.cal-v5 .occ input{width:70px}
+.cal-v5 .occ .omv select{max-width:9.5em}
+.cal-v5 .occ .ost{min-height:1.3em;font:500 12px/1.3 var(--sans);color:var(--ink2)}
+.cal-v5 .occ .ost.err{color:oklch(.55 .12 28)}
+.cal-v5 .occ select:focus-visible, .cal-v5 .occ input:focus-visible{outline:1.5px solid var(--ink);outline-offset:1px}
 .cal-v5 .chipset{display:flex;flex-wrap:wrap;gap:5px}
 .cal-v5 .chipset:empty{display:none}
 .cal-v5 .lpick{position:relative}
