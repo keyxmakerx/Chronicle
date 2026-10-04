@@ -1406,7 +1406,7 @@
     // deleted from the media library. The server re-checks everything
     // (ownership, and the saved look still using it), so this only tidies;
     // failures are ignored and the file simply stays.
-    function pictureNames(d){ return d ? [d.brand.logo, d.brand.backdrop, d.header.image] : []; }
+    function pictureNames(d){ return d ? [d.brand.logo, d.brand.backdrop, d.header.image, d.sidebar.banner] : []; }
     function tidyPictures(){
       var keep = {};
       [draft, saved, undoDraft].forEach(function(d){ pictureNames(d).forEach(function(n){ keep[n] = true; }); });
