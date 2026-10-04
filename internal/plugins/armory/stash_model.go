@@ -250,6 +250,9 @@ type EntityRef struct {
 	// Restricted is set on an item players cannot all see: private, or with a
 	// custom allow list.
 	Restricted bool
+	// HandoutMapID is the map an item stands for when it is a map handout
+	// (see HandoutStore), else empty.
+	HandoutMapID string
 	// MoneyLabel is that field's display label, empty when it has none.
 	MoneyLabel string
 	// Purse maps each 5e coin (cp, sp, ep, gp, pp) to the sheet field that
@@ -276,6 +279,8 @@ type HeldItem struct {
 	ItemID   string
 	Name     string
 	Quantity int
+	// IsMap marks a map handout, which the panel shows with a map icon.
+	IsMap bool
 }
 
 // CharacterPanelView feeds the "Items and money" panel on a character page.

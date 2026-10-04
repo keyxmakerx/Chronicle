@@ -1,5 +1,5 @@
 // onclick_handlers.go builds the inline IIFE click handlers for the armory's
-// HTMX-swapped fragments (item card menu, collection rename). Templ script
+// HTMX-swapped fragments (item card menu, collection rename, the Give box). Templ script
 // helpers emit a sibling <script> that browsers do not reliably run after an
 // innerHTML swap, so each handler is a self-contained expression rendered
 // straight into the onclick attribute. The JS uses single quotes only (the
@@ -27,52 +27,15 @@ func jsStr(s string) string {
 	return "'" + strings.ReplaceAll(template.JSEscapeString(s), `\"`, `\u0022`) + "'"
 }
 
-// collectionMenuOnClick toggles the item card's "Add to collection" popover.
-// It lazily loads the collections that hold the item, and each checkbox adds
-// or removes the item through the existing instance-item routes, ticking and
-// counting from the server's answer rather than assuming success. Focus and
-// Escape handling are scoped to the popover (no document listeners) so a swap
-// of the gallery cannot leave a stray handler behind.
-//
-// A non-empty giveURL adds a "Give to..." entry that loads the give dialog
-// into #armory-move-modal; it is empty for viewers who may not give. A viewer
-// who may give but not edit collections (a co-DM below Scribe) skips the
-// collection list and goes straight to the dialog.
+// collectionMenuOnClick opens the item card's menu: "Add to collection..."
+// (the collections that hold the item, ticked and counted from the server's
+// answers) and, with a giveURL, "Give to...", which turns the same popover
+// into the Give box. Chronicle.GiveBox.card owns the popover; giveURL is empty
+// for viewers who may not give and collections is false for those who may not
+// edit collections, and each leaves its entry out.
 func collectionMenuOnClick(campaignID, entityID, popoverID, giveURL string, collections bool) templ.ComponentScript {
 	body := fmt.Sprintf(
-		`(function(btn){`+
-			`var pop=document.getElementById(%[3]s);if(!pop)return;`+
-			`var base='/campaigns/'+encodeURIComponent(%[1]s)+'/armory/';var eid=%[2]s;var giveUrl=%[4]s;`+
-			`function close(refocus){pop.hidden=true;btn.setAttribute('aria-expanded','false');if(refocus)btn.focus();}`+
-			`if(!%[5]t){if(giveUrl&&window.htmx)htmx.ajax('GET',giveUrl,{target:'#armory-move-modal',swap:'innerHTML'});return;}`+
-			`if(!pop.hidden){close(true);return;}`+
-			`pop.hidden=false;btn.setAttribute('aria-expanded','true');pop.textContent='Loading...';`+
-			`pop.onkeydown=function(e){if(e.key==='Escape'){e.stopPropagation();close(true);}};`+
-			`pop.onfocusout=function(){setTimeout(function(){var a=document.activeElement;if(!pop.hidden&&a!==btn&&!pop.contains(a))close(false);},0);};`+
-			`function fail(msg){var m=pop.querySelector('[data-coll-error]');if(m){m.textContent=msg;}if(window.Chronicle&&Chronicle.notify)Chronicle.notify(msg,'error');}`+
-			`function syncOption(c){var o=document.querySelector('select[name=instance] option[value=\''+c.id+'\']');if(o)o.textContent=c.name+' ('+c.itemCount+')';}`+
-			`function row(c){`+
-			`var l=document.createElement('label');l.className='flex items-center gap-2 px-2 py-1.5 rounded hover:bg-surface-alt cursor-pointer text-sm text-fg';`+
-			`var cb=document.createElement('input');cb.type='checkbox';cb.checked=!!c.hasItem;`+
-			`var n=document.createElement('span');n.className='flex-1 truncate';n.textContent=c.name;`+
-			`var k=document.createElement('span');k.className='text-xs text-fg-muted';k.textContent=String(c.itemCount);`+
-			`cb.onchange=function(){var want=cb.checked;if(cb.getAttribute('aria-busy')==='true')return;cb.setAttribute('aria-busy','true');`+
-			`var req=want?Chronicle.apiFetch(base+'instances/'+c.id+'/items',{method:'POST',body:{entity_id:eid}}):Chronicle.apiFetch(base+'instances/'+c.id+'/items/'+encodeURIComponent(eid),{method:'DELETE'});`+
-			`req.then(function(r){if(r.ok){c.hasItem=want;c.itemCount=Math.max(0,c.itemCount+(want?1:-1));k.textContent=String(c.itemCount);syncOption(c);return;}`+
-			`cb.checked=!want;return r.json().then(function(j){fail(j.message||'Could not update the collection.');},function(){fail('Could not update the collection.');});})`+
-			`.catch(function(){cb.checked=!want;fail('Could not update the collection.');})`+
-			`.then(function(){cb.removeAttribute('aria-busy');});};`+
-			`l.appendChild(cb);l.appendChild(n);l.appendChild(k);return l;}`+
-			`function render(list){pop.textContent='';var h=document.createElement('div');h.className='px-2 pb-1 text-xs font-semibold text-fg-secondary';h.textContent='Add to collection';pop.appendChild(h);`+
-			`if(!list.length){var e=document.createElement('p');e.className='px-2 py-1 text-xs text-fg-muted';e.textContent='No collections yet. Create one with the gear button.';pop.appendChild(e);}`+
-			`list.forEach(function(c){pop.appendChild(row(c));});`+
-			`var m=document.createElement('p');m.setAttribute('data-coll-error','1');m.setAttribute('role','alert');m.className='px-2 text-xs text-red-500';pop.appendChild(m);`+
-			`if(giveUrl){var g=document.createElement('button');g.type='button';g.className='w-full text-left px-2 py-1.5 mt-1 border-t border-border text-sm text-accent hover:bg-surface-alt rounded';g.textContent='Give to\u2026';`+
-			`g.onclick=function(){close(false);if(window.htmx)htmx.ajax('GET',giveUrl,{target:'#armory-move-modal',swap:'innerHTML'});};pop.appendChild(g);}`+
-			`var f=pop.querySelector('input');if(f)f.focus();else pop.focus();}`+
-			`Chronicle.apiFetch(base+'items/'+encodeURIComponent(eid)+'/collections').then(function(r){if(!r.ok)throw new Error('load');return r.json();}).then(render)`+
-			`.catch(function(){pop.textContent='Could not load collections.';pop.focus();});`+
-			`})(this)`,
+		`(function(btn){if(window.Chronicle&&Chronicle.GiveBox)Chronicle.GiveBox.card(btn,{campaign:%s,item:%s,pop:%s,give:%s,collections:%t});})(this)`,
 		jsStr(campaignID), jsStr(entityID), jsStr(popoverID), jsStr(giveURL), collections)
 	return inlineOnClick("armory_collectionMenu", body)
 }

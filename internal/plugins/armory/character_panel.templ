@@ -7,7 +7,9 @@ import "fmt"
 // CharacterPanel shows what a character carries and lets its player move it.
 // The root reloads on the armory-moved event so a move made in the dialog is
 // reflected without a page refresh; the dialog container sits inside the root
-// so the reload also closes the dialog.
+// so the reload also closes the dialog. The Give box opens in place in the
+// fold above the list; after a give, the reload flashes the line it landed on
+// (data-item-id).
 templ CharacterPanel(v *CharacterPanelView, csrfToken string) {
 	{{ self := Endpoint{Kind: "character", ID: v.Character.ID} }}
 	<section
@@ -26,34 +28,45 @@ templ CharacterPanel(v *CharacterPanelView, csrfToken string) {
 					<button
 						type="button"
 						class="btn-secondary text-xs"
-						hx-get={ giveDialogURL(v.CampaignID, "character", v.Character.ID) }
-						hx-target="#armory-move-modal"
-						hx-swap="innerHTML"
-					>+ Give an item</button>
+						data-open-give
+						aria-expanded="false"
+						onclick={ giveOpenOnClick(giveDialogURL(v.CampaignID, "character", v.Character.ID)) }
+					><i class="fa-solid fa-gift mr-1"></i>Give an item</button>
 				}
 				@downtimePill(v.DowntimeOpen)
 			</div>
 		</div>
 
+		if v.CanGive {
+			<div class="ag-fold" data-give-fold></div>
+		}
 		if len(v.Items) == 0 {
 			<p class="text-xs text-fg-muted mb-3">No items carried.</p>
 		} else {
-			<ul class="divide-y divide-border mb-3">
+			<ul class="divide-y divide-border mb-3" data-items>
 				for _, it := range v.Items {
-					<li class="flex items-center justify-between gap-2 py-1.5 text-sm">
-						<span class="text-fg truncate">
-							{ it.Name }
-							if it.Quantity > 1 {
-								<span class="text-fg-muted">&times; { fmt.Sprintf("%d", it.Quantity) }</span>
-							}
-						</span>
-						<button
-							type="button"
-							class="text-xs text-accent hover:underline shrink-0"
-							hx-get={ moveDialogURL(v.CampaignID, "item", self, it.ItemID) }
-							hx-target="#armory-move-modal"
-							hx-swap="innerHTML"
-						>Move&hellip;</button>
+					<li class="py-1.5" data-item-id={ it.ItemID }>
+						<div class="flex items-center justify-between gap-2 text-sm">
+							<span class="text-fg truncate">
+								if it.IsMap {
+									<i class="fa-solid fa-map text-fg-muted mr-1.5 text-xs"></i>{ it.Name }
+								} else {
+									{ it.Name }
+								}
+								if it.Quantity > 1 {
+									<span class="text-fg-muted">&times; { fmt.Sprintf("%d", it.Quantity) }</span>
+								}
+							</span>
+							<span class="flex items-center gap-3">
+								<button
+									type="button"
+									class="text-xs text-accent hover:underline shrink-0"
+									hx-get={ moveDialogURL(v.CampaignID, "item", self, it.ItemID) }
+									hx-target="#armory-move-modal"
+									hx-swap="innerHTML"
+								>Move&hellip;</button>
+							</span>
+						</div>
 					</li>
 				}
 			</ul>

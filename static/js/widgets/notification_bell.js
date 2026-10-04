@@ -27,6 +27,9 @@
     return new Date(iso).toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
   }
 
+  // A notification type with its own icon; the rest show only the unread dot.
+  var TYPE_ICON = { item_given: 'fa-gift' };
+
   function refreshBadge(el) {
     var badge = $('[data-notif-badge]', el);
     if (!badge) return;
@@ -54,6 +57,13 @@
       var dot = document.createElement('span');
       dot.className = 'mt-1.5 w-1.5 h-1.5 rounded-full shrink-0 ' + (n.read ? 'bg-transparent' : 'bg-accent');
       item.appendChild(dot);
+      if (TYPE_ICON[n.type]) {
+        var ic = document.createElement('i');
+        ic.className = 'fa-solid ' + TYPE_ICON[n.type] + ' mt-1 text-xs shrink-0';
+        ic.style.color = '#8b5cf6';
+        ic.setAttribute('aria-hidden', 'true');
+        item.appendChild(ic);
+      }
       var body = document.createElement('div');
       body.className = 'min-w-0';
       var msg = document.createElement('div');
@@ -61,7 +71,8 @@
       msg.textContent = n.message || 'Notification';
       var when = document.createElement('div');
       when.className = 'text-xs text-fg-muted mt-0.5';
-      when.textContent = relTime(n.createdAt);
+      // A detail line ("On Bren") goes before the time.
+      when.textContent = n.detail ? n.detail + ' · ' + relTime(n.createdAt) : relTime(n.createdAt);
       body.appendChild(msg); body.appendChild(when);
       item.appendChild(body);
       item.addEventListener('click', function () {

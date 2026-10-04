@@ -176,59 +176,45 @@ func moveStatusClass(status string) string {
 	return "badge-green"
 }
 
-// giveTabOnClick shows one tab of the give dialog and hides the other.
-func giveTabOnClick(tab string) templ.ComponentScript {
-	return inlineOnClick("armory_giveTab",
-		`(function(btn){var root=btn.closest('[data-give-root]');if(!root)return;var want=`+jsStr(tab)+`;`+
-			`root.querySelectorAll('[data-give-panel]').forEach(function(p){p.hidden=p.getAttribute('data-give-panel')!==want;});`+
-			`root.querySelectorAll('[data-give-tab]').forEach(function(t){var on=t.getAttribute('data-give-tab')===want;`+
-			`t.setAttribute('aria-selected',on?'true':'false');`+
-			`t.classList.toggle('border-accent',on);t.classList.toggle('text-fg',on);`+
-			`t.classList.toggle('border-transparent',!on);t.classList.toggle('text-fg-muted',!on);});})(this)`)
+// giveBoxCall is the inline handler of a Give or Share box control: it hands
+// the element to Chronicle.GiveBox's method of that name. The method name is
+// one of a fixed set chosen here, never user text.
+func giveBoxCall(method string) templ.ComponentScript {
+	return inlineOnClick("armory_giveBox_"+method,
+		`(function(el){if(window.Chronicle&&Chronicle.GiveBox)Chronicle.GiveBox.`+method+`(el);})(this)`)
 }
 
-// giveFilterOnInput hides the rows of the list below the search box whose
-// name does not contain what was typed.
-func giveFilterOnInput() templ.ComponentScript {
-	return inlineOnClick("armory_giveFilter",
-		`(function(inp){var form=inp.closest('form');if(!form)return;var q=inp.value.trim().toLowerCase();`+
-			`form.querySelectorAll('[data-give-row]').forEach(function(r){r.style.display=r.getAttribute('data-name').indexOf(q)<0?'none':'';});})(this)`)
+// giveOpenOnClick opens (or shuts) the character panel's Give box, loading it
+// from url the first time.
+func giveOpenOnClick(url string) templ.ComponentScript {
+	return inlineOnClick("armory_giveOpen",
+		`(function(btn){if(window.Chronicle&&Chronicle.GiveBox)Chronicle.GiveBox.open(btn,`+jsStr(url)+`);})(this)`)
 }
 
-// giveHintOnChange writes the picked map's sentence under the list.
-func giveHintOnChange() templ.ComponentScript {
-	return inlineOnClick("armory_giveHint",
-		`(function(r){var p=r.closest('form').querySelector('[data-give-hint]');if(p)p.textContent=r.getAttribute('data-hint')||'';})(this)`)
-}
-
-// mapHint says what a character gets for the picked map.
-func mapHint(who string) func(NamedRef) string {
-	return func(m NamedRef) string {
-		return fmt.Sprintf("%s gets an item called \"%s\". Opening it shows the map.", who, handoutName(m.Name))
+// itemPickHint is the line under the list once an item (or, on a card, a
+// character) is picked. A hidden item becomes visible to the character's
+// player, so that is what it says; otherwise it says who hears about it.
+// With nobody playing the character there is nobody to tell.
+func itemPickHint(restricted bool, character, player string) string {
+	switch {
+	case player == "":
+		return "It shows on " + character + " in Foundry too."
+	case restricted:
+		return player + ", " + character + "’s player, will be able to see this item’s page. Nobody else will."
+	default:
+		return player + " gets a notification. It shows on " + character + " in Foundry too."
 	}
 }
 
-// itemHint warns, for a private item, that giving it lets the character's
-// player see its page. It is nil (no hint) when the character is not known.
-func itemHint(who *NamedRef) func(NamedRef) string {
-	if who == nil {
-		return nil
+// itemPickIcon is the Font Awesome icon in front of itemPickHint.
+func itemPickIcon(restricted bool, player string) string {
+	if restricted && player != "" {
+		return "fa-eye"
 	}
-	return func(it NamedRef) string {
-		if !it.Restricted {
-			return ""
-		}
-		return who.Name + "'s player will be able to see this item's page."
-	}
+	return "fa-bell"
 }
 
-// restrictedHint is the same warning for the item flow, where the item is
-// fixed and the character is picked.
-func restrictedHint(restricted bool) func(NamedRef) string {
-	if !restricted {
-		return nil
-	}
-	return func(c NamedRef) string {
-		return c.Name + "'s player will be able to see this item's page."
-	}
+// mapPickHint says what a character gets for the picked map.
+func mapPickHint(character, mapName string) string {
+	return fmt.Sprintf("%s gets “%s”. Opening it shows the map. Only players holding it can see its page.", character, handoutName(mapName))
 }

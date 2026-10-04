@@ -240,6 +240,6 @@ type armoryGiveNotifierAdapter struct {
 
 var _ armory.GiveNotifier = (*armoryGiveNotifierAdapter)(nil)
 
-func (a *armoryGiveNotifierAdapter) ItemGiven(ctx context.Context, campaignID string, userIDs []string, message, link string) error {
-	return a.svc.NotifyUsers(ctx, userIDs, campaignID, armory.NotifItemGiven, message, link)
+func (a *armoryGiveNotifierAdapter) ItemGiven(ctx context.Context, campaignID string, userIDs []string, message, detail, link string) error {
+	return a.svc.NotifyUsersWithDetail(ctx, userIDs, campaignID, armory.NotifItemGiven, message, detail, link)
 }

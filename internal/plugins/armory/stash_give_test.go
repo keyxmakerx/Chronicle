@@ -2,8 +2,10 @@ package armory
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
@@ -66,7 +68,7 @@ func (h *fakeHandouts) FindHandout(_ context.Context, _, name, mapID string) (*E
 	return nil, nil
 }
 func (h *fakeHandouts) CreateHandout(_ context.Context, _, _, name string, m NamedRef) (*EntityRef, error) {
-	r := EntityRef{ID: "h" + m.ID, Name: name, IsItem: true}
+	r := EntityRef{ID: "h" + m.ID, Name: name, IsItem: true, HandoutMapID: m.ID}
 	h.made = append(h.made, r)
 	h.madeMap[r.ID] = m.ID
 	return &r, nil
@@ -86,12 +88,12 @@ func (h *fakeHandouts) AllowViewers(_ context.Context, _, id string, users []str
 }
 
 type fakeNotifier struct {
-	users         [][]string
-	messages, lnk []string
+	users                  [][]string
+	messages, details, lnk []string
 }
 
-func (n *fakeNotifier) ItemGiven(_ context.Context, _ string, users []string, msg, link string) error {
-	n.users, n.messages, n.lnk = append(n.users, users), append(n.messages, msg), append(n.lnk, link)
+func (n *fakeNotifier) ItemGiven(_ context.Context, _ string, users []string, msg, detail, link string) error {
+	n.users, n.messages, n.details, n.lnk = append(n.users, users), append(n.messages, msg), append(n.details, detail), append(n.lnk, link)
 	return nil
 }
 
@@ -119,7 +121,7 @@ func newGiveFx() *giveFx {
 	g.svc = NewStashService(StashDeps{
 		Repo: f.repo, Directory: g.dir, Visibility: f.vis, Actor: fakeActor{f.dir},
 		Fields: f.fields, Relations: f.rels, Events: g.events, Handouts: g.hand, Notifier: g.notify,
-		UserNames: fakeNames{"gm": "Greta"},
+		UserNames: fakeNames{"gm": "Greta", "u1": "Tess", "u2": "Robin"},
 	})
 	return g
 }
@@ -154,8 +156,8 @@ func TestGive_ItemCreditsHistoryEventAndBell(t *testing.T) {
 		t.Fatalf("event characters %v", g.events.got[0].payload["characterIds"])
 	}
 	if len(g.notify.users) != 1 || g.notify.users[0][0] != "u2" ||
-		g.notify.messages[0] != "Greta gave you 2 × Potion" || g.notify.lnk[0] != "/campaigns/camp/entities/c2" {
-		t.Fatalf("notification %v %v %v", g.notify.users, g.notify.messages, g.notify.lnk)
+		g.notify.messages[0] != "Your GM gave you 2 × Potion" || g.notify.details[0] != "On Mira" || g.notify.lnk[0] != "/campaigns/camp/entities/c2" {
+		t.Fatalf("notification %v %v %v %v", g.notify.users, g.notify.messages, g.notify.details, g.notify.lnk)
 	}
 }
 
@@ -273,7 +275,7 @@ func TestGive_HistoryWordingPerViewer(t *testing.T) {
 	}{
 		{"the giver", gm, "You gave Mira 2 × Potion"},
 		{"another gm", Actor{"sc", rScribe}, "Greta gave Mira 2 × Potion"},
-		{"the player", Actor{"u2", rPlayer}, "Greta gave you 2 × Potion"},
+		{"the player", Actor{"u2", rPlayer}, "Your GM gave you 2 × Potion"},
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
@@ -311,7 +313,7 @@ func TestGive_PanelOffersGiveToOwnerOnly(t *testing.T) {
 		if err := CharacterPanel(v, "tok").Render(ctx, &sb); err != nil {
 			t.Fatal(err)
 		}
-		if has := strings.Contains(sb.String(), "+ Give an item"); has != tc.want {
+		if has := strings.Contains(sb.String(), "Give an item"); has != tc.want {
 			t.Errorf("%s: button present=%v", tc.who.UserID, has)
 		}
 	}
@@ -421,33 +423,60 @@ func TestGiveDialog(t *testing.T) {
 func TestGiveDialog_Renders(t *testing.T) {
 	g := newGiveFx()
 	ctx := context.Background()
-	fromChar, _ := g.svc.GiveDialog(ctx, "camp", gm, "c2", "", "")
-	fromItem, _ := g.svc.GiveDialog(ctx, "camp", gm, "", "i1", "")
-	render := func(v *GiveDialogView) string {
+	// Mira already holds the Dungeon's handout, so its row says so.
+	if _, err := g.svc.Give(ctx, "camp", gm, GiveInput{CharacterID: "c2", MapID: "m1", Quantity: 1}); err != nil {
+		t.Fatal(err)
+	}
+	g.dir.ents["hm1"] = &g.hand.made[0]
+	for _, r := range g.rels.rels["c2"] {
+		if r.ItemEntityID == "hm1" {
+			r.ItemName = "Map: Dungeon" // the fake names a line by its id
+		}
+	}
+	g.dir.items.list = append(g.dir.items.list, EntityRef{ID: "z1", Name: "Zephyr Cloak", IsItem: true, Restricted: true})
+	fromChar, err := g.svc.GiveDialog(ctx, "camp", gm, "c2", "", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	fromItem, err := g.svc.GiveDialog(ctx, "camp", gm, "", "i1", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	render := func(c interface {
+		Render(context.Context, io.Writer) error
+	}) string {
 		var sb strings.Builder
-		if err := GiveDialog(v, "tok").Render(ctx, &sb); err != nil {
+		if err := c.Render(ctx, &sb); err != nil {
 			t.Fatal(err)
 		}
 		return sb.String()
 	}
-	out := render(fromChar)
+	out := render(GiveBox(fromChar))
 	for _, want := range []string{
-		"Give to Mira", "From the Armory", "A map", `name="item_id"`, `name="map_id"`, `name="quantity"`,
-		`name="character_id" value="c2"`, `name="_csrf" value="tok"`, "/campaigns/camp/armory/give",
-		`Mira gets an item called &#34;Map: Dungeon&#34;. Opening it shows the map.`,
+		`class="ag-box"`, "Give to Mira", "From the Armory", "A map", `data-character="c2"`,
+		`data-post="/campaigns/camp/armory/give"`, `data-field="item_id"`, `data-field="map_id"`,
+		`placeholder="Search the Armory"`, `data-search="/campaigns/camp/armory/give?character=c2&amp;list=items"`, "Hidden", "Mira has it",
+		"Robin gets a notification. It shows on Mira in Foundry too.",
+		"Robin, Mira’s player, will be able to see this item’s page. Nobody else will.",
+		"Mira gets “Map: Dungeon”. Opening it shows the map. Only players holding it can see its page.",
+		"How many", "Not given yet. Give it, or throw the choice away.", "Discard",
 	} {
 		if !strings.Contains(out, want) {
-			t.Errorf("character dialog missing %q", want)
+			t.Errorf("character box missing %q", want)
 		}
 	}
-	out = render(fromItem)
-	for _, want := range []string{"Give Potion", `name="item_id" value="i1"`, `name="character_id"`, "Thorin", "Mira"} {
+	if n := strings.Count(out, "has it"); n != 1 {
+		t.Errorf("only the held map is tagged, got %d", n)
+	}
+	out = render(GiveCardBox(fromItem))
+	for _, want := range []string{"Give Potion to", `data-item="i1"`, `data-field="character_id"`, "Thorin", "Mira", "Robin", "Tess",
+		"It shows on Ghost in Foundry too."} {
 		if !strings.Contains(out, want) {
-			t.Errorf("item dialog missing %q", want)
+			t.Errorf("card box missing %q", want)
 		}
 	}
-	if strings.Contains(out, `name="map_id"`) || strings.Contains(out, "<script") {
-		t.Error("item dialog must have no map tab and no script element")
+	if strings.Contains(out, `data-field="map_id"`) || strings.Contains(out, "<script") || strings.Contains(out, "Search the Armory") {
+		t.Error("card box must have no map tab, no search and no script element")
 	}
 }
 
@@ -478,6 +507,16 @@ func TestGiveRoutes(t *testing.T) {
 		}
 		if g.carried("c2", "i1") != 3 {
 			t.Fatalf("held %d", g.carried("c2", "i1"))
+		}
+		// The box reads its toast and the line to flash from armory-given,
+		// sent as ASCII so the × survives the header.
+		if h := rec.Header().Get("HX-Trigger"); strings.ContainsRune(h, '×') || !strings.Contains(h, `\u00d7`) {
+			t.Fatalf("header not ASCII-escaped: %s", h)
+		}
+		var trig map[string]map[string]any
+		_ = json.Unmarshal([]byte(rec.Header().Get("HX-Trigger")), &trig)
+		if got := trig["armory-given"]; got["message"] != "Gave Mira 3 × Potion" || got["itemId"] != "i1" || got["characterId"] != "c2" {
+			t.Fatalf("armory-given %v", trig["armory-given"])
 		}
 	})
 	t.Run("blank quantity is one (the map form has none)", func(t *testing.T) {
@@ -598,9 +637,16 @@ func TestGiveDialog_ItemSearchIsServerSide(t *testing.T) {
 	// Restricted items carry the warning for their row.
 	v, _ := g.svc.GiveDialog(ctx, "camp", gm, "c2", "", "zeph")
 	var sb strings.Builder
-	_ = GiveDialog(v, "tok").Render(ctx, &sb)
-	if !strings.Contains(sb.String(), "Mira&#39;s player will be able to see this item&#39;s page.") {
+	_ = GiveBox(v).Render(ctx, &sb)
+	if !strings.Contains(sb.String(), "Robin, Mira’s player, will be able to see this item’s page.") {
 		t.Fatalf("hint missing: %s", sb.String())
+	}
+	// Nothing matching says so in the list itself.
+	v, _ = g.svc.GiveDialog(ctx, "camp", gm, "c2", "", "dragon")
+	sb.Reset()
+	_ = GiveItemChoices(v).Render(ctx, &sb)
+	if !strings.Contains(sb.String(), "Nothing in the Armory matches “dragon”.") {
+		t.Fatalf("empty line missing: %s", sb.String())
 	}
 }
 
@@ -614,8 +660,8 @@ func TestGiveDialog_ItemFlowHintOnlyForPrivateItems(t *testing.T) {
 			t.Fatal(err)
 		}
 		var sb strings.Builder
-		_ = GiveDialog(v, "tok").Render(ctx, &sb)
-		if has := strings.Contains(sb.String(), "player will be able to see this item"); has != want {
+		_ = GiveCardBox(v).Render(ctx, &sb)
+		if has := strings.Contains(sb.String(), "’s player, will be able to see this item’s page"); has != want {
 			t.Errorf("%s: hint present=%v", id, has)
 		}
 	}
@@ -631,7 +677,7 @@ func TestGive_HistoryWordingForOtherPlayers(t *testing.T) {
 	}
 	// u1 owns c1: recipient wording.
 	lines, _ := g.svc.CharacterHistory(ctx, "camp", Actor{"u1", rPlayer}, "c1")
-	if got := MoveSummary(lines[0]); got != "Greta gave you 1 × Potion" {
+	if got := MoveSummary(lines[0]); got != "Your GM gave you 1 × Potion" {
 		t.Fatalf("recipient: %q", got)
 	}
 	// u2 is a player with edit access to c1 but not its claimant.
@@ -664,7 +710,7 @@ func TestGiveRoutes_ItemListFragment(t *testing.T) {
 		t.Fatal(err)
 	}
 	out := rec.Body.String()
-	if !strings.Contains(out, "Potion") || strings.Contains(out, "armory-give-title") {
+	if !strings.Contains(out, "Potion") || strings.Contains(out, "ag-box") {
 		t.Fatalf("expected the list alone: %s", out)
 	}
 }
@@ -699,5 +745,50 @@ func TestItemCard_GiveEntryFollowsOwnerVisibility(t *testing.T) {
 				t.Errorf("give url present=%v", has)
 			}
 		})
+	}
+}
+
+// The panel marks a map handout with the map icon, and every line carries its
+// item id so the Give box can flash the one a give landed on.
+func TestCharacterPanel_MapLinesAndLandingIDs(t *testing.T) {
+	g := newGiveFx()
+	ctx := context.Background()
+	if _, err := g.svc.Give(ctx, "camp", gm, GiveInput{CharacterID: "c2", MapID: "m1", Quantity: 1}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := g.svc.Give(ctx, "camp", gm, GiveInput{CharacterID: "c2", ItemID: "i1", Quantity: 1}); err != nil {
+		t.Fatal(err)
+	}
+	g.dir.ents["hm1"] = &g.hand.made[0]
+	for _, r := range g.rels.rels["c2"] {
+		if r.ItemEntityID == "hm1" {
+			r.ItemName = "Map: Dungeon"
+		}
+	}
+	v, err := g.svc.CharacterPanel(ctx, "camp", gm, "c2")
+	if err != nil {
+		t.Fatal(err)
+	}
+	maps := 0
+	for _, it := range v.Items {
+		if it.IsMap {
+			maps++
+			if it.ItemID != "hm1" {
+				t.Errorf("%s marked as a map", it.ItemID)
+			}
+		}
+	}
+	if maps != 1 {
+		t.Fatalf("map lines %d", maps)
+	}
+	var sb strings.Builder
+	if err := CharacterPanel(v, "tok").Render(ctx, &sb); err != nil {
+		t.Fatal(err)
+	}
+	out := sb.String()
+	for _, want := range []string{`data-item-id="hm1"`, `data-item-id="i1"`, "fa-map", "data-give-fold", "fa-gift", `aria-expanded="false"`} {
+		if !strings.Contains(out, want) {
+			t.Errorf("panel missing %q", want)
+		}
 	}
 }

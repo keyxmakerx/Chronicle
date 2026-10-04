@@ -767,6 +767,7 @@ func (s *stashService) CharacterPanel(ctx context.Context, campaignID string, a 
 	if err != nil {
 		return nil, err
 	}
+	s.markMaps(ctx, campaignID, held)
 	view.Items = held
 
 	if ref.MoneyKey != "" {

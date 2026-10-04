@@ -18,11 +18,18 @@ import (
 type notificationPayload struct {
 	Message string `json:"message"`
 	Kind    string `json:"kind"`
+	// Detail is an optional second line, shown under the message.
+	Detail string `json:"detail,omitempty"`
 }
 
 // marshalPayload builds the JSON payload string for a notification.
 func marshalPayload(message, kind string) *string {
-	b, err := json.Marshal(notificationPayload{Message: message, Kind: kind})
+	return marshalPayloadDetail(message, kind, "")
+}
+
+// marshalPayloadDetail is marshalPayload with the optional second line.
+func marshalPayloadDetail(message, kind, detail string) *string {
+	b, err := json.Marshal(notificationPayload{Message: message, Kind: kind, Detail: detail})
 	if err != nil {
 		return nil
 	}
@@ -45,10 +52,15 @@ func proposalLink(campaignID, proposalID string) string {
 // roster slice that may contain a blank without pre-filtering. A blank ntype is
 // rejected: an untyped row would be invisible to any consumer that filters.
 func (s *sessionService) NotifyUsers(ctx context.Context, userIDs []string, campaignID, ntype, message, link string) error {
+	return s.NotifyUsersWithDetail(ctx, userIDs, campaignID, ntype, message, "", link)
+}
+
+// NotifyUsersWithDetail is NotifyUsers with a second line under the message.
+func (s *sessionService) NotifyUsersWithDetail(ctx context.Context, userIDs []string, campaignID, ntype, message, detail, link string) error {
 	if ntype == "" {
 		return apperror.NewValidation("notification type is required")
 	}
-	payload := marshalPayload(message, ntype)
+	payload := marshalPayloadDetail(message, ntype, detail)
 	now := time.Now().UTC()
 	cid := campaignID
 	for _, uid := range userIDs {

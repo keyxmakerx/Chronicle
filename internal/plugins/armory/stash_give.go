@@ -63,8 +63,9 @@ type HandoutStore interface {
 
 // GiveNotifier tells players they were given something. Optional.
 type GiveNotifier interface {
-	// ItemGiven notifies the users, with a link to where to look.
-	ItemGiven(ctx context.Context, campaignID string, userIDs []string, message, link string) error
+	// ItemGiven notifies the users, with a link to where to look. detail is
+	// the short line under the message ("On Bren").
+	ItemGiven(ctx context.Context, campaignID string, userIDs []string, message, detail, link string) error
 }
 
 // GiveInput is what the GM asks for. Exactly one of ItemID and MapID is set.
@@ -82,22 +83,37 @@ type GiveOutcome struct {
 	CharacterName string
 }
 
-// GiveDialogView feeds the "Give to" dialog. Opened from a character page the
+// GiveDialogView feeds the Give box. Opened from a character page the
 // character is fixed and the item (or map) is picked; opened from an item card
 // the item is fixed and the character is picked.
 type GiveDialogView struct {
 	CampaignID string
 	Character  *NamedRef
-	Item       *NamedRef
+	// Player is the fixed character's player's name, empty when nobody has
+	// claimed the character; the box's hint names them.
+	Player string
+	Item   *NamedRef
 	// Items is the page of Armory items matching Query (at most
-	// giveListPageSize); ItemTotal counts every match so the dialog can say
+	// giveListPageSize); ItemTotal counts every match so the box can say
 	// when it is showing only some.
 	Items     []NamedRef
 	ItemTotal int
 	Query     string
 	// Characters is the pick-list of the item flow.
-	Characters []NamedRef
-	Maps       []NamedRef
+	Characters []GiveCharacter
+	// MapsOn is true when maps can be given at all (the box shows the map
+	// tab); Maps lists them and HeldMaps marks those the character holds.
+	MapsOn   bool
+	Maps     []NamedRef
+	HeldMaps map[string]bool
+}
+
+// GiveCharacter is one character in the item flow's list, with its player's
+// name (empty when unclaimed) shown at the right of the row.
+type GiveCharacter struct {
+	ID     string
+	Name   string
+	Player string
 }
 
 // MoreItems reports whether the list shows only some of the matches.
@@ -134,15 +150,22 @@ func (s *stashService) GiveDialog(ctx context.Context, campaignID string, a Acto
 			return nil, err
 		}
 		view.Character = &NamedRef{ID: ref.ID, Name: ref.Name}
+		view.Player = s.playerNames(ctx, campaignID, []string{ref.OwnerUserID})[ref.OwnerUserID]
 		items, err := s.Directory.ListItems(ctx, campaignID, a.Role, a.UserID, 0)
 		if err != nil {
 			return nil, err
 		}
 		view.Items, view.ItemTotal = matchItems(items, view.Query, giveListPageSize)
 		if s.Handouts != nil {
+			view.MapsOn = true
 			if view.Maps, err = s.Handouts.ListMaps(ctx, campaignID); err != nil {
 				return nil, err
 			}
+			held, err := s.carried(ctx, campaignID, a, ref.ID)
+			if err != nil {
+				return nil, err
+			}
+			view.HeldMaps = s.markMaps(ctx, campaignID, held)
 		}
 	case strings.TrimSpace(itemID) != "":
 		ref, err := s.loadItem(ctx, campaignID, itemID)
@@ -154,13 +177,57 @@ func (s *stashService) GiveDialog(ctx context.Context, campaignID string, a Acto
 		if err != nil {
 			return nil, err
 		}
+		owners := make([]string, 0, len(chars))
 		for _, c := range chars {
-			view.Characters = append(view.Characters, NamedRef{ID: c.ID, Name: c.Name})
+			owners = append(owners, c.OwnerUserID)
+		}
+		names := s.playerNames(ctx, campaignID, owners)
+		for _, c := range chars {
+			view.Characters = append(view.Characters, GiveCharacter{ID: c.ID, Name: c.Name, Player: names[c.OwnerUserID]})
 		}
 	default:
 		return nil, apperror.NewBadRequest("Choose a character or an item to give.")
 	}
 	return view, nil
+}
+
+// playerNames resolves the claimed players' display names. A failed lookup
+// only costs the names: the box then reads without them.
+func (s *stashService) playerNames(ctx context.Context, campaignID string, userIDs []string) map[string]string {
+	var ids []string
+	for _, id := range userIDs {
+		if id != "" {
+			ids = append(ids, id)
+		}
+	}
+	if s.UserNames == nil || len(ids) == 0 {
+		return map[string]string{}
+	}
+	names, err := s.UserNames.DisplayNames(ctx, campaignID, ids)
+	if err != nil {
+		slog.Warn("give: could not read player names", slog.Any("error", err))
+		return map[string]string{}
+	}
+	return names
+}
+
+// markMaps flags the held lines that are map handouts and returns the maps
+// they stand for. Only a name with the handout prefix is looked up, so a
+// character's ordinary items cost nothing.
+func (s *stashService) markMaps(ctx context.Context, campaignID string, held []HeldItem) map[string]bool {
+	maps := map[string]bool{}
+	for i := range held {
+		if !strings.HasPrefix(held[i].Name, handoutPrefix) {
+			continue
+		}
+		ref, err := s.Directory.GetEntity(ctx, campaignID, held[i].ItemID)
+		if err != nil || ref == nil || ref.HandoutMapID == "" {
+			continue
+		}
+		held[i].IsMap = true
+		maps[ref.HandoutMapID] = true
+	}
+	return maps
 }
 
 // matchItems returns the first limit items whose name contains query (any case,
@@ -296,31 +363,26 @@ func (s *stashService) handoutFor(ctx context.Context, campaignID string, a Acto
 }
 
 // notifyGiven tells the character's player. A failure is logged and dropped:
-// the item is already given and a missed bell must not undo it.
+// the item is already given and a missed bell must not undo it. The player
+// reads "Your GM", whoever of the GMs gave it, as in their history.
 func (s *stashService) notifyGiven(ctx context.Context, campaignID string, a Actor, char *EntityRef, out *GiveOutcome, qty int) {
 	if s.Notifier == nil || char.OwnerUserID == "" || char.OwnerUserID == a.UserID {
 		return
-	}
-	who := "Your GM"
-	if s.UserNames != nil {
-		if names, err := s.UserNames.DisplayNames(ctx, campaignID, []string{a.UserID}); err == nil && names[a.UserID] != "" {
-			who = names[a.UserID]
-		}
 	}
 	thing := out.ItemName
 	if qty > 1 {
 		thing = fmt.Sprintf("%d × %s", qty, out.ItemName)
 	}
 	link := "/campaigns/" + campaignID + "/entities/" + char.ID
-	if err := s.Notifier.ItemGiven(ctx, campaignID, []string{char.OwnerUserID}, fmt.Sprintf("%s gave you %s", who, thing), link); err != nil {
+	if err := s.Notifier.ItemGiven(ctx, campaignID, []string{char.OwnerUserID}, "Your GM gave you "+thing, "On "+char.Name, link); err != nil {
 		slog.Warn("give: could not notify the player", slog.Any("error", err))
 	}
 }
 
 // giveSummary is the history sentence for a give. A GM reads who gave what to
-// whom; the character's own player reads it from their side; anyone else who
-// can see the line reads it from the outside. requester is empty when the
-// giver's name is not known.
+// whom; the character's own player reads "Your GM gave you", as the
+// notification says; anyone else who can see the line reads it from the
+// outside. requester is empty when the giver's name is not known.
 func giveSummary(l MoveLine, viewerIsGM, viewerIsRecipient bool, viewerID, requester string) string {
 	thing := thingText(l)
 	if viewerIsGM {
@@ -334,11 +396,7 @@ func giveSummary(l MoveLine, viewerIsGM, viewerIsRecipient bool, viewerID, reque
 		return fmt.Sprintf("%s gave %s %s", who, l.ToName, thing)
 	}
 	if viewerIsRecipient {
-		who := requester
-		if who == "" {
-			who = "Your GM"
-		}
-		return fmt.Sprintf("%s gave you %s", who, thing)
+		return "Your GM gave you " + thing
 	}
 	who := requester
 	if who == "" {

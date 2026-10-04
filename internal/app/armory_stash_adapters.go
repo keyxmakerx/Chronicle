@@ -139,6 +139,11 @@ func (a *armoryStashDirectoryAdapter) ref(ti *stashTypeInfo, e *entities.Entity)
 	if e.OwnerUserID != nil {
 		r.OwnerUserID = *e.OwnerUserID
 	}
+	if r.IsItem {
+		if mid, ok := e.FieldsData[handoutMarkerField].(string); ok {
+			r.HandoutMapID = mid
+		}
+	}
 	if r.IsCharacter {
 		r.MoneyKey = ti.money[e.EntityTypeID]
 		r.MoneyLabel = ti.moneyName[e.EntityTypeID]

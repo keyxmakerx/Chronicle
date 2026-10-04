@@ -6,9 +6,11 @@ package armory
 
 import (
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"strconv"
 	"strings"
+	"unicode/utf16"
 
 	"github.com/labstack/echo/v4"
 
@@ -51,10 +53,29 @@ func done(c echo.Context, cc *campaigns.CampaignContext, message string) error {
 	if message != "" {
 		trigger["chronicle:notify"] = map[string]string{"message": message, "type": "success"}
 	}
-	b, _ := json.Marshal(trigger)
-	c.Response().Header().Set("HX-Trigger", string(b))
+	c.Response().Header().Set("HX-Trigger", triggerJSON(trigger))
 	c.Response().Header().Set("HX-Reswap", "none")
 	return c.NoContent(http.StatusNoContent)
+}
+
+// triggerJSON encodes an HX-Trigger header value with every non-ASCII
+// character escaped (\u00d7 for ×). Browsers read header bytes as Latin-1, so
+// an item name or "×" sent raw would arrive garbled in the toast.
+func triggerJSON(v any) string {
+	b, _ := json.Marshal(v)
+	var sb strings.Builder
+	for _, r := range string(b) {
+		switch {
+		case r < 0x80:
+			sb.WriteRune(r)
+		case r <= 0xFFFF:
+			fmt.Fprintf(&sb, `\u%04x`, r)
+		default:
+			hi, lo := utf16.EncodeRune(r)
+			fmt.Fprintf(&sb, `\u%04x\u%04x`, hi, lo)
+		}
+	}
+	return sb.String()
 }
 
 // Page renders GET /campaigns/:id/armory/stashes.
@@ -231,8 +252,9 @@ func (h *StashHandler) MoveDialog(c echo.Context) error {
 	return middleware.Render(c, http.StatusOK, MoveDialog(view, middleware.GetCSRFToken(c)))
 }
 
-// GiveDialog handles GET /armory/give: the dialog for giving a character an
-// item or a map. ?character= fixes the recipient, ?item= fixes the item.
+// GiveDialog handles GET /armory/give: the Give box. ?character= fixes the
+// recipient (the character page's box), ?item= fixes the item (the Armory
+// card's box); ?list=items&q= answers the box's search with the list alone.
 func (h *StashHandler) GiveDialog(c echo.Context) error {
 	cc, a, err := caller(c)
 	if err != nil {
@@ -242,20 +264,24 @@ func (h *StashHandler) GiveDialog(c echo.Context) error {
 	if err != nil {
 		return err
 	}
-	// The search box swaps only the list.
-	if c.QueryParam("list") == "items" {
+	switch {
+	case view.Item != nil:
+		return middleware.Render(c, http.StatusOK, GiveCardBox(view))
+	case c.QueryParam("list") == "items":
 		return middleware.Render(c, http.StatusOK, GiveItemChoices(view))
 	}
-	return middleware.Render(c, http.StatusOK, GiveDialog(view, middleware.GetCSRFToken(c)))
+	return middleware.Render(c, http.StatusOK, GiveBox(view))
 }
 
-// Give handles POST /armory/give.
+// Give handles POST /armory/give. Besides the usual reload signal it answers
+// with armory-given, which the Give box reads for its toast and to flash the
+// line the item landed on.
 func (h *StashHandler) Give(c echo.Context) error {
 	cc, a, err := caller(c)
 	if err != nil {
 		return err
 	}
-	// A blank "how many" means one; the map form has no such field.
+	// A blank "how many" means one; a map has none.
 	qty := 1
 	if v := strings.TrimSpace(c.FormValue("quantity")); v != "" {
 		if qty, err = strconv.Atoi(v); err != nil {
@@ -271,7 +297,16 @@ func (h *StashHandler) Give(c echo.Context) error {
 	if err != nil {
 		return err
 	}
-	return done(c, cc, "Gave "+out.ItemName+" to "+out.CharacterName+".")
+	if !middleware.IsHTMX(c) {
+		return c.Redirect(http.StatusSeeOther, stashesURL(cc.Campaign.ID))
+	}
+	msg := fmt.Sprintf("Gave %s %d × %s", out.CharacterName, out.Move.Quantity, out.ItemName)
+	c.Response().Header().Set("HX-Trigger", triggerJSON(map[string]any{
+		"armory-moved": true,
+		"armory-given": map[string]string{"message": msg, "itemId": out.Move.ItemEntityID, "characterId": out.Move.To.ID},
+	}))
+	c.Response().Header().Set("HX-Reswap", "none")
+	return c.NoContent(http.StatusNoContent)
 }
 
 // parseDestination splits the "kind:id" value of the To select.
@@ -360,11 +395,10 @@ func doneWithTone(c echo.Context, cc *campaigns.CampaignContext, message, tone s
 	if !middleware.IsHTMX(c) {
 		return c.Redirect(http.StatusSeeOther, stashesURL(cc.Campaign.ID))
 	}
-	b, _ := json.Marshal(map[string]any{
+	c.Response().Header().Set("HX-Trigger", triggerJSON(map[string]any{
 		"armory-moved":     true,
 		"chronicle:notify": map[string]string{"message": message, "type": tone},
-	})
-	c.Response().Header().Set("HX-Trigger", string(b))
+	}))
 	c.Response().Header().Set("HX-Reswap", "none")
 	return c.NoContent(http.StatusNoContent)
 }
