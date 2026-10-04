@@ -83,10 +83,13 @@ func loadIndexEntries(sysDir string, manifest *SystemManifest, category string) 
 	if def == nil {
 		return nil, fmt.Errorf("the manifest has no category called %q", category)
 	}
-	if !systemDataFilePattern.MatchString(category + ".json") {
-		return nil, fmt.Errorf("%q is not a data file name", category)
+	// The file name comes from the manifest's own slug, never the caller's
+	// string, and must still be a plain data file name.
+	file := def.Slug + ".json"
+	if !systemDataFilePattern.MatchString(file) || filepath.Base(file) != file {
+		return nil, fmt.Errorf("%q is not a data file name", def.Slug)
 	}
-	path := filepath.Join(sysDir, "data", category+".json")
+	path := filepath.Join(sysDir, "data", file)
 	info, err := os.Stat(path)
 	if err != nil || !info.Mode().IsRegular() {
 		return nil, fmt.Errorf("data/%s.json not found", category)
