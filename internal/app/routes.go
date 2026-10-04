@@ -3383,6 +3383,7 @@ func (a *App) RegisterRoutes() {
 	mapsHandler := maps.NewHandler(mapsService)
 	drawingRepo := maps.NewDrawingRepository(a.DB)
 	drawingService := maps.NewDrawingService(drawingRepo)
+	hexService := maps.NewHexService(maps.NewHexRepository(a.DB))
 	// Pins under a shadow area are withheld from players; the map service asks
 	// the drawing service (which owns drawings) where the shadows are.
 	wireMapShadows(mapsService, drawingService)
@@ -3402,6 +3403,7 @@ func (a *App) RegisterRoutes() {
 		campaignHandler.RegisterCustomizeTab(mapsHandler.CustomizeTabFactory())
 		drawingHandler := maps.NewDrawingHandler(mapsService, drawingService)
 		maps.RegisterDrawingRoutes(e, drawingHandler, campaignService, authService, addonService)
+		maps.RegisterHexRoutes(e, maps.NewHexHandler(hexService), campaignService, authService, addonService)
 	} else {
 		slog.Warn("maps plugin degraded — routes not registered")
 	}
@@ -4814,6 +4816,21 @@ func (a *App) RegisterRoutes() {
 	})
 	drawingService.SetMediaVerifier(&mapMediaVerifierAdapter{svc: mediaService})
 	mapsService.SetEventPublisher(mapEvents)
+	hexService.SetMapLookup(func(ctx context.Context, mapID string) (string, error) {
+		m, err := mapsService.GetMap(ctx, mapID)
+		if err != nil {
+			return "", err
+		}
+		return m.CampaignID, nil
+	})
+	// Painting terrain is drawing on the map, so it follows the same gate.
+	hexService.SetDrawPolicyLookup(func(ctx context.Context, mapID string) (string, error) {
+		m, err := mapsService.GetMap(ctx, mapID)
+		if err != nil {
+			return "", err
+		}
+		return m.DrawWho(), nil
+	})
 
 	// --- Module Routes ---
 	// Game system reference pages and tooltip APIs.

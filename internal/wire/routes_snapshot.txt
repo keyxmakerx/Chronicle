@@ -337,6 +337,7 @@ GET	/maps/:mid/drawings	internal/plugins/maps/routes.go
 GET	/maps/:mid/drawings	internal/plugins/maps/routes.go
 GET	/maps/:mid/drawings/:did	internal/plugins/maps/routes.go
 GET	/maps/:mid/fog	internal/plugins/maps/routes.go
+GET	/maps/:mid/hexes	internal/plugins/maps/routes.go
 GET	/maps/:mid/layers	internal/plugins/maps/routes.go
 GET	/maps/:mid/layers/:lid	internal/plugins/maps/routes.go
 GET	/maps/:mid/markers	internal/plugins/maps/routes.go
@@ -478,6 +479,7 @@ GET	/worldbuilding-prompts	internal/plugins/entities/worldbuilding_prompt_routes
 GET	/ws	internal/app/routes.go
 PATCH	/:id/visibility	internal/plugins/bestiary/routes.go
 PATCH	/maps/:mapID/tokens/:tokenID/position	internal/plugins/syncapi/routes.go
+PATCH	/maps/:mid/hexes/cells	internal/plugins/maps/routes.go
 PATCH	/maps/:mid/tokens/:tid/position	internal/plugins/maps/routes.go
 POST		internal/plugins/bestiary/routes.go
 POST		internal/plugins/packages/routes.go
