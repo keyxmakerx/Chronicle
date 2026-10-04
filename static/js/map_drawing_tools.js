@@ -75,7 +75,11 @@
           .then(function (fresh) { return fresh && fresh.image_url ? fresh.image_url : ''; });
       },
       canEdit: !!isScribe,
-      canDelete: !!ctx.isOwner,
+      // The server's delete rule: owners and DM access any picture, a scribe
+      // the ones they added.
+      canDelete: function (d) {
+        return !!(ctx.isOwner || ctx.canDmOnly || (ctx.userID && d.created_by === ctx.userID));
+      },
       onPatch: patchDrawing,
       onDelete: confirmDelete
     }) : null;

@@ -201,7 +201,6 @@
       '.mp-picbar[hidden] { display: none; }',
       '.mp-picbar label { display: flex; align-items: center; gap: 6px; color: var(--color-text-secondary); }',
       '.mp-picbar input[type=range] { width: 96px; accent-color: var(--mp-accent, #6366f1); }',
-      '.mp-picbar output { min-width: 3.2em; text-align: right; color: var(--color-text-primary); font-variant-numeric: tabular-nums; }',
       '.mp-picbar button { border: 1px solid var(--color-border); background: var(--color-card-bg); border-radius: 7px; padding: 4px 9px; font-size: 12px; color: var(--color-text-body); }',
       '.mp-picbar button:hover { background: var(--color-bg-tertiary); }',
       '.mp-picbar button[aria-pressed="true"] { background: var(--mp-accent, #6366f1); border-color: var(--mp-accent, #6366f1); color: #fff; }',
@@ -229,7 +228,9 @@
    *   refreshURL(d)         resolves a fresh signed URL (or '') once an image
    *                         fails to load, since signed URLs expire,
    *   canEdit               whether this viewer may select and edit,
-   *   canDelete             whether this viewer may delete (owners only),
+   *   canDelete(d)          whether this viewer may delete picture d (the
+   *                         server's rule: owners and DM access any, a
+   *                         scribe the ones they added),
    *   onPatch(id, fields)   saves only the changed fields; resolves true/false,
    *   onDelete(id)          asks the host to confirm and delete
    * }
@@ -240,7 +241,7 @@
     addStyle();
     var mapW = opts.mapW, mapH = opts.mapH;
     var canEdit = !!opts.canEdit;
-    var canDelete = !!opts.canDelete;
+    var canDelete = typeof opts.canDelete === 'function' ? opts.canDelete : function () { return !!opts.canDelete; };
     var pane = map.getPane('mpPictures') || map.createPane('mpPictures');
     // Below the staff shadows (390) and the vector pane (400), so drawings and
     // shapes over a picture stay clickable and a shadow still covers it.
@@ -275,11 +276,9 @@
         var wrap = el('label');
         wrap.appendChild(document.createTextNode(label));
         var input = el('input', cls, { type: 'range', min: min, max: max, step: step, 'aria-label': label });
-        var out = el('output');
         wrap.appendChild(input);
-        wrap.appendChild(out);
         bar.appendChild(wrap);
-        return { input: input, out: out };
+        return { input: input };
       }
       function button(label, cls) {
         var b = el('button', cls || '', { type: 'button' });
@@ -296,12 +295,17 @@
       crop.setAttribute('aria-pressed', 'false');
       var fwd = button('Forward');
       var back = button('Back');
-      var hide = button('Hide from players');
-      hide.setAttribute('aria-pressed', 'false');
+      var hideWrap = el('label');
+      var hide = el('input', '', { type: 'checkbox' });
+      hideWrap.appendChild(hide);
+      hideWrap.appendChild(document.createTextNode('Hide from players'));
+      bar.appendChild(hideWrap);
       sep();
-      // The server only lets owners delete, so nobody else is offered it.
-      var del = canDelete ? button('Delete', 'mp-pic-del') : null;
-      if (!canDelete) bar.removeChild(bar.lastChild);
+      // Shown per picture by syncBar, following the server's delete rule.
+      var del = button('Delete', 'mp-pic-del');
+      var done = button('', 'mp-pic-done');
+      done.setAttribute('aria-label', 'Done');
+      done.innerHTML = '<i class="fa-solid fa-xmark" aria-hidden="true"></i>';
 
       see.input.addEventListener('input', function () {
         if (!selected) return;
@@ -328,14 +332,15 @@
       });
       fwd.addEventListener('click', function () { step('forward'); });
       back.addEventListener('click', function () { step('back'); });
-      hide.addEventListener('click', function () {
+      hide.addEventListener('change', function () {
         if (!selected) return;
-        patch(selected, { visibility: selected._d.visibility === 'dm_only' ? 'everyone' : 'dm_only' });
+        patch(selected, { visibility: hide.checked ? 'dm_only' : 'everyone' });
       });
-      if (del) del.addEventListener('click', function () { if (selected) opts.onDelete(selected._d.id); });
+      del.addEventListener('click', function () { if (selected && canDelete(selected._d)) opts.onDelete(selected._d.id); });
+      done.addEventListener('click', function () { cropping = false; deselect(); });
 
       host.appendChild(bar);
-      barRefs = { see: see, turn: turn, crop: crop, hide: hide };
+      barRefs = { see: see, turn: turn, crop: crop, hide: hide, del: del };
     }
 
     function syncBar() {
@@ -344,13 +349,11 @@
       if (!selected) return;
       var v = selected._view;
       barRefs.see.input.value = String(Math.round(v.alpha * 100));
-      barRefs.see.out.textContent = Math.round(v.alpha * 100) + '%';
       barRefs.turn.input.value = String(Math.round(v.rot));
-      barRefs.turn.out.textContent = Math.round(v.rot) + '°';
       barRefs.crop.setAttribute('aria-pressed', cropping ? 'true' : 'false');
-      var hidden = selected._d.visibility === 'dm_only';
-      barRefs.hide.textContent = hidden ? 'Show to players' : 'Hide from players';
-      barRefs.hide.setAttribute('aria-pressed', hidden ? 'true' : 'false');
+      barRefs.crop.textContent = cropping ? 'Finish crop' : 'Crop';
+      barRefs.hide.checked = selected._d.visibility === 'dm_only';
+      barRefs.del.hidden = !canDelete(selected._d);
     }
 
     function step(dir) {
@@ -699,7 +702,7 @@
         return deselect();
       },
       deleteSelected: function () {
-        if (!selected || !canDelete) return false;
+        if (!selected || !canDelete(selected._d)) return false;
         opts.onDelete(selected._d.id);
         return true;
       },

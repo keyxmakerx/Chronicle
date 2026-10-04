@@ -1374,7 +1374,7 @@
 		// Letters inside the settings sheet belong to its controls.
 		if (!isScribe || typing(e.target) || (e.target.closest && e.target.closest('#mp-sheet'))) return;
 		// Delete removes the selected picture, after the usual confirm.
-		if (e.key === 'Delete' && canDraw && isOwner && draw() && draw().deleteSelected) {
+		if (e.key === 'Delete' && canDraw && draw() && draw().deleteSelected) {
 			if (draw().deleteSelected()) e.preventDefault();
 			return;
 		}
@@ -1574,6 +1574,8 @@
 		canDraw: canDraw,
 		canShadow: canShadow,
 		isOwner: isOwner,
+		canDmOnly: canDmOnly,
+		userID: userID,
 		// Callbacks the drawing module calls so the panel counts and the
 		// undo button stay in step with what is on the map.
 		onDrawingsChange: function(n) {
