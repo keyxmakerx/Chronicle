@@ -341,7 +341,7 @@
   Editor.prototype.addChapter = function (part, c) {
     var ch = {
       uid: 'c' + (++this.nid), id: str(c.id), title: str(c.title), intro: str(c.intro), director: c.director === true,
-      house: c.house === true, problem: str(c.problem), part: part, pages: [],
+      house: c.house === true, generated: c.generated === true, problem: str(c.problem), part: part, pages: [],
       timer: 0, dirty: false, inflight: null, again: false, error: '', save: Editor.prototype.saveChapter
     };
     var self = this;
@@ -573,6 +573,8 @@
           (ch.director && !part.director ? ' <span class="rbe-pill rbe-dir">Directors</span>' : '') + '</div>';
         if (ch.problem) {
           h += '<p class="rbe-note-line">This chapter could not be loaded: ' + esc(ch.problem) + '</p>';
+        } else if (ch.generated) {
+          h += '<p class="rbe-note-line">Made from ' + esc(s) + '\'s rules data, so it changes when ' + esc(s) + ' updates. It isn\'t edited here.</p>';
         } else {
           ch.pages.forEach(function (n) { h += self.pageButton(n); });
           h += '<button type="button" class="rbe-add" id="' + self.id('addpg-' + ch.uid) + '" data-act="addpage" data-ch="' + ch.uid + '">+ Add a page</button>';

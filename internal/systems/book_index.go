@@ -223,8 +223,13 @@ func buildIndexChapter(sysDir string, manifest *SystemManifest, ch BookChapter, 
 		label := ie.fieldLabel(spec.Group)
 		for _, v := range values {
 			title := v
-			if isNumber(v) {
+			switch {
+			case isNumber(v):
 				title = label + " " + v
+			case strings.ToLower(v) == v:
+				// Data values are often lower-case keys ("condition").
+				r := []rune(v)
+				title = string(unicode.ToUpper(r[0])) + string(r[1:])
 			}
 			add(title, bookIndexSlice{Key: spec.Group, Value: v}, counts[v])
 		}
@@ -337,14 +342,15 @@ func refMarkupToTerms(s string) string {
 // indexEntry shapes one item for a reader. Fields follow the manifest's
 // columns (the category browser's), skipping empty values; a field flagged
 // gm_only is left out for players. A "_display" field whose structured twin
-// carries rule markup shows the twin with hover terms instead.
-func (ie *indexEntries) indexEntry(it ReferenceItem, director bool) BookIndexEntry {
+// carries rule markup shows the twin with hover terms instead. The page's own
+// group property (groupKey) is left out: the page title already says it.
+func (ie *indexEntries) indexEntry(it ReferenceItem, director bool, groupKey string) BookIndexEntry {
 	e := BookIndexEntry{ID: it.ID, Name: it.Name, Summary: flattenRefMarkup(it.Summary)}
 	if d := strings.TrimSpace(it.Description); d != "" && flattenRefMarkup(d) != e.Summary {
 		e.Text = refMarkupToTerms(d)
 	}
 	for _, f := range ie.fields {
-		if f.GMOnly && !director {
+		if (f.GMOnly && !director) || (groupKey != "" && f.Key == groupKey) {
 			continue
 		}
 		v := strings.TrimSpace(propString(it.Properties, f.Key))
@@ -387,6 +393,19 @@ func pageSlice(p BookPage) (string, bookIndexSlice, bool) {
 	}
 	b := p.Blocks[0]
 	return b.Category, bookIndexSlice{Key: b.Key, Value: b.Value, From: b.From, To: b.To}, true
+}
+
+// bookShowsSlice reports whether a page of b lists exactly this slice, so
+// the index API serves only what the reader's own book shows.
+func bookShowsSlice(b *Book, category string, want bookIndexSlice) bool {
+	for _, ch := range indexChapters(b) {
+		for _, p := range ch.Pages {
+			if pc, s, ok := pageSlice(p); ok && pc == category && s == want {
+				return true
+			}
+		}
+	}
+	return false
 }
 
 // BookFindResult is one rules-index entry a search found, with the chapter

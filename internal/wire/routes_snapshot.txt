@@ -164,6 +164,8 @@ GET	/bindings/picker	internal/plugins/widgetbindings/routes.go
 GET	/book	internal/systems/routes.go
 GET	/book/edit	internal/systems/routes.go
 GET	/book/export	internal/systems/routes.go
+GET	/book/find	internal/systems/routes.go
+GET	/book/index/:cat	internal/systems/routes.go
 GET	/book/source	internal/systems/routes.go
 GET	/browse	internal/plugins/packages/routes.go
 GET	/calendar	internal/app/routes.go

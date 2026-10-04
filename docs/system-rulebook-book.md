@@ -87,6 +87,34 @@ pages:
 Chapters, pages and blocks can all carry `director: true` to show them to
 Directors only. A page with `wide: true` spans both pages of the spread.
 
+### A rules-index chapter
+
+Instead of pages, a chapter can name one of the system's reference data
+categories (a `categories` entry in `manifest.json`). Chronicle then makes the
+pages itself from the data file, so the book lists every entry and stays in
+step when the data changes:
+
+```yaml
+title: Abilities
+intro: Every hero ability, one page per class.
+index:
+  category: abilities      # a manifest category; its data/<category>.json
+  group: class             # optional: one page per value of this property
+  other: Common abilities  # optional: the page for entries without one
+```
+
+- With `group`, each value gets its own page, in order (numbers count up, so
+  a `level` group reads Level 1, Level 2, Level 10). Without it, the entries
+  run A to Z, `per-page` to a page (40 unless set, at most 100).
+- Each entry folds down to show the category's manifest fields (the same
+  columns the category list shows) and its description. Rule markup such as
+  `{@condition taunted|taunts}` becomes a hover word.
+- A field marked `gm_only` in the manifest is shown to Directors only.
+- `director: true` on the chapter keeps the whole index for Directors.
+- A chapter has `index` or `pages`, never both. Generated chapters can't be
+  changed in a campaign's book editor; they follow the package.
+- The book's search box searches written pages and every rules-index entry.
+
 ### Writing text
 
 - `**bold**` and `*italic*`.

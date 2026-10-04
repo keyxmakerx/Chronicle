@@ -599,15 +599,7 @@ func (h *SystemHandler) BookIndexAPI(c echo.Context) error {
 	want := bookIndexSlice{Key: c.QueryParam("key"), Value: c.QueryParam("value")}
 	want.From, _ = strconv.Atoi(c.QueryParam("from"))
 	want.To, _ = strconv.Atoi(c.QueryParam("to"))
-	shown := false
-	for _, ch := range indexChapters(b) {
-		for _, p := range ch.Pages {
-			if pc, s, ok := pageSlice(p); ok && pc == cat && s == want {
-				shown = true
-			}
-		}
-	}
-	if !shown {
+	if !bookShowsSlice(b, cat, want) {
 		return apperror.NewNotFound("this book has no such index page")
 	}
 	ie, err := loadIndexEntries(sysDir, manifest, cat)
@@ -620,7 +612,7 @@ func (h *SystemHandler) BookIndexAPI(c echo.Context) error {
 	}
 	out := make([]BookIndexEntry, 0, len(items))
 	for _, it := range items {
-		out = append(out, ie.indexEntry(it, director))
+		out = append(out, ie.indexEntry(it, director, want.Key))
 	}
 	c.Response().Header().Set("Cache-Control", "private, no-store")
 	return c.JSON(http.StatusOK, map[string]any{"items": out})
