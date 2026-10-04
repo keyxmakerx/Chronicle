@@ -181,6 +181,7 @@ GET	/calendar/moons	internal/plugins/syncapi/routes.go
 GET	/calendar/seasons	internal/plugins/syncapi/routes.go
 GET	/calendar/structure	internal/plugins/syncapi/routes.go
 GET	/calendar/weather	internal/plugins/syncapi/routes.go
+GET	/calendar/weather/days	internal/plugins/syncapi/routes.go
 GET	/calendar/world-state	internal/plugins/syncapi/routes.go
 GET	/calendars	internal/plugins/calendar/routes.go
 GET	/calendars	internal/plugins/syncapi/routes.go
