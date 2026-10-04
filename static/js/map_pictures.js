@@ -205,6 +205,10 @@
       '.mp-picbar button:hover { background: var(--color-bg-tertiary); }',
       '.mp-picbar button[aria-pressed="true"] { background: var(--mp-accent, #6366f1); border-color: var(--mp-accent, #6366f1); color: #fff; }',
       '.mp-picbar .mp-pic-del { color: #dc2626; }',
+      '.mp-picbar .mp-pic-hex { background: var(--mp-accent, #6366f1); border-color: var(--mp-accent, #6366f1); color: #fff; }',
+      '.mp-picbar .mp-pic-hex:hover { filter: brightness(1.08); background: var(--mp-accent, #6366f1); }',
+      '.mp-picbar .mp-pic-hexline { color: var(--color-text-secondary); }',
+      '.mp-picbar [hidden] { display: none !important; }',
       '.mp-picbar .mp-pic-sep { width: 1px; height: 18px; background: var(--color-border); }'
     ].join('\n');
     document.head.appendChild(s);
@@ -232,7 +236,12 @@
    *                         server's rule: owners and DM access any, a
    *                         scribe the ones they added),
    *   onPatch(id, fields)   saves only the changed fields; resolves true/false,
-   *   onDelete(id)          asks the host to confirm and delete
+   *   onDelete(id)          asks the host to confirm and delete,
+   *   onChange(kind, id, points)  told as a picture changes: 'geo' while it is
+   *                         being moved or resized (points are the live corners),
+   *                         'patch' once an edit was applied or taken back,
+   *   hexCover              the viewer's hex-cover controls (see map_viewer.js);
+   *                         without it the picture bar offers no hex buttons
    * }
    * Returns { layer(drawing), selectMode(on), escape(), deleteSelected(),
    * selectedId(), select(id), placement(natW, natH), destroy() }.
@@ -255,6 +264,10 @@
     var destroyed = false;
     var bar = null;
     var barRefs = null;
+
+    function emit(kind, id, points) {
+      if (typeof opts.onChange === 'function') opts.onChange(kind, id, points);
+    }
 
     // ---- stacking ----
 
@@ -288,6 +301,15 @@
       }
       function sep() { bar.appendChild(el('span', 'mp-pic-sep')); }
 
+      // Hex controls come first, as in the approved design: either the way in
+      // ("Turn into a hex map") or, for the picture that already carries the
+      // hexes, what it is and the two things to do about it.
+      var hexTurn = button('Turn into a hex map', 'mp-pic-hex');
+      var hexLine = el('span', 'mp-pic-hexline');
+      hexLine.textContent = 'This picture is a hex map. The hexes move and resize with it.';
+      bar.appendChild(hexLine);
+      var hexOpen = button('Open hexes');
+      var hexOff = button('Take the hexes off');
       var see = slider('See-through', 20, 100, 5, '');
       var turn = slider('Turn', -MAX_TURN, MAX_TURN, 1, '');
       sep();
@@ -340,7 +362,13 @@
       done.addEventListener('click', function () { cropping = false; deselect(); });
 
       host.appendChild(bar);
-      barRefs = { see: see, turn: turn, crop: crop, hide: hide, del: del };
+      hexTurn.addEventListener('click', function () {
+        if (selected && opts.hexCover) opts.hexCover.turnInto(selected._d.id);
+      });
+      hexOpen.addEventListener('click', function () { if (opts.hexCover) opts.hexCover.open(); });
+      hexOff.addEventListener('click', function () { if (opts.hexCover) opts.hexCover.takeOff(); });
+      if (opts.hexCover) opts.hexCover.onChange(syncBar);
+      barRefs = { see: see, turn: turn, crop: crop, hide: hide, del: del, hexTurn: hexTurn, hexLine: hexLine, hexOpen: hexOpen, hexOff: hexOff };
     }
 
     function syncBar() {
@@ -354,6 +382,15 @@
       barRefs.crop.textContent = cropping ? 'Finish crop' : 'Crop';
       barRefs.hide.checked = selected._d.visibility === 'dm_only';
       barRefs.del.hidden = !canDelete(selected._d);
+      // Turning and cropping would move the picture away from the hexes laid
+      // on it, so a picture that carries hexes offers neither.
+      var hc = opts.hexCover;
+      var carries = !!(hc && hc.carries(selected._d.id));
+      barRefs.hexTurn.hidden = !(hc && !carries && hc.canTurn());
+      barRefs.hexLine.hidden = barRefs.hexOpen.hidden = !carries;
+      barRefs.hexOff.hidden = !(carries && hc.canTakeOff());
+      barRefs.turn.input.parentNode.hidden = carries;
+      barRefs.crop.hidden = carries;
     }
 
     function step(dir) {
@@ -383,6 +420,7 @@
       layer._refresh();
       restack();
       syncBar();
+      emit('patch', layer._d.id);
       Promise.resolve(opts.onPatch(layer._d.id, fields)).then(function (ok) {
         if (ok) return;
         Object.keys(before).forEach(function (k) { layer._d[k] = before[k]; });
@@ -390,6 +428,7 @@
         layer._refresh();
         restack();
         syncBar();
+        emit('patch', layer._d.id);
       });
     }
 
@@ -452,6 +491,15 @@
         this._seq = seq++;
         this._sel = false;
         this._read();
+      },
+
+      // reload re-reads the stored drawing after something outside this module
+      // changed it (the server straightened it when hexes were pinned to it).
+      reload: function () {
+        this._read();
+        this._refresh();
+        restack();
+        syncBar();
       },
 
       // _read copies what is stored into the working view that the live
@@ -630,6 +678,7 @@
         drag(startEvent, function (dx, dy) {
           self._geo = { cx: g0.cx + dx / px, cy: g0.cy + dy / px, w: g0.w, h: g0.h };
           self._place();
+          emit('geo', self._d.id, pointsFromGeo(self._geo, mapW, mapH));
         }, function (moved) {
           if (!moved) return;
           self._justDragged = true;
@@ -652,6 +701,7 @@
           var s = resizeScale(visW, visH, local.x, local.y, g0, mapW);
           self._geo = scaleGeoAbout(g0, rot, rx, ry, s);
           self._place();
+          emit('geo', self._d.id, pointsFromGeo(self._geo, mapW, mapH));
         }, function (moved) {
           if (!moved) return;
           patch(self, { points: pointsFromGeo(self._geo, mapW, mapH) });

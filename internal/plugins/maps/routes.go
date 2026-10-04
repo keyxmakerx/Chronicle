@@ -128,6 +128,9 @@ func RegisterHexRoutes(e *echo.Echo, hh *HexHandler, campaignSvc campaigns.Campa
 		addons.RequireAddon(addonSvc, "maps"),
 	)
 	cg.PATCH("/maps/:mid/hexes/cells", hh.PatchHexCells, campaigns.RequireRole(campaigns.RolePlayer))
+	// Same membership-only gate: a DM-granted player is not an owner by role,
+	// and HexService decides who may change what the hexes cover.
+	cg.PUT("/maps/:mid/hexes/layer", hh.PutHexLayer, campaigns.RequireRole(campaigns.RolePlayer))
 
 	// Public-capable read so a public campaign's map shows its hexes. The
 	// service filters cells by the viewer's role, which is RoleNone for the

@@ -785,6 +785,7 @@ PUT	/maps/:mapID/markers/:markerID	internal/plugins/syncapi/routes.go
 PUT	/maps/:mapID/tokens/:tokenID	internal/plugins/syncapi/routes.go
 PUT	/maps/:mid	internal/plugins/maps/routes.go
 PUT	/maps/:mid/drawings/:did	internal/plugins/maps/routes.go
+PUT	/maps/:mid/hexes/layer	internal/plugins/maps/routes.go
 PUT	/maps/:mid/layers/:lid	internal/plugins/maps/routes.go
 PUT	/maps/:mid/markers/:mkid	internal/plugins/maps/routes.go
 PUT	/maps/:mid/tokens/:tid	internal/plugins/maps/routes.go

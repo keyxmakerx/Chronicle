@@ -257,3 +257,143 @@ func TestIsValidTerrain(t *testing.T) {
 		}
 	}
 }
+
+func TestUsableAnchor(t *testing.T) {
+	tests := []struct {
+		name string
+		d    *Drawing
+		want bool
+	}{
+		{"a picture on this map", &Drawing{MapID: "m", DrawingType: DrawingTypeImage}, true},
+		{"nothing", nil, false},
+		{"another map's picture", &Drawing{MapID: "other", DrawingType: DrawingTypeImage}, false},
+		{"a rectangle", &Drawing{MapID: "m", DrawingType: "rectangle"}, false},
+		{"a shadow", &Drawing{MapID: "m", DrawingType: DrawingTypeShadow}, false},
+	}
+	for _, tc := range tests {
+		if got := UsableAnchor("m", tc.d); got != tc.want {
+			t.Errorf("%s: UsableAnchor = %v, want %v", tc.name, got, tc.want)
+		}
+	}
+}
+
+func TestAnchorHidesLayer(t *testing.T) {
+	hidden := &Drawing{Visibility: "dm_only"}
+	shown := &Drawing{Visibility: "everyone"}
+	tests := []struct {
+		name   string
+		anchor *Drawing
+		role   int
+		want   bool
+	}{
+		{"no anchor", nil, permissions.RolePlayer, false},
+		{"shown picture, player", shown, permissions.RolePlayer, false},
+		{"hidden picture, public", hidden, permissions.RoleNone, true},
+		{"hidden picture, player", hidden, permissions.RolePlayer, true},
+		{"hidden picture, scribe", hidden, permissions.RoleScribe, true},
+		{"hidden picture, owner", hidden, permissions.RoleOwner, false},
+	}
+	for _, tc := range tests {
+		if got := AnchorHidesLayer(tc.anchor, tc.role); got != tc.want {
+			t.Errorf("%s: AnchorHidesLayer = %v, want %v", tc.name, got, tc.want)
+		}
+	}
+}
+
+// Resizing a picture must scale the hexes with it and keep every key: the same
+// columns and rows, and the same hex under the same relative point.
+func TestAnchoredGeometry_ScalesWithThePicture(t *testing.T) {
+	small := NewAnchoredHexGeometry(80, 100, 50, 400, 300)
+	big := NewAnchoredHexGeometry(80, 300, 20, 800, 600)
+	if small.Cols != big.Cols || small.Rows != big.Rows {
+		t.Fatalf("field changed with size: %dx%d vs %dx%d", small.Cols, small.Rows, big.Cols, big.Rows)
+	}
+	if math.Abs(big.R-2*small.R) > 1e-9 {
+		t.Errorf("R = %v, want twice %v", big.R, small.R)
+	}
+	inside := 0
+	for fx := 0.0123; fx <= 1.0; fx += 0.037 {
+		for fy := 0.0117; fy <= 1.0; fy += 0.041 {
+			c1, r1, ok1 := small.HexAtPoint(100+fx*400, 50+fy*300)
+			c2, r2, ok2 := big.HexAtPoint(300+fx*800, 20+fy*600)
+			if ok1 != ok2 || (ok1 && (c1 != c2 || r1 != r2)) {
+				t.Fatalf("point (%.3f,%.3f): small = %d,%d,%v big = %d,%d,%v", fx, fy, c1, r1, ok1, c2, r2, ok2)
+			}
+			if ok1 {
+				inside++
+			}
+		}
+	}
+	if inside < 100 {
+		t.Errorf("only %d sample points landed in the field", inside)
+	}
+}
+
+// The field stays inside the picture: every hex's outline lies within the box,
+// and at least one hex always exists, even for a box too small to hold one.
+func TestAnchoredGeometry_StaysInsideTheBox(t *testing.T) {
+	tests := []struct {
+		name         string
+		size, bx, by float64
+		bw, bh       float64
+	}{
+		{"typical picture", 80, 100, 50, 400, 300},
+		{"small hexes", 20, 0, 0, 640, 480},
+		{"wide picture", 115, 30, 40, 900, 200},
+		{"a hex bigger than the picture", 300, 10, 10, 100, 100},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			g := NewAnchoredHexGeometry(tc.size, tc.bx, tc.by, tc.bw, tc.bh)
+			if g.Cols < 1 || g.Rows < 1 {
+				t.Fatalf("field %dx%d has no hex", g.Cols, g.Rows)
+			}
+			if tc.name == "a hex bigger than the picture" {
+				return
+			}
+			w := g.Width()
+			for row := 0; row < g.Rows; row++ {
+				for col := 0; col < g.Cols; col++ {
+					x, y := g.Center(col, row)
+					if x-w/2 < tc.bx-1e-6 || x+w/2 > tc.bx+tc.bw+1e-6 || y-g.R < tc.by-1e-6 || y+g.R > tc.by+tc.bh+1e-6 {
+						t.Fatalf("hex (%d,%d) centred %.1f,%.1f spills out of the box", col, row, x, y)
+					}
+				}
+			}
+		})
+	}
+}
+
+func TestAnchoredGeometry_Degenerate(t *testing.T) {
+	for _, g := range []HexGeometry{
+		NewAnchoredHexGeometry(0, 0, 0, 400, 300),
+		NewAnchoredHexGeometry(80, 0, 0, 0, 300),
+		NewAnchoredHexGeometry(80, 0, 0, 400, -1),
+	} {
+		if _, _, ok := g.HexAtPoint(10, 10); ok {
+			t.Errorf("a degenerate field %+v resolved a point", g)
+		}
+	}
+}
+
+// Golden vectors shared with test/js/map_hexes.test.mjs: the same field built
+// in a box 1000 wide and scaled must give the same keys.
+func TestAnchoredGeometry_GoldenVectors(t *testing.T) {
+	g := NewAnchoredHexGeometry(80, 100, 50, 400, 300)
+	if g.Cols != 13 || g.Rows != 12 || math.Abs(g.R-16) > 1e-9 {
+		t.Fatalf("field = R %v %dx%d, want 16 13x12", g.R, g.Cols, g.Rows)
+	}
+	for _, tc := range []struct {
+		x, y     float64
+		col, row int
+		ok       bool
+	}{
+		{120, 60, 0, 0, true}, {250, 200, 5, 6, true}, {300, 100, 6, 1, true},
+		{100, 50, 0, 0, false}, {499, 349, 0, 0, false}, {90, 50, 0, 0, false},
+	} {
+		col, row, ok := g.HexAtPoint(tc.x, tc.y)
+		if ok != tc.ok || (ok && (col != tc.col || row != tc.row)) {
+			t.Errorf("HexAtPoint(%v,%v) = %d,%d,%v, want %d,%d,%v", tc.x, tc.y, col, row, ok, tc.col, tc.row, tc.ok)
+		}
+	}
+}

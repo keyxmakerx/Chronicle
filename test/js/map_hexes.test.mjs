@@ -171,3 +171,90 @@ test('the palette matches the server allowlist', () => {
   // Every filled terrain has an icon; road is a line.
   for (const [id] of H.TERRAINS) assert.equal(id === 'road' ? !H.SIMPLE[id] : !!H.SIMPLE[id], true, id);
 });
+
+// ---- Hexes pinned to a picture ----
+
+test('anchored geometry matches the Go golden vectors (box 400 x 300 at 100,50 on a 1000 x 700 map)', () => {
+  // The same field Go builds in map pixels, here built 1000 wide and scaled.
+  const box = H.boxFromPoints([{ x: 10, y: 50 / 7 }, { x: 50, y: 50 / 7 + 300 / 7 }], 1000, 700);
+  near(box.x, 100); near(box.y, 50); near(box.w, 400); near(box.h, 300);
+  const L = H.layoutFor(80, box, 1000, 700);
+  assert.equal(L.geo.cols, 13);
+  assert.equal(L.geo.rows, 12);
+  near(L.geo.r * L.xf.s, 16);
+  const vectors = [
+    [120, 60, 0, 0], [250, 200, 5, 6], [300, 100, 6, 1],
+    [100, 50, null], [499, 349, null], [90, 50, null]
+  ];
+  for (const [x, y, col, row] of vectors) {
+    const h = H.hexAtMap(L, x, y);
+    if (col === null) assert.equal(h, null, `${x},${y}`);
+    else assert.deepEqual(h, { col, row }, `${x},${y}`);
+  }
+});
+
+test('point to hex inside a picture box, and nothing outside it', () => {
+  const box = { x: 200, y: 100, w: 500, h: 400 };
+  const L = H.layoutFor(100, box, 2000, 1500);
+  // The first whole hex sits at the box's top-left corner, inset by half a hex.
+  const c0 = H.center(L.geo, 0, 0);
+  const mx = c0[0] * L.xf.s + L.xf.x, my = c0[1] * L.xf.s + L.xf.y;
+  assert.deepEqual(H.hexAtMap(L, mx, my), { col: 0, row: 0 });
+  assert.equal(H.hexAtMap(L, 150, 90), null, 'left of and above the picture');
+  assert.equal(H.hexAtMap(L, 1500, 1200), null, 'far outside the picture');
+  // Every hex stays inside the box.
+  for (let row = 0; row < L.geo.rows; row++) {
+    for (let col = 0; col < L.geo.cols; col++) {
+      const c = H.center(L.geo, col, row);
+      const x = c[0] * L.xf.s + L.xf.x, y = c[1] * L.xf.s + L.xf.y;
+      const hw = L.geo.w * L.xf.s / 2, r = L.geo.r * L.xf.s;
+      assert.ok(x - hw >= box.x - 1e-6 && x + hw <= box.x + box.w + 1e-6, `hex ${col},${row} spills sideways`);
+      assert.ok(y - r >= box.y - 1e-6 && y + r <= box.y + box.h + 1e-6, `hex ${col},${row} spills vertically`);
+    }
+  }
+});
+
+test('resizing or moving the picture keeps every hex key', () => {
+  const small = H.layoutFor(80, { x: 100, y: 50, w: 400, h: 300 }, 2000, 1500);
+  const big = H.layoutFor(80, { x: 700, y: 400, w: 1200, h: 900 }, 2000, 1500);
+  // The geometry is identical; only the transform differs.
+  assert.deepEqual(small.geo, big.geo);
+  near(big.xf.s, small.xf.s * 3);
+  let seen = 0;
+  for (let fx = 0.0123; fx <= 1; fx += 0.037) {
+    for (let fy = 0.0117; fy <= 1; fy += 0.041) {
+      const a = H.hexAtMap(small, 100 + fx * 400, 50 + fy * 300);
+      const b = H.hexAtMap(big, 700 + fx * 1200, 400 + fy * 900);
+      assert.deepEqual(a, b, `point ${fx.toFixed(3)},${fy.toFixed(3)}`);
+      if (a) seen++;
+    }
+  }
+  assert.ok(seen > 100, `only ${seen} points were inside the field`);
+});
+
+test('a whole-map layout is the plain geometry with no transform', () => {
+  const L = H.layoutFor(60, null, 1000, 700);
+  assert.deepEqual(L.xf, { x: 0, y: 0, s: 1 });
+  assert.deepEqual(L.geo, H.geometry(60, 1000, 700));
+  assert.deepEqual(H.hexAtMap(L, 250.5, 300.25), { col: 4, row: 7 });
+});
+
+test('a picture box is read from two corners in any order, and bad input is refused', () => {
+  const ok = H.boxFromPoints([{ x: 60, y: 80 }, { x: 20, y: 30 }], 1000, 500);
+  near(ok.x, 200); near(ok.y, 150); near(ok.w, 400); near(ok.h, 250);
+  for (const bad of [null, [], [{ x: 1, y: 1 }], [{ x: 1, y: 1 }, { x: 1, y: 9 }], [{ x: 'a', y: 1 }, { x: 2, y: 2 }]]) {
+    assert.equal(H.boxFromPoints(bad, 1000, 500), null);
+  }
+});
+
+test('an anchored field is capped at 400 hexes an axis and never empty', () => {
+  const g = H.anchoredGeometry(10, 1000, 100000);
+  assert.equal(g.rows, 400);
+  const tiny = H.anchoredGeometry(300, 100, 100);
+  assert.ok(tiny.cols >= 1 && tiny.rows >= 1);
+  assert.equal(H.anchoredGeometry(0, 1000, 700).cols, 0);
+});
+
+test('the transform string carries position and scale', () => {
+  assert.equal(H.xfAttr({ x: 10, y: 20, s: 0.5 }), 'translate(10 20) scale(0.5)');
+});

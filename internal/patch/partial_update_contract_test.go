@@ -59,6 +59,7 @@ var contractGoverned = map[string]string{
 	"armory.UpdateStashInput":      "PUT /campaigns/:id/armory/stashes/:sid — a rename must not clear the stash location; only an explicit null does",
 	"tags.UpdateTagRequest":        "PUT /campaigns/:id/tags/:tagId — the wire-bound twin of UpdateTagInput above; same incident, same fix",
 	"maps.UpdateHexCellInput":      "PATCH .../maps/:mid/hexes/cells — a paint stroke sends only terrain, so it must not touch a hex's name or notes; a rename must not clear its terrain",
+	"maps.UpdateHexLayerInput":     "PUT .../maps/:mid/hexes/layer — a push naming nothing about the anchor must not move the hexes off their picture; only an explicit null puts them back on the whole map",
 	"auth.UpdateViewPrefsInput":    "PUT /account/view-prefs — each My view choice saves on its own as it is tapped, so a body naming one must not reset the other three (born governed, no incident)",
 }
 
