@@ -9,6 +9,7 @@ import (
 
 	"github.com/labstack/echo/v4"
 
+	"github.com/keyxmakerx/chronicle/internal/apperror"
 	"github.com/keyxmakerx/chronicle/internal/middleware"
 	"github.com/keyxmakerx/chronicle/internal/plugins/auth"
 )
@@ -17,6 +18,10 @@ import (
 type Handler struct {
 	activity ActivityRecorder
 	service  PackageService
+	// updates and reminder are optional: without them the Campaigns tab shows
+	// the plain usage list and the per-campaign actions are not available.
+	updates  CampaignUpdateService
+	reminder OwnerReminder
 }
 
 // NewHandler creates a new package manager handler.
@@ -33,10 +38,11 @@ func (h *Handler) ListPackages(c echo.Context) error {
 		c.QueryParam("pkg"), c.QueryParam("ptab"),
 	)
 
-	data, err := buildPackagesPage(c.Request().Context(), h.service, q, middleware.GetCSRFToken(c), time.Now())
+	data, err := buildPackagesPage(c.Request().Context(), h.service, h.updates, q, middleware.GetCSRFToken(c), time.Now())
 	if err != nil {
 		return err
 	}
+	data.CanRemind = h.reminder != nil
 	return middleware.Render(c, http.StatusOK, PackagesPage(*data))
 }
 
@@ -141,8 +147,13 @@ func (h *Handler) ListVersions(c echo.Context) error {
 		return err
 	}
 
+	ruleText := ""
+	if site, err := h.service.GetRetentionSettings(ctx); err == nil {
+		ruleText = RetentionSummary(*site, pkg)
+	}
+
 	csrfToken := middleware.GetCSRFToken(c)
-	return middleware.Render(c, http.StatusOK, VersionList(pkg, versions, csrfToken))
+	return middleware.Render(c, http.StatusOK, VersionList(pkg, versions, ruleText, csrfToken))
 }
 
 // InstallVersion installs a specific version (PUT /admin/packages/:id/version).
@@ -213,6 +224,36 @@ func (h *Handler) SetAutoUpdate(c echo.Context) error {
 	}
 
 	h.recordActivity(c, "package.auto_update", "package", id, h.packageLabel(ctx, id))
+
+	return h.backToPage(c)
+}
+
+// SetRetention sets or clears a package's own old-version rule
+// (PUT /admin/packages/:id/retention). mode=site clears it; mode=own stores
+// keep_newest. No re-auth, matching auto-update: it only decides how many
+// already-installed old folders may be cleaned up later.
+func (h *Handler) SetRetention(c echo.Context) error {
+	ctx := c.Request().Context()
+	id := c.Param("id")
+
+	var input RetentionOverrideInput
+	if err := c.Bind(&input); err != nil {
+		return echo.NewHTTPError(http.StatusBadRequest, "invalid request")
+	}
+
+	var keep *int
+	switch input.Mode {
+	case "site":
+	case "own":
+		keep = &input.KeepNewest
+	default:
+		return apperror.NewValidation("choose the site rule or the package's own rule")
+	}
+	if err := h.service.SetPackageRetention(ctx, id, keep); err != nil {
+		return err
+	}
+
+	h.recordActivity(c, "package.retention", "package", id, h.packageLabel(ctx, id))
 
 	return h.backToPage(c)
 }
@@ -394,8 +435,13 @@ func (h *Handler) GetSecuritySettings(c echo.Context) error {
 		return err
 	}
 
+	retention, err := h.service.GetRetentionSettings(ctx)
+	if err != nil {
+		return err
+	}
+
 	csrfToken := middleware.GetCSRFToken(c)
-	return middleware.Render(c, http.StatusOK, SecuritySettingsPage(*secSettings, csrfToken))
+	return middleware.Render(c, http.StatusOK, SecuritySettingsPage(*secSettings, *retention, csrfToken))
 }
 
 // SaveSecuritySettings persists settings (POST /admin/packages/settings).
@@ -412,6 +458,23 @@ func (h *Handler) SaveSecuritySettings(c echo.Context) error {
 		ownerPolicy = OwnerUploadAutoApprove
 	}
 
+	// The old-version rule rides on the same form but is only touched when
+	// the form carries it, so an older client posting just the security
+	// fields cannot reset the rule (partial-update contract). Validated
+	// before anything is saved so a bad number rejects the whole save.
+	var retention *RetentionSettings
+	if mode := c.FormValue("retention_mode"); mode != "" {
+		current, err := h.service.GetRetentionSettings(ctx)
+		if err != nil {
+			return err
+		}
+		parsed, err := ParseRetentionSettings(mode, c.FormValue("retention_keep_newest"), c.FormValue("retention_unused_days"), *current)
+		if err != nil {
+			return err
+		}
+		retention = &parsed
+	}
+
 	settings := &PackageSecuritySettings{
 		RepoPolicy:        c.FormValue("repo_policy"),
 		RequireApproval:   c.FormValue("require_approval") == "true",
@@ -426,8 +489,19 @@ func (h *Handler) SaveSecuritySettings(c echo.Context) error {
 		return err
 	}
 
+	if retention != nil {
+		if err := h.service.SaveRetentionSettings(ctx, *retention); err != nil {
+			return err
+		}
+	}
+
 	slog.Info("security settings updated")
 
+	// The form submits by HTMX so a re-auth challenge can be retried; an
+	// HTMX caller is sent back to its own page, a plain post to the tab.
+	if middleware.IsHTMX(c) {
+		return h.backToPage(c)
+	}
 	return c.Redirect(http.StatusSeeOther, "/admin/packages/settings")
 }
 

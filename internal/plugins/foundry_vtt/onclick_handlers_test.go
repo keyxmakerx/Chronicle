@@ -25,7 +25,8 @@ func TestOnClick_HandlersAreInlineIIFE(t *testing.T) {
 		{"forcePinCampaign", forcePinCampaignOnClick("camp-1", "v0.1.10").Call},
 		{"notifyOlder", notifyOlderOnClick("v0.1.10").Call},
 		{"forcePinOlder", forcePinOlderOnClick("v0.1.10").Call},
-		{"pinSave", pinSaveOnClick("camp-1").Call},
+		{"openDialog", openDialogOnClick("fvtt-update-dlg-row").Call},
+		{"closeDialog", closeDialogOnClick().Call},
 		{"rotateToken", rotateTokenOnClick("camp-1").Call},
 		{"dismissAutoPinBanner", dismissAutoPinBannerOnClick().Call},
 	}
@@ -62,7 +63,8 @@ func TestOnClick_NoEmptyScriptFunction(t *testing.T) {
 		{"forcePinCampaign", struct{ Function string }{forcePinCampaignOnClick("c", "v").Function}},
 		{"notifyOlder", struct{ Function string }{notifyOlderOnClick("v").Function}},
 		{"forcePinOlder", struct{ Function string }{forcePinOlderOnClick("v").Function}},
-		{"pinSave", struct{ Function string }{pinSaveOnClick("c").Function}},
+		{"openDialog", struct{ Function string }{openDialogOnClick("d").Function}},
+		{"closeDialog", struct{ Function string }{closeDialogOnClick().Function}},
 		{"rotateToken", struct{ Function string }{rotateTokenOnClick("c").Function}},
 		{"dismissAutoPinBanner", struct{ Function string }{dismissAutoPinBannerOnClick().Function}},
 	}

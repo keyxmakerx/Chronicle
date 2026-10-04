@@ -3,6 +3,7 @@ DELETE	/:extID	internal/extensions/routes.go
 DELETE	/:id	internal/plugins/bestiary/routes.go
 DELETE	/:id	internal/plugins/packages/routes.go
 DELETE	/:id/archive	internal/plugins/packages/routes.go
+DELETE	/:id/campaigns/:cid/hold	internal/plugins/packages/routes.go
 DELETE	/:id/deprecate	internal/plugins/packages/routes.go
 DELETE	/:id/favorite	internal/plugins/bestiary/routes.go
 DELETE	/:id/pin	internal/plugins/packages/routes.go
@@ -299,6 +300,7 @@ GET	/files/:name	internal/plugins/backup/routes.go
 GET	/flagged	internal/plugins/bestiary/routes.go
 GET	/forgot-password	internal/plugins/auth/routes.go
 GET	/foundry-presence	internal/plugins/foundry_vtt/routes.go
+GET	/foundry-vtt/apps-row	internal/plugins/foundry_vtt/routes.go
 GET	/foundry-vtt/dashboard-sync-block	internal/plugins/foundry_vtt/routes.go
 GET	/foundry-vtt/install-url	internal/plugins/foundry_vtt/routes.go
 GET	/foundry-vtt/npc-spotlight/:eid	internal/plugins/foundry_vtt/routes.go
@@ -488,6 +490,8 @@ POST	/:extID/:slug/call	internal/extensions/routes.go
 POST	/:extID/disable	internal/extensions/routes.go
 POST	/:extID/enable	internal/extensions/routes.go
 POST	/:id/archive	internal/plugins/packages/routes.go
+POST	/:id/campaigns/:cid/hold	internal/plugins/packages/routes.go
+POST	/:id/campaigns/:cid/remind	internal/plugins/packages/routes.go
 POST	/:id/check	internal/plugins/packages/routes.go
 POST	/:id/deprecate	internal/plugins/packages/routes.go
 POST	/:id/favorite	internal/plugins/bestiary/routes.go
@@ -592,6 +596,9 @@ POST	/files/:name/link	internal/plugins/backup/routes.go
 POST	/forgot-password	internal/plugins/auth/routes.go
 POST	/foundry-vtt/npc-spotlight/:eid	internal/plugins/foundry_vtt/routes.go
 POST	/foundry-vtt/token/rotate	internal/plugins/foundry_vtt/routes.go
+POST	/foundry-vtt/update	internal/plugins/foundry_vtt/routes.go
+POST	/foundry-vtt/update/later	internal/plugins/foundry_vtt/routes.go
+POST	/foundry-vtt/update/switch	internal/plugins/foundry_vtt/routes.go
 POST	/groups	internal/plugins/campaigns/routes.go
 POST	/groups/:gid/members	internal/plugins/campaigns/routes.go
 POST	/install	internal/extensions/routes.go
@@ -694,8 +701,10 @@ PUT		internal/plugins/campaigns/routes.go
 PUT	/:extID	internal/extensions/routes.go
 PUT	/:id	internal/plugins/bestiary/routes.go
 PUT	/:id/auto-update	internal/plugins/packages/routes.go
+PUT	/:id/campaigns/:cid/version	internal/plugins/packages/routes.go
 PUT	/:id/pin	internal/plugins/packages/routes.go
 PUT	/:id/repo	internal/plugins/packages/routes.go
+PUT	/:id/retention	internal/plugins/packages/routes.go
 PUT	/:id/version	internal/plugins/packages/routes.go
 PUT	/account/display-name	internal/plugins/auth/routes.go
 PUT	/account/email	internal/plugins/auth/routes.go
@@ -777,7 +786,6 @@ PUT	/entity-types/:etid/layout	internal/plugins/entities/routes.go
 PUT	/entity-types/:etid/reorder	internal/plugins/entities/routes.go
 PUT	/entity-types/:typeID	internal/plugins/syncapi/routes.go
 PUT	/event-tier-definitions	internal/plugins/campaigns/routes.go
-PUT	/foundry-vtt/pin	internal/plugins/foundry_vtt/routes.go
 PUT	/groups/:gid	internal/plugins/campaigns/routes.go
 PUT	/layout-presets/:pid	internal/plugins/entities/layout_preset_routes.go
 PUT	/maps/:mapID/drawings/:drawingID	internal/plugins/syncapi/routes.go
@@ -786,6 +794,7 @@ PUT	/maps/:mapID/markers/:markerID	internal/plugins/syncapi/routes.go
 PUT	/maps/:mapID/tokens/:tokenID	internal/plugins/syncapi/routes.go
 PUT	/maps/:mid	internal/plugins/maps/routes.go
 PUT	/maps/:mid/drawings/:did	internal/plugins/maps/routes.go
+PUT	/maps/:mid/hexes/layer	internal/plugins/maps/routes.go
 PUT	/maps/:mid/layers/:lid	internal/plugins/maps/routes.go
 PUT	/maps/:mid/markers/:mkid	internal/plugins/maps/routes.go
 PUT	/maps/:mid/tokens/:tid	internal/plugins/maps/routes.go

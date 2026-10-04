@@ -4,12 +4,13 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"log/slog"
 	"os"
 	"path/filepath"
-	"sort"
 	"strings"
 	"time"
 
+	"github.com/keyxmakerx/chronicle/internal/apperror"
 	"github.com/keyxmakerx/chronicle/internal/plugins/packages"
 )
 
@@ -142,11 +143,6 @@ type Service interface {
 	// settings tab fragment. Empty-state cases (no package registered,
 	// no version installed) are flags on the struct, not errors.
 	OwnerTabData(ctx context.Context, campaignID string) (OwnerTabData, error)
-
-	// GetBannerStatus reports whether the campaign should see the
-	// "newer version available" dashboard banner. Best-effort UX: any
-	// lookup failure yields HasUpdate=false rather than an error.
-	GetBannerStatus(ctx context.Context, campaignID string) (BannerStatus, error)
 
 	// --- admin operations ---
 
@@ -448,6 +444,13 @@ func (s *service) resolveCampaignManifest(ctx context.Context, campaignID string
 		return DownloadParams{}, ErrInternal("get_campaign_pin", err)
 	}
 	version := pin
+	if pin != "" && !packages.ValidVersionString(pin) {
+		// A stored pin that fails validation is never turned into a path;
+		// it is handled like a pin whose folder is missing.
+		slog.Warn("ignoring invalid stored foundry module pin",
+			slog.String("campaign_id", campaignID))
+		return DownloadParams{}, ErrPinnedVersionNotInstalled(version)
+	}
 	if version == "" {
 		// Latest-tracking: use whatever's currently installed.
 		version = pkg.InstalledVersion
@@ -576,12 +579,31 @@ func (s *service) GetPackageByID(ctx context.Context, id string) (*packages.Pack
 // the campaigns adapter.
 func (s *service) SetPinnedVersion(ctx context.Context, campaignID, version string) error {
 	if version != "" {
+		if !packages.ValidVersionString(version) {
+			return apperror.NewValidation("invalid module version")
+		}
 		pkg, err := s.FindFoundryPackage(ctx)
 		if err != nil {
 			return err
 		}
 		if pkg == nil {
 			return ErrNoPackageRegistered()
+		}
+		// Only versions the packages plugin knows about can be pinned, in
+		// addition to the folder existing on disk.
+		known, err := s.pkgs.ListVersions(ctx, pkg.ID)
+		if err != nil {
+			return ErrInternal("list_package_versions", err)
+		}
+		found := false
+		for _, v := range known {
+			if v.Version == version {
+				found = true
+				break
+			}
+		}
+		if !found {
+			return ErrPinnedVersionNotInstalled(version)
 		}
 		installDir := s.pkgs.InstallDirForVersion(packages.PackageTypeFoundryModule, pkg.Slug, version)
 		if installDir == "" {
@@ -629,12 +651,6 @@ func (s *service) OwnerTabData(ctx context.Context, campaignID string) (OwnerTab
 	}
 	out.PackageRegistered = true
 
-	// Enumerate every version on disk for the foundry-module
-	// package's install root. Returns an empty list if no
-	// versions are installed (admin added the package but hasn't
-	// installed any version yet).
-	out.AvailableVersions = s.listInstalledVersionsOnDisk(pkg.Slug)
-
 	pin, err := s.settings.GetFoundryModulePin(ctx, campaignID)
 	if err != nil {
 		return out, ErrInternal("get_foundry_module_pin", err)
@@ -673,34 +689,6 @@ func (s *service) OwnerTabData(ctx context.Context, campaignID string) (OwnerTab
 	out.InstallURL = installURL
 
 	return out, nil
-}
-
-// listInstalledVersionsOnDisk enumerates the version directories inside
-// the foundry-module install root, sorted descending by lex order (matches
-// numeric order for canonical zero-padded semver like v0.1.5). Best-effort
-// — a read failure returns an empty slice so the owner tab still renders.
-func (s *service) listInstalledVersionsOnDisk(slug string) []string {
-	// The packages plugin owns the on-disk layout convention;
-	// we re-derive the root from InstallDirForVersion by
-	// stripping a sentinel version. This avoids re-encoding the
-	// "media/packages/foundry-module/" path here.
-	sentinelDir := s.pkgs.InstallDirForVersion(packages.PackageTypeFoundryModule, slug, "__list__")
-	if sentinelDir == "" {
-		return nil
-	}
-	root := filepath.Dir(sentinelDir)
-	entries, err := os.ReadDir(root)
-	if err != nil {
-		return nil
-	}
-	var versions []string
-	for _, e := range entries {
-		if e.IsDir() {
-			versions = append(versions, e.Name())
-		}
-	}
-	sort.Sort(sort.Reverse(sort.StringSlice(versions)))
-	return versions
 }
 
 // --- admin operations ---
@@ -797,7 +785,7 @@ func (s *service) NotifyCampaignOfUpdate(ctx context.Context, campaignID, newVer
 			subject := "Foundry module update available"
 			body := fmt.Sprintf(
 				"Hi %s,\n\nA newer version of the Chronicle Foundry module (%s) is available "+
-					"for your campaign. Open campaign settings → VTT Setup Guides to switch.\n",
+					"for your campaign. Open your campaign page and press Update when you are ready.\n",
 				name, newVersion)
 			_ = s.mail.SendMail(ctx, []string{email}, subject, body)
 		}
@@ -845,35 +833,6 @@ func (s *service) ForcePinAllToVersion(ctx context.Context, version, actorID, ac
 	return count, nil
 }
 
-// GetBannerStatus reports whether the dashboard banner should fire: only
-// when the campaign's pin is strictly older than the latest installed
-// version. Errors swallow to zero-value — the banner is soft UX, not
-// worth failing the dashboard over.
-func (s *service) GetBannerStatus(ctx context.Context, campaignID string) (BannerStatus, error) {
-	pkg, err := s.FindFoundryPackage(ctx)
-	if err != nil || pkg == nil || pkg.InstalledVersion == "" {
-		return BannerStatus{}, nil
-	}
-	pin, err := s.settings.GetFoundryModulePin(ctx, campaignID)
-	if err != nil {
-		return BannerStatus{}, nil
-	}
-	if pin == "" {
-		// Latest-tracking — by definition at-or-after latest.
-		return BannerStatus{}, nil
-	}
-	if !semverLess(pin, pkg.InstalledVersion) {
-		// Pin is at-or-after the latest installed version. Could
-		// be a deliberate stay-on-older or just current; no banner.
-		return BannerStatus{}, nil
-	}
-	return BannerStatus{
-		HasUpdate:      true,
-		CurrentVersion: pin,
-		LatestVersion:  pkg.InstalledVersion,
-	}, nil
-}
-
 // AutoPinOnInstall is the install-time auto-pin path. previousVersion is
 // the foundry-module version installed before the current install.
 //
@@ -899,6 +858,12 @@ func (s *service) AutoPinOnInstall(ctx context.Context, previousVersion, newVers
 		// Re-install of the same version. No version transition; no
 		// auto-pin needed. Defensive — packages.InstallVersion shouldn't
 		// call the hook in this case but the no-op is cheap.
+		return 0, nil
+	}
+
+	if !packages.ValidVersionString(previousVersion) {
+		// Never persist a pin that could not later be resolved safely.
+		slog.Warn("skipping auto-pin: previous version is not a valid version string")
 		return 0, nil
 	}
 
@@ -969,6 +934,9 @@ func (s *service) AutoPinOnInstall(ctx context.Context, previousVersion, newVers
 func (s *service) MigrateAutoPinToVersion(ctx context.Context, version string) (int, error) {
 	if version == "" {
 		return 0, fmt.Errorf("MigrateAutoPinToVersion: empty version")
+	}
+	if !packages.ValidVersionString(version) {
+		return 0, fmt.Errorf("MigrateAutoPinToVersion: invalid version")
 	}
 	campaigns, err := s.repo.CampaignsWithEmptyPin(ctx)
 	if err != nil {

@@ -86,8 +86,12 @@ type Package struct {
 	// badge + banner render straight from this field.
 	LastError   string
 	LastErrorAt *time.Time
-	CreatedAt   time.Time
-	UpdatedAt   time.Time
+	// RetentionKeepNewest is this package's own old-version rule: keep the
+	// newest N versions. nil = follow the site rule. Never consulted for
+	// foundry-module packages, whose versions are never removed.
+	RetentionKeepNewest *int
+	CreatedAt           time.Time
+	UpdatedAt           time.Time
 }
 
 // PackageVersion represents a single release from GitHub.
@@ -133,6 +137,13 @@ type AddPackageInput struct {
 // UpdatePolicyInput is the request to change auto-update policy.
 type UpdatePolicyInput struct {
 	Policy string `json:"policy" form:"policy"`
+}
+
+// RetentionOverrideInput is the per-package old-version rule form. Mode is
+// "site" (follow the site rule) or "own" (keep the newest KeepNewest).
+type RetentionOverrideInput struct {
+	Mode       string `json:"mode" form:"mode"`
+	KeepNewest int    `json:"keepNewest" form:"keep_newest"`
 }
 
 // InstallVersionInput is the request to install a specific version.

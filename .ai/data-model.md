@@ -299,6 +299,7 @@ Foundry module repo for the wire contract.
 |---|---|---|
 | `packages` | Installed/available external packages (systems, Foundry modules) | `type` enum(`system`,`foundry-module`); `slug` UNIQUE; `auto_update` enum; `status` enum(`pending`,`approved`,`rejected`,`archived`,`deprecated`) — submission/review workflow; `last_error`/`last_error_at` (durable failure record, survives restarts) |
 | `package_versions` | Version history from GitHub releases | `UNIQUE(package_id, version)`; `prerelease` flag |
+| `campaign_package_updates` | One campaign's update choice for one package | `PRIMARY KEY(campaign_id, package_id)`; `update_mode` enum(`automatic`,`pinned`,`approve_first`); `version` (the version a game-system campaign stays on); `held_version` (a newly installed version awaiting approval, any package type). No row = automatic. The Foundry module keeps its mode and pin in the campaign settings, so only `held_version` is used on its rows |
 
 ### foundry_vtt (`internal/plugins/foundry_vtt/migrations/`)
 

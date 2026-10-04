@@ -314,6 +314,42 @@ func TestHexRepository_Integration(t *testing.T) {
 		}
 	})
 
+	t.Run("SetAnchor creates the layer, bumps the version and touches only the anchor", func(t *testing.T) {
+		mapID := newMap()
+		pic := newMapsDBID(t)
+		v, err := repo.SetAnchor(ctx, mapID, &pic)
+		if err != nil || v != 1 {
+			t.Fatalf("first SetAnchor: version=%d err=%v; want 1", v, err)
+		}
+		mustExecMaps(t, db, `UPDATE map_hex_layers SET fog_enabled = 1, miles_per_hex = 9 WHERE map_id = ?`, mapID)
+		v, err = repo.SetAnchor(ctx, mapID, &pic)
+		if err != nil || v != 2 {
+			t.Fatalf("second SetAnchor: version=%d err=%v; want 2", v, err)
+		}
+		layer, _ := repo.GetLayer(ctx, mapID)
+		if layer == nil || layer.AnchorDrawingID == nil || *layer.AnchorDrawingID != pic || !layer.FogEnabled || layer.MilesPerHex != 9 {
+			t.Fatalf("layer = %+v; want anchor %s with fog and miles untouched", layer, pic)
+		}
+		v, err = repo.SetAnchor(ctx, mapID, nil)
+		if err != nil || v != 3 {
+			t.Fatalf("clearing SetAnchor: version=%d err=%v; want 3", v, err)
+		}
+		layer, _ = repo.GetLayer(ctx, mapID)
+		if layer.AnchorDrawingID != nil {
+			t.Errorf("anchor after null = %v; want nil", *layer.AnchorDrawingID)
+		}
+		// A painted cell must survive an anchor change untouched.
+		if _, err := repo.ApplyCells(ctx, mapID, userID, []HexCellWrite{{Col: 2, Row: 2, TerrainSet: true, Terrain: hexStrp("water")}}); err != nil {
+			t.Fatal(err)
+		}
+		if _, err := repo.SetAnchor(ctx, mapID, &pic); err != nil {
+			t.Fatal(err)
+		}
+		if n, _ := repo.CountCells(ctx, mapID); n != 1 {
+			t.Errorf("cells after SetAnchor = %d; want 1", n)
+		}
+	})
+
 	t.Run("deleting the map cascades to both hex tables", func(t *testing.T) {
 		mapID := newMap()
 		if _, err := repo.ApplyCells(ctx, mapID, userID, []HexCellWrite{{Col: 1, Row: 1, NameSet: true, Name: "x"}}); err != nil {

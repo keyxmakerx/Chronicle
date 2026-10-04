@@ -121,6 +121,22 @@ func VisibleCells(layer HexLayer, cells []HexCell, role int) []HexCell {
 	return out
 }
 
+// UsableAnchor reports whether d can still carry a layer on mapID: it must
+// exist, sit on this map and be a picture. The anchor column has no foreign
+// key (so deleting a picture never cascades into painted terrain), which means
+// a stale value is normal and is read as "the whole map", never as an error.
+func UsableAnchor(mapID string, d *Drawing) bool {
+	return d != nil && d.MapID == mapID && d.DrawingType == DrawingTypeImage
+}
+
+// AnchorHidesLayer reports whether the layer must be withheld from role
+// because its picture is hidden from them. A hex field pinned to a DM-only
+// picture would otherwise show players the outline, and any painted terrain, of
+// something they are not meant to know exists.
+func AnchorHidesLayer(anchor *Drawing, role int) bool {
+	return anchor != nil && anchor.Visibility == "dm_only" && !permissions.CanSeeDmOnly(role)
+}
+
 // --- Hex maths ---
 //
 // Hexes are pointy-top with odd rows shifted half a hex to the right ("odd-r"
@@ -200,6 +216,36 @@ func NewHexGeometry(gridSize float64, mapW, mapH float64) HexGeometry {
 		Cols: int(math.Ceil(mapW/w)) + 1,
 		Rows: int(math.Ceil((mapH + r) / (1.5 * r))),
 	}
+}
+
+// NewAnchoredHexGeometry lays the field inside a picture's box (boxX, boxY,
+// boxW, boxH in map pixels) instead of over the whole map. gridSize is
+// measured as if the picture were 1000 wide, so every length scales with the
+// box: resize the picture and the hexes grow with it, with the same columns,
+// rows and keys. Hex (0, 0) is the first hex that fits whole at the box's
+// top-left, and the field stops before a hex would cross the right or bottom
+// edge, so nothing spills off the picture. static/js/map_hexes.js builds the
+// same field (anchoredGeometry) in a box 1000 wide and scales it.
+func NewAnchoredHexGeometry(gridSize, boxX, boxY, boxW, boxH float64) HexGeometry {
+	r := gridSize * boxW / 1000 / 2
+	if r <= 0 || boxW <= 0 || boxH <= 0 {
+		return HexGeometry{}
+	}
+	w := math.Sqrt(3) * r
+	return HexGeometry{
+		R:    r,
+		Ox:   boxX + w/2,
+		Oy:   boxY + r,
+		Cols: maxInt(1, int(math.Floor((boxW-1.5*w)/w))+1),
+		Rows: maxInt(1, int(math.Floor((boxH-2*r)/(1.5*r)))+1),
+	}
+}
+
+func maxInt(a, b int) int {
+	if a > b {
+		return a
+	}
+	return b
 }
 
 // Width is a hex's width.

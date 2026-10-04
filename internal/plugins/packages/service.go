@@ -13,6 +13,8 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/keyxmakerx/chronicle/internal/apperror"
 )
 
 // SettingsReader provides read access to site settings without importing
@@ -104,6 +106,19 @@ type PackageService interface {
 	// and any currently-loaded dir. dryRun previews without deleting.
 	PruneStaleVersions(ctx context.Context, keepNewest int, dryRun bool) (*PruneResult, error)
 
+	// GetRetentionSettings / SaveRetentionSettings are the site-wide
+	// automatic old-version rule (default: manual, nothing automatic).
+	GetRetentionSettings(ctx context.Context) (*RetentionSettings, error)
+	SaveRetentionSettings(ctx context.Context, r RetentionSettings) error
+
+	// SetPackageRetention sets (non-nil) or clears (nil) one package's own
+	// "keep the newest N" rule, which overrides the site rule.
+	SetPackageRetention(ctx context.Context, packageID string, keepNewest *int) error
+
+	// RunRetention applies the effective rule to every package through the
+	// same protected-set code path as PruneStaleVersions.
+	RunRetention(ctx context.Context) (*PruneResult, error)
+
 	// InstalledPackagePath returns the on-disk install path for the active
 	// (installed + approved) package matching the given type and slug.
 	// Returns empty string if no matching package is installed.
@@ -149,6 +164,14 @@ type PostInstallHook interface {
 	AfterInstall(ctx context.Context, pkg *Package, version, previousVersion, destDir string) error
 }
 
+// PostCommitHook is an optional extension of PostInstallHook: AfterCommit runs
+// once the install is committed (DB row updated). Failures are logged, never
+// fatal, because the install is already done. Use it for state that must not
+// exist for an install that was refused.
+type PostCommitHook interface {
+	AfterCommit(ctx context.Context, pkg *Package, version, previousVersion string) error
+}
+
 // packageService implements PackageService.
 type packageService struct {
 	repo           PackageRepository
@@ -191,6 +214,12 @@ type packageService struct {
 	// currently serving; injected via SetLoadedDirsProvider (packages
 	// must not import systems). PruneStaleVersions FAILS CLOSED when nil.
 	loadedDirsFn func() map[string]bool
+
+	// campaignVersionsFn returns, per system package slug, every version some
+	// campaign is on or holds for approval; injected via
+	// SetCampaignVersionsProvider. PruneStaleVersions FAILS CLOSED when it is
+	// nil or returns an error.
+	campaignVersionsFn func(ctx context.Context) (map[string]map[string]bool, error)
 
 	// postInstallVerifier, when set, checks AFTER a system install (and
 	// the registry rescan) that the loader is actually SERVING the newly
@@ -288,7 +317,13 @@ func (s *packageService) downloadsDir() string {
 }
 
 // installDir returns the extraction directory for a package version.
+// It refuses versions that fail ValidVersionString so no caller can build a
+// path from an unvalidated version.
+// It returns "" for an invalid version.
 func (s *packageService) installDir(pkgType PackageType, slug, version string) string {
+	if !ValidVersionString(version) {
+		return ""
+	}
 	switch pkgType {
 	case PackageTypeFoundryModule:
 		return filepath.Join(s.packagesDir(), "foundry-module", version)
@@ -301,10 +336,8 @@ func (s *packageService) installDir(pkgType PackageType, slug, version string) s
 // calls this to resolve a campaign-pinned historical version to its
 // on-disk extracted directory, since Package.InstallPath only tracks the
 // currently-active install, not every version still on disk.
+// Returns "" for an empty or invalid version.
 func (s *packageService) InstallDirForVersion(pkgType PackageType, slug, version string) string {
-	if version == "" {
-		return ""
-	}
 	return s.installDir(pkgType, slug, version)
 }
 
@@ -541,6 +574,9 @@ func (s *packageService) installVersion(ctx context.Context, packageID, version 
 	}
 
 	destDir := s.installDir(pkg.Type, pkg.Slug, version)
+	if destDir == "" {
+		return apperror.NewValidation("invalid package version")
+	}
 	if err := os.MkdirAll(destDir, 0o755); err != nil {
 		return fmt.Errorf("creating install directory: %w", err)
 	}
@@ -643,6 +679,25 @@ func (s *packageService) installVersion(ctx context.Context, packageID, version 
 		slog.String("path", destDir),
 	)
 
+	// The replaced version's folder time becomes "unused since now", which
+	// is what the unused-for-N-days rule measures (nothing else records when
+	// a version stopped being the installed one). Best effort.
+	if previousVersion != "" && previousVersion != version {
+		now := time.Now()
+		_ = os.Chtimes(s.installDir(pkg.Type, pkg.Slug, previousVersion), now, now)
+	}
+
+	for _, hook := range s.postInstallHooks {
+		pc, ok := hook.(PostCommitHook)
+		if !ok || hook.PackageType() != pkg.Type {
+			continue
+		}
+		if err := pc.AfterCommit(ctx, pkg, version, previousVersion); err != nil {
+			slog.Error("post-commit hook failed (install is done)",
+				slog.String("package", pkg.Slug), slog.Any("error", err))
+		}
+	}
+
 	// Notify system registry to rescan after a system package install,
 	// passing the installed dir so the app layer can force-load it
 	// (rollbacks must beat the rescan's highest-version policy).
@@ -680,6 +735,16 @@ func (s *packageService) installVersion(ctx context.Context, packageID, version 
 
 // SetPinnedVersion pins a package to a specific version, preventing auto-updates.
 func (s *packageService) SetPinnedVersion(ctx context.Context, packageID, version string) error {
+	if !ValidVersionString(version) {
+		return apperror.NewValidation("invalid package version")
+	}
+
+	// Same per-package lock as install and prune, so a clean-up that already
+	// chose its deletions cannot race a pin on one of them.
+	mu := s.lockForPackage(packageID)
+	mu.Lock()
+	defer mu.Unlock()
+
 	pkg, err := s.repo.GetPackage(ctx, packageID)
 	if err != nil {
 		return fmt.Errorf("fetching package: %w", err)
@@ -702,6 +767,10 @@ func (s *packageService) SetPinnedVersion(ctx context.Context, packageID, versio
 
 // ClearPinnedVersion removes the version pin, allowing auto-updates again.
 func (s *packageService) ClearPinnedVersion(ctx context.Context, packageID string) error {
+	mu := s.lockForPackage(packageID)
+	mu.Lock()
+	defer mu.Unlock()
+
 	pkg, err := s.repo.GetPackage(ctx, packageID)
 	if err != nil {
 		return fmt.Errorf("fetching package: %w", err)
@@ -890,6 +959,12 @@ func (s *packageService) StartAutoUpdateWorker(ctx context.Context) {
 		case <-ticker.C:
 			if err := s.RunAutoUpdates(ctx); err != nil {
 				slog.Error("auto-update run failed", slog.Any("error", err))
+			}
+			// Clean-up runs after the update pass so a freshly replaced
+			// version is already "previous" when the rule looks at it. A
+			// failure here is logged and never stops the loop.
+			if _, err := s.RunRetention(ctx); err != nil {
+				slog.Warn("automatic old-version clean-up failed", slog.Any("error", err))
 			}
 		}
 	}

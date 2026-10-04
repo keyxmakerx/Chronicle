@@ -44,11 +44,15 @@ templ packagePanel(data PackagesPageData) {
 		<div class="p-4 space-y-4">
 			switch data.Query.PanelTab {
 				case PanelTabVersions:
-					@VersionList(&r.Package, r.Versions, data.CSRFToken)
+					@VersionList(&r.Package, r.Versions, RetentionSummary(data.Retention, &r.Package), data.CSRFToken)
 				case PanelTabCampaigns:
-					@CampaignsPanel(&r.Package, r.Usage, r.UsageKnown)
+					if r.CampaignsKnown {
+						@campaignUpdatesPanel(r, data)
+					} else {
+						@CampaignsPanel(&r.Package, r.Usage, r.UsageKnown)
+					}
 				case PanelTabSettings:
-					@panelSettings(r, data.CSRFToken)
+					@panelSettings(r, data.Retention, data.CSRFToken)
 				default:
 					@panelOverview(r, data)
 			}

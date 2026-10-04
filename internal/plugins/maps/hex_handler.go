@@ -76,3 +76,29 @@ func (h *HexHandler) PatchHexCells(c echo.Context) error {
 	}
 	return c.JSON(http.StatusOK, res)
 }
+
+// PutHexLayer changes the layer row. The body is partial: an absent
+// anchor_drawing_id keeps, null means the whole map, an id pins the hexes to
+// that picture.
+// PUT /campaigns/:id/maps/:mid/hexes/layer
+func (h *HexHandler) PutHexLayer(c echo.Context) error {
+	cc := campaigns.GetCampaignContext(c)
+	if cc == nil {
+		return apperror.NewMissingContext()
+	}
+	var req struct {
+		AnchorDrawingID patch.Field[string] `json:"anchor_drawing_id"`
+	}
+	if err := c.Bind(&req); err != nil {
+		return apperror.NewBadRequest("invalid request body")
+	}
+	res, err := h.svc.UpdateLayer(c.Request().Context(), cc.Campaign.ID, c.Param("mid"), HexActor{
+		UserID: getUserID(c),
+		Role:   int(cc.MemberRole),
+		IsDM:   cc.CanAuthorDmOnly(),
+	}, UpdateHexLayerInput{AnchorDrawingID: req.AnchorDrawingID})
+	if err != nil {
+		return err
+	}
+	return c.JSON(http.StatusOK, res)
+}

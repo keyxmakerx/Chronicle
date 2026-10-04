@@ -282,9 +282,9 @@ func TestReleaseNoteLines(t *testing.T) {
 		n    int
 		want []string
 	}{
-		{3, []string{"What's new", "Monster builder shows sources", "New ancestries"}},
-		{1, []string{"What's new"}},
-		{10, []string{"What's new", "Monster builder shows sources", "New ancestries", "Plain line", "fourth"}},
+		{3, []string{"Monster builder shows sources", "New ancestries", "Plain line"}},
+		{1, []string{"Monster builder shows sources"}},
+		{10, []string{"Monster builder shows sources", "New ancestries", "Plain line", "fourth"}},
 	}
 	for _, tt := range tests {
 		if got := releaseNoteLines(notes, tt.n); !reflect.DeepEqual(got, tt.want) {
@@ -293,6 +293,15 @@ func TestReleaseNoteLines(t *testing.T) {
 	}
 	if got := releaseNoteLines("", 3); len(got) != 0 {
 		t.Errorf("empty notes: got %q", got)
+	}
+
+	// GitHub's generated notes, as the Foundry module's releases carry them.
+	generated := "## What's Changed\n* Copy the Draw Steel negotiation tracker onto Foundry NPC sheets by @keyxmakerx in https://github.com/o/r/pull/159\n" +
+		"* Keep dev-only folders out of the release zip by @keyxmakerx in https://github.com/o/r/pull/160\n\n\n" +
+		"**Full Changelog**: https://github.com/o/r/compare/2.0.1...2.0.2"
+	want := []string{"Copy the Draw Steel negotiation tracker onto Foundry NPC sheets", "Keep dev-only folders out of the release zip"}
+	if got := releaseNoteLines(generated, 3); !reflect.DeepEqual(got, want) {
+		t.Errorf("generated notes: got %q, want %q", got, want)
 	}
 }
 
@@ -352,6 +361,11 @@ func (f *fakePageSource) GetSecuritySettings(context.Context) (*PackageSecurityS
 	return f.settings, nil
 }
 
+func (f *fakePageSource) GetRetentionSettings(context.Context) (*RetentionSettings, error) {
+	r := DefaultRetentionSettings()
+	return &r, nil
+}
+
 func TestBuildPackagesPage(t *testing.T) {
 	src := &fakePageSource{
 		pkgs: []Package{
@@ -368,7 +382,7 @@ func TestBuildPackagesPage(t *testing.T) {
 		settings: &PackageSecuritySettings{RepoPolicy: RepoPolicyGitHubOnly},
 	}
 	q := parsePackagesQuery("", "", "", "ds", "")
-	data, err := buildPackagesPage(context.Background(), src, q, "tok", time.Now())
+	data, err := buildPackagesPage(context.Background(), src, nil, q, "tok", time.Now())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -399,7 +413,7 @@ func TestBuildPackagesPage(t *testing.T) {
 	}
 
 	q = parsePackagesQuery("settings", "", "", "gone", "")
-	data, err = buildPackagesPage(context.Background(), src, q, "tok", time.Now())
+	data, err = buildPackagesPage(context.Background(), src, nil, q, "tok", time.Now())
 	if err != nil {
 		t.Fatal(err)
 	}

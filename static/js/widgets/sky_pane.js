@@ -124,6 +124,20 @@
   // dt (seconds since the last frame) lets a weather change roll in instead
   // of snapping: each dial with an ease glides at its own pace.
   var GLIDE = LOOKS.DIALS.filter(function (d) { return d.ease; });
+  // Things with a place in the sky arrive by their kind instead of fading
+  // where they stand: 'edge' moves in from beyond the right edge and leaves
+  // the same way (a funnel), 'open' grows in place from nothing (every moon
+  // event: a blood moon's stain, an eclipse's shadow, a harvest moon's size
+  // and glow, the thread between meeting moons, a magic moon's tint).
+  // Meteors, fireballs and lightning are the third kind, 'once': they play
+  // and need nothing here. Weather layers fade with the look (FADE_S).
+  var BODIES = { funnel: { enter: 'edge', s: 8 }, moonEvent: { enter: 'open', s: 6 } };
+  // A body's progress toward being fully here (1) or gone (0).
+  function arrive(b, want, live, dt, s) {
+    b.v = !live ? want : want > b.v ? Math.min(want, b.v + dt / s) : Math.max(want, b.v - dt / s);
+    return b.v > 0 && b.v < 1;
+  }
+  function ease(v) { return v * v * (3 - 2 * v); }
   function buildState(model, tSeconds, dt) {
     var cal = model.calendar;
     var year = cal.current_year, month = cal.current_month, day = cal.current_day;
@@ -182,12 +196,38 @@
       look.dark = Math.max(look.dark, .6); look.stars = Math.min(look.stars, .25);
       look.rain = 0; look.cloud = .45; look.sky = ['#7a0612', .95]; look.light *= .7; look.rainTint = null;
     }
-    var target = look || LOOKS.blank();
-    var wx = model.wxs;
-    if (!wx || model.reduced || !(dt > 0 && dt < 1)) { wx = model.wxs = {}; GLIDE.forEach(function (d) { wx[d.n] = target[d.n]; }); }
-    else GLIDE.forEach(function (d) { wx[d.n] += (target[d.n] - wx[d.n]) * (1 - Math.exp(-dt / d.ease)); });
+    // A change of weather rolls in: the look's layers and its unpaced dials fade across over FADE_S, and each paced
+    // dial heads for the new weather itself at its own pace. A first frame, a jump in time or reduced motion shows the
+    // new weather at once; a repaint with no time passed holds where it is. g is kept across frames, and across days
+    // by the dock.
+    var goal = look || LOOKS.blank(), g = model.glide || (model.glide = {}), live = !model.reduced && dt >= 0 && dt < 1, gliding = false;
+    var key = JSON.stringify(model.dayWeather || cal.weather || null) + (moons.some(function (M) { return M.blood; }) ? ':blood' : '');
+    if (g.key !== key) { g.from = live && g.shown ? g.shown : null; g.k = 0; g.key = key; }
+    if (g.from && live) {
+      g.k = Math.min(1, g.k + dt / LOOKS.FADE_S);
+      look = LOOKS.blend(g.from, goal, g.k * g.k * (3 - 2 * g.k)); gliding = true;
+      if (g.k >= 1) { g.from = null; look = goal; }
+    } else g.from = null;
+    g.shown = look || goal;
+    var wx = g.wx;
+    if (!wx || !live) { wx = g.wx = {}; GLIDE.forEach(function (d) { wx[d.n] = goal[d.n]; }); }
+    else GLIDE.forEach(function (d) { wx[d.n] += (goal[d.n] - wx[d.n]) * (1 - Math.exp(-dt / d.ease)); if (Math.abs(goal[d.n] - wx[d.n]) > .005) gliding = true; });
+    var Bd = g.bodies || (g.bodies = { funnel: { v: 0, spec: null } }), fun = Bd.funnel;
+    // Each moon event showing today opens by its own progress, kept by its kind and moon; asked twice in a frame it
+    // answers the same. One no longer showing is forgotten, so it opens again when it comes back.
+    var EVS = g.events || (g.events = {}), seen = {};
+    function opened(key) {
+      if (seen[key] != null) return seen[key];
+      var b = EVS[key] || (EVS[key] = { v: 0 });
+      if (arrive(b, 1, live, dt, BODIES.moonEvent.s)) gliding = true;
+      return (seen[key] = ease(b.v));
+    }
+    if (goal.funnel) fun.spec = goal.funnel;
+    if (arrive(fun, goal.funnel ? 1 : 0, live, dt, BODIES.funnel.s)) gliding = true;
+    // The funnel keeps its full strength while it moves; only the fade of step 2 is replaced.
+    if (fun.v > 0 || (look && look.funnel)) look = Object.assign({}, look || goal, { funnel: fun.v > 0 && fun.spec ? fun.spec : null });
     var P = SW.paletteFor(altDeg, eve, look, wx, dark, false);
-    if (overlay.magic) SW.tintPalette(P, '#8a5fe0', .3, ['zen', 'mid', 'hor', 'anti', 'clit', 'cshade', 'h0', 'h1', 'h2', 'h3']);
+    if (overlay.magic) SW.tintPalette(P, '#8a5fe0', .3 * opened('magic'), ['zen', 'mid', 'hor', 'anti', 'clit', 'cshade', 'h0', 'h1', 'h2', 'h3']);
 
     var st = {
       P: P, L: L, W: model.width, H: model.height, wx: wx, t: tSeconds, look: look, rm: !!model.reduced, almanac: false,
@@ -202,7 +242,28 @@
     // and the look's moving things (meteors, aurora, the bleeding moon).
     st.sl = window.SkyFX.sceneLight(st, P);
     EV.apply(st, dayEvents);
+    // How far the funnel still is beyond the right edge, as a share of the width.
+    st.funnelOff = (1 - ease(fun.v)) * .62;
+    st.moons.forEach(function (M) {
+      if (!M.up) return;
+      var id = M.mo.id, e, sh = M.i >= 0 && st.shadows[M.i];
+      // The world's shadow darkens across the moon; a blood moon's stain and drips spread from it.
+      if (sh) { e = opened('shadow:' + id); st.shadows[M.i] = [sh[0], sh[1], sh[2], sh[3] * e]; M.shadowCover = (M.shadowCover || 0) * e; }
+      if (st.bleed && st.bleed.M === M) st.bleed = Object.assign({}, st.bleed, { k: st.bleed.k * opened('shadow:' + id) });
+      if (M.conj) M.conj *= opened('conj:' + id);
+      // A harvest moon swells to its size and warms.
+      if (overlay.harvest[id]) {
+        e = opened('harvest:' + id);
+        var grow = (1 + .18 * e) / 1.18; M.r *= grow; M.sr *= grow;
+        if (M.warm) M.warm = [M.warm[0], M.warm[1] * e];
+        st.fxItems.forEach(function (f) { if (f.shape === 'warm' && f.x === M.x && f.y === M.y) { f.k *= e; f.r *= grow; } });
+      }
+    });
+    Object.keys(EVS).forEach(function (k) { if (seen[k] == null) delete EVS[k]; });
     st.pace = motionOf(st);
+    // A change rolling in is painted at the full rate, so it never steps.
+    st.gliding = gliding;
+    if (gliding && st.pace) st.pace = 2;
     return st;
   }
   // motionOf(st): how much the painted sky moves — 2 when something visibly
@@ -219,10 +280,11 @@
   function PROJ_at(L, alt, az) { return SW.PROJ.at(L, alt, az); }
 
   // paceOf(state): how often the sky must be painted. The painted sky
-  // moves as motionOf says; the basic sky moves only for a blood moon.
+  // moves as motionOf says; the basic sky moves only for a blood moon or
+  // while a change of weather rolls in.
   function paceOf(state) {
     if (window.SkyGL && window.SkyGL.available()) return state.pace;
-    return !state.rm && Object.keys(state.overlay.blood || {}).length > 0 ? 2 : 0;
+    return !state.rm && (state.gliding || Object.keys(state.overlay.blood || {}).length > 0) ? 2 : 0;
   }
   // paintSky: the painted sky when it can be had, the basic sky otherwise.
   // hold keeps that sky's own drawn-layer canvases between frames.
@@ -321,7 +383,8 @@
   // the render loop while nothing is visible.
   Instance.prototype.refreshPalette = function () {
     if (!this.model) return;
-    var st = buildState(this.model, 0);
+    // A copy without the glide, so a refresh never cuts short a change that is rolling in.
+    var m = this.model, st = buildState({ calendar: m.calendar, todayEvents: m.todayEvents, dayWeather: m.dayWeather, skym: m.skym, landSeed: m.landSeed, width: m.width, height: m.height, reduced: m.reduced }, 0);
     var hexOf = function (lin) { return LOOKS.linHex(lin); };
     this.chipSw.style.background = 'linear-gradient(' + hexOf(st.P.zen) + ',' + hexOf(st.P.hor) + ')';
     var cal = this.model.calendar;
@@ -578,10 +641,10 @@
   // day's events. Players only ever get today as it is from here.
   Dock.prototype.setDay = function (cal, events) {
     // A new day keeps the weather it is rolling from, so a change rolls in.
-    var self = this, prev = this.model, wxs = prev ? prev.wxs : null;
+    var self = this, prev = this.model, glide = prev ? prev.glide : null;
     // The same day keeps its reading while a fresh one loads.
     var same = prev && prev.calendar.current_year === cal.current_year && prev.calendar.current_month === cal.current_month && prev.calendar.current_day === cal.current_day;
-    this.model = { calendar: cal, todayEvents: events || [], dayWeather: same ? prev.dayWeather : null, skym: SW.makeSkym(cal), landSeed: hashSeed(this.o.seed), width: 0, height: 0, reduced: this.rm, wxs: wxs };
+    this.model = { calendar: cal, todayEvents: events || [], dayWeather: same ? prev.dayWeather : null, skym: SW.makeSkym(cal), landSeed: hashSeed(this.o.seed), width: 0, height: 0, reduced: this.rm, glide: glide };
     this.redraw();
     var tok = this._wxTok = (this._wxTok || 0) + 1;
     if (this.o.campaignId && this.o.calendarId) fetchDayWeather(this.o.campaignId, this.o.calendarId, cal).then(function (w) {

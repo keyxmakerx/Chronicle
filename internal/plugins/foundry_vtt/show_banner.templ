@@ -1,60 +1,61 @@
-// show_banner.templ owns the "newer Foundry module version available"
-// banner displayed at the top of the campaign show page. Kept here
-// (not in campaigns) so the campaigns plugin stays VTT-agnostic (T-B2).
+// show_banner.templ owns the owner-only "new Foundry module version is ready"
+// line at the top of the campaign home page. Kept here (not in campaigns) so
+// the campaigns plugin stays VTT-agnostic (T-B2).
 //
 // URL: GET /campaigns/:id/foundry-vtt/show-banner-fragment
-// Auth: owner-only
+// Auth: owner-only; players are never sent the line.
 
 package foundry_vtt
 
-import "fmt"
-
-// CampaignShowFoundryBanner renders the dismissable "update available"
-// banner at the top of the campaign show page. The handler decides
-// whether to render content (HasUpdate=true) or an empty body
-// (HasUpdate=false); the body-less response lets HTMX swap the
-// lazy-load slot with nothing — graceful invisible state.
-templ CampaignShowFoundryBanner(campaignID string, b BannerStatus) {
-	if b.HasUpdate {
-		<div
-			x-data={ fmt.Sprintf(`{
-				dismissed: false,
-				key: 'fmc-banner-dismissed-' + '%s',
-				init() {
-					if (sessionStorage.getItem(this.key) === '1') this.dismissed = true;
-				},
-				dismiss() {
-					this.dismissed = true;
-					sessionStorage.setItem(this.key, '1');
-				}
-			}`, campaignID) }
-			x-show="!dismissed"
-			x-transition
-			class="mb-6 p-4 rounded-md bg-amber-500/10 border border-amber-500/30 flex items-start gap-3"
-		>
-			<i class="fa-solid fa-dice-d20 text-amber-600 dark:text-amber-400 mt-0.5 shrink-0"></i>
-			<div class="flex-1 text-sm">
-				<p class="font-medium text-fg">
-					Foundry module v{ b.LatestVersion } is available.
-					if b.CurrentVersion != "" {
-						You&rsquo;re currently on v{ b.CurrentVersion }.
-					}
+// CampaignUpdateBanner renders one of three lines: the prompt while a version
+// waits, a small pointer once the owner chose Later for it, or a one-line
+// result right after Update. Nothing is rendered when there is nothing to say
+// or while a site admin holds the campaign (the owner has no choice to offer).
+templ CampaignUpdateBanner(v *OwnerUpdateView, csrfToken string) {
+	if v != nil {
+		if v.Done != "" {
+			<p id={ updateBannerID } class="mb-4 text-sm text-fg-secondary" role="status">{ v.Done }</p>
+		} else if v.Ready != "" && !v.AdminHold {
+			if v.Dismissed {
+				<p id={ updateBannerID } class="mb-4 text-xs text-fg-muted">
+					{ v.Package } { v.Ready } is waiting in
+					<a href={ templ.SafeURL(extensionsURL(v.CampaignID)) } class="text-accent hover:underline">Apps &amp; game system</a>
+					whenever you&rsquo;re ready. Only you see this.
 				</p>
-				<a
-					href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/settings?tab=integrations", campaignID)) }
-					class="text-amber-700 dark:text-amber-300 underline hover:no-underline text-xs mt-1 inline-block"
-				>
-					Update pin in campaign settings &rarr;
-				</a>
-			</div>
-			<button
-				type="button"
-				@click="dismiss()"
-				class="text-fg-muted hover:text-fg transition-colors shrink-0"
-				title="Dismiss until next session"
-			>
-				<i class="fa-solid fa-xmark text-xs"></i>
-			</button>
-		</div>
+			} else {
+				<div id={ updateBannerID } class="mb-6 p-4 rounded-md bg-amber-500/10 border border-amber-500/30 flex flex-wrap items-start justify-between gap-3" role="status">
+					<div class="min-w-0 text-sm text-fg">
+						<p>
+							<b>{ v.Package } { v.Ready } is ready for this campaign.</b>
+							You&rsquo;re on { v.Running }.
+							if len(v.Notes) > 0 {
+								What&rsquo;s new:
+							}
+						</p>
+						if len(v.Notes) > 0 {
+							<ul class="mt-1.5 list-disc pl-5 text-fg-secondary">
+								for _, line := range v.Notes {
+									<li class="break-words">{ line }</li>
+								}
+							</ul>
+						}
+					</div>
+					<div class="flex gap-2">
+						<button type="button" class="btn-primary btn-sm" onclick={ openDialogOnClick(updateDialogID("update", updateViewBanner)) }>Update</button>
+						<form
+							hx-post={ updateActionURL(v.CampaignID, "/later") }
+							hx-headers={ hxCSRFHeaders(csrfToken) }
+							hx-target={ updateTargetSelector(updateViewBanner) }
+							hx-swap="outerHTML"
+						>
+							<input type="hidden" name="version" value={ v.Ready }/>
+							<input type="hidden" name="view" value={ updateViewBanner }/>
+							<button type="submit" class="btn-secondary btn-sm">Later</button>
+						</form>
+					</div>
+					@updateConfirmDialog(v, updateViewBanner, csrfToken)
+				</div>
+			}
+		}
 	}
 }

@@ -529,7 +529,7 @@
     U.uAirA = AA; U.uAirB = AB; U.uAirD = AD; U.uAirC = AC;
     /* A funnel cloud, and where its debris swirls. */
     var fu = lk && lk.funnel;
-    if (fu && fu.k > .01){ var fxp = W * (.62 + .06 * Math.sin(t / 23)); U.uFunnel = [fxp, fu.k * (1 - wx.fog * .4), fu.w, 1.7]; U.uFunnelC = LOOKS.lit(fu.c, 'shade', st.sl); st.funnelAt = {x:fxp, gy:H * .86}; }
+    if (fu && fu.k > .01){ var fxp = W * (.62 + .06 * Math.sin(t / 23) + (st.funnelOff || 0)); U.uFunnel = [fxp, fu.k * (1 - wx.fog * .4), fu.w, 1.7]; U.uFunnelC = LOOKS.lit(fu.c, 'shade', st.sl); st.funnelAt = {x:fxp, gy:H * .86}; }
     else { U.uFunnel = [0, 0, 1, 0]; U.uFunnelC = [0, 0, 0]; st.funnelAt = null; }
     /* A blood moon's stain on the sky. */
     var bm = st.bleed;

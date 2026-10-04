@@ -38,6 +38,14 @@ templ ExtensionsHubPage(cc *CampaignContext, addons []PluginHubAddon, csrfToken,
 			<div class="mb-6">
 				@gameSystemCard(cc, systemOptionsJSON)
 			</div>
+			// The Foundry module's version row loads from the plugin that owns it
+			// (this page stays VTT-agnostic) and renders nothing when there is no
+			// module to update. Owner-only, like the rest of this page.
+			<span
+				hx-get={ fmt.Sprintf("/campaigns/%s/foundry-vtt/apps-row", cc.Campaign.ID) }
+				hx-trigger="load"
+				hx-swap="outerHTML"
+			></span>
 			<div class="mb-3">
 				<h2 class="text-base font-semibold text-fg">Apps</h2>
 				<p class="text-sm text-fg-muted">

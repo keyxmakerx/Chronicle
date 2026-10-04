@@ -713,11 +713,14 @@
 	var flyDraw = $id('mp-fly-draw');
 	var flyStyle = $id('mp-fly-style');
 	var flyShadow = $id('mp-fly-shadow');
+	var flyHex = $id('mp-fly-hex');
+	var makeHexBtn = $id('mp-make-hex');
 	function closePopovers() {
 		var any = false;
-		[flyDraw, flyStyle, flyShadow].forEach(function(f) {
+		[flyDraw, flyStyle, flyShadow, flyHex].forEach(function(f) {
 			if (f && !f.hidden) { f.hidden = true; any = true; }
 		});
+		if (makeHexBtn) makeHexBtn.setAttribute('aria-expanded', 'false');
 		document.querySelectorAll('[data-tool="draw"], [data-tool="shadow"]').forEach(function(b) {
 			b.setAttribute('aria-expanded', 'false');
 		});
@@ -994,6 +997,7 @@
 	// (including when the owner switches the grid to hex in the settings
 	// sheet). Once loaded it follows the display settings through refresh().
 	var hexesLoading = false;
+	var pendingHexOpen = null;
 	function hexesOn() { return !!(viewerCtx && viewerCtx.hexes && viewerCtx.hexes.isOn()); }
 	function syncHexes() {
 		if (destroyed || !viewerCtx) return;
@@ -1004,11 +1008,169 @@
 			hexesLoading = false;
 			if (destroyed || !window.ChronicleMapHexes || !viewerCtx) return;
 			try { window.ChronicleMapHexes.init(viewerCtx); } catch (err) { console.error('[map-viewer] hexes failed:', err); }
+			if (pendingHexOpen && viewerCtx.hexes) { var m = pendingHexOpen; pendingHexOpen = null; viewerCtx.hexes.open(m); }
 		}).catch(function() {
 			// Hexes are an add-on: without the module the plain grid still shows.
 			hexesLoading = false;
 		});
 	}
+
+	// ---- What the hexes cover: the whole map, or one picture ----
+	// The layer's picture lives on the hex layer (not in display settings), so
+	// it is changed through its own endpoint. Every route in goes through
+	// setHexCover so the grid type, the grid size, the confirm and the picture
+	// are decided in one place: the rail flyout, the picture bar and Take the
+	// hexes off apply at once; the settings sheet stages the choice in
+	// D.hex_anchor and applies it on Save.
+	var hexBase = '/campaigns/' + campaignID + '/maps/' + mapID + '/hexes';
+	// The picture the server says the layer covers; null is the whole map.
+	var hexAnchor = null;
+	var hexCoverSubs = [];
+	var savedMapName = '';
+	// About ten hexes across a picture, whatever its size.
+	var PICTURE_GRID_SIZE = 115;
+	var RELAY_CONFIRM = 'Painted hexes stay where they are in the grid, so they may land on different spots. Continue?';
+	function hexCoverNotify() { hexCoverSubs.slice().forEach(function(fn) { fn(); }); }
+	function hexPictureList() { return viewerCtx && viewerCtx.pictures ? viewerCtx.pictures.list() : []; }
+	// Pictures have no name of their own, so people meet them as Picture 1, 2,
+	// ... in stacking order.
+	function pictureName(i) { return 'Picture ' + (i + 1); }
+
+	// Whether the layer holds painted hexes. The loaded module knows; without
+	// it the answer comes from the server, and a failed lookup counts as "has
+	// hexes" so the re-lay warning is never skipped on a guess.
+	async function hexHasCells() {
+		if (viewerCtx && viewerCtx.hexes && viewerCtx.hexes.hasCells) return viewerCtx.hexes.hasCells();
+		try {
+			var res = await Chronicle.apiFetch(hexBase);
+			if (!res.ok) return true;
+			var data = await res.json();
+			return !data || !data.cells || data.cells.length > 0;
+		} catch (err) { return true; }
+	}
+	var HIDDEN_PICTURE_CONFIRM = 'Hexes painted on this hidden picture will become visible to players. Continue?';
+	// Moving the hexes off a dm_only picture onto something players can see
+	// would publish whatever was painted while it was hidden.
+	function hexCoverReveals(newId) {
+		if (hexAnchor === null || newId === hexAnchor) return false;
+		var cur = hexPictureList().filter(function(p) { return p.id === hexAnchor; })[0];
+		if (!cur || cur.visibility !== 'dm_only') return false;
+		var next = newId === null ? null : hexPictureList().filter(function(p) { return p.id === newId; })[0];
+		return !next || next.visibility !== 'dm_only';
+	}
+	function apiPut(url, body) {
+		return Chronicle.apiFetch(url, { method: 'PUT', body: body }).then(function(res) {
+			if (res.ok) return true;
+			return res.json().catch(function() { return {}; }).then(function(err) {
+				Chronicle.notify(err.message || 'Could not save that change', 'error');
+				return false;
+			});
+		}).catch(function() { Chronicle.notify('Could not save that change', 'error'); return false; });
+	}
+	// The name is required by the endpoint and may have been renamed since the
+	// page loaded, so the current one is read just before writing; the stamp
+	// makes a rename that lands in between a conflict instead of a revert.
+	async function putGrid(type, size) {
+		var body = { name: savedMapName, display_settings: { grid: { type: type, size: size, strength: savedD.grid_strength } } };
+		try {
+			var res = await Chronicle.apiFetch('/campaigns/' + campaignID + '/maps/' + mapID + '/meta');
+			if (res.ok) {
+				var meta = await res.json();
+				if (meta && meta.name) body.name = meta.name;
+				if (meta && meta.updated_at) body.expected_updated_at = meta.updated_at;
+			}
+		} catch (err) { /* fall back to the name this page loaded with */ }
+		return apiPut('/campaigns/' + campaignID + '/maps/' + mapID, body);
+	}
+	// openHexes shows the Hexes tool, now if the module is up, else once it is.
+	function openHexes(mode) {
+		if (viewerCtx && viewerCtx.hexes) viewerCtx.hexes.open(mode);
+		else pendingHexOpen = mode;
+	}
+	function adoptGrid(type, size) {
+		[D, savedD].forEach(function(o) { o.grid_type = type; o.grid_size = size; delete o.hex_anchor; });
+	}
+
+	// setHexCover makes the map a hex map covering the whole map (id null) or
+	// the picture id, and resolves true once it is saved. Painted hexes are
+	// keyed by position, so a different cover or size lays them out on
+	// different spots; that is confirmed first when any exist.
+	async function setHexCover(id, mode) {
+		// Only the owner can change the grid; a DM who may pin the hexes keeps the size.
+		var newSize = !isOwner ? savedD.grid_size : id ? PICTURE_GRID_SIZE : Math.max(savedD.grid_size, 60);
+		var wasHex = savedD.grid_type === 'hex';
+		if (!wasHex && !isOwner) { Chronicle.notify('Only the campaign owner can turn the hex grid on', 'error'); return false; }
+		var coverChanges = id !== hexAnchor;
+		var sizeChanges = newSize !== savedD.grid_size;
+		if ((coverChanges || sizeChanges) && await hexHasCells() && !confirm(RELAY_CONFIRM)) return false;
+		if (hexCoverReveals(id) && !confirm(HIDDEN_PICTURE_CONFIRM)) return false;
+		// The picture first: if it is refused nothing else has changed.
+		if (coverChanges && !await apiPut(hexBase + '/layer', { anchor_drawing_id: id })) return false;
+		if ((!wasHex || sizeChanges) && !await putGrid('hex', newSize)) return false;
+		hexAnchor = id;
+		adoptGrid('hex', newSize);
+		// The server turned the picture upright; show it so without a reload.
+		if (id && viewerCtx && viewerCtx.pictures) viewerCtx.pictures.straighten(id);
+		applyDisplay();
+		if (viewerCtx && viewerCtx.hexes) viewerCtx.hexes.reloadLayer();
+		openHexes(mode || 'look');
+		hexCoverNotify();
+		return true;
+	}
+
+	// takeHexesOff puts the layer back on the whole map and turns the grid off.
+	// The painted hexes stay stored, so turning hexes back on finds them.
+	async function takeHexesOff() {
+		if (!isOwner) return false;
+		if (hexCoverReveals(null) && !confirm(HIDDEN_PICTURE_CONFIRM)) return false;
+		if (hexAnchor !== null && !await apiPut(hexBase + '/layer', { anchor_drawing_id: null })) return false;
+		if (!await putGrid('none', savedD.grid_size)) return false;
+		hexAnchor = null;
+		adoptGrid('none', savedD.grid_size);
+		applyDisplay();
+		hexCoverNotify();
+		return true;
+	}
+
+	var hexCover = {
+		carries: function(id) { return D.grid_type === 'hex' && hexAnchor === id; },
+		// Owner or DM access may pin hexes to a picture; turning the grid on is
+		// the owner's alone, so a DM sees the button only on a hex map.
+		canTurn: function() { return canDmOnly && (isOwner || savedD.grid_type === 'hex'); },
+		canTakeOff: function() { return isOwner; },
+		turnInto: function(id) { return setHexCover(id, 'paint'); },
+		open: function() { openHexes('look'); },
+		takeOff: function() { return takeHexesOff(); },
+		onChange: function(fn) { hexCoverSubs.push(fn); }
+	};
+
+	// The rail's "Make a hex map" button, shown while the grid is not hexes.
+	function syncMakeHex() { if (makeHexBtn) makeHexBtn.hidden = D.grid_type === 'hex'; }
+	function buildHexFlyout() {
+		flyHex.textContent = '';
+		var label = document.createElement('div');
+		label.className = 'mp-fly-label';
+		label.textContent = 'Make a hex map';
+		flyHex.appendChild(label);
+		function item(text, id, mode) {
+			var b = document.createElement('button');
+			b.type = 'button';
+			b.className = 'mp-wd';
+			b.textContent = text;
+			b.addEventListener('click', function() { closePopovers(); setHexCover(id, mode); });
+			flyHex.appendChild(b);
+		}
+		item('Hexes over the whole map', null, 'look');
+		hexPictureList().forEach(function(p, i) { item('Hexes over “' + pictureName(i) + '”', p.id, 'paint'); });
+		var help = document.createElement('div');
+		help.className = 'mp-fly-help';
+		help.textContent = 'Add a picture first to turn just that picture into a hex map. Or click any picture and choose Turn into a hex map.';
+		flyHex.appendChild(help);
+	}
+	if (makeHexBtn && flyHex) {
+		makeHexBtn.addEventListener('click', function() { buildHexFlyout(); openPopover(flyHex, makeHexBtn); });
+	}
+	syncMakeHex();
 
 	// ---- Map settings sheet (owners). Every change previews on the map
 	// behind it straight away; Save sends the changed groups in one PUT
@@ -1059,6 +1221,7 @@
 		refreshPins();
 		syncKindSelects();
 		renderPanel();
+		syncMakeHex();
 		drawGridSoon();
 	}
 
@@ -1071,6 +1234,7 @@
 		var bgFlag = $id('ms-background-color-set');
 		var imgChanged = false;
 		var origName = sInputs.name.value;
+		savedMapName = origName;
 		var origDesc = sInputs.desc.value;
 
 		function viewNow() {
@@ -1084,10 +1248,36 @@
 		}
 
 		// Reflect D into the controls.
+		// "Hexes cover" has a chip for the whole map and one per picture. The
+		// choice is staged in D.hex_anchor (the hex module previews it) and saved
+		// with the rest; Cancel drops it with the other previews.
+		function renderHexCover() {
+			var row = $id('ms-hex');
+			var box = $id('ms-hexcover');
+			if (!row || !box) return;
+			row.hidden = D.grid_type !== 'hex';
+			box.textContent = '';
+			var cur = Object.prototype.hasOwnProperty.call(D, 'hex_anchor') ? D.hex_anchor : hexAnchor;
+			function chip(text, id) {
+				var b = document.createElement('button');
+				b.type = 'button';
+				b.className = 'mp-chip';
+				b.dataset.hc = id === null ? 'whole' : id;
+				b.setAttribute('aria-pressed', cur === id ? 'true' : 'false');
+				b.textContent = text;
+				box.appendChild(b);
+			}
+			chip('The whole map', null);
+			hexPictureList().forEach(function(p, i) { chip('Just “' + pictureName(i) + '”', p.id); });
+		}
+		hexCoverSubs.push(function() { if (!sheet.hidden) renderHexCover(); });
+
 		function syncSheet() {
 			sheet.querySelectorAll('.mp-chip').forEach(function(b) {
+				if (b.dataset.hc !== undefined) return;
 				b.setAttribute('aria-pressed', String(D[b.dataset.k]) === b.dataset.v ? 'true' : 'false');
 			});
+			renderHexCover();
 			$id('ms-frame-pick').hidden = D.frame_source !== 'map';
 			$id('ms-frame-note').hidden = D.frame_source === 'map';
 			sInputs.tint.checked = !!D.tint;
@@ -1111,6 +1301,12 @@
 		sheet.addEventListener('click', function(e) {
 			var b = e.target.closest ? e.target.closest('.mp-chip') : null;
 			if (!b || !sheet.contains(b)) return;
+			if (b.dataset.hc !== undefined) {
+				D.hex_anchor = b.dataset.hc === 'whole' ? null : b.dataset.hc;
+				syncSheet();
+				applyDisplay();
+				return;
+			}
 			var k = b.dataset.k, v = b.dataset.v;
 			if (k === 'frame_source') {
 				D.frame_source = v;
@@ -1232,10 +1428,19 @@
 				if (JSON.stringify(now[g]) !== JSON.stringify(was[g])) { ds[g] = now[g]; any = true; }
 			});
 			if (any) body.display_settings = ds;
+			// A different cover or grid size lays painted hexes out on different
+			// spots, so ask before saving that over a map that has some.
+			var stagedAnchor = Object.prototype.hasOwnProperty.call(D, 'hex_anchor');
+			var anchorChanges = D.grid_type === 'hex' && stagedAnchor && D.hex_anchor !== hexAnchor;
+			if (D.grid_type === 'hex' && (anchorChanges || D.grid_size !== savedD.grid_size) && await hexHasCells() && !confirm(RELAY_CONFIRM)) return;
+			if (anchorChanges && hexCoverReveals(D.hex_anchor) && !confirm(HIDDEN_PICTURE_CONFIRM)) return;
 			var btn = $id('ms-save');
 			btn.disabled = true;
 			try {
 				var resp = await Chronicle.apiFetch('/campaigns/' + campaignID + '/maps/' + mapID, { method: 'PUT', body: body });
+				if (resp.ok && anchorChanges) {
+					if (!await apiPut(hexBase + '/layer', { anchor_drawing_id: D.hex_anchor })) { btn.disabled = false; return; }
+				}
 				if (resp.ok) { reloadView(); return; }
 				var data = await resp.json().catch(function() { return {}; });
 				Chronicle.notify(data.message || 'Failed to save settings', 'error');
@@ -1630,6 +1835,8 @@
 		// What the hex module needs from the viewer: the live display settings,
 		// a way to hand the hex lines over, and the tool rail and hint bar.
 		getDisplay: function() { return D; },
+		hexCover: hexCover,
+		onHexAnchor: function(id) { hexAnchor = id; hexCoverNotify(); },
 		onHexLines: function(on) { hexLinesOwned = !!on; drawGrid(); },
 		setTool: function(t) { setTool(t); },
 		setHint: function(msg) { setHint(msg); }
