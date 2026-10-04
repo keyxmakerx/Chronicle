@@ -17,6 +17,14 @@ type pageSource interface {
 	GetUsage(ctx context.Context, packageID string) ([]PackageUsage, error)
 	ListPendingSubmissions(ctx context.Context) ([]Package, error)
 	GetSecuritySettings(ctx context.Context) (*PackageSecuritySettings, error)
+	GetRetentionSettings(ctx context.Context) (*RetentionSettings, error)
+}
+
+// campaignStateSource is the part of the update service the page reads for a
+// package whose owners are asked before a campaign moves.
+type campaignStateSource interface {
+	CampaignsOnPackage(ctx context.Context, packageID string) ([]CampaignPackageState, error)
+	InstalledVersions(ctx context.Context, packageID string) ([]string, error)
 }
 
 // buildPackagesPage loads what the requested tab needs. The summary strip and
@@ -24,7 +32,7 @@ type pageSource interface {
 // usage are loaded for all rows; a failed lookup for one package degrades that
 // row (no update, no campaign count) instead of failing the page, because the
 // admin must still be able to reach the Remove and Settings controls.
-func buildPackagesPage(ctx context.Context, src pageSource, q packagesQuery, csrfToken string, now time.Time) (*PackagesPageData, error) {
+func buildPackagesPage(ctx context.Context, src pageSource, updates campaignStateSource, q packagesQuery, csrfToken string, now time.Time) (*PackagesPageData, error) {
 	pkgs, err := src.ListPackages(ctx)
 	if err != nil {
 		return nil, err
@@ -40,6 +48,16 @@ func buildPackagesPage(ctx context.Context, src pageSource, q packagesQuery, csr
 		Now:          now,
 		Pending:      pending,
 		PendingCount: len(pending),
+	}
+
+	// The panel's Settings tab and the Versions hint name the site rule, so it
+	// is needed on every tab; a failed read degrades to the manual default
+	// (which deletes nothing) rather than failing the page.
+	data.Retention = DefaultRetentionSettings()
+	if r, err := src.GetRetentionSettings(ctx); err != nil {
+		slog.Warn("packages page: reading old-version rule failed", slog.Any("error", err))
+	} else if r != nil {
+		data.Retention = *r
 	}
 
 	for _, p := range pkgs {
@@ -71,6 +89,10 @@ func buildPackagesPage(ctx context.Context, src pageSource, q packagesQuery, csr
 			row.UsageKnown = true
 		}
 
+		if updates != nil && p.Type == PackageTypeFoundryModule && p.InstalledVersion != "" {
+			loadCampaignStates(ctx, updates, &row)
+		}
+
 		data.Rows = append(data.Rows, row)
 	}
 
@@ -95,4 +117,23 @@ func buildPackagesPage(ctx context.Context, src pageSource, q packagesQuery, csr
 		data.Settings = settings
 	}
 	return data, nil
+}
+
+// loadCampaignStates fills a row's per-campaign standing. A failed lookup
+// leaves the row on the plain usage list: it must not fail the page, because
+// the admin still has to reach the other controls.
+func loadCampaignStates(ctx context.Context, updates campaignStateSource, row *PackageRow) {
+	camps, err := updates.CampaignsOnPackage(ctx, row.ID)
+	if err != nil {
+		slog.Warn("packages page: reading campaign update state failed",
+			slog.String("package", row.Slug), slog.Any("error", err))
+		return
+	}
+	versions, err := updates.InstalledVersions(ctx, row.ID)
+	if err != nil {
+		slog.Warn("packages page: listing installed versions failed",
+			slog.String("package", row.Slug), slog.Any("error", err))
+		return
+	}
+	row.Campaigns, row.MovableVersions, row.CampaignsKnown = camps, versions, true
 }

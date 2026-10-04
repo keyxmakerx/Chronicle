@@ -28,7 +28,7 @@ func TestVersionListKeepsForeignHooks(t *testing.T) {
 		{Version: "v0.1.10", PublishedAt: time.Now()},
 		{Version: "v0.1.9", PublishedAt: time.Now()},
 	}
-	out := renderToString(t, VersionList(pkg, versions, "tok"))
+	out := renderToString(t, VersionList(pkg, versions, "", "tok"))
 
 	for _, want := range []string{
 		`id="fvtt-campaigns-trigger-v0-1-10"`,
@@ -49,7 +49,7 @@ func TestVersionListSystemPackageHasNoForeignHooks(t *testing.T) {
 		{Version: "1.1.0", PublishedAt: time.Now(), ReleaseNotes: "Fixes <b>things</b>"},
 		{Version: "1.0.0", PublishedAt: time.Now()},
 	}
-	out := renderToString(t, VersionList(pkg, versions, "tok"))
+	out := renderToString(t, VersionList(pkg, versions, "", "tok"))
 
 	if strings.Contains(out, "fvtt-") || strings.Contains(out, "/admin/foundry-vtt/") {
 		t.Error("a system package must not render the Foundry hooks")
@@ -67,7 +67,7 @@ func TestVersionListOlderVersionSaysSwitch(t *testing.T) {
 	out := renderToString(t, VersionList(pkg, []PackageVersion{
 		{Version: "1.1.0", PublishedAt: time.Now()},
 		{Version: "1.0.0", PublishedAt: time.Now()},
-	}, "tok"))
+	}, "", "tok"))
 	if !strings.Contains(out, "Switch to this") {
 		t.Error("an older version should offer Switch to this")
 	}
@@ -195,5 +195,58 @@ func TestSettingsTabKeepsFormContractAndCleanup(t *testing.T) {
 		if !strings.Contains(out, want) {
 			t.Errorf("settings tab missing %q", want)
 		}
+	}
+}
+
+func TestSettingsTabOldVersionsCard(t *testing.T) {
+	data := pageDataForRender("", "")
+	data.Query.Tab = PackagesTabSettings
+	data.Settings = &PackageSecuritySettings{RepoPolicy: RepoPolicyGitHubOnly, OwnerUploadPolicy: OwnerUploadDisabled, MaxFileSize: 25 * 1024 * 1024}
+	data.Retention = RetentionSettings{Mode: RetentionKeepNewest, KeepNewest: 4, UnusedDays: 30}
+	out := renderToString(t, settingsTab(data))
+	for _, want := range []string{
+		"Old versions, site-wide",
+		`name="retention_mode" value="manual"`,
+		`name="retention_mode" value="keep_newest" checked`,
+		`name="retention_keep_newest" value="4"`,
+		`name="retention_unused_days" value="30"`,
+		"every version of the Foundry module",
+		`hx-get="/admin/packages/prune"`,
+	} {
+		if !strings.Contains(out, want) {
+			t.Errorf("settings tab missing %q", want)
+		}
+	}
+}
+
+func TestPanelOldVersionsGroup(t *testing.T) {
+	site := RetentionSettings{Mode: RetentionKeepNewest, KeepNewest: 2, UnusedDays: 30}
+	sys := PackageRow{Package: Package{ID: "p1", Name: "X", Type: PackageTypeSystem}}
+	out := renderToString(t, panelSettings(sys, site, "tok"))
+	for _, want := range []string{`hx-put="/admin/packages/p1/retention"`, `name="mode" value="site" checked`, "Use the site rule", "Its own rule"} {
+		if !strings.Contains(out, want) {
+			t.Errorf("panel missing %q", want)
+		}
+	}
+
+	own := sys
+	own.RetentionKeepNewest = intp(5)
+	out = renderToString(t, panelSettings(own, site, "tok"))
+	if !strings.Contains(out, `name="mode" value="own" checked`) || !strings.Contains(out, `name="keep_newest" value="5"`) {
+		t.Error("an override must pre-select its own rule with its number")
+	}
+
+	fm := PackageRow{Package: Package{ID: "f1", Name: "F", Type: PackageTypeFoundryModule}}
+	out = renderToString(t, panelSettings(fm, site, "tok"))
+	if strings.Contains(out, "/retention") || !strings.Contains(out, "never removed") {
+		t.Error("foundry module must show the never-removed note and no override form")
+	}
+}
+
+func TestVersionListShowsRuleText(t *testing.T) {
+	pkg := &Package{ID: "p", Type: PackageTypeSystem}
+	out := renderToString(t, VersionList(pkg, nil, "Old versions follow the site rule: keep the newest 2.", "tok"))
+	if !strings.Contains(out, "follow the site rule: keep the newest 2.") {
+		t.Error("versions tab must state the actual rule")
 	}
 }

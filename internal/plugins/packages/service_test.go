@@ -39,6 +39,9 @@ type fakeRepo struct {
 	// versions, when populated (keyed "pkgID@version"), backs GetVersion
 	// so install-pipeline tests can drive InstallVersion end-to-end.
 	versions map[string]*PackageVersion
+	// listed backs ListVersions (same list for every package) so retention
+	// tests can supply published dates.
+	listed []PackageVersion
 }
 
 func newFakeRepo() *fakeRepo {
@@ -88,7 +91,16 @@ func (r *fakeRepo) UpdatePackage(_ context.Context, pkg *Package) error {
 func (r *fakeRepo) DeletePackage(_ context.Context, _ string) error { return nil }
 
 func (r *fakeRepo) ListVersions(_ context.Context, _ string) ([]PackageVersion, error) {
-	return nil, nil
+	return r.listed, nil
+}
+
+func (r *fakeRepo) SetRetention(_ context.Context, id string, keepNewest *int) error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	if p, ok := r.packages[id]; ok {
+		p.RetentionKeepNewest = keepNewest
+	}
+	return nil
 }
 
 func (r *fakeRepo) GetVersion(_ context.Context, pkgID, version string) (*PackageVersion, error) {

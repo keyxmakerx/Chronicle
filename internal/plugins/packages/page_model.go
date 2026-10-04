@@ -214,6 +214,16 @@ type PackageRow struct {
 	// UsageKnown is false when the usage lookup failed: the page then says
 	// nothing about campaign counts rather than showing a wrong zero.
 	UsageKnown bool
+
+	// Campaigns is each campaign's standing on the package, loaded for a type
+	// whose owners are asked before a campaign moves (the Foundry module).
+	// CampaignsKnown is false when that is not wired or the lookup failed, and
+	// the page then shows the plain usage list instead.
+	Campaigns      []CampaignPackageState
+	CampaignsKnown bool
+
+	// Versions the admin may move a campaign to: installed, not cleaned up.
+	MovableVersions []string
 }
 
 // IsFoundryModule reports whether the row is the Foundry module type.
@@ -485,6 +495,15 @@ func plural(n int, noun string) string {
 	return strconv.Itoa(n) + " " + noun + "s"
 }
 
+// ownKeepNewest pre-fills the per-package number box: the stored value, or the
+// site default when the package follows the site rule.
+func ownKeepNewest(v *int) string {
+	if v == nil {
+		return strconv.Itoa(DefaultRetentionKeepNewest)
+	}
+	return strconv.Itoa(*v)
+}
+
 // campaignCount renders "3 campaigns" for the usage count of a row.
 func campaignCount(n int) string { return plural(n, "campaign") }
 
@@ -510,6 +529,10 @@ func releaseNoteLines(notes string, n int) []string {
 	}
 	return out
 }
+
+// ReleaseNoteLines is releaseNoteLines for another plugin's page, so a
+// campaign owner reads release notes the same way the admin does.
+func ReleaseNoteLines(notes string, n int) []string { return releaseNoteLines(notes, n) }
 
 // latestCheck is the most recent update check across all rows, or nil if none
 // has ever run.
@@ -560,4 +583,59 @@ type PackagesPageData struct {
 	PendingCount int
 	// Settings is loaded for the Settings tab only.
 	Settings *PackageSecuritySettings
+	// Retention is the site-wide old-version rule, loaded for every tab.
+	Retention RetentionSettings
+	// CanRemind is true when an owner-notification path is wired, so the
+	// Remind owner action is offered.
+	CanRemind bool
+}
+
+// chipState is what the Campaigns tab says about one campaign's update.
+type chipState struct {
+	Label string
+	Class string
+	// Hint is the "since ..." text after the chip; empty when there is none.
+	Hint string
+	// Asked is true while an owner has a version waiting that the admin has
+	// not held back, so Remind owner makes sense.
+	Asked bool
+}
+
+// campaignChip picks the one chip a campaign row shows. A hold outranks
+// everything, since it is what the owner cannot override.
+func campaignChip(st CampaignPackageState, now time.Time) chipState {
+	switch {
+	case st.AdminHold:
+		return chipState{Label: "Held by you", Class: "badge-primary", Hint: "since " + dateLabel(st.AdminHoldAt)}
+	case st.HeldVersion != "" && st.DismissedVersion == st.HeldVersion:
+		return chipState{Label: "Owner chose Later", Class: "badge-amber", Asked: true,
+			Hint: st.HeldVersion + " offered " + agoLabel(now, st.HeldAt)}
+	case st.HeldVersion != "":
+		return chipState{Label: "Owner asked", Class: "badge-amber", Asked: true, Hint: "since " + dateLabel(st.HeldAt)}
+	default:
+		return chipState{Label: "Up to date", Class: "badge-green"}
+	}
+}
+
+// askedAndHeld counts the owners who will be asked about the next version and
+// the campaigns the admin is holding back (which are not asked).
+func askedAndHeld(camps []CampaignPackageState) (asked, held int) {
+	for _, c := range camps {
+		if c.AdminHold {
+			held++
+		} else {
+			asked++
+		}
+	}
+	return asked, held
+}
+
+// installConfirmText is the confirm shown before an install. For a type whose
+// owners are asked, it says nothing moves until they press Update.
+func installConfirmText(t PackageType, version string) string {
+	msg := "Install version " + version + "?"
+	if t == PackageTypeFoundryModule {
+		msg += " Each campaign keeps its current version until its owner presses Update."
+	}
+	return msg
 }
