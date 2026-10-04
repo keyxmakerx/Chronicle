@@ -60,8 +60,8 @@ func stepByID(f *CallFlow, id string) *FlowStep {
 func TestBuildCallFlow_Steps(t *testing.T) {
 	f := buildCallFlow(flowFixtureInput(false))
 	type want struct {
-		id         string
-		from, to   int
+		id          string
+		from, to    int
 		label, code string
 		fail, reply bool
 	}
@@ -301,7 +301,9 @@ type stubKeysSvc struct {
 	keys []APIKey
 }
 
-func (s *stubKeysSvc) ListKeysByCampaign(context.Context, string) ([]APIKey, error) { return s.keys, nil }
+func (s *stubKeysSvc) ListKeysByCampaign(context.Context, string) ([]APIKey, error) {
+	return s.keys, nil
+}
 
 func TestSyncFlowHandlers(t *testing.T) {
 	rows := flowFixture()

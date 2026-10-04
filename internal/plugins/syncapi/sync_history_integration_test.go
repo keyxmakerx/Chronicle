@@ -87,7 +87,7 @@ func TestSyncHistoryIntegration_ListFiltersAndSteps(t *testing.T) {
 
 	// The call flow's reads: one row, a window with steps, the latest
 	// (failure), and the same failure lately.
-	refused := insert(cid, SyncEvent{Direction: DirToChronicle, Kind: "calendar", ResourceName: "Ches 8, 1492", Was: "Ches 7, 1492",
+	refused := insert(cid, SyncEvent{Direction: DirToChronicle, Kind: historyKindCalendar, ResourceName: "Ches 8, 1492", Was: "Ches 7, 1492",
 		Action: "date set", Call: "PUT /calendar/date", Status: "403", OK: false, Message: "owner role required"})
 	got, err := repo.Get(ctx, cid, refused)
 	if err != nil || got.Was != "Ches 7, 1492" || got.ResourceName != "Ches 8, 1492" {
