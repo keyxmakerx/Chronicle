@@ -41,6 +41,7 @@ var (
 	shopRoomFurnitures  = setOf("sparse", "normal", "packed")
 	shopRoomDecorations = setOf("none", "some", "lots")
 	shopRoomPalettes    = setOf("oak", "ember", "moss", "gilt", "slate", "dusk")
+	shopRoomLooks       = setOf("lit", "paper", "")
 	shopRoomKinds       = setOf("shelf", "rack", "cabinet", "bookcase", "forge", "window", "herbs", "counter", "table", "barrel", "crate", "anvil", "glass", "stall", "rug", "pedestal", "lamp", "sack")
 	shopRoomWalls       = setOf("Y", "X", "")
 	shopRoomColors      = setOf("steel", "iron", "gold", "silver", "red", "green", "teal", "blue", "violet", "leather", "paper", "cloth", "wood", "dark", "bone", "honey", "")
@@ -93,6 +94,7 @@ func (l *ShopRoomLayout) validate() error {
 		{"furniture", l.Furniture, shopRoomFurnitures},
 		{"decorations", l.Decorations, shopRoomDecorations},
 		{"palette", l.Palette, shopRoomPalettes},
+		{"look", l.Look, shopRoomLooks},
 	}
 	for _, e := range enums {
 		if !e.set[e.val] {

@@ -50,6 +50,15 @@
   }
   window.ShopRoomLight = { castOffset: castOffset };
 
+  // Moving one of the room's own decorations keeps all of them: each becomes
+  // a hand-placed one where it stands and the generator adds no more, so
+  // nothing else in the room shifts when one is picked up.
+  function freezeDecor(S, placed) {
+    (placed || []).forEach(function (d) { if (d.icon && !d.mine) S.decor.push({ piece: d.piece, spot: d.spot, icon: d.icon }); });
+    S.deco = 'none';
+  }
+  window.ShopRoomDecor = { freeze: freezeDecor };
+
   function esc(s) {
     return String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/'/g, '&#39;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
   }
@@ -721,22 +730,24 @@
       (S.decor || []).forEach(function (d) { mine[d.piece + ':' + d.spot] = d.icon; });
       out.forEach(function (o, oi) {
         o.d.a.forEach(function (a, ai) {
-          anchors.push({ piece: o.p.id, spot: ai, pt: P(a.x, a.y, a.z) });
-          var ic = mine[o.p.id + ':' + ai];
-          if (ic && ICONS[ic]) { o.decos.push([ai, ic, 1]); return; }
-          (a.deco ? hangs : o.d.decoOnly ? hangs : spots).push([oi, ai]);
+          anchors.push({ piece: o.p.id, spot: ai, pt: P(a.x, a.y, a.z), at: [a.x, a.y, a.z] });
+          var ic = mine[o.p.id + ':' + ai], held = !!(ic && ICONS[ic]);
+          if (held) o.decos.push([ai, ic, 1]);
+          (a.deco ? hangs : o.d.decoOnly ? hangs : spots).push([oi, ai, held]);
         });
       });
-      var rg = rng(S.seeds.goods * 4049 + S.key * 17), rd = rng(S.seeds.deco * 6151 + S.key * 29), order = shuffle(spots, rg);
+      // Spots are shuffled with the GM's decorations still in them, so placing
+      // or moving a decoration never sends the goods to different shelves.
+      var rg = rng(S.seeds.goods * 4049 + S.key * 17), rd = rng(S.seeds.deco * 6151 + S.key * 29), order = shuffle(spots, rg).filter(function (sp) { return !sp[2]; });
       order.forEach(function (sp, k) { if (k < S.its.length) out[sp[0]].goods.push([sp[1], k]); });
-      order.slice(S.its.length).concat(hangs).forEach(function (sp) { var a = out[sp[0]].d.a[sp[1]]; if (rd() < (a.hang ? level * 1.4 : level)) out[sp[0]].decos.push([sp[1], rec.deco[Math.floor(rd() * rec.deco.length)]]); });
+      order.slice(S.its.length).concat(hangs.filter(function (sp) { return !sp[2]; })).forEach(function (sp) { var a = out[sp[0]].d.a[sp[1]]; if (rd() < (a.hang ? level * 1.4 : level)) out[sp[0]].decos.push([sp[1], rec.deco[Math.floor(rd() * rec.deco.length)]]); });
       // Back-to-front by footprint centre; rugs lie under everything and lamps hang over it.
       function key(o) { var p = o.p, r = rect(p); return p.kind === 'rug' ? -99 : p.kind === 'lamp' ? 99 + r[0] + r[1] : r[0] + r[2] / 2 + r[1] + r[3] / 2; }
       out.sort(function (a, b) { return key(a) - key(b); });
       var lights = [], s = defs() + (sq ? shell(N) : shellShape(N)) + sign(N) + wallDecor(N, rec, rng(S.seeds.deco * 3301 + S.key * 7), level, function (l) { lights.push(l); });
       function piece(o) {
         var p = o.p, g = '<g class="piece' + (p.pinned ? ' pinned' : '') + '" data-p="' + p.id + '"><g class="body">' + o.d.pre + '</g>';
-        o.decos.forEach(function (d) { g += d[2] ? '<g class="udeco" data-up="' + p.id + '" data-ua="' + d[0] + '">' + decoSvg(o.d.a[d[0]], d[1]) + '</g>' : decoSvg(o.d.a[d[0]], d[1]); });
+        o.decos.forEach(function (d) { g += '<g class="udeco" data-up="' + p.id + '" data-ua="' + d[0] + '">' + decoSvg(o.d.a[d[0]], d[1]) + '</g>'; });
         o.goods.forEach(function (gd) { g += itemSvg(o.d.a[gd[0]], gd[1]); });
         g += '<g class="body">' + o.d.post + '</g>';
         if (p.pinned && S.mode === 'arr') { var r = rect(p), q = P(r[0] + r[2] / 2, r[1] + r[3] / 2, HT[p.kind] + .25); g += '<g class="pinbtn" data-unpin="' + p.id + '" style="cursor:pointer"><title>Moved by hand. Click to unpin.</title><line x1="' + q[0] + '" y1="' + q[1] + '" x2="' + q[0] + '" y2="' + (q[1] + 10) + '" stroke="#333" stroke-width="2"/><circle cx="' + q[0] + '" cy="' + q[1] + '" r="6" fill="' + C.acc + '" stroke="#fff" stroke-width="1.5"/></g>'; }
@@ -755,7 +766,24 @@
       if (full) s += '<g class="shr-life" style="pointer-events:none">' + out.map(function (o) { return o.p.life || ''; }).join('') + '</g>';
       if (!sq) s += '<g style="pointer-events:none">' + lip() + '</g>';
       if (full) s += lighting(lights);
-      return { svg: s, viewBox: VB, keeperAt: keeperPt, anchors: anchors };
+      // What sits where, in floor units, for the paper look to stand on its own pieces.
+      var placed = [];
+      out.forEach(function (o) {
+        o.goods.forEach(function (gd) { var a = o.d.a[gd[0]]; placed.push({ piece: o.p.id, spot: gd[0], at: [a.x, a.y, a.z], good: gd[1] }); });
+        o.decos.forEach(function (d) { var a = o.d.a[d[0]]; placed.push({ piece: o.p.id, spot: d[0], at: [a.x, a.y, a.z], icon: d[1], mine: !!d[2], hang: !!a.hang }); });
+      });
+      return { svg: s, viewBox: VB, keeperAt: keeperPt, anchors: anchors, placed: placed, room: roomModel(out, rec) };
+    }
+    // The same room as plain data in floor units, for the paper look to build from.
+    function roomModel(out, rec) {
+      var sq = S.setting === 'room';
+      return {
+        N: G.N, setting: S.setting, wall: sq ? rec.wall : S.setting, floor: sq ? rec.floor : { tower: 'flags', tree: 'rings', burrow: 'plank', cave: 'dirt' }[S.setting],
+        colours: { wall: sq ? C.wall : wallBase(), wood: C.wood, trim: sq ? C.trim : capCol(), floor: S.setting === 'tree' ? mix(C.floor, '#d2b07a', .55) : S.setting === 'cave' ? mix(C.floor, '#6e5a44', .5) : C.floor, acc: C.acc, dark: C.dark },
+        pts: G.pts, back: G.edges.filter(function (e) { return e.back; }).map(function (e) { return { a: e.a, b: e.b, d: e.d, len: e.len, h: Math.max(e.h0, e.h1) }; }),
+        pieces: out.map(function (o) { var p = o.p; return { id: p.id, kind: p.kind, wall: WALLK[p.kind] ? p.wall : '', x: p.x, y: p.y, off: p.off || 0, len: p.len || 0, w: p.w || 0, d: p.d || 0, pinned: !!p.pinned, r: rect(p), h: HT[p.kind], depth: DEPTH[p.kind] || 0, warm: p.warm || null }; }),
+        decoCol: DECOCOL, wh: WH, dim: S.setting === 'cave' ? .6 : .72
+      };
     }
 
     return {
@@ -763,6 +791,8 @@
       size: function () { return SZ[S.size] || 8; },
       accent: function () { return (PAL[S.pal] || PAL.oak).acc; },
       isWall: function (kind) { return !!WALLK[kind]; },
+      height: function (kind) { return HT[kind] || 1; },
+      WH: WH,
       // What the GM can add by hand: every furniture kind, and every decoration any shop type uses.
       KINDS: Object.keys(SIZE), DECOS: Object.keys(DECOCOL).filter(function (n) { return ICONS[n]; }),
       MAT: MAT, PALS: PALS, SETTINGS: SETTINGS, RECIPES: RECIPES, ICONS: ICONS
@@ -780,6 +810,7 @@
     return {
       version: 1, roomType: S.roomType, setting: S.setting, size: S.size, furniture: S.full, decorations: S.deco, palette: S.pal,
       seeds: { room: S.seeds.room, goods: S.seeds.goods, deco: S.seeds.deco },
+      look: S.look === 'paper' ? 'paper' : 'lit',
       pieces: S.pieces.map(function (p) {
         var o = { id: p.id, kind: p.kind, wall: p.wall || '', x: p.x || 0, y: p.y || 0, off: p.off || 0, len: p.len || 0, w: p.w || 0, d: p.d || 0, pinned: !!p.pinned };
         ['x', 'y', 'off', 'len', 'w', 'd'].forEach(function (k) { o[k] = Math.round(o[k] * 1000) / 1000; });
@@ -793,6 +824,7 @@
     if (!L) return false;
     S.roomType = L.roomType || S.roomType; S.setting = L.setting || 'room'; S.size = L.size || 'm'; S.full = L.furniture || 'normal';
     S.deco = L.decorations || 'some'; S.pal = L.palette || S.pal;
+    S.look = L.look === 'paper' ? 'paper' : 'lit';
     if (L.seeds) S.seeds = { room: L.seeds.room || 1, goods: L.seeds.goods || 1, deco: L.seeds.deco || 1 };
     S.pieces = (L.pieces || []).map(function (p) { var o = { id: p.id, kind: p.kind, x: p.x, y: p.y, off: p.off || 0, pinned: !!p.pinned }; if (p.wall) { o.wall = p.wall; o.len = p.len; } else { o.w = p.w; o.d = p.d; } return o; });
     S.decor = []; (L.decor || []).forEach(function (d) { S.decor.push({ piece: d.piece, spot: d.spot, icon: d.icon }); });
@@ -861,6 +893,10 @@
     '.shr-scene{position:relative;touch-action:none;background:radial-gradient(ellipse at 50% 40%,color-mix(in srgb,var(--color-text-primary,#111827) 6%,var(--color-bg-primary,#f9fafb)),color-mix(in srgb,var(--color-text-primary,#111827) 14%,var(--color-bg-primary,#f9fafb)))}',
     '.shr.arr .shr-scene{background-image:radial-gradient(circle,color-mix(in srgb,var(--shr-acc) 35%,transparent) 1px,transparent 1.5px);background-size:16px 16px}',
     '.shr-iso{display:block;width:100%;height:auto;user-select:none}',
+    // The paper look sits over the scene on a dark desk; the drawing beneath keeps the size.
+    '.shr-paper{position:absolute;inset:0;z-index:2;user-select:none}.shr:not(.paper) .shr-paper{display:none}',
+    '.shr.paper .shr-iso{visibility:hidden}.shr.paper .shr-keeper,.shr.paper .shr-plate{display:none}',
+    '.shr.paper .shr-scene{background-color:#1d1a15;background-image:radial-gradient(120% 90% at 50% 0%,#3a3328,#17140f 75%)}',
     '.shr-grain{position:absolute;inset:0;pointer-events:none;mix-blend-mode:overlay;opacity:.32;z-index:1}',
     '.shr-grain svg{display:block}',
     '.shr.fxlight .shr-grain{display:none}',
@@ -961,7 +997,7 @@
     '.shr-bin{position:absolute;left:50%;bottom:12px;z-index:15;transform:translate(-50%,140%);display:flex;align-items:center;gap:8px;padding:9px 16px;border-radius:999px;background:rgb(127 29 29/.92);color:#fff;font-size:.8rem;pointer-events:none;opacity:0;transition:transform .3s cubic-bezier(.32,1.25,.5,1),opacity .2s}',
     '.shr.arr .shr-bin{left:calc((100% - min(320px,100%)) / 2)}',
     '.shr.dragging .shr-bin{transform:translate(-50%,0);opacity:1}.shr-bin.hot{background:#b91c1c;transform:translate(-50%,0) scale(1.08)}',
-    '.shr .udeco{cursor:grab}',
+    '.shr.arr .udeco{cursor:grab}',
     '.shr-ib{width:30px;height:30px;border:0;border-radius:8px;display:inline-grid;place-items:center;background:transparent;color:var(--color-text-body,#374151);cursor:pointer;transition:background .15s,color .15s}',
     '.shr-ib:hover:not(:disabled){background:var(--color-bg-tertiary,#f3f4f6);color:var(--color-text-primary,#111827)}',
     '.shr-ib:disabled{opacity:.35;cursor:default}',
@@ -1046,7 +1082,7 @@
       var ds = el.dataset, canArrange = ds.canArrange === 'true', campaignUrl = ds.campaignUrl || '';
       var eid = (ds.roomEndpoint || '').split('/shops/')[1] || '';
       var buyersEndpoint = (ds.roomEndpoint || '').replace(/\/room$/, '/buyers'), buyEndpoint = (ds.roomEndpoint || '').replace(/\/room$/, '/buy');
-      var S = { roomType: 'general', pal: 'oak', setting: 'room', fx: readFx(), size: 'm', full: 'normal', deco: 'some', keep: true,
+      var S = { roomType: 'general', pal: 'oak', setting: 'room', look: 'lit', fx: readFx(), size: 'm', full: 'normal', deco: 'some', keep: true,
         seeds: { room: 1, goods: 1, deco: 1 }, pieces: [], decor: [], ov: {}, portrait: null, lines: [], mode: 'shop', its: [],
         key: keyOf(eid), name: ds.shopName || 'Shop', dark: document.documentElement.classList.contains('dark') };
       var room = createRoom(S), ICONS = room.ICONS, rels = [], relsOk = false, buy = null, basket = {}, payer = '', busy = false, note = '', tab = 'All', open = false, line = 0, dirty = false, busySave = false, savedLayout = null, partKeep = { room: false, goods: false, deco: false };
@@ -1058,12 +1094,12 @@
         '<button type="button" class="shr-front" data-enter="1" aria-expanded="false"><span class="shr-dr"><span class="w">' + DOOR_WAY.replace(/ZZ/g, 'shr-d' + uid) + '</span><span class="lf">' + DOOR_LEAF.replace(/ZZ/g, 'shr-d' + uid) + '</span></span><span class="nm"><b></b><span>Press the door to step inside</span></span></button><div class="shr-hole" aria-hidden="true"></div><div class="shr-dark" aria-hidden="true"></div>' +
         '<div class="shr-card">' +
         '<div class="shr-top"><b></b><span class="shr-sub">Shop</span>' + (canArrange ? '<span class="shr-mode" role="group" aria-label="Mode"><button type="button" data-mode="shop" aria-pressed="true">Shop</button><button type="button" data-mode="arr" aria-pressed="false">Arrange</button></span>' : '') + '</div>' +
-        '<div class="shr-scene"><svg class="shr-iso" role="img"></svg><div class="shr-grain"><svg width="100%" height="100%" aria-hidden="true"><filter id="shr-grn"><feTurbulence type="fractalNoise" baseFrequency=".85" numOctaves="2" stitchTiles="stitch"/><feColorMatrix type="saturate" values="0"/></filter><rect width="100%" height="100%" filter="url(#shr-grn)"/></svg></div>' +
+        '<div class="shr-scene"><svg class="shr-iso" role="img"></svg><div class="shr-paper"></div><div class="shr-grain"><svg width="100%" height="100%" aria-hidden="true"><filter id="shr-grn"><feTurbulence type="fractalNoise" baseFrequency=".85" numOctaves="2" stitchTiles="stitch"/><feColorMatrix type="saturate" values="0"/></filter><rect width="100%" height="100%" filter="url(#shr-grn)"/></svg></div>' +
         '<button type="button" class="shr-keeper"></button><div class="shr-plate"></div></div>' +
         '<div class="shr-bar"><button type="button" class="shr-wbtn" aria-expanded="false">Wares <span></span><i class="shr-chev" aria-hidden="true">▾</i></button><div class="shr-bk" aria-live="polite"></div>' +
         '<span class="shr-fx">Shadows <span class="shr-seg" role="group" aria-label="Shadows and light"><button type="button" data-fx="full">Full</button><button type="button" data-fx="light">Light</button></span></span></div>' +
         '<div class="shr-wares"><div><div class="shr-wp"><div class="shr-tabs"></div><div class="shr-list"></div></div></div></div></div></div>';
-      var root = el.firstChild, svg = root.querySelector('.shr-iso'), scene = root.querySelector('.shr-scene'), keeper = root.querySelector('.shr-keeper'), plate = root.querySelector('.shr-plate');
+      var root = el.firstChild, svg = root.querySelector('.shr-iso'), pel = root.querySelector('.shr-paper'), scene = root.querySelector('.shr-scene'), keeper = root.querySelector('.shr-keeper'), plate = root.querySelector('.shr-plate');
       var tip = document.createElement('div'), say = document.createElement('div'), pick = document.createElement('div'), panel = null;
       tip.className = 'shr-tip'; tip.setAttribute('role', 'tooltip'); say.className = 'shr-say'; say.setAttribute('aria-live', 'polite');
       pick.className = 'shr-pick'; pick.hidden = true; pick.setAttribute('role', 'dialog'); pick.setAttribute('aria-label', 'Change item look');
@@ -1086,7 +1122,14 @@
         root.style.setProperty('--shr-acc', acc);
         if (!ds.shopImage) keeper.innerHTML = silhouette(acc);
         placeKeeper();
+        // The paper look stands the same room up as cut card over the drawing,
+        // which stays underneath to keep the scene's size.
+        var paper = paperOn();
+        root.classList.toggle('paper', paper);
+        if (paper) window.ShopRoomPaper.render(pel, { view: view, its: S.its, name: S.name, image: ds.shopImage, icons: ICONS, fx: S.fx, arr: S.mode === 'arr', shut: root.classList.contains('cold') });
+        else pel.innerHTML = '';
       }
+      function paperOn() { return S.look === 'paper' && !!window.ShopRoomPaper; }
       function placeKeeper() {
         var l = 18, t = 40, VB = view.viewBox;
         if (S.portrait) { l = S.portrait[0]; t = S.portrait[1]; }
@@ -1186,8 +1229,9 @@
       var typeT = 0, sayT = 0;
       function talk() {
         if (!S.lines.length) return;
-        var text = S.lines[line++ % S.lines.length], n = 0, r = keeper.getBoundingClientRect();
-        keeper.classList.remove('talk'); void keeper.offsetWidth; keeper.classList.add('talk');
+        var kEl = (paperOn() && pel.querySelector('.srp-keeper')) || keeper, kc = kEl.querySelector('.srp-cd') || kEl;
+        var text = S.lines[line++ % S.lines.length], n = 0, r = kc.getBoundingClientRect();
+        kEl.classList.remove('talk'); void kEl.offsetWidth; kEl.classList.add('talk');
         clearInterval(typeT); clearTimeout(sayT);
         say.textContent = '“' + text + '”'; say.classList.add('on');
         var x = r.right + 10; if (x + say.offsetWidth > innerWidth - 8) x = r.left - say.offsetWidth - 10;
@@ -1252,7 +1296,7 @@
         if (pin) { var pp = byId(+pin.getAttribute('data-unpin')); if (pp) { pp.pinned = false; draw(); save(); } return; }
         if (e.target.closest('.it')) return;
         var ud = e.target.closest('.udeco');
-        if (ud) { var up = +ud.getAttribute('data-up'), ua = +ud.getAttribute('data-ua'), was = S.decor.filter(function (d) { return d.piece === up && d.spot === ua; })[0]; if (was) startAdd(e, { icon: was.icon, from: was }); return; }
+        if (ud) { pickDeco(e, +ud.getAttribute('data-up'), +ud.getAttribute('data-ua')); return; }
         var g = e.target.closest('.piece'); if (!g) return;
         var p = byId(+g.getAttribute('data-p')); if (!p) return;
         var q = svgPt(e);
@@ -1261,11 +1305,50 @@
         svg.setPointerCapture(e.pointerId); e.preventDefault();
       }
       function onSvgMove(e) {
-        if (!drag) return;
+        if (!drag || drag.paper) return;
         var p = drag.p, q = svgPt(e), nx = drag.x, ny = drag.y;
         // Wall pieces slide along their wall; floor pieces move on the floor grid.
         if (room.isWall(p.kind)) { if (p.wall === 'Y') nx = room.snap(drag.x + (q[0] - drag.q[0]) / 32); else ny = room.snap(drag.y - (q[0] - drag.q[0]) / 32); }
         else { var f = toFloor(q); nx = room.snap(drag.x + f[0] - drag.f[0]); ny = room.snap(drag.y + f[1] - drag.f[1]); }
+        moveTo(p, nx, ny);
+      }
+      // Picking up a decoration. The room's own ones are kept where they stand
+      // first (see ShopRoomDecor.freeze), so any of them can be moved.
+      function pickDeco(e, up, ua) {
+        var find = function () { return S.decor.filter(function (d) { return d.piece === up && d.spot === ua; })[0]; }, was = find();
+        if (!was && window.ShopRoomDecor) { window.ShopRoomDecor.freeze(S, view.placed); was = find(); save(); renderPanel(); }
+        if (was) startAdd(e, { icon: was.icon, from: was });
+      }
+      // The paper look: the same drags, with the pointer turned into a floor point.
+      function floorFrom(e) { return paperOn() ? window.ShopRoomPaper.floorAt(pel, e.clientX, e.clientY) : toFloor(svgPt(e)); }
+      function spotFrom(e) { return paperOn() ? window.ShopRoomPaper.spotAt(pel, e.clientX, e.clientY) : nearestSpot(svgPt(e)); }
+      function onPaperDown(e) {
+        if (S.mode !== 'arr') return;
+        var h = window.ShopRoomPaper.hit(pel, e.clientX, e.clientY) || e.target;
+        if (h.closest('.it,.srp-keeper')) return;
+        var dc = h.closest('.srp-deco');
+        if (dc) { pickDeco(e, +dc.getAttribute('data-up'), +dc.getAttribute('data-ua')); return; }
+        var g = e.target.closest('.srp-pc'), p = g && byId(+g.getAttribute('data-p')), f = p && floorFrom(e);
+        if (!f) return;
+        drag = { p: p, f: f, x: p.x, y: p.y, moved: false, paper: true };
+        showBin(true);
+        pel.setPointerCapture(e.pointerId); e.preventDefault();
+      }
+      function onPaperMove(e) {
+        if (!drag || !drag.paper) return;
+        if (bin) bin.classList.toggle('hot', overBin(e));
+        var p = drag.p, f = floorFrom(e), nx = drag.x, ny = drag.y;
+        if (!f) return;
+        if (room.isWall(p.kind)) { if (p.wall === 'Y') nx = room.snap(drag.x + f[0] - drag.f[0]); else ny = room.snap(drag.y + f[1] - drag.f[1]); }
+        else { nx = room.snap(drag.x + f[0] - drag.f[0]); ny = room.snap(drag.y + f[1] - drag.f[1]); }
+        moveTo(p, nx, ny);
+      }
+      function onPaperClick(e) {
+        var h = window.ShopRoomPaper.hit(pel, e.clientX, e.clientY) || e.target, g = h.closest('.it'); if (g) { useItem(g); return; }
+        if (h.closest('.srp-keeper')) onKeeperClick();
+      }
+      function onPaperKey(e) { if ((e.key === 'Enter' || e.key === ' ') && e.target.closest('.srp-keeper')) { e.preventDefault(); onKeeperClick(); return; } onSvgKey(e); }
+      function moveTo(p, nx, ny) {
         if (nx === p.x && ny === p.y) return;
         var ox = p.x, oy = p.y, oo = p.off; p.x = nx; p.y = ny;
         if ((room.isWall(p.kind) && !room.hug(p)) || room.clashes(p, S.pieces, room.size())) { p.x = ox; p.y = oy; p.off = oo; return; }
@@ -1316,12 +1399,12 @@
         if (binned) { if (w.from) { draw(); save(); status('Removed. Save room to keep it.'); } return; }
         var r = svg.getBoundingClientRect(), inRoom = e.clientX >= r.left && e.clientX <= r.right && e.clientY >= r.top && e.clientY <= r.bottom;
         if (a.moved && !inRoom && !w.from) return;
-        var q = a.moved && inRoom ? svgPt(e) : null;
+        var q = a.moved && inRoom;
         if (w.kind) {
-          var N = room.size(), f = q ? toFloor(q) : [N / 2, N / 2];
+          var N = room.size(), f = (q && floorFrom(e)) || [N / 2, N / 2];
           if (!room.place(w.kind, f[0], f[1])) { status('No space there for that. Try another spot.'); return; }
         } else {
-          var sp = q ? nearestSpot(q) : freeSpot();
+          var sp = q ? spotFrom(e) : freeSpot();
           if (!sp) { if (w.from) S.decor.push(w.from); status(q ? 'Drop decorations on a shelf, table or wall spot.' : 'Every spot is taken.'); draw(); return; }
           S.decor = S.decor.filter(function (d) { return !(d.piece === sp.piece && d.spot === sp.spot); });
           S.decor.push({ piece: sp.piece, spot: sp.spot, icon: w.icon });
@@ -1358,7 +1441,7 @@
       }
       function openPicker(i, g) {
         picking = i;
-        var it = S.its[i], r = g.getBoundingClientRect();
+        var it = S.its[i], r = (g.querySelector('.srp-cd') || g).getBoundingClientRect();
         pick.innerHTML = '<h4></h4><div class="g">' + Object.keys(ICONS).map(function (n) { return '<button type="button" data-pk="' + n + '" aria-label="' + n + '" aria-pressed="' + (n === it.ic) + '">' + iconSvg(n, ICONS) + '</button>'; }).join('') + '</div>' +
           '<div class="c">' + Object.keys(room.MAT).map(function (m) { return '<button type="button" class="sw" data-pc="' + m + '" aria-label="' + m + '" aria-pressed="' + (m === it.mat) + '" style="background:' + room.MAT[m] + '"></button>'; }).join('') + '<button type="button" class="rs" data-reset="1">Reset</button></div>' +
           '<p>Only the look in this room changes. The item’s name, price and stock stay as they are.</p>';
@@ -1376,7 +1459,7 @@
         else if (b.dataset.pc) o.color = b.dataset.pc;
         if (b.dataset.reset) delete S.ov[k]; else S.ov[k] = o;
         draw(); renderList(); save();
-        var g = svg.querySelector('.it[data-i="' + picking + '"]'); if (g) openPicker(picking, g);
+        var g = (paperOn() ? pel : svg).querySelector('.it[data-i="' + picking + '"]'); if (g) openPicker(picking, g);
       }
       function onDocDown(e) { if (picking !== null && !pick.contains(e.target) && !e.target.closest('.it')) closePicker(); }
       function onDocKey(e) { if (e.key === 'Escape') { if (picking !== null) { closePicker(); return; } say.classList.remove('on'); tryLeave(); } }
@@ -1409,6 +1492,7 @@
         if (!panel) return;
         var pins = S.pieces.filter(function (p) { return p.pinned; }).length;
         panel.innerHTML = '<div class="shr-ph"><h3>Arrange this room</h3><button type="button" class="shr-x" data-leave="1" aria-label="Close">✕</button></div><div class="shr-pb">' +
+          (window.ShopRoomPaper ? '<div class="shr-field"><span>Look</span>' + seg('look', [['lit', 'Lit room'], ['paper', 'Paper']]) + '</div>' : '') +
           '<label class="shr-field"><span>Shop type</span><select data-sel="roomType">' + ROOM_TYPES.map(function (t) { return '<option value="' + t[0] + '"' + (t[0] === S.roomType ? ' selected' : '') + '>' + t[1] + '</option>'; }).join('') + '</select></label>' +
           '<label class="shr-field"><span>Setting</span><select data-sel="setting">' + room.SETTINGS.map(function (t) { return '<option value="' + t[0] + '"' + (t[0] === S.setting ? ' selected' : '') + '>' + t[1] + '</option>'; }).join('') + '</select></label>' +
           '<div class="shr-field"><span>Room size</span>' + seg('size', [['s', 'Small'], ['m', 'Medium'], ['l', 'Large']]) + '</div>' +
@@ -1453,7 +1537,7 @@
         if (b === keeper) { onKeeperClick(); return; }
         if (!canArrange) return;
         var k = b.dataset.k;
-        if (k === 'pal' || k === 'deco') { S[k] = b.dataset.v; draw(); }
+        if (k === 'pal' || k === 'deco' || k === 'look') { S[k] = b.dataset.v; draw(); }
         else if (k === 'size' || k === 'full') { S[k] = b.dataset.v; room.generate(); draw(); }
         else if (b.dataset.pin) { partKeep[b.dataset.pin] = !partKeep[b.dataset.pin]; renderPanel(); if (dirty) save(); return; }
         else if (b.dataset.roll === 'rest') { ['room', 'goods', 'deco'].forEach(function (p) { if (!partKeep[p]) roll(p); }); draw(); }
@@ -1512,6 +1596,7 @@
           hole.classList.remove('cover'); hole.style.display = 'none';
           requestAnimationFrame(function () { requestAnimationFrame(function () {
             dark.classList.add('fade'); dark.classList.remove('on'); root.classList.remove('cold');
+            var book = pel.querySelector('.srp'); if (book) book.classList.remove('shut');
             walkT = setTimeout(settle, 850);
           }); });
         }, 620);
@@ -1528,7 +1613,7 @@
         if (!on || !svg.getAnimations) return;
         aliveT = setInterval(function () {
           var MR = window.MotionRest, sp = MR ? MR.speed() : 1;
-          svg.getAnimations({ subtree: true }).forEach(function (a) {
+          svg.getAnimations({ subtree: true }).concat(pel.getAnimations({ subtree: true })).forEach(function (a) {
             if (sp === 0) { if (a.playState === 'running') a.pause(); return; }
             a.playbackRate = Math.max(.02, sp); if (a.playState === 'paused') a.play();
           });
@@ -1536,7 +1621,11 @@
       }
       // A few degrees of tilt toward the mouse gives the room depth. Not while
       // arranging, where drags map straight onto the floor, and not on touch.
-      function tilt(x, y) { svg.style.transform = x || y ? 'perspective(1400px) rotateX(' + (-y * 4).toFixed(2) + 'deg) rotateY(' + (x * 6).toFixed(2) + 'deg)' : ''; }
+      function tilt(x, y) {
+        var book = pel.querySelector('.srp-tilt');
+        if (book) book.style.transform = x || y ? 'rotateX(' + (-y * 5).toFixed(2) + 'deg) rotateY(' + (x * 8).toFixed(2) + 'deg)' : '';
+        svg.style.transform = x || y ? 'perspective(1400px) rotateX(' + (-y * 4).toFixed(2) + 'deg) rotateY(' + (x * 6).toFixed(2) + 'deg)' : '';
+      }
       function onTilt(e) {
         if (e.pointerType !== 'mouse' || S.mode === 'arr' || S.fx !== 'full' || root.classList.contains('closed') || matchMedia('(prefers-reduced-motion: reduce)').matches) return;
         var r = scene.getBoundingClientRect();
@@ -1585,6 +1674,11 @@
       document.addEventListener('pointerdown', onOutsideDown);
       document.addEventListener('pointermove', onAddMove); document.addEventListener('pointerup', onAddUp);
       svg.addEventListener('pointermove', onSvgMoveBin);
+      pel.addEventListener('pointerdown', onPaperDown); pel.addEventListener('pointermove', onPaperMove);
+      pel.addEventListener('pointerup', onSvgUp); pel.addEventListener('pointercancel', onSvgUp);
+      pel.addEventListener('click', onPaperClick); pel.addEventListener('keydown', onPaperKey);
+      var resizeObs = window.ResizeObserver ? new ResizeObserver(function () { if (paperOn()) window.ShopRoomPaper.fit(pel); }) : null;
+      if (resizeObs) resizeObs.observe(scene);
       document.addEventListener('keydown', onDocKey);
       window.addEventListener('scroll', onScroll, { passive: true });
 
@@ -1592,7 +1686,7 @@
         onDocDown: onDocDown, onDocKey: onDocKey,
         cleanup: function () {
           clearInterval(typeT); clearInterval(aliveT); clearTimeout(sayT); clearTimeout(walkT); if (raf) cancelAnimationFrame(raf);
-          themeObs.disconnect();
+          themeObs.disconnect(); if (resizeObs) resizeObs.disconnect();
           window.removeEventListener('scroll', onScroll);
           document.removeEventListener('pointerdown', onDocDown); document.removeEventListener('pointerdown', onOutsideDown); document.removeEventListener('pointerdown', onOutsideShop); document.removeEventListener('pointermove', onAddMove); document.removeEventListener('pointerup', onAddUp); if (adding) adding.ghost.remove(); document.removeEventListener('keydown', onDocKey);
           tip.remove(); say.remove(); pick.remove();

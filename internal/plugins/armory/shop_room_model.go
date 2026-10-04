@@ -9,19 +9,22 @@ const maxShopRoomBytes = 64 << 10
 // into this and re-marshalled, never stored as the client sent them, so the
 // stored document can only contain fields and values validated here.
 type ShopRoomLayout struct {
-	Version     int                         `json:"version"`
-	RoomType    string                      `json:"roomType"`
-	Setting     string                      `json:"setting"`
-	Size        string                      `json:"size"`
-	Furniture   string                      `json:"furniture"`
-	Decorations string                      `json:"decorations"`
-	Palette     string                      `json:"palette"`
-	Seeds       ShopRoomSeeds               `json:"seeds"`
-	Pieces      []ShopRoomPiece             `json:"pieces"`
-	Decor       []ShopRoomDecor             `json:"decor"`
-	Items       map[string]ShopRoomItemLook `json:"items"`
-	Portrait    *ShopRoomPortrait           `json:"portrait"`
-	Lines       []string                    `json:"lines"`
+	Version     int    `json:"version"`
+	RoomType    string `json:"roomType"`
+	Setting     string `json:"setting"`
+	Size        string `json:"size"`
+	Furniture   string `json:"furniture"`
+	Decorations string `json:"decorations"`
+	Palette     string `json:"palette"`
+	// Look is how the room is drawn: "lit" (the isometric room) or "paper" (a
+	// pop-up book). Empty, from layouts saved before there was a choice, is lit.
+	Look     string                      `json:"look"`
+	Seeds    ShopRoomSeeds               `json:"seeds"`
+	Pieces   []ShopRoomPiece             `json:"pieces"`
+	Decor    []ShopRoomDecor             `json:"decor"`
+	Items    map[string]ShopRoomItemLook `json:"items"`
+	Portrait *ShopRoomPortrait           `json:"portrait"`
+	Lines    []string                    `json:"lines"`
 }
 
 // ShopRoomSeeds drive the widget's deterministic procedural layout, so a

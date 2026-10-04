@@ -91,6 +91,7 @@ func TestNormalizeShopRoomLayout_Rejects(t *testing.T) {
 		})},
 		{"bad decorations", mutate(func(m map[string]any) { m["decorations"] = "many" })},
 		{"bad palette", mutate(func(m map[string]any) { m["palette"] = "pink" })},
+		{"bad look", mutate(func(m map[string]any) { m["look"] = "neon" })},
 		{"seed zero", mutate(func(m map[string]any) { m["seeds"] = map[string]any{"room": 0, "goods": 2, "deco": 3} })},
 		{"seed too big", mutate(func(m map[string]any) { m["seeds"] = map[string]any{"room": 1, "goods": 1000000001, "deco": 3} })},
 		{"seed missing", mutate(func(m map[string]any) { m["seeds"] = map[string]any{"room": 1, "goods": 2} })},
@@ -167,6 +168,16 @@ func TestNormalizeShopRoomLayout_Accepts(t *testing.T) {
 			}
 			if l.Items["12"].Icon != "hammer" || l.Pieces[0].X != 2.5 || l.Portrait == nil || l.Portrait.Left != 10.5 {
 				t.Errorf("fields changed: %+v", l)
+			}
+		}},
+		{"paper look kept", mutate(func(m map[string]any) { m["look"] = "paper" }), func(t *testing.T, l ShopRoomLayout) {
+			if l.Look != "paper" {
+				t.Errorf("look = %q, want paper", l.Look)
+			}
+		}},
+		{"no look reads as the lit room", mutate(func(m map[string]any) { delete(m, "look") }), func(t *testing.T, l ShopRoomLayout) {
+			if l.Look != "" {
+				t.Errorf("look = %q, want empty", l.Look)
 			}
 		}},
 		{"boundaries", mutate(boundary), func(t *testing.T, l ShopRoomLayout) {
