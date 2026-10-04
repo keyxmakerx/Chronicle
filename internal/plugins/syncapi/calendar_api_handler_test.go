@@ -436,3 +436,44 @@ func TestCalendarAPI_SetDateNamesTheDates(t *testing.T) {
 		})
 	}
 }
+
+// TestCalendarAPI_AudiencePlayersNarrows: `?audience=players` reads as an
+// anonymous Player whatever the key's role, so the module's player-facing
+// date bar gets Chronicle's own player filtering; without it the key's
+// viewer is unchanged.
+func TestCalendarAPI_AudiencePlayersNarrows(t *testing.T) {
+	cases := []struct {
+		name     string
+		target   string
+		wantRole int
+		wantUser string
+	}{
+		{"players audience", "/?audience=players", int(campaigns.RolePlayer), ""},
+		{"no audience", "/", int(campaigns.RoleOwner), "user-p"},
+		{"unknown audience", "/?audience=gm", int(campaigns.RoleOwner), "user-p"},
+	}
+	routes := []struct {
+		name string
+		fn   func(*CalendarAPIHandler) func(echo.Context) error
+	}{
+		{"GetCalendar", func(h *CalendarAPIHandler) func(echo.Context) error { return h.GetCalendar }},
+		{"GetCurrentDate", func(h *CalendarAPIHandler) func(echo.Context) error { return h.GetCurrentDate }},
+		{"ListEvents", func(h *CalendarAPIHandler) func(echo.Context) error { return h.ListEvents }},
+	}
+	for _, r := range routes {
+		for _, tc := range cases {
+			t.Run(r.name+"/"+tc.name, func(t *testing.T) {
+				svc := newCalendarFixture()
+				h := NewCalendarAPIHandler(nil, svc, &stubCampaignSvcForCalendarAPI{role: campaigns.RoleOwner})
+				if _, err := callCalendarAPI(t, h, r.fn(h), http.MethodGet, tc.target, "", sessionKey()); err != nil {
+					t.Fatalf("%s: %v", r.name, err)
+				}
+				v := svc.viewers[0]
+				if v.Role() != tc.wantRole || v.UserID() != tc.wantUser || v.IsSystem() || v.SkipsPerUserRules() != (tc.wantRole >= int(campaigns.RoleOwner)) {
+					t.Errorf("viewer = role %d user %q system %v, want role %d user %q",
+						v.Role(), v.UserID(), v.IsSystem(), tc.wantRole, tc.wantUser)
+				}
+			})
+		}
+	}
+}

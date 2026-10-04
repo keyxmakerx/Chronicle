@@ -84,6 +84,19 @@ func (h *CalendarAPIHandler) viewer(c echo.Context) permissions.Viewer {
 	return permissions.RequestViewer(int(role), key.UserID)
 }
 
+// readViewer is the viewer for a calendar read. `?audience=players` asks
+// for what any player at the table may see: an anonymous Player, so
+// allow-listed and deny-listed content drops out as well. The Foundry
+// module's GM client uses it to build the date bar every player sees from
+// Chronicle's own player filtering rather than re-deriving it. It can only
+// narrow what the key would otherwise read.
+func (h *CalendarAPIHandler) readViewer(c echo.Context) permissions.Viewer {
+	if c.QueryParam("audience") == "players" {
+		return permissions.RequestViewer(int(campaigns.RolePlayer), "")
+	}
+	return h.viewer(c)
+}
+
 // requireOwner mirrors the calendar plugin's RequireRole(Owner) web routes
 // (settings, event delete) for the same actions over the API, where
 // RequirePermission(PermWrite) alone would also admit a Scribe.
@@ -154,7 +167,7 @@ func (h *CalendarAPIHandler) ListCalendars(c echo.Context) error {
 // GetCalendar returns the default calendar with its structure.
 // GET /api/v1/campaigns/:id/calendar
 func (h *CalendarAPIHandler) GetCalendar(c echo.Context) error {
-	cal, err := h.defaultCalendar(c, h.viewer(c))
+	cal, err := h.defaultCalendar(c, h.readViewer(c))
 	if err != nil {
 		return err
 	}
@@ -166,7 +179,7 @@ func (h *CalendarAPIHandler) GetCalendar(c echo.Context) error {
 // served-date beacon; a member browsing over the session door never does.
 // GET /api/v1/campaigns/:id/calendar/date
 func (h *CalendarAPIHandler) GetCurrentDate(c echo.Context) error {
-	cal, err := h.defaultCalendar(c, h.viewer(c))
+	cal, err := h.defaultCalendar(c, h.readViewer(c))
 	if err != nil {
 		return err
 	}
@@ -346,7 +359,7 @@ func nonNil[T any](s []T) []T {
 // `occurrences`, so a rule event shows on its start date only in Foundry.
 // GET /api/v1/campaigns/:id/calendar/events?year=N&month=M
 func (h *CalendarAPIHandler) ListEvents(c echo.Context) error {
-	v := h.viewer(c)
+	v := h.readViewer(c)
 	cal, err := h.defaultCalendar(c, v)
 	if err != nil {
 		return err
