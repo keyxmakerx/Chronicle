@@ -28,7 +28,7 @@ templ CustomizePage(cc *CampaignContext, entityTypes []SettingsEntityType, csrfT
 		// The page body below bleeds to the edges with negative margins, so
 		// the header gets its own padded wrapper above it.
 		<div class="px-4 pt-4 pb-6">
-			@layouts.ManageHeader("Customize", "manage:customize")
+			@layouts.ManageHeader("Customize")
 		</div>
 		<div class="h-full flex flex-col -mx-5 -mb-4" x-data="{ tab: 'layouts' }">
 			<!-- Header -->

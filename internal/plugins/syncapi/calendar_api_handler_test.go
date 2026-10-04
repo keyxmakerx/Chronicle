@@ -37,18 +37,8 @@ type fakeCalendarSvcForAPI struct {
 	deleteArgs      [3]string
 	setDateArgs     []any
 
-	importCalls    int
-	importCampaign string
-	importBody     []byte
-	importCal      *calendar.Calendar
-	importWarnings []string
-	importErr      error
-}
-
-func (f *fakeCalendarSvcForAPI) ImportFoundryCalendar(_ context.Context, campaignID string, data []byte) (*calendar.Calendar, []string, error) {
-	f.importCalls++
-	f.importCampaign, f.importBody = campaignID, data
-	return f.importCal, f.importWarnings, f.importErr
+	dayWeatherArgs   [4]any
+	dayWeatherViewer permissions.Viewer
 }
 
 func (f *fakeCalendarSvcForAPI) GetPrimaryCalendarForViewer(_ context.Context, campaignID string, v permissions.Viewer) (*calendar.Calendar, error) {
@@ -64,6 +54,12 @@ func (f *fakeCalendarSvcForAPI) GetPrimaryCalendarForViewer(_ context.Context, c
 func (f *fakeCalendarSvcForAPI) ListEventsForMonth(_ context.Context, calendarID, campaignID string, year, month int, _ permissions.Viewer) ([]calendar.Event, error) {
 	f.listArgs = [4]any{calendarID, campaignID, year, month}
 	return append([]calendar.Event(nil), f.events...), nil
+}
+
+func (f *fakeCalendarSvcForAPI) ListDayWeather(_ context.Context, calendarID, campaignID string, year, month int, v permissions.Viewer) ([]calendar.DayWeather, error) {
+	f.dayWeatherArgs = [4]any{calendarID, campaignID, year, month}
+	f.dayWeatherViewer = v
+	return []calendar.DayWeather{{Year: year, Month: month, Day: 1}}, nil
 }
 
 func (f *fakeCalendarSvcForAPI) GetEventForViewer(_ context.Context, eventID, calendarID, campaignID string, _ permissions.Viewer) (*calendar.Event, error) {
@@ -416,83 +412,6 @@ func TestCalendarAPI_CurrentDateRealTimeSignal(t *testing.T) {
 	}
 }
 
-// TestCalendarAPI_CreateCalendar: only an Owner may import, the path campaign
-// (never the payload) scopes it, and every refusal happens before the service
-// is called so a rejected caller cannot create or probe anything.
-func TestCalendarAPI_CreateCalendar(t *testing.T) {
-	oversize := strings.Repeat("x", maxFoundryImportBytes+1)
-	atCap := strings.Repeat(" ", maxFoundryImportBytes)
-	tests := []struct {
-		name        string
-		role        campaigns.Role
-		body        string
-		svcErr      error
-		wantStatus  int // HTTP status on the recorder when err == nil, else the error's code
-		wantErr     bool
-		wantCalls   int
-		wantWarning []string
-	}{
-		{name: "owner creates", role: campaigns.RoleOwner, body: `{"schema_version":1}`, wantStatus: http.StatusCreated, wantCalls: 1, wantWarning: []string{"check the day length"}},
-		{name: "owner with no warnings gets an empty array", role: campaigns.RoleOwner, body: `{}`, wantStatus: http.StatusCreated, wantCalls: 1},
-		{name: "scribe refused", role: campaigns.RoleScribe, body: `{}`, wantErr: true, wantStatus: http.StatusForbidden},
-		{name: "player refused", role: campaigns.RolePlayer, body: `{}`, wantErr: true, wantStatus: http.StatusForbidden},
-		{name: "service conflict passes through", role: campaigns.RoleOwner, body: `{}`, svcErr: apperror.NewConflict("already has a calendar"), wantErr: true, wantStatus: http.StatusConflict, wantCalls: 1},
-		{name: "body over the cap is a 400", role: campaigns.RoleOwner, body: oversize, wantErr: true, wantStatus: http.StatusBadRequest},
-		{name: "body exactly at the cap is passed on", role: campaigns.RoleOwner, body: atCap, wantStatus: http.StatusCreated, wantCalls: 1},
-	}
-	for _, tc := range tests {
-		t.Run(tc.name, func(t *testing.T) {
-			svc := newCalendarFixture()
-			svc.importCal = &calendar.Calendar{ID: "cal-new", CampaignID: "camp-1", Name: "Imported"}
-			svc.importWarnings = tc.wantWarning
-			svc.importErr = tc.svcErr
-			h := NewCalendarAPIHandler(nil, svc, &stubCampaignSvcForCalendarAPI{role: tc.role})
-
-			rec, err := callCalendarAPI(t, h, h.CreateCalendar, http.MethodPost, "/", tc.body, bearerKey())
-
-			if svc.importCalls != tc.wantCalls {
-				t.Fatalf("ImportFoundryCalendar calls = %d, want %d", svc.importCalls, tc.wantCalls)
-			}
-			if tc.wantErr {
-				if got := statusOf(err); got != tc.wantStatus {
-					t.Fatalf("error status = %d (%v), want %d", got, err, tc.wantStatus)
-				}
-				return
-			}
-			if err != nil {
-				t.Fatal(err)
-			}
-			if rec.Code != tc.wantStatus {
-				t.Fatalf("status = %d, want %d", rec.Code, tc.wantStatus)
-			}
-			if svc.importCampaign != "camp-1" {
-				t.Errorf("campaign passed to service = %q, want the path campaign camp-1", svc.importCampaign)
-			}
-			if string(svc.importBody) != tc.body {
-				t.Errorf("body passed to service differs from the request body (%d vs %d bytes)", len(svc.importBody), len(tc.body))
-			}
-			var resp struct {
-				Calendar struct {
-					ID string `json:"id"`
-				} `json:"created"`
-				Warnings []string `json:"warnings"`
-			}
-			if err := json.Unmarshal(rec.Body.Bytes(), &resp); err != nil {
-				t.Fatalf("response is not JSON: %v: %s", err, rec.Body.String())
-			}
-			if resp.Warnings == nil {
-				t.Errorf("warnings must be an array, never null: %s", rec.Body.String())
-			}
-			if len(resp.Warnings) != len(tc.wantWarning) {
-				t.Errorf("warnings = %v, want %v", resp.Warnings, tc.wantWarning)
-			}
-			if resp.Calendar.ID != "cal-new" {
-				t.Errorf("calendar id = %q, want cal-new: %s", resp.Calendar.ID, rec.Body.String())
-			}
-		})
-	}
-}
-
 // TestCalendarAPI_SetDateNamesTheDates: the sync history says which date a
 // push asked for and which it would replace, for a refused push too.
 func TestCalendarAPI_SetDateNamesTheDates(t *testing.T) {
@@ -524,5 +443,73 @@ func TestCalendarAPI_SetDateNamesTheDates(t *testing.T) {
 				t.Fatalf("history names %+v", res)
 			}
 		})
+	}
+}
+
+// TestCalendarAPI_AudiencePlayersNarrows: `?audience=players` reads as an
+// anonymous Player whatever the key's role, so the module's player-facing
+// date bar gets Chronicle's own player filtering; without it the key's
+// viewer is unchanged.
+func TestCalendarAPI_AudiencePlayersNarrows(t *testing.T) {
+	cases := []struct {
+		name     string
+		target   string
+		wantRole int
+		wantUser string
+	}{
+		{"players audience", "/?audience=players", int(campaigns.RolePlayer), ""},
+		{"no audience", "/", int(campaigns.RoleOwner), "user-p"},
+		{"unknown audience", "/?audience=gm", int(campaigns.RoleOwner), "user-p"},
+	}
+	routes := []struct {
+		name string
+		fn   func(*CalendarAPIHandler) func(echo.Context) error
+	}{
+		{"GetCalendar", func(h *CalendarAPIHandler) func(echo.Context) error { return h.GetCalendar }},
+		{"GetCurrentDate", func(h *CalendarAPIHandler) func(echo.Context) error { return h.GetCurrentDate }},
+		{"ListEvents", func(h *CalendarAPIHandler) func(echo.Context) error { return h.ListEvents }},
+		{"ListDayWeather", func(h *CalendarAPIHandler) func(echo.Context) error { return h.ListDayWeather }},
+	}
+	for _, r := range routes {
+		for _, tc := range cases {
+			t.Run(r.name+"/"+tc.name, func(t *testing.T) {
+				svc := newCalendarFixture()
+				h := NewCalendarAPIHandler(nil, svc, &stubCampaignSvcForCalendarAPI{role: campaigns.RoleOwner})
+				rec, err := callCalendarAPI(t, h, r.fn(h), http.MethodGet, tc.target, "", sessionKey())
+				if err != nil {
+					t.Fatalf("%s: %v", r.name, err)
+				}
+				echoed := strings.Contains(rec.Body.String(), `"audience":"players"`)
+				if r.name != "GetCalendar" && echoed != (tc.wantUser == "") {
+					t.Errorf("audience echoed = %v, want %v", echoed, tc.wantUser == "")
+				}
+				v := svc.viewers[0]
+				if v.Role() != tc.wantRole || v.UserID() != tc.wantUser || v.IsSystem() || v.SkipsPerUserRules() != (tc.wantRole >= int(campaigns.RoleOwner)) {
+					t.Errorf("viewer = role %d user %q system %v, want role %d user %q",
+						v.Role(), v.UserID(), v.IsSystem(), tc.wantRole, tc.wantUser)
+				}
+			})
+		}
+	}
+}
+
+// TestCalendarAPI_ListDayWeather: the month read goes to the resolved
+// calendar and passes the request's viewer, so the service's "only up to
+// today for players" rule applies to a players-audience read.
+func TestCalendarAPI_ListDayWeather(t *testing.T) {
+	svc := newCalendarFixture()
+	h := NewCalendarAPIHandler(nil, svc, &stubCampaignSvcForCalendarAPI{role: campaigns.RoleOwner})
+	rec, err := callCalendarAPI(t, h, h.ListDayWeather, http.MethodGet, "/?year=1491&month=2&audience=players", "", sessionKey())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if svc.dayWeatherArgs != [4]any{"cal-1", "camp-1", 1491, 2} {
+		t.Errorf("ListDayWeather args = %v", svc.dayWeatherArgs)
+	}
+	if svc.dayWeatherViewer.SkipsPerUserRules() {
+		t.Error("players audience must not skip per-user rules")
+	}
+	if !strings.Contains(rec.Body.String(), `"total":1`) {
+		t.Errorf("body = %s", rec.Body.String())
 	}
 }

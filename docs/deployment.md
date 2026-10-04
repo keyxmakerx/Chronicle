@@ -261,8 +261,8 @@ Chronicle, the Foundry module and each game system package ship separately,
 and a Chronicle deploy changes none of the others. In this order:
 
 1. **Back up**, set `BACKUP_REQUIRED=1`, and make sure `BASE_URL` is the public
-   `https://` address. The Foundry connect line (Campaign > Apps & game
-   system > Foundry) is built from `BASE_URL`; a line made while it still says
+   `https://` address. The Foundry connect line (Campaign > Manage >
+   Foundry) is built from `BASE_URL`; a line made while it still says
    `localhost` points Foundry at the wrong place. Make a new connect line after
    fixing it. Older keys are not revoked.
 2. **Deploy Chronicle** (steps 1–5 above). New tables and columns are added at

@@ -95,92 +95,7 @@ func RegisterRoutes(e *echo.Echo, h *Handler, campaignSvc campaigns.CampaignServ
 	// it. No real calendar id is ever the literal string "list" (ids are
 	// UUIDs), and a static segment always wins over a same-position ":calid"
 	// param, so the two can't collide going the other way either.
-	cg.GET("/calendars/list", h.ListCalendarsAPI, campaigns.RequireRole(campaigns.RolePlayer))
-	cg.GET("/calendars/:calid", h.GetCalendarAPI, campaigns.RequireRole(campaigns.RolePlayer))
-
-	// Events: view Player, create/edit Scribe, delete + visibility Owner.
-	cg.GET("/calendars/:calid/events", h.ListEventsAPI, campaigns.RequireRole(campaigns.RolePlayer))
-	cg.GET("/calendars/:calid/events/:eid", h.GetEventAPI, campaigns.RequireRole(campaigns.RolePlayer))
-	cg.GET("/calendars/:calid/eras/:eraID/events", h.ListEraEventsAPI, campaigns.RequireRole(campaigns.RolePlayer))
-	cg.POST("/calendars/:calid/events", h.CreateEventAPI, campaigns.RequireRole(campaigns.RoleScribe))
-	cg.PUT("/calendars/:calid/events/:eid", h.UpdateEventAPI, campaigns.RequireRole(campaigns.RoleScribe))
-	cg.DELETE("/calendars/:calid/events/:eid", h.DeleteEventAPI, campaigns.RequireRole(campaigns.RoleOwner))
-	// "This one only": skip or move one occurrence of a repeating event, or
-	// undo that. Gated like editing the event (Scribe+; the service also
-	// requires the event be visible to the caller).
-	cg.PUT("/calendars/:calid/events/:eid/occurrences/:y/:m/:d", h.SetOccurrenceAPI, campaigns.RequireRole(campaigns.RoleScribe))
-	cg.DELETE("/calendars/:calid/events/:eid/occurrences/:y/:m/:d", h.DeleteOccurrenceAPI, campaigns.RequireRole(campaigns.RoleScribe))
-	// The rule editor's "next few dates": gated like a read, writes nothing;
-	// the service refuses a rule naming anything the caller cannot see.
-	cg.POST("/calendars/:calid/recurrence/preview", h.PreviewRecurrenceAPI, campaigns.RequireRole(campaigns.RolePlayer))
-	// The dm_only toggle is gated on CanAuthorDmOnly, not a bare role
-	// minimum: the operator has decided a granted co-DM (Scribe role, plus
-	// the dm_only grant) may use this the same as the Owner, so RequireRole
-	// alone would wrongly exclude them.
-	cg.PUT("/calendars/:calid/events/:eid/visibility", h.SetEventVisibilityAPI,
-		campaigns.RequireCapability(func(cc *campaigns.CampaignContext) bool { return cc.CanAuthorDmOnly() },
-			"only the campaign owner or a granted co-DM may change this event's visibility"))
-
-	// Event kinds: campaign structure (no Player read). Listing stays Owner
-	// only; creating, editing and deleting a kind are gated CanAuthorDmOnly,
-	// not a bare role minimum — the operator has decided a granted co-DM may
-	// author calendar structure the same as the Owner, matching the eras and
-	// moon-hidden writes below and the event-visibility toggle further up.
-	cg.GET("/calendars/event-kinds", h.ListEventKindsAPI, campaigns.RequireRole(campaigns.RoleOwner))
-	cg.POST("/calendars/event-kinds", h.CreateEventKindAPI,
-		campaigns.RequireCapability(func(cc *campaigns.CampaignContext) bool { return cc.CanAuthorDmOnly() },
-			"only the campaign owner or a granted co-DM may create an event kind"))
-	cg.PUT("/calendars/event-kinds/:kindID", h.UpdateEventKindAPI,
-		campaigns.RequireCapability(func(cc *campaigns.CampaignContext) bool { return cc.CanAuthorDmOnly() },
-			"only the campaign owner or a granted co-DM may edit an event kind"))
-	cg.DELETE("/calendars/event-kinds/:kindID", h.DeleteEventKindAPI,
-		campaigns.RequireCapability(func(cc *campaigns.CampaignContext) bool { return cc.CanAuthorDmOnly() },
-			"only the campaign owner or a granted co-DM may delete an event kind"))
-
-	// Eras: no read route of their own; they ship inside the calendar's own
-	// read, filtered for the viewer (an era hidden until it begins, and the
-	// Director's notes, never reach a player). Writes are gated
-	// CanAuthorDmOnly, same reasoning as the event-kind writes above.
-	cg.POST("/calendars/:calid/eras", h.CreateEraAPI,
-		campaigns.RequireCapability(func(cc *campaigns.CampaignContext) bool { return cc.CanAuthorDmOnly() },
-			"only the campaign owner or a granted co-DM may create an era"))
-	cg.PUT("/calendars/:calid/eras/:eraID", h.UpdateEraAPI,
-		campaigns.RequireCapability(func(cc *campaigns.CampaignContext) bool { return cc.CanAuthorDmOnly() },
-			"only the campaign owner or a granted co-DM may edit an era"))
-	cg.DELETE("/calendars/:calid/eras/:eraID", h.DeleteEraAPI,
-		campaigns.RequireCapability(func(cc *campaigns.CampaignContext) bool { return cc.CanAuthorDmOnly() },
-			"only the campaign owner or a granted co-DM may delete an era"))
-	// The era look (colours behind the days, feel, each era's colours and
-	// style) is part of the calendar settings, so Owner only like PUT
-	// /calendars/:calid and the structure editor.
-	cg.PUT("/calendars/:calid/era-look", h.SaveEraLookAPI, campaigns.RequireRole(campaigns.RoleOwner))
-
-	// Moon hidden flag: calendar structure, gated CanAuthorDmOnly like the
-	// event-kind and era writes above.
-	cg.PUT("/calendars/:calid/moons/:moonID/hidden", h.SetMoonHiddenAPI,
-		campaigns.RequireCapability(func(cc *campaigns.CampaignContext) bool { return cc.CanAuthorDmOnly() },
-			"only the campaign owner or a granted co-DM may change a moon's visibility"))
-
-	// Day weather: one reading per day. Read Player (the service hides
-	// future days from anyone who can't see dm_only content); painting,
-	// storing generated weather, clearing and locking are gated CanAuthorDmOnly like
-	// the moon hidden flag above, since a write can reveal future weather.
-	cg.GET("/calendars/:calid/weather/days", h.ListDayWeatherAPI, campaigns.RequireRole(campaigns.RolePlayer))
-	cg.PUT("/calendars/:calid/weather/days", h.SetDayWeatherAPI,
-		campaigns.RequireCapability(func(cc *campaigns.CampaignContext) bool { return cc.CanAuthorDmOnly() },
-			"only the campaign owner or a granted co-DM may set a day's weather"))
-	cg.GET("/calendars/:calid/weather/settings", h.GetWeatherSettingsAPI,
-		campaigns.RequireCapability(func(cc *campaigns.CampaignContext) bool { return cc.CanAuthorDmOnly() },
-			"only the campaign owner or a granted co-DM may read the weather settings"))
-	cg.POST("/calendars/:calid/weather/days/clear", h.ClearDayWeatherAPI,
-		campaigns.RequireCapability(func(cc *campaigns.CampaignContext) bool { return cc.CanAuthorDmOnly() },
-			"only the campaign owner or a granted co-DM may clear a day's weather"))
-	cg.POST("/calendars/:calid/weather/days/lock", h.LockDayWeatherAPI,
-		campaigns.RequireCapability(func(cc *campaigns.CampaignContext) bool { return cc.CanAuthorDmOnly() },
-			"only the campaign owner or a granted co-DM may lock a day's weather"))
-	// The forecast is the one future weather a player may read, blurred by
-	// the service; it has the same gate as the day readings it is built from.
-	cg.GET("/calendars/:calid/weather/forecast", h.ListWeatherForecastAPI, campaigns.RequireRole(campaigns.RolePlayer))
+	registerCalendarJSONRoutes(cg, h)
 
 	// Real-date anchor preview: read-only, Owner only (moving the anchor
 	// re-dates every session scheduled by in-world date at once, so the
@@ -221,4 +136,108 @@ func RegisterRoutes(e *echo.Echo, h *Handler, campaignSvc campaigns.CampaignServ
 	// public-capable group for anonymous/public-campaign viewers.
 	cg.GET("/calendars/:calid/view", h.CalendarViewPage, campaigns.RequireRole(campaigns.RolePlayer))
 	pub.GET("/calendars/:calid/view", h.CalendarViewPage, campaigns.RequireViewAccess())
+}
+
+// registerCalendarJSONRoutes mounts the member JSON routes the calendar page
+// and its editor call. The same set serves the site (session) and an app the
+// member allowed (the notes grant), so the two can never drift apart; every
+// route keeps its own role or capability gate, and the grant runs as the
+// member at their live role.
+func registerCalendarJSONRoutes(g *echo.Group, h *Handler) {
+	g.GET("/calendars/list", h.ListCalendarsAPI, campaigns.RequireRole(campaigns.RolePlayer))
+	g.GET("/calendars/:calid", h.GetCalendarAPI, campaigns.RequireRole(campaigns.RolePlayer))
+
+	// Events: view Player, create/edit Scribe, delete + visibility Owner.
+	g.GET("/calendars/:calid/events", h.ListEventsAPI, campaigns.RequireRole(campaigns.RolePlayer))
+	g.GET("/calendars/:calid/events/:eid", h.GetEventAPI, campaigns.RequireRole(campaigns.RolePlayer))
+	g.GET("/calendars/:calid/eras/:eraID/events", h.ListEraEventsAPI, campaigns.RequireRole(campaigns.RolePlayer))
+	g.POST("/calendars/:calid/events", h.CreateEventAPI, campaigns.RequireRole(campaigns.RoleScribe))
+	g.PUT("/calendars/:calid/events/:eid", h.UpdateEventAPI, campaigns.RequireRole(campaigns.RoleScribe))
+	g.DELETE("/calendars/:calid/events/:eid", h.DeleteEventAPI, campaigns.RequireRole(campaigns.RoleOwner))
+	// "This one only": skip or move one occurrence of a repeating event, or
+	// undo that. Gated like editing the event (Scribe+; the service also
+	// requires the event be visible to the caller).
+	g.PUT("/calendars/:calid/events/:eid/occurrences/:y/:m/:d", h.SetOccurrenceAPI, campaigns.RequireRole(campaigns.RoleScribe))
+	g.DELETE("/calendars/:calid/events/:eid/occurrences/:y/:m/:d", h.DeleteOccurrenceAPI, campaigns.RequireRole(campaigns.RoleScribe))
+	// The rule editor's "next few dates": gated like a read, writes nothing;
+	// the service refuses a rule naming anything the caller cannot see.
+	g.POST("/calendars/:calid/recurrence/preview", h.PreviewRecurrenceAPI, campaigns.RequireRole(campaigns.RolePlayer))
+	// The dm_only toggle is gated on CanAuthorDmOnly, not a bare role
+	// minimum: the operator has decided a granted co-DM (Scribe role, plus
+	// the dm_only grant) may use this the same as the Owner, so RequireRole
+	// alone would wrongly exclude them.
+	g.PUT("/calendars/:calid/events/:eid/visibility", h.SetEventVisibilityAPI,
+		campaigns.RequireCapability(func(cc *campaigns.CampaignContext) bool { return cc.CanAuthorDmOnly() },
+			"only the campaign owner or a granted co-DM may change this event's visibility"))
+
+	// Event kinds: campaign structure (no Player read). Listing stays Owner
+	// only; creating, editing and deleting a kind are gated CanAuthorDmOnly,
+	// not a bare role minimum — the operator has decided a granted co-DM may
+	// author calendar structure the same as the Owner, matching the eras and
+	// moon-hidden writes below and the event-visibility toggle further up.
+	g.GET("/calendars/event-kinds", h.ListEventKindsAPI, campaigns.RequireRole(campaigns.RoleOwner))
+	g.POST("/calendars/event-kinds", h.CreateEventKindAPI,
+		campaigns.RequireCapability(func(cc *campaigns.CampaignContext) bool { return cc.CanAuthorDmOnly() },
+			"only the campaign owner or a granted co-DM may create an event kind"))
+	g.PUT("/calendars/event-kinds/:kindID", h.UpdateEventKindAPI,
+		campaigns.RequireCapability(func(cc *campaigns.CampaignContext) bool { return cc.CanAuthorDmOnly() },
+			"only the campaign owner or a granted co-DM may edit an event kind"))
+	g.DELETE("/calendars/event-kinds/:kindID", h.DeleteEventKindAPI,
+		campaigns.RequireCapability(func(cc *campaigns.CampaignContext) bool { return cc.CanAuthorDmOnly() },
+			"only the campaign owner or a granted co-DM may delete an event kind"))
+
+	// Eras: no read route of their own; they ship inside the calendar's own
+	// read, filtered for the viewer (an era hidden until it begins, and the
+	// Director's notes, never reach a player). Writes are gated
+	// CanAuthorDmOnly, same reasoning as the event-kind writes above.
+	g.POST("/calendars/:calid/eras", h.CreateEraAPI,
+		campaigns.RequireCapability(func(cc *campaigns.CampaignContext) bool { return cc.CanAuthorDmOnly() },
+			"only the campaign owner or a granted co-DM may create an era"))
+	g.PUT("/calendars/:calid/eras/:eraID", h.UpdateEraAPI,
+		campaigns.RequireCapability(func(cc *campaigns.CampaignContext) bool { return cc.CanAuthorDmOnly() },
+			"only the campaign owner or a granted co-DM may edit an era"))
+	g.DELETE("/calendars/:calid/eras/:eraID", h.DeleteEraAPI,
+		campaigns.RequireCapability(func(cc *campaigns.CampaignContext) bool { return cc.CanAuthorDmOnly() },
+			"only the campaign owner or a granted co-DM may delete an era"))
+	// The era look (colours behind the days, feel, each era's colours and
+	// style) is part of the calendar settings, so Owner only like PUT
+	// /calendars/:calid and the structure editor.
+	g.PUT("/calendars/:calid/era-look", h.SaveEraLookAPI, campaigns.RequireRole(campaigns.RoleOwner))
+
+	// Moon hidden flag: calendar structure, gated CanAuthorDmOnly like the
+	// event-kind and era writes above.
+	g.PUT("/calendars/:calid/moons/:moonID/hidden", h.SetMoonHiddenAPI,
+		campaigns.RequireCapability(func(cc *campaigns.CampaignContext) bool { return cc.CanAuthorDmOnly() },
+			"only the campaign owner or a granted co-DM may change a moon's visibility"))
+
+	// Day weather: one reading per day. Read Player (the service hides
+	// future days from anyone who can't see dm_only content); painting,
+	// storing generated weather, clearing and locking are gated CanAuthorDmOnly like
+	// the moon hidden flag above, since a write can reveal future weather.
+	g.GET("/calendars/:calid/weather/days", h.ListDayWeatherAPI, campaigns.RequireRole(campaigns.RolePlayer))
+	g.PUT("/calendars/:calid/weather/days", h.SetDayWeatherAPI,
+		campaigns.RequireCapability(func(cc *campaigns.CampaignContext) bool { return cc.CanAuthorDmOnly() },
+			"only the campaign owner or a granted co-DM may set a day's weather"))
+	g.GET("/calendars/:calid/weather/settings", h.GetWeatherSettingsAPI,
+		campaigns.RequireCapability(func(cc *campaigns.CampaignContext) bool { return cc.CanAuthorDmOnly() },
+			"only the campaign owner or a granted co-DM may read the weather settings"))
+	g.POST("/calendars/:calid/weather/days/clear", h.ClearDayWeatherAPI,
+		campaigns.RequireCapability(func(cc *campaigns.CampaignContext) bool { return cc.CanAuthorDmOnly() },
+			"only the campaign owner or a granted co-DM may clear a day's weather"))
+	g.POST("/calendars/:calid/weather/days/lock", h.LockDayWeatherAPI,
+		campaigns.RequireCapability(func(cc *campaigns.CampaignContext) bool { return cc.CanAuthorDmOnly() },
+			"only the campaign owner or a granted co-DM may lock a day's weather"))
+	// The forecast is the one future weather a player may read, blurred by
+	// the service; it has the same gate as the day readings it is built from.
+	g.GET("/calendars/:calid/weather/forecast", h.ListWeatherForecastAPI, campaigns.RequireRole(campaigns.RolePlayer))
+}
+
+// RegisterAppRoutes mounts the calendar on the routes of an app a member
+// allowed (the Foundry calendar window): the calendar page's JSON routes and
+// the fragment the window mounts. g must already authenticate the grant and
+// check campaign access, as the notes grant group does.
+func RegisterAppRoutes(g *echo.Group, h *Handler, addonSvc addons.AddonService) {
+	ag := g.Group("", addons.RequireAddon(addonSvc, PluginSlug))
+	registerCalendarJSONRoutes(ag, h)
+	ag.GET("/calendars/embed", h.CalendarEmbedFragment, campaigns.RequireRole(campaigns.RolePlayer))
 }

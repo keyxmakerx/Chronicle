@@ -13,7 +13,7 @@ import (
 templ CampaignMembersPage(cc *CampaignContext, members []CampaignMember, transfer *OwnershipTransfer, csrfToken, errMsg string, smtpConfigured bool) {
 	@layouts.App(cc.Campaign.Name + " - People") {
 		<div class="max-w-4xl mx-auto">
-			@layouts.ManageHeader("People", "manage:members")
+			@layouts.ManageHeader("People")
 			@peopleSections(cc, members, transfer, csrfToken, errMsg, smtpConfigured)
 		</div>
 	}
@@ -66,6 +66,9 @@ templ MemberListComponent(cc *CampaignContext, members []CampaignMember, csrfTok
 						<th class="px-6 py-3 text-left text-xs font-medium text-fg-secondary uppercase">Character</th>
 						<th class="px-6 py-3 text-left text-xs font-medium text-fg-secondary uppercase">Role</th>
 						<th class="px-6 py-3 text-left text-xs font-medium text-fg-secondary uppercase">Joined</th>
+						if showFoundryColumn(ctx, cc) {
+							<th class="px-6 py-3 text-left text-xs font-medium text-fg-secondary uppercase">In Foundry</th>
+						}
 						if cc.MemberRole >= RoleOwner {
 							<th class="px-6 py-3 text-right text-xs font-medium text-fg-secondary uppercase">Actions</th>
 						}
@@ -78,7 +81,7 @@ templ MemberListComponent(cc *CampaignContext, members []CampaignMember, csrfTok
 						}
 					} else {
 						<tr>
-							<td colspan="5" class="px-6 py-12 text-center">
+							<td colspan="6" class="px-6 py-12 text-center">
 								<div class="text-fg-muted text-sm">No members yet. Add someone above to get started.</div>
 							</td>
 						</tr>
@@ -86,7 +89,41 @@ templ MemberListComponent(cc *CampaignContext, members []CampaignMember, csrfTok
 				</tbody>
 			</table>
 		</div>
+		if showFoundryColumn(ctx, cc) {
+			// One request fills every "In Foundry" cell (out-of-band swaps by
+			// cell id); the sync plugin owns what Foundry reported.
+			<div hx-get={ fmt.Sprintf("/campaigns/%s/foundry/member-status", cc.Campaign.ID) } hx-trigger="load" hx-swap="none"></div>
+			<p class="text-xs text-fg-muted mt-2">
+				"In Foundry" shows whether each person is linked to a Foundry user. The
+				<a href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/foundry#foundry-players", cc.Campaign.ID)) } class="text-accent hover:underline">Foundry page</a>
+				says why and what to do.
+			</p>
+		}
+		if cc.MemberRole >= RoleOwner {
+			@roleGuide()
+		}
 	</div>
+}
+
+// roleGuide is "What each role can do", under the member table.
+templ roleGuide() {
+	<section class="card mt-6" aria-labelledby="role-guide-heading">
+		<h2 id="role-guide-heading" class="px-4 py-3 border-b border-edge text-sm font-semibold text-fg">What each role can do</h2>
+		<div class="grid gap-3 p-4 sm:grid-cols-3">
+			<div class="rounded-md border border-edge bg-surface-alt/50 p-3">
+				<p class="text-sm font-semibold text-fg">Player</p>
+				<p class="text-xs text-fg-secondary mt-0.5">Reads what they are shown and plays their own characters.</p>
+			</div>
+			<div class="rounded-md border border-edge bg-surface-alt/50 p-3">
+				<p class="text-sm font-semibold text-fg">Scribe</p>
+				<p class="text-xs text-fg-secondary mt-0.5">Also writes and edits pages.</p>
+			</div>
+			<div class="rounded-md border border-edge bg-surface-alt/50 p-3">
+				<p class="text-sm font-semibold text-fg">Co-DM</p>
+				<p class="text-xs text-fg-secondary mt-0.5">A Scribe who also sees and writes DM-only content. Cannot delete the campaign, remove people or take it over.</p>
+			</div>
+		</div>
+	</section>
 }
 
 // MemberRow renders a single member row in the table.
@@ -115,12 +152,22 @@ templ MemberRow(cc *CampaignContext, member *CampaignMember, csrfToken string) {
 				templ.KV("bg-blue-100 dark:bg-blue-900/30 text-blue-800 dark:text-blue-300", member.Role == RoleScribe),
 				templ.KV("bg-surface-alt text-fg-body", member.Role == RolePlayer),
 			}>
-				{ member.Role.DisplayName() }
+				{ MemberAccessLabel(cc.Campaign, *member) }
 			</span>
+			if cc.MemberRole >= RoleOwner {
+				if note := MemberAccessNote(cc.Campaign, *member); note != "" {
+					<p class="text-[11px] text-fg-muted mt-1 max-w-[16rem]">{ note }</p>
+				}
+			}
 		</td>
 		<td class="px-6 py-4 text-sm text-fg-secondary">
 			{ member.JoinedAt.Format("Jan 2, 2006") }
 		</td>
+		if showFoundryColumn(ctx, cc) {
+			<td class="px-6 py-4 text-sm">
+				<span id={ "foundry-status-" + member.UserID } class="text-xs text-fg-muted">&hellip;</span>
+			</td>
+		}
 		if cc.MemberRole >= RoleOwner {
 			<td class="px-6 py-4 text-right">
 				if member.Role != RoleOwner {
@@ -136,9 +183,10 @@ templ MemberRow(cc *CampaignContext, member *CampaignMember, csrfToken string) {
 						>
 							<input type="hidden" name="_method" value="PUT"/>
 							<input type="hidden" name="csrf_token" value={ csrfToken }/>
-							<select name="role" class="input text-xs py-1">
-								<option value="player" selected?={ member.Role == RolePlayer }>Player</option>
-								<option value="scribe" selected?={ member.Role == RoleScribe }>Scribe</option>
+							<select name="role" class="input text-xs py-1" aria-label={ "Role for " + member.DisplayName }>
+								<option value={ AccessPlayer } selected?={ MemberAccess(cc.Campaign, *member) == AccessPlayer }>Player</option>
+								<option value={ AccessScribe } selected?={ MemberAccess(cc.Campaign, *member) == AccessScribe }>Scribe</option>
+								<option value={ AccessCoDM } selected?={ MemberAccess(cc.Campaign, *member) == AccessCoDM }>Co-DM</option>
 							</select>
 							<button type="submit" class="text-xs text-accent hover:text-accent-hover">Save</button>
 						</form>

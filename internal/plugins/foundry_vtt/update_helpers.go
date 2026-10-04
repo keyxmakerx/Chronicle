@@ -6,7 +6,7 @@ import (
 )
 
 // Where the owner's update screens post and swap. The same actions serve the
-// dashboard line and the Apps & game system row; the form says which one to
+// dashboard line and the Foundry page's Module version card; the form says which one to
 // answer with so each swaps its own markup.
 const (
 	updateViewBanner = "banner"
@@ -44,12 +44,8 @@ func hxCSRFHeaders(token string) string {
 	return string(b)
 }
 
-// extensionsURL is the campaign's Apps & game system page.
-func extensionsURL(campaignID string) string {
-	return fmt.Sprintf("/campaigns/%s/extensions", campaignID)
-}
-
-// setupGuideURL is the campaign's Foundry setup guide.
-func setupGuideURL(campaignID string) string {
-	return fmt.Sprintf("/campaigns/%s/settings?tab=integrations", campaignID)
+// foundryPageURL is the owner's Foundry page, where the module version, the
+// install link and the setup steps all live.
+func foundryPageURL(campaignID string) string {
+	return fmt.Sprintf("/campaigns/%s/foundry", campaignID)
 }

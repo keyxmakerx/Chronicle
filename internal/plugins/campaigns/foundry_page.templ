@@ -1,0 +1,126 @@
+// foundry_page.templ — the owner's Foundry page (see foundry_page.go).
+
+package campaigns
+
+import (
+	"fmt"
+	"strconv"
+
+	"github.com/keyxmakerx/chronicle/internal/templates/layouts"
+)
+
+// FoundryPageView is the full page. Cards owned by other plugins load by
+// hx-get into placeholders that say what is loading.
+templ FoundryPageView(cc *CampaignContext, row FoundryRowData, checks []FoundryCheck, csrfToken string) {
+	@layouts.App(cc.Campaign.Name + " - Foundry") {
+		<div class="max-w-5xl mx-auto px-4 py-6" data-foundry-page>
+			@layouts.ManageHeader("Foundry")
+			<p class="-mt-4 mb-4 text-sm text-fg-secondary max-w-prose">
+				Your Foundry world's link to this campaign: whether it is working, which module version it runs, and how to install it.
+			</p>
+			if !row.Wired {
+				<section class="card p-4">
+					<p class="text-sm text-fg-secondary">Foundry sync is not available on this Chronicle site.</p>
+				</section>
+			} else {
+				@foundrySummaryStrip(row, checks)
+				<div class="space-y-6">
+					@foundryChecksCard(checks)
+					<section id="foundry-problems" class="card scroll-mt-4" aria-labelledby="foundry-problems-heading">
+						<div class="flex flex-wrap items-center gap-2 px-4 py-3 border-b border-edge">
+							<h2 id="foundry-problems-heading" class="text-base font-semibold text-fg flex-1">Recent problems</h2>
+							<a href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/sync-history", cc.Campaign.ID)) } class="btn-secondary text-xs">Open sync history</a>
+						</div>
+						<div hx-get={ fmt.Sprintf("/campaigns/%s/foundry/problems", cc.Campaign.ID) } hx-trigger="load" hx-swap="outerHTML">
+							<p class="px-4 py-3 text-sm text-fg-muted">Loading recent problems&hellip;</p>
+						</div>
+					</section>
+					<section id="foundry-players" class="card scroll-mt-4" aria-labelledby="foundry-players-heading">
+						<div class="px-4 py-3 border-b border-edge">
+							<h2 id="foundry-players-heading" class="text-base font-semibold text-fg">Players in Foundry</h2>
+							<p class="text-xs text-fg-muted mt-0.5">Players sync through your Foundry world as the member they're linked to; they never need their own link or key.</p>
+						</div>
+						<div hx-get={ fmt.Sprintf("/campaigns/%s/foundry/players", cc.Campaign.ID) } hx-trigger="load" hx-swap="outerHTML">
+							<p class="px-4 py-3 text-sm text-fg-muted">Loading players&hellip;</p>
+						</div>
+					</section>
+					<section id="foundry-connection" class="card scroll-mt-4" aria-labelledby="foundry-connection-heading">
+						<div class="px-4 py-3 border-b border-edge">
+							<h2 id="foundry-connection-heading" class="text-base font-semibold text-fg">Connection</h2>
+							<p class="text-xs text-fg-muted mt-0.5">The connect line links your Foundry world to this campaign. Making a new one leaves the old one working.</p>
+						</div>
+						<ul class="px-4">
+							@foundryConnectRow(cc, row, csrfToken)
+						</ul>
+						<div class="px-4 pb-4" hx-get={ fmt.Sprintf("/campaigns/%s/api-keys/sync-overview", cc.Campaign.ID) } hx-trigger="load" hx-swap="innerHTML"></div>
+					</section>
+					<div id="foundry-version" class="scroll-mt-4">
+						<h2 class="text-base font-semibold text-fg mb-2">Module version</h2>
+						<div hx-get={ fmt.Sprintf("/campaigns/%s/foundry-vtt/apps-row", cc.Campaign.ID) } hx-trigger="load" hx-swap="outerHTML">
+							<p class="card p-4 text-sm text-fg-muted">Loading the module version&hellip;</p>
+						</div>
+					</div>
+					<section id="foundry-install" class="scroll-mt-4" aria-labelledby="foundry-install-heading">
+						<h2 id="foundry-install-heading" class="text-base font-semibold text-fg mb-2">Install in Foundry</h2>
+						<div hx-get={ fmt.Sprintf("/campaigns/%s/foundry-vtt/settings-tab", cc.Campaign.ID) } hx-trigger="load" hx-swap="innerHTML">
+							<p class="card p-4 text-sm text-fg-muted">Loading the install link&hellip;</p>
+						</div>
+					</section>
+				</div>
+			}
+		</div>
+	}
+}
+
+// foundrySummaryStrip is the row of quick facts at the top; each jumps to the
+// card that explains it.
+templ foundrySummaryStrip(row FoundryRowData, checks []FoundryCheck) {
+	<div class="flex flex-wrap gap-2 mb-6" data-foundry-summary>
+		<a href="#foundry-connection" class="card px-3 py-2 text-sm text-fg flex items-center gap-2 hover:bg-surface-alt">
+			<span class={ "inline-block w-2 h-2 rounded-full", foundryDotClass(row.Status.Level) } aria-hidden="true"></span>
+			World: <b>{ row.Status.Text }</b>
+		</a>
+		<a href="#foundry-version" class="card px-3 py-2 text-sm text-fg hover:bg-surface-alt">
+			if row.ModuleVersion != "" {
+				Module <b class="tabular-nums">{ row.ModuleVersion }</b>
+			} else {
+				Module version <b>unknown</b>
+			}
+		</a>
+		if n := foundryChecksNeedingLook(checks); n > 0 {
+			<a href="#foundry-checks" class="card px-3 py-2 text-sm text-fg hover:bg-surface-alt border-amber-500/50">
+				To look at: <b class="text-amber-700 dark:text-amber-400">{ strconv.Itoa(n) }</b>
+			</a>
+		} else {
+			<a href="#foundry-checks" class="card px-3 py-2 text-sm text-fg hover:bg-surface-alt">
+				Checks: <b class="text-emerald-700 dark:text-emerald-400">all good</b>
+			</a>
+		}
+	</div>
+}
+
+// foundryChecksCard is "Is everything working?".
+templ foundryChecksCard(checks []FoundryCheck) {
+	<section id="foundry-checks" class="card scroll-mt-4" aria-labelledby="foundry-checks-heading">
+		<div class="flex flex-wrap items-center gap-2 px-4 py-3 border-b border-edge">
+			<div class="flex-1 min-w-0">
+				<h2 id="foundry-checks-heading" class="text-base font-semibold text-fg">Is everything working?</h2>
+				<p class="text-xs text-fg-muted mt-0.5">From what your Foundry world last told Chronicle. Reload the page to check again.</p>
+			</div>
+		</div>
+		<ul class="divide-y divide-edge">
+			for _, ck := range checks {
+				<li class="flex items-start gap-3 px-4 py-3" data-foundry-check={ string(ck.Level) }>
+					<span class={ "w-6 h-6 rounded-full text-xs font-bold flex items-center justify-center shrink-0", foundryCheckBadgeClass(ck.Level) } aria-hidden="true">{ foundryCheckGlyph(ck.Level) }</span>
+					<div class="min-w-0">
+						<p class="text-sm font-medium text-fg"><span class="sr-only">{ foundryCheckSR(ck.Level) }</span>{ ck.Title }</p>
+						<p class="text-xs text-fg-secondary mt-0.5">{ ck.Detail }</p>
+					</div>
+				</li>
+			}
+		</ul>
+		<p class="px-4 py-2 text-xs text-fg-muted border-t border-edge bg-surface-alt/50 rounded-b-md">
+			Site admins also see request logs and blocked addresses for the whole site. Everything about this campaign is on this page.
+		</p>
+	</section>
+}

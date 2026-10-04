@@ -51,7 +51,7 @@ func RegisterCampaignRoutes(e *echo.Echo, h *Handler, campaignSvc campaigns.Camp
 	cg.GET("/api-keys/sync-overview", h.SyncOverviewFragment, campaigns.RequireRole(campaigns.RoleOwner))
 	cg.GET("/api-keys/sync-mappings", h.SyncMappingsFragment, campaigns.RequireRole(campaigns.RoleOwner))
 
-	// Integrations tab fragments (owner only — HTMX-loaded within Settings page).
+	// API keys tab fragments (owner only — HTMX-loaded within Settings page).
 	cg.GET("/integrations/keys", h.IntegrationsKeysFragment, campaigns.RequireRole(campaigns.RoleOwner))
 
 	// Calendar sync beacon: any campaign member may read — NO RequireRole,
@@ -192,6 +192,7 @@ func RegisterAPIRoutes(e *echo.Echo, api *APIHandler, calAPI *CalendarAPIHandler
 	calGroup.GET("/calendar/event-categories", retiredCalendarRoute(retiredEventCategories))
 	calGroup.GET("/calendar/structure", calAPI.GetStructure, RequirePermission(PermRead))
 	calGroup.GET("/calendar/weather", calAPI.GetWeather, RequirePermission(PermRead))
+	calGroup.GET("/calendar/weather/days", calAPI.ListDayWeather, RequirePermission(PermRead))
 	calGroup.GET("/calendar/world-state", retiredCalendarRoute("GET /calendar/date carries the current season, moon phases and weather."))
 	calGroup.GET("/calendar/cycles", calAPI.GetCycles, RequirePermission(PermRead))
 	calGroup.GET("/calendar/festivals", calAPI.GetFestivals, RequirePermission(PermRead))
@@ -206,11 +207,9 @@ func RegisterAPIRoutes(e *echo.Echo, api *APIHandler, calAPI *CalendarAPIHandler
 	cg.DELETE("/entities/:entityID", api.DeleteEntity, RequirePermission(PermWrite))
 
 	// Calendar write endpoints (require "write" permission + calendar addon).
-	// POST /calendar creates a campaign's first calendar from the module's
-	// Calendaria payload. The structure, advance and import routes after it
-	// are retired: the module never called them, and V5 edits structure only
-	// in Chronicle's calendar.
-	calGroup.POST("/calendar", calAPI.CreateCalendar, RequirePermission(PermWrite))
+	// Creating a calendar and the structure, advance and import routes are
+	// retired: V5 creates and edits calendars only in Chronicle's calendar.
+	calGroup.POST("/calendar", retiredCalendarRoute(retiredCreate))
 	calGroup.POST("/calendar/events", calAPI.CreateEvent, RequirePermission(PermWrite))
 	calGroup.PUT("/calendar/events/:eventID", calAPI.UpdateEvent, RequirePermission(PermWrite))
 	calGroup.DELETE("/calendar/events/:eventID", calAPI.DeleteEvent, RequirePermission(PermWrite))
@@ -314,6 +313,9 @@ func RegisterAPIRoutes(e *echo.Echo, api *APIHandler, calAPI *CalendarAPIHandler
 	if api.history != nil {
 		cg.GET("/sync/history", api.history.ListHistory, RequirePermission(PermSync))
 		cg.POST("/sync/history", api.history.ReportHistory, RequirePermission(PermSync))
+		// Who is in the Foundry world and which member each user is linked
+		// to, from the GM's client. Owner or DM access only (in the handler).
+		cg.POST("/sync/players", api.history.ReportPlayers, RequirePermission(PermSync))
 	}
 
 	// Stashes: move items and money as a named campaign member. The group is

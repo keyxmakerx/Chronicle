@@ -15,6 +15,7 @@ internal/plugins/media/service.go	sanitize_calls=0	html_params=-	html_struct_fie
 internal/plugins/npcs/service.go	sanitize_calls=0	html_params=-	html_struct_fields=-
 internal/plugins/packages/service.go	sanitize_calls=0	html_params=-	html_struct_fields=-
 internal/plugins/restore/service.go	sanitize_calls=0	html_params=-	html_struct_fields=-
+internal/plugins/rolltables/service.go	sanitize_calls=0	html_params=-	html_struct_fields=-
 internal/plugins/sessions/service.go	sanitize_calls=1	html_params=recapHTML	html_struct_fields=NotesHTML,RecapHTML
 internal/plugins/settings/service.go	sanitize_calls=0	html_params=-	html_struct_fields=-
 internal/plugins/smtp/service.go	sanitize_calls=0	html_params=-	html_struct_fields=-

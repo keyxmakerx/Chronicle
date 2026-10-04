@@ -646,6 +646,10 @@
     var same = prev && prev.calendar.current_year === cal.current_year && prev.calendar.current_month === cal.current_month && prev.calendar.current_day === cal.current_day;
     this.model = { calendar: cal, todayEvents: events || [], dayWeather: same ? prev.dayWeather : null, skym: SW.makeSkym(cal), landSeed: hashSeed(this.o.seed), width: 0, height: 0, reduced: this.rm, glide: glide };
     this.redraw();
+    // A new time on the same day (a preview's time of day) keeps the reading it has.
+    var day = [cal.current_year, cal.current_month, cal.current_day].join('-');
+    if (same && this._wxDay === day) return;
+    this._wxDay = day;
     var tok = this._wxTok = (this._wxTok || 0) + 1;
     if (this.o.campaignId && this.o.calendarId) fetchDayWeather(this.o.campaignId, this.o.calendarId, cal).then(function (w) {
       if (tok !== self._wxTok || !self.model || JSON.stringify(w) === JSON.stringify(self.model.dayWeather)) return;

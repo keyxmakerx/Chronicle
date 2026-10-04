@@ -41,7 +41,7 @@ func (a calendarDiagAdapter) CalendarStats(ctx context.Context, campaignID strin
 	out := systems.CalendarStatsFacts{
 		CampaignID: campaignID,
 		// Reported as a fact of the current build, not a live read.
-		FoundrySyncState: "on V5: date, events, weather and the Calendaria import are served; pre-V5 structure routes answer 410 calendar_route_retired",
+		FoundrySyncState: "on V5: date, events and weather are served; creating a calendar and the pre-V5 structure routes answer 410 calendar_route_retired",
 	}
 	camp, err := a.campaigns.GetByID(ctx, campaignID)
 	if err != nil {

@@ -504,16 +504,18 @@ func (h *Handler) GenerateAIExport(c echo.Context) error {
 // factory per-request with the live CampaignContext, so the tab's
 // content closure can bind cc.Campaign.ID into the form URLs etc.
 //
-// Slot 55 lands the tab between AI Export (50) and Activity (60);
-// pinned by TestRegisterSettingsTab_MergesAndSorts.
+// The tab is Settings' "Data & AI": the campaign's own export and import
+// first, then the AI tools. It takes the place of the built-in Data tab,
+// which campaigns shows only when this plugin is not wired. Slot 50 sits
+// between API keys (40) and Activity (60).
 func (h *Handler) SettingsTabFactory() func(*campaigns.CampaignContext) campaigns.SettingsTab {
 	return func(cc *campaigns.CampaignContext) campaigns.SettingsTab {
 		return campaigns.SettingsTab{
 			ID:        "ai-workspace",
-			Label:     "AI Workspace",
-			Icon:      "fa-solid fa-wand-magic-sparkles",
+			Label:     "Data & AI",
+			Icon:      "fa-solid fa-database",
 			MinRole:   campaigns.RoleOwner,
-			SortOrder: 55,
+			SortOrder: 50,
 			Content:   SettingsTabBody(cc),
 		}
 	}

@@ -1,0 +1,42 @@
+package entities
+
+import (
+	"fmt"
+
+	"github.com/keyxmakerx/chronicle/internal/plugins/campaigns"
+)
+
+// The page pieces that are blocks rather than sections under every layout
+// (see page_extras.go). Each reads what the show handler put on the request.
+
+// blockSubPages lists the page's sub-pages; scribes see it even when empty
+// so they can add one.
+templ blockSubPages(cc *campaigns.CampaignContext, entity *Entity) {
+	if children := pageChildren(ctx); len(children) > 0 || cc.MemberRole >= campaigns.RoleScribe {
+		@blockChildren(cc, entity, children)
+	}
+}
+
+// blockWritingPrompts is the writing-prompts panel, for the people who write.
+templ blockWritingPrompts(cc *campaigns.CampaignContext, entityType *EntityType) {
+	if cc.MemberRole >= campaigns.RoleScribe && entityType != nil {
+		@WorldbuildingPromptsPanel(cc.Campaign.ID, entityType.ID)
+	}
+}
+
+// blockBacklinksMount loads the pages that mention this one.
+templ blockBacklinksMount(cc *campaigns.CampaignContext, entity *Entity) {
+	<div
+		hx-get={ fmt.Sprintf("/campaigns/%s/entities/%s/backlinks", cc.Campaign.ID, entity.ID) }
+		hx-trigger="load"
+		hx-swap="innerHTML"
+	></div>
+}
+
+// blockCharacterItems loads the items-and-money panel another plugin serves;
+// it renders nothing when that plugin is off or the page is not a character.
+templ blockCharacterItems() {
+	if u := pagePanelURL(ctx); u != "" {
+		<div hx-get={ u } hx-trigger="load" hx-swap="outerHTML"></div>
+	}
+}

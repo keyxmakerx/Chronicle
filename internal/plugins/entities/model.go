@@ -117,11 +117,10 @@ func CharacterLayout() EntityTypeLayout {
 }
 
 // DefaultLayout returns the standard two-column layout used for new entity types.
-// Includes a full-width player-notes block so operators get per-player notes
-// on every new type without hunting through edit forms; it is
-// addon/identity-gated at render time, so it costs nothing on types where it
-// doesn't apply. Visibility editing lives only in edit mode, not an
-// auto-appended read-page row (ADR-057 decision 5).
+// It holds only the page's own content: player notes and the other page
+// pieces are blocks the owner adds (only character pages start with player
+// notes, in CharacterLayout). Visibility editing lives only in edit mode, not
+// an auto-appended read-page row (ADR-057 decision 5).
 func DefaultLayout() EntityTypeLayout {
 	return EntityTypeLayout{
 		Rows: []TemplateRow{
@@ -147,16 +146,14 @@ func DefaultLayout() EntityTypeLayout {
 					},
 				},
 			},
-			entityNotesRow("row-notes", "col-notes", "blk-notes"),
 		},
 	}
 }
 
 // entityNotesRow builds a full-width row holding the player-notes
-// (entity_notes) block. Shared by CharacterLayout and DefaultLayout so the
-// block's placement stays identical across the built-in layouts. The block
-// is gated by the "player-notes" addon at render time, so it renders nothing
-// when the addon is off — safe to include on every default layout.
+// (entity_notes) block for CharacterLayout. The block is gated by the
+// "player-notes" addon at render time, so it renders nothing when the addon
+// is off.
 func entityNotesRow(rowID, colID, blockID string) TemplateRow {
 	return TemplateRow{
 		ID: rowID,

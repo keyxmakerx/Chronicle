@@ -905,7 +905,7 @@ Also under this ADR: the partial-update contract test only recognised structs na
 
 ## ADR-057: One visibility glance, shown to those who can change it, edited only in edit mode
 
-**Status:** Accepted; amended to Option B — editing opens from the glance icon (click, Owner only) as the widget's existing right-edge slide-in card, rather than a hover popover. Hover stays the read-only key; the edit form's old inline mount is retired.
+**Status:** Accepted; amended to Option B — editing opens from the glance icon (click, Owner only) as the widget's existing right-edge slide-in card, rather than a hover popover. Hover stays the read-only key; the edit form's old inline mount is retired. Amended again (#1077): the page's glance stands at the top-right of the page, on the breadcrumb line, as a labelled control; the Owner clicks it and the editor unfolds from it as a popover. Clicking outside closes it only when nothing is unsaved.
 
 **Context:** An operator asked for one visibility icon near the entity name that the DM team can glance at and click through to edit, replacing four separate implementations of the same three-glyph vocabulary (`fa-globe`/`fa-lock`/`fa-shield-halved`) — one of which (the "Details" card) showed even to Players, hard-coded a color no theme defines, and one of which (the "Permissions" row) was the editor bolted onto the read page. Two defects were found alongside: a Co-DM could not open a DM-only entity, because most `CheckEntityAccess` call sites passed raw `MemberRole` instead of `VisibilityRole()` (which promotes a DM grant to Owner); and a Scribe editing a DM-only entity was shown a wrong, default "Permissions · Everyone" because the widget swallowed a 403 on load and rendered its init defaults.
 

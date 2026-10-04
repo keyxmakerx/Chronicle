@@ -44,6 +44,7 @@ import (
 	"github.com/keyxmakerx/chronicle/internal/plugins/npcs"
 	"github.com/keyxmakerx/chronicle/internal/plugins/packages"
 	"github.com/keyxmakerx/chronicle/internal/plugins/restore"
+	"github.com/keyxmakerx/chronicle/internal/plugins/rolltables"
 	"github.com/keyxmakerx/chronicle/internal/plugins/sessions"
 	"github.com/keyxmakerx/chronicle/internal/plugins/settings"
 	"github.com/keyxmakerx/chronicle/internal/plugins/smtp"
@@ -379,10 +380,15 @@ type foundryConnectorAdapter struct {
 		FoundryPresence(campaignID string) (*time.Time, bool)
 	}
 	baseURL string
+	// served names the module version the campaign's world is served, so the
+	// Foundry page can say when Foundry still runs an older one. May be nil.
+	served interface {
+		View(ctx context.Context, campaignID string) (*foundry_vtt.OwnerUpdateView, error)
+	}
 }
 
 // foundryConnectKeyName and foundryConnectVTTTag mark keys minted from the
-// Apps & game system page; the tag matches the value the Integrations form's
+// Foundry page; the tag matches the value the Integrations form's
 // Foundry option stores, so these keys group with hand-made Foundry keys.
 const (
 	foundryConnectKeyName = "Foundry connect line"
@@ -433,6 +439,13 @@ func (a *foundryConnectorAdapter) FoundryConnection(ctx context.Context, campaig
 		// after escaping so it stays a literal character.
 		if line, err := campaigns.BuildFoundryConnectLine(a.baseURL, campaignID, conn.KeyPrefix); err == nil {
 			conn.LinePreview = line + "\u2026"
+		}
+	}
+	if a.served != nil {
+		// A failed lookup only hides the version check; the rest of the page
+		// still answers.
+		if v, err := a.served.View(ctx, campaignID); err == nil && v != nil {
+			conn.ServedVersion = v.Running
 		}
 	}
 	return conn, nil
@@ -2427,25 +2440,14 @@ func (a *App) RegisterRoutes() {
 		}
 	}()
 
-	// One-shot boot reconcilers for entity_types, run SERIALLY in a single
-	// goroutine: any two reconcilers that each read a full pre-backfill
-	// snapshot and rewrite the whole layout_json per row would have the
-	// second clobber the first's block on a type missing both. A new
-	// layout_json reconciler must join this chain, not start its own
-	// goroutine. gm_only field-flag sync runs last since it touches a
-	// different column (fields, not layout_json). Each step is idempotent;
-	// a failure is logged and the chain continues.
+	// Boot reconcilers for entity_types fields, run SERIALLY in a single
+	// goroutine. They write only the fields column; the one layout_json
+	// reconciler (placePageExtrasOnce) runs synchronously later in boot, so
+	// no two reconcilers rewrite the same layout. A new layout_json
+	// reconciler must run beside that one, not in a goroutine of its own.
+	// Each step is idempotent; a failure is logged and the chain continues.
 	go func() {
 		ctx := context.Background()
-
-		// Player Notes was only wired into new default layouts, so custom
-		// sub-categories created earlier never showed the block even with
-		// the addon enabled.
-		if n, err := entityService.EnsureEntityNotesBlockInDefaults(ctx); err != nil {
-			slog.Warn("entity_types: player-notes block backfill failed", slog.Any("error", err))
-		} else if n > 0 {
-			slog.Info("entity_types: player-notes block backfill added to layouts", slog.Int("rows", n))
-		}
 
 		// Converge gm_only field flags from installed system manifests onto
 		// existing types so the GM-field egress filter covers characters
@@ -3139,10 +3141,13 @@ func (a *App) RegisterRoutes() {
 		a.Config.BaseURL,
 	)
 	fvttHandler := foundry_vtt.NewHandler(fvttService)
+	// Also read by the Foundry page's version check; nil without packages.
+	var fvttOwnerUpdates foundry_vtt.OwnerUpdates
 	fvttHandler.SetActivityRecorder(adminActivity)
 	if pkgUpdateSvc != nil {
 		// Owners are asked before a new module version reaches their campaign.
-		fvttHandler.SetOwnerUpdates(foundry_vtt.NewOwnerUpdates(pkgUpdateSvc, pkgService))
+		fvttOwnerUpdates = foundry_vtt.NewOwnerUpdates(pkgUpdateSvc, pkgService)
+		fvttHandler.SetOwnerUpdates(fvttOwnerUpdates)
 		pkgHandler.SetOwnerReminder(packageOwnerReminder{fvtt: fvttService})
 	}
 	// The campaign show page lazy-loads /foundry-vtt/show-banner-fragment
@@ -3240,7 +3245,7 @@ func (a *App) RegisterRoutes() {
 	// decision and is left alone. Best-effort: logs and never blocks startup.
 	if n, err := syncapi.ReconcileAddonEnablement(context.Background(), syncService, addonService); err != nil {
 		slog.Error("sync-api addon enablement backfill failed; campaigns that already use the "+
-			"Sync API may be refused until an owner enables Sync API on the campaign's Apps & game system page (Manage → Apps & game system)",
+			"Sync API may be refused until an owner enables Sync API on the campaign's Game & features page (Manage → Game & features)",
 			slog.String("error", err.Error()))
 	} else if n > 0 {
 		slog.Info("sync-api addon enablement backfill complete", slog.Int("campaigns", n))
@@ -3691,12 +3696,16 @@ func (a *App) RegisterRoutes() {
 	syncHistoryRepo := syncapi.NewSyncHistoryRepository(a.DB)
 	syncHistoryHandler := syncapi.NewSyncHistoryHandler(syncHistoryRepo, campaignService, syncService,
 		syncHistoryEditorAdapter{audit: audit.NewAuditService(audit.NewAuditRepository(a.DB))})
+	// Who is in each campaign's Foundry world, as the GM's client reports it.
+	foundryPlayerRepo := syncapi.NewFoundryPlayerRepository(a.DB)
+	syncHistoryHandler.SetFoundryPlayers(foundryPlayerRepo)
 
 	if a.PluginHealth.IsHealthy("syncapi") {
 		syncapi.RegisterAPIRoutes(e, syncAPIHandler, calendarAPIHandler, mediaAPIHandler, mapAPIHandler, noteAPIHandler, tagAPIHandler, syncMappingHandler, syncChangesHandler, stashAPIHandler, syncService, addonService, authService, campaignService, syncapi.WithSyncHistory(syncHistoryHandler))
 		syncapi.RegisterSyncHistoryPageRoutes(e, syncHistoryHandler, campaignService, authService)
+		syncapi.RegisterFoundryPageRoutes(e, syncHistoryHandler, campaignService, authService)
 		syncapi.RegisterAdminSyncFlowRoute(adminGroup, syncHistoryHandler)
-		go syncapi.StartHistoryPruner(a.ShutdownCtx, syncHistoryRepo)
+		go syncapi.StartHistoryPruner(a.ShutdownCtx, syncHistoryRepo, foundryPlayerRepo)
 	}
 
 	// NPC plugin: gallery/hub view for revealed character entities.
@@ -3793,6 +3802,12 @@ func (a *App) RegisterRoutes() {
 	// The editor's @ page picker, as the player sees pages.
 	notesApp.GET("/entities/search", entityHandler.SearchAPI, campaigns.RequireViewAccess())
 	notesApp.GET("/entities/:eid/preview", entityHandler.PreviewAPI, campaigns.RequireViewAccess())
+	// The Foundry calendar window: the calendar page over the same grant,
+	// each route at its site gate, only while the calendar plugin is healthy.
+	if a.PluginHealth.IsHealthy(calendar.PluginSlug) {
+		calendar.RegisterAppRoutes(notesApp, calendarHandler, addonService)
+		noteGrantHandler.AllowEmbedMode(calendar.PluginSlug)
+	}
 
 	// Relations widget routes already registered above (before REST API v1).
 
@@ -3880,6 +3895,11 @@ func (a *App) RegisterRoutes() {
 	// This drives validation, rendering, and the template editor palette.
 	blockRegistry := entities.NewBlockRegistry()
 	entities.RegisterCoreBlocks(blockRegistry)
+	blockRegistry.Register(entities.BlockMeta{
+		Type: entities.BlockCharacterItems, Label: "Items & Money", Icon: "fa-sack-dollar",
+		Description: "What a character carries, their money and recent moves",
+		Addon:       armory.AddonSlug, Contexts: []string{"template"},
+	}, entities.RenderCharacterItemsBlock)
 
 	// Widget-binding framework: the dynamic host↔widget-type↔instance
 	// registry + service. Widget types register declaratively; the service
@@ -4117,6 +4137,15 @@ func (a *App) RegisterRoutes() {
 	showRegistry := entities.NewEntityShowRendererRegistry()
 	registerManifestRenderers(showRegistry)
 	entities.SetGlobalEntityShowRendererRegistry(showRegistry)
+
+	// One-time: place the page pieces that became blocks into existing
+	// layouts, so no page loses anything (see page_extras.go). Best-effort;
+	// a failure is retried on the next boot.
+	if n, err := placePageExtrasOnce(context.Background(), settingsRepo, campaignService, addonService, entityService); err != nil {
+		slog.Error("placing page extras failed", slog.String("error", err.Error()))
+	} else if n > 0 {
+		slog.Info("placed page extras into layouts", slog.Int("layouts", n))
+	}
 
 	campaignHandler.SetAuditLogger(&campaignAuditAdapter{svc: auditService})
 	campaignHandler.SetAddonLister(&addonListerAdapter{svc: addonService})
@@ -4765,7 +4794,7 @@ func (a *App) RegisterRoutes() {
 	// Real-time bidirectional sync for Foundry VTT and browser clients.
 	wsHub := ws.NewHub()
 	go wsHub.Run()
-	campaignHandler.SetFoundryConnector(&foundryConnectorAdapter{keys: syncService, hub: wsHub, baseURL: a.Config.BaseURL})
+	campaignHandler.SetFoundryConnector(&foundryConnectorAdapter{keys: syncService, hub: wsHub, baseURL: a.Config.BaseURL, served: fvttOwnerUpdates})
 
 	// Late-bind now that wsHub exists — see wsRevokerHolder above. From
 	// here on, every wired revoke path force-disconnects the sockets it
@@ -4852,6 +4881,15 @@ func (a *App) RegisterRoutes() {
 		syncAPIHandler.SetSystemStateReader(&systemStateSyncReader{svc: systemStateSvc})
 	} else {
 		slog.Warn("systemstate plugin degraded — routes not registered")
+	}
+
+	// Per-campaign rolling tables: the DM team edits them, scribes may roll.
+	if a.PluginHealth.IsHealthy(rolltables.PluginSlug) {
+		rolltables.RegisterRoutes(e,
+			rolltables.NewHandler(rolltables.NewService(rolltables.NewRepository(a.DB))),
+			campaignService, authService)
+	} else {
+		slog.Warn("rolltables plugin degraded — routes not registered")
 	}
 
 	// Late-bind the entity_notes notifier now that wsEventBus exists.

@@ -236,22 +236,6 @@ templ createTimelineModal(data TimelineListData) {
 			</form>
 		</div>
 	</div>
-	<script>
-		function timelineCreateForm() {
-			return {
-				calendarId: '',
-				calendars: [],
-				init() {
-					// Fetch available calendars for this campaign.
-					var campaignID = window.location.pathname.split('/campaigns/')[1].split('/')[0];
-					Chronicle.apiFetch('/campaigns/' + campaignID + '/timelines/calendars')
-						.then(function(r) { return r.json(); })
-						.then(function(data) { this.calendars = data || []; }.bind(this))
-						.catch(function(err) { console.warn('[timeline] Failed to load calendars:', err); });
-				}
-			};
-		}
-	</script>
 }
 
 // TimelineShowPage renders the full timeline detail page.

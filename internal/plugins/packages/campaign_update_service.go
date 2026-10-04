@@ -420,8 +420,16 @@ func (s *campaignUpdateService) SetMode(ctx context.Context, in SetUpdateModeInp
 	mu.Lock()
 	defer mu.Unlock()
 
+	if err := s.requireUses(ctx, b, in.CampaignID, pkg); err != nil {
+		return nil, err
+	}
 	cur, err := s.stateOf(ctx, b, in.CampaignID, pkg)
 	if err != nil {
+		return nil, err
+	}
+	// An owner cannot change how updates arrive while the site admin holds
+	// the campaign: "automatic" would move it off the held version.
+	if err := ownerMayMove(cur, actor); err != nil {
 		return nil, err
 	}
 
