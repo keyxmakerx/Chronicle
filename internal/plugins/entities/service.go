@@ -64,6 +64,9 @@ type EntityService interface {
 
 	// Entity types
 	GetEntityTypes(ctx context.Context, campaignID string) ([]EntityType, error)
+	// PlacePageExtras places the page pieces that used to be drawn outside
+	// the layout into a campaign's entity types (see page_extras.go).
+	PlacePageExtras(ctx context.Context, campaignID string, plans map[int]PageExtrasPlan) (int, error)
 	GetEntityTypeBySlug(ctx context.Context, campaignID, slug string) (*EntityType, error)
 	GetEntityTypeByID(ctx context.Context, id int) (*EntityType, error)
 	GetEntityTypesByPresetCategory(ctx context.Context, campaignID, category string) ([]EntityType, error)
@@ -201,13 +204,6 @@ type EntityService interface {
 	// Returns the count of healed rows. Idempotent; safe to call on
 	// every boot.
 	HealAutoPluralizedTypes(ctx context.Context) (int, error)
-
-	// EnsureEntityNotesBlockInDefaults walks every entity_types row and
-	// inserts a player-notes (entity_notes) block if one isn't already
-	// present, so custom types created before Player Notes was added to
-	// the default layouts still get the block. Returns the
-	// count of types updated. Idempotent; safe to call on every boot.
-	EnsureEntityNotesBlockInDefaults(ctx context.Context) (int, error)
 
 	// SyncFieldGMFlags re-stamps the GMOnly flag on stored entity-type field
 	// definitions from a caller-supplied (preset-category → field-key →
@@ -2940,63 +2936,6 @@ func (s *entityService) HealAutoPluralizedTypes(ctx context.Context) (int, error
 	return healer.HealDoubledPluralS(ctx)
 }
 
-// EnsureEntityNotesBlockInDefaults walks every entity_types row and inserts
-// a player-notes (entity_notes) block if the layout doesn't already contain
-// one, so existing custom types get the Player Notes surface. Player Notes
-// were only in no built-in layout before, so a custom sub-category created
-// before this change never showed the block even with the addon on
-// (cordinator#7).
-//
-// The new row is inserted just ahead of a "permissions"-typed row, if the
-// layout happens to have one — ADR-057 decision 5 stopped generating those
-// for new/default layouts, but a layout stored before that change can still
-// carry one, and this keeps notes ordered above it in that case. A layout
-// with no such row appends at the end. Idempotent — a second call is a
-// no-op. Best-effort — a failure on one row logs and continues so a single
-// bad layout JSON can't block boot. The block is addon-gated at render time,
-// so backfilling a type whose campaign has the player-notes addon off is
-// harmless (it renders nothing).
-func (s *entityService) EnsureEntityNotesBlockInDefaults(ctx context.Context) (int, error) {
-	if s.types == nil {
-		return 0, nil
-	}
-	types, err := s.types.ListAll(ctx)
-	if err != nil {
-		return 0, fmt.Errorf("listing entity types for player-notes heal: %w", err)
-	}
-
-	updated := 0
-	for i := range types {
-		et := &types[i]
-		if layoutContainsBlockType(et.Layout, "entity_notes") {
-			continue
-		}
-		notesRow := entityNotesRow(
-			fmt.Sprintf("row-notes-%d", et.ID),
-			fmt.Sprintf("col-notes-%d", et.ID),
-			fmt.Sprintf("blk-notes-%d", et.ID),
-		)
-		et.Layout.Rows = insertRowBeforeBlockType(et.Layout.Rows, "permissions", notesRow)
-		layoutJSON, mErr := json.Marshal(et.Layout)
-		if mErr != nil {
-			slog.Warn("player-notes heal: failed to marshal layout",
-				slog.Int("entity_type_id", et.ID),
-				slog.Any("error", mErr),
-			)
-			continue
-		}
-		if uErr := s.types.UpdateLayout(ctx, et.ID, string(layoutJSON)); uErr != nil {
-			slog.Warn("player-notes heal: failed to update layout",
-				slog.Int("entity_type_id", et.ID),
-				slog.Any("error", uErr),
-			)
-			continue
-		}
-		updated++
-	}
-	return updated, nil
-}
-
 // SyncFieldGMFlags re-stamps FieldDefinition.GMOnly on stored entity types
 // from a (preset-category → field-key → gm_only) map. When a system manifest
 // newly marks a field gm_only (e.g. Draw Steel's gm_notes), preset
@@ -3080,42 +3019,6 @@ func (s *entityService) syncFieldFlag(
 		updated++
 	}
 	return updated, nil
-}
-
-// insertRowBeforeBlockType returns rows with `row` inserted just before the
-// first row that contains a block of beforeType. If no such row exists it
-// appends `row` at the end. Used to place the player-notes row above the
-// permissions strip while staying a no-op-safe append for layouts without one.
-func insertRowBeforeBlockType(rows []TemplateRow, beforeType string, row TemplateRow) []TemplateRow {
-	for i, r := range rows {
-		for _, col := range r.Columns {
-			for _, blk := range col.Blocks {
-				if blk.Type == beforeType {
-					out := make([]TemplateRow, 0, len(rows)+1)
-					out = append(out, rows[:i]...)
-					out = append(out, row)
-					out = append(out, rows[i:]...)
-					return out
-				}
-			}
-		}
-	}
-	return append(rows, row)
-}
-
-// layoutContainsBlockType returns true if the layout already has a block
-// of the given type anywhere in any row/column.
-func layoutContainsBlockType(layout EntityTypeLayout, blockType string) bool {
-	for _, row := range layout.Rows {
-		for _, col := range row.Columns {
-			for _, blk := range col.Blocks {
-				if blk.Type == blockType {
-					return true
-				}
-			}
-		}
-	}
-	return false
 }
 
 // isEditorDoc reports whether an entry body is editor JSON (a JSON object)

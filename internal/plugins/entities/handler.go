@@ -688,11 +688,22 @@ func (h *Handler) Show(c echo.Context) error {
 		ctx = WithEffectiveVisibility(ctx, &ev)
 	}
 
-	// Optional panel another plugin hangs under character pages (items and
-	// money). Only the cheap type pre-filter and the addon switch run here.
-	if p := h.characterPanel; p != nil && p.URL != nil && mayHoldCharacterPanel(entityType) &&
-		h.isAddonEnabled(c.Request().Context(), cc.Campaign.ID, p.Addon) {
-		ctx = withPagePanelURL(ctx, p.URL(cc.Campaign.ID, entity.ID))
+	ctx = withPageChildren(ctx, children)
+
+	// The items-and-money panel another plugin serves: drawn where the layout
+	// places it, and on its own only on player-character pages without it
+	// (or a page a game-system renderer owns, which has no layout to place
+	// it in). The addon switch is only checked when one of those applies.
+	if p := h.characterPanel; p != nil && p.URL != nil {
+		auto := autoCharacterPanel(entityType) ||
+			(hasEntityShowRenderer(entityType) && mayHoldCharacterPanel(entityType))
+		placed := layoutPlacesBlock(entityType.Layout, BlockCharacterItems)
+		if (auto || placed) && h.isAddonEnabled(c.Request().Context(), cc.Campaign.ID, p.Addon) {
+			ctx = withPagePanelURL(ctx, p.URL(cc.Campaign.ID, entity.ID))
+			if auto {
+				ctx = withAutoPagePanel(ctx)
+			}
+		}
 	}
 
 	// Widget panels the enabled game system mounts under the title. The

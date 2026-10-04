@@ -148,6 +148,47 @@ func RegisterCoreBlocks(r *BlockRegistry) {
 		return blockTransactionLog(ctx.CC, ctx.Entity)
 	})
 
+	// Page pieces that used to be drawn under every layout; see page_extras.go.
+	r.Register(BlockMeta{
+		Type: BlockSubPages, Label: "Sub-pages", Icon: "fa-sitemap",
+		Description: "This page's sub-pages, with a button to add one",
+		Contexts:    []string{"template"},
+	}, func(ctx BlockRenderContext) templ.Component {
+		return blockSubPages(ctx.CC, ctx.Entity)
+	})
+
+	r.Register(BlockMeta{
+		Type: BlockWritingPrompts, Label: "Writing Prompts", Icon: "fa-lightbulb",
+		Description: "Prompts to help write this page (shown to scribes and the owner)",
+		Contexts:    []string{"template"},
+	}, func(ctx BlockRenderContext) templ.Component {
+		return blockWritingPrompts(ctx.CC, ctx.EntityType)
+	})
+
+	r.Register(BlockMeta{
+		Type: BlockBacklinks, Label: "Backlinks", Icon: "fa-link",
+		Description: "Pages that mention this one",
+		Contexts:    []string{"template"},
+	}, func(ctx BlockRenderContext) templ.Component {
+		return blockBacklinksMount(ctx.CC, ctx.Entity)
+	})
+
+	r.Register(BlockMeta{
+		Type: BlockSystemPanels, Label: "Game System Panels", Icon: "fa-dice-d20",
+		Description: "Panels the game system adds to NPC pages",
+		Contexts:    []string{"template"},
+	}, func(ctx BlockRenderContext) templ.Component {
+		return entitySystemPanels(ctx.CC, ctx.Entity)
+	})
+
+	r.Register(BlockMeta{
+		Type: BlockCharacterItems, Label: "Items & Money", Icon: "fa-sack-dollar",
+		Description: "What a character carries, their money and recent moves",
+		Addon: "armory", Contexts: []string{"template"},
+	}, func(ctx BlockRenderContext) templ.Component {
+		return blockCharacterItems()
+	})
+
 	// text_block is shared between dashboard and template contexts.
 	r.Register(BlockMeta{
 		Type: "text_block", Label: "Text Block", Icon: "fa-align-left",

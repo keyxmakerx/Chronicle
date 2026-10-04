@@ -239,3 +239,24 @@ func lookupEntityShowRenderer(ctx EntityShowRenderContext) templ.Component {
 	}
 	return rend(ctx)
 }
+
+// hasEntityShowRenderer reports whether a game-system renderer owns this
+// type's pages in place of the layout, by the same slug-then-category lookup
+// lookupEntityShowRenderer uses.
+func hasEntityShowRenderer(et *EntityType) bool {
+	if et == nil {
+		return false
+	}
+	reg := globalEntityShowRendererRegistry.Load()
+	if reg == nil {
+		return false
+	}
+	if _, ok := reg.Lookup(et.Slug); ok {
+		return true
+	}
+	if et.PresetCategory != nil {
+		_, ok := reg.LookupByPresetCategory(*et.PresetCategory)
+		return ok
+	}
+	return false
+}

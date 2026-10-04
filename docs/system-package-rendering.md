@@ -265,9 +265,11 @@ the renderer registry. Every entry must satisfy:
 
 ### Adding a panel to NPC pages (`entity_panels`)
 
-A renderer replaces a page; a panel adds to one. To mount a widget under the
-title of every NPC or monster page in campaigns that have your system enabled,
-declare it in `entity_panels`:
+A renderer replaces a page; a panel adds to one. To offer a widget on NPC or
+monster pages in campaigns that have your system enabled, declare it in
+`entity_panels`. The panels show where the owner places the "Game System
+Panels" block in the page template (and above a renderer's page, which has no
+template); nothing is added to a page the owner has not placed it on:
 
 ```json
 "widgets": [
