@@ -1835,15 +1835,18 @@
       if (!p) return '<section class="eps"><h4>Recap</h4><div class="none">Loading…</div></section>';
       if (p.failed) return '<section class="eps"><h4>Recap</h4><div class="none">The recap and linked pages could not be loaded.</div></section>';
       var h = '<section class="eps gnrecap"><h4>Recap</h4>';
-      if (this._gnRecapFor === sid) {
+      // Editing here is plain text, so a recap with formatting is shown but
+      // never edited here: saving it would drop the formatting.
+      var rich = !!p.recapHtml && /<(?!\/?p\b|br\b)[a-z]/i.test(p.recapHtml);
+      if (this._gnRecapFor === sid && !rich) {
         h += '<label class="fld"><span class="sr">Recap</span><textarea data-gn-recap-input rows="6" placeholder="What happened this game night?">' + esc(p.recap) + '</textarea></label>' +
-          (p.recapHtml && /<(?!\/?p\b|br\b)[a-z]/i.test(p.recapHtml) ? '<p class="dnote">Saving here keeps the words but drops the formatting.</p>' : '') +
           '<p class="gperr" role="alert" hidden></p>' +
           '<div class="gpa"><button type="button" class="btn sm primary" data-gn-recap="save">Save the recap</button><button type="button" class="btn sm quiet" data-gn-recap="cancel">Cancel</button></div>';
       } else {
         // The server sanitizes recap HTML when it is saved.
         h += p.recapHtml ? '<div class="notes gnrtext">' + p.recapHtml + '</div>' : '<div class="none">No recap yet.</div>';
-        if (scribe) h += '<button type="button" class="lnk" data-gn-recap="edit"><i class="fa-solid fa-pen"></i> ' + (p.recapHtml ? 'Edit the recap' : 'Write the recap') + '</button>';
+        if (scribe && rich) h += '<a class="lnk" href="/campaigns/' + cid + '/sessions/' + encodeURIComponent(sid) + '"><i class="fa-solid fa-pen"></i> Edit on the page</a>';
+        else if (scribe) h += '<button type="button" class="lnk" data-gn-recap="edit"><i class="fa-solid fa-pen"></i> ' + (p.recapHtml ? 'Edit the recap' : 'Write the recap') + '</button>';
       }
       h += '</section><section class="eps gnlinks"><h4>Linked pages</h4>';
       h += p.links.length ? '<div class="gnchips">' + p.links.map(function (l) {
