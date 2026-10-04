@@ -716,6 +716,7 @@
     }
 
     this.busy = true;
+    this.bookEl.classList.add('is-turning');
     this.bookEl.appendChild(leaf);
     [].forEach.call(leaf.querySelectorAll('.rb-page'), function (p) {
       var s = p.querySelector('.rb-scroll');
@@ -729,6 +730,7 @@
       clearTimeout(self.leafTimer);
       self.finishNow = null;
       leaf.remove();
+      self.bookEl.classList.remove('is-turning');
       self.busy = false;
       self.paint(true);
       self.settled();
