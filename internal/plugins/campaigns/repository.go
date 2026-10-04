@@ -343,9 +343,17 @@ func (r *campaignRepository) UpdateSettings(ctx context.Context, campaignID, set
 	if err != nil {
 		return fmt.Errorf("updating settings: %w", err)
 	}
-	rows, _ := result.RowsAffected()
-	if rows == 0 {
-		return apperror.NewNotFound("campaign not found")
+	// MariaDB counts only rows it changed, so writing the same settings twice
+	// in one second affects nothing; that is a no-op, not a missing campaign.
+	if rows, _ := result.RowsAffected(); rows == 0 {
+		var one int
+		err := r.db.QueryRowContext(ctx, `SELECT 1 FROM campaigns WHERE id = ?`, campaignID).Scan(&one)
+		if errors.Is(err, sql.ErrNoRows) {
+			return apperror.NewNotFound("campaign not found")
+		}
+		if err != nil {
+			return fmt.Errorf("checking campaign: %w", err)
+		}
 	}
 	return nil
 }

@@ -95,7 +95,7 @@ func TestOwnerUpdatesView(t *testing.T) {
 			state: packages.CampaignPackageState{EffectiveVersion: "2.8.0", HeldVersion: "2.9.0"},
 			notes: []packages.PackageVersion{notes},
 			want: OwnerUpdateView{CampaignID: "c1", Package: "Chronicle Sync", Running: "2.8.0", Ready: "2.9.0",
-				Notes: []string{"Changes", "Calendar notice", "Safer deletes"}, NotesURL: notes.ReleaseURL,
+				Notes: []string{"Calendar notice", "Safer deletes"}, NotesURL: notes.ReleaseURL,
 				Versions: []string{"2.9.0", "2.8.0"}},
 		},
 		{
