@@ -237,7 +237,7 @@ plugin does with them: `internal/plugins/calendar/.ai.md`.
 | `map_campaign_settings` | Campaign-wide default map frame | `campaign_id` PK, FK→`campaigns` CASCADE; `frame_style` (no row = `atlas`) |
 | `map_markers` | Pins on a map | `x`/`y` percentage 0–100; `entity_id` FK→`entities` SET NULL; `pin_category`; `visibility`/`visibility_rules`; `foundry_id` |
 | `map_layers` | Ordered drawing/token/fog layers | `layer_type`; `is_visible`/`is_locked`/`opacity` |
-| `map_drawings` | Freehand/shape/text annotations on a layer | `points` JSON; `visibility`/`visibility_rules`; `foundry_id` |
+| `map_drawings` | Freehand/shape/text/shadow annotations and pictures on a layer | `points` JSON; `visibility`/`visibility_rules`; `foundry_id`; `image_id` (picture's media file, no FK), `crop` JSON, `sort_order` (migration 008, pictures only) |
 | `map_tokens` | Positioned tokens (often an entity's avatar) | `entity_id` FK SET NULL; `bar1/2_value/max`, `aura_*`, `light_*`, `vision_enabled/range` (Foundry-parity fields); `status_effects`/`flags` JSON; `foundry_id` |
 | `map_fog` | Explored/unexplored fog-of-war polygons | `points` JSON; `is_explored` |
 

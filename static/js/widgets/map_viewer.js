@@ -50,6 +50,12 @@
     if (window.ChronicleMapShadow) return Promise.resolve();
     return loadScript(cfg.shadowSrc).catch(function () { /* shadows simply do not render */ });
   }
+  // Pictures on the map need their module before the drawing module renders one;
+  // it is optional too, and without it pictures are simply not drawn.
+  function ensurePictures(cfg) {
+    if (window.ChronicleMapPictures) return Promise.resolve();
+    return loadScript(cfg.picturesSrc).catch(function () { /* pictures simply do not render */ });
+  }
   function ensureDrawing(cfg) {
     if (window.ChronicleMapDrawing) return Promise.resolve();
     return loadScript(cfg.drawSrc).catch(function () { /* drawings simply do not render */ });
@@ -732,6 +738,8 @@
 		document.querySelectorAll('[data-shape]').forEach(function(b) {
 			b.setAttribute('aria-pressed', (tool === 'draw' && b.dataset.shape === drawShape) ? 'true' : 'false');
 		});
+		// Pictures can be picked only under the move tool.
+		if (draw() && draw().pictureSelectMode) draw().pictureSelectMode(tool === 'move');
 		// The drawing module sets its own crosshair while a shape tool runs.
 		if (tool === 'pin') map.getContainer().style.cursor = 'crosshair';
 		else if (tool === 'move') map.getContainer().style.cursor = '';
@@ -790,6 +798,20 @@
 		document.querySelectorAll('[data-shape]').forEach(function(b) {
 			b.addEventListener('click', function() { startShape(b.dataset.shape); });
 		});
+		// Add a picture: the campaign media picker (a widget on this button)
+		// reports the choice, which the drawing module drops on the view.
+		var pictureBtn = $id('mp-add-picture');
+		if (pictureBtn) {
+			// The picker's slide-out lives outside the full-screen element.
+			pictureBtn.addEventListener('click', leaveFullscreen);
+			pictureBtn.addEventListener('media-picker:select', function(ev) {
+				var d = ev.detail || {};
+				if (!d.id) return;
+				if (!draw() || !draw().addPicture) { Chronicle.notify('Drawing tools are still loading', 'error'); return; }
+				setTool('move');
+				draw().addPicture({ id: d.id, url: d.url });
+			});
+		}
 		var styleBtn = $id('mp-style-btn');
 		styleBtn.addEventListener('click', function() { openPopover(flyStyle, styleBtn); });
 		function syncStyle() {
@@ -1317,7 +1339,7 @@
 		startDraft(p.x, p.y);
 	});
 
-	// ---- Keys: V move, P pin, D draw, B hide under shadow, Esc steps back ----
+	// ---- Keys: V move, P pin, D draw, B hide under shadow, I add a picture, Delete removes the selected picture, Esc steps back ----
 	function typing(t) {
 		if (!t || !t.tagName) return false;
 		var n = t.tagName;
@@ -1343,17 +1365,25 @@
 			if (window.__mpCloseSheet && window.__mpCloseSheet()) return;
 			if (closePanel()) return;
 			if (map._popup && map._popup.isOpen && map._popup.isOpen()) { map.closePopup(); return; }
+			// A selected picture (or cropping) steps back before the tool does.
+			if (draw() && draw().escape && draw().escape()) return;
 			if (tool !== 'move') { setTool('move'); return; }
 			e.mpConsumed = false;
 			return;
 		}
 		// Letters inside the settings sheet belong to its controls.
 		if (!isScribe || typing(e.target) || (e.target.closest && e.target.closest('#mp-sheet'))) return;
+		// Delete removes the selected picture, after the usual confirm.
+		if (e.key === 'Delete' && canDraw && draw() && draw().deleteSelected) {
+			if (draw().deleteSelected()) e.preventDefault();
+			return;
+		}
 		var k = e.key.toLowerCase();
 		if (k === 'v') { setTool('move'); e.preventDefault(); }
 		else if (k === 'p') { setTool('pin'); e.preventDefault(); }
 		else if (k === 'd' && canDraw) { openPopover(flyDraw, document.querySelector('[data-tool="draw"]')); e.preventDefault(); }
 		else if (k === 'b' && canShadow) { openPopover(flyShadow, document.querySelector('[data-tool="shadow"]')); e.preventDefault(); }
+		else if (k === 'i' && canDraw) { var pb = $id('mp-add-picture'); if (pb) pb.click(); e.preventDefault(); }
 	}
 	listen(document, 'keydown', onKey);
 
@@ -1544,6 +1574,8 @@
 		canDraw: canDraw,
 		canShadow: canShadow,
 		isOwner: isOwner,
+		canDmOnly: canDmOnly,
+		userID: userID,
 		// Callbacks the drawing module calls so the panel counts and the
 		// undo button stay in step with what is on the map.
 		onDrawingsChange: function(n) {
@@ -1587,6 +1619,8 @@
         var handle = mountViewer(cfgEl, opts);
         cfgEl.__mapViewerHandle = handle;
         return ensureShadow({ shadowSrc: d.shadowSrc }).then(function () {
+          return ensurePictures({ picturesSrc: d.picturesSrc });
+        }).then(function () {
           return ensureDrawing({ drawSrc: d.drawSrc });
         }).then(function () {
           // The drawing module only polls once, at load; later mounts are
