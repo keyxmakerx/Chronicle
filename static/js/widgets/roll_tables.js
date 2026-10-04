@@ -20,8 +20,12 @@
 (function () {
   'use strict';
 
+  // The page hands over the engine's versioned URL; only that one file, with
+  // an optional ?v= token, is ever loaded from it.
+  var ENGINE_PATH = '/static/js/widgets/chronicle_gen.js';
   var SELF = document.currentScript;
-  var ENGINE_SRC = (SELF && SELF.getAttribute('data-engine-src')) || '/static/js/widgets/chronicle_gen.js';
+  var ENGINE_V = /^\/static\/js\/widgets\/chronicle_gen\.js\?v=([A-Za-z0-9._-]{1,80})$/.exec((SELF && SELF.getAttribute('data-engine-src')) || '');
+  var ENGINE_SRC = ENGINE_PATH + (ENGINE_V ? '?v=' + encodeURIComponent(ENGINE_V[1]) : '');
   var ID_RE = /^[a-z][a-z0-9-]{0,63}$/;
   var NAMES = { 'names-people': 'People', 'names-places': 'Places' };
   // Pages have no calendar of their own; with this one, entries that need a
