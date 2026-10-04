@@ -21,7 +21,18 @@ templ CharacterPanel(v *CharacterPanelView, csrfToken string) {
 			<h3 class="text-sm font-semibold text-fg">
 				<i class="fa-solid fa-sack-dollar text-fg-muted mr-1.5 text-xs"></i>Items and money
 			</h3>
-			@downtimePill(v.DowntimeOpen)
+			<div class="flex items-center gap-2">
+				if v.CanGive {
+					<button
+						type="button"
+						class="btn-secondary text-xs"
+						hx-get={ giveDialogURL(v.CampaignID, "character", v.Character.ID) }
+						hx-target="#armory-move-modal"
+						hx-swap="innerHTML"
+					>+ Give an item</button>
+				}
+				@downtimePill(v.DowntimeOpen)
+			</div>
 		</div>
 
 		if len(v.Items) == 0 {

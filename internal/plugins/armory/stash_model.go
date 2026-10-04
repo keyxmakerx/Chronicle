@@ -182,6 +182,14 @@ func (m Move) IsMoneyEdit() bool {
 	return m.Kind == MoveKindMoney && m.From.Kind == EndpointCharacter && m.From == m.To
 }
 
+// IsGive reports whether the row records the GM handing an item to a
+// character: an item row whose two ends are the same character. It was
+// applied the moment it was written and never runs again, so no apply path may
+// debit or credit it a second time.
+func (m Move) IsGive() bool {
+	return m.Kind == MoveKindItem && m.From.Kind == EndpointCharacter && m.From == m.To
+}
+
 // MoveFilter narrows a history query. Zero values mean "no restriction".
 type MoveFilter struct {
 	// Endpoint, when set, keeps moves that touch it on either side.
@@ -272,11 +280,14 @@ type CharacterPanelView struct {
 	CampaignID   string
 	Character    EntityRef
 	DowntimeOpen bool
-	Items        []HeldItem
-	HasMoney     bool
-	Money        Cents
-	History      []MoveLine
-	HistoryMore  bool
+	// CanGive is true for Owner visibility, who may hand the character items
+	// and maps.
+	CanGive     bool
+	Items       []HeldItem
+	HasMoney    bool
+	Money       Cents
+	History     []MoveLine
+	HistoryMore bool
 }
 
 // NamedRef is an id with a display name.

@@ -3629,6 +3629,8 @@ func (a *App) RegisterRoutes() {
 		Relations:  &armoryHasItemAdapter{svc: relService},
 		UserNames:  &armoryMemberNamesAdapter{svc: campaignService},
 		Events:     stashEvents,
+		Handouts:   &armoryHandoutAdapter{maps: mapsService, svc: entityService, dir: stashDirectory},
+		Notifier:   &armoryGiveNotifierAdapter{svc: sessionsService},
 	})
 	// A money change made on a sheet (web, Foundry, extension) leaves a line in
 	// the character's history, like a move would.

@@ -33,11 +33,14 @@ func jsStr(s string) string {
 // counting from the server's answer rather than assuming success. Focus and
 // Escape handling are scoped to the popover (no document listeners) so a swap
 // of the gallery cannot leave a stray handler behind.
-func collectionMenuOnClick(campaignID, entityID, popoverID string) templ.ComponentScript {
+//
+// A non-empty giveURL adds a "Give to..." entry that loads the give dialog
+// into #armory-move-modal; it is empty for viewers who may not give.
+func collectionMenuOnClick(campaignID, entityID, popoverID, giveURL string) templ.ComponentScript {
 	body := fmt.Sprintf(
 		`(function(btn){`+
 			`var pop=document.getElementById(%[3]s);if(!pop)return;`+
-			`var base='/campaigns/'+encodeURIComponent(%[1]s)+'/armory/';var eid=%[2]s;`+
+			`var base='/campaigns/'+encodeURIComponent(%[1]s)+'/armory/';var eid=%[2]s;var giveUrl=%[4]s;`+
 			`function close(refocus){pop.hidden=true;btn.setAttribute('aria-expanded','false');if(refocus)btn.focus();}`+
 			`if(!pop.hidden){close(true);return;}`+
 			`pop.hidden=false;btn.setAttribute('aria-expanded','true');pop.textContent='Loading...';`+
@@ -61,11 +64,13 @@ func collectionMenuOnClick(campaignID, entityID, popoverID string) templ.Compone
 			`if(!list.length){var e=document.createElement('p');e.className='px-2 py-1 text-xs text-fg-muted';e.textContent='No collections yet. Create one with the gear button.';pop.appendChild(e);}`+
 			`list.forEach(function(c){pop.appendChild(row(c));});`+
 			`var m=document.createElement('p');m.setAttribute('data-coll-error','1');m.setAttribute('role','alert');m.className='px-2 text-xs text-red-500';pop.appendChild(m);`+
+			`if(giveUrl){var g=document.createElement('button');g.type='button';g.className='w-full text-left px-2 py-1.5 mt-1 border-t border-border text-sm text-accent hover:bg-surface-alt rounded';g.textContent='Give to\u2026';`+
+			`g.onclick=function(){close(false);if(window.htmx)htmx.ajax('GET',giveUrl,{target:'#armory-move-modal',swap:'innerHTML'});};pop.appendChild(g);}`+
 			`var f=pop.querySelector('input');if(f)f.focus();else pop.focus();}`+
 			`Chronicle.apiFetch(base+'items/'+encodeURIComponent(eid)+'/collections').then(function(r){if(!r.ok)throw new Error('load');return r.json();}).then(render)`+
 			`.catch(function(){pop.textContent='Could not load collections.';pop.focus();});`+
 			`})(this)`,
-		jsStr(campaignID), jsStr(entityID), jsStr(popoverID))
+		jsStr(campaignID), jsStr(entityID), jsStr(popoverID), jsStr(giveURL))
 	return inlineOnClick("armory_collectionMenu", body)
 }
 

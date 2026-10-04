@@ -86,6 +86,10 @@ func RegisterRoutes(e *echo.Echo, h *Handler, th *TransactionHandler, ih *Instan
 	cg.POST("/armory/stashes/:sid/items", sh.AddItem, campaigns.RequireRole(campaigns.RolePlayer))
 	cg.GET("/armory/stashes/:sid/history", sh.StashHistory, campaigns.RequireRole(campaigns.RolePlayer))
 	cg.GET("/armory/move", sh.MoveDialog, campaigns.RequireRole(campaigns.RolePlayer))
+	// Giving an item or a map to a character: Player+ at the route, Owner
+	// visibility enforced in the service.
+	cg.GET("/armory/give", sh.GiveDialog, campaigns.RequireRole(campaigns.RolePlayer))
+	cg.POST("/armory/give", sh.Give, campaigns.RequireRole(campaigns.RolePlayer))
 	cg.POST("/armory/moves", sh.Move, campaigns.RequireRole(campaigns.RolePlayer))
 	cg.POST("/armory/moves/:mid/approve", sh.Approve, campaigns.RequireRole(campaigns.RolePlayer))
 	cg.POST("/armory/moves/:mid/decline", sh.Decline, campaigns.RequireRole(campaigns.RolePlayer))

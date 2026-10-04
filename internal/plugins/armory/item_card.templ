@@ -83,7 +83,8 @@ templ ItemCardComponent(cc *campaigns.CampaignContext, card *ItemCard) {
 		}
 	</div>
 
-	// Collection menu: Scribe and Owner only, matching the instance routes.
+	// Collection menu: Scribe and Owner only, matching the instance routes. Its
+	// "Give to..." entry is for Owner visibility alone.
 	if cc.MemberRole >= campaigns.RoleScribe {
 		<div class="absolute top-2 right-2 z-10">
 			<button
@@ -94,7 +95,7 @@ templ ItemCardComponent(cc *campaigns.CampaignContext, card *ItemCard) {
 				aria-controls={ "armory-coll-" + card.ID }
 				aria-label={ "Collections for " + card.Name }
 				title="Add to collection"
-				onclick={ collectionMenuOnClick(cc.Campaign.ID, card.ID, "armory-coll-"+card.ID) }
+				onclick={ collectionMenuOnClick(cc.Campaign.ID, card.ID, "armory-coll-"+card.ID, giveMenuURL(cc, card.ID)) }
 			>
 				<i class="fa-solid fa-ellipsis text-xs"></i>
 			</button>
@@ -109,6 +110,15 @@ templ ItemCardComponent(cc *campaigns.CampaignContext, card *ItemCard) {
 		</div>
 	}
 	</div>
+}
+
+// giveMenuURL is the "Give to..." dialog address for the card's menu, empty
+// for a viewer who may not give (the menu then leaves the entry out).
+func giveMenuURL(cc *campaigns.CampaignContext, itemID string) string {
+	if cc.VisibilityRole() < int(campaigns.RoleOwner) {
+		return ""
+	}
+	return giveDialogURL(cc.Campaign.ID, "item", itemID)
 }
 
 // itemSubtitle renders system-specific subtitle from item fields.

@@ -266,7 +266,10 @@ func TestInlineHandlers_AttributeSafe(t *testing.T) {
 		name string
 		call string
 	}{
-		{"collection menu", collectionMenuOnClick("camp-1", "ent'1", "pop-1").Call},
+		{"collection menu", collectionMenuOnClick("camp-1", "ent'1", "pop-1", "/campaigns/camp-1/armory/give?item=ent%271").Call},
+		{"give tab", giveTabOnClick("map").Call},
+		{"give filter", giveFilterOnInput().Call},
+		{"give hint", giveHintOnChange().Call},
 		{"rename", renameInstanceOnClick("camp-1", 7, hostile, hostile, "fa-box", "#6b7280").Call},
 	}
 	for _, tt := range tests {

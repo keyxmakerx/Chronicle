@@ -1,0 +1,309 @@
+// stash_give.go lets the GM hand a character an Armory item or a map.
+//
+// A give credits the character's "Has Item" relation exactly as a stash move
+// that credits a character does (adjustCarried), under the same campaign
+// lock, so the relation events that already reach Foundry fire unchanged. It
+// is recorded in item_moves as an applied item row whose two ends are the same
+// character: the table's ENUMs stay as they are, and every history reader sees
+// it through Move.IsGive instead of treating it as a move between two places.
+//
+// A map is given as an item. The map itself is not an item, so a handout
+// entity called "Map: <name>" stands for it; it points at the map and is shown
+// only to the players who hold it.
+package armory
+
+import (
+	"context"
+	"fmt"
+	"log/slog"
+	"strings"
+	"unicode/utf8"
+
+	"github.com/keyxmakerx/chronicle/internal/apperror"
+)
+
+const (
+	// giveReplayReason is what run answers when handed a give.
+	giveReplayReason = "A gift is already given and can't be moved again."
+	// handoutPrefix names a map handout item. The prefix plus the map name is
+	// how an earlier handout for the same map is found again.
+	handoutPrefix = "Map: "
+	// maxHandoutMapName leaves room for the prefix inside the 200-byte entity
+	// name limit, whatever the map's name is made of.
+	maxHandoutMapName = 150
+	// NotifItemGiven is the notification type a player gets when a GM gives
+	// their character something.
+	NotifItemGiven = "item_given"
+)
+
+// HandoutStore is what giving a map needs from the maps and entities plugins.
+// Implemented in internal/app over their services; nil means maps cannot be
+// given, and the dialog leaves that tab out.
+type HandoutStore interface {
+	// ListMaps returns the campaign's maps, by name.
+	ListMaps(ctx context.Context, campaignID string) ([]NamedRef, error)
+	// FindMap returns the map, or nil (and no error) when it does not exist in
+	// campaignID, so a foreign id and a missing id look the same.
+	FindMap(ctx context.Context, campaignID, mapID string) (*NamedRef, error)
+	// FindHandout returns the item entity called name that is assigned mapID,
+	// or nil when there is none.
+	FindHandout(ctx context.Context, campaignID, name, mapID string) (*EntityRef, error)
+	// CreateHandout makes an item entity called name, hidden from players,
+	// assigned to the map, whose entry links the map's page.
+	CreateHandout(ctx context.Context, campaignID, createdBy, name string, m NamedRef) (*EntityRef, error)
+	// AllowViewers adds the users to the entity's allow list so they, besides
+	// the GM, can open it. Existing grants stay.
+	AllowViewers(ctx context.Context, campaignID, entityID string, userIDs []string) error
+}
+
+// GiveNotifier tells players they were given something. Optional.
+type GiveNotifier interface {
+	// ItemGiven notifies the users, with a link to where to look.
+	ItemGiven(ctx context.Context, campaignID string, userIDs []string, message, link string) error
+}
+
+// GiveInput is what the GM asks for. Exactly one of ItemID and MapID is set.
+type GiveInput struct {
+	CharacterID string
+	ItemID      string
+	MapID       string
+	Quantity    int
+}
+
+// GiveOutcome reports what Give did, for the confirmation toast.
+type GiveOutcome struct {
+	Move          Move
+	ItemName      string
+	CharacterName string
+}
+
+// GiveDialogView feeds the "Give to" dialog. Opened from a character page the
+// character is fixed and the item (or map) is picked; opened from an item card
+// the item is fixed and the character is picked.
+type GiveDialogView struct {
+	CampaignID string
+	Character  *NamedRef
+	Item       *NamedRef
+	Items      []NamedRef
+	Characters []NamedRef
+	Maps       []NamedRef
+}
+
+func (s *stashService) requireOwner(a Actor) error {
+	if !a.IsOwner() {
+		return forbidden()
+	}
+	return nil
+}
+
+// loadItem returns an item-category entity in the campaign, else NotFound.
+func (s *stashService) loadItem(ctx context.Context, campaignID, id string) (*EntityRef, error) {
+	ref, err := s.Directory.GetEntity(ctx, campaignID, strings.TrimSpace(id))
+	if err != nil {
+		return nil, err
+	}
+	if ref == nil || !ref.IsItem {
+		return nil, notFound("item")
+	}
+	return ref, nil
+}
+
+func (s *stashService) GiveDialog(ctx context.Context, campaignID string, a Actor, characterID, itemID string) (*GiveDialogView, error) {
+	if err := s.requireOwner(a); err != nil {
+		return nil, err
+	}
+	view := &GiveDialogView{CampaignID: campaignID}
+	switch {
+	case strings.TrimSpace(characterID) != "":
+		ref, err := s.loadCharacter(ctx, campaignID, strings.TrimSpace(characterID))
+		if err != nil {
+			return nil, err
+		}
+		view.Character = &NamedRef{ID: ref.ID, Name: ref.Name}
+		items, err := s.Directory.ListItems(ctx, campaignID, a.Role, a.UserID, 500)
+		if err != nil {
+			return nil, err
+		}
+		for _, it := range items {
+			view.Items = append(view.Items, NamedRef{ID: it.ID, Name: it.Name})
+		}
+		if s.Handouts != nil {
+			if view.Maps, err = s.Handouts.ListMaps(ctx, campaignID); err != nil {
+				return nil, err
+			}
+		}
+	case strings.TrimSpace(itemID) != "":
+		ref, err := s.loadItem(ctx, campaignID, itemID)
+		if err != nil {
+			return nil, err
+		}
+		view.Item = &NamedRef{ID: ref.ID, Name: ref.Name}
+		chars, err := s.Directory.ListCharacters(ctx, campaignID, a.Role, a.UserID)
+		if err != nil {
+			return nil, err
+		}
+		for _, c := range chars {
+			view.Characters = append(view.Characters, NamedRef{ID: c.ID, Name: c.Name})
+		}
+	default:
+		return nil, apperror.NewBadRequest("Choose a character or an item to give.")
+	}
+	return view, nil
+}
+
+// handoutName is the item name a map's handout carries.
+func handoutName(mapName string) string {
+	mapName = strings.TrimSpace(mapName)
+	if utf8.RuneCountInString(mapName) > maxHandoutMapName {
+		mapName = string([]rune(mapName)[:maxHandoutMapName])
+	}
+	return handoutPrefix + mapName
+}
+
+func (s *stashService) Give(ctx context.Context, campaignID string, a Actor, in GiveInput) (*GiveOutcome, error) {
+	if err := s.requireOwner(a); err != nil {
+		return nil, err
+	}
+	in.CharacterID, in.ItemID, in.MapID = strings.TrimSpace(in.CharacterID), strings.TrimSpace(in.ItemID), strings.TrimSpace(in.MapID)
+	if in.Quantity < 1 || in.Quantity > maxMoveQuantity {
+		return nil, apperror.NewBadRequest("Enter a quantity of at least 1.")
+	}
+	if (in.ItemID == "") == (in.MapID == "") {
+		return nil, apperror.NewBadRequest("Choose an item or a map to give.")
+	}
+	char, err := s.loadCharacter(ctx, campaignID, in.CharacterID)
+	if err != nil {
+		return nil, err
+	}
+
+	var item *EntityRef
+	var mp *NamedRef
+	if in.MapID != "" {
+		if s.Handouts == nil {
+			return nil, apperror.NewBadRequest("Maps can't be given here.")
+		}
+		if mp, err = s.Handouts.FindMap(ctx, campaignID, in.MapID); err != nil {
+			return nil, err
+		}
+		if mp == nil {
+			return nil, notFound("map")
+		}
+	} else if item, err = s.loadItem(ctx, campaignID, in.ItemID); err != nil {
+		return nil, err
+	}
+
+	// Registered before the lock so the events go out after it is released.
+	var ev eventBatch
+	defer ev.flush(s.Events, campaignID)
+	unlock := s.locks.lock(campaignID)
+	out, err := s.give(ctx, campaignID, a, char, item, mp, in.Quantity, &ev)
+	unlock()
+	if err != nil {
+		return nil, err
+	}
+	s.notifyGiven(ctx, campaignID, a, char, out, in.Quantity)
+	return out, nil
+}
+
+// give does the work of Give under the campaign lock. The handout is found or
+// made inside the lock so two gives of one map cannot make two items.
+func (s *stashService) give(ctx context.Context, campaignID string, a Actor, char, item *EntityRef, mp *NamedRef, qty int, ev *eventBatch) (*GiveOutcome, error) {
+	if mp != nil {
+		var err error
+		if item, err = s.handoutFor(ctx, campaignID, a, *mp); err != nil {
+			return nil, err
+		}
+	}
+
+	// Let the holder see the item before they hold it, so a player is never
+	// handed something they cannot open. A character with no player keeps a
+	// map handout GM-only.
+	if mp != nil && char.OwnerUserID != "" {
+		if err := s.Handouts.AllowViewers(ctx, campaignID, item.ID, []string{char.OwnerUserID}); err != nil {
+			return nil, err
+		}
+	}
+
+	ok, err := s.adjustCarried(ctx, campaignID, char.ID, item.ID, a.UserID, qty, true, false)
+	if err != nil {
+		return nil, err
+	}
+	if !ok {
+		return nil, apperror.NewConflict("Could not add it to that character.")
+	}
+
+	self := Endpoint{Kind: EndpointCharacter, ID: char.ID}
+	m := &Move{
+		CampaignID: campaignID, Kind: MoveKindItem, ItemEntityID: item.ID, Quantity: qty,
+		From: self, To: self, Status: MoveApplied, RequestedBy: a.UserID, byGM: true,
+	}
+	if err := s.Repo.InsertMove(ctx, m); err != nil {
+		// The item is already on the character and its relation events have
+		// gone out. Failing the request would invite a second give, so say so
+		// where an operator will see it and report success.
+		slog.Error("give: GIVEN BUT NOT RECORDED in the move history",
+			slog.String("campaign_id", campaignID), slog.String("character_id", char.ID),
+			slog.String("item_id", item.ID), slog.Any("error", err))
+	} else {
+		ev.moved(m)
+	}
+	return &GiveOutcome{Move: *m, ItemName: item.Name, CharacterName: char.Name}, nil
+}
+
+// handoutFor returns the item that stands for the map, making it the first
+// time. It reuses an item with the same name that points at the same map.
+func (s *stashService) handoutFor(ctx context.Context, campaignID string, a Actor, mp NamedRef) (*EntityRef, error) {
+	name := handoutName(mp.Name)
+	ref, err := s.Handouts.FindHandout(ctx, campaignID, name, mp.ID)
+	if err != nil {
+		return nil, err
+	}
+	if ref != nil {
+		return ref, nil
+	}
+	return s.Handouts.CreateHandout(ctx, campaignID, a.UserID, name, mp)
+}
+
+// notifyGiven tells the character's player. A failure is logged and dropped:
+// the item is already given and a missed bell must not undo it.
+func (s *stashService) notifyGiven(ctx context.Context, campaignID string, a Actor, char *EntityRef, out *GiveOutcome, qty int) {
+	if s.Notifier == nil || char.OwnerUserID == "" || char.OwnerUserID == a.UserID {
+		return
+	}
+	who := "Your GM"
+	if s.UserNames != nil {
+		if names, err := s.UserNames.DisplayNames(ctx, campaignID, []string{a.UserID}); err == nil && names[a.UserID] != "" {
+			who = names[a.UserID]
+		}
+	}
+	thing := out.ItemName
+	if qty > 1 {
+		thing = fmt.Sprintf("%d × %s", qty, out.ItemName)
+	}
+	link := "/campaigns/" + campaignID + "/entities/" + char.ID
+	if err := s.Notifier.ItemGiven(ctx, campaignID, []string{char.OwnerUserID}, fmt.Sprintf("%s gave you %s", who, thing), link); err != nil {
+		slog.Warn("give: could not notify the player", slog.Any("error", err))
+	}
+}
+
+// giveSummary is the history sentence for a give. A GM reads who gave what to
+// whom; the player reads it from their own side. requester is empty when the
+// giver's name is not known.
+func giveSummary(l MoveLine, viewerIsGM bool, viewerID, requester string) string {
+	thing := thingText(l)
+	if viewerIsGM {
+		who := "You"
+		if l.RequestedBy != viewerID {
+			who = requester
+			if who == "" {
+				who = "A GM"
+			}
+		}
+		return fmt.Sprintf("%s gave %s %s", who, l.ToName, thing)
+	}
+	who := requester
+	if who == "" {
+		who = "Your GM"
+	}
+	return fmt.Sprintf("%s gave you %s", who, thing)
+}

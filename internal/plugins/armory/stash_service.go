@@ -77,6 +77,10 @@ type StashDeps struct {
 	UserNames UserNamer
 	// Events announces finished moves and downtime changes; optional.
 	Events StashEventPublisher
+	// Handouts lets the GM give a map; without it only items can be given.
+	Handouts HandoutStore
+	// Notifier tells a player their character was given something; optional.
+	Notifier GiveNotifier
 }
 
 // Actor is the calling user as the service sees them. Role is the campaign's
@@ -107,6 +111,11 @@ type StashService interface {
 	Move(ctx context.Context, campaignID string, a Actor, in MoveInput) (*MoveOutcome, error)
 	Approve(ctx context.Context, campaignID string, a Actor, moveID int64) (*Move, error)
 	Decline(ctx context.Context, campaignID string, a Actor, moveID int64) (*Move, error)
+
+	// GiveDialog feeds the "Give to" dialog. Owner visibility only.
+	GiveDialog(ctx context.Context, campaignID string, a Actor, characterID, itemID string) (*GiveDialogView, error)
+	// Give hands a character an Armory item or a map. Owner visibility only.
+	Give(ctx context.Context, campaignID string, a Actor, in GiveInput) (*GiveOutcome, error)
 
 	// Destinations lists the places the actor may send a move to from `from`.
 	Destinations(ctx context.Context, campaignID string, a Actor, kind string, from Endpoint) ([]MoveDestination, error)
@@ -633,6 +642,9 @@ func (s *stashService) lines(ctx context.Context, campaignID string, a Actor, mo
 			l.ItemName = entityName(m.ItemEntityID)
 		}
 		l.RequesterName = userNames[m.RequestedBy]
+		if m.IsGive() {
+			l.Summary = giveSummary(l, a.IsGM(), a.UserID, l.RequesterName)
+		}
 		if l.RequesterName == "" {
 			l.RequesterName = "A player"
 		}
@@ -743,7 +755,7 @@ func (s *stashService) CharacterPanel(ctx context.Context, campaignID string, a 
 	if err != nil {
 		return nil, err
 	}
-	view := &CharacterPanelView{CampaignID: campaignID, Character: *ref, DowntimeOpen: open}
+	view := &CharacterPanelView{CampaignID: campaignID, Character: *ref, DowntimeOpen: open, CanGive: a.IsOwner()}
 
 	held, err := s.carried(ctx, campaignID, a, ref.ID)
 	if err != nil {

@@ -1,0 +1,218 @@
+package app
+
+// armory_give_adapters.go wires "give an item or a map to a character" to the
+// maps, entities and sessions plugins. The armory plugin sees only
+// armory.HandoutStore and armory.GiveNotifier; every cross-plugin call goes
+// through these adapters.
+
+import (
+	"context"
+	"encoding/json"
+	"errors"
+	"fmt"
+	"html"
+	"log/slog"
+	"net/http"
+	"sort"
+	"strconv"
+	"strings"
+
+	"github.com/keyxmakerx/chronicle/internal/apperror"
+	"github.com/keyxmakerx/chronicle/internal/permissions"
+	"github.com/keyxmakerx/chronicle/internal/plugins/armory"
+	"github.com/keyxmakerx/chronicle/internal/plugins/entities"
+	"github.com/keyxmakerx/chronicle/internal/plugins/maps"
+	"github.com/keyxmakerx/chronicle/internal/plugins/sessions"
+)
+
+// handoutScanPages bounds the walk for an earlier handout (100 per page); a
+// campaign with more items than that simply makes a fresh handout.
+const handoutScanPages = 20
+
+// armoryHandoutAdapter implements armory.HandoutStore. A map is handed out as
+// an item entity that points at it, so the character holds a normal "Has Item"
+// line and Foundry sees an ordinary item whose description links the map.
+type armoryHandoutAdapter struct {
+	maps maps.MapService
+	svc  entities.EntityService
+	dir  *armoryStashDirectoryAdapter
+}
+
+var _ armory.HandoutStore = (*armoryHandoutAdapter)(nil)
+
+func (a *armoryHandoutAdapter) ListMaps(ctx context.Context, campaignID string) ([]armory.NamedRef, error) {
+	list, err := a.maps.ListMaps(ctx, campaignID)
+	if err != nil {
+		return nil, err
+	}
+	out := make([]armory.NamedRef, 0, len(list))
+	for _, m := range list {
+		out = append(out, armory.NamedRef{ID: m.ID, Name: m.Name})
+	}
+	sort.SliceStable(out, func(i, j int) bool { return strings.ToLower(out[i].Name) < strings.ToLower(out[j].Name) })
+	return out, nil
+}
+
+// FindMap treats a missing map and one from another campaign alike.
+func (a *armoryHandoutAdapter) FindMap(ctx context.Context, campaignID, mapID string) (*armory.NamedRef, error) {
+	m, err := a.maps.GetMap(ctx, mapID)
+	if err != nil {
+		var ae *apperror.AppError
+		if errors.As(err, &ae) && ae.Code == http.StatusNotFound {
+			return nil, nil
+		}
+		return nil, err
+	}
+	if m == nil || m.CampaignID != campaignID {
+		return nil, nil
+	}
+	return &armory.NamedRef{ID: m.ID, Name: m.Name}, nil
+}
+
+func (a *armoryHandoutAdapter) FindHandout(ctx context.Context, campaignID, name, mapID string) (*armory.EntityRef, error) {
+	ti, err := a.dir.types(ctx, campaignID)
+	if err != nil {
+		return nil, err
+	}
+	for _, tid := range ti.itemIDs {
+		for page := 1; page <= handoutScanPages; page++ {
+			list, total, err := a.svc.List(ctx, campaignID, tid, permissions.RoleOwner, "", entities.ListOptions{Page: page, PerPage: 100, Sort: "name"})
+			if err != nil {
+				return nil, err
+			}
+			for i := range list {
+				e := &list[i]
+				if e.Name == name && e.MapID != nil && *e.MapID == mapID && ti.item[e.EntityTypeID] {
+					r := a.dir.ref(ti, e)
+					return &r, nil
+				}
+			}
+			if page*100 >= total || len(list) == 0 {
+				break
+			}
+		}
+	}
+	return nil, nil
+}
+
+// handoutEntry is the handout's entry: one line linking the map's page. Foundry
+// shows the entry as the item's description, so the link is how a player there
+// finds the map.
+func handoutEntry(campaignID string, m armory.NamedRef) (entryJSON, entryHTML string) {
+	href := "/campaigns/" + campaignID + "/maps/" + m.ID
+	doc := map[string]any{"type": "doc", "content": []any{
+		map[string]any{"type": "paragraph", "content": []any{
+			map[string]any{"type": "text", "text": "Map: "},
+			map[string]any{"type": "text", "text": m.Name, "marks": []any{
+				map[string]any{"type": "link", "attrs": map[string]any{"href": href}},
+			}},
+		}},
+	}}
+	b, _ := json.Marshal(doc)
+	return string(b), fmt.Sprintf(`<p>Map: <a href="%s">%s</a></p>`, html.EscapeString(href), html.EscapeString(m.Name))
+}
+
+func (a *armoryHandoutAdapter) CreateHandout(ctx context.Context, campaignID, createdBy, name string, m armory.NamedRef) (*armory.EntityRef, error) {
+	ti, err := a.dir.types(ctx, campaignID)
+	if err != nil {
+		return nil, err
+	}
+	if len(ti.itemIDs) == 0 {
+		return nil, apperror.NewBadRequest("This campaign has no item category to hold a map. Add one first.")
+	}
+	// Hidden from players until a give adds the holder to the allow list.
+	e, err := a.svc.Create(ctx, campaignID, createdBy, entities.CreateEntityInput{
+		Name: name, EntityTypeID: ti.itemIDs[0], IsPrivate: true,
+	})
+	if err != nil {
+		return nil, err
+	}
+	entryJSON, entryHTML := handoutEntry(campaignID, m)
+	if _, err := a.svc.AssignMap(ctx, e.ID, &m.ID); err != nil {
+		a.discard(ctx, e.ID)
+		return nil, err
+	}
+	if err := a.svc.UpdateEntry(ctx, e.ID, entryJSON, entryHTML); err != nil {
+		a.discard(ctx, e.ID)
+		return nil, err
+	}
+	r := a.dir.ref(ti, e)
+	return &r, nil
+}
+
+// discard removes a handout that could not be finished, so the next give does
+// not find a half-made item and a retry does not pile up copies.
+func (a *armoryHandoutAdapter) discard(ctx context.Context, entityID string) {
+	if err := a.svc.Delete(ctx, entityID); err != nil {
+		slog.Warn("give: could not remove an unfinished map handout", slog.String("entity_id", entityID), slog.Any("error", err))
+	}
+}
+
+// viewGrants returns the grants that make the entity visible to the users
+// besides the GM, and whether anything changed. A custom entity keeps every
+// grant it has; a private default one starts from "Scribe and up", the same
+// people a private entity is open to. A public default entity is already open
+// to everyone and is left alone.
+func viewGrants(e *entities.Entity, existing []entities.EntityPermission, userIDs []string) (grants []entities.PermissionGrant, changed bool) {
+	if e.Visibility != entities.VisibilityCustom {
+		if !e.IsPrivate {
+			return nil, false
+		}
+		grants = []entities.PermissionGrant{{
+			SubjectType: entities.SubjectRole, SubjectID: strconv.Itoa(permissions.RoleScribe), Permission: entities.PermEdit,
+		}}
+		changed = true
+	} else {
+		for _, p := range existing {
+			grants = append(grants, entities.PermissionGrant{SubjectType: p.SubjectType, SubjectID: p.SubjectID, Permission: p.Permission})
+		}
+	}
+	have := map[string]bool{}
+	for _, g := range grants {
+		if g.SubjectType == entities.SubjectUser {
+			have[g.SubjectID] = true
+		}
+	}
+	for _, id := range userIDs {
+		if id == "" || have[id] {
+			continue
+		}
+		have[id] = true
+		grants = append(grants, entities.PermissionGrant{SubjectType: entities.SubjectUser, SubjectID: id, Permission: entities.PermView})
+		changed = true
+	}
+	return grants, changed
+}
+
+func (a *armoryHandoutAdapter) AllowViewers(ctx context.Context, campaignID, entityID string, userIDs []string) error {
+	e, err := a.svc.GetByID(ctx, entityID)
+	if err != nil {
+		return err
+	}
+	if e.CampaignID != campaignID {
+		return apperror.NewNotFound("item")
+	}
+	existing, err := a.svc.GetEntityPermissions(ctx, entityID)
+	if err != nil {
+		return err
+	}
+	grants, changed := viewGrants(e, existing, userIDs)
+	if !changed {
+		return nil
+	}
+	return a.svc.SetEntityPermissions(ctx, entityID, entities.SetPermissionsInput{
+		Visibility: entities.VisibilityCustom, Permissions: grants,
+	})
+}
+
+// armoryGiveNotifierAdapter implements armory.GiveNotifier on the sessions
+// plugin's notification store, which any feature may write through NotifyUsers.
+type armoryGiveNotifierAdapter struct {
+	svc sessions.SessionService
+}
+
+var _ armory.GiveNotifier = (*armoryGiveNotifierAdapter)(nil)
+
+func (a *armoryGiveNotifierAdapter) ItemGiven(ctx context.Context, campaignID string, userIDs []string, message, link string) error {
+	return a.svc.NotifyUsers(ctx, userIDs, campaignID, armory.NotifItemGiven, message, link)
+}

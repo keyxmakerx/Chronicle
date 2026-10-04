@@ -30,6 +30,9 @@ func MoveSummary(l MoveLine) string {
 	if l.IsMoneyEdit() && l.Reason != "" {
 		return l.Reason
 	}
+	if l.IsGive() {
+		return giveSummary(l, true, "", l.RequesterName)
+	}
 	route := fmt.Sprintf("%s from %s to %s", thingText(l), l.FromName, l.ToName)
 	switch l.Status {
 	case MovePending:
@@ -139,6 +142,14 @@ func closeMoveDialogOnKey() templ.ComponentScript {
 		`(function(e){if(e.key==='Escape'){var m=document.getElementById('armory-move-modal');if(m){m.innerHTML='';}}})(event)`)
 }
 
+// giveDialogURL is the GET that loads the "Give to" dialog, opened for a
+// character (pick an item or map) or for an item (pick a character).
+func giveDialogURL(campaignID, param, id string) string {
+	return "/campaigns/" + campaignID + "/armory/give?" + url.Values{param: {id}}.Encode()
+}
+
+func giveURL(campaignID string) string { return "/campaigns/" + campaignID + "/armory/give" }
+
 func destValue(e Endpoint) string { return e.Kind + ":" + e.ID }
 
 func moveStatusLabel(status string) string {
@@ -163,4 +174,29 @@ func moveStatusClass(status string) string {
 		return "badge-red"
 	}
 	return "badge-green"
+}
+
+// giveTabOnClick shows one tab of the give dialog and hides the other.
+func giveTabOnClick(tab string) templ.ComponentScript {
+	return inlineOnClick("armory_giveTab",
+		`(function(btn){var root=btn.closest('[data-give-root]');if(!root)return;var want=`+jsStr(tab)+`;`+
+			`root.querySelectorAll('[data-give-panel]').forEach(function(p){p.hidden=p.getAttribute('data-give-panel')!==want;});`+
+			`root.querySelectorAll('[data-give-tab]').forEach(function(t){var on=t.getAttribute('data-give-tab')===want;`+
+			`t.setAttribute('aria-selected',on?'true':'false');`+
+			`t.classList.toggle('border-accent',on);t.classList.toggle('text-fg',on);`+
+			`t.classList.toggle('border-transparent',!on);t.classList.toggle('text-fg-muted',!on);});})(this)`)
+}
+
+// giveFilterOnInput hides the rows of the list below the search box whose
+// name does not contain what was typed.
+func giveFilterOnInput() templ.ComponentScript {
+	return inlineOnClick("armory_giveFilter",
+		`(function(inp){var form=inp.closest('form');if(!form)return;var q=inp.value.trim().toLowerCase();`+
+			`form.querySelectorAll('[data-give-row]').forEach(function(r){r.style.display=r.getAttribute('data-name').indexOf(q)<0?'none':'';});})(this)`)
+}
+
+// giveHintOnChange writes the picked map's sentence under the list.
+func giveHintOnChange() templ.ComponentScript {
+	return inlineOnClick("armory_giveHint",
+		`(function(r){var p=r.closest('form').querySelector('[data-give-hint]');if(p)p.textContent=r.getAttribute('data-hint');})(this)`)
 }

@@ -231,6 +231,45 @@ func (h *StashHandler) MoveDialog(c echo.Context) error {
 	return middleware.Render(c, http.StatusOK, MoveDialog(view, middleware.GetCSRFToken(c)))
 }
 
+// GiveDialog handles GET /armory/give: the dialog for giving a character an
+// item or a map. ?character= fixes the recipient, ?item= fixes the item.
+func (h *StashHandler) GiveDialog(c echo.Context) error {
+	cc, a, err := caller(c)
+	if err != nil {
+		return err
+	}
+	view, err := h.svc.GiveDialog(c.Request().Context(), cc.Campaign.ID, a, c.QueryParam("character"), c.QueryParam("item"))
+	if err != nil {
+		return err
+	}
+	return middleware.Render(c, http.StatusOK, GiveDialog(view, middleware.GetCSRFToken(c)))
+}
+
+// Give handles POST /armory/give.
+func (h *StashHandler) Give(c echo.Context) error {
+	cc, a, err := caller(c)
+	if err != nil {
+		return err
+	}
+	// A blank "how many" means one; the map form has no such field.
+	qty := 1
+	if v := strings.TrimSpace(c.FormValue("quantity")); v != "" {
+		if qty, err = strconv.Atoi(v); err != nil {
+			return apperror.NewBadRequest("Enter a quantity of at least 1.")
+		}
+	}
+	out, err := h.svc.Give(c.Request().Context(), cc.Campaign.ID, a, GiveInput{
+		CharacterID: c.FormValue("character_id"),
+		ItemID:      c.FormValue("item_id"),
+		MapID:       c.FormValue("map_id"),
+		Quantity:    qty,
+	})
+	if err != nil {
+		return err
+	}
+	return done(c, cc, "Gave "+out.ItemName+" to "+out.CharacterName+".")
+}
+
 // parseDestination splits the "kind:id" value of the To select.
 func parseDestination(v string) Endpoint {
 	kind, id, _ := strings.Cut(v, ":")
