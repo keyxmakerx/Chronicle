@@ -251,6 +251,9 @@ type UpdateSessionInput struct {
 	RecurrenceInterval  patch.Field[int]
 	RecurrenceDayOfWeek patch.Field[int]
 	RecurrenceEndDate   patch.Field[string]
+	// ScheduledTZ is the IANA zone a changed ScheduledTime is in; a value
+	// that is not a real zone is refused.
+	ScheduledTZ patch.Field[string]
 }
 
 // SessionListData holds data for the session list page.

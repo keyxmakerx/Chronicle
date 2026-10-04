@@ -54,22 +54,30 @@ func gameNightsTarget(campaignID, calendarID, sessionID, date string) string {
 	return base + "/calendars/" + url.PathEscape(calendarID) + "/view?" + q.Encode()
 }
 
-// GameNightsLink sends the sidebar's "Game nights" link and the RSVP card's
-// links to the calendar, where members answer. Only members answer there,
-// so a public viewer keeps the Sessions page.
+// GameNightsLink sends the sidebar's "Game nights" link, the RSVP card's
+// links and the dashboard's game night list to the calendar, where members
+// answer. Only members answer there, so a public viewer keeps the Sessions
+// page.
 // GET /campaigns/:id/game-nights[?session=ID&date=YYYY-MM-DD]
 func (h *Handler) GameNightsLink(c echo.Context) error {
 	cc := campaigns.GetCampaignContext(c)
-	calID := ""
+	calID, found := "", false // found: the lookup ran and answered
 	if h.calendarFinder != nil && cc.MemberRole >= campaigns.RolePlayer {
 		id, err := h.calendarFinder.RealWorldCalendarID(c.Request().Context(), cc.Campaign.ID, int(cc.MemberRole), auth.GetUserID(c))
 		if err != nil {
 			slog.Warn("game nights link: finding the real-world calendar failed", slog.Any("error", err))
 		} else {
-			calID = id
+			calID, found = id, true
 		}
 	}
-	return middleware.HTMXRedirect(c, gameNightsTarget(cc.Campaign.ID, calID, c.QueryParam("session"), c.QueryParam("date")))
+	sessionID := c.QueryParam("session")
+	if calID == "" && found && sessionID == "" && cc.MemberRole >= campaigns.RoleOwner {
+		// Game nights live in a real-world calendar; the owner is offered
+		// one (a single press on the calendar wizard's review step) instead
+		// of being sent to the Sessions page.
+		return middleware.HTMXRedirect(c, "/campaigns/"+url.PathEscape(cc.Campaign.ID)+"/calendars/wizard/reallife")
+	}
+	return middleware.HTMXRedirect(c, gameNightsTarget(cc.Campaign.ID, calID, sessionID, c.QueryParam("date")))
 }
 
 // sidebarNightDate is the date the RSVP card's link opens a session on: a

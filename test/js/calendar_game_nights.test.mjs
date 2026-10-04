@@ -361,7 +361,8 @@ test('a player sees counts, never names', () => {
   const wing = v._freeWingHTML({ y: 2026, m: 10, d: 8 });
   assert.match(wing, /3 of 4 free 7pm to 10pm/);
   assert.doesNotMatch(wing, /Julie|class="flines"/);
-  assert.match(wing, /Change my hours/);
+  assert.match(wing, /<button type="button" class="lnk" data-pl-mine>Change my usual hours/, 'opens My hours in the calendar');
+  assert.doesNotMatch(wing, /href="[^"]*\/availability/, 'never leaves the calendar');
   assert.doesNotMatch(wing, /Plan a game night/);
 });
 
@@ -389,8 +390,8 @@ test('the Director plans a game night inside the day’s card', () => {
   wing = v._freeWingHTML({ y: 2026, m: 10, d: 8 });
   assert.match(wing, /<form class="gnplan" data-plan-form="2026-10-08">/);
   assert.match(wing, /Starts \(CDT\)<\/span><input type="time" name="time" value="19:00"/);
-  assert.match(wing, /More options<\/a>/);
-  assert.match(wing, /plan_date=2026-10-08&amp;plan_time=19:00/, 'More options is the Sessions page form');
+  assert.match(wing, /<button type="button" class="lnk" data-plan-more>More options<\/button>/, 'More options opens the game night editor');
+  assert.doesNotMatch(wing, /\/sessions\?plan_date/, 'never the Sessions page');
   assert.deepEqual({ ...v._planFields('2026-10-08', { name: ' Night one ', time: '19:30', repeat: 'weekly' }) }, {
     name: 'Night one', scheduled_date: '2026-10-08', scheduled_time: '19:30', scheduled_tz: 'America/Chicago',
     is_recurring: '1', recurrence_type: 'weekly',
@@ -478,7 +479,28 @@ test('the full planner shows the week day by day, the month’s nights with who 
   assert.doesNotMatch(html, /Open the full planner/, 'the drawer does not link to itself');
 });
 
-test('painting your hours keeps alternating weeks and saves the every-week pattern', () => {
+test('painting your hours saves the every-week pattern', () => {
+  const { def } = load();
+  const v = freeView(def, overlay());
+  v.mine = { answered: true, tz: 'America/Chicago', blocks: [
+    { dayOfWeek: 6, startMinute: 1080, endMinute: 1320, state: 'available', weekCadence: 0 },
+  ] };
+  v._plLoadGrid();
+  assert.equal(v._plAlt, false);
+  assert.equal(v._plGrids[0][5][18], 'available', 'Saturday 6pm, Monday first');
+  v._plGrids[0][0][19] = 'preferred'; v._plGrids[0][0][20] = 'preferred';
+  assert.deepEqual(JSON.parse(JSON.stringify(v._plBlocks())), [
+    { dayOfWeek: 1, startMinute: 1140, endMinute: 1260, state: 'preferred', weekCadence: 0 },
+    { dayOfWeek: 6, startMinute: 1080, endMinute: 1320, state: 'available', weekCadence: 0 },
+  ]);
+  v._plPaint = true; v._plTool = 'available';
+  const html = v._plMineHTML();
+  assert.match(html, /data-g="0" data-c="5" data-h="18" data-st="available"/);
+  assert.match(html, /data-pl-alt="0" aria-pressed="true">Same every week/);
+  assert.doesNotMatch(html, /href="[^"]*\/availability/, 'alternating weeks are painted here, not on another page');
+});
+
+test('alternating weeks paint two weeks, named by date, and save each as its own week', () => {
   const { def } = load();
   const v = freeView(def, overlay());
   v.mine = { answered: true, tz: 'America/Chicago', blocks: [
@@ -486,16 +508,73 @@ test('painting your hours keeps alternating weeks and saves the every-week patte
     { dayOfWeek: 2, startMinute: 600, endMinute: 720, state: 'preferred', weekCadence: 1 },
   ] };
   v._plLoadGrid();
-  assert.equal(v._plGrid[5][18], 'available', 'Saturday 6pm, Monday first');
-  assert.equal(v._plGrid[1][10], '', 'the alternating Tuesday is not on the every-week grid');
-  v._plGrid[0][19] = 'preferred'; v._plGrid[0][20] = 'preferred';
+  assert.equal(v._plAlt, true, 'a member with alternating hours opens on them');
+  assert.equal(v._plGrids[1][5][18], 'available', 'every-week Saturday holds on week one');
+  assert.equal(v._plGrids[2][5][18], 'available', 'and on week two');
+  assert.equal(v._plGrids[1][1][10], 'preferred', 'the alternating Tuesday is on week one only');
+  assert.equal(v._plGrids[2][1][10], '');
   const blocks = JSON.parse(JSON.stringify(v._plBlocks()));
-  assert.deepEqual(blocks, [
-    { dayOfWeek: 1, startMinute: 1140, endMinute: 1260, state: 'preferred', weekCadence: 0 },
-    { dayOfWeek: 6, startMinute: 1080, endMinute: 1320, state: 'available', weekCadence: 0 },
-    { dayOfWeek: 2, startMinute: 600, endMinute: 720, state: 'preferred', weekCadence: 1 },
-  ]);
-  v._plPaint = true; v._plTool = 'available';
-  assert.match(v._plMineHTML(), /data-c="5" data-h="18" data-st="available"/);
-  assert.match(v._plMineHTML(), /alternating-week hours are kept/);
+  assert.ok(blocks.every((b) => b.weekCadence === 1 || b.weekCadence === 2), 'only the two weeks are saved');
+  assert.equal(blocks.filter((b) => b.dayOfWeek === 6).length, 2);
+  // 2026-10-04 is a Sunday 2961 weeks after 1970-01-04, an odd week: the
+  // server's WeekCadenceFor calls it week two (2), so Oct 11 is week one.
+  v.cal.current_year = 2026; v.cal.current_month = 10; v.cal.current_day = 7;
+  v._plPaint = true;
+  const html = v._plMineHTML();
+  assert.match(html, /Week of Sun Oct 4 and every other week after<\/h5><div class="plgrid" role="grid" aria-label="[^"]*"><div class="plgh" aria-hidden="true">(?:<span>[^<]*<\/span>)*<\/div><div class="plrow" role="row"><span class="nm">Sun<\/span><span class="plcells"><button type="button" class="plc" role="gridcell" data-g="2"/, 'the sooner week first, holding week two');
+  assert.match(html, /Week of Sun Oct 11 and every other week after[\s\S]*data-g="1"/);
+  assert.match(html, /<div class="plrow" role="row"><span class="nm">Sun<\/span>/, 'an alternating week starts on Sunday');
+  assert.match(html, /data-g="2"/);
+});
+
+test('switching to alternating weeks starts both weeks from the usual hours', () => {
+  const { def } = load();
+  const v = freeView(def, overlay());
+  v.mine = { answered: true, tz: 'UTC', blocks: [{ dayOfWeek: 1, startMinute: 1140, endMinute: 1200, state: 'available', weekCadence: 0 }] };
+  v._plLoadGrid();
+  v.refreshPlanner = () => {};
+  v._plSetAlt(true);
+  assert.equal(v._plGrids[1][0][19], 'available');
+  assert.equal(v._plGrids[2][0][19], 'available');
+  assert.equal(v._plDirty, true);
+  v._plGrids[2][0][19] = '';
+  assert.deepEqual(JSON.parse(JSON.stringify(v._plBlocks())), [{ dayOfWeek: 1, startMinute: 1140, endMinute: 1200, state: 'available', weekCadence: 1 }]);
+  v._plSetAlt(false);
+  assert.deepEqual(JSON.parse(JSON.stringify(v._plBlocks())), [{ dayOfWeek: 1, startMinute: 1140, endMinute: 1200, state: 'available', weekCadence: 0 }]);
+});
+
+test('a day’s card shows the viewer’s own hours that day and changes just that day', async () => {
+  const { def, calls } = load();
+  const v = freeView(def, overlay({ includeDetail: false, members: [] }));
+  v.freeDirector = false; v.role = 1;
+  v.mine = { answered: true, tz: 'America/Chicago', blocks: [] };
+  v.myDays = [{ id: 'x', onDate: '2026-10-09', startMinute: 0, endMinute: 1440, state: 'unavailable' }, { id: 'y', onDate: '2026-10-10', startMinute: 1200, endMinute: 1380, state: 'available' }];
+  assert.match(v._myDayHTML('2026-10-08'), /This day: <b>Your usual hours/);
+  assert.match(v._myDayHTML('2026-10-09'), /You can’t play/);
+  assert.match(v._myDayHTML('2026-10-10'), /8pm to 11pm/);
+  v._myDayFor = '2026-10-10';
+  v._myDayForm = { mode: 'diff', start: 1200, end: 1380 };
+  const form = v._myDayHTML('2026-10-10');
+  assert.match(form, /<form class="myday edit" data-myday="2026-10-10">/, 'a form, so the card holds open');
+  assert.match(form, /data-myday-from value="20:00"[\s\S]*data-myday-to value="23:00"/);
+  assert.match(form, /In America\/Chicago time/);
+});
+
+
+test('a recap with formatting is never edited as plain text in the calendar', () => {
+  const { def } = load();
+  const v = view(def, [night()]);
+  v.role = 2;
+  v._gnPages = {
+    plain: { recap: 'The vault opened.', recapHtml: '<p>The vault opened.</p>', links: [] },
+    rich: { recap: 'The vault opened.', recapHtml: '<p>The <strong>vault</strong> opened.</p><ul><li>Loot</li></ul>', links: [] },
+  };
+  assert.match(v._gnExtraHTML('plain'), /data-gn-recap="edit"><i class="fa-solid fa-pen"><\/i> Edit the recap/);
+  const rich = v._gnExtraHTML('rich');
+  assert.doesNotMatch(rich, /data-gn-recap="edit"/, 'no plain-text editor for a formatted recap');
+  assert.match(rich, /<a class="lnk" href="\/campaigns\/c1\/sessions\/rich">.*Edit on the page/);
+  v._gnRecapFor = 'rich';
+  assert.doesNotMatch(v._gnExtraHTML('rich'), /data-gn-recap-input/, 'even when asked, the textarea never opens on it');
+  v.role = 1;
+  assert.doesNotMatch(v._gnExtraHTML('plain'), /data-gn-recap="edit"/, 'players read the recap only');
 });

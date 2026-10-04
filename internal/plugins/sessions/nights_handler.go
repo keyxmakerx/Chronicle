@@ -45,3 +45,43 @@ func (h *Handler) ListGameNightsAPI(c echo.Context) error {
 	}
 	return c.JSON(http.StatusOK, nights)
 }
+
+// nightPage is what a game night's page in the calendar shows below the
+// answers: the recap and the pages linked to the night.
+type nightPage struct {
+	// Recap is the plain text the recap was written as, for editing it.
+	Recap     string          `json:"recap"`
+	RecapHTML string          `json:"recapHtml"`
+	Links     []nightPageLink `json:"links"`
+}
+
+// nightPageLink is one linked page, already filtered to what the viewer may
+// see.
+type nightPageLink struct {
+	EntityID string `json:"entityId"`
+	Name     string `json:"name"`
+	Slug     string `json:"slug"`
+	Role     string `json:"role"`
+}
+
+// NightPageAPI returns a game night's recap and linked pages for its page in
+// the calendar. Linked pages go through the same visibility filter as the
+// Sessions page (ADR-055 rule 3): a page the viewer can't open is absent,
+// not named.
+// GET /campaigns/:id/sessions/:sid/page
+func (h *Handler) NightPageAPI(c echo.Context) error {
+	cc := campaigns.GetCampaignContext(c)
+	session, err := h.requireSessionInCampaign(c, c.Param("sid"), cc.Campaign.ID)
+	if err != nil {
+		return err
+	}
+	visible, err := h.svc.FilterEntitiesForViewer(c.Request().Context(), cc.Campaign.ID, session.Entities, int(cc.VisibilityRole()), auth.GetUserID(c))
+	if err != nil {
+		return err
+	}
+	out := nightPage{Recap: strPtrVal(session.Recap), RecapHTML: strPtrVal(session.RecapHTML), Links: []nightPageLink{}}
+	for _, e := range visible {
+		out.Links = append(out.Links, nightPageLink{EntityID: e.EntityID, Name: e.EntityName, Slug: e.EntitySlug, Role: e.Role})
+	}
+	return c.JSON(http.StatusOK, out)
+}

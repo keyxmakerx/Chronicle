@@ -718,7 +718,7 @@ templ dashSessionTracker(cc *CampaignContext, config map[string]any) {
 				<i class="fa-solid fa-dice-d20 mr-1.5"></i>Upcoming Sessions
 			</h2>
 			<a
-				href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/sessions", cc.Campaign.ID)) }
+				href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/game-nights", cc.Campaign.ID)) }
 				class="text-xs text-accent hover:underline"
 			>
 				View all
