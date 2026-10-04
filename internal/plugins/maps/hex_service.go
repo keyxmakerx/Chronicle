@@ -158,7 +158,8 @@ func validHexText(field, v string, maxRunes int, multiline bool) error {
 		return apperror.NewBadRequest(field + " is too long")
 	}
 	for _, r := range v {
-		if unicode.IsControl(r) && !(multiline && (r == '\n' || r == '\t' || r == '\r')) {
+		allowed := multiline && (r == '\n' || r == '\t' || r == '\r')
+		if unicode.IsControl(r) && !allowed {
 			return apperror.NewBadRequest(field + " has characters that cannot be used")
 		}
 	}
