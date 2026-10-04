@@ -14,7 +14,7 @@ func TestNavManageRows_OwnerOnly(t *testing.T) {
 		c    navStateCase
 		want []string
 	}{
-		{"owner", navStateCase{role: 3, path: "/campaigns/c1"}, []string{"Overview", "People", "Customize", "Apps & game system", "Trash", "Settings"}},
+		{"owner", navStateCase{role: 3, path: "/campaigns/c1"}, []string{"Overview", "People", "Customize", "Game & features", "Trash", "Settings"}},
 		{"scribe", navStateCase{role: 2, path: "/campaigns/c1"}, nil},
 		{"player", navStateCase{role: 1, path: "/campaigns/c1"}, nil},
 		{"owner viewing as player", navStateCase{role: 1, player: true, path: "/campaigns/c1"}, nil},
@@ -33,32 +33,34 @@ func TestNavManageRows_OwnerOnly(t *testing.T) {
 	}
 }
 
-// Sync history joins the owner's Manage rows only when the campaign syncs.
-func TestNavManageRows_SyncHistoryNeedsSyncAPI(t *testing.T) {
+// The Foundry page joins the owner's Manage rows only when the campaign syncs.
+func TestNavManageRows_FoundryNeedsSyncAPI(t *testing.T) {
 	ctx := SetEnabledAddons(navStateCase{role: 3, path: "/campaigns/c1"}.ctx(), map[string]bool{"sync-api": true})
 	var got []string
 	for _, r := range NavManageRows(ctx) {
 		got = append(got, r.Label)
 	}
-	want := "Overview,People,Customize,Apps & game system,Sync history,Trash,Settings"
+	want := "Overview,People,Customize,Game & features,Foundry,Trash,Settings"
 	if strings.Join(got, ",") != want {
 		t.Fatalf("rows = %v, want %s", got, want)
 	}
 }
 
-func TestManageHeader_MarksCurrentPage(t *testing.T) {
+// The sidebar is the only Manage menu: the header is a title, never a
+// second row of the same links.
+func TestManageHeader_TitleOnly(t *testing.T) {
 	var buf bytes.Buffer
 	ctx := navStateCase{role: 3, path: "/campaigns/c1/members"}.ctx()
-	if err := ManageHeader("People", "manage:members").Render(ctx, &buf); err != nil {
+	if err := ManageHeader("People").Render(ctx, &buf); err != nil {
 		t.Fatal(err)
 	}
 	out := buf.String()
-	for _, want := range []string{"Manage", "Saltmarsh", "<h1", "People", `href="/campaigns/c1/settings"`} {
+	for _, want := range []string{"Manage", "Saltmarsh", "<h1", "People"} {
 		if !strings.Contains(out, want) {
 			t.Errorf("header is missing %q: %s", want, out)
 		}
 	}
-	if n := strings.Count(out, `aria-current="page"`); n != 1 {
-		t.Errorf("want exactly one current tab, got %d", n)
+	if strings.Contains(out, "<nav") || strings.Contains(out, "href=") {
+		t.Errorf("header repeats the Manage links: %s", out)
 	}
 }

@@ -206,7 +206,7 @@ templ historyDiff(d HistoryPanelData) {
 templ TrashPage(cc *campaigns.CampaignContext, d TrashPageData) {
 	@layouts.App(cc.Campaign.Name + " - Trash") {
 		<div class="max-w-4xl mx-auto">
-			@layouts.ManageHeader("Trash", "manage:trash")
+			@layouts.ManageHeader("Trash")
 			<p class="text-sm text-fg-secondary mb-4">
 				Deleted pages wait here for { fmt.Sprint(d.Retention) } days, then are gone for good.
 				Restoring a page brings back its sub-pages, links and pictures with it. Players never see the Trash.

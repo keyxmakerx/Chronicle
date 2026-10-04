@@ -132,21 +132,6 @@ func (h *Handler) OwnerTabFragmentHandler(c echo.Context) error {
 	return middleware.Render(c, http.StatusOK, OwnerTabFragment(data))
 }
 
-// CampaignSettingsFoundryGuideHandler serves the foundry-VTT-labeled
-// disclosure block inside Settings -> Integrations -> "VTT Setup
-// Guides". Lazy-loaded by campaigns/settings.templ via HTMX.
-// Owner-gated so a non-owner can't fetch the install-URL fragment.
-//
-// GET /campaigns/:id/foundry-vtt/setup-guide-fragment
-func (h *Handler) CampaignSettingsFoundryGuideHandler(c echo.Context) error {
-	cc := campaigns.GetCampaignContext(c)
-	if cc == nil {
-		return apperror.NewMissingContext()
-	}
-	isOwner := cc.MemberRole >= campaigns.RoleOwner
-	return middleware.Render(c, http.StatusOK, CampaignSettingsFoundryGuide(cc.Campaign.ID, isOwner))
-}
-
 // DashboardSyncBlockHandler serves the per-campaign dashboard "Foundry
 // VTT Sync" block. Lazy-loaded by campaigns/dashboard_blocks.templ when
 // the dashboard layout includes a sync_status block. Campaign-member
