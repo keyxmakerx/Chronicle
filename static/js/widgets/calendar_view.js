@@ -2458,6 +2458,18 @@
         '<div class="gpa"><button type="button" class="btn sm primary" data-myday-save>Save</button><button type="button" class="btn sm quiet" data-myday-cancel>Cancel</button></div></form>';
     },
 
+    // Redraws just the one-day block: the card won't redraw around a form.
+    _myDayRedraw: function (iso, focusSel) {
+      var old = this.wingEl.querySelector('.myday');
+      if (!old) { this.refreshWing(); return; }
+      var tmp = document.createElement('div');
+      tmp.innerHTML = this._myDayHTML(iso);
+      var next = tmp.firstChild;
+      if (next) old.replaceWith(next); else old.remove();
+      var f = focusSel && next && next.querySelector(focusSel);
+      if (f) f.focus({ preventScroll: true });
+    },
+
     _myDayRead: function (box) {
       var f = this._myDayForm, from = box.querySelector('[data-myday-from]'), to = box.querySelector('[data-myday-to]');
       var mins = function (v) { var p = (v || '').split(':'); return p.length === 2 ? (+p[0]) * 60 + (+p[1]) : null; };
@@ -2472,16 +2484,14 @@
         this._myDayFor = edit.dataset.mydayEdit;
         var st = this._myDayState(this._myDayFor);
         this._myDayForm = { mode: st.mode, start: st.start, end: st.end };
-        this.refreshWing();
-        var first = this.wingEl.querySelector('[data-myday] [aria-pressed="true"]');
-        if (first) first.focus({ preventScroll: true });
+        this._myDayRedraw(this._myDayFor, '[aria-pressed="true"]');
         return true;
       }
       var box = e.target.closest('[data-myday]');
       if (!box) return false;
       var mode = e.target.closest('[data-myday-mode]');
-      if (mode) { this._myDayRead(box); this._myDayForm.mode = mode.dataset.mydayMode; this.refreshWing(); return true; }
-      if (e.target.closest('[data-myday-cancel]')) { this._myDayFor = null; this._myDayForm = null; this.refreshWing(); return true; }
+      if (mode) { this._myDayRead(box); this._myDayForm.mode = mode.dataset.mydayMode; this._myDayRedraw(box.dataset.myday, '[aria-pressed="true"]'); return true; }
+      if (e.target.closest('[data-myday-cancel]')) { var was = box.dataset.myday; this._myDayFor = null; this._myDayForm = null; this._myDayRedraw(was, '[data-myday-edit]'); return true; }
       if (!e.target.closest('[data-myday-save]')) return true;
       this._myDayRead(box);
       var f = this._myDayForm, iso = box.dataset.myday, err = box.querySelector('.gperr'), blocks = [];
@@ -2497,6 +2507,7 @@
           if (!resp.ok) return resp.json().catch(function () { return {}; }).then(function (j) { return Promise.reject(j && j.error); });
           self._myDayFor = null;
           self._myDayForm = null;
+          self._myDayRedraw(iso);
           // Everyone's lines include this viewer's, so the weeks are read again.
           self._freeWeeks = {};
           self.freeByDate = {};
