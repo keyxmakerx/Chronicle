@@ -4507,6 +4507,7 @@ func (a *App) RegisterRoutes() {
 			effectiveRole := int(cc.MemberRole)
 			isOwner := cc.MemberRole >= campaigns.RoleOwner
 			ctx = layouts.SetIsOwner(ctx, isOwner)
+			ctx = layouts.SetIsDmGranted(ctx, cc.IsDmGranted)
 			if isOwner {
 				if cookie, err := c.Cookie("chronicle_view_as_player"); err == nil && cookie.Value == "1" {
 					effectiveRole = int(campaigns.RolePlayer)

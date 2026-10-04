@@ -35,6 +35,7 @@ const (
 	keyEnabledSystem       ctxKey = "layout_enabled_system"
 	keyViewingAsPlayer     ctxKey = "layout_viewing_as_player"
 	keyIsOwner             ctxKey = "layout_is_owner"
+	keyIsDmGranted         ctxKey = "layout_is_dm_granted"
 	keyMediaURLFunc        ctxKey = "layout_media_url_func"
 	keyMediaThumbFunc      ctxKey = "layout_media_thumb_func"
 	keyExtWidgetScripts    ctxKey = "layout_ext_widget_scripts"
@@ -439,6 +440,18 @@ func SetIsOwner(ctx context.Context, isOwner bool) context.Context {
 func IsOwner(ctx context.Context) bool {
 	isOwner, _ := ctx.Value(keyIsOwner).(bool)
 	return isOwner
+}
+
+// SetIsDmGranted stores whether the owner has given this member DM access.
+func SetIsDmGranted(ctx context.Context, granted bool) context.Context {
+	return context.WithValue(ctx, keyIsDmGranted, granted)
+}
+
+// IsDmGranted reports whether the owner has given this member DM access.
+// Their role stays what it is; DM access adds the game-running tools.
+func IsDmGranted(ctx context.Context) bool {
+	granted, _ := ctx.Value(keyIsDmGranted).(bool)
+	return granted
 }
 
 // --- Signed Media URLs ---
