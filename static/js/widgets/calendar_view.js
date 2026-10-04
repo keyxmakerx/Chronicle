@@ -1317,16 +1317,20 @@
         return;
       }
       chip.hidden = false;
+      // boot.js reuses this object for every mount, so a fresh dock starts
+      // with no day drawn, whatever the last calendar showed.
+      this._skySig = null;
       this._skyDay();
     },
 
-    // Today's sky, redrawn only when today's events change. The calendar
-    // and events here are already what this viewer may see.
+    // Today's sky, redrawn only when the moment or today's events change.
+    // The calendar and events here are already what this viewer may see.
     _skyDay: function () {
       var c = this.cal;
       if (!this.skyDock || !this.eventsByMonth[this.monthKey(c.current_year, c.current_month)]) return;
       var evs = this.eventsOnDay(c.current_year, c.current_month, c.current_day);
-      var sig = evs.map(function (e) { return e.id + ':' + (e.updated_at || ''); }).join(',');
+      var sig = [this.calendarId, c.current_year, c.current_month, c.current_day, c.current_hour, c.current_minute].join('/') + '|' +
+        evs.map(function (e) { return e.id + ':' + (e.updated_at || ''); }).join(',');
       if (sig === this._skySig) return;
       this._skySig = sig;
       this.skyDock.setDay(c, evs);
