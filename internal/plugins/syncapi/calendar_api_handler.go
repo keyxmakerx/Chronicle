@@ -91,11 +91,18 @@ func (h *CalendarAPIHandler) viewer(c echo.Context) permissions.Viewer {
 // Chronicle's own player filtering rather than re-deriving it. It can only
 // narrow what the key would otherwise read.
 func (h *CalendarAPIHandler) readViewer(c echo.Context) permissions.Viewer {
-	if c.QueryParam("audience") == "players" {
+	if playersAudience(c) {
 		return permissions.RequestViewer(int(campaigns.RolePlayer), "")
 	}
 	return h.viewer(c)
 }
+
+// audiencePlayers is echoed as `"audience"` on a players-audience date or
+// events read, so the module can tell this server filtered for players: an
+// older one ignores the parameter and answers with the key's own view.
+const audiencePlayers = "players"
+
+func playersAudience(c echo.Context) bool { return c.QueryParam("audience") == audiencePlayers }
 
 // requireOwner mirrors the calendar plugin's RequireRole(Owner) web routes
 // (settings, event delete) for the same actions over the API, where
@@ -222,6 +229,9 @@ func (h *CalendarAPIHandler) GetCurrentDate(c echo.Context) error {
 	}
 	if cal.Weather != nil {
 		result["current_weather"] = cal.Weather
+	}
+	if playersAudience(c) {
+		result["audience"] = audiencePlayers
 	}
 	return c.JSON(http.StatusOK, result)
 }
@@ -380,7 +390,11 @@ func (h *CalendarAPIHandler) ListEvents(c echo.Context) error {
 		out = append(out, eventForWire(e))
 	}
 	sanitizeCalendarEventsHTMLForEgress(out)
-	return c.JSON(http.StatusOK, map[string]any{"data": out, "total": len(out)})
+	body := map[string]any{"data": out, "total": len(out)}
+	if playersAudience(c) {
+		body["audience"] = audiencePlayers
+	}
+	return c.JSON(http.StatusOK, body)
 }
 
 // GetEvent returns one event of the default calendar.

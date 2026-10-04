@@ -465,8 +465,13 @@ func TestCalendarAPI_AudiencePlayersNarrows(t *testing.T) {
 			t.Run(r.name+"/"+tc.name, func(t *testing.T) {
 				svc := newCalendarFixture()
 				h := NewCalendarAPIHandler(nil, svc, &stubCampaignSvcForCalendarAPI{role: campaigns.RoleOwner})
-				if _, err := callCalendarAPI(t, h, r.fn(h), http.MethodGet, tc.target, "", sessionKey()); err != nil {
+				rec, err := callCalendarAPI(t, h, r.fn(h), http.MethodGet, tc.target, "", sessionKey())
+				if err != nil {
 					t.Fatalf("%s: %v", r.name, err)
+				}
+				echoed := strings.Contains(rec.Body.String(), `"audience":"players"`)
+				if r.name != "GetCalendar" && echoed != (tc.wantUser == "") {
+					t.Errorf("audience echoed = %v, want %v", echoed, tc.wantUser == "")
 				}
 				v := svc.viewers[0]
 				if v.Role() != tc.wantRole || v.UserID() != tc.wantUser || v.IsSystem() || v.SkipsPerUserRules() != (tc.wantRole >= int(campaigns.RoleOwner)) {
