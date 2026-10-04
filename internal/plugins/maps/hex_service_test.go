@@ -19,11 +19,12 @@ import (
 
 // fakeHexRepo is an in-memory HexRepository that records every write.
 type fakeHexRepo struct {
-	layer   *HexLayer
-	cells   map[HexKey]HexCell
-	applied [][]HexCellWrite
-	by      string
-	count   int // overrides CountCells when non-zero
+	layer      *HexLayer
+	cells      map[HexKey]HexCell
+	applied    [][]HexCellWrite
+	by         string
+	count      int // overrides CountCells when non-zero
+	anchorSets int // SetAnchor calls
 }
 
 func newFakeHexRepo() *fakeHexRepo { return &fakeHexRepo{cells: map[HexKey]HexCell{}} }

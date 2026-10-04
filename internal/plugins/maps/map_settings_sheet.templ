@@ -130,6 +130,13 @@ templ mapSettingsSheet(data MapViewData) {
 				@sheetChips("grid_type", []sheetChoice{{"none", "None"}, {"square", "Squares"}, {"hex", "Hexes"}})
 				<label class="mp-f"><span>Size</span><input type="range" id="ms-grid-size" min="10" max="300" step="5"/></label>
 				<label class="mp-f"><span>Strength</span><input type="range" id="ms-grid-strength" min="5" max="80"/></label>
+				<!-- Shown while the grid is hexes; the viewer fills the chips from the map's pictures. -->
+				<div id="ms-hex" hidden>
+					<small>Hexes add a Hexes tool to the map: paint terrain, and name and write notes on hexes.</small>
+					<div class="mp-f"><span>Hexes cover</span>
+						<div id="ms-hexcover" class="mp-chips" role="group" aria-label="Hexes cover"></div>
+					</div>
+				</div>
 			</section>
 			<section>
 				<h3>Opening the map</h3>

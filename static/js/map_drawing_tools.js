@@ -13,6 +13,8 @@
  *   { start(shape), cancel(), setStyle({color,width}), setShadowStrength(alpha), undo(),
  *     setVisible(bool), count(), addPicture({id}), pictureSelectMode(bool),
  *     escape(), deleteSelected() }
+ * and `window.chronicleMap.pictures` (when the picture module is present), which
+ * the hex layer reads: { ready(), get(id), list(), subscribe(fn), straighten(id) }.
  *
  * Drawings are persisted via the REST API:
  *   POST /campaigns/:id/maps/:mid/drawings
@@ -61,6 +63,21 @@
     // withholds what lies under it.
     var shadows = window.ChronicleMapShadow ? window.ChronicleMapShadow.attach(map, { toLatLng: toLatLng }) : null;
     // Pictures placed on the map (drawings of type "image"), likewise optional.
+    // The registry of pictures the hex layer reads (ctx.pictures). It lives
+    // here, not in the picture module, because a picture leaves the map layer
+    // while drawings are hidden, and the hexes pinned to it must not go with it.
+    var picReg = {};
+    var picLive = {};
+    var picSubs = [];
+    var picSeq = 0;
+    var picReady = false;
+    function picNotify(kind, id) {
+      picSubs.slice().forEach(function (fn) { try { fn(kind, id); } catch (e) { console.error('[map-drawing] picture listener failed:', e); } });
+    }
+    function pictureChanged(kind, id, points) {
+      if (kind === 'geo') picLive[id] = points; else delete picLive[id];
+      picNotify(kind, id);
+    }
     var pictures = window.ChronicleMapPictures ? window.ChronicleMapPictures.attach(map, {
       mapW: w,
       mapH: h,
@@ -81,9 +98,46 @@
         return !!(ctx.isOwner || ctx.canDmOnly || (ctx.userID && d.created_by === ctx.userID));
       },
       onPatch: patchDrawing,
-      onDelete: confirmDelete
+      onDelete: confirmDelete,
+      onChange: pictureChanged,
+      hexCover: ctx.hexCover
     }) : null;
+    if (pictures) {
+      // What the hex layer needs to know about pictures: which exist, where they
+      // are right now (live while one is dragged), and when that changes.
+      ctx.pictures = {
+        ready: function () { return picReady; },
+        get: function (id) {
+          var d = picReg[id];
+          if (!d) return null;
+          return { id: d.id, points: picLive[id] || d.points, sort_order: d.sort_order || 0,
+            visibility: d.visibility, rotation: Number(d.rotation) || 0, seq: d._seq };
+        },
+        // Pictures in stacking order, which is how they are numbered for people.
+        list: function () {
+          return Object.keys(picReg).map(function (id) { return ctx.pictures.get(id); }).sort(function (a, b) {
+            return a.sort_order - b.sort_order || a.seq - b.seq;
+          });
+        },
+        subscribe: function (fn) {
+          picSubs.push(fn);
+          return function () { var i = picSubs.indexOf(fn); if (i !== -1) picSubs.splice(i, 1); };
+        },
+        // straighten shows a picture upright after the server turned it so,
+        // without waiting for a reload.
+        straighten: function (id) {
+          var d = picReg[id];
+          if (!d) return;
+          d.rotation = 0;
+          var layer = layersByID[id];
+          if (layer && layer.reload) layer.reload();
+          picNotify('patch', id);
+        }
+      };
+      if (ctx.hexes && ctx.hexes.bindPictures) ctx.hexes.bindPictures();
+    }
     ctx.onDestroy = function () {
+      picSubs = [];
       if (shadows) shadows.destroy();
       if (pictures) pictures.destroy();
     };
@@ -196,8 +250,12 @@
           if (!drawings || !Array.isArray(drawings)) return;
           drawingLayer.clearLayers();
           layersByID = {};
+          picReg = {};
+          picLive = {};
           drawingCount = 0;
           drawings.forEach(function (d) { renderDrawing(d); });
+          picReady = true;
+          picNotify('list');
           notifyCount();
         });
     }
@@ -226,7 +284,11 @@
           }
           break;
         case 'image':
-          if (pictures && d.image_id) layer = pictures.layer(d);
+          if (pictures && d.image_id) {
+            layer = pictures.layer(d);
+            d._seq = picSeq++;
+            picReg[d.id] = d;
+          }
           break;
         case 'shadow':
           // Only the owner and co-DMs see through it; scribes are hidden like players.
@@ -296,6 +358,7 @@
     // server-side.
     function forget(id) {
       var layer = layersByID[id];
+      if (picReg[id]) { delete picReg[id]; delete picLive[id]; picNotify('list', id); }
       if (layer) {
         drawingLayer.removeLayer(layer);
         delete layersByID[id];
@@ -309,6 +372,7 @@
     function addSaved(d) {
       if (!d) return;
       renderDrawing(d);
+      if (picReg[d.id]) picNotify('list', d.id);
       sessionStack.push(d.id);
       notifyCount();
     }

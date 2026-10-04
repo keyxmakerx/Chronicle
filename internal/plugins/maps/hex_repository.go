@@ -35,6 +35,10 @@ type HexRepository interface {
 	GetCells(ctx context.Context, mapID string, keys []HexKey) (map[HexKey]HexCell, error)
 	// CountCells returns how many cells a map stores.
 	CountCells(ctx context.Context, mapID string) (int, error)
+	// SetAnchor points the layer at a picture (nil: the whole map), creating the
+	// layer row on first use, bumps the version and returns it. Only the anchor
+	// column is touched, so it cannot disturb fog, the party or the miles.
+	SetAnchor(ctx context.Context, mapID string, anchor *string) (uint64, error)
 	// ApplyCells writes the changes and bumps the layer's version in one
 	// transaction, creating the layer row on first use, deleting any touched cell
 	// that ends up empty, and returns the new
@@ -187,6 +191,30 @@ func (r *hexRepo) ApplyCells(ctx context.Context, mapID, userID string, writes [
 		}
 	}
 
+	var version uint64
+	if err := tx.QueryRowContext(ctx,
+		`SELECT version FROM map_hex_layers WHERE map_id = ?`, mapID).Scan(&version); err != nil {
+		return 0, apperror.NewInternal(err)
+	}
+	if err := tx.Commit(); err != nil {
+		return 0, apperror.NewInternal(err)
+	}
+	return version, nil
+}
+
+func (r *hexRepo) SetAnchor(ctx context.Context, mapID string, anchor *string) (uint64, error) {
+	tx, err := r.db.BeginTx(ctx, nil)
+	if err != nil {
+		return 0, apperror.NewInternal(err)
+	}
+	defer func() { _ = tx.Rollback() }()
+
+	if _, err := tx.ExecContext(ctx, `
+		INSERT INTO map_hex_layers (map_id, anchor_drawing_id, version) VALUES (?, ?, 1)
+		ON DUPLICATE KEY UPDATE anchor_drawing_id = VALUES(anchor_drawing_id), version = version + 1`,
+		mapID, anchor); err != nil {
+		return 0, apperror.NewInternal(err)
+	}
 	var version uint64
 	if err := tx.QueryRowContext(ctx,
 		`SELECT version FROM map_hex_layers WHERE map_id = ?`, mapID).Scan(&version); err != nil {

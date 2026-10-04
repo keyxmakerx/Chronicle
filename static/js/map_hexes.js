@@ -19,9 +19,16 @@
  * and exported for test/js/map_hexes.test.mjs; the browser part needs Leaflet
  * and window.chronicleMap.
  *
+ * By default the field covers the whole map. When the layer is pinned to a
+ * picture (layer.anchor_drawing_id) the field is laid inside that picture's box
+ * and follows it live as it is moved or resized: the geometry is built once in
+ * a box 1000 wide, and the picture's position and size only change one
+ * transform, so cell keys never change with the picture's size.
+ *
  * Data comes from, and is saved to, the REST API:
  *   GET   /campaigns/:id/maps/:mid/hexes          layer + the cells this viewer may see
  *   PATCH /campaigns/:id/maps/:mid/hexes/cells    { cells: [{col,row,terrain?,name?,notes?}] }
+ *   PUT   /campaigns/:id/maps/:mid/hexes/layer    { anchor_drawing_id: id | null } (owner or DM; the viewer sends it)
  * PATCH is partial: a stroke sends only terrain, an edit of a name sends only
  * the name. The server decides who may write; ctx.canPaintHexes (the same rule
  * as HexService.requireWriter) only decides what is offered.
@@ -93,6 +100,58 @@
       rows: Math.min(MAX_HEX_AXIS, Math.ceil((mapH + r) / (1.5 * r)))
     };
   }
+
+  // The width a pinned field is built at. grid.size is measured as if the
+  // picture were this wide, so a picture's real size only scales the result.
+  var REF_W = 1000;
+
+  function clampAxis(n) { return Math.max(1, Math.min(MAX_HEX_AXIS, n)); }
+
+  // anchoredGeometry lays the field inside a box (boxW by boxH, origin 0,0): hex
+  // (0,0) is the first hex that fits whole at the top-left, and the field stops
+  // where the next hex would cross the right or bottom edge, so no hex spills
+  // off the picture. Mirrors NewAnchoredHexGeometry in hex.go.
+  function anchoredGeometry(gridSize, boxW, boxH) {
+    var r = gridSize * boxW / 1000 / 2;
+    var w = SQRT3 * r;
+    if (!(r > 0)) return { r: r, w: w, ox: 0, oy: 0, cols: 0, rows: 0 };
+    return {
+      r: r, w: w, ox: w / 2, oy: r,
+      cols: clampAxis(Math.floor((boxW - 1.5 * w) / w) + 1),
+      rows: clampAxis(Math.floor((boxH - 2 * r) / (1.5 * r)) + 1)
+    };
+  }
+
+  // boxFromPoints turns a picture's two corners (map percentages) into a box in
+  // map pixels, or null when they do not make a usable box.
+  function boxFromPoints(points, mapW, mapH) {
+    if (!Array.isArray(points) || points.length !== 2) return null;
+    var a = points[0], b = points[1];
+    if (!a || !b || !isFinite(a.x) || !isFinite(a.y) || !isFinite(b.x) || !isFinite(b.y)) return null;
+    var box = {
+      x: Math.min(a.x, b.x) / 100 * mapW, y: Math.min(a.y, b.y) / 100 * mapH,
+      w: Math.abs(b.x - a.x) / 100 * mapW, h: Math.abs(b.y - a.y) / 100 * mapH
+    };
+    return box.w > 0 && box.h > 0 ? box : null;
+  }
+
+  // layoutFor is where the field is and how it sits on the map: the geometry in
+  // its own units, and the transform {x, y, s} that carries those units to map
+  // pixels. With no box the field covers the whole map and the transform does
+  // nothing; with a box the geometry is always built REF_W wide, so moving or
+  // resizing the picture changes only the transform.
+  function layoutFor(gridSize, box, mapW, mapH) {
+    if (!box) return { geo: geometry(gridSize, mapW, mapH), xf: { x: 0, y: 0, s: 1 } };
+    var s = box.w / REF_W;
+    return { geo: anchoredGeometry(gridSize, REF_W, box.h / s), xf: { x: box.x, y: box.y, s: s } };
+  }
+
+  // hexAtMap is the hex under a map point (pixels), or null outside the field.
+  function hexAtMap(lay, x, y) {
+    return hexAt(lay.geo, (x - lay.xf.x) / lay.xf.s, (y - lay.xf.y) / lay.xf.s);
+  }
+
+  function xfAttr(xf) { return 'translate(' + xf.x + ' ' + xf.y + ') scale(' + xf.s + ')'; }
 
   // center is the centre of hex (col,row) in map pixels.
   function center(g, col, row) {
@@ -240,6 +299,7 @@
   if (typeof module !== 'undefined' && module.exports) {
     module.exports = {
       TERRAINS: TERRAINS, SIMPLE: SIMPLE, BATCH_MAX: BATCH_MAX, MAX_HEX_AXIS: MAX_HEX_AXIS, geometry: geometry, center: center,
+      anchoredGeometry: anchoredGeometry, boxFromPoints: boxFromPoints, layoutFor: layoutFor, hexAtMap: hexAtMap, xfAttr: xfAttr,
       hexAt: hexAt, cubeOf: cubeOf, distance: distance, hexLine: hexLine, hexD: hexD,
       cellsPath: cellsPath, linesPath: linesPath, roadPath: roadPath, batches: batches,
       mergeEntry: mergeEntry
@@ -271,6 +331,17 @@
     var mode = 'look';
     var paintTerrain = 'forest';
     var geo = null;
+    var layout = null;        // { geo, xf }: where the field sits on the map
+    var anchorId = null;      // the picture the server says the layer covers, or null for the whole map
+    var hidden = false;       // the server withholds this layer from the viewer
+    var loading = false;
+    var loadTried = false;
+    var placedSig = '';
+    var placePending = false;
+    var pendingOpen = null;   // 'look' | 'paint': open the tool once the field is up
+    var reloadedFor = null;
+    var picUnsub = null;
+    var root = null;
     var cells = {};           // "col,row" -> { col, row, terrain, name, notes }
     var fx = {};              // "col,row" -> { prev, next, t }: hexes cross-fading now
     var version = 0;
@@ -301,6 +372,12 @@
 
     function removeOverlay() {
       if (overlay) { map.removeLayer(overlay); overlay = null; }
+      root = null;
+      placedSig = '';
+    }
+
+    function applyTransform() {
+      if (root && layout) root.setAttribute('transform', xfAttr(layout.xf));
     }
 
     function buildOverlay() {
@@ -318,11 +395,16 @@
       });
       hoverPath.style.display = 'none';
       gHover.appendChild(hoverPath);
+      // Everything is drawn in the field's own units inside one group; its
+      // transform is all that moves when a pinned picture does.
+      root = svgEl('g');
+      root.appendChild(gFills);
+      root.appendChild(gLines);
+      root.appendChild(gTop);
+      root.appendChild(gHover);
       svg.appendChild(defs);
-      svg.appendChild(gFills);
-      svg.appendChild(gLines);
-      svg.appendChild(gTop);
-      svg.appendChild(gHover);
+      svg.appendChild(root);
+      applyTransform();
       // The hex lines: one path for the whole field, a constant 1px wide at
       // every zoom, like the plain grid it replaces.
       gLines.appendChild(svgEl('path', {
@@ -506,6 +588,9 @@
           };
         });
         version = data.version || 0;
+        anchorId = (data.layer && data.layer.anchor_drawing_id) || null;
+        hidden = !!data.hidden;
+        if (ctx.onHexAnchor) ctx.onHexAnchor(anchorId);
         loaded = true;
         fx = {};
         renderSoon();
@@ -517,11 +602,11 @@
 
     function pointToHex(e) {
       var ll = map.mouseEventToLatLng(e);
-      return hexAt(geo, ll.lng, mapH - ll.lat);
+      return hexAtMap(layout, ll.lng, mapH - ll.lat);
     }
 
     function moveHover(e) {
-      if (!active || !geo) { hoverPath.style.display = 'none'; return; }
+      if (!active || !geo || !layout) { hoverPath.style.display = 'none'; return; }
       var h = pointToHex(e);
       if (!h) { hoverPath.style.display = 'none'; return; }
       var c = center(geo, h.col, h.row);
@@ -563,7 +648,7 @@
     // Look mode: a click selects a hex and opens its card.
     function onMapClick(e) {
       if (!active || !layerOn || mode !== 'look') return;
-      var h = hexAt(geo, e.latlng.lng, mapH - e.latlng.lat);
+      var h = hexAtMap(layout, e.latlng.lng, mapH - e.latlng.lat);
       if (!h) return;
       flush();
       selected = key(h.col, h.row);
@@ -709,35 +794,122 @@
       if (rail && !ctx.isScribe) rail.hidden = !on;
     }
 
-    // refresh follows the map's display settings: it turns the layer on or off,
-    // and re-lays the hexes when the grid size or strength changes (the owner's
-    // settings sheet previews them live).
-    function refresh() {
+    // wantedAnchor is the picture the field should cover right now: the owner's
+    // unsaved choice in the settings sheet while it is open (it previews live),
+    // otherwise what the server holds.
+    function wantedAnchor() {
       var D = display();
-      var g = null;
-      if (D.grid_type === 'hex') {
-        g = geometry(D.grid_size || 50, mapW, mapH);
-        if (!(g.r >= 1) || g.cols * g.rows > MAX_POSITIONS) g = null;
+      return Object.prototype.hasOwnProperty.call(D, 'hex_anchor') ? D.hex_anchor : anchorId;
+    }
+
+    // off takes the field down. keepLines keeps the viewer's plain grid away as
+    // well, for a layer that exists but may not be shown to this viewer: the
+    // plain hex grid would give away the very thing being withheld.
+    function off(keepLines) {
+      var wasActive = active;
+      layerOn = false;
+      setActive(false);
+      // The viewer's own tool state must not keep pointing at a tool that is gone.
+      if (wasActive && ctx.setTool) ctx.setTool('move');
+      removeOverlay();
+      showTool(false);
+      if (ctx.onHexLines) ctx.onHexLines(!!keepLines);
+      renderPanel();
+    }
+
+    // placeSoon coalesces picture and settings changes to one placement a frame,
+    // so dragging a picture does not rebuild the field on every pointer event.
+    function placeSoon() {
+      if (placePending) return;
+      placePending = true;
+      requestAnimationFrame(function () { placePending = false; if (loaded && display().grid_type === 'hex' && !hidden) place(); });
+    }
+
+    // place puts the field where it belongs. If only the picture's position or
+    // size changed it moves the group; anything else rebuilds the overlay.
+    function place() {
+      var D = display();
+      var aid = wantedAnchor();
+      var box = null;
+      if (aid) {
+        var pic = ctx.pictures ? ctx.pictures.get(aid) : null;
+        box = pic ? boxFromPoints(pic.points, mapW, mapH) : null;
+        if (!box) {
+          // The picture is not known yet (the drawing module is still loading)
+          // or it is gone. Once drawings are in, a missing server anchor is
+          // re-read once: the server then answers with the whole map.
+          off(true);
+          if (ctx.pictures && ctx.pictures.ready() && aid === anchorId && reloadedFor !== aid) {
+            reloadedFor = aid;
+            load().then(function () { if (loaded) refresh(); });
+          }
+          return;
+        }
       }
-      if (!g) {
-        layerOn = false;
-        setActive(false);
-        removeOverlay();
-        showTool(false);
-        if (ctx.onHexLines) ctx.onHexLines(false);
-        return;
-      }
+      var next = layoutFor(D.grid_size || 50, box, mapW, mapH);
+      var g = next.geo;
+      if (!box && !(g.r >= 1)) { off(); return; }
+      if (g.cols * g.rows > MAX_POSITIONS || !(g.cols > 0)) { off(); return; }
+      var sig = [D.grid_size, D.grid_strength, g.r, g.cols, g.rows].join('|');
+      layout = next;
       geo = g;
+      if (overlay && sig === placedSig) { applyTransform(); return; }
+      placedSig = sig;
       layerOn = true;
       buildOverlay();
       showTool(true);
       if (ctx.onHexLines) ctx.onHexLines(true);
-      if (!loaded) load(); else renderSoon();
+      renderSoon();
       renderPanel();
+      if (pendingOpen) {
+        mode = pendingOpen === 'paint' && canWrite ? 'paint' : 'look';
+        pendingOpen = null;
+        if (ctx.setTool) ctx.setTool('hex');
+      }
+    }
+
+    // refresh follows the map's display settings: it turns the layer on or off,
+    // and re-lays the hexes when the grid size or strength changes (the owner's
+    // settings sheet previews them live). The layer is read first, because
+    // where it sits depends on which picture it covers.
+    function refresh() {
+      if (display().grid_type !== 'hex') { off(); return; }
+      if (!loaded) {
+        // One attempt: if the read fails the viewer's plain grid stays, and
+        // the slider does not hammer a server that is not answering.
+        if (loading || loadTried) return;
+        loading = loadTried = true;
+        load().then(function () { loading = false; if (loaded) refresh(); });
+        return;
+      }
+      if (hidden) { off(true); return; }
+      bindPictures();
+      place();
+    }
+
+    function bindPictures() {
+      if (picUnsub || !ctx.pictures) return;
+      picUnsub = ctx.pictures.subscribe(placeSoon);
     }
 
     var handle = {
       refresh: refresh,
+      // bindPictures is called by the drawing module once it has the pictures,
+      // which may be after this module started.
+      bindPictures: function () { bindPictures(); if (loaded) placeSoon(); },
+      anchorId: function () { return anchorId; },
+      hasCells: function () { return Object.keys(cells).length > 0; },
+      // reloadLayer re-reads the layer (after the cover was changed) and lays
+      // the field out again.
+      reloadLayer: function () { reloadedFor = null; loadTried = true; return load().then(function () { if (loaded) refresh(); }); },
+      // open shows the Hexes tool in the given mode as soon as the field is up.
+      open: function (m) {
+        pendingOpen = m;
+        if (!layerOn) return;
+        pendingOpen = null;
+        mode = m === 'paint' && canWrite ? 'paint' : 'look';
+        if (ctx.setTool) ctx.setTool('hex');
+      },
       setActive: setActive,
       isOn: function () { return layerOn; },
       // escape steps back from an open card; false means nothing was open.
@@ -747,6 +919,7 @@
       },
       destroy: function () {
         window.removeEventListener('pagehide', onPageHide);
+        if (picUnsub) { picUnsub(); picUnsub = null; }
         flush();
         clearTimeout(fxTimer);
         container.removeEventListener('pointerdown', onPointerDown);
