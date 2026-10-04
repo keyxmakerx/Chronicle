@@ -14,6 +14,8 @@ import (
 
 const (
 	maxShopRoomPieces  = 80
+	maxShopRoomDecor   = 120
+	maxShopRoomSpot    = 63
 	maxShopRoomItems   = 500
 	maxShopRoomLines   = 10
 	maxShopRoomLine    = 200
@@ -129,6 +131,24 @@ func (l *ShopRoomLayout) validate() error {
 			if !(v >= shopRoomCoordMin && v <= shopRoomCoordMax) {
 				return fmt.Errorf("piece coordinate out of range")
 			}
+		}
+	}
+
+	if len(l.Decor) > maxShopRoomDecor {
+		return fmt.Errorf("too many decorations")
+	}
+	if l.Decor == nil {
+		l.Decor = []ShopRoomDecor{}
+	}
+	for _, d := range l.Decor {
+		if !seen[d.Piece] {
+			return fmt.Errorf("decoration on a missing piece")
+		}
+		if d.Spot < 0 || d.Spot > maxShopRoomSpot {
+			return fmt.Errorf("invalid decoration spot")
+		}
+		if d.Icon == "" || !shopRoomIconSet[d.Icon] {
+			return fmt.Errorf("invalid decoration icon")
 		}
 	}
 

@@ -18,6 +18,7 @@ type ShopRoomLayout struct {
 	Palette     string                      `json:"palette"`
 	Seeds       ShopRoomSeeds               `json:"seeds"`
 	Pieces      []ShopRoomPiece             `json:"pieces"`
+	Decor       []ShopRoomDecor             `json:"decor"`
 	Items       map[string]ShopRoomItemLook `json:"items"`
 	Portrait    *ShopRoomPortrait           `json:"portrait"`
 	Lines       []string                    `json:"lines"`
@@ -43,6 +44,15 @@ type ShopRoomPiece struct {
 	W      float64 `json:"w"`
 	D      float64 `json:"d"`
 	Pinned bool    `json:"pinned"`
+}
+
+// ShopRoomDecor is a decoration the GM placed by hand: an icon standing on
+// one of a furniture piece's spots (Spot indexes that piece's spots in
+// drawing order). It is dropped when its piece is gone.
+type ShopRoomDecor struct {
+	Piece int    `json:"piece"`
+	Spot  int    `json:"spot"`
+	Icon  string `json:"icon"`
 }
 
 // ShopRoomItemLook is how one shop good (a "sells" relation) is drawn. Both

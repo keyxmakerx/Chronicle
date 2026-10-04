@@ -78,6 +78,17 @@ func TestNormalizeShopRoomLayout_Rejects(t *testing.T) {
 		{"bad setting", mutate(func(m map[string]any) { m["setting"] = "moon" })},
 		{"bad size", mutate(func(m map[string]any) { m["size"] = "xl" })},
 		{"bad furniture", mutate(func(m map[string]any) { m["furniture"] = "" })},
+		{"decoration on a missing piece", mutate(func(m map[string]any) { m["decor"] = []any{map[string]any{"piece": 9, "spot": 0, "icon": "gem"}} })},
+		{"decoration spot out of range", mutate(func(m map[string]any) { m["decor"] = []any{map[string]any{"piece": 1, "spot": 64, "icon": "gem"}} })},
+		{"decoration with no icon", mutate(func(m map[string]any) { m["decor"] = []any{map[string]any{"piece": 1, "spot": 0, "icon": ""}} })},
+		{"decoration with an unknown icon", mutate(func(m map[string]any) { m["decor"] = []any{map[string]any{"piece": 1, "spot": 0, "icon": "rocket"}} })},
+		{"too many decorations", mutate(func(m map[string]any) {
+			ds := make([]any, maxShopRoomDecor+1)
+			for i := range ds {
+				ds[i] = map[string]any{"piece": 1, "spot": 0, "icon": "gem"}
+			}
+			m["decor"] = ds
+		})},
 		{"bad decorations", mutate(func(m map[string]any) { m["decorations"] = "many" })},
 		{"bad palette", mutate(func(m map[string]any) { m["palette"] = "pink" })},
 		{"seed zero", mutate(func(m map[string]any) { m["seeds"] = map[string]any{"room": 0, "goods": 2, "deco": 3} })},
@@ -163,6 +174,13 @@ func TestNormalizeShopRoomLayout_Accepts(t *testing.T) {
 				t.Errorf("unexpected: %+v", l)
 			}
 		}},
+		{"hand-placed decorations kept", mutate(func(m map[string]any) {
+			m["decor"] = []any{map[string]any{"piece": 1, "spot": 63, "icon": "gem"}}
+		}), func(t *testing.T, l ShopRoomLayout) {
+			if len(l.Decor) != 1 || l.Decor[0] != (ShopRoomDecor{Piece: 1, Spot: 63, Icon: "gem"}) {
+				t.Errorf("decor: %+v", l.Decor)
+			}
+		}},
 		{"unknown fields are dropped", mutate(func(m map[string]any) { m["extra"] = "<script>" }), func(t *testing.T, l ShopRoomLayout) {}},
 		{"empty collections become empty not null", mutate(func(m map[string]any) {
 			delete(m, "pieces")
@@ -170,7 +188,7 @@ func TestNormalizeShopRoomLayout_Accepts(t *testing.T) {
 			delete(m, "lines")
 			delete(m, "portrait")
 		}), func(t *testing.T, l ShopRoomLayout) {
-			if l.Pieces == nil || l.Items == nil || l.Lines == nil {
+			if l.Pieces == nil || l.Items == nil || l.Lines == nil || l.Decor == nil {
 				t.Errorf("nil collection: %+v", l)
 			}
 		}},
