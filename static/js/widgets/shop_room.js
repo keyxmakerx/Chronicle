@@ -894,12 +894,14 @@
     '.shr-dr{position:relative;flex:none;width:64px;height:96px;perspective:420px;transform-origin:50% 55%;transition:transform .5s cubic-bezier(.3,.7,.3,1)}.shr-dr>span{position:absolute;inset:0}.shr-dr svg{display:block;width:100%;height:100%}',
     '.shr-dr .lf{transform-origin:6px 50%;transition:transform .7s cubic-bezier(.45,.05,.3,1)}.shr-front.opening .lf{transform:rotateY(-110deg)}',
     '.shr.closed .shr-front{display:flex}.shr.closed .shr-card{display:none}',
-    // Walking in: you move into the lit doorway until it fills the view, then the shop fades up around you.
+    // Walking in: the dark doorway grows until the widget is black, the room
+    // swaps in behind the dark (so its taller height never shows as a jump),
+    // then the dark lifts. Only transform and opacity animate, which phones keep smooth.
     '.shr.walking{overflow:hidden;border-radius:10px}',
-    '.shr.walking .shr-front{display:flex;position:absolute;top:0;left:0;right:0;z-index:7;pointer-events:none;transition:transform 1.1s cubic-bezier(.55,0,.35,1),opacity .6s ease .65s}',
-    '.shr.walking .shr-front.gone{transform:scale(9);opacity:0}',
-    '.shr.walking .shr-card{opacity:0;transform:scale(1.12);transition:opacity .7s ease .65s,transform 1s cubic-bezier(.2,.7,.2,1) .65s}',
-    '.shr.walking.in .shr-card{opacity:1;transform:none}',
+    '.shr-hole{position:absolute;z-index:8;display:none;background:#000;border-radius:999px 999px 0 0;pointer-events:none;will-change:transform}',
+    '.shr-hole.cover{transition:transform .6s cubic-bezier(.55,0,.4,1)}',
+    '.shr-dark{position:absolute;inset:0;z-index:8;background:#000;border-radius:10px;opacity:0;visibility:hidden;pointer-events:none}',
+    '.shr-dark.on{opacity:1;visibility:visible}.shr-dark.fade{visibility:visible;transition:opacity .8s ease}',
     '.shr-stay{animation:shr-nudge .45s ease}@keyframes shr-nudge{0%,100%{transform:none}25%{transform:translateX(-5px)}75%{transform:translateX(5px)}}',
     '@media (prefers-reduced-motion:reduce){.shr *,.shr-say,.shr-tip{animation:none!important;transition:none!important}}'
   ].join('\n');
@@ -930,7 +932,7 @@
       // ---- Skeleton ----
       var uid = ++doorSeq;
       el.innerHTML = '<div class="shr closed' + (S.fx === 'light' ? ' fxlight' : '') + '">' +
-        '<button type="button" class="shr-front" data-enter="1" aria-expanded="false"><span class="shr-dr"><span class="w">' + DOOR_WAY.replace(/ZZ/g, 'shr-d' + uid) + '</span><span class="lf">' + DOOR_LEAF.replace(/ZZ/g, 'shr-d' + uid) + '</span></span><span class="nm"><b></b><span>Press the door to step inside</span></span></button>' +
+        '<button type="button" class="shr-front" data-enter="1" aria-expanded="false"><span class="shr-dr"><span class="w">' + DOOR_WAY.replace(/ZZ/g, 'shr-d' + uid) + '</span><span class="lf">' + DOOR_LEAF.replace(/ZZ/g, 'shr-d' + uid) + '</span></span><span class="nm"><b></b><span>Press the door to step inside</span></span></button><div class="shr-hole" aria-hidden="true"></div><div class="shr-dark" aria-hidden="true"></div>' +
         '<div class="shr-card">' +
         '<div class="shr-top"><b></b><span class="shr-sub">Shop</span>' + (canArrange ? '<span class="shr-mode" role="group" aria-label="Mode"><button type="button" data-mode="shop" aria-pressed="true">Shop</button><button type="button" data-mode="arr" aria-pressed="false">Arrange</button></span>' : '') + '</div>' +
         '<div class="shr-scene"><svg class="shr-iso" role="img"></svg><div class="shr-grain"><svg width="100%" height="100%" aria-hidden="true"><filter id="shr-grn"><feTurbulence type="fractalNoise" baseFrequency=".85" numOctaves="2" stitchTiles="stitch"/><feColorMatrix type="saturate" values="0"/></filter><rect width="100%" height="100%" filter="url(#shr-grn)"/></svg></div>' +
@@ -1279,9 +1281,10 @@
       }
       // ---- Opening and closing ----
       var front = root.querySelector('.shr-front');
+      var hole = root.querySelector('.shr-hole'), dark = root.querySelector('.shr-dark');
       var walkT = 0;
       // Opening: the door swings open in place, then the room is revealed
-      // through the doorway's outline as it grows to fill the widget.
+      // as its dark doorway grows to fill the widget.
       function enter() {
         if (!root.classList.contains('closed') || front.classList.contains('opening')) return;
         front.setAttribute('aria-expanded', 'true');
@@ -1291,15 +1294,29 @@
       }
       function walkIn() {
         var dr = front.querySelector('.shr-dr').getBoundingClientRect(), r0 = root.getBoundingClientRect();
-        front.style.transformOrigin = (dr.left - r0.left + dr.width / 2) + 'px ' + (dr.top - r0.top + dr.height / 2) + 'px';
-        root.classList.remove('closed'); root.classList.add('walking'); draw();
-        void root.offsetWidth;
-        front.classList.add('gone'); root.classList.add('in');
-        walkT = setTimeout(settle, 1750);
+        // The doorway's opening inside the door drawing's 64 by 96 box.
+        var w = dr.width * 52 / 64, h = dr.height * 86 / 96;
+        hole.style.left = (dr.left - r0.left + dr.width * 6 / 64) + 'px';
+        hole.style.top = (dr.top - r0.top + dr.height * 8 / 96) + 'px';
+        hole.style.width = w + 'px'; hole.style.height = h + 'px';
+        hole.style.transformOrigin = '50% 60%'; hole.style.transform = 'scale(1)'; hole.style.display = 'block';
+        root.classList.add('walking');
+        var k = 2.2 * Math.hypot(r0.width, r0.height) / Math.min(w, h);
+        void hole.offsetWidth;
+        hole.classList.add('cover'); hole.style.transform = 'scale(' + k + ')';
+        walkT = setTimeout(function () {
+          dark.classList.add('on');
+          root.classList.remove('closed'); draw();
+          hole.classList.remove('cover'); hole.style.display = 'none';
+          requestAnimationFrame(function () { requestAnimationFrame(function () {
+            dark.classList.add('fade'); dark.classList.remove('on');
+            walkT = setTimeout(settle, 850);
+          }); });
+        }, 620);
       }
       function settle() {
-        root.classList.remove('walking', 'in'); front.classList.remove('opening', 'gone');
-        front.style.transformOrigin = '';
+        root.classList.remove('walking'); front.classList.remove('opening');
+        hole.classList.remove('cover'); hole.style.display = 'none'; dark.className = 'shr-dark';
         placeKeeper();
       }
       function leave() {
