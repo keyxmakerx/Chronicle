@@ -97,6 +97,7 @@ func nullableJSON(raw json.RawMessage) any {
 // VisibilityRules=nil regardless of what is actually stored.
 func (r *drawingRepo) GetDrawing(ctx context.Context, id string) (*Drawing, error) {
 	var d Drawing
+	var crop []byte
 	err := r.db.QueryRowContext(ctx, `
 		SELECT id, map_id, layer_id, drawing_type, points, stroke_color,
 			stroke_width, fill_color, fill_alpha, text_content, font_size,
@@ -107,8 +108,9 @@ func (r *drawingRepo) GetDrawing(ctx context.Context, id string) (*Drawing, erro
 		&d.ID, &d.MapID, &d.LayerID, &d.DrawingType, &d.Points,
 		&d.StrokeColor, &d.StrokeWidth, &d.FillColor, &d.FillAlpha,
 		&d.TextContent, &d.FontSize, &d.Rotation, &d.Visibility, &d.VisibilityRules,
-		&d.CreatedBy, &d.FoundryID, &d.ImageID, &d.Crop, &d.SortOrder, &d.CreatedAt, &d.UpdatedAt,
+		&d.CreatedBy, &d.FoundryID, &d.ImageID, &crop, &d.SortOrder, &d.CreatedAt, &d.UpdatedAt,
 	)
+	d.Crop = cropFromColumn(crop)
 	if err == sql.ErrNoRows {
 		return nil, apperror.NewNotFound("drawing not found: " + id)
 	}
@@ -161,12 +163,14 @@ const drawingCols = `id, map_id, layer_id, drawing_type, points, stroke_color,
 // can't drift apart from each other.
 func scanDrawing(rows *sql.Rows) (Drawing, error) {
 	var d Drawing
+	var crop []byte
 	err := rows.Scan(
 		&d.ID, &d.MapID, &d.LayerID, &d.DrawingType, &d.Points,
 		&d.StrokeColor, &d.StrokeWidth, &d.FillColor, &d.FillAlpha,
 		&d.TextContent, &d.FontSize, &d.Rotation, &d.Visibility, &d.VisibilityRules,
-		&d.CreatedBy, &d.FoundryID, &d.ImageID, &d.Crop, &d.SortOrder, &d.CreatedAt, &d.UpdatedAt,
+		&d.CreatedBy, &d.FoundryID, &d.ImageID, &crop, &d.SortOrder, &d.CreatedAt, &d.UpdatedAt,
 	)
+	d.Crop = cropFromColumn(crop)
 	return d, err
 }
 
@@ -580,4 +584,14 @@ func (r *drawingRepo) ResetFog(ctx context.Context, mapID string) error {
 		return apperror.NewInternal(err)
 	}
 	return nil
+}
+
+// cropFromColumn turns the nullable crop column into the drawing's field. It is
+// scanned as bytes because database/sql cannot store NULL into json.RawMessage;
+// NULL reads back as an empty crop.
+func cropFromColumn(b []byte) json.RawMessage {
+	if len(b) == 0 {
+		return nil
+	}
+	return json.RawMessage(b)
 }
