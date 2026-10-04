@@ -164,3 +164,50 @@ func TestMoveSummary_MoneyEditVersusMove(t *testing.T) {
 		t.Errorf("move summary = %q", got)
 	}
 }
+
+func TestMoneyHistory_Purse(t *testing.T) {
+	purse := map[string]string{"cp": "cp", "sp": "sp", "ep": "ep", "gp": "gp", "pp": "pp"}
+	web := changesource.With(context.Background(), changesource.Source{Kind: changesource.KindWeb, UserID: "u9"})
+	shop := changesource.With(context.Background(), changesource.Source{Kind: changesource.KindShop, UserID: "u9"})
+	stash := changesource.With(context.Background(), changesource.Source{Kind: changesource.KindStash})
+	tests := []struct {
+		name       string
+		ctx        context.Context
+		old, new   map[string]any
+		wantReason string
+		wantAmount Cents
+	}{
+		{"a silver-only change still logs", web,
+			map[string]any{"gp": 12.0, "sp": 3.0}, map[string]any{"gp": 12.0, "sp": 4.0},
+			"Purse 12 gp 3 sp → 12 gp 4 sp · on the sheet", 10},
+		{"a shop purchase shows the whole purse", shop,
+			map[string]any{"gp": 12.0, "sp": 3.0}, map[string]any{"gp": 11.0, "sp": 8.0, "cp": 3.0},
+			"Purse 12 gp 3 sp → 11 gp 8 sp 3 cp · at a shop", -47},
+		{"a stash move logs itself", stash,
+			map[string]any{"gp": 12.0}, map[string]any{"gp": 11.0}, "", 0},
+		{"coins that trade evenly are not a change", web,
+			map[string]any{"gp": 1.0}, map[string]any{"gp": 0.0, "sp": 10.0}, "", 0},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			f := newFx()
+			f.dir.ents["c1"].Purse = purse
+			h := NewMoneyHistory(f.repo, f.dir, nil, &fakeEvents{})
+			if err := h.RecordFieldChange(tt.ctx, "camp", "c1", tt.old, tt.new); err != nil {
+				t.Fatal(err)
+			}
+			if tt.wantReason == "" {
+				if len(f.repo.moves) != 0 {
+					t.Fatalf("expected nothing logged, got %+v", f.repo.moves)
+				}
+				return
+			}
+			if len(f.repo.moves) != 1 {
+				t.Fatalf("rows = %d", len(f.repo.moves))
+			}
+			if m := f.repo.moves[0]; m.Reason != tt.wantReason || m.Amount != tt.wantAmount {
+				t.Fatalf("row = %q %d, want %q %d", m.Reason, m.Amount, tt.wantReason, tt.wantAmount)
+			}
+		})
+	}
+}

@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"log/slog"
+	"strings"
 
 	"github.com/a-h/templ"
 )
@@ -65,6 +66,19 @@ func isPlayerCharacterPageType(et *EntityType) bool {
 		return false
 	}
 	return isClaimableType(et) || isPlayerCharacterType(derefStr(et.PresetCategory), et.Slug)
+}
+
+// layoutPlacesBlock reports whether any block of the given type appears in
+// the layout. Container blocks (tabs, columns, sections) keep their children
+// in free-form config, so the check scans the serialized layout rather than
+// walking a fixed shape.
+func layoutPlacesBlock(layout EntityTypeLayout, blockType string) bool {
+	raw, err := json.Marshal(layout)
+	if err != nil {
+		return false
+	}
+	needle, _ := json.Marshal(blockType)
+	return strings.Contains(string(raw), `"type":`+string(needle))
 }
 
 // autoCharacterPanel reports whether a page shows the items-and-money panel

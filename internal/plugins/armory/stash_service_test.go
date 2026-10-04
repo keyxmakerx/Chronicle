@@ -246,7 +246,12 @@ func (f fakeActor) CanUserActAsBuyer(_ context.Context, _, id, userID string, ro
 	return e != nil && e.OwnerUserID == userID, nil
 }
 
-type fakeFields struct{ data map[string]map[string]any }
+type fakeFields struct {
+	data map[string]map[string]any
+	// afterUpdate, when set, runs after each write, standing in for a sheet
+	// edit that lands between two steps of a purchase.
+	afterUpdate func()
+}
 
 func (f *fakeFields) GetEntityFields(_ context.Context, id string) (map[string]any, error) {
 	out := map[string]any{}
@@ -261,6 +266,9 @@ func (f *fakeFields) UpdateEntityFields(_ context.Context, id string, p map[stri
 	}
 	for k, v := range p {
 		f.data[id][k] = v
+	}
+	if f.afterUpdate != nil {
+		f.afterUpdate()
 	}
 	return nil
 }
