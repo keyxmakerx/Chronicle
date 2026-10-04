@@ -3265,7 +3265,7 @@ func (a *App) RegisterRoutes() {
 	// data-widget="calendar_view" (the calendar's own page, however it was
 	// reached), calendar_editor.js self-gates on that
 	// mount's data-can-edit="true" and opens calendar_event_drawer.js's full
-	// event editor and calendar_weather_sheet.js's Generate sheet (both
+	// event editor and calendar_weather_sheet.js's weather calendar (both
 	// loaded first so they exist when the editor binds; the drawer's
 	// repeat-by-rule logic is calendar_rule.js, loaded before it), and
 	// calendar_open.js peeks and opens the Calendars page's cards. rulebook.js

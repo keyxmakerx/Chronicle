@@ -1737,7 +1737,7 @@ type DayWeatherInput struct {
 }
 
 // WeatherSettings is a calendar's world climate and how long weather lasts
-// (0 changes every day, 1 settles into long spells). The Generate sheet
+// (0 changes every day, 1 settles into long spells). The weather calendar
 // starts from these. Kinds are the owner's own kinds of weather.
 type WeatherSettings struct {
 	Climate    string        `json:"climate"`

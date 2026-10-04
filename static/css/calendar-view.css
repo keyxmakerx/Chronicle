@@ -507,12 +507,10 @@
 .cal-v5 .nudge .i{width:11px;height:11px}
 @keyframes cal5-foldDown{from{opacity:0;transform:perspective(600px) rotateX(-65deg)}to{opacity:1;transform:none}}
 .cal-v5 .kinds{display:flex;flex-wrap:wrap;gap:5px;margin:8px 0 2px 30px;padding:8px;border-radius:10px;background:var(--paper2);transform-origin:top;animation:cal5-foldDown .34s var(--spring) both}
-.cal-v5 .kinds button, .cal-v5 .wxchips button{display:inline-flex;align-items:center;gap:6px;height:27px;padding:0 10px;border-radius:99px;font:550 11.5px/1 var(--sans);color:var(--ink2);box-shadow:inset 0 0 0 1px var(--edge);background:var(--paper)}
-.cal-v5 .kinds button:hover, .cal-v5 .wxchips button:hover{color:var(--ink)}
-.cal-v5 .kinds button[aria-pressed="true"], .cal-v5 .wxchips button[aria-pressed="true"]{box-shadow:inset 0 0 0 1.3px var(--ink);color:var(--ink)}
+.cal-v5 .kinds button{display:inline-flex;align-items:center;gap:6px;height:27px;padding:0 10px;border-radius:99px;font:550 11.5px/1 var(--sans);color:var(--ink2);box-shadow:inset 0 0 0 1px var(--edge);background:var(--paper)}
+.cal-v5 .kinds button:hover{color:var(--ink)}
+.cal-v5 .kinds button[aria-pressed="true"]{box-shadow:inset 0 0 0 1.3px var(--ink);color:var(--ink)}
 .cal-v5 .kinds .ci, .cal-v5 .chips button .ci{width:14px;height:14px;color:oklch(var(--icL) var(--icC) var(--h,260))}
-.cal-v5 .wxchips{display:flex;flex-wrap:wrap;gap:5px;padding:2px 0 3px 22px;transform-origin:top;animation:cal5-foldDown .34s var(--spring) both}
-.cal-v5 .wxchips .i{width:13px;height:13px}
 .cal-v5 .wxrow{width:calc(100% + 12px);margin:-3px -6px;padding:3px 6px;border-radius:7px;text-align:left}
 .cal-v5 .wxrow:hover, .cal-v5 .wxrow[aria-expanded="true"]{background:var(--paper)}
 .cal-v5 .links{display:flex;flex-wrap:wrap;align-items:center;gap:5px}
@@ -571,8 +569,8 @@
 /* A toast and the bulk-selection bar are both bottom-centered a few px apart
    (.toast at 16px, .bbar at 14px); .bar-up (toggled on .cal by
    calendar_editor.js's _renderBar alongside .bbar's own hidden state) lifts
-   the toast clear of it, reusing the bar-height custom property .btray/.bmore
-   already stack on above the bar. Scoped to the width the two actually share
+   the toast clear of it, reusing the bar-height custom property that .btray
+   already stacks on above the bar. Scoped to the width the two actually share
    this corner at: below it the toast moves to the top of the screen (the
    max-width:600px block further down), where it never meets the bar. */
 @media (min-width:601px){
@@ -853,7 +851,7 @@
 .cal-v5 .rm .pop.open, .cal-v5 .rm .drawer.open, .cal-v5 .rm .toast.on{transition:opacity .18s ease,visibility 0s!important}
 .cal-v5 .rm .hc{transform:none!important}
 .cal-v5 .rm .hc.on{transition:opacity .12s ease!important}
-.cal-v5 .rm .kinds, .cal-v5 .rm .wxchips, .cal-v5 .rm .lsug, .cal-v5 .rm .moresec, .cal-v5 .rm .evd.rowin, .cal-v5 .rm .evd.rowout{animation:cal5-fadeIn .15s ease both!important}
+.cal-v5 .rm .kinds, .cal-v5 .rm .lsug, .cal-v5 .rm .moresec, .cal-v5 .rm .evd.rowin, .cal-v5 .rm .evd.rowout{animation:cal5-fadeIn .15s ease both!important}
 .cal-v5 .rm .evd.hl.pulse::after{animation:none!important;opacity:0}
 .cal-v5 .rm .toast{transform:translate(-50%,0)!important}
 .cal-v5 .rm .drawer{opacity:0}
@@ -1288,21 +1286,8 @@
 .cal-v5 .btray{position:absolute;z-index:4;left:0;right:0;bottom:calc(22px + var(--barH,48px));margin:0 auto;width:-moz-fit-content;width:fit-content;max-width:min(560px,calc(100% - 24px));padding:12px 14px 12px;border-radius:14px;background:var(--paper);border:1px solid var(--edge);box-shadow:var(--shadow-l);pointer-events:auto}
 .cal-v5 .trh{font:600 12.5px/1.35 var(--sans);color:var(--ink)}
 .cal-v5 .trh small{display:block;font-weight:500;font-size:11.5px;color:var(--mut);margin-top:2px}
-.cal-v5 .trf{display:flex;flex-wrap:wrap;align-items:center;gap:6px;margin-top:10px}
-.cal-v5 .pal{display:flex;flex-wrap:wrap;gap:5px;margin-top:9px}
 .cal-v5 .btray.slim{max-width:calc(100% - 24px);padding:7px 8px}
-.cal-v5 .trrow{display:flex;flex-wrap:wrap;align-items:center;gap:6px}
-.cal-v5 .trrow .pal{margin-top:0}
-.cal-v5 .trf1{display:flex;align-items:center;gap:6px;margin-left:auto}
 .cal-v5 .cal.editing.traying .stage{padding-bottom:calc(84px + var(--trayH,0px))}
-.cal-v5 .pal button{display:inline-flex;align-items:center;gap:6px;height:30px;padding:0 11px 0 9px;border-radius:99px;font:550 12px/1 var(--sans);color:var(--ink2);background:var(--paper);box-shadow:inset 0 0 0 1px var(--edge)}
-.cal-v5 .pal button .sw2{width:12px;height:12px;border-radius:50%;background:var(--wxc);box-shadow:inset 0 0 0 1px var(--edge)}
-.cal-v5 .pal button[aria-checked="true"]{box-shadow:inset 0 0 0 1.5px var(--ink);color:var(--ink)}
-.cal-v5 .pal button .i{width:14px;height:14px}
-/* "Yours" and "Common" headings in the paint palette: each starts its own
-   line, so the owner's kinds sit in a row above the built-in ones. */
-.cal-v5 .pal .trgh{flex:0 0 100%;font:650 9.5px/1 var(--sans);letter-spacing:.14em;text-transform:uppercase;color:var(--mut);margin-top:4px}
-.cal-v5 .pal .trgh:first-child{margin-top:0}
 .cal-v5 .shn{display:flex;align-items:center;gap:8px;margin-top:9px}
 .cal-v5 .shn output{min-width:150px;text-align:center;font:600 13px/1.2 var(--sans);color:var(--ink)}
 .cal-v5 .shn button{width:30px;height:30px;border-radius:8px;display:grid;place-items:center;color:var(--ink2);box-shadow:inset 0 0 0 1px var(--edge)}
@@ -1314,7 +1299,6 @@
 .cal-v5 .clo button:hover{background:var(--paper2)}
 .cal-v5 .clo button:disabled{opacity:.45;cursor:default}
 .cal-v5 .clo button:disabled:hover{background:var(--paper)}
-.cal-v5 .trnote{margin-top:8px;font:500 11px/1.4 var(--sans);color:var(--mut)}
 /* ── The recipe sheet: one sheet for every generator. ── */
 .cal-v5 .gsheet{width:452px}
 .cal-v5 .gbody{flex:1;min-height:0;overflow:auto;overscroll-behavior:contain;padding:12px 18px 16px;display:flex;flex-direction:column;gap:14px}
@@ -1400,6 +1384,81 @@
 .cal-v5 .gfa{display:flex;gap:8px;margin-left:auto}
 .cal-v5 .gsave{display:flex;align-items:flex-end;gap:8px;width:100%;padding:0 0 10px;border-bottom:1px solid var(--hair);margin-bottom:2px}
 .cal-v5 .gsave .fld{flex:1}
+/* ── The weather calendar: a compact month that holds only weather. ── */
+.cal-v5 .wxc{gap:12px}
+.cal-v5 .wxc-mon{display:flex;align-items:center;gap:6px}
+.cal-v5 .wxc-mon h3{margin:0;flex:1;min-width:0;font:500 22px/1.1 var(--serif);color:var(--ink);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.cal-v5 .wxc-mon h3 span{color:var(--mut)}
+.cal-v5 .wxc-nav{width:30px;height:30px;border-radius:8px;display:grid;place-items:center;color:var(--ink2);transition:background .15s var(--ease),color .15s var(--ease)}
+.cal-v5 .wxc-nav:hover{background:var(--hair2);color:var(--ink)}
+.cal-v5 .wxc-seas{display:flex;gap:6px;flex-wrap:wrap;margin-top:-4px}
+.cal-v5 .wxc-seas:empty{display:none}
+.cal-v5 .wxc-seas span{display:inline-flex;align-items:center;gap:6px;height:22px;padding:0 9px;border-radius:99px;font:600 11px/1 var(--sans);color:var(--ink2);box-shadow:inset 0 0 0 1px var(--edge)}
+.cal-v5 .wxc-seas i{width:8px;height:8px;border-radius:50%;background:var(--sc,var(--mut))}
+.cal-v5 .wxc-cal{display:grid;grid-template-columns:repeat(var(--wxcols,7),minmax(0,1fr));gap:3px;user-select:none;-webkit-user-select:none;touch-action:none}
+.cal-v5 .wxc-dow{font:650 8.5px/1 var(--sans);letter-spacing:.1em;text-transform:uppercase;color:var(--mut);text-align:center;padding:0 0 4px;overflow:hidden;white-space:nowrap}
+.cal-v5 .wxc-d{position:relative;height:46px;min-width:0;border-radius:8px;background:color-mix(in oklch,var(--wc,var(--paper2)) 22%,var(--paper));box-shadow:inset 0 -3px 0 var(--sc,transparent),inset 0 0 0 1px var(--hair2);display:grid;place-items:center;cursor:pointer;transition:transform .15s var(--ease),box-shadow .15s var(--ease)}
+.cal-v5 .wxc-d.empty{background:var(--paper2)}
+.cal-v5 .wxc-d.blank{visibility:hidden;cursor:default}
+.cal-v5 .wxc-d:hover{transform:translateY(-1px);box-shadow:inset 0 -3px 0 var(--sc,transparent),inset 0 0 0 1px var(--edge),0 4px 10px -6px oklch(0 0 0 / .35)}
+.cal-v5 .wxc-d:focus-visible{outline:1.5px solid var(--ink);outline-offset:1px}
+.cal-v5 .wxc-d .n{position:absolute;left:4px;top:3px;font:600 9.5px/1 var(--sans);color:var(--ink2)}
+.cal-v5 .wxc-d.today .n{background:var(--ink);color:var(--paper);border-radius:99px;padding:2px 4px;margin:-2px 0 0 -2px}
+.cal-v5 .wxc-d .wi{font-size:15px;color:var(--wc,var(--mut));margin-top:4px;transition:transform .25s var(--spring),opacity .2s}
+.cal-v5 .wxc-d .sk{position:absolute;right:3px;top:3px;font-size:8.5px;line-height:1;color:var(--ink2)}
+.cal-v5 .wxc-d .sk svg{display:block}
+.cal-v5 .wxc-d.blood .sk, .cal-v5 .wxc-key .blood i{color:oklch(.55 .17 28)}
+.cal-v5 .wxc-d .pin{position:absolute;left:3px;bottom:6px;font-size:8px;color:var(--keep);display:none}
+.cal-v5 .wxc-d.kept .pin{display:block}
+.cal-v5 .wxc-d.chg::after{content:"";position:absolute;right:4px;bottom:6px;width:4px;height:4px;border-radius:50%;background:var(--gold)}
+.cal-v5 .wxc-d.sel{box-shadow:inset 0 -3px 0 var(--sc,transparent),inset 0 0 0 2px var(--ink)}
+.cal-v5 .wxc-d.drop{transform:scale(1.08);box-shadow:inset 0 0 0 2px var(--ink),0 6px 16px -8px oklch(0 0 0 / .5)}
+.cal-v5 .wxc-d.roll .wi{animation:cal5-wxRoll .45s var(--spring)}
+@keyframes cal5-wxRoll{0%{transform:rotate(-90deg) scale(.4);opacity:0}100%{transform:none;opacity:1}}
+.cal-v5 .wxc-key{display:flex;flex-wrap:wrap;gap:4px 12px;font:500 11px/1.3 var(--sans);color:var(--mut)}
+.cal-v5 .wxc-key:empty{display:none}
+.cal-v5 .wxc-key span{display:inline-flex;align-items:center;gap:5px}
+.cal-v5 .wxc-key .kp i{color:var(--keep)}
+.cal-v5 .wxc-selrow{display:flex;align-items:center;flex-wrap:wrap;gap:6px;min-height:30px;font:500 12px/1.3 var(--sans);color:var(--ink2)}
+.cal-v5 .wxc-selrow b{font-weight:650;color:var(--ink)}
+.cal-v5 .wxc-selrow .sp{flex:1}
+.cal-v5 .wxc-lab{font:650 9.5px/1 var(--sans);letter-spacing:.14em;text-transform:uppercase;color:var(--mut);margin:2px 0 -4px}
+.cal-v5 .wxc-pal{display:flex;flex-wrap:wrap;gap:5px}
+.cal-v5 .wxc-pal button{display:inline-flex;align-items:center;gap:6px;height:30px;padding:0 10px 0 8px;border-radius:99px;font:600 12px/1 var(--sans);color:var(--ink);box-shadow:inset 0 0 0 1px var(--edge);background:var(--paper);cursor:grab;touch-action:none;transition:transform .15s var(--ease),box-shadow .15s var(--ease)}
+.cal-v5 .wxc-pal button:hover{transform:translateY(-1px);box-shadow:inset 0 0 0 1px var(--ink2)}
+.cal-v5 .wxc-pal button:focus-visible{outline:1.5px solid var(--ink);outline-offset:1px}
+.cal-v5 .wxc-pal button i{color:var(--wc,var(--ink2))}
+.cal-v5 .wxc-pal button.mg i{color:var(--wxMagicInk,var(--wc))}
+.cal-v5 .wxc-pal button[aria-pressed="true"]{box-shadow:inset 0 0 0 1.5px var(--ink)}
+.cal-v5 .wxc-pal button.added:not([aria-pressed="true"]){box-shadow:none;outline:1px dashed var(--mut);outline-offset:-1px}
+.cal-v5 .wxc-pal .wxc-tool{cursor:pointer;box-shadow:none;border:1px dashed var(--edge);background:transparent;color:var(--ink2)}
+.cal-v5 .wxc-pal .wxc-tool:hover{box-shadow:none;color:var(--ink);background:var(--paper)}
+.cal-v5 .wxc-pal .wxc-tool[aria-expanded="true"]{border-style:solid;border-color:var(--ink);color:var(--ink)}
+.cal-v5 .wxc-more{padding:8px;border-radius:12px;box-shadow:inset 0 0 0 1px var(--edge)}
+.cal-v5 .wxc-more .wxi i{width:16px;text-align:center;color:var(--wc,var(--ink2))}
+.cal-v5 .wxc-more .wxi.mg i{color:var(--wxMagicInk,var(--wc))}
+.cal-v5 .wxc-roll{display:flex;flex-direction:column;gap:10px;padding:12px;border-radius:12px;background:var(--paper2)}
+.cal-v5 .wxc-roll .fld{font-size:11.5px}
+.cal-v5 .wxc-roll .dv{display:flex;align-items:center;gap:10px}
+.cal-v5 .wxc-roll .dv input[type=range]{flex:1;height:18px;padding:0;border:0;background:transparent;accent-color:var(--ink)}
+.cal-v5 .wxc-roll .dv output{min-width:84px;text-align:right;font:600 12px/1 var(--sans);color:var(--ink)}
+.cal-v5 .wxc-chk{display:flex;align-items:flex-start;gap:8px;font:500 12px/1.35 var(--sans);color:var(--ink2)}
+.cal-v5 .wxc-chk input{margin-top:2px;accent-color:var(--ink)}
+.cal-v5 .wxc-go{display:flex;align-items:center;gap:8px}
+.cal-v5 .wxc-go .note{flex:1;font:500 11.5px/1.35 var(--sans);color:var(--mut)}
+.cal-v5 .wxc-warn{display:flex;align-items:center;gap:8px;margin:0 12px 10px;padding:9px 10px 9px 12px;border-radius:10px;background:var(--goldBg);color:var(--ink);box-shadow:inset 0 0 0 1px var(--goldRing);font:600 12.5px/1.3 var(--sans);animation:cal5-wxWarnIn .28s var(--ease) both}
+.cal-v5 .wxc-warn[hidden]{display:none}
+.cal-v5 .wxc-warn i{color:var(--gold)}
+.cal-v5 .wxc-warn .sp{flex:1}
+.cal-v5 .wxc-warn button{color:inherit;font:inherit;text-decoration:underline;padding:4px}
+.cal-v5 .wxc-warn:focus{outline:none}
+@keyframes cal5-wxWarnIn{0%{opacity:0;transform:translateY(6px)}100%{opacity:1;transform:none}}
+.cal-v5 .drawer.wxcal.nag{animation:cal5-wxNag .42s cubic-bezier(.36,.07,.19,.97)}
+@keyframes cal5-wxNag{10%,90%{transform:translateX(-1px)}20%,80%{transform:translateX(3px)}30%,50%,70%{transform:translateX(-5px)}40%,60%{transform:translateX(5px)}}
+/* The dragged weather follows the pointer; it lives in the panel but is drawn fixed. */
+.cal-v5 .wxc-ghost{position:fixed;z-index:999;pointer-events:none;display:inline-flex;align-items:center;gap:6px;height:30px;padding:0 10px;border-radius:99px;background:var(--paper);box-shadow:0 10px 24px -10px oklch(0 0 0 / .5),inset 0 0 0 1px var(--edge);font:600 12px/1 var(--sans);color:var(--ink);transform:translate(-50%,-50%) rotate(-4deg)}
+@media (prefers-reduced-motion:reduce){.cal-v5 .wxc-d, .cal-v5 .wxc-d .wi, .cal-v5 .wxc-pal button, .cal-v5 .wxc-warn, .cal-v5 .drawer.wxcal.nag{transition:none!important;animation:none!important}}
+.rm .cal-v5 .wxc-d, .rm .cal-v5 .wxc-d .wi, .rm .cal-v5 .wxc-pal button, .rm .cal-v5 .wxc-warn, .rm .cal-v5 .drawer.wxcal.nag{transition:none!important;animation:none!important}
 /* ── Settings: the calendar's own door. ── */
 .cal-v5 .gset{width:452px}
 .cal-v5 .stl{display:flex;flex-direction:column}
@@ -1438,7 +1497,7 @@
 }
 @media (max-width:600px){.cal-v5 #cal5-settings span{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}
 .cal-v5 .h-edit{margin-top:4px}
-/* On a phone the hint may take two lines (holding to choose a range is not guessable); Generate… keeps only its icon. */
+/* On a phone the hint may take two lines (holding to choose a range is not guessable); Weather keeps only its icon. */
 .cal-v5 .h-subw{min-height:34px}
 .cal-v5 .ehint{white-space:normal;font-size:11px;line-height:1.25;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical}
 .cal-v5 #edGen{padding:0 9px}
@@ -1461,6 +1520,8 @@
 .cal-v5 .bbb{flex-direction:column;justify-content:center;gap:3px;height:48px;padding:0 2px;font-size:10.5px;box-shadow:inset 0 0 0 1px var(--hair)}
 .cal-v5 .btray{position:fixed;left:0;right:0;z-index:56;bottom:var(--barH,110px);width:auto;max-width:none;margin:0;border-radius:16px 16px 0 0;border-left:0;border-right:0;box-shadow:0 -8px 24px -12px oklch(0 0 0 / .3)}
 .cal-v5 .gsheet{max-height:calc(64vh + 28px)}
+.cal-v5 .gsheet.wxcal{max-height:calc(86vh + 28px)}
+.cal-v5 .wxc-d{height:42px}
 .cal-v5 .gset{max-height:calc(86vh + 28px)}
 .cal-v5 .gsheet, .cal-v5 .gset{width:auto}
 .cal-v5 .clo{grid-template-columns:repeat(2,minmax(0,1fr))}
@@ -1484,7 +1545,6 @@
 }
 :root[data-theme="dark"]{--wk-violet:oklch(.5 .1 290 / .45);--wk-teal:oklch(.52 .07 185 / .42);--wk-rose:oklch(.52 .09 355 / .42);--wk-amber:oklch(.58 .09 75 / .36);--wk-moss:oklch(.55 .08 125 / .38);--wk-slate:oklch(.5 .03 255 / .45)}
 .cal-v5 .cwx.yours{color:var(--wkc)}
-.cal-v5 .pal button.yours .i{color:var(--wkc)}
 .cal-v5 .wksw{width:26px;height:26px;border-radius:8px;display:grid;place-items:center;background:var(--wxc);color:var(--wkc);flex:none}
 .cal-v5 .wksw .i{width:15px;height:15px}
 .cal-v5 .str .mk{flex:none}
@@ -1531,9 +1591,9 @@
 :root[data-theme="dark"]{--wxMagic:linear-gradient(135deg,oklch(.45 .09 295 / .45),oklch(.48 .085 345 / .45));--wxMagicInk:oklch(.82 .1 318);--mgTag:oklch(.78 .1 300)}
 .cal-v5 .cwx.mg, .cal-v5 .row .i.mg{color:var(--wxMagicInk)}
 /* The six common chips, then More weather…, which unfolds the whole list the way the chips unfold. */
-.cal-v5 .wxchips button.wxmb, .cal-v5 .trrow .pmore, .cal-v5 .kinds .nkb, .cal-v5 .chips .nkb{box-shadow:none;border:1px dashed var(--edge);background:transparent;color:var(--ink2)}
-.cal-v5 .wxchips button.wxmb:hover, .cal-v5 .trrow .pmore:hover, .cal-v5 .kinds .nkb:hover, .cal-v5 .chips .nkb:hover{color:var(--ink);background:var(--paper)}
-.cal-v5 .wxchips button.wxmb[aria-expanded="true"], .cal-v5 .trrow .pmore[aria-expanded="true"], .cal-v5 .kinds .nkb[aria-expanded="true"], .cal-v5 .chips .nkb[aria-expanded="true"]{border-style:solid;border-color:var(--ink);color:var(--ink);background:var(--paper)}
+.cal-v5 .kinds .nkb, .cal-v5 .chips .nkb{box-shadow:none;border:1px dashed var(--edge);background:transparent;color:var(--ink2)}
+.cal-v5 .kinds .nkb:hover, .cal-v5 .chips .nkb:hover{color:var(--ink);background:var(--paper)}
+.cal-v5 .kinds .nkb[aria-expanded="true"], .cal-v5 .chips .nkb[aria-expanded="true"]{border-style:solid;border-color:var(--ink);color:var(--ink);background:var(--paper)}
 .cal-v5 .wxmore{margin:3px 0 4px 22px;padding:8px;border-radius:10px;background:var(--paper);box-shadow:inset 0 0 0 1px var(--hair);transform-origin:top;animation:cal5-foldDown .34s var(--spring) both}
 .cal-v5 .dsec .wxmore{margin:8px 0 0}
 .cal-v5 .wxmb2{margin-top:8px}
@@ -1544,25 +1604,15 @@
 .cal-v5 .wxi{display:flex;align-items:center;gap:8px;width:100%;min-height:30px;padding:0 8px;border-radius:8px;font:550 12px/1.2 var(--sans);color:var(--ink2);text-align:left}
 .cal-v5 .wxi:hover{background:var(--paper2);color:var(--ink)}
 .cal-v5 .wxi[aria-pressed="true"]{box-shadow:inset 0 0 0 1.3px var(--ink);color:var(--ink)}
-.cal-v5 .wxi:focus-visible, .cal-v5 .wxchips button:focus-visible, .cal-v5 .pmore:focus-visible, .cal-v5 .nkb:focus-visible{outline:1.5px solid var(--ink);outline-offset:1px}
-.cal-v5 .wxi .sw2{width:10px;height:10px;flex:none;border-radius:50%;background:var(--wxc);box-shadow:inset 0 0 0 1px var(--edge)}
+.cal-v5 .wxi:focus-visible, .cal-v5 .nkb:focus-visible{outline:1.5px solid var(--ink);outline-offset:1px}
 .cal-v5 .wxi .i{width:13px;height:13px}
-.cal-v5 .wxi.mg .i, .cal-v5 .pal button.mg .i{color:var(--wxMagicInk)}
+.cal-v5 .wxi.mg .i{color:var(--wxMagicInk)}
 .cal-v5 .wxi.yours .i{color:var(--wkc)}
 .cal-v5 .wxi .wxn{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .cal-v5 .wmg{flex:none;font:600 10.5px/1 var(--sans);color:var(--mgTag)}
 .cal-v5 .wmg.yt{color:var(--mut)}
 .cal-v5 .wxnone{margin:8px;font:500 12px/1.4 var(--sans);color:var(--mut)}
 .cal-v5 .rm .wxmore, .cal-v5 .rm .nkf{animation:cal5-fadeIn .15s ease both!important}
-/* The paint tray's More…: the same list, in a panel of its own just above the tray. A weather picked there joins the
-   palette for this session, ringed with dashes so it is plainly an addition. */
-.cal-v5 .trrow .pmore{display:inline-flex;align-items:center;gap:6px;height:30px;padding:0 11px 0 9px;border-radius:99px;font:550 12px/1 var(--sans)}
-.cal-v5 .trrow .pmore .i{width:14px;height:14px}
-.cal-v5 .pal button.added:not([aria-checked="true"]){box-shadow:none;outline:1px dashed var(--mut);outline-offset:-1px}
-.cal-v5 .bmore{position:absolute;z-index:4;left:0;right:0;bottom:calc(22px + var(--barH,48px) + var(--trayH,52px));margin:0 auto;width:min(380px,calc(100% - 24px));max-height:min(420px,52vh);display:flex;flex-direction:column;padding:10px 10px 6px;border-radius:14px;background:var(--paper);border:1px solid var(--edge);box-shadow:var(--shadow-l);pointer-events:auto}
-.cal-v5 .bmore .wxl{flex:1;min-height:0;max-height:none}
-.cal-v5 .bmore .wxq, .cal-v5 .bmore .pmh{flex:none}
-.cal-v5 .bmore .pmh{display:flex;align-items:center;justify-content:space-between;gap:8px;margin:0 0 8px 2px;font:600 12.5px/1.3 var(--sans);color:var(--ink)}
 /* A new kind of event, right where kinds are picked: a name, an icon and a colour. It is the campaign's, like the ones
    made in Settings. */
 .cal-v5 .kinds .nkb, .cal-v5 .chips .nkb{display:inline-flex;align-items:center;gap:6px}
@@ -1586,9 +1636,7 @@
 .cal-v5 .nkf button.btn.quiet{border-color:transparent;background:transparent;color:var(--ink2)}
 .cal-v5 .nkf button.btn.primary{background:var(--ink);color:var(--paper);border-color:transparent}
 .cal-v5 .nkf button.btn:focus-visible{outline:1.5px solid var(--ink);outline-offset:1px}
-@media (max-width:600px){.cal-v5 .bmore{position:fixed;left:8px;right:8px;z-index:57;width:auto;margin:0;bottom:calc(var(--barH,110px) + var(--trayH,52px));max-height:46vh}
-.cal-v5 .cal.toolup .bmore{visibility:hidden}
-.cal-v5 .wxl{max-height:40vh}
+@media (max-width:600px){.cal-v5 .wxl{max-height:40vh}
 
 }
 
