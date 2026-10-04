@@ -684,12 +684,18 @@
       '<ul class="rb-flaps rb-ix-list" data-ix-list><li class="rb-ix-wait">Opening the entries…</li></ul></div>';
   };
 
+  // A Director previewing the player view asks the server for exactly what a
+  // player would get (no gm_only fields, no Director-only chapters).
+  Rulebook.prototype.viewParam = function (sep) {
+    return this.data && this.data.isDirector && this.view === 'player' ? sep + 'view=player' : '';
+  };
+
   Rulebook.prototype.indexURL = function (box) {
     var base = this.url.replace(/[?#].*$/, '').replace(/\/+$/, '');
     var q = 'key=' + encodeURIComponent(box.getAttribute('data-key') || '') +
       '&value=' + encodeURIComponent(box.getAttribute('data-value') || '') +
       '&from=' + (+box.getAttribute('data-from') || 0) + '&to=' + (+box.getAttribute('data-to') || 0);
-    return base + '/index/' + encodeURIComponent(box.getAttribute('data-cat') || '') + '?' + q;
+    return base + '/index/' + encodeURIComponent(box.getAttribute('data-cat') || '') + '?' + q + this.viewParam('&');
   };
 
   Rulebook.prototype.fillIndex = function (box) {
@@ -749,12 +755,12 @@
 
   // Opens the entry a search result asked for once its page is on screen.
   Rulebook.prototype.openPending = function (box) {
-    var id = this.pendingEntry;
-    if (!id) return;
-    var row = null;
-    [].forEach.call(box.querySelectorAll('.rb-ix-row'), function (li) { if (li.getAttribute('data-id') === id) row = li; });
-    if (!row) return;
+    var p = this.pendingEntry;
+    if (!p || p.url !== this.indexURL(box)) return;
     this.pendingEntry = '';
+    var row = null;
+    [].forEach.call(box.querySelectorAll('.rb-ix-row'), function (li) { if (li.getAttribute('data-id') === p.id) row = li; });
+    if (!row) return;
     var btn = row.querySelector('button');
     if (!row.classList.contains('open')) this.toggleFlap(btn);
     var scroller = row.closest('.rb-scroll');
@@ -813,7 +819,7 @@
     this.showResults(q, pages, null);
     if (!this.items.some(function (it) { return it.ch.generated; })) { this.showResults(q, pages, []); return; }
     var base = this.url.replace(/[?#].*$/, '').replace(/\/+$/, '');
-    Chronicle.apiFetch(base + '/find?q=' + encodeURIComponent(q)).then(function (res) {
+    Chronicle.apiFetch(base + '/find?q=' + encodeURIComponent(q) + this.viewParam('&')).then(function (res) {
       if (!res.ok) throw new Error('http');
       return res.json();
     }).then(function (json) {
@@ -888,7 +894,14 @@
   Rulebook.prototype.pickResult = function (btn) {
     var n = +btn.getAttribute('data-hit'), id = btn.getAttribute('data-entry') || '';
     this.closeResults();
-    this.pendingEntry = id;
+    this.pendingEntry = '';
+    var it = this.items[n], blk = it && it.kind === 'page' && it.p.blocks[0];
+    if (id && isObj(blk) && blk.type === 'index') {
+      // The entry opens only on the page that lists it, once its rows load.
+      var probe = document.createElement('div');
+      probe.innerHTML = this.indexHTML(blk);
+      this.pendingEntry = { id: id, url: this.indexURL(probe.firstChild) };
+    }
     var sp = this.spreadOf(n);
     if (sp === this.at) {
       var self = this;
@@ -1182,6 +1195,7 @@
     if (this.finishNow) this.finishNow();
     var key = this.currentKey();
     this.view = v;
+    this.closeResults();
     this.rebuild(key);
   };
 

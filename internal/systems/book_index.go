@@ -145,7 +145,7 @@ func lessFold(a, b string) bool {
 func (ie *indexEntries) slice(s bookIndexSlice) []ReferenceItem {
 	var out []ReferenceItem
 	for _, it := range ie.items {
-		if s.Key == "" || strings.TrimSpace(propString(it.Properties, s.Key)) == s.Value {
+		if s.Key == "" || groupValue(it, s.Key) == s.Value {
 			out = append(out, it)
 		}
 	}
@@ -159,6 +159,16 @@ func (ie *indexEntries) slice(s bookIndexSlice) []ReferenceItem {
 		out = out[s.From:]
 	}
 	return out
+}
+
+// groupValue is an entry's value for a group property; missing and null are
+// both "", so they share one page.
+func groupValue(it ReferenceItem, key string) string {
+	v := strings.TrimSpace(propString(it.Properties, key))
+	if v == "<nil>" {
+		return ""
+	}
+	return v
 }
 
 // fieldLabel is the manifest label of a property, or the key itself.
@@ -211,14 +221,35 @@ func buildIndexChapter(sysDir string, manifest *SystemManifest, ch BookChapter, 
 		})
 	}
 
+	// addGroup adds one value's pages: one page, or more than one when the
+	// value holds more entries than a page may list.
+	addGroup := func(title string, key, value string, n int) {
+		if n <= maxBookIndexItems {
+			add(title, bookIndexSlice{Key: key, Value: value}, n)
+			return
+		}
+		for from, part := 0, 1; from < n; from, part = from+maxBookIndexItems, part+1 {
+			s := bookIndexSlice{Key: key, Value: value, From: from}
+			size := n - from
+			if size > maxBookIndexItems {
+				s.To, size = from+maxBookIndexItems, maxBookIndexItems
+			}
+			add(fmt.Sprintf("%s (%d)", title, part), s, size)
+		}
+	}
+
 	if spec.Group != "" {
 		counts := map[string]int{}
 		for _, it := range ie.items {
-			counts[strings.TrimSpace(propString(it.Properties, spec.Group))]++
+			switch it.Properties[spec.Group].(type) {
+			case []any, map[string]any:
+				return ch, fmt.Sprintf("%s: index group %q holds lists or sets on some entries; group by a property with one plain value", file, spec.Group)
+			}
+			counts[groupValue(it, spec.Group)]++
 		}
 		values := make([]string, 0, len(counts))
 		for v := range counts {
-			if v != "" && v != "<nil>" {
+			if v != "" {
 				values = append(values, v)
 			}
 		}
@@ -234,17 +265,15 @@ func buildIndexChapter(sysDir string, manifest *SystemManifest, ch BookChapter, 
 				r := []rune(v)
 				title = string(unicode.ToUpper(r[0])) + string(r[1:])
 			}
-			add(title, bookIndexSlice{Key: spec.Group, Value: v}, counts[v])
+			addGroup(title, spec.Group, v, counts[v])
 		}
 		// Entries without the property, or with a null, share one last page.
-		for _, empty := range []string{"", "<nil>"} {
-			if n := counts[empty]; n > 0 {
-				other := strings.TrimSpace(spec.Other)
-				if other == "" {
-					other = "Other"
-				}
-				add(other, bookIndexSlice{Key: spec.Group, Value: empty}, n)
+		if n := counts[""]; n > 0 {
+			other := strings.TrimSpace(spec.Other)
+			if other == "" {
+				other = "Other"
 			}
+			addGroup(other, spec.Group, "", n)
 		}
 	} else {
 		total := len(ie.items)

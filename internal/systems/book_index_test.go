@@ -2,6 +2,7 @@ package systems
 
 import (
 	"encoding/json"
+	"fmt"
 	"strings"
 	"testing"
 )
@@ -218,5 +219,45 @@ func TestBookIndexReaderScope(t *testing.T) {
 	got := findInIndex(dir, m, player, "dash")
 	if len(got) == 0 || got[0].Name != "dash" || got[0].Where != "By class · Fury" {
 		t.Errorf("find dash: %+v", got)
+	}
+}
+
+func TestBookIndexGroupEdges(t *testing.T) {
+	var big strings.Builder
+	big.WriteString("[")
+	for i := 0; i < maxBookIndexItems+20; i++ {
+		if i > 0 {
+			big.WriteString(",")
+		}
+		fmt.Fprintf(&big, `{"slug":"e%04d","name":"Entry %04d","properties":{"class":"Big"}}`, i, i)
+	}
+	big.WriteString(`,{"slug":"n1","name":"Null class","properties":{"class":null}},{"slug":"n2","name":"No class","properties":{}}]`)
+
+	dir, m := indexTestBook(t, map[string]string{"data/abilities.json": big.String()})
+	b, err := LoadBook(dir, m)
+	if err != nil {
+		t.Fatal(err)
+	}
+	ch := chapterByID(b, "by-class")
+	if got := indexPageTitles(ch); got != "Big (1),Big (2),Everyone" {
+		t.Fatalf("pages %q", got)
+	}
+	if n := ch.Pages[0].Blocks[0].Count + ch.Pages[1].Blocks[0].Count; n != maxBookIndexItems+20 {
+		t.Errorf("split pages hold %d entries", n)
+	}
+	if ch.Pages[2].Blocks[0].Count != 2 {
+		t.Errorf("missing and null share the Everyone page: %+v", ch.Pages[2].Blocks[0])
+	}
+	ie, _ := loadIndexEntries(dir, m, "abilities")
+	_, second, _ := pageSlice(ch.Pages[1])
+	if got := len(ie.slice(second)); got != 20 {
+		t.Errorf("second page lists %d", got)
+	}
+
+	listy := `[{"slug":"a","name":"A","properties":{"class":["x","y"]}}]`
+	dir, m = indexTestBook(t, map[string]string{"data/abilities.json": listy})
+	b, _ = LoadBook(dir, m)
+	if ch := chapterByID(b, "by-class"); ch.Generated || !strings.Contains(ch.Pages[0].Blocks[0].Text, "plain value") {
+		t.Errorf("a list-valued group must be refused: %+v", ch)
 	}
 }

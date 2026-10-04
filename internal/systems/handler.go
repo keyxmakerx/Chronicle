@@ -561,7 +561,8 @@ func (h *SystemHandler) BookAPI(c echo.Context) error {
 	return c.JSON(http.StatusOK, out)
 }
 
-// viewerBook loads the package book filtered for the viewer, for the
+// viewerBook loads the package book filtered for the viewer (or for a player,
+// when a Director previews the player view), for the
 // rules-index endpoints. Campaign edits are not merged: generated chapters
 // can't be edited, so the package's are the ones readers see.
 func (h *SystemHandler) viewerBook(c echo.Context) (*Book, string, *SystemManifest, bool, error) {
@@ -582,7 +583,8 @@ func (h *SystemHandler) viewerBook(c echo.Context) (*Book, string, *SystemManife
 	if err != nil {
 		return nil, "", nil, false, apperror.NewNotFound("the rulebook could not be opened")
 	}
-	director := bookViewerIsDirector(cc)
+	// A Director previewing the player view asks for exactly what players get.
+	director := bookViewerIsDirector(cc) && c.QueryParam("view") != "player"
 	return FilterBook(b, director), sysDir, manifest, director, nil
 }
 
@@ -606,10 +608,8 @@ func (h *SystemHandler) BookIndexAPI(c echo.Context) error {
 	if err != nil {
 		return apperror.NewNotFound("this index could not be read")
 	}
+	// Chapters are built so no page lists more than maxBookIndexItems.
 	items := ie.slice(want)
-	if len(items) > maxBookIndexItems {
-		items = items[:maxBookIndexItems]
-	}
 	out := make([]BookIndexEntry, 0, len(items))
 	for _, it := range items {
 		out = append(out, ie.indexEntry(it, director, want.Key))

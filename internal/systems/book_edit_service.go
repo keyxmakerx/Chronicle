@@ -419,6 +419,9 @@ func (ed *edition) editableChapter(chapterID string) (*editionChapter, error) {
 	if c == nil {
 		return nil, apperror.NewNotFound("chapter not found")
 	}
+	if c.entry.Generated {
+		return nil, apperror.NewValidation("This chapter is made from the system's rules data, so it changes with the package and can't be edited here.")
+	}
 	if !c.editable {
 		return nil, apperror.NewValidation("This chapter couldn't be loaded, so it can't be edited here.")
 	}
