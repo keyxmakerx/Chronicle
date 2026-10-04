@@ -243,11 +243,23 @@
       });
     }
 
+    // A failed load still marks pictures ready: an anchored hex layer waits on
+    // that, and would otherwise stay off for good instead of taking its
+    // reload/fallback path.
+    function loadFailed() {
+      picReady = true;
+      picNotify('list');
+      Chronicle.notify('Could not load the drawings on this map', 'error');
+    }
+
     function loadDrawings() {
       Chronicle.apiFetch('/campaigns/' + campaignID + '/maps/' + mapID + '/drawings')
-        .then(function (res) { return res.ok ? res.json() : []; })
+        .then(function (res) {
+          if (!res.ok) throw new Error('HTTP ' + res.status);
+          return res.json();
+        })
         .then(function (drawings) {
-          if (!drawings || !Array.isArray(drawings)) return;
+          if (!drawings || !Array.isArray(drawings)) throw new Error('unexpected response');
           drawingLayer.clearLayers();
           layersByID = {};
           picReg = {};
@@ -257,7 +269,8 @@
           picReady = true;
           picNotify('list');
           notifyCount();
-        });
+        })
+        .catch(loadFailed);
     }
 
     // --- Rendering ---

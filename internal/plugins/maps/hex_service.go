@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"net/http"
+	"time"
 	"unicode"
 	"unicode/utf8"
 
@@ -57,9 +58,13 @@ type HexLayerView struct {
 type HexPictures interface {
 	// GetPicture returns a drawing by id, or nil when it does not exist.
 	GetPicture(ctx context.Context, id string) (*Drawing, error)
+	// IsShadowed reports whether a shadow wholly covers the picture for a
+	// viewer of this role, using the same rule that withholds drawings.
+	IsShadowed(ctx context.Context, d *Drawing, role int) (bool, error)
 	// ClearRotation turns a picture upright. Hexes do not turn, so a picture
-	// carrying them must not either.
-	ClearRotation(ctx context.Context, mapID, id string) error
+	// carrying them must not either. expected is the picture's UpdatedAt as the
+	// caller read it, so a concurrent edit to the picture is a conflict.
+	ClearRotation(ctx context.Context, mapID, id string, actor HexActor, expected time.Time) error
 }
 
 type drawingHexPictures struct{ svc DrawingService }
@@ -78,9 +83,23 @@ func (p *drawingHexPictures) GetPicture(ctx context.Context, id string) (*Drawin
 	return d, err
 }
 
-func (p *drawingHexPictures) ClearRotation(ctx context.Context, mapID, id string) error {
-	return p.svc.UpdateDrawing(ctx, id, mapID, permissions.RoleOwner, true,
-		UpdateDrawingInput{Rotation: patch.Of(0.0)})
+func (p *drawingHexPictures) IsShadowed(ctx context.Context, d *Drawing, role int) (bool, error) {
+	return p.svc.IsDrawingShadowed(ctx, d, role)
+}
+
+// ClearRotation runs the actor through the normal drawing write. Only an owner
+// or DM grant reaches it, and a DM-granted player's member role is below the
+// drawing gate's scribe floor, so a DM is lifted to owner for this one write:
+// the hex layer already authorised the change, and refusing here would leave a
+// rotated picture under the hexes. The optimistic-concurrency token still
+// applies, so an edit that landed after the picture was read is a 409.
+func (p *drawingHexPictures) ClearRotation(ctx context.Context, mapID, id string, actor HexActor, expected time.Time) error {
+	role := actor.Role
+	if actor.IsDM {
+		role = permissions.RoleOwner
+	}
+	return p.svc.UpdateDrawing(ctx, id, mapID, role, actor.IsDM,
+		UpdateDrawingInput{Rotation: patch.Of(0.0), ExpectedUpdatedAt: &expected})
 }
 
 // HexLayerWriteResult is the outcome of a layer change.
@@ -171,26 +190,62 @@ func (s *hexService) GetLayer(ctx context.Context, campaignID, mapID string, rol
 	if err != nil {
 		return nil, err
 	}
-	if layer.AnchorDrawingID != nil {
-		anchor, err := s.anchorPicture(ctx, *layer.AnchorDrawingID)
-		if err != nil {
-			return nil, err
-		}
-		switch {
-		case !UsableAnchor(mapID, anchor):
-			// A deleted or repurposed picture leaves the layer in place on the
-			// whole map instead of failing the read.
-			layer.AnchorDrawingID = nil
-		case AnchorHidesLayer(anchor, role):
-			layer.AnchorDrawingID = nil
-			return &HexLayerView{Layer: layer, Cells: []HexCell{}, Version: layer.Version, Hidden: true}, nil
-		}
+	hidden, stale, err := s.anchorState(ctx, mapID, layer, role)
+	if err != nil {
+		return nil, err
+	}
+	if hidden {
+		// Only the version leaves: no anchor, fog, party or miles, so nothing
+		// about the withheld picture or its layer can be read from the reply.
+		l := DefaultHexLayer(mapID)
+		l.Version = layer.Version
+		return &HexLayerView{Layer: l, Cells: []HexCell{}, Version: layer.Version, Hidden: true}, nil
+	}
+	if stale {
+		// An owner or DM keeps the whole-map fallback so they can see and fix
+		// the layer; the stored anchor is left alone.
+		layer.AnchorDrawingID = nil
 	}
 	cells, err := s.repo.ListCells(ctx, mapID)
 	if err != nil {
 		return nil, err
 	}
 	return &HexLayerView{Layer: layer, Cells: VisibleCells(layer, cells, role), Version: layer.Version}, nil
+}
+
+// anchorState says how a viewer must treat the layer's anchor. hidden: the
+// layer is withheld entirely (the picture is dm_only or under a shadow for
+// them, or the anchor is unusable and they cannot see dm_only). stale: the
+// anchor is unusable but the viewer may see it, so they get the whole-map
+// fallback. An unusable anchor reads as hidden to players because the picture
+// may have been dm_only before it was deleted; only an explicit PUT with a null
+// anchor shows the cells to them again.
+func (s *hexService) anchorState(ctx context.Context, mapID string, layer HexLayer, role int) (hidden, stale bool, err error) {
+	if layer.AnchorDrawingID == nil {
+		return false, false, nil
+	}
+	anchor, err := s.anchorPicture(ctx, *layer.AnchorDrawingID)
+	if err != nil {
+		return false, false, err
+	}
+	privileged := permissions.CanSeeDmOnly(role)
+	if !UsableAnchor(mapID, anchor) {
+		return !privileged, privileged, nil
+	}
+	if AnchorHidesLayer(anchor, role) {
+		return true, false, nil
+	}
+	if !privileged {
+		shadowed, err := s.pictures.IsShadowed(ctx, anchor, role)
+		if err != nil {
+			// Fail closed: a picture that might be shadowed is not revealed.
+			return false, false, err
+		}
+		if shadowed {
+			return true, false, nil
+		}
+	}
+	return false, false, nil
 }
 
 // anchorPicture loads the picture a layer is pinned to. Without a wired
@@ -216,6 +271,8 @@ func (s *hexService) UpdateLayer(ctx context.Context, campaignID, mapID string, 
 		return nil, apperror.NewBadRequest("nothing to change")
 	}
 	var anchor *string
+	var rotated bool
+	var expected time.Time
 	if !in.AnchorDrawingID.IsNull() {
 		id, _ := in.AnchorDrawingID.Get()
 		pic, err := s.anchorPicture(ctx, id)
@@ -227,16 +284,19 @@ func (s *hexService) UpdateLayer(ctx context.Context, campaignID, mapID string, 
 		if !UsableAnchor(mapID, pic) {
 			return nil, apperror.NewBadRequest("the hexes can only cover a picture on this map")
 		}
-		if pic.Rotation != 0 {
-			if err := s.pictures.ClearRotation(ctx, mapID, id); err != nil {
-				return nil, err
-			}
-		}
 		anchor = &id
+		rotated, expected = pic.Rotation != 0, pic.UpdatedAt
 	}
 	version, err := s.repo.SetAnchor(ctx, mapID, anchor)
 	if err != nil {
 		return nil, err
+	}
+	// Straightened only once the anchor is stored, so a failed pin never
+	// leaves a picture turned for nothing.
+	if rotated {
+		if err := s.pictures.ClearRotation(ctx, mapID, *anchor, actor, expected); err != nil {
+			return nil, err
+		}
 	}
 	return &HexLayerWriteResult{Version: version, AnchorDrawingID: anchor}, nil
 }
@@ -343,6 +403,21 @@ func (s *hexService) PatchCells(ctx context.Context, campaignID, mapID string, a
 	if len(entries) > MaxHexBatch {
 		return nil, apperror.NewBadRequest("too many hexes in one request")
 	}
+	layer, err := s.layerOrDefault(ctx, mapID)
+	if err != nil {
+		return nil, err
+	}
+	// A scribe who cannot see the layer must not be able to write to it: the
+	// write would confirm or alter hexes they are not meant to know about.
+	if !actor.IsDM {
+		hidden, _, err := s.anchorState(ctx, mapID, layer, actor.Role)
+		if err != nil {
+			return nil, err
+		}
+		if hidden {
+			return nil, apperror.NewForbidden("you cannot paint hexes on this map")
+		}
+	}
 
 	// Entries naming the same hex are folded into one write, later fields
 	// winning, so a stroke that crosses a hex twice is applied once.
@@ -370,11 +445,6 @@ func (s *hexService) PatchCells(ctx context.Context, campaignID, mapID string, a
 		if w.NotesSet {
 			p.NotesSet, p.Notes = true, w.Notes
 		}
-	}
-
-	layer, err := s.layerOrDefault(ctx, mapID)
-	if err != nil {
-		return nil, err
 	}
 
 	keys := make([]HexKey, len(writes))

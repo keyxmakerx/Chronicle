@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/keyxmakerx/chronicle/internal/permissions"
 	"github.com/keyxmakerx/chronicle/internal/plugins/campaigns"
@@ -28,13 +29,18 @@ func (r *fakeHexRepo) SetAnchor(_ context.Context, mapID string, anchor *string)
 type fakeHexPictures struct {
 	drawings map[string]*Drawing
 	cleared  []string
+	shadowed map[string]bool
+}
+
+func (p *fakeHexPictures) IsShadowed(_ context.Context, d *Drawing, role int) (bool, error) {
+	return p.shadowed[d.ID] && !permissions.CanSeeDmOnly(role), nil
 }
 
 func (p *fakeHexPictures) GetPicture(_ context.Context, id string) (*Drawing, error) {
 	return p.drawings[id], nil
 }
 
-func (p *fakeHexPictures) ClearRotation(_ context.Context, _, id string) error {
+func (p *fakeHexPictures) ClearRotation(_ context.Context, _, id string, _ HexActor, _ time.Time) error {
 	p.cleared = append(p.cleared, id)
 	p.drawings[id].Rotation = 0
 	return nil
@@ -232,36 +238,130 @@ func TestUpdateLayer_AnchoringStraightensThePicture(t *testing.T) {
 	})
 }
 
-func TestGetLayer_AnchorFallsBackToTheWholeMap(t *testing.T) {
-	tests := []struct {
+// An anchor that is set but unusable may once have been a hidden picture, so
+// players get nothing; owners and DM grants keep the whole-map fallback so they
+// can see and repair it.
+func TestGetLayer_UnusableAnchorIsHiddenFromPlayers(t *testing.T) {
+	anchors := []struct {
 		name   string
 		anchor string
-		keeps  bool
 	}{
-		{"a live picture is kept", "pic-1", true},
-		{"a deleted picture falls back", "deleted", false},
-		{"a picture moved to another map falls back", "pic-other", false},
-		{"a drawing that stopped being a picture falls back", "rect-1", false},
+		{"deleted picture", "deleted"},
+		{"picture moved to another map", "pic-other"},
+		{"drawing that stopped being a picture", "rect-1"},
 	}
-	for _, tc := range tests {
-		t.Run(tc.name, func(t *testing.T) {
-			svc, repo, _ := anchorFixture()
-			repo.layer = &HexLayer{MapID: "map-1", AnchorDrawingID: strPtr(tc.anchor), Version: 4}
-			repo.cells[HexKey{1, 1}] = HexCell{Col: 1, Row: 1}
-			v, err := svc.GetLayer(context.Background(), "camp-1", "map-1", permissions.RolePlayer)
+	roles := []struct {
+		name   string
+		role   int
+		hidden bool
+	}{
+		{"player", permissions.RolePlayer, true},
+		{"scribe", permissions.RoleScribe, true},
+		{"public", permissions.RoleNone, true},
+		{"owner", permissions.RoleOwner, false},
+		// The handler promotes a DM grant to the owner visibility role.
+		{"DM grant", permissions.RoleOwner, false},
+	}
+	for _, a := range anchors {
+		for _, r := range roles {
+			t.Run(a.name+"/"+r.name, func(t *testing.T) {
+				svc, repo, _ := anchorFixture()
+				repo.layer = &HexLayer{MapID: "map-1", AnchorDrawingID: strPtr(a.anchor), Version: 4, FogEnabled: true, MilesPerHex: 9}
+				repo.cells[HexKey{1, 1}] = HexCell{Col: 1, Row: 1, Name: "secret keep", Explored: true}
+				v, err := svc.GetLayer(context.Background(), "camp-1", "map-1", r.role)
+				if err != nil {
+					t.Fatal(err)
+				}
+				if v.Hidden != r.hidden {
+					t.Fatalf("hidden = %v, want %v", v.Hidden, r.hidden)
+				}
+				body, _ := json.Marshal(v)
+				if r.hidden {
+					l := v.Layer
+					if len(v.Cells) != 0 || l.AnchorDrawingID != nil || l.FogEnabled || l.MilesPerHex != 6 || v.Version != 4 ||
+						strings.Contains(string(body), "secret") || strings.Contains(string(body), a.anchor) {
+						t.Errorf("a hidden layer leaked: %s", body)
+					}
+				} else if v.Layer.AnchorDrawingID != nil || len(v.Cells) != 1 {
+					t.Errorf("owner fallback = %s", body)
+				}
+				if repo.layer.AnchorDrawingID == nil || *repo.layer.AnchorDrawingID != a.anchor {
+					t.Error("a read changed the stored anchor")
+				}
+			})
+		}
+	}
+}
+
+func TestGetLayer_UsablePictureIsKept(t *testing.T) {
+	svc, repo, _ := anchorFixture()
+	repo.layer = &HexLayer{MapID: "map-1", AnchorDrawingID: strPtr("pic-1"), Version: 4}
+	repo.cells[HexKey{1, 1}] = HexCell{Col: 1, Row: 1}
+	v, err := svc.GetLayer(context.Background(), "camp-1", "map-1", permissions.RolePlayer)
+	if err != nil || v.Hidden || v.Layer.AnchorDrawingID == nil || len(v.Cells) != 1 {
+		t.Fatalf("got %+v, %v", v, err)
+	}
+}
+
+func TestGetLayer_ShadowedAnchorIsHidden(t *testing.T) {
+	roles := []struct {
+		name   string
+		role   int
+		hidden bool
+	}{
+		{"player", permissions.RolePlayer, true},
+		{"scribe", permissions.RoleScribe, true},
+		{"public", permissions.RoleNone, true},
+		{"owner", permissions.RoleOwner, false},
+	}
+	for _, r := range roles {
+		t.Run(r.name, func(t *testing.T) {
+			svc, repo, pics := anchorFixture()
+			pics.shadowed = map[string]bool{"pic-1": true}
+			repo.layer = &HexLayer{MapID: "map-1", AnchorDrawingID: strPtr("pic-1"), Version: 3}
+			repo.cells[HexKey{0, 0}] = HexCell{Col: 0, Row: 0, Name: "secret keep"}
+			v, err := svc.GetLayer(context.Background(), "camp-1", "map-1", r.role)
 			if err != nil {
 				t.Fatal(err)
 			}
-			if got := v.Layer.AnchorDrawingID != nil; got != tc.keeps {
-				t.Errorf("anchor kept = %v, want %v", got, tc.keeps)
+			body, _ := json.Marshal(v)
+			if v.Hidden != r.hidden || (r.hidden && (len(v.Cells) != 0 || strings.Contains(string(body), "pic-1") || strings.Contains(string(body), "secret"))) {
+				t.Errorf("hidden = %v, want %v: %s", v.Hidden, r.hidden, body)
 			}
-			// A fallback is not a hiding: the painted hexes still arrive.
-			if v.Hidden || len(v.Cells) != 1 {
-				t.Errorf("hidden = %v, cells = %d; want the layer visible with its cell", v.Hidden, len(v.Cells))
+		})
+	}
+}
+
+// A scribe who cannot see the layer must not be able to write to it.
+func TestPatchCells_RefusedWhenLayerIsHidden(t *testing.T) {
+	tests := []struct {
+		name   string
+		anchor string
+		actor  HexActor
+		allow  bool
+	}{
+		{"scribe on a dm_only picture", "pic-hidden", actorScribe, false},
+		{"scribe on a deleted picture", "deleted", actorScribe, false},
+		{"scribe on a shadowed picture", "pic-1", actorScribe, false},
+		{"scribe on a visible picture", "pic-2", actorScribe, true},
+		{"owner on a dm_only picture", "pic-hidden", actorOwner, true},
+		{"DM grant on a deleted picture", "deleted", actorDM, true},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			svc, repo, pics := anchorFixture()
+			pics.drawings["pic-2"] = picture("pic-2", "map-1")
+			pics.shadowed = map[string]bool{"pic-1": true}
+			repo.layer = &HexLayer{MapID: "map-1", AnchorDrawingID: strPtr(tc.anchor), Version: 1}
+			_, err := svc.PatchCells(context.Background(), "camp-1", "map-1", tc.actor, []UpdateHexCellInput{paint(1, 1, "forest")})
+			if tc.allow {
+				if err != nil || len(repo.applied) != 1 {
+					t.Fatalf("expected success, got %v", err)
+				}
+				return
 			}
-			// Reading never rewrites the stored anchor.
-			if repo.layer.AnchorDrawingID == nil || *repo.layer.AnchorDrawingID != tc.anchor {
-				t.Error("a read changed the stored anchor")
+			if !isForbidden(err) || len(repo.applied) != 0 {
+				t.Fatalf("expected 403 with no write, got %v (writes %d)", err, len(repo.applied))
 			}
 		})
 	}

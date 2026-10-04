@@ -515,6 +515,7 @@ func (h *Handler) GetMapMetaAPI(c echo.Context) error {
 	return c.JSON(http.StatusOK, map[string]any{
 		"id":           m.ID,
 		"name":         m.Name,
+		"updated_at":   m.UpdatedAt,
 		"image_id":     m.ImageID,
 		"image_url":    m.PlayerImageURL,
 		"image_width":  m.ImageWidth,

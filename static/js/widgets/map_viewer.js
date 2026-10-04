@@ -1036,10 +1036,27 @@
 	// ... in stacking order.
 	function pictureName(i) { return 'Picture ' + (i + 1); }
 
-	function hexCellCount() {
-		return Chronicle.apiFetch(hexBase).then(function(res) { return res.ok ? res.json() : null; })
-			.then(function(data) { return data && data.cells ? data.cells.length : 0; })
-			.catch(function() { return 0; });
+	// Whether the layer holds painted hexes. The loaded module knows; without
+	// it the answer comes from the server, and a failed lookup counts as "has
+	// hexes" so the re-lay warning is never skipped on a guess.
+	async function hexHasCells() {
+		if (viewerCtx && viewerCtx.hexes && viewerCtx.hexes.hasCells) return viewerCtx.hexes.hasCells();
+		try {
+			var res = await Chronicle.apiFetch(hexBase);
+			if (!res.ok) return true;
+			var data = await res.json();
+			return !data || !data.cells || data.cells.length > 0;
+		} catch (err) { return true; }
+	}
+	var HIDDEN_PICTURE_CONFIRM = 'Hexes painted on this hidden picture will become visible to players. Continue?';
+	// Moving the hexes off a dm_only picture onto something players can see
+	// would publish whatever was painted while it was hidden.
+	function hexCoverReveals(newId) {
+		if (hexAnchor === null || newId === hexAnchor) return false;
+		var cur = hexPictureList().filter(function(p) { return p.id === hexAnchor; })[0];
+		if (!cur || cur.visibility !== 'dm_only') return false;
+		var next = newId === null ? null : hexPictureList().filter(function(p) { return p.id === newId; })[0];
+		return !next || next.visibility !== 'dm_only';
 	}
 	function apiPut(url, body) {
 		return Chronicle.apiFetch(url, { method: 'PUT', body: body }).then(function(res) {
@@ -1050,11 +1067,20 @@
 			});
 		}).catch(function() { Chronicle.notify('Could not save that change', 'error'); return false; });
 	}
-	function putGrid(type, size) {
-		return apiPut('/campaigns/' + campaignID + '/maps/' + mapID, {
-			name: savedMapName,
-			display_settings: { grid: { type: type, size: size, strength: savedD.grid_strength } }
-		});
+	// The name is required by the endpoint and may have been renamed since the
+	// page loaded, so the current one is read just before writing; the stamp
+	// makes a rename that lands in between a conflict instead of a revert.
+	async function putGrid(type, size) {
+		var body = { name: savedMapName, display_settings: { grid: { type: type, size: size, strength: savedD.grid_strength } } };
+		try {
+			var res = await Chronicle.apiFetch('/campaigns/' + campaignID + '/maps/' + mapID + '/meta');
+			if (res.ok) {
+				var meta = await res.json();
+				if (meta && meta.name) body.name = meta.name;
+				if (meta && meta.updated_at) body.expected_updated_at = meta.updated_at;
+			}
+		} catch (err) { /* fall back to the name this page loaded with */ }
+		return apiPut('/campaigns/' + campaignID + '/maps/' + mapID, body);
 	}
 	// openHexes shows the Hexes tool, now if the module is up, else once it is.
 	function openHexes(mode) {
@@ -1076,7 +1102,8 @@
 		if (!wasHex && !isOwner) { Chronicle.notify('Only the campaign owner can turn the hex grid on', 'error'); return false; }
 		var coverChanges = id !== hexAnchor;
 		var sizeChanges = newSize !== savedD.grid_size;
-		if ((coverChanges || sizeChanges) && await hexCellCount() > 0 && !confirm(RELAY_CONFIRM)) return false;
+		if ((coverChanges || sizeChanges) && await hexHasCells() && !confirm(RELAY_CONFIRM)) return false;
+		if (hexCoverReveals(id) && !confirm(HIDDEN_PICTURE_CONFIRM)) return false;
 		// The picture first: if it is refused nothing else has changed.
 		if (coverChanges && !await apiPut(hexBase + '/layer', { anchor_drawing_id: id })) return false;
 		if ((!wasHex || sizeChanges) && !await putGrid('hex', newSize)) return false;
@@ -1095,6 +1122,7 @@
 	// The painted hexes stay stored, so turning hexes back on finds them.
 	async function takeHexesOff() {
 		if (!isOwner) return false;
+		if (hexCoverReveals(null) && !confirm(HIDDEN_PICTURE_CONFIRM)) return false;
 		if (hexAnchor !== null && !await apiPut(hexBase + '/layer', { anchor_drawing_id: null })) return false;
 		if (!await putGrid('none', savedD.grid_size)) return false;
 		hexAnchor = null;
@@ -1404,7 +1432,8 @@
 			// spots, so ask before saving that over a map that has some.
 			var stagedAnchor = Object.prototype.hasOwnProperty.call(D, 'hex_anchor');
 			var anchorChanges = D.grid_type === 'hex' && stagedAnchor && D.hex_anchor !== hexAnchor;
-			if (D.grid_type === 'hex' && (anchorChanges || D.grid_size !== savedD.grid_size) && await hexCellCount() > 0 && !confirm(RELAY_CONFIRM)) return;
+			if (D.grid_type === 'hex' && (anchorChanges || D.grid_size !== savedD.grid_size) && await hexHasCells() && !confirm(RELAY_CONFIRM)) return;
+			if (anchorChanges && hexCoverReveals(D.hex_anchor) && !confirm(HIDDEN_PICTURE_CONFIRM)) return;
 			var btn = $id('ms-save');
 			btn.disabled = true;
 			try {
