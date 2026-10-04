@@ -14,6 +14,7 @@ import (
 // retiredCalendarRoutes is every pre-V5 calendar route the sync API no longer
 // serves. None is called by the Foundry module.
 var retiredCalendarRoutes = []string{
+	`POST("/calendar"`,
 	`GET("/calendar/event-categories"`,
 	`GET("/calendar/world-state"`,
 	`PUT("/calendar/settings"`,

@@ -3,7 +3,6 @@ package syncapi
 import (
 	"context"
 	"fmt"
-	"io"
 	"log/slog"
 	"net/http"
 	"strconv"
@@ -52,7 +51,8 @@ func retiredCalendarRoute(instead string) echo.HandlerFunc {
 
 // What each retired route says to use instead.
 const (
-	retiredStructure       = "Calendar structure and settings are edited in Chronicle's calendar. Foundry's Import button creates a campaign's first calendar; after that dates and events sync."
+	retiredStructure       = "Calendar structure and settings are edited in Chronicle's calendar; dates and events sync."
+	retiredCreate          = "Create the calendar in Chronicle's calendar; dates and events then sync."
 	retiredEventCategories = "Event kinds replaced event categories; edit them in Chronicle's calendar."
 	retiredAdvance         = "Set the date with PUT /calendar/date."
 )
@@ -628,36 +628,6 @@ func (h *CalendarAPIHandler) SetDate(c echo.Context) error {
 		"day":    req.Day,
 		"hour":   req.Hour,
 		"minute": req.Minute,
-	})
-}
-
-// maxFoundryImportBytes caps the Calendaria payload. A real calendar is a few
-// kilobytes; the cap keeps a hostile body from being decoded whole.
-const maxFoundryImportBytes = 1 << 20
-
-// CreateCalendar is the module's "Import into Chronicle" button: it creates
-// the campaign's first calendar from a Calendaria calendar. Owner only, like
-// creating a calendar on the web. A campaign that already has a calendar
-// gets 409 so a repeated click never makes a second copy.
-// POST /api/v1/campaigns/:id/calendar
-func (h *CalendarAPIHandler) CreateCalendar(c echo.Context) error {
-	if err := h.requireOwner(c); err != nil {
-		return err
-	}
-	body, err := io.ReadAll(io.LimitReader(c.Request().Body, maxFoundryImportBytes+1))
-	if err != nil {
-		return apperror.NewBadRequest("could not read the calendar")
-	}
-	if len(body) > maxFoundryImportBytes {
-		return apperror.NewBadRequest("the calendar sent from Foundry is too large")
-	}
-	cal, warnings, err := h.calendarSvc.ImportFoundryCalendar(c.Request().Context(), c.Param("id"), body)
-	if err != nil {
-		return err
-	}
-	return c.JSON(http.StatusCreated, map[string]any{
-		"created":  cal,
-		"warnings": nonNil(warnings),
 	})
 }
 

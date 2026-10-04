@@ -206,11 +206,9 @@ func RegisterAPIRoutes(e *echo.Echo, api *APIHandler, calAPI *CalendarAPIHandler
 	cg.DELETE("/entities/:entityID", api.DeleteEntity, RequirePermission(PermWrite))
 
 	// Calendar write endpoints (require "write" permission + calendar addon).
-	// POST /calendar creates a campaign's first calendar from the module's
-	// Calendaria payload. The structure, advance and import routes after it
-	// are retired: the module never called them, and V5 edits structure only
-	// in Chronicle's calendar.
-	calGroup.POST("/calendar", calAPI.CreateCalendar, RequirePermission(PermWrite))
+	// Creating a calendar and the structure, advance and import routes are
+	// retired: V5 creates and edits calendars only in Chronicle's calendar.
+	calGroup.POST("/calendar", retiredCalendarRoute(retiredCreate))
 	calGroup.POST("/calendar/events", calAPI.CreateEvent, RequirePermission(PermWrite))
 	calGroup.PUT("/calendar/events/:eventID", calAPI.UpdateEvent, RequirePermission(PermWrite))
 	calGroup.DELETE("/calendar/events/:eventID", calAPI.DeleteEvent, RequirePermission(PermWrite))
