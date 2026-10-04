@@ -119,8 +119,8 @@ func RegisterCoreBlocks(r *BlockRegistry) {
 	})
 
 	r.Register(BlockMeta{
-		Type: "shop_inventory", Label: "Shop Inventory", Icon: "fa-store",
-		Description: "Shop items with prices",
+		Type: "shop_inventory", Label: "Shop", Icon: "fa-store",
+		Description: "A shop players step into to browse and buy",
 		Contexts:    []string{"template"},
 	}, func(ctx BlockRenderContext) templ.Component {
 		return blockShopInventory(ctx.CC, ctx.Entity, ctx.CSRFToken)
