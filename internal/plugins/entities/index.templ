@@ -136,7 +136,7 @@ templ EntityListContent(cc *campaigns.CampaignContext, entities []Entity, entity
 				for _, et := range entityTypes {
 					if et.Enabled {
 						<a
-							href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/%s", cc.Campaign.ID, et.Slug + "s")) }
+							href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/%s", cc.Campaign.ID, et.Slug)) }
 							class={ "entity-tab",
 								templ.KV("entity-tab--active", activeTypeSlug == et.Slug || activeTypeID == et.ID),
 								templ.KV("entity-tab--inactive", activeTypeSlug != et.Slug && activeTypeID != et.ID) }

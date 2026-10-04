@@ -203,6 +203,57 @@ func TestWeatherRepository_Days_Integration(t *testing.T) {
 		}
 	})
 
+	t.Run("lock protects a generated day, only existing rows change, and paint clears it", func(t *testing.T) {
+		month2 := func() DayWeather {
+			t.Helper()
+			got, err := weatherRepo.ListDays(ctx, calA.ID, 3, 2)
+			if err != nil || len(got) != 1 {
+				t.Fatalf("ListDays month 2 = %+v, %v; want 1 day", got, err)
+			}
+			return got[0]
+		}
+		if d := month2(); d.Locked == nil || *d.Locked {
+			t.Fatalf("a new day must start unlocked, got %v", d.Locked)
+		}
+		n, err := weatherRepo.LockDays(ctx, calA.ID, []DayDate{{3, 2, 1}, {3, 9, 9}}, true)
+		if err != nil || n != 1 {
+			t.Fatalf("LockDays = %d, %v; want 1 (the day with no reading is skipped)", n, err)
+		}
+		if gone, _ := weatherRepo.ListDays(ctx, calA.ID, 3, 9); len(gone) != 0 {
+			t.Fatalf("locking must not create a row, got %+v", gone)
+		}
+		if d := month2(); d.Locked == nil || !*d.Locked {
+			t.Fatalf("day should be locked, got %v", d.Locked)
+		}
+		if n, _ := weatherRepo.LockDays(ctx, calA.ID, []DayDate{{3, 2, 1}}, true); n != 0 {
+			t.Errorf("locking a locked day changed %d rows, want 0", n)
+		}
+
+		if err := weatherRepo.SetDays(ctx, calA.ID, []DayWeatherInput{day(2, 1, WeatherSourceGenerated, "storm")}); err != nil {
+			t.Fatalf("generated SetDays: %v", err)
+		}
+		d := month2()
+		if *d.PresetID != "fog" || d.Source != WeatherSourceGenerated || !*d.Locked {
+			t.Errorf("generated write over a locked day = %s/%s locked=%v, want fog/generated locked", *d.PresetID, d.Source, *d.Locked)
+		}
+
+		if err := weatherRepo.SetDays(ctx, calA.ID, []DayWeatherInput{day(2, 1, WeatherSourceManual, "gale")}); err != nil {
+			t.Fatalf("manual SetDays: %v", err)
+		}
+		d = month2()
+		if *d.PresetID != "gale" || d.Source != WeatherSourceManual || *d.Locked {
+			t.Errorf("paint over a locked day = %s/%s locked=%v, want gale/manual unlocked", *d.PresetID, d.Source, *d.Locked)
+		}
+
+		// Unlock restores generated overwrites.
+		if _, err := weatherRepo.LockDays(ctx, calA.ID, []DayDate{{3, 1, 2}}, true); err != nil {
+			t.Fatalf("lock 1/2: %v", err)
+		}
+		if n, err := weatherRepo.LockDays(ctx, calA.ID, []DayDate{{3, 1, 2}}, false); err != nil || n != 1 {
+			t.Fatalf("unlock = %d, %v; want 1", n, err)
+		}
+	})
+
 	t.Run("days are scoped to their calendar", func(t *testing.T) {
 		got, err := weatherRepo.ListDays(ctx, calB.ID, 3, 0)
 		if err != nil || len(got) != 0 {
@@ -273,6 +324,24 @@ func TestWeatherRepository_Settings_Integration(t *testing.T) {
 	}
 	if s, _ := repo.GetSettings(ctx, calB.ID); s != nil {
 		t.Fatalf("calendar B must not see A's settings, got %+v", s)
+	}
+
+	// The forecast reach round-trips, and a row written without it (the
+	// column default) reads as five days.
+	if err := repo.SetSettings(ctx, calA.ID, WeatherSettings{Climate: "ashlands", Continuity: 1, ForecastDays: 7}); err != nil {
+		t.Fatalf("SetSettings forecast days: %v", err)
+	}
+	if got, _ = repo.GetSettings(ctx, calA.ID); got == nil || got.ForecastDays != 7 {
+		t.Fatalf("forecast days = %+v; want 7", got)
+	}
+	if _, err := db.ExecContext(ctx, `INSERT INTO calendar_weather_settings (calendar_id, climate) VALUES (?, 'desert')`, calB.ID); err != nil {
+		t.Fatalf("insert settings without forecast_days: %v", err)
+	}
+	if got, _ = repo.GetSettings(ctx, calB.ID); got == nil || got.ForecastDays != 5 {
+		t.Fatalf("default forecast days = %+v; want 5", got)
+	}
+	if _, err := db.ExecContext(ctx, `DELETE FROM calendar_weather_settings WHERE calendar_id = ?`, calB.ID); err != nil {
+		t.Fatalf("cleanup: %v", err)
 	}
 
 	// Own kinds round-trip through the JSON column and are replaced whole.

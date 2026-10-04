@@ -105,6 +105,10 @@ type ImportedToday struct {
 	Year  int  `json:"year"`
 	Month *int `json:"month,omitempty"`
 	Day   *int `json:"day,omitempty"`
+	// Hour and Minute are the time of day, 0 for every format but the Foundry
+	// module's payload, which carries the world's current time.
+	Hour   int `json:"hour,omitempty"`
+	Minute int `json:"minute,omitempty"`
 }
 
 // ImportedSettings holds calendar-level settings extracted from the import.
@@ -116,8 +120,10 @@ type ImportedSettings struct {
 	// CreateCalendar call defaults an empty Mode to ModeFantasy — the same
 	// default CreateCalendar already applies to a manual create with no
 	// mode specified.
-	Mode             string  `json:"mode,omitempty"`
-	EpochName        *string `json:"epoch_name,omitempty"`
+	Mode      string  `json:"mode,omitempty"`
+	EpochName *string `json:"epoch_name,omitempty"`
+	// Description is only carried by the Foundry module's payload.
+	Description      *string `json:"description,omitempty"`
 	CurrentYear      int     `json:"current_year"`
 	HoursPerDay      int     `json:"hours_per_day"`
 	MinutesPerHour   int     `json:"minutes_per_hour"`
@@ -134,6 +140,8 @@ type ImportedSettings struct {
 	Hemisphere         *string `json:"hemisphere,omitempty"`
 	ForecastsEnabled   bool    `json:"forecasts_enabled,omitempty"`
 	MonthStartsNewWeek bool    `json:"month_starts_new_week,omitempty"`
+	// EraLook is Chronicle-native only too; nil keeps the defaults.
+	EraLook *EraLook `json:"era_look,omitempty"`
 }
 
 // DetectAndParse auto-detects the format of raw JSON bytes and parses into
@@ -239,6 +247,7 @@ func parseChronicle(data []byte) (*ImportResult, error) {
 			Hemisphere:         export.Calendar.Hemisphere,
 			ForecastsEnabled:   export.Calendar.ForecastsEnabled,
 			MonthStartsNewWeek: export.Calendar.MonthStartsNewWeek,
+			EraLook:            normalizeEraLook(export.Calendar.EraLook),
 		},
 		// export.Events is already the top-level "events" array (ExportEvent's
 		// own json tag lives on ChronicleExport, not nested under "calendar") —
@@ -347,7 +356,55 @@ func normalizeEraStart(e EraInput) EraInput {
 	// clamped to something calendar_eras.color can hold, regardless of
 	// format.
 	e.Color = normalizeColor(e.Color)
+	e.Color2 = normalizeOptionalColor(e.Color2)
+	e.Style = normalizeEraStyle(e.Style)
+	e.Feel = normalizeEraFeel(e.Feel)
+	// A page id in a file names a page in some other campaign, if any.
+	e.LoreEntityID = nil
 	return e
+}
+
+// normalizeEraStyle reads an unknown or missing style as gas, the default.
+func normalizeEraStyle(style string) string {
+	if style == EraStyleInk {
+		return EraStyleInk
+	}
+	return EraStyleGas
+}
+
+// normalizeEraFeel drops a feel that names no preset, so the era follows
+// the calendar's.
+func normalizeEraFeel(feel *string) *string {
+	if feel == nil || !isEraPresetFeel(*feel) {
+		return nil
+	}
+	f := *feel
+	return &f
+}
+
+// normalizeEraLook clamps an imported calendar-wide era look to what the
+// settings can hold; nil (a file from before era looks) stays nil.
+func normalizeEraLook(l *EraLook) *EraLook {
+	if l == nil {
+		return nil
+	}
+	out := *l
+	if out.Feel != EraFeelCustom && !isEraPresetFeel(out.Feel) {
+		out.Feel = EraFeelSubtle
+	}
+	out.Intensity = clampFloat(out.Intensity, minEraIntensity, maxEraIntensity)
+	out.Speed = clampFloat(out.Speed, minEraSpeed, maxEraSpeed)
+	return &out
+}
+
+func clampFloat(v, lo, hi float64) float64 {
+	if math.IsNaN(v) || v < lo {
+		return lo
+	}
+	if v > hi {
+		return hi
+	}
+	return v
 }
 
 // --- Simple Calendar Parser ---
@@ -1802,7 +1859,20 @@ func clampCalendarStructure(result *ImportResult) error {
 				result.Warnings = append(result.Warnings, fmt.Sprintf("era %d's description was too long; shortened", i+1))
 			}
 		}
+		if e.DMNote != nil {
+			if trunc := truncateImportText(*e.DMNote, apperror.MaxDescriptionLength); trunc != *e.DMNote {
+				e.DMNote = &trunc
+				result.Warnings = append(result.Warnings, fmt.Sprintf("era %d's note was too long; shortened", i+1))
+			}
+		}
+		// Re-normalized here as well as in normalizeEraStart, since a
+		// browser-built calendar reaches this clamp without that parser.
+		e.Color2 = normalizeOptionalColor(e.Color2)
+		e.Style = normalizeEraStyle(e.Style)
+		e.Feel = normalizeEraFeel(e.Feel)
+		e.LoreEntityID = nil
 	}
+	result.Settings.EraLook = normalizeEraLook(result.Settings.EraLook)
 
 	for i := range result.Cycles {
 		c := &result.Cycles[i]

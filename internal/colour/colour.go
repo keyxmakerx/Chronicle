@@ -306,3 +306,34 @@ func Tame(hex string, deep bool) (out string, toned bool) {
 	}
 	return out, DeltaE(hex, out) > 0.02
 }
+
+// menuContrast is the contrast the menu's light text (#ffffff) must reach on
+// the menu colour. Stricter than body text because the menu is read at a
+// glance, in small type, on every page.
+const menuContrast = 7.0
+
+// menuSecondary is the menu's fixed secondary text colour (subtitles, counts,
+// section labels); it must still reach normal body-text contrast (4.5:1),
+// which a colour that only just passes for white would leave far short of.
+const menuSecondary = "#8b93a1"
+
+// MenuDark darkens hex toward black until white text reaches menuContrast and
+// the secondary text reaches 4.5:1 on it, so any colour an owner picks (or an
+// accent-derived tint) still leaves the whole menu readable. A colour that
+// already passes is returned unchanged (lowercased). The JS menuDark in
+// customize_look.js applies the same steps; the editor preview and the real
+// menu must agree to the hex digit.
+func MenuDark(hex string) string {
+	out := Lower(hex)
+	for i := 0; i < 24 && (Contrast(out, "#ffffff") < menuContrast || Contrast(out, menuSecondary) < 4.5); i++ {
+		out = Mix(out, "#000000", 0.12)
+	}
+	return out
+}
+
+// MenuTinted is the Tinted menu colour: the chrome accent pulled most of the
+// way to a near-black, then darkened as MenuDark does, so the menu hints at
+// the accent without competing with it.
+func MenuTinted(accent string) string {
+	return MenuDark(Mix(accent, "#0b0b12", 0.72))
+}

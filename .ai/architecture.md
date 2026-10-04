@@ -23,13 +23,13 @@ System or Widget (see root `CLAUDE.md` for what each tier is).
 │  └──────────────────────────────────────────────────────┘    │
 │                                                               │
 │  ┌──────────────────────────────────────────────────────┐    │
-│  │  PLUGINS -- Feature Applications (24)                  │    │
+│  │  PLUGINS -- Feature Applications (26)                  │    │
 │  │  auth/  campaigns/  entities/  calendar/  maps/        │    │
 │  │  admin/  addons/  syncapi/  media/  audit/             │    │
 │  │  settings/  timeline/  sessions/  packages/            │    │
 │  │  smtp/  armory/  bestiary/  designlab/  npcs/          │    │
 │  │  ai_workspace/  backup/  foundry_vtt/  restore/        │    │
-│  │  widgetbindings/                                       │    │
+│  │  widgetbindings/  dmscreen/  systemstate/              │    │
 │  └──────────────────────────────────────────────────────┘    │
 │                                                               │
 │  ┌──────────────────────────────────────────────────────┐    │
@@ -63,9 +63,9 @@ migrations, service and JSON API; the calendars list, preview and
 new-calendar wizard; each calendar's own page with owner editing;
 real-world calendars with game-night RSVPs; and the sky pane widget. What
 is still to be rebuilt is tagged `CALV5-PLACEHOLDER:` with a `TODO(#778)`:
-`syncapi`'s calendar routes still answer `503 calendar_rebuilding` (see
-`.ai/plugin-development.md`), and the entity-page calendar blocks show a
-rebuilding notice. See `internal/plugins/calendar/.ai.md` for exactly which
+the entity-page calendar blocks show a rebuilding notice. `syncapi`'s
+Foundry calendar routes serve the V5 calendar (see
+`internal/plugins/syncapi/.ai.md`). See `internal/plugins/calendar/.ai.md` for exactly which
 routes and UI exist.
 
 ### How They Interact on a Page

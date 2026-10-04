@@ -134,6 +134,27 @@ func (s *URLSigner) VerifyThumb(fileID, size, viewer, expiresStr, signature stri
 	return false
 }
 
+// VerifyAPIKeyLink reports whether the signature was minted for the fixed
+// ViewerAPIKey sentinel, and only that (unlike Verify it never accepts a link
+// minted for a session or for anonymous viewers). It lets the shadowed-map
+// picture rule tell the sync API's own links from everyone else's.
+func (s *URLSigner) VerifyAPIKeyLink(fileID, expiresStr, signature string) bool {
+	expires, err := strconv.ParseInt(expiresStr, 10, 64)
+	if err != nil || time.Now().Unix() > expires {
+		return false
+	}
+	return hmac.Equal([]byte(signature), []byte(s.computeSignature(fileID, ViewerAPIKey, expires)))
+}
+
+// VerifyThumbAPIKeyLink is VerifyAPIKeyLink for a thumbnail link.
+func (s *URLSigner) VerifyThumbAPIKeyLink(fileID, size, expiresStr, signature string) bool {
+	expires, err := strconv.ParseInt(expiresStr, 10, 64)
+	if err != nil || time.Now().Unix() > expires {
+		return false
+	}
+	return hmac.Equal([]byte(signature), []byte(s.computeThumbSignature(fileID, size, ViewerAPIKey, expires)))
+}
+
 // computeSignature creates an HMAC-SHA256 hex digest over
 // "{fileID}:{viewer}:{expires}". Including viewer is decision 6's whole
 // mechanism: two requests presenting different viewers for the same file

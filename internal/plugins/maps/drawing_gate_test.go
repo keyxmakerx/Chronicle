@@ -81,7 +81,7 @@ func TestDrawingWrites_EnforceWhoCanDraw(t *testing.T) {
 		})
 		t.Run("update/"+tc.name, func(t *testing.T) {
 			repo := &gateRepo{}
-			err := gateService(repo, tc.policy).UpdateDrawing(context.Background(), "d-1", "map-1", tc.role,
+			err := gateService(repo, tc.policy).UpdateDrawing(context.Background(), "d-1", "map-1", tc.role, tc.role >= permissions.RoleOwner,
 				UpdateDrawingInput{StrokeColor: patch.Of("#ff0000")})
 			assertGate(t, err, tc.allow, repo.updated)
 		})

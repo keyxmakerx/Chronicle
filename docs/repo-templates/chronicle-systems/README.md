@@ -19,8 +19,10 @@ to provide:
 | System | ID | Foundry ID | License | Categories |
 |--------|-----|-----------|---------|------------|
 | D&D 5th Edition | `dnd5e` | `dnd5e` | OGL-1.0a | spells, monsters, items, classes, races, conditions |
-| Draw Steel | `drawsteel` | `draw-steel` | CC-BY-4.0 | abilities, creatures, ancestries, kits |
+| Draw Steel | `drawsteel` | `draw-steel` | not one licence: see the package's own `LICENSE` and `data/NOTICE.md` | abilities, creatures, ancestries, kits |
 | Pathfinder 2e | `pathfinder2e` | `pf2e` | ORC | spells, creatures, equipment, ancestries, classes, conditions |
+
+A package's licence is whatever its own repository says. Content reproduced from a published game keeps that publisher's terms; a package can hold more than one licence, and a single identifier in `manifest.json` cannot say so. Never copy a licence line from this table into a package.
 
 ## How Systems Are Used
 

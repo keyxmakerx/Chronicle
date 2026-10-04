@@ -112,6 +112,7 @@ var adminNav = AdminNavTree{
 			{Label: "Backups & restore", Href: "/admin/backup", Icon: "fa-box-archive",
 				Prefixes: []string{"/admin/restore"}},
 			{Label: "Email", Href: "/admin/smtp", Icon: "fa-envelope"},
+			{Label: "Site look", Href: "/admin/site-look", Icon: "fa-palette"},
 		}},
 		{ID: "tools", Label: "Tools", Items: []AdminNavItem{
 			// Parts of Chronicle, Database and the AI helper are tabs on one

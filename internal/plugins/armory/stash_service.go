@@ -75,6 +75,8 @@ type StashDeps struct {
 	Fields    EntityFieldUpdater
 	Relations HasItemStore
 	UserNames UserNamer
+	// Events announces finished moves and downtime changes; optional.
+	Events StashEventPublisher
 }
 
 // Actor is the calling user as the service sees them. Role is the campaign's
@@ -106,6 +108,12 @@ type StashService interface {
 	Approve(ctx context.Context, campaignID string, a Actor, moveID int64) (*Move, error)
 	Decline(ctx context.Context, campaignID string, a Actor, moveID int64) (*Move, error)
 
+	// Destinations lists the places the actor may send a move to from `from`.
+	Destinations(ctx context.Context, campaignID string, a Actor, kind string, from Endpoint) ([]MoveDestination, error)
+	// PendingRequests lists the requests waiting for an answer, with names
+	// redacted for the actor. Only Owner visibility may ask.
+	PendingRequests(ctx context.Context, campaignID string, a Actor) ([]MoveLine, error)
+
 	IsDowntimeOpen(ctx context.Context, campaignID string) (bool, error)
 	SetDowntime(ctx context.Context, campaignID string, a Actor, open bool) (DowntimeResult, error)
 
@@ -125,10 +133,37 @@ type DowntimeResult struct {
 type stashService struct {
 	StashDeps
 	locks campaignLocks
+	// purchases is set by NewShopBuyService. It is how opening downtime reaches
+	// waiting purchase requests, and how the stashes page and character history
+	// show them. Nil when buying is not wired (tests, a bus-less setup).
+	purchases purchaseRequests
 }
 
-// NewStashService creates the stash service.
-func NewStashService(deps StashDeps) StashService {
+// purchaseRequests is the stash service's view of the shop-buy side. The
+// sweep runs with the campaign lock already held by the caller.
+type purchaseRequests interface {
+	// sweepRequests applies every waiting request, oldest first, and reports
+	// how many went through and how many did not.
+	sweepRequests(ctx context.Context, campaignID, decidedBy string) (applied, failed int)
+	// pendingLines lists waiting requests for the Owner's page.
+	pendingLines(ctx context.Context, campaignID string, a Actor) ([]PurchaseRequestLine, error)
+	// buyerHistory lists a character's requests as history lines the actor may see.
+	buyerHistory(ctx context.Context, campaignID string, a Actor, buyerID string, limit int) ([]MoveLine, error)
+}
+
+// mergeHistory interleaves two newest-first history lists, keeping the order.
+func mergeHistory(moves, extra []MoveLine) []MoveLine {
+	if len(extra) == 0 {
+		return moves
+	}
+	out := append(append([]MoveLine(nil), moves...), extra...)
+	sort.SliceStable(out, func(i, j int) bool { return out[i].CreatedAt.After(out[j].CreatedAt) })
+	return out
+}
+
+// NewStashService creates the stash service. It returns the concrete type so
+// the shop-buy service can take the same per-campaign lock as the stash moves.
+func NewStashService(deps StashDeps) *stashService {
 	return &stashService{StashDeps: deps}
 }
 
@@ -505,6 +540,11 @@ func (s *stashService) StashesPage(ctx context.Context, campaignID string, a Act
 		if view.Pending, err = s.lines(ctx, campaignID, a, pending); err != nil {
 			return nil, err
 		}
+		if s.purchases != nil {
+			if view.PendingPurchases, err = s.purchases.pendingLines(ctx, campaignID, a); err != nil {
+				return nil, err
+			}
+		}
 	}
 	return view, nil
 }
@@ -617,6 +657,17 @@ func ownPending(a Actor, moves []Move) []Move {
 	return out
 }
 
+func (s *stashService) PendingRequests(ctx context.Context, campaignID string, a Actor) ([]MoveLine, error) {
+	if !a.IsOwner() {
+		return nil, forbidden()
+	}
+	pending, err := s.Repo.ListPending(ctx, campaignID)
+	if err != nil {
+		return nil, err
+	}
+	return s.lines(ctx, campaignID, a, pending)
+}
+
 func (s *stashService) CharacterHistory(ctx context.Context, campaignID string, a Actor, characterID string) ([]MoveLine, error) {
 	ref, err := s.loadCharacter(ctx, campaignID, characterID)
 	if err != nil {
@@ -634,7 +685,26 @@ func (s *stashService) CharacterHistory(ctx context.Context, campaignID string, 
 	if err != nil {
 		return nil, err
 	}
-	return s.lines(ctx, campaignID, a, ownPending(a, moves))
+	lines, err := s.lines(ctx, campaignID, a, ownPending(a, moves))
+	if err != nil {
+		return nil, err
+	}
+	extra, err := s.buyerHistory(ctx, campaignID, a, ref.ID, historyPageSize)
+	if err != nil {
+		return nil, err
+	}
+	if lines = mergeHistory(lines, extra); len(lines) > historyPageSize {
+		lines = lines[:historyPageSize]
+	}
+	return lines, nil
+}
+
+// buyerHistory is the purchase-request part of a character's history.
+func (s *stashService) buyerHistory(ctx context.Context, campaignID string, a Actor, buyerID string, limit int) ([]MoveLine, error) {
+	if s.purchases == nil {
+		return nil, nil
+	}
+	return s.purchases.buyerHistory(ctx, campaignID, a, buyerID, limit)
 }
 
 func (s *stashService) StashHistory(ctx context.Context, campaignID string, a Actor, stashID int) ([]MoveLine, error) {
@@ -694,12 +764,21 @@ func (s *stashService) CharacterPanel(ctx context.Context, campaignID string, a 
 	if err != nil {
 		return nil, err
 	}
-	if len(moves) > panelHistorySize {
-		view.HistoryMore = true
-		moves = moves[:panelHistorySize]
-	}
-	if view.History, err = s.lines(ctx, campaignID, a, ownPending(a, moves)); err != nil {
+	lines, err := s.lines(ctx, campaignID, a, ownPending(a, moves))
+	if err != nil {
 		return nil, err
 	}
+	extra, err := s.buyerHistory(ctx, campaignID, a, ref.ID, panelHistorySize+1)
+	if err != nil {
+		return nil, err
+	}
+	// Moves and purchase requests share one newest-first list; "more" is
+	// decided after merging so a long run of either kind is not cut silently.
+	lines = mergeHistory(lines, extra)
+	if len(lines) > panelHistorySize {
+		view.HistoryMore = true
+		lines = lines[:panelHistorySize]
+	}
+	view.History = lines
 	return view, nil
 }

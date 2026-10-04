@@ -167,6 +167,12 @@ func (h *Hub) Run() {
 					continue
 				}
 
+				// A notes grant reaches notes only, so its socket gets note
+				// events and nothing else the campaign broadcasts.
+				if client.Source == NotesAppSource && !isNoteMessage(msg.Type) {
+					continue
+				}
+
 				// Audience gate: messages flagged RequiresDM only go to
 				// clients with Owner role or IsDmGranted=true — server-side
 				// defense pairing with client-side visibility filters, so
@@ -315,12 +321,23 @@ func (h *Hub) RegisterClient(conn WSConn, campaignID, userID, source string, rol
 // WSConn is an interface satisfied by *websocket.Conn, used for testability.
 type WSConn interface{}
 
-// RevokeAPIKeyClients force-disconnects every Foundry-sourced client in
-// the campaign. Call this when a sync key is revoked or Sync API is
-// switched off, so a socket from before the change can't keep receiving.
+// RevokeAPIKeyClients force-disconnects every outside-app client in the
+// campaign: Foundry's sync sockets and the notes frames' grant sockets. Call
+// this when a sync key is revoked or Sync API is switched off, so a socket
+// from before the change can't keep receiving. A notes frame dropped by a
+// key revoke reconnects on its own if its grant still works.
 func (h *Hub) RevokeAPIKeyClients(campaignID string) {
 	h.revokeMatching(campaignID, func(c *Client) bool {
-		return c.Source == "foundry" || c.Source == foundry_vtt.ModuleSource
+		return c.Source == "foundry" || c.Source == foundry_vtt.ModuleSource || c.Source == NotesAppSource
+	})
+}
+
+// RevokeNotesAppClients force-disconnects userID's notes grant sockets in
+// the campaign. Call this when one of the player's grants is revoked; their
+// other frames reconnect with grants that still work.
+func (h *Hub) RevokeNotesAppClients(campaignID, userID string) {
+	h.revokeMatching(campaignID, func(c *Client) bool {
+		return c.Source == NotesAppSource && c.UserID == userID
 	})
 }
 
@@ -333,15 +350,30 @@ func (h *Hub) RevokeUser(campaignID, userID string) {
 	})
 }
 
+// RevokeNotesAppClientsEverywhere force-disconnects userID's notes grant
+// sockets in every campaign. Call this when all the user's grants end at
+// once; their signed-in tabs and sync-key sockets stay up.
+func (h *Hub) RevokeNotesAppClientsEverywhere(userID string) {
+	h.revokeAcrossCampaigns(func(c *Client) bool {
+		return c.Source == NotesAppSource && c.UserID == userID
+	})
+}
+
 // RevokeUserEverywhere force-disconnects userID's sockets across ALL
 // campaigns. Call this when an account is disabled: unlike RevokeUser,
 // there's no single campaign to scope to, so every client map is swept.
 func (h *Hub) RevokeUserEverywhere(userID string) {
+	h.revokeAcrossCampaigns(func(c *Client) bool { return c.UserID == userID })
+}
+
+// revokeAcrossCampaigns closes every client in every campaign for which
+// match returns true.
+func (h *Hub) revokeAcrossCampaigns(match func(*Client) bool) {
 	h.mu.RLock()
 	var matched []*Client
 	for _, clients := range h.clients {
 		for _, c := range clients {
-			if c.UserID == userID {
+			if match(c) {
 				matched = append(matched, c)
 			}
 		}

@@ -144,17 +144,20 @@ templ dashQuickActions(cc *CampaignContext) {
 			</div>
 		</a>
 
-		<a href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/members", cc.Campaign.ID)) } class="card p-5 hover:shadow-md hover:-translate-y-0.5 block group">
-			<div class="flex items-center gap-3">
-				<div class="w-10 h-10 rounded-lg bg-blue-50 dark:bg-blue-900/30 flex items-center justify-center shrink-0">
-					<i class="fa-solid fa-users text-blue-600 dark:text-blue-400"></i>
+		// The People page is the owner's; anyone else would get a 403.
+		if cc.MemberRole >= RoleOwner {
+			<a href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/members", cc.Campaign.ID)) } class="card p-5 hover:shadow-md hover:-translate-y-0.5 block group">
+				<div class="flex items-center gap-3">
+					<div class="w-10 h-10 rounded-lg bg-blue-50 dark:bg-blue-900/30 flex items-center justify-center shrink-0">
+						<i class="fa-solid fa-users text-blue-600 dark:text-blue-400"></i>
+					</div>
+					<div>
+						<h3 class="font-semibold text-fg group-hover:text-accent transition-colors">Members</h3>
+						<p class="text-xs text-fg-secondary">View campaign members</p>
+					</div>
 				</div>
-				<div>
-					<h3 class="font-semibold text-fg group-hover:text-accent transition-colors">Members</h3>
-					<p class="text-xs text-fg-secondary">View campaign members</p>
-				</div>
-			</div>
-		</a>
+			</a>
+		}
 
 		if cc.MemberRole >= RoleOwner {
 			<a href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/entity-types", cc.Campaign.ID)) } class="card p-5 hover:shadow-md hover:-translate-y-0.5 block group">

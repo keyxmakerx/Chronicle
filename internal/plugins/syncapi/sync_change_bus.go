@@ -3,6 +3,7 @@ package syncapi
 import (
 	"context"
 	"log/slog"
+	"sort"
 	"strings"
 	"time"
 
@@ -28,8 +29,26 @@ var changeFeedTypes = map[string]string{
 	"layer":          "layer",
 	"fog":            "fog",
 	"map":            "map",
+	"relation":       "relation",
 	"calendar.event": "calendar_event",
+	"stash":          "stash",
+	"downtime":       "downtime",
 }
+
+// recordedTypes is changeFeedTypes' resource types, sorted, as the feed
+// response reports them.
+var recordedTypes = func() []string {
+	seen := map[string]bool{}
+	out := []string{}
+	for _, t := range changeFeedTypes {
+		if !seen[t] {
+			seen[t] = true
+			out = append(out, t)
+		}
+	}
+	sort.Strings(out)
+	return out
+}()
 
 // classifyChange returns the feed resource type and op for a message type,
 // or ok=false when the type is not part of the feed.
@@ -44,10 +63,12 @@ func classifyChange(t ws.MessageType) (resourceType, op string, ok bool) {
 		return "", "", false
 	}
 	switch s[i+1:] {
-	case "created":
+	case "created", "requested":
 		op = "created"
-	case "updated", "moved":
-		// A token move changes the token; the client refetches it either way.
+	case "updated", "moved", "settled", "money_changed", "changed", "metadata_updated":
+		// A token move changes the token, a relation's metadata write the
+		// relation; a stash move, a request's answer and a downtime switch
+		// change the view. The client refetches either way.
 		op = "updated"
 	case "deleted":
 		op = "deleted"

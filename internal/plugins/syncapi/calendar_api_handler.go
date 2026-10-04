@@ -2,6 +2,8 @@ package syncapi
 
 import (
 	"context"
+	"fmt"
+	"io"
 	"log/slog"
 	"net/http"
 	"strconv"
@@ -17,14 +19,13 @@ import (
 
 // CalendarAPIHandler serves the calendar REST surface the Foundry module's
 // calendar sync uses. Every route works on the campaign's default calendar
-// and goes through calendar.CalendarService's (calendarID, campaignID)
+// (or its first, when none is marked default) and goes through calendar.CalendarService's (calendarID, campaignID)
 // methods with the caller's Viewer, so a read or write can never reach
 // another campaign's calendar and a player never receives what the
 // calendar pages would hide from them.
 //
-// The rest (structure and settings writes, import, export, world state,
-// advance) still answer calendarRebuilding, and the Calendaria import
-// POST /calendar answers 404, until they are rebuilt. TODO(#869)
+// The pre-V5 structure, settings, advance, world-state, event-category,
+// export and import routes are retired (retiredCalendarRoute in routes.go).
 type CalendarAPIHandler struct {
 	syncSvc     SyncAPIService
 	calendarSvc calendar.CalendarService
@@ -36,16 +37,25 @@ func NewCalendarAPIHandler(syncSvc SyncAPIService, calendarSvc calendar.Calendar
 	return &CalendarAPIHandler{syncSvc: syncSvc, calendarSvc: calendarSvc, campaignSvc: campaignSvc}
 }
 
-// calendarRebuilding answers a route that has not been rebuilt on the new
-// calendar yet. 503 with this code, not 404: the module reads a 404 as an
-// old Chronicle without the endpoint and would hide the real reason.
-func calendarRebuilding(c echo.Context) error {
-	return c.JSON(http.StatusServiceUnavailable, map[string]string{
-		"error": "calendar_rebuilding",
-		"message": "This part of Chronicle's calendar API is still being rebuilt. " +
-			"Date and event sync work; maps, actors, items and notes are unaffected.",
-	})
+// retiredCalendarRoute answers a pre-V5 calendar route that the new calendar
+// has no API for. 410, not 404, so a script still calling it learns the route
+// is gone for good and what to use instead. The Foundry module calls none of
+// them.
+func retiredCalendarRoute(instead string) echo.HandlerFunc {
+	return func(c echo.Context) error {
+		return c.JSON(http.StatusGone, map[string]string{
+			"error":   "calendar_route_retired",
+			"message": "This calendar API route was retired. " + instead,
+		})
+	}
 }
+
+// What each retired route says to use instead.
+const (
+	retiredStructure       = "Calendar structure and settings are edited in Chronicle's calendar. Foundry's Import button creates a campaign's first calendar; after that dates and events sync."
+	retiredEventCategories = "Event kinds replaced event categories; edit them in Chronicle's calendar."
+	retiredAdvance         = "Set the date with PUT /calendar/date."
+)
 
 // --- Caller identity ---
 
@@ -89,11 +99,12 @@ func (h *CalendarAPIHandler) requireOwner(c echo.Context) error {
 	return nil
 }
 
-// defaultCalendar loads the campaign's default calendar for v, with its
-// sub-resources already filtered for v. A campaign with no calendar, or one
-// v cannot see, is the same 404 the module reads as "no calendar".
+// defaultCalendar loads the one calendar Foundry follows for v (the default,
+// or the first when none is marked default), with its sub-resources already
+// filtered for v. A campaign with no calendar, or one v cannot see, is the
+// same 404 the module reads as "no calendar".
 func (h *CalendarAPIHandler) defaultCalendar(c echo.Context, v permissions.Viewer) (*calendar.Calendar, error) {
-	return h.calendarSvc.GetDefaultCalendarForViewer(c.Request().Context(), c.Param("id"), v)
+	return h.calendarSvc.GetPrimaryCalendarForViewer(c.Request().Context(), c.Param("id"), v)
 }
 
 // --- Visibility on the wire ---
@@ -251,8 +262,9 @@ func (h *CalendarAPIHandler) GetMoons(c echo.Context) error {
 	return c.JSON(http.StatusOK, map[string]any{"data": nonNil(cal.Moons)})
 }
 
-// GetEras returns the default calendar's eras; empty for a player, since
-// eras are calendar structure only the Owner sees.
+// GetEras returns the default calendar's eras as the viewer may see them:
+// for a player, eras hidden until they begin are withheld and Director
+// notes stripped (the calendar service's viewer read does both).
 // GET /api/v1/campaigns/:id/calendar/eras
 func (h *CalendarAPIHandler) GetEras(c echo.Context) error {
 	cal, err := h.defaultCalendar(c, h.viewer(c))
@@ -587,15 +599,22 @@ type apiSetDateRequest struct {
 // which the module reads as "dates are read-only here".
 // PUT /api/v1/campaigns/:id/calendar/date
 func (h *CalendarAPIHandler) SetDate(c echo.Context) error {
+	// Read first so the sync history names the date asked for and the date
+	// it would replace, refused or not. The answers keep their order: a
+	// non-owner hears 403 before anything about the calendar or the body.
+	var req apiSetDateRequest
+	bindErr := c.Bind(&req)
+	cal, calErr := h.defaultCalendar(c, h.viewer(c))
+	if bindErr == nil && calErr == nil {
+		noteSyncChange(c, "", calendarDateLabel(cal, req.Year, req.Month, req.Day), cal.FullDateLabel())
+	}
 	if err := h.requireOwner(c); err != nil {
 		return err
 	}
-	cal, err := h.defaultCalendar(c, h.viewer(c))
-	if err != nil {
-		return err
+	if calErr != nil {
+		return calErr
 	}
-	var req apiSetDateRequest
-	if err := c.Bind(&req); err != nil {
+	if bindErr != nil {
 		return apperror.NewBadRequest("invalid request body")
 	}
 	if err := h.calendarSvc.SetCurrentDate(c.Request().Context(), cal.ID, cal.CampaignID,
@@ -612,73 +631,43 @@ func (h *CalendarAPIHandler) SetDate(c echo.Context) error {
 	})
 }
 
-// --- Not rebuilt yet. TODO(#869) ---
+// maxFoundryImportBytes caps the Calendaria payload. A real calendar is a few
+// kilobytes; the cap keeps a hostile body from being decoded whole.
+const maxFoundryImportBytes = 1 << 20
 
-// GetEventCategories is not rebuilt yet; event kinds replaced categories.
-func (h *CalendarAPIHandler) GetEventCategories(c echo.Context) error { return calendarRebuilding(c) }
-
-// GetWorldState is not rebuilt yet.
-func (h *CalendarAPIHandler) GetWorldState(c echo.Context) error { return calendarRebuilding(c) }
-
-// AdvanceDate is not rebuilt yet.
-func (h *CalendarAPIHandler) AdvanceDate(c echo.Context) error { return calendarRebuilding(c) }
-
-// AdvanceTime is not rebuilt yet.
-func (h *CalendarAPIHandler) AdvanceTime(c echo.Context) error { return calendarRebuilding(c) }
-
-// UpdateCalendarSettings is not rebuilt yet.
-func (h *CalendarAPIHandler) UpdateCalendarSettings(c echo.Context) error {
-	return calendarRebuilding(c)
-}
-
-// UpdateMonths is not rebuilt yet.
-func (h *CalendarAPIHandler) UpdateMonths(c echo.Context) error { return calendarRebuilding(c) }
-
-// UpdateWeekdays is not rebuilt yet.
-func (h *CalendarAPIHandler) UpdateWeekdays(c echo.Context) error { return calendarRebuilding(c) }
-
-// UpdateMoons is not rebuilt yet.
-func (h *CalendarAPIHandler) UpdateMoons(c echo.Context) error { return calendarRebuilding(c) }
-
-// UpdateEras is not rebuilt yet.
-func (h *CalendarAPIHandler) UpdateEras(c echo.Context) error { return calendarRebuilding(c) }
-
-// UpdateSeasons is not rebuilt yet.
-func (h *CalendarAPIHandler) UpdateSeasons(c echo.Context) error { return calendarRebuilding(c) }
-
-// UpdateEventCategories is not rebuilt yet.
-func (h *CalendarAPIHandler) UpdateEventCategories(c echo.Context) error {
-	return calendarRebuilding(c)
-}
-
-// SetWeather is not rebuilt yet.
-func (h *CalendarAPIHandler) SetWeather(c echo.Context) error { return calendarRebuilding(c) }
-
-// UpdateCycles is not rebuilt yet.
-func (h *CalendarAPIHandler) UpdateCycles(c echo.Context) error { return calendarRebuilding(c) }
-
-// UpdateFestivals is not rebuilt yet.
-func (h *CalendarAPIHandler) UpdateFestivals(c echo.Context) error { return calendarRebuilding(c) }
-
-// ExportCalendar is not rebuilt yet.
-func (h *CalendarAPIHandler) ExportCalendar(c echo.Context) error { return calendarRebuilding(c) }
-
-// ImportCalendar is not rebuilt yet.
-func (h *CalendarAPIHandler) ImportCalendar(c echo.Context) error { return calendarRebuilding(c) }
-
-// CreateCalendar (the module's "Import into Chronicle" button) is not
-// rebuilt yet. It answers 404, not 503: the module's import path reads 404 as
-// "this Chronicle has no create endpoint yet" and says so, where a 503 would
-// surface as "Chronicle rejected the calendar payload".
+// CreateCalendar is the module's "Import into Chronicle" button: it creates
+// the campaign's first calendar from a Calendaria calendar. Owner only, like
+// creating a calendar on the web. A campaign that already has a calendar
+// gets 409 so a repeated click never makes a second copy.
+// POST /api/v1/campaigns/:id/calendar
 func (h *CalendarAPIHandler) CreateCalendar(c echo.Context) error {
-	return c.JSON(http.StatusNotFound, map[string]string{
-		"error": "calendar_import_unavailable",
-		"message": "Importing a calendar from Foundry isn't available yet. " +
-			"Create the calendar in Chronicle; dates and events then sync.",
+	if err := h.requireOwner(c); err != nil {
+		return err
+	}
+	body, err := io.ReadAll(io.LimitReader(c.Request().Body, maxFoundryImportBytes+1))
+	if err != nil {
+		return apperror.NewBadRequest("could not read the calendar")
+	}
+	if len(body) > maxFoundryImportBytes {
+		return apperror.NewBadRequest("the calendar sent from Foundry is too large")
+	}
+	cal, warnings, err := h.calendarSvc.ImportFoundryCalendar(c.Request().Context(), c.Param("id"), body)
+	if err != nil {
+		return err
+	}
+	return c.JSON(http.StatusCreated, map[string]any{
+		"created":  cal,
+		"warnings": nonNil(warnings),
 	})
 }
 
 // --- Helpers ---
+
+// calendarDateLabel names a date the way the calendar pages do
+// (Calendar.FullDateLabel), for a date the calendar may not be on.
+func calendarDateLabel(cal *calendar.Calendar, year, month, day int) string {
+	return fmt.Sprintf("%s %d, %d", cal.MonthName(month), day, year)
+}
 
 // recordCalendarDateBeaconIfModule records the served-date beacon only for a
 // real Bearer key: the session door's synthetic key (synthKeySessionID) is a

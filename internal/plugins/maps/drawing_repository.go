@@ -20,6 +20,11 @@ type DrawingRepository interface {
 	// drawings whose visibility_rules admit userID, matching ListMarkers'
 	// signature and semantics exactly.
 	ListDrawings(ctx context.Context, mapID string, role int, userID string) ([]Drawing, error)
+	// ListShadows returns every shadow drawing on a map regardless of its own
+	// visibility: a shadow hides what is under it from everyone who cannot see
+	// the shadow's author's view, so the rule must not depend on whether this
+	// particular viewer was allowed to receive the shadow itself.
+	ListShadows(ctx context.Context, mapID string) ([]Drawing, error)
 
 	// Token CRUD.
 	CreateToken(ctx context.Context, t *Token) error
@@ -61,16 +66,27 @@ func (r *drawingRepo) CreateDrawing(ctx context.Context, d *Drawing) error {
 	_, err := r.db.ExecContext(ctx, `
 		INSERT INTO map_drawings (id, map_id, layer_id, drawing_type, points,
 			stroke_color, stroke_width, fill_color, fill_alpha, text_content,
-			font_size, rotation, visibility, visibility_rules, created_by, foundry_id)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+			font_size, rotation, visibility, visibility_rules, created_by, foundry_id,
+			image_id, crop, sort_order)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 		d.ID, d.MapID, d.LayerID, d.DrawingType, d.Points,
 		d.StrokeColor, d.StrokeWidth, d.FillColor, d.FillAlpha, d.TextContent,
 		d.FontSize, d.Rotation, d.Visibility, d.VisibilityRules, d.CreatedBy, d.FoundryID,
+		d.ImageID, nullableJSON(d.Crop), d.SortOrder,
 	)
 	if err != nil {
 		return apperror.NewInternal(err)
 	}
 	return nil
+}
+
+// nullableJSON stores an empty RawMessage as SQL NULL; a JSON column rejects
+// the empty string.
+func nullableJSON(raw json.RawMessage) any {
+	if len(raw) == 0 {
+		return nil
+	}
+	return []byte(raw)
 }
 
 // GetDrawing retrieves a drawing by ID.
@@ -81,17 +97,20 @@ func (r *drawingRepo) CreateDrawing(ctx context.Context, d *Drawing) error {
 // VisibilityRules=nil regardless of what is actually stored.
 func (r *drawingRepo) GetDrawing(ctx context.Context, id string) (*Drawing, error) {
 	var d Drawing
+	var crop []byte
 	err := r.db.QueryRowContext(ctx, `
 		SELECT id, map_id, layer_id, drawing_type, points, stroke_color,
 			stroke_width, fill_color, fill_alpha, text_content, font_size,
-			rotation, visibility, visibility_rules, created_by, foundry_id, created_at, updated_at
+			rotation, visibility, visibility_rules, created_by, foundry_id,
+			image_id, crop, sort_order, created_at, updated_at
 		FROM map_drawings WHERE id = ?`, id,
 	).Scan(
 		&d.ID, &d.MapID, &d.LayerID, &d.DrawingType, &d.Points,
 		&d.StrokeColor, &d.StrokeWidth, &d.FillColor, &d.FillAlpha,
 		&d.TextContent, &d.FontSize, &d.Rotation, &d.Visibility, &d.VisibilityRules,
-		&d.CreatedBy, &d.FoundryID, &d.CreatedAt, &d.UpdatedAt,
+		&d.CreatedBy, &d.FoundryID, &d.ImageID, &crop, &d.SortOrder, &d.CreatedAt, &d.UpdatedAt,
 	)
+	d.Crop = cropFromColumn(crop)
 	if err == sql.ErrNoRows {
 		return nil, apperror.NewNotFound("drawing not found: " + id)
 	}
@@ -106,10 +125,11 @@ func (r *drawingRepo) UpdateDrawing(ctx context.Context, d *Drawing) error {
 	result, err := r.db.ExecContext(ctx, `
 		UPDATE map_drawings SET points = ?, stroke_color = ?, stroke_width = ?,
 			fill_color = ?, fill_alpha = ?, text_content = ?, font_size = ?,
-			rotation = ?, visibility = ?
+			rotation = ?, visibility = ?, image_id = ?, crop = ?, sort_order = ?
 		WHERE id = ?`,
 		d.Points, d.StrokeColor, d.StrokeWidth, d.FillColor, d.FillAlpha,
-		d.TextContent, d.FontSize, d.Rotation, d.Visibility, d.ID,
+		d.TextContent, d.FontSize, d.Rotation, d.Visibility,
+		d.ImageID, nullableJSON(d.Crop), d.SortOrder, d.ID,
 	)
 	if err != nil {
 		return apperror.NewInternal(err)
@@ -135,20 +155,45 @@ func (r *drawingRepo) DeleteDrawing(ctx context.Context, id string) error {
 // drawingCols is the shared column list for GetDrawing/ListDrawings scans.
 const drawingCols = `id, map_id, layer_id, drawing_type, points, stroke_color,
 	stroke_width, fill_color, fill_alpha, text_content, font_size,
-	rotation, visibility, visibility_rules, created_by, foundry_id, created_at, updated_at`
+	rotation, visibility, visibility_rules, created_by, foundry_id,
+	image_id, crop, sort_order, created_at, updated_at`
 
 // scanDrawing scans one row using drawingCols' exact column order. Shared
 // by ListDrawings' two branches so the column list and the Scan targets
 // can't drift apart from each other.
 func scanDrawing(rows *sql.Rows) (Drawing, error) {
 	var d Drawing
+	var crop []byte
 	err := rows.Scan(
 		&d.ID, &d.MapID, &d.LayerID, &d.DrawingType, &d.Points,
 		&d.StrokeColor, &d.StrokeWidth, &d.FillColor, &d.FillAlpha,
 		&d.TextContent, &d.FontSize, &d.Rotation, &d.Visibility, &d.VisibilityRules,
-		&d.CreatedBy, &d.FoundryID, &d.CreatedAt, &d.UpdatedAt,
+		&d.CreatedBy, &d.FoundryID, &d.ImageID, &crop, &d.SortOrder, &d.CreatedAt, &d.UpdatedAt,
 	)
+	d.Crop = cropFromColumn(crop)
 	return d, err
+}
+
+// ListShadows returns the shadow drawings of a map; see the interface.
+func (r *drawingRepo) ListShadows(ctx context.Context, mapID string) ([]Drawing, error) {
+	rows, err := r.db.QueryContext(ctx,
+		`SELECT `+drawingCols+`
+		 FROM map_drawings WHERE map_id = ? AND drawing_type = 'shadow'
+		 ORDER BY created_at ASC`, mapID)
+	if err != nil {
+		return nil, apperror.NewInternal(err)
+	}
+	defer rows.Close()
+
+	var drawings []Drawing
+	for rows.Next() {
+		d, err := scanDrawing(rows)
+		if err != nil {
+			return nil, apperror.NewInternal(err)
+		}
+		drawings = append(drawings, d)
+	}
+	return drawings, rows.Err()
 }
 
 // ListDrawings returns all drawings for a map, filtered by role AND user.
@@ -539,4 +584,14 @@ func (r *drawingRepo) ResetFog(ctx context.Context, mapID string) error {
 		return apperror.NewInternal(err)
 	}
 	return nil
+}
+
+// cropFromColumn turns the nullable crop column into the drawing's field. It is
+// scanned as bytes because database/sql cannot store NULL into json.RawMessage;
+// NULL reads back as an empty crop.
+func cropFromColumn(b []byte) json.RawMessage {
+	if len(b) == 0 {
+		return nil
+	}
+	return json.RawMessage(b)
 }

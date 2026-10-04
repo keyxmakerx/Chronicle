@@ -14,7 +14,7 @@ func TestNavManageRows_OwnerOnly(t *testing.T) {
 		c    navStateCase
 		want []string
 	}{
-		{"owner", navStateCase{role: 3, path: "/campaigns/c1"}, []string{"Overview", "People", "Customize", "Apps & game system", "Settings"}},
+		{"owner", navStateCase{role: 3, path: "/campaigns/c1"}, []string{"Overview", "People", "Customize", "Apps & game system", "Trash", "Settings"}},
 		{"scribe", navStateCase{role: 2, path: "/campaigns/c1"}, nil},
 		{"player", navStateCase{role: 1, path: "/campaigns/c1"}, nil},
 		{"owner viewing as player", navStateCase{role: 1, player: true, path: "/campaigns/c1"}, nil},
@@ -30,6 +30,19 @@ func TestNavManageRows_OwnerOnly(t *testing.T) {
 				t.Fatalf("rows = %v, want %v", got, tt.want)
 			}
 		})
+	}
+}
+
+// Sync history joins the owner's Manage rows only when the campaign syncs.
+func TestNavManageRows_SyncHistoryNeedsSyncAPI(t *testing.T) {
+	ctx := SetEnabledAddons(navStateCase{role: 3, path: "/campaigns/c1"}.ctx(), map[string]bool{"sync-api": true})
+	var got []string
+	for _, r := range NavManageRows(ctx) {
+		got = append(got, r.Label)
+	}
+	want := "Overview,People,Customize,Apps & game system,Sync history,Trash,Settings"
+	if strings.Join(got, ",") != want {
+		t.Fatalf("rows = %v, want %s", got, want)
 	}
 }
 

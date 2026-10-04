@@ -116,10 +116,9 @@
     cmds.push({
       label: 'Toggle Theme', icon: 'fa-circle-half-stroke', shortcut: '',
       action: function () {
-        var html = document.documentElement;
-        var isDark = html.classList.contains('dark');
-        html.classList.toggle('dark', !isDark);
-        try { localStorage.setItem('theme', isDark ? 'light' : 'dark'); } catch (e) { /* noop */ }
+        // One implementation of the toggle (static/js/theme.js): it saves to the
+        // account when signed in and to this browser otherwise.
+        if (typeof Chronicle !== 'undefined' && Chronicle.toggleTheme) Chronicle.toggleTheme();
       }
     });
     cmds.push({

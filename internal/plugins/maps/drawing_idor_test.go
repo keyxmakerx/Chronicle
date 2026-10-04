@@ -41,7 +41,8 @@ func (r *idorRepo) DeleteLayer(context.Context, string) error { r.mutated = true
 func (r *idorRepo) DeleteFog(context.Context, string) error   { r.mutated = true; return nil }
 
 // Unused-by-these-tests methods round out the interface.
-func (r *idorRepo) CreateDrawing(context.Context, *Drawing) error { return nil }
+func (r *idorRepo) CreateDrawing(context.Context, *Drawing) error          { return nil }
+func (r *idorRepo) ListShadows(context.Context, string) ([]Drawing, error) { return nil, nil }
 func (r *idorRepo) ListDrawings(context.Context, string, int, string) ([]Drawing, error) {
 	return nil, nil
 }
@@ -67,10 +68,10 @@ func TestDrawingWrites_CrossMapRejected(t *testing.T) {
 		call func(svc DrawingService) error
 	}{
 		{"UpdateDrawing", func(s DrawingService) error {
-			return s.UpdateDrawing(context.Background(), "d-1", wrongMap, permissions.RoleOwner, UpdateDrawingInput{})
+			return s.UpdateDrawing(context.Background(), "d-1", wrongMap, permissions.RoleOwner, true, UpdateDrawingInput{})
 		}},
 		{"DeleteDrawing", func(s DrawingService) error {
-			return s.DeleteDrawing(context.Background(), "d-1", wrongMap, nil, "", 3)
+			return s.DeleteDrawing(context.Background(), "d-1", wrongMap, nil, "", 3, true)
 		}},
 		{"UpdateToken", func(s DrawingService) error {
 			return s.UpdateToken(context.Background(), "t-1", wrongMap, UpdateTokenInput{})
@@ -116,10 +117,10 @@ func TestDrawingWrites_SameMapAllowed(t *testing.T) {
 		call func(svc DrawingService) error
 	}{
 		{"UpdateDrawing", func(s DrawingService) error {
-			return s.UpdateDrawing(context.Background(), "d-1", rightMap, permissions.RoleOwner, UpdateDrawingInput{})
+			return s.UpdateDrawing(context.Background(), "d-1", rightMap, permissions.RoleOwner, true, UpdateDrawingInput{})
 		}},
 		{"DeleteDrawing", func(s DrawingService) error {
-			return s.DeleteDrawing(context.Background(), "d-1", rightMap, nil, "", 3)
+			return s.DeleteDrawing(context.Background(), "d-1", rightMap, nil, "", 3, true)
 		}},
 		{"UpdateToken", func(s DrawingService) error {
 			return s.UpdateToken(context.Background(), "t-1", rightMap, UpdateTokenInput{})

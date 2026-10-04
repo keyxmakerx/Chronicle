@@ -168,8 +168,9 @@ type Calendar struct {
 	// stored-not-computed. RealTimeZone is the IANA anchor, required at enable.
 	// TracksRealTime is wire-exposed (UsesRealTime gates MonthDays/absDayIndex/
 	// WeekdayIndex on it, not on Mode alone, so the browser's CalDate/SkyWorld
-	// mirrors need it to pick the same branch); RealTimeZone stays
-	// server-only, nothing client-side reads it.
+	// mirrors need it to pick the same branch). RealTimeZone stays off the
+	// wire; the calendar page hands it to members alone, for game-night
+	// times (CalendarViewData.Zone).
 	TracksRealTime bool    `json:"tracks_real_time"`
 	RealTimeZone   *string `json:"-"`
 	// The real-date anchor: one in-world date and the Gregorian date it
@@ -187,6 +188,9 @@ type Calendar struct {
 	AnchorRealDate *time.Time `json:"anchor_real_date,omitempty"`
 	CreatedAt      time.Time  `json:"created_at"`
 	UpdatedAt      time.Time  `json:"updated_at"`
+
+	// EraLook is how the eras look behind the month (migration 024).
+	EraLook EraLook `json:"era_look"`
 
 	// Eager-loaded sub-resources (populated by service, not by every query).
 	Months   []Month   `json:"months,omitempty"`
@@ -669,6 +673,26 @@ func (c *Calendar) EraForDate(year, month, day int) *Era {
 	return nil
 }
 
+// EraIsSecret reports whether e is hidden from players right now: flagged
+// HiddenUntilBegins and starting after the calendar's current date. Every
+// player-facing read asks this one question (finishCalendarForViewer,
+// dropSecretEraEvents, the AI export's Safe mode).
+func (c *Calendar) EraIsSecret(e *Era) bool {
+	return e.HiddenUntilBegins && dateLess(c.CurrentYear, c.CurrentMonth, c.CurrentDay, e.StartYear, e.StartMonth, e.StartDay)
+}
+
+// InSecretEra reports whether a date falls inside an era that is still
+// secret (EraIsSecret). Needs c.Eras loaded, unfiltered.
+func (c *Calendar) InSecretEra(year, month, day int) bool {
+	for i := range c.Eras {
+		e := &c.Eras[i]
+		if c.EraIsSecret(e) && e.ContainsDate(year, month, day) {
+			return true
+		}
+	}
+	return false
+}
+
 // AbsoluteDay returns the total number of days from year 0 day 0 to the given
 // date (year, month 1-indexed, day). Used for moon phase calculation.
 //
@@ -909,7 +933,76 @@ type Era struct {
 	Description *string `json:"description,omitempty"`
 	Color       string  `json:"color"`
 	SortOrder   int     `json:"sort_order"`
+	// Color2 is the era's second colour; nil draws it in Color alone.
+	Color2 *string `json:"color_2,omitempty"`
+	// Style is how the two colours mix behind the days (EraStyleGas or
+	// EraStyleInk). Where two eras meet, the entered era's style shapes it.
+	Style string `json:"style"`
+	// Feel is the era's own feel (EraFeelStill/Subtle/Lively); nil follows
+	// the calendar's EraLook.
+	Feel *string `json:"feel,omitempty"`
+	// LoreEntityID links a page about the era. LoreEntityName is read with
+	// it, scoped to the calendar's campaign; both are blanked for a viewer
+	// who may not see that page.
+	LoreEntityID   *string `json:"lore_entity_id,omitempty"`
+	LoreEntityName string  `json:"lore_entity_name,omitempty"`
+	// DMNote is the Director's private note. Only a viewer who skips the
+	// per-user layer (Owner, granted co-Director, system) ever receives it.
+	DMNote *string `json:"dm_note,omitempty"`
+	// HiddenUntilBegins keeps the whole era from players until the
+	// calendar's current date reaches its start: see Calendar.EraIsSecret.
+	HiddenUntilBegins bool `json:"hidden_until_begins"`
 }
+
+// Era styles and feels. A feel names an intensity and speed pair; "custom"
+// is only ever the calendar's own feel, when the owner fine-tuned it.
+const (
+	EraStyleGas = "gas"
+	EraStyleInk = "ink"
+
+	EraFeelStill  = "still"
+	EraFeelSubtle = "subtle"
+	EraFeelLively = "lively"
+	EraFeelCustom = "custom"
+)
+
+// eraFeelPresets is the intensity and speed each named feel stands for.
+// calendar_era_blend.js's PRESETS mirrors it.
+var eraFeelPresets = map[string][2]float64{
+	EraFeelStill:  {1, 0},
+	EraFeelSubtle: {1, 1},
+	EraFeelLively: {1.7, 1.9},
+}
+
+// isEraPresetFeel reports whether f names a preset feel (not "custom").
+func isEraPresetFeel(f string) bool {
+	_, ok := eraFeelPresets[f]
+	return ok
+}
+
+// DefaultEraLook is a calendar's era look until its owner changes it, the
+// same values migration 024's column defaults hold.
+func DefaultEraLook() EraLook {
+	return EraLook{ColorsOn: true, Feel: EraFeelSubtle, Intensity: 1, Speed: 1}
+}
+
+// EraLook is the whole calendar's era colours: ColorsOn switches the tint
+// behind the days off; Feel names the feel, and Intensity/Speed are what it
+// stands for (a custom feel is just numbers no preset matches).
+type EraLook struct {
+	ColorsOn  bool    `json:"colors_on"`
+	Feel      string  `json:"feel"`
+	Intensity float64 `json:"intensity"`
+	Speed     float64 `json:"speed"`
+}
+
+// Bounds of the fine-tune sliders; the presets sit inside them.
+const (
+	minEraIntensity = 0.5
+	maxEraIntensity = 3
+	minEraSpeed     = 0
+	maxEraSpeed     = 2.5
+)
 
 // IsOngoing returns true if this era has no end year (still in progress).
 func (e *Era) IsOngoing() bool {
@@ -1215,6 +1308,10 @@ type CreateCalendarInput struct {
 	LeapYearOffset   int
 	Visibility       string
 	VisibilityRules  *string
+	// IsDefault creates the calendar already marked as the campaign's
+	// default. The one-default-per-campaign unique index then refuses a
+	// second one atomically, which CreateCalendar reports as a conflict.
+	IsDefault bool
 }
 
 // CreateCalendarFromImportOptions carries the caller's explicit choice for
@@ -1232,6 +1329,9 @@ type CreateCalendarFromImportOptions struct {
 	CurrentYear  *int
 	CurrentMonth *int
 	CurrentDay   *int
+	// MakeDefault creates the calendar as the campaign's default, failing
+	// with a conflict if the campaign already has one.
+	MakeDefault bool
 }
 
 // UpdateCalendarInput is the validated input for updating calendar settings.
@@ -1447,6 +1547,14 @@ type EraInput struct {
 	Description *string `json:"description"`
 	Color       string  `json:"color"`
 	SortOrder   int     `json:"sort_order"`
+	// Color2/Style/Feel/LoreEntityID/DMNote/HiddenUntilBegins: see Era. An
+	// empty Style is read as EraStyleGas.
+	Color2            *string `json:"color_2"`
+	Style             string  `json:"style"`
+	Feel              *string `json:"feel"`
+	LoreEntityID      *string `json:"lore_entity_id"`
+	DMNote            *string `json:"dm_note"`
+	HiddenUntilBegins bool    `json:"hidden_until_begins"`
 }
 
 // UpdateEraInput is the validated PARTIAL-update input for an existing era:
@@ -1456,16 +1564,41 @@ type EraInput struct {
 // silently overwriting (the same governedFieldExceptions shape as
 // calendar.UpdateCalendarInput.Name).
 type UpdateEraInput struct {
-	Name        string
-	StartYear   patch.Field[int]
-	StartMonth  patch.Field[int]
-	StartDay    patch.Field[int]
-	EndYear     patch.Field[int]
-	EndMonth    patch.Field[int]
-	EndDay      patch.Field[int]
-	Description patch.Field[string]
-	Color       patch.Field[string]
-	SortOrder   patch.Field[int]
+	Name              string
+	StartYear         patch.Field[int]
+	StartMonth        patch.Field[int]
+	StartDay          patch.Field[int]
+	EndYear           patch.Field[int]
+	EndMonth          patch.Field[int]
+	EndDay            patch.Field[int]
+	Description       patch.Field[string]
+	Color             patch.Field[string]
+	SortOrder         patch.Field[int]
+	Color2            patch.Field[string]
+	Style             patch.Field[string]
+	Feel              patch.Field[string]
+	LoreEntityID      patch.Field[string]
+	DMNote            patch.Field[string]
+	HiddenUntilBegins patch.Field[bool]
+}
+
+// EraLookWrite is one era's resolved look, as SaveEraLook stores it.
+type EraLookWrite struct {
+	ID     int
+	Color  string
+	Color2 *string
+	Style  string
+	Feel   *string
+}
+
+// EraLookEra is one era's part of a SaveEraLook: only the look fields, each
+// a partial-update field like UpdateEraInput's.
+type EraLookEra struct {
+	ID     int
+	Color  patch.Field[string]
+	Color2 patch.Field[string]
+	Style  patch.Field[string]
+	Feel   patch.Field[string]
 }
 
 // EventKind is a campaign-defined event kind (category) for calendar events.
@@ -1587,7 +1720,10 @@ type DayWeather struct {
 	ZoneName           *string        `json:"zone_name,omitempty"`
 	Description        *string        `json:"description,omitempty"`
 	Source             string         `json:"source"`
-	UpdatedAt          time.Time      `json:"updated_at"`
+	// Locked is set only for a viewer who can author Director-only content;
+	// a player's reading omits the key so they never learn a day is locked.
+	Locked    *bool     `json:"locked,omitempty"`
+	UpdatedAt time.Time `json:"updated_at"`
 }
 
 // DayWeatherInput sets one day's reading: the date, the same flat fields
@@ -1601,12 +1737,18 @@ type DayWeatherInput struct {
 }
 
 // WeatherSettings is a calendar's world climate and how long weather lasts
-// (0 changes every day, 1 settles into long spells). The Generate sheet
+// (0 changes every day, 1 settles into long spells). The weather calendar
 // starts from these. Kinds are the owner's own kinds of weather.
 type WeatherSettings struct {
 	Climate    string        `json:"climate"`
 	Continuity float64       `json:"continuity"`
 	Kinds      []WeatherKind `json:"kinds"`
+	// ForecastDays is how many days ahead a player's forecast reaches
+	// (1..MaxForecastDays). ForecastsEnabled mirrors calendars.forecasts_enabled:
+	// the service fills it on read and writes it through UpdateCalendar, so
+	// the switch has one home and the repository never owns it.
+	ForecastDays     int  `json:"forecast_days"`
+	ForecastsEnabled bool `json:"forecasts_enabled"`
 }
 
 // MarshalJSON writes Kinds as [] rather than null when there are none, so a

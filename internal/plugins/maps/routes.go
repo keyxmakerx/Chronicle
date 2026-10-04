@@ -48,6 +48,11 @@ func RegisterRoutes(e *echo.Echo, h *Handler, campaignSvc campaigns.CampaignServ
 	)
 	pub.GET("/maps", h.Index, campaigns.RequireViewAccess())
 	pub.GET("/maps/:mid", h.Show, campaigns.RequireViewAccess())
+	// The bare framed viewer for the focus view over entity pages: same group and
+	// access check as the page itself.
+	pub.GET("/maps/:mid/viewer", h.Viewer, campaigns.RequireViewAccess())
+	// The picture for viewers who must not get the original of a shadowed map.
+	pub.GET("/maps/:mid/player-image", h.PlayerImage, campaigns.RequireViewAccess())
 	// Read-only map data for the embeddable map-widget / entity-map blocks on
 	// public campaigns. meta = image + dimensions + visibility-filtered
 	// markers; markers also exposed standalone. Both reuse the existing
@@ -110,4 +115,27 @@ func RegisterDrawingRoutes(e *echo.Echo, dh *DrawingHandler, campaignSvc campaig
 	)
 	pub.GET("/maps/:mid/drawings", dh.ListDrawings, campaigns.RequireViewAccess())
 	pub.GET("/maps/:mid/tokens", dh.ListTokens, campaigns.RequireViewAccess())
+}
+
+// RegisterHexRoutes sets up the hex layer's API. Painting is gated in
+// HexService (owner or DM grant, or a scribe where the map's draw policy and
+// fog allow), so the write route only requires membership: a DM-granted player
+// is not a scribe by role and must still get through to the service.
+func RegisterHexRoutes(e *echo.Echo, hh *HexHandler, campaignSvc campaigns.CampaignService, authSvc auth.AuthService, addonSvc addons.AddonService) {
+	cg := e.Group("/campaigns/:id",
+		auth.RequireAuth(authSvc),
+		campaigns.RequireCampaignAccess(campaignSvc),
+		addons.RequireAddon(addonSvc, "maps"),
+	)
+	cg.PATCH("/maps/:mid/hexes/cells", hh.PatchHexCells, campaigns.RequireRole(campaigns.RolePlayer))
+
+	// Public-capable read so a public campaign's map shows its hexes. The
+	// service filters cells by the viewer's role, which is RoleNone for the
+	// public.
+	pub := e.Group("/campaigns/:id",
+		auth.OptionalAuth(authSvc),
+		campaigns.AllowPublicCampaignAccess(campaignSvc),
+		addons.RequireAddon(addonSvc, "maps"),
+	)
+	pub.GET("/maps/:mid/hexes", hh.GetHexes, campaigns.RequireViewAccess())
 }

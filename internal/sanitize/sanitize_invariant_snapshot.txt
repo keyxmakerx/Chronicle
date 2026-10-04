@@ -7,6 +7,7 @@ internal/plugins/backup/service.go	sanitize_calls=0	html_params=-	html_struct_fi
 internal/plugins/bestiary/service.go	sanitize_calls=0	html_params=-	html_struct_fields=-
 internal/plugins/calendar/service.go	sanitize_calls=2	html_params=-	html_struct_fields=DescriptionHTML
 internal/plugins/campaigns/service.go	sanitize_calls=1	html_params=-	html_struct_fields=-
+internal/plugins/dmscreen/service.go	sanitize_calls=0	html_params=-	html_struct_fields=-
 internal/plugins/entities/service.go	sanitize_calls=4	html_params=entryHTML,notesHTML	html_struct_fields=EntryHTML,PlayerNotesHTML
 internal/plugins/foundry_vtt/service.go	sanitize_calls=0	html_params=-	html_struct_fields=-
 internal/plugins/maps/service.go	sanitize_calls=0	html_params=-	html_struct_fields=-
@@ -18,6 +19,7 @@ internal/plugins/sessions/service.go	sanitize_calls=1	html_params=recapHTML	html
 internal/plugins/settings/service.go	sanitize_calls=0	html_params=-	html_struct_fields=-
 internal/plugins/smtp/service.go	sanitize_calls=0	html_params=-	html_struct_fields=-
 internal/plugins/syncapi/service.go	sanitize_calls=0	html_params=-	html_struct_fields=-
+internal/plugins/systemstate/service.go	sanitize_calls=0	html_params=-	html_struct_fields=-
 internal/plugins/timeline/service.go	sanitize_calls=2	html_params=-	html_struct_fields=DescriptionHTML
 internal/plugins/widgetbindings/service.go	sanitize_calls=0	html_params=-	html_struct_fields=-
 internal/widgets/entity_notes/service.go	sanitize_calls=1	html_params=-	html_struct_fields=BodyHTML

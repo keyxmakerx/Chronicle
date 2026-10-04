@@ -69,12 +69,26 @@ const (
 	MsgEntityTypeDeleted MessageType = "entity_type.deleted"
 )
 
+// Relation sync messages, one per relation row written. ResourceID is the
+// row's source entity, so a client can follow one entity's relations (a
+// character's inventory) and the change feed collapses them per entity.
+const (
+	MsgRelationCreated         MessageType = "relation.created"
+	MsgRelationDeleted         MessageType = "relation.deleted"
+	MsgRelationMetadataUpdated MessageType = "relation.metadata_updated"
+)
+
 // Note sync messages.
 const (
 	MsgNoteCreated MessageType = "note.created"
 	MsgNoteUpdated MessageType = "note.updated"
 	MsgNoteDeleted MessageType = "note.deleted"
 )
+
+// isNoteMessage reports whether t is one of the note.* events above.
+func isNoteMessage(t MessageType) bool {
+	return t == MsgNoteCreated || t == MsgNoteUpdated || t == MsgNoteDeleted
+}
 
 // Entity notes sync messages (player-notes addon). Distinct from note.*
 // because the data model + audience semantics are different — these
@@ -83,6 +97,30 @@ const (
 	MsgEntityNoteCreated MessageType = "entity_note.created"
 	MsgEntityNoteUpdated MessageType = "entity_note.updated"
 	MsgEntityNoteDeleted MessageType = "entity_note.deleted"
+)
+
+// Stash and downtime messages. Payloads carry ids and statuses only.
+const (
+	MsgStashMoved        MessageType = "stash.moved"
+	MsgStashRequested    MessageType = "stash.requested"
+	MsgStashSettled      MessageType = "stash.settled"
+	MsgStashMoneyChanged MessageType = "stash.money_changed"
+	MsgDowntimeChanged   MessageType = "downtime.changed"
+)
+
+// Foundry table messages. Sent to the campaign's Foundry module only to
+// act at the table; never recorded in the sync change feed.
+const (
+	// MsgNPCSpotlight asks Foundry to spotlight the NPC page's token.
+	// ResourceID is the entity id; always published RequiresDM.
+	MsgNPCSpotlight MessageType = "npc.spotlight"
+
+	// MsgSystemStateUpdated tells the GM side that a page's per-system
+	// state changed. ResourceID is the entity id; the payload names the
+	// system and key only, never the state. Always published RequiresDM
+	// and deliberately not a change-feed type: the state is read through
+	// its own route, not replayed from the feed.
+	MsgSystemStateUpdated MessageType = "system_state.updated"
 )
 
 // Sync control messages.

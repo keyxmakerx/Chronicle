@@ -1,10 +1,11 @@
 // Package calendar - weather_climates.go lists the climates a calendar can
 // pick for its world. The ids and names mirror the weather generator in
 // static/js/widgets/chronicle_gen.js (a JS test pins the two together), so
-// the Generate sheet can start from the stored id without a lookup table.
+// the weather calendar can start from the stored id without a lookup table.
 package calendar
 
 import (
+	"fmt"
 	"math"
 
 	"github.com/keyxmakerx/chronicle/internal/apperror"
@@ -15,6 +16,10 @@ const (
 	// with no stored setting reports.
 	DefaultWeatherClimate    = "temperate"
 	DefaultWeatherContinuity = 0.55
+	// DefaultForecastDays and MaxForecastDays bound how far ahead a player's
+	// forecast reaches: past ten days a guess carries no information.
+	DefaultForecastDays = 5
+	MaxForecastDays     = 10
 )
 
 // WeatherClimate is one selectable climate. Magic climates are listed apart
@@ -70,6 +75,9 @@ func validateWeatherSettings(s WeatherSettings) error {
 	if math.IsNaN(s.Continuity) || s.Continuity < 0 || s.Continuity > 1 {
 		return apperror.NewBadRequest("how long weather lasts must be between 0 and 1")
 	}
+	if s.ForecastDays < 1 || s.ForecastDays > MaxForecastDays {
+		return apperror.NewBadRequest(fmt.Sprintf("the forecast can cover 1 to %d days", MaxForecastDays))
+	}
 	if _, err := validateWeatherKinds(s.Kinds); err != nil {
 		return err
 	}
@@ -82,7 +90,7 @@ func roundContinuity(c float64) float64 {
 }
 
 // continuityWords names a "how long weather lasts" value in the words the
-// Generate sheet uses (continuityWords in calendar_weather_sheet.js);
+// weather calendar uses (continuityWords in calendar_weather_sheet.js);
 // continuityWordsJS is the same rule for the settings page's live readout.
 func continuityWords(v float64) string {
 	switch {

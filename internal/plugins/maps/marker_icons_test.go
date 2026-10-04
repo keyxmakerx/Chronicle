@@ -9,7 +9,6 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
-	"os"
 	"strings"
 	"testing"
 
@@ -159,11 +158,7 @@ func TestMapEditorBody_ControlsFloatOverTheMap(t *testing.T) {
 // The quick card must send only the fields a person changed, so a rename can
 // never clear the kind or flip visibility (the partial-update contract).
 func TestMapEditorBody_QuickCardSendsOnlyChanges(t *testing.T) {
-	src, err := os.ReadFile("maps.templ")
-	if err != nil {
-		t.Fatalf("read maps.templ: %v", err)
-	}
-	text := string(src)
+	text := templSource(t) + viewerScript(t)
 	for _, want := range []string{
 		"if (nm !== mk.name) body.name = nm;",
 		"if (kind !== origKind) body.pin_category = kind || null;",
@@ -254,5 +249,8 @@ func renderMapEditor(t *testing.T, scribe bool) string {
 	if err := MapEditorBody(cc, data, "flex-1", "").Render(context.Background(), &sb); err != nil {
 		t.Fatalf("render MapEditorBody: %v", err)
 	}
-	return sb.String()
+	// The viewer's behaviour lives in a static module now, not an inline
+	// script; the checks below were written against the page's whole output, so
+	// the module's source rides along with the markup.
+	return sb.String() + viewerScript(t)
 }

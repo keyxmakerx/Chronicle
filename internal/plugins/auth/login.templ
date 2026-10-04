@@ -12,14 +12,13 @@ import "github.com/keyxmakerx/chronicle/internal/templates/layouts"
 // sanitizeRedirect in handler.go); "" means the dashboard.
 templ LoginPage(csrfToken, email, errMsg, successMsg, redirect string) {
 	@layouts.Base("Login") {
-		<div class="min-h-screen flex items-center justify-center bg-surface px-4">
+		@layouts.SiteAuthStage("") {
 			<div class="w-full max-w-md">
 				<div class="text-center mb-8">
-					<a href="/" class="inline-flex items-center justify-center w-12 h-12 rounded-xl bg-accent/10 dark:bg-accent/20 mb-4">
-						<i class="fa-solid fa-book-open text-lg text-accent"></i>
-					</a>
+					@layouts.SiteAuthMark()
 					<h1 class="text-3xl font-bold text-fg">Welcome back</h1>
-					<p class="text-fg-secondary mt-2">Sign in to your Chronicle account</p>
+					<p class="text-fg-secondary mt-2">Sign in to your { layouts.SiteName(ctx) } account</p>
+					@layouts.SiteWelcomeLine()
 				</div>
 				if successMsg != "" {
 					<div class="alert-success mb-4" role="status">
@@ -29,7 +28,7 @@ templ LoginPage(csrfToken, email, errMsg, successMsg, redirect string) {
 				}
 				@LoginForm_(csrfToken, email, errMsg, redirect)
 			</div>
-		</div>
+		}
 	}
 }
 

@@ -35,6 +35,7 @@ const (
 	keyEnabledSystem       ctxKey = "layout_enabled_system"
 	keyViewingAsPlayer     ctxKey = "layout_viewing_as_player"
 	keyIsOwner             ctxKey = "layout_is_owner"
+	keyIsDmGranted         ctxKey = "layout_is_dm_granted"
 	keyMediaURLFunc        ctxKey = "layout_media_url_func"
 	keyMediaThumbFunc      ctxKey = "layout_media_thumb_func"
 	keyExtWidgetScripts    ctxKey = "layout_ext_widget_scripts"
@@ -441,6 +442,18 @@ func IsOwner(ctx context.Context) bool {
 	return isOwner
 }
 
+// SetIsDmGranted stores whether the owner has given this member DM access.
+func SetIsDmGranted(ctx context.Context, granted bool) context.Context {
+	return context.WithValue(ctx, keyIsDmGranted, granted)
+}
+
+// IsDmGranted reports whether the owner has given this member DM access.
+// Their role stays what it is; DM access adds the game-running tools.
+func IsDmGranted(ctx context.Context) bool {
+	granted, _ := ctx.Value(keyIsDmGranted).(bool)
+	return granted
+}
+
 // --- Signed Media URLs ---
 
 // MediaURLFunc generates a signed media URL given a file ID.
@@ -785,6 +798,38 @@ type TopbarContentData struct {
 	// Widgets is the Customize page's ordered list ("links", "text"); nil
 	// for an older save, where Mode alone decides.
 	Widgets []string
+	// Live is today's data for the date, weather, moon and game-night
+	// widgets, filled per request by the app from the calendar and sessions
+	// services. Nil, or any empty field, means that widget has nothing to
+	// draw and stays out of the bar.
+	Live *TopbarLiveData
+}
+
+// TopbarLiveData is the read-only, already-formatted text of the header's
+// data-backed widgets. The layouts package takes strings, never the
+// calendar or sessions types, so the templates stay plugin-agnostic.
+type TopbarLiveData struct {
+	// Date is the in-world date, e.g. "14 Frostfall 1203".
+	Date string
+	// Weather is today's weather only, never a forecast, e.g. "Clear, 4°".
+	Weather string
+	// Moons holds today's phase for each visible moon.
+	Moons []TopbarMoon
+	// NextNight is the countdown to the next game night, e.g. "Fri 7 pm".
+	NextNight TopbarNight
+}
+
+// TopbarMoon is one moon's phase today.
+type TopbarMoon struct {
+	Name  string
+	Phase string
+}
+
+// TopbarNight is the next game night: Label is the short text in the chip,
+// Title the fuller wording shown on hover.
+type TopbarNight struct {
+	Label string
+	Title string
 }
 
 // TopbarWidgets returns the header's widgets in order, reading an older

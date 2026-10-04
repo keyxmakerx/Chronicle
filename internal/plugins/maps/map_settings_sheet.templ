@@ -8,7 +8,6 @@ package maps
 import (
 	"fmt"
 
-	"github.com/keyxmakerx/chronicle/internal/templates/layouts"
 )
 
 // sheetChoice is one option of a segmented control.
@@ -48,7 +47,7 @@ templ mapSettingsSheet(data MapViewData) {
 					<input type="hidden" id="ms-image-width" value={ fmt.Sprintf("%d", data.Map.ImageWidth) }/>
 					<input type="hidden" id="ms-image-height" value={ fmt.Sprintf("%d", data.Map.ImageHeight) }/>
 					if data.Map.HasImage() {
-						<img id="ms-image-preview" src={ layouts.MediaURL(ctx, *data.Map.ImageID) } alt="" class="mp-preview"/>
+						<img id="ms-image-preview" src={ mapImageSrc(ctx, data.Map) } alt="" class="mp-preview"/>
 					} else {
 						<img id="ms-image-preview" src="" alt="" class="mp-preview" hidden/>
 					}

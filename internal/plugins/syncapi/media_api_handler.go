@@ -23,6 +23,9 @@ type MediaAPIHandler struct {
 	mediaSvc    media.MediaService
 	signer      *media.URLSigner
 	campaignSvc campaigns.CampaignService
+	// mapImages withholds the links of a shadowed map's picture from callers
+	// below owner. Nil means unwired (tests); production wiring is pinned in app.
+	mapImages media.MapImageGuard
 }
 
 // NewMediaAPIHandler creates a new media API handler.
@@ -44,6 +47,35 @@ func (h *MediaAPIHandler) SetURLSigner(signer *media.URLSigner) {
 // in app/routes.go.
 func (h *MediaAPIHandler) SetCampaignService(svc campaigns.CampaignService) {
 	h.campaignSvc = svc
+}
+
+// SetMapImageGuard wires the shadowed-map-picture check. Called during wiring in
+// app/routes.go.
+func (h *MediaAPIHandler) SetMapImageGuard(g media.MapImageGuard) {
+	h.mapImages = g
+}
+
+// response is toAPIResponse minus every link, for a caller below owner, when the
+// file is the picture of any map. The links are minted for the cookieless
+// API-key flow, which the media server accepts without knowing who asked, and a
+// link stays valid for its whole lifetime: one minted before a DM adds a shadow
+// would still fetch the original afterwards. So a map picture gets no link for
+// such a caller, shadowed or not. A failed check withholds too.
+func (h *MediaAPIHandler) response(c echo.Context, file *media.MediaFile) apiMediaFileResponse {
+	resp := h.toAPIResponse(file)
+	if h.mapImages == nil || file.CampaignID == nil || h.resolveRole(c) >= int(campaigns.RoleOwner) {
+		return resp
+	}
+	isPicture, err := h.mapImages.IsMapPicture(c.Request().Context(), *file.CampaignID, file.ID)
+	if err != nil {
+		slog.Error("api: map picture check failed; withholding links",
+			slog.String("file_id", file.ID), slog.Any("error", err))
+		isPicture = true
+	}
+	if isPicture {
+		resp.URL, resp.ThumbnailURL, resp.Thumbnails = "", "", nil
+	}
+	return resp
 }
 
 // resolveRole returns the caller's effective campaign role for ListMedia's
@@ -171,7 +203,7 @@ func (h *MediaAPIHandler) ListMedia(c echo.Context) error {
 
 	data := make([]apiMediaFileResponse, 0, len(files))
 	for i := range files {
-		data = append(data, h.toAPIResponse(&files[i]))
+		data = append(data, h.response(c, &files[i]))
 	}
 
 	return c.JSON(http.StatusOK, map[string]any{
@@ -198,7 +230,7 @@ func (h *MediaAPIHandler) GetMedia(c echo.Context) error {
 		return apperror.NewNotFound("media file not found")
 	}
 
-	return c.JSON(http.StatusOK, h.toAPIResponse(file))
+	return c.JSON(http.StatusOK, h.response(c, file))
 }
 
 // GetMediaStats returns aggregate storage stats for the campaign.
@@ -277,7 +309,7 @@ func (h *MediaAPIHandler) UploadMedia(c echo.Context) error {
 		return err
 	}
 
-	return c.JSON(http.StatusCreated, h.toAPIResponse(mediaFile))
+	return c.JSON(http.StatusCreated, h.response(c, mediaFile))
 }
 
 // DeleteMedia deletes a media file from the campaign.

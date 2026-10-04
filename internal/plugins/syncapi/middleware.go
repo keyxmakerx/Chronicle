@@ -5,6 +5,7 @@ import (
 	"log/slog"
 	"net"
 	"net/http"
+	"regexp"
 	"strconv"
 	"strings"
 	"sync"
@@ -13,6 +14,7 @@ import (
 	"github.com/labstack/echo/v4"
 
 	"github.com/keyxmakerx/chronicle/internal/apperror"
+	"github.com/keyxmakerx/chronicle/internal/changesource"
 	"github.com/keyxmakerx/chronicle/internal/plugins/auth"
 	"github.com/keyxmakerx/chronicle/internal/plugins/campaigns"
 )
@@ -141,6 +143,37 @@ func tryAuthFromSession(c echo.Context, authSvc auth.AuthService, campaignSvc ca
 	}, true
 }
 
+// moduleVersionHeader carries the Chronicle Sync module's own version on
+// every REST request so the owner can see which build last connected.
+const moduleVersionHeader = "X-Chronicle-Module-Version"
+
+// moduleVersionPattern bounds what a client can make us store: the value is
+// self-reported and later rendered, so anything beyond a plain version string
+// (letters, digits, dot, plus, hyphen; at most 32) is dropped rather than
+// escaped.
+var moduleVersionPattern = regexp.MustCompile(`^[0-9A-Za-z.+\-]{1,32}$`)
+
+// moduleVersionFromHeader returns the reported module version, or "" when the
+// header is absent or malformed. "" means "leave the stored value alone",
+// never "clear it".
+func moduleVersionFromHeader(h http.Header) string {
+	v := h.Get(moduleVersionHeader)
+	if !moduleVersionPattern.MatchString(v) {
+		return ""
+	}
+	return v
+}
+
+// recordKeyUsage stamps last-used time/IP and the reported module version on
+// a stored key. The session door's synthetic key has no api_keys row, so it
+// is never written.
+func recordKeyUsage(ctx context.Context, service SyncAPIService, key *APIKey, ip, moduleVersion string) error {
+	if key == nil || key.ID == synthKeySessionID {
+		return nil
+	}
+	return service.UpdateKeyLastUsed(ctx, key.ID, ip, moduleVersion)
+}
+
 // RequireAPIKey returns middleware that authenticates requests via API key.
 // Extracts the key from the Authorization header, validates it with bcrypt,
 // checks the IP blocklist, verifies IP allowlist, and records the request.
@@ -241,8 +274,9 @@ func RequireAPIKey(service SyncAPIService) echo.MiddlewareFunc {
 			// Update last-used timestamp (fire-and-forget).
 			// Use background context since the request context may be cancelled
 			// before the goroutine completes.
+			moduleVersion := moduleVersionFromHeader(c.Request().Header)
 			go func() {
-				_ = service.UpdateKeyLastUsed(context.Background(), key.ID, ip)
+				_ = recordKeyUsage(context.Background(), service, key, ip, moduleVersion)
 			}()
 
 			// Execute the handler and log the request.
@@ -655,5 +689,25 @@ func syncAPIDisabledError() *apperror.AppError {
 		Type: "sync_api_disabled",
 		Message: "the Sync API integration is switched off for this campaign; " +
 			"a campaign owner can re-enable it on the campaign's Extensions page (sidebar → Extensions)",
+	}
+}
+
+// WithChangeSource stamps the request context with where its writes come from,
+// so observers of an entity write can describe it: a real Bearer key is the
+// external sync client, while a session-authed caller (Chronicle's own browser
+// widgets on these routes) is the web UI. Mounted after the identity resolver.
+func WithChangeSource() echo.MiddlewareFunc {
+	return func(next echo.HandlerFunc) echo.HandlerFunc {
+		return func(c echo.Context) error {
+			if key := GetAPIKey(c); key != nil {
+				kind := changesource.KindFoundry
+				if key.ID == synthKeySessionID {
+					kind = changesource.KindWeb
+				}
+				ctx := changesource.With(c.Request().Context(), changesource.Source{Kind: kind, UserID: key.UserID})
+				c.SetRequest(c.Request().WithContext(ctx))
+			}
+			return next(c)
+		}
 	}
 }

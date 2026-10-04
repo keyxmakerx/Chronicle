@@ -226,8 +226,31 @@
 
     /* Precipitation follows the preset's amount: drizzle a third of rain, a monsoon half again as much. */
     function amount(ph){ return ph && ph[4] > 0 ? clamp(ph[4] / .55, .3, 1.8) : 1; }
-    function blank(){ return {cloud:0, dark:0, fog:0, rain:0, snow:0, hail:0, storm:0, wind:.2, sky:null, fogTint:null, grey:0, light:1,
-      rainTint:null, slant:0, heavy:0, aurora:[], air:[], parts:[], sigils:[], fire:[], funnel:null, flash:{lightning:0, ley:0}, sun:{dim:0, 'void':0, tint:null}, stars:1, drift:1, effects:[]}; }
+    /* The sky's dials: every plain number a weather sets, with its value on a still, empty sky and, for the ones the
+       pane glides between weathers, how many seconds the glide takes. Any change of weather is just new targets for
+       these, so no pair of weathers needs a transition of its own (#945). Dials with no ease change at once. */
+    L.DIALS = [
+      {n:'cloud', rest:0, ease:.8, what:'how much of the sky is cloud'},
+      {n:'dark', rest:0, ease:.8, what:'how far storm cloud darkens the sky'},
+      {n:'fog', rest:0, ease:.8, what:'how thick the fog is'},
+      {n:'rain', rest:0, ease:.8, what:'how hard it rains (above 1 for a downpour)'},
+      {n:'snow', rest:0, ease:.8, what:'how hard it snows'},
+      {n:'hail', rest:0, ease:.8, what:'how hard it hails'},
+      {n:'storm', rest:0, ease:.8, what:'how stormy: lightning and churn'},
+      {n:'wind', rest:.2, ease:.8, what:'how strong the wind is'},
+      {n:'grey', rest:0, ease:null, what:'how far the light is washed grey'},
+      {n:'light', rest:1, ease:null, what:'how bright the light is, 1 for a plain day'},
+      {n:'slant', rest:0, ease:null, what:'how far rain is driven sideways'},
+      {n:'heavy', rest:0, ease:null, what:'how heavy the drops are'},
+      {n:'stars', rest:1, ease:null, what:'how many stars show, 1 for all'},
+      {n:'drift', rest:1, ease:null, what:'how fast fog and haze drift, 1 for a still day'}
+    ];
+    L.DIAL_NAMES = L.DIALS.map(function(d){ return d.n; });
+    function blank(){
+      var R = {sky:null, fogTint:null, rainTint:null, aurora:[], air:[], parts:[], sigils:[], fire:[], funnel:null, flash:{lightning:0, ley:0}, sun:{dim:0, 'void':0, tint:null}, effects:[]};
+      L.DIALS.forEach(function(d){ R[d.n] = d.rest; });
+      return R;
+    }
     L.blank = blank;
     function hx(c, tint){ return tint ? L.hueTo(c, tint) : c; }
     /* One building block into a recipe, at weight w (1 for the main effect, less for a second layer) and strength m. */
@@ -291,7 +314,7 @@
       if (!A) return B; if (!B) return A;
       if (t <= 0) return A; if (t >= 1) return B;
       var R = blank(), u = 1 - t;
-      ['cloud', 'dark', 'fog', 'rain', 'snow', 'hail', 'storm', 'wind', 'grey', 'light', 'slant', 'heavy', 'stars', 'drift'].forEach(function(n){ R[n] = A[n] * u + B[n] * t; });
+      L.DIAL_NAMES.forEach(function(n){ R[n] = A[n] * u + B[n] * t; });
       R.sky = A.sky && B.sky ? [L.linHex(PAL.mixLin(PAL.hexLin(A.sky[0]), PAL.hexLin(B.sky[0]), t)), A.sky[1] * u + B.sky[1] * t] : A.sky ? [A.sky[0], A.sky[1] * u] : B.sky ? [B.sky[0], B.sky[1] * t] : null;
       R.fogTint = A.fogTint && B.fogTint ? [B.fogTint[0], A.fogTint[1] * u + B.fogTint[1] * t] : A.fogTint ? [A.fogTint[0], A.fogTint[1] * u] : B.fogTint ? [B.fogTint[0], B.fogTint[1] * t] : null;
       R.rainTint = (A.rainTint && B.rainTint) ? [t < .5 ? A.rainTint[0] : B.rainTint[0], A.rainTint[1] * u + B.rainTint[1] * t] : A.rainTint ? [A.rainTint[0], A.rainTint[1] * u] : B.rainTint ? [B.rainTint[0], B.rainTint[1] * t] : null;

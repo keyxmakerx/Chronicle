@@ -140,7 +140,42 @@ const (
 	// Values: "open" (default), "invite", "closed". Enforced in the auth service;
 	// the first-user-admin bootstrap always works regardless of mode.
 	KeyRegistrationMode = "auth.registration_mode"
+
+	// KeyTrashRetentionDays is how many days a deleted world page waits in
+	// its campaign's Trash before it is removed for good. One of
+	// TrashRetentionChoices; anything else reads as the default.
+	KeyTrashRetentionDays = "content.trash_retention_days"
+
+	// --- Site look (pages outside a campaign) ---
+	// Stored as plain strings; internal/sitelook defines what each may hold.
+	// An absent key means "never saved", so a fresh site renders as before.
+
+	// KeySiteName is the site name ("" is Chronicle).
+	KeySiteName = "site.name"
+	// KeySiteLogo is the stored media filename of the logo ("" is the letter mark).
+	KeySiteLogo = "site.logo"
+	// KeySiteLogoFavicon is "1" to use the logo as the browser tab icon.
+	KeySiteLogoFavicon = "site.logo_as_favicon"
+	// KeySiteLook is a campaign look id, or "" to leave pages as they are.
+	KeySiteLook = "site.look"
+	// KeySiteSigninBackground is "plain", "look" or "picture".
+	KeySiteSigninBackground = "site.signin_background"
+	// KeySiteSigninPicture is the stored media filename of the sign-in picture.
+	KeySiteSigninPicture = "site.signin_picture"
+	// KeySiteWelcome is the optional welcome line on the sign-in card.
+	KeySiteWelcome = "site.welcome"
+	// KeySiteMove is "1" to let the sign-in background and the top bar drift
+	// slowly. Absent or anything else is off.
+	KeySiteMove = "site.move"
 )
+
+// TrashRetentionChoices are the retention periods the admin can pick, in
+// days. They match the entities plugin's list, which reads this setting
+// through an adapter (plugins don't import each other).
+var TrashRetentionChoices = []int{30, 60, 90, 180, 365}
+
+// DefaultTrashRetentionDays applies while the setting is unset.
+const DefaultTrashRetentionDays = 30
 
 // Registration mode values for KeyRegistrationMode. Defined here as the canonical
 // source of truth for the site setting; the auth service compares against its own

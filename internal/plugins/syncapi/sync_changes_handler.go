@@ -31,6 +31,9 @@ type syncChangesResponse struct {
 	Next          int64        `json:"next"`
 	HasMore       bool         `json:"hasMore"`
 	ResetRequired bool         `json:"resetRequired"`
+	// Types lists the resource types this server records, so a client can
+	// tell a quiet resource from one an older server never recorded.
+	Types []string `json:"types"`
 }
 
 // isDMEquivalent mirrors MapAPIHandler.canAuthorDmOnly: campaign Owner or a
@@ -90,7 +93,7 @@ func (h *SyncChangesHandler) ListChanges(c echo.Context) error {
 		if err != nil {
 			return err
 		}
-		return c.JSON(http.StatusOK, syncChangesResponse{Changes: []SyncChange{}, Next: head, ResetRequired: true})
+		return c.JSON(http.StatusOK, syncChangesResponse{Changes: []SyncChange{}, Next: head, ResetRequired: true, Types: recordedTypes})
 	}
 
 	// One extra row tells us whether more remain without a COUNT.
@@ -106,5 +109,5 @@ func (h *SyncChangesHandler) ListChanges(c echo.Context) error {
 	if len(rows) > 0 {
 		next = rows[len(rows)-1].Seq
 	}
-	return c.JSON(http.StatusOK, syncChangesResponse{Changes: rows, Next: next, HasMore: hasMore})
+	return c.JSON(http.StatusOK, syncChangesResponse{Changes: rows, Next: next, HasMore: hasMore, Types: recordedTypes})
 }

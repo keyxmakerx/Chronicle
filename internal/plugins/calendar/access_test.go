@@ -99,6 +99,9 @@ type fakeCalendarSvc struct {
 	// savedWeather records the last SetWeatherSettings.
 	weather      *WeatherSettings
 	savedWeather *WeatherSettings
+	// lockedDays/lockedTo record the last LockDayWeather call.
+	lockedDays []DayDate
+	lockedTo   *bool
 }
 
 const secretCalendarID = "cal-secret"
@@ -123,6 +126,12 @@ func (f *fakeCalendarSvc) ListCalendars(_ context.Context, _ string, v permissio
 }
 func (f *fakeCalendarSvc) SetCurrentDate(context.Context, string, string, int, int, int, int, int) error {
 	return nil
+}
+func (f *fakeCalendarSvc) GetPrimaryCalendarForViewer(ctx context.Context, campaignID string, v permissions.Viewer) (*Calendar, error) {
+	return f.GetDefaultCalendarForViewer(ctx, campaignID, v)
+}
+func (f *fakeCalendarSvc) ImportFoundryCalendar(context.Context, string, []byte) (*Calendar, []string, error) {
+	return nil, nil, nil
 }
 func (f *fakeCalendarSvc) UpdateCalendar(context.Context, string, string, UpdateCalendarInput) error {
 	return nil
@@ -149,6 +158,10 @@ func (f *fakeCalendarSvc) GetCalendarNameForViewer(context.Context, string, stri
 func (f *fakeCalendarSvc) ListEventsForMonth(_ context.Context, calendarID, _ string, _, _ int, v permissions.Viewer) ([]Event, error) {
 	f.lastViewer = v
 	return []Event{{ID: "evt-1", CalendarID: calendarID}}, nil
+}
+func (f *fakeCalendarSvc) ListEraEventsForViewer(_ context.Context, _ int, _, _ string, v permissions.Viewer) ([]Event, int, error) {
+	f.lastViewer = v
+	return nil, 0, nil
 }
 func (f *fakeCalendarSvc) ListUpcomingEvents(_ context.Context, calendarID, _ string, _ int, v permissions.Viewer) ([]Event, error) {
 	f.lastViewer = v
@@ -185,6 +198,9 @@ func (f *fakeCalendarSvc) UpdateEra(context.Context, int, string, string, Update
 	return nil
 }
 func (f *fakeCalendarSvc) DeleteEra(context.Context, int, string, string) error { return nil }
+func (f *fakeCalendarSvc) SaveEraLook(context.Context, string, string, EraLook, []EraLookEra) error {
+	return nil
+}
 
 func (f *fakeCalendarSvc) SetMoonHidden(context.Context, int, string, string, bool) error { return nil }
 
@@ -214,7 +230,7 @@ func (f *fakeCalendarSvc) GetWeatherSettings(context.Context, string, string, pe
 		w := *f.weather
 		return &w, nil
 	}
-	return &WeatherSettings{Climate: DefaultWeatherClimate, Continuity: DefaultWeatherContinuity}, nil
+	return &WeatherSettings{Climate: DefaultWeatherClimate, Continuity: DefaultWeatherContinuity, ForecastDays: DefaultForecastDays}, nil
 }
 func (f *fakeCalendarSvc) SetWeatherSettings(_ context.Context, _, _ string, s WeatherSettings) error {
 	f.savedWeather = &s
@@ -222,6 +238,13 @@ func (f *fakeCalendarSvc) SetWeatherSettings(_ context.Context, _, _ string, s W
 }
 func (f *fakeCalendarSvc) ClearDayWeather(context.Context, string, string, []DayDate) error {
 	return nil
+}
+func (f *fakeCalendarSvc) LockDayWeather(_ context.Context, _, _ string, dates []DayDate, locked bool) (int, error) {
+	f.lockedDays, f.lockedTo = dates, &locked
+	return len(dates), nil
+}
+func (f *fakeCalendarSvc) ListWeatherForecast(context.Context, string, string, permissions.Viewer) ([]ForecastEntry, error) {
+	return []ForecastEntry{}, nil
 }
 
 func (f *fakeCalendarSvc) ListAllEventsForCalendar(context.Context, string, string, permissions.Viewer) ([]Event, error) {
@@ -481,16 +504,18 @@ func TestRouteGates_StructureWritesCanAuthorDmOnly(t *testing.T) {
 		name   string
 		method string
 		path   string
-		wantOK int // response code for a caller who passes CanAuthorDmOnly
+		body   string // JSON body, for a route that needs one to reach the service
+		wantOK int    // response code for a caller who passes CanAuthorDmOnly
 	}{
-		{"create event kind", http.MethodPost, "/campaigns/camp-1/calendars/event-kinds", http.StatusCreated},
-		{"update event kind", http.MethodPut, "/campaigns/camp-1/calendars/event-kinds/1", http.StatusOK},
-		{"delete event kind", http.MethodDelete, "/campaigns/camp-1/calendars/event-kinds/1", http.StatusOK},
-		{"create era", http.MethodPost, "/campaigns/camp-1/calendars/cal-1/eras", http.StatusCreated},
-		{"update era", http.MethodPut, "/campaigns/camp-1/calendars/cal-1/eras/1", http.StatusOK},
-		{"delete era", http.MethodDelete, "/campaigns/camp-1/calendars/cal-1/eras/1", http.StatusOK},
-		{"set moon hidden", http.MethodPut, "/campaigns/camp-1/calendars/cal-1/moons/1/hidden", http.StatusOK},
-		{"read weather settings", http.MethodGet, "/campaigns/camp-1/calendars/cal-1/weather/settings", http.StatusOK},
+		{"create event kind", http.MethodPost, "/campaigns/camp-1/calendars/event-kinds", "", http.StatusCreated},
+		{"update event kind", http.MethodPut, "/campaigns/camp-1/calendars/event-kinds/1", "", http.StatusOK},
+		{"delete event kind", http.MethodDelete, "/campaigns/camp-1/calendars/event-kinds/1", "", http.StatusOK},
+		{"create era", http.MethodPost, "/campaigns/camp-1/calendars/cal-1/eras", "", http.StatusCreated},
+		{"update era", http.MethodPut, "/campaigns/camp-1/calendars/cal-1/eras/1", "", http.StatusOK},
+		{"delete era", http.MethodDelete, "/campaigns/camp-1/calendars/cal-1/eras/1", "", http.StatusOK},
+		{"set moon hidden", http.MethodPut, "/campaigns/camp-1/calendars/cal-1/moons/1/hidden", "", http.StatusOK},
+		{"read weather settings", http.MethodGet, "/campaigns/camp-1/calendars/cal-1/weather/settings", "", http.StatusOK},
+		{"lock day weather", http.MethodPost, "/campaigns/camp-1/calendars/cal-1/weather/days/lock", `{"days":[{"year":1,"month":1,"day":1}],"locked":true}`, http.StatusOK},
 	}
 
 	const userID = "u-caller"
@@ -509,7 +534,7 @@ func TestRouteGates_StructureWritesCanAuthorDmOnly(t *testing.T) {
 						settings = `{"dm_grant_ids":["` + userID + `"]}`
 					}
 					e, _ := newAccessTestRouterWithSettings(false, true, roles, settings)
-					rec := doRequest(e, rt.method, rt.path, userID)
+					rec := doRequestWithBody(e, rt.method, rt.path, userID, rt.body)
 
 					canAuthor := c.role >= campaigns.RoleOwner || c.granted
 					want := http.StatusForbidden

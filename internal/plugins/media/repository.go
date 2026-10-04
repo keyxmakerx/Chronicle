@@ -482,6 +482,9 @@ func (r *mediaRepository) ListAllFilenames(ctx context.Context) (map[string]bool
 // layouts.normalizeMediaID's basename+strip-extension logic: match a
 // "/<id>.<anything>" suffix. mediaID is a server-generated UUID (no LIKE
 // wildcard characters), so it's safe unescaped.
+// Trashed pages deliberately still count as references: a picture on a trashed
+// page must survive cleanup and stay access-protected so a restore brings it
+// back intact.
 func (r *mediaRepository) FindReferences(ctx context.Context, campaignID, mediaID string) ([]MediaRef, error) {
 	query := `SELECT id, name, slug, 'image' AS ref_type
 	          FROM entities

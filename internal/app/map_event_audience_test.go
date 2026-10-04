@@ -68,7 +68,7 @@ func TestPublishMarkerEvent_ComputesAudienceFromVisibilityRules(t *testing.T) {
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			bus := &captureBus{}
-			a := &mapEventPublisherAdapter{bus: bus}
+			a := &mapEventPublisherAdapter{bus: bus, shadows: fixedShadowLookup{}}
 			a.PublishMarkerEvent("updated", "camp-1", tc.marker)
 
 			if bus.last == nil {
@@ -107,6 +107,15 @@ func TestPublishDrawingEvent_ComputesAudienceFromVisibilityRules(t *testing.T) {
 			wantRequiresDM: true,
 		},
 		{
+			name:           "a picture hidden from players is staff-only on the wire",
+			drawing:        &maps.Drawing{ID: "pic", DrawingType: "image", Visibility: "dm_only", ImageID: strPtr("media-1")},
+			wantRequiresDM: true,
+		},
+		{
+			name:    "a visible picture reaches everyone",
+			drawing: &maps.Drawing{ID: "pic2", DrawingType: "image", Visibility: "everyone", ImageID: strPtr("media-1")},
+		},
+		{
 			name:       "everyone with an explicit deny",
 			drawing:    &maps.Drawing{ID: "d3", Visibility: "everyone", VisibilityRules: strPtr(`{"denied_users":["user-denied"]}`)},
 			wantDenied: []string{"user-denied"},
@@ -121,7 +130,7 @@ func TestPublishDrawingEvent_ComputesAudienceFromVisibilityRules(t *testing.T) {
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			bus := &captureBus{}
-			a := &mapEventPublisherAdapter{bus: bus}
+			a := &mapEventPublisherAdapter{bus: bus, shadows: fixedShadowLookup{}}
 			a.PublishDrawingEvent("updated", "camp-1", tc.drawing)
 
 			if bus.last == nil {
@@ -147,7 +156,7 @@ func TestPublishDrawingEvent_ComputesAudienceFromVisibilityRules(t *testing.T) {
 // AllowedUsers/DeniedUsers list.
 func TestPublishTokenEvent_NeverCarriesAudienceLists(t *testing.T) {
 	bus := &captureBus{}
-	a := &mapEventPublisherAdapter{bus: bus}
+	a := &mapEventPublisherAdapter{bus: bus, shadows: fixedShadowLookup{}}
 	a.PublishTokenEvent("updated", "camp-1", &maps.Token{ID: "t1", IsHidden: true})
 
 	if bus.last == nil {

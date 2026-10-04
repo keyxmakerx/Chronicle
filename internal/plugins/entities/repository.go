@@ -817,6 +817,21 @@ type entityRepository struct {
 	db *sql.DB
 }
 
+// notFoundUnlessExists turns a zero-row UPDATE into a not-found only when the
+// entity is really missing. Without clientFoundRows MariaDB counts changed
+// rows, not matched ones, and updated_at has one-second precision, so writing
+// the same values twice within a second changes nothing and reports zero.
+func (r *entityRepository) notFoundUnlessExists(ctx context.Context, id string) error {
+	var exists bool
+	if err := r.db.QueryRowContext(ctx, `SELECT EXISTS(SELECT 1 FROM entities WHERE id = ?)`, id).Scan(&exists); err != nil {
+		return fmt.Errorf("checking entity exists: %w", err)
+	}
+	if !exists {
+		return apperror.NewNotFound("entity not found")
+	}
+	return nil
+}
+
 // NewEntityRepository creates a new entity repository.
 func NewEntityRepository(db *sql.DB) EntityRepository {
 	return &entityRepository{db: db}
@@ -869,7 +884,7 @@ func (r *entityRepository) FindByID(ctx context.Context, id string) (*Entity, er
 	query := `SELECT ` + entitySelectColumns + `
 	          FROM entities e
 	          INNER JOIN entity_types et ON et.id = e.entity_type_id
-	          WHERE e.id = ?`
+	          WHERE e.id = ?` + liveOnly
 
 	return r.scanEntity(r.db.QueryRowContext(ctx, query, id))
 }
@@ -879,7 +894,7 @@ func (r *entityRepository) FindBySlug(ctx context.Context, campaignID, slug stri
 	query := `SELECT ` + entitySelectColumns + `
 	          FROM entities e
 	          INNER JOIN entity_types et ON et.id = e.entity_type_id
-	          WHERE e.campaign_id = ? AND e.slug = ?`
+	          WHERE e.campaign_id = ? AND e.slug = ?` + liveOnly
 
 	return r.scanEntity(r.db.QueryRowContext(ctx, query, campaignID, slug))
 }
@@ -932,12 +947,16 @@ func (r *entityRepository) Update(ctx context.Context, entity *Entity) error {
 		return fmt.Errorf("marshaling fields data: %w", err)
 	}
 
-	query := `UPDATE entities SET name = ?, slug = ?, entry = ?, entry_html = ?,
+	// entry_rev is assigned before entry_html so it compares against the
+	// stored text: MariaDB applies SET assignments left to right.
+	query := `UPDATE entities SET entry_rev = entry_rev + IF(entry_html <=> ?, 0, 1),
+	          name = ?, slug = ?, entry = ?, entry_html = ?,
 	          player_notes = ?, player_notes_html = ?,
 	          type_label = ?, parent_id = ?, sort_order = ?, is_private = ?, fields_data = ?, updated_at = ?
 	          WHERE id = ?`
 
 	result, err := r.db.ExecContext(ctx, query,
+		entity.EntryHTML,
 		entity.Name, entity.Slug, entity.Entry, entity.EntryHTML,
 		entity.PlayerNotes, entity.PlayerNotesHTML,
 		entity.TypeLabel, entity.ParentID, entity.SortOrder, entity.IsPrivate, fieldsJSON, entity.UpdatedAt,
@@ -952,7 +971,7 @@ func (r *entityRepository) Update(ctx context.Context, entity *Entity) error {
 		return fmt.Errorf("checking rows affected: %w", err)
 	}
 	if rows == 0 {
-		return apperror.NewNotFound("entity not found")
+		return r.notFoundUnlessExists(ctx, entity.ID)
 	}
 	return nil
 }
@@ -960,7 +979,7 @@ func (r *entityRepository) Update(ctx context.Context, entity *Entity) error {
 // UpdateEntry updates only the entry content (JSON + rendered HTML) for an entity.
 // Used by the editor widget's autosave without touching other fields.
 func (r *entityRepository) UpdateEntry(ctx context.Context, id, entryJSON, entryHTML, searchText string) error {
-	query := `UPDATE entities SET entry = ?, entry_html = ?, search_text = ?, updated_at = NOW() WHERE id = ?`
+	query := `UPDATE entities SET entry = ?, entry_html = ?, search_text = ?, entry_rev = entry_rev + 1, updated_at = NOW() WHERE id = ?`
 
 	result, err := r.db.ExecContext(ctx, query, entryJSON, entryHTML, searchText, id)
 	if err != nil {
@@ -972,7 +991,7 @@ func (r *entityRepository) UpdateEntry(ctx context.Context, id, entryJSON, entry
 		return fmt.Errorf("checking rows affected: %w", err)
 	}
 	if rows == 0 {
-		return apperror.NewNotFound("entity not found")
+		return r.notFoundUnlessExists(ctx, id)
 	}
 	return nil
 }
@@ -992,7 +1011,7 @@ func (r *entityRepository) UpdatePlayerNotes(ctx context.Context, id, notesJSON,
 		return fmt.Errorf("checking rows affected: %w", err)
 	}
 	if rows == 0 {
-		return apperror.NewNotFound("entity not found")
+		return r.notFoundUnlessExists(ctx, id)
 	}
 	return nil
 }
@@ -1017,7 +1036,7 @@ func (r *entityRepository) UpdateFields(ctx context.Context, id string, fieldsDa
 		return fmt.Errorf("checking rows affected: %w", err)
 	}
 	if rows == 0 {
-		return apperror.NewNotFound("entity not found")
+		return r.notFoundUnlessExists(ctx, id)
 	}
 	return nil
 }
@@ -1045,7 +1064,7 @@ func (r *entityRepository) UpdateFieldOverrides(ctx context.Context, id string, 
 		return fmt.Errorf("checking rows affected: %w", err)
 	}
 	if rows == 0 {
-		return apperror.NewNotFound("entity not found")
+		return r.notFoundUnlessExists(ctx, id)
 	}
 	return nil
 }
@@ -1069,7 +1088,7 @@ func (r *entityRepository) UpdateImage(ctx context.Context, id, imagePath string
 		return fmt.Errorf("checking rows affected: %w", err)
 	}
 	if rows == 0 {
-		return apperror.NewNotFound("entity not found")
+		return r.notFoundUnlessExists(ctx, id)
 	}
 	return nil
 }
@@ -1093,7 +1112,7 @@ func (r *entityRepository) UpdateCoverImage(ctx context.Context, id, coverImageP
 		return fmt.Errorf("checking rows affected: %w", err)
 	}
 	if rows == 0 {
-		return apperror.NewNotFound("entity not found")
+		return r.notFoundUnlessExists(ctx, id)
 	}
 	return nil
 }
@@ -1183,10 +1202,10 @@ func tagFilterClause(tagSlugs []string) (string, []any) {
 // THIRD caller of either policy appears).
 func visibilityFilter(role int, userID string) (string, []any) {
 	if role >= permissions.RoleOwner {
-		return "", nil
+		return liveOnly, nil
 	}
 
-	filter := ` AND (
+	filter := liveOnly + ` AND (
 		(e.visibility = 'default' AND (? >= 2 OR e.is_private = false))
 		OR (e.visibility = 'custom' AND EXISTS (
 			SELECT 1 FROM entity_permissions ep
@@ -1220,6 +1239,11 @@ func visibilityFilter(role int, userID string) (string, []any) {
 	)`
 	return filter, []any{role, role, userID, userID, role, userID, userID}
 }
+
+// liveOnly keeps trashed pages out of a read. visibilityFilter carries it for
+// every role, owners included, because nobody sees a trashed page anywhere
+// but the Trash; reads that skip visibilityFilter add it themselves.
+const liveOnly = ` AND e.deleted_at IS NULL`
 
 // FilterViewableEntityIDs returns the subset of entityIDs (scoped to campaignID)
 // that a viewer with the given role + userID may view, applying the canonical
@@ -1358,7 +1382,7 @@ func (r *entityRepository) ListByOwner(ctx context.Context, campaignID, ownerUse
 	query := `SELECT ` + entitySelectColumns + `
 	          FROM entities e
 	          INNER JOIN entity_types et ON et.id = e.entity_type_id
-	          WHERE e.campaign_id = ? AND e.owner_user_id = ?
+	          WHERE e.campaign_id = ? AND e.owner_user_id = ?` + liveOnly + `
 	          ORDER BY e.updated_at DESC`
 	rows, err := r.db.QueryContext(ctx, query, campaignID, ownerUserID)
 	if err != nil {
@@ -1632,20 +1656,17 @@ func (r *entityRepository) FindAncestors(ctx context.Context, entityID string, r
 	// The filter must stay on the OUTER select, never inside the recursion:
 	// pruning mid-recursion would drop every ancestor ABOVE a hidden one too,
 	// hiding pages the viewer is entitled to see.
+	// visibilityFilter emits a leading " AND ...", so it needs something to
+	// hang off; for an Owner it is only the trashed-page exclusion.
 	visFilter, visArgs := visibilityFilter(role, userID)
-	where := ""
-	if visFilter != "" {
-		// visibilityFilter emits a leading " AND ...", so it needs something
-		// to hang off. An Owner gets "" back and no WHERE clause at all.
-		where = "WHERE 1=1" + visFilter
-	}
+	where := "WHERE 1=1" + visFilter
 
 	query := fmt.Sprintf(`WITH RECURSIVE ancestors AS (
 	    SELECT e.id, e.campaign_id, e.entity_type_id, e.name, e.slug,
 	           e.entry, e.entry_html, e.player_notes, e.player_notes_html,
 	           e.image_path, e.cover_image_path, e.parent_id, e.parent_node_id, e.sort_order, e.type_label,
 	           e.is_private, e.visibility, e.is_template, e.fields_data, e.field_overrides, e.popup_config,
-	           e.created_by, e.owner_user_id, e.map_id, e.created_at, e.updated_at,
+	           e.created_by, e.owner_user_id, e.map_id, e.created_at, e.updated_at, e.deleted_at,
 	           1 AS depth
 	    FROM entities e
 	    WHERE e.id = (SELECT parent_id FROM entities WHERE id = ?)
@@ -1654,7 +1675,7 @@ func (r *entityRepository) FindAncestors(ctx context.Context, entityID string, r
 	           e.entry, e.entry_html, e.player_notes, e.player_notes_html,
 	           e.image_path, e.cover_image_path, e.parent_id, e.parent_node_id, e.sort_order, e.type_label,
 	           e.is_private, e.visibility, e.is_template, e.fields_data, e.field_overrides, e.popup_config,
-	           e.created_by, e.owner_user_id, e.map_id, e.created_at, e.updated_at,
+	           e.created_by, e.owner_user_id, e.map_id, e.created_at, e.updated_at, e.deleted_at,
 	           a.depth + 1
 	    FROM entities e
 	    INNER JOIN ancestors a ON e.id = a.parent_id
@@ -1724,7 +1745,7 @@ func (r *entityRepository) UpdateParentNode(ctx context.Context, entityID, campa
 func (r *entityRepository) ListSiblingIDsOrdered(ctx context.Context, campaignID string, entityTypeID int, parentID, parentNodeID *string) ([]string, error) {
 	// parent_id and parent_node_id are mutually exclusive; the root scope is both
 	// NULL. Pin the inactive column to NULL so a stale value can't widen the set.
-	where := "campaign_id = ? AND entity_type_id = ?"
+	where := "campaign_id = ? AND entity_type_id = ? AND deleted_at IS NULL"
 	args := []any{campaignID, entityTypeID}
 	switch {
 	case parentNodeID != nil:
@@ -2137,7 +2158,18 @@ func (r *entityPermissionRepository) UpdateVisibility(ctx context.Context, entit
 		return fmt.Errorf("checking rows affected: %w", err)
 	}
 	if rows == 0 {
-		return apperror.NewNotFound("entity not found")
+		// Without clientFoundRows MariaDB counts changed rows, not matched
+		// ones: the same visibility within the same second as the entity's
+		// last write changes nothing and reports zero. Only a missing row is
+		// a not-found.
+		var exists bool
+		if err := r.db.QueryRowContext(ctx,
+			`SELECT EXISTS(SELECT 1 FROM entities WHERE id = ?)`, entityID).Scan(&exists); err != nil {
+			return fmt.Errorf("checking entity exists: %w", err)
+		}
+		if !exists {
+			return apperror.NewNotFound("entity not found")
+		}
 	}
 	return nil
 }

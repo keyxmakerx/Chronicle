@@ -22,6 +22,7 @@ import (
 
 	"github.com/go-sql-driver/mysql"
 
+	"github.com/keyxmakerx/chronicle/internal/changesource"
 	"github.com/keyxmakerx/chronicle/internal/database"
 )
 
@@ -303,4 +304,57 @@ func TestStashRepoIntegration_StashesViewersMovesDowntime(t *testing.T) {
 	if err := repo.DeleteStash(ctx, camp, st.ID); code(err) != http.StatusNotFound {
 		t.Fatalf("second delete: %v", err)
 	}
+}
+
+// A sheet money edit is a signed self-move row. item_moves.amount must keep the
+// sign (a lowered balance is a negative amount) and the two equal ends.
+func TestStashRepoIntegration_MoneyEditRowKeepsSign(t *testing.T) {
+	db := newStashScratchDB(t)
+	repo := NewStashRepository(db)
+	ctx := context.Background()
+	camp := seedStashCampaign(t, db)
+	char := seedStashEntity(t, db, camp, "Thorin")
+
+	dir := &fakeDir{ents: map[string]*EntityRef{
+		char: {ID: char, Name: "Thorin", IsCharacter: true, MoneyKey: "gp", MoneyLabel: "Wealth"},
+	}}
+	// The fake directory only knows the campaign named "camp".
+	h := NewMoneyHistory(repo, campaignDir{dir, camp}, nil, nil)
+	src := changesource.With(ctx, changesource.Source{Kind: changesource.KindFoundry, UserID: "gm"})
+
+	for _, step := range []struct{ from, to float64 }{{20, 5}, {5, 8}} {
+		if err := h.RecordFieldChange(src, camp, char, map[string]any{"gp": step.from}, map[string]any{"gp": step.to}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	ep := Endpoint{Kind: EndpointCharacter, ID: char}
+	rows, err := repo.ListMoves(ctx, camp, MoveFilter{Endpoint: &ep})
+	if err != nil || len(rows) != 2 {
+		t.Fatalf("rows = %+v, %v", rows, err)
+	}
+	// Newest first.
+	if rows[0].Amount != 300 || rows[1].Amount != -1500 {
+		t.Fatalf("amounts = %d, %d; want 300, -1500", rows[0].Amount, rows[1].Amount)
+	}
+	for _, r := range rows {
+		if !r.IsMoneyEdit() || r.Status != MoveApplied || r.RequestedBy != "gm" {
+			t.Fatalf("row = %+v", r)
+		}
+	}
+	if rows[1].Reason != "Wealth changed 20 → 5 · in Foundry" {
+		t.Fatalf("reason = %q", rows[1].Reason)
+	}
+}
+
+// campaignDir answers a fake directory's lookups for a scratch campaign id.
+type campaignDir struct {
+	*fakeDir
+	campaign string
+}
+
+func (d campaignDir) GetEntity(ctx context.Context, campaignID, id string) (*EntityRef, error) {
+	if campaignID != d.campaign {
+		return nil, nil
+	}
+	return d.fakeDir.GetEntity(ctx, "camp", id)
 }

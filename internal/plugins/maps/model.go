@@ -79,8 +79,16 @@ type Map struct {
 	Name        string  `json:"name"`
 	Description *string `json:"description,omitempty"`
 	ImageID     *string `json:"image_id,omitempty"`
-	ImageWidth  int     `json:"image_width"`
-	ImageHeight int     `json:"image_height"`
+	// PlayerImageURL replaces ImageID for a viewer who must not receive the
+	// original (a map with a shadow): the address of the picture with the shadows
+	// smudged in. Never stored; set only by MapService.ForViewer.
+	PlayerImageURL string `json:"image_url,omitempty"`
+	// PlayerImageAPIURL is the sync API address of the player copy, set on maps
+	// the sync API returns when the map has a shadow, for every key: an owner key
+	// still reads the original, but must hand players this copy instead.
+	PlayerImageAPIURL string `json:"player_image_url,omitempty"`
+	ImageWidth        int    `json:"image_width"`
+	ImageHeight       int    `json:"image_height"`
 	// BackgroundColor optionally overrides the default theme-following
 	// canvas color (bg-surface-alt, which adapts to dark/light via CSS
 	// vars) with a fixed CSS color (e.g. "#000000"). Nil means "follow
@@ -101,9 +109,10 @@ type Map struct {
 // middleware.CampaignScoped for generic IDOR protection.
 func (m *Map) GetCampaignID() string { return m.CampaignID }
 
-// HasImage returns true if the map has a background image set.
+// HasImage returns true if the map has a background image set, either the
+// original or the player copy that stands in for it.
 func (m *Map) HasImage() bool {
-	return m.ImageID != nil && *m.ImageID != ""
+	return (m.ImageID != nil && *m.ImageID != "") || m.PlayerImageURL != ""
 }
 
 // Marker is a pin placed on a map at percentage coordinates (0-100).
@@ -234,6 +243,9 @@ type MapViewData struct {
 	// IsOwner gates the Map settings sheet: the PUT behind it is Owner-only,
 	// so offering it to a scribe could only end in a refusal.
 	IsOwner bool
+	// IsDM is the owner or a co-DM. Only they see under shadows and get the
+	// shadow tool; a scribe is hidden like a player.
+	IsDM bool
 	// UserID is the viewer's own id (empty when anonymous). The page uses it
 	// only to key the per-person "where I left off" view in the browser.
 	UserID string
@@ -261,6 +273,27 @@ type MapListData struct {
 	CSRFToken  string
 	// CampaignFrame is the campaign-wide frame the list cards wear in small form.
 	CampaignFrame string
+}
+
+// CanShadow reports whether this viewer gets the "Hide under shadow" tool: a
+// DM who can draw on this map. Offering only; DrawingService enforces it.
+func (d MapViewData) CanShadow() bool {
+	return d.IsDM && d.CanDraw()
+}
+
+// CanPaintHexes reports whether this viewer is offered Paint in the Hexes
+// tool. It mirrors HexService.requireWriter exactly: an owner or DM grant
+// always, a scribe only when the map lets scribes draw, a player never. It is
+// not CanDraw because a DM-granted player is below scribe, so CanDraw hides a
+// tool the server would let them use.
+func (d MapViewData) CanPaintHexes() bool {
+	if d.IsDM {
+		return true
+	}
+	if !d.IsScribe {
+		return false
+	}
+	return d.DisplayOrDefault().DrawWho != DrawWhoOwners
 }
 
 // CanDraw reports whether this viewer gets the drawing tools: a scribe or

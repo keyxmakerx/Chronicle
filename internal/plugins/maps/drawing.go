@@ -9,11 +9,13 @@ import (
 
 // Drawing represents a freehand drawing, shape, or text annotation on a map.
 // Coordinates use percentage-based positioning (0-100) for resolution independence.
+// A "shadow" drawing is not a visible shape for players: it is an area whose
+// contents the server withholds from them (see shadow.go).
 type Drawing struct {
 	ID          string          `json:"id"`
 	MapID       string          `json:"map_id"`
 	LayerID     *string         `json:"layer_id,omitempty"`
-	DrawingType string          `json:"drawing_type"` // freehand, rectangle, ellipse, polygon, text
+	DrawingType string          `json:"drawing_type"` // freehand, rectangle, ellipse, polygon, text, shadow, image (two corners; fill_alpha is its strength, see shadow.go)
 	Points      json.RawMessage `json:"points"`       // Array of {x, y} coordinate pairs.
 	StrokeColor string          `json:"stroke_color"`
 	StrokeWidth float64         `json:"stroke_width"`
@@ -28,11 +30,17 @@ type Drawing struct {
 	// (drawing_repository.go, matching ListMarkers) and by the WS publisher
 	// (routes.go's mapEventPublisherAdapter), or a rule set on a drawing
 	// silently does nothing.
-	VisibilityRules *string   `json:"visibility_rules,omitempty"`
-	CreatedBy       *string   `json:"created_by,omitempty"`
-	FoundryID       *string   `json:"foundry_id,omitempty"`
-	CreatedAt       time.Time `json:"created_at"`
-	UpdatedAt       time.Time `json:"updated_at"`
+	VisibilityRules *string `json:"visibility_rules,omitempty"`
+	CreatedBy       *string `json:"created_by,omitempty"`
+	FoundryID       *string `json:"foundry_id,omitempty"`
+	// ImageID, Crop and SortOrder belong to "image" drawings (a picture placed
+	// on the map): the campaign media file, the percentage trimmed from each
+	// edge as {"t","r","b","l"}, and the stacking position among pictures.
+	ImageID   *string         `json:"image_id,omitempty"`
+	Crop      json.RawMessage `json:"crop,omitempty"`
+	SortOrder int             `json:"sort_order"`
+	CreatedAt time.Time       `json:"created_at"`
+	UpdatedAt time.Time       `json:"updated_at"`
 }
 
 // CreateDrawingInput is the validated input for creating a drawing.
@@ -51,9 +59,17 @@ type CreateDrawingInput struct {
 	Visibility  string
 	CreatedBy   string
 	FoundryID   *string
+	// ImageID, Crop and SortOrder are for "image" drawings only; any other
+	// type that carries them is refused.
+	ImageID   *string
+	Crop      json.RawMessage
+	SortOrder int
 	// CallerRole is the caller's campaign role (permissions.Role*), used for
 	// the map's "who can draw" gate. Not a data field; 0 is refused.
 	CallerRole int
+	// CallerIsDM is true for an owner or co-DM. Only they may create a shadow;
+	// it is not a data field.
+	CallerIsDM bool
 }
 
 // UpdateDrawingInput is the validated input for updating a drawing.
@@ -65,15 +81,20 @@ type CreateDrawingInput struct {
 // UpdateTokenInput). A caller sending only {points} to reshape a freehand
 // stroke must not wipe fill, text content, font size or rotation.
 type UpdateDrawingInput struct {
-	Points            patch.Field[json.RawMessage]
-	StrokeColor       patch.Field[string]
-	StrokeWidth       patch.Field[float64]
-	FillColor         patch.Field[string]
-	FillAlpha         patch.Field[float64]
-	TextContent       patch.Field[string]
-	FontSize          patch.Field[int]
-	Rotation          patch.Field[float64]
-	Visibility        patch.Field[string]
+	Points      patch.Field[json.RawMessage]
+	StrokeColor patch.Field[string]
+	StrokeWidth patch.Field[float64]
+	FillColor   patch.Field[string]
+	FillAlpha   patch.Field[float64]
+	TextContent patch.Field[string]
+	FontSize    patch.Field[int]
+	Rotation    patch.Field[float64]
+	Visibility  patch.Field[string]
+	// ImageID may only change to another media file of the map's campaign;
+	// Crop null clears the crop. Both apply to "image" drawings only.
+	ImageID           patch.Field[string]
+	Crop              patch.Field[json.RawMessage]
+	SortOrder         patch.Field[int]
 	ExpectedUpdatedAt *time.Time
 }
 

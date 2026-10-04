@@ -168,12 +168,12 @@ const SKY_SCRIPTS = [
 ];
 
 function harnessHTML(campaignID, calendarID) {
-  // htmx first, then boot.js, then the sky scripts, in base.templ's own
+  // htmx first, then boot.js, the rest clock and the sky scripts, in base.templ's own
   // order — boot.js references `htmx.config` unconditionally at its own top
   // level, so loading it out of production order throws before boot.js
   // finishes defining Chronicle.apiFetch.
   const htmxTag = '<script src="/static/vendor/htmx.min.js" defer></script>';
-  const scripts = ['boot.js', ...SKY_SCRIPTS.map((f) => `widgets/${f}`)]
+  const scripts = ['boot.js', 'motion_rest.js', ...SKY_SCRIPTS.map((f) => `widgets/${f}`)]
     .map((p) => `<script src="/static/js/${p}" defer></script>`)
     .join('\n    ');
   return `<!doctype html>

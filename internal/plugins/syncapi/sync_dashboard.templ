@@ -225,8 +225,18 @@ templ AdminCampaignSyncTableTempl(stats []CampaignSyncStats) {
 					</thead>
 					<tbody class="divide-y divide-edge">
 						for _, s := range stats {
-							<tr>
+							// A row opens the campaign's call flow under it, names hidden.
+							<tr
+								class="sf-camp cursor-pointer hover:bg-surface-alt"
+								data-flow-src={ "/admin/api/sync-flow/" + s.CampaignID }
+								data-flow-target={ "sf-admin-" + s.CampaignID }
+								tabindex="0"
+								role="button"
+								aria-expanded="false"
+								aria-controls={ "sf-admin-" + s.CampaignID }
+							>
 								<td class="py-2.5 pr-4">
+									<span class="sf-car text-fg-faint" aria-hidden="true">▸</span>
 									<span class="text-fg font-medium">{ s.CampaignName }</span>
 									<span class="text-xs text-fg-muted font-mono ml-1">{ truncateID(s.CampaignID) }</span>
 								</td>
@@ -251,6 +261,11 @@ templ AdminCampaignSyncTableTempl(stats []CampaignSyncStats) {
 									} else {
 										<span class="text-fg-muted">0</span>
 									}
+								</td>
+							</tr>
+							<tr class="sf-camp-flow">
+								<td colspan="5" class="p-0">
+									<div class="sf-fold" id={ "sf-admin-" + s.CampaignID }><div></div></div>
 								</td>
 							</tr>
 						}

@@ -24,7 +24,7 @@ func TestMapEditorBody_InvalidatesSizeAfterLayout(t *testing.T) {
 		IsScribe:   true,
 	}
 
-	out := render(t, MapEditorBody(cc, data, "flex-1 relative bg-surface-alt", ""))
+	out := render(t, MapEditorBody(cc, data, "flex-1 relative bg-surface-alt", "")) + viewerScript(t)
 
 	if !strings.Contains(out, "invalidateSize") {
 		t.Errorf("editor IIFE must call map.invalidateSize() after layout settles; not found in rendered output")
