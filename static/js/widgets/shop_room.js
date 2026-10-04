@@ -886,14 +886,20 @@
     // doorway as you walk through it.
     '.shr{position:relative}',
     '.shr-front{display:none;align-items:center;gap:14px;width:100%;text-align:left;border:1px solid var(--color-border,#e5e7eb);border-radius:10px;background:var(--color-card-bg,#fff);color:var(--color-text-primary,#111827);padding:10px 14px;cursor:pointer;font:inherit}',
-    '.shr-front:hover{border-color:var(--shr-acc,#b45309)}',
+    // Pointing at the door is stepping up to it: the door grows and the wall around it dims.
+    '.shr-front:hover{background:radial-gradient(circle at 46px 50%,var(--color-card-bg,#fff) 0,color-mix(in srgb,var(--color-card-bg,#fff) 88%,#78350f) 45%,color-mix(in srgb,var(--color-card-bg,#fff) 80%,#78350f) 100%)}',
+    '.shr-front .nm{transition:transform .5s,opacity .5s}.shr-front:hover .nm{transform:translateX(6px);opacity:.8}',
+    '.shr-front:hover .shr-dr{transform:scale(1.14)}',
     '.shr-front .nm{flex:1;min-width:0}.shr-front .nm b{display:block}.shr-front .nm span{font-size:.8rem;color:var(--color-text-secondary,#6b7280)}',
-    '.shr-dr{position:relative;flex:none;width:64px;height:96px;perspective:420px}.shr-dr>span{position:absolute;inset:0}.shr-dr svg{display:block;width:100%;height:100%}',
-    '.shr-dr .lf{transform-origin:6px 50%;transition:transform .6s cubic-bezier(.45,.05,.3,1)}.shr-front.opening .lf{transform:rotateY(-110deg)}',
+    '.shr-dr{position:relative;flex:none;width:64px;height:96px;perspective:420px;transform-origin:50% 55%;transition:transform .5s cubic-bezier(.3,.7,.3,1)}.shr-dr>span{position:absolute;inset:0}.shr-dr svg{display:block;width:100%;height:100%}',
+    '.shr-dr .lf{transform-origin:6px 50%;transition:transform .7s cubic-bezier(.45,.05,.3,1)}.shr-front.opening .lf{transform:rotateY(-110deg)}',
     '.shr.closed .shr-front{display:flex}.shr.closed .shr-card{display:none}',
-    '.shr.walking .shr-front{display:flex;position:absolute;top:0;left:0;right:0;z-index:7;pointer-events:none;transition:transform .75s cubic-bezier(.6,0,.2,1),opacity .6s ease}',
-    '.shr.walking .shr-front.gone{transform:scale(2.2);opacity:0}',
-    '.shr.walking .shr-card{transition:clip-path .75s cubic-bezier(.6,0,.2,1),transform .75s cubic-bezier(.6,0,.2,1)}',
+    // Walking in: you move into the lit doorway until it fills the view, then the shop fades up around you.
+    '.shr.walking{overflow:hidden;border-radius:10px}',
+    '.shr.walking .shr-front{display:flex;position:absolute;top:0;left:0;right:0;z-index:7;pointer-events:none;transition:transform 1.1s cubic-bezier(.55,0,.35,1),opacity .6s ease .65s}',
+    '.shr.walking .shr-front.gone{transform:scale(9);opacity:0}',
+    '.shr.walking .shr-card{opacity:0;transform:scale(1.12);transition:opacity .7s ease .65s,transform 1s cubic-bezier(.2,.7,.2,1) .65s}',
+    '.shr.walking.in .shr-card{opacity:1;transform:none}',
     '.shr-stay{animation:shr-nudge .45s ease}@keyframes shr-nudge{0%,100%{transform:none}25%{transform:translateX(-5px)}75%{transform:translateX(5px)}}',
     '@media (prefers-reduced-motion:reduce){.shr *,.shr-say,.shr-tip{animation:none!important;transition:none!important}}'
   ].join('\n');
@@ -1281,25 +1287,19 @@
         front.setAttribute('aria-expanded', 'true');
         if (matchMedia('(prefers-reduced-motion: reduce)').matches) { root.classList.remove('closed'); draw(); return; }
         front.classList.add('opening');
-        walkT = setTimeout(walkIn, 650);
+        walkT = setTimeout(walkIn, 700);
       }
       function walkIn() {
         var dr = front.querySelector('.shr-dr').getBoundingClientRect(), r0 = root.getBoundingClientRect();
-        var card = root.querySelector('.shr-card');
+        front.style.transformOrigin = (dr.left - r0.left + dr.width / 2) + 'px ' + (dr.top - r0.top + dr.height / 2) + 'px';
         root.classList.remove('closed'); root.classList.add('walking'); draw();
-        var W = card.offsetWidth, H = card.offsetHeight, x = dr.left - r0.left, y = dr.top - r0.top;
-        var origin = (x + dr.width / 2) + 'px ' + (y + dr.height / 2) + 'px';
-        card.style.transition = 'none'; card.style.transformOrigin = origin; front.style.transformOrigin = origin;
-        card.style.clipPath = 'inset(' + y + 'px ' + Math.max(0, W - x - dr.width) + 'px ' + Math.max(0, H - y - dr.height) + 'px ' + x + 'px round 32px 32px 0 0)';
-        card.style.transform = 'scale(1.25)';
-        void card.offsetWidth; card.style.transition = '';
-        card.style.clipPath = 'inset(0 0 0 0 round 10px)'; card.style.transform = 'none'; front.classList.add('gone');
-        walkT = setTimeout(settle, 800);
+        void root.offsetWidth;
+        front.classList.add('gone'); root.classList.add('in');
+        walkT = setTimeout(settle, 1750);
       }
       function settle() {
-        var card = root.querySelector('.shr-card');
-        root.classList.remove('walking'); front.classList.remove('opening', 'gone');
-        card.style.clipPath = card.style.transform = card.style.transformOrigin = front.style.transformOrigin = '';
+        root.classList.remove('walking', 'in'); front.classList.remove('opening', 'gone');
+        front.style.transformOrigin = '';
         placeKeeper();
       }
       function leave() {
