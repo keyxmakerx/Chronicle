@@ -2440,25 +2440,14 @@ func (a *App) RegisterRoutes() {
 		}
 	}()
 
-	// One-shot boot reconcilers for entity_types, run SERIALLY in a single
-	// goroutine: any two reconcilers that each read a full pre-backfill
-	// snapshot and rewrite the whole layout_json per row would have the
-	// second clobber the first's block on a type missing both. A new
-	// layout_json reconciler must join this chain, not start its own
-	// goroutine. gm_only field-flag sync runs last since it touches a
-	// different column (fields, not layout_json). Each step is idempotent;
-	// a failure is logged and the chain continues.
+	// Boot reconcilers for entity_types fields, run SERIALLY in a single
+	// goroutine. They write only the fields column; the one layout_json
+	// reconciler (placePageExtrasOnce) runs synchronously later in boot, so
+	// no two reconcilers rewrite the same layout. A new layout_json
+	// reconciler must run beside that one, not in a goroutine of its own.
+	// Each step is idempotent; a failure is logged and the chain continues.
 	go func() {
 		ctx := context.Background()
-
-		// Player Notes was only wired into new default layouts, so custom
-		// sub-categories created earlier never showed the block even with
-		// the addon enabled.
-		if n, err := entityService.EnsureEntityNotesBlockInDefaults(ctx); err != nil {
-			slog.Warn("entity_types: player-notes block backfill failed", slog.Any("error", err))
-		} else if n > 0 {
-			slog.Info("entity_types: player-notes block backfill added to layouts", slog.Int("rows", n))
-		}
 
 		// Converge gm_only field flags from installed system manifests onto
 		// existing types so the GM-field egress filter covers characters
@@ -3900,6 +3889,11 @@ func (a *App) RegisterRoutes() {
 	// This drives validation, rendering, and the template editor palette.
 	blockRegistry := entities.NewBlockRegistry()
 	entities.RegisterCoreBlocks(blockRegistry)
+	blockRegistry.Register(entities.BlockMeta{
+		Type: entities.BlockCharacterItems, Label: "Items & Money", Icon: "fa-sack-dollar",
+		Description: "What a character carries, their money and recent moves",
+		Addon:       armory.AddonSlug, Contexts: []string{"template"},
+	}, entities.RenderCharacterItemsBlock)
 
 	// Widget-binding framework: the dynamic host↔widget-type↔instance
 	// registry + service. Widget types register declaratively; the service
@@ -4137,6 +4131,15 @@ func (a *App) RegisterRoutes() {
 	showRegistry := entities.NewEntityShowRendererRegistry()
 	registerManifestRenderers(showRegistry)
 	entities.SetGlobalEntityShowRendererRegistry(showRegistry)
+
+	// One-time: place the page pieces that became blocks into existing
+	// layouts, so no page loses anything (see page_extras.go). Best-effort;
+	// a failure is retried on the next boot.
+	if n, err := placePageExtrasOnce(context.Background(), settingsRepo, campaignService, addonService, entityService); err != nil {
+		slog.Error("placing page extras failed", slog.String("error", err.Error()))
+	} else if n > 0 {
+		slog.Info("placed page extras into layouts", slog.Int("layouts", n))
+	}
 
 	campaignHandler.SetAuditLogger(&campaignAuditAdapter{svc: auditService})
 	campaignHandler.SetAddonLister(&addonListerAdapter{svc: addonService})

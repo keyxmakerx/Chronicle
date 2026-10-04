@@ -82,6 +82,12 @@ templ EntityShowPage(cc *campaigns.CampaignContext, entity *Entity, entityType *
 				// block that normally carries the panels, so mount them here.
 				@entitySystemPanels(cc, entity)
 				@comp
+				// It has no layout to place the page pieces in, so they are
+				// drawn here as before they became blocks.
+				@blockSubPages(cc, entity)
+				@blockPosts(cc, entity, csrfToken)
+				@blockWritingPrompts(cc, entityType)
+				@blockBacklinksMount(cc, entity)
 			} else {
 				<!-- Dynamic layout from entity type template -->
 				if entityType != nil && len(entityType.Layout.Rows) > 0 {
@@ -121,31 +127,21 @@ templ EntityShowPage(cc *campaigns.CampaignContext, entity *Entity, entityType *
 							@blockDetails(cc, entity)
 						</div>
 					</div>
+					// No layout to place the page pieces in, as with a page
+					// renderer above.
+					@blockSubPages(cc, entity)
+					@blockPosts(cc, entity, csrfToken)
+					@blockWritingPrompts(cc, entityType)
+					@blockBacklinksMount(cc, entity)
 				}
 			}
-			// Panel another plugin contributes to character pages. It loads
-			// itself and replaces this placeholder; an empty answer removes it.
-			if u := pagePanelURL(ctx); u != "" {
-				<div hx-get={ u } hx-trigger="load" hx-swap="outerHTML"></div>
+
+			// The items-and-money panel on player-character pages whose layout
+			// does not place it; every other page gets it only as a block.
+			if autoPagePanel(ctx) {
+				@blockCharacterItems()
 			}
-			// Children section: shown below the layout if this entity has children.
-			if len(children) > 0 || cc.MemberRole >= campaigns.RoleScribe {
-				@blockChildren(cc, entity, children)
-			}
-			// Entity posts (sub-notes): additional content sections below the main entry.
-			@blockPosts(cc, entity, csrfToken)
-			// Writing prompts: collapsible panel to help content creators.
-			// Only shown to Scribe+ (content creators), lazy-loaded via HTMX.
-			if cc.MemberRole >= campaigns.RoleScribe && entityType != nil {
-				@WorldbuildingPromptsPanel(cc.Campaign.ID, entityType.ID)
-			}
-			// Backlinks: entities that reference this one via @mentions.
-			// Loaded asynchronously via HTMX to keep page load fast.
-			<div
-				hx-get={ fmt.Sprintf("/campaigns/%s/entities/%s/backlinks", cc.Campaign.ID, entity.ID) }
-				hx-trigger="load"
-				hx-swap="innerHTML"
-			></div>
+
 			// A per-entity calendar is opt-in via the `entity_calendar`
 			// page-template block, not rendered automatically here.
 		</div>
@@ -378,7 +374,6 @@ templ blockTitle(cc *campaigns.CampaignContext, entity *Entity, csrfToken string
 				</div>
 			</div>
 		}
-		@entitySystemPanels(cc, entity)
 	</div>
 }
 
