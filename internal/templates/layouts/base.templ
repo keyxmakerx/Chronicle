@@ -93,6 +93,10 @@ templ Base(title string) {
 		     Alpine so the component exists when Alpine first evaluates it. -->
 		<script src={ AssetURL("/static/js/media_uploader.js") } defer></script>
 
+		<!-- Timelines page "New Timeline" form (x-data="timelineCreateForm()");
+		     before Alpine for the same reason as the uploader above. -->
+		<script src={ AssetURL("/static/js/timeline_create_form.js") } defer></script>
+
 		<!-- Alpine.js: loaded AFTER boot.js so Chronicle.apiFetch/notify exist
 		     when Alpine initializes and evaluates x-data attributes. -->
 		<script src={ AssetURL("/static/vendor/alpine-collapse.min.js") } defer></script>
