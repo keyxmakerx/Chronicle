@@ -586,6 +586,7 @@ func (h *Handler) GeneratePrompt(c echo.Context) error {
 		in.ContentMode = "none"
 	}
 	if h.records != nil {
+		in.Capabilities = h.records.Capabilities()
 		if in.IncludeFrontMatterExample {
 			in.RecordDocs = h.records.Docs()
 		}

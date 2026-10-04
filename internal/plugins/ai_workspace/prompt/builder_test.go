@@ -330,3 +330,34 @@ func TestBuild_TrimsInstructionWhitespace(t *testing.T) {
 		t.Errorf("expected leading whitespace stripped:\n%s", got)
 	}
 }
+
+// TestBuild_Capabilities pins the opening "what you can do" list and the
+// NEED: route the AI uses to ask for formats or existing records; both
+// are left out when no record kinds are wired.
+func TestBuild_Capabilities(t *testing.T) {
+	svc := NewService(nil, nil, &stubExporter{})
+	cases := []struct {
+		name string
+		caps string
+		want bool
+	}{
+		{"wired", "- `kind: note`: my own notes only\n", true},
+		{"not wired", "", false},
+	}
+	for _, c := range cases {
+		got, err := svc.Build(context.Background(), "Ashfall", "owner-1", "camp-1", Input{
+			ContentMode: "none", Capabilities: c.caps, OperatorInstruction: "x",
+		})
+		if err != nil {
+			t.Fatalf("%s: Build: %v", c.name, err)
+		}
+		for _, s := range []string{"## What you can do", "`kind: note`: my own notes only", "## If you need more", "NEED:"} {
+			if strings.Contains(got, s) != c.want {
+				t.Errorf("%s: contains %q = %v, want %v", c.name, s, !c.want, c.want)
+			}
+		}
+		if i, j := strings.Index(got, "## What you can do"), strings.Index(got, "## What I want you to generate"); c.want && i > j {
+			t.Errorf("%s: capabilities come after the instruction", c.name)
+		}
+	}
+}

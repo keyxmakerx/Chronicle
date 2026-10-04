@@ -93,6 +93,9 @@ type Input struct {
 
 	OperatorInstruction string
 
+	// Capabilities is the opening one-line-per-kind list
+	// (records.Registry.Capabilities); every prompt carries it.
+	Capabilities string
 	// RecordDocs describes the non-page kinds (records.Registry.Docs);
 	// "" leaves the section out.
 	RecordDocs string
@@ -122,6 +125,7 @@ func (s *Service) Build(
 		ContentMode:               in.ContentMode,
 		OperatorInstruction:       strings.TrimSpace(in.OperatorInstruction),
 		RecordDocs:                strings.TrimSpace(in.RecordDocs),
+		Capabilities:              strings.TrimSpace(in.Capabilities),
 	}
 
 	if in.IncludeEntityTypes || in.IncludeCategoriesInUse {

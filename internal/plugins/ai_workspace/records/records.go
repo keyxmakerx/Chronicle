@@ -137,6 +137,34 @@ func (r *Registry) Plan(ctx context.Context, campaignID string, a Actor, rec Rec
 	return k, k.Plan(ctx, campaignID, a, rec)
 }
 
+// briefs is one plain line per kind for the prompt's opening "what you
+// can do" list, which every prompt carries; Docs has the full formats.
+var briefs = map[string]string{
+	"event":        "calendar events on the campaign calendar",
+	"weather":      "one day's weather on the calendar",
+	"table":        "rolling tables and their entries",
+	"shop-stock":   "what a shop sells, its price and how many",
+	"carried-item": "items a character carries",
+	"pin":          "pins on the campaign's maps",
+	"note":         "my own notes only: my Journal notes and my jots on pages, never notes anyone else wrote",
+	"house-rule":   "house-rules chapters in the campaign's rulebook",
+	"generator":    "run Chronicle's own generators (weather for a range of days, festivals and other events, sky events, names into a rolling table) instead of inventing the result",
+}
+
+// Capabilities is the prompt's opening list of what a block can change,
+// one line per wired kind.
+func (r *Registry) Capabilities() string {
+	var b strings.Builder
+	for _, k := range r.Kinds() {
+		brief := briefs[k.Name()]
+		if brief == "" {
+			brief = k.Label()
+		}
+		b.WriteString("- `kind: " + k.Name() + "`: " + brief + "\n")
+	}
+	return b.String()
+}
+
 // Docs is the prompt section describing every kind.
 func (r *Registry) Docs() string {
 	var b strings.Builder

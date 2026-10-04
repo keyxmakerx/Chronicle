@@ -357,6 +357,15 @@ func TestRegistry_Plan(t *testing.T) {
 	if !strings.Contains(r.Docs(), "kind: table") {
 		t.Fatal("docs missing")
 	}
+	caps := NewRegistry(TableKind{Svc: &fakeTables{}}, NoteKind{}).Capabilities()
+	for _, want := range []string{"`kind: table`: rolling tables", "`kind: note`: my own notes only", "never notes anyone else wrote"} {
+		if !strings.Contains(caps, want) {
+			t.Errorf("capabilities missing %q:\n%s", want, caps)
+		}
+	}
+	if strings.Contains(caps, "kind: pin") {
+		t.Error("capabilities list a kind that is not wired")
+	}
 }
 
 func TestPlanError_ShowsOnlyTheMessage(t *testing.T) {
