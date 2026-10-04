@@ -83,7 +83,7 @@ templ EntityShowPage(cc *campaigns.CampaignContext, entity *Entity, entityType *
 			} else {
 				<!-- Dynamic layout from entity type template -->
 				if entityType != nil && len(entityType.Layout.Rows) > 0 {
-					for i, row := range entityType.Layout.Rows {
+					for _, row := range entityType.Layout.Rows {
 						<div class="grid grid-cols-1 md:grid-cols-12 gap-4 md:gap-6 mb-4 md:mb-6">
 							for _, col := range row.Columns {
 								<div class={ entityColSpan(col.Width) }>
@@ -93,11 +93,6 @@ templ EntityShowPage(cc *campaigns.CampaignContext, entity *Entity, entityType *
 								</div>
 							}
 						</div>
-						if i == 0 && needsImplicitShopInventory(entity, entityType) {
-							<div class="mb-4 md:mb-6">
-								@blockShopInventory(cc, entity, csrfToken)
-							</div>
-						}
 					}
 				} else {
 					<!-- Fallback: default two-column layout if no layout defined -->
@@ -105,9 +100,6 @@ templ EntityShowPage(cc *campaigns.CampaignContext, entity *Entity, entityType *
 						<div class="col-span-1 md:col-span-8 space-y-4">
 							@blockTitle(cc, entity, csrfToken)
 							@blockTags(cc, entity, csrfToken)
-							if entity.TypeSlug == "shop" {
-								@blockShopInventory(cc, entity, csrfToken)
-							}
 							@blockRelations(cc, entity, csrfToken)
 							@blockEntry(cc, entity, csrfToken)
 						</div>
@@ -548,9 +540,9 @@ templ blockInventory(cc *campaigns.CampaignContext, entity *Entity, csrfToken st
 	></div>
 }
 
-// blockShopInventory renders the shop inventory widget mount point. Appears on
-// entities of type "Shop" and displays items as "sells" relations with price,
-// quantity, and stock metadata.
+// blockShopInventory renders the shop mount point for a placed Shop block.
+// Nothing mounts it on its own: a page has a shop only where the owner added
+// the block, and the shop starts closed until pressed.
 templ blockShopInventory(cc *campaigns.CampaignContext, entity *Entity, csrfToken string) {
 	// The room widget hides itself when its endpoint answers 404 (armory addon
 	// off, or no access), so no addon check is needed here.

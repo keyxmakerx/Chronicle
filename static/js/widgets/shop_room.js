@@ -29,6 +29,15 @@
  * Needs shop_room_icons.js loaded first (window.ShopRoomIcons).
  */
 (function () {
+  // What a press outside an open shop does: it closes, unless the basket
+  // still holds something, when the shop stays open and says so instead.
+  function outsideClose(basket) {
+    for (var k in basket) { if (Object.prototype.hasOwnProperty.call(basket, k) && basket[k] > 0) return 'warn'; }
+    return 'close';
+  }
+
+  window.ShopRoomDoor = { outsideClose: outsideClose };
+
   function esc(s) {
     return String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/'/g, '&#39;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
   }
@@ -739,6 +748,11 @@
   if (!window.Chronicle || !window.document) return;
 
   var FX_KEY = 'chronicle.shopRoom.fx';
+  // The shop's door in black-and-white line art: the lit doorway behind, and
+  // the leaf that swings open. ZZ becomes a per-widget id prefix.
+  var DOOR_WAY = '<svg viewBox="0 0 64 96" aria-hidden="true"><defs><radialGradient id="ZZg" cx=".5" cy=".75" r=".7"><stop offset="0" stop-color="#fbbf24" stop-opacity=".9"/><stop offset=".55" stop-color="#92400e" stop-opacity=".85"/><stop offset="1" stop-color="#1c1917"/></radialGradient></defs><path d="M6 94V34A26 26 0 0 1 58 34V94Z" fill="url(#ZZg)"/><path d="M2 95V34A30 30 0 0 1 62 34V95" fill="none" stroke="currentColor" stroke-width="3"/><path d="M0 95H64" stroke="currentColor" stroke-width="3"/></svg>';
+  var DOOR_LEAF = '<svg viewBox="0 0 64 96" aria-hidden="true"><defs><clipPath id="ZZc"><path d="M6 94V34A26 26 0 0 1 58 34V94Z"/></clipPath></defs><path d="M6 94V34A26 26 0 0 1 58 34V94Z" fill="var(--color-card-bg,#fff)" stroke="currentColor" stroke-width="2.5"/><g clip-path="url(#ZZc)" stroke="currentColor" stroke-width="1.4"><path d="M19 4V94M32 4V94M45 4V94"/></g><g fill="currentColor"><rect x="6" y="40" width="34" height="4.5" rx="1"/><rect x="6" y="74" width="34" height="4.5" rx="1"/><circle cx="12" cy="42.2" r="1.3" fill="var(--color-card-bg,#fff)"/><circle cx="12" cy="76.2" r="1.3" fill="var(--color-card-bg,#fff)"/></g><circle cx="49" cy="62" r="4.2" fill="none" stroke="currentColor" stroke-width="2"/><circle cx="49" cy="57" r="1.6" fill="currentColor"/></svg>';
+  var doorSeq = 0;
   var CSS = [
     '.shr{display:grid;gap:12px;margin-bottom:16px}',
     '.shr.arr .shr-scene{min-height:540px}',
@@ -867,6 +881,20 @@
     '.shr-pick .c .rs{margin-left:auto;border:1px solid var(--color-border,#e5e7eb);background:transparent;color:var(--color-text-body,#374151);border-radius:6px;padding:2px 8px;cursor:pointer;font-size:.78rem}',
     '.shr-pick p{margin:0;font-size:.74rem;color:var(--color-text-secondary,#6b7280)}',
     '.shr button:focus-visible,.shr-pick button:focus-visible{outline:2px solid var(--color-accent,#6366f1);outline-offset:2px}',
+    // Closed, the shop is a shopfront with a drawn door. Pressing the door
+    // swings it open where it stands, then the room grows out of the
+    // doorway as you walk through it.
+    '.shr{position:relative}',
+    '.shr-front{display:none;align-items:center;gap:14px;width:100%;text-align:left;border:1px solid var(--color-border,#e5e7eb);border-radius:10px;background:var(--color-card-bg,#fff);color:var(--color-text-primary,#111827);padding:10px 14px;cursor:pointer;font:inherit}',
+    '.shr-front:hover{border-color:var(--shr-acc,#b45309)}',
+    '.shr-front .nm{flex:1;min-width:0}.shr-front .nm b{display:block}.shr-front .nm span{font-size:.8rem;color:var(--color-text-secondary,#6b7280)}',
+    '.shr-dr{position:relative;flex:none;width:64px;height:96px;perspective:420px}.shr-dr>span{position:absolute;inset:0}.shr-dr svg{display:block;width:100%;height:100%}',
+    '.shr-dr .lf{transform-origin:6px 50%;transition:transform .6s cubic-bezier(.45,.05,.3,1)}.shr-front.opening .lf{transform:rotateY(-110deg)}',
+    '.shr.closed .shr-front{display:flex}.shr.closed .shr-card{display:none}',
+    '.shr.walking .shr-front{display:flex;position:absolute;top:0;left:0;right:0;z-index:7;pointer-events:none;transition:transform .75s cubic-bezier(.6,0,.2,1),opacity .6s ease}',
+    '.shr.walking .shr-front.gone{transform:scale(2.2);opacity:0}',
+    '.shr.walking .shr-card{transition:clip-path .75s cubic-bezier(.6,0,.2,1),transform .75s cubic-bezier(.6,0,.2,1)}',
+    '.shr-stay{animation:shr-nudge .45s ease}@keyframes shr-nudge{0%,100%{transform:none}25%{transform:translateX(-5px)}75%{transform:translateX(5px)}}',
     '@media (prefers-reduced-motion:reduce){.shr *,.shr-say,.shr-tip{animation:none!important;transition:none!important}}'
   ].join('\n');
 
@@ -894,7 +922,10 @@
       el.hidden = true;
 
       // ---- Skeleton ----
-      el.innerHTML = '<div class="shr' + (S.fx === 'light' ? ' fxlight' : '') + '"><div class="shr-card">' +
+      var uid = ++doorSeq;
+      el.innerHTML = '<div class="shr closed' + (S.fx === 'light' ? ' fxlight' : '') + '">' +
+        '<button type="button" class="shr-front" data-enter="1" aria-expanded="false"><span class="shr-dr"><span class="w">' + DOOR_WAY.replace(/ZZ/g, 'shr-d' + uid) + '</span><span class="lf">' + DOOR_LEAF.replace(/ZZ/g, 'shr-d' + uid) + '</span></span><span class="nm"><b></b><span>Press the door to step inside</span></span></button>' +
+        '<div class="shr-card">' +
         '<div class="shr-top"><b></b><span class="shr-sub">Shop</span>' + (canArrange ? '<span class="shr-mode" role="group" aria-label="Mode"><button type="button" data-mode="shop" aria-pressed="true">Shop</button><button type="button" data-mode="arr" aria-pressed="false">Arrange</button></span>' : '') + '</div>' +
         '<div class="shr-scene"><svg class="shr-iso" role="img"></svg><div class="shr-grain"><svg width="100%" height="100%" aria-hidden="true"><filter id="shr-grn"><feTurbulence type="fractalNoise" baseFrequency=".85" numOctaves="2" stitchTiles="stitch"/><feColorMatrix type="saturate" values="0"/></filter><rect width="100%" height="100%" filter="url(#shr-grn)"/></svg></div>' +
         '<button type="button" class="shr-keeper"></button><div class="shr-plate"></div></div>' +
@@ -907,6 +938,7 @@
       pick.className = 'shr-pick'; pick.hidden = true; pick.setAttribute('role', 'dialog'); pick.setAttribute('aria-label', 'Change item look');
       document.body.appendChild(tip); document.body.appendChild(say); document.body.appendChild(pick);
       root.querySelector('.shr-top b').textContent = S.name;
+      root.querySelector('.shr-front b').textContent = S.name;
       keeper.setAttribute('aria-label', 'Talk to the shopkeeper');
       if (ds.shopImage) { var im = document.createElement('img'); im.src = ds.shopImage; im.alt = ''; keeper.appendChild(im); }
 
@@ -1197,6 +1229,7 @@
       }
       function onRootClick(e) {
         var b = e.target.closest('button'); if (!b) return;
+        if (b.dataset.enter) { enter(); return; }
         if (b.dataset.mode) { if (b.dataset.mode === 'shop') tryLeave(); else if (S.mode !== 'arr') { S.mode = 'arr'; setMode(); } return; }
         if (b.dataset.leave) { tryLeave(); return; }
         if (b.dataset.discard) { discard(); return; }
@@ -1238,6 +1271,52 @@
         }
         closePicker(); draw();
       }
+      // ---- Opening and closing ----
+      var front = root.querySelector('.shr-front');
+      var walkT = 0;
+      // Opening: the door swings open in place, then the room is revealed
+      // through the doorway's outline as it grows to fill the widget.
+      function enter() {
+        if (!root.classList.contains('closed') || front.classList.contains('opening')) return;
+        front.setAttribute('aria-expanded', 'true');
+        if (matchMedia('(prefers-reduced-motion: reduce)').matches) { root.classList.remove('closed'); draw(); return; }
+        front.classList.add('opening');
+        walkT = setTimeout(walkIn, 650);
+      }
+      function walkIn() {
+        var dr = front.querySelector('.shr-dr').getBoundingClientRect(), r0 = root.getBoundingClientRect();
+        var card = root.querySelector('.shr-card');
+        root.classList.remove('closed'); root.classList.add('walking'); draw();
+        var W = card.offsetWidth, H = card.offsetHeight, x = dr.left - r0.left, y = dr.top - r0.top;
+        var origin = (x + dr.width / 2) + 'px ' + (y + dr.height / 2) + 'px';
+        card.style.transition = 'none'; card.style.transformOrigin = origin; front.style.transformOrigin = origin;
+        card.style.clipPath = 'inset(' + y + 'px ' + Math.max(0, W - x - dr.width) + 'px ' + Math.max(0, H - y - dr.height) + 'px ' + x + 'px round 32px 32px 0 0)';
+        card.style.transform = 'scale(1.25)';
+        void card.offsetWidth; card.style.transition = '';
+        card.style.clipPath = 'inset(0 0 0 0 round 10px)'; card.style.transform = 'none'; front.classList.add('gone');
+        walkT = setTimeout(settle, 800);
+      }
+      function settle() {
+        var card = root.querySelector('.shr-card');
+        root.classList.remove('walking'); front.classList.remove('opening', 'gone');
+        card.style.clipPath = card.style.transform = card.style.transformOrigin = front.style.transformOrigin = '';
+        placeKeeper();
+      }
+      function leave() {
+        clearTimeout(walkT); settle();
+        root.classList.add('closed'); front.setAttribute('aria-expanded', 'false');
+        setOpen(false);
+      }
+      // A press outside the open shop closes it, unless the basket still has
+      // something in it; arranging has its own leave rule below.
+      function onOutsideShop(e) {
+        if (root.classList.contains('closed') || S.mode === 'arr') return;
+        if (root.contains(e.target) || pick.contains(e.target) || say.contains(e.target) || tip.contains(e.target)) return;
+        if (outsideClose(basket) === 'close') { leave(); return; }
+        note = 'Your basket still has items. Buy or empty it before you leave.'; renderBasket();
+        var bk = root.querySelector('.shr-bk'); bk.classList.remove('shr-stay'); void bk.offsetWidth; bk.classList.add('shr-stay');
+      }
+
       // A press outside the whole room while arranging counts as leaving it;
       // the room itself (dragging furniture) and the item picker do not.
       function onOutsideDown(e) {
@@ -1259,16 +1338,17 @@
       pick.addEventListener('click', onPickClick);
       document.addEventListener('pointerdown', onDocDown);
       document.addEventListener('pointerdown', onOutsideDown);
+      document.addEventListener('pointerdown', onOutsideShop);
       document.addEventListener('keydown', onDocKey);
       window.addEventListener('scroll', onScroll, { passive: true });
 
       el._shopRoom = {
         onDocDown: onDocDown, onDocKey: onDocKey,
         cleanup: function () {
-          clearInterval(typeT); clearTimeout(sayT); if (raf) cancelAnimationFrame(raf);
+          clearInterval(typeT); clearTimeout(sayT); clearTimeout(walkT); if (raf) cancelAnimationFrame(raf);
           themeObs.disconnect();
           window.removeEventListener('scroll', onScroll);
-          document.removeEventListener('pointerdown', onDocDown); document.removeEventListener('pointerdown', onOutsideDown); document.removeEventListener('keydown', onDocKey);
+          document.removeEventListener('pointerdown', onDocDown); document.removeEventListener('pointerdown', onOutsideDown); document.removeEventListener('pointerdown', onOutsideShop); document.removeEventListener('keydown', onDocKey);
           tip.remove(); say.remove(); pick.remove();
         }
       };

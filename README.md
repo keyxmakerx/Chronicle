@@ -41,7 +41,7 @@ Chronicle is purpose-built for tabletop RPGs, open source, and designed to be se
 
 ### Armory, Shops & Stashes
 - **Armory** — Item galleries with tag filters, collections and character money history
-- **Shops** — Shop pages with a walk-in shop room; players buy as their character, or ask the GM to when downtime is closed
+- **Shops** — A Shop block you add to a page, opening onto a walk-in shop room; players buy as their character, or ask the GM to when downtime is closed
 - **Stashes** — Shared hoards of items and money, with GM-approved moves and a downtime switch
 
 ### DM Screen
