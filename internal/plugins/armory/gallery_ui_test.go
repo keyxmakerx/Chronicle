@@ -266,7 +266,7 @@ func TestInlineHandlers_AttributeSafe(t *testing.T) {
 		name string
 		call string
 	}{
-		{"collection menu", collectionMenuOnClick("camp-1", "ent'1", "pop-1", "/campaigns/camp-1/armory/give?item=ent%271").Call},
+		{"collection menu", collectionMenuOnClick("camp-1", "ent'1", "pop-1", "/campaigns/camp-1/armory/give?item=ent%271", true).Call},
 		{"give tab", giveTabOnClick("map").Call},
 		{"give filter", giveFilterOnInput().Call},
 		{"give hint", giveHintOnChange().Call},

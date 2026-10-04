@@ -16,6 +16,7 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"sort"
 	"strings"
 	"unicode/utf8"
 
@@ -34,6 +35,10 @@ const (
 	// NotifItemGiven is the notification type a player gets when a GM gives
 	// their character something.
 	NotifItemGiven = "item_given"
+	// giveListPageSize caps the item list a dialog shows; the search narrows it.
+	giveListPageSize = 50
+	// giveQuantityMessage is the answer to a quantity outside the allowed range.
+	giveQuantityMessage = "Enter a quantity from 1 to 1,000,000."
 )
 
 // HandoutStore is what giving a map needs from the maps and entities plugins.
@@ -52,7 +57,7 @@ type HandoutStore interface {
 	// assigned to the map, whose entry links the map's page.
 	CreateHandout(ctx context.Context, campaignID, createdBy, name string, m NamedRef) (*EntityRef, error)
 	// AllowViewers adds the users to the entity's allow list so they, besides
-	// the GM, can open it. Existing grants stay.
+	// the GM, can open it. Existing grants stay; a public entity is left alone.
 	AllowViewers(ctx context.Context, campaignID, entityID string, userIDs []string) error
 }
 
@@ -84,10 +89,19 @@ type GiveDialogView struct {
 	CampaignID string
 	Character  *NamedRef
 	Item       *NamedRef
-	Items      []NamedRef
+	// Items is the page of Armory items matching Query (at most
+	// giveListPageSize); ItemTotal counts every match so the dialog can say
+	// when it is showing only some.
+	Items     []NamedRef
+	ItemTotal int
+	Query     string
+	// Characters is the pick-list of the item flow.
 	Characters []NamedRef
 	Maps       []NamedRef
 }
+
+// MoreItems reports whether the list shows only some of the matches.
+func (v *GiveDialogView) MoreItems() bool { return v.ItemTotal > len(v.Items) }
 
 func (s *stashService) requireOwner(a Actor) error {
 	if !a.IsOwner() {
@@ -108,11 +122,11 @@ func (s *stashService) loadItem(ctx context.Context, campaignID, id string) (*En
 	return ref, nil
 }
 
-func (s *stashService) GiveDialog(ctx context.Context, campaignID string, a Actor, characterID, itemID string) (*GiveDialogView, error) {
+func (s *stashService) GiveDialog(ctx context.Context, campaignID string, a Actor, characterID, itemID, query string) (*GiveDialogView, error) {
 	if err := s.requireOwner(a); err != nil {
 		return nil, err
 	}
-	view := &GiveDialogView{CampaignID: campaignID}
+	view := &GiveDialogView{CampaignID: campaignID, Query: strings.TrimSpace(query)}
 	switch {
 	case strings.TrimSpace(characterID) != "":
 		ref, err := s.loadCharacter(ctx, campaignID, strings.TrimSpace(characterID))
@@ -120,13 +134,11 @@ func (s *stashService) GiveDialog(ctx context.Context, campaignID string, a Acto
 			return nil, err
 		}
 		view.Character = &NamedRef{ID: ref.ID, Name: ref.Name}
-		items, err := s.Directory.ListItems(ctx, campaignID, a.Role, a.UserID, 500)
+		items, err := s.Directory.ListItems(ctx, campaignID, a.Role, a.UserID, 0)
 		if err != nil {
 			return nil, err
 		}
-		for _, it := range items {
-			view.Items = append(view.Items, NamedRef{ID: it.ID, Name: it.Name})
-		}
+		view.Items, view.ItemTotal = matchItems(items, view.Query, giveListPageSize)
 		if s.Handouts != nil {
 			if view.Maps, err = s.Handouts.ListMaps(ctx, campaignID); err != nil {
 				return nil, err
@@ -137,7 +149,7 @@ func (s *stashService) GiveDialog(ctx context.Context, campaignID string, a Acto
 		if err != nil {
 			return nil, err
 		}
-		view.Item = &NamedRef{ID: ref.ID, Name: ref.Name}
+		view.Item = &NamedRef{ID: ref.ID, Name: ref.Name, Restricted: ref.Restricted}
 		chars, err := s.Directory.ListCharacters(ctx, campaignID, a.Role, a.UserID)
 		if err != nil {
 			return nil, err
@@ -149,6 +161,24 @@ func (s *stashService) GiveDialog(ctx context.Context, campaignID string, a Acto
 		return nil, apperror.NewBadRequest("Choose a character or an item to give.")
 	}
 	return view, nil
+}
+
+// matchItems returns the first limit items whose name contains query (any case,
+// by name), and how many matched in all.
+func matchItems(items []EntityRef, query string, limit int) ([]NamedRef, int) {
+	q := strings.ToLower(query)
+	var all []NamedRef
+	for _, it := range items {
+		if q == "" || strings.Contains(strings.ToLower(it.Name), q) {
+			all = append(all, NamedRef{ID: it.ID, Name: it.Name, Restricted: it.Restricted})
+		}
+	}
+	sort.SliceStable(all, func(i, j int) bool { return strings.ToLower(all[i].Name) < strings.ToLower(all[j].Name) })
+	total := len(all)
+	if total > limit {
+		all = all[:limit]
+	}
+	return all, total
 }
 
 // handoutName is the item name a map's handout carries.
@@ -166,7 +196,7 @@ func (s *stashService) Give(ctx context.Context, campaignID string, a Actor, in 
 	}
 	in.CharacterID, in.ItemID, in.MapID = strings.TrimSpace(in.CharacterID), strings.TrimSpace(in.ItemID), strings.TrimSpace(in.MapID)
 	if in.Quantity < 1 || in.Quantity > maxMoveQuantity {
-		return nil, apperror.NewBadRequest("Enter a quantity of at least 1.")
+		return nil, apperror.NewBadRequest(giveQuantityMessage)
 	}
 	if (in.ItemID == "") == (in.MapID == "") {
 		return nil, apperror.NewBadRequest("Choose an item or a map to give.")
@@ -216,9 +246,10 @@ func (s *stashService) give(ctx context.Context, campaignID string, a Actor, cha
 	}
 
 	// Let the holder see the item before they hold it, so a player is never
-	// handed something they cannot open. A character with no player keeps a
-	// map handout GM-only.
-	if mp != nil && char.OwnerUserID != "" {
+	// handed something they cannot open (a private item would otherwise show
+	// as "someone" in their history and be missing from their panel). A
+	// character with no player keeps a private item GM-only.
+	if s.Handouts != nil && char.OwnerUserID != "" {
 		if err := s.Handouts.AllowViewers(ctx, campaignID, item.ID, []string{char.OwnerUserID}); err != nil {
 			return nil, err
 		}
@@ -287,9 +318,10 @@ func (s *stashService) notifyGiven(ctx context.Context, campaignID string, a Act
 }
 
 // giveSummary is the history sentence for a give. A GM reads who gave what to
-// whom; the player reads it from their own side. requester is empty when the
+// whom; the character's own player reads it from their side; anyone else who
+// can see the line reads it from the outside. requester is empty when the
 // giver's name is not known.
-func giveSummary(l MoveLine, viewerIsGM bool, viewerID, requester string) string {
+func giveSummary(l MoveLine, viewerIsGM, viewerIsRecipient bool, viewerID, requester string) string {
 	thing := thingText(l)
 	if viewerIsGM {
 		who := "You"
@@ -301,9 +333,16 @@ func giveSummary(l MoveLine, viewerIsGM bool, viewerID, requester string) string
 		}
 		return fmt.Sprintf("%s gave %s %s", who, l.ToName, thing)
 	}
+	if viewerIsRecipient {
+		who := requester
+		if who == "" {
+			who = "Your GM"
+		}
+		return fmt.Sprintf("%s gave you %s", who, thing)
+	}
 	who := requester
 	if who == "" {
-		who = "Your GM"
+		who = "A GM"
 	}
-	return fmt.Sprintf("%s gave you %s", who, thing)
+	return fmt.Sprintf("%s gave %s %s", who, l.ToName, thing)
 }

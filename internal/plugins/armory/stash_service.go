@@ -113,7 +113,7 @@ type StashService interface {
 	Decline(ctx context.Context, campaignID string, a Actor, moveID int64) (*Move, error)
 
 	// GiveDialog feeds the "Give to" dialog. Owner visibility only.
-	GiveDialog(ctx context.Context, campaignID string, a Actor, characterID, itemID string) (*GiveDialogView, error)
+	GiveDialog(ctx context.Context, campaignID string, a Actor, characterID, itemID, query string) (*GiveDialogView, error)
 	// Give hands a character an Armory item or a map. Owner visibility only.
 	Give(ctx context.Context, campaignID string, a Actor, in GiveInput) (*GiveOutcome, error)
 
@@ -643,7 +643,13 @@ func (s *stashService) lines(ctx context.Context, campaignID string, a Actor, mo
 		}
 		l.RequesterName = userNames[m.RequestedBy]
 		if m.IsGive() {
-			l.Summary = giveSummary(l, a.IsGM(), a.UserID, l.RequesterName)
+			recipient := false
+			if !a.IsGM() {
+				if c, err := s.Directory.GetEntity(ctx, campaignID, m.To.ID); err == nil && c != nil {
+					recipient = c.OwnerUserID != "" && c.OwnerUserID == a.UserID
+				}
+			}
+			l.Summary = giveSummary(l, a.IsGM(), recipient, a.UserID, l.RequesterName)
 		}
 		if l.RequesterName == "" {
 			l.RequesterName = "A player"

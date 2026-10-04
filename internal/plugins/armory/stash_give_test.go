@@ -2,6 +2,8 @@ package armory
 
 import (
 	"context"
+	"errors"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
@@ -10,16 +12,22 @@ import (
 
 	"github.com/labstack/echo/v4"
 
+	"github.com/keyxmakerx/chronicle/internal/apperror"
 	"github.com/keyxmakerx/chronicle/internal/plugins/campaigns"
 )
 
 // --- fakes ---
 
 // giveDir adds an item catalogue to the shared directory fake.
-type giveDir struct{ *fakeDir }
+type giveItems struct{ list []EntityRef }
+
+type giveDir struct {
+	*fakeDir
+	items *giveItems
+}
 
 func (d giveDir) ListItems(context.Context, string, int, string, int) ([]EntityRef, error) {
-	return []EntityRef{{ID: "i1", Name: "Potion", IsItem: true}}, nil
+	return d.items.list, nil
 }
 
 // fakeHandouts stands in for the maps and entities plugins. Maps m1 and m2
@@ -95,6 +103,7 @@ func (n fakeNames) DisplayNames(context.Context, string, []string) (map[string]s
 
 type giveFx struct {
 	*fx
+	dir    giveDir
 	hand   *fakeHandouts
 	notify *fakeNotifier
 	events *fakeEvents
@@ -106,8 +115,9 @@ func newGiveFx() *giveFx {
 	f := newFx()
 	f.dir.ents["c4"] = &EntityRef{ID: "c4", Name: "Ghost", IsCharacter: true}
 	g := &giveFx{fx: f, hand: newFakeHandouts(), notify: &fakeNotifier{}, events: &fakeEvents{}}
+	g.dir = giveDir{f.dir, &giveItems{[]EntityRef{{ID: "i1", Name: "Potion", IsItem: true}}}}
 	g.svc = NewStashService(StashDeps{
-		Repo: f.repo, Directory: giveDir{f.dir}, Visibility: f.vis, Actor: fakeActor{f.dir},
+		Repo: f.repo, Directory: g.dir, Visibility: f.vis, Actor: fakeActor{f.dir},
 		Fields: f.fields, Relations: f.rels, Events: g.events, Handouts: g.hand, Notifier: g.notify,
 		UserNames: fakeNames{"gm": "Greta"},
 	})
@@ -183,7 +193,9 @@ func TestGive_Rejections(t *testing.T) {
 		{"item and map", "camp", gm, GiveInput{CharacterID: "c2", ItemID: "i1", MapID: "m1", Quantity: 1}, http.StatusBadRequest, nil},
 		{"neither", "camp", gm, GiveInput{CharacterID: "c2", Quantity: 1}, http.StatusBadRequest, nil},
 		{"maps not wired", "camp", gm, GiveInput{CharacterID: "c2", MapID: "m1", Quantity: 1}, http.StatusBadRequest,
-			func(g *giveFx) { g.svc = NewStashService(StashDeps{Repo: g.repo, Directory: g.dir, Visibility: g.vis, Relations: g.rels}) }},
+			func(g *giveFx) {
+				g.svc = NewStashService(StashDeps{Repo: g.repo, Directory: g.dir, Visibility: g.vis, Relations: g.rels})
+			}},
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
@@ -275,7 +287,7 @@ func TestGive_HistoryWordingPerViewer(t *testing.T) {
 		})
 	}
 	// With the giver's name unknown a player still gets a sentence.
-	if got := giveSummary(MoveLine{Move: Move{Kind: MoveKindItem, Quantity: 1}, ItemName: "Map: Crypt"}, false, "u2", ""); got != "Your GM gave you 1 × Map: Crypt" {
+	if got := giveSummary(MoveLine{Move: Move{Kind: MoveKindItem, Quantity: 1}, ItemName: "Map: Crypt"}, false, true, "u2", ""); got != "Your GM gave you 1 × Map: Crypt" {
 		t.Fatalf("%q", got)
 	}
 }
@@ -395,7 +407,7 @@ func TestGiveDialog(t *testing.T) {
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
-			v, err := g.svc.GiveDialog(ctx, "camp", tc.who, tc.char, tc.item)
+			v, err := g.svc.GiveDialog(ctx, "camp", tc.who, tc.char, tc.item, "")
 			if code(err) != tc.want {
 				t.Fatalf("code %d (%v), want %d", code(err), err, tc.want)
 			}
@@ -409,8 +421,8 @@ func TestGiveDialog(t *testing.T) {
 func TestGiveDialog_Renders(t *testing.T) {
 	g := newGiveFx()
 	ctx := context.Background()
-	fromChar, _ := g.svc.GiveDialog(ctx, "camp", gm, "c2", "")
-	fromItem, _ := g.svc.GiveDialog(ctx, "camp", gm, "", "i1")
+	fromChar, _ := g.svc.GiveDialog(ctx, "camp", gm, "c2", "", "")
+	fromItem, _ := g.svc.GiveDialog(ctx, "camp", gm, "", "i1", "")
 	render := func(v *GiveDialogView) string {
 		var sb strings.Builder
 		if err := GiveDialog(v, "tok").Render(ctx, &sb); err != nil {
@@ -515,3 +527,177 @@ func TestGiveRoutes(t *testing.T) {
 	})
 }
 
+// A give lets the holder's player see the item, so it shows on their panel and
+// reads by name in their history.
+func TestGive_ItemLetsTheHolderSeeIt(t *testing.T) {
+	g := newGiveFx()
+	ctx := context.Background()
+	if _, err := g.svc.Give(ctx, "camp", gm, GiveInput{CharacterID: "c2", ItemID: "i1", Quantity: 1}); err != nil {
+		t.Fatal(err)
+	}
+	if got := strings.Join(g.hand.allowed["i1"], ","); got != "u2" {
+		t.Fatalf("allow list %q", got)
+	}
+	if _, err := g.svc.Give(ctx, "camp", gm, GiveInput{CharacterID: "c4", ItemID: "i1", Quantity: 1}); err != nil {
+		t.Fatal(err)
+	}
+	if got := strings.Join(g.hand.allowed["i1"], ","); got != "u2" {
+		t.Fatalf("a character with no player must add nobody: %q", got)
+	}
+}
+
+func TestGive_QuantityMessage(t *testing.T) {
+	g := newGiveFx()
+	for _, q := range []int{0, maxMoveQuantity + 1} {
+		_, err := g.svc.Give(context.Background(), "camp", gm, GiveInput{CharacterID: "c2", ItemID: "i1", Quantity: q})
+		var ae *apperror.AppError
+		if !errors.As(err, &ae) || !strings.Contains(ae.Message, "Enter a quantity from 1 to 1,000,000.") {
+			t.Fatalf("q=%d: %v", q, err)
+		}
+	}
+}
+
+func TestGiveDialog_ItemSearchIsServerSide(t *testing.T) {
+	g := newGiveFx()
+	ctx := context.Background()
+	var items []EntityRef
+	for i := 0; i < 120; i++ {
+		items = append(items, EntityRef{ID: fmt.Sprintf("x%03d", i), Name: fmt.Sprintf("Sword %03d", i), IsItem: true})
+	}
+	items = append(items, EntityRef{ID: "z1", Name: "Zephyr Cloak", IsItem: true, Restricted: true})
+	g.dir.items.list = items
+	tests := []struct {
+		name, q    string
+		shown, all int
+	}{
+		{"no query caps at 50", "", 50, 121},
+		{"narrowed", "zeph", 1, 1},
+		{"narrowed, still more than a page", "sword 0", 50, 100},
+		{"nothing", "dragon", 0, 0},
+		{"query is trimmed and any case", "  CLOAK ", 1, 1},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			v, err := g.svc.GiveDialog(ctx, "camp", gm, "c2", "", tc.q)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if len(v.Items) != tc.shown || v.ItemTotal != tc.all {
+				t.Fatalf("shown %d of %d", len(v.Items), v.ItemTotal)
+			}
+			var sb strings.Builder
+			if err := GiveItemChoices(v).Render(ctx, &sb); err != nil {
+				t.Fatal(err)
+			}
+			more := strings.Contains(sb.String(), fmt.Sprintf("Showing %d of %d", tc.shown, tc.all))
+			if more != (tc.all > tc.shown) {
+				t.Fatalf("more-line present=%v", more)
+			}
+		})
+	}
+	// Restricted items carry the warning for their row.
+	v, _ := g.svc.GiveDialog(ctx, "camp", gm, "c2", "", "zeph")
+	var sb strings.Builder
+	_ = GiveDialog(v, "tok").Render(ctx, &sb)
+	if !strings.Contains(sb.String(), "Mira&#39;s player will be able to see this item&#39;s page.") {
+		t.Fatalf("hint missing: %s", sb.String())
+	}
+}
+
+func TestGiveDialog_ItemFlowHintOnlyForPrivateItems(t *testing.T) {
+	g := newGiveFx()
+	ctx := context.Background()
+	g.dir.ents["i1"].Restricted = true
+	for id, want := range map[string]bool{"i1": true, "i2": false} {
+		v, err := g.svc.GiveDialog(ctx, "camp", gm, "", id, "")
+		if err != nil {
+			t.Fatal(err)
+		}
+		var sb strings.Builder
+		_ = GiveDialog(v, "tok").Render(ctx, &sb)
+		if has := strings.Contains(sb.String(), "player will be able to see this item"); has != want {
+			t.Errorf("%s: hint present=%v", id, has)
+		}
+	}
+}
+
+func TestGive_HistoryWordingForOtherPlayers(t *testing.T) {
+	g := newGiveFx()
+	ctx := context.Background()
+	// c1 is Thorin (u1); u2 may see his history through a stash viewer-less
+	// path only as an entity-edit holder, so read the lines directly.
+	if _, err := g.svc.Give(ctx, "camp", gm, GiveInput{CharacterID: "c1", ItemID: "i1", Quantity: 1}); err != nil {
+		t.Fatal(err)
+	}
+	// u1 owns c1: recipient wording.
+	lines, _ := g.svc.CharacterHistory(ctx, "camp", Actor{"u1", rPlayer}, "c1")
+	if got := MoveSummary(lines[0]); got != "Greta gave you 1 × Potion" {
+		t.Fatalf("recipient: %q", got)
+	}
+	// u2 is a player with edit access to c1 but not its claimant.
+	g.svc = NewStashService(StashDeps{Repo: g.repo, Directory: g.dir, Visibility: g.vis, Actor: allowAll{}, Fields: g.fields,
+		Relations: g.rels, UserNames: fakeNames{"gm": "Greta"}})
+	lines, err := g.svc.CharacterHistory(ctx, "camp", Actor{"u2", rPlayer}, "c1")
+	if err != nil || len(lines) != 1 {
+		t.Fatalf("%v %v", lines, err)
+	}
+	if got := MoveSummary(lines[0]); got != "Greta gave Thorin 1 × Potion" {
+		t.Fatalf("other player: %q", got)
+	}
+}
+
+type allowAll struct{}
+
+func (allowAll) CanUserActAsBuyer(context.Context, string, string, string, int) (bool, error) {
+	return true, nil
+}
+
+func TestGiveRoutes_ItemListFragment(t *testing.T) {
+	g := newGiveFx()
+	h := NewStashHandler(g.svc)
+	req := httptest.NewRequest(http.MethodGet, "/?character=c2&list=items&q=pot", nil)
+	rec := httptest.NewRecorder()
+	c := echo.New().NewContext(req, rec)
+	c.Set("auth_user_id", "gm")
+	c.Set("campaign_context", &campaigns.CampaignContext{Campaign: &campaigns.Campaign{ID: "camp"}, MemberRole: campaigns.RoleOwner})
+	if err := h.GiveDialog(c); err != nil {
+		t.Fatal(err)
+	}
+	out := rec.Body.String()
+	if !strings.Contains(out, "Potion") || strings.Contains(out, "armory-give-title") {
+		t.Fatalf("expected the list alone: %s", out)
+	}
+}
+
+// The card menu's give entry shows for exactly the people the panel button
+// does: Owner visibility, which includes a co-DM whose role is only Player.
+func TestItemCard_GiveEntryFollowsOwnerVisibility(t *testing.T) {
+	tests := []struct {
+		name       string
+		role       campaigns.Role
+		dm         bool
+		wantMenu   bool
+		wantGiveIn bool
+	}{
+		{"owner", campaigns.RoleOwner, false, true, true},
+		{"co-DM granted, player role", campaigns.RolePlayer, true, true, true},
+		{"scribe", campaigns.RoleScribe, false, true, false},
+		{"player", campaigns.RolePlayer, false, false, false},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			cc := &campaigns.CampaignContext{Campaign: &campaigns.Campaign{ID: "camp"}, MemberRole: tc.role, IsDmGranted: tc.dm}
+			var sb strings.Builder
+			if err := ItemCardComponent(cc, &ItemCard{ID: "i1", Name: "Potion"}).Render(context.Background(), &sb); err != nil {
+				t.Fatal(err)
+			}
+			out := sb.String()
+			if has := strings.Contains(out, "armory-coll-i1"); has != tc.wantMenu {
+				t.Errorf("menu present=%v", has)
+			}
+			if has := strings.Contains(out, "armory/give"); has != tc.wantGiveIn {
+				t.Errorf("give url present=%v", has)
+			}
+		})
+	}
+}

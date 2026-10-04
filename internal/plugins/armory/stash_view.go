@@ -31,7 +31,7 @@ func MoveSummary(l MoveLine) string {
 		return l.Reason
 	}
 	if l.IsGive() {
-		return giveSummary(l, true, "", l.RequesterName)
+		return giveSummary(l, true, false, "", l.RequesterName)
 	}
 	route := fmt.Sprintf("%s from %s to %s", thingText(l), l.FromName, l.ToName)
 	switch l.Status {
@@ -198,5 +198,37 @@ func giveFilterOnInput() templ.ComponentScript {
 // giveHintOnChange writes the picked map's sentence under the list.
 func giveHintOnChange() templ.ComponentScript {
 	return inlineOnClick("armory_giveHint",
-		`(function(r){var p=r.closest('form').querySelector('[data-give-hint]');if(p)p.textContent=r.getAttribute('data-hint');})(this)`)
+		`(function(r){var p=r.closest('form').querySelector('[data-give-hint]');if(p)p.textContent=r.getAttribute('data-hint')||'';})(this)`)
+}
+
+// mapHint says what a character gets for the picked map.
+func mapHint(who string) func(NamedRef) string {
+	return func(m NamedRef) string {
+		return fmt.Sprintf("%s gets an item called \"%s\". Opening it shows the map.", who, handoutName(m.Name))
+	}
+}
+
+// itemHint warns, for a private item, that giving it lets the character's
+// player see its page. It is nil (no hint) when the character is not known.
+func itemHint(who *NamedRef) func(NamedRef) string {
+	if who == nil {
+		return nil
+	}
+	return func(it NamedRef) string {
+		if !it.Restricted {
+			return ""
+		}
+		return who.Name + "'s player will be able to see this item's page."
+	}
+}
+
+// restrictedHint is the same warning for the item flow, where the item is
+// fixed and the character is picked.
+func restrictedHint(restricted bool) func(NamedRef) string {
+	if !restricted {
+		return nil
+	}
+	return func(c NamedRef) string {
+		return c.Name + "'s player will be able to see this item's page."
+	}
 }

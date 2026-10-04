@@ -57,8 +57,25 @@ templ GiveDialog(v *GiveDialogView, csrfToken string) {
 						>
 							<input type="hidden" name="_csrf" value={ csrfToken }/>
 							<input type="hidden" name="character_id" value={ v.Character.ID }/>
-							@giveSearch("Search items")
-							@giveRadioList("item_id", v.Items, "")
+							<input
+								type="search"
+								name="q"
+								value={ v.Query }
+								autocomplete="off"
+								autofocus
+								placeholder="Search items"
+								aria-label="Search items"
+								class="input w-full text-sm"
+								hx-get={ giveDialogURL(v.CampaignID, "character", v.Character.ID) + "&list=items" }
+								hx-trigger="input changed delay:250ms, search"
+								hx-target="#armory-give-items"
+								hx-swap="innerHTML"
+								hx-sync="this:replace"
+							/>
+							<div id="armory-give-items">
+								@GiveItemChoices(v)
+							</div>
+							<p data-give-hint class="text-xs text-fg-muted"></p>
 							<div>
 								<label for="armory-give-qty" class="block text-xs font-medium text-fg-body mb-1">How many</label>
 								<input id="armory-give-qty" type="number" name="quantity" min="1" value="1" required class="input w-full text-sm"/>
@@ -81,7 +98,7 @@ templ GiveDialog(v *GiveDialogView, csrfToken string) {
 						>
 							<input type="hidden" name="_csrf" value={ csrfToken }/>
 							<input type="hidden" name="character_id" value={ v.Character.ID }/>
-							@giveRadioList("map_id", v.Maps, v.Character.Name)
+							@giveRadioList("map_id", v.Maps, mapHint(v.Character.Name))
 							<p data-give-hint class="text-xs text-fg-muted">Pick a map to give.</p>
 							@giveSubmitRow()
 						</form>
@@ -103,7 +120,8 @@ templ GiveDialog(v *GiveDialogView, csrfToken string) {
 						<input type="hidden" name="_csrf" value={ csrfToken }/>
 						<input type="hidden" name="item_id" value={ v.Item.ID }/>
 						@giveSearch("Search characters")
-						@giveRadioList("character_id", v.Characters, "")
+						@giveRadioList("character_id", v.Characters, restrictedHint(v.Item.Restricted))
+						<p data-give-hint class="text-xs text-fg-muted"></p>
 						<div>
 							<label for="armory-give-qty" class="block text-xs font-medium text-fg-body mb-1">How many</label>
 							<input id="armory-give-qty" type="number" name="quantity" min="1" value="1" required class="input w-full text-sm"/>
@@ -129,10 +147,29 @@ templ giveSearch(label string) {
 	/>
 }
 
-// giveRadioList lists the choices as radios. For a map, each radio carries the
-// sentence that says what the character will get, shown under the list. A
-// nonempty recipient marks the list as maps.
-templ giveRadioList(name string, list []NamedRef, recipient string) {
+// GiveItemChoices is the item list under the search box: a page of matches,
+// and a line saying so when there are more than it shows. The search box swaps
+// this alone.
+templ GiveItemChoices(v *GiveDialogView) {
+	if len(v.Items) == 0 {
+		<p class="text-sm text-fg-muted py-2">
+			if v.Query != "" {
+				No items match that.
+			} else {
+				There are no items in the Armory yet.
+			}
+		</p>
+	} else {
+		@giveRadioList("item_id", v.Items, itemHint(v.Character))
+		if v.MoreItems() {
+			<p class="text-xs text-fg-muted mt-1">{ fmt.Sprintf("Showing %d of %d", len(v.Items), v.ItemTotal) } &mdash; type to narrow</p>
+		}
+	}
+}
+
+// giveRadioList lists the choices as radios. When hint is set, picking a row
+// writes that row's sentence into the hint line of the form.
+templ giveRadioList(name string, list []NamedRef, hint func(NamedRef) string) {
 	<div class="max-h-60 overflow-y-auto border border-border rounded divide-y divide-border" role="radiogroup">
 		for _, it := range list {
 			<label
@@ -140,13 +177,13 @@ templ giveRadioList(name string, list []NamedRef, recipient string) {
 				data-name={ strings.ToLower(it.Name) }
 				class="flex items-center gap-2 px-3 py-1.5 text-sm text-fg cursor-pointer hover:bg-surface-alt"
 			>
-				if recipient != "" {
+				if hint != nil {
 					<input
 						type="radio"
 						name={ name }
 						value={ it.ID }
 						required
-						data-hint={ fmt.Sprintf("%s gets an item called \"%s\". Opening it shows the map.", recipient, handoutName(it.Name)) }
+						data-hint={ hint(it) }
 						onchange={ giveHintOnChange() }
 					/>
 				} else {

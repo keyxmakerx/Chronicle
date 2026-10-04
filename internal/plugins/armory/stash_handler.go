@@ -238,9 +238,13 @@ func (h *StashHandler) GiveDialog(c echo.Context) error {
 	if err != nil {
 		return err
 	}
-	view, err := h.svc.GiveDialog(c.Request().Context(), cc.Campaign.ID, a, c.QueryParam("character"), c.QueryParam("item"))
+	view, err := h.svc.GiveDialog(c.Request().Context(), cc.Campaign.ID, a, c.QueryParam("character"), c.QueryParam("item"), c.QueryParam("q"))
 	if err != nil {
 		return err
+	}
+	// The search box swaps only the list.
+	if c.QueryParam("list") == "items" {
+		return middleware.Render(c, http.StatusOK, GiveItemChoices(view))
 	}
 	return middleware.Render(c, http.StatusOK, GiveDialog(view, middleware.GetCSRFToken(c)))
 }
@@ -255,7 +259,7 @@ func (h *StashHandler) Give(c echo.Context) error {
 	qty := 1
 	if v := strings.TrimSpace(c.FormValue("quantity")); v != "" {
 		if qty, err = strconv.Atoi(v); err != nil {
-			return apperror.NewBadRequest("Enter a quantity of at least 1.")
+			return apperror.NewBadRequest(giveQuantityMessage)
 		}
 	}
 	out, err := h.svc.Give(c.Request().Context(), cc.Campaign.ID, a, GiveInput{

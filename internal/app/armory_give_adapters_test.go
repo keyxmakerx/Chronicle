@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/keyxmakerx/chronicle/internal/plugins/armory"
 	"github.com/keyxmakerx/chronicle/internal/plugins/entities"
@@ -66,5 +67,39 @@ func TestHandoutEntry_LinksTheMapAndEscapes(t *testing.T) {
 	}
 	if !strings.Contains(j, `"type":"link"`) || !strings.Contains(j, `/campaigns/camp-1/maps/m-1`) {
 		t.Fatalf("json %s", j)
+	}
+}
+
+func TestPickHandout(t *testing.T) {
+	m1, m2 := "m1", "m2"
+	t0 := time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)
+	marked := func(id string, age int, mapID *string, marker any) entities.Entity {
+		return entities.Entity{ID: id, Name: "Map: Dungeon", MapID: mapID, CreatedAt: t0.Add(time.Duration(age) * time.Hour),
+			FieldsData: map[string]any{handoutMarkerField: marker}}
+	}
+	tests := []struct {
+		name string
+		list []entities.Entity
+		want string
+	}{
+		{"a Scribe's own note with the same name and map is not taken", []entities.Entity{
+			{ID: "note", Name: "Map: Dungeon", MapID: &m1, CreatedAt: t0}}, ""},
+		{"marker for another map is not taken", []entities.Entity{marked("a", 0, &m1, "m2")}, ""},
+		{"same marker but another assigned map is not taken", []entities.Entity{marked("a", 0, &m2, "m1")}, ""},
+		{"oldest marked one wins", []entities.Entity{marked("new", 5, &m1, "m1"), marked("old", 1, &m1, "m1"), marked("mid", 3, &m1, "m1")}, "old"},
+		{"same age breaks the tie by id", []entities.Entity{marked("b", 1, &m1, "m1"), marked("a", 1, &m1, "m1")}, "a"},
+		{"the plain note is skipped even when older", []entities.Entity{
+			{ID: "note", Name: "Map: Dungeon", MapID: &m1, CreatedAt: t0.Add(-time.Hour)}, marked("h", 1, &m1, "m1")}, "h"},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			got := pickHandout(tc.list, "Map: Dungeon", "m1")
+			switch {
+			case tc.want == "" && got != nil:
+				t.Fatalf("picked %s", got.ID)
+			case tc.want != "" && (got == nil || got.ID != tc.want):
+				t.Fatalf("picked %v want %s", got, tc.want)
+			}
+		})
 	}
 }

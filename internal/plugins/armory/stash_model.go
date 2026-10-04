@@ -247,6 +247,9 @@ type EntityRef struct {
 	// MoneyKey is the character's money field key, empty when its entity type
 	// has no usable numeric money field.
 	MoneyKey string
+	// Restricted is set on an item players cannot all see: private, or with a
+	// custom allow list.
+	Restricted bool
 	// MoneyLabel is that field's display label, empty when it has none.
 	MoneyLabel string
 	// Purse maps each 5e coin (cp, sp, ep, gp, pp) to the sheet field that
@@ -294,6 +297,9 @@ type CharacterPanelView struct {
 type NamedRef struct {
 	ID   string
 	Name string
+	// Restricted marks an item players cannot all see; giving it adds the
+	// holder's player to who can.
+	Restricted bool
 }
 
 // StashItemView is one item line in a stash with its name resolved.

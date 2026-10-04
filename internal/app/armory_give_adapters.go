@@ -25,6 +25,11 @@ import (
 	"github.com/keyxmakerx/chronicle/internal/plugins/sessions"
 )
 
+// handoutMarkerField is the fields_data key that marks an entity as a map's
+// handout. It is not a field of any entity type, so no form can show or type
+// it; its value is the map id.
+const handoutMarkerField = "chronicle_map_handout"
+
 // handoutScanPages bounds the walk for an earlier handout (100 per page); a
 // campaign with more items than that simply makes a fresh handout.
 const handoutScanPages = 20
@@ -69,28 +74,49 @@ func (a *armoryHandoutAdapter) FindMap(ctx context.Context, campaignID, mapID st
 	return &armory.NamedRef{ID: m.ID, Name: m.Name}, nil
 }
 
+// pickHandout chooses the marked handout for the map among the candidates:
+// the same name, the same assigned map and the marker, so a player's or
+// Scribe's own item that happens to share the name is never taken over. With
+// several, the oldest wins, so the choice does not move around.
+func pickHandout(list []entities.Entity, name, mapID string) *entities.Entity {
+	var best *entities.Entity
+	for i := range list {
+		e := &list[i]
+		if e.Name != name || e.MapID == nil || *e.MapID != mapID || e.FieldsData[handoutMarkerField] != mapID {
+			continue
+		}
+		if best == nil || e.CreatedAt.Before(best.CreatedAt) || (e.CreatedAt.Equal(best.CreatedAt) && e.ID < best.ID) {
+			best = e
+		}
+	}
+	return best
+}
+
 func (a *armoryHandoutAdapter) FindHandout(ctx context.Context, campaignID, name, mapID string) (*armory.EntityRef, error) {
 	ti, err := a.dir.types(ctx, campaignID)
 	if err != nil {
 		return nil, err
 	}
+	var found []entities.Entity
 	for _, tid := range ti.itemIDs {
 		for page := 1; page <= handoutScanPages; page++ {
 			list, total, err := a.svc.List(ctx, campaignID, tid, permissions.RoleOwner, "", entities.ListOptions{Page: page, PerPage: 100, Sort: "name"})
 			if err != nil {
 				return nil, err
 			}
-			for i := range list {
-				e := &list[i]
-				if e.Name == name && e.MapID != nil && *e.MapID == mapID && ti.item[e.EntityTypeID] {
-					r := a.dir.ref(ti, e)
-					return &r, nil
+			for _, e := range list {
+				if ti.item[e.EntityTypeID] {
+					found = append(found, e)
 				}
 			}
 			if page*100 >= total || len(list) == 0 {
 				break
 			}
 		}
+	}
+	if e := pickHandout(found, name, mapID); e != nil {
+		r := a.dir.ref(ti, e)
+		return &r, nil
 	}
 	return nil, nil
 }
@@ -123,6 +149,7 @@ func (a *armoryHandoutAdapter) CreateHandout(ctx context.Context, campaignID, cr
 	// Hidden from players until a give adds the holder to the allow list.
 	e, err := a.svc.Create(ctx, campaignID, createdBy, entities.CreateEntityInput{
 		Name: name, EntityTypeID: ti.itemIDs[0], IsPrivate: true,
+		FieldsData: map[string]any{handoutMarkerField: m.ID},
 	})
 	if err != nil {
 		return nil, err

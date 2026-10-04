@@ -35,13 +35,16 @@ func jsStr(s string) string {
 // of the gallery cannot leave a stray handler behind.
 //
 // A non-empty giveURL adds a "Give to..." entry that loads the give dialog
-// into #armory-move-modal; it is empty for viewers who may not give.
-func collectionMenuOnClick(campaignID, entityID, popoverID, giveURL string) templ.ComponentScript {
+// into #armory-move-modal; it is empty for viewers who may not give. A viewer
+// who may give but not edit collections (a co-DM below Scribe) skips the
+// collection list and goes straight to the dialog.
+func collectionMenuOnClick(campaignID, entityID, popoverID, giveURL string, collections bool) templ.ComponentScript {
 	body := fmt.Sprintf(
 		`(function(btn){`+
 			`var pop=document.getElementById(%[3]s);if(!pop)return;`+
 			`var base='/campaigns/'+encodeURIComponent(%[1]s)+'/armory/';var eid=%[2]s;var giveUrl=%[4]s;`+
 			`function close(refocus){pop.hidden=true;btn.setAttribute('aria-expanded','false');if(refocus)btn.focus();}`+
+			`if(!%[5]t){if(giveUrl&&window.htmx)htmx.ajax('GET',giveUrl,{target:'#armory-move-modal',swap:'innerHTML'});return;}`+
 			`if(!pop.hidden){close(true);return;}`+
 			`pop.hidden=false;btn.setAttribute('aria-expanded','true');pop.textContent='Loading...';`+
 			`pop.onkeydown=function(e){if(e.key==='Escape'){e.stopPropagation();close(true);}};`+
@@ -70,7 +73,7 @@ func collectionMenuOnClick(campaignID, entityID, popoverID, giveURL string) temp
 			`Chronicle.apiFetch(base+'items/'+encodeURIComponent(eid)+'/collections').then(function(r){if(!r.ok)throw new Error('load');return r.json();}).then(render)`+
 			`.catch(function(){pop.textContent='Could not load collections.';pop.focus();});`+
 			`})(this)`,
-		jsStr(campaignID), jsStr(entityID), jsStr(popoverID), jsStr(giveURL))
+		jsStr(campaignID), jsStr(entityID), jsStr(popoverID), jsStr(giveURL), collections)
 	return inlineOnClick("armory_collectionMenu", body)
 }
 
