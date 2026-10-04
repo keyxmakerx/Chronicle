@@ -259,30 +259,37 @@ func TestPluginHubRedirect_LandsOnExtensionsHub(t *testing.T) {
 	}
 }
 
-// TestExtensionsHubPage_HasSystemPickerAndConnections pins the page's
-// sections and that the AI link follows whether its plugin is wired in.
-func TestExtensionsHubPage_HasSystemPickerAndConnections(t *testing.T) {
+// TestExtensionsHubPage_GameAndFeaturesOnly pins the page's sections: the
+// game system and features stay, Foundry lives on its own page and is only
+// pointed at once the campaign syncs.
+func TestExtensionsHubPage_GameAndFeaturesOnly(t *testing.T) {
 	cc := &CampaignContext{Campaign: &Campaign{ID: "c-1", Name: "Test"}}
 	for _, tc := range []struct {
-		name  string
-		hasAI bool
+		name    string
+		addons  []PluginHubAddon
+		pointer bool
 	}{
-		{"ai wired", true},
-		{"ai absent", false},
+		{"sync on", []PluginHubAddon{{Slug: "sync-api", Enabled: true, Installed: true}}, true},
+		{"sync off", []PluginHubAddon{{Slug: "sync-api", Installed: true}}, false},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			var buf bytes.Buffer
-			if err := ExtensionsHubPage(cc, nil, "csrf", "[]", tc.hasAI, nil, FoundryRowData{}).Render(context.Background(), &buf); err != nil {
+			if err := ExtensionsHubPage(cc, tc.addons, "csrf", "[]", nil).Render(context.Background(), &buf); err != nil {
 				t.Fatalf("render: %v", err)
 			}
 			html := buf.String()
-			for _, want := range []string{"data-game-system-card", "data-connections-card", "tab=integrations"} {
+			for _, want := range []string{"data-game-system-card", ">Features</h2>", "Game &amp; features"} {
 				if !strings.Contains(html, want) {
 					t.Errorf("page missing %q", want)
 				}
 			}
-			if got := strings.Contains(html, "tab=ai-workspace"); got != tc.hasAI {
-				t.Errorf("AI link present=%v, want %v", got, tc.hasAI)
+			for _, gone := range []string{"data-connections-card", "foundry-vtt/apps-row", "tab=integrations"} {
+				if strings.Contains(html, gone) {
+					t.Errorf("page still has %q; Foundry moved to its own page", gone)
+				}
+			}
+			if got := strings.Contains(html, `href="/campaigns/c-1/foundry"`); got != tc.pointer {
+				t.Errorf("Foundry pointer present=%v, want %v", got, tc.pointer)
 			}
 		})
 	}

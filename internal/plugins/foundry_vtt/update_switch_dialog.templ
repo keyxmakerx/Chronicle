@@ -1,5 +1,5 @@
-// update_switch_dialog.templ is the "Use another version" picker on the Apps &
-// game system row.
+// update_switch_dialog.templ is the "Use another version" picker on the
+// Foundry page's Module version card.
 
 package foundry_vtt
 
@@ -18,7 +18,7 @@ templ updateSwitchDialog(v *OwnerUpdateView, csrfToken string) {
 			<input type="hidden" name="view" value={ updateViewRow }/>
 			<h2 class="text-lg font-semibold text-fg">Use another version of { v.Package }</h2>
 			<p class="text-sm text-fg-secondary">
-				For when a new version causes trouble. The campaign stays on the one you pick until you press Update again.
+				For when a new version causes trouble. Your campaign stays on the version you pick. If updates were automatic they switch to Ask me first, so nothing moves it back without asking. Your world loads it the next time Foundry starts.
 			</p>
 			<select name="version" class="input w-full" aria-label="Version">
 				for _, ver := range v.Versions {

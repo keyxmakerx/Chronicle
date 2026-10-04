@@ -169,5 +169,6 @@ func (h *APIHandler) BuyFromShop(c echo.Context) error {
 	if err != nil {
 		return err
 	}
+	noteSyncActor(c, acting.ActingUserID)
 	return c.JSON(http.StatusOK, out)
 }

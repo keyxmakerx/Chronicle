@@ -299,6 +299,7 @@ GET	/favorites	internal/plugins/entities/routes.go
 GET	/files/:name	internal/plugins/backup/routes.go
 GET	/flagged	internal/plugins/bestiary/routes.go
 GET	/forgot-password	internal/plugins/auth/routes.go
+GET	/foundry	internal/plugins/campaigns/routes.go
 GET	/foundry-presence	internal/plugins/foundry_vtt/routes.go
 GET	/foundry-vtt/apps-row	internal/plugins/foundry_vtt/routes.go
 GET	/foundry-vtt/dashboard-sync-block	internal/plugins/foundry_vtt/routes.go
@@ -306,8 +307,10 @@ GET	/foundry-vtt/install-url	internal/plugins/foundry_vtt/routes.go
 GET	/foundry-vtt/npc-spotlight/:eid	internal/plugins/foundry_vtt/routes.go
 GET	/foundry-vtt/presence-pill-fragment	internal/plugins/foundry_vtt/routes.go
 GET	/foundry-vtt/settings-tab	internal/plugins/foundry_vtt/routes.go
-GET	/foundry-vtt/setup-guide-fragment	internal/plugins/foundry_vtt/routes.go
 GET	/foundry-vtt/show-banner-fragment	internal/plugins/foundry_vtt/routes.go
+GET	/foundry/member-status	internal/plugins/syncapi/foundry_players_handler.go
+GET	/foundry/players	internal/plugins/syncapi/foundry_players_handler.go
+GET	/foundry/problems	internal/plugins/syncapi/foundry_players_handler.go
 GET	/game-nights	internal/plugins/sessions/routes.go
 GET	/groups	internal/plugins/campaigns/routes.go
 GET	/groups/:gid	internal/plugins/campaigns/routes.go
@@ -598,6 +601,7 @@ POST	/foundry-vtt/npc-spotlight/:eid	internal/plugins/foundry_vtt/routes.go
 POST	/foundry-vtt/token/rotate	internal/plugins/foundry_vtt/routes.go
 POST	/foundry-vtt/update	internal/plugins/foundry_vtt/routes.go
 POST	/foundry-vtt/update/later	internal/plugins/foundry_vtt/routes.go
+POST	/foundry-vtt/update/mode	internal/plugins/foundry_vtt/routes.go
 POST	/foundry-vtt/update/switch	internal/plugins/foundry_vtt/routes.go
 POST	/groups	internal/plugins/campaigns/routes.go
 POST	/groups/:gid/members	internal/plugins/campaigns/routes.go
@@ -675,6 +679,7 @@ POST	/submit	internal/plugins/packages/routes.go
 POST	/sync	internal/plugins/syncapi/routes.go
 POST	/sync/history	internal/plugins/syncapi/routes.go
 POST	/sync/mappings	internal/plugins/syncapi/routes.go
+POST	/sync/players	internal/plugins/syncapi/routes.go
 POST	/tags	internal/plugins/syncapi/routes.go
 POST	/tags	internal/widgets/tags/routes.go
 POST	/tags/:tagId/grants	internal/widgets/tags/routes.go

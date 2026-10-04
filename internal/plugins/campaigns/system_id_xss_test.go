@@ -54,6 +54,6 @@ func TestSettingsGeneralTab_NoLongerHoldsPicker(t *testing.T) {
 		t.Error("General tab still renders the game system picker")
 	}
 	if !strings.Contains(html, "/campaigns/camp-1/extensions") {
-		t.Error("General tab should link to the Apps & game system page")
+		t.Error("General tab should link to the Game & features page")
 	}
 }

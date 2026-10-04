@@ -20,7 +20,7 @@ templ updateConfirmDialog(v *OwnerUpdateView, view, csrfToken string) {
 			<h2 class="text-lg font-semibold text-fg">{ "Update " + v.Package + " for " + v.CampaignName + "?" }</h2>
 			<p class="text-sm text-fg-secondary">
 				Your Foundry world picks up { v.Ready } the next time it starts. If something looks wrong,
-				Use another version on Apps &amp; game system takes you back.
+				Use another version on the Foundry page takes you back.
 			</p>
 			<div class="flex justify-end gap-2">
 				<button type="button" class="btn-secondary text-sm" onclick={ closeDialogOnClick() }>Cancel</button>

@@ -228,7 +228,7 @@ func (h *Handler) SetAddonLister(lister AddonLister) {
 }
 
 // SetFoundryConnector wires the Foundry connection status and connect-line
-// source for the Apps & game system page. Late-bound because the websocket hub
+// source for the Foundry page. Late-bound because the websocket hub
 // it reads is built after the campaign handler.
 func (h *Handler) SetFoundryConnector(c FoundryConnector) {
 	h.foundryConnector = c
@@ -654,17 +654,14 @@ func (h *Handler) Settings(c echo.Context) error {
 		return apperror.NewMissingContext()
 	}
 
+	// Tabs that became pages of their own keep their old links working.
+	if to := settingsTabRedirect(cc.Campaign.ID, c.QueryParam("tab")); to != "" {
+		return c.Redirect(http.StatusFound, to)
+	}
+
 	ctx := c.Request().Context()
 	transfer, _ := h.service.GetPendingTransfer(ctx, cc.Campaign.ID)
 	csrfToken := middleware.GetCSRFToken(c)
-
-	// (The entity-types fetch that used to live here was passed to
-	// CampaignSettingsPage but never read inside the templ. Removed
-	// during the SettingsTab refactor — Customize / Sidebar config
-	// still fetch it via h.entityLister separately.)
-
-	// Fetch members for the People tab.
-	members, _ := h.service.ListMembers(ctx, cc.Campaign.ID)
 
 	// Check SMTP configuration for invite/transfer warnings.
 	smtpConfigured := false
@@ -682,7 +679,7 @@ func (h *Handler) Settings(c echo.Context) error {
 	// at `/campaigns/:id/extensions`, not any built-in Settings tab —
 	// no addons-store load needed here.
 
-	tabs := h.visibleSettingsTabs(cc, transfer, members, csrfToken, systemOptions, smtpConfigured)
+	tabs := h.visibleSettingsTabs(cc, transfer, nil, csrfToken, systemOptions, smtpConfigured)
 
 	// Resolve the requested tab against the set actually visible to this
 	// viewer. The raw `?tab=` value is attacker-controllable and flows
@@ -1225,12 +1222,12 @@ func (h *Handler) UpdateRole(c echo.Context) error {
 		return apperror.NewBadRequest("invalid request")
 	}
 
-	role := RoleFromString(req.Role)
-	if err := h.service.UpdateMemberRole(c.Request().Context(), cc.Campaign.ID, targetUserID, role); err != nil {
-		members, _ := h.service.ListMembers(c.Request().Context(), cc.Campaign.ID)
+	ctx := c.Request().Context()
+	if err := h.service.SetMemberAccess(ctx, cc.Campaign.ID, targetUserID, req.Role); err != nil {
+		members, _ := h.service.ListMembers(ctx, cc.Campaign.ID)
 		csrfToken := middleware.GetCSRFToken(c)
 		errMsg := apperror.UserMessage(err, "failed to update role")
-		return middleware.Render(c, http.StatusOK, MemberListComponent(cc, members, csrfToken, errMsg))
+		return middleware.Render(c, http.StatusOK, MemberListComponent(h.freshContext(ctx, cc), members, csrfToken, errMsg))
 	}
 
 	h.logAudit(c, cc.Campaign.ID, "member.role_changed", map[string]any{
@@ -1238,13 +1235,29 @@ func (h *Handler) UpdateRole(c echo.Context) error {
 		"new_role":       req.Role,
 	})
 
-	members, _ := h.service.ListMembers(c.Request().Context(), cc.Campaign.ID)
+	members, _ := h.service.ListMembers(ctx, cc.Campaign.ID)
 	csrfToken := middleware.GetCSRFToken(c)
+	// The grant lives in the campaign's settings, which the request's context
+	// read before the change; the menu must show the new Co-DM state.
+	cc = h.freshContext(ctx, cc)
 
 	if middleware.IsHTMX(c) {
 		return middleware.Render(c, http.StatusOK, MemberListComponent(cc, members, csrfToken, ""))
 	}
 	return c.Redirect(http.StatusSeeOther, "/campaigns/"+cc.Campaign.ID+"/members")
+}
+
+// freshContext is cc with the campaign re-read, for a response that must
+// show a change this request just made to the campaign's settings. A failed
+// read keeps cc as it was.
+func (h *Handler) freshContext(ctx context.Context, cc *CampaignContext) *CampaignContext {
+	c, err := h.service.GetByID(ctx, cc.Campaign.ID)
+	if err != nil || c == nil {
+		return cc
+	}
+	copied := *cc
+	copied.Campaign = c
+	return &copied
 }
 
 // UpdateMemberCharacterAPI sets a member's character entity assignment.

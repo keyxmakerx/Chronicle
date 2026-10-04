@@ -1,17 +1,21 @@
-// update_row.templ is the Foundry module row on the owner's Apps & game system
-// page. It is lazy-loaded into that page so the campaigns plugin stays
-// VTT-agnostic.
+// update_row.templ is the Module version card on the owner's Foundry page. It
+// is lazy-loaded into that page so the campaigns plugin stays VTT-agnostic.
 //
 // URL: GET /campaigns/:id/foundry-vtt/apps-row
 // Auth: owner-only
 
 package foundry_vtt
 
-// AppsUpdateRow shows what the campaign's Foundry world runs and, when a newer
-// version is waiting, the owner's choices. While a site admin holds the
-// campaign the two buttons that would move it are replaced by one line.
+// AppsUpdateRow shows what the campaign's Foundry world runs, the owner's
+// choices when a newer version is waiting, and how new versions arrive. While
+// a site admin holds the campaign everything that would move it is replaced
+// by one line.
 templ AppsUpdateRow(v *OwnerUpdateView, csrfToken string) {
-	if v != nil {
+	if v == nil {
+		<section id={ updateRowID } class="card p-4 mb-6">
+			<p class="text-sm text-fg-secondary">The Foundry module isn't installed on this Chronicle site yet. A site admin adds it under Admin &rsaquo; Packages.</p>
+		</section>
+	} else {
 		<section id={ updateRowID } class="card p-4 mb-6" aria-label={ v.Package }>
 			<div class="flex flex-wrap items-start justify-between gap-3">
 				<div class="min-w-0">
@@ -28,11 +32,10 @@ templ AppsUpdateRow(v *OwnerUpdateView, csrfToken string) {
 						}
 					</p>
 					if v.AdminHold {
-						<p class="text-xs text-fg-secondary mt-1">The site admin is keeping this campaign on { v.Running }.</p>
+						<p class="text-xs text-fg-secondary mt-1">The site admin is keeping this campaign on { v.Running }, so updates can't be changed here for now.</p>
 					}
 					<p class="text-xs text-fg-muted mt-1">
 						Your Foundry world loads this version the next time it starts.
-						<a href={ templ.SafeURL(setupGuideURL(v.CampaignID)) } class="text-accent hover:underline">Foundry setup guide</a>
 					</p>
 				</div>
 				<div class="flex flex-col items-end gap-1.5">
@@ -57,6 +60,56 @@ templ AppsUpdateRow(v *OwnerUpdateView, csrfToken string) {
 			if !v.AdminHold && len(v.Versions) > 0 {
 				@updateSwitchDialog(v, csrfToken)
 			}
+			if !v.AdminHold {
+				@updateModeChooser(v, csrfToken)
+			}
 		</section>
 	}
+}
+
+// updateModeOption is one choice of how new versions arrive.
+type updateModeOption struct {
+	Mode, Label, Detail string
+}
+
+// updateModeOptions are the three choices, in the order the card lists them.
+// Ask me first is the recommended one: nothing changes mid-session.
+var updateModeOptions = []updateModeOption{
+	{"approve_first", "Ask me first", "Recommended. A new version waits here until you press Update. Nothing changes mid-session."},
+	{"automatic", "Update automatically", "Your world gets each new version as soon as the site admin installs it. Players see it the next time Foundry starts."},
+	{"pinned", "Stay on one version", "Nothing changes until you pick another version. You still see here when a new one is installed."},
+}
+
+// updateModeChooser is "When a new version comes out". Choosing a radio posts
+// at once and the card is swapped for the new state, so there is no Save
+// button to forget.
+templ updateModeChooser(v *OwnerUpdateView, csrfToken string) {
+	<form
+		class="mt-4 pt-4 border-t border-edge"
+		hx-post={ updateActionURL(v.CampaignID, "/mode") }
+		hx-headers={ hxCSRFHeaders(csrfToken) }
+		hx-target={ updateTargetSelector(updateViewRow) }
+		hx-swap="outerHTML"
+		hx-trigger="change"
+		data-update-mode
+	>
+		<input type="hidden" name="view" value={ updateViewRow }/>
+		<fieldset>
+			<legend class="text-xs font-semibold uppercase tracking-wider text-fg-muted mb-2">When a new version comes out</legend>
+			<div class="space-y-2">
+				for _, o := range updateModeOptions {
+					<label class={ "flex items-start gap-3 rounded-md border p-3 cursor-pointer", templ.KV("border-accent bg-accent/5", o.Mode == v.Mode), templ.KV("border-edge", o.Mode != v.Mode) }>
+						<input type="radio" name="mode" value={ o.Mode } checked?={ o.Mode == v.Mode } class="mt-1 accent-accent"/>
+						<span class="min-w-0">
+							<span class="block text-sm font-medium text-fg">{ o.Label }</span>
+							<span class="block text-xs text-fg-secondary">{ o.Detail }</span>
+							if o.Mode == "automatic" && v.Ready != "" && v.Mode != "automatic" {
+								<span class="block text-xs text-amber-700 dark:text-amber-400 mt-1">Choosing this moves your world to { v.Ready } now.</span>
+							}
+						</span>
+					</label>
+				}
+			</div>
+		</fieldset>
+	</form>
 }

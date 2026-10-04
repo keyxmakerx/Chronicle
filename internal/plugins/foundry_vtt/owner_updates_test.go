@@ -264,7 +264,7 @@ func TestOwnerBannerHandler(t *testing.T) {
 		{"up to date", packages.CampaignPackageState{EffectiveVersion: "2.9.0"}, nil, true},
 		{"held by the admin", packages.CampaignPackageState{EffectiveVersion: "2.8.0", HeldVersion: "2.9.0", AdminHold: true}, nil, true},
 		{"later pressed", packages.CampaignPackageState{EffectiveVersion: "2.8.0", HeldVersion: "2.9.0", DismissedVersion: "2.9.0"},
-			[]string{"is waiting in", "/campaigns/c1/extensions", "Only you see this."}, false},
+			[]string{"is waiting in", "/campaigns/c1/foundry", "Only you see this."}, false},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {

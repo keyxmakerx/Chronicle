@@ -292,6 +292,7 @@ Foundry module repo for the wire contract.
 | `sync_change_watermarks` | How far the feed was pruned, so a stale cursor is told to resync | PK `campaign_id`; `pruned_through` |
 | `sync_calendar_date_beacons` | Per-campaign "date Foundry last saw / last applied" | PK `campaign_id`; `last_served_*` (a Bearer-authed GET was served) vs `applied_*` (Foundry confirmed it set its own date via `POST .../confirm`) — distinct claims, filled independently. |
 | `sync_events` | Sync history: one row per thing that synced, either direction, read by Manage › Sync history and the module's History tab | `direction` enum(`to_chronicle`,`to_foundry`,`link`); `reported_by` enum(`chronicle`,`client`); `parent_id` groups a catch-up run's steps; names, ids, call and answer only, never page text; `was_value` is what a change replaced, in words (a date push's old date); pruned after 90 days |
+| `foundry_players` | Players in Foundry: the GM's Foundry client's latest list of the world's users, read by the owner's Foundry page and People page | PK (`campaign_id`, `foundry_user_id`); `member_user_id` only when a campaign member; `foundry_name` ≤100, `last_failure` ≤200; each report replaces the campaign's rows; pruned 30 days after the last report |
 
 ### packages (`internal/plugins/packages/migrations/`)
 
