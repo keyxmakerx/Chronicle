@@ -13,6 +13,8 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/keyxmakerx/chronicle/internal/apperror"
 )
 
 // SettingsReader provides read access to site settings without importing
@@ -288,7 +290,13 @@ func (s *packageService) downloadsDir() string {
 }
 
 // installDir returns the extraction directory for a package version.
+// It refuses versions that fail ValidVersionString so no caller can build a
+// path from an unvalidated version.
+// It returns "" for an invalid version.
 func (s *packageService) installDir(pkgType PackageType, slug, version string) string {
+	if !ValidVersionString(version) {
+		return ""
+	}
 	switch pkgType {
 	case PackageTypeFoundryModule:
 		return filepath.Join(s.packagesDir(), "foundry-module", version)
@@ -301,10 +309,8 @@ func (s *packageService) installDir(pkgType PackageType, slug, version string) s
 // calls this to resolve a campaign-pinned historical version to its
 // on-disk extracted directory, since Package.InstallPath only tracks the
 // currently-active install, not every version still on disk.
+// Returns "" for an empty or invalid version.
 func (s *packageService) InstallDirForVersion(pkgType PackageType, slug, version string) string {
-	if version == "" {
-		return ""
-	}
 	return s.installDir(pkgType, slug, version)
 }
 
@@ -541,6 +547,9 @@ func (s *packageService) installVersion(ctx context.Context, packageID, version 
 	}
 
 	destDir := s.installDir(pkg.Type, pkg.Slug, version)
+	if destDir == "" {
+		return apperror.NewValidation("invalid package version")
+	}
 	if err := os.MkdirAll(destDir, 0o755); err != nil {
 		return fmt.Errorf("creating install directory: %w", err)
 	}
@@ -680,6 +689,9 @@ func (s *packageService) installVersion(ctx context.Context, packageID, version 
 
 // SetPinnedVersion pins a package to a specific version, preventing auto-updates.
 func (s *packageService) SetPinnedVersion(ctx context.Context, packageID, version string) error {
+	if !ValidVersionString(version) {
+		return apperror.NewValidation("invalid package version")
+	}
 	pkg, err := s.repo.GetPackage(ctx, packageID)
 	if err != nil {
 		return fmt.Errorf("fetching package: %w", err)
