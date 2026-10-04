@@ -84,7 +84,39 @@ func TestSyncHistoryIntegration_ListFiltersAndSteps(t *testing.T) {
 	if len(all[0].Children) != 2 || all[0].Children[1].Message != "folder missing" || all[1].UserName != "Ren" {
 		t.Fatalf("steps or names not loaded: %+v", all)
 	}
-	if n, err := repo.PruneOlderThan(ctx, time.Now().UTC().Add(time.Hour)); err != nil || n != 5 {
-		t.Fatalf("prune removed %d rows (err %v), want 5", n, err)
+
+	// The call flow's reads: one row, a window with steps, the latest
+	// (failure), and the same failure lately.
+	refused := insert(cid, SyncEvent{Direction: DirToChronicle, Kind: historyKindCalendar, ResourceName: "Ches 8, 1492", Was: "Ches 7, 1492",
+		Action: "date set", Call: "PUT /calendar/date", Status: "403", OK: false, Message: "owner role required"})
+	got, err := repo.Get(ctx, cid, refused)
+	if err != nil || got.Was != "Ches 7, 1492" || got.ResourceName != "Ches 8, 1492" {
+		t.Fatalf("get: %+v, %v", got, err)
+	}
+	if _, err := repo.Get(ctx, other, refused); err == nil {
+		t.Fatal("read another campaign's row")
+	}
+	win, err := repo.Window(ctx, cid, at, time.Second, 100)
+	if err != nil || len(win) != 5 {
+		t.Fatalf("window: %d rows (want the 3 rows and 2 steps), %v", len(win), err)
+	}
+	// A busy stretch keeps the rows closest to the centre.
+	if near, err := repo.Window(ctx, cid, at, time.Second, 2); err != nil || len(near) != 2 || near[1].ID != refused {
+		t.Fatalf("window per side: %+v, %v", near, err)
+	}
+	last, err := repo.Latest(ctx, cid, at.Add(-time.Hour), true)
+	if err != nil || last == nil || last.ID != refused {
+		t.Fatalf("latest failure: %+v, %v", last, err)
+	}
+	if none, err := repo.Latest(ctx, other, at.Add(time.Hour), false); err != nil || none != nil {
+		t.Fatalf("latest with nothing: %+v, %v", none, err)
+	}
+	reps, err := repo.Failures(ctx, cid, "PUT /calendar/date", "403", at.Add(-time.Hour), 10)
+	if err != nil || len(reps) != 1 || reps[0].ID != refused {
+		t.Fatalf("failures: %+v, %v", reps, err)
+	}
+
+	if n, err := repo.PruneOlderThan(ctx, time.Now().UTC().Add(time.Hour)); err != nil || n != 6 {
+		t.Fatalf("prune removed %d rows (err %v), want 6", n, err)
 	}
 }

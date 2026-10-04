@@ -3629,6 +3629,7 @@ func (a *App) RegisterRoutes() {
 	if a.PluginHealth.IsHealthy("syncapi") {
 		syncapi.RegisterAPIRoutes(e, syncAPIHandler, calendarAPIHandler, mediaAPIHandler, mapAPIHandler, noteAPIHandler, tagAPIHandler, syncMappingHandler, syncChangesHandler, stashAPIHandler, syncService, addonService, authService, campaignService, syncapi.WithSyncHistory(syncHistoryHandler))
 		syncapi.RegisterSyncHistoryPageRoutes(e, syncHistoryHandler, campaignService, authService)
+		syncapi.RegisterAdminSyncFlowRoute(adminGroup, syncHistoryHandler)
 		go syncapi.StartHistoryPruner(a.ShutdownCtx, syncHistoryRepo)
 	}
 
