@@ -302,7 +302,7 @@ func TestBuild_AllSectionsTogether(t *testing.T) {
 		"## Existing world context",
 		"## What I want you to generate",
 		"Build me a maze.",
-		"Use front-matter for every entity.",
+		"Use front-matter for every block.",
 	}
 	for _, w := range must {
 		if !strings.Contains(got, w) {

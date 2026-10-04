@@ -9,6 +9,7 @@ package ai_workspace
 
 import (
 	"context"
+	"errors"
 	"io"
 	"log/slog"
 	"net/http"
@@ -22,8 +23,10 @@ import (
 	"github.com/keyxmakerx/chronicle/internal/plugins/ai_workspace/aiexport"
 	"github.com/keyxmakerx/chronicle/internal/plugins/ai_workspace/importer"
 	"github.com/keyxmakerx/chronicle/internal/plugins/ai_workspace/prompt"
+	"github.com/keyxmakerx/chronicle/internal/plugins/ai_workspace/records"
 	"github.com/keyxmakerx/chronicle/internal/plugins/auth"
 	"github.com/keyxmakerx/chronicle/internal/plugins/campaigns"
+	"github.com/keyxmakerx/chronicle/internal/templates/layouts"
 )
 
 // Handler is the HTTP boundary for the AI Workspace plugin. Holds
@@ -54,6 +57,10 @@ type Handler struct {
 	// single-method surface rather than the concrete audit package,
 	// to avoid pulling in unused machinery.
 	audit AuditLogger
+
+	// records writes the non-page blocks (calendar events, tables, pins…).
+	// Optional — nil leaves such blocks reported as not supported.
+	records *records.Registry
 }
 
 // AuditLogger is the narrow contract the plugin needs for audit
@@ -101,6 +108,62 @@ func (h *Handler) SetImportCommitter(c *importer.Committer) {
 	h.importCommitter = c
 }
 
+// SetRecords wires the record kinds.
+func (h *Handler) SetRecords(r *records.Registry) {
+	h.records = r
+}
+
+// actorFor is the operator as the record kinds see them.
+func actorFor(c echo.Context, cc *campaigns.CampaignContext) records.Actor {
+	return records.Actor{UserID: auth.GetUserID(c), Role: cc.VisibilityRole()}
+}
+
+// splitImport separates pages from records, keeping each list in input
+// order so the review form's indexes match a re-parse at commit.
+func splitImport(all []importer.ParsedPage) (pages, recs []importer.ParsedPage) {
+	for _, p := range all {
+		if p.IsRecord() && p.Status != importer.StatusParseError {
+			recs = append(recs, p)
+		} else {
+			pages = append(pages, p)
+		}
+	}
+	return pages, recs
+}
+
+// toRecord builds a records.Record from a parsed block.
+func toRecord(i int, p importer.ParsedPage) records.Record {
+	fields := make(map[string]any, len(p.Fields))
+	for k, v := range p.Fields {
+		fields[strings.ToLower(k)] = v
+	}
+	return records.Record{
+		Index: i, Kind: p.FrontMatter.Kind, Action: p.FrontMatter.Action,
+		Name: p.Name, Fields: fields, Body: p.Body,
+	}
+}
+
+// planRecords plans every record for the review screen.
+func (h *Handler) planRecords(c echo.Context, cc *campaigns.CampaignContext, recs []importer.ParsedPage) []RecordRow {
+	rows := make([]RecordRow, len(recs))
+	a := actorFor(c, cc)
+	for i, p := range recs {
+		rec := toRecord(i, p)
+		row := RecordRow{Index: i, Label: rec.Kind, Action: rec.Action, Name: rec.Name}
+		if h.records == nil {
+			row.Plan = records.Plan{Error: "this server cannot import " + rec.Kind}
+		} else {
+			k, plan := h.records.Plan(c.Request().Context(), cc.Campaign.ID, a, rec)
+			if k != nil {
+				row.Label = k.Label()
+			}
+			row.Plan = plan
+		}
+		rows[i] = row
+	}
+	return rows
+}
+
 // ParseImport accepts multipart-or-textarea markdown input,
 // parses it into per-page ParsedPage structs, classifies each
 // against live campaign state (conflict / new category / etc),
@@ -125,7 +188,7 @@ func (h *Handler) ParseImport(c echo.Context) error {
 	if h.importLookup == nil {
 		return middleware.Render(c, http.StatusOK,
 			ImportReview(ImportReviewData{
-				CampaignID: cc.Campaign.ID,
+				CampaignID:    cc.Campaign.ID,
 				SummaryCounts: ReviewSummary{Total: 0},
 			}))
 	}
@@ -143,7 +206,8 @@ func (h *Handler) ParseImport(c echo.Context) error {
 		return apperror.NewBadRequest("Nothing to import — paste markdown into the textarea or drop one or more .md files.")
 	}
 
-	pages := importer.Parse(body)
+	pages, recs := splitImport(importer.Parse(body))
+	recRows := h.planRecords(c, cc, recs)
 	cls, err := importer.NewClassifier(h.importLookup, cc.Campaign.ID).
 		ClassifyAll(c.Request().Context(), pages)
 	if err != nil {
@@ -153,7 +217,14 @@ func (h *Handler) ParseImport(c echo.Context) error {
 		return apperror.NewInternal(err)
 	}
 
-	summary := ReviewSummary{Total: len(pages)}
+	summary := ReviewSummary{Total: len(pages) + len(recRows)}
+	for _, r := range recRows {
+		if r.Plan.Error == "" {
+			summary.Selectable++
+		} else {
+			summary.ParseErrors++
+		}
+	}
 	for _, c := range cls {
 		switch c.Status {
 		case importer.StatusNew:
@@ -179,6 +250,7 @@ func (h *Handler) ParseImport(c echo.Context) error {
 				"new_categories":  summary.NewCategories,
 				"parse_errors":    summary.ParseErrors,
 				"input_byte_size": len(body),
+				"records":         len(recRows),
 			})
 	}
 
@@ -188,6 +260,8 @@ func (h *Handler) ParseImport(c echo.Context) error {
 		Classes:        cls,
 		SummaryCounts:  summary,
 		MarkdownSource: body,
+		Records:        recRows,
+		EngineSrc:      layouts.AssetURL("/static/js/widgets/chronicle_gen.js"),
 	}))
 }
 
@@ -234,7 +308,7 @@ func (h *Handler) CommitImport(c echo.Context) error {
 	// templ rendered. The classifier-supplied dropdowns embedded
 	// the right values in the form, but the bodies need to come
 	// from the markdown source.
-	pages := importer.Parse(source)
+	pages, recs := splitImport(importer.Parse(source))
 
 	bulkCategory := strings.TrimSpace(c.FormValue("bulk_default_category"))
 	// Empty means "no bulk override" — left for each row to resolve
@@ -299,18 +373,25 @@ func (h *Handler) CommitImport(c echo.Context) error {
 	}
 
 	userID := auth.GetUserID(c)
-	result, err := h.importCommitter.Commit(c.Request().Context(), cc.Campaign.ID, importer.CommitInput{
-		OwnerID:                userID,
-		Pages:                  pages,
-		Decisions:              decisions,
-		CampaignDefaultPrivate: cc.Campaign.ParseSettings().DefaultsToPrivate(),
-	})
+	var result importer.CommitResult
+	var err error
+	if len(pages) > 0 {
+		result, err = h.importCommitter.Commit(c.Request().Context(), cc.Campaign.ID, importer.CommitInput{
+			OwnerID:                userID,
+			Pages:                  pages,
+			Decisions:              decisions,
+			CampaignDefaultPrivate: cc.Campaign.ParseSettings().DefaultsToPrivate(),
+		})
+	}
 	if err != nil {
 		slog.Error("ai-workspace: commit failed",
 			slog.String("campaign_id", cc.Campaign.ID),
 			slog.Any("error", err))
 		return apperror.NewInternal(err)
 	}
+	// Records run after pages, so a record may name a page this same
+	// import just created.
+	recCounts := h.commitRecords(c, cc, recs, &result)
 
 	if h.audit != nil {
 		// Counts only — no names, no body content.
@@ -325,6 +406,8 @@ func (h *Handler) CommitImport(c echo.Context) error {
 				"failed":                 result.Failed,
 				"new_categories_created": len(result.NewCategoriesCreated),
 				"new_categories_failed":  len(result.NewCategoriesFailed),
+				"records_applied":        recCounts.applied,
+				"records_failed":         recCounts.failed,
 			})
 	}
 
@@ -332,6 +415,80 @@ func (h *Handler) CommitImport(c echo.Context) error {
 		CampaignID: cc.Campaign.ID,
 		Result:     result,
 	}))
+}
+
+type recordCounts struct{ applied, failed int }
+
+// commitRecords applies each included record and appends its outcome to
+// the result. A delete needs its own confirmation tick, checked here again
+// whatever the browser sent; every record is re-planned inside Apply, so
+// nothing the review screen showed is trusted at commit.
+func (h *Handler) commitRecords(c echo.Context, cc *campaigns.CampaignContext, recs []importer.ParsedPage, result *importer.CommitResult) recordCounts {
+	var n recordCounts
+	a := actorFor(c, cc)
+	base := len(result.Rows)
+	for i, p := range recs {
+		prefix := "rec_" + strconv.Itoa(i) + "_"
+		rec := toRecord(i, p)
+		out := importer.RowOutcome{Index: base + i, Name: rec.Name}
+		k, ok := h.records.Get(rec.Kind)
+		if ok {
+			out.Name = k.Label() + ": " + rec.Name
+		}
+		switch {
+		case c.FormValue(prefix+"include") != "on":
+			out.Status, out.Reason = importer.StatusSkipped, "Excluded by operator"
+		case h.records == nil || !ok:
+			out.Status, out.Reason = importer.StatusFailed, "This server cannot import "+rec.Kind
+		case rec.Action == records.ActionDelete && c.FormValue(prefix+"delete_confirmed") != "on":
+			out.Status, out.Reason = importer.StatusFailed, "Removal was not confirmed"
+		default:
+			rec.Generated = c.FormValue(prefix + "generated")
+			if err := k.Apply(c.Request().Context(), cc.Campaign.ID, a, rec); err != nil {
+				slog.Warn("ai-workspace: record failed",
+					slog.String("campaign_id", cc.Campaign.ID),
+					slog.String("kind", rec.Kind), slog.Any("error", err))
+				out.Status, out.Reason = importer.StatusFailed, recordError(err)
+				break
+			}
+			switch rec.Action {
+			case records.ActionDelete:
+				out.Status = importer.StatusDeleted
+			case records.ActionUpdate:
+				out.Status = importer.StatusUpdated
+			default:
+				out.Status = importer.StatusCreated
+			}
+		}
+		switch out.Status {
+		case importer.StatusFailed:
+			result.Failed++
+			n.failed++
+		case importer.StatusSkipped:
+			result.Skipped++
+		case importer.StatusDeleted:
+			result.Deleted++
+			n.applied++
+		case importer.StatusUpdated:
+			result.Updated++
+			n.applied++
+		default:
+			result.Created++
+			n.applied++
+		}
+		result.Rows = append(result.Rows, out)
+	}
+	return n
+}
+
+// recordError shows a refusal's own wording (the kinds and services word
+// them for people) and hides anything else, such as a database error.
+func recordError(err error) string {
+	var ae *apperror.AppError
+	if errors.As(err, &ae) && ae.Code < 500 {
+		return ae.Message
+	}
+	return "Could not be saved; try again in a moment"
 }
 
 // readImportBody concatenates the textarea + every uploaded .md
@@ -414,6 +571,14 @@ func (h *Handler) GeneratePrompt(c echo.Context) error {
 	if in.ContentMode == "" {
 		in.ContentMode = "none"
 	}
+	if h.records != nil {
+		if in.IncludeFrontMatterExample {
+			in.RecordDocs = h.records.Docs()
+		}
+		if in.ContentMode == "all" || hasCategory(in.ContentMode, recordsCategory) {
+			in.RecordContext = h.records.ExportAll(c.Request().Context(), cc.Campaign.ID, actorFor(c, cc))
+		}
+	}
 
 	userID := auth.GetUserID(c)
 	out, err := h.promptBuilder.Build(c.Request().Context(),
@@ -465,7 +630,10 @@ func (h *Handler) GenerateAIExport(c echo.Context) error {
 		Privacy:               parsePrivacy(c.QueryParam("privacy")),
 		IncludeSessionGMNotes: c.QueryParam("gm_notes") == "on",
 	}
-	if raw := c.QueryParam("categories"); raw != "" {
+	// A form sends one categories value per ticked box (a link may send
+	// one comma-separated value); read them all, not just the first.
+	rawCats := strings.Join(c.QueryParams()["categories"], ",")
+	if raw := rawCats; raw != "" {
 		for _, s := range strings.Split(raw, ",") {
 			s = strings.TrimSpace(s)
 			if s != "" {
@@ -483,6 +651,11 @@ func (h *Handler) GenerateAIExport(c echo.Context) error {
 			slog.Any("error", err))
 		return middleware.Render(c, http.StatusOK,
 			AIExportModal("", "Could not generate the export. Try again in a moment."))
+	}
+	if h.records != nil && (rawCats == "" || hasCategory(rawCats, recordsCategory)) {
+		if more := h.records.ExportAll(c.Request().Context(), cc.Campaign.ID, actorFor(c, cc)); more != "" {
+			markdown += "\n\n" + more
+		}
 	}
 
 	if h.audit != nil {
@@ -519,6 +692,20 @@ func (h *Handler) SettingsTabFactory() func(*campaigns.CampaignContext) campaign
 			Content:   SettingsTabBody(cc),
 		}
 	}
+}
+
+// recordsCategory is the export and prompt checkbox for everything the
+// record kinds list (weather, tables, pins, house rules…).
+const recordsCategory = "more"
+
+// hasCategory reports whether a comma-separated category list names cat.
+func hasCategory(list, cat string) bool {
+	for _, s := range strings.Split(list, ",") {
+		if strings.TrimSpace(s) == cat {
+			return true
+		}
+	}
+	return false
 }
 
 // parsePrivacy maps the form-string ("safe" / "permitted" /

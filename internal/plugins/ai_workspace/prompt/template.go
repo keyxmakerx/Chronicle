@@ -36,6 +36,9 @@ type templateData struct {
 
 	// Custom instruction (operator's textarea contents).
 	OperatorInstruction string
+
+	// RecordDocs is the "other things" section: one entry per record kind.
+	RecordDocs string
 }
 
 // entityTypeView is the slim shape the template iterates.
@@ -113,6 +116,18 @@ Valid ` + "`" + `type` + "`" + ` values are the slugs listed above. ` + "`" + `v
 existing tag vocabulary where possible.
 {{ end }}
 
+{{ if .RecordDocs }}
+## Other things you can add, change or remove
+
+Besides pages, a block can change other parts of the campaign. Give it
+` + "`" + `kind:` + "`" + ` (below) and ` + "`" + `action:` + "`" + ` (` + "`" + `create` + "`" + `, ` + "`" + `update` + "`" + ` or ` + "`" + `delete` + "`" + `), matched by
+` + "`" + `name` + "`" + `. I review every change, and confirm each removal myself, before
+anything happens. For a page, ` + "`" + `action: update` + "`" + ` and ` + "`" + `action: delete` + "`" + ` work the
+same way.
+
+{{ .RecordDocs }}
+{{ end }}
+
 {{ if .IncludeSampleEntity }}
 ## Sample entity (one per type, for shape reference)
 
@@ -133,9 +148,9 @@ existing tag vocabulary where possible.
 
 {{ .OperatorInstruction }}
 
-Please output your response as one or more entity blocks in the format above.
-Use front-matter for every entity. Do not include any text outside the entity
-blocks (no preamble, no commentary between entities).
+Please output your response as one or more blocks in the format above.
+Use front-matter for every block. Do not include any text outside the
+blocks (no preamble, no commentary between blocks).
 `
 
 // tmpl is the parsed template, ready for Execute. Parsed once at

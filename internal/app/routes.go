@@ -21,6 +21,7 @@ import (
 	"github.com/keyxmakerx/chronicle/internal/changesource"
 	"github.com/keyxmakerx/chronicle/internal/extensions"
 	"github.com/keyxmakerx/chronicle/internal/middleware"
+	"github.com/keyxmakerx/chronicle/internal/patch"
 	"github.com/keyxmakerx/chronicle/internal/permissions"
 	"github.com/keyxmakerx/chronicle/internal/plugins/addons"
 	"github.com/keyxmakerx/chronicle/internal/plugins/admin"
@@ -28,6 +29,7 @@ import (
 	"github.com/keyxmakerx/chronicle/internal/plugins/ai_workspace/aiexport"
 	"github.com/keyxmakerx/chronicle/internal/plugins/ai_workspace/importer"
 	"github.com/keyxmakerx/chronicle/internal/plugins/ai_workspace/prompt"
+	"github.com/keyxmakerx/chronicle/internal/plugins/ai_workspace/records"
 	"github.com/keyxmakerx/chronicle/internal/plugins/armory"
 	"github.com/keyxmakerx/chronicle/internal/plugins/audit"
 	"github.com/keyxmakerx/chronicle/internal/plugins/auth"
@@ -4884,13 +4886,39 @@ func (a *App) RegisterRoutes() {
 	}
 
 	// Per-campaign rolling tables: the DM team edits them, scribes may roll.
+	rollTablesSvc := rolltables.NewService(rolltables.NewRepository(a.DB))
 	if a.PluginHealth.IsHealthy(rolltables.PluginSlug) {
-		rolltables.RegisterRoutes(e,
-			rolltables.NewHandler(rolltables.NewService(rolltables.NewRepository(a.DB))),
-			campaignService, authService)
+		rolltables.RegisterRoutes(e, rolltables.NewHandler(rollTablesSvc), campaignService, authService)
 	} else {
 		slog.Warn("rolltables plugin degraded — routes not registered")
 	}
+
+	// AI Import's record kinds: the features beyond pages it may write.
+	// Wired here, after the rulebook and rolling tables exist; a degraded
+	// plugin's kind is left out, so its blocks are refused at review.
+	aiKinds := []records.Kind{
+		records.EventKind{Svc: calendarService},
+		records.WeatherKind{Svc: calendarService},
+	}
+	aiTables := records.TableKind{Svc: aiRollTablesAdapter{rollTablesSvc}}
+	if a.PluginHealth.IsHealthy(rolltables.PluginSlug) {
+		aiKinds = append(aiKinds, aiTables)
+	}
+	aiKinds = append(aiKinds,
+		records.ShopStockKind(entityService, relService),
+		records.CarriedItemKind(entityService, relService),
+		records.PinKind{Svc: aiMapsAdapter{mapsService}, Entities: entityService},
+		records.NoteKind{Svc: noteSvc, Entities: entityService},
+		records.HouseRuleKind{Book: systemHandler, SystemOf: func(ctx context.Context, campaignID string) string {
+			c, err := campaignService.GetByID(ctx, campaignID)
+			if err != nil {
+				return ""
+			}
+			return c.ParseSettings().SystemID
+		}},
+		records.GeneratorKind{Cal: calendarService, Tables: aiTables},
+	)
+	aiWorkspaceHandler.SetRecords(records.NewRegistry(aiKinds...))
 
 	// Late-bind the entity_notes notifier now that wsEventBus exists.
 	// The service was constructed earlier with a holder.Notify reference;
@@ -5075,6 +5103,105 @@ func (a *mediaUploadAdapter) UploadRaw(ctx context.Context, campaignID, userID s
 		return "", err
 	}
 	return file.Filename, nil
+}
+
+// aiMapsAdapter is the maps service in AI Import's pin types, so the
+// ai_workspace plugin never imports maps.
+type aiMapsAdapter struct{ svc maps.MapService }
+
+func (m aiMapsAdapter) ListMaps(ctx context.Context, campaignID string) ([]records.MapRef, error) {
+	ms, err := m.svc.ListMaps(ctx, campaignID)
+	out := make([]records.MapRef, len(ms))
+	for i, x := range ms {
+		out[i] = records.MapRef{ID: x.ID, CampaignID: x.CampaignID, Name: x.Name}
+	}
+	return out, err
+}
+
+func (m aiMapsAdapter) ListPins(ctx context.Context, campaignID, mapID string, role int, userID string) ([]records.PinRef, error) {
+	ps, err := m.svc.ListMarkers(ctx, campaignID, mapID, role, userID)
+	out := make([]records.PinRef, len(ps))
+	for i, x := range ps {
+		out[i] = records.PinRef{ID: x.ID, Name: x.Name, X: x.X, Y: x.Y}
+	}
+	return out, err
+}
+
+func (m aiMapsAdapter) CreatePin(ctx context.Context, mapID, userID string, in records.PinInput) error {
+	c := maps.CreateMarkerInput{MapID: mapID, Name: in.Name, Icon: in.Icon, Color: in.Color,
+		Visibility: in.Visibility, Description: in.Description, EntityID: in.EntityID, CreatedBy: userID}
+	if in.X != nil {
+		c.X = *in.X
+	}
+	if in.Y != nil {
+		c.Y = *in.Y
+	}
+	if in.Category != "" {
+		c.PinCategory = &in.Category
+	}
+	_, err := m.svc.CreateMarker(ctx, c)
+	return err
+}
+
+func (m aiMapsAdapter) UpdatePin(ctx context.Context, pinID string, in records.PinInput, canAuthorDmOnly bool) error {
+	var u maps.UpdateMarkerInput
+	set := func(f *patch.Field[string], v string) {
+		if v != "" {
+			*f = patch.Of(v)
+		}
+	}
+	set(&u.Name, in.Name)
+	set(&u.Icon, in.Icon)
+	set(&u.Color, in.Color)
+	set(&u.PinCategory, in.Category)
+	set(&u.Visibility, in.Visibility)
+	// nil means "not written": leave the stored value (never FromPtr,
+	// which would clear it).
+	if in.Description != nil {
+		u.Description = patch.Of(*in.Description)
+	}
+	if in.EntityID != nil {
+		u.EntityID = patch.Of(*in.EntityID)
+	}
+	if in.X != nil {
+		u.X = patch.Of(*in.X)
+	}
+	if in.Y != nil {
+		u.Y = patch.Of(*in.Y)
+	}
+	return m.svc.UpdateMarker(ctx, pinID, u, canAuthorDmOnly)
+}
+
+// DeletePin skips the concurrency token: the pin was read from its map in
+// the same request.
+func (m aiMapsAdapter) DeletePin(ctx context.Context, pinID string, canAuthorDmOnly bool, actorID string, role int) error {
+	return m.svc.DeleteMarker(ctx, pinID, nil, canAuthorDmOnly, actorID, role)
+}
+
+// aiRollTablesAdapter is the rolltables service as AI Import's TableDoc,
+// a JSON round trip, so the ai_workspace plugin never imports rolltables.
+type aiRollTablesAdapter struct{ svc rolltables.Service }
+
+func (r aiRollTablesAdapter) Get(ctx context.Context, campaignID string) (records.TableDoc, error) {
+	var out records.TableDoc
+	doc, err := r.svc.Get(ctx, campaignID)
+	if err != nil {
+		return out, err
+	}
+	b, err := json.Marshal(doc)
+	if err != nil {
+		return out, err
+	}
+	return out, json.Unmarshal(b, &out)
+}
+
+func (r aiRollTablesAdapter) Put(ctx context.Context, campaignID string, doc records.TableDoc, userID string) error {
+	b, err := json.Marshal(doc)
+	if err != nil {
+		return err
+	}
+	_, err = r.svc.Put(ctx, campaignID, b, userID)
+	return err
 }
 
 // aiWorkspaceAuditAdapter bridges audit.AuditService to the narrow
