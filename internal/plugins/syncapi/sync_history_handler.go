@@ -37,6 +37,7 @@ type SyncHistoryHandler struct {
 	syncSvc     SyncAPIService
 	editors     ChangeEditorLookup
 	namer       EntityNamer
+	players     FoundryPlayerRepository
 	now         func() time.Time
 }
 

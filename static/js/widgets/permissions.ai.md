@@ -10,7 +10,15 @@ sees when a tag has widened access.
 ## Mount
 
 `data-widget="permissions"`, loaded by a `<script defer>` tag in
-`layouts/base.templ`. Two mounts in `plugins/entities/form.templ`:
+`layouts/base.templ`. The page's own mount is the top-right visibility
+control (`effectiveVisibilityBadge` in `plugins/entities/visibility_glance.templ`),
+rendered for the Owner only:
+
+| Mount | Attributes | Behaviour |
+|---|---|---|
+| Page corner | `data-layout="corner"`, `data-endpoint`, `data-editable` | Reuses the server-rendered `[data-perm-corner-trigger]` chip; the editor unfolds from it as a popover. Outside click closes it only when nothing is saving or failed, else a "Not saved yet" warning shows; Escape always closes |
+
+Two more mounts in `plugins/entities/form.templ`:
 
 | Mount | Attributes | Behaviour |
 |---|---|---|

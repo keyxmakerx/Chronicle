@@ -4663,3 +4663,120 @@ html[data-view-motion="calm"] *:not(.czp *), html[data-view-motion="calm"] *:not
   .sf-det-in { padding-left: 16px; grid-template-columns: minmax(0, 1fr); }
   .sf-legend { margin-left: 0; }
 }
+
+/* ---- Rolling-table rollers (roll_tables.js): a block in a page, and the
+   "Roll one" panel in a calendar day card. Outside @layer so classes the
+   script builds survive the purge. Every rule is scoped to .rt-block or
+   .rtd: the calendar resets every button inside it (.cal-v5 button), so
+   the roller's own button rules need the extra class to win. The local
+   --rt-* colours follow the page, or the calendar's own palette. */
+.rt-block, .rtd {
+  --rt-ink: var(--color-text-primary); --rt-ink2: var(--color-text-secondary);
+  --rt-mut: var(--color-text-muted); --rt-edge: var(--color-border);
+  --rt-paper: var(--color-card-bg); --rt-fill: var(--color-bg-tertiary);
+  --rt-acc: var(--color-accent); --rt-acc-rgb: var(--color-accent-rgb);
+}
+.cal-v5 .rtd { --rt-ink: var(--ink); --rt-ink2: var(--ink2); --rt-mut: var(--mut); --rt-edge: var(--edge); --rt-paper: var(--paper); --rt-fill: var(--paper2); }
+@keyframes rt-in { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
+@keyframes rt-pop { from { opacity: 0; transform: translateY(-4px) scale(.97); } to { opacity: 1; transform: none; } }
+@keyframes rt-shake { 0%, 100% { translate: 0; } 20% { translate: -9px; } 40% { translate: 7px; } 60% { translate: -4px; } 80% { translate: 2px; } }
+@keyframes rt-glow { 0% { box-shadow: 0 0 0 0 rgba(217, 119, 6, .55); } 100% { box-shadow: 0 0 0 12px rgba(217, 119, 6, 0); } }
+@keyframes rt-land { 0% { background: rgb(var(--rt-acc-rgb) / .16); } 100% { background: transparent; } }
+@keyframes rt-spin { from { rotate: 0deg; } to { rotate: 360deg; } }
+@keyframes rt-flick { from { opacity: .3; transform: translateY(-6px); } to { opacity: .55; transform: none; } }
+
+.ce-roll { margin: 14px 0; }
+.rt-block { container-type: inline-size; position: relative; border: 1px solid var(--rt-edge); border-radius: 12px; background: var(--rt-paper); box-shadow: 0 1px 2px rgba(0, 0, 0, .04); font-size: 14px; line-height: 1.45; color: var(--rt-ink); }
+.rt-block.is-nagging, .wing.is-nagging { animation: rt-shake .42s cubic-bezier(.36, .07, .19, .97); }
+.rt-block .rt-loading { padding: 14px; color: var(--rt-mut); font-size: 13px; }
+.rt-block .rt-head { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; padding: 10px 12px; border-bottom: 1px solid var(--rt-edge); }
+.rt-block .rt-ic { width: 28px; height: 28px; border-radius: 8px; display: grid; place-items: center; background: rgb(var(--rt-acc-rgb) / .12); color: var(--rt-acc); }
+.rt-block .rt-tbl { border: 0; background: none; font-weight: 600; font-size: 14px; color: inherit; display: inline-flex; align-items: center; gap: 6px; padding: 5px 8px; border-radius: 7px; cursor: pointer; }
+.rt-block .rt-tbl:hover { background: var(--rt-fill); }
+.rt-block .rt-src { font-size: 12px; color: var(--rt-mut); }
+.rt-block .rt-sp, .rtd .rt-sp { flex: 1; }
+.rt-block .rt-seg { display: inline-flex; border: 1px solid var(--rt-edge); border-radius: 7px; overflow: hidden; }
+.rt-block .rt-seg button { border: 0; background: none; padding: 4px 9px; font-size: 12px; font-weight: 500; color: var(--rt-mut); cursor: pointer; }
+.rt-block .rt-seg button[aria-pressed="true"] { background: var(--rt-acc); color: #fff; }
+.rt-block .rt-ghost, .rtd .rt-ghost { border: 0; background: none; color: var(--rt-mut); font-size: 12.5px; font-weight: 500; padding: 5px 8px; border-radius: 7px; cursor: pointer; display: inline-flex; gap: 6px; align-items: center; }
+.rt-block .rt-ghost:hover, .rtd .rt-ghost:hover { background: var(--rt-fill); color: var(--rt-ink); }
+.rt-block .rt-rows { padding: 4px 0; }
+.rt-block .rt-row { display: flex; gap: 10px; align-items: flex-start; padding: 9px 12px; border-radius: 9px; margin: 2px 6px; transition: background .15s, box-shadow .15s; }
+.rt-block .rt-row:hover { background: var(--rt-fill); }
+.rt-block .rt-row.is-pinned { box-shadow: inset 3px 0 0 var(--rt-acc); background: rgb(var(--rt-acc-rgb) / .05); }
+.rt-block .rt-row.is-landed { animation: rt-land 1.1s ease-out; }
+.rt-block .rt-txt { flex: 1; min-width: 0; overflow: hidden; }
+.rt-block .rt-txt b { display: block; font-weight: 600; }
+.rt-block .rt-txt span:not(.rt-reel) { display: block; color: var(--rt-ink2); font-size: 13px; }
+.rt-reel { display: block; }
+.rt-reel--flick { opacity: .55; animation: rt-flick linear both; }
+.rt-reel--land { animation: rt-in .22s ease-out both; }
+.rt-block .rt-btn, .rtd .rt-btn { width: 30px; height: 30px; flex: none; border: 1px solid transparent; border-radius: 8px; background: none; color: var(--rt-mut); cursor: pointer; display: grid; place-items: center; transition: transform .15s, background .15s, color .15s; }
+.rt-block .rt-btn:hover, .rtd .rt-btn:hover { background: var(--rt-fill); color: var(--rt-ink); transform: translateY(-1px); }
+.rt-block .rt-btn[aria-pressed="true"] { color: var(--rt-acc); border-color: rgb(var(--rt-acc-rgb) / .35); background: rgb(var(--rt-acc-rgb) / .08); }
+.rt-block .rt-btn:disabled, .rtd .rt-btn:disabled { opacity: .35; cursor: default; transform: none; }
+.rt-block .rt-btn.is-spinning i, .rtd .rt-btn.is-spinning i { animation: rt-spin .5s cubic-bezier(.3, 1.4, .5, 1); }
+.rt-block .rt-foot { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; padding: 10px 12px; border-top: 1px solid var(--rt-edge); }
+.rt-block .rt-main, .rtd .rt-main { border: 0; border-radius: 8px; background: var(--rt-acc); color: #fff; font-size: 13px; font-weight: 600; padding: 8px 13px; cursor: pointer; display: inline-flex; gap: 7px; align-items: center; transition: transform .15s, box-shadow .15s; }
+.rt-block .rt-main:hover, .rtd .rt-main:hover { transform: translateY(-1px); box-shadow: 0 6px 16px -8px rgb(var(--rt-acc-rgb) / .9); }
+.rt-block .rt-main:disabled, .rtd .rt-main:disabled { opacity: .5; cursor: default; transform: none; box-shadow: none; }
+.rt-block .rt-sec { border: 1px solid var(--rt-edge); border-radius: 8px; background: var(--rt-paper); color: var(--rt-ink); font-size: 13px; font-weight: 500; padding: 7px 12px; cursor: pointer; display: inline-flex; gap: 7px; align-items: center; }
+.rt-block .rt-sec:hover { border-color: var(--rt-acc); }
+.rt-block .rt-note, .rtd .rt-note { margin: 0; font-size: 12px; color: var(--rt-mut); }
+.rt-block .rt-pick { position: absolute; z-index: 40; left: 44px; top: 46px; width: min(330px, calc(100% - 56px)); max-height: 280px; overflow: auto; background: var(--rt-paper); border: 1px solid var(--rt-edge); border-radius: 12px; box-shadow: 0 18px 40px -16px rgba(0, 0, 0, .35); padding: 8px; animation: rt-pop .2s ease-out both; transform-origin: 20% 0; }
+.rt-block .rt-pick input { width: 100%; box-sizing: border-box; border: 1px solid var(--rt-edge); border-radius: 8px; padding: 7px 10px; font-size: 13px; margin-bottom: 6px; background: var(--color-input-bg); color: inherit; }
+.rt-block .rt-pick h6 { margin: 8px 6px 3px; font-size: 10.5px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; color: var(--rt-mut); }
+.rt-block .rt-pick button { display: flex; width: 100%; gap: 8px; align-items: center; border: 0; background: none; text-align: left; padding: 6px 8px; border-radius: 7px; font-size: 13px; color: inherit; cursor: pointer; }
+.rt-block .rt-pick button:hover, .rt-block .rt-pick button[aria-current="true"] { background: var(--rt-fill); }
+.rt-block .rt-pick small { margin-left: auto; color: var(--rt-mut); font-size: 11.5px; }
+.rt-block .rt-pick hr { border: 0; border-top: 1px solid var(--rt-edge); margin: 6px 0; }
+.rt-block .rt-pick-empty { padding: 4px 8px; }
+.rt-block .rt-ed { overflow: hidden; transition: height .32s cubic-bezier(.3, .9, .4, 1); }
+.rt-block .rt-banner { margin: 10px 12px 4px; padding: 9px 11px; border-radius: 9px; background: var(--rt-fill); font-size: 13px; display: flex; gap: 10px; align-items: center; }
+.rt-block .rt-name { display: flex; gap: 8px; align-items: center; margin: 10px 12px 4px; font-size: 12px; color: var(--rt-mut); }
+.rt-block .rt-name input { flex: 1; border: 1px solid var(--rt-edge); border-radius: 7px; padding: 5px 8px; font-size: 14px; font-weight: 600; background: var(--color-input-bg); color: var(--rt-ink); }
+.rt-block .rt-ent { display: grid; grid-template-columns: 104px 1fr 30px; gap: 8px; align-items: start; padding: 7px 12px; border-bottom: 1px dashed var(--rt-edge); }
+.rt-block .rt-ent select, .rt-block .rt-ent input, .rt-block .rt-ent textarea { width: 100%; box-sizing: border-box; border: 1px solid var(--rt-edge); border-radius: 7px; padding: 5px 8px; font-size: 13px; background: var(--color-input-bg); color: inherit; }
+.rt-block .rt-ent input { font-weight: 600; margin-bottom: 4px; }
+.rt-block .rt-ent textarea { resize: vertical; min-height: 34px; color: var(--rt-ink2); }
+.rt-block .rt-w { font-size: 12px; color: var(--rt-mut); padding-top: 2px; }
+.rt-block .rt-en { font-weight: 600; }
+.rt-block .rt-eb { font-size: 13px; color: var(--rt-ink2); }
+.rt-block .rt-brace { color: var(--rt-acc); font-weight: 600; }
+.rt-block .rt-warn, .rtd .rt-warn { display: none; align-items: center; gap: 8px; margin: 0 12px 10px; padding: 9px 10px 9px 12px; border-radius: 10px; background: oklch(.95 .06 80); color: oklch(.38 .09 60); box-shadow: inset 0 0 0 1px oklch(.8 .1 75); font-size: 12.5px; font-weight: 600; line-height: 1.3; }
+.rt-block .rt-warn span, .rtd .rt-warn span { flex: 1; }
+.rt-block .rt-warn.is-on, .rtd .rt-warn.is-on { display: flex; animation: rt-in .28s ease-out both, rt-glow .9s ease-out .1s; }
+.rt-block .rt-warn button, .rtd .rt-warn button { border: 0; background: transparent; color: inherit; font: inherit; text-decoration: underline; cursor: pointer; padding: 4px; }
+
+/* Calendar day: "Roll one" sits beside "Add an event"; the panel opens below. */
+.cal-v5 .rtd-open { display: flex; gap: 6px; margin-top: 12px; }
+.cal-v5 .rtd-open .addev { flex: 1; width: auto; margin: 0; }
+.cal-v5 .rtd-open .addev[data-roll-one] { flex: none; }
+.rtd { overflow: hidden; transition: height .34s cubic-bezier(.3, .9, .4, 1), opacity .25s; margin: 8px 0 4px; border: 1px solid var(--rt-edge); border-radius: 11px; background: var(--rt-paper); color: var(--rt-ink); }
+.rtd .rtd-chips { display: flex; flex-wrap: wrap; gap: 5px; padding: 9px 10px 4px; }
+.rtd .rtd-chips button { border: 1px solid var(--rt-edge); background: none; border-radius: 999px; padding: 3px 9px; font-size: 12px; font-weight: 500; color: var(--rt-ink2); cursor: pointer; transition: background .15s, color .15s, border-color .15s; }
+.rtd .rtd-chips button[aria-pressed="true"] { background: var(--rt-acc); border-color: var(--rt-acc); color: #fff; }
+.rtd .rtd-res { padding: 6px 12px 2px; min-height: 78px; }
+.rtd .rtd-res b { display: block; font-size: 14.5px; font-weight: 600; line-height: 1.3; }
+.rtd .rtd-res span:not(.rt-reel) { display: block; font-size: 12.5px; color: var(--rt-ink2); margin-top: 2px; }
+.rtd .rtd-why { display: flex; gap: 6px; flex-wrap: wrap; padding: 4px 12px 0; }
+.rtd .rtd-why em { font-style: normal; font-size: 11px; padding: 2px 7px; border-radius: 999px; background: var(--rt-fill); color: var(--rt-mut); }
+.rtd .rtd-act { display: flex; gap: 6px; align-items: center; padding: 9px 10px 4px; }
+.rtd .rtd-act .rt-main { flex: 1; justify-content: center; }
+.rtd .rtd-hid { padding: 0 12px 10px; }
+
+@container (max-width: 480px) {
+  .rt-block .rt-src { display: none; }
+  .rt-block .rt-head .rt-sp { flex-basis: 100%; height: 0; }
+  .rt-block .rt-ent { grid-template-columns: 1fr 30px; }
+  .rt-block .rt-ent select { grid-column: 1 / -1; width: auto; justify-self: start; }
+  .rt-block .rt-banner { flex-direction: column; align-items: flex-start; }
+  .rt-block .rt-foot .rt-note { flex-basis: 100%; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .rt-block.is-nagging, .wing.is-nagging, .rt-warn.is-on, .rt-row.is-landed, .rt-pick, .rt-btn.is-spinning i, .rt-reel { animation: none !important; }
+  .rt-ed, .rtd { transition: none !important; }
+}
+/* The in-app reduced-motion setting (.nav-rm) stills the rollers too. */
+.nav-rm .rt-block.is-nagging, .nav-rm .wing.is-nagging, .nav-rm .rt-warn.is-on, .nav-rm .rt-row.is-landed, .nav-rm .rt-pick, .nav-rm .rt-btn.is-spinning i, .nav-rm .rt-reel { animation: none !important; }
+.nav-rm .rt-ed, .nav-rm .rtd { transition: none !important; }

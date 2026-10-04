@@ -74,7 +74,7 @@ func (h *Handler) KeysPage(c echo.Context) error {
 }
 
 // IntegrationsKeysFragment renders the API keys section as an HTMX fragment
-// for the Settings > Integrations tab. Includes connection status, key cards,
+// for the Settings > API keys tab. Includes connection status, key cards,
 // and the inline key creation form.
 // GET /campaigns/:id/integrations/keys
 func (h *Handler) IntegrationsKeysFragment(c echo.Context) error {
@@ -202,7 +202,7 @@ func (h *Handler) ToggleKey(c echo.Context) error {
 		}
 	}
 
-	// When toggled from the Integrations tab, re-render the inline fragment.
+	// When toggled from the API keys tab, re-render the inline fragment.
 	if c.Request().Header.Get("HX-Target") == "integrations-keys" {
 		return h.IntegrationsKeysFragment(c)
 	}
@@ -233,7 +233,7 @@ func (h *Handler) RevokeKey(c echo.Context) error {
 		return err
 	}
 
-	// When revoked from the Integrations tab, re-render the inline fragment.
+	// When revoked from the API keys tab, re-render the inline fragment.
 	if c.Request().Header.Get("HX-Target") == "integrations-keys" {
 		return h.IntegrationsKeysFragment(c)
 	}

@@ -1,4 +1,4 @@
-// foundry_connect.go — the Foundry row on the "Apps & game system" page:
+// foundry_connect.go — the connection row on the owner's Foundry page:
 // connection status, the one-paste connect line, and the POST that mints a
 // fresh line.
 //
@@ -42,6 +42,9 @@ type FoundryConnection struct {
 	// LinePreview is the connect line built with KeyPrefix and a trailing
 	// ellipsis. It carries nothing secret: the full key is never recoverable.
 	LinePreview string
+	// ServedVersion is the module version Chronicle serves this campaign,
+	// empty when no module is installed or it could not be read.
+	ServedVersion string
 }
 
 // FoundryConnector is what the campaigns plugin needs from the sync plugin
@@ -170,6 +173,8 @@ type FoundryRowData struct {
 	Preview string
 	// NewLine is the full line, set only on the response to a fresh mint.
 	NewLine string
+	// conn is the raw connection the row was built from, for the checklist.
+	conn FoundryConnection
 }
 
 // newFoundryRowData derives the view model from a connection.
@@ -180,6 +185,7 @@ func newFoundryRowData(now time.Time, c FoundryConnection) FoundryRowData {
 		ModuleVersion: c.ModuleVersion,
 		HasKey:        c.HasKey,
 		Preview:       c.LinePreview,
+		conn:          c,
 	}
 }
 

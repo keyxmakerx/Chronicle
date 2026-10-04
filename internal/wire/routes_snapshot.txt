@@ -300,6 +300,7 @@ GET	/favorites	internal/plugins/entities/routes.go
 GET	/files/:name	internal/plugins/backup/routes.go
 GET	/flagged	internal/plugins/bestiary/routes.go
 GET	/forgot-password	internal/plugins/auth/routes.go
+GET	/foundry	internal/plugins/campaigns/routes.go
 GET	/foundry-presence	internal/plugins/foundry_vtt/routes.go
 GET	/foundry-vtt/apps-row	internal/plugins/foundry_vtt/routes.go
 GET	/foundry-vtt/dashboard-sync-block	internal/plugins/foundry_vtt/routes.go
@@ -307,8 +308,10 @@ GET	/foundry-vtt/install-url	internal/plugins/foundry_vtt/routes.go
 GET	/foundry-vtt/npc-spotlight/:eid	internal/plugins/foundry_vtt/routes.go
 GET	/foundry-vtt/presence-pill-fragment	internal/plugins/foundry_vtt/routes.go
 GET	/foundry-vtt/settings-tab	internal/plugins/foundry_vtt/routes.go
-GET	/foundry-vtt/setup-guide-fragment	internal/plugins/foundry_vtt/routes.go
 GET	/foundry-vtt/show-banner-fragment	internal/plugins/foundry_vtt/routes.go
+GET	/foundry/member-status	internal/plugins/syncapi/foundry_players_handler.go
+GET	/foundry/players	internal/plugins/syncapi/foundry_players_handler.go
+GET	/foundry/problems	internal/plugins/syncapi/foundry_players_handler.go
 GET	/game-nights	internal/plugins/sessions/routes.go
 GET	/groups	internal/plugins/campaigns/routes.go
 GET	/groups/:gid	internal/plugins/campaigns/routes.go
@@ -413,6 +416,7 @@ GET	/relations-graph	internal/widgets/relations/routes.go
 GET	/relations-graph/page	internal/widgets/relations/routes.go
 GET	/relations/types	internal/plugins/syncapi/routes.go
 GET	/reset-password	internal/plugins/auth/routes.go
+GET	/roll-tables	internal/plugins/rolltables/routes.go
 GET	/rsvp/:token	internal/plugins/sessions/routes.go
 GET	/rsvp/:token/suggest	internal/plugins/sessions/routes.go
 GET	/rules-glossary	internal/systems/routes.go
@@ -598,6 +602,7 @@ POST	/foundry-vtt/npc-spotlight/:eid	internal/plugins/foundry_vtt/routes.go
 POST	/foundry-vtt/token/rotate	internal/plugins/foundry_vtt/routes.go
 POST	/foundry-vtt/update	internal/plugins/foundry_vtt/routes.go
 POST	/foundry-vtt/update/later	internal/plugins/foundry_vtt/routes.go
+POST	/foundry-vtt/update/mode	internal/plugins/foundry_vtt/routes.go
 POST	/foundry-vtt/update/switch	internal/plugins/foundry_vtt/routes.go
 POST	/groups	internal/plugins/campaigns/routes.go
 POST	/groups/:gid/members	internal/plugins/campaigns/routes.go
@@ -675,6 +680,7 @@ POST	/submit	internal/plugins/packages/routes.go
 POST	/sync	internal/plugins/syncapi/routes.go
 POST	/sync/history	internal/plugins/syncapi/routes.go
 POST	/sync/mappings	internal/plugins/syncapi/routes.go
+POST	/sync/players	internal/plugins/syncapi/routes.go
 POST	/tags	internal/plugins/syncapi/routes.go
 POST	/tags	internal/widgets/tags/routes.go
 POST	/tags/:tagId/grants	internal/widgets/tags/routes.go
@@ -808,6 +814,7 @@ PUT	/notes/:noteID	internal/plugins/syncapi/routes.go
 PUT	/notes/:noteId	internal/widgets/notes/routes.go
 PUT	/owner-dashboard-layout	internal/plugins/campaigns/routes.go
 PUT	/relations/:relationId	internal/plugins/syncapi/routes.go
+PUT	/roll-tables	internal/plugins/rolltables/routes.go
 PUT	/security/users/:id/disable	internal/plugins/admin/routes.go
 PUT	/security/users/:id/enable	internal/plugins/admin/routes.go
 PUT	/sessions/:sid	internal/plugins/sessions/routes.go

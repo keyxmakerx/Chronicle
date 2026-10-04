@@ -43,6 +43,9 @@ type CampaignService interface {
 	AddMember(ctx context.Context, campaignID, email string, role Role) error
 	RemoveMember(ctx context.Context, campaignID, userID string) error
 	UpdateMemberRole(ctx context.Context, campaignID, userID string, role Role) error
+	// SetMemberAccess applies a People role-menu choice: player, scribe or
+	// codm (a Scribe with the DM-only grant).
+	SetMemberAccess(ctx context.Context, campaignID, userID, access string) error
 	UpdateMemberCharacter(ctx context.Context, campaignID, userID string, characterEntityID *string) error
 	ListMembers(ctx context.Context, campaignID string) ([]CampaignMember, error)
 

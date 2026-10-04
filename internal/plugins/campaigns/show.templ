@@ -151,7 +151,7 @@ templ customDashboard(cc *CampaignContext, layout *DashboardLayout, recentEntiti
 templ OwnerDashboardPage(cc *CampaignContext, recentEntities []RecentEntity, needsYou []NeedsYouItem, csrfToken string) {
 	@layouts.App(cc.Campaign.Name + " — Overview") {
 		<div class="max-w-5xl mx-auto">
-			@layouts.ManageHeader("Overview", "manage:dashboard")
+			@layouts.ManageHeader("Overview")
 			@NeedsYouCard(needsYou)
 
 			if layout := cc.Campaign.ParseOwnerDashboardLayout(); layout != nil {
@@ -214,8 +214,8 @@ templ defaultOwnerDashboard(cc *CampaignContext, recentEntities []RecentEntity, 
 					<i class="fa-solid fa-puzzle-piece text-green-600 dark:text-green-400 text-sm"></i>
 				</div>
 				<div>
-					<h3 class="text-sm font-semibold text-fg group-hover:text-accent transition-colors">Apps &amp; game system</h3>
-					<p class="text-[11px] text-fg-muted">Game system, apps and connections</p>
+					<h3 class="text-sm font-semibold text-fg group-hover:text-accent transition-colors">Game &amp; features</h3>
+					<p class="text-[11px] text-fg-muted">Game system and features</p>
 				</div>
 			</div>
 		</a>

@@ -1,8 +1,8 @@
 // foundry_vtt — owner_tab.templ renders the per-campaign Foundry VTT
-// install URL + version pointer + rotate-token button as an HTMX fragment
-// served at GET /campaigns/:id/foundry-vtt/settings-tab. The campaigns
-// plugin's VTT Setup Guides → Foundry VTT disclosure section embeds
-// this via hx-get.
+// install URL, the install steps and the rotate-token button as an HTMX
+// fragment served at GET /campaigns/:id/foundry-vtt/settings-tab. The
+// campaigns plugin's Foundry page embeds it via hx-get; the version the
+// campaign runs is on the same page's Module version card.
 //
 // HTMX-swap-safe patterns (see onclick_handlers.go for the full
 // reasoning):
@@ -25,8 +25,6 @@ templ OwnerTabFragment(data OwnerTabData) {
 	} else {
 		<div class="space-y-6">
 			@ownerInstallURLBlock(data)
-			@ownerCurrentVersionCard(data)
-			@ownerVersionPointer(data)
 			@ownerPlayerInstructions(data)
 		</div>
 	}
@@ -75,65 +73,6 @@ templ ownerEmptyState() {
 	</div>
 }
 
-// ownerCurrentVersionCard surfaces what version this campaign
-// resolves to right now. Distinguishes pinned (CurrentPin != "")
-// from latest-tracking (CurrentPin == "").
-templ ownerCurrentVersionCard(data OwnerTabData) {
-	<div class="card p-4 rounded-md">
-		<p class="text-xs font-semibold text-fg-muted uppercase tracking-wider mb-2">Currently Serving</p>
-		if data.CurrentVersion == "" {
-			<p class="text-sm text-amber-600 dark:text-amber-400">
-				<i class="fa-solid fa-triangle-exclamation mr-1"></i>
-				No module version is installed yet. An admin needs to install a version via
-				<code class="text-xs font-mono">/admin/packages</code>.
-			</p>
-		} else {
-			<div class="flex items-center gap-3 flex-wrap">
-				<span class="text-base font-mono font-semibold text-fg">{ data.CurrentVersion }</span>
-				if data.CurrentPin == "" {
-					<span class="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium bg-accent/10 text-accent">
-						<i class="fa-solid fa-arrow-up-right-from-square mr-1"></i>
-						auto: latest
-					</span>
-				} else {
-					<span class="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium bg-yellow-500/15 text-yellow-700 dark:text-yellow-400">
-						<i class="fa-solid fa-thumbtack mr-1"></i>
-						pinned
-					</span>
-				}
-				@descriptorBadge(data.DescriptorPresent)
-			</div>
-		}
-	</div>
-}
-
-// descriptorBadge is the "Descriptor: present" / "Descriptor:
-// defaults" transparency cue. Operators flagged that they want to
-// see at a glance which path is active without reading source.
-templ descriptorBadge(present bool) {
-	if present {
-		<span class="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium bg-emerald-500/15 text-emerald-700 dark:text-emerald-400" title="Module ships chronicle-package.json — serve behavior is descriptor-driven">
-			<i class="fa-solid fa-file-circle-check mr-1"></i>
-			descriptor: present
-		</span>
-	} else {
-		<span class="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium bg-blue-500/15 text-blue-700 dark:text-blue-400" title="No chronicle-package.json found — using hardcoded fallback defaults">
-			<i class="fa-solid fa-gear mr-1"></i>
-			descriptor: defaults
-		</span>
-	}
-}
-
-// ownerVersionPointer sends the owner to the one place the version is chosen.
-// The pin dropdown that lived here let an owner move the campaign without the
-// update flow's admin hold and confirmation, so it is gone.
-templ ownerVersionPointer(data OwnerTabData) {
-	<p class="text-sm text-fg-secondary">
-		Which module version this campaign runs, and new versions waiting for you, are on
-		<a href={ templ.SafeURL(extensionsURL(data.CampaignID)) } class="text-accent hover:underline">Apps &amp; game system</a>.
-	</p>
-}
-
 // ownerInstallURLBlock is the primary card on the owner tab: the
 // install URL is the focal point, token rotation is a de-emphasized
 // secondary row at the bottom of the card.
@@ -144,7 +83,7 @@ templ ownerInstallURLBlock(data OwnerTabData) {
 				<i class="fa-solid fa-link mr-1"></i> Module Install URL
 			</p>
 			<p class="text-xs text-fg-secondary mt-1">
-				Share this URL with players to install the Chronicle Foundry module in Foundry. The URL is unique to this campaign — players who install with it get this campaign's pinned module version and update channel.
+				Install the Chronicle Sync module in your Foundry setup with this URL. Only whoever runs Foundry installs it; players never need it, because Foundry gives them the module when they join. The URL is unique to this campaign, so Foundry gets this campaign's module version and updates.
 			</p>
 		</div>
 		<div class="flex items-stretch gap-2">
@@ -166,7 +105,7 @@ templ ownerInstallURLBlock(data OwnerTabData) {
 		</div>
 		<div class="flex items-center justify-between gap-2 pt-2 border-t border-edge/50">
 			<p class="text-xs text-fg-muted">
-				Rotating regenerates the signing token — every player will need to reinstall with the new URL.
+				Only rotate if this URL leaked. The URL saved in Foundry stops working, so reinstall the module there with the new one. Players are not affected.
 			</p>
 			<button
 				type="button"
@@ -179,13 +118,13 @@ templ ownerInstallURLBlock(data OwnerTabData) {
 	</div>
 }
 
-// ownerPlayerInstructions is the copy-pasteable steps block the owner
-// shares with their table. Wrapped in <details>, collapsed by default,
+// ownerPlayerInstructions is the copy-pasteable steps block whoever runs Foundry
+// follows to install the module in Foundry. Wrapped in <details>, collapsed by default,
 // so the install URL stays the primary content.
 templ ownerPlayerInstructions(data OwnerTabData) {
 	<details class="card p-4 rounded-md">
 		<summary class="text-xs font-semibold text-fg-muted uppercase tracking-wider cursor-pointer">
-			<i class="fa-solid fa-circle-question mr-1"></i> Player install instructions (click to expand)
+			<i class="fa-solid fa-circle-question mr-1"></i> How to install in Foundry (click to expand)
 		</summary>
 		<ol class="list-decimal list-inside text-sm text-fg-secondary space-y-1 mt-3">
 			<li>Open Foundry &rarr; Add-on Modules &rarr; Install Module</li>
@@ -193,6 +132,7 @@ templ ownerPlayerInstructions(data OwnerTabData) {
 				<code class="block mt-1 px-2 py-1 rounded-md bg-surface-alt text-xs break-all">{ data.InstallURL }</code>
 			</li>
 			<li>Click Install</li>
+			<li>In your world, turn on Chronicle Sync and paste the connect line when it asks.</li>
 		</ol>
 	</details>
 }

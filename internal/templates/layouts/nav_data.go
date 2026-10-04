@@ -121,7 +121,7 @@ func NavCommandsJSON(ctx context.Context) string {
 // NavManageRows are the campaign-management pages, in the order the sidebar
 // lists them. Only the owner manages a campaign, so anyone else (a Scribe, a
 // player, an owner viewing as a player whose role reads Player, a visitor)
-// gets none. The same rows feed the shared Manage header's tab strip.
+// gets none.
 func NavManageRows(ctx context.Context) []NavRowView {
 	if !InCampaign(ctx) || !IsAuthenticated(ctx) || GetCampaignRole(ctx) < 3 {
 		return nil
@@ -136,11 +136,13 @@ func NavManageRows(ctx context.Context) []NavRowView {
 	}
 	rows = append(rows,
 		NavRowView{Key: "manage:customize", Label: "Customize", Icon: "fa-paintbrush", URL: base + "/customize"},
-		NavRowView{Key: "manage:extensions", Label: "Apps & game system", Icon: "fa-puzzle-piece", URL: base + "/extensions"},
+		NavRowView{Key: "manage:extensions", Label: "Game & features", Icon: "fa-puzzle-piece", URL: base + "/extensions"},
 	)
-	// Sync history only means something once the campaign syncs with Foundry.
+	// The Foundry page (connection, players, module version, install link,
+	// and from there the sync history) only means something once the
+	// campaign syncs with Foundry.
 	if IsAddonEnabled(ctx, "sync-api") {
-		rows = append(rows, NavRowView{Key: "manage:sync-history", Label: "Sync history", Icon: "fa-clock-rotate-left", URL: base + "/sync-history"})
+		rows = append(rows, NavRowView{Key: "manage:foundry", Label: "Foundry", Icon: "fa-dice-d20", URL: base + "/foundry"})
 	}
 	return append(rows,
 		NavRowView{Key: "manage:trash", Label: "Trash", Icon: "fa-trash-can", URL: base + "/trash"},

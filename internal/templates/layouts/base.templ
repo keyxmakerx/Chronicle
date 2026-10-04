@@ -93,6 +93,10 @@ templ Base(title string) {
 		     Alpine so the component exists when Alpine first evaluates it. -->
 		<script src={ AssetURL("/static/js/media_uploader.js") } defer></script>
 
+		<!-- Timelines page "New Timeline" form (x-data="timelineCreateForm()");
+		     before Alpine for the same reason as the uploader above. -->
+		<script src={ AssetURL("/static/js/timeline_create_form.js") } defer></script>
+
 		<!-- Alpine.js: loaded AFTER boot.js so Chronicle.apiFetch/notify exist
 		     when Alpine initializes and evaluates x-data attributes. -->
 		<script src={ AssetURL("/static/vendor/alpine-collapse.min.js") } defer></script>
@@ -132,6 +136,10 @@ templ Base(title string) {
 		<script src={ AssetURL("/static/js/widgets/editor_outline.js") } defer></script>
 		<!-- Pictures inside the text (after editor_slash.js, before editor.js) -->
 		<script src={ AssetURL("/static/js/widgets/editor_image.js") } defer></script>
+		<!-- Rolling tables: the shared roller (pages and calendar days) loads the
+		     generator engine only when someone first rolls. -->
+		<script src={ AssetURL("/static/js/widgets/roll_tables.js") } data-engine-src={ AssetURL("/static/js/widgets/chronicle_gen.js") } defer></script>
+		<script src={ AssetURL("/static/js/widgets/editor_rolltable.js") } defer></script>
 		<script src={ AssetURL("/static/js/widgets/editor.js") } defer></script>
 
 		<!-- Image upload widget -->

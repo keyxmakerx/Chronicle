@@ -51,7 +51,7 @@ func RegisterCampaignRoutes(e *echo.Echo, h *Handler, campaignSvc campaigns.Camp
 	cg.GET("/api-keys/sync-overview", h.SyncOverviewFragment, campaigns.RequireRole(campaigns.RoleOwner))
 	cg.GET("/api-keys/sync-mappings", h.SyncMappingsFragment, campaigns.RequireRole(campaigns.RoleOwner))
 
-	// Integrations tab fragments (owner only — HTMX-loaded within Settings page).
+	// API keys tab fragments (owner only — HTMX-loaded within Settings page).
 	cg.GET("/integrations/keys", h.IntegrationsKeysFragment, campaigns.RequireRole(campaigns.RoleOwner))
 
 	// Calendar sync beacon: any campaign member may read — NO RequireRole,
@@ -313,6 +313,9 @@ func RegisterAPIRoutes(e *echo.Echo, api *APIHandler, calAPI *CalendarAPIHandler
 	if api.history != nil {
 		cg.GET("/sync/history", api.history.ListHistory, RequirePermission(PermSync))
 		cg.POST("/sync/history", api.history.ReportHistory, RequirePermission(PermSync))
+		// Who is in the Foundry world and which member each user is linked
+		// to, from the GM's client. Owner or DM access only (in the handler).
+		cg.POST("/sync/players", api.history.ReportPlayers, RequirePermission(PermSync))
 	}
 
 	// Stashes: move items and money as a named campaign member. The group is

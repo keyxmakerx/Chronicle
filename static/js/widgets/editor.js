@@ -142,6 +142,12 @@
         extensions.push(Chronicle.EditorImage.extension);
       }
 
+      // Rolling-table rollers. In the schema for everyone so a page holding
+      // one loads; the server strips them before players get the page.
+      if (Chronicle.EditorRollTable) {
+        extensions.push(Chronicle.EditorRollTable.extension);
+      }
+
       // [[links]] to notes. Always in the schema, so a body holding one
       // loads anywhere; reading, a click opens the Journal at the note,
       // unless this reader can't see it. While editing a click selects it.
