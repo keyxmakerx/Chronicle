@@ -613,3 +613,27 @@ func TestMapViewData_CanPaintHexes(t *testing.T) {
 		})
 	}
 }
+
+// CanMoveParty is what the page offers; it must agree with requirePartyMover.
+func TestMapViewData_CanMoveParty(t *testing.T) {
+	owners := ResolvedDisplay{Frame: "x", PartyWho: PartyWhoOwners}
+	scribes := ResolvedDisplay{Frame: "x", PartyWho: PartyWhoScribes}
+	tests := []struct {
+		name string
+		data MapViewData
+		want bool
+	}{
+		{"owner, owners policy", MapViewData{IsScribe: true, IsOwner: true, IsDM: true, Display: owners}, true},
+		{"DM-granted player, owners policy", MapViewData{IsDM: true, Display: owners}, true},
+		{"scribe, scribes policy", MapViewData{IsScribe: true, Display: scribes}, true},
+		{"scribe, owners policy", MapViewData{IsScribe: true, Display: owners}, false},
+		{"player, scribes policy", MapViewData{Display: scribes}, false},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := tc.data.CanMoveParty(); got != tc.want {
+				t.Errorf("CanMoveParty = %v, want %v", got, tc.want)
+			}
+		})
+	}
+}

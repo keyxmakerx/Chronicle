@@ -258,3 +258,135 @@ test('an anchored field is capped at 400 hexes an axis and never empty', () => {
 test('the transform string carries position and scale', () => {
   assert.equal(H.xfAttr({ x: 10, y: 20, s: 0.5 }), 'translate(10 20) scale(0.5)');
 });
+
+// ---- Fog of war and the party ----
+
+const keyOf = (c) => `${c.col},${c.row}`;
+
+test('neighbors: six hexes, odd rows shifted right, and the relation is symmetric', () => {
+  const sets = (col, row) => H.neighbors(col, row).map(keyOf).sort();
+  assert.deepEqual(sets(2, 2), ['1,1', '1,2', '1,3', '2,1', '2,3', '3,2']);
+  assert.deepEqual(sets(2, 3), ['1,3', '2,2', '2,4', '3,2', '3,3', '3,4']);
+  for (const [col, row] of [[5, 5], [4, 4], [0, 0], [3, 1]]) {
+    for (const n of H.neighbors(col, row)) {
+      assert.ok(H.neighbors(n.col, n.row).map(keyOf).includes(`${col},${row}`), `${col},${row} not a neighbour of ${keyOf(n)}`);
+      assert.equal(H.distance({ col, row }, n), 1);
+    }
+  }
+});
+
+test('unexploredKeys: everything in the field the explored set lacks', () => {
+  const g = { cols: 3, rows: 2 };
+  assert.equal(H.unexploredKeys(g, {}).length, 6);
+  const left = H.unexploredKeys(g, { '0,0': true, '2,1': true }).map(keyOf);
+  assert.deepEqual(left, ['1,0', '2,0', '0,1', '1,1']);
+  assert.deepEqual(H.unexploredKeys(g, { '0,0': true, '1,0': true, '2,0': true, '0,1': true, '1,1': true, '2,1': true }), []);
+  assert.deepEqual(H.unexploredKeys({ cols: 0, rows: 0 }, {}), []);
+});
+
+test('fogPolygons: six corners per hex, through the transform and canvas scale', () => {
+  const g = { r: 10, w: Math.sqrt(3) * 10, ox: 0, oy: 0, cols: 2, rows: 1 };
+  const polys = H.fogPolygons(g, { x: 100, y: 50, s: 2 }, [{ col: 1, row: 0 }], 0.5, 0.25);
+  assert.equal(polys.length, 1);
+  assert.equal(polys[0].length, 12);
+  // Hex (1,0) is centred at x = w; its top corner is r above that.
+  near(polys[0][0], (100 + g.w * 2) * 0.5);
+  near(polys[0][1], (50 + (0 - 10) * 2) * 0.25);
+  assert.deepEqual(H.fogPolygons(g, { x: 0, y: 0, s: 1 }, [], 1, 1), []);
+});
+
+test('walkPoint: eased hex by hex, a hop between, arrives exactly', () => {
+  const pts = [[0, 0], [100, 0], [100, 100]];
+  const start = H.walkPoint(pts, 0, 170, 12);
+  assert.deepEqual([start.x, start.y, start.done], [0, 0, false]);
+  const mid = H.walkPoint(pts, 85, 170, 12);
+  near(mid.x, 50); near(mid.y, -12); assert.equal(mid.done, false);
+  const second = H.walkPoint(pts, 170 + 85, 170, 12);
+  near(second.x, 100); near(second.y, 50 - 12);
+  // Eased: a quarter of the way through a step is less than a quarter across.
+  assert.ok(H.walkPoint(pts, 170 / 4, 170, 0).x < 25);
+  for (const t of [340, 341, 10000]) {
+    const end = H.walkPoint(pts, t, 170, 12);
+    assert.deepEqual([end.x, end.y, end.done], [100, 100, true]);
+  }
+  // Before the start and a single point do not fail.
+  assert.equal(H.walkPoint(pts, -50, 170, 12).x, 0);
+  assert.deepEqual(H.walkPoint([[7, 9]], 500, 170, 12), { x: 7, y: 9, done: true });
+});
+
+test('revealSchedule: the hexes around each path hex, once, when the token gets there', () => {
+  const g = { cols: 20, rows: 20 };
+  const path = H.hexLine({ col: 5, row: 5 }, { col: 8, row: 5 });
+  assert.equal(path.length, 4);
+  const sched = H.revealSchedule(path, 170, g);
+  const keys = sched.map(keyOf);
+  assert.equal(new Set(keys).size, keys.length, 'a hex is scheduled once');
+  // Each path hex and every neighbour of one is in the zone, nothing else.
+  const want = new Set();
+  for (const p of path) { want.add(keyOf(p)); H.neighbors(p.col, p.row).forEach((n) => want.add(keyOf(n))); }
+  assert.deepEqual([...keys].sort(), [...want].sort());
+  const at = Object.fromEntries(sched.map((s) => [keyOf(s), s.at]));
+  assert.equal(at['5,5'], 85);
+  // The last hex is already inside the zone of the one before it; only the land beyond waits for the final step.
+  assert.equal(at['8,5'], 2 * 170 + 85);
+  assert.equal(at['9,5'], 3 * 170 + 85);
+  // A hex near the start comes out with the start, not later.
+  assert.equal(at[keyOf(H.neighbors(5, 5)[0])], 85);
+  // Clipped to the field at its corner.
+  const corner = H.revealSchedule([{ col: 0, row: 0 }], 170, { cols: 3, rows: 3 });
+  assert.ok(corner.every((c) => c.col >= 0 && c.row >= 0 && c.col < 3 && c.row < 3));
+  assert.equal(corner.length, 3);
+  // First placement: one hex, revealed at once.
+  assert.equal(H.revealSchedule([{ col: 4, row: 4 }], 170, g)[0].at, 85);
+});
+
+test('fogBatches: the server\'s cap of 500, one direction per request', () => {
+  assert.equal(H.BATCH_MAX, 500);
+  const cells = Array.from({ length: 1201 }, (_, i) => ({ col: i, row: 0, terrain: 'x' }));
+  for (const explored of [true, false]) {
+    const out = H.fogBatches(cells, explored);
+    assert.deepEqual(out.map((b) => b.cells.length), [500, 500, 201]);
+    assert.ok(out.every((b) => b.explored === explored));
+    // Only the position travels: a reveal never carries terrain or names.
+    assert.deepEqual(Object.keys(out[0].cells[0]).sort(), ['col', 'row']);
+  }
+  assert.deepEqual(H.fogBatches([], true), []);
+  assert.equal(H.fogBatches(cells.slice(0, 500), true).length, 1);
+  assert.equal(H.fogBatches(cells.slice(0, 501), true).length, 2);
+});
+
+test('partyMoverAllowed mirrors the server: DM always, scribe unless owners-only, player never', () => {
+  const cases = [
+    [{ isDM: true, isScribe: true, partyWho: 'owners' }, true],
+    [{ isDM: true, isScribe: false, partyWho: 'owners' }, true],
+    [{ isDM: false, isScribe: true, partyWho: 'scribes' }, true],
+    [{ isDM: false, isScribe: true, partyWho: undefined }, true],
+    [{ isDM: false, isScribe: true, partyWho: 'owners' }, false],
+    [{ isDM: false, isScribe: false, partyWho: 'scribes' }, false],
+    [{ isDM: false, isScribe: false, partyWho: 'owners' }, false],
+  ];
+  for (const [o, want] of cases) assert.equal(H.partyMoverAllowed(o), want, JSON.stringify(o));
+});
+
+test('isStale: old versions and this client\'s own echoes are ignored, anything newer is read', () => {
+  assert.equal(H.isStale(10, 10, {}), true);
+  assert.equal(H.isStale(10, 9, {}), true);
+  assert.equal(H.isStale(10, 11, {}), false);
+  assert.equal(H.isStale(10, 12, { 12: true }), true);
+  assert.equal(H.isStale(10, 13, { 12: true }), false);
+  // No usable version: read to be safe.
+  for (const v of [undefined, null, 0, 'x']) assert.equal(H.isStale(10, v, {}), false);
+});
+
+test('the map picture: the server copy for viewers below DM level while fog is on', () => {
+  assert.equal(H.playerImageURL('c1', 'm1', 7), '/campaigns/c1/maps/m1/player-image?v=7');
+  const cases = [
+    [{ dmViewer: true, fogOn: true, anchored: false, startedWithCopy: true }, false],
+    [{ dmViewer: false, fogOn: true, anchored: false, startedWithCopy: false }, true],
+    [{ dmViewer: false, fogOn: true, anchored: true, startedWithCopy: false }, false],
+    [{ dmViewer: false, fogOn: false, anchored: false, startedWithCopy: false }, false],
+    // A page served the copy keeps it when fog goes off: the original's address is unknown.
+    [{ dmViewer: false, fogOn: false, anchored: false, startedWithCopy: true }, true],
+  ];
+  for (const [o, want] of cases) assert.equal(H.wantsPlayerCopy(o), want, JSON.stringify(o));
+});

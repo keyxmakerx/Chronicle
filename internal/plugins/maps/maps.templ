@@ -284,6 +284,8 @@ templ MapEditorBody(cc *campaigns.CampaignContext, data MapViewData, mapContaine
 		data-can-dm-only={ fmt.Sprintf("%t", cc.CanAuthorDmOnly() || cc.IsSiteAdmin) }
 		data-can-draw={ fmt.Sprintf("%t", data.CanDraw()) }
 		data-can-paint-hexes={ fmt.Sprintf("%t", data.CanPaintHexes()) }
+		data-can-move-party={ fmt.Sprintf("%t", data.CanMoveParty()) }
+		data-can-fog={ fmt.Sprintf("%t", data.IsDM) }
 		data-can-shadow={ fmt.Sprintf("%t", data.CanShadow()) }
 		data-user-id={ data.UserID }
 		data-display={ mustMarshalDisplay(data.DisplayOrDefault()) }

@@ -92,6 +92,11 @@
 	// grant, or a scribe where the draw policy allows), which is not the same
 	// as canDraw: a DM-granted player may paint hexes without being a scribe.
 	var canPaintHexes = cfg.dataset.canPaintHexes === 'true';
+	// canFog (reveal and hide hexes) is for owners and DM grants; canMoveParty
+	// follows the map's "who can move the party" setting. Both only decide what
+	// is offered: the server refuses everyone else.
+	var canFog = cfg.dataset.canFog === 'true';
+	var canMoveParty = cfg.dataset.canMoveParty === 'true';
 	// Shadows decide what players may know, so the tool is for the owner and
 	// co-DMs only; the server refuses everyone else regardless.
 	var canShadow = cfg.dataset.canShadow === 'true';
@@ -144,8 +149,17 @@
 	// Leaflet's overlay pane (z 400) it would cover the placed pictures (380),
 	// the hexes (390) and the shadow outlines (390).
 	map.createPane('mpBase').style.zIndex = 350;
+	var imageLayer = null;
 	if (mapImageURL) {
-		L.imageOverlay(mapImageURL, bounds, { pane: 'mpBase' }).addTo(map);
+		imageLayer = L.imageOverlay(mapImageURL, bounds, { pane: 'mpBase' }).addTo(map);
+	}
+	// The hex layer swaps the picture for the server's fogged copy when land is
+	// explored or covered, so the address can change while the map is open.
+	function setMapImage(url) {
+		if (!url) return;
+		mapImageURL = url;
+		if (imageLayer) imageLayer.setUrl(url);
+		else imageLayer = L.imageOverlay(url, bounds, { pane: 'mpBase' }).addTo(map);
 	}
 
 	// ---- Opening view: the whole map, where this person left off, or a
@@ -1005,8 +1019,9 @@
 	function hexesOn() { return !!(viewerCtx && viewerCtx.hexes && viewerCtx.hexes.isOn()); }
 	function syncHexes() {
 		if (destroyed || !viewerCtx) return;
-		if (viewerCtx.hexes) { viewerCtx.hexes.refresh(); return; }
+		if (viewerCtx.hexes) { if (D.grid_type === 'hex') startHexSocket(); viewerCtx.hexes.refresh(); return; }
 		if (D.grid_type !== 'hex' || hexesLoading) return;
+		startHexSocket();
 		hexesLoading = true;
 		loadScript(cfg.dataset.hexesSrc).then(function() {
 			hexesLoading = false;
@@ -1029,6 +1044,11 @@
 	var hexBase = '/campaigns/' + campaignID + '/maps/' + mapID + '/hexes';
 	// The picture the server says the layer covers; null is the whole map.
 	var hexAnchor = null;
+	// The layer's saved fog switch; the settings sheet stages a change in D.hex_fog.
+	var hexFog = false;
+	// The live hex connection's state (see startHexSocket); declared up here
+	// because syncHexes can run before the connection code below does.
+	var hexSocket = null, hexSocketTries = 0, hexSocketTimer = null, hexSocketLost = false;
 	var hexCoverSubs = [];
 	var savedMapName = '';
 	// About ten hexes across a picture, whatever its size.
@@ -1201,7 +1221,8 @@
 			open: R.open_mode === 'spot'
 				? { mode: 'spot', x: R.open_x, y: R.open_y, zoom: R.open_zoom }
 				: { mode: R.open_mode },
-			draw: { who: R.draw_who }
+			draw: { who: R.draw_who },
+			hexes: { party_who: R.party_who }
 		};
 	}
 
@@ -1282,6 +1303,8 @@
 				b.setAttribute('aria-pressed', String(D[b.dataset.k]) === b.dataset.v ? 'true' : 'false');
 			});
 			renderHexCover();
+			var fogBox = $id('ms-fog');
+			if (fogBox) fogBox.checked = Object.prototype.hasOwnProperty.call(D, 'hex_fog') ? !!D.hex_fog : hexFog;
 			$id('ms-frame-pick').hidden = D.frame_source !== 'map';
 			$id('ms-frame-note').hidden = D.frame_source === 'map';
 			sInputs.tint.checked = !!D.tint;
@@ -1330,6 +1353,11 @@
 			applyDisplay();
 		});
 		sInputs.tint.addEventListener('change', function() { D.tint = this.checked; applyDisplay(); });
+		// Fog of war is a layer setting, saved with the sheet and previewed live.
+		var fogSwitch = $id('ms-fog');
+		if (fogSwitch) fogSwitch.addEventListener('change', function() { D.hex_fog = this.checked; applyDisplay(); });
+		window.__mpSyncFog = function() { if (!sheet.hidden) syncSheet(); };
+		cleanups.push(function() { window.__mpSyncFog = null; });
 		sInputs.gridSize.addEventListener('input', function() {
 			D.grid_size = parseInt(this.value, 10);
 			if (D.grid_type === 'none') { D.grid_type = 'square'; syncSheet(); }
@@ -1444,6 +1472,11 @@
 				var resp = await Chronicle.apiFetch('/campaigns/' + campaignID + '/maps/' + mapID, { method: 'PUT', body: body });
 				if (resp.ok && anchorChanges) {
 					if (!await apiPut(hexBase + '/layer', { anchor_drawing_id: D.hex_anchor })) { btn.disabled = false; return; }
+				}
+				// Only the fog switch travels: the layer's cover is not touched here.
+				var fogChanges = D.grid_type === 'hex' && Object.prototype.hasOwnProperty.call(D, 'hex_fog') && D.hex_fog !== hexFog;
+				if (resp.ok && fogChanges) {
+					if (!await apiPut(hexBase + '/layer', { fog_enabled: D.hex_fog })) { btn.disabled = false; return; }
 				}
 				if (resp.ok) { reloadView(); return; }
 				var data = await resp.json().catch(function() { return {}; });
@@ -1824,6 +1857,8 @@
 		// server enforces the map's "who can draw" rule regardless.
 		canDraw: canDraw,
 		canPaintHexes: canPaintHexes,
+		canFog: canFog,
+		canMoveParty: canMoveParty,
 		canShadow: canShadow,
 		isOwner: isOwner,
 		canDmOnly: canDmOnly,
@@ -1841,12 +1876,55 @@
 		getDisplay: function() { return D; },
 		hexCover: hexCover,
 		onHexAnchor: function(id) { hexAnchor = id; hexCoverNotify(); },
+		onHexFog: function(on) { hexFog = !!on; if (window.__mpSyncFog) window.__mpSyncFog(); },
+		getMapImage: function() { return mapImageURL; },
+		setMapImage: setMapImage,
 		onHexLines: function(on) { hexLinesOwned = !!on; drawGrid(); },
 		setTool: function(t) { setTool(t); },
 		setHint: function(msg) { setHint(msg); }
 	};
 	viewerCtx = window.chronicleMap;
 	syncHexes();
+
+	// ---- Live hex changes ----
+	// The server announces every hex write as "hex.changed" with a version (and,
+	// when it is safe for this viewer, the party's path). It never carries hex
+	// contents: the hex module refetches the read filtered for this viewer.
+	// Without a socket the map still works; changes then show on reload.
+	function startHexSocket() {
+		if (destroyed || hexSocket || hexSocketTimer || typeof window.WebSocket !== 'function') return;
+		try {
+			var proto = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+			hexSocket = new WebSocket(proto + '//' + window.location.host + '/ws?campaign=' + encodeURIComponent(campaignID));
+			hexSocket.addEventListener('open', function() {
+				hexSocketTries = 0;
+				// Events missed while disconnected: read the layer again.
+				if (hexSocketLost && viewerCtx && viewerCtx.hexes && viewerCtx.hexes.resync) viewerCtx.hexes.resync();
+				hexSocketLost = false;
+			});
+			hexSocket.addEventListener('message', function(ev) {
+				var msg;
+				try { msg = JSON.parse(ev.data); } catch (e) { return; }
+				if (!msg || msg.type !== 'hex.changed' || msg.campaignId !== campaignID) return;
+				if (viewerCtx && viewerCtx.hexes && viewerCtx.hexes.onChanged) viewerCtx.hexes.onChanged(msg.payload);
+			});
+			hexSocket.addEventListener('close', function() {
+				hexSocket = null;
+				hexSocketLost = true;
+				// A quiet, bounded retry: a proxy that never upgrades must not be hammered.
+				if (!destroyed && hexSocketTries < 8) {
+					hexSocketTries++;
+					hexSocketTimer = setTimeout(function() { hexSocketTimer = null; startHexSocket(); }, Math.min(30000, 2000 * hexSocketTries));
+				}
+			});
+			hexSocket.addEventListener('error', function(e) { if (e && e.preventDefault) e.preventDefault(); });
+		} catch (e) { /* live updates are a nicety */ }
+	}
+	if (D.grid_type === 'hex') startHexSocket();
+	cleanups.push(function() {
+		clearTimeout(hexSocketTimer);
+		if (hexSocket) { var ws = hexSocket; hexSocket = null; try { ws.close(); } catch (e) { /* already closed */ } }
+	});
 
 	// Tear down a mount so a host that re-creates the viewer (the focus view,
 	// opened and closed over a page that stays loaded) leaks nothing: Leaflet's
@@ -1882,6 +1960,8 @@
         var handle = mountViewer(cfgEl, opts);
         cfgEl.__mapViewerHandle = handle;
         return ensureShadow({ shadowSrc: d.shadowSrc }).then(function () {
+          // The hex layer may have started first; its fog smoke needs this module.
+          if (handle.ctx && handle.ctx.hexes && handle.ctx.hexes.shadowReady) handle.ctx.hexes.shadowReady();
           return ensurePictures({ picturesSrc: d.picturesSrc });
         }).then(function () {
           return ensureDrawing({ drawSrc: d.drawSrc });

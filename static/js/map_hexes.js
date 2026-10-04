@@ -28,10 +28,20 @@
  * Data comes from, and is saved to, the REST API:
  *   GET   /campaigns/:id/maps/:mid/hexes          layer + the cells this viewer may see
  *   PATCH /campaigns/:id/maps/:mid/hexes/cells    { cells: [{col,row,terrain?,name?,notes?}] }
- *   PUT   /campaigns/:id/maps/:mid/hexes/layer    { anchor_drawing_id: id | null } (owner or DM; the viewer sends it)
+ *   PUT   /campaigns/:id/maps/:mid/hexes/layer    { anchor_drawing_id?, fog_enabled? } (owner or DM; the viewer sends it)
+ *   POST  /campaigns/:id/maps/:mid/hexes/fog      { cells: [{col,row}], explored } or { reset: true } (DM)
+ *   PUT   /campaigns/:id/maps/:mid/hexes/party    { col, row } -> { version, path }
  * PATCH is partial: a stroke sends only terrain, an edit of a name sends only
  * the name. The server decides who may write; ctx.canPaintHexes (the same rule
  * as HexService.requireWriter) only decides what is offered.
+ *
+ * Fog of war. A viewer who cannot see DM-only content is sent explored cells
+ * only, so "unexplored" on their side is simply every field hex without a
+ * cell; the DM is sent every cell with its explored flag. Unexplored hexes are
+ * drawn as part of the shared smoke (map_shadow.js, one union mask, so overlaps
+ * never darken) for players and faintly hatched for the DM. The server tells
+ * every client "hex.changed" with a version (and, when safe, the party's path);
+ * the client refetches the filtered read, never trusting the event for data.
  */
 (function () {
   'use strict';
@@ -290,6 +300,135 @@
     return out;
   }
 
+
+  // ---- Fog and the party (pure) ----
+
+  var STEP_MS = 170;   // time the party token takes to cross one hex
+  var LIFT = 0.12;     // the token's little hop, as a fraction of a hex radius
+
+  // neighbors lists the six hexes around (col,row), odd rows shifted right
+  // (the same order and rule as Neighbors in hex.go).
+  function neighbors(col, row) {
+    var odd = row & 1;
+    return [
+      { col: col + 1, row: row }, { col: col - 1, row: row },
+      { col: col + (odd ? 1 : 0), row: row - 1 }, { col: col + (odd ? 0 : -1), row: row - 1 },
+      { col: col + (odd ? 1 : 0), row: row + 1 }, { col: col + (odd ? 0 : -1), row: row + 1 }
+    ];
+  }
+
+  // unexploredKeys lists every hex of the field that is not in the explored
+  // set (an object keyed "col,row"). One definition of "unexplored" for the
+  // smoke, the DM's hatch and the click card.
+  function unexploredKeys(g, explored) {
+    var out = [];
+    for (var row = 0; row < g.rows; row++) {
+      for (var col = 0; col < g.cols; col++) {
+        if (!explored[key(col, row)]) out.push({ col: col, row: row });
+      }
+    }
+    return out;
+  }
+
+  // fogPolygons turns hexes into flat corner lists [x0,y0,x1,y1,...] in a
+  // canvas whose pixels are sx and sy per map pixel, through the field's
+  // transform xf. The shadow module fills them into its mask.
+  function fogPolygons(g, xf, list, sx, sy) {
+    var out = [];
+    for (var i = 0; i < list.length; i++) {
+      var c = center(g, list[i].col, list[i].row), poly = [];
+      for (var k = 0; k < 6; k++) {
+        var a = Math.PI / 3 * k - Math.PI / 2;
+        poly.push((xf.x + (c[0] + g.r * Math.cos(a)) * xf.s) * sx, (xf.y + (c[1] + g.r * Math.sin(a)) * xf.s) * sy);
+      }
+      out.push(poly);
+    }
+    return out;
+  }
+
+  // walkPoint is where the party token is, elapsed ms after it set off along
+  // points ([[x,y],...] hex centres). Each hex takes stepMs, eased so the token
+  // pauses a beat at every hex, with a small hop of lift pixels between them.
+  // done is true once it has arrived.
+  function walkPoint(points, elapsed, stepMs, lift) {
+    var n = points.length - 1;
+    if (n < 1) return { x: points[0][0], y: points[0][1], done: true };
+    var e = Math.max(0, elapsed) / stepMs;
+    if (e >= n) return { x: points[n][0], y: points[n][1], done: true };
+    var i = Math.floor(e), f = e - i;
+    f = f * f * (3 - 2 * f);
+    var a = points[i], b = points[i + 1];
+    return {
+      x: a[0] + (b[0] - a[0]) * f,
+      y: a[1] + (b[1] - a[1]) * f - Math.sin(f * Math.PI) * lift,
+      done: false
+    };
+  }
+
+  // revealSchedule says when each hex a move reveals should come out of the
+  // fog: the hexes around path[i] when the token is half a step into hex i.
+  // A hex near several path hexes appears with the first. The field's edge
+  // clips it, as the server does. Returns [{col,row,at}] with at in ms.
+  function revealSchedule(path, stepMs, g) {
+    var seen = {}, out = [];
+    function add(c, at) {
+      if (c.col < 0 || c.row < 0 || c.col >= g.cols || c.row >= g.rows) return;
+      var k = key(c.col, c.row);
+      if (seen[k]) return;
+      seen[k] = true;
+      out.push({ col: c.col, row: c.row, at: at });
+    }
+    for (var i = 0; i < path.length; i++) {
+      var at = i * stepMs + stepMs / 2;
+      add(path[i], at);
+      neighbors(path[i].col, path[i].row).forEach(function (n) { add(n, at); });
+    }
+    return out;
+  }
+
+  // fogBatches splits a reveal or hide into requests of at most BATCH_MAX
+  // hexes, each saying which way it goes (the server refuses a body that does
+  // not say). cells is [{col,row}].
+  function fogBatches(cells, explored) {
+    var out = [];
+    for (var i = 0; i < cells.length; i += BATCH_MAX) {
+      out.push({ cells: cells.slice(i, i + BATCH_MAX).map(function (c) { return { col: c.col, row: c.row }; }), explored: !!explored });
+    }
+    return out;
+  }
+
+  // partyMoverAllowed mirrors HexService.requirePartyMover, which decides what
+  // is offered: a DM always, a scribe unless the map keeps the party to
+  // owners, a player never. The server enforces it regardless.
+  function partyMoverAllowed(o) {
+    if (o.isDM) return true;
+    return !!o.isScribe && o.partyWho !== 'owners';
+  }
+
+  // isStale is true when an event tells nothing new: its version is not past
+  // the state this client last read, or is the version of a write this client
+  // made itself (own is an object keyed by version), which echoes back.
+  function isStale(known, incoming, own) {
+    if (typeof incoming !== 'number' || incoming <= 0) return false;
+    return incoming <= known || !!(own && own[incoming]);
+  }
+
+  // The mapped picture a viewer below DM level is shown while fog hides land
+  // from them: the server's smudged copy. The version only busts the browser's
+  // cache; the server always renders the current state.
+  function playerImageURL(campaignID, mapID, version) {
+    return '/campaigns/' + campaignID + '/maps/' + mapID + '/player-image?v=' + version;
+  }
+
+  // wantsPlayerCopy says whether the map picture must be the server's copy.
+  // A layer pinned to a picture leaves the map's own picture alone. A page that
+  // was served the copy keeps asking for it, because the original address is
+  // not known to the page and the copy is always current.
+  function wantsPlayerCopy(o) {
+    if (o.dmViewer) return false;
+    return (!!o.fogOn && !o.anchored) || !!o.startedWithCopy;
+  }
+
   function esc(s) {
     return String(s).replace(/[&<>"']/g, function (c) {
       return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c];
@@ -302,7 +441,11 @@
       anchoredGeometry: anchoredGeometry, boxFromPoints: boxFromPoints, layoutFor: layoutFor, hexAtMap: hexAtMap, xfAttr: xfAttr,
       hexAt: hexAt, cubeOf: cubeOf, distance: distance, hexLine: hexLine, hexD: hexD,
       cellsPath: cellsPath, linesPath: linesPath, roadPath: roadPath, batches: batches,
-      mergeEntry: mergeEntry
+      mergeEntry: mergeEntry,
+      STEP_MS: STEP_MS, neighbors: neighbors, unexploredKeys: unexploredKeys, fogPolygons: fogPolygons,
+      walkPoint: walkPoint, revealSchedule: revealSchedule, fogBatches: fogBatches,
+      partyMoverAllowed: partyMoverAllowed, isStale: isStale, playerImageURL: playerImageURL,
+      wantsPlayerCopy: wantsPlayerCopy
     };
   }
   if (typeof window === 'undefined') return;
@@ -357,6 +500,27 @@
     var dragDisabled = false;
     var stroke = null;        // { last: {col,row} } while the pointer is down in Paint mode
     var canWrite = !!ctx.canPaintHexes;
+    var canFog = !!ctx.canFog;                 // DM: reveal and hide hexes (HexService.RevealFog)
+    var canParty = !!ctx.canMoveParty;         // offered Party mode; the server decides
+    var seesAll = !!ctx.canDmOnly;             // the server sends this viewer every hex
+    var fogLayerOn = false;   // the layer's saved fog_enabled
+    var lastFog = false;
+    var party = null;         // { col, row } or null
+    var partyVer = 0;         // version of the last move animated, so one move plays once
+    var partyAnim = null;     // { pts, t0 } while the token walks
+    var partyRaf = 0;
+    var partyBusy = false;
+    var revealAt = {};        // "col,row" -> performance.now() time a hex leaves the fog
+    var revealTimers = [];
+    var fogQ = null;          // { value, cells } reveals or hides waiting to be saved
+    var loadedVersion = 0;    // version of the state last read
+    var own = {};             // versions of this client's own writes
+    var pendingSaves = 0;
+    var remoteWaiting = false;
+    var hatchDirty = true;
+    var gHatch, gParty, partyTok, fieldD = '';
+    var shadow = null, smokeSet = false;
+    var startedWithCopy = null, initialImage = null, copyVer = null;
 
     var pane = map.getPane('mpHexes') || map.createPane('mpHexes');
     pane.style.zIndex = 390;
@@ -367,6 +531,13 @@
     var container = map.getContainer();
 
     function display() { return ctx.getDisplay ? ctx.getDisplay() : {}; }
+
+    // fogOn is whether fog hides land right now: the owner's unsaved choice in
+    // the settings sheet while it is open (a live preview), else the layer's.
+    function fogOn() {
+      var D = display();
+      return Object.prototype.hasOwnProperty.call(D, 'hex_fog') ? !!D.hex_fog : fogLayerOn;
+    }
 
     // ---- Overlay ----
 
@@ -389,6 +560,10 @@
       gLines = svgEl('g');
       gTop = svgEl('g');
       gHover = svgEl('g');
+      gHatch = svgEl('g');
+      gParty = svgEl('g');
+      gParty.style.pointerEvents = 'none';
+      gHatch.style.pointerEvents = 'none';
       hoverPath = svgEl('path', {
         fill: '#ffffff', 'fill-opacity': '.14', stroke: '#ffffff', 'stroke-width': '2',
         'stroke-linejoin': 'round', 'vector-effect': 'non-scaling-stroke'
@@ -399,16 +574,21 @@
       // transform is all that moves when a pinned picture does.
       root = svgEl('g');
       root.appendChild(gFills);
+      root.appendChild(gHatch);
       root.appendChild(gLines);
       root.appendChild(gTop);
+      root.appendChild(gParty);
       root.appendChild(gHover);
       svg.appendChild(defs);
       svg.appendChild(root);
       applyTransform();
       // The hex lines: one path for the whole field, a constant 1px wide at
       // every zoom, like the plain grid it replaces.
+      fieldD = linesPath(geo);
+      hatchDirty = true;
+      partyTok = null;
       gLines.appendChild(svgEl('path', {
-        d: linesPath(geo), fill: 'none', stroke: '#241c10',
+        d: fieldD, fill: 'none', stroke: '#241c10',
         'stroke-opacity': String((D.grid_strength || 30) / 100),
         'stroke-width': '1', 'vector-effect': 'non-scaling-stroke'
       }));
@@ -491,6 +671,213 @@
           'stroke-width': '3', 'stroke-linejoin': 'round', 'vector-effect': 'non-scaling-stroke'
         }));
       }
+      if (hatchDirty) renderHatch();
+      renderParty();
+    }
+
+    // ---- Fog: what is unexplored, and how each kind of viewer sees it ----
+
+    // heldBack is true while a hex a move just revealed has not been reached by
+    // the walking party yet, so land comes out of the fog as the token arrives.
+    function heldBack(k) { return revealAt[k] !== undefined && performance.now() < revealAt[k]; }
+
+    function exploredSet() {
+      var set = {};
+      for (var k in cells) if (cells[k].explored && !heldBack(k)) set[k] = true;
+      return set;
+    }
+
+    // The DM's view of the fog: unexplored hexes faintly hatched. The hatch is
+    // one rectangle masked by the field minus the explored hexes, so a drag
+    // costs the explored count, not the field.
+    function renderHatch() {
+      hatchDirty = false;
+      if (!gHatch) return;
+      while (gHatch.firstChild) gHatch.removeChild(gHatch.firstChild);
+      if (!layerOn || !geo || !fogOn() || !seesAll) return;
+      var k = geo.r / 26, exp = [];
+      var set = exploredSet();
+      for (var c in set) exp.push(cells[c]);
+      var bb = { x: geo.ox - geo.w / 2, y: geo.oy - geo.r, w: geo.cols * geo.w + geo.w, h: (geo.rows - 1) * 1.5 * geo.r + 2 * geo.r };
+      var defsEl = svgEl('defs');
+      var pat = svgEl('pattern', { id: uid + 'hatch', patternUnits: 'userSpaceOnUse', width: (7 * k).toFixed(2), height: (7 * k).toFixed(2), patternTransform: 'rotate(45)' });
+      pat.appendChild(svgEl('line', { x1: 0, y1: 0, x2: 0, y2: (7 * k).toFixed(2), stroke: '#1d262d', 'stroke-width': (2.2 * k).toFixed(2) }));
+      var mask = svgEl('mask', { id: uid + 'hm', maskUnits: 'userSpaceOnUse', x: bb.x.toFixed(1), y: bb.y.toFixed(1), width: bb.w.toFixed(1), height: bb.h.toFixed(1) });
+      mask.appendChild(svgEl('path', { d: fieldD, fill: '#fff' }));
+      mask.appendChild(svgEl('path', { d: cellsPath(geo, exp), fill: '#000' }));
+      defsEl.appendChild(pat);
+      defsEl.appendChild(mask);
+      gHatch.appendChild(defsEl);
+      gHatch.appendChild(svgEl('rect', {
+        x: bb.x.toFixed(1), y: bb.y.toFixed(1), width: bb.w.toFixed(1), height: bb.h.toFixed(1),
+        fill: 'url(#' + uid + 'hatch)', mask: 'url(#' + uid + 'hm)', opacity: '.42'
+      }));
+    }
+
+    // paintSmoke fills the unexplored hexes into the shadow module's mask, so
+    // they share one smoke with every shadowed area and overlaps never darken.
+    function paintSmoke(g2, cw, ch) {
+      if (!layout || !geo) return;
+      var polys = fogPolygons(geo, layout.xf, unexploredKeys(geo, exploredSet()), cw / mapW, ch / mapH);
+      g2.beginPath();
+      polys.forEach(function (p) {
+        g2.moveTo(p[0], p[1]);
+        for (var i = 2; i < p.length; i += 2) g2.lineTo(p[i], p[i + 1]);
+        g2.closePath();
+      });
+      g2.fill();
+      // A hairline stroke closes the seams between neighbouring hexes.
+      g2.lineWidth = Math.max(1, cw / mapW * 1.5);
+      g2.strokeStyle = '#000';
+      g2.stroke();
+    }
+
+    function smoke() {
+      if (!shadow && window.ChronicleMapShadow && window.L) {
+        shadow = window.ChronicleMapShadow.attach(map, {
+          toLatLng: function (pt) { return L.latLng(mapH - (pt.y / 100) * mapH, (pt.x / 100) * mapW); }
+        });
+      }
+      return shadow;
+    }
+
+    // fogView brings everything fog draws in line with the current state: the
+    // players' smoke, the DM's hatch, and the picture players are shown.
+    function fogView() {
+      var on = layerOn && loaded && !hidden && fogOn();
+      // The smoke is only needed by viewers the fog hides land from.
+      var sh = (on && !seesAll) || smokeSet ? smoke() : null;
+      if (sh) {
+        if (on && !seesAll) {
+          if (!smokeSet) { sh.setHexFog(paintSmoke); smokeSet = true; } else sh.refreshHexFog();
+        } else if (smokeSet) { sh.setHexFog(null); smokeSet = false; }
+      }
+      hatchDirty = true;
+      renderSoon();
+      syncImage();
+    }
+
+    // The picture a viewer below DM level may see while fog hides land is the
+    // server's copy with those hexes smudged. It is asked for by version, so a
+    // reveal fetches a fresh one.
+    function syncImage() {
+      if (!ctx.setMapImage || !ctx.getMapImage || !loaded) return;
+      if (startedWithCopy === null) {
+        initialImage = ctx.getMapImage() || '';
+        startedWithCopy = /\/player-image\?/.test(initialImage);
+        if (startedWithCopy) copyVer = version;
+      }
+      var want = wantsPlayerCopy({ dmViewer: seesAll, fogOn: fogLayerOn && !hidden, anchored: !!anchorId, startedWithCopy: startedWithCopy });
+      if (want) {
+        if (copyVer !== version) { copyVer = version; ctx.setMapImage(playerImageURL(ctx.campaignID, ctx.mapID, version)); }
+      } else if (copyVer !== null && !startedWithCopy) {
+        copyVer = null;
+        ctx.setMapImage(initialImage);
+      }
+    }
+
+    // ---- The party ----
+
+    function tokenNode(k) {
+      var g2 = svgEl('g');
+      g2.appendChild(svgEl('circle', { r: (10 * k + 2).toFixed(2), fill: '#b91c1c', stroke: '#fff', 'stroke-width': (2.5 * k).toFixed(2) }));
+      g2.appendChild(svgEl('circle', { r: (10 * k - 1.5).toFixed(2), fill: 'none', stroke: '#fca5a5', 'stroke-width': k.toFixed(2), opacity: '.7' }));
+      g2.appendChild(svgEl('path', {
+        transform: 'scale(' + k.toFixed(3) + ')', d: 'M-3.5 6V-6M-3.5-6h8l-2.2 3 2.2 3h-8',
+        fill: '#fff', stroke: '#fff', 'stroke-width': '1.3', 'stroke-linejoin': 'round'
+      }));
+      return g2;
+    }
+
+    function partyShown() {
+      if (!party || !layerOn || hidden) return false;
+      // Never draw the party on land the viewer has not been shown, whatever
+      // the server sent.
+      if (fogOn() && !seesAll && !partyAnim) {
+        var c = cells[key(party.col, party.row)];
+        return !!(c && c.explored);
+      }
+      return true;
+    }
+
+    function placeToken(x, y) {
+      if (partyTok) partyTok.setAttribute('transform', 'translate(' + x.toFixed(1) + ' ' + y.toFixed(1) + ')');
+    }
+
+    function renderParty() {
+      if (!gParty || !geo) return;
+      if (!partyShown()) { while (gParty.firstChild) gParty.removeChild(gParty.firstChild); partyTok = null; return; }
+      if (!partyTok) {
+        partyTok = svgEl('g');
+        partyTok.appendChild(tokenNode(geo.r / 26));
+        gParty.appendChild(partyTok);
+      }
+      if (!partyAnim) { var c = center(geo, party.col, party.row); placeToken(c[0], c[1]); }
+    }
+
+    function stopWalk() {
+      partyAnim = null;
+      if (partyRaf) { cancelAnimationFrame(partyRaf); partyRaf = 0; }
+    }
+
+    // walk moves the token along the path hex by hex, easing at each. With
+    // reduced motion, or no path to walk, it simply appears at the end.
+    function walk(path) {
+      stopWalk();
+      if (!geo || reduced() || path.length < 2) { renderParty(); return; }
+      var pts = path.map(function (p) { return center(geo, p.col, p.row); });
+      partyAnim = { pts: pts, t0: performance.now() };
+      renderParty();
+      (function frame() {
+        if (!partyAnim) return;
+        var w = walkPoint(partyAnim.pts, performance.now() - partyAnim.t0, STEP_MS, geo.r * LIFT);
+        placeToken(w.x, w.y);
+        if (w.done) { partyAnim = null; partyRaf = 0; renderParty(); return; }
+        partyRaf = requestAnimationFrame(frame);
+      })();
+    }
+
+    // applyParty plays a move once: the land around the path stays in the fog
+    // until the token reaches it, then the token walks. The same move can
+    // arrive twice (the write's answer and the live event); the version makes
+    // the second a no-op.
+    function applyParty(path, ver) {
+      if (!geo || !path || !path.length) return;
+      if (ver) { if (ver <= partyVer) return; partyVer = ver; }
+      if (!reduced() && path.length > 1) {
+        var t = performance.now();
+        revealSchedule(path, STEP_MS, geo).forEach(function (r) {
+          var k = key(r.col, r.row);
+          if (cells[k] && cells[k].explored) return;
+          revealAt[k] = t + r.at;
+          revealTimers.push(setTimeout(function () { hatchDirty = true; if (smokeSet && shadow) shadow.refreshHexFog(); renderSoon(); }, r.at + 20));
+        });
+      }
+      var last = path[path.length - 1];
+      party = { col: last.col, row: last.row };
+      walk(path);
+    }
+
+    function moveParty(h) {
+      if (partyBusy || !canParty) return;
+      if (party && party.col === h.col && party.row === h.row) return;
+      partyBusy = true;
+      Chronicle.apiFetch(base + '/party', { method: 'PUT', body: { col: h.col, row: h.row } }).then(function (res) {
+        if (res.ok) {
+          return res.json().then(function (r) {
+            if (r && r.version) { own[r.version] = true; version = Math.max(version, r.version); }
+            applyParty((r && r.path) || [], r && r.version);
+            return load();
+          });
+        }
+        return res.json().catch(function () { return {}; }).then(function (err) {
+          Chronicle.notify(err.message || 'Could not move the party', 'error');
+          return load();
+        });
+      }).catch(function () {
+        Chronicle.notify('Could not move the party', 'error');
+        return load();
+      }).then(function () { partyBusy = false; });
     }
 
     // Redraws coalesce to one per frame, so a drag over many hexes paints once
@@ -516,7 +903,7 @@
 
     function cellAt(col, row) {
       var k = key(col, row);
-      return cells[k] || (cells[k] = { col: col, row: row, terrain: null, name: '', notes: null });
+      return cells[k] || (cells[k] = { col: col, row: row, terrain: null, name: '', notes: null, explored: false });
     }
 
     function queueChange(col, row, change) {
@@ -552,11 +939,65 @@
       flushTimer = null;
       var entries = Object.keys(queue).map(function (k) { return queue[k]; });
       queue = {};
-      if (!entries.length) return saving;
       batches(entries).forEach(function (body) {
-        saving = saving.then(function () { return send(body); });
+        pendingSaves++;
+        saving = saving.then(function () { return send(body); }).then(settled);
       });
+      // Reveals and hides go the same way, one request per 500 hexes.
+      if (fogQ) {
+        var q = fogQ;
+        fogQ = null;
+        fogBatches(Object.keys(q.cells).map(function (k) { return q.cells[k]; }), q.value).forEach(function (body) {
+          pendingSaves++;
+          saving = saving.then(function () { return sendFog(body); }).then(settled);
+        });
+      }
       return saving;
+    }
+
+    // settled runs after each save. A remote change that arrived while edits
+    // were unsaved is read now, so it cannot overwrite what is on screen.
+    function settled() {
+      pendingSaves = Math.max(0, pendingSaves - 1);
+      if (pendingSaves === 0 && remoteWaiting && !stroke && !flushTimer && !fogQ && !Object.keys(queue).length) {
+        remoteWaiting = false;
+        load();
+      }
+    }
+
+    function sendFog(body) {
+      var keep = new TextEncoder().encode(JSON.stringify(body)).length < KEEPALIVE_MAX_BYTES;
+      return Chronicle.apiFetch(base + '/fog', { method: 'POST', body: body, keepalive: keep }).then(function (res) {
+        if (res.ok) {
+          return res.json().then(function (r) { if (r && r.version) { own[r.version] = true; version = Math.max(version, r.version); } });
+        }
+        return res.json().catch(function () { return {}; }).then(function (err) {
+          Chronicle.notify(err.message || 'Could not save the fog', 'error');
+          return load();
+        });
+      }).catch(function () {
+        Chronicle.notify('Could not save the fog', 'error');
+        return load();
+      });
+    }
+
+    // queueFog notes one hex to reveal (value true) or hide (false). A change of
+    // direction sends what is waiting first, so order is kept.
+    function queueFog(col, row, value) {
+      if (fogQ && fogQ.value !== value) flush();
+      if (!fogQ) fogQ = { value: value, cells: {} };
+      fogQ.cells[key(col, row)] = { col: col, row: row };
+    }
+
+    // setExplored flips one hex's fog locally and queues the save.
+    function setExplored(col, row, value) {
+      var c = cellAt(col, row);
+      if (c.explored === value) return false;
+      c.explored = value;
+      queueFog(col, row, value);
+      hatchDirty = true;
+      if (smokeSet && shadow) shadow.refreshHexFog();
+      return true;
     }
 
     function send(body) {
@@ -565,7 +1006,7 @@
       var keep = new TextEncoder().encode(JSON.stringify(body)).length < KEEPALIVE_MAX_BYTES;
       return Chronicle.apiFetch(base + '/cells', { method: 'PATCH', body: body, keepalive: keep }).then(function (res) {
         if (res.ok) {
-          return res.json().then(function (r) { if (r && r.version) version = r.version; });
+          return res.json().then(function (r) { if (r && r.version) { own[r.version] = true; version = Math.max(version, r.version); } });
         }
         return res.json().catch(function () { return {}; }).then(function (err) {
           Chronicle.notify(err.message || 'Could not save those hexes', 'error');
@@ -584,15 +1025,23 @@
         cells = {};
         (data.cells || []).forEach(function (c) {
           cells[key(c.col, c.row)] = {
-            col: c.col, row: c.row, terrain: c.terrain || null, name: c.name || '', notes: c.notes || null
+            col: c.col, row: c.row, terrain: c.terrain || null, name: c.name || '', notes: c.notes || null,
+            explored: !!c.explored
           };
         });
         version = data.version || 0;
+        loadedVersion = version;
+        var L2 = data.layer || {};
+        fogLayerOn = !!L2.fog_enabled;
+        party = (L2.party_col != null && L2.party_row != null) ? { col: L2.party_col, row: L2.party_row } : null;
+        if (ctx.onHexFog) ctx.onHexFog(fogLayerOn);
+        hatchDirty = true;
         anchorId = (data.layer && data.layer.anchor_drawing_id) || null;
         hidden = !!data.hidden;
         if (ctx.onHexAnchor) ctx.onHexAnchor(anchorId);
         loaded = true;
         fx = {};
+        if (layerOn) fogView(); else syncImage();
         renderSoon();
         renderPanel();
       }).catch(function () { /* the lines still show; painting is just empty */ });
@@ -614,15 +1063,31 @@
       hoverPath.style.display = '';
     }
 
+    // strokeKind is what a drag does in the current mode: paint terrain, reveal
+    // or hide hexes, or nothing (Look, Party and Move pan the map).
+    function strokeKind() {
+      if (mode === 'paint' && canWrite) return 'paint';
+      if (mode === 'fog' && canFog) return 'fog';
+      return null;
+    }
+
+    // fogStroke applies the stroke's direction to one hex: the first hex
+    // decides whether the drag reveals or hides, the rest follow it.
+    function fogStroke(h) {
+      if (stroke.value === undefined) stroke.value = !cellAt(h.col, h.row).explored;
+      setExplored(h.col, h.row, stroke.value);
+    }
+
     function onPointerDown(e) {
-      if (!active || !layerOn || mode !== 'paint' || !canWrite || e.button !== 0) return;
+      var kind = strokeKind();
+      if (!active || !layerOn || !kind || e.button !== 0) return;
       if (e.target.closest && e.target.closest('.leaflet-marker-icon, .leaflet-popup, .leaflet-control')) return;
       var h = pointToHex(e);
       if (!h) return;
       e.preventDefault();
       try { container.setPointerCapture(e.pointerId); } catch (err) { /* capture is a nicety */ }
-      stroke = { last: h };
-      paintHex(h.col, h.row);
+      stroke = { last: h, kind: kind };
+      if (kind === 'fog') fogStroke(h); else paintHex(h.col, h.row);
       renderSoon();
     }
 
@@ -631,7 +1096,7 @@
       if (!stroke) return;
       var h = pointToHex(e);
       if (!h || (h.col === stroke.last.col && h.row === stroke.last.row)) return;
-      hexLine(stroke.last, h).forEach(function (p) { paintHex(p.col, p.row); });
+      hexLine(stroke.last, h).forEach(function (p) { if (stroke.kind === 'fog') fogStroke(p); else paintHex(p.col, p.row); });
       stroke.last = h;
       renderSoon();
     }
@@ -645,9 +1110,16 @@
 
     function onPointerLeave() { if (hoverPath) hoverPath.style.display = 'none'; }
 
-    // Look mode: a click selects a hex and opens its card.
+    // Look mode: a click selects a hex and opens its card. Party mode: a click
+    // moves the party there.
     function onMapClick(e) {
-      if (!active || !layerOn || mode !== 'look') return;
+      if (!active || !layerOn) return;
+      if (mode === 'party') {
+        var ph = hexAtMap(layout, e.latlng.lng, mapH - e.latlng.lat);
+        if (ph) moveParty(ph);
+        return;
+      }
+      if (mode !== 'look') return;
       var h = hexAtMap(layout, e.latlng.lng, mapH - e.latlng.lat);
       if (!h) return;
       flush();
@@ -676,7 +1148,13 @@
       return '<path d="' + hexD(0, 0, 13) + '" fill="#efe6cf"/>' + artFor(t, 0, 0, 13);
     }
 
-    function modes() { return canWrite ? [['look', 'Look'], ['paint', 'Paint']] : [['look', 'Look']]; }
+    function modes() {
+      var m = [['look', 'Look']];
+      if (canWrite) m.push(['paint', 'Paint']);
+      if (canFog) m.push(['fog', 'Fog']);
+      if (canParty) m.push(['party', 'Party']);
+      return m;
+    }
 
     function renderPanel() {
       if (!panel) return;
@@ -693,6 +1171,12 @@
         }).join('') + '<button type="button" data-ter="" aria-pressed="' + (paintTerrain === '') + '"><i></i>Clear</button></div>' +
           '<p>Click or drag across hexes. The picture still shows through.</p>';
       }
+      if (mode === 'fog') {
+        h += '<p>Click or drag to reveal hexes; drag over revealed ones to cover them again. Players see unexplored hexes under a moving shadow.</p>';
+        if (!fogOn()) h += '<p>Fog of war is off, so players see every hex. Turn it on in Map settings.</p>';
+        h += '<button type="button" class="mp-chip" id="mp-hx-reset">Cover everything again</button>';
+      }
+      if (mode === 'party') h += '<p>Click a hex to move the party. The hexes around them are revealed for everyone.</p>';
       if (mode === 'look') {
         if (selected) h += '<div class="mp-hx-card" id="mp-hx-card"></div>';
         else h += '<p>Click a hex to see ' + (canWrite ? 'or write what’s there.' : 'what the party knows about it.') + '</p>';
@@ -713,7 +1197,21 @@
       Array.prototype.forEach.call(panel.querySelectorAll('[data-ter]'), function (b) {
         b.onclick = function () { paintTerrain = b.dataset.ter; renderPanel(); };
       });
+      var reset = document.getElementById('mp-hx-reset');
+      if (reset) reset.onclick = resetFog;
       if (mode === 'look' && selected) fillCard();
+    }
+
+    // resetFog covers every hex again, after asking: it undoes all exploring.
+    function resetFog() {
+      if (!window.confirm('Cover every hex again? Players will see them all as unexplored.')) return;
+      flush();
+      saving = saving.then(function () {
+        return Chronicle.apiFetch(base + '/fog', { method: 'POST', body: { reset: true } }).then(function (res) {
+          if (res.ok) return res.json().then(function (r) { if (r && r.version) { own[r.version] = true; } });
+          return res.json().catch(function () { return {}; }).then(function (err) { Chronicle.notify(err.message || 'Could not cover the hexes', 'error'); });
+        }).catch(function () { Chronicle.notify('Could not cover the hexes', 'error'); });
+      }).then(function () { return load(); });
     }
 
     // fillCard builds the open hex's card. Names and notes go in as values and
@@ -723,6 +1221,17 @@
       if (!card) return;
       var p = selected.split(',');
       var c = cells[selected] || { col: +p[0], row: +p[1], name: '', notes: null };
+      // Unexplored land has no card for people who cannot see it; the server
+      // sent them nothing about it either.
+      if (fogOn() && !seesAll && !(cells[selected] && cells[selected].explored && !heldBack(selected))) {
+        var ut = document.createElement('b');
+        ut.textContent = 'Unexplored';
+        var ub = document.createElement('span');
+        ub.textContent = 'The party hasn’t been here yet.';
+        card.appendChild(ut);
+        card.appendChild(ub);
+        return;
+      }
       if (canWrite) {
         var name = document.createElement('input');
         name.className = 'mp-input'; name.id = 'mp-hx-name'; name.maxLength = 120;
@@ -749,6 +1258,20 @@
         note.style.cssText = 'display:block;margin-top:4px;color:var(--text-muted,#6b7280);font-size:11px';
         note.textContent = 'Everyone who can see this map can read these notes.';
         card.appendChild(note);
+        if (canFog) {
+          var lab = document.createElement('label');
+          lab.className = 'mp-check';
+          var lt = document.createElement('span');
+          lt.textContent = 'Explored';
+          var cb = document.createElement('input');
+          cb.type = 'checkbox'; cb.id = 'mp-hx-ex'; cb.checked = !!c.explored;
+          cb.onchange = function () {
+            if (setExplored(+p[0], +p[1], cb.checked)) { scheduleFlush(FLUSH_MS); renderSoon(); }
+          };
+          lab.appendChild(lt);
+          lab.appendChild(cb);
+          card.appendChild(lab);
+        }
       } else {
         var title = document.createElement('b');
         title.textContent = c.name || 'Unnamed hex';
@@ -762,12 +1285,17 @@
     // ---- Tool state ----
 
     function applyMode() {
-      var paintOn = active && layerOn && mode === 'paint' && canWrite;
-      // While painting, a drag paints rather than pans; Look and Move pan.
+      var paintOn = active && layerOn && !!strokeKind();
+      // While painting or fogging, a drag paints rather than pans; Look, Party and Move pan.
       if (paintOn && !dragDisabled) { map.dragging.disable(); dragDisabled = true; }
       if (!paintOn && dragDisabled) { map.dragging.enable(); dragDisabled = false; }
       if (active && layerOn) container.style.cursor = paintOn ? 'crosshair' : '';
-      if (ctx.setHint && active) ctx.setHint(mode === 'paint' ? 'Click or drag to paint terrain' : 'Click a hex to see it');
+      if (ctx.setHint && active) {
+        ctx.setHint({
+          paint: 'Click or drag to paint terrain', fog: 'Click or drag to reveal or cover hexes',
+          party: 'Click a hex to move the party'
+        }[mode] || 'Click a hex to see it');
+      }
     }
 
     function setActive(on) {
@@ -808,11 +1336,13 @@
     function off(keepLines) {
       var wasActive = active;
       layerOn = false;
+      stopWalk();
       setActive(false);
       // The viewer's own tool state must not keep pointing at a tool that is gone.
       if (wasActive && ctx.setTool) ctx.setTool('move');
       removeOverlay();
       showTool(false);
+      fogView();
       if (ctx.onHexLines) ctx.onHexLines(!!keepLines);
       renderPanel();
     }
@@ -858,6 +1388,7 @@
       layerOn = true;
       buildOverlay();
       showTool(true);
+      fogView();
       if (ctx.onHexLines) ctx.onHexLines(true);
       renderSoon();
       renderPanel();
@@ -885,6 +1416,23 @@
       if (hidden) { off(true); return; }
       bindPictures();
       place();
+      // The settings sheet previews the fog switch live.
+      var f = fogOn();
+      if (f !== lastFog) { lastFog = f; if (layerOn) fogView(); }
+    }
+
+    // onChanged follows a "hex.changed" live event: a version and maybe the
+    // party's path, never hex contents. The path (only sent when it is safe for
+    // this viewer) is played; the filtered read is fetched afresh. An event
+    // that tells nothing new, or the echo of this client's own write, is
+    // ignored; one that lands while edits are unsaved waits for them, so it
+    // cannot wipe the screen.
+    function onChanged(msg) {
+      if (!msg || String(msg.map_id) !== String(ctx.mapID) || !loaded) return;
+      if (isStale(loadedVersion, msg.version, own)) return;
+      if (msg.party_path && msg.party_path.length) applyParty(msg.party_path, msg.version);
+      if (stroke || flushTimer || fogQ || pendingSaves || Object.keys(queue).length) { remoteWaiting = true; return; }
+      load();
     }
 
     function bindPictures() {
@@ -912,6 +1460,13 @@
       },
       setActive: setActive,
       isOn: function () { return layerOn; },
+      onChanged: onChanged,
+      // resync reads the layer again, after the live connection was lost and
+      // events may have been missed.
+      resync: function () { if (loaded && !stroke && !flushTimer && !fogQ && !pendingSaves) load(); },
+      // shadowReady is called once the shadow module is loaded, which may be
+      // after this module started: the smoke can then be set up.
+      shadowReady: function () { if (layerOn) fogView(); },
       // escape steps back from an open card; false means nothing was open.
       escape: function () {
         if (active && selected) { selected = null; renderSoon(); renderPanel(); return true; }
@@ -922,6 +1477,9 @@
         if (picUnsub) { picUnsub(); picUnsub = null; }
         flush();
         clearTimeout(fxTimer);
+        revealTimers.forEach(clearTimeout);
+        stopWalk();
+        if (shadow) { if (smokeSet) shadow.setHexFog(null); smokeSet = false; shadow.destroy(); shadow = null; }
         container.removeEventListener('pointerdown', onPointerDown);
         container.removeEventListener('pointermove', onPointerMove);
         container.removeEventListener('pointerup', endStroke);
