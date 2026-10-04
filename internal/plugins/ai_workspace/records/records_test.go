@@ -374,3 +374,26 @@ func TestPlanError_ShowsOnlyTheMessage(t *testing.T) {
 		}
 	}
 }
+
+func TestLinkKinds_ReviewWording(t *testing.T) {
+	cases := []struct {
+		kind        Kind
+		fields      map[string]any
+		title, summ string
+	}{
+		{ShopStockKind(nil, nil), map[string]any{"shop": "The Rusty Anchor", "item": "Rope", "price": 1, "quantity": 5}, "Rope at The Rusty Anchor", "1 gp · 5 in stock"},
+		{ShopStockKind(nil, nil), map[string]any{"shop": "The Rusty Anchor", "item": "Rope"}, "Rope at The Rusty Anchor", "no price or quantity given"},
+		{CarriedItemKind(nil, nil), map[string]any{"character": "Ser Aldric", "item": "Potion", "quantity": 2}, "Potion for Ser Aldric", "2 carried"},
+		{CarriedItemKind(nil, nil), map[string]any{"character": "Ser Aldric", "item": "Potion"}, "Potion for Ser Aldric", "1 carried"},
+	}
+	for _, c := range cases {
+		lk := c.kind.(*linkKind)
+		r := rec(lk.name, ActionCreate, "", c.fields, "")
+		if got := lk.Title(r); got != c.title {
+			t.Errorf("Title = %q, want %q", got, c.title)
+		}
+		if got := lk.summary(r); got != c.summ {
+			t.Errorf("summary = %q, want %q", got, c.summ)
+		}
+	}
+}

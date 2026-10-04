@@ -54,6 +54,12 @@ func (a Actor) Viewer() permissions.Viewer { return permissions.RequestViewer(a.
 // CanAuthorDmOnly mirrors the UI's Owner-or-co-DM rule for hidden content.
 func (a Actor) CanAuthorDmOnly() bool { return a.Viewer().SkipsPerUserRules() }
 
+// Titled is a kind whose records have no name of their own; Title gives
+// the review row's heading.
+type Titled interface {
+	Title(r Record) string
+}
+
 // Plan is what the review screen shows for one record before commit.
 type Plan struct {
 	Summary  string   // one plain line: what will happen

@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"strings"
 
 	"github.com/keyxmakerx/chronicle/internal/apperror"
 	"github.com/keyxmakerx/chronicle/internal/plugins/entities"
@@ -32,6 +33,7 @@ type RelationsAPI interface {
 type linkKind struct {
 	name, label, doc     string
 	ownerKey             string // front-matter key naming the source page
+	joiner, qtyWord      string // review wording: "Rope at the shop", "5 in stock"
 	relType, reverseType string
 	numbers              []string // metadata keys copied from front matter
 	strs                 []string
@@ -42,7 +44,7 @@ type linkKind struct {
 // ShopStockKind is what a shop sells and for how much.
 func ShopStockKind(e EntityLookup, r RelationsAPI) Kind {
 	return &linkKind{
-		name: "shop-stock", label: "Shop stock", ownerKey: "shop",
+		name: "shop-stock", label: "Shop stock", ownerKey: "shop", joiner: "at", qtyWord: "in stock",
 		relType: "sells", reverseType: "sold by",
 		numbers: []string{"price", "quantity"}, strs: []string{"currency"},
 		Entities: e, Rels: r,
@@ -53,7 +55,7 @@ func ShopStockKind(e EntityLookup, r RelationsAPI) Kind {
 // CarriedItemKind is an item in a character's inventory.
 func CarriedItemKind(e EntityLookup, r RelationsAPI) Kind {
 	return &linkKind{
-		name: "carried-item", label: "Carried item", ownerKey: "character",
+		name: "carried-item", label: "Carried item", ownerKey: "character", joiner: "for", qtyWord: "carried",
 		relType: "Has Item", reverseType: "In Inventory Of",
 		numbers: []string{"quantity"}, strs: []string{"notes"},
 		Entities: e, Rels: r,
@@ -95,19 +97,34 @@ func (k *linkKind) resolve(ctx context.Context, campaignID string, r Record) (sr
 	return src, item, nil, nil
 }
 
+// Title names the row on the review screen, since these records have no
+// name of their own: "Rope at The Rusty Anchor", "Potion for Ser Aldric".
+func (k *linkKind) Title(r Record) string {
+	if r.Str("item") == "" || r.Str(k.ownerKey) == "" {
+		return ""
+	}
+	return r.Str("item") + " " + k.joiner + " " + r.Str(k.ownerKey)
+}
+
 func (k *linkKind) summary(r Record) string {
-	s := r.Str("item") + " · " + r.Str(k.ownerKey)
+	var parts []string
 	if k.name == "shop-stock" && r.Has("price") {
 		cur := r.Str("currency")
 		if cur == "" {
 			cur = "gp"
 		}
-		s += " · " + r.Str("price") + " " + cur
+		parts = append(parts, r.Str("price")+" "+cur)
 	}
 	if r.Has("quantity") {
-		s += " · " + r.Str("quantity")
+		parts = append(parts, r.Str("quantity")+" "+k.qtyWord)
 	}
-	return s
+	if len(parts) == 0 {
+		if k.name == "carried-item" {
+			return "1 carried"
+		}
+		return "no price or quantity given"
+	}
+	return strings.Join(parts, " · ")
 }
 
 func (k *linkKind) Plan(ctx context.Context, campaignID string, a Actor, r Record) Plan {

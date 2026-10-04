@@ -167,6 +167,9 @@ func (h *Handler) planRecords(c echo.Context, cc *campaigns.CampaignContext, rec
 			k, plan := h.records.Plan(c.Request().Context(), cc.Campaign.ID, a, rec)
 			if k != nil {
 				row.Label = k.Label()
+				if t, ok := k.(records.Titled); ok && row.Name == "" {
+					row.Name = t.Title(rec)
+				}
 			}
 			row.Plan = plan
 		}
