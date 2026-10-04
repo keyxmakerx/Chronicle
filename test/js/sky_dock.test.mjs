@@ -105,7 +105,7 @@ function loadSky({ reduced = false, stored = null, apiFetch = null, rest = null 
     return n;
   };
   const step = () => { const fn = frames.shift(); if (fn) { now += 16; fn(now); return true; } return false; };
-  return { SkyPane: sandbox.SkyPane, document, store, drain, step, pending: () => frames.filter(Boolean).length };
+  return { SkyPane: sandbox.SkyPane, document, store, drain, step, pending: () => frames.filter(Boolean).length, setNow: (ms) => { now = ms; } };
 }
 
 const CAL = {
@@ -334,4 +334,48 @@ test('a moving sky asks for no frames while the viewer is away, and starts again
   d.destroy();
   rest.away = true; rest.wake();
   assert.equal(env.pending(), 0, 'a destroyed dock does not wake');
+});
+
+// Paints the dock's sky at 60 frames a second for the given seconds, from t0, with the page clock kept in step.
+function run(env, d, t0, secs) {
+  let t = t0;
+  for (let i = 0; i < secs * 60; i++) { t += 1 / 60; env.setNow(t * 1000); d.paint(t, 0, d.H); }
+  return t;
+}
+
+test('a change of weather rolls in: each dial at its own pace, the layers over a few seconds', () => {
+  const env = loadSky();
+  const { d } = dock(env, { cal: WITH_CURRENT });
+  d.measure();
+  let t = run(env, d, 100, 1);
+  const g = d.model.glide;
+  assert.equal(g.wx.cloud, 0, 'a clear sky starts with no cloud');
+  d.setDay({ ...WITH_CURRENT, current_day: 15, weather: { preset_id: 'sandstorm', preset_label: 'Sandstorm' } }, []);
+  const G = d.model.glide;
+  assert.equal(G, g, 'the new day keeps the sky it is rolling from');
+  t = run(env, d, t, 1);
+  assert.ok(G.from, 'one second in, the dust is still fading in');
+  assert.ok(G.k > .1 && G.k < .3, 'the layers are a sixth of the way: ' + G.k);
+  const cloud1 = G.wx.cloud, fog1 = G.wx.fog, wind1 = G.wx.wind;
+  assert.ok(cloud1 > 0, 'cloud has started to gather');
+  assert.equal(d.pace, 2, 'a change rolling in is painted at the full rate, even by the basic sky');
+  t = run(env, d, t, 15);
+  assert.equal(G.from, null, 'the fade is done');
+  // Each dial has gone most of the way in about three of its paces, the slower ones less far after one second.
+  assert.ok(cloud1 < G.wx.cloud * .5, 'cloud is less than half way after the first second, and keeps rolling in');
+  assert.ok(wind1 / G.wx.wind > fog1 / G.wx.fog, 'wind (a fast dial) got further in the first second than fog (a slow one)');
+});
+
+test('with reduced motion a change of weather shows at once', () => {
+  const env = loadSky({ reduced: true });
+  const { d } = dock(env, { cal: WITH_CURRENT });
+  d.measure();
+  let t = run(env, d, 100, .5);
+  d.setDay({ ...WITH_CURRENT, current_day: 15, weather: { preset_id: 'sandstorm', preset_label: 'Sandstorm' } }, []);
+  t = run(env, d, t, .1);
+  const G = d.model.glide;
+  assert.equal(G.from, null, 'no fade');
+  const before = JSON.stringify(G.wx);
+  run(env, d, t, 2);
+  assert.equal(JSON.stringify(G.wx), before, 'the dials are already at the new weather');
 });
