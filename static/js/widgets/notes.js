@@ -44,6 +44,7 @@ Chronicle.register('notes', {
       refs: [],       // Journal notes that link to this page
       editingId: null,
       loading: true,
+      loadFailed: false, // the last load failed: say so, not "no jots"
       searchFilter: '',
       // Locking state.
       lockHeartbeatTimer: null,
@@ -376,6 +377,17 @@ Chronicle.register('notes', {
     // Tab switching.
     tabBtns.forEach(function (btn) {
       btn.addEventListener('click', function () {
+        // The tab already open reloads its list, so the click always shows
+        // something happening (the loading line, then the list or the
+        // empty line), even when it is the only tab. The short wait keeps
+        // the loading line on screen long enough to be seen.
+        if (btn.getAttribute('data-tab') === state.tab && !state.editingId && !state.versionsNoteId) {
+          if (state.loading) return;
+          state.loading = true;
+          renderNotes();
+          setTimeout(loadNotes, 300);
+          return;
+        }
         state.tab = btn.getAttribute('data-tab');
         tabBtns.forEach(function (b) {
           var on = b === btn;
@@ -508,13 +520,15 @@ Chronicle.register('notes', {
         state.pageJots = jotsOnly(results[1]);
         if (editing) replaceNoteInState(editing);
         state.loading = false;
+        state.loadFailed = false;
         updateTabCount();
         renderNotes();
         loadPageNames();
         loadRefs();
       }).catch(function () {
-          if (quiet) return;
+        if (quiet) return;
         state.loading = false;
+        state.loadFailed = true;
         state.jots = [];
         state.pageJots = [];
         renderNotes();
@@ -881,7 +895,8 @@ Chronicle.register('notes', {
         list = list.filter(function (n) { return n.title && n.title.toLowerCase().indexOf(q) !== -1; });
       }
       if (!list.length) {
-        var emptyMsg = state.searchFilter ? 'No matching jots'
+        var emptyMsg = state.loadFailed ? 'Couldn\'t load your jots. Click the tab to try again.'
+          : state.searchFilter ? 'No matching jots'
           : state.tab === 'page' ? 'No jots here yet — add one below.'
             : 'No jots yet. Jots live on pages: open one to add a jot.';
         notesList.innerHTML = '<div class="notes-empty">' + Chronicle.escapeHtml(emptyMsg) + '</div>';
