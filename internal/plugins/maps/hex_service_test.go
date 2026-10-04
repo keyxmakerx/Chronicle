@@ -290,9 +290,6 @@ func TestPatchCells_PartialUpdateContract(t *testing.T) {
 		{"null notes clears them",
 			UpdateHexCellInput{Col: 2, Row: 3, Notes: patchNull()},
 			HexCellWrite{Col: 2, Row: 3, NotesSet: true}},
-		{"nothing but a position changes nothing",
-			UpdateHexCellInput{Col: 2, Row: 3},
-			HexCellWrite{Col: 2, Row: 3}},
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
@@ -333,13 +330,62 @@ func TestPatchCells_DuplicateEntriesFold(t *testing.T) {
 	}
 }
 
+// The cap counts only hexes the map does not store yet, so a full map can
+// still be edited and cleared but not grown.
 func TestPatchCells_CellCap(t *testing.T) {
+	tests := []struct {
+		name   string
+		count  int
+		stored []HexKey
+		entry  UpdateHexCellInput
+		ok     bool
+	}{
+		{"new hex on a full map is refused", MaxHexCellsPerMap, nil, paint(0, 0, "forest"), false},
+		{"edit of a stored hex on a full map works", MaxHexCellsPerMap, []HexKey{{0, 0}}, paint(0, 0, "forest"), true},
+		{"clear of a stored hex on a full map works", MaxHexCellsPerMap, []HexKey{{0, 0}}, UpdateHexCellInput{Terrain: patchNull()}, true},
+		{"new hex one below the cap works", MaxHexCellsPerMap - 1, nil, paint(0, 0, "forest"), true},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			repo := newFakeHexRepo()
+			repo.count = tc.count
+			for _, k := range tc.stored {
+				repo.cells[k] = HexCell{Col: k.Col, Row: k.Row}
+			}
+			_, err := hexSvc(repo, DrawWhoScribes).PatchCells(context.Background(), "camp-1", "map-1", actorOwner,
+				[]UpdateHexCellInput{tc.entry})
+			if tc.ok && err != nil {
+				t.Fatalf("expected success, got %v", err)
+			}
+			if !tc.ok && (!isBadRequest(err) || len(repo.applied) != 0) {
+				t.Fatalf("expected 400 and no write, got %v", err)
+			}
+		})
+	}
+}
+
+// A batch mixing stored and new hexes counts only the new ones against the cap.
+func TestPatchCells_CellCapCountsOnlyNewKeys(t *testing.T) {
 	repo := newFakeHexRepo()
-	repo.count = MaxHexCellsPerMap
+	repo.count = MaxHexCellsPerMap - 1
+	repo.cells[HexKey{0, 0}] = HexCell{Col: 0, Row: 0}
+	entries := []UpdateHexCellInput{paint(0, 0, "forest"), paint(1, 0, "forest")}
+	if _, err := hexSvc(repo, DrawWhoScribes).PatchCells(context.Background(), "camp-1", "map-1", actorOwner, entries); err != nil {
+		t.Fatalf("one stored plus one new fits in one free slot, got %v", err)
+	}
+	repo.applied = nil
+	entries = append(entries, paint(2, 0, "forest"))
+	if _, err := hexSvc(repo, DrawWhoScribes).PatchCells(context.Background(), "camp-1", "map-1", actorOwner, entries); !isBadRequest(err) {
+		t.Fatalf("two new hexes need two free slots, got %v", err)
+	}
+}
+
+func TestPatchCells_RefusesEntryNamingNoField(t *testing.T) {
+	repo := newFakeHexRepo()
 	_, err := hexSvc(repo, DrawWhoScribes).PatchCells(context.Background(), "camp-1", "map-1", actorOwner,
-		[]UpdateHexCellInput{paint(0, 0, "forest")})
+		[]UpdateHexCellInput{paint(0, 0, "forest"), {Col: 1, Row: 1}})
 	if !isBadRequest(err) || len(repo.applied) != 0 {
-		t.Errorf("a full layer must refuse more cells, got %v", err)
+		t.Fatalf("an entry with only col and row must be refused whole, got %v", err)
 	}
 }
 
@@ -528,3 +574,27 @@ func TestHexHandler_GetUsesVisibilityRole(t *testing.T) {
 
 func patchOf(s string) patch.Field[string] { return patch.Of(s) }
 func patchNull() patch.Field[string]       { return patch.Null[string]() }
+
+// CanPaintHexes is what the page offers; it must agree with requireWriter.
+func TestMapViewData_CanPaintHexes(t *testing.T) {
+	tests := []struct {
+		name string
+		data MapViewData
+		want bool
+	}{
+		{"owner, scribes policy", MapViewData{IsScribe: true, IsOwner: true, IsDM: true}, true},
+		{"owner, owners policy", MapViewData{IsScribe: true, IsOwner: true, IsDM: true, Display: ResolvedDisplay{Frame: "x", DrawWho: DrawWhoOwners}}, true},
+		{"DM-granted player, owners policy", MapViewData{IsDM: true, Display: ResolvedDisplay{Frame: "x", DrawWho: DrawWhoOwners}}, true},
+		{"DM-granted player, scribes policy", MapViewData{IsDM: true}, true},
+		{"scribe, scribes policy", MapViewData{IsScribe: true, Display: ResolvedDisplay{Frame: "x", DrawWho: DrawWhoScribes}}, true},
+		{"scribe, owners policy", MapViewData{IsScribe: true, Display: ResolvedDisplay{Frame: "x", DrawWho: DrawWhoOwners}}, false},
+		{"player", MapViewData{}, false},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := tc.data.CanPaintHexes(); got != tc.want {
+				t.Errorf("CanPaintHexes = %v, want %v", got, tc.want)
+			}
+		})
+	}
+}

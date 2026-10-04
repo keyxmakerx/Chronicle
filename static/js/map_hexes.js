@@ -23,8 +23,8 @@
  *   GET   /campaigns/:id/maps/:mid/hexes          layer + the cells this viewer may see
  *   PATCH /campaigns/:id/maps/:mid/hexes/cells    { cells: [{col,row,terrain?,name?,notes?}] }
  * PATCH is partial: a stroke sends only terrain, an edit of a name sends only
- * the name. The server decides who may write; canDraw only decides what is
- * offered.
+ * the name. The server decides who may write; ctx.canPaintHexes (the same rule
+ * as HexService.requireWriter) only decides what is offered.
  */
 (function () {
   'use strict';
@@ -61,6 +61,11 @@
   // approved design does, so they fill the hex without touching its edge.
   var ICON_SCALE = 1.55 / 26;
 
+  // Hexes along one axis, one more than the server's MaxHexCoord (hex.go), so
+  // the field never offers a position the server would refuse.
+  var MAX_HEX_AXIS = 400;
+  // A keepalive request body may not exceed 64 KiB in browsers; stay under it.
+  var KEEPALIVE_MAX_BYTES = 60000;
   // The server's limit on entries per request.
   var BATCH_MAX = 500;
   // A layer this dense is skipped, as the plain grid does, so a tiny grid size
@@ -84,8 +89,8 @@
     var w = SQRT3 * r;
     return {
       r: r, w: w, ox: 0, oy: 0,
-      cols: Math.ceil(mapW / w) + 1,
-      rows: Math.ceil((mapH + r) / (1.5 * r))
+      cols: Math.min(MAX_HEX_AXIS, Math.ceil(mapW / w) + 1),
+      rows: Math.min(MAX_HEX_AXIS, Math.ceil((mapH + r) / (1.5 * r)))
     };
   }
 
@@ -234,7 +239,7 @@
 
   if (typeof module !== 'undefined' && module.exports) {
     module.exports = {
-      TERRAINS: TERRAINS, SIMPLE: SIMPLE, BATCH_MAX: BATCH_MAX, geometry: geometry, center: center,
+      TERRAINS: TERRAINS, SIMPLE: SIMPLE, BATCH_MAX: BATCH_MAX, MAX_HEX_AXIS: MAX_HEX_AXIS, geometry: geometry, center: center,
       hexAt: hexAt, cubeOf: cubeOf, distance: distance, hexLine: hexLine, hexD: hexD,
       cellsPath: cellsPath, linesPath: linesPath, roadPath: roadPath, batches: batches,
       mergeEntry: mergeEntry
@@ -280,7 +285,7 @@
     var gFills, gLines, gTop, gHover, hoverPath, defs;
     var dragDisabled = false;
     var stroke = null;        // { last: {col,row} } while the pointer is down in Paint mode
-    var canWrite = !!ctx.canDraw;
+    var canWrite = !!ctx.canPaintHexes;
 
     var pane = map.getPane('mpHexes') || map.createPane('mpHexes');
     pane.style.zIndex = 390;
@@ -473,7 +478,10 @@
     }
 
     function send(body) {
-      return Chronicle.apiFetch(base + '/cells', { method: 'PATCH', body: body }).then(function (res) {
+      // keepalive lets a save that is in flight when the page closes still
+      // finish; browsers cap such a body, so a larger one goes the plain way.
+      var keep = new TextEncoder().encode(JSON.stringify(body)).length < KEEPALIVE_MAX_BYTES;
+      return Chronicle.apiFetch(base + '/cells', { method: 'PATCH', body: body, keepalive: keep }).then(function (res) {
         if (res.ok) {
           return res.json().then(function (r) { if (r && r.version) version = r.version; });
         }
@@ -565,6 +573,10 @@
 
     container.addEventListener('pointerdown', onPointerDown);
     container.addEventListener('pointermove', onPointerMove);
+    // Leaving the page (a link, a reload, a closed tab) must not drop edits
+    // still waiting on their debounce timer.
+    function onPageHide() { flush(); }
+    window.addEventListener('pagehide', onPageHide);
     container.addEventListener('pointerup', endStroke);
     container.addEventListener('pointercancel', endStroke);
     container.addEventListener('pointerleave', onPointerLeave);
@@ -632,7 +644,7 @@
         name.placeholder = 'Name this hex'; name.setAttribute('aria-label', 'Hex name'); name.value = c.name || '';
         var notes = document.createElement('textarea');
         notes.className = 'mp-input'; notes.id = 'mp-hx-notes'; notes.rows = 3; notes.maxLength = 2000;
-        notes.placeholder = 'What’s here: encounters, secrets'; notes.setAttribute('aria-label', 'Notes'); notes.value = c.notes || '';
+        notes.placeholder = 'What’s here'; notes.setAttribute('aria-label', 'Notes'); notes.value = c.notes || '';
         name.oninput = function () {
           cellAt(+p[0], +p[1]).name = name.value;
           queueChange(+p[0], +p[1], { name: name.value });
@@ -647,6 +659,11 @@
         name.onblur = notes.onblur = function () { flush(); };
         card.appendChild(name);
         card.appendChild(notes);
+        var note = document.createElement('small');
+        note.className = 'mp-hx-note';
+        note.style.cssText = 'display:block;margin-top:4px;color:var(--text-muted,#6b7280);font-size:11px';
+        note.textContent = 'Everyone who can see this map can read these notes.';
+        card.appendChild(note);
       } else {
         var title = document.createElement('b');
         title.textContent = c.name || 'Unnamed hex';
@@ -729,6 +746,7 @@
         return false;
       },
       destroy: function () {
+        window.removeEventListener('pagehide', onPageHide);
         flush();
         clearTimeout(fxTimer);
         container.removeEventListener('pointerdown', onPointerDown);

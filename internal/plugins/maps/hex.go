@@ -48,8 +48,11 @@ func IsValidTerrain(t string) bool {
 
 // Limits on what a hex may hold and what one request may change. The cell cap
 // bounds a layer to roughly a 200 x 200 field so one map cannot grow without
-// limit; the coordinate cap is looser than that because a tall, narrow map
-// has many more rows than columns.
+// limit. MaxHexCoord is the highest valid column or row index, so a field is at
+// most MaxHexCoord+1 (400) hexes along either axis; static/js/map_hexes.js
+// clamps its field to the same MAX_HEX_AXIS so the client never offers a hex
+// the server would refuse. A field of that size can hold more hexes than the
+// cell cap, which only limits how many are painted.
 const (
 	MaxHexBatch       = 500
 	MaxHexNameRunes   = 120

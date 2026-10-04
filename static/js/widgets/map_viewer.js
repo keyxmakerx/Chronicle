@@ -88,6 +88,10 @@
 	// canDraw is what the viewer is OFFERED; the server enforces the
 	// map's "who can draw" setting on every drawing write regardless.
 	var canDraw = cfg.dataset.canDraw === 'true';
+	// canPaintHexes mirrors the hex service's own writer rule (owner or DM
+	// grant, or a scribe where the draw policy allows), which is not the same
+	// as canDraw: a DM-granted player may paint hexes without being a scribe.
+	var canPaintHexes = cfg.dataset.canPaintHexes === 'true';
 	// Shadows decide what players may know, so the tool is for the owner and
 	// co-DMs only; the server refuses everyone else regardless.
 	var canShadow = cfg.dataset.canShadow === 'true';
@@ -1610,6 +1614,7 @@
 		// canDraw is what the drawing module builds its tools from; the
 		// server enforces the map's "who can draw" rule regardless.
 		canDraw: canDraw,
+		canPaintHexes: canPaintHexes,
 		canShadow: canShadow,
 		isOwner: isOwner,
 		canDmOnly: canDmOnly,

@@ -170,6 +170,11 @@ func buildWrite(e UpdateHexCellInput) (HexCellWrite, error) {
 	if e.Col < 0 || e.Row < 0 || e.Col > MaxHexCoord || e.Row > MaxHexCoord {
 		return HexCellWrite{}, apperror.NewBadRequest("hex position is outside the map")
 	}
+	// An entry naming only a position changes nothing; refusing it keeps a
+	// malformed client from burning a version bump (and a cap slot) on a no-op.
+	if !e.Terrain.Present() && !e.Name.Present() && !e.Notes.Present() {
+		return HexCellWrite{}, apperror.NewBadRequest("every hex needs a field to change")
+	}
 	w := HexCellWrite{Col: e.Col, Row: e.Row}
 	if e.Terrain.Present() {
 		w.TerrainSet = true
@@ -251,18 +256,19 @@ func (s *hexService) PatchCells(ctx context.Context, campaignID, mapID string, a
 		return nil, err
 	}
 
+	keys := make([]HexKey, len(writes))
+	for i, w := range writes {
+		keys[i] = HexKey{w.Col, w.Row}
+	}
+	stored, err := s.repo.GetCells(ctx, mapID, keys)
+	if err != nil {
+		return nil, err
+	}
+
 	// With fog on, a scribe may only touch hexes the party has explored: a
 	// write to an unexplored hex would let them confirm or alter a secret
 	// they are not meant to see. Owners and DM grants are not limited.
 	if layer.FogEnabled && !actor.IsDM {
-		keys := make([]HexKey, len(writes))
-		for i, w := range writes {
-			keys[i] = HexKey{w.Col, w.Row}
-		}
-		stored, err := s.repo.GetCells(ctx, mapID, keys)
-		if err != nil {
-			return nil, err
-		}
 		for _, k := range keys {
 			if c, ok := stored[k]; !ok || !c.Explored {
 				return nil, apperror.NewForbidden("you can only change hexes the party has explored")
@@ -270,13 +276,20 @@ func (s *hexService) PatchCells(ctx context.Context, campaignID, mapID string, a
 		}
 	}
 
-	// The size cap counts every entry as new, which is slightly strict near
-	// the limit and keeps the check to one cheap COUNT.
+	// The size cap counts only hexes the map does not store yet, so editing or
+	// clearing an existing hex always works, even at the cap; otherwise a full
+	// map could never be trimmed back down.
 	n, err := s.repo.CountCells(ctx, mapID)
 	if err != nil {
 		return nil, err
 	}
-	if n+len(writes) > MaxHexCellsPerMap {
+	newKeys := 0
+	for _, k := range keys {
+		if _, ok := stored[k]; !ok {
+			newKeys++
+		}
+	}
+	if n+newKeys > MaxHexCellsPerMap {
 		return nil, apperror.NewBadRequest("this map has too many painted hexes")
 	}
 

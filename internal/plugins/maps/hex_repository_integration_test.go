@@ -262,6 +262,58 @@ func TestHexRepository_Integration(t *testing.T) {
 		}
 	})
 
+	t.Run("a cleared hex is deleted, one with anything left stays", func(t *testing.T) {
+		mapID := newMap()
+		if _, err := repo.ApplyCells(ctx, mapID, userID, []HexCellWrite{
+			{Col: 0, Row: 0, TerrainSet: true, Terrain: hexStrp("forest")},
+			{Col: 1, Row: 0, TerrainSet: true, Terrain: hexStrp("forest"), NameSet: true, Name: "Keep"},
+			{Col: 2, Row: 0, NotesSet: true, Notes: hexStrp("note")},
+			{Col: 3, Row: 0, TerrainSet: true, Terrain: hexStrp("hills")},
+		}); err != nil {
+			t.Fatal(err)
+		}
+		// An explored hex is held open by a later slice, so it must survive.
+		mustExecMaps(t, db, "UPDATE map_hex_cells SET explored = 1 WHERE map_id = ? AND col = 3 AND `row` = 0", mapID)
+		if _, err := repo.ApplyCells(ctx, mapID, userID, []HexCellWrite{
+			{Col: 0, Row: 0, TerrainSet: true},
+			{Col: 1, Row: 0, TerrainSet: true},
+			{Col: 2, Row: 0, NotesSet: true},
+			{Col: 3, Row: 0, TerrainSet: true},
+		}); err != nil {
+			t.Fatal(err)
+		}
+		got, err := repo.GetCells(ctx, mapID, []HexKey{{0, 0}, {1, 0}, {2, 0}, {3, 0}})
+		if err != nil {
+			t.Fatal(err)
+		}
+		if _, ok := got[HexKey{0, 0}]; ok {
+			t.Error("a hex with every field cleared must be deleted")
+		}
+		if c, ok := got[HexKey{1, 0}]; !ok || c.Name != "Keep" || c.Terrain != nil {
+			t.Errorf("a hex that still has a name must stay: %+v", c)
+		}
+		if _, ok := got[HexKey{2, 0}]; ok {
+			t.Error("a hex whose only field was cleared must be deleted")
+		}
+		if _, ok := got[HexKey{3, 0}]; !ok {
+			t.Error("an explored hex must stay")
+		}
+		if n, err := repo.CountCells(ctx, mapID); err != nil || n != 2 {
+			t.Errorf("count = %d, %v; want 2", n, err)
+		}
+	})
+
+	t.Run("an untouched empty row elsewhere is not swept", func(t *testing.T) {
+		mapID := newMap()
+		mustExecMaps(t, db, "INSERT INTO map_hex_cells (map_id, col, `row`) VALUES (?, 9, 9)", mapID)
+		if _, err := repo.ApplyCells(ctx, mapID, userID, []HexCellWrite{{Col: 0, Row: 0, TerrainSet: true, Terrain: hexStrp("snow")}}); err != nil {
+			t.Fatal(err)
+		}
+		if n, err := repo.CountCells(ctx, mapID); err != nil || n != 2 {
+			t.Errorf("count = %d, %v; want 2 (only touched rows are checked)", n, err)
+		}
+	})
+
 	t.Run("deleting the map cascades to both hex tables", func(t *testing.T) {
 		mapID := newMap()
 		if _, err := repo.ApplyCells(ctx, mapID, userID, []HexCellWrite{{Col: 1, Row: 1, NameSet: true, Name: "x"}}); err != nil {

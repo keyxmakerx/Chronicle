@@ -37,6 +37,16 @@ test('geometry matches the mockup: gridSize 60 over 1000 x 700', () => {
   assert.equal(g.rows, 17);
 });
 
+test('the field never exceeds the server\'s 400 hexes per axis', () => {
+  assert.equal(H.MAX_HEX_AXIS, 400);
+  const tall = H.geometry(10, 1000, 100000);
+  assert.ok(tall.rows <= 400, `rows ${tall.rows}`);
+  assert.equal(tall.rows, 400);
+  const wide = H.geometry(10, 100000, 1000);
+  assert.ok(wide.cols <= 400, `cols ${wide.cols}`);
+  assert.equal(H.hexAt(tall, 0, 1.5 * tall.r * 450), null);
+});
+
 test('grid size is relative to the map width', () => {
   const small = H.geometry(60, 1000, 700);
   const big = H.geometry(60, 4000, 2800);

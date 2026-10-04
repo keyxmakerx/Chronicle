@@ -36,7 +36,8 @@ type HexRepository interface {
 	// CountCells returns how many cells a map stores.
 	CountCells(ctx context.Context, mapID string) (int, error)
 	// ApplyCells writes the changes and bumps the layer's version in one
-	// transaction, creating the layer row on first use, and returns the new
+	// transaction, creating the layer row on first use, deleting any touched cell
+	// that ends up empty, and returns the new
 	// version. The layer row is touched first so concurrent writers to one map
 	// queue behind it and every version is unique.
 	ApplyCells(ctx context.Context, mapID, userID string, writes []HexCellWrite) (uint64, error)
@@ -169,6 +170,19 @@ func (r *hexRepo) ApplyCells(ctx context.Context, mapID, userID string, writes [
 		if _, err := tx.ExecContext(ctx, upsert,
 			mapID, w.Col, w.Row, w.Terrain, w.Name, w.Notes, by,
 			w.TerrainSet, w.NameSet, w.NotesSet); err != nil {
+			return 0, apperror.NewInternal(err)
+		}
+	}
+
+	// A hex whose every field has been cleared carries no information; keeping
+	// the row would still count against the map's cell cap, so a cleared hex
+	// could never free its slot. Only touched rows are checked, in this
+	// transaction, so a concurrent writer's row is never swept by mistake.
+	// explored and piece belong to later slices and keep a row alive.
+	for _, w := range writes {
+		if _, err := tx.ExecContext(ctx, "DELETE FROM map_hex_cells WHERE map_id = ? AND col = ? AND `row` = ? "+
+			"AND terrain IS NULL AND name = '' AND notes IS NULL AND piece IS NULL AND explored = 0",
+			mapID, w.Col, w.Row); err != nil {
 			return 0, apperror.NewInternal(err)
 		}
 	}
