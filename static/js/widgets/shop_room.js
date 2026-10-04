@@ -887,6 +887,10 @@
     '.shr-hint{font-size:.72rem;color:var(--color-text-secondary,#6b7280)}',
     '.shr-field>span{font-size:.72rem;text-transform:uppercase;letter-spacing:.06em;color:var(--color-text-muted,#9ca3af)}',
     '.shr-field select,.shr-field textarea{width:100%;min-width:0;border:1px solid var(--color-input-border,#d1d5db);border-radius:6px;padding:6px 8px;background:var(--color-input-bg,#fff);color:var(--color-text-primary,#111827);font:inherit}',
+    // A shorthand background here used to wipe the site's dropdown chevron, so
+    // the selects read as text boxes; they draw their own, the same as Chronicle's.
+    '.shr-field select{-webkit-appearance:none;appearance:none;background-color:var(--color-input-bg,#fff);background-image:url("data:image/svg+xml,%3csvg xmlns=%27http://www.w3.org/2000/svg%27 fill=%27none%27 viewBox=%270 0 20 20%27%3e%3cpath stroke=%27%236b7280%27 stroke-linecap=%27round%27 stroke-linejoin=%27round%27 stroke-width=%271.5%27 d=%27M6 8l4 4 4-4%27/%3e%3c/svg%3e");background-repeat:no-repeat;background-position:right .5rem center;background-size:1.25em 1.25em;padding:8px 2.25rem 8px 10px;border-radius:8px;cursor:pointer}',
+    '.shr-field select:hover{border-color:var(--color-text-muted,#9ca3af)}',
     '.shr-field .shr-seg{display:grid}',
     // The generators' shared rows: a part, its keep pin and its reroll dice.
     '.shr-gh{display:flex;align-items:center;gap:8px;margin-top:4px}',
