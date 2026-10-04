@@ -36,6 +36,9 @@ type fakeCalendarSvcForAPI struct {
 	updateArgs      [3]string
 	deleteArgs      [3]string
 	setDateArgs     []any
+
+	dayWeatherArgs   [4]any
+	dayWeatherViewer permissions.Viewer
 }
 
 func (f *fakeCalendarSvcForAPI) GetPrimaryCalendarForViewer(_ context.Context, campaignID string, v permissions.Viewer) (*calendar.Calendar, error) {
@@ -51,6 +54,12 @@ func (f *fakeCalendarSvcForAPI) GetPrimaryCalendarForViewer(_ context.Context, c
 func (f *fakeCalendarSvcForAPI) ListEventsForMonth(_ context.Context, calendarID, campaignID string, year, month int, _ permissions.Viewer) ([]calendar.Event, error) {
 	f.listArgs = [4]any{calendarID, campaignID, year, month}
 	return append([]calendar.Event(nil), f.events...), nil
+}
+
+func (f *fakeCalendarSvcForAPI) ListDayWeather(_ context.Context, calendarID, campaignID string, year, month int, v permissions.Viewer) ([]calendar.DayWeather, error) {
+	f.dayWeatherArgs = [4]any{calendarID, campaignID, year, month}
+	f.dayWeatherViewer = v
+	return []calendar.DayWeather{{Year: year, Month: month, Day: 1}}, nil
 }
 
 func (f *fakeCalendarSvcForAPI) GetEventForViewer(_ context.Context, eventID, calendarID, campaignID string, _ permissions.Viewer) (*calendar.Event, error) {
@@ -459,6 +468,7 @@ func TestCalendarAPI_AudiencePlayersNarrows(t *testing.T) {
 		{"GetCalendar", func(h *CalendarAPIHandler) func(echo.Context) error { return h.GetCalendar }},
 		{"GetCurrentDate", func(h *CalendarAPIHandler) func(echo.Context) error { return h.GetCurrentDate }},
 		{"ListEvents", func(h *CalendarAPIHandler) func(echo.Context) error { return h.ListEvents }},
+		{"ListDayWeather", func(h *CalendarAPIHandler) func(echo.Context) error { return h.ListDayWeather }},
 	}
 	for _, r := range routes {
 		for _, tc := range cases {
@@ -480,5 +490,26 @@ func TestCalendarAPI_AudiencePlayersNarrows(t *testing.T) {
 				}
 			})
 		}
+	}
+}
+
+// TestCalendarAPI_ListDayWeather: the month read goes to the resolved
+// calendar and passes the request's viewer, so the service's "only up to
+// today for players" rule applies to a players-audience read.
+func TestCalendarAPI_ListDayWeather(t *testing.T) {
+	svc := newCalendarFixture()
+	h := NewCalendarAPIHandler(nil, svc, &stubCampaignSvcForCalendarAPI{role: campaigns.RoleOwner})
+	rec, err := callCalendarAPI(t, h, h.ListDayWeather, http.MethodGet, "/?year=1491&month=2&audience=players", "", sessionKey())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if svc.dayWeatherArgs != [4]any{"cal-1", "camp-1", 1491, 2} {
+		t.Errorf("ListDayWeather args = %v", svc.dayWeatherArgs)
+	}
+	if svc.dayWeatherViewer.SkipsPerUserRules() {
+		t.Error("players audience must not skip per-user rules")
+	}
+	if !strings.Contains(rec.Body.String(), `"total":1`) {
+		t.Errorf("body = %s", rec.Body.String())
 	}
 }

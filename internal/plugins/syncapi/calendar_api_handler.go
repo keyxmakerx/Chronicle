@@ -331,6 +331,34 @@ func (h *CalendarAPIHandler) GetWeather(c echo.Context) error {
 	return c.JSON(http.StatusOK, cal.Weather)
 }
 
+// ListDayWeather returns one month's day readings. A viewer below the
+// Director gets only days up to today and no lock state (the service
+// decides), so `?audience=players` never shows a forecast.
+// GET /api/v1/campaigns/:id/calendar/weather/days?year=&month=
+func (h *CalendarAPIHandler) ListDayWeather(c echo.Context) error {
+	v := h.readViewer(c)
+	cal, err := h.defaultCalendar(c, v)
+	if err != nil {
+		return err
+	}
+	year, month := cal.CurrentYear, cal.CurrentMonth
+	if y, err := strconv.Atoi(c.QueryParam("year")); err == nil {
+		year = y
+	}
+	if m, err := strconv.Atoi(c.QueryParam("month")); err == nil && m > 0 {
+		month = m
+	}
+	days, err := h.calendarSvc.ListDayWeather(c.Request().Context(), cal.ID, cal.CampaignID, year, month, v)
+	if err != nil {
+		return err
+	}
+	body := map[string]any{"data": nonNil(days), "total": len(days)}
+	if playersAudience(c) {
+		body["audience"] = audiencePlayers
+	}
+	return c.JSON(http.StatusOK, body)
+}
+
 // GetCycles returns the default calendar's cycles.
 // GET /api/v1/campaigns/:id/calendar/cycles
 func (h *CalendarAPIHandler) GetCycles(c echo.Context) error {
