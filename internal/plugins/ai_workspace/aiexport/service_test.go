@@ -112,7 +112,9 @@ func TestService_GenerateAllCategories(t *testing.T) {
 			},
 		},
 		&stubNoteLister{list: []notes.Note{
-			{ID: "n1", Title: "Plot Threads", EntryHTML: sp("<p>note body</p>")},
+			{ID: "n1", UserID: "owner-1", Title: "Plot Threads", EntryHTML: sp("<p>note body</p>")},
+			// Shared with the owner but someone else's writing: never exported.
+			{ID: "n2", UserID: "player-9", Title: "Player Secret", IsShared: true, EntryHTML: sp("<p>theirs</p>")},
 		}},
 		&stubCalendarLister{
 			cal: &calendar.Calendar{
@@ -154,6 +156,9 @@ func TestService_GenerateAllCategories(t *testing.T) {
 		if !strings.Contains(got, want) {
 			t.Errorf("Generate output missing %q. First 500 chars:\n%s", want, got[:min(500, len(got))])
 		}
+	}
+	if strings.Contains(got, "Player Secret") {
+		t.Error("exported a note another member wrote")
 	}
 	if strings.Contains(got, "__TOKEN_COUNT__") {
 		t.Errorf("token placeholder not substituted; output starts:\n%s", got[:min(500, len(got))])

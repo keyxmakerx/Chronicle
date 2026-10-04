@@ -92,6 +92,16 @@ type Input struct {
 	// --- Custom ---
 
 	OperatorInstruction string
+
+	// Capabilities is the opening one-line-per-kind list
+	// (records.Registry.Capabilities); every prompt carries it.
+	Capabilities string
+	// RecordDocs describes the non-page kinds (records.Registry.Docs);
+	// "" leaves the section out.
+	RecordDocs string
+	// RecordContext lists today's records (records.Registry.ExportAll),
+	// added to the world context when content is included.
+	RecordContext string
 }
 
 // Build assembles the prompt markdown by combining the schema fetch
@@ -114,6 +124,8 @@ func (s *Service) Build(
 		IncludeTagsVocabulary:     in.IncludeTagsVocabulary,
 		ContentMode:               in.ContentMode,
 		OperatorInstruction:       strings.TrimSpace(in.OperatorInstruction),
+		RecordDocs:                strings.TrimSpace(in.RecordDocs),
+		Capabilities:              strings.TrimSpace(in.Capabilities),
 	}
 
 	if in.IncludeEntityTypes || in.IncludeCategoriesInUse {
@@ -157,6 +169,9 @@ func (s *Service) Build(
 			return "", fmt.Errorf("prompt: render content: %w", err)
 		}
 		data.ExportedContent = out
+		if rc := strings.TrimSpace(in.RecordContext); rc != "" {
+			data.ExportedContent += "\n\n" + rc
+		}
 	}
 
 	var buf bytes.Buffer

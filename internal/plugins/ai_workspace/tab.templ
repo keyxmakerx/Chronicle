@@ -260,7 +260,7 @@ templ aiExportSection(cc *campaigns.CampaignContext) {
 				<h3 class="text-sm font-medium text-fg mb-2">Categories</h3>
 				<p class="text-xs text-fg-muted mb-3">
 					All on by default. Uncheck any you don't want in the export.
-					Maps + media not yet supported (binary content).
+					Map images and other media are not included.
 				</p>
 				<div class="grid grid-cols-1 sm:grid-cols-2 gap-2 text-sm">
 					<label class="flex items-center gap-2 cursor-pointer">
@@ -269,7 +269,7 @@ templ aiExportSection(cc *campaigns.CampaignContext) {
 					</label>
 					<label class="flex items-center gap-2 cursor-pointer">
 						<input type="checkbox" name="categories" value="notes" checked class="rounded border-edge text-accent"/>
-						<span>Notes</span>
+						<span>Notes (yours only)</span>
 					</label>
 					<label class="flex items-center gap-2 cursor-pointer">
 						<input type="checkbox" name="categories" value="calendar_events" checked class="rounded border-edge text-accent"/>
@@ -282,6 +282,10 @@ templ aiExportSection(cc *campaigns.CampaignContext) {
 					<label class="flex items-center gap-2 cursor-pointer">
 						<input type="checkbox" name="categories" value="timelines" checked class="rounded border-edge text-accent"/>
 						<span>Timelines</span>
+					</label>
+					<label class="flex items-center gap-2 cursor-pointer sm:col-span-2">
+						<input type="checkbox" name="categories" value="more" checked class="rounded border-edge text-accent"/>
+						<span>Weather, tables, shops, carried items, map pins, house rules</span>
 					</label>
 				</div>
 			</div>

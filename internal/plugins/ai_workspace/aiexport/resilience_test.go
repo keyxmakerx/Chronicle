@@ -120,7 +120,7 @@ func TestGenerate_BadEntityHTML_SkipsFieldNotExport(t *testing.T) {
 func TestGenerate_CategoryListerError_SkipsSectionNotExport(t *testing.T) {
 	svc := NewService(
 		errEntityLister{types: []entities.EntityType{{ID: 1, Name: "Character"}}},
-		&stubNoteLister{list: []notes.Note{{ID: "n1", Title: "Survives", EntryHTML: sp("<p>note body</p>")}}},
+		&stubNoteLister{list: []notes.Note{{ID: "n1", UserID: "owner-1", Title: "Survives", EntryHTML: sp("<p>note body</p>")}}},
 		nil, &stubSessionLister{}, &stubTimelineLister{},
 		&stubRelationLister{}, &stubTagLister{},
 	)
@@ -146,7 +146,7 @@ func TestGenerate_CategoryListerError_SkipsSectionNotExport(t *testing.T) {
 func TestGenerate_CalendarListerError_SkipsSectionNotExport(t *testing.T) {
 	svc := NewService(
 		&stubEntityLister{},
-		&stubNoteLister{list: []notes.Note{{ID: "n1", Title: "Survives", EntryHTML: sp("<p>note body</p>")}}},
+		&stubNoteLister{list: []notes.Note{{ID: "n1", UserID: "owner-1", Title: "Survives", EntryHTML: sp("<p>note body</p>")}}},
 		errCalendarLister{}, &stubSessionLister{}, &stubTimelineLister{},
 		&stubRelationLister{}, &stubTagLister{},
 	)
