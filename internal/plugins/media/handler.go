@@ -56,6 +56,18 @@ type EntityVisibilityFilter interface {
 	FilterViewableEntityIDs(ctx context.Context, campaignID string, entityIDs []string, role int, userID string) (map[string]bool, error)
 }
 
+// MapImageGuard says whether a media file is the background of a map that has a
+// shadowed area. Implemented by the maps plugin (media never reads map data),
+// because the original picture of such a map must not reach anyone who is not
+// meant to see under the shadows, however they obtained its id or a link.
+//
+// IsMapPicture is the wider question (any map, shadowed or not) the sync media
+// API asks before minting a cookieless link.
+type MapImageGuard interface {
+	IsShadowedMapImage(ctx context.Context, campaignID, mediaID string) (bool, error)
+	IsMapPicture(ctx context.Context, campaignID, mediaID string) (bool, error)
+}
+
 // SecurityEventLogger records security events for the admin security dashboard.
 // Implemented by the admin security service; wired after both are initialized.
 type SecurityEventLogger interface {
@@ -69,6 +81,9 @@ type Handler struct {
 	memberChecker    MemberChecker
 	securityLogger   SecurityEventLogger
 	entityVisibility EntityVisibilityFilter
+	// mapImages is consulted after every other access check. Nil means no maps
+	// plugin is wired (tests); production wiring is pinned by a test in app.
+	mapImages MapImageGuard
 	// cache is optional (nil in tests and any deploy without Redis wired).
 	// A miss or error falls through to computing the decision fresh — the
 	// cache can only make ADR-058's access check slower, never laxer.
@@ -98,6 +113,18 @@ func (h *Handler) SetMemberChecker(checker MemberChecker) {
 // there — media does not get its own adapter type either.
 func (h *Handler) SetEntityVisibilityFilter(f EntityVisibilityFilter) {
 	h.entityVisibility = f
+}
+
+// SetMapImageGuard wires the shadowed-map-picture check. Called during wiring in
+// app/routes.go.
+func (h *Handler) SetMapImageGuard(g MapImageGuard) {
+	h.mapImages = g
+}
+
+// MapImageGuardWired reports whether the guard is set, so the app's wiring test
+// can prove production never serves media without it.
+func (h *Handler) MapImageGuardWired() bool {
+	return h.mapImages != nil
 }
 
 // SetCache wires the Redis client used to cache the ADR-058 entity-scoped
@@ -322,9 +349,60 @@ func currentViewerIdentity(c echo.Context) string {
 }
 
 // checkMediaAccess enforces signed URL verification and private/public
-// campaign access control. Returns nil if access is allowed, or an error to
-// return to the client.
+// campaign access control, then the shadowed-map-picture rule. Returns nil if
+// access is allowed, or an error to return to the client.
 func (h *Handler) checkMediaAccess(c echo.Context, file *MediaFile, isThumb bool, thumbSize string) error {
+	if err := h.checkBaseMediaAccess(c, file, isThumb, thumbSize); err != nil {
+		return err
+	}
+	return h.checkMapImageGuard(c, file, isThumb, thumbSize)
+}
+
+// checkMapImageGuard refuses the original (and any thumbnail) of a map picture
+// that has a shadowed area unless the viewer is owner/DM-equivalent. It runs
+// even for a validly signed URL: a signature proves the link is genuine, not
+// that its holder may see under the shadows. Any error refuses, with the same
+// 404 as every other denial so the response does not reveal the file exists.
+func (h *Handler) checkMapImageGuard(c echo.Context, file *MediaFile, isThumb bool, thumbSize string) error {
+	if h.mapImages == nil || file.CampaignID == nil {
+		return nil
+	}
+	hidden, err := h.mapImages.IsShadowedMapImage(c.Request().Context(), *file.CampaignID, file.ID)
+	if err != nil {
+		slog.Error("media: map picture shadow check failed; denying access",
+			slog.String("file_id", file.ID), slog.Any("error", err))
+		return apperror.NewNotFound("media file not found")
+	}
+	if hidden && !h.viewerSeesUnderShadow(c, file, isThumb, thumbSize) {
+		return apperror.NewNotFound("media file not found")
+	}
+	return nil
+}
+
+// viewerSeesUnderShadow is true for a signed-in user whose promoted role is
+// owner (co-DM grants count), or for a cookieless request carrying a link
+// minted for an API key (the owner's sync module, which cannot send cookies).
+// The sync media API mints such links for map pictures only to owner callers,
+// whether or not the picture has a shadow yet, so no link below owner predates
+// a shadow and stays valid for the signed-URL lifetime. Everything else,
+// including an anonymous-bound link, is refused.
+func (h *Handler) viewerSeesUnderShadow(c echo.Context, file *MediaFile, isThumb bool, thumbSize string) bool {
+	if userID := auth.GetUserID(c); userID != "" {
+		return promotedVisibilityRole(h.memberChecker, *file.CampaignID, userID) >= int(campaigns.RoleOwner)
+	}
+	expires, sig := c.QueryParam("expires"), c.QueryParam("sig")
+	if h.signer == nil || expires == "" || sig == "" {
+		return false
+	}
+	if isThumb {
+		return h.signer.VerifyThumbAPIKeyLink(file.ID, thumbSize, expires, sig)
+	}
+	return h.signer.VerifyAPIKeyLink(file.ID, expires, sig)
+}
+
+// checkBaseMediaAccess is signed URL verification and private/public campaign
+// access control; checkMediaAccess adds the map picture rule on top.
+func (h *Handler) checkBaseMediaAccess(c echo.Context, file *MediaFile, isThumb bool, thumbSize string) error {
 	// A nil campaign_id only skips the checks below for a usage type that
 	// was uploaded without a campaign on purpose: an avatar (gated on
 	// sign-in, not campaign membership) or a backdrop (fully public, no

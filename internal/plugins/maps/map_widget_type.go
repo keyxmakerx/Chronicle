@@ -104,11 +104,9 @@ func (w *mapWidgetType) CreateInstance(ctx context.Context, campaignID string, i
 // fallback folded in on first render). Wrapped in BlockHost for the stable
 // swap target.
 //
-// JS NOTE: the embed's Leaflet init is an inline IIFE in MapEditorBody; the
-// entity-map data-widget re-mounts on htmx:afterSettle but the inline IIFE does
-// not re-run under htmx.config.allowScriptTags=false. So a bind that swaps INTO
-// the embed shows the editor chrome immediately and the Leaflet canvas paints on
-// the next full load — consistent with hx-boosted navigation today. (Flagged.)
+// The embed is a framed preview, so a bind that swaps INTO the block shows the
+// finished picture immediately: it needs no script to run after the swap (the
+// click handler is inline, and the live viewer is fetched on click).
 func (w *mapWidgetType) RenderBlock(ctx context.Context, rc widgetbindings.BlockRenderContext) templ.Component {
 	return widgetbindings.BlockHost(WidgetTypeMap, rc.HostID, w.renderInner(ctx, rc))
 }
@@ -124,15 +122,19 @@ func (w *mapWidgetType) renderInner(ctx context.Context, rc widgetbindings.Block
 		// SECURITY: only render an in-campaign map (cross-campaign / dangling →
 		// fall through to the choose/empty branch rather than leak or 500).
 		if err == nil && m != nil && m.CampaignID == rc.CC.Campaign.ID {
-			markers, mErr := w.svc.ListMarkers(ctx, rc.CC.Campaign.ID, m.ID, rc.Role, rc.UserID)
-			if mErr != nil {
-				slog.Warn("map widget RenderBlock: failed to list markers",
-					slog.String("map_id", m.ID), slog.Any("error", mErr))
-				markers = nil
-			}
+			// No markers: the preview is a picture. The live viewer fetches its own,
+			// role-filtered, when it is opened.
 			display, _ := w.svc.ResolveDisplay(ctx, m)
+			// The preview is a picture, so it gets the viewer's version of it.
+			vm, verr := w.svc.ForViewer(ctx, m, rc.Role)
+			if verr != nil {
+				slog.Error("map widget RenderBlock: cannot prepare the map picture",
+					slog.String("map_id", mapID), slog.Any("error", verr))
+				return templ.NopComponent
+			}
+			m = vm
 			viewData := MapViewData{
-				CampaignID: rc.CC.Campaign.ID, Map: m, Markers: markers, IsScribe: isScribe,
+				CampaignID: rc.CC.Campaign.ID, Map: m, IsScribe: isScribe,
 				IsOwner: rc.Role >= int(campaigns.RoleOwner), UserID: rc.UserID, Display: display,
 			}
 			return BlockEntityMapEmbed(rc.CC, rc.HostID, viewData, isScribe, rc.Resolution.Source)

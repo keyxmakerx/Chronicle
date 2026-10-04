@@ -28,12 +28,19 @@ type EntityService interface {
 	GetBySlug(ctx context.Context, campaignID, slug string) (*Entity, error)
 	Update(ctx context.Context, entityID string, input UpdateEntityInput) (*Entity, error)
 	UpdateEntry(ctx context.Context, entityID, entryJSON, entryHTML string) error
+	// SaveEntry is the editor's save: with baseRev set it refuses to replace
+	// text someone else saved since that revision, returning the conflict.
+	SaveEntry(ctx context.Context, entityID, entryJSON, entryHTML string, baseRev *int) (int, *EntryConflict, error)
+	// EntryRev is the page text's revision, for the editor to save against.
+	EntryRev(ctx context.Context, entityID string) (int, error)
 	UpdatePlayerNotes(ctx context.Context, entityID, notesJSON, notesHTML string) error
 	UpdateFields(ctx context.Context, entityID string, fieldsData map[string]any) error
 	MergeFields(ctx context.Context, entityID string, patch map[string]any) error
 	UpdateFieldOverrides(ctx context.Context, entityID string, overrides *FieldOverrides) error
 	UpdateImage(ctx context.Context, entityID, imagePath string) error
 	UpdateCoverImage(ctx context.Context, entityID, coverImagePath string) error
+	// Delete moves the page and its sub-pages to the Trash when page safety
+	// is wired, and removes it for good otherwise.
 	Delete(ctx context.Context, entityID string) error
 
 	// Hierarchy
@@ -136,6 +143,11 @@ type EntityService interface {
 	// toggle — SEC-IDOR-1).
 	TogglePrivateInCampaign(ctx context.Context, entityID, campaignID string) (newPrivate bool, err error)
 
+	// SetPrivateInCampaign sets is_private to the given value only when the
+	// entity belongs to campaignID (NotFound otherwise). Unlike the toggle it
+	// is idempotent, so a repeated request can never flip the flag back.
+	SetPrivateInCampaign(ctx context.Context, entityID, campaignID string, private bool) error
+
 	// ListByOwner returns entities in a campaign owned by the given user,
 	// ordered most-recently-updated first. Powers the player landing page
 	// ("My Characters") at GET /campaigns/:id/me. No visibility filter:
@@ -180,6 +192,10 @@ type EntityService interface {
 	// addons service; when unset the gate fails open (used by tests).
 	SetAddonChecker(checker AddonChecker)
 
+	// SetPageSafety wires page history, the Trash and the save-clash check.
+	// Unset (tests), Delete removes pages for good and nothing is versioned.
+	SetPageSafety(repo PageSafetyRepository)
+
 	// HealAutoPluralizedTypes corrects entity_types rows whose
 	// name_plural was double-s'd by the legacy auto-pluralize default.
 	// Returns the count of healed rows. Idempotent; safe to call on
@@ -221,6 +237,17 @@ type EntityService interface {
 	SetEventPublisher(pub EntityEventPublisher)
 	SetBlockRegistry(reg *BlockRegistry)
 	SetSidebarAutoAdder(adder SidebarAutoAdder)
+	SetFieldChangeObserver(obs FieldChangeObserver)
+}
+
+// FieldChangeObserver is told after an entity's custom fields were written.
+// It lets another plugin react to field writes (for example to keep a history)
+// without the entities plugin knowing it exists.
+type FieldChangeObserver interface {
+	// FieldsChanged receives the entity as stored after the write, the fields
+	// as they were before it and the fields now. A returned error is logged by
+	// the caller and never fails the write that already succeeded.
+	FieldsChanged(ctx context.Context, e *Entity, oldFields, newFields map[string]any) error
 }
 
 // EntityEventPublisher emits domain events when entities or entity types change.
@@ -307,6 +334,8 @@ type entityService struct {
 	mapVerifier   MapCampaignVerifier
 	mediaVerifier MediaCampaignVerifier
 	addonChecker  AddonChecker
+	safety        PageSafetyRepository // nil: no history, no Trash (tests)
+	fieldObserver FieldChangeObserver
 }
 
 // NewEntityService creates a new entity service with the given dependencies.
@@ -366,6 +395,34 @@ func (s *entityService) isAddonEnabled(ctx context.Context, campaignID, slug str
 // SetEventPublisher sets the event publisher for real-time sync.
 func (s *entityService) SetEventPublisher(pub EntityEventPublisher) {
 	s.events = pub
+}
+
+// SetFieldChangeObserver wires the observer told after field writes. Optional;
+// without one, writes behave exactly as before.
+func (s *entityService) SetFieldChangeObserver(obs FieldChangeObserver) {
+	s.fieldObserver = obs
+}
+
+// notifyFieldsChanged tells the observer about a completed field write. The
+// write has already happened, so a failing observer is logged, not returned.
+func (s *entityService) notifyFieldsChanged(ctx context.Context, e *Entity, oldFields, newFields map[string]any) {
+	if s.fieldObserver == nil || e == nil {
+		return
+	}
+	if err := s.fieldObserver.FieldsChanged(ctx, e, oldFields, newFields); err != nil {
+		slog.Warn("entity field observer failed",
+			slog.String("entity_id", e.ID), slog.Any("error", err))
+	}
+}
+
+// cloneFields copies a fields map so a later in-place edit of the entity
+// cannot change what the observer is shown as "before".
+func cloneFields(m map[string]any) map[string]any {
+	out := make(map[string]any, len(m))
+	for k, v := range m {
+		out[k] = v
+	}
+	return out
 }
 
 // SetBlockRegistry sets the block registry for layout validation.
@@ -473,6 +530,7 @@ func (s *entityService) Create(ctx context.Context, campaignID, userID string, i
 		slog.String("name", name),
 	)
 
+	s.recordVersion(WithActor(ctx, userID), nil, entity, VersionCreated)
 	s.events.PublishEntityEvent("created", campaignID, entity.ID, entity)
 	return entity, nil
 }
@@ -563,6 +621,7 @@ func (s *entityService) Update(ctx context.Context, entityID string, input Updat
 	if err != nil {
 		return nil, err
 	}
+	before := *entity
 
 	// Optimistic concurrency check: reject if the entity was modified after
 	// the caller's last-known version.
@@ -654,7 +713,13 @@ func (s *entityService) Update(ctx context.Context, entityID string, input Updat
 		entity.Entry = nil
 		entity.EntryHTML = nil
 	} else if entry := strings.TrimSpace(input.Entry.Val("")); entry != "" {
-		entity.Entry = &entry
+		// Plain HTML (the sync API's clients send their page text this way)
+		// leaves entry empty: that column only holds editor JSON, so the HTML
+		// is the body from now on and the editor opens it from entry_html.
+		entity.Entry = nil
+		if isEditorDoc(entry) {
+			entity.Entry = &entry
+		}
 		sanitized := sanitize.HTML(entry)
 		entity.EntryHTML = &sanitized
 	}
@@ -672,7 +737,12 @@ func (s *entityService) Update(ctx context.Context, entityID string, input Updat
 		}
 	}
 
-	if input.FieldsData != nil {
+	// The pre-write fields are kept only when this write replaces them, so the
+	// observer is told about field changes and nothing else.
+	var oldFields map[string]any
+	fieldsWritten := input.FieldsData != nil
+	if fieldsWritten {
+		oldFields = cloneFields(entity.FieldsData)
 		entity.FieldsData = input.FieldsData
 	}
 
@@ -682,7 +752,13 @@ func (s *entityService) Update(ctx context.Context, entityID string, input Updat
 		return nil, apperror.NewInternal(fmt.Errorf("updating entity: %w", err))
 	}
 
+	if entity.Name != before.Name || derefStr(entity.EntryHTML) != derefStr(before.EntryHTML) {
+		s.recordVersion(ctx, &before, entity, VersionEdit)
+	}
 	s.events.PublishEntityEvent("updated", entity.CampaignID, entity.ID, entity)
+	if fieldsWritten {
+		s.notifyFieldsChanged(ctx, entity, oldFields, entity.FieldsData)
+	}
 	return entity, nil
 }
 
@@ -873,8 +949,9 @@ func (s *entityService) UpdateEntry(ctx context.Context, entityID, entryJSON, en
 
 	// Build search_text from sanitized HTML + existing field values.
 	var fieldsData map[string]any
-	if entity, err := s.entities.FindByID(ctx, entityID); err == nil {
-		fieldsData = entity.FieldsData
+	before, beforeErr := s.entities.FindByID(ctx, entityID)
+	if beforeErr == nil {
+		fieldsData = before.FieldsData
 	}
 	searchText := buildSearchText(entryHTML, fieldsData)
 
@@ -884,6 +961,9 @@ func (s *entityService) UpdateEntry(ctx context.Context, entityID, entryJSON, en
 	slog.Info("entity entry updated", slog.String("entity_id", entityID))
 	// Emit entity updated event (fetch entity for campaign ID).
 	if entity, err := s.entities.FindByID(ctx, entityID); err == nil {
+		if beforeErr == nil {
+			s.recordVersion(ctx, before, entity, VersionEdit)
+		}
 		s.events.PublishEntityEvent("updated", entity.CampaignID, entityID, entity)
 	}
 	return nil
@@ -964,8 +1044,10 @@ func (s *entityService) UpdateFields(ctx context.Context, entityID string, field
 	// Carry the new fields on the payload; best-effort (only when the entity
 	// loaded), matching this method's existing tolerance of a load failure.
 	if entity != nil {
+		oldFields := cloneFields(entity.FieldsData)
 		entity.FieldsData = fieldsData
 		s.events.PublishEntityEvent("updated", entity.CampaignID, entityID, entity)
+		s.notifyFieldsChanged(ctx, entity, oldFields, fieldsData)
 	}
 	slog.Info("entity fields updated", slog.String("entity_id", entityID))
 	return nil
@@ -1064,10 +1146,28 @@ func (s *entityService) verifyMediaInCampaign(ctx context.Context, entityID, med
 	return nil
 }
 
-// Delete removes an entity.
+// Delete moves an entity and its sub-pages to the Trash, or removes it for
+// good when page safety isn't wired. Either way it is gone for every reader,
+// so subscribers (Foundry sync) get the same "deleted" event.
 func (s *entityService) Delete(ctx context.Context, entityID string) error {
 	// Fetch entity before deletion to get campaign ID for event publishing.
 	entity, _ := s.entities.FindByID(ctx, entityID)
+
+	if s.safety != nil {
+		if entity == nil {
+			return apperror.NewNotFound("entity not found")
+		}
+		ids, err := s.safety.TrashSubtree(ctx, entity.CampaignID, entityID, actorFrom(ctx), time.Now().UTC())
+		if err != nil {
+			return err
+		}
+		slog.Info("entity moved to trash", slog.String("entity_id", entityID), slog.Int("pages", len(ids)))
+		s.events.PublishEntityEvent("deleted", entity.CampaignID, entityID, entity)
+		for _, id := range ids[1:] {
+			s.events.PublishEntityEvent("deleted", entity.CampaignID, id, &Entity{ID: id, CampaignID: entity.CampaignID})
+		}
+		return nil
+	}
 
 	if err := s.entities.Delete(ctx, entityID); err != nil {
 		return err
@@ -1115,6 +1215,28 @@ func (s *entityService) togglePrivate(ctx context.Context, entityID, campaignID 
 	s.events.PublishEntityEvent("updated", entity.CampaignID, entityID, entity)
 
 	return newPrivate, nil
+}
+
+// SetPrivateInCampaign sets is_private to private when the entity belongs to
+// campaignID. An entity already in that state is left untouched and no event
+// is published.
+func (s *entityService) SetPrivateInCampaign(ctx context.Context, entityID, campaignID string, private bool) error {
+	entity, err := s.entities.FindByID(ctx, entityID)
+	if err != nil {
+		return err
+	}
+	if entity.CampaignID != campaignID {
+		return apperror.NewNotFound("entity not found")
+	}
+	if entity.IsPrivate == private {
+		return nil
+	}
+	if err := s.entities.UpdatePrivate(ctx, entityID, private); err != nil {
+		return err
+	}
+	entity.IsPrivate = private
+	s.events.PublishEntityEvent("updated", entity.CampaignID, entityID, entity)
+	return nil
 }
 
 // ListByOwner returns entities in a campaign owned by the given user.
@@ -2091,6 +2213,18 @@ func (s *entityService) DeleteEntityType(ctx context.Context, id int) error {
 		return apperror.NewConflict(fmt.Sprintf("cannot delete entity type: %d entities still use it", count))
 	}
 
+	// Pages in the Trash still belong to the kind; deleting it would take them
+	// with it before anyone could restore them.
+	if s.safety != nil {
+		trashed, err := s.safety.CountTrashedByType(ctx, id)
+		if err != nil {
+			return apperror.NewInternal(err)
+		}
+		if trashed > 0 {
+			return apperror.NewConflict(fmt.Sprintf("cannot delete entity type: %d of its pages are in the Trash; restore them or wait until they expire", trashed))
+		}
+	}
+
 	if err := s.types.Delete(ctx, id); err != nil {
 		return apperror.NewInternal(fmt.Errorf("deleting entity type: %w", err))
 	}
@@ -2982,4 +3116,11 @@ func layoutContainsBlockType(layout EntityTypeLayout, blockType string) bool {
 		}
 	}
 	return false
+}
+
+// isEditorDoc reports whether an entry body is editor JSON (a JSON object)
+// rather than HTML or plain text. A bare JSON scalar such as "2024" is page
+// text, not a document.
+func isEditorDoc(entry string) bool {
+	return strings.HasPrefix(entry, "{") && json.Valid([]byte(entry))
 }

@@ -1,0 +1,36 @@
+// npc_spotlight.templ owns the "Show in Foundry" button on an NPC page
+// header. Kept here, not in entities, so the entities plugin stays
+// VTT-agnostic (T-B2); the page lazy-loads it.
+//
+// URL: GET/POST /campaigns/:id/foundry-vtt/npc-spotlight/:eid
+// Auth: the campaign owner or a member given DM access.
+
+package foundry_vtt
+
+import "fmt"
+
+// NPCSpotlightButton renders the button and, after a press, one status
+// line. The whole fragment swaps itself so the status replaces in place.
+templ NPCSpotlightButton(v NPCSpotlightView) {
+	<form
+		class="inline-flex items-center gap-2"
+		hx-post={ fmt.Sprintf("/campaigns/%s/foundry-vtt/npc-spotlight/%s", v.CampaignID, v.EntityID) }
+		hx-swap="outerHTML"
+		hx-disabled-elt="find button"
+	>
+		<input type="hidden" name="csrf_token" value={ v.CSRFToken }/>
+		<button type="submit" class="btn-ghost btn-sm" title="Glide everyone's Foundry camera to this NPC's token, if they can see it">
+			<i class="fa-solid fa-star mr-1"></i> Show in Foundry
+		</button>
+		if v.Status != "" {
+			<span
+				role="status"
+				if v.StatusOK {
+					class="text-xs text-green-700 dark:text-green-300"
+				} else {
+					class="text-xs text-fg-muted"
+				}
+			>{ v.Status }</span>
+		}
+	</form>
+}

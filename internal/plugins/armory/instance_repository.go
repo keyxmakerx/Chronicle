@@ -189,7 +189,7 @@ func (r *instanceRepository) ListItemEntityIDsByInstance(ctx context.Context, ca
 	query := `SELECT ii.instance_id, ii.entity_id
 		FROM inventory_items ii
 		INNER JOIN inventory_instances i ON i.id = ii.instance_id AND i.campaign_id = ?
-		INNER JOIN entities e ON e.id = ii.entity_id AND e.campaign_id = ? AND e.is_template = false`
+		INNER JOIN entities e ON e.id = ii.entity_id AND e.campaign_id = ? AND e.is_template = false AND e.deleted_at IS NULL`
 	rows, err := r.db.QueryContext(ctx, query, campaignID, campaignID)
 	if err != nil {
 		return nil, fmt.Errorf("listing instance item ids: %w", err)

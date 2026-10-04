@@ -16,6 +16,7 @@ import (
 
 // mockUserRepo implements UserRepository for testing.
 type mockUserRepo struct {
+	viewPrefs            []byte
 	createFn             func(ctx context.Context, user *User) error
 	findByIDFn           func(ctx context.Context, id string) (*User, error)
 	findByEmailFn        func(ctx context.Context, email string) (*User, error)
@@ -140,6 +141,15 @@ func (m *mockUserRepo) UpdateIsDisabled(ctx context.Context, id string, isDisabl
 }
 
 func (m *mockUserRepo) UpdateTimezone(ctx context.Context, userID, timezone string) error {
+	return nil
+}
+
+func (m *mockUserRepo) GetViewPrefs(ctx context.Context, userID string) ([]byte, error) {
+	return m.viewPrefs, nil
+}
+
+func (m *mockUserRepo) SetViewPrefs(ctx context.Context, userID string, prefs []byte) error {
+	m.viewPrefs = prefs
 	return nil
 }
 

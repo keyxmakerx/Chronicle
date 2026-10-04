@@ -23,6 +23,16 @@
       var editable = config.editable === true;
       var csrf = config.csrf || '';
 
+      // apiFetch resolves to the raw Response: unwrap it, and turn an error
+      // status into a rejection carrying the server's message.
+      function readJSON(resp) {
+        if (resp.status === 204) return null;
+        return resp.json().catch(function () { return null; }).then(function (data) {
+          if (!resp.ok) throw new Error((data && data.message) || 'Request failed (' + resp.status + ')');
+          return data;
+        });
+      }
+
       var state = {
         posts: [],
         loading: true,
@@ -36,7 +46,7 @@
         state.loading = true;
         render();
 
-        Chronicle.apiFetch(endpoint)
+        Chronicle.apiFetch(endpoint).then(readJSON)
           .then(function (posts) {
             state.posts = posts || [];
             state.loading = false;
@@ -54,8 +64,8 @@
       function createPost(name) {
         Chronicle.apiFetch(endpoint, {
           method: 'POST',
-          body: JSON.stringify({ name: name, isPrivate: false })
-        })
+          body: { name: name, isPrivate: false }
+        }).then(readJSON)
           .then(function (post) {
             state.posts.push(post);
             state.expandedPostId = post.id;
@@ -72,8 +82,8 @@
       function updatePost(postId, data) {
         Chronicle.apiFetch(endpoint + '/' + postId, {
           method: 'PUT',
-          body: JSON.stringify(data)
-        })
+          body: data
+        }).then(readJSON)
           .then(function (updated) {
             for (var i = 0; i < state.posts.length; i++) {
               if (state.posts[i].id === postId) {
@@ -92,7 +102,7 @@
       // --- Delete Post ---
 
       function deletePost(postId) {
-        Chronicle.apiFetch(endpoint + '/' + postId, { method: 'DELETE' })
+        Chronicle.apiFetch(endpoint + '/' + postId, { method: 'DELETE' }).then(readJSON)
           .then(function () {
             state.posts = state.posts.filter(function (p) { return p.id !== postId; });
             if (state.expandedPostId === postId) state.expandedPostId = null;
@@ -109,8 +119,8 @@
       function reorderPosts(postIds) {
         Chronicle.apiFetch(endpoint + '/reorder', {
           method: 'PUT',
-          body: JSON.stringify({ postIds: postIds })
-        })
+          body: { postIds: postIds }
+        }).then(readJSON)
           .catch(function (err) {
             console.error('[EntityPosts] Reorder error:', err);
           });

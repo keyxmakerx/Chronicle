@@ -48,6 +48,11 @@ func RegisterRoutes(e *echo.Echo, h *Handler, campaignSvc campaigns.CampaignServ
 	)
 	pub.GET("/maps", h.Index, campaigns.RequireViewAccess())
 	pub.GET("/maps/:mid", h.Show, campaigns.RequireViewAccess())
+	// The bare framed viewer for the focus view over entity pages: same group and
+	// access check as the page itself.
+	pub.GET("/maps/:mid/viewer", h.Viewer, campaigns.RequireViewAccess())
+	// The picture for viewers who must not get the original of a shadowed map.
+	pub.GET("/maps/:mid/player-image", h.PlayerImage, campaigns.RequireViewAccess())
 	// Read-only map data for the embeddable map-widget / entity-map blocks on
 	// public campaigns. meta = image + dimensions + visibility-filtered
 	// markers; markers also exposed standalone. Both reuse the existing

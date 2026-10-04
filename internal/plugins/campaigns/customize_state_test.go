@@ -78,6 +78,39 @@ func TestBuildCustomizeState(t *testing.T) {
 				t.Errorf("an invalid gradient must read as the default header, got %+v", st.Draft.Header)
 			}
 		}},
+		{"never customised is a slim header and a charcoal menu", "", nil, func(t *testing.T, st customizeState) {
+			d := st.Draft
+			if d.Header.Height != "slim" {
+				t.Errorf("height = %q, want slim", d.Header.Height)
+			}
+			if d.Colours.Sidebar != "charcoal" || d.Sidebar.Corner != "plain" || d.Sidebar.Glow != "accent" {
+				t.Errorf("menu defaults wrong: %q %+v", d.Colours.Sidebar, d.Sidebar)
+			}
+			if d.Sidebar.Own != startMenuOwn || d.Sidebar.GlowColour != startGlowOwn || d.Sidebar.Banner != "" || d.Sidebar.Subtitle != "" {
+				t.Errorf("menu starting values wrong: %+v", d.Sidebar)
+			}
+		}},
+		{"saved menu and header choices read back", `{"appearance":{"header_height":"tall","sidebar_colour":"own","sidebar_own":"#123456","sidebar_corner":"banner","sidebar_banner":"` + pic + `","peek_glow":"own","peek_glow_colour":"#abcdef"},"topbar_style":{"mode":"moving","gradient_from":"#0f172a","gradient_to":"#3b1d5e"},"topbar_content":{"mode":"widgets","widgets":["note","search"]}}`, nil, func(t *testing.T, st customizeState) {
+			d := st.Draft
+			if d.Header.Height != "tall" || d.Header.Bg != "moving" || d.Header.From != "#0f172a" || d.Header.To != "#3b1d5e" {
+				t.Errorf("header read back wrong: %+v", d.Header)
+			}
+			if strings.Join(d.Header.Widgets, ",") != "note,search" {
+				t.Errorf("widgets = %v", d.Header.Widgets)
+			}
+			if d.Colours.Sidebar != "own" || d.Sidebar.Own != "#123456" || d.Sidebar.Corner != "banner" || d.Sidebar.Banner != pic ||
+				d.Sidebar.Glow != "own" || d.Sidebar.GlowColour != "#abcdef" {
+				t.Errorf("menu read back wrong: %q %+v", d.Colours.Sidebar, d.Sidebar)
+			}
+			if st.Pictures[pic] == "" {
+				t.Error("the banner needs a URL the editor can show")
+			}
+		}},
+		{"a broken own colour falls back to the starting colour", `{"appearance":{"sidebar_colour":"own","sidebar_own":"red","peek_glow":"own","peek_glow_colour":"nope"}}`, nil, func(t *testing.T, st customizeState) {
+			if st.Draft.Sidebar.Own != startMenuOwn || st.Draft.Sidebar.GlowColour != startGlowOwn {
+				t.Errorf("invalid stored colours must not reach the editor: %+v", st.Draft.Sidebar)
+			}
+		}},
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {

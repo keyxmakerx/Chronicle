@@ -10,6 +10,9 @@ func RegisterRoutes(adminGroup *echo.Group, h *Handler) {
 	adminGroup.GET("/storage/settings", h.StorageSettings)
 	adminGroup.POST("/storage/settings", h.UpdateStorageSettings)
 
+	// How long deleted world pages wait in a campaign's Trash.
+	adminGroup.POST("/storage/trash", h.UpdateTrashRetention)
+
 	// Per-user storage overrides.
 	adminGroup.PUT("/users/:id/storage", h.SetUserStorageLimit)
 	adminGroup.DELETE("/users/:id/storage", h.DeleteUserStorageLimit)

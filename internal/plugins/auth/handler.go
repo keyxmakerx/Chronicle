@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"log/slog"
 	"net/http"
 	"net/url"
 	"strings"
@@ -572,7 +573,33 @@ func (h *Handler) AccountPage(c echo.Context) error {
 	csrfToken := middleware.GetCSRFToken(c)
 	timezones := timeutil.CommonZones()
 
-	return middleware.Render(c, http.StatusOK, AccountPage(user, csrfToken, timezones))
+	// A failed read shows the defaults: the page still works and a save fixes it.
+	prefs, err := h.service.GetViewPrefs(c.Request().Context(), userID)
+	if err != nil {
+		slog.Warn("reading view prefs", slog.String("user_id", userID), slog.Any("error", err))
+	}
+
+	return middleware.Render(c, http.StatusOK, AccountPage(user, csrfToken, timezones, prefs))
+}
+
+// UpdateViewPrefsAPI saves the signed-in person's own viewing choices
+// (PUT /account/view-prefs). The body is partial: only the keys sent change.
+func (h *Handler) UpdateViewPrefsAPI(c echo.Context) error {
+	userID := GetUserID(c)
+	if userID == "" {
+		return apperror.NewUnauthorized("not authenticated")
+	}
+
+	var req UpdateViewPrefsInput
+	if err := json.NewDecoder(c.Request().Body).Decode(&req); err != nil {
+		return apperror.NewBadRequest("invalid request body")
+	}
+
+	prefs, err := h.service.UpdateViewPrefs(c.Request().Context(), userID, req)
+	if err != nil {
+		return err
+	}
+	return c.JSON(http.StatusOK, prefs)
 }
 
 // UpdateTimezoneAPI updates the user's timezone preference (PUT /account/timezone).

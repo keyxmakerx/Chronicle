@@ -1,9 +1,8 @@
-// calendar_paint_weather.test.mjs — pins the paint tray's pure pieces in
-// calendar_editor.js: the palette's six common kinds and the More weather
+// calendar_paint_weather.test.mjs — pins the weather calendar's palette in
+// calendar_weather_sheet.js: its six common kinds and the More weather
 // groups both match the generator's own weather list (the owner's own kinds
-// first), a stored reading
-// flattens back to the write shape Undo sends (source kept), and the list's
-// search and escaping.
+// first), the list's search and escaping; and, in calendar_editor.js, a
+// stored reading flattens back to the write shape Undo sends (source kept).
 
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
@@ -31,7 +30,10 @@ function load() {
   };
   vm.createContext(sandbox);
   vm.runInContext(readFileSync(path.join(widgets, 'calendar_editor.js'), 'utf8'), sandbox);
-  return sandbox.module.exports;
+  const editor = sandbox.module.exports;
+  sandbox.module = { exports: {} };
+  vm.runInContext(readFileSync(path.join(widgets, 'calendar_weather_sheet.js'), 'utf8'), sandbox);
+  return { ...editor, ...sandbox.module.exports };
 }
 
 const byId = Object.fromEntries(G.weather.presets().map((p) => [p.id, p]));
@@ -50,12 +52,12 @@ test('every generator category has a More weather group', () => {
 });
 
 test("the owner's own kinds lead the More weather list, in their own colour", () => {
-  const { paintListHTML } = load();
+  const { moreListHTML: paintListHTML } = load();
   const fire = { id: 'fire-rain', name: 'Fire rain', icon: 'rain', color: '#e2552b', like: 'rain', seasons: { summer: 'often' } };
   const mine = Object.fromEntries(G.weather.presets([fire]).map((p) => [p.id, p]));
   const html = paintListHTML(mine, '');
   assert.ok(html.indexOf('>Yours<') >= 0 && html.indexOf('>Yours<') < html.indexOf('>Common<'));
-  assert.match(html, /data-wx="fire-rain" style="--wxc:#e2552b"/);
+  assert.match(html, /data-wx-pick="fire-rain" style="--wc:#e2552b"/);
 });
 
 test('a stored reading flattens to the write shape, keeping its source', () => {
@@ -76,21 +78,20 @@ test('a stored reading flattens to the write shape, keeping its source', () => {
 });
 
 test('the list groups kinds, searches labels and marks magic', () => {
-  const { paintListHTML } = load();
+  const { moreListHTML: paintListHTML } = load();
   const all = paintListHTML(byId, '');
   for (const name of ['Common', 'Stormy', 'Nature', 'Magic']) assert.match(all, new RegExp('class="wxgt">' + name + '<'));
   const rain = paintListHTML(byId, 'RAIN');
-  assert.match(rain, /data-wx="rain"/);
-  assert.doesNotMatch(rain, /data-wx="snow"/);
+  assert.match(rain, /data-wx-pick="rain"/);
+  assert.doesNotMatch(rain, /data-wx-pick="snow"/);
   assert.match(paintListHTML(byId, 'zzz<b>'), /No weather matches “zzz&lt;b&gt;”/);
   const magic = Object.values(byId).find((p) => p.category === 'Fantasy');
   assert.match(paintListHTML(byId, magic.label), /class="wmg">Magic</);
 });
 
-test('a palette button is a radio in the kind colour', () => {
-  const { paintButtonHTML } = load();
-  const html = paintButtonHTML(byId.rain, true, false);
-  assert.match(html, /role="radio" aria-checked="true" data-wx="rain"/);
-  assert.match(html, /--wxc:#/);
+test('a palette button is a pressed toggle in the kind colour', () => {
+  const { paletteChip } = load();
+  const html = paletteChip(byId.rain, true, false);
+  assert.match(html, /data-wx="rain" class="" aria-pressed="true" style="--wc:#/);
   assert.match(html, /fa-cloud-rain/);
 });

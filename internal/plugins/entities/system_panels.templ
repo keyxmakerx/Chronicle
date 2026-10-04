@@ -1,0 +1,26 @@
+package entities
+
+import (
+	"fmt"
+
+	"github.com/keyxmakerx/chronicle/internal/plugins/campaigns"
+)
+
+// entitySystemPanels mounts the widget panels a game-system package declared
+// for this page. Resolution (which system, which page types) happened in the
+// show handler and carried in the render context, so this stays
+// system-agnostic. It renders nothing when no
+// panel applies. The mounts are plain boot.js widget elements, the same shape
+// MakeWidgetMountRenderer emits, so no inline script is involved.
+templ entitySystemPanels(cc *campaigns.CampaignContext, entity *Entity) {
+	for _, p := range systemPanelsFrom(ctx) {
+		<div
+			class="mt-3"
+			data-widget={ p.Widget }
+			data-campaign-id={ cc.Campaign.ID }
+			data-entity-id={ entity.ID }
+			data-system-id={ p.SystemID }
+			data-is-gm={ fmt.Sprintf("%t", cc.CanAuthorDmOnly()) }
+		></div>
+	}
+}

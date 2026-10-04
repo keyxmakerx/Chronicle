@@ -73,7 +73,7 @@ func RegisterCampaignRoutes(e *echo.Echo, h *Handler, campaignSvc campaigns.Camp
 // match middleware ensures Bearer keys can only access their scoped
 // campaign (session users are naturally scoped to campaigns they belong
 // to by the membership lookup in RequireAuthOrAPIKey).
-func RegisterAPIRoutes(e *echo.Echo, api *APIHandler, calAPI *CalendarAPIHandler, mediaAPI *MediaAPIHandler, mapAPI *MapAPIHandler, noteAPI *NoteAPIHandler, tagAPI *TagAPIHandler, syncH *SyncHandler, changesH *SyncChangesHandler, syncSvc SyncAPIService, addonChecker AddonChecker, authSvc auth.AuthService, campaignSvc campaigns.CampaignService, opts ...func(*APIHandler)) {
+func RegisterAPIRoutes(e *echo.Echo, api *APIHandler, calAPI *CalendarAPIHandler, mediaAPI *MediaAPIHandler, mapAPI *MapAPIHandler, noteAPI *NoteAPIHandler, tagAPI *TagAPIHandler, syncH *SyncHandler, changesH *SyncChangesHandler, stashAPI *StashAPIHandler, syncSvc SyncAPIService, addonChecker AddonChecker, authSvc auth.AuthService, campaignSvc campaigns.CampaignService, opts ...func(*APIHandler)) {
 	// Inject addon checker into API handler for system-aware endpoints.
 	api.SetAddonChecker(addonChecker)
 
@@ -109,6 +109,7 @@ func RegisterAPIRoutes(e *echo.Echo, api *APIHandler, calAPI *CalendarAPIHandler
 		RequireSyncAPIAddon(addonChecker),
 		RateLimit(syncSvc),
 		RequireJSONContentType(),
+		WithChangeSource(),
 	)
 
 	// Multipart sub-group at the same /api/v1 prefix. Same auth +
@@ -125,7 +126,11 @@ func RegisterAPIRoutes(e *echo.Echo, api *APIHandler, calAPI *CalendarAPIHandler
 	)
 
 	// Campaign-scoped routes with campaign match enforcement.
-	cg := v1.Group("/campaigns/:id", RequireCampaignMatch(campaignSvc))
+	campaignMW := []echo.MiddlewareFunc{RequireCampaignMatch(campaignSvc)}
+	if api.history != nil {
+		campaignMW = append(campaignMW, RecordSyncHistory(api.history.repo, api))
+	}
+	cg := v1.Group("/campaigns/:id", campaignMW...)
 
 	// Read endpoints (require "read" permission).
 	cg.GET("", api.GetCampaign, RequirePermission(PermRead))
@@ -138,8 +143,15 @@ func RegisterAPIRoutes(e *echo.Echo, api *APIHandler, calAPI *CalendarAPIHandler
 	cg.GET("/entities", api.ListEntities, RequirePermission(PermRead))
 	cg.GET("/entities/:entityID", api.GetEntity, RequirePermission(PermRead))
 	cg.GET("/entities/:entityID/relations", api.ListEntityRelations, RequirePermission(PermRead))
+	cg.GET("/entities/:entityID/system-state/:system/:key", api.GetSystemState, RequirePermission(PermRead))
 	cg.GET("/entities/:entityID/permissions", api.GetEntityPermissions, RequirePermission(PermRead))
 	cg.PUT("/entities/:entityID/permissions", api.SetEntityPermissions, RequirePermission(PermWrite))
+
+	// DM Screen for the Foundry module. The provider refuses players and
+	// keeps the downtime switch owner-only; see dm_screen_api.go.
+	cg.GET("/dm-screen", api.GetDMScreen, RequirePermission(PermRead))
+	cg.POST("/dm-screen/reveal/:entityID", api.RevealDMScreenCharacter, RequirePermission(PermWrite))
+	cg.POST("/dm-screen/downtime", api.SetDMScreenDowntime, RequirePermission(PermWrite))
 
 	// Addon discovery (read).
 	cg.GET("/addons", api.ListAddons, RequirePermission(PermRead))
@@ -238,7 +250,9 @@ func RegisterAPIRoutes(e *echo.Echo, api *APIHandler, calAPI *CalendarAPIHandler
 	// Map read endpoints (require "read" permission + maps addon).
 	mapGroup := cg.Group("", RequireAddonAPI(addonChecker, "maps"))
 	mapGroup.GET("/maps", mapAPI.ListMaps, RequirePermission(PermRead))
+	mapGroup.GET("/maps/look", mapAPI.GetMapLook, RequirePermission(PermRead))
 	mapGroup.GET("/maps/:mapID", mapAPI.GetMap, RequirePermission(PermRead))
+	mapGroup.GET("/maps/:mapID/player-image", mapAPI.PlayerImage, RequirePermission(PermRead))
 	mapGroup.GET("/maps/:mapID/drawings", mapAPI.ListDrawings, RequirePermission(PermRead))
 	mapGroup.GET("/maps/:mapID/tokens", mapAPI.ListTokens, RequirePermission(PermRead))
 	mapGroup.GET("/maps/:mapID/layers", mapAPI.ListLayers, RequirePermission(PermRead))
@@ -264,6 +278,16 @@ func RegisterAPIRoutes(e *echo.Echo, api *APIHandler, calAPI *CalendarAPIHandler
 	mapGroup.DELETE("/maps/:mapID/fog/:fogID", mapAPI.DeleteFog, RequirePermission(PermWrite))
 	mapGroup.DELETE("/maps/:mapID/fog", mapAPI.ResetFog, RequirePermission(PermWrite))
 
+	// Shop room read endpoint (require "read" permission + the shop room's
+	// addon, named by the app wiring): the Foundry module shows the room to
+	// its players.
+	shopGroup := cg.Group("", RequireAddonAPI(addonChecker, api.shopRoomAddon))
+	shopGroup.GET("/armory/shops/:eid/room", api.GetShopRoom, RequirePermission(PermRead))
+	// Buying acts as the member the call names (actingUserId); see
+	// ShopBuyAPIService for why that can only narrow the key's power.
+	shopGroup.GET("/armory/shops/:eid/buyers", api.GetShopBuyers, RequirePermission(PermRead))
+	shopGroup.POST("/armory/shops/:eid/buy", api.BuyFromShop, RequirePermission(PermWrite))
+
 	// Note read endpoints (require "read" permission).
 	cg.GET("/notes", noteAPI.ListNotes, RequirePermission(PermRead))
 	cg.GET("/notes/:noteID", noteAPI.GetNote, RequirePermission(PermRead))
@@ -285,4 +309,25 @@ func RegisterAPIRoutes(e *echo.Echo, api *APIHandler, calAPI *CalendarAPIHandler
 	cg.GET("/sync/pull", syncH.PullMappings, RequirePermission(PermSync))
 	// Change feed: ids only, DM-equivalent callers only (checked in the handler).
 	cg.GET("/sync/changes", changesH.ListChanges, RequirePermission(PermSync))
+	// Sync history: what synced, which way, who and what failed. Owner or
+	// DM access only (checked in the handler), like the change feed.
+	if api.history != nil {
+		cg.GET("/sync/history", api.history.ListHistory, RequirePermission(PermSync))
+		cg.POST("/sync/history", api.history.ReportHistory, RequirePermission(PermSync))
+	}
+
+	// Stashes: move items and money as a named campaign member. The group is
+	// gated by the stash feature's addon (slug supplied by the wiring), and the
+	// acting member's own rules apply to each call — see StashAPIService.
+	if stashAPI != nil {
+		stashGroup := cg.Group("", RequireAddonAPI(addonChecker, stashAPI.addonSlug))
+		stashGroup.GET("/stashes/view", stashAPI.View, RequirePermission(PermRead))
+		stashGroup.GET("/stashes/history", stashAPI.History, RequirePermission(PermRead))
+		stashGroup.GET("/stashes/requests", stashAPI.Requests, RequirePermission(PermRead))
+		stashGroup.GET("/stashes/downtime", stashAPI.Downtime, RequirePermission(PermRead))
+		stashGroup.POST("/stashes/moves", stashAPI.Move, RequirePermission(PermWrite))
+		stashGroup.POST("/stashes/requests/:moveId/approve", stashAPI.Approve, RequirePermission(PermWrite))
+		stashGroup.POST("/stashes/requests/:moveId/decline", stashAPI.Decline, RequirePermission(PermWrite))
+		stashGroup.PUT("/stashes/downtime", stashAPI.SetDowntime, RequirePermission(PermWrite))
+	}
 }

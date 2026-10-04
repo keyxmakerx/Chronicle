@@ -33,6 +33,7 @@ func RegisterRoutes(e *echo.Echo, h *Handler) {
 	// Account settings (requires auth).
 	e.GET("/account", h.AccountPage, RequireAuth(h.service))
 	e.PUT("/account/timezone", h.UpdateTimezoneAPI, RequireAuth(h.service))
+	e.PUT("/account/view-prefs", h.UpdateViewPrefsAPI, RequireAuth(h.service))
 	e.PUT("/account/password", h.ChangePasswordAPI, RequireAuth(h.service))
 	e.PUT("/account/display-name", h.UpdateDisplayNameAPI, RequireAuth(h.service))
 	// Same rate limit as the general /media/upload route (media/routes.go):

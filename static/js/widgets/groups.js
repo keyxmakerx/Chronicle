@@ -22,6 +22,16 @@ Chronicle.register('groups', {
       expandedGroup: null // group ID whose members are shown
     };
 
+    // apiFetch resolves to the raw Response: unwrap it, and turn an error
+    // status into a rejection carrying the server's message.
+    function readJSON(resp) {
+      if (resp.status === 204) return null;
+      return resp.json().catch(function () { return null; }).then(function (data) {
+        if (!resp.ok) throw new Error((data && data.message) || 'Request failed (' + resp.status + ')');
+        return data;
+      });
+    }
+
     try {
       state.members = JSON.parse(config.membersJson || '[]');
     } catch (e) {
@@ -35,7 +45,7 @@ Chronicle.register('groups', {
       state.loading = true;
       state.error = null;
       render();
-      Chronicle.apiFetch(endpoint).then(function (data) {
+      Chronicle.apiFetch(endpoint).then(readJSON).then(function (data) {
         state.groups = data.groups || [];
         state.loading = false;
         render();
@@ -246,7 +256,7 @@ Chronicle.register('groups', {
       if (desc) body.description = desc;
 
       state.error = null;
-      Chronicle.apiFetch(endpoint, { method: 'POST', body: JSON.stringify(body) })
+      Chronicle.apiFetch(endpoint, { method: 'POST', body: body }).then(readJSON)
         .then(function () {
           loadGroups();
         })
@@ -264,7 +274,7 @@ Chronicle.register('groups', {
       }
       // Load members for this group.
       state.expandedGroup = gid;
-      Chronicle.apiFetch(endpoint + '/' + gid).then(function (data) {
+      Chronicle.apiFetch(endpoint + '/' + gid).then(readJSON).then(function (data) {
         // Update group in state with members.
         for (var i = 0; i < state.groups.length; i++) {
           if (state.groups[i].id === gid) {
@@ -296,7 +306,7 @@ Chronicle.register('groups', {
       else body.description = null;
 
       state.editingGroup = null;
-      Chronicle.apiFetch(endpoint + '/' + gid, { method: 'PUT', body: JSON.stringify(body) })
+      Chronicle.apiFetch(endpoint + '/' + gid, { method: 'PUT', body: body }).then(readJSON)
         .then(function () {
           loadGroups();
         })
@@ -310,7 +320,7 @@ Chronicle.register('groups', {
       if (!confirm('Delete group "' + (gname || 'this group') + '"? Any entity permission grants for this group will also be removed.')) {
         return;
       }
-      Chronicle.apiFetch(endpoint + '/' + gid, { method: 'DELETE' })
+      Chronicle.apiFetch(endpoint + '/' + gid, { method: 'DELETE' }).then(readJSON)
         .then(function () {
           if (state.expandedGroup === gid) state.expandedGroup = null;
           loadGroups();
@@ -330,8 +340,8 @@ Chronicle.register('groups', {
 
       Chronicle.apiFetch(endpoint + '/' + gid + '/members', {
         method: 'POST',
-        body: JSON.stringify({ user_id: uid })
-      }).then(function (data) {
+        body: { user_id: uid }
+      }).then(readJSON).then(function (data) {
         // Update members in state.
         for (var i = 0; i < state.groups.length; i++) {
           if (state.groups[i].id === gid) {
@@ -347,7 +357,7 @@ Chronicle.register('groups', {
     }
 
     function removeMember(gid, uid) {
-      Chronicle.apiFetch(endpoint + '/' + gid + '/members/' + uid, { method: 'DELETE' })
+      Chronicle.apiFetch(endpoint + '/' + gid + '/members/' + uid, { method: 'DELETE' }).then(readJSON)
         .then(function () {
           // Remove from local state.
           for (var i = 0; i < state.groups.length; i++) {

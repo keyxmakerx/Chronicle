@@ -26,11 +26,6 @@ const (
 	NotifProposalCreated   = "proposal_created"
 	NotifProposalResponse  = "proposal_response"
 	NotifProposalConfirmed = "proposal_confirmed" // winner picked, session created.
-	// NotifCalendarRSVP marks a calendar-event RSVP notification. The stored
-	// value avoids spelling the owning plugin's slug: a quoted plugin-name
-	// literal outside that plugin's own directory fails the plugin-isolation
-	// guard, and this file lives in sessions.
-	NotifCalendarRSVP = "event_rsvp"
 	// NotifAvailabilityNudge is the Director asking a member who has never
 	// answered to set their availability. Sent only on an explicit press —
 	// there is no scheduled-job runner, so a timer-fired reminder would need

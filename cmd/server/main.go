@@ -24,6 +24,7 @@ import (
 	"github.com/keyxmakerx/chronicle/internal/plugins/packages"
 	"github.com/keyxmakerx/chronicle/internal/plugins/sessions"
 	"github.com/keyxmakerx/chronicle/internal/plugins/syncapi"
+	"github.com/keyxmakerx/chronicle/internal/plugins/systemstate"
 	"github.com/keyxmakerx/chronicle/internal/plugins/timeline"
 	"github.com/keyxmakerx/chronicle/internal/plugins/widgetbindings"
 	"github.com/keyxmakerx/chronicle/internal/systems"
@@ -300,6 +301,9 @@ func registeredPlugins() []database.PluginSchema {
 		// FK-free and polymorphic, so plugin order vs calendar/maps/timeline
 		// doesn't matter.
 		{Slug: "widgetbindings", MigrationsFS: mustSub(widgetbindings.MigrationsFS, database.PluginMigrationsSubdir)},
+		// systemstate: per-page game-system state. Its foreign keys point at
+		// core tables only, which have migrated before any plugin runs.
+		{Slug: systemstate.PluginSlug, MigrationsFS: mustSub(systemstate.MigrationsFS, database.PluginMigrationsSubdir)},
 		{Slug: "syncapi", MigrationsFS: mustSub(syncapi.MigrationsFS, database.PluginMigrationsSubdir)},
 		{Slug: "packages", MigrationsFS: mustSub(packages.MigrationsFS, database.PluginMigrationsSubdir)},
 		// foundry_vtt's migration 001 renames foundry_module_campaign_tokens

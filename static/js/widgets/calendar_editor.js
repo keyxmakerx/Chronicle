@@ -145,20 +145,26 @@
     var strip = document.createElement('div');
     strip.className = 'h-edit';
     // The structure editor is Owner only (routes.go), so only an Owner
-    // gets the gear that leads to it. Generate… here works without choosing
-    // days: it fills the shown month.
+    // gets the gear that leads to it. Weather here works without choosing
+    // days: it opens on the shown month.
     var view = this.view;
     var gear = view.role >= ROLE_OWNER && view.campaignId && view.calendarId
       ? '<a class="btn sm quiet" id="cal5-settings" href="/campaigns/' + encodeURIComponent(view.campaignId) + '/calendars/' + encodeURIComponent(view.calendarId) + '/structure" title="Calendar settings: months, weekdays, leap years, moons and seasons"><i class="fa-solid fa-gear"></i><span>Calendar settings</span></a>'
       : '';
     var gen = view.canAuthorDmOnly && Chronicle.calendarWeatherSheet;
+    // Era authors (Owner or co-Director) manage eras from here; the card
+    // folds out of this button.
+    var eras = view.canAuthorDmOnly
+      ? '<button type="button" class="btn sm quiet" id="cal5-erabtn" aria-haspopup="dialog" aria-expanded="false"><i class="fa-solid fa-timeline"></i><span class="btxt"> Eras</span></button>'
+      : '';
     strip.innerHTML = '<span class="etag">Editing</span><span class="ehint">Click or drag across days. Shift extends, Ctrl/Cmd adds. Touch: tap, or hold then drag.</span><span class="sp"></span>' +
-      (gen ? '<button type="button" class="btn sm quiet" id="edGen" aria-haspopup="dialog" aria-label="Generate weather"><i class="fa-solid fa-wand-magic-sparkles"></i><span class="btxt"> Generate…</span></button>' : '') +
-      gear + '<button type="button" class="btn sm quiet" id="cal5-editdone">Done</button>';
+      (gen ? '<button type="button" class="btn sm quiet" id="edGen" aria-haspopup="dialog" aria-label="Weather"><i class="fa-solid fa-cloud-sun"></i><span class="btxt"> Weather</span></button>' : '') +
+      eras + gear + '<button type="button" class="btn sm quiet" id="cal5-editdone">Done</button>';
     subw.appendChild(strip);
     $('#cal5-editdone', strip).addEventListener('click', this.setEditing.bind(this, false));
     var self = this;
-    if (gen) $('#edGen', strip).addEventListener('click', function () { self._openGenerate(true); });
+    if (eras) $('#cal5-erabtn', strip).addEventListener('click', function () { view.toggleEra(); });
+    if (gen) $('#edGen', strip).addEventListener('click', function () { self._openWeather(); });
   };
 
   CalendarEditor.prototype.setEditing = function (on) {
@@ -171,7 +177,7 @@
     // The view owns the weekday header; re-render it so the buttons go
     // back to plain labels, then decorate again only while editing.
     this.view.renderHeader();
-    if (!on) { this.selection = {}; this._syncPicks(); this._renderBar(); this._closePaintTray(); }
+    if (!on) { this.selection = {}; this._syncPicks(); this._renderBar(); }
     this.view.say(on ? 'Editing on. Click or drag across days to choose them.' : 'Editing off.');
   };
 
@@ -524,11 +530,22 @@
   // selected. Only the bulk actions this API can actually perform
   // ship: bulk visibility (Hide/Reveal, gated CanAuthorDmOnly, the same
   // gate the single-event visibility route already uses) and Shift events
-  // (moves every event touching the selection by N days), plus Paint
-  // weather, which sets a weather on every chosen day, and Generate…, which
-  // opens calendar_weather_sheet.js for them. The mockup's Lock action is
-  // not wired yet (TODO(#918)).
+  // (moves every event touching the selection by N days), plus Weather,
+  // which opens the weather calendar (calendar_weather_sheet.js) with those
+  // days chosen; Lock keeps the chosen days' weather safe from a roll.
   // ------------------------------------------------------------------
+  // lockState is the Lock button's face for the chosen days' stored readings
+  // (null where a day has none): Unlock once every reading is locked, and
+  // disabled when no chosen day has weather to lock.
+  function lockState(readings) {
+    var have = (readings || []).filter(Boolean);
+    var allLocked = have.length > 0 && have.every(function (w) { return w.locked === true; });
+    return { label: allLocked ? 'Unlock' : 'Lock', icon: allLocked ? 'fa-lock-open' : 'fa-lock', disabled: !have.length, unlocking: allLocked };
+  }
+  function lockButtonHTML(st) {
+    return '<button type="button" class="bbb" data-bb="lock"' + (st.disabled ? ' disabled' : '') + '><i class="fa-solid ' + st.icon + '" aria-hidden="true"></i><span>' + st.label + '</span></button>';
+  }
+
   CalendarEditor.prototype._buildBulkBar = function () {
     var wrap = document.createElement('div');
     wrap.className = 'bbw';
@@ -543,8 +560,8 @@
       if (a === 'none') { self.selection = {}; self._syncPicks(); self._renderBar(); }
       else if (a === 'hide' || a === 'reveal') self._bulkVisibility(a === 'hide' ? 'dm_only' : 'everyone');
       else if (a === 'shift') self._toggleShiftTray();
-      else if (a === 'paint') self._togglePaintTray();
-      else if (a === 'gen') self._openGenerate();
+      else if (a === 'wx') self._openWeather();
+      else if (a === 'lock') self._lockDays();
     });
   };
 
@@ -555,19 +572,18 @@
     // not .bbar itself, so a plain CSS sibling/descendant selector can react
     // to it without needing :has().
     this.view.calEl.classList.toggle('bar-up', !!n);
-    if (!n) { this.bbar.hidden = true; this.bbar.innerHTML = ''; this._closeShiftTray(); this._closePaintTray(); return; }
-    var canVis = this.view.canAuthorDmOnly;
+    if (!n) { this.bbar.hidden = true; this.bbar.innerHTML = ''; this._closeShiftTray(); return; }
+    var canVis = this.view.canAuthorDmOnly, self = this;
     this.bbar.hidden = false;
     this.bbar.innerHTML =
       '<div class="bbl"><b>' + (n === 1 ? '1 day' : n + ' days') + ' chosen</b><span>' + this._eventsInSelection().length + ' events touched</span></div>' +
       '<div class="bba">' +
         (canVis ? '<button type="button" class="bbb" data-bb="hide"><i class="fa-solid fa-eye-slash"></i><span>Hide</span></button><button type="button" class="bbb" data-bb="reveal"><i class="fa-solid fa-eye"></i><span>Reveal</span></button>' : '') +
         '<button type="button" class="bbb" data-bb="shift" aria-expanded="' + !!this._shiftTray + '"><i class="fa-solid fa-arrows-left-right"></i><span>Shift events</span></button>' +
-        (canVis ? '<button type="button" class="bbb" data-bb="paint" aria-expanded="' + !!this._paintTray + '"><i class="fa-solid fa-paintbrush"></i><span>Paint weather</span></button>' +
-          (Chronicle.calendarWeatherSheet ? '<button type="button" class="bbb" data-bb="gen" aria-haspopup="dialog"><i class="fa-solid fa-wand-magic-sparkles"></i><span>Generate…</span></button>' : '') : '') +
+        (canVis ? (Chronicle.calendarWeatherSheet ? '<button type="button" class="bbb" data-bb="wx" aria-haspopup="dialog"><i class="fa-solid fa-cloud-sun"></i><span>Weather</span></button>' : '') +
+          lockButtonHTML(lockState(this._selectedDates().map(function (d) { return (self.view.weatherByYear[d.year] || {})[d.month + '_' + d.day] || null; }))) : '') +
       '</div>' +
       '<button type="button" class="x" data-bb="none" aria-label="Choose no days">✕</button>';
-    if (this._paintTray) this._paintCount();
   };
 
   // Runs one Chronicle.apiFetch()-returning promise per item and resolves
@@ -616,7 +632,6 @@
 
   CalendarEditor.prototype._toggleShiftTray = function () {
     if (this._shiftTray) { this._closeShiftTray(); return; }
-    this._closePaintTray();
     var self = this, view = this.view;
     var tray = document.createElement('div');
     tray.className = 'btray';
@@ -675,18 +690,11 @@
   };
 
   // ------------------------------------------------------------------
-  // Paint weather (the signed paint tray): pick a weather and it is set on
-  // every chosen day at once, as a hand-painted reading the generator never
-  // replaces. Six common kinds sit in the palette; More weather… opens the
-  // whole list grouped Common, Stormy, Nature and Magic, with search, and a
-  // kind picked there joins the palette for the session. The weather list is
-  // the generator's own (chronicle_gen.js, loaded on first use), so a painted
-  // day and a generated one name and colour the same weather the same way.
-  // Undo puts back exactly what the days held before the last paint or clear.
+  // Weather: the edit strip's and the bulk bar's Weather buttons open the
+  // weather calendar (calendar_weather_sheet.js) on a month, with any chosen
+  // days of that month still chosen. It keeps a draft; Save hands it here as
+  // writes, and Undo puts back exactly what the days held before.
   // ------------------------------------------------------------------
-  var PAINT_COMMON = ['clear', 'partly-cloudy', 'cloudy', 'rain', 'snow', 'fog'];
-  var PAINT_GROUPS = [['Yours', 'Yours'], ['Standard', 'Common'], ['Severe', 'Stormy'], ['Environmental', 'Nature'], ['Fantasy', 'Magic']];
-
   // loadEngine runs cb once chronicle_gen.js is on the page, injecting it
   // the first time; onFail runs if it cannot load.
   function loadEngine(src, cb, onFail) {
@@ -714,146 +722,6 @@
     };
   }
 
-  function paintButtonHTML(p, checked, added) {
-    var c = Chronicle.calendarColor(p.color);
-    return '<button type="button" role="radio" aria-checked="' + !!checked + '" data-wx="' + esc(p.id) + '"' +
-      ' class="' + (p.category === 'Fantasy' ? 'mg' : '') + (added ? ' added' : '') + '"' + (c ? ' style="--wxc:' + c + '"' : '') + '>' +
-      '<span class="sw2"></span><i class="fa-solid ' + Chronicle.calendarWeatherIcon({ icon: p.glyph }) + ' i" aria-hidden="true"></i>' + esc(p.label) + '</button>';
-  }
-
-  CalendarEditor.prototype._togglePaintTray = function () {
-    if (this._paintTray) { this._closePaintTray(); return; }
-    this._closeShiftTray();
-    var self = this, view = this.view;
-    var tray = document.createElement('div');
-    tray.className = 'btray';
-    tray.innerHTML = '<div class="trh">Paint weather<small id="cal5-paintn"></small></div>' +
-      '<div class="pal" id="cal5-pal"><span class="trnote">Loading weather…</span></div>' +
-      '<div class="trf"><span class="trf1">' +
-        '<button type="button" class="btn sm quiet" data-paint-clear><i class="fa-solid fa-eraser"></i> Clear weather</button>' +
-        '<button type="button" class="btn sm quiet" data-paint-undo hidden><i class="fa-solid fa-rotate-left"></i> Undo</button>' +
-      '</span></div>';
-    view.calEl.appendChild(tray);
-    this._paintTray = tray;
-    this._paintCount();
-    var b = $('[data-bb="paint"]', this.bbar);
-    if (b) b.setAttribute('aria-expanded', 'true');
-    tray.addEventListener('click', function (e) {
-      var wx = e.target.closest('[data-wx]');
-      if (wx) { self._paintWith(wx.dataset.wx); return; }
-      if (e.target.closest('[data-pmore]')) { self._togglePaintMore(); return; }
-      if (e.target.closest('[data-paint-clear]')) { self._clearWeather(); return; }
-      if (e.target.closest('[data-paint-undo]')) self._undoPaint();
-    });
-    loadEngine(view.engineSrc, function () {
-      Chronicle.calendarWeatherSettings(view).then(function (s) {
-        if (self._paintTray !== tray) return;
-        var kinds = Chronicle.calendarWeatherOwnKinds(s && s.kinds);
-        self._presets = {};
-        self._paintOwn = kinds.map(function (k) { return k.id; });
-        window.ChronicleGen.weather.presets(kinds).forEach(function (p) { self._presets[p.id] = p; });
-        self._renderPalette();
-      });
-    }, function () {
-      if (self._paintTray !== tray) return;
-      $('#cal5-pal', tray).innerHTML = '<span class="trnote">The weather list could not load. Check your connection and try again.</span>';
-    });
-  };
-
-  CalendarEditor.prototype._paintCount = function () {
-    var n = this._selectedKeys().length, el = this._paintTray && $('#cal5-paintn', this._paintTray);
-    if (el) el.textContent = 'Pick a weather to set it on the ' + (n === 1 ? 'chosen day' : n + ' chosen days') + '. Weather you paint is never replaced by Generate.';
-  };
-
-  CalendarEditor.prototype._renderPalette = function () {
-    var self = this, pal = this._paintTray && $('#cal5-pal', this._paintTray);
-    if (!pal || !this._presets) return;
-    this._paintAdded = this._paintAdded || [];
-    var own = this._paintOwn || [];
-    var ids = PAINT_COMMON.concat(this._paintAdded.filter(function (id) { return PAINT_COMMON.indexOf(id) < 0 && own.indexOf(id) < 0; }));
-    var button = function (id) {
-      var p = self._presets[id];
-      return p ? paintButtonHTML(p, id === self._paintLast, PAINT_COMMON.indexOf(id) < 0 && own.indexOf(id) < 0) : '';
-    };
-    pal.setAttribute('role', 'radiogroup');
-    pal.setAttribute('aria-label', 'Weather');
-    // The owner's own kinds lead the palette under their own heading
-    // (Calendar settings → Weather), the built-in common ones follow.
-    pal.innerHTML = (own.length ? '<span class="trgh" aria-hidden="true">Yours</span>' + own.map(button).join('') + '<span class="trgh" aria-hidden="true">Common</span>' : '') +
-      ids.map(button).join('') + '<button type="button" class="pmore" data-pmore aria-expanded="' + !!this._paintMore + '"><i class="fa-solid fa-ellipsis i" aria-hidden="true"></i>More weather…</button>';
-    pal.classList.add('trrow');
-  };
-
-  CalendarEditor.prototype._togglePaintMore = function () {
-    if (this._paintMore) { this._closePaintMore(); return; }
-    var self = this, panel = document.createElement('div');
-    panel.className = 'bmore';
-    panel.innerHTML = '<div class="pmh"><span>All weather</span><button type="button" class="x" data-pmore-x aria-label="Close">✕</button></div>' +
-      '<input type="search" class="wxq" placeholder="Search weather" aria-label="Search weather">' +
-      '<div class="wxl" role="list"></div>';
-    // The panel sits above the tray; the tray's real height (its palette
-    // wraps) replaces the CSS default so the two never overlap.
-    if (this._paintTray) this.view.calEl.style.setProperty('--trayH', (this._paintTray.offsetHeight + 8) + 'px');
-    this.view.calEl.appendChild(panel);
-    this._paintMore = panel;
-    var q = $('.wxq', panel);
-    q.addEventListener('input', function () { self._renderPaintList(q.value); });
-    panel.addEventListener('click', function (e) {
-      if (e.target.closest('[data-pmore-x]')) { self._closePaintMore(); return; }
-      var it = e.target.closest('[data-wx]');
-      if (!it) return;
-      var id = it.dataset.wx;
-      if (self._paintAdded.indexOf(id) < 0 && PAINT_COMMON.indexOf(id) < 0) self._paintAdded.push(id);
-      self._closePaintMore();
-      self._paintWith(id);
-    });
-    this._renderPaintList('');
-    this._renderPalette();
-    q.focus();
-  };
-
-  // paintListHTML draws the More weather list: every kind under its group
-  // heading, filtered by the search text, or a no-match line.
-  function paintListHTML(presets, query) {
-    var needle = String(query || '').trim().toLowerCase(), html = '';
-    var all = Object.keys(presets).map(function (k) { return presets[k]; });
-    PAINT_GROUPS.forEach(function (g) {
-      var items = all.filter(function (p) {
-        return p.category === g[0] && (!needle || p.label.toLowerCase().indexOf(needle) >= 0);
-      });
-      if (!items.length) return;
-      html += '<div class="wxgt">' + esc(g[1]) + '</div>' + items.map(function (p) {
-        var c = Chronicle.calendarColor(p.color);
-        return '<button type="button" class="wxi' + (p.category === 'Fantasy' ? ' mg' : '') + '" role="listitem" data-wx="' + esc(p.id) + '"' + (c ? ' style="--wxc:' + c + '"' : '') + '>' +
-          '<span class="sw2"></span><i class="fa-solid ' + Chronicle.calendarWeatherIcon({ icon: p.glyph }) + ' i" aria-hidden="true"></i><span class="wxn">' + esc(p.label) + '</span>' +
-          (p.category === 'Fantasy' ? '<span class="wmg">Magic</span>' : '') + '</button>';
-      }).join('');
-    });
-    return html || '<p class="wxnone">No weather matches “' + esc(query) + '”.</p>';
-  }
-
-  CalendarEditor.prototype._renderPaintList = function (query) {
-    var list = this._paintMore && $('.wxl', this._paintMore);
-    if (list) list.innerHTML = paintListHTML(this._presets || {}, query);
-  };
-
-  CalendarEditor.prototype._closePaintMore = function () {
-    if (!this._paintMore) return;
-    this._paintMore.remove();
-    this._paintMore = null;
-    this.view.calEl.style.removeProperty('--trayH');
-    this._renderPalette();
-  };
-
-  CalendarEditor.prototype._closePaintTray = function () {
-    this._closePaintMore();
-    if (!this._paintTray) return;
-    var b = $('[data-bb="paint"]', this.bbar);
-    if (b) b.setAttribute('aria-expanded', 'false');
-    this._paintTray.remove();
-    this._paintTray = null;
-  };
-
   // _selectedDates turns the selection into {year, month, day} dates.
   CalendarEditor.prototype._selectedDates = function () {
     return this._selectedKeys().map(function (k) {
@@ -878,7 +746,7 @@
       years.forEach(function (y) { if (!view.weatherByYear[y]) throw new Error('weather not loaded'); });
       return dates.map(function (d) {
         var w = (view.weatherByYear[d.year] || {})[d.month + '_' + d.day];
-        return { date: d, prev: w ? dayInput(w) : null };
+        return { date: d, prev: w ? dayInput(w) : null, locked: !!(w && w.locked) };
       });
     });
   };
@@ -886,7 +754,9 @@
   // _refreshWeather reloads the touched years and then redraws, so the grid
   // shows what the server actually holds without flashing empty meanwhile.
   CalendarEditor.prototype._refreshWeather = function (dates) {
-    var view = this.view;
+    var view = this.view, self = this;
+    // The Director's "Players see" line follows the saved weather.
+    if (view.canAuthorDmOnly && view.fetchForecast) view.fetchForecast(true);
     return Promise.all(yearsOf(dates).map(function (y) {
       var old = view.weatherByYear[y];
       delete view.weatherByYear[y];
@@ -896,52 +766,46 @@
     })).then(function () {
       view.renderMonth();
       view.refreshWing();
+      self._renderBar();
     });
   };
 
-  CalendarEditor.prototype._paintWith = function (id) {
-    var self = this, view = this.view, p = this._presets && this._presets[id], dates = this._selectedDates();
-    if (!p || !dates.length || this._paintBusy) return;
-    this._paintBusy = true;
-    this._paintLast = id;
-    this._renderPalette();
-    this._snapshot(dates).then(function (snap) {
-      var days = dates.map(function (d) {
-        return { year: d.year, month: d.month, day: d.day, source: 'manual',
-          preset_id: p.id, preset_label: p.label, icon: p.glyph, color: p.color };
-      });
-      return Chronicle.apiFetch(view.apiBase + '/weather/days', { method: 'PUT', body: { days: days } }).then(function (resp) {
-        if (!resp.ok) throw new Error('paint failed');
-        self._paintUndo = snap;
-        self._refreshWeather(dates);
-        view.say('Painted ' + p.label + ' on ' + (days.length === 1 ? '1 day' : days.length + ' days') + '.');
-      });
-    }).catch(function () {
-      view.say("Couldn't save the weather. Nothing changed.");
-    }).then(function () {
-      self._paintBusy = false;
-      self._syncUndo();
-    });
-  };
-
-  CalendarEditor.prototype._clearWeather = function () {
+  // _lockDays locks (or unlocks) the chosen days that hold weather. Undo
+  // sends the opposite for exactly the days that changed.
+  CalendarEditor.prototype._lockDays = function () {
     var self = this, view = this.view, dates = this._selectedDates();
     if (!dates.length || this._paintBusy) return;
     this._paintBusy = true;
+    var send = function (days, locked) {
+      return Chronicle.apiFetch(view.apiBase + '/weather/days/lock', { method: 'POST', body: { days: days, locked: locked } }).then(function (resp) {
+        if (!resp.ok) throw new Error('lock failed');
+        return resp.json();
+      });
+    };
     this._snapshot(dates).then(function (snap) {
-      var had = snap.filter(function (s) { return s.prev; });
-      if (!had.length) { view.say('The chosen days have no weather to clear.'); return; }
-      return Chronicle.apiFetch(view.apiBase + '/weather/days/clear', { method: 'POST', body: { days: dates } }).then(function (resp) {
-        if (!resp.ok) throw new Error('clear failed');
-        self._paintUndo = snap;
-        self._refreshWeather(dates);
-        view.say('Cleared the weather on ' + (had.length === 1 ? '1 day' : had.length + ' days') + '.');
+      // The snapshot's write shape drops the lock flag, so read the stored readings.
+      snap.forEach(function (s) { s.prev = (view.weatherByYear[s.date.year] || {})[s.date.month + '_' + s.date.day] || null; });
+      var have = snap.filter(function (s) { return s.prev; });
+      var st = lockState(snap.map(function (s) { return s.prev; }));
+      if (st.disabled) { view.say('The chosen days have no weather to lock.'); return; }
+      var toggle = have.filter(function (s) { return (s.prev.locked === true) === st.unlocking; });
+      var days = (toggle.length ? toggle : have).map(function (s) { return s.date; });
+      var locked = !st.unlocking;
+      return send(days, locked).then(function (out) {
+        var n = out && typeof out.changed === 'number' ? out.changed : days.length;
+        self._refreshWeather(days);
+        view.say((locked ? 'Locked ' : 'Unlocked ') + (n === 1 ? '1 day' : n + ' days') + '.', { label: 'Undo', run: function () {
+          if (self._paintBusy) return;
+          self._paintBusy = true;
+          send(days, !locked).then(function () { view.say('Undone.'); }).catch(function () {
+            view.say("Couldn't undo. The calendar shows what is saved now.");
+          }).then(function () { self._paintBusy = false; self._refreshWeather(days); });
+        } });
       });
     }).catch(function () {
-      view.say("Couldn't clear the weather. Nothing changed.");
+      view.say("Couldn't lock those days. Nothing changed.");
     }).then(function () {
       self._paintBusy = false;
-      self._syncUndo();
     });
   };
 
@@ -960,6 +824,12 @@
       return Chronicle.apiFetch(view.apiBase + '/weather/days', { method: 'PUT', body: { days: restore } });
     }).then(function (resp) {
       if (!resp.ok) throw new Error('undo restore failed');
+      // Painting over a locked day clears its lock; Undo puts that back too.
+      var relock = snap.filter(function (s) { return s.prev && s.locked; }).map(function (s) { return s.date; });
+      if (!relock.length) return resp;
+      return Chronicle.apiFetch(view.apiBase + '/weather/days/lock', { method: 'POST', body: { days: relock, locked: true } });
+    }).then(function (resp) {
+      if (!resp.ok) throw new Error('undo relock failed');
       self._paintUndo = null;
       view.say('Undone.');
     }).catch(function () {
@@ -967,72 +837,86 @@
     }).then(function () {
       self._paintBusy = false;
       self._refreshWeather(dates);
-      self._syncUndo();
     });
   };
 
-  // _openGenerate opens the Generate sheet for the chosen days (or, from the
-  // header with none chosen, every day of the shown month), once the
-  // generator and every year those days fall in have loaded.
-  CalendarEditor.prototype._openGenerate = function (monthIfNone) {
+  // _openWeather opens the weather calendar on the month of the first chosen
+  // day (or the shown month), once the generator, the calendar's weather
+  // settings and that month's weather and events have loaded.
+  CalendarEditor.prototype._openWeather = function () {
     var self = this, view = this.view, dates = this._selectedDates();
-    if (!dates.length && monthIfNone) dates = this._shownMonthDates();
-    if (!dates.length || this._paintBusy) return;
-    // The per-day weather API takes at most 1000 days per call.
-    if (dates.length > 1000) { view.say('Choose 1000 days or fewer to generate weather for.'); return; }
-    this._closePaintTray();
+    if (this._paintBusy) return;
+    var CD = CalDate, cal = view.cal;
+    dates.sort(function (a, b) { return CD.dayIndex(cal, a.year, a.month, a.day) - CD.dayIndex(cal, b.year, b.month, b.day); });
+    var y = dates.length ? dates[0].year : view.view.y, m = dates.length ? dates[0].month : view.view.m;
+    var mc = CD.monthCount(cal);
+    m = ((m - 1) % mc + mc) % mc + 1;
+    var chosen = dates.filter(function (d) { return d.year === y && d.month === m; }).map(function (d) { return d.year + '_' + d.month + '_' + d.day; });
     this._closeShiftTray();
     var fail = function () { view.say('The weather generator could not load. Check your connection and try again.'); };
     loadEngine(view.engineSrc, function () {
-      Promise.all([self._snapshot(dates), Chronicle.calendarWeatherSettings(view)]).then(function (got) {
-        var stored = {};
-        yearsOf(dates).forEach(function (y) {
-          var byDay = view.weatherByYear[y] || {};
-          Object.keys(byDay).forEach(function (md) { stored[y + '_' + md] = byDay[md]; });
-        });
+      Promise.all([view.fetchWeatherYear(y), view.fetchMonth(y, m), Chronicle.calendarWeatherSettings(view)]).then(function (got) {
+        if (!view.weatherByYear[y]) { view.say("Couldn't load the weather already on those days. Try again."); return; }
         Chronicle.calendarWeatherSheet.open(view, {
-          dates: dates, stored: stored, settings: got[1],
-          apply: function (days) { return self._applyGenerated(days); }
+          year: y, month: m, chosen: chosen, settings: got[2],
+          save: function (changes) { return self._saveWeather(changes); }
         });
-      }).catch(function () { view.say("Couldn't load the weather already on those days. Try again."); });
+      });
     }, fail);
   };
 
-  CalendarEditor.prototype._shownMonthDates = function () {
-    var view = this.view, cal = view.cal, y = view.view.y, m = view.view.m, out = [];
-    var mc = CalDate.monthCount(cal), m0 = ((m - 1) % mc + mc) % mc;
-    for (var d = 1, n = CalDate.monthDays(cal, m0, y); d <= n; d++) out.push({ year: y, month: m0 + 1, day: d });
-    return out;
-  };
-
-  // _applyGenerated saves the sheet's readings as generated (the server
-  // keeps any day painted meanwhile) and offers Undo. Resolves true once
-  // saved, false if nothing changed.
-  CalendarEditor.prototype._applyGenerated = function (days) {
+  // _saveWeather writes the weather calendar's changes (clears, then
+  // readings, then locks) and offers Undo. Resolves true once all are saved;
+  // on a failure part way it reloads what the server holds and resolves
+  // false, so the panel stays open with its draft.
+  CalendarEditor.prototype._saveWeather = function (ch) {
     var self = this, view = this.view;
-    var dates = days.map(function (d) { return { year: d.year, month: d.month, day: d.day }; });
+    var key = function (d) { return d.year + '_' + d.month + '_' + d.day; }, seen = {}, dates = [];
+    ch.clear.concat(ch.put, ch.lock, ch.unlock).forEach(function (d) {
+      var k = key(d);
+      if (!seen[k]) { seen[k] = true; dates.push({ year: d.year, month: d.month, day: d.day }); }
+    });
+    if (!dates.length) return Promise.resolve(true);
+    // The per-day weather API takes at most 1000 days per call, and a draft
+    // can span many months, so each list goes in batches of that size.
+    var call = function (path, method, list, extra) {
+      var at = 0;
+      var next = function () {
+        if (at >= list.length) return null;
+        var body = { days: list.slice(at, at + 1000) };
+        at += 1000;
+        Object.keys(extra || {}).forEach(function (k) { body[k] = extra[k]; });
+        return Chronicle.apiFetch(view.apiBase + path, { method: method, body: body }).then(function (resp) {
+          if (!resp.ok) throw new Error('weather save failed');
+          return next();
+        });
+      };
+      return next();
+    };
     this._paintBusy = true;
-    return this._snapshot(dates).then(function (snap) {
-      return Chronicle.apiFetch(view.apiBase + '/weather/days', { method: 'PUT', body: { days: days } }).then(function (resp) {
-        if (!resp.ok) throw new Error('generate failed');
-        self._paintUndo = snap;
-        self._refreshWeather(dates);
-        view.say('Generated weather for ' + (days.length === 1 ? '1 day' : days.length + ' days') + '.', { label: 'Undo', run: function () { self._undoPaint(); } });
-        return true;
-      });
+    var snap = null;
+    return this._snapshot(dates).then(function (s) {
+      snap = s;
+      return call('/weather/days/clear', 'POST', ch.clear);
+    }).then(function () {
+      return call('/weather/days', 'PUT', ch.put);
+    }).then(function () {
+      return call('/weather/days/lock', 'POST', ch.lock, { locked: true });
+    }).then(function () {
+      return call('/weather/days/lock', 'POST', ch.unlock, { locked: false });
+    }).then(function () {
+      self._paintUndo = snap;
+      self._refreshWeather(dates);
+      view.say('Saved the weather on ' + (dates.length === 1 ? '1 day' : dates.length + ' days') + '.', { label: 'Undo', run: function () { self._undoPaint(); } });
+      return true;
     }).catch(function () {
-      view.say("Couldn't save the weather. Nothing changed.");
+      if (snap) self._refreshWeather(dates);
+      view.say(snap ? "Some of the weather couldn't be saved. The calendar shows what is saved now." : "Couldn't save the weather. Nothing changed.");
       return false;
     }).then(function (ok) {
       self._paintBusy = false;
-      self._syncUndo();
       return ok;
     });
-  };
-
-  CalendarEditor.prototype._syncUndo = function () {
-    var u = this._paintTray && $('[data-paint-undo]', this._paintTray);
-    if (u) u.hidden = !this._paintUndo;
   };
 
   // ------------------------------------------------------------------
@@ -1422,54 +1306,179 @@
       self._eraFormFor = undefined;
       view._showFlapHTML(self._eraManagerHTML());
     };
+    // The era panel's "Edit eras" lands here: edit mode on, then the
+    // manager folds out of the strip's Eras button once it is showing.
+    view.openEraManager = function () {
+      if (!self.editing) self.setEditing(true);
+      requestAnimationFrame(function () { if (view._pf.state === 'closed') view.showFlap(); });
+    };
   };
 
   CalendarEditor.prototype._refreshFlap = function () {
-    this.view.flapEl.innerHTML = this._eraManagerHTML();
+    var view = this.view, flap = view.flapEl;
+    flap.innerHTML = this._eraManagerHTML();
+    // The card may grow for the form, but only to the calendar's own
+    // bottom edge: past it the card would cover the page below. What does
+    // not fit scrolls inside, under the fixed Save/Cancel bar.
+    if (!window.matchMedia('(max-width:600px)').matches && flap.style.top) {
+      var top = parseFloat(flap.style.top) || 0, lim = view.calEl.clientHeight - top - 8;
+      var room = view._pf && view._pf.g ? view._pf.g.final.room : lim;
+      flap.style.maxHeight = Math.max(220, Math.min(room, lim)) + 'px';
+    }
+    // The open era's tab is brought into the row's view.
+    var tab = flap.querySelector('.eratab[aria-pressed="true"]');
+    if (tab) {
+      var row = tab.parentNode, over = tab.offsetLeft + tab.offsetWidth + 24 - row.clientWidth;
+      if (over > 0) row.scrollLeft = over;
+    }
   };
+
+  // eraRangeLabel is an era's span as the manager lists it: where it
+  // really ends, which for an era with no end of its own is the day before
+  // the next era begins.
+  function eraRangeLabel(cal, r) {
+    var mo = function (t) { var m = (cal.months || [])[t.m - 1]; return m ? m.name : 'Month ' + t.m; };
+    var today = CalDate.dayIndex(cal, cal.current_year, cal.current_month, cal.current_day);
+    if (!r.end) return r.startK > today ? 'From ' + mo(r.start) + ' ' + r.start.y : r.start.y + '–present';
+    if (r.start.y !== r.end.y) return r.start.y + '–' + r.end.y;
+    if (r.start.m !== r.end.m) return mo(r.start) + ' – ' + mo(r.end) + ' ' + r.end.y;
+    return r.start.d + '–' + r.end.d + ' ' + mo(r.end) + ' ' + r.end.y;
+  }
 
   CalendarEditor.prototype._eraManagerHTML = function () {
-    var view = this.view;
-    var eras = (view.cal.eras || []).slice().sort(function (a, b) {
-      return (a.sort_order || 0) - (b.sort_order || 0) || a.start_year - b.start_year;
-    });
+    var view = this.view, cal = view.cal;
+    var rows = Chronicle.calendarEras.sorted(cal);
     var current = view.eraForDate(view.view.y, view.view.m, 1);
-    var rows = eras.map(function (e) {
-      var span = e.start_year + (e.end_year != null ? '–' + e.end_year : '–present');
-      return '<div class="etl-seg' + (current && e.id === current.id ? ' cur' : '') + '">' +
-        '<span>' + esc(e.name) + '<small>' + esc(span) + '</small></span>' +
-        '<span class="acts">' +
-          '<button type="button" class="qi" data-edit-era="' + e.id + '" aria-label="Edit ' + esc(e.name) + '"><i class="fa-solid fa-pencil"></i></button>' +
-          '<button type="button" class="qi" data-del-era="' + e.id + '" aria-label="Delete ' + esc(e.name) + '"><i class="fa-solid fa-trash"></i></button>' +
-        '</span></div>';
-    }).join('') || '<p class="none">No eras yet.</p>';
+    var formFor = this._eraFormFor, editing = formFor !== undefined;
+    var hid = function (e) { return e.hidden_until_begins ? ' <i class="fa-solid fa-eye-slash eh" title="Hidden from players until it begins" aria-label="Hidden from players until it begins"></i>' : ''; };
+    var body, foot = '';
+    if (!editing) {
+      // The eras, oldest first; a row opens that era's form.
+      body = rows.length ? '<ul class="eral">' + rows.map(function (r) {
+        var e = r.era;
+        return '<li><button type="button" class="erali' + (current && e.id === current.id ? ' cur' : '') + '" data-edit-era="' + esc(e.id) + '" aria-label="Edit ' + esc(e.name) + '">' +
+          '<i class="esw" style="' + view._eraSwatch(e) + '"></i><span class="en">' + esc(e.name) + hid(e) + '<small>' + esc(eraRangeLabel(cal, r)) + '</small></span>' +
+          '<span class="lg" aria-hidden="true">›</span></button></li>';
+      }).join('') + '</ul>' : '<p class="none">No eras yet.</p>';
+      body += '<button type="button" class="addev" data-add-era><i class="fa-solid fa-plus"></i>Add an era</button>';
+      // Colours, style and feel are set in the Era look part of the calendar
+      // settings, which is Owner only like the rest of that page.
+      if (view.role >= ROLE_OWNER && view.campaignId && view.calendarId) {
+        body += '<a class="addev" href="/campaigns/' + encodeURIComponent(view.campaignId) + '/calendars/' + encodeURIComponent(view.calendarId) + '/structure#era-look"><i class="fa-solid fa-palette"></i>Colours and feel: Era look</a>';
+      }
+    } else {
+      // While one era is open, the others stay one tap away in a row that
+      // scrolls sideways.
+      var row = formFor === 'new' ? null : rows.filter(function (r) { return String(r.era.id) === String(formFor); })[0];
+      var era = row ? row.era : null;
+      body = '<div class="eratabs" role="group" aria-label="Eras">' + rows.map(function (r) {
+        var e = r.era, on = String(e.id) === String(formFor);
+        return '<button type="button" class="eratab" data-edit-era="' + esc(e.id) + '" aria-pressed="' + on + '">' +
+          '<i class="esw" style="' + view._eraSwatch(e) + '"></i><span>' + esc(e.name) + hid(e) + '<small>' + esc(eraRangeLabel(cal, r)) + '</small></span></button>';
+      }).join('') +
+        '<button type="button" class="eratab add" data-add-era aria-pressed="' + (formFor === 'new') + '"><span>+ New era</span></button></div>' +
+        this._eraFormHTML(era, row && row.end);
+      foot = '<div class="efoot erafoot"><button type="button" class="btn quiet" data-cancel-era>Cancel</button><span class="sp"></span>' +
+        (era ? '<button type="button" class="btn danger" data-del-era="' + esc(era.id) + '">Delete</button>' : '') +
+        '<button type="submit" class="btn primary" form="cal5-eraform">' + (era ? 'Save' : 'Create') + '</button></div>';
+    }
 
-    var formFor = this._eraFormFor;
-    var body = formFor !== undefined
-      ? this._eraFormHTML(formFor === 'new' ? null : eras.filter(function (e) { return String(e.id) === String(formFor); })[0])
-      : '<button type="button" class="addev" data-add-era><i class="fa-solid fa-plus"></i>Add an era</button>';
-
-    // Two leaves, as calendar_view.js's era card: the bar, then the list and
-    // its form, which scroll.
+    // Two leaves, as calendar_view.js's era card: the bar, then the list
+    // or the form, which scroll above the form's fixed buttons.
     return '<div class="leaf lf1"><div class="grab" aria-hidden="true"></div>' +
         '<div class="crease"><span>Eras</span><button type="button" class="x" data-close aria-label="Close">✕</button></div></div>' +
-      '<div class="leaf lf2"><div class="lscroll"><div class="fb fbr"><div class="etl-track">' + rows + '</div>' + body + '</div></div></div>';
+      '<div class="leaf lf2"><div class="lscroll"><div class="fb fbr eram">' + body + '</div></div>' + foot + '</div>';
   };
 
-  CalendarEditor.prototype._eraFormHTML = function (era) {
-    var isNew = !era;
-    return '<form class="ebody" id="cal5-eraform" style="margin-top:10px">' +
-      '<div class="fld"><input class="etitle" name="name" placeholder="Era name" required value="' + esc(era ? era.name : '') + '"/></div>' +
-      '<div class="two">' +
-        '<div class="fld">Starts<div class="erow"><span class="rl">Y</span><input type="number" name="start_year" required value="' + esc(era ? era.start_year : '') + '"/><input type="number" name="start_month" min="1" placeholder="M" value="' + esc(era ? era.start_month : 1) + '"/><input type="number" name="start_day" min="1" placeholder="D" value="' + esc(era ? era.start_day : 1) + '"/></div></div>' +
-        '<div class="fld">Ends<label class="check"><input type="checkbox" name="ongoing"' + (!era || era.end_year == null ? ' checked' : '') + '/> Ongoing</label>' +
-          '<div class="erow" data-end-fields' + (!era || era.end_year == null ? ' hidden' : '') + '><span class="rl">Y</span><input type="number" name="end_year" value="' + esc(era && era.end_year != null ? era.end_year : '') + '"/><input type="number" name="end_month" min="1" placeholder="M" value="' + esc(era && era.end_month != null ? era.end_month : '') + '"/><input type="number" name="end_day" min="1" placeholder="D" value="' + esc(era && era.end_day != null ? era.end_day : '') + '"/></div></div>' +
-      '</div>' +
-      '<div class="fld"><textarea name="description" rows="2" placeholder="Optional description">' + esc(era && era.description ? era.description : '') + '</textarea></div>' +
-      '<div class="efoot"><button type="button" class="btn quiet" data-cancel-era>Cancel</button><span class="sp"></span>' +
-        (isNew ? '' : '<button type="button" class="btn danger" data-del-era="' + era.id + '">Delete</button>') +
-        '<button type="submit" class="btn primary">' + (isNew ? 'Create' : 'Save') + '</button></div>' +
+  // eraDateFields is a Starts or Ends row: month and day as lists of this
+  // calendar's own months and days, then the year, as the event editor's
+  // date rows are.
+  CalendarEditor.prototype._eraDateFields = function (p, t, label) {
+    var cal = this.view.cal, months = cal.months || [];
+    var yr = '<input type="number" name="' + p + '_year" aria-label="' + label + ' year" value="' + esc(t ? t.y : '') + '"' + (p === 'start' ? ' required' : '') + '/>';
+    if (!months.length) {
+      return '<input type="number" name="' + p + '_month" min="1" aria-label="' + label + ' month" value="' + esc(t ? t.m : 1) + '"/>' +
+        '<input type="number" name="' + p + '_day" min="1" aria-label="' + label + ' day" value="' + esc(t ? t.d : 1) + '"/>' + yr;
+    }
+    var m = t ? t.m : 1;
+    return '<select name="' + p + '_month" aria-label="' + label + ' month">' + months.map(function (mo, i) {
+      return '<option value="' + (i + 1) + '"' + (i + 1 === m ? ' selected' : '') + '>' + esc(mo.name) + '</option>';
+    }).join('') + '</select>' +
+      '<select name="' + p + '_day" aria-label="' + label + ' day">' + this._eraDayOptions(t ? t.y : cal.current_year, m, t ? t.d : 1) + '</select>' + yr;
+  };
+  CalendarEditor.prototype._eraDayOptions = function (y, m, sel) {
+    var n = CalDate.monthDays(this.view.cal, m - 1, y) || 30, h = '';
+    sel = Math.min(sel || 1, n);
+    for (var d = 1; d <= n; d++) h += '<option value="' + d + '"' + (d === sel ? ' selected' : '') + '>' + d + '</option>';
+    return h;
+  };
+  // A month or year change keeps the day list to that month's length.
+  CalendarEditor.prototype._eraDaysFor = function (form, p) {
+    var m = form[p + '_month'], d = form[p + '_day'], y = form[p + '_year'];
+    if (!m || !d || d.tagName !== 'SELECT') return;
+    d.innerHTML = this._eraDayOptions(+y.value || this.view.cal.current_year, +m.value || 1, +d.value || 1);
+  };
+
+  // until is where the era ends now (its own end, or the day before the next
+  // era begins): what the Ends row starts at when Ongoing is switched off.
+  CalendarEditor.prototype._eraFormHTML = function (era, until) {
+    var cal = this.view.cal, ongoing = !era || era.end_year == null;
+    var start = era ? { y: era.start_year, m: era.start_month || 1, d: era.start_day || 1 } : { y: cal.current_year, m: cal.current_month || 1, d: cal.current_day || 1 };
+    var end = null;
+    if (era && era.end_year != null) {
+      end = Chronicle.calendarEras.explicitEndOf(cal, era);
+    }
+    var tog = function (name, on, label) {
+      return '<button type="button" class="tog" role="switch" aria-checked="' + !!on + '" aria-label="' + label + '" data-etog="' + name + '"></button>';
+    };
+    return '<form class="eraform" id="cal5-eraform" novalidate>' +
+      '<label class="fld"><span class="sr">Era name</span><input class="etitle" name="name" placeholder="Era name" required maxlength="255" value="' + esc(era ? era.name : '') + '"/></label>' +
+      '<section class="esec"><h4>When</h4>' +
+        '<div class="erow ecap" aria-hidden="true"><span></span><span>Month</span><span>Day</span><span>Year</span></div>' +
+        '<div class="erow"><span class="rl">Starts</span>' + this._eraDateFields('start', start, 'Start') + '</div>' +
+        '<div class="swrow"><span>Ongoing<small>Runs until the next era begins.</small></span>' + tog('ongoing', ongoing, 'Ongoing') + '</div>' +
+        '<div class="erow" data-end-fields' + (ongoing ? ' hidden' : '') + '><span class="rl">Ends</span>' + this._eraDateFields('end', end || until || start, 'End') + '</div>' +
+      '</section>' +
+      '<section class="esec"><h4>Details</h4>' +
+        '<label class="fld">Description<textarea name="description" rows="2" placeholder="Optional. Shows in the era panel.">' + esc(era && era.description ? era.description : '') + '</textarea></label>' +
+        '<div class="fld">Lore page<div class="lorepick" data-lore-pick>' + this._lorePickHTML(era ? era.lore_entity_id : null, era ? era.lore_entity_name : '') + '</div></div>' +
+      '</section>' +
+      '<section class="esec"><h4>Players</h4>' +
+        '<div class="swrow"><span>Hide from players until it begins<small>Until then players see the era before it carry on, and nothing dated inside it.</small></span>' + tog('hidden', era && era.hidden_until_begins, 'Hide from players until it begins') + '</div>' +
+        '<label class="fld">Director’s note<textarea name="dm_note" rows="2" placeholder="Only you and co-Directors ever see this">' + esc(era && era.dm_note ? era.dm_note : '') + '</textarea></label>' +
+      '</section>' +
       '</form>';
+  };
+
+  // The lore page picker: a chosen page with Change/Remove, or a search box
+  // over the campaign's pages. The chosen id rides on the picker itself.
+  CalendarEditor.prototype._lorePickHTML = function (id, name) {
+    if (id) {
+      return '<input type="hidden" name="lore_entity_id" value="' + esc(id) + '"/>' +
+        '<span class="lp-cur">' + (Chronicle.calendarPageGlyph || '') + esc(name || 'Linked page') + '</span>' +
+        '<button type="button" class="btn sm quiet" data-lore-change>Change</button><button type="button" class="btn sm quiet" data-lore-clear>Remove</button>';
+    }
+    return '<input type="hidden" name="lore_entity_id" value=""/>' +
+      '<input type="search" class="lp-q" data-lore-q placeholder="Search pages to link" aria-label="Search pages to link" autocomplete="off"/>' +
+      '<ul class="lp-res" data-lore-res role="listbox" aria-label="Pages" hidden></ul>';
+  };
+
+  CalendarEditor.prototype._loreSearch = function (input) {
+    var view = this.view, q = input.value.trim(), res = input.parentNode.querySelector('[data-lore-res]'), seq = (this._loreSeq || 0) + 1;
+    this._loreSeq = seq;
+    if (q.length < 2) { res.hidden = true; res.innerHTML = ''; return; }
+    var self = this;
+    Chronicle.apiFetch('/campaigns/' + encodeURIComponent(view.campaignId) + '/entities/search?q=' + encodeURIComponent(q))
+      .then(function (resp) { return resp.ok ? resp.json() : { results: [] }; })
+      .then(function (body) {
+        if (self._loreSeq !== seq) return;
+        // Only pages: the search also returns other kinds of result.
+        var pages = (body.results || []).filter(function (r) { return r.id && /\/entities\//.test(r.url || ''); }).slice(0, 8);
+        res.innerHTML = pages.length
+          ? pages.map(function (r) { return '<li><button type="button" role="option" data-lore-id="' + esc(r.id) + '" data-lore-name="' + esc(r.name) + '">' + esc(r.name) + (r.type_name ? '<small>' + esc(r.type_name) + '</small>' : '') + '</button></li>'; }).join('')
+          : '<li class="none">No pages match.</li>';
+        res.hidden = false;
+      });
   };
 
   CalendarEditor.prototype._bindFlapCapture = function () {
@@ -1480,7 +1489,24 @@
       var edit = e.target.closest('[data-edit-era]');
       var del = e.target.closest('[data-del-era]');
       var cancel = e.target.closest('[data-cancel-era]');
-      var ongoing = e.target.closest('[name="ongoing"]');
+      var pick = e.target.closest('[data-lore-id]');
+      var lp = e.target.closest('[data-lore-pick]');
+      if (pick && lp) { lp.innerHTML = self._lorePickHTML(pick.dataset.loreId, pick.dataset.loreName); return; }
+      if (lp && e.target.closest('[data-lore-clear], [data-lore-change]')) {
+        lp.innerHTML = self._lorePickHTML(null, '');
+        var q = lp.querySelector('[data-lore-q]'); if (q) q.focus();
+        return;
+      }
+      var tg = e.target.closest('[data-etog]');
+      if (tg) {
+        var on = tg.getAttribute('aria-checked') !== 'true';
+        tg.setAttribute('aria-checked', String(on));
+        if (tg.dataset.etog === 'ongoing') {
+          var ef = view.flapEl.querySelector('[data-end-fields]');
+          if (ef) ef.hidden = on;
+        }
+        return;
+      }
       if (add) { self._eraFormFor = 'new'; self._refreshFlap(); }
       else if (edit) { self._eraFormFor = edit.dataset.editEra; self._refreshFlap(); }
       else if (cancel) { self._eraFormFor = undefined; self._refreshFlap(); }
@@ -1492,25 +1518,33 @@
           view.cal.eras = (view.cal.eras || []).filter(function (er) { return String(er.id) !== String(del.dataset.delEra); });
           self._eraFormFor = undefined;
           self._refreshFlap();
+          view.renderMonth();
           view.say('Era deleted.');
         });
-      } else if (ongoing) {
-        var fields = view.flapEl.querySelector('[data-end-fields]');
-        if (fields) fields.hidden = ongoing.checked;
       }
     });
+    var loreTimer = 0;
+    view.flapEl.addEventListener('input', function (e) {
+      if (!e.target.matches('[data-lore-q]')) return;
+      clearTimeout(loreTimer);
+      loreTimer = setTimeout(function () { self._loreSearch(e.target); }, 220);
+    });
     view.flapEl.addEventListener('change', function (e) {
-      if (e.target.name === 'ongoing') {
-        var fields = view.flapEl.querySelector('[data-end-fields]');
-        if (fields) fields.hidden = e.target.checked;
-      }
+      var m = /^(start|end)_(month|year)$/.exec(e.target.name || '');
+      if (m && e.target.form) self._eraDaysFor(e.target.form, m[1]);
     });
     view.flapEl.addEventListener('submit', function (e) {
       var form = e.target.closest('#cal5-eraform');
       if (!form) return;
       e.preventDefault();
       var f = form;
-      var ongoing = f.ongoing.checked;
+      if (!f.name.value.trim() || !f.start_year.value) {
+        view.say(!f.name.value.trim() ? 'Give the era a name.' : 'Give the era a start year.');
+        (!f.name.value.trim() ? f.name : f.start_year).focus();
+        return;
+      }
+      var isOn = function (k) { var t = f.querySelector('[data-etog="' + k + '"]'); return !!t && t.getAttribute('aria-checked') === 'true'; };
+      var ongoing = isOn('ongoing');
       var body = {
         name: f.name.value.trim(),
         start_year: +f.start_year.value,
@@ -1520,25 +1554,47 @@
         end_month: ongoing ? null : (f.end_month.value ? +f.end_month.value : null),
         end_day: ongoing ? null : (f.end_day.value ? +f.end_day.value : null),
         description: f.description.value || null,
-        color: '#8b5cf6',
-        sort_order: (view.cal.eras || []).length
+        hidden_until_begins: isOn('hidden'),
+        dm_note: f.dm_note.value.trim() || null
       };
       var isNew = self._eraFormFor === 'new';
+      var prior = isNew ? null : (view.cal.eras || []).filter(function (er) { return String(er.id) === String(self._eraFormFor); })[0];
+      var lore = f.lore_entity_id.value || null;
+      // A lore page is sent only when it changed: the server checks a newly
+      // chosen page, and an unchanged one should never fail that check.
+      if (isNew || (prior && (prior.lore_entity_id || null) !== lore)) body.lore_entity_id = lore;
+      if (isNew) {
+        // A new era starts on the next suggested palette; the Era look
+        // settings change it. Colours and order are left alone on edit.
+        var pals = (Chronicle.calendarEraBlend && Chronicle.calendarEraBlend.PALETTES) || [['', '#8b5cf6', '#c4b5fd']];
+        var pal = pals[(view.cal.eras || []).length % pals.length];
+        body.color = pal[1];
+        body.color_2 = pal[2];
+        body.sort_order = (view.cal.eras || []).length;
+      }
       var req = isNew
         ? Chronicle.apiFetch(view.apiBase + '/eras', { method: 'POST', body: body })
         : Chronicle.apiFetch(view.apiBase + '/eras/' + self._eraFormFor, { method: 'PUT', body: body });
       req.then(function (resp) {
-        if (!resp.ok) { view.say('Could not save the era.'); return null; }
-        return isNew ? resp.json() : null;
+        if (!resp.ok) {
+          return resp.json().catch(function () { return {}; }).then(function (j) {
+            view.say('Could not save the era' + (j && j.message ? ': ' + j.message : '.'));
+            return false;
+          });
+        }
+        return isNew ? resp.json() : true;
       }).then(function (created) {
-        if (isNew && created) {
+        if (!created) return;
+        if (isNew) {
+          if (created.lore_entity_id) created.lore_entity_name = (f.querySelector('.lp-cur') || {}).textContent || '';
           view.cal.eras = (view.cal.eras || []).concat([created]);
-        } else if (!isNew) {
-          var existing = (view.cal.eras || []).filter(function (er) { return String(er.id) === String(self._eraFormFor); })[0];
-          if (existing) { for (var k in body) existing[k] = body[k]; }
+        } else if (prior) {
+          for (var k in body) prior[k] = body[k];
+          if ('lore_entity_id' in body) prior.lore_entity_name = body.lore_entity_id ? (f.querySelector('.lp-cur') || {}).textContent || '' : '';
         }
         self._eraFormFor = undefined;
         self._refreshFlap();
+        view.renderMonth();
         view.say(isNew ? 'Era created.' : 'Era saved.');
       });
     });
@@ -1563,7 +1619,7 @@
   // not a function" the instant a canEdit viewer loads the page.
   // Pure helpers, exposed for test/js/calendar_paint_weather.test.mjs.
   if (typeof module !== 'undefined' && module.exports) {
-    module.exports = { PAINT_COMMON: PAINT_COMMON, PAINT_GROUPS: PAINT_GROUPS, dayInput: dayInput, paintButtonHTML: paintButtonHTML, paintListHTML: paintListHTML };
+    module.exports = { dayInput: dayInput, lockState: lockState, lockButtonHTML: lockButtonHTML };
   }
 
   var mount = document.querySelector('[data-widget="calendar_view"]');

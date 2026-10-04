@@ -105,6 +105,8 @@ type AuthService interface {
 	// User profile.
 	GetUser(ctx context.Context, userID string) (*User, error)
 	UpdateTimezone(ctx context.Context, userID, timezone string) error
+	GetViewPrefs(ctx context.Context, userID string) (ViewPrefs, error)
+	UpdateViewPrefs(ctx context.Context, userID string, input UpdateViewPrefsInput) (ViewPrefs, error)
 	UpdateDisplayName(ctx context.Context, userID, displayName string) error
 	UpdateAvatarPath(ctx context.Context, userID string, avatarPath *string) error
 	ChangePassword(ctx context.Context, userID, currentPassword, newPassword string) error
@@ -158,6 +160,11 @@ type authService struct {
 	// in routes.go after the media service exists (ConfigureAvatarUploader);
 	// nil only in a test that constructs authService directly.
 	avatarUploader AvatarUploader
+
+	// onSessionsRevoked runs whenever all of a user's sessions are destroyed
+	// (password reset or change, force sign-out), so credentials kept outside
+	// sessions, like a player's notes grants, end with them.
+	onSessionsRevoked []func(ctx context.Context, userID string)
 }
 
 // Registration modes. These mirror the settings plugin's canonical constants;
@@ -219,6 +226,15 @@ func ConfigureMailSender(svc AuthService, mail MailSender, baseURL string) {
 func ConfigureAvatarUploader(svc AuthService, uploader AvatarUploader) {
 	if s, ok := svc.(*authService); ok {
 		s.avatarUploader = uploader
+	}
+}
+
+// OnSessionsRevoked registers fn to run whenever all of a user's sessions are
+// destroyed. Other plugins use it to end their own credentials for that user
+// without auth importing them.
+func OnSessionsRevoked(svc AuthService, fn func(ctx context.Context, userID string)) {
+	if s, ok := svc.(*authService); ok && fn != nil {
+		s.onSessionsRevoked = append(s.onSessionsRevoked, fn)
 	}
 }
 
@@ -721,6 +737,9 @@ func (s *authService) ListAllSessions(ctx context.Context) ([]SessionInfo, error
 // DestroyAllUserSessions removes all active sessions for a user from Redis.
 // Returns the number of sessions destroyed. Used by admin force-logout.
 func (s *authService) DestroyAllUserSessions(ctx context.Context, userID string) (int, error) {
+	for _, fn := range s.onSessionsRevoked {
+		fn(ctx, userID)
+	}
 	if s.redis == nil {
 		return 0, nil
 	}
@@ -882,6 +901,9 @@ func hashToken(token string) string {
 // destroyUserSessions removes all active sessions for a user from Redis.
 // Called on password reset to invalidate any compromised sessions.
 func (s *authService) destroyUserSessions(ctx context.Context, userID string) {
+	for _, fn := range s.onSessionsRevoked {
+		fn(ctx, userID)
+	}
 	if s.redis == nil {
 		return
 	}
@@ -929,6 +951,37 @@ func (s *authService) UpdateTimezone(ctx context.Context, userID, timezone strin
 		}
 	}
 	return s.repo.UpdateTimezone(ctx, userID, timezone)
+}
+
+// GetViewPrefs returns the person's own viewing choices, defaults filled in.
+func (s *authService) GetViewPrefs(ctx context.Context, userID string) (ViewPrefs, error) {
+	raw, err := s.repo.GetViewPrefs(ctx, userID)
+	if err != nil {
+		return DefaultViewPrefs(), err
+	}
+	return ParseViewPrefs(raw), nil
+}
+
+// UpdateViewPrefs merges a partial change into the person's stored choices
+// and returns the result. Only this user's row is written; campaign settings
+// and other members are never touched.
+func (s *authService) UpdateViewPrefs(ctx context.Context, userID string, input UpdateViewPrefsInput) (ViewPrefs, error) {
+	cur, err := s.GetViewPrefs(ctx, userID)
+	if err != nil {
+		return cur, err
+	}
+	next, err := input.ApplyTo(cur)
+	if err != nil {
+		return cur, err
+	}
+	raw, err := json.Marshal(next)
+	if err != nil {
+		return cur, apperror.NewInternal(err)
+	}
+	if err := s.repo.SetViewPrefs(ctx, userID, raw); err != nil {
+		return cur, err
+	}
+	return next, nil
 }
 
 // UpdateDisplayName sets the user's display name with validation.

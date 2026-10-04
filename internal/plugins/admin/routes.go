@@ -2,6 +2,7 @@ package admin
 
 import (
 	"github.com/labstack/echo/v4"
+	echomw "github.com/labstack/echo/v4/middleware"
 
 	"github.com/keyxmakerx/chronicle/internal/plugins/auth"
 	"github.com/keyxmakerx/chronicle/internal/plugins/smtp"
@@ -37,6 +38,12 @@ func RegisterRoutes(e *echo.Echo, h *Handler, authService auth.AuthService, smtp
 	admin.DELETE("/campaigns/:id", h.DeleteCampaign, reauth)
 	admin.POST("/campaigns/:id/join", h.JoinCampaign, reauth)
 	admin.DELETE("/campaigns/:id/leave", h.LeaveCampaign)
+
+	// Site look: name, logo, look and sign-in background for pages outside a
+	// campaign. The POST carries picture uploads, so it has its own body cap
+	// (the global 2M limit skips this path in app.go).
+	admin.GET("/site-look", h.SiteLook)
+	admin.POST("/site-look", h.SaveSiteLook, echomw.BodyLimit("5M"))
 
 	// Site-wide log of admin changes.
 	admin.GET("/activity", h.Activity)

@@ -22,6 +22,7 @@ const WIDGETS = [
   'static/js/widgets/tag_picker.js',     // canonical correct pattern (control)
   'static/js/widgets/journal.js',        // keys, outside clicks and visibility, per mount
   'static/js/widgets/notes.js',          // re-mounted on every page change
+  'static/js/widgets/shop_room.js',      // tooltip, speech bubble and icon picker live on the body
 ];
 
 // Strip comments so prose mentioning the call names can't trip the guard.

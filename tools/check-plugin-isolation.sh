@@ -167,6 +167,9 @@ always_allowed_prefixes=(
 const_registry_files=(
   "internal/plugins/campaigns/import_report.go"
   "internal/systems/operator_diag_campaign.go"
+  # The sync history's calendar kind: a label on the history wire that the
+  # Foundry module sends too, not a use of the calendar plugin.
+  "internal/plugins/syncapi/sync_history_kinds.go"
 )
 
 # ---------------------------------------------------------------------------

@@ -34,6 +34,9 @@ func newUpgrader(allowedOrigins []string, dynamicOrigins DynamicOrigins) gorilla
 	return gorillaWs.Upgrader{
 		ReadBufferSize:  1024,
 		WriteBufferSize: 1024,
+		// The only subprotocol the server answers with; the grant token a
+		// notes frame offers alongside it is never echoed back.
+		Subprotocols: []string{NotesSubprotocol},
 		CheckOrigin: func(r *http.Request) bool {
 			// API key auth (Foundry VTT) — origin varies by deployment, but
 			// the token query param already proves authorization.

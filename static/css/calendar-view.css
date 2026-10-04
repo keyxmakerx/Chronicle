@@ -507,12 +507,10 @@
 .cal-v5 .nudge .i{width:11px;height:11px}
 @keyframes cal5-foldDown{from{opacity:0;transform:perspective(600px) rotateX(-65deg)}to{opacity:1;transform:none}}
 .cal-v5 .kinds{display:flex;flex-wrap:wrap;gap:5px;margin:8px 0 2px 30px;padding:8px;border-radius:10px;background:var(--paper2);transform-origin:top;animation:cal5-foldDown .34s var(--spring) both}
-.cal-v5 .kinds button, .cal-v5 .wxchips button{display:inline-flex;align-items:center;gap:6px;height:27px;padding:0 10px;border-radius:99px;font:550 11.5px/1 var(--sans);color:var(--ink2);box-shadow:inset 0 0 0 1px var(--edge);background:var(--paper)}
-.cal-v5 .kinds button:hover, .cal-v5 .wxchips button:hover{color:var(--ink)}
-.cal-v5 .kinds button[aria-pressed="true"], .cal-v5 .wxchips button[aria-pressed="true"]{box-shadow:inset 0 0 0 1.3px var(--ink);color:var(--ink)}
+.cal-v5 .kinds button{display:inline-flex;align-items:center;gap:6px;height:27px;padding:0 10px;border-radius:99px;font:550 11.5px/1 var(--sans);color:var(--ink2);box-shadow:inset 0 0 0 1px var(--edge);background:var(--paper)}
+.cal-v5 .kinds button:hover{color:var(--ink)}
+.cal-v5 .kinds button[aria-pressed="true"]{box-shadow:inset 0 0 0 1.3px var(--ink);color:var(--ink)}
 .cal-v5 .kinds .ci, .cal-v5 .chips button .ci{width:14px;height:14px;color:oklch(var(--icL) var(--icC) var(--h,260))}
-.cal-v5 .wxchips{display:flex;flex-wrap:wrap;gap:5px;padding:2px 0 3px 22px;transform-origin:top;animation:cal5-foldDown .34s var(--spring) both}
-.cal-v5 .wxchips .i{width:13px;height:13px}
 .cal-v5 .wxrow{width:calc(100% + 12px);margin:-3px -6px;padding:3px 6px;border-radius:7px;text-align:left}
 .cal-v5 .wxrow:hover, .cal-v5 .wxrow[aria-expanded="true"]{background:var(--paper)}
 .cal-v5 .links{display:flex;flex-wrap:wrap;align-items:center;gap:5px}
@@ -571,8 +569,8 @@
 /* A toast and the bulk-selection bar are both bottom-centered a few px apart
    (.toast at 16px, .bbar at 14px); .bar-up (toggled on .cal by
    calendar_editor.js's _renderBar alongside .bbar's own hidden state) lifts
-   the toast clear of it, reusing the bar-height custom property .btray/.bmore
-   already stack on above the bar. Scoped to the width the two actually share
+   the toast clear of it, reusing the bar-height custom property that .btray
+   already stacks on above the bar. Scoped to the width the two actually share
    this corner at: below it the toast moves to the top of the screen (the
    max-width:600px block further down), where it never meets the bar. */
 @media (min-width:601px){
@@ -853,7 +851,7 @@
 .cal-v5 .rm .pop.open, .cal-v5 .rm .drawer.open, .cal-v5 .rm .toast.on{transition:opacity .18s ease,visibility 0s!important}
 .cal-v5 .rm .hc{transform:none!important}
 .cal-v5 .rm .hc.on{transition:opacity .12s ease!important}
-.cal-v5 .rm .kinds, .cal-v5 .rm .wxchips, .cal-v5 .rm .lsug, .cal-v5 .rm .moresec, .cal-v5 .rm .evd.rowin, .cal-v5 .rm .evd.rowout{animation:cal5-fadeIn .15s ease both!important}
+.cal-v5 .rm .kinds, .cal-v5 .rm .lsug, .cal-v5 .rm .moresec, .cal-v5 .rm .evd.rowin, .cal-v5 .rm .evd.rowout{animation:cal5-fadeIn .15s ease both!important}
 .cal-v5 .rm .evd.hl.pulse::after{animation:none!important;opacity:0}
 .cal-v5 .rm .toast{transform:translate(-50%,0)!important}
 .cal-v5 .rm .drawer{opacity:0}
@@ -1205,6 +1203,17 @@
 .cal-v5 .wxf small{display:block;color:var(--mut);font-size:11px}
 .cal-v5 .wxf.fut{opacity:.6;padding:4px 6px;margin:-4px -6px;border:1px dashed var(--edge);border-radius:7px}
 .cal-v5 .wxtag{display:inline-block;margin-top:3px;padding:1px 7px;border-radius:99px;font-size:10.5px;color:var(--mut);box-shadow:inset 0 0 0 1px var(--edge)}
+/* A player's forecast for a future day: dashed, and fainter when the forecast is unsure. */
+.cal-v5 .wxm.fc{display:inline-flex;align-items:center;gap:3px;max-width:calc(100% - 12px);padding:1px 5px;border-radius:99px;border:1px dashed var(--edge);font:500 10px/1.2 var(--sans);color:var(--ink2)}
+.cal-v5 .wxm.fc .fcw{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.cal-v5 .wxm.fc.faded{opacity:.55}
+.cal-v5 .band .wxm.fc{max-width:none}
+.cal-v5 .fcsr{position:absolute;width:1px;height:1px;margin:-1px;padding:0;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap;border:0}
+.cal-v5 .wxtag.fctag{margin:0 0 0 8px;vertical-align:middle;color:var(--ink2)}
+.cal-v5 .wxf.fcf b{font-weight:650;color:var(--ink)}
+.cal-v5 .wxf.fcps small{margin-top:0}
+/* Edit mode's lock on a locked day, a small monochrome glyph at the mark's corner. */
+.cal-v5 .cwx .lk{position:absolute;right:-3px;top:-3px;font-size:8px;line-height:1;color:var(--mut)}
 /* A day's weather, shown while editing or generating; painted days carry their weather's tint. */
 .cal-v5 .cwx{position:absolute;right:5px;bottom:5px;z-index:2;width:20px;height:20px;display:none;place-items:center;border-radius:50%;color:var(--mut);pointer-events:none}
 .cal-v5 .cal.wxon .cwx{display:grid}
@@ -1274,24 +1283,11 @@
 .cal-v5 .bbb .i{width:15px;height:15px}
 .cal-v5 .bbar .x{margin-left:2px}
 /* The tray: a paint palette, a shift or a clear, floating just above the bar. */
-.cal-v5 .btray{position:absolute;left:0;right:0;bottom:calc(22px + var(--barH,48px));margin:0 auto;width:-moz-fit-content;width:fit-content;max-width:min(560px,calc(100% - 24px));padding:12px 14px 12px;border-radius:14px;background:var(--paper);border:1px solid var(--edge);box-shadow:var(--shadow-l);pointer-events:auto}
+.cal-v5 .btray{position:absolute;z-index:4;left:0;right:0;bottom:calc(22px + var(--barH,48px));margin:0 auto;width:-moz-fit-content;width:fit-content;max-width:min(560px,calc(100% - 24px));padding:12px 14px 12px;border-radius:14px;background:var(--paper);border:1px solid var(--edge);box-shadow:var(--shadow-l);pointer-events:auto}
 .cal-v5 .trh{font:600 12.5px/1.35 var(--sans);color:var(--ink)}
 .cal-v5 .trh small{display:block;font-weight:500;font-size:11.5px;color:var(--mut);margin-top:2px}
-.cal-v5 .trf{display:flex;flex-wrap:wrap;align-items:center;gap:6px;margin-top:10px}
-.cal-v5 .pal{display:flex;flex-wrap:wrap;gap:5px;margin-top:9px}
 .cal-v5 .btray.slim{max-width:calc(100% - 24px);padding:7px 8px}
-.cal-v5 .trrow{display:flex;flex-wrap:wrap;align-items:center;gap:6px}
-.cal-v5 .trrow .pal{margin-top:0}
-.cal-v5 .trf1{display:flex;align-items:center;gap:6px;margin-left:auto}
 .cal-v5 .cal.editing.traying .stage{padding-bottom:calc(84px + var(--trayH,0px))}
-.cal-v5 .pal button{display:inline-flex;align-items:center;gap:6px;height:30px;padding:0 11px 0 9px;border-radius:99px;font:550 12px/1 var(--sans);color:var(--ink2);background:var(--paper);box-shadow:inset 0 0 0 1px var(--edge)}
-.cal-v5 .pal button .sw2{width:12px;height:12px;border-radius:50%;background:var(--wxc);box-shadow:inset 0 0 0 1px var(--edge)}
-.cal-v5 .pal button[aria-checked="true"]{box-shadow:inset 0 0 0 1.5px var(--ink);color:var(--ink)}
-.cal-v5 .pal button .i{width:14px;height:14px}
-/* "Yours" and "Common" headings in the paint palette: each starts its own
-   line, so the owner's kinds sit in a row above the built-in ones. */
-.cal-v5 .pal .trgh{flex:0 0 100%;font:650 9.5px/1 var(--sans);letter-spacing:.14em;text-transform:uppercase;color:var(--mut);margin-top:4px}
-.cal-v5 .pal .trgh:first-child{margin-top:0}
 .cal-v5 .shn{display:flex;align-items:center;gap:8px;margin-top:9px}
 .cal-v5 .shn output{min-width:150px;text-align:center;font:600 13px/1.2 var(--sans);color:var(--ink)}
 .cal-v5 .shn button{width:30px;height:30px;border-radius:8px;display:grid;place-items:center;color:var(--ink2);box-shadow:inset 0 0 0 1px var(--edge)}
@@ -1303,7 +1299,6 @@
 .cal-v5 .clo button:hover{background:var(--paper2)}
 .cal-v5 .clo button:disabled{opacity:.45;cursor:default}
 .cal-v5 .clo button:disabled:hover{background:var(--paper)}
-.cal-v5 .trnote{margin-top:8px;font:500 11px/1.4 var(--sans);color:var(--mut)}
 /* ── The recipe sheet: one sheet for every generator. ── */
 .cal-v5 .gsheet{width:452px}
 .cal-v5 .gbody{flex:1;min-height:0;overflow:auto;overscroll-behavior:contain;padding:12px 18px 16px;display:flex;flex-direction:column;gap:14px}
@@ -1389,6 +1384,81 @@
 .cal-v5 .gfa{display:flex;gap:8px;margin-left:auto}
 .cal-v5 .gsave{display:flex;align-items:flex-end;gap:8px;width:100%;padding:0 0 10px;border-bottom:1px solid var(--hair);margin-bottom:2px}
 .cal-v5 .gsave .fld{flex:1}
+/* ── The weather calendar: a compact month that holds only weather. ── */
+.cal-v5 .wxc{gap:12px}
+.cal-v5 .wxc-mon{display:flex;align-items:center;gap:6px}
+.cal-v5 .wxc-mon h3{margin:0;flex:1;min-width:0;font:500 22px/1.1 var(--serif);color:var(--ink);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.cal-v5 .wxc-mon h3 span{color:var(--mut)}
+.cal-v5 .wxc-nav{width:30px;height:30px;border-radius:8px;display:grid;place-items:center;color:var(--ink2);transition:background .15s var(--ease),color .15s var(--ease)}
+.cal-v5 .wxc-nav:hover{background:var(--hair2);color:var(--ink)}
+.cal-v5 .wxc-seas{display:flex;gap:6px;flex-wrap:wrap;margin-top:-4px}
+.cal-v5 .wxc-seas:empty{display:none}
+.cal-v5 .wxc-seas span{display:inline-flex;align-items:center;gap:6px;height:22px;padding:0 9px;border-radius:99px;font:600 11px/1 var(--sans);color:var(--ink2);box-shadow:inset 0 0 0 1px var(--edge)}
+.cal-v5 .wxc-seas i{width:8px;height:8px;border-radius:50%;background:var(--sc,var(--mut))}
+.cal-v5 .wxc-cal{display:grid;grid-template-columns:repeat(var(--wxcols,7),minmax(0,1fr));gap:3px;user-select:none;-webkit-user-select:none;touch-action:none}
+.cal-v5 .wxc-dow{font:650 8.5px/1 var(--sans);letter-spacing:.1em;text-transform:uppercase;color:var(--mut);text-align:center;padding:0 0 4px;overflow:hidden;white-space:nowrap}
+.cal-v5 .wxc-d{position:relative;height:46px;min-width:0;border-radius:8px;background:color-mix(in oklch,var(--wc,var(--paper2)) 22%,var(--paper));box-shadow:inset 0 -3px 0 var(--sc,transparent),inset 0 0 0 1px var(--hair2);display:grid;place-items:center;cursor:pointer;transition:transform .15s var(--ease),box-shadow .15s var(--ease)}
+.cal-v5 .wxc-d.empty{background:var(--paper2)}
+.cal-v5 .wxc-d.blank{visibility:hidden;cursor:default}
+.cal-v5 .wxc-d:hover{transform:translateY(-1px);box-shadow:inset 0 -3px 0 var(--sc,transparent),inset 0 0 0 1px var(--edge),0 4px 10px -6px oklch(0 0 0 / .35)}
+.cal-v5 .wxc-d:focus-visible{outline:1.5px solid var(--ink);outline-offset:1px}
+.cal-v5 .wxc-d .n{position:absolute;left:4px;top:3px;font:600 9.5px/1 var(--sans);color:var(--ink2)}
+.cal-v5 .wxc-d.today .n{background:var(--ink);color:var(--paper);border-radius:99px;padding:2px 4px;margin:-2px 0 0 -2px}
+.cal-v5 .wxc-d .wi{font-size:15px;color:var(--wc,var(--mut));margin-top:4px;transition:transform .25s var(--spring),opacity .2s}
+.cal-v5 .wxc-d .sk{position:absolute;right:3px;top:3px;font-size:8.5px;line-height:1;color:var(--ink2)}
+.cal-v5 .wxc-d .sk svg{display:block}
+.cal-v5 .wxc-d.blood .sk, .cal-v5 .wxc-key .blood i{color:oklch(.55 .17 28)}
+.cal-v5 .wxc-d .pin{position:absolute;left:3px;bottom:6px;font-size:8px;color:var(--keep);display:none}
+.cal-v5 .wxc-d.kept .pin{display:block}
+.cal-v5 .wxc-d.chg::after{content:"";position:absolute;right:4px;bottom:6px;width:4px;height:4px;border-radius:50%;background:var(--gold)}
+.cal-v5 .wxc-d.sel{box-shadow:inset 0 -3px 0 var(--sc,transparent),inset 0 0 0 2px var(--ink)}
+.cal-v5 .wxc-d.drop{transform:scale(1.08);box-shadow:inset 0 0 0 2px var(--ink),0 6px 16px -8px oklch(0 0 0 / .5)}
+.cal-v5 .wxc-d.roll .wi{animation:cal5-wxRoll .45s var(--spring)}
+@keyframes cal5-wxRoll{0%{transform:rotate(-90deg) scale(.4);opacity:0}100%{transform:none;opacity:1}}
+.cal-v5 .wxc-key{display:flex;flex-wrap:wrap;gap:4px 12px;font:500 11px/1.3 var(--sans);color:var(--mut)}
+.cal-v5 .wxc-key:empty{display:none}
+.cal-v5 .wxc-key span{display:inline-flex;align-items:center;gap:5px}
+.cal-v5 .wxc-key .kp i{color:var(--keep)}
+.cal-v5 .wxc-selrow{display:flex;align-items:center;flex-wrap:wrap;gap:6px;min-height:30px;font:500 12px/1.3 var(--sans);color:var(--ink2)}
+.cal-v5 .wxc-selrow b{font-weight:650;color:var(--ink)}
+.cal-v5 .wxc-selrow .sp{flex:1}
+.cal-v5 .wxc-lab{font:650 9.5px/1 var(--sans);letter-spacing:.14em;text-transform:uppercase;color:var(--mut);margin:2px 0 -4px}
+.cal-v5 .wxc-pal{display:flex;flex-wrap:wrap;gap:5px}
+.cal-v5 .wxc-pal button{display:inline-flex;align-items:center;gap:6px;height:30px;padding:0 10px 0 8px;border-radius:99px;font:600 12px/1 var(--sans);color:var(--ink);box-shadow:inset 0 0 0 1px var(--edge);background:var(--paper);cursor:grab;touch-action:none;transition:transform .15s var(--ease),box-shadow .15s var(--ease)}
+.cal-v5 .wxc-pal button:hover{transform:translateY(-1px);box-shadow:inset 0 0 0 1px var(--ink2)}
+.cal-v5 .wxc-pal button:focus-visible{outline:1.5px solid var(--ink);outline-offset:1px}
+.cal-v5 .wxc-pal button i{color:var(--wc,var(--ink2))}
+.cal-v5 .wxc-pal button.mg i{color:var(--wxMagicInk,var(--wc))}
+.cal-v5 .wxc-pal button[aria-pressed="true"]{box-shadow:inset 0 0 0 1.5px var(--ink)}
+.cal-v5 .wxc-pal button.added:not([aria-pressed="true"]){box-shadow:none;outline:1px dashed var(--mut);outline-offset:-1px}
+.cal-v5 .wxc-pal .wxc-tool{cursor:pointer;box-shadow:none;border:1px dashed var(--edge);background:transparent;color:var(--ink2)}
+.cal-v5 .wxc-pal .wxc-tool:hover{box-shadow:none;color:var(--ink);background:var(--paper)}
+.cal-v5 .wxc-pal .wxc-tool[aria-expanded="true"]{border-style:solid;border-color:var(--ink);color:var(--ink)}
+.cal-v5 .wxc-more{padding:8px;border-radius:12px;box-shadow:inset 0 0 0 1px var(--edge)}
+.cal-v5 .wxc-more .wxi i{width:16px;text-align:center;color:var(--wc,var(--ink2))}
+.cal-v5 .wxc-more .wxi.mg i{color:var(--wxMagicInk,var(--wc))}
+.cal-v5 .wxc-roll{display:flex;flex-direction:column;gap:10px;padding:12px;border-radius:12px;background:var(--paper2)}
+.cal-v5 .wxc-roll .fld{font-size:11.5px}
+.cal-v5 .wxc-roll .dv{display:flex;align-items:center;gap:10px}
+.cal-v5 .wxc-roll .dv input[type=range]{flex:1;height:18px;padding:0;border:0;background:transparent;accent-color:var(--ink)}
+.cal-v5 .wxc-roll .dv output{min-width:84px;text-align:right;font:600 12px/1 var(--sans);color:var(--ink)}
+.cal-v5 .wxc-chk{display:flex;align-items:flex-start;gap:8px;font:500 12px/1.35 var(--sans);color:var(--ink2)}
+.cal-v5 .wxc-chk input{margin-top:2px;accent-color:var(--ink)}
+.cal-v5 .wxc-go{display:flex;align-items:center;gap:8px}
+.cal-v5 .wxc-go .note{flex:1;font:500 11.5px/1.35 var(--sans);color:var(--mut)}
+.cal-v5 .wxc-warn{display:flex;align-items:center;gap:8px;margin:0 12px 10px;padding:9px 10px 9px 12px;border-radius:10px;background:var(--goldBg);color:var(--ink);box-shadow:inset 0 0 0 1px var(--goldRing);font:600 12.5px/1.3 var(--sans);animation:cal5-wxWarnIn .28s var(--ease) both}
+.cal-v5 .wxc-warn[hidden]{display:none}
+.cal-v5 .wxc-warn i{color:var(--gold)}
+.cal-v5 .wxc-warn .sp{flex:1}
+.cal-v5 .wxc-warn button{color:inherit;font:inherit;text-decoration:underline;padding:4px}
+.cal-v5 .wxc-warn:focus{outline:none}
+@keyframes cal5-wxWarnIn{0%{opacity:0;transform:translateY(6px)}100%{opacity:1;transform:none}}
+.cal-v5 .drawer.wxcal.nag{animation:cal5-wxNag .42s cubic-bezier(.36,.07,.19,.97)}
+@keyframes cal5-wxNag{10%,90%{transform:translateX(-1px)}20%,80%{transform:translateX(3px)}30%,50%,70%{transform:translateX(-5px)}40%,60%{transform:translateX(5px)}}
+/* The dragged weather follows the pointer; it lives in the panel but is drawn fixed. */
+.cal-v5 .wxc-ghost{position:fixed;z-index:999;pointer-events:none;display:inline-flex;align-items:center;gap:6px;height:30px;padding:0 10px;border-radius:99px;background:var(--paper);box-shadow:0 10px 24px -10px oklch(0 0 0 / .5),inset 0 0 0 1px var(--edge);font:600 12px/1 var(--sans);color:var(--ink);transform:translate(-50%,-50%) rotate(-4deg)}
+@media (prefers-reduced-motion:reduce){.cal-v5 .wxc-d, .cal-v5 .wxc-d .wi, .cal-v5 .wxc-pal button, .cal-v5 .wxc-warn, .cal-v5 .drawer.wxcal.nag{transition:none!important;animation:none!important}}
+.rm .cal-v5 .wxc-d, .rm .cal-v5 .wxc-d .wi, .rm .cal-v5 .wxc-pal button, .rm .cal-v5 .wxc-warn, .rm .cal-v5 .drawer.wxcal.nag{transition:none!important;animation:none!important}
 /* ── Settings: the calendar's own door. ── */
 .cal-v5 .gset{width:452px}
 .cal-v5 .stl{display:flex;flex-direction:column}
@@ -1427,7 +1497,7 @@
 }
 @media (max-width:600px){.cal-v5 #cal5-settings span{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}
 .cal-v5 .h-edit{margin-top:4px}
-/* On a phone the hint may take two lines (holding to choose a range is not guessable); Generate… keeps only its icon. */
+/* On a phone the hint may take two lines (holding to choose a range is not guessable); Weather keeps only its icon. */
 .cal-v5 .h-subw{min-height:34px}
 .cal-v5 .ehint{white-space:normal;font-size:11px;line-height:1.25;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical}
 .cal-v5 #edGen{padding:0 9px}
@@ -1450,6 +1520,8 @@
 .cal-v5 .bbb{flex-direction:column;justify-content:center;gap:3px;height:48px;padding:0 2px;font-size:10.5px;box-shadow:inset 0 0 0 1px var(--hair)}
 .cal-v5 .btray{position:fixed;left:0;right:0;z-index:56;bottom:var(--barH,110px);width:auto;max-width:none;margin:0;border-radius:16px 16px 0 0;border-left:0;border-right:0;box-shadow:0 -8px 24px -12px oklch(0 0 0 / .3)}
 .cal-v5 .gsheet{max-height:calc(64vh + 28px)}
+.cal-v5 .gsheet.wxcal{max-height:calc(86vh + 28px)}
+.cal-v5 .wxc-d{height:42px}
 .cal-v5 .gset{max-height:calc(86vh + 28px)}
 .cal-v5 .gsheet, .cal-v5 .gset{width:auto}
 .cal-v5 .clo{grid-template-columns:repeat(2,minmax(0,1fr))}
@@ -1473,7 +1545,6 @@
 }
 :root[data-theme="dark"]{--wk-violet:oklch(.5 .1 290 / .45);--wk-teal:oklch(.52 .07 185 / .42);--wk-rose:oklch(.52 .09 355 / .42);--wk-amber:oklch(.58 .09 75 / .36);--wk-moss:oklch(.55 .08 125 / .38);--wk-slate:oklch(.5 .03 255 / .45)}
 .cal-v5 .cwx.yours{color:var(--wkc)}
-.cal-v5 .pal button.yours .i{color:var(--wkc)}
 .cal-v5 .wksw{width:26px;height:26px;border-radius:8px;display:grid;place-items:center;background:var(--wxc);color:var(--wkc);flex:none}
 .cal-v5 .wksw .i{width:15px;height:15px}
 .cal-v5 .str .mk{flex:none}
@@ -1520,9 +1591,9 @@
 :root[data-theme="dark"]{--wxMagic:linear-gradient(135deg,oklch(.45 .09 295 / .45),oklch(.48 .085 345 / .45));--wxMagicInk:oklch(.82 .1 318);--mgTag:oklch(.78 .1 300)}
 .cal-v5 .cwx.mg, .cal-v5 .row .i.mg{color:var(--wxMagicInk)}
 /* The six common chips, then More weather…, which unfolds the whole list the way the chips unfold. */
-.cal-v5 .wxchips button.wxmb, .cal-v5 .trrow .pmore, .cal-v5 .kinds .nkb, .cal-v5 .chips .nkb{box-shadow:none;border:1px dashed var(--edge);background:transparent;color:var(--ink2)}
-.cal-v5 .wxchips button.wxmb:hover, .cal-v5 .trrow .pmore:hover, .cal-v5 .kinds .nkb:hover, .cal-v5 .chips .nkb:hover{color:var(--ink);background:var(--paper)}
-.cal-v5 .wxchips button.wxmb[aria-expanded="true"], .cal-v5 .trrow .pmore[aria-expanded="true"], .cal-v5 .kinds .nkb[aria-expanded="true"], .cal-v5 .chips .nkb[aria-expanded="true"]{border-style:solid;border-color:var(--ink);color:var(--ink);background:var(--paper)}
+.cal-v5 .kinds .nkb, .cal-v5 .chips .nkb{box-shadow:none;border:1px dashed var(--edge);background:transparent;color:var(--ink2)}
+.cal-v5 .kinds .nkb:hover, .cal-v5 .chips .nkb:hover{color:var(--ink);background:var(--paper)}
+.cal-v5 .kinds .nkb[aria-expanded="true"], .cal-v5 .chips .nkb[aria-expanded="true"]{border-style:solid;border-color:var(--ink);color:var(--ink);background:var(--paper)}
 .cal-v5 .wxmore{margin:3px 0 4px 22px;padding:8px;border-radius:10px;background:var(--paper);box-shadow:inset 0 0 0 1px var(--hair);transform-origin:top;animation:cal5-foldDown .34s var(--spring) both}
 .cal-v5 .dsec .wxmore{margin:8px 0 0}
 .cal-v5 .wxmb2{margin-top:8px}
@@ -1533,25 +1604,15 @@
 .cal-v5 .wxi{display:flex;align-items:center;gap:8px;width:100%;min-height:30px;padding:0 8px;border-radius:8px;font:550 12px/1.2 var(--sans);color:var(--ink2);text-align:left}
 .cal-v5 .wxi:hover{background:var(--paper2);color:var(--ink)}
 .cal-v5 .wxi[aria-pressed="true"]{box-shadow:inset 0 0 0 1.3px var(--ink);color:var(--ink)}
-.cal-v5 .wxi:focus-visible, .cal-v5 .wxchips button:focus-visible, .cal-v5 .pmore:focus-visible, .cal-v5 .nkb:focus-visible{outline:1.5px solid var(--ink);outline-offset:1px}
-.cal-v5 .wxi .sw2{width:10px;height:10px;flex:none;border-radius:50%;background:var(--wxc);box-shadow:inset 0 0 0 1px var(--edge)}
+.cal-v5 .wxi:focus-visible, .cal-v5 .nkb:focus-visible{outline:1.5px solid var(--ink);outline-offset:1px}
 .cal-v5 .wxi .i{width:13px;height:13px}
-.cal-v5 .wxi.mg .i, .cal-v5 .pal button.mg .i{color:var(--wxMagicInk)}
+.cal-v5 .wxi.mg .i{color:var(--wxMagicInk)}
 .cal-v5 .wxi.yours .i{color:var(--wkc)}
 .cal-v5 .wxi .wxn{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .cal-v5 .wmg{flex:none;font:600 10.5px/1 var(--sans);color:var(--mgTag)}
 .cal-v5 .wmg.yt{color:var(--mut)}
 .cal-v5 .wxnone{margin:8px;font:500 12px/1.4 var(--sans);color:var(--mut)}
 .cal-v5 .rm .wxmore, .cal-v5 .rm .nkf{animation:cal5-fadeIn .15s ease both!important}
-/* The paint tray's More…: the same list, in a panel of its own just above the tray. A weather picked there joins the
-   palette for this session, ringed with dashes so it is plainly an addition. */
-.cal-v5 .trrow .pmore{display:inline-flex;align-items:center;gap:6px;height:30px;padding:0 11px 0 9px;border-radius:99px;font:550 12px/1 var(--sans)}
-.cal-v5 .trrow .pmore .i{width:14px;height:14px}
-.cal-v5 .pal button.added:not([aria-checked="true"]){box-shadow:none;outline:1px dashed var(--mut);outline-offset:-1px}
-.cal-v5 .bmore{position:absolute;left:0;right:0;bottom:calc(22px + var(--barH,48px) + var(--trayH,52px));margin:0 auto;width:min(380px,calc(100% - 24px));max-height:min(420px,52vh);display:flex;flex-direction:column;padding:10px 10px 6px;border-radius:14px;background:var(--paper);border:1px solid var(--edge);box-shadow:var(--shadow-l);pointer-events:auto}
-.cal-v5 .bmore .wxl{flex:1;min-height:0;max-height:none}
-.cal-v5 .bmore .wxq, .cal-v5 .bmore .pmh{flex:none}
-.cal-v5 .bmore .pmh{display:flex;align-items:center;justify-content:space-between;gap:8px;margin:0 0 8px 2px;font:600 12.5px/1.3 var(--sans);color:var(--ink)}
 /* A new kind of event, right where kinds are picked: a name, an icon and a colour. It is the campaign's, like the ones
    made in Settings. */
 .cal-v5 .kinds .nkb, .cal-v5 .chips .nkb{display:inline-flex;align-items:center;gap:6px}
@@ -1575,12 +1636,157 @@
 .cal-v5 .nkf button.btn.quiet{border-color:transparent;background:transparent;color:var(--ink2)}
 .cal-v5 .nkf button.btn.primary{background:var(--ink);color:var(--paper);border-color:transparent}
 .cal-v5 .nkf button.btn:focus-visible{outline:1.5px solid var(--ink);outline-offset:1px}
-@media (max-width:600px){.cal-v5 .bmore{position:fixed;left:8px;right:8px;z-index:57;width:auto;margin:0;bottom:calc(var(--barH,110px) + var(--trayH,52px));max-height:46vh}
-.cal-v5 .cal.toolup .bmore{visibility:hidden}
-.cal-v5 .wxl{max-height:40vh}
+@media (max-width:600px){.cal-v5 .wxl{max-height:40vh}
 
 }
 
+
+/* ---- Eras: the colour field, the header chips, their tooltip and the era panel ---- */
+/* Era tokens: the Director-only colouring of a note and a hidden-era badge. */
+:root{--eraDmBg:oklch(.96 .035 85);--eraDmLine:oklch(.82 .07 85);--eraDmFg:oklch(.45 .08 75);--eraChip:oklch(1 0 0 / .72)}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){--eraDmBg:oklch(.8 .1 85 / .08);--eraDmLine:oklch(.8 .1 85 / .24);--eraDmFg:oklch(.86 .08 85);--eraChip:oklch(.22 .01 265 / .72)}}
+:root[data-theme="dark"]{--eraDmBg:oklch(.8 .1 85 / .08);--eraDmLine:oklch(.8 .1 85 / .24);--eraDmFg:oklch(.86 .08 85);--eraChip:oklch(.22 .01 265 / .72)}
+/* The field sits under every day in the stage's own layer, so a day's hover and selection still paint over it. */
+.cal-v5 .stage>.era-field{position:absolute;z-index:-2;display:block;pointer-events:none;transition:opacity .35s ease}
+.cal-v5 .stage>.era-fade{z-index:-1;opacity:0}
+/* The row, not the chip, steps out to the left by the chip's padding: a negative margin on the chip itself would
+   shrink the row's measured width and cut the era's name short. */
+.cal-v5 .erachips{display:inline-flex;flex-wrap:wrap;align-items:center;gap:2px 6px;min-width:0;max-width:calc(100% + 6px);margin-left:-6px}
+.cal-v5 .erachip{display:inline-flex;align-items:center;gap:6px;min-width:0;max-width:100%;padding:4px 8px 4px 6px;border-radius:8px;font:600 12.5px/1.2 var(--sans);color:var(--ink);box-shadow:inset 0 0 0 1px transparent;transition:background-color .15s,box-shadow .15s}
+.cal-v5 .erachip:hover, .cal-v5 .erachip[aria-expanded="true"]{background:var(--lift);box-shadow:inset 0 0 0 1px var(--edge)}
+.cal-v5 .erachip:focus-visible{outline:1.5px solid var(--ink);outline-offset:2px}
+.cal-v5 .erachip .en{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;min-width:0}
+.cal-v5 .erachip small{font:500 12px/1.2 var(--sans);color:var(--mut);white-space:nowrap}
+.cal-v5 .erachip .eh{font-size:11px;color:var(--mut)}
+.cal-v5 .erachip .ev{font-size:10px;color:var(--mut);transition:transform .25s var(--ease)}
+.cal-v5 .erachip[aria-expanded="true"] .ev{transform:rotate(180deg)}
+.cal-v5 .earrow{color:var(--mut);font-size:12px}
+.cal-v5 .esw{display:inline-block;width:14px;height:10px;border-radius:3px;flex:none;box-shadow:inset 0 0 0 1px oklch(0 0 0 / .12)}
+.cal-v5 .eratip{position:absolute;z-index:45;max-width:min(280px,calc(100% - 16px));padding:6px 9px;border-radius:8px;background:var(--ink);color:var(--paper);font:500 12px/1.35 var(--sans);box-shadow:var(--shadow-s);pointer-events:none;animation:cal5-fadeIn .12s ease both}
+.cal-v5 .eratip b{display:block;font-weight:650}
+.cal-v5 .eratip span{display:block;opacity:.8}
+/* The panel unfolds under the header and pushes the grid down. */
+.cal-v5 .erapanel{position:relative;z-index:1;overflow:hidden;margin:2px var(--gx) 10px;border-radius:14px;background:linear-gradient(180deg,color-mix(in srgb,var(--ea,#888) 7%,var(--paper)),var(--paper) 70px);box-shadow:inset 0 0 0 1px var(--edge),var(--shadow-s);color:var(--ink)}
+.cal-v5 .ep-ribbon{position:relative;padding:20px 16px 2px}
+.cal-v5 .rtrack{display:flex;gap:3px;height:20px;align-items:center}
+.cal-v5 .rseg{position:relative;height:20px;min-width:0;border-radius:4px}
+.cal-v5 .rseg::before{content:"";position:absolute;left:0;right:0;top:6px;height:8px;border-radius:4px;background:var(--g);opacity:.6;transition:opacity .15s,top .15s,height .15s}
+.cal-v5 .rseg:hover::before, .cal-v5 .rseg:focus-visible::before{opacity:.95;top:5px;height:10px}
+.cal-v5 .rseg:focus-visible{outline:1.5px solid var(--ink);outline-offset:1px}
+.cal-v5 .rseg.showing::before{opacity:.9;box-shadow:0 0 0 1.5px var(--paper),0 0 0 2.5px color-mix(in srgb,var(--ink) 35%,transparent)}
+.cal-v5 .rseg.hid::before{background:repeating-linear-gradient(135deg,color-mix(in srgb,var(--c) 55%,transparent) 0 4px,transparent 4px 7px);opacity:.8;box-shadow:inset 0 0 0 1px color-mix(in srgb,var(--c) 60%,transparent)}
+.cal-v5 .rhere{position:absolute;top:6px;bottom:16px;width:0;pointer-events:none}
+.cal-v5 .rhere::before{content:"";position:absolute;left:-1px;top:13px;width:2px;height:16px;border-radius:1px;background:var(--ink)}
+.cal-v5 .rhere span{position:absolute;top:-1px;font:650 10.5px/1.2 var(--sans);color:var(--ink);white-space:nowrap}
+.cal-v5 .raxis{position:relative;height:14px;margin-top:1px;font:500 10.5px/1.3 var(--sans);color:var(--mut);overflow:hidden}
+.cal-v5 .raxis span{position:absolute;top:0;white-space:nowrap;font-variant-numeric:tabular-nums}
+/* Below the ribbon: above it the panel's own edge would cut it off. */
+.cal-v5 .rtip{position:absolute;z-index:2;top:calc(100% + 4px);transform:translateX(-50%);padding:4px 8px;border-radius:7px;background:var(--ink);color:var(--paper);font:500 11.5px/1.3 var(--sans);white-space:nowrap;pointer-events:none}
+.cal-v5 .rtip b{font-weight:650;margin-right:6px}
+.cal-v5 .rtip span{opacity:.8}
+.cal-v5 .ep-card{padding:8px 16px 14px}
+.cal-v5 .ep-head{display:flex;align-items:flex-start;gap:10px}
+.cal-v5 .ep-head .esw{width:22px;height:16px;border-radius:5px;margin-top:5px}
+.cal-v5 .ep-main{flex:1;min-width:0}
+.cal-v5 .ep-name{margin:0;font:500 20px/1.2 var(--serif);color:var(--ink);overflow-wrap:anywhere}
+.cal-v5 .ep-name:focus{outline:none}
+.cal-v5 .ep-dates{font:500 12.5px/1.4 var(--sans);color:var(--mut);margin-top:2px}
+.cal-v5 .ep-dates b{display:block;font-weight:550;color:var(--ink2)}
+.cal-v5 .ep-badge{display:inline-flex;align-items:center;gap:6px;margin-top:6px;padding:2px 8px;border-radius:6px;font:550 11.5px/1.4 var(--sans);color:var(--eraDmFg);background:var(--eraDmBg);box-shadow:inset 0 0 0 1px var(--eraDmLine)}
+.cal-v5 .ep-x{flex:none;width:32px;height:32px;border-radius:9px;display:grid;place-items:center;color:var(--ink2)}
+.cal-v5 .ep-x:hover{background:var(--lift);box-shadow:0 0 0 1px var(--hair);color:var(--ink)}
+.cal-v5 .ep-x:focus-visible, .cal-v5 .ep-lore:focus-visible, .cal-v5 .ep-evs button:focus-visible, .cal-v5 .ep-all:focus-visible, .cal-v5 .ep-manage:focus-visible{outline:1.5px solid var(--ink);outline-offset:1px}
+.cal-v5 .ep-body{display:grid;grid-template-columns:minmax(0,1.15fr) minmax(0,1fr);gap:6px 22px;margin-top:10px}
+.cal-v5 .ep-col{min-width:0}
+.cal-v5 .ep-desc{font:400 13.5px/1.55 var(--sans);color:var(--ink);overflow-wrap:anywhere}
+.cal-v5 .ep-desc p{margin:0 0 8px}
+.cal-v5 .ep-lore{display:flex;align-items:center;gap:9px;margin:4px 0 10px;padding:8px 10px;border-radius:10px;box-shadow:inset 0 0 0 1px var(--edge);background:var(--paper);color:var(--ink);text-decoration:none;font:500 13px/1.3 var(--sans)}
+.cal-v5 .ep-lore:hover{box-shadow:inset 0 0 0 1px var(--mut)}
+.cal-v5 .ep-lore .li{width:26px;height:26px;border-radius:7px;display:grid;place-items:center;background:var(--paper2);box-shadow:inset 0 0 0 1px var(--hair);color:var(--ink2);flex:none}
+.cal-v5 .ep-lore .lt{flex:1;min-width:0;overflow-wrap:anywhere}
+.cal-v5 .ep-lore .lt small{display:block;color:var(--mut);font-size:11.5px}
+.cal-v5 .ep-lore .lg{color:var(--mut)}
+.cal-v5 .ep-note{margin:4px 0 10px;padding:9px 11px;border-radius:10px;background:var(--eraDmBg);box-shadow:inset 0 0 0 1px var(--eraDmLine);font:400 13px/1.5 var(--sans);color:var(--ink);white-space:pre-wrap;overflow-wrap:anywhere}
+.cal-v5 .ep-note .nh{display:flex;align-items:center;gap:6px;margin-bottom:3px;font:650 10.5px/1.3 var(--sans);letter-spacing:.06em;text-transform:uppercase;color:var(--eraDmFg);white-space:normal}
+.cal-v5 .ep-sh{display:flex;align-items:baseline;justify-content:space-between;gap:8px;margin:0 0 4px;font:650 10.5px/1.3 var(--sans);letter-spacing:.08em;text-transform:uppercase;color:var(--mut)}
+.cal-v5 .ep-sh .cnt{text-transform:none;letter-spacing:0;font-weight:500;font-size:12px}
+.cal-v5 .ep-none{margin:4px 0;font:400 12.5px/1.45 var(--sans);color:var(--mut)}
+.cal-v5 .ep-evs{list-style:none;margin:0;padding:0}
+.cal-v5 .ep-evs li + li{border-top:1px solid var(--hair)}
+.cal-v5 .ep-evs button{display:flex;width:100%;align-items:baseline;gap:10px;padding:6px 4px;border-radius:6px;font:500 13px/1.35 var(--sans);color:var(--ink)}
+.cal-v5 .ep-evs button:hover{background:var(--lift)}
+.cal-v5 .ep-evs .t{flex:1;min-width:0;overflow-wrap:anywhere}
+.cal-v5 .ep-evs .k{margin-left:5px;font-size:9.5px;color:var(--mut)}
+.cal-v5 .ep-evs .w{flex:none;font-size:12px;color:var(--mut);font-variant-numeric:tabular-nums;white-space:nowrap}
+.cal-v5 .ep-all, .cal-v5 .ep-manage{display:inline-flex;align-items:center;gap:6px;margin-top:6px;padding:4px 2px;border-radius:6px;font:550 12.5px/1.3 var(--sans);color:var(--ink2);text-decoration:underline;text-decoration-color:var(--edge);text-underline-offset:3px}
+.cal-v5 .ep-all:hover, .cal-v5 .ep-manage:hover{color:var(--ink)}
+/* The label on the first day of an era: a small chip in the cell's corner that opens the era panel. */
+/* It wraps rather than cut the era's name short; the era's colour is its left edge. */
+.cal-v5 .erastart{position:absolute;left:4px;right:4px;bottom:4px;z-index:1;padding:2px 6px;border-radius:5px;background:var(--eraChip);box-shadow:0 1px 2px oklch(0 0 0 / .08);font:650 10.5px/1.25 var(--sans);color:var(--ink);cursor:pointer;border-left:3px solid var(--es,#888)}
+.cal-v5 .erastart .esl{display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:3;overflow:hidden}
+.cal-v5 .erastart .ess{display:none}
+.cal-v5 .erastart:hover{box-shadow:0 1px 2px oklch(0 0 0 / .08),inset 0 0 0 1px var(--edge)}
+.cal-v5 .band .erastart{position:static;flex:none;margin-left:8px}
+.cal-v5 .band .erastart .esl{display:block;white-space:nowrap}
+.cal-v5 .cal.editing .erastart{opacity:.3;pointer-events:none}
+/* The era manager's lore page picker. */
+.cal-v5 .fhint{font:500 11.5px/1.4 var(--sans);color:var(--mut)}
+.cal-v5 .lorepick{position:relative;display:flex;flex-wrap:wrap;align-items:center;gap:6px;font:500 13px/1.3 var(--sans);color:var(--ink)}
+.cal-v5 .lorepick .lp-cur{display:inline-flex;align-items:center;gap:6px;flex:1;min-width:0;overflow-wrap:anywhere}
+.cal-v5 .lorepick .lp-cur svg{flex:none;color:var(--mut)}
+.cal-v5 .lorepick .lp-q{flex:1 1 100%}
+.cal-v5 .lp-res{list-style:none;margin:0;padding:4px;flex:1 1 100%;border-radius:9px;background:var(--paper);box-shadow:inset 0 0 0 1px var(--edge)}
+.cal-v5 .lp-res button{display:flex;width:100%;justify-content:space-between;gap:8px;padding:6px 8px;border-radius:6px;font:500 13px/1.3 var(--sans);color:var(--ink)}
+.cal-v5 .lp-res button:hover, .cal-v5 .lp-res button:focus-visible{background:var(--lift);outline:none;box-shadow:inset 0 0 0 1px var(--edge)}
+.cal-v5 .lp-res small{color:var(--mut)}
+.cal-v5 .lp-res .none{padding:6px 8px;color:var(--mut)}
+/* The era manager: the list of eras, the row of eras over an open form, the form in the event editor's sections,
+   and the form's buttons, which stay put while the form scrolls. */
+.cal-v5 .eram{padding-top:2px}
+.cal-v5 .eral{list-style:none;margin:0;padding:0}
+.cal-v5 .eral li + li{border-top:1px solid var(--hair)}
+.cal-v5 .erali{display:flex;align-items:center;gap:10px;width:100%;padding:9px 6px;border-radius:8px;text-align:left;font:600 13px/1.3 var(--sans);color:var(--ink)}
+.cal-v5 .erali:hover, .cal-v5 .erali:focus-visible{background:var(--lift);outline:none}
+.cal-v5 .erali .en{flex:1;min-width:0;overflow-wrap:anywhere}
+.cal-v5 .erali .lg{color:var(--mut)}
+.cal-v5 .erali small, .cal-v5 .eratab small{display:block;margin-top:1px;font:500 11.5px/1.3 var(--sans);color:var(--mut);font-variant-numeric:tabular-nums}
+.cal-v5 .erali .eh, .cal-v5 .eratab .eh{margin-left:4px;font-size:10.5px;color:var(--mut)}
+.cal-v5 .eratabs{position:relative;display:flex;gap:6px;overflow-x:auto;overscroll-behavior-x:contain;scrollbar-width:thin;margin:0 -18px;padding:2px 18px 12px;scroll-padding:0 18px;
+  -webkit-mask-image:linear-gradient(90deg,transparent,#000 14px,#000 calc(100% - 22px),transparent);mask-image:linear-gradient(90deg,transparent,#000 14px,#000 calc(100% - 22px),transparent)}
+.cal-v5 .eratab{flex:none;display:flex;align-items:flex-start;gap:7px;max-width:210px;padding:7px 10px;border-radius:9px;box-shadow:inset 0 0 0 1px var(--edge);background:var(--paper);text-align:left;font:600 12px/1.25 var(--sans);color:var(--ink2);white-space:nowrap}
+.cal-v5 .eratab>span{min-width:0;overflow:hidden;text-overflow:ellipsis}
+.cal-v5 .eratab .esw{margin-top:2px}
+.cal-v5 .eratab:hover{color:var(--ink);background:var(--paper2)}
+.cal-v5 .eratab:focus-visible{outline:1.5px solid var(--ink);outline-offset:1px}
+.cal-v5 .eratab[aria-pressed="true"]{color:var(--ink);background:var(--paper2);box-shadow:inset 0 0 0 1.5px var(--ink)}
+.cal-v5 .eratab.add{align-self:stretch;align-items:center;color:var(--mut);box-shadow:none;border:1px dashed var(--edge)}
+.cal-v5 .eratab.add[aria-pressed="true"]{color:var(--ink);border-color:var(--ink)}
+.cal-v5 .eraform{display:flex;flex-direction:column}
+.cal-v5 .eraform>.fld:first-child{margin-bottom:4px}
+.cal-v5 .eraform .esec:last-child{padding-bottom:6px}
+.cal-v5 .erow.ecap{margin-bottom:-5px}
+.cal-v5 .erow.ecap span{font:600 10.5px/1 var(--sans);color:var(--mut)}
+.cal-v5 .erow[hidden]{display:none}
+.cal-v5 .erafoot{flex:none;background:var(--paper);border-bottom-left-radius:inherit;border-bottom-right-radius:inherit}
+@media (max-width:600px){.cal-v5 .erafoot{position:sticky;bottom:0;z-index:2}}
+@media (max-width:600px){.cal-v5 .erachips{flex-direction:column;align-items:flex-start;gap:1px}
+.cal-v5 .earrow{display:none}
+.cal-v5 .erachip{flex-wrap:wrap;column-gap:6px}
+.cal-v5 .erapanel{margin:2px 8px 10px;border-radius:12px}
+.cal-v5 .ep-ribbon{padding:20px 12px 2px}
+.cal-v5 .ep-card{padding:8px 12px 12px}
+.cal-v5 .ep-body{grid-template-columns:minmax(0,1fr)}
+/* A phone's cell is too narrow for the era's name: a short tag in the era's colour, named in full for screen readers. */
+.cal-v5 .erastart{left:2px;right:2px;bottom:2px;padding:2px 1px;border-radius:4px;border-left:0;border-top:2.5px solid var(--es,#888);font:700 8.5px/1.1 var(--sans);text-align:center}
+.cal-v5 .erastart .esl{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}
+.cal-v5 .erastart .ess{display:block}
+.cal-v5 .band .erastart{border-top:0;border-left:3px solid var(--es,#888);padding:2px 6px;font:650 10.5px/1.25 var(--sans)}
+.cal-v5 .band .erastart .esl{position:static;width:auto;height:auto;clip:auto}
+.cal-v5 .band .erastart .ess{display:none}
+}
+@media (prefers-reduced-motion:reduce){.cal-v5 .eratip{animation:none}
+.cal-v5 .erachip .ev, .cal-v5 .rseg::before, .cal-v5 .stage>.era-field{transition:none}
+}
 
 /* Who's free. In a day of the month: one line per player along the bottom,
    midnight to midnight, green where they are free, with a soft band where
@@ -1699,3 +1905,8 @@
   .cal-v5 .avl{left:3px;right:3px;bottom:4px;gap:1px}
   .cal-v5 .avl .ln, .cal-v5 .avl.many .ln{height:2px}
 }
+
+/* A day can carry both the "era begins" label and Who's free lines, which
+   share the bottom edge; the label steps up above the lines. */
+.cal-v5 .day:has(.avl) .erastart{bottom:26px}
+@media (max-width:600px){.cal-v5 .day:has(.avl) .erastart{bottom:16px}}

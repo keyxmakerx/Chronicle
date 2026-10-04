@@ -50,7 +50,6 @@ type Callout struct {
 // unread, burying the one that actually needs an answer.
 var calloutNotifTypes = map[string]bool{
 	NotifProposalCreated: true,
-	NotifCalendarRSVP:    true,
 }
 
 // BuildCallout decides what one player should be shown, from their unread

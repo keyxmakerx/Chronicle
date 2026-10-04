@@ -1,0 +1,31 @@
+// purchase_request_row.templ renders one waiting shop purchase as a row of the
+// "Requests waiting on you" list, in the same markup as a waiting move so the
+// two read as one list.
+package armory
+
+import "fmt"
+
+templ purchaseRequestRow(campaignID string, p PurchaseRequestLine, csrfToken string) {
+	<li class="py-2 flex flex-wrap items-center justify-between gap-2">
+		<div class="min-w-0">
+			<p class="text-sm text-fg">
+				<span class="font-medium">{ p.RequesterName }</span>
+				{ purchaseRequestText(p) }
+			</p>
+			<p class="text-xs text-fg-muted">
+				Buying for { p.BuyerName } &middot;
+				<time datetime={ p.CreatedAt.Format("2006-01-02T15:04:05Z07:00") } title={ p.CreatedAt.Format("2 Jan 2006 15:04") }>{ moveAgo(p.CreatedAt) }</time>
+			</p>
+		</div>
+		<div class="flex items-center gap-2 shrink-0">
+			<form hx-post={ fmt.Sprintf("%s/%d/approve", purchaseRequestsURL(campaignID), p.ID) } hx-swap="none" hx-disabled-elt="find button">
+				<input type="hidden" name="_csrf" value={ csrfToken }/>
+				<button type="submit" class="btn-primary text-xs">Approve</button>
+			</form>
+			<form hx-post={ fmt.Sprintf("%s/%d/decline", purchaseRequestsURL(campaignID), p.ID) } hx-swap="none" hx-disabled-elt="find button">
+				<input type="hidden" name="_csrf" value={ csrfToken }/>
+				<button type="submit" class="btn-secondary text-xs">Turn down</button>
+			</form>
+		</div>
+	</li>
+}

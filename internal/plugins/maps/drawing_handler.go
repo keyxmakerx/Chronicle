@@ -1,6 +1,7 @@
 package maps
 
 import (
+	"context"
 	"encoding/json"
 	"net/http"
 	"time"
@@ -10,6 +11,7 @@ import (
 	"github.com/keyxmakerx/chronicle/internal/apperror"
 	"github.com/keyxmakerx/chronicle/internal/patch"
 	"github.com/keyxmakerx/chronicle/internal/plugins/campaigns"
+	"github.com/keyxmakerx/chronicle/internal/templates/layouts"
 )
 
 // DrawingHandler processes HTTP requests for drawings, tokens, layers, and fog.
@@ -49,6 +51,24 @@ func getUserID(c echo.Context) string {
 
 // --- Drawing Endpoints ---
 
+// drawingResponse is a drawing as sent to a viewer. ImageURL is the signed
+// media URL of a picture, minted for THIS viewer (ADR-058): an unsigned
+// /media/<id> is refused for an anonymous visitor of a public campaign and for
+// a file that a hidden page also uses. It is added only to drawings the viewer
+// was already allowed to receive, so a hidden picture never gets one.
+type drawingResponse struct {
+	Drawing
+	ImageURL string `json:"image_url,omitempty"`
+}
+
+func drawingResponseFor(ctx context.Context, d Drawing) drawingResponse {
+	r := drawingResponse{Drawing: d}
+	if d.DrawingType == DrawingTypeImage && d.ImageID != nil && *d.ImageID != "" {
+		r.ImageURL = layouts.MediaURL(ctx, *d.ImageID)
+	}
+	return r
+}
+
 // ListDrawings returns all drawings for a map, filtered by the user's role.
 // GET /api/v1/campaigns/:id/maps/:mid/drawings
 func (h *DrawingHandler) ListDrawings(c echo.Context) error {
@@ -66,7 +86,11 @@ func (h *DrawingHandler) ListDrawings(c echo.Context) error {
 	if err != nil {
 		return err
 	}
-	return c.JSON(http.StatusOK, drawings)
+	out := make([]drawingResponse, len(drawings))
+	for i, d := range drawings {
+		out[i] = drawingResponseFor(c.Request().Context(), d)
+	}
+	return c.JSON(http.StatusOK, out)
 }
 
 // CreateDrawing creates a new drawing on a map.
@@ -92,6 +116,9 @@ func (h *DrawingHandler) CreateDrawing(c echo.Context) error {
 		Rotation    float64         `json:"rotation"`
 		Visibility  string          `json:"visibility"`
 		FoundryID   *string         `json:"foundry_id"`
+		ImageID     *string         `json:"image_id"`
+		Crop        json.RawMessage `json:"crop"`
+		SortOrder   int             `json:"sort_order"`
 	}
 	if err := c.Bind(&req); err != nil {
 		return apperror.NewBadRequest("invalid request body")
@@ -112,12 +139,16 @@ func (h *DrawingHandler) CreateDrawing(c echo.Context) error {
 		Visibility:  req.Visibility,
 		CreatedBy:   getUserID(c),
 		FoundryID:   req.FoundryID,
+		ImageID:     req.ImageID,
+		Crop:        req.Crop,
+		SortOrder:   req.SortOrder,
 		CallerRole:  int(cc.MemberRole),
+		CallerIsDM:  cc.CanAuthorDmOnly(),
 	})
 	if err != nil {
 		return err
 	}
-	return c.JSON(http.StatusCreated, d)
+	return c.JSON(http.StatusCreated, drawingResponseFor(c.Request().Context(), *d))
 }
 
 // GetDrawing returns a single drawing by ID.
@@ -137,7 +168,16 @@ func (h *DrawingHandler) GetDrawing(c echo.Context) error {
 	if d.MapID != mapID {
 		return apperror.NewNotFound("drawing not found")
 	}
-	return c.JSON(http.StatusOK, d)
+	// A by-id read must not reveal what the list withholds; NotFound so the
+	// answer matches a missing drawing.
+	shadowed, err := h.drawingSvc.IsDrawingShadowed(c.Request().Context(), d, cc.VisibilityRole())
+	if err != nil {
+		return err
+	}
+	if shadowed {
+		return apperror.NewNotFound("drawing not found")
+	}
+	return c.JSON(http.StatusOK, drawingResponseFor(c.Request().Context(), *d))
 }
 
 // UpdateDrawing updates an existing drawing.
@@ -162,13 +202,16 @@ func (h *DrawingHandler) UpdateDrawing(c echo.Context) error {
 		FontSize          patch.Field[int]             `json:"font_size"`
 		Rotation          patch.Field[float64]         `json:"rotation"`
 		Visibility        patch.Field[string]          `json:"visibility"`
+		ImageID           patch.Field[string]          `json:"image_id"`
+		Crop              patch.Field[json.RawMessage] `json:"crop"`
+		SortOrder         patch.Field[int]             `json:"sort_order"`
 		ExpectedUpdatedAt *time.Time                   `json:"expected_updated_at"`
 	}
 	if err := c.Bind(&req); err != nil {
 		return apperror.NewBadRequest("invalid request body")
 	}
 
-	if err := h.drawingSvc.UpdateDrawing(c.Request().Context(), c.Param("did"), c.Param("mid"), int(cc.MemberRole), UpdateDrawingInput{
+	if err := h.drawingSvc.UpdateDrawing(c.Request().Context(), c.Param("did"), c.Param("mid"), int(cc.MemberRole), cc.CanAuthorDmOnly(), UpdateDrawingInput{
 		Points:            req.Points,
 		StrokeColor:       req.StrokeColor,
 		StrokeWidth:       req.StrokeWidth,
@@ -178,6 +221,9 @@ func (h *DrawingHandler) UpdateDrawing(c echo.Context) error {
 		FontSize:          req.FontSize,
 		Rotation:          req.Rotation,
 		Visibility:        req.Visibility,
+		ImageID:           req.ImageID,
+		Crop:              req.Crop,
+		SortOrder:         req.SortOrder,
 		ExpectedUpdatedAt: req.ExpectedUpdatedAt,
 	}); err != nil {
 		return err
@@ -195,7 +241,7 @@ func (h *DrawingHandler) DeleteDrawing(c echo.Context) error {
 		return err
 	}
 
-	if err := h.drawingSvc.DeleteDrawing(c.Request().Context(), c.Param("did"), c.Param("mid"), ParseExpectedUpdatedAt(c), getUserID(c), int(cc.MemberRole)); err != nil {
+	if err := h.drawingSvc.DeleteDrawing(c.Request().Context(), c.Param("did"), c.Param("mid"), ParseExpectedUpdatedAt(c), getUserID(c), int(cc.MemberRole), cc.CanAuthorDmOnly()); err != nil {
 		return err
 	}
 	return c.NoContent(http.StatusOK)

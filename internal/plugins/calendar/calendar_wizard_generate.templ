@@ -116,6 +116,7 @@ seedEditing: false,
 seedDraft: '',
 seedCopied: false,
 kept: {},
+keptOne: {},
 busy: true,
 ready: false,
 err: '',
@@ -177,6 +178,7 @@ recipeObj(){
 },
 setRecipe(id){
   if (!this.ready) return;
+  this.touched();
   this.recipe = id;
   this.applyRecipeDefaults();
   this.build();
@@ -189,6 +191,7 @@ setCulture(v){
 },
 toggleSky(){
   if (!this.ready) return;
+  this.touched();
   this.sky = !this.sky;
   this.build();
 },
@@ -199,17 +202,26 @@ stepper(name, delta, min, max){
   if (v > max) v = max;
   this[name] = v;
   this.kept.shape = false;
+  this.touched();
   this.build();
 },
-toggleLeap(){ if (!this.ready) return; this.leap = !this.leap; this.kept.shape = false; this.build(); },
-setFest(v){ if (!this.ready) return; this.fest = v; this.kept.shape = false; this.build(); },
-onRnd(v){ if (!this.ready) return; this.rnd = +v; this.kept.shape = false; this.build(); },
+toggleLeap(){ if (!this.ready) return; this.touched(); this.leap = !this.leap; this.kept.shape = false; this.build(); },
+setFest(v){ if (!this.ready) return; this.touched(); this.fest = v; this.kept.shape = false; this.build(); },
+onRnd(v){ if (!this.ready) return; this.touched(); this.rnd = +v; this.kept.shape = false; this.build(); },
 rerollAll(){
   if (!this.ready) return;
+  this.touched();
   this.seed = window.ChronicleGen.randomSeed();
   this.build();
 },
-toggleKeep(part){ this.kept[part] = !this.kept[part]; },
+// touched tells the dialog shell there is now something to lose, so a
+// click outside asks before closing.
+touched(){ this.$dispatch('calv5-dirty'); },
+toggleKeep(part){ this.kept[part] = !this.kept[part]; this.touched(); },
+// One month kept on its own: its name survives "Reroll the rest" and the
+// Months part's own reroll, the same way a kept part does.
+isKeptOne(part, idx){ return !!this.keptOne[part + '_' + idx]; },
+toggleKeepOne(part, idx){ var k = part + '_' + idx; this.keptOne[k] = !this.keptOne[k]; this.touched(); },
 build(){
   var oldCal = this.cal;
   var out;
@@ -223,9 +235,10 @@ build(){
     if (this.kept.name) cal.name = oldCal.name;
     if (this.kept.era && cal.eras[0] && oldCal.eras[0]) cal.eras[0].name = oldCal.eras[0].name;
     ['months', 'weekdays', 'seasons', 'festivals'].forEach(function (p) {
-      if (!self.kept[p]) return;
       var a = cal[p] || [], b = oldCal[p] || [];
-      for (var i = 0; i < a.length && i < b.length; i++) a[i].name = b[i].name;
+      for (var i = 0; i < a.length && i < b.length; i++) {
+        if (self.kept[p] || self.keptOne[p + '_' + i]) a[i].name = b[i].name;
+      }
     });
     if (this.kept.moons) cal.moons = oldCal.moons;
   }
@@ -244,6 +257,7 @@ build(){
 },
 rerollPart(part){
   if (!this.ready || !this.cal) return;
+  this.touched();
   this.kept[part] = false;
   var seed = window.ChronicleGen.randomSeed();
   if (part === 'shape') { this.seed = seed; this.build(); return; }
@@ -272,10 +286,14 @@ rerollPart(part){
   var rp = window.ChronicleGen.names.generate({ seed: seed, recipe: { generator: 'names', details: { theme: this.culture }, makes: makes } });
   var list = rp.names[part] || [];
   var target = this.cal[part];
-  for (var i = 0; i < target.length && i < list.length; i++) target[i].name = list[i].name;
+  for (var i = 0; i < target.length && i < list.length; i++) {
+    if (!this.keptOne[part + '_' + i]) target[i].name = list[i].name;
+  }
 },
 rerollOne(part, idx){
   if (!this.ready || !this.cal || !this.cal[part]) return;
+  this.touched();
+  this.keptOne[part + '_' + idx] = false;
   var count = this.cal[part].length;
   var makes = {};
   makes[part] = count;
@@ -315,7 +333,7 @@ copySeed(){
 },
 startEditSeed(){ this.seedDraft = this.seed; this.seedEditing = true; },
 applySeed(){
-  if (this.seedDraft && this.seedDraft !== this.seed) { this.seed = this.seedDraft; this.build(); }
+  if (this.seedDraft && this.seedDraft !== this.seed) { this.seed = this.seedDraft; this.touched(); this.build(); }
   this.seedEditing = false;
 },
 toPreset(){ return window.ChronicleGen.cal.toPreset({ format: 'chronicle-calendar-v1', version: 2, calendar: this.cal }); },
@@ -323,37 +341,52 @@ reviewJSON(){ return this.cal ? JSON.stringify(this.toPreset()) : ''; }
 }`, recipesJSON, culturesJSON)
 }
 
-// wizardGenPartHeader is one result part's title row: the title, an
-// optional note, and Keep/Reroll text buttons. part is the JS-side key
-// (toggleKeep/rerollPart's argument).
+// wizardGenPartHeader is one result part's title row: the title and the
+// keep pin and reroll dice the weather generator uses. part is the JS-side
+// key (toggleKeep/rerollPart's argument).
 templ wizardGenPartHeader(part, title string) {
 	<div class="calv5-phead">
 		<h4>{ title }</h4>
 		<span class="calv5-pbtns">
-			<button
-				type="button"
-				class="btn sm quiet"
-				x-bind:aria-pressed={ fmt.Sprintf("String(!!kept.%s)", part) }
-				x-on:click={ fmt.Sprintf("toggleKeep('%s')", part) }
-			>
-				<span x-text={ fmt.Sprintf("kept.%s ? 'Kept' : 'Keep'", part) }></span>
-			</button>
-			<button
-				type="button"
-				class="btn sm quiet"
-				x-bind:disabled={ fmt.Sprintf("kept.%s", part) }
-				x-on:click={ fmt.Sprintf("rerollPart('%s')", part) }
-			>
-				Reroll
-			</button>
+			@wizardGenKeepBtn(fmt.Sprintf("kept.%s", part), fmt.Sprintf("toggleKeep('%s')", part), "Keep "+title)
+			@wizardGenDiceBtn(fmt.Sprintf("kept.%s", part), fmt.Sprintf("rerollPart('%s')", part), "Reroll "+title)
 		</span>
 	</div>
+}
+
+// wizardGenKeepBtn is the keep pin: pressed (gold) while the value is kept.
+templ wizardGenKeepBtn(keptExpr, onClick, label string) {
+	<button
+		type="button"
+		class="calv5-ib keep"
+		x-bind:aria-pressed={ fmt.Sprintf("String(!!%s)", keptExpr) }
+		x-bind:title={ fmt.Sprintf("%s ? 'Kept' : 'Keep'", keptExpr) }
+		aria-label={ label }
+		x-on:click={ onClick }
+	>
+		<i class="fa-solid fa-thumbtack" aria-hidden="true"></i>
+	</button>
+}
+
+// wizardGenDiceBtn is the reroll dice, off while the value is kept. The
+// !! matters: this Alpine build treats an undefined binding (a part never
+// kept) as disabled.
+templ wizardGenDiceBtn(keptExpr, onClick, label string) {
+	<button
+		type="button"
+		class="calv5-ib"
+		title="Reroll"
+		aria-label={ label }
+		x-bind:disabled={ fmt.Sprintf("!!%s", keptExpr) }
+		x-on:click={ onClick }
+	>
+		<i class="fa-solid fa-dice" aria-hidden="true"></i>
+	</button>
 }
 
 // wizardGenerateBody is the Generate step itself.
 templ wizardGenerateBody(campaignID, csrfToken, formError string) {
 	<h2 class="calv5-wz-h">Generate a calendar</h2>
-	<p class="calv5-wz-lead">A whole calendar from a recipe — months, weeks, moons and names in one culture's voice. Change anything and the result follows; press Review whenever you like.</p>
 	if formError != "" {
 		<p class="calv5-err">{ formError }</p>
 	}
@@ -368,7 +401,7 @@ templ wizardGenerateBody(campaignID, csrfToken, formError string) {
 			<div>
 			<div class="calv5-rv">
 				<div>
-					<div class="calv5-bsec" style="margin-top:0">
+					<div class="calv5-bsec" style="margin-top:14px">
 						<h4>Recipe</h4>
 						<div class="calv5-chips" role="group" aria-label="Recipe">
 							<template x-for="r in recipes" x-bind:key="r.id">
@@ -389,25 +422,25 @@ templ wizardGenerateBody(campaignID, csrfToken, formError string) {
 							<div class="calv5-step">
 								<span>Months</span>
 								<span class="calv5-stepctl">
-									<button type="button" class="btn sm quiet" x-on:click="stepper('monthsOverride', -1, 1, 24)">Fewer</button>
+									<button type="button" class="calv5-ib" title="Fewer" aria-label="Fewer" x-on:click="stepper('monthsOverride', -1, 1, 24)"><i class="fa-solid fa-minus" aria-hidden="true"></i></button>
 									<b x-text="monthsOverride"></b>
-									<button type="button" class="btn sm quiet" x-on:click="stepper('monthsOverride', 1, 1, 24)">More</button>
+									<button type="button" class="calv5-ib" title="More" aria-label="More" x-on:click="stepper('monthsOverride', 1, 1, 24)"><i class="fa-solid fa-plus" aria-hidden="true"></i></button>
 								</span>
 							</div>
 							<div class="calv5-step">
 								<span>Days in a week</span>
 								<span class="calv5-stepctl">
-									<button type="button" class="btn sm quiet" x-on:click="stepper('weekOverride', -1, 3, 14)">Fewer</button>
+									<button type="button" class="calv5-ib" title="Fewer" aria-label="Fewer" x-on:click="stepper('weekOverride', -1, 3, 14)"><i class="fa-solid fa-minus" aria-hidden="true"></i></button>
 									<b x-text="weekOverride"></b>
-									<button type="button" class="btn sm quiet" x-on:click="stepper('weekOverride', 1, 3, 14)">More</button>
+									<button type="button" class="calv5-ib" title="More" aria-label="More" x-on:click="stepper('weekOverride', 1, 3, 14)"><i class="fa-solid fa-plus" aria-hidden="true"></i></button>
 								</span>
 							</div>
 							<div class="calv5-step">
 								<span>Moons</span>
 								<span class="calv5-stepctl">
-									<button type="button" class="btn sm quiet" x-on:click="stepper('moonsN', -1, 0, 5)">Fewer</button>
+									<button type="button" class="calv5-ib" title="Fewer" aria-label="Fewer" x-on:click="stepper('moonsN', -1, 0, 5)"><i class="fa-solid fa-minus" aria-hidden="true"></i></button>
 									<b x-text="moonsN"></b>
-									<button type="button" class="btn sm quiet" x-on:click="stepper('moonsN', 1, 0, 5)">More</button>
+									<button type="button" class="calv5-ib" title="More" aria-label="More" x-on:click="stepper('moonsN', 1, 0, 5)"><i class="fa-solid fa-plus" aria-hidden="true"></i></button>
 								</span>
 							</div>
 							<label class="calv5-toggle-row" style="margin-top:12px">
@@ -421,25 +454,25 @@ templ wizardGenerateBody(campaignID, csrfToken, formError string) {
 							<div class="calv5-step">
 								<span>Suns</span>
 								<span class="calv5-stepctl">
-									<button type="button" class="btn sm quiet" x-on:click="stepper('suns', -1, 1, 3)">Fewer</button>
+									<button type="button" class="calv5-ib" title="Fewer" aria-label="Fewer" x-on:click="stepper('suns', -1, 1, 3)"><i class="fa-solid fa-minus" aria-hidden="true"></i></button>
 									<b x-text="suns"></b>
-									<button type="button" class="btn sm quiet" x-on:click="stepper('suns', 1, 1, 3)">More</button>
+									<button type="button" class="calv5-ib" title="More" aria-label="More" x-on:click="stepper('suns', 1, 1, 3)"><i class="fa-solid fa-plus" aria-hidden="true"></i></button>
 								</span>
 							</div>
 							<div class="calv5-step">
 								<span>Moons</span>
 								<span class="calv5-stepctl">
-									<button type="button" class="btn sm quiet" x-on:click="stepper('skyMoons', -1, 0, 4)">Fewer</button>
+									<button type="button" class="calv5-ib" title="Fewer" aria-label="Fewer" x-on:click="stepper('skyMoons', -1, 0, 4)"><i class="fa-solid fa-minus" aria-hidden="true"></i></button>
 									<b x-text="skyMoons"></b>
-									<button type="button" class="btn sm quiet" x-on:click="stepper('skyMoons', 1, 0, 4)">More</button>
+									<button type="button" class="calv5-ib" title="More" aria-label="More" x-on:click="stepper('skyMoons', 1, 0, 4)"><i class="fa-solid fa-plus" aria-hidden="true"></i></button>
 								</span>
 							</div>
 							<div class="calv5-step">
 								<span>Wandering planets</span>
 								<span class="calv5-stepctl">
-									<button type="button" class="btn sm quiet" x-on:click="stepper('planets', -1, 0, 7)">Fewer</button>
+									<button type="button" class="calv5-ib" title="Fewer" aria-label="Fewer" x-on:click="stepper('planets', -1, 0, 7)"><i class="fa-solid fa-minus" aria-hidden="true"></i></button>
 									<b x-text="planets"></b>
-									<button type="button" class="btn sm quiet" x-on:click="stepper('planets', 1, 0, 7)">More</button>
+									<button type="button" class="calv5-ib" title="More" aria-label="More" x-on:click="stepper('planets', 1, 0, 7)"><i class="fa-solid fa-plus" aria-hidden="true"></i></button>
 								</span>
 							</div>
 						</div>
@@ -473,9 +506,9 @@ templ wizardGenerateBody(campaignID, csrfToken, formError string) {
 								<div class="calv5-step" style="margin-top:10px">
 									<span>Seasons</span>
 									<span class="calv5-stepctl">
-										<button type="button" class="btn sm quiet" x-on:click="stepper('seasonsN', -1, 0, 6)">Fewer</button>
+										<button type="button" class="calv5-ib" title="Fewer" aria-label="Fewer" x-on:click="stepper('seasonsN', -1, 0, 6)"><i class="fa-solid fa-minus" aria-hidden="true"></i></button>
 										<b x-text="seasonsN"></b>
-										<button type="button" class="btn sm quiet" x-on:click="stepper('seasonsN', 1, 0, 6)">More</button>
+										<button type="button" class="calv5-ib" title="More" aria-label="More" x-on:click="stepper('seasonsN', 1, 0, 6)"><i class="fa-solid fa-plus" aria-hidden="true"></i></button>
 									</span>
 								</div>
 								<label class="calv5-fld" style="margin-top:10px">
@@ -488,9 +521,9 @@ templ wizardGenerateBody(campaignID, csrfToken, formError string) {
 							<div class="calv5-step">
 								<span>Seasons</span>
 								<span class="calv5-stepctl">
-									<button type="button" class="btn sm quiet" x-on:click="stepper('seasonsN', -1, 0, 6)">Fewer</button>
+									<button type="button" class="calv5-ib" title="Fewer" aria-label="Fewer" x-on:click="stepper('seasonsN', -1, 0, 6)"><i class="fa-solid fa-minus" aria-hidden="true"></i></button>
 									<b x-text="seasonsN"></b>
-									<button type="button" class="btn sm quiet" x-on:click="stepper('seasonsN', 1, 0, 6)">More</button>
+									<button type="button" class="calv5-ib" title="More" aria-label="More" x-on:click="stepper('seasonsN', 1, 0, 6)"><i class="fa-solid fa-plus" aria-hidden="true"></i></button>
 								</span>
 							</div>
 						</template>
@@ -506,12 +539,14 @@ templ wizardGenerateBody(campaignID, csrfToken, formError string) {
 							<button type="button" class="btn sm" x-on:click="applySeed()">Use</button>
 						</div>
 					</div>
-					<div style="margin-top:16px">
-						<button type="button" class="btn" x-on:click="rerollAll()">Reroll all</button>
-						<p class="calv5-wz-lead" style="margin-top:6px;max-width:none">Keeps every part you kept.</p>
-					</div>
 				</div>
 				<div>
+					<div class="calv5-pvhead">
+						<h4>Preview</h4>
+						<button type="button" class="btn sm quiet" title="Keeps every part you pinned" x-on:click="rerollAll()">
+							<i class="fa-solid fa-dice" aria-hidden="true"></i> Reroll the rest
+						</button>
+					</div>
 					<p class="calv5-wz-lead" style="max-width:none" x-text="summary"></p>
 					<div class="calv5-chk" x-bind:class="{ bad: !validOk }">
 						<span x-text="validText"></span>
@@ -549,9 +584,12 @@ templ wizardGenerateBody(campaignID, csrfToken, formError string) {
 							<div class="calv5-blist">
 								<template x-for="(mo, i) in cal.months" x-bind:key="i">
 									<div class="calv5-brow">
-										<input type="text" class="nm" x-model="mo.name" x-on:input="kept.months = true" maxlength="100"/>
+										<input type="text" class="nm" x-model="mo.name" x-on:input="keptOne['months_' + i] = true" maxlength="100"/>
 										<span class="calv5-meta" x-text="mo.days + (mo.leap_year_days ? '+' + mo.leap_year_days : '') + ' d'"></span>
-										<button type="button" class="mini" x-on:click="rerollOne('months', i)">Reroll</button>
+										<span class="calv5-pbtns">
+											<button type="button" class="calv5-ib keep" x-bind:aria-pressed="String(isKeptOne('months', i))" x-bind:title="isKeptOne('months', i) ? 'Kept' : 'Keep'" x-bind:aria-label="'Keep ' + mo.name" x-on:click="toggleKeepOne('months', i)"><i class="fa-solid fa-thumbtack" aria-hidden="true"></i></button>
+											<button type="button" class="calv5-ib" title="Reroll" x-bind:aria-label="'Reroll ' + mo.name" x-bind:disabled="kept.months || isKeptOne('months', i)" x-on:click="rerollOne('months', i)"><i class="fa-solid fa-dice" aria-hidden="true"></i></button>
+										</span>
 									</div>
 								</template>
 							</div>

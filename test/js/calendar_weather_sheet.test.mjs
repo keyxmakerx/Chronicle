@@ -1,10 +1,10 @@
-// calendar_weather_sheet.test.mjs — pins the Generate sheet's rules in
+// calendar_weather_sheet.test.mjs — pins the weather calendar's rules in
 // calendar_weather_sheet.js, driven through its own methods with the real
-// generator (chronicle_gen.js) and calendar maths (calendar_view.js):
-// painted days are never in what Apply saves and never previewed over,
-// kept days survive "Reroll the rest", the same seed gives the same
-// weather, Apply's write is the per-day API's shape marked generated, and
-// the sheet starts from the calendar's stored climate and own kinds.
+// generator (chronicle_gen.js) and calendar maths (calendar_view.js): a roll
+// leaves painted and pinned days alone and touches only the chosen days, the
+// same seed gives the same weather, Save's writes are the per-day API's
+// shape, a sky event brings its own weather, moon marks sit on the turning
+// days, and the panel starts from the calendar's stored climate and kinds.
 
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
@@ -40,93 +40,178 @@ function load() {
   return sandbox;
 }
 
-const dates = [1, 2, 3, 4, 5, 6].map((d) => ({ year: 100, month: 2, day: d }));
 const painted = { year: 100, month: 2, day: 3, source: 'manual', preset_id: 'snow', preset_label: 'Snow', icon: 'snow', color: '#e8eef6' };
+const eclipse = { id: 9, name: 'The Dark Noon', year: 100, month: 2, day: 10, payload: '{"type":"eclipse","moons":[1]}' };
 
-function sheet(sb, seed = 'pinned') {
-  const { Sheet } = sb.module.exports;
-  const s = Object.create(Sheet.prototype);
-  s.view = { cal, say() {}, _paintMonth() {}, wxPreview: null };
-  s.el = { innerHTML: '', contains: () => false };
-  s._climate = 'temperate';
-  s._continuity = 0.55;
-  s.state = { dates, stored: { '100_2_3': painted }, context: [], seed, nonce: 0, kept: {}, days: {}, summary: '', warnings: [], error: null, showAll: false, busy: false };
-  s._generate();
-  return s;
+function panel(sb, stored = { '2_3': painted }, events = []) {
+  const { Panel } = sb.module.exports;
+  const p = Object.create(Panel.prototype);
+  p.view = {
+    cal, weatherByYear: { 100: stored }, say() {}, _paintMonth() {}, wxPreview: null, mainMoon: () => null,
+    eventsOnDay: (y, m, d) => events.filter((e) => e.year === y && e.month === m && e.day === d),
+  };
+  p._climate = 'temperate';
+  p._continuity = 0.55;
+  p._skyOwn = true;
+  p._kinds = [];
+  p._presets = {};
+  sb.ChronicleGen.weather.presets([]).forEach((x) => { p._presets[x.id] = x; });
+  p.state = { y: 100, m: 2, draft: {}, pins: {}, sel: {}, added: [] };
+  return p;
 }
+const day = (n) => '100_2_' + n;
 
-test('a painted day is kept out of the preview and out of Apply', () => {
-  const s = sheet(load());
-  assert.equal(s.state.error, null, String(s.state.error));
-  assert.ok(!('100_2_3' in s.view.wxPreview));
-  assert.equal(Object.keys(s.view.wxPreview).length, 5);
-  const days = s._applyDays();
-  assert.equal(days.length, 5);
-  assert.ok(days.every((d) => d.day !== 3 && d.source === 'generated'));
+test('a roll leaves the painted day alone and drafts the rest as generated', () => {
+  const p = panel(load());
+  const out = p.roll('pinned');
+  assert.equal(out.error, undefined, String(out.error));
+  assert.equal(out.rolled.length, 29);
+  assert.ok(!(day(3) in p.state.draft));
+  const ch = p.changes();
+  assert.equal(ch.put.length, 29);
+  assert.ok(ch.put.every((d) => d.day !== 3 && d.source === 'generated'));
+  assert.equal(ch.clear.length + ch.lock.length + ch.unlock.length, 0);
 });
 
-test('Apply sends the per-day write shape', () => {
-  const d = sheet(load())._applyDays()[0];
+test("Save sends the per-day write shape, without the generator's notes", () => {
+  const p = panel(load());
+  p.roll('pinned');
+  const d = p.changes().put[0];
   for (const k of ['year', 'month', 'day', 'source', 'preset_id', 'preset_label', 'icon', 'color', 'temperature_celsius', 'wind_speed_kph', 'wind_direction', 'zone_id', 'description']) assert.ok(k in d, k);
   assert.equal(d.gen, undefined);
 });
 
 test('the same seed gives the same weather', () => {
-  const a = sheet(load())._applyDays(), b = sheet(load())._applyDays();
-  assert.equal(JSON.stringify(a), JSON.stringify(b));
+  const a = panel(load()), b = panel(load());
+  a.roll('pinned');
+  b.roll('pinned');
+  assert.equal(JSON.stringify(a.changes()), JSON.stringify(b.changes()));
 });
 
-test('kept days survive Reroll the rest; the others are redrawn', () => {
-  const s = sheet(load());
-  const before = JSON.stringify(s.state.days);
-  s.state.kept['100_2_1'] = true;
-  const kept = JSON.stringify(s.state.days['100_2_1']);
-  for (let i = 0; i < 4; i++) s._reroll();
-  assert.equal(JSON.stringify(s.state.days['100_2_1']), kept);
-  assert.notEqual(JSON.stringify(s.state.days), before);
-  assert.equal(s.state.nonce, 4);
-  assert.ok(!('100_2_3' in s.view.wxPreview));
+test('only the chosen days roll, and a pinned one among them stays', () => {
+  const p = panel(load(), { '2_3': painted, '2_6': { ...painted, day: 6, source: 'generated' } });
+  [5, 6, 7, 8].forEach((n) => { p.state.sel[day(n)] = true; });
+  p.togglePins([day(6)]);
+  const out = p.roll('pinned');
+  assert.deepEqual([...out.rolled].sort(), [day(5), day(7), day(8)]);
+  assert.equal(out.left, 1);
+  assert.deepEqual(Object.keys(p.state.draft).sort(), [day(5), day(7), day(8)]);
 });
 
-test('a single-day reroll touches only that day', () => {
-  const s = sheet(load());
-  const others = ['100_2_1', '100_2_2', '100_2_4', '100_2_6'].map((k) => JSON.stringify(s.state.days[k]));
-  for (let i = 0; i < 3; i++) s._reroll(['100_2_5']);
-  assert.deepEqual(['100_2_1', '100_2_2', '100_2_4', '100_2_6'].map((k) => JSON.stringify(s.state.days[k])), others);
+test('a pinned day with weather is saved as a lock', () => {
+  const p = panel(load());
+  p.roll('pinned');
+  p.togglePins([day(8)]);
+  const ch = p.changes();
+  assert.deepEqual([...ch.lock.map((d) => d.day)], [8]);
 });
 
-test('the sheet renders cards, marks the painted day and escapes text', () => {
-  const s = sheet(load());
-  s.state.stored['100_2_3'] = Object.assign({}, painted, { preset_label: '<b>x</b>' });
-  s._render();
-  const h = s.el.innerHTML;
-  assert.match(h, /Generate weather/);
-  assert.match(h, /Apply to 5 days/);
-  assert.match(h, /painted by hand, stays/);
-  assert.match(h, /&lt;b&gt;x&lt;\/b&gt;/);
-  assert.equal((h.match(/data-rc="keep"/g) || []).length, 5);
-  assert.match(h, /<optgroup label="Magic">.*Ashlands/);
+test('rolling over an unpinned locked day or an erased painted day clears it first, so the write lands', () => {
+  const locked = { year: 100, month: 2, day: 5, source: 'generated', locked: true, preset_id: 'snow', preset_label: 'Snow', icon: 'snow', color: '#e8eef6' };
+  const p = panel(load(), { '2_3': painted, '2_5': locked });
+  p.state.sel[day(5)] = true;
+  p.togglePins([day(5)]);
+  p.roll('pinned');
+  let ch = p.changes();
+  assert.deepEqual([...ch.put.map((d) => d.day)], [5]);
+  assert.deepEqual([...ch.clear.map((d) => d.day)], [5]);
+  assert.equal(ch.lock.length + ch.unlock.length, 0);
+
+  const q = panel(load());
+  q.state.sel[day(3)] = true;
+  q.clear([day(3)]);
+  q.roll('pinned');
+  ch = q.changes();
+  assert.equal(ch.put[0].source, 'generated');
+  assert.deepEqual([...ch.clear.map((d) => d.day)], [3]);
 });
 
-test('closing clears the grid preview', () => {
-  const s = sheet(load());
-  s.el.classList = { contains: () => true, remove() {} };
-  s.view.dockEl = { classList: { remove() {} } };
-  s.close(true);
-  assert.equal(s.view.wxPreview, null);
+test('only days with weather can be pinned', () => {
+  const p = panel(load(), {});
+  assert.equal(p.togglePins([day(8)]), null);
+  assert.equal(p.dirty(), false);
+  p.paint('rain', [day(9)]);
+  assert.equal(p.togglePins([day(8), day(9)]), true);
+  assert.equal(p._pinned(day(8)), false);
+  assert.equal(p._pinned(day(9)), true);
+});
+
+test('painting drafts a hand-painted reading, and clearing only clears stored weather', () => {
+  const p = panel(load());
+  assert.equal(p.paint('rain', [day(1), day(2)]), 2);
+  assert.equal(p.state.draft[day(1)].w.source, 'manual');
+  assert.equal(p.clear([day(1), day(3), day(4)]), 2);
+  const ch = p.changes();
+  assert.deepEqual([...ch.put.map((d) => d.day)], [2]);
+  assert.equal(ch.put[0].preset_id, 'rain');
+  assert.deepEqual([...ch.clear.map((d) => d.day)], [3]);
+  assert.ok(!(day(4) in p.state.draft));
+});
+
+test("a sky event brings its own weather unless that is switched off; a painted day keeps its own", () => {
+  const sb = load();
+  const p = panel(sb, { '2_3': painted }, [eclipse, { ...eclipse, day: 3 }]);
+  p.roll('pinned');
+  assert.equal(p.state.draft[day(10)].w.preset_id, 'black-sun');
+  assert.ok(!(day(3) in p.state.draft));
+  const q = panel(sb, { '2_3': painted }, [eclipse]);
+  q._skyOwn = false;
+  q.roll('pinned');
+  assert.notEqual(q.state.draft[day(10)].w.preset_id, 'black-sun');
+});
+
+test('moon marks sit on the one day nearest each full and new moon', () => {
+  const { moonPeaks } = load().module.exports;
+  const cycle = 28, phase = (a) => { const r = a / cycle; return r - Math.floor(r); };
+  const abs = Array.from({ length: 56 }, (_, i) => i + 1);
+  const peaks = moonPeaks(phase, abs, cycle);
+  const marks = Object.keys(peaks).map((i) => abs[i] + ':' + peaks[i]);
+  assert.deepEqual(marks, ['14:full', '28:new', '42:full', '56:new']);
+});
+
+test('the sky marks the strongest moon night of a day and ignores other payloads', () => {
+  const p = panel(load(), {}, [eclipse, { ...eclipse, payload: '{"type":"harvest"}' }, { ...eclipse, day: 11, payload: 'not json' }, { ...eclipse, day: 12, payload: '{"type":"party"}' }]);
+  const sky = p._sky();
+  assert.equal(sky[day(10)].type, 'eclipse');
+  assert.equal(sky[day(10)].name, 'The Dark Noon');
+  assert.equal(sky[day(11)], undefined);
+  assert.equal(sky[day(12)], undefined);
+});
+
+test('a day cell names its weather, season, sky and pin, escaped', () => {
+  const p = panel(load(), { '2_3': { ...painted, preset_label: '<b>x</b>', locked: true } }, [{ ...eclipse, day: 3, name: '<i>y</i>' }]);
+  p._sky();
+  const h = p._cellHTML(day(3), day(3));
+  assert.match(h, /&lt;b&gt;x&lt;\/b&gt;, painted by hand/);
+  assert.match(h, /Eclipse: &lt;i&gt;y&lt;\/i&gt;/);
+  assert.match(h, /class="wxc-d kept/);
+  assert.match(h, /tabindex="0"/);
+  assert.match(h, /fa-circle-half-stroke/);
+  assert.doesNotMatch(h, /<b>x/);
+});
+
+test('the calendar behind previews the draft; nothing unsaved means not dirty', () => {
+  const p = panel(load());
+  assert.equal(p.dirty(), false);
+  p.paint('fog', [day(7)]);
+  assert.equal(p.dirty(), true);
+  p._preview();
+  assert.equal(p.view.wxPreview[day(7)].preset_id, 'fog');
+  p.state.draft = {};
+  assert.equal(p.dirty(), false);
 });
 
 const fire = { id: 'fire-rain', name: 'Fire rain', icon: 'rain', color: '#e2552b', like: 'rain', seasons: { winter: 'often', spring: 'often', summer: 'often', autumn: 'often' } };
 
 test("the calendar's climate becomes the sheet's starting point", () => {
-  const s = sheet(load());
+  const s = panel(load());
   s._useSettings({ climate: 'ashlands', continuity: 0.9, kinds: [] });
   assert.equal(s._climate, 'ashlands');
   assert.equal(s._continuity, 0.9);
 });
 
 test('a climate the owner picked here is kept; own kinds still arrive', () => {
-  const s = sheet(load());
+  const s = panel(load());
   s._picked = true;
   s._useSettings({ climate: 'ashlands', continuity: 0.9, kinds: [fire] });
   assert.equal(s._climate, 'temperate');
@@ -134,7 +219,7 @@ test('a climate the owner picked here is kept; own kinds still arrive', () => {
 });
 
 test('an unknown climate or no settings keeps the defaults', () => {
-  const s = sheet(load());
+  const s = panel(load());
   s._useSettings({ climate: 'moon', continuity: 7 });
   assert.equal(s._climate, 'temperate');
   assert.equal(s._continuity, 0.55);
@@ -149,23 +234,21 @@ test("the owner's own kinds are generated, kept when painted, and a bad one is d
   assert.equal(ownKinds([fire, bad]).length, 1);
   assert.equal(ownKinds('nope').length, 0);
 
-  const s = sheet(sb);
+  const s = panel(sb, {});
   s._useSettings({ climate: 'ashlands', continuity: 0.2, kinds: [fire, bad] });
-  s._generate();
-  assert.equal(s.state.error, null, String(s.state.error));
-  // Every season is "often", so a fortnight-plus run is sure to see it.
-  const long = Array.from({ length: 30 }, (_, i) => ({ year: 100, month: 3, day: i + 1 }));
-  s.state.dates = long;
-  s._generate();
-  const days = Object.values(s.state.days);
+  sb.ChronicleGen.weather.presets(s._kinds).forEach((x) => { s._presets[x.id] = x; });
+  // Every season is "often", so a month-long run is sure to see it.
+  const out = s.roll('pinned');
+  assert.equal(out.error, undefined, String(out.error));
+  const days = Object.values(s.state.draft).map((d) => d.w);
   const own = days.filter((d) => d.preset_id === 'fire-rain');
   assert.ok(own.length > 0, 'no fire rain in 30 days: ' + days.map((d) => d.preset_id).join(','));
   assert.equal(own[0].color, '#e2552b');
   assert.equal(own[0].preset_label, 'Fire rain');
 
-  // A day painted with an own kind stays a lock rather than being dropped.
-  s.state.stored = { '100_3_5': { year: 100, month: 3, day: 5, source: 'manual', preset_id: 'fire-rain', preset_label: 'Fire rain', icon: 'rain', color: '#e2552b' } };
-  assert.ok(s._locks(false).some((d) => d.preset_id === 'fire-rain'));
+  // A day painted with an own kind can be painted from the palette.
+  assert.equal(s.paint('fire-rain', [day(5)]), 1);
+  assert.equal(s.state.draft[day(5)].w.preset_id, 'fire-rain');
 });
 
 test("the settings form's climates are the generator's climates", () => {

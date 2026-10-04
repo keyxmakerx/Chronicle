@@ -959,3 +959,21 @@ Also under this ADR: the partial-update contract test only recognised structs na
 **Consequences:**
 - Where both run, Chronicle's media scope may narrow to "pictures attached to entities," simplifying (not invalidating) `.ai/designs/2026-09-13-media-renovation.md`.
 - Worth reimplementing from grimoire: OIDC, guest invite codes, a per-user revocable `.ics` session feed, a player-safe export, LegendKeeper import. Not worth reimplementing: PDF indexing, audio, 3D models, token/UVTT editors.
+
+---
+
+## ADR-060: A deleted world page is marked, not removed, until the Trash retention runs out
+
+**Status:** Accepted; operator-approved design (page history, Trash, save clashes; #1006).
+
+**Context:** Deleting a page ran `DELETE FROM entities`, which cascades into about twenty tables (relations, tags, permissions, map pins, calendar ties, session links, favourites, inventory). A Trash that copies the page out and re-inserts it on restore would have to know every one of those tables and keep up with each new one; missing one silently loses data on restore.
+
+**Decision:**
+1. Delete sets `entities.deleted_at`/`deleted_by` and stamps the page and its live sub-pages with one `trash_root_id`, so they restore together. Nothing that hangs off the page is touched.
+2. Every read of `entities` excludes trashed rows. Inside the entities plugin `visibilityFilter` carries `liveOnly` for every role, owners included; reads that skip it add `liveOnly` (`FindByID`, `FindBySlug`, `ListByOwner`, sibling ordering). Other plugins add `deleted_at IS NULL` to their own joins (in the `ON` of a `LEFT JOIN`, so a row shows as if its page were gone).
+3. Reads that must still see trashed pages say so: media "is this file used" checks (a picture on a trashed page must survive cleanup), the slug-uniqueness check, the sync-mapping list, and the armory ledger's historical names.
+4. An hourly purge hard-deletes pages trashed longer than the site's `content.trash_retention_days` (30/60/90/180/365, default 30); the ordinary cascades then run.
+
+**Consequences:**
+- A new query against `entities` must exclude trashed rows, or a deleted page reappears in it. The Trash has no "delete forever" yet; the purge is the only hard delete.
+- A trashed page still holds its slug, so a new page with the same name gets a suffixed slug.

@@ -175,6 +175,13 @@ type Move struct {
 	byGM bool
 }
 
+// IsMoneyEdit reports whether the row records a character's money being
+// changed on its sheet rather than a move: a money row whose two ends are the
+// same character.
+func (m Move) IsMoneyEdit() bool {
+	return m.Kind == MoveKindMoney && m.From.Kind == EndpointCharacter && m.From == m.To
+}
+
 // MoveFilter narrows a history query. Zero values mean "no restriction".
 type MoveFilter struct {
 	// Endpoint, when set, keeps moves that touch it on either side.
@@ -232,6 +239,8 @@ type EntityRef struct {
 	// MoneyKey is the character's money field key, empty when its entity type
 	// has no usable numeric money field.
 	MoneyKey string
+	// MoneyLabel is that field's display label, empty when it has none.
+	MoneyLabel string
 }
 
 // MoveLine is a history row with names resolved for display.
@@ -241,6 +250,9 @@ type MoveLine struct {
 	FromName      string
 	ToName        string
 	RequesterName string
+	// Summary, when set, is the whole sentence for the row. Purchase requests
+	// share the history list and carry their own wording here.
+	Summary string
 }
 
 // HeldItem is one line of what a character carries.
@@ -292,10 +304,16 @@ type StashesPageView struct {
 	CanManage    bool // Owner or Scribe.
 	CanApprove   bool // Owner visibility.
 	Pending      []MoveLine
-	Stashes      []StashView
-	Characters   []NamedRef // Character-family entities, for the viewer picker.
-	Items        []NamedRef // Catalogue items the GM can drop into a stash.
+	// PendingPurchases are shop baskets waiting for the Owner, listed beside
+	// the move requests.
+	PendingPurchases []PurchaseRequestLine
+	Stashes          []StashView
+	Characters       []NamedRef // Character-family entities, for the viewer picker.
+	Items            []NamedRef // Catalogue items the GM can drop into a stash.
 }
+
+// WaitingCount is every request waiting on the Owner: moves and purchases.
+func (v *StashesPageView) WaitingCount() int { return len(v.Pending) + len(v.PendingPurchases) }
 
 // MoveDestination is one choice in the "To" select.
 type MoveDestination struct {

@@ -30,6 +30,11 @@ type UserRepository interface {
 	UpdateDisplayName(ctx context.Context, userID, displayName string) error
 	UpdateAvatarPath(ctx context.Context, userID string, avatarPath *string) error
 
+	// View preferences: the person's own look, as the stored JSON (nil when
+	// they have chosen nothing).
+	GetViewPrefs(ctx context.Context, userID string) ([]byte, error)
+	SetViewPrefs(ctx context.Context, userID string, prefs []byte) error
+
 	// ListLegacyAvatarPaths returns userID -> avatar_path for every user
 	// whose avatar_path still starts with prefix. Used only by the boot
 	// reconciler (reconcile_avatar_paths.go) to find rows still pointing at
@@ -290,6 +295,29 @@ func (r *userRepository) UpdateTimezone(ctx context.Context, userID, timezone st
 	n, _ := result.RowsAffected()
 	if n == 0 {
 		return apperror.NewNotFound("user not found")
+	}
+	return nil
+}
+
+// GetViewPrefs returns the raw view_prefs JSON for a user, or nil when unset.
+func (r *userRepository) GetViewPrefs(ctx context.Context, userID string) ([]byte, error) {
+	var raw []byte
+	err := r.db.QueryRowContext(ctx, `SELECT view_prefs FROM users WHERE id = ?`, userID).Scan(&raw)
+	if errors.Is(err, sql.ErrNoRows) {
+		return nil, apperror.NewNotFound("user not found")
+	}
+	if err != nil {
+		return nil, fmt.Errorf("reading view prefs: %w", err)
+	}
+	return raw, nil
+}
+
+// SetViewPrefs stores the validated view_prefs JSON for a user.
+func (r *userRepository) SetViewPrefs(ctx context.Context, userID string, prefs []byte) error {
+	// RowsAffected is 0 both for a missing user and for an unchanged value
+	// (MySQL reports changed rows), so existence is not inferred from it.
+	if _, err := r.db.ExecContext(ctx, `UPDATE users SET view_prefs = ? WHERE id = ?`, string(prefs), userID); err != nil {
+		return fmt.Errorf("updating view prefs: %w", err)
 	}
 	return nil
 }

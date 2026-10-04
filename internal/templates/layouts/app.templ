@@ -188,7 +188,10 @@ templ Sidebar() {
 			<!-- Logo / Brand -->
 			<div class="h-16 flex items-center px-4 border-b border-gray-700 shrink-0">
 				<a href="/campaigns" class="flex items-center flex-1 min-w-0 gap-2 hover:opacity-80 transition-opacity">
-					<span class="text-lg font-bold text-white tracking-tight truncate sidebar-hide-collapsed">Chronicle</span>
+					<span class="sidebar-hide-collapsed contents">
+						@SiteSidebarMark()
+					</span>
+					<span class="text-lg font-bold text-white tracking-tight truncate sidebar-hide-collapsed">{ SiteName(ctx) }</span>
 					<!-- Collapsed state: book icon -->
 					<span class="hidden items-center justify-center w-5 h-5 shrink-0" :class="{ '!flex': !pinned && !hovered }">
 						<i class="fa-solid fa-book-open text-white text-sm"></i>
@@ -529,15 +532,18 @@ templ SidebarDrillPanel(campaignID string, et SidebarEntityType, count int) {
 			<span class="nav-drill-name">{ et.NamePlural }</span>
 		</a>
 		<span class="nav-drill-count">{ strconv.Itoa(count) }</span>
-		<a
-			href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/entities/new?type=%d", campaignID, et.ID)) }
-			class="nav-drill-new"
-			title={ fmt.Sprintf("New %s", et.Slug) }
-			aria-label={ fmt.Sprintf("New %s", et.Slug) }
-			hx-boost="false"
-		>
-			<i class="fa-solid fa-plus" aria-hidden="true"></i>
-		</a>
+		// Creating a page needs Scribe; a Player would get a 403.
+		if GetCampaignRole(ctx) >= 2 {
+			<a
+				href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/entities/new?type=%d", campaignID, et.ID)) }
+				class="nav-drill-new"
+				title={ fmt.Sprintf("New %s", et.Slug) }
+				aria-label={ fmt.Sprintf("New %s", et.Slug) }
+				hx-boost="false"
+			>
+				<i class="fa-solid fa-plus" aria-hidden="true"></i>
+			</a>
+		}
 	</div>
 	<div class="nav-drill-search">
 		<i class="fa-solid fa-magnifying-glass" aria-hidden="true"></i>
@@ -643,10 +649,20 @@ templ Topbar() {
 				// escape to the nearest ancestor context and paint before the header
 				// surface, making the brand invisible (the original "saved but invisible" bug).
 				// pointer-events:none lets clicks fall through to the nav controls.
-				<div
-					style={ "position:absolute; inset:0; z-index:-1; pointer-events:none; " + topbarInlineStyle(ctx) }
-					aria-hidden="true"
-				></div>
+				if topbarStyleIsMoving(ctx) {
+					// Moving: an over-wide strip of the two colours that the
+					// header-motion widget slides, easing to a stop whenever
+					// the person steps away. The clip keeps the strip inside
+					// the bar.
+					<div style="position:absolute; inset:0; z-index:-1; pointer-events:none; overflow:hidden;" aria-hidden="true">
+						<div data-widget="header-motion" data-axis={ topbarMovingAxis(ctx) } style={ topbarMovingStyle(ctx) }></div>
+					</div>
+				} else {
+					<div
+						style={ "position:absolute; inset:0; z-index:-1; pointer-events:none; " + topbarInlineStyle(ctx) }
+						aria-hidden="true"
+					></div>
+				}
 				if topbarStyleIsImage(ctx) {
 					// A dark scrim over the photo keeps the nav text + icons legible
 					// regardless of which image the owner uploaded.
@@ -681,7 +697,7 @@ templ Topbar() {
 							@click.outside="open = false"
 							class="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-sm font-semibold text-fg hover:bg-surface-alt transition-colors"
 						>
-							<span class="truncate max-w-[160px]" data-topbar-name>{ GetDisplayName(ctx) }</span>
+							<span class="truncate max-w-[110px] md:max-w-[160px]" data-topbar-name>{ GetDisplayName(ctx) }</span>
 							<svg class="w-3.5 h-3.5 text-fg-muted shrink-0" width="14" height="14" fill="none" stroke="currentColor" viewBox="0 0 24 24">
 								<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path>
 							</svg>
@@ -791,7 +807,7 @@ templ Topbar() {
 
 		<!-- Center: Customizable content area (quick-links, quote, or empty) -->
 		if InCampaign(ctx) {
-			<div id="topbar-content" class="flex-1 flex items-center justify-center min-w-0 overflow-hidden transition-all duration-200">
+			<div id="topbar-content" class="tb-slot flex-1 flex items-center justify-center min-w-0 overflow-hidden transition-all duration-200">
 				@topbarCenterContent(ctx)
 			</div>
 
@@ -824,7 +840,7 @@ templ Topbar() {
 				<button
 					id="topbar-search-trigger"
 					onclick="Chronicle.openSearch()"
-					class="btn-ghost btn-icon"
+					class={ "btn-ghost btn-icon", templ.KV("md:hidden", topbarHasWidget(ctx, "search")) }
 					title="Search (Ctrl+K)"
 				>
 					<svg class="w-4 h-4" width="16" height="16" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -894,6 +910,21 @@ templ Topbar() {
 						</div>
 						<div data-notif-list class="py-0"></div>
 					</div>
+				</div>
+			}
+			if InCampaign(ctx) && (GetCampaignRole(ctx) >= 2 || IsDmGranted(ctx)) {
+				<!-- DM Screen: the control panel for the owner, scribes and
+				     members with DM access (dmscreen.CanOpen). The dm-screen
+				     widget fetches the panel and plays the opening; hidden
+				     under "view as player" because the role reads 1. -->
+				<div data-widget="dm-screen" data-url={ fmt.Sprintf("/campaigns/%s/dm-screen", GetCampaignID(ctx)) }>
+					<button type="button" class="btn-ghost btn-icon" data-dms-open title="DM Screen" aria-label="Open the DM Screen" aria-haspopup="dialog">
+						<svg class="w-5 h-5" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round" aria-hidden="true">
+							<path d="M2 6l6-2v15l-6 2z"></path>
+							<path d="M8 4l8 2v15l-8-2z"></path>
+							<path d="M16 6l6-2v15l-6 2z"></path>
+						</svg>
+					</button>
 				</div>
 			}
 			if IsAuthenticated(ctx) {
@@ -1011,39 +1042,199 @@ func isExternalURL(url string) bool {
 	return strings.HasPrefix(url, "http://") || strings.HasPrefix(url, "https://")
 }
 
-// topbarCenterContent renders the customizable center area of the topbar.
-// Supports quick-link buttons and quote/message text, configured by the owner.
+// topbarCenterContent renders the header's widgets in the owner's order. At
+// md and wider every widget shows; below that the first stays and the rest
+// move into a tray under the header behind a "+N" button, because a phone's
+// bar has room for one. When the bar is too narrow even for that one, a
+// container query (input.css, "tb-") moves it into the tray too, so no widget
+// is ever unreachable.
 templ topbarCenterContent(ctx context.Context) {
 	if tc := GetTopbarContent(ctx); tc != nil {
-		<div class="flex items-center gap-3 min-w-0 justify-center">
-			for _, w := range tc.TopbarWidgets() {
-				@topbarWidget(tc, w)
-			}
-		</div>
+		if ws := topbarShownWidgets(ctx, tc); len(ws) > 0 {
+			<div
+				class="flex items-center gap-3 min-w-0 justify-center"
+				x-data="{ more: false }"
+				@click.outside="more = false"
+				@keydown.escape.window="if (more) { more = false; $nextTick(() => $refs.moreBtn.focus()) }"
+			>
+				for i, w := range ws {
+					if i == 0 {
+						<div class="tb-first flex items-center min-w-0">
+							@topbarWidget(ctx, tc, w)
+						</div>
+					} else {
+						<div class="hidden md:flex items-center min-w-0">
+							@topbarWidget(ctx, tc, w)
+						</div>
+					}
+				}
+				<button
+					type="button"
+					x-ref="moreBtn"
+					@click="more = !more"
+					:aria-expanded="more ? 'true' : 'false'"
+					aria-controls="topbar-tray"
+					class={ "md:hidden shrink-0 inline-flex items-center px-2.5 py-1 rounded-full border border-edge bg-surface-alt text-xs font-semibold text-fg", templ.KV("tb-solo", len(ws) == 1) }
+				>
+					if len(ws) > 1 {
+						<span class="tb-n">+{ strconv.Itoa(len(ws) - 1) }</span>
+					}
+					<span class="tb-n-all">+{ strconv.Itoa(len(ws)) }</span>
+					<span class="sr-only">more header items</span>
+				</button>
+				<div
+					id="topbar-tray"
+					x-show="more"
+					x-cloak
+					class="md:hidden absolute left-2 right-2 top-full mt-1.5 z-50 flex flex-wrap items-center gap-2 p-2.5 rounded-lg border border-edge bg-surface text-fg shadow-xl"
+				>
+					<div class="tb-first-copy">
+						@topbarWidget(ctx, tc, ws[0])
+					</div>
+					for _, w := range ws[1:] {
+						@topbarWidget(ctx, tc, w)
+					}
+				</div>
+			</div>
+		}
 	}
 }
 
-// topbarWidget renders one header widget: the quick links or the owner's
-// line of text.
-templ topbarWidget(tc *TopbarContentData, w string) {
+// topbarWidgetShown reports whether a widget has anything to draw for this
+// viewer: links with no links, empty text, or a note button for someone who
+// can't take notes would only leave a gap.
+func topbarWidgetShown(ctx context.Context, tc *TopbarContentData, w string) bool {
+	switch w {
+	case "links":
+		return len(tc.Links) > 0
+	case "text":
+		return tc.Quote != ""
+	case "note":
+		return IsAuthenticated(ctx) && GetCampaignRole(ctx) >= 1
+	case "search":
+		return true
+	case "date":
+		return tc.Live != nil && tc.Live.Date != ""
+	case "weather":
+		return tc.Live != nil && tc.Live.Weather != ""
+	case "moon":
+		return tc.Live != nil && len(tc.Live.Moons) > 0
+	case "session":
+		return tc.Live != nil && tc.Live.NextNight.Label != ""
+	}
+	return false
+}
+
+// topbarMoonText joins each moon's name and phase for the moon chip, capped
+// at three so a world with many moons can't crowd the bar; the rest are
+// counted.
+func topbarMoonText(moons []TopbarMoon) string {
+	const shown = 3
+	parts := make([]string, 0, shown+1)
+	for i, m := range moons {
+		if i == shown {
+			parts = append(parts, fmt.Sprintf("+%d more", len(moons)-shown))
+			break
+		}
+		parts = append(parts, m.Name+" "+strings.ToLower(m.Phase))
+	}
+	return strings.Join(parts, " · ")
+}
+
+// topbarChipClass is the shared pill for the data-backed widgets: the Quick
+// note button's look without being a button, since these only report.
+const topbarChipClass = "inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full border border-edge bg-surface-alt text-xs font-medium text-fg-secondary whitespace-nowrap min-w-0 max-w-[16rem] sm:max-w-[22rem]"
+
+// topbarShownWidgets is the header's widgets, in order, that have something
+// to draw.
+func topbarShownWidgets(ctx context.Context, tc *TopbarContentData) []string {
+	var out []string
+	for _, w := range tc.TopbarWidgets() {
+		if topbarWidgetShown(ctx, tc, w) {
+			out = append(out, w)
+		}
+	}
+	return out
+}
+
+// topbarHasWidget reports whether the header holds widget w, so the search
+// icon can step aside for the search box.
+func topbarHasWidget(ctx context.Context, w string) bool {
+	tc := GetTopbarContent(ctx)
+	if tc == nil {
+		return false
+	}
+	for _, x := range tc.TopbarWidgets() {
+		if x == w {
+			return topbarWidgetShown(ctx, tc, w)
+		}
+	}
+	return false
+}
+
+// topbarWidget renders one header widget. Quick note and search open the
+// site's own quick capture and topbar search, so they behave exactly as the
+// keyboard shortcuts and icon do.
+templ topbarWidget(ctx context.Context, tc *TopbarContentData, w string) {
 	if w == "links" && len(tc.Links) > 0 {
-			<div class="flex items-center gap-1.5 flex-wrap justify-center">
-				for _, link := range tc.Links {
-					<a
-						href={ safeExternalURL(link.URL) }
-						class="inline-flex items-center gap-1 px-2.5 py-1 rounded-md text-xs font-medium text-fg-secondary hover:text-fg hover:bg-surface-alt transition-colors whitespace-nowrap"
-					>
-						if link.Icon != "" {
-							<i class={ "fa-solid " + link.Icon, "text-[10px]" }></i>
-						}
-						{ link.Label }
-					</a>
-				}
-			</div>
+		<div class="flex items-center gap-1.5 justify-center min-w-0">
+			for _, link := range tc.Links {
+				<a
+					href={ safeExternalURL(link.URL) }
+					class="inline-flex items-center gap-1 px-2.5 py-1 rounded-md text-xs font-medium text-fg-secondary hover:text-fg hover:bg-surface-alt transition-colors whitespace-nowrap"
+				>
+					if link.Icon != "" {
+						<i class={ "fa-solid " + link.Icon, "text-[10px]" }></i>
+					}
+					{ link.Label }
+				</a>
+			}
+		</div>
 	} else if w == "text" && tc.Quote != "" {
-			<div class="text-xs text-fg-muted italic truncate px-4 max-w-md text-center">
-				{ tc.Quote }
-			</div>
+		<div class="text-xs text-fg-muted italic truncate px-1 md:px-4 max-w-md text-center min-w-0">
+			{ tc.Quote }
+		</div>
+	} else if w == "note" && topbarWidgetShown(ctx, tc, "note") {
+		<button
+			type="button"
+			onclick="if(window.Chronicle&&Chronicle.openQuickCapture){Chronicle.openQuickCapture();}"
+			class="shrink-0 inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full border border-edge bg-surface-alt text-xs font-medium text-fg-secondary hover:text-fg whitespace-nowrap"
+			title="Quick note (Ctrl+Shift+N)"
+		>
+			<i class="fa-solid fa-pen text-[10px]" aria-hidden="true"></i>
+			Quick note
+		</button>
+	} else if w == "date" && topbarWidgetShown(ctx, tc, "date") {
+		<span class={ topbarChipClass } title="Today in your world">
+			<i class="fa-solid fa-calendar-days text-[10px] shrink-0" aria-hidden="true"></i>
+			<span class="truncate">{ tc.Live.Date }</span>
+		</span>
+	} else if w == "weather" && topbarWidgetShown(ctx, tc, "weather") {
+		<span class={ topbarChipClass } title="Today's weather">
+			<i class="fa-solid fa-cloud-sun text-[10px] shrink-0" aria-hidden="true"></i>
+			<span class="truncate">{ tc.Live.Weather }</span>
+		</span>
+	} else if w == "moon" && topbarWidgetShown(ctx, tc, "moon") {
+		<span class={ topbarChipClass } title="Today's moon">
+			<i class="fa-solid fa-moon text-[10px] shrink-0" aria-hidden="true"></i>
+			<span class="truncate">{ topbarMoonText(tc.Live.Moons) }</span>
+		</span>
+	} else if w == "session" && topbarWidgetShown(ctx, tc, "session") {
+		<span class={ topbarChipClass } title={ tc.Live.NextNight.Title }>
+			<i class="fa-solid fa-clock text-[10px] shrink-0" aria-hidden="true"></i>
+			<span class="truncate">{ tc.Live.NextNight.Label }</span>
+		</span>
+	} else if w == "search" {
+		<button
+			type="button"
+			onclick="if(window.Chronicle&&Chronicle.openSearch){Chronicle.openSearch();}"
+			class="inline-flex items-center gap-2 w-full min-w-[9rem] max-w-xs px-3 py-1.5 rounded-lg border border-edge bg-surface-alt text-xs text-fg-muted hover:text-fg text-left"
+			title="Search (Ctrl+K)"
+		>
+			<i class="fa-solid fa-magnifying-glass text-[11px] shrink-0" aria-hidden="true"></i>
+			<span class="truncate flex-1">{ "Search " + GetDisplayName(ctx) + "…" }</span>
+			<kbd class="hidden lg:inline text-[10px] font-mono border border-edge rounded px-1 py-0.5">Ctrl K</kbd>
+		</button>
 	}
 }
 
@@ -1061,7 +1252,9 @@ func topbarInlineStyle(ctx context.Context) string {
 		if style.Color != "" {
 			return fmt.Sprintf("background-color: %s;", style.Color)
 		}
-	case "gradient":
+	case "gradient", "moving":
+		// Moving shares the plain gradient as its resting look and as the
+		// test for "has a custom style"; topbarMovingStyle draws the drift.
 		if style.GradientFrom != "" && style.GradientTo != "" {
 			return fmt.Sprintf("background: linear-gradient(%s, %s, %s);", topbarGradientDir(style.GradientDir), style.GradientFrom, style.GradientTo)
 		}
@@ -1087,7 +1280,7 @@ func topbarWantsLightWords(ctx context.Context) bool {
 		return true
 	case "solid":
 		cols = []string{style.Color}
-	case "gradient":
+	case "gradient", "moving":
 		cols = []string{style.GradientFrom, style.GradientTo}
 	}
 	white, ink := 99.0, 99.0
@@ -1133,6 +1326,36 @@ func topbarGradientDir(dir string) string {
 // topbar background — used to decide whether to emit the background layer.
 func topbarHasCustomStyle(ctx context.Context) bool {
 	return topbarInlineStyle(ctx) != ""
+}
+
+// topbarStyleIsMoving reports whether the header background drifts.
+func topbarStyleIsMoving(ctx context.Context) bool {
+	style := GetTopbarStyle(ctx)
+	return style != nil && style.Mode == "moving" && topbarInlineStyle(ctx) != ""
+}
+
+// topbarMovingAxis is the axis the strip slides along: "y" only for a
+// top-to-bottom gradient, "x" otherwise.
+func topbarMovingAxis(ctx context.Context) string {
+	if style := GetTopbarStyle(ctx); style != nil && style.GradientDir == "to-b" {
+		return "y"
+	}
+	return "x"
+}
+
+// topbarMovingStyle sizes the strip three bars long, painted as the two
+// colours repeating once per bar length, so sliding it by one third loops
+// seamlessly. Only a transform ever moves it.
+func topbarMovingStyle(ctx context.Context) string {
+	style := GetTopbarStyle(ctx)
+	if style == nil {
+		return ""
+	}
+	stops := fmt.Sprintf("%s 0%%, %s 16.6667%%, %s 33.3333%%", style.GradientFrom, style.GradientTo, style.GradientFrom)
+	if topbarMovingAxis(ctx) == "y" {
+		return "position:absolute; left:0; top:0; width:100%; height:300%; will-change:transform; background:repeating-linear-gradient(180deg, " + stops + ");"
+	}
+	return "position:absolute; left:0; top:0; width:300%; height:100%; will-change:transform; background:repeating-linear-gradient(90deg, " + stops + ");"
 }
 
 // topbarStyleIsImage reports whether the custom topbar background is an image,

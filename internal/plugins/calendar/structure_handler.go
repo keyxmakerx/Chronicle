@@ -60,14 +60,18 @@ func bindStructureEdit(c echo.Context) (StructureEdit, string, error) {
 	return StructureEditFromImport(ir), string(raw), nil
 }
 
-// bindWeatherCarry reads the editor's three weather fields against the stored
+// bindWeatherCarry reads the editor's weather fields against the stored
 // settings. None sent keeps what is stored (an older form, or a client that
 // only sends structure); any sent fills the others from storage, so an
-// absent weather_kinds keeps the stored kinds and "[]" clears them. Invalid
-// values are a bad-request the owner reads in the preview slot.
+// absent weather_kinds keeps the stored kinds and "[]" clears them. The
+// forecast switch is a checkbox, so weather_forecast_sent says the control
+// was on the form: with it, an absent weather_forecast means off; without
+// it, the stored switch stays. Invalid values are a bad-request the owner
+// reads in the preview slot.
 func (h *Handler) bindWeatherCarry(c echo.Context, cc *campaigns.CampaignContext, calID string) (weatherCarry, error) {
 	climate, cont, kindsRaw := c.FormValue("weather_climate"), c.FormValue("weather_continuity"), c.FormValue("weather_kinds")
-	if climate == "" && cont == "" && kindsRaw == "" {
+	forecastSent, daysRaw := c.FormValue("weather_forecast_sent") != "", c.FormValue("weather_forecast_days")
+	if climate == "" && cont == "" && kindsRaw == "" && !forecastSent && daysRaw == "" {
 		return weatherCarry{}, nil
 	}
 	cur, err := h.svc.GetWeatherSettings(c.Request().Context(), calID, cc.Campaign.ID, viewerFrom(c, cc))
@@ -92,6 +96,16 @@ func (h *Handler) bindWeatherCarry(c echo.Context, cc *campaigns.CampaignContext
 		}
 		next.Continuity = f
 	}
+	if forecastSent {
+		next.ForecastsEnabled = c.FormValue("weather_forecast") == "on"
+	}
+	if daysRaw != "" {
+		n, perr := strconv.Atoi(daysRaw)
+		if perr != nil {
+			return weatherCarry{}, apperror.NewBadRequest(fmt.Sprintf("the forecast can cover 1 to %d days", MaxForecastDays))
+		}
+		next.ForecastDays = n
+	}
 	if err := validateWeatherSettings(next); err != nil {
 		return weatherCarry{}, err
 	}
@@ -106,6 +120,9 @@ func (h *Handler) bindWeatherCarry(c echo.Context, cc *campaigns.CampaignContext
 		Continuity: strconv.FormatFloat(next.Continuity, 'f', -1, 64),
 		Kinds:      cleaned,
 		KindsJSON:  encodeWeatherKinds(cleaned),
+
+		Forecast:     next.ForecastsEnabled,
+		ForecastDays: strconv.Itoa(next.ForecastDays),
 	}
 	if next.Climate != cur.Climate {
 		wx.Notes = append(wx.Notes, fmt.Sprintf("Weather: the climate changes to %s.", climateName(next.Climate)))
@@ -115,6 +132,14 @@ func (h *Handler) bindWeatherCarry(c echo.Context, cc *campaigns.CampaignContext
 		wx.Notes = append(wx.Notes, "Weather: weather lasts longer.")
 	case next.Continuity < cur.Continuity:
 		wx.Notes = append(wx.Notes, "Weather: weather changes more often.")
+	}
+	switch {
+	case next.ForecastsEnabled && !cur.ForecastsEnabled:
+		wx.Notes = append(wx.Notes, fmt.Sprintf("Weather: players now see a %d-day forecast.", next.ForecastDays))
+	case !next.ForecastsEnabled && cur.ForecastsEnabled:
+		wx.Notes = append(wx.Notes, "Weather: players no longer see a forecast.")
+	case next.ForecastsEnabled && next.ForecastDays != cur.ForecastDays:
+		wx.Notes = append(wx.Notes, fmt.Sprintf("Weather: the forecast now covers %d %s.", next.ForecastDays, nounFor(next.ForecastDays, "day", "days")))
 	}
 	wx.Notes = append(wx.Notes, weatherKindNotes(cur.Kinds, cleaned)...)
 	return wx, nil
@@ -179,8 +204,10 @@ func (h *Handler) StructureEditApply(c echo.Context) error {
 		if err == nil {
 			if wx.Sent {
 				cont, _ := strconv.ParseFloat(wx.Continuity, 64)
+				days, _ := strconv.Atoi(wx.ForecastDays)
 				err = h.svc.SetWeatherSettings(c.Request().Context(), calID, cc.Campaign.ID,
-					WeatherSettings{Climate: wx.Climate, Continuity: cont, Kinds: wx.Kinds})
+					WeatherSettings{Climate: wx.Climate, Continuity: cont, Kinds: wx.Kinds,
+						ForecastDays: days, ForecastsEnabled: wx.Forecast})
 			}
 			if err == nil {
 				return middleware.HTMXRedirect(c, structureCalendarURL(cc.Campaign.ID, calID))

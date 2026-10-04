@@ -61,7 +61,7 @@ func (s *stubDrawingSvcOwnerGate) CreateFog(context.Context, maps.CreateFogInput
 }
 func (s *stubDrawingSvcOwnerGate) DeleteFog(context.Context, string, string) error { return nil }
 func (s *stubDrawingSvcOwnerGate) ResetFog(context.Context, string) error          { return nil }
-func (s *stubDrawingSvcOwnerGate) DeleteDrawing(context.Context, string, string, *time.Time, string, int) error {
+func (s *stubDrawingSvcOwnerGate) DeleteDrawing(context.Context, string, string, *time.Time, string, int, bool) error {
 	return nil
 }
 func (s *stubDrawingSvcOwnerGate) DeleteToken(context.Context, string, string, *time.Time) error {
@@ -69,10 +69,15 @@ func (s *stubDrawingSvcOwnerGate) DeleteToken(context.Context, string, string, *
 }
 
 // stubCampaignSvcOwnerGate embeds campaigns.CampaignService; only GetMember
-// is reachable from MapAPIHandler.resolveRole.
+// and IsUserDmGranted are reachable from MapAPIHandler.
 type stubCampaignSvcOwnerGate struct {
 	campaigns.CampaignService
 	role campaigns.Role
+}
+
+// IsUserDmGranted reports no co-DM grant, so DM-equivalence here is the role alone.
+func (s *stubCampaignSvcOwnerGate) IsUserDmGranted(context.Context, string, string) (bool, error) {
+	return false, nil
 }
 
 func (s *stubCampaignSvcOwnerGate) GetMember(context.Context, string, string) (*campaigns.CampaignMember, error) {

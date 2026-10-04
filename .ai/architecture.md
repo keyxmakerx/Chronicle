@@ -23,13 +23,13 @@ System or Widget (see root `CLAUDE.md` for what each tier is).
 │  └──────────────────────────────────────────────────────┘    │
 │                                                               │
 │  ┌──────────────────────────────────────────────────────┐    │
-│  │  PLUGINS -- Feature Applications (24)                  │    │
+│  │  PLUGINS -- Feature Applications (26)                  │    │
 │  │  auth/  campaigns/  entities/  calendar/  maps/        │    │
 │  │  admin/  addons/  syncapi/  media/  audit/             │    │
 │  │  settings/  timeline/  sessions/  packages/            │    │
 │  │  smtp/  armory/  bestiary/  designlab/  npcs/          │    │
 │  │  ai_workspace/  backup/  foundry_vtt/  restore/        │    │
-│  │  widgetbindings/                                       │    │
+│  │  widgetbindings/  dmscreen/  systemstate/              │    │
 │  └──────────────────────────────────────────────────────┘    │
 │                                                               │
 │  ┌──────────────────────────────────────────────────────┐    │

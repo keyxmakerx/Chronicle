@@ -566,6 +566,12 @@ func bookViewerIsDirector(cc *campaigns.CampaignContext) bool {
 	return cc.VisibilityRole() >= int(campaigns.RoleOwner)
 }
 
+// EnabledSystem returns the System enabled for a campaign, or nil. Other
+// plugins (the DM Screen) read a system's manifest through it.
+func (h *SystemHandler) EnabledSystem(ctx context.Context, campaignID string) System {
+	return h.resolveEnabledSystem(ctx, campaignID)
+}
+
 // resolveEnabledSystem returns the System enabled for the given campaign,
 // checking both built-in addon systems and campaign custom systems.
 func (h *SystemHandler) resolveEnabledSystem(ctx context.Context, campaignID string) System {
@@ -606,23 +612,30 @@ func (h *SystemHandler) GetSystemWidgetBlockMetas(ctx context.Context, campaignI
 		return nil
 	}
 
-	manifest := sys.Info()
+	return placeableWidgetMetas(sys.Info())
+}
+
+// placeableWidgetMetas lists the manifest widgets a layout may place. A widget
+// the host mounts itself, as a page RENDERER (manifest.renderers[].widget) or
+// an entity PANEL (manifest.entity_panels[].widget), is excluded: a renderer
+// owns a whole page and would mount without its page context, and a panel is
+// already mounted by the host with its own context, so a hand-placed copy would
+// duplicate it.
+func placeableWidgetMetas(manifest *SystemManifest) []entities.BlockMeta {
 	if len(manifest.Widgets) == 0 {
 		return nil
 	}
-
-	// A widget registered as a page RENDERER (manifest.renderers[].widget) owns a
-	// whole entity page, not a placeable layout block; exclude it from the
-	// palette so it can't be dropped into a layout and mount without its page
-	// context.
-	rendererWidgets := make(map[string]struct{}, len(manifest.Renderers))
+	hostMounted := make(map[string]struct{}, len(manifest.Renderers)+len(manifest.EntityPanels))
 	for _, r := range manifest.Renderers {
-		rendererWidgets[r.Widget] = struct{}{}
+		hostMounted[r.Widget] = struct{}{}
+	}
+	for _, p := range manifest.EntityPanels {
+		hostMounted[p.Widget] = struct{}{}
 	}
 
 	metas := make([]entities.BlockMeta, 0, len(manifest.Widgets))
 	for _, w := range manifest.Widgets {
-		if _, isRenderer := rendererWidgets[w.Slug]; isRenderer {
+		if _, skip := hostMounted[w.Slug]; skip {
 			continue
 		}
 		icon := w.Icon

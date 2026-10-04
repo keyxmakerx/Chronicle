@@ -23,15 +23,20 @@ func TestSetWeatherSettings(t *testing.T) {
 		wantErr  bool
 		wantCont float64
 	}{
-		{"unknown climate", WeatherSettings{Climate: "swamp", Continuity: 0.5}, true, 0},
-		{"empty climate", WeatherSettings{Continuity: 0.5}, true, 0},
-		{"continuity below zero", WeatherSettings{Climate: "desert", Continuity: -0.1}, true, 0},
-		{"continuity above one", WeatherSettings{Climate: "desert", Continuity: 1.1}, true, 0},
-		{"continuity NaN", WeatherSettings{Climate: "desert", Continuity: math.NaN()}, true, 0},
-		{"lower bound", WeatherSettings{Climate: "tundra", Continuity: 0}, false, 0},
-		{"upper bound", WeatherSettings{Climate: "gloomfen", Continuity: 1}, false, 1},
-		{"rounds to two decimals", WeatherSettings{Climate: "ashlands", Continuity: 0.456}, false, 0.46},
-		{"rounds down", WeatherSettings{Climate: "highland", Continuity: 0.504}, false, 0.5},
+		{"unknown climate", WeatherSettings{Climate: "swamp", Continuity: 0.5, ForecastDays: 5}, true, 0},
+		{"empty climate", WeatherSettings{Continuity: 0.5, ForecastDays: 5}, true, 0},
+		{"continuity below zero", WeatherSettings{Climate: "desert", Continuity: -0.1, ForecastDays: 5}, true, 0},
+		{"continuity above one", WeatherSettings{Climate: "desert", Continuity: 1.1, ForecastDays: 5}, true, 0},
+		{"continuity NaN", WeatherSettings{Climate: "desert", Continuity: math.NaN(), ForecastDays: 5}, true, 0},
+		{"forecast days below one", WeatherSettings{Climate: "desert", Continuity: 0.5, ForecastDays: 0}, true, 0},
+		{"forecast days negative", WeatherSettings{Climate: "desert", Continuity: 0.5, ForecastDays: -1}, true, 0},
+		{"forecast days above ten", WeatherSettings{Climate: "desert", Continuity: 0.5, ForecastDays: 11}, true, 0},
+		{"forecast days one", WeatherSettings{Climate: "desert", Continuity: 0.5, ForecastDays: 1}, false, 0.5},
+		{"forecast days ten", WeatherSettings{Climate: "desert", Continuity: 0.5, ForecastDays: 10}, false, 0.5},
+		{"lower bound", WeatherSettings{Climate: "tundra", Continuity: 0, ForecastDays: 5}, false, 0},
+		{"upper bound", WeatherSettings{Climate: "gloomfen", Continuity: 1, ForecastDays: 5}, false, 1},
+		{"rounds to two decimals", WeatherSettings{Climate: "ashlands", Continuity: 0.456, ForecastDays: 5}, false, 0.46},
+		{"rounds down", WeatherSettings{Climate: "highland", Continuity: 0.504, ForecastDays: 5}, false, 0.5},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -63,7 +68,7 @@ func TestSetWeatherSettings(t *testing.T) {
 
 func TestSetWeatherSettings_WrongCampaignIsNotFound(t *testing.T) {
 	err := dayWeatherFixture(&fakeWeatherRepo{}).SetWeatherSettings(context.Background(), "cal", "other",
-		WeatherSettings{Climate: "desert", Continuity: 0.5})
+		WeatherSettings{Climate: "desert", Continuity: 0.5, ForecastDays: 5})
 	if err == nil || apperror.SafeCode(err) != http.StatusNotFound {
 		t.Fatalf("want not found, got %v", err)
 	}
@@ -75,10 +80,11 @@ func TestGetWeatherSettings(t *testing.T) {
 		stored *WeatherSettings
 		want   WeatherSettings
 	}{
-		{"unset gives the defaults", nil, WeatherSettings{Climate: "temperate", Continuity: 0.55, Kinds: []WeatherKind{}}},
-		{"stored is returned", &WeatherSettings{Climate: "desert", Continuity: 0.8}, WeatherSettings{Climate: "desert", Continuity: 0.8, Kinds: []WeatherKind{}}},
-		{"a retired climate id falls back", &WeatherSettings{Climate: "gone", Continuity: 0.8}, WeatherSettings{Climate: "temperate", Continuity: 0.55, Kinds: []WeatherKind{}}},
-		{"a stored kind that no longer validates is dropped", &WeatherSettings{Climate: "desert", Continuity: 0.8, Kinds: []WeatherKind{fireRain, {ID: "rain", Name: "Rain", Icon: "rain", Color: "#112233", Like: "rain"}}}, WeatherSettings{Climate: "desert", Continuity: 0.8, Kinds: []WeatherKind{fireRainClean}}},
+		{"unset gives the defaults", nil, WeatherSettings{Climate: "temperate", Continuity: 0.55, Kinds: []WeatherKind{}, ForecastDays: 5}},
+		{"stored is returned", &WeatherSettings{Climate: "desert", Continuity: 0.8, ForecastDays: 3}, WeatherSettings{Climate: "desert", Continuity: 0.8, Kinds: []WeatherKind{}, ForecastDays: 3}},
+		{"an out-of-range stored forecast reach reads as the default", &WeatherSettings{Climate: "desert", Continuity: 0.8, ForecastDays: 40}, WeatherSettings{Climate: "desert", Continuity: 0.8, Kinds: []WeatherKind{}, ForecastDays: 5}},
+		{"a retired climate id falls back but keeps the forecast reach", &WeatherSettings{Climate: "gone", Continuity: 0.8, ForecastDays: 7}, WeatherSettings{Climate: "temperate", Continuity: 0.55, Kinds: []WeatherKind{}, ForecastDays: 7}},
+		{"a stored kind that no longer validates is dropped", &WeatherSettings{Climate: "desert", Continuity: 0.8, ForecastDays: 5, Kinds: []WeatherKind{fireRain, {ID: "rain", Name: "Rain", Icon: "rain", Color: "#112233", Like: "rain"}}}, WeatherSettings{Climate: "desert", Continuity: 0.8, ForecastDays: 5, Kinds: []WeatherKind{fireRainClean}}},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -117,7 +123,7 @@ func TestStructureForm_WeatherCarry(t *testing.T) {
 
 	t.Run("page renders both controls with the stored values selected", func(t *testing.T) {
 		e, svc := newAccessTestRouter(false, true, owner)
-		svc.weather = &WeatherSettings{Climate: "ashlands", Continuity: 0.8}
+		svc.weather = &WeatherSettings{Climate: "ashlands", Continuity: 0.8, ForecastDays: 5}
 		body := doRequest(e, http.MethodGet, save, "u-owner").Body.String()
 		for _, want := range []string{`name="weather_climate"`, `name="weather_continuity"`, `value="ashlands" selected`,
 			`value="0.8"`, `label="Natural"`, `label="Magic"`, "How long weather lasts", `@change="clearPreview()"`} {
@@ -212,7 +218,7 @@ func TestStructureForm_WeatherKinds(t *testing.T) {
 	post := func(t *testing.T, path string, stored []WeatherKind, extra url.Values) (*fakeCalendarSvc, string, string) {
 		t.Helper()
 		e, svc := newAccessTestRouter(false, true, owner)
-		svc.weather = &WeatherSettings{Climate: "temperate", Continuity: 0.55, Kinds: stored}
+		svc.weather = &WeatherSettings{Climate: "temperate", Continuity: 0.55, ForecastDays: 5, Kinds: stored}
 		form := url.Values{"import_json": {buildImportJSON(t, 3)}, "fingerprint": {"fp"}}
 		for k, v := range extra {
 			form[k] = v
@@ -228,7 +234,7 @@ func TestStructureForm_WeatherKinds(t *testing.T) {
 
 	t.Run("page prefills the editor from the stored kinds", func(t *testing.T) {
 		e, svc := newAccessTestRouter(false, true, owner)
-		svc.weather = &WeatherSettings{Climate: "temperate", Continuity: 0.55, Kinds: []WeatherKind{fireRainClean}}
+		svc.weather = &WeatherSettings{Climate: "temperate", Continuity: 0.55, ForecastDays: 5, Kinds: []WeatherKind{fireRainClean}}
 		body := doRequest(e, http.MethodGet, save, "u-owner").Body.String()
 		for _, want := range []string{`name="weather_kinds"`, "Your own weather", "+ Add weather", "Behaves like",
 			"its temperature, wind and wetness", "Same as the weather it's like", `value="thunderstorm"`, `value="rain-acid"`,
@@ -338,7 +344,7 @@ func TestWeatherClimates_ValidClimate(t *testing.T) {
 	}
 }
 
-// The settings page's readout must use the Generate sheet's words at the
+// The settings page's readout must use the weather calendar's words at the
 // same thresholds (continuityWords in calendar_weather_sheet.js).
 func TestContinuityWords(t *testing.T) {
 	tests := []struct {
