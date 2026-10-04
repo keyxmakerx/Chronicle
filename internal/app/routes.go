@@ -3817,6 +3817,7 @@ func (a *App) RegisterRoutes() {
 	// each route at its site gate, only while the calendar plugin is healthy.
 	if a.PluginHealth.IsHealthy(calendar.PluginSlug) {
 		calendar.RegisterAppRoutes(notesApp, calendarHandler, addonService)
+		noteGrantHandler.AllowEmbedMode(calendar.PluginSlug)
 	}
 
 	// Relations widget routes already registered above (before REST API v1).

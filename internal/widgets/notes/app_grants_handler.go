@@ -40,6 +40,19 @@ type AppGrantHandler struct {
 	gate AppGate
 	// links signs media for the frames; nil leaves pictures unsigned.
 	links MediaLinker
+	// embedModes are the frame modes other plugins added beyond the notes
+	// pages (AllowEmbedMode), so this widget names no other plugin.
+	embedModes map[string]bool
+}
+
+// AllowEmbedMode lets the frame shell open in mode, for another plugin's
+// page served over the same grant (wired in app/routes.go). The shell is
+// the same empty page whatever the mode; notes_embed.js picks the fragment.
+func (h *AppGrantHandler) AllowEmbedMode(mode string) {
+	if h.embedModes == nil {
+		h.embedModes = map[string]bool{}
+	}
+	h.embedModes[mode] = true
 }
 
 // NewAppGrantHandler creates the handler for the Allow window.
@@ -173,15 +186,15 @@ func (h *AppGrantHandler) Revoke(c echo.Context) error {
 }
 
 // ShowEmbed renders the empty shell an allowed app frames
-// (GET /embed/campaigns/:id/notes/:mode, mode journal, jots or calendar;
-// the calendar mounts the calendar plugin's fragment over the same grant). It needs no
+// (GET /embed/campaigns/:id/notes/:mode, mode journal, jots or one added by
+// AllowEmbedMode). It needs no
 // sign-in and shows nothing about the campaign: the content arrives later
 // over the grant the parent window hands it. Only the allowed origins may
 // frame it; everywhere else the site stays unframeable.
 func (h *AppGrantHandler) ShowEmbed(c echo.Context) error {
 	id := c.Param("id")
 	mode := c.Param("mode")
-	if !idPattern.MatchString(id) || (mode != "journal" && mode != "jots" && mode != "calendar") {
+	if !idPattern.MatchString(id) || (mode != "journal" && mode != "jots" && !h.embedModes[mode]) {
 		return apperror.NewNotFound("page not found")
 	}
 	var origins []string
