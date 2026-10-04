@@ -8,6 +8,7 @@ package packages
 import (
 	"encoding/json"
 	"net/url"
+	"regexp"
 	"sort"
 	"strconv"
 	"strings"
@@ -507,19 +508,22 @@ func ownKeepNewest(v *int) string {
 // campaignCount renders "3 campaigns" for the usage count of a row.
 func campaignCount(n int) string { return plural(n, "campaign") }
 
-// releaseNoteLines pulls the first n meaningful lines out of a release body
-// for the Updates tab: blank lines and markdown heading marks are dropped and
-// bullet markers are stripped, since the page renders its own bullets.
+// releaseNoteLines pulls the first n meaningful lines out of a release body.
+// Only the changes themselves are kept: headings and GitHub's generated
+// "Full Changelog" line are dropped, and the " by @author in <pull URL>"
+// tail GitHub adds to each generated entry is cut, so a line reads as one
+// short sentence. Bullet markers are stripped since the page draws its own.
 func releaseNoteLines(notes string, n int) []string {
 	var out []string
 	for _, line := range strings.Split(notes, "\n") {
 		line = strings.TrimSpace(line)
-		line = strings.TrimLeft(line, "#")
-		line = strings.TrimSpace(line)
+		if strings.HasPrefix(line, "#") {
+			continue
+		}
 		line = strings.TrimPrefix(line, "- ")
 		line = strings.TrimPrefix(line, "* ")
-		line = strings.TrimSpace(line)
-		if line == "" {
+		line = strings.TrimSpace(generatedNoteTail.ReplaceAllString(line, ""))
+		if line == "" || strings.Contains(line, "Full Changelog") {
 			continue
 		}
 		out = append(out, line)
@@ -529,6 +533,10 @@ func releaseNoteLines(notes string, n int) []string {
 	}
 	return out
 }
+
+// generatedNoteTail matches the credit GitHub appends to each entry of
+// generated release notes.
+var generatedNoteTail = regexp.MustCompile(`\s+by @\S+ in https?://\S+$`)
 
 // ReleaseNoteLines is releaseNoteLines for another plugin's page, so a
 // campaign owner reads release notes the same way the admin does.
