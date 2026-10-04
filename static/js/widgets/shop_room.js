@@ -38,6 +38,18 @@
 
   window.ShopRoomDoor = { outsideClose: outsideClose };
 
+  // Where a piece's floor shadow points, in floor units: away from the nearest
+  // warm light (forge, lamp) and longer the taller the piece, or back and to
+  // the right as before when the room has no warm light.
+  function castOffset(warm, cx, cy, h) {
+    var best = null, bd = Infinity;
+    (warm || []).forEach(function (w) { var d = (cx - w[0]) * (cx - w[0]) + (cy - w[1]) * (cy - w[1]); if (d < bd) { bd = d; best = w; } });
+    if (!best || bd < 1e-4) return [h * .5, h * .16];
+    var len = Math.sqrt(bd), k = Math.min(h * .55, .4 + h * .35);
+    return [(cx - best[0]) / len * k, (cy - best[1]) / len * k];
+  }
+  window.ShopRoomLight = { castOffset: castOffset };
+
   function esc(s) {
     return String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/'/g, '&#39;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
   }
@@ -103,6 +115,30 @@
     function wf(p, u0, dv, z0) { var f = p.off || 0; return function (u, v) { return p.wall === 'Y' ? P(p.x + u0 + u, f + dv, z0 + v) : P(f + dv, p.y + u0 + u, z0 + v); }; }
     // Shadows are drawn together in one blurred layer under the furniture (see castShadows), which is far cheaper than blurring each one.
     function shadow() { return ''; }
+    // Living details are plain shapes with classes; the widget's CSS moves them.
+    // Offsets come from the piece id so a room looks the same every time it is drawn.
+    function jit(id, i, n) { var v = Math.sin(id * 12.9898 + i * 78.233) * 43758.5453; return (v - Math.floor(v)) * n; }
+    function flames(x, y, k) {
+      var f = function (dx, h, w, c, d) { return '<path class="shr-flame" style="animation-delay:-' + d + 's" d="M' + (x + dx).toFixed(1) + ' ' + y.toFixed(1) + 'c' + (-w) + ' ' + (-h * .4) + ' ' + (-w * .3) + ' ' + (-h * .8) + ' 0 ' + (-h) + 'c' + (w * .3) + ' ' + (h * .2) + ' ' + w + ' ' + (h * .6) + ' 0 ' + h + 'z" fill="' + c + '"/>'; };
+      return f(-5 * k, 9 * k, 4 * k, '#ff8a2a', .1) + f(0, 12 * k, 4.5 * k, '#ffb347', .35) + f(5 * k, 8 * k, 3.5 * k, '#ff7a1a', .2) + f(0, 6 * k, 2.5 * k, '#fff0b0', .5);
+    }
+    function embers(x, y, n, id) {
+      var s = '';
+      for (var i = 0; i < n; i++) s += '<circle class="shr-ember" style="--dx:' + (jit(id, i, 24) - 12).toFixed(0) + 'px;animation-delay:-' + jit(id, i + 9, 2.6).toFixed(2) + 's;animation-duration:' + (2 + jit(id, i + 3, 1.4)).toFixed(2) + 's" cx="' + (x + jit(id, i + 5, 16) - 8).toFixed(1) + '" cy="' + y.toFixed(1) + '" r="' + (.8 + jit(id, i + 7, .7)).toFixed(1) + '" fill="#ffcf6a"/>';
+      return s;
+    }
+    function motes(a, b, n, id) {
+      var s = '';
+      for (var i = 0; i < n; i++) { var t = jit(id, i, 1), x = a[0] + (b[0] - a[0]) * t + jit(id, i + 4, 30) - 15, y = a[1] + (b[1] - a[1]) * t;
+        s += '<circle class="shr-mote" style="animation-delay:-' + jit(id, i + 2, 10).toFixed(1) + 's;animation-duration:' + (7 + jit(id, i + 6, 6)).toFixed(1) + 's" cx="' + x.toFixed(1) + '" cy="' + y.toFixed(1) + '" r="' + (.5 + jit(id, i + 8, .6)).toFixed(1) + '" fill="#fff"/>'; }
+      return s;
+    }
+    function sparks(x, y, n, id) {
+      var s = '';
+      for (var i = 0; i < n; i++) { var a = -Math.PI * (.1 + jit(id, i, .8)), r = 12 + jit(id, i + 3, 14);
+        s += '<circle class="shr-spark" style="--dx:' + (Math.cos(a) * r).toFixed(0) + 'px;--dy:' + (Math.sin(a) * r).toFixed(0) + 'px;animation-delay:-' + (i * .04).toFixed(2) + 's" cx="' + x.toFixed(1) + '" cy="' + y.toFixed(1) + '" r="1" fill="#ffe08a"/>'; }
+      return s;
+    }
     function A(x, y, z, o) { o = o || {}; return { x: x, y: y, z: z, rot: o.rot || 0, s: o.s || 1 }; }
     function prng(seed) { return rng(seed); }
 
@@ -162,7 +198,9 @@
         s += poly(m, 'url(#gFire)', ' stroke="' + dk(st, .5) + '" stroke-width="2"');
         s += poly([f(.8, .15), f(1.6, .15), f(1.6, .3), f(.8, .3)], '#3a1607');
         [[.95, .22], [1.2, .26], [1.4, .2]].forEach(function (q) { var c = f(q[0], q[1]); s += '<circle cx="' + c[0].toFixed(1) + '" cy="' + c[1].toFixed(1) + '" r="2.4" fill="#ffcf6b"/>'; });
-        p.light = f(1.2, .5);
+        p.light = f(1.2, .5); p.warm = wpt(p, 1.2, 1.6, 0);
+        var mo = f(1.2, .3);
+        p.life = flames(mo[0], mo[1] - 2, 1) + embers(mo[0], mo[1] - 6, 7, p.id);
         a.push(A.apply(null, wpt(p, .25, .7, 1.5).concat([{}]))); a.push(A.apply(null, wpt(p, L - .25, .7, 1.5).concat([{}])));
         return { pre: s, post: '', a: a };
       },
@@ -178,6 +216,8 @@
         p.floorLight = poly(g, 'rgba(255,240,200,.18)');
         // A faint shaft of daylight from the window down to that pool.
         p.shaft = poly(hull([f(0, 0), f(L, 0), f(L, 1.22), f(0, 1.22)].concat(g)), 'url(#gShaft)');
+        var pool = [(g[0][0] + g[1][0] + g[2][0] + g[3][0]) / 4, (g[0][1] + g[1][1] + g[2][1] + g[3][1]) / 4];
+        p.life = motes(f(L / 2, .6), pool, 9, p.id);
         return { pre: s, post: '', a: [] };
       },
       herbs: function (p) {
@@ -219,6 +259,8 @@
         var ir = '#4b5058', s = shadow(p.x, p.y, .8, .6);
         s += box(p.x + .15, p.y + .1, 0, .5, .4, .14, '#3a2d22') + box(p.x + .28, p.y + .2, .14, .26, .2, .28, ir) + box(p.x + .05, p.y + .12, .42, .7, .36, .16, ir);
         s += poly([P(p.x + .75, p.y + .2, .58), P(p.x + 1.0, p.y + .3, .52), P(p.x + .75, p.y + .4, .5)], lt(ir, .1));
+        var top = P(p.x + .45, p.y + .3, .6);
+        p.life = sparks(top[0], top[1], 7, p.id);
         return { pre: s, post: '', a: [A(p.x + .4, p.y + .3, .58)] };
       },
       glass: function (p) {
@@ -248,7 +290,7 @@
       lamp: function (p) {
         var top = P(p.x + .2, p.y + .2, WH), b = P(p.x + .2, p.y + .2, 2.3), s = line(top, b, '#222', 1);
         s += '<rect x="' + (b[0] - 6) + '" y="' + b[1] + '" width="12" height="16" rx="2" fill="url(#gLamp)" stroke="#1f1f1f" stroke-width="1.5"/>';
-        p.light = [b[0], b[1] + 8];
+        p.light = [b[0], b[1] + 8]; p.warm = [p.x + .2, p.y + .2];
         return { pre: s, post: '', a: [] };
       },
       sack: function (p) {
@@ -493,7 +535,7 @@
         '<radialGradient id="gLamp"><stop offset="0" stop-color="#fff7d1"/><stop offset="1" stop-color="#f0a83a"/></radialGradient>' +
         '<linearGradient id="gBarrel" x1="0" x2="1"><stop offset="0" stop-color="#5a3c22"/><stop offset=".35" stop-color="#9a6b3d"/><stop offset=".55" stop-color="#8a5d33"/><stop offset="1" stop-color="#4a3019"/></linearGradient>' +
         '<radialGradient id="gSack" cx="35%" cy="35%" r="75%"><stop offset="0" stop-color="#e3cfa4"/><stop offset="1" stop-color="#9c7d4f"/></radialGradient>' +
-        '<radialGradient id="gGlow"><stop offset="0" stop-color="#ffb35c" stop-opacity=".62"/><stop offset=".5" stop-color="#ff9a3c" stop-opacity=".2"/><stop offset="1" stop-color="#ff9a3c" stop-opacity="0"/></radialGradient>' +
+        '<radialGradient id="gGlow"><stop offset="0" stop-color="#ffb35c" stop-opacity=".5"/><stop offset=".5" stop-color="#ff9a3c" stop-opacity=".2"/><stop offset="1" stop-color="#ff9a3c" stop-opacity="0"/></radialGradient>' +
         '<radialGradient id="gMagic"><stop offset="0" stop-color="#c4b5fd" stop-opacity=".75"/><stop offset="1" stop-color="#8b5cf6" stop-opacity="0"/></radialGradient>' +
         '<radialGradient id="gVig" cx="50%" cy="45%" r="70%"><stop offset=".6" stop-color="#000" stop-opacity="0"/><stop offset="1" stop-color="#000" stop-opacity=".28"/></radialGradient></defs>';
     }
@@ -638,7 +680,7 @@
       return lo.slice(0, -1).concat(up.slice(0, -1));
     }
     function shading(full) {
-      var ao = '', cast = '';
+      var ao = '', cast = '', warm = S.pieces.filter(function (p) { return p.warm; }).map(function (p) { return p.warm; });
       G.edges.filter(function (e) { return e.back; }).forEach(function (e) { ao += line(P(e.a[0], e.a[1], 0), P(e.b[0], e.b[1], 0), 'rgba(0,0,0,.5)', 14); });
       if (S.setting === 'room') ao += line(P(0, 0, 0), P(0, 0, WH), 'rgba(0,0,0,.4)', 12);
       S.pieces.forEach(function (p) {
@@ -646,7 +688,7 @@
         var r = rect(p), h = HT[p.kind], m = .06;
         ao += poly([P(r[0] - m, r[1] - m), P(r[0] + r[2] + m, r[1] - m), P(r[0] + r[2] + m, r[1] + r[3] + m), P(r[0] - m, r[1] + r[3] + m)], 'rgba(0,0,0,.42)');
         if (WALLK[p.kind]) return;
-        var dx = h * .5, dy = h * .16, cs = [[r[0], r[1]], [r[0] + r[2], r[1]], [r[0] + r[2], r[1] + r[3]], [r[0], r[1] + r[3]]];
+        var off = castOffset(warm, r[0] + r[2] / 2, r[1] + r[3] / 2, h), dx = off[0], dy = off[1], cs = [[r[0], r[1]], [r[0] + r[2], r[1]], [r[0] + r[2], r[1] + r[3]], [r[0], r[1] + r[3]]];
         cast += poly(hull(cs.concat(cs.map(function (q) { return [q[0] + dx, q[1] + dy]; }))).map(function (q) { return P(q[0], q[1], 0); }), 'rgba(0,0,0,.22)');
       });
       if (!full) return '<g style="pointer-events:none" opacity=".6">' + cast + '</g>';
@@ -673,7 +715,7 @@
       GRAD = {}; USED = {};
       var level = { none: 0, some: .35, lots: .8 }[S.deco];
       // Draw each piece once to learn its anchor spots, then hand goods and decorations out to them.
-      var out = S.pieces.slice().sort(function (a, b) { return a.id - b.id; }).map(function (p) { delete p.light; delete p.floorLight; delete p.keeperAt; delete p.cool; delete p.shaft; return { p: p, d: DRAW[p.kind](p), goods: [], decos: [] }; });
+      var out = S.pieces.slice().sort(function (a, b) { return a.id - b.id; }).map(function (p) { delete p.light; delete p.floorLight; delete p.keeperAt; delete p.cool; delete p.shaft; delete p.warm; delete p.life; return { p: p, d: DRAW[p.kind](p), goods: [], decos: [] }; });
       // Decorations the GM placed take their spots first; goods and the generated ones share the rest.
       var spots = [], hangs = [], mine = {}, anchors = [];
       (S.decor || []).forEach(function (d) { mine[d.piece + ':' + d.spot] = d.icon; });
@@ -708,7 +750,9 @@
       out.forEach(function (o) { if (o.p.floorLight) s += o.p.floorLight; });
       s += shading(full);
       out.filter(function (o) { return o.p.kind !== 'rug'; }).forEach(function (o) { s += piece(o); });
-      s += gradDefs() + iconDefs() + '<g style="pointer-events:none">' + out.map(function (o) { return o.p.shaft && full ? o.p.shaft : ''; }).join('') + lights.map(function (l) { return '<circle cx="' + l.x.toFixed(1) + '" cy="' + l.y.toFixed(1) + '" r="' + l.r + '" fill="url(#' + (l.cool ? 'gCool' : 'gGlow') + ')" style="mix-blend-mode:screen"/>'; }).join('') + '</g>';
+      s += gradDefs() + iconDefs() + '<g class="shr-glows" style="pointer-events:none">' + out.map(function (o) { return o.p.shaft && full ? o.p.shaft : ''; }).join('') + lights.map(function (l, i) { return '<circle' + (l.cool ? '' : ' class="shr-fl" style="animation-delay:-' + (i * .37 % 2).toFixed(2) + 's;mix-blend-mode:screen"') + ' cx="' + l.x.toFixed(1) + '" cy="' + l.y.toFixed(1) + '" r="' + l.r + '" fill="url(#' + (l.cool ? 'gCool' : 'gGlow') + ')"' + (l.cool ? ' style="mix-blend-mode:screen"' : '') + '/>'; }).join('') + '</g>';
+      // Small living details: flames, embers, dust in the window light, sparks off the anvil.
+      if (full) s += '<g class="shr-life" style="pointer-events:none">' + out.map(function (o) { return o.p.life || ''; }).join('') + '</g>';
       if (!sq) s += '<g style="pointer-events:none">' + lip() + '</g>';
       if (full) s += lighting(lights);
       return { svg: s, viewBox: VB, keeperAt: keeperPt, anchors: anchors };
@@ -971,8 +1015,18 @@
     '.shr-hole.cover{transition:transform .6s cubic-bezier(.55,0,.4,1)}',
     '.shr-dark{position:absolute;inset:0;z-index:8;background:#000;border-radius:10px;opacity:0;visibility:hidden;pointer-events:none}',
     '.shr-dark.on{opacity:1;visibility:visible}.shr-dark.fade{visibility:visible;transition:opacity .8s ease}',
+    // The lit room: glows flicker, flames lick, embers rise, dust drifts and the
+    // anvil throws sparks. Lights warm up after you walk in (.cold), the room
+    // tilts a little toward the mouse, and motion rests with MotionRest.
+    '.shr-fl{animation:shr-fl 2.1s ease-in-out infinite alternate}@keyframes shr-fl{0%{opacity:.86}30%{opacity:1}55%{opacity:.8}80%{opacity:.95}100%{opacity:.84}}',
+    '.shr-flame{transform-box:fill-box;transform-origin:50% 100%;animation:shr-flame .7s ease-in-out infinite alternate}@keyframes shr-flame{0%{transform:none}50%{transform:scale(.9,1.12) skewX(-5deg)}100%{transform:scale(1.06,.92) skewX(4deg)}}',
+    '.shr-ember{opacity:0;animation:shr-ember 2.6s ease-out infinite}@keyframes shr-ember{0%{transform:none;opacity:0}10%{opacity:1}100%{transform:translate(var(--dx,0),-60px);opacity:0}}',
+    '.shr-mote{opacity:0;animation:shr-mote 9s linear infinite}@keyframes shr-mote{0%{transform:none;opacity:0}15%{opacity:.8}85%{opacity:.6}100%{transform:translate(-30px,50px);opacity:0}}',
+    '.shr-spark{opacity:0;animation:shr-spark 4.2s ease-out infinite}@keyframes shr-spark{0%,86%{transform:none;opacity:0}88%{opacity:1}100%{transform:translate(var(--dx),var(--dy));opacity:0}}',
+    '.shr-glows,.shr-life{transition:opacity 1.4s ease}.shr.cold .shr-glows,.shr.cold .shr-life{opacity:0;transition:none}',
+    '.shr-iso{transition:transform .5s cubic-bezier(.2,.7,.2,1)}',
     '.shr-stay{animation:shr-nudge .45s ease}@keyframes shr-nudge{0%,100%{transform:none}25%{transform:translateX(-5px)}75%{transform:translateX(5px)}}',
-    '@media (prefers-reduced-motion:reduce){.shr *,.shr-say,.shr-tip{animation:none!important;transition:none!important}}'
+    '@media (prefers-reduced-motion:reduce){.shr *,.shr-say,.shr-tip{animation:none!important;transition:none!important}.shr-ember,.shr-mote,.shr-spark{display:none}}'
   ].join('\n');
 
   function injectStyle() {
@@ -1416,7 +1470,7 @@
         else if (t.dataset.lines) { S.lines = t.value.split('\n').map(function (s) { return s.trim().slice(0, 200); }).filter(Boolean).slice(0, 10); save(); }
       }
       function setMode() {
-        root.classList.toggle('arr', S.mode === 'arr');
+        root.classList.toggle('arr', S.mode === 'arr'); if (S.mode === 'arr') tilt(0, 0);
         root.querySelectorAll('[data-mode]').forEach(function (b) { b.setAttribute('aria-pressed', b.dataset.mode === S.mode); });
         if (canArrange && !panel) { panel = document.createElement('aside'); panel.className = 'shr-panel'; panel.setAttribute('aria-label', 'Arrange this room'); scene.appendChild(panel); panel.addEventListener('animationend', function () { panel.classList.remove('nag'); }); panel.addEventListener('pointerdown', onPanelDown); }
         if (panel) {
@@ -1436,7 +1490,7 @@
       function enter() {
         if (!root.classList.contains('closed') || front.classList.contains('opening')) return;
         front.setAttribute('aria-expanded', 'true');
-        if (matchMedia('(prefers-reduced-motion: reduce)').matches) { root.classList.remove('closed'); draw(); return; }
+        if (matchMedia('(prefers-reduced-motion: reduce)').matches) { root.classList.remove('closed'); draw(); alive(true); return; }
         front.classList.add('opening');
         walkT = setTimeout(walkIn, 700);
       }
@@ -1454,21 +1508,44 @@
         hole.classList.add('cover'); hole.style.transform = 'scale(' + k + ')';
         walkT = setTimeout(function () {
           dark.classList.add('on');
-          root.classList.remove('closed'); draw();
+          root.classList.add('cold'); root.classList.remove('closed'); draw(); alive(true);
           hole.classList.remove('cover'); hole.style.display = 'none';
           requestAnimationFrame(function () { requestAnimationFrame(function () {
-            dark.classList.add('fade'); dark.classList.remove('on');
+            dark.classList.add('fade'); dark.classList.remove('on'); root.classList.remove('cold');
             walkT = setTimeout(settle, 850);
           }); });
         }, 620);
       }
       function settle() {
-        root.classList.remove('walking'); front.classList.remove('opening');
+        root.classList.remove('walking', 'cold'); front.classList.remove('opening');
         hole.classList.remove('cover'); hole.style.display = 'none'; dark.className = 'shr-dark';
         placeKeeper();
       }
+      // Looping details follow MotionRest: they slow with it and pause once it is still.
+      var aliveT = 0;
+      function alive(on) {
+        clearInterval(aliveT); aliveT = 0;
+        if (!on || !svg.getAnimations) return;
+        aliveT = setInterval(function () {
+          var MR = window.MotionRest, sp = MR ? MR.speed() : 1;
+          svg.getAnimations({ subtree: true }).forEach(function (a) {
+            if (sp === 0) { if (a.playState === 'running') a.pause(); return; }
+            a.playbackRate = Math.max(.02, sp); if (a.playState === 'paused') a.play();
+          });
+        }, 250);
+      }
+      // A few degrees of tilt toward the mouse gives the room depth. Not while
+      // arranging, where drags map straight onto the floor, and not on touch.
+      function tilt(x, y) { svg.style.transform = x || y ? 'perspective(1400px) rotateX(' + (-y * 4).toFixed(2) + 'deg) rotateY(' + (x * 6).toFixed(2) + 'deg)' : ''; }
+      function onTilt(e) {
+        if (e.pointerType !== 'mouse' || S.mode === 'arr' || S.fx !== 'full' || root.classList.contains('closed') || matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+        var r = scene.getBoundingClientRect();
+        tilt((e.clientX - r.left) / r.width - .5, (e.clientY - r.top) / r.height - .5);
+      }
+      scene.addEventListener('pointermove', onTilt);
+      scene.addEventListener('pointerleave', function () { tilt(0, 0); });
       function leave() {
-        clearTimeout(walkT); settle();
+        clearTimeout(walkT); settle(); alive(false); tilt(0, 0);
         root.classList.add('closed'); front.setAttribute('aria-expanded', 'false');
         setOpen(false);
       }
@@ -1514,7 +1591,7 @@
       el._shopRoom = {
         onDocDown: onDocDown, onDocKey: onDocKey,
         cleanup: function () {
-          clearInterval(typeT); clearTimeout(sayT); clearTimeout(walkT); if (raf) cancelAnimationFrame(raf);
+          clearInterval(typeT); clearInterval(aliveT); clearTimeout(sayT); clearTimeout(walkT); if (raf) cancelAnimationFrame(raf);
           themeObs.disconnect();
           window.removeEventListener('scroll', onScroll);
           document.removeEventListener('pointerdown', onDocDown); document.removeEventListener('pointerdown', onOutsideDown); document.removeEventListener('pointerdown', onOutsideShop); document.removeEventListener('pointermove', onAddMove); document.removeEventListener('pointerup', onAddUp); if (adding) adding.ghost.remove(); document.removeEventListener('keydown', onDocKey);
