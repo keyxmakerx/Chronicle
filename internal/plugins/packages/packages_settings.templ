@@ -11,7 +11,7 @@ import (
 templ settingsTab(data PackagesPageData) {
 	<div class="space-y-4">
 		if data.Settings != nil {
-			@securitySettingsForm(*data.Settings, data.CSRFToken)
+			@securitySettingsForm(*data.Settings, data.Retention, data.CSRFToken)
 		}
 		<!-- Stale-version cleanup wizard. Lazy fragment so the disk walk
 		     (per-version folder sizes) never slows the page load; the
@@ -26,8 +26,14 @@ templ settingsTab(data PackagesPageData) {
 
 // securitySettingsForm is the one form behind POST /admin/packages/settings:
 // where packages can come from, who may send them in, and the safety checks.
-templ securitySettingsForm(settings PackageSecuritySettings, csrfToken string) {
-	<form method="POST" action="/admin/packages/settings" class="space-y-4">
+templ securitySettingsForm(settings PackageSecuritySettings, retention RetentionSettings, csrfToken string) {
+	<form
+		method="POST"
+		action="/admin/packages/settings"
+		hx-post="/admin/packages/settings"
+		hx-headers={ csrfHeaders(csrfToken) }
+		class="space-y-4"
+	>
 		<input type="hidden" name="_csrf" value={ csrfToken }/>
 		<div class="grid gap-4 lg:grid-cols-2 items-start">
 			<section class="card space-y-2">
@@ -44,6 +50,34 @@ templ securitySettingsForm(settings PackageSecuritySettings, csrfToken string) {
 				@settingRadio("owner_upload_policy", OwnerUploadRequireApproval, "Allowed, you review", "Works like Allowed today. Reserved for also holding custom ZIP installs for review.", settings.OwnerUploadPolicy == OwnerUploadRequireApproval)
 				@settingRadio("owner_upload_policy", OwnerUploadDisabled, "Not allowed", "Owners cannot send in packages or upload ZIPs. Only packages you add are available.", settings.OwnerUploadPolicy == OwnerUploadDisabled)
 				@settingToggle("require_approval", "Hold submissions for approval", "Submissions from campaign owners must be approved before they are fetched.", settings.RequireApproval)
+			</section>
+			<section class="card space-y-2 lg:col-span-2">
+				<h2 class="text-base font-semibold text-fg">Old versions, site-wide</h2>
+				<p class="text-xs text-fg-muted">What happens to the folders of versions you have moved on from. A package can use its own rule on its Settings tab.</p>
+				@retentionRadio(RetentionManual, "Only when I click Clean up", "Nothing is removed automatically, unless a package has its own rule. Use the Clean up card below.", retention.Mode == RetentionManual)
+				<label class="flex items-start gap-3 rounded-lg border border-edge p-2.5 cursor-pointer hover:bg-surface-alt">
+					<input type="radio" name="retention_mode" value={ string(RetentionKeepNewest) } checked?={ retention.Mode == RetentionKeepNewest } class="mt-1 text-accent"/>
+					<span class="flex-1">
+						<span class="block text-sm font-medium text-fg">Keep the newest versions</span>
+						<span class="flex items-center gap-2 text-xs text-fg-muted">
+							Keep the newest
+							<input type="number" name="retention_keep_newest" value={ fmt.Sprintf("%d", retention.KeepNewest) } min="1" max="1000" class="input w-20" aria-label="Number of versions to keep"/>
+							versions of each package; older ones are removed.
+						</span>
+					</span>
+				</label>
+				<label class="flex items-start gap-3 rounded-lg border border-edge p-2.5 cursor-pointer hover:bg-surface-alt">
+					<input type="radio" name="retention_mode" value={ string(RetentionUnusedDays) } checked?={ retention.Mode == RetentionUnusedDays } class="mt-1 text-accent"/>
+					<span class="flex-1">
+						<span class="block text-sm font-medium text-fg">Remove versions unused for a while</span>
+						<span class="flex items-center gap-2 text-xs text-fg-muted">
+							Remove versions not in use for
+							<input type="number" name="retention_unused_days" value={ fmt.Sprintf("%d", retention.UnusedDays) } min="1" max="1000" class="input w-20" aria-label="Number of days unused"/>
+							days.
+						</span>
+					</span>
+				</label>
+				<p class="text-xs text-fg-muted">Never removed, whatever you choose: the installed version, a pinned version, any version a campaign is on right now, and every version of the Foundry module (Foundry worlds may still load them). The check runs about once an hour.</p>
 			</section>
 			<section class="card space-y-2 lg:col-span-2">
 				<h2 class="text-base font-semibold text-fg">Safety checks on every install</h2>
@@ -84,6 +118,11 @@ templ settingRadio(name, value, title, desc string, checked bool) {
 	</label>
 }
 
+// retentionRadio is a choice of the old-versions rule that takes no number.
+templ retentionRadio(mode RetentionMode, title, desc string, checked bool) {
+	@settingRadio("retention_mode", string(mode), title, desc, checked)
+}
+
 // settingToggle is an on/off switch posting "true" when on.
 templ settingToggle(name, title, desc string, checked bool) {
 	<div class="flex items-center justify-between gap-3 rounded-lg border border-edge p-3">
@@ -100,7 +139,7 @@ templ settingToggle(name, title, desc string, checked bool) {
 
 // SecuritySettingsPage is the standalone settings page, kept for HTMX callers;
 // a full-page visit is redirected to the Settings tab.
-templ SecuritySettingsPage(settings PackageSecuritySettings, csrfToken string) {
+templ SecuritySettingsPage(settings PackageSecuritySettings, retention RetentionSettings, csrfToken string) {
 	@layouts.App("Package Security - Admin") {
 		<div class="max-w-3xl mx-auto space-y-6">
 			<div>
@@ -109,7 +148,7 @@ templ SecuritySettingsPage(settings PackageSecuritySettings, csrfToken string) {
 					Configure security policies for package submissions and downloads.
 				</p>
 			</div>
-			@securitySettingsForm(settings, csrfToken)
+			@securitySettingsForm(settings, retention, csrfToken)
 		</div>
 	}
 }

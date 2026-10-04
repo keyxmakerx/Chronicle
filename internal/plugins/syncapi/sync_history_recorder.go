@@ -22,12 +22,20 @@ const historyRecordTimeout = 2 * time.Second
 const historyResourceKey = "syncHistoryResource"
 
 type historyResource struct {
-	id, name string
+	id, name, was string
 }
 
 // noteSyncResource tells the history recorder what this call touched.
 func noteSyncResource(c echo.Context, id, name string) {
 	c.Set(historyResourceKey, historyResource{id: id, name: name})
+}
+
+// noteSyncChange is noteSyncResource for a change that replaces a value
+// people know by name: name is what was asked for, was what it replaced.
+// Noted before the call is allowed, so a refused change still says what it
+// asked for.
+func noteSyncChange(c echo.Context, id, name, was string) {
+	c.Set(historyResourceKey, historyResource{id: id, name: name, was: was})
 }
 
 // EntityNamer resolves a page's name for a history row when the handler
@@ -166,7 +174,7 @@ func RecordSyncHistory(repo SyncHistoryRepository, namer EntityNamer) echo.Middl
 				ev.Message = truncate(apperror.UserMessage(err, "the request failed"), 500)
 			}
 			if res, ok := c.Get(historyResourceKey).(historyResource); ok {
-				ev.ResourceID, ev.ResourceName = res.id, res.name
+				ev.ResourceID, ev.ResourceName, ev.Was = res.id, res.name, truncate(res.was, 200)
 			} else if id := c.Param("entityID"); id != "" {
 				ev.ResourceID = id
 			} else if id := c.Param("noteID"); id != "" {

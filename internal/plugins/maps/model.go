@@ -281,6 +281,21 @@ func (d MapViewData) CanShadow() bool {
 	return d.IsDM && d.CanDraw()
 }
 
+// CanPaintHexes reports whether this viewer is offered Paint in the Hexes
+// tool. It mirrors HexService.requireWriter exactly: an owner or DM grant
+// always, a scribe only when the map lets scribes draw, a player never. It is
+// not CanDraw because a DM-granted player is below scribe, so CanDraw hides a
+// tool the server would let them use.
+func (d MapViewData) CanPaintHexes() bool {
+	if d.IsDM {
+		return true
+	}
+	if !d.IsScribe {
+		return false
+	}
+	return d.DisplayOrDefault().DrawWho != DrawWhoOwners
+}
+
 // CanDraw reports whether this viewer gets the drawing tools: a scribe or
 // above, and an owner when the map restricts drawing to owners. This only
 // decides what is offered; DrawingService enforces the rule on the server.

@@ -272,6 +272,8 @@ templ MapEditorBody(cc *campaigns.CampaignContext, data MapViewData, mapContaine
 		data-cluster-src={ layouts.AssetURL("/static/vendor/leaflet.markercluster.js") }
 		data-draw-src={ layouts.AssetURL("/static/js/map_drawing_tools.js") }
 		data-shadow-src={ layouts.AssetURL("/static/js/map_shadow.js") }
+		data-pictures-src={ layouts.AssetURL("/static/js/map_pictures.js") }
+		data-hexes-src={ layouts.AssetURL("/static/js/map_hexes.js") }
 		data-map-id={ data.Map.ID }
 		data-image-id={ derefStr(data.Map.ImageID) }
 		data-image-url={ mapImageSrc(ctx, data.Map) }
@@ -281,6 +283,7 @@ templ MapEditorBody(cc *campaigns.CampaignContext, data MapViewData, mapContaine
 		data-is-owner={ fmt.Sprintf("%t", cc.MemberRole >= campaigns.RoleOwner || cc.IsSiteAdmin) }
 		data-can-dm-only={ fmt.Sprintf("%t", cc.CanAuthorDmOnly() || cc.IsSiteAdmin) }
 		data-can-draw={ fmt.Sprintf("%t", data.CanDraw()) }
+		data-can-paint-hexes={ fmt.Sprintf("%t", data.CanPaintHexes()) }
 		data-can-shadow={ fmt.Sprintf("%t", data.CanShadow()) }
 		data-user-id={ data.UserID }
 		data-display={ mustMarshalDisplay(data.DisplayOrDefault()) }
@@ -319,6 +322,36 @@ templ MapEditorBody(cc *campaigns.CampaignContext, data MapViewData, mapContaine
 		.leaflet-tooltip.mp-name { background: var(--color-card-bg); color: var(--color-text-primary); border: 1px solid var(--color-border); border-radius: 6px; box-shadow: var(--mp-shadow); font-size: 12px; padding: 2px 7px; }
 		.leaflet-tooltip.mp-name::before { display: none; }
 		.mp-grid { pointer-events: none; }
+
+		/* The Hexes tool's icon and panel. The panel sits beside the rail like
+		   the draw flyouts; the hexes themselves are an SVG in map_hexes.js. */
+		.mp-hexico { width: 18px; height: 18px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linejoin: round; }
+		.mp-hexpanel { top: 58px; left: 58px; width: 260px; max-height: calc(100% - 80px); overflow: auto; padding: 0 12px 12px; display: flex; flex-direction: column; gap: 9px; font-size: 12.5px; color: var(--color-text-primary); animation: mp-hx-panel 0.22s cubic-bezier(0.2, 0.8, 0.2, 1); }
+		.mp-hexpanel > * { flex-shrink: 0; }
+		.mp-hexpanel .mp-hx-head { display: flex; align-items: center; justify-content: space-between; font-weight: 600; padding: 10px 0 2px; position: sticky; top: 0; background: var(--mp-float); }
+		.mp-hexpanel .mp-hx-x { border: 0; background: none; width: 26px; height: 26px; border-radius: 6px; display: flex; align-items: center; justify-content: center; color: var(--color-text-secondary); }
+		.mp-hexpanel .mp-hx-x:hover { background: var(--color-bg-tertiary); }
+		.mp-hexpanel p { margin: 0; color: var(--color-text-secondary); }
+		.mp-hexpanel .mp-hx-pal { display: grid; grid-template-columns: repeat(3, 1fr); gap: 4px; }
+		.mp-hexpanel .mp-hx-pal button { border: 1px solid var(--color-border); border-radius: 6px; background: var(--color-card-bg); padding: 5px 3px; font-size: 11px; display: flex; flex-direction: column; align-items: center; gap: 3px; color: var(--color-text-primary); }
+		.mp-hexpanel .mp-hx-pal button[aria-pressed="true"] { border-color: var(--mp-accent); box-shadow: 0 0 0 2px var(--mp-accent-soft); }
+		.mp-hexpanel .mp-hx-pal svg { display: block; overflow: visible; }
+		.mp-hexpanel .mp-hx-pal i { width: 22px; height: 13px; border-radius: 3px; display: block; background: repeating-linear-gradient(45deg, #ccc 0 3px, #fff 3px 6px); }
+		.mp-hexpanel .mp-hx-card { border: 1px solid var(--color-border); border-radius: 10px; padding: 9px; display: flex; flex-direction: column; gap: 6px; }
+		.mp-hexpanel .mp-hx-card b { font-size: 14px; }
+		.mp-hexpanel .mp-hx-card .mp-input { width: 100%; }
+		.mp-hexpanel .mp-hx-card span { white-space: pre-wrap; overflow-wrap: anywhere; }
+		@keyframes mp-hx-panel { from { opacity: 0; transform: translateY(-6px); } }
+		.mp-hx-in { animation: mp-hx-in 0.48s cubic-bezier(0.2, 0.9, 0.3, 1.18) both; transform-box: fill-box; transform-origin: 50% 62%; }
+		.mp-hx-out { animation: mp-hx-out 0.36s ease-in both; transform-box: fill-box; transform-origin: 50% 62%; }
+		@keyframes mp-hx-in { from { opacity: 0; transform: scale(0.5); } to { opacity: 1; transform: none; } }
+		@keyframes mp-hx-out { to { opacity: 0; transform: scale(0.8); } }
+		@media (max-width: 760px) {
+			.mp-hexpanel { left: 12px; right: 12px; width: auto; top: auto; bottom: 64px; max-height: 46%; }
+		}
+		@media (prefers-reduced-motion: reduce) {
+			.mp-hexpanel, .mp-hx-in, .mp-hx-out { animation: none !important; }
+		}
 
 		#map-wrap {
 			--mp-accent: rgb(var(--color-accent-rgb, 99 102 241));
@@ -365,6 +398,9 @@ templ MapEditorBody(cc *campaigns.CampaignContext, data MapViewData, mapContaine
 		.mp-fly { left: 48px; top: 0; padding: 6px; display: flex; gap: 2px; flex-wrap: wrap; width: max-content; max-width: 220px; }
 		.mp-fly-label { flex-basis: 100%; font-size: 11px; color: var(--color-text-secondary); padding: 2px 4px 4px; text-transform: uppercase; letter-spacing: 0.06em; }
 		.mp-fly-gap { margin-top: 6px; }
+		.mp-fly-col { flex-direction: column; flex-wrap: nowrap; align-items: stretch; max-width: 250px; }
+		.mp-fly-col .mp-wd { text-align: left; padding: 6px 10px; }
+		.mp-fly-help { font-size: 11.5px; color: var(--color-text-secondary); padding: 4px 4px 2px; }
 		.mp-sw { width: 24px; height: 24px; border-radius: 50%; border: 2px solid transparent; box-shadow: inset 0 0 0 1px var(--color-border); padding: 0; margin: 2px; }
 		.mp-sw[aria-pressed="true"] { border-color: var(--color-text-primary); }
 		.mp-wd { border: 1px solid var(--color-border); background: var(--color-card-bg); border-radius: 6px; padding: 3px 9px; font-size: 12px; }
@@ -486,12 +522,15 @@ templ mapControls(data MapViewData) {
 		/>
 		<div id="mp-results" class="mp-results" hidden></div>
 	</div>
-	if data.IsScribe {
-		<div class="mp-fl mp-rail" role="toolbar" aria-label="Map tools">
-			<button type="button" class="mp-btn" data-tool="move" aria-pressed="true" aria-label="Move the map (V)">
-				<i class="fa-solid fa-hand" aria-hidden="true"></i>
-				<span class="mp-tip">Move the map <kbd>V</kbd></span>
-			</button>
+	<!-- The rail is for scribes; everyone else gets it only while the map has
+	     hexes, holding Move and the Hexes tool, so a player can open a hex's
+	     card. The viewer shows or hides the Hexes button as the grid changes. -->
+	<div class="mp-fl mp-rail" role="toolbar" aria-label="Map tools" hidden?={ !data.IsScribe && data.DisplayOrDefault().GridType != "hex" }>
+		<button type="button" class="mp-btn" data-tool="move" aria-pressed="true" aria-label="Move the map (V)">
+			<i class="fa-solid fa-hand" aria-hidden="true"></i>
+			<span class="mp-tip">Move the map <kbd>V</kbd></span>
+		</button>
+		if data.IsScribe {
 			<button type="button" class="mp-btn" data-tool="pin" aria-pressed="false" aria-label="Drop a pin (P)">
 				<i class="fa-solid fa-location-dot" aria-hidden="true"></i>
 				<span class="mp-tip">Drop a pin <kbd>P</kbd></span>
@@ -524,6 +563,38 @@ templ mapControls(data MapViewData) {
 				</div>
 			</div>
 			}
+			<!-- The campaign media picker mounts on this button and reports the choice
+			     as media-picker:select, which the viewer hands to the drawing module. -->
+			<button
+				type="button"
+				id="mp-add-picture"
+				class="mp-btn"
+				data-widget="media-picker"
+				data-campaign-id={ data.CampaignID }
+				data-mime-prefix="image/"
+				aria-label="Add a picture (I)"
+			>
+				<i class="fa-solid fa-image" aria-hidden="true"></i>
+				<span class="mp-tip">Add a picture <kbd>I</kbd></span>
+			</button>
+			}
+		}
+		<button type="button" class="mp-btn" data-tool="hex" aria-pressed="false" aria-label="Hexes (H)" hidden?={ data.DisplayOrDefault().GridType != "hex" }>
+			<svg class="mp-hexico" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3l8 4.5v9L12 21l-8-4.5v-9z"/></svg>
+			<span class="mp-tip">Hexes <kbd>H</kbd></span>
+		</button>
+		if data.IsOwner {
+			<!-- Turns the grid to hexes and chooses what they cover. Shown while the
+			     grid is not hexes; the viewer fills the flyout from the map's pictures. -->
+			<div class="mp-item">
+				<button type="button" id="mp-make-hex" class="mp-btn" aria-expanded="false" aria-label="Make a hex map" hidden?={ data.DisplayOrDefault().GridType == "hex" }>
+					<svg class="mp-hexico" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3l8 4.5v9L12 21l-8-4.5v-9z"/></svg>
+					<span class="mp-tip">Make a hex map</span>
+				</button>
+				<div id="mp-fly-hex" class="mp-fl mp-fly mp-fly-col" hidden></div>
+			</div>
+		}
+		if data.IsScribe && data.CanDraw() {
 			<div class="mp-sep"></div>
 			<div class="mp-item">
 				<button type="button" id="mp-style-btn" class="mp-btn" aria-expanded="false" aria-label="Colour and line">
@@ -545,9 +616,9 @@ templ mapControls(data MapViewData) {
 				<i class="fa-solid fa-rotate-left" aria-hidden="true"></i>
 				<span class="mp-tip">Undo last drawing</span>
 			</button>
-			}
-		</div>
-	}
+		}
+	</div>
+	<div id="mp-hexpanel" class="mp-fl mp-hexpanel" role="region" aria-label="Hexes" hidden></div>
 	<div class="mp-topright">
 		if data.IsOwner {
 			<button type="button" id="mp-settings-btn" class="mp-fl mp-pill mp-pill-icon" aria-label="Map settings" title="Map settings" aria-expanded="false" aria-controls="mp-sheet">

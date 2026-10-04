@@ -23,6 +23,10 @@ type fakeHistoryRepo struct {
 	listed   SyncHistoryFilter
 	list     []SyncEvent
 	done     chan struct{}
+	// The call flow's reads.
+	rows     []SyncEvent
+	latest   map[bool]*SyncEvent
+	failures []SyncEvent
 }
 
 func (f *fakeHistoryRepo) Insert(_ context.Context, _ string, ev *SyncEvent) (int64, error) {
@@ -38,6 +42,34 @@ func (f *fakeHistoryRepo) Insert(_ context.Context, _ string, ev *SyncEvent) (in
 func (f *fakeHistoryRepo) List(_ context.Context, _ string, flt SyncHistoryFilter) ([]SyncEvent, error) {
 	f.listed = flt
 	return f.list, nil
+}
+
+func (f *fakeHistoryRepo) Get(_ context.Context, _ string, id int64) (*SyncEvent, error) {
+	for i := range f.rows {
+		if f.rows[i].ID == id {
+			return &f.rows[i], nil
+		}
+	}
+	return nil, apperror.NewNotFound("that history entry was not found")
+}
+
+func (f *fakeHistoryRepo) Window(_ context.Context, _ string, centre time.Time, span time.Duration, _ int) ([]SyncEvent, error) {
+	from, to := centre.Add(-span), centre.Add(span)
+	var out []SyncEvent
+	for _, ev := range f.rows {
+		if !ev.OccurredAt.Before(from) && !ev.OccurredAt.After(to) {
+			out = append(out, ev)
+		}
+	}
+	return out, nil
+}
+
+func (f *fakeHistoryRepo) Latest(_ context.Context, _ string, _ time.Time, failedOnly bool) (*SyncEvent, error) {
+	return f.latest[failedOnly], nil
+}
+
+func (f *fakeHistoryRepo) Failures(context.Context, string, string, string, time.Time, int) ([]SyncEvent, error) {
+	return f.failures, nil
 }
 
 func (f *fakeHistoryRepo) PruneOlderThan(context.Context, time.Time) (int64, error) { return 0, nil }

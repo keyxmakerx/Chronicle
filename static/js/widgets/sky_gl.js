@@ -71,8 +71,9 @@
     /* The painter on its canvas. dir: 'painted'. */
     function create(canvas, dir){
       /* failIfMajorPerformanceCaveat: a browser that would paint in software gives no context, and the basic sky draws
-       instead. SkyGL.allowSoftware lifts that, for the browser checks only. */
-    var gl = canvas.getContext('webgl2', {alpha:true, premultipliedAlpha:true, antialias:false, depth:false, stencil:false, preserveDrawingBuffer:false, powerPreference:'low-power', failIfMajorPerformanceCaveat:!window.SkyGLAllowSoftware});
+       instead. SkyGL.allowSoftware lifts that, for the browser checks only. preserveDrawingBuffer: each sky is copied
+       out of this canvas with drawImage, and Firefox can copy an unkept buffer as empty. */
+    var gl = canvas.getContext('webgl2', {alpha:true, premultipliedAlpha:true, antialias:false, depth:false, stencil:false, preserveDrawingBuffer:true, powerPreference:'low-power', failIfMajorPerformanceCaveat:!window.SkyGLAllowSoftware});
       if (!gl) throw new Error('This sky needs WebGL2, which this browser did not provide.');
       var S = {gl:gl, dir:dir, canvas:canvas, slots:{}, slotPx:0, lost:false, warm:false, par:gl.getExtension('KHR_parallel_shader_compile')};
       function build(){
@@ -82,6 +83,8 @@
         gl.pixelStorei(gl.UNPACK_PREMULTIPLY_ALPHA_WEBGL, true);
       }
       build();
+      /* Canvases come in premultiplied; raw arrays are uploaded as they are, which Firefox requires of them. */
+      function raw(up){ gl.pixelStorei(gl.UNPACK_PREMULTIPLY_ALPHA_WEBGL, false); up(); gl.pixelStorei(gl.UNPACK_PREMULTIPLY_ALPHA_WEBGL, true); }
       canvas.addEventListener('webglcontextlost', function(e){ e.preventDefault(); S.lost = true; });
       canvas.addEventListener('webglcontextrestored', function(){ S.lost = false; build(); S.onRestore && S.onRestore(); });
 
@@ -92,7 +95,9 @@
         if (need > S.slotPx){
           S.slotPx = need; S.slots = {};
           gl.bindTexture(gl.TEXTURE_2D, S.atlas);
-          gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, (need + 2) * 4, need + 2, 0, gl.RGBA, gl.UNSIGNED_BYTE, null);
+          /* Allocated as zeros, not left empty: Firefox warns and clears an empty texture itself before the first slot
+             is written into it. */
+          raw(function(){ gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, (need + 2) * 4, need + 2, 0, gl.RGBA, gl.UNSIGNED_BYTE, new Uint8Array((need + 2) * 4 * (need + 2) * 4)); });
         }
         var k = key + ':' + need;
         if (S.slots[i] !== k){
@@ -100,7 +105,7 @@
           gl.bindTexture(gl.TEXTURE_2D, S.atlas);
           /* The slot is cleared first: a smaller moon in a slot a larger one used leaves nothing of it at its edge. */
           if (!S.zero || S.zero.length !== sp * sp * 4) S.zero = new Uint8Array(sp * sp * 4);
-          gl.texSubImage2D(gl.TEXTURE_2D, 0, i * sp, 0, sp, sp, gl.RGBA, gl.UNSIGNED_BYTE, S.zero);
+          raw(function(){ gl.texSubImage2D(gl.TEXTURE_2D, 0, i * sp, 0, sp, sp, gl.RGBA, gl.UNSIGNED_BYTE, S.zero); });
           gl.texSubImage2D(gl.TEXTURE_2D, 0, i * sp + 1, 1, gl.RGBA, gl.UNSIGNED_BYTE, cv);
           S.slots[i] = k;
         }
@@ -113,9 +118,7 @@
       S.landUpload = function(key, data, w){
         if (S.landKey === key) return;
         gl.bindTexture(gl.TEXTURE_2D, S.land);
-        gl.pixelStorei(gl.UNPACK_PREMULTIPLY_ALPHA_WEBGL, false);
-        gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA32F, w, 2, 0, gl.RGBA, gl.FLOAT, data);
-        gl.pixelStorei(gl.UNPACK_PREMULTIPLY_ALPHA_WEBGL, true);
+        raw(function(){ gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA32F, w, 2, 0, gl.RGBA, gl.FLOAT, data); });
         S.landKey = key;
       };
 
@@ -526,7 +529,7 @@
     U.uAirA = AA; U.uAirB = AB; U.uAirD = AD; U.uAirC = AC;
     /* A funnel cloud, and where its debris swirls. */
     var fu = lk && lk.funnel;
-    if (fu && fu.k > .01){ var fxp = W * (.62 + .06 * Math.sin(t / 23)); U.uFunnel = [fxp, fu.k * (1 - wx.fog * .4), fu.w, 1.7]; U.uFunnelC = LOOKS.lit(fu.c, 'shade', st.sl); st.funnelAt = {x:fxp, gy:H * .86}; }
+    if (fu && fu.k > .01){ var fxp = W * (.62 + .06 * Math.sin(t / 23) + (st.funnelOff || 0)); U.uFunnel = [fxp, fu.k * (1 - wx.fog * .4), fu.w, 1.7]; U.uFunnelC = LOOKS.lit(fu.c, 'shade', st.sl); st.funnelAt = {x:fxp, gy:H * .86}; }
     else { U.uFunnel = [0, 0, 1, 0]; U.uFunnelC = [0, 0, 0]; st.funnelAt = null; }
     /* A blood moon's stain on the sky. */
     var bm = st.bleed;
@@ -582,6 +585,9 @@
        session. */
     P.SLOW_MS = 28; P.WINDOW = 45; P.STALL_MS = 120; P.stalls = 0;
     function giveUp(){ P.slow = true; try { window.sessionStorage.setItem(SLOW_KEY, '1'); } catch (e) { /* not remembered */ } touch(); }
+    /* A copy that arrives empty means this browser cannot hand the painted sky over at all: the basic sky draws instead
+       for the rest of the page, never a blank pane. */
+    P.blank = function(){ P.err = 'painted sky copied as empty'; if (window.console) console.warn('Sky: the painted sky came through empty here, so the basic sky is drawn instead.'); touch(); };
     P.timed = function(ms, moving){
       if (P.slow) return;
       if (!moving) return;
@@ -616,6 +622,16 @@
     ctx.setTransform(1, 0, 0, 1, 0, 0);
     ctx.drawImage(S.canvas, 0, S.canvas.height - S.h, S.w, S.h, 0, y, S.w, S.h);
     PAINTER.timed(performance.now() - t0, moving);
+    /* The first copy is checked once: the sky is opaque a quarter of the way down, so a clear pixel there is a failed
+       copy. */
+    if (!PAINTER.checked){
+      var cx = Math.floor(S.w / 2), cy = y + Math.floor(S.h / 4), cv = ctx.canvas;
+      if (cx < cv.width && cy >= 0 && cy < cv.height){
+        PAINTER.checked = true;
+        var px = null; try { px = ctx.getImageData(cx, cy, 1, 1).data; } catch (e) { /* unreadable: trust the copy */ }
+        if (px && px[3] === 0){ PAINTER.blank(); return false; }
+      }
+    }
     return true;
   }
 

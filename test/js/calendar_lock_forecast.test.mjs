@@ -1,7 +1,7 @@
 // calendar_lock_forecast.test.mjs — pins locked days and the player forecast:
-// the Lock button's label, a locked day's edit-mode mark, the Generate sheet
-// treating a locked day like a painted one, and the forecast's grid mark and
-// day-card wording (including the Director's "Players see" line).
+// the Lock button's label, a locked day's edit-mode mark, the weather calendar
+// treating a locked day as pinned, and the forecast's grid mark and day-card
+// wording (including the Director's "Players see" line).
 
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
@@ -71,44 +71,47 @@ test('a locked day shows a monochrome lock with accessible text; others do not',
   assert.doesNotMatch(view.weatherPaintHTML(w, false, true), /fa-lock/);
 });
 
-// ---- Generate sheet ----
-const dates = [1, 2, 3, 4, 5, 6].map((d) => ({ year: 100, month: 2, day: d }));
+// ---- Weather calendar ----
 const lockedDay = { year: 100, month: 2, day: 3, source: 'generated', locked: true, preset_id: 'snow', preset_label: 'Snow', icon: 'snow', color: '#e8eef6' };
 const paintedDay = { year: 100, month: 2, day: 4, source: 'manual', preset_id: 'snow', preset_label: 'Snow', icon: 'snow', color: '#e8eef6' };
 
-function makeSheet(sb, stored) {
-  const { Sheet } = sb.sheet;
-  const s = Object.create(Sheet.prototype);
-  s.view = { cal, say() {}, _paintMonth() {}, wxPreview: null };
-  s.el = { innerHTML: '', contains: () => false };
-  s._climate = 'temperate';
-  s._continuity = 0.55;
-  s.state = { dates, stored, context: [], seed: 'pinned', nonce: 0, kept: {}, days: {}, summary: '', warnings: [], error: null, showAll: false, busy: false };
-  s._generate();
-  return s;
+function makePanel(sb, stored) {
+  const { Panel } = sb.sheet;
+  const p = Object.create(Panel.prototype);
+  p.view = { cal, weatherByYear: { 100: stored }, say() {}, _paintMonth() {}, wxPreview: null, eventsOnDay: () => [], mainMoon: () => null };
+  p._climate = 'temperate';
+  p._continuity = 0.55;
+  p._skyOwn = true;
+  p._kinds = [];
+  p._presets = {};
+  sb.sandbox.ChronicleGen.weather.presets([]).forEach((x) => { p._presets[x.id] = x; });
+  p.state = { y: 100, m: 2, draft: {}, pins: {}, sel: {}, added: [] };
+  return p;
 }
 
-test('a locked day is never applied, never previewed, and used as a lock', () => {
+test('a locked day stays through a roll and reads as pinned; a painted one stays too', () => {
   const sb = loadAll();
-  const s = makeSheet(sb, { '100_2_3': lockedDay, '100_2_4': paintedDay });
-  assert.equal(s.state.error, null, String(s.state.error));
-  const applied = s._applyDays().map((d) => d.day).sort();
-  assert.deepEqual(applied, [1, 2, 5, 6]);
-  assert.equal(s.view.wxPreview['100_2_3'], undefined);
-  assert.equal(s._locks(false).filter((d) => d.day === 3).length, 1);
-  const before = JSON.stringify(s.state.days['100_2_3']);
-  s._reroll();
-  assert.equal(JSON.stringify(s.state.days['100_2_3']), before);
+  const p = makePanel(sb, { '2_3': lockedDay, '2_4': paintedDay });
+  assert.equal(p._pinned('100_2_3'), true);
+  assert.equal(p._pinned('100_2_4'), false);
+  const out = p.roll('pinned');
+  assert.equal(out.error, undefined, String(out.error));
+  assert.equal(out.rolled.length, 28);
+  assert.ok(!('100_2_3' in p.state.draft) && !('100_2_4' in p.state.draft));
+  const ch = p.changes();
+  assert.ok(ch.put.every((d) => d.day !== 3 && d.day !== 4 && d.source === 'generated'));
+  assert.equal(ch.lock.length, 0);
 });
 
-test('a locked day card says Locked; a painted one keeps its wording', () => {
-  const s = makeSheet(loadAll(), { '100_2_3': lockedDay, '100_2_4': paintedDay });
-  const l = s._cardHTML('100_2_3'), p = s._cardHTML('100_2_4');
-  assert.match(l, /Locked/);
-  assert.doesNotMatch(l, /painted by hand/);
-  assert.match(p, /painted by hand, stays/);
-  assert.doesNotMatch(p, /Locked/);
-  assert.doesNotMatch(l, /data-rc="keep"/);
+test('painting a locked day keeps its pin: the write is locked again after', () => {
+  const p = makePanel(loadAll(), { '2_3': lockedDay });
+  p.paint('rain', ['100_2_3']);
+  const ch = p.changes();
+  assert.equal(ch.put.length, 1);
+  assert.equal(ch.put[0].source, 'manual');
+  assert.deepEqual([...ch.lock.map((d) => d.day)], [3]);
+  p.togglePins(['100_2_3']);
+  assert.equal(p.changes().lock.length, 0);
 });
 
 test('the grid ghost is not drawn over a locked day', () => {

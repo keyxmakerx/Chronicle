@@ -492,3 +492,37 @@ func TestCalendarAPI_CreateCalendar(t *testing.T) {
 		})
 	}
 }
+
+// TestCalendarAPI_SetDateNamesTheDates: the sync history says which date a
+// push asked for and which it would replace, for a refused push too.
+func TestCalendarAPI_SetDateNamesTheDates(t *testing.T) {
+	cases := []struct {
+		name     string
+		role     campaigns.Role
+		wantCode int
+	}{
+		{"owner", campaigns.RoleOwner, 0},
+		{"player refused", campaigns.RolePlayer, http.StatusForbidden},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			svc := newCalendarFixture()
+			svc.cal.Months = []calendar.Month{{Name: "Hammer"}, {Name: "Alturiak"}, {Name: "Ches"}, {Name: "Tarsakh"}}
+			h := NewCalendarAPIHandler(nil, svc, &stubCampaignSvcForCalendarAPI{role: tc.role})
+			req := httptest.NewRequest(http.MethodPut, "/", strings.NewReader(`{"year":1492,"month":4,"day":1}`))
+			req.Header.Set("Content-Type", "application/json")
+			c := echo.New().NewContext(req, httptest.NewRecorder())
+			c.SetParamNames("id")
+			c.SetParamValues("camp-1")
+			c.Set(apiKeyContextKey, bearerKey())
+			err := h.SetDate(c)
+			if statusOf(err) != tc.wantCode {
+				t.Fatalf("err = %v, want code %d", err, tc.wantCode)
+			}
+			res, ok := c.Get(historyResourceKey).(historyResource)
+			if !ok || res.name != "Tarsakh 1, 1492" || res.was != "Ches 7, 1492" {
+				t.Fatalf("history names %+v", res)
+			}
+		})
+	}
+}

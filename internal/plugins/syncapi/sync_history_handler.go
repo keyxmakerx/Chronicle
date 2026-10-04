@@ -290,7 +290,9 @@ func (h *SyncHistoryHandler) Page(c echo.Context) error {
 // RegisterSyncHistoryPageRoutes mounts the Manage page.
 func RegisterSyncHistoryPageRoutes(e *echo.Echo, h *SyncHistoryHandler, campaignSvc campaigns.CampaignService, authSvc auth.AuthService) {
 	cg := e.Group("/campaigns/:id", auth.RequireAuth(authSvc), campaigns.RequireCampaignAccess(campaignSvc))
-	cg.GET("/sync-history", h.Page, campaigns.RequireCapability(canSeeHistory, "only the campaign owner and members with DM access can see the sync history"))
+	gate := campaigns.RequireCapability(canSeeHistory, "only the campaign owner and members with DM access can see the sync history")
+	cg.GET("/sync-history", h.Page, gate)
+	cg.GET("/sync-history/flow/:eventID", h.Flow, gate)
 }
 
 // WithSyncHistory mounts the sync history on the REST API: the recorder on

@@ -123,8 +123,8 @@ func welcomeMessageQuoted(msg string) string {
 	return string(b)
 }
 
-// The owner-only "newer Foundry module version available" banner lives in
-// internal/plugins/foundry_vtt/show_banner.templ (CampaignShowFoundryBanner);
+// The owner-only "new Foundry module version is ready" line lives in
+// internal/plugins/foundry_vtt/show_banner.templ (CampaignUpdateBanner);
 // campaigns/show.templ lazy-loads it via hx-get to stay VTT-agnostic. See the
 // lazy-load slot at the top of CampaignShowPage above.
 

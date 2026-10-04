@@ -1,0 +1,62 @@
+// update_row.templ is the Foundry module row on the owner's Apps & game system
+// page. It is lazy-loaded into that page so the campaigns plugin stays
+// VTT-agnostic.
+//
+// URL: GET /campaigns/:id/foundry-vtt/apps-row
+// Auth: owner-only
+
+package foundry_vtt
+
+// AppsUpdateRow shows what the campaign's Foundry world runs and, when a newer
+// version is waiting, the owner's choices. While a site admin holds the
+// campaign the two buttons that would move it are replaced by one line.
+templ AppsUpdateRow(v *OwnerUpdateView, csrfToken string) {
+	if v != nil {
+		<section id={ updateRowID } class="card p-4 mb-6" aria-label={ v.Package }>
+			<div class="flex flex-wrap items-start justify-between gap-3">
+				<div class="min-w-0">
+					<p class="text-sm font-semibold text-fg">
+						{ v.Package }
+						<span class="ml-1 badge-gray">Foundry module</span>
+					</p>
+					<p class="text-xs text-fg-secondary mt-1">
+						Running <span class="tabular-nums">{ v.Running }</span>.
+						if v.Ready != "" {
+							<b class="text-fg">{ v.Ready } is ready.</b>
+						} else {
+							Up to date.
+						}
+					</p>
+					if v.AdminHold {
+						<p class="text-xs text-fg-secondary mt-1">The site admin is keeping this campaign on { v.Running }.</p>
+					}
+					<p class="text-xs text-fg-muted mt-1">
+						Your Foundry world loads this version the next time it starts.
+						<a href={ templ.SafeURL(setupGuideURL(v.CampaignID)) } class="text-accent hover:underline">Foundry setup guide</a>
+					</p>
+				</div>
+				<div class="flex flex-col items-end gap-1.5">
+					if v.Ready != "" && !v.AdminHold {
+						<button type="button" class="btn-primary btn-sm" onclick={ openDialogOnClick(updateDialogID("update", updateViewRow)) }>
+							Update to { v.Ready }
+						</button>
+					}
+					if v.Ready != "" && v.NotesURL != "" {
+						<a href={ templ.SafeURL(v.NotesURL) } target="_blank" rel="noopener noreferrer" class="btn-secondary btn-sm">What&rsquo;s new</a>
+					}
+					if !v.AdminHold && len(v.Versions) > 0 {
+						<button type="button" class="btn-secondary btn-sm" onclick={ openDialogOnClick(updateDialogID("switch", updateViewRow)) }>
+							Use another version&hellip;
+						</button>
+					}
+				</div>
+			</div>
+			if v.Ready != "" && !v.AdminHold {
+				@updateConfirmDialog(v, updateViewRow, csrfToken)
+			}
+			if !v.AdminHold && len(v.Versions) > 0 {
+				@updateSwitchDialog(v, csrfToken)
+			}
+		</section>
+	}
+}

@@ -50,6 +50,12 @@
     if (window.ChronicleMapShadow) return Promise.resolve();
     return loadScript(cfg.shadowSrc).catch(function () { /* shadows simply do not render */ });
   }
+  // Pictures on the map need their module before the drawing module renders one;
+  // it is optional too, and without it pictures are simply not drawn.
+  function ensurePictures(cfg) {
+    if (window.ChronicleMapPictures) return Promise.resolve();
+    return loadScript(cfg.picturesSrc).catch(function () { /* pictures simply do not render */ });
+  }
   function ensureDrawing(cfg) {
     if (window.ChronicleMapDrawing) return Promise.resolve();
     return loadScript(cfg.drawSrc).catch(function () { /* drawings simply do not render */ });
@@ -82,6 +88,10 @@
 	// canDraw is what the viewer is OFFERED; the server enforces the
 	// map's "who can draw" setting on every drawing write regardless.
 	var canDraw = cfg.dataset.canDraw === 'true';
+	// canPaintHexes mirrors the hex service's own writer rule (owner or DM
+	// grant, or a scribe where the draw policy allows), which is not the same
+	// as canDraw: a DM-granted player may paint hexes without being a scribe.
+	var canPaintHexes = cfg.dataset.canPaintHexes === 'true';
 	// Shadows decide what players may know, so the tool is for the owner and
 	// co-DMs only; the server refuses everyone else regardless.
 	var canShadow = cfg.dataset.canShadow === 'true';
@@ -703,11 +713,14 @@
 	var flyDraw = $id('mp-fly-draw');
 	var flyStyle = $id('mp-fly-style');
 	var flyShadow = $id('mp-fly-shadow');
+	var flyHex = $id('mp-fly-hex');
+	var makeHexBtn = $id('mp-make-hex');
 	function closePopovers() {
 		var any = false;
-		[flyDraw, flyStyle, flyShadow].forEach(function(f) {
+		[flyDraw, flyStyle, flyShadow, flyHex].forEach(function(f) {
 			if (f && !f.hidden) { f.hidden = true; any = true; }
 		});
+		if (makeHexBtn) makeHexBtn.setAttribute('aria-expanded', 'false');
 		document.querySelectorAll('[data-tool="draw"], [data-tool="shadow"]').forEach(function(b) {
 			b.setAttribute('aria-expanded', 'false');
 		});
@@ -732,27 +745,33 @@
 		document.querySelectorAll('[data-shape]').forEach(function(b) {
 			b.setAttribute('aria-pressed', (tool === 'draw' && b.dataset.shape === drawShape) ? 'true' : 'false');
 		});
+		// Pictures can be picked only under the move tool.
+		if (draw() && draw().pictureSelectMode) draw().pictureSelectMode(tool === 'move');
 		// The drawing module sets its own crosshair while a shape tool runs.
 		if (tool === 'pin') map.getContainer().style.cursor = 'crosshair';
 		else if (tool === 'move') map.getContainer().style.cursor = '';
 	}
 
 	function setTool(t) {
-		if (!isScribe) t = 'move';
+		if (!isScribe && t !== 'hex') t = 'move';
+		if (t === 'hex' && !hexesOn()) t = 'move';
 		closePopovers();
 		if (t !== 'draw' && t !== 'shadow' && draw()) draw().cancel();
 		tool = t;
 		if (t === 'pin') setHint('Click the map to drop a pin');
 		else if (t === 'draw') setHint(SHAPE_HINT[drawShape]);
 		else if (t === 'shadow') setHint(SHADOW_HINT);
-		else setHint('');
+		else if (t !== 'hex') setHint('');
 		syncRail();
+		// The hex module sets its own hint, so it runs after the one above.
+		if (viewerCtx && viewerCtx.hexes) viewerCtx.hexes.setActive(t === 'hex');
 	}
 	function startShape(shape) {
 		if (!draw()) { Chronicle.notify('Drawing tools are still loading', 'error'); return; }
 		closePopovers();
 		drawShape = shape;
 		tool = 'draw';
+		if (viewerCtx && viewerCtx.hexes) viewerCtx.hexes.setActive(false);
 		draw().setStyle({ color: drawColor, width: drawWidth });
 		draw().start(shape);
 		setHint(SHAPE_HINT[shape]);
@@ -766,20 +785,20 @@
 		closePopovers();
 		draw().setShadowStrength(strength);
 		tool = 'shadow';
+		if (viewerCtx && viewerCtx.hexes) viewerCtx.hexes.setActive(false);
 		draw().start('shadow');
 		setHint(SHADOW_HINT);
 		syncRail();
 	}
-	if (isScribe) {
-		document.querySelectorAll('[data-tool]').forEach(function(b) {
-			b.addEventListener('click', function() {
-				var t = b.dataset.tool;
-				if (t === 'draw') { openPopover(flyDraw, b); return; }
-				if (t === 'shadow') { openPopover(flyShadow, b); return; }
-				setTool(tool === t && t !== 'move' ? 'move' : t);
-			});
+	// Everyone's rail holds Move and the Hexes tool; the rest exist only for scribes.
+	document.querySelectorAll('[data-tool]').forEach(function(b) {
+		b.addEventListener('click', function() {
+			var t = b.dataset.tool;
+			if (t === 'draw') { openPopover(flyDraw, b); return; }
+			if (t === 'shadow') { openPopover(flyShadow, b); return; }
+			setTool(tool === t && t !== 'move' ? 'move' : t);
 		});
-	}
+	});
 	if (canShadow) {
 		document.querySelectorAll('[data-shadow-strength]').forEach(function(b) {
 			b.addEventListener('click', function() { startShadow(parseFloat(b.dataset.shadowStrength)); });
@@ -790,6 +809,20 @@
 		document.querySelectorAll('[data-shape]').forEach(function(b) {
 			b.addEventListener('click', function() { startShape(b.dataset.shape); });
 		});
+		// Add a picture: the campaign media picker (a widget on this button)
+		// reports the choice, which the drawing module drops on the view.
+		var pictureBtn = $id('mp-add-picture');
+		if (pictureBtn) {
+			// The picker's slide-out lives outside the full-screen element.
+			pictureBtn.addEventListener('click', leaveFullscreen);
+			pictureBtn.addEventListener('media-picker:select', function(ev) {
+				var d = ev.detail || {};
+				if (!d.id) return;
+				if (!draw() || !draw().addPicture) { Chronicle.notify('Drawing tools are still loading', 'error'); return; }
+				setTool('move');
+				draw().addPicture({ id: d.id, url: d.url });
+			});
+		}
 		var styleBtn = $id('mp-style-btn');
 		styleBtn.addEventListener('click', function() { openPopover(flyStyle, styleBtn); });
 		function syncStyle() {
@@ -902,6 +935,11 @@
 	// 1px width at every zoom (non-scaling stroke). ----
 	var gridLayer = null;
 	var gridPending = null;
+	// True while the hex module draws the hex lines itself, so there is one set
+	// of lines, not two. If that module never loads this stays false and the
+	// plain grid below keeps drawing.
+	var hexLinesOwned = false;
+	var viewerCtx = null;
 	map.createPane('mpGrid');
 	map.getPane('mpGrid').style.zIndex = 405;
 	map.getPane('mpGrid').style.pointerEvents = 'none';
@@ -928,6 +966,7 @@
 	function drawGrid() {
 		if (gridLayer) { map.removeLayer(gridLayer); gridLayer = null; }
 		if (D.grid_type !== 'square' && D.grid_type !== 'hex') return;
+		if (D.grid_type === 'hex' && hexLinesOwned) return;
 		var cell = D.grid_size * w / 1000;
 		// A guard against a degenerate picture shape making millions of cells.
 		var cells = (w / cell + 2) * (h / (cell * (D.grid_type === 'hex' ? 0.75 : 1)) + 2);
@@ -950,9 +989,188 @@
 	// Slider drags redraw at most once a frame.
 	function drawGridSoon() {
 		if (gridPending) return;
-		gridPending = requestAnimationFrame(function() { gridPending = null; drawGrid(); });
+		gridPending = requestAnimationFrame(function() { gridPending = null; drawGrid(); syncHexes(); });
 	}
 	drawGrid();
+
+	// The hex layer is its own module, loaded the first time a map has hexes
+	// (including when the owner switches the grid to hex in the settings
+	// sheet). Once loaded it follows the display settings through refresh().
+	var hexesLoading = false;
+	var pendingHexOpen = null;
+	function hexesOn() { return !!(viewerCtx && viewerCtx.hexes && viewerCtx.hexes.isOn()); }
+	function syncHexes() {
+		if (destroyed || !viewerCtx) return;
+		if (viewerCtx.hexes) { viewerCtx.hexes.refresh(); return; }
+		if (D.grid_type !== 'hex' || hexesLoading) return;
+		hexesLoading = true;
+		loadScript(cfg.dataset.hexesSrc).then(function() {
+			hexesLoading = false;
+			if (destroyed || !window.ChronicleMapHexes || !viewerCtx) return;
+			try { window.ChronicleMapHexes.init(viewerCtx); } catch (err) { console.error('[map-viewer] hexes failed:', err); }
+			if (pendingHexOpen && viewerCtx.hexes) { var m = pendingHexOpen; pendingHexOpen = null; viewerCtx.hexes.open(m); }
+		}).catch(function() {
+			// Hexes are an add-on: without the module the plain grid still shows.
+			hexesLoading = false;
+		});
+	}
+
+	// ---- What the hexes cover: the whole map, or one picture ----
+	// The layer's picture lives on the hex layer (not in display settings), so
+	// it is changed through its own endpoint. Every route in goes through
+	// setHexCover so the grid type, the grid size, the confirm and the picture
+	// are decided in one place: the rail flyout, the picture bar and Take the
+	// hexes off apply at once; the settings sheet stages the choice in
+	// D.hex_anchor and applies it on Save.
+	var hexBase = '/campaigns/' + campaignID + '/maps/' + mapID + '/hexes';
+	// The picture the server says the layer covers; null is the whole map.
+	var hexAnchor = null;
+	var hexCoverSubs = [];
+	var savedMapName = '';
+	// About ten hexes across a picture, whatever its size.
+	var PICTURE_GRID_SIZE = 115;
+	var RELAY_CONFIRM = 'Painted hexes stay where they are in the grid, so they may land on different spots. Continue?';
+	function hexCoverNotify() { hexCoverSubs.slice().forEach(function(fn) { fn(); }); }
+	function hexPictureList() { return viewerCtx && viewerCtx.pictures ? viewerCtx.pictures.list() : []; }
+	// Pictures have no name of their own, so people meet them as Picture 1, 2,
+	// ... in stacking order.
+	function pictureName(i) { return 'Picture ' + (i + 1); }
+
+	// Whether the layer holds painted hexes. The loaded module knows; without
+	// it the answer comes from the server, and a failed lookup counts as "has
+	// hexes" so the re-lay warning is never skipped on a guess.
+	async function hexHasCells() {
+		if (viewerCtx && viewerCtx.hexes && viewerCtx.hexes.hasCells) return viewerCtx.hexes.hasCells();
+		try {
+			var res = await Chronicle.apiFetch(hexBase);
+			if (!res.ok) return true;
+			var data = await res.json();
+			return !data || !data.cells || data.cells.length > 0;
+		} catch (err) { return true; }
+	}
+	var HIDDEN_PICTURE_CONFIRM = 'Hexes painted on this hidden picture will become visible to players. Continue?';
+	// Moving the hexes off a dm_only picture onto something players can see
+	// would publish whatever was painted while it was hidden.
+	function hexCoverReveals(newId) {
+		if (hexAnchor === null || newId === hexAnchor) return false;
+		var cur = hexPictureList().filter(function(p) { return p.id === hexAnchor; })[0];
+		if (!cur || cur.visibility !== 'dm_only') return false;
+		var next = newId === null ? null : hexPictureList().filter(function(p) { return p.id === newId; })[0];
+		return !next || next.visibility !== 'dm_only';
+	}
+	function apiPut(url, body) {
+		return Chronicle.apiFetch(url, { method: 'PUT', body: body }).then(function(res) {
+			if (res.ok) return true;
+			return res.json().catch(function() { return {}; }).then(function(err) {
+				Chronicle.notify(err.message || 'Could not save that change', 'error');
+				return false;
+			});
+		}).catch(function() { Chronicle.notify('Could not save that change', 'error'); return false; });
+	}
+	// The name is required by the endpoint and may have been renamed since the
+	// page loaded, so the current one is read just before writing; the stamp
+	// makes a rename that lands in between a conflict instead of a revert.
+	async function putGrid(type, size) {
+		var body = { name: savedMapName, display_settings: { grid: { type: type, size: size, strength: savedD.grid_strength } } };
+		try {
+			var res = await Chronicle.apiFetch('/campaigns/' + campaignID + '/maps/' + mapID + '/meta');
+			if (res.ok) {
+				var meta = await res.json();
+				if (meta && meta.name) body.name = meta.name;
+				if (meta && meta.updated_at) body.expected_updated_at = meta.updated_at;
+			}
+		} catch (err) { /* fall back to the name this page loaded with */ }
+		return apiPut('/campaigns/' + campaignID + '/maps/' + mapID, body);
+	}
+	// openHexes shows the Hexes tool, now if the module is up, else once it is.
+	function openHexes(mode) {
+		if (viewerCtx && viewerCtx.hexes) viewerCtx.hexes.open(mode);
+		else pendingHexOpen = mode;
+	}
+	function adoptGrid(type, size) {
+		[D, savedD].forEach(function(o) { o.grid_type = type; o.grid_size = size; delete o.hex_anchor; });
+	}
+
+	// setHexCover makes the map a hex map covering the whole map (id null) or
+	// the picture id, and resolves true once it is saved. Painted hexes are
+	// keyed by position, so a different cover or size lays them out on
+	// different spots; that is confirmed first when any exist.
+	async function setHexCover(id, mode) {
+		// Only the owner can change the grid; a DM who may pin the hexes keeps the size.
+		var newSize = !isOwner ? savedD.grid_size : id ? PICTURE_GRID_SIZE : Math.max(savedD.grid_size, 60);
+		var wasHex = savedD.grid_type === 'hex';
+		if (!wasHex && !isOwner) { Chronicle.notify('Only the campaign owner can turn the hex grid on', 'error'); return false; }
+		var coverChanges = id !== hexAnchor;
+		var sizeChanges = newSize !== savedD.grid_size;
+		if ((coverChanges || sizeChanges) && await hexHasCells() && !confirm(RELAY_CONFIRM)) return false;
+		if (hexCoverReveals(id) && !confirm(HIDDEN_PICTURE_CONFIRM)) return false;
+		// The picture first: if it is refused nothing else has changed.
+		if (coverChanges && !await apiPut(hexBase + '/layer', { anchor_drawing_id: id })) return false;
+		if ((!wasHex || sizeChanges) && !await putGrid('hex', newSize)) return false;
+		hexAnchor = id;
+		adoptGrid('hex', newSize);
+		// The server turned the picture upright; show it so without a reload.
+		if (id && viewerCtx && viewerCtx.pictures) viewerCtx.pictures.straighten(id);
+		applyDisplay();
+		if (viewerCtx && viewerCtx.hexes) viewerCtx.hexes.reloadLayer();
+		openHexes(mode || 'look');
+		hexCoverNotify();
+		return true;
+	}
+
+	// takeHexesOff puts the layer back on the whole map and turns the grid off.
+	// The painted hexes stay stored, so turning hexes back on finds them.
+	async function takeHexesOff() {
+		if (!isOwner) return false;
+		if (hexCoverReveals(null) && !confirm(HIDDEN_PICTURE_CONFIRM)) return false;
+		if (hexAnchor !== null && !await apiPut(hexBase + '/layer', { anchor_drawing_id: null })) return false;
+		if (!await putGrid('none', savedD.grid_size)) return false;
+		hexAnchor = null;
+		adoptGrid('none', savedD.grid_size);
+		applyDisplay();
+		hexCoverNotify();
+		return true;
+	}
+
+	var hexCover = {
+		carries: function(id) { return D.grid_type === 'hex' && hexAnchor === id; },
+		// Owner or DM access may pin hexes to a picture; turning the grid on is
+		// the owner's alone, so a DM sees the button only on a hex map.
+		canTurn: function() { return canDmOnly && (isOwner || savedD.grid_type === 'hex'); },
+		canTakeOff: function() { return isOwner; },
+		turnInto: function(id) { return setHexCover(id, 'paint'); },
+		open: function() { openHexes('look'); },
+		takeOff: function() { return takeHexesOff(); },
+		onChange: function(fn) { hexCoverSubs.push(fn); }
+	};
+
+	// The rail's "Make a hex map" button, shown while the grid is not hexes.
+	function syncMakeHex() { if (makeHexBtn) makeHexBtn.hidden = D.grid_type === 'hex'; }
+	function buildHexFlyout() {
+		flyHex.textContent = '';
+		var label = document.createElement('div');
+		label.className = 'mp-fly-label';
+		label.textContent = 'Make a hex map';
+		flyHex.appendChild(label);
+		function item(text, id, mode) {
+			var b = document.createElement('button');
+			b.type = 'button';
+			b.className = 'mp-wd';
+			b.textContent = text;
+			b.addEventListener('click', function() { closePopovers(); setHexCover(id, mode); });
+			flyHex.appendChild(b);
+		}
+		item('Hexes over the whole map', null, 'look');
+		hexPictureList().forEach(function(p, i) { item('Hexes over “' + pictureName(i) + '”', p.id, 'paint'); });
+		var help = document.createElement('div');
+		help.className = 'mp-fly-help';
+		help.textContent = 'Add a picture first to turn just that picture into a hex map. Or click any picture and choose Turn into a hex map.';
+		flyHex.appendChild(help);
+	}
+	if (makeHexBtn && flyHex) {
+		makeHexBtn.addEventListener('click', function() { buildHexFlyout(); openPopover(flyHex, makeHexBtn); });
+	}
+	syncMakeHex();
 
 	// ---- Map settings sheet (owners). Every change previews on the map
 	// behind it straight away; Save sends the changed groups in one PUT
@@ -1003,6 +1221,7 @@
 		refreshPins();
 		syncKindSelects();
 		renderPanel();
+		syncMakeHex();
 		drawGridSoon();
 	}
 
@@ -1015,6 +1234,7 @@
 		var bgFlag = $id('ms-background-color-set');
 		var imgChanged = false;
 		var origName = sInputs.name.value;
+		savedMapName = origName;
 		var origDesc = sInputs.desc.value;
 
 		function viewNow() {
@@ -1028,10 +1248,36 @@
 		}
 
 		// Reflect D into the controls.
+		// "Hexes cover" has a chip for the whole map and one per picture. The
+		// choice is staged in D.hex_anchor (the hex module previews it) and saved
+		// with the rest; Cancel drops it with the other previews.
+		function renderHexCover() {
+			var row = $id('ms-hex');
+			var box = $id('ms-hexcover');
+			if (!row || !box) return;
+			row.hidden = D.grid_type !== 'hex';
+			box.textContent = '';
+			var cur = Object.prototype.hasOwnProperty.call(D, 'hex_anchor') ? D.hex_anchor : hexAnchor;
+			function chip(text, id) {
+				var b = document.createElement('button');
+				b.type = 'button';
+				b.className = 'mp-chip';
+				b.dataset.hc = id === null ? 'whole' : id;
+				b.setAttribute('aria-pressed', cur === id ? 'true' : 'false');
+				b.textContent = text;
+				box.appendChild(b);
+			}
+			chip('The whole map', null);
+			hexPictureList().forEach(function(p, i) { chip('Just “' + pictureName(i) + '”', p.id); });
+		}
+		hexCoverSubs.push(function() { if (!sheet.hidden) renderHexCover(); });
+
 		function syncSheet() {
 			sheet.querySelectorAll('.mp-chip').forEach(function(b) {
+				if (b.dataset.hc !== undefined) return;
 				b.setAttribute('aria-pressed', String(D[b.dataset.k]) === b.dataset.v ? 'true' : 'false');
 			});
+			renderHexCover();
 			$id('ms-frame-pick').hidden = D.frame_source !== 'map';
 			$id('ms-frame-note').hidden = D.frame_source === 'map';
 			sInputs.tint.checked = !!D.tint;
@@ -1055,6 +1301,12 @@
 		sheet.addEventListener('click', function(e) {
 			var b = e.target.closest ? e.target.closest('.mp-chip') : null;
 			if (!b || !sheet.contains(b)) return;
+			if (b.dataset.hc !== undefined) {
+				D.hex_anchor = b.dataset.hc === 'whole' ? null : b.dataset.hc;
+				syncSheet();
+				applyDisplay();
+				return;
+			}
 			var k = b.dataset.k, v = b.dataset.v;
 			if (k === 'frame_source') {
 				D.frame_source = v;
@@ -1176,10 +1428,19 @@
 				if (JSON.stringify(now[g]) !== JSON.stringify(was[g])) { ds[g] = now[g]; any = true; }
 			});
 			if (any) body.display_settings = ds;
+			// A different cover or grid size lays painted hexes out on different
+			// spots, so ask before saving that over a map that has some.
+			var stagedAnchor = Object.prototype.hasOwnProperty.call(D, 'hex_anchor');
+			var anchorChanges = D.grid_type === 'hex' && stagedAnchor && D.hex_anchor !== hexAnchor;
+			if (D.grid_type === 'hex' && (anchorChanges || D.grid_size !== savedD.grid_size) && await hexHasCells() && !confirm(RELAY_CONFIRM)) return;
+			if (anchorChanges && hexCoverReveals(D.hex_anchor) && !confirm(HIDDEN_PICTURE_CONFIRM)) return;
 			var btn = $id('ms-save');
 			btn.disabled = true;
 			try {
 				var resp = await Chronicle.apiFetch('/campaigns/' + campaignID + '/maps/' + mapID, { method: 'PUT', body: body });
+				if (resp.ok && anchorChanges) {
+					if (!await apiPut(hexBase + '/layer', { anchor_drawing_id: D.hex_anchor })) { btn.disabled = false; return; }
+				}
 				if (resp.ok) { reloadView(); return; }
 				var data = await resp.json().catch(function() { return {}; });
 				Chronicle.notify(data.message || 'Failed to save settings', 'error');
@@ -1312,12 +1573,12 @@
 	// while a drawing tool is active: the polygon tool finishes on
 	// double-click and must not also leave a pin behind.
 	map.on('dblclick', function(e) {
-		if (!isScribe || tool === 'draw' || tool === 'shadow') return;
+		if (!isScribe || tool === 'draw' || tool === 'shadow' || tool === 'hex') return;
 		var p = latLngToPercent(e.latlng);
 		startDraft(p.x, p.y);
 	});
 
-	// ---- Keys: V move, P pin, D draw, B hide under shadow, Esc steps back ----
+	// ---- Keys: V move, P pin, D draw, B hide under shadow, I add a picture, Delete removes the selected picture, Esc steps back ----
 	function typing(t) {
 		if (!t || !t.tagName) return false;
 		var n = t.tagName;
@@ -1343,17 +1604,33 @@
 			if (window.__mpCloseSheet && window.__mpCloseSheet()) return;
 			if (closePanel()) return;
 			if (map._popup && map._popup.isOpen && map._popup.isOpen()) { map.closePopup(); return; }
+			// A selected picture (or cropping) steps back before the tool does.
+			if (draw() && draw().escape && draw().escape()) return;
+			// An open hex card steps back before the Hexes tool does.
+			if (viewerCtx && viewerCtx.hexes && viewerCtx.hexes.escape()) return;
 			if (tool !== 'move') { setTool('move'); return; }
 			e.mpConsumed = false;
 			return;
 		}
+		// H toggles the Hexes tool for everyone, whenever the map has hexes.
+		if (e.key.toLowerCase() === 'h' && hexesOn() && !typing(e.target) && !(e.target.closest && e.target.closest('#mp-sheet'))) {
+			setTool(tool === 'hex' ? 'move' : 'hex');
+			e.preventDefault();
+			return;
+		}
 		// Letters inside the settings sheet belong to its controls.
 		if (!isScribe || typing(e.target) || (e.target.closest && e.target.closest('#mp-sheet'))) return;
+		// Delete removes the selected picture, after the usual confirm.
+		if (e.key === 'Delete' && canDraw && draw() && draw().deleteSelected) {
+			if (draw().deleteSelected()) e.preventDefault();
+			return;
+		}
 		var k = e.key.toLowerCase();
 		if (k === 'v') { setTool('move'); e.preventDefault(); }
 		else if (k === 'p') { setTool('pin'); e.preventDefault(); }
 		else if (k === 'd' && canDraw) { openPopover(flyDraw, document.querySelector('[data-tool="draw"]')); e.preventDefault(); }
 		else if (k === 'b' && canShadow) { openPopover(flyShadow, document.querySelector('[data-tool="shadow"]')); e.preventDefault(); }
+		else if (k === 'i' && canDraw) { var pb = $id('mp-add-picture'); if (pb) pb.click(); e.preventDefault(); }
 	}
 	listen(document, 'keydown', onKey);
 
@@ -1542,8 +1819,11 @@
 		// canDraw is what the drawing module builds its tools from; the
 		// server enforces the map's "who can draw" rule regardless.
 		canDraw: canDraw,
+		canPaintHexes: canPaintHexes,
 		canShadow: canShadow,
 		isOwner: isOwner,
+		canDmOnly: canDmOnly,
+		userID: userID,
 		// Callbacks the drawing module calls so the panel counts and the
 		// undo button stay in step with what is on the map.
 		onDrawingsChange: function(n) {
@@ -1551,8 +1831,18 @@
 			if (!showDrawings && draw()) draw().setVisible(false);
 			renderPanel();
 		},
-		onUndoChange: function(n) { if (window.__mpUndoChange) window.__mpUndoChange(n); }
+		onUndoChange: function(n) { if (window.__mpUndoChange) window.__mpUndoChange(n); },
+		// What the hex module needs from the viewer: the live display settings,
+		// a way to hand the hex lines over, and the tool rail and hint bar.
+		getDisplay: function() { return D; },
+		hexCover: hexCover,
+		onHexAnchor: function(id) { hexAnchor = id; hexCoverNotify(); },
+		onHexLines: function(on) { hexLinesOwned = !!on; drawGrid(); },
+		setTool: function(t) { setTool(t); },
+		setHint: function(msg) { setHint(msg); }
 	};
+	viewerCtx = window.chronicleMap;
+	syncHexes();
 
 	// Tear down a mount so a host that re-creates the viewer (the focus view,
 	// opened and closed over a page that stays loaded) leaks nothing: Leaflet's
@@ -1566,6 +1856,7 @@
 			if (destroyed) return;
 			destroyed = true;
 			clearTimeout(viewTimer);
+			if (ctx.hexes) { try { ctx.hexes.destroy(); } catch (e) { /* hex module already gone */ } }
 			if (typeof ctx.onDestroy === 'function') { try { ctx.onDestroy(); } catch (e) { /* drawing add-on already gone */ } }
 			cleanups.forEach(function(fn) { fn(); });
 			leaveFullscreen();
@@ -1587,6 +1878,8 @@
         var handle = mountViewer(cfgEl, opts);
         cfgEl.__mapViewerHandle = handle;
         return ensureShadow({ shadowSrc: d.shadowSrc }).then(function () {
+          return ensurePictures({ picturesSrc: d.picturesSrc });
+        }).then(function () {
           return ensureDrawing({ drawSrc: d.drawSrc });
         }).then(function () {
           // The drawing module only polls once, at load; later mounts are

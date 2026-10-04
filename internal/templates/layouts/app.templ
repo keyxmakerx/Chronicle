@@ -912,10 +912,11 @@ templ Topbar() {
 					</div>
 				</div>
 			}
-			if InCampaign(ctx) && GetCampaignRole(ctx) >= 2 {
-				<!-- DM Screen: the owner's and scribes' control panel. The
-				     dm-screen widget fetches the panel and plays the opening;
-				     hidden under "view as player" because the role reads 1. -->
+			if InCampaign(ctx) && (GetCampaignRole(ctx) >= 2 || IsDmGranted(ctx)) {
+				<!-- DM Screen: the control panel for the owner, scribes and
+				     members with DM access (dmscreen.CanOpen). The dm-screen
+				     widget fetches the panel and plays the opening; hidden
+				     under "view as player" because the role reads 1. -->
 				<div data-widget="dm-screen" data-url={ fmt.Sprintf("/campaigns/%s/dm-screen", GetCampaignID(ctx)) }>
 					<button type="button" class="btn-ghost btn-icon" data-dms-open title="DM Screen" aria-label="Open the DM Screen" aria-haspopup="dialog">
 						<svg class="w-5 h-5" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round" aria-hidden="true">

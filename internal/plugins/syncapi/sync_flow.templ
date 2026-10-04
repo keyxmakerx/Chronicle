@@ -1,0 +1,391 @@
+// sync_flow.templ draws the call flow: a stretch of the sync history as a
+// sequence of arrows between Chronicle in a browser, the Chronicle server
+// and Foundry. Served alone, into a Sync history row or an admin campaign
+// row; sync_flow.js does the selecting, chaining and filtering.
+
+package syncapi
+
+import (
+	"fmt"
+	"strconv"
+	"strings"
+	"time"
+)
+
+// flowClock is the no-JavaScript time; sync_flow.js rewrites it in the
+// reader's own time zone.
+func flowClock(t time.Time) string {
+	return t.UTC().Format("15:04:05")
+}
+
+func flowMillis(t time.Time) string {
+	return t.UTC().Format(".000")
+}
+
+func flowISO(t time.Time) string {
+	return t.UTC().Format(time.RFC3339Nano)
+}
+
+// flowGap is the "later" note on a group heading.
+func flowGap(d time.Duration) string {
+	switch {
+	case d < time.Second:
+		return ""
+	case d < 90*time.Second:
+		return fmt.Sprintf("%d s later", int(d.Round(time.Second).Seconds()))
+	case d < 90*time.Minute:
+		return fmt.Sprintf("%d min later", int(d.Round(time.Minute).Minutes()))
+	}
+	return fmt.Sprintf("%d h later", int(d.Round(time.Hour).Hours()))
+}
+
+func flowSteps(n int) string {
+	if n == 1 {
+		return "1 step"
+	}
+	return strconv.Itoa(n) + " steps"
+}
+
+func flowProblems(n int) string {
+	if n == 1 {
+		return "1 problem"
+	}
+	return strconv.Itoa(n) + " problems"
+}
+
+// flowArrowClass places an arrow between two lanes, or a loop on one.
+func flowArrowClass(s *FlowStep) string {
+	c := "sf-arr sf-a" + strconv.Itoa(s.From) + strconv.Itoa(s.To) + " sf-c-" + s.Line
+	if s.To > s.From {
+		c += " sf-r"
+	} else {
+		c += " sf-l"
+	}
+	if s.Reply {
+		c += " sf-dash"
+	}
+	return c
+}
+
+func flowMid(s *FlowStep) string {
+	a, b := s.From, s.To
+	if a > b {
+		a, b = b, a
+	}
+	return "sf-m" + strconv.Itoa(a) + strconv.Itoa(b)
+}
+
+func flowRowClass(f *CallFlow, s *FlowStep) string {
+	c := "sf-row sf-g" + strconv.Itoa(f.Groups[s.Group-1].Colour)
+	if s.Fail {
+		c += " sf-fail"
+	}
+	if s.ID == f.Selected {
+		c += " sf-sel"
+	}
+	return c
+}
+
+func flowDetClass(f *CallFlow, s *FlowStep) string {
+	c := "sf-det sf-fold sf-g" + strconv.Itoa(f.Groups[s.Group-1].Colour)
+	if s.ID == f.Selected {
+		c += " sf-open"
+	}
+	return c
+}
+
+func flowStepGroupName(f *CallFlow, s *FlowStep) string {
+	return f.Groups[s.Group-1].Name
+}
+
+// flowResultNumeric is true when the step's result is an HTTP answer.
+func flowResultNumeric(s *FlowStep) bool {
+	return s.Result != "" && s.Result[0] >= '0' && s.Result[0] <= '9'
+}
+
+func flowKeyLine(k *FlowKey) string {
+	parts := []string{"“" + k.Name + "”"}
+	if k.Owner != "" {
+		parts = append(parts, "made by "+k.Owner)
+	}
+	if k.Role != "" {
+		parts = append(parts, k.Role)
+	}
+	return strings.Join(parts, " · ")
+}
+
+func flowRepeatLine(p *FlowProblem) string {
+	if p.RepeatCount == 1 {
+		return "Once in the last 24 hours:"
+	}
+	return fmt.Sprintf("%d times in the last 24 hours:", p.RepeatCount)
+}
+
+templ SyncFlow(f *CallFlow) {
+	<div class="sf-flow" id={ f.ID } data-sync-flow data-selected={ f.Selected }>
+		<div class="sf-bar">
+			<span class="sf-sum">
+				{ flowSteps(len(f.Steps)) } ·
+				<time class="sf-time" datetime={ flowISO(f.First) }>{ flowClock(f.First) }</time>
+				to
+				<time class="sf-time" datetime={ flowISO(f.Last) }>{ flowClock(f.Last) }</time>
+				if f.Problems > 0 {
+					· <span class="sf-bad">{ flowProblems(f.Problems) }</span>
+				}
+			</span>
+			<div class="sf-chips" role="group" aria-label="Show">
+				if !f.OneGroup {
+					for _, g := range f.Groups {
+						<button type="button" class={ "sf-chip sf-g" + strconv.Itoa(g.Colour) } data-hide={ strconv.Itoa(g.N) } aria-pressed="true">
+							<span class="sf-dot" aria-hidden="true"></span>{ g.Name } · { strconv.Itoa(g.Steps) }
+						</button>
+					}
+				}
+				<button type="button" class="sf-chip sf-prob" data-prob aria-pressed="false">Only problems</button>
+			</div>
+			<div class="sf-legend" aria-hidden="true">
+				<span><i class="sf-c-toch"></i>to Chronicle</span>
+				<span><i class="sf-c-tofo"></i>to Foundry</span>
+				<span><i class="sf-c-web"></i>web edit</span>
+				<span><i class="sf-c-muted sf-dash"></i>answer</span>
+				<span><i class="sf-c-bad"></i>problem</span>
+			</div>
+		</div>
+		<div class="sf-sheet">
+			<div class="sf-sheet-in">
+				<div class="sf-lhead">
+					<span class="sf-ch">Time</span>
+					<span></span>
+					<div class="sf-lanes sf-lanes-head">
+						<span><b>Chronicle</b><small>in a browser</small></span>
+						<span><b>Chronicle</b><small>server</small></span>
+						<span><b>Foundry</b><small>the game world</small></span>
+					</div>
+					<span class="sf-ch sf-rh">Result</span>
+				</div>
+				for _, r := range f.Rows {
+					if r.Head != nil {
+						<div class={ "sf-ghead sf-g" + strconv.Itoa(r.Head.Group.Colour) } data-group={ strconv.Itoa(r.Head.Group.N) }>
+							<span class="sf-gap">{ flowGap(r.Head.Gap) }</span>
+							<span></span>
+							<span class="sf-gname"><span class="sf-dot" aria-hidden="true"></span>{ r.Head.Group.Name } <small>{ flowSteps(r.Head.Group.Steps) }</small></span>
+						</div>
+					} else {
+						@flowStepRow(f, r.Step)
+					}
+				}
+				<p class="sf-none" hidden>Nothing to show. Turn a thing back on above.</p>
+			</div>
+		</div>
+	</div>
+}
+
+templ flowStepRow(f *CallFlow, s *FlowStep) {
+	<div
+		class={ flowRowClass(f, s) }
+		data-step={ s.ID }
+		data-group={ strconv.Itoa(s.Group) }
+		data-cause={ strings.Join(s.Cause, " ") }
+		data-then={ strings.Join(s.Then, " ") }
+		data-fail?={ s.Fail }
+		tabindex="0"
+		role="button"
+		aria-expanded={ strconv.FormatBool(s.ID == f.Selected) }
+		aria-controls={ "d-" + f.ID + "-" + s.ID }
+	>
+		<span class="sf-t"><time class="sf-time" datetime={ flowISO(s.At) } data-ms>{ flowClock(s.At) }<span>{ flowMillis(s.At) }</span></time></span>
+		<span class="sf-gut" aria-hidden="true"></span>
+		<span class="sf-lanes">
+			if s.From == s.To {
+				<span class={ "sf-self sf-at" + strconv.Itoa(s.From) + " sf-c-" + s.Line }></span>
+				<span class={ "sf-sl sf-at" + strconv.Itoa(s.From) }>
+					{ s.Label }
+					if s.Who != "" {
+						<span class="sf-who">· { s.Who }</span>
+					}
+					<span class="sf-code">{ s.Code }</span>
+				</span>
+			} else {
+				<span class={ flowArrowClass(s) }></span>
+				<span class={ "sf-al " + flowMid(s) }>
+					{ s.Label }
+					if s.Who != "" {
+						<span class="sf-who">· { s.Who }</span>
+					}
+				</span>
+				<span class={ "sf-code " + flowMid(s) }>{ s.Code }</span>
+			}
+		</span>
+		<span class="sf-res">
+			if s.Result != "" {
+				<b>{ s.Result }</b>
+			}
+			if s.ShowMs {
+				{ " " + strconv.Itoa(s.Ms) } ms
+			}
+			<span class="sf-car" aria-hidden="true">▸</span>
+		</span>
+	</div>
+	<div class={ flowDetClass(f, s) } id={ "d-" + f.ID + "-" + s.ID } data-det={ s.ID }>
+		<div>
+			if s.Problem != nil {
+				@flowProblemDetail(f, s, s.Problem)
+			} else {
+				@flowStepDetail(f, s)
+			}
+		</div>
+	</div>
+}
+
+templ flowDetailHead(f *CallFlow, s *FlowStep, title string, bad bool) {
+	<div class={ "sf-head", templ.KV("sf-bad", bad) }>
+		<h3>{ title }</h3>
+		<span class="sf-mono">
+			<time class="sf-time" datetime={ flowISO(s.At) }>{ flowClock(s.At) }</time>
+			if s.ShowMs {
+				· { strconv.Itoa(s.Ms) } ms
+			}
+			if !f.Admin {
+				· { flowStepGroupName(f, s) }
+			}
+		</span>
+	</div>
+}
+
+templ flowLinks(s *FlowStep) {
+	if len(s.Links) > 0 {
+		<div class="sf-full sf-links">
+			for _, l := range s.Links {
+				<button type="button" data-go={ l.ID }>
+					<span class="sf-k">{ l.Kind }</span>
+					<time class="sf-time sf-mono" datetime={ flowISO(l.At) }>{ flowClock(l.At) }</time>
+					{ l.Label }
+				</button>
+			}
+		</div>
+	}
+}
+
+templ flowCallBox(s *FlowStep) {
+	<div class="sf-callbox">
+		<dl>
+			if flowResultNumeric(s) {
+				<dt>Answer</dt>
+				<dd class={ "sf-mono", templ.KV("sf-bad", s.Fail) }>{ s.Code }</dd>
+			} else {
+				<dt>Call</dt>
+				<dd class="sf-mono">{ s.Code }</dd>
+			}
+			if s.ShowMs {
+				<dt>Took</dt>
+				<dd class="sf-mono">{ strconv.Itoa(s.Ms) } ms</dd>
+			}
+			if s.Who != "" {
+				<dt>Who</dt>
+				<dd>{ s.Who }</dd>
+			}
+			if s.Key != nil {
+				<dt>Key</dt>
+				<dd>{ flowKeyLine(s.Key) }</dd>
+			}
+			<dt>Recorded by</dt>
+			<dd>{ s.Recorded }</dd>
+		</dl>
+	</div>
+}
+
+templ flowStepDetail(f *CallFlow, s *FlowStep) {
+	<div class="sf-det-in">
+		@flowDetailHead(f, s, s.Label, false)
+		<div>
+			<h4>What happened</h4>
+			<p>{ s.What }</p>
+		</div>
+		<div>
+			@flowCallBox(s)
+		</div>
+		@flowLinks(s)
+	</div>
+}
+
+templ flowProblemDetail(f *CallFlow, s *FlowStep, p *FlowProblem) {
+	<div class="sf-det-in">
+		@flowDetailHead(f, s, p.Headline, true)
+		<div>
+			<h4>What happened</h4>
+			<p>{ p.What }</p>
+		</div>
+		<div>
+			<h4>Why</h4>
+			<p>{ p.Why }</p>
+		</div>
+		if p.Asked != "" && p.Was != "" {
+			<div>
+				<h4>The date, before and after</h4>
+				<div class="sf-state">
+					<div>{ p.Was }<small>Chronicle</small></div>
+					<span aria-hidden="true">✕</span>
+					<div class="sf-no">{ p.Asked }<small>Foundry asked for</small></div>
+				</div>
+				<p class="sf-note">Chronicle stayed on { p.Was }. Nothing else changed.</p>
+			</div>
+		}
+		if len(p.Next) > 0 {
+			<div>
+				<h4>What Foundry does next</h4>
+				<ul>
+					for _, n := range p.Next {
+						<li>{ n }</li>
+					}
+				</ul>
+			</div>
+		}
+		<div>
+			<h4>How to fix it</h4>
+			<ol>
+				for _, x := range p.Fix {
+					<li>{ x }</li>
+				}
+			</ol>
+			if p.FixedBy != "" {
+				<p class="sf-note">
+					if p.FixedByWho != "" {
+						{ p.FixedByWho } did this at
+					} else {
+						Done at
+					}
+					<button type="button" class="sf-golink" data-go={ p.FixedBy }><time class="sf-time sf-mono" datetime={ flowISO(p.FixedByAt) }>{ flowClock(p.FixedByAt) }</time></button>.
+				</p>
+			}
+		</div>
+		<div>
+			<h4>The call</h4>
+			@flowCallBox(s)
+		</div>
+		if p.RepeatCount > 0 {
+			<div class="sf-full">
+				<h4>Same problem lately</h4>
+				<div class="sf-again">
+					{ flowRepeatLine(p) }
+					for _, t := range p.Repeats {
+						<time class="sf-time sf-pill" datetime={ flowISO(t) } data-short>{ flowClock(t) }</time>
+					}
+					if p.RepeatKey != "" {
+						all from “{ p.RepeatKey }”.
+					}
+					if p.OnlyThese != "" {
+						<a href={ templ.SafeURL(p.OnlyThese) }>Show only these</a>
+					}
+				</div>
+			</div>
+		}
+		@flowLinks(s)
+		if p.OpenHistory != "" {
+			<div class="sf-full"><a href={ templ.SafeURL(p.OpenHistory) }>Open in the campaign’s Sync history ›</a></div>
+		}
+	</div>
+}
+
+templ SyncFlowEmpty() {
+	<p class="sf-empty">Nothing has synced yet.</p>
+}

@@ -116,3 +116,29 @@ func RegisterDrawingRoutes(e *echo.Echo, dh *DrawingHandler, campaignSvc campaig
 	pub.GET("/maps/:mid/drawings", dh.ListDrawings, campaigns.RequireViewAccess())
 	pub.GET("/maps/:mid/tokens", dh.ListTokens, campaigns.RequireViewAccess())
 }
+
+// RegisterHexRoutes sets up the hex layer's API. Painting is gated in
+// HexService (owner or DM grant, or a scribe where the map's draw policy and
+// fog allow), so the write route only requires membership: a DM-granted player
+// is not a scribe by role and must still get through to the service.
+func RegisterHexRoutes(e *echo.Echo, hh *HexHandler, campaignSvc campaigns.CampaignService, authSvc auth.AuthService, addonSvc addons.AddonService) {
+	cg := e.Group("/campaigns/:id",
+		auth.RequireAuth(authSvc),
+		campaigns.RequireCampaignAccess(campaignSvc),
+		addons.RequireAddon(addonSvc, "maps"),
+	)
+	cg.PATCH("/maps/:mid/hexes/cells", hh.PatchHexCells, campaigns.RequireRole(campaigns.RolePlayer))
+	// Same membership-only gate: a DM-granted player is not an owner by role,
+	// and HexService decides who may change what the hexes cover.
+	cg.PUT("/maps/:mid/hexes/layer", hh.PutHexLayer, campaigns.RequireRole(campaigns.RolePlayer))
+
+	// Public-capable read so a public campaign's map shows its hexes. The
+	// service filters cells by the viewer's role, which is RoleNone for the
+	// public.
+	pub := e.Group("/campaigns/:id",
+		auth.OptionalAuth(authSvc),
+		campaigns.AllowPublicCampaignAccess(campaignSvc),
+		addons.RequireAddon(addonSvc, "maps"),
+	)
+	pub.GET("/maps/:mid/hexes", hh.GetHexes, campaigns.RequireViewAccess())
+}

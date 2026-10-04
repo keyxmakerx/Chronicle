@@ -344,7 +344,7 @@ func TestWeatherClimates_ValidClimate(t *testing.T) {
 	}
 }
 
-// The settings page's readout must use the Generate sheet's words at the
+// The settings page's readout must use the weather calendar's words at the
 // same thresholds (continuityWords in calendar_weather_sheet.js).
 func TestContinuityWords(t *testing.T) {
 	tests := []struct {

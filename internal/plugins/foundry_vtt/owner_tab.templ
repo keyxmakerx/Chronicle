@@ -1,5 +1,5 @@
 // foundry_vtt — owner_tab.templ renders the per-campaign Foundry VTT
-// install URL + pin selector + rotate-token button as an HTMX fragment
+// install URL + version pointer + rotate-token button as an HTMX fragment
 // served at GET /campaigns/:id/foundry-vtt/settings-tab. The campaigns
 // plugin's VTT Setup Guides → Foundry VTT disclosure section embeds
 // this via hx-get.
@@ -26,7 +26,7 @@ templ OwnerTabFragment(data OwnerTabData) {
 		<div class="space-y-6">
 			@ownerInstallURLBlock(data)
 			@ownerCurrentVersionCard(data)
-			@ownerVersionSelector(data)
+			@ownerVersionPointer(data)
 			@ownerPlayerInstructions(data)
 		</div>
 	}
@@ -124,33 +124,14 @@ templ descriptorBadge(present bool) {
 	}
 }
 
-// ownerVersionSelector renders the dropdown the operator uses to
-// change the pin. Versions come from the packages plugin's on-disk
-// install dirs, not foundry_modules' catalog. Latest-tracking is
-// the empty-string option.
-templ ownerVersionSelector(data OwnerTabData) {
-	if len(data.AvailableVersions) > 0 {
-		<div class="card p-4 rounded-md space-y-3">
-			<div>
-				<p class="text-xs font-semibold text-fg-muted uppercase tracking-wider mb-2">Pin to Version</p>
-				<select id="fvtt-pin-selector" class="w-full px-3 py-2 rounded-md border border-edge bg-surface text-sm">
-					<option value="">Auto-update (track latest installed)</option>
-					for _, v := range data.AvailableVersions {
-						<option value={ v } selected?={ v == data.CurrentPin }>{ v }</option>
-					}
-				</select>
-			</div>
-			<div class="flex items-center justify-end gap-2">
-				<button
-					type="button"
-					onclick={ pinSaveOnClick(data.CampaignID) }
-					class="px-4 py-1.5 text-sm rounded-md bg-accent-fill text-on-accent hover:bg-accent-fill-hover"
-				>
-					Save Pin
-				</button>
-			</div>
-		</div>
-	}
+// ownerVersionPointer sends the owner to the one place the version is chosen.
+// The pin dropdown that lived here let an owner move the campaign without the
+// update flow's admin hold and confirmation, so it is gone.
+templ ownerVersionPointer(data OwnerTabData) {
+	<p class="text-sm text-fg-secondary">
+		Which module version this campaign runs, and new versions waiting for you, are on
+		<a href={ templ.SafeURL(extensionsURL(data.CampaignID)) } class="text-accent hover:underline">Apps &amp; game system</a>.
+	</p>
 }
 
 // ownerInstallURLBlock is the primary card on the owner tab: the
@@ -216,6 +197,6 @@ templ ownerPlayerInstructions(data OwnerTabData) {
 	</details>
 }
 
-// Save Pin + Rotate Token use inline IIFE onclick bodies built in
-// onclick_handlers.go (pinSaveOnClick, rotateTokenOnClick) — see that
-// file for why templ `script` helpers aren't used here.
+// Rotate Token uses an inline IIFE onclick body built in
+// onclick_handlers.go (rotateTokenOnClick) — see that file for why templ
+// `script` helpers aren't used here.

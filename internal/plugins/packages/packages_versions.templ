@@ -7,11 +7,14 @@ import "fmt"
 // VersionList renders a package's versions, newest first, with Install /
 // switch, Pin and release-notes controls. It is the panel's Versions tab and
 // the body of GET /admin/packages/:id/versions.
-templ VersionList(pkg *Package, versions []PackageVersion, csrfToken string) {
+templ VersionList(pkg *Package, versions []PackageVersion, ruleText, csrfToken string) {
 	<div class="space-y-3">
 		<p class="text-xs text-fg-muted">
 			Install or switch to any version. Pinning a version stops automatic updates for this package.
 		</p>
+		if ruleText != "" {
+			<p class="text-xs text-fg-muted">{ ruleText }</p>
+		}
 		if len(versions) == 0 {
 			<p class="text-sm text-fg-secondary">No versions found. Press Check now on the Settings tab.</p>
 		} else {
@@ -38,7 +41,7 @@ templ VersionList(pkg *Package, versions []PackageVersion, csrfToken string) {
 										hx-put={ fmt.Sprintf("/admin/packages/%s/version", pkg.ID) }
 										hx-vals={ versionVals(v.Version) }
 										hx-headers={ csrfHeaders(csrfToken) }
-										hx-confirm={ fmt.Sprintf("Install version %s?", v.Version) }
+										hx-confirm={ installConfirmText(pkg.Type, v.Version) }
 										class={ "btn-sm", templ.KV("btn-primary", upgrade), templ.KV("btn-secondary", !upgrade) }
 									>
 										if upgrade {

@@ -3,6 +3,7 @@ package maps
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"regexp"
 	"strings"
 	"time"
@@ -20,6 +21,7 @@ var validDrawingTypes = map[string]bool{
 	"polygon":   true,
 	"text":      true,
 	"shadow":    true,
+	"image":     true,
 }
 
 // validLayerTypes enumerates allowed layer types.
@@ -151,6 +153,9 @@ type DrawingService interface {
 	// SetDrawPolicyLookup wires the per-map "who can draw" value (DrawWhoOwners
 	// or DrawWhoScribes). Unwired, every map uses the default (scribes).
 	SetDrawPolicyLookup(fn func(ctx context.Context, mapID string) (string, error))
+	// SetMediaVerifier wires the check that a picture's media file belongs to
+	// the map's campaign. Unwired, picture writes are refused.
+	SetMediaVerifier(v MediaVerifier)
 }
 
 // MapEventPublisher emits domain events when map resources change.
@@ -189,7 +194,13 @@ type drawingService struct {
 	// onShadowChange tells the map service a shadow was written, so cached
 	// answers about shadowed map pictures are dropped.
 	onShadowChange func(campaignID string)
+	// media confirms a picture's file is an image of the map's campaign.
+	media MediaVerifier
 }
+
+// errImageWiring is the cause logged when picture writes arrive before the
+// media verifier is wired.
+var errImageWiring = errors.New("maps: media verifier not configured")
 
 // NewDrawingService creates a new drawing service.
 func NewDrawingService(repo DrawingRepository) DrawingService {
@@ -224,6 +235,11 @@ func (s *drawingService) shadowChanged(ctx context.Context, d *Drawing) {
 		return
 	}
 	s.onShadowChange(s.campaignForMap(ctx, d.MapID))
+}
+
+// SetMediaVerifier sets the media check used for picture drawings.
+func (s *drawingService) SetMediaVerifier(v MediaVerifier) {
+	s.media = v
 }
 
 // requireDrawAccess is the server-side half of the map's "who can draw"
@@ -285,6 +301,27 @@ func (s *drawingService) CreateDrawing(ctx context.Context, input CreateDrawingI
 			return nil, err
 		}
 	}
+	input.Crop = dropNullJSON(input.Crop)
+	if dt == DrawingTypeImage {
+		if err := validateImageGeometry(input.Points, input.Rotation); err != nil {
+			return nil, err
+		}
+		crop, err := validateCrop(input.Crop)
+		if err != nil {
+			return nil, err
+		}
+		input.Crop = crop
+		imageID := ""
+		if input.ImageID != nil {
+			imageID = *input.ImageID
+		}
+		if err := s.verifyImageMedia(ctx, input.MapID, imageID); err != nil {
+			return nil, err
+		}
+		input.FillAlpha = clampImageOpacity(input.FillAlpha)
+	} else if err := rejectImageFields(input.ImageID, input.Crop); err != nil {
+		return nil, err
+	}
 
 	vis := input.Visibility
 	if vis == "" {
@@ -307,6 +344,9 @@ func (s *drawingService) CreateDrawing(ctx context.Context, input CreateDrawingI
 		Visibility:  vis,
 		CreatedBy:   &input.CreatedBy,
 		FoundryID:   input.FoundryID,
+		ImageID:     input.ImageID,
+		Crop:        input.Crop,
+		SortOrder:   input.SortOrder,
 	}
 
 	if d.StrokeColor == "" {
@@ -365,6 +405,15 @@ func (s *drawingService) UpdateDrawing(ctx context.Context, id, mapID string, ro
 	d.FontSize = input.FontSize.Ptr(d.FontSize)
 	d.Rotation = input.Rotation.Val(d.Rotation)
 	d.Visibility = input.Visibility.Val(d.Visibility)
+	d.SortOrder = input.SortOrder.Val(d.SortOrder)
+
+	if d.DrawingType == DrawingTypeImage {
+		if err := s.mergeImageFields(ctx, d, input); err != nil {
+			return err
+		}
+	} else if err := rejectImageFields(input.ImageID.Ptr(nil), input.Crop.Val(nil)); err != nil {
+		return err
+	}
 
 	// A shadow keeps its shape and strength rules on every write, so an edit
 	// cannot leave a box players cannot interpret or hide a pin unpredictably.
@@ -380,6 +429,39 @@ func (s *drawingService) UpdateDrawing(ctx context.Context, id, mapID string, ro
 	}
 	s.shadowChanged(ctx, d)
 	s.events.PublishDrawingEvent("updated", s.campaignForMap(ctx, d.MapID), d)
+	return nil
+}
+
+// mergeImageFields applies the picture-only fields of a partial update and
+// re-checks every picture rule on the merged row, so an edit to one field
+// cannot leave the whole picture invalid.
+func (s *drawingService) mergeImageFields(ctx context.Context, d *Drawing, input UpdateDrawingInput) error {
+	if input.ImageID.IsNull() {
+		return apperror.NewBadRequest("a picture needs an image")
+	}
+	if id, ok := input.ImageID.Get(); ok {
+		// Only a changed id needs the media lookup; re-sending the stored id
+		// keeps working even if the file was since removed.
+		if d.ImageID == nil || *d.ImageID != id {
+			if err := s.verifyImageMedia(ctx, d.MapID, id); err != nil {
+				return err
+			}
+		}
+		d.ImageID = &id
+	}
+	d.Crop = input.Crop.Val(d.Crop)
+	if input.Crop.IsNull() {
+		d.Crop = nil
+	}
+	crop, err := validateCrop(d.Crop)
+	if err != nil {
+		return err
+	}
+	d.Crop = crop
+	if err := validateImageGeometry(d.Points, d.Rotation); err != nil {
+		return err
+	}
+	d.FillAlpha = clampImageOpacity(d.FillAlpha)
 	return nil
 }
 

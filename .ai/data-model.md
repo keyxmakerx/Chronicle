@@ -237,7 +237,7 @@ plugin does with them: `internal/plugins/calendar/.ai.md`.
 | `map_campaign_settings` | Campaign-wide default map frame | `campaign_id` PK, FK→`campaigns` CASCADE; `frame_style` (no row = `atlas`) |
 | `map_markers` | Pins on a map | `x`/`y` percentage 0–100; `entity_id` FK→`entities` SET NULL; `pin_category`; `visibility`/`visibility_rules`; `foundry_id` |
 | `map_layers` | Ordered drawing/token/fog layers | `layer_type`; `is_visible`/`is_locked`/`opacity` |
-| `map_drawings` | Freehand/shape/text annotations on a layer | `points` JSON; `visibility`/`visibility_rules`; `foundry_id` |
+| `map_drawings` | Freehand/shape/text/shadow annotations and pictures on a layer | `points` JSON; `visibility`/`visibility_rules`; `foundry_id`; `image_id` (picture's media file, no FK), `crop` JSON, `sort_order` (migration 008, pictures only) |
 | `map_tokens` | Positioned tokens (often an entity's avatar) | `entity_id` FK SET NULL; `bar1/2_value/max`, `aura_*`, `light_*`, `vision_enabled/range` (Foundry-parity fields); `status_effects`/`flags` JSON; `foundry_id` |
 | `map_fog` | Explored/unexplored fog-of-war polygons | `points` JSON; `is_explored` |
 
@@ -291,7 +291,7 @@ Foundry module repo for the wire contract.
 | `sync_changes` | The change feed Foundry reads on connect (`GET /sync/changes`) | `seq` autoincrement is the cursor; `resource_type`, `resource_id`, `op` enum(`created`,`updated`,`deleted`); rows are pruned by age |
 | `sync_change_watermarks` | How far the feed was pruned, so a stale cursor is told to resync | PK `campaign_id`; `pruned_through` |
 | `sync_calendar_date_beacons` | Per-campaign "date Foundry last saw / last applied" | PK `campaign_id`; `last_served_*` (a Bearer-authed GET was served) vs `applied_*` (Foundry confirmed it set its own date via `POST .../confirm`) — distinct claims, filled independently. |
-| `sync_events` | Sync history: one row per thing that synced, either direction, read by Manage › Sync history and the module's History tab | `direction` enum(`to_chronicle`,`to_foundry`,`link`); `reported_by` enum(`chronicle`,`client`); `parent_id` groups a catch-up run's steps; names, ids, call and answer only, never page text; pruned after 90 days |
+| `sync_events` | Sync history: one row per thing that synced, either direction, read by Manage › Sync history and the module's History tab | `direction` enum(`to_chronicle`,`to_foundry`,`link`); `reported_by` enum(`chronicle`,`client`); `parent_id` groups a catch-up run's steps; names, ids, call and answer only, never page text; `was_value` is what a change replaced, in words (a date push's old date); pruned after 90 days |
 
 ### packages (`internal/plugins/packages/migrations/`)
 
@@ -299,6 +299,7 @@ Foundry module repo for the wire contract.
 |---|---|---|
 | `packages` | Installed/available external packages (systems, Foundry modules) | `type` enum(`system`,`foundry-module`); `slug` UNIQUE; `auto_update` enum; `status` enum(`pending`,`approved`,`rejected`,`archived`,`deprecated`) — submission/review workflow; `last_error`/`last_error_at` (durable failure record, survives restarts) |
 | `package_versions` | Version history from GitHub releases | `UNIQUE(package_id, version)`; `prerelease` flag |
+| `campaign_package_updates` | One campaign's update choice for one package | `PRIMARY KEY(campaign_id, package_id)`; `update_mode` enum(`automatic`,`pinned`,`approve_first`); `version` (the version a game-system campaign stays on); `held_version` (a newly installed version awaiting approval, any package type). No row = automatic. The Foundry module keeps its mode and pin in the campaign settings, so only `held_version` is used on its rows |
 
 ### foundry_vtt (`internal/plugins/foundry_vtt/migrations/`)
 

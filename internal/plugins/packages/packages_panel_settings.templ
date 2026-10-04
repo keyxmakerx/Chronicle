@@ -4,7 +4,7 @@ package packages
 
 // panelSettings groups the per-package controls. Each one is an existing
 // endpoint; the page reloads to the same panel after a change.
-templ panelSettings(r PackageRow, csrfToken string) {
+templ panelSettings(r PackageRow, site RetentionSettings, csrfToken string) {
 	<div class="space-y-6">
 		<section class="space-y-2" aria-labelledby="pkg-get-new">
 			<h3 id="pkg-get-new" class="text-xs font-bold uppercase tracking-wide text-fg-secondary">Get new versions</h3>
@@ -35,6 +35,39 @@ templ panelSettings(r PackageRow, csrfToken string) {
 				<i class="fa-solid fa-rotate mr-1"></i>
 				Check now
 			</button>
+		</section>
+		<section class="space-y-2" aria-labelledby="pkg-old">
+			<h3 id="pkg-old" class="text-xs font-bold uppercase tracking-wide text-fg-secondary">Old versions</h3>
+			if r.Type == PackageTypeFoundryModule {
+				<p class="text-xs text-fg-muted">{ RetentionSummary(site, &r.Package) }</p>
+			} else {
+				<form
+					hx-put={ "/admin/packages/" + r.ID + "/retention" }
+					hx-headers={ csrfHeaders(csrfToken) }
+					class="space-y-2"
+				>
+					<label class="flex items-start gap-3 rounded-lg border border-edge p-2.5 cursor-pointer hover:bg-surface-alt">
+						<input type="radio" name="mode" value="site" checked?={ r.RetentionKeepNewest == nil } class="mt-1 text-accent"/>
+						<span>
+							<span class="block text-sm font-medium text-fg">Use the site rule</span>
+							<span class="block text-xs text-fg-muted">{ RetentionSummary(site, &Package{Type: r.Type}) }</span>
+						</span>
+					</label>
+					<label class="flex items-start gap-3 rounded-lg border border-edge p-2.5 cursor-pointer hover:bg-surface-alt">
+						<input type="radio" name="mode" value="own" checked?={ r.RetentionKeepNewest != nil } class="mt-1 text-accent"/>
+						<span class="flex-1">
+							<span class="block text-sm font-medium text-fg">Its own rule</span>
+							<span class="flex items-center gap-2 text-xs text-fg-muted">
+								Keep the newest
+								<input type="number" name="keep_newest" value={ ownKeepNewest(r.RetentionKeepNewest) } min="1" max="1000" class="input w-20" aria-label="Number of versions to keep"/>
+								versions
+							</span>
+						</span>
+					</label>
+					<p class="text-xs text-fg-muted">The installed and pinned versions are always kept.</p>
+					<button type="submit" class="btn-secondary btn-sm">Save</button>
+				</form>
+			}
 		</section>
 		<section class="space-y-2" aria-labelledby="pkg-source">
 			<h3 id="pkg-source" class="text-xs font-bold uppercase tracking-wide text-fg-secondary">Where it comes from</h3>

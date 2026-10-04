@@ -49,7 +49,7 @@ func NewService(src Sources) Service {
 // left out, so one broken plugin never blanks the whole screen.
 func (s *service) Build(ctx context.Context, campaignID string, v Viewer) (*View, error) {
 	if v.Role < 2 {
-		return nil, apperror.NewForbidden("the DM Screen is for the campaign's owner and scribes")
+		return nil, apperror.NewForbidden("the DM Screen is for the people running this campaign")
 	}
 	view := &View{CampaignID: campaignID}
 	warn := func(section string, err error) {
@@ -144,7 +144,7 @@ func (s *service) Build(ctx context.Context, campaignID string, v Viewer) (*View
 // Reveal makes a hidden character visible to players and returns its name.
 func (s *service) Reveal(ctx context.Context, entityID, campaignID string, v Viewer) (string, error) {
 	if v.Role < 2 {
-		return "", apperror.NewForbidden("only the campaign's owner and scribes can reveal characters")
+		return "", apperror.NewForbidden("only the people running this campaign can reveal characters")
 	}
 	if s.src.Hidden == nil {
 		return "", apperror.NewNotFound("revealing is not available")

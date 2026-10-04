@@ -901,7 +901,7 @@ func (h *Handler) ListDayWeatherAPI(c echo.Context) error {
 }
 
 // GetWeatherSettingsAPI returns the calendar's climate and how long weather
-// lasts, for the Generate sheet. Same gate as the day-weather writes, since
+// lasts, for the weather calendar. Same gate as the day-weather writes, since
 // only those who can store generated weather need it.
 // GET /campaigns/:id/calendars/:calid/weather/settings
 func (h *Handler) GetWeatherSettingsAPI(c echo.Context) error {

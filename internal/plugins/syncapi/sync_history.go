@@ -45,6 +45,7 @@ type SyncEvent struct {
 	OK           bool        `json:"ok"`
 	DurationMs   int         `json:"durationMs"`
 	Message      string      `json:"message,omitempty"`
+	Was          string      `json:"was,omitempty"`
 	UserID       *string     `json:"-"`
 	UserName     string      `json:"who,omitempty"`
 	APIKeyID     *int        `json:"-"`
@@ -67,6 +68,18 @@ type SyncHistoryRepository interface {
 	Insert(ctx context.Context, campaignID string, ev *SyncEvent) (int64, error)
 	// List returns top-level events newest first, each with its children.
 	List(ctx context.Context, campaignID string, f SyncHistoryFilter) ([]SyncEvent, error)
+	// Get returns one row of this campaign, a step of a run included.
+	Get(ctx context.Context, campaignID string, id int64) (*SyncEvent, error)
+	// Window returns every row, steps included, within span of centre,
+	// oldest first: at most perSide rows on each side, the closest kept, so
+	// a busy stretch never pushes out the rows around the centre.
+	Window(ctx context.Context, campaignID string, centre time.Time, span time.Duration, perSide int) ([]SyncEvent, error)
+	// Latest returns the newest row since a time, or only the newest
+	// failure, or nil when there is none.
+	Latest(ctx context.Context, campaignID string, since time.Time, failedOnly bool) (*SyncEvent, error)
+	// Failures returns this campaign's failed rows for one call and answer
+	// since a time, newest first.
+	Failures(ctx context.Context, campaignID, call, status string, since time.Time, limit int) ([]SyncEvent, error)
 	// PruneOlderThan deletes rows older than cutoff.
 	PruneOlderThan(ctx context.Context, cutoff time.Time) (int64, error)
 }
@@ -82,8 +95,8 @@ func NewSyncHistoryRepository(db *sql.DB) SyncHistoryRepository {
 
 const insertSyncEvent = `INSERT INTO sync_events
 	(campaign_id, parent_id, occurred_at, direction, reported_by, kind, resource_id, resource_name,
-	 action, call_desc, status, ok, duration_ms, message, user_id, api_key_id)
-	VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+	 action, call_desc, status, ok, duration_ms, message, was_value, user_id, api_key_id)
+	VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
 
 func (r *syncHistoryRepo) Insert(ctx context.Context, campaignID string, ev *SyncEvent) (int64, error) {
 	tx, err := r.db.BeginTx(ctx, nil)
@@ -117,7 +130,7 @@ func (r *syncHistoryRepo) Insert(ctx context.Context, campaignID string, ev *Syn
 func insertEventTx(ctx context.Context, tx *sql.Tx, campaignID string, parent *int64, ev *SyncEvent) (int64, error) {
 	res, err := tx.ExecContext(ctx, insertSyncEvent,
 		campaignID, parent, ev.OccurredAt.UTC(), ev.Direction, ev.ReportedBy, ev.Kind, ev.ResourceID,
-		ev.ResourceName, ev.Action, ev.Call, ev.Status, ev.OK, ev.DurationMs, ev.Message, ev.UserID, ev.APIKeyID)
+		ev.ResourceName, ev.Action, ev.Call, ev.Status, ev.OK, ev.DurationMs, ev.Message, ev.Was, ev.UserID, ev.APIKeyID)
 	if err != nil {
 		return 0, apperror.NewInternal(fmt.Errorf("insert sync event: %w", err))
 	}
@@ -130,7 +143,7 @@ func insertEventTx(ctx context.Context, tx *sql.Tx, campaignID string, parent *i
 
 const selectSyncEvent = `SELECT e.id, e.parent_id, e.occurred_at, e.direction, e.reported_by, e.kind,
 	e.resource_id, e.resource_name, e.action, e.call_desc, e.status, e.ok, e.duration_ms, e.message,
-	e.user_id, COALESCE(u.display_name, ''), e.api_key_id
+	e.was_value, e.user_id, COALESCE(u.display_name, ''), e.api_key_id
 	FROM sync_events e LEFT JOIN users u ON u.id = e.user_id`
 
 func (r *syncHistoryRepo) List(ctx context.Context, campaignID string, f SyncHistoryFilter) ([]SyncEvent, error) {
@@ -219,7 +232,7 @@ func scanSyncEvents(rows *sql.Rows) ([]SyncEvent, error) {
 		var key sql.NullInt64
 		if err := rows.Scan(&ev.ID, &parent, &ev.OccurredAt, &ev.Direction, &ev.ReportedBy, &ev.Kind,
 			&ev.ResourceID, &ev.ResourceName, &ev.Action, &ev.Call, &ev.Status, &ev.OK, &ev.DurationMs,
-			&ev.Message, &user, &ev.UserName, &key); err != nil {
+			&ev.Message, &ev.Was, &user, &ev.UserName, &key); err != nil {
 			return nil, apperror.NewInternal(fmt.Errorf("scan sync event: %w", err))
 		}
 		if parent.Valid {
@@ -240,6 +253,76 @@ func scanSyncEvents(rows *sql.Rows) ([]SyncEvent, error) {
 		return nil, apperror.NewInternal(fmt.Errorf("read sync events: %w", err))
 	}
 	return out, nil
+}
+
+func (r *syncHistoryRepo) Get(ctx context.Context, campaignID string, id int64) (*SyncEvent, error) {
+	rows, err := r.db.QueryContext(ctx, selectSyncEvent+" WHERE e.campaign_id = ? AND e.id = ?", campaignID, id)
+	if err != nil {
+		return nil, apperror.NewInternal(fmt.Errorf("get sync event: %w", err))
+	}
+	events, err := scanSyncEvents(rows)
+	if err != nil {
+		return nil, err
+	}
+	if len(events) == 0 {
+		return nil, apperror.NewNotFound("that history entry was not found")
+	}
+	return &events[0], nil
+}
+
+func (r *syncHistoryRepo) Window(ctx context.Context, campaignID string, centre time.Time, span time.Duration, perSide int) ([]SyncEvent, error) {
+	before, err := r.db.QueryContext(ctx, selectSyncEvent+
+		" WHERE e.campaign_id = ? AND e.occurred_at BETWEEN ? AND ? ORDER BY e.occurred_at DESC, e.id DESC LIMIT ?",
+		campaignID, centre.Add(-span).UTC(), centre.UTC(), perSide)
+	if err != nil {
+		return nil, apperror.NewInternal(fmt.Errorf("sync event window: %w", err))
+	}
+	earlier, err := scanSyncEvents(before)
+	if err != nil {
+		return nil, err
+	}
+	after, err := r.db.QueryContext(ctx, selectSyncEvent+
+		" WHERE e.campaign_id = ? AND e.occurred_at > ? AND e.occurred_at <= ? ORDER BY e.occurred_at, e.id LIMIT ?",
+		campaignID, centre.UTC(), centre.Add(span).UTC(), perSide)
+	if err != nil {
+		return nil, apperror.NewInternal(fmt.Errorf("sync event window: %w", err))
+	}
+	later, err := scanSyncEvents(after)
+	if err != nil {
+		return nil, err
+	}
+	out := make([]SyncEvent, 0, len(earlier)+len(later))
+	for i := len(earlier) - 1; i >= 0; i-- {
+		out = append(out, earlier[i])
+	}
+	return append(out, later...), nil
+}
+
+func (r *syncHistoryRepo) Latest(ctx context.Context, campaignID string, since time.Time, failedOnly bool) (*SyncEvent, error) {
+	q := selectSyncEvent + " WHERE e.campaign_id = ? AND e.occurred_at >= ?"
+	if failedOnly {
+		q += " AND e.ok = 0"
+	}
+	rows, err := r.db.QueryContext(ctx, q+" ORDER BY e.occurred_at DESC, e.id DESC LIMIT 1", campaignID, since.UTC())
+	if err != nil {
+		return nil, apperror.NewInternal(fmt.Errorf("latest sync event: %w", err))
+	}
+	events, err := scanSyncEvents(rows)
+	if err != nil || len(events) == 0 {
+		return nil, err
+	}
+	return &events[0], nil
+}
+
+func (r *syncHistoryRepo) Failures(ctx context.Context, campaignID, call, status string, since time.Time, limit int) ([]SyncEvent, error) {
+	rows, err := r.db.QueryContext(ctx, selectSyncEvent+
+		" WHERE e.campaign_id = ? AND e.ok = 0 AND e.call_desc = ? AND e.status = ? AND e.occurred_at >= ?"+
+		" ORDER BY e.occurred_at DESC, e.id DESC LIMIT ?",
+		campaignID, call, status, since.UTC(), limit)
+	if err != nil {
+		return nil, apperror.NewInternal(fmt.Errorf("repeated sync failures: %w", err))
+	}
+	return scanSyncEvents(rows)
 }
 
 func (r *syncHistoryRepo) PruneOlderThan(ctx context.Context, cutoff time.Time) (int64, error) {

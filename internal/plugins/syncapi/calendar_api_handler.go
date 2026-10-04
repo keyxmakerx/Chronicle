@@ -2,6 +2,7 @@ package syncapi
 
 import (
 	"context"
+	"fmt"
 	"io"
 	"log/slog"
 	"net/http"
@@ -598,15 +599,22 @@ type apiSetDateRequest struct {
 // which the module reads as "dates are read-only here".
 // PUT /api/v1/campaigns/:id/calendar/date
 func (h *CalendarAPIHandler) SetDate(c echo.Context) error {
+	// Read first so the sync history names the date asked for and the date
+	// it would replace, refused or not. The answers keep their order: a
+	// non-owner hears 403 before anything about the calendar or the body.
+	var req apiSetDateRequest
+	bindErr := c.Bind(&req)
+	cal, calErr := h.defaultCalendar(c, h.viewer(c))
+	if bindErr == nil && calErr == nil {
+		noteSyncChange(c, "", calendarDateLabel(cal, req.Year, req.Month, req.Day), cal.FullDateLabel())
+	}
 	if err := h.requireOwner(c); err != nil {
 		return err
 	}
-	cal, err := h.defaultCalendar(c, h.viewer(c))
-	if err != nil {
-		return err
+	if calErr != nil {
+		return calErr
 	}
-	var req apiSetDateRequest
-	if err := c.Bind(&req); err != nil {
+	if bindErr != nil {
 		return apperror.NewBadRequest("invalid request body")
 	}
 	if err := h.calendarSvc.SetCurrentDate(c.Request().Context(), cal.ID, cal.CampaignID,
@@ -654,6 +662,12 @@ func (h *CalendarAPIHandler) CreateCalendar(c echo.Context) error {
 }
 
 // --- Helpers ---
+
+// calendarDateLabel names a date the way the calendar pages do
+// (Calendar.FullDateLabel), for a date the calendar may not be on.
+func calendarDateLabel(cal *calendar.Calendar, year, month, day int) string {
+	return fmt.Sprintf("%s %d, %d", cal.MonthName(month), day, year)
+}
 
 // recordCalendarDateBeaconIfModule records the served-date beacon only for a
 // real Bearer key: the session door's synthetic key (synthKeySessionID) is a
