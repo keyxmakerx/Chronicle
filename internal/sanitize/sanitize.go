@@ -119,18 +119,25 @@ var secretSpanRe = regexp.MustCompile(`(?s)<span[^>]*\bdata-secret\b[^>]*>.*?</s
 // ends at its own closing tag.
 var gmPictureRe = regexp.MustCompile(`(?s)<figure\b[^>]*\bclass="[^"]*\bce-img--gm\b[^"]*"[^>]*>.*?</figure>`)
 
-// StripSecretsHTML removes all <span data-secret>...</span> elements and
-// GM-only pictures from HTML, used to hide GM-only content from players.
+// rollerRe matches a rolling-table roller from the editor: an empty <div>
+// whose class list holds ce-roll. The roller is a DM tool, so players never
+// get it; only what the DM puts into the text reaches them.
+var rollerRe = regexp.MustCompile(`(?s)<div\b[^>]*\bclass="[^"]*\bce-roll\b[^"]*"[^>]*>.*?</div>`)
+
+// StripSecretsHTML removes all <span data-secret>...</span> elements,
+// GM-only pictures and rolling-table rollers from HTML, used to hide GM-only
+// content from players.
 func StripSecretsHTML(html string) string {
 	if html == "" {
 		return ""
 	}
 	html = gmPictureRe.ReplaceAllString(html, "")
+	html = rollerRe.ReplaceAllString(html, "")
 	return secretSpanRe.ReplaceAllString(html, "")
 }
 
-// StripSecretsJSON removes nodes marked with the "secret" mark, and GM-only
-// pictures, from ProseMirror JSON content. Returns the modified JSON string. If the input
+// StripSecretsJSON removes nodes marked with the "secret" mark, GM-only
+// pictures and rolling-table rollers from ProseMirror JSON content. Returns the modified JSON string. If the input
 // is not valid ProseMirror JSON, it is returned unchanged.
 func StripSecretsJSON(jsonStr string) string {
 	if jsonStr == "" {
@@ -168,7 +175,7 @@ func stripSecretNodes(node map[string]interface{}) {
 			continue
 		}
 
-		if hasSecretMark(childMap) || isGMPicture(childMap) {
+		if hasSecretMark(childMap) || isGMPicture(childMap) || childMap["type"] == "rollTable" {
 			continue // strip this node
 		}
 

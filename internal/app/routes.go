@@ -44,6 +44,7 @@ import (
 	"github.com/keyxmakerx/chronicle/internal/plugins/npcs"
 	"github.com/keyxmakerx/chronicle/internal/plugins/packages"
 	"github.com/keyxmakerx/chronicle/internal/plugins/restore"
+	"github.com/keyxmakerx/chronicle/internal/plugins/rolltables"
 	"github.com/keyxmakerx/chronicle/internal/plugins/sessions"
 	"github.com/keyxmakerx/chronicle/internal/plugins/settings"
 	"github.com/keyxmakerx/chronicle/internal/plugins/smtp"
@@ -4788,6 +4789,15 @@ func (a *App) RegisterRoutes() {
 		syncAPIHandler.SetSystemStateReader(&systemStateSyncReader{svc: systemStateSvc})
 	} else {
 		slog.Warn("systemstate plugin degraded — routes not registered")
+	}
+
+	// Per-campaign rolling tables: the DM team edits them, scribes may roll.
+	if a.PluginHealth.IsHealthy(rolltables.PluginSlug) {
+		rolltables.RegisterRoutes(e,
+			rolltables.NewHandler(rolltables.NewService(rolltables.NewRepository(a.DB))),
+			campaignService, authService)
+	} else {
+		slog.Warn("rolltables plugin degraded — routes not registered")
 	}
 
 	// Late-bind the entity_notes notifier now that wsEventBus exists.
