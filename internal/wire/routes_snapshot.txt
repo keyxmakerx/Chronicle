@@ -428,6 +428,7 @@ GET	/search	internal/systems/routes.go
 GET	/security	internal/plugins/admin/routes.go
 GET	/sessions	internal/plugins/sessions/routes.go
 GET	/sessions/:sid	internal/plugins/sessions/routes.go
+GET	/sessions/:sid/page	internal/plugins/sessions/routes.go
 GET	/sessions/embed	internal/plugins/sessions/routes.go
 GET	/sessions/feed-settings	internal/plugins/sessions/routes.go
 GET	/sessions/feed/:token	internal/plugins/sessions/routes.go

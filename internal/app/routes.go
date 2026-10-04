@@ -3358,7 +3358,8 @@ func (a *App) RegisterRoutes() {
 	// editor's Era look part (calendar_era_look.js, which mounts on that
 	// page's data-widget="calendar_era_look"); calendar_view.js mounts on
 	// data-widget="calendar_view" (the calendar's own page, however it was
-	// reached), calendar_editor.js self-gates on that
+	// reached) and opens calendar_game_night.js's game night editor,
+	// calendar_editor.js self-gates on that
 	// mount's data-can-edit="true" and opens calendar_event_drawer.js's full
 	// event editor and calendar_weather_sheet.js's weather calendar (both
 	// loaded first so they exist when the editor binds; the drawer's
@@ -3373,6 +3374,7 @@ func (a *App) RegisterRoutes() {
 		"/static/js/widgets/calendar_era_blend.js",
 		"/static/js/widgets/calendar_era_look.js",
 		"/static/js/widgets/calendar_view.js",
+		"/static/js/widgets/calendar_game_night.js",
 		"/static/js/widgets/calendar_rule.js",
 		"/static/js/widgets/calendar_event_drawer.js",
 		"/static/js/widgets/calendar_weather_sheet.js",
