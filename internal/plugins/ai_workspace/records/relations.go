@@ -116,14 +116,14 @@ func (k *linkKind) Plan(ctx context.Context, campaignID string, a Actor, r Recor
 	}
 	for _, n := range k.numbers {
 		if f, ok, err := r.Float(n); err != nil {
-			return Plan{Error: err.Error()}
+			return Plan{Error: planError(err)}
 		} else if ok && f < 0 {
 			return Plan{Error: n + " cannot be negative"}
 		}
 	}
 	src, item, link, err := k.resolve(ctx, campaignID, r)
 	if err != nil {
-		return Plan{Error: err.Error()}
+		return Plan{Error: planError(err)}
 	}
 	p := Plan{Summary: k.summary(r)}
 	if src == nil || item == nil {
@@ -191,6 +191,9 @@ func (k *linkKind) Apply(ctx context.Context, campaignID string, a Actor, r Reco
 	}
 	if src == nil || item == nil {
 		return badRequestf("%s or %s is not a page", quote(r.Str(k.ownerKey)), quote(r.Str("item")))
+	}
+	if r.Action != ActionCreate && link == nil {
+		return apperror.NewBadRequest("it changed while you were reviewing; check it again")
 	}
 	if r.Action == ActionDelete {
 		return k.Rels.Delete(ctx, link.ID)

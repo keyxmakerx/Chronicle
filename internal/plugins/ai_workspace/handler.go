@@ -118,6 +118,17 @@ func actorFor(c echo.Context, cc *campaigns.CampaignContext) records.Actor {
 	return records.Actor{UserID: auth.GetUserID(c), Role: cc.VisibilityRole()}
 }
 
+// exportActor is who the export lists records as. Safe mode, the default,
+// lists them as a player sees them, so hidden events and pins, rolling
+// tables and Director-only rules stay out, as for every other category.
+func exportActor(c echo.Context, cc *campaigns.CampaignContext, mode aiexport.PrivacyMode) records.Actor {
+	a := actorFor(c, cc)
+	if mode == aiexport.PrivacyModeSafe {
+		a.Role = int(campaigns.RolePlayer)
+	}
+	return a
+}
+
 // splitImport separates pages from records, keeping each list in input
 // order so the review form's indexes match a re-parse at commit.
 func splitImport(all []importer.ParsedPage) (pages, recs []importer.ParsedPage) {
@@ -576,7 +587,7 @@ func (h *Handler) GeneratePrompt(c echo.Context) error {
 			in.RecordDocs = h.records.Docs()
 		}
 		if in.ContentMode == "all" || hasCategory(in.ContentMode, recordsCategory) {
-			in.RecordContext = h.records.ExportAll(c.Request().Context(), cc.Campaign.ID, actorFor(c, cc))
+			in.RecordContext = h.records.ExportAll(c.Request().Context(), cc.Campaign.ID, exportActor(c, cc, in.Privacy))
 		}
 	}
 
@@ -653,7 +664,7 @@ func (h *Handler) GenerateAIExport(c echo.Context) error {
 			AIExportModal("", "Could not generate the export. Try again in a moment."))
 	}
 	if h.records != nil && (rawCats == "" || hasCategory(rawCats, recordsCategory)) {
-		if more := h.records.ExportAll(c.Request().Context(), cc.Campaign.ID, actorFor(c, cc)); more != "" {
+		if more := h.records.ExportAll(c.Request().Context(), cc.Campaign.ID, exportActor(c, cc, opts.Privacy)); more != "" {
 			markdown += "\n\n" + more
 		}
 	}

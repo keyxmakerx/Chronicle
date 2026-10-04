@@ -133,7 +133,7 @@ func (k EventKind) Plan(ctx context.Context, campaignID string, a Actor, r Recor
 	}
 	cal, err := defaultCalendar(ctx, k.Svc, campaignID, a)
 	if err != nil {
-		return Plan{Error: err.Error()}
+		return Plan{Error: planError(err)}
 	}
 	vis := r.Str("visibility")
 	if vis != "" && vis != "everyone" && vis != "dm_only" {
@@ -144,14 +144,14 @@ func (k EventKind) Plan(ctx context.Context, campaignID string, a Actor, r Recor
 	}
 	existing, err := k.find(ctx, campaignID, a, cal, r)
 	if err != nil && r.Action != ActionCreate {
-		return Plan{Error: err.Error()}
+		return Plan{Error: planError(err)}
 	}
 	y, m, d, dated, derr := readDate(cal, r, "")
 	if derr != nil {
-		return Plan{Error: derr.Error()}
+		return Plan{Error: planError(derr)}
 	}
 	if _, _, _, _, err := readDate(cal, r, "end_"); err != nil {
-		return Plan{Error: err.Error()}
+		return Plan{Error: planError(err)}
 	}
 	switch r.Action {
 	case ActionCreate:
@@ -258,32 +258,9 @@ func (k EventKind) Apply(ctx context.Context, campaignID string, a Actor, r Reco
 	return k.Svc.UpdateEvent(ctx, ev.ID, cal.ID, campaignID, in, a.Viewer())
 }
 
-func (k EventKind) Export(ctx context.Context, campaignID string, a Actor) (string, error) {
-	cal, err := defaultCalendar(ctx, k.Svc, campaignID, a)
-	if err != nil {
-		return "", nil
-	}
-	evs, err := k.Svc.ListAllEventsForCalendar(ctx, cal.ID, campaignID, a.Viewer())
-	if err != nil {
-		return "", err
-	}
-	var b strings.Builder
-	for _, e := range evs {
-		fmt.Fprintf(&b, "- %s — year %d, month %d (%s), day %d", e.Name, e.Year, e.Month, monthName(cal, e.Month), e.Day)
-		if e.Visibility == "dm_only" {
-			b.WriteString(", dm_only")
-		}
-		b.WriteString("\n")
-	}
-	return b.String(), nil
-}
-
-func monthName(cal *calendar.Calendar, m int) string {
-	if m >= 1 && m <= len(cal.Months) {
-		return cal.Months[m-1].Name
-	}
-	return "?"
-}
+// Export is empty: the Calendar events category of the export already
+// lists events, filtered by the chosen privacy mode.
+func (EventKind) Export(context.Context, string, Actor) (string, error) { return "", nil }
 
 // ---- day weather ----
 
@@ -303,18 +280,18 @@ func (k WeatherKind) Plan(ctx context.Context, campaignID string, a Actor, r Rec
 	}
 	cal, err := defaultCalendar(ctx, k.Svc, campaignID, a)
 	if err != nil {
-		return Plan{Error: err.Error()}
+		return Plan{Error: planError(err)}
 	}
 	y, m, d, dated, err := readDate(cal, r, "")
 	if err != nil {
-		return Plan{Error: err.Error()}
+		return Plan{Error: planError(err)}
 	}
 	if !dated {
 		return Plan{Error: "weather needs year, month and day"}
 	}
 	for _, key := range []string{"temperature", "wind_kph"} {
 		if _, _, err := r.Float(key); err != nil {
-			return Plan{Error: err.Error()}
+			return Plan{Error: planError(err)}
 		}
 	}
 	if r.Action == ActionDelete {

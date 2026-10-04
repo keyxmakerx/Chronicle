@@ -12,9 +12,9 @@ package records
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"math"
-	"sort"
 	"strconv"
 	"strings"
 
@@ -264,12 +264,12 @@ func sameName(a, b string) bool {
 // quote renders a YAML-safe scalar for exports.
 func quote(s string) string { return strconv.Quote(s) }
 
-// sortedKeys is for deterministic exports.
-func sortedKeys[V any](m map[string]V) []string {
-	out := make([]string, 0, len(m))
-	for k := range m {
-		out = append(out, k)
+// planError is the text a review row shows for err: an AppError's own
+// message (never its type prefix or internal cause), else a plain line.
+func planError(err error) string {
+	var ae *apperror.AppError
+	if errors.As(err, &ae) && ae.Code < 500 {
+		return ae.Message
 	}
-	sort.Strings(out)
-	return out
+	return "could not be checked; try again in a moment"
 }

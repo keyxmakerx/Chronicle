@@ -7,6 +7,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/keyxmakerx/chronicle/internal/apperror"
 	"github.com/keyxmakerx/chronicle/internal/permissions"
 	"github.com/keyxmakerx/chronicle/internal/plugins/calendar"
 	"github.com/keyxmakerx/chronicle/internal/plugins/entities"
@@ -274,6 +275,9 @@ func TestGeneratorKind_Names(t *testing.T) {
 	if len(ft.doc.Tables) != 1 || ft.doc.Tables[0].ID != "villagers" || len(ft.doc.Tables[0].Entries) != 3 {
 		t.Fatalf("tables %+v", ft.doc)
 	}
+	if w := ft.doc.Tables[0].Entries[0].Weight; w != 1 {
+		t.Fatalf("generated name weight %v, want 1 (0 is never rolled)", w)
+	}
 	r.Generated = `[` + strings.Repeat(`"x",`, 40) + `"y"]`
 	if err := k.Apply(context.Background(), camp, owner, r); err == nil {
 		t.Fatal("accepted more names than the plan allows")
@@ -295,8 +299,15 @@ func TestTableKind(t *testing.T) {
 	if err := k.Apply(ctx, camp, owner, rec("table", ActionUpdate, "Loot", nil, "- Gem: shiny\n- Sword")); err != nil {
 		t.Fatal(err)
 	}
-	if es := ft.doc.Tables[0].Entries; len(es) != 2 || es[0].Brief != "shiny" {
+	if es := ft.doc.Tables[0].Entries; len(es) != 2 || es[0].Brief != "shiny" || es[0].Weight != 1 || es[1].Weight != 1 {
 		t.Fatalf("entries %+v", es)
+	}
+	fm := rec("table", ActionUpdate, "Loot", map[string]any{"entries": []any{"Plain", map[string]any{"name": "Rare", "weight": 3}}}, "")
+	if err := k.Apply(ctx, camp, owner, fm); err != nil {
+		t.Fatal(err)
+	}
+	if es := ft.doc.Tables[0].Entries; len(es) != 2 || es[0].Weight != 1 || es[1].Weight != 3 {
+		t.Fatalf("front-matter entries %+v", es)
 	}
 	if err := k.Apply(ctx, camp, owner, rec("table", ActionDelete, "Loot", nil, "")); err != nil || len(ft.doc.Tables) != 0 {
 		t.Fatalf("delete: %v %+v", err, ft.doc)
@@ -345,5 +356,21 @@ func TestRegistry_Plan(t *testing.T) {
 	}
 	if !strings.Contains(r.Docs(), "kind: table") {
 		t.Fatal("docs missing")
+	}
+}
+
+func TestPlanError_ShowsOnlyTheMessage(t *testing.T) {
+	cases := []struct {
+		err  error
+		want string
+	}{
+		{apperror.NewBadRequest("no page called \"X\""), "no page called \"X\""},
+		{apperror.NewInternal(errors.New("dial tcp 10.0.0.5:3306")), "could not be checked; try again in a moment"},
+		{errors.New("raw driver error"), "could not be checked; try again in a moment"},
+	}
+	for _, c := range cases {
+		if got := planError(c.err); got != c.want {
+			t.Errorf("planError(%v) = %q, want %q", c.err, got, c.want)
+		}
 	}
 }

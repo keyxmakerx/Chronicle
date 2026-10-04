@@ -30,7 +30,9 @@ type Table struct {
 	Entries []Entry `json:"entries"`
 }
 
-// Entry is one row of a table.
+// Entry is one row of a table. Weight is always sent: the service keeps an
+// explicit 0 and the roller never picks a 0-weight entry, so new entries
+// get 1 unless the record gives a weight.
 type Entry struct {
 	Name   string  `json:"name"`
 	Brief  string  `json:"brief"`
@@ -54,7 +56,7 @@ func tableEntries(r Record) []Entry {
 	for _, it := range r.List("entries") {
 		switch t := it.(type) {
 		case map[string]any:
-			e := Entry{Name: strings.TrimSpace(fmt.Sprint(t["name"]))}
+			e := Entry{Name: strings.TrimSpace(fmt.Sprint(t["name"])), Weight: 1}
 			if b, ok := t["brief"]; ok && b != nil {
 				e.Brief = strings.TrimSpace(fmt.Sprint(b))
 			}
@@ -66,7 +68,7 @@ func tableEntries(r Record) []Entry {
 			out = append(out, e)
 		case nil:
 		default:
-			out = append(out, Entry{Name: strings.TrimSpace(fmt.Sprint(t))})
+			out = append(out, Entry{Name: strings.TrimSpace(fmt.Sprint(t)), Weight: 1})
 		}
 	}
 	if len(out) > 0 {
@@ -78,7 +80,7 @@ func tableEntries(r Record) []Entry {
 			continue
 		}
 		name, brief, _ := strings.Cut(m[1], ": ")
-		out = append(out, Entry{Name: strings.TrimSpace(name), Brief: strings.TrimSpace(brief)})
+		out = append(out, Entry{Name: strings.TrimSpace(name), Brief: strings.TrimSpace(brief), Weight: 1})
 	}
 	return out
 }
@@ -160,6 +162,9 @@ func (k TableKind) Apply(ctx context.Context, campaignID string, a Actor, r Reco
 		return err
 	}
 	i := findTable(doc, r.Name)
+	if r.Action != ActionCreate && i < 0 {
+		return apperror.NewBadRequest("it changed while you were reviewing; check it again")
+	}
 	switch r.Action {
 	case ActionCreate:
 		taken := map[string]bool{}

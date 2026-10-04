@@ -92,7 +92,7 @@ func (k PinKind) Plan(ctx context.Context, campaignID string, a Actor, r Record)
 	for _, key := range []string{"x", "y"} {
 		f, ok, err := r.Float(key)
 		if err != nil {
-			return Plan{Error: err.Error()}
+			return Plan{Error: planError(err)}
 		}
 		if ok && (f < 0 || f > 100) {
 			return Plan{Error: key + " must be between 0 and 100"}
@@ -110,7 +110,7 @@ func (k PinKind) Plan(ctx context.Context, campaignID string, a Actor, r Record)
 	}
 	m, pin, err := k.find(ctx, campaignID, a, r)
 	if err != nil {
-		return Plan{Error: err.Error()}
+		return Plan{Error: planError(err)}
 	}
 	switch r.Action {
 	case ActionCreate:
@@ -151,6 +151,9 @@ func (k PinKind) Apply(ctx context.Context, campaignID string, a Actor, r Record
 	m, pin, err := k.find(ctx, campaignID, a, r)
 	if err != nil {
 		return err
+	}
+	if m == nil || (r.Action != ActionCreate && pin == nil) {
+		return apperror.NewBadRequest("it changed while you were reviewing; check it again")
 	}
 	if r.Action == ActionDelete {
 		return k.Svc.DeletePin(ctx, pin.ID, a.CanAuthorDmOnly(), a.UserID, a.Role)

@@ -10,6 +10,7 @@ import (
 
 	"github.com/labstack/echo/v4"
 
+	"github.com/keyxmakerx/chronicle/internal/plugins/ai_workspace/aiexport"
 	"github.com/keyxmakerx/chronicle/internal/plugins/ai_workspace/importer"
 	"github.com/keyxmakerx/chronicle/internal/plugins/ai_workspace/records"
 	"github.com/keyxmakerx/chronicle/internal/plugins/campaigns"
@@ -115,5 +116,37 @@ func TestImport_RecordsCommit_DeleteNeedsConfirmation(t *testing.T) {
 		if len(m.doc.Tables) == 0 || m.doc.Tables[len(m.doc.Tables)-1].Name != "Tavern names" {
 			t.Errorf("confirmed=%v: new table not created: %+v", confirmed, m.doc)
 		}
+	}
+}
+
+// Safe export (the default) lists records as a player would see them, so
+// the record kinds drop hidden content exactly as the other categories do.
+func TestExportActor_FollowsPrivacy(t *testing.T) {
+	cases := []struct {
+		mode    aiexport.PrivacyMode
+		dmShows bool
+	}{
+		{aiexport.PrivacyModeSafe, false},
+		{aiexport.PrivacyModePermitted, true},
+		{aiexport.PrivacyModeEverything, true},
+	}
+	for _, tc := range cases {
+		c := echo.New().NewContext(httptest.NewRequest(http.MethodGet, "/", nil), httptest.NewRecorder())
+		ownerCtx(c)
+		cc := campaigns.GetCampaignContext(c)
+		if got := exportActor(c, cc, tc.mode).CanAuthorDmOnly(); got != tc.dmShows {
+			t.Errorf("%v: CanAuthorDmOnly = %v, want %v", tc.mode, got, tc.dmShows)
+		}
+	}
+	m := &memTables{doc: records.TableDoc{Tables: []records.Table{{ID: "loot", Name: "Loot", Entries: []records.Entry{{Name: "Gem", Weight: 1}}}}}}
+	reg := records.NewRegistry(records.TableKind{Svc: m})
+	c := echo.New().NewContext(httptest.NewRequest(http.MethodGet, "/", nil), httptest.NewRecorder())
+	ownerCtx(c)
+	cc := campaigns.GetCampaignContext(c)
+	if out := reg.ExportAll(context.Background(), "camp-1", exportActor(c, cc, aiexport.PrivacyModeSafe)); strings.Contains(out, "Loot") {
+		t.Errorf("safe export listed a rolling table:\n%s", out)
+	}
+	if out := reg.ExportAll(context.Background(), "camp-1", exportActor(c, cc, aiexport.PrivacyModeEverything)); !strings.Contains(out, "Loot") {
+		t.Errorf("everything export dropped the rolling table:\n%s", out)
 	}
 }

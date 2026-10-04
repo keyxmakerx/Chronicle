@@ -167,7 +167,7 @@ func (k GeneratorKind) plan(ctx context.Context, campaignID string, a Actor, r R
 func (k GeneratorKind) Plan(ctx context.Context, campaignID string, a Actor, r Record) Plan {
 	p, _, summary, err := k.plan(ctx, campaignID, a, r)
 	if err != nil {
-		return Plan{Error: err.Error()}
+		return Plan{Error: planError(err)}
 	}
 	cj, err := json.Marshal(p)
 	if err != nil {
@@ -224,7 +224,7 @@ func (k GeneratorKind) Apply(ctx context.Context, campaignID string, a Actor, r 
 		es := make([]Entry, 0, len(names))
 		for _, n := range names {
 			if n = strings.TrimSpace(n); n != "" {
-				es = append(es, Entry{Name: n})
+				es = append(es, Entry{Name: n, Weight: 1})
 			}
 		}
 		return k.Tables.appendEntries(ctx, campaignID, a, r.Str("table"), es)

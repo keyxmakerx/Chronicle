@@ -58,11 +58,11 @@ func (k HouseRuleKind) Plan(ctx context.Context, campaignID string, a Actor, r R
 	}
 	pkg, svc, err := k.open(ctx, campaignID, a)
 	if err != nil {
-		return Plan{Error: err.Error()}
+		return Plan{Error: planError(err)}
 	}
 	ch, err := k.find(ctx, campaignID, r.Name, pkg, svc)
 	if err != nil {
-		return Plan{Error: err.Error()}
+		return Plan{Error: planError(err)}
 	}
 	switch r.Action {
 	case ActionCreate:
@@ -94,6 +94,9 @@ func (k HouseRuleKind) Apply(ctx context.Context, campaignID string, a Actor, r 
 	ch, err := k.find(ctx, campaignID, r.Name, pkg, svc)
 	if err != nil {
 		return err
+	}
+	if r.Action != ActionCreate && ch == nil {
+		return apperror.NewBadRequest("it changed while you were reviewing; check it again")
 	}
 	if r.Action == ActionDelete {
 		return svc.DeleteChapter(ctx, campaignID, pkg, ch.ID)

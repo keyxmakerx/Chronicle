@@ -103,7 +103,7 @@ func (k NoteKind) Plan(ctx context.Context, campaignID string, a Actor, r Record
 	}
 	hit, _, err := k.find(ctx, campaignID, a, r)
 	if err != nil {
-		return Plan{Error: err.Error()}
+		return Plan{Error: planError(err)}
 	}
 	switch r.Action {
 	case ActionCreate:
@@ -167,6 +167,9 @@ func (k NoteKind) Apply(ctx context.Context, campaignID string, a Actor, r Recor
 	}
 	// Re-read the stored note: ownership is checked on what is saved, not
 	// on the list it came from.
+	if hit == nil {
+		return apperror.NewBadRequest("it changed while you were reviewing; check it again")
+	}
 	stored, err := k.Svc.GetByID(ctx, hit.ID)
 	if err != nil || !stored.IsOwnedBy(a.UserID, campaignID) {
 		return apperror.NewBadRequest("that note is not yours")
