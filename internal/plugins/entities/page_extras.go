@@ -5,6 +5,8 @@ import (
 	"encoding/json"
 	"fmt"
 	"log/slog"
+
+	"github.com/a-h/templ"
 )
 
 // page_extras.go covers the page pieces that are blocks the owner places
@@ -24,6 +26,10 @@ const (
 	BlockCharacterItems  = "character_items"
 	blockInventoryLegacy = "inventory"
 )
+
+// RenderCharacterItemsBlock renders the Items & Money block: the page panel
+// set with SetCharacterPagePanel, when its addon is on.
+func RenderCharacterItemsBlock(BlockRenderContext) templ.Component { return blockCharacterItems() }
 
 type pageChildrenKey struct{}
 

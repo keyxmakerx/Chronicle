@@ -181,13 +181,8 @@ func RegisterCoreBlocks(r *BlockRegistry) {
 		return entitySystemPanels(ctx.CC, ctx.Entity)
 	})
 
-	r.Register(BlockMeta{
-		Type: BlockCharacterItems, Label: "Items & Money", Icon: "fa-sack-dollar",
-		Description: "What a character carries, their money and recent moves",
-		Addon: "armory", Contexts: []string{"template"},
-	}, func(ctx BlockRenderContext) templ.Component {
-		return blockCharacterItems()
-	})
+	// Items & Money (BlockCharacterItems) is registered by app beside the
+	// page panel it shows, which names the addon that gates it.
 
 	// text_block is shared between dashboard and template contexts.
 	r.Register(BlockMeta{

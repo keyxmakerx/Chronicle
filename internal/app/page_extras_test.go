@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	"github.com/keyxmakerx/chronicle/internal/apperror"
+	"github.com/keyxmakerx/chronicle/internal/plugins/armory"
 	"github.com/keyxmakerx/chronicle/internal/plugins/campaigns"
 	"github.com/keyxmakerx/chronicle/internal/plugins/entities"
 )
@@ -37,7 +38,7 @@ func (f fakeExtrasCampaigns) ListAll(_ context.Context, opts campaigns.ListOptio
 type fakeExtrasAddons struct{ armory map[string]bool }
 
 func (f fakeExtrasAddons) IsEnabledForCampaign(_ context.Context, id, slug string) (bool, error) {
-	return slug == "armory" && f.armory[id], nil
+	return slug == armory.AddonSlug && f.armory[id], nil
 }
 
 type fakeExtrasEntities struct {

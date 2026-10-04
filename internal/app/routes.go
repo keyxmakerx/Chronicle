@@ -3870,6 +3870,11 @@ func (a *App) RegisterRoutes() {
 	// This drives validation, rendering, and the template editor palette.
 	blockRegistry := entities.NewBlockRegistry()
 	entities.RegisterCoreBlocks(blockRegistry)
+	blockRegistry.Register(entities.BlockMeta{
+		Type: entities.BlockCharacterItems, Label: "Items & Money", Icon: "fa-sack-dollar",
+		Description: "What a character carries, their money and recent moves",
+		Addon:       armory.AddonSlug, Contexts: []string{"template"},
+	}, entities.RenderCharacterItemsBlock)
 
 	// Widget-binding framework: the dynamic host↔widget-type↔instance
 	// registry + service. Widget types register declaratively; the service

@@ -7,6 +7,7 @@ import (
 	"log/slog"
 
 	"github.com/keyxmakerx/chronicle/internal/apperror"
+	"github.com/keyxmakerx/chronicle/internal/plugins/armory"
 	"github.com/keyxmakerx/chronicle/internal/plugins/campaigns"
 	"github.com/keyxmakerx/chronicle/internal/plugins/entities"
 )
@@ -71,12 +72,12 @@ func placePageExtrasOnce(ctx context.Context, st pageExtrasSettings, camps pageE
 					slog.String("campaign_id", c.ID), slog.Any("error", err))
 				continue
 			}
-			armory, err := addons.IsEnabledForCampaign(ctx, c.ID, "armory")
+			armoryOn, err := addons.IsEnabledForCampaign(ctx, c.ID, armory.AddonSlug)
 			if err != nil {
 				slog.Warn("page extras: armory switch unavailable",
 					slog.String("campaign_id", c.ID), slog.Any("error", err))
 			}
-			n, err := ents.PlacePageExtras(ctx, c.ID, pageExtrasPlans(types, armory))
+			n, err := ents.PlacePageExtras(ctx, c.ID, pageExtrasPlans(types, armoryOn))
 			if err != nil {
 				slog.Warn("page extras: placing failed",
 					slog.String("campaign_id", c.ID), slog.Any("error", err))
@@ -98,14 +99,14 @@ func placePageExtrasOnce(ctx context.Context, st pageExtrasSettings, camps pageE
 // outside the layout: game-system panels on NPC pages (newSystemPanelResolver)
 // and, with the armory on, the items-and-money panel on the types that asked
 // for it and that the armory treats as characters (armoryStashDirectoryAdapter).
-func pageExtrasPlans(types []entities.EntityType, armory bool) map[int]entities.PageExtrasPlan {
+func pageExtrasPlans(types []entities.EntityType, armoryOn bool) map[int]entities.PageExtrasPlan {
 	plans := make(map[int]entities.PageExtrasPlan, len(types))
 	for _, id := range npcTypeIDs(types) {
 		p := plans[id]
 		p.SystemPanels = true
 		plans[id] = p
 	}
-	if !armory {
+	if !armoryOn {
 		return plans
 	}
 	byID := make(map[int]*entities.EntityType, len(types))
