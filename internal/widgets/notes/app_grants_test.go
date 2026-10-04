@@ -404,6 +404,7 @@ func TestShowEmbed_FramableOnlyByAllowedOrigins(t *testing.T) {
 	}{
 		{"journal", "/embed/campaigns/0b9f2c1e-1111-2222-3333-444455556666/notes/journal", http.StatusOK},
 		{"jots", "/embed/campaigns/0b9f2c1e-1111-2222-3333-444455556666/notes/jots", http.StatusOK},
+		{"calendar", "/embed/campaigns/0b9f2c1e-1111-2222-3333-444455556666/notes/calendar", http.StatusOK},
 		{"unknown mode", "/embed/campaigns/0b9f2c1e-1111-2222-3333-444455556666/notes/admin", http.StatusNotFound},
 		{"bad id", "/embed/campaigns/not-an-id!/notes/journal", http.StatusNotFound},
 	}

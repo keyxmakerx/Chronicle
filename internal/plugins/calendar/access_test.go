@@ -102,6 +102,8 @@ type fakeCalendarSvc struct {
 	// lockedDays/lockedTo record the last LockDayWeather call.
 	lockedDays []DayDate
 	lockedTo   *bool
+	// noDefault makes GetDefaultCalendarForViewer report no calendar.
+	noDefault bool
 }
 
 const secretCalendarID = "cal-secret"
@@ -118,6 +120,9 @@ func (f *fakeCalendarSvc) GetCalendarForViewer(_ context.Context, calendarID, ca
 }
 func (f *fakeCalendarSvc) GetDefaultCalendarForViewer(_ context.Context, campaignID string, v permissions.Viewer) (*Calendar, error) {
 	f.lastViewer = v
+	if f.noDefault {
+		return nil, apperror.NewNotFound("calendar not found")
+	}
 	return &Calendar{ID: "cal-default", CampaignID: campaignID, Name: "The Default Calendar", IsDefault: true}, nil
 }
 func (f *fakeCalendarSvc) ListCalendars(_ context.Context, _ string, v permissions.Viewer) ([]Calendar, error) {

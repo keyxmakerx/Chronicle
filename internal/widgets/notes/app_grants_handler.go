@@ -173,14 +173,15 @@ func (h *AppGrantHandler) Revoke(c echo.Context) error {
 }
 
 // ShowEmbed renders the empty shell an allowed app frames
-// (GET /embed/campaigns/:id/notes/:mode, mode journal or jots). It needs no
+// (GET /embed/campaigns/:id/notes/:mode, mode journal, jots or calendar;
+// the calendar mounts the calendar plugin's fragment over the same grant). It needs no
 // sign-in and shows nothing about the campaign: the content arrives later
 // over the grant the parent window hands it. Only the allowed origins may
 // frame it; everywhere else the site stays unframeable.
 func (h *AppGrantHandler) ShowEmbed(c echo.Context) error {
 	id := c.Param("id")
 	mode := c.Param("mode")
-	if !idPattern.MatchString(id) || (mode != "journal" && mode != "jots") {
+	if !idPattern.MatchString(id) || (mode != "journal" && mode != "jots" && mode != "calendar") {
 		return apperror.NewNotFound("page not found")
 	}
 	var origins []string
