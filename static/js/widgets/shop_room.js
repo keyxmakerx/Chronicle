@@ -541,6 +541,7 @@
       // Items get a lit, slightly glossy gradient in their own colour instead of a flat fill.
       if (S.fx === 'full' && /^#[0-9a-f]{6}$/i.test(fill)) { var gid = 'gm' + fill.slice(1); GRAD[gid] = fill; fill = 'url(#' + gid + ')'; }
       if (!ICONS[name]) name = 'box';
+      USED[name] = 1;
       var g = ICONS[name], w = sz * g[0] / 512, tf = o.rot ? ' transform="rotate(' + o.rot + ' ' + x.toFixed(1) + ' ' + (y - sz / 2).toFixed(1) + ')"' : '';
       return '<use href="#i-' + name + '" x="' + (x - w / 2).toFixed(1) + '" y="' + (y - sz).toFixed(1) + '" width="' + w.toFixed(1) + '" height="' + sz + '" fill="' + fill + '" stroke="rgba(0,0,0,.55)" stroke-width="22" paint-order="stroke"' + tf + (o.op ? ' opacity="' + o.op + '"' : '') + '/>';
     }
@@ -570,7 +571,7 @@
             var fr = dk(C.wood, .25), c = at(.4, 1.75);
             s += poly([at(0, 1.3), at(.8, 1.3), at(.8, 2.2), at(0, 2.2)], fr) + poly([at(.07, 1.37), at(.73, 1.37), at(.73, 2.13), at(.07, 2.13)], mix(C.wall, '#2a2320', .55));
             if (Math.abs(sd[0]) > 8) {
-              var nm = rec.deco[Math.floor(r() * rec.deco.length)]; if (!ICONS[nm]) continue; var g = ICONS[nm], h = 17, w = h * g[0] / 512, sl = sd[1] / sd[0];
+              var nm = rec.deco[Math.floor(r() * rec.deco.length)]; if (!ICONS[nm]) continue; USED[nm] = 1; var g = ICONS[nm], h = 17, w = h * g[0] / 512, sl = sd[1] / sd[0];
               s += '<g transform="matrix(1,' + sl.toFixed(3) + ',0,1,' + c[0].toFixed(1) + ',' + c[1].toFixed(1) + ')"><use href="#i-' + nm + '" x="' + (-w / 2).toFixed(1) + '" y="' + (-h / 2) + '" width="' + w.toFixed(1) + '" height="' + h + '" fill="' + (DECOCOL[nm] || '#ccc') + '" opacity=".85"/></g>';
             }
           } else {
@@ -617,13 +618,16 @@
       return '<clipPath id="room">' + sil + '</clipPath><mask id="lm" maskUnits="userSpaceOnUse" x="' + VB[0] + '" y="' + VB[1] + '" width="' + VB[2] + '" height="' + VB[3] + '"><rect x="' + VB[0] + '" y="' + VB[1] + '" width="' + VB[2] + '" height="' + VB[3] + '" fill="#fff"/>' + holes + '</mask>' +
         '<rect x="' + VB[0] + '" y="' + VB[1] + '" width="' + VB[2] + '" height="' + VB[3] + '" fill="' + (C.dark ? '#04040c' : '#121027') + '" opacity="' + (S.setting === 'cave' ? .64 : .52) + '" mask="url(#lm)" clip-path="url(#room)" style="pointer-events:none"/>';
     }
-    var VB, keeperPt, GRAD = {};
+    var VB, keeperPt, GRAD = {}, USED = {};
+    // Every icon the room draws is a <use> of a symbol; this defines the ones
+    // this drawing used, so goods and decorations have shapes to point at.
+    function iconDefs() { return '<defs>' + Object.keys(USED).map(function (n) { var g = ICONS[n]; return '<symbol id="i-' + n + '" viewBox="0 0 ' + g[0] + ' 512"><path d="' + g[1] + '"/></symbol>'; }).join('') + '</defs>'; }
     function gradDefs() { return '<defs>' + Object.keys(GRAD).map(function (id) { var c = GRAD[id]; return '<linearGradient id="' + id + '" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="' + lt(c, .55) + '"/><stop offset=".4" stop-color="' + lt(c, .1) + '"/><stop offset=".6" stop-color="' + c + '"/><stop offset="1" stop-color="' + dk(c, .42) + '"/></linearGradient>'; }).join('') + '</defs>'; }
     function draw() {
       colours();
       var N = SZ[S.size], rec = RECIPES[S.roomType], full = S.fx === 'full', sq = S.setting === 'room';
       VB = [-N * 32 - 30, -WH * 32 - 34, N * 64 + 60, N * 32 + WH * 32 + 34 + 26];
-      GRAD = {};
+      GRAD = {}; USED = {};
       var level = { none: 0, some: .35, lots: .8 }[S.deco];
       // Draw each piece once to learn its anchor spots, then hand goods and decorations out to them.
       var out = S.pieces.slice().sort(function (a, b) { return a.id - b.id; }).map(function (p) { delete p.light; delete p.floorLight; delete p.keeperAt; delete p.cool; delete p.shaft; return { p: p, d: DRAW[p.kind](p), goods: [], decos: [] }; });
@@ -652,7 +656,7 @@
       out.forEach(function (o) { if (o.p.floorLight) s += o.p.floorLight; });
       s += shading(full);
       out.filter(function (o) { return o.p.kind !== 'rug'; }).forEach(function (o) { s += piece(o); });
-      s += gradDefs() + '<g style="pointer-events:none">' + out.map(function (o) { return o.p.shaft && full ? o.p.shaft : ''; }).join('') + lights.map(function (l) { return '<circle cx="' + l.x.toFixed(1) + '" cy="' + l.y.toFixed(1) + '" r="' + l.r + '" fill="url(#' + (l.cool ? 'gCool' : 'gGlow') + ')" style="mix-blend-mode:screen"/>'; }).join('') + '</g>';
+      s += gradDefs() + iconDefs() + '<g style="pointer-events:none">' + out.map(function (o) { return o.p.shaft && full ? o.p.shaft : ''; }).join('') + lights.map(function (l) { return '<circle cx="' + l.x.toFixed(1) + '" cy="' + l.y.toFixed(1) + '" r="' + l.r + '" fill="url(#' + (l.cool ? 'gCool' : 'gGlow') + ')" style="mix-blend-mode:screen"/>'; }).join('') + '</g>';
       if (!sq) s += '<g style="pointer-events:none">' + lip() + '</g>';
       if (full) s += lighting(lights);
       return { svg: s, viewBox: VB, keeperAt: keeperPt };
