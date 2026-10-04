@@ -71,8 +71,9 @@
     /* The painter on its canvas. dir: 'painted'. */
     function create(canvas, dir){
       /* failIfMajorPerformanceCaveat: a browser that would paint in software gives no context, and the basic sky draws
-       instead. SkyGL.allowSoftware lifts that, for the browser checks only. */
-    var gl = canvas.getContext('webgl2', {alpha:true, premultipliedAlpha:true, antialias:false, depth:false, stencil:false, preserveDrawingBuffer:false, powerPreference:'low-power', failIfMajorPerformanceCaveat:!window.SkyGLAllowSoftware});
+       instead. SkyGL.allowSoftware lifts that, for the browser checks only. preserveDrawingBuffer: each sky is copied
+       out of this canvas with drawImage, and Firefox can copy an unkept buffer as empty. */
+    var gl = canvas.getContext('webgl2', {alpha:true, premultipliedAlpha:true, antialias:false, depth:false, stencil:false, preserveDrawingBuffer:true, powerPreference:'low-power', failIfMajorPerformanceCaveat:!window.SkyGLAllowSoftware});
       if (!gl) throw new Error('This sky needs WebGL2, which this browser did not provide.');
       var S = {gl:gl, dir:dir, canvas:canvas, slots:{}, slotPx:0, lost:false, warm:false, par:gl.getExtension('KHR_parallel_shader_compile')};
       function build(){
@@ -584,6 +585,9 @@
        session. */
     P.SLOW_MS = 28; P.WINDOW = 45; P.STALL_MS = 120; P.stalls = 0;
     function giveUp(){ P.slow = true; try { window.sessionStorage.setItem(SLOW_KEY, '1'); } catch (e) { /* not remembered */ } touch(); }
+    /* A copy that arrives empty means this browser cannot hand the painted sky over at all: the basic sky draws instead
+       for the rest of the page, never a blank pane. */
+    P.blank = function(){ P.err = 'painted sky copied as empty'; if (window.console) console.warn('Sky: the painted sky came through empty here, so the basic sky is drawn instead.'); touch(); };
     P.timed = function(ms, moving){
       if (P.slow) return;
       if (!moving) return;
@@ -618,6 +622,16 @@
     ctx.setTransform(1, 0, 0, 1, 0, 0);
     ctx.drawImage(S.canvas, 0, S.canvas.height - S.h, S.w, S.h, 0, y, S.w, S.h);
     PAINTER.timed(performance.now() - t0, moving);
+    /* The first copy is checked once: the sky is opaque a quarter of the way down, so a clear pixel there is a failed
+       copy. */
+    if (!PAINTER.checked){
+      var cx = Math.floor(S.w / 2), cy = y + Math.floor(S.h / 4), cv = ctx.canvas;
+      if (cx < cv.width && cy >= 0 && cy < cv.height){
+        PAINTER.checked = true;
+        var px = null; try { px = ctx.getImageData(cx, cy, 1, 1).data; } catch (e) { /* unreadable: trust the copy */ }
+        if (px && px[3] === 0){ PAINTER.blank(); return false; }
+      }
+    }
     return true;
   }
 
