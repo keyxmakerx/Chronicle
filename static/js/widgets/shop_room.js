@@ -4,9 +4,13 @@
  * Draws a shop as an isometric room: furniture, the shop's goods on shelves
  * and tables, the keeper's portrait, light and shadow. The wares list sits
  * under the room. Owners get Arrange: drag furniture and the portrait, change
- * an item's icon and colour, and run the room generator. The layout is saved
- * per shop; the goods themselves are the shop's "sells" relations, so stock and
- * prices always come from the inventory, never from the room.
+ * an item's icon and colour, and run the room generator from a panel that
+ * slides out inside the room (keep pin and reroll dice per part, like the
+ * other generators). Arrange changes wait for "Save room"; leaving with
+ * unsaved changes shakes the panel and says so instead of losing them. The
+ * layout is saved per shop; the goods themselves are the shop's "sells"
+ * relations, so stock and prices always come from the inventory, never from
+ * the room.
  *
  * The scene is one SVG string built by createRoom() below, a pure function of
  * the room state with no DOM access, so it is unit-tested in Node
@@ -733,8 +737,7 @@
   var FX_KEY = 'chronicle.shopRoom.fx';
   var CSS = [
     '.shr{display:grid;gap:12px;margin-bottom:16px}',
-    '.shr.arr{grid-template-columns:minmax(0,1fr) 280px;align-items:start}',
-    '@media (max-width:900px){.shr.arr{grid-template-columns:1fr}}',
+    '.shr.arr .shr-scene{min-height:540px}',
     '.shr-card{border:1px solid var(--color-border,#e5e7eb);border-radius:10px;overflow:hidden;background:var(--color-card-bg,#fff)}',
     '.shr-top{display:flex;align-items:center;gap:10px;flex-wrap:wrap;padding:8px 12px;border-bottom:1px solid var(--color-border,#e5e7eb)}',
     '.shr-top b{color:var(--color-text-primary,#111827)}',
@@ -797,22 +800,52 @@
     '.shr-price{color:var(--shr-acc);font-weight:600;font-variant-numeric:tabular-nums}',
     '.shr-stock{font-size:.76rem;color:var(--color-text-secondary,#6b7280);min-width:4.5em;text-align:right}',
     '.shr-empty{color:var(--color-text-secondary,#6b7280);font-size:.85rem;padding:6px 8px}',
-    '.shr-panel{border:1px solid var(--color-border,#e5e7eb);border-radius:10px;background:var(--color-card-bg,#fff);padding:12px;display:grid;gap:10px}',
-    '.shr-panel h3{margin:0;font-size:.95rem;color:var(--color-text-primary,#111827)}',
-    '.shr-panel p{margin:0;font-size:.8rem;color:var(--color-text-secondary,#6b7280);line-height:1.45}',
+    // The arrange panel slides out inside the room's scene, on its right edge.
+    '.shr-panel{position:absolute;top:0;right:0;bottom:0;z-index:20;width:min(320px,100%);display:flex;flex-direction:column;background:var(--color-card-bg,#fff);border-left:1px solid var(--color-border,#e5e7eb);box-shadow:-18px 0 40px -24px rgb(0 0 0/.45);transform:translateX(105%);visibility:hidden;transition:transform .55s cubic-bezier(.32,1.25,.5,1),visibility 0s linear .55s;touch-action:auto}',
+    '.shr-panel.on{transform:none;visibility:visible;transition:transform .55s cubic-bezier(.32,1.25,.5,1),visibility 0s}',
+    '.shr-panel.nag{animation:shr-nag .42s cubic-bezier(.36,.07,.19,.97)}',
+    '@keyframes shr-nag{0%,100%{translate:0}20%{translate:-9px}40%{translate:7px}60%{translate:-4px}80%{translate:2px}}',
+    '.shr-ph{display:flex;align-items:center;gap:8px;padding:12px 14px 10px;border-bottom:1px dashed var(--color-border,#e5e7eb)}',
+    '.shr-ph h3{flex:1;margin:0;font-size:.66rem;font-weight:700;line-height:1;letter-spacing:.12em;text-transform:uppercase;color:var(--color-text-secondary,#6b7280)}',
+    '.shr-x{border:0;background:transparent;color:var(--color-text-secondary,#6b7280);cursor:pointer;width:28px;height:28px;border-radius:6px;font-size:1rem;line-height:1}',
+    '.shr-x:hover{background:var(--color-bg-tertiary,#f3f4f6);color:var(--color-text-primary,#111827)}',
+    '.shr-pb{flex:1;min-height:0;overflow:auto;padding:12px 14px 6px;display:grid;gap:10px;align-content:start}',
+    '.shr-pf{display:flex;justify-content:flex-end;gap:8px;padding:10px 14px;border-top:1px solid var(--color-border,#e5e7eb)}',
+    '.shr-pf button{border:0;border-radius:8px;padding:8px 14px;font-size:.82rem;font-weight:600;line-height:1;cursor:pointer;background:transparent;color:var(--color-text-body,#374151)}',
+    '.shr-pf .shr-save{background:var(--shr-acc);color:#fff}',
+    '.shr-pf .shr-save:disabled{opacity:.5;cursor:default}',
     '.shr-field{display:grid;gap:4px}',
     '.shr-field>span{font-size:.72rem;text-transform:uppercase;letter-spacing:.06em;color:var(--color-text-muted,#9ca3af)}',
     '.shr-field select,.shr-field textarea{width:100%;min-width:0;border:1px solid var(--color-input-border,#d1d5db);border-radius:6px;padding:6px 8px;background:var(--color-input-bg,#fff);color:var(--color-text-primary,#111827);font:inherit}',
     '.shr-field .shr-seg{display:grid}',
-    '.shr-check{display:flex;gap:8px;align-items:flex-start;font-size:.82rem}',
-    '.shr-gbtn{border:0;border-radius:6px;background:var(--shr-acc);color:#fff;padding:8px 10px;font-weight:600;cursor:pointer;text-align:left}',
-    '.shr-gbtn small{display:block;font-weight:400;opacity:.85;font-size:.74rem}',
-    '.shr-gbtn.alt{background:var(--color-bg-tertiary,#f3f4f6);color:var(--color-text-primary,#111827);border:1px solid var(--color-border,#e5e7eb)}',
+    // The generators' shared rows: a part, its keep pin and its reroll dice.
+    '.shr-gh{display:flex;align-items:center;gap:8px;margin-top:4px}',
+    '.shr-gh>span{flex:1;font-size:.72rem;text-transform:uppercase;letter-spacing:.06em;color:var(--color-text-muted,#9ca3af)}',
+    '.shr-rest{display:inline-flex;align-items:center;gap:6px;border:0;background:transparent;color:var(--color-text-body,#374151);font-size:.78rem;font-weight:600;line-height:1;padding:6px 8px;border-radius:8px;cursor:pointer}',
+    '.shr-rest:hover{background:var(--color-bg-tertiary,#f3f4f6)}',
+    '.shr-gr{display:grid;grid-template-columns:24px minmax(0,1fr) auto;align-items:center;gap:8px;min-height:48px;padding:6px 6px 6px 10px;border-radius:11px;background:var(--color-card-bg,#fff);box-shadow:inset 0 0 0 1px var(--color-border,#e5e7eb);transition:transform .15s,box-shadow .15s}',
+    '.shr-gr:hover{transform:translateY(-1px);box-shadow:inset 0 0 0 1px color-mix(in srgb,var(--shr-acc) 55%,transparent),0 4px 12px -6px rgb(0 0 0/.25)}',
+    '.shr-gr.kept{background:oklch(.9 .07 85/.3)}',
+    '.shr-gr>i{color:var(--color-text-secondary,#6b7280);text-align:center}',
+    '.shr-gr b{display:block;font-size:.8rem;color:var(--color-text-primary,#111827)}',
+    '.shr-gr small{display:block;font-size:.72rem;color:var(--color-text-secondary,#6b7280);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}',
+    '.shr-gr small.roll{animation:shr-roll .3s ease-out}',
+    '@keyframes shr-roll{from{opacity:.1}to{opacity:1}}',
+    '.shr-ib{width:30px;height:30px;border:0;border-radius:8px;display:inline-grid;place-items:center;background:transparent;color:var(--color-text-body,#374151);cursor:pointer;transition:background .15s,color .15s}',
+    '.shr-ib:hover:not(:disabled){background:var(--color-bg-tertiary,#f3f4f6);color:var(--color-text-primary,#111827)}',
+    '.shr-ib:disabled{opacity:.35;cursor:default}',
+    '.shr-ib[aria-pressed="true"]{color:oklch(.62 .12 75);background:oklch(.9 .07 85/.45)}',
+    '.shr-warn{display:none;align-items:center;gap:8px;margin:0 14px 10px;padding:6px 6px 6px 12px;border-radius:10px;background:oklch(.95 .06 80);color:oklch(.38 .09 60);box-shadow:inset 0 0 0 1px oklch(.8 .1 75);font-size:.8rem;font-weight:600}',
+    '.shr-warn.on{display:flex;animation:shr-warn .28s cubic-bezier(.32,1.25,.5,1) both}',
+    '@keyframes shr-warn{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:none}}',
+    '.shr-warn button{margin-left:auto;border:0;background:transparent;color:inherit;font:inherit;text-decoration:underline;cursor:pointer;padding:4px 6px}',
+    '.shr-toast{position:absolute;left:50%;bottom:16px;z-index:25;transform:translateX(-50%);background:#111827;color:#fff;font-size:.82rem;font-weight:600;padding:9px 14px;border-radius:9px;box-shadow:0 10px 30px -10px rgb(0 0 0/.5);animation:shr-warn .25s ease-out both;pointer-events:none}',
     '.shr-chips{display:flex;flex-wrap:wrap;gap:6px}',
     '.shr-chip{border:1px solid var(--color-border,#e5e7eb);background:var(--color-card-bg,#fff);color:var(--color-text-body,#374151);border-radius:999px;padding:3px 10px;cursor:pointer;display:inline-flex;align-items:center;gap:6px;font-size:.8rem}',
     '.shr-chip[aria-pressed="true"]{border-color:var(--color-text-primary,#111827);box-shadow:inset 0 0 0 1px var(--color-text-primary,#111827)}',
     '.shr-sw{width:12px;height:12px;border-radius:50%}',
     '.shr-status{font-size:.75rem;color:var(--color-text-muted,#9ca3af)}',
+    '.shr-status:empty{display:none}',
     '.shr-tip{position:fixed;z-index:60;max-width:220px;padding:6px 8px;font-size:.75rem;line-height:1.35;background:#111827;color:#f9fafb;border-radius:6px;pointer-events:none;opacity:0;transition:opacity .15s}',
     '.shr-tip.on{opacity:1}.shr-tip b{display:block}',
     '.shr-say{position:fixed;z-index:55;max-width:230px;padding:7px 10px;border-radius:8px;background:var(--color-card-bg,#fff);color:var(--color-text-primary,#111827);border:1px solid var(--color-border,#e5e7eb);font:italic .85rem Georgia,serif;box-shadow:0 8px 20px -6px rgb(0 0 0/.4);opacity:0;transition:opacity .2s;pointer-events:none}',
@@ -853,7 +886,7 @@
       var S = { roomType: 'general', pal: 'oak', setting: 'room', fx: readFx(), size: 'm', full: 'normal', deco: 'some', keep: true,
         seeds: { room: 1, goods: 1, deco: 1 }, pieces: [], ov: {}, portrait: null, lines: [], mode: 'shop', its: [],
         key: keyOf(eid), name: ds.shopName || 'Shop', dark: document.documentElement.classList.contains('dark') };
-      var room = createRoom(S), ICONS = room.ICONS, rels = [], relsOk = false, buy = null, basket = {}, payer = '', busy = false, note = '', tab = 'All', open = false, line = 0, saveT = 0, dirty = false;
+      var room = createRoom(S), ICONS = room.ICONS, rels = [], relsOk = false, buy = null, basket = {}, payer = '', busy = false, note = '', tab = 'All', open = false, line = 0, dirty = false, busySave = false, savedLayout = null, partKeep = { room: false, goods: false, deco: false };
       el.hidden = true;
 
       // ---- Skeleton ----
@@ -999,19 +1032,46 @@
         sayT = setTimeout(function () { say.classList.remove('on'); }, 4000);
       }
 
-      // ---- Saving (owners only). Every change in Arrange saves after a short pause. ----
+      // ---- Saving (owners only). Changes in Arrange wait for "Save room";
+      // Cancel or Discard puts the room back as it was last saved. ----
       function status(t) { var s = panel && panel.querySelector('.shr-status'); if (s) s.textContent = t; }
       function save() {
         if (!canArrange) return;
-        dirty = true; clearTimeout(saveT); status('Saving…');
-        saveT = setTimeout(function () {
-          // Drop looks for goods no longer sold, so the saved list can't creep up to
-          // the server's cap; only when the goods list really loaded.
-          if (relsOk) { var live = {}; rels.forEach(function (r) { live[String(r.id)] = 1; }); Object.keys(S.ov).forEach(function (k) { if (!live[k]) delete S.ov[k]; }); }
-          Chronicle.apiFetch(ds.roomEndpoint, { method: 'PUT', body: toLayout(S), csrfToken: ds.csrfToken })
-            .then(function (res) { if (!res.ok) throw new Error('save ' + res.status); dirty = false; status('Saved'); })
-            .catch(function () { status('Couldn’t save. Your changes are still here; try again.'); });
-        }, 700);
+        dirty = true;
+        if (panel) { panel.querySelector('.shr-warn').classList.remove('on'); panel.querySelector('.shr-save').disabled = false; }
+        status('');
+      }
+      function saveRoom() {
+        if (!canArrange || busySave) return;
+        // Drop looks for goods no longer sold, so the saved list can't creep up to
+        // the server's cap; only when the goods list really loaded.
+        if (relsOk) { var live = {}; rels.forEach(function (r) { live[String(r.id)] = 1; }); Object.keys(S.ov).forEach(function (k) { if (!live[k]) delete S.ov[k]; }); }
+        var layout = toLayout(S);
+        busySave = true; status('Saving…');
+        Chronicle.apiFetch(ds.roomEndpoint, { method: 'PUT', body: layout, csrfToken: ds.csrfToken })
+          .then(function (res) {
+            if (!res.ok) throw new Error('save ' + res.status);
+            savedLayout = JSON.parse(JSON.stringify(layout)); dirty = false; busySave = false;
+            S.mode = 'shop'; setMode(); toast('Room saved');
+          })
+          .catch(function () { busySave = false; status('Couldn’t save. Your changes are still here; try again.'); });
+      }
+      // Leaving Arrange: straight away when nothing changed, otherwise the
+      // panel shakes and says so, and nothing is lost.
+      function tryLeave() {
+        if (!panel || S.mode !== 'arr') return;
+        if (!dirty) { S.mode = 'shop'; setMode(); return; }
+        var w = panel.querySelector('.shr-warn');
+        panel.classList.remove('nag'); void panel.offsetWidth; panel.classList.add('nag');
+        w.classList.remove('on'); void w.offsetWidth; w.classList.add('on');
+      }
+      function discard() {
+        fromLayout(S, JSON.parse(JSON.stringify(savedLayout))); room.geometry();
+        dirty = false; S.mode = 'shop'; setMode(); renderList();
+      }
+      function toast(t) {
+        var d = document.createElement('div'); d.className = 'shr-toast'; d.setAttribute('role', 'status'); d.textContent = t;
+        scene.appendChild(d); setTimeout(function () { d.remove(); }, 1800);
       }
 
       // ---- Arrange: drag furniture, drag the portrait, unpin, change an item's look ----
@@ -1080,7 +1140,7 @@
         var g = svg.querySelector('.it[data-i="' + picking + '"]'); if (g) openPicker(picking, g);
       }
       function onDocDown(e) { if (picking !== null && !pick.contains(e.target) && !e.target.closest('.it')) closePicker(); }
-      function onDocKey(e) { if (e.key === 'Escape') { closePicker(); say.classList.remove('on'); } }
+      function onDocKey(e) { if (e.key === 'Escape') { if (picking !== null) { closePicker(); return; } say.classList.remove('on'); tryLeave(); } }
       function onScroll() { tip.classList.remove('on'); say.classList.remove('on'); }
 
       function onKeeperDown(e) {
@@ -1099,27 +1159,44 @@
 
       // ---- Owner panel: the generator and the keeper's lines ----
       function seg(key, opts) { return '<span class="shr-seg" role="group">' + opts.map(function (o) { return '<button type="button" data-k="' + key + '" data-v="' + o[0] + '" aria-pressed="' + (S[key] === o[0]) + '">' + o[1] + '</button>'; }).join('') + '</span>'; }
+      // One generator row: a part of the room with its keep pin and reroll dice.
+      function genRow(part, icon, name, sub) {
+        var k = partKeep[part];
+        return '<div class="shr-gr' + (k ? ' kept' : '') + '"><i class="fa-solid ' + icon + '" aria-hidden="true"></i><span><b>' + name + '</b><small data-sub="' + part + '">' + esc(sub) + '</small></span><span>' +
+          '<button type="button" class="shr-ib" data-pin="' + part + '" aria-pressed="' + k + '" title="' + (k ? 'Kept' : 'Keep') + '" aria-label="Keep ' + name + '"><i class="fa-solid fa-thumbtack" aria-hidden="true"></i></button>' +
+          '<button type="button" class="shr-ib" data-roll="' + part + '" title="Reroll" aria-label="Reroll ' + name + '"' + (k ? ' disabled' : '') + '><i class="fa-solid fa-dice" aria-hidden="true"></i></button></span></div>';
+      }
       function renderPanel() {
         if (!panel) return;
         var pins = S.pieces.filter(function (p) { return p.pinned; }).length;
-        panel.innerHTML = '<h3>Arrange this room</h3><p>Drag furniture and the portrait. Click an item to change its icon. The generator builds the whole room; anything you moved stays put while the box is ticked.</p>' +
+        panel.innerHTML = '<div class="shr-ph"><h3>Arrange this room</h3><button type="button" class="shr-x" data-leave="1" aria-label="Close">✕</button></div><div class="shr-pb">' +
           '<label class="shr-field"><span>Shop type</span><select data-sel="roomType">' + ROOM_TYPES.map(function (t) { return '<option value="' + t[0] + '"' + (t[0] === S.roomType ? ' selected' : '') + '>' + t[1] + '</option>'; }).join('') + '</select></label>' +
           '<label class="shr-field"><span>Setting</span><select data-sel="setting">' + room.SETTINGS.map(function (t) { return '<option value="' + t[0] + '"' + (t[0] === S.setting ? ' selected' : '') + '>' + t[1] + '</option>'; }).join('') + '</select></label>' +
           '<div class="shr-field"><span>Room size</span>' + seg('size', [['s', 'Small'], ['m', 'Medium'], ['l', 'Large']]) + '</div>' +
           '<div class="shr-field"><span>Furniture</span>' + seg('full', [['sparse', 'Sparse'], ['normal', 'Normal'], ['packed', 'Packed']]) + '</div>' +
           '<div class="shr-field"><span>Decorations</span>' + seg('deco', [['none', 'None'], ['some', 'Some'], ['lots', 'Lots']]) + '</div>' +
           '<div class="shr-field"><span>Colours</span><span class="shr-chips">' + room.PALS.map(function (p) { return '<button type="button" class="shr-chip" data-k="pal" data-v="' + p[0] + '" aria-pressed="' + (S.pal === p[0]) + '"><span class="shr-sw" style="background:' + p[2] + '"></span>' + p[1] + '</button>'; }).join('') + '</span></div>' +
-          '<label class="shr-check"><input type="checkbox" data-keep="1"' + (S.keep ? ' checked' : '') + '> Keep what I’ve moved by hand</label>' +
-          '<button type="button" class="shr-gbtn" data-gen="all">Generate whole room<small>New furniture, new spots for goods, new decorations</small></button>' +
-          '<button type="button" class="shr-gbtn alt" data-gen="goods">Shuffle goods only<small>Same furniture, goods move to new spots</small></button>' +
-          '<button type="button" class="shr-gbtn alt" data-gen="deco">New decorations only</button>' +
+          '<div class="shr-gh"><span>Generate</span><button type="button" class="shr-rest" data-roll="rest" title="Keeps every part you pinned and everything you moved by hand"><i class="fa-solid fa-dice" aria-hidden="true"></i> Reroll the rest</button></div>' +
+          genRow('room', 'fa-chair', 'Furniture', S.pieces.length + (S.pieces.length === 1 ? ' piece' : ' pieces') + (pins ? ' · ' + pins + ' moved by you' : '')) +
+          genRow('goods', 'fa-coins', 'Goods', S.its.length + (S.its.length === 1 ? ' item' : ' items') + ' on show') +
+          genRow('deco', 'fa-wand-magic-sparkles', 'Decorations', { none: 'None', some: 'Some', lots: 'Lots' }[S.deco] || '') +
           '<label class="shr-field"><span>What the keeper says (one line each)</span><textarea rows="3" data-lines="1" maxlength="2200"></textarea></label>' +
-          '<span class="shr-status">' + (pins ? pins + ' moved by hand. ' : '') + (S.portrait ? 'Portrait placed by hand. ' : '') + (dirty ? 'Saving…' : '') + '</span>';
+          '<span class="shr-status" aria-live="polite">' + (S.portrait ? 'Portrait placed by hand.' : '') + '</span></div>' +
+          '<div class="shr-warn" role="alert"><i class="fa-solid fa-triangle-exclamation" aria-hidden="true"></i><span>Not saved yet</span><button type="button" data-discard="1">Discard</button></div>' +
+          '<div class="shr-pf"><button type="button" data-discard="1">Cancel</button><button type="button" class="shr-save" data-saveroom="1"' + (dirty ? '' : ' disabled') + '>Save room</button></div>';
         panel.querySelector('[data-lines]').value = S.lines.join('\n');
+      }
+      // Rolls one part of the room; the furniture rebuilds around pieces moved by hand.
+      function roll(part) {
+        S.seeds[part]++;
+        if (part === 'room') room.generate();
       }
       function onRootClick(e) {
         var b = e.target.closest('button'); if (!b) return;
-        if (b.dataset.mode) { S.mode = b.dataset.mode; setMode(); return; }
+        if (b.dataset.mode) { if (b.dataset.mode === 'shop') tryLeave(); else if (S.mode !== 'arr') { S.mode = 'arr'; setMode(); } return; }
+        if (b.dataset.leave) { tryLeave(); return; }
+        if (b.dataset.discard) { discard(); return; }
+        if (b.dataset.saveroom) { saveRoom(); return; }
         if (b.dataset.fx) { S.fx = b.dataset.fx; saveFx(S.fx); root.classList.toggle('fxlight', S.fx !== 'full'); draw(); renderList(); return; }
         if (b.dataset.tab) { tab = b.dataset.tab; renderList(); return; }
         if (b.dataset.add) { basket[b.dataset.add] = (basket[b.dataset.add] || 0) + 1; note = ''; renderList(); return; }
@@ -1130,26 +1207,38 @@
         if (!canArrange) return;
         var k = b.dataset.k;
         if (k === 'pal' || k === 'deco') { S[k] = b.dataset.v; draw(); }
-        else if (k === 'size' || k === 'full') { S[k] = b.dataset.v; S.portrait = S.keep ? S.portrait : null; room.generate(); draw(); }
-        else if (b.dataset.gen === 'all') { S.seeds.room++; S.seeds.goods++; S.seeds.deco++; if (!S.keep) S.portrait = null; room.generate(); draw(); }
-        else if (b.dataset.gen === 'goods') { S.seeds.goods++; draw(); }
-        else if (b.dataset.gen === 'deco') { S.seeds.deco++; draw(); }
+        else if (k === 'size' || k === 'full') { S[k] = b.dataset.v; room.generate(); draw(); }
+        else if (b.dataset.pin) { partKeep[b.dataset.pin] = !partKeep[b.dataset.pin]; renderPanel(); if (dirty) save(); return; }
+        else if (b.dataset.roll === 'rest') { ['room', 'goods', 'deco'].forEach(function (p) { if (!partKeep[p]) roll(p); }); draw(); }
+        else if (b.dataset.roll) { roll(b.dataset.roll); draw(); }
         else return;
         renderPanel(); save();
+        var rolled = b.dataset.roll === 'rest' ? ['room', 'goods', 'deco'].filter(function (p) { return !partKeep[p]; }) : b.dataset.roll ? [b.dataset.roll] : [];
+        rolled.forEach(function (p) { var sub = panel && panel.querySelector('[data-sub="' + p + '"]'); if (sub) sub.classList.add('roll'); });
       }
       function onRootChange(e) {
         var t = e.target;
         if (t.dataset.payer) { payer = t.value; note = ''; renderBasket(); return; }
         if (t.dataset.sel) { S[t.dataset.sel] = t.value; if (t.dataset.sel === 'setting') S.portrait = null; room.generate(); draw(); renderPanel(); save(); }
-        else if (t.dataset.keep) S.keep = t.checked;
         else if (t.dataset.lines) { S.lines = t.value.split('\n').map(function (s) { return s.trim().slice(0, 200); }).filter(Boolean).slice(0, 10); save(); }
       }
       function setMode() {
         root.classList.toggle('arr', S.mode === 'arr');
         root.querySelectorAll('[data-mode]').forEach(function (b) { b.setAttribute('aria-pressed', b.dataset.mode === S.mode); });
-        if (S.mode === 'arr' && !panel) { panel = document.createElement('aside'); panel.className = 'shr-panel'; panel.setAttribute('aria-label', 'Arrange this room'); root.appendChild(panel); }
-        if (S.mode !== 'arr' && panel) { panel.remove(); panel = null; }
-        renderPanel(); closePicker(); draw();
+        if (canArrange && !panel) { panel = document.createElement('aside'); panel.className = 'shr-panel'; panel.setAttribute('aria-label', 'Arrange this room'); scene.appendChild(panel); panel.addEventListener('animationend', function () { panel.classList.remove('nag'); }); }
+        if (panel) {
+          renderPanel();
+          // Next frame, so the slide plays from its closed position.
+          var on = S.mode === 'arr';
+          requestAnimationFrame(function () { panel.classList.toggle('on', on); if (on) { var f = panel.querySelector('select'); if (f) f.focus({ preventScroll: true }); } });
+        }
+        closePicker(); draw();
+      }
+      // A press outside the whole room while arranging counts as leaving it;
+      // the room itself (dragging furniture) and the item picker do not.
+      function onOutsideDown(e) {
+        if (S.mode !== 'arr' || root.contains(e.target) || pick.contains(e.target)) return;
+        tryLeave();
       }
 
       // Redraw when the site switches between light and dark.
@@ -1165,16 +1254,17 @@
       root.addEventListener('click', onRootClick); root.addEventListener('change', onRootChange);
       pick.addEventListener('click', onPickClick);
       document.addEventListener('pointerdown', onDocDown);
+      document.addEventListener('pointerdown', onOutsideDown);
       document.addEventListener('keydown', onDocKey);
       window.addEventListener('scroll', onScroll, { passive: true });
 
       el._shopRoom = {
         onDocDown: onDocDown, onDocKey: onDocKey,
         cleanup: function () {
-          clearTimeout(saveT); clearInterval(typeT); clearTimeout(sayT); if (raf) cancelAnimationFrame(raf);
+          clearInterval(typeT); clearTimeout(sayT); if (raf) cancelAnimationFrame(raf);
           themeObs.disconnect();
           window.removeEventListener('scroll', onScroll);
-          document.removeEventListener('pointerdown', onDocDown); document.removeEventListener('keydown', onDocKey);
+          document.removeEventListener('pointerdown', onDocDown); document.removeEventListener('pointerdown', onOutsideDown); document.removeEventListener('keydown', onDocKey);
           tip.remove(); say.remove(); pick.remove();
         }
       };
@@ -1188,6 +1278,7 @@
         loadBuyers()
       ]).then(function (res) {
         if (fromLayout(S, res[0] && res[0].layout)) room.geometry(); else room.generate();
+        savedLayout = toLayout(S);
         el.hidden = false;
         draw(); renderList();
       }).catch(function () { el.hidden = true; });
