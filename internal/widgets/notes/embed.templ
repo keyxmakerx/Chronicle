@@ -12,7 +12,7 @@ import (
 	"github.com/keyxmakerx/chronicle/internal/templates/layouts"
 )
 
-// NotesEmbedPage is the shell. mode is "journal" or "jots".
+// NotesEmbedPage is the shell. mode is "journal", "jots" or "calendar".
 templ NotesEmbedPage(campaignID, mode string) {
 	@layouts.Base("Notebook") {
 		<main

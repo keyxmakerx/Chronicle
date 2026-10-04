@@ -102,6 +102,8 @@ type fakeCalendarSvc struct {
 	// lockedDays/lockedTo record the last LockDayWeather call.
 	lockedDays []DayDate
 	lockedTo   *bool
+	// noDefault makes GetDefaultCalendarForViewer report no calendar.
+	noDefault bool
 }
 
 const secretCalendarID = "cal-secret"
@@ -118,6 +120,9 @@ func (f *fakeCalendarSvc) GetCalendarForViewer(_ context.Context, calendarID, ca
 }
 func (f *fakeCalendarSvc) GetDefaultCalendarForViewer(_ context.Context, campaignID string, v permissions.Viewer) (*Calendar, error) {
 	f.lastViewer = v
+	if f.noDefault {
+		return nil, apperror.NewNotFound("calendar not found")
+	}
 	return &Calendar{ID: "cal-default", CampaignID: campaignID, Name: "The Default Calendar", IsDefault: true}, nil
 }
 func (f *fakeCalendarSvc) ListCalendars(_ context.Context, _ string, v permissions.Viewer) ([]Calendar, error) {
@@ -129,9 +134,6 @@ func (f *fakeCalendarSvc) SetCurrentDate(context.Context, string, string, int, i
 }
 func (f *fakeCalendarSvc) GetPrimaryCalendarForViewer(ctx context.Context, campaignID string, v permissions.Viewer) (*Calendar, error) {
 	return f.GetDefaultCalendarForViewer(ctx, campaignID, v)
-}
-func (f *fakeCalendarSvc) ImportFoundryCalendar(context.Context, string, []byte) (*Calendar, []string, error) {
-	return nil, nil, nil
 }
 func (f *fakeCalendarSvc) UpdateCalendar(context.Context, string, string, UpdateCalendarInput) error {
 	return nil

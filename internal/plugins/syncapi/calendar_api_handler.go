@@ -3,7 +3,6 @@ package syncapi
 import (
 	"context"
 	"fmt"
-	"io"
 	"log/slog"
 	"net/http"
 	"strconv"
@@ -52,7 +51,8 @@ func retiredCalendarRoute(instead string) echo.HandlerFunc {
 
 // What each retired route says to use instead.
 const (
-	retiredStructure       = "Calendar structure and settings are edited in Chronicle's calendar. Foundry's Import button creates a campaign's first calendar; after that dates and events sync."
+	retiredStructure       = "Calendar structure and settings are edited in Chronicle's calendar; dates and events sync."
+	retiredCreate          = "Create the calendar in Chronicle's calendar; dates and events then sync."
 	retiredEventCategories = "Event kinds replaced event categories; edit them in Chronicle's calendar."
 	retiredAdvance         = "Set the date with PUT /calendar/date."
 )
@@ -83,6 +83,26 @@ func (h *CalendarAPIHandler) viewer(c echo.Context) permissions.Viewer {
 	}
 	return permissions.RequestViewer(int(role), key.UserID)
 }
+
+// readViewer is the viewer for a calendar read. `?audience=players` asks
+// for what any player at the table may see: an anonymous Player, so
+// allow-listed and deny-listed content drops out as well. The Foundry
+// module's GM client uses it to build the date bar every player sees from
+// Chronicle's own player filtering rather than re-deriving it. It can only
+// narrow what the key would otherwise read.
+func (h *CalendarAPIHandler) readViewer(c echo.Context) permissions.Viewer {
+	if playersAudience(c) {
+		return permissions.RequestViewer(int(campaigns.RolePlayer), "")
+	}
+	return h.viewer(c)
+}
+
+// audiencePlayers is echoed as `"audience"` on a players-audience date or
+// events read, so the module can tell this server filtered for players: an
+// older one ignores the parameter and answers with the key's own view.
+const audiencePlayers = "players"
+
+func playersAudience(c echo.Context) bool { return c.QueryParam("audience") == audiencePlayers }
 
 // requireOwner mirrors the calendar plugin's RequireRole(Owner) web routes
 // (settings, event delete) for the same actions over the API, where
@@ -154,7 +174,7 @@ func (h *CalendarAPIHandler) ListCalendars(c echo.Context) error {
 // GetCalendar returns the default calendar with its structure.
 // GET /api/v1/campaigns/:id/calendar
 func (h *CalendarAPIHandler) GetCalendar(c echo.Context) error {
-	cal, err := h.defaultCalendar(c, h.viewer(c))
+	cal, err := h.defaultCalendar(c, h.readViewer(c))
 	if err != nil {
 		return err
 	}
@@ -166,7 +186,7 @@ func (h *CalendarAPIHandler) GetCalendar(c echo.Context) error {
 // served-date beacon; a member browsing over the session door never does.
 // GET /api/v1/campaigns/:id/calendar/date
 func (h *CalendarAPIHandler) GetCurrentDate(c echo.Context) error {
-	cal, err := h.defaultCalendar(c, h.viewer(c))
+	cal, err := h.defaultCalendar(c, h.readViewer(c))
 	if err != nil {
 		return err
 	}
@@ -209,6 +229,9 @@ func (h *CalendarAPIHandler) GetCurrentDate(c echo.Context) error {
 	}
 	if cal.Weather != nil {
 		result["current_weather"] = cal.Weather
+	}
+	if playersAudience(c) {
+		result["audience"] = audiencePlayers
 	}
 	return c.JSON(http.StatusOK, result)
 }
@@ -308,6 +331,34 @@ func (h *CalendarAPIHandler) GetWeather(c echo.Context) error {
 	return c.JSON(http.StatusOK, cal.Weather)
 }
 
+// ListDayWeather returns one month's day readings. A viewer below the
+// Director gets only days up to today and no lock state (the service
+// decides), so `?audience=players` never shows a forecast.
+// GET /api/v1/campaigns/:id/calendar/weather/days?year=&month=
+func (h *CalendarAPIHandler) ListDayWeather(c echo.Context) error {
+	v := h.readViewer(c)
+	cal, err := h.defaultCalendar(c, v)
+	if err != nil {
+		return err
+	}
+	year, month := cal.CurrentYear, cal.CurrentMonth
+	if y, err := strconv.Atoi(c.QueryParam("year")); err == nil {
+		year = y
+	}
+	if m, err := strconv.Atoi(c.QueryParam("month")); err == nil && m > 0 {
+		month = m
+	}
+	days, err := h.calendarSvc.ListDayWeather(c.Request().Context(), cal.ID, cal.CampaignID, year, month, v)
+	if err != nil {
+		return err
+	}
+	body := map[string]any{"data": nonNil(days), "total": len(days)}
+	if playersAudience(c) {
+		body["audience"] = audiencePlayers
+	}
+	return c.JSON(http.StatusOK, body)
+}
+
 // GetCycles returns the default calendar's cycles.
 // GET /api/v1/campaigns/:id/calendar/cycles
 func (h *CalendarAPIHandler) GetCycles(c echo.Context) error {
@@ -346,7 +397,7 @@ func nonNil[T any](s []T) []T {
 // `occurrences`, so a rule event shows on its start date only in Foundry.
 // GET /api/v1/campaigns/:id/calendar/events?year=N&month=M
 func (h *CalendarAPIHandler) ListEvents(c echo.Context) error {
-	v := h.viewer(c)
+	v := h.readViewer(c)
 	cal, err := h.defaultCalendar(c, v)
 	if err != nil {
 		return err
@@ -367,7 +418,11 @@ func (h *CalendarAPIHandler) ListEvents(c echo.Context) error {
 		out = append(out, eventForWire(e))
 	}
 	sanitizeCalendarEventsHTMLForEgress(out)
-	return c.JSON(http.StatusOK, map[string]any{"data": out, "total": len(out)})
+	body := map[string]any{"data": out, "total": len(out)}
+	if playersAudience(c) {
+		body["audience"] = audiencePlayers
+	}
+	return c.JSON(http.StatusOK, body)
 }
 
 // GetEvent returns one event of the default calendar.
@@ -628,36 +683,6 @@ func (h *CalendarAPIHandler) SetDate(c echo.Context) error {
 		"day":    req.Day,
 		"hour":   req.Hour,
 		"minute": req.Minute,
-	})
-}
-
-// maxFoundryImportBytes caps the Calendaria payload. A real calendar is a few
-// kilobytes; the cap keeps a hostile body from being decoded whole.
-const maxFoundryImportBytes = 1 << 20
-
-// CreateCalendar is the module's "Import into Chronicle" button: it creates
-// the campaign's first calendar from a Calendaria calendar. Owner only, like
-// creating a calendar on the web. A campaign that already has a calendar
-// gets 409 so a repeated click never makes a second copy.
-// POST /api/v1/campaigns/:id/calendar
-func (h *CalendarAPIHandler) CreateCalendar(c echo.Context) error {
-	if err := h.requireOwner(c); err != nil {
-		return err
-	}
-	body, err := io.ReadAll(io.LimitReader(c.Request().Body, maxFoundryImportBytes+1))
-	if err != nil {
-		return apperror.NewBadRequest("could not read the calendar")
-	}
-	if len(body) > maxFoundryImportBytes {
-		return apperror.NewBadRequest("the calendar sent from Foundry is too large")
-	}
-	cal, warnings, err := h.calendarSvc.ImportFoundryCalendar(c.Request().Context(), c.Param("id"), body)
-	if err != nil {
-		return err
-	}
-	return c.JSON(http.StatusCreated, map[string]any{
-		"created":  cal,
-		"warnings": nonNil(warnings),
 	})
 }
 

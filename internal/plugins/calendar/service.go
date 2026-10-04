@@ -17,11 +17,9 @@ import (
 	"context"
 	"crypto/rand"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"log/slog"
 	"math"
-	"net/http"
 	"regexp"
 	"sort"
 	"time"
@@ -197,13 +195,6 @@ type CalendarService interface {
 	// real-world calendar whose date follows the real one.
 	TodayInZone(zone string) (year, month, day int, err error)
 	CreateCalendarFromImport(ctx context.Context, campaignID string, ir *ImportResult, opts CreateCalendarFromImportOptions) (*Calendar, error)
-	// ImportFoundryCalendar creates a campaign's first calendar from the
-	// Foundry module's Calendaria payload (ParseFoundryImport) and makes it
-	// the default. A campaign that already has any calendar gets a conflict
-	// (409), so a repeated or doubled import never makes a second copy; an
-	// unreadable payload is a bad request (400). The returned warnings say
-	// what the import filled in or left out.
-	ImportFoundryCalendar(ctx context.Context, campaignID string, data []byte) (*Calendar, []string, error)
 	// GetPrimaryCalendarForViewer is "the campaign's calendar" for a caller
 	// that can only follow one: the default, or when no calendar is marked
 	// default, the first by sort order. Gated like GetCalendarForViewer, and
@@ -705,12 +696,8 @@ func (s *calendarService) CreateCalendar(ctx context.Context, campaignID string,
 		LeapYearOffset:   input.LeapYearOffset,
 		Visibility:       visibility,
 		VisibilityRules:  input.VisibilityRules,
-		IsDefault:        input.IsDefault,
 	}
 	if err := s.calRepo.Create(ctx, cal); err != nil {
-		if input.IsDefault && isDuplicateEntry(err) {
-			return nil, apperror.NewConflict("this campaign already has a default calendar")
-		}
 		return nil, fmt.Errorf("create calendar: %w", err)
 	}
 	return cal, nil
@@ -1237,7 +1224,6 @@ func (s *calendarService) CreateCalendarFromImport(ctx context.Context, campaign
 		SecondsPerMinute: ir.Settings.SecondsPerMinute,
 		LeapYearEvery:    ir.Settings.LeapYearEvery,
 		LeapYearOffset:   ir.Settings.LeapYearOffset,
-		IsDefault:        opts.MakeDefault,
 	})
 	if err != nil {
 		return nil, err
@@ -1300,37 +1286,6 @@ func (s *calendarService) CreateCalendarFromImport(ctx context.Context, campaign
 		return nil, err
 	}
 	return cal, nil
-}
-
-// ImportFoundryCalendar implements CalendarService (see the interface doc).
-// The "no calendar yet" check reads every calendar regardless of visibility,
-// and MakeDefault makes the insert itself refuse a second default, so two
-// imports racing past the check still leave one calendar.
-func (s *calendarService) ImportFoundryCalendar(ctx context.Context, campaignID string, data []byte) (*Calendar, []string, error) {
-	ir, err := ParseFoundryImport(data)
-	if err != nil {
-		var ae *apperror.AppError
-		if errors.As(err, &ae) {
-			return nil, nil, err
-		}
-		return nil, nil, apperror.NewBadRequest(err.Error())
-	}
-	existing, err := s.calRepo.ListByCampaignID(ctx, campaignID)
-	if err != nil {
-		return nil, nil, fmt.Errorf("list calendars: %w", err)
-	}
-	if len(existing) > 0 {
-		return nil, nil, apperror.NewConflict("this campaign already has a calendar; Foundry syncs its date and events with that one")
-	}
-	cal, err := s.CreateCalendarFromImport(ctx, campaignID, ir, CreateCalendarFromImportOptions{MakeDefault: true})
-	if err != nil {
-		var ae *apperror.AppError
-		if errors.As(err, &ae) && ae.Code == http.StatusConflict {
-			return nil, nil, apperror.NewConflict("this campaign already has a calendar; Foundry syncs its date and events with that one")
-		}
-		return nil, nil, err
-	}
-	return cal, ir.Warnings, nil
 }
 
 // GetPrimaryCalendarForViewer implements CalendarService (see the interface

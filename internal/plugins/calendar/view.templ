@@ -116,3 +116,20 @@ func mustMarshalEvents(events []Event) string {
 	}
 	return string(b)
 }
+
+// CalendarEmbed is the calendar for an allowed app's frame (the Foundry
+// calendar window): the same widget mount as the calendar's own page, with
+// its stylesheet, and no page chrome around it. The frame's shell already
+// loaded the widget scripts.
+templ CalendarEmbed(data CalendarViewData) {
+	<link rel="stylesheet" href={ layouts.AssetURL("/static/css/calendar-view.css") }/>
+	<div class="cal-embed p-3">
+		@calendarViewMount(data)
+	</div>
+}
+
+// CalendarEmbedEmpty is the frame's note when the campaign has no calendar
+// this member may see.
+templ CalendarEmbedEmpty() {
+	<p class="text-sm text-fg-secondary p-6" role="status">This campaign has no calendar yet.</p>
+}

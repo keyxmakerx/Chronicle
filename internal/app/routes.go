@@ -3802,6 +3802,12 @@ func (a *App) RegisterRoutes() {
 	// The editor's @ page picker, as the player sees pages.
 	notesApp.GET("/entities/search", entityHandler.SearchAPI, campaigns.RequireViewAccess())
 	notesApp.GET("/entities/:eid/preview", entityHandler.PreviewAPI, campaigns.RequireViewAccess())
+	// The Foundry calendar window: the calendar page over the same grant,
+	// each route at its site gate, only while the calendar plugin is healthy.
+	if a.PluginHealth.IsHealthy(calendar.PluginSlug) {
+		calendar.RegisterAppRoutes(notesApp, calendarHandler, addonService)
+		noteGrantHandler.AllowEmbedMode(calendar.PluginSlug)
+	}
 
 	// Relations widget routes already registered above (before REST API v1).
 
