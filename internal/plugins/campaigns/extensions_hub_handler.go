@@ -4,6 +4,7 @@
 //   - GET /campaigns/:id/extensions          → ExtensionsHub (owner)
 //   - GET /campaigns/:id/extensions/fragment → ExtensionsHubFragmentAPI (owner)
 //   - POST /campaigns/:id/extensions/foundry/connect-line → NewFoundryConnectLine (owner)
+//   - GET /campaigns/:id/foundry → FoundryPage (owner, foundry_page.go)
 //
 // The hub owns the bare /campaigns/:id/extensions path; Content Packs
 // renders as a card inside the hub via the `ContentPacksCardRenderer`
@@ -25,7 +26,7 @@ import (
 	"github.com/keyxmakerx/chronicle/internal/plugins/auth"
 )
 
-// ExtensionsHub renders the owner-only "Apps & game system" page.
+// ExtensionsHub renders the owner-only "Game & features" page.
 //
 // Catalog source is the same `AddonLister.ListForPluginHub` the
 // Features tab + the older /plugins page use; the
@@ -74,8 +75,7 @@ func (h *Handler) ExtensionsHub(c echo.Context) error {
 
 	csrfToken := middleware.GetCSRFToken(c)
 	return middleware.Render(c, http.StatusOK,
-		ExtensionsHubPage(cc, addons, csrfToken, systemOptionsJSON(systemOptions), h.hasSettingsTab(cc, "ai-workspace"), contentPacksCard,
-			h.foundryRow(ctx, cc.Campaign.ID)))
+		ExtensionsHubPage(cc, addons, csrfToken, systemOptionsJSON(systemOptions), contentPacksCard))
 }
 
 // foundryRow loads the Foundry row's view model. A missing connector or a
@@ -124,17 +124,6 @@ func (h *Handler) NewFoundryConnectLine(c echo.Context) error {
 	c.Response().Header().Set(echo.HeaderCacheControl, "no-store")
 	return middleware.Render(c, http.StatusOK,
 		foundryConnectRow(cc, row, middleware.GetCSRFToken(c)))
-}
-
-// hasSettingsTab reports whether a plugin registered a Settings tab with the
-// given ID, so the page links to it only when its plugin is wired in.
-func (h *Handler) hasSettingsTab(cc *CampaignContext, id string) bool {
-	for _, factory := range h.extraSettingsTabs {
-		if factory(cc).ID == id {
-			return true
-		}
-	}
-	return false
 }
 
 // ExtensionsHubFragmentAPI returns the catalog grid as an HTMX

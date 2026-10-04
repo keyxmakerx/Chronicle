@@ -380,10 +380,15 @@ type foundryConnectorAdapter struct {
 		FoundryPresence(campaignID string) (*time.Time, bool)
 	}
 	baseURL string
+	// served names the module version the campaign's world is served, so the
+	// Foundry page can say when Foundry still runs an older one. May be nil.
+	served interface {
+		View(ctx context.Context, campaignID string) (*foundry_vtt.OwnerUpdateView, error)
+	}
 }
 
 // foundryConnectKeyName and foundryConnectVTTTag mark keys minted from the
-// Apps & game system page; the tag matches the value the Integrations form's
+// Foundry page; the tag matches the value the Integrations form's
 // Foundry option stores, so these keys group with hand-made Foundry keys.
 const (
 	foundryConnectKeyName = "Foundry connect line"
@@ -434,6 +439,13 @@ func (a *foundryConnectorAdapter) FoundryConnection(ctx context.Context, campaig
 		// after escaping so it stays a literal character.
 		if line, err := campaigns.BuildFoundryConnectLine(a.baseURL, campaignID, conn.KeyPrefix); err == nil {
 			conn.LinePreview = line + "\u2026"
+		}
+	}
+	if a.served != nil {
+		// A failed lookup only hides the version check; the rest of the page
+		// still answers.
+		if v, err := a.served.View(ctx, campaignID); err == nil && v != nil {
+			conn.ServedVersion = v.Running
 		}
 	}
 	return conn, nil
@@ -3129,10 +3141,13 @@ func (a *App) RegisterRoutes() {
 		a.Config.BaseURL,
 	)
 	fvttHandler := foundry_vtt.NewHandler(fvttService)
+	// Also read by the Foundry page's version check; nil without packages.
+	var fvttOwnerUpdates foundry_vtt.OwnerUpdates
 	fvttHandler.SetActivityRecorder(adminActivity)
 	if pkgUpdateSvc != nil {
 		// Owners are asked before a new module version reaches their campaign.
-		fvttHandler.SetOwnerUpdates(foundry_vtt.NewOwnerUpdates(pkgUpdateSvc, pkgService))
+		fvttOwnerUpdates = foundry_vtt.NewOwnerUpdates(pkgUpdateSvc, pkgService)
+		fvttHandler.SetOwnerUpdates(fvttOwnerUpdates)
 		pkgHandler.SetOwnerReminder(packageOwnerReminder{fvtt: fvttService})
 	}
 	// The campaign show page lazy-loads /foundry-vtt/show-banner-fragment
@@ -3230,7 +3245,7 @@ func (a *App) RegisterRoutes() {
 	// decision and is left alone. Best-effort: logs and never blocks startup.
 	if n, err := syncapi.ReconcileAddonEnablement(context.Background(), syncService, addonService); err != nil {
 		slog.Error("sync-api addon enablement backfill failed; campaigns that already use the "+
-			"Sync API may be refused until an owner enables Sync API on the campaign's Apps & game system page (Manage → Apps & game system)",
+			"Sync API may be refused until an owner enables Sync API on the campaign's Game & features page (Manage → Game & features)",
 			slog.String("error", err.Error()))
 	} else if n > 0 {
 		slog.Info("sync-api addon enablement backfill complete", slog.Int("campaigns", n))
@@ -3681,12 +3696,16 @@ func (a *App) RegisterRoutes() {
 	syncHistoryRepo := syncapi.NewSyncHistoryRepository(a.DB)
 	syncHistoryHandler := syncapi.NewSyncHistoryHandler(syncHistoryRepo, campaignService, syncService,
 		syncHistoryEditorAdapter{audit: audit.NewAuditService(audit.NewAuditRepository(a.DB))})
+	// Who is in each campaign's Foundry world, as the GM's client reports it.
+	foundryPlayerRepo := syncapi.NewFoundryPlayerRepository(a.DB)
+	syncHistoryHandler.SetFoundryPlayers(foundryPlayerRepo)
 
 	if a.PluginHealth.IsHealthy("syncapi") {
 		syncapi.RegisterAPIRoutes(e, syncAPIHandler, calendarAPIHandler, mediaAPIHandler, mapAPIHandler, noteAPIHandler, tagAPIHandler, syncMappingHandler, syncChangesHandler, stashAPIHandler, syncService, addonService, authService, campaignService, syncapi.WithSyncHistory(syncHistoryHandler))
 		syncapi.RegisterSyncHistoryPageRoutes(e, syncHistoryHandler, campaignService, authService)
+		syncapi.RegisterFoundryPageRoutes(e, syncHistoryHandler, campaignService, authService)
 		syncapi.RegisterAdminSyncFlowRoute(adminGroup, syncHistoryHandler)
-		go syncapi.StartHistoryPruner(a.ShutdownCtx, syncHistoryRepo)
+		go syncapi.StartHistoryPruner(a.ShutdownCtx, syncHistoryRepo, foundryPlayerRepo)
 	}
 
 	// NPC plugin: gallery/hub view for revealed character entities.
@@ -4769,7 +4788,7 @@ func (a *App) RegisterRoutes() {
 	// Real-time bidirectional sync for Foundry VTT and browser clients.
 	wsHub := ws.NewHub()
 	go wsHub.Run()
-	campaignHandler.SetFoundryConnector(&foundryConnectorAdapter{keys: syncService, hub: wsHub, baseURL: a.Config.BaseURL})
+	campaignHandler.SetFoundryConnector(&foundryConnectorAdapter{keys: syncService, hub: wsHub, baseURL: a.Config.BaseURL, served: fvttOwnerUpdates})
 
 	// Late-bind now that wsHub exists — see wsRevokerHolder above. From
 	// here on, every wired revoke path force-disconnects the sockets it

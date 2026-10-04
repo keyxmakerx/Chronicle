@@ -1910,3 +1910,18 @@
    share the bottom edge; the label steps up above the lines. */
 .cal-v5 .day:has(.avl) .erastart{bottom:26px}
 @media (max-width:600px){.cal-v5 .day:has(.avl) .erastart{bottom:16px}}
+
+/* A private preview of another day's sky: which day, its time, the way back. */
+.cal-v5 .skyday{display:inline-flex;align-items:center;gap:6px;margin-top:8px;padding:5px 10px 5px 8px;border-radius:99px;font:550 12px/1 var(--sans);color:var(--ink2);box-shadow:0 0 0 1px var(--hair)}
+.cal-v5 .skyday:hover{background:var(--lift);color:var(--ink);box-shadow:0 0 0 1px var(--edge)}
+.cal-v5 .skyday:focus-visible{outline:1.5px solid var(--ink);outline-offset:2px}
+.cal-v5 .skyprev{position:absolute;left:12px;top:10px;z-index:1;display:flex;align-items:center;gap:10px;padding:6px 6px 6px 12px;border-radius:99px;background:oklch(0.16 0.02 260 / .62);color:#eef2f8;font:550 12px/1 var(--sans);backdrop-filter:blur(6px);visibility:hidden}
+.cal-v5 .skywrap.open .skyprev:not([hidden]){visibility:visible}
+.cal-v5 .skyprev[hidden]{display:none}
+.cal-v5 .skyprev .spt{width:140px;accent-color:#eef2f8}
+.cal-v5 .skyprev .sph{min-width:38px;font-variant-numeric:tabular-nums}
+.cal-v5 .skyprev .spx{padding:6px 10px;border-radius:99px;background:oklch(1 0 0 / .14);color:#fff;font:600 12px/1 var(--sans)}
+.cal-v5 .skyprev .spx:hover{background:oklch(1 0 0 / .24)}
+.cal-v5 .skyprev .spx:focus-visible{outline:1.5px solid #fff;outline-offset:2px}
+@media (prefers-reduced-motion: no-preference){.cal-v5 .skyprev:not([hidden]){animation:skyprev-in .22s ease-out}}
+@keyframes skyprev-in{from{opacity:0;transform:translateY(4px)}to{opacity:1;transform:none}}

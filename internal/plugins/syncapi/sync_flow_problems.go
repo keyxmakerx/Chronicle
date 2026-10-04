@@ -125,7 +125,7 @@ func explainProblem(ev SyncEvent, key *FlowKey, in flowInput) *FlowProblem {
 		p.Headline = "Chronicle didn’t accept the key"
 		p.What = "Foundry called Chronicle with a key Chronicle no longer accepts."
 		p.Why = "The key was turned off, revoked or has expired, or it is being used from a place it isn’t allowed."
-		p.Fix = []string{"In Chronicle, open Manage › Apps & game system and make a new Foundry connect line, then paste it into Foundry."}
+		p.Fix = []string{"In Chronicle, open Manage › Foundry and make a new connect line, then paste it into Foundry."}
 	case code == 403:
 		p.Headline = "Chronicle refused " + possessive(owner) + " change"
 		p.What = fmt.Sprintf("Foundry sent a change with %s key, and Chronicle said no.", possessive(owner))

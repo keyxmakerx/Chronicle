@@ -83,8 +83,8 @@ func (h *Handler) CampaignShowBannerHandler(c echo.Context) error {
 	return middleware.Render(c, http.StatusOK, CampaignUpdateBanner(v, middleware.GetCSRFToken(c)))
 }
 
-// AppsUpdateRowHandler serves the Foundry module row of the owner's Apps &
-// game system page.
+// AppsUpdateRowHandler serves the Module version card of the owner's
+// Foundry page.
 //
 // GET /campaigns/:id/foundry-vtt/apps-row
 func (h *Handler) AppsUpdateRowHandler(c echo.Context) error {
@@ -93,10 +93,12 @@ func (h *Handler) AppsUpdateRowHandler(c echo.Context) error {
 		return err
 	}
 	v, err := h.owner.View(c.Request().Context(), cc.Campaign.ID)
-	if err != nil || v == nil {
+	if err != nil {
 		return c.NoContent(http.StatusOK)
 	}
-	v.CampaignName = cc.Campaign.Name
+	if v != nil {
+		v.CampaignName = cc.Campaign.Name
+	}
 	return middleware.Render(c, http.StatusOK, AppsUpdateRow(v, middleware.GetCSRFToken(c)))
 }
 
@@ -155,6 +157,24 @@ func (h *Handler) OwnerUpdateSwitchHandler(c echo.Context) error {
 		return err
 	}
 	if err := h.owner.Switch(c.Request().Context(), cc.Campaign.ID, c.FormValue("version"), actor); err != nil {
+		return err
+	}
+	return h.renderUpdate(c, cc, updateView(c), false)
+}
+
+// OwnerUpdateModeHandler changes how new module versions reach the campaign.
+//
+// POST /campaigns/:id/foundry-vtt/update/mode   form: mode, view
+func (h *Handler) OwnerUpdateModeHandler(c echo.Context) error {
+	cc, err := h.ownerCampaign(c)
+	if err != nil {
+		return err
+	}
+	actor, err := ownerActor(c)
+	if err != nil {
+		return err
+	}
+	if err := h.owner.SetMode(c.Request().Context(), cc.Campaign.ID, c.FormValue("mode"), actor); err != nil {
 		return err
 	}
 	return h.renderUpdate(c, cc, updateView(c), false)

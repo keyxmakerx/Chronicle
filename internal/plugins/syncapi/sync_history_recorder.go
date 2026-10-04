@@ -21,6 +21,19 @@ const historyRecordTimeout = 2 * time.Second
 // the history row needs no second lookup (and names a page it just deleted).
 const historyResourceKey = "syncHistoryResource"
 
+// historyActorKey carries the member a call acted as, once the service has
+// accepted that member (StashAPI.ActorFor: the key holder is the owner or a
+// co-DM and the named user is in the campaign). Set only after success, so
+// a module's unchecked claim never names who did something.
+const historyActorKey = "syncHistoryActor"
+
+// noteSyncActor tells the history recorder the verified acting member.
+func noteSyncActor(c echo.Context, userID string) {
+	if userID != "" {
+		c.Set(historyActorKey, userID)
+	}
+}
+
 type historyResource struct {
 	id, name, was string
 }
@@ -88,11 +101,14 @@ var historyRoutes = map[string]historyRoute{
 	"POST /sync/mappings":                     {kind: "link", action: "linked"},
 	"DELETE /sync/mappings/:mappingID":        {kind: "link", action: "unlinked"},
 	"POST /stashes/moves":                     {kind: "stash", action: "item moved"},
+	"POST /armory/shops/:eid/buy":             {kind: "shop", action: "bought"},
 	// A token drag sends a position on every step; one drag would bury the
 	// rest of the history.
 	"PATCH /maps/:mapID/tokens/:tokenID/position": {skip: true},
 	// The module's own reports are recorded as what they describe.
 	"POST /sync/history": {skip: true},
+	// The player list is a status report, refreshed every few minutes.
+	"POST /sync/players": {skip: true},
 }
 
 // classifyHistoryCall maps a request to its history kind and action, and
@@ -172,6 +188,8 @@ func RecordSyncHistory(repo SyncHistoryRepository, namer EntityNamer) echo.Middl
 			}
 			if err != nil {
 				ev.Message = truncate(apperror.UserMessage(err, "the request failed"), 500)
+			} else if actor, ok := c.Get(historyActorKey).(string); ok {
+				ev.UserID = &actor
 			}
 			if res, ok := c.Get(historyResourceKey).(historyResource); ok {
 				ev.ResourceID, ev.ResourceName, ev.Was = res.id, res.name, truncate(res.was, 200)
@@ -202,10 +220,10 @@ func RecordSyncHistory(repo SyncHistoryRepository, namer EntityNamer) echo.Middl
 	}
 }
 
-// StartHistoryPruner deletes expired history rows at startup and then once
-// a day until ctx ends.
-func StartHistoryPruner(ctx context.Context, repo SyncHistoryRepository) {
-	pruneHistory(ctx, repo)
+// StartHistoryPruner deletes expired history rows and stale Foundry player
+// lists at startup and then once a day until ctx ends. players may be nil.
+func StartHistoryPruner(ctx context.Context, repo SyncHistoryRepository, players FoundryPlayerRepository) {
+	pruneHistory(ctx, repo, players)
 	ticker := time.NewTicker(24 * time.Hour)
 	defer ticker.Stop()
 	for {
@@ -213,19 +231,22 @@ func StartHistoryPruner(ctx context.Context, repo SyncHistoryRepository) {
 		case <-ctx.Done():
 			return
 		case <-ticker.C:
-			pruneHistory(ctx, repo)
+			pruneHistory(ctx, repo, players)
 		}
 	}
 }
 
-func pruneHistory(ctx context.Context, repo SyncHistoryRepository) {
+func pruneHistory(ctx context.Context, repo SyncHistoryRepository, players FoundryPlayerRepository) {
 	n, err := repo.PruneOlderThan(ctx, time.Now().UTC().Add(-historyRetention))
 	if err != nil {
 		slog.Warn("sync history prune failed", slog.Any("error", err))
-		return
-	}
-	if n > 0 {
+	} else if n > 0 {
 		slog.Info("sync history pruned", slog.Int64("rows", n))
+	}
+	if n, err := prunePlayers(ctx, players, time.Now().UTC()); err != nil {
+		slog.Warn("foundry players prune failed", slog.Any("error", err))
+	} else if n > 0 {
+		slog.Info("foundry players pruned", slog.Int64("rows", n))
 	}
 }
 

@@ -333,6 +333,32 @@ func TestSetMode(t *testing.T) {
 	}
 }
 
+// An owner cannot change how updates arrive while the site admin holds the
+// campaign; the admin still can.
+func TestSetModeRespectsAdminHold(t *testing.T) {
+	cases := []struct {
+		name    string
+		actor   ActorInfo
+		wantErr bool
+	}{
+		{"owner is refused", ActorInfo{UserID: "owner"}, true},
+		{"admin may", ActorInfo{UserID: "admin", Admin: true}, false},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			e := newUpdEnv(t, "2.0.0", []string{"1.0.0", "2.0.0"}, "c1")
+			e.repo.rows[ukey("c1", "p1")] = &CampaignUpdateRow{CampaignID: "c1", PackageID: "p1", Mode: UpdateModePinned, Version: "1.0.0", AdminHold: true}
+			_, err := e.svc.SetMode(ctx(), SetUpdateModeInput{CampaignID: "c1", PackageID: "p1", Mode: "automatic"}, tc.actor)
+			if (err != nil) != tc.wantErr {
+				t.Fatalf("err = %v, wantErr %v", err, tc.wantErr)
+			}
+			if got := e.repo.rows[ukey("c1", "p1")].Mode; tc.wantErr && got != UpdateModePinned {
+				t.Errorf("a refused change wrote mode %q", got)
+			}
+		})
+	}
+}
+
 func TestSetModeKeepsPendingHoldOnlyWhileAskingFirst(t *testing.T) {
 	cases := []struct {
 		name     string

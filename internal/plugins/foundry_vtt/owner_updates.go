@@ -16,7 +16,7 @@ import (
 )
 
 // OwnerUpdateView is one campaign's standing on the Foundry module, shaped for
-// the dashboard line and the Apps & game system row.
+// the dashboard line and the Foundry page's Module version card.
 type OwnerUpdateView struct {
 	CampaignID   string
 	CampaignName string
@@ -41,6 +41,10 @@ type OwnerUpdateView struct {
 	// AdminHold is true while a site admin keeps the campaign on Running.
 	AdminHold bool
 
+	// Mode is how new versions reach the campaign: automatic, approve_first
+	// or pinned (packages.UpdateMode values).
+	Mode string
+
 	// Versions are the installed versions the owner may go back to.
 	Versions []string
 
@@ -64,6 +68,10 @@ type OwnerUpdates interface {
 
 	// Switch keeps the campaign on another installed version.
 	Switch(ctx context.Context, campaignID, version string, actor packages.ActorInfo) error
+
+	// SetMode changes how new versions reach the campaign. An admin hold
+	// refuses it, as it refuses every other owner move.
+	SetMode(ctx context.Context, campaignID, mode string, actor packages.ActorInfo) error
 }
 
 type ownerUpdates struct {
@@ -105,6 +113,7 @@ func (o *ownerUpdates) View(ctx context.Context, campaignID string) (*OwnerUpdat
 		Ready:      st.HeldVersion,
 		Dismissed:  st.HeldVersion != "" && st.DismissedVersion == st.HeldVersion,
 		AdminHold:  st.AdminHold,
+		Mode:       string(st.Mode),
 	}
 	if v.Ready != "" {
 		o.addNotes(ctx, pkg, v)
@@ -171,5 +180,19 @@ func (o *ownerUpdates) Switch(ctx context.Context, campaignID, version string, a
 		return apperror.NewNotFound("the Foundry module is not installed")
 	}
 	_, err = o.updates.SwitchVersion(ctx, campaignID, pkg.ID, version, actor)
+	return err
+}
+
+func (o *ownerUpdates) SetMode(ctx context.Context, campaignID, mode string, actor packages.ActorInfo) error {
+	pkg, err := o.modulePackage(ctx)
+	if err != nil {
+		return err
+	}
+	if pkg == nil {
+		return apperror.NewNotFound("the Foundry module is not installed")
+	}
+	// "Stay on one version" stays on the version running now; the version
+	// list is for Use another version.
+	_, err = o.updates.SetMode(ctx, packages.SetUpdateModeInput{CampaignID: campaignID, PackageID: pkg.ID, Mode: mode}, actor)
 	return err
 }
