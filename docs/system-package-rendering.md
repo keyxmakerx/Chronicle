@@ -285,7 +285,8 @@ template); nothing is added to a page the owner has not placed it on:
 - `applies_to` must be `"npc"`, the only audience for now. Any other value is
   rejected at install so a typo is loud. "NPC" is the same family as the NPC
   gallery: the character, npc and creature types, system `-character` and
-  `-monster` types and their sub-types, but not the player-character type.
+  `-monster` types and their sub-types, but not the player-character type,
+  and never a page a player has claimed as their character.
 - A manifest declares no more than 10 panels.
 
 The host emits `<div data-widget="…" data-campaign-id="…" data-entity-id="…"

@@ -709,7 +709,7 @@ func (h *Handler) Show(c echo.Context) error {
 	// Widget panels the enabled game system mounts under the title. The
 	// resolver owns the system and page-type rules; this only carries the result.
 	if r := h.systemPanels; r != nil {
-		if panels := r(c.Request().Context(), cc.Campaign.ID, entityType); len(panels) > 0 {
+		if panels := r(c.Request().Context(), cc.Campaign.ID, entityType, entity.OwnerUserID != nil); len(panels) > 0 {
 			ctx = withSystemPanels(ctx, panels)
 		}
 	}
