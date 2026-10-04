@@ -1209,7 +1209,9 @@
       var canEditAttr = this.canEdit ? ' data-can-edit="true"' : '';
       this.el.innerHTML =
         '<section class="cal" id="cal5-cal" aria-label="Calendar"' + canEditAttr + '>' +
-          '<div class="skywrap" id="cal5-skywrap" hidden><div class="sky" role="img" aria-label="The sky"><canvas></canvas></div></div>' +
+          '<div class="skywrap" id="cal5-skywrap" hidden><div class="sky" role="img" aria-label="The sky"><canvas></canvas></div>' +
+            (this.canAuthorDmOnly ? '<div class="skyprev" id="cal5-skyprev" title="Only you see this. Players still see today’s sky." hidden><span class="spd"></span><input type="range" class="spt" aria-label="Time of day"><span class="sph"></span><button type="button" class="spx" data-sky-now>Back to now</button></div>' : '') +
+          '</div>' +
           '<header class="head">' +
             '<div class="h-row h-top">' +
               '<button type="button" class="hub" id="cal5-hub" aria-haspopup="dialog" aria-expanded="false"><span>' + esc(this.cal.name || 'Calendar') + '</span><i class="fa-solid fa-chevron-down"></i></button>' +
@@ -1321,13 +1323,27 @@
       // boot.js reuses this object for every mount, so a fresh dock starts
       // with no day drawn, whatever the last calendar showed.
       this._skySig = null;
+      this._skyPrev = null;
+      var bar = $('#cal5-skyprev', this.el);
+      if (bar) {
+        bar.addEventListener('click', function (e) { if (e.target.closest('[data-sky-now]')) self.endSkyPreview(); });
+        $('.spt', bar).addEventListener('input', function () {
+          var p = self._skyPrev, mph = self.cal.minutes_per_hour || 60, v = parseInt(this.value, 10) || 0;
+          if (!p) return;
+          p.h = Math.floor(v / mph); p.min = v % mph;
+          self._skyDay();
+        });
+      }
       this._skyDay();
     },
 
     // Today's sky, redrawn only when the moment or today's events change.
     // The calendar and events here are already what this viewer may see.
     _skyDay: function () {
-      var c = this.cal;
+      var c = this.cal, p = this._skyPrev;
+      // A preview shows only that day's own weather, never today's.
+      if (p) c = Object.assign({}, c, { current_year: p.y, current_month: p.m, current_day: p.d, current_hour: p.h, current_minute: p.min, weather: null });
+      this._skyPrevBar();
       if (!this.skyDock || !this.eventsByMonth[this.monthKey(c.current_year, c.current_month)]) return;
       var evs = this.eventsOnDay(c.current_year, c.current_month, c.current_day);
       var sig = [this.calendarId, c.current_year, c.current_month, c.current_day, c.current_hour, c.current_minute].join('/') + '|' +
@@ -1335,6 +1351,36 @@
       if (sig === this._skySig) return;
       this._skySig = sig;
       this.skyDock.setDay(c, evs);
+    },
+
+    // A private look at another day's sky, for viewers with DM access: only
+    // this page's sky changes; the campaign's date and what players see stay.
+    previewSky: function (y, m, d) {
+      if (!this.skyDock || !this.canAuthorDmOnly) return;
+      var self = this, c = this.cal, p = this._skyPrev;
+      this._skyPrev = { y: y, m: m, d: d, h: p ? p.h : c.current_hour || 0, min: p ? p.min : c.current_minute || 0 };
+      if (!this.skyDock.S.layout) this.skyDock.fold(true);
+      this.fetchMonth(y, m).then(function () { if (self._skyPrev && self._skyPrev.d === d) self._skyDay(); });
+      this._skyDay();
+      this._announce('Showing the sky on ' + this._dateLabel(y, m, d) + '. Only you see this.');
+    },
+    endSkyPreview: function () {
+      if (!this._skyPrev) return;
+      this._skyPrev = null;
+      this._skyDay();
+      this._announce('Showing the sky now.');
+    },
+    // The strip's own line while a preview shows: which day, its time, and the way back.
+    _skyPrevBar: function () {
+      var bar = $('#cal5-skyprev', this.el), p = this._skyPrev, c = this.cal;
+      if (!bar) return;
+      bar.hidden = !p;
+      if (!p) return;
+      var mph = c.minutes_per_hour || 60, hpd = c.hours_per_day || 24, r = $('.spt', bar);
+      $('.spd', bar).textContent = this._dateLabel(p.y, p.m, p.d);
+      $('.sph', bar).textContent = pad2(p.h) + ':' + pad2(p.min);
+      r.min = 0; r.max = hpd * mph - 1; r.step = Math.max(1, Math.round(mph / 6));
+      r.value = p.h * mph + p.min;
     },
 
     // A transform on the card would carry its phone bars and sheets
@@ -3145,6 +3191,7 @@
         if (plan) { self._openPlan(plan.dataset.plan, parseInt(plan.dataset.planAt, 10) || 19); return; }
         if (e.target.closest('[data-plan-cancel]')) { self._closePlan(); return; }
         if (self._gnHandleClick(e)) return;
+        if (e.target.closest('[data-sky-day]')) { var sd = parseDayKey(self.wingFor); self.previewSky(sd.y, sd.m, sd.d); return; }
         var mr = e.target.closest('.mrow');
         if (mr) { self.mvMoonId = mr.dataset.moon; self.openMoonView(); return; }
         var evd = e.target.closest('.evd');
@@ -3552,6 +3599,7 @@
       return '<div class="leaf lf1"><div class="grab" aria-hidden="true"></div>' +
           '<div class="crease"><span>Day</span><button type="button" class="x" data-close aria-label="Close">✕</button></div>' +
           '<div class="wb wbh"><h3 class="wdate">' + esc(label) + '</h3>' + (isForecast ? '<span class="wxtag fctag">Forecast</span>' : '') +
+          (this.canAuthorDmOnly && this.skyDock ? '<button type="button" class="skyday" data-sky-day><i class="fa-solid fa-cloud-sun"></i>See this day’s sky</button>' : '') +
           (weatherFact ? '<div class="facts">' + weatherFact + '</div>' : '') + '</div>' +
         '</div>' +
         '<div class="leaf lf2"><div class="lscroll"><div class="wb wbr">' + gnHTML + this._freeWingHTML(d) +

@@ -18,7 +18,8 @@ const src = readFileSync(path.join(here, '..', '..', 'static', 'js', 'widgets', 
 function load() {
   const defs = {}, days = [];
   function Dock(o) { this.o = o; }
-  Dock.prototype.setDay = function (cal) { days.push(this.o.calendarId + ' ' + [cal.current_year, cal.current_month, cal.current_day, cal.current_hour].join('-')); };
+  Dock.prototype.setDay = function (cal) { days.push(this.o.calendarId + ' ' + [cal.current_year, cal.current_month, cal.current_day, cal.current_hour].join('-') + (cal.weather ? ' ' + cal.weather.preset_id : '')); };
+  Dock.prototype.S = { layout: true };
   Dock.prototype.destroy = function () {};
   const SkyPane = { Dock };
   const sandbox = {
@@ -39,6 +40,7 @@ function mount(v, calendarId, cal) {
     el: { querySelector: (s) => parts[s] || null, querySelectorAll: () => [] },
     calEl: { nextElementSibling: null }, calendarId, campaignId: 'c1', cal,
     eventsByMonth: { [cal.current_year + '_' + cal.current_month]: [] },
+    _announce() {}, _dateLabel: (y, m, d) => d + '/' + m,
   });
   v._dockSky();
 }
@@ -63,4 +65,24 @@ test('a new date or hour redraws the sky on days with no events', () => {
   v._skyDay();
   v._skyDay();
   assert.deepEqual([...days], ['world 1523-1-1-0', 'world 1523-1-2-0', 'world 1523-1-2-6']);
+});
+
+test('a preview shows the chosen day, without today\'s weather, then comes back', () => {
+  const { def, days } = load();
+  const v = Object.create(def);
+  v.canAuthorDmOnly = true;
+  mount(v, 'world', world({ weather: { preset_id: 'rain' } }));
+  v.previewSky(1523, 1, 14);
+  v.endSkyPreview();
+  assert.deepEqual([...days], ['world 1523-1-1-0 rain', 'world 1523-1-14-0', 'world 1523-1-1-0 rain']);
+  assert.equal(v.cal.current_day, 1, 'the campaign date never moves');
+});
+
+test('only viewers with DM access can preview', () => {
+  const { def, days } = load();
+  const v = Object.create(def);
+  v.canAuthorDmOnly = false;
+  mount(v, 'world', world());
+  v.previewSky(1523, 1, 14);
+  assert.deepEqual([...days], ['world 1523-1-1-0']);
 });
