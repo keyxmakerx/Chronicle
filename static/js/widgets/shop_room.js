@@ -748,9 +748,9 @@
   if (!window.Chronicle || !window.document) return;
 
   var FX_KEY = 'chronicle.shopRoom.fx';
-  // The shop's door in black-and-white line art: the lit doorway behind, and
+  // The shop's door in black-and-white line art: the dark doorway behind, and
   // the leaf that swings open. ZZ becomes a per-widget id prefix.
-  var DOOR_WAY = '<svg viewBox="0 0 64 96" aria-hidden="true"><defs><radialGradient id="ZZg" cx=".5" cy=".75" r=".7"><stop offset="0" stop-color="#fbbf24" stop-opacity=".9"/><stop offset=".55" stop-color="#92400e" stop-opacity=".85"/><stop offset="1" stop-color="#1c1917"/></radialGradient></defs><path d="M6 94V34A26 26 0 0 1 58 34V94Z" fill="url(#ZZg)"/><path d="M2 95V34A30 30 0 0 1 62 34V95" fill="none" stroke="currentColor" stroke-width="3"/><path d="M0 95H64" stroke="currentColor" stroke-width="3"/></svg>';
+  var DOOR_WAY = '<svg viewBox="0 0 64 96" aria-hidden="true"><path d="M6 94V34A26 26 0 0 1 58 34V94Z" fill="#000"/><path d="M2 95V34A30 30 0 0 1 62 34V95" fill="none" stroke="currentColor" stroke-width="3"/><path d="M0 95H64" stroke="currentColor" stroke-width="3"/></svg>';
   var DOOR_LEAF = '<svg viewBox="0 0 64 96" aria-hidden="true"><defs><clipPath id="ZZc"><path d="M6 94V34A26 26 0 0 1 58 34V94Z"/></clipPath></defs><path d="M6 94V34A26 26 0 0 1 58 34V94Z" fill="var(--color-card-bg,#fff)" stroke="currentColor" stroke-width="2.5"/><g clip-path="url(#ZZc)" stroke="currentColor" stroke-width="1.4"><path d="M19 4V94M32 4V94M45 4V94"/></g><g fill="currentColor"><rect x="6" y="40" width="34" height="4.5" rx="1"/><rect x="6" y="74" width="34" height="4.5" rx="1"/><circle cx="12" cy="42.2" r="1.3" fill="var(--color-card-bg,#fff)"/><circle cx="12" cy="76.2" r="1.3" fill="var(--color-card-bg,#fff)"/></g><circle cx="49" cy="62" r="4.2" fill="none" stroke="currentColor" stroke-width="2"/><circle cx="49" cy="57" r="1.6" fill="currentColor"/></svg>';
   var doorSeq = 0;
   var CSS = [
@@ -885,11 +885,11 @@
     // swings it open where it stands, then the room grows out of the
     // doorway as you walk through it.
     '.shr{position:relative}',
-    '.shr-front{display:none;align-items:center;gap:14px;width:100%;text-align:left;border:1px solid var(--color-border,#e5e7eb);border-radius:10px;background:var(--color-card-bg,#fff);color:var(--color-text-primary,#111827);padding:10px 14px;cursor:pointer;font:inherit}',
+    '.shr-front{display:none;align-items:center;gap:14px;width:100%;text-align:left;border:1px solid var(--color-border,#e5e7eb);border-radius:10px;background:var(--color-card-bg,#fff);color:var(--color-text-primary,#111827);padding:14px 16px;cursor:pointer;font:inherit}',
     // Pointing at the door is stepping up to it: the door grows and the wall around it dims.
     '.shr-front:hover{background:radial-gradient(circle at 46px 50%,var(--color-card-bg,#fff) 0,color-mix(in srgb,var(--color-card-bg,#fff) 88%,#78350f) 45%,color-mix(in srgb,var(--color-card-bg,#fff) 80%,#78350f) 100%)}',
     '.shr-front .nm{transition:transform .5s,opacity .5s}.shr-front:hover .nm{transform:translateX(6px);opacity:.8}',
-    '.shr-front:hover .shr-dr{transform:scale(1.14)}',
+    '.shr-front:hover .shr-dr{transform:scale(1.08)}',
     '.shr-front .nm{flex:1;min-width:0}.shr-front .nm b{display:block}.shr-front .nm span{font-size:.8rem;color:var(--color-text-secondary,#6b7280)}',
     '.shr-dr{position:relative;flex:none;width:64px;height:96px;perspective:420px;transform-origin:50% 55%;transition:transform .5s cubic-bezier(.3,.7,.3,1)}.shr-dr>span{position:absolute;inset:0}.shr-dr svg{display:block;width:100%;height:100%}',
     '.shr-dr .lf{transform-origin:6px 50%;transition:transform .7s cubic-bezier(.45,.05,.3,1)}.shr-front.opening .lf{transform:rotateY(-110deg)}',
