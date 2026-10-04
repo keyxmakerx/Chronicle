@@ -94,3 +94,46 @@ func TestCleanupOrphans_SkipsKnownFiles(t *testing.T) {
 		t.Errorf("expected known file to remain, Stat err = %v", err)
 	}
 }
+
+// TestCleanupOrphans_KeepsFileUsedOnlyByMapPicture pins that orphan cleanup is
+// decided by the media_files table, never by what references a file. A picture
+// placed on a map is referenced only by a map_drawings row, which
+// FindReferences (entities only) does not see; its file must still survive
+// because it has a media row. A true orphan next to it is still removed.
+func TestCleanupOrphans_KeepsFileUsedOnlyByMapPicture(t *testing.T) {
+	dir := t.TempDir()
+	old := time.Now().Add(-1 * time.Hour)
+	for _, name := range []string{"map-picture.png", "stray.png"} {
+		p := filepath.Join(dir, name)
+		if err := os.WriteFile(p, []byte(name), 0o644); err != nil {
+			t.Fatal(err)
+		}
+		_ = os.Chtimes(p, old, old)
+	}
+
+	repo := &mockMediaRepo{
+		listAllFilenamesFn: func(context.Context) (map[string]bool, error) {
+			return map[string]bool{"map-picture.png": true}, nil
+		},
+		findReferencesFn: func(context.Context, string, string) ([]MediaRef, error) {
+			t.Error("orphan cleanup must not depend on entity references")
+			return nil, nil
+		},
+	}
+	svc := newTestMediaService(repo)
+	svc.mediaPath = dir
+
+	removed, err := svc.CleanupOrphans(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if removed != 1 {
+		t.Errorf("removed = %d, want 1 (the stray file only)", removed)
+	}
+	if _, err := os.Stat(filepath.Join(dir, "map-picture.png")); err != nil {
+		t.Errorf("the map picture's file was removed: %v", err)
+	}
+	if _, err := os.Stat(filepath.Join(dir, "stray.png")); !os.IsNotExist(err) {
+		t.Errorf("the stray file should be gone, Stat err = %v", err)
+	}
+}

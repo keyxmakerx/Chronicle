@@ -107,6 +107,15 @@ func TestPublishDrawingEvent_ComputesAudienceFromVisibilityRules(t *testing.T) {
 			wantRequiresDM: true,
 		},
 		{
+			name:           "a picture hidden from players is staff-only on the wire",
+			drawing:        &maps.Drawing{ID: "pic", DrawingType: "image", Visibility: "dm_only", ImageID: strPtr("media-1")},
+			wantRequiresDM: true,
+		},
+		{
+			name:    "a visible picture reaches everyone",
+			drawing: &maps.Drawing{ID: "pic2", DrawingType: "image", Visibility: "everyone", ImageID: strPtr("media-1")},
+		},
+		{
 			name:       "everyone with an explicit deny",
 			drawing:    &maps.Drawing{ID: "d3", Visibility: "everyone", VisibilityRules: strPtr(`{"denied_users":["user-denied"]}`)},
 			wantDenied: []string{"user-denied"},

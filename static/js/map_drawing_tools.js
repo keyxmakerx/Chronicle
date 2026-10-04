@@ -2,7 +2,7 @@
  * map_drawing_tools.js -- Chronicle Map Drawing Tools
  *
  * Renders saved drawings for everyone and, for Scribe+, provides the drawing
- * tools (freehand, rectangle, polygon, ellipse, text, shadow) on Leaflet's native APIs
+ * tools (freehand, rectangle, polygon, ellipse, text, shadow) and pictures on Leaflet's native APIs
  * (no Leaflet.Draw dependency). It owns no UI: the map page's floating tool rail
  * drives it through `window.chronicleMap.draw`, so there is one control surface.
  *
@@ -11,7 +11,8 @@
  *     onDrawingsChange(count), onUndoChange(count) }
  * and publishes `window.chronicleMap.draw` =
  *   { start(shape), cancel(), setStyle({color,width}), setShadowStrength(alpha), undo(),
- *     setVisible(bool), count() }
+ *     setVisible(bool), count(), addPicture({id}), pictureSelectMode(bool),
+ *     escape(), deleteSelected() }
  *
  * Drawings are persisted via the REST API:
  *   POST /campaigns/:id/maps/:mid/drawings
@@ -59,7 +60,33 @@
     // optional: without it a shadow is simply not drawn, and the server still
     // withholds what lies under it.
     var shadows = window.ChronicleMapShadow ? window.ChronicleMapShadow.attach(map, { toLatLng: toLatLng }) : null;
-    ctx.onDestroy = function () { if (shadows) shadows.destroy(); };
+    // Pictures placed on the map (drawings of type "image"), likewise optional.
+    var pictures = window.ChronicleMapPictures ? window.ChronicleMapPictures.attach(map, {
+      mapW: w,
+      mapH: h,
+      toLatLng: toLatLng,
+      // The server signs each picture's URL for this viewer; the bare path is
+      // only a fallback for a response from an older server.
+      mediaURL: function (d) { return d.image_url || '/media/' + encodeURIComponent(d.image_id); },
+      // Signed URLs expire, so a failed load asks the server for a new one.
+      refreshURL: function (d) {
+        return Chronicle.apiFetch('/campaigns/' + campaignID + '/maps/' + mapID + '/drawings/' + d.id)
+          .then(function (res) { return res.ok ? res.json() : null; })
+          .then(function (fresh) { return fresh && fresh.image_url ? fresh.image_url : ''; });
+      },
+      canEdit: !!isScribe,
+      // The server's delete rule: owners and DM access any picture, a scribe
+      // the ones they added.
+      canDelete: function (d) {
+        return !!(ctx.isOwner || ctx.canDmOnly || (ctx.userID && d.created_by === ctx.userID));
+      },
+      onPatch: patchDrawing,
+      onDelete: confirmDelete
+    }) : null;
+    ctx.onDestroy = function () {
+      if (shadows) shadows.destroy();
+      if (pictures) pictures.destroy();
+    };
     // How much a new shadow hides: 0.5 "A hint", 0.85 "Almost nothing".
     var shadowStrength = 0.5;
     var currentPoints = [];
@@ -105,16 +132,54 @@
         visibility: 'everyone'
       };
       if (opts.text_content) body.text_content = opts.text_content;
+      if (opts.image_id) body.image_id = opts.image_id;
+      if (opts.sort_order) body.sort_order = opts.sort_order;
 
       return Chronicle.apiFetch('/campaigns/' + campaignID + '/maps/' + mapID + '/drawings', {
         method: 'POST',
         body: body
       }).then(function (res) {
         if (!res.ok) {
-          Chronicle.notify('Failed to save drawing', 'error');
-          return null;
+          // The server says why a picture is refused (not this campaign's
+          // image, too many points); show that instead of a bare failure.
+          return res.json().catch(function () { return {}; }).then(function (err) {
+            Chronicle.notify(err.message || 'Failed to save drawing', 'error');
+            return null;
+          });
         }
         return res.json();
+      });
+    }
+
+    // Sends only the fields that changed (the endpoint is a partial update),
+    // so a picture nudge cannot touch its opacity, crop or visibility.
+    function patchDrawing(drawingID, fields) {
+      return Chronicle.apiFetch('/campaigns/' + campaignID + '/maps/' + mapID + '/drawings/' + drawingID, {
+        method: 'PUT',
+        body: fields
+      }).then(function (res) {
+        if (res.ok) return true;
+        return res.json().catch(function () { return {}; }).then(function (err) {
+          Chronicle.notify(err.message || 'Could not save that change', 'error');
+          return false;
+        });
+      }).catch(function () {
+        Chronicle.notify('Could not save that change', 'error');
+        return false;
+      });
+    }
+
+    // The same confirm the right-click delete uses; the server still decides
+    // who may delete.
+    function confirmDelete(id) {
+      if (!confirm('Delete this drawing?')) return;
+      deleteDrawing(id).then(function (res) {
+        if (res && res.ok) {
+          forget(id);
+          notifyCount();
+          return;
+        }
+        Chronicle.notify(res && res.status === 403 ? 'Only owners can delete drawings' : 'Could not delete that drawing', 'error');
       });
     }
 
@@ -159,6 +224,9 @@
           if (latlngs.length >= 2) {
             layer = L.rectangle([latlngs[0], latlngs[1]], opts);
           }
+          break;
+        case 'image':
+          if (pictures && d.image_id) layer = pictures.layer(d);
           break;
         case 'shadow':
           // Only the owner and co-DMs see through it; scribes are hidden like players.
@@ -243,6 +311,27 @@
       renderDrawing(d);
       sessionStack.push(d.id);
       notifyCount();
+    }
+
+    // Drops a chosen campaign picture onto the middle of the view. The picture
+    // is measured first so it keeps its proportions.
+    function addPicture(pick) {
+      if (!pictures || !pick || !pick.id) return;
+      var probe = new Image();
+      probe.onload = function () { placePicture(pick.id, probe.naturalWidth, probe.naturalHeight); };
+      // A picture the browser cannot measure still goes down, as a square.
+      probe.onerror = function () { placePicture(pick.id, 1, 1); };
+      probe.src = pick.url || '/media/' + encodeURIComponent(pick.id);
+    }
+
+    function placePicture(imageID, natW, natH) {
+      var pts = pictures.placement(natW, natH);
+      // New pictures land on top of the others.
+      saveDrawing('image', pts, { image_id: imageID, fill_alpha: 1, sort_order: pictures.nextSortOrder() }).then(function (d) {
+        if (!d) return;
+        addSaved(d);
+        pictures.select(d.id);
+      });
     }
 
     function undoLast() {
@@ -542,7 +631,15 @@
       setVisible: function (on) {
         if (on) map.addLayer(drawingLayer); else map.removeLayer(drawingLayer);
       },
-      count: function () { return drawingCount; }
+      count: function () { return drawingCount; },
+      addPicture: addPicture,
+      // Pictures can be picked only while the move tool is active; any other
+      // tool gets every click.
+      pictureSelectMode: function (on) { if (pictures) pictures.selectMode(on); },
+      // Esc: true when it only deselected a picture (or left cropping).
+      escape: function () { return pictures ? pictures.escape() : false; },
+      // Delete key: true when a picture was selected (the confirm follows).
+      deleteSelected: function () { return pictures ? pictures.deleteSelected() : false; }
     };
 
     // --- Init ---
