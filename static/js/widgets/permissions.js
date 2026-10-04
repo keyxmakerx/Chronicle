@@ -5,9 +5,11 @@
  * visibility-mode selector (Everyone / DM Only / Custom) and, in Custom
  * mode, per-role / per-user / per-group grant rows.
  *
- * Two mount modes:
+ * Mount modes:
  *   1. `data-endpoint` present (entity show/edit): loads/saves via
- *      GET/PUT /permissions.
+ *      GET/PUT /permissions. On the page itself, `data-layout="corner"`
+ *      reuses the server-rendered control as the trigger and unfolds the
+ *      editor from it.
  *   2. `data-mode="draft"` + `data-draft-target` (create form): no
  *      endpoint yet, writes is_private into the target hidden input;
  *      Custom mode is disabled until the entity has an ID.
@@ -49,6 +51,11 @@ Chronicle.register('permissions', {
     // of the right-edge slide-in card. Pure presentation — reuses
     // renderBody/load/save/grant UI verbatim.
     var inline = config.layout === 'inline';
+    // Corner layout: the page's top-right visibility control. The trigger
+    // is the server-rendered chip already inside the mount, and the editor
+    // unfolds from it as a popover rather than sliding in from the screen
+    // edge, so it opens inside the thing it belongs to.
+    var corner = config.layout === 'corner';
 
     // Inject scoped styles once. Card uses CSS variables that flow from
     // the campaign theme (surface/edge/accent) so per-campaign retints
@@ -136,7 +143,23 @@ Chronicle.register('permissions', {
         '.perm-inline .perm-card-body { padding: 16px; }',
         '.perm-inline .perm-card-footer { border-top: 1px solid var(--color-edge, #e5e7eb); }',
         '.perm-inline-open .perm-trigger { border-radius: 8px 8px 0 0; }',
-        '@media (prefers-reduced-motion: reduce) { .perm-inline-panel, .perm-inline .perm-trigger-chevron { transition: none; } }'
+        '@media (prefers-reduced-motion: reduce) { .perm-inline-panel, .perm-inline .perm-trigger-chevron { transition: none; } }',
+        // Corner layout: a popover anchored under the page's top-right
+        // control, growing from that corner. Only transform and opacity
+        // animate; visibility flips after the close transition ends.
+        '.perm-corner-panel { position: absolute; top: calc(100% + 6px); right: 0; width: min(380px, calc(100vw - 32px)); max-height: min(70vh, 560px); display: flex; flex-direction: column; background: var(--color-card-bg, #fff); color: var(--color-fg-body, #374151); border: 1px solid var(--color-edge, #e5e7eb); border-radius: 12px; box-shadow: var(--elev-dragged, 0 16px 36px -8px rgba(0,0,0,0.22)); transform-origin: top right; transform: scale(0.92) translateY(-4px); opacity: 0; visibility: hidden; pointer-events: none; transition: transform var(--dur-standard, 200ms) var(--ease-out, ease-out), opacity var(--dur-standard, 200ms) var(--ease-out, ease-out), visibility 0s linear var(--dur-standard, 200ms); z-index: 50; text-align: left; }',
+        '.perm-corner-panel.perm-open { transform: none; opacity: 1; visibility: visible; pointer-events: auto; transition-delay: 0s; }',
+        '.perm-corner-panel .perm-card-header { padding: 12px 16px; }',
+        '.perm-corner-panel .perm-card-body { padding: 12px 16px; }',
+        '.perm-corner-open [data-perm-corner-tip] { display: none; }',
+        '.perm-corner-open [data-perm-corner-trigger] { border-color: var(--color-accent, #6366f1); }',
+        '.perm-unsaved { display: none; margin: 0 16px 12px; padding: 8px 10px; border-radius: 8px; font-size: 12px; background: #fffbeb; color: #92400e; border: 1px solid #fde68a; }',
+        '.dark .perm-unsaved { background: #451a03; color: #fbbf24; border-color: #92400e; }',
+        '.perm-unsaved.perm-unsaved-show { display: block; animation: perm-unsaved-in var(--dur-standard, 200ms) var(--ease-out, ease-out); }',
+        '.perm-corner-panel.perm-nudge { animation: perm-nudge 360ms var(--ease-in-out, ease-in-out); }',
+        '@keyframes perm-unsaved-in { from { opacity: 0; transform: translateY(-4px); } to { opacity: 1; transform: none; } }',
+        '@keyframes perm-nudge { 20%, 60% { transform: translateX(-5px); } 40%, 80% { transform: translateX(5px); } }',
+        '@media (prefers-reduced-motion: reduce) { .perm-corner-panel { transition: none; } .perm-corner-panel.perm-nudge, .perm-unsaved.perm-unsaved-show { animation: none; } }'
       ].join('\n');
       document.head.appendChild(style);
     }
@@ -216,6 +239,10 @@ Chronicle.register('permissions', {
 
     function renderTrigger() {
       if (!trigger) return;
+      if (corner) {
+        renderCornerTrigger();
+        return;
+      }
       trigger.innerHTML = '';
       // ADR-057: a load that hasn't resolved yet is just as unknown as one
       // that failed — getMode() would otherwise run against untouched init
@@ -268,6 +295,40 @@ Chronicle.register('permissions', {
         chevron.className = 'fa-solid fa-chevron-down text-xs perm-trigger-chevron';
         trigger.appendChild(chevron);
       }
+    }
+
+    // renderCornerTrigger refreshes the server-rendered corner control after
+    // a load or save. Until a load succeeds the server's answer stands, so
+    // the control never flashes an unknown or defaulted state.
+    function renderCornerTrigger() {
+      if (state.loading || state.loadFailed) return;
+      var mode = getMode();
+      var icon = trigger.querySelector('[data-perm-corner-icon]');
+      if (icon) {
+        icon.className = 'fa-solid ' + (mode === 'everyone' ? 'fa-globe' : mode === 'dm_only' ? 'fa-lock' : 'fa-shield-halved') + ' text-[11px]';
+        icon.style.color = mode === 'custom' ? 'var(--color-accent)' : 'var(--color-fg-muted)';
+      }
+      var label = trigger.querySelector('[data-perm-corner-label]');
+      if (label) label.textContent = mode === 'everyone' ? 'Everyone' : mode === 'dm_only' ? 'DM team only' : 'Custom';
+      trigger.setAttribute('data-visibility-badge', mode);
+      // Tags only widen a page that is otherwise hidden.
+      var dot = trigger.querySelector('[data-perm-corner-dot]');
+      if (dot) dot.style.display = mode === 'everyone' ? 'none' : '';
+      var tip = el.querySelector('[data-perm-corner-tip]');
+      if (tip && tip.getAttribute('data-perm-mode') !== mode && tip.hasAttribute('data-perm-mode')) {
+        tip.textContent = cornerTip(mode);
+      }
+      if (tip) tip.setAttribute('data-perm-mode', mode);
+    }
+
+    function cornerTip(mode) {
+      var base = mode === 'everyone' ? 'Visible to everyone in this campaign'
+        : mode === 'dm_only' ? 'Visible only to the owner and members given DM access'
+        : 'Custom permissions — specific people';
+      if (mode !== 'everyone' && state.tagGrants && state.tagGrants.length > 0) {
+        base += ' · Also visible via tags';
+      }
+      return base + ' · Click to change.';
     }
 
     // renderTagGrantsNote appends a read-only summary of the tag-derived
@@ -692,6 +753,16 @@ Chronicle.register('permissions', {
     function openCard() {
       if (state.open) return;
       state.open = true;
+      if (corner) {
+        hideUnsaved();
+        void card.offsetWidth;
+        card.classList.add('perm-open');
+        el.classList.add('perm-corner-open');
+        trigger.setAttribute('aria-expanded', 'true');
+        document.addEventListener('keydown', onEscape);
+        document.addEventListener('pointerdown', onOutside, true);
+        return;
+      }
       // Inline layout: expand the in-flow panel via the grid-rows animation;
       // no backdrop, no body-scroll lock, no global Escape (it's part of the
       // form, not a modal).
@@ -715,6 +786,15 @@ Chronicle.register('permissions', {
     function closeCard() {
       if (!state.open) return;
       state.open = false;
+      if (corner) {
+        card.classList.remove('perm-open');
+        el.classList.remove('perm-corner-open');
+        trigger.setAttribute('aria-expanded', 'false');
+        document.removeEventListener('keydown', onEscape);
+        document.removeEventListener('pointerdown', onOutside, true);
+        hideUnsaved();
+        return;
+      }
       if (inline) {
         card.classList.remove('perm-open');
         el.classList.remove('perm-inline-open');
@@ -731,6 +811,101 @@ Chronicle.register('permissions', {
         e.preventDefault();
         closeCard();
       }
+    }
+
+    // A change is unsaved while its save is in flight or after it failed.
+    function hasUnsaved() {
+      return state.saving || (!!state.error && !state.loadFailed);
+    }
+
+    // tryClose closes the corner editor unless a change is unsaved; then it
+    // stays open and says so, with a small nudge so the warning is seen.
+    function tryClose() {
+      if (!hasUnsaved()) {
+        closeCard();
+        return;
+      }
+      unsavedEl.classList.remove('perm-unsaved-show');
+      void unsavedEl.offsetWidth;
+      unsavedEl.classList.add('perm-unsaved-show');
+      card.classList.remove('perm-nudge');
+      void card.offsetWidth;
+      card.classList.add('perm-nudge');
+    }
+
+    function hideUnsaved() {
+      if (unsavedEl) unsavedEl.classList.remove('perm-unsaved-show');
+    }
+
+    function onOutside(e) {
+      if (!state.open || el.contains(e.target)) return;
+      tryClose();
+    }
+
+    var unsavedEl = null;
+
+    if (corner) {
+      trigger = el.querySelector('[data-perm-corner-trigger]');
+      if (!trigger) return;
+      trigger.setAttribute('aria-haspopup', 'dialog');
+      trigger.setAttribute('aria-expanded', 'false');
+      trigger.addEventListener('click', function () {
+        if (state.open) {
+          tryClose();
+        } else {
+          openCard();
+        }
+      });
+
+      card = document.createElement('div');
+      card.className = 'perm-corner-panel';
+      card.setAttribute('role', 'dialog');
+      card.setAttribute('aria-label', 'Who can see this page');
+      card.addEventListener('animationend', function () {
+        card.classList.remove('perm-nudge');
+      });
+
+      var cHeader = document.createElement('div');
+      cHeader.className = 'perm-card-header';
+      var cTitle = document.createElement('div');
+      cTitle.className = 'perm-card-title';
+      cTitle.textContent = 'Who can see this page';
+      cHeader.appendChild(cTitle);
+      var cClose = document.createElement('button');
+      cClose.type = 'button';
+      cClose.className = 'perm-card-close';
+      cClose.setAttribute('aria-label', 'Close');
+      cClose.innerHTML = '<i class="fa-solid fa-xmark"></i>';
+      cClose.addEventListener('click', tryClose);
+      cHeader.appendChild(cClose);
+      card.appendChild(cHeader);
+
+      bodyEl = document.createElement('div');
+      bodyEl.className = 'perm-card-body';
+      card.appendChild(bodyEl);
+
+      unsavedEl = document.createElement('div');
+      unsavedEl.className = 'perm-unsaved';
+      unsavedEl.setAttribute('role', 'status');
+      unsavedEl.textContent = 'Not saved yet. Wait a moment, or press Esc to leave without it.';
+      card.appendChild(unsavedEl);
+
+      var cFooter = document.createElement('div');
+      cFooter.className = 'perm-card-footer';
+      statusEl = document.createElement('span');
+      cFooter.appendChild(statusEl);
+      card.appendChild(cFooter);
+
+      el.appendChild(card);
+
+      el._permState = state;
+      el._permCard = card;
+      el._permBackdrop = null;
+      el._permOnEscape = onEscape;
+      el._permOnOutside = onOutside;
+
+      load();
+      return;
     }
 
     // Build the trigger inside the mount element.
@@ -846,6 +1021,9 @@ Chronicle.register('permissions', {
     if (el._permOnEscape) {
       document.removeEventListener('keydown', el._permOnEscape);
     }
+    if (el._permOnOutside) {
+      document.removeEventListener('pointerdown', el._permOnOutside, true);
+    }
     if (el._permCard && el._permCard.parentNode) {
       el._permCard.parentNode.removeChild(el._permCard);
     }
@@ -857,6 +1035,8 @@ Chronicle.register('permissions', {
     delete el._permCard;
     delete el._permBackdrop;
     delete el._permOnEscape;
-    el.innerHTML = '';
+    delete el._permOnOutside;
+    // The corner mount's control is server-rendered and outlives the widget.
+    if (el.getAttribute('data-layout') !== 'corner') el.innerHTML = '';
   }
 });

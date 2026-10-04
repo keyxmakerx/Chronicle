@@ -3,7 +3,11 @@
 // DM team can act on (ADR-057).
 package entities
 
-import "github.com/keyxmakerx/chronicle/internal/plugins/campaigns"
+import (
+	"fmt"
+
+	"github.com/keyxmakerx/chronicle/internal/plugins/campaigns"
+)
 
 // visibilityGlanceVisible is the single gate predicate (ADR-057): the DM
 // team — Owner, Scribe, and any co-DM promoted by VisibilityRole() — sees
@@ -52,5 +56,99 @@ templ visibilityGlance(cc *campaigns.CampaignContext, entity *Entity, ev *Effect
 				<span class="absolute -top-0.5 -right-0.5 w-1.5 h-1.5 rounded-full bg-amber-400 ring-1 ring-surface" aria-hidden="true"></span>
 			}
 		</span>
+	}
+}
+
+// visibilityCornerLabel is the short word the page-corner control shows
+// beside its glyph.
+func visibilityCornerLabel(state string) string {
+	switch state {
+	case VisStateCustom:
+		return "Custom"
+	case VisStateDMOnly:
+		return "DM team only"
+	default:
+		return "Everyone"
+	}
+}
+
+// visibilityCornerIcon is the glyph for a visibility state, the same three
+// the list glance uses (ADR-057).
+func visibilityCornerIcon(state string) string {
+	switch state {
+	case VisStateCustom:
+		return "fa-shield-halved"
+	case VisStateDMOnly:
+		return "fa-lock"
+	default:
+		return "fa-globe"
+	}
+}
+
+// effectiveVisibilityBadge is the page's one visibility control, standing at
+// the top-right of the page so every page type has it, including pages whose
+// layout has no title block. The DM team sees who can view the page on hover;
+// the Owner clicks it to open the permissions editor, which unfolds from the
+// control itself. Players get nothing, since a badge would hint that something
+// is hidden from them (ADR-055 rule 3).
+templ effectiveVisibilityBadge(cc *campaigns.CampaignContext, entity *Entity, ev *EffectiveVisibility) {
+	if visibilityGlanceVisible(cc) {
+		{{ state := baseVisibilityState(entity) }}
+		{{ widened := ev != nil && ev.WidenedByTags }}
+		{{ canEdit := cc.MemberRole >= campaigns.RoleOwner }}
+		<div
+			class="group relative shrink-0"
+			data-entity-access
+			if canEdit {
+				data-widget="permissions"
+				data-layout="corner"
+				data-endpoint={ fmt.Sprintf("/campaigns/%s/entities/%s/permissions", cc.Campaign.ID, entity.ID) }
+				data-editable="true"
+			}
+		>
+			<button
+				type="button"
+				class={ "relative inline-flex items-center gap-1.5 h-7 px-2.5 rounded-full border border-edge bg-surface text-xs text-fg-body transition-colors",
+					templ.KV("hover:border-accent cursor-pointer", canEdit),
+					templ.KV("cursor-default", !canEdit) }
+				data-perm-corner-trigger
+				data-visibility-badge={ state }
+				if widened {
+					data-tag-widened="true"
+				}
+				aria-describedby={ "entity-access-tip-" + entity.ID }
+				if !canEdit {
+					aria-disabled="true"
+				}
+			>
+				<i
+					class={ "fa-solid", visibilityCornerIcon(state), "text-[11px]" }
+					if state == VisStateCustom {
+						style="color: var(--color-accent);"
+					} else {
+						style="color: var(--color-fg-muted);"
+					}
+					data-perm-corner-icon
+				></i>
+				<span data-perm-corner-label>{ visibilityCornerLabel(state) }</span>
+				if canEdit {
+					<i class="fa-solid fa-chevron-down text-[9px] text-fg-muted" aria-hidden="true"></i>
+				}
+				if widened {
+					<span class="absolute -top-0.5 -right-0.5 w-2 h-2 rounded-full bg-amber-400 ring-1 ring-surface" aria-hidden="true" data-perm-corner-dot></span>
+				}
+			</button>
+			<span
+				id={ "entity-access-tip-" + entity.ID }
+				role="tooltip"
+				data-perm-corner-tip
+				class="pointer-events-none absolute right-0 top-full mt-1.5 z-40 w-max max-w-xs rounded-md bg-fg px-2 py-1 text-[11px] leading-snug text-surface opacity-0 transition-opacity group-hover:opacity-100 group-focus-within:opacity-100"
+			>
+				{ visibilityGlanceTooltip(cc, entity, ev) }
+				if canEdit {
+					{ " · Click to change." }
+				}
+			</span>
+		</div>
 	}
 }

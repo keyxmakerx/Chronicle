@@ -26,39 +26,41 @@ import (
 templ EntityShowPage(cc *campaigns.CampaignContext, entity *Entity, entityType *EntityType, ancestors []Entity, children []Entity, showAttributes bool, showCalendar bool, claimingEnabled bool, ownerName string, csrfToken string, userID string) {
 	@layouts.App(entity.Name + " - " + cc.Campaign.Name) {
 		<div class="max-w-7xl mx-auto" data-entity-type-slug={ entityType.Slug }>
-			<!-- Breadcrumb with ancestor chain -->
-			<nav class="text-xs md:text-sm text-fg-secondary mb-4 overflow-x-auto whitespace-nowrap">
-				<a href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/entities", cc.Campaign.ID)) } class="hover:text-fg-body">Pages</a>
-				if entity.TypeSlug != "" {
+			<!-- Breadcrumb with ancestor chain, and the page's visibility
+			     control standing on its own at the top-right. -->
+			<div class="flex items-start justify-between gap-3 mb-4">
+				<nav class="text-xs md:text-sm text-fg-secondary overflow-x-auto whitespace-nowrap min-w-0 flex-1">
+					<a href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/entities", cc.Campaign.ID)) } class="hover:text-fg-body">Pages</a>
+					if entity.TypeSlug != "" {
+						<span class="mx-1">/</span>
+						{{
+							// Display label: prefer the type's NamePlural ("Maps") over
+							// naively appending "s" to TypeName, which doubled the s on
+							// already-plural names ("Maps" → "Mapss"). Falls back to
+							// TypeName + "s" only when NamePlural is empty (legacy types
+							// without the column populated).
+							breadcrumbLabel := entity.TypeNamePlural
+							if breadcrumbLabel == "" {
+								breadcrumbLabel = entity.TypeName + "s"
+							}
+						}}
+						<a href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/%s", cc.Campaign.ID, entity.TypeSlug)) } class="hover:text-fg-body">{ breadcrumbLabel }</a>
+					}
+					// Ancestors: furthest first, immediate parent last.
+					for i := len(ancestors) - 1; i >= 0; i-- {
+						<span class="mx-1">/</span>
+						<a href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/entities/%s", cc.Campaign.ID, ancestors[i].ID)) } class="hover:text-fg-body">{ ancestors[i].Name }</a>
+					}
 					<span class="mx-1">/</span>
-					{{
-						// Display label: prefer the type's NamePlural ("Maps") over
-						// naively appending "s" to TypeName, which doubled the s on
-						// already-plural names ("Maps" → "Mapss"). Falls back to
-						// TypeName + "s" only when NamePlural is empty (legacy types
-						// without the column populated).
-						breadcrumbLabel := entity.TypeNamePlural
-						if breadcrumbLabel == "" {
-							breadcrumbLabel = entity.TypeName + "s"
-						}
-					}}
-					<a href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/%s", cc.Campaign.ID, entity.TypeSlug)) } class="hover:text-fg-body">{ breadcrumbLabel }</a>
-				}
-				// Ancestors: furthest first, immediate parent last.
-				for i := len(ancestors) - 1; i >= 0; i-- {
-					<span class="mx-1">/</span>
-					<a href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/entities/%s", cc.Campaign.ID, ancestors[i].ID)) } class="hover:text-fg-body">{ ancestors[i].Name }</a>
-				}
-				<span class="mx-1">/</span>
-				<span class="text-fg">{ entity.Name }</span>
-			</nav>
-
+					<span class="text-fg">{ entity.Name }</span>
+				</nav>
+				@effectiveVisibilityBadge(cc, entity, GetEffectiveVisibility(ctx))
+			</div>
 			<!-- Player Character Claiming banner (PC-CLAIM-3, Parts 1 & 4):
 			     "Claimed by <player>" when owned, the actionable claim banner
 			     when unclaimed + claimable + the addon is enabled, nothing
 			     otherwise. ClaimEntity enforces the same rules server-side. -->
 			@claimBanner(cc, entity, entityType, claimingEnabled, ownerName, csrfToken)
-
 			<!-- Slug-keyed system-package renderer (CH4). When a system
 			     package has registered a renderer for this entity_type
 			     slug, that renderer owns the page contents in place of
@@ -121,27 +123,22 @@ templ EntityShowPage(cc *campaigns.CampaignContext, entity *Entity, entityType *
 					</div>
 				}
 			}
-
 			// Panel another plugin contributes to character pages. It loads
 			// itself and replaces this placeholder; an empty answer removes it.
 			if u := pagePanelURL(ctx); u != "" {
 				<div hx-get={ u } hx-trigger="load" hx-swap="outerHTML"></div>
 			}
-
 			// Children section: shown below the layout if this entity has children.
 			if len(children) > 0 || cc.MemberRole >= campaigns.RoleScribe {
 				@blockChildren(cc, entity, children)
 			}
-
 			// Entity posts (sub-notes): additional content sections below the main entry.
 			@blockPosts(cc, entity, csrfToken)
-
 			// Writing prompts: collapsible panel to help content creators.
 			// Only shown to Scribe+ (content creators), lazy-loaded via HTMX.
 			if cc.MemberRole >= campaigns.RoleScribe && entityType != nil {
 				@WorldbuildingPromptsPanel(cc.Campaign.ID, entityType.ID)
 			}
-
 			// Backlinks: entities that reference this one via @mentions.
 			// Loaded asynchronously via HTMX to keep page load fast.
 			<div
@@ -149,7 +146,6 @@ templ EntityShowPage(cc *campaigns.CampaignContext, entity *Entity, entityType *
 				hx-trigger="load"
 				hx-swap="innerHTML"
 			></div>
-
 			// A per-entity calendar is opt-in via the `entity_calendar`
 			// page-template block, not rendered automatically here.
 		</div>
@@ -246,38 +242,36 @@ templ blockTitle(cc *campaigns.CampaignContext, entity *Entity, csrfToken string
 				jsEsc(derefStr(entity.ParentID))) }
 		}
 	>
-		<div class="flex items-center justify-between">
-			<div class="flex items-center gap-2">
-				<h1 class="text-xl md:text-3xl font-bold text-fg">{ entity.Name }</h1>
-				<button
-					class="text-fg-muted hover:text-amber-400 transition-colors"
-					data-favorite-toggle={ entity.ID }
-					data-entity-name={ entity.Name }
-					title="Toggle favorite"
-				>
-					<i class="fa-regular fa-star text-lg"></i>
-				</button>
-				// Effective-visibility badge, read from the per-request glance the
-				// show handler injected (nil when none was computed). The
-				// DM-team gate lives inside visibilityGlance itself (ADR-057).
-				@effectiveVisibilityBadge(cc, entity, GetEffectiveVisibility(ctx))
-				// "Show in Foundry" for NPC pages. foundry_vtt owns it and
-				// answers empty for anything else, so this stays VTT-agnostic.
-				if cc.CanAuthorDmOnly() {
-					<span
-						hx-get={ fmt.Sprintf("/campaigns/%s/foundry-vtt/npc-spotlight/%s", cc.Campaign.ID, entity.ID) }
-						hx-trigger="load"
-						hx-swap="outerHTML"
-					></span>
-				}
+		<div class="flex items-start justify-between gap-3">
+			<div class="min-w-0">
+				<div class="flex items-center gap-2">
+					<h1 class="text-xl md:text-3xl font-bold text-fg">{ entity.Name }</h1>
+					<button
+						class="text-fg-muted hover:text-amber-400 transition-colors"
+						data-favorite-toggle={ entity.ID }
+						data-entity-name={ entity.Name }
+						title="Toggle favorite"
+					>
+						<i class="fa-regular fa-star text-lg"></i>
+					</button>
+					// "Show in Foundry" for NPC pages. foundry_vtt owns it and
+					// answers empty for anything else, so this stays VTT-agnostic.
+					if cc.CanAuthorDmOnly() {
+						<span
+							hx-get={ fmt.Sprintf("/campaigns/%s/foundry-vtt/npc-spotlight/%s", cc.Campaign.ID, entity.ID) }
+							hx-trigger="load"
+							hx-swap="outerHTML"
+						></span>
+					}
+				</div>
+				// Aliases ("aka") sit under the name they are alternatives to.
+				<div
+					data-widget="aliases"
+					data-entity-id={ entity.ID }
+					data-campaign-id={ cc.Campaign.ID }
+					data-editable={ fmt.Sprintf("%t", cc.MemberRole >= campaigns.RoleScribe) }
+				></div>
 			</div>
-			// Aliases widget: displays alternative names for this entity.
-			<div
-				data-widget="aliases"
-				data-entity-id={ entity.ID }
-				data-campaign-id={ cc.Campaign.ID }
-				data-editable={ fmt.Sprintf("%t", cc.MemberRole >= campaigns.RoleScribe) }
-			></div>
 			if cc.MemberRole >= campaigns.RoleScribe {
 				<div class="flex items-center gap-2">
 					<button
@@ -327,12 +321,10 @@ templ blockTitle(cc *campaigns.CampaignContext, entity *Entity, csrfToken string
 				</div>
 			}
 		</div>
-
 		// The History panel loads here when History is clicked.
 		if cc.MemberRole >= campaigns.RoleScribe {
 			<div id="page-history-slot"></div>
 		}
-
 		// Inline metadata edit panel (Scribe+).
 		if cc.MemberRole >= campaigns.RoleScribe {
 			<div x-show="editing" x-cloak x-transition class="mt-4 card p-4 space-y-3">
@@ -346,7 +338,6 @@ templ blockTitle(cc *campaigns.CampaignContext, entity *Entity, csrfToken string
 						<input type="text" x-model="typeLabel" class="input w-full text-sm" placeholder="e.g., City, NPC, Artifact" maxlength="100"/>
 					</div>
 				</div>
-
 				<div>
 					<label class="block text-xs font-medium text-fg-body mb-1">Parent Page</label>
 					<input type="text" x-model="parentId" class="input w-full text-sm" placeholder="Parent entity ID (or leave empty)"/>
@@ -355,7 +346,6 @@ templ blockTitle(cc *campaigns.CampaignContext, entity *Entity, csrfToken string
 				// inline permissions widget (ADR-057). The metadata PUT below
 				// carries no is_private; UpdateMetadataAPI's nil-preserving
 				// service call keeps the entity's current value.
-
 				<div class="flex items-center justify-end gap-3 pt-1">
 					<span x-show="saved" x-transition class="text-xs text-green-600">Saved!</span>
 					<span x-show="error" x-transition class="text-xs text-red-500" x-text="error"></span>
@@ -487,7 +477,6 @@ templ blockDetails(cc *campaigns.CampaignContext, entity *Entity) {
 			}
 			@visibilityGlance(cc, entity, nil)
 		</div>
-
 		<!-- Metadata -->
 		<div class="pt-2 border-t border-edge-light text-xs text-fg-muted space-y-1">
 			<div>Created { entity.CreatedAt.Format("Jan 2, 2006") }</div>
@@ -983,4 +972,3 @@ templ blockUnavailablePlaceholder(blockType string) {
 		</div>
 	</div>
 }
-

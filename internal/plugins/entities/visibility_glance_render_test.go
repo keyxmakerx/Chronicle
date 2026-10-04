@@ -1,4 +1,4 @@
-// visibility_glance_render_test.go renders the REAL call sites (blockTitle,
+// visibility_glance_render_test.go renders the REAL call sites (the page corner,
 // EntityCard, blockDetails, EntityTableRow, entityTreeLevel, blockChildren,
 // entityBlock/RenderBlock), never a hand-rolled stand-in for them (ADR-057).
 package entities
@@ -42,7 +42,7 @@ func glanceViewers() map[string]*campaigns.CampaignContext {
 // TestVisibilityGlance_GateAcrossCallSites pins the visibility-glance gate
 // across every render call site, not just the show page header: Player and
 // anonymous viewers must get no glance element, and co-DM/Owner must, on
-// blockTitle, EntityCard, blockDetails, EntityTableRow, entityTreeLevel and
+// the page corner, EntityCard, blockDetails, EntityTableRow, entityTreeLevel and
 // blockChildren alike (ADR-057).
 func TestVisibilityGlance_GateAcrossCallSites(t *testing.T) {
 	entity := &Entity{ID: "e1", CampaignID: "c1", EntityTypeID: 9, Name: "Waterdeep", Visibility: VisibilityDefault, IsPrivate: true}
@@ -50,8 +50,8 @@ func TestVisibilityGlance_GateAcrossCallSites(t *testing.T) {
 	node := EntityTreeNode{Entity: *entity}
 
 	sites := map[string]func(cc *campaigns.CampaignContext) string{
-		"header (blockTitle)": func(cc *campaigns.CampaignContext) string {
-			return renderComponent(t, blockTitle(cc, entity, "csrf"))
+		"page corner (effectiveVisibilityBadge)": func(cc *campaigns.CampaignContext) string {
+			return renderComponent(t, effectiveVisibilityBadge(cc, entity, nil))
 		},
 		"card (EntityCard)": func(cc *campaigns.CampaignContext) string {
 			return renderComponent(t, EntityCard(entity, cc))
@@ -135,7 +135,7 @@ func TestVisibilityGlance_TagWidened(t *testing.T) {
 	}
 	ctx := WithEffectiveVisibility(context.Background(), ev)
 	var sb strings.Builder
-	if err := blockTitle(owner, entity, "csrf").Render(ctx, &sb); err != nil {
+	if err := effectiveVisibilityBadge(owner, entity, GetEffectiveVisibility(ctx)).Render(ctx, &sb); err != nil {
 		t.Fatalf("render: %v", err)
 	}
 	html := sb.String()
@@ -185,5 +185,36 @@ func TestStoredRowPermRendersWithoutPermissionsBlock(t *testing.T) {
 	}
 	if !strings.Contains(html, `data-widget="editor"`) {
 		t.Errorf("the sibling entry block must still render, got:\n%s", html)
+	}
+}
+
+// TestPageCorner_OnlyOwnerGetsEditor pins who can open the permissions
+// editor from the page corner: the Owner gets the corner widget mount, while
+// a member the owner has given DM access sees the control but no editor (the
+// permissions routes are Owner-only). The title block no longer carries a
+// second visibility icon.
+func TestPageCorner_OnlyOwnerGetsEditor(t *testing.T) {
+	entity := &Entity{ID: "e1", CampaignID: "c1", Name: "The Gilded Anvil", Visibility: VisibilityDefault}
+	viewers := glanceViewers()
+
+	owner := renderComponent(t, effectiveVisibilityBadge(viewers["owner"], entity, nil))
+	for _, want := range []string{`data-widget="permissions"`, `data-layout="corner"`, `/campaigns/c1/entities/e1/permissions`, "data-perm-corner-trigger"} {
+		if !strings.Contains(owner, want) {
+			t.Errorf("owner corner missing %q\ngot: %s", want, owner)
+		}
+	}
+
+	coDM := renderComponent(t, effectiveVisibilityBadge(viewers["co-dm"], entity, nil))
+	if strings.Contains(coDM, "data-widget") {
+		t.Errorf("a member with DM access must not get the editor mount:\n%s", coDM)
+	}
+
+	title := renderComponent(t, blockTitle(viewers["owner"], entity, "csrf"))
+	if strings.Contains(title, "data-visibility-badge") {
+		t.Errorf("title block must not carry a second visibility icon:\n%s", title)
+	}
+	h1, aka := strings.Index(title, "<h1"), strings.Index(title, `data-widget="aliases"`)
+	if h1 < 0 || aka < h1 {
+		t.Errorf("aliases must render after the page name")
 	}
 }
