@@ -124,6 +124,17 @@
   // dt (seconds since the last frame) lets a weather change roll in instead
   // of snapping: each dial with an ease glides at its own pace.
   var GLIDE = LOOKS.DIALS.filter(function (d) { return d.ease; });
+  // Things with a place in the sky arrive and leave by their kind instead of
+  // fading where they stand: 'edge' moves in from beyond the right edge and
+  // leaves the same way, 'open' spreads from where it is. Meteors and
+  // lightning are the third kind, 'once': they play and need nothing here.
+  var BODIES = { funnel: { enter: 'edge', s: 8 }, blood: { enter: 'open', s: 6 } };
+  // A body's progress toward being fully here (1) or gone (0).
+  function arrive(b, want, live, dt, s) {
+    b.v = !live ? want : want > b.v ? Math.min(want, b.v + dt / s) : Math.max(want, b.v - dt / s);
+    return b.v > 0 && b.v < 1;
+  }
+  function ease(v) { return v * v * (3 - 2 * v); }
   function buildState(model, tSeconds, dt) {
     var cal = model.calendar;
     var year = cal.current_year, month = cal.current_month, day = cal.current_day;
@@ -198,6 +209,11 @@
     var wx = g.wx;
     if (!wx || !live) { wx = g.wx = {}; GLIDE.forEach(function (d) { wx[d.n] = goal[d.n]; }); }
     else GLIDE.forEach(function (d) { wx[d.n] += (goal[d.n] - wx[d.n]) * (1 - Math.exp(-dt / d.ease)); if (Math.abs(goal[d.n] - wx[d.n]) > .005) gliding = true; });
+    var Bd = g.bodies || (g.bodies = { funnel: { v: 0, spec: null }, blood: { v: 0 } }), fun = Bd.funnel;
+    if (goal.funnel) fun.spec = goal.funnel;
+    if (arrive(fun, goal.funnel ? 1 : 0, live, dt, BODIES.funnel.s)) gliding = true;
+    // The funnel keeps its full strength while it moves; only the fade of step 2 is replaced.
+    if (fun.v > 0 || (look && look.funnel)) look = Object.assign({}, look || goal, { funnel: fun.v > 0 && fun.spec ? fun.spec : null });
     var P = SW.paletteFor(altDeg, eve, look, wx, dark, false);
     if (overlay.magic) SW.tintPalette(P, '#8a5fe0', .3, ['zen', 'mid', 'hor', 'anti', 'clit', 'cshade', 'h0', 'h1', 'h2', 'h3']);
 
@@ -214,6 +230,14 @@
     // and the look's moving things (meteors, aurora, the bleeding moon).
     st.sl = window.SkyFX.sceneLight(st, P);
     EV.apply(st, dayEvents);
+    // How far the funnel still is beyond the right edge, as a share of the width.
+    st.funnelOff = (1 - ease(fun.v)) * .62;
+    // A blood moon's stain and drips spread from the moon; when the event ends they go with the look's fade.
+    if (!st.bleed) Bd.blood.v = 0;
+    else {
+      if (arrive(Bd.blood, 1, live, dt, BODIES.blood.s)) gliding = true;
+      st.bleed = Object.assign({}, st.bleed, { k: st.bleed.k * ease(Bd.blood.v) });
+    }
     st.pace = motionOf(st);
     // A change rolling in is painted at the full rate, so it never steps.
     st.gliding = gliding;

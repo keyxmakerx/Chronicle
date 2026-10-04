@@ -379,3 +379,35 @@ test('with reduced motion a change of weather shows at once', () => {
   run(env, d, t, 2);
   assert.equal(JSON.stringify(G.wx), before, 'the dials are already at the new weather');
 });
+
+test('a funnel moves in from beyond the right edge and leaves the same way', () => {
+  const env = loadSky();
+  const { d } = dock(env, { cal: WITH_CURRENT });
+  d.measure();
+  let t = run(env, d, 100, .5);
+  const tornado = { ...WITH_CURRENT, current_day: 15, weather: { preset_id: 'tornado', preset_label: 'Tornado' } };
+  d.setDay(tornado, []);
+  t = run(env, d, t, 1);
+  const fun = d.model.glide.bodies.funnel;
+  assert.ok(fun.v > .05 && fun.v < .25, 'one second in, it is still arriving: ' + fun.v);
+  assert.ok(d.model.glide.shown, 'the sky is showing');
+  t = run(env, d, t, 9);
+  assert.equal(fun.v, 1, 'after eight seconds it is here');
+  t = run(env, d, t, 1);
+  assert.equal(fun.v, 1, 'and it stays');
+  d.setDay({ ...tornado, current_day: 16, weather: { preset_id: 'clear', preset_label: 'Clear skies' } }, []);
+  t = run(env, d, t, 2);
+  assert.ok(fun.v > .5 && fun.v < 1, 'two seconds after it clears, it is on its way out: ' + fun.v);
+  run(env, d, t, 8);
+  assert.equal(fun.v, 0, 'and then gone');
+});
+
+test('with reduced motion a funnel is simply there', () => {
+  const env = loadSky({ reduced: true });
+  const { d } = dock(env, { cal: WITH_CURRENT });
+  d.measure();
+  const t = run(env, d, 100, .5);
+  d.setDay({ ...WITH_CURRENT, current_day: 15, weather: { preset_id: 'tornado', preset_label: 'Tornado' } }, []);
+  run(env, d, t, .1);
+  assert.equal(d.model.glide.bodies.funnel.v, 1);
+});
