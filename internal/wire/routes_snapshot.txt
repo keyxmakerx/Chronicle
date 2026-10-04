@@ -410,6 +410,7 @@ GET	/relations-graph	internal/widgets/relations/routes.go
 GET	/relations-graph/page	internal/widgets/relations/routes.go
 GET	/relations/types	internal/plugins/syncapi/routes.go
 GET	/reset-password	internal/plugins/auth/routes.go
+GET	/roll-tables	internal/plugins/rolltables/routes.go
 GET	/rsvp/:token	internal/plugins/sessions/routes.go
 GET	/rsvp/:token/suggest	internal/plugins/sessions/routes.go
 GET	/rules-glossary	internal/systems/routes.go
@@ -798,6 +799,7 @@ PUT	/notes/:noteID	internal/plugins/syncapi/routes.go
 PUT	/notes/:noteId	internal/widgets/notes/routes.go
 PUT	/owner-dashboard-layout	internal/plugins/campaigns/routes.go
 PUT	/relations/:relationId	internal/plugins/syncapi/routes.go
+PUT	/roll-tables	internal/plugins/rolltables/routes.go
 PUT	/security/users/:id/disable	internal/plugins/admin/routes.go
 PUT	/security/users/:id/enable	internal/plugins/admin/routes.go
 PUT	/sessions/:sid	internal/plugins/sessions/routes.go
