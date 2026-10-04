@@ -157,7 +157,7 @@ templ SyncHistoryRows(d SyncHistoryPageData) {
 		</p>
 	}
 	for _, ev := range d.Events {
-		@syncHistoryRow(ev, false)
+		@syncHistoryRow(d.CampaignID, ev, false)
 	}
 	if d.NextBefore > 0 {
 		<div class="sh-more border-t border-edge p-2 text-center">
@@ -174,7 +174,7 @@ templ SyncHistoryRows(d SyncHistoryPageData) {
 	}
 }
 
-templ syncHistoryRow(ev SyncEvent, child bool) {
+templ syncHistoryRow(campaignID string, ev SyncEvent, child bool) {
 	<details
 		class={ "sh-row group border-t border-edge first:border-t-0", templ.KV("sh-kid", child), templ.KV("sh-fail", !ev.OK) }
 		data-id={ strconv.FormatInt(ev.ID, 10) }
@@ -184,7 +184,7 @@ templ syncHistoryRow(ev SyncEvent, child bool) {
 			<time class="sh-t font-mono text-xs text-fg-muted tabular-nums" datetime={ ev.OccurredAt.UTC().Format(time.RFC3339Nano) }>{ historyTime(ev.OccurredAt) }</time>
 			<span class={ "sh-d text-xs font-medium whitespace-nowrap", historyDirClass(ev.Direction) }>{ historyDirWord(ev.Direction) }</span>
 			<span class="sh-e min-w-0 text-fg">
-				if len(ev.Children) > 0 {
+				if len(ev.Children) > 0 || !ev.OK {
 					<span class="sh-caret text-fg-faint" aria-hidden="true">▸</span>
 				}
 				{ historyName(ev) }
@@ -200,9 +200,19 @@ templ syncHistoryRow(ev SyncEvent, child bool) {
 		</summary>
 		<div class="sh-steps">
 			for _, ch := range ev.Children {
-				@syncHistoryRow(ch, true)
+				@syncHistoryRow(campaignID, ch, true)
 			}
 		</div>
+		if !ev.OK {
+			// A failure opens its call flow: what led to it, what it led to, and why.
+			<div class="sh-flow sf-fold" data-flow-src={ fmt.Sprintf("/campaigns/%s/sync-history/flow/%d", campaignID, ev.ID) }><div></div></div>
+		} else {
+			@syncHistoryDetail(ev)
+		}
+	</details>
+}
+
+templ syncHistoryDetail(ev SyncEvent) {
 		<dl class="sh-det grid grid-cols-[max-content_1fr] gap-x-3 gap-y-1 px-4 pb-3 text-xs text-fg-muted">
 			if ev.UserName != "" {
 				<dt>Who</dt>
@@ -219,5 +229,4 @@ templ syncHistoryRow(ev SyncEvent, child bool) {
 				}
 			</dd>
 		</dl>
-	</details>
 }
