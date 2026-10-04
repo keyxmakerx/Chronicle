@@ -36,10 +36,11 @@ type UpdateHexCellInput struct {
 }
 
 // UpdateHexLayerInput is a partial change to the layer row: an absent field
-// keeps, an explicit null clears, a present value replaces. Today only the
-// anchor can change, and null means "the whole map".
+// keeps, an explicit null clears, a present value replaces. Null on the anchor
+// means "the whole map"; null on fog_enabled means off.
 type UpdateHexLayerInput struct {
 	AnchorDrawingID patch.Field[string]
+	FogEnabled      patch.Field[bool]
 }
 
 // HexLayerView is what a viewer receives: the layer and only the cells their
@@ -106,6 +107,28 @@ func (p *drawingHexPictures) ClearRotation(ctx context.Context, mapID, id string
 type HexLayerWriteResult struct {
 	Version         uint64  `json:"version"`
 	AnchorDrawingID *string `json:"anchor_drawing_id"`
+	FogEnabled      bool    `json:"fog_enabled"`
+}
+
+// HexFogCell names one hex in a reveal or hide request.
+type HexFogCell struct {
+	Col int
+	Row int
+}
+
+// PartyMoveResult is the outcome of moving the party. Path runs from the old
+// position to the new one inclusive (just the new one on first placement);
+// every hex on it is explored by the time it is returned.
+type PartyMoveResult struct {
+	Version uint64   `json:"version"`
+	Path    []HexKey `json:"path"`
+}
+
+// HexEventPublisher announces that a map's hexes changed. It carries a version
+// and, when it is safe, the party's path, never any cell contents: clients
+// refetch the filtered read, so the audience rules live in one place.
+type HexEventPublisher interface {
+	PublishHexChanged(campaignID, mapID string, version uint64, partyPath []HexKey)
 }
 
 // HexWriteResult is the outcome of a batch.
@@ -124,8 +147,28 @@ type HexService interface {
 	// UpdateLayer changes the layer row (today: which picture it covers) and
 	// returns the new version. Owner or DM access only.
 	UpdateLayer(ctx context.Context, campaignID, mapID string, actor HexActor, in UpdateHexLayerInput) (*HexLayerWriteResult, error)
+	// RevealFog marks hexes explored or unexplored. Owner or DM access only.
+	RevealFog(ctx context.Context, campaignID, mapID string, actor HexActor, cells []HexFogCell, explored bool) (*HexWriteResult, error)
+	// ResetFog hides every hex again. Owner or DM access only.
+	ResetFog(ctx context.Context, campaignID, mapID string, actor HexActor) (*HexWriteResult, error)
+	// MoveParty moves the party, revealing radius 1 along the path the server
+	// computes. Who may is the map's hexes.party_who setting.
+	MoveParty(ctx context.Context, campaignID, mapID string, actor HexActor, to HexFogCell) (*PartyMoveResult, error)
+	// FogMask makes the hex service a HexFogLookup for pins, drawings, events
+	// and the map picture.
+	FogMask(ctx context.Context, mapID string) (*FogMask, error)
 	// SetPictures wires the lookup behind the anchor checks.
 	SetPictures(p HexPictures)
+	// SetEventPublisher wires the live-update publisher. Unwired, writes still
+	// succeed and clients pick changes up on their next read.
+	SetEventPublisher(pub HexEventPublisher)
+	// SetMapLoader wires the lookup of a whole map, which the fog needs for the
+	// picture's size, the grid size and the party rule. Unwired, the fog fails
+	// closed and only owners and DMs may move the party.
+	SetMapLoader(fn func(ctx context.Context, mapID string) (*Map, error))
+	// SetPictureInvalidator wires the drop of cached map-picture answers, called
+	// with the campaign id when fog changes who may fetch the original.
+	SetPictureInvalidator(fn func(campaignID string))
 	// SetMapLookup wires the map-to-campaign lookup behind the IDOR check.
 	SetMapLookup(fn func(ctx context.Context, mapID string) (string, error))
 	// SetDrawPolicyLookup wires the map's "who can draw" value.
@@ -137,6 +180,9 @@ type hexService struct {
 	pictures   HexPictures
 	mapLookup  func(ctx context.Context, mapID string) (string, error)
 	drawPolicy func(ctx context.Context, mapID string) (string, error)
+	events     HexEventPublisher
+	mapLoader  func(ctx context.Context, mapID string) (*Map, error)
+	invalidate func(campaignID string)
 }
 
 // NewHexService creates a new hex service.
@@ -145,6 +191,14 @@ func NewHexService(repo HexRepository) HexService {
 }
 
 func (s *hexService) SetPictures(p HexPictures) { s.pictures = p }
+
+func (s *hexService) SetEventPublisher(pub HexEventPublisher) { s.events = pub }
+
+func (s *hexService) SetMapLoader(fn func(ctx context.Context, mapID string) (*Map, error)) {
+	s.mapLoader = fn
+}
+
+func (s *hexService) SetPictureInvalidator(fn func(campaignID string)) { s.invalidate = fn }
 
 func (s *hexService) SetMapLookup(fn func(ctx context.Context, mapID string) (string, error)) {
 	s.mapLookup = fn
@@ -210,6 +264,7 @@ func (s *hexService) GetLayer(ctx context.Context, campaignID, mapID string, rol
 	if err != nil {
 		return nil, err
 	}
+	layer = VisiblePartyLayer(layer, cells, role)
 	return &HexLayerView{Layer: layer, Cells: VisibleCells(layer, cells, role), Version: layer.Version}, nil
 }
 
@@ -262,43 +317,84 @@ func (s *hexService) UpdateLayer(ctx context.Context, campaignID, mapID string, 
 	if err := s.requireMapInCampaign(ctx, campaignID, mapID); err != nil {
 		return nil, err
 	}
-	// Choosing what the hexes cover also decides who can see them, so it is a
-	// DM decision even where scribes may paint.
+	// Choosing what the hexes cover or whether land is fogged also decides who
+	// can see them, so it is a DM decision even where scribes may paint.
 	if !actor.IsDM {
-		return nil, apperror.NewForbidden("only the owner or a DM can change what the hexes cover")
+		return nil, apperror.NewForbidden("only the owner or a DM can change the hex layer")
 	}
-	if !in.AnchorDrawingID.Present() {
+	if !in.AnchorDrawingID.Present() && !in.FogEnabled.Present() {
 		return nil, apperror.NewBadRequest("nothing to change")
 	}
-	var anchor *string
-	var rotated bool
-	var expected time.Time
-	if !in.AnchorDrawingID.IsNull() {
-		id, _ := in.AnchorDrawingID.Get()
-		pic, err := s.anchorPicture(ctx, id)
+	res := &HexLayerWriteResult{}
+	if in.AnchorDrawingID.Present() {
+		anchor, rotated, expected, err := s.resolveAnchor(ctx, mapID, in.AnchorDrawingID)
 		if err != nil {
 			return nil, err
 		}
-		// One message for a missing id, another map's picture and a drawing of
-		// the wrong kind, so the answer cannot be used to probe other maps.
-		if !UsableAnchor(mapID, pic) {
-			return nil, apperror.NewBadRequest("the hexes can only cover a picture on this map")
+		version, err := s.repo.SetAnchor(ctx, mapID, anchor)
+		if err != nil {
+			return nil, err
 		}
-		anchor = &id
-		rotated, expected = pic.Rotation != 0, pic.UpdatedAt
+		// Straightened only once the anchor is stored, so a failed pin never
+		// leaves a picture turned for nothing.
+		if rotated {
+			if err := s.pictures.ClearRotation(ctx, mapID, *anchor, actor, expected); err != nil {
+				return nil, err
+			}
+		}
+		res.Version, res.AnchorDrawingID = version, anchor
 	}
-	version, err := s.repo.SetAnchor(ctx, mapID, anchor)
+	if in.FogEnabled.Present() {
+		on := false
+		if !in.FogEnabled.IsNull() {
+			on, _ = in.FogEnabled.Get()
+		}
+		version, err := s.repo.SetFog(ctx, mapID, on)
+		if err != nil {
+			return nil, err
+		}
+		res.Version = version
+	}
+	layer, err := s.layerOrDefault(ctx, mapID)
 	if err != nil {
 		return nil, err
 	}
-	// Straightened only once the anchor is stored, so a failed pin never
-	// leaves a picture turned for nothing.
-	if rotated {
-		if err := s.pictures.ClearRotation(ctx, mapID, *anchor, actor, expected); err != nil {
-			return nil, err
-		}
+	res.AnchorDrawingID, res.FogEnabled = layer.AnchorDrawingID, layer.FogEnabled
+	s.afterWrite(campaignID, mapID, res.Version, nil, true)
+	return res, nil
+}
+
+// resolveAnchor validates a requested anchor: null is the whole map, an id must
+// name a picture on this map. rotated and expected carry what ClearRotation
+// needs.
+func (s *hexService) resolveAnchor(ctx context.Context, mapID string, f patch.Field[string]) (anchor *string, rotated bool, expected time.Time, err error) {
+	if f.IsNull() {
+		return nil, false, time.Time{}, nil
 	}
-	return &HexLayerWriteResult{Version: version, AnchorDrawingID: anchor}, nil
+	id, _ := f.Get()
+	pic, err := s.anchorPicture(ctx, id)
+	if err != nil {
+		return nil, false, time.Time{}, err
+	}
+	// One message for a missing id, another map's picture and a drawing of
+	// the wrong kind, so the answer cannot be used to probe other maps.
+	if !UsableAnchor(mapID, pic) {
+		return nil, false, time.Time{}, apperror.NewBadRequest("the hexes can only cover a picture on this map")
+	}
+	return &id, pic.Rotation != 0, pic.UpdatedAt, nil
+}
+
+// afterWrite runs once per successful write: it announces the change and, when
+// the write changed who may fetch the original map picture, drops the cached
+// answers so the next request re-decides. A request that changes many hexes
+// publishes once.
+func (s *hexService) afterWrite(campaignID, mapID string, version uint64, partyPath []HexKey, pictureAffected bool) {
+	if pictureAffected && s.invalidate != nil {
+		s.invalidate(campaignID)
+	}
+	if s.events != nil {
+		s.events.PublishHexChanged(campaignID, mapID, version, partyPath)
+	}
 }
 
 // requireWriter decides whether the actor may write hexes on this map at all.
@@ -488,5 +584,6 @@ func (s *hexService) PatchCells(ctx context.Context, campaignID, mapID string, a
 	if err != nil {
 		return nil, err
 	}
+	s.afterWrite(campaignID, mapID, version, nil, false)
 	return &HexWriteResult{Version: version, Updated: len(writes)}, nil
 }

@@ -42,6 +42,13 @@ const (
 	MsgLayerDeleted MessageType = "layer.deleted"
 )
 
+// MsgHexChanged tells map viewers that a map's hex layer changed. The payload
+// is {map_id, version, party_path?} and never cell contents: clients refetch
+// the role-filtered read, so who may see what is decided in one place.
+// party_path rides along only when every hex on it is explored. Not a
+// change-feed type: the filtered read is the source of truth.
+const MsgHexChanged MessageType = "hex.changed"
+
 // Calendar sync messages.
 const (
 	MsgCalendarEventCreated     MessageType = "calendar.event.created"

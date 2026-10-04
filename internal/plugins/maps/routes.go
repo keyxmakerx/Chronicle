@@ -131,6 +131,10 @@ func RegisterHexRoutes(e *echo.Echo, hh *HexHandler, campaignSvc campaigns.Campa
 	// Same membership-only gate: a DM-granted player is not an owner by role,
 	// and HexService decides who may change what the hexes cover.
 	cg.PUT("/maps/:mid/hexes/layer", hh.PutHexLayer, campaigns.RequireRole(campaigns.RolePlayer))
+	// Fog and the party carry the same membership-only gate; HexService refuses
+	// anyone who is not an owner or DM (fog) or not allowed by hexes.party_who.
+	cg.POST("/maps/:mid/hexes/fog", hh.PostHexFog, campaigns.RequireRole(campaigns.RolePlayer))
+	cg.PUT("/maps/:mid/hexes/party", hh.PutHexParty, campaigns.RequireRole(campaigns.RolePlayer))
 
 	// Public-capable read so a public campaign's map shows its hexes. The
 	// service filters cells by the viewer's role, which is RoleNone for the

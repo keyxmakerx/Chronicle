@@ -98,7 +98,10 @@ type HexCell struct {
 }
 
 // HexKey identifies a hex by its offset coordinates.
-type HexKey struct{ Col, Row int }
+type HexKey struct {
+	Col int `json:"col"`
+	Row int `json:"row"`
+}
 
 // VisibleCells returns the cells role may receive. role is the viewer's
 // VisibilityRole, so a co-DM grant already arrives promoted to owner.

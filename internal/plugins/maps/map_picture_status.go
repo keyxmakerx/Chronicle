@@ -115,7 +115,12 @@ func (s *mapService) pictureStatusOf(ctx context.Context, campaignID, mediaID st
 		if err != nil {
 			return closed, fmt.Errorf("list shadow areas: %w", err)
 		}
-		st.shadowed = len(areas) > 0
+		fog, err := s.pictureFog(ctx, m.ID)
+		if err != nil {
+			return closed, fmt.Errorf("read hex fog: %w", err)
+		}
+		// Fog on a whole-map layer withholds the original just as a shadow does.
+		st.shadowed = len(areas) > 0 || fog != nil
 	}
 	s.pictureCache.put(campaignID, mediaID, st, gen)
 	return st, nil

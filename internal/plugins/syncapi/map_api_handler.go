@@ -298,6 +298,11 @@ func (h *MapAPIHandler) ListDrawings(c echo.Context) error {
 	if err != nil {
 		return apperror.NewInternal(fmt.Errorf("failed to list drawings"))
 	}
+	// A fogged hex layer's picture goes out without its file, as on the web.
+	drawings, err = h.drawingSvc.WithholdImages(c.Request().Context(), m.ID, role, drawings)
+	if err != nil {
+		return apperror.NewInternal(fmt.Errorf("failed to list drawings"))
+	}
 	return c.JSON(http.StatusOK, drawings)
 }
 

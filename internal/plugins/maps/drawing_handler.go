@@ -86,6 +86,11 @@ func (h *DrawingHandler) ListDrawings(c echo.Context) error {
 	if err != nil {
 		return err
 	}
+	// The picture a fogged hex layer is pinned to is sent without its file.
+	drawings, err = h.drawingSvc.WithholdImages(c.Request().Context(), mapID, role, drawings)
+	if err != nil {
+		return err
+	}
 	out := make([]drawingResponse, len(drawings))
 	for i, d := range drawings {
 		out[i] = drawingResponseFor(c.Request().Context(), d)
@@ -177,7 +182,11 @@ func (h *DrawingHandler) GetDrawing(c echo.Context) error {
 	if shadowed {
 		return apperror.NewNotFound("drawing not found")
 	}
-	return c.JSON(http.StatusOK, drawingResponseFor(c.Request().Context(), *d))
+	one, err := h.drawingSvc.WithholdImages(c.Request().Context(), mapID, cc.VisibilityRole(), []Drawing{*d})
+	if err != nil {
+		return err
+	}
+	return c.JSON(http.StatusOK, drawingResponseFor(c.Request().Context(), one[0]))
 }
 
 // UpdateDrawing updates an existing drawing.

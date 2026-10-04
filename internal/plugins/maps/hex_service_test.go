@@ -25,6 +25,20 @@ type fakeHexRepo struct {
 	by         string
 	count      int // overrides CountCells when non-zero
 	anchorSets int // SetAnchor calls
+
+	// Fog and party writes.
+	exploredWrites [][]HexKey // keys of each SetExplored call
+	exploredValue  []bool     // the value each SetExplored call set
+	resets         int
+	partyMoves     []partyMove
+	conflicts      int // ApplyParty answers Conflict this many times first
+}
+
+// partyMove records one ApplyParty call.
+type partyMove struct {
+	from   *HexKey
+	to     HexKey
+	reveal []HexKey
 }
 
 func newFakeHexRepo() *fakeHexRepo { return &fakeHexRepo{cells: map[HexKey]HexCell{}} }

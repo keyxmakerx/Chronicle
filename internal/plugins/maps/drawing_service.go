@@ -119,6 +119,11 @@ type DrawingService interface {
 	// IsDrawingShadowed answers the same question for one drawing fetched by
 	// id, so a by-id read cannot reveal what the list withholds.
 	IsDrawingShadowed(ctx context.Context, d *Drawing, role int) (bool, error)
+	// WithholdImages returns the drawings with the picture file removed from the
+	// one a fogged hex layer is pinned to, for a viewer subject to fog. That
+	// picture's file is the secret under the fog, so it never reaches them; the
+	// drawing itself stays so the viewer can still place the hexes by its box.
+	WithholdImages(ctx context.Context, mapID string, role int, ds []Drawing) ([]Drawing, error)
 
 	// Token CRUD.
 	CreateToken(ctx context.Context, input CreateTokenInput) (*Token, error)
@@ -156,6 +161,9 @@ type DrawingService interface {
 	// SetMediaVerifier wires the check that a picture's media file belongs to
 	// the map's campaign. Unwired, picture writes are refused.
 	SetMediaVerifier(v MediaVerifier)
+	// SetHexFogLookup wires the hex fog, so drawings under unexplored hexes are
+	// withheld like those under a shadow. Unwired, no fog is known.
+	SetHexFogLookup(l HexFogLookup)
 }
 
 // MapEventPublisher emits domain events when map resources change.
@@ -196,7 +204,11 @@ type drawingService struct {
 	onShadowChange func(campaignID string)
 	// media confirms a picture's file is an image of the map's campaign.
 	media MediaVerifier
+	// hexFog supplies the fog mask for drawings under unexplored hexes.
+	hexFog HexFogLookup
 }
+
+func (s *drawingService) SetHexFogLookup(l HexFogLookup) { s.hexFog = l }
 
 // errImageWiring is the cause logged when picture writes arrive before the
 // media verifier is wired.
@@ -512,7 +524,41 @@ func (s *drawingService) ListDrawings(ctx context.Context, mapID string, role in
 		// Fail closed: a drawing that might be under a shadow is not sent.
 		return nil, err
 	}
-	return filterDrawingsByShadow(areas, drawings), nil
+	drawings = filterDrawingsByShadow(areas, drawings)
+	fog, err := fogFor(ctx, s.hexFog, mapID, role)
+	if err != nil {
+		// Fail closed, as for shadows.
+		return nil, err
+	}
+	if fog == nil {
+		return drawings, nil
+	}
+	kept := make([]Drawing, 0, len(drawings))
+	for i := range drawings {
+		if !fog.HidesDrawing(&drawings[i]) {
+			kept = append(kept, drawings[i])
+		}
+	}
+	return kept, nil
+}
+
+// WithholdImages implements DrawingService.
+func (s *drawingService) WithholdImages(ctx context.Context, mapID string, role int, ds []Drawing) ([]Drawing, error) {
+	fog, err := fogFor(ctx, s.hexFog, mapID, role)
+	if err != nil {
+		return nil, err
+	}
+	if fog == nil || fog.AnchorID == "" {
+		return ds, nil
+	}
+	out := make([]Drawing, len(ds))
+	copy(out, ds)
+	for i := range out {
+		if fog.WithholdsImageOf(&out[i]) {
+			out[i].ImageID = nil
+		}
+	}
+	return out, nil
 }
 
 // ShadowAreas returns the boxes of every shadow on a map. It is on the
@@ -588,7 +634,14 @@ func (s *drawingService) IsDrawingShadowed(ctx context.Context, d *Drawing, role
 	if err != nil {
 		return true, err
 	}
-	return DrawingUnderShadow(areas, d), nil
+	if DrawingUnderShadow(areas, d) {
+		return true, nil
+	}
+	fog, err := fogFor(ctx, s.hexFog, d.MapID, role)
+	if err != nil {
+		return true, err
+	}
+	return fog.HidesDrawing(d), nil
 }
 
 // validateShadowPoints requires exactly two finite corners; a shadow is a box,

@@ -43,11 +43,25 @@ const (
 // does not matter, and rounded so float noise in stored points does not churn
 // the cache.
 func playerImageKey(mediaID, mapID string, areas []ShadowArea) string {
+	return playerImageKeyFog(mediaID, mapID, areas, nil)
+}
+
+// playerImageKeyFog is playerImageKey for a map whose whole-map hex layer has
+// fog on. The layer's version is part of the key, so any hex write (a reveal
+// above all) gives players a new address and a freshly rendered copy; the
+// geometry is too, because changing the grid size moves every hex without
+// touching the layer. A nil fog gives exactly playerImageKey.
+func playerImageKeyFog(mediaID, mapID string, areas []ShadowArea, fog *FogMask) string {
 	sorted := sortedShadowAreas(areas)
 	h := sha256.New()
 	_, _ = fmt.Fprintf(h, "%s|%s|%s", playerImageRenderVersion, mediaID, mapID)
 	for _, a := range sorted {
 		_, _ = fmt.Fprintf(h, "|%.3f,%.3f,%.3f,%.3f,%.2f", a.MinX, a.MinY, a.MaxX, a.MaxY, a.Strength)
+	}
+	if fog != nil {
+		g := fog.Geo
+		_, _ = fmt.Fprintf(h, "|fog|%d|%.3f,%.3f,%.3f|%d,%d|%.0f,%.0f",
+			fog.Version, g.R, g.Ox, g.Oy, g.Cols, g.Rows, fog.MapW, fog.MapH)
 	}
 	return hex.EncodeToString(h.Sum(nil))
 }
@@ -80,6 +94,13 @@ func sortedShadowAreas(areas []ShadowArea) []ShadowArea {
 // source pixels are flattened onto black so no colour data survives behind a
 // zero alpha.
 func renderPlayerImage(src image.Image, areas []ShadowArea, maxSide int) *image.RGBA {
+	return renderPlayerImageFog(src, areas, nil, maxSide)
+}
+
+// renderPlayerImageFog is renderPlayerImage that also smudges every unexplored
+// hex of fog (nil: none). Fog goes first and shadows after, so a shadow over
+// unexplored land only darkens it further.
+func renderPlayerImageFog(src image.Image, areas []ShadowArea, fog *FogMask, maxSide int) *image.RGBA {
 	sb := src.Bounds()
 	w, h := sb.Dx(), sb.Dy()
 	if w > maxSide || h > maxSide {
@@ -94,10 +115,78 @@ func renderPlayerImage(src image.Image, areas []ShadowArea, maxSide int) *image.
 	} else {
 		xdraw.CatmullRom.Scale(dst, dst.Bounds(), src, sb, xdraw.Over, nil)
 	}
+	if fog != nil {
+		smudgeFog(dst, fog)
+	}
 	for _, a := range sortedShadowAreas(areas) {
 		smudgeArea(dst, a)
 	}
 	return dst
+}
+
+// fogMaskSide is the long side of the working mask. The hexes are rasterised
+// at this size and blurred, then read back at full size, so the edge between
+// explored and unexplored land is soft without testing every pixel of a large
+// picture against the hex grid.
+const fogMaskSide = 1024
+
+// smudgeFog blurs and darkens every unexplored hex of the field in place, in
+// one pass over the whole picture: a blurred copy is blended in wherever the
+// feathered hex mask is set. Unexplored land keeps only a formless dark blur
+// (the "almost nothing" look), so nothing recoverable is left to download, and
+// land outside the field is untouched.
+func smudgeFog(img *image.RGBA, fog *FogMask) {
+	b := img.Bounds()
+	w, h := b.Dx(), b.Dy()
+	if w == 0 || h == 0 || fog.MapW <= 0 || fog.MapH <= 0 {
+		return
+	}
+	long := max(w, h)
+	step := max(1, (long+fogMaskSide-1)/fogMaskSide)
+	mw, mh := (w+step-1)/step, (h+step-1)/step
+	mask := image.NewRGBA(image.Rect(0, 0, mw, mh))
+	any := false
+	for my := 0; my < mh; my++ {
+		y := (float64(my*step) + float64(step)/2) / float64(h) * fog.MapH
+		for mx := 0; mx < mw; mx++ {
+			x := (float64(mx*step) + float64(step)/2) / float64(w) * fog.MapW
+			if fog.Geo.PointInUnexplored(fog.Explored, x, y) {
+				o := mask.PixOffset(mx, my)
+				mask.Pix[o], mask.Pix[o+1], mask.Pix[o+2], mask.Pix[o+3] = 255, 255, 255, 255
+				any = true
+			}
+		}
+	}
+	if !any {
+		return
+	}
+	boxBlur(mask, 2, 2)
+
+	reach := max(10, long/40)
+	shrink := max(1, reach/4)
+	small := image.NewRGBA(image.Rect(0, 0, max(1, (w+shrink-1)/shrink), max(1, (h+shrink-1)/shrink)))
+	xdraw.BiLinear.Scale(small, small.Bounds(), img, b, xdraw.Src, nil)
+	boxBlur(small, 3, 3)
+	smudge := image.NewRGBA(image.Rect(0, 0, w, h))
+	xdraw.BiLinear.Scale(smudge, smudge.Bounds(), small, small.Bounds(), xdraw.Src, nil)
+
+	for y := 0; y < h; y++ {
+		for x := 0; x < w; x++ {
+			mo := mask.PixOffset(min(x/step, mw-1), min(y/step, mh-1))
+			wt := float64(mask.Pix[mo]) / 255
+			if wt == 0 {
+				continue
+			}
+			po := img.PixOffset(b.Min.X+x, b.Min.Y+y)
+			so := smudge.PixOffset(x, y)
+			for c := 0; c < 3; c++ {
+				orig := float64(img.Pix[po+c])
+				shaded := float64(smudge.Pix[so+c]) * hiddenRetain
+				img.Pix[po+c] = uint8(orig*(1-wt) + shaded*wt + 0.5)
+			}
+			img.Pix[po+3] = 255
+		}
+	}
 }
 
 // smudgeArea blurs and darkens the box in place, feathering the edge so the

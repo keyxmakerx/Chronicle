@@ -1345,6 +1345,29 @@ type mapEventPublisherAdapter struct {
 	// published to DM-equivalent clients only. Nil fails closed: with no way to
 	// tell, every pin and drawing event is restricted.
 	shadows maps.ShadowLookup
+	// fog resolves a map's unexplored hexes so a pin or drawing wholly inside
+	// them is published to DM-equivalent clients only. Nil fails closed, like
+	// shadows.
+	fog maps.HexFogLookup
+}
+
+// wireHexFog gives pins, drawings, the event publisher and the map picture
+// their fog source (the hex service), and the hex service the lookups it needs
+// to build the fog and to announce changes. A named helper so a test can prove
+// the production wiring sets all of it; without it players would see every pin
+// and the whole picture under unexplored hexes.
+func wireHexFog(mapsService maps.MapService, drawingService maps.DrawingService, events *mapEventPublisherAdapter, hexService maps.HexService) {
+	mapsService.SetHexFogLookup(hexService)
+	drawingService.SetHexFogLookup(hexService)
+	events.fog = hexService
+	hexService.SetEventPublisher(events)
+	hexService.SetMapLoader(mapsService.GetMap)
+	// Fog on a whole-map layer changes who may fetch the original picture, so a
+	// toggle drops the cached answers; the map service exposes the drop by
+	// assertion, as other optional wiring here does.
+	if inv, ok := mapsService.(interface{ InvalidateMapPictures(campaignID string) }); ok {
+		hexService.SetPictureInvalidator(inv.InvalidateMapPictures)
+	}
 }
 
 // wireMapShadows gives the map service its shadow source. A named helper so a
@@ -1420,6 +1443,42 @@ func (a *mapEventPublisherAdapter) underShadow(mapID string, check func([]maps.S
 	return check(areas)
 }
 
+// underFog is underShadow for hex fog: it reports whether an event about a pin
+// or drawing on mapID must be restricted to DM-equivalent clients because the
+// item lies in unexplored hexes. Same fail-closed rule: an unwired or failing
+// lookup restricts.
+func (a *mapEventPublisherAdapter) underFog(mapID string, check func(*maps.FogMask) bool) bool {
+	if a.fog == nil {
+		slog.Error("maps: hex fog lookup not wired; restricting map events to DMs", slog.String("map_id", mapID))
+		return true
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+	defer cancel()
+	mask, err := a.fog.FogMask(ctx, mapID)
+	if err != nil {
+		slog.Error("maps: hex fog lookup failed while publishing; restricting event to DMs",
+			slog.String("map_id", mapID), slog.Any("error", err))
+		return true
+	}
+	return mask != nil && check(mask)
+}
+
+// PublishHexChanged announces a hex write. The message carries the map id, the
+// layer version and, only when the service judged it safe, the party's path:
+// never a cell, a name or a note. Clients refetch the role-filtered read, so
+// the audience rules live in one place. It goes to every client of the
+// campaign: the version tells a viewer who cannot see the layer nothing.
+func (a *mapEventPublisherAdapter) PublishHexChanged(campaignID, mapID string, version uint64, partyPath []maps.HexKey) {
+	if campaignID == "" || a.bus == nil {
+		return
+	}
+	payload := map[string]any{"map_id": mapID, "version": version}
+	if len(partyPath) > 0 {
+		payload["party_path"] = partyPath
+	}
+	a.bus.Publish(ws.NewMessage(ws.MsgHexChanged, campaignID, mapID, payload))
+}
+
 // publishWithAudience wraps ws.NewMessage with the audience derived from
 // the source row: the binary RequiresDM (dm_only) flag, plus — for
 // markers and drawings, which carry per-user visibility_rules — the
@@ -1457,9 +1516,12 @@ func (a *mapEventPublisherAdapter) PublishDrawingEvent(eventType string, campaig
 	default:
 		return
 	}
+	// The picture a fogged hex layer is pinned to is DM-only on the wire too:
+	// its event carries the file id, which is the secret under the fog.
 	dmOnly := drawing.Visibility == "dm_only" ||
 		(drawing.DrawingType != maps.DrawingTypeShadow &&
-			a.underShadow(drawing.MapID, func(areas []maps.ShadowArea) bool { return maps.DrawingUnderShadow(areas, drawing) }))
+			(a.underShadow(drawing.MapID, func(areas []maps.ShadowArea) bool { return maps.DrawingUnderShadow(areas, drawing) }) ||
+				a.underFog(drawing.MapID, func(f *maps.FogMask) bool { return f.HidesDrawing(drawing) || f.WithholdsImageOf(drawing) })))
 	a.publishWithAudience(msgType, campaignID, drawing.ID, drawing, dmOnly, maps.ParseVisibilityRules(drawing.VisibilityRules))
 }
 
@@ -1569,7 +1631,8 @@ func (a *mapEventPublisherAdapter) PublishMarkerEvent(eventType string, campaign
 		return
 	}
 	dmOnly := marker.IsDMOnly() ||
-		a.underShadow(marker.MapID, func(areas []maps.ShadowArea) bool { return maps.MarkerUnderShadow(areas, marker) })
+		a.underShadow(marker.MapID, func(areas []maps.ShadowArea) bool { return maps.MarkerUnderShadow(areas, marker) }) ||
+		a.underFog(marker.MapID, func(f *maps.FogMask) bool { return f.HidesMarker(marker) })
 	a.publishWithAudience(msgType, campaignID, marker.ID, marker, dmOnly, maps.ParseVisibilityRules(marker.VisibilityRules))
 }
 
@@ -5043,6 +5106,7 @@ func (a *App) RegisterRoutes() {
 	})
 	drawingService.SetMediaVerifier(&mapMediaVerifierAdapter{svc: mediaService})
 	mapsService.SetEventPublisher(mapEvents)
+	wireHexFog(mapsService, drawingService, mapEvents, hexService)
 	hexService.SetPictures(maps.NewHexPictures(drawingService))
 	hexService.SetMapLookup(func(ctx context.Context, mapID string) (string, error) {
 		m, err := mapsService.GetMap(ctx, mapID)

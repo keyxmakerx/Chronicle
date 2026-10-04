@@ -116,6 +116,9 @@ type MapService interface {
 	SetShadowLookup(l ShadowLookup)
 	// SetPlayerImageSource is on the interface for the same reason.
 	SetPlayerImageSource(src MediaImageSource, cacheDir string)
+	// SetHexFogLookup is on the interface for the same reason: without it every
+	// player would see every pin and the whole picture under unexplored hexes.
+	SetHexFogLookup(l HexFogLookup)
 }
 
 // EntityVisibilityGate resolves which of a set of entity IDs a viewer (role +
@@ -142,6 +145,7 @@ type mapService struct {
 	bindingCleaner BindingCleaner
 	entityGate     EntityVisibilityGate
 	shadows        ShadowLookup
+	hexFog         HexFogLookup
 	images         MediaImageSource
 	imageCacheDir  string
 	pictureCache   *pictureStatusCache
@@ -187,6 +191,15 @@ func (s *mapService) SetShadowLookup(l ShadowLookup) {
 	}
 }
 
+// SetHexFogLookup injects the fog source (the hex service, built separately).
+// Unwired means no fog is known, which is correct only for tests and installs
+// without hexes; the production wiring is pinned by a test in app. Cached
+// picture answers are dropped because fog changes who may fetch the original.
+func (s *mapService) SetHexFogLookup(l HexFogLookup) {
+	s.hexFog = l
+	s.pictureCache.invalidate("")
+}
+
 // shadowAreasFor returns the map's shadows for a viewer subject to hiding, or
 // nil when the viewer is exempt or nothing is wired.
 func (s *mapService) shadowAreasFor(ctx context.Context, mapID string, role int) ([]ShadowArea, error) {
@@ -206,7 +219,14 @@ func (s *mapService) IsMarkerShadowed(ctx context.Context, mk *Marker, role int)
 	if err != nil {
 		return true, err
 	}
-	return MarkerUnderShadow(areas, mk), nil
+	if MarkerUnderShadow(areas, mk) {
+		return true, nil
+	}
+	fog, err := fogFor(ctx, s.hexFog, mk.MapID, role)
+	if err != nil {
+		return true, err
+	}
+	return fog.HidesMarker(mk), nil
 }
 
 // SetEventPublisher sets the event publisher for real-time marker sync.
@@ -606,6 +626,19 @@ func (s *mapService) ListMarkers(ctx context.Context, campaignID, mapID string, 
 		return nil, fmt.Errorf("list shadow areas: %w", err)
 	}
 	markers = filterMarkersByShadow(areas, markers)
+	fog, err := fogFor(ctx, s.hexFog, mapID, role)
+	if err != nil {
+		return nil, fmt.Errorf("read hex fog: %w", err)
+	}
+	if fog != nil {
+		kept := make([]Marker, 0, len(markers))
+		for _, mk := range markers {
+			if !fog.HidesMarker(&mk) {
+				kept = append(kept, mk)
+			}
+		}
+		markers = kept
+	}
 
 	entityIDs := make([]string, 0, len(markers))
 	seen := make(map[string]bool, len(markers))

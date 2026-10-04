@@ -79,7 +79,7 @@ func (h *HexHandler) PatchHexCells(c echo.Context) error {
 
 // PutHexLayer changes the layer row. The body is partial: an absent
 // anchor_drawing_id keeps, null means the whole map, an id pins the hexes to
-// that picture.
+// that picture; an absent fog_enabled keeps, null or false turns fog off.
 // PUT /campaigns/:id/maps/:mid/hexes/layer
 func (h *HexHandler) PutHexLayer(c echo.Context) error {
 	cc := campaigns.GetCampaignContext(c)
@@ -88,6 +88,7 @@ func (h *HexHandler) PutHexLayer(c echo.Context) error {
 	}
 	var req struct {
 		AnchorDrawingID patch.Field[string] `json:"anchor_drawing_id"`
+		FogEnabled      patch.Field[bool]   `json:"fog_enabled"`
 	}
 	if err := c.Bind(&req); err != nil {
 		return apperror.NewBadRequest("invalid request body")
@@ -96,7 +97,94 @@ func (h *HexHandler) PutHexLayer(c echo.Context) error {
 		UserID: getUserID(c),
 		Role:   int(cc.MemberRole),
 		IsDM:   cc.CanAuthorDmOnly(),
-	}, UpdateHexLayerInput{AnchorDrawingID: req.AnchorDrawingID})
+	}, UpdateHexLayerInput{AnchorDrawingID: req.AnchorDrawingID, FogEnabled: req.FogEnabled})
+	if err != nil {
+		return err
+	}
+	return c.JSON(http.StatusOK, res)
+}
+
+// hexActor resolves who is writing, the same way for every hex write.
+func hexActor(c echo.Context, cc *campaigns.CampaignContext) HexActor {
+	return HexActor{UserID: getUserID(c), Role: int(cc.MemberRole), IsDM: cc.CanAuthorDmOnly()}
+}
+
+// hexPos is one position on the wire. Col and Row are pointers so a missing one
+// is refused instead of silently meaning hex 0.
+type hexPos struct {
+	Col *int `json:"col"`
+	Row *int `json:"row"`
+}
+
+func (p hexPos) cell() (HexFogCell, error) {
+	if p.Col == nil || p.Row == nil {
+		return HexFogCell{}, apperror.NewBadRequest("every hex needs a col and a row")
+	}
+	return HexFogCell{Col: *p.Col, Row: *p.Row}, nil
+}
+
+// PostHexFog reveals or hides hexes, or hides them all. A body of
+// {"reset": true} hides every hex; otherwise {cells, explored} names them.
+// POST /campaigns/:id/maps/:mid/hexes/fog
+func (h *HexHandler) PostHexFog(c echo.Context) error {
+	cc := campaigns.GetCampaignContext(c)
+	if cc == nil {
+		return apperror.NewMissingContext()
+	}
+	var req struct {
+		Cells    []hexPos `json:"cells"`
+		Explored *bool    `json:"explored"`
+		Reset    bool     `json:"reset"`
+	}
+	if err := c.Bind(&req); err != nil {
+		return apperror.NewBadRequest("invalid request body")
+	}
+	actor := hexActor(c, cc)
+	if req.Reset {
+		res, err := h.svc.ResetFog(c.Request().Context(), cc.Campaign.ID, c.Param("mid"), actor)
+		if err != nil {
+			return err
+		}
+		return c.JSON(http.StatusOK, res)
+	}
+	// explored has no safe default: a body that forgot it must not reveal.
+	if req.Explored == nil {
+		return apperror.NewBadRequest("explored must be true or false")
+	}
+	if len(req.Cells) > MaxFogBatch {
+		return apperror.NewBadRequest("too many hexes in one request")
+	}
+	cells := make([]HexFogCell, len(req.Cells))
+	for i, p := range req.Cells {
+		cell, err := p.cell()
+		if err != nil {
+			return err
+		}
+		cells[i] = cell
+	}
+	res, err := h.svc.RevealFog(c.Request().Context(), cc.Campaign.ID, c.Param("mid"), actor, cells, *req.Explored)
+	if err != nil {
+		return err
+	}
+	return c.JSON(http.StatusOK, res)
+}
+
+// PutHexParty moves the party to a hex and returns the path it walked.
+// PUT /campaigns/:id/maps/:mid/hexes/party
+func (h *HexHandler) PutHexParty(c echo.Context) error {
+	cc := campaigns.GetCampaignContext(c)
+	if cc == nil {
+		return apperror.NewMissingContext()
+	}
+	var req hexPos
+	if err := c.Bind(&req); err != nil {
+		return apperror.NewBadRequest("invalid request body")
+	}
+	to, err := req.cell()
+	if err != nil {
+		return err
+	}
+	res, err := h.svc.MoveParty(c.Request().Context(), cc.Campaign.ID, c.Param("mid"), hexActor(c, cc), to)
 	if err != nil {
 		return err
 	}

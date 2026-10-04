@@ -634,6 +634,7 @@ POST	/maps/:mapID/tokens	internal/plugins/syncapi/routes.go
 POST	/maps/:mid/drawings	internal/plugins/maps/routes.go
 POST	/maps/:mid/fog	internal/plugins/maps/routes.go
 POST	/maps/:mid/fog/reset	internal/plugins/maps/routes.go
+POST	/maps/:mid/hexes/fog	internal/plugins/maps/routes.go
 POST	/maps/:mid/layers	internal/plugins/maps/routes.go
 POST	/maps/:mid/markers	internal/plugins/maps/routes.go
 POST	/maps/:mid/tokens	internal/plugins/maps/routes.go
@@ -816,6 +817,7 @@ PUT	/maps/:mapID/tokens/:tokenID	internal/plugins/syncapi/routes.go
 PUT	/maps/:mid	internal/plugins/maps/routes.go
 PUT	/maps/:mid/drawings/:did	internal/plugins/maps/routes.go
 PUT	/maps/:mid/hexes/layer	internal/plugins/maps/routes.go
+PUT	/maps/:mid/hexes/party	internal/plugins/maps/routes.go
 PUT	/maps/:mid/layers/:lid	internal/plugins/maps/routes.go
 PUT	/maps/:mid/markers/:mkid	internal/plugins/maps/routes.go
 PUT	/maps/:mid/tokens/:tid	internal/plugins/maps/routes.go
