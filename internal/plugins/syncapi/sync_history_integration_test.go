@@ -96,9 +96,13 @@ func TestSyncHistoryIntegration_ListFiltersAndSteps(t *testing.T) {
 	if _, err := repo.Get(ctx, other, refused); err == nil {
 		t.Fatal("read another campaign's row")
 	}
-	win, err := repo.Window(ctx, cid, at.Add(-time.Second), at.Add(time.Second), 100)
+	win, err := repo.Window(ctx, cid, at, time.Second, 100)
 	if err != nil || len(win) != 5 {
 		t.Fatalf("window: %d rows (want the 3 rows and 2 steps), %v", len(win), err)
+	}
+	// A busy stretch keeps the rows closest to the centre.
+	if near, err := repo.Window(ctx, cid, at, time.Second, 2); err != nil || len(near) != 2 || near[1].ID != refused {
+		t.Fatalf("window per side: %+v, %v", near, err)
 	}
 	last, err := repo.Latest(ctx, cid, at.Add(-time.Hour), true)
 	if err != nil || last == nil || last.ID != refused {

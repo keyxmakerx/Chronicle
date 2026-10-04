@@ -70,9 +70,10 @@ type SyncHistoryRepository interface {
 	List(ctx context.Context, campaignID string, f SyncHistoryFilter) ([]SyncEvent, error)
 	// Get returns one row of this campaign, a step of a run included.
 	Get(ctx context.Context, campaignID string, id int64) (*SyncEvent, error)
-	// Window returns every row, steps included, between from and to, oldest
-	// first, at most limit of them.
-	Window(ctx context.Context, campaignID string, from, to time.Time, limit int) ([]SyncEvent, error)
+	// Window returns every row, steps included, within span of centre,
+	// oldest first: at most perSide rows on each side, the closest kept, so
+	// a busy stretch never pushes out the rows around the centre.
+	Window(ctx context.Context, campaignID string, centre time.Time, span time.Duration, perSide int) ([]SyncEvent, error)
 	// Latest returns the newest row since a time, or only the newest
 	// failure, or nil when there is none.
 	Latest(ctx context.Context, campaignID string, since time.Time, failedOnly bool) (*SyncEvent, error)
@@ -269,14 +270,32 @@ func (r *syncHistoryRepo) Get(ctx context.Context, campaignID string, id int64) 
 	return &events[0], nil
 }
 
-func (r *syncHistoryRepo) Window(ctx context.Context, campaignID string, from, to time.Time, limit int) ([]SyncEvent, error) {
-	rows, err := r.db.QueryContext(ctx, selectSyncEvent+
-		" WHERE e.campaign_id = ? AND e.occurred_at BETWEEN ? AND ? ORDER BY e.occurred_at, e.id LIMIT ?",
-		campaignID, from.UTC(), to.UTC(), limit)
+func (r *syncHistoryRepo) Window(ctx context.Context, campaignID string, centre time.Time, span time.Duration, perSide int) ([]SyncEvent, error) {
+	before, err := r.db.QueryContext(ctx, selectSyncEvent+
+		" WHERE e.campaign_id = ? AND e.occurred_at BETWEEN ? AND ? ORDER BY e.occurred_at DESC, e.id DESC LIMIT ?",
+		campaignID, centre.Add(-span).UTC(), centre.UTC(), perSide)
 	if err != nil {
 		return nil, apperror.NewInternal(fmt.Errorf("sync event window: %w", err))
 	}
-	return scanSyncEvents(rows)
+	earlier, err := scanSyncEvents(before)
+	if err != nil {
+		return nil, err
+	}
+	after, err := r.db.QueryContext(ctx, selectSyncEvent+
+		" WHERE e.campaign_id = ? AND e.occurred_at > ? AND e.occurred_at <= ? ORDER BY e.occurred_at, e.id LIMIT ?",
+		campaignID, centre.UTC(), centre.Add(span).UTC(), perSide)
+	if err != nil {
+		return nil, apperror.NewInternal(fmt.Errorf("sync event window: %w", err))
+	}
+	later, err := scanSyncEvents(after)
+	if err != nil {
+		return nil, err
+	}
+	out := make([]SyncEvent, 0, len(earlier)+len(later))
+	for i := len(earlier) - 1; i >= 0; i-- {
+		out = append(out, earlier[i])
+	}
+	return append(out, later...), nil
 }
 
 func (r *syncHistoryRepo) Latest(ctx context.Context, campaignID string, since time.Time, failedOnly bool) (*SyncEvent, error) {

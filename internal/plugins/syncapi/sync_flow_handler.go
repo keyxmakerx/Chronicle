@@ -16,9 +16,9 @@ import (
 )
 
 const (
-	// flowReadLimit bounds the rows read for one flow before it picks the
-	// ones it draws.
-	flowReadLimit = 500
+	// flowReadPerSide bounds the rows read either side of the centre before
+	// the flow picks the ones it draws.
+	flowReadPerSide = 250
 	// flowMaxRepeatLookups bounds the "same problem lately" lookups one
 	// flow makes.
 	flowMaxRepeatLookups = 5
@@ -37,7 +37,7 @@ type flowOptions struct {
 // loadFlow reads the rows around centre and draws them.
 func (h *SyncHistoryHandler) loadFlow(ctx context.Context, campaignID string, centre *SyncEvent, opt flowOptions) (*CallFlow, error) {
 	at := centre.OccurredAt
-	rows, err := h.repo.Window(ctx, campaignID, at.Add(-flowWindow), at.Add(flowWindow), flowReadLimit)
+	rows, err := h.repo.Window(ctx, campaignID, at, flowWindow, flowReadPerSide)
 	if err != nil {
 		return nil, err
 	}

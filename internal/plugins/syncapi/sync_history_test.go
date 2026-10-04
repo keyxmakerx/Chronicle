@@ -53,7 +53,8 @@ func (f *fakeHistoryRepo) Get(_ context.Context, _ string, id int64) (*SyncEvent
 	return nil, apperror.NewNotFound("that history entry was not found")
 }
 
-func (f *fakeHistoryRepo) Window(_ context.Context, _ string, from, to time.Time, _ int) ([]SyncEvent, error) {
+func (f *fakeHistoryRepo) Window(_ context.Context, _ string, centre time.Time, span time.Duration, _ int) ([]SyncEvent, error) {
+	from, to := centre.Add(-span), centre.Add(span)
 	var out []SyncEvent
 	for _, ev := range f.rows {
 		if !ev.OccurredAt.Before(from) && !ev.OccurredAt.After(to) {
