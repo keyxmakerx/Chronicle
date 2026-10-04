@@ -411,3 +411,21 @@ test('with reduced motion a funnel is simply there', () => {
   run(env, d, t, .1);
   assert.equal(d.model.glide.bodies.funnel.v, 1);
 });
+
+test('a moon event opens in place over a few seconds, whichever event it is', () => {
+  const env = loadSky();
+  const { d } = dock(env, { cal: WITH_CURRENT });
+  d.measure();
+  let t = run(env, d, 100, .5);
+  const magic = [{ id: 'e1', year: 1491, month: 1, day: 15, payload: JSON.stringify({ type: 'magic', moons: [1] }) }];
+  d.setDay({ ...WITH_CURRENT, current_day: 15 }, magic);
+  t = run(env, d, t, 1);
+  const ev = d.model.glide.events;
+  assert.ok(ev.magic && ev.magic.v > .1 && ev.magic.v < .3, 'one second in, the magic moon is still opening');
+  assert.equal(d.pace, 2, 'painted at the full rate while it opens');
+  t = run(env, d, t, 6);
+  assert.equal(ev.magic.v, 1, 'after six seconds it is fully there');
+  d.setDay({ ...WITH_CURRENT, current_day: 16 }, []);
+  run(env, d, t, .1);
+  assert.equal(d.model.glide.events.magic, undefined, 'a day without it forgets it, so it opens again next time');
+});

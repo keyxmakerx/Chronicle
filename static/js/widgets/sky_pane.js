@@ -124,11 +124,14 @@
   // dt (seconds since the last frame) lets a weather change roll in instead
   // of snapping: each dial with an ease glides at its own pace.
   var GLIDE = LOOKS.DIALS.filter(function (d) { return d.ease; });
-  // Things with a place in the sky arrive and leave by their kind instead of
-  // fading where they stand: 'edge' moves in from beyond the right edge and
-  // leaves the same way, 'open' spreads from where it is. Meteors and
-  // lightning are the third kind, 'once': they play and need nothing here.
-  var BODIES = { funnel: { enter: 'edge', s: 8 }, blood: { enter: 'open', s: 6 } };
+  // Things with a place in the sky arrive by their kind instead of fading
+  // where they stand: 'edge' moves in from beyond the right edge and leaves
+  // the same way (a funnel), 'open' grows in place from nothing (every moon
+  // event: a blood moon's stain, an eclipse's shadow, a harvest moon's size
+  // and glow, the thread between meeting moons, a magic moon's tint).
+  // Meteors, fireballs and lightning are the third kind, 'once': they play
+  // and need nothing here. Weather layers fade with the look (FADE_S).
+  var BODIES = { funnel: { enter: 'edge', s: 8 }, moonEvent: { enter: 'open', s: 6 } };
   // A body's progress toward being fully here (1) or gone (0).
   function arrive(b, want, live, dt, s) {
     b.v = !live ? want : want > b.v ? Math.min(want, b.v + dt / s) : Math.max(want, b.v - dt / s);
@@ -209,13 +212,22 @@
     var wx = g.wx;
     if (!wx || !live) { wx = g.wx = {}; GLIDE.forEach(function (d) { wx[d.n] = goal[d.n]; }); }
     else GLIDE.forEach(function (d) { wx[d.n] += (goal[d.n] - wx[d.n]) * (1 - Math.exp(-dt / d.ease)); if (Math.abs(goal[d.n] - wx[d.n]) > .005) gliding = true; });
-    var Bd = g.bodies || (g.bodies = { funnel: { v: 0, spec: null }, blood: { v: 0 } }), fun = Bd.funnel;
+    var Bd = g.bodies || (g.bodies = { funnel: { v: 0, spec: null } }), fun = Bd.funnel;
+    // Each moon event showing today opens by its own progress, kept by its kind and moon; asked twice in a frame it
+    // answers the same. One no longer showing is forgotten, so it opens again when it comes back.
+    var EVS = g.events || (g.events = {}), seen = {};
+    function opened(key) {
+      if (seen[key] != null) return seen[key];
+      var b = EVS[key] || (EVS[key] = { v: 0 });
+      if (arrive(b, 1, live, dt, BODIES.moonEvent.s)) gliding = true;
+      return (seen[key] = ease(b.v));
+    }
     if (goal.funnel) fun.spec = goal.funnel;
     if (arrive(fun, goal.funnel ? 1 : 0, live, dt, BODIES.funnel.s)) gliding = true;
     // The funnel keeps its full strength while it moves; only the fade of step 2 is replaced.
     if (fun.v > 0 || (look && look.funnel)) look = Object.assign({}, look || goal, { funnel: fun.v > 0 && fun.spec ? fun.spec : null });
     var P = SW.paletteFor(altDeg, eve, look, wx, dark, false);
-    if (overlay.magic) SW.tintPalette(P, '#8a5fe0', .3, ['zen', 'mid', 'hor', 'anti', 'clit', 'cshade', 'h0', 'h1', 'h2', 'h3']);
+    if (overlay.magic) SW.tintPalette(P, '#8a5fe0', .3 * opened('magic'), ['zen', 'mid', 'hor', 'anti', 'clit', 'cshade', 'h0', 'h1', 'h2', 'h3']);
 
     var st = {
       P: P, L: L, W: model.width, H: model.height, wx: wx, t: tSeconds, look: look, rm: !!model.reduced, almanac: false,
@@ -232,12 +244,22 @@
     EV.apply(st, dayEvents);
     // How far the funnel still is beyond the right edge, as a share of the width.
     st.funnelOff = (1 - ease(fun.v)) * .62;
-    // A blood moon's stain and drips spread from the moon; when the event ends they go with the look's fade.
-    if (!st.bleed) Bd.blood.v = 0;
-    else {
-      if (arrive(Bd.blood, 1, live, dt, BODIES.blood.s)) gliding = true;
-      st.bleed = Object.assign({}, st.bleed, { k: st.bleed.k * ease(Bd.blood.v) });
-    }
+    st.moons.forEach(function (M) {
+      if (!M.up) return;
+      var id = M.mo.id, e, sh = M.i >= 0 && st.shadows[M.i];
+      // The world's shadow darkens across the moon; a blood moon's stain and drips spread from it.
+      if (sh) { e = opened('shadow:' + id); st.shadows[M.i] = [sh[0], sh[1], sh[2], sh[3] * e]; M.shadowCover = (M.shadowCover || 0) * e; }
+      if (st.bleed && st.bleed.M === M) st.bleed = Object.assign({}, st.bleed, { k: st.bleed.k * opened('shadow:' + id) });
+      if (M.conj) M.conj *= opened('conj:' + id);
+      // A harvest moon swells to its size and warms.
+      if (overlay.harvest[id]) {
+        e = opened('harvest:' + id);
+        var grow = (1 + .18 * e) / 1.18; M.r *= grow; M.sr *= grow;
+        if (M.warm) M.warm = [M.warm[0], M.warm[1] * e];
+        st.fxItems.forEach(function (f) { if (f.shape === 'warm' && f.x === M.x && f.y === M.y) { f.k *= e; f.r *= grow; } });
+      }
+    });
+    Object.keys(EVS).forEach(function (k) { if (seen[k] == null) delete EVS[k]; });
     st.pace = motionOf(st);
     // A change rolling in is painted at the full rate, so it never steps.
     st.gliding = gliding;
