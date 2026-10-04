@@ -214,6 +214,12 @@ func mergePackageChapter(pkg *BookPackage, ch BookChapter, copies map[int]*Store
 		built: BookChapter{ID: ch.ID, Title: ch.Title, Intro: ch.Intro, Director: ch.Director},
 	}
 	authored := pkg.Source.chapters[ch.ID]
+	if ch.Generated {
+		// Made from the system's data: shown as is, never edited.
+		ec.built = ch
+		ec.entry.Generated = true
+		return ec
+	}
 	if authored == nil {
 		// Failed to load: kept as the package's problem chapter, not editable.
 		ec.built = ch
@@ -808,6 +814,13 @@ func (s *bookEditService) Export(ctx context.Context, campaignID string, pkg *Bo
 	for _, p := range ed.parts {
 		for _, c := range p.chapters {
 			if !c.editable {
+				if g := pkg.Source.generated[c.entry.ID]; g != nil && c.entry.Generated {
+					data, err := marshalYAML(g)
+					if err != nil {
+						return nil, apperror.NewInternal(err)
+					}
+					files["book/"+bookChaptersDir+"/"+c.entry.ID+".yaml"] = data
+				}
 				continue // a broken package chapter has no authored form to write out
 			}
 			pages := make([]authoredPage, 0, len(c.entry.Pages))

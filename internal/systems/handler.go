@@ -9,6 +9,7 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"strconv"
 	"strings"
 
 	"github.com/labstack/echo/v4"
@@ -558,6 +559,86 @@ func (h *SystemHandler) BookAPI(c echo.Context) error {
 	out := FilterBook(book, bookViewerIsDirector(cc))
 	out.CanEdit = h.bookEdits != nil && bookEditorAllowed(cc)
 	return c.JSON(http.StatusOK, out)
+}
+
+// viewerBook loads the package book filtered for the viewer, for the
+// rules-index endpoints. Campaign edits are not merged: generated chapters
+// can't be edited, so the package's are the ones readers see.
+func (h *SystemHandler) viewerBook(c echo.Context) (*Book, string, *SystemManifest, bool, error) {
+	cc := campaigns.GetCampaignContext(c)
+	if cc == nil {
+		return nil, "", nil, false, apperror.NewMissingContext()
+	}
+	mod := h.resolveSystem(c)
+	if mod == nil {
+		return nil, "", nil, false, apperror.NewNotFound("system not found")
+	}
+	sysDir := h.systemDir(c, mod)
+	if !HasBook(sysDir) {
+		return nil, "", nil, false, apperror.NewNotFound("this system has no book")
+	}
+	manifest := mod.Info()
+	b, err := LoadBook(sysDir, manifest)
+	if err != nil {
+		return nil, "", nil, false, apperror.NewNotFound("the rulebook could not be opened")
+	}
+	director := bookViewerIsDirector(cc)
+	return FilterBook(b, director), sysDir, manifest, director, nil
+}
+
+// BookIndexAPI returns the entries one rules-index page shows. The query must
+// name a slice a page of the viewer's own book shows, so a player can only
+// list what their book lists (Director-only chapters are already gone).
+// GET /campaigns/:id/systems/:mod/book/index/:cat?key=&value=&from=&to=
+func (h *SystemHandler) BookIndexAPI(c echo.Context) error {
+	b, sysDir, manifest, director, err := h.viewerBook(c)
+	if err != nil {
+		return err
+	}
+	cat := c.Param("cat")
+	want := bookIndexSlice{Key: c.QueryParam("key"), Value: c.QueryParam("value")}
+	want.From, _ = strconv.Atoi(c.QueryParam("from"))
+	want.To, _ = strconv.Atoi(c.QueryParam("to"))
+	shown := false
+	for _, ch := range indexChapters(b) {
+		for _, p := range ch.Pages {
+			if pc, s, ok := pageSlice(p); ok && pc == cat && s == want {
+				shown = true
+			}
+		}
+	}
+	if !shown {
+		return apperror.NewNotFound("this book has no such index page")
+	}
+	ie, err := loadIndexEntries(sysDir, manifest, cat)
+	if err != nil {
+		return apperror.NewNotFound("this index could not be read")
+	}
+	items := ie.slice(want)
+	if len(items) > maxBookIndexItems {
+		items = items[:maxBookIndexItems]
+	}
+	out := make([]BookIndexEntry, 0, len(items))
+	for _, it := range items {
+		out = append(out, ie.indexEntry(it, director))
+	}
+	c.Response().Header().Set("Cache-Control", "private, no-store")
+	return c.JSON(http.StatusOK, map[string]any{"items": out})
+}
+
+// BookFindAPI searches the rules-index chapters the viewer's book shows.
+// GET /campaigns/:id/systems/:mod/book/find?q=
+func (h *SystemHandler) BookFindAPI(c echo.Context) error {
+	b, sysDir, manifest, _, err := h.viewerBook(c)
+	if err != nil {
+		return err
+	}
+	q := c.QueryParam("q")
+	if len(q) > 100 {
+		q = q[:100]
+	}
+	c.Response().Header().Set("Cache-Control", "private, no-store")
+	return c.JSON(http.StatusOK, map[string]any{"results": findInIndex(sysDir, manifest, b, q)})
 }
 
 // bookViewerIsDirector: the campaign owner, or a member the owner granted

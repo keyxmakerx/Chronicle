@@ -188,15 +188,18 @@ type BookPageEntry struct {
 }
 
 // BookChapterEntry is one chapter as the editor sees it. A package chapter
-// that failed to load carries Problem and no pages: it cannot be edited.
+// that failed to load carries Problem and no pages: it cannot be edited. A
+// rules-index chapter carries Generated and no pages: it is made from the
+// system's data, so it changes with the package, not here.
 type BookChapterEntry struct {
-	ID       string          `json:"id"`
-	Title    string          `json:"title"`
-	Intro    string          `json:"intro"`
-	Director bool            `json:"director"`
-	House    bool            `json:"house"`
-	Problem  string          `json:"problem,omitempty"`
-	Pages    []BookPageEntry `json:"pages"`
+	ID        string          `json:"id"`
+	Title     string          `json:"title"`
+	Intro     string          `json:"intro"`
+	Director  bool            `json:"director"`
+	House     bool            `json:"house"`
+	Generated bool            `json:"generated,omitempty"`
+	Problem   string          `json:"problem,omitempty"`
+	Pages     []BookPageEntry `json:"pages"`
 }
 
 // BookEditorPart groups chapters like BookPart does for readers.

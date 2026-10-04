@@ -84,11 +84,14 @@ type BookPart struct {
 
 // BookChapter is one chapter file.
 type BookChapter struct {
-	ID       string     `json:"id"`
-	Title    string     `json:"title"`
-	Intro    string     `json:"intro,omitempty"`
-	Director bool       `json:"director"`
-	Pages    []BookPage `json:"pages"`
+	ID       string `json:"id"`
+	Title    string `json:"title"`
+	Intro    string `json:"intro,omitempty"`
+	Director bool   `json:"director"`
+	// Generated chapters are made from the system's reference data (a rules
+	// index); they are not edited in the campaign's book editor.
+	Generated bool       `json:"generated,omitempty"`
+	Pages     []BookPage `json:"pages"`
 }
 
 // BookPage is one page of a chapter; Wide spans the whole spread.
@@ -119,6 +122,14 @@ type BookBlock struct {
 	Note        string     `json:"note,omitempty"`
 	HiddenStats bool       `json:"hiddenStats,omitempty"`
 	Widget      string     `json:"widget,omitempty"`
+	// An "index" block (generated pages only) lists the entries of a data
+	// category: those whose Key property equals Value, From..To in name order.
+	Category string `json:"category,omitempty"`
+	Key      string `json:"key,omitempty"`
+	Value    string `json:"value,omitempty"`
+	From     int    `json:"from,omitempty"`
+	To       int    `json:"to,omitempty"`
+	Count    int    `json:"count,omitempty"`
 }
 
 // BookDice is a parsed dice expression such as 2d10.
@@ -167,10 +178,11 @@ type bookPartYAML struct {
 }
 
 type bookChapterYAML struct {
-	Title    string         `yaml:"title"`
-	Intro    string         `yaml:"intro"`
-	Director bool           `yaml:"director"`
-	Pages    []bookPageYAML `yaml:"pages"`
+	Title    string             `yaml:"title"`
+	Intro    string             `yaml:"intro"`
+	Director bool               `yaml:"director"`
+	Index    *bookIndexSpecYAML `yaml:"index,omitempty"`
+	Pages    []bookPageYAML     `yaml:"pages"`
 }
 
 // bookPageYAML is one authored page. It is also the shape a campaign's
@@ -240,6 +252,9 @@ func LoadBook(sysDir string, manifest *SystemManifest) (*Book, error) {
 type BookSource struct {
 	index    bookIndexYAML
 	chapters map[string]*bookChapterYAML
+	// generated holds the chapter files of rules-index chapters, which are
+	// not editable but are exported as written.
+	generated map[string]*bookChapterYAML
 }
 
 // loadBookWithSource is LoadBook plus the authored source of every chapter
@@ -251,7 +266,7 @@ func loadBookWithSource(sysDir string, manifest *SystemManifest) (*Book, *BookSo
 		return nil, nil, fmt.Errorf("%s: %w", bookIndexFile, err)
 	}
 
-	src := &BookSource{index: idx, chapters: map[string]*bookChapterYAML{}}
+	src := &BookSource{index: idx, chapters: map[string]*bookChapterYAML{}, generated: map[string]*bookChapterYAML{}}
 	b := &Book{
 		Title: strings.TrimSpace(idx.Title),
 		Mark:  strings.TrimSpace(idx.Mark),
@@ -320,8 +335,11 @@ func loadBookWithSource(sysDir string, manifest *SystemManifest) (*Book, *BookSo
 			if total > maxBookChapters {
 				return nil, nil, fmt.Errorf("%s: more than %d chapters", bookIndexFile, maxBookChapters)
 			}
-			ch, authored := loadBookChapter(bookDir, id, widgets)
-			if authored != nil {
+			ch, authored := loadBookChapter(sysDir, manifest, id, widgets)
+			switch {
+			case authored != nil && ch.Generated:
+				src.generated[id] = authored
+			case authored != nil:
 				src.chapters[id] = authored
 			}
 			part.Chapters = append(part.Chapters, ch)
@@ -336,7 +354,8 @@ func loadBookWithSource(sysDir string, manifest *SystemManifest) (*Book, *BookSo
 
 // loadBookChapter loads one chapter, turning any mistake into a problem
 // chapter. The authored chapter is returned only when the chapter loaded.
-func loadBookChapter(bookDir, id string, widgets map[string]bool) (BookChapter, *bookChapterYAML) {
+func loadBookChapter(sysDir string, manifest *SystemManifest, id string, widgets map[string]bool) (BookChapter, *bookChapterYAML) {
+	bookDir := filepath.Join(sysDir, bookDirName)
 	file := bookChaptersDir + "/" + id + ".yaml"
 	if !bookChapterID.MatchString(id) {
 		return problemChapter(id, fmt.Sprintf("book.yaml lists a chapter called %q; chapter names use lower-case letters, digits and -", id)), nil
@@ -348,6 +367,16 @@ func loadBookChapter(bookDir, id string, widgets map[string]bool) (BookChapter, 
 	ch := BookChapter{ID: id, Title: strings.TrimSpace(cy.Title), Intro: strings.TrimSpace(cy.Intro), Director: cy.Director}
 	if ch.Title == "" {
 		return problemChapter(id, file+": the chapter has no title"), nil
+	}
+	if cy.Index != nil {
+		if len(cy.Pages) > 0 {
+			return problemChapter(id, file+": a chapter has either index or pages, not both"), nil
+		}
+		gen, problem := buildIndexChapter(sysDir, manifest, ch, cy.Index, file)
+		if problem != "" {
+			return problemChapter(id, problem), nil
+		}
+		return gen, &cy
 	}
 	if len(cy.Pages) == 0 {
 		return problemChapter(id, file+": the chapter has no pages"), nil
