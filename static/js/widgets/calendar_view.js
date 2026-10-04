@@ -1336,7 +1336,7 @@
     // (position:fixed) along with it, so while one shows the sky folds
     // without travelling.
     _fixedShowing: function () {
-      var els = this.calEl.querySelectorAll('.bbar:not([hidden]), .btray:not([hidden]), .bmore:not([hidden]), .drawer.open, .toast.on');
+      var els = this.calEl.querySelectorAll('.bbar:not([hidden]), .btray:not([hidden]), .drawer.open, .toast.on');
       for (var i = 0; i < els.length; i++) {
         if (getComputedStyle(els[i]).position === 'fixed' && els[i].getClientRects().length) return true;
       }

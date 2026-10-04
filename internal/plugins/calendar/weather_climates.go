@@ -1,7 +1,7 @@
 // Package calendar - weather_climates.go lists the climates a calendar can
 // pick for its world. The ids and names mirror the weather generator in
 // static/js/widgets/chronicle_gen.js (a JS test pins the two together), so
-// the Generate sheet can start from the stored id without a lookup table.
+// the weather calendar can start from the stored id without a lookup table.
 package calendar
 
 import (
@@ -90,7 +90,7 @@ func roundContinuity(c float64) float64 {
 }
 
 // continuityWords names a "how long weather lasts" value in the words the
-// Generate sheet uses (continuityWords in calendar_weather_sheet.js);
+// weather calendar uses (continuityWords in calendar_weather_sheet.js);
 // continuityWordsJS is the same rule for the settings page's live readout.
 func continuityWords(v float64) string {
 	switch {
