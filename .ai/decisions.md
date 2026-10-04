@@ -977,3 +977,17 @@ Also under this ADR: the partial-update contract test only recognised structs na
 **Consequences:**
 - A new query against `entities` must exclude trashed rows, or a deleted page reappears in it. The Trash has no "delete forever" yet; the purge is the only hard delete.
 - A trashed page still holds its slug, so a new page with the same name gets a suffixed slug.
+
+---
+
+## ADR-061: In the armory a DM grant acts as the Owner
+
+**Status:** Accepted; operator ruling 2026-09-13 (#633).
+
+**Context:** `VisibilityRole()` promotes a member the owner has given DM access to Owner, and is documented as a visibility rule. The armory's stash and shop handlers pass that promoted role into their services, so the grant also decides who may answer stash and purchase requests, open or close downtime and buy for any character. The operator ruled that such a member may buy on a player's behalf, not only see.
+
+**Decision:** Armory handlers build their `Actor` from `VisibilityRole()`. Inside the armory, `Actor.IsOwner()` is true for the Owner and for members with DM access; Scribes stay below it. Other plugins keep `VisibilityRole()` for visibility only and use their own named checks (`CanControlWorldState`, `CanAuthorDmOnly`) for actions.
+
+**Consequences:**
+- Taking away a DM grant also takes away these armory actions on the next request.
+- A new armory action that must be the Owner alone needs its own check on `MemberRole`; `IsOwner()` will not tell them apart.
