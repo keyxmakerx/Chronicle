@@ -1162,6 +1162,7 @@
       this.view = { y: this.cal.current_year || 1, m: this.cal.current_month || 1 };
       this.rm = reducedMotion();
       this.wingFor = null; // key of the day whose wing is open, or null
+      this._roll = null;   // the open "Roll one" roller in the day card, or null
       this._wingStale = null; // the open day's card, redrawn once it finishes unfolding
       this.selection = {}; // edit-mode multi-select, keyed by dayKey -> true
 
@@ -3133,7 +3134,9 @@
         if (form) { e.preventDefault(); self._submitPlan(form); }
       });
       this.wingEl.addEventListener('click', function (e) {
-        if (e.target.closest('[data-close]')) { self.closeWing(); return; }
+        if (e.target.closest('[data-close]')) { if (!self._rollHolds()) self.closeWing(); return; }
+        var roll = e.target.closest('[data-roll-one]');
+        if (roll) { self._toggleRoll(roll); return; }
         var plan = e.target.closest('[data-plan]');
         if (plan) { self._openPlan(plan.dataset.plan, parseInt(plan.dataset.planAt, 10) || 19); return; }
         if (e.target.closest('[data-plan-cancel]')) { self._closePlan(); return; }
@@ -3230,6 +3233,7 @@
         if (self.fvEl.classList.contains('open')) { self.closeFreeView(); return; }
         if (self._pf.state !== 'closed') { self.closeFlap(); return; }
         if (self.popEl.classList.contains('open')) { self.closePop(); return; }
+        if (self._roll) { if (!self._rollHolds()) self._roll.close(); return; }
         if (self.wingFor) { self.closeWing(); return; }
         if (self._eraOpen != null) { self.closeEraPanel({ refocus: true }); return; }
       };
@@ -3249,8 +3253,8 @@
         if (inside && self.mvEl.classList.contains('open') && !self.mvEl.contains(t) && !t.closest('#cal5-moonbtn, .msil, .mrow')) self.closeMoonView();
         if (inside && self.fvEl.classList.contains('open') && !self.fvEl.contains(t) && !t.closest('#cal5-freebtn')) self.closeFreeView();
         if (!self.wingFor || self.wingEl.contains(t) || self.wingEl.querySelector('form')) return;
-        if (inside ? !t.closest('.day[data-key], #cal5-freebtn') :
-            !t.closest('dialog, [role="dialog"], [aria-modal="true"]')) self.closeWing();
+        if ((inside ? !t.closest('.day[data-key], #cal5-freebtn') :
+            !t.closest('dialog, [role="dialog"], [aria-modal="true"]')) && !self._rollHolds()) self.closeWing();
       };
       document.addEventListener('pointerdown', this._mvOffHandler, true);
     },
@@ -3293,9 +3297,10 @@
       this.hideGlance();
       if (P.state === 'opening' || P.state === 'closing') { P.next = function () { self.openWing(key, highlightEventId); }; return; }
       if (this.wingFor === key) {
-        if (highlightEventId) this._pickRow(highlightEventId); else this.closeWing();
+        if (highlightEventId) this._pickRow(highlightEventId); else if (!this._rollHolds()) this.closeWing();
         return;
       }
+      if (this.wingFor && this._rollHolds()) return;
       var go = function () { if (!self.wingFor) self._showWing(key, highlightEventId); };
       if (this.wingFor) this.closeWing({ quiet: true, fast: true }).then(go);
       else if (this._pf.state !== 'closed') this.closeFlap({ quiet: true }).then(go);
@@ -3368,7 +3373,8 @@
 
     refreshWing: function () {
       // Never under a form being filled in: its own save refreshes after.
-      if (!this.wingFor || this._pw.state !== 'open' || this.wingEl.querySelector('form')) return;
+      // Nor under an open roller: it refreshes when it closes.
+      if (!this.wingFor || this._pw.state !== 'open' || this.wingEl.querySelector('form') || this._roll) return;
       var sc = this.wingEl.querySelector('.lscroll') || this.wingEl, top = sc.scrollTop;
       this.wingEl.innerHTML = this._wingHTML(parseDayKey(this.wingFor));
       (this.wingEl.querySelector('.lscroll') || this.wingEl).scrollTop = top;
@@ -3393,6 +3399,7 @@
         $$('.day.sel', self.stageEl).forEach(function (d) { d.classList.remove('sel'); d.removeAttribute('aria-expanded'); });
         $$('.month.dim', self.stageEl).forEach(function (m) { m.classList.remove('dim'); });
         self.wingEl.innerHTML = '';
+        self._roll = null;
         self.wingFor = null;
         P.closing = null;
         self._updateScrim();
@@ -3443,6 +3450,67 @@
       return d + ' ' + (mo ? mo.name : m) + (y !== cal.current_year ? ' ' + y : '');
     },
 
+    // "Add an event", with "Roll one" beside it for the DM team: rolling a
+    // happening onto a day makes a DM-only event, so only they get it.
+    _addRowHTML: function () {
+      var add = '<button type="button" class="addev" data-add-event><i class="fa-solid fa-plus"></i>Add an event</button>';
+      if (!this.canAuthorDmOnly || !(window.Chronicle && Chronicle.RollTables)) return add;
+      return '<div class="rtd-open">' + add + '<button type="button" class="addev" data-roll-one aria-expanded="false"><i class="fa-solid fa-dice"></i>Roll one</button></div>';
+    },
+
+    // _rollHolds keeps the day card open while it holds a roll not yet put
+    // on the day: the card shakes and says so instead of closing.
+    _rollHolds: function () {
+      if (this._roll && this._roll.isDirty()) { this._roll.nag(); return true; }
+      return false;
+    },
+
+    // _toggleRoll opens the roller under the day card's "Roll one", or puts
+    // it away again (unless it holds a roll).
+    _toggleRoll: function (btn) {
+      var self = this;
+      if (this._roll) { if (!this._rollHolds()) this._roll.close(); return; }
+      var d = parseDayKey(this.wingFor), cal = this.cal;
+      var mc = CalDate.monthCount(cal), monthDef = (cal.months || [])[((d.m - 1) % mc + mc) % mc];
+      var label = (monthDef ? monthDef.name : d.m) + ' ' + d.d;
+      var host = document.createElement('div');
+      btn.closest('.rtd-open').insertAdjacentElement('afterend', host);
+      btn.setAttribute('aria-expanded', 'true');
+      var handle = Chronicle.RollTables.mountDay(host, {
+        campaignId: this.campaignId,
+        calendar: cal,
+        date: { year: d.y, month: d.m, day: d.d },
+        why: function (r) {
+          var abs = CalDate.dayIndex(cal, d.y, d.m, d.d), w = '';
+          var moon = (r.moon && (cal.moons || []).filter(function (mo) { return mo.name === r.moon; })[0]) || self.mainMoon();
+          if (moon) w += '<em><i class="fa-solid fa-moon"></i> ' + esc(moon.name) + ': ' + MoonMath.name(MoonMath.phase(moon, abs)) + '</em>';
+          var season = self.seasonForDate(d.m, d.d);
+          if (season) w += '<em><i class="fa-solid fa-leaf"></i> ' + esc(season.name) + '</em>';
+          return w;
+        },
+        onPut: function (r) {
+          var body = {
+            name: r.name, description: r.brief || null,
+            description_html: r.brief ? '<p>' + esc(r.brief) + '</p>' : null,
+            year: d.y, month: d.m, day: d.d, all_day: true, visibility: 'dm_only'
+          };
+          return Chronicle.apiFetch(self.apiBase + '/events', { method: 'POST', body: body }).then(function (resp) {
+            if (!resp.ok) throw new Error('not saved');
+            self.eventsByMonth = {};
+            self.renderMonth();
+            self.say('On ' + label + '. Players won’t see it until you show it.');
+          });
+        },
+        onClose: function () {
+          host.remove();
+          if (self._roll !== handle) return;
+          self._roll = null;
+          self.refreshWing();
+        }
+      });
+      this._roll = handle;
+    },
+
     _wingHTML: function (d, highlightEventId) {
       var self = this, cal = this.cal;
       var mc = CalDate.monthCount(cal), m0 = ((d.m - 1) % mc + mc) % mc, monthDef = (cal.months || [])[m0];
@@ -3485,7 +3553,7 @@
         '<div class="leaf lf2"><div class="lscroll"><div class="wb wbr">' + gnHTML + this._freeWingHTML(d) +
           (evHTML ? '<div class="sect">' + (evs.length > 1 ? evs.length + ' events' : 'Events') + '</div>' +
           '<div class="evlist">' + evHTML + '</div>' : '') +
-          (this.canEdit ? '<button type="button" class="addev" data-add-event><i class="fa-solid fa-plus"></i>Add an event</button>' : '') +
+          (this.canEdit ? this._addRowHTML() : '') +
           (moonRows ? '<div class="sect">' + (moonCount > 1 ? 'Moons' : 'Moon') + '</div><div class="moonsec">' + moonRows + '</div>' : '') +
         '</div></div></div>';
     },

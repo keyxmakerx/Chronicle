@@ -1184,7 +1184,7 @@
 
     // Right under "Add an event", ahead of the day's moons.
     var addBtn = view.wingEl.querySelector('[data-add-event]');
-    if (addBtn) addBtn.insertAdjacentElement('afterend', form);
+    if (addBtn) (addBtn.closest('.rtd-open') || addBtn).insertAdjacentElement('afterend', form);
     else (view.wingEl.querySelector('.wbr') || view.wingEl.querySelector('.wb')).appendChild(form);
     form.name.focus({ preventScroll: true });
     reveal(form);
