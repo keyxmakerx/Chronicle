@@ -191,6 +191,85 @@ Chronicle.register('notes', {
     var refsBox = panel.querySelector('.jot-refs');
     var tabCount = fab.querySelector('.jot-tab-count');
 
+    // --- Live updates ---
+
+    /**
+     * While the panel is open, note events (ids only, each reaching only
+     * the note's audience) reload the list quietly. A reload never redraws
+     * under someone at work: while a jot is being edited, its history is
+     * open, or focus is in the list, it waits and tries again. That also
+     * covers our own saves, which come back as note.updated.
+     */
+    var live = (function () {
+      var ws = null;
+      var retry = null;
+      var reload = null;
+      var delay = 0;
+      var on = false;
+
+      function busy() {
+        var a = document.activeElement;
+        return !!(state.editingId || state.versionsNoteId || state.loading ||
+          (a && a !== document.body && notesList.contains(a)));
+      }
+
+      function refresh(wait) {
+        clearTimeout(reload);
+        reload = setTimeout(function tick() {
+          if (!on) return;
+          if (busy()) { reload = setTimeout(tick, 2000); return; }
+          loadNotes(true);
+        }, wait);
+      }
+
+      function connect() {
+        if (!on || typeof window.WebSocket !== 'function' || !campaignId) return;
+        var url = (window.location.protocol === 'https:' ? 'wss:' : 'ws:') + '//' + window.location.host +
+          '/ws?campaign=' + encodeURIComponent(campaignId);
+        // In an outside app's frame the notes grant stands in for the
+        // sign-in cookie, offered as a subprotocol (as the Journal does).
+        var embed = Chronicle.embed;
+        var sock;
+        try {
+          sock = embed && embed.token
+            ? new WebSocket(url, ['chronicle.notes', 'chronicle.grant.' + embed.token])
+            : new WebSocket(url);
+        } catch (e) { return; }
+        ws = sock;
+        sock.addEventListener('message', function (ev) {
+          var msg;
+          try { msg = JSON.parse(ev.data); } catch (e) { return; }
+          if (!msg || msg.campaignId !== campaignId || typeof msg.type !== 'string' || msg.type.indexOf('note.') !== 0) return;
+          refresh(400);
+        });
+        sock.addEventListener('error', function (e) { if (e.preventDefault) e.preventDefault(); });
+        sock.addEventListener('open', function () { delay = 0; });
+        sock.addEventListener('close', function () {
+          if (ws === sock) ws = null;
+          if (!on) return;
+          // Reconnect gently; reload on return so nothing is missed.
+          delay = Math.min(60000, (delay || 2500) * 2);
+          retry = setTimeout(function () { connect(); refresh(0); }, delay);
+        });
+      }
+
+      return {
+        refresh: refresh,
+        start: function () {
+          if (on) return;
+          on = true;
+          delay = 0;
+          connect();
+        },
+        stop: function () {
+          on = false;
+          clearTimeout(retry);
+          clearTimeout(reload);
+          if (ws) { try { ws.close(); } catch (e) { /* already closing */ } ws = null; }
+        }
+      };
+    })();
+
     // --- Opening, pinning, collapsing ---
 
     function openPanel() {
@@ -199,11 +278,13 @@ Chronicle.register('notes', {
       fab.classList.add('jot-tab-hidden');
       fab.setAttribute('aria-expanded', 'true');
       loadNotes();
+      live.start();
     }
 
     function closePanel() {
       if (embedded) return;
       state.open = false;
+      live.stop();
       flushAutosave();
       panel.classList.add('notes-panel-hidden');
       fab.classList.remove('jot-tab-hidden');
@@ -389,23 +470,40 @@ Chronicle.register('notes', {
       return (list || []).filter(function (n) { return n.entityId && !n.isFolder; });
     }
 
-    function loadNotes() {
+    /**
+     * @param {boolean} [quiet] keep the list on screen while it reloads
+     *   (a live update), instead of showing the loading line.
+     */
+    function loadNotes(quiet) {
       // The jot being edited keeps what was typed over the fresh copy.
       keepEditingInputs();
       var editing = state.editingId ? findNote(state.editingId) : null;
-      state.loading = true;
-      renderNotes();
+      if (!quiet) {
+        state.loading = true;
+        renderNotes();
+      }
 
+      // A live reload that fails keeps the list rather than emptying it.
+      var read = function (r) {
+        if (!r.ok && quiet) throw new Error('HTTP ' + r.status);
+        return r.ok ? r.json() : [];
+      };
       var promises = [
-        Chronicle.apiFetch(apiUrl('?scope=jots')).then(function (r) { return r.ok ? r.json() : []; })
+        Chronicle.apiFetch(apiUrl('?scope=jots')).then(read)
       ];
       if (entityId) {
         promises.push(
-          Chronicle.apiFetch(apiUrl('?scope=entity&entity_id=' + encodeURIComponent(entityId))).then(function (r) { return r.ok ? r.json() : []; })
+          Chronicle.apiFetch(apiUrl('?scope=entity&entity_id=' + encodeURIComponent(entityId))).then(read)
         );
       }
 
       return Promise.all(promises).then(function (results) {
+        // Someone started editing while a live reload was out: drawing now
+        // would replace the editor under them, so try again later.
+        if (quiet && state.editingId !== (editing ? editing.id : null)) {
+          live.refresh(2000);
+          return;
+        }
         state.jots = jotsOnly(results[0]).filter(function (n) { return n.userId === currentUserId; });
         state.pageJots = jotsOnly(results[1]);
         if (editing) replaceNoteInState(editing);
@@ -415,6 +513,7 @@ Chronicle.register('notes', {
         loadPageNames();
         loadRefs();
       }).catch(function () {
+          if (quiet) return;
         state.loading = false;
         state.jots = [];
         state.pageJots = [];
@@ -1584,6 +1683,7 @@ Chronicle.register('notes', {
       Object.keys(miniEditors).forEach(destroyMiniEditor);
     };
     el._notesRelease = releaseLockIfHeld;
+    el._notesLive = live;
   },
 
   /**
@@ -1616,6 +1716,10 @@ Chronicle.register('notes', {
     if (el._notesOnOpenNote) {
       window.removeEventListener('chronicle:open-note', el._notesOnOpenNote);
       delete el._notesOnOpenNote;
+    }
+    if (el._notesLive) {
+      el._notesLive.stop();
+      delete el._notesLive;
     }
     // Hand back a held edit lock and stop its heartbeat.
     if (el._notesRelease) {
