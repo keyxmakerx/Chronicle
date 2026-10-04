@@ -25,7 +25,7 @@ func listen(t *testing.T) (net.Listener, int) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	t.Cleanup(func() { ln.Close() })
+	t.Cleanup(func() { _ = ln.Close() })
 	return ln, ln.Addr().(*net.TCPAddr).Port
 }
 
@@ -75,7 +75,7 @@ func TestSend_DeliversToPlainServer(t *testing.T) {
 		}
 		defer c.Close()
 		r := bufio.NewReader(c)
-		w := func(s string) { c.Write([]byte(s + "\r\n")) }
+		w := func(s string) { _, _ = c.Write([]byte(s + "\r\n")) }
 		w("220 test ESMTP")
 		var data strings.Builder
 		inData := false
