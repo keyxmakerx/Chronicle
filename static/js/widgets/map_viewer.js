@@ -746,21 +746,25 @@
 	}
 
 	function setTool(t) {
-		if (!isScribe) t = 'move';
+		if (!isScribe && t !== 'hex') t = 'move';
+		if (t === 'hex' && !hexesOn()) t = 'move';
 		closePopovers();
 		if (t !== 'draw' && t !== 'shadow' && draw()) draw().cancel();
 		tool = t;
 		if (t === 'pin') setHint('Click the map to drop a pin');
 		else if (t === 'draw') setHint(SHAPE_HINT[drawShape]);
 		else if (t === 'shadow') setHint(SHADOW_HINT);
-		else setHint('');
+		else if (t !== 'hex') setHint('');
 		syncRail();
+		// The hex module sets its own hint, so it runs after the one above.
+		if (viewerCtx && viewerCtx.hexes) viewerCtx.hexes.setActive(t === 'hex');
 	}
 	function startShape(shape) {
 		if (!draw()) { Chronicle.notify('Drawing tools are still loading', 'error'); return; }
 		closePopovers();
 		drawShape = shape;
 		tool = 'draw';
+		if (viewerCtx && viewerCtx.hexes) viewerCtx.hexes.setActive(false);
 		draw().setStyle({ color: drawColor, width: drawWidth });
 		draw().start(shape);
 		setHint(SHAPE_HINT[shape]);
@@ -774,20 +778,20 @@
 		closePopovers();
 		draw().setShadowStrength(strength);
 		tool = 'shadow';
+		if (viewerCtx && viewerCtx.hexes) viewerCtx.hexes.setActive(false);
 		draw().start('shadow');
 		setHint(SHADOW_HINT);
 		syncRail();
 	}
-	if (isScribe) {
-		document.querySelectorAll('[data-tool]').forEach(function(b) {
-			b.addEventListener('click', function() {
-				var t = b.dataset.tool;
-				if (t === 'draw') { openPopover(flyDraw, b); return; }
-				if (t === 'shadow') { openPopover(flyShadow, b); return; }
-				setTool(tool === t && t !== 'move' ? 'move' : t);
-			});
+	// Everyone's rail holds Move and the Hexes tool; the rest exist only for scribes.
+	document.querySelectorAll('[data-tool]').forEach(function(b) {
+		b.addEventListener('click', function() {
+			var t = b.dataset.tool;
+			if (t === 'draw') { openPopover(flyDraw, b); return; }
+			if (t === 'shadow') { openPopover(flyShadow, b); return; }
+			setTool(tool === t && t !== 'move' ? 'move' : t);
 		});
-	}
+	});
 	if (canShadow) {
 		document.querySelectorAll('[data-shadow-strength]').forEach(function(b) {
 			b.addEventListener('click', function() { startShadow(parseFloat(b.dataset.shadowStrength)); });
@@ -924,6 +928,11 @@
 	// 1px width at every zoom (non-scaling stroke). ----
 	var gridLayer = null;
 	var gridPending = null;
+	// True while the hex module draws the hex lines itself, so there is one set
+	// of lines, not two. If that module never loads this stays false and the
+	// plain grid below keeps drawing.
+	var hexLinesOwned = false;
+	var viewerCtx = null;
 	map.createPane('mpGrid');
 	map.getPane('mpGrid').style.zIndex = 405;
 	map.getPane('mpGrid').style.pointerEvents = 'none';
@@ -950,6 +959,7 @@
 	function drawGrid() {
 		if (gridLayer) { map.removeLayer(gridLayer); gridLayer = null; }
 		if (D.grid_type !== 'square' && D.grid_type !== 'hex') return;
+		if (D.grid_type === 'hex' && hexLinesOwned) return;
 		var cell = D.grid_size * w / 1000;
 		// A guard against a degenerate picture shape making millions of cells.
 		var cells = (w / cell + 2) * (h / (cell * (D.grid_type === 'hex' ? 0.75 : 1)) + 2);
@@ -972,9 +982,29 @@
 	// Slider drags redraw at most once a frame.
 	function drawGridSoon() {
 		if (gridPending) return;
-		gridPending = requestAnimationFrame(function() { gridPending = null; drawGrid(); });
+		gridPending = requestAnimationFrame(function() { gridPending = null; drawGrid(); syncHexes(); });
 	}
 	drawGrid();
+
+	// The hex layer is its own module, loaded the first time a map has hexes
+	// (including when the owner switches the grid to hex in the settings
+	// sheet). Once loaded it follows the display settings through refresh().
+	var hexesLoading = false;
+	function hexesOn() { return !!(viewerCtx && viewerCtx.hexes && viewerCtx.hexes.isOn()); }
+	function syncHexes() {
+		if (destroyed || !viewerCtx) return;
+		if (viewerCtx.hexes) { viewerCtx.hexes.refresh(); return; }
+		if (D.grid_type !== 'hex' || hexesLoading) return;
+		hexesLoading = true;
+		loadScript(cfg.dataset.hexesSrc).then(function() {
+			hexesLoading = false;
+			if (destroyed || !window.ChronicleMapHexes || !viewerCtx) return;
+			try { window.ChronicleMapHexes.init(viewerCtx); } catch (err) { console.error('[map-viewer] hexes failed:', err); }
+		}).catch(function() {
+			// Hexes are an add-on: without the module the plain grid still shows.
+			hexesLoading = false;
+		});
+	}
 
 	// ---- Map settings sheet (owners). Every change previews on the map
 	// behind it straight away; Save sends the changed groups in one PUT
@@ -1334,7 +1364,7 @@
 	// while a drawing tool is active: the polygon tool finishes on
 	// double-click and must not also leave a pin behind.
 	map.on('dblclick', function(e) {
-		if (!isScribe || tool === 'draw' || tool === 'shadow') return;
+		if (!isScribe || tool === 'draw' || tool === 'shadow' || tool === 'hex') return;
 		var p = latLngToPercent(e.latlng);
 		startDraft(p.x, p.y);
 	});
@@ -1367,8 +1397,16 @@
 			if (map._popup && map._popup.isOpen && map._popup.isOpen()) { map.closePopup(); return; }
 			// A selected picture (or cropping) steps back before the tool does.
 			if (draw() && draw().escape && draw().escape()) return;
+			// An open hex card steps back before the Hexes tool does.
+			if (viewerCtx && viewerCtx.hexes && viewerCtx.hexes.escape()) return;
 			if (tool !== 'move') { setTool('move'); return; }
 			e.mpConsumed = false;
+			return;
+		}
+		// H toggles the Hexes tool for everyone, whenever the map has hexes.
+		if (e.key.toLowerCase() === 'h' && hexesOn() && !typing(e.target) && !(e.target.closest && e.target.closest('#mp-sheet'))) {
+			setTool(tool === 'hex' ? 'move' : 'hex');
+			e.preventDefault();
 			return;
 		}
 		// Letters inside the settings sheet belong to its controls.
@@ -1583,8 +1621,16 @@
 			if (!showDrawings && draw()) draw().setVisible(false);
 			renderPanel();
 		},
-		onUndoChange: function(n) { if (window.__mpUndoChange) window.__mpUndoChange(n); }
+		onUndoChange: function(n) { if (window.__mpUndoChange) window.__mpUndoChange(n); },
+		// What the hex module needs from the viewer: the live display settings,
+		// a way to hand the hex lines over, and the tool rail and hint bar.
+		getDisplay: function() { return D; },
+		onHexLines: function(on) { hexLinesOwned = !!on; drawGrid(); },
+		setTool: function(t) { setTool(t); },
+		setHint: function(msg) { setHint(msg); }
 	};
+	viewerCtx = window.chronicleMap;
+	syncHexes();
 
 	// Tear down a mount so a host that re-creates the viewer (the focus view,
 	// opened and closed over a page that stays loaded) leaks nothing: Leaflet's
@@ -1598,6 +1644,7 @@
 			if (destroyed) return;
 			destroyed = true;
 			clearTimeout(viewTimer);
+			if (ctx.hexes) { try { ctx.hexes.destroy(); } catch (e) { /* hex module already gone */ } }
 			if (typeof ctx.onDestroy === 'function') { try { ctx.onDestroy(); } catch (e) { /* drawing add-on already gone */ } }
 			cleanups.forEach(function(fn) { fn(); });
 			leaveFullscreen();
