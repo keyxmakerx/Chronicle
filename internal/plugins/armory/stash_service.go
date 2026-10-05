@@ -77,6 +77,15 @@ type StashDeps struct {
 	UserNames UserNamer
 	// Events announces finished moves and downtime changes; optional.
 	Events StashEventPublisher
+	// Handouts lets the GM give a map; without it only items can be given.
+	Handouts HandoutStore
+	// Notifier tells a player their character was given something; optional.
+	Notifier GiveNotifier
+	// Shares records the grants players add by sharing a hidden item; nil
+	// (the armory plugin's own table did not migrate) turns sharing off.
+	Shares ShareStore
+	// Auditor writes shares to the campaign's activity log; optional.
+	Auditor ShareAuditor
 }
 
 // Actor is the calling user as the service sees them. Role is the campaign's
@@ -107,6 +116,18 @@ type StashService interface {
 	Move(ctx context.Context, campaignID string, a Actor, in MoveInput) (*MoveOutcome, error)
 	Approve(ctx context.Context, campaignID string, a Actor, moveID int64) (*Move, error)
 	Decline(ctx context.Context, campaignID string, a Actor, moveID int64) (*Move, error)
+
+	// GiveDialog feeds the Give box. Owner visibility only.
+	GiveDialog(ctx context.Context, campaignID string, a Actor, characterID, itemID, query string) (*GiveDialogView, error)
+	// Give hands a character an Armory item or a map. Owner visibility only.
+	Give(ctx context.Context, campaignID string, a Actor, in GiveInput) (*GiveOutcome, error)
+
+	// ShareBox feeds the "Who else can see <item>?" box for an item the
+	// character holds. The holder's player or Owner visibility only.
+	ShareBox(ctx context.Context, campaignID string, a Actor, characterID, itemID string) (*ShareBoxView, error)
+	// Share lets exactly userIDs (other players of the campaign) see the
+	// item, adding and taking back only grants sharing made.
+	Share(ctx context.Context, campaignID string, a Actor, characterID, itemID string, userIDs []string) (*ShareOutcome, error)
 
 	// Destinations lists the places the actor may send a move to from `from`.
 	Destinations(ctx context.Context, campaignID string, a Actor, kind string, from Endpoint) ([]MoveDestination, error)
@@ -633,6 +654,15 @@ func (s *stashService) lines(ctx context.Context, campaignID string, a Actor, mo
 			l.ItemName = entityName(m.ItemEntityID)
 		}
 		l.RequesterName = userNames[m.RequestedBy]
+		if m.IsGive() {
+			recipient := false
+			if !a.IsGM() {
+				if c, err := s.Directory.GetEntity(ctx, campaignID, m.To.ID); err == nil && c != nil {
+					recipient = c.OwnerUserID != "" && c.OwnerUserID == a.UserID
+				}
+			}
+			l.Summary = giveSummary(l, a.IsGM(), recipient, a.UserID, l.RequesterName)
+		}
 		if l.RequesterName == "" {
 			l.RequesterName = "A player"
 		}
@@ -743,12 +773,14 @@ func (s *stashService) CharacterPanel(ctx context.Context, campaignID string, a 
 	if err != nil {
 		return nil, err
 	}
-	view := &CharacterPanelView{CampaignID: campaignID, Character: *ref, DowntimeOpen: open}
+	view := &CharacterPanelView{CampaignID: campaignID, Character: *ref, DowntimeOpen: open, CanGive: a.IsOwner()}
 
 	held, err := s.carried(ctx, campaignID, a, ref.ID)
 	if err != nil {
 		return nil, err
 	}
+	s.markMaps(ctx, campaignID, held)
+	s.markShares(ctx, campaignID, a, ref, held)
 	view.Items = held
 
 	if ref.MoneyKey != "" {

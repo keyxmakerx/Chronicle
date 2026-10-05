@@ -200,7 +200,7 @@ func units(c Cents) float64 { return float64(c) / 100 }
 func apiItems(in []HeldItem) []APIItem {
 	out := make([]APIItem, 0, len(in))
 	for _, it := range in {
-		out = append(out, APIItem(it))
+		out = append(out, APIItem{ItemID: it.ItemID, Name: it.Name, Quantity: it.Quantity})
 	}
 	return out
 }

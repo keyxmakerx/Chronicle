@@ -30,6 +30,9 @@ func MoveSummary(l MoveLine) string {
 	if l.IsMoneyEdit() && l.Reason != "" {
 		return l.Reason
 	}
+	if l.IsGive() {
+		return giveSummary(l, true, false, "", l.RequesterName)
+	}
 	route := fmt.Sprintf("%s from %s to %s", thingText(l), l.FromName, l.ToName)
 	switch l.Status {
 	case MovePending:
@@ -139,6 +142,14 @@ func closeMoveDialogOnKey() templ.ComponentScript {
 		`(function(e){if(e.key==='Escape'){var m=document.getElementById('armory-move-modal');if(m){m.innerHTML='';}}})(event)`)
 }
 
+// giveDialogURL is the GET that loads the "Give to" dialog, opened for a
+// character (pick an item or map) or for an item (pick a character).
+func giveDialogURL(campaignID, param, id string) string {
+	return "/campaigns/" + campaignID + "/armory/give?" + url.Values{param: {id}}.Encode()
+}
+
+func giveURL(campaignID string) string { return "/campaigns/" + campaignID + "/armory/give" }
+
 func destValue(e Endpoint) string { return e.Kind + ":" + e.ID }
 
 func moveStatusLabel(status string) string {
@@ -163,4 +174,67 @@ func moveStatusClass(status string) string {
 		return "badge-red"
 	}
 	return "badge-green"
+}
+
+// giveBoxCall is the inline handler of a Give or Share box control: it hands
+// the element to Chronicle.GiveBox's method of that name. The method name is
+// one of a fixed set chosen here, never user text.
+func giveBoxCall(method string) templ.ComponentScript {
+	return inlineOnClick("armory_giveBox_"+method,
+		`(function(el){if(window.Chronicle&&Chronicle.GiveBox)Chronicle.GiveBox.`+method+`(el);})(this)`)
+}
+
+// giveOpenOnClick opens (or shuts) the character panel's Give box, loading it
+// from url the first time.
+func giveOpenOnClick(url string) templ.ComponentScript {
+	return inlineOnClick("armory_giveOpen",
+		`(function(btn){if(window.Chronicle&&Chronicle.GiveBox)Chronicle.GiveBox.open(btn,`+jsStr(url)+`);})(this)`)
+}
+
+// itemPickHint is the line under the list once an item (or, on a card, a
+// character) is picked. A hidden item becomes visible to the character's
+// player, so that is what it says; otherwise it says who hears about it.
+// With nobody playing the character there is nobody to tell.
+func itemPickHint(restricted bool, character, player string) string {
+	switch {
+	case player == "":
+		return "It shows on " + character + " in Foundry too."
+	case restricted:
+		return player + ", " + character + "’s player, will be able to see this item’s page. Nobody else will."
+	default:
+		return player + " gets a notification. It shows on " + character + " in Foundry too."
+	}
+}
+
+// itemPickIcon is the Font Awesome icon in front of itemPickHint.
+func itemPickIcon(restricted bool, player string) string {
+	if restricted && player != "" {
+		return "fa-eye"
+	}
+	return "fa-bell"
+}
+
+// mapPickHint says what a character gets for the picked map.
+func mapPickHint(character, mapName string) string {
+	return fmt.Sprintf("%s gets “%s”. Opening it shows the map. Only players holding it can see its page.", character, handoutName(mapName))
+}
+
+// shareURL is the Share box's address (GET) and where it saves (POST).
+func shareURL(campaignID, characterID, itemID string) string {
+	return "/campaigns/" + campaignID + "/armory/characters/" + url.PathEscape(characterID) + "/items/" + url.PathEscape(itemID) + "/share"
+}
+
+// shareOpenOnClick opens (or shuts) a panel line's Share box.
+func shareOpenOnClick(url string) templ.ComponentScript {
+	return inlineOnClick("armory_shareOpen",
+		`(function(btn){if(window.Chronicle&&Chronicle.GiveBox)Chronicle.GiveBox.open(btn,`+jsStr(url)+`);})(this)`)
+}
+
+// shareHint says what sharing lets the others do; a map handout's page opens
+// the map too.
+func shareHint(v *ShareBoxView) string {
+	if v.IsMap {
+		return "They can open its page and the map. It stays on " + v.Character.Name + "."
+	}
+	return "They can open its page. It stays on " + v.Character.Name + "."
 }

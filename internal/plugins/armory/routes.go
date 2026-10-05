@@ -86,10 +86,18 @@ func RegisterRoutes(e *echo.Echo, h *Handler, th *TransactionHandler, ih *Instan
 	cg.POST("/armory/stashes/:sid/items", sh.AddItem, campaigns.RequireRole(campaigns.RolePlayer))
 	cg.GET("/armory/stashes/:sid/history", sh.StashHistory, campaigns.RequireRole(campaigns.RolePlayer))
 	cg.GET("/armory/move", sh.MoveDialog, campaigns.RequireRole(campaigns.RolePlayer))
+	// Giving an item or a map to a character: Player+ at the route, Owner
+	// visibility enforced in the service.
+	cg.GET("/armory/give", sh.GiveDialog, campaigns.RequireRole(campaigns.RolePlayer))
+	cg.POST("/armory/give", sh.Give, campaigns.RequireRole(campaigns.RolePlayer))
 	cg.POST("/armory/moves", sh.Move, campaigns.RequireRole(campaigns.RolePlayer))
 	cg.POST("/armory/moves/:mid/approve", sh.Approve, campaigns.RequireRole(campaigns.RolePlayer))
 	cg.POST("/armory/moves/:mid/decline", sh.Decline, campaigns.RequireRole(campaigns.RolePlayer))
 	cg.POST("/armory/downtime", sh.SetDowntime, campaigns.RequireRole(campaigns.RolePlayer))
 	cg.GET("/armory/characters/:eid/panel", sh.CharacterPanel, campaigns.RequireRole(campaigns.RolePlayer))
 	cg.GET("/armory/characters/:eid/history", sh.CharacterHistory, campaigns.RequireRole(campaigns.RolePlayer))
+	// Sharing a hidden item a character holds: Player+ at the route; the
+	// service lets only the holder's player or Owner visibility through.
+	cg.GET("/armory/characters/:eid/items/:iid/share", sh.ShareBox, campaigns.RequireRole(campaigns.RolePlayer))
+	cg.POST("/armory/characters/:eid/items/:iid/share", sh.Share, campaigns.RequireRole(campaigns.RolePlayer))
 }

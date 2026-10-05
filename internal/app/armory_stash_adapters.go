@@ -133,9 +133,16 @@ func (a *armoryStashDirectoryAdapter) ref(ti *stashTypeInfo, e *entities.Entity)
 		ID: e.ID, Name: e.Name, TypeID: e.EntityTypeID,
 		IsCharacter: ti.character[e.EntityTypeID],
 		IsItem:      ti.item[e.EntityTypeID],
+		// A custom allow list also hides the item from some players.
+		Restricted: e.IsPrivate || e.Visibility == entities.VisibilityCustom,
 	}
 	if e.OwnerUserID != nil {
 		r.OwnerUserID = *e.OwnerUserID
+	}
+	if r.IsItem {
+		if mid, ok := e.FieldsData[handoutMarkerField].(string); ok {
+			r.HandoutMapID = mid
+		}
 	}
 	if r.IsCharacter {
 		r.MoneyKey = ti.money[e.EntityTypeID]

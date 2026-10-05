@@ -1,0 +1,192 @@
+// give_box.templ renders the Give box: what a GM picks to hand a character
+// an Armory item or a map. On a character page it opens in place inside the
+// "Items and money" panel; on an Armory card it fills the card's popover.
+// static/js/widgets/give_box.js (Chronicle.GiveBox) folds it open and shut,
+// keeps an unsent pick from being lost, posts it and shows the result. Every
+// control calls into it through an inline handler built in Go, so it still
+// works after the fragment is swapped in.
+package armory
+
+import "fmt"
+
+// GiveBox is the character-page box: the character is fixed, the GM picks an
+// item from the Armory or a map.
+templ GiveBox(v *GiveDialogView) {
+	<div
+		class="ag-box"
+		data-box
+		data-give-box
+		data-post={ giveURL(v.CampaignID) }
+		data-character={ v.Character.ID }
+		data-kind="items"
+	>
+		<div class="ag-head">
+			<h4>Give to { v.Character.Name }</h4>
+			@giveX()
+		</div>
+		if v.MapsOn {
+			<div class="ag-seg" role="tablist">
+				<button type="button" role="tab" aria-selected="true" data-tab="items" onclick={ giveBoxCall("tab") }>From the Armory</button>
+				<button type="button" role="tab" aria-selected="false" data-tab="map" onclick={ giveBoxCall("tab") }>A map</button>
+			</div>
+		}
+		<div class="ag-body">
+			<div class="ag-search">
+				<i class="fa-solid fa-magnifying-glass"></i>
+				<input
+					id="ag-search"
+					type="search"
+					name="q"
+					class="input w-full text-sm"
+					placeholder="Search the Armory"
+					aria-label="Search the Armory"
+					autocomplete="off"
+					data-search={ giveDialogURL(v.CampaignID, "character", v.Character.ID) + "&list=items" }
+					oninput={ giveBoxCall("search") }
+				/>
+			</div>
+			<div class="ag-list" role="radiogroup" aria-label="Armory items" data-list="items">
+				@GiveItemChoices(v)
+			</div>
+			if v.MapsOn {
+				<div class="ag-list" role="radiogroup" aria-label="Maps" data-list="map" hidden>
+					if len(v.Maps) == 0 {
+						<div class="ag-more">This campaign has no maps yet.</div>
+					}
+					for _, m := range v.Maps {
+						<label class="ag-row">
+							<input
+								type="radio"
+								name="ag-pick"
+								value={ m.ID }
+								data-field="map_id"
+								data-say-icon="fa-map"
+								data-say={ mapPickHint(v.Character.Name, m.Name) }
+								onchange={ giveBoxCall("pick") }
+							/>
+							<span class="ag-ico map"><i class="fa-solid fa-map"></i></span>
+							<span class="ag-name">{ m.Name }</span>
+							if v.HeldMaps[m.ID] {
+								<span class="ag-tag">{ v.Character.Name } has it</span>
+							}
+						</label>
+					}
+				</div>
+			}
+			<div class="ag-hint" data-hint aria-live="polite"></div>
+			@giveFoot()
+		</div>
+		@giveWarn()
+	</div>
+}
+
+// GiveItemChoices is the item list inside the box: a page of matches, and a
+// line saying so when there are more than it shows. The search box swaps
+// this alone.
+templ GiveItemChoices(v *GiveDialogView) {
+	if len(v.Items) == 0 {
+		if v.Query != "" {
+			<div class="ag-more">Nothing in the Armory matches “{ v.Query }”.</div>
+		} else {
+			<div class="ag-more">There are no items in the Armory yet.</div>
+		}
+	}
+	for _, it := range v.Items {
+		<label class="ag-row">
+			<input
+				type="radio"
+				name="ag-pick"
+				value={ it.ID }
+				data-field="item_id"
+				data-say-icon={ itemPickIcon(it.Restricted, v.Player) }
+				data-say={ itemPickHint(it.Restricted, v.Character.Name, v.Player) }
+				onchange={ giveBoxCall("pick") }
+			/>
+			<span class="ag-ico"><i class="fa-solid fa-box"></i></span>
+			<span class="ag-name">{ it.Name }</span>
+			if it.Restricted {
+				<span class="ag-tag"><i class="fa-solid fa-eye-slash"></i> Hidden</span>
+			}
+		</label>
+	}
+	if v.MoreItems() {
+		<div class="ag-more">{ fmt.Sprintf("Showing %d of %d", len(v.Items), v.ItemTotal) } &mdash; type to narrow</div>
+	}
+}
+
+// GiveCardBox is the Armory card's box: the item is fixed, the GM picks a
+// character. It fills the card menu's popover.
+templ GiveCardBox(v *GiveDialogView) {
+	<div
+		class="ag-box"
+		data-box
+		data-give-box
+		data-post={ giveURL(v.CampaignID) }
+		data-item={ v.Item.ID }
+		data-kind="char"
+	>
+		<div class="ag-head">
+			<h4>Give { v.Item.Name } to</h4>
+			@giveX()
+		</div>
+		<div class="ag-body">
+			<div class="ag-list" role="radiogroup" aria-label="Characters" data-list="char">
+				if len(v.Characters) == 0 {
+					<div class="ag-more">There are no characters to give this to yet.</div>
+				}
+				for _, c := range v.Characters {
+					<label class="ag-row">
+						<input
+							type="radio"
+							name="ag-pick"
+							value={ c.ID }
+							data-field="character_id"
+							data-say-icon={ itemPickIcon(v.Item.Restricted, c.Player) }
+							data-say={ itemPickHint(v.Item.Restricted, c.Name, c.Player) }
+							onchange={ giveBoxCall("pick") }
+						/>
+						<span class="ag-ico" style="background:rgba(16,185,129,.13);color:#10b981"><i class="fa-solid fa-user"></i></span>
+						<span class="ag-name">{ c.Name }</span>
+						if c.Player != "" {
+							<span class="ag-tag">{ c.Player }</span>
+						}
+					</label>
+				}
+			</div>
+			<div class="ag-hint" data-hint aria-live="polite"></div>
+			@giveFoot()
+		</div>
+		@giveWarn()
+	</div>
+}
+
+templ giveX() {
+	<button type="button" class="ag-x" data-close aria-label="Close" onclick={ giveBoxCall("cancel") }><i class="fa-solid fa-xmark"></i></button>
+}
+
+// giveFoot is the "How many" stepper and the two buttons. Give stays
+// disabled until something is picked.
+templ giveFoot() {
+	<div class="ag-foot">
+		<span data-qty class="ag-qty">
+			<span class="ag-lbl" id="ag-q-l">How many</span>
+			<span class="ag-step">
+				<button type="button" data-q="-1" aria-label="One fewer" onclick={ giveBoxCall("step") }><i class="fa-solid fa-minus"></i></button>
+				<input id="ag-q" type="number" min="1" max="1000000" value="1" aria-labelledby="ag-q-l"/>
+				<button type="button" data-q="1" aria-label="One more" onclick={ giveBoxCall("step") }><i class="fa-solid fa-plus"></i></button>
+			</span>
+		</span>
+		<span class="ag-sp"></span>
+		<button type="button" class="btn-secondary btn-sm" data-close onclick={ giveBoxCall("cancel") }>Cancel</button>
+		<button type="button" class="btn-primary btn-sm" data-give disabled onclick={ giveBoxCall("give") }>Give</button>
+	</div>
+}
+
+// giveWarn is the bar a click outside shows while a pick is unsent.
+templ giveWarn() {
+	<div class="ag-warn" role="alert">
+		<i class="fa-solid fa-triangle-exclamation"></i>
+		<span>Not given yet. Give it, or throw the choice away.</span>
+		<button type="button" data-discard onclick={ giveBoxCall("discard") }>Discard</button>
+	</div>
+}

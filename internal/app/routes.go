@@ -3622,6 +3622,16 @@ func (a *App) RegisterRoutes() {
 	// the sync API so the API's stash endpoints can use it; the event bus does
 	// not exist yet, so events bind to it later through stashEvents.
 	stashEvents := &armoryStashEventAdapter{}
+	// Sharing a hidden item needs the armory's own table; if its migration
+	// failed the plugin is degraded and sharing is simply not offered. The
+	// activity log is bound once the audit service exists, further down.
+	var shareStore armory.ShareStore
+	if a.PluginHealth.IsHealthy(armory.AddonSlug) {
+		shareStore = armory.NewShareRepository(a.DB)
+	} else {
+		slog.Warn("armory plugin schema degraded — item sharing is off")
+	}
+	shareAudit := &armoryShareAuditAdapter{}
 	stashRepo := armory.NewStashRepository(a.DB)
 	stashDirectory := &armoryStashDirectoryAdapter{svc: entityService}
 	stashSvc := armory.NewStashService(armory.StashDeps{
@@ -3633,6 +3643,10 @@ func (a *App) RegisterRoutes() {
 		Relations:  &armoryHasItemAdapter{svc: relService},
 		UserNames:  &armoryMemberNamesAdapter{svc: campaignService},
 		Events:     stashEvents,
+		Handouts:   &armoryHandoutAdapter{maps: mapsService, svc: entityService, dir: stashDirectory},
+		Notifier:   &armoryGiveNotifierAdapter{svc: sessionsService},
+		Shares:     shareStore,
+		Auditor:    shareAudit,
 	})
 	// A money change made on a sheet (web, Foundry, extension) leaves a line in
 	// the character's history, like a move would.
@@ -3818,6 +3832,7 @@ func (a *App) RegisterRoutes() {
 	// Audit plugin: campaign activity logging and history.
 	auditRepo := audit.NewAuditRepository(a.DB)
 	auditService := audit.NewAuditService(auditRepo)
+	shareAudit.svc = auditService
 	auditHandler := audit.NewHandler(auditService)
 	// Guard the entity-history endpoint with campaign ownership + per-entity
 	// visibility, resolved via the entities service (SEC-IDOR-2).

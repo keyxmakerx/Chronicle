@@ -197,6 +197,9 @@ type SessionService interface {
 	// scheduler growing a method per feature and without that feature
 	// reaching the repository.
 	NotifyUsers(ctx context.Context, userIDs []string, campaignID, ntype, message, link string) error
+	// NotifyUsersWithDetail is NotifyUsers with a short second line the bell
+	// shows under the message, before the time ("On Bren").
+	NotifyUsersWithDetail(ctx context.Context, userIDs []string, campaignID, ntype, message, detail, link string) error
 	// NotifyProposalConfirmed tells everyone who responded that the winning
 	// slot was picked, linking to the new session.
 	NotifyProposalConfirmed(ctx context.Context, campaignID, proposalID, sessionID string) error

@@ -1,0 +1,44 @@
+// share_box.templ renders the Share box: "Who else can see <item>?", opened
+// in place under a line of the character panel by the holder's player.
+// Chronicle.GiveBox (static/js/widgets/give_box.js) folds it, guards unsaved
+// ticks and saves it; its controls call in through inline handlers built in
+// Go.
+package armory
+
+// ShareBox lists the campaign's other players with a box each, ticked for
+// those the item is already shared with.
+templ ShareBox(v *ShareBoxView) {
+	<div class="ag-box" data-box data-share-box data-post={ shareURL(v.CampaignID, v.Character.ID, v.Item.ID) } tabindex="-1" style="margin-top:8px">
+		<div class="ag-head">
+			<h4>Who else can see { v.Item.Name }?</h4>
+			@giveX()
+		</div>
+		<div class="ag-body">
+			if len(v.Party) == 0 {
+				<div class="ag-hint"><i class="fa-solid fa-circle-info"></i><span>There are no other players in this campaign to share it with yet.</span></div>
+			} else {
+				<div class="ag-checks">
+					for _, m := range v.Party {
+						<label>
+							<input type="checkbox" name="user" value={ m.UserID } checked?={ m.Checked } onchange={ giveBoxCall("tick") }/>
+							<span>{ m.Character } <small>{ m.Player }</small></span>
+						</label>
+					}
+				</div>
+				<div class="ag-hint"><i class="fa-solid fa-circle-info"></i><span>{ shareHint(v) }</span></div>
+			}
+			<div class="ag-foot">
+				<span class="ag-sp"></span>
+				<button type="button" class="btn-secondary btn-sm" data-close onclick={ giveBoxCall("cancel") }>Cancel</button>
+				if len(v.Party) > 0 {
+					<button type="button" class="btn-primary btn-sm" data-save onclick={ giveBoxCall("save") }>Save</button>
+				}
+			</div>
+		</div>
+		<div class="ag-warn" role="alert">
+			<i class="fa-solid fa-triangle-exclamation"></i>
+			<span>Not saved yet. Save who can see it, or throw the change away.</span>
+			<button type="button" data-discard onclick={ giveBoxCall("discard") }>Discard</button>
+		</div>
+	</div>
+}

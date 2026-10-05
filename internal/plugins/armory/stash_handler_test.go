@@ -115,3 +115,25 @@ func TestStashesContent_DowntimeSwitchOwnerOnly(t *testing.T) {
 		})
 	}
 }
+
+func TestTriggerJSON_EscapesNonASCII(t *testing.T) {
+	tests := []struct {
+		in   string
+		want string
+	}{
+		{"plain", `{"m":"plain"}`},
+		{"Gave Mira 2 × Potion", `{"m":"Gave Mira 2 \u00d7 Potion"}`},
+		{"Épée", `{"m":"\u00c9p\u00e9e"}`},
+		{"🗡", `{"m":"\ud83d\udde1"}`},
+	}
+	for _, tc := range tests {
+		got := triggerJSON(map[string]string{"m": tc.in})
+		if got != tc.want {
+			t.Errorf("%q: %s, want %s", tc.in, got, tc.want)
+		}
+		var back map[string]string
+		if err := json.Unmarshal([]byte(got), &back); err != nil || back["m"] != tc.in {
+			t.Errorf("%q does not round-trip: %v %q", tc.in, err, back["m"])
+		}
+	}
+}

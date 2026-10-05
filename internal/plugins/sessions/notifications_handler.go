@@ -19,11 +19,13 @@ import (
 
 // notifDTO is the camelCase list item the bell widget renders.
 type notifDTO struct {
-	ID        string `json:"id"`
-	Message   string `json:"message"`
-	Link      string `json:"link"`
-	Read      bool   `json:"read"`
-	Type      string `json:"type"`
+	ID      string `json:"id"`
+	Message string `json:"message"`
+	Link    string `json:"link"`
+	Read    bool   `json:"read"`
+	Type    string `json:"type"`
+	// Detail is the optional second line ("On Bren"), empty for most types.
+	Detail    string `json:"detail,omitempty"`
 	CreatedAt string `json:"createdAt"`
 }
 
@@ -44,6 +46,7 @@ func (h *Handler) ListNotificationsAPI(c echo.Context) error {
 			Read:      n.ReadAt != nil,
 			CreatedAt: n.CreatedAt.UTC().Format("2006-01-02T15:04:05Z"),
 			Message:   notificationMessage(n),
+			Detail:    notificationDetail(n),
 		}
 		if n.Link != nil {
 			d.Link = *n.Link
@@ -89,6 +92,18 @@ func (h *Handler) MarkAllNotificationsReadAPI(c echo.Context) error {
 		return c.JSON(apperror.SafeCode(err), map[string]string{"error": apperror.SafeMessage(err)})
 	}
 	return c.JSON(http.StatusOK, map[string]string{"status": "ok"})
+}
+
+// notificationDetail is the payload's optional second line.
+func notificationDetail(n Notification) string {
+	if n.Payload == nil {
+		return ""
+	}
+	var p notificationPayload
+	if err := json.Unmarshal([]byte(*n.Payload), &p); err != nil {
+		return ""
+	}
+	return p.Detail
 }
 
 // notificationMessage extracts the human-readable message from a notification's

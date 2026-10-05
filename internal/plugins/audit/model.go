@@ -54,6 +54,10 @@ const (
 	// ActionEntityTypeDeleted is logged when an entity type is removed from a campaign.
 	ActionEntityTypeDeleted = "entity_type.deleted"
 
+	// ActionItemShared is logged when a player changes who else can see a
+	// hidden item their character holds. The armory plugin writes the string.
+	ActionItemShared = "item.shared"
+
 	// ActionTagCreated is logged when a new tag is added to a campaign.
 	ActionTagCreated = "tag.created"
 

@@ -154,6 +154,7 @@ func (s *stashService) dropEmptyCarried(ctx context.Context, campaignID, charact
 	if q, _ := parseCarried(rel.Metadata); q != 0 {
 		return
 	}
+	s.releaseShares(ctx, campaignID, characterID, itemID)
 	if err := s.Relations.Delete(ctx, rel.ID); err != nil {
 		// Harmless: a 0-quantity line is hidden from the panel and re-used by
 		// the next credit.
@@ -200,6 +201,9 @@ func (s *stashService) adjustCarried(ctx context.Context, campaignID, characterI
 		if next == 0 && !keepZero {
 			if err := s.Relations.Delete(ctx, rel.ID); err != nil {
 				return false, err
+			}
+			if delta < 0 {
+				s.releaseShares(ctx, campaignID, characterID, itemID)
 			}
 			return true, nil
 		}
@@ -429,6 +433,12 @@ func (s *stashService) credit(ctx context.Context, m *Move, end Endpoint, ref *E
 // the campaign lock. It never applies a move in part: if the destination can't
 // take it, the source is restored and the move is reported failed.
 func (s *stashService) run(ctx context.Context, m *Move, refs moveRefs) (status, reason string) {
+	// A give is written as already applied. Running it would take the item
+	// off the character and put it straight back, and fail when they no
+	// longer hold it, so it is refused rather than replayed.
+	if m.IsGive() {
+		return MoveFailed, giveReplayReason
+	}
 	ok, err := s.debit(ctx, m, m.From, refs.from)
 	if err != nil {
 		slog.Error("stash move: debit failed", slog.Int64("move_id", m.ID), slog.Any("error", err))
