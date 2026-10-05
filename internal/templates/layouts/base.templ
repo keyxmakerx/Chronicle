@@ -179,6 +179,11 @@ templ Base(title string) {
 		<script src={ AssetURL("/static/js/widgets/shop_room_paper.js") } defer></script>
 		<script src={ AssetURL("/static/js/widgets/shop_room.js") } defer></script>
 
+		<!-- Quest board and Notice boards widgets (cork boards on quest and place pages). -->
+		<script src={ AssetURL("/static/js/widgets/quest_board_kit.js") } defer></script>
+		<script src={ AssetURL("/static/js/widgets/quest_board.js") } defer></script>
+		<script src={ AssetURL("/static/js/widgets/notice_boards.js") } defer></script>
+
 		<!-- Character inventory widget ("Has Item" relations with qty/equipped/attuned).
 		     Sibling of shop_inventory above; its mount is the `inventory` entity
 		     block (entities/show.templ blockInventory). -->

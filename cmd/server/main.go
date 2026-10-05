@@ -23,6 +23,7 @@ import (
 	"github.com/keyxmakerx/chronicle/internal/plugins/foundry_vtt"
 	"github.com/keyxmakerx/chronicle/internal/plugins/maps"
 	"github.com/keyxmakerx/chronicle/internal/plugins/packages"
+	"github.com/keyxmakerx/chronicle/internal/plugins/quests"
 	"github.com/keyxmakerx/chronicle/internal/plugins/rolltables"
 	"github.com/keyxmakerx/chronicle/internal/plugins/sessions"
 	"github.com/keyxmakerx/chronicle/internal/plugins/syncapi"
@@ -312,6 +313,9 @@ func registeredPlugins() []database.PluginSchema {
 		// armory: its own tables beyond the core ones (item shares). Foreign
 		// keys point at core campaigns and entities only.
 		{Slug: armory.AddonSlug, MigrationsFS: mustSub(armory.MigrationsFS, database.PluginMigrationsSubdir)},
+		// quests: foreign keys point at core tables (entities, campaigns) and at
+		// its own boards table; no reference to any other plugin's tables.
+		{Slug: quests.PluginSlug, MigrationsFS: mustSub(quests.MigrationsFS, database.PluginMigrationsSubdir)},
 		{Slug: "syncapi", MigrationsFS: mustSub(syncapi.MigrationsFS, database.PluginMigrationsSubdir)},
 		{Slug: "packages", MigrationsFS: mustSub(packages.MigrationsFS, database.PluginMigrationsSubdir)},
 		// foundry_vtt's migration 001 renames foundry_module_campaign_tokens
