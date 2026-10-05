@@ -498,7 +498,7 @@ func (s *boardService) CreateItem(ctx context.Context, campaignID, entityID, boa
 
 	switch in.Kind {
 	case KindNotice:
-		if !(v.IsDM || (b.Who == WhoScribe && v.IsScribe())) {
+		if !v.IsDM && (b.Who != WhoScribe || !v.IsScribe()) {
 			return nil, errForbidden("only the DM or a scribe on a scribe board may pin a quest notice")
 		}
 		if err := s.requireTarget(ctx, campaignID, v, in.RefID); err != nil {

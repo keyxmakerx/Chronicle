@@ -253,7 +253,7 @@ func (f *fakeBoardRepo) DeleteItems(_ context.Context, _, bid string, ids []stri
 	}
 	var keep []Item
 	for _, it := range f.items {
-		if !(it.BoardID == bid && gone[it.ID]) {
+		if it.BoardID != bid || !gone[it.ID] {
 			keep = append(keep, it)
 		}
 	}
