@@ -40,6 +40,8 @@ type fakeHandouts struct {
 	madeMap  map[string]string // handout id -> map id
 	allowed  map[string][]string
 	allowCnt int
+	// failAllow and failRevoke make the matching call fail.
+	failAllow, failRevoke bool
 }
 
 func newFakeHandouts() *fakeHandouts {
@@ -75,6 +77,9 @@ func (h *fakeHandouts) CreateHandout(_ context.Context, _, _, name string, m Nam
 }
 func (h *fakeHandouts) AllowViewers(_ context.Context, _, id string, users []string) ([]string, error) {
 	h.allowCnt++
+	if h.failAllow {
+		return nil, errors.New("handouts down")
+	}
 	var added []string
 	for _, u := range users {
 		dup := false
@@ -89,6 +94,9 @@ func (h *fakeHandouts) AllowViewers(_ context.Context, _, id string, users []str
 	return added, nil
 }
 func (h *fakeHandouts) RevokeViewers(_ context.Context, _, id string, users []string) error {
+	if h.failRevoke {
+		return errors.New("handouts down")
+	}
 	drop := map[string]bool{}
 	for _, u := range users {
 		drop[u] = true

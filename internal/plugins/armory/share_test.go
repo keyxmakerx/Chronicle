@@ -3,6 +3,7 @@ package armory
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
@@ -16,7 +17,11 @@ import (
 )
 
 // fakeShares is an in-memory ShareStore.
-type fakeShares struct{ rows []ItemShare }
+type fakeShares struct {
+	rows []ItemShare
+	// failSetMade makes SetMadeGrant fail, like a dropped connection.
+	failSetMade bool
+}
 
 func (f *fakeShares) ListByCharacter(_ context.Context, _, cid string) ([]ItemShare, error) {
 	var out []ItemShare
@@ -48,7 +53,7 @@ func (f *fakeShares) Add(_ context.Context, s ItemShare) error {
 func (f *fakeShares) Remove(_ context.Context, _, cid, item, user string) error {
 	var keep []ItemShare
 	for _, r := range f.rows {
-		if !(r.CharacterID == cid && r.ItemID == item && r.UserID == user) {
+		if r.CharacterID != cid || r.ItemID != item || r.UserID != user {
 			keep = append(keep, r)
 		}
 	}
@@ -56,6 +61,9 @@ func (f *fakeShares) Remove(_ context.Context, _, cid, item, user string) error 
 	return nil
 }
 func (f *fakeShares) SetMadeGrant(_ context.Context, _, cid, item, user string) error {
+	if f.failSetMade {
+		return errors.New("db down")
+	}
 	for i := range f.rows {
 		if f.rows[i].CharacterID == cid && f.rows[i].ItemID == item && f.rows[i].UserID == user {
 			f.rows[i].MadeGrant = true
@@ -247,7 +255,7 @@ func TestShare_TakingBackRemovesOnlyWhatSharingAdded(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			if len(out.SharedWith) != 0 || sharedMessage(out) != "Only you can see it now" {
+			if len(out.SharedWith) != 0 || sharedMessage(out) != "No longer shared by Mira" {
 				t.Fatalf("outcome %+v", out)
 			}
 			if got := f.allowed("z1"); got != tc.want {
@@ -410,4 +418,152 @@ func TestShareRoutes(t *testing.T) {
 	if _, err := post("u1", campaigns.RolePlayer, url.Values{"user": {"u1"}}); code(err) != http.StatusForbidden {
 		t.Fatalf("another player: %v", err)
 	}
+}
+
+// A failed grant or revoke must never leave a grant nothing tracks, nor a row
+// that can't be retried.
+func TestShare_FailuresLeaveNothingUntracked(t *testing.T) {
+	ctx := context.Background()
+	t.Run("grant fails: no row is left", func(t *testing.T) {
+		f := newShareFx()
+		f.hand.failAllow = true
+		if _, err := f.svc.Share(ctx, "camp", robin, "c2", "z1", []string{"u1"}); err == nil {
+			t.Fatal("want an error")
+		}
+		if len(f.shares.rows) != 0 || f.allowed("z1") != "u2" {
+			t.Fatalf("rows %v, allowed %s", f.shares.rows, f.allowed("z1"))
+		}
+	})
+	t.Run("recording the grant fails: the grant is undone", func(t *testing.T) {
+		f := newShareFx()
+		f.shares.failSetMade = true
+		if _, err := f.svc.Share(ctx, "camp", robin, "c2", "z1", []string{"u1"}); err == nil {
+			t.Fatal("want an error")
+		}
+		if len(f.shares.rows) != 0 || f.allowed("z1") != "u2" {
+			t.Fatalf("rows %v, allowed %s", f.shares.rows, f.allowed("z1"))
+		}
+	})
+	t.Run("revoke fails: the row stays and a retry finishes", func(t *testing.T) {
+		f := newShareFx()
+		if _, err := f.svc.Share(ctx, "camp", robin, "c2", "z1", []string{"u1"}); err != nil {
+			t.Fatal(err)
+		}
+		f.hand.failRevoke = true
+		if _, err := f.svc.Share(ctx, "camp", robin, "c2", "z1", nil); err == nil {
+			t.Fatal("want an error")
+		}
+		if len(f.shares.rows) != 1 || f.allowed("z1") != "u1,u2" {
+			t.Fatalf("rows %v, allowed %s", f.shares.rows, f.allowed("z1"))
+		}
+		f.hand.failRevoke = false
+		if _, err := f.svc.Share(ctx, "camp", robin, "c2", "z1", nil); err != nil {
+			t.Fatal(err)
+		}
+		if len(f.shares.rows) != 0 || f.allowed("z1") != "u2" {
+			t.Fatalf("rows %v, allowed %s", f.shares.rows, f.allowed("z1"))
+		}
+	})
+}
+
+// A GM-only line is hidden from its player, so it doesn't count as them
+// holding the item and the grant sharing made still goes.
+func TestShare_GMOnlyHoldingDoesNotKeepTheGrant(t *testing.T) {
+	ctx := context.Background()
+	tests := []struct {
+		name   string
+		dmOnly bool
+		want   string
+	}{
+		{"a visible line keeps it", false, "u1,u2"},
+		{"a GM-only line does not", true, "u2"},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			f := newShareFx()
+			if _, err := f.svc.Share(ctx, "camp", robin, "c2", "z1", []string{"u1"}); err != nil {
+				t.Fatal(err)
+			}
+			f.rels.next++
+			f.rels.rels["c1"] = append(f.rels.rels["c1"], &HasItemRelation{ID: f.rels.next, ItemEntityID: "z1", ItemName: "Zephyr Cloak", Metadata: []byte(`{"quantity":1}`), DmOnly: tc.dmOnly})
+			if _, err := f.svc.Share(ctx, "camp", robin, "c2", "z1", nil); err != nil {
+				t.Fatal(err)
+			}
+			if got := f.allowed("z1"); got != tc.want {
+				t.Fatalf("allow list %s, want %s", got, tc.want)
+			}
+		})
+	}
+}
+
+// A share ends with the holding: when the last unit leaves, the holder's
+// shares go by the same rule as taking them back by hand.
+func TestShare_EndsWhenTheHoldingDoes(t *testing.T) {
+	ctx := context.Background()
+	lee := Actor{"u3", rPlayer}
+	otherHolds := func(qty string) func(*shareFx) {
+		return func(f *shareFx) {
+			f.rels.next++
+			f.rels.rels["c3"] = append(f.rels.rels["c3"], &HasItemRelation{ID: f.rels.next, ItemEntityID: "z1", ItemName: "Zephyr Cloak", Metadata: []byte(`{"quantity":` + qty + `}`)})
+			if _, err := f.svc.Share(ctx, "camp", lee, "c3", "z1", []string{"u1"}); err != nil {
+				panic(err)
+			}
+		}
+	}
+	tests := []struct {
+		name     string
+		between  func(*shareFx)
+		keepZero bool
+		wantList string
+		wantRows int
+	}{
+		{"a take that deletes the line", nil, false, "u2", 0},
+		{"a take that keeps a zero line, then drops it", nil, true, "u2", 0},
+		{"another holder still sharing keeps the grant", otherHolds("1"), false, "u1,u2", 1},
+		{"another holder who let go does not", func(f *shareFx) {
+			otherHolds("1")(f)
+			f.rels.rels["c3"][0].Metadata = []byte(`{"quantity":0}`)
+		}, false, "u2", 1},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			f := newShareFx()
+			if _, err := f.svc.Share(ctx, "camp", robin, "c2", "z1", []string{"u1"}); err != nil {
+				t.Fatal(err)
+			}
+			if tc.between != nil {
+				tc.between(f)
+			}
+			s := f.svc.(*stashService)
+			ok, err := s.adjustCarried(ctx, "camp", "c2", "z1", "u2", -1, true, tc.keepZero)
+			if err != nil || !ok {
+				t.Fatalf("take: %v %v", ok, err)
+			}
+			if tc.keepZero {
+				if len(f.shares.rows) == 0 {
+					t.Fatal("a kept zero line released early")
+				}
+				s.dropEmptyCarried(ctx, "camp", "c2", "z1")
+			}
+			if got := f.allowed("z1"); got != tc.wantList {
+				t.Fatalf("allow list %s, want %s", got, tc.wantList)
+			}
+			if len(f.shares.rows) != tc.wantRows {
+				t.Fatalf("rows %v, want %d", f.shares.rows, tc.wantRows)
+			}
+		})
+	}
+	t.Run("a partial take keeps the share", func(t *testing.T) {
+		f := newShareFx()
+		f.rels.rels["c2"][0].Metadata = []byte(`{"quantity":2}`)
+		if _, err := f.svc.Share(ctx, "camp", robin, "c2", "z1", []string{"u1"}); err != nil {
+			t.Fatal(err)
+		}
+		if _, err := f.svc.(*stashService).adjustCarried(ctx, "camp", "c2", "z1", "u2", -1, true, false); err != nil {
+			t.Fatal(err)
+		}
+		if len(f.shares.rows) != 1 || f.allowed("z1") != "u1,u2" {
+			t.Fatalf("rows %v, allowed %s", f.shares.rows, f.allowed("z1"))
+		}
+	})
 }

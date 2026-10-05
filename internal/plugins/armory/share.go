@@ -47,6 +47,8 @@ type ShareBoxView struct {
 // ShareOutcome reports who the item is shared with after a save, by
 // character name, for the toast and the panel line.
 type ShareOutcome struct {
+	// Character is the holder, named in the toast when nothing is shared.
+	Character  string
 	SharedWith []string
 }
 
@@ -198,7 +200,7 @@ func (s *stashService) Share(ctx context.Context, campaignID string, a Actor, ch
 		return nil, err
 	}
 
-	out := &ShareOutcome{}
+	out := &ShareOutcome{Character: t.char.Name}
 	for _, m := range t.party {
 		if want[m.UserID] {
 			out.SharedWith = append(out.SharedWith, m.Character)
@@ -242,72 +244,148 @@ func (s *stashService) applyShares(ctx context.Context, campaignID string, a Act
 	sort.Strings(removed)
 
 	if len(added) > 0 {
-		granted, err := s.Handouts.AllowViewers(ctx, campaignID, t.item.ID, added)
-		if err != nil {
+		if err := s.addShares(ctx, campaignID, a, t, added); err != nil {
 			return nil, nil, err
-		}
-		made := map[string]bool{}
-		for _, id := range granted {
-			made[id] = true
-		}
-		for _, id := range added {
-			if err := s.Shares.Add(ctx, ItemShare{
-				CampaignID: campaignID, CharacterID: t.char.ID, ItemID: t.item.ID, UserID: id,
-				MadeGrant: made[id], SharedBy: a.UserID,
-			}); err != nil {
-				return nil, nil, err
-			}
 		}
 	}
 	for _, id := range removed {
-		if err := s.unshare(ctx, campaignID, t, mine[id], rows); err != nil {
+		if err := s.unshare(ctx, campaignID, mine[id], rows); err != nil {
 			return nil, nil, err
 		}
 	}
 	return added, removed, nil
 }
 
-// unshare forgets one share and, when that share added the player's grant,
-// takes the grant back unless something else still needs it: another
-// holder's share (which then owns the grant) or the player holding the item
-// on a character of their own.
-func (s *stashService) unshare(ctx context.Context, campaignID string, t *shareTarget, row ItemShare, all []ItemShare) error {
-	if err := s.Shares.Remove(ctx, campaignID, t.char.ID, t.item.ID, row.UserID); err != nil {
-		return err
-	}
-	if !row.MadeGrant {
-		return nil
-	}
-	for _, other := range all {
-		if other.UserID == row.UserID && other.CharacterID != t.char.ID {
-			return s.Shares.SetMadeGrant(ctx, campaignID, other.CharacterID, t.item.ID, row.UserID)
+// addShares records the shares first and grants second, so a crash between
+// the two can't leave a grant nothing tracks (and so nothing could ever take
+// back). If the grant fails the new rows are dropped again; if recording
+// which grants sharing made fails, those grants are revoked with them.
+func (s *stashService) addShares(ctx context.Context, campaignID string, a Actor, t *shareTarget, users []string) error {
+	var recorded []string
+	rollback := func(granted []string) {
+		if len(granted) > 0 {
+			if err := s.Handouts.RevokeViewers(ctx, campaignID, t.item.ID, granted); err != nil {
+				slog.Error("share: could not undo a grant", slog.String("item_id", t.item.ID), slog.Any("error", err))
+				return // keep the rows so the grant stays tracked
+			}
+		}
+		for _, id := range recorded {
+			if err := s.Shares.Remove(ctx, campaignID, t.char.ID, t.item.ID, id); err != nil {
+				slog.Error("share: could not undo a share", slog.String("item_id", t.item.ID), slog.Any("error", err))
+			}
 		}
 	}
-	holds, err := s.userHolds(ctx, campaignID, row.UserID, t.item.ID)
+	for _, id := range users {
+		if err := s.Shares.Add(ctx, ItemShare{
+			CampaignID: campaignID, CharacterID: t.char.ID, ItemID: t.item.ID, UserID: id, SharedBy: a.UserID,
+		}); err != nil {
+			rollback(nil)
+			return err
+		}
+		recorded = append(recorded, id)
+	}
+	granted, err := s.Handouts.AllowViewers(ctx, campaignID, t.item.ID, users)
+	if err != nil {
+		rollback(nil)
+		return err
+	}
+	for _, id := range granted {
+		if err := s.Shares.SetMadeGrant(ctx, campaignID, t.char.ID, t.item.ID, id); err != nil {
+			rollback(granted)
+			return err
+		}
+	}
+	return nil
+}
+
+// unshare takes one share back. When that share added the player's grant, the
+// grant is revoked first and the row forgotten after, so a failed revoke
+// leaves the row to retry from. The grant stays when something else still
+// needs it: another holder who still holds the item and shares it (the grant
+// passes to that share) or the player holding the item on a character of
+// their own.
+func (s *stashService) unshare(ctx context.Context, campaignID string, row ItemShare, all []ItemShare) error {
+	forget := func() error {
+		return s.Shares.Remove(ctx, campaignID, row.CharacterID, row.ItemID, row.UserID)
+	}
+	if !row.MadeGrant {
+		return forget()
+	}
+	for _, other := range all {
+		if other.UserID != row.UserID || other.CharacterID == row.CharacterID {
+			continue
+		}
+		// A share whose character let go of the item is stale: it can't
+		// carry the grant.
+		held, err := s.holdsVisible(ctx, campaignID, other.CharacterID, row.ItemID)
+		if err != nil {
+			return err
+		}
+		if held {
+			if err := s.Shares.SetMadeGrant(ctx, campaignID, other.CharacterID, row.ItemID, row.UserID); err != nil {
+				return err
+			}
+			return forget()
+		}
+	}
+	holds, err := s.userHolds(ctx, campaignID, row.UserID, row.ItemID)
 	if err != nil {
 		return err
 	}
-	if holds {
-		return nil
+	if !holds {
+		if err := s.Handouts.RevokeViewers(ctx, campaignID, row.ItemID, []string{row.UserID}); err != nil {
+			return err
+		}
 	}
-	return s.Handouts.RevokeViewers(ctx, campaignID, t.item.ID, []string{row.UserID})
+	return forget()
 }
 
-// userHolds reports whether any character the user has claimed holds the item.
+// releaseShares takes back a character's shares of an item once the last
+// unit has left them: a share must not outlive the holding. Callers hold the
+// campaign lock. A failure is logged, not returned: the move already
+// happened, and the stale row is skipped by later hand-overs.
+func (s *stashService) releaseShares(ctx context.Context, campaignID, characterID, itemID string) {
+	if s.Shares == nil || s.Handouts == nil {
+		return
+	}
+	rows, err := s.Shares.ListByItem(ctx, campaignID, itemID)
+	if err != nil {
+		slog.Warn("share: could not read shares to release", slog.Any("error", err))
+		return
+	}
+	for _, r := range rows {
+		if r.CharacterID != characterID {
+			continue
+		}
+		if err := s.unshare(ctx, campaignID, r, rows); err != nil {
+			slog.Warn("share: could not release a share", slog.String("item_id", itemID), slog.Any("error", err))
+		}
+	}
+}
+
+// holdsVisible reports whether the character holds at least one unit on a
+// line a player can see. A GM-only line is hidden from players, so it never
+// counts as them holding the item.
+func (s *stashService) holdsVisible(ctx context.Context, campaignID, characterID, itemID string) (bool, error) {
+	rel, err := s.hasItem(ctx, campaignID, characterID, itemID, false)
+	if err != nil || rel == nil {
+		return false, err
+	}
+	q, _ := parseCarried(rel.Metadata)
+	return q > 0, nil
+}
+
+// userHolds reports whether any character the user has claimed holds the item
+// where they can see it.
 func (s *stashService) userHolds(ctx context.Context, campaignID, userID, itemID string) (bool, error) {
 	owned, err := s.Directory.OwnedCharacterIDs(ctx, campaignID, userID)
 	if err != nil {
 		return false, err
 	}
 	for cid := range owned {
-		rel, err := s.hasItem(ctx, campaignID, cid, itemID, true)
-		if err != nil {
-			return false, err
-		}
-		if rel != nil {
-			if q, _ := parseCarried(rel.Metadata); q > 0 {
-				return true, nil
-			}
+		held, err := s.holdsVisible(ctx, campaignID, cid, itemID)
+		if err != nil || held {
+			return held, err
 		}
 	}
 	return false, nil
@@ -360,7 +438,9 @@ func (s *stashService) markShares(ctx context.Context, campaignID string, a Acto
 // sharedMessage is the toast after a save.
 func sharedMessage(o *ShareOutcome) string {
 	if len(o.SharedWith) == 0 {
-		return "Only you can see it now"
+		// Others may still see the item through another holder's share, a
+		// grant the GM set or a role, so only this share is reported gone.
+		return "No longer shared by " + o.Character
 	}
 	return "Shared with " + strings.Join(o.SharedWith, ", ")
 }

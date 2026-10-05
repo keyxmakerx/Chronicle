@@ -154,6 +154,7 @@ func (s *stashService) dropEmptyCarried(ctx context.Context, campaignID, charact
 	if q, _ := parseCarried(rel.Metadata); q != 0 {
 		return
 	}
+	s.releaseShares(ctx, campaignID, characterID, itemID)
 	if err := s.Relations.Delete(ctx, rel.ID); err != nil {
 		// Harmless: a 0-quantity line is hidden from the panel and re-used by
 		// the next credit.
@@ -200,6 +201,9 @@ func (s *stashService) adjustCarried(ctx context.Context, campaignID, characterI
 		if next == 0 && !keepZero {
 			if err := s.Relations.Delete(ctx, rel.ID); err != nil {
 				return false, err
+			}
+			if delta < 0 {
+				s.releaseShares(ctx, campaignID, characterID, itemID)
 			}
 			return true, nil
 		}
