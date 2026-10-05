@@ -45,6 +45,7 @@ import (
 	"github.com/keyxmakerx/chronicle/internal/plugins/media"
 	"github.com/keyxmakerx/chronicle/internal/plugins/npcs"
 	"github.com/keyxmakerx/chronicle/internal/plugins/packages"
+	"github.com/keyxmakerx/chronicle/internal/plugins/quests"
 	"github.com/keyxmakerx/chronicle/internal/plugins/restore"
 	"github.com/keyxmakerx/chronicle/internal/plugins/rolltables"
 	"github.com/keyxmakerx/chronicle/internal/plugins/sessions"
@@ -4057,6 +4058,30 @@ func (a *App) RegisterRoutes() {
 		return renderSkyboxBlock(context.Background(), calendarService, rc)
 	})
 
+	// Quest board and Notice boards: cork-board blocks for quest pages and
+	// place pages. Always available (no addon); the widgets fetch their own
+	// data, so these only emit the mount point.
+	blockRegistry.Register(entities.BlockMeta{
+		Type: "quest_board", Label: "Quest board", Icon: "fa-scroll",
+		Description: "Cork board with the quest's notice, a map scrap and a reward tag, plus a DM-only ledger",
+		Contexts:    []string{"template"}, Singleton: true,
+	}, func(rc entities.BlockRenderContext) templ.Component {
+		if rc.CC == nil || rc.Entity == nil {
+			return templ.NopComponent
+		}
+		return quests.QuestBoardMount(rc.CC.Campaign.ID, rc.Entity.ID, rc.CSRFToken, rc.CC.CanControlWorldState())
+	})
+	blockRegistry.Register(entities.BlockMeta{
+		Type: "notice_boards", Label: "Notice boards", Icon: "fa-thumbtack",
+		Description: "Boards players can cycle through, with quest notices, notes, pinned pages and maps",
+		Contexts:    []string{"template"}, Singleton: true,
+	}, func(rc entities.BlockRenderContext) templ.Component {
+		if rc.CC == nil || rc.Entity == nil {
+			return templ.NopComponent
+		}
+		return quests.NoticeBoardsMount(rc.CC.Campaign.ID, rc.Entity.ID, rc.CSRFToken, rc.CC.CanControlWorldState(), int(rc.CC.MemberRole))
+	})
+
 	// Timeline plugin blocks (requires "timeline" addon).
 	blockRegistry.Register(entities.BlockMeta{
 		Type: "timeline", Label: "Timeline", Icon: "fa-timeline",
@@ -4908,6 +4933,24 @@ func (a *App) RegisterRoutes() {
 		rolltables.RegisterRoutes(e, rolltables.NewHandler(rollTablesSvc), campaignService, authService)
 	} else {
 		slog.Warn("rolltables plugin degraded — routes not registered")
+	}
+
+	// Quest sheets and notice boards. Cross-plugin lookups go through the
+	// adapters in quests_adapters.go.
+	if a.PluginHealth.IsHealthy(quests.PluginSlug) {
+		questEntities := &questEntityAdapter{svc: entityService}
+		questMaps := &questMapAdapter{svc: mapsService}
+		questRepo := quests.NewQuestRepository(a.DB)
+		quests.RegisterRoutes(e, quests.NewHandler(
+			quests.NewQuestService(questRepo, questEntities, questMaps),
+			quests.NewBoardService(quests.NewBoardRepository(a.DB), questRepo, questEntities, questMaps, &questMemberNamesAdapter{svc: campaignService}),
+			quests.NewPickerService(questEntities, questMaps, &questCharacterAdapter{
+				dir:   &armoryStashDirectoryAdapter{svc: entityService},
+				names: &questMemberNamesAdapter{svc: campaignService},
+			}),
+		), campaignService, authService)
+	} else {
+		slog.Warn("quests plugin degraded — routes not registered")
 	}
 
 	// AI Import's record kinds: the features beyond pages it may write.

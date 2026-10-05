@@ -252,6 +252,7 @@ jobs:
           go test ./internal/app/ -v -count=1 -run 'CustomVisibilityLeak|PrivateEntityVisibilityLeak|CalendarCampaignExportImport' 2>&1 | tee -a dbtests.log
           go test ./internal/plugins/campaigns/ -v -count=1 -run TestNavPins_Integration 2>&1 | tee -a dbtests.log
           go test ./internal/plugins/auth/ -v -count=1 -run 'TestUserRepository_.*_Integration' 2>&1 | tee -a dbtests.log
+          go test ./internal/plugins/quests/ -v -count=1 -run 'Integration' 2>&1 | tee -a dbtests.log
           for want in TestDB_SessionRSVPTokenCannotBeSpentTwiceConcurrently \
                       TestEntityTypeRepository_Integration \
                       TestConsolidatePlayerCharacterDuplicate_Integration \
@@ -271,7 +272,11 @@ jobs:
                       TestWeatherRepository_Integration \
                       TestCalendarService_Integration_PrivateEntityNameRedacted \
                       TestCalendarCampaignExportImport_DBRoundTrip \
-                      TestCalendarCampaignExportImport_DmOnlyCalendarVisibilityDBRoundTrip; do
+                      TestCalendarCampaignExportImport_DmOnlyCalendarVisibilityDBRoundTrip \
+                      TestQuestRepositoryIntegration_SaveGetVersioning \
+                      TestQuestRepositoryIntegration_DocumentRoundTripAndGetMany \
+                      TestBoardRepositoryIntegration_LooksAndBoards \
+                      TestBoardRepositoryIntegration_Items; do
             grep -q -- "--- PASS: $want" dbtests.log || {
               echo "::error::$want did not PASS — it was skipped or never ran."
               exit 1

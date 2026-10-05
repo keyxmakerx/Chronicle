@@ -320,6 +320,15 @@ Foundry module repo for the wire contract.
 |---|---|---|
 | `entity_system_state` | Per-page JSON documents a game-system package's widget keeps (e.g. a negotiation tracker) | `PRIMARY KEY (entity_id, system_id, state_key)`; FKs to `entities`, `campaigns` (both `ON DELETE CASCADE`) and `users` (`updated_by`, `ON DELETE SET NULL`); `public_data` (any viewer of the page) and `gm_data` (DM team only) are separate JSON columns so a partial write replaces one half |
 
+### quests (`internal/plugins/quests/migrations/`)
+
+| Table | Purpose |
+|-------|---------|
+| `quests` | One JSON sheet per page (`entity_id` PK), `version` for edit conflicts |
+| `quest_board_pages` | Board and ledger looks for a place page |
+| `quest_boards` | Boards on a place page; `who` = dm/scribe/all, `sort_order` |
+| `quest_board_items` | Pins: notice/note/page/map/string; `owner_user_id`, `by_dm`, `hidden`, `ref_id` (no FK) |
+
 ## MariaDB-specific notes
 
 - **JSON columns:** MariaDB validates JSON on write. Prefer loading full JSON

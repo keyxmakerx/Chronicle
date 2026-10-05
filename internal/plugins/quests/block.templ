@@ -1,0 +1,50 @@
+package quests
+
+import (
+	"strconv"
+
+	"github.com/keyxmakerx/chronicle/internal/templates/layouts"
+)
+
+// questAssets loads the boards' stylesheet and the period faces the notices
+// and ledgers are set in. A page holding both blocks loads them once, since
+// the browser reuses a stylesheet it already has.
+templ questAssets() {
+	<link rel="stylesheet" href={ layouts.AssetURL("/static/css/quest_board.css") }/>
+	<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Caveat:wght@500&family=IM+Fell+English:ital@0;1&family=IM+Fell+English+SC&display=swap"/>
+}
+
+// QuestBoardMount is the mount point of the Quest board block. The widget
+// fetches the quest from the endpoint itself, so what it shows is decided by
+// the service for whoever is looking, not by this markup.
+templ QuestBoardMount(campaignID, entityID, csrfToken string, canEdit bool) {
+	@questAssets()
+	<div
+		data-widget="quest_board"
+		data-endpoint={ "/campaigns/" + campaignID + "/quests/" + entityID }
+		data-campaign-id={ campaignID }
+		data-entity-id={ entityID }
+		data-csrf-token={ csrfToken }
+		if canEdit {
+			data-can-edit="true"
+		}
+	></div>
+}
+
+// NoticeBoardsMount is the mount point of the Notice boards block.
+// memberRole is 0 for a guest up to 3 for the owner; it only decides which
+// controls to draw, since the routes enforce the real rules.
+templ NoticeBoardsMount(campaignID, entityID, csrfToken string, canManage bool, memberRole int) {
+	@questAssets()
+	<div
+		data-widget="notice_boards"
+		data-endpoint={ "/campaigns/" + campaignID + "/notice-boards/" + entityID }
+		data-campaign-id={ campaignID }
+		data-entity-id={ entityID }
+		data-csrf-token={ csrfToken }
+		data-member-role={ strconv.Itoa(memberRole) }
+		if canManage {
+			data-can-manage="true"
+		}
+	></div>
+}

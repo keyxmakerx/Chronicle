@@ -71,6 +71,9 @@ DELETE	/notes/:nid/attachments/:aid	internal/widgets/notes/routes.go
 DELETE	/notes/:noteID	internal/plugins/syncapi/routes.go
 DELETE	/notes/:noteId	internal/widgets/notes/routes.go
 DELETE	/notes/app-grants/:gid	internal/widgets/notes/routes.go
+DELETE	/notice-boards/:eid/boards/:bid	internal/plugins/quests/routes.go
+DELETE	/notice-boards/:eid/boards/:bid/items/:iid	internal/plugins/quests/routes.go
+DELETE	/notice-boards/:eid/boards/:bid/player-items	internal/plugins/quests/routes.go
 DELETE	/owner-dashboard-layout	internal/plugins/campaigns/routes.go
 DELETE	/prune	internal/plugins/packages/routes.go
 DELETE	/relations/:relationId	internal/plugins/syncapi/routes.go
@@ -395,6 +398,7 @@ GET	/notes/members	internal/widgets/notes/routes.go
 GET	/notes/page-names	internal/widgets/notes/routes.go
 GET	/notes/page-refs	internal/widgets/notes/routes.go
 GET	/notes/search	internal/widgets/notes/routes.go
+GET	/notice-boards/:eid	internal/plugins/quests/routes.go
 GET	/notifications	internal/plugins/sessions/routes.go
 GET	/notifications/badge	internal/plugins/sessions/routes.go
 GET	/notifications/call-to-action	internal/plugins/sessions/routes.go
@@ -413,6 +417,8 @@ GET	/proposals	internal/plugins/sessions/routes.go
 GET	/proposals/:pid	internal/plugins/sessions/routes.go
 GET	/proposals/respond/:token	internal/plugins/sessions/routes.go
 GET	/prune	internal/plugins/packages/routes.go
+GET	/quests/:eid	internal/plugins/quests/routes.go
+GET	/quests/picker	internal/plugins/quests/routes.go
 GET	/register	internal/plugins/auth/routes.go
 GET	/relation-types	internal/widgets/relations/routes.go
 GET	/relations-graph	internal/widgets/relations/routes.go
@@ -492,6 +498,8 @@ PATCH	/:id/visibility	internal/plugins/bestiary/routes.go
 PATCH	/maps/:mapID/tokens/:tokenID/position	internal/plugins/syncapi/routes.go
 PATCH	/maps/:mid/hexes/cells	internal/plugins/maps/routes.go
 PATCH	/maps/:mid/tokens/:tid/position	internal/plugins/maps/routes.go
+PATCH	/notice-boards/:eid/boards/:bid	internal/plugins/quests/routes.go
+PATCH	/notice-boards/:eid/boards/:bid/items/:iid	internal/plugins/quests/routes.go
 POST		internal/plugins/bestiary/routes.go
 POST		internal/plugins/packages/routes.go
 POST	/:extID/:slug/call	internal/extensions/routes.go
@@ -646,6 +654,8 @@ POST	/notes/:noteId/versions/:vid/restore	internal/widgets/notes/routes.go
 POST	/notes/allow-app	internal/widgets/notes/routes.go
 POST	/notes/bulk	internal/widgets/notes/routes.go
 POST	/notes/media-links	internal/widgets/notes/routes.go
+POST	/notice-boards/:eid/boards	internal/plugins/quests/routes.go
+POST	/notice-boards/:eid/boards/:bid/items	internal/plugins/quests/routes.go
 POST	/notifications/:nid/read	internal/plugins/sessions/routes.go
 POST	/notifications/read-all	internal/plugins/sessions/routes.go
 POST	/npcs/:eid/reveal	internal/plugins/npcs/routes.go
@@ -818,7 +828,10 @@ PUT	/nav/pins	internal/plugins/admin/routes.go
 PUT	/notes/:nid/attachments/:aid/transcript	internal/widgets/notes/routes.go
 PUT	/notes/:noteID	internal/plugins/syncapi/routes.go
 PUT	/notes/:noteId	internal/widgets/notes/routes.go
+PUT	/notice-boards/:eid/looks	internal/plugins/quests/routes.go
+PUT	/notice-boards/:eid/order	internal/plugins/quests/routes.go
 PUT	/owner-dashboard-layout	internal/plugins/campaigns/routes.go
+PUT	/quests/:eid	internal/plugins/quests/routes.go
 PUT	/relations/:relationId	internal/plugins/syncapi/routes.go
 PUT	/roll-tables	internal/plugins/rolltables/routes.go
 PUT	/security/users/:id/disable	internal/plugins/admin/routes.go
