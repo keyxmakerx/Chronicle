@@ -20,6 +20,7 @@ import (
 	"github.com/keyxmakerx/chronicle/internal/apperror"
 	"github.com/keyxmakerx/chronicle/internal/permissions"
 	"github.com/keyxmakerx/chronicle/internal/plugins/armory"
+	"github.com/keyxmakerx/chronicle/internal/plugins/audit"
 	"github.com/keyxmakerx/chronicle/internal/plugins/entities"
 	"github.com/keyxmakerx/chronicle/internal/plugins/maps"
 	"github.com/keyxmakerx/chronicle/internal/plugins/sessions"
@@ -176,14 +177,15 @@ func (a *armoryHandoutAdapter) discard(ctx context.Context, entityID string) {
 }
 
 // viewGrants returns the grants that make the entity visible to the users
-// besides the GM, and whether anything changed. A custom entity keeps every
-// grant it has; a private default one starts from "Scribe and up", the same
-// people a private entity is open to. A public default entity is already open
-// to everyone and is left alone.
-func viewGrants(e *entities.Entity, existing []entities.EntityPermission, userIDs []string) (grants []entities.PermissionGrant, changed bool) {
+// besides the GM, the users it added, and whether anything changed. A custom
+// entity keeps every grant it has; a private default one starts from "Scribe
+// and up", the same people a private entity is open to. A public default
+// entity is already open to everyone and is left alone. A user who already
+// holds a grant of their own is not added again.
+func viewGrants(e *entities.Entity, existing []entities.EntityPermission, userIDs []string) (grants []entities.PermissionGrant, added []string, changed bool) {
 	if e.Visibility != entities.VisibilityCustom {
 		if !e.IsPrivate {
-			return nil, false
+			return nil, nil, false
 		}
 		grants = []entities.PermissionGrant{{
 			SubjectType: entities.SubjectRole, SubjectID: strconv.Itoa(permissions.RoleScribe), Permission: entities.PermEdit,
@@ -206,30 +208,83 @@ func viewGrants(e *entities.Entity, existing []entities.EntityPermission, userID
 		}
 		have[id] = true
 		grants = append(grants, entities.PermissionGrant{SubjectType: entities.SubjectUser, SubjectID: id, Permission: entities.PermView})
+		added = append(added, id)
 		changed = true
+	}
+	return grants, added, changed
+}
+
+func (a *armoryHandoutAdapter) AllowViewers(ctx context.Context, campaignID, entityID string, userIDs []string) ([]string, error) {
+	e, existing, err := a.permissionsOf(ctx, campaignID, entityID)
+	if err != nil {
+		return nil, err
+	}
+	grants, added, changed := viewGrants(e, existing, userIDs)
+	if !changed {
+		return nil, nil
+	}
+	if err := a.svc.SetEntityPermissions(ctx, entityID, entities.SetPermissionsInput{
+		Visibility: entities.VisibilityCustom, Permissions: grants,
+	}); err != nil {
+		return nil, err
+	}
+	return added, nil
+}
+
+// withoutViewers returns the custom grants minus the users' plain view
+// grants, and whether any went. Role and group grants, and a user grant
+// above view, are someone's deliberate choice and stay.
+func withoutViewers(existing []entities.EntityPermission, userIDs []string) ([]entities.PermissionGrant, bool) {
+	drop := map[string]bool{}
+	for _, id := range userIDs {
+		drop[id] = true
+	}
+	var grants []entities.PermissionGrant
+	changed := false
+	for _, p := range existing {
+		if p.SubjectType == entities.SubjectUser && p.Permission == entities.PermView && drop[p.SubjectID] {
+			changed = true
+			continue
+		}
+		grants = append(grants, entities.PermissionGrant{SubjectType: p.SubjectType, SubjectID: p.SubjectID, Permission: p.Permission})
 	}
 	return grants, changed
 }
 
-func (a *armoryHandoutAdapter) AllowViewers(ctx context.Context, campaignID, entityID string, userIDs []string) error {
-	e, err := a.svc.GetByID(ctx, entityID)
+// RevokeViewers only ever narrows a custom allow list; an entity that is not
+// custom has no user grants to take back.
+func (a *armoryHandoutAdapter) RevokeViewers(ctx context.Context, campaignID, entityID string, userIDs []string) error {
+	e, existing, err := a.permissionsOf(ctx, campaignID, entityID)
 	if err != nil {
 		return err
 	}
-	if e.CampaignID != campaignID {
-		return apperror.NewNotFound("item")
+	if e.Visibility != entities.VisibilityCustom {
+		return nil
 	}
-	existing, err := a.svc.GetEntityPermissions(ctx, entityID)
-	if err != nil {
-		return err
-	}
-	grants, changed := viewGrants(e, existing, userIDs)
+	grants, changed := withoutViewers(existing, userIDs)
 	if !changed {
 		return nil
 	}
 	return a.svc.SetEntityPermissions(ctx, entityID, entities.SetPermissionsInput{
 		Visibility: entities.VisibilityCustom, Permissions: grants,
 	})
+}
+
+// permissionsOf loads the entity and its grants, treating one from another
+// campaign as missing.
+func (a *armoryHandoutAdapter) permissionsOf(ctx context.Context, campaignID, entityID string) (*entities.Entity, []entities.EntityPermission, error) {
+	e, err := a.svc.GetByID(ctx, entityID)
+	if err != nil {
+		return nil, nil, err
+	}
+	if e.CampaignID != campaignID {
+		return nil, nil, apperror.NewNotFound("item")
+	}
+	existing, err := a.svc.GetEntityPermissions(ctx, entityID)
+	if err != nil {
+		return nil, nil, err
+	}
+	return e, existing, nil
 }
 
 // armoryGiveNotifierAdapter implements armory.GiveNotifier on the sessions
@@ -242,4 +297,23 @@ var _ armory.GiveNotifier = (*armoryGiveNotifierAdapter)(nil)
 
 func (a *armoryGiveNotifierAdapter) ItemGiven(ctx context.Context, campaignID string, userIDs []string, message, detail, link string) error {
 	return a.svc.NotifyUsersWithDetail(ctx, userIDs, campaignID, armory.NotifItemGiven, message, detail, link)
+}
+
+// armoryShareAuditAdapter writes item shares to the campaign's activity log.
+// The audit service is built after the stash service, so it is bound late;
+// until then (never, once the app serves) a share simply goes unlogged.
+type armoryShareAuditAdapter struct {
+	svc audit.AuditService
+}
+
+var _ armory.ShareAuditor = (*armoryShareAuditAdapter)(nil)
+
+func (a *armoryShareAuditAdapter) LogEvent(ctx context.Context, campaignID, userID, action string, details map[string]any) error {
+	if a.svc == nil {
+		return nil
+	}
+	return a.svc.Log(ctx, &audit.AuditEntry{
+		CampaignID: campaignID, UserID: userID, Action: action, EntityType: "entity",
+		EntityID: fmt.Sprint(details["item_id"]), EntityName: fmt.Sprint(details["item_name"]), Details: details,
+	})
 }

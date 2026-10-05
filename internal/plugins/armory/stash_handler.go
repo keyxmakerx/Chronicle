@@ -309,6 +309,46 @@ func (h *StashHandler) Give(c echo.Context) error {
 	return c.NoContent(http.StatusNoContent)
 }
 
+// ShareBox handles GET /armory/characters/:eid/items/:iid/share: the box
+// that lets the holder's player choose who else can see a hidden item.
+func (h *StashHandler) ShareBox(c echo.Context) error {
+	cc, a, err := caller(c)
+	if err != nil {
+		return err
+	}
+	view, err := h.svc.ShareBox(c.Request().Context(), cc.Campaign.ID, a, c.Param("eid"), c.Param("iid"))
+	if err != nil {
+		return err
+	}
+	return middleware.Render(c, http.StatusOK, ShareBox(view))
+}
+
+// Share handles POST /armory/characters/:eid/items/:iid/share. The body is
+// the full set of players ("user"), so an unticked box is a take-back.
+func (h *StashHandler) Share(c echo.Context) error {
+	cc, a, err := caller(c)
+	if err != nil {
+		return err
+	}
+	form, err := c.FormParams()
+	if err != nil {
+		return apperror.NewBadRequest("invalid form")
+	}
+	out, err := h.svc.Share(c.Request().Context(), cc.Campaign.ID, a, c.Param("eid"), c.Param("iid"), form["user"])
+	if err != nil {
+		return err
+	}
+	if !middleware.IsHTMX(c) {
+		return c.Redirect(http.StatusSeeOther, stashesURL(cc.Campaign.ID))
+	}
+	c.Response().Header().Set("HX-Trigger", triggerJSON(map[string]any{
+		"armory-moved":  true,
+		"armory-shared": map[string]string{"message": sharedMessage(out), "itemId": c.Param("iid")},
+	}))
+	c.Response().Header().Set("HX-Reswap", "none")
+	return c.NoContent(http.StatusNoContent)
+}
+
 // parseDestination splits the "kind:id" value of the To select.
 func parseDestination(v string) Endpoint {
 	kind, id, _ := strings.Cut(v, ":")

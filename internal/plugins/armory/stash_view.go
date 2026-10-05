@@ -218,3 +218,23 @@ func itemPickIcon(restricted bool, player string) string {
 func mapPickHint(character, mapName string) string {
 	return fmt.Sprintf("%s gets “%s”. Opening it shows the map. Only players holding it can see its page.", character, handoutName(mapName))
 }
+
+// shareURL is the Share box's address (GET) and where it saves (POST).
+func shareURL(campaignID, characterID, itemID string) string {
+	return "/campaigns/" + campaignID + "/armory/characters/" + url.PathEscape(characterID) + "/items/" + url.PathEscape(itemID) + "/share"
+}
+
+// shareOpenOnClick opens (or shuts) a panel line's Share box.
+func shareOpenOnClick(url string) templ.ComponentScript {
+	return inlineOnClick("armory_shareOpen",
+		`(function(btn){if(window.Chronicle&&Chronicle.GiveBox)Chronicle.GiveBox.open(btn,`+jsStr(url)+`);})(this)`)
+}
+
+// shareHint says what sharing lets the others do; a map handout's page opens
+// the map too.
+func shareHint(v *ShareBoxView) string {
+	if v.IsMap {
+		return "They can open its page and the map. It stays on " + v.Character.Name + "."
+	}
+	return "They can open its page. It stays on " + v.Character.Name + "."
+}

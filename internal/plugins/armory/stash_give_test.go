@@ -73,8 +73,9 @@ func (h *fakeHandouts) CreateHandout(_ context.Context, _, _, name string, m Nam
 	h.madeMap[r.ID] = m.ID
 	return &r, nil
 }
-func (h *fakeHandouts) AllowViewers(_ context.Context, _, id string, users []string) error {
+func (h *fakeHandouts) AllowViewers(_ context.Context, _, id string, users []string) ([]string, error) {
 	h.allowCnt++
+	var added []string
 	for _, u := range users {
 		dup := false
 		for _, have := range h.allowed[id] {
@@ -82,8 +83,23 @@ func (h *fakeHandouts) AllowViewers(_ context.Context, _, id string, users []str
 		}
 		if !dup {
 			h.allowed[id] = append(h.allowed[id], u)
+			added = append(added, u)
 		}
 	}
+	return added, nil
+}
+func (h *fakeHandouts) RevokeViewers(_ context.Context, _, id string, users []string) error {
+	drop := map[string]bool{}
+	for _, u := range users {
+		drop[u] = true
+	}
+	var keep []string
+	for _, u := range h.allowed[id] {
+		if !drop[u] {
+			keep = append(keep, u)
+		}
+	}
+	h.allowed[id] = keep
 	return nil
 }
 

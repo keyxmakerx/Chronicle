@@ -140,6 +140,7 @@ GET	/api/version	internal/plugins/syncapi/routes.go
 GET	/apps/calendar	internal/app/routes.go
 GET	/armory	internal/plugins/armory/routes.go
 GET	/armory/characters/:eid/history	internal/plugins/armory/routes.go
+GET	/armory/characters/:eid/items/:iid/share	internal/plugins/armory/routes.go
 GET	/armory/characters/:eid/panel	internal/plugins/armory/routes.go
 GET	/armory/count	internal/plugins/armory/routes.go
 GET	/armory/give	internal/plugins/armory/routes.go
@@ -517,6 +518,7 @@ POST	/api/cors	internal/plugins/settings/routes.go
 POST	/api/ip-blocks	internal/plugins/syncapi/routes.go
 POST	/appearance/picture	internal/plugins/campaigns/routes.go
 POST	/archive	internal/plugins/campaigns/routes.go
+POST	/armory/characters/:eid/items/:iid/share	internal/plugins/armory/routes.go
 POST	/armory/downtime	internal/plugins/armory/routes.go
 POST	/armory/give	internal/plugins/armory/routes.go
 POST	/armory/instances	internal/plugins/armory/routes.go

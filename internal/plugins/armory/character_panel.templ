@@ -2,7 +2,10 @@
 // page. It loads itself over HTMX and reloads whenever a move lands.
 package armory
 
-import "fmt"
+import (
+	"fmt"
+	"strings"
+)
 
 // CharacterPanel shows what a character carries and lets its player move it.
 // The root reloads on the armory-moved event so a move made in the dialog is
@@ -58,6 +61,15 @@ templ CharacterPanel(v *CharacterPanelView, csrfToken string) {
 								}
 							</span>
 							<span class="flex items-center gap-3">
+								if it.CanShare {
+									<button
+										type="button"
+										class="text-xs text-accent hover:underline shrink-0"
+										data-share
+										aria-expanded="false"
+										onclick={ shareOpenOnClick(shareURL(v.CampaignID, v.Character.ID, it.ItemID)) }
+									>Share&hellip;</button>
+								}
 								<button
 									type="button"
 									class="text-xs text-accent hover:underline shrink-0"
@@ -67,6 +79,12 @@ templ CharacterPanel(v *CharacterPanelView, csrfToken string) {
 								>Move&hellip;</button>
 							</span>
 						</div>
+						if len(it.SharedWith) > 0 {
+							<div class="ag-shared"><i class="fa-solid fa-user-group"></i>Shared with { strings.Join(it.SharedWith, ", ") }</div>
+						}
+						if it.CanShare {
+							<div class="ag-fold" data-share-fold></div>
+						}
 					</li>
 				}
 			</ul>

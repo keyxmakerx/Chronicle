@@ -58,7 +58,12 @@ type HandoutStore interface {
 	CreateHandout(ctx context.Context, campaignID, createdBy, name string, m NamedRef) (*EntityRef, error)
 	// AllowViewers adds the users to the entity's allow list so they, besides
 	// the GM, can open it. Existing grants stay; a public entity is left alone.
-	AllowViewers(ctx context.Context, campaignID, entityID string, userIDs []string) error
+	// It returns the users it added, leaving out those who already had a
+	// grant of their own.
+	AllowViewers(ctx context.Context, campaignID, entityID string, userIDs []string) ([]string, error)
+	// RevokeViewers takes the users' view grants off the entity's allow list.
+	// A grant above view (set by hand) and every other grant stay.
+	RevokeViewers(ctx context.Context, campaignID, entityID string, userIDs []string) error
 }
 
 // GiveNotifier tells players they were given something. Optional.
@@ -317,7 +322,7 @@ func (s *stashService) give(ctx context.Context, campaignID string, a Actor, cha
 	// as "someone" in their history and be missing from their panel). A
 	// character with no player keeps a private item GM-only.
 	if s.Handouts != nil && char.OwnerUserID != "" {
-		if err := s.Handouts.AllowViewers(ctx, campaignID, item.ID, []string{char.OwnerUserID}); err != nil {
+		if _, err := s.Handouts.AllowViewers(ctx, campaignID, item.ID, []string{char.OwnerUserID}); err != nil {
 			return nil, err
 		}
 	}

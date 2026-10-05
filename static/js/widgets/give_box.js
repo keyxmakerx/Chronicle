@@ -282,10 +282,12 @@
     }
   }
 
-  // open toggles the character panel's Give box.
+  // open toggles a box that folds out of the character panel: the Give box
+  // (the header's "Give an item") or a line's Share box ("Share...").
   function open(btn, url) {
-    var panel = btn.closest('section');
-    var f = panel && panel.querySelector('[data-give-fold]');
+    var f = btn.hasAttribute('data-share')
+      ? (btn.closest('li') && btn.closest('li').querySelector('[data-share-fold]'))
+      : (btn.closest('section') && btn.closest('section').querySelector('[data-give-fold]'));
     if (!f || busy) return;
     if (S && S.btn === btn) { close(false); return; }
     if (S && !close(false)) return;
@@ -295,8 +297,39 @@
       S = { host: f, box: box, kind: 'fold', btn: btn, dirty: false };
       btn.setAttribute('aria-expanded', 'true');
       listen(true);
-      fold(f, true, function () { var s = box.querySelector('#ag-search'); if (s) s.focus({ preventScroll: true }); });
+      fold(f, true, function () {
+        // The Give box starts in its search, as the mockup does; the Share box
+        // takes focus itself so Tab reaches the first player without a ring
+        // showing on a mouse open.
+        var s = box.querySelector('#ag-search') || box;
+        s.focus({ preventScroll: true });
+      });
     });
+  }
+
+  // ---- the Share box ----
+
+  function tick(input) {
+    var box = boxOf(input); if (!box) return;
+    var st = mine(box); if (st) st.dirty = true;
+    warnOff(box);
+  }
+
+  function save(btn) {
+    var box = boxOf(btn); if (!box || btn.disabled) return;
+    var fd = new FormData();
+    box.querySelectorAll('input[name=user]:checked').forEach(function (c) { fd.append('user', c.value); });
+    btn.disabled = true;
+    Chronicle.apiFetch(box.getAttribute('data-post'), { method: 'POST', body: fd, headers: { 'HX-Request': 'true' } })
+      .then(function (resp) {
+        if (!resp.ok) return errorOf(resp).then(function (m) { btn.disabled = false; notify(m); });
+        var g = trigger(resp, 'armory-shared') || {};
+        var st = mine(box); if (st) st.dirty = false;
+        var panel = box.closest('section[id^="armory-panel-"]');
+        close(true, function () { reload(panel ? panel.id : '', g.itemId); });
+        if (g.message) toast(g.message);
+      })
+      .catch(function () { btn.disabled = false; notify('Network error. Try again.'); });
   }
 
   // ---- the Armory card's menu ----
@@ -400,7 +433,7 @@
   window.Chronicle = window.Chronicle || {};
   window.Chronicle.GiveBox = {
     open: open, card: card, tab: tab, pick: pick, step: step,
-    search: search, cancel: cancel, discard: discard, give: give,
+    search: search, cancel: cancel, discard: discard, give: give, tick: tick, save: save,
     _internal: { clampQty: clampQty, esc: esc, close: close, toast: toast }
   };
 })();

@@ -281,6 +281,12 @@ type HeldItem struct {
 	Quantity int
 	// IsMap marks a map handout, which the panel shows with a map icon.
 	IsMap bool
+	// CanShare gives the line a "Share..." link: the viewer is the holder's
+	// player and not everyone can see the item.
+	CanShare bool
+	// SharedWith names the characters whose players the holder shared the
+	// item with.
+	SharedWith []string
 }
 
 // CharacterPanelView feeds the "Items and money" panel on a character page.

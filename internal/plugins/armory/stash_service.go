@@ -81,6 +81,11 @@ type StashDeps struct {
 	Handouts HandoutStore
 	// Notifier tells a player their character was given something; optional.
 	Notifier GiveNotifier
+	// Shares records the grants players add by sharing a hidden item; nil
+	// (the armory plugin's own table did not migrate) turns sharing off.
+	Shares ShareStore
+	// Auditor writes shares to the campaign's activity log; optional.
+	Auditor ShareAuditor
 }
 
 // Actor is the calling user as the service sees them. Role is the campaign's
@@ -112,10 +117,17 @@ type StashService interface {
 	Approve(ctx context.Context, campaignID string, a Actor, moveID int64) (*Move, error)
 	Decline(ctx context.Context, campaignID string, a Actor, moveID int64) (*Move, error)
 
-	// GiveDialog feeds the "Give to" dialog. Owner visibility only.
+	// GiveDialog feeds the Give box. Owner visibility only.
 	GiveDialog(ctx context.Context, campaignID string, a Actor, characterID, itemID, query string) (*GiveDialogView, error)
 	// Give hands a character an Armory item or a map. Owner visibility only.
 	Give(ctx context.Context, campaignID string, a Actor, in GiveInput) (*GiveOutcome, error)
+
+	// ShareBox feeds the "Who else can see <item>?" box for an item the
+	// character holds. The holder's player or Owner visibility only.
+	ShareBox(ctx context.Context, campaignID string, a Actor, characterID, itemID string) (*ShareBoxView, error)
+	// Share lets exactly userIDs (other players of the campaign) see the
+	// item, adding and taking back only grants sharing made.
+	Share(ctx context.Context, campaignID string, a Actor, characterID, itemID string, userIDs []string) (*ShareOutcome, error)
 
 	// Destinations lists the places the actor may send a move to from `from`.
 	Destinations(ctx context.Context, campaignID string, a Actor, kind string, from Endpoint) ([]MoveDestination, error)
@@ -768,6 +780,7 @@ func (s *stashService) CharacterPanel(ctx context.Context, campaignID string, a 
 		return nil, err
 	}
 	s.markMaps(ctx, campaignID, held)
+	s.markShares(ctx, campaignID, a, ref, held)
 	view.Items = held
 
 	if ref.MoneyKey != "" {
