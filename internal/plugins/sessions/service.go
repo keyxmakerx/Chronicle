@@ -11,6 +11,7 @@ import (
 	"github.com/keyxmakerx/chronicle/internal/patch"
 	"github.com/keyxmakerx/chronicle/internal/permissions"
 	"github.com/keyxmakerx/chronicle/internal/sanitize"
+	"github.com/keyxmakerx/chronicle/internal/timeutil"
 )
 
 // EntityCampaignChecker verifies that an entity belongs to a given campaign.
@@ -386,6 +387,10 @@ func (s *sessionService) UpdateSession(ctx context.Context, id string, input Upd
 		}
 	}
 
+	if tz, ok := input.ScheduledTZ.Get(); ok && tz != "" && !timeutil.IsValidLocation(tz) {
+		return nil, apperror.NewBadRequest("invalid time zone")
+	}
+
 	session, err := s.repo.FindByID(ctx, id)
 	if err != nil {
 		return nil, err
@@ -414,6 +419,7 @@ func (s *sessionService) UpdateSession(ctx context.Context, id string, input Upd
 	}
 	session.RecurrenceDayOfWeek = input.RecurrenceDayOfWeek.Ptr(session.RecurrenceDayOfWeek)
 	session.RecurrenceEndDate = input.RecurrenceEndDate.Ptr(session.RecurrenceEndDate)
+	session.ScheduledTZ = input.ScheduledTZ.Ptr(session.ScheduledTZ)
 
 	if err := s.repo.Update(ctx, session); err != nil {
 		return nil, err

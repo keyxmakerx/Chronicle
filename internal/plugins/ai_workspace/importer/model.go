@@ -9,7 +9,10 @@
 // an AST structural pin in committer_sanitize_test.go.
 package importer
 
-import "time"
+import (
+	"strings"
+	"time"
+)
 
 // FrontMatter is the YAML preamble that AI tools emit between
 // `---` fences above each page. Every field is optional — missing
@@ -32,6 +35,9 @@ type FrontMatter struct {
 	// by the parser against the {create, update, delete} enum;
 	// invalid value yields StatusParseError.
 	Action string `yaml:"action"`
+	// Kind routes the block: "" or "page" is a page; anything else is a
+	// record for the records package (calendar event, rolling table…).
+	Kind string `yaml:"kind"`
 }
 
 // Front-matter action values. The corresponding committer dispatch
@@ -119,9 +125,19 @@ type ParsedPage struct {
 	// in the review row. Empty for non-error statuses.
 	ParseError string
 
+	// Fields is the whole front matter as loose YAML, for records (whose
+	// keys vary by kind). Nil when there was no front matter.
+	Fields map[string]any
+
 	// ParsedAt timestamps the parse for downstream audit /
 	// debugging. Not surfaced to the operator UI.
 	ParsedAt time.Time
+}
+
+// IsRecord reports whether this block is a record rather than a page.
+func (p ParsedPage) IsRecord() bool {
+	k := strings.ToLower(strings.TrimSpace(p.FrontMatter.Kind))
+	return k != "" && k != "page"
 }
 
 // HasName returns true when the page resolved to a non-empty name.

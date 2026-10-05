@@ -352,6 +352,47 @@
     });
   }
   function dayKey(y, m, d) { return y + '_' + m + '_' + d; }
+  // The viewer's own date today, as YYYY-MM-DD.
+  function localIso(t) { return t.getFullYear() + '-' + pad2(t.getMonth() + 1) + '-' + pad2(t.getDate()); }
+
+  // A week of hours to paint: [col 0..6, Monday first][hour 0..23].
+  function emptyWeekGrid() {
+    var g = [];
+    for (var c = 0; c < 7; c++) { g.push([]); for (var h = 0; h < 24; h++) g[c].push(''); }
+    return g;
+  }
+  function copyWeekGrid(g) { return g.map(function (col) { return col.slice(); }); }
+  function weekGridEmpty(g) { return g.every(function (col) { return col.every(function (v) { return !v; }); }); }
+
+  // A painted week as the availability API's blocks: one block per run of
+  // same-state hours, dayOfWeek 0 = Sunday.
+  function weekGridBlocks(g, cadence) {
+    var out = [];
+    for (var c = 0; c < 7; c++) {
+      var run = null;
+      for (var h = 0; h <= 24; h++) {
+        var st = h < 24 ? g[c][h] : '';
+        if (run && run.st === st) continue;
+        if (run) out.push({ dayOfWeek: (c + 1) % 7, startMinute: run.h * 60, endMinute: h * 60, state: run.st, weekCadence: cadence });
+        run = st ? { st: st, h: h } : null;
+      }
+    }
+    return out;
+  }
+
+  // The Sundays that name the two alternating weeks, from the week holding
+  // iso: { 1: week A's, 2: week B's }, whichever comes first. Weeks are
+  // counted from Sunday 1970-01-04, as the server's WeekCadenceFor counts
+  // them, so both sides agree which week is which.
+  function cadenceWeeks(iso) {
+    var p = iso.split('-'), d = new Date(Date.UTC(+p[0], +p[1] - 1, +p[2]));
+    d.setUTCDate(d.getUTCDate() - d.getUTCDay());
+    var days = Math.round((d.getTime() - Date.UTC(1970, 0, 4)) / 86400000);
+    var week = Math.floor(days / 7), first = d.toISOString().slice(0, 10);
+    d.setUTCDate(d.getUTCDate() + 7);
+    var next = d.toISOString().slice(0, 10);
+    return ((week % 2) + 2) % 2 === 0 ? { 1: first, 2: next } : { 1: next, 2: first };
+  }
   function parseDayKey(k) { var p = k.split('_'); return { y: +p[0], m: +p[1], d: +p[2] }; }
   function pad2(n) { return (n < 10 ? '0' : '') + n; }
   // realAnchor reads a world calendar's real-date anchor (one world day and
@@ -1138,6 +1179,7 @@
       this.forecastByDay = {};
       this.weatherByYear = {}; // year -> {'m_d': reading}, filled by fetchWeatherYear
       this.nightsByMonth = {}; // 'y_m' -> game nights, filled by fetchNights
+      this._gnPages = {}; // session id -> its recap and linked pages
       // Game nights are real-world dates, so only a calendar that follows
       // the real clock, or a world calendar anchored to a real date, can
       // place them; only members see who is coming.
@@ -1194,6 +1236,7 @@
       this._eraOpener = null;
       if (this.skyDock) this.skyDock.destroy();
       if (this._eventDrawer) this._eventDrawer.destroy();
+      if (window.Chronicle && Chronicle.calendarGameNight) Chronicle.calendarGameNight.destroy(this);
       if (this._resizeHandler) window.removeEventListener('resize', this._resizeHandler);
       if (this._escHandler) document.removeEventListener('keydown', this._escHandler);
       if (this._mvOffHandler) document.removeEventListener('pointerdown', this._mvOffHandler, true);
@@ -1746,9 +1789,9 @@
     _gnPageHTML: function (n) {
       var time = this._gnTime(n);
       var label = (this._anchor ? 'Real date: ' : '') + realDateWords(n.date) + (time ? ' · ' + time : '');
-      var link = '/campaigns/' + encodeURIComponent(this.campaignId) + '/sessions/' + encodeURIComponent(n.sessionId);
       return '<div class="grab" aria-hidden="true"></div>' +
-        '<div class="ein"><div class="crease"><button type="button" class="back" data-close><i class="fa-solid fa-arrow-left"></i><span>Day</span></button></div>' +
+        '<div class="ein"><div class="crease"><button type="button" class="back" data-close><i class="fa-solid fa-arrow-left"></i><span>Day</span></button>' +
+          (this.role >= 2 ? '<button type="button" class="btn sm" data-gn-edit><i class="fa-solid fa-pen"></i> Edit</button>' : '') + '</div>' +
         '<div class="epb">' +
           '<h3 class="ept">' + esc(n.name) + ' <span class="dirnote">' + (n.past ? 'Played' : 'Game night') + '</span></h3>' +
           '<div class="espan">' + esc(label) + (n.recurring ? ' · repeats' : '') + '</div>' +
@@ -1756,8 +1799,132 @@
           (n.tz && time ? '<div class="espan">Set by ' + esc(n.organizerName || 'the organiser') + ' in ' + esc(n.tz.replace(/_/g, ' ')) + ' time.</div>' : '') +
           (n.summary ? '<div class="notes"><p>' + esc(n.summary) + '</p></div>' : '') +
           '<section class="eps"><h4>Who’s coming</h4>' + (n.past ? this._gnRosterHTML(n) : this._gnRsvpHTML(n, true)) + '</section>' +
-          '<section class="eps"><h4>More</h4><div class="v"><i class="fa-solid fa-book-open"></i><span><a href="' + esc(link) + '">Notes, recap and linked pages</a></span></div></section>' +
+          this._gnPageExtraHTML(n) +
         '</div></div>';
+    },
+
+    // A night's recap and linked pages sit below its answers. They are read
+    // when the page opens; until then the page says so.
+    _gnPageExtraHTML: function (n) {
+      var sid = n.sessionId;
+      if (!this._gnPages[sid]) this._gnLoadPage(sid);
+      return '<div data-gn-extra="' + esc(sid) + '">' + this._gnExtraHTML(sid) + '</div>';
+    },
+
+    _gnLoadPage: function (sid) {
+      var self = this;
+      return Chronicle.apiFetch('/campaigns/' + encodeURIComponent(this.campaignId) + '/sessions/' + encodeURIComponent(sid) + '/page')
+        .then(function (resp) { return resp.ok ? resp.json() : Promise.reject(); })
+        .then(function (p) {
+          self._gnPages[sid] = { recap: p.recap || '', recapHtml: p.recapHtml || '', links: Array.isArray(p.links) ? p.links : [] };
+        })
+        .catch(function () { self._gnPages[sid] = { failed: true, recap: '', recapHtml: '', links: [] }; })
+        .then(function () { self._gnRedrawExtra(sid); });
+    },
+
+    _gnRedrawExtra: function (sid, focusSel) {
+      var box = this.evpEl.classList.contains('open') && this.evpEl.querySelector('[data-gn-extra="' + sid + '"]');
+      if (!box) return;
+      box.innerHTML = this._gnExtraHTML(sid);
+      var f = focusSel && box.querySelector(focusSel);
+      if (f) f.focus({ preventScroll: true });
+    },
+
+    _gnExtraHTML: function (sid) {
+      var p = this._gnPages[sid], scribe = this.role >= 2, cid = encodeURIComponent(this.campaignId);
+      if (!p) return '<section class="eps"><h4>Recap</h4><div class="none">Loading…</div></section>';
+      if (p.failed) return '<section class="eps"><h4>Recap</h4><div class="none">The recap and linked pages could not be loaded.</div></section>';
+      var h = '<section class="eps gnrecap"><h4>Recap</h4>';
+      // Editing here is plain text, so a recap with formatting is shown but
+      // never edited here: saving it would drop the formatting.
+      var rich = !!p.recapHtml && /<(?!\/?p\b|br\b)[a-z]/i.test(p.recapHtml);
+      if (this._gnRecapFor === sid && !rich) {
+        h += '<label class="fld"><span class="sr">Recap</span><textarea data-gn-recap-input rows="6" placeholder="What happened this game night?">' + esc(p.recap) + '</textarea></label>' +
+          '<p class="gperr" role="alert" hidden></p>' +
+          '<div class="gpa"><button type="button" class="btn sm primary" data-gn-recap="save">Save the recap</button><button type="button" class="btn sm quiet" data-gn-recap="cancel">Cancel</button></div>';
+      } else {
+        // The server sanitizes recap HTML when it is saved.
+        h += p.recapHtml ? '<div class="notes gnrtext">' + p.recapHtml + '</div>' : '<div class="none">No recap yet.</div>';
+        if (scribe && rich) h += '<a class="lnk" href="/campaigns/' + cid + '/sessions/' + encodeURIComponent(sid) + '"><i class="fa-solid fa-pen"></i> Edit on the page</a>';
+        else if (scribe) h += '<button type="button" class="lnk" data-gn-recap="edit"><i class="fa-solid fa-pen"></i> ' + (p.recapHtml ? 'Edit the recap' : 'Write the recap') + '</button>';
+      }
+      h += '</section><section class="eps gnlinks"><h4>Linked pages</h4>';
+      h += p.links.length ? '<div class="gnchips">' + p.links.map(function (l) {
+        return '<span class="gnchip"><a href="/campaigns/' + cid + '/entities/' + encodeURIComponent(l.slug) + '">' + esc(l.name) + '</a>' +
+          (scribe ? '<button type="button" data-gn-unlink="' + esc(l.entityId) + '" aria-label="Unlink ' + esc(l.name) + '"><i class="fa-solid fa-xmark"></i></button>' : '') + '</span>';
+      }).join('') + '</div>' : '<div class="none">No pages linked yet.</div>';
+      if (scribe) {
+        h += this._gnLinkFor === sid
+          ? '<div class="gnfind"><input type="search" data-gn-link-q placeholder="Search pages to link" aria-label="Search pages to link" autocomplete="off"><ul class="lp-res" data-gn-link-res role="listbox" aria-label="Pages" hidden></ul></div>'
+          : '<button type="button" class="lnk" data-gn-link-open><i class="fa-solid fa-plus"></i> Link a page</button>';
+      }
+      return h + '</section>';
+    },
+
+    _gnLinkSearch: function (input) {
+      var self = this, q = input.value.trim(), res = input.parentNode.querySelector('[data-gn-link-res]'), seq = (this._gnLinkSeq || 0) + 1;
+      this._gnLinkSeq = seq;
+      if (q.length < 2) { res.hidden = true; res.innerHTML = ''; return; }
+      Chronicle.apiFetch('/campaigns/' + encodeURIComponent(this.campaignId) + '/entities/search?q=' + encodeURIComponent(q), { headers: { Accept: 'application/json' } })
+        .then(function (resp) { return resp.ok ? resp.json() : { results: [] }; })
+        .then(function (body) {
+          if (self._gnLinkSeq !== seq) return;
+          // Only pages: the search also returns other kinds of result.
+          var pages = (body.results || []).filter(function (r) { return r.id && /\/entities\//.test(r.url || ''); }).slice(0, 8);
+          res.innerHTML = pages.length
+            ? pages.map(function (r) { return '<li><button type="button" role="option" data-gn-link-id="' + esc(r.id) + '">' + esc(r.name) + (r.type_name ? '<small>' + esc(r.type_name) + '</small>' : '') + '</button></li>'; }).join('')
+            : '<li class="none">No pages match.</li>';
+          res.hidden = false;
+        });
+    },
+
+    // Recap and link presses on a night's page. Returns true when handled.
+    _gnExtraClick: function (e) {
+      var self = this, box = e.target.closest('[data-gn-extra]');
+      if (!box) return false;
+      var sid = box.dataset.gnExtra, base = '/campaigns/' + encodeURIComponent(this.campaignId) + '/sessions/' + encodeURIComponent(sid);
+      var t = e.target.closest('button');
+      if (!t) return true;
+      var reload = function (msg) { self.say(msg); return self._gnLoadPage(sid); };
+      var fail = function (msg) {
+        var err = box.querySelector('.gperr');
+        if (err) { err.textContent = msg; err.hidden = false; } else self.say(msg);
+        $$('button, textarea, input', box).forEach(function (c) { c.disabled = false; });
+      };
+      var act = t.dataset.gnRecap;
+      if (act === 'edit') { this._gnRecapFor = sid; this._gnRedrawExtra(sid, '[data-gn-recap-input]'); }
+      else if (act === 'cancel') { this._gnRecapFor = null; this._gnRedrawExtra(sid, '[data-gn-recap="edit"]'); }
+      else if (act === 'save') {
+        var text = box.querySelector('[data-gn-recap-input]').value;
+        // The same shape the Sessions page saves: the text, and each line as
+        // a paragraph.
+        var html = text.split('\n').filter(function (l) { return l.trim(); }).map(function (l) { return '<p>' + esc(l) + '</p>'; }).join('');
+        $$('button, textarea', box).forEach(function (c) { c.disabled = true; });
+        Chronicle.apiFetch(base + '/recap', { method: 'PUT', body: { recap: text, recap_html: html } })
+          .then(function (resp) {
+            if (!resp.ok) return Promise.reject();
+            self._gnRecapFor = null;
+            return reload('Recap saved.');
+          })
+          .catch(function () { fail('The recap didn’t save. Try again.'); });
+      } else if (t.hasAttribute('data-gn-link-open')) {
+        this._gnLinkFor = sid; this._gnRedrawExtra(sid, '[data-gn-link-q]');
+      } else if (t.dataset.gnLinkId) {
+        $$('button, input', box).forEach(function (c) { c.disabled = true; });
+        Chronicle.apiFetch(base + '/entities', { method: 'POST', body: { entity_id: t.dataset.gnLinkId, role: 'mentioned' } })
+          .then(function (resp) {
+            if (!resp.ok) return Promise.reject();
+            self._gnLinkFor = null;
+            return reload('Page linked.');
+          })
+          .catch(function () { fail('That page could not be linked. Try again.'); });
+      } else if (t.dataset.gnUnlink) {
+        $$('button, input', box).forEach(function (c) { c.disabled = true; });
+        Chronicle.apiFetch(base + '/entities/' + encodeURIComponent(t.dataset.gnUnlink), { method: 'DELETE' })
+          .then(function (resp) { return resp.ok ? reload('Page unlinked.') : Promise.reject(); })
+          .catch(function () { fail('That page could not be unlinked. Try again.'); });
+      }
+      return true;
     },
 
     // Redraws every visible copy of a night's answer block (day card and
@@ -2017,11 +2184,6 @@
         }).join('') + '</ul>';
     },
 
-    _sessionsPlanURL: function (iso, startHour) {
-      return '/campaigns/' + encodeURIComponent(this.campaignId) + '/sessions?plan_date=' + iso + '&plan_time=' + pad2(startHour) + ':00' +
-        (this.calZone ? '&plan_tz=' + encodeURIComponent(this.calZone) : '');
-    },
-
     _windowWords: function (w, iso) {
       var z = zoneAbbr(this.calZone, iso);
       return ampm(w.start * 60) + ' to ' + ampm(w.end * 60) + (z ? ' ' + z : '');
@@ -2038,7 +2200,7 @@
         if (iso) this.fetchFreeWeek(isoMonday(iso)).then(function () { if (self.wingFor === key && self.freeByDate[iso]) self._refreshWingOnceOpen(); });
         return '';
       }
-      var mine = '<a class="lnk" href="/campaigns/' + encodeURIComponent(this.campaignId) + '/availability">Change my hours</a>';
+      var mine = this._myDayHTML(iso) + '<button type="button" class="lnk" data-pl-mine>Change my usual hours</button>';
       var h = '<div class="sect">Who’s free</div><div class="free">';
       if (!data.total) return h + '<div class="none">Nobody in the campaign yet.</div></div>';
       var all = this._freeRuns(data.hours, data.total)[0], w = all ? { start: all[0], end: all[1], free: data.total } : this._bestWindow(data, 1);
@@ -2060,7 +2222,7 @@
 
     // Planning a game night, inside the day's card: a name, the start (in
     // the calendar's zone) and whether it repeats weekly. "More options"
-    // is the Sessions page's full form, filled in the same way.
+    // carries what is filled in over to the game night editor.
     _planFormHTML: function (iso, startHour) {
       var z = zoneAbbr(this.calZone, iso);
       return '<form class="gnplan" data-plan-form="' + esc(iso) + '">' +
@@ -2070,7 +2232,7 @@
         '<label class="fld"><span>Repeats</span><select name="repeat"><option value="">Just this day</option><option value="weekly">Every week</option><option value="biweekly">Every 2 weeks</option></select></label></div>' +
         '<p class="gpn">Everyone in the campaign is asked if they can come.</p>' +
         '<div class="gpa"><button type="submit" class="btn sm primary">Plan it</button><button type="button" class="btn sm quiet" data-plan-cancel>Cancel</button>' +
-        '<a class="lnk" href="' + esc(this._sessionsPlanURL(iso, startHour)) + '">More options</a></div>' +
+        '<button type="button" class="lnk" data-plan-more>More options</button></div>' +
         '<p class="gperr" role="alert" hidden></p></form>';
     },
 
@@ -2081,6 +2243,13 @@
       if (this.calZone && out.scheduled_time) out.scheduled_tz = this.calZone;
       if (f.repeat === 'weekly' || f.repeat === 'biweekly') { out.is_recurring = '1'; out.recurrence_type = f.repeat; }
       return out;
+    },
+
+    _planMore: function (form) {
+      if (!form) return;
+      var preset = { name: form.elements.name.value, time: form.elements.time.value, repeat: form.elements.repeat.value };
+      this._planFor = null;
+      this._gnOpenEditor(null, form.dataset.planForm, preset);
     },
 
     _openPlan: function (iso, startHour) {
@@ -2119,6 +2288,48 @@
           err.textContent = (typeof msg === 'string' && msg) || 'That game night could not be planned. Try again.';
           err.hidden = false;
         });
+    },
+
+    // Opens the game night editor drawer: night to change it, or null and
+    // the day for a new one.
+    _gnOpenEditor: function (night, iso, preset) {
+      if (!window.Chronicle || !Chronicle.calendarGameNight) return;
+      if (!night && !iso) return;
+      Chronicle.calendarGameNight.open(this, night, iso, preset);
+    },
+
+    // "Plan a game night" in a day's card, for the Director team, on any
+    // day from today on, whoever is free.
+    _gnAddHTML: function (d) {
+      if (!this.showNights || this.role < 2) return '';
+      var iso = this._realIso(d.y, d.m, d.d);
+      if (!iso || iso < (this._todayIso() || localIso(new Date()))) return '';
+      return '<button type="button" class="addev" data-gn-new="' + esc(iso) + '"><i class="fa-solid fa-dice-d20"></i>Plan a game night</button>';
+    },
+
+    // reloadNights re-reads game nights after one is planned, changed or
+    // cancelled. A change to a series reaches every month, so every month's
+    // copy is dropped. On a real-world calendar the day card of iso (the
+    // night's day) opens, so the result is in view.
+    reloadNights: function (iso) {
+      var self = this, openId = this.evpEl.classList.contains('open') ? this.evpEl.dataset.ev : '';
+      this.nightsByMonth = {};
+      this._gnPages = {};
+      var target = null;
+      if (iso && /^\d{4}-\d{2}-\d{2}$/.test(iso) && CalDate.usesRealTime(this.cal)) {
+        var p = iso.split('-');
+        target = { y: +p[0], m: +p[1], d: +p[2] };
+        if (target.y !== this.view.y || target.m !== this.view.m) { this.view = { y: target.y, m: target.m }; this.renderMonth(); }
+      }
+      return this.fetchNights(this.view.y, this.view.m, { fresh: true }).then(function () {
+        self._paintMonth();
+        if (target && !self.anyPanelOpen()) { self.openWing(dayKey(target.y, target.m, target.d)); return; }
+        if (self.wingFor) self.refreshWing();
+        if (openId) {
+          var n = self._findNight(openId);
+          if (n) self.evpEl.innerHTML = self._gnPageHTML(n); else self.closeEventDetail();
+        }
+      });
     },
 
     _todayIso: function () {
@@ -2192,6 +2403,128 @@
         .then(function (mine) { self.mine = mine; })
         .catch(function () { self.mine = null; });
       return this._minePromise;
+    },
+
+    // fetchMyDays loads (once) the viewer's own one-day changes. Returns a
+    // Promise.
+    fetchMyDays: function (o) {
+      var self = this;
+      if (this._myDaysPromise && !(o && o.fresh)) return this._myDaysPromise;
+      this._myDaysPromise = Chronicle.apiFetch('/campaigns/' + encodeURIComponent(this.campaignId) + '/availability/exceptions')
+        .then(function (resp) { return resp.ok ? resp.json() : []; })
+        .then(function (list) { self.myDays = Array.isArray(list) ? list : []; })
+        .catch(function () { self.myDays = self.myDays || []; });
+      return this._myDaysPromise;
+    },
+
+    // How the viewer's own hours read on one day: their usual hours, a
+    // different window, or not at all. A day changed on the Availability
+    // page into something more than one window reads as "changed".
+    _myDayState: function (iso) {
+      var rows = (this.myDays || []).filter(function (x) { return x.onDate === iso; });
+      if (!rows.length) return { mode: 'usual' };
+      if (rows.length === 1 && rows[0].state === 'unavailable' && rows[0].startMinute === 0 && rows[0].endMinute >= 1440) return { mode: 'cant' };
+      var free = rows.filter(function (x) { return x.state !== 'unavailable'; });
+      if (rows.length === 1 && free.length === 1) return { mode: 'diff', start: free[0].startMinute, end: free[0].endMinute };
+      return { mode: 'diff', start: free.length ? free[0].startMinute : 18 * 60, end: free.length ? free[0].endMinute : 22 * 60, mixed: true };
+    },
+
+    // "Your hours this day" in a day's card, with the one-day change: keep
+    // the usual hours, play a different window, or not play at all. The
+    // change is the Availability page's own (a day's exceptions), in the
+    // member's zone.
+    _myDayHTML: function (iso) {
+      var self = this;
+      if (!iso || iso < (this._todayIso() || localIso(new Date()))) return '';
+      // The member's zone comes with their hours, so both are read first.
+      if (!this.myDays || this.mine === undefined) {
+        Promise.all([this.fetchMyDays(), this.fetchMine()]).then(function () { if (self.wingFor) self.refreshWing(); });
+        return '';
+      }
+      var st = this._myDayState(iso), zone = (this.mine && this.mine.tz) || browserZone() || '';
+      var words = st.mode === 'usual' ? 'Your usual hours' : st.mode === 'cant' ? 'You can’t play' : (st.mixed ? 'Changed, starting ' : '') + ampm(st.start) + ' to ' + ampm(st.end % 1440);
+      if (this._myDayFor !== iso) {
+        return '<div class="myday"><span>This day: <b>' + esc(words) + '</b></span><button type="button" class="lnk" data-myday-edit="' + esc(iso) + '">Change this day</button></div>';
+      }
+      var f = this._myDayForm || st;
+      var modes = [['usual', 'Usual hours'], ['diff', 'Different this day'], ['cant', 'Can’t play']];
+      var hhmm = function (min) { min = min % 1440; return pad2(Math.floor(min / 60)) + ':' + pad2(min % 60); };
+      // A form, so the card stays open around it (see _mvOffHandler).
+      return '<form class="myday edit" data-myday="' + esc(iso) + '"><b>Your hours on ' + esc(realDateWords(iso)) + '</b>' +
+        '<div class="segs" role="group" aria-label="Your hours this day">' + modes.map(function (o) {
+          return '<button type="button" data-myday-mode="' + o[0] + '" aria-pressed="' + (f.mode === o[0]) + '">' + o[1] + '</button>';
+        }).join('') + '</div>' +
+        (f.mode === 'diff' ? '<div class="gprow"><label class="fld"><span>From</span><input type="time" step="1800" data-myday-from value="' + hhmm(f.start == null ? 18 * 60 : f.start) + '"></label>' +
+          '<label class="fld"><span>To</span><input type="time" step="1800" data-myday-to value="' + hhmm(f.end == null ? 22 * 60 : f.end) + '"></label></div>' : '') +
+        (zone ? '<p class="gpn">In ' + esc(zone.replace(/_/g, ' ')) + ' time. Only this day changes.</p>' : '<p class="gpn">Only this day changes.</p>') +
+        '<p class="gperr" role="alert" hidden></p>' +
+        '<div class="gpa"><button type="button" class="btn sm primary" data-myday-save>Save</button><button type="button" class="btn sm quiet" data-myday-cancel>Cancel</button></div></form>';
+    },
+
+    // Redraws just the one-day block: the card won't redraw around a form.
+    _myDayRedraw: function (iso, focusSel) {
+      var old = this.wingEl.querySelector('.myday');
+      if (!old) { this.refreshWing(); return; }
+      var tmp = document.createElement('div');
+      tmp.innerHTML = this._myDayHTML(iso);
+      var next = tmp.firstChild;
+      if (next) old.replaceWith(next); else old.remove();
+      var f = focusSel && next && next.querySelector(focusSel);
+      if (f) f.focus({ preventScroll: true });
+    },
+
+    _myDayRead: function (box) {
+      var f = this._myDayForm, from = box.querySelector('[data-myday-from]'), to = box.querySelector('[data-myday-to]');
+      var mins = function (v) { var p = (v || '').split(':'); return p.length === 2 ? (+p[0]) * 60 + (+p[1]) : null; };
+      if (from) f.start = mins(from.value);
+      if (to) { f.end = mins(to.value); if (f.end === 0) f.end = 1440; }
+    },
+
+    // Wing presses on the one-day change. Returns true when handled.
+    _myDayClick: function (e) {
+      var self = this, edit = e.target.closest('[data-myday-edit]');
+      if (edit) {
+        this._myDayFor = edit.dataset.mydayEdit;
+        var st = this._myDayState(this._myDayFor);
+        this._myDayForm = { mode: st.mode, start: st.start, end: st.end };
+        this._myDayRedraw(this._myDayFor, '[aria-pressed="true"]');
+        return true;
+      }
+      var box = e.target.closest('[data-myday]');
+      if (!box) return false;
+      var mode = e.target.closest('[data-myday-mode]');
+      if (mode) { this._myDayRead(box); this._myDayForm.mode = mode.dataset.mydayMode; this._myDayRedraw(box.dataset.myday, '[aria-pressed="true"]'); return true; }
+      if (e.target.closest('[data-myday-cancel]')) { var was = box.dataset.myday; this._myDayFor = null; this._myDayForm = null; this._myDayRedraw(was, '[data-myday-edit]'); return true; }
+      if (!e.target.closest('[data-myday-save]')) return true;
+      this._myDayRead(box);
+      var f = this._myDayForm, iso = box.dataset.myday, err = box.querySelector('.gperr'), blocks = [];
+      if (f.mode === 'cant') blocks = [{ startMinute: 0, endMinute: 1440, state: 'unavailable' }];
+      else if (f.mode === 'diff') {
+        if (f.start == null || f.end == null || f.end <= f.start) { err.textContent = 'The end has to be after the start.'; err.hidden = false; return true; }
+        blocks = [{ startMinute: f.start, endMinute: f.end, state: 'available' }];
+      }
+      var zone = (this.mine && this.mine.tz) || browserZone() || 'UTC';
+      $$('button, input', box).forEach(function (c) { c.disabled = true; });
+      Chronicle.apiFetch('/campaigns/' + encodeURIComponent(this.campaignId) + '/availability/exceptions', { method: 'PUT', body: { onDate: iso, tz: zone, blocks: blocks } })
+        .then(function (resp) {
+          if (!resp.ok) return resp.json().catch(function () { return {}; }).then(function (j) { return Promise.reject(j && j.error); });
+          self._myDayFor = null;
+          self._myDayForm = null;
+          self._myDayRedraw(iso);
+          // Everyone's lines include this viewer's, so the weeks are read again.
+          self._freeWeeks = {};
+          self.freeByDate = {};
+          return self.fetchMyDays({ fresh: true }).then(function () {
+            self.say('Saved. Only ' + realDateWords(iso) + ' changed.');
+            return Promise.all([self.fetchFreeWeek(isoMonday(iso)), self.fetchFreeMonth(self.view.y, self.view.m)]);
+          }).then(function () { self._paintMonth(); self.refreshWing(); });
+        })
+        .catch(function (msg) {
+          $$('button, input', box).forEach(function (c) { c.disabled = false; });
+          err.textContent = (typeof msg === 'string' && msg) || 'That day didn’t save. Try again.';
+          err.hidden = false;
+        });
+      return true;
     },
 
     _availURL: function (tab) {
@@ -2394,70 +2727,106 @@
       var quick = this._fvDirectorHTML(y, m, monthName).replace(/<section class="fvsec fvfoot">[\s\S]*$/, '');
       h += '<div class="plquick">' + quick + '</div>';
       h += '<section class="dsec plfoot"><label class="fvsw"><input type="checkbox" data-fv-lines' + (this.showFree ? ' checked' : '') + '><span>Show who’s free on the days</span></label>' +
-        '<a class="lnk" href="' + esc(this._availURL('overlay')) + '">Polls and alternating weeks</a></section>';
+        '<a class="lnk" href="' + esc(this._availURL('overlay')) + '">Date polls</a></section>';
       return h;
     },
 
     // --- Painting your own weekly hours ---------------------------------
-    // grid[col 0..6, Monday first][hour 0..23] = '' | available | preferred,
-    // the Availability page's every-week layer at the same one-hour grain.
+    // Three grids, one per week cadence (0 every week, 1 and 2 the two
+    // alternating weeks), each [col 0..6, Monday first][hour 0..23] =
+    // '' | available | preferred, the Availability page's layers at the same
+    // one-hour grain. Alternating mode paints grids 1 and 2; otherwise
+    // grid 0. Every-week hours in a member who also has alternating ones
+    // apply on both weeks, so they are painted into both.
     _plLoadGrid: function () {
-      var mine = this.mine || {}, grid = [], keep = [];
-      for (var c = 0; c < 7; c++) { grid.push([]); for (var h = 0; h < 24; h++) grid[c].push(''); }
-      (mine.blocks || []).forEach(function (b) {
-        if (b.weekCadence === 1 || b.weekCadence === 2) { keep.push(b); return; }
+      var mine = this.mine || {}, grids = { 0: emptyWeekGrid(), 1: emptyWeekGrid(), 2: emptyWeekGrid() };
+      var blocks = mine.blocks || [];
+      var alt = blocks.some(function (b) { return b.weekCadence === 1 || b.weekCadence === 2; });
+      blocks.forEach(function (b) {
+        var cad = b.weekCadence === 1 || b.weekCadence === 2 ? b.weekCadence : 0;
+        var targets = alt && cad === 0 ? [1, 2] : [cad];
         var col = (b.dayOfWeek + 6) % 7;
-        for (var hh = Math.floor(b.startMinute / 60); hh < Math.ceil(b.endMinute / 60) && hh < 24; hh++) grid[col][hh] = b.state || 'available';
+        targets.forEach(function (g) {
+          for (var hh = Math.floor(b.startMinute / 60); hh < Math.ceil(b.endMinute / 60) && hh < 24; hh++) grids[g][col][hh] = b.state || 'available';
+        });
       });
-      this._plGrid = grid;
-      this._plKeep = keep; // alternating-week blocks, sent back untouched
+      this._plGrids = grids;
+      this._plAlt = alt;
       this._plTool = this._plTool || 'available';
       this._plDirty = false;
     },
 
     _plBlocks: function () {
-      var out = [], g = this._plGrid;
-      for (var c = 0; c < 7; c++) {
-        var run = null;
-        for (var h = 0; h <= 24; h++) {
-          var st = h < 24 ? g[c][h] : '';
-          if (run && run.st === st) continue;
-          if (run) out.push({ dayOfWeek: (c + 1) % 7, startMinute: run.h * 60, endMinute: h * 60, state: run.st, weekCadence: 0 });
-          run = st ? { st: st, h: h } : null;
-        }
+      var g = this._plGrids;
+      return this._plAlt ? weekGridBlocks(g[1], 1).concat(weekGridBlocks(g[2], 2)) : weekGridBlocks(g[0], 0);
+    },
+
+    // Switching to alternating weeks starts both weeks from the usual
+    // hours; switching back keeps the first week's hours as the usual ones.
+    _plSetAlt: function (on) {
+      if (on === this._plAlt) return;
+      var g = this._plGrids;
+      if (on) {
+        if (weekGridEmpty(g[1]) && weekGridEmpty(g[2])) { g[1] = copyWeekGrid(g[0]); g[2] = copyWeekGrid(g[0]); }
+      } else if (weekGridEmpty(g[0])) {
+        g[0] = copyWeekGrid(g[1]);
       }
-      return out.concat(this._plKeep || []);
+      this._plAlt = on;
+      this._plDirty = true;
+      this._plStatus = '';
+      this.refreshPlanner();
+    },
+
+    _plGridHTML: function (g, label) {
+      // An alternating week starts on Sunday (the server counts the weeks
+      // from a Sunday), so its grid does too.
+      var names = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'], order = g === 0 ? [0, 1, 2, 3, 4, 5, 6] : [6, 0, 1, 2, 3, 4, 5];
+      var grid = this._plGrids[g];
+      var h = '<div class="plgrid" role="grid" aria-label="' + esc(label) + '"><div class="plgh" aria-hidden="true"><span></span><span>12am</span><span>6am</span><span>noon</span><span>6pm</span></div>';
+      order.forEach(function (c) {
+        h += '<div class="plrow" role="row"><span class="nm">' + names[c] + '</span><span class="plcells">';
+        for (var hr = 0; hr < 24; hr++) {
+          var st = grid[c][hr];
+          h += '<button type="button" class="plc" role="gridcell" data-g="' + g + '" data-c="' + c + '" data-h="' + hr + '" data-st="' + st + '" aria-label="' + names[c] + ' ' + ampm(hr * 60) + (st ? ', ' + (st === 'preferred' ? 'best' : 'free') : '') + '"></button>';
+        }
+        h += '</span></div>';
+      });
+      return h + '</div>';
     },
 
     _plMineHTML: function () {
-      if (!this._plGrid) return '<section class="dsec"><p class="none">Loading your hours…</p></section>';
-      var self = this, names = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'], zone = (this.mine && this.mine.tz) || browserZone() || '';
+      if (!this._plGrids) return '<section class="dsec"><p class="none">Loading your hours…</p></section>';
+      var self = this, zone = (this.mine && this.mine.tz) || browserZone() || '', alt = this._plAlt;
       var tools = [['available', 'Free'], ['preferred', 'Best'], ['', 'Clear']];
+      var inZone = zone ? ', in ' + esc(zone.replace(/_/g, ' ')) + ' time' : '';
       var h = '<section class="dsec"><h4>Your hours</h4>' +
-        '<p class="dnote">Drag across the hours you can usually play. They repeat every week' + (zone ? ', in ' + esc(zone.replace(/_/g, ' ')) + ' time' : '') + '.</p>' +
+        '<div class="segs plalt" role="group" aria-label="How your hours repeat">' +
+          '<button type="button" data-pl-alt="0" aria-pressed="' + !alt + '">Same every week</button>' +
+          '<button type="button" data-pl-alt="1" aria-pressed="' + alt + '">Alternating weeks</button></div>' +
+        '<p class="dnote">' + (alt ? 'Paint each of the two weeks. They take turns, every other week' : 'Drag across the hours you can usually play. They repeat every week') + inZone + '.</p>' +
         '<div class="rseg pltools" role="group" aria-label="Paint">' + tools.map(function (t) {
           return '<button type="button" data-pl-tool="' + t[0] + '" aria-pressed="' + (self._plTool === t[0]) + '"><span class="plsw ' + (t[0] || 'none') + '"></span>' + t[1] + '</button>';
-        }).join('') + '</div>' +
-        '<div class="plgrid" role="grid" aria-label="Your weekly hours"><div class="plgh" aria-hidden="true"><span></span><span>12am</span><span>6am</span><span>noon</span><span>6pm</span></div>';
-      for (var c = 0; c < 7; c++) {
-        h += '<div class="plrow" role="row"><span class="nm">' + names[c] + '</span><span class="plcells">';
-        for (var hr = 0; hr < 24; hr++) {
-          var st = this._plGrid[c][hr];
-          h += '<button type="button" class="plc" role="gridcell" data-c="' + c + '" data-h="' + hr + '" data-st="' + st + '" aria-label="' + names[c] + ' ' + ampm(hr * 60) + (st ? ', ' + (st === 'preferred' ? 'best' : 'free') : '') + '"></button>';
-        }
-        h += '</span></div>';
+        }).join('') + '</div>';
+      if (alt) {
+        var weeks = cadenceWeeks(this._todayIso() || localIso(new Date()));
+        // The sooner week first.
+        (weeks[1] < weeks[2] ? [1, 2] : [2, 1]).forEach(function (g) {
+          var title = 'Week of ' + realDateWords(weeks[g]) + ' and every other week after';
+          h += '<h5 class="plwk">' + esc(title) + '</h5>' + self._plGridHTML(g, title);
+        });
+      } else {
+        h += this._plGridHTML(0, 'Your weekly hours');
       }
-      h += '</div><div class="plsave"><button type="button" class="btn primary" data-pl-save' + (this._plDirty ? '' : ' disabled') + '>Save my hours</button><span class="plstat" role="status">' + esc(this._plStatus || '') + '</span></div>';
-      if ((this._plKeep || []).length) h += '<p class="dnote">Your alternating-week hours are kept as they are.</p>';
-      h += '<p class="dnote"><a class="lnk" href="' + esc(this._availURL()) + '">Alternating weeks and one-off days</a></p></section>';
+      h += '<div class="plsave"><button type="button" class="btn primary" data-pl-save' + (this._plDirty ? '' : ' disabled') + '>Save my hours</button><span class="plstat" role="status">' + esc(this._plStatus || '') + '</span></div>';
+      h += '<p class="dnote">A day that’s different, or a day you can’t play: open that day in the calendar.</p></section>';
       return h;
     },
 
     _paintStart: function (e) {
       var c = e.target.closest && e.target.closest('.plc');
-      if (!c || !this._plGrid) return;
+      if (!c || !this._plGrids) return;
       e.preventDefault();
-      var col = +c.dataset.c, hr = +c.dataset.h, cur = this._plGrid[col][hr];
+      var col = +c.dataset.c, hr = +c.dataset.h, cur = this._plGrids[+c.dataset.g || 0][col][hr];
       this._painting = { v: cur === this._plTool ? '' : this._plTool };
       this._paintCell(c);
     },
@@ -2473,9 +2842,9 @@
       if (btn) btn.disabled = !this._plDirty;
     },
     _paintCell: function (c) {
-      var col = +c.dataset.c, hr = +c.dataset.h, v = this._painting.v;
-      if (this._plGrid[col][hr] === v) return;
-      this._plGrid[col][hr] = v;
+      var col = +c.dataset.c, hr = +c.dataset.h, v = this._painting.v, grid = this._plGrids[+c.dataset.g || 0];
+      if (grid[col][hr] === v) return;
+      grid[col][hr] = v;
       c.dataset.st = v;
       this._plDirty = true;
       this._plStatus = '';
@@ -2512,6 +2881,8 @@
       if (tab) { this._plPaint = tab.dataset.plTab === 'mine'; this.refreshPlanner(); return; }
       var tool = t.closest('[data-pl-tool]');
       if (tool) { this._plTool = tool.dataset.plTool; this.refreshPlanner(); return; }
+      var alt = t.closest('[data-pl-alt]');
+      if (alt) { this._plSetAlt(alt.dataset.plAlt === '1'); return; }
       if (t.closest('[data-pl-save]')) { this._plSave(t.closest('[data-pl-save]')); return; }
       var wk = t.closest('[data-pl-week]');
       if (wk) {
@@ -3181,7 +3552,8 @@
 
       this.wingEl.addEventListener('submit', function (e) {
         var form = e.target.closest('[data-plan-form]');
-        if (form) { e.preventDefault(); self._submitPlan(form); }
+        if (form) { e.preventDefault(); self._submitPlan(form); return; }
+        if (e.target.closest('[data-myday]')) e.preventDefault();
       });
       this.wingEl.addEventListener('click', function (e) {
         if (e.target.closest('[data-close]')) { if (!self._rollHolds()) self.closeWing(); return; }
@@ -3190,6 +3562,12 @@
         var plan = e.target.closest('[data-plan]');
         if (plan) { self._openPlan(plan.dataset.plan, parseInt(plan.dataset.planAt, 10) || 19); return; }
         if (e.target.closest('[data-plan-cancel]')) { self._closePlan(); return; }
+        if (e.target.closest('[data-pl-mine]')) { self.openPlanner({ paint: true }); return; }
+        if (self._myDayClick(e)) return;
+        var gnNew = e.target.closest('[data-gn-new]');
+        if (gnNew) { self._gnOpenEditor(null, gnNew.dataset.gnNew); return; }
+        var more = e.target.closest('[data-plan-more]');
+        if (more) { self._planMore(more.closest('[data-plan-form]')); return; }
         if (self._gnHandleClick(e)) return;
         if (e.target.closest('[data-sky-day]')) { var sd = parseDayKey(self.wingFor); self.previewSky(sd.y, sd.m, sd.d); return; }
         var mr = e.target.closest('.mrow');
@@ -3222,7 +3600,12 @@
       });
       this.evpEl.addEventListener('click', function (e) {
         if (e.target.closest('[data-close]')) { self.closeEventDetail(); return; }
+        if (e.target.closest('[data-gn-edit]')) { self._gnOpenEditor(self._findNight(self.evpEl.dataset.ev)); return; }
+        if (self._gnExtraClick(e)) return;
         self._gnHandleClick(e);
+      });
+      this.evpEl.addEventListener('input', function (e) {
+        if (e.target.matches('[data-gn-link-q]')) self._gnLinkSearch(e.target);
       });
       // Enter saves a game night's note; Escape puts the note away without
       // closing the card around it.
@@ -3336,6 +3719,7 @@
       this.closeFreeView();
       this.closePlanner(true);
       this.closePop();
+      if (window.Chronicle && Chronicle.calendarGameNight) Chronicle.calendarGameNight.close(this, true);
     },
 
     // --------------------------------------------------------------
@@ -3605,7 +3989,7 @@
         '<div class="leaf lf2"><div class="lscroll"><div class="wb wbr">' + gnHTML + this._freeWingHTML(d) +
           (evHTML ? '<div class="sect">' + (evs.length > 1 ? evs.length + ' events' : 'Events') + '</div>' +
           '<div class="evlist">' + evHTML + '</div>' : '') +
-          (this.canEdit ? this._addRowHTML() : '') +
+          this._gnAddHTML(d) + (this.canEdit ? this._addRowHTML() : '') +
           (moonRows ? '<div class="sect">' + (moonCount > 1 ? 'Moons' : 'Moon') + '</div><div class="moonsec">' + moonRows + '</div>' : '') +
         '</div></div></div>';
     },

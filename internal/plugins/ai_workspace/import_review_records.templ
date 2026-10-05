@@ -1,0 +1,113 @@
+// import_review_records.templ renders the review rows for records: the
+// non-page blocks (calendar events, rolling tables, shop stock, map pins,
+// notes, generators…). Unlike page rows, a record's action is fixed by the
+// markdown, because the plan shown is the plan for that action.
+
+package ai_workspace
+
+import (
+	"fmt"
+
+	"github.com/keyxmakerx/chronicle/internal/plugins/ai_workspace/records"
+)
+
+// RecordRow is one record as the review screen shows it.
+type RecordRow struct {
+	Index  int    // position among records; form fields are rec_<Index>_*
+	Label  string // the kind's label, or the raw kind when unknown
+	Action string
+	Name   string
+	Plan   records.Plan
+}
+
+// actionWord is the plain verb the chip shows.
+func (r RecordRow) actionWord() string {
+	switch {
+	case r.Plan.Client != "":
+		return "Generate"
+	case r.Action == records.ActionUpdate:
+		return "Change"
+	case r.Action == records.ActionDelete:
+		return "Remove"
+	}
+	return "Add"
+}
+
+func (r RecordRow) title() string {
+	if r.Name != "" {
+		return r.Name
+	}
+	return r.Label
+}
+
+templ reviewRecordRow(r RecordRow) {
+	<div
+		role="listitem"
+		aria-label={ fmt.Sprintf("%s %s: %s", r.actionWord(), r.Label, r.title()) }
+		class={
+			"card card-elev p-3 transition-colors",
+			templ.KV("border-rose-300 dark:border-rose-700", r.Plan.Error != "" || r.Action == records.ActionDelete),
+			templ.KV("border-sky-300 dark:border-sky-700", r.Plan.Client != "" && r.Plan.Error == ""),
+		}
+		if r.Plan.Client != "" && r.Plan.Error == "" {
+			data-ai-gen={ r.Plan.Client }
+		}
+	>
+		<div class="flex items-start gap-3">
+			<input
+				type="checkbox"
+				name={ fmt.Sprintf("rec_%d_include", r.Index) }
+				checked?={ r.Plan.Error == "" }
+				disabled?={ r.Plan.Error != "" }
+				class="mt-1 rounded border-edge text-accent"
+				aria-label={ fmt.Sprintf("Include %s in this import", r.title()) }
+			/>
+			<div class="flex-1 min-w-0 space-y-1">
+				<div class="flex items-center gap-2 flex-wrap">
+					<span class="text-sm font-medium text-fg">{ r.title() }</span>
+					<span class="text-xs px-2 py-0.5 rounded-full border border-edge text-fg-secondary">{ r.Label }</span>
+					<span
+						class={
+							"text-xs px-2 py-0.5 rounded-full",
+							templ.KV("bg-emerald-100 dark:bg-emerald-900/40 text-emerald-700 dark:text-emerald-300", r.Action == records.ActionCreate),
+							templ.KV("bg-sky-100 dark:bg-sky-900/40 text-sky-700 dark:text-sky-300", r.Action == records.ActionUpdate),
+							templ.KV("bg-rose-100 dark:bg-rose-900/40 text-rose-700 dark:text-rose-300", r.Action == records.ActionDelete),
+						}
+					>{ r.actionWord() }</span>
+				</div>
+				if r.Plan.Error != "" {
+					<div class="text-xs text-rose-700 dark:text-rose-300" role="alert">
+						<i class="fa-solid fa-triangle-exclamation mr-1" aria-hidden="true"></i>
+						{ r.Plan.Error }
+					</div>
+				} else {
+					<div class="text-xs text-fg-muted">{ r.Plan.Summary }</div>
+				}
+				if r.Plan.Client != "" {
+					<input type="hidden" name={ fmt.Sprintf("rec_%d_generated", r.Index) } value=""/>
+				}
+				if r.Action == records.ActionDelete && r.Plan.Error == "" {
+					<div class="mt-2 p-2 rounded border border-rose-300 dark:border-rose-700 bg-rose-50 dark:bg-rose-900/20">
+						<label class="flex items-start gap-2 text-xs text-rose-900 dark:text-rose-100 cursor-pointer">
+							<input
+								type="checkbox"
+								name={ fmt.Sprintf("rec_%d_delete_confirmed", r.Index) }
+								required
+								class="mt-0.5 rounded border-rose-400 text-rose-600"
+								aria-label={ fmt.Sprintf("I confirm %s will be removed", r.title()) }
+							/>
+							<span>I understand <strong>{ r.title() }</strong> will be removed for good.</span>
+						</label>
+					</div>
+				}
+				if len(r.Plan.Warnings) > 0 {
+					<ul class="text-xs text-amber-700 dark:text-amber-300 list-disc ml-4">
+						for _, w := range r.Plan.Warnings {
+							<li>{ w }</li>
+						}
+					</ul>
+				}
+			</div>
+		</div>
+	</div>
+}

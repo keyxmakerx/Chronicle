@@ -211,8 +211,9 @@ func parseOnePage(raw string) ParsedPage {
 		p.HasFrontMatter = true
 		p.FrontMatter = fm
 		p.Body = body
-		// Warn for unknown YAML keys.
-		if unknown := unknownYAMLKeys(fmRaw); len(unknown) > 0 {
+		_ = yaml.Unmarshal([]byte(fmRaw), &p.Fields)
+		// Warn for unknown YAML keys (records carry per-kind keys).
+		if unknown := unknownYAMLKeys(fmRaw); len(unknown) > 0 && !p.IsRecord() {
 			p.Warnings = append(p.Warnings,
 				"Unknown front-matter key(s): "+strings.Join(unknown, ", "))
 		}
@@ -227,6 +228,22 @@ func parseOnePage(raw string) ParsedPage {
 			p.Warnings = append(p.Warnings,
 				"No `name:` in front-matter; using first H1 as name")
 		}
+	}
+
+	// A record's keys, name and body are checked by its kind, not here.
+	if p.IsRecord() {
+		switch p.FrontMatter.Action {
+		case "":
+			p.FrontMatter.Action = ActionCreate
+		case ActionCreate, ActionUpdate, ActionDelete:
+		default:
+			p.Status = StatusParseError
+			p.ParseError = fmt.Sprintf(
+				"action: %q is not valid (must be one of create, update, delete)", p.FrontMatter.Action)
+			return p
+		}
+		p.Status = StatusNew
+		return p
 	}
 
 	// Validate visibility enum BEFORE checking name — a bad
@@ -359,7 +376,7 @@ func unknownYAMLKeys(rawYAML string) []string {
 	known := map[string]bool{
 		"name": true, "type": true, "subcategory": true,
 		"visibility": true, "tags": true, "description": true,
-		"action": true,
+		"action": true, "kind": true,
 	}
 	var unknown []string
 	for _, line := range strings.Split(rawYAML, "\n") {
