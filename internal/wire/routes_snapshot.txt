@@ -445,7 +445,6 @@ GET	/settings	internal/plugins/campaigns/routes.go
 GET	/settings	internal/plugins/packages/routes.go
 GET	/sidebar-config	internal/plugins/campaigns/routes.go
 GET	/sidebar/drill/:slug	internal/plugins/campaigns/routes.go
-GET	/sidebar/sessions-rsvp	internal/plugins/sessions/routes.go
 GET	/site-look	internal/plugins/admin/routes.go
 GET	/smtp	internal/plugins/smtp/routes.go
 GET	/stashes/downtime	internal/plugins/syncapi/routes.go

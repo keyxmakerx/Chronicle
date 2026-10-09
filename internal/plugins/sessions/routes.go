@@ -121,7 +121,6 @@ func RegisterRoutes(e *echo.Echo, h *Handler,
 	)
 	pub.GET("/sessions", h.ListSessions, campaigns.RequireViewAccess())
 	pub.GET("/sessions/:sid", h.ShowSession, campaigns.RequireViewAccess())
-	pub.GET("/sidebar/sessions-rsvp", h.SidebarRSVP, campaigns.RequireViewAccess())
 	pub.GET("/sessions/embed", h.EmbedSessions, campaigns.RequireViewAccess())
 	pub.GET("/game-nights", h.GameNightsLink, campaigns.RequireViewAccess())
 
