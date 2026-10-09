@@ -13,6 +13,7 @@ which code comments still cite; Cordinator is otherwise a frozen archive.
 | File | What it covers |
 |------|----------------|
 | `architecture.md` | System design, the three-tier extension model, request flow, dependency graph |
+| `ui-standard.md` | How Chronicle looks and behaves: what is on a page, opening and closing, motion, look, sign-off. Read before any UI change |
 | `conventions.md` | Code patterns with Go/Templ/SQL examples, CI guards, security rules, cross-plugin import discipline |
 | `decisions.md` | Architecture Decision Records. Append-only; code cites ADR numbers, so never renumber |
 | `tech-stack.md` | Technology versions, configs, and why each was chosen |
