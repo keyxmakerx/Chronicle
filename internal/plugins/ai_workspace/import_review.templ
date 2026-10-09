@@ -690,25 +690,13 @@ templ visibilityOption(idx int, value, label, fmValue string) {
 	}
 }
 
-// importSection renders the paste textarea + optional file upload
+// importBody renders the paste textarea + optional file upload
 // (via the markdown_importer.js widget) + Parse button. POST →
 // review fragment swap. Per-textarea Alpine state computes a live
 // character counter (5 MB cap mirrored client-side; the server
 // enforces it too, in handler.go's importBodyCap).
-templ importSection(cc *campaigns.CampaignContext) {
-	<div class="card p-6">
-		<div class="flex items-start gap-4 mb-4">
-			<span class="w-10 h-10 rounded-lg bg-accent/10 flex items-center justify-center shrink-0">
-				<i class="fa-solid fa-file-import text-accent text-lg" aria-hidden="true"></i>
-			</span>
-			<div>
-				<h2 class="text-lg font-semibold text-fg">AI Import</h2>
-				<p class="text-sm text-fg-secondary mt-0.5 leading-relaxed">
-					Paste AI-generated markdown (or drag-drop .md files) below. The next screen reviews every detected page; nothing is created until you confirm.
-				</p>
-			</div>
-		</div>
-
+templ importBody(cc *campaigns.CampaignContext) {
+	<div>
 		<form
 			hx-post={ fmt.Sprintf("/campaigns/%s/ai-workspace/import/parse", cc.Campaign.ID) }
 			hx-target="#ai-import-review-host"
@@ -729,7 +717,7 @@ templ importSection(cc *campaigns.CampaignContext) {
 					id="ai-import-paste-area"
 					name="markdown_paste"
 					rows="10"
-					placeholder="Paste AI-generated markdown here (multiple pages separated by --- front-matter blocks or # headings)..."
+					placeholder="Paste what your AI gave you: pages and changes, or a lookup..."
 					class="input w-full text-sm font-mono"
 					x-model="pasted"
 					maxlength="5242880"

@@ -14,21 +14,91 @@ import (
 )
 
 // SettingsTabBody renders the Data & AI settings tab: the campaign's own
-// export and import first, then the Prompt builder (operator generates a
-// prompt, pastes into an AI tool, gets content back), AI Export and AI
-// Import.
+// export and import first, then the one AI tool box.
 templ SettingsTabBody(cc *campaigns.CampaignContext) {
 	<div class="space-y-6">
 		@campaigns.SettingsDataSection(cc)
 		@onboardingHint(cc)
-		@promptBuilderSection(cc)
-		@aiExportSection(cc)
-		@importSection(cc)
+		@aiToolSection(cc)
+	</div>
+}
+
+// aiToolSection is the AI tool: three folding rows in the order an owner
+// uses them (copy a prompt, paste back what the AI gives, or export the
+// whole campaign). Pasting is open by default, since it is the step people
+// come back for; each row grows open inside the box.
+templ aiToolSection(cc *campaigns.CampaignContext) {
+	<div class="card p-6" x-data="{ open: 'paste' }">
+		<div class="flex items-start gap-4 mb-4">
+			<span class="w-10 h-10 rounded-lg bg-accent/10 flex items-center justify-center shrink-0">
+				<i class="fa-solid fa-wand-magic-sparkles text-accent text-lg" aria-hidden="true"></i>
+			</span>
+			<div>
+				<h2 class="text-lg font-semibold text-fg">AI tool</h2>
+				<p class="text-sm text-fg-secondary mt-0.5 leading-relaxed">
+					Work with Claude, ChatGPT or another AI. It reads what you copy to it and can ask Chronicle for more; everything it sends back is reviewed here first.
+				</p>
+			</div>
+		</div>
+		<div class="divide-y divide-edge border border-edge rounded-lg">
+			@aiToolRow("prompt", "1", "", "Copy a prompt for your AI", "What your campaign looks like and what you want made") {
+				@promptBuilderBody(cc)
+			}
+			@aiToolRow("paste", "2", "", "Paste what your AI gives you", "Changes to review, or a lookup for Chronicle to answer") {
+				@importBody(cc)
+			}
+			@aiToolRow("export", "", "fa-solid fa-file-export", "Export the whole campaign for AI", "One markdown file for NotebookLM and similar tools") {
+				@aiExportBody(cc)
+			}
+		</div>
+	</div>
+}
+
+// aiToolRow is one folding row of the AI tool: a numbered (or icon) badge,
+// a title and a line under it. Only one row is open at a time.
+templ aiToolRow(key, num, icon, title, sub string) {
+	<div>
+		<button
+			type="button"
+			class="w-full flex items-center gap-3 px-4 py-3 text-left"
+			@click={ fmt.Sprintf("open = open === '%s' ? '' : '%s'", key, key) }
+			:aria-expanded={ fmt.Sprintf("open === '%s'", key) }
+			aria-controls={ "ai-tool-" + key }
+		>
+			<span class="inline-flex items-center justify-center w-6 h-6 rounded-full bg-accent/10 text-accent text-xs font-bold shrink-0">
+				if icon != "" {
+					<i class={ icon } aria-hidden="true"></i>
+				} else {
+					{ num }
+				}
+			</span>
+			<span class="flex-1 min-w-0">
+				<span class="block text-sm font-medium text-fg">{ title }</span>
+				<span class="block text-xs text-fg-muted">{ sub }</span>
+			</span>
+			<i
+				class="fa-solid fa-chevron-down text-xs text-fg-muted transition-transform"
+				:class={ fmt.Sprintf("open === '%s' && 'rotate-180'", key) }
+				aria-hidden="true"
+			></i>
+		</button>
+		<div
+			id={ "ai-tool-" + key }
+			x-show={ fmt.Sprintf("open === '%s'", key) }
+			x-collapse.duration.200ms
+			if key != "paste" {
+				x-cloak
+			}
+		>
+			<div class="px-4 pb-4">
+				{ children... }
+			</div>
+		</div>
 	</div>
 }
 
 // onboardingHint renders a one-shot inline callout (not a popup or
-// overlay) pointing at the Copy AI Prompt section. It is dismissed
+// overlay) pointing at the AI tool's first row. It is dismissed
 // via a per-campaign localStorage key
 // (`ai-workspace-onboarded-<campaignID>`); clearing the key re-shows
 // it.
@@ -61,7 +131,7 @@ templ onboardingHint(cc *campaigns.CampaignContext) {
 			<i class="fa-solid fa-lightbulb text-accent text-base mt-0.5" aria-hidden="true"></i>
 			<div class="flex-1 text-sm text-fg">
 				<strong class="font-medium">New here?</strong>
-				Start with <strong>Copy AI Prompt</strong> below. Paste the prompt into Claude / ChatGPT, get new entities back, then bring them in via <strong>AI Import</strong>. Owner-only; nothing is created until you confirm the review.
+				Copy a prompt for your AI, then paste back whatever it gives you: changes to review, or a lookup Chronicle answers for it. Owner-only; nothing changes until you confirm.
 			</div>
 			<button
 				type="button"
@@ -75,15 +145,14 @@ templ onboardingHint(cc *campaigns.CampaignContext) {
 	</div>
 }
 
-// promptBuilderSection is the picker UI: operator selects which
+// promptBuilderBody is the picker UI: operator selects which
 // schema bits to include, whether to embed content (and at what
 // privacy mode), and types a custom instruction; Generate renders
 // the assembled markdown in a modal with a Copy button. The token
 // estimate here is a rough client-side Alpine computation; the
 // authoritative count is server-rendered in the modal's footer.
-templ promptBuilderSection(cc *campaigns.CampaignContext) {
+templ promptBuilderBody(cc *campaigns.CampaignContext) {
 	<div
-		class="card p-6"
 		x-data="{
 			schemaTypes: true,
 			schemaCategories: true,
@@ -103,24 +172,12 @@ templ promptBuilderSection(cc *campaigns.CampaignContext) {
 			}
 		}"
 	>
-		<div class="flex items-start gap-4 mb-4">
-			<span class="w-10 h-10 rounded-lg bg-accent/10 flex items-center justify-center shrink-0">
-				<i class="fa-solid fa-message text-accent text-lg"></i>
-			</span>
-			<div>
-				<h2 class="text-lg font-semibold text-fg">Copy AI Prompt</h2>
-				<p class="text-sm text-fg-secondary mt-0.5 leading-relaxed">
-					Build a context-rich prompt for Claude, ChatGPT, or another AI tool. Include your campaign's schema, optionally include existing content, and tell the AI what to generate. Output you paste back via AI Import is checked against this same schema.
-				</p>
-			</div>
-		</div>
-
 		<form
 			hx-get={ fmt.Sprintf("/campaigns/%s/ai-workspace/prompt/generate", cc.Campaign.ID) }
 			hx-target="#ai-prompt-modal-host"
 			hx-swap="innerHTML"
 			hx-indicator="#ai-prompt-generating"
-			class="space-y-5 mt-4"
+			class="space-y-5"
 		>
 			<div>
 				<h3 class="text-sm font-medium text-fg mb-2">Schema bits</h3>
@@ -229,32 +286,18 @@ templ promptBuilderSection(cc *campaigns.CampaignContext) {
 	</div>
 }
 
-// aiExportSection is the form + Generate button. Sends an HTMX hx-get
+// aiExportBody is the form + Generate button. Sends an HTMX hx-get
 // to /ai-export/generate; the response replaces #ai-export-modal-host
-// with the rendered modal (modal.templ).
-templ aiExportSection(cc *campaigns.CampaignContext) {
-	<div class="card p-6">
-		<div class="flex items-start gap-4 mb-4">
-			<span class="w-10 h-10 rounded-lg bg-accent/10 flex items-center justify-center shrink-0">
-				<i class="fa-solid fa-wand-magic-sparkles text-accent text-lg"></i>
-			</span>
-			<div>
-				<h2 class="text-lg font-semibold text-fg">Export for AI</h2>
-				<p class="text-sm text-fg-secondary mt-0.5 leading-relaxed">
-					Generate a single markdown document of this campaign's content,
-					ready to paste into Claude, ChatGPT, NotebookLM, or other AI tools.
-					Intentionally lossy — the campaign export endpoint stays the
-					source of truth backup surface.
-				</p>
-			</div>
-		</div>
-
+// with the rendered modal (modal.templ). The export is lossy on purpose;
+// the campaign export above stays the backup.
+templ aiExportBody(cc *campaigns.CampaignContext) {
+	<div>
 		<form
 			hx-get={ fmt.Sprintf("/campaigns/%s/ai-export/generate", cc.Campaign.ID) }
 			hx-target="#ai-export-modal-host"
 			hx-swap="innerHTML"
 			hx-indicator="#ai-export-generating"
-			class="space-y-5 mt-4"
+			class="space-y-5"
 		>
 			<div>
 				<h3 class="text-sm font-medium text-fg mb-2">Categories</h3>

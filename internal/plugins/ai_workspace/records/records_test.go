@@ -176,13 +176,36 @@ type fakeCal struct {
 	cal     calendar.Calendar
 	weather []calendar.DayWeatherInput
 	events  []calendar.CreateEventInput
+	stored  []calendar.Event      // what the list reads return
+	days    []calendar.DayWeather // what ListDayWeather returns
 }
 
 func (f *fakeCal) GetDefaultCalendarForViewer(context.Context, string, permissions.Viewer) (*calendar.Calendar, error) {
 	return &f.cal, nil
 }
-func (f *fakeCal) ListAllEventsForCalendar(context.Context, string, string, permissions.Viewer) ([]calendar.Event, error) {
-	return nil, nil
+
+// ListEventsForCalendar drops Director-only events below a co-DM, as the
+// real service's role filter does.
+func (f *fakeCal) ListEventsForCalendar(_ context.Context, _, _ string, role int) ([]calendar.Event, error) {
+	var out []calendar.Event
+	for _, e := range f.stored {
+		if e.Visibility != "dm_only" || role >= 3 {
+			out = append(out, e)
+		}
+	}
+	return out, nil
+}
+
+// ListEventsForMonth drops Director-only events for a player, as the real
+// service's role filter does.
+func (f *fakeCal) ListEventsForMonth(_ context.Context, _, _ string, y, m int, v permissions.Viewer) ([]calendar.Event, error) {
+	var out []calendar.Event
+	for _, e := range f.stored {
+		if e.Year == y && e.Month == m && (e.Visibility != "dm_only" || v.SkipsPerUserRules()) {
+			out = append(out, e)
+		}
+	}
+	return out, nil
 }
 func (f *fakeCal) CreateEvent(_ context.Context, _, _ string, in calendar.CreateEventInput) (*calendar.Event, error) {
 	f.events = append(f.events, in)
@@ -194,8 +217,14 @@ func (f *fakeCal) UpdateEvent(context.Context, string, string, string, calendar.
 func (f *fakeCal) DeleteEvent(context.Context, string, string, string, permissions.Viewer) error {
 	return nil
 }
-func (f *fakeCal) ListDayWeather(context.Context, string, string, int, int, permissions.Viewer) ([]calendar.DayWeather, error) {
-	return nil, nil
+func (f *fakeCal) ListDayWeather(_ context.Context, _, _ string, y, m int, _ permissions.Viewer) ([]calendar.DayWeather, error) {
+	var out []calendar.DayWeather
+	for _, d := range f.days {
+		if d.Year == y && d.Month == m {
+			out = append(out, d)
+		}
+	}
+	return out, nil
 }
 func (f *fakeCal) SetDayWeather(_ context.Context, _, _ string, days []calendar.DayWeatherInput) error {
 	f.weather = append(f.weather, days...)
