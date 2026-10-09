@@ -62,6 +62,7 @@ type mockSessionRepo struct {
 	createProposalTokenFn       func(ctx context.Context, token *SlotProposalToken) error
 	findProposalTokenFn         func(ctx context.Context, tokenStr string) (*SlotProposalToken, error)
 	markProposalTokenUsedFn     func(ctx context.Context, tokenStr string) error
+	mergeUnreadNotificationFn   func(ctx context.Context, n *Notification) error
 	createNotificationFn        func(ctx context.Context, n *Notification) error
 	listNotificationsFn         func(ctx context.Context, userID string, limit int) ([]Notification, error)
 	countUnreadNotificationsFn  func(ctx context.Context, userID string) (int, error)
@@ -526,6 +527,13 @@ func (m *mockSessionRepo) MarkProposalTokenUsed(ctx context.Context, tokenStr st
 func (m *mockSessionRepo) CreateNotification(ctx context.Context, n *Notification) error {
 	if m.createNotificationFn != nil {
 		return m.createNotificationFn(ctx, n)
+	}
+	return nil
+}
+
+func (m *mockSessionRepo) MergeUnreadNotification(ctx context.Context, n *Notification) error {
+	if m.mergeUnreadNotificationFn != nil {
+		return m.mergeUnreadNotificationFn(ctx, n)
 	}
 	return nil
 }

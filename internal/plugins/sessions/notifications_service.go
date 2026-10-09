@@ -114,18 +114,27 @@ func (s *sessionService) NotifyProposalCreated(ctx context.Context, campaignID, 
 	return nil
 }
 
-// NotifyProposalResponse writes a single notification to the proposal's creator
-// that a member responded. Looks the proposal up (campaign-scoped) to find the
-// recipient and title.
-func (s *sessionService) NotifyProposalResponse(ctx context.Context, campaignID, proposalID, responderName, response string) error {
+// NotifyProposalResponse tells the proposal's creator that members are
+// answering. A player ticks yes/no on every option, so one notification per
+// tick buried the creator; instead the creator keeps a single unread row per
+// proposal that names the latest responder and how many have answered. The
+// creator answering their own proposal notifies nobody.
+func (s *sessionService) NotifyProposalResponse(ctx context.Context, campaignID, proposalID, responderID, responderName string) error {
 	p, _, err := s.repo.GetProposal(ctx, campaignID, proposalID)
 	if err != nil {
 		return err
 	}
+	if responderID == p.CreatedBy {
+		return nil
+	}
+	responses, err := s.repo.ListProposalResponses(ctx, proposalID)
+	if err != nil {
+		return apperror.NewInternal(fmt.Errorf("loading responders: %w", err))
+	}
 	if responderName == "" {
 		responderName = "A player"
 	}
-	message := fmt.Sprintf("%s responded %q to %q", responderName, response, p.Title)
+	message := proposalResponseMessage(responderName, p.Title, responses, responderID, p.CreatedBy)
 	link := proposalLink(campaignID, proposalID)
 	cid := campaignID
 	n := &Notification{
@@ -137,10 +146,29 @@ func (s *sessionService) NotifyProposalResponse(ctx context.Context, campaignID,
 		Link:       &link,
 		CreatedAt:  time.Now().UTC(),
 	}
-	if err := s.repo.CreateNotification(ctx, n); err != nil {
+	if err := s.repo.MergeUnreadNotification(ctx, n); err != nil {
 		return apperror.NewInternal(fmt.Errorf("writing response notification: %w", err))
 	}
 	return nil
+}
+
+// proposalResponseMessage words the creator's one row: the latest responder,
+// plus how many other members (never the creator) have answered so far.
+func proposalResponseMessage(latest, title string, responses []SlotProposalResponse, latestID, creatorID string) string {
+	others := map[string]bool{}
+	for _, r := range responses {
+		if r.UserID != latestID && r.UserID != creatorID {
+			others[r.UserID] = true
+		}
+	}
+	switch len(others) {
+	case 0:
+		return fmt.Sprintf("%s answered %q", latest, title)
+	case 1:
+		return fmt.Sprintf("%s and 1 other have answered %q", latest, title)
+	default:
+		return fmt.Sprintf("%s and %d others have answered %q", latest, len(others), title)
+	}
 }
 
 // NotifyProposalConfirmed writes a "session confirmed" notification to every

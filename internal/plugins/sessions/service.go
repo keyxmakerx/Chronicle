@@ -191,7 +191,7 @@ type SessionService interface {
 	// enumerates members / resolves names); the service owns the
 	// payload/link/message construction. See notifications_service.go.
 	NotifyProposalCreated(ctx context.Context, campaignID, proposalID, title string, recipientIDs []string) error
-	NotifyProposalResponse(ctx context.Context, campaignID, proposalID, responderName, response string) error
+	NotifyProposalResponse(ctx context.Context, campaignID, proposalID, responderID, responderName string) error
 	// NotifyUsers is the generic fan-in the notifications store supports, so a
 	// feature outside the scheduler can write a bell notification without the
 	// scheduler growing a method per feature and without that feature

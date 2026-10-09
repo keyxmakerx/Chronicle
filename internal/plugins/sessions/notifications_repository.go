@@ -23,6 +23,25 @@ func (r *sessionRepository) CreateNotification(ctx context.Context, n *Notificat
 	return nil
 }
 
+// MergeUnreadNotification rewrites the recipient's still-unread notification
+// of the same type and link with n's payload and time, so a burst of answers
+// to one thing stays one bell row. It inserts n when there is nothing unread
+// to merge into; once the recipient has read the row, the next answer starts
+// a fresh one.
+func (r *sessionRepository) MergeUnreadNotification(ctx context.Context, n *Notification) error {
+	res, err := r.db.ExecContext(ctx,
+		`UPDATE notifications SET payload = ?, created_at = ?
+		 WHERE user_id = ? AND type = ? AND link = ? AND read_at IS NULL`,
+		n.Payload, n.CreatedAt, n.UserID, n.Type, n.Link)
+	if err != nil {
+		return fmt.Errorf("merging notification: %w", err)
+	}
+	if affected, aErr := res.RowsAffected(); aErr == nil && affected > 0 {
+		return nil
+	}
+	return r.CreateNotification(ctx, n)
+}
+
 // ListNotifications returns a user's notifications, newest first, capped at limit.
 func (r *sessionRepository) ListNotifications(ctx context.Context, userID string, limit int) ([]Notification, error) {
 	if limit <= 0 || limit > 100 {

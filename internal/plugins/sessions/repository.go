@@ -131,6 +131,7 @@ type SessionRepository interface {
 	// Scheduler-scoped notifications. Own table (notifications); see
 	// notifications_repository.go.
 	CreateNotification(ctx context.Context, n *Notification) error
+	MergeUnreadNotification(ctx context.Context, n *Notification) error
 	ListNotifications(ctx context.Context, userID string, limit int) ([]Notification, error)
 	CountUnreadNotifications(ctx context.Context, userID string) (int, error)
 	MarkNotificationRead(ctx context.Context, userID, notificationID string) error
