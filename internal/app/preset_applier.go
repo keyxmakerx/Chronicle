@@ -237,9 +237,75 @@ func mapPresetFields(fields []systems.FieldDef) []entities.FieldDefinition {
 			OwnerOnly: f.OwnerOnly,
 			// Names the data file the pick-from-the-system control reads.
 			Choices: f.Choices,
+			// Carried so play controls read one stored declaration.
+			Play: mapPlayDef(f.Play),
 		})
 	}
 	return out
+}
+
+// mapPlayDef copies a manifest play block onto the entities type. Slices are
+// copied so the stored field never aliases the registry's manifest.
+func mapPlayDef(p *systems.PlayDef) *entities.FieldPlay {
+	if p == nil {
+		return nil
+	}
+	out := &entities.FieldPlay{
+		Edit:            p.Edit,
+		Kind:            p.Kind,
+		Min:             p.Min,
+		Max:             p.Max,
+		MaxField:        p.MaxField,
+		Step:            p.Step,
+		MaxLength:       p.MaxLength,
+		ToFoundry:       p.ToFoundry,
+		CombatAuthority: p.CombatAuthority,
+	}
+	if len(p.Options) > 0 {
+		out.Options = append([]string(nil), p.Options...)
+	}
+	return out
+}
+
+// buildPlayByCategory is buildFlagsByCategory's counterpart for play blocks:
+// every declared preset field is recorded (nil when it has no block) so the
+// reconciler also clears a block a system update removed.
+func buildPlayByCategory() map[string]map[string]*entities.FieldPlay {
+	out := map[string]map[string]*entities.FieldPlay{}
+	for _, m := range systems.Registry() {
+		if m == nil {
+			continue
+		}
+		for _, preset := range m.EntityPresets {
+			if preset.Category == "" {
+				continue
+			}
+			for _, f := range preset.Fields {
+				if out[preset.Category] == nil {
+					out[preset.Category] = map[string]*entities.FieldPlay{}
+				}
+				out[preset.Category][f.Key] = mapPlayDef(f.Play)
+			}
+		}
+	}
+	return out
+}
+
+// reconcileFieldPlay stamps manifest play blocks onto existing entity types.
+// Same idempotent, best-effort contract as reconcileFieldGMFlags.
+func reconcileFieldPlay(ctx context.Context, entityService entities.EntityService) {
+	play := buildPlayByCategory()
+	if len(play) == 0 {
+		return
+	}
+	n, err := entityService.SyncFieldPlay(ctx, play)
+	if err != nil {
+		slog.Warn("entity_types: play field sync failed", slog.Any("error", err))
+		return
+	}
+	if n > 0 {
+		slog.Info("entity_types: play field sync updated types", slog.Int("rows", n))
+	}
 }
 
 // mapPresetFieldType maps a manifest field type ("string", "number", "boolean",

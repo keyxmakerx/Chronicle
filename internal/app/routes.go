@@ -2508,6 +2508,10 @@ func (a *App) RegisterRoutes() {
 		// fields become owner-private on types created before the manifest
 		// carried owner_only.
 		reconcileFieldOwnerOnlyFlags(ctx, entityService)
+
+		// Same for play blocks, so an installed system's play declarations
+		// reach types created before it declared them.
+		reconcileFieldPlay(ctx, entityService)
 	}()
 
 	// Campaigns plugin: CRUD, membership, ownership transfer.
@@ -2966,6 +2970,7 @@ func (a *App) RegisterRoutes() {
 		// without a restart — mirrors the boot-time reconcile.
 		reconcileFieldGMFlags(context.Background(), entityService)
 		reconcileFieldOwnerOnlyFlags(context.Background(), entityService)
+		reconcileFieldPlay(context.Background(), entityService)
 
 		// Add the sheet fields this install introduced to campaigns already
 		// using the system; background since it walks every such campaign.
