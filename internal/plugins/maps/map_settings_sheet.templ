@@ -136,6 +136,9 @@ templ mapSettingsSheet(data MapViewData) {
 					<div class="mp-f"><span>Hexes cover</span>
 						<div id="ms-hexcover" class="mp-chips" role="group" aria-label="Hexes cover"></div>
 					</div>
+					<div class="mp-f"><span>Terrain art</span>
+						@sheetChips("hex_art", []sheetChoice{{"real", "Realistic"}, {"detailed", "Detailed"}, {"simple", "Simple"}})
+					</div>
 					<label class="mp-check"><span>Fog of war</span><input type="checkbox" id="ms-fog"/></label>
 					<small>Players see hexes the party hasn’t explored under a moving shadow.</small>
 					<div class="mp-f"><span>Who can move the party</span>

@@ -1023,7 +1023,9 @@
 		if (D.grid_type !== 'hex' || hexesLoading) return;
 		startHexSocket();
 		hexesLoading = true;
-		loadScript(cfg.dataset.hexesSrc).then(function() {
+		// The terrain art is optional: without it every map draws Simple.
+		var art = cfg.dataset.hexArtSrc ? loadScript(cfg.dataset.hexArtSrc).catch(function() {}) : Promise.resolve();
+		Promise.all([art, loadScript(cfg.dataset.hexesSrc)]).then(function() {
 			hexesLoading = false;
 			if (destroyed || !window.ChronicleMapHexes || !viewerCtx) return;
 			try { window.ChronicleMapHexes.init(viewerCtx); } catch (err) { console.error('[map-viewer] hexes failed:', err); }
@@ -1049,6 +1051,8 @@
 	// The layer's saved travel figures; the settings sheet stages changes in
 	// D.hex_miles and D.hex_speed.
 	var hexMiles = 6, hexSpeed = 24;
+	// The map's saved terrain art; the settings sheet stages a change in D.hex_art.
+	var hexArt = 'detailed';
 	// The live hex connection's state (see startHexSocket); declared up here
 	// because syncHexes can run before the connection code below does.
 	var hexSocket = null, hexSocketTries = 0, hexSocketTimer = null, hexSocketLost = false;
@@ -1303,7 +1307,8 @@
 		function syncSheet() {
 			sheet.querySelectorAll('.mp-chip').forEach(function(b) {
 				if (b.dataset.hc !== undefined) return;
-				b.setAttribute('aria-pressed', String(D[b.dataset.k]) === b.dataset.v ? 'true' : 'false');
+				var cur = b.dataset.k === 'hex_art' && !Object.prototype.hasOwnProperty.call(D, 'hex_art') ? hexArt : D[b.dataset.k];
+				b.setAttribute('aria-pressed', String(cur) === b.dataset.v ? 'true' : 'false');
 			});
 			renderHexCover();
 			var fogBox = $id('ms-fog');
@@ -1500,6 +1505,8 @@
 					if (Object.prototype.hasOwnProperty.call(D, 'hex_fog') && D.hex_fog !== hexFog) layerBody.fog_enabled = D.hex_fog;
 					if (Object.prototype.hasOwnProperty.call(D, 'hex_miles') && D.hex_miles !== hexMiles) layerBody.miles_per_hex = D.hex_miles;
 					if (Object.prototype.hasOwnProperty.call(D, 'hex_speed') && D.hex_speed !== hexSpeed) layerBody.miles_per_day = D.hex_speed;
+					// The art goes through the layer so every open map redraws with it.
+					if (Object.prototype.hasOwnProperty.call(D, 'hex_art') && D.hex_art !== hexArt) layerBody.art = D.hex_art;
 				}
 				if (resp.ok && Object.keys(layerBody).length) {
 					if (!await apiPut(hexBase + '/layer', layerBody)) { btn.disabled = false; return; }
@@ -1903,6 +1910,13 @@
 		hexCover: hexCover,
 		onHexAnchor: function(id) { hexAnchor = id; hexCoverNotify(); },
 		onHexFog: function(on) { hexFog = !!on; if (window.__mpSyncFog) window.__mpSyncFog(); },
+		// onHexArt hears the map's art; fromPanel means the Paint panel chose it,
+		// which replaces anything staged in the sheet.
+		onHexArt: function(art, fromPanel) {
+			hexArt = art;
+			if (fromPanel) delete D.hex_art;
+			if (window.__mpSyncFog) window.__mpSyncFog();
+		},
 		onHexTravel: function(perHex, perDay) { hexMiles = perHex; hexSpeed = perDay; if (window.__mpSyncFog) window.__mpSyncFog(); },
 		getMapImage: function() { return mapImageURL; },
 		setMapImage: setMapImage,

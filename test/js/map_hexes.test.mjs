@@ -2,7 +2,8 @@
 // vectors produced by the approved mockup's own functions (the same vectors the
 // Go tests use), path building (one path however many hexes), the request
 // batching the server's cap needs, and the partial-update merge that keeps a
-// paint stroke from touching a name.
+// paint stroke from touching a name; and the terrain art's pure parts in
+// map_hex_art.js (pieces, folders, zoom steps, the tile cache).
 
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
@@ -12,9 +13,10 @@ import path from 'node:path';
 import vm from 'node:vm';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
-const src = readFileSync(path.join(here, '..', '..', 'static', 'js', 'map_hexes.js'), 'utf8');
+const jsDir = path.join(here, '..', '..', 'static', 'js');
 
-function load() {
+function load(file = 'map_hexes.js') {
+  const src = readFileSync(path.join(jsDir, file), 'utf8');
   const saved = { window: globalThis.window, document: globalThis.document, module: globalThis.module };
   delete globalThis.window;
   delete globalThis.document;
@@ -27,6 +29,7 @@ function load() {
   return api;
 }
 const H = load();
+const A = load('map_hex_art.js');
 const near = (a, b, eps = 1e-9) => assert.ok(Math.abs(a - b) < eps, `${a} !~ ${b}`);
 
 test('geometry matches the mockup: gridSize 60 over 1000 x 700', () => {
@@ -495,4 +498,127 @@ test('the default travel figures match the server\'s columns', () => {
   assert.equal(H.DEFAULT_MILES_PER_HEX, 6);
   assert.equal(H.DEFAULT_MILES_PER_DAY, 24);
   assert.equal(H.MAX_TRAVEL_MILES, 1000);
+});
+
+// ---- Terrain art and pieces ----
+
+test('artOf keeps the three styles and reads anything else as Detailed', () => {
+  const cases = [['real', 'real'], ['detailed', 'detailed'], ['simple', 'simple'], ['illustrated', 'detailed'], ['', 'detailed'], [undefined, 'detailed'], [null, 'detailed'], ['REAL', 'detailed']];
+  for (const [in_, want] of cases) assert.equal(H.artOf(in_), want, String(in_));
+  assert.equal(H.DEFAULT_ART, 'detailed');
+});
+
+test('paintEntry carries a piece only for a terrain that has pieces', () => {
+  const cases = [
+    { t: 'forest', p: 3, has: true, want: { terrain: 'forest', piece: 3 } },
+    { t: 'forest', p: 0, has: true, want: { terrain: 'forest', piece: 0 } },
+    { t: 'forest', p: null, has: true, want: { terrain: 'forest', piece: null } },
+    { t: 'road', p: 3, has: false, want: { terrain: 'road', piece: null } },
+    { t: '', p: 3, has: true, want: { terrain: null, piece: null } },
+    { t: null, p: null, has: false, want: { terrain: null, piece: null } },
+  ];
+  for (const c of cases) assert.deepEqual(H.paintEntry(c.t, c.p, c.has), c.want, JSON.stringify(c));
+});
+
+test('mergeEntry keeps a piece beside a later name, and a later stroke replaces it', () => {
+  const stroke = H.mergeEntry({ col: 1, row: 1 }, { terrain: 'forest', piece: 4 });
+  assert.deepEqual(H.mergeEntry(stroke, { name: 'Wood' }), { col: 1, row: 1, terrain: 'forest', piece: 4, name: 'Wood' });
+  assert.deepEqual(H.mergeEntry(stroke, { terrain: 'road', piece: null }), { col: 1, row: 1, terrain: 'road', piece: null });
+  assert.deepEqual(H.mergeEntry({ col: 0, row: 0 }, { name: 'x' }), { col: 0, row: 0, name: 'x' });
+});
+
+test('lowerRaised sees only raised land below, and treats unsent hexes as flat', () => {
+  const k = (c, r) => c + ',' + r;
+  const cells = { [k(0, 1)]: { terrain: 'forest' }, [k(1, 1)]: { terrain: 'water' }, [k(2, 3)]: { terrain: 'road' }, [k(3, 3)]: { terrain: 'hills' } };
+  const cases = [
+    { col: 1, row: 0, want: { bl: true, br: false } },  // even row: (0,1) and (1,1)
+    { col: 2, row: 2, want: { bl: false, br: false } }, // even row: (1,3) unsent, (2,3) road
+    { col: 2, row: 1, want: { bl: false, br: false } }, // odd row: (2,2), (3,2) unsent
+    { col: 2, row: 3, want: { bl: false, br: false } },
+    { col: 3, row: 2, want: { bl: false, br: true } },  // even row: (2,3) road, (3,3) hills
+  ];
+  for (const c of cases) assert.deepEqual(H.lowerRaised(cells, c.col, c.row), c.want, JSON.stringify(c));
+});
+
+test('artRange covers only hexes whose art can reach the view, clamped to the field', () => {
+  const g = H.geometry(60, 1000, 700);
+  const all = H.artRange(g, -1e6, -1e6, 1e6, 1e6, H.ART_REACH.real);
+  assert.deepEqual([all.c0, all.r0, all.c1, all.r1], [0, 0, g.cols - 1, g.rows - 1]);
+  const small = H.artRange(g, 400, 300, 450, 350, H.ART_REACH.detailed);
+  assert.ok(small.c0 > 0 && small.c1 < g.cols - 1 && small.r0 > 0 && small.r1 < g.rows - 1);
+  // A tall Realistic peak below the view can still reach into it.
+  const real = H.artRange(g, 400, 300, 450, 350, H.ART_REACH.real);
+  assert.ok(real.r1 > small.r1);
+  assert.equal(H.artRange({ r: 0, cols: 1, rows: 1 }, 0, 0, 1, 1, H.ART_REACH.real), null);
+});
+
+test('pieceOf keeps a chosen piece and gives Mix a stable piece in range', () => {
+  assert.equal(A.pieceOf('forest', 'any', 7), 7);
+  assert.equal(A.pieceOf('forest', 'any', 0), 0);
+  const seen = new Set();
+  for (let i = 0; i < 400; i++) {
+    const seed = 'h' + i + ',' + (i * 7 % 13);
+    const v = A.pieceOf('forest', seed, null);
+    assert.ok(Number.isInteger(v) && v >= 0 && v < 12, String(v));
+    assert.equal(A.pieceOf('forest', seed, undefined), v, 'same seed, same piece');
+    seen.add(v);
+  }
+  assert.ok(seen.size >= 10, 'Mix spreads over the pieces');
+});
+
+test('every terrain with pieces has twelve, and its folders hold each exactly once', () => {
+  const terrains = Object.keys(A.PIECES);
+  assert.deepEqual(terrains.sort(), ['desert', 'forest', 'hills', 'mountain', 'plains', 'snow', 'swamp', 'town', 'water']);
+  for (const t of terrains) {
+    assert.equal(A.PIECES[t].length, 12, t); // the server's HexPiecesPerTerrain
+    const all = A.PFOLD[t].flatMap((f) => f[1]).sort((a, b) => a - b);
+    assert.deepEqual(all, [...Array(12).keys()], t);
+    for (let v = 0; v < 12; v++) assert.ok(A.PFOLD[t][A.folderOf(t, v)][1].includes(v), t + v);
+  }
+  assert.equal(A.terrainHasPieces('road'), false);
+  assert.equal(A.folderOf('forest', null), -1);
+  assert.equal(A.folderOf('road', 1), -1);
+});
+
+test('zoomBucket steps by half powers of two inside its bounds', () => {
+  const cases = [[0, 12], [-3, 12], [NaN, 12], [5, 12], [16, 16], [17, 22.63], [23, 32], [33, 45.25], [64, 64], [500, 64]];
+  for (const [px, want] of cases) assert.equal(A.zoomBucket(px, 12, 64), want, String(px));
+  assert.equal(A.zoomBucket(150, 12, 192), 181.02);
+});
+
+test('TileCache drops the least recently used past either cap', () => {
+  const c = new A.TileCache(3, 1000);
+  c.set('a', 1, 100); c.set('b', 2, 100); c.set('c', 3, 100);
+  c.get('a');
+  c.set('d', 4, 100);
+  assert.equal(c.size, 3);
+  assert.equal(c.has('b'), false, 'b was least recently used');
+  assert.equal(c.get('a'), 1);
+  c.set('e', 5, 900);
+  assert.ok(c.px <= 1000, 'pixel cap holds');
+  assert.equal(c.has('e'), true);
+  // One tile bigger than the cap is kept on its own rather than thrashing.
+  c.set('huge', 6, 5000);
+  assert.equal(c.size, 1);
+  c.set('huge', 7, 10);
+  assert.equal(c.px, 10, 'replacing a key replaces its pixels');
+  c.clear();
+  assert.equal(c.size, 0);
+  assert.equal(c.px, 0);
+});
+
+test('detailed variants are stable and in range', () => {
+  for (let i = 0; i < 200; i++) {
+    const v = A.detailedVariant('3,' + i);
+    assert.ok(Number.isInteger(v) && v >= 0 && v < A.DETAILED_VARIANTS);
+    assert.equal(A.detailedVariant('3,' + i), v);
+  }
+  assert.equal(A.detailedSeed('forest', 4), 'dforest4');
+});
+
+test('Detailed art is plain SVG that names its own shading', () => {
+  const svg = A.detailedArt('forest', 0, 0, 26, 'dforest1', 'u');
+  assert.match(svg, /url\(#ugforest\)/);
+  assert.ok(!/undefined|NaN/.test(svg));
+  assert.match(A.detailedDefs('u'), /id="ugforest"/);
 });

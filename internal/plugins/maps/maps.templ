@@ -273,6 +273,7 @@ templ MapEditorBody(cc *campaigns.CampaignContext, data MapViewData, mapContaine
 		data-draw-src={ layouts.AssetURL("/static/js/map_drawing_tools.js") }
 		data-shadow-src={ layouts.AssetURL("/static/js/map_shadow.js") }
 		data-pictures-src={ layouts.AssetURL("/static/js/map_pictures.js") }
+		data-hex-art-src={ layouts.AssetURL("/static/js/map_hex_art.js") }
 		data-hexes-src={ layouts.AssetURL("/static/js/map_hexes.js") }
 		data-map-id={ data.Map.ID }
 		data-image-id={ derefStr(data.Map.ImageID) }
@@ -339,6 +340,18 @@ templ MapEditorBody(cc *campaigns.CampaignContext, data MapViewData, mapContaine
 		.mp-hexpanel .mp-hx-pal button[aria-pressed="true"] { border-color: var(--mp-accent); box-shadow: 0 0 0 2px var(--mp-accent-soft); }
 		.mp-hexpanel .mp-hx-pal svg { display: block; overflow: visible; }
 		.mp-hexpanel .mp-hx-pal i { width: 22px; height: 13px; border-radius: 3px; display: block; background: repeating-linear-gradient(45deg, #ccc 0 3px, #fff 3px 6px); }
+		/* The Art chips and the piece picker in Paint. Folders are dashed so they
+		   read as something to open rather than a piece to paint with. */
+		.mp-hexpanel .mp-hx-art { gap: 4px; align-items: center; }
+		.mp-hexpanel .mp-hx-art > span { font-size: 11.5px; margin-right: 2px; color: var(--color-text-secondary); }
+		.mp-hexpanel .mp-hx-defs { position: absolute; width: 0; height: 0; overflow: hidden; }
+		.mp-hexpanel .mp-hx-pcs-h { display: flex; flex-direction: column; gap: 1px; font-size: 12px; }
+		.mp-hexpanel .mp-hx-pcs-h span { font-size: 11px; color: var(--color-text-secondary); }
+		.mp-hexpanel .mp-hx-pcs button { font-size: 10.5px; line-height: 1.15; text-align: center; padding: 4px 2px; }
+		.mp-hexpanel .mp-hx-pcs .mp-hx-pf { border-style: dashed; }
+		.mp-hexpanel .mp-hx-cnt { font-size: 9.5px; color: var(--color-text-secondary); }
+		.mp-hexpanel .mp-hx-pfback { align-self: flex-start; font-size: 11.5px; padding: 3px 8px; }
+		.mp-hexpanel .mp-hx-pfname { font-weight: 600; font-size: 12px; }
 		.mp-hexpanel .mp-hx-card { border: 1px solid var(--color-border); border-radius: 10px; padding: 9px; display: flex; flex-direction: column; gap: 6px; }
 		.mp-hexpanel .mp-hx-card b { font-size: 14px; }
 		.mp-hexpanel .mp-hx-card .mp-input { width: 100%; }
