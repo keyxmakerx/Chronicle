@@ -4139,12 +4139,18 @@ func (a *App) RegisterRoutes() {
 	// layouts, so no page loses anything (see page_extras.go). Best-effort;
 	// a failure is retried on the next boot.
 	// The lists come first: the page-extras pass reads them.
+	// A failed seed skips the page-extras pass this boot: it would read empty
+	// lists, place nothing for that campaign, and still mark itself done.
+	var seedErr error
 	if n, err := seedCharacterListsOnce(context.Background(), settingsRepo, campaignService, characterListService); err != nil {
+		seedErr = err
 		slog.Error("seeding character lists failed", slog.String("error", err.Error()))
 	} else if n > 0 {
 		slog.Info("checked character lists for existing campaigns", slog.Int("campaigns", n))
 	}
-	if n, err := placePageExtrasOnce(context.Background(), settingsRepo, campaignService, addonService, entityService, characterListService); err != nil {
+	if seedErr != nil {
+		slog.Warn("placing page extras deferred until character lists are seeded")
+	} else if n, err := placePageExtrasOnce(context.Background(), settingsRepo, campaignService, addonService, entityService, characterListService); err != nil {
 		slog.Error("placing page extras failed", slog.String("error", err.Error()))
 	} else if n > 0 {
 		slog.Info("placed page extras into layouts", slog.Int("layouts", n))
