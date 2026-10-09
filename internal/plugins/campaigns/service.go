@@ -403,7 +403,7 @@ func (s *campaignService) Create(ctx context.Context, userID string, input Creat
 	}
 
 	// Seed entity types for the new campaign (genre-specific or defaults).
-	if s.seeder != nil {
+	if s.seeder != nil && !input.SkipEntityTypeSeed {
 		var seedErr error
 		if input.Genre != "" {
 			seedErr = s.seeder.SeedGenre(ctx, campaign.ID, input.Genre)

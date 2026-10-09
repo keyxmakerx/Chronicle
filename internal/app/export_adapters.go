@@ -53,6 +53,14 @@ func (a *entityExportAdapter) ExportEntities(ctx context.Context, campaignID str
 	typeIDToSlug := make(map[int]string, len(etypes))
 	for _, et := range etypes {
 		typeIDToSlug[et.ID] = et.Slug
+	}
+	for _, et := range etypes {
+		var parentSlug *string
+		if et.ParentTypeID != nil {
+			if s, ok := typeIDToSlug[*et.ParentTypeID]; ok {
+				parentSlug = &s
+			}
+		}
 
 		fieldsJSON, err := json.Marshal(et.Fields)
 		if err != nil {
@@ -78,6 +86,9 @@ func (a *entityExportAdapter) ExportEntities(ctx context.Context, campaignID str
 			SortOrder:       et.SortOrder,
 			IsDefault:       et.IsDefault,
 			Enabled:         et.Enabled,
+			PresetCategory:  et.PresetCategory,
+			ParentTypeSlug:  parentSlug,
+			Claimable:       et.Claimable,
 		})
 	}
 
@@ -998,16 +1009,63 @@ type entityImportAdapter struct {
 func (a *entityImportAdapter) ImportEntities(ctx context.Context, campaignID, userID string, data *campaigns.ExportEntityData, report *campaigns.ImportReport) (*campaigns.IDMap, error) {
 	idMap := campaigns.NewIDMap(campaignID)
 
-	// 1. Create entity types.
+	// 1. Create entity types. Add-ons are restored before this runs, and an
+	// add-on can already have made some of the file's types (the Player
+	// Character addon premakes its category, a game system its presets);
+	// those are reused rather than duplicated. Parents go first so a
+	// sub-category can name its parent's new id.
+	existing, err := a.entitySvc.GetEntityTypes(ctx, campaignID)
+	if err != nil {
+		return nil, fmt.Errorf("list existing entity types: %w", err)
+	}
+	claimed := make(map[int]bool, len(existing))
 	typeSlugToNewID := make(map[string]int)
-	for _, et := range data.Types {
-		// Create type with basic fields.
-		newType, err := a.entitySvc.CreateEntityType(ctx, campaignID, entities.CreateEntityTypeInput{
-			Name:       et.Name,
-			NamePlural: et.NamePlural,
-			Icon:       et.Icon,
-			Color:      et.Color,
-		})
+	for _, et := range importTypeOrder(data.Types) {
+		var fields []entities.FieldDefinition
+		fieldsOK := len(et.Fields) == 0
+		if len(et.Fields) > 0 {
+			if err := json.Unmarshal(et.Fields, &fields); err != nil {
+				slog.Warn("import: invalid fields JSON", slog.String("type", et.Slug), slog.Any("error", err))
+				report.Fail("entities", "entity type field set", et.Name, "field definitions were not readable")
+			} else {
+				fieldsOK = true
+			}
+		}
+		var parentID *int
+		if et.ParentTypeSlug != nil {
+			if id, ok := typeSlugToNewID[*et.ParentTypeSlug]; ok {
+				parentID = &id
+			} else {
+				report.Fail("entities", "entity type parent link", et.Name, "parent \""+*et.ParentTypeSlug+"\" is not in the file")
+			}
+		}
+
+		var newType *entities.EntityType
+		if match := matchExistingType(existing, claimed, et); match != nil {
+			claimed[match.ID] = true
+			in := entities.UpdateEntityTypeInput{
+				Name: et.Name, NamePlural: et.NamePlural, Icon: et.Icon, Color: et.Color,
+				ParentTypeID: parentID, ClearParent: parentID == nil, Claimable: et.Claimable,
+			}
+			if fieldsOK {
+				in.Fields = fields
+				if in.Fields == nil {
+					in.Fields = []entities.FieldDefinition{}
+				}
+			}
+			newType, err = a.entitySvc.UpdateEntityType(ctx, match.ID, in)
+		} else {
+			newType, err = a.entitySvc.CreateEntityType(ctx, campaignID, entities.CreateEntityTypeInput{
+				Name:           et.Name,
+				NamePlural:     et.NamePlural,
+				Icon:           et.Icon,
+				Color:          et.Color,
+				PresetCategory: derefStr(et.PresetCategory),
+				ParentTypeID:   parentID,
+				Claimable:      et.Claimable,
+				Fields:         fields,
+			})
+		}
 		if err != nil {
 			slog.Warn("import: create entity type failed", slog.String("slug", et.Slug), slog.Any("error", err))
 			report.Fail("entities", "entity type", et.Name, apperror.SafeMessage(err))
@@ -1016,25 +1074,6 @@ func (a *entityImportAdapter) ImportEntities(ctx context.Context, campaignID, us
 
 		idMap.EntityTypeIDs[et.OriginalID] = newType.ID
 		typeSlugToNewID[et.Slug] = newType.ID
-
-		// Apply fields via UpdateEntityType.
-		var fields []entities.FieldDefinition
-		if len(et.Fields) > 0 {
-			if err := json.Unmarshal(et.Fields, &fields); err != nil {
-				slog.Warn("import: invalid fields JSON", slog.String("type", et.Slug), slog.Any("error", err))
-				report.Fail("entities", "entity type field set", et.Name, "field definitions were not readable")
-			}
-		}
-		if len(fields) > 0 {
-			_, err := a.entitySvc.UpdateEntityType(ctx, newType.ID, entities.UpdateEntityTypeInput{
-				Name: et.Name, NamePlural: et.NamePlural, Icon: et.Icon, Color: et.Color,
-				Fields: fields,
-			})
-			if err != nil {
-				slog.Warn("import: update entity type fields failed", slog.String("type", et.Slug), slog.Any("error", err))
-				report.Fail("entities", "entity type field set", et.Name, apperror.SafeMessage(err))
-			}
-		}
 
 		// Apply layout if present.
 		if len(et.Layout) > 0 {
@@ -1250,6 +1289,56 @@ func (a *entityImportAdapter) ImportEntities(ctx context.Context, campaignID, us
 	}
 
 	return idMap, nil
+}
+
+// importTypeOrder returns the file's types with every top-level type ahead
+// of the sub-categories, keeping the file's order within each group, so a
+// sub-category's parent already exists when it is created.
+func importTypeOrder(types []campaigns.ExportEntityType) []campaigns.ExportEntityType {
+	out := make([]campaigns.ExportEntityType, 0, len(types))
+	for _, et := range types {
+		if et.ParentTypeSlug == nil {
+			out = append(out, et)
+		}
+	}
+	for _, et := range types {
+		if et.ParentTypeSlug != nil {
+			out = append(out, et)
+		}
+	}
+	return out
+}
+
+// importIsPlayerCharacterType is the entities plugin's rule for the Player
+// Character category (preset player_character, or the premade slug), applied
+// to a type from an export file.
+func importIsPlayerCharacterType(preset, slug string) bool {
+	return preset == entities.PresetCategoryPlayerCharacter || slug == entities.SlugPlayerCharacter
+}
+
+// matchExistingType finds a type already in the importing campaign that the
+// file's type should become: the Player Character category the addon
+// premade (a campaign has only one), else an unclaimed type with the same
+// slug. A type made by a game-system addon carries the slug the exporting
+// campaign's copy had, since both were named by the same preset.
+func matchExistingType(existing []entities.EntityType, claimed map[int]bool, et campaigns.ExportEntityType) *entities.EntityType {
+	wantPC := importIsPlayerCharacterType(derefStr(et.PresetCategory), et.Slug)
+	for i := range existing {
+		t := &existing[i]
+		if claimed[t.ID] {
+			continue
+		}
+		if wantPC && importIsPlayerCharacterType(derefStr(t.PresetCategory), t.Slug) {
+			return t
+		}
+	}
+	for i := range existing {
+		t := &existing[i]
+		if !claimed[t.ID] && t.Slug == et.Slug {
+			return t
+		}
+	}
+	return nil
 }
 
 // calendarImportAdapter implements campaigns.CalendarImporter, the inverse of

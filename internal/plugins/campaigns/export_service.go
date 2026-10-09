@@ -414,9 +414,11 @@ func (s *ExportImportService) Export(ctx context.Context, campaignID string) (*C
 
 // Import creates a new campaign from a CampaignExport. Returns the newly
 // created campaign and a report of everything that could not be restored.
-// Processes data in dependency order: campaign metadata, entity types +
-// entities + tags + relations, calendar, timelines, sessions, maps, notes,
-// addons.
+// Processes data in dependency order: campaign metadata, addons, entity
+// types + entities + tags + relations, groups, calendar, timelines,
+// sessions, maps, notes, posts. Addons come first because they gate what
+// may be created: the Player Character category is refused while its addon
+// is off, which used to drop every player character from a restore.
 //
 // Import is best-effort: a single bad row must not abandon a half-built
 // campaign. The returned *ImportReport is never nil; a non-zero Count()
@@ -426,8 +428,9 @@ func (s *ExportImportService) Import(ctx context.Context, userID string, data *C
 	report := NewImportReport()
 	// Create the new campaign.
 	campaign, err := s.campaigns.Create(ctx, userID, CreateCampaignInput{
-		Name:        data.Campaign.Name,
-		Description: ptrToString(data.Campaign.Description),
+		Name:               data.Campaign.Name,
+		Description:        ptrToString(data.Campaign.Description),
+		SkipEntityTypeSeed: len(data.EntityTypes) > 0,
 	})
 	if err != nil {
 		return nil, report, fmt.Errorf("import create campaign: %w", err)
@@ -468,6 +471,14 @@ func (s *ExportImportService) Import(ctx context.Context, userID string, data *C
 				slog.Warn("import dashboard layout failed", slog.Any("error", err))
 				report.Fail("campaign", "dashboard layout", data.Campaign.Name, apperror.SafeMessage(err))
 			}
+		}
+	}
+
+	// Import addons before anything they gate.
+	if s.addonImp != nil && len(data.Addons) > 0 {
+		if err := s.addonImp.ImportAddons(ctx, campaignID, userID, data.Addons, report); err != nil {
+			slog.Warn("import addons failed", slog.Any("error", err))
+			report.Fail("addons", "addon", "", apperror.SafeMessage(err))
 		}
 	}
 
@@ -547,13 +558,6 @@ func (s *ExportImportService) Import(ctx context.Context, userID string, data *C
 		}
 	}
 
-	// Import addons.
-	if s.addonImp != nil && len(data.Addons) > 0 {
-		if err := s.addonImp.ImportAddons(ctx, campaignID, userID, data.Addons, report); err != nil {
-			slog.Warn("import addons failed", slog.Any("error", err))
-			report.Fail("addons", "addon", "", apperror.SafeMessage(err))
-		}
-	}
 
 	if report.HasFailures() {
 		slog.Warn("campaign import completed with losses",

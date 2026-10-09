@@ -75,6 +75,13 @@ type ExportEntityType struct {
 	SortOrder       int             `json:"sort_order"`
 	IsDefault       bool            `json:"is_default"`
 	Enabled         bool            `json:"enabled"`
+	// PresetCategory, ParentTypeSlug and Claimable are additive. They are
+	// what makes a type the campaign's Player Character category (and a
+	// sub-category of its parent); without them a restored PC type comes
+	// back as an ordinary top-level category nobody can claim from.
+	PresetCategory *string `json:"preset_category,omitempty"`
+	ParentTypeSlug *string `json:"parent_type_slug,omitempty"`
+	Claimable      *bool   `json:"claimable,omitempty"`
 }
 
 // --- Entities ---
