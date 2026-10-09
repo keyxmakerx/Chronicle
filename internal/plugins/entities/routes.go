@@ -30,7 +30,9 @@ func RegisterRoutes(e *echo.Echo, h *Handler, campaignSvc campaigns.CampaignServ
 
 	// Fields API (JSON endpoints for attributes widget).
 	cg.GET("/entities/:eid/fields", h.GetFieldsAPI, campaigns.RequireRole(campaigns.RolePlayer))
-	cg.PUT("/entities/:eid/fields", h.UpdateFieldsAPI, campaigns.RequireRole(campaigns.RoleScribe))
+	// Player-admitted on purpose: the handler lets only a claimed owner through,
+	// and only for the identity allowlist (identity_edit.go).
+	cg.PUT("/entities/:eid/fields", h.UpdateFieldsAPI, campaigns.RequireRole(campaigns.RolePlayer))
 	cg.PUT("/entities/:eid/field-overrides", h.UpdateFieldOverridesAPI, campaigns.RequireRole(campaigns.RoleScribe))
 	cg.DELETE("/entities/:eid/field-overrides", h.ResetFieldOverridesAPI, campaigns.RequireRole(campaigns.RoleScribe))
 
@@ -44,7 +46,8 @@ func RegisterRoutes(e *echo.Echo, h *Handler, campaignSvc campaigns.CampaignServ
 	cg.PUT("/entities/:eid/cover-image", h.UpdateCoverImageAPI, campaigns.RequireRole(campaigns.RoleScribe))
 
 	// Inline metadata API (Scribe+): name, descriptor, parent, privacy.
-	cg.PUT("/entities/:eid/metadata", h.UpdateMetadataAPI, campaigns.RequireRole(campaigns.RoleScribe))
+	// Player-admitted like /fields: a claimed owner may send {name} only.
+	cg.PUT("/entities/:eid/metadata", h.UpdateMetadataAPI, campaigns.RequireRole(campaigns.RolePlayer))
 
 	// Popup preview config API (Scribe+).
 	cg.PUT("/entities/:eid/popup-config", h.UpdatePopupConfigAPI, campaigns.RequireRole(campaigns.RoleScribe))

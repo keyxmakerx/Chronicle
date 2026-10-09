@@ -2018,17 +2018,28 @@ func (h *Handler) UpdateFieldsAPI(c echo.Context) error {
 		return apperror.NewBadRequest("invalid JSON body")
 	}
 
-	var saveErr error
+	var fieldsPatch map[string]any
 	if body.FieldsPatch != nil {
 		// A patch must be an object and must come alone: a null patch would
 		// otherwise fall through to the replace path and clear every field.
-		var patch map[string]any
 		if body.FieldsData != nil {
 			return apperror.NewBadRequest("send fields_data or fields_patch, not both")
 		}
-		if err := json.Unmarshal(body.FieldsPatch, &patch); err != nil || patch == nil {
+		if err := json.Unmarshal(body.FieldsPatch, &fieldsPatch); err != nil || fieldsPatch == nil {
 			return apperror.NewBadRequest("fields_patch must be an object")
 		}
+	}
+
+	// The route admits Players so a claimed owner can reach the identity
+	// allowlist; every other Player is refused here, before any write.
+	if err := authorizeFieldsWrite(cc.MemberRole, entity, auth.GetUserID(c), cc.Campaign.ID,
+		body.FieldsPatch == nil, fieldsPatch); err != nil {
+		return err
+	}
+
+	var saveErr error
+	if body.FieldsPatch != nil {
+		patch := fieldsPatch
 		saveErr = h.service.MergeFields(webWriteContext(c), entityID, patch)
 	} else {
 		saveErr = h.service.UpdateFields(webWriteContext(c), entityID, body.FieldsData)
@@ -2348,7 +2359,16 @@ func (h *Handler) UpdateMetadataAPI(c echo.Context) error {
 		TypeLabel patch.Field[string] `json:"type_label"`
 		ParentID  patch.Field[string] `json:"parent_id"`
 	}
-	if err := json.NewDecoder(c.Request().Body).Decode(&req); err != nil {
+	// Read the raw body once: the Player path checks the exact key set, which a
+	// typed decode would hide by ignoring unknown keys.
+	rawBody, err := io.ReadAll(c.Request().Body)
+	if err != nil {
+		return apperror.NewBadRequest("invalid JSON body")
+	}
+	if err := authorizeMetadataWrite(cc.MemberRole, entity, auth.GetUserID(c), cc.Campaign.ID, rawBody); err != nil {
+		return err
+	}
+	if err := json.Unmarshal(rawBody, &req); err != nil {
 		return apperror.NewBadRequest("invalid JSON body")
 	}
 
