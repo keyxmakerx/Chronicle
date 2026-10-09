@@ -42,8 +42,8 @@ folding, counts in a pill sized to its number.
   pointer is (the sidebar peek, availability bars). A click then opens the
   full panel.
 - **Content previews use the one hover card**, `Chronicle.hovercard`
-  (`static/js/hovercard.js`): linked pages, rule words, creatures, game-system
-  entries. A caller describes the content; the card owns behaviour and look,
+  (`static/js/hovercard.js`): linked pages, rule words, and any package widget
+  preview. A caller describes the content; the card owns behaviour and look,
   so no feature draws its own tooltip. It opens after the pointer rests
   250 ms and stays while the pointer is on it; keyboard focus opens it and
   Escape closes it, returning focus; one card at a time, kept inside the
