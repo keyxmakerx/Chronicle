@@ -35,8 +35,9 @@ exist, and does the design still apply? Three drifts are already known:
 - **D-"living sky" background mode:** the sky engine now lives in
   `internal/widgets/sky` and `static/js/widgets/sky_*.js`. **Defer to the skypane standalone project.** Nothing
   in H1–H3 may depend on it.
-- **Compact-calendar and weather widgets:** the calendar plugin is domain-
-  only until V5. **Their registry slots are declared; their bodies wait.**
+- **Compact-calendar and weather widgets:** the calendar plugin now has its
+  `calendar` and `worldstate` widget types. **Their registry slots are
+  declared; build their bodies on those.**
 - **The accent-trio rename (D14):** already shipped under different names as
   Site / Action / App accent (`C-ACCENT-SLOTS`, PR #541,
   `campaigns/branding.templ:557-634`). **Done; do not redo.**
