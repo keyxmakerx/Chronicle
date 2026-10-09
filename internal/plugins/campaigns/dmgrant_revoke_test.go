@@ -393,3 +393,41 @@ func TestUpdateDmGrants_StaleID(t *testing.T) {
 		})
 	}
 }
+
+// Removal hooks run once a member is gone, with that campaign and user, and
+// never for a refused removal (the Owner).
+func TestRemoveMember_RunsRemovalHooks(t *testing.T) {
+	tests := []struct {
+		name     string
+		role     Role
+		wantCall bool
+	}{
+		{"player removed", RolePlayer, true},
+		{"owner refused", RoleOwner, false},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			repo := &mockCampaignRepo{
+				findMemberFn: func(_ context.Context, _, userID string) (*CampaignMember, error) {
+					return &CampaignMember{CampaignID: "camp-1", UserID: userID, Role: tt.role}, nil
+				},
+				findByIDFn: func(context.Context, string) (*Campaign, error) {
+					return campaignWithGrants(t, false), nil
+				},
+				updateSettingsFn: func(context.Context, string, string) error { return nil },
+			}
+			svc := &campaignService{repo: repo}
+			var got []string
+			OnMemberRemoved(svc, func(_ context.Context, campaignID, userID string) {
+				got = append(got, campaignID+"/"+userID)
+			})
+			_ = svc.RemoveMember(context.Background(), "camp-1", "u-1")
+			if tt.wantCall && (len(got) != 1 || got[0] != "camp-1/u-1") {
+				t.Fatalf("hook calls = %v, want [camp-1/u-1]", got)
+			}
+			if !tt.wantCall && len(got) != 0 {
+				t.Fatalf("hook ran for a refused removal: %v", got)
+			}
+		})
+	}
+}

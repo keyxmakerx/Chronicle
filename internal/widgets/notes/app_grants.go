@@ -92,6 +92,11 @@ type AppGrantService interface {
 	// change, force sign-out), so a grant never outlives them.
 	RevokeAllForUser(ctx context.Context, userID string) error
 
+	// RevokeAllInCampaign ends every grant the user holds in one campaign.
+	// Runs when the user is removed from it, so being invited back does not
+	// bring an old grant back to life.
+	RevokeAllInCampaign(ctx context.Context, campaignID, userID string) error
+
 	// SetConnectionRevoker wires the live-socket drop that makes a revoke
 	// take effect on an open notes frame at once.
 	SetConnectionRevoker(r AppConnectionRevoker)
@@ -232,6 +237,26 @@ func (s *appGrantService) Revoke(ctx context.Context, campaignID, userID, grantI
 		}
 	}
 	return apperror.NewNotFound("connection not found")
+}
+
+func (s *appGrantService) RevokeAllInCampaign(ctx context.Context, campaignID, userID string) error {
+	if campaignID == "" || userID == "" {
+		return nil
+	}
+	live, err := s.repo.ListLive(ctx, campaignID, userID)
+	if err != nil {
+		return apperror.NewInternal(err)
+	}
+	at := s.now().UTC().Truncate(time.Second)
+	for _, g := range live {
+		if err := s.repo.Revoke(ctx, g.ID, at); err != nil {
+			return apperror.NewInternal(err)
+		}
+	}
+	if len(live) > 0 && s.conns != nil {
+		s.conns.RevokeNotesAppClients(campaignID, userID)
+	}
+	return nil
 }
 
 func (s *appGrantService) RevokeAllForUser(ctx context.Context, userID string) error {

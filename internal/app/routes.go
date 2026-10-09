@@ -3840,6 +3840,13 @@ func (a *App) RegisterRoutes() {
 			slog.Error("revoking notes app grants failed", slog.String("user_id", userID), slog.Any("error", err))
 		}
 	})
+	// Removing a player from a campaign ends their grants there, so a later
+	// re-invite starts with none.
+	campaigns.OnMemberRemoved(campaignService, func(ctx context.Context, campaignID, userID string) {
+		if err := noteGrants.RevokeAllInCampaign(ctx, campaignID, userID); err != nil {
+			slog.Error("revoking notes app grants on removal failed", slog.String("campaign_id", campaignID), slog.String("user_id", userID), slog.Any("error", err))
+		}
+	})
 	// The campaign's Sync API switch governs outside apps, the notebook too.
 	notesAppGate := func(ctx context.Context, campaignID string) (bool, error) {
 		return addonService.IsEnabledForCampaign(ctx, campaignID, syncapi.SyncAPIAddonSlug)

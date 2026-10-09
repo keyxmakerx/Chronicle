@@ -222,6 +222,16 @@ type campaignService struct {
 	navSections      NavSectionsSource      // Draws a member's sidebar for pin checks. Pins are refused while nil.
 	siteLook         SiteLookSource         // Site-wide look new campaigns start with. May be nil.
 	baseURL          string
+	// memberRemoved runs after a member is removed, so other plugins can end
+	// credentials they issued for that campaign without campaigns importing them.
+	memberRemoved []func(ctx context.Context, campaignID, userID string)
+}
+
+// OnMemberRemoved registers fn to run after a user is removed from a campaign.
+func OnMemberRemoved(svc CampaignService, fn func(ctx context.Context, campaignID, userID string)) {
+	if s, ok := svc.(*campaignService); ok && fn != nil {
+		s.memberRemoved = append(s.memberRemoved, fn)
+	}
 }
 
 // NewCampaignService creates a new campaign service with the given dependencies.
@@ -672,6 +682,9 @@ func (s *campaignService) RemoveMember(ctx context.Context, campaignID, userID s
 	// hub's gates too, so even a plain member keeps receiving otherwise.
 	if s.connRevoker != nil {
 		s.connRevoker.RevokeUser(campaignID, userID)
+	}
+	for _, fn := range s.memberRemoved {
+		fn(ctx, campaignID, userID)
 	}
 
 	slog.Info("member removed from campaign",
