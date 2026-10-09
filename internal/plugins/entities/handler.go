@@ -2010,16 +2010,25 @@ func (h *Handler) UpdateFieldsAPI(c echo.Context) error {
 	// field). fields_patch changes only the keys it carries (null clears), for
 	// single-field editors such as the choice picker that never hold the rest.
 	var body struct {
-		FieldsData  map[string]any `json:"fields_data"`
-		FieldsPatch map[string]any `json:"fields_patch"`
+		FieldsData  map[string]any  `json:"fields_data"`
+		FieldsPatch json.RawMessage `json:"fields_patch"`
 	}
 	if err := json.NewDecoder(c.Request().Body).Decode(&body); err != nil {
 		return apperror.NewBadRequest("invalid JSON body")
 	}
 
 	var saveErr error
-	if body.FieldsPatch != nil && body.FieldsData == nil {
-		saveErr = h.service.MergeFields(webWriteContext(c), entityID, body.FieldsPatch)
+	if body.FieldsPatch != nil {
+		// A patch must be an object and must come alone: a null patch would
+		// otherwise fall through to the replace path and clear every field.
+		var patch map[string]any
+		if body.FieldsData != nil {
+			return apperror.NewBadRequest("send fields_data or fields_patch, not both")
+		}
+		if err := json.Unmarshal(body.FieldsPatch, &patch); err != nil || patch == nil {
+			return apperror.NewBadRequest("fields_patch must be an object")
+		}
+		saveErr = h.service.MergeFields(webWriteContext(c), entityID, patch)
 	} else {
 		saveErr = h.service.UpdateFields(webWriteContext(c), entityID, body.FieldsData)
 	}
