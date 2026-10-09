@@ -427,7 +427,7 @@ func pageSlice(p BookPage) (string, bookIndexSlice, bool) {
 	return b.Category, bookIndexSlice{Key: b.Key, Value: b.Value, From: b.From, To: b.To}, true
 }
 
-// bookShowsSlice reports whether a page of b lists exactly this slice, so
+// bookShowsSlice reports whether a page of b lists exactly the wanted entries, so
 // the index API serves only what the reader's own book shows.
 func bookShowsSlice(b *Book, category string, want bookIndexSlice) bool {
 	for _, ch := range indexChapters(b) {
