@@ -8,6 +8,7 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"reflect"
 	"strings"
 
 	"github.com/keyxmakerx/chronicle/internal/plugins/entities"
@@ -269,10 +270,18 @@ func mapPlayDef(p *systems.PlayDef) *entities.FieldPlay {
 
 // buildPlayByCategory is buildFlagsByCategory's counterpart for play blocks:
 // every declared preset field is recorded (nil when it has no block) so the
-// reconciler also clears a block a system update removed.
+// reconciler also clears a block a system update removed. Stored entity types
+// do not record which system they came from, so when two systems declare the
+// same category and key with different blocks neither is written; otherwise
+// one system's play rules would land on the other system's characters.
 func buildPlayByCategory() map[string]map[string]*entities.FieldPlay {
+	return playByCategory(systems.Registry())
+}
+
+func playByCategory(manifests []*systems.SystemManifest) map[string]map[string]*entities.FieldPlay {
 	out := map[string]map[string]*entities.FieldPlay{}
-	for _, m := range systems.Registry() {
+	conflicted := map[string]map[string]bool{}
+	for _, m := range manifests {
 		if m == nil {
 			continue
 		}
@@ -280,11 +289,24 @@ func buildPlayByCategory() map[string]map[string]*entities.FieldPlay {
 			if preset.Category == "" {
 				continue
 			}
+			cat := preset.Category
 			for _, f := range preset.Fields {
-				if out[preset.Category] == nil {
-					out[preset.Category] = map[string]*entities.FieldPlay{}
+				if conflicted[cat][f.Key] {
+					continue
 				}
-				out[preset.Category][f.Key] = mapPlayDef(f.Play)
+				if out[cat] == nil {
+					out[cat] = map[string]*entities.FieldPlay{}
+				}
+				want := mapPlayDef(f.Play)
+				if prev, seen := out[cat][f.Key]; seen && !reflect.DeepEqual(prev, want) {
+					delete(out[cat], f.Key)
+					if conflicted[cat] == nil {
+						conflicted[cat] = map[string]bool{}
+					}
+					conflicted[cat][f.Key] = true
+					continue
+				}
+				out[cat][f.Key] = want
 			}
 		}
 	}

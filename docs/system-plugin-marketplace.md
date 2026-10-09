@@ -108,12 +108,14 @@ An entity preset field may carry an optional `play` object declaring that it can
 | `min`, `max` | Bounds for `counter` and `resource` |
 | `max_field` | Key of another `number` field in the same preset whose value is the upper bound; wins over `max` |
 | `step` | Size of one +/- nudge |
-| `options` | Allowed values; required and non-empty for `conditions` and `choice` |
+| `options` | Allowed values, at most 50, each 1 to 64 characters; required and non-empty for `conditions` and `choice` |
 | `max_length` | Length bound for `text` and `choice` |
 | `to_foundry` | Whether a play edit is written to Foundry; absent means follow the field's `foundry_writable` |
 | `combat_authority` | `foundry` or `chronicle`: which side wins during combat; absent leaves it undecided |
 
-A `play` block is dropped at load, and the field stays an ordinary field, when: `edit`, `kind` or `combat_authority` has an unknown value; `max_field` names a missing field, the field itself or a non-number field; `options` is empty for `conditions` or `choice`; `min` is greater than `max`; `step` or `max_length` is negative; or the field is `gm_only` and `edit` is `owner`. The rest of the system still loads. Each drop is logged and listed under the system's validation warnings (the diagnostics page and the install preview).
+A `play` block is dropped at load, and the field stays an ordinary field, when: `edit`, `kind` or `combat_authority` has an unknown value; `max_field` names a missing field, the field itself or a non-number field; `options` is empty for `conditions` or `choice`, has more than 50 entries, or holds an empty or over-64-character value; `min` is greater than `max`; `step` or `max_length` is negative; or the field is `gm_only` and `edit` is `owner`. The rest of the system still loads. Each drop is logged and listed under the system's validation warnings (the diagnostics page and the install preview).
+
+Entity types do not record which system created them, so when two installed systems declare the same category and field key with different `play` blocks, neither block is copied onto existing types.
 
 Declaring `play` changes no behaviour by itself; it is the declaration the play-edit guard and sheet controls read.
 

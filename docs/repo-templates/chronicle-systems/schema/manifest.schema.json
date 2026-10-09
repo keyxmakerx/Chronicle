@@ -113,7 +113,7 @@
             "max": { "type": "number" },
             "max_field": { "type": "string" },
             "step": { "type": "number", "minimum": 0 },
-            "options": { "type": "array", "items": { "type": "string" } },
+            "options": { "type": "array", "maxItems": 50, "items": { "type": "string", "minLength": 1, "maxLength": 64 } },
             "max_length": { "type": "integer", "minimum": 0 },
             "to_foundry": { "type": "boolean" },
             "combat_authority": { "enum": ["foundry", "chronicle"] }

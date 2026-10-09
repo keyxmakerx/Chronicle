@@ -83,3 +83,33 @@ func TestMapPresetFields_CarriesPlay(t *testing.T) {
 		t.Error("stored options alias the manifest's slice")
 	}
 }
+
+func TestPlayByCategory_SharedKeysAcrossSystems(t *testing.T) {
+	owner := &systems.PlayDef{Edit: "owner", Kind: "counter"}
+	gm := &systems.PlayDef{Edit: "gm", Kind: "counter"}
+	sys := func(id string, fields ...systems.FieldDef) *systems.SystemManifest {
+		return &systems.SystemManifest{ID: id, EntityPresets: []systems.EntityPresetDef{{Category: "character", Fields: fields}}}
+	}
+	cases := []struct {
+		name      string
+		manifests []*systems.SystemManifest
+		key       string
+		wantSet   bool // key present in the map
+		wantPlay  bool // and carrying a block
+	}{
+		{"one system", []*systems.SystemManifest{sys("a", systems.FieldDef{Key: "level", Play: owner})}, "level", true, true},
+		{"one system clears", []*systems.SystemManifest{sys("a", systems.FieldDef{Key: "level"})}, "level", true, false},
+		{"same block twice", []*systems.SystemManifest{sys("a", systems.FieldDef{Key: "level", Play: owner}), sys("b", systems.FieldDef{Key: "level", Play: owner})}, "level", true, true},
+		{"block and none", []*systems.SystemManifest{sys("a", systems.FieldDef{Key: "level"}), sys("b", systems.FieldDef{Key: "level", Play: owner})}, "level", false, false},
+		{"different blocks", []*systems.SystemManifest{sys("a", systems.FieldDef{Key: "level", Play: owner}), sys("b", systems.FieldDef{Key: "level", Play: gm})}, "level", false, false},
+		{"conflict stays out", []*systems.SystemManifest{sys("a", systems.FieldDef{Key: "level", Play: owner}), sys("b", systems.FieldDef{Key: "level", Play: gm}), sys("c", systems.FieldDef{Key: "level", Play: owner})}, "level", false, false},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			got, ok := playByCategory(tc.manifests)["character"][tc.key]
+			if ok != tc.wantSet || (got != nil) != tc.wantPlay {
+				t.Errorf("present=%v play=%+v, want present=%v play=%v", ok, got, tc.wantSet, tc.wantPlay)
+			}
+		})
+	}
+}

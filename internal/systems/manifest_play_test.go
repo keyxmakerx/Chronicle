@@ -56,6 +56,9 @@ func TestPlayBlockValidation(t *testing.T) {
 		{"min above max", `{"key":"hp","label":"HP","type":"number","play":{"edit":"owner","kind":"counter","min":5,"max":1}}`, false, "greater than max"},
 		{"negative step", `{"key":"hp","label":"HP","type":"number","play":{"edit":"owner","kind":"counter","step":-1}}`, false, "step"},
 		{"negative max_length", `{"key":"c","label":"C","type":"string","play":{"edit":"owner","kind":"text","max_length":-1}}`, false, "max_length"},
+		{"too many options", `{"key":"c","label":"C","type":"string","play":{"edit":"owner","kind":"choice","options":[` + strings.TrimSuffix(strings.Repeat(`"x",`, 51), ",") + `]}}`, false, "max 50"},
+		{"empty option", `{"key":"c","label":"C","type":"string","play":{"edit":"owner","kind":"choice","options":["a",""]}}`, false, "1 to 64"},
+		{"long option", `{"key":"c","label":"C","type":"string","play":{"edit":"owner","kind":"choice","options":["` + strings.Repeat("y", 65) + `"]}}`, false, "1 to 64"},
 		{"gm_only owner-editable", `{"key":"n","label":"N","type":"string","gm_only":true,"play":{"edit":"owner","kind":"text"}}`, false, "gm_only"},
 	}
 	for _, tc := range cases {
@@ -148,5 +151,16 @@ func TestPlayWarningsSurviveRevalidate(t *testing.T) {
 	}
 	if len(m.PlayWarnings) != 1 {
 		t.Errorf("warnings = %v, want exactly one", m.PlayWarnings)
+	}
+}
+
+func TestPlayOptionsAreEscaped(t *testing.T) {
+	m := playManifest(t, `{"key":"c","label":"C","type":"string","play":{"edit":"owner","kind":"conditions","options":["<b>dazed</b>"]}}`)
+	if err := ValidateManifest(m); err != nil {
+		t.Fatalf("validate: %v", err)
+	}
+	fields := m.EntityPresets[0].Fields
+	if got := fields[len(fields)-1].Play.Options[0]; got != "&lt;b&gt;dazed&lt;/b&gt;" {
+		t.Errorf("option = %q, want it HTML-escaped", got)
 	}
 }

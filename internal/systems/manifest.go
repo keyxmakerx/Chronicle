@@ -8,6 +8,7 @@ import (
 	"os"
 	"regexp"
 	"strings"
+	"unicode/utf8"
 )
 
 // SystemManifest describes a module's metadata, capabilities, and content
@@ -711,6 +712,10 @@ const (
 	maxTextRenderers   = 5
 	maxRenderers       = 10
 	maxEntityPanels    = 10
+	// A play block's options become controls on a character page, so a
+	// package cannot flood one with an unbounded list or long labels.
+	maxPlayOptions      = 50
+	maxPlayOptionLength = 64
 )
 
 // slugPattern matches valid manifest IDs and preset slugs.
@@ -984,6 +989,11 @@ func sanitizeManifestStrings(m *SystemManifest) {
 		m.EntityPresets[i].NamePlural = html.EscapeString(m.EntityPresets[i].NamePlural)
 		for j := range m.EntityPresets[i].Fields {
 			m.EntityPresets[i].Fields[j].Label = html.EscapeString(m.EntityPresets[i].Fields[j].Label)
+			if play := m.EntityPresets[i].Fields[j].Play; play != nil {
+				for k := range play.Options {
+					play.Options[k] = html.EscapeString(play.Options[k])
+				}
+			}
 		}
 	}
 
@@ -1059,6 +1069,14 @@ func validatePlayDef(f FieldDef, siblings []FieldDef) string {
 	}
 	if (p.Kind == PlayKindConditions || p.Kind == PlayKindChoice) && len(p.Options) == 0 {
 		return fmt.Sprintf("kind %q needs a non-empty options list", p.Kind)
+	}
+	if len(p.Options) > maxPlayOptions {
+		return fmt.Sprintf("options has %d entries (max %d)", len(p.Options), maxPlayOptions)
+	}
+	for _, o := range p.Options {
+		if o == "" || utf8.RuneCountInString(o) > maxPlayOptionLength {
+			return fmt.Sprintf("each option must be 1 to %d characters", maxPlayOptionLength)
+		}
 	}
 	if p.Min != nil && p.Max != nil && *p.Min > *p.Max {
 		return fmt.Sprintf("min %v is greater than max %v", *p.Min, *p.Max)
