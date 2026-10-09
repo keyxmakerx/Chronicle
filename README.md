@@ -21,7 +21,7 @@ Chronicle is purpose-built for tabletop RPGs, open source, and designed to be se
 - **Entity Hierarchy** — Parent/child nesting with tree views and breadcrumb navigation
 - **Tags** — Color-coded tags with DM-only visibility controls
 - **Custom Attributes** — Per-category field templates (text, number, select, checkbox, URL) with per-entity overrides
-- **Drag-and-Drop Page Layouts** — Visual layout editor for entity profile pages — no other tool has this
+- **Drag-and-Drop Page Layouts** — Visual layout editor for entity profile pages
 
 ### Calendar
 - **Custom Calendars** — Months, weekdays, moons, seasons and eras of your own, or the real-world calendar; import from Calendaria, Simple Calendar and Fantasy Calendar
@@ -89,17 +89,6 @@ Chronicle is purpose-built for tabletop RPGs, open source, and designed to be se
 
 ---
 
-## What's in v0.1
-
-- Worldbuilding with custom entity types and rich text editor
-- Map viewer with markers, drawings, and fog of war
-- Timeline visualization with standalone (calendar-free) events
-- Session planning with RSVP tracking
-- Bestiary with community sharing and ratings
-- Full REST API for integrations
-
----
-
 ## Screenshots
 
 > Screenshots coming soon — see the feature list above for what Chronicle offers today.
@@ -131,7 +120,7 @@ docker compose up -d
 
 ### From Source
 
-**Prerequisites:** Go 1.27+, Node.js (for Tailwind), MariaDB 10.11+, Redis 7+
+**Prerequisites:** Go 1.27+, Node.js (only for `make tiptap-bundle`), MariaDB 10.11+, Redis 7+
 
 ```bash
 # Clone and setup
@@ -191,15 +180,7 @@ db/migrations/       # Sequential SQL migration files
 
 ### Architecture
 
-Chronicle uses a **three-tier extension architecture**:
-
-| Tier | Purpose | Example |
-|------|---------|---------|
-| **Plugin** | Feature app with handler/service/repo/templates | auth, campaigns, entities, calendar, maps |
-| **System** | Game system content pack (installed via package manager) | drawsteel, dnd5e, pathfinder2e |
-| **Widget** | Reusable UI component (self-contained JS + API) | editor, tags, relations, notes |
-
-Request flow: `Router → Middleware → Handler → Service → Repository → MariaDB`
+Chronicle has three kinds of extension: plugins (feature apps), systems (game system content packs installed from Admin > Packages) and widgets (reusable UI blocks).
 
 See [.ai/architecture.md](.ai/architecture.md) for the full architecture document.
 
