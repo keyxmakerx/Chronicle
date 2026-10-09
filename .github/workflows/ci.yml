@@ -292,7 +292,10 @@ jobs:
 
       - uses: actions/setup-go@v7
         with:
-          go-version: '1.27'
+          # Exact, matching go.mod: golangci-lint reads the standard library's
+          # export data, and a newer patch release can write a format the
+          # pinned binary below cannot load. Bump the two together.
+          go-version: '1.27.1'
 
       - name: Install templ
         # Pin to the runtime version in go.mod. The generator and the
