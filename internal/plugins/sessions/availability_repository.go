@@ -135,6 +135,22 @@ func (r *sessionRepository) ListAnsweredUserIDs(ctx context.Context, campaignID 
 	return out, rows.Err()
 }
 
+// TouchAvailabilityAnswered moves a member's answered stamp to at, leaving
+// their hours and zone as they are. Reports whether they had answered.
+func (r *sessionRepository) TouchAvailabilityAnswered(ctx context.Context, campaignID, userID string, at time.Time) (bool, error) {
+	res, err := r.db.ExecContext(ctx,
+		`UPDATE member_availability_status SET answered_at = ? WHERE campaign_id = ? AND user_id = ?`,
+		at, campaignID, userID)
+	if err != nil {
+		return false, fmt.Errorf("touching availability answer: %w", err)
+	}
+	n, err := res.RowsAffected()
+	if err != nil {
+		return false, fmt.Errorf("touching availability answer: %w", err)
+	}
+	return n > 0, nil
+}
+
 // ListUserExceptions returns a member's own per-date overrides for a campaign.
 func (r *sessionRepository) ListUserExceptions(ctx context.Context, campaignID, userID string) ([]AvailabilityException, error) {
 	const q = `SELECT id, campaign_id, user_id, DATE_FORMAT(on_date, '%Y-%m-%d'), start_minute, end_minute, state, tz, updated_at

@@ -68,7 +68,6 @@ var contractGoverned = map[string]string{
 var governedFieldExceptions = map[string]string{
 	"maps.UpdateHexCellInput.Col":          "value-typed by choice: Col and Row are the hex's identity, not data to merge. The handler refuses an entry that omits either, and the service bounds them to 0..MaxHexCoord.",
 	"maps.UpdateHexCellInput.Row":          "value-typed by choice: same as maps.UpdateHexCellInput.Col.",
-	"entities.UpdateEntityInput.ImagePath": "INERT — entityService.Update never reads it. That is its own defect (campaign import believes it is applying image paths through this input and is not); tracked as #613 rather than fixed under a ruling that was about a different bug. It cannot clobber anything precisely because nothing reads it.",
 
 	// Update only assigns Name when non-empty, so it already preserves an
 	// absent/blank name without needing presence-awareness.
