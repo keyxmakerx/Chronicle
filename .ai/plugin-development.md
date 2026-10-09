@@ -52,11 +52,11 @@ Plugins can:
 }
 ```
 
-**Calendar is being rebuilt (V5, #741).** Its UI, routes and service were
-deleted; only its domain layer and migrations remain. The `calendar_read` /
-`calendar_write` host functions and the three `calendar.event_*` hooks stay
-declared and registered, but the read/write functions return an error instead
-of data and the hooks never fire, until the rebuild rewires them.
+**Calendar host functions are not wired to the calendar (#741).** The
+`calendar_read` / `calendar_write` host functions and the three
+`calendar.event_*` hooks stay declared and registered, but the read/write
+functions return an error instead of data and the hooks never fire, until
+they are rewired to the calendar service.
 
 ## Capabilities
 
@@ -108,11 +108,10 @@ Update custom fields on an entity.
 Get calendar configuration for a campaign.
 - Input: `{"campaign_id": "..."}`
 - Output: Calendar config JSON
-- **Currently always errors.** Calendar's UI, routes and service were deleted
-  for a ground-up rebuild (V5, #741); only its domain layer and migrations
-  remain. The host function stays registered and declared, but its adapter
-  (`internal/app/routes.go`, `wasmCalendarReader`) returns "calendar is being
-  rebuilt (V5) and is unavailable to extensions" rather than data.
+- **Currently always errors.** The host function stays registered and
+  declared, but its adapter (`internal/app/routes.go`, `wasmCalendarReader`)
+  is not wired to the calendar service and returns "calendar is being rebuilt
+  (V5) and is unavailable to extensions" rather than data.
 
 ### list_events
 List upcoming events for a campaign's calendar.
@@ -191,7 +190,7 @@ When an event fires, Chronicle calls the plugin's `on_hook` export with:
 | `entity.created` | New entity created |
 | `entity.updated` | Entity modified |
 | `entity.deleted` | Entity deleted |
-| `calendar.event_created` | Calendar event created (currently dormant — nothing calls the dispatcher while calendar is being rebuilt, see below) |
+| `calendar.event_created` | Calendar event created (currently dormant — nothing calls the dispatcher, see the note above) |
 | `calendar.event_updated` | Calendar event modified (currently dormant) |
 | `calendar.event_deleted` | Calendar event deleted (currently dormant) |
 | `tag.added` | Tag applied to entity |
