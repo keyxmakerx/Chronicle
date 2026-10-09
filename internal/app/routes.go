@@ -4417,6 +4417,22 @@ func (a *App) RegisterRoutes() {
 	systemHandler.SetAddonService(addonService)
 	systemHandler.SetBookEdits(systems.NewBookEditService(systems.NewBookEditRepository(a.DB)))
 	systems.RegisterRoutes(e, systemHandler, addonService, authService, campaignService)
+	// The campaign's own pick-list entries, merged into the pick lists below.
+	// The manifest is the campaign's custom upload, else its chosen built-in.
+	systemEntrySvc := systems.NewSystemEntryService(
+		systems.NewSystemEntryRepository(a.DB),
+		func(ctx context.Context, campaignID string) *systems.SystemManifest {
+			if m := campaignSystemMgr.GetManifest(campaignID); m != nil {
+				return m
+			}
+			c, err := campaignService.GetByID(ctx, campaignID)
+			if err != nil {
+				return nil
+			}
+			return systems.Find(c.ParseSettings().SystemID)
+		})
+	systems.RegisterSystemEntryChoices(systemEntrySvc)
+	systems.RegisterSystemEntryRoutes(e, systems.NewSystemEntryHandler(systemEntrySvc), authService, campaignService)
 	// Pick lists (Ancestry, Kit, Race, Class…) for the character attributes editor.
 	systems.RegisterCharacterChoiceRoutes(e,
 		systems.NewCharacterChoiceHandler(systems.NewCharacterChoiceService(addonService, campaignSystemMgr)),
@@ -4945,6 +4961,7 @@ func (a *App) RegisterRoutes() {
 			}
 			return c.ParseSettings().SystemID
 		}},
+		records.SystemEntryKind{Svc: systemEntrySvc},
 		records.GeneratorKind{Cal: calendarService, Tables: aiTables},
 	)
 	aiWorkspaceHandler.SetRecords(records.NewRegistry(aiKinds...))

@@ -1,4 +1,5 @@
 DELETE		internal/plugins/campaigns/routes.go
+DELETE	/:entryId	internal/systems/system_entries_handler.go
 DELETE	/:extID	internal/extensions/routes.go
 DELETE	/:id	internal/plugins/bestiary/routes.go
 DELETE	/:id	internal/plugins/packages/routes.go
@@ -104,6 +105,7 @@ GET		internal/plugins/packages/routes.go
 GET		internal/plugins/restore/routes.go
 GET		internal/plugins/syncapi/routes.go
 GET		internal/systems/routes.go
+GET		internal/systems/system_entries_handler.go
 GET	/	internal/app/routes.go
 GET	/:cat	internal/systems/routes.go
 GET	/:cat/:item	internal/systems/routes.go
@@ -503,6 +505,7 @@ PATCH	/notice-boards/:eid/boards/:bid	internal/plugins/quests/routes.go
 PATCH	/notice-boards/:eid/boards/:bid/items/:iid	internal/plugins/quests/routes.go
 POST		internal/plugins/bestiary/routes.go
 POST		internal/plugins/packages/routes.go
+POST		internal/systems/system_entries_handler.go
 POST	/:extID/:slug/call	internal/extensions/routes.go
 POST	/:extID/disable	internal/extensions/routes.go
 POST	/:extID/enable	internal/extensions/routes.go
@@ -722,6 +725,7 @@ POST	/version/:version/notify-older	internal/plugins/foundry_vtt/routes.go
 POST	/version/:version/notify/:cid	internal/plugins/foundry_vtt/routes.go
 POST	/worldbuilding-prompts	internal/plugins/entities/worldbuilding_prompt_routes.go
 PUT		internal/plugins/campaigns/routes.go
+PUT	/:entryId	internal/systems/system_entries_handler.go
 PUT	/:extID	internal/extensions/routes.go
 PUT	/:id	internal/plugins/bestiary/routes.go
 PUT	/:id/auto-update	internal/plugins/packages/routes.go
