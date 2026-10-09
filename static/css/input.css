@@ -110,6 +110,11 @@
     --dur-micro:       120ms;    /* button/hover feedback */
     --dur-standard:    200ms;    /* modal, dropdown, panel */
     --dur-large:       280ms;    /* view-level transitions */
+    --dur-slide:       360ms;    /* a tab or sheet sliding out from under paper */
+    --dur-turn:        560ms;    /* the Handbook's page turn */
+
+    --ease-slide:      cubic-bezier(0.22, 0.8, 0.24, 1);  /* slows to a stop, no overshoot */
+    --ease-turn:       cubic-bezier(0.45, 0.05, 0.25, 1); /* lifts slowly, lands softly */
 
     /* ──────────────────────────────────────────────────────────────────
      * V2 widget-animation durations — the `--motion-*` family, consumed
@@ -4228,18 +4233,40 @@ html.dark[data-view-contrast="high"] { /* the second out-ranks a campaign's :roo
   [data-cz-nav="tide"] .nav-ring::after { display: none; }
 }
 
-/* Reduce motion: the same total-disable as the device setting, for everyone
-   when the owner switches it on (data-cz-reduce) and for one person when they
-   pick Calmer in My view (data-view-motion). The person's choice only adds to
-   the owner's; it can never turn the owner's setting off.
+/* Calm and Off (html[data-motion], .ai/ui-standard.md "Motion").
+   Calm is for everyone when the owner switches it on (data-cz-reduce) and for
+   one person who picks Calm or Off in My view (both write
+   data-view-motion="calm"). Calm keeps fades and colour changes but nothing
+   travels: transitions are limited to non-moving properties and keyframe
+   animations jump to their end. Off is the same total-disable as the device
+   setting. A person's choice only adds to the owner's; it can never turn the
+   owner's setting off.
    The Customize editor is left out: its example site shows the owner's
    draft, which may turn the switch off before saving. */
 html[data-cz-reduce] *:not(.czp *), html[data-cz-reduce] *:not(.czp *)::before, html[data-cz-reduce] *:not(.czp *)::after,
 html[data-view-motion="calm"] *:not(.czp *), html[data-view-motion="calm"] *:not(.czp *)::before, html[data-view-motion="calm"] *:not(.czp *)::after {
+  transition-property: opacity, color, background-color, border-color, outline-color, box-shadow, visibility !important;
+  animation-duration: 0.01ms !important;
+  animation-iteration-count: 1 !important;
+  scroll-behavior: auto !important;
+}
+html[data-motion="off"] *:not(.czp *), html[data-motion="off"] *:not(.czp *)::before, html[data-motion="off"] *:not(.czp *)::after {
   animation-duration: 0.01ms !important;
   animation-iteration-count: 1 !important;
   transition-duration: 0.01ms !important;
   scroll-behavior: auto !important;
+}
+
+/* ============================================================ */
+/* AI tool (internal/plugins/ai_workspace): the lookup answer grows open
+   under the paste box. The reduced-motion guards above settle it at once. */
+.ai-grow {
+  transform-origin: top center;
+  animation: ai-grow var(--dur-standard) var(--ease-out) both;
+}
+@keyframes ai-grow {
+  from { opacity: 0; transform: scaleY(0.94); }
+  to   { opacity: 1; transform: none; }
 }
 
 /* ============================================================ */
@@ -4796,37 +4823,37 @@ html[data-view-motion="calm"] *:not(.czp *), html[data-view-motion="calm"] *:not
 .ag-box { margin: 2px 0 12px; border: 1px solid var(--color-border); border-radius: 11px; background: var(--color-surface-alt, var(--color-bg-secondary)); }
 .ag-box.is-nagging { animation: ag-shake .42s cubic-bezier(.36, .07, .19, .97); }
 .ag-head { display: flex; align-items: center; gap: 8px; padding: 10px 12px 0; }
-.ag-head h4 { flex: 1; margin: 0; font-size: 13px; font-weight: 600; color: var(--color-fg); }
-.ag-x { width: 26px; height: 26px; border: 0; border-radius: 7px; background: transparent; color: var(--color-fg-muted); cursor: pointer; }
-.ag-x:hover { background: var(--color-bg-tertiary, rgba(0,0,0,.06)); color: var(--color-fg); }
+.ag-head h4 { flex: 1; margin: 0; font-size: 13px; font-weight: 600; color: var(--color-text-primary); }
+.ag-x { width: 26px; height: 26px; border: 0; border-radius: 7px; background: transparent; color: var(--color-text-muted); cursor: pointer; }
+.ag-x:hover { background: var(--color-bg-tertiary, rgba(0,0,0,.06)); color: var(--color-text-primary); }
 .ag-seg { display: inline-flex; gap: 2px; margin: 10px 12px 0; padding: 3px; border-radius: 9px; background: var(--color-bg-tertiary, rgba(0,0,0,.06)); }
-.ag-seg button { border: 0; border-radius: 7px; padding: 4px 11px; background: transparent; color: var(--color-fg-muted); font-family: inherit; font-size: 12.5px; font-weight: 500; line-height: 1.4; cursor: pointer; transition: background .15s, color .15s; }
-.ag-seg button[aria-selected="true"] { background: var(--color-card-bg); color: var(--color-fg); box-shadow: 0 1px 2px rgba(0, 0, 0, .12); }
+.ag-seg button { border: 0; border-radius: 7px; padding: 4px 11px; background: transparent; color: var(--color-text-muted); font-family: inherit; font-size: 12.5px; font-weight: 500; line-height: 1.4; cursor: pointer; transition: background .15s, color .15s; }
+.ag-seg button[aria-selected="true"] { background: var(--color-card-bg); color: var(--color-text-primary); box-shadow: 0 1px 2px rgba(0, 0, 0, .12); }
 .ag-body { padding: 10px 12px 12px; }
 .ag-search { position: relative; }
-.ag-search i { position: absolute; left: 10px; top: 50%; transform: translateY(-50%); font-size: 12px; color: var(--color-fg-muted); pointer-events: none; }
+.ag-search i { position: absolute; left: 10px; top: 50%; transform: translateY(-50%); font-size: 12px; color: var(--color-text-muted); pointer-events: none; }
 .ag-search input { padding-left: 30px; }
 .ag-list { margin-top: 8px; max-height: 196px; overflow-y: auto; border: 1px solid var(--color-border); border-radius: 9px; background: var(--color-card-bg); }
-.ag-row { display: flex; align-items: center; gap: 10px; padding: 7px 10px; font-size: 13.5px; color: var(--color-fg); cursor: pointer; border-top: 1px solid var(--color-border); transition: background .12s; }
+.ag-row { display: flex; align-items: center; gap: 10px; padding: 7px 10px; font-size: 13.5px; color: var(--color-text-primary); cursor: pointer; border-top: 1px solid var(--color-border); transition: background .12s; }
 .ag-row:first-child { border-top: 0; }
 .ag-row:hover { background: var(--color-surface-alt, rgba(0,0,0,.03)); }
 .ag-row input { accent-color: var(--color-accent); }
 .ag-row .ag-ico { width: 26px; height: 26px; flex: none; border-radius: 7px; display: grid; place-items: center; background: rgba(139, 92, 246, .13); color: #8b5cf6; font-size: 12px; }
 .ag-row .ag-ico.map { background: rgba(14, 165, 233, .13); color: #0ea5e9; }
 .ag-row .ag-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.ag-row .ag-tag { flex: none; font-size: 11px; color: var(--color-fg-muted); }
+.ag-row .ag-tag { flex: none; font-size: 11px; color: var(--color-text-muted); }
 .ag-row:has(input:checked) { background: rgb(var(--color-accent-rgb, 99 102 241) / .08); }
-.ag-more { padding: 7px 10px; font-size: 12px; color: var(--color-fg-muted); border-top: 1px solid var(--color-border); }
-.ag-hint { display: flex; gap: 7px; align-items: flex-start; min-height: 18px; margin: 8px 2px 0; font-size: 12px; color: var(--color-fg-muted); }
+.ag-more { padding: 7px 10px; font-size: 12px; color: var(--color-text-muted); border-top: 1px solid var(--color-border); }
+.ag-hint { display: flex; gap: 7px; align-items: flex-start; min-height: 18px; margin: 8px 2px 0; font-size: 12px; color: var(--color-text-muted); }
 .ag-hint:empty { display: none; }
 .ag-hint i { margin-top: 2px; }
 .ag-foot { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; margin-top: 10px; }
 .ag-step { display: inline-flex; align-items: center; border: 1px solid var(--color-input-border, var(--color-border)); border-radius: 8px; background: var(--color-input-bg, var(--color-card-bg)); }
-.ag-step button { width: 28px; height: 30px; border: 0; background: transparent; color: var(--color-fg-muted); cursor: pointer; }
-.ag-step button:hover { color: var(--color-fg); }
-.ag-step input { width: 40px; height: 30px; border: 0; background: transparent; text-align: center; font-family: inherit; font-size: 13px; font-weight: 600; line-height: 1; color: var(--color-fg); font-variant-numeric: tabular-nums; -moz-appearance: textfield; }
+.ag-step button { width: 28px; height: 30px; border: 0; background: transparent; color: var(--color-text-muted); cursor: pointer; }
+.ag-step button:hover { color: var(--color-text-primary); }
+.ag-step input { width: 40px; height: 30px; border: 0; background: transparent; text-align: center; font-family: inherit; font-size: 13px; font-weight: 600; line-height: 1; color: var(--color-text-primary); font-variant-numeric: tabular-nums; -moz-appearance: textfield; }
 .ag-step input::-webkit-inner-spin-button { -webkit-appearance: none; }
-.ag-lbl { font-size: 12px; color: var(--color-fg-muted); }
+.ag-lbl { font-size: 12px; color: var(--color-text-muted); }
 .ag-sp { flex: 1; }
 .ag-warn { display: none; align-items: center; gap: 8px; margin: 0 12px 12px; padding: 9px 10px 9px 12px; border-radius: 10px; background: oklch(.95 .06 80); color: oklch(.38 .09 60); box-shadow: inset 0 0 0 1px oklch(.8 .1 75); font-size: 12.5px; font-weight: 600; line-height: 1.3; }
 .ag-warn span { flex: 1; }
@@ -4834,21 +4861,43 @@ html[data-view-motion="calm"] *:not(.czp *), html[data-view-motion="calm"] *:not
 .ag-warn.is-on { display: flex; animation: ag-in .28s ease-out both, ag-glow .9s ease-out .1s; }
 .dark .ag-warn { background: oklch(.32 .06 70); color: oklch(.92 .07 85); box-shadow: inset 0 0 0 1px oklch(.5 .1 75); }
 .ag-landed { animation: ag-land 1.1s ease-out; }
-.ag-shared { display: flex; align-items: center; gap: 6px; margin: -2px 0 6px; font-size: 12px; color: var(--color-fg-muted); }
+.ag-shared { display: flex; align-items: center; gap: 6px; margin: -2px 0 6px; font-size: 12px; color: var(--color-text-muted); }
 .ag-checks { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 2px 10px; }
-.ag-checks label { display: flex; align-items: center; gap: 8px; padding: 5px 4px; font-size: 13.5px; color: var(--color-fg); cursor: pointer; border-radius: 7px; }
+.ag-checks label { display: flex; align-items: center; gap: 8px; padding: 5px 4px; font-size: 13.5px; color: var(--color-text-primary); cursor: pointer; border-radius: 7px; }
 .ag-checks label:hover { background: var(--color-surface-alt, rgba(0,0,0,.03)); }
-.ag-checks small { color: var(--color-fg-muted); font-size: 11.5px; }
+.ag-checks small { color: var(--color-text-muted); font-size: 11.5px; }
 .ag-checks input { accent-color: var(--color-accent); }
 /* The card menu's Give box: a popover anchored inside the card. */
 .ag-pop { position: absolute; z-index: 30; top: 40px; right: 8px; width: min(268px, calc(100vw - 48px)); border: 1px solid var(--color-border); border-radius: 12px; background: var(--color-card-bg); box-shadow: 0 18px 40px -16px rgba(0, 0, 0, .35); animation: ag-pop .2s ease-out both; transform-origin: 90% 0; }
 .ag-pop .ag-menu { padding: 6px; }
-.ag-pop .ag-menu button { display: flex; width: 100%; align-items: center; gap: 9px; padding: 7px 9px; border: 0; border-radius: 8px; background: transparent; color: var(--color-fg); font-family: inherit; font-size: 13px; font-weight: 500; line-height: 1.3; text-align: left; cursor: pointer; }
+.ag-pop .ag-menu button { display: flex; width: 100%; align-items: center; gap: 9px; padding: 7px 9px; border: 0; border-radius: 8px; background: transparent; color: var(--color-text-primary); font-family: inherit; font-size: 13px; font-weight: 500; line-height: 1.3; text-align: left; cursor: pointer; }
 .ag-pop .ag-menu button:hover { background: var(--color-surface-alt, rgba(0,0,0,.04)); }
-.ag-pop .ag-menu i { width: 14px; color: var(--color-fg-muted); }
+.ag-pop .ag-menu i { width: 14px; color: var(--color-text-muted); }
 .ag-pop .ag-box { margin: 0; border: 0; background: transparent; }
-.ag-toast { position: fixed; z-index: 90; right: 18px; bottom: 18px; display: flex; align-items: center; gap: 10px; padding: 10px 14px; border-radius: 11px; background: var(--color-card-bg); color: var(--color-fg); border: 1px solid var(--color-border); box-shadow: 0 14px 34px -14px rgba(0,0,0,.4); font-size: 13px; animation: ag-in .28s ease-out both; }
+.ag-toast { position: fixed; z-index: 90; right: 18px; bottom: 18px; display: flex; align-items: center; gap: 10px; padding: 10px 14px; border-radius: 11px; background: var(--color-card-bg); color: var(--color-text-primary); border: 1px solid var(--color-border); box-shadow: 0 14px 34px -14px rgba(0,0,0,.4); font-size: 13px; animation: ag-in .28s ease-out both; }
 .ag-toast i { color: #16a34a; }
+/* A toast the server renders into a swapped fragment fades itself out, since no
+   script is there to remove it. */
+.ag-toast-timed { animation: ag-in .28s ease-out both, ag-out .3s ease-in 3.2s forwards; }
+@keyframes ag-out { to { opacity: 0; visibility: hidden; pointer-events: none; } }
+/* Band heads on the Characters page: the heading, the chosen types as chips,
+   and the Add button. */
+.ag-bandhead { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 10px; margin-bottom: 12px; }
+.ag-bandhead .section-header { margin: 0; }
+.ag-chips { display: inline-flex; flex-wrap: wrap; gap: 6px; }
+.ag-chip { display: inline-flex; align-items: center; gap: 4px; height: 24px; padding: 0 4px 0 9px; border-radius: 999px; border: 1px solid var(--color-border); background: var(--color-card-bg); color: var(--color-fg); font-size: 12px; font-weight: 500; }
+.ag-chip button { width: 18px; height: 18px; border: 0; border-radius: 999px; background: transparent; color: var(--color-fg-muted); cursor: pointer; display: grid; place-items: center; font-size: 10px; }
+.ag-chip button:hover { background: var(--color-bg-tertiary, rgba(0,0,0,.06)); color: var(--color-fg); }
+.ag-add { display: inline-flex; align-items: center; gap: 5px; height: 26px; padding: 0 10px; border-radius: 8px; border: 1px dashed var(--color-border); background: transparent; color: var(--color-fg-muted); font: inherit; font-size: 12.5px; cursor: pointer; }
+.ag-add:hover, .ag-add[aria-expanded="true"] { color: var(--color-accent); border-color: var(--color-accent); }
+.ag-empty { padding: 18px; border: 1px dashed var(--color-border); border-radius: 10px; text-align: center; font-size: 13px; color: var(--color-fg-secondary); }
+.ag-link { border: 0; padding: 0; background: none; font: inherit; font-size: 12px; color: var(--color-accent); cursor: pointer; }
+.ag-link:hover { text-decoration: underline; }
+.ag-confirm p { margin: 0 0 4px; font-size: 13px; color: var(--color-fg); }
+.ag-confirm small { display: block; font-size: 12px; color: var(--color-fg-muted); }
+.ag-row.is-sub { padding-left: 32px; }
+.ag-row .ag-name b { font-weight: 500; }
+.ag-count { display: inline-flex; align-items: center; justify-content: center; min-width: 18px; height: 18px; padding: 0 6px; border-radius: 999px; background: var(--color-bg-tertiary, rgba(0,0,0,.06)); color: var(--color-fg-muted); font-size: 11px; }
 @keyframes ag-in { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
 @keyframes ag-pop { from { opacity: 0; transform: translateY(-4px) scale(.97); } to { opacity: 1; transform: none; } }
 @keyframes ag-glow { 0% { box-shadow: 0 0 0 0 rgba(217, 119, 6, .55); } 100% { box-shadow: 0 0 0 12px rgba(217, 119, 6, 0); } }
@@ -4862,3 +4911,53 @@ html[data-view-motion="calm"] *:not(.czp *), html[data-view-motion="calm"] *:not
 /* The in-app reduced-motion setting (.nav-rm) stills them too. */
 .nav-rm .ag-box.is-nagging, .nav-rm .ag-warn.is-on, .nav-rm .ag-landed, .nav-rm .ag-pop, .nav-rm .ag-toast { animation: none !important; }
 .nav-rm .ag-fold { transition: none !important; }
+
+/* Picture box in the user menu, and member avatars. The box reuses the
+   ag-fold/ag-box/ag-warn pieces above; static/js/widgets/picture_box.js drives it. */
+.ag-av { position: relative; flex: none; border-radius: 999px; overflow: hidden; display: grid; place-items: center; background: rgb(var(--color-accent-rgb, 99 102 241)); color: #fff; font-weight: 600; }
+.ag-av img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.ag-av.s32 { width: 32px; height: 32px; font-size: 12px; }
+.ag-av.s36 { width: 36px; height: 36px; font-size: 13px; }
+.ag-av.s56 { width: 56px; height: 56px; font-size: 18px; }
+.ag-prog { height: 4px; border-radius: 999px; background: var(--color-bg-tertiary); overflow: hidden; margin-top: 8px; }
+.ag-prog > span { display: block; height: 100%; width: 0; background: var(--color-accent); transition: width var(--dur-standard, 200ms) linear; }
+.ag-menuhead { display: flex; align-items: center; gap: 10px; padding: 10px 12px; border-bottom: 1px solid var(--color-border); }
+.ag-menuhead .min-w-0 { flex: 1; }
+.ag-link { border: 0; padding: 0; background: none; font: inherit; font-size: 12px; color: var(--color-accent); cursor: pointer; }
+.ag-link:hover { text-decoration: underline; }
+.ag-link.danger { color: #dc2626; }
+.dark .ag-link.danger { color: #f87171; }
+.ag-confirm p { margin: 0 0 4px; font-size: 13px; color: var(--color-text-primary); }
+.ag-confirm small { display: block; font-size: 12px; color: var(--color-text-muted); }
+.ag-ring { animation: ag-ring 1.1s var(--ease-out, ease-out); }
+@keyframes ag-ring { 0% { box-shadow: 0 0 0 0 rgb(var(--color-accent-rgb, 99 102 241) / .6); } 100% { box-shadow: 0 0 0 10px rgb(var(--color-accent-rgb, 99 102 241) / 0); } }
+@media (prefers-reduced-motion: reduce) {
+  .ag-ring { animation: none !important; }
+  .ag-prog > span { transition: none !important; }
+}
+.nav-rm .ag-ring, html[data-cz-reduce] .ag-ring, html[data-view-motion="calm"] .ag-ring { animation: none !important; }
+.nav-rm .ag-prog > span, html[data-cz-reduce] .ag-prog > span, html[data-view-motion="calm"] .ag-prog > span { transition: none !important; }
+/* Game-system picker (static/js/widgets/choice_picker.js): the value button on
+   a character field and the fold that lists the system's names. The box reuses
+   the Give-box classes above, restated here on the real colour tokens. */
+.ag-pick { display: flex; width: 100%; align-items: center; gap: 6px; margin-top: 2px; padding: 3px 6px; margin-left: -6px; border: 0; border-radius: 7px; background: transparent; text-align: left; font: inherit; font-size: 14px; color: var(--color-text-primary); cursor: pointer; transition: background var(--dur-micro, 120ms); }
+.ag-pick:hover, .ag-pick[aria-expanded="true"] { background: var(--color-bg-secondary); }
+.ag-pick .ph { color: var(--color-text-muted); }
+.ag-pick .chev { margin-left: auto; font-size: 10px; color: var(--color-text-muted); transition: transform var(--dur-standard, 200ms) var(--ease-out, ease-out); }
+.ag-pick[aria-expanded="true"] .chev { transform: rotate(180deg); }
+.ag-src { display: inline-flex; align-items: center; height: 18px; padding: 0 7px; border-radius: 999px; background: var(--color-bg-tertiary); color: var(--color-text-secondary); font-size: 10.5px; font-weight: 500; white-space: nowrap; }
+.ag-note { margin-top: 2px; font-size: 11.5px; color: var(--color-text-muted); }
+.ag-mine { margin-top: 8px; display: flex; gap: 6px; }
+.ag-pickbox .ag-head h4 { color: var(--color-text-primary); }
+.ag-pickbox .ag-x { color: var(--color-text-muted); }
+.ag-pickbox .ag-x:hover { color: var(--color-text-primary); }
+.ag-pickbox .ag-search i, .ag-pickbox .ag-more, .ag-pickbox .ag-hint { color: var(--color-text-muted); }
+.ag-pickbox .ag-list { max-height: 236px; }
+.ag-pickbox .ag-row { align-items: flex-start; color: var(--color-text-primary); }
+.ag-pickbox .ag-row:hover { background: var(--color-bg-secondary); }
+.ag-pickbox .ag-row input { margin-top: 3px; flex: none; }
+.ag-pickbox .ag-row .ag-name { overflow: visible; white-space: normal; }
+.ag-pickbox .ag-row .ag-name b { display: block; font-weight: 500; }
+.ag-pickbox .ag-row .ag-name small { display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; font-size: 12px; line-height: 1.35; color: var(--color-text-muted); margin-top: 1px; }
+.ag-pick:focus-visible, .ag-link:focus-visible { outline: 2px solid var(--color-accent); outline-offset: 2px; }
+@media (prefers-reduced-motion: reduce) { .ag-pick .chev { transition: none !important; } }

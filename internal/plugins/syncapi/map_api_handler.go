@@ -298,6 +298,11 @@ func (h *MapAPIHandler) ListDrawings(c echo.Context) error {
 	if err != nil {
 		return apperror.NewInternal(fmt.Errorf("failed to list drawings"))
 	}
+	// A fogged hex layer's picture goes out without its file, as on the web.
+	drawings, err = h.drawingSvc.WithholdImages(c.Request().Context(), m.ID, role, drawings)
+	if err != nil {
+		return apperror.NewInternal(fmt.Errorf("failed to list drawings"))
+	}
 	return c.JSON(http.StatusOK, drawings)
 }
 
@@ -558,7 +563,7 @@ func (h *MapAPIHandler) UpdateToken(c echo.Context) error {
 		return apperror.NewBadRequest("invalid request body")
 	}
 
-	err := h.drawingSvc.UpdateToken(c.Request().Context(), tokenID, c.Param("mapID"), maps.UpdateTokenInput{
+	err := h.drawingSvc.UpdateToken(c.Request().Context(), tokenID, c.Param("mapID"), h.canAuthorDmOnly(c), maps.UpdateTokenInput{
 		Name:              req.Name,
 		ImagePath:         req.ImagePath,
 		X:                 req.X,
@@ -611,7 +616,7 @@ func (h *MapAPIHandler) UpdateTokenPosition(c echo.Context) error {
 		return apperror.NewBadRequest("invalid request body")
 	}
 
-	err := h.drawingSvc.UpdateTokenPosition(c.Request().Context(), tokenID, c.Param("mapID"), maps.UpdateTokenPositionInput{
+	err := h.drawingSvc.UpdateTokenPosition(c.Request().Context(), tokenID, c.Param("mapID"), h.canAuthorDmOnly(c), maps.UpdateTokenPositionInput{
 		X:                 req.X,
 		Y:                 req.Y,
 		ExpectedUpdatedAt: req.ExpectedUpdatedAt,

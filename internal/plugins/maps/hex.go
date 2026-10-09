@@ -46,6 +46,21 @@ func IsValidTerrain(t string) bool {
 	return false
 }
 
+// HexPiecesPerTerrain is how many pieces (looks) the Realistic art offers for
+// each terrain that has any; a hex's piece column picks one, and NULL ("Mix")
+// lets the viewer pick a stable one from the hex's position. It must match the
+// viewer's PIECES list in static/js/map_hex_art.js.
+const HexPiecesPerTerrain = 12
+
+// PieceCount is how many pieces a terrain offers. A road is a line through its
+// hexes and an unknown kind has no art, so neither has pieces.
+func PieceCount(terrain string) int {
+	if terrain == TerrainRoad || !IsValidTerrain(terrain) {
+		return 0
+	}
+	return HexPiecesPerTerrain
+}
+
 // Limits on what a hex may hold and what one request may change. The cell cap
 // bounds a layer to roughly a 200 x 200 field so one map cannot grow without
 // limit. MaxHexCoord is the highest valid column or row index, so a field is at
@@ -59,6 +74,16 @@ const (
 	MaxHexNotesRunes  = 2000
 	MaxHexCoord       = 399
 	MaxHexCellsPerMap = 40000
+)
+
+// Travel figures for the trip planner. The columns are SMALLINT UNSIGNED; the
+// ceiling keeps a typo from making every trip read as zero days, and the floor
+// keeps the day maths from dividing by zero.
+const (
+	DefaultMilesPerHex = 6
+	DefaultMilesPerDay = 24
+	MinTravelMiles     = 1
+	MaxTravelMiles     = 1000
 )
 
 // HexLayer is the per-map hex settings row. A map without a row has an
@@ -79,7 +104,7 @@ type HexLayer struct {
 
 // DefaultHexLayer is the layer of a map nobody has painted yet.
 func DefaultHexLayer(mapID string) HexLayer {
-	return HexLayer{MapID: mapID, MilesPerHex: 6, MilesPerDay: 24}
+	return HexLayer{MapID: mapID, MilesPerHex: DefaultMilesPerHex, MilesPerDay: DefaultMilesPerDay}
 }
 
 // HexCell is one painted or annotated hex. Only hexes someone has touched have
@@ -98,7 +123,10 @@ type HexCell struct {
 }
 
 // HexKey identifies a hex by its offset coordinates.
-type HexKey struct{ Col, Row int }
+type HexKey struct {
+	Col int `json:"col"`
+	Row int `json:"row"`
+}
 
 // VisibleCells returns the cells role may receive. role is the viewer's
 // VisibilityRole, so a co-DM grant already arrives promoted to owner.

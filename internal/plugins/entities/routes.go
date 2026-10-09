@@ -88,6 +88,9 @@ func RegisterRoutes(e *echo.Echo, h *Handler, campaignSvc campaigns.CampaignServ
 	// Type-shape gate (only character-shaped entity_types) lives in the
 	// service so the route surface stays uniform.
 	cg.POST("/entities/:eid/claim", h.ClaimEntity, campaigns.RequireRole(campaigns.RolePlayer))
+	// Owner picks which page types the Characters page lists as the party and
+	// as NPCs.
+	cg.POST("/characters/lists", h.UpdateCharacterLists, campaigns.RequireRole(campaigns.RoleOwner))
 	// Owner reassignment: Scribe+ only. Pass owner_user_id=null to clear.
 	cg.PUT("/entities/:eid/owner", h.AssignOwner, campaigns.RequireRole(campaigns.RoleScribe))
 	// Map assignment for the per-entity Map Editor block: Scribe+ only.

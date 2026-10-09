@@ -109,14 +109,35 @@
       }
       return;
     }
-    var attr = { motion: 'data-view-motion', textSize: 'data-view-text', contrast: 'data-view-contrast' }[key];
-    if (!attr) return;
-    var isDefault = value === 'owner' || value === 'standard';
-    if (isDefault) html.removeAttribute(attr); else html.setAttribute(attr, value);
     if (key === 'motion') {
-      // nav-rm is how the menu's script hears a reduce switch; the owner's
-      // own switch keeps it on whatever the person picks.
-      html.classList.toggle('nav-rm', !isDefault || html.hasAttribute('data-cz-reduce'));
+      // Calm and Off both write data-view-motion="calm" (the "wants less
+      // motion" flag scripts check); data-motion says how much less.
+      if (value === 'calm' || value === 'off') html.setAttribute('data-view-motion', 'calm');
+      else html.removeAttribute('data-view-motion');
+      window.Chronicle.syncMotion(value);
+      return;
     }
+    var attr = { textSize: 'data-view-text', contrast: 'data-view-contrast' }[key];
+    if (!attr) return;
+    if (value === 'standard') html.removeAttribute(attr); else html.setAttribute(attr, value);
   };
+
+  /**
+   * Re-work html[data-motion] and nav-rm, matching MotionLevel on the
+   * server: the device's reduced-motion setting or an Off pick give "off",
+   * Calm or the owner's switch give "calm". pick is the person's new My view
+   * choice; without it (after a Customize save) an existing "off" stands,
+   * since only the device or the person can set it.
+   */
+  window.Chronicle.syncMotion = function (pick) {
+    var html = document.documentElement;
+    var device = !!(window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches);
+    var off = device || (pick ? pick === 'off' : html.getAttribute('data-motion') === 'off');
+    var calm = html.hasAttribute('data-cz-reduce') || html.getAttribute('data-view-motion') === 'calm';
+    if (off || calm) html.setAttribute('data-motion', off ? 'off' : 'calm');
+    else html.removeAttribute('data-motion');
+    // nav-rm is how the menu's script hears a reduce switch.
+    html.classList.toggle('nav-rm', off || calm);
+  };
+
 })();

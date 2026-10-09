@@ -43,7 +43,7 @@ claimed.
    applies. Grants are **additive only** — they can widen visibility (e.g.
    reveal a `dm_only` entity to one player via a tag grant) but never narrow
    it. `maps`, `map_markers`, `map_drawings`, `timelines`, `timeline_events`,
-   `timeline_event_links`, `entity_notes` and (dormant, see below)
+   `timeline_event_links`, `entity_notes` and
    `calendar_events` carry their own `visibility` enum plus a
    `visibility_rules` JSON `{allowed_users: [], denied_users: []}` for
    per-object overrides.
@@ -237,6 +237,8 @@ plugin does with them: `internal/plugins/calendar/.ai.md`.
 | `map_drawings` | Freehand/shape/text/shadow annotations and pictures on a layer | `points` JSON; `visibility`/`visibility_rules`; `foundry_id`; `image_id` (picture's media file, no FK), `crop` JSON, `sort_order` (migration 008, pictures only) |
 | `map_tokens` | Positioned tokens (often an entity's avatar) | `entity_id` FK SET NULL; `bar1/2_value/max`, `aura_*`, `light_*`, `vision_enabled/range` (Foundry-parity fields); `status_effects`/`flags` JSON; `foundry_id` |
 | `map_fog` | Explored/unexplored fog-of-war polygons | `points` JSON; `is_explored` |
+| `map_hex_layers` | A map's hex layer (at most one per map, on when `display_settings` grid type is hex) | PK `map_id` FK→`maps` CASCADE; `anchor_drawing_id` (a picture on the map, no FK); `fog_enabled`; `party_col`/`party_row`; `miles_per_hex`, `miles_per_day`; `version` |
+| `map_hex_cells` | Painted hexes, sparse (an unpainted hex has no row) | PK `(map_id, col, row)`, FK→`maps` CASCADE; `terrain` (VARCHAR checked in Go), `piece`, `name`, `notes`, `explored`; `updated_by` (no FK) |
 
 `entities.map_id` FKs `maps.id` (constraint added by maps migration 005, since
 core migrations cannot reference a plugin table on a fresh DB).
@@ -245,9 +247,13 @@ core migrations cannot reference a plugin table on a fresh DB).
 
 | Table | Purpose | Notable columns |
 |---|---|---|
-| `sessions` | A scheduled game session | `calendar_id` FK→`calendars` SET NULL (calendar is an empty stub, see above); `notes`/`notes_html`, `recap`/`recap_html`; `scheduled_date`/`scheduled_time`; `is_recurring`+`recurrence_*` |
+| `sessions` | A scheduled game session | `calendar_id` FK→`calendars` SET NULL ; `notes`/`notes_html`, `recap`/`recap_html`; `scheduled_date`/`scheduled_time`/`scheduled_tz` (organizer's IANA zone, nullable); `deleted_at` (soft delete); `is_recurring`+`recurrence_*` |
 | `session_entities` | Entities linked to a session | `UNIQUE(session_id, entity_id)`; `role` (mentioned/encountered/key) |
-| `session_attendees` | Per-user RSVP status | `UNIQUE(session_id, user_id)`; `status` (invited/accepted/declined/tentative) |
+| `session_attendees` | Per-user RSVP status | `UNIQUE(session_id, user_id)`; `status` (invited/accepted/declined/tentative); `note` (≤140), `excluded_from_count`, `needs_recheck` |
+| `session_occurrence_rsvps` | Per-night RSVPs for a repeating session (a non-recurring session uses `session_attendees`) | `UNIQUE(session_id, user_id, occurrence_date)`; `status` (default `invited`), `note`, `excluded_from_count`, `needs_recheck`, `responded_at` |
+| `session_reschedule_suggestions` | A member's "suggest another time" answer from an RSVP email link | `session_id`, `user_id` FK CASCADE; `occurrence_date` set only for one night of a repeating series; `suggested_date`, `suggested_time`, `note` |
+| `session_calendar_feed_tokens` | One private, replaceable calendar-feed link per campaign member | `UNIQUE(token)`, `UNIQUE(campaign_id, user_id)` |
+| `session_calendar_feed_settings` | Owner kill switch for the feed, per campaign | PK `campaign_id`; `enabled` — no row means enabled |
 | `session_rsvp_tokens` | Single-use email RSVP links | `token` UNIQUE; 7-day expiry |
 | `member_availability` | Recurring per-member weekly free/busy blocks | zone-local wall-clock (`day_of_week`, `start_minute`, `end_minute`, `tz`) — never UTC, so DST doesn't shift it; `week_parity` (0=every week, 1/2=alternating tracks) |
 | `availability_exceptions` | One-off date overrides to the recurring pattern | `on_date` + zone-local wall-clock, same shape as `member_availability` |
@@ -258,17 +264,12 @@ core migrations cannot reference a plugin table on a fresh DB).
 | `slot_proposal_tokens` | Single-use email response links, mirrors `session_rsvp_tokens` | `token` UNIQUE |
 | `notifications` | Generic in-app notification store | `user_id`; `campaign_id` nullable; `type`/`payload`/`link`; `read_at` NULL = unread |
 
-`member_availability`, `availability_exceptions` and
-`member_availability_status` were truncated (not dropped) by the same CALV5
-clean slate that emptied the calendar tables — players re-enter availability
-once V5 ships.
-
 ### timeline (`internal/plugins/timeline/migrations/`)
 
 | Table | Purpose | Notable columns |
 |---|---|---|
-| `timelines` | A visual timeline (per campaign, optionally tied to a calendar) | `calendar_id` FK→`calendars` SET NULL, cleared for existing rows by the timeline plugin's own CALV5 migration; the UI still offers a calendar picker but `calendars` is empty until V5, so it has nothing to link; `visibility`/`visibility_rules`; `zoom_default` |
-| `timeline_event_links` | Links a calendar event onto a timeline | FK→`calendar_events` CASCADE — table is kept but empty, since `calendar_events` is an empty stub; `display_order`, `visibility_override`, `label`/`color_override` |
+| `timelines` | A visual timeline (per campaign, optionally tied to a calendar) | `calendar_id` FK→`calendars` SET NULL (the create form's calendar picker lists the campaign's calendars; creation checks the calendar is in the same campaign); `visibility`/`visibility_rules`; `zoom_default` |
+| `timeline_event_links` | Links a calendar event onto a timeline | FK→`calendar_events` CASCADE; `display_order`, `visibility_override`, `label`/`color_override` |
 | `timeline_entity_groups` / `timeline_entity_group_members` | Named entity groupings shown on a timeline | plain parent + junction |
 | `timeline_events` | Standalone timeline events (not calendar-linked) | `year`/`month`/`day` (+ `end_*`); `entity_id` FK SET NULL; `visibility`/`visibility_rules`; `is_recurring`+`recurrence_type` |
 | `timeline_event_connections` | Drawn connector lines between two events/links | `source_id`/`target_id` + `source_type`/`target_type` (`event` or `link`, not FK-typed — polymorphic); `style` (solid/dashed/dotted/arrow) |

@@ -27,7 +27,7 @@ type castEntitySvc struct {
 func (s *castEntitySvc) ListClaimed(_ context.Context, _ string, role int, userID string) ([]Entity, error) {
 	s.called, s.role, s.userID = true, role, userID
 	owner := "u1"
-	return []Entity{{ID: "pc1", Name: "Aldric", OwnerUserID: &owner, TypeName: "Player Character"}}, nil
+	return []Entity{{ID: "pc1", Name: "Aldric", OwnerUserID: &owner, TypeName: "Player Character", EntityTypeID: 7}}, nil
 }
 
 func TestCharactersPage_AnonymousPublicVsPrivate(t *testing.T) {
@@ -46,7 +46,9 @@ func TestCharactersPage_AnonymousPublicVsPrivate(t *testing.T) {
 			svc := &castEntitySvc{}
 			e := echo.New()
 			e.Use(emw.Recover())
-			RegisterRoutes(e, NewHandler(svc), guardCampaignSvc{public: tt.public}, guardAuthSvc{})
+			h := NewHandler(svc)
+			h.SetCharacterLists(&fakeCastLists{chars: []int{7}, chosen: CharacterLists{CharacterTypeIDs: []int{7}}})
+			RegisterRoutes(e, h, guardCampaignSvc{public: tt.public}, guardAuthSvc{})
 			rec := httptest.NewRecorder()
 			e.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, path, nil))
 

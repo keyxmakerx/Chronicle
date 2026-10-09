@@ -296,6 +296,16 @@ func (d MapViewData) CanPaintHexes() bool {
 	return d.DisplayOrDefault().DrawWho != DrawWhoOwners
 }
 
+// CanMoveParty reports whether this viewer is offered the Party tool. It
+// mirrors HexService.requirePartyMover: an owner or DM grant always, a scribe
+// unless the map keeps the party to owners, a player never.
+func (d MapViewData) CanMoveParty() bool {
+	if d.IsDM {
+		return true
+	}
+	return d.IsScribe && d.DisplayOrDefault().PartyWho != PartyWhoOwners
+}
+
 // CanDraw reports whether this viewer gets the drawing tools: a scribe or
 // above, and an owner when the map restricts drawing to owners. This only
 // decides what is offered; DrawingService enforces the rule on the server.

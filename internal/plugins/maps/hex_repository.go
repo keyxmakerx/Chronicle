@@ -21,6 +21,8 @@ type HexCellWrite struct {
 	Name       string // "" with NameSet clears
 	NotesSet   bool
 	Notes      *string // nil with NotesSet clears
+	PieceSet   bool
+	Piece      *int // nil with PieceSet means "Mix"
 }
 
 // HexRepository defines persistence for hex layers and their cells.
@@ -45,6 +47,31 @@ type HexRepository interface {
 	// version. The layer row is touched first so concurrent writers to one map
 	// queue behind it and every version is unique.
 	ApplyCells(ctx context.Context, mapID, userID string, writes []HexCellWrite) (uint64, error)
+	// ListExplored returns the position of every explored hex, which is all the
+	// fog filters need; it never reads names or notes.
+	ListExplored(ctx context.Context, mapID string) ([]HexKey, error)
+	// SetFog turns fog of war on or off, creating the layer row on first use,
+	// bumps the version and returns it. Only the fog column is touched.
+	SetFog(ctx context.Context, mapID string, enabled bool) (uint64, error)
+	// SetTravel changes the miles per hex and per day, creating the layer row
+	// on first use, bumps the version and returns it. A nil figure keeps its
+	// column, so changing one never writes the other.
+	SetTravel(ctx context.Context, mapID string, perHex, perDay *int) (uint64, error)
+	// BumpVersion raises the layer's version (creating the row on first use)
+	// and returns it, for a change stored elsewhere that viewers must hear
+	// about, such as the map's terrain art.
+	BumpVersion(ctx context.Context, mapID string) (uint64, error)
+	// SetExplored marks hexes explored or unexplored and bumps the version, in
+	// one transaction. Hiding a hex that carries nothing else removes its row so
+	// it stops counting against the map's cell cap.
+	SetExplored(ctx context.Context, mapID, userID string, keys []HexKey, explored bool) (uint64, error)
+	// ResetExplored hides every hex of the map and bumps the version.
+	ResetExplored(ctx context.Context, mapID, userID string) (uint64, error)
+	// ApplyParty moves the party to `to` and marks reveal explored, in one
+	// transaction, and returns the new version. expectedFrom is where the caller
+	// computed its path from (nil: never placed); if the stored position differs
+	// the move is a Conflict, so two movers cannot both reveal along stale paths.
+	ApplyParty(ctx context.Context, mapID, userID string, expectedFrom *HexKey, to HexKey, reveal []HexKey) (uint64, error)
 }
 
 // hexRepo implements HexRepository with MariaDB.
@@ -163,17 +190,18 @@ func (r *hexRepo) ApplyCells(ctx context.Context, mapID, userID string, writes [
 	// Each flag pair makes the UPDATE branch keep the stored value unless the
 	// caller named the field; the INSERT branch (a hex nobody has touched yet)
 	// takes what was sent, with unnamed fields at their column defaults.
-	const upsert = "INSERT INTO map_hex_cells (map_id, col, `row`, terrain, name, notes, updated_by) " +
-		"VALUES (?, ?, ?, ?, ?, ?, ?) " +
+	const upsert = "INSERT INTO map_hex_cells (map_id, col, `row`, terrain, piece, name, notes, updated_by) " +
+		"VALUES (?, ?, ?, ?, ?, ?, ?, ?) " +
 		"ON DUPLICATE KEY UPDATE " +
 		"terrain = IF(?, VALUES(terrain), terrain), " +
+		"piece = IF(?, VALUES(piece), piece), " +
 		"name = IF(?, VALUES(name), name), " +
 		"notes = IF(?, VALUES(notes), notes), " +
 		"updated_by = VALUES(updated_by)"
 	for _, w := range writes {
 		if _, err := tx.ExecContext(ctx, upsert,
-			mapID, w.Col, w.Row, w.Terrain, w.Name, w.Notes, by,
-			w.TerrainSet, w.NameSet, w.NotesSet); err != nil {
+			mapID, w.Col, w.Row, w.Terrain, w.Piece, w.Name, w.Notes, by,
+			w.TerrainSet, w.PieceSet, w.NameSet, w.NotesSet); err != nil {
 			return 0, apperror.NewInternal(err)
 		}
 	}
@@ -182,7 +210,6 @@ func (r *hexRepo) ApplyCells(ctx context.Context, mapID, userID string, writes [
 	// the row would still count against the map's cell cap, so a cleared hex
 	// could never free its slot. Only touched rows are checked, in this
 	// transaction, so a concurrent writer's row is never swept by mistake.
-	// explored and piece belong to later slices and keep a row alive.
 	for _, w := range writes {
 		if _, err := tx.ExecContext(ctx, "DELETE FROM map_hex_cells WHERE map_id = ? AND col = ? AND `row` = ? "+
 			"AND terrain IS NULL AND name = '' AND notes IS NULL AND piece IS NULL AND explored = 0",
@@ -224,4 +251,249 @@ func (r *hexRepo) SetAnchor(ctx context.Context, mapID string, anchor *string) (
 		return 0, apperror.NewInternal(err)
 	}
 	return version, nil
+}
+
+func (r *hexRepo) ListExplored(ctx context.Context, mapID string) ([]HexKey, error) {
+	rows, err := r.db.QueryContext(ctx,
+		"SELECT col, `row` FROM map_hex_cells WHERE map_id = ? AND explored = 1", mapID)
+	if err != nil {
+		return nil, apperror.NewInternal(err)
+	}
+	defer rows.Close()
+	out := []HexKey{}
+	for rows.Next() {
+		var k HexKey
+		if err := rows.Scan(&k.Col, &k.Row); err != nil {
+			return nil, apperror.NewInternal(err)
+		}
+		out = append(out, k)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, apperror.NewInternal(err)
+	}
+	return out, nil
+}
+
+// bumpLayer creates the layer row on first use or raises its version, inside
+// tx. It runs first in every write so concurrent writers to one map queue
+// behind the row lock and each gets a unique version.
+func bumpLayer(ctx context.Context, tx *sql.Tx, mapID string) error {
+	_, err := tx.ExecContext(ctx, `
+		INSERT INTO map_hex_layers (map_id, version) VALUES (?, 1)
+		ON DUPLICATE KEY UPDATE version = version + 1`, mapID)
+	if err != nil {
+		return apperror.NewInternal(err)
+	}
+	return nil
+}
+
+func layerVersion(ctx context.Context, tx *sql.Tx, mapID string) (uint64, error) {
+	var v uint64
+	if err := tx.QueryRowContext(ctx, `SELECT version FROM map_hex_layers WHERE map_id = ?`, mapID).Scan(&v); err != nil {
+		return 0, apperror.NewInternal(err)
+	}
+	return v, nil
+}
+
+// deleteEmptyCell drops a touched hex that ended up carrying nothing, so a
+// hidden hex does not keep a row (and a cap slot) alive.
+func deleteEmptyCell(ctx context.Context, tx *sql.Tx, mapID string, k HexKey) error {
+	_, err := tx.ExecContext(ctx, "DELETE FROM map_hex_cells WHERE map_id = ? AND col = ? AND `row` = ? "+
+		"AND terrain IS NULL AND name = '' AND notes IS NULL AND piece IS NULL AND explored = 0",
+		mapID, k.Col, k.Row)
+	if err != nil {
+		return apperror.NewInternal(err)
+	}
+	return nil
+}
+
+func nullableUser(userID string) *string {
+	if userID == "" {
+		return nil
+	}
+	return &userID
+}
+
+func (r *hexRepo) SetFog(ctx context.Context, mapID string, enabled bool) (uint64, error) {
+	tx, err := r.db.BeginTx(ctx, nil)
+	if err != nil {
+		return 0, apperror.NewInternal(err)
+	}
+	defer func() { _ = tx.Rollback() }()
+	if _, err := tx.ExecContext(ctx, `
+		INSERT INTO map_hex_layers (map_id, fog_enabled, version) VALUES (?, ?, 1)
+		ON DUPLICATE KEY UPDATE fog_enabled = VALUES(fog_enabled), version = version + 1`,
+		mapID, enabled); err != nil {
+		return 0, apperror.NewInternal(err)
+	}
+	v, err := layerVersion(ctx, tx, mapID)
+	if err != nil {
+		return 0, err
+	}
+	if err := tx.Commit(); err != nil {
+		return 0, apperror.NewInternal(err)
+	}
+	return v, nil
+}
+
+func (r *hexRepo) BumpVersion(ctx context.Context, mapID string) (uint64, error) {
+	tx, err := r.db.BeginTx(ctx, nil)
+	if err != nil {
+		return 0, apperror.NewInternal(err)
+	}
+	defer func() { _ = tx.Rollback() }()
+	if err := bumpLayer(ctx, tx, mapID); err != nil {
+		return 0, err
+	}
+	v, err := layerVersion(ctx, tx, mapID)
+	if err != nil {
+		return 0, err
+	}
+	if err := tx.Commit(); err != nil {
+		return 0, apperror.NewInternal(err)
+	}
+	return v, nil
+}
+
+func (r *hexRepo) SetTravel(ctx context.Context, mapID string, perHex, perDay *int) (uint64, error) {
+	tx, err := r.db.BeginTx(ctx, nil)
+	if err != nil {
+		return 0, apperror.NewInternal(err)
+	}
+	defer func() { _ = tx.Rollback() }()
+	// A first write creates the row with the column defaults for whichever
+	// figure was not named; later writes keep the stored value for it.
+	if _, err := tx.ExecContext(ctx, `
+		INSERT INTO map_hex_layers (map_id, miles_per_hex, miles_per_day, version)
+		VALUES (?, COALESCE(?, ?), COALESCE(?, ?), 1)
+		ON DUPLICATE KEY UPDATE
+			miles_per_hex = COALESCE(?, miles_per_hex),
+			miles_per_day = COALESCE(?, miles_per_day),
+			version = version + 1`,
+		mapID, perHex, DefaultMilesPerHex, perDay, DefaultMilesPerDay, perHex, perDay); err != nil {
+		return 0, apperror.NewInternal(err)
+	}
+	v, err := layerVersion(ctx, tx, mapID)
+	if err != nil {
+		return 0, err
+	}
+	if err := tx.Commit(); err != nil {
+		return 0, apperror.NewInternal(err)
+	}
+	return v, nil
+}
+
+func (r *hexRepo) SetExplored(ctx context.Context, mapID, userID string, keys []HexKey, explored bool) (uint64, error) {
+	tx, err := r.db.BeginTx(ctx, nil)
+	if err != nil {
+		return 0, apperror.NewInternal(err)
+	}
+	defer func() { _ = tx.Rollback() }()
+	if err := bumpLayer(ctx, tx, mapID); err != nil {
+		return 0, err
+	}
+	by := nullableUser(userID)
+	for _, k := range keys {
+		if explored {
+			if err := upsertExplored(ctx, tx, mapID, k, by); err != nil {
+				return 0, err
+			}
+			continue
+		}
+		if _, err := tx.ExecContext(ctx,
+			"UPDATE map_hex_cells SET explored = 0, updated_by = ? WHERE map_id = ? AND col = ? AND `row` = ?",
+			by, mapID, k.Col, k.Row); err != nil {
+			return 0, apperror.NewInternal(err)
+		}
+		if err := deleteEmptyCell(ctx, tx, mapID, k); err != nil {
+			return 0, err
+		}
+	}
+	v, err := layerVersion(ctx, tx, mapID)
+	if err != nil {
+		return 0, err
+	}
+	if err := tx.Commit(); err != nil {
+		return 0, apperror.NewInternal(err)
+	}
+	return v, nil
+}
+
+func upsertExplored(ctx context.Context, tx *sql.Tx, mapID string, k HexKey, by *string) error {
+	_, err := tx.ExecContext(ctx, "INSERT INTO map_hex_cells (map_id, col, `row`, explored, updated_by) "+
+		"VALUES (?, ?, ?, 1, ?) ON DUPLICATE KEY UPDATE explored = 1, updated_by = VALUES(updated_by)",
+		mapID, k.Col, k.Row, by)
+	if err != nil {
+		return apperror.NewInternal(err)
+	}
+	return nil
+}
+
+func (r *hexRepo) ResetExplored(ctx context.Context, mapID, userID string) (uint64, error) {
+	tx, err := r.db.BeginTx(ctx, nil)
+	if err != nil {
+		return 0, apperror.NewInternal(err)
+	}
+	defer func() { _ = tx.Rollback() }()
+	if err := bumpLayer(ctx, tx, mapID); err != nil {
+		return 0, err
+	}
+	if _, err := tx.ExecContext(ctx,
+		"UPDATE map_hex_cells SET explored = 0, updated_by = ? WHERE map_id = ? AND explored = 1",
+		nullableUser(userID), mapID); err != nil {
+		return 0, apperror.NewInternal(err)
+	}
+	if _, err := tx.ExecContext(ctx, "DELETE FROM map_hex_cells WHERE map_id = ? "+
+		"AND terrain IS NULL AND name = '' AND notes IS NULL AND piece IS NULL AND explored = 0", mapID); err != nil {
+		return 0, apperror.NewInternal(err)
+	}
+	v, err := layerVersion(ctx, tx, mapID)
+	if err != nil {
+		return 0, err
+	}
+	if err := tx.Commit(); err != nil {
+		return 0, apperror.NewInternal(err)
+	}
+	return v, nil
+}
+
+func (r *hexRepo) ApplyParty(ctx context.Context, mapID, userID string, expectedFrom *HexKey, to HexKey, reveal []HexKey) (uint64, error) {
+	tx, err := r.db.BeginTx(ctx, nil)
+	if err != nil {
+		return 0, apperror.NewInternal(err)
+	}
+	defer func() { _ = tx.Rollback() }()
+	if err := bumpLayer(ctx, tx, mapID); err != nil {
+		return 0, err
+	}
+	// The bump above holds the row lock, so this read cannot be overtaken.
+	var col, row sql.NullInt64
+	if err := tx.QueryRowContext(ctx,
+		`SELECT party_col, party_row FROM map_hex_layers WHERE map_id = ?`, mapID).Scan(&col, &row); err != nil {
+		return 0, apperror.NewInternal(err)
+	}
+	switch {
+	case expectedFrom == nil && (col.Valid || row.Valid):
+		return 0, apperror.NewConflict("the party was moved by someone else; try again")
+	case expectedFrom != nil && (!col.Valid || !row.Valid || int(col.Int64) != expectedFrom.Col || int(row.Int64) != expectedFrom.Row):
+		return 0, apperror.NewConflict("the party was moved by someone else; try again")
+	}
+	by := nullableUser(userID)
+	for _, k := range reveal {
+		if err := upsertExplored(ctx, tx, mapID, k, by); err != nil {
+			return 0, err
+		}
+	}
+	if _, err := tx.ExecContext(ctx,
+		`UPDATE map_hex_layers SET party_col = ?, party_row = ? WHERE map_id = ?`, to.Col, to.Row, mapID); err != nil {
+		return 0, apperror.NewInternal(err)
+	}
+	v, err := layerVersion(ctx, tx, mapID)
+	if err != nil {
+		return 0, err
+	}
+	if err := tx.Commit(); err != nil {
+		return 0, apperror.NewInternal(err)
+	}
+	return v, nil
 }

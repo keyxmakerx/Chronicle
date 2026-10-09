@@ -77,8 +77,17 @@ type stashTypeInfo struct {
 // cached per campaign for a few seconds.
 type armoryStashDirectoryAdapter struct {
 	svc   entities.EntityService
+	lists entities.CharacterListReader
 	mu    sync.Mutex
 	cache map[string]*stashTypeInfo
+}
+
+// Forget drops a campaign's cached type facts, so a change to its character
+// list shows at once instead of after the cache expires.
+func (a *armoryStashDirectoryAdapter) Forget(campaignID string) {
+	a.mu.Lock()
+	delete(a.cache, campaignID)
+	a.mu.Unlock()
 }
 
 func (a *armoryStashDirectoryAdapter) types(ctx context.Context, campaignID string) (*stashTypeInfo, error) {
@@ -105,7 +114,11 @@ func (a *armoryStashDirectoryAdapter) types(ctx context.Context, campaignID stri
 		moneyName: map[int]string{},
 		purse:     map[int]map[string]string{},
 	}
-	ti.charIDs = characterFamilyTypeIDs(all, true)
+	charIDs, err := a.lists.CharacterTypeIDs(ctx, campaignID)
+	if err != nil {
+		return nil, err
+	}
+	ti.charIDs = charIDs
 	for _, id := range ti.charIDs {
 		ti.character[id] = true
 	}

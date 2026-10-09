@@ -25,6 +25,22 @@ type fakeHexRepo struct {
 	by         string
 	count      int // overrides CountCells when non-zero
 	anchorSets int // SetAnchor calls
+	travelSets int // SetTravel calls
+	bumps      int // BumpVersion calls
+
+	// Fog and party writes.
+	exploredWrites [][]HexKey // keys of each SetExplored call
+	exploredValue  []bool     // the value each SetExplored call set
+	resets         int
+	partyMoves     []partyMove
+	conflicts      int // ApplyParty answers Conflict this many times first
+}
+
+// partyMove records one ApplyParty call.
+type partyMove struct {
+	from   *HexKey
+	to     HexKey
+	reveal []HexKey
 }
 
 func newFakeHexRepo() *fakeHexRepo { return &fakeHexRepo{cells: map[HexKey]HexCell{}} }
@@ -56,6 +72,13 @@ func (r *fakeHexRepo) ApplyCells(_ context.Context, _, userID string, w []HexCel
 	r.applied = append(r.applied, w)
 	r.by = userID
 	return uint64(len(r.applied)), nil
+}
+
+func (r *fakeHexRepo) BumpVersion(_ context.Context, mapID string) (uint64, error) {
+	r.ensureLayer(mapID)
+	r.layer.Version++
+	r.bumps++
+	return r.layer.Version, nil
 }
 
 // hexSvc builds a service whose map "map-1" belongs to "camp-1".
@@ -595,6 +618,30 @@ func TestMapViewData_CanPaintHexes(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			if got := tc.data.CanPaintHexes(); got != tc.want {
 				t.Errorf("CanPaintHexes = %v, want %v", got, tc.want)
+			}
+		})
+	}
+}
+
+// CanMoveParty is what the page offers; it must agree with requirePartyMover.
+func TestMapViewData_CanMoveParty(t *testing.T) {
+	owners := ResolvedDisplay{Frame: "x", PartyWho: PartyWhoOwners}
+	scribes := ResolvedDisplay{Frame: "x", PartyWho: PartyWhoScribes}
+	tests := []struct {
+		name string
+		data MapViewData
+		want bool
+	}{
+		{"owner, owners policy", MapViewData{IsScribe: true, IsOwner: true, IsDM: true, Display: owners}, true},
+		{"DM-granted player, owners policy", MapViewData{IsDM: true, Display: owners}, true},
+		{"scribe, scribes policy", MapViewData{IsScribe: true, Display: scribes}, true},
+		{"scribe, owners policy", MapViewData{IsScribe: true, Display: owners}, false},
+		{"player, scribes policy", MapViewData{Display: scribes}, false},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := tc.data.CanMoveParty(); got != tc.want {
+				t.Errorf("CanMoveParty = %v, want %v", got, tc.want)
 			}
 		})
 	}

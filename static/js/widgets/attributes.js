@@ -22,8 +22,32 @@ Chronicle.register('attributes', {
       isEditing: false,      // Whether the edit form is shown
       isCustomizing: false,  // Whether the field override panel is shown
       isSaving: false,
+      loadingChoices: false, // Edit clicked, pick lists still arriving
+      choiceLists: {},       // fieldKey -> {systemName, choices} for text fields
       error: null
     };
+
+    // Campaign and entity ids for the pick-from-the-system control.
+    var idMatch = config.endpoint.match(/\/campaigns\/([^/]+)\/entities\/([^/]+)\/fields$/);
+    var campaignId = idMatch ? idMatch[1] : '';
+
+    // Fields people commonly expect a system list for; when the system has
+    // none we say so instead of leaving a bare text box unexplained.
+    var LISTABLE = ['ancestry', 'race', 'species', 'heritage', 'class', 'subclass',
+      'kit', 'career', 'culture', 'background'];
+
+    // Fetches the pick list for every text field before the form opens, so the
+    // form renders once. A failed fetch leaves that field a plain text box.
+    function loadChoiceLists() {
+      if (!campaignId || !Chronicle.fetchChoices) return Promise.resolve();
+      var jobs = state.fields.filter(function (f) { return f.type === 'text'; }).slice(0, 40)
+        .map(function (f) {
+          return Chronicle.fetchChoices(campaignId, f.key).then(function (l) {
+            state.choiceLists[f.key] = l;
+          }).catch(function () { /* plain text box */ });
+        });
+      return Promise.all(jobs);
+    }
 
     el._attributesState = state;
 
@@ -102,9 +126,16 @@ Chronicle.register('attributes', {
           editBtn.className = 'chronicle-editor__edit-btn';
           editBtn.innerHTML = '<i class="fa-solid fa-pen" style="font-size:11px"></i> Edit';
           editBtn.addEventListener('click', function () {
-            state.isEditing = true;
-            state.isCustomizing = false;
-            render();
+            if (state.loadingChoices) return;
+            state.loadingChoices = true;
+            editBtn.disabled = true;
+            editBtn.innerHTML = '<i class="fa-solid fa-spinner fa-spin" style="font-size:11px"></i> Loading';
+            loadChoiceLists().then(function () {
+              state.loadingChoices = false;
+              state.isEditing = true;
+              state.isCustomizing = false;
+              render();
+            });
           });
         }
         btnGroup.appendChild(editBtn);
@@ -262,6 +293,18 @@ Chronicle.register('attributes', {
               break;
 
             default: // text, number, url
+              var pl = field.type === 'text' ? state.choiceLists[field.key] : null;
+              if (pl && pl.choices.length > 0) {
+                row.appendChild(buildPicker(field, pl, String(currentVal)));
+                container.appendChild(row);
+                return;
+              }
+              if (pl && (field.choices || LISTABLE.indexOf(field.key) >= 0)) {
+                var note = document.createElement('p');
+                note.className = 'ag-note';
+                note.textContent = (pl.systemName || 'This game system') + ' doesn\u2019t list these yet, type it in.';
+                row.appendChild(note);
+              }
               input = document.createElement('input');
               input.type = field.type === 'number' ? 'number' : (field.type === 'url' ? 'url' : 'text');
               input.className = 'input';
@@ -276,6 +319,57 @@ Chronicle.register('attributes', {
           container.appendChild(row);
         });
       });
+    }
+
+    // --- Pick from the system's list ---
+
+    // A hidden input keeps the value the save step already reads
+    // (data-field-key); the visible button opens the shared picker, which
+    // only hands the chosen NAME back. Nothing is saved until Done.
+    function buildPicker(field, list, currentVal) {
+      var wrap = document.createElement('div');
+
+      var hidden = document.createElement('input');
+      hidden.type = 'hidden';
+      hidden.id = 'attr-' + field.key;
+      hidden.value = currentVal;
+      hidden.setAttribute('data-field-key', field.key);
+      wrap.appendChild(hidden);
+
+      var btn = document.createElement('button');
+      btn.type = 'button';
+      btn.className = 'ag-pick';
+      btn.setAttribute('aria-expanded', 'false');
+      function paint() {
+        btn.innerHTML = '';
+        var span = document.createElement('span');
+        if (hidden.value) {
+          span.textContent = hidden.value;
+        } else {
+          span.className = 'ph';
+          span.textContent = 'Pick ' + field.label.toLowerCase();
+        }
+        btn.appendChild(span);
+        var chev = document.createElement('i');
+        chev.className = 'fa-solid fa-chevron-down chev';
+        btn.appendChild(chev);
+      }
+      paint();
+      btn.addEventListener('click', function () {
+        Chronicle.pickChoice({
+          campaignId: campaignId,
+          fieldKey: field.key,
+          label: field.label,
+          current: hidden.value,
+          anchorEl: btn,
+          save: false,
+          choices: list
+        }).then(function (res) {
+          if (res) { hidden.value = res.value; paint(); }
+        });
+      });
+      wrap.appendChild(btn);
+      return wrap;
     }
 
     // --- Customize panel (per-entity field overrides) ---

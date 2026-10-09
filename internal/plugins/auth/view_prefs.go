@@ -14,7 +14,7 @@ import (
 // allowed values; the first value of each list is the default.
 type ViewPrefs struct {
 	Theme    string `json:"theme"`    // device | light | dark
-	Motion   string `json:"motion"`   // owner | calm
+	Motion   string `json:"motion"`   // owner | calm | off
 	TextSize string `json:"textSize"` // standard | larger | largest
 	Contrast string `json:"contrast"` // standard | high
 }
@@ -25,7 +25,7 @@ type ViewPrefs struct {
 // is a cross-layer change.
 var (
 	viewThemes    = []string{"device", "light", "dark"}
-	viewMotions   = []string{"owner", "calm"}
+	viewMotions   = []string{"owner", "calm", "off"}
 	viewTextSizes = []string{"standard", "larger", "largest"}
 	viewContrasts = []string{"standard", "high"}
 )

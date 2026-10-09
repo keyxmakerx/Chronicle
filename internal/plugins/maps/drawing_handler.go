@@ -86,6 +86,11 @@ func (h *DrawingHandler) ListDrawings(c echo.Context) error {
 	if err != nil {
 		return err
 	}
+	// The picture a fogged hex layer is pinned to is sent without its file.
+	drawings, err = h.drawingSvc.WithholdImages(c.Request().Context(), mapID, role, drawings)
+	if err != nil {
+		return err
+	}
 	out := make([]drawingResponse, len(drawings))
 	for i, d := range drawings {
 		out[i] = drawingResponseFor(c.Request().Context(), d)
@@ -177,7 +182,11 @@ func (h *DrawingHandler) GetDrawing(c echo.Context) error {
 	if shadowed {
 		return apperror.NewNotFound("drawing not found")
 	}
-	return c.JSON(http.StatusOK, drawingResponseFor(c.Request().Context(), *d))
+	one, err := h.drawingSvc.WithholdImages(c.Request().Context(), mapID, cc.VisibilityRole(), []Drawing{*d})
+	if err != nil {
+		return err
+	}
+	return c.JSON(http.StatusOK, drawingResponseFor(c.Request().Context(), one[0]))
 }
 
 // UpdateDrawing updates an existing drawing.
@@ -365,6 +374,14 @@ func (h *DrawingHandler) GetToken(c echo.Context) error {
 	if t.MapID != mapID || !TokenVisibleTo(t, cc.VisibilityRole()) {
 		return apperror.NewNotFound("token not found")
 	}
+	// The list also withholds tokens in unexplored hexes.
+	hidden, err := h.drawingSvc.IsTokenHidden(c.Request().Context(), t, cc.VisibilityRole())
+	if err != nil {
+		return err
+	}
+	if hidden {
+		return apperror.NewNotFound("token not found")
+	}
 	return c.JSON(http.StatusOK, t)
 }
 
@@ -412,7 +429,7 @@ func (h *DrawingHandler) UpdateToken(c echo.Context) error {
 		return apperror.NewBadRequest("invalid request body")
 	}
 
-	if err := h.drawingSvc.UpdateToken(c.Request().Context(), c.Param("tid"), c.Param("mid"), UpdateTokenInput{
+	if err := h.drawingSvc.UpdateToken(c.Request().Context(), c.Param("tid"), c.Param("mid"), cc.CanAuthorDmOnly(), UpdateTokenInput{
 		Name:              req.Name,
 		ImagePath:         req.ImagePath,
 		X:                 req.X,
@@ -463,7 +480,7 @@ func (h *DrawingHandler) UpdateTokenPosition(c echo.Context) error {
 		return apperror.NewBadRequest("invalid request body")
 	}
 
-	if err := h.drawingSvc.UpdateTokenPosition(c.Request().Context(), c.Param("tid"), c.Param("mid"), UpdateTokenPositionInput{
+	if err := h.drawingSvc.UpdateTokenPosition(c.Request().Context(), c.Param("tid"), c.Param("mid"), cc.CanAuthorDmOnly(), UpdateTokenPositionInput{
 		X:                 req.X,
 		Y:                 req.Y,
 		ExpectedUpdatedAt: req.ExpectedUpdatedAt,

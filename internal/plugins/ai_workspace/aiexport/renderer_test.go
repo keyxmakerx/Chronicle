@@ -206,6 +206,28 @@ func TestRenderEntities_PermittedKeepsDmOnlyTags(t *testing.T) {
 	}
 }
 
+// Safe mode is a player's view: GM-only text in a page body stays out,
+// while Permitted keeps it.
+func TestRenderEntities_SafeDropsGMSecrets(t *testing.T) {
+	ents := []entities.Entity{{
+		ID: "e1", Name: "Duke Varrin", EntityTypeID: 1, TypeName: "Character",
+		EntryHTML: sp(`<p>Rules the city. <span data-secret="true">Poisoned the old duke.</span></p>`),
+	}}
+	types := []entities.EntityType{{ID: 1, Name: "Character", NamePlural: "Characters"}}
+	for _, tt := range []struct {
+		mode PrivacyMode
+		want bool
+	}{{PrivacyModeSafe, false}, {PrivacyModePermitted, true}} {
+		got, err := RenderEntities(context.Background(), ents, types, nil, nil, Options{Privacy: tt.mode})
+		if err != nil {
+			t.Fatal(err)
+		}
+		if !strings.Contains(got, "Rules the city") || strings.Contains(got, "Poisoned") != tt.want {
+			t.Errorf("%s:\n%s", tt.mode, got)
+		}
+	}
+}
+
 func TestRenderNotes_FolderHierarchyAndScriptStripped(t *testing.T) {
 	ctx := context.Background()
 	now := time.Date(2026, 4, 30, 12, 0, 0, 0, time.UTC)

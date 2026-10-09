@@ -196,8 +196,6 @@
     this.dead = false;
     this.loadSeq = 0;
     this.timers = [];
-    this.card = null;
-    this.pinned = false;
     this.leafTimer = 0;
     this.touch = null;
     this.handlers = [];
@@ -222,11 +220,11 @@
     this.el.classList.add('rb');
     this.on(document, 'click', function (e) { self.onClick(e); });
     this.on(document, 'keydown', function (e) { self.onKey(e); });
-    this.on(this.el, 'mouseover', function (e) { self.onOver(e); });
-    this.on(this.el, 'focusin', function (e) { self.onFocus(e, true); });
-    this.on(this.el, 'focusout', function (e) { self.onFocus(e, false); });
+    // Rule words open Chronicle's shared hover card, in the campaign's look.
+    if (window.Chronicle && Chronicle.hovercard) {
+      this.unbindCard = Chronicle.hovercard.bind(this.el, '.rb-term', function (t) { return self.termCard(t); }, { pinOnClick: true });
+    }
     this.on(this.el, 'input', function (e) { self.onInput(e); });
-    this.on(this.el, 'scroll', function () { if (self.card) self.hideCard(true); }, true);
     this.on(this.el, 'touchstart', function (e) { self.onTouch(e, true); }, { passive: true });
     this.on(this.el, 'touchend', function (e) { self.onTouch(e, false); }, { passive: true });
     try {
@@ -245,6 +243,7 @@
       else h[0].removeEventListener(h[1], h[2], h[3]);
     });
     this.handlers = [];
+    if (this.unbindCard) { this.unbindCard(); this.unbindCard = null; }
     this.timers.forEach(function (t) { clearInterval(t); clearTimeout(t); });
     this.timers = [];
     clearTimeout(this.leafTimer);
@@ -316,7 +315,6 @@
     this.bookEl = q('.rb-book');
     this.drawerEl = q('.rb-drawer');
     this.scrimEl = q('.rb-scrim');
-    this.cardEl = q('.rb-hc');
     this.whereEl = q('.rb-where');
     this.srEl = q('.rb-sr');
     this.tocBtn = q('[data-act="toc"]');
@@ -429,7 +427,7 @@
       '<button type="button" class="rb-curl l" data-act="prev" aria-label="Previous page"></button>' +
       '<button type="button" class="rb-curl r" data-act="next" aria-label="Next page"></button>' +
       '<div class="rb-scrim"></div><aside class="rb-drawer" aria-label="Contents"></aside></div>' +
-      '<div class="rb-hc" role="tooltip" hidden></div><div class="rb-sr" aria-live="polite"></div>';
+      '<div class="rb-sr" aria-live="polite"></div>';
   };
 
   // --- Page list -------------------------------------------------------------
@@ -1170,50 +1168,19 @@
 
   // --- Hover terms -----------------------------------------------------------
 
-  Rulebook.prototype.showCard = function (t) {
-    var key = t.getAttribute('data-term'), def = has(this.data.terms, key) ? this.data.terms[key] : null;
-    if (!def) return;
-    var hc = this.cardEl;
-    if (this.card && this.card !== t) this.card.removeAttribute('aria-describedby');
-    hc.innerHTML = '<b>' + esc(def.name) + '</b>' + esc(def.text);
-    hc.id = hc.id || 'rb-hc-' + (++uid);
-    t.setAttribute('aria-describedby', hc.id);
-    hc.hidden = false;
-    hc.style.left = '0px';
-    hc.style.top = '0px';
-    var r = t.getBoundingClientRect(), w = hc.offsetWidth, h = hc.offsetHeight;
-    var x = clamp(r.left, 8, Math.max(8, window.innerWidth - w - 8)), y = r.bottom + 6;
-    if (y + h > window.innerHeight - 8 && r.top - h - 6 > 8) y = r.top - h - 6;
-    hc.style.left = Math.round(x) + 'px';
-    hc.style.top = Math.round(y) + 'px';
-    this.card = t;
+  // What a rule word's hover card says. Inside the book there is no
+  // "open in the rulebook" link: the reader is already in it.
+  Rulebook.prototype.termCard = function (t) {
+    var key = t.getAttribute('data-term');
+    var def = this.data && has(this.data.terms, key) ? this.data.terms[key] : null;
+    return def ? { kind: 'Rule', title: def.name, text: def.text } : null;
   };
 
+  // Closes the hover card when it belongs to this book.
   Rulebook.prototype.hideCard = function () {
-    if (this.card) this.card.removeAttribute('aria-describedby');
-    if (this.cardEl) this.cardEl.hidden = true;
-    this.card = null;
-    this.pinned = false;
-  };
-
-  Rulebook.prototype.togglePin = function (t) {
-    if (this.card === t && this.pinned) { this.hideCard(); return; }
-    this.showCard(t);
-    this.pinned = this.card === t;
-  };
-
-  Rulebook.prototype.onOver = function (e) {
-    if (!this.data || this.pinned) return;
-    var t = e.target.closest && e.target.closest('.rb-term');
-    if (t) { if (t !== this.card) this.showCard(t); }
-    else if (this.card) this.hideCard();
-  };
-
-  Rulebook.prototype.onFocus = function (e, inn) {
-    if (!this.data || this.pinned) return;
-    var t = e.target.classList && e.target.classList.contains('rb-term') ? e.target : null;
-    if (inn && t) this.showCard(t);
-    else if (!inn && t) this.hideCard();
+    var hc = window.Chronicle && Chronicle.hovercard;
+    var cur = hc && hc.current();
+    if (cur && this.el.contains(cur)) hc.close();
   };
 
   // --- Block behaviour -------------------------------------------------------
@@ -1311,10 +1278,8 @@
   Rulebook.prototype.onClick = function (e) {
     var t = e.target;
     if (!t || !t.closest) return;
-    if (!this.el.contains(t)) { if (this.card) this.hideCard(); this.closeResults(); return; }
+    if (!this.el.contains(t)) { this.closeResults(); return; }
     var x;
-    if ((x = t.closest('.rb-term'))) { this.togglePin(x); return; }
-    if (this.card) this.hideCard();
     if (!this.data) {
       if (t.closest('[data-act="retry"]')) this.load();
       return;
@@ -1346,7 +1311,6 @@
     if (!this.data || !this.el.isConnected) return;
     var t = e.target;
     if (t && t.closest) {
-      if (t.classList.contains('rb-term') && (e.key === 'Enter' || e.key === ' ')) { e.preventDefault(); this.togglePin(t); return; }
       if (this.searchKey(e, t)) return;
       if (t.closest('input,select,textarea,[contenteditable="true"]')) return;
       if (t.closest('.rb-wslot') && e.key !== 'Escape') return;
