@@ -126,12 +126,44 @@ templ roleGuide() {
 	</section>
 }
 
+// memberAvatar shows a member's picture, or their initials when they have
+// none. Only the signed-in person's own avatar carries data-pk-av, so a new
+// upload repaints it here without touching anyone else's.
+templ memberAvatar(member *CampaignMember) {
+	<span
+		class="ag-av s32"
+		if layouts.GetUserID(ctx) == member.UserID {
+			data-pk-av
+			data-initials={ layouts.Initials(member.DisplayName) }
+		}
+	>
+		if member.AvatarPath != nil && *member.AvatarPath != "" {
+			<img src={ layouts.MediaThumbURL(ctx, *member.AvatarPath, "300") } alt="" loading="lazy"/>
+		} else {
+			{ layouts.Initials(member.DisplayName) }
+		}
+	</span>
+}
+
 // MemberRow renders a single member row in the table.
 templ MemberRow(cc *CampaignContext, member *CampaignMember, csrfToken string) {
 	<tr>
 		<td class="px-6 py-4">
-			<div class="text-sm font-medium text-fg">{ member.DisplayName }</div>
-			<div class="text-xs text-fg-secondary">{ member.Email }</div>
+			<div class="flex items-center gap-3">
+				@memberAvatar(member)
+				<div class="min-w-0">
+					<div class="text-sm font-medium text-fg">{ member.DisplayName }</div>
+					<div class="text-xs text-fg-secondary">{ member.Email }</div>
+					if layouts.GetUserID(ctx) == member.UserID {
+						// A signed-in person finds the picture control on their own row.
+						<button
+							type="button"
+							class="ag-link mt-0.5"
+							onclick="if(window.Chronicle&&Chronicle.PictureBox)Chronicle.PictureBox.open()"
+						>Change picture</button>
+					}
+				</div>
+			</div>
 		</td>
 		<td class="px-6 py-4 text-sm text-fg-body">
 			if member.CharacterName != nil && *member.CharacterName != "" {
