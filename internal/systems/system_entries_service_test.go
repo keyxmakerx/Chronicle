@@ -209,12 +209,22 @@ func TestSystemEntryService_SecretsHiddenFromPlayers(t *testing.T) {
 		{"player list", pl[0].Description, false},
 		{"player find", pf.Description, false},
 		{"director list keeps it", dl[0].Description, true},
+		{"director choice keeps it", dirChoice(t, svc)[0].Description, true},
 	}
 	for _, tt := range tests {
 		if leaks(tt.text) != tt.wantLeaks {
 			t.Errorf("%s: %q", tt.name, tt.text)
 		}
 	}
+}
+
+func dirChoice(t *testing.T, svc SystemEntryService) []Choice {
+	t.Helper()
+	ch, err := svc.Choices(WithChoiceViewer(context.Background(), true), "c1", "ancestry")
+	if err != nil || len(ch) == 0 {
+		t.Fatalf("director choices: %v %+v", err, ch)
+	}
+	return ch
 }
 
 func TestSystemEntryService_VisibilityFiltering(t *testing.T) {
@@ -249,6 +259,12 @@ func TestSystemEntryService_VisibilityFiltering(t *testing.T) {
 	ch, _ := svc.Choices(ctx, "c1", "ancestry")
 	if len(ch) != 1 || ch[0].Name != "Open" || ch[0].Source != ChoiceSourceCampaign {
 		t.Fatalf("choices = %+v, want only Open from source campaign", ch)
+	}
+	if dch, _ := svc.Choices(WithChoiceViewer(ctx, true), "c1", "ancestry"); len(dch) != 2 {
+		t.Fatalf("a Director's pick list = %+v, want both entries", dch)
+	}
+	if pch, _ := svc.Choices(WithChoiceViewer(ctx, false), "c1", "ancestry"); len(pch) != 1 {
+		t.Fatalf("a player's pick list = %+v, want only Open", pch)
 	}
 	if other, _ := svc.Choices(ctx, "other-campaign", "ancestry"); len(other) != 0 {
 		t.Fatalf("another campaign's choices leaked: %+v", other)

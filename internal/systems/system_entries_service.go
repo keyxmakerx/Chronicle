@@ -52,8 +52,8 @@ type SystemEntryService interface {
 	Update(ctx context.Context, campaignID string, actor EntryActor, id int64, in UpdateSystemEntryInput) (*SystemEntry, error)
 	// Delete removes the entry only. Characters keep the name they stored.
 	Delete(ctx context.Context, campaignID string, actor EntryActor, id int64) error
-	// Choices is the ChoiceSource body: the entries every member may see,
-	// shaped for the picker.
+	// Choices is the ChoiceSource body: the entries this viewer may see
+	// (ChoiceViewerIsDirector), shaped for the picker.
 	Choices(ctx context.Context, campaignID, fieldKey string) ([]Choice, error)
 }
 
@@ -287,15 +287,19 @@ func (s *systemEntryService) Choices(ctx context.Context, campaignID, fieldKey s
 	if m == nil || !ValidChoiceFieldKey(fieldKey) {
 		return nil, nil
 	}
-	entries, err := s.repo.List(ctx, campaignID, m.ID, fieldKey, false)
+	// A context the pick-list handler didn't mark counts as a player's, so
+	// Directors-only entries and secret spans stay hidden by default.
+	director := ChoiceViewerIsDirector(ctx)
+	entries, err := s.repo.List(ctx, campaignID, m.ID, fieldKey, director)
 	if err != nil {
 		return nil, err
 	}
 	out := make([]Choice, 0, len(entries))
 	for _, e := range entries {
-		// The picker serves every member, so Director-only secret spans in a
-		// shared entry's text are dropped before anything is derived from it.
-		desc := sanitize.StripSecretsHTML(e.Description)
+		desc := e.Description
+		if !director {
+			desc = sanitize.StripSecretsHTML(desc)
+		}
 		sum := e.Summary
 		if sum == "" {
 			sum = cleanSummary(desc)
