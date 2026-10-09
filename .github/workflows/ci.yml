@@ -286,7 +286,9 @@ jobs:
                       TestQuestRepositoryIntegration_SaveGetVersioning \
                       TestQuestRepositoryIntegration_DocumentRoundTripAndGetMany \
                       TestBoardRepositoryIntegration_LooksAndBoards \
-                      TestBoardRepositoryIntegration_Items; do
+                      TestBoardRepositoryIntegration_Items \
+                      TestBoardRepositoryIntegration_TypeHomes \
+                      TestPageCards_Integration; do
             grep -q -- "--- PASS: $want" dbtests.log || {
               echo "::error::$want did not PASS — it was skipped or never ran."
               exit 1

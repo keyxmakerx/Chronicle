@@ -22,6 +22,7 @@ func RegisterRoutes(e *echo.Echo, h *Handler, campaignSvc campaigns.CampaignServ
 	pub.GET("/quests/picker", h.Picker, campaigns.RequireViewAccess())
 	pub.GET("/quests/:eid", h.GetQuest, campaigns.RequireViewAccess())
 	pub.GET("/notice-boards/:eid", h.GetBoards, campaigns.RequireViewAccess())
+	pub.GET("/category-boards/:tid", h.GetBoards, campaigns.RequireViewAccess())
 
 	cg := e.Group("/campaigns/:id",
 		auth.RequireAuth(authSvc),
@@ -44,4 +45,16 @@ func RegisterRoutes(e *echo.Echo, h *Handler, campaignSvc campaigns.CampaignServ
 	cg.POST("/notice-boards/:eid/boards/:bid/items", h.CreateItem, member)
 	cg.PATCH("/notice-boards/:eid/boards/:bid/items/:iid", h.PatchItem, member)
 	cg.DELETE("/notice-boards/:eid/boards/:bid/items/:iid", h.DeleteItem, member)
+
+	// Category homes: same handlers, same gates.
+	cg.POST("/category-boards/:tid/boards", h.CreateBoard, dm)
+	cg.PATCH("/category-boards/:tid/boards/:bid", h.PatchBoard, dm)
+	cg.DELETE("/category-boards/:tid/boards/:bid", h.DeleteBoard, dm)
+	cg.DELETE("/category-boards/:tid/boards/:bid/player-items", h.ClearPlayerItems, dm)
+	cg.PUT("/category-boards/:tid/order", h.SetOrder, dm)
+	cg.PUT("/category-boards/:tid/looks", h.SetLooks, dm)
+
+	cg.POST("/category-boards/:tid/boards/:bid/items", h.CreateItem, member)
+	cg.PATCH("/category-boards/:tid/boards/:bid/items/:iid", h.PatchItem, member)
+	cg.DELETE("/category-boards/:tid/boards/:bid/items/:iid", h.DeleteItem, member)
 }

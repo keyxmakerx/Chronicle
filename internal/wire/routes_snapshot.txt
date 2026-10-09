@@ -31,6 +31,9 @@ DELETE	/campaigns/:id	internal/plugins/admin/routes.go
 DELETE	/campaigns/:id/leave	internal/plugins/admin/routes.go
 DELETE	/campaigns/:id/storage	internal/plugins/settings/routes.go
 DELETE	/campaigns/:id/storage/bypass	internal/plugins/settings/routes.go
+DELETE	/category-boards/:tid/boards/:bid	internal/plugins/quests/routes.go
+DELETE	/category-boards/:tid/boards/:bid/items/:iid	internal/plugins/quests/routes.go
+DELETE	/category-boards/:tid/boards/:bid/player-items	internal/plugins/quests/routes.go
 DELETE	/content-templates/:tid	internal/plugins/entities/content_template_routes.go
 DELETE	/custom	internal/systems/routes.go
 DELETE	/dashboard-layout	internal/plugins/campaigns/routes.go
@@ -226,6 +229,7 @@ GET	/campaigns/:id/accept-transfer	internal/plugins/campaigns/routes.go
 GET	/campaigns/import	internal/plugins/campaigns/routes.go
 GET	/campaigns/new	internal/plugins/campaigns/routes.go
 GET	/campaigns/picker	internal/plugins/campaigns/routes.go
+GET	/category-boards/:tid	internal/plugins/quests/routes.go
 GET	/characters	internal/plugins/entities/routes.go
 GET	/content-templates	internal/plugins/entities/content_template_routes.go
 GET	/content-templates/:tid	internal/plugins/entities/content_template_routes.go
@@ -494,6 +498,8 @@ GET	/widgets/:slug	internal/systems/routes.go
 GET	/worldbuilding-prompts	internal/plugins/entities/worldbuilding_prompt_routes.go
 GET	/ws	internal/app/routes.go
 PATCH	/:id/visibility	internal/plugins/bestiary/routes.go
+PATCH	/category-boards/:tid/boards/:bid	internal/plugins/quests/routes.go
+PATCH	/category-boards/:tid/boards/:bid/items/:iid	internal/plugins/quests/routes.go
 PATCH	/maps/:mapID/tokens/:tokenID/position	internal/plugins/syncapi/routes.go
 PATCH	/maps/:mid/hexes/cells	internal/plugins/maps/routes.go
 PATCH	/maps/:mid/tokens/:tid/position	internal/plugins/maps/routes.go
@@ -534,6 +540,7 @@ POST	/armory/instances/:iid/items	internal/plugins/armory/routes.go
 POST	/armory/moves	internal/plugins/armory/routes.go
 POST	/armory/moves/:mid/approve	internal/plugins/armory/routes.go
 POST	/armory/moves/:mid/decline	internal/plugins/armory/routes.go
+POST	/armory/pay	internal/plugins/armory/routes.go
 POST	/armory/purchase-requests/:rid/approve	internal/plugins/armory/routes.go
 POST	/armory/purchase-requests/:rid/decline	internal/plugins/armory/routes.go
 POST	/armory/shops/:eid/buy	internal/plugins/armory/routes.go
@@ -579,6 +586,8 @@ POST	/campaigns/:id/join	internal/plugins/admin/routes.go
 POST	/campaigns/:id/media	internal/plugins/syncapi/routes.go
 POST	/campaigns/import	internal/plugins/campaigns/routes.go
 POST	/cancel-transfer	internal/plugins/campaigns/routes.go
+POST	/category-boards/:tid/boards	internal/plugins/quests/routes.go
+POST	/category-boards/:tid/boards/:bid/items	internal/plugins/quests/routes.go
 POST	/content-templates	internal/plugins/entities/content_template_routes.go
 POST	/database/migrations/apply	internal/plugins/admin/routes.go
 POST	/diagnostics/workspace/parse	internal/plugins/admin/routes.go
@@ -773,6 +782,8 @@ PUT	/calendars/:calid/weather/days	internal/plugins/calendar/routes.go
 PUT	/calendars/event-kinds/:kindID	internal/plugins/calendar/routes.go
 PUT	/campaigns/:id/storage	internal/plugins/settings/routes.go
 PUT	/campaigns/:id/storage/bypass	internal/plugins/settings/routes.go
+PUT	/category-boards/:tid/looks	internal/plugins/quests/routes.go
+PUT	/category-boards/:tid/order	internal/plugins/quests/routes.go
 PUT	/content-templates/:tid	internal/plugins/entities/content_template_routes.go
 PUT	/dashboard-layout	internal/plugins/campaigns/routes.go
 PUT	/default-visibility	internal/plugins/campaigns/routes.go

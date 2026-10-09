@@ -25,7 +25,7 @@ type BlockMeta struct {
 	Addon        string            `json:"addon,omitempty"`           // Required addon slug; empty = always available.
 	Container    bool              `json:"container,omitempty"`       // True for layout containers (two_column, tabs, etc.).
 	WidgetSlug   string            `json:"widget_slug,omitempty"`     // For ext_widget blocks: the extension widget slug.
-	Contexts     []string          `json:"contexts,omitempty"`        // Editor contexts: "dashboard", "template". Empty = all.
+	Contexts     []string          `json:"contexts,omitempty"`        // Editor contexts: "dashboard", "template", "category". Empty = all.
 	ConfigFields []ConfigFieldMeta `json:"config_fields,omitempty"`   // Declarative config schema for the editor dialog.
 	// Singleton blocks may only appear once per layout. Used by blocks
 	// whose render path binds fixed DOM IDs (e.g., map_editor's
@@ -181,6 +181,10 @@ func (r *BlockRegistry) TypesForCampaign(ctx context.Context, campaignID string,
 // TypesForCampaignAndContext returns block metadata filtered by both addon
 // availability and editor context. Pass an empty editorCtx to skip context
 // filtering (returns all blocks for the campaign, same as TypesForCampaign).
+//
+// The "category" context is the category dashboard editor: it offers every
+// "dashboard" block plus those that list "category", so blocks only a category
+// page can render (extra category blocks) stay out of the campaign dashboard.
 func (r *BlockRegistry) TypesForCampaignAndContext(ctx context.Context, campaignID string, checker blockAddonChecker, editorCtx string) []BlockMeta {
 	all := r.Types()
 	result := make([]BlockMeta, 0, len(all))
@@ -189,7 +193,7 @@ func (r *BlockRegistry) TypesForCampaignAndContext(ctx context.Context, campaign
 		if editorCtx != "" && len(meta.Contexts) > 0 {
 			found := false
 			for _, c := range meta.Contexts {
-				if c == editorCtx {
+				if c == editorCtx || (editorCtx == "category" && c == "dashboard") {
 					found = true
 					break
 				}

@@ -455,6 +455,7 @@
         widgetEl.setAttribute('data-endpoint', '/campaigns/' + this.campaignId + '/owner-dashboard-layout');
       } else if (ctx.type === CTX_CATEGORY_DASH) {
         widgetEl.setAttribute('data-endpoint', '/campaigns/' + this.campaignId + '/entity-types/' + ctx.etid + '/dashboard-layout');
+        widgetEl.setAttribute('data-scope', 'category');
       }
 
       this.editorEl.innerHTML = '';

@@ -34,9 +34,11 @@
       el.innerHTML = '<div class="loading">Loading the quest board…</div>';
       el._qb = S;
       load(S);
+      S.stops.push(K.live(cfg.campaignId, function (m) { onLive(S, m); }));
     },
     destroy: function (el) {
       var S = el._qb; if (!S) return;
+      clearTimeout(S.liveTimer);
       S.stops.forEach(function (f) { f(); });
       el._qb = null;
     }
@@ -102,7 +104,8 @@
     if (n && (isDm || !L.notice.hidden)) {
       var stamp = d.status === 'done' ? 'Done' : d.status === 'failed' ? 'Failed' : '';
       parts.push(K.noticeHTML(n, { style: K.placeStyle(pos(L.notice, 7, 8, 58, -2.5), i++), attrs: ' data-id="notice" data-piece="notice"',
-        seal: K.sealLetter(n.title), stamp: stamp, cls: L.notice.hidden ? 'veiled' : '' }));
+        seal: K.sealLetter(n.title), stamp: stamp, cls: L.notice.hidden ? 'veiled' : '',
+        left: d.due && !stamp ? K.daysText(d.due.daysLeft) : '', late: d.due && d.due.daysLeft < 0 }));
     }
     if (d.map && (isDm || !L.map.hidden)) {
       parts.push('<div class="note scrap' + (L.map.hidden ? ' veiled' : '') + '" tabindex="0" role="button" aria-label="Open the map: ' + esc(d.map.name) + '" data-id="map" data-piece="map" style="' +
@@ -146,7 +149,8 @@
       line('postedBy', 'div', 'by', n.postedBy, 'Posted by…') + body +
       ((n.reward || isDm) ? '<h4>Reward</h4>' + line('reward', 'p', '', n.reward, 'What the reward is') : '') +
       (steps.length ? '<h4>What must be done</h4><ul class="steps">' + steps.join('') + '</ul>' : '') +
-      '<div class="sfoot">' + line('due', 'span', 'due', n.due, 'When it is due') +
+      '<div class="sfoot">' + (d.due ? '<span class="due">Due ' + esc(d.due.label) + ' <span class="dl">· ' + esc(K.daysText(d.due.daysLeft)) + '</span></span>'
+        : line('due', 'span', 'due', n.due, 'When it is due')) +
       '<span style="display:flex;gap:10px;align-items:center"><button type="button" class="pbtn" data-close>Pin it back</button><span class="seal" aria-hidden="true">' + esc(K.sealLetter(n.title)) + '</span></span></div>' +
       (isDm ? '<div class="dmhint">Double-click any line to change it. Players read this sheet without the hidden steps.</div>' : '');
   }
@@ -180,6 +184,34 @@
     save(S, { notice: n }, field === 'plate' || field === 'title' || field === 'kicker' || field === 'reward' ? 'board' : '');
   }
 
+  // ---------- Live updates ----------
+  // Someone else saved this quest: fetch it again, but never under a viewer
+  // who is mid-change; wait until they finish so nothing they typed is lost.
+  function onLive(S, m) {
+    var mine = m.type === 'quest.updated' && m.resourceId === S.cfg.entityId;
+    if (mine && m.payload && S.data && m.payload.version != null && m.payload.version <= S.data.version) return;
+    if (mine || m.type === 'reconnected') { S.stale = true; refreshWhenIdle(S); }
+  }
+  function idle(S) {
+    var a = document.activeElement;
+    return !S.give && !K.sheetIsOpen() && !S.el.querySelector('.dragging') &&
+      !(a && S.el.contains(a) && (a.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(a.tagName)));
+  }
+  function refreshWhenIdle(S) {
+    clearTimeout(S.liveTimer);
+    if (!S.stale || !S.data || !S.el.isConnected) return;
+    if (!idle(S)) { S.liveTimer = setTimeout(function () { refreshWhenIdle(S); }, 1500); return; }
+    S.stale = false;
+    var gen = S.gen || 0;
+    // Queued behind this viewer's own saves, so the answer is never older.
+    S.saving = S.saving.then(function () { return K.api(S.cfg.endpoint); }).then(function (data) {
+      if (gen !== (S.gen || 0) || !S.data) return;
+      if (!idle(S)) { S.stale = true; refreshWhenIdle(S); return; }
+      if (data && data.version != null && data.version === S.data.version) return;
+      S.data = normalise(data); redrawBoard(S); redrawLedger(S);
+    }).catch(function (err) { if (err.status === 404 || err.status === 403) S.el.hidden = true; });
+  }
+
   // ---------- Saving ----------
   // Saves queue one behind another so the version always matches; a clash
   // with someone else's save reloads theirs and says so.
@@ -194,6 +226,8 @@
       patch.version = S.data.version;
       return K.api(S.cfg.endpoint, 'PUT', patch, S.cfg.csrfToken).then(function (data) {
         S.data.version = data && data.version != null ? data.version : S.data.version;
+        // The label and days left are the server's, worked out on its calendar.
+        if (data && 'dueDate' in patch) { S.data.due = data.due || null; redrawBoard(S); redrawLedger(S); }
       });
     }).catch(function (err) {
       S.gen = (S.gen || 0) + 1;
@@ -211,7 +245,12 @@
     var head = '<select class="lsel" data-status aria-label="Status">' + STATUS.map(function (s) {
       return '<option value="' + s[0] + '"' + (d.status === s[0] ? ' selected' : '') + '>' + s[1] + '</option>';
     }).join('') + '</select>';
-    var due = lrow('<span class="ico">' + I.cal + '</span><span class="grow" data-rename="due" data-max="160" title="Double-click to change">' +
+    // With a campaign calendar the due date is a day on it; without one it
+    // stays the free text it always was.
+    var due = d.dueCalendar ? lrow('<span class="ico">' + I.cal + '</span><button type="button" class="lk grow" data-due-pick style="text-align:left">' +
+      (d.due ? esc('Due ' + d.due.label) : '<em class="ph">Pick a due date on the calendar…</em>') + '</button>' +
+      (d.due ? '<span class="sub">' + esc(K.daysText(d.due.daysLeft)) + '</span>' : ''))
+      : lrow('<span class="ico">' + I.cal + '</span><span class="grow" data-rename="due" data-max="160" title="Double-click to change">' +
       (n.due ? esc(n.due) : '<em class="ph">When is it due?</em>') + '</span>', false, ' data-list="notice" data-i="0"');
     var html = K.ledgerShell({
       title: 'Quest Ledger', head: head, fixed: due, tab: S.tab,
@@ -255,8 +294,9 @@
       var isMap = l.kind === 'map', url = isMap ? S.campaignUrl + '/maps/' + encodeURIComponent(l.refId) : entityUrl(S, l.refId);
       return '<span class="ico">' + (isMap ? I.map : I.note) + '</span><a class="lk grow" href="' + url + '">' + esc(l.label || l.name || 'Untitled') + '</a>' +
         '<span class="sub">' + esc(isMap ? 'map' : (l.typeName || 'page').toLowerCase()) + '</span>';
-    } }) + lrow('<button type="button" class="lbtn" data-add-link="page">+ Link a page</button><button type="button" class="lbtn" data-add-link="map">+ Link a map</button>' +
-      (S.data.mapId ? '' : '<span class="sub grow" style="text-align:right">The first map you link is pinned to the board.</span>'));
+    } }) + lrow('<button type="button" class="lbtn" data-add-link="page">+ Link a page</button>' +
+      (S.data.mapsOn === false ? '' : '<button type="button" class="lbtn" data-add-link="map">+ Link a map</button>') +
+      (S.data.mapId || S.data.mapsOn === false ? '' : '<span class="sub grow" style="text-align:right">The first map you link is pinned to the board.</span>'));
   }
   function entityUrl(S, id) { return S.campaignUrl + '/entities/' + encodeURIComponent(id); }
   function pickerUrl(S) { return S.campaignUrl + '/quests/picker'; }
@@ -308,14 +348,16 @@
   // ---------- Hand out rewards ----------
   // Each linked item reward goes through the Armory's own give, so the item
   // lands on the sheet, its history and the player's notification exactly as
-  // a give from the Armory would. Chronicle has no way to pay coins yet, so a
-  // money reward shows each share for the DM to write on the sheets.
+  // a give from the Armory would. A money reward is split between the ticked
+  // characters and each share paid onto their sheet through the Armory's pay,
+  // which records it in their money history.
+  // (Due dates are below the hand-out.)
   var AV = ['#8a5a2b', '#3f6e5a', '#5a4a8a', '#8a3f4f', '#3f5f8a', '#6e6a3f'];
   function startGive(S) {
     var bw = S.el.querySelector('.bw');
     if (S.give) { K.openLedger(bw); return; }
     S.tab = 'rewards'; redrawLedger(S); K.openLedger(bw);
-    S.give = { dirty: false, party: null };
+    S.give = { dirty: false, party: null, done: {} };
     K.api(pickerUrl(S) + '?kind=character', 'GET').then(function (party) {
       if (!S.give) return;
       S.give.party = party || [];
@@ -339,10 +381,13 @@
         '<span class="av" style="background:' + AV[i % AV.length] + '">' + esc((p.name || '?').charAt(0).toUpperCase()) + '</span></label>';
     }).join('');
     money.forEach(function (r) {
+      if (r.amount == null) {
+        rows += lrow('<span class="grow">' + esc(r.text) + '</span><span class="sub">give it an amount to pay it</span>');
+        return;
+      }
       rows += lrow('<span class="grow">Split ' + esc(r.text) + ' between</span>');
-      if (party.length) rows += lrow('<span class="chips">' + chips + '</span><span class="sp"></span><span class="sub" data-share="' + esc(r.id) + '"></span>');
+      if (party.length) rows += lrow('<span class="chips" data-split="' + esc(r.id) + '">' + chips + '</span><span class="sp"></span><span class="sub" data-share="' + esc(r.id) + '"></span>');
     });
-    if (money.length && party.length) rows += lrow('<span class="sub grow">Coins go on the sheets by hand for now.</span>');
     var opts = '<option value="">Nobody</option>' + party.map(function (p, i) {
       return '<option value="' + i + '"' + (i === 0 ? ' selected' : '') + '>' + esc(p.name) + '</option>';
     }).join('');
@@ -358,18 +403,95 @@
     return '<div class="give" aria-hidden="true" role="dialog" aria-label="Hand out rewards"><div class="wh"><b>Hand out rewards</b><span class="sp"></span><span class="only">' + esc(title) + '</span></div>' +
       '<div class="gb">' + rows + '</div><div class="gf"><button type="button" class="mini" data-give-cancel>Cancel</button><button type="button" class="mini pri" data-give-ok>Hand out</button></div></div>';
   }
+  // ---------- Due date ----------
+  // The DM picks a day on the campaign calendar; the server works out the
+  // label and days left against the calendar's today, and keeps a matching
+  // event on the calendar. The count here is only a preview while picking.
+  function openDue(S) {
+    var cal = S.data.dueCalendar, led = S.el.querySelector('.ledger');
+    if (!cal || !led || S.duePick) return;
+    var at = S.data.due || cal.today;
+    var months = cal.months.map(function (m, i) {
+      return '<option value="' + (i + 1) + '"' + (i + 1 === at.month ? ' selected' : '') + '>' + esc(m.name) + '</option>';
+    }).join('');
+    var tmp = document.createElement('div');
+    tmp.innerHTML = '<div class="give due" aria-hidden="true" role="dialog" aria-label="Due date"><div class="wh"><b>Due date</b><span class="sp"></span><span class="only">' + esc(cal.name) + '</span></div>' +
+      '<div class="gb">' + lrow('<span class="grow">Today in the world is ' + esc(cal.today.label) + '.</span>') +
+      '<div class="row when"><select class="wsel" data-due-month aria-label="Month">' + months + '</select><select class="wsel" data-due-day aria-label="Day"></select>' +
+      '<input class="wsel yr" data-due-year type="number" inputmode="numeric" value="' + at.year + '" aria-label="Year"></div>' +
+      '<div class="far" data-due-far></div>' +
+      '<p class="sub dnote">It goes on the calendar as “Due: ' + esc((S.data.notice && S.data.notice.title) || 'this quest') + '”. Players see it there when they can see this quest.</p>' +
+      '</div><div class="gf">' + (S.data.due ? '<button type="button" class="mini" data-due-clear>Clear</button><span class="sp"></span>' : '') +
+      '<button type="button" class="mini" data-due-cancel>Cancel</button><button type="button" class="mini pri" data-due-ok>Set due date</button></div></div>';
+    var g = tmp.firstChild; led.appendChild(g);
+    S.duePick = true;
+    fillDays(S, at.day);
+    K.openLedger(S.el.querySelector('.bw'));
+    requestAnimationFrame(function () { g.classList.add('on'); g.setAttribute('aria-hidden', 'false'); });
+  }
+  function fillDays(S, want) {
+    var g = S.el.querySelector('.due'), cal = S.data.dueCalendar;
+    var y = +g.querySelector('[data-due-year]').value, m = +g.querySelector('[data-due-month]').value;
+    var n = monthDays(cal, m, y), sel = g.querySelector('[data-due-day]'), cur = Math.min(want || +sel.value || 1, n), opts = '';
+    for (var i = 1; i <= n; i++) opts += '<option value="' + i + '"' + (i === cur ? ' selected' : '') + '>' + i + '</option>';
+    sel.innerHTML = opts;
+    showDueDistance(S);
+  }
+  function readDue(S) {
+    var g = S.el.querySelector('.due');
+    return { year: +g.querySelector('[data-due-year]').value, month: +g.querySelector('[data-due-month]').value, day: +g.querySelector('[data-due-day]').value };
+  }
+  function showDueDistance(S) {
+    var g = S.el.querySelector('.due'); if (!g) return;
+    var cal = S.data.dueCalendar, far = g.querySelector('[data-due-far]'), left = daysBetween(cal, cal.today, readDue(S));
+    far.textContent = isFinite(left) ? K.daysText(left) : '';
+    far.classList.toggle('late', left < 0);
+  }
+  // Mirrors the calendar's own day count (leap months included) so the
+  // preview agrees with what the server will say.
+  function isLeap(cal, y) { return cal.leapEvery > 0 && (y - (cal.leapOffset || 0)) % cal.leapEvery === 0; }
+  function monthDays(cal, m, y) { var mo = cal.months[m - 1]; return mo ? mo.days + (isLeap(cal, y) ? mo.leapDays || 0 : 0) : 0; }
+  function daysBetween(cal, a, b) {
+    if (!(Math.abs(a.year - b.year) <= 400)) return NaN;
+    var lo = Math.min(a.year, b.year);
+    function count(d) {
+      var n = 0, y, m;
+      for (y = lo; y < d.year; y++) for (m = 1; m <= cal.months.length; m++) n += monthDays(cal, m, y);
+      for (m = 1; m < d.month; m++) n += monthDays(cal, m, d.year);
+      return n + d.day;
+    }
+    return count(b) - count(a);
+  }
+  function closeDue(S) {
+    var g = S.el.querySelector('.due');
+    S.duePick = false;
+    if (!g) return;
+    g.classList.remove('on'); g.setAttribute('aria-hidden', 'true');
+    setTimeout(function () { g.remove(); }, K.reduce() ? 0 : 400);
+  }
+  function setDue(S, when) {
+    closeDue(S);
+    save(S, { dueDate: when }, '');
+    K.toast(when ? 'Due date set. It is on the calendar too.' : 'Due date cleared, and taken off the calendar.');
+  }
+
+  function rewardById(S, id) { return S.data.rewards.filter(function (x) { return x.id === id; })[0]; }
+  // share is one character's part of a split, in hundredths, rounded down so
+  // the party is never paid more than the reward.
+  function share(amount, n) { return n ? Math.floor(Math.round(amount * 100) / n) : 0; }
+  function fmtShare(h) { return h % 100 ? (h / 100).toFixed(2) : String(h / 100); }
   function updateShares(S) {
     var g = S.el.querySelector('.give'); if (!g) return;
-    var money = S.data.rewards.filter(function (r) { return r.kind === 'money'; });
-    g.querySelectorAll('[data-share]').forEach(function (sp, k) {
-      var r = money[k], boxes = sp.closest('.row').querySelectorAll('input[name=coin]'), n = 0;
-      boxes.forEach(function (b) { if (b.checked) n++; });
-      if (!n) { sp.textContent = 'nobody picked'; return; }
-      sp.textContent = r && r.amount != null ? Math.floor(r.amount / n) + ' each' : n + (n === 1 ? ' share' : ' shares');
+    g.querySelectorAll('[data-share]').forEach(function (sp) {
+      var r = rewardById(S, sp.dataset.share), n = 0;
+      sp.closest('.row').querySelectorAll('input[name=coin]').forEach(function (b) { if (b.checked) n++; });
+      if (!r || !n) { sp.textContent = 'nobody picked'; return; }
+      var h = share(r.amount, n);
+      sp.textContent = h ? fmtShare(h) + ' each' : 'too little to split';
     });
   }
   function closeGive(S) {
-    var g = S.el.querySelector('.give'), w = S.el.querySelector('.ledger .warn');
+    var g = S.el.querySelector('.give:not(.due)'), w = S.el.querySelector('.ledger .warn');
     if (w) w.remove();
     S.give = null;
     if (!g) return;
@@ -397,40 +519,53 @@
       return res.json().catch(function () { return {}; }).then(function (b) { throw new Error(b.message || 'The Armory refused that give.'); });
     });
   }
+  function payOne(S, characterId, hundredths, reason) {
+    var fd = new FormData();
+    fd.append('character_id', characterId); fd.append('amount', (hundredths / 100).toFixed(2)); fd.append('reason', reason);
+    return K.api(S.campaignUrl + '/armory/pay', 'POST', fd, S.cfg.csrfToken);
+  }
+  // A whole hand-out is a list of steps, run one at a time. A step that went
+  // through is remembered, so a retry after a refusal never pays or gives
+  // anything twice.
   function handOut(S) {
     var g = S.el.querySelector('.give'); if (!g || !S.give || S.give.sending) return;
-    var party = S.give.party || [], gives = [];
+    var party = S.give.party || [], steps = [], done = S.give.done;
+    var title = (S.data.notice && S.data.notice.title) || '';
+    var reason = title ? 'as a reward for ' + title : 'as a quest reward';
+    g.querySelectorAll('[data-split]').forEach(function (row) {
+      var r = rewardById(S, row.dataset.split); if (!r || r.amount == null) return;
+      var picked = Array.prototype.filter.call(row.querySelectorAll('input[name=coin]'), function (b) { return b.checked; });
+      var h = share(r.amount, picked.length); if (!h) return;
+      picked.forEach(function (b) {
+        var p = party[+b.value]; if (!p) return;
+        steps.push({ key: 'pay:' + r.id + ':' + p.id, label: fmtShare(h) + ' to ' + p.name, run: function () { return payOne(S, p.id, h, reason); } });
+      });
+    });
     g.querySelectorAll('[data-give-to]').forEach(function (sel) {
       if (sel.value === '') return;
-      var r = S.data.rewards.filter(function (x) { return x.id === sel.dataset.giveTo; })[0], p = party[+sel.value];
-      if (r && r.entityId && p) gives.push({ item: r.entityId, to: p.id, text: r.text, name: p.name });
+      var r = rewardById(S, sel.dataset.giveTo), p = party[+sel.value];
+      if (r && r.entityId && p) steps.push({ key: 'give:' + r.id + ':' + p.id, label: r.text + ' to ' + p.name, run: function () { return giveOne(S, r.entityId, p.id); } });
     });
     var markDone = !!(g.querySelector('[data-give-done]') || {}).checked;
     S.give.sending = true;
     var ok = g.querySelector('[data-give-ok]'); ok.disabled = true;
     var given = [];
-    // One at a time, so a refusal names the reward it stopped at and the ones
-    // before it are not given twice on a retry.
-    var chain = gives.reduce(function (p, gv) {
-      return p.then(function () { return giveOne(S, gv.item, gv.to).then(function () { given.push(gv); }); });
+    var chain = steps.reduce(function (p, st) {
+      return p.then(function () {
+        if (done[st.key]) return;
+        return st.run().then(function () { done[st.key] = true; given.push(st); });
+      });
     }, Promise.resolve());
     chain.then(function () {
       var patch = { handedOut: true }; S.data.handedOut = true;
       if (markDone) { patch.status = 'done'; S.data.status = 'done'; }
       closeGive(S);
       save(S, patch, markDone ? 'both' : 'ledger');
-      K.toast(given.length ? 'Handed out: ' + given.map(function (x) { return x.text + ' to ' + x.name; }).join(', ') + '.' : 'Rewards marked as handed out.');
+      K.toast(given.length ? 'Handed out: ' + given.map(function (x) { return x.label; }).join(', ') + '.' : 'Rewards marked as handed out.');
     }).catch(function (err) {
       if (S.give) S.give.sending = false;
       ok.disabled = false;
-      // Rewards already given are taken off the panel so a retry skips them.
-      given.forEach(function (gv) {
-        g.querySelectorAll('[data-give-to]').forEach(function (s2) {
-          var r = S.data.rewards.filter(function (x) { return x.id === s2.dataset.giveTo; })[0];
-          if (r && r.entityId === gv.item && party[+s2.value] && party[+s2.value].id === gv.to) s2.value = '';
-        });
-      });
-      K.toast(err.message);
+      K.toast((given.length ? 'Handed out ' + given.length + ', then stopped: ' : '') + err.message + ' Press Hand out again to finish; nothing is given twice.');
     });
   }
 
@@ -447,7 +582,7 @@
       redraw: function () {}
     });
     var ledgers = K.wireLedgers(el, {
-      busy: function () { return !!S.give; },
+      busy: function () { return !!S.give || !!S.duePick; },
       blocked: function (bw) { giveBlocked(S, bw); },
       onAdd: function (list, text, row) { addTo(S, list, text, row); },
       onRemove: function (list, i) {
@@ -515,6 +650,10 @@
           } });
         return;
       }
+      if (t.closest('[data-due-pick]')) { openDue(S); return; }
+      if (t.closest('[data-due-cancel]')) { closeDue(S); return; }
+      if (t.closest('[data-due-clear]')) { setDue(S, null); return; }
+      if (t.closest('[data-due-ok]')) { setDue(S, readDue(S)); return; }
       if (t.closest('[data-give]')) { startGive(S); return; }
       if (t.closest('[data-give-cancel]')) { closeGive(S); return; }
       if (t.closest('[data-give-ok]')) { handOut(S); return; }
@@ -537,6 +676,7 @@
     });
     el.addEventListener('change', function (e) {
       var t = e.target;
+      if (t.closest('.due')) { fillDays(S); return; }
       if (t.closest('.give')) {
         if (S.give) S.give.dirty = true;
         if (t.name === 'coin') updateShares(S);
