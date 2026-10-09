@@ -64,7 +64,10 @@ func (f *fakeEntities) Search(_ context.Context, campaignID, q string, _ int, _ 
 type fakeMaps struct {
 	byID map[string]MapInfo
 	camp map[string]string
+	off  bool // the maps addon is off: nothing is found, as the adapter does
 }
+
+func (f *fakeMaps) Enabled(context.Context, string) (bool, error) { return !f.off, nil }
 
 func newFakeMaps() *fakeMaps { return &fakeMaps{byID: map[string]MapInfo{}, camp: map[string]string{}} }
 
@@ -75,6 +78,9 @@ func (f *fakeMaps) add(campaign, id, name string) {
 
 func (f *fakeMaps) Maps(_ context.Context, campaignID string, ids []string) (map[string]MapInfo, error) {
 	out := map[string]MapInfo{}
+	if f.off {
+		return out, nil
+	}
 	for _, id := range ids {
 		if m, ok := f.byID[id]; ok && f.camp[id] == campaignID {
 			out[id] = m
@@ -85,6 +91,9 @@ func (f *fakeMaps) Maps(_ context.Context, campaignID string, ids []string) (map
 
 func (f *fakeMaps) ListMaps(_ context.Context, campaignID string) ([]MapInfo, error) {
 	var out []MapInfo
+	if f.off {
+		return out, nil
+	}
 	for id, m := range f.byID {
 		if f.camp[id] == campaignID {
 			out = append(out, m)

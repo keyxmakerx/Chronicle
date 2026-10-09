@@ -69,7 +69,7 @@
   // ---------- Rendering ----------
   function first(S) {
     var el = S.el;
-    el.innerHTML = '<div class="bw wide">' + frameHTML() + (isDm(S) ? K.ribbon('Board ledger') + ledgerHTML(S) : '') + '</div>';
+    el.innerHTML = '<div class="bw wide">' + frameHTML(S) + (isDm(S) ? K.ribbon('Board ledger') + ledgerHTML(S) : '') + '</div>';
     K.setLooks(el, S.data.looks);
     var b = el.querySelector('.board');
     setTimeout(function () { b.classList.remove('enter'); }, 1600);
@@ -80,13 +80,15 @@
     window.addEventListener('resize', onResize);
     S.stops.push(function () { window.removeEventListener('resize', onResize); });
   }
-  function frameHTML() {
+  function frameHTML(S) {
     var plate = '<div class="bplate turn"><button type="button" class="arr" data-turn="-1" aria-label="Previous board">‹</button><span class="bnm"></span>' +
       '<button type="button" class="arr" data-turn="1" aria-label="Next board">›</button></div>';
     var tray = '<div class="tray"><span class="dots" aria-hidden="true"></span><span class="sp"></span><span class="lockline"></span>' +
       '<div class="addw"><button type="button" class="addb" aria-haspopup="true" aria-expanded="false">+ Add to board</button>' +
       '<div class="menu" hidden><button type="button" data-add="notice">Post a quest notice</button><button type="button" data-add="note">Note</button>' +
-      '<button type="button" data-add="page">Pin a page…</button><button type="button" data-add="map">Pin a map…</button><button type="button" data-add="string">Tie string</button></div></div></div>';
+      '<button type="button" data-add="page">Pin a page…</button>' +
+      // The maps addon off hides map pins; the server refuses them too.
+      (S.data.mapsOn === false ? '' : '<button type="button" data-add="map">Pin a map…</button>') + '<button type="button" data-add="string">Tie string</button></div></div></div>';
     return K.boardFrame('wide multi', plate, '<div class="face"></div>', tray);
   }
   function drawFace(S) {

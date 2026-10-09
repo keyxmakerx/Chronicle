@@ -4943,8 +4943,8 @@ func (a *App) RegisterRoutes() {
 	// Quest sheets and notice boards. Cross-plugin lookups go through the
 	// adapters in quests_adapters.go.
 	if a.PluginHealth.IsHealthy(quests.PluginSlug) {
-		questEntities := &questEntityAdapter{svc: entityService}
-		questMaps := &questMapAdapter{svc: mapsService}
+		questEntities := &questEntityAdapter{svc: entityService, cards: entities.NewPageCards(a.DB)}
+		questMaps := &questMapAdapter{svc: mapsService, addons: addonService}
 		questRepo := quests.NewQuestRepository(a.DB)
 		questSvc, boardSvc := quests.WithAnnouncer(
 			quests.NewQuestService(questRepo, questEntities, questMaps),

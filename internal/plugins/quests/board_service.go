@@ -145,7 +145,12 @@ func (s *boardService) View(ctx context.Context, campaignID string, h Home, v Vi
 	if err != nil {
 		return nil, err
 	}
+	mapsOn, err := s.maps.Enabled(ctx, campaignID)
+	if err != nil {
+		return nil, apperrorInternal(err)
+	}
 	out := &BoardsView{
+		MapsOn:    mapsOn,
 		CanManage: v.IsDM,
 		Me:        Me{UserID: v.UserID, IsDM: v.IsDM, Role: v.MemberRole},
 		Looks:     looks,

@@ -18,9 +18,11 @@ import (
 	ws "github.com/keyxmakerx/chronicle/internal/websocket"
 )
 
-// questEntityAdapter implements quests.EntityDirectory over the entities service.
+// questEntityAdapter implements quests.EntityDirectory over the entities
+// service, with names read in one query per load through PageCards.
 type questEntityAdapter struct {
-	svc entities.EntityService
+	svc   entities.EntityService
+	cards entities.PageCards
 }
 
 func entityInfo(e *entities.Entity) quests.EntityInfo {
@@ -34,22 +36,13 @@ func entityInfo(e *entities.Entity) quests.EntityInfo {
 // Entities skips a missing page and one in another campaign (a clean absence,
 // not an error), so a foreign id can never be resolved through this plugin.
 func (a *questEntityAdapter) Entities(ctx context.Context, campaignID string, ids []string) (map[string]quests.EntityInfo, error) {
-	out := make(map[string]quests.EntityInfo, len(ids))
-	for _, id := range ids {
-		if _, done := out[id]; done || id == "" {
-			continue
-		}
-		e, err := a.svc.GetByID(ctx, id)
-		if err != nil {
-			var appErr *apperror.AppError
-			if errors.As(err, &appErr) && appErr.Code == http.StatusNotFound {
-				continue
-			}
-			return nil, err
-		}
-		if e.CampaignID == campaignID {
-			out[id] = entityInfo(e)
-		}
+	cards, err := a.cards.InCampaign(ctx, campaignID, ids)
+	if err != nil {
+		return nil, err
+	}
+	out := make(map[string]quests.EntityInfo, len(cards))
+	for id, c := range cards {
+		out[id] = quests.EntityInfo{ID: c.ID, Name: c.Name, TypeName: c.TypeName, TypeSlug: c.TypeSlug, ImagePath: c.ImagePath}
 	}
 	return out, nil
 }
@@ -74,33 +67,53 @@ func (a *questEntityAdapter) Search(ctx context.Context, campaignID, query strin
 	return out, nil
 }
 
-// questMapAdapter implements quests.MapDirectory over the maps service.
+// questMapAdapter implements quests.MapDirectory over the maps service. With
+// the maps addon off it finds no maps, so quests cannot pin or link one and
+// never points at the addon's routes.
 type questMapAdapter struct {
-	svc maps.MapService
+	svc    maps.MapService
+	addons questAddonChecker
 }
 
+// questAddonChecker is the slice of the addons service the map adapter needs.
+type questAddonChecker interface {
+	IsEnabledForCampaign(ctx context.Context, campaignID string, addonSlug string) (bool, error)
+}
+
+func (a *questMapAdapter) Enabled(ctx context.Context, campaignID string) (bool, error) {
+	return a.addons.IsEnabledForCampaign(ctx, campaignID, "maps")
+}
+
+// Maps reads the campaign's map list once and picks the requested ones, so a
+// board with many map pins costs one lookup, and a foreign id is never found.
 func (a *questMapAdapter) Maps(ctx context.Context, campaignID string, ids []string) (map[string]quests.MapInfo, error) {
 	out := make(map[string]quests.MapInfo, len(ids))
+	want := make(map[string]bool, len(ids))
 	for _, id := range ids {
-		if _, done := out[id]; done || id == "" {
-			continue
+		if id != "" {
+			want[id] = true
 		}
-		m, err := a.svc.GetMap(ctx, id)
-		if err != nil {
-			var appErr *apperror.AppError
-			if errors.As(err, &appErr) && appErr.Code == http.StatusNotFound {
-				continue
-			}
-			return nil, err
-		}
-		if m.CampaignID == campaignID {
-			out[id] = quests.MapInfo{ID: m.ID, Name: m.Name}
+	}
+	if len(want) == 0 {
+		return out, nil
+	}
+	ms, err := a.ListMaps(ctx, campaignID)
+	if err != nil {
+		return nil, err
+	}
+	for _, m := range ms {
+		if want[m.ID] {
+			out[m.ID] = quests.MapInfo{ID: m.ID, Name: m.Name}
 		}
 	}
 	return out, nil
 }
 
 func (a *questMapAdapter) ListMaps(ctx context.Context, campaignID string) ([]quests.MapInfo, error) {
+	on, err := a.Enabled(ctx, campaignID)
+	if err != nil || !on {
+		return nil, err
+	}
 	ms, err := a.svc.ListMaps(ctx, campaignID)
 	if err != nil {
 		return nil, err

@@ -54,6 +54,9 @@ type MapDirectory interface {
 	Maps(ctx context.Context, campaignID string, ids []string) (map[string]MapInfo, error)
 	// ListMaps returns every map of the campaign.
 	ListMaps(ctx context.Context, campaignID string) ([]MapInfo, error)
+	// Enabled reports whether the campaign has the maps addon on. When it is
+	// off, Maps and ListMaps find nothing, so map pins and links are refused.
+	Enabled(ctx context.Context, campaignID string) (bool, error)
 }
 
 // MemberNames resolves campaign members' display names.

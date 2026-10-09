@@ -165,7 +165,12 @@ func (s *questService) dmView(ctx context.Context, campaignID string, q Quest, v
 	if err != nil {
 		return nil, apperrorInternal(err)
 	}
+	mapsOn, err := s.maps.Enabled(ctx, campaignID)
+	if err != nil {
+		return nil, apperrorInternal(err)
+	}
 	out := &DMQuestView{
+		MapsOn:  mapsOn,
 		CanEdit: true, Version: version, Notice: q.Notice, Status: q.Status,
 		HandedOut: q.HandedOut, Steps: q.Steps, MapID: q.MapID,
 		MapName: maps[q.MapID].Name, Layout: q.Layout, Looks: q.Looks,

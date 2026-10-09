@@ -285,8 +285,9 @@
       var isMap = l.kind === 'map', url = isMap ? S.campaignUrl + '/maps/' + encodeURIComponent(l.refId) : entityUrl(S, l.refId);
       return '<span class="ico">' + (isMap ? I.map : I.note) + '</span><a class="lk grow" href="' + url + '">' + esc(l.label || l.name || 'Untitled') + '</a>' +
         '<span class="sub">' + esc(isMap ? 'map' : (l.typeName || 'page').toLowerCase()) + '</span>';
-    } }) + lrow('<button type="button" class="lbtn" data-add-link="page">+ Link a page</button><button type="button" class="lbtn" data-add-link="map">+ Link a map</button>' +
-      (S.data.mapId ? '' : '<span class="sub grow" style="text-align:right">The first map you link is pinned to the board.</span>'));
+    } }) + lrow('<button type="button" class="lbtn" data-add-link="page">+ Link a page</button>' +
+      (S.data.mapsOn === false ? '' : '<button type="button" class="lbtn" data-add-link="map">+ Link a map</button>') +
+      (S.data.mapId || S.data.mapsOn === false ? '' : '<span class="sub grow" style="text-align:right">The first map you link is pinned to the board.</span>'));
   }
   function entityUrl(S, id) { return S.campaignUrl + '/entities/' + encodeURIComponent(id); }
   function pickerUrl(S) { return S.campaignUrl + '/quests/picker'; }

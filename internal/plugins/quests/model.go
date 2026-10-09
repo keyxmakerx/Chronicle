@@ -198,6 +198,8 @@ type DMQuestView struct {
 	MapName   string       `json:"mapName"`
 	Layout    Layout       `json:"layout"`
 	Looks     Looks        `json:"looks"`
+	// MapsOn is false when the maps addon is off, so map choices are hidden.
+	MapsOn bool `json:"mapsOn"`
 }
 
 // PlayerStep is a shown step without its id.
@@ -376,6 +378,8 @@ type BoardsView struct {
 	Me        Me          `json:"me"`
 	Looks     Looks       `json:"looks"`
 	Boards    []BoardView `json:"boards"`
+	// MapsOn is false when the maps addon is off, so map choices are hidden.
+	MapsOn bool `json:"mapsOn"`
 }
 
 // PickerItem is one search hit for the pinning picker; maps carry only id

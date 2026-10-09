@@ -21,6 +21,7 @@ type boardEnv struct {
 	repo  *fakeBoardRepo
 	quest *fakeQuestRepo
 	ents  *fakeEntities
+	maps  *fakeMaps
 }
 
 func newBoardEnv() boardEnv {
@@ -35,6 +36,7 @@ func newBoardEnv() boardEnv {
 	m.add(camp, "map-1", "Vale")
 	m.add(other, "map-x", "Foreign")
 	types := fakeTypes{camp: {catType: true}, other: {otherType: true}}
+	e.maps = m
 	e.svc = NewBoardService(e.repo, e.quest, e.ents, types, m, fakeNames{"dm": "Dana", "pl": "Pat", "scr": "Sam", "pl2": "Pia"})
 	return e
 }
@@ -682,5 +684,31 @@ func TestTypeHomeGetsNoPageVisibilityCheck(t *testing.T) {
 	it := out.Boards[0].Items[0]
 	if !it.Concealed || it.Name != "" || it.EntityID != "" {
 		t.Errorf("hidden page leaked on a category board: %+v", it)
+	}
+}
+
+// With the maps addon off, boards offer no maps, refuse a map pin, and drop
+// map pins made while it was on (their route is behind the addon).
+func TestBoardsMapsAddonOff(t *testing.T) {
+	ctx := context.Background()
+	e := newBoardEnv()
+	bid := e.board(t, WhoAll)
+	if _, err := e.svc.CreateItem(ctx, camp, pageHome, bid, player, ItemInput{Kind: KindMap, RefID: "map-1"}); err != nil {
+		t.Fatal(err)
+	}
+	on, err := e.svc.View(ctx, camp, pageHome, player)
+	if err != nil || !on.MapsOn || len(on.Boards[0].Items) != 1 {
+		t.Fatalf("addon on: %+v %v", on, err)
+	}
+	e.maps.off = true
+	off, err := e.svc.View(ctx, camp, pageHome, player)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if off.MapsOn || len(off.Boards[0].Items) != 0 {
+		t.Fatalf("addon off: mapsOn=%v items=%+v", off.MapsOn, off.Boards[0].Items)
+	}
+	if _, err := e.svc.CreateItem(ctx, camp, pageHome, bid, dm, ItemInput{Kind: KindMap, RefID: "map-1"}); code(err) != 422 {
+		t.Fatalf("map pin with addon off: %v", err)
 	}
 }
