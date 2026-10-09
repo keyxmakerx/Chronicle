@@ -60,8 +60,9 @@
       var html = document.documentElement;
       Array.prototype.slice.call(html.attributes).forEach(function (a) { if (a.name.indexOf('data-cz-') === 0) html.removeAttribute(a.name); });
       Array.prototype.slice.call(doc.documentElement.attributes).forEach(function (a) { if (a.name.indexOf('data-cz-') === 0) html.setAttribute(a.name, a.value); });
-      // nav-rm is how the menu's script hears the campaign's reduce switch.
-      html.classList.toggle('nav-rm', html.hasAttribute('data-cz-reduce'));
+      // The reduce switch may have changed: re-work data-motion and nav-rm.
+      if (window.Chronicle && window.Chronicle.syncMotion) window.Chronicle.syncMotion();
+      else html.classList.toggle('nav-rm', html.hasAttribute('data-cz-reduce'));
       swapFrom(doc);
       var brand = doc.querySelector('.nav-brand-link'), liveBrand = document.querySelector('.nav-brand-link');
       if (brand && liveBrand) liveBrand.innerHTML = brand.innerHTML;

@@ -58,7 +58,8 @@ func TestAppearanceAttrs(t *testing.T) {
 		{"all", AppearanceData{NavStyle: "comet", NavStrength: "lively", NavPageName: "hidden", ButtonStyle: "glow",
 			Elevation: "flat", TypeScale: "roomy", ReduceMotion: true},
 			map[string]string{"data-cz-nav": "comet", "data-cz-strength": "lively", "data-cz-pagename": "hidden",
-				"data-cz-btn": "glow", "data-cz-elev": "flat", "data-cz-scale": "roomy", "data-cz-reduce": "1"}},
+				"data-cz-btn": "glow", "data-cz-elev": "flat", "data-cz-scale": "roomy", "data-cz-reduce": "1",
+				"data-motion": "calm"}},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {

@@ -110,6 +110,11 @@
     --dur-micro:       120ms;    /* button/hover feedback */
     --dur-standard:    200ms;    /* modal, dropdown, panel */
     --dur-large:       280ms;    /* view-level transitions */
+    --dur-slide:       360ms;    /* a tab or sheet sliding out from under paper */
+    --dur-turn:        560ms;    /* the Handbook's page turn */
+
+    --ease-slide:      cubic-bezier(0.22, 0.8, 0.24, 1);  /* slows to a stop, no overshoot */
+    --ease-turn:       cubic-bezier(0.45, 0.05, 0.25, 1); /* lifts slowly, lands softly */
 
     /* ──────────────────────────────────────────────────────────────────
      * V2 widget-animation durations — the `--motion-*` family, consumed
@@ -4228,14 +4233,24 @@ html.dark[data-view-contrast="high"] { /* the second out-ranks a campaign's :roo
   [data-cz-nav="tide"] .nav-ring::after { display: none; }
 }
 
-/* Reduce motion: the same total-disable as the device setting, for everyone
-   when the owner switches it on (data-cz-reduce) and for one person when they
-   pick Calmer in My view (data-view-motion). The person's choice only adds to
-   the owner's; it can never turn the owner's setting off.
+/* Calm and Off (html[data-motion], .ai/ui-standard.md "Motion").
+   Calm is for everyone when the owner switches it on (data-cz-reduce) and for
+   one person who picks Calm or Off in My view (both write
+   data-view-motion="calm"). Calm keeps fades and colour changes but nothing
+   travels: transitions are limited to non-moving properties and keyframe
+   animations jump to their end. Off is the same total-disable as the device
+   setting. A person's choice only adds to the owner's; it can never turn the
+   owner's setting off.
    The Customize editor is left out: its example site shows the owner's
    draft, which may turn the switch off before saving. */
 html[data-cz-reduce] *:not(.czp *), html[data-cz-reduce] *:not(.czp *)::before, html[data-cz-reduce] *:not(.czp *)::after,
 html[data-view-motion="calm"] *:not(.czp *), html[data-view-motion="calm"] *:not(.czp *)::before, html[data-view-motion="calm"] *:not(.czp *)::after {
+  transition-property: opacity, color, background-color, border-color, outline-color, box-shadow, visibility !important;
+  animation-duration: 0.01ms !important;
+  animation-iteration-count: 1 !important;
+  scroll-behavior: auto !important;
+}
+html[data-motion="off"] *:not(.czp *), html[data-motion="off"] *:not(.czp *)::before, html[data-motion="off"] *:not(.czp *)::after {
   animation-duration: 0.01ms !important;
   animation-iteration-count: 1 !important;
   transition-duration: 0.01ms !important;
