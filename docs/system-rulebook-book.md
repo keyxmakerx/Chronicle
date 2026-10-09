@@ -46,6 +46,11 @@ theme:                   # optional: colours and fonts, all optional
   accent: "#a78bfa"
   heading-font: "Inter, system-ui, sans-serif"
   body-font: "Inter, system-ui, sans-serif"
+  cover: "#2e2240"       # the leather around the pages (paper look only)
+look: paper              # optional: draw the book as a printed handbook
+tabs: [players-screen, how-to-play, combat]   # optional: chapters with a tab
+start: players-screen    # optional: the chapter the book opens on
+first: how-to-play       # optional: where a first-time reader opens instead
 terms:                   # optional: extra hover definitions
   edge: A bonus on a power roll.
 parts:
@@ -61,6 +66,18 @@ parts:
 - Colours are `#` hex values. Fonts are font names separated by commas.
 - `glossary` names a file in the package's `data/` folder: a list of entries
   with `name` and `summary`. Each becomes a hover definition.
+- `look: paper` draws pages as paper inside a cover, with a soft crease
+  between them. Set the paper colours in `theme` (light `paper`, dark `ink`).
+- `tabs` puts a row of tabs above the book, one per named chapter, in that
+  order (at most 12). When the campaign has written house rules, a House
+  rules tab is added at the end.
+- The book opens on `start`. A reader who has never opened it opens on
+  `first`. A link to the Rules page ending in `#<chapter>` (for example
+  `#making-a-hero`) opens that chapter instead. Without `start` the book
+  reopens where the reader left it.
+- `tabs`, `start` and `first` must name chapters listed in `parts`. A player
+  never receives a tab, start page or link that leads to a Director-only
+  chapter.
 
 ## A chapter file
 
@@ -85,7 +102,9 @@ pages:
 ```
 
 Chapters, pages and blocks can all carry `director: true` to show them to
-Directors only. A page with `wide: true` spans both pages of the spread.
+Directors only. A page with `wide: true` spans both pages of the spread, and
+`columns: true` flows its blocks into two columns (useful for a reference
+screen).
 
 ### A rules-index chapter
 
@@ -136,6 +155,7 @@ Every block is one item under `blocks:`. Plain text needs no `type`.
 | example | A worked example, stepped through line by line | `title:`, `steps:` (a list of text) |
 | creature | A creature as heroes see it; Directors also see its numbers | `name:`, `tagline:`, `look:`, `notice:` (list), `stats:` (list of `label:`/`value:`), `note:` |
 | note | A Director's note | `text:` (always Director-only) |
+| links | Buttons that turn to other chapters | `title:`, `items:` each with `title:`, `summary:`, `chapter:` (a chapter name) |
 | widget | One of the package's own widgets, for things no block covers | `widget:` (a slug from `manifest.json`'s `widgets`) |
 
 A roll's `bands` go lowest first. Every band but the last has `max:`, the

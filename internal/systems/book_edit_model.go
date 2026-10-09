@@ -50,10 +50,13 @@ const (
 // export form, with empty fields omitted so exported files read like
 // hand-written ones.
 type authoredPage struct {
-	Title    string          `json:"title" yaml:"title,omitempty"`
-	Director bool            `json:"director" yaml:"director,omitempty"`
-	Wide     bool            `json:"wide" yaml:"wide,omitempty"`
-	Blocks   []authoredBlock `json:"blocks" yaml:"blocks"`
+	Title    string `json:"title" yaml:"title,omitempty"`
+	Director bool   `json:"director" yaml:"director,omitempty"`
+	Wide     bool   `json:"wide" yaml:"wide,omitempty"`
+	// Columns is omitempty in JSON too, so adding it left the hash of every
+	// existing page unchanged.
+	Columns bool            `json:"columns,omitempty" yaml:"columns,omitempty"`
+	Blocks  []authoredBlock `json:"blocks" yaml:"blocks"`
 }
 
 type authoredBlock struct {
@@ -88,6 +91,7 @@ type authoredItem struct {
 	Title   string `json:"title" yaml:"title"`
 	Summary string `json:"summary,omitempty" yaml:"summary,omitempty"`
 	Text    string `json:"text,omitempty" yaml:"text,omitempty"`
+	Chapter string `json:"chapter,omitempty" yaml:"chapter,omitempty"`
 }
 
 type authoredStat struct {
@@ -105,7 +109,7 @@ type authoredChapter struct {
 
 // toAuthored converts a decoded page to its stored/wire mirror.
 func toAuthored(p bookPageYAML) authoredPage {
-	out := authoredPage{Title: p.Title, Director: p.Director, Wide: p.Wide, Blocks: []authoredBlock{}}
+	out := authoredPage{Title: p.Title, Director: p.Director, Wide: p.Wide, Columns: p.Columns, Blocks: []authoredBlock{}}
 	for _, b := range p.Blocks {
 		ab := authoredBlock{
 			Type: b.Type, Director: b.Director, Title: b.Title, Text: b.Text, Label: b.Label,
@@ -116,7 +120,7 @@ func toAuthored(p bookPageYAML) authoredPage {
 			ab.Bands = append(ab.Bands, authoredBand{Max: x.Max, Label: x.Label, Text: x.Text})
 		}
 		for _, x := range b.Items {
-			ab.Items = append(ab.Items, authoredItem{Title: x.Title, Summary: x.Summary, Text: x.Text})
+			ab.Items = append(ab.Items, authoredItem{Title: x.Title, Summary: x.Summary, Text: x.Text, Chapter: x.Chapter})
 		}
 		for _, x := range b.Stats {
 			ab.Stats = append(ab.Stats, authoredStat{Label: x.Label, Value: x.Value})

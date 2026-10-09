@@ -319,7 +319,7 @@ func problemPage(detail string) BookPage {
 // nothing, while every other block must pass the book checks. Block numbers
 // in errors still count the empty blocks, so they match what the editor shows.
 func buildStoredPage(p bookPageYAML, widgets map[string]bool) (BookPage, *bookPageError) {
-	page := BookPage{Title: strings.TrimSpace(p.Title), Director: p.Director, Wide: p.Wide, Blocks: []BookBlock{}}
+	page := BookPage{Title: strings.TrimSpace(p.Title), Director: p.Director, Wide: p.Wide, Columns: p.Columns, Blocks: []BookBlock{}}
 	if len(p.Blocks) == 0 {
 		return page, &bookPageError{Msg: "the page has no blocks"}
 	}

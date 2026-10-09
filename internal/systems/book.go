@@ -43,6 +43,7 @@ var bookThemeKeys = map[string]*regexp.Regexp{
 	"muted":        bookColorPattern,
 	"edge":         bookColorPattern,
 	"accent":       bookColorPattern,
+	"cover":        bookColorPattern,
 	"heading-font": bookFontPattern,
 	"body-font":    bookFontPattern,
 }
@@ -58,11 +59,18 @@ var (
 
 // Book is the wire shape of a system's rulebook book (camelCase JSON).
 type Book struct {
-	Title      string              `json:"title"`
-	Mark       string              `json:"mark,omitempty"`
-	SystemName string              `json:"systemName"`
-	Turn       string              `json:"turn"`
-	Theme      map[string]string   `json:"theme,omitempty"`
+	Title      string            `json:"title"`
+	Mark       string            `json:"mark,omitempty"`
+	SystemName string            `json:"systemName"`
+	Turn       string            `json:"turn"`
+	Theme      map[string]string `json:"theme,omitempty"`
+	// Look "paper" draws the book as a printed handbook; "" is the default.
+	Look string `json:"look,omitempty"`
+	// Tabs are the chapter ids given an edge tab. Start is the chapter the
+	// book opens on, and First the one it opens on for a first-time reader.
+	Tabs       []string            `json:"tabs,omitempty"`
+	Start      string              `json:"start,omitempty"`
+	First      string              `json:"first,omitempty"`
 	IsDirector bool                `json:"isDirector"`
 	CanEdit    bool                `json:"canEdit"`
 	Terms      map[string]BookTerm `json:"terms"`
@@ -94,11 +102,13 @@ type BookChapter struct {
 	Pages     []BookPage `json:"pages"`
 }
 
-// BookPage is one page of a chapter; Wide spans the whole spread.
+// BookPage is one page of a chapter; Wide spans the whole spread and
+// Columns flows its blocks into two columns.
 type BookPage struct {
 	Title    string      `json:"title,omitempty"`
 	Director bool        `json:"director"`
 	Wide     bool        `json:"wide"`
+	Columns  bool        `json:"columns,omitempty"`
 	Blocks   []BookBlock `json:"blocks"`
 }
 
@@ -145,11 +155,13 @@ type BookBand struct {
 	Text  string `json:"text,omitempty"`
 }
 
-// BookItem is a card or a flap.
+// BookItem is a card, a flap or a link. A link's Chapter is the chapter id
+// it turns to.
 type BookItem struct {
 	Title   string `json:"title"`
 	Summary string `json:"summary,omitempty"`
 	Text    string `json:"text,omitempty"`
+	Chapter string `json:"chapter,omitempty"`
 }
 
 // BookStat is one creature number.
@@ -167,6 +179,10 @@ type bookIndexYAML struct {
 	Turn     string            `yaml:"turn,omitempty"`
 	Glossary string            `yaml:"glossary,omitempty"`
 	Theme    map[string]string `yaml:"theme,omitempty"`
+	Look     string            `yaml:"look,omitempty"`
+	Tabs     []string          `yaml:"tabs,omitempty"`
+	Start    string            `yaml:"start,omitempty"`
+	First    string            `yaml:"first,omitempty"`
 	Terms    map[string]string `yaml:"terms,omitempty"`
 	Parts    []bookPartYAML    `yaml:"parts"`
 }
@@ -192,6 +208,7 @@ type bookPageYAML struct {
 	Title    string          `yaml:"title"`
 	Director bool            `yaml:"director"`
 	Wide     bool            `yaml:"wide"`
+	Columns  bool            `yaml:"columns"`
 	Blocks   []bookBlockYAML `yaml:"blocks"`
 }
 
@@ -212,6 +229,7 @@ type bookBlockYAML struct {
 		Title   string `yaml:"title"`
 		Summary string `yaml:"summary"`
 		Text    string `yaml:"text"`
+		Chapter string `yaml:"chapter"`
 	} `yaml:"items"`
 	Steps   []string `yaml:"steps"`
 	Name    string   `yaml:"name"`
@@ -349,7 +367,59 @@ func loadBookWithSource(sysDir string, manifest *SystemManifest) (*Book, *BookSo
 	if len(b.Parts) == 0 {
 		return nil, nil, fmt.Errorf("%s: no parts", bookIndexFile)
 	}
+	if err := setBookNavigation(b, idx); err != nil {
+		return nil, nil, fmt.Errorf("%s: %w", bookIndexFile, err)
+	}
 	return b, src, nil
+}
+
+// maxBookTabs keeps the tab strip to one readable row.
+const maxBookTabs = 12
+
+// setBookNavigation checks the cover file's look, tabs, start and first
+// against the chapters the book lists, so a typo is reported here rather
+// than leaving a tab that goes nowhere.
+func setBookNavigation(b *Book, idx bookIndexYAML) error {
+	switch idx.Look {
+	case "", "paper":
+		b.Look = idx.Look
+	default:
+		return fmt.Errorf("look must be paper or left out, not %q", idx.Look)
+	}
+	listed := map[string]bool{}
+	for _, p := range idx.Parts {
+		for _, id := range p.Chapters {
+			listed[id] = true
+		}
+	}
+	if len(idx.Tabs) > maxBookTabs {
+		return fmt.Errorf("more than %d tabs", maxBookTabs)
+	}
+	seen := map[string]bool{}
+	for _, id := range idx.Tabs {
+		if !listed[id] {
+			return fmt.Errorf("tabs names %q, which is not a chapter in parts", id)
+		}
+		if seen[id] {
+			return fmt.Errorf("tabs names %q twice", id)
+		}
+		seen[id] = true
+		b.Tabs = append(b.Tabs, id)
+	}
+	for _, f := range []struct {
+		key string
+		id  string
+		dst *string
+	}{{"start", idx.Start, &b.Start}, {"first", idx.First, &b.First}} {
+		if f.id == "" {
+			continue
+		}
+		if !listed[f.id] {
+			return fmt.Errorf("%s names %q, which is not a chapter in parts", f.key, f.id)
+		}
+		*f.dst = f.id
+	}
+	return nil
 }
 
 // loadBookChapter loads one chapter, turning any mistake into a problem
@@ -417,7 +487,7 @@ func (e *bookPageError) detail(label string) string {
 // It is the single definition of a valid page: package files and campaign
 // edits both pass through it.
 func buildBookPage(p bookPageYAML, widgets map[string]bool) (BookPage, *bookPageError) {
-	page := BookPage{Title: strings.TrimSpace(p.Title), Director: p.Director, Wide: p.Wide}
+	page := BookPage{Title: strings.TrimSpace(p.Title), Director: p.Director, Wide: p.Wide, Columns: p.Columns}
 	if len(p.Blocks) == 0 {
 		return page, &bookPageError{Msg: "the page has no blocks"}
 	}
@@ -525,6 +595,25 @@ func buildBookBlock(y bookBlockYAML, widgets map[string]bool) (BookBlock, error)
 				return b, fmt.Errorf("item %d needs a title", i+1)
 			}
 			b.Items = append(b.Items, BookItem{Title: it.Title, Summary: it.Summary, Text: it.Text})
+		}
+		return b, nil
+	case "links":
+		if len(y.Items) == 0 {
+			return b, errors.New("a links block needs items")
+		}
+		if len(y.Items) > maxBookListItems {
+			return b, fmt.Errorf("more than %d items", maxBookListItems)
+		}
+		b.Title = y.Title
+		for i, it := range y.Items {
+			if strings.TrimSpace(it.Title) == "" {
+				return b, fmt.Errorf("item %d needs a title", i+1)
+			}
+			ch := strings.TrimSpace(it.Chapter)
+			if !bookChapterID.MatchString(ch) {
+				return b, fmt.Errorf("item %d needs chapter, the name of the chapter it turns to", i+1)
+			}
+			b.Items = append(b.Items, BookItem{Title: it.Title, Summary: it.Summary, Chapter: ch})
 		}
 		return b, nil
 	case "example":
@@ -697,5 +786,56 @@ func FilterBook(b *Book, director bool) *Book {
 	if out.Parts == nil {
 		out.Parts = []BookPart{}
 	}
+	trimBookNavigation(&out)
 	return &out
+}
+
+// trimBookNavigation drops tabs, start pages and links that point at a
+// chapter the viewer did not receive, so a player's copy never names a
+// Director-only chapter and never offers a link that goes nowhere.
+func trimBookNavigation(b *Book) {
+	has := map[string]bool{}
+	for _, p := range b.Parts {
+		for _, ch := range p.Chapters {
+			has[ch.ID] = true
+		}
+	}
+	var tabs []string
+	for _, id := range b.Tabs {
+		if has[id] {
+			tabs = append(tabs, id)
+		}
+	}
+	b.Tabs = tabs
+	if !has[b.Start] {
+		b.Start = ""
+	}
+	if !has[b.First] {
+		b.First = ""
+	}
+	for pi := range b.Parts {
+		for ci := range b.Parts[pi].Chapters {
+			ch := &b.Parts[pi].Chapters[ci]
+			for gi := range ch.Pages {
+				pg := &ch.Pages[gi]
+				blocks := pg.Blocks[:0:0]
+				for _, blk := range pg.Blocks {
+					if blk.Type == "links" {
+						items := []BookItem{}
+						for _, it := range blk.Items {
+							if has[it.Chapter] {
+								items = append(items, it)
+							}
+						}
+						if len(items) == 0 {
+							continue
+						}
+						blk.Items = items
+					}
+					blocks = append(blocks, blk)
+				}
+				pg.Blocks = blocks
+			}
+		}
+	}
 }
