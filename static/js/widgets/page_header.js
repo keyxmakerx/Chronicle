@@ -95,6 +95,26 @@
     if (ask) ask.hidden = true;
   };
 
+  // ---- Change picture ----
+
+  // A system widget's Change button dispatches a bubbling chronicle:change-image
+  // event naming the entity. The page holds a hidden image-upload mount for it
+  // only when the viewer may replace the picture, so no mount means do nothing.
+  // Bound once on the document: the listener has no markup to be swapped away.
+  function onChangeImage(e) {
+    var id = e.detail && e.detail.entityId;
+    if (!id) return;
+    var mounts = document.querySelectorAll('[data-image-upload-for]');
+    for (var i = 0; i < mounts.length; i++) {
+      if (mounts[i].getAttribute('data-image-upload-for') === id) { mounts[i].click(); return; }
+    }
+  }
+  if (!C._changeImageBound) {
+    C._changeImageBound = true;
+    document.addEventListener('chronicle:change-image', onChangeImage);
+  }
+  H._onChangeImage = onChangeImage;
+
   // ---- Claim ----
 
   function warn(on) {

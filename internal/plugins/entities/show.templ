@@ -83,10 +83,12 @@ templ EntityShowPage(cc *campaigns.CampaignContext, entity *Entity, entityType *
 				ShowCalendar:   showCalendar,
 				CSRFToken:      csrfToken,
 				UserID:         userID,
+				OwnerName:      ownerName,
 			}); comp != nil {
 				// A page renderer replaces the layout, and with it the title
 				// block that normally carries the panels, so mount them here.
 				@entitySystemPanels(cc, entity)
+				@systemImageMount(cc, entity, csrfToken)
 				@comp
 				// It has no layout to place the page pieces in, so they are
 				// drawn here as before they became blocks.

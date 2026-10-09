@@ -32,3 +32,26 @@ test('every call the header controls make exists', () => {
     assert.equal(typeof H[m], 'function', m);
   }
 });
+
+test('chronicle:change-image opens the upload for that entity only, and is bound once', () => {
+  const clicked = [];
+  const mounts = ['e1', 'e2'].map((id) => ({ getAttribute: () => id, click: () => clicked.push(id) }));
+  const listeners = [];
+  const window = { Chronicle: {} };
+  const document = {
+    querySelector: () => null,
+    querySelectorAll: () => mounts,
+    addEventListener: (type, fn) => listeners.push([type, fn]),
+    removeEventListener: () => {},
+  };
+  const ctx = { window, document, matchMedia: () => ({ matches: true }) };
+  const src = readFileSync(join(root, 'static/js/widgets/page_header.js'), 'utf8');
+  vm.runInNewContext(src, ctx);
+  vm.runInNewContext(src, ctx); // loaded twice (a swapped page): still one listener
+  const bound = listeners.filter(([t]) => t === 'chronicle:change-image');
+  assert.equal(bound.length, 1);
+  bound[0][1]({ detail: { entityId: 'e2' } });
+  bound[0][1]({ detail: { entityId: 'nobody' } });
+  bound[0][1]({ detail: {} });
+  assert.deepEqual(clicked, ['e2']);
+});

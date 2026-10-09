@@ -120,6 +120,26 @@ func TestSystemPageHeader_DeleteIsOwnerOnly(t *testing.T) {
 	}
 }
 
+// The picture upload the widget's Change button reaches exists only for those
+// who may replace the picture (the image route is Scribe-only).
+func TestSystemImageMount_ScribeOnly(t *testing.T) {
+	ent := &Entity{ID: "e1", CampaignID: "c1"}
+	for _, tc := range []struct {
+		role campaigns.Role
+		want bool
+	}{{campaigns.RolePlayer, false}, {campaigns.RoleScribe, true}, {campaigns.RoleOwner, true}} {
+		var buf bytes.Buffer
+		if err := systemImageMount(foldTestCC(tc.role), ent, "tok").Render(context.Background(), &buf); err != nil {
+			t.Fatal(err)
+		}
+		got := strings.Contains(buf.String(), `data-image-upload-for="e1"`) &&
+			strings.Contains(buf.String(), `data-endpoint="/campaigns/c1/entities/e1/image"`)
+		if got != tc.want {
+			t.Errorf("role %v: mount = %v, want %v", tc.role, got, tc.want)
+		}
+	}
+}
+
 func TestSystemPageBelow_RendersTheFourBlocks(t *testing.T) {
 	prev := GetGlobalBlockRegistry()
 	reg := NewBlockRegistry()

@@ -152,3 +152,20 @@ templ systemPageBelow(cc *campaigns.CampaignContext, entity *Entity, entityType 
 		@RenderBlock(ctx, TemplateBlock{ID: "shell-subpages", Type: BlockSubPages}, cc, entity, entityType, csrfToken)
 	</div>
 }
+
+// systemImageMount is the hidden image-upload mount a system widget's Change
+// picture button reaches through the chronicle:change-image event. Only
+// Scribes and up get one: the image route is Scribe-only.
+templ systemImageMount(cc *campaigns.CampaignContext, entity *Entity, csrfToken string) {
+	if cc.MemberRole >= campaigns.RoleScribe {
+		<div
+			class="hidden"
+			data-widget="image-upload"
+			data-image-upload-for={ entity.ID }
+			data-endpoint={ fmt.Sprintf("/campaigns/%s/entities/%s/image", cc.Campaign.ID, entity.ID) }
+			data-upload-url="/media/upload"
+			data-csrf-token={ csrfToken }
+		></div>
+	}
+}
+
