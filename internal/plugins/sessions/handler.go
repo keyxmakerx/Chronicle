@@ -976,35 +976,6 @@ button{margin-top:1.25rem;font:inherit;font-weight:600;padding:.65rem 1.6rem;bor
 </form></div></body></html>`
 }
 
-// SidebarRSVP returns an HTMX fragment showing planned sessions with RSVP statuses.
-// GET /campaigns/:id/sidebar/sessions-rsvp
-func (h *Handler) SidebarRSVP(c echo.Context) error {
-	cc := campaigns.GetCampaignContext(c)
-	ctx := c.Request().Context()
-	userID := auth.GetUserID(c)
-
-	planned, err := h.svc.ListPlannedSessions(ctx, cc.Campaign.ID)
-	if err != nil {
-		slog.Warn("sidebar RSVP: list planned sessions failed", slog.Any("error", err))
-		return c.HTML(http.StatusOK, "") // Graceful degradation: empty sidebar section.
-	}
-
-	if len(planned) == 0 {
-		return c.HTML(http.StatusOK, "") // Nothing to show.
-	}
-
-	// Fetch attendees for each planned session.
-	for i := range planned {
-		attendees, err := h.svc.ListAttendees(ctx, planned[i].ID)
-		if err == nil {
-			planned[i].Attendees = attendees
-		}
-	}
-
-	return middleware.Render(c, http.StatusOK,
-		SidebarSessionsRSVP(cc.Campaign.ID, planned, userID, gameNightsToday()))
-}
-
 // EmbedSessions returns an HTMX fragment for the dashboard session tracker block.
 // Shows upcoming planned sessions with RSVP counts in a compact format.
 // GET /campaigns/:id/sessions/embed

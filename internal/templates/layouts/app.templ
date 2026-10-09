@@ -173,16 +173,6 @@ templ Sidebar() {
 			@campaignNavBrand()
 			@campaignNavTop()
 			@campaignNavCategories()
-			<!-- Session RSVP card (lazy-loaded, members only, calendar addon required) -->
-			if IsAuthenticated(ctx) && GetCampaignRole(ctx) >= 1 && IsAddonEnabled(ctx, "calendar") {
-				<div
-					id="sidebar-sessions-rsvp"
-					class="shrink-0 border-t border-gray-700"
-					hx-get={ fmt.Sprintf("/campaigns/%s/sidebar/sessions-rsvp", GetCampaignID(ctx)) }
-					hx-trigger="load"
-					hx-swap="innerHTML"
-				></div>
-			}
 			@campaignNavFooter()
 		} else {
 			<!-- Logo / Brand -->

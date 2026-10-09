@@ -31,6 +31,10 @@ const (
 	// there is no scheduled-job runner, so a timer-fired reminder would need
 	// separate consent.
 	NotifAvailabilityNudge = "availability_nudge"
+	// NotifAvailabilityConfirm is the Director asking everyone to confirm
+	// their times are still right. The newest one is also the ask's time,
+	// which a member's confirmation has to come after.
+	NotifAvailabilityConfirm = "availability_confirm"
 
 	// Game-night lifecycle notifications (issue #741). Each fires only
 	// to members who had already RESPONDED before the change — an untouched

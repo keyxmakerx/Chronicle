@@ -13,7 +13,9 @@ import (
 	"net/http"
 	"os"
 	"sort"
+	"strings"
 
+	"github.com/google/uuid"
 	"github.com/keyxmakerx/chronicle/internal/apperror"
 	"github.com/keyxmakerx/chronicle/internal/patch"
 	"github.com/keyxmakerx/chronicle/internal/permissions"
@@ -53,6 +55,14 @@ func (a *entityExportAdapter) ExportEntities(ctx context.Context, campaignID str
 	typeIDToSlug := make(map[int]string, len(etypes))
 	for _, et := range etypes {
 		typeIDToSlug[et.ID] = et.Slug
+	}
+	for _, et := range etypes {
+		var parentSlug *string
+		if et.ParentTypeID != nil {
+			if s, ok := typeIDToSlug[*et.ParentTypeID]; ok {
+				parentSlug = &s
+			}
+		}
 
 		fieldsJSON, err := json.Marshal(et.Fields)
 		if err != nil {
@@ -78,6 +88,9 @@ func (a *entityExportAdapter) ExportEntities(ctx context.Context, campaignID str
 			SortOrder:       et.SortOrder,
 			IsDefault:       et.IsDefault,
 			Enabled:         et.Enabled,
+			PresetCategory:  et.PresetCategory,
+			ParentTypeSlug:  parentSlug,
+			Claimable:       et.Claimable,
 		})
 	}
 
@@ -126,6 +139,7 @@ func (a *entityExportAdapter) ExportEntities(ctx context.Context, campaignID str
 				Entry:          e.Entry,
 				EntryHTML:      e.EntryHTML,
 				ImagePath:      e.ImagePath,
+				CoverImagePath: e.CoverImagePath,
 				TypeLabel:      e.TypeLabel,
 				IsPrivate:      e.IsPrivate,
 				IsTemplate:     e.IsTemplate,
@@ -339,6 +353,7 @@ func (a *calendarExportAdapter) exportOne(ctx context.Context, cal *calendar.Cal
 	}
 
 	data := &campaigns.ExportCalendarData{
+		Ref:              cal.ID,
 		Name:             cal.Name,
 		Description:      cal.Description,
 		Mode:             cal.Mode,
@@ -541,15 +556,24 @@ func (a *timelineExportAdapter) ExportTimelines(ctx context.Context, campaignID 
 			Visibility:      tl.Visibility,
 			SortOrder:       tl.SortOrder,
 			ZoomDefault:     tl.ZoomDefault,
+			CalendarRef:     tl.CalendarID,
+			NoCalendar:      !tl.HasCalendar(),
 		}
 
-		// Export standalone events only (calendar events are in the calendar section).
+		// Standalone events travel here; calendar events travel in the
+		// calendar section, and only the timeline's links to them here.
 		// Build event ID → export index map for connection references.
 		eventIDToIndex := make(map[string]int)
 		events, err := a.svc.ListTimelineEvents(ctx, tl.ID, campaignID, systemViewer)
 		if err == nil {
 			for _, evt := range events {
+				// A timeline event is either standalone or a calendar event
+				// shown on it; the latter travels as a link.
 				if evt.Source != "standalone" {
+					et.CalendarEventLinks = append(et.CalendarEventLinks, campaigns.ExportTimelineEventLink{
+						EventRef: evt.EventID, Label: evt.Label, ColorOverride: evt.ColorOverride,
+						VisibilityOverride: evt.VisibilityOverride, VisibilityRules: evt.VisibilityRules,
+					})
 					continue
 				}
 				var entitySlug *string
@@ -976,12 +1000,63 @@ func (a *mediaExportAdapter) ExportMedia(ctx context.Context, campaignID string)
 				MimeType:     f.MimeType,
 				FileSize:     f.FileSize,
 				UsageType:    f.UsageType,
+				Filename:     campaigns.MediaZipName(f.Filename),
 			})
 		}
 		page++
 	}
 
 	return result, nil
+}
+
+// mediaImportAdapter implements campaigns.MediaImporter.
+type mediaImportAdapter struct {
+	svc media.MediaService
+}
+
+// ImportMedia uploads each manifest file the zip carries into the new
+// campaign through the ordinary upload path, so it gets the same type,
+// size and quota checks as any upload. Files the upload lacks (all of them,
+// for a JSON upload) are reported once as a count.
+func (a *mediaImportAdapter) ImportMedia(ctx context.Context, campaignID, userID string, files []campaigns.ExportMediaFile, bundle *campaigns.ImportMediaBundle, idMap *campaigns.IDMap, report *campaigns.ImportReport) error {
+	missing := 0
+	for _, f := range files {
+		data, ok, err := bundle.Read(f)
+		if !ok {
+			missing++
+			continue
+		}
+		if err != nil {
+			slog.Warn("import: read media file failed", slog.String("original_id", f.OriginalID), slog.Any("error", err))
+			report.Fail("media", "media file", f.OriginalName, "the file in the zip could not be read")
+			continue
+		}
+		usage := f.UsageType
+		if usage == "" {
+			usage = "attachment"
+		}
+		newFile, err := a.svc.Upload(ctx, media.UploadInput{
+			CampaignID:   campaignID,
+			UploadedBy:   userID,
+			OriginalName: f.OriginalName,
+			MimeType:     f.MimeType,
+			FileSize:     int64(len(data)),
+			UsageType:    usage,
+			FileBytes:    data,
+		})
+		if err != nil {
+			slog.Warn("import: restore media file failed", slog.String("original_id", f.OriginalID), slog.Any("error", err))
+			report.Fail("media", "media file", f.OriginalName, apperror.SafeMessage(err))
+			continue
+		}
+		idMap.MediaIDs[f.OriginalID] = newFile.ID
+	}
+	reason := "not in the zip"
+	if bundle == nil {
+		reason = "a JSON export carries no picture files; import the ZIP export to restore them"
+	}
+	report.FailN("media", "media file", "", reason, missing)
+	return nil
 }
 
 // --- Import Adapters ---
@@ -995,19 +1070,64 @@ type entityImportAdapter struct {
 
 // ImportEntities creates entity types, entities, tags, and relations from
 // import data. Returns an IDMap for cross-referencing by other importers.
-func (a *entityImportAdapter) ImportEntities(ctx context.Context, campaignID, userID string, data *campaigns.ExportEntityData, report *campaigns.ImportReport) (*campaigns.IDMap, error) {
-	idMap := campaigns.NewIDMap(campaignID)
-
-	// 1. Create entity types.
+func (a *entityImportAdapter) ImportEntities(ctx context.Context, campaignID, userID string, data *campaigns.ExportEntityData, idMap *campaigns.IDMap, report *campaigns.ImportReport) error {
+	// 1. Create entity types. Add-ons are restored before this runs, and an
+	// add-on can already have made some of the file's types (the Player
+	// Character addon premakes its category, a game system its presets);
+	// those are reused rather than duplicated. Parents go first so a
+	// sub-category can name its parent's new id.
+	existing, err := a.entitySvc.GetEntityTypes(ctx, campaignID)
+	if err != nil {
+		return fmt.Errorf("list existing entity types: %w", err)
+	}
+	claimed := make(map[int]bool, len(existing))
 	typeSlugToNewID := make(map[string]int)
-	for _, et := range data.Types {
-		// Create type with basic fields.
-		newType, err := a.entitySvc.CreateEntityType(ctx, campaignID, entities.CreateEntityTypeInput{
-			Name:       et.Name,
-			NamePlural: et.NamePlural,
-			Icon:       et.Icon,
-			Color:      et.Color,
-		})
+	for _, et := range importTypeOrder(data.Types) {
+		var fields []entities.FieldDefinition
+		fieldsOK := len(et.Fields) == 0
+		if len(et.Fields) > 0 {
+			if err := json.Unmarshal(et.Fields, &fields); err != nil {
+				slog.Warn("import: invalid fields JSON", slog.String("type", et.Slug), slog.Any("error", err))
+				report.Fail("entities", "entity type field set", et.Name, "field definitions were not readable")
+			} else {
+				fieldsOK = true
+			}
+		}
+		var parentID *int
+		if et.ParentTypeSlug != nil {
+			if id, ok := typeSlugToNewID[*et.ParentTypeSlug]; ok {
+				parentID = &id
+			} else {
+				report.Fail("entities", "entity type parent link", et.Name, "parent \""+*et.ParentTypeSlug+"\" is not in the file")
+			}
+		}
+
+		var newType *entities.EntityType
+		if match := matchExistingType(existing, claimed, et); match != nil {
+			claimed[match.ID] = true
+			in := entities.UpdateEntityTypeInput{
+				Name: et.Name, NamePlural: et.NamePlural, Icon: et.Icon, Color: et.Color,
+				ParentTypeID: parentID, ClearParent: parentID == nil, Claimable: et.Claimable,
+			}
+			if fieldsOK {
+				in.Fields = fields
+				if in.Fields == nil {
+					in.Fields = []entities.FieldDefinition{}
+				}
+			}
+			newType, err = a.entitySvc.UpdateEntityType(ctx, match.ID, in)
+		} else {
+			newType, err = a.entitySvc.CreateEntityType(ctx, campaignID, entities.CreateEntityTypeInput{
+				Name:           et.Name,
+				NamePlural:     et.NamePlural,
+				Icon:           et.Icon,
+				Color:          et.Color,
+				PresetCategory: derefStr(et.PresetCategory),
+				ParentTypeID:   parentID,
+				Claimable:      et.Claimable,
+				Fields:         fields,
+			})
+		}
 		if err != nil {
 			slog.Warn("import: create entity type failed", slog.String("slug", et.Slug), slog.Any("error", err))
 			report.Fail("entities", "entity type", et.Name, apperror.SafeMessage(err))
@@ -1016,25 +1136,6 @@ func (a *entityImportAdapter) ImportEntities(ctx context.Context, campaignID, us
 
 		idMap.EntityTypeIDs[et.OriginalID] = newType.ID
 		typeSlugToNewID[et.Slug] = newType.ID
-
-		// Apply fields via UpdateEntityType.
-		var fields []entities.FieldDefinition
-		if len(et.Fields) > 0 {
-			if err := json.Unmarshal(et.Fields, &fields); err != nil {
-				slog.Warn("import: invalid fields JSON", slog.String("type", et.Slug), slog.Any("error", err))
-				report.Fail("entities", "entity type field set", et.Name, "field definitions were not readable")
-			}
-		}
-		if len(fields) > 0 {
-			_, err := a.entitySvc.UpdateEntityType(ctx, newType.ID, entities.UpdateEntityTypeInput{
-				Name: et.Name, NamePlural: et.NamePlural, Icon: et.Icon, Color: et.Color,
-				Fields: fields,
-			})
-			if err != nil {
-				slog.Warn("import: update entity type fields failed", slog.String("type", et.Slug), slog.Any("error", err))
-				report.Fail("entities", "entity type field set", et.Name, apperror.SafeMessage(err))
-			}
-		}
 
 		// Apply layout if present.
 		if len(et.Layout) > 0 {
@@ -1055,6 +1156,7 @@ func (a *entityImportAdapter) ImportEntities(ctx context.Context, campaignID, us
 
 	// 2. Create entities (first pass: without parent references).
 	entitySlugToNewID := make(map[string]string)
+	missingPictures := 0
 	for _, e := range data.Entities {
 		typeID, ok := typeSlugToNewID[e.EntityTypeSlug]
 		if !ok {
@@ -1085,29 +1187,14 @@ func (a *entityImportAdapter) ImportEntities(ctx context.Context, campaignID, us
 		idMap.EntitySlugToID[e.Slug] = newEntity.ID
 		entitySlugToNewID[e.Slug] = newEntity.ID
 
-		// Apply entry content and image via Update.
-		if e.Entry != nil || e.ImagePath != nil {
-			// Import carries the source row's is_private; pass through
-			// as a pointer so the nil-preserving service layer writes it.
-			isPrivate := e.IsPrivate
-			// The import restores a complete exported row, so every field
-			// is sent PRESENT — an empty descriptor in the source really
-			// does mean "no descriptor". ParentID is absent on purpose:
-			// parents are resolved in a second pass below, once every
-			// entity exists.
-			_, updateErr := a.entitySvc.Update(ctx, newEntity.ID, entities.UpdateEntityInput{
-				Name:       patch.Of(e.Name),
-				TypeLabel:  patch.Of(ptrString(e.TypeLabel)),
-				IsPrivate:  &isPrivate,
-				Entry:      patch.Of(ptrString(e.Entry)),
-				ImagePath:  ptrString(e.ImagePath),
-				FieldsData: fieldsData,
-			})
-			if updateErr != nil {
-				slog.Warn("import: update entity entry/image failed", slog.String("entity", e.Name), slog.Any("error", updateErr))
-				report.Fail("entities", "entity body", e.Name, apperror.SafeMessage(updateErr))
-			}
+		// Create already wrote the name, label, privacy and fields; the
+		// page text and pictures each have their own writer.
+		if err := a.restoreEntityBody(ctx, newEntity.ID, e); err != nil {
+			slog.Warn("import: restore entity text failed", slog.String("entity", e.Name), slog.Any("error", err))
+			report.Fail("entities", "entity body", e.Name, apperror.SafeMessage(err))
 		}
+		missingPictures += a.restoreEntityPicture(ctx, newEntity.ID, e.Name, e.ImagePath, idMap, a.entitySvc.UpdateImage, report)
+		missingPictures += a.restoreEntityPicture(ctx, newEntity.ID, e.Name, e.CoverImagePath, idMap, a.entitySvc.UpdateCoverImage, report)
 
 		// Apply field overrides.
 		if len(e.FieldOverrides) > 0 {
@@ -1168,27 +1255,19 @@ func (a *entityImportAdapter) ImportEntities(ctx context.Context, campaignID, us
 			continue
 		}
 
-		var fieldsData map[string]any
-		if len(e.FieldsData) > 0 {
-			_ = json.Unmarshal(e.FieldsData, &fieldsData)
-		}
-
-		// Second-pass parent resolve carries the source is_private.
-		isPrivate := e.IsPrivate
+		// A partial update: only the parent changes, so the text and
+		// pictures restored in the first pass are kept as they are.
 		_, err := a.entitySvc.Update(ctx, entityNewID, entities.UpdateEntityInput{
-			Name:       patch.Of(e.Name),
-			TypeLabel:  patch.Of(ptrString(e.TypeLabel)),
-			ParentID:   patch.Of(parentNewID),
-			IsPrivate:  &isPrivate,
-			Entry:      patch.Of(ptrString(e.Entry)),
-			ImagePath:  ptrString(e.ImagePath),
-			FieldsData: fieldsData,
+			ParentID: patch.Of(parentNewID),
 		})
 		if err != nil {
 			slog.Warn("import: set parent failed", slog.String("entity", e.Name), slog.Any("error", err))
 			report.Fail("entities", "entity parent link", e.Name, apperror.SafeMessage(err))
 		}
 	}
+
+	report.FailN("entities", "page picture", "",
+		"its picture file was not in the upload; import the ZIP export to keep pictures", missingPictures)
 
 	// 3. Create tags.
 	tagSlugToNewID := make(map[string]int)
@@ -1249,7 +1328,122 @@ func (a *entityImportAdapter) ImportEntities(ctx context.Context, campaignID, us
 		}
 	}
 
-	return idMap, nil
+	return nil
+}
+
+// restoreEntityBody writes a page's text as the export had it. Editor
+// pages carry the editor document and its HTML, saved together the way the
+// editor saves them; a page written as plain HTML (the sync API's pages)
+// has no editor document, and its HTML is the body.
+func (a *entityImportAdapter) restoreEntityBody(ctx context.Context, entityID string, e campaigns.ExportEntity) error {
+	doc, html := ptrString(e.Entry), ptrString(e.EntryHTML)
+	switch {
+	case strings.TrimSpace(doc) != "" && strings.TrimSpace(html) != "":
+		return a.entitySvc.UpdateEntry(ctx, entityID, doc, html)
+	case strings.TrimSpace(doc) != "":
+		_, err := a.entitySvc.Update(ctx, entityID, entities.UpdateEntityInput{Entry: patch.Of(doc)})
+		return err
+	case strings.TrimSpace(html) != "":
+		_, err := a.entitySvc.Update(ctx, entityID, entities.UpdateEntityInput{Entry: patch.Of(html)})
+		return err
+	}
+	return nil
+}
+
+// restoreEntityPicture sets a page's portrait or cover through its own
+// writer, which accepts only a file in the page's campaign. A picture whose
+// file was not restored is not set and is counted (returns 1) so the report
+// can say so once rather than once per page.
+func (a *entityImportAdapter) restoreEntityPicture(ctx context.Context, entityID, name string, path *string, idMap *campaigns.IDMap,
+	set func(ctx context.Context, entityID, mediaID string) error, report *campaigns.ImportReport) int {
+	if path == nil || *path == "" {
+		return 0
+	}
+	id, ok := restoredMediaID(idMap, *path)
+	if !ok {
+		return 1
+	}
+	if err := set(ctx, entityID, id); err != nil {
+		slog.Warn("import: set entity picture failed", slog.String("entity", name), slog.Any("error", err))
+		report.Fail("entities", "page picture", name, apperror.SafeMessage(err))
+	}
+	return 0
+}
+
+// restoredMediaID returns the media id a picture reference names when that
+// file was restored into the new campaign by this import. Anything else
+// (a file the upload did not carry, or an id from some other campaign) is
+// not ok, so an import can never point a picture at a file it does not own.
+func restoredMediaID(idMap *campaigns.IDMap, path string) (string, bool) {
+	id := mediaIDFromPath(path)
+	for _, newID := range idMap.MediaIDs {
+		if newID == id {
+			return id, true
+		}
+	}
+	return "", false
+}
+
+// mediaIDFromPath reduces a stored picture reference to its media id: older
+// rows hold the file's path ("2026/03/<id>.jpg"), newer ones the bare id.
+func mediaIDFromPath(p string) string {
+	if i := strings.LastIndex(p, "/"); i >= 0 {
+		p = p[i+1:]
+		if j := strings.LastIndex(p, "."); j > 0 {
+			p = p[:j]
+		}
+	}
+	return p
+}
+
+// importTypeOrder returns the file's types with every top-level type ahead
+// of the sub-categories, keeping the file's order within each group, so a
+// sub-category's parent already exists when it is created.
+func importTypeOrder(types []campaigns.ExportEntityType) []campaigns.ExportEntityType {
+	out := make([]campaigns.ExportEntityType, 0, len(types))
+	for _, et := range types {
+		if et.ParentTypeSlug == nil {
+			out = append(out, et)
+		}
+	}
+	for _, et := range types {
+		if et.ParentTypeSlug != nil {
+			out = append(out, et)
+		}
+	}
+	return out
+}
+
+// importIsPlayerCharacterType is the entities plugin's rule for the Player
+// Character category (preset player_character, or the premade slug), applied
+// to a type from an export file.
+func importIsPlayerCharacterType(preset, slug string) bool {
+	return preset == entities.PresetCategoryPlayerCharacter || slug == entities.SlugPlayerCharacter
+}
+
+// matchExistingType finds a type already in the importing campaign that the
+// file's type should become: the Player Character category the addon
+// premade (a campaign has only one), else an unclaimed type with the same
+// slug. A type made by a game-system addon carries the slug the exporting
+// campaign's copy had, since both were named by the same preset.
+func matchExistingType(existing []entities.EntityType, claimed map[int]bool, et campaigns.ExportEntityType) *entities.EntityType {
+	wantPC := importIsPlayerCharacterType(derefStr(et.PresetCategory), et.Slug)
+	for i := range existing {
+		t := &existing[i]
+		if claimed[t.ID] {
+			continue
+		}
+		if wantPC && importIsPlayerCharacterType(derefStr(t.PresetCategory), t.Slug) {
+			return t
+		}
+	}
+	for i := range existing {
+		t := &existing[i]
+		if !claimed[t.ID] && t.Slug == et.Slug {
+			return t
+		}
+	}
+	return nil
 }
 
 // calendarImportAdapter implements campaigns.CalendarImporter, the inverse of
@@ -1329,6 +1523,9 @@ func (a *calendarImportAdapter) importOne(ctx context.Context, campaignID string
 	}
 	if isPrimary {
 		idMap.CalendarID = cal.ID
+	}
+	if data.Ref != "" {
+		idMap.CalendarIDs[data.Ref] = cal.ID
 	}
 
 	// The primary is the campaign's first calendar, so it becomes the default — every default-calendar
@@ -1541,6 +1738,7 @@ func (a *calendarImportAdapter) importOne(ctx context.Context, campaignID string
 			created[i] = a.importEvent(ctx, cal.ID, campaignID, evt, idMap, kindIDBySlug, refs, report)
 			if created[i] != "" && evt.Ref != "" {
 				refs.events[evt.Ref] = created[i]
+				idMap.CalendarEventIDs[evt.Ref] = created[i]
 			}
 		}
 	}
@@ -1926,11 +2124,7 @@ type timelineImportAdapter struct {
 // ImportTimelines creates timelines from import data.
 func (a *timelineImportAdapter) ImportTimelines(ctx context.Context, campaignID, userID string, data []campaigns.ExportTimeline, idMap *campaigns.IDMap, report *campaigns.ImportReport) error {
 	for _, tl := range data {
-		// Link to calendar if one was created.
-		var calendarID *string
-		if idMap.CalendarID != "" {
-			calendarID = &idMap.CalendarID
-		}
+		calendarID := importTimelineCalendar(tl, idMap)
 
 		newTimeline, err := a.svc.CreateTimeline(ctx, campaignID, timeline.CreateTimelineInput{
 			CampaignID:  campaignID,
@@ -2010,6 +2204,34 @@ func (a *timelineImportAdapter) ImportTimelines(ctx context.Context, campaignID,
 			}
 		}
 
+		// Re-link the calendar events the timeline showed, in their order.
+		if calendarID != nil {
+			for _, l := range tl.CalendarEventLinks {
+				eventID, ok := idMap.CalendarEventIDs[l.EventRef]
+				if !ok {
+					report.Fail("timelines", "timeline event link", tl.Name, "its calendar event is not in the file")
+					continue
+				}
+				if _, err := a.svc.LinkEvent(ctx, newTimeline.ID, eventID, timeline.LinkEventInput{
+					Label: l.Label, ColorOverride: l.ColorOverride,
+				}); err != nil {
+					slog.Warn("import: link timeline event failed", slog.String("name", tl.Name), slog.Any("error", err))
+					report.Fail("timelines", "timeline event link", tl.Name, apperror.SafeMessage(err))
+					continue
+				}
+				if l.VisibilityOverride != nil || l.VisibilityRules != nil {
+					if err := a.svc.UpdateEventLinkVisibility(ctx, newTimeline.ID, eventID, timeline.UpdateEventVisibilityInput{
+						VisibilityOverride: l.VisibilityOverride, VisibilityRules: l.VisibilityRules,
+					}); err != nil {
+						slog.Warn("import: timeline link visibility failed", slog.String("name", tl.Name), slog.Any("error", err))
+						report.Fail("timelines", "timeline event link", tl.Name, apperror.SafeMessage(err))
+					}
+				}
+			}
+		} else if len(tl.CalendarEventLinks) > 0 {
+			report.FailN("timelines", "timeline event link", tl.Name, "its calendar was not restored", len(tl.CalendarEventLinks))
+		}
+
 		// Create entity groups (swim lanes).
 		for _, eg := range tl.EntityGroups {
 			newGroup, err := a.svc.CreateEntityGroup(ctx, newTimeline.ID, timeline.CreateEntityGroupInput{
@@ -2031,20 +2253,72 @@ func (a *timelineImportAdapter) ImportTimelines(ctx context.Context, campaignID,
 	return nil
 }
 
+// importTimelineCalendar picks the calendar a restored timeline draws on:
+// none for a timeline that had none, the restored copy of the one it named
+// (none if that calendar was not restored, rather than some other calendar),
+// and the default calendar for a file from before timelines recorded theirs.
+func importTimelineCalendar(tl campaigns.ExportTimeline, idMap *campaigns.IDMap) *string {
+	if tl.NoCalendar {
+		return nil
+	}
+	if tl.CalendarRef != nil {
+		if id, ok := idMap.CalendarIDs[*tl.CalendarRef]; ok {
+			return &id
+		}
+		return nil
+	}
+	if idMap.CalendarID != "" {
+		id := idMap.CalendarID
+		return &id
+	}
+	return nil
+}
+
 // mapImportAdapter implements campaigns.MapImporter.
 type mapImportAdapter struct {
 	mapSvc     maps.MapService
 	drawingSvc maps.DrawingService
 }
 
-// ImportMaps creates maps from import data.
+// importTokenImage keeps a token picture that names no media file (an
+// inline data: image, a bundled icon) as it is, and one that names a media
+// file only when this import restored that file; ok is false when a media
+// picture was dropped.
+func importTokenImage(idMap *campaigns.IDMap, path *string) (*string, bool) {
+	if path == nil || *path == "" {
+		return path, true
+	}
+	if uuid.Validate(mediaIDFromPath(*path)) != nil {
+		return path, true
+	}
+	if _, ok := restoredMediaID(idMap, *path); ok {
+		return path, true
+	}
+	return nil, false
+}
+
+// ImportMaps creates maps from import data. A map background or token
+// picture is kept only when it names a file this import restored.
 func (a *mapImportAdapter) ImportMaps(ctx context.Context, campaignID, userID string, data []campaigns.ExportMap, idMap *campaigns.IDMap, report *campaigns.ImportReport) error {
+	missingPictures := 0
+	defer func() {
+		report.FailN("maps", "map picture", "",
+			"its picture file was not in the upload; import the ZIP export to keep pictures", missingPictures)
+	}()
 	for _, m := range data {
+		var imageID *string
+		if m.ImageID != nil && *m.ImageID != "" {
+			if id, ok := restoredMediaID(idMap, *m.ImageID); ok {
+				imageID = &id
+			} else {
+				missingPictures++
+			}
+		}
 		newMap, err := a.mapSvc.CreateMap(ctx, maps.CreateMapInput{
 			CampaignID:  campaignID,
 			Name:        m.Name,
 			Description: m.Description,
-			ImageID:     m.ImageID,
+			ImageID:     imageID,
 			ImageWidth:  m.ImageWidth,
 			ImageHeight: m.ImageHeight,
 		})
@@ -2129,9 +2403,13 @@ func (a *mapImportAdapter) ImportMaps(ctx context.Context, campaignID, userID st
 					layerID = &id
 				}
 			}
+			imagePath, ok := importTokenImage(idMap, t.ImagePath)
+			if !ok {
+				missingPictures++
+			}
 			_, err := a.drawingSvc.CreateToken(ctx, maps.CreateTokenInput{
 				MapID: newMap.ID, LayerID: layerID, EntityID: entityID,
-				Name: t.Name, ImagePath: t.ImagePath,
+				Name: t.Name, ImagePath: imagePath,
 				X: t.X, Y: t.Y, Width: t.Width, Height: t.Height,
 				Rotation: t.Rotation, Scale: t.Scale,
 				IsHidden: t.IsHidden, IsLocked: t.IsLocked,

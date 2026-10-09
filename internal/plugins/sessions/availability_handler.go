@@ -4,6 +4,8 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"html"
+	"log/slog"
 	"net/http"
 	"sort"
 	"time"
@@ -122,18 +124,119 @@ func (h *Handler) GetOverlayAPI(c echo.Context) error {
 // one availability action that writes into other people's notification lists,
 // so an ungated version would be a campaign-wide broadcast handed to anybody
 // who could reach the URL.
+//
+// An optional JSON body widens the ask: {"userId": "..."} reminds that one
+// member whatever their state, and {"ask": "confirm"} asks everyone to
+// confirm their times, on the site and by email.
 func (h *Handler) NudgeAvailabilityAPI(c echo.Context) error {
 	cc := campaigns.GetCampaignContext(c)
 	if cc.MemberRole < campaigns.RoleOwner && !cc.IsDmGranted {
 		return c.JSON(http.StatusForbidden, map[string]string{"error": "only the Director can send this"})
 	}
+	var req struct {
+		UserID string `json:"userId"`
+		Ask    string `json:"ask"`
+	}
+	if c.Request().ContentLength != 0 {
+		if err := json.NewDecoder(c.Request().Body).Decode(&req); err != nil {
+			return c.JSON(http.StatusBadRequest, map[string]string{"error": "invalid request"})
+		}
+	}
 	ctx := c.Request().Context()
-	link := fmt.Sprintf("/campaigns/%s/availability", cc.Campaign.ID)
-	res, err := h.svc.NudgeUnansweredAvailability(ctx, cc.Campaign.ID, link, h.overlayMembers(ctx, cc.Campaign.ID))
+	userID := auth.GetUserID(c)
+	members := h.overlayMembers(ctx, cc.Campaign.ID)
+	link := fmt.Sprintf("/campaigns/%s/game-nights", cc.Campaign.ID)
+	var res *NudgeResult
+	var err error
+	switch {
+	case req.UserID != "":
+		res, err = h.svc.PingMemberAvailability(ctx, cc.Campaign.ID, userID, h.resolveDisplayName(ctx, userID), req.UserID, link, members)
+	case req.Ask == "confirm":
+		var asked []string
+		asker := h.resolveDisplayName(ctx, userID)
+		res, asked, err = h.svc.AskAllToConfirm(ctx, cc.Campaign.ID, userID, asker, link, members)
+		if err == nil && len(asked) > 0 {
+			go h.sendConfirmEmails(context.Background(), cc.Campaign.ID, cc.Campaign.Name, askerLabel(asker), asked)
+		}
+	case req.Ask == "":
+		res, err = h.svc.NudgeUnansweredAvailability(ctx, cc.Campaign.ID, fmt.Sprintf("/campaigns/%s/availability", cc.Campaign.ID), members)
+	default:
+		return c.JSON(http.StatusBadRequest, map[string]string{"error": "unknown ask"})
+	}
 	if err != nil {
 		return c.JSON(apperror.SafeCode(err), map[string]string{"error": apperror.SafeMessage(err)})
 	}
 	return c.JSON(http.StatusOK, res)
+}
+
+// sendConfirmEmails emails the "confirm your times" ask to the members who
+// were asked on the site. Best-effort, off the request path: without mail
+// configured, or for a member with no address, the bell alone carries it.
+func (h *Handler) sendConfirmEmails(ctx context.Context, campaignID, campaignName, asker string, userIDs []string) {
+	if h.mailer == nil || h.memberLister == nil || !h.mailer.IsConfigured(ctx) {
+		return
+	}
+	members, err := h.memberLister.ListMembers(ctx, campaignID)
+	if err != nil {
+		slog.Warn("confirm-times email: listing members failed", slog.Any("error", err))
+		return
+	}
+	asked := map[string]bool{}
+	for _, id := range userIDs {
+		asked[id] = true
+	}
+	link := fmt.Sprintf("%s/campaigns/%s/game-nights", h.baseURL, campaignID)
+	subject := fmt.Sprintf("Are your times still right? — %s", campaignName)
+	plain := fmt.Sprintf("%s asked everyone in %s to check the times they can play.\n\nOpen the calendar and press Who's free, then either confirm your times or change them:\n%s\n", asker, campaignName, link)
+	htmlBody := fmt.Sprintf(`<!DOCTYPE html><html><head><meta charset="utf-8"></head><body style="font-family:system-ui,-apple-system,sans-serif;max-width:480px;margin:0 auto;padding:20px;color:#333">
+<h1 style="font-size:18px;margin:0 0 12px">Are your times still right?</h1>
+<p style="font-size:14px;line-height:1.5;margin:0 0 16px">%s asked everyone in <strong>%s</strong> to check the times they can play.</p>
+<p style="margin:0 0 20px"><a href="%s" style="display:inline-block;padding:10px 20px;background:#1f2937;color:#fff;text-decoration:none;border-radius:6px;font-weight:600">Check my times</a></p>
+<p style="font-size:12px;color:#777;margin:0">In the calendar, press Who&rsquo;s free, then confirm your times or change them.</p>
+</body></html>`, html.EscapeString(asker), html.EscapeString(campaignName), link)
+	for _, m := range members {
+		if !asked[m.UserID] || m.Email == "" {
+			continue
+		}
+		if err := h.mailer.SendHTMLMail(ctx, []string{m.Email}, subject, plain, htmlBody); err != nil {
+			slog.Warn("confirm-times email failed", slog.Any("error", err), slog.String("user_id", m.UserID))
+		}
+	}
+}
+
+// ConfirmMyAvailabilityAPI records that the caller's saved times are still
+// right, answering a confirm ask without changing them.
+// POST /campaigns/:id/availability/confirm
+func (h *Handler) ConfirmMyAvailabilityAPI(c echo.Context) error {
+	cc := campaigns.GetCampaignContext(c)
+	if err := h.svc.ConfirmMyAvailability(c.Request().Context(), cc.Campaign.ID, auth.GetUserID(c)); err != nil {
+		return c.JSON(apperror.SafeCode(err), map[string]string{"error": apperror.SafeMessage(err)})
+	}
+	return c.JSON(http.StatusOK, map[string]string{"status": "ok"})
+}
+
+// MarkAwayAPI marks a stretch of days the caller can't play.
+// PUT /campaigns/:id/availability/away
+func (h *Handler) MarkAwayAPI(c echo.Context) error {
+	return h.awayAPI(c, h.svc.MarkMeAway)
+}
+
+// ClearAwayAPI takes the away mark off a stretch of days.
+// POST /campaigns/:id/availability/away/clear
+func (h *Handler) ClearAwayAPI(c echo.Context) error {
+	return h.awayAPI(c, h.svc.ClearMeAway)
+}
+
+func (h *Handler) awayAPI(c echo.Context, do func(ctx context.Context, campaignID, userID string, req AwayRequest) error) error {
+	cc := campaigns.GetCampaignContext(c)
+	var req AwayRequest
+	if err := json.NewDecoder(c.Request().Body).Decode(&req); err != nil {
+		return c.JSON(http.StatusBadRequest, map[string]string{"error": "invalid request"})
+	}
+	if err := do(c.Request().Context(), cc.Campaign.ID, auth.GetUserID(c), req); err != nil {
+		return c.JSON(apperror.SafeCode(err), map[string]string{"error": apperror.SafeMessage(err)})
+	}
+	return c.JSON(http.StatusOK, map[string]string{"status": "ok"})
 }
 
 // AvailabilityAnswersAPI lists who has answered and who has not.
@@ -148,7 +251,13 @@ func (h *Handler) AvailabilityAnswersAPI(c echo.Context) error {
 	if err != nil {
 		return c.JSON(apperror.SafeCode(err), map[string]string{"error": apperror.SafeMessage(err)})
 	}
-	return c.JSON(http.StatusOK, map[string]any{"members": rows})
+	// askedAt is the last "confirm your times" ask: an answer stamped after
+	// it is a confirmation. Empty when the campaign never asked.
+	out := map[string]any{"members": rows, "askedAt": ""}
+	if at, aErr := h.svc.LastConfirmAsk(ctx, cc.Campaign.ID); aErr == nil && !at.IsZero() {
+		out["askedAt"] = at.UTC().Format(time.RFC3339)
+	}
+	return c.JSON(http.StatusOK, out)
 }
 
 // availabilityAnswerStamped fills HasAnswered on a roster the caller already

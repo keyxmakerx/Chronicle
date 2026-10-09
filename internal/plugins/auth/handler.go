@@ -759,6 +759,17 @@ func (h *Handler) ReauthConfirm(c echo.Context) error {
 	}
 
 	if err := h.service.ConfirmReauth(c.Request().Context(), session.UserID, password); err != nil {
+		// A wrong password here is someone with a signed-in session who
+		// doesn't know its password, so the security dashboard sees it.
+		if h.securityLogger != nil {
+			_ = h.securityLogger.LogEvent(
+				c.Request().Context(),
+				"reauth_failed",
+				session.UserID, session.UserID,
+				c.RealIP(), c.Request().UserAgent(),
+				nil,
+			)
+		}
 		return apperror.NewUnauthorized("incorrect password")
 	}
 

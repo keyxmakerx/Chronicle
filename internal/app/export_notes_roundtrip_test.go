@@ -178,7 +178,7 @@ func TestCampaignExportImport_SharedNotesRoundTrip(t *testing.T) {
 	importSvc := campaigns.NewExportImportService(&stubCampaignSvc{})
 	importSvc.SetNoteImporter(&noteImportAdapter{svc: dst})
 
-	_, report, err := importSvc.Import(context.Background(), "user-1", &reloaded)
+	_, report, err := importSvc.Import(context.Background(), "user-1", &reloaded, nil)
 	if err != nil {
 		t.Fatalf("import: %v", err)
 	}
