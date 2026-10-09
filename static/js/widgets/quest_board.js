@@ -34,9 +34,11 @@
       el.innerHTML = '<div class="loading">Loading the quest board…</div>';
       el._qb = S;
       load(S);
+      S.stops.push(K.live(cfg.campaignId, function (m) { onLive(S, m); }));
     },
     destroy: function (el) {
       var S = el._qb; if (!S) return;
+      clearTimeout(S.liveTimer);
       S.stops.forEach(function (f) { f(); });
       el._qb = null;
     }
@@ -178,6 +180,34 @@
       n.body = body.filter(function (x) { return x; });
     } else n[field] = text;
     save(S, { notice: n }, field === 'plate' || field === 'title' || field === 'kicker' || field === 'reward' ? 'board' : '');
+  }
+
+  // ---------- Live updates ----------
+  // Someone else saved this quest: fetch it again, but never under a viewer
+  // who is mid-change; wait until they finish so nothing they typed is lost.
+  function onLive(S, m) {
+    var mine = m.type === 'quest.updated' && m.resourceId === S.cfg.entityId;
+    if (mine && m.payload && S.data && m.payload.version != null && m.payload.version <= S.data.version) return;
+    if (mine || m.type === 'reconnected') { S.stale = true; refreshWhenIdle(S); }
+  }
+  function idle(S) {
+    var a = document.activeElement;
+    return !S.give && !K.sheetIsOpen() && !S.el.querySelector('.dragging') &&
+      !(a && S.el.contains(a) && (a.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(a.tagName)));
+  }
+  function refreshWhenIdle(S) {
+    clearTimeout(S.liveTimer);
+    if (!S.stale || !S.data || !S.el.isConnected) return;
+    if (!idle(S)) { S.liveTimer = setTimeout(function () { refreshWhenIdle(S); }, 1500); return; }
+    S.stale = false;
+    var gen = S.gen || 0;
+    // Queued behind this viewer's own saves, so the answer is never older.
+    S.saving = S.saving.then(function () { return K.api(S.cfg.endpoint); }).then(function (data) {
+      if (gen !== (S.gen || 0) || !S.data) return;
+      if (!idle(S)) { S.stale = true; refreshWhenIdle(S); return; }
+      if (data && data.version != null && data.version === S.data.version) return;
+      S.data = normalise(data); redrawBoard(S); redrawLedger(S);
+    }).catch(function (err) { if (err.status === 404 || err.status === 403) S.el.hidden = true; });
   }
 
   // ---------- Saving ----------

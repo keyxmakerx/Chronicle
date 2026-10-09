@@ -8,12 +8,14 @@ import (
 	"context"
 	"errors"
 	"net/http"
+	"strconv"
 
 	"github.com/keyxmakerx/chronicle/internal/apperror"
 	"github.com/keyxmakerx/chronicle/internal/plugins/campaigns"
 	"github.com/keyxmakerx/chronicle/internal/plugins/entities"
 	"github.com/keyxmakerx/chronicle/internal/plugins/maps"
 	"github.com/keyxmakerx/chronicle/internal/plugins/quests"
+	ws "github.com/keyxmakerx/chronicle/internal/websocket"
 )
 
 // questEntityAdapter implements quests.EntityDirectory over the entities service.
@@ -175,4 +177,25 @@ func (a *questTypeAdapter) TypeInCampaign(ctx context.Context, campaignID string
 		return false, err
 	}
 	return et.CampaignID == campaignID, nil
+}
+
+// questAnnouncerAdapter implements quests.Announcer over the websocket bus.
+type questAnnouncerAdapter struct {
+	bus ws.EventBus
+}
+
+func (a *questAnnouncerAdapter) QuestChanged(campaignID, entityID string, version int, dmOnly bool) {
+	msg := ws.NewMessage(ws.MsgQuestUpdated, campaignID, entityID, map[string]int{"version": version})
+	msg.RequiresDM = dmOnly
+	a.bus.Publish(msg)
+}
+
+func (a *questAnnouncerAdapter) BoardsChanged(campaignID string, h quests.Home, dmOnly bool) {
+	id, home := h.EntityID, "page"
+	if h.IsType() {
+		id, home = strconv.Itoa(h.TypeID), "category"
+	}
+	msg := ws.NewMessage(ws.MsgNoticeBoardsUpdated, campaignID, id, map[string]string{"home": home})
+	msg.RequiresDM = dmOnly
+	a.bus.Publish(msg)
 }

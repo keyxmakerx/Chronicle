@@ -7,7 +7,7 @@
  *
  * Styles live in static/css/quest_board.css, scoped under .qbk. Positions on
  * a board are percentages of the cork, so a board looks the same at any width.
- * Nothing here talks to the server; each widget passes callbacks.
+ * Nothing here talks to the server except live(); each widget passes callbacks.
  */
 (function () {
   'use strict';
@@ -585,10 +585,55 @@
     return p;
   }
 
+  // Live updates: one socket per campaign, shared by every board on the page.
+  // Messages carry ids only; each widget refetches through its own route, so
+  // the server's visibility rules decide what anyone sees. A dropped socket
+  // retries with a growing wait, and coming back to the tab counts as a
+  // reconnect, because messages sent while away are not replayed.
+  var socks = {};
+  function live(campaignId, fn) {
+    var s = socks[campaignId];
+    if (!s) {
+      s = socks[campaignId] = { fns: [], ws: null, wait: 1000, timer: 0 };
+      var open = function () {
+        s.timer = 0;
+        if (!s.fns.length || typeof window.WebSocket !== 'function') return;
+        var ws;
+        try { ws = new WebSocket((location.protocol === 'https:' ? 'wss:' : 'ws:') + '//' + location.host + '/ws?campaign=' + encodeURIComponent(campaignId)); } catch (e) { return; }
+        s.ws = ws;
+        ws.addEventListener('open', function () {
+          if (s.wait > 1000) s.fns.forEach(function (f) { f({ type: 'reconnected' }); });
+          s.wait = 1000;
+        });
+        ws.addEventListener('message', function (ev) {
+          var m; try { m = JSON.parse(ev.data); } catch (e) { return; }
+          if (m && m.campaignId === campaignId) s.fns.slice().forEach(function (f) { f(m); });
+        });
+        ws.addEventListener('error', function (e) { if (e.preventDefault) e.preventDefault(); });
+        ws.addEventListener('close', function () {
+          if (s.ws !== ws) return;
+          s.ws = null;
+          if (!s.fns.length) return;
+          s.timer = setTimeout(open, s.wait); s.wait = Math.min(s.wait * 2, 60000);
+        });
+      };
+      s.open = open;
+      document.addEventListener('visibilitychange', function () {
+        if (document.visibilityState === 'visible' && s.fns.length) s.fns.forEach(function (f) { f({ type: 'reconnected' }); });
+      });
+    }
+    s.fns.push(fn);
+    if (!s.ws && !s.timer) s.open();
+    return function () {
+      s.fns = s.fns.filter(function (f) { return f !== fn; });
+      if (!s.fns.length) { clearTimeout(s.timer); s.timer = 0; if (s.ws) { var w = s.ws; s.ws = null; w.close(); } s.wait = 1000; }
+    };
+  }
+
   window.QuestBoardKit = {
     boardFrame: boardFrame, placeStyle: placeStyle, noticeHTML: noticeHTML, mapSVG: mapSVG, photoHTML: photoHTML, sealLetter: sealLetter,
     dust: dust, restLoops: restLoops, drawStrings: drawStrings, wireDrag: wireDrag, dmTab: dmTab, askDown: askDown,
-    takeDownAnim: takeDownAnim, dropIn: dropIn, picker: picker,
+    takeDownAnim: takeDownAnim, dropIn: dropIn, picker: picker, live: live,
     I: I, LOOKS: LOOKS, esc: esc, api: apiCall, reduce: reduce,
     getLayer: getLayer, toast: toast,
     openSheet: openSheet, closeSheet: closeSheet, sheetIsOpen: sheetIsOpen,

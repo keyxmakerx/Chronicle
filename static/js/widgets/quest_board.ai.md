@@ -53,5 +53,10 @@ which also links `static/css/quest_board.css` and the period fonts.
   share through `POST /armory/pay`; items go through `POST /armory/give`. Steps
   run one at a time and finished ones are remembered, so pressing Hand out
   again after a failure never pays or gives twice.
+- Both widgets stay current: `QuestBoardKit.live` keeps one socket per
+  campaign, and a `quest.updated` or `notice_boards.updated` for what is shown
+  (or a reconnect, or coming back to the tab) refetches through the widget's
+  own route. A refetch waits while the viewer is typing, dragging, tying
+  string, reading a notice or handing out, so nothing in progress is lost.
 - Looping animations slow to rest through `MotionRest`, and stop under
   reduced motion.

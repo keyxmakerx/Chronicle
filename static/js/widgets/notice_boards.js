@@ -32,14 +32,16 @@
       el.innerHTML = '<div class="loading">Loading the notice boards…</div>';
       el._nb = S;
       K.api(cfg.endpoint).then(function (data) {
-        S.data = normalise(data); first(S);
+        S.seen = JSON.stringify(data); S.data = normalise(data); first(S);
       }).catch(function (err) {
         if (err.status === 404) { el.hidden = true; return; }
         el.innerHTML = '<div class="loading">' + esc(err.message) + '</div>';
       });
+      S.stops.push(K.live(cfg.campaignId, function (m) { onLive(S, m); }));
     },
     destroy: function (el) {
       var S = el._nb; if (!S) return;
+      clearTimeout(S.liveTimer);
       S.stops.forEach(function (f) { f(); });
       el._nb = null;
     }
@@ -197,6 +199,36 @@
     }
   }
 
+  // ---------- Live updates ----------
+  // Fetch again when these boards change, or a quest pinned on them is saved
+  // (its title or status shows on the notice). Never under a viewer who is
+  // mid-change: wait until they finish so a drag or an edit is not lost.
+  function onLive(S, m) {
+    var cat = S.cfg.endpoint.indexOf('/category-boards/') >= 0, key = S.cfg.endpoint.split('/').pop();
+    var hit = m.type === 'reconnected' ||
+      (m.type === 'notice_boards.updated' && m.resourceId === key && (m.payload && m.payload.home) === (cat ? 'category' : 'page')) ||
+      (m.type === 'quest.updated' && S.data && S.data.boards.some(function (b) { return b.items.some(function (it) { return it.questId === m.resourceId; }); }));
+    if (hit) { S.stale = true; refreshWhenIdle(S); }
+  }
+  function idle(S) {
+    var a = document.activeElement, pk = S.el.querySelector('.picker');
+    return !S.tying && !K.sheetIsOpen() && !S.el.querySelector('.dragging') && !(pk && !pk.hidden) &&
+      !(a && S.el.contains(a) && (a.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(a.tagName)));
+  }
+  function refreshWhenIdle(S) {
+    clearTimeout(S.liveTimer);
+    if (!S.stale || !S.data || !S.el.isConnected) return;
+    if (!idle(S)) { S.liveTimer = setTimeout(function () { refreshWhenIdle(S); }, 1500); return; }
+    S.stale = false;
+    K.api(S.cfg.endpoint).then(function (data) {
+      if (!S.data) return;
+      if (!idle(S)) { S.stale = true; refreshWhenIdle(S); return; }
+      var raw = JSON.stringify(data);
+      if (raw === S.seen) return;
+      S.seen = raw; apply(S, data);
+    }).catch(function (err) { if (err.status === 404 || err.status === 403) S.el.hidden = true; });
+  }
+
   // ---------- Talking to the server ----------
   // A refused change puts the board back the way the server has it.
   function send(S, method, url, body) {
@@ -207,12 +239,16 @@
   }
   function reload(S) {
     return K.api(S.cfg.endpoint).then(function (data) {
-      var curId = board(S) && board(S).id;
-      S.data = normalise(data);
-      var i = S.data.boards.map(function (b) { return b.id; }).indexOf(curId);
-      S.cur = i >= 0 ? i : Math.min(S.cur, Math.max(0, S.data.boards.length - 1));
-      drawFace(S); redrawLedger(S);
+      S.seen = JSON.stringify(data); apply(S, data);
     }).catch(function () {});
+  }
+  // Shows a fresh copy, staying on the board the viewer was looking at.
+  function apply(S, data) {
+    var curId = board(S) && board(S).id;
+    S.data = normalise(data);
+    var i = S.data.boards.map(function (b) { return b.id; }).indexOf(curId);
+    S.cur = i >= 0 ? i : Math.min(S.cur, Math.max(0, S.data.boards.length - 1));
+    drawFace(S); redrawLedger(S);
   }
   function addItem(S, item) {
     var b = board(S);

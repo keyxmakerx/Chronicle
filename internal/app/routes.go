@@ -4946,9 +4946,13 @@ func (a *App) RegisterRoutes() {
 		questEntities := &questEntityAdapter{svc: entityService}
 		questMaps := &questMapAdapter{svc: mapsService}
 		questRepo := quests.NewQuestRepository(a.DB)
-		quests.RegisterRoutes(e, quests.NewHandler(
+		questSvc, boardSvc := quests.WithAnnouncer(
 			quests.NewQuestService(questRepo, questEntities, questMaps),
 			quests.NewBoardService(quests.NewBoardRepository(a.DB), questRepo, questEntities, &questTypeAdapter{svc: entityService}, questMaps, &questMemberNamesAdapter{svc: campaignService}),
+			questEntities, &questAnnouncerAdapter{bus: wsEventBus})
+		quests.RegisterRoutes(e, quests.NewHandler(
+			questSvc,
+			boardSvc,
 			quests.NewPickerService(questEntities, questMaps, &questCharacterAdapter{
 				dir:   &armoryStashDirectoryAdapter{svc: entityService},
 				names: &questMemberNamesAdapter{svc: campaignService},
