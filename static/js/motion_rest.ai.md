@@ -4,7 +4,7 @@ The rest clock shared by every looping animation on the page (`window.MotionRest
 
 **Why it exists.** Ongoing animations should behave the same way when the
 viewer steps away. They ease to a standstill instead of running on, which
-saves battery, and they come back together when the viewer returns (#935).
+saves battery, and they come back together when the viewer returns.
 One-shot transitions do not use it: drawers, the sky's fold, card openings.
 
 **When the viewer counts as away**
@@ -35,5 +35,6 @@ card takes effect without a reload.
 - `simulate(away)`: for mockups and tests. `true` rests now; `false` hands
   back to the real signals.
 
-Loaded in `base.templ` before anything that loops. Users: the sky pane
-(`internal/widgets/sky/.ai.md`, "Rest"). Tests: `test/js/motion_rest.test.mjs`.
+Loaded in `base.templ` before anything that loops. Users: every script that
+animates in a loop, e.g. the sky pane (`internal/widgets/sky/.ai.md`, "Rest")
+and `header_motion.js`; grep `MotionRest` for the rest. Tests: `test/js/motion_rest.test.mjs`.

@@ -161,8 +161,7 @@ All classes have `.dark` variants for dark mode support.
 
 ## Utility Functions
 
-- `escapeHtml(str)` — Prevent XSS in rendered content
-- `escapeAttr(str)` — Escape HTML attributes
+- `Chronicle.escapeHtml` / `Chronicle.escapeAttr` (from `boot.js`) escape all rendered content
 - `contrastTextColor(hex)` — ITU-R BT.709 perceived brightness for badge text color
 
 ## Dependencies
