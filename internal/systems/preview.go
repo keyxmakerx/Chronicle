@@ -104,6 +104,12 @@ func PreviewFromZIP(zipData []byte) (*PreviewResult, error) {
 		return result, nil
 	}
 
+	if len(zr.File) > maxCustomSystemFiles {
+		result.Valid = false
+		result.Errors = append(result.Errors, fmt.Sprintf("ZIP holds more than %d files", maxCustomSystemFiles))
+		return result, nil
+	}
+
 	// Find manifest and data files.
 	var manifestFile *zip.File
 	dataFiles := make(map[string]*zip.File) // "data/spells.json" → file
@@ -124,6 +130,10 @@ func PreviewFromZIP(zipData []byte) (*PreviewResult, error) {
 				result.Valid = false
 			}
 			dataFiles[f.Name] = f
+		} else if strings.HasSuffix(strings.ToLower(f.Name), ".js") {
+			result.Valid = false
+			result.Errors = append(result.Errors, errCustomSystemScripts.Error())
+			return result, nil
 		}
 	}
 
@@ -141,6 +151,10 @@ func PreviewFromZIP(zipData []byte) (*PreviewResult, error) {
 		return result, nil
 	}
 	result.Manifest = manifest
+	if len(manifest.Widgets) > 0 || len(manifest.TextRenderers) > 0 {
+		result.Valid = false
+		result.Errors = append(result.Errors, errCustomSystemScripts.Error())
+	}
 
 	if len(dataFiles) == 0 {
 		result.Valid = false

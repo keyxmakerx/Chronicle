@@ -22,6 +22,19 @@ const maxSystemZipSize = 50 * 1024 * 1024
 // maxDataFileSize limits individual JSON data files to 10 MB.
 const maxDataFileSize = 10 * 1024 * 1024
 
+// maxCustomSystemFiles and maxCustomSystemBytes bound a whole custom system:
+// every data file is parsed into memory at upload and again at every boot, so
+// a small ZIP must not unpack into more than the server can hold.
+const (
+	maxCustomSystemFiles = 200
+	maxCustomSystemBytes = 20 * 1024 * 1024
+)
+
+// errCustomSystemScripts refuses scripts in an owner's upload. A custom system
+// is installed by any campaign owner without review, and its scripts would run
+// in Chronicle's own pages for every member and any admin who visits.
+var errCustomSystemScripts = fmt.Errorf("custom game systems can hold reference data only; widget and text renderer scripts are not accepted")
+
 // CampaignSystemManager manages custom game systems uploaded by
 // campaign owners. Each campaign can have at most one custom system.
 // Modules are stored on disk and loaded into memory as GenericSystem instances.
@@ -92,7 +105,9 @@ func (m *CampaignSystemManager) Install(campaignID string, zipData io.ReaderAt, 
 	// First pass: validate structure and find manifest.
 	var manifestFile *zip.File
 	var dataFiles []*zip.File
-	var widgetFiles []*zip.File
+	if len(zr.File) > maxCustomSystemFiles {
+		return nil, fmt.Errorf("ZIP holds more than %d files", maxCustomSystemFiles)
+	}
 	for _, f := range zr.File {
 		// Security: reject path traversal.
 		if strings.Contains(f.Name, "..") {
@@ -109,11 +124,8 @@ func (m *CampaignSystemManager) Install(campaignID string, zipData io.ReaderAt, 
 				return nil, fmt.Errorf("data file %s exceeds maximum size of %d MB", f.Name, maxDataFileSize/(1024*1024))
 			}
 			dataFiles = append(dataFiles, f)
-		} else if strings.HasPrefix(f.Name, "widgets/") && strings.HasSuffix(f.Name, ".js") {
-			if f.UncompressedSize64 > maxDataFileSize {
-				return nil, fmt.Errorf("widget file %s exceeds maximum size of %d MB", f.Name, maxDataFileSize/(1024*1024))
-			}
-			widgetFiles = append(widgetFiles, f)
+		} else if strings.HasSuffix(strings.ToLower(f.Name), ".js") {
+			return nil, errCustomSystemScripts
 		}
 		// Ignore other files silently.
 	}
@@ -131,10 +143,21 @@ func (m *CampaignSystemManager) Install(campaignID string, zipData io.ReaderAt, 
 		return nil, err
 	}
 
-	// Validate all data files parse as ReferenceItem arrays.
+	if len(manifest.Widgets) > 0 || len(manifest.TextRenderers) > 0 {
+		return nil, errCustomSystemScripts
+	}
+
+	// Validate all data files parse as ReferenceItem arrays, counting the
+	// bytes actually read: a ZIP's declared sizes can't be trusted.
+	var total int64
 	for _, df := range dataFiles {
-		if err := m.validateDataFile(df); err != nil {
+		n, err := m.validateDataFile(df)
+		if err != nil {
 			return nil, fmt.Errorf("invalid data file %s: %w", df.Name, err)
+		}
+		total += n
+		if total > maxCustomSystemBytes {
+			return nil, fmt.Errorf("data files exceed %d MB in total", maxCustomSystemBytes/(1024*1024))
 		}
 	}
 
@@ -154,13 +177,6 @@ func (m *CampaignSystemManager) Install(campaignID string, zipData io.ReaderAt, 
 		return nil, fmt.Errorf("creating module directory: %w", err)
 	}
 
-	// Create widgets directory if widget files are present.
-	if len(widgetFiles) > 0 {
-		if err := os.MkdirAll(filepath.Join(sysDir, "widgets"), 0o755); err != nil {
-			return nil, fmt.Errorf("creating widgets directory: %w", err)
-		}
-	}
-
 	// Write modified manifest (with custom- prefix and available status).
 	manifestBytes, err := json.MarshalIndent(manifest, "", "  ")
 	if err != nil {
@@ -176,15 +192,6 @@ func (m *CampaignSystemManager) Install(campaignID string, zipData io.ReaderAt, 
 		if err := m.extractFile(df, destPath); err != nil {
 			_ = os.RemoveAll(sysDir)
 			return nil, fmt.Errorf("extracting %s: %w", df.Name, err)
-		}
-	}
-
-	// Extract widget JS files.
-	for _, wf := range widgetFiles {
-		destPath := filepath.Join(sysDir, wf.Name)
-		if err := m.extractFile(wf, destPath); err != nil {
-			_ = os.RemoveAll(sysDir)
-			return nil, fmt.Errorf("extracting widget %s: %w", wf.Name, err)
 		}
 	}
 
@@ -314,30 +321,33 @@ func (m *CampaignSystemManager) readManifestFromZip(f *zip.File) (*SystemManifes
 	return &manifest, nil
 }
 
-// validateDataFile checks that a ZIP data file contains valid JSON
-// that can be parsed as a ReferenceItem array.
-func (m *CampaignSystemManager) validateDataFile(f *zip.File) error {
+// validateDataFile checks that a ZIP data file contains valid JSON that can
+// be parsed as a ReferenceItem array, and returns how many bytes it holds.
+func (m *CampaignSystemManager) validateDataFile(f *zip.File) (int64, error) {
 	rc, err := f.Open()
 	if err != nil {
-		return err
+		return 0, err
 	}
 	defer func() { _ = rc.Close() }()
 
-	data, err := io.ReadAll(io.LimitReader(rc, maxDataFileSize))
+	data, err := io.ReadAll(io.LimitReader(rc, maxDataFileSize+1))
 	if err != nil {
-		return err
+		return 0, err
+	}
+	if len(data) > maxDataFileSize {
+		return 0, fmt.Errorf("exceeds maximum size of %d MB", maxDataFileSize/(1024*1024))
 	}
 
 	var items []ReferenceItem
 	if err := json.Unmarshal(data, &items); err != nil {
-		return fmt.Errorf("not a valid ReferenceItem array: %w", err)
+		return 0, fmt.Errorf("not a valid ReferenceItem array: %w", err)
 	}
 
 	if len(items) == 0 {
-		return fmt.Errorf("data file is empty")
+		return 0, fmt.Errorf("data file is empty")
 	}
 
-	return nil
+	return int64(len(data)), nil
 }
 
 // extractFile writes a ZIP entry to disk.

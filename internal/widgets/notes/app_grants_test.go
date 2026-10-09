@@ -387,6 +387,38 @@ func TestAppGrant_RevokeAllForUserEndsEveryCampaign(t *testing.T) {
 	}
 }
 
+// Removal from one campaign ends the player's grants there only.
+func TestAppGrant_RevokeAllInCampaign(t *testing.T) {
+	now := time.Date(2026, 10, 3, 12, 0, 0, 0, time.UTC)
+	svc, _ := newTestGrantService(&now)
+	ctx := context.Background()
+	here1, _, _ := svc.Issue(ctx, "camp", "user", "https://foundry.example")
+	here2, _, _ := svc.Issue(ctx, "camp", "user", "https://foundry.example")
+	elsewhere, _, _ := svc.Issue(ctx, "other-camp", "user", "https://foundry.example")
+	someoneElse, _, _ := svc.Issue(ctx, "camp", "someone-else", "https://foundry.example")
+	if err := svc.RevokeAllInCampaign(ctx, "camp", "user"); err != nil {
+		t.Fatal(err)
+	}
+	tests := []struct {
+		name  string
+		token string
+		alive bool
+	}{
+		{"first grant in the campaign", here1, false},
+		{"second grant in the campaign", here2, false},
+		{"the same player's grant elsewhere", elsewhere, true},
+		{"another player's grant in the campaign", someoneElse, true},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			_, err := svc.Authenticate(ctx, tt.token)
+			if (err == nil) != tt.alive {
+				t.Fatalf("alive = %v, want %v", err == nil, tt.alive)
+			}
+		})
+	}
+}
+
 func TestFrameAncestors(t *testing.T) {
 	got := frameAncestors([]string{"https://foundry.example", "https://x.example/path", "javascript:x", "https://Other.Example:30000",
 		"https://*", "https://a.example;x", "https://*.example", "http://[::1]:8080"})
