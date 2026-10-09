@@ -139,7 +139,7 @@ func TestTimelineCalendarLinks_DBRoundTrip(t *testing.T) {
 	}
 	var found bool
 	for _, l := range links {
-		if l.Source != "calendar" || l.EventName != "Eclipse" {
+		if l.Source == "standalone" || l.EventName != "Eclipse" {
 			continue
 		}
 		found = true

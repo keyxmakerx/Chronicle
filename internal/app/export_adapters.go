@@ -567,14 +567,13 @@ func (a *timelineExportAdapter) ExportTimelines(ctx context.Context, campaignID 
 		events, err := a.svc.ListTimelineEvents(ctx, tl.ID, campaignID, systemViewer)
 		if err == nil {
 			for _, evt := range events {
-				if evt.Source == "calendar" {
+				// A timeline event is either standalone or a calendar event
+				// shown on it; the latter travels as a link.
+				if evt.Source != "standalone" {
 					et.CalendarEventLinks = append(et.CalendarEventLinks, campaigns.ExportTimelineEventLink{
 						EventRef: evt.EventID, Label: evt.Label, ColorOverride: evt.ColorOverride,
 						VisibilityOverride: evt.VisibilityOverride, VisibilityRules: evt.VisibilityRules,
 					})
-					continue
-				}
-				if evt.Source != "standalone" {
 					continue
 				}
 				var entitySlug *string
@@ -2216,7 +2215,7 @@ func (a *timelineImportAdapter) ImportTimelines(ctx context.Context, campaignID,
 				if _, err := a.svc.LinkEvent(ctx, newTimeline.ID, eventID, timeline.LinkEventInput{
 					Label: l.Label, ColorOverride: l.ColorOverride,
 				}); err != nil {
-					slog.Warn("import: link timeline event failed", slog.String("timeline", tl.Name), slog.Any("error", err))
+					slog.Warn("import: link timeline event failed", slog.String("name", tl.Name), slog.Any("error", err))
 					report.Fail("timelines", "timeline event link", tl.Name, apperror.SafeMessage(err))
 					continue
 				}
@@ -2224,7 +2223,7 @@ func (a *timelineImportAdapter) ImportTimelines(ctx context.Context, campaignID,
 					if err := a.svc.UpdateEventLinkVisibility(ctx, newTimeline.ID, eventID, timeline.UpdateEventVisibilityInput{
 						VisibilityOverride: l.VisibilityOverride, VisibilityRules: l.VisibilityRules,
 					}); err != nil {
-						slog.Warn("import: timeline link visibility failed", slog.String("timeline", tl.Name), slog.Any("error", err))
+						slog.Warn("import: timeline link visibility failed", slog.String("name", tl.Name), slog.Any("error", err))
 						report.Fail("timelines", "timeline event link", tl.Name, apperror.SafeMessage(err))
 					}
 				}
