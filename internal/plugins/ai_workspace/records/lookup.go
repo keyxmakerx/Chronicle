@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"strconv"
 	"strings"
+	"unicode/utf8"
 
 	"github.com/keyxmakerx/chronicle/internal/plugins/ai_workspace/aiexport"
 	"github.com/keyxmakerx/chronicle/internal/plugins/entities"
@@ -132,6 +133,9 @@ type lookupRun struct {
 	pages      []entities.Entity
 	pagesErr   error
 	pagesRead  bool
+	// pagesCut is true when the walk stopped at maxPagesWalk with pages
+	// left; answers that read pages then say so.
+	pagesCut bool
 }
 
 // Answer answers each lookup in order. A failing lookup gets an Error and
@@ -143,10 +147,15 @@ func (l *Lookups) Answer(ctx context.Context, campaignID string, a Actor, recs [
 	for i, r := range recs {
 		what := normKind(r.Str("what"))
 		if i >= maxLookups {
-			out = append(out, LookupAnswer{Chip: what, Error: fmt.Sprintf("only %d lookups are answered at once; ask again for the rest", maxLookups)})
+			out = append(out, LookupAnswer{Chip: oneLine(what, 80), Error: fmt.Sprintf("only %d lookups are answered at once; ask again for the rest", maxLookups)})
 			continue
 		}
 		ans := run.one(what, r)
+		ans.Chip = oneLine(ans.Chip, 80)
+		ans.Error = oneLine(ans.Error, 300)
+		if ans.Error == "" && run.pagesCut && ans.Text != "" {
+			ans.Text += fmt.Sprintf("\n(Only the first %d pages were read; this answer may miss some.)\n", maxPagesWalk*100)
+		}
 		if ans.Error == "" {
 			ans.Text = capText(ans.Text, maxAnswerBytes)
 			if total+len(ans.Text) > maxAnswersBytes {
@@ -247,6 +256,9 @@ func (run *lookupRun) visiblePages() ([]entities.Entity, error) {
 		}
 		if len(ents) < 100 || added == 0 {
 			break
+		}
+		if p == maxPagesWalk {
+			run.pagesCut = true
 		}
 	}
 	return run.pages, nil
@@ -819,7 +831,7 @@ func capText(s string, n int) string {
 	}
 	cut := strings.LastIndex(s[:n], "\n")
 	if cut < 0 {
-		cut = n
+		cut = runeStart(s, n)
 	}
 	return s[:cut] + "\n…cut here; ask a narrower lookup for the rest.\n"
 }
@@ -832,7 +844,16 @@ func oneLine(s string, n int) string {
 	}
 	cut := strings.LastIndex(s[:n], " ")
 	if cut < n/2 {
-		cut = n
+		cut = runeStart(s, n)
 	}
 	return s[:cut] + "…"
+}
+
+// runeStart backs i up to the start of a UTF-8 character, so a cut never
+// splits one.
+func runeStart(s string, i int) int {
+	for i > 0 && !utf8.RuneStart(s[i]) {
+		i--
+	}
+	return i
 }

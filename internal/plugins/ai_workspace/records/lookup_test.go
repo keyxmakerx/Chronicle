@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"strings"
 	"testing"
+	"unicode/utf8"
 
 	"github.com/keyxmakerx/chronicle/internal/plugins/calendar"
 	"github.com/keyxmakerx/chronicle/internal/plugins/entities"
@@ -185,6 +186,13 @@ func TestLookups_Caps(t *testing.T) {
 	}
 	if got := capText(strings.Repeat("line\n", 10000), 100); len(got) > 160 || !strings.Contains(got, "cut here") {
 		t.Fatalf("capText did not cut: %d bytes", len(got))
+	}
+	if got := capText(strings.Repeat("é", 100), 51); !utf8.ValidString(got) {
+		t.Fatal("capText split a character")
+	}
+	long := world().Answer(context.Background(), camp, owner, []Record{lookup(strings.Repeat("x", 10000), nil)})
+	if len(long[0].Chip) > 90 || len(long[0].Error) > 310 {
+		t.Fatalf("echoed input not capped: %d, %d", len(long[0].Chip), len(long[0].Error))
 	}
 }
 
