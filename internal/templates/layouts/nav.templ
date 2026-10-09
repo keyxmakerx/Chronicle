@@ -112,9 +112,7 @@ templ campaignNavCategories() {
 					@navManage()
 				}
 				if GetIsAdmin(ctx) {
-					<div class="nav-admin">
-						@AdminSidebarNav()
-					</div>
+					@navSiteAdmin()
 				}
 			</div>
 		</nav>
@@ -350,6 +348,17 @@ templ navSubRow(sub NavSubRowView, parentHidden bool) {
 		if NavHasRing(ctx, sub.Key) {
 			@navRing()
 		}
+	</a>
+}
+
+// navSiteAdmin is a site admin's one way to the admin pages from inside a
+// campaign; the full admin menu stays on those pages so it never sits under
+// the campaign's own sections. A full load, so the sidebar switches too.
+templ navSiteAdmin() {
+	<a href="/admin" class="nav-row" data-nav-key="site-admin" hx-boost="false">
+		<span class="nav-ic"><i class="fa-solid fa-gauge" aria-hidden="true"></i></span>
+		<span class="nav-lb">Site admin</span>
+		<span class="nav-tr"></span>
 	</a>
 }
 
