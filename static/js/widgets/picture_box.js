@@ -150,6 +150,8 @@
       fold(f, on);
       if (b) b.setAttribute('aria-expanded', on ? 'true' : 'false');
       f.setAttribute('aria-hidden', on ? 'false' : 'true');
+      // inert keeps a closed fold's buttons out of the tab order.
+      f.inert = !on;
       if (!on) PB.reset();
     },
 
@@ -175,6 +177,7 @@
       var b = $('pk-toggle');
       if (b) b.setAttribute('aria-expanded', 'false');
       f.setAttribute('aria-hidden', 'true');
+      f.inert = true;
       PB.reset();
     },
 
