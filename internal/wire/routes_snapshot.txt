@@ -541,6 +541,7 @@ POST	/armory/instances/:iid/items	internal/plugins/armory/routes.go
 POST	/armory/moves	internal/plugins/armory/routes.go
 POST	/armory/moves/:mid/approve	internal/plugins/armory/routes.go
 POST	/armory/moves/:mid/decline	internal/plugins/armory/routes.go
+POST	/armory/pay	internal/plugins/armory/routes.go
 POST	/armory/purchase	internal/plugins/armory/routes.go
 POST	/armory/purchase-requests/:rid/approve	internal/plugins/armory/routes.go
 POST	/armory/purchase-requests/:rid/decline	internal/plugins/armory/routes.go
