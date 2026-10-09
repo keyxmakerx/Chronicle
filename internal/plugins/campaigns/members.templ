@@ -153,7 +153,11 @@ templ MemberRow(cc *CampaignContext, member *CampaignMember, csrfToken string) {
 				@memberAvatar(member)
 				<div class="min-w-0">
 					<div class="text-sm font-medium text-fg">{ member.DisplayName }</div>
-					<div class="text-xs text-fg-secondary">{ member.Email }</div>
+					// Email addresses are private: only the owner, who manages people, and
+					// the member themselves see one. Fellow players see the name alone.
+					if cc.MemberRole >= RoleOwner || layouts.GetUserID(ctx) == member.UserID {
+						<div class="text-xs text-fg-secondary">{ member.Email }</div>
+					}
 					if layouts.GetUserID(ctx) == member.UserID {
 						// A signed-in person finds the picture control on their own row.
 						<button
