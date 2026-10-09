@@ -255,6 +255,28 @@ func (r *entityTypeRepository) ListByPresetCategory(ctx context.Context, campaig
 	return types, rows.Err()
 }
 
+// changedOrExists turns an UPDATE that touched no row into "entity type not
+// found" only when the type is really missing. entity_types has no
+// updated_at, and without clientFoundRows MariaDB counts changed rows, so
+// saving a type exactly as stored reports zero rows.
+func (r *entityTypeRepository) changedOrExists(ctx context.Context, result sql.Result, id int) error {
+	rows, err := result.RowsAffected()
+	if err != nil {
+		return fmt.Errorf("checking rows affected: %w", err)
+	}
+	if rows > 0 {
+		return nil
+	}
+	var exists bool
+	if err := r.db.QueryRowContext(ctx, `SELECT EXISTS(SELECT 1 FROM entity_types WHERE id = ?)`, id).Scan(&exists); err != nil {
+		return fmt.Errorf("checking entity type exists: %w", err)
+	}
+	if !exists {
+		return apperror.NewNotFound("entity type not found")
+	}
+	return nil
+}
+
 // UpdateLayout updates only the layout_json for an entity type. Used by the
 // layout builder widget to persist layout changes.
 func (r *entityTypeRepository) UpdateLayout(ctx context.Context, id int, layoutJSON string) error {
@@ -265,14 +287,7 @@ func (r *entityTypeRepository) UpdateLayout(ctx context.Context, id int, layoutJ
 	if err != nil {
 		return fmt.Errorf("updating entity type layout: %w", err)
 	}
-	rows, err := result.RowsAffected()
-	if err != nil {
-		return fmt.Errorf("checking rows affected: %w", err)
-	}
-	if rows == 0 {
-		return apperror.NewNotFound("entity type not found")
-	}
-	return nil
+	return r.changedOrExists(ctx, result, id)
 }
 
 // UpdateFieldsSchema updates ONLY the fields JSON column for an entity type.
@@ -287,14 +302,7 @@ func (r *entityTypeRepository) UpdateFieldsSchema(ctx context.Context, id int, f
 	if err != nil {
 		return fmt.Errorf("updating entity type fields: %w", err)
 	}
-	rows, err := result.RowsAffected()
-	if err != nil {
-		return fmt.Errorf("checking rows affected: %w", err)
-	}
-	if rows == 0 {
-		return apperror.NewNotFound("entity type not found")
-	}
-	return nil
+	return r.changedOrExists(ctx, result, id)
 }
 
 // ListAll returns every entity_types row across every campaign.
@@ -357,14 +365,7 @@ func (r *entityTypeRepository) UpdateColor(ctx context.Context, id int, color st
 	if err != nil {
 		return fmt.Errorf("updating entity type color: %w", err)
 	}
-	rows, err := result.RowsAffected()
-	if err != nil {
-		return fmt.Errorf("checking rows affected: %w", err)
-	}
-	if rows == 0 {
-		return apperror.NewNotFound("entity type not found")
-	}
-	return nil
+	return r.changedOrExists(ctx, result, id)
 }
 
 // UpdateDashboard updates the category dashboard fields (description and pinned
@@ -382,14 +383,7 @@ func (r *entityTypeRepository) UpdateDashboard(ctx context.Context, id int, desc
 	if err != nil {
 		return fmt.Errorf("updating entity type dashboard: %w", err)
 	}
-	rows, err := result.RowsAffected()
-	if err != nil {
-		return fmt.Errorf("checking rows affected: %w", err)
-	}
-	if rows == 0 {
-		return apperror.NewNotFound("entity type not found")
-	}
-	return nil
+	return r.changedOrExists(ctx, result, id)
 }
 
 // UpdateDashboardLayout updates the dashboard_layout JSON for an entity type.
@@ -402,14 +396,7 @@ func (r *entityTypeRepository) UpdateDashboardLayout(ctx context.Context, id int
 	if err != nil {
 		return fmt.Errorf("updating entity type dashboard layout: %w", err)
 	}
-	rows, err := result.RowsAffected()
-	if err != nil {
-		return fmt.Errorf("checking rows affected: %w", err)
-	}
-	if rows == 0 {
-		return apperror.NewNotFound("entity type not found")
-	}
-	return nil
+	return r.changedOrExists(ctx, result, id)
 }
 
 // Update modifies an existing entity type's name, slug, icon, color, and fields.
@@ -429,14 +416,7 @@ func (r *entityTypeRepository) Update(ctx context.Context, et *EntityType) error
 		return fmt.Errorf("updating entity type: %w", err)
 	}
 
-	rows, err := result.RowsAffected()
-	if err != nil {
-		return fmt.Errorf("checking rows affected: %w", err)
-	}
-	if rows == 0 {
-		return apperror.NewNotFound("entity type not found")
-	}
-	return nil
+	return r.changedOrExists(ctx, result, et.ID)
 }
 
 // Delete removes an entity type by ID.

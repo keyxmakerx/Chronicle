@@ -567,3 +567,37 @@ func TestShare_EndsWhenTheHoldingDoes(t *testing.T) {
 		}
 	})
 }
+
+// A "Has Item" line changed outside the armory (the inventory widget, the
+// relations panel) ends the holder's shares once the relation event runs the
+// check; a line still held keeps them.
+func TestReleaseLetGoShares(t *testing.T) {
+	ctx := context.Background()
+	tests := []struct {
+		name     string
+		change   func(*shareFx)
+		wantList string
+		wantRows int
+	}{
+		{"line lowered to zero", func(f *shareFx) { f.rels.rels["c2"][0].Metadata = []byte(`{"quantity":0}`) }, "u2", 0},
+		{"line deleted", func(f *shareFx) { f.rels.rels["c2"] = f.rels.rels["c2"][1:] }, "u2", 0},
+		{"line made GM-only", func(f *shareFx) { f.rels.rels["c2"][0].DmOnly = true }, "u2", 0},
+		{"line still held", func(*shareFx) {}, "u1,u2", 1},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			f := newShareFx()
+			if _, err := f.svc.Share(ctx, "camp", robin, "c2", "z1", []string{"u1"}); err != nil {
+				t.Fatal(err)
+			}
+			tc.change(f)
+			f.svc.(*stashService).ReleaseLetGoShares(ctx, "camp", "c2")
+			if got := f.allowed("z1"); got != tc.wantList {
+				t.Fatalf("allow list %s, want %s", got, tc.wantList)
+			}
+			if len(f.shares.rows) != tc.wantRows {
+				t.Fatalf("rows %v, want %d", f.shares.rows, tc.wantRows)
+			}
+		})
+	}
+}

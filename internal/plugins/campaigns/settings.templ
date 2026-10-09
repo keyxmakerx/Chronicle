@@ -542,12 +542,9 @@ templ SettingsDataSection(cc *CampaignContext) {
 		</div>
 		<p class="text-[11px] text-fg-muted mt-2">
 			The ZIP contains <code>campaign.json</code> plus a <code>media/</code> folder holding your image
-			files, so nothing is lost from the backup. Importing either file restores
-			<strong>structural data only</strong>: media files are archived for manual restoration and
-			are <strong>not</strong> re-attached on import, so images in a restored campaign will be
-			broken until you restore them by hand. The import tells you how many media files it left
-			behind. The JSON-only export carries media <em>metadata</em> and no bytes at all — use the
-			ZIP if you want a complete backup.
+			files. Importing the ZIP restores the campaign with its pictures in place. The JSON-only
+			export carries no pictures at all, so a campaign imported from it has none; use the ZIP for
+			a backup you can restore in full.
 		</p>
 	</div>
 
@@ -565,7 +562,7 @@ func pluginURL(campaignID, slug string) string {
 	case "sessions":
 		return fmt.Sprintf("/campaigns/%s/sessions", campaignID)
 	case "notes":
-		return fmt.Sprintf("/campaigns/%s/entities", campaignID) // Notes are per-entity.
+		return fmt.Sprintf("/campaigns/%s/journal", campaignID)
 	case "armory":
 		return fmt.Sprintf("/campaigns/%s/armory", campaignID)
 	case "sync-api":

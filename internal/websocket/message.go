@@ -123,6 +123,16 @@ const (
 	MsgSystemStateUpdated MessageType = "system_state.updated"
 )
 
+// Quest messages. They carry ids only (and a quest's version), so a page
+// reading them fetches again through its own route; not change-feed types.
+const (
+	// MsgQuestUpdated says a quest sheet was saved. ResourceID is the page id.
+	MsgQuestUpdated MessageType = "quest.updated"
+	// MsgNoticeBoardsUpdated says a home's notice boards changed. ResourceID
+	// is the page id, or the category id for a category's boards.
+	MsgNoticeBoardsUpdated MessageType = "notice_boards.updated"
+)
+
 // Sync control messages.
 const (
 	MsgSyncStatus   MessageType = "sync.status"

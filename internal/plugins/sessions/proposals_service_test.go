@@ -348,19 +348,53 @@ func TestNotifyProposalCreated_WritesPerRecipient(t *testing.T) {
 	}
 }
 
-func TestNotifyProposalResponse_NotifiesCreator(t *testing.T) {
-	var written *Notification
-	repo := &mockSessionRepo{
-		getProposalFn: func(_ context.Context, _, _ string) (*SlotProposal, []SlotProposalOption, error) {
-			return &SlotProposal{ID: "p1", CampaignID: "c1", CreatedBy: "dm-1", Title: "T"}, nil, nil
-		},
-		createNotificationFn: func(_ context.Context, n *Notification) error { written = n; return nil },
+func TestNotifyProposalResponse(t *testing.T) {
+	proposal := &SlotProposal{ID: "p1", CampaignID: "c1", CreatedBy: "dm-1", Title: "T"}
+	tests := []struct {
+		name        string
+		responderID string
+		responses   []SlotProposalResponse
+		wantWrite   bool
+		wantMessage string
+	}{
+		{"first answer", "u-b", []SlotProposalResponse{{UserID: "u-b"}, {UserID: "u-b"}}, true, `Bianca answered "T"`},
+		{"counts other members once each", "u-b", []SlotProposalResponse{{UserID: "u-b"}, {UserID: "u-c"}, {UserID: "u-c"}, {UserID: "u-d"}, {UserID: "dm-1"}}, true, `Bianca and 2 others have answered "T"`},
+		{"one other", "u-b", []SlotProposalResponse{{UserID: "u-c"}}, true, `Bianca and 1 other have answered "T"`},
+		{"creator answering stays quiet", "dm-1", nil, false, ""},
 	}
-	svc := NewSessionService(repo, nil, nil)
-	if err := svc.NotifyProposalResponse(context.Background(), "c1", "p1", "Bianca", ResponseYes); err != nil {
-		t.Fatalf("error: %v", err)
-	}
-	if written == nil || written.UserID != "dm-1" || written.Type != NotifProposalResponse {
-		t.Errorf("notification = %+v, want a proposal_response to dm-1", written)
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			var merged *Notification
+			created := false
+			repo := &mockSessionRepo{
+				getProposalFn: func(_ context.Context, _, _ string) (*SlotProposal, []SlotProposalOption, error) {
+					return proposal, nil, nil
+				},
+				listProposalResponsesFn: func(_ context.Context, _ string) ([]SlotProposalResponse, error) {
+					return tt.responses, nil
+				},
+				mergeUnreadNotificationFn: func(_ context.Context, n *Notification) error { merged = n; return nil },
+				createNotificationFn:      func(_ context.Context, _ *Notification) error { created = true; return nil },
+			}
+			svc := NewSessionService(repo, nil, nil)
+			if err := svc.NotifyProposalResponse(context.Background(), "c1", "p1", tt.responderID, "Bianca"); err != nil {
+				t.Fatalf("error: %v", err)
+			}
+			if created {
+				t.Error("wrote a fresh notification; answers must merge into the unread one")
+			}
+			if !tt.wantWrite {
+				if merged != nil {
+					t.Errorf("notification = %+v, want none", merged)
+				}
+				return
+			}
+			if merged == nil || merged.UserID != "dm-1" || merged.Type != NotifProposalResponse {
+				t.Fatalf("notification = %+v, want a proposal_response to dm-1", merged)
+			}
+			if got := notificationMessage(*merged); got != tt.wantMessage {
+				t.Errorf("message = %q, want %q", got, tt.wantMessage)
+			}
+		})
 	}
 }

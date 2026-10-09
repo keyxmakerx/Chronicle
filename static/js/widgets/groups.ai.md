@@ -33,17 +33,6 @@ Via `Chronicle.apiFetch`, all in `routes_snapshot.txt` and all
 None emitted. A single delegated click listener on the mount element handles
 every action; `destroy()` removes it. Delete uses a native `confirm()`.
 
-## Known defect: reads the response as parsed JSON (TODO(#1052))
-
-`Chronicle.apiFetch` returns the raw `fetch` `Response`, not parsed JSON (the
-notes widget says so and parses explicitly). `groups.js` passes the result
-straight to `.then(function (data) { data.groups ... })` and never checks
-`res.ok` or calls `res.json()`. As written, the group list reads as empty
-after load, member lists never populate, and HTTP errors never reach the
-`.catch`. It also sends `body: JSON.stringify(...)`, which skips the
-`Content-Type: application/json` header that `apiFetch` sets only for plain
-object bodies. Treat the page as unverified until it is checked in a browser.
-
 ## Gotchas
 
 - Description is sent as `null` on rename when cleared, omitted on create.

@@ -6,6 +6,7 @@ package quests
 import (
 	"io"
 	"net/http"
+	"strconv"
 
 	"github.com/labstack/echo/v4"
 
@@ -40,6 +41,21 @@ func viewerFrom(c echo.Context) (campaignID string, v Viewer, err error) {
 		VisibilityRole: cc.VisibilityRole(),
 		IsDM:           cc.CanControlWorldState(),
 	}, nil
+}
+
+// homeFrom reads the board home from the route: /category-boards/:tid is a
+// category, /notice-boards/:eid a page. The same handlers serve both, so the
+// two route families cannot drift apart. A malformed category id is a 404,
+// the same as a category that does not exist.
+func homeFrom(c echo.Context) (Home, error) {
+	if raw := c.Param("tid"); raw != "" {
+		tid, err := strconv.Atoi(raw)
+		if err != nil || tid <= 0 {
+			return Home{}, errNotFound("category")
+		}
+		return TypeHome(tid), nil
+	}
+	return PageHome(c.Param("eid")), nil
 }
 
 // GetQuest handles GET /campaigns/:id/quests/:eid.
@@ -96,14 +112,19 @@ func (h *Handler) Picker(c echo.Context) error {
 	return c.JSON(http.StatusOK, items)
 }
 
-// GetBoards handles GET /campaigns/:id/notice-boards/:eid.
+// GetBoards handles GET /campaigns/:id/notice-boards/:eid and
+// /campaigns/:id/category-boards/:tid.
 func (h *Handler) GetBoards(c echo.Context) error {
 	cid, v, err := viewerFrom(c)
 	if err != nil {
 		return err
 	}
+	home, err := homeFrom(c)
+	if err != nil {
+		return err
+	}
 	ctx := c.Request().Context()
-	out, err := h.boards.View(ctx, cid, c.Param("eid"), v)
+	out, err := h.boards.View(ctx, cid, home, v)
 	if err != nil {
 		return err
 	}
@@ -129,11 +150,15 @@ func (h *Handler) CreateBoard(c echo.Context) error {
 	if err != nil {
 		return err
 	}
+	home, err := homeFrom(c)
+	if err != nil {
+		return err
+	}
 	var req createBoardRequest
 	if err := c.Bind(&req); err != nil {
 		return apperror.NewBadRequest("invalid request body")
 	}
-	out, err := h.boards.CreateBoard(c.Request().Context(), cid, c.Param("eid"), v, req.Name, req.Who)
+	out, err := h.boards.CreateBoard(c.Request().Context(), cid, home, v, req.Name, req.Who)
 	if err != nil {
 		return err
 	}
@@ -146,11 +171,15 @@ func (h *Handler) PatchBoard(c echo.Context) error {
 	if err != nil {
 		return err
 	}
+	home, err := homeFrom(c)
+	if err != nil {
+		return err
+	}
 	var p BoardPatch
 	if err := c.Bind(&p); err != nil {
 		return apperror.NewBadRequest("invalid request body")
 	}
-	out, err := h.boards.PatchBoard(c.Request().Context(), cid, c.Param("eid"), c.Param("bid"), v, p)
+	out, err := h.boards.PatchBoard(c.Request().Context(), cid, home, c.Param("bid"), v, p)
 	if err != nil {
 		return err
 	}
@@ -163,7 +192,11 @@ func (h *Handler) DeleteBoard(c echo.Context) error {
 	if err != nil {
 		return err
 	}
-	if err := h.boards.DeleteBoard(c.Request().Context(), cid, c.Param("eid"), c.Param("bid"), v); err != nil {
+	home, err := homeFrom(c)
+	if err != nil {
+		return err
+	}
+	if err := h.boards.DeleteBoard(c.Request().Context(), cid, home, c.Param("bid"), v); err != nil {
 		return err
 	}
 	return c.NoContent(http.StatusNoContent)
@@ -179,11 +212,15 @@ func (h *Handler) SetOrder(c echo.Context) error {
 	if err != nil {
 		return err
 	}
+	home, err := homeFrom(c)
+	if err != nil {
+		return err
+	}
 	var req orderRequest
 	if err := c.Bind(&req); err != nil {
 		return apperror.NewBadRequest("invalid request body")
 	}
-	if err := h.boards.SetOrder(c.Request().Context(), cid, c.Param("eid"), v, req.IDs); err != nil {
+	if err := h.boards.SetOrder(c.Request().Context(), cid, home, v, req.IDs); err != nil {
 		return err
 	}
 	return c.NoContent(http.StatusNoContent)
@@ -195,11 +232,15 @@ func (h *Handler) SetLooks(c echo.Context) error {
 	if err != nil {
 		return err
 	}
+	home, err := homeFrom(c)
+	if err != nil {
+		return err
+	}
 	var p LooksPatch
 	if err := c.Bind(&p); err != nil {
 		return apperror.NewBadRequest("invalid request body")
 	}
-	out, err := h.boards.SetLooks(c.Request().Context(), cid, c.Param("eid"), v, p)
+	out, err := h.boards.SetLooks(c.Request().Context(), cid, home, v, p)
 	if err != nil {
 		return err
 	}
@@ -212,7 +253,11 @@ func (h *Handler) ClearPlayerItems(c echo.Context) error {
 	if err != nil {
 		return err
 	}
-	n, err := h.boards.ClearPlayerItems(c.Request().Context(), cid, c.Param("eid"), c.Param("bid"), v)
+	home, err := homeFrom(c)
+	if err != nil {
+		return err
+	}
+	n, err := h.boards.ClearPlayerItems(c.Request().Context(), cid, home, c.Param("bid"), v)
 	if err != nil {
 		return err
 	}
@@ -233,11 +278,15 @@ func (h *Handler) CreateItem(c echo.Context) error {
 	if err != nil {
 		return err
 	}
+	home, err := homeFrom(c)
+	if err != nil {
+		return err
+	}
 	var in ItemInput
 	if err := c.Bind(&in); err != nil {
 		return apperror.NewBadRequest("invalid request body")
 	}
-	out, err := h.boards.CreateItem(c.Request().Context(), cid, c.Param("eid"), c.Param("bid"), v, in)
+	out, err := h.boards.CreateItem(c.Request().Context(), cid, home, c.Param("bid"), v, in)
 	if err != nil {
 		return err
 	}
@@ -250,11 +299,15 @@ func (h *Handler) PatchItem(c echo.Context) error {
 	if err != nil {
 		return err
 	}
+	home, err := homeFrom(c)
+	if err != nil {
+		return err
+	}
 	var p ItemPatch
 	if err := c.Bind(&p); err != nil {
 		return apperror.NewBadRequest("invalid request body")
 	}
-	out, err := h.boards.PatchItem(c.Request().Context(), cid, c.Param("eid"), c.Param("bid"), c.Param("iid"), v, p)
+	out, err := h.boards.PatchItem(c.Request().Context(), cid, home, c.Param("bid"), c.Param("iid"), v, p)
 	if err != nil {
 		return err
 	}
@@ -267,7 +320,11 @@ func (h *Handler) DeleteItem(c echo.Context) error {
 	if err != nil {
 		return err
 	}
-	if err := h.boards.DeleteItem(c.Request().Context(), cid, c.Param("eid"), c.Param("bid"), c.Param("iid"), v); err != nil {
+	home, err := homeFrom(c)
+	if err != nil {
+		return err
+	}
+	if err := h.boards.DeleteItem(c.Request().Context(), cid, home, c.Param("bid"), c.Param("iid"), v); err != nil {
 		return err
 	}
 	return c.NoContent(http.StatusNoContent)

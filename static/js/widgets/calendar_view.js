@@ -395,17 +395,19 @@
   }
   function parseDayKey(k) { var p = k.split('_'); return { y: +p[0], m: +p[1], d: +p[2] }; }
   function pad2(n) { return (n < 10 ? '0' : '') + n; }
-  // realAnchor reads a world calendar's real-date anchor (one world day and
-  // the real date it equals) into {abs, ms}: every other day's real date
-  // follows by day count, the arithmetic the server's anchor uses
-  // (AbsoluteDay, not the real-time counter). A real-time calendar needs
-  // none, and a partial anchor maps nothing, so both return null.
-  function realAnchor(cal) {
+  // realAnchor ties a world calendar to real dates by its own today: the
+  // world's current date is the real today, and every other day's real
+  // date follows by day count (AbsoluteDay). Game nights are real-life
+  // dates, so tonight's night belongs on the world's today wherever the
+  // story's clock has been moved to; a fixed link set once drifted off as
+  // soon as the world's date moved faster or slower than the real one.
+  // A real-time calendar needs none and returns null. now (ms) is for
+  // tests; the real today is the viewer's own.
+  function realAnchor(cal, now) {
     if (CalDate.usesRealTime(cal)) return null;
-    if (cal.anchor_year == null || cal.anchor_month == null || cal.anchor_day == null || !cal.anchor_real_date) return null;
-    var m = /^(\d{4})-(\d{2})-(\d{2})/.exec(String(cal.anchor_real_date));
-    if (!m) return null;
-    return { abs: CalDate.absoluteDay(cal, cal.anchor_year, cal.anchor_month, cal.anchor_day), ms: Date.UTC(+m[1], +m[2] - 1, +m[3]) };
+    if (!cal.current_year || !cal.current_month || !cal.current_day) return null;
+    var t = new Date(now == null ? Date.now() : now);
+    return { abs: CalDate.absoluteDay(cal, cal.current_year, cal.current_month, cal.current_day), ms: Date.UTC(t.getFullYear(), t.getMonth(), t.getDate()) };
   }
 
   // Game-night times: a night is stored as a wall time in the zone it was
@@ -452,6 +454,33 @@
     var h = Math.floor(m / 60) % 24, mm = m % 60, suf = h < 12 ? 'am' : 'pm', h12 = h % 12 || 12;
     return h12 + (mm ? ':' + pad2(mm) : '') + suf;
   }
+  // "Oct 17", "Oct 17 and Oct 31", "Oct 3, Oct 17 and Oct 31".
+  function listWords(a) {
+    return a.length < 2 ? (a[0] || '') : a.slice(0, -1).join(', ') + ' and ' + a[a.length - 1];
+  }
+  // A player's whole days off from today on, as stretches of consecutive
+  // dates: [{from, to}]. A date holding anything but one whole day off is a
+  // day shaped by hand, not part of an away stretch.
+  function awayStretches(excs, today) {
+    var byDate = {};
+    excs.forEach(function (e) { (byDate[e.onDate] = byDate[e.onDate] || []).push(e); });
+    var days = Object.keys(byDate).filter(function (d) {
+      var l = byDate[d];
+      return d >= today && l.length === 1 && l[0].startMinute === 0 && l[0].endMinute === 1440 && l[0].state === 'unavailable';
+    }).sort();
+    var out = [];
+    days.forEach(function (d) {
+      var last = out[out.length - 1];
+      if (last && isoAddDays(last.to, 1) === d) last.to = d;
+      else out.push({ from: d, to: d });
+    });
+    return out;
+  }
+  // "19:30" as "7:30pm", the clock the rest of the calendar reads in.
+  function hmWords(hm) {
+    var p = /^(\d{1,2}):(\d{2})/.exec(String(hm || ''));
+    return p ? ampm(+p[1] * 60 + +p[2]) : String(hm || '');
+  }
   // Real-date arithmetic on YYYY-MM-DD strings, in UTC so no zone shifts
   // a day.
   function isoAddDays(iso, n) {
@@ -468,6 +497,12 @@
     try { return zoneParts(zone, Date.parse(iso + 'T12:00:00Z')).timeZoneName || ''; } catch (e) { return ''; }
   }
   var FREE_KEY = 'chronicle.calendar.whosFree';
+  // What the colours in a line mean, under every set of named lines.
+  var FREE_LEGEND = '<div class="flegend" aria-hidden="true"><span><i class="f"></i>Free</span><span><i class="b"></i>Best time</span><span><i class="e"></i>Everyone free</span></div>';
+  // The key under one day's lines, with "Off, usually free" when it is used.
+  function freeLegend(members) {
+    return members.some(function (mem) { return mem.off; }) ? FREE_LEGEND.replace('</div>', '<span><i class="o"></i>Off, usually free</span></div>') : FREE_LEGEND;
+  }
 
   // Which zone a viewer reads game-night times in: 'mine' or the
   // calendar's. The browser remembers it; nothing breaks without storage.
@@ -704,7 +739,11 @@
   // and opacity move, and a leaf only shows while its face is towards
   // us, so every frame shows each leaf whole or not at all.
   // ---------------------------------------------------------------
-  var FOLD = { d: 1100, lead: [30, 330], trail: [100, 390], rest: 490, fade: 80, cut: 76, shut: 450, back: 0.86, pressBack: 250, shade: 0.3, leafMin: 170, leafRatio: 1.5, letDown: 300, takeUp: 180 };
+  var FOLD = { d: 1100, lead: [30, 330], trail: [100, 390], rest: 490, fade: 80, cut: 76, shut: 450, back: 0.86, pressBack: 250, shade: 0.3, leafMin: 170, leafRatio: 1.5, letDown: 300, takeUp: 180, eye: 2.4 };
+  // How long the held part of a long card takes to let down (or take up):
+  // the base time for an ordinary card, more for a longer drop, so the
+  // paper moves at one speed whatever the card's length.
+  function leafTime(h, base) { return Math.round(clampN(base * (0.6 + (h.full - h.cap) / 500), base * 0.75, base * 1.6)); }
   var SPRING = 'cubic-bezier(.34,1.3,.4,1)';
   var EASE = 'cubic-bezier(.22,.8,.24,1)';
   function isPhone() { return window.matchMedia('(max-width:600px)').matches; }
@@ -773,7 +812,9 @@
     if (L2 && !L2.offsetHeight) L2 = null;
     var W = el.offsetWidth, H = el.offsetHeight, h1 = L1.offsetHeight, cy = g.cell.y + g.cell.h / 2 - bx.y;
     var side = g.side, flat = side === 'right' || side === 'left', head = !L2 || (flat ? cy < h1 : side !== 'up' && cy <= H / 2);
-    var F = { el: el, d: FOLD.d, V: { x: W / 2, y: H / 2 }, ax: flat ? 'rotateY' : 'rotateX', B: { x: 0, y: h1 }, head: head, lead: head ? L1 : L2, trail: head ? L2 : L1, s2: head ? -1 : 1 };
+    // The eye stands back in proportion to the span that turns, so a tall
+    // card leans as far as a short one instead of ballooning towards us.
+    var F = { el: el, d: Math.max(FOLD.d, Math.round(FOLD.eye * (flat ? W : H))), V: { x: W / 2, y: H / 2 }, ax: flat ? 'rotateY' : 'rotateX', B: { x: 0, y: h1 }, head: head, lead: head ? L1 : L2, trail: head ? L2 : L1, s2: head ? -1 : 1 };
     if (flat) { F.A = { x: side === 'left' ? W : 0, y: 0 }; F.s1 = side === 'right' ? 1 : -1; }
     else { F.A = { x: 0, y: head ? 0 : H }; F.s1 = head ? -1 : 1; }
     F.O = { lead: { x: 0, y: head ? 0 : h1 }, trail: { x: 0, y: head ? h1 : 0 } };
@@ -977,7 +1018,7 @@
       if (tok !== P.seq) throw new Error('superseded');
       stopAnims(el, true);
       land(P, false);
-      if (held) { freeLeaf(held); slideLeaf(held, held.cap, held.full, FOLD.letDown); }
+      if (held) { freeLeaf(held); slideLeaf(held, held.cap, held.full, leafTime(held, FOLD.letDown)); }
       P.state = 'open';
       el.classList.add('open');
       return true;
@@ -1012,7 +1053,7 @@
       pressIn(P.press, { delay: 300 / sp, dur: 280 / sp, soft: true });
     } else {
       var marks = fly(P, true, { delay: 0, dur: 340 / sp, stagger: 24 / sp }, calEl), held = foldShort(P);
-      var up = held ? FOLD.takeUp / sp : 0;
+      var up = held ? leafTime(held, FOLD.takeUp) / sp : 0;
       var folded = (held ? slideLeaf(held, held.full, held.cap, up).then(function () { holdLeaf(held, held.cap); }) : Promise.resolve())
         .then(function () { return settleAll(foldRun(foldGeo(P, calEl), true, sp)); });
       run = Promise.all([folded, settleAll(marks)]);
@@ -1166,6 +1207,10 @@
       this.canEdit = config.canEdit === true;
       this.canAuthorDmOnly = config.canAuthorDmOnly === true;
       this.role = typeof config.role === 'number' ? config.role : parseInt(config.role, 10) || 0;
+      this.userId = config.userId || '';
+      // Game nights have their own switch; with it off the calendar shows
+      // no nights, RSVP or free hours, since those routes are closed.
+      this.gameNights = config.gameNights === true;
       this.apiBase = config.apiBase;
       this.engineSrc = config.engineSrc; // chronicle_gen.js, loaded only when an editor paints weather
 
@@ -1180,11 +1225,11 @@
       this.weatherByYear = {}; // year -> {'m_d': reading}, filled by fetchWeatherYear
       this.nightsByMonth = {}; // 'y_m' -> game nights, filled by fetchNights
       this._gnPages = {}; // session id -> its recap and linked pages
-      // Game nights are real-world dates, so only a calendar that follows
-      // the real clock, or a world calendar anchored to a real date, can
-      // place them; only members see who is coming.
+      // Game nights are real-world dates, so only a real-world calendar
+      // shows them; a world calendar keeps to the story. Only members see
+      // who is coming.
       this._anchor = realAnchor(this.cal);
-      this.showNights = this.role >= 1 && (CalDate.usesRealTime(this.cal) || !!this._anchor);
+      this.showNights = this.gameNights && this.role >= 1 && CalDate.usesRealTime(this.cal);
       this.calZone = cfgEl.dataset.zone || ''; // the real-world calendar's zone, members only
       this._gnZoneMode = readZoneMode();
       // Who's free: members' painted hours (the sessions plugin's overlay),
@@ -1196,7 +1241,10 @@
       this.freeByDate = {}; // 'YYYY-MM-DD' -> {total, hours[24], members[], detail}
       this._freeWeeks = {}; // week start -> Promise of that week's read
       var freeOn = false;
-      try { freeOn = window.localStorage.getItem(FREE_KEY) === '1'; } catch (e3) { freeOn = false; }
+      // On unless the Director turned the lines off: they are the reason
+      // to open the calendar when planning, and a switch inside a panel is
+      // easy never to find.
+      try { freeOn = window.localStorage.getItem(FREE_KEY) !== '0'; } catch (e3) { freeOn = true; }
       this.showFree = this.freeDirector && freeOn;
       this._gnNoteFor = null; // the night whose note is being written
       this.eventsByMonth[this.cal.current_year + '_' + this.cal.current_month] = initialEvents;
@@ -1663,16 +1711,16 @@
     _gnWhen: function (n) {
       if (!n.time) return null;
       var hm = String(n.time).slice(0, 5), src = n.tz || this.calZone;
-      if (!src) return { text: hm, canSwitch: false };
+      if (!src) return { text: hmWords(hm), canSwitch: false };
       var self = this, ref = this.calZone || src, mineZ = browserZone();
       function show(zone) {
         var o = zonedShow(n.date, hm, src, zone);
         if (!o) return null;
-        var t = o.hm + (o.abbr ? ' ' + o.abbr : '');
+        var t = hmWords(o.hm) + (o.abbr ? ' ' + o.abbr : '');
         return o.date !== n.date ? realDateWords(o.date).split(' ')[0] + ' ' + t : t;
       }
       var calText = show(ref);
-      if (calText == null) return { text: hm, canSwitch: false };
+      if (calText == null) return { text: hmWords(hm), canSwitch: false };
       var mineText = mineZ ? show(mineZ) : null, canSwitch = mineText != null && mineText !== calText;
       var useMine = canSwitch && self._gnZoneMode === 'mine';
       return {
@@ -1741,12 +1789,23 @@
       }).join('') + '</ul>';
     },
 
+    // Who answered what, as name chips: the day's card for whoever has no
+    // answer of their own to give, and the full planner's list of nights.
+    _gnChipsHTML: function (n) {
+      var who = (n.roster || []).filter(function (a) { return !a.excluded; });
+      if (!who.length) return '';
+      return '<div class="plwho">' + who.map(function (a) {
+        var k = a.carried ? 'q' : a.answer === 'yes' ? 'y' : a.answer === 'maybe' ? 'm' : a.answer === 'no' ? 'n' : 'q';
+        return '<span class="plw ' + k + '" title="' + esc((a.name || 'A member') + ': ' + { y: 'going', m: 'maybe', n: 'can’t make it', q: 'no answer yet' }[k]) + '">' + esc(a.name || 'A member') + '</span>';
+      }).join('') + '</div>';
+    },
+
     // The answer block. The same markup serves the day's card (full=false:
     // buttons, note and count) and the night's page (full=true: plus who
     // answered what), so an answer looks and works the same in both.
     _gnRsvpHTML: function (n, full) {
       var id = this._gnId(n), mine = n.mine || {}, a = mine.carried ? '' : mine.answer, h = '<div class="rsvp" data-gnr="' + esc(id) + '">';
-      if (!n.mine) return h + '<div class="rcount">' + esc(this._gnTally(n)) + '</div></div>';
+      if (!n.mine) return '<div class="rsvp glance" data-gnr="' + esc(id) + '"><div class="rcount">' + esc(this._gnTally(n)) + '</div>' + this._gnChipsHTML(n) + '</div>';
       if (mine.recheck && a) h += '<div class="rnote">The time changed after you answered. Is your answer still right?</div>';
       if (mine.carried) h += '<div class="rnote">You said yes to this time when it was proposed. Are you coming?</div>';
       h += '<div class="rq">' + (n.organizerId === mine.userId ? 'Are you playing?' : 'Are you coming?') + '</div>';
@@ -2081,7 +2140,11 @@
           members: members.map(function (m) {
             return {
               userId: m.userId, name: m.name || 'A player', answered: !!m.hasAnswered,
-              segs: (m.lanes || []).filter(function (l) { return l.day === i; }).map(function (l) { return [l.start, l.end]; })
+              // [start, end, best]: a run the player marked as their best
+              // time keeps that mark, so the lines can show it apart.
+              segs: (m.lanes || []).filter(function (l) { return l.day === i; }).map(function (l) { return [l.start, l.end, l.state === 'preferred']; }),
+              // Marked this day off although their usual hours cover it.
+              off: (m.offDays || []).indexOf(i) >= 0
             };
           })
         };
@@ -2141,9 +2204,12 @@
       });
     },
 
-    _lineHTML: function (segs) {
+    // off: the player marked this day off although they are usually free,
+    // drawn as a broken line so the DM sees the change, not a blank.
+    _lineHTML: function (segs, off) {
+      if (off) return '<span class="ln off"></span>';
       return '<span class="ln">' + segs.map(function (sg) {
-        return '<b style="left:' + (sg[0] / 14.4).toFixed(2) + '%;width:' + ((sg[1] - sg[0]) / 14.4).toFixed(2) + '%"></b>';
+        return '<b' + (sg[2] ? ' class="p"' : '') + ' style="left:' + (sg[0] / 14.4).toFixed(2) + '%;width:' + ((sg[1] - sg[0]) / 14.4).toFixed(2) + '%"></b>';
       }).join('') + '</span>';
     },
 
@@ -2165,13 +2231,14 @@
       if (!data || !data.detail || !data.members.length) return '';
       var self = this, rows = data.members.slice(0, 12);
       return '<span class="avl' + (rows.length > 8 ? ' many' : '') + '" data-avl="' + esc(this._realIso(y, m, d)) + '" aria-hidden="true">' +
-        this._bandHTML(data, 'fband') + rows.map(function (mem) { return self._lineHTML(mem.segs); }).join('') + '</span>';
+        this._bandHTML(data, 'fband') + rows.map(function (mem) { return self._lineHTML(mem.segs, mem.off); }).join('') + '</span>';
     },
 
     _segsWords: function (mem) {
+      if (mem.off) return 'off this day, usually free';
       if (!mem.segs.length) return mem.answered ? 'not free' : 'hasn’t painted hours yet';
       if (mem.segs.length === 1 && mem.segs[0][0] === 0 && mem.segs[0][1] >= 1440) return 'free all day';
-      return mem.segs.map(function (sg) { return ampm(sg[0]) + ' to ' + ampm(sg[1]); }).join(', ');
+      return mem.segs.map(function (sg) { return ampm(sg[0]) + ' to ' + ampm(sg[1]) + (sg[2] ? ' (best)' : ''); }).join(', ');
     },
 
     _freeGlanceHTML: function (iso) {
@@ -2206,13 +2273,13 @@
       var all = this._freeRuns(data.hours, data.total)[0], w = all ? { start: all[0], end: all[1], free: data.total } : this._bestWindow(data, 1);
       var summary = !w ? 'Nobody is free this day.'
         : (w.free === data.total ? 'Everyone free ' : w.free + ' of ' + data.total + ' free ') + this._windowWords(w, iso);
+      h += '<div class="fsum">' + esc(summary) + '</div>';
       if (data.detail && data.members.length) {
         h += '<div class="flines"><span class="bandwrap" aria-hidden="true">' + this._bandHTML(data, 'band2') + '</span>' + data.members.map(function (mem) {
-          return '<div class="fr"><span class="nm">' + esc(mem.name) + '</span>' + self._lineHTML(mem.segs) +
+          return '<div class="fr"><span class="nm">' + esc(mem.name) + '</span>' + self._lineHTML(mem.segs, mem.off) +
             '<span class="sr">' + esc(mem.name + ': ' + self._segsWords(mem)) + '</span></div>';
-        }).join('') + '</div><div class="fticks" aria-hidden="true"><span>12am</span><span>6am</span><span>noon</span><span>6pm</span><span>12am</span></div>';
+        }).join('') + '</div><div class="fticks" aria-hidden="true"><span>12am</span><span>6am</span><span>noon</span><span>6pm</span><span>12am</span></div>' + freeLegend(data.members);
       }
-      h += '<div class="fsum">' + esc(summary) + '</div>';
       if (w && this.role >= 2 && iso >= this._todayIso() && !this.nightsOnDay(d.y, d.m, d.d).length) {
         h += this._planFor && this._planFor.iso === iso ? this._planFormHTML(iso, this._planFor.start)
           : '<button type="button" class="btn sm" data-plan="' + esc(iso) + '" data-plan-at="' + w.start + '"><i class="fa-solid fa-dice-d20"></i> Plan a game night at ' + esc(ampm(w.start * 60)) + '</button>';
@@ -2332,25 +2399,84 @@
       });
     },
 
+    // The real today: the real-world calendar's own date, or on a world
+    // calendar the real day its today stands for.
     _todayIso: function () {
       var c = this.cal;
-      return CalDate.usesRealTime(c) ? c.current_year + '-' + pad2(c.current_month) + '-' + pad2(c.current_day) : '';
+      if (CalDate.usesRealTime(c)) return c.current_year + '-' + pad2(c.current_month) + '-' + pad2(c.current_day);
+      return this._anchor ? new Date(this._anchor.ms).toISOString().slice(0, 10) : '';
     },
 
-    // The three strongest slots of at least three hours left in the month,
-    // most players first, then the longest, then the soonest.
-    bestTimes: function (y, m) {
+    // Every day left in the month with a window of at least three hours,
+    // each with its strongest window.
+    _bestCandidates: function (y, m) {
       var out = [], today = this._todayIso(), last = CalDate.monthDays(this.cal, m - 1, y);
       for (var d = 1; d <= last; d++) {
         var iso = this._realIso(y, m, d), data = iso && this.freeByDate[iso];
         if (!data || !data.detail || iso < today) continue;
         var w = this._bestWindow(data, 3);
-        if (w) out.push({ y: y, m: m, d: d, iso: iso, w: w, data: data });
+        if (w) out.push({ y: y, m: m, d: d, iso: iso, w: w, data: data, wd: new Date(iso + 'T12:00:00Z').getUTCDay() });
       }
-      out.sort(function (a, b) {
-        return (b.w.free - a.w.free) || ((b.w.end - b.w.start) - (a.w.end - a.w.start)) || (a.iso < b.iso ? -1 : a.iso > b.iso ? 1 : 0);
+      return out;
+    },
+
+    // How strong each weekday is across the month: the players free in its
+    // best window, averaged over all of that weekday's days left, so a day
+    // that is strong every week outranks one strong date among weak ones.
+    _weekdayStrength: function (cands) {
+      var sum = {}, n = {};
+      cands.forEach(function (c) { sum[c.wd] = (sum[c.wd] || 0) + c.w.free; n[c.wd] = (n[c.wd] || 0) + 1; });
+      var out = {};
+      Object.keys(sum).forEach(function (k) { out[k] = sum[k] / n[k]; });
+      return out;
+    },
+
+    // The three strongest slots of at least three hours left in the month:
+    // most players first; then the window's length, counted only up to a
+    // game night's four hours, so a whole free weekday never beats an
+    // evening everyone can make; then the weekday that is strongest week
+    // after week; then the soonest.
+    bestTimes: function (y, m) {
+      var cands = this._bestCandidates(y, m), str = this._weekdayStrength(cands);
+      function len(c) { return Math.min(4, c.w.end - c.w.start); }
+      cands.sort(function (a, b) {
+        return (b.w.free - a.w.free) || (len(b) - len(a)) || ((str[b.wd] || 0) - (str[a.wd] || 0)) || (a.iso < b.iso ? -1 : a.iso > b.iso ? 1 : 0);
       });
-      return out.slice(0, 3);
+      return cands.slice(0, 3);
+    },
+
+    // The weekday that is best overall, when the list of dates hides it:
+    // a weekday that shows on most weeks but loses some dates to someone
+    // who is away (often a player free every other week). Says who is
+    // missing on which dates, so the shading and the list agree. null when
+    // the list already leads with it, or no weekday stands out.
+    bestWeekday: function (y, m) {
+      var self = this, cands = this._bestCandidates(y, m), str = this._weekdayStrength(cands), top = this.bestTimes(y, m);
+      // Only a weekday seen on two or more dates can be best "overall".
+      var wd = null;
+      Object.keys(str).forEach(function (k) {
+        if (cands.filter(function (c) { return String(c.wd) === k; }).length < 2) return;
+        if (wd == null || str[k] > str[wd]) wd = k;
+      });
+      if (wd == null) return null;
+      var days = cands.filter(function (c) { return String(c.wd) === String(wd); });
+      var bestFree = Math.max.apply(null, days.map(function (c) { return c.w.free; }));
+      var weak = days.filter(function (c) { return c.w.free < bestFree; });
+      var listed = top.filter(function (c) { return String(c.wd) === String(wd); }).length;
+      if (listed >= Math.min(2, days.length) && !weak.length) return null;
+      var strong = days.filter(function (c) { return c.w.free === bestFree; })[0];
+      var away = {};
+      weak.forEach(function (c) {
+        self._freeMissing(c.data, strong.w).forEach(function (mem) {
+          if (self._freeMissing(strong.data, strong.w).some(function (x) { return x.userId === mem.userId; })) return;
+          (away[mem.name] = away[mem.name] || []).push(realDateWords(c.iso).replace(/^\w+ /, ''));
+        });
+      });
+      var name = new Date(strong.iso + 'T12:00:00Z').toLocaleDateString('en-US', { weekday: 'long', timeZone: 'UTC' });
+      return {
+        weekday: name, window: strong.w, iso: strong.iso,
+        away: Object.keys(away).map(function (k) { return { name: k, dates: away[k] }; })
+      };
     },
 
     // --------------------------------------------------------------
@@ -2371,8 +2497,8 @@
       btn.setAttribute('aria-expanded', 'true');
       this._updateScrim();
       this.fvEl.focus({ preventScroll: true });
-      var reads = [this.fetchFreeMonth(this.view.y, this.view.m)];
-      if (!this.freeDirector) reads.push(this.fetchMine());
+      var reads = [this.fetchFreeMonth(this.view.y, this.view.m), this.fetchAnswers()];
+      if (!this.freeDirector) reads.push(this.fetchMine(), this.fetchAway());
       Promise.all(reads).then(function () { self.refreshFreeView(); });
     },
 
@@ -2565,18 +2691,216 @@
             : '<button type="button" class="btn sm" data-best-open="' + esc(dayKey(s.y, s.m, s.d)) + '">Open</button>');
         return '<li><span><b>' + esc(realDateWords(s.iso)) + '</b>, ' + esc(self._windowWords(s.w, s.iso)) + '<small>' + esc(who) + '</small></span>' + act + '</li>';
       }).join('') + '</ul>';
-      h += '</section><section class="fvsec fvwho"><h4>Players</h4>';
-      if (roster) {
-        var silent = roster.filter(function (mem) { return !mem.answered; }).length;
-        h += '<ul class="fvroster">' + roster.map(function (mem) {
-          return '<li><span>' + esc(mem.name) + '</span><span class="' + (mem.answered ? 'ok' : 'wait') + '">' + (mem.answered ? 'Hours given' : 'No hours yet') + '</span></li>';
-        }).join('') + '</ul>';
-        if (silent) h += '<p class="fnote">' + (silent === 1 ? '1 player hasn’t' : silent + ' players haven’t') + ' painted hours yet. <button type="button" class="btn sm" data-best-nudge><i class="fa-solid fa-bell"></i> Remind them</button></p>';
+      var wk = roster ? this.bestWeekday(y, m) : null;
+      if (wk) {
+        h += '<p class="fvwk"><b>' + esc(wk.weekday) + 's</b> are best overall, ' + esc(this._windowWords(wk.window, wk.iso)) + '.' +
+          (wk.away.length ? ' ' + wk.away.map(function (a) { return esc(a.name) + ' is away ' + esc(listWords(a.dates)); }).join('. ') + '.' : '') + '</p>';
       }
+      h += '</section><section class="fvsec fvwho"><h4>Players</h4>';
+      if (roster) h += this._fvRosterHTML(roster);
       h += '</section><section class="fvsec fvfoot">' +
         '<label class="fvsw"><input type="checkbox" data-fv-lines' + (this.showFree ? ' checked' : '') + '><span>Show who’s free on the days</span></label>' +
         '<span class="fvlinks"><button type="button" class="lnk" data-fv-planner="mine">Change my hours</button><button type="button" class="btn sm" data-fv-planner="team"><i class="fa-solid fa-up-right-and-down-left-from-center"></i> Open the full planner</button></span></section>';
       return h;
+    },
+
+    // The Director's players: each one's state, with a reminder for that
+    // one player, and the ask that has everyone confirm their times. After
+    // an ask, a player's state is whether they have confirmed since.
+    _fvRosterHTML: function (roster) {
+      var self = this, ans = this.answers || {}, asked = ans.askedAt || '', byId = {};
+      (ans.members || []).forEach(function (a) { byId[a.userId] = a; });
+      var done = 0, askedOf = 0, silent = 0;
+      var rows = roster.map(function (mem) {
+        var a = byId[mem.userId] || {}, st, cls;
+        var conf = !!(asked && a.answeredAt && a.answeredAt >= asked);
+        if (!mem.answered) { st = 'No hours yet'; cls = 'wait'; silent++; }
+        else if (asked) { st = conf ? 'Confirmed' : 'Not confirmed yet'; cls = conf ? 'ok' : 'wait'; }
+        else { st = 'Hours given'; cls = 'ok'; }
+        if (asked && mem.userId !== self.userId) { askedOf++; if (conf) done++; }
+        var sent = self._reminded && self._reminded[mem.userId];
+        var act = mem.userId === self.userId ? '<span class="fvme">You</span>'
+          : '<button type="button" class="ib fvbell" data-remind="' + esc(mem.userId) + '"' + (sent ? ' disabled' : '') + ' aria-label="' + esc((sent ? 'Reminded ' : 'Remind ') + mem.name) + '" title="' + esc(sent ? 'Reminded' : 'Remind ' + mem.name + ' to check their times') + '"><i class="fa-solid ' + (sent ? 'fa-check' : 'fa-bell') + '"></i></button>';
+        return '<li><span class="nm">' + esc(mem.name) + '</span><span class="' + cls + '">' + st + '</span>' + act + '</li>';
+      });
+      var h = '<ul class="fvroster">' + rows.join('') + '</ul>';
+      h += '<div class="fvask">';
+      if (asked) {
+        h += '<p><b>' + done + ' of ' + askedOf + '</b> confirmed since you asked on ' + esc(realDateWords(asked.slice(0, 10)).replace(/^\w+ /, '')) + '.</p>';
+      } else {
+        h += '<p>Ask everyone to check their times are still right, on the site and by email.</p>';
+      }
+      h += '<span class="fvaskb"><button type="button" class="btn sm" data-ask-confirm><i class="fa-solid fa-clipboard-check"></i> ' + (asked ? 'Ask again' : 'Ask everyone to confirm') + '</button>' +
+        (silent ? '<button type="button" class="btn sm quiet" data-best-nudge><i class="fa-solid fa-bell"></i> Remind ' + (silent === 1 ? 'the 1 without hours' : 'the ' + silent + ' without hours') + '</button>' : '') + '</span></div>';
+      return h;
+    },
+
+    fetchAnswers: function (fresh) {
+      var self = this;
+      if (this._answersPromise && !fresh) return this._answersPromise;
+      this._answersPromise = Chronicle.apiFetch('/campaigns/' + encodeURIComponent(this.campaignId) + '/availability/answers')
+        .then(function (resp) { return resp.ok ? resp.json() : null; })
+        .then(function (a) { self.answers = a || { members: [], askedAt: '' }; })
+        .catch(function () { self.answers = self.answers || { members: [], askedAt: '' }; });
+      return this._answersPromise;
+    },
+
+    // The player's side of an ask: the DM asked, their hours are saved, and
+    // they have not confirmed since.
+    _confirmDue: function () {
+      var a = this.answers || {}, mine = this.mine;
+      return !!(a.askedAt && mine && mine.answered && !(mine.answeredAt && mine.answeredAt >= a.askedAt));
+    },
+
+    // --- Away: whole days a player can't play, set ahead of time ---------
+    // Stored as the Availability page's own days off, one per date; read
+    // back here as stretches of consecutive days.
+    fetchAway: function (fresh) {
+      var self = this;
+      if (this._awayPromise && !fresh) return this._awayPromise;
+      this._awayPromise = Chronicle.apiFetch('/campaigns/' + encodeURIComponent(this.campaignId) + '/availability/exceptions')
+        .then(function (resp) { return resp.ok ? resp.json() : []; })
+        .then(function (list) { self.away = awayStretches(Array.isArray(list) ? list : [], self._todayIso() || localIso(new Date())); })
+        .catch(function () { self.away = self.away || []; });
+      return this._awayPromise;
+    },
+
+    _awayHTML: function () {
+      var away = this.away, h = '<div class="fvaway"><h5>Away</h5>';
+      if (away === undefined) return h + '<p class="none">Loading…</p></div>';
+      if (away.length) {
+        h += '<ul class="fvawl">' + away.map(function (a) {
+          var words = a.from === a.to ? realDateWords(a.from) : realDateWords(a.from) + ' to ' + realDateWords(a.to);
+          return '<li><span>' + esc(words) + '</span><button type="button" class="lnk" data-away-clear="' + esc(a.from + '_' + a.to) + '" aria-label="' + esc('Clear away ' + words) + '">Clear</button></li>';
+        }).join('') + '</ul>';
+      }
+      if (this._awayForm) {
+        var f = this._awayForm;
+        h += '<form class="fvawf" data-away-form novalidate>' +
+          '<label class="fld"><span>First day</span><input type="date" name="from" value="' + esc(f.from) + '" required></label>' +
+          '<label class="fld"><span>Last day</span><input type="date" name="to" value="' + esc(f.to) + '" required></label>' +
+          '<p class="gperr" role="alert"' + (f.error ? '' : ' hidden') + '>' + esc(f.error || '') + '</p>' +
+          '<span class="fvawa"><button type="submit" class="btn sm primary">Mark me away</button><button type="button" class="btn sm quiet" data-away-cancel>Cancel</button></span></form>';
+      } else {
+        h += (away.length ? '' : '<p class="fnote">Going somewhere? Mark the days and game nights and Best times leave you out.</p>') +
+          '<button type="button" class="btn sm" data-away-new><i class="fa-solid fa-plane"></i> I’m away…</button>';
+      }
+      return h + '</div>';
+    },
+
+    // A press on any of the time tools in the Who's free view or the
+    // planner's My hours. Returns true when it handled the press.
+    _timeToolClick: function (e, redraw) {
+      var self = this, t = e.target, base = '/campaigns/' + encodeURIComponent(this.campaignId) + '/availability';
+      var remind = t.closest('[data-remind]');
+      if (remind) {
+        remind.disabled = true;
+        Chronicle.apiFetch(base + '/nudge', { method: 'POST', body: { userId: remind.dataset.remind } })
+          .then(function (resp) { return resp.ok ? resp.json() : Promise.reject(); })
+          .then(function (res) {
+            self._reminded = self._reminded || {};
+            self._reminded[remind.dataset.remind] = true;
+            self.say('Reminded ' + ((res && res.notified || [])[0] || 'them') + ' to check their times.');
+            redraw();
+          })
+          .catch(function () { remind.disabled = false; self.say('That reminder could not be sent. Try again.'); });
+        return true;
+      }
+      var ask = t.closest('[data-ask-confirm]');
+      if (ask) {
+        ask.disabled = true;
+        Chronicle.apiFetch(base + '/nudge', { method: 'POST', body: { ask: 'confirm' } })
+          .then(function (resp) { return resp.ok ? resp.json() : Promise.reject(); })
+          .then(function (res) {
+            var n = (res && res.notified || []).length;
+            self.say(n ? 'Asked ' + n + (n === 1 ? ' player' : ' players') + ' to confirm their times.' : 'There is nobody to ask yet.');
+            return self.fetchAnswers(true);
+          })
+          .then(redraw)
+          .catch(function () { ask.disabled = false; self.say('That ask could not be sent. Try again.'); });
+        return true;
+      }
+      var conf = t.closest('[data-confirm-mine]');
+      if (conf) {
+        conf.disabled = true;
+        Chronicle.apiFetch(base + '/confirm', { method: 'POST' })
+          .then(function (resp) { return resp.ok ? resp.json() : Promise.reject(); })
+          .then(function () {
+            if (self.mine) self.mine.answeredAt = new Date().toISOString().replace(/\.\d+Z$/, 'Z');
+            self.say('Thanks. Your times are confirmed.');
+            redraw();
+          })
+          .catch(function () { conf.disabled = false; self.say('That could not be saved. Try again.'); });
+        return true;
+      }
+      if (t.closest('[data-away-new]')) {
+        var from = this._todayIso() || localIso(new Date());
+        this._awayForm = { from: from, to: isoAddDays(from, 6) };
+        redraw();
+        var first = this._awayFocus(); if (first) first.focus();
+        return true;
+      }
+      if (t.closest('[data-away-cancel]')) { this._awayForm = null; redraw(); return true; }
+      var clear = t.closest('[data-away-clear]');
+      if (clear) {
+        var p = clear.dataset.awayClear.split('_');
+        clear.disabled = true;
+        this._awaySend('/away/clear', 'POST', p[0], p[1]).then(function (err) {
+          if (err) { clear.disabled = false; self.say(err); return; }
+          self.say('Cleared. Those days follow your usual hours again.');
+          redraw();
+        });
+        return true;
+      }
+      return false;
+    },
+
+    // An away form left open holds its panel against a stray press outside,
+    // and says why. Returns true when it held.
+    _awayHolds: function (redraw) {
+      if (!this._awayForm) return false;
+      var root = this.plannerOpen() ? this.plEl : this.fvEl, form = root && root.querySelector('[data-away-form]');
+      if (form) { this._awayForm.from = form.elements.from.value; this._awayForm.to = form.elements.to.value; }
+      this._awayForm.error = 'You haven’t marked these days yet. Press Mark me away, or Cancel.';
+      redraw();
+      var err = root && root.querySelector('[data-away-form] .gperr');
+      if (err) err.classList.add('shake');
+      return true;
+    },
+
+    _awayFocus: function () {
+      var root = this.plannerOpen() ? this.plEl : this.fvEl;
+      return root && root.querySelector('[data-away-form] input');
+    },
+
+    _awaySubmit: function (form, redraw) {
+      var self = this, from = form.elements.from.value, to = form.elements.to.value;
+      var bad = !/^\d{4}-\d{2}-\d{2}$/.test(from) || !/^\d{4}-\d{2}-\d{2}$/.test(to) ? 'Pick the first and last day.' : to < from ? 'The last day can’t be before the first.' : '';
+      if (bad) { this._awayForm = { from: from, to: to, error: bad }; redraw(); return; }
+      form.querySelector('[type="submit"]').disabled = true;
+      this._awaySend('/away', 'PUT', from, to).then(function (err) {
+        if (err) { self._awayForm = { from: from, to: to, error: err }; redraw(); return; }
+        self._awayForm = null;
+        self.say('Marked away ' + realDateWords(from) + (to !== from ? ' to ' + realDateWords(to) : '') + '.');
+        redraw();
+      });
+    },
+
+    // Writes or clears a stretch, then rereads what it changes: the
+    // player's own days off and the free hours of the weeks shown.
+    _awaySend: function (path, method, from, to) {
+      var self = this, zone = (this.mine && this.mine.tz) || browserZone() || 'UTC';
+      return Chronicle.apiFetch('/campaigns/' + encodeURIComponent(this.campaignId) + '/availability' + path, { method: method, body: { from: from, to: to, tz: zone } })
+        .then(function (resp) {
+          if (!resp.ok) return resp.json().then(function (j) { return (j && j.error) || 'That could not be saved.'; }, function () { return 'That could not be saved.'; });
+          self.freeByDate = {};
+          self._freeWeeks = {};
+          return Promise.all([self.fetchAway(true), self.fetchFreeMonth(self.view.y, self.view.m)]).then(function () {
+            if (self.showFree) self._paintMonth();
+            return '';
+          });
+        })
+        .catch(function () { return 'Could not reach Chronicle. Try again.'; });
     },
 
     _fvPlayerHTML: function (y, m) {
@@ -2586,8 +2910,12 @@
         h += '<p class="fvlead">You haven’t given your hours yet. The DM uses them to pick game nights.</p>' +
           '<button type="button" class="btn fvgo" data-fv-planner="mine"><i class="fa-solid fa-user-pen"></i> Give my hours</button>';
       } else {
-        h += this._mineWeekHTML(mine) + '<button type="button" class="btn sm" data-fv-planner="mine"><i class="fa-solid fa-user-pen"></i> Change my hours</button>';
+        if (this._confirmDue()) h += '<p class="fvdue"><i class="fa-solid fa-clipboard-check"></i> The DM asked everyone to check their times are still right.</p>';
+        h += this._mineWeekHTML(mine) + '<span class="fvmb">' +
+          (this._confirmDue() ? '<button type="button" class="btn sm primary" data-confirm-mine><i class="fa-solid fa-check"></i> My times are still right</button>' : '') +
+          '<button type="button" class="btn sm" data-fv-planner="mine"><i class="fa-solid fa-user-pen"></i> Change my hours</button></span>';
       }
+      h += this._awayHTML();
       h += '</section><section class="fvsec fvnights"><h4>Game nights this month</h4>';
       var today = this._todayIso(), rows = [];
       for (var d = 1; d <= CalDate.monthDays(this.cal, m - 1, y); d++) {
@@ -2640,11 +2968,17 @@
         this.plEl.tabIndex = -1;
         dock.appendChild(this.plEl);
         this.plEl.addEventListener('click', function (e) { self._plClick(e); });
+        this.plEl.addEventListener('submit', function (e) {
+          var form = e.target.closest('[data-away-form]');
+          if (!form) return;
+          e.preventDefault();
+          self._awaySubmit(form, function () { self.refreshPlanner(); });
+        });
         this.plEl.addEventListener('pointerdown', function (e) { self._paintStart(e); });
         this.plEl.addEventListener('pointerover', function (e) { self._paintMove(e); });
         this._plUp = function () { self._paintEnd(); };
         document.addEventListener('pointerup', this._plUp);
-        this.plScrim.addEventListener('click', function () { if (self.plannerOpen()) self.closePlanner(); });
+        this.plScrim.addEventListener('click', function () { if (self.plannerOpen() && !self._awayHolds(function () { self.refreshPlanner(); })) self.closePlanner(); });
       }
       this._plBack = back;
       this._plWeek = this._plWeek || isoMonday(this._todayIso() || (this.view.y + '-' + pad2(this.view.m) + '-01'));
@@ -2653,7 +2987,7 @@
       this.plEl.classList.add('open');
       this.dockEl.classList.add('on');
       setTimeout(function () { self.plEl.focus({ preventScroll: true }); }, reducedMotion() ? 20 : 260);
-      var reads = [this.fetchFreeWeek(this._plWeek), this.fetchFreeMonth(this.view.y, this.view.m), this.fetchMine()];
+      var reads = [this.fetchFreeWeek(this._plWeek), this.fetchFreeMonth(this.view.y, this.view.m), this.fetchMine(), this.fetchAnswers(), this.fetchAway()];
       Promise.all(reads).then(function () { self._plLoadGrid(); self.refreshPlanner(); });
     },
 
@@ -2703,11 +3037,11 @@
         h += '<div class="plday"><div class="pldh"><button type="button" class="lnk" data-pl-day="' + esc(key) + '"><b>' + esc(realDateWords(iso)) + '</b></button>' +
           '<span>' + esc(!w ? 'Nobody free' : (w.free === data.total ? 'Everyone ' : w.free + ' of ' + data.total + ' ') + this._windowWords(w, iso)) + '</span></div>' +
           '<div class="flines"><span class="bandwrap" aria-hidden="true">' + this._bandHTML(data, 'band2') + '</span>' + data.members.map(function (mem) {
-            return '<div class="fr"><span class="nm">' + esc(mem.name) + '</span>' + self._lineHTML(mem.segs) + '<span class="sr">' + esc(mem.name + ': ' + self._segsWords(mem)) + '</span></div>';
+            return '<div class="fr"><span class="nm">' + esc(mem.name) + '</span>' + self._lineHTML(mem.segs, mem.off) + '<span class="sr">' + esc(mem.name + ': ' + self._segsWords(mem)) + '</span></div>';
           }).join('') + '</div></div>';
       }
       if (!any) h += '<p class="none">Loading who’s free…</p>';
-      else h += '<div class="fticks pltk" aria-hidden="true"><span>12am</span><span>6am</span><span>noon</span><span>6pm</span><span>12am</span></div>';
+      else h += '<div class="fticks pltk" aria-hidden="true"><span>12am</span><span>6am</span><span>noon</span><span>6pm</span><span>12am</span></div>' + FREE_LEGEND;
       h += '</section>';
       // The month's game nights, with who is coming to each.
       var nights = [], today = this._todayIso();
@@ -2716,11 +3050,9 @@
       }
       h += '<section class="dsec"><h4>Game nights in ' + esc(monthName) + '</h4>';
       h += nights.length ? '<ul class="plnights">' + nights.map(function (x) {
-        var n = x.n, t = n.tally || {}, who = (n.roster || []).filter(function (a) { return !a.excluded; }).map(function (a) {
-          return '<span class="plw ' + (a.answer === 'yes' ? 'y' : a.answer === 'maybe' ? 'm' : a.answer === 'no' ? 'n' : 'q') + '">' + esc(a.name) + '</span>';
-        }).join('');
+        var n = x.n, t = n.tally || {};
         return '<li><button type="button" class="plnb" data-pl-day="' + esc(x.key) + '" data-pl-night="' + esc(self._gnId(n)) + '"><b>' + esc(realDateWords(n.date)) + '</b> · ' + esc(n.name) +
-          '<small>' + (t.going || 0) + ' going · ' + (t.maybe || 0) + ' maybe · ' + (t.cant || 0) + ' can’t · ' + (t.noAnswer || 0) + ' no answer</small></button><div class="plwho">' + who + '</div></li>';
+          '<small>' + (t.going || 0) + ' going · ' + (t.maybe || 0) + ' maybe · ' + (t.cant || 0) + ' can’t · ' + (t.noAnswer || 0) + ' no answer</small></button>' + self._gnChipsHTML(n) + '</li>';
       }).join('') + '</ul>' : '<p class="none">No game nights left this month.</p>';
       h += '</section>';
       // Best times and the players, as in the quick view.
@@ -2800,7 +3132,7 @@
       var tools = [['available', 'Free'], ['preferred', 'Best'], ['', 'Clear']];
       var inZone = zone ? ', in ' + esc(zone.replace(/_/g, ' ')) + ' time' : '';
       var h = '<section class="dsec"><h4>Your hours</h4>' +
-        '<div class="segs plalt" role="group" aria-label="How your hours repeat">' +
+        '<div class="rseg plalt" role="group" aria-label="How your hours repeat">' +
           '<button type="button" data-pl-alt="0" aria-pressed="' + !alt + '">Same every week</button>' +
           '<button type="button" data-pl-alt="1" aria-pressed="' + alt + '">Alternating weeks</button></div>' +
         '<p class="dnote">' + (alt ? 'Paint each of the two weeks. They take turns, every other week' : 'Drag across the hours you can usually play. They repeat every week') + inZone + '.</p>' +
@@ -2819,6 +3151,7 @@
       }
       h += '<div class="plsave"><button type="button" class="btn primary" data-pl-save' + (this._plDirty ? '' : ' disabled') + '>Save my hours</button><span class="plstat" role="status">' + esc(this._plStatus || '') + '</span></div>';
       h += '<p class="dnote">A day that’s different, or a day you can’t play: open that day in the calendar.</p></section>';
+      h += '<section class="dsec">' + this._awayHTML() + '</section>';
       return h;
     },
 
@@ -2895,6 +3228,7 @@
       if (lines) { this.setShowFree(lines.checked); return; }
       var nudge = t.closest('[data-best-nudge]');
       if (nudge) { this._fvHandleClick(e); return; }
+      if (this._timeToolClick(e, function () { self.refreshPlanner(); })) return;
       var go = t.closest('[data-pl-day], [data-best-open]');
       if (go) {
         var key = go.dataset.plDay || go.dataset.bestOpen, night = go.dataset.plNight || go.dataset.bestNight || null;
@@ -2910,6 +3244,8 @@
     _fvHandleClick: function (e) {
       var self = this, open = e.target.closest('[data-best-open]'), nudge = e.target.closest('[data-best-nudge]');
       if (e.target.closest('[data-close]')) { this.closeFreeView(); return; }
+      var redraw = this.plannerOpen() ? function () { self.refreshPlanner(); } : function () { self.refreshFreeView(); };
+      if (this._timeToolClick(e, redraw)) return;
       var pl = e.target.closest('[data-fv-planner]');
       if (pl) { this.openPlanner({ paint: pl.dataset.fvPlanner === 'mine' }); return; }
       if (open) {
@@ -2999,13 +3335,105 @@
       this.calEl.style.setProperty('--cols', weekdays.length || 7);
     },
 
-    renderToday: function () {
+    renderToday: function (bump) {
       var cal = this.cal;
       var el = $('#cal5-todaypill', this.el);
       var mc = CalDate.monthCount(cal), m0 = ((cal.current_month - 1) % mc + mc) % mc;
       var monthDef = (cal.months || [])[m0];
       var label = (monthDef ? monthDef.name : cal.current_month) + ' ' + cal.current_day + ', ' + cal.current_year;
-      el.innerHTML = '<span class="tl">Today</span><span class="td">' + esc(label) + '</span>';
+      if (!this._canSetToday()) {
+        el.classList.remove('step');
+        el.innerHTML = '<span class="tl">Today</span><span class="td">' + esc(label) + '</span>';
+        return;
+      }
+      // The DM moves the world's today here: a day back or on with the
+      // arrows, or any date and time from the date itself.
+      var t = this._todayTimeWords();
+      el.classList.add('step');
+      el.innerHTML = '<span class="tl">Today</span>' +
+        '<button type="button" class="sb" data-today-step="-1" aria-label="Move today back a day"><i class="fa-solid fa-chevron-left"></i></button>' +
+        '<button type="button" class="td tdset' + (bump ? ' bump' : '') + '" data-today-set aria-haspopup="dialog" title="Set the world’s date and time">' + esc(label) + (t ? '<span class="tt">' + esc(t) + '</span>' : '') + '</button>' +
+        '<button type="button" class="sb" data-today-step="1" aria-label="Move today on a day"><i class="fa-solid fa-chevron-right"></i></button>';
+    },
+
+    // --------------------------------------------------------------
+    // Set today: the owner moves a world calendar's current date and time.
+    // A real-world calendar follows the clock, so it has nothing to set.
+    // --------------------------------------------------------------
+    _canSetToday: function () {
+      return this.role >= 3 && !!this.apiBase && !CalDate.usesRealTime(this.cal);
+    },
+
+    _hoursPerDay: function () { return this.cal.hours_per_day > 0 ? this.cal.hours_per_day : 24; },
+    _minutesPerHour: function () { return this.cal.minutes_per_hour > 0 ? this.cal.minutes_per_hour : 60; },
+
+    // "3:05pm" on a 24-hour day, "Hour 13:05" on any other.
+    _todayTimeWords: function () {
+      var c = this.cal, h = c.current_hour || 0, mm = c.current_minute || 0;
+      if (c.current_hour == null) return '';
+      return this._hoursPerDay() === 24 && this._minutesPerHour() === 60 ? ampm(h * 60 + mm) : 'Hour ' + h + ':' + pad2(mm);
+    },
+
+    showSetToday: function (btn) {
+      var self = this, c = this.cal, mc = CalDate.monthCount(c);
+      this._popBtn = btn;
+      var months = (c.months || []).map(function (mo, i) {
+        return '<option value="' + (i + 1) + '"' + (i + 1 === c.current_month ? ' selected' : '') + '>' + esc(mo.name || 'Month ' + (i + 1)) + '</option>';
+      }).join('') || Array.from({ length: mc }, function (_, i) { return '<option value="' + (i + 1) + '">' + (i + 1) + '</option>'; }).join('');
+      this.popEl.innerHTML = '<div class="crease"><span>Today in the world</span><button type="button" class="x" data-close aria-label="Close">✕</button></div>' +
+        '<form class="settoday" data-today-form novalidate>' +
+          '<div class="strow3"><label class="fld"><span>Month</span><select name="month">' + months + '</select></label>' +
+          '<label class="fld"><span>Day</span><input type="number" name="day" inputmode="numeric" min="1" value="' + esc(String(c.current_day)) + '"></label>' +
+          '<label class="fld"><span>Year</span><input type="number" name="year" inputmode="numeric" value="' + esc(String(c.current_year)) + '"></label></div>' +
+          '<div class="strow2"><label class="fld"><span>Hour</span><input type="number" name="hour" inputmode="numeric" min="0" max="' + (this._hoursPerDay() - 1) + '" value="' + (c.current_hour || 0) + '"></label>' +
+          '<label class="fld"><span>Minute</span><input type="number" name="minute" inputmode="numeric" min="0" max="' + (this._minutesPerHour() - 1) + '" value="' + (c.current_minute || 0) + '"></label></div>' +
+          '<p class="stn">Players see the new date at once.</p>' +
+          '<p class="sterr" role="alert" hidden></p>' +
+          '<div class="sta"><button type="submit" class="btn sm primary">Set today</button><button type="button" class="btn sm quiet" data-close>Cancel</button></div>' +
+        '</form>';
+      growOpen(this.popEl, btn, this.calEl);
+      this._updateScrim();
+      setTimeout(function () { var f = self.popEl.querySelector('select'); if (f) f.focus({ preventScroll: true }); }, reducedMotion() ? 20 : 230);
+    },
+
+    _readTodayForm: function (form) {
+      var n = function (k) { var v = form.elements[k].value.trim(); return /^-?\d+$/.test(v) ? parseInt(v, 10) : NaN; };
+      var d = { y: n('year'), m: n('month'), d: n('day'), h: n('hour'), mi: n('minute') };
+      if ([d.y, d.m, d.d, d.h, d.mi].some(isNaN)) return { error: 'Fill in every box with a number.' };
+      var len = CalDate.monthDays(this.cal, d.m - 1, d.y);
+      if (d.d < 1 || d.d > len) return { error: 'That month has ' + len + ' days.' };
+      if (d.h < 0 || d.h >= this._hoursPerDay()) return { error: 'The hour runs from 0 to ' + (this._hoursPerDay() - 1) + '.' };
+      if (d.mi < 0 || d.mi >= this._minutesPerHour()) return { error: 'The minute runs from 0 to ' + (this._minutesPerHour() - 1) + '.' };
+      return d;
+    },
+
+    // _saveToday writes the world's new today and, once it is stored,
+    // redraws everything that hangs off it. Resolves to an error message or ''.
+    _saveToday: function (d) {
+      var self = this;
+      var body = { current_year: d.y, current_month: d.m, current_day: d.d, current_hour: d.h, current_minute: d.mi };
+      return Chronicle.apiFetch(this.apiBase, { method: 'PUT', body: body })
+        .then(function (resp) {
+          if (!resp.ok) return resp.json().then(function (j) { return (j && (j.error || j.message)) || 'Could not set today.'; }, function () { return 'Could not set today.'; });
+          Object.assign(self.cal, body);
+          self._anchor = realAnchor(self.cal);
+          self.nightsByMonth = {};
+          self.renderToday(true);
+          self.goToday();
+          self.say('Today is now ' + $('#cal5-todaypill .tdset', self.el).textContent + '.');
+          return '';
+        })
+        .catch(function () { return 'Could not reach Chronicle. Try again.'; });
+    },
+
+    _stepToday: function (delta) {
+      if (this._todayBusy) return;
+      var self = this, c = this.cal, next = CalDate.addDays(c, { y: c.current_year, m: c.current_month, d: c.current_day }, delta);
+      this._todayBusy = true;
+      this._saveToday({ y: next.y, m: next.m, d: next.d, h: c.current_hour || 0, mi: c.current_minute || 0 }).then(function (err) {
+        self._todayBusy = false;
+        if (err) self._toast(err);
+      });
     },
 
     renderLegend: function () {
@@ -3511,6 +3939,12 @@
         if (self.fvEl.classList.contains('open')) self.closeFreeView(); else self.openFreeView();
       });
       this.fvEl.addEventListener('click', function (e) { self._fvHandleClick(e); });
+      this.fvEl.addEventListener('submit', function (e) {
+        var form = e.target.closest('[data-away-form]');
+        if (!form) return;
+        e.preventDefault();
+        self._awaySubmit(form, function () { self.refreshFreeView(); });
+      });
       this.fvEl.addEventListener('change', function (e) {
         if (e.target.matches('[data-fv-lines]')) self.setShowFree(e.target.checked);
       });
@@ -3625,6 +4059,27 @@
       this.popEl.addEventListener('click', function (e) {
         if (e.target.closest('[data-close]')) self.closePop();
       });
+      this.popEl.addEventListener('submit', function (e) {
+        var form = e.target.closest('[data-today-form]');
+        if (!form) return;
+        e.preventDefault();
+        var d = self._readTodayForm(form), err = form.querySelector('.sterr'), go = form.querySelector('[type="submit"]');
+        if (d.error) { err.textContent = d.error; err.hidden = false; return; }
+        go.disabled = true;
+        self._saveToday(d).then(function (msg) {
+          go.disabled = false;
+          if (msg) { err.textContent = msg; err.hidden = false; return; }
+          self.closePop();
+        });
+      });
+      $('#cal5-todaypill', this.el).addEventListener('click', function (e) {
+        var step = e.target.closest('[data-today-step]');
+        if (step) { self._stepToday(parseInt(step.dataset.todayStep, 10)); return; }
+        var set = e.target.closest('[data-today-set]');
+        if (!set) return;
+        if (self.popEl.classList.contains('open')) { self.closePop(); return; }
+        self.showSetToday(set);
+      });
 
       // Keyboard: arrows move the roving day, T jumps to today, Page
       // Up/Down change month, Enter/Space open the focused day.
@@ -3685,7 +4140,8 @@
         if (!(t instanceof Element) || self.evpEl.contains(t)) return;
         var inside = self.el.contains(t);
         if (inside && self.mvEl.classList.contains('open') && !self.mvEl.contains(t) && !t.closest('#cal5-moonbtn, .msil, .mrow')) self.closeMoonView();
-        if (inside && self.fvEl.classList.contains('open') && !self.fvEl.contains(t) && !t.closest('#cal5-freebtn')) self.closeFreeView();
+        if (inside && self.fvEl.classList.contains('open') && !self.fvEl.contains(t) && !t.closest('#cal5-freebtn') && !self._awayHolds(function () { self.refreshFreeView(); })) self.closeFreeView();
+        if (self.popEl.classList.contains('open') && !self.popEl.contains(t) && !t.closest('#cal5-hub, #cal5-todaypill')) self._popOff();
         if (!self.wingFor || self.wingEl.contains(t) || self.wingEl.querySelector('form')) return;
         if ((inside ? !t.closest('.day[data-key], #cal5-freebtn') :
             !t.closest('dialog, [role="dialog"], [aria-modal="true"]')) && !self._rollHolds()) self.closeWing();
@@ -4276,6 +4732,7 @@
 
     showHub: function () {
       var self = this, btn = $('#cal5-hub', this.el);
+      this._popBtn = btn;
       this.popEl.innerHTML = '<div class="crease"><span>Calendars</span><button type="button" class="x" data-close aria-label="Close">✕</button></div><div class="list"><p class="none" style="padding:10px">Loading…</p></div>';
       growOpen(this.popEl, btn, this.calEl);
       btn.setAttribute('aria-expanded', 'true');
@@ -4300,10 +4757,31 @@
         });
     },
 
+    // A press outside the popover closes it, unless it holds a date being
+    // set: then it stays and says so, so a stray press never loses it.
+    _popOff: function () {
+      var form = this.popEl.querySelector('[data-today-form]');
+      if (form && this._todayFormDirty(form)) {
+        var err = form.querySelector('.sterr');
+        err.textContent = 'You haven’t set this date yet. Press Set today, or Cancel.';
+        err.hidden = false;
+        err.classList.remove('shake'); void err.offsetWidth; err.classList.add('shake');
+        return;
+      }
+      this.closePop();
+    },
+
+    _todayFormDirty: function (form) {
+      var c = this.cal, v = function (k) { return form.elements[k].value.trim(); };
+      return v('year') !== String(c.current_year) || v('month') !== String(c.current_month) || v('day') !== String(c.current_day) ||
+        v('hour') !== String(c.current_hour || 0) || v('minute') !== String(c.current_minute || 0);
+    },
+
     closePop: function () {
       if (!this.popEl.classList.contains('open')) return;
-      var btn = $('#cal5-hub', this.el);
-      btn.setAttribute('aria-expanded', 'false');
+      var btn = this._popBtn && this._popBtn.isConnected ? this._popBtn : $('#cal5-hub', this.el);
+      $('#cal5-hub', this.el).setAttribute('aria-expanded', 'false');
+      this._popBtn = null;
       growClose(this.popEl, btn);
       this._updateScrim();
     }
@@ -4314,6 +4792,6 @@
   // Go model's own values without a browser DOM. `module` is undefined when
   // loaded via <script>, so this is a no-op in the browser.
   if (typeof module !== 'undefined' && module.exports) {
-    module.exports = { CalDate: CalDate, MoonMath: MoonMath, EraMath: EraMath, weatherMarkHTML: weatherMarkHTML, weatherFactHTML: weatherFactHTML, weatherPaintHTML: weatherPaintHTML, forecastMarkHTML: forecastMarkHTML, forecastFactHTML: forecastFactHTML, forecastDetailText: forecastDetailText, playersSeeHTML: playersSeeHTML, weatherIcon: weatherIcon };
+    module.exports = { CalDate: CalDate, MoonMath: MoonMath, EraMath: EraMath, weatherMarkHTML: weatherMarkHTML, weatherFactHTML: weatherFactHTML, weatherPaintHTML: weatherPaintHTML, forecastMarkHTML: forecastMarkHTML, forecastFactHTML: forecastFactHTML, forecastDetailText: forecastDetailText, playersSeeHTML: playersSeeHTML, weatherIcon: weatherIcon, awayStretches: awayStretches };
   }
 })();

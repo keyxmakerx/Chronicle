@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/rand"
 	"database/sql"
+	"encoding/json"
 	"fmt"
 	mrand "math/rand"
 	"os"
@@ -12,6 +13,7 @@ import (
 
 	"github.com/go-sql-driver/mysql"
 
+	"github.com/keyxmakerx/chronicle/internal/apperror"
 	"github.com/keyxmakerx/chronicle/internal/database"
 )
 
@@ -191,6 +193,39 @@ func TestEntityTypeRepository_Integration(t *testing.T) {
 		}
 		if got.Claimable == nil || *got.Claimable {
 			t.Errorf("after update→false: want false, got %v", got.Claimable)
+		}
+	})
+
+	// entity_types has no updated_at, so a write of the values already stored
+	// changes no row; that is a save, not a missing type. Campaign import
+	// writes an addon-made type back exactly as the file has it.
+	t.Run("unchanged writes are not a missing type", func(t *testing.T) {
+		layout, _ := json.Marshal(child.Layout)
+		fields, _ := json.Marshal(child.Fields)
+		layoutJSON := string(layout)
+		for i := 0; i < 2; i++ {
+			if err := repo.Update(ctx, child); err != nil {
+				t.Fatalf("Update %d: %v", i+1, err)
+			}
+			if err := repo.UpdateLayout(ctx, child.ID, layoutJSON); err != nil {
+				t.Fatalf("UpdateLayout %d: %v", i+1, err)
+			}
+			if err := repo.UpdateFieldsSchema(ctx, child.ID, string(fields)); err != nil {
+				t.Fatalf("UpdateFieldsSchema %d: %v", i+1, err)
+			}
+			if err := repo.UpdateColor(ctx, child.ID, child.Color); err != nil {
+				t.Fatalf("UpdateColor %d: %v", i+1, err)
+			}
+			if err := repo.UpdateDashboard(ctx, child.ID, nil, nil); err != nil {
+				t.Fatalf("UpdateDashboard %d: %v", i+1, err)
+			}
+			if err := repo.UpdateDashboardLayout(ctx, child.ID, &layoutJSON); err != nil {
+				t.Fatalf("UpdateDashboardLayout %d: %v", i+1, err)
+			}
+		}
+		err := repo.UpdateLayout(ctx, 999999999, layoutJSON)
+		if appErr, ok := err.(*apperror.AppError); !ok || appErr.Code != 404 {
+			t.Errorf("UpdateLayout on a missing type: got %v, want not found", err)
 		}
 	})
 }

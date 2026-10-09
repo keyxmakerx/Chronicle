@@ -7,11 +7,6 @@
 <!-- Update: Whenever a non-obvious bug is encountered and solved.            -->
 <!-- ====================================================================== -->
 
-> This file will grow as the project progresses. Add entries whenever you
-> encounter and solve a non-obvious issue.
-
----
-
 ## Templ Files Not Updating
 
 **Symptom:** Changed a `.templ` file but browser shows old content.
@@ -72,8 +67,7 @@ well with CHAR(36) UUID primary keys.
 **Cause:** Random UUIDs (v4) cause index fragmentation in B-trees.
 
 **Fix:** Consider UUID v7 (time-ordered) for better index locality. The
-`google/uuid` package supports this with `uuid.Must(uuid.NewV7())`. Decision
-to switch should be an ADR.
+`google/uuid` package supports this with `uuid.Must(uuid.NewV7())`.
 
 ---
 

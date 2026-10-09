@@ -11,7 +11,7 @@
  * buttons honest.
  *
  * Mount: <div data-widget="notice_boards" data-endpoint data-campaign-id
- * data-entity-id data-csrf-token data-can-manage data-member-role>. Shared
+ * data-entity-id (page mount only) data-csrf-token data-can-manage data-member-role>. Shared
  * parts: quest_board_kit.js; styles: static/css/quest_board.css.
  */
 (function () {
@@ -32,14 +32,16 @@
       el.innerHTML = '<div class="loading">Loading the notice boards…</div>';
       el._nb = S;
       K.api(cfg.endpoint).then(function (data) {
-        S.data = normalise(data); first(S);
+        S.seen = JSON.stringify(data); S.data = normalise(data); first(S);
       }).catch(function (err) {
         if (err.status === 404) { el.hidden = true; return; }
         el.innerHTML = '<div class="loading">' + esc(err.message) + '</div>';
       });
+      S.stops.push(K.live(cfg.campaignId, function (m) { onLive(S, m); }));
     },
     destroy: function (el) {
       var S = el._nb; if (!S) return;
+      clearTimeout(S.liveTimer);
       S.stops.forEach(function (f) { f(); });
       el._nb = null;
     }
@@ -67,7 +69,7 @@
   // ---------- Rendering ----------
   function first(S) {
     var el = S.el;
-    el.innerHTML = '<div class="bw wide">' + frameHTML() + (isDm(S) ? K.ribbon('Board ledger') + ledgerHTML(S) : '') + '</div>';
+    el.innerHTML = '<div class="bw wide">' + frameHTML(S) + (isDm(S) ? K.ribbon('Board ledger') + ledgerHTML(S) : '') + '</div>';
     K.setLooks(el, S.data.looks);
     var b = el.querySelector('.board');
     setTimeout(function () { b.classList.remove('enter'); }, 1600);
@@ -78,13 +80,15 @@
     window.addEventListener('resize', onResize);
     S.stops.push(function () { window.removeEventListener('resize', onResize); });
   }
-  function frameHTML() {
+  function frameHTML(S) {
     var plate = '<div class="bplate turn"><button type="button" class="arr" data-turn="-1" aria-label="Previous board">‹</button><span class="bnm"></span>' +
       '<button type="button" class="arr" data-turn="1" aria-label="Next board">›</button></div>';
     var tray = '<div class="tray"><span class="dots" aria-hidden="true"></span><span class="sp"></span><span class="lockline"></span>' +
       '<div class="addw"><button type="button" class="addb" aria-haspopup="true" aria-expanded="false">+ Add to board</button>' +
       '<div class="menu" hidden><button type="button" data-add="notice">Post a quest notice</button><button type="button" data-add="note">Note</button>' +
-      '<button type="button" data-add="page">Pin a page…</button><button type="button" data-add="map">Pin a map…</button><button type="button" data-add="string">Tie string</button></div></div></div>';
+      '<button type="button" data-add="page">Pin a page…</button>' +
+      // The maps addon off hides map pins; the server refuses them too.
+      (S.data.mapsOn === false ? '' : '<button type="button" data-add="map">Pin a map…</button>') + '<button type="button" data-add="string">Tie string</button></div></div></div>';
     return K.boardFrame('wide multi', plate, '<div class="face"></div>', tray);
   }
   function drawFace(S) {
@@ -120,7 +124,8 @@
       var stamp = it.status === 'done' ? 'Done' : it.status === 'active' ? 'Taken' : it.status === 'failed' ? 'Failed' : '';
       return K.noticeHTML({ kicker: it.kicker, title: it.title, blurb: it.blurb, reward: it.reward }, {
         cls: 'bi notice' + (mine ? ' mine' : '') + (it.hidden ? ' veiled' : ''), attrs: ' data-id="' + esc(it.id) + '" data-notice="' + esc(it.questId) + '"',
-        style: style, stamp: stamp, brass: i % 3 === 1, torn: i % 3 === 2 });
+        style: style, stamp: stamp, brass: i % 3 === 1, torn: i % 3 === 2,
+        left: it.status === 'done' || it.status === 'failed' ? '' : K.daysText(it.daysLeft), late: it.daysLeft < 0 });
     }
     if (it.kind === 'note') {
       return head + ' aria-label="Note' + (it.ownerName ? ' by ' + esc(it.ownerName) : '') + '"><span class="pin"></span><div class="sticky"><div class="nt"' +
@@ -197,6 +202,36 @@
     }
   }
 
+  // ---------- Live updates ----------
+  // Fetch again when these boards change, or a quest pinned on them is saved
+  // (its title or status shows on the notice). Never under a viewer who is
+  // mid-change: wait until they finish so a drag or an edit is not lost.
+  function onLive(S, m) {
+    var cat = S.cfg.endpoint.indexOf('/category-boards/') >= 0, key = S.cfg.endpoint.split('/').pop();
+    var hit = m.type === 'reconnected' ||
+      (m.type === 'notice_boards.updated' && m.resourceId === key && (m.payload && m.payload.home) === (cat ? 'category' : 'page')) ||
+      (m.type === 'quest.updated' && S.data && S.data.boards.some(function (b) { return b.items.some(function (it) { return it.questId === m.resourceId; }); }));
+    if (hit) { S.stale = true; refreshWhenIdle(S); }
+  }
+  function idle(S) {
+    var a = document.activeElement, pk = S.el.querySelector('.picker');
+    return !S.tying && !K.sheetIsOpen() && !S.el.querySelector('.dragging') && !(pk && !pk.hidden) &&
+      !(a && S.el.contains(a) && (a.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(a.tagName)));
+  }
+  function refreshWhenIdle(S) {
+    clearTimeout(S.liveTimer);
+    if (!S.stale || !S.data || !S.el.isConnected) return;
+    if (!idle(S)) { S.liveTimer = setTimeout(function () { refreshWhenIdle(S); }, 1500); return; }
+    S.stale = false;
+    K.api(S.cfg.endpoint).then(function (data) {
+      if (!S.data) return;
+      if (!idle(S)) { S.stale = true; refreshWhenIdle(S); return; }
+      var raw = JSON.stringify(data);
+      if (raw === S.seen) return;
+      S.seen = raw; apply(S, data);
+    }).catch(function (err) { if (err.status === 404 || err.status === 403) S.el.hidden = true; });
+  }
+
   // ---------- Talking to the server ----------
   // A refused change puts the board back the way the server has it.
   function send(S, method, url, body) {
@@ -207,12 +242,16 @@
   }
   function reload(S) {
     return K.api(S.cfg.endpoint).then(function (data) {
-      var curId = board(S) && board(S).id;
-      S.data = normalise(data);
-      var i = S.data.boards.map(function (b) { return b.id; }).indexOf(curId);
-      S.cur = i >= 0 ? i : Math.min(S.cur, Math.max(0, S.data.boards.length - 1));
-      drawFace(S); redrawLedger(S);
+      S.seen = JSON.stringify(data); apply(S, data);
     }).catch(function () {});
+  }
+  // Shows a fresh copy, staying on the board the viewer was looking at.
+  function apply(S, data) {
+    var curId = board(S) && board(S).id;
+    S.data = normalise(data);
+    var i = S.data.boards.map(function (b) { return b.id; }).indexOf(curId);
+    S.cur = i >= 0 ? i : Math.min(S.cur, Math.max(0, S.data.boards.length - 1));
+    drawFace(S); redrawLedger(S);
   }
   function addItem(S, item) {
     var b = board(S);
@@ -439,7 +478,7 @@
       (n.postedBy ? '<div class="by">' + esc(n.postedBy) + '</div>' : '') + (n.body || []).map(function (p) { return '<p>' + esc(p) + '</p>'; }).join('') +
       (n.reward ? '<h4>Reward</h4><p style="margin:0">' + esc(n.reward) + '</p>' : '') +
       (steps.length ? '<h4>What must be done</h4><ul class="steps">' + steps.join('') + '</ul>' : '') +
-      '<div class="sfoot"><span class="due">' + esc(n.due || '') + '</span><span style="display:flex;gap:10px;align-items:center">' +
+      '<div class="sfoot"><span class="due">' + (q.due ? 'Due ' + esc(q.due.label) + ' <span class="dl">· ' + esc(K.daysText(q.due.daysLeft)) + '</span>' : esc(n.due || '')) + '</span><span style="display:flex;gap:10px;align-items:center">' +
       '<a class="pbtn" href="' + S.campaignUrl + '/entities/' + encodeURIComponent(it.questId) + '">Open the quest</a>' +
       '<button type="button" class="pbtn" data-close>Pin it back</button><span class="seal" aria-hidden="true">' + esc(K.sealLetter(n.title)) + '</span></span></div>';
   }

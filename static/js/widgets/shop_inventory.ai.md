@@ -44,8 +44,6 @@ None emitted or listened to.
 
 - Item data lives in the relation's `metadata` (price, quantity, in_stock); a
   custom item without a linked page stores its name there too.
-- `purchaseEndpoint` (`<campaign-url>/armory/purchase`) is computed but never
-  used by this widget.
 - A failed inventory load is swallowed, leaving the widget on its loading
   state.
 - Shop-room and transaction-log widgets are separate mounts on the same page.

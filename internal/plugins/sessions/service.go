@@ -167,6 +167,17 @@ type SessionService interface {
 	// explicit press (there is no scheduled-job runner in this product).
 	AvailabilityAnswerStatuses(ctx context.Context, campaignID string, members []overlayMemberInput) ([]AvailabilityAnswerStatus, error)
 	NudgeUnansweredAvailability(ctx context.Context, campaignID, link string, members []overlayMemberInput) (*NudgeResult, error)
+	// The Director's further asks and a member's away dates; see
+	// availability_asks.go.
+	PingMemberAvailability(ctx context.Context, campaignID, askerID, askerName, targetID, link string, members []overlayMemberInput) (*NudgeResult, error)
+	AskAllToConfirm(ctx context.Context, campaignID, askerID, askerName, link string, members []overlayMemberInput) (*NudgeResult, []string, error)
+	LastConfirmAsk(ctx context.Context, campaignID string) (time.Time, error)
+	// ListCampaignIDsUsingGameNights is every campaign with game-night data,
+	// for the addon reconciler.
+	ListCampaignIDsUsingGameNights(ctx context.Context) ([]string, error)
+	ConfirmMyAvailability(ctx context.Context, campaignID, userID string) error
+	MarkMeAway(ctx context.Context, campaignID, userID string, req AwayRequest) error
+	ClearMeAway(ctx context.Context, campaignID, userID string, req AwayRequest) error
 
 	// Slot proposals + responses. See proposals_service.go.
 	CreateProposal(ctx context.Context, campaignID, createdBy string, req CreateProposalRequest) (*SlotProposal, error)
@@ -191,7 +202,7 @@ type SessionService interface {
 	// enumerates members / resolves names); the service owns the
 	// payload/link/message construction. See notifications_service.go.
 	NotifyProposalCreated(ctx context.Context, campaignID, proposalID, title string, recipientIDs []string) error
-	NotifyProposalResponse(ctx context.Context, campaignID, proposalID, responderName, response string) error
+	NotifyProposalResponse(ctx context.Context, campaignID, proposalID, responderID, responderName string) error
 	// NotifyUsers is the generic fan-in the notifications store supports, so a
 	// feature outside the scheduler can write a bell notification without the
 	// scheduler growing a method per feature and without that feature

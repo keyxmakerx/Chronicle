@@ -833,6 +833,10 @@ type CreateCampaignInput struct {
 	Name        string
 	Description string
 	Genre       string // Optional genre preset for entity type seeding.
+	// SkipEntityTypeSeed leaves the campaign with no default categories.
+	// Import sets it when the file carries its own, which would otherwise
+	// arrive as a second copy of every default ("Character", "Character 2").
+	SkipEntityTypeSeed bool
 }
 
 // UpdateCampaignInput is the validated input for updating a campaign.

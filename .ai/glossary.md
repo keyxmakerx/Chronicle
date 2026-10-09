@@ -25,7 +25,7 @@
 ## Game Systems (Modules)
 
 - **D&D 5e** -- Dungeons & Dragons 5th Edition. Most popular TTRPG.
-- **Pathfinder** -- D&D derivative with more mechanical depth. Uses OGL.
+- **Pathfinder** -- D&D derivative with more mechanical depth.
 - **Draw Steel** -- Matt Colville's tactical TTRPG. Modern design.
 
 ## Chronicle-Specific Terms
@@ -33,17 +33,18 @@
 - **Plugin** -- A self-contained feature application in `internal/plugins/`.
   Has its own handler, service, repository, and templates. Examples: auth,
   campaigns, entities, calendar, maps.
-- **System** -- A game system content pack in `internal/systems/`. Provides
-  reference data, tooltips, and dedicated pages. Read-only. Installed via
-  Admin > Packages. Examples: drawsteel, dnd5e, pathfinder2e.
+- **System** -- A game system content pack. Provides reference data,
+  tooltips, and dedicated pages. Read-only. An external package installed via
+  Admin > Packages; `internal/systems/` is the loader, not the content.
 - **Widget** -- A reusable UI building block in `internal/widgets/`. Mounts to a
   DOM element via `data-widget` attribute, fetches its own data. Examples:
   editor, title, tags, attributes, mentions.
 - **Entity** -- The universal base type for all worldbuilding objects (characters,
   locations, items, etc.). Every "thing" in a campaign is an entity.
 - **Entity Type** -- A configurable template that defines what fields an entity
-  has. Can be customized per campaign. Default types: Character, Location,
-  Organization, Item, Quest, etc.
+  has. Can be customized per campaign. A new campaign starts from a genre
+  preset (`internal/plugins/entities/genre_presets.go`); the Fantasy preset has
+  Character, Location, Faction, Item, Creature, Quest, Lore and Shop.
 - **Fragment** -- An HTML partial returned by an HTMX request (not a full page).
 - **Layout** -- The outer HTML shell (head, nav, footer) that wraps page content.
 - **Mount Point** -- A DOM element where a widget auto-mounts itself.

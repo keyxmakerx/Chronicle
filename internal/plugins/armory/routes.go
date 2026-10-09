@@ -63,13 +63,8 @@ func RegisterRoutes(e *echo.Echo, h *Handler, th *TransactionHandler, ih *Instan
 	cg.POST("/armory/purchase-requests/:rid/approve", bh.ApproveRequest, campaigns.RequireRole(campaigns.RolePlayer))
 	cg.POST("/armory/purchase-requests/:rid/decline", bh.DeclineRequest, campaigns.RequireRole(campaigns.RolePlayer))
 
-	// Transaction routes.
-	// Purchase is the player-initiated buy path: a Player buys an item from
-	// a shop with their own character. CreateTransaction below is the
-	// admin-mediated path (gift/transfer/restock) and stays Scribe-gated.
-	// No prior ADR or comment justified the previous Scribe gate on
-	// Purchase — buyer ownership is enforced server-side in transaction_service.
-	cg.POST("/armory/purchase", th.Purchase, campaigns.RequireRole(campaigns.RolePlayer))
+	// Transaction routes. Buying goes through the shop buy route above;
+	// CreateTransaction is the GM-mediated path (gift, transfer, restock).
 	cg.POST("/armory/transactions", th.CreateTransaction, campaigns.RequireRole(campaigns.RoleScribe))
 	cg.GET("/armory/transactions", th.ListTransactions, campaigns.RequireRole(campaigns.RolePlayer))
 	cg.GET("/armory/shops/:eid/transactions", th.ListShopTransactions, campaigns.RequireRole(campaigns.RolePlayer))
@@ -90,6 +85,9 @@ func RegisterRoutes(e *echo.Echo, h *Handler, th *TransactionHandler, ih *Instan
 	// visibility enforced in the service.
 	cg.GET("/armory/give", sh.GiveDialog, campaigns.RequireRole(campaigns.RolePlayer))
 	cg.POST("/armory/give", sh.Give, campaigns.RequireRole(campaigns.RolePlayer))
+	// Paying coins onto a character's sheet (quest rewards): Owner
+	// visibility enforced in the service, as for a give.
+	cg.POST("/armory/pay", sh.Pay, campaigns.RequireRole(campaigns.RolePlayer))
 	cg.POST("/armory/moves", sh.Move, campaigns.RequireRole(campaigns.RolePlayer))
 	cg.POST("/armory/moves/:mid/approve", sh.Approve, campaigns.RequireRole(campaigns.RolePlayer))
 	cg.POST("/armory/moves/:mid/decline", sh.Decline, campaigns.RequireRole(campaigns.RolePlayer))

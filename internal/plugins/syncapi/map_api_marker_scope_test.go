@@ -3,7 +3,9 @@ package syncapi
 import (
 	"context"
 	"errors"
+	"io"
 	"net/http"
+	"strings"
 	"testing"
 	"time"
 
@@ -158,5 +160,94 @@ func TestMapAPIHandler_GetMarker_HidesShadowedPin(t *testing.T) {
 		if svc.shadowRole != int(campaigns.RolePlayer) {
 			t.Errorf("asked about role %d, want the key's role", svc.shadowRole)
 		}
+	}
+}
+
+// A marker whose visibility rules leave the caller out answers NotFound, as
+// the list leaves it out; the player the rules admit reads it.
+func TestMapAPIHandler_GetMarker_AppliesVisibilityRules(t *testing.T) {
+	rules := `{"allowed_users":["player-ann"]}`
+	tests := []struct {
+		name    string
+		userID  string
+		role    campaigns.Role
+		wantErr bool
+	}{
+		{"admitted player", "player-ann", campaigns.RolePlayer, false},
+		{"player left out", "player-bob", campaigns.RolePlayer, true},
+		{"owner bypasses rules", "owner-1", campaigns.RoleOwner, false},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			svc := &stubMapSvcMarkerScope{
+				m:      &maps.Map{ID: "map-1", CampaignID: "camp-1"},
+				marker: &maps.Marker{ID: "mk-1", MapID: "map-1", Visibility: "everyone", VisibilityRules: &rules},
+			}
+			camp := &stubCampaignSvcMarkerScope{stubCampaignSvcOwnerGate{role: tt.role}}
+			h := NewMapAPIHandler(nil, svc, &stubDrawingSvcOwnerGate{}, camp)
+			key := &APIKey{ID: 1, CampaignID: "camp-1", UserID: tt.userID, IsActive: true, Permissions: []APIKeyPermission{PermRead}}
+			c, _ := newMapAPIContext(http.MethodGet, "/api/v1/campaigns/camp-1/maps/map-1/markers/mk-1", key)
+			c.SetParamNames("id", "mapID", "markerID")
+			c.SetParamValues("camp-1", "map-1", "mk-1")
+
+			err := h.GetMarker(c)
+			if !tt.wantErr {
+				if err != nil {
+					t.Fatalf("want success, got %v", err)
+				}
+				return
+			}
+			var ae *apperror.AppError
+			if !errors.As(err, &ae) || ae.Code != http.StatusNotFound {
+				t.Fatalf("want 404 NotFound, got %v", err)
+			}
+		})
+	}
+}
+
+// stubMapSvcRulesCapture records the visibility rules an update passes on.
+type stubMapSvcRulesCapture struct {
+	stubMapSvcMarkerScope
+	got maps.UpdateMarkerInput
+}
+
+func (s *stubMapSvcRulesCapture) UpdateMarker(_ context.Context, _ string, in maps.UpdateMarkerInput, _ bool) error {
+	s.got = in
+	return nil
+}
+
+// Only an Owner key may change per-player visibility rules; anyone else's are
+// dropped to absent, so the Owner's stored rules survive untouched.
+func TestMapAPIHandler_UpdateMarker_RulesOwnerOnly(t *testing.T) {
+	tests := []struct {
+		name        string
+		role        campaigns.Role
+		wantPresent bool
+	}{
+		{"owner sets rules", campaigns.RoleOwner, true},
+		{"scribe's rules are dropped", campaigns.RoleScribe, false},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			svc := &stubMapSvcRulesCapture{stubMapSvcMarkerScope: stubMapSvcMarkerScope{
+				m:      &maps.Map{ID: "map-1", CampaignID: "camp-1"},
+				marker: &maps.Marker{ID: "mk-1", MapID: "map-1", Visibility: "everyone"},
+			}}
+			camp := &stubCampaignSvcMarkerScope{stubCampaignSvcOwnerGate{role: tt.role}}
+			h := NewMapAPIHandler(nil, svc, &stubDrawingSvcOwnerGate{}, camp)
+			key := &APIKey{ID: 1, CampaignID: "camp-1", UserID: "u-1", IsActive: true, Permissions: []APIKeyPermission{PermRead, PermWrite}}
+			c, _ := newMapAPIContext(http.MethodPut, "/api/v1/campaigns/camp-1/maps/map-1/markers/mk-1", key)
+			c.Request().Body = io.NopCloser(strings.NewReader(`{"visibility_rules":"{\"allowed_users\":[\"u-1\"]}"}`))
+			c.Request().Header.Set(echo.HeaderContentType, echo.MIMEApplicationJSON)
+			c.SetParamNames("id", "mapID", "markerID")
+			c.SetParamValues("camp-1", "map-1", "mk-1")
+
+			if err := h.UpdateMarker(c); err != nil {
+				t.Fatalf("update: %v", err)
+			}
+			if got := svc.got.VisibilityRules.Present(); got != tt.wantPresent {
+				t.Fatalf("rules present = %v, want %v", got, tt.wantPresent)
+			}
+		})
 	}
 }

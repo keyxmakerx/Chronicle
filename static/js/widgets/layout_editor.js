@@ -8,7 +8,8 @@
  * Mount: data-widget="layout-editor". Config: data-endpoint (GET/PUT/DELETE
  * layout JSON), data-campaign-id, data-csrf-token, data-context
  * ("dashboard"|"template"), data-features, and optional data-layout,
- * data-block-types, data-fields, data-role.
+ * data-block-types, data-fields, data-role, data-scope ("category" on a
+ * category dashboard, which widens the palette).
  */
 (function () {
   'use strict';
@@ -101,6 +102,9 @@
       this.campaignId = el.dataset.campaignId;
       this.csrfToken = el.dataset.csrfToken;
       this.context = el.dataset.context || 'dashboard'; // "dashboard" or "template"
+      // A category dashboard edits like any dashboard but is offered the
+      // blocks only a category page can render.
+      this.scope = el.dataset.scope || '';
 
       // Parse feature flags.
       var featureStr = el.dataset.features || '';
@@ -224,7 +228,7 @@
         return;
       }
 
-      var ctx = this.context === 'template' ? 'template' : 'dashboard';
+      var ctx = this.context === 'template' ? 'template' : (this.scope === 'category' ? 'category' : 'dashboard');
       var url = '/campaigns/' + this.campaignId + '/entity-types/block-types?context=' + ctx;
 
       Chronicle.apiFetch(url)

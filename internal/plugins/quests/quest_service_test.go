@@ -38,7 +38,7 @@ func newQuestEnv() questEnv {
 	e.ents.add(other, "foreign", "Foreign", false)
 	e.maps.add(camp, "map-1", "Vale")
 	e.maps.add(other, "map-x", "Foreign map")
-	e.svc = NewQuestService(e.repo, e.ents, e.maps)
+	e.svc = NewQuestService(e.repo, e.ents, e.maps, nil)
 	return e
 }
 
@@ -300,5 +300,29 @@ func TestQuestDeletedRefDoesNotBlockEdits(t *testing.T) {
 	// A new id is still checked.
 	if _, err := e.svc.Put(ctx, camp, qid, dm, parsePatch(t, `{"version":2,"foes":[{"id":"c","text":"F","entityId":"foreign"}]}`)); code(err) != 422 {
 		t.Fatalf("foreign page accepted: %v", err)
+	}
+}
+
+// With the maps addon off, a quest shows no map and cannot link one.
+func TestQuestMapsAddonOff(t *testing.T) {
+	ctx := context.Background()
+	e := newQuestEnv()
+	if _, err := e.svc.Put(ctx, camp, qid, dm, parsePatch(t, `{"version":0,"mapId":"map-1","links":[{"kind":"map","refId":"map-1"}]}`)); err != nil {
+		t.Fatal(err)
+	}
+	e.maps.off = true
+	got, err := e.svc.Get(ctx, camp, qid, dm)
+	if err != nil {
+		t.Fatal(err)
+	}
+	dv := got.(*DMQuestView)
+	if dv.MapsOn || dv.MapName != "" || dv.Links[0].Name != "" {
+		t.Fatalf("dm view with addon off: %+v", dv)
+	}
+	// A link saved earlier is kept (other edits still save); a new one is refused.
+	e2 := newQuestEnv()
+	e2.maps.off = true
+	if _, err := e2.svc.Put(ctx, camp, qid, dm, parsePatch(t, `{"version":0,"links":[{"kind":"map","refId":"map-1"}]}`)); code(err) != 422 {
+		t.Fatalf("new map link with addon off: %v", err)
 	}
 }
