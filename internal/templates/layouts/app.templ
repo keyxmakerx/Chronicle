@@ -631,9 +631,12 @@ func safeExternalURL(url string) templ.SafeURL {
 }
 
 // Topbar renders the top navigation bar with campaign selector, customizable
-// content area, search, notes, and user menu.
+// content area, search, notes, and user menu. It sits at z-20 so its menus
+// paint over page content that makes its own stacking context (the
+// call-to-action strip keeps a transform), while staying under the mobile
+// sidebar (z-30/z-40).
 templ Topbar() {
-	<header id="app-topbar" class={ "h-14 bg-surface border-b border-edge flex items-center px-3 md:px-5 shrink-0 gap-2 relative isolate", templ.KV("cz-hdr-light", topbarWantsLightWords(ctx)) }>
+	<header id="app-topbar" class={ "h-14 bg-surface border-b border-edge flex items-center px-3 md:px-5 shrink-0 gap-2 relative isolate z-20", templ.KV("cz-hdr-light", topbarWantsLightWords(ctx)) }>
 		// #topbar-bg is always rendered, even empty, so a save on the Customize
 		// page can swap in the new background without a reload: the header
 		// sits outside #main-content and boosted navigation never redraws it.
@@ -902,7 +905,7 @@ templ Topbar() {
 					<div
 						data-notif-panel
 						hidden
-						class="absolute right-0 top-full mt-1 w-80 max-h-[70vh] overflow-y-auto bg-surface rounded-lg shadow-lg border border-edge z-50"
+						class="fixed left-3 right-3 top-14 sm:absolute sm:left-auto sm:right-0 sm:top-full sm:w-80 mt-1 max-h-[70vh] overflow-y-auto bg-surface rounded-lg shadow-lg border border-edge z-50"
 					>
 						<div class="flex items-center justify-between px-3 py-2 border-b border-edge">
 							<span class="text-sm font-semibold text-fg">Notifications</span>
