@@ -231,7 +231,7 @@ type DMQuestView struct {
 	MapsOn bool `json:"mapsOn"`
 	// Calendar is null when the campaign has no usable calendar; the DM
 	// view alone carries it. Due is null without a due date or a calendar.
-	Calendar *CalendarView `json:"calendar"`
+	Calendar *CalendarView `json:"dueCalendar"`
 	Due      *DueView      `json:"due"`
 }
 

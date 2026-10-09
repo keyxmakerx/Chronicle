@@ -247,7 +247,7 @@
     }).join('') + '</select>';
     // With a campaign calendar the due date is a day on it; without one it
     // stays the free text it always was.
-    var due = d.calendar ? lrow('<span class="ico">' + I.cal + '</span><button type="button" class="lk grow" data-due-pick style="text-align:left">' +
+    var due = d.dueCalendar ? lrow('<span class="ico">' + I.cal + '</span><button type="button" class="lk grow" data-due-pick style="text-align:left">' +
       (d.due ? esc('Due ' + d.due.label) : '<em class="ph">Pick a due date on the calendar…</em>') + '</button>' +
       (d.due ? '<span class="sub">' + esc(K.daysText(d.due.daysLeft)) + '</span>' : ''))
       : lrow('<span class="ico">' + I.cal + '</span><span class="grow" data-rename="due" data-max="160" title="Double-click to change">' +
@@ -408,7 +408,7 @@
   // label and days left against the calendar's today, and keeps a matching
   // event on the calendar. The count here is only a preview while picking.
   function openDue(S) {
-    var cal = S.data.calendar, led = S.el.querySelector('.ledger');
+    var cal = S.data.dueCalendar, led = S.el.querySelector('.ledger');
     if (!cal || !led || S.duePick) return;
     var at = S.data.due || cal.today;
     var months = cal.months.map(function (m, i) {
@@ -430,7 +430,7 @@
     requestAnimationFrame(function () { g.classList.add('on'); g.setAttribute('aria-hidden', 'false'); });
   }
   function fillDays(S, want) {
-    var g = S.el.querySelector('.due'), cal = S.data.calendar;
+    var g = S.el.querySelector('.due'), cal = S.data.dueCalendar;
     var y = +g.querySelector('[data-due-year]').value, m = +g.querySelector('[data-due-month]').value;
     var n = monthDays(cal, m, y), sel = g.querySelector('[data-due-day]'), cur = Math.min(want || +sel.value || 1, n), opts = '';
     for (var i = 1; i <= n; i++) opts += '<option value="' + i + '"' + (i === cur ? ' selected' : '') + '>' + i + '</option>';
@@ -443,7 +443,7 @@
   }
   function showDueDistance(S) {
     var g = S.el.querySelector('.due'); if (!g) return;
-    var cal = S.data.calendar, far = g.querySelector('[data-due-far]'), left = daysBetween(cal, cal.today, readDue(S));
+    var cal = S.data.dueCalendar, far = g.querySelector('[data-due-far]'), left = daysBetween(cal, cal.today, readDue(S));
     far.textContent = isFinite(left) ? K.daysText(left) : '';
     far.classList.toggle('late', left < 0);
   }

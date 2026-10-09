@@ -243,7 +243,7 @@ func TestDueWireShape(t *testing.T) {
 	e, cal := newDueEnv()
 	ctx := context.Background()
 
-	// No due date yet: "due" is an explicit null, "calendar" is filled in.
+	// No due date yet: "due" is an explicit null, "dueCalendar" is filled in.
 	if _, err := putDM(t, e, qid, `{"version":0,"status":"active"}`); err != nil {
 		t.Fatal(err)
 	}
@@ -254,7 +254,7 @@ func TestDueWireShape(t *testing.T) {
 	if v, ok := m["due"]; !ok || v != nil {
 		t.Fatalf("due should be null: %s", raw)
 	}
-	c, _ := m["calendar"].(map[string]any)
+	c, _ := m["dueCalendar"].(map[string]any)
 	if c == nil || c["name"] != "Harvest Reckoning" || c["leapEvery"] != float64(4) || c["leapOffset"] != float64(0) {
 		t.Fatalf("calendar wrong: %s", raw)
 	}
@@ -273,7 +273,7 @@ func TestDueWireShape(t *testing.T) {
 	raw, _ = json.Marshal(got)
 	m = map[string]any{}
 	_ = json.Unmarshal(raw, &m)
-	if v, ok := m["calendar"]; !ok || v != nil {
+	if v, ok := m["dueCalendar"]; !ok || v != nil {
 		t.Fatalf("calendar should be null: %s", raw)
 	}
 
@@ -314,7 +314,7 @@ func TestPlayerViewGetsDueButNotCalendar(t *testing.T) {
 		if due == nil || due["daysLeft"] != float64(2) || due["label"] != "Frost 12, 100" {
 			t.Fatalf("player due wrong: %s", raw)
 		}
-		if _, has := m["calendar"]; has || strings.Contains(string(raw), "Harvest") || strings.Contains(string(raw), "dueEventId") {
+		if _, has := m["dueCalendar"]; has || strings.Contains(string(raw), "Harvest") || strings.Contains(string(raw), "dueEventId") {
 			t.Fatalf("player view leaks the calendar: %s", raw)
 		}
 	}

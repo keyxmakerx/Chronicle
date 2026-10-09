@@ -45,7 +45,7 @@ which also links `static/css/quest_board.css` and the period fonts.
   foes, no hidden steps and no hidden pieces; a page a player cannot open
   arrives on a board as `concealed`, with no name or id.
 - The ledger's due row is a day picked on the campaign calendar when the DM
-  view has a `calendar` (sent as `dueDate`; the server returns the `due` label
+  view has a `dueCalendar` (sent as `dueDate`; the server returns the `due` label
   and days left and keeps a calendar event in step); without one it is the free
   text `notice.due`. Notices show `daysLeft` on the board and in the reading
   sheet, and an unfinished one turns late when it is negative.
