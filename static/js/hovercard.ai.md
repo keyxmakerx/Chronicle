@@ -18,7 +18,7 @@ var unbind = Chronicle.hovercard.bind(root, '.my-term', function (el) {
 Content fields: `kind`, `kindIcon` (Font Awesome name), `title`, `locked`,
 `pic`, `facts` (`[[label, value]]`), `text`, `foot`, `link {href,label}`,
 `extraHTML`. All but `extraHTML` are escaped; `extraHTML` must already be
-safe markup. Links are followed only for same-site paths and http(s).
+safe markup. Links are followed only for same-site paths, `#` fragments and http(s).
 `Chronicle.hovercard.html(content)` returns the markup for a still preview
 (the Customize tiles). `open`, `update`, `close`, `current` drive it by hand.
 
@@ -44,7 +44,7 @@ safe markup. Links are followed only for same-site paths and http(s).
 `paper.css` also defines the paper every paper-styled screen uses: tokens
 `--paper`, `--paper-cut`, `--paper-under`, `--paper-edge`, `--paper-ink`,
 `--paper-ink-soft`, `--paper-accent`, `--paper-burn`, `--paper-font`,
-`--paper-lift`, `--paper-grain`, `--paper-fibre`; classes `.paper` (a sheet
+`--paper-lift`, `--paper-grain`, `--paper-fibre`, `--paper-ui-font`; classes `.paper` (a sheet
 with aged edges, grain and a lifted shadow), `.paper-stack` (wrapper that
 tucks a turned sheet behind its `.paper` child; must not clip),
 `.paper-kind` and `.paper-title`. Colours match the Rules book.
