@@ -56,22 +56,22 @@ func buildZip(t *testing.T, entries map[string]string) []byte {
 }
 
 // TestExtractCampaignJSONFromZip_HappyPath confirms a well-formed bundle
-// yields the JSON bytes verbatim plus a count of media entries.
+// yields the JSON bytes verbatim plus its media entries.
 func TestExtractCampaignJSONFromZip_HappyPath(t *testing.T) {
 	bundle := buildZip(t, map[string]string{
 		"campaign.json":     `{"format":"chronicle-campaign-v1","version":1}`,
 		"media/abc.jpg":     "FAKE-IMAGE-BYTES",
 		"media/def-thumb.png": "FAKE-THUMB-BYTES",
 	})
-	jsonBytes, mediaCount, err := extractCampaignJSONFromZip(bundle)
+	jsonBytes, media, err := extractCampaignJSONFromZip(bundle)
 	if err != nil {
 		t.Fatalf("extract: %v", err)
 	}
 	if !strings.Contains(string(jsonBytes), "chronicle-campaign-v1") {
 		t.Errorf("JSON not extracted correctly: %s", jsonBytes)
 	}
-	if mediaCount != 2 {
-		t.Errorf("mediaCount = %d, want 2", mediaCount)
+	if media.Len() != 2 {
+		t.Errorf("media entries = %d, want 2", media.Len())
 	}
 }
 

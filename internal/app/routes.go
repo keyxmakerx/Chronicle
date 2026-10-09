@@ -4303,6 +4303,7 @@ func (a *App) RegisterRoutes() {
 	exportSvc.SetGroupImporter(&groupImportAdapter{svc: groupService})
 	exportSvc.SetPostExporter(&postExportAdapter{postSvc: postService, entitySvc: entityService})
 	exportSvc.SetPostImporter(&postImportAdapter{svc: postService})
+	exportSvc.SetMediaImporter(&mediaImportAdapter{svc: mediaService})
 	exportHandler := campaigns.NewExportHandler(exportSvc)
 	campaigns.RegisterExportRoutes(e, exportHandler, campaignService, authService)
 

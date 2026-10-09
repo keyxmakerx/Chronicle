@@ -488,11 +488,8 @@ type CreateEntityInput struct {
 // same three-state contract; the permissions widget is the sole
 // authoritative writer, other handlers must not send it.
 //
-// TODO(keyxmakerx/Chronicle#613): ImagePath is a value-typed field the
-// service never reads — campaign import believes it applies image paths
-// through this input and does not. internal/patch/partial_update_contract_test.go
-// carries it as a named exception so a new value-typed field can't land
-// quietly beside it.
+// Pictures are not set here: UpdateImage and UpdateCoverImage are their
+// only writers, and they check the file belongs to the page's campaign.
 type UpdateEntityInput struct {
 	Name              patch.Field[string]
 	TypeLabel         patch.Field[string] // absent = preserve; "" or null = clear.
@@ -500,7 +497,6 @@ type UpdateEntityInput struct {
 	IsPrivate         *bool               // nil = preserve current; non-nil = set to *IsPrivate.
 	Entry             patch.Field[string] // absent or "" = preserve; null = clear (see service.Update).
 	PlayerNotes       *string             // Player-facing content (nil = don't change).
-	ImagePath         string              // Inert — never read. See the doc comment above.
 	FieldsData        map[string]any
 	ExpectedUpdatedAt *time.Time // Optimistic concurrency: reject if entity was modified after this timestamp.
 }

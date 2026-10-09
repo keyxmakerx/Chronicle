@@ -75,6 +75,13 @@ type ExportEntityType struct {
 	SortOrder       int             `json:"sort_order"`
 	IsDefault       bool            `json:"is_default"`
 	Enabled         bool            `json:"enabled"`
+	// PresetCategory, ParentTypeSlug and Claimable are additive. They are
+	// what makes a type the campaign's Player Character category (and a
+	// sub-category of its parent); without them a restored PC type comes
+	// back as an ordinary top-level category nobody can claim from.
+	PresetCategory *string `json:"preset_category,omitempty"`
+	ParentTypeSlug *string `json:"parent_type_slug,omitempty"`
+	Claimable      *bool   `json:"claimable,omitempty"`
 }
 
 // --- Entities ---
@@ -88,6 +95,7 @@ type ExportEntity struct {
 	Entry          *string                  `json:"entry,omitempty"`
 	EntryHTML      *string                  `json:"entry_html,omitempty"`
 	ImagePath      *string                  `json:"image_path,omitempty"`
+	CoverImagePath *string                  `json:"cover_image_path,omitempty"`
 	ParentSlug     *string                  `json:"parent_slug,omitempty"`
 	TypeLabel      *string                  `json:"type_label,omitempty"`
 	IsPrivate      bool                     `json:"is_private"`
@@ -140,6 +148,9 @@ type ExportRelation struct {
 // backup — see calendarImportAdapter.ImportCalendar's doc comment for how a
 // pre-V5 backup (which never had this field) is handled on import.
 type ExportCalendarData struct {
+	// Ref is the calendar's id in the exporting campaign, so a timeline can
+	// be bound back to the same calendar on import. Additive.
+	Ref              string  `json:"ref,omitempty"`
 	Name             string  `json:"name"`
 	Description      *string `json:"description,omitempty"`
 	Mode             string  `json:"mode"`
@@ -454,6 +465,25 @@ type ExportTimeline struct {
 	Events          []ExportTimelineEvent   `json:"events,omitempty"`
 	EntityGroups    []ExportEntityGroup     `json:"entity_groups,omitempty"`
 	Connections     []ExportEventConnection `json:"connections,omitempty"`
+	// CalendarRef names the calendar the timeline draws on (its
+	// ExportCalendarData.Ref); NoCalendar marks a timeline with none.
+	// CalendarEventLinks are the calendar events shown on it. All additive:
+	// a file with neither field binds the timeline to the default calendar,
+	// as imports always did.
+	CalendarRef        *string                   `json:"calendar_ref,omitempty"`
+	NoCalendar         bool                      `json:"no_calendar,omitempty"`
+	CalendarEventLinks []ExportTimelineEventLink `json:"calendar_event_links,omitempty"`
+}
+
+// ExportTimelineEventLink is a calendar event shown on a timeline, with the
+// timeline's own overrides for it. EventRef is the event's
+// ExportCalendarEvent.Ref.
+type ExportTimelineEventLink struct {
+	EventRef           string  `json:"event_ref"`
+	Label              *string `json:"label,omitempty"`
+	ColorOverride      *string `json:"color_override,omitempty"`
+	VisibilityOverride *string `json:"visibility_override,omitempty"`
+	VisibilityRules    *string `json:"visibility_rules,omitempty"`
 }
 
 // ExportTimelineEvent captures a standalone timeline event.
@@ -696,11 +726,15 @@ type ExportPost struct {
 // --- Media Manifest ---
 
 // ExportMediaFile captures media file metadata for reference remapping.
-// Actual file bytes are not included in the JSON export.
+// The bytes travel only in the ZIP export, as media/<Filename>.
 type ExportMediaFile struct {
 	OriginalID   string `json:"original_id"`
 	OriginalName string `json:"original_name"`
 	MimeType     string `json:"mime_type"`
 	FileSize     int64  `json:"file_size"`
 	UsageType    string `json:"usage_type"`
+	// Filename is the file's zip entry name under media/. Additive: a
+	// manifest without it is paired by OriginalID, which the stored file
+	// is named after.
+	Filename string `json:"filename,omitempty"`
 }
