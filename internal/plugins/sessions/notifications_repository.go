@@ -42,6 +42,22 @@ func (r *sessionRepository) MergeUnreadNotification(ctx context.Context, n *Noti
 	return r.CreateNotification(ctx, n)
 }
 
+// LatestCampaignNotificationAt is the newest created_at among the campaign's
+// notifications of ntype, or the zero time when there are none.
+func (r *sessionRepository) LatestCampaignNotificationAt(ctx context.Context, campaignID, ntype string) (time.Time, error) {
+	var at sql.NullTime
+	err := r.db.QueryRowContext(ctx,
+		`SELECT MAX(created_at) FROM notifications WHERE campaign_id = ? AND type = ?`,
+		campaignID, ntype).Scan(&at)
+	if err != nil {
+		return time.Time{}, fmt.Errorf("finding latest notification: %w", err)
+	}
+	if !at.Valid {
+		return time.Time{}, nil
+	}
+	return at.Time, nil
+}
+
 // ListNotifications returns a user's notifications, newest first, capped at limit.
 func (r *sessionRepository) ListNotifications(ctx context.Context, userID string, limit int) ([]Notification, error) {
 	if limit <= 0 || limit > 100 {

@@ -110,6 +110,14 @@ type AvailabilityAnswerStatus struct {
 	AnsweredAt string `json:"answeredAt,omitempty"` // RFC3339, empty when never
 }
 
+// AwayRequest marks (or clears) a stretch of days a member can't play,
+// From..To inclusive, as YYYY-MM-DD dates in TZ.
+type AwayRequest struct {
+	From string `json:"from"`
+	To   string `json:"to"`
+	TZ   string `json:"tz"`
+}
+
 // NudgeResult reports what a nudge actually did — how many members were asked,
 // and who. Returned so the Director sees the outcome rather than a silent
 // success that may have notified nobody.

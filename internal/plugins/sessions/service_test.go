@@ -50,24 +50,26 @@ type mockSessionRepo struct {
 	replaceDayExceptionsFn        func(ctx context.Context, campaignID, userID, onDate string, excs []AvailabilityException) error
 	deleteExceptionFn             func(ctx context.Context, campaignID, userID, exceptionID string) error
 	// Proposals + notifications.
-	createProposalFn            func(ctx context.Context, p *SlotProposal, options []SlotProposalOption) error
-	getProposalFn               func(ctx context.Context, campaignID, proposalID string) (*SlotProposal, []SlotProposalOption, error)
-	findProposalByIDFn          func(ctx context.Context, proposalID string) (*SlotProposal, error)
-	setProposalWinnerAndCloseFn func(ctx context.Context, proposalID, winningOptionID string) error
-	listProposalsFn             func(ctx context.Context, campaignID string) ([]SlotProposal, error)
-	listProposalOptionsFn       func(ctx context.Context, proposalID string) ([]SlotProposalOption, error)
-	findOptionFn                func(ctx context.Context, optionID string) (*SlotProposalOption, error)
-	upsertProposalResponseFn    func(ctx context.Context, r *SlotProposalResponse) error
-	listProposalResponsesFn     func(ctx context.Context, proposalID string) ([]SlotProposalResponse, error)
-	createProposalTokenFn       func(ctx context.Context, token *SlotProposalToken) error
-	findProposalTokenFn         func(ctx context.Context, tokenStr string) (*SlotProposalToken, error)
-	markProposalTokenUsedFn     func(ctx context.Context, tokenStr string) error
-	mergeUnreadNotificationFn   func(ctx context.Context, n *Notification) error
-	createNotificationFn        func(ctx context.Context, n *Notification) error
-	listNotificationsFn         func(ctx context.Context, userID string, limit int) ([]Notification, error)
-	countUnreadNotificationsFn  func(ctx context.Context, userID string) (int, error)
-	markNotificationReadFn      func(ctx context.Context, userID, notificationID string) error
-	markAllNotificationsReadFn  func(ctx context.Context, userID string) error
+	createProposalFn               func(ctx context.Context, p *SlotProposal, options []SlotProposalOption) error
+	getProposalFn                  func(ctx context.Context, campaignID, proposalID string) (*SlotProposal, []SlotProposalOption, error)
+	findProposalByIDFn             func(ctx context.Context, proposalID string) (*SlotProposal, error)
+	setProposalWinnerAndCloseFn    func(ctx context.Context, proposalID, winningOptionID string) error
+	listProposalsFn                func(ctx context.Context, campaignID string) ([]SlotProposal, error)
+	listProposalOptionsFn          func(ctx context.Context, proposalID string) ([]SlotProposalOption, error)
+	findOptionFn                   func(ctx context.Context, optionID string) (*SlotProposalOption, error)
+	upsertProposalResponseFn       func(ctx context.Context, r *SlotProposalResponse) error
+	listProposalResponsesFn        func(ctx context.Context, proposalID string) ([]SlotProposalResponse, error)
+	createProposalTokenFn          func(ctx context.Context, token *SlotProposalToken) error
+	findProposalTokenFn            func(ctx context.Context, tokenStr string) (*SlotProposalToken, error)
+	markProposalTokenUsedFn        func(ctx context.Context, tokenStr string) error
+	latestCampaignNotificationAtFn func(ctx context.Context, campaignID, ntype string) (time.Time, error)
+	touchAvailabilityAnsweredFn    func(ctx context.Context, campaignID, userID string, at time.Time) (bool, error)
+	mergeUnreadNotificationFn      func(ctx context.Context, n *Notification) error
+	createNotificationFn           func(ctx context.Context, n *Notification) error
+	listNotificationsFn            func(ctx context.Context, userID string, limit int) ([]Notification, error)
+	countUnreadNotificationsFn     func(ctx context.Context, userID string) (int, error)
+	markNotificationReadFn         func(ctx context.Context, userID, notificationID string) error
+	markAllNotificationsReadFn     func(ctx context.Context, userID string) error
 	// Game-night RSVP.
 	setAttendeeNoteFn                   func(ctx context.Context, sessionID, userID string, note *string) error
 	setAttendeeExcludedFn               func(ctx context.Context, sessionID, userID string, excluded bool) error
@@ -536,6 +538,20 @@ func (m *mockSessionRepo) MergeUnreadNotification(ctx context.Context, n *Notifi
 		return m.mergeUnreadNotificationFn(ctx, n)
 	}
 	return nil
+}
+
+func (m *mockSessionRepo) LatestCampaignNotificationAt(ctx context.Context, campaignID, ntype string) (time.Time, error) {
+	if m.latestCampaignNotificationAtFn != nil {
+		return m.latestCampaignNotificationAtFn(ctx, campaignID, ntype)
+	}
+	return time.Time{}, nil
+}
+
+func (m *mockSessionRepo) TouchAvailabilityAnswered(ctx context.Context, campaignID, userID string, at time.Time) (bool, error) {
+	if m.touchAvailabilityAnsweredFn != nil {
+		return m.touchAvailabilityAnsweredFn(ctx, campaignID, userID, at)
+	}
+	return true, nil
 }
 
 func (m *mockSessionRepo) ListNotifications(ctx context.Context, userID string, limit int) ([]Notification, error) {

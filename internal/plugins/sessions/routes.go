@@ -93,6 +93,9 @@ func RegisterRoutes(e *echo.Echo, h *Handler,
 	// rather than encoded in a route (see the comment above).
 	cg.GET("/availability/answers", h.AvailabilityAnswersAPI, campaigns.RequireRole(campaigns.RolePlayer))
 	cg.POST("/availability/nudge", h.NudgeAvailabilityAPI, campaigns.RequireRole(campaigns.RolePlayer))
+	cg.POST("/availability/confirm", h.ConfirmMyAvailabilityAPI, campaigns.RequireRole(campaigns.RolePlayer))
+	cg.PUT("/availability/away", h.MarkAwayAPI, campaigns.RequireRole(campaigns.RolePlayer))
+	cg.POST("/availability/away/clear", h.ClearAwayAPI, campaigns.RequireRole(campaigns.RolePlayer))
 	cg.GET("/availability/exceptions", h.ListMyExceptionsAPI, campaigns.RequireRole(campaigns.RolePlayer))
 	cg.POST("/availability/exceptions", h.AddExceptionAPI, campaigns.RequireRole(campaigns.RolePlayer))
 	cg.PUT("/availability/exceptions", h.ReplaceDayExceptionsAPI, campaigns.RequireRole(campaigns.RolePlayer))

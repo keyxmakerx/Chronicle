@@ -544,6 +544,8 @@ POST	/armory/stashes	internal/plugins/armory/routes.go
 POST	/armory/stashes/:sid/items	internal/plugins/armory/routes.go
 POST	/armory/transactions	internal/plugins/armory/routes.go
 POST	/autopin-banner/dismiss	internal/plugins/foundry_vtt/routes.go
+POST	/availability/away/clear	internal/plugins/sessions/routes.go
+POST	/availability/confirm	internal/plugins/sessions/routes.go
 POST	/availability/exceptions	internal/plugins/sessions/routes.go
 POST	/availability/nudge	internal/plugins/sessions/routes.go
 POST	/bindings	internal/plugins/widgetbindings/routes.go
@@ -743,6 +745,7 @@ PUT	/armory/instances/:iid	internal/plugins/armory/routes.go
 PUT	/armory/shops/:eid/room	internal/plugins/armory/routes.go
 PUT	/armory/stashes/:sid	internal/plugins/armory/routes.go
 PUT	/armory/stashes/:sid/viewers	internal/plugins/armory/routes.go
+PUT	/availability/away	internal/plugins/sessions/routes.go
 PUT	/availability/exceptions	internal/plugins/sessions/routes.go
 PUT	/availability/mine	internal/plugins/sessions/routes.go
 PUT	/book/chapters/:chapter	internal/systems/routes.go

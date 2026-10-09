@@ -167,6 +167,14 @@ type SessionService interface {
 	// explicit press (there is no scheduled-job runner in this product).
 	AvailabilityAnswerStatuses(ctx context.Context, campaignID string, members []overlayMemberInput) ([]AvailabilityAnswerStatus, error)
 	NudgeUnansweredAvailability(ctx context.Context, campaignID, link string, members []overlayMemberInput) (*NudgeResult, error)
+	// The Director's further asks and a member's away dates; see
+	// availability_asks.go.
+	PingMemberAvailability(ctx context.Context, campaignID, askerID, askerName, targetID, link string, members []overlayMemberInput) (*NudgeResult, error)
+	AskAllToConfirm(ctx context.Context, campaignID, askerID, askerName, link string, members []overlayMemberInput) (*NudgeResult, []string, error)
+	LastConfirmAsk(ctx context.Context, campaignID string) (time.Time, error)
+	ConfirmMyAvailability(ctx context.Context, campaignID, userID string) error
+	MarkMeAway(ctx context.Context, campaignID, userID string, req AwayRequest) error
+	ClearMeAway(ctx context.Context, campaignID, userID string, req AwayRequest) error
 
 	// Slot proposals + responses. See proposals_service.go.
 	CreateProposal(ctx context.Context, campaignID, createdBy string, req CreateProposalRequest) (*SlotProposal, error)

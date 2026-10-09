@@ -102,6 +102,9 @@ type SessionRepository interface {
 	// pattern at all, keyed by user id. Absence of blocks means
 	// "unavailable", so without this the roster cannot tell silence from a "no".
 	ListAnsweredUserIDs(ctx context.Context, campaignID string) (map[string]time.Time, error)
+	// TouchAvailabilityAnswered moves a member's answered stamp to at
+	// without touching their hours; false when they never answered.
+	TouchAvailabilityAnswered(ctx context.Context, campaignID, userID string, at time.Time) (bool, error)
 	ListUserExceptions(ctx context.Context, campaignID, userID string) ([]AvailabilityException, error)
 	ListCampaignExceptionsInRange(ctx context.Context, campaignID, startDate, endDate string) ([]AvailabilityException, error)
 	AddException(ctx context.Context, e *AvailabilityException) error
@@ -132,6 +135,9 @@ type SessionRepository interface {
 	// notifications_repository.go.
 	CreateNotification(ctx context.Context, n *Notification) error
 	MergeUnreadNotification(ctx context.Context, n *Notification) error
+	// LatestCampaignNotificationAt is when the campaign last sent a
+	// notification of ntype to anyone; the zero time when never.
+	LatestCampaignNotificationAt(ctx context.Context, campaignID, ntype string) (time.Time, error)
 	ListNotifications(ctx context.Context, userID string, limit int) ([]Notification, error)
 	CountUnreadNotifications(ctx context.Context, userID string) (int, error)
 	MarkNotificationRead(ctx context.Context, userID, notificationID string) error
