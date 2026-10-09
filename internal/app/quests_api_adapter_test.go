@@ -2,9 +2,12 @@ package app
 
 import (
 	"context"
+	"net/url"
+	"strings"
 	"testing"
 
 	"github.com/keyxmakerx/chronicle/internal/apperror"
+	"github.com/keyxmakerx/chronicle/internal/plugins/media"
 	"github.com/keyxmakerx/chronicle/internal/plugins/quests"
 	"github.com/keyxmakerx/chronicle/internal/plugins/syncapi"
 )
@@ -69,5 +72,24 @@ func TestSyncQuestAPIAdapterHomes(t *testing.T) {
 	}
 	if _, err := a.Boards(context.Background(), "c", "u1", syncapi.QuestHome{Kind: "page", ID: "p1"}, false); err != nil || b.home != quests.PageHome("p1") {
 		t.Errorf("page home %+v err %v", b.home, err)
+	}
+}
+
+func TestSyncQuestAPIAdapterThumbURL(t *testing.T) {
+	const id = "b7c17bb1-6563-462c-8b49-5b2e8bd57108"
+	if got := (&syncQuestAPIAdapter{}).thumbURL(context.Background(), "2026/03/"+id+".jpg"); got != "/media/"+id+"/thumb/300" {
+		t.Errorf("unsigned link %q", got)
+	}
+	signer := media.NewURLSigner("test-secret-that-is-long-enough-0123456789")
+	for _, stored := range []string{id, "2026/03/" + id + ".jpg"} {
+		got := (&syncQuestAPIAdapter{signer: signer}).thumbURL(context.Background(), stored)
+		u, err := url.Parse(got)
+		if err != nil || !strings.HasPrefix(u.Path, "/media/"+id+"/thumb/300") {
+			t.Fatalf("signed link %q", got)
+		}
+		q := u.Query()
+		if !signer.VerifyThumbAPIKeyLink(id, "300", q.Get("expires"), q.Get("sig")) {
+			t.Errorf("%q: link does not verify as an API-key link", stored)
+		}
 	}
 }

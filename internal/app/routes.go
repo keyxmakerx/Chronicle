@@ -3732,7 +3732,7 @@ func (a *App) RegisterRoutes() {
 	)
 	// Quests for the Foundry module; the quest services attach below, once
 	// the quests plugin is built.
-	questAPI := &syncQuestAPIAdapter{stash: stashSvc, actors: stashAPI}
+	questAPI := &syncQuestAPIAdapter{stash: stashSvc, actors: stashAPI, signer: urlSigner}
 
 	// REST API v1: versioned endpoints for external clients (Foundry VTT, etc.).
 	// Authenticates via API keys, not browser sessions.

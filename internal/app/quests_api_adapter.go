@@ -3,11 +3,14 @@ package app
 import (
 	"context"
 	"math"
+	"path"
 	"strconv"
+	"strings"
 
 	"github.com/keyxmakerx/chronicle/internal/apperror"
 	"github.com/keyxmakerx/chronicle/internal/permissions"
 	"github.com/keyxmakerx/chronicle/internal/plugins/armory"
+	"github.com/keyxmakerx/chronicle/internal/plugins/media"
 	"github.com/keyxmakerx/chronicle/internal/plugins/quests"
 	"github.com/keyxmakerx/chronicle/internal/plugins/syncapi"
 	"github.com/keyxmakerx/chronicle/internal/templates/layouts"
@@ -26,6 +29,10 @@ type syncQuestAPIAdapter struct {
 	picker quests.PickerService
 	stash  armory.StashService
 	actors *armory.StashAPI
+	// signer mints picture links Foundry can load without a Chronicle
+	// session; without it the links are the web page's, which only load for
+	// public campaigns.
+	signer *media.URLSigner
 }
 
 var _ syncapi.QuestAPIService = (*syncQuestAPIAdapter)(nil)
@@ -76,11 +83,21 @@ func (a *syncQuestAPIAdapter) Boards(ctx context.Context, campaignID, userID str
 		for ii := range out.Boards[bi].Items {
 			it := &out.Boards[bi].Items[ii]
 			if it.ImagePath != "" {
-				it.ImageURL = layouts.MediaThumbURL(ctx, it.ImagePath, "300")
+				it.ImageURL = a.thumbURL(ctx, it.ImagePath)
 			}
 		}
 	}
 	return out, nil
+}
+
+// thumbURL is a board picture's link for the API caller: signed for an API
+// key (the cookieless form Foundry's <img> needs) when a signer is set.
+func (a *syncQuestAPIAdapter) thumbURL(ctx context.Context, imagePath string) string {
+	if a.signer == nil {
+		return layouts.MediaThumbURL(ctx, imagePath, "300")
+	}
+	id := strings.TrimSuffix(path.Base(imagePath), path.Ext(imagePath))
+	return a.signer.SignThumb(id, "300", media.ViewerAPIKey, media.SignedURLTTL)
 }
 
 func (a *syncQuestAPIAdapter) Quest(ctx context.Context, campaignID, userID, entityID string, players bool) (any, error) {
