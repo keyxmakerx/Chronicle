@@ -2351,7 +2351,7 @@ paths:
   /campaigns/{campaignId}/quests/party:
     get:
       tags: [Quests]
-      summary: Characters rewards can go to
+      summary: Characters rewards can go to (a DM read; audience=players is refused with 403)
       operationId: listQuestParty
       parameters:
         - $ref: "#/components/parameters/campaignId"

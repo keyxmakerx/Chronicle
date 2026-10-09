@@ -101,6 +101,12 @@ func TestQuestAPIHandler(t *testing.T) {
 					t.Errorf("pay %+v", f.pay)
 				}
 			}},
+		{name: "party has no players view", role: campaigns.RoleOwner, query: "audience=players", run: func(h *QuestAPIHandler) echo.HandlerFunc { return h.Party }, wantStatus: 403,
+			check: func(t *testing.T, f *fakeQuestAPI) {
+				if f.called != "" {
+					t.Errorf("service called: %q", f.called)
+				}
+			}},
 		{name: "pay with a bad body", role: campaigns.RoleOwner, method: http.MethodPost, body: `{`, run: func(h *QuestAPIHandler) echo.HandlerFunc { return h.Pay }, wantStatus: 400},
 	}
 	for _, tt := range tests {

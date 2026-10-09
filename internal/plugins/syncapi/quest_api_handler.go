@@ -159,12 +159,16 @@ func (h *QuestAPIHandler) PutQuest(c echo.Context) error {
 	return h.answer(c, out, err)
 }
 
-// Party lists the characters rewards can go to.
+// Party lists the characters rewards can go to. It is a DM read with no
+// players view, so a request for one is refused rather than answered as the DM.
 // GET /api/v1/campaigns/:id/quests/party
 func (h *QuestAPIHandler) Party(c echo.Context) error {
 	uid, err := h.dmUser(c)
 	if err != nil {
 		return err
+	}
+	if playersView(c) {
+		return apperror.NewForbidden("the party list has no players view")
 	}
 	out, err := h.svc.Party(c.Request().Context(), c.Param("id"), uid)
 	return h.answer(c, out, err)
