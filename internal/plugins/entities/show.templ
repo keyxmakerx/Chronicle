@@ -369,32 +369,39 @@ templ blockTitle(cc *campaigns.CampaignContext, entity *Entity, csrfToken string
 	</div>
 }
 
-// blockImage renders the entity header image with optional upload widget.
+// blockImage renders the entity header image. A Scribe or above sees a
+// "Change" chip on the picture itself, in view on touch screens too, which
+// opens the file picker; image_upload.js adds the progress bar and the amber
+// error bar. Everyone else sees the picture alone.
 templ blockImage(cc *campaigns.CampaignContext, entity *Entity, csrfToken string) {
 	<div class="card overflow-hidden p-0">
 		if entity.ImagePath != nil && *entity.ImagePath != "" {
-			<div class="relative group">
+			if cc.MemberRole >= campaigns.RoleScribe {
+				<div
+					class="relative"
+					data-widget="image-upload"
+					data-endpoint={ fmt.Sprintf("/campaigns/%s/entities/%s/image", cc.Campaign.ID, entity.ID) }
+					data-upload-url="/media/upload"
+					data-csrf-token={ csrfToken }
+				>
+					<img
+						src={ layouts.MediaURL(ctx, *entity.ImagePath) }
+						alt={ entity.Name }
+						class="w-full h-56 object-cover"
+					/>
+					<button type="button" class="fx-chip is-corner" data-pick aria-label="Change image"><i class="fa-solid fa-camera"></i> Change</button>
+				</div>
+			} else {
 				<img
 					src={ layouts.MediaURL(ctx, *entity.ImagePath) }
 					alt={ entity.Name }
 					class="w-full h-56 object-cover"
 				/>
-				if cc.MemberRole >= campaigns.RoleScribe {
-					<div
-						class="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center cursor-pointer"
-						data-widget="image-upload"
-						data-endpoint={ fmt.Sprintf("/campaigns/%s/entities/%s/image", cc.Campaign.ID, entity.ID) }
-						data-upload-url="/media/upload"
-						data-csrf-token={ csrfToken }
-					>
-						<span class="text-white text-sm font-medium">Change Image</span>
-					</div>
-				}
-			</div>
+			}
 		} else {
 			if cc.MemberRole >= campaigns.RoleScribe {
 				<div
-					class="w-full h-40 bg-surface-alt flex flex-col items-center justify-center cursor-pointer hover:bg-surface transition-colors"
+					class="relative w-full h-40 bg-surface-alt flex flex-col items-center justify-center cursor-pointer hover:bg-surface transition-colors"
 					data-widget="image-upload"
 					data-endpoint={ fmt.Sprintf("/campaigns/%s/entities/%s/image", cc.Campaign.ID, entity.ID) }
 					data-upload-url="/media/upload"
@@ -866,7 +873,7 @@ func coverImageOverlayClass(config map[string]any) string {
 templ blockCoverImage(cc *campaigns.CampaignContext, entity *Entity, csrfToken string, config map[string]any) {
 	<div class="w-full overflow-hidden rounded-lg">
 		if entity.CoverImagePath != nil && *entity.CoverImagePath != "" {
-			<div class="relative group">
+			<div class="relative">
 				<img
 					src={ layouts.MediaURL(ctx, *entity.CoverImagePath) }
 					alt={ entity.Name + " cover" }
@@ -877,20 +884,20 @@ templ blockCoverImage(cc *campaigns.CampaignContext, entity *Entity, csrfToken s
 				}
 				if cc.MemberRole >= campaigns.RoleScribe {
 					<div
-						class="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center cursor-pointer"
+						class="absolute inset-0"
 						data-widget="image-upload"
 						data-endpoint={ fmt.Sprintf("/campaigns/%s/entities/%s/cover-image", cc.Campaign.ID, entity.ID) }
 						data-upload-url="/media/upload"
 						data-csrf-token={ csrfToken }
 					>
-						<span class="text-white text-sm font-medium">Change Cover Image</span>
+						<button type="button" class="fx-chip is-corner" data-pick aria-label="Change cover image"><i class="fa-solid fa-camera"></i> Change</button>
 					</div>
 				}
 			</div>
 		} else {
 			if cc.MemberRole >= campaigns.RoleScribe {
 				<div
-					class={ "w-full bg-surface-alt flex flex-col items-center justify-center cursor-pointer hover:bg-surface transition-colors rounded-lg " + coverImageHeight(config) }
+					class={ "relative w-full bg-surface-alt flex flex-col items-center justify-center cursor-pointer hover:bg-surface transition-colors rounded-lg " + coverImageHeight(config) }
 					data-widget="image-upload"
 					data-endpoint={ fmt.Sprintf("/campaigns/%s/entities/%s/cover-image", cc.Campaign.ID, entity.ID) }
 					data-upload-url="/media/upload"
