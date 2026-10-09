@@ -4461,6 +4461,10 @@ func (a *App) RegisterRoutes() {
 	systemHandler.SetAddonService(addonService)
 	systemHandler.SetBookEdits(systems.NewBookEditService(systems.NewBookEditRepository(a.DB)))
 	systems.RegisterRoutes(e, systemHandler, addonService, authService, campaignService)
+	// Pick lists (Ancestry, Kit, Race, Class…) for the character attributes editor.
+	systems.RegisterCharacterChoiceRoutes(e,
+		systems.NewCharacterChoiceHandler(systems.NewCharacterChoiceService(addonService, campaignSystemMgr)),
+		authService, campaignService)
 
 	// Admin-only deployment-health diagnostic: read-only fingerprints of the
 	// version + files each system loader is ACTUALLY serving, to catch the

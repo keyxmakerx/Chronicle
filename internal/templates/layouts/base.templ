@@ -216,6 +216,10 @@ templ Base(title string) {
 		<!-- Entity type editor widget (inline edit for entity type management) -->
 		<script src={ AssetURL("/static/js/widgets/entity_type_editor.js") } defer></script>
 
+		<!-- Choice picker: Chronicle.pickChoice, shared by the attributes widget
+		     and system widgets (loads first so both can call it) -->
+		<script src={ AssetURL("/static/js/widgets/choice_picker.js") } defer></script>
+
 		<!-- Attributes widget (inline edit for entity custom fields) -->
 		<script src={ AssetURL("/static/js/widgets/attributes.js") } defer></script>
 

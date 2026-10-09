@@ -284,6 +284,10 @@ type FieldDefinition struct {
 	// owner. Unlike GMOnly (hidden even from the owner), OwnerOnly is for
 	// content private between one player and the GM but not party-wide.
 	OwnerOnly bool `json:"owner_only,omitempty"`
+	// Choices names the system data file the field is picked from. Absent:
+	// the picker falls back to the plural of the field key. The stored value
+	// is still the picked entry's name as plain text.
+	Choices string `json:"choices,omitempty"`
 }
 
 // Entity represents a single worldbuilding object — a character, location,

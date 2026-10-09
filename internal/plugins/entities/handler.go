@@ -2006,15 +2006,25 @@ func (h *Handler) UpdateFieldsAPI(c echo.Context) error {
 		return apperror.NewNotFound("entity not found")
 	}
 
+	// fields_data replaces the whole map (the attributes form sends every
+	// field). fields_patch changes only the keys it carries (null clears), for
+	// single-field editors such as the choice picker that never hold the rest.
 	var body struct {
-		FieldsData map[string]any `json:"fields_data"`
+		FieldsData  map[string]any `json:"fields_data"`
+		FieldsPatch map[string]any `json:"fields_patch"`
 	}
 	if err := json.NewDecoder(c.Request().Body).Decode(&body); err != nil {
 		return apperror.NewBadRequest("invalid JSON body")
 	}
 
-	if err := h.service.UpdateFields(webWriteContext(c), entityID, body.FieldsData); err != nil {
-		return err
+	var saveErr error
+	if body.FieldsPatch != nil && body.FieldsData == nil {
+		saveErr = h.service.MergeFields(webWriteContext(c), entityID, body.FieldsPatch)
+	} else {
+		saveErr = h.service.UpdateFields(webWriteContext(c), entityID, body.FieldsData)
+	}
+	if saveErr != nil {
+		return saveErr
 	}
 
 	h.logAudit(c, cc.Campaign.ID, audit.ActionEntityUpdated, entityID, entity.Name)

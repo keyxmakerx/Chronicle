@@ -4881,3 +4881,27 @@ html[data-view-motion="calm"] *:not(.czp *), html[data-view-motion="calm"] *:not
 }
 .nav-rm .ag-ring, html[data-cz-reduce] .ag-ring, html[data-view-motion="calm"] .ag-ring { animation: none !important; }
 .nav-rm .ag-prog > span, html[data-cz-reduce] .ag-prog > span, html[data-view-motion="calm"] .ag-prog > span { transition: none !important; }
+/* Game-system picker (static/js/widgets/choice_picker.js): the value button on
+   a character field and the fold that lists the system's names. The box reuses
+   the Give-box classes above, restated here on the real colour tokens. */
+.ag-pick { display: flex; width: 100%; align-items: center; gap: 6px; margin-top: 2px; padding: 3px 6px; margin-left: -6px; border: 0; border-radius: 7px; background: transparent; text-align: left; font: inherit; font-size: 14px; color: var(--color-text-primary); cursor: pointer; transition: background var(--dur-micro, 120ms); }
+.ag-pick:hover, .ag-pick[aria-expanded="true"] { background: var(--color-bg-secondary); }
+.ag-pick .ph { color: var(--color-text-muted); }
+.ag-pick .chev { margin-left: auto; font-size: 10px; color: var(--color-text-muted); transition: transform var(--dur-standard, 200ms) var(--ease-out, ease-out); }
+.ag-pick[aria-expanded="true"] .chev { transform: rotate(180deg); }
+.ag-src { display: inline-flex; align-items: center; height: 18px; padding: 0 7px; border-radius: 999px; background: var(--color-bg-tertiary); color: var(--color-text-secondary); font-size: 10.5px; font-weight: 500; white-space: nowrap; }
+.ag-note { margin-top: 2px; font-size: 11.5px; color: var(--color-text-muted); }
+.ag-mine { margin-top: 8px; display: flex; gap: 6px; }
+.ag-pickbox .ag-head h4 { color: var(--color-text-primary); }
+.ag-pickbox .ag-x { color: var(--color-text-muted); }
+.ag-pickbox .ag-x:hover { color: var(--color-text-primary); }
+.ag-pickbox .ag-search i, .ag-pickbox .ag-more, .ag-pickbox .ag-hint { color: var(--color-text-muted); }
+.ag-pickbox .ag-list { max-height: 236px; }
+.ag-pickbox .ag-row { align-items: flex-start; color: var(--color-text-primary); }
+.ag-pickbox .ag-row:hover { background: var(--color-bg-secondary); }
+.ag-pickbox .ag-row input { margin-top: 3px; flex: none; }
+.ag-pickbox .ag-row .ag-name { overflow: visible; white-space: normal; }
+.ag-pickbox .ag-row .ag-name b { display: block; font-weight: 500; }
+.ag-pickbox .ag-row .ag-name small { display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; font-size: 12px; line-height: 1.35; color: var(--color-text-muted); margin-top: 1px; }
+.ag-pick:focus-visible, .ag-link:focus-visible { outline: 2px solid var(--color-accent); outline-offset: 2px; }
+@media (prefers-reduced-motion: reduce) { .ag-pick .chev { transition: none !important; } }

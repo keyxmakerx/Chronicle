@@ -110,6 +110,7 @@ GET	/:cat/:item	internal/systems/routes.go
 GET	/:cat/:item/tooltip	internal/systems/routes.go
 GET	/:extID	internal/extensions/routes.go
 GET	/:extID/preview	internal/extensions/routes.go
+GET	/:fieldKey	internal/systems/character_choices_handler.go
 GET	/:id/moderation-log	internal/plugins/bestiary/routes.go
 GET	/:id/usage	internal/plugins/packages/routes.go
 GET	/:id/versions	internal/plugins/packages/routes.go
