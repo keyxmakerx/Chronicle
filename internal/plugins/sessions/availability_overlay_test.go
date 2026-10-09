@@ -193,3 +193,36 @@ func TestBuildWeekOverlay_DensityAndPreferCounts(t *testing.T) {
 		t.Errorf("detail FreeIDs = %v, want 2 ids", wed.Hours[19].FreeIDs)
 	}
 }
+
+// A day marked off is flagged only when the usual hours would have had the
+// member free; a day they are never free, or one they reshaped with some
+// hours left, is not.
+func TestBuildWeekOverlay_OffDays(t *testing.T) {
+	ny := mustLoc(t, "America/New_York")
+	tz := "America/New_York"
+	off := func(date string) AvailabilityException {
+		return AvailabilityException{OnDate: date, StartMinute: 0, EndMinute: 1440, State: AvailUnavailable, TZ: tz}
+	}
+	tests := []struct {
+		name string
+		exc  []AvailabilityException
+		want []int
+	}{
+		{"usually free Tuesday marked off", []AvailabilityException{off("2026-07-14")}, []int{1}},
+		{"never free Wednesday marked off", []AvailabilityException{off("2026-07-15")}, nil},
+		{"Tuesday reshaped, still some hours", []AvailabilityException{{OnDate: "2026-07-14", StartMinute: 20 * 60, EndMinute: 22 * 60, State: AvailAvailable, TZ: tz}}, nil},
+		{"no exceptions", nil, nil},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			members := []overlayMemberInput{{UserID: "u1", Name: "Alex"}}
+			avail := map[string][]AvailabilityBlock{"u1": {block(2, 18*60, 21*60, AvailAvailable, tz)}}
+			exc := map[string][]AvailabilityException{"u1": tt.exc}
+			ov := buildWeekOverlay(members, avail, exc, testWeekStart(), ny, tz, true)
+			got := ov.Members[0].OffDays
+			if len(got) != len(tt.want) || (len(got) == 1 && got[0] != tt.want[0]) {
+				t.Errorf("OffDays = %v, want %v", got, tt.want)
+			}
+		})
+	}
+}

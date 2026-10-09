@@ -725,3 +725,17 @@ test('only the owner of a world calendar gets Set today, and it checks the form'
   assert.match(v._readTodayForm(form({ hour: '24' })).error, /0 to 23/);
   assert.match(v._readTodayForm(form({ year: 'soon' })).error, /every box/);
 });
+
+test('the DM sees a day a player marked off although usually free', () => {
+  const { def } = load();
+  const base = overlay();
+  // Dee marked Thursday (column 3) off; their usual hours would cover it.
+  const ov = overlay({ members: base.members.map((m) => (m.userId === 'dee' ? { ...m, hasAnswered: true, offDays: [3] } : m)) });
+  const v = freeView(def, ov);
+  v._todayIso = () => '2026-10-01';
+  const wing = v._freeWingHTML({ y: 2026, m: 10, d: 8 });
+  assert.match(wing, /Dee<\/span><span class="ln off"><\/span><span class="sr">Dee: off this day, usually free/);
+  assert.match(wing, /<i class="o"><\/i>Off, usually free/, 'the key explains the broken line');
+  assert.match(v._freeCellHTML(2026, 10, 8), /<span class="ln off"><\/span>/, 'on the month too');
+  assert.doesNotMatch(v._freeWingHTML({ y: 2026, m: 10, d: 9 }), /ln off|Off, usually free/, 'only on that day');
+});

@@ -499,6 +499,10 @@
   var FREE_KEY = 'chronicle.calendar.whosFree';
   // What the colours in a line mean, under every set of named lines.
   var FREE_LEGEND = '<div class="flegend" aria-hidden="true"><span><i class="f"></i>Free</span><span><i class="b"></i>Best time</span><span><i class="e"></i>Everyone free</span></div>';
+  // The key under one day's lines, with "Off, usually free" when it is used.
+  function freeLegend(members) {
+    return members.some(function (mem) { return mem.off; }) ? FREE_LEGEND.replace('</div>', '<span><i class="o"></i>Off, usually free</span></div>') : FREE_LEGEND;
+  }
 
   // Which zone a viewer reads game-night times in: 'mine' or the
   // calendar's. The browser remembers it; nothing breaks without storage.
@@ -2138,7 +2142,9 @@
               userId: m.userId, name: m.name || 'A player', answered: !!m.hasAnswered,
               // [start, end, best]: a run the player marked as their best
               // time keeps that mark, so the lines can show it apart.
-              segs: (m.lanes || []).filter(function (l) { return l.day === i; }).map(function (l) { return [l.start, l.end, l.state === 'preferred']; })
+              segs: (m.lanes || []).filter(function (l) { return l.day === i; }).map(function (l) { return [l.start, l.end, l.state === 'preferred']; }),
+              // Marked this day off although their usual hours cover it.
+              off: (m.offDays || []).indexOf(i) >= 0
             };
           })
         };
@@ -2198,7 +2204,10 @@
       });
     },
 
-    _lineHTML: function (segs) {
+    // off: the player marked this day off although they are usually free,
+    // drawn as a broken line so the DM sees the change, not a blank.
+    _lineHTML: function (segs, off) {
+      if (off) return '<span class="ln off"></span>';
       return '<span class="ln">' + segs.map(function (sg) {
         return '<b' + (sg[2] ? ' class="p"' : '') + ' style="left:' + (sg[0] / 14.4).toFixed(2) + '%;width:' + ((sg[1] - sg[0]) / 14.4).toFixed(2) + '%"></b>';
       }).join('') + '</span>';
@@ -2222,10 +2231,11 @@
       if (!data || !data.detail || !data.members.length) return '';
       var self = this, rows = data.members.slice(0, 12);
       return '<span class="avl' + (rows.length > 8 ? ' many' : '') + '" data-avl="' + esc(this._realIso(y, m, d)) + '" aria-hidden="true">' +
-        this._bandHTML(data, 'fband') + rows.map(function (mem) { return self._lineHTML(mem.segs); }).join('') + '</span>';
+        this._bandHTML(data, 'fband') + rows.map(function (mem) { return self._lineHTML(mem.segs, mem.off); }).join('') + '</span>';
     },
 
     _segsWords: function (mem) {
+      if (mem.off) return 'off this day, usually free';
       if (!mem.segs.length) return mem.answered ? 'not free' : 'hasn’t painted hours yet';
       if (mem.segs.length === 1 && mem.segs[0][0] === 0 && mem.segs[0][1] >= 1440) return 'free all day';
       return mem.segs.map(function (sg) { return ampm(sg[0]) + ' to ' + ampm(sg[1]) + (sg[2] ? ' (best)' : ''); }).join(', ');
@@ -2266,9 +2276,9 @@
       h += '<div class="fsum">' + esc(summary) + '</div>';
       if (data.detail && data.members.length) {
         h += '<div class="flines"><span class="bandwrap" aria-hidden="true">' + this._bandHTML(data, 'band2') + '</span>' + data.members.map(function (mem) {
-          return '<div class="fr"><span class="nm">' + esc(mem.name) + '</span>' + self._lineHTML(mem.segs) +
+          return '<div class="fr"><span class="nm">' + esc(mem.name) + '</span>' + self._lineHTML(mem.segs, mem.off) +
             '<span class="sr">' + esc(mem.name + ': ' + self._segsWords(mem)) + '</span></div>';
-        }).join('') + '</div><div class="fticks" aria-hidden="true"><span>12am</span><span>6am</span><span>noon</span><span>6pm</span><span>12am</span></div>' + FREE_LEGEND;
+        }).join('') + '</div><div class="fticks" aria-hidden="true"><span>12am</span><span>6am</span><span>noon</span><span>6pm</span><span>12am</span></div>' + freeLegend(data.members);
       }
       if (w && this.role >= 2 && iso >= this._todayIso() && !this.nightsOnDay(d.y, d.m, d.d).length) {
         h += this._planFor && this._planFor.iso === iso ? this._planFormHTML(iso, this._planFor.start)
@@ -3027,7 +3037,7 @@
         h += '<div class="plday"><div class="pldh"><button type="button" class="lnk" data-pl-day="' + esc(key) + '"><b>' + esc(realDateWords(iso)) + '</b></button>' +
           '<span>' + esc(!w ? 'Nobody free' : (w.free === data.total ? 'Everyone ' : w.free + ' of ' + data.total + ' ') + this._windowWords(w, iso)) + '</span></div>' +
           '<div class="flines"><span class="bandwrap" aria-hidden="true">' + this._bandHTML(data, 'band2') + '</span>' + data.members.map(function (mem) {
-            return '<div class="fr"><span class="nm">' + esc(mem.name) + '</span>' + self._lineHTML(mem.segs) + '<span class="sr">' + esc(mem.name + ': ' + self._segsWords(mem)) + '</span></div>';
+            return '<div class="fr"><span class="nm">' + esc(mem.name) + '</span>' + self._lineHTML(mem.segs, mem.off) + '<span class="sr">' + esc(mem.name + ': ' + self._segsWords(mem)) + '</span></div>';
           }).join('') + '</div></div>';
       }
       if (!any) h += '<p class="none">Loading who’s free…</p>';

@@ -60,7 +60,7 @@
   --eclT:oklch(.46 .07 50); --eclS:oklch(.5 .07 50 / .5); --hvtT:oklch(.52 .12 75); --hvtS:oklch(.66 .13 78 / .6);
   --gold:oklch(.50 .10 75); --goldBg:oklch(.86 .085 85 / .4); --goldRing:oklch(.62 .10 80 / .5);
   /* Who's free: a player's free hours, the hours they marked as their best, and the band where everyone is free. */
-  --free:oklch(.56 .11 152); --freeTrack:oklch(.5 .01 265 / .14); --freeBand:oklch(.62 .11 152 / .18); --best:oklch(.68 .15 70);
+  --free:oklch(.56 .11 152); --freeTrack:oklch(.5 .01 265 / .14); --freeBand:oklch(.62 .11 152 / .18); --best:oklch(.68 .15 70); --off:oklch(.58 .17 25);
 }
 @media (prefers-color-scheme:dark){:root:not([data-theme="light"]){color-scheme:dark;
     --page:oklch(.16 .008 265); --ink:oklch(.94 .006 265); --ink2:oklch(.82 .008 265); --mut:oklch(.68 .01 265);
@@ -78,7 +78,7 @@
     --arcT:oklch(.8 .12 295); --arcS:oklch(.7 .13 295 / .5); --tsB:.34; --tsS:.8; --tsL:.93; --mring:oklch(.94 .01 265 / .12);
     --eclT:oklch(.76 .07 52); --eclS:oklch(.68 .07 52 / .5); --hvtT:oklch(.84 .12 80); --hvtS:oklch(.76 .12 80 / .5);
     --gold:oklch(.84 .10 85); --goldBg:oklch(.70 .10 85 / .15); --goldRing:oklch(.78 .10 85 / .38);
-    --free:oklch(.74 .12 152); --freeTrack:oklch(.94 .01 265 / .1); --freeBand:oklch(.74 .12 152 / .16); --best:oklch(.82 .13 78);}
+    --free:oklch(.74 .12 152); --freeTrack:oklch(.94 .01 265 / .1); --freeBand:oklch(.74 .12 152 / .16); --best:oklch(.82 .13 78); --off:oklch(.72 .15 25);}
 
 }
 :root[data-theme="dark"]{color-scheme:dark;
@@ -97,7 +97,7 @@
   --arcT:oklch(.8 .12 295); --arcS:oklch(.7 .13 295 / .5); --tsB:.34; --tsS:.8; --tsL:.93; --mring:oklch(.94 .01 265 / .12);
   --eclT:oklch(.76 .07 52); --eclS:oklch(.68 .07 52 / .5); --hvtT:oklch(.84 .12 80); --hvtS:oklch(.76 .12 80 / .5);
   --gold:oklch(.84 .10 85); --goldBg:oklch(.70 .10 85 / .15); --goldRing:oklch(.78 .10 85 / .38);
-    --free:oklch(.74 .12 152); --freeTrack:oklch(.94 .01 265 / .1); --freeBand:oklch(.74 .12 152 / .16); --best:oklch(.82 .13 78);}
+    --free:oklch(.74 .12 152); --freeTrack:oklch(.94 .01 265 / .1); --freeBand:oklch(.74 .12 152 / .16); --best:oklch(.82 .13 78); --off:oklch(.72 .15 25);}
 .cal-v5 *, .cal-v5 *::before, .cal-v5 *::after{box-sizing:border-box}
 .cal-v5 html, .cal-v5 body{margin:0}
 .cal-v5 body{background:var(--page);color:var(--ink);font:14px/1.45 var(--sans);-webkit-font-smoothing:antialiased;overflow-x:hidden}
@@ -1817,6 +1817,7 @@
 .cal-v5 .ln{position:relative;display:block;flex:none;border-radius:2px;background:var(--freeTrack)}
 .cal-v5 .ln b{position:absolute;top:0;bottom:0;border-radius:inherit;background:var(--free)}
 .cal-v5 .ln b.p{background:var(--best)}
+.cal-v5 .ln.off{background:repeating-linear-gradient(90deg,var(--off) 0 5px,transparent 5px 9px)}
 .cal-v5 .avl .fband{position:absolute;top:-2px;bottom:-2px;border-radius:3px;background:var(--freeBand)}
 .cal-v5 .gfree{list-style:none;margin:6px 0 0;padding:0;font:500 11.5px/1.45 var(--sans);color:var(--ink2)}
 .cal-v5 .gfree li{display:flex;justify-content:space-between;gap:10px}
@@ -1836,6 +1837,7 @@
 .cal-v5 .flegend .f{background:var(--free)}
 .cal-v5 .flegend .b{background:var(--best)}
 .cal-v5 .flegend .e{height:9px;background:var(--freeBand)}
+.cal-v5 .flegend .o{background:repeating-linear-gradient(90deg,var(--off) 0 3px,transparent 3px 5px)}
 .cal-v5 .fmine>.lnk{margin-left:-6px}
 .cal-v5 .fmine{margin-top:4px}
 /* The Who's free view: the moon view's panel, holding Best times, the players and their hours, and the way to the

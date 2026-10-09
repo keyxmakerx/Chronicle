@@ -236,6 +236,10 @@ type OverlayMember struct {
 	// both of which render as empty Lanes and must not be presented as the
 	// same fact.
 	HasAnswered bool `json:"hasAnswered"`
+	// OffDays are the columns (0..6) the member marked as a day they can't
+	// play although their usual hours would have had them free, so the DM
+	// can tell a change from a member who is never free that day.
+	OffDays []int `json:"offDays,omitempty"`
 }
 
 // LaneSegment is one contiguous availability run for a member on one column,
