@@ -551,6 +551,12 @@ type CampaignSettings struct {
 	DefaultVisibility string       `json:"default_visibility,omitempty"`  // Default visibility for new entities: "", "dm_only", "private".
 	SystemID          string       `json:"system_id,omitempty"`           // Game system ID (e.g. "dnd5e", "drawsteel") or "custom:<url>".
 
+	// CharacterTypeIDs and NPCTypeIDs are the page types the owner chose to
+	// show as The Party and as NPCs. Pointers because "never chosen" (nil) and
+	// "chose none" (empty) differ: the one-time reconciler fills only nil.
+	CharacterTypeIDs *[]int `json:"character_type_ids,omitempty"`
+	NPCTypeIDs       *[]int `json:"npc_type_ids,omitempty"`
+
 	// FoundryModulePin is the version string the campaign is pinned
 	// to for the Chronicle-served Foundry module catalog (e.g. "0.1.5").
 	// Empty = follow latest available (manifest endpoint resolves to
@@ -776,6 +782,13 @@ type ContentTemplateSeeder interface {
 // is created. Implemented by the entities plugin's WorldbuildingPromptService.
 type WorldbuildingPromptSeeder interface {
 	SeedDefaults(ctx context.Context, campaignID string) error
+}
+
+// CharacterListSeeder records which page types a new campaign lists as
+// characters and NPCs. Implemented by the entities plugin's character list
+// service, and run after the entity types exist.
+type CharacterListSeeder interface {
+	Seed(ctx context.Context, campaignID string) error
 }
 
 // LayoutPresetSeeder seeds default layout presets when a campaign is created.

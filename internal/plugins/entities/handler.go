@@ -117,6 +117,7 @@ type Handler struct {
 	systemSearcher     SystemSearcher
 	memberLister       MemberLister
 	npcSection         NPCSectionProvider
+	charLists          CharacterListManager
 	groupLister        GroupLister
 	widgetBlockLister  WidgetBlockLister
 	contentTemplateSvc ContentTemplateService
@@ -3472,6 +3473,11 @@ type NPCSectionProvider interface {
 // SetNPCSectionProvider injects the npcs plugin's section renderer.
 func (h *Handler) SetNPCSectionProvider(p NPCSectionProvider) { h.npcSection = p }
 
+// SetCharacterLists injects the service behind the owner's choice of which
+// page types are characters and NPCs. Without it the Characters page lists
+// nothing, since no list is ever guessed.
+func (h *Handler) SetCharacterLists(m CharacterListManager) { h.charLists = m }
+
 // Characters renders the per-campaign Characters page. It has two addon-gated
 // sections: the Party (player characters — when the player-character-claiming
 // addon is on) and NPCs/Monsters (contributed by the npcs plugin when its addon
@@ -3485,6 +3491,24 @@ func (h *Handler) Characters(c echo.Context) error {
 	if cc == nil {
 		return apperror.NewMissingContext()
 	}
+	view, err := h.buildCastView(c, cc)
+	if err != nil {
+		return err
+	}
+	return h.renderCast(c, cc, view)
+}
+
+func (h *Handler) renderCast(c echo.Context, cc *campaigns.CampaignContext, view CastView) error {
+	if middleware.IsHTMX(c) {
+		return middleware.Render(c, http.StatusOK, CharactersContent(cc, view))
+	}
+	return middleware.Render(c, http.StatusOK, CharactersPage(cc, view))
+}
+
+// buildCastView gathers the page: the viewer's own characters, the party and
+// NPC bands narrowed to the page types the owner listed, and, for the owner
+// only, the controls to change those lists.
+func (h *Handler) buildCastView(c echo.Context, cc *campaigns.CampaignContext) (CastView, error) {
 	ctx := c.Request().Context()
 	campaignID := cc.Campaign.ID
 	userID := auth.GetUserID(c)
@@ -3492,14 +3516,32 @@ func (h *Handler) Characters(c echo.Context) error {
 	pcOn := h.isAddonEnabled(ctx, campaignID, AddonPlayerCharacterClaiming)
 	npcsOn := h.isAddonEnabled(ctx, campaignID, AddonNPCs)
 	if !pcOn && !npcsOn {
-		return apperror.NewNotFound("the Characters page requires the Player Character Claiming or NPC Gallery addon")
+		return CastView{}, apperror.NewNotFound("the Characters page requires the Player Character Claiming or NPC Gallery addon")
 	}
 
 	var view CastView
 	view.ShowPlayers = pcOn
 	view.IsMember = cc.MemberRole >= campaigns.RolePlayer
+	view.CSRFToken = middleware.GetCSRFToken(c)
+	isOwner := cc.MemberRole >= campaigns.RoleOwner
+
+	var charTypes []int
+	if h.charLists != nil {
+		var err error
+		if charTypes, err = h.charLists.CharacterTypeIDs(ctx, campaignID); err != nil {
+			return CastView{}, err
+		}
+		chosen, err := h.charLists.Chosen(ctx, campaignID)
+		if err != nil {
+			return CastView{}, err
+		}
+		view.PartyListed = len(chosen.CharacterTypeIDs) > 0
+		view.NPCsListed = len(chosen.NPCTypeIDs) > 0
+	}
+
+	view.Yours = h.buildYours(ctx, campaignID, userID)
 	if pcOn {
-		view.Party = h.buildCastParty(ctx, cc, userID)
+		view.Party = filterCastByType(h.buildCastParty(ctx, cc, userID), charTypes)
 		// Only a member with no party yet needs a pointer to where claiming happens.
 		if view.IsMember && len(view.Party) == 0 {
 			if types, err := h.service.GetEntityTypes(ctx, campaignID); err == nil {
@@ -3508,15 +3550,118 @@ func (h *Handler) Characters(c echo.Context) error {
 		}
 	}
 	if npcsOn && h.npcSection != nil {
-		view.NPCSection = h.npcSection.NPCSection(ctx, cc, userID, middleware.GetCSRFToken(c), CastTagSlug)
+		view.ShowNPCs = true
+		if view.NPCsListed {
+			view.NPCSection = h.npcSection.NPCSection(ctx, cc, userID, view.CSRFToken, CastTagSlug)
+		}
 	} else if npcsOn {
 		slog.Warn("characters page: npcs addon enabled but no NPCSectionProvider wired", slog.String("campaign_id", campaignID))
 	}
 
-	if middleware.IsHTMX(c) {
-		return middleware.Render(c, http.StatusOK, CharactersContent(cc, view))
+	if isOwner && h.charLists != nil {
+		if pcOn {
+			ed, err := h.charLists.Editor(ctx, campaignID, CharacterListCharacters)
+			if err != nil {
+				return CastView{}, err
+			}
+			view.PartyEditor = &ed
+		}
+		if view.ShowNPCs {
+			ed, err := h.charLists.Editor(ctx, campaignID, CharacterListNPCs)
+			if err != nil {
+				return CastView{}, err
+			}
+			view.NPCEditor = &ed
+		}
 	}
-	return middleware.Render(c, http.StatusOK, CharactersPage(cc, view))
+	return view, nil
+}
+
+// filterCastByType keeps the cards whose page type is in typeIDs.
+func filterCastByType(members []CastMember, typeIDs []int) []CastMember {
+	allowed := make(map[int]bool, len(typeIDs))
+	for _, id := range typeIDs {
+		allowed[id] = true
+	}
+	out := make([]CastMember, 0, len(members))
+	for _, m := range members {
+		if allowed[m.Entity.EntityTypeID] {
+			out = append(out, m)
+		}
+	}
+	return out
+}
+
+// buildYours lists the viewer's own characters, whatever their type: a page
+// they claimed is theirs even when its type is not on the party list. A failed
+// lookup only leaves the band out.
+func (h *Handler) buildYours(ctx context.Context, campaignID, userID string) []CastMember {
+	if userID == "" {
+		return nil
+	}
+	mine, err := h.service.ListByOwner(ctx, campaignID, userID)
+	if err != nil {
+		slog.Warn("cast page: own characters failed", slog.String("campaign_id", campaignID), slog.Any("error", err))
+		return nil
+	}
+	out := make([]CastMember, 0, len(mine))
+	for _, e := range mine {
+		out = append(out, CastMember{Entity: e, IsViewer: true})
+	}
+	return out
+}
+
+// UpdateCharacterLists adds or removes one page type on the party or NPC list.
+// Owner only (the route enforces it); the service checks the type belongs to
+// this campaign. Answers with the refreshed page body for the HTMX swap.
+//
+// Route: POST /campaigns/:id/characters/lists
+func (h *Handler) UpdateCharacterLists(c echo.Context) error {
+	cc := campaigns.GetCampaignContext(c)
+	if cc == nil {
+		return apperror.NewMissingContext()
+	}
+	if h.charLists == nil {
+		return apperror.NewNotFound("page type lists are not available")
+	}
+	var req struct {
+		List   string `form:"list"`
+		Op     string `form:"op"`
+		TypeID int    `form:"type_id"`
+	}
+	if err := c.Bind(&req); err != nil {
+		return apperror.NewBadRequest("invalid request")
+	}
+	ctx := c.Request().Context()
+	kind := CharacterListKind(req.List)
+	label := bandLabel(kind)
+	var name, notice string
+	var err error
+	switch req.Op {
+	case "add":
+		name, err = h.charLists.Add(ctx, cc.Campaign.ID, kind, req.TypeID)
+		notice = label + " now shows " + name + " pages"
+	case "remove":
+		name, err = h.charLists.Remove(ctx, cc.Campaign.ID, kind, req.TypeID)
+		notice = label + " no longer shows " + name + " pages"
+	default:
+		err = apperror.NewBadRequest("unknown action")
+	}
+	if err != nil {
+		return err
+	}
+	if !isHTMX(c) {
+		return c.Redirect(http.StatusSeeOther, fmt.Sprintf("/campaigns/%s/characters", cc.Campaign.ID))
+	}
+	view, err := h.buildCastView(c, cc)
+	if err != nil {
+		return err
+	}
+	view.Notice = notice
+	if req.Op == "add" {
+		view.Landed = req.TypeID
+	}
+	return middleware.Render(c, http.StatusOK, CharactersContent(cc, view))
 }
 
 // buildCastParty fetches the party for the Players section: the campaign-wide

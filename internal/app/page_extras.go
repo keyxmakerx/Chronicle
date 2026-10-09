@@ -49,7 +49,7 @@ type pageExtrasEntities interface {
 // layouts unless that already happened. The setting is written only after
 // every campaign was attempted, so a crash part-way repeats the sweep, which
 // is harmless: a block already placed is never added twice.
-func placePageExtrasOnce(ctx context.Context, st pageExtrasSettings, camps pageExtrasCampaigns, addons pageExtrasAddons, ents pageExtrasEntities) (int, error) {
+func placePageExtrasOnce(ctx context.Context, st pageExtrasSettings, camps pageExtrasCampaigns, addons pageExtrasAddons, ents pageExtrasEntities, lists entities.CharacterListReader) (int, error) {
 	if v, err := st.Get(ctx, pageExtrasPlacedKey); err == nil && v == "1" {
 		return 0, nil
 	} else if err != nil {
@@ -72,12 +72,24 @@ func placePageExtrasOnce(ctx context.Context, st pageExtrasSettings, camps pageE
 					slog.String("campaign_id", c.ID), slog.Any("error", err))
 				continue
 			}
+			npcIDs, err := lists.NPCTypeIDs(ctx, c.ID)
+			if err != nil {
+				slog.Warn("page extras: NPC types unavailable",
+					slog.String("campaign_id", c.ID), slog.Any("error", err))
+				continue
+			}
+			charIDs, err := lists.CharacterTypeIDs(ctx, c.ID)
+			if err != nil {
+				slog.Warn("page extras: character types unavailable",
+					slog.String("campaign_id", c.ID), slog.Any("error", err))
+				continue
+			}
 			armoryOn, err := addons.IsEnabledForCampaign(ctx, c.ID, armory.AddonSlug)
 			if err != nil {
 				slog.Warn("page extras: armory switch unavailable",
 					slog.String("campaign_id", c.ID), slog.Any("error", err))
 			}
-			n, err := ents.PlacePageExtras(ctx, c.ID, pageExtrasPlans(types, armoryOn))
+			n, err := ents.PlacePageExtras(ctx, c.ID, pageExtrasPlans(types, npcIDs, charIDs, armoryOn))
 			if err != nil {
 				slog.Warn("page extras: placing failed",
 					slog.String("campaign_id", c.ID), slog.Any("error", err))
@@ -99,9 +111,10 @@ func placePageExtrasOnce(ctx context.Context, st pageExtrasSettings, camps pageE
 // outside the layout: game-system panels on NPC pages (newSystemPanelResolver)
 // and, with the armory on, the items-and-money panel on the types that asked
 // for it and that the armory treats as characters (armoryStashDirectoryAdapter).
-func pageExtrasPlans(types []entities.EntityType, armoryOn bool) map[int]entities.PageExtrasPlan {
+// npcIDs and charIDs are the campaign's listed page types.
+func pageExtrasPlans(types []entities.EntityType, npcIDs, charIDs []int, armoryOn bool) map[int]entities.PageExtrasPlan {
 	plans := make(map[int]entities.PageExtrasPlan, len(types))
-	for _, id := range npcTypeIDs(types) {
+	for _, id := range npcIDs {
 		p := plans[id]
 		p.SystemPanels = true
 		plans[id] = p
@@ -113,7 +126,7 @@ func pageExtrasPlans(types []entities.EntityType, armoryOn bool) map[int]entitie
 	for i := range types {
 		byID[types[i].ID] = &types[i]
 	}
-	for _, id := range characterFamilyTypeIDs(types, true) {
+	for _, id := range charIDs {
 		if !entities.ShowedCharacterPanel(byID[id]) {
 			continue
 		}

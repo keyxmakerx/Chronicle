@@ -1923,81 +1923,15 @@ func (a *entityAccessAdapter) FilterViewableEntityIDs(ctx context.Context, campa
 	return a.svc.FilterViewableEntityIDs(ctx, campaignID, entityIDs, role, userID)
 }
 
-// npcEntityTypeFinderAdapter wraps entities.EntityService to implement the
-// npcs.EntityTypeFinder interface. Resolves the entity types the NPC section
-// lists without creating a circular import.
+// npcEntityTypeFinderAdapter implements npcs.EntityTypeFinder from the page
+// types the owner listed as NPCs, so the NPC section lists exactly those.
 type npcEntityTypeFinderAdapter struct {
-	svc entities.EntityService
+	lists entities.CharacterListReader
 }
 
-// FindCharacterTypeIDs returns the campaign's NPC/monster entity types.
+// FindCharacterTypeIDs returns the campaign's NPC page types.
 func (a *npcEntityTypeFinderAdapter) FindCharacterTypeIDs(ctx context.Context, campaignID string) ([]int, error) {
-	types, err := a.svc.GetEntityTypes(ctx, campaignID)
-	if err != nil {
-		return nil, err
-	}
-	return npcTypeIDs(types), nil
-}
-
-// npcTypeIDs picks the entity types whose entities are NPCs or monsters: the
-// default "character" type, the "npc"/"creature" genre types, system-pack
-// character and monster types, and every enabled sub-type nested under one of
-// them. The player-character type is left out; claimed PCs are the party.
-func npcTypeIDs(types []entities.EntityType) []int {
-	return characterFamilyTypeIDs(types, false)
-}
-
-// characterFamilyTypeIDs is the shared walk behind npcTypeIDs. includePC keeps
-// the player-character type: the NPC gallery leaves it out (claimed PCs are the
-// party), while stashes and moves are mostly about the players' own characters.
-func characterFamilyTypeIDs(types []entities.EntityType, includePC bool) []int {
-	isRoot := func(et entities.EntityType) bool {
-		if et.PresetCategory != nil {
-			switch *et.PresetCategory {
-			case "character", "creature":
-				return true
-			}
-		}
-		switch et.Slug {
-		case "character", "npc", "creature":
-			return true
-		}
-		return strings.HasSuffix(et.Slug, "-character") || strings.HasSuffix(et.Slug, "-monster")
-	}
-	isPC := func(et entities.EntityType) bool {
-		return (et.PresetCategory != nil && *et.PresetCategory == entities.PresetCategoryPlayerCharacter) ||
-			et.Slug == entities.SlugPlayerCharacter
-	}
-
-	byID := make(map[int]entities.EntityType, len(types))
-	for _, et := range types {
-		byID[et.ID] = et
-	}
-	// inFamily walks up the parent chain; depth guards against a cycle.
-	inFamily := func(et entities.EntityType) bool {
-		for depth := 0; depth < 16; depth++ {
-			if isRoot(et) {
-				return true
-			}
-			if et.ParentTypeID == nil {
-				return false
-			}
-			parent, ok := byID[*et.ParentTypeID]
-			if !ok {
-				return false
-			}
-			et = parent
-		}
-		return false
-	}
-
-	var ids []int
-	for _, et := range types {
-		if et.Enabled && (includePC || !isPC(et)) && inFamily(et) {
-			ids = append(ids, et.ID)
-		}
-	}
-	return ids
+	return a.lists.NPCTypeIDs(ctx, campaignID)
 }
 
 // npcVisibilityTogglerAdapter wraps entities.EntityService to implement the
@@ -2563,6 +2497,13 @@ func (a *App) RegisterRoutes() {
 	layoutPresetHandler := entities.NewLayoutPresetHandler(layoutPresetService)
 	entities.RegisterLayoutPresetRoutes(e, layoutPresetHandler, campaignService, authService)
 	campaignService.SetLayoutPresetSeeder(layoutPresetService)
+
+	// Which page types are characters and which are NPCs is the owner's
+	// choice, kept in the campaign settings; a new campaign starts with the
+	// types its defaults provide.
+	characterListService := entities.NewCharacterListService(entityService, &characterListStore{camps: campaignService})
+	campaignService.SetCharacterListSeeder(characterListService)
+	entityHandler.SetCharacterLists(characterListService)
 
 	// Media plugin: file upload, storage, thumbnailing, serving.
 	// Graceful degradation: if the media directory can't be created, log a warning
@@ -3640,7 +3581,10 @@ func (a *App) RegisterRoutes() {
 	}
 	shareAudit := &armoryShareAuditAdapter{}
 	stashRepo := armory.NewStashRepository(a.DB)
-	stashDirectory := &armoryStashDirectoryAdapter{svc: entityService}
+	stashDirectory := &armoryStashDirectoryAdapter{svc: entityService, lists: characterListService}
+	// The stash directory caches page-type facts for a few seconds; drop them
+	// when the owner changes the lists so the change shows at once.
+	characterListService.SetChangeHook(stashDirectory.Forget)
 	stashSvc := armory.NewStashService(armory.StashDeps{
 		Repo:       stashRepo,
 		Directory:  stashDirectory,
@@ -3742,7 +3686,7 @@ func (a *App) RegisterRoutes() {
 	// narrowed by entities' canonical FilterViewableEntityIDs rather than a
 	// second, hand-rolled predicate.
 	npcRepo := npcs.NewNPCRepository(a.DB)
-	npcSvc := npcs.NewNPCService(npcRepo, &npcEntityTypeFinderAdapter{svc: entityService}, &entityVisibilityFilterAdapter{svc: entityService})
+	npcSvc := npcs.NewNPCService(npcRepo, &npcEntityTypeFinderAdapter{lists: characterListService}, &entityVisibilityFilterAdapter{svc: entityService})
 	npcSvc.SetTagLister(&npcTagListerAdapter{svc: tagService})
 	npcHandler := npcs.NewHandler(npcSvc)
 	npcHandler.SetVisibilityToggler(&npcVisibilityTogglerAdapter{svc: entityService})
@@ -4194,7 +4138,13 @@ func (a *App) RegisterRoutes() {
 	// One-time: place the page pieces that became blocks into existing
 	// layouts, so no page loses anything (see page_extras.go). Best-effort;
 	// a failure is retried on the next boot.
-	if n, err := placePageExtrasOnce(context.Background(), settingsRepo, campaignService, addonService, entityService); err != nil {
+	// The lists come first: the page-extras pass reads them.
+	if n, err := seedCharacterListsOnce(context.Background(), settingsRepo, campaignService, characterListService); err != nil {
+		slog.Error("seeding character lists failed", slog.String("error", err.Error()))
+	} else if n > 0 {
+		slog.Info("checked character lists for existing campaigns", slog.Int("campaigns", n))
+	}
+	if n, err := placePageExtrasOnce(context.Background(), settingsRepo, campaignService, addonService, entityService, characterListService); err != nil {
 		slog.Error("placing page extras failed", slog.String("error", err.Error()))
 	} else if n > 0 {
 		slog.Info("placed page extras into layouts", slog.Int("layouts", n))
@@ -4874,7 +4824,7 @@ func (a *App) RegisterRoutes() {
 		Nights:   &dmNightAdapter{svc: sessionsService, members: campaignService},
 		Foundry:  wsHub,
 		Party:    &dmPartyAdapter{entities: entityService, campaigns: campaignService},
-		Hidden:   &dmHiddenAdapter{entities: entityService},
+		Hidden:   &dmHiddenAdapter{entities: entityService, lists: characterListService},
 		System:   systemHandler,
 	})
 	dmscreen.RegisterRoutes(e, dmscreen.NewHandler(dmScreenSvc), campaignService, authService)
@@ -4918,10 +4868,10 @@ func (a *App) RegisterRoutes() {
 
 	// "Show in Foundry" on NPC pages: npc.spotlight is not a change-feed
 	// type, so the recording wrapper passes it straight to the hub.
-	fvttHandler.SetNPCSpotlight(&npcSpotlightResolver{entities: entityService}, &npcSpotlightPublisher{bus: wsEventBus})
+	fvttHandler.SetNPCSpotlight(&npcSpotlightResolver{entities: entityService, lists: characterListService}, &npcSpotlightPublisher{bus: wsEventBus})
 
 	// Game-system widget panels under NPC page titles (manifest entity_panels).
-	entityHandler.SetSystemPanelResolver(newSystemPanelResolver(systemHandler, entityService))
+	entityHandler.SetSystemPanelResolver(newSystemPanelResolver(systemHandler, characterListService))
 
 	// Per-page game-system state. system_state.updated is not a change-feed
 	// type, so the recording wrapper passes it straight to the hub.
@@ -4958,7 +4908,7 @@ func (a *App) RegisterRoutes() {
 			quests.NewQuestService(questRepo, questEntities, questMaps),
 			quests.NewBoardService(quests.NewBoardRepository(a.DB), questRepo, questEntities, questMaps, &questMemberNamesAdapter{svc: campaignService}),
 			quests.NewPickerService(questEntities, questMaps, &questCharacterAdapter{
-				dir:   &armoryStashDirectoryAdapter{svc: entityService},
+				dir:   stashDirectory,
 				names: &questMemberNamesAdapter{svc: campaignService},
 			}),
 		), campaignService, authService)

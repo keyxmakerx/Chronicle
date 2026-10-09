@@ -654,22 +654,41 @@ type CastMember struct {
 	IsViewer  bool
 }
 
-// CastView is the Characters page view-model. The page has two addon-gated
-// sections: the Party (player characters — shown when ShowPlayers, i.e. the
-// player-character-claiming addon is on) and the NPCs/Monsters section
-// (NPCSection — a templ component contributed by the npcs plugin when its addon
-// is on, nil otherwise). The page itself is only served when at least one of the
-// two is enabled.
+// CastView is the Characters page view-model. The page has addon-gated bands:
+// Yours (the viewer's own characters), the Party (claimed player characters of
+// the types the owner listed, shown when ShowPlayers, i.e. the
+// player-character-claiming addon is on) and the NPCs band (NPCSection, a
+// templ component contributed by the npcs plugin when its addon is on, nil
+// otherwise). The page itself is only served when at least one of the two
+// addons is enabled.
 type CastView struct {
+	Yours       []CastMember
 	Party       []CastMember
 	ShowPlayers bool
 	// IsMember is false for signed-out and non-member viewers of a public
-	// campaign; member-only links (My characters, claim hint) hide for them.
+	// campaign; member-only links (claim hint) hide for them.
 	IsMember bool
 	// ClaimTypeID is the claimable type whose list the empty-party hint links
 	// to; 0 means no link.
 	ClaimTypeID int
 	NPCSection  templ.Component
+
+	// ShowNPCs is true when the npcs addon is on and its section is wired.
+	ShowNPCs bool
+	// PartyListed and NPCsListed say whether the owner has listed any page
+	// type for that band. A band with none is hidden from everyone but the
+	// owner, who sees the Add control instead.
+	PartyListed bool
+	NPCsListed  bool
+	// PartyEditor and NPCEditor are the owner's controls; nil for everyone
+	// else, so a player's page carries no controls at all.
+	PartyEditor *CastBandEditor
+	NPCEditor   *CastBandEditor
+	// Landed is the type just added, flashed once on its chip.
+	Landed int
+	// Notice is a one-line confirmation shown as a toast after a change.
+	Notice    string
+	CSRFToken string
 }
 
 // --- Slug Generation ---

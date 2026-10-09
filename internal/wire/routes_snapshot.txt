@@ -580,6 +580,7 @@ POST	/campaigns/:id/join	internal/plugins/admin/routes.go
 POST	/campaigns/:id/media	internal/plugins/syncapi/routes.go
 POST	/campaigns/import	internal/plugins/campaigns/routes.go
 POST	/cancel-transfer	internal/plugins/campaigns/routes.go
+POST	/characters/lists	internal/plugins/entities/routes.go
 POST	/content-templates	internal/plugins/entities/content_template_routes.go
 POST	/database/migrations/apply	internal/plugins/admin/routes.go
 POST	/diagnostics/workspace/parse	internal/plugins/admin/routes.go

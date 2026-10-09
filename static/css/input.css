@@ -4842,6 +4842,28 @@ html[data-view-motion="calm"] *:not(.czp *), html[data-view-motion="calm"] *:not
 .ag-pop .ag-box { margin: 0; border: 0; background: transparent; }
 .ag-toast { position: fixed; z-index: 90; right: 18px; bottom: 18px; display: flex; align-items: center; gap: 10px; padding: 10px 14px; border-radius: 11px; background: var(--color-card-bg); color: var(--color-text-primary); border: 1px solid var(--color-border); box-shadow: 0 14px 34px -14px rgba(0,0,0,.4); font-size: 13px; animation: ag-in .28s ease-out both; }
 .ag-toast i { color: #16a34a; }
+/* A toast the server renders into a swapped fragment fades itself out, since no
+   script is there to remove it. */
+.ag-toast-timed { animation: ag-in .28s ease-out both, ag-out .3s ease-in 3.2s forwards; }
+@keyframes ag-out { to { opacity: 0; visibility: hidden; pointer-events: none; } }
+/* Band heads on the Characters page: the heading, the chosen types as chips,
+   and the Add button. */
+.ag-bandhead { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 10px; margin-bottom: 12px; }
+.ag-bandhead .section-header { margin: 0; }
+.ag-chips { display: inline-flex; flex-wrap: wrap; gap: 6px; }
+.ag-chip { display: inline-flex; align-items: center; gap: 4px; height: 24px; padding: 0 4px 0 9px; border-radius: 999px; border: 1px solid var(--color-border); background: var(--color-card-bg); color: var(--color-fg); font-size: 12px; font-weight: 500; }
+.ag-chip button { width: 18px; height: 18px; border: 0; border-radius: 999px; background: transparent; color: var(--color-fg-muted); cursor: pointer; display: grid; place-items: center; font-size: 10px; }
+.ag-chip button:hover { background: var(--color-bg-tertiary, rgba(0,0,0,.06)); color: var(--color-fg); }
+.ag-add { display: inline-flex; align-items: center; gap: 5px; height: 26px; padding: 0 10px; border-radius: 8px; border: 1px dashed var(--color-border); background: transparent; color: var(--color-fg-muted); font: inherit; font-size: 12.5px; cursor: pointer; }
+.ag-add:hover, .ag-add[aria-expanded="true"] { color: var(--color-accent); border-color: var(--color-accent); }
+.ag-empty { padding: 18px; border: 1px dashed var(--color-border); border-radius: 10px; text-align: center; font-size: 13px; color: var(--color-fg-secondary); }
+.ag-link { border: 0; padding: 0; background: none; font: inherit; font-size: 12px; color: var(--color-accent); cursor: pointer; }
+.ag-link:hover { text-decoration: underline; }
+.ag-confirm p { margin: 0 0 4px; font-size: 13px; color: var(--color-fg); }
+.ag-confirm small { display: block; font-size: 12px; color: var(--color-fg-muted); }
+.ag-row.is-sub { padding-left: 32px; }
+.ag-row .ag-name b { font-weight: 500; }
+.ag-count { display: inline-flex; align-items: center; justify-content: center; min-width: 18px; height: 18px; padding: 0 6px; border-radius: 999px; background: var(--color-bg-tertiary, rgba(0,0,0,.06)); color: var(--color-fg-muted); font-size: 11px; }
 @keyframes ag-in { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
 @keyframes ag-pop { from { opacity: 0; transform: translateY(-4px) scale(.97); } to { opacity: 1; transform: none; } }
 @keyframes ag-glow { 0% { box-shadow: 0 0 0 0 rgba(217, 119, 6, .55); } 100% { box-shadow: 0 0 0 12px rgba(217, 119, 6, 0); } }

@@ -21,10 +21,6 @@ func (s *revealEntitySvc) GetByID(context.Context, string) (*entities.Entity, er
 	return s.ent, nil
 }
 
-func (s *revealEntitySvc) GetEntityTypes(context.Context, string) ([]entities.EntityType, error) {
-	return []entities.EntityType{{ID: 1, Slug: "character", Enabled: true}, {ID: 2, Slug: "location", Enabled: true}}, nil
-}
-
 func (s *revealEntitySvc) SetPrivateInCampaign(_ context.Context, _, _ string, private bool) error {
 	if private {
 		s.hides++
@@ -49,7 +45,7 @@ func TestDMHiddenAdapter_RevealOnlyReveals(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			svc := &revealEntitySvc{ent: &tt.ent}
-			name, err := (&dmHiddenAdapter{entities: svc}).Reveal(context.Background(), "e1", tt.campaign)
+			name, err := (&dmHiddenAdapter{entities: svc, lists: fixedTypeLists{npc: []int{1}}}).Reveal(context.Background(), "e1", tt.campaign)
 			if (err != nil) != tt.wantErr {
 				t.Fatalf("err = %v, wantErr %v", err, tt.wantErr)
 			}

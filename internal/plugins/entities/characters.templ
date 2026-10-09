@@ -1,6 +1,7 @@
-// characters.templ — per-campaign Characters ("Cast") page. Two bands: the
-// Party (every claimed player character, the viewer's own highlighted and
-// first) and the Active NPCs (entities the GM tagged `cast`). Each card is a
+// characters.templ — per-campaign Characters ("Cast") page. Bands: Yours (the
+// viewer's own characters), the Party (claimed player characters of the page
+// types the owner listed) and the NPCs (the npcs plugin's section, for the
+// types the owner listed; entities the GM tagged `cast` are featured). Each card is a
 // real link to the entity page and carries the data attributes characters.js
 // uses to launch a mini→full preview via the dynamic-surface frame. The card
 // visual language mirrors myCharacterCard so the two pages feel like siblings.
@@ -9,6 +10,8 @@ package entities
 
 import (
 	"fmt"
+	"strconv"
+	"strings"
 
 	"github.com/keyxmakerx/chronicle/internal/plugins/campaigns"
 	"github.com/keyxmakerx/chronicle/internal/templates/layouts"
@@ -33,49 +36,186 @@ templ CharactersPage(cc *campaigns.CampaignContext, view CastView) {
 	}
 }
 
-// CharactersContent is the HTMX-swappable body (the two bands). Returned alone
-// for boosted/fragment requests; wrapped by CharactersPage for full loads.
+// CharactersContent is the HTMX-swappable body: the viewer's own characters,
+// then the Party and NPC bands. Returned alone for boosted/fragment requests;
+// wrapped by CharactersPage for full loads. The owner's list controls swap this
+// whole region (#cast-content) after each change.
 templ CharactersContent(cc *campaigns.CampaignContext, view CastView) {
-	<div class="mb-6 flex items-baseline justify-between gap-4">
-		<div>
+	<div id="cast-content">
+		<div class="mb-6">
 			<h1 class="text-2xl font-bold text-fg">Characters</h1>
 			<p class="mt-1 text-sm text-fg-secondary">The cast of { cc.Campaign.Name }.</p>
 		</div>
-		if view.ShowPlayers && view.IsMember {
-			<a
-				href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/me", cc.Campaign.ID)) }
-				class="text-sm text-fg-secondary hover:text-fg whitespace-nowrap"
-			>
-				My characters →
-			</a>
-		}
-	</div>
-
-	if view.ShowPlayers {
-		<section class="mb-8">
-			<h2 class="section-header mb-3">The Party</h2>
-			if len(view.Party) == 0 {
-				if view.ClaimTypeID != 0 {
-					@castEmptyLink("fa-users", "No player characters yet", "Claimed characters appear here.", "Find a character to claim →", fmt.Sprintf("/campaigns/%s/entities?type=%d", cc.Campaign.ID, view.ClaimTypeID))
-				} else {
-					@castEmpty("fa-users", "No player characters yet", "Claimed characters appear here. Players can claim a character from its page.")
-				}
-			} else {
+		if len(view.Yours) > 0 {
+			<section class="mb-8" data-yours="true">
+				<h2 class="section-header mb-3">Yours</h2>
 				<div class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-4">
-					for _, m := range view.Party {
+					for _, m := range view.Yours {
 						@castCard(cc.Campaign.ID, m)
 					}
 				</div>
-			}
-		</section>
-	}
+			</section>
+		}
+		if view.ShowPlayers && (view.PartyListed || view.PartyEditor != nil || len(view.Party) > 0) {
+			<section class="mb-8" data-band="characters">
+				@castBandHead("The Party", view.PartyEditor, view.Landed)
+				if view.PartyEditor != nil {
+					@castBandFold(cc.Campaign.ID, view.CSRFToken, view.PartyEditor)
+				}
+				if !view.PartyListed && view.PartyEditor != nil {
+					@castBandEmpty()
+				} else if len(view.Party) == 0 {
+					if view.ClaimTypeID != 0 {
+						@castEmptyLink("fa-users", "No player characters yet", "Claimed characters appear here.", "Find a character to claim →", fmt.Sprintf("/campaigns/%s/entities?type=%d", cc.Campaign.ID, view.ClaimTypeID))
+					} else {
+						@castEmpty("fa-users", "No player characters yet", "Claimed characters appear here. Players can claim a character from its page.")
+					}
+				} else {
+					<div class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-4">
+						for _, m := range view.Party {
+							@castCard(cc.Campaign.ID, m)
+						}
+					</div>
+				}
+			</section>
+		}
+		if view.NPCSection != nil || view.NPCEditor != nil {
+			<section data-band="npcs">
+				@castBandHead("NPCs", view.NPCEditor, view.Landed)
+				if view.NPCEditor != nil {
+					@castBandFold(cc.Campaign.ID, view.CSRFToken, view.NPCEditor)
+				}
+				if view.NPCSection != nil {
+					@view.NPCSection
+				} else if view.NPCEditor != nil {
+					@castBandEmpty()
+				}
+			</section>
+		}
+		if view.Notice != "" {
+			<div class="ag-toast ag-toast-timed" role="status">
+				<i class="fa-solid fa-circle-check" aria-hidden="true"></i>
+				<span>{ view.Notice }</span>
+			</div>
+		}
+	</div>
+}
 
-	if view.NPCSection != nil {
-		<section>
-			<h2 class="section-header mb-3">NPCs &amp; Monsters</h2>
-			@view.NPCSection
-		</section>
-	}
+// castBandHead is a band's heading. The owner's page adds the chosen types as
+// chips (each with an x that opens its in-place "stop showing" box) and the Add
+// button; everyone else sees the heading alone.
+templ castBandHead(label string, ed *CastBandEditor, landed int) {
+	<div class="ag-bandhead">
+		<h2 class="section-header">{ label }</h2>
+		if ed != nil {
+			<span class="ag-chips">
+				for _, ch := range ed.Chips {
+					<span class={ "ag-chip", templ.KV("ag-landed", ch.ID == landed) } data-chip={ strconv.Itoa(ch.ID) }>
+						{ ch.Name }
+						<button type="button" aria-label={ "Stop showing " + ch.Name + " pages here" } onclick={ castFoldRemoveCall(ch.ID) }>
+							<i class="fa-solid fa-xmark" aria-hidden="true"></i>
+						</button>
+					</span>
+				}
+			</span>
+			<button type="button" class="ag-add" aria-expanded="false" onclick={ castFoldCall("add") }>
+				<i class="fa-solid fa-plus" aria-hidden="true"></i> Add
+			</button>
+		}
+	</div>
+}
+
+// castBandEmpty is what the owner sees on a band with no page types yet.
+templ castBandEmpty() {
+	<div class="ag-empty">
+		No page types yet.
+		<button type="button" class="ag-link" style="font-size:13px" onclick={ castFoldCall("add") }>+ Add</button>
+		the types that belong here.
+	</div>
+}
+
+// castBandFold holds the owner's boxes, closed until a control opens one: the
+// Add box and one "stop showing" box per chip. Each is a form posting to the
+// list endpoint, which answers with the refreshed page body.
+templ castBandFold(campaignID, csrf string, ed *CastBandEditor) {
+	<div class="ag-fold" data-open="">
+		<form
+			class="ag-box"
+			data-box="add"
+			hidden
+			method="post"
+			action={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/characters/lists", campaignID)) }
+			hx-post={ fmt.Sprintf("/campaigns/%s/characters/lists", campaignID) }
+			hx-headers={ fmt.Sprintf(`{"X-CSRF-Token":"%s"}`, csrf) }
+			hx-target="#cast-content"
+			hx-swap="outerHTML"
+		>
+			<input type="hidden" name="csrf_token" value={ csrf }/>
+			<input type="hidden" name="list" value={ string(ed.Kind) }/>
+			<input type="hidden" name="op" value="add"/>
+			<div class="ag-head">
+				<h4>Add to { ed.Label }</h4>
+				<button type="button" class="ag-x" aria-label="Close" onclick={ castFoldCall("") }>
+					<i class="fa-solid fa-xmark" aria-hidden="true"></i>
+				</button>
+			</div>
+			<div class="ag-body">
+				<div class="ag-search">
+					<i class="fa-solid fa-magnifying-glass" aria-hidden="true"></i>
+					<input type="search" class="input w-full text-sm" placeholder="Search page types" aria-label="Search page types" autocomplete="off" oninput={ castSearchCall }/>
+				</div>
+				<div class="ag-list" role="radiogroup" aria-label="Page types">
+					for _, o := range ed.Options {
+						<label class={ "ag-row", templ.KV("is-sub", o.IsSub) }>
+							<input type="radio" name="type_id" value={ strconv.Itoa(o.ID) } data-say={ castPickSay(ed.Kind, o) } onchange={ castPickCall }/>
+							<span class="ag-name"><b>{ o.Name }</b></span>
+							if len(o.With) > 0 {
+								<span class="ag-tag">with { strings.Join(o.With, ", ") }</span>
+							}
+							<span class="ag-count" title={ strconv.Itoa(o.Count) + " pages" }>{ strconv.Itoa(o.Count) }</span>
+						</label>
+					}
+					if len(ed.Options) == 0 {
+						<div class="ag-more">Every page type is already on this list.</div>
+					}
+					<div class="ag-more" data-nomatch hidden>No page type matches.</div>
+				</div>
+				<div class="ag-hint" data-hint></div>
+				<div class="ag-foot">
+					<span class="ag-sp"></span>
+					<button type="button" class="btn-secondary btn-sm" onclick={ castFoldCall("") }>Cancel</button>
+					<button type="submit" class="btn-primary btn-sm" data-save disabled>Save</button>
+				</div>
+			</div>
+		</form>
+		for _, ch := range ed.Chips {
+			<form
+				class="ag-box ag-confirm"
+				data-box={ "rm-" + strconv.Itoa(ch.ID) }
+				hidden
+				method="post"
+				action={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/characters/lists", campaignID)) }
+				hx-post={ fmt.Sprintf("/campaigns/%s/characters/lists", campaignID) }
+				hx-headers={ fmt.Sprintf(`{"X-CSRF-Token":"%s"}`, csrf) }
+				hx-target="#cast-content"
+				hx-swap="outerHTML"
+			>
+				<input type="hidden" name="csrf_token" value={ csrf }/>
+				<input type="hidden" name="list" value={ string(ed.Kind) }/>
+				<input type="hidden" name="op" value="remove"/>
+				<input type="hidden" name="type_id" value={ strconv.Itoa(ch.ID) }/>
+				<div class="ag-body">
+					<p>Stop showing { ch.Name } pages under { ed.Label }?</p>
+					<small>The pages stay where they are; they only leave this list. You can add the type back at any time.</small>
+					<div class="ag-foot">
+						<span class="ag-sp"></span>
+						<button type="button" class="btn-secondary btn-sm" onclick={ castFoldCall("") }>Keep</button>
+						<button type="submit" class="btn-danger btn-sm">Remove</button>
+					</div>
+				</div>
+			</form>
+		}
+	</div>
 }
 
 // castCard is one mini profile card. The whole card links to the entity page

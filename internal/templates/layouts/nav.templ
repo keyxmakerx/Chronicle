@@ -53,7 +53,7 @@ templ campaignNavBrand() {
 	</div>
 }
 
-// campaignNavTop is the fixed block: Dashboard, My Characters, Pinned, Apps.
+// campaignNavTop is the fixed block: Dashboard, Pinned, Apps.
 // It sizes to its own content and never scrolls with the categories area; a
 // safety-valve scroll of its own only engages past about half the sidebar's
 // height (see .nav-top in input.css). It shares hx-boost with the
@@ -70,9 +70,6 @@ templ campaignNavTop() {
 	>
 		<div class="nav-list" id="sidebar-nav-top-list">
 			@navFixedRow("dashboard", "Dashboard", "fa-house", fmt.Sprintf("/campaigns/%s", GetCampaignID(ctx)), "")
-			if navShowsMe(ctx) {
-				@navFixedRow("me", "My Characters", "fa-user-shield", fmt.Sprintf("/campaigns/%s/me", GetCampaignID(ctx)), "You")
-			}
 			for _, sec := range GetNavSections(ctx) {
 				if sec.Kind == "pinned" || sec.Kind == "apps" {
 					@navSection(sec)
@@ -353,8 +350,7 @@ templ navSubRow(sub NavSubRowView, parentHidden bool) {
 	</a>
 }
 
-// navFixedRow is a row the sidebar always has: Dashboard, My Characters,
-// All Pages.
+// navFixedRow is a row the sidebar always has: Dashboard, All Pages.
 templ navFixedRow(key string, label string, icon string, url string, trail string) {
 	<a
 		href={ templ.SafeURL(url) }
