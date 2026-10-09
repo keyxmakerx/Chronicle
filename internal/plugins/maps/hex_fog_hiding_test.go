@@ -183,12 +183,18 @@ func TestDrawingService_FogHiding(t *testing.T) {
 	})
 }
 
-// An anchored layer's picture file is the secret: its image id goes only to
-// viewers who may see DM-only content.
+// The file of the anchor picture, and of any picture reaching into unexplored
+// hexes, goes only to viewers who may see DM-only content.
 func TestDrawingService_WithholdImages(t *testing.T) {
 	img := "media-secret"
-	pic := Drawing{ID: "pic", MapID: "map-1", DrawingType: DrawingTypeImage, ImageID: &img}
-	other := Drawing{ID: "other", MapID: "map-1", DrawingType: DrawingTypeImage, ImageID: &img}
+	box := func(x0, y0, x1, y1 float64) []byte {
+		return []byte(`[{"x":` + fl(x0) + `,"y":` + fl(y0) + `},{"x":` + fl(x1) + `,"y":` + fl(y1) + `}]`)
+	}
+	// In fogMaskFixture hex (1,1) is explored, around map pixel (129.9, 75).
+	lit := box(12, 6.5, 14, 8.5)
+	pic := Drawing{ID: "pic", MapID: "map-1", DrawingType: DrawingTypeImage, ImageID: &img, Points: lit}
+	other := Drawing{ID: "other", MapID: "map-1", DrawingType: DrawingTypeImage, ImageID: &img, Points: lit}
+	dark := Drawing{ID: "dark", MapID: "map-1", DrawingType: DrawingTypeImage, ImageID: &img, Points: box(12, 6.5, 40, 40)}
 	anchored := fogMaskFixture()
 	anchored.AnchorID = "pic"
 	build := func(l HexFogLookup) DrawingService {
@@ -197,24 +203,24 @@ func TestDrawingService_WithholdImages(t *testing.T) {
 		return svc
 	}
 	tests := []struct {
-		name     string
-		lookup   fakeFogLookup
-		role     int
-		wantPic  bool // the anchor picture keeps its image
-		wantOthr bool
-		wantErr  bool
+		name    string
+		lookup  fakeFogLookup
+		role    int
+		want    string // "1" where the image is kept, for pic, other, dark
+		wantErr bool
 	}{
-		{"player, anchored fog", fakeFogLookup{mask: anchored}, permissions.RolePlayer, false, true, false},
-		{"scribe, anchored fog", fakeFogLookup{mask: anchored}, permissions.RoleScribe, false, true, false},
-		{"public, anchored fog", fakeFogLookup{mask: anchored}, permissions.RoleNone, false, true, false},
-		{"owner, anchored fog", fakeFogLookup{mask: anchored}, permissions.RoleOwner, true, true, false},
-		{"player, whole-map fog", fakeFogLookup{mask: fogMaskFixture()}, permissions.RolePlayer, true, true, false},
-		{"player, no fog", fakeFogLookup{}, permissions.RolePlayer, true, true, false},
-		{"player, lookup fails", fakeFogLookup{err: errors.New("down")}, permissions.RolePlayer, false, false, true},
+		{"player, anchored fog", fakeFogLookup{mask: anchored}, permissions.RolePlayer, "010", false},
+		{"scribe, anchored fog", fakeFogLookup{mask: anchored}, permissions.RoleScribe, "010", false},
+		{"public, anchored fog", fakeFogLookup{mask: anchored}, permissions.RoleNone, "010", false},
+		{"owner, anchored fog", fakeFogLookup{mask: anchored}, permissions.RoleOwner, "111", false},
+		{"player, whole-map fog", fakeFogLookup{mask: fogMaskFixture()}, permissions.RolePlayer, "110", false},
+		{"owner, whole-map fog", fakeFogLookup{mask: fogMaskFixture()}, permissions.RoleOwner, "111", false},
+		{"player, no fog", fakeFogLookup{}, permissions.RolePlayer, "111", false},
+		{"player, lookup fails", fakeFogLookup{err: errors.New("down")}, permissions.RolePlayer, "", true},
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
-			in := []Drawing{pic, other}
+			in := []Drawing{pic, other, dark}
 			got, err := build(tc.lookup).WithholdImages(context.Background(), "map-1", tc.role, in)
 			if (err != nil) != tc.wantErr {
 				t.Fatalf("err = %v, want error = %v", err, tc.wantErr)
@@ -222,21 +228,40 @@ func TestDrawingService_WithholdImages(t *testing.T) {
 			if tc.wantErr {
 				return
 			}
-			if (got[0].ImageID != nil) != tc.wantPic || (got[1].ImageID != nil) != tc.wantOthr {
-				t.Errorf("anchor image kept = %v, other kept = %v", got[0].ImageID != nil, got[1].ImageID != nil)
+			kept := ""
+			for _, d := range got {
+				if d.ImageID != nil {
+					kept += "1"
+				} else {
+					kept += "0"
+				}
+			}
+			if kept != tc.want {
+				t.Errorf("images kept = %s, want %s", kept, tc.want)
 			}
 			// The caller's slice is never edited: a cached or shared list stays whole.
-			if in[0].ImageID == nil {
+			if in[0].ImageID == nil || in[2].ImageID == nil {
 				t.Error("WithholdImages edited its input")
 			}
 		})
 	}
 }
 
+// fakeFogMedia answers FogWithholdsMedia for one withheld file.
+type fakeFogMedia struct {
+	withheld string
+	err      error
+}
+
+func (f fakeFogMedia) FogWithholdsMedia(_ context.Context, _, mediaID string) (bool, error) {
+	return f.err != nil || mediaID == f.withheld, f.err
+}
+
 // fogMapService is a map service whose one map has a picture and the given fog.
 func fogMapService(fog *FogMask, err error) *mapService {
 	s := shadowedMapService(nil, nil)
 	s.SetHexFogLookup(fakeFogLookup{mask: fog, err: err})
+	s.SetFogMediaLookup(fakeFogMedia{withheld: "media-picture-in-fog"})
 	return s
 }
 
@@ -340,6 +365,16 @@ func TestIsShadowedMapImage_Fog(t *testing.T) {
 		{"fog on another file", fogMaskFixture(), nil, "media-unused", false, false},
 		{"a failed lookup refuses", nil, errors.New("down"), originalMediaID, true, true},
 	}
+	tests = append(tests, []struct {
+		name    string
+		fog     *FogMask
+		err     error
+		media   string
+		want    bool
+		wantErr bool
+	}{
+		{"a picture drawing's file the fog withholds is refused", anchored, nil, "media-picture-in-fog", true, false},
+	}...)
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
 			got, err := fogMapService(tc.fog, tc.err).IsShadowedMapImage(context.Background(), "camp-1", tc.media)
@@ -358,6 +393,25 @@ func TestIsShadowedMapImage_Fog(t *testing.T) {
 		t.Error("rewiring the fog must drop the cached answer")
 	}
 	s.InvalidateMapPictures("camp-1")
+}
+
+// The sync media API withholds links for the same files, and a fog lookup
+// wired without the picture check, or a picture check that fails, refuses.
+func TestFogWithheldPicture_GuardAndLinks(t *testing.T) {
+	s := fogMapService(nil, nil)
+	if pic, err := s.IsMapPicture(context.Background(), "camp-1", "media-picture-in-fog"); err != nil || !pic {
+		t.Errorf("IsMapPicture = %v, %v; want true so no link is minted below owner", pic, err)
+	}
+	failing := fogMapService(nil, nil)
+	failing.SetFogMediaLookup(fakeFogMedia{err: errors.New("down")})
+	if hidden, err := failing.IsShadowedMapImage(context.Background(), "camp-1", "media-unused"); err == nil || !hidden {
+		t.Errorf("a failed picture check: %v, %v; want refused with an error", hidden, err)
+	}
+	unwired := shadowedMapService(nil, nil)
+	unwired.SetHexFogLookup(fakeFogLookup{})
+	if hidden, err := unwired.IsShadowedMapImage(context.Background(), "camp-1", "media-unused"); err == nil || !hidden {
+		t.Errorf("fog wired without the picture check: %v, %v; want refused", hidden, err)
+	}
 }
 
 // A small picture and a field of 50-wide hexes: hex (2,2) is explored, hex
@@ -465,5 +519,26 @@ func TestPlayerImage_FogLookupFailureIsAnError(t *testing.T) {
 	stored, _ := s.GetMap(context.Background(), "map-1")
 	if data, err := s.PlayerImage(context.Background(), stored); err == nil || data != nil {
 		t.Errorf("got %d bytes, err %v; want an error and no image", len(data), err)
+	}
+}
+
+// The soft edge spills into explored land, never into unexplored land: a pixel
+// just inside an unexplored hex is smudged in full, exactly as if every hex
+// were unexplored.
+func TestRenderPlayerImageFog_EdgeOfAnUnexploredHexIsFullySmudged(t *testing.T) {
+	src := checkerboard(200, 200, 4)
+	fog := smallFog()
+	all := smallFog()
+	all.Explored = map[HexKey]bool{}
+	out := renderPlayerImageFog(src, nil, fog, 4096)
+	full := renderPlayerImageFog(src, nil, all, 4096)
+
+	cx, cy := fog.Geo.Center(2, 2)
+	edge := cx + fog.Geo.Width()/2 // the side shared with unexplored hex (3,2)
+	for _, d := range []int{1, 2, 3} {
+		x, y := int(edge)+d, int(cy)
+		if o, f := out.RGBAAt(x, y), full.RGBAAt(x, y); o != f {
+			t.Errorf("%dpx inside the unexplored hex: %v, want the full smudge %v", d, o, f)
+		}
 	}
 }

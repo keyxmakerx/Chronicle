@@ -160,10 +160,111 @@ func (f *FogMask) HidesDrawing(d *Drawing) bool {
 	return true
 }
 
+// HidesToken reports whether a token sits in an unexplored hex, by the same
+// point rule as a pin.
+func (f *FogMask) HidesToken(t *Token) bool {
+	return f != nil && t != nil && f.HidesPoint(t.X, t.Y)
+}
+
 // WithholdsImageOf reports whether the picture file of drawing d must not be
-// sent to a viewer: it is the picture a fogged layer is pinned to.
+// sent to a viewer: it is the picture a fogged layer is pinned to, or a
+// picture whose box reaches into any unexplored hex. A picture shows land as
+// pixels, so unlike a line it cannot "merely touch" the fog; the drawing itself
+// still goes out (as a placeholder) wherever HidesDrawing lets it. A picture
+// whose box cannot be read is withheld, failing closed.
 func (f *FogMask) WithholdsImageOf(d *Drawing) bool {
-	return f != nil && f.AnchorID != "" && d != nil && d.ID == f.AnchorID
+	if f == nil || d == nil || d.DrawingType != DrawingTypeImage {
+		return false
+	}
+	if f.AnchorID != "" && d.ID == f.AnchorID {
+		return true
+	}
+	pts, ok := parsePoints(d.Points)
+	if !ok || len(pts) != 2 || math.IsNaN(d.Rotation) || math.IsInf(d.Rotation, 0) {
+		return true
+	}
+	// Corners in map pixels, then the box the picture covers once turned about
+	// its centre, so a rotated picture is judged by all the land it can show.
+	x0, x1 := minFloat(pts[0].X, pts[1].X)/100*f.MapW, maxFloat(pts[0].X, pts[1].X)/100*f.MapW
+	y0, y1 := minFloat(pts[0].Y, pts[1].Y)/100*f.MapH, maxFloat(pts[0].Y, pts[1].Y)/100*f.MapH
+	cx, cy, hw, hh := (x0+x1)/2, (y0+y1)/2, (x1-x0)/2, (y1-y0)/2
+	rad := d.Rotation * math.Pi / 180
+	cos, sin := math.Abs(math.Cos(rad)), math.Abs(math.Sin(rad))
+	ex, ey := hw*cos+hh*sin, hw*sin+hh*cos
+	return f.boxTouchesUnexplored(cx-ex, cy-ey, cx+ex, cy+ey)
+}
+
+// boxTouchesUnexplored reports whether the box (map pixels) overlaps any
+// unexplored hex of the field with a non-zero area. Only the hexes whose
+// rows and columns can reach the box are tested, each exactly (the hex is a
+// hexagon, not its bounding box), so a picture lying in explored land next to
+// the fog keeps its file.
+func (f *FogMask) boxTouchesUnexplored(x0, y0, x1, y1 float64) bool {
+	g := f.Geo
+	if g.R <= 0 || g.Cols <= 0 || g.Rows <= 0 || !(x1 > x0) || !(y1 > y0) {
+		return false
+	}
+	w := g.Width()
+	r0 := clampIndex((y0-g.Oy-g.R)/(1.5*g.R)-1, g.Rows)
+	r1 := clampIndex((y1-g.Oy+g.R)/(1.5*g.R)+1, g.Rows)
+	c0 := clampIndex((x0-g.Ox-w)/w-1, g.Cols)
+	c1 := clampIndex((x1-g.Ox+w)/w+1, g.Cols)
+	for row := r0; row <= r1; row++ {
+		for col := c0; col <= c1; col++ {
+			if f.Explored[HexKey{Col: col, Row: row}] {
+				continue
+			}
+			hx, hy := g.Center(col, row)
+			if hexOverlapsBox(hx, hy, g.R, x0, y0, x1, y1) {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+// clampIndex turns a fractional hex index into one inside [0, n-1], safe for
+// any finite or infinite input.
+func clampIndex(v float64, n int) int {
+	if math.IsNaN(v) || v < 0 {
+		return 0
+	}
+	if v > float64(n-1) {
+		return n - 1
+	}
+	return int(v)
+}
+
+// hexAxes are the separating axes of a pointy-top hexagon and a box: the box's
+// own two and the hexagon's three edge normals.
+var hexAxes = [4][2]float64{{1, 0}, {0, 1}, {0.5, math.Sqrt(3) / 2}, {-0.5, math.Sqrt(3) / 2}}
+
+// hexOverlapsBox is the separating-axis test between the pointy-top hexagon of
+// corner radius r centred on (hx, hy) and the box: they overlap unless some
+// axis separates them. Touching edges do not count as overlap.
+func hexOverlapsBox(hx, hy, r, x0, y0, x1, y1 float64) bool {
+	var hv [6][2]float64
+	for i := range hv {
+		a := (float64(i)*60 - 90) * math.Pi / 180
+		hv[i] = [2]float64{hx + r*math.Cos(a), hy + r*math.Sin(a)}
+	}
+	bv := [4][2]float64{{x0, y0}, {x1, y0}, {x1, y1}, {x0, y1}}
+	for _, ax := range hexAxes {
+		hmin, hmax := math.Inf(1), math.Inf(-1)
+		for _, v := range hv {
+			p := v[0]*ax[0] + v[1]*ax[1]
+			hmin, hmax = math.Min(hmin, p), math.Max(hmax, p)
+		}
+		bmin, bmax := math.Inf(1), math.Inf(-1)
+		for _, v := range bv {
+			p := v[0]*ax[0] + v[1]*ax[1]
+			bmin, bmax = math.Min(bmin, p), math.Max(bmax, p)
+		}
+		if hmax <= bmin || bmax <= hmin {
+			return false
+		}
+	}
+	return true
 }
 
 // fogHidingApplies is who the fog hides things from: everyone who cannot see

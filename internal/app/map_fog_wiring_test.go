@@ -230,3 +230,91 @@ func TestRoutes_CallsWireHexFog(t *testing.T) {
 		t.Error("routes.go no longer wires the hex fog; players would see every pin and the whole picture")
 	}
 }
+
+// fogMediaMapRepo has one map in the campaign, so the media guard has a map to
+// ask about.
+type fogMediaMapRepo struct{ fogWiringMapRepo }
+
+func (fogMediaMapRepo) ListMaps(context.Context, string) ([]maps.Map, error) {
+	return []maps.Map{{ID: "m", CampaignID: "c"}}, nil
+}
+
+// fogTokenDrawRepo has a token and a picture in unexplored land (only hex
+// (1,1) is explored in fogMask) and a token in hex (1,1).
+type fogTokenDrawRepo struct{ shadowTestDrawRepo }
+
+func (fogTokenDrawRepo) ListTokens(context.Context, string, int) ([]maps.Token, error) {
+	m := fogMask("")
+	dx, dy := pct(m, 4, 4)
+	lx, ly := pct(m, 1, 1)
+	return []maps.Token{{ID: "dark", MapID: "m", X: dx, Y: dy}, {ID: "lit", MapID: "m", X: lx, Y: ly}}, nil
+}
+
+func (fogTokenDrawRepo) ListDrawings(context.Context, string, int, string) ([]maps.Drawing, error) {
+	return []maps.Drawing{{ID: "p", MapID: "m", DrawingType: "image", ImageID: strPtr("media-dark"),
+		Points: json.RawMessage(`[{"x":38,"y":44},{"x":42,"y":48}]`)}}, nil
+}
+
+// The same wiring also covers tokens and the media server: a player's token
+// list loses the token in the dark, and the file of a picture in the dark is
+// refused as a withheld map picture.
+func TestWireHexFog_TokensAndMediaGuard(t *testing.T) {
+	mapsSvc := maps.NewMapService(fogMediaMapRepo{})
+	drawSvc := maps.NewDrawingService(fogTokenDrawRepo{})
+	hexSvc := &recordingHexService{HexService: maps.NewHexService(nil), mask: fogMask("")}
+	wireHexFog(mapsSvc, drawSvc, newMapEventPublisher(nil, drawSvc), hexSvc)
+
+	toks, err := drawSvc.ListTokens(context.Background(), "m", permissions.RolePlayer)
+	if err != nil || len(toks) != 1 || toks[0].ID != "lit" {
+		t.Errorf("player tokens = %v (err %v), want only the lit one", toks, err)
+	}
+	if hidden, err := mapsSvc.IsShadowedMapImage(context.Background(), "c", "media-dark"); err != nil || !hidden {
+		t.Errorf("a picture file under the fog: hidden=%v err=%v, want refused", hidden, err)
+	}
+	if hidden, err := mapsSvc.IsShadowedMapImage(context.Background(), "c", "media-other"); err != nil || hidden {
+		t.Errorf("an unrelated file: hidden=%v err=%v, want served", hidden, err)
+	}
+}
+
+func TestMapEventPublisher_TokenEventsUnderFog(t *testing.T) {
+	m := fogMask("")
+	dx, dy := pct(m, 4, 4)
+	lx, ly := pct(m, 1, 1)
+	cases := []struct {
+		name       string
+		publish    func(a *mapEventPublisherAdapter)
+		wantDMOnly bool
+	}{
+		{"a token created in the dark", func(a *mapEventPublisherAdapter) {
+			a.PublishTokenEvent("created", "c", &maps.Token{ID: "t", MapID: "m", X: dx, Y: dy})
+		}, true},
+		{"a token created on explored land", func(a *mapEventPublisherAdapter) {
+			a.PublishTokenEvent("created", "c", &maps.Token{ID: "t", MapID: "m", X: lx, Y: ly})
+		}, false},
+		{"a hidden token on explored land", func(a *mapEventPublisherAdapter) {
+			a.PublishTokenEvent("updated", "c", &maps.Token{ID: "t", MapID: "m", X: lx, Y: ly, IsHidden: true})
+		}, true},
+		{"a token dragged into the dark", func(a *mapEventPublisherAdapter) {
+			a.PublishTokenPositionEvent("c", "m", "t", dx, dy, false)
+		}, true},
+		{"a token dragged on explored land", func(a *mapEventPublisherAdapter) {
+			a.PublishTokenPositionEvent("c", "m", "t", lx, ly, false)
+		}, false},
+		{"a picture reaching from explored land into the dark carries its file id", func(a *mapEventPublisherAdapter) {
+			pts, _ := json.Marshal([]map[string]float64{{"x": lx, "y": ly}, {"x": dx, "y": dy}})
+			a.PublishDrawingEvent("updated", "c", &maps.Drawing{ID: "p", MapID: "m", DrawingType: "image", Points: pts, Visibility: "everyone", ImageID: strPtr("media-1")})
+		}, true},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			bus := &captureBus{}
+			tc.publish(&mapEventPublisherAdapter{bus: bus, shadows: fixedShadowLookup{}, fog: fixedFogLookup{m}})
+			if bus.last == nil {
+				t.Fatal("nothing published")
+			}
+			if bus.last.RequiresDM != tc.wantDMOnly {
+				t.Errorf("RequiresDM = %v, want %v", bus.last.RequiresDM, tc.wantDMOnly)
+			}
+		})
+	}
+}

@@ -654,12 +654,24 @@ func TestFogMask_Service(t *testing.T) {
 			t.Errorf("mask = %+v", m)
 		}
 	})
-	t.Run("hexes that are not the grid mean no fog", func(t *testing.T) {
+	t.Run("switching the grid away from hexes keeps the fog", func(t *testing.T) {
 		svc, repo, _, _ := fogFixture(PartyWhoScribes)
 		repo.layer = &HexLayer{MapID: "map-1", FogEnabled: true}
-		svc.SetMapLoader(func(context.Context, string) (*Map, error) {
-			return &Map{ID: "map-1", ImageWidth: 1000, ImageHeight: 1000}, nil
-		})
+		for _, grid := range []string{GridNone, GridSquare} {
+			svc.SetMapLoader(func(context.Context, string) (*Map, error) {
+				return &Map{ID: "map-1", ImageWidth: 1000, ImageHeight: 1000,
+					Display: &DisplaySettings{Grid: &GridDisplay{Type: grid, Size: 100}}}, nil
+			})
+			m, err := svc.FogMask(context.Background(), "map-1")
+			if err != nil || m == nil || m.Geo.Cols != 13 || m.Geo.Rows != 14 {
+				t.Fatalf("grid %q: mask = %+v err = %v, want the hex field still fogged", grid, m, err)
+			}
+		}
+	})
+	t.Run("a map with no picture size has nothing to fog", func(t *testing.T) {
+		svc, repo, _, _ := fogFixture(PartyWhoScribes)
+		repo.layer = &HexLayer{MapID: "map-1", FogEnabled: true}
+		svc.SetMapLoader(func(context.Context, string) (*Map, error) { return &Map{ID: "map-1"}, nil })
 		if m, err := svc.FogMask(context.Background(), "map-1"); err != nil || m != nil {
 			t.Fatalf("mask = %v err = %v, want none", m, err)
 		}
@@ -704,5 +716,76 @@ func TestFogHidingAppliesMatchesDMOnlyVisibility(t *testing.T) {
 		if fogHidingApplies(role) == permissions.CanSeeDmOnly(role) {
 			t.Errorf("role %d: fog hiding must apply exactly to those who cannot see DM-only content", role)
 		}
+	}
+}
+
+// With fog on, a scribe cannot move the party while it stands on a hex hidden
+// from them: the path starts there, so the reply and the live event would give
+// that hex away. Where they can see the party, or with fog off, the move works.
+func TestMoveParty_ScribeCannotMoveFromAHiddenHex(t *testing.T) {
+	tests := []struct {
+		name  string
+		fog   bool
+		party HexKey
+		actor HexActor
+		allow bool
+	}{
+		{"party on an unexplored hex, fog on", true, HexKey{9, 9}, actorScribe, false},
+		{"party on an explored hex, fog on", true, HexKey{5, 5}, actorScribe, true},
+		{"party on an unexplored hex, fog off", false, HexKey{9, 9}, actorScribe, true},
+		{"the DM moves it from anywhere", true, HexKey{9, 9}, actorDM, true},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			svc, repo, events, _ := fogFixture(PartyWhoScribes)
+			repo.layer = &HexLayer{MapID: "map-1", FogEnabled: tc.fog, PartyCol: intp(tc.party.Col), PartyRow: intp(tc.party.Row), MilesPerHex: 6, MilesPerDay: 24}
+			mark(repo, HexKey{5, 5})
+			_, err := svc.MoveParty(context.Background(), "camp-1", "map-1", tc.actor, HexFogCell{5, 6})
+			if tc.allow {
+				if err != nil {
+					t.Fatalf("expected success, got %v", err)
+				}
+				return
+			}
+			if !isForbidden(err) {
+				t.Fatalf("expected forbidden, got %v", err)
+			}
+			if len(repo.partyMoves) != 0 || len(events.calls) != 0 {
+				t.Error("a refused move must not write or publish")
+			}
+		})
+	}
+}
+
+// Revealing, hiding and resetting change which picture files the fog
+// withholds, so each drops the media guard's cached answers.
+func TestFogWrites_InvalidateThePictureCache(t *testing.T) {
+	tests := []struct {
+		name  string
+		write func(HexService) error
+	}{
+		{"reveal", func(s HexService) error {
+			_, err := s.RevealFog(context.Background(), "camp-1", "map-1", actorOwner, []HexFogCell{{1, 1}}, true)
+			return err
+		}},
+		{"hide", func(s HexService) error {
+			_, err := s.RevealFog(context.Background(), "camp-1", "map-1", actorOwner, []HexFogCell{{1, 1}}, false)
+			return err
+		}},
+		{"reset", func(s HexService) error {
+			_, err := s.ResetFog(context.Background(), "camp-1", "map-1", actorOwner)
+			return err
+		}},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			svc, _, _, inval := fogFixture(PartyWhoScribes)
+			if err := tc.write(svc); err != nil {
+				t.Fatal(err)
+			}
+			if *inval != 1 {
+				t.Errorf("invalidations = %d, want 1", *inval)
+			}
+		})
 	}
 }

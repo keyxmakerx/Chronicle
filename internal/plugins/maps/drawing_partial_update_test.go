@@ -162,7 +162,7 @@ func runTokenUpdate(t *testing.T, input UpdateTokenInput) *Token {
 		getTokenFn:    func(_ context.Context, _ string) (*Token, error) { return storedToken(), nil },
 		updateTokenFn: func(_ context.Context, tok *Token) error { written = tok; return nil },
 	}
-	if err := NewDrawingService(repo).UpdateToken(context.Background(), "tok-1", "map-1", input); err != nil {
+	if err := NewDrawingService(repo).UpdateToken(context.Background(), "tok-1", "map-1", true, input); err != nil {
 		t.Fatalf("UpdateToken: %v", err)
 	}
 	if written == nil {

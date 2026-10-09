@@ -160,7 +160,19 @@ func smudgeFog(img *image.RGBA, fog *FogMask) {
 	if !any {
 		return
 	}
+	// The feather must only spill outward into explored land: a mask cell is
+	// sampled at its centre, so the cells around an unexplored one are set in
+	// full first (the edge of a hex may cross them), then the blurred mask is
+	// never allowed below that hard core. Otherwise the soft edge would leave
+	// part of the original pixels inside unexplored hexes.
+	hard := dilateMask(mask)
 	boxBlur(mask, 2, 2)
+	for i := 0; i < len(hard); i++ {
+		if hard[i] {
+			o := i * 4
+			mask.Pix[o], mask.Pix[o+1], mask.Pix[o+2], mask.Pix[o+3] = 255, 255, 255, 255
+		}
+	}
 
 	reach := max(10, long/40)
 	shrink := max(1, reach/4)
@@ -187,6 +199,36 @@ func smudgeFog(img *image.RGBA, fog *FogMask) {
 			img.Pix[po+3] = 255
 		}
 	}
+}
+
+// dilateMask sets every mask cell next to (or on) a set cell, in place, and
+// returns which cells are set afterwards.
+func dilateMask(mask *image.RGBA) []bool {
+	b := mask.Bounds()
+	w, h := b.Dx(), b.Dy()
+	set := make([]bool, w*h)
+	for y := 0; y < h; y++ {
+		for x := 0; x < w; x++ {
+			if mask.Pix[mask.PixOffset(x, y)] == 0 {
+				continue
+			}
+			for dy := -1; dy <= 1; dy++ {
+				for dx := -1; dx <= 1; dx++ {
+					nx, ny := x+dx, y+dy
+					if nx >= 0 && ny >= 0 && nx < w && ny < h {
+						set[ny*w+nx] = true
+					}
+				}
+			}
+		}
+	}
+	for i, on := range set {
+		if on {
+			o := i * 4
+			mask.Pix[o], mask.Pix[o+1], mask.Pix[o+2], mask.Pix[o+3] = 255, 255, 255, 255
+		}
+	}
+	return set
 }
 
 // smudgeArea blurs and darkens the box in place, feathering the edge so the

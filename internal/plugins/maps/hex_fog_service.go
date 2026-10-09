@@ -61,7 +61,9 @@ func (s *hexService) RevealFog(ctx context.Context, campaignID, mapID string, ac
 	if err != nil {
 		return nil, err
 	}
-	s.afterWrite(campaignID, mapID, version, nil, false)
+	// Which pictures' files are withheld follows the explored set, so the
+	// cached answers of the media guard are dropped.
+	s.afterWrite(campaignID, mapID, version, nil, true)
 	return &HexWriteResult{Version: version, Updated: len(keys)}, nil
 }
 
@@ -100,7 +102,7 @@ func (s *hexService) ResetFog(ctx context.Context, campaignID, mapID string, act
 	if err != nil {
 		return nil, err
 	}
-	s.afterWrite(campaignID, mapID, version, nil, false)
+	s.afterWrite(campaignID, mapID, version, nil, true)
 	return &HexWriteResult{Version: version}, nil
 }
 
@@ -195,13 +197,22 @@ func (s *hexService) tryMoveParty(ctx context.Context, campaignID, mapID string,
 	}
 
 	// A scribe may follow ground the party has seen, not jump into the dark.
+	// The party must also stand where they can see it: the path starts at its
+	// position, so a move from a hex hidden from them would hand that hex (and
+	// the line out of it) back in the reply and on the live event.
 	if !actor.IsDM {
 		near := append([]HexKey{target}, neighborKeys(target)...)
+		if from != nil {
+			near = append(near, *from)
+		}
 		stored, err := s.repo.GetCells(ctx, mapID, near)
 		if err != nil {
 			return nil, err
 		}
 		explored := func(k HexKey) bool { return stored[k].Explored }
+		if layer.FogEnabled && from != nil && !explored(*from) {
+			return nil, apperror.NewForbidden("you cannot move the party right now")
+		}
 		if !OnExploredFrontier(explored, target) {
 			return nil, apperror.NewForbidden("you can only move the party onto explored land or next to it")
 		}
@@ -264,8 +275,10 @@ func (s *hexService) FogMask(ctx context.Context, mapID string) (*FogMask, error
 	if err != nil {
 		return nil, err
 	}
-	d := ResolveDisplay(m, "")
-	if d.GridType != GridHex || m.ImageWidth <= 0 || m.ImageHeight <= 0 {
+	// The grid type is not consulted: switching the grid away from hexes must
+	// not lift the fog from pins, drawings and the picture. Only turning fog
+	// off does that.
+	if m.ImageWidth <= 0 || m.ImageHeight <= 0 {
 		return nil, nil
 	}
 	var anchor *Drawing
@@ -296,16 +309,15 @@ func (s *hexService) FogMask(ctx context.Context, mapID string) (*FogMask, error
 // fieldGeometry lays out the field the way the viewer does. A layer pinned to
 // a usable picture is laid inside that picture's box; otherwise (including a
 // stale anchor, which the viewer also reads as "the whole map") it covers the
-// map. ok is false when the map has no picture or hexes are not its grid.
-// The axes are clamped to the same 400 hexes the viewer allows.
+// map. ok is false when the map has no picture. The field is laid out from the
+// grid size whatever the grid type, so the fog keeps its shape when the grid
+// is switched away from hexes and back. The axes are clamped to the same 400
+// hexes the viewer allows.
 func (s *hexService) fieldGeometry(m *Map, layer HexLayer, anchor *Drawing) (geo HexGeometry, anchorID string, ok bool) {
 	if m == nil || m.ImageWidth <= 0 || m.ImageHeight <= 0 {
 		return HexGeometry{}, "", false
 	}
 	d := ResolveDisplay(m, "")
-	if d.GridType != GridHex {
-		return HexGeometry{}, "", false
-	}
 	w, h := float64(m.ImageWidth), float64(m.ImageHeight)
 	geo = NewHexGeometry(float64(d.GridSize), w, h)
 	if anchor != nil && UsableAnchor(m.ID, anchor) {
@@ -324,6 +336,13 @@ func (s *hexService) fieldGeometry(m *Map, layer HexLayer, anchor *Drawing) (geo
 
 func minFloat(a, b float64) float64 {
 	if a < b {
+		return a
+	}
+	return b
+}
+
+func maxFloat(a, b float64) float64 {
+	if a > b {
 		return a
 	}
 	return b

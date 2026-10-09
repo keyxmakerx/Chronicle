@@ -1351,13 +1351,15 @@ type mapEventPublisherAdapter struct {
 	fog maps.HexFogLookup
 }
 
-// wireHexFog gives pins, drawings, the event publisher and the map picture
-// their fog source (the hex service), and the hex service the lookups it needs
+// wireHexFog gives pins, drawings, tokens, the event publisher, the map picture
+// and the media guard their fog source (the hex service, and the drawing
+// service for which picture files it withholds), and the hex service the lookups it needs
 // to build the fog and to announce changes. A named helper so a test can prove
 // the production wiring sets all of it; without it players would see every pin
 // and the whole picture under unexplored hexes.
 func wireHexFog(mapsService maps.MapService, drawingService maps.DrawingService, events *mapEventPublisherAdapter, hexService maps.HexService) {
 	mapsService.SetHexFogLookup(hexService)
+	mapsService.SetFogMediaLookup(drawingService)
 	drawingService.SetHexFogLookup(hexService)
 	events.fog = hexService
 	hexService.SetEventPublisher(events)
@@ -1527,7 +1529,8 @@ func (a *mapEventPublisherAdapter) PublishDrawingEvent(eventType string, campaig
 
 // PublishTokenEvent translates map token domain events into WebSocket messages.
 // Tokens flagged is_hidden are GM-only — same gate as the SQL filter in
-// drawing_repository.ListTokens.
+// drawing_repository.ListTokens — and so are tokens in unexplored hexes, the
+// gate DrawingService.ListTokens adds.
 func (a *mapEventPublisherAdapter) PublishTokenEvent(eventType string, campaignID string, token *maps.Token) {
 	if campaignID == "" {
 		return
@@ -1543,20 +1546,23 @@ func (a *mapEventPublisherAdapter) PublishTokenEvent(eventType string, campaignI
 	default:
 		return
 	}
-	a.publishWithAudience(msgType, campaignID, token.ID, token, token.IsHidden, nil)
+	dmOnly := token.IsHidden || a.underFog(token.MapID, func(f *maps.FogMask) bool { return f.HidesToken(token) })
+	a.publishWithAudience(msgType, campaignID, token.ID, token, dmOnly, nil)
 }
 
 // PublishTokenPositionEvent broadcasts a token position update via WebSocket.
-// Gated on isHidden exactly like PublishTokenEvent, so a GM-only token's live
-// drag position never reaches a non-GM client.
-func (a *mapEventPublisherAdapter) PublishTokenPositionEvent(campaignID, tokenID string, x, y float64, isHidden bool) {
+// Gated on isHidden and the fog exactly like PublishTokenEvent, so neither a
+// GM-only token's live drag position nor a token walking in unexplored land
+// reaches a non-GM client.
+func (a *mapEventPublisherAdapter) PublishTokenPositionEvent(campaignID, mapID, tokenID string, x, y float64, isHidden bool) {
 	if campaignID == "" {
 		return
 	}
+	dmOnly := isHidden || a.underFog(mapID, func(f *maps.FogMask) bool { return f.HidesPoint(x, y) })
 	a.publishWithAudience(ws.MsgTokenMoved, campaignID, tokenID, map[string]float64{
 		"x": x,
 		"y": y,
-	}, isHidden, nil)
+	}, dmOnly, nil)
 }
 
 // PublishLayerEvent broadcasts a map layer event via WebSocket. Layers

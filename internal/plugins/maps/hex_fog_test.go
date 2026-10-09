@@ -239,17 +239,63 @@ func TestFogMask_AnchoredGeometryUsesThePictureBox(t *testing.T) {
 }
 
 func TestFogMask_WithholdsImageOf(t *testing.T) {
+	// fogMaskFixture: hexes (1,1) and (2,1) are explored, centred at map pixels
+	// (129.9, 75) and (216.5, 75); every other hex of the field is not.
+	pic := func(id string, x0, y0, x1, y1, rot float64) *Drawing {
+		pts := `[{"x":` + fl(x0/10) + `,"y":` + fl(y0/10) + `},{"x":` + fl(x1/10) + `,"y":` + fl(y1/10) + `}]`
+		return &Drawing{ID: id, DrawingType: DrawingTypeImage, Points: []byte(pts), Rotation: rot}
+	}
+	anchored := fogMaskFixture()
+	anchored.AnchorID = "anchor"
+	tests := []struct {
+		name string
+		mask *FogMask
+		d    *Drawing
+		want bool
+	}{
+		{"a picture inside an explored hex keeps its file", fogMaskFixture(), pic("p", 120, 65, 140, 85, 0), false},
+		{"a picture across two explored hexes keeps its file", fogMaskFixture(), pic("p", 120, 65, 225, 85, 0), false},
+		{"a picture whose edge reaches into the dark is withheld", fogMaskFixture(), pic("p", 120, 40, 225, 85, 0), true},
+		{"a picture wholly in the dark is withheld", fogMaskFixture(), pic("p", 600, 600, 700, 700, 0), true},
+		{"a turned picture is judged by the land it sweeps", fogMaskFixture(), pic("p", 100, 45, 160, 105, 45), true},
+		{"the same picture unturned keeps its file", fogMaskFixture(), pic("p", 100, 45, 160, 105, 0), false},
+		{"a picture beyond the field keeps its file", fogMaskFixture(), pic("p", 1100, 1100, 1200, 1200, 0), false},
+		{"unreadable corners are withheld", fogMaskFixture(), &Drawing{ID: "p", DrawingType: DrawingTypeImage, Points: []byte(`nope`)}, true},
+		{"the anchor picture is withheld even on explored land", anchored, pic("anchor", 120, 65, 140, 85, 0), true},
+		{"a line is never a withheld picture", fogMaskFixture(), &Drawing{ID: "l", DrawingType: "freehand", Points: []byte(`[{"x":60,"y":60}]`)}, false},
+		{"no fog withholds nothing", nil, pic("p", 600, 600, 700, 700, 0), false},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := tc.mask.WithholdsImageOf(tc.d); got != tc.want {
+				t.Errorf("withheld = %v, want %v", got, tc.want)
+			}
+		})
+	}
+}
+
+func TestFogMask_HidesToken(t *testing.T) {
 	f := fogMaskFixture()
-	if f.WithholdsImageOf(&Drawing{ID: "pic"}) {
-		t.Error("a whole-map layer has no anchor picture to withhold")
+	dx, dy := pctOf(f.Geo, HexKey{4, 4}, 1000)
+	lx, ly := pctOf(f.Geo, HexKey{1, 1}, 1000)
+	var none *FogMask
+	tests := []struct {
+		name string
+		mask *FogMask
+		tok  *Token
+		want bool
+	}{
+		{"in an unexplored hex", f, &Token{X: dx, Y: dy}, true},
+		{"in an explored hex", f, &Token{X: lx, Y: ly}, false},
+		{"no fog", none, &Token{X: dx, Y: dy}, false},
+		{"no token", f, nil, false},
 	}
-	f.AnchorID = "pic"
-	if !f.WithholdsImageOf(&Drawing{ID: "pic"}) || f.WithholdsImageOf(&Drawing{ID: "other"}) {
-		t.Error("only the anchor picture's file is withheld")
-	}
-	var nilMask *FogMask
-	if nilMask.WithholdsImageOf(&Drawing{ID: "pic"}) {
-		t.Error("no fog withholds nothing")
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := tc.mask.HidesToken(tc.tok); got != tc.want {
+				t.Errorf("got %v, want %v", got, tc.want)
+			}
+		})
 	}
 }
 

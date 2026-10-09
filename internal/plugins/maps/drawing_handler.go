@@ -374,6 +374,14 @@ func (h *DrawingHandler) GetToken(c echo.Context) error {
 	if t.MapID != mapID || !TokenVisibleTo(t, cc.VisibilityRole()) {
 		return apperror.NewNotFound("token not found")
 	}
+	// The list also withholds tokens in unexplored hexes.
+	hidden, err := h.drawingSvc.IsTokenHidden(c.Request().Context(), t, cc.VisibilityRole())
+	if err != nil {
+		return err
+	}
+	if hidden {
+		return apperror.NewNotFound("token not found")
+	}
 	return c.JSON(http.StatusOK, t)
 }
 
@@ -421,7 +429,7 @@ func (h *DrawingHandler) UpdateToken(c echo.Context) error {
 		return apperror.NewBadRequest("invalid request body")
 	}
 
-	if err := h.drawingSvc.UpdateToken(c.Request().Context(), c.Param("tid"), c.Param("mid"), UpdateTokenInput{
+	if err := h.drawingSvc.UpdateToken(c.Request().Context(), c.Param("tid"), c.Param("mid"), cc.CanAuthorDmOnly(), UpdateTokenInput{
 		Name:              req.Name,
 		ImagePath:         req.ImagePath,
 		X:                 req.X,
@@ -472,7 +480,7 @@ func (h *DrawingHandler) UpdateTokenPosition(c echo.Context) error {
 		return apperror.NewBadRequest("invalid request body")
 	}
 
-	if err := h.drawingSvc.UpdateTokenPosition(c.Request().Context(), c.Param("tid"), c.Param("mid"), UpdateTokenPositionInput{
+	if err := h.drawingSvc.UpdateTokenPosition(c.Request().Context(), c.Param("tid"), c.Param("mid"), cc.CanAuthorDmOnly(), UpdateTokenPositionInput{
 		X:                 req.X,
 		Y:                 req.Y,
 		ExpectedUpdatedAt: req.ExpectedUpdatedAt,

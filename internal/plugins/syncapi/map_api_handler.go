@@ -563,7 +563,7 @@ func (h *MapAPIHandler) UpdateToken(c echo.Context) error {
 		return apperror.NewBadRequest("invalid request body")
 	}
 
-	err := h.drawingSvc.UpdateToken(c.Request().Context(), tokenID, c.Param("mapID"), maps.UpdateTokenInput{
+	err := h.drawingSvc.UpdateToken(c.Request().Context(), tokenID, c.Param("mapID"), h.canAuthorDmOnly(c), maps.UpdateTokenInput{
 		Name:              req.Name,
 		ImagePath:         req.ImagePath,
 		X:                 req.X,
@@ -616,7 +616,7 @@ func (h *MapAPIHandler) UpdateTokenPosition(c echo.Context) error {
 		return apperror.NewBadRequest("invalid request body")
 	}
 
-	err := h.drawingSvc.UpdateTokenPosition(c.Request().Context(), tokenID, c.Param("mapID"), maps.UpdateTokenPositionInput{
+	err := h.drawingSvc.UpdateTokenPosition(c.Request().Context(), tokenID, c.Param("mapID"), h.canAuthorDmOnly(c), maps.UpdateTokenPositionInput{
 		X:                 req.X,
 		Y:                 req.Y,
 		ExpectedUpdatedAt: req.ExpectedUpdatedAt,
