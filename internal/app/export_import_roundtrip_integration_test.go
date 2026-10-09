@@ -23,6 +23,7 @@ import (
 	"github.com/labstack/echo/v4"
 
 	"github.com/keyxmakerx/chronicle/internal/database"
+	"github.com/keyxmakerx/chronicle/internal/patch"
 	"github.com/keyxmakerx/chronicle/internal/plugins/addons"
 	"github.com/keyxmakerx/chronicle/internal/plugins/campaigns"
 	"github.com/keyxmakerx/chronicle/internal/plugins/entities"
@@ -88,6 +89,7 @@ func newRoundTripHarness(t *testing.T) *roundTripHarness {
 	exportSvc.SetEntityImporter(&entityImportAdapter{entitySvc: entitySvc, tagSvc: tagSvc, relationSvc: relSvc})
 	exportSvc.SetMapImporter(&mapImportAdapter{mapSvc: mapSvc, drawingSvc: drawingSvc})
 	exportSvc.SetAddonImporter(&addonImportAdapter{svc: addonSvc})
+	exportSvc.SetMediaImporter(&mediaImportAdapter{svc: mediaSvc})
 
 	return &roundTripHarness{
 		t: t, db: db, campaigns: campaignSvc, entities: entitySvc, addons: addonSvc,
@@ -138,7 +140,13 @@ func (h *roundTripHarness) upload(campaignID, userID string, seed uint8) string 
 // exportZip runs the real export handler with ?include_media=1.
 func (h *roundTripHarness) exportZip(campaign *campaigns.Campaign, userID string) []byte {
 	h.t.Helper()
-	req := httptest.NewRequest(http.MethodGet, "/campaigns/"+campaign.ID+"/export?include_media=1", nil)
+	return h.export(campaign, userID, "?include_media=1", "application/zip")
+}
+
+// export runs the real export handler and checks the response type.
+func (h *roundTripHarness) export(campaign *campaigns.Campaign, userID, query, wantType string) []byte {
+	h.t.Helper()
+	req := httptest.NewRequest(http.MethodGet, "/campaigns/"+campaign.ID+"/export"+query, nil)
 	rec := httptest.NewRecorder()
 	c := echo.New().NewContext(req, rec)
 	c.Set("auth_user_id", userID)
@@ -146,8 +154,8 @@ func (h *roundTripHarness) exportZip(campaign *campaigns.Campaign, userID string
 	if err := h.handler.ExportCampaign(c); err != nil {
 		h.t.Fatalf("ExportCampaign: %v", err)
 	}
-	if ct := rec.Header().Get("Content-Type"); ct != "application/zip" {
-		h.t.Fatalf("export Content-Type = %q, want application/zip", ct)
+	if ct := rec.Header().Get("Content-Type"); !strings.HasPrefix(ct, wantType) {
+		h.t.Fatalf("export Content-Type = %q, want %s", ct, wantType)
 	}
 	return rec.Body.Bytes()
 }
@@ -219,6 +227,16 @@ func (h *roundTripHarness) sourceWithPlayerCharacter(owner string) (*campaigns.C
 		h.t.Fatalf("create PC: %v", err)
 	}
 	return src, hero.ID
+}
+
+// typeID returns the id of a campaign's category by slug.
+func (h *roundTripHarness) typeID(campaignID, slug string) int {
+	h.t.Helper()
+	var id int
+	if err := h.db.QueryRow(`SELECT id FROM entity_types WHERE campaign_id = ? AND slug = ?`, campaignID, slug).Scan(&id); err != nil {
+		h.t.Fatalf("category %q: %v", slug, err)
+	}
+	return id
 }
 
 // typeRow is one entity type as the database holds it.
@@ -293,5 +311,123 @@ func TestCampaignExportImport_PlayerCharacters_DBRoundTrip(t *testing.T) {
 	}
 	if strings.Contains(body, "Imported with losses") {
 		t.Errorf("round trip reported losses:\n%s", body)
+	}
+}
+
+// TestCampaignExportImport_Pictures_DBRoundTrip: every picture a page or map
+// uses comes back pointing at a file the new campaign owns: the portrait,
+// the cover, a picture inside the page text, a map background and a token.
+// A /media/ address that names no file in the zip is left as it was.
+func TestCampaignExportImport_Pictures_DBRoundTrip(t *testing.T) {
+	if testing.Short() {
+		t.Skip("integration test requires a database; skipped under -short")
+	}
+	h := newRoundTripHarness(t)
+	ctx := context.Background()
+	owner := h.newUser("owner")
+	src, heroID := h.sourceWithPlayerCharacter(owner)
+
+	portrait := h.upload(src.ID, owner, 10)
+	cover := h.upload(src.ID, owner, 40)
+	inline := h.upload(src.ID, owner, 80)
+	background := h.upload(src.ID, owner, 120)
+	tokenPic := h.upload(src.ID, owner, 160)
+
+	if _, err := h.entities.Update(ctx, heroID, entities.UpdateEntityInput{
+		Entry: patch.Of(`<p>Her sigil:</p><p><img src="/media/` + inline + `"></p><p>Unrelated: /media/not-a-restored-id</p>`),
+	}); err != nil {
+		t.Fatalf("set entry: %v", err)
+	}
+	// A page written in the editor keeps its editor document and HTML.
+	editorPage, err := h.entities.Create(ctx, src.ID, owner, entities.CreateEntityInput{Name: "Sigil Notes", EntityTypeID: h.typeID(src.ID, "note")})
+	if err != nil {
+		t.Fatalf("create editor page: %v", err)
+	}
+	doc := `{"type":"doc","content":[{"type":"image","attrs":{"src":"/media/` + inline + `"}}]}`
+	if err := h.entities.UpdateEntry(ctx, editorPage.ID, doc, `<p><img src="/media/`+inline+`"></p>`); err != nil {
+		t.Fatalf("set editor entry: %v", err)
+	}
+	if err := h.entities.UpdateImage(ctx, heroID, portrait); err != nil {
+		t.Fatalf("set portrait: %v", err)
+	}
+	if err := h.entities.UpdateCoverImage(ctx, heroID, cover); err != nil {
+		t.Fatalf("set cover: %v", err)
+	}
+	m, err := h.maps.CreateMap(ctx, maps.CreateMapInput{CampaignID: src.ID, Name: "Coast", ImageID: &background, ImageWidth: 4, ImageHeight: 4})
+	if err != nil {
+		t.Fatalf("create map: %v", err)
+	}
+	if _, err := h.drawings.CreateToken(ctx, maps.CreateTokenInput{
+		MapID: m.ID, Name: "Aria token", ImagePath: &tokenPic, X: 10, Y: 10, Width: 1, Height: 1, Scale: 1, CreatedBy: owner,
+	}); err != nil {
+		t.Fatalf("create token: %v", err)
+	}
+
+	newID, body := h.importBlob(h.newUser("importer"), "campaign.zip", h.exportZip(src, owner))
+	if newID == src.ID {
+		t.Fatalf("import made no new campaign")
+	}
+
+	var imagePath, coverPath, entryHTML sql.NullString
+	if err := h.db.QueryRow(`SELECT image_path, cover_image_path, entry_html FROM entities WHERE campaign_id = ? AND name = 'Aria'`,
+		newID).Scan(&imagePath, &coverPath, &entryHTML); err != nil {
+		t.Fatalf("imported character not found (response: %s): %v", body, err)
+	}
+	if got := h.mediaCampaign(imagePath.String); got != newID {
+		t.Errorf("portrait %q belongs to campaign %q, want the imported one", imagePath.String, got)
+	}
+	if got := h.mediaCampaign(coverPath.String); got != newID {
+		t.Errorf("cover %q belongs to campaign %q, want the imported one", coverPath.String, got)
+	}
+	html := entryHTML.String
+	if i := strings.Index(html, `<img src="/media/`); i < 0 || strings.Contains(html, inline) {
+		t.Errorf("inline picture was not re-pointed at the restored file: %s", html)
+	} else {
+		start := i + len(`<img src="/media/`)
+		if newInline := html[start : start+36]; h.mediaCampaign(newInline) != newID {
+			t.Errorf("inline picture %q does not belong to the imported campaign", newInline)
+		}
+	}
+	if !strings.Contains(html, "/media/not-a-restored-id") {
+		t.Errorf("a /media/ address with no file in the zip was rewritten: %s", html)
+	}
+
+	var editorDoc, editorHTML sql.NullString
+	if err := h.db.QueryRow(`SELECT entry, entry_html FROM entities WHERE campaign_id = ? AND name = 'Sigil Notes'`,
+		newID).Scan(&editorDoc, &editorHTML); err != nil {
+		t.Fatalf("imported editor page not found: %v", err)
+	}
+	if !strings.HasPrefix(editorDoc.String, `{"type":"doc"`) || strings.Contains(editorDoc.String, inline) ||
+		!strings.Contains(editorHTML.String, `<img src="/media/`) || strings.Contains(editorHTML.String, inline) {
+		t.Errorf("editor page did not come back as an editor document with its picture re-pointed:\n entry: %s\n html: %s",
+			editorDoc.String, editorHTML.String)
+	}
+
+	var newMapID string
+	var mapImage sql.NullString
+	if err := h.db.QueryRow(`SELECT id, image_id FROM maps WHERE campaign_id = ?`, newID).Scan(&newMapID, &mapImage); err != nil {
+		t.Fatalf("imported map not found: %v", err)
+	}
+	if got := h.mediaCampaign(mapImage.String); got != newID {
+		t.Errorf("map background %q belongs to campaign %q, want the imported one", mapImage.String, got)
+	}
+	var tokenImage sql.NullString
+	if err := h.db.QueryRow(`SELECT image_path FROM map_tokens WHERE map_id = ?`, newMapID).Scan(&tokenImage); err != nil {
+		t.Fatalf("imported token not found: %v", err)
+	}
+	if got := h.mediaCampaign(tokenImage.String); got != newID {
+		t.Errorf("token picture %q belongs to campaign %q, want the imported one", tokenImage.String, got)
+	}
+
+	if strings.Contains(body, "Imported with losses") {
+		t.Errorf("round trip reported losses:\n%s", body)
+	}
+
+	// The JSON export carries no picture bytes; importing it says so.
+	_, jsonBody := h.importBlob(h.newUser("json-importer"), "campaign.json", h.export(src, owner, "", "application/json"))
+	for _, want := range []string{"Imported with losses", "5 media files", "2 page pictures"} {
+		if !strings.Contains(jsonBody, want) {
+			t.Errorf("JSON import response does not mention %q:\n%s", want, jsonBody)
+		}
 	}
 }

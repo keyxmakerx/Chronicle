@@ -13,6 +13,7 @@ import (
 	"net/http"
 	"os"
 	"sort"
+	"strings"
 
 	"github.com/keyxmakerx/chronicle/internal/apperror"
 	"github.com/keyxmakerx/chronicle/internal/patch"
@@ -137,6 +138,7 @@ func (a *entityExportAdapter) ExportEntities(ctx context.Context, campaignID str
 				Entry:          e.Entry,
 				EntryHTML:      e.EntryHTML,
 				ImagePath:      e.ImagePath,
+				CoverImagePath: e.CoverImagePath,
 				TypeLabel:      e.TypeLabel,
 				IsPrivate:      e.IsPrivate,
 				IsTemplate:     e.IsTemplate,
@@ -987,12 +989,63 @@ func (a *mediaExportAdapter) ExportMedia(ctx context.Context, campaignID string)
 				MimeType:     f.MimeType,
 				FileSize:     f.FileSize,
 				UsageType:    f.UsageType,
+				Filename:     campaigns.MediaZipName(f.Filename),
 			})
 		}
 		page++
 	}
 
 	return result, nil
+}
+
+// mediaImportAdapter implements campaigns.MediaImporter.
+type mediaImportAdapter struct {
+	svc media.MediaService
+}
+
+// ImportMedia uploads each manifest file the zip carries into the new
+// campaign through the ordinary upload path, so it gets the same type,
+// size and quota checks as any upload. Files the upload lacks (all of them,
+// for a JSON upload) are reported once as a count.
+func (a *mediaImportAdapter) ImportMedia(ctx context.Context, campaignID, userID string, files []campaigns.ExportMediaFile, bundle *campaigns.ImportMediaBundle, idMap *campaigns.IDMap, report *campaigns.ImportReport) error {
+	missing := 0
+	for _, f := range files {
+		data, ok, err := bundle.Read(f)
+		if !ok {
+			missing++
+			continue
+		}
+		if err != nil {
+			slog.Warn("import: read media file failed", slog.String("original_id", f.OriginalID), slog.Any("error", err))
+			report.Fail("media", "media file", f.OriginalName, "the file in the zip could not be read")
+			continue
+		}
+		usage := f.UsageType
+		if usage == "" {
+			usage = "attachment"
+		}
+		newFile, err := a.svc.Upload(ctx, media.UploadInput{
+			CampaignID:   campaignID,
+			UploadedBy:   userID,
+			OriginalName: f.OriginalName,
+			MimeType:     f.MimeType,
+			FileSize:     int64(len(data)),
+			UsageType:    usage,
+			FileBytes:    data,
+		})
+		if err != nil {
+			slog.Warn("import: restore media file failed", slog.String("original_id", f.OriginalID), slog.Any("error", err))
+			report.Fail("media", "media file", f.OriginalName, apperror.SafeMessage(err))
+			continue
+		}
+		idMap.MediaIDs[f.OriginalID] = newFile.ID
+	}
+	reason := "not in the zip"
+	if bundle == nil {
+		reason = "a JSON export carries no picture files; import the ZIP export to restore them"
+	}
+	report.FailN("media", "media file", "", reason, missing)
+	return nil
 }
 
 // --- Import Adapters ---
@@ -1006,9 +1059,7 @@ type entityImportAdapter struct {
 
 // ImportEntities creates entity types, entities, tags, and relations from
 // import data. Returns an IDMap for cross-referencing by other importers.
-func (a *entityImportAdapter) ImportEntities(ctx context.Context, campaignID, userID string, data *campaigns.ExportEntityData, report *campaigns.ImportReport) (*campaigns.IDMap, error) {
-	idMap := campaigns.NewIDMap(campaignID)
-
+func (a *entityImportAdapter) ImportEntities(ctx context.Context, campaignID, userID string, data *campaigns.ExportEntityData, idMap *campaigns.IDMap, report *campaigns.ImportReport) error {
 	// 1. Create entity types. Add-ons are restored before this runs, and an
 	// add-on can already have made some of the file's types (the Player
 	// Character addon premakes its category, a game system its presets);
@@ -1016,7 +1067,7 @@ func (a *entityImportAdapter) ImportEntities(ctx context.Context, campaignID, us
 	// sub-category can name its parent's new id.
 	existing, err := a.entitySvc.GetEntityTypes(ctx, campaignID)
 	if err != nil {
-		return nil, fmt.Errorf("list existing entity types: %w", err)
+		return fmt.Errorf("list existing entity types: %w", err)
 	}
 	claimed := make(map[int]bool, len(existing))
 	typeSlugToNewID := make(map[string]int)
@@ -1094,6 +1145,7 @@ func (a *entityImportAdapter) ImportEntities(ctx context.Context, campaignID, us
 
 	// 2. Create entities (first pass: without parent references).
 	entitySlugToNewID := make(map[string]string)
+	missingPictures := 0
 	for _, e := range data.Entities {
 		typeID, ok := typeSlugToNewID[e.EntityTypeSlug]
 		if !ok {
@@ -1124,29 +1176,14 @@ func (a *entityImportAdapter) ImportEntities(ctx context.Context, campaignID, us
 		idMap.EntitySlugToID[e.Slug] = newEntity.ID
 		entitySlugToNewID[e.Slug] = newEntity.ID
 
-		// Apply entry content and image via Update.
-		if e.Entry != nil || e.ImagePath != nil {
-			// Import carries the source row's is_private; pass through
-			// as a pointer so the nil-preserving service layer writes it.
-			isPrivate := e.IsPrivate
-			// The import restores a complete exported row, so every field
-			// is sent PRESENT — an empty descriptor in the source really
-			// does mean "no descriptor". ParentID is absent on purpose:
-			// parents are resolved in a second pass below, once every
-			// entity exists.
-			_, updateErr := a.entitySvc.Update(ctx, newEntity.ID, entities.UpdateEntityInput{
-				Name:       patch.Of(e.Name),
-				TypeLabel:  patch.Of(ptrString(e.TypeLabel)),
-				IsPrivate:  &isPrivate,
-				Entry:      patch.Of(ptrString(e.Entry)),
-				ImagePath:  ptrString(e.ImagePath),
-				FieldsData: fieldsData,
-			})
-			if updateErr != nil {
-				slog.Warn("import: update entity entry/image failed", slog.String("entity", e.Name), slog.Any("error", updateErr))
-				report.Fail("entities", "entity body", e.Name, apperror.SafeMessage(updateErr))
-			}
+		// Create already wrote the name, label, privacy and fields; the
+		// page text and pictures each have their own writer.
+		if err := a.restoreEntityBody(ctx, newEntity.ID, e); err != nil {
+			slog.Warn("import: restore entity text failed", slog.String("entity", e.Name), slog.Any("error", err))
+			report.Fail("entities", "entity body", e.Name, apperror.SafeMessage(err))
 		}
+		missingPictures += a.restoreEntityPicture(ctx, newEntity.ID, e.Name, e.ImagePath, idMap, a.entitySvc.UpdateImage, report)
+		missingPictures += a.restoreEntityPicture(ctx, newEntity.ID, e.Name, e.CoverImagePath, idMap, a.entitySvc.UpdateCoverImage, report)
 
 		// Apply field overrides.
 		if len(e.FieldOverrides) > 0 {
@@ -1207,27 +1244,19 @@ func (a *entityImportAdapter) ImportEntities(ctx context.Context, campaignID, us
 			continue
 		}
 
-		var fieldsData map[string]any
-		if len(e.FieldsData) > 0 {
-			_ = json.Unmarshal(e.FieldsData, &fieldsData)
-		}
-
-		// Second-pass parent resolve carries the source is_private.
-		isPrivate := e.IsPrivate
+		// A partial update: only the parent changes, so the text and
+		// pictures restored in the first pass are kept as they are.
 		_, err := a.entitySvc.Update(ctx, entityNewID, entities.UpdateEntityInput{
-			Name:       patch.Of(e.Name),
-			TypeLabel:  patch.Of(ptrString(e.TypeLabel)),
-			ParentID:   patch.Of(parentNewID),
-			IsPrivate:  &isPrivate,
-			Entry:      patch.Of(ptrString(e.Entry)),
-			ImagePath:  ptrString(e.ImagePath),
-			FieldsData: fieldsData,
+			ParentID: patch.Of(parentNewID),
 		})
 		if err != nil {
 			slog.Warn("import: set parent failed", slog.String("entity", e.Name), slog.Any("error", err))
 			report.Fail("entities", "entity parent link", e.Name, apperror.SafeMessage(err))
 		}
 	}
+
+	report.FailN("entities", "page picture", "",
+		"its picture file was not in the upload; import the ZIP export to keep pictures", missingPictures)
 
 	// 3. Create tags.
 	tagSlugToNewID := make(map[string]int)
@@ -1288,7 +1317,65 @@ func (a *entityImportAdapter) ImportEntities(ctx context.Context, campaignID, us
 		}
 	}
 
-	return idMap, nil
+	return nil
+}
+
+// restoreEntityBody writes a page's text as the export had it. Editor
+// pages carry the editor document and its HTML, saved together the way the
+// editor saves them; a page written as plain HTML (the sync API's pages)
+// has no editor document, and its HTML is the body.
+func (a *entityImportAdapter) restoreEntityBody(ctx context.Context, entityID string, e campaigns.ExportEntity) error {
+	doc, html := ptrString(e.Entry), ptrString(e.EntryHTML)
+	switch {
+	case strings.TrimSpace(doc) != "" && strings.TrimSpace(html) != "":
+		return a.entitySvc.UpdateEntry(ctx, entityID, doc, html)
+	case strings.TrimSpace(doc) != "":
+		_, err := a.entitySvc.Update(ctx, entityID, entities.UpdateEntityInput{Entry: patch.Of(doc)})
+		return err
+	case strings.TrimSpace(html) != "":
+		_, err := a.entitySvc.Update(ctx, entityID, entities.UpdateEntityInput{Entry: patch.Of(html)})
+		return err
+	}
+	return nil
+}
+
+// restoreEntityPicture sets a page's portrait or cover through its own
+// writer, which accepts only a file in the page's campaign. A picture whose
+// file was not restored is not set and is counted (returns 1) so the report
+// can say so once rather than once per page.
+func (a *entityImportAdapter) restoreEntityPicture(ctx context.Context, entityID, name string, path *string, idMap *campaigns.IDMap,
+	set func(ctx context.Context, entityID, mediaID string) error, report *campaigns.ImportReport) int {
+	if path == nil || *path == "" {
+		return 0
+	}
+	id := mediaIDFromPath(*path)
+	restored := false
+	for _, newID := range idMap.MediaIDs {
+		if newID == id {
+			restored = true
+			break
+		}
+	}
+	if !restored {
+		return 1
+	}
+	if err := set(ctx, entityID, id); err != nil {
+		slog.Warn("import: set entity picture failed", slog.String("entity", name), slog.Any("error", err))
+		report.Fail("entities", "page picture", name, apperror.SafeMessage(err))
+	}
+	return 0
+}
+
+// mediaIDFromPath reduces a stored picture reference to its media id: older
+// rows hold the file's path ("2026/03/<id>.jpg"), newer ones the bare id.
+func mediaIDFromPath(p string) string {
+	if i := strings.LastIndex(p, "/"); i >= 0 {
+		p = p[i+1:]
+		if j := strings.LastIndex(p, "."); j > 0 {
+			p = p[:j]
+		}
+	}
+	return p
 }
 
 // importTypeOrder returns the file's types with every top-level type ahead

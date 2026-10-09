@@ -66,8 +66,8 @@ type IDMap struct {
 	// TagSlugToID maps tag slug → new tag ID.
 	TagSlugToID map[string]int
 
-	// MapIDs maps original map image ID → new map image ID (for media refs).
-	MapIDs map[string]string
+	// MediaIDs maps original media file ID → the restored file's new ID.
+	MediaIDs map[string]string
 
 	// CampaignID is the new campaign's ID.
 	CampaignID string
@@ -84,7 +84,7 @@ func NewIDMap(campaignID string) *IDMap {
 		EntitySlugToID: make(map[string]string),
 		TagIDs:         make(map[int]int),
 		TagSlugToID:    make(map[string]int),
-		MapIDs:         make(map[string]string),
+		MediaIDs:       make(map[string]string),
 		CampaignID:     campaignID,
 	}
 }

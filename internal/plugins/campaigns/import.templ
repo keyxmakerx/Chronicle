@@ -45,9 +45,8 @@ templ ImportCampaignPage(csrfToken string) {
 							Must be a Chronicle export: a .json file (max 10 MB) or a .zip bundle (max 500 MB).
 						</p>
 						<p class="text-xs text-amber-600 dark:text-amber-400 mt-1">
-							A ZIP restores structural data only. The media files inside it are
-							<strong>not</strong> re-attached, so images in the restored campaign will point at
-							files that no longer exist until you restore them by hand.
+							A .json file carries no pictures. Import the .zip export to bring the
+							campaign's pictures back with it.
 						</p>
 					</div>
 					<div class="flex items-center justify-end gap-3 pt-2 border-t border-edge">

@@ -95,6 +95,7 @@ type ExportEntity struct {
 	Entry          *string                  `json:"entry,omitempty"`
 	EntryHTML      *string                  `json:"entry_html,omitempty"`
 	ImagePath      *string                  `json:"image_path,omitempty"`
+	CoverImagePath *string                  `json:"cover_image_path,omitempty"`
 	ParentSlug     *string                  `json:"parent_slug,omitempty"`
 	TypeLabel      *string                  `json:"type_label,omitempty"`
 	IsPrivate      bool                     `json:"is_private"`
@@ -703,11 +704,15 @@ type ExportPost struct {
 // --- Media Manifest ---
 
 // ExportMediaFile captures media file metadata for reference remapping.
-// Actual file bytes are not included in the JSON export.
+// The bytes travel only in the ZIP export, as media/<Filename>.
 type ExportMediaFile struct {
 	OriginalID   string `json:"original_id"`
 	OriginalName string `json:"original_name"`
 	MimeType     string `json:"mime_type"`
 	FileSize     int64  `json:"file_size"`
 	UsageType    string `json:"usage_type"`
+	// Filename is the file's zip entry name under media/. Additive: a
+	// manifest without it is paired by OriginalID, which the stored file
+	// is named after.
+	Filename string `json:"filename,omitempty"`
 }
