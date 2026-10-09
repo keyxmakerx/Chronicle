@@ -49,14 +49,15 @@ templ NoticeBoardsMount(campaignID, entityID, csrfToken string, canManage bool, 
 	></div>
 }
 
-
 // CategoryBoardsMount is the mount point of the Notice boards block on a
 // category dashboard. The boards belong to the category (entity type), so the
 // endpoint carries its id. The CSRF token is left to the widget, which falls
-// back to the page's own token for writes.
+// back to the page's own token for writes. The bottom margin leaves room for
+// the ledger ribbon, which hangs below the board over the next block.
 templ CategoryBoardsMount(campaignID string, typeID int, canManage bool, memberRole int) {
 	@questAssets()
 	<div
+		class="mb-10"
 		data-widget="notice_boards"
 		data-endpoint={ "/campaigns/" + campaignID + "/category-boards/" + strconv.Itoa(typeID) }
 		data-campaign-id={ campaignID }
