@@ -992,6 +992,13 @@ func (a *wsNotesGrantAdapter) AuthenticateNotesGrantForWS(ctx context.Context, t
 // relations.RelationEventPublisher interface.
 type relationEventPublisherAdapter struct {
 	bus ws.EventBus
+	// shares, when set, re-checks the row's source character's item shares
+	// after a relation is deleted or its metadata changes, so a share never
+	// outlives the holding. Runs detached: the armory's own moves call this
+	// while holding the campaign lock the check takes.
+	shares interface {
+		ReleaseLetGoShares(ctx context.Context, campaignID, characterID string)
+	}
 }
 
 // PublishRelationEvent translates a relation row write into a WebSocket
@@ -1017,6 +1024,15 @@ func (a *relationEventPublisherAdapter) PublishRelationEvent(eventType string, r
 	msg := ws.NewMessage(msgType, rel.CampaignID, rel.SourceEntityID, rel)
 	msg.RequiresDM = true
 	a.bus.Publish(msg)
+
+	if a.shares != nil && eventType != relations.RelationEventCreated {
+		campaignID, characterID := rel.CampaignID, rel.SourceEntityID
+		go func() {
+			ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+			defer cancel()
+			a.shares.ReleaseLetGoShares(ctx, campaignID, characterID)
+		}()
+	}
 }
 
 // entityEventPublisherAdapter bridges the websocket.EventBus to the
@@ -1145,6 +1161,7 @@ type navAppDef struct {
 	path    string   // campaign-relative page
 	caption string   // a few muted words beside the label
 	addons  []string // the app is on when any of these addons is enabled
+	needs   []string // and only while every one of these is enabled too
 	access  campaigns.NavAccess
 	pinned  bool // starts in Pinned for a campaign that never arranged its sidebar
 	system  bool // the enabled game system's reference; label, icon and path come from it
@@ -1153,13 +1170,13 @@ type navAppDef struct {
 // navAppCatalog lists every app the sidebar can show, in the order a campaign
 // that never arranged its sidebar lists them. Each access level mirrors the
 // app route's own gate, so the sidebar never offers a page that would turn
-// the viewer away; Game nights is gated on the calendar addon because its
-// routes are. Its slug stays "sessions" so sidebars already arranged keep it. Characters is the campaign's cast, party and NPCs together, which is
+// the viewer away; Game nights has its own switch (addon slug "sessions")
+// and also needs the calendar addon, because its routes need both. Its slug stays "sessions" so sidebars already arranged keep it. Characters is the campaign's cast, party and NPCs together, which is
 // why the NPC gallery addon also turns it on.
 var navAppCatalog = []navAppDef{
 	{slug: "notes", label: "Journal", icon: "fa-book-open", path: "/journal", addons: []string{"notes"}, access: campaigns.NavAccessMember, pinned: true},
 	{slug: "calendar", label: "Calendar", icon: "fa-calendar-days", path: "/apps/calendar", addons: []string{calendar.PluginSlug}, access: campaigns.NavAccessMemberOrAdmin, pinned: true},
-	{slug: "sessions", label: "Game nights", icon: "fa-dice-d20", path: "/game-nights", addons: []string{calendar.PluginSlug}, access: campaigns.NavAccessAnyone},
+	{slug: "sessions", label: "Game nights", icon: "fa-dice-d20", path: "/game-nights", addons: []string{"sessions"}, needs: []string{calendar.PluginSlug}, access: campaigns.NavAccessAnyone},
 	{slug: "maps", label: "Maps", icon: "fa-map", path: "/maps", addons: []string{"maps"}, access: campaigns.NavAccessAnyone},
 	{slug: "characters", label: "Characters", icon: "fa-masks-theater", path: "/characters", caption: "Party & NPCs", addons: []string{entities.AddonPlayerCharacterClaiming, "npcs"}, access: campaigns.NavAccessAnyone},
 	{slug: "armory", label: "Armory", icon: "fa-shield-halved", path: "/armory", addons: []string{"armory"}, access: campaigns.NavAccessAnyone},
@@ -2428,6 +2445,20 @@ func (a *App) RegisterRoutes() {
 	entityPermRepo := entities.NewEntityPermissionRepository(a.DB)
 	entityService := entities.NewEntityService(entityRepo, entityTypeRepo, entityPermRepo)
 
+	// Pages saved before search_text stopped indexing GM-only content still
+	// carry it until edited; recompute those rows. Idempotent, so it is a
+	// no-op on later boots; detached so a large campaign can't stall startup.
+	go func() {
+		n, err := entities.ReindexSecretSearchText(a.ShutdownCtx, entityRepo)
+		if err != nil {
+			slog.Warn("entities: search_text reindex stopped", slog.Any("error", err), slog.Int("rewritten", n))
+			return
+		}
+		if n > 0 {
+			slog.Info("entities: search_text reindexed", slog.Int("rewritten", n))
+		}
+	}()
+
 	// One-shot heal of legacy auto-pluralize defaults that produced
 	// "Mapss"-style values (name="Maps", plural="Mapss"). Idempotent;
 	// failures are logged but never block boot. Runs in a goroutine
@@ -3494,6 +3525,15 @@ func (a *App) RegisterRoutes() {
 	}); ok {
 		wired.SetGameNightsAffectedByAnchorMove(&gameNightsAnchorMoveAdapter{svc: sessionsService})
 	}
+	// Keeps Game nights on for campaigns that already use them; a recorded
+	// owner choice is left alone. Best-effort: logs and never blocks startup.
+	if n, err := sessions.ReconcileAddonEnablement(context.Background(), sessionsService, addonService); err != nil {
+		slog.Error("game nights addon enablement backfill failed; campaigns that already use game nights "+
+			"may not see them until an owner turns on Game nights (Manage → Game & features)",
+			slog.String("error", err.Error()))
+	} else if n > 0 {
+		slog.Info("game nights addon enablement backfill complete", slog.Int("campaigns", n))
+	}
 	sessionsHandler := sessions.NewHandler(sessionsService)
 	sessionsHandler.SetMemberLister(campaignService)
 	sessionsHandler.SetMailSender(smtpService, a.Config.BaseURL)
@@ -3808,6 +3848,13 @@ func (a *App) RegisterRoutes() {
 	auth.OnSessionsRevoked(authService, func(ctx context.Context, userID string) {
 		if err := noteGrants.RevokeAllForUser(ctx, userID); err != nil {
 			slog.Error("revoking notes app grants failed", slog.String("user_id", userID), slog.Any("error", err))
+		}
+	})
+	// Removing a player from a campaign ends their grants there, so a later
+	// re-invite starts with none.
+	campaigns.OnMemberRemoved(campaignService, func(ctx context.Context, campaignID, userID string) {
+		if err := noteGrants.RevokeAllInCampaign(ctx, campaignID, userID); err != nil {
+			slog.Error("revoking notes app grants on removal failed", slog.String("campaign_id", campaignID), slog.String("user_id", userID), slog.Any("error", err))
 		}
 	})
 	// The campaign's Sync API switch governs outside apps, the notebook too.
@@ -4266,6 +4313,7 @@ func (a *App) RegisterRoutes() {
 	exportSvc.SetGroupImporter(&groupImportAdapter{svc: groupService})
 	exportSvc.SetPostExporter(&postExportAdapter{postSvc: postService, entitySvc: entityService})
 	exportSvc.SetPostImporter(&postImportAdapter{svc: postService})
+	exportSvc.SetMediaImporter(&mediaImportAdapter{svc: mediaService})
 	exportHandler := campaigns.NewExportHandler(exportSvc)
 	campaigns.RegisterExportRoutes(e, exportHandler, campaignService, authService)
 
@@ -4898,7 +4946,7 @@ func (a *App) RegisterRoutes() {
 	go syncapi.StartChangePruner(a.ShutdownCtx, syncChangeRepo)
 
 	entityService.SetEventPublisher(&entityEventPublisherAdapter{bus: wsEventBus})
-	relService.SetEventPublisher(&relationEventPublisherAdapter{bus: wsEventBus})
+	relService.SetEventPublisher(&relationEventPublisherAdapter{bus: wsEventBus, shares: stashSvc})
 	stashEvents.bus = wsEventBus
 	entityService.SetSidebarAutoAdder(&sidebarAutoAdderAdapter{campaignService: campaignService})
 	noteSvc.SetEventPublisher(&noteEventPublisherAdapter{bus: wsEventBus})

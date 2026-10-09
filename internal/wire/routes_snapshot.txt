@@ -445,7 +445,6 @@ GET	/settings	internal/plugins/campaigns/routes.go
 GET	/settings	internal/plugins/packages/routes.go
 GET	/sidebar-config	internal/plugins/campaigns/routes.go
 GET	/sidebar/drill/:slug	internal/plugins/campaigns/routes.go
-GET	/sidebar/sessions-rsvp	internal/plugins/sessions/routes.go
 GET	/site-look	internal/plugins/admin/routes.go
 GET	/smtp	internal/plugins/smtp/routes.go
 GET	/stashes/downtime	internal/plugins/syncapi/routes.go
@@ -535,7 +534,6 @@ POST	/armory/instances/:iid/items	internal/plugins/armory/routes.go
 POST	/armory/moves	internal/plugins/armory/routes.go
 POST	/armory/moves/:mid/approve	internal/plugins/armory/routes.go
 POST	/armory/moves/:mid/decline	internal/plugins/armory/routes.go
-POST	/armory/purchase	internal/plugins/armory/routes.go
 POST	/armory/purchase-requests/:rid/approve	internal/plugins/armory/routes.go
 POST	/armory/purchase-requests/:rid/decline	internal/plugins/armory/routes.go
 POST	/armory/shops/:eid/buy	internal/plugins/armory/routes.go
@@ -544,6 +542,8 @@ POST	/armory/stashes	internal/plugins/armory/routes.go
 POST	/armory/stashes/:sid/items	internal/plugins/armory/routes.go
 POST	/armory/transactions	internal/plugins/armory/routes.go
 POST	/autopin-banner/dismiss	internal/plugins/foundry_vtt/routes.go
+POST	/availability/away/clear	internal/plugins/sessions/routes.go
+POST	/availability/confirm	internal/plugins/sessions/routes.go
 POST	/availability/exceptions	internal/plugins/sessions/routes.go
 POST	/availability/nudge	internal/plugins/sessions/routes.go
 POST	/bindings	internal/plugins/widgetbindings/routes.go
@@ -743,6 +743,7 @@ PUT	/armory/instances/:iid	internal/plugins/armory/routes.go
 PUT	/armory/shops/:eid/room	internal/plugins/armory/routes.go
 PUT	/armory/stashes/:sid	internal/plugins/armory/routes.go
 PUT	/armory/stashes/:sid/viewers	internal/plugins/armory/routes.go
+PUT	/availability/away	internal/plugins/sessions/routes.go
 PUT	/availability/exceptions	internal/plugins/sessions/routes.go
 PUT	/availability/mine	internal/plugins/sessions/routes.go
 PUT	/book/chapters/:chapter	internal/systems/routes.go

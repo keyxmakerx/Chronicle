@@ -140,8 +140,12 @@
 	// original's for the owner and the player copy's for everyone the shadows hide
 	// it from, so presence of the address, not of an image id, is the test.
 	var bounds = [[0, 0], [h, w]];
+	// The map picture gets its own pane under everything drawn on it. In
+	// Leaflet's overlay pane (z 400) it would cover the placed pictures (380),
+	// the hexes (390) and the shadow outlines (390).
+	map.createPane('mpBase').style.zIndex = 350;
 	if (mapImageURL) {
-		L.imageOverlay(mapImageURL, bounds).addTo(map);
+		L.imageOverlay(mapImageURL, bounds, { pane: 'mpBase' }).addTo(map);
 	}
 
 	// ---- Opening view: the whole map, where this person left off, or a

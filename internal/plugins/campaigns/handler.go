@@ -349,7 +349,7 @@ func (h *Handler) Create(c echo.Context) error {
 	}
 
 	userID := auth.GetUserID(c)
-	input := CreateCampaignInput(req)
+	input := CreateCampaignInput{Name: req.Name, Description: req.Description, Genre: req.Genre}
 
 	campaign, err := h.service.Create(c.Request().Context(), userID, input)
 	if err != nil {

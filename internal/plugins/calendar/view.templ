@@ -70,6 +70,8 @@ templ calendarViewMount(data CalendarViewData) {
 		data-can-edit={ fmt.Sprintf("%t", data.CanEdit) }
 		data-can-author-dm-only={ fmt.Sprintf("%t", data.CanAuthorDmOnly) }
 		data-role={ fmt.Sprintf("%d", data.ViewerRole) }
+		data-user-id={ data.ViewerID }
+		data-game-nights={ fmt.Sprintf("%t", layouts.IsAddonEnabled(ctx, "sessions")) }
 		data-api-base={ fmt.Sprintf("/campaigns/%s/calendars/%s", data.CampaignID, data.CalendarID) }
 		data-engine-src={ layouts.AssetURL("/static/js/widgets/chronicle_gen.js") }
 	>

@@ -363,6 +363,40 @@ func (s *stashService) releaseShares(ctx context.Context, campaignID, characterI
 	}
 }
 
+// ReleaseLetGoShares takes back characterID's shares of every item it no
+// longer holds where its player can see it. The armory's own moves release
+// shares as they go; this catches a "Has Item" line lowered, hidden or
+// deleted elsewhere (the inventory widget, the relations panel). It takes the
+// campaign lock, so callers must not hold it; an id that is not a character
+// with shares does nothing.
+func (s *stashService) ReleaseLetGoShares(ctx context.Context, campaignID, characterID string) {
+	if s.Shares == nil || s.Handouts == nil || campaignID == "" || characterID == "" {
+		return
+	}
+	unlock := s.locks.lock(campaignID)
+	defer unlock()
+	rows, err := s.Shares.ListByCharacter(ctx, campaignID, characterID)
+	if err != nil {
+		slog.Warn("share: could not read shares to check", slog.Any("error", err))
+		return
+	}
+	checked := make(map[string]bool, len(rows))
+	for _, r := range rows {
+		if checked[r.ItemID] {
+			continue
+		}
+		checked[r.ItemID] = true
+		held, err := s.holdsVisible(ctx, campaignID, characterID, r.ItemID)
+		if err != nil {
+			slog.Warn("share: could not check a holding", slog.String("item_id", r.ItemID), slog.Any("error", err))
+			continue
+		}
+		if !held {
+			s.releaseShares(ctx, campaignID, characterID, r.ItemID)
+		}
+	}
+}
+
 // holdsVisible reports whether the character holds at least one unit on a
 // line a player can see. A GM-only line is hidden from players, so it never
 // counts as them holding the item.

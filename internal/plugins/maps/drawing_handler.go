@@ -165,11 +165,11 @@ func (h *DrawingHandler) GetDrawing(c echo.Context) error {
 	if err != nil {
 		return err
 	}
-	if d.MapID != mapID {
-		return apperror.NewNotFound("drawing not found")
-	}
 	// A by-id read must not reveal what the list withholds; NotFound so the
 	// answer matches a missing drawing.
+	if d.MapID != mapID || !DrawingVisibleTo(d, cc.VisibilityRole(), getUserID(c)) {
+		return apperror.NewNotFound("drawing not found")
+	}
 	shadowed, err := h.drawingSvc.IsDrawingShadowed(c.Request().Context(), d, cc.VisibilityRole())
 	if err != nil {
 		return err
@@ -361,7 +361,8 @@ func (h *DrawingHandler) GetToken(c echo.Context) error {
 	if err != nil {
 		return err
 	}
-	if t.MapID != mapID {
+	// Same rule as the list, and the same answer as a missing token.
+	if t.MapID != mapID || !TokenVisibleTo(t, cc.VisibilityRole()) {
 		return apperror.NewNotFound("token not found")
 	}
 	return c.JSON(http.StatusOK, t)

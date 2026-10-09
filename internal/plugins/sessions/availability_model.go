@@ -94,6 +94,9 @@ type MyAvailabilityResponse struct {
 	// tell "you have not answered yet" apart from "you answered: never free",
 	// which look identical in Blocks (both empty).
 	Answered bool `json:"answered"`
+	// AnsweredAt is when they last saved or confirmed (RFC3339), so a
+	// "confirm your times" ask can tell whether they have answered it.
+	AnsweredAt string `json:"answeredAt,omitempty"`
 	// WeekALabel/WeekBLabel are the YYYY-MM-DD Sundays that start the next week
 	// of each alternating track, so the picker can offer two dates the member
 	// can find on a calendar instead of the words "odd" and "even".
@@ -108,6 +111,14 @@ type AvailabilityAnswerStatus struct {
 	Name       string `json:"name"`
 	Answered   bool   `json:"answered"`
 	AnsweredAt string `json:"answeredAt,omitempty"` // RFC3339, empty when never
+}
+
+// AwayRequest marks (or clears) a stretch of days a member can't play,
+// From..To inclusive, as YYYY-MM-DD dates in TZ.
+type AwayRequest struct {
+	From string `json:"from"`
+	To   string `json:"to"`
+	TZ   string `json:"tz"`
 }
 
 // NudgeResult reports what a nudge actually did — how many members were asked,
@@ -225,6 +236,10 @@ type OverlayMember struct {
 	// both of which render as empty Lanes and must not be presented as the
 	// same fact.
 	HasAnswered bool `json:"hasAnswered"`
+	// OffDays are the columns (0..6) the member marked as a day they can't
+	// play although their usual hours would have had them free, so the DM
+	// can tell a change from a member who is never free that day.
+	OffDays []int `json:"offDays,omitempty"`
 }
 
 // LaneSegment is one contiguous availability run for a member on one column,

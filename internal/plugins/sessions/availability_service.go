@@ -69,7 +69,10 @@ func (s *sessionService) GetMyAvailability(ctx context.Context, campaignID, user
 	if err != nil {
 		return nil, apperror.NewInternal(fmt.Errorf("loading availability answers: %w", err))
 	}
-	_, resp.Answered = answered[userID]
+	if at, ok := answered[userID]; ok {
+		resp.Answered = true
+		resp.AnsweredAt = at.UTC().Format(time.RFC3339)
+	}
 
 	// The two alternating tracks are labelled by the next real Sunday that
 	// starts each one, so the picker offers dates rather than a convention.
@@ -741,4 +744,13 @@ func mondayOf(d timeutil.CivilDate) timeutil.CivilDate {
 	// time.Weekday: Sunday=0..Saturday=6, Monday=1.
 	offset := (int(d.Weekday()) - int(time.Monday) + 7) % 7
 	return d.AddDays(-offset)
+}
+
+// ListCampaignIDsUsingGameNights is every campaign with game-night data.
+func (s *sessionService) ListCampaignIDsUsingGameNights(ctx context.Context) ([]string, error) {
+	ids, err := s.repo.ListCampaignIDsUsingGameNights(ctx)
+	if err != nil {
+		return nil, apperror.NewInternal(fmt.Errorf("listing campaigns using game nights: %w", err))
+	}
+	return ids, nil
 }

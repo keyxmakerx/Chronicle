@@ -43,28 +43,6 @@ func listError(err error) error {
 	return apperror.NewInternal(err)
 }
 
-// Purchase handles POST /campaigns/:id/armory/purchase.
-// Validates stock, creates transaction, decrements shop inventory.
-func (h *TransactionHandler) Purchase(c echo.Context) error {
-	cc := campaigns.GetCampaignContext(c)
-	if cc == nil {
-		return apperror.NewMissingContext()
-	}
-
-	var input CreateTransactionInput
-	if err := json.NewDecoder(c.Request().Body).Decode(&input); err != nil {
-		return apperror.NewBadRequest("invalid JSON body")
-	}
-
-	userID := auth.GetUserID(c)
-	result, err := h.svc.Purchase(c.Request().Context(), cc.Campaign.ID, userID, int(cc.MemberRole), input)
-	if err != nil {
-		return err
-	}
-
-	return c.JSON(http.StatusCreated, result)
-}
-
 // CreateTransaction handles POST /campaigns/:id/armory/transactions.
 // Records a manual transaction (gift, transfer, restock).
 func (h *TransactionHandler) CreateTransaction(c echo.Context) error {

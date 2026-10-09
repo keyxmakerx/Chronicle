@@ -107,10 +107,11 @@ func (h *Handler) RespondOptionAPI(c echo.Context) error {
 		return c.JSON(apperror.SafeCode(err), map[string]string{"error": apperror.SafeMessage(err)})
 	}
 
-	// Notify the proposer (best-effort, off the request path).
+	// Notify the proposer (best-effort, off the request path); the service
+	// folds a player's run of answers into one row.
 	responderName := h.resolveDisplayName(c.Request().Context(), userID)
 	go func() {
-		if err := h.svc.NotifyProposalResponse(context.Background(), cc.Campaign.ID, proposalID, responderName, req.Response); err != nil {
+		if err := h.svc.NotifyProposalResponse(context.Background(), cc.Campaign.ID, proposalID, userID, responderName); err != nil {
 			slog.Warn("failed to write response notification", slog.Any("error", err))
 		}
 	}()

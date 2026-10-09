@@ -991,3 +991,21 @@ Also under this ADR: the partial-update contract test only recognised structs na
 **Consequences:**
 - Taking away a DM grant also takes away these armory actions on the next request.
 - A new armory action that must be the Owner alone needs its own check on `MemberRole`; `IsOwner()` will not tell them apart.
+
+---
+
+## ADR-062: Game nights have their own switch
+
+**Status:** Accepted; operator sign-off 2026-10-09 (#1119). Revises ADR-023's first bullet.
+
+**Context:** ADR-023 put sessions under the calendar addon with no switch of its own, so a campaign that wanted a calendar got game nights, an RSVP card in every member's sidebar and the free-hours tools whether it played on a schedule or not. A separate "sessions" addon existed only to make the dashboard's sessions block available.
+
+**Decision:**
+1. The "sessions" addon is the Game nights switch. Its slug is kept so campaigns that had the dashboard block on keep game nights on. The sessions route groups require it and the calendar addon; the sidebar's Game nights app needs both (`navAppDef.needs`); the calendar shows nights, RSVP and free hours only with it on (`data-game-nights`).
+2. New campaigns start with it off, like every addon without a `campaign_addons` row.
+3. `sessions.ReconcileAddonEnablement` runs at boot and switches it on for campaigns that already have sessions, painted hours or proposals and no recorded choice. A recorded row, on or off, is left alone.
+4. Nothing draws an RSVP panel automatically; the dashboard block is placed by the owner.
+
+**Consequences:**
+- A campaign whose owner had switched the old dashboard-only "sessions" addon off now has game nights off too, until the owner turns Game nights on.
+- A new game-night route belongs in one of the two gated groups, or it answers while the switch is off.

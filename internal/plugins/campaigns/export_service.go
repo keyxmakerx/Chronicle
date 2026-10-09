@@ -110,10 +110,11 @@ type PostExporter interface {
 
 // --- Import adapter interfaces ---
 
-// EntityImporter creates entities from import data. Returns the ID map
-// for cross-referencing by other importers.
+// EntityImporter creates entities from import data, recording their new
+// ids on idMap for cross-referencing by other importers. idMap.MediaIDs
+// already holds the restored media files.
 type EntityImporter interface {
-	ImportEntities(ctx context.Context, campaignID, userID string, data *ExportEntityData, report *ImportReport) (*IDMap, error)
+	ImportEntities(ctx context.Context, campaignID, userID string, data *ExportEntityData, idMap *IDMap, report *ImportReport) error
 }
 
 // CalendarImporter creates calendar from import data.
@@ -185,6 +186,7 @@ type ExportImportService struct {
 	addonImp    AddonImporter
 	groupImp    GroupImporter
 	postImp     PostImporter
+	mediaImp    MediaImporter
 }
 
 // NewExportImportService creates a new export/import service.
@@ -258,6 +260,9 @@ func (s *ExportImportService) SetPostExporter(e PostExporter) { s.postExp = e }
 
 // SetPostImporter wires the post import adapter.
 func (s *ExportImportService) SetPostImporter(i PostImporter) { s.postImp = i }
+
+// SetMediaImporter wires the media import adapter.
+func (s *ExportImportService) SetMediaImporter(i MediaImporter) { s.mediaImp = i }
 
 // Export generates a complete campaign export as a CampaignExport struct.
 // Requires the caller to have owner access to the campaign.
@@ -414,20 +419,26 @@ func (s *ExportImportService) Export(ctx context.Context, campaignID string) (*C
 
 // Import creates a new campaign from a CampaignExport. Returns the newly
 // created campaign and a report of everything that could not be restored.
-// Processes data in dependency order: campaign metadata, entity types +
-// entities + tags + relations, calendar, timelines, sessions, maps, notes,
-// addons.
+// Processes data in dependency order: campaign metadata, addons, media,
+// entity types + entities + tags + relations, groups, calendar, timelines,
+// sessions, maps, notes, posts. Addons come first because they gate what
+// may be created: the Player Character category is refused while its addon
+// is off, so restoring it first keeps the player characters. Media comes
+// before everything that points at a picture, so those references can be
+// rewritten to the restored files. media is the ZIP's files, or nil
+// for a JSON upload.
 //
 // Import is best-effort: a single bad row must not abandon a half-built
 // campaign. The returned *ImportReport is never nil; a non-zero Count()
 // means the caller MUST tell the operator the restore is partial and what
 // was lost.
-func (s *ExportImportService) Import(ctx context.Context, userID string, data *CampaignExport) (*Campaign, *ImportReport, error) {
+func (s *ExportImportService) Import(ctx context.Context, userID string, data *CampaignExport, media *ImportMediaBundle) (*Campaign, *ImportReport, error) {
 	report := NewImportReport()
 	// Create the new campaign.
 	campaign, err := s.campaigns.Create(ctx, userID, CreateCampaignInput{
-		Name:        data.Campaign.Name,
-		Description: ptrToString(data.Campaign.Description),
+		Name:               data.Campaign.Name,
+		Description:        ptrToString(data.Campaign.Description),
+		SkipEntityTypeSeed: len(data.EntityTypes) > 0,
 	})
 	if err != nil {
 		return nil, report, fmt.Errorf("import create campaign: %w", err)
@@ -471,8 +482,29 @@ func (s *ExportImportService) Import(ctx context.Context, userID string, data *C
 		}
 	}
 
+	// Import addons before anything they gate.
+	if s.addonImp != nil && len(data.Addons) > 0 {
+		if err := s.addonImp.ImportAddons(ctx, campaignID, userID, data.Addons, report); err != nil {
+			slog.Warn("import addons failed", slog.Any("error", err))
+			report.Fail("addons", "addon", "", apperror.SafeMessage(err))
+		}
+	}
+
+	idMap := NewIDMap(campaignID)
+
+	// Restore media files, then point every reference at the new copies.
+	if s.mediaImp != nil && len(data.Media) > 0 {
+		if err := s.mediaImp.ImportMedia(ctx, campaignID, userID, data.Media, media, idMap, report); err != nil {
+			slog.Warn("import media failed", slog.Any("error", err))
+			report.Fail("media", "media file", "", apperror.SafeMessage(err))
+		}
+		if err := remapMediaReferences(data, idMap.MediaIDs); err != nil {
+			slog.Warn("import media remap failed", slog.Any("error", err))
+			report.FailN("media", "media file", "", "restored, but pages and maps still point at the old copies", len(idMap.MediaIDs))
+		}
+	}
+
 	// Import entities (creates entity types, entities, tags, relations).
-	var idMap *IDMap
 	if s.entityImp != nil && (len(data.EntityTypes) > 0 || len(data.Entities) > 0) {
 		entityData := &ExportEntityData{
 			Types:      data.EntityTypes,
@@ -481,13 +513,9 @@ func (s *ExportImportService) Import(ctx context.Context, userID string, data *C
 			EntityTags: data.EntityTags,
 			Relations:  data.Relations,
 		}
-		idMap, err = s.entityImp.ImportEntities(ctx, campaignID, userID, entityData, report)
-		if err != nil {
+		if err := s.entityImp.ImportEntities(ctx, campaignID, userID, entityData, idMap, report); err != nil {
 			return nil, report, fmt.Errorf("import entities: %w", err)
 		}
-	}
-	if idMap == nil {
-		idMap = NewIDMap(campaignID)
 	}
 
 	// Import campaign groups (before calendar, since group-based permission
@@ -544,14 +572,6 @@ func (s *ExportImportService) Import(ctx context.Context, userID string, data *C
 		if err := s.postImp.ImportPosts(ctx, campaignID, userID, data.Posts, idMap, report); err != nil {
 			slog.Warn("import posts failed", slog.Any("error", err))
 			report.Fail("posts", "post", "", apperror.SafeMessage(err))
-		}
-	}
-
-	// Import addons.
-	if s.addonImp != nil && len(data.Addons) > 0 {
-		if err := s.addonImp.ImportAddons(ctx, campaignID, userID, data.Addons, report); err != nil {
-			slog.Warn("import addons failed", slog.Any("error", err))
-			report.Fail("addons", "addon", "", apperror.SafeMessage(err))
 		}
 	}
 
