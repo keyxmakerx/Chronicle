@@ -1,0 +1,166 @@
+/*
+ * paper.css -- Chronicle's shared paper look and the hover card.
+ *
+ * Paper is one language across Chronicle: the hover card's Paper look, the
+ * character sheet and the character creator all build on these tokens and
+ * classes rather than mixing their own, so they read as the same stock.
+ * The colours and type match the Rules book (rulebook.css).
+ *
+ *   .paper          a sheet: cut-paper light at the top, aged edges, grain
+ *                   and a lifted shadow. Its content area stays clean.
+ *   .paper-stack    wrapper that tucks a second sheet behind its .paper
+ *                   child, slightly turned. Must not clip (no overflow:hidden).
+ *   .paper-kind     the small coloured label above a title.
+ *   .paper-title    a title with the accent rule under it.
+ *
+ * Paper stays paper in dark mode; only its shadow deepens.
+ */
+
+:root {
+  --paper: #efe6d2;
+  --paper-cut: #f8f2e4;            /* freshly cut stock, the lit top edge */
+  --paper-under: #e2d5b8;          /* the sheet tucked behind */
+  --paper-edge: #c4b89a;           /* dashed rules and hairlines */
+  --paper-ink: #2b2433;
+  --paper-ink-soft: #4a4152;
+  --paper-accent: #5b3d8a;         /* lich purple: labels, title rule, links */
+  --paper-burn: 110 80 40;         /* aged-edge brown, as an rgb triplet */
+  --paper-font: "Spectral", Georgia, "Times New Roman", serif;
+  --paper-ui-font: var(--font-sans, "Inter", system-ui, -apple-system, "Segoe UI", sans-serif);
+  --paper-lift: 0 1px 1px rgb(0 0 0 / 0.2), 0 6px 10px -4px rgb(0 0 0 / 0.22), 0 22px 34px -14px rgb(0 0 0 / 0.42);
+  /* Grain and fibres: tiny tiling noise, so the sheet never reads as a flat fill. */
+  --paper-grain: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='160' height='160'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='.9' numOctaves='2' stitchTiles='stitch'/><feColorMatrix values='0 0 0 0 .35  0 0 0 0 .27  0 0 0 0 .15  0 0 0 .09 0'/></filter><rect width='100%' height='100%' filter='url(%23n)'/></svg>");
+  --paper-fibre: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='240' height='240'><filter id='f'><feTurbulence type='fractalNoise' baseFrequency='.012 .09' numOctaves='3' seed='4'/><feColorMatrix values='0 0 0 0 .4  0 0 0 0 .3  0 0 0 0 .15  0 0 0 .07 0'/></filter><rect width='100%' height='100%' filter='url(%23f)'/></svg>");
+}
+.dark {
+  --paper-lift: 0 1px 1px rgb(0 0 0 / 0.5), 0 8px 14px -4px rgb(0 0 0 / 0.55), 0 26px 40px -14px rgb(0 0 0 / 0.8);
+}
+
+.paper,
+.chc[data-look="paper"] .chc__in {
+  position: relative;
+  color: var(--paper-ink-soft);
+  font-family: var(--paper-font);
+  border-radius: 3px;
+  background:
+    radial-gradient(130% 120% at 50% 0%, transparent 55%, rgb(var(--paper-burn) / 0.22) 100%),
+    var(--paper-fibre),
+    var(--paper-grain),
+    linear-gradient(var(--paper-cut), var(--paper) 38%);
+  box-shadow:
+    inset 0 0 0 1px rgb(var(--paper-burn) / 0.28),
+    inset 0 1px 0 rgb(255 255 255 / 0.7),
+    inset 0 0 18px rgb(var(--paper-burn) / 0.16),
+    var(--paper-lift);
+}
+
+.paper-stack { position: relative; }
+.paper-stack::before,
+.chc[data-look="paper"]::before {
+  content: "";
+  position: absolute;
+  inset: 4px -4px -5px 5px;
+  z-index: -1;
+  border-radius: 3px;
+  transform: rotate(1.4deg);
+  background: linear-gradient(var(--paper-under), color-mix(in srgb, var(--paper-under) 88%, rgb(var(--paper-burn))));
+  box-shadow: inset 0 0 0 1px rgb(var(--paper-burn) / 0.25), 0 12px 24px -10px rgb(0 0 0 / 0.45);
+  pointer-events: none;
+}
+
+.paper-kind,
+.chc[data-look="paper"] .chc__kind {
+  font: 600 10.5px/1.3 var(--paper-ui-font);
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--paper-accent);
+}
+.paper-title,
+.chc[data-look="paper"] .chc__title {
+  font: 700 18px/1.15 var(--paper-font);
+  color: var(--paper-ink);
+  padding-bottom: 6px;
+  border-bottom: 1.5px solid var(--paper-accent);
+}
+
+/* ------------------------------------------------------------------ */
+/* Hover card (static/js/hovercard.js). One card at a time, positioned  */
+/* fixed by the script. Its look comes from the campaign's Customize    */
+/* choice (data-look): paper (default), plain, night or compact.        */
+/* ------------------------------------------------------------------ */
+
+.chc {
+  position: fixed;
+  z-index: 9999;
+  width: min(320px, calc(100vw - 24px));
+  opacity: 0;
+  transform: translateY(4px);
+  transition: opacity 140ms ease, transform 180ms var(--ease-out, cubic-bezier(0.16, 1, 0.3, 1));
+  pointer-events: none;
+}
+.chc[hidden] { display: none; }
+.chc--up { transform: translateY(-4px); }
+.chc--show { opacity: 1; transform: none; pointer-events: auto; }
+@media (prefers-reduced-motion: reduce) {
+  .chc, .chc--up { transform: none; transition: opacity 100ms linear; }
+}
+
+.chc__in { position: relative; display: flex; flex-direction: column; gap: 8px; padding: 13px 15px 11px; font-size: 13.5px; line-height: 1.55; overflow-wrap: anywhere; }
+.chc__kind { font-size: 10.5px; letter-spacing: 0.09em; text-transform: uppercase; }
+.chc__kind i { margin-right: 4px; font-size: 9px; }
+.chc__title { margin: 0; line-height: 1.2; display: flex; align-items: center; gap: 6px; }
+.chc__title .chc__lock { font-size: 11px; opacity: 0.6; }
+.chc__top { display: flex; gap: 12px; align-items: flex-start; }
+.chc__top > div { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 6px; }
+.chc__pic { flex: 0 0 64px; width: 64px; height: 64px; object-fit: cover; border-radius: 8px; display: block; }
+.chc__facts { display: grid; grid-template-columns: auto 1fr; gap: 1px 10px; margin: 0; font-size: 12.5px; }
+.chc__facts dt { opacity: 0.7; }
+.chc__facts dd { margin: 0; font-weight: 600; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.chc__text { margin: 0; display: -webkit-box; -webkit-line-clamp: 4; -webkit-box-orient: vertical; overflow: hidden; }
+.chc__foot { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding-top: 7px; font: 500 12.5px/1.4 var(--paper-ui-font); }
+.chc__link { font-weight: 600; text-decoration: none; margin-left: auto; }
+.chc__link:hover { text-decoration: underline; }
+.chc__x { display: none; position: absolute; top: 6px; right: 6px; width: 24px; height: 24px; border: 0; border-radius: 6px; background: none; color: inherit; opacity: 0.7; cursor: pointer; font-size: 16px; line-height: 1; }
+.chc__x:hover { opacity: 1; }
+.chc--pinned .chc__x { display: block; }
+.chc--pinned .chc__title { padding-right: 22px; }
+.chc__loading { opacity: 0.7; font-style: italic; }
+
+/* Paper */
+.chc[data-look="paper"] .chc__in { padding: 14px 16px 11px; }
+.chc[data-look="paper"] .chc__facts { font-family: var(--paper-font); color: var(--paper-ink); }
+.chc[data-look="paper"] .chc__foot { border-top: 1px dashed var(--paper-edge); color: var(--paper-ink-soft); }
+.chc[data-look="paper"] .chc__link { color: var(--paper-accent); }
+.chc[data-look="paper"] .chc__pic { border-radius: 3px; box-shadow: 0 0 0 1px var(--paper-edge); }
+
+/* Plain: the site's own surfaces and fonts, light and dark */
+.chc[data-look="plain"] .chc__in { background: var(--color-card-bg); color: var(--color-text-body); border: 1px solid var(--color-border); border-radius: 12px; box-shadow: 0 10px 28px -6px rgb(0 0 0 / 0.18); font-family: inherit; }
+.dark .chc[data-look="plain"] .chc__in { box-shadow: 0 10px 28px -6px rgb(0 0 0 / 0.55); }
+.chc[data-look="plain"] .chc__kind { color: var(--color-accent); font-weight: 600; }
+.chc[data-look="plain"] .chc__title { font-size: 16px; font-weight: 600; color: var(--color-text-primary); }
+.chc[data-look="plain"] .chc__foot { border-top: 1px solid var(--color-border); color: var(--color-text-secondary); }
+.chc[data-look="plain"] .chc__link { color: var(--color-accent); }
+
+/* Night: the Rules book's dark page, with gold */
+.chc[data-look="night"] .chc__in { background: #131722; color: #c9d0e0; border: 1px solid #2d3448; border-radius: 10px; box-shadow: 0 18px 40px rgb(0 0 0 / 0.5); font-family: var(--paper-font); }
+.chc[data-look="night"] .chc__kind { color: #e4b45a; font-family: var(--paper-ui-font); }
+.chc[data-look="night"] .chc__title { font: 700 18px/1.15 var(--paper-font); color: #f2f4fa; }
+.chc[data-look="night"] .chc__foot { border-top: 1px solid #2d3448; color: #8a93a8; }
+.chc[data-look="night"] .chc__link { color: #e4b45a; }
+
+/* Compact: name and one or two lines, nothing else */
+.chc[data-look="compact"] { width: min(260px, calc(100vw - 24px)); }
+.chc[data-look="compact"] .chc__in { background: var(--color-text-primary); color: var(--color-bg-primary); border-radius: 8px; padding: 8px 11px; gap: 3px; font-size: 12.5px; line-height: 1.45; box-shadow: 0 6px 18px -4px rgb(0 0 0 / 0.3); font-family: inherit; }
+.chc[data-look="compact"] .chc__title { font-size: 13.5px; font-weight: 600; }
+.chc[data-look="compact"] .chc__kind { opacity: 0.7; font-size: 10px; }
+.chc[data-look="compact"] .chc__pic,
+.chc[data-look="compact"] .chc__facts,
+.chc[data-look="compact"] .chc__extra { display: none; }
+.chc[data-look="compact"] .chc__top { display: block; }
+.chc[data-look="compact"] .chc__text { -webkit-line-clamp: 2; }
+.chc[data-look="compact"] .chc__foot { padding-top: 2px; font-size: 11.5px; opacity: 0.85; }
+.chc[data-look="compact"] .chc__link { color: inherit; text-decoration: underline; }
+
+@media (max-width: 640px) {
+  .chc { width: calc(100vw - 16px); }
+}

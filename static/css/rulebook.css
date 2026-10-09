@@ -209,9 +209,6 @@
 .rb-stat-note .rb-prose:where(:not(.rb-wslot *)) { font-size: 14px; }
 
 /* ---- term hover card ---- */
-.rb-hc:where(:not(.rb-wslot *)) { position: fixed; z-index: 80; max-width: 280px; border: 1px solid var(--rb-edge); border-radius: 12px; background: var(--rb-box3); padding: 10px 12px; font: 500 12.5px/1.55 var(--rb-ui); color: var(--rb-ink2); box-shadow: 0 14px 40px rgba(0, 0, 0, 0.5); pointer-events: none; transform-origin: top left; animation: rb-pop 0.16s ease; overflow-wrap: anywhere; }
-.rb-hc b:where(:not(.rb-wslot *)) { display: block; color: var(--rb-ink); font: 700 14px var(--rb-head); }
-@keyframes rb-pop { from { transform: scale(0.85); opacity: 0; } to { transform: none; opacity: 1; } }
 
 /* ---- contents drawer ---- */
 .rb-drawer:where(:not(.rb-wslot *)) { position: absolute; inset: 0 auto 0 0; width: min(420px, 92%); z-index: 40; background: var(--rb-box); border-right: 1px solid var(--rb-edge); box-shadow: 20px 0 60px rgba(0, 0, 0, 0.5); overflow: auto; padding: 18px 18px 40px; transform: translateX(-102%); visibility: hidden; transition: transform 0.3s cubic-bezier(0.3, 0.7, 0.2, 1), visibility 0s 0.3s; }
@@ -266,9 +263,8 @@
   .rb-bar:where(:not(.rb-wslot *)) { gap: 8px; padding: 8px 10px; }
   .rb-seg button:where(:not(.rb-wslot *)) { padding: 6px 8px; }
   .rb-scroll:where(:not(.rb-wslot *)) { padding-top: 24px; }
-  .rb-hc:where(:not(.rb-wslot *)) { max-width: calc(100vw - 16px); }
 }
 @media (prefers-reduced-motion: reduce) {
-  .rb-leaf:where(:not(.rb-wslot *)), .rb-leaf.go:where(:not(.rb-wslot *)), .rb-fold:where(:not(.rb-wslot *)), .rb-body:where(:not(.rb-wslot *)), .rb-die.spin:where(:not(.rb-wslot *)), .rb-hc:where(:not(.rb-wslot *)), .rb-spinner:where(:not(.rb-wslot *)) { animation: none !important; }
+  .rb-leaf:where(:not(.rb-wslot *)), .rb-leaf.go:where(:not(.rb-wslot *)), .rb-fold:where(:not(.rb-wslot *)), .rb-body:where(:not(.rb-wslot *)), .rb-die.spin:where(:not(.rb-wslot *)), .rb-spinner:where(:not(.rb-wslot *)) { animation: none !important; }
   .rb-drawer:where(:not(.rb-wslot *)), .rb-scrim:where(:not(.rb-wslot *)), .rb-tier:where(:not(.rb-wslot *)), .rb-curl:where(:not(.rb-wslot *))::before { transition: none; }
 }
