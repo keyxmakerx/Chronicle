@@ -120,7 +120,14 @@ func (s *systemEntryService) List(ctx context.Context, campaignID, fieldKey stri
 	if m == nil {
 		return []SystemEntry{}, nil
 	}
-	return s.repo.List(ctx, campaignID, m.ID, fieldKey, actor.IsDirector)
+	entries, err := s.repo.List(ctx, campaignID, m.ID, fieldKey, actor.IsDirector)
+	if err != nil || actor.IsDirector {
+		return entries, err
+	}
+	for i := range entries {
+		entries[i].Description = sanitize.StripSecretsHTML(entries[i].Description)
+	}
+	return entries, nil
 }
 
 func (s *systemEntryService) manifestOrNil(ctx context.Context, campaignID string) *SystemManifest {
@@ -139,9 +146,13 @@ func (s *systemEntryService) FindByName(ctx context.Context, campaignID, fieldKe
 	if err != nil || e == nil {
 		return nil, err
 	}
-	if e.Visibility == EntryVisibilityDirectors && !actor.IsDirector {
+	if actor.IsDirector {
+		return e, nil
+	}
+	if e.Visibility == EntryVisibilityDirectors {
 		return nil, nil
 	}
+	e.Description = sanitize.StripSecretsHTML(e.Description)
 	return e, nil
 }
 
@@ -282,13 +293,16 @@ func (s *systemEntryService) Choices(ctx context.Context, campaignID, fieldKey s
 	}
 	out := make([]Choice, 0, len(entries))
 	for _, e := range entries {
+		// The picker serves every member, so Director-only secret spans in a
+		// shared entry's text are dropped before anything is derived from it.
+		desc := sanitize.StripSecretsHTML(e.Description)
 		sum := e.Summary
 		if sum == "" {
-			sum = cleanSummary(e.Description)
+			sum = cleanSummary(desc)
 		}
 		out = append(out, Choice{
 			Slug: e.Slug, Name: e.Name, Summary: sum, Source: ChoiceSourceCampaign,
-			Description: e.Description, Properties: e.Properties,
+			Description: desc, Properties: e.Properties,
 		})
 	}
 	return out, nil

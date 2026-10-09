@@ -187,6 +187,36 @@ func TestSystemEntryService_DescriptionSanitized(t *testing.T) {
 	}
 }
 
+func TestSystemEntryService_SecretsHiddenFromPlayers(t *testing.T) {
+	svc, _ := newEntrySvc(entryTestManifest())
+	ctx := context.Background()
+	if _, err := svc.Create(ctx, "c1", dirActor, CreateSystemEntryInput{FieldKey: "ancestry", Name: "Gnome",
+		Description: `<p>Small folk. <span data-secret="true">They serve the lich.</span></p>`}); err != nil {
+		t.Fatal(err)
+	}
+	leaks := func(s string) bool { return strings.Contains(s, "lich") }
+	ch, _ := svc.Choices(ctx, "c1", "ancestry")
+	pl, _ := svc.List(ctx, "c1", "ancestry", playerActor)
+	pf, _ := svc.FindByName(ctx, "c1", "ancestry", "Gnome", playerActor)
+	dl, _ := svc.List(ctx, "c1", "ancestry", dirActor)
+	tests := []struct {
+		name      string
+		text      string
+		wantLeaks bool
+	}{
+		{"choice summary", ch[0].Summary, false},
+		{"choice description", ch[0].Description, false},
+		{"player list", pl[0].Description, false},
+		{"player find", pf.Description, false},
+		{"director list keeps it", dl[0].Description, true},
+	}
+	for _, tt := range tests {
+		if leaks(tt.text) != tt.wantLeaks {
+			t.Errorf("%s: %q", tt.name, tt.text)
+		}
+	}
+}
+
 func TestSystemEntryService_VisibilityFiltering(t *testing.T) {
 	svc, _ := newEntrySvc(entryTestManifest())
 	ctx := context.Background()
