@@ -2428,6 +2428,20 @@ func (a *App) RegisterRoutes() {
 	entityPermRepo := entities.NewEntityPermissionRepository(a.DB)
 	entityService := entities.NewEntityService(entityRepo, entityTypeRepo, entityPermRepo)
 
+	// Pages saved before search_text stopped indexing GM-only content still
+	// carry it until edited; recompute those rows. Idempotent, so it is a
+	// no-op on later boots; detached so a large campaign can't stall startup.
+	go func() {
+		n, err := entities.ReindexSecretSearchText(a.ShutdownCtx, entityRepo)
+		if err != nil {
+			slog.Warn("entities: search_text reindex stopped", slog.Any("error", err), slog.Int("rewritten", n))
+			return
+		}
+		if n > 0 {
+			slog.Info("entities: search_text reindexed", slog.Int("rewritten", n))
+		}
+	}()
+
 	// One-shot heal of legacy auto-pluralize defaults that produced
 	// "Mapss"-style values (name="Maps", plural="Mapss"). Idempotent;
 	// failures are logged but never block boot. Runs in a goroutine
