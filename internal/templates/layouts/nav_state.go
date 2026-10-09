@@ -100,9 +100,6 @@ func ResolveNavState(ctx context.Context) context.Context {
 	base := "/campaigns/" + GetCampaignID(ctx)
 	var cands []navCandidate
 	cands = append(cands, navCandidate{key: "dashboard", url: base, exact: true})
-	if navShowsMe(ctx) {
-		cands = append(cands, navCandidate{key: "me", url: base + "/me", exact: true})
-	}
 	for _, sec := range GetNavSections(ctx) {
 		for _, row := range sec.Rows {
 			if row.Kind != "link" {
@@ -213,13 +210,6 @@ func NavSectionCurrent(ctx context.Context, rows []NavRowView) string {
 		}
 	}
 	return ""
-}
-
-// navShowsMe reports whether the viewer gets a My Characters row: players, and
-// an owner or scribe previewing the campaign as a player.
-func navShowsMe(ctx context.Context) bool {
-	role := GetCampaignRole(ctx)
-	return IsAuthenticated(ctx) && (role == 1 || (role >= 2 && IsViewingAsPlayer(ctx)))
 }
 
 // NavCanPin reports whether the viewer pins rows for themselves: a signed-in

@@ -44,6 +44,10 @@ type AppearanceData struct {
 	// PeekGlow is "own" for a glow colour of its own; "" follows the accent.
 	PeekGlow       string
 	PeekGlowColour string
+
+	// HoverCard is the hover card look ("plain", "night" or "compact");
+	// "" is Paper, which paper.css and hovercard.js use without an attribute.
+	HoverCard string
 }
 
 const keyAppearance ctxKey = "layout_appearance"
@@ -83,6 +87,7 @@ func AppearanceAttrs(ctx context.Context) templ.Attributes {
 	set("data-cz-btn", a.ButtonStyle)
 	set("data-cz-elev", a.Elevation)
 	set("data-cz-scale", a.TypeScale)
+	set("data-cz-hover", a.HoverCard)
 	if a.HeadingFont != "" && a.HeadingFont != "same" {
 		attrs["data-cz-heading"] = a.HeadingFont
 	}

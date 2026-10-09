@@ -15,6 +15,7 @@ import (
 	"time"
 
 	"github.com/a-h/templ"
+	"github.com/google/uuid"
 	"github.com/labstack/echo/v4"
 
 	"github.com/keyxmakerx/chronicle/internal/apperror"
@@ -83,8 +84,13 @@ func (a *bestiaryUserFetcherAdapter) GetUserPublicInfo(ctx context.Context, user
 		ID:          user.ID,
 		DisplayName: user.DisplayName,
 	}
+	// avatar_path holds a media id, not a URL. The bestiary pages are signed-in
+	// only, and the media route serves an avatar to any signed-in session
+	// without a signature, so the plain thumbnail path is enough here.
 	if user.AvatarPath != nil {
-		info.AvatarURL = *user.AvatarPath
+		if id, err := uuid.Parse(*user.AvatarPath); err == nil {
+			info.AvatarURL = "/media/" + id.String() + "/thumb/300"
+		}
 	}
 	return info, nil
 }
@@ -1346,6 +1352,38 @@ type mapEventPublisherAdapter struct {
 	// published to DM-equivalent clients only. Nil fails closed: with no way to
 	// tell, every pin and drawing event is restricted.
 	shadows maps.ShadowLookup
+	// fog resolves a map's unexplored hexes so a pin or drawing wholly inside
+	// them is published to DM-equivalent clients only. Nil fails closed, like
+	// shadows.
+	fog maps.HexFogLookup
+}
+
+// wireHexFog gives pins, drawings, tokens, the event publisher, the map picture
+// and the media guard their fog source (the hex service, and the drawing
+// service for which picture files it withholds), and the hex service the lookups it needs
+// to build the fog and to announce changes. A named helper so a test can prove
+// the production wiring sets all of it; without it players would see every pin
+// and the whole picture under unexplored hexes.
+func wireHexFog(mapsService maps.MapService, drawingService maps.DrawingService, events *mapEventPublisherAdapter, hexService maps.HexService) {
+	mapsService.SetHexFogLookup(hexService)
+	mapsService.SetFogMediaLookup(drawingService)
+	drawingService.SetHexFogLookup(hexService)
+	events.fog = hexService
+	hexService.SetEventPublisher(events)
+	hexService.SetMapLoader(mapsService.GetMap)
+	// The terrain art lives in the map's display settings; the map service
+	// exposes the narrow write by assertion, as the picture drop below does.
+	if aw, ok := mapsService.(interface {
+		SetHexArt(ctx context.Context, mapID, art string) error
+	}); ok {
+		hexService.SetArtWriter(aw.SetHexArt)
+	}
+	// Fog on a whole-map layer changes who may fetch the original picture, so a
+	// toggle drops the cached answers; the map service exposes the drop by
+	// assertion, as other optional wiring here does.
+	if inv, ok := mapsService.(interface{ InvalidateMapPictures(campaignID string) }); ok {
+		hexService.SetPictureInvalidator(inv.InvalidateMapPictures)
+	}
 }
 
 // wireMapShadows gives the map service its shadow source. A named helper so a
@@ -1421,6 +1459,42 @@ func (a *mapEventPublisherAdapter) underShadow(mapID string, check func([]maps.S
 	return check(areas)
 }
 
+// underFog is underShadow for hex fog: it reports whether an event about a pin
+// or drawing on mapID must be restricted to DM-equivalent clients because the
+// item lies in unexplored hexes. Same fail-closed rule: an unwired or failing
+// lookup restricts.
+func (a *mapEventPublisherAdapter) underFog(mapID string, check func(*maps.FogMask) bool) bool {
+	if a.fog == nil {
+		slog.Error("maps: hex fog lookup not wired; restricting map events to DMs", slog.String("map_id", mapID))
+		return true
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+	defer cancel()
+	mask, err := a.fog.FogMask(ctx, mapID)
+	if err != nil {
+		slog.Error("maps: hex fog lookup failed while publishing; restricting event to DMs",
+			slog.String("map_id", mapID), slog.Any("error", err))
+		return true
+	}
+	return mask != nil && check(mask)
+}
+
+// PublishHexChanged announces a hex write. The message carries the map id, the
+// layer version and, only when the service judged it safe, the party's path:
+// never a cell, a name or a note. Clients refetch the role-filtered read, so
+// the audience rules live in one place. It goes to every client of the
+// campaign: the version tells a viewer who cannot see the layer nothing.
+func (a *mapEventPublisherAdapter) PublishHexChanged(campaignID, mapID string, version uint64, partyPath []maps.HexKey) {
+	if campaignID == "" || a.bus == nil {
+		return
+	}
+	payload := map[string]any{"map_id": mapID, "version": version}
+	if len(partyPath) > 0 {
+		payload["party_path"] = partyPath
+	}
+	a.bus.Publish(ws.NewMessage(ws.MsgHexChanged, campaignID, mapID, payload))
+}
+
 // publishWithAudience wraps ws.NewMessage with the audience derived from
 // the source row: the binary RequiresDM (dm_only) flag, plus — for
 // markers and drawings, which carry per-user visibility_rules — the
@@ -1458,15 +1532,19 @@ func (a *mapEventPublisherAdapter) PublishDrawingEvent(eventType string, campaig
 	default:
 		return
 	}
+	// The picture a fogged hex layer is pinned to is DM-only on the wire too:
+	// its event carries the file id, which is the secret under the fog.
 	dmOnly := drawing.Visibility == "dm_only" ||
 		(drawing.DrawingType != maps.DrawingTypeShadow &&
-			a.underShadow(drawing.MapID, func(areas []maps.ShadowArea) bool { return maps.DrawingUnderShadow(areas, drawing) }))
+			(a.underShadow(drawing.MapID, func(areas []maps.ShadowArea) bool { return maps.DrawingUnderShadow(areas, drawing) }) ||
+				a.underFog(drawing.MapID, func(f *maps.FogMask) bool { return f.HidesDrawing(drawing) || f.WithholdsImageOf(drawing) })))
 	a.publishWithAudience(msgType, campaignID, drawing.ID, drawing, dmOnly, maps.ParseVisibilityRules(drawing.VisibilityRules))
 }
 
 // PublishTokenEvent translates map token domain events into WebSocket messages.
 // Tokens flagged is_hidden are GM-only — same gate as the SQL filter in
-// drawing_repository.ListTokens.
+// drawing_repository.ListTokens — and so are tokens in unexplored hexes, the
+// gate DrawingService.ListTokens adds.
 func (a *mapEventPublisherAdapter) PublishTokenEvent(eventType string, campaignID string, token *maps.Token) {
 	if campaignID == "" {
 		return
@@ -1482,20 +1560,23 @@ func (a *mapEventPublisherAdapter) PublishTokenEvent(eventType string, campaignI
 	default:
 		return
 	}
-	a.publishWithAudience(msgType, campaignID, token.ID, token, token.IsHidden, nil)
+	dmOnly := token.IsHidden || a.underFog(token.MapID, func(f *maps.FogMask) bool { return f.HidesToken(token) })
+	a.publishWithAudience(msgType, campaignID, token.ID, token, dmOnly, nil)
 }
 
 // PublishTokenPositionEvent broadcasts a token position update via WebSocket.
-// Gated on isHidden exactly like PublishTokenEvent, so a GM-only token's live
-// drag position never reaches a non-GM client.
-func (a *mapEventPublisherAdapter) PublishTokenPositionEvent(campaignID, tokenID string, x, y float64, isHidden bool) {
+// Gated on isHidden and the fog exactly like PublishTokenEvent, so neither a
+// GM-only token's live drag position nor a token walking in unexplored land
+// reaches a non-GM client.
+func (a *mapEventPublisherAdapter) PublishTokenPositionEvent(campaignID, mapID, tokenID string, x, y float64, isHidden bool) {
 	if campaignID == "" {
 		return
 	}
+	dmOnly := isHidden || a.underFog(mapID, func(f *maps.FogMask) bool { return f.HidesPoint(x, y) })
 	a.publishWithAudience(ws.MsgTokenMoved, campaignID, tokenID, map[string]float64{
 		"x": x,
 		"y": y,
-	}, isHidden, nil)
+	}, dmOnly, nil)
 }
 
 // PublishLayerEvent broadcasts a map layer event via WebSocket. Layers
@@ -1570,7 +1651,8 @@ func (a *mapEventPublisherAdapter) PublishMarkerEvent(eventType string, campaign
 		return
 	}
 	dmOnly := marker.IsDMOnly() ||
-		a.underShadow(marker.MapID, func(areas []maps.ShadowArea) bool { return maps.MarkerUnderShadow(areas, marker) })
+		a.underShadow(marker.MapID, func(areas []maps.ShadowArea) bool { return maps.MarkerUnderShadow(areas, marker) }) ||
+		a.underFog(marker.MapID, func(f *maps.FogMask) bool { return f.HidesMarker(marker) })
 	a.publishWithAudience(msgType, campaignID, marker.ID, marker, dmOnly, maps.ParseVisibilityRules(marker.VisibilityRules))
 }
 
@@ -1934,81 +2016,15 @@ func (a *entityAccessAdapter) FilterViewableEntityIDs(ctx context.Context, campa
 	return a.svc.FilterViewableEntityIDs(ctx, campaignID, entityIDs, role, userID)
 }
 
-// npcEntityTypeFinderAdapter wraps entities.EntityService to implement the
-// npcs.EntityTypeFinder interface. Resolves the entity types the NPC section
-// lists without creating a circular import.
+// npcEntityTypeFinderAdapter implements npcs.EntityTypeFinder from the page
+// types the owner listed as NPCs, so the NPC section lists exactly those.
 type npcEntityTypeFinderAdapter struct {
-	svc entities.EntityService
+	lists entities.CharacterListReader
 }
 
-// FindCharacterTypeIDs returns the campaign's NPC/monster entity types.
+// FindCharacterTypeIDs returns the campaign's NPC page types.
 func (a *npcEntityTypeFinderAdapter) FindCharacterTypeIDs(ctx context.Context, campaignID string) ([]int, error) {
-	types, err := a.svc.GetEntityTypes(ctx, campaignID)
-	if err != nil {
-		return nil, err
-	}
-	return npcTypeIDs(types), nil
-}
-
-// npcTypeIDs picks the entity types whose entities are NPCs or monsters: the
-// default "character" type, the "npc"/"creature" genre types, system-pack
-// character and monster types, and every enabled sub-type nested under one of
-// them. The player-character type is left out; claimed PCs are the party.
-func npcTypeIDs(types []entities.EntityType) []int {
-	return characterFamilyTypeIDs(types, false)
-}
-
-// characterFamilyTypeIDs is the shared walk behind npcTypeIDs. includePC keeps
-// the player-character type: the NPC gallery leaves it out (claimed PCs are the
-// party), while stashes and moves are mostly about the players' own characters.
-func characterFamilyTypeIDs(types []entities.EntityType, includePC bool) []int {
-	isRoot := func(et entities.EntityType) bool {
-		if et.PresetCategory != nil {
-			switch *et.PresetCategory {
-			case "character", "creature":
-				return true
-			}
-		}
-		switch et.Slug {
-		case "character", "npc", "creature":
-			return true
-		}
-		return strings.HasSuffix(et.Slug, "-character") || strings.HasSuffix(et.Slug, "-monster")
-	}
-	isPC := func(et entities.EntityType) bool {
-		return (et.PresetCategory != nil && *et.PresetCategory == entities.PresetCategoryPlayerCharacter) ||
-			et.Slug == entities.SlugPlayerCharacter
-	}
-
-	byID := make(map[int]entities.EntityType, len(types))
-	for _, et := range types {
-		byID[et.ID] = et
-	}
-	// inFamily walks up the parent chain; depth guards against a cycle.
-	inFamily := func(et entities.EntityType) bool {
-		for depth := 0; depth < 16; depth++ {
-			if isRoot(et) {
-				return true
-			}
-			if et.ParentTypeID == nil {
-				return false
-			}
-			parent, ok := byID[*et.ParentTypeID]
-			if !ok {
-				return false
-			}
-			et = parent
-		}
-		return false
-	}
-
-	var ids []int
-	for _, et := range types {
-		if et.Enabled && (includePC || !isPC(et)) && inFamily(et) {
-			ids = append(ids, et.ID)
-		}
-	}
-	return ids
+	return a.lists.NPCTypeIDs(ctx, campaignID)
 }
 
 // npcVisibilityTogglerAdapter wraps entities.EntityService to implement the
@@ -2588,6 +2604,13 @@ func (a *App) RegisterRoutes() {
 	layoutPresetHandler := entities.NewLayoutPresetHandler(layoutPresetService)
 	entities.RegisterLayoutPresetRoutes(e, layoutPresetHandler, campaignService, authService)
 	campaignService.SetLayoutPresetSeeder(layoutPresetService)
+
+	// Which page types are characters and which are NPCs is the owner's
+	// choice, kept in the campaign settings; a new campaign starts with the
+	// types its defaults provide.
+	characterListService := entities.NewCharacterListService(entityService, &characterListStore{camps: campaignService})
+	campaignService.SetCharacterListSeeder(characterListService)
+	entityHandler.SetCharacterLists(characterListService)
 
 	// Media plugin: file upload, storage, thumbnailing, serving.
 	// Graceful degradation: if the media directory can't be created, log a warning
@@ -3674,7 +3697,10 @@ func (a *App) RegisterRoutes() {
 	}
 	shareAudit := &armoryShareAuditAdapter{}
 	stashRepo := armory.NewStashRepository(a.DB)
-	stashDirectory := &armoryStashDirectoryAdapter{svc: entityService}
+	stashDirectory := &armoryStashDirectoryAdapter{svc: entityService, lists: characterListService}
+	// The stash directory caches page-type facts for a few seconds; drop them
+	// when the owner changes the lists so the change shows at once.
+	characterListService.SetChangeHook(stashDirectory.Forget)
 	stashSvc := armory.NewStashService(armory.StashDeps{
 		Repo:       stashRepo,
 		Directory:  stashDirectory,
@@ -3709,6 +3735,9 @@ func (a *App) RegisterRoutes() {
 	// Authenticates via API keys, not browser sessions.
 	syncAPIHandler := syncapi.NewAPIHandler(syncService, entityService, campaignService, relService)
 	syncAPIHandler.SetAddonLister(&addonListerAPIAdapter{svc: addonService})
+	if urlSigner != nil {
+		syncAPIHandler.SetURLSigner(urlSigner)
+	}
 	// Expose tag-derived grants on the permissions endpoint for Foundry
 	// ownership sync, reusing the entities glance adapter.
 	syncAPIHandler.SetTagGrantLister(tagFetcherAdapter)
@@ -3773,7 +3802,7 @@ func (a *App) RegisterRoutes() {
 	// narrowed by entities' canonical FilterViewableEntityIDs rather than a
 	// second, hand-rolled predicate.
 	npcRepo := npcs.NewNPCRepository(a.DB)
-	npcSvc := npcs.NewNPCService(npcRepo, &npcEntityTypeFinderAdapter{svc: entityService}, &entityVisibilityFilterAdapter{svc: entityService})
+	npcSvc := npcs.NewNPCService(npcRepo, &npcEntityTypeFinderAdapter{lists: characterListService}, &entityVisibilityFilterAdapter{svc: entityService})
 	npcSvc.SetTagLister(&npcTagListerAdapter{svc: tagService})
 	npcHandler := npcs.NewHandler(npcSvc)
 	npcHandler.SetVisibilityToggler(&npcVisibilityTogglerAdapter{svc: entityService})
@@ -4237,7 +4266,19 @@ func (a *App) RegisterRoutes() {
 	// One-time: place the page pieces that became blocks into existing
 	// layouts, so no page loses anything (see page_extras.go). Best-effort;
 	// a failure is retried on the next boot.
-	if n, err := placePageExtrasOnce(context.Background(), settingsRepo, campaignService, addonService, entityService); err != nil {
+	// The lists come first: the page-extras pass reads them.
+	// A failed seed skips the page-extras pass this boot: it would read empty
+	// lists, place nothing for that campaign, and still mark itself done.
+	var seedErr error
+	if n, err := seedCharacterListsOnce(context.Background(), settingsRepo, campaignService, characterListService); err != nil {
+		seedErr = err
+		slog.Error("seeding character lists failed", slog.String("error", err.Error()))
+	} else if n > 0 {
+		slog.Info("checked character lists for existing campaigns", slog.Int("campaigns", n))
+	}
+	if seedErr != nil {
+		slog.Warn("placing page extras deferred until character lists are seeded")
+	} else if n, err := placePageExtrasOnce(context.Background(), settingsRepo, campaignService, addonService, entityService, characterListService); err != nil {
 		slog.Error("placing page extras failed", slog.String("error", err.Error()))
 	} else if n > 0 {
 		slog.Info("placed page extras into layouts", slog.Int("layouts", n))
@@ -4513,6 +4554,10 @@ func (a *App) RegisterRoutes() {
 	systemHandler.SetAddonService(addonService)
 	systemHandler.SetBookEdits(systems.NewBookEditService(systems.NewBookEditRepository(a.DB)))
 	systems.RegisterRoutes(e, systemHandler, addonService, authService, campaignService)
+	// Pick lists (Ancestry, Kit, Race, Class…) for the character attributes editor.
+	systems.RegisterCharacterChoiceRoutes(e,
+		systems.NewCharacterChoiceHandler(systems.NewCharacterChoiceService(addonService, campaignSystemMgr)),
+		authService, campaignService)
 
 	// Admin-only deployment-health diagnostic: read-only fingerprints of the
 	// version + files each system loader is ACTUALLY serving, to catch the
@@ -4671,6 +4716,7 @@ func (a *App) RegisterRoutes() {
 					SidebarColour: ap.SidebarColour, SidebarOwn: ap.SidebarOwn,
 					SidebarCorner: ap.SidebarCorner, SidebarSubtitle: ap.SidebarSubtitle, SidebarBanner: ap.SidebarBanner,
 					PeekGlow: ap.PeekGlow, PeekGlowColour: ap.PeekGlowColour,
+					HoverCard: ap.HoverCard,
 				}
 				ctx = layouts.SetAppearance(ctx, ad)
 			}
@@ -4922,7 +4968,7 @@ func (a *App) RegisterRoutes() {
 		Nights:   &dmNightAdapter{svc: sessionsService, members: campaignService},
 		Foundry:  wsHub,
 		Party:    &dmPartyAdapter{entities: entityService, campaigns: campaignService},
-		Hidden:   &dmHiddenAdapter{entities: entityService},
+		Hidden:   &dmHiddenAdapter{entities: entityService, lists: characterListService},
 		System:   systemHandler,
 	})
 	dmscreen.RegisterRoutes(e, dmscreen.NewHandler(dmScreenSvc), campaignService, authService)
@@ -4969,10 +5015,10 @@ func (a *App) RegisterRoutes() {
 
 	// "Show in Foundry" on NPC pages: npc.spotlight is not a change-feed
 	// type, so the recording wrapper passes it straight to the hub.
-	fvttHandler.SetNPCSpotlight(&npcSpotlightResolver{entities: entityService}, &npcSpotlightPublisher{bus: wsEventBus})
+	fvttHandler.SetNPCSpotlight(&npcSpotlightResolver{entities: entityService, lists: characterListService}, &npcSpotlightPublisher{bus: wsEventBus})
 
 	// Game-system widget panels under NPC page titles (manifest entity_panels).
-	entityHandler.SetSystemPanelResolver(newSystemPanelResolver(systemHandler, entityService))
+	entityHandler.SetSystemPanelResolver(newSystemPanelResolver(systemHandler, characterListService))
 
 	// Per-page game-system state. system_state.updated is not a change-feed
 	// type, so the recording wrapper passes it straight to the hub.
@@ -5015,7 +5061,7 @@ func (a *App) RegisterRoutes() {
 			questSvc,
 			boardSvc,
 			quests.NewPickerService(questEntities, questMaps, &questCharacterAdapter{
-				dir:   &armoryStashDirectoryAdapter{svc: entityService},
+				dir:   stashDirectory,
 				names: &questMemberNamesAdapter{svc: campaignService},
 			}),
 		), campaignService, authService)
@@ -5076,6 +5122,7 @@ func (a *App) RegisterRoutes() {
 	})
 	drawingService.SetMediaVerifier(&mapMediaVerifierAdapter{svc: mediaService})
 	mapsService.SetEventPublisher(mapEvents)
+	wireHexFog(mapsService, drawingService, mapEvents, hexService)
 	hexService.SetPictures(maps.NewHexPictures(drawingService))
 	hexService.SetMapLookup(func(ctx context.Context, mapID string) (string, error) {
 		m, err := mapsService.GetMap(ctx, mapID)

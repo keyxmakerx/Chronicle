@@ -74,10 +74,10 @@ func TestDrawingWrites_CrossMapRejected(t *testing.T) {
 			return s.DeleteDrawing(context.Background(), "d-1", wrongMap, nil, "", 3, true)
 		}},
 		{"UpdateToken", func(s DrawingService) error {
-			return s.UpdateToken(context.Background(), "t-1", wrongMap, UpdateTokenInput{})
+			return s.UpdateToken(context.Background(), "t-1", wrongMap, true, UpdateTokenInput{})
 		}},
 		{"UpdateTokenPosition", func(s DrawingService) error {
-			return s.UpdateTokenPosition(context.Background(), "t-1", wrongMap, UpdateTokenPositionInput{X: 10, Y: 10})
+			return s.UpdateTokenPosition(context.Background(), "t-1", wrongMap, true, UpdateTokenPositionInput{X: 10, Y: 10})
 		}},
 		{"DeleteToken", func(s DrawingService) error {
 			return s.DeleteToken(context.Background(), "t-1", wrongMap, nil)
@@ -123,10 +123,10 @@ func TestDrawingWrites_SameMapAllowed(t *testing.T) {
 			return s.DeleteDrawing(context.Background(), "d-1", rightMap, nil, "", 3, true)
 		}},
 		{"UpdateToken", func(s DrawingService) error {
-			return s.UpdateToken(context.Background(), "t-1", rightMap, UpdateTokenInput{})
+			return s.UpdateToken(context.Background(), "t-1", rightMap, true, UpdateTokenInput{})
 		}},
 		{"UpdateTokenPosition", func(s DrawingService) error {
-			return s.UpdateTokenPosition(context.Background(), "t-1", rightMap, UpdateTokenPositionInput{X: 10, Y: 10})
+			return s.UpdateTokenPosition(context.Background(), "t-1", rightMap, true, UpdateTokenPositionInput{X: 10, Y: 10})
 		}},
 		{"DeleteToken", func(s DrawingService) error {
 			return s.DeleteToken(context.Background(), "t-1", rightMap, nil)

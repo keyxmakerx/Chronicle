@@ -230,6 +230,11 @@ type FieldDef struct {
 	// Enforced the same way as GMOnly.
 	OwnerOnly bool `json:"owner_only,omitempty"`
 
+	// Choices names a data file (data/<name>.json) listing the values this
+	// field can be picked from. Absent: the character field picker falls back
+	// to the plural of the field key (ancestry -> ancestries.json).
+	Choices string `json:"choices,omitempty"`
+
 	// FoundryPath is the dot-notation path to the corresponding field in
 	// a Foundry VTT Actor's system data (e.g., "system.abilities.str.value").
 	// Used by the generic Foundry adapter to auto-generate field mappings.

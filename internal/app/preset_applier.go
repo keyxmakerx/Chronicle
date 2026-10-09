@@ -235,6 +235,8 @@ func mapPresetFields(fields []systems.FieldDef) []entities.FieldDefinition {
 			// Carried so the egress filter can strip player-private content
 			// (e.g. backstory) from viewers who aren't the entity's owner.
 			OwnerOnly: f.OwnerOnly,
+			// Names the data file the pick-from-the-system control reads.
+			Choices: f.Choices,
 		})
 	}
 	return out

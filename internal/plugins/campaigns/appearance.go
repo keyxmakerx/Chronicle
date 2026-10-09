@@ -38,6 +38,7 @@ type Appearance struct {
 	PeekGlow        string `json:"peek_glow,omitempty"`        // Hidden-menu edge glow: "accent" (default) or "own".
 	PeekGlowColour  string `json:"peek_glow_colour,omitempty"` // The glow's own colour, used when PeekGlow is "own".
 	HeaderHeight    string `json:"header_height,omitempty"`    // "slim" (default) or "tall".
+	HoverCard       string `json:"hover_card,omitempty"`       // Hover card look: "paper" (default), "plain", "night" or "compact".
 }
 
 // The allowed values of each Appearance choice. The first entry is the
@@ -61,6 +62,7 @@ var (
 	AppearanceCorners      = []string{"plain", "subtitle", "banner"}
 	AppearanceGlows        = []string{"accent", "own"}
 	AppearanceHeights      = []string{"slim", "tall"}
+	AppearanceHoverCards   = []string{"paper", "plain", "night", "compact"}
 )
 
 // Text limits the Customize page shows. Brand name and welcome keep their
@@ -102,6 +104,9 @@ type AppearanceInput struct {
 		ReduceAll bool   `json:"reduceAll"`
 	} `json:"motion"`
 	Sidebar AppearanceSidebarInput `json:"sidebar"`
+	Hover   struct {
+		Look string `json:"look"`
+	} `json:"hover"`
 }
 
 // AppearanceSidebarInput is the Sidebar section. Colour is the menu colour
@@ -369,6 +374,7 @@ func applyAppearance(s *CampaignSettings, in AppearanceInput) (*string, error) {
 		{&a.SidebarColour, "menu colour", in.Sidebar.Colour, AppearanceSidebars},
 		{&a.SidebarCorner, "menu corner", in.Sidebar.Corner, AppearanceCorners},
 		{&a.PeekGlow, "peek glow", in.Sidebar.Glow, AppearanceGlows},
+		{&a.HoverCard, "hover card look", in.Hover.Look, AppearanceHoverCards},
 	}
 	for _, c := range checks {
 		if *c.dst, err = oneOf(c.name, c.v, c.allowed); err != nil {

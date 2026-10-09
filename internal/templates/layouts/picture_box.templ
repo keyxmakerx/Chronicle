@@ -1,0 +1,125 @@
+// picture_box.templ renders the signed-in user's picture in the top bar and
+// the "Change picture" box in the user menu. Every control is a plain inline
+// onclick into Chronicle.PictureBox (static/js/widgets/picture_box.js), so
+// nothing relies on a script that a swap might not run.
+
+package layouts
+
+// UserAvatar is the signed-in user's round picture (initials when they have
+// none). The data-pk-av marker lets the picture box repaint it in place after
+// an upload or removal.
+templ UserAvatar(sizeClass, id string) {
+	<div
+		if id != "" {
+			id={ id }
+		}
+		data-pk-av
+		data-initials={ userInitials(ctx) }
+		class={ "rounded-full bg-accent-fill flex items-center justify-center overflow-hidden font-semibold text-on-accent " + sizeClass }
+	>
+		if avatarPath := GetUserAvatarPath(ctx); avatarPath != "" {
+			<img src={ MediaThumbURL(ctx, avatarPath, "300") } class="w-full h-full object-cover" alt=""/>
+		} else {
+			{ userInitials(ctx) }
+		}
+	</div>
+}
+
+// UserPictureBox is the top of the user menu: who you are, a "Change
+// picture" link, and the box that folds open under it. The upload goes to the
+// existing /account/avatar endpoint, which validates the file and only acts on
+// the signed-in user.
+templ UserPictureBox() {
+	<div class="ag-menuhead">
+		@UserAvatar("ag-av s36", "")
+		<div class="min-w-0">
+			<div class="text-sm font-medium text-fg truncate">{ GetUserName(ctx) }</div>
+			<div class="text-xs text-fg-muted truncate">{ GetUserEmail(ctx) }</div>
+		</div>
+		<button
+			type="button"
+			id="pk-toggle"
+			class="ag-link"
+			aria-expanded="false"
+			aria-controls="pk-fold"
+			onclick="if(window.Chronicle&&Chronicle.PictureBox)Chronicle.PictureBox.toggle()"
+		>Change picture</button>
+	</div>
+	<div id="pk-fold" class="ag-fold" aria-hidden="true" inert>
+		<div class="ag-box" style="margin:8px 8px 6px">
+			<div class="ag-head">
+				<h4>Your picture</h4>
+				<button
+					type="button"
+					class="ag-x"
+					aria-label="Close"
+					onclick="if(window.Chronicle&&Chronicle.PictureBox)Chronicle.PictureBox.toggle()"
+				><i class="fa-solid fa-xmark"></i></button>
+			</div>
+			<div class="ag-body">
+				<div id="pk-main">
+					<div class="flex items-center gap-3">
+						<span id="pk-box-av">
+							@UserAvatar("ag-av s56", "")
+						</span>
+						<div class="min-w-0">
+							<button
+								type="button"
+								id="pk-up"
+								class="btn-secondary btn-sm"
+								style="gap:6px"
+								onclick="if(window.Chronicle&&Chronicle.PictureBox)Chronicle.PictureBox.pick()"
+							><i class="fa-solid fa-arrow-up-from-bracket"></i> Upload a new picture</button>
+							<div class="mt-1.5 text-xs text-fg-muted">
+								<button
+									type="button"
+									id="pk-remove"
+									class="ag-link danger"
+									hidden?={ GetUserAvatarPath(ctx) == "" }
+									onclick="if(window.Chronicle&&Chronicle.PictureBox)Chronicle.PictureBox.askRemove()"
+								>Remove picture</button>
+								<span id="pk-none" hidden?={ GetUserAvatarPath(ctx) != "" }>Showing your initials for now.</span>
+							</div>
+						</div>
+					</div>
+					<div id="pk-prog" hidden>
+						<div class="flex items-center justify-between text-xs text-fg-secondary mt-3" aria-live="polite">
+							<span id="pk-pt">Uploading…</span>
+							<span id="pk-pn">0%</span>
+						</div>
+						<div class="ag-prog"><span></span></div>
+					</div>
+					<div class="ag-hint"><i class="fa-solid fa-dice-d20"></i><span>Your picture also shows as your user picture in Foundry.</span></div>
+				</div>
+				<div id="pk-confirm" class="ag-confirm" hidden>
+					<p>Remove your picture?</p>
+					<small>Your initials show instead, here and in Foundry.</small>
+					<div class="ag-foot">
+						<span class="ag-sp"></span>
+						<button
+							type="button"
+							class="btn-secondary btn-sm"
+							onclick="if(window.Chronicle&&Chronicle.PictureBox)Chronicle.PictureBox.keep()"
+						>Keep</button>
+						<button
+							type="button"
+							class="btn-danger btn-sm"
+							onclick="if(window.Chronicle&&Chronicle.PictureBox)Chronicle.PictureBox.remove()"
+						>Remove</button>
+					</div>
+				</div>
+				<input
+					type="file"
+					id="pk-file"
+					accept="image/jpeg,image/png,image/webp,image/gif"
+					hidden
+					onchange="if(window.Chronicle&&Chronicle.PictureBox)Chronicle.PictureBox.chosen(this)"
+				/>
+			</div>
+			<div id="pk-warn" class="ag-warn" role="alert">
+				<i class="fa-solid fa-triangle-exclamation"></i>
+				<span></span>
+			</div>
+		</div>
+	</div>
+}
