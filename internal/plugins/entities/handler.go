@@ -690,6 +690,7 @@ func (h *Handler) Show(c echo.Context) error {
 	}
 
 	ctx = withPageChildren(ctx, children)
+	ctx = withPageParent(ctx, parentOfEntity(entity, ancestors))
 
 	// The items-and-money panel another plugin serves: drawn where the layout
 	// places it, and on its own only on player-character pages without it

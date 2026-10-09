@@ -52,7 +52,7 @@ templ EntityShowPage(cc *campaigns.CampaignContext, entity *Entity, entityType *
 						<a href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/entities/%s", cc.Campaign.ID, ancestors[i].ID)) } class="hover:text-fg-body">{ ancestors[i].Name }</a>
 					}
 					<span class="mx-1">/</span>
-					<span class="text-fg">{ entity.Name }</span>
+					<span class="text-fg" data-page-crumb>{ entity.Name }</span>
 				</nav>
 				@effectiveVisibilityBadge(cc, entity, GetEffectiveVisibility(ctx))
 			</div>
@@ -220,28 +220,19 @@ templ entityBlockInner(block TemplateBlock, cc *campaigns.CampaignContext, entit
 	@RenderBlock(ctx, block, cc, entity, entityType, csrfToken)
 }
 
-// blockTitle renders the entity name heading with inline metadata edit panel.
+// blockTitle renders the entity name heading. Edit name opens the same fold the
+// system-page header uses; Scribes and up also get History, Clone and Delete.
 templ blockTitle(cc *campaigns.CampaignContext, entity *Entity, csrfToken string) {
-	<div
-		if cc.MemberRole >= campaigns.RoleScribe {
-			x-data={ fmt.Sprintf("{ editing: false, saving: false, saved: false, error: '', name: '%s', typeLabel: '%s', parentId: '%s' }",
-				jsEsc(entity.Name),
-				jsEsc(derefStr(entity.TypeLabel)),
-				jsEsc(derefStr(entity.ParentID))) }
-		}
-	>
+	{{
+		isScribe := cc.MemberRole >= campaigns.RoleScribe
+		canRename := CanEditIdentity(cc.MemberRole, entity, layouts.GetUserID(ctx))
+	}}
+	<div>
 		<div class="flex items-start justify-between gap-3">
 			<div class="min-w-0">
 				<div class="flex items-center gap-2">
-					<h1 class="text-xl md:text-3xl font-bold text-fg">{ entity.Name }</h1>
-					<button
-						class="text-fg-muted hover:text-amber-400 transition-colors"
-						data-favorite-toggle={ entity.ID }
-						data-entity-name={ entity.Name }
-						title="Toggle favorite"
-					>
-						<i class="fa-regular fa-star text-lg"></i>
-					</button>
+					<h1 class="text-xl md:text-3xl font-bold text-fg" data-page-h1>{ entity.Name }</h1>
+					@entityFavoriteButton(entity)
 					// "Show in Foundry" for NPC pages. foundry_vtt owns it and
 					// answers empty for anything else, so this stays VTT-agnostic.
 					if cc.CanAuthorDmOnly() {
@@ -257,114 +248,60 @@ templ blockTitle(cc *campaigns.CampaignContext, entity *Entity, csrfToken string
 					data-widget="aliases"
 					data-entity-id={ entity.ID }
 					data-campaign-id={ cc.Campaign.ID }
-					data-editable={ fmt.Sprintf("%t", cc.MemberRole >= campaigns.RoleScribe) }
+					data-editable={ fmt.Sprintf("%t", isScribe) }
 				></div>
 			</div>
-			if cc.MemberRole >= campaigns.RoleScribe {
+			if canRename {
 				<div class="flex items-center gap-2">
-					<button
-						@click="editing = !editing"
-						class="btn-ghost btn-sm"
-						:class="editing ? 'text-accent' : ''"
-						title="Edit page details"
-					>
-						<i class="fa-solid fa-pencil mr-1"></i>
-						<span x-text="editing ? 'Close' : 'Edit'">Edit</span>
-					</button>
-					<form
-						method="POST"
-						action={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/entities/%s/clone", cc.Campaign.ID, entity.ID)) }
-						hx-post={ fmt.Sprintf("/campaigns/%s/entities/%s/clone", cc.Campaign.ID, entity.ID) }
-						class="inline"
-					>
-						<input type="hidden" name="csrf_token" value={ csrfToken }/>
-						<button type="submit" class="btn-ghost btn-sm" title="Create a copy of this page">
-							<i class="fa-regular fa-clone mr-1"></i> Clone
-						</button>
-					</form>
 					<button
 						type="button"
 						class="btn-ghost btn-sm"
-						hx-get={ fmt.Sprintf("/campaigns/%s/entities/%s/history", cc.Campaign.ID, entity.ID) }
-						hx-target="#page-history-slot"
-						title="See earlier versions of this page and put one back"
+						data-edit-name
+						aria-expanded="false"
+						aria-controls="page-name-fold"
+						title="Edit page details"
+						onclick={ headerCall("nameFold") }
 					>
-						<i class="fa-solid fa-clock-rotate-left mr-1"></i> History
+						<i class="fa-solid fa-pencil mr-1"></i> Edit name
 					</button>
-					if cc.MemberRole >= campaigns.RoleOwner {
+					if isScribe {
 						<form
 							method="POST"
-							action={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/entities/%s", cc.Campaign.ID, entity.ID)) }
-							hx-delete={ fmt.Sprintf("/campaigns/%s/entities/%s", cc.Campaign.ID, entity.ID) }
-							hx-confirm="Move this page and its sub-pages to the Trash? You can restore them from Manage > Trash."
+							action={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/entities/%s/clone", cc.Campaign.ID, entity.ID)) }
+							hx-post={ fmt.Sprintf("/campaigns/%s/entities/%s/clone", cc.Campaign.ID, entity.ID) }
 							class="inline"
 						>
-							<input type="hidden" name="_method" value="DELETE"/>
 							<input type="hidden" name="csrf_token" value={ csrfToken }/>
-							<button type="submit" class="btn-ghost btn-sm text-red-500 hover:text-red-700 dark:text-red-400">
-								<i class="fa-solid fa-trash mr-1"></i> Delete
+							<button type="submit" class="btn-ghost btn-sm" title="Create a copy of this page">
+								<i class="fa-regular fa-clone mr-1"></i> Clone
 							</button>
 						</form>
+						@entityHistoryButton(cc, entity, "btn-ghost btn-sm")
+						if cc.MemberRole >= campaigns.RoleOwner {
+							<form
+								method="POST"
+								action={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/entities/%s", cc.Campaign.ID, entity.ID)) }
+								hx-delete={ fmt.Sprintf("/campaigns/%s/entities/%s", cc.Campaign.ID, entity.ID) }
+								hx-confirm="Move this page and its sub-pages to the Trash? You can restore them from Manage > Trash."
+								class="inline"
+							>
+								<input type="hidden" name="_method" value="DELETE"/>
+								<input type="hidden" name="csrf_token" value={ csrfToken }/>
+								<button type="submit" class="btn-ghost btn-sm text-red-500 hover:text-red-700 dark:text-red-400">
+									<i class="fa-solid fa-trash mr-1"></i> Delete
+								</button>
+							</form>
+						}
 					}
 				</div>
 			}
 		</div>
 		// The History panel loads here when History is clicked.
-		if cc.MemberRole >= campaigns.RoleScribe {
+		if isScribe {
 			<div id="page-history-slot"></div>
 		}
-		// Inline metadata edit panel (Scribe+).
-		if cc.MemberRole >= campaigns.RoleScribe {
-			<div x-show="editing" x-cloak x-transition class="mt-4 card p-4 space-y-3">
-				<div class="grid grid-cols-1 md:grid-cols-2 gap-3">
-					<div>
-						<label class="block text-xs font-medium text-fg-body mb-1">Name</label>
-						<input type="text" x-model="name" class="input w-full text-sm" maxlength="200"/>
-					</div>
-					<div>
-						<label class="block text-xs font-medium text-fg-body mb-1">Descriptor</label>
-						<input type="text" x-model="typeLabel" class="input w-full text-sm" placeholder="e.g., City, NPC, Artifact" maxlength="100"/>
-					</div>
-				</div>
-				<div>
-					<label class="block text-xs font-medium text-fg-body mb-1">Parent Page</label>
-					<input type="text" x-model="parentId" class="input w-full text-sm" placeholder="Parent entity ID (or leave empty)"/>
-				</div>
-				// Visibility editing lives only in edit mode, via form.templ's
-				// inline permissions widget (ADR-057). The metadata PUT below
-				// carries no is_private; UpdateMetadataAPI's nil-preserving
-				// service call keeps the entity's current value.
-				<div class="flex items-center justify-end gap-3 pt-1">
-					<span x-show="saved" x-transition class="text-xs text-green-600">Saved!</span>
-					<span x-show="error" x-transition class="text-xs text-red-500" x-text="error"></span>
-					<button
-						type="button"
-						class="btn-secondary btn-sm"
-						@click="editing = false; saved = false; error = ''"
-					>Cancel</button>
-					<button
-						type="button"
-						class="btn-primary btn-sm"
-						:disabled="saving || !name.trim()"
-						@click={ fmt.Sprintf(`
-							saving = true; saved = false; error = '';
-							Chronicle.apiFetch('/campaigns/%s/entities/%s/metadata', {
-								method: 'PUT',
-								body: { name: name.trim(), type_label: typeLabel.trim(), parent_id: parentId.trim() }
-							}).then(r => {
-								if (!r.ok) return r.json().then(d => { throw new Error(d.error || 'Failed to save'); });
-								return r.json();
-							}).then(d => {
-								saved = true;
-								setTimeout(() => { window.location.reload(); }, 600);
-							}).catch(e => { error = e.message; }).finally(() => { saving = false; })
-						`, cc.Campaign.ID, entity.ID) }
-					>
-						<span x-show="!saving">Save Changes</span>
-						<span x-show="saving">Saving...</span>
-					</button>
-				</div>
-			</div>
+		if canRename {
+			@pageNameFold(cc, entity, isScribe)
 		}
 	</div>
 }

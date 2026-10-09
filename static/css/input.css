@@ -4977,3 +4977,16 @@ html[data-view-motion="calm"] *:not(.czp *), html[data-view-motion="calm"] *:not
 .ag-pickbox .ag-row .ag-name small { display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; font-size: 12px; line-height: 1.35; color: var(--color-text-muted); margin-top: 1px; }
 .ag-pick:focus-visible, .ag-link:focus-visible { outline: 2px solid var(--color-accent); outline-offset: 2px; }
 @media (prefers-reduced-motion: reduce) { .ag-pick .chev { transition: none !important; } }
+
+/* Edit name fold: the save button's loading and done states, and the error
+   line. The fold itself reuses ag-fold/ag-box/ag-warn;
+   static/js/widgets/page_name_fold.js drives it. */
+.ag-err { margin: 10px 0 0; font-size: 12.5px; color: #dc2626; }
+.dark .ag-err { color: #f87171; }
+.ag-err[hidden] { display: none; }
+.ph-save { display: inline-flex; align-items: center; gap: 7px; }
+.ph-save .ph-spin, .ph-save .ph-ok { display: none; }
+.ph-save.is-loading .ph-spin { display: inline-block; width: 13px; height: 13px; border-radius: 999px; border: 2px solid rgba(255,255,255,.45); border-top-color: #fff; animation: ph-spin .7s linear infinite; }
+.ph-save.is-ok .ph-ok { display: inline-block; }
+@keyframes ph-spin { to { transform: rotate(360deg); } }
+@media (prefers-reduced-motion: reduce) { .ph-save.is-loading .ph-spin { animation-duration: 2.4s; } }
