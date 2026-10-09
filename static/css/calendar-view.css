@@ -244,6 +244,18 @@
 .cal-v5 .todaypill .sb:hover{background:var(--hair);color:var(--ink)}
 .cal-v5 .todaypill .sb .i{width:14px;height:14px}
 .cal-v5 .todaypill .td.bump{animation:cal5-bump .45s var(--spring)}
+.cal-v5 .todaypill .tdset{height:26px;padding:0 8px;border-radius:8px;font:600 12.5px/1 var(--sans);color:var(--ink)}
+.cal-v5 .todaypill .tdset:hover{background:var(--hair)}
+.cal-v5 .todaypill .tdset:focus-visible, .cal-v5 .todaypill .sb:focus-visible{outline:1.5px solid var(--ink);outline-offset:1px}
+.cal-v5 .todaypill .tt{margin-left:7px;font-weight:500;color:var(--mut)}
+.cal-v5 .settoday{display:flex;flex-direction:column;gap:10px;padding:12px 14px 14px}
+.cal-v5 .settoday .strow3{display:grid;grid-template-columns:minmax(0,1.5fr) minmax(0,.7fr) minmax(0,1fr);gap:8px}
+.cal-v5 .settoday .strow2{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px;max-width:66%}
+.cal-v5 .settoday .fld input, .cal-v5 .settoday .fld select{height:32px;font-size:13px}
+.cal-v5 .settoday .stn{margin:0;font:500 11.5px/1.45 var(--sans);color:var(--mut)}
+.cal-v5 .settoday .sterr{margin:0;font:550 12px/1.4 var(--sans);color:var(--bldT)}
+.cal-v5 .settoday .sta{display:flex;gap:8px}
+.cal-v5 .settoday .sterr.shake{animation:cal5-wxNag .4s ease}
 @keyframes cal5-bump{from{opacity:.2;transform:translateY(5px)}to{opacity:1;transform:none}}
 .cal-v5 .dow{display:grid;grid-template-columns:repeat(var(--cols),minmax(0,1fr));padding:8px var(--gx) 0}
 .cal-v5 .dow span{padding:0 10px 9px;font:650 9.5px/1 var(--sans);letter-spacing:.13em;text-transform:uppercase;color:var(--mut);white-space:nowrap;overflow:hidden}
@@ -1841,9 +1853,31 @@
 .cal-v5 .fvwk{margin:8px 0 0;padding:8px 10px;border-radius:9px;background:var(--paper2);font:500 12px/1.45 var(--sans);color:var(--ink2)}
 .cal-v5 .fvwk b{color:var(--ink);font-weight:600}
 .cal-v5 .fvbody small{display:block;font:500 11.5px/1.35 var(--sans);color:var(--mut)}
-.cal-v5 .fvroster li{display:flex;justify-content:space-between;gap:10px;padding:5px 0;font:500 12.5px/1.3 var(--sans);color:var(--ink)}
+.cal-v5 .fvroster li{display:flex;align-items:center;gap:10px;min-height:32px;padding:2px 0;font:500 12.5px/1.3 var(--sans);color:var(--ink)}
+.cal-v5 .fvroster .nm{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .cal-v5 .fvroster .ok{color:var(--mut)}
 .cal-v5 .fvroster .wait{color:var(--ink2);font-weight:600}
+.cal-v5 .fvroster .fvbell{width:28px;height:28px;flex:none;font-size:11.5px;color:var(--ink2)}
+.cal-v5 .fvroster .fvbell:disabled{color:var(--free);cursor:default}
+.cal-v5 .fvroster .fvme{width:28px;flex:none;text-align:center;font:550 10.5px/1 var(--sans);color:var(--mut)}
+.cal-v5 .fvask{margin-top:10px;padding-top:10px;border-top:1px solid var(--hair)}
+.cal-v5 .fvask p{margin:0 0 8px;font:500 12px/1.45 var(--sans);color:var(--ink2)}
+.cal-v5 .fvask p b{color:var(--ink);font-weight:650}
+.cal-v5 .fvaskb{display:flex;flex-wrap:wrap;gap:6px}
+.cal-v5 .fvdue{display:flex;align-items:baseline;gap:7px;margin:0 0 10px;padding:8px 10px;border-radius:9px;background:var(--goldBg);font:550 12px/1.45 var(--sans);color:var(--ink)}
+.cal-v5 .fvdue i{color:var(--gold)}
+.cal-v5 .fvmb{display:flex;flex-wrap:wrap;gap:6px}
+.cal-v5 .fvaway{margin-top:14px}
+.cal-v5 .fvaway h5{margin:0 0 6px;font:650 9.5px/1 var(--sans);letter-spacing:.14em;text-transform:uppercase;color:var(--mut)}
+.cal-v5 .fvawl{list-style:none;margin:0 0 8px;padding:0}
+.cal-v5 .fvawl li{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:5px 0;border-top:1px solid var(--hair);font:550 12.5px/1.3 var(--sans);color:var(--ink)}
+.cal-v5 .fvawl li:first-child{border-top:0}
+.cal-v5 .fvaway .fnote{margin:0 0 8px}
+.cal-v5 .fvawf{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px;padding:10px;border-radius:10px;background:var(--paper2);box-shadow:inset 0 0 0 1px var(--hair);transform-origin:top;animation:cal5-foldDown .34s var(--spring) both}
+.cal-v5 .fvawf .fld input{height:32px;background:var(--paper);font-size:12.5px}
+.cal-v5 .fvawf .gperr, .cal-v5 .fvawa{grid-column:1/-1}
+.cal-v5 .fvawa{display:flex;gap:6px}
+.cal-v5 .gperr.shake{animation:cal5-wxNag .42s cubic-bezier(.36,.07,.19,.97)}
 .cal-v5 .fvbody .fnote{margin:8px 0 0;display:flex;flex-wrap:wrap;align-items:center;gap:6px 10px;font:500 11.5px/1.4 var(--sans);color:var(--mut)}
 .cal-v5 .fvsw{display:inline-flex;align-items:center;gap:8px;font:550 12.5px/1.2 var(--sans);color:var(--ink);cursor:pointer}
 .cal-v5 .fvsw input{width:16px;height:16px;accent-color:var(--free)}

@@ -94,6 +94,9 @@ type MyAvailabilityResponse struct {
 	// tell "you have not answered yet" apart from "you answered: never free",
 	// which look identical in Blocks (both empty).
 	Answered bool `json:"answered"`
+	// AnsweredAt is when they last saved or confirmed (RFC3339), so a
+	// "confirm your times" ask can tell whether they have answered it.
+	AnsweredAt string `json:"answeredAt,omitempty"`
 	// WeekALabel/WeekBLabel are the YYYY-MM-DD Sundays that start the next week
 	// of each alternating track, so the picker can offer two dates the member
 	// can find on a calendar instead of the words "odd" and "even".

@@ -41,7 +41,7 @@ function load(o = {}) {
   };
   vm.createContext(sandbox);
   vm.runInContext(src, sandbox);
-  return { def: defs.calendar_view, calls, Chronicle: sandbox.Chronicle };
+  return { def: defs.calendar_view, calls, Chronicle: sandbox.Chronicle, exp: sandbox.module.exports };
 }
 
 // A view with just enough state for the game-night methods; the DOM bits
@@ -477,7 +477,7 @@ test('the Director’s Who’s free view lists the players, a reminder and the f
   const html = v._fvDirectorHTML(2026, 10, 'October');
   assert.match(html, /Jack<\/span><span class="ok">Hours given/);
   assert.match(html, /Dee<\/span><span class="wait">No hours yet/);
-  assert.match(html, /1 player hasn’t painted hours yet\. <button type="button" class="btn sm" data-best-nudge>/);
+  assert.match(html, /data-best-nudge><i class="fa-solid fa-bell"><\/i> Remind the 1 without hours/);
   assert.match(html, /<input type="checkbox" data-fv-lines checked>/, 'the lines switch, on');
   assert.match(html, /data-fv-planner="team">.*Open the full planner/, 'the full planner, inside the calendar');
 });
@@ -649,4 +649,79 @@ test('a recap with formatting is never edited as plain text in the calendar', ()
   assert.doesNotMatch(v._gnExtraHTML('rich'), /data-gn-recap-input/, 'even when asked, the textarea never opens on it');
   v.role = 1;
   assert.doesNotMatch(v._gnExtraHTML('plain'), /data-gn-recap="edit"/, 'players read the recap only');
+});
+
+test('the Director can remind any one player, never themselves', () => {
+  const { def } = load();
+  const v = freeView(def, overlay());
+  v.userId = 'jack';
+  const html = v._fvDirectorHTML(2026, 10, 'October');
+  assert.doesNotMatch(html, /data-remind="jack"/, 'no bell for yourself');
+  assert.match(html, /Jack<\/span><span class="ok">Hours given<\/span><span class="fvme">You/);
+  assert.match(html, /data-remind="julie"/);
+  assert.match(html, /data-remind="dee"/, 'a player with no hours can be reminded too');
+  v._reminded = { julie: true };
+  assert.match(v._fvDirectorHTML(2026, 10, 'October'), /data-remind="julie" disabled aria-label="Reminded Julie"/);
+});
+
+test('after an ask, the roster shows who confirmed since', () => {
+  const { def } = load();
+  const v = freeView(def, overlay());
+  v.userId = 'jack';
+  v.answers = { askedAt: '2026-10-01T12:00:00Z', members: [
+    { userId: 'julie', answeredAt: '2026-10-02T09:00:00Z' },
+    { userId: 'bryn', answeredAt: '2026-09-20T09:00:00Z' },
+  ] };
+  const html = v._fvDirectorHTML(2026, 10, 'October');
+  assert.match(html, /Julie<\/span><span class="ok">Confirmed/);
+  assert.match(html, /Bryn<\/span><span class="wait">Not confirmed yet/);
+  assert.match(html, /Dee<\/span><span class="wait">No hours yet/);
+  assert.match(html, /<b>1 of 3<\/b> confirmed since you asked/, 'the asker is not counted');
+  assert.match(html, /data-ask-confirm>.*Ask again/);
+});
+
+test('a player is asked to confirm only while an ask is newer than their answer', () => {
+  const { def } = load();
+  const v = freeView(def, overlay({ includeDetail: false, members: [] }));
+  v.freeDirector = false; v.role = 1;
+  v.answers = { askedAt: '2026-10-01T12:00:00Z' };
+  v.mine = { answered: true, answeredAt: '2026-09-01T00:00:00Z', blocks: [] };
+  assert.equal(v._confirmDue(), true);
+  assert.match(v._fvPlayerHTML(2026, 10), /data-confirm-mine>.*My times are still right/);
+  v.mine.answeredAt = '2026-10-02T00:00:00Z';
+  assert.equal(v._confirmDue(), false);
+  v.mine = { answered: false, blocks: [] };
+  assert.equal(v._confirmDue(), false, 'no hours yet: asked to give them, not confirm');
+});
+
+test('whole days off read back as away stretches; shaped days do not', () => {
+  const { exp } = load();
+  const off = (d) => ({ onDate: d, startMinute: 0, endMinute: 1440, state: 'unavailable' });
+  const got = exp.awayStretches([
+    off('2026-10-03'), off('2026-10-04'), off('2026-10-05'),
+    off('2026-10-09'),
+    { onDate: '2026-10-12', startMinute: 1080, endMinute: 1320, state: 'available' },
+    off('2026-09-20'),
+  ], '2026-10-01');
+  assert.deepEqual(JSON.parse(JSON.stringify(got)), [
+    { from: '2026-10-03', to: '2026-10-05' },
+    { from: '2026-10-09', to: '2026-10-09' },
+  ]);
+});
+
+test('only the owner of a world calendar gets Set today, and it checks the form', () => {
+  const { def } = load();
+  const v = freeView(def);
+  v.apiBase = '/campaigns/c1/calendar';
+  assert.equal(v._canSetToday(), false, 'a real-world calendar follows the clock');
+  v.cal = { mode: 'fantasy', current_year: 1200, current_month: 2, current_day: 5, hours_per_day: 24, minutes_per_hour: 60,
+    months: [{ name: 'Frost', days: 30 }, { name: 'Thaw', days: 28 }] };
+  assert.equal(v._canSetToday(), true);
+  v.role = 2;
+  assert.equal(v._canSetToday(), false, 'below owner: read only');
+  const form = (o) => ({ elements: Object.fromEntries(Object.entries(Object.assign({ year: '1200', month: '2', day: '5', hour: '20', minute: '0' }, o)).map(([k, x]) => [k, { value: x }])) });
+  assert.deepEqual(JSON.parse(JSON.stringify(v._readTodayForm(form()))), { y: 1200, m: 2, d: 5, h: 20, mi: 0 });
+  assert.match(v._readTodayForm(form({ day: '29' })).error, /28 days/);
+  assert.match(v._readTodayForm(form({ hour: '24' })).error, /0 to 23/);
+  assert.match(v._readTodayForm(form({ year: 'soon' })).error, /every box/);
 });

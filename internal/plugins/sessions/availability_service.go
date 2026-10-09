@@ -69,7 +69,10 @@ func (s *sessionService) GetMyAvailability(ctx context.Context, campaignID, user
 	if err != nil {
 		return nil, apperror.NewInternal(fmt.Errorf("loading availability answers: %w", err))
 	}
-	_, resp.Answered = answered[userID]
+	if at, ok := answered[userID]; ok {
+		resp.Answered = true
+		resp.AnsweredAt = at.UTC().Format(time.RFC3339)
+	}
 
 	// The two alternating tracks are labelled by the next real Sunday that
 	// starts each one, so the picker offers dates rather than a convention.

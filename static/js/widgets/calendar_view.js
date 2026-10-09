@@ -458,6 +458,24 @@
   function listWords(a) {
     return a.length < 2 ? (a[0] || '') : a.slice(0, -1).join(', ') + ' and ' + a[a.length - 1];
   }
+  // A player's whole days off from today on, as stretches of consecutive
+  // dates: [{from, to}]. A date holding anything but one whole day off is a
+  // day shaped by hand, not part of an away stretch.
+  function awayStretches(excs, today) {
+    var byDate = {};
+    excs.forEach(function (e) { (byDate[e.onDate] = byDate[e.onDate] || []).push(e); });
+    var days = Object.keys(byDate).filter(function (d) {
+      var l = byDate[d];
+      return d >= today && l.length === 1 && l[0].startMinute === 0 && l[0].endMinute === 1440 && l[0].state === 'unavailable';
+    }).sort();
+    var out = [];
+    days.forEach(function (d) {
+      var last = out[out.length - 1];
+      if (last && isoAddDays(last.to, 1) === d) last.to = d;
+      else out.push({ from: d, to: d });
+    });
+    return out;
+  }
   // "19:30" as "7:30pm", the clock the rest of the calendar reads in.
   function hmWords(hm) {
     var p = /^(\d{1,2}):(\d{2})/.exec(String(hm || ''));
@@ -1185,6 +1203,7 @@
       this.canEdit = config.canEdit === true;
       this.canAuthorDmOnly = config.canAuthorDmOnly === true;
       this.role = typeof config.role === 'number' ? config.role : parseInt(config.role, 10) || 0;
+      this.userId = config.userId || '';
       this.apiBase = config.apiBase;
       this.engineSrc = config.engineSrc; // chronicle_gen.js, loaded only when an editor paints weather
 
@@ -2465,8 +2484,8 @@
       btn.setAttribute('aria-expanded', 'true');
       this._updateScrim();
       this.fvEl.focus({ preventScroll: true });
-      var reads = [this.fetchFreeMonth(this.view.y, this.view.m)];
-      if (!this.freeDirector) reads.push(this.fetchMine());
+      var reads = [this.fetchFreeMonth(this.view.y, this.view.m), this.fetchAnswers()];
+      if (!this.freeDirector) reads.push(this.fetchMine(), this.fetchAway());
       Promise.all(reads).then(function () { self.refreshFreeView(); });
     },
 
@@ -2665,17 +2684,210 @@
           (wk.away.length ? ' ' + wk.away.map(function (a) { return esc(a.name) + ' is away ' + esc(listWords(a.dates)); }).join('. ') + '.' : '') + '</p>';
       }
       h += '</section><section class="fvsec fvwho"><h4>Players</h4>';
-      if (roster) {
-        var silent = roster.filter(function (mem) { return !mem.answered; }).length;
-        h += '<ul class="fvroster">' + roster.map(function (mem) {
-          return '<li><span>' + esc(mem.name) + '</span><span class="' + (mem.answered ? 'ok' : 'wait') + '">' + (mem.answered ? 'Hours given' : 'No hours yet') + '</span></li>';
-        }).join('') + '</ul>';
-        if (silent) h += '<p class="fnote">' + (silent === 1 ? '1 player hasn’t' : silent + ' players haven’t') + ' painted hours yet. <button type="button" class="btn sm" data-best-nudge><i class="fa-solid fa-bell"></i> Remind them</button></p>';
-      }
+      if (roster) h += this._fvRosterHTML(roster);
       h += '</section><section class="fvsec fvfoot">' +
         '<label class="fvsw"><input type="checkbox" data-fv-lines' + (this.showFree ? ' checked' : '') + '><span>Show who’s free on the days</span></label>' +
         '<span class="fvlinks"><button type="button" class="lnk" data-fv-planner="mine">Change my hours</button><button type="button" class="btn sm" data-fv-planner="team"><i class="fa-solid fa-up-right-and-down-left-from-center"></i> Open the full planner</button></span></section>';
       return h;
+    },
+
+    // The Director's players: each one's state, with a reminder for that
+    // one player, and the ask that has everyone confirm their times. After
+    // an ask, a player's state is whether they have confirmed since.
+    _fvRosterHTML: function (roster) {
+      var self = this, ans = this.answers || {}, asked = ans.askedAt || '', byId = {};
+      (ans.members || []).forEach(function (a) { byId[a.userId] = a; });
+      var done = 0, askedOf = 0, silent = 0;
+      var rows = roster.map(function (mem) {
+        var a = byId[mem.userId] || {}, st, cls;
+        var conf = !!(asked && a.answeredAt && a.answeredAt >= asked);
+        if (!mem.answered) { st = 'No hours yet'; cls = 'wait'; silent++; }
+        else if (asked) { st = conf ? 'Confirmed' : 'Not confirmed yet'; cls = conf ? 'ok' : 'wait'; }
+        else { st = 'Hours given'; cls = 'ok'; }
+        if (asked && mem.userId !== self.userId) { askedOf++; if (conf) done++; }
+        var sent = self._reminded && self._reminded[mem.userId];
+        var act = mem.userId === self.userId ? '<span class="fvme">You</span>'
+          : '<button type="button" class="ib fvbell" data-remind="' + esc(mem.userId) + '"' + (sent ? ' disabled' : '') + ' aria-label="' + esc((sent ? 'Reminded ' : 'Remind ') + mem.name) + '" title="' + esc(sent ? 'Reminded' : 'Remind ' + mem.name + ' to check their times') + '"><i class="fa-solid ' + (sent ? 'fa-check' : 'fa-bell') + '"></i></button>';
+        return '<li><span class="nm">' + esc(mem.name) + '</span><span class="' + cls + '">' + st + '</span>' + act + '</li>';
+      });
+      var h = '<ul class="fvroster">' + rows.join('') + '</ul>';
+      h += '<div class="fvask">';
+      if (asked) {
+        h += '<p><b>' + done + ' of ' + askedOf + '</b> confirmed since you asked on ' + esc(realDateWords(asked.slice(0, 10)).replace(/^\w+ /, '')) + '.</p>';
+      } else {
+        h += '<p>Ask everyone to check their times are still right, on the site and by email.</p>';
+      }
+      h += '<span class="fvaskb"><button type="button" class="btn sm" data-ask-confirm><i class="fa-solid fa-clipboard-check"></i> ' + (asked ? 'Ask again' : 'Ask everyone to confirm') + '</button>' +
+        (silent ? '<button type="button" class="btn sm quiet" data-best-nudge><i class="fa-solid fa-bell"></i> Remind ' + (silent === 1 ? 'the 1 without hours' : 'the ' + silent + ' without hours') + '</button>' : '') + '</span></div>';
+      return h;
+    },
+
+    fetchAnswers: function (fresh) {
+      var self = this;
+      if (this._answersPromise && !fresh) return this._answersPromise;
+      this._answersPromise = Chronicle.apiFetch('/campaigns/' + encodeURIComponent(this.campaignId) + '/availability/answers')
+        .then(function (resp) { return resp.ok ? resp.json() : null; })
+        .then(function (a) { self.answers = a || { members: [], askedAt: '' }; })
+        .catch(function () { self.answers = self.answers || { members: [], askedAt: '' }; });
+      return this._answersPromise;
+    },
+
+    // The player's side of an ask: the DM asked, their hours are saved, and
+    // they have not confirmed since.
+    _confirmDue: function () {
+      var a = this.answers || {}, mine = this.mine;
+      return !!(a.askedAt && mine && mine.answered && !(mine.answeredAt && mine.answeredAt >= a.askedAt));
+    },
+
+    // --- Away: whole days a player can't play, set ahead of time ---------
+    // Stored as the Availability page's own days off, one per date; read
+    // back here as stretches of consecutive days.
+    fetchAway: function (fresh) {
+      var self = this;
+      if (this._awayPromise && !fresh) return this._awayPromise;
+      this._awayPromise = Chronicle.apiFetch('/campaigns/' + encodeURIComponent(this.campaignId) + '/availability/exceptions')
+        .then(function (resp) { return resp.ok ? resp.json() : []; })
+        .then(function (list) { self.away = awayStretches(Array.isArray(list) ? list : [], self._todayIso() || localIso(new Date())); })
+        .catch(function () { self.away = self.away || []; });
+      return this._awayPromise;
+    },
+
+    _awayHTML: function () {
+      var away = this.away, h = '<div class="fvaway"><h5>Away</h5>';
+      if (away === undefined) return h + '<p class="none">Loading…</p></div>';
+      if (away.length) {
+        h += '<ul class="fvawl">' + away.map(function (a) {
+          var words = a.from === a.to ? realDateWords(a.from) : realDateWords(a.from) + ' to ' + realDateWords(a.to);
+          return '<li><span>' + esc(words) + '</span><button type="button" class="lnk" data-away-clear="' + esc(a.from + '_' + a.to) + '" aria-label="' + esc('Clear away ' + words) + '">Clear</button></li>';
+        }).join('') + '</ul>';
+      }
+      if (this._awayForm) {
+        var f = this._awayForm;
+        h += '<form class="fvawf" data-away-form novalidate>' +
+          '<label class="fld"><span>First day</span><input type="date" name="from" value="' + esc(f.from) + '" required></label>' +
+          '<label class="fld"><span>Last day</span><input type="date" name="to" value="' + esc(f.to) + '" required></label>' +
+          '<p class="gperr" role="alert"' + (f.error ? '' : ' hidden') + '>' + esc(f.error || '') + '</p>' +
+          '<span class="fvawa"><button type="submit" class="btn sm primary">Mark me away</button><button type="button" class="btn sm quiet" data-away-cancel>Cancel</button></span></form>';
+      } else {
+        h += (away.length ? '' : '<p class="fnote">Going somewhere? Mark the days and game nights and Best times leave you out.</p>') +
+          '<button type="button" class="btn sm" data-away-new><i class="fa-solid fa-plane"></i> I’m away…</button>';
+      }
+      return h + '</div>';
+    },
+
+    // A press on any of the time tools in the Who's free view or the
+    // planner's My hours. Returns true when it handled the press.
+    _timeToolClick: function (e, redraw) {
+      var self = this, t = e.target, base = '/campaigns/' + encodeURIComponent(this.campaignId) + '/availability';
+      var remind = t.closest('[data-remind]');
+      if (remind) {
+        remind.disabled = true;
+        Chronicle.apiFetch(base + '/nudge', { method: 'POST', body: { userId: remind.dataset.remind } })
+          .then(function (resp) { return resp.ok ? resp.json() : Promise.reject(); })
+          .then(function (res) {
+            self._reminded = self._reminded || {};
+            self._reminded[remind.dataset.remind] = true;
+            self.say('Reminded ' + ((res && res.notified || [])[0] || 'them') + ' to check their times.');
+            redraw();
+          })
+          .catch(function () { remind.disabled = false; self.say('That reminder could not be sent. Try again.'); });
+        return true;
+      }
+      var ask = t.closest('[data-ask-confirm]');
+      if (ask) {
+        ask.disabled = true;
+        Chronicle.apiFetch(base + '/nudge', { method: 'POST', body: { ask: 'confirm' } })
+          .then(function (resp) { return resp.ok ? resp.json() : Promise.reject(); })
+          .then(function (res) {
+            var n = (res && res.notified || []).length;
+            self.say(n ? 'Asked ' + n + (n === 1 ? ' player' : ' players') + ' to confirm their times.' : 'There is nobody to ask yet.');
+            return self.fetchAnswers(true);
+          })
+          .then(redraw)
+          .catch(function () { ask.disabled = false; self.say('That ask could not be sent. Try again.'); });
+        return true;
+      }
+      var conf = t.closest('[data-confirm-mine]');
+      if (conf) {
+        conf.disabled = true;
+        Chronicle.apiFetch(base + '/confirm', { method: 'POST' })
+          .then(function (resp) { return resp.ok ? resp.json() : Promise.reject(); })
+          .then(function () {
+            if (self.mine) self.mine.answeredAt = new Date().toISOString().replace(/\.\d+Z$/, 'Z');
+            self.say('Thanks. Your times are confirmed.');
+            redraw();
+          })
+          .catch(function () { conf.disabled = false; self.say('That could not be saved. Try again.'); });
+        return true;
+      }
+      if (t.closest('[data-away-new]')) {
+        var from = this._todayIso() || localIso(new Date());
+        this._awayForm = { from: from, to: isoAddDays(from, 6) };
+        redraw();
+        var first = this._awayFocus(); if (first) first.focus();
+        return true;
+      }
+      if (t.closest('[data-away-cancel]')) { this._awayForm = null; redraw(); return true; }
+      var clear = t.closest('[data-away-clear]');
+      if (clear) {
+        var p = clear.dataset.awayClear.split('_');
+        clear.disabled = true;
+        this._awaySend('/away/clear', 'POST', p[0], p[1]).then(function (err) {
+          if (err) { clear.disabled = false; self.say(err); return; }
+          self.say('Cleared. Those days follow your usual hours again.');
+          redraw();
+        });
+        return true;
+      }
+      return false;
+    },
+
+    // An away form left open holds its panel against a stray press outside,
+    // and says why. Returns true when it held.
+    _awayHolds: function (redraw) {
+      if (!this._awayForm) return false;
+      var root = this.plannerOpen() ? this.plEl : this.fvEl, form = root && root.querySelector('[data-away-form]');
+      if (form) { this._awayForm.from = form.elements.from.value; this._awayForm.to = form.elements.to.value; }
+      this._awayForm.error = 'You haven’t marked these days yet. Press Mark me away, or Cancel.';
+      redraw();
+      var err = root && root.querySelector('[data-away-form] .gperr');
+      if (err) err.classList.add('shake');
+      return true;
+    },
+
+    _awayFocus: function () {
+      var root = this.plannerOpen() ? this.plEl : this.fvEl;
+      return root && root.querySelector('[data-away-form] input');
+    },
+
+    _awaySubmit: function (form, redraw) {
+      var self = this, from = form.elements.from.value, to = form.elements.to.value;
+      var bad = !/^\d{4}-\d{2}-\d{2}$/.test(from) || !/^\d{4}-\d{2}-\d{2}$/.test(to) ? 'Pick the first and last day.' : to < from ? 'The last day can’t be before the first.' : '';
+      if (bad) { this._awayForm = { from: from, to: to, error: bad }; redraw(); return; }
+      form.querySelector('[type="submit"]').disabled = true;
+      this._awaySend('/away', 'PUT', from, to).then(function (err) {
+        if (err) { self._awayForm = { from: from, to: to, error: err }; redraw(); return; }
+        self._awayForm = null;
+        self.say('Marked away ' + realDateWords(from) + (to !== from ? ' to ' + realDateWords(to) : '') + '.');
+        redraw();
+      });
+    },
+
+    // Writes or clears a stretch, then rereads what it changes: the
+    // player's own days off and the free hours of the weeks shown.
+    _awaySend: function (path, method, from, to) {
+      var self = this, zone = (this.mine && this.mine.tz) || browserZone() || 'UTC';
+      return Chronicle.apiFetch('/campaigns/' + encodeURIComponent(this.campaignId) + '/availability' + path, { method: method, body: { from: from, to: to, tz: zone } })
+        .then(function (resp) {
+          if (!resp.ok) return resp.json().then(function (j) { return (j && j.error) || 'That could not be saved.'; }, function () { return 'That could not be saved.'; });
+          self.freeByDate = {};
+          self._freeWeeks = {};
+          return Promise.all([self.fetchAway(true), self.fetchFreeMonth(self.view.y, self.view.m)]).then(function () {
+            if (self.showFree) self._paintMonth();
+            return '';
+          });
+        })
+        .catch(function () { return 'Could not reach Chronicle. Try again.'; });
     },
 
     _fvPlayerHTML: function (y, m) {
@@ -2685,8 +2897,12 @@
         h += '<p class="fvlead">You haven’t given your hours yet. The DM uses them to pick game nights.</p>' +
           '<button type="button" class="btn fvgo" data-fv-planner="mine"><i class="fa-solid fa-user-pen"></i> Give my hours</button>';
       } else {
-        h += this._mineWeekHTML(mine) + '<button type="button" class="btn sm" data-fv-planner="mine"><i class="fa-solid fa-user-pen"></i> Change my hours</button>';
+        if (this._confirmDue()) h += '<p class="fvdue"><i class="fa-solid fa-clipboard-check"></i> The DM asked everyone to check their times are still right.</p>';
+        h += this._mineWeekHTML(mine) + '<span class="fvmb">' +
+          (this._confirmDue() ? '<button type="button" class="btn sm primary" data-confirm-mine><i class="fa-solid fa-check"></i> My times are still right</button>' : '') +
+          '<button type="button" class="btn sm" data-fv-planner="mine"><i class="fa-solid fa-user-pen"></i> Change my hours</button></span>';
       }
+      h += this._awayHTML();
       h += '</section><section class="fvsec fvnights"><h4>Game nights this month</h4>';
       var today = this._todayIso(), rows = [];
       for (var d = 1; d <= CalDate.monthDays(this.cal, m - 1, y); d++) {
@@ -2739,11 +2955,17 @@
         this.plEl.tabIndex = -1;
         dock.appendChild(this.plEl);
         this.plEl.addEventListener('click', function (e) { self._plClick(e); });
+        this.plEl.addEventListener('submit', function (e) {
+          var form = e.target.closest('[data-away-form]');
+          if (!form) return;
+          e.preventDefault();
+          self._awaySubmit(form, function () { self.refreshPlanner(); });
+        });
         this.plEl.addEventListener('pointerdown', function (e) { self._paintStart(e); });
         this.plEl.addEventListener('pointerover', function (e) { self._paintMove(e); });
         this._plUp = function () { self._paintEnd(); };
         document.addEventListener('pointerup', this._plUp);
-        this.plScrim.addEventListener('click', function () { if (self.plannerOpen()) self.closePlanner(); });
+        this.plScrim.addEventListener('click', function () { if (self.plannerOpen() && !self._awayHolds(function () { self.refreshPlanner(); })) self.closePlanner(); });
       }
       this._plBack = back;
       this._plWeek = this._plWeek || isoMonday(this._todayIso() || (this.view.y + '-' + pad2(this.view.m) + '-01'));
@@ -2752,7 +2974,7 @@
       this.plEl.classList.add('open');
       this.dockEl.classList.add('on');
       setTimeout(function () { self.plEl.focus({ preventScroll: true }); }, reducedMotion() ? 20 : 260);
-      var reads = [this.fetchFreeWeek(this._plWeek), this.fetchFreeMonth(this.view.y, this.view.m), this.fetchMine()];
+      var reads = [this.fetchFreeWeek(this._plWeek), this.fetchFreeMonth(this.view.y, this.view.m), this.fetchMine(), this.fetchAnswers(), this.fetchAway()];
       Promise.all(reads).then(function () { self._plLoadGrid(); self.refreshPlanner(); });
     },
 
@@ -2916,6 +3138,7 @@
       }
       h += '<div class="plsave"><button type="button" class="btn primary" data-pl-save' + (this._plDirty ? '' : ' disabled') + '>Save my hours</button><span class="plstat" role="status">' + esc(this._plStatus || '') + '</span></div>';
       h += '<p class="dnote">A day that’s different, or a day you can’t play: open that day in the calendar.</p></section>';
+      h += '<section class="dsec">' + this._awayHTML() + '</section>';
       return h;
     },
 
@@ -2992,6 +3215,7 @@
       if (lines) { this.setShowFree(lines.checked); return; }
       var nudge = t.closest('[data-best-nudge]');
       if (nudge) { this._fvHandleClick(e); return; }
+      if (this._timeToolClick(e, function () { self.refreshPlanner(); })) return;
       var go = t.closest('[data-pl-day], [data-best-open]');
       if (go) {
         var key = go.dataset.plDay || go.dataset.bestOpen, night = go.dataset.plNight || go.dataset.bestNight || null;
@@ -3007,6 +3231,8 @@
     _fvHandleClick: function (e) {
       var self = this, open = e.target.closest('[data-best-open]'), nudge = e.target.closest('[data-best-nudge]');
       if (e.target.closest('[data-close]')) { this.closeFreeView(); return; }
+      var redraw = this.plannerOpen() ? function () { self.refreshPlanner(); } : function () { self.refreshFreeView(); };
+      if (this._timeToolClick(e, redraw)) return;
       var pl = e.target.closest('[data-fv-planner]');
       if (pl) { this.openPlanner({ paint: pl.dataset.fvPlanner === 'mine' }); return; }
       if (open) {
@@ -3096,13 +3322,105 @@
       this.calEl.style.setProperty('--cols', weekdays.length || 7);
     },
 
-    renderToday: function () {
+    renderToday: function (bump) {
       var cal = this.cal;
       var el = $('#cal5-todaypill', this.el);
       var mc = CalDate.monthCount(cal), m0 = ((cal.current_month - 1) % mc + mc) % mc;
       var monthDef = (cal.months || [])[m0];
       var label = (monthDef ? monthDef.name : cal.current_month) + ' ' + cal.current_day + ', ' + cal.current_year;
-      el.innerHTML = '<span class="tl">Today</span><span class="td">' + esc(label) + '</span>';
+      if (!this._canSetToday()) {
+        el.classList.remove('step');
+        el.innerHTML = '<span class="tl">Today</span><span class="td">' + esc(label) + '</span>';
+        return;
+      }
+      // The DM moves the world's today here: a day back or on with the
+      // arrows, or any date and time from the date itself.
+      var t = this._todayTimeWords();
+      el.classList.add('step');
+      el.innerHTML = '<span class="tl">Today</span>' +
+        '<button type="button" class="sb" data-today-step="-1" aria-label="Move today back a day"><i class="fa-solid fa-chevron-left"></i></button>' +
+        '<button type="button" class="td tdset' + (bump ? ' bump' : '') + '" data-today-set aria-haspopup="dialog" title="Set the world’s date and time">' + esc(label) + (t ? '<span class="tt">' + esc(t) + '</span>' : '') + '</button>' +
+        '<button type="button" class="sb" data-today-step="1" aria-label="Move today on a day"><i class="fa-solid fa-chevron-right"></i></button>';
+    },
+
+    // --------------------------------------------------------------
+    // Set today: the owner moves a world calendar's current date and time.
+    // A real-world calendar follows the clock, so it has nothing to set.
+    // --------------------------------------------------------------
+    _canSetToday: function () {
+      return this.role >= 3 && !!this.apiBase && !CalDate.usesRealTime(this.cal);
+    },
+
+    _hoursPerDay: function () { return this.cal.hours_per_day > 0 ? this.cal.hours_per_day : 24; },
+    _minutesPerHour: function () { return this.cal.minutes_per_hour > 0 ? this.cal.minutes_per_hour : 60; },
+
+    // "3:05pm" on a 24-hour day, "Hour 13:05" on any other.
+    _todayTimeWords: function () {
+      var c = this.cal, h = c.current_hour || 0, mm = c.current_minute || 0;
+      if (c.current_hour == null) return '';
+      return this._hoursPerDay() === 24 && this._minutesPerHour() === 60 ? ampm(h * 60 + mm) : 'Hour ' + h + ':' + pad2(mm);
+    },
+
+    showSetToday: function (btn) {
+      var self = this, c = this.cal, mc = CalDate.monthCount(c);
+      this._popBtn = btn;
+      var months = (c.months || []).map(function (mo, i) {
+        return '<option value="' + (i + 1) + '"' + (i + 1 === c.current_month ? ' selected' : '') + '>' + esc(mo.name || 'Month ' + (i + 1)) + '</option>';
+      }).join('') || Array.from({ length: mc }, function (_, i) { return '<option value="' + (i + 1) + '">' + (i + 1) + '</option>'; }).join('');
+      this.popEl.innerHTML = '<div class="crease"><span>Today in the world</span><button type="button" class="x" data-close aria-label="Close">✕</button></div>' +
+        '<form class="settoday" data-today-form novalidate>' +
+          '<div class="strow3"><label class="fld"><span>Month</span><select name="month">' + months + '</select></label>' +
+          '<label class="fld"><span>Day</span><input type="number" name="day" inputmode="numeric" min="1" value="' + esc(String(c.current_day)) + '"></label>' +
+          '<label class="fld"><span>Year</span><input type="number" name="year" inputmode="numeric" value="' + esc(String(c.current_year)) + '"></label></div>' +
+          '<div class="strow2"><label class="fld"><span>Hour</span><input type="number" name="hour" inputmode="numeric" min="0" max="' + (this._hoursPerDay() - 1) + '" value="' + (c.current_hour || 0) + '"></label>' +
+          '<label class="fld"><span>Minute</span><input type="number" name="minute" inputmode="numeric" min="0" max="' + (this._minutesPerHour() - 1) + '" value="' + (c.current_minute || 0) + '"></label></div>' +
+          '<p class="stn">Players see the new date at once. Game nights move with it, since they sit beside the world’s today.</p>' +
+          '<p class="sterr" role="alert" hidden></p>' +
+          '<div class="sta"><button type="submit" class="btn sm primary">Set today</button><button type="button" class="btn sm quiet" data-close>Cancel</button></div>' +
+        '</form>';
+      growOpen(this.popEl, btn, this.calEl);
+      this._updateScrim();
+      setTimeout(function () { var f = self.popEl.querySelector('select'); if (f) f.focus({ preventScroll: true }); }, reducedMotion() ? 20 : 230);
+    },
+
+    _readTodayForm: function (form) {
+      var n = function (k) { var v = form.elements[k].value.trim(); return /^-?\d+$/.test(v) ? parseInt(v, 10) : NaN; };
+      var d = { y: n('year'), m: n('month'), d: n('day'), h: n('hour'), mi: n('minute') };
+      if ([d.y, d.m, d.d, d.h, d.mi].some(isNaN)) return { error: 'Fill in every box with a number.' };
+      var len = CalDate.monthDays(this.cal, d.m - 1, d.y);
+      if (d.d < 1 || d.d > len) return { error: 'That month has ' + len + ' days.' };
+      if (d.h < 0 || d.h >= this._hoursPerDay()) return { error: 'The hour runs from 0 to ' + (this._hoursPerDay() - 1) + '.' };
+      if (d.mi < 0 || d.mi >= this._minutesPerHour()) return { error: 'The minute runs from 0 to ' + (this._minutesPerHour() - 1) + '.' };
+      return d;
+    },
+
+    // _saveToday writes the world's new today and, once it is stored,
+    // redraws everything that hangs off it. Resolves to an error message or ''.
+    _saveToday: function (d) {
+      var self = this;
+      var body = { current_year: d.y, current_month: d.m, current_day: d.d, current_hour: d.h, current_minute: d.mi };
+      return Chronicle.apiFetch(this.apiBase, { method: 'PUT', body: body })
+        .then(function (resp) {
+          if (!resp.ok) return resp.json().then(function (j) { return (j && (j.error || j.message)) || 'Could not set today.'; }, function () { return 'Could not set today.'; });
+          Object.assign(self.cal, body);
+          self._anchor = realAnchor(self.cal);
+          self.nightsByMonth = {};
+          self.renderToday(true);
+          self.goToday();
+          self.say('Today is now ' + $('#cal5-todaypill .tdset', self.el).textContent + '.');
+          return '';
+        })
+        .catch(function () { return 'Could not reach Chronicle. Try again.'; });
+    },
+
+    _stepToday: function (delta) {
+      if (this._todayBusy) return;
+      var self = this, c = this.cal, next = CalDate.addDays(c, { y: c.current_year, m: c.current_month, d: c.current_day }, delta);
+      this._todayBusy = true;
+      this._saveToday({ y: next.y, m: next.m, d: next.d, h: c.current_hour || 0, mi: c.current_minute || 0 }).then(function (err) {
+        self._todayBusy = false;
+        if (err) self._toast(err);
+      });
     },
 
     renderLegend: function () {
@@ -3608,6 +3926,12 @@
         if (self.fvEl.classList.contains('open')) self.closeFreeView(); else self.openFreeView();
       });
       this.fvEl.addEventListener('click', function (e) { self._fvHandleClick(e); });
+      this.fvEl.addEventListener('submit', function (e) {
+        var form = e.target.closest('[data-away-form]');
+        if (!form) return;
+        e.preventDefault();
+        self._awaySubmit(form, function () { self.refreshFreeView(); });
+      });
       this.fvEl.addEventListener('change', function (e) {
         if (e.target.matches('[data-fv-lines]')) self.setShowFree(e.target.checked);
       });
@@ -3722,6 +4046,27 @@
       this.popEl.addEventListener('click', function (e) {
         if (e.target.closest('[data-close]')) self.closePop();
       });
+      this.popEl.addEventListener('submit', function (e) {
+        var form = e.target.closest('[data-today-form]');
+        if (!form) return;
+        e.preventDefault();
+        var d = self._readTodayForm(form), err = form.querySelector('.sterr'), go = form.querySelector('[type="submit"]');
+        if (d.error) { err.textContent = d.error; err.hidden = false; return; }
+        go.disabled = true;
+        self._saveToday(d).then(function (msg) {
+          go.disabled = false;
+          if (msg) { err.textContent = msg; err.hidden = false; return; }
+          self.closePop();
+        });
+      });
+      $('#cal5-todaypill', this.el).addEventListener('click', function (e) {
+        var step = e.target.closest('[data-today-step]');
+        if (step) { self._stepToday(parseInt(step.dataset.todayStep, 10)); return; }
+        var set = e.target.closest('[data-today-set]');
+        if (!set) return;
+        if (self.popEl.classList.contains('open')) { self.closePop(); return; }
+        self.showSetToday(set);
+      });
 
       // Keyboard: arrows move the roving day, T jumps to today, Page
       // Up/Down change month, Enter/Space open the focused day.
@@ -3782,7 +4127,8 @@
         if (!(t instanceof Element) || self.evpEl.contains(t)) return;
         var inside = self.el.contains(t);
         if (inside && self.mvEl.classList.contains('open') && !self.mvEl.contains(t) && !t.closest('#cal5-moonbtn, .msil, .mrow')) self.closeMoonView();
-        if (inside && self.fvEl.classList.contains('open') && !self.fvEl.contains(t) && !t.closest('#cal5-freebtn')) self.closeFreeView();
+        if (inside && self.fvEl.classList.contains('open') && !self.fvEl.contains(t) && !t.closest('#cal5-freebtn') && !self._awayHolds(function () { self.refreshFreeView(); })) self.closeFreeView();
+        if (self.popEl.classList.contains('open') && !self.popEl.contains(t) && !t.closest('#cal5-hub, #cal5-todaypill')) self._popOff();
         if (!self.wingFor || self.wingEl.contains(t) || self.wingEl.querySelector('form')) return;
         if ((inside ? !t.closest('.day[data-key], #cal5-freebtn') :
             !t.closest('dialog, [role="dialog"], [aria-modal="true"]')) && !self._rollHolds()) self.closeWing();
@@ -4373,6 +4719,7 @@
 
     showHub: function () {
       var self = this, btn = $('#cal5-hub', this.el);
+      this._popBtn = btn;
       this.popEl.innerHTML = '<div class="crease"><span>Calendars</span><button type="button" class="x" data-close aria-label="Close">✕</button></div><div class="list"><p class="none" style="padding:10px">Loading…</p></div>';
       growOpen(this.popEl, btn, this.calEl);
       btn.setAttribute('aria-expanded', 'true');
@@ -4397,10 +4744,31 @@
         });
     },
 
+    // A press outside the popover closes it, unless it holds a date being
+    // set: then it stays and says so, so a stray press never loses it.
+    _popOff: function () {
+      var form = this.popEl.querySelector('[data-today-form]');
+      if (form && this._todayFormDirty(form)) {
+        var err = form.querySelector('.sterr');
+        err.textContent = 'You haven’t set this date yet. Press Set today, or Cancel.';
+        err.hidden = false;
+        err.classList.remove('shake'); void err.offsetWidth; err.classList.add('shake');
+        return;
+      }
+      this.closePop();
+    },
+
+    _todayFormDirty: function (form) {
+      var c = this.cal, v = function (k) { return form.elements[k].value.trim(); };
+      return v('year') !== String(c.current_year) || v('month') !== String(c.current_month) || v('day') !== String(c.current_day) ||
+        v('hour') !== String(c.current_hour || 0) || v('minute') !== String(c.current_minute || 0);
+    },
+
     closePop: function () {
       if (!this.popEl.classList.contains('open')) return;
-      var btn = $('#cal5-hub', this.el);
-      btn.setAttribute('aria-expanded', 'false');
+      var btn = this._popBtn && this._popBtn.isConnected ? this._popBtn : $('#cal5-hub', this.el);
+      $('#cal5-hub', this.el).setAttribute('aria-expanded', 'false');
+      this._popBtn = null;
       growClose(this.popEl, btn);
       this._updateScrim();
     }
@@ -4411,6 +4779,6 @@
   // Go model's own values without a browser DOM. `module` is undefined when
   // loaded via <script>, so this is a no-op in the browser.
   if (typeof module !== 'undefined' && module.exports) {
-    module.exports = { CalDate: CalDate, MoonMath: MoonMath, EraMath: EraMath, weatherMarkHTML: weatherMarkHTML, weatherFactHTML: weatherFactHTML, weatherPaintHTML: weatherPaintHTML, forecastMarkHTML: forecastMarkHTML, forecastFactHTML: forecastFactHTML, forecastDetailText: forecastDetailText, playersSeeHTML: playersSeeHTML, weatherIcon: weatherIcon };
+    module.exports = { CalDate: CalDate, MoonMath: MoonMath, EraMath: EraMath, weatherMarkHTML: weatherMarkHTML, weatherFactHTML: weatherFactHTML, weatherPaintHTML: weatherPaintHTML, forecastMarkHTML: forecastMarkHTML, forecastFactHTML: forecastFactHTML, forecastDetailText: forecastDetailText, playersSeeHTML: playersSeeHTML, weatherIcon: weatherIcon, awayStretches: awayStretches };
   }
 })();
