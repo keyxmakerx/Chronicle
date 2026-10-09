@@ -423,11 +423,20 @@ func TestCampaignExportImport_Pictures_DBRoundTrip(t *testing.T) {
 		t.Errorf("round trip reported losses:\n%s", body)
 	}
 
-	// The JSON export carries no picture bytes; importing it says so.
-	_, jsonBody := h.importBlob(h.newUser("json-importer"), "campaign.json", h.export(src, owner, "", "application/json"))
-	for _, want := range []string{"Imported with losses", "5 media files", "2 page pictures"} {
+	// The JSON export carries no picture bytes; importing it says so, and the
+	// new campaign's map and token do not point at the source campaign's files.
+	jsonID, jsonBody := h.importBlob(h.newUser("json-importer"), "campaign.json", h.export(src, owner, "", "application/json"))
+	for _, want := range []string{"Imported with losses", "5 media files", "2 page pictures", "2 map pictures"} {
 		if !strings.Contains(jsonBody, want) {
 			t.Errorf("JSON import response does not mention %q:\n%s", want, jsonBody)
 		}
+	}
+	var jsonMapImage, jsonTokenImage sql.NullString
+	if err := h.db.QueryRow(`SELECT m.image_id, t.image_path FROM maps m JOIN map_tokens t ON t.map_id = m.id WHERE m.campaign_id = ?`,
+		jsonID).Scan(&jsonMapImage, &jsonTokenImage); err != nil {
+		t.Fatalf("JSON-imported map not found: %v", err)
+	}
+	if jsonMapImage.Valid || jsonTokenImage.Valid {
+		t.Errorf("JSON import kept the source campaign's map pictures: map %q, token %q", jsonMapImage.String, jsonTokenImage.String)
 	}
 }

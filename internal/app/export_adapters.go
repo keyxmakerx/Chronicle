@@ -15,6 +15,7 @@ import (
 	"sort"
 	"strings"
 
+	"github.com/google/uuid"
 	"github.com/keyxmakerx/chronicle/internal/apperror"
 	"github.com/keyxmakerx/chronicle/internal/patch"
 	"github.com/keyxmakerx/chronicle/internal/permissions"
@@ -1359,15 +1360,8 @@ func (a *entityImportAdapter) restoreEntityPicture(ctx context.Context, entityID
 	if path == nil || *path == "" {
 		return 0
 	}
-	id := mediaIDFromPath(*path)
-	restored := false
-	for _, newID := range idMap.MediaIDs {
-		if newID == id {
-			restored = true
-			break
-		}
-	}
-	if !restored {
+	id, ok := restoredMediaID(idMap, *path)
+	if !ok {
 		return 1
 	}
 	if err := set(ctx, entityID, id); err != nil {
@@ -1375,6 +1369,20 @@ func (a *entityImportAdapter) restoreEntityPicture(ctx context.Context, entityID
 		report.Fail("entities", "page picture", name, apperror.SafeMessage(err))
 	}
 	return 0
+}
+
+// restoredMediaID returns the media id a picture reference names when that
+// file was restored into the new campaign by this import. Anything else
+// (a file the upload did not carry, or an id from some other campaign) is
+// not ok, so an import can never point a picture at a file it does not own.
+func restoredMediaID(idMap *campaigns.IDMap, path string) (string, bool) {
+	id := mediaIDFromPath(path)
+	for _, newID := range idMap.MediaIDs {
+		if newID == id {
+			return id, true
+		}
+	}
+	return "", false
 }
 
 // mediaIDFromPath reduces a stored picture reference to its media id: older
@@ -2273,14 +2281,45 @@ type mapImportAdapter struct {
 	drawingSvc maps.DrawingService
 }
 
-// ImportMaps creates maps from import data.
+// importTokenImage keeps a token picture that names no media file (an
+// inline data: image, a bundled icon) as it is, and one that names a media
+// file only when this import restored that file; ok is false when a media
+// picture was dropped.
+func importTokenImage(idMap *campaigns.IDMap, path *string) (*string, bool) {
+	if path == nil || *path == "" {
+		return path, true
+	}
+	if uuid.Validate(mediaIDFromPath(*path)) != nil {
+		return path, true
+	}
+	if _, ok := restoredMediaID(idMap, *path); ok {
+		return path, true
+	}
+	return nil, false
+}
+
+// ImportMaps creates maps from import data. A map background or token
+// picture is kept only when it names a file this import restored.
 func (a *mapImportAdapter) ImportMaps(ctx context.Context, campaignID, userID string, data []campaigns.ExportMap, idMap *campaigns.IDMap, report *campaigns.ImportReport) error {
+	missingPictures := 0
+	defer func() {
+		report.FailN("maps", "map picture", "",
+			"its picture file was not in the upload; import the ZIP export to keep pictures", missingPictures)
+	}()
 	for _, m := range data {
+		var imageID *string
+		if m.ImageID != nil && *m.ImageID != "" {
+			if id, ok := restoredMediaID(idMap, *m.ImageID); ok {
+				imageID = &id
+			} else {
+				missingPictures++
+			}
+		}
 		newMap, err := a.mapSvc.CreateMap(ctx, maps.CreateMapInput{
 			CampaignID:  campaignID,
 			Name:        m.Name,
 			Description: m.Description,
-			ImageID:     m.ImageID,
+			ImageID:     imageID,
 			ImageWidth:  m.ImageWidth,
 			ImageHeight: m.ImageHeight,
 		})
@@ -2365,9 +2404,13 @@ func (a *mapImportAdapter) ImportMaps(ctx context.Context, campaignID, userID st
 					layerID = &id
 				}
 			}
+			imagePath, ok := importTokenImage(idMap, t.ImagePath)
+			if !ok {
+				missingPictures++
+			}
 			_, err := a.drawingSvc.CreateToken(ctx, maps.CreateTokenInput{
 				MapID: newMap.ID, LayerID: layerID, EntityID: entityID,
-				Name: t.Name, ImagePath: t.ImagePath,
+				Name: t.Name, ImagePath: imagePath,
 				X: t.X, Y: t.Y, Width: t.Width, Height: t.Height,
 				Rotation: t.Rotation, Scale: t.Scale,
 				IsHidden: t.IsHidden, IsLocked: t.IsLocked,
