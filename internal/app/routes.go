@@ -1364,6 +1364,13 @@ func wireHexFog(mapsService maps.MapService, drawingService maps.DrawingService,
 	events.fog = hexService
 	hexService.SetEventPublisher(events)
 	hexService.SetMapLoader(mapsService.GetMap)
+	// The terrain art lives in the map's display settings; the map service
+	// exposes the narrow write by assertion, as the picture drop below does.
+	if aw, ok := mapsService.(interface {
+		SetHexArt(ctx context.Context, mapID, art string) error
+	}); ok {
+		hexService.SetArtWriter(aw.SetHexArt)
+	}
 	// Fog on a whole-map layer changes who may fetch the original picture, so a
 	// toggle drops the cached answers; the map service exposes the drop by
 	// assertion, as other optional wiring here does.

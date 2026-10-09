@@ -46,6 +46,21 @@ func IsValidTerrain(t string) bool {
 	return false
 }
 
+// HexPiecesPerTerrain is how many pieces (looks) the Realistic art offers for
+// each terrain that has any; a hex's piece column picks one, and NULL ("Mix")
+// lets the viewer pick a stable one from the hex's position. It must match the
+// viewer's PIECES list in static/js/map_hex_art.js.
+const HexPiecesPerTerrain = 12
+
+// PieceCount is how many pieces a terrain offers. A road is a line through its
+// hexes and an unknown kind has no art, so neither has pieces.
+func PieceCount(terrain string) int {
+	if terrain == TerrainRoad || !IsValidTerrain(terrain) {
+		return 0
+	}
+	return HexPiecesPerTerrain
+}
+
 // Limits on what a hex may hold and what one request may change. The cell cap
 // bounds a layer to roughly a 200 x 200 field so one map cannot grow without
 // limit. MaxHexCoord is the highest valid column or row index, so a field is at

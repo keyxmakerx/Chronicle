@@ -21,6 +21,8 @@ type HexCellWrite struct {
 	Name       string // "" with NameSet clears
 	NotesSet   bool
 	Notes      *string // nil with NotesSet clears
+	PieceSet   bool
+	Piece      *int // nil with PieceSet means "Mix"
 }
 
 // HexRepository defines persistence for hex layers and their cells.
@@ -55,6 +57,10 @@ type HexRepository interface {
 	// on first use, bumps the version and returns it. A nil figure keeps its
 	// column, so changing one never writes the other.
 	SetTravel(ctx context.Context, mapID string, perHex, perDay *int) (uint64, error)
+	// BumpVersion raises the layer's version (creating the row on first use)
+	// and returns it, for a change stored elsewhere that viewers must hear
+	// about, such as the map's terrain art.
+	BumpVersion(ctx context.Context, mapID string) (uint64, error)
 	// SetExplored marks hexes explored or unexplored and bumps the version, in
 	// one transaction. Hiding a hex that carries nothing else removes its row so
 	// it stops counting against the map's cell cap.
@@ -184,17 +190,18 @@ func (r *hexRepo) ApplyCells(ctx context.Context, mapID, userID string, writes [
 	// Each flag pair makes the UPDATE branch keep the stored value unless the
 	// caller named the field; the INSERT branch (a hex nobody has touched yet)
 	// takes what was sent, with unnamed fields at their column defaults.
-	const upsert = "INSERT INTO map_hex_cells (map_id, col, `row`, terrain, name, notes, updated_by) " +
-		"VALUES (?, ?, ?, ?, ?, ?, ?) " +
+	const upsert = "INSERT INTO map_hex_cells (map_id, col, `row`, terrain, piece, name, notes, updated_by) " +
+		"VALUES (?, ?, ?, ?, ?, ?, ?, ?) " +
 		"ON DUPLICATE KEY UPDATE " +
 		"terrain = IF(?, VALUES(terrain), terrain), " +
+		"piece = IF(?, VALUES(piece), piece), " +
 		"name = IF(?, VALUES(name), name), " +
 		"notes = IF(?, VALUES(notes), notes), " +
 		"updated_by = VALUES(updated_by)"
 	for _, w := range writes {
 		if _, err := tx.ExecContext(ctx, upsert,
-			mapID, w.Col, w.Row, w.Terrain, w.Name, w.Notes, by,
-			w.TerrainSet, w.NameSet, w.NotesSet); err != nil {
+			mapID, w.Col, w.Row, w.Terrain, w.Piece, w.Name, w.Notes, by,
+			w.TerrainSet, w.PieceSet, w.NameSet, w.NotesSet); err != nil {
 			return 0, apperror.NewInternal(err)
 		}
 	}
@@ -203,7 +210,6 @@ func (r *hexRepo) ApplyCells(ctx context.Context, mapID, userID string, writes [
 	// the row would still count against the map's cell cap, so a cleared hex
 	// could never free its slot. Only touched rows are checked, in this
 	// transaction, so a concurrent writer's row is never swept by mistake.
-	// explored and piece belong to later slices and keep a row alive.
 	for _, w := range writes {
 		if _, err := tx.ExecContext(ctx, "DELETE FROM map_hex_cells WHERE map_id = ? AND col = ? AND `row` = ? "+
 			"AND terrain IS NULL AND name = '' AND notes IS NULL AND piece IS NULL AND explored = 0",
@@ -319,6 +325,25 @@ func (r *hexRepo) SetFog(ctx context.Context, mapID string, enabled bool) (uint6
 		ON DUPLICATE KEY UPDATE fog_enabled = VALUES(fog_enabled), version = version + 1`,
 		mapID, enabled); err != nil {
 		return 0, apperror.NewInternal(err)
+	}
+	v, err := layerVersion(ctx, tx, mapID)
+	if err != nil {
+		return 0, err
+	}
+	if err := tx.Commit(); err != nil {
+		return 0, apperror.NewInternal(err)
+	}
+	return v, nil
+}
+
+func (r *hexRepo) BumpVersion(ctx context.Context, mapID string) (uint64, error) {
+	tx, err := r.db.BeginTx(ctx, nil)
+	if err != nil {
+		return 0, apperror.NewInternal(err)
+	}
+	defer func() { _ = tx.Rollback() }()
+	if err := bumpLayer(ctx, tx, mapID); err != nil {
+		return 0, err
 	}
 	v, err := layerVersion(ctx, tx, mapID)
 	if err != nil {

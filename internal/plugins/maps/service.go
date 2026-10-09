@@ -3,6 +3,7 @@ package maps
 import (
 	"context"
 	"crypto/rand"
+	"encoding/json"
 	"fmt"
 	"log/slog"
 	"regexp"
@@ -377,6 +378,37 @@ func (s *mapService) UpdateMap(ctx context.Context, id string, input UpdateMapIn
 		return fmt.Errorf("update map: %w", err)
 	}
 	s.InvalidateMapPictures(m.CampaignID)
+	return nil
+}
+
+// SetHexArt stores the map's terrain art (display_settings hexes.art). The hex
+// layer calls it so a DM grant, who may not save the rest of the map's
+// settings, can change the art from the Paint mode. Only the art field of the
+// hexes group is written, through the same merge as a settings save, so the
+// party rule and every other group are kept.
+func (s *mapService) SetHexArt(ctx context.Context, mapID, art string) error {
+	if !IsValidHexArt(art) {
+		return apperror.NewValidation("terrain art must be one of: real, detailed, simple")
+	}
+	m, err := s.repo.GetMap(ctx, mapID)
+	if err != nil {
+		return fmt.Errorf("get map for terrain art: %w", err)
+	}
+	if m == nil {
+		return apperror.NewNotFound("map not found")
+	}
+	raw, err := json.Marshal(map[string]map[string]string{"hexes": {"art": art}})
+	if err != nil {
+		return apperror.NewInternal(err)
+	}
+	next, err := MergeDisplaySettings(m.Display, raw)
+	if err != nil {
+		return err
+	}
+	m.Display = next
+	if err := s.repo.UpdateMap(ctx, m); err != nil {
+		return fmt.Errorf("update map terrain art: %w", err)
+	}
 	return nil
 }
 

@@ -26,6 +26,7 @@ type fakeHexRepo struct {
 	count      int // overrides CountCells when non-zero
 	anchorSets int // SetAnchor calls
 	travelSets int // SetTravel calls
+	bumps      int // BumpVersion calls
 
 	// Fog and party writes.
 	exploredWrites [][]HexKey // keys of each SetExplored call
@@ -71,6 +72,13 @@ func (r *fakeHexRepo) ApplyCells(_ context.Context, _, userID string, w []HexCel
 	r.applied = append(r.applied, w)
 	r.by = userID
 	return uint64(len(r.applied)), nil
+}
+
+func (r *fakeHexRepo) BumpVersion(_ context.Context, mapID string) (uint64, error) {
+	r.ensureLayer(mapID)
+	r.layer.Version++
+	r.bumps++
+	return r.layer.Version, nil
 }
 
 // hexSvc builds a service whose map "map-1" belongs to "camp-1".

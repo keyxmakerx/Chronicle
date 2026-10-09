@@ -110,6 +110,20 @@ func TestHexRepository_Integration(t *testing.T) {
 		}
 	})
 
+	t.Run("a version bump creates the layer and touches nothing else", func(t *testing.T) {
+		mapID := newMap()
+		for _, want := range []uint64{1, 2} {
+			v, err := repo.BumpVersion(ctx, mapID)
+			if err != nil || v != want {
+				t.Fatalf("BumpVersion = %d, %v; want %d", v, err, want)
+			}
+		}
+		layer, err := repo.GetLayer(ctx, mapID)
+		if err != nil || layer == nil || layer.Version != 2 || layer.FogEnabled || layer.AnchorDrawingID != nil || layer.MilesPerHex != 6 {
+			t.Fatalf("layer = %+v, %v; want version 2 and every column at its default", layer, err)
+		}
+	})
+
 	t.Run("partial update", func(t *testing.T) {
 		tests := []struct {
 			name        string
@@ -117,22 +131,32 @@ func TestHexRepository_Integration(t *testing.T) {
 			wantTerrain *string
 			wantName    string
 			wantNotes   *string
+			wantPiece   *int
 		}{
-			{"rename keeps terrain and notes",
+			{"rename keeps terrain, piece and notes",
 				HexCellWrite{NameSet: true, Name: "Ashford"},
-				hexStrp("hills"), "Ashford", hexStrp("old road")},
+				hexStrp("hills"), "Ashford", hexStrp("old road"), intp(4)},
 			{"null terrain clears only terrain",
 				HexCellWrite{TerrainSet: true, Terrain: nil},
-				nil, "Old", hexStrp("old road")},
+				nil, "Old", hexStrp("old road"), intp(4)},
 			{"null notes clears only notes",
 				HexCellWrite{NotesSet: true, Notes: nil},
-				hexStrp("hills"), "Old", nil},
+				hexStrp("hills"), "Old", nil, intp(4)},
 			{"empty name clears only name",
 				HexCellWrite{NameSet: true, Name: ""},
-				hexStrp("hills"), "", hexStrp("old road")},
+				hexStrp("hills"), "", hexStrp("old road"), intp(4)},
+			{"a piece replaces only the piece",
+				HexCellWrite{PieceSet: true, Piece: intp(9)},
+				hexStrp("hills"), "Old", hexStrp("old road"), intp(9)},
+			{"a null piece is Mix and clears only the piece",
+				HexCellWrite{PieceSet: true, Piece: nil},
+				hexStrp("hills"), "Old", hexStrp("old road"), nil},
+			{"repainting the terrain keeps the piece",
+				HexCellWrite{TerrainSet: true, Terrain: hexStrp("forest")},
+				hexStrp("forest"), "Old", hexStrp("old road"), intp(4)},
 			{"empty write changes nothing",
 				HexCellWrite{},
-				hexStrp("hills"), "Old", hexStrp("old road")},
+				hexStrp("hills"), "Old", hexStrp("old road"), intp(4)},
 		}
 		for _, tc := range tests {
 			t.Run(tc.name, func(t *testing.T) {
@@ -140,6 +164,7 @@ func TestHexRepository_Integration(t *testing.T) {
 				if _, err := repo.ApplyCells(ctx, mapID, userID, []HexCellWrite{{
 					Col: 2, Row: 3,
 					TerrainSet: true, Terrain: hexStrp("hills"),
+					PieceSet: true, Piece: intp(4),
 					NameSet: true, Name: "Old",
 					NotesSet: true, Notes: hexStrp("old road"),
 				}}); err != nil {
@@ -158,9 +183,9 @@ func TestHexRepository_Integration(t *testing.T) {
 				if !ok {
 					t.Fatal("cell missing")
 				}
-				if !eqStrPtr(c.Terrain, tc.wantTerrain) || c.Name != tc.wantName || !eqStrPtr(c.Notes, tc.wantNotes) {
-					t.Errorf("cell = terrain %v name %q notes %v; want %v %q %v",
-						deref(c.Terrain), c.Name, deref(c.Notes), deref(tc.wantTerrain), tc.wantName, deref(tc.wantNotes))
+				if !eqStrPtr(c.Terrain, tc.wantTerrain) || c.Name != tc.wantName || !eqStrPtr(c.Notes, tc.wantNotes) || !intPtrEq(c.Piece, tc.wantPiece) {
+					t.Errorf("cell = terrain %v name %q notes %v piece %s; want %v %q %v %s",
+						deref(c.Terrain), c.Name, deref(c.Notes), ptrStr(c.Piece), deref(tc.wantTerrain), tc.wantName, deref(tc.wantNotes), ptrStr(tc.wantPiece))
 				}
 			})
 		}

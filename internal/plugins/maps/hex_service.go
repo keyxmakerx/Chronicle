@@ -27,11 +27,14 @@ type HexActor struct {
 // UpdateHexCellInput is one entry of a hex batch. Col and Row name the hex and
 // are required; every other field is presence-aware: absent keeps the stored
 // value, an explicit null clears it, a present value replaces it. A paint
-// stroke sends only terrain, so it cannot touch a hex's name or notes.
+// stroke sends terrain and piece only, so it cannot touch a hex's name or
+// notes. Piece picks one of the terrain's looks (0..PieceCount-1); null is
+// "Mix", where the viewer picks a stable look from the hex's position.
 type UpdateHexCellInput struct {
 	Col     int
 	Row     int
 	Terrain patch.Field[string]
+	Piece   patch.Field[int]
 	Name    patch.Field[string]
 	Notes   patch.Field[string]
 }
@@ -40,23 +43,31 @@ type UpdateHexCellInput struct {
 // keeps, an explicit null clears, a present value replaces. Null on the anchor
 // means "the whole map"; null on fog_enabled means off; null on a travel figure
 // restores its default. A value outside MinTravelMiles..MaxTravelMiles is
-// refused.
+// refused. Art is the map's terrain style (display_settings hexes.art), here
+// so a DM grant, who cannot save the map's settings, can change it from the
+// Paint mode; null restores the default.
 type UpdateHexLayerInput struct {
 	AnchorDrawingID patch.Field[string]
 	FogEnabled      patch.Field[bool]
 	MilesPerHex     patch.Field[int]
 	MilesPerDay     patch.Field[int]
+	Art             patch.Field[string]
 }
 
 // HexLayerView is what a viewer receives: the layer and only the cells their
 // role may see. Hidden is true when the layer's picture is hidden from this
 // viewer; the layer then carries no anchor and no cells, and the client draws
 // no hexes at all rather than falling back to the whole map.
+//
+// Art is the map's terrain style, sent here as well as with the page so a
+// change reaches every open viewer with the next read. It is empty for a
+// hidden layer.
 type HexLayerView struct {
 	Layer   HexLayer  `json:"layer"`
 	Cells   []HexCell `json:"cells"`
 	Version uint64    `json:"version"`
 	Hidden  bool      `json:"hidden"`
+	Art     string    `json:"art,omitempty"`
 }
 
 // HexPictures is the hex layer's view of the map's pictures. It is narrow on
@@ -115,6 +126,7 @@ type HexLayerWriteResult struct {
 	FogEnabled      bool    `json:"fog_enabled"`
 	MilesPerHex     int     `json:"miles_per_hex"`
 	MilesPerDay     int     `json:"miles_per_day"`
+	Art             string  `json:"art,omitempty"`
 }
 
 // HexFogCell names one hex in a reveal or hide request.
@@ -180,6 +192,9 @@ type HexService interface {
 	SetMapLookup(fn func(ctx context.Context, mapID string) (string, error))
 	// SetDrawPolicyLookup wires the map's "who can draw" value.
 	SetDrawPolicyLookup(fn func(ctx context.Context, mapID string) (string, error))
+	// SetArtWriter wires the save of the map's terrain art into its display
+	// settings. Unwired, a request to change the art fails.
+	SetArtWriter(fn func(ctx context.Context, mapID, art string) error)
 }
 
 type hexService struct {
@@ -190,6 +205,7 @@ type hexService struct {
 	events     HexEventPublisher
 	mapLoader  func(ctx context.Context, mapID string) (*Map, error)
 	invalidate func(campaignID string)
+	artWriter  func(ctx context.Context, mapID, art string) error
 }
 
 // NewHexService creates a new hex service.
@@ -203,6 +219,10 @@ func (s *hexService) SetEventPublisher(pub HexEventPublisher) { s.events = pub }
 
 func (s *hexService) SetMapLoader(fn func(ctx context.Context, mapID string) (*Map, error)) {
 	s.mapLoader = fn
+}
+
+func (s *hexService) SetArtWriter(fn func(ctx context.Context, mapID, art string) error) {
+	s.artWriter = fn
 }
 
 func (s *hexService) SetPictureInvalidator(fn func(campaignID string)) { s.invalidate = fn }
@@ -272,7 +292,21 @@ func (s *hexService) GetLayer(ctx context.Context, campaignID, mapID string, rol
 		return nil, err
 	}
 	layer = VisiblePartyLayer(layer, cells, role)
-	return &HexLayerView{Layer: layer, Cells: VisibleCells(layer, cells, role), Version: layer.Version}, nil
+	return &HexLayerView{Layer: layer, Cells: VisibleCells(layer, cells, role), Version: layer.Version, Art: s.artOf(ctx, mapID)}, nil
+}
+
+// artOf is the map's terrain art for the read. The art is not secret and the
+// page already carries it, so a failed lookup sends nothing and the viewer
+// keeps what it has rather than failing the whole read.
+func (s *hexService) artOf(ctx context.Context, mapID string) string {
+	if s.mapLoader == nil {
+		return ""
+	}
+	m, err := s.mapLoader(ctx, mapID)
+	if err != nil {
+		return ""
+	}
+	return m.HexArt()
 }
 
 // anchorState says how a viewer must treat the layer's anchor. hidden: the
@@ -329,8 +363,21 @@ func (s *hexService) UpdateLayer(ctx context.Context, campaignID, mapID string, 
 	if !actor.IsDM {
 		return nil, apperror.NewForbidden("only the owner or a DM can change the hex layer")
 	}
-	if !in.AnchorDrawingID.Present() && !in.FogEnabled.Present() && !in.MilesPerHex.Present() && !in.MilesPerDay.Present() {
+	if !in.AnchorDrawingID.Present() && !in.FogEnabled.Present() && !in.MilesPerHex.Present() && !in.MilesPerDay.Present() && !in.Art.Present() {
 		return nil, apperror.NewBadRequest("nothing to change")
+	}
+	art := ""
+	if in.Art.Present() {
+		art = HexArtDetailed
+		if !in.Art.IsNull() {
+			art, _ = in.Art.Get()
+		}
+		if !IsValidHexArt(art) {
+			return nil, apperror.NewBadRequest("terrain art must be one of: real, detailed, simple")
+		}
+		if s.artWriter == nil {
+			return nil, apperror.NewMissingContext()
+		}
 	}
 	// Checked before anything is written, so a bad figure cannot leave a body
 	// that also moved the anchor half applied.
@@ -378,6 +425,18 @@ func (s *hexService) UpdateLayer(ctx context.Context, campaignID, mapID string, 
 			return nil, err
 		}
 		res.Version = version
+	}
+	if art != "" {
+		if err := s.artWriter(ctx, mapID, art); err != nil {
+			return nil, err
+		}
+		// The art lives in the map's settings; the version bump is what tells
+		// open viewers to read it again.
+		version, err := s.repo.BumpVersion(ctx, mapID)
+		if err != nil {
+			return nil, err
+		}
+		res.Version, res.Art = version, art
 	}
 	layer, err := s.layerOrDefault(ctx, mapID)
 	if err != nil {
@@ -490,7 +549,7 @@ func buildWrite(e UpdateHexCellInput) (HexCellWrite, error) {
 	}
 	// An entry naming only a position changes nothing; refusing it keeps a
 	// malformed client from burning a version bump (and a cap slot) on a no-op.
-	if !e.Terrain.Present() && !e.Name.Present() && !e.Notes.Present() {
+	if !e.Terrain.Present() && !e.Piece.Present() && !e.Name.Present() && !e.Notes.Present() {
 		return HexCellWrite{}, apperror.NewBadRequest("every hex needs a field to change")
 	}
 	w := HexCellWrite{Col: e.Col, Row: e.Row}
@@ -502,6 +561,18 @@ func buildWrite(e UpdateHexCellInput) (HexCellWrite, error) {
 				return HexCellWrite{}, apperror.NewBadRequest("unknown terrain: " + t)
 			}
 			w.Terrain = &t
+		}
+	}
+	if e.Piece.Present() {
+		w.PieceSet = true
+		if !e.Piece.IsNull() {
+			p, _ := e.Piece.Get()
+			// The upper bound for the hex's own terrain is checked once the
+			// stored terrain is known (fitPieces); this bounds the column.
+			if p < 0 || p >= HexPiecesPerTerrain {
+				return HexCellWrite{}, apperror.NewBadRequest("piece is out of range")
+			}
+			w.Piece = &p
 		}
 	}
 	if e.Name.Present() {
@@ -525,6 +596,38 @@ func buildWrite(e UpdateHexCellInput) (HexCellWrite, error) {
 		}
 	}
 	return w, nil
+}
+
+// fitPieces checks every piece against the terrain the hex will have after the
+// write (the entry's own, else the stored one), so a piece never names a look
+// its terrain does not offer. A terrain change that leaves the stored piece out
+// of range (painting a road, clearing the hex) puts the hex back to Mix in the
+// same write: the piece only ever described the old terrain.
+func fitPieces(writes []HexCellWrite, stored map[HexKey]HexCell) error {
+	for i := range writes {
+		w := &writes[i]
+		old, had := stored[HexKey{w.Col, w.Row}]
+		var terrain *string
+		if w.TerrainSet {
+			terrain = w.Terrain
+		} else if had {
+			terrain = old.Terrain
+		}
+		count := 0
+		if terrain != nil {
+			count = PieceCount(*terrain)
+		}
+		if w.PieceSet {
+			if w.Piece != nil && *w.Piece >= count {
+				return apperror.NewBadRequest("that piece does not fit this hex's terrain")
+			}
+			continue
+		}
+		if w.TerrainSet && had && old.Piece != nil && *old.Piece >= count {
+			w.PieceSet, w.Piece = true, nil
+		}
+	}
+	return nil
 }
 
 func (s *hexService) PatchCells(ctx context.Context, campaignID, mapID string, actor HexActor, entries []UpdateHexCellInput) (*HexWriteResult, error) {
@@ -576,6 +679,9 @@ func (s *hexService) PatchCells(ctx context.Context, campaignID, mapID string, a
 		if w.TerrainSet {
 			p.TerrainSet, p.Terrain = true, w.Terrain
 		}
+		if w.PieceSet {
+			p.PieceSet, p.Piece = true, w.Piece
+		}
 		if w.NameSet {
 			p.NameSet, p.Name = true, w.Name
 		}
@@ -602,6 +708,10 @@ func (s *hexService) PatchCells(ctx context.Context, campaignID, mapID string, a
 				return nil, apperror.NewForbidden("you can only change hexes the party has explored")
 			}
 		}
+	}
+
+	if err := fitPieces(writes, stored); err != nil {
+		return nil, err
 	}
 
 	// The size cap counts only hexes the map does not store yet, so editing or

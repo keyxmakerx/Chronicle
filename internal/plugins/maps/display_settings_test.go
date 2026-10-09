@@ -128,6 +128,42 @@ func TestMergeDisplaySettings(t *testing.T) {
 			incoming: `{"draw":{"who":"owners"}}`,
 			want:     &DisplaySettings{Hexes: &HexesDisplay{PartyWho: PartyWhoOwners}, Draw: &DrawDisplay{Who: DrawWhoOwners}},
 		},
+		{name: "terrain art is checked", incoming: `{"hexes":{"art":"photo"}}`, wantErr: true},
+		{name: "terrain art is case sensitive", incoming: `{"hexes":{"art":"Real"}}`, wantErr: true},
+		{name: "realistic art is stored", incoming: `{"hexes":{"art":"real"}}`, want: &DisplaySettings{Hexes: &HexesDisplay{Art: HexArtRealistic}}},
+		{name: "simple art is stored", incoming: `{"hexes":{"art":"simple"}}`, want: &DisplaySettings{Hexes: &HexesDisplay{Art: HexArtSimple}}},
+		{name: "the default art is not stored", incoming: `{"hexes":{"art":"detailed"}}`, want: nil},
+		{
+			name:     "a party-only save keeps the art",
+			current:  &DisplaySettings{Hexes: &HexesDisplay{Art: HexArtRealistic}},
+			incoming: `{"hexes":{"party_who":"owners"}}`,
+			want:     &DisplaySettings{Hexes: &HexesDisplay{PartyWho: PartyWhoOwners, Art: HexArtRealistic}},
+		},
+		{
+			name:     "an art-only save keeps the party gate",
+			current:  &DisplaySettings{Hexes: &HexesDisplay{PartyWho: PartyWhoOwners}},
+			incoming: `{"hexes":{"art":"simple"}}`,
+			want:     &DisplaySettings{Hexes: &HexesDisplay{PartyWho: PartyWhoOwners, Art: HexArtSimple}},
+		},
+		{
+			name:     "art set back to the default keeps the party gate",
+			current:  &DisplaySettings{Hexes: &HexesDisplay{PartyWho: PartyWhoOwners, Art: HexArtRealistic}},
+			incoming: `{"hexes":{"art":"detailed"}}`,
+			want:     &DisplaySettings{Hexes: &HexesDisplay{PartyWho: PartyWhoOwners}},
+		},
+		{
+			name:     "a null field clears only that field",
+			current:  &DisplaySettings{Hexes: &HexesDisplay{PartyWho: PartyWhoOwners, Art: HexArtRealistic}},
+			incoming: `{"hexes":{"party_who":null}}`,
+			want:     &DisplaySettings{Hexes: &HexesDisplay{Art: HexArtRealistic}},
+		},
+		{
+			name:     "an unknown key in the hexes group is dropped",
+			current:  &DisplaySettings{Hexes: &HexesDisplay{Art: HexArtSimple}},
+			incoming: `{"hexes":{"colour":"red"}}`,
+			want:     &DisplaySettings{Hexes: &HexesDisplay{Art: HexArtSimple}},
+		},
+		{name: "a hexes group that is not an object is a validation error", incoming: `{"hexes":"real"}`, wantErr: true},
 		{name: "opening mode is checked", incoming: `{"open":{"mode":"wherever"}}`, wantErr: true},
 		{name: "a wrong type in a group is a validation error", incoming: `{"pins":{"style":7}}`, wantErr: true},
 		{name: "a group that is not an object is a validation error", incoming: `{"grid":"squares"}`, wantErr: true},
@@ -351,6 +387,28 @@ func TestMapDrawWho(t *testing.T) {
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			if got := tc.m.DrawWho(); got != tc.want {
+				t.Errorf("got %q want %q", got, tc.want)
+			}
+		})
+	}
+}
+
+func TestMapHexArt(t *testing.T) {
+	cases := []struct {
+		name string
+		m    *Map
+		want string
+	}{
+		{"nil map", nil, HexArtDetailed},
+		{"no settings", &Map{}, HexArtDetailed},
+		{"no art stored", &Map{Display: &DisplaySettings{Hexes: &HexesDisplay{PartyWho: PartyWhoOwners}}}, HexArtDetailed},
+		{"realistic", &Map{Display: &DisplaySettings{Hexes: &HexesDisplay{Art: HexArtRealistic}}}, HexArtRealistic},
+		{"simple", &Map{Display: &DisplaySettings{Hexes: &HexesDisplay{Art: HexArtSimple}}}, HexArtSimple},
+		{"an unknown stored value reads as the default", &Map{Display: &DisplaySettings{Hexes: &HexesDisplay{Art: "photo"}}}, HexArtDetailed},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := tc.m.HexArt(); got != tc.want {
 				t.Errorf("got %q want %q", got, tc.want)
 			}
 		})

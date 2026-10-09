@@ -184,8 +184,8 @@ func TestWireHexFog_WiresEverySink(t *testing.T) {
 	if events.fog == nil {
 		t.Error("the event publisher was built without a fog lookup")
 	}
-	if !hexSvc.publisherSet || !hexSvc.loaderSet || !hexSvc.invalidatorSet {
-		t.Errorf("hex service wiring: publisher=%v loader=%v invalidator=%v", hexSvc.publisherSet, hexSvc.loaderSet, hexSvc.invalidatorSet)
+	if !hexSvc.publisherSet || !hexSvc.loaderSet || !hexSvc.invalidatorSet || !hexSvc.artSet {
+		t.Errorf("hex service wiring: publisher=%v loader=%v invalidator=%v art=%v", hexSvc.publisherSet, hexSvc.loaderSet, hexSvc.invalidatorSet, hexSvc.artSet)
 	}
 	// The map service now asks the hex service: its mask hides the dark pin.
 	hexSvc.mask = fogMask("")
@@ -208,6 +208,7 @@ type recordingHexService struct {
 	maps.HexService
 	mask                                    *maps.FogMask
 	publisherSet, loaderSet, invalidatorSet bool
+	artSet                                  bool
 }
 
 func (r *recordingHexService) FogMask(context.Context, string) (*maps.FogMask, error) {
@@ -218,6 +219,9 @@ func (r *recordingHexService) SetMapLoader(func(context.Context, string) (*maps.
 	r.loaderSet = true
 }
 func (r *recordingHexService) SetPictureInvalidator(func(string)) { r.invalidatorSet = true }
+func (r *recordingHexService) SetArtWriter(func(context.Context, string, string) error) {
+	r.artSet = true
+}
 
 // The wiring helper only protects anyone if the route setup calls it, so the
 // call is pinned in source.
