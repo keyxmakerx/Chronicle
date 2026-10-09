@@ -992,6 +992,13 @@ func (a *wsNotesGrantAdapter) AuthenticateNotesGrantForWS(ctx context.Context, t
 // relations.RelationEventPublisher interface.
 type relationEventPublisherAdapter struct {
 	bus ws.EventBus
+	// shares, when set, re-checks the row's source character's item shares
+	// after a relation is deleted or its metadata changes, so a share never
+	// outlives the holding. Runs detached: the armory's own moves call this
+	// while holding the campaign lock the check takes.
+	shares interface {
+		ReleaseLetGoShares(ctx context.Context, campaignID, characterID string)
+	}
 }
 
 // PublishRelationEvent translates a relation row write into a WebSocket
@@ -1017,6 +1024,15 @@ func (a *relationEventPublisherAdapter) PublishRelationEvent(eventType string, r
 	msg := ws.NewMessage(msgType, rel.CampaignID, rel.SourceEntityID, rel)
 	msg.RequiresDM = true
 	a.bus.Publish(msg)
+
+	if a.shares != nil && eventType != relations.RelationEventCreated {
+		campaignID, characterID := rel.CampaignID, rel.SourceEntityID
+		go func() {
+			ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+			defer cancel()
+			a.shares.ReleaseLetGoShares(ctx, campaignID, characterID)
+		}()
+	}
 }
 
 // entityEventPublisherAdapter bridges the websocket.EventBus to the
@@ -4912,7 +4928,7 @@ func (a *App) RegisterRoutes() {
 	go syncapi.StartChangePruner(a.ShutdownCtx, syncChangeRepo)
 
 	entityService.SetEventPublisher(&entityEventPublisherAdapter{bus: wsEventBus})
-	relService.SetEventPublisher(&relationEventPublisherAdapter{bus: wsEventBus})
+	relService.SetEventPublisher(&relationEventPublisherAdapter{bus: wsEventBus, shares: stashSvc})
 	stashEvents.bus = wsEventBus
 	entityService.SetSidebarAutoAdder(&sidebarAutoAdderAdapter{campaignService: campaignService})
 	noteSvc.SetEventPublisher(&noteEventPublisherAdapter{bus: wsEventBus})
