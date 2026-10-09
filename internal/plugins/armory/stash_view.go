@@ -128,18 +128,34 @@ func moveDialogURL(campaignID, kind string, from Endpoint, itemID string) string
 	return "/campaigns/" + campaignID + "/armory/move?" + q.Encode()
 }
 
-// closeMoveDialogOnClick empties the dialog container. It is an inline
-// expression rather than a script helper so it still runs after the fragment
-// is swapped in.
-func closeMoveDialogOnClick() templ.ComponentScript {
-	return inlineOnClick("armory_closeMoveDialog",
-		`(function(){var m=document.getElementById('armory-move-modal');if(m){m.innerHTML='';}})()`)
+// moveOpenOnClick opens (or shuts) the Move box under the line it belongs to,
+// loading it from url the first time.
+func moveOpenOnClick(url string) templ.ComponentScript {
+	return inlineOnClick("armory_moveOpen",
+		`(function(btn){if(window.Chronicle&&Chronicle.GiveBox)Chronicle.GiveBox.open(btn,`+jsStr(url)+`);})(this)`)
 }
 
-// closeMoveDialogOnKey closes the dialog on Escape.
-func closeMoveDialogOnKey() templ.ComponentScript {
-	return inlineOnClick("armory_closeMoveDialogKey",
-		`(function(e){if(e.key==='Escape'){var m=document.getElementById('armory-move-modal');if(m){m.innerHTML='';}}})(event)`)
+// moveEnter sends the Move box on Enter from its number or amount field.
+func moveEnter() templ.ComponentScript {
+	return inlineOnClick("armory_moveEnter",
+		`(function(el,e){if(e.key==='Enter'&&window.Chronicle&&Chronicle.GiveBox){e.preventDefault();Chronicle.GiveBox.move(el);}})(this,event)`)
+}
+
+// moveGoLabel is the Move box's main button: a player outside downtime asks
+// the GM instead of moving.
+func moveGoLabel(immediate bool) string {
+	if immediate {
+		return "Move"
+	}
+	return "Ask the GM"
+}
+
+// moveBusyLabel is what that button says while the answer is awaited.
+func moveBusyLabel(immediate bool) string {
+	if immediate {
+		return "Moving…"
+	}
+	return "Asking…"
 }
 
 // giveDialogURL is the GET that loads the "Give to" dialog, opened for a

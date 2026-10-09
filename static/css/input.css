@@ -4910,6 +4910,31 @@ html[data-view-motion="calm"] *:not(.czp *), html[data-view-motion="calm"] *:not
 }
 .nav-rm .ag-ring, html[data-cz-reduce] .ag-ring, html[data-view-motion="calm"] .ag-ring { animation: none !important; }
 .nav-rm .ag-prog > span, html[data-cz-reduce] .ag-prog > span, html[data-view-motion="calm"] .ag-prog > span { transition: none !important; }
+/* Working and answered states shared by the character page's older parts:
+   the spinner inside a busy button, the Move box's headings and button, the
+   "Yours" pill after a claim, an inline "Remove? Yes . Keep" ask, and the
+   picture's Change chip. */
+.fx-spin { width: 13px; height: 13px; flex: none; border-radius: 999px; border: 2px solid rgba(255, 255, 255, .45); border-top-color: #fff; animation: fx-spin .7s linear infinite; }
+@keyframes fx-spin { to { transform: rotate(360deg); } }
+.ag-box [data-move-go], .fx-claim .btn-primary { display: inline-flex; align-items: center; gap: 7px; }
+.fx-dest-h { padding: 6px 10px 3px; font-size: 10.5px; font-weight: 700; letter-spacing: .07em; text-transform: uppercase; color: var(--color-text-muted); border-top: 1px solid var(--color-border); }
+.ag-list .fx-dest-h:first-child { border-top: 0; }
+.fx-pill { display: inline-flex; align-items: center; gap: 6px; height: 24px; padding: 0 10px; border-radius: 999px; font-size: 12px; font-weight: 600; white-space: nowrap; background: var(--color-bg-tertiary); color: var(--color-text-secondary); }
+.fx-pill.is-yours { background: rgba(16, 185, 129, .14); color: #047857; }
+.dark .fx-pill.is-yours { color: #34d399; }
+.fx-ask { display: inline-flex; align-items: center; gap: 8px; font-size: 12.5px; font-weight: 600; color: var(--color-text-primary); animation: ag-in var(--dur-standard, 200ms) var(--ease-out, ease-out) both; }
+.fx-ask button { border: 0; background: none; padding: 3px 4px; font: inherit; cursor: pointer; color: var(--color-accent); }
+.fx-ask button.danger { color: #dc2626; }
+.dark .fx-ask button.danger { color: #f87171; }
+.fx-chip { position: absolute; left: 50%; bottom: -10px; transform: translateX(-50%); display: inline-flex; align-items: center; gap: 5px; height: 24px; padding: 0 10px; border-radius: 999px; border: 1px solid var(--color-border); background: var(--color-card-bg); color: var(--color-text-primary); font: inherit; font-size: 11.5px; font-weight: 600; white-space: nowrap; cursor: pointer; box-shadow: 0 4px 10px -6px rgba(0, 0, 0, .35); transition: border-color var(--dur-micro, 120ms), color var(--dur-micro, 120ms); }
+.fx-chip:hover, .fx-chip[aria-expanded="true"] { border-color: var(--color-accent); color: var(--color-accent); }
+.fx-chip:focus-visible { outline: 2px solid var(--color-accent); outline-offset: 2px; }
+@media (prefers-reduced-motion: reduce) {
+  .fx-spin, .fx-ask { animation: none !important; }
+  .fx-chip { transition: none !important; }
+}
+.nav-rm .fx-spin, html[data-cz-reduce] .fx-spin, html[data-view-motion="calm"] .fx-spin,
+.nav-rm .fx-ask, html[data-cz-reduce] .fx-ask, html[data-view-motion="calm"] .fx-ask { animation: none !important; }
 /* Game-system picker (static/js/widgets/choice_picker.js): the value button on
    a character field and the fold that lists the system's names. The box reuses
    the Give-box classes above, restated here on the real colour tokens. */
