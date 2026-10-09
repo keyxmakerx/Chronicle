@@ -31,67 +31,46 @@ Chronicle.register('relations', {
       var style = document.createElement('style');
       style.id = 'relations-widget-styles';
       style.textContent = [
-        '.rel-card { border: 1px solid #e5e7eb; border-radius: 8px; background: white; overflow: hidden; }',
-        '.dark .rel-card { border-color: #374151; background: #1f2937; }',
-        '.rel-group-header { display: flex; align-items: center; gap: 6px; padding: 8px 12px; font-size: 12px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.05em; color: #6b7280; border-bottom: 1px solid #f3f4f6; }',
-        '.dark .rel-group-header { color: #9ca3af; border-bottom-color: #374151; }',
+        '.rel-card { border: 1px solid var(--color-border, #e5e7eb); border-radius: 8px; background: var(--color-card-bg, white); overflow: hidden; }',
+        '.rel-group-header { display: flex; align-items: center; gap: 6px; padding: 8px 12px; font-size: 12px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.05em; color: var(--color-text-secondary, #6b7280); border-bottom: 1px solid var(--color-bg-tertiary, #f3f4f6); }',
         '.rel-item { display: flex; align-items: center; gap: 8px; padding: 8px 12px; transition: background 0.15s; }',
-        '.rel-item:hover { background: #f9fafb; }',
-        '.dark .rel-item:hover { background: #374151; }',
-        '.rel-item + .rel-item { border-top: 1px solid #f3f4f6; }',
-        '.dark .rel-item + .rel-item { border-top-color: #374151; }',
+        '.rel-item:hover { background: var(--color-bg-tertiary, #f3f4f6); }',
+        '.rel-item + .rel-item { border-top: 1px solid var(--color-bg-tertiary, #f3f4f6); }',
         '.rel-icon { width: 28px; height: 28px; border-radius: 50%; display: flex; align-items: center; justify-content: center; flex-shrink: 0; }',
         '.rel-icon i { font-size: 12px; color: white; }',
         '.rel-name { flex: 1; min-width: 0; }',
-        '.rel-name a { font-size: 14px; font-weight: 500; color: #111827; text-decoration: none; }',
-        '.dark .rel-name a { color: #f3f4f6; }',
-        '.rel-name a:hover { color: #4f46e5; }',
-        '.dark .rel-name a:hover { color: #818cf8; }',
-        '.rel-type-badge { font-size: 11px; color: #9ca3af; }',
-        '.rel-delete { opacity: 0; padding: 4px; cursor: pointer; color: #9ca3af; border: none; background: none; border-radius: 4px; transition: opacity 0.15s, color 0.15s; }',
-        '.rel-item:hover .rel-delete { opacity: 1; }',
-        '.rel-delete:hover { color: #ef4444; }',
-        '.rel-add-btn { display: inline-flex; align-items: center; gap: 6px; padding: 6px 14px; font-size: 13px; font-weight: 500; color: #4f46e5; background: none; border: 1px dashed #c7d2fe; border-radius: 8px; cursor: pointer; transition: border-color 0.15s, background 0.15s; }',
-        '.dark .rel-add-btn { color: #818cf8; border-color: #4338ca; }',
-        '.rel-add-btn:hover { background: #eef2ff; border-color: #a5b4fc; }',
-        '.dark .rel-add-btn:hover { background: #312e81; }',
-        '.rel-modal { margin-top: 8px; border: 1px solid #e5e7eb; border-radius: 8px; background: white; box-shadow: 0 4px 12px rgba(0,0,0,0.1); padding: 12px; }',
-        '.dark .rel-modal { border-color: #374151; background: #1f2937; }',
-        '.rel-search { width: 100%; padding: 8px 10px; font-size: 13px; border: 1px solid #e5e7eb; border-radius: 6px; outline: none; background: transparent; color: inherit; }',
-        '.dark .rel-search { border-color: #4b5563; color: #e5e7eb; }',
-        '.rel-search:focus { border-color: #6366f1; box-shadow: 0 0 0 2px rgba(99,102,241,0.15); }',
+        '.rel-name a { font-size: 14px; font-weight: 500; color: var(--color-text-primary, #111827); text-decoration: none; }',
+        '.rel-name a:hover { color: var(--color-accent, #6366f1); }',
+        '.rel-type-badge { font-size: 11px; color: var(--color-text-muted, #9ca3af); }',
+        '.rel-delete { opacity: 0; padding: 4px; cursor: pointer; color: var(--color-text-muted, #9ca3af); border: none; background: none; border-radius: 4px; transition: opacity 0.15s, color 0.15s; }',
+        '.rel-item:hover .rel-delete, .rel-delete:focus-visible { opacity: 1; }',
+        '.rel-delete:hover { color: var(--color-danger, #ef4444); }',
+        '.rel-add-btn { display: inline-flex; align-items: center; gap: 6px; padding: 6px 14px; font-size: 13px; font-weight: 500; color: var(--color-accent-hover, #4f46e5); background: none; border: 1px dashed rgb(var(--color-accent-rgb, 99 102 241) / 4); border-radius: 8px; cursor: pointer; transition: border-color 0.15s, background 0.15s; }',
+        '.rel-add-btn:hover { background: rgb(var(--color-accent-rgb, 99 102 241) / 08); border-color: var(--color-accent-light, #a5b4fc); }',
+        '.rel-modal { margin-top: 8px; border: 1px solid var(--color-border, #e5e7eb); border-radius: 8px; background: var(--color-card-bg, white); box-shadow: 0 4px 12px rgba(0,0,0,0.1); padding: 12px; }',
+        '.rel-search { width: 100%; padding: 8px 10px; font-size: 13px; border: 1px solid var(--color-border, #e5e7eb); border-radius: 6px; outline: none; background: transparent; color: inherit; }',
+        '.rel-search:focus { border-color: var(--color-accent, #6366f1); box-shadow: 0 0 0 2px rgb(var(--color-accent-rgb, 99 102 241) / 15); }',
         '.rel-results { max-height: 160px; overflow-y: auto; margin-top: 6px; }',
-        '.rel-result { display: flex; align-items: center; gap: 8px; padding: 6px 8px; border-radius: 6px; cursor: pointer; font-size: 13px; color: #374151; }',
-        '.dark .rel-result { color: #d1d5db; }',
-        '.rel-result:hover { background: #f3f4f6; }',
-        '.dark .rel-result:hover { background: #374151; }',
-        '.rel-result.selected { background: #eef2ff; border: 1px solid #c7d2fe; }',
-        '.dark .rel-result.selected { background: #312e81; border-color: #4338ca; }',
+        '.rel-result { display: flex; align-items: center; gap: 8px; padding: 6px 8px; border-radius: 6px; cursor: pointer; font-size: 13px; color: var(--color-text-body, #374151); }',
+        '.rel-result:hover { background: var(--color-bg-tertiary, #f3f4f6); }',
+        '.rel-result.selected { background: rgb(var(--color-accent-rgb, 99 102 241) / 1); border: 1px solid rgb(var(--color-accent-rgb, 99 102 241) / 4); }',
         '.rel-result-icon { width: 24px; height: 24px; border-radius: 50%; display: flex; align-items: center; justify-content: center; flex-shrink: 0; }',
         '.rel-result-icon i { font-size: 10px; color: white; }',
-        '.rel-type-select { width: 100%; padding: 8px 10px; font-size: 13px; border: 1px solid #e5e7eb; border-radius: 6px; outline: none; background: transparent; color: inherit; margin-top: 8px; }',
-        '.dark .rel-type-select { border-color: #4b5563; color: #e5e7eb; background: #1f2937; }',
-        '.rel-type-select:focus { border-color: #6366f1; box-shadow: 0 0 0 2px rgba(99,102,241,0.15); }',
+        '.rel-type-select { width: 100%; padding: 8px 10px; font-size: 13px; border: 1px solid var(--color-border, #e5e7eb); border-radius: 6px; outline: none; background: var(--color-card-bg, transparent); color: inherit; margin-top: 8px; }',
+        '.rel-type-select:focus { border-color: var(--color-accent, #6366f1); box-shadow: 0 0 0 2px rgb(var(--color-accent-rgb, 99 102 241) / 15); }',
         '.rel-custom-row { display: flex; gap: 6px; margin-top: 6px; }',
-        '.rel-custom-row input { flex: 1; padding: 6px 8px; font-size: 12px; border: 1px solid #e5e7eb; border-radius: 6px; outline: none; background: transparent; color: inherit; }',
-        '.dark .rel-custom-row input { border-color: #4b5563; color: #e5e7eb; }',
+        '.rel-custom-row input { flex: 1; padding: 6px 8px; font-size: 12px; border: 1px solid var(--color-border, #e5e7eb); border-radius: 6px; outline: none; background: transparent; color: inherit; }',
         '.rel-actions { display: flex; gap: 6px; margin-top: 10px; justify-content: flex-end; }',
-        '.rel-submit { padding: 6px 16px; font-size: 13px; font-weight: 500; color: white; background: #4f46e5; border: none; border-radius: 6px; cursor: pointer; }',
-        '.rel-submit:hover { background: #4338ca; }',
+        '.rel-submit { padding: 6px 16px; font-size: 13px; font-weight: 500; color: white; background: var(--color-accent-hover, #4f46e5); border: none; border-radius: 6px; cursor: pointer; }',
+        '.rel-submit:hover { filter: brightness(0.9); }',
         '.rel-submit:disabled { opacity: 0.5; cursor: not-allowed; }',
-        '.rel-cancel { padding: 6px 16px; font-size: 13px; font-weight: 500; color: #6b7280; background: none; border: 1px solid #e5e7eb; border-radius: 6px; cursor: pointer; }',
-        '.dark .rel-cancel { color: #9ca3af; border-color: #4b5563; }',
-        '.rel-cancel:hover { background: #f9fafb; }',
-        '.dark .rel-cancel:hover { background: #374151; }',
-        '.rel-empty { padding: 16px; text-align: center; font-size: 13px; color: #9ca3af; }',
-        '.rel-error { padding: 12px; font-size: 13px; color: #ef4444; background: #fef2f2; border-radius: 6px; margin-bottom: 8px; }',
-        '.dark .rel-error { background: #451a1a; }',
-        '.rel-label { font-size: 12px; font-weight: 500; color: #6b7280; margin-top: 8px; margin-bottom: 4px; }',
-        '.dark .rel-label { color: #9ca3af; }',
-        '.rel-dm-badge { display: inline-flex; align-items: center; gap: 3px; font-size: 10px; font-weight: 600; color: #d97706; background: #fef3c7; padding: 1px 6px; border-radius: 4px; margin-left: 4px; }',
-        '.dark .rel-dm-badge { color: #fbbf24; background: #451a03; }',
-        '.rel-dm-toggle { display: flex; align-items: center; gap: 6px; margin-top: 8px; font-size: 12px; color: #6b7280; cursor: pointer; }',
-        '.dark .rel-dm-toggle { color: #9ca3af; }',
+        '.rel-cancel { padding: 6px 16px; font-size: 13px; font-weight: 500; color: var(--color-text-secondary, #6b7280); background: none; border: 1px solid var(--color-border, #e5e7eb); border-radius: 6px; cursor: pointer; }',
+        '.rel-cancel:hover { background: var(--color-bg-tertiary, #f3f4f6); }',
+        '.rel-empty { padding: 16px; text-align: center; font-size: 13px; color: var(--color-text-muted, #9ca3af); }',
+        '.rel-error { padding: 12px; font-size: 13px; color: var(--color-danger, #ef4444); background: var(--color-danger-bg, #fef2f2); border-radius: 6px; margin-bottom: 8px; }',
+        '.rel-label { font-size: 12px; font-weight: 500; color: var(--color-text-secondary, #6b7280); margin-top: 8px; margin-bottom: 4px; }',
+        '.rel-dm-badge { display: inline-flex; align-items: center; gap: 3px; font-size: 10px; font-weight: 600; color: var(--color-warn, #d97706); background: var(--color-warn-bg, #fef3c7); padding: 1px 6px; border-radius: 4px; margin-left: 4px; }',
+        '.rel-dm-toggle { display: flex; align-items: center; gap: 6px; margin-top: 8px; font-size: 12px; color: var(--color-text-secondary, #6b7280); cursor: pointer; }',
         '.rel-dm-toggle input { cursor: pointer; }'
       ].join('\n');
       document.head.appendChild(style);
@@ -216,7 +195,7 @@ Chronicle.register('relations', {
       // Entity type icon.
       var icon = document.createElement('div');
       icon.className = 'rel-icon';
-      icon.style.backgroundColor = rel.targetEntityColor || '#6b7280';
+      icon.style.backgroundColor = rel.targetEntityColor || 'var(--color-text-secondary, #6b7280)';
       icon.innerHTML = '<i class="fa-solid ' + Chronicle.escapeHtml(rel.targetEntityIcon || 'fa-file') + '"></i>';
       item.appendChild(icon);
 
@@ -254,9 +233,10 @@ Chronicle.register('relations', {
         delBtn.className = 'rel-delete';
         delBtn.title = 'Remove relation';
         delBtn.innerHTML = '<i class="fa-solid fa-xmark"></i>';
+        delBtn.setAttribute('aria-label', 'Remove relation');
         delBtn.addEventListener('click', function (e) {
           e.stopPropagation();
-          deleteRelation(rel.id);
+          askRemove(item, delBtn, rel);
         });
         item.appendChild(delBtn);
       }
@@ -317,7 +297,7 @@ Chronicle.register('relations', {
 
         var selIcon = document.createElement('div');
         selIcon.className = 'rel-result-icon';
-        selIcon.style.backgroundColor = state.selectedTarget.type_color || '#6b7280';
+        selIcon.style.backgroundColor = state.selectedTarget.type_color || 'var(--color-text-secondary, #6b7280)';
         selIcon.innerHTML = '<i class="fa-solid ' + Chronicle.escapeHtml(state.selectedTarget.type_icon || 'fa-file') + '"></i>';
         selectedEl.appendChild(selIcon);
 
@@ -481,7 +461,7 @@ Chronicle.register('relations', {
 
         var icon = document.createElement('div');
         icon.className = 'rel-result-icon';
-        icon.style.backgroundColor = entity.type_color || '#6b7280';
+        icon.style.backgroundColor = entity.type_color || 'var(--color-text-secondary, #6b7280)';
         icon.innerHTML = '<i class="fa-solid ' + Chronicle.escapeHtml(entity.type_icon || 'fa-file') + '"></i>';
         result.appendChild(icon);
 
@@ -491,7 +471,7 @@ Chronicle.register('relations', {
 
         if (entity.type_name) {
           var typeBadge = document.createElement('span');
-          typeBadge.style.cssText = 'font-size:11px; color:#9ca3af; margin-left:auto;';
+          typeBadge.style.cssText = 'font-size:11px; color:var(--color-text-muted, #9ca3af); margin-left:auto;';
           typeBadge.textContent = entity.type_name;
           result.appendChild(typeBadge);
         }
@@ -589,19 +569,74 @@ Chronicle.register('relations', {
         });
     }
 
-    function deleteRelation(relationId) {
-      if (!confirm('Remove this relation?')) return;
+    // askRemove swaps a row's remove button for "Remove? Yes . Keep" so the
+    // question and the answer stay on the row it is about. A failed removal
+    // keeps the row and offers another try in the same place.
+    function askRemove(item, delBtn, rel) {
+      var name = rel.targetEntityName || 'this page';
+      var ask = document.createElement('span');
+      ask.className = 'fx-ask';
+      ask.setAttribute('role', 'group');
+      ask.setAttribute('aria-label', 'Remove the relation to ' + name);
 
-      Chronicle.apiFetch(config.relationsEndpoint + '/' + relationId, {
+      function setAsk(label, yes, danger) {
+        ask.innerHTML = '';
+        ask.appendChild(document.createTextNode(label + ' '));
+        var y = document.createElement('button');
+        y.type = 'button';
+        y.className = danger ? 'danger' : '';
+        y.textContent = yes;
+        ask.appendChild(y);
+        ask.appendChild(document.createTextNode('\u00b7'));
+        var k = document.createElement('button');
+        k.type = 'button';
+        k.textContent = 'Keep';
+        ask.appendChild(k);
+        y.addEventListener('click', function (e) {
+          e.stopPropagation();
+          y.disabled = true;
+          k.disabled = true;
+          ask.firstChild.textContent = 'Removing\u2026 ';
+          deleteRelation(rel.id).then(function (ok) {
+            if (ok) {
+              Chronicle.notify('Removed the relation to ' + name + '.', 'success');
+              return;
+            }
+            setAsk('Could not remove it.', 'Try again', true);
+          });
+        });
+        k.addEventListener('click', function (e) {
+          e.stopPropagation();
+          ask.replaceWith(delBtn);
+          delBtn.focus();
+        });
+        y.focus();
+      }
+
+      delBtn.replaceWith(ask);
+      setAsk('Remove?', 'Yes', true);
+      ask.addEventListener('keydown', function (e) {
+        if (e.key === 'Escape') {
+          e.stopPropagation();
+          ask.replaceWith(delBtn);
+          delBtn.focus();
+        }
+      });
+    }
+
+    // deleteRelation resolves true once the relation is gone and the list has
+    // reloaded, false when the server refused.
+    function deleteRelation(relationId) {
+      return Chronicle.apiFetch(config.relationsEndpoint + '/' + relationId, {
         method: 'DELETE'
       })
         .then(function (r) {
           if (!r.ok) throw new Error('Failed to delete relation');
-          return loadRelations();
+          return loadRelations().then(function () { return true; });
         })
         .catch(function (err) {
           console.error('[relations] Delete failed:', err);
-          Chronicle.notify('Failed to remove relation', 'error');
+          return false;
         });
     }
 

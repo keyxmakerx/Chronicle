@@ -90,6 +90,17 @@
     --color-bad-rgb:  220 38 38;   /* red-600 */
     --color-sidebar-bg:    #1a1c23;  /* always dark */
 
+    /* State colours for older widgets that style themselves in JS. */
+    --color-danger:        #ef4444;
+    --color-danger-strong: #dc2626;
+    --color-danger-bg:     #fef2f2;
+    --color-warn:          #d97706;
+    --color-warn-bg:       #fef3c7;
+    --color-ok-fg:         #065f46;
+    --color-ok-bg:         #d1fae5;
+    --color-info:          #3b82f6;
+    --color-info-hover:    #2563eb;
+
     /* ──────────────────────────────────────────────────────────────────
      * V2 motion vocabulary. Only `transform` + `opacity` are ever
      * animated, never `transition: all` (lint-guarded via
@@ -216,6 +227,9 @@
     --color-warn-rgb: 251 191 36;  /* amber-400 */
     --color-bad-rgb:  248 113 113; /* red-400 */
     --color-sidebar-bg:    #1a1c23;  /* always dark */
+    --color-danger-bg:     #451a1a;
+    --color-warn:          #fbbf24;
+    --color-warn-bg:       #451a03;
   }
 
   /* Default body styling -- uses semantic vars so no dark: overrides needed */
