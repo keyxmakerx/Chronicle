@@ -74,17 +74,25 @@ type IDMap struct {
 
 	// CalendarID is the new calendar's ID (if created).
 	CalendarID string
+
+	// CalendarIDs maps original calendar ID → new calendar ID.
+	CalendarIDs map[string]string
+
+	// CalendarEventIDs maps original calendar event ID → new event ID.
+	CalendarEventIDs map[string]string
 }
 
 // NewIDMap creates an empty ID mapping structure.
 func NewIDMap(campaignID string) *IDMap {
 	return &IDMap{
-		EntityTypeIDs:  make(map[int]int),
-		EntityIDs:      make(map[string]string),
-		EntitySlugToID: make(map[string]string),
-		TagIDs:         make(map[int]int),
-		TagSlugToID:    make(map[string]int),
-		MediaIDs:       make(map[string]string),
-		CampaignID:     campaignID,
+		EntityTypeIDs:    make(map[int]int),
+		EntityIDs:        make(map[string]string),
+		EntitySlugToID:   make(map[string]string),
+		TagIDs:           make(map[int]int),
+		TagSlugToID:      make(map[string]int),
+		MediaIDs:         make(map[string]string),
+		CalendarIDs:      make(map[string]string),
+		CalendarEventIDs: make(map[string]string),
+		CampaignID:       campaignID,
 	}
 }

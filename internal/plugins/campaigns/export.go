@@ -148,6 +148,9 @@ type ExportRelation struct {
 // backup — see calendarImportAdapter.ImportCalendar's doc comment for how a
 // pre-V5 backup (which never had this field) is handled on import.
 type ExportCalendarData struct {
+	// Ref is the calendar's id in the exporting campaign, so a timeline can
+	// be bound back to the same calendar on import. Additive.
+	Ref              string  `json:"ref,omitempty"`
 	Name             string  `json:"name"`
 	Description      *string `json:"description,omitempty"`
 	Mode             string  `json:"mode"`
@@ -462,6 +465,25 @@ type ExportTimeline struct {
 	Events          []ExportTimelineEvent   `json:"events,omitempty"`
 	EntityGroups    []ExportEntityGroup     `json:"entity_groups,omitempty"`
 	Connections     []ExportEventConnection `json:"connections,omitempty"`
+	// CalendarRef names the calendar the timeline draws on (its
+	// ExportCalendarData.Ref); NoCalendar marks a timeline with none.
+	// CalendarEventLinks are the calendar events shown on it. All additive:
+	// a file with neither field binds the timeline to the default calendar,
+	// as imports always did.
+	CalendarRef        *string                   `json:"calendar_ref,omitempty"`
+	NoCalendar         bool                      `json:"no_calendar,omitempty"`
+	CalendarEventLinks []ExportTimelineEventLink `json:"calendar_event_links,omitempty"`
+}
+
+// ExportTimelineEventLink is a calendar event shown on a timeline, with the
+// timeline's own overrides for it. EventRef is the event's
+// ExportCalendarEvent.Ref.
+type ExportTimelineEventLink struct {
+	EventRef           string  `json:"event_ref"`
+	Label              *string `json:"label,omitempty"`
+	ColorOverride      *string `json:"color_override,omitempty"`
+	VisibilityOverride *string `json:"visibility_override,omitempty"`
+	VisibilityRules    *string `json:"visibility_rules,omitempty"`
 }
 
 // ExportTimelineEvent captures a standalone timeline event.

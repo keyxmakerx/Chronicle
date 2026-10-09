@@ -352,6 +352,7 @@ func (a *calendarExportAdapter) exportOne(ctx context.Context, cal *calendar.Cal
 	}
 
 	data := &campaigns.ExportCalendarData{
+		Ref:              cal.ID,
 		Name:             cal.Name,
 		Description:      cal.Description,
 		Mode:             cal.Mode,
@@ -554,14 +555,24 @@ func (a *timelineExportAdapter) ExportTimelines(ctx context.Context, campaignID 
 			Visibility:      tl.Visibility,
 			SortOrder:       tl.SortOrder,
 			ZoomDefault:     tl.ZoomDefault,
+			CalendarRef:     tl.CalendarID,
+			NoCalendar:      !tl.HasCalendar(),
 		}
 
-		// Export standalone events only (calendar events are in the calendar section).
+		// Standalone events travel here; calendar events travel in the
+		// calendar section, and only the timeline's links to them here.
 		// Build event ID → export index map for connection references.
 		eventIDToIndex := make(map[string]int)
 		events, err := a.svc.ListTimelineEvents(ctx, tl.ID, campaignID, systemViewer)
 		if err == nil {
 			for _, evt := range events {
+				if evt.Source == "calendar" {
+					et.CalendarEventLinks = append(et.CalendarEventLinks, campaigns.ExportTimelineEventLink{
+						EventRef: evt.EventID, Label: evt.Label, ColorOverride: evt.ColorOverride,
+						VisibilityOverride: evt.VisibilityOverride, VisibilityRules: evt.VisibilityRules,
+					})
+					continue
+				}
 				if evt.Source != "standalone" {
 					continue
 				}
@@ -1506,6 +1517,9 @@ func (a *calendarImportAdapter) importOne(ctx context.Context, campaignID string
 	if isPrimary {
 		idMap.CalendarID = cal.ID
 	}
+	if data.Ref != "" {
+		idMap.CalendarIDs[data.Ref] = cal.ID
+	}
 
 	// The primary is the campaign's first calendar, so it becomes the default — every default-calendar
 	// reader (GetDefaultCalendarForViewer, the skybox/dashboard/category
@@ -1717,6 +1731,7 @@ func (a *calendarImportAdapter) importOne(ctx context.Context, campaignID string
 			created[i] = a.importEvent(ctx, cal.ID, campaignID, evt, idMap, kindIDBySlug, refs, report)
 			if created[i] != "" && evt.Ref != "" {
 				refs.events[evt.Ref] = created[i]
+				idMap.CalendarEventIDs[evt.Ref] = created[i]
 			}
 		}
 	}
@@ -2102,11 +2117,7 @@ type timelineImportAdapter struct {
 // ImportTimelines creates timelines from import data.
 func (a *timelineImportAdapter) ImportTimelines(ctx context.Context, campaignID, userID string, data []campaigns.ExportTimeline, idMap *campaigns.IDMap, report *campaigns.ImportReport) error {
 	for _, tl := range data {
-		// Link to calendar if one was created.
-		var calendarID *string
-		if idMap.CalendarID != "" {
-			calendarID = &idMap.CalendarID
-		}
+		calendarID := importTimelineCalendar(tl, idMap)
 
 		newTimeline, err := a.svc.CreateTimeline(ctx, campaignID, timeline.CreateTimelineInput{
 			CampaignID:  campaignID,
@@ -2186,6 +2197,34 @@ func (a *timelineImportAdapter) ImportTimelines(ctx context.Context, campaignID,
 			}
 		}
 
+		// Re-link the calendar events the timeline showed, in their order.
+		if calendarID != nil {
+			for _, l := range tl.CalendarEventLinks {
+				eventID, ok := idMap.CalendarEventIDs[l.EventRef]
+				if !ok {
+					report.Fail("timelines", "timeline event link", tl.Name, "its calendar event is not in the file")
+					continue
+				}
+				if _, err := a.svc.LinkEvent(ctx, newTimeline.ID, eventID, timeline.LinkEventInput{
+					Label: l.Label, ColorOverride: l.ColorOverride,
+				}); err != nil {
+					slog.Warn("import: link timeline event failed", slog.String("timeline", tl.Name), slog.Any("error", err))
+					report.Fail("timelines", "timeline event link", tl.Name, apperror.SafeMessage(err))
+					continue
+				}
+				if l.VisibilityOverride != nil || l.VisibilityRules != nil {
+					if err := a.svc.UpdateEventLinkVisibility(ctx, newTimeline.ID, eventID, timeline.UpdateEventVisibilityInput{
+						VisibilityOverride: l.VisibilityOverride, VisibilityRules: l.VisibilityRules,
+					}); err != nil {
+						slog.Warn("import: timeline link visibility failed", slog.String("timeline", tl.Name), slog.Any("error", err))
+						report.Fail("timelines", "timeline event link", tl.Name, apperror.SafeMessage(err))
+					}
+				}
+			}
+		} else if len(tl.CalendarEventLinks) > 0 {
+			report.FailN("timelines", "timeline event link", tl.Name, "its calendar was not restored", len(tl.CalendarEventLinks))
+		}
+
 		// Create entity groups (swim lanes).
 		for _, eg := range tl.EntityGroups {
 			newGroup, err := a.svc.CreateEntityGroup(ctx, newTimeline.ID, timeline.CreateEntityGroupInput{
@@ -2203,6 +2242,27 @@ func (a *timelineImportAdapter) ImportTimelines(ctx context.Context, campaignID,
 				}
 			}
 		}
+	}
+	return nil
+}
+
+// importTimelineCalendar picks the calendar a restored timeline draws on:
+// none for a timeline that had none, the restored copy of the one it named
+// (none if that calendar was not restored, rather than some other calendar),
+// and the default calendar for a file from before timelines recorded theirs.
+func importTimelineCalendar(tl campaigns.ExportTimeline, idMap *campaigns.IDMap) *string {
+	if tl.NoCalendar {
+		return nil
+	}
+	if tl.CalendarRef != nil {
+		if id, ok := idMap.CalendarIDs[*tl.CalendarRef]; ok {
+			return &id
+		}
+		return nil
+	}
+	if idMap.CalendarID != "" {
+		id := idMap.CalendarID
+		return &id
 	}
 	return nil
 }
