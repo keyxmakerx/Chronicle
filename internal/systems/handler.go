@@ -378,19 +378,12 @@ func (h *SystemHandler) WidgetScriptAPI(c echo.Context) error {
 		return apperror.NewNotFound("widget not found")
 	}
 
-	// Resolve the system's directory on disk.
+	// Only installed packages serve scripts. A campaign's own custom system
+	// is data-only (errCustomSystemScripts), including one uploaded before
+	// that rule, whose scripts may still sit on disk.
 	sysDir := Dir(manifest.ID)
 	if sysDir == "" {
-		// Check campaign custom systems.
-		if h.campaignSystems != nil {
-			cc := campaigns.GetCampaignContext(c)
-			if cc != nil {
-				sysDir = h.campaignSystems.Dir(cc.Campaign.ID)
-			}
-		}
-	}
-	if sysDir == "" {
-		return apperror.NewNotFound("system directory not found")
+		return apperror.NewNotFound("widget not found")
 	}
 
 	// Resolve and validate the script file path.
@@ -665,7 +658,8 @@ func (h *SystemHandler) GetSystemWidgetScriptURLs(ctx context.Context, campaignI
 
 	manifest := sys.Info()
 	total := len(manifest.TextRenderers) + len(manifest.Widgets)
-	if total == 0 {
+	// A campaign's custom system serves no scripts (see WidgetScriptAPI).
+	if total == 0 || Dir(manifest.ID) == "" {
 		return nil
 	}
 

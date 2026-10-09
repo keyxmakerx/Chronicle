@@ -172,6 +172,8 @@ Never: the story of how a bug was found, "before this fix"/"this used to", task 
 
 Avoid: restating the code (`// Set name to the request name`), unexplained commented-out code, and comments stating the obvious (`// Delete deletes a campaign`).
 
+`tools/check-comment-clutter.sh` (CI) fails a branch whose new comments carry an old tracking ID, a `cordinator/` path, "this PR", a `file:line` pointer, a pointer to `.ai/todo.md`, or a date outside tests. Existing comments are grandfathered; a line that truly needs one ends with `clutter-ok`.
+
 **TODO format** names the tracking issue (open one first if none exists): `// TODO(#613): stop echoing untouched fields back on update`, or cross-repo `// TODO(keyxmakerx/Chronicle-Foundry-Module#95): ...`.
 
 ## Schema, Migrations and Permissions

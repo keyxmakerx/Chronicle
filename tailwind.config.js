@@ -95,6 +95,11 @@ module.exports = {
           DEFAULT: 'var(--color-border)',               // standard borders
           light:   'var(--color-border-light)',          // subtle dividers
         },
+
+        // State: yes / maybe / no. Take an opacity modifier (bg-ok/10).
+        ok:   'rgb(var(--color-ok-rgb, 22 163 74) / <alpha-value>)',
+        warn: 'rgb(var(--color-warn-rgb, 217 119 6) / <alpha-value>)',
+        bad:  'rgb(var(--color-bad-rgb, 220 38 38) / <alpha-value>)',
       },
       // Use Inter as the default font
       fontFamily: {

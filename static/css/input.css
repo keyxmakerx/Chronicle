@@ -84,6 +84,10 @@
     --color-accent-rgb:       99 102 241;
     --color-accent-hover-rgb: 79 70 229;
     --color-accent-light-rgb: 165 180 252;
+    /* State colours: yes / maybe / no, saved / warning / error. */
+    --color-ok-rgb:   22 163 74;   /* green-600 */
+    --color-warn-rgb: 217 119 6;   /* amber-600 */
+    --color-bad-rgb:  220 38 38;   /* red-600 */
     --color-sidebar-bg:    #1a1c23;  /* always dark */
 
     /* ──────────────────────────────────────────────────────────────────
@@ -208,6 +212,9 @@
     --color-accent-rgb:       99 102 241;
     --color-accent-hover-rgb: 79 70 229;
     --color-accent-light-rgb: 165 180 252;
+    --color-ok-rgb:   74 222 128;  /* green-400 */
+    --color-warn-rgb: 251 191 36;  /* amber-400 */
+    --color-bad-rgb:  248 113 113; /* red-400 */
     --color-sidebar-bg:    #1a1c23;  /* always dark */
   }
 
@@ -3262,7 +3269,7 @@
   .sidebar-collapsed .nav-tr, .sidebar-collapsed .nav-hid, .sidebar-collapsed .nav-ext, .sidebar-collapsed .nav-gh-wrap,
   .sidebar-collapsed .nav-gh, .sidebar-collapsed .nav-tw, .sidebar-collapsed .nav-subs, .sidebar-collapsed .nav-admin,
   .sidebar-collapsed .nav-mypin,
-  .sidebar-collapsed .nav-foot, .sidebar-collapsed #sidebar-sessions-rsvp { display: none; }
+  .sidebar-collapsed .nav-foot { display: none; }
   .sidebar-collapsed .nav-sb .nav-row, .nav-sb.sidebar-collapsed .nav-row { padding: 0; justify-content: center; }
 
   /* The owner's edit mode (sidebar_editor.js): a handle, a pin and an eye on

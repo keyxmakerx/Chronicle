@@ -80,7 +80,7 @@ func (h *Handler) GameNightsLink(c echo.Context) error {
 	return middleware.HTMXRedirect(c, gameNightsTarget(cc.Campaign.ID, calID, sessionID, c.QueryParam("date")))
 }
 
-// sidebarNightDate is the date the RSVP card's link opens a session on: a
+// sidebarNightDate is the date the dashboard block's link opens a session on: a
 // repeating session's next night, or a one-off's own date.
 func sidebarNightDate(s Session, today string) string {
 	if s.IsRecurring {

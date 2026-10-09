@@ -1,7 +1,5 @@
-// import_zip_media_test.go pins that a media ZIP export is accepted on
-// import and its unrestored media is counted and named in the response,
-// rather than silently dropped. Full media restore (remapping old media IDs
-// across entity/map/token image paths and entry_html) is TODO(keyxmakerx/Chronicle#612).
+// import_zip_media_test.go pins how an uploaded ZIP's media reaches the
+// media importer, and what the import form promises about pictures.
 package campaigns
 
 import (
@@ -79,27 +77,82 @@ func postImportBlob(t *testing.T, h *ExportHandler, filename string, blob []byte
 	return rec
 }
 
-// TestImportCampaign_ZipMediaIsCountedAndNamed is the regression: importing a
-// media-bearing zip must tell the operator how many media files did not come
-// back, not redirect them to a campaign full of broken images.
-func TestImportCampaign_ZipMediaIsCountedAndNamed(t *testing.T) {
-	svc := NewExportImportService(importStubCampaignSvc{})
-	blob := buildImportZip(t, &CampaignExport{
-		Format:   ExportFormat,
-		Version:  ExportVersion,
-		Campaign: ExportCampaignMeta{Name: "Test Campaign"},
-	}, 3)
+// recordingMediaImporter reads every manifest row from the bundle it is
+// handed and pretends each read file was restored under a new id.
+type recordingMediaImporter struct {
+	got    map[string]string // original id -> bytes read
+	bundle *ImportMediaBundle
+}
 
-	rec := postImportBlob(t, NewExportHandler(svc), "campaign.zip", blob)
-
-	if got := rec.Header().Get("HX-Redirect"); got != "" {
-		t.Fatalf("zip import with dropped media redirected to %q — the loss was never surfaced", got)
-	}
-	body := rec.Body.String()
-	for _, want := range []string{"Imported with losses", "3 media files", "restore them by hand"} {
-		if !strings.Contains(body, want) {
-			t.Errorf("response never mentions %q; body:\n%s", want, body)
+func (r *recordingMediaImporter) ImportMedia(_ context.Context, _, _ string, files []ExportMediaFile, bundle *ImportMediaBundle, idMap *IDMap, _ *ImportReport) error {
+	r.bundle = bundle
+	r.got = map[string]string{}
+	for _, f := range files {
+		data, ok, err := bundle.Read(f)
+		if ok && err == nil {
+			r.got[f.OriginalID] = string(data)
+			idMap.MediaIDs[f.OriginalID] = "restored-" + f.OriginalID
 		}
+	}
+	return nil
+}
+
+// TestImportCampaign_ZipMediaReachesTheImporter: the zip's media/ entries are
+// handed to the media importer, paired with their manifest rows by Filename,
+// and a manifest from before Filename existed is paired by the file's id.
+func TestImportCampaign_ZipMediaReachesTheImporter(t *testing.T) {
+	const withName = "11111111-1111-1111-1111-111111111111"
+	const legacy = "22222222-2222-2222-2222-222222222222"
+	var buf bytes.Buffer
+	zw := zip.NewWriter(&buf)
+	raw, _ := json.Marshal(&CampaignExport{
+		Format: ExportFormat, Version: ExportVersion,
+		Campaign: ExportCampaignMeta{Name: "Test Campaign"},
+		Media: []ExportMediaFile{
+			{OriginalID: withName, Filename: withName + ".png", MimeType: "image/png"},
+			{OriginalID: legacy, MimeType: "image/png"},
+		},
+	})
+	for name, body := range map[string]string{
+		"campaign.json":              string(raw),
+		"media/" + withName + ".png": "NAMED-BYTES",
+		"media/" + legacy + ".png":   "LEGACY-BYTES",
+	} {
+		w, err := zw.Create(name)
+		if err != nil {
+			t.Fatalf("create %s: %v", name, err)
+		}
+		_, _ = w.Write([]byte(body))
+	}
+	if err := zw.Close(); err != nil {
+		t.Fatalf("close zip: %v", err)
+	}
+
+	svc := NewExportImportService(importStubCampaignSvc{})
+	rec := &recordingMediaImporter{}
+	svc.SetMediaImporter(rec)
+	resp := postImportBlob(t, NewExportHandler(svc), "campaign.zip", buf.Bytes())
+
+	if rec.got[withName] != "NAMED-BYTES" || rec.got[legacy] != "LEGACY-BYTES" {
+		t.Errorf("importer read %v, want both files' bytes", rec.got)
+	}
+	if got := resp.Header().Get("HX-Redirect"); got != "/campaigns/new-campaign" {
+		t.Errorf("a zip whose media all came back reported losses; HX-Redirect = %q, body:\n%s", got, resp.Body.String())
+	}
+}
+
+// TestImportCampaign_JSONUploadHandsNoBundle: a JSON upload has no picture
+// bytes, and the importer is told so (a nil bundle) rather than handed an
+// empty one it could mistake for a zip that lost its files.
+func TestImportCampaign_JSONUploadHandsNoBundle(t *testing.T) {
+	svc := NewExportImportService(importStubCampaignSvc{})
+	rec := &recordingMediaImporter{}
+	svc.SetMediaImporter(rec)
+	env := minimalEnvelope()
+	env.Media = []ExportMediaFile{{OriginalID: "33333333-3333-3333-3333-333333333333", MimeType: "image/png"}}
+	postImport(t, NewExportHandler(svc), env)
+	if rec.bundle != nil {
+		t.Error("a JSON upload handed the media importer a bundle")
 	}
 }
 
@@ -119,10 +172,8 @@ func TestImportCampaign_ZipWithoutMediaIsClean(t *testing.T) {
 	}
 }
 
-// TestImportForm_AcceptsZip pins the UI half. The handler has always been
-// able to parse a zip; the form's accept attribute meant the operator could
-// not hand it one, so "Export ZIP (with media)" round-tripped to nothing at
-// all — not even the structural data.
+// TestImportForm_AcceptsZip pins the UI half: the form accepts the zip, and
+// says a JSON file brings no pictures back.
 func TestImportForm_AcceptsZip(t *testing.T) {
 	var buf bytes.Buffer
 	if err := ImportCampaignPage("csrf-token").Render(context.Background(), &buf); err != nil {
@@ -140,9 +191,8 @@ func TestImportForm_AcceptsZip(t *testing.T) {
 	if !strings.Contains(accept, ".zip") {
 		t.Errorf("accept=%q does not offer .zip; the ZIP export cannot be uploaded at all", accept)
 	}
-	// And it must not over-promise what a zip import does.
-	if !strings.Contains(html, "not") || !strings.Contains(html, "re-attached") {
-		t.Error("the import form does not warn that media files are not re-attached")
+	if !strings.Contains(html, "carries no pictures") {
+		t.Error("the import form does not say a JSON file brings no pictures back")
 	}
 }
 
@@ -153,7 +203,7 @@ func TestImportForm_AcceptsZip(t *testing.T) {
 func TestImportReport_FailNCountsBatchOnce(t *testing.T) {
 	r := NewImportReport()
 	r.Fail("notes", "note", "Party Loot", "database is away")
-	r.FailN("media", "media file", "", "not re-attached", 12)
+	r.FailN("media", "media file", "", "not in the zip", 12)
 
 	if got := r.Count(); got != 13 {
 		t.Errorf("Count() = %d, want 13", got)

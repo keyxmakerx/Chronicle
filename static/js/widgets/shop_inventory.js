@@ -26,7 +26,6 @@ Chronicle.register('shop_inventory', {
 
     // Transaction endpoints derive from the campaign URL.
     var txEndpoint = campaignUrl + '/armory/transactions';
-    var purchaseEndpoint = campaignUrl + '/armory/purchase';
 
     // Internal state.
     var state = {
