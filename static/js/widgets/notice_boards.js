@@ -124,7 +124,8 @@
       var stamp = it.status === 'done' ? 'Done' : it.status === 'active' ? 'Taken' : it.status === 'failed' ? 'Failed' : '';
       return K.noticeHTML({ kicker: it.kicker, title: it.title, blurb: it.blurb, reward: it.reward }, {
         cls: 'bi notice' + (mine ? ' mine' : '') + (it.hidden ? ' veiled' : ''), attrs: ' data-id="' + esc(it.id) + '" data-notice="' + esc(it.questId) + '"',
-        style: style, stamp: stamp, brass: i % 3 === 1, torn: i % 3 === 2 });
+        style: style, stamp: stamp, brass: i % 3 === 1, torn: i % 3 === 2,
+        left: it.status === 'done' || it.status === 'failed' ? '' : K.daysText(it.daysLeft), late: it.daysLeft < 0 });
     }
     if (it.kind === 'note') {
       return head + ' aria-label="Note' + (it.ownerName ? ' by ' + esc(it.ownerName) : '') + '"><span class="pin"></span><div class="sticky"><div class="nt"' +
@@ -477,7 +478,7 @@
       (n.postedBy ? '<div class="by">' + esc(n.postedBy) + '</div>' : '') + (n.body || []).map(function (p) { return '<p>' + esc(p) + '</p>'; }).join('') +
       (n.reward ? '<h4>Reward</h4><p style="margin:0">' + esc(n.reward) + '</p>' : '') +
       (steps.length ? '<h4>What must be done</h4><ul class="steps">' + steps.join('') + '</ul>' : '') +
-      '<div class="sfoot"><span class="due">' + esc(n.due || '') + '</span><span style="display:flex;gap:10px;align-items:center">' +
+      '<div class="sfoot"><span class="due">' + (q.due ? 'Due ' + esc(q.due.label) + ' <span class="dl">· ' + esc(K.daysText(q.due.daysLeft)) + '</span>' : esc(n.due || '')) + '</span><span style="display:flex;gap:10px;align-items:center">' +
       '<a class="pbtn" href="' + S.campaignUrl + '/entities/' + encodeURIComponent(it.questId) + '">Open the quest</a>' +
       '<button type="button" class="pbtn" data-close>Pin it back</button><span class="seal" aria-hidden="true">' + esc(K.sealLetter(n.title)) + '</span></span></div>';
   }

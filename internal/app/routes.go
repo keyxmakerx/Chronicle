@@ -4902,7 +4902,10 @@ func (a *App) RegisterRoutes() {
 	wsEventBus := ws.EventBus(syncapi.NewRecordingEventBus(ws.NewEventBus(wsHub), syncChangeRepo))
 	go syncapi.StartChangePruner(a.ShutdownCtx, syncChangeRepo)
 
-	entityService.SetEventPublisher(&entityEventPublisherAdapter{bus: wsEventBus})
+	// The quests due-date events follow a page's visibility, so the entity
+	// events also reach them once the quests service exists (attached below).
+	questEntityEvts := newQuestEntityEvents(&entityEventPublisherAdapter{bus: wsEventBus})
+	entityService.SetEventPublisher(questEntityEvts)
 	relService.SetEventPublisher(&relationEventPublisherAdapter{bus: wsEventBus})
 	stashEvents.bus = wsEventBus
 	entityService.SetSidebarAutoAdder(&sidebarAutoAdderAdapter{campaignService: campaignService})
@@ -4946,10 +4949,12 @@ func (a *App) RegisterRoutes() {
 		questEntities := &questEntityAdapter{svc: entityService, cards: entities.NewPageCards(a.DB)}
 		questMaps := &questMapAdapter{svc: mapsService, addons: addonService}
 		questRepo := quests.NewQuestRepository(a.DB)
+		questCal := &questCalendarAdapter{svc: calendarService, addons: addonService}
 		questSvc, boardSvc := quests.WithAnnouncer(
-			quests.NewQuestService(questRepo, questEntities, questMaps),
-			quests.NewBoardService(quests.NewBoardRepository(a.DB), questRepo, questEntities, &questTypeAdapter{svc: entityService}, questMaps, &questMemberNamesAdapter{svc: campaignService}),
+			quests.NewQuestService(questRepo, questEntities, questMaps, questCal),
+			quests.NewBoardService(quests.NewBoardRepository(a.DB), questRepo, questEntities, &questTypeAdapter{svc: entityService}, questMaps, &questMemberNamesAdapter{svc: campaignService}, questCal),
 			questEntities, &questAnnouncerAdapter{bus: wsEventBus})
+		questEntityEvts.attach(questSvc)
 		quests.RegisterRoutes(e, quests.NewHandler(
 			questSvc,
 			boardSvc,

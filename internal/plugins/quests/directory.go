@@ -70,3 +70,65 @@ type TypeDirectory interface {
 	// TypeInCampaign is false for a missing type and for one of another campaign.
 	TypeInCampaign(ctx context.Context, campaignID string, typeID int) (bool, error)
 }
+
+// DueDay is a day on the campaign calendar, as stored on a quest sheet.
+type DueDay struct {
+	Year  int `json:"year"`
+	Month int `json:"month"`
+	Day   int `json:"day"`
+}
+
+// CalendarMonth is one month of the calendar, as the due-date picker needs it.
+type CalendarMonth struct {
+	Name     string `json:"name"`
+	Days     int    `json:"days"`
+	LeapDays int    `json:"leapDays"`
+}
+
+// QuestCalendar is the campaign calendar reduced to what a due date needs. All
+// date arithmetic lives behind it, in the calendar plugin's own methods, so
+// the quests plugin never second-guesses leap rules or month lengths.
+type QuestCalendar interface {
+	ID() string
+	Name() string
+	// Today is the calendar's current in-world date.
+	Today() DueDay
+	Months() []CalendarMonth
+	// Leap is the leap-year interval and offset (0 every = no leap years).
+	Leap() (every, offset int)
+	// Valid reports whether d is a real day of this calendar.
+	Valid(d DueDay) bool
+	// Label formats d in the calendar's own style.
+	Label(d DueDay) string
+	// DaysFromToday is d minus today in days; negative when d is past.
+	DaysFromToday(d DueDay) int
+}
+
+// DueEvent is the calendar event that mirrors a quest's due date.
+type DueEvent struct {
+	EntityID string
+	Title    string
+	Day      DueDay
+	// DMOnly keeps the event off players' calendars; it is set whenever a
+	// plain player may not open the quest page, so a hidden quest's title
+	// never reaches them.
+	DMOnly bool
+	// CreatedBy is the acting user; only used when the event is created.
+	CreatedBy string
+}
+
+// CalendarDirectory is the quests plugin's view of the campaign calendar. It
+// is implemented in internal/app over the calendar service.
+type CalendarDirectory interface {
+	// Calendar returns the campaign's primary calendar, or nil (and no
+	// error) when there is none or the calendar addon is off.
+	Calendar(ctx context.Context, campaignID string) (QuestCalendar, error)
+	// SaveDueEvent updates the event eventID, or creates one when eventID is
+	// empty or the event is gone, and returns the event's id.
+	SaveDueEvent(ctx context.Context, campaignID string, cal QuestCalendar, eventID string, ev DueEvent) (string, error)
+	// SetDueEventVisibility changes only the event's visibility, and only
+	// when it differs. A missing event is not an error.
+	SetDueEventVisibility(ctx context.Context, campaignID string, cal QuestCalendar, eventID string, dmOnly bool) error
+	// DeleteDueEvent removes the event; a missing event is not an error.
+	DeleteDueEvent(ctx context.Context, campaignID string, cal QuestCalendar, eventID string) error
+}

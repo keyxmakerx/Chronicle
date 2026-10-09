@@ -44,6 +44,11 @@ which also links `static/css/quest_board.css` and the period fonts.
 - What a viewer sees is decided by the server. A player's quest view has no
   foes, no hidden steps and no hidden pieces; a page a player cannot open
   arrives on a board as `concealed`, with no name or id.
+- The ledger's due row is a day picked on the campaign calendar when the DM
+  view has a `calendar` (sent as `dueDate`; the server returns the `due` label
+  and days left and keeps a calendar event in step); without one it is the free
+  text `notice.due`. Notices show `daysLeft` on the board and in the reading
+  sheet, and an unfinished one turns late when it is negative.
 - Ledgers open by clicking the bookmark and fold away on a click outside or
   Escape, unless pinned. While the hand-out panel is open a fold-away asks
   first if something was picked.

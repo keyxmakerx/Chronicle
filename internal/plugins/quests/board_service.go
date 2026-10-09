@@ -3,6 +3,7 @@ package quests
 import (
 	"context"
 	"fmt"
+	"log/slog"
 	"math"
 	"strings"
 	"unicode"
@@ -48,6 +49,8 @@ type boardService struct {
 	types   TypeDirectory
 	maps    MapDirectory
 	members MemberNames
+	// cal may be nil: without a calendar a notice carries no days left.
+	cal CalendarDirectory
 }
 
 // questDocs is the slice of QuestRepository the boards need, to show a
@@ -57,8 +60,8 @@ type questDocs interface {
 }
 
 // NewBoardService builds the service.
-func NewBoardService(repo BoardRepository, quests QuestRepository, entities EntityDirectory, types TypeDirectory, maps MapDirectory, members MemberNames) BoardService {
-	return &boardService{repo: repo, quests: quests, gate: gate{entities: entities}, types: types, maps: maps, members: members}
+func NewBoardService(repo BoardRepository, quests QuestRepository, entities EntityDirectory, types TypeDirectory, maps MapDirectory, members MemberNames, cal CalendarDirectory) BoardService {
+	return &boardService{repo: repo, quests: quests, gate: gate{entities: entities}, types: types, maps: maps, members: members, cal: cal}
 }
 
 // requireHome is the one check that a board home exists in the campaign. A
@@ -213,6 +216,26 @@ func (s *boardService) buildViews(ctx context.Context, campaignID string, v View
 		}
 	}
 
+	// The calendar is read at most once, and only for a notice that has a
+	// due date; a calendar that cannot be read just leaves the days off.
+	var cal QuestCalendar
+	calRead := false
+	daysLeft := func(d DueDay) *int {
+		if !calRead {
+			calRead = true
+			c, err := calendarOf(ctx, s.cal, campaignID)
+			if err != nil {
+				slog.Warn("quests: reading the campaign calendar failed", slog.String("campaign_id", campaignID), slog.Any("error", err))
+			}
+			cal = c
+		}
+		if cal == nil {
+			return nil
+		}
+		n := cal.DaysFromToday(d)
+		return &n
+	}
+
 	out := map[string][]ItemView{}
 	visible := map[string]bool{}
 	base := func(it Item) ItemView {
@@ -282,6 +305,9 @@ func (s *boardService) buildViews(ctx context.Context, campaignID string, v View
 			iv = base(it)
 			iv.QuestID, iv.Title, iv.Kicker = e.ID, q.Notice.Title, q.Notice.Kicker
 			iv.Blurb, iv.Status, iv.HasSheet = q.Notice.Blurb, q.Status, true
+			if q.DueDate != nil {
+				iv.DaysLeft = daysLeft(*q.DueDate)
+			}
 			// The reward travels with its tag: hidden on the quest page, hidden here.
 			if v.IsDM || !q.Layout.Tag.Hidden {
 				iv.Reward = q.Notice.Reward

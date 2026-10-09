@@ -391,6 +391,7 @@
       '<span class="pin' + (o.brass ? ' brass' : '') + '"></span>' +
       '<div class="pp' + (o.torn ? ' torn' : '') + '"><div class="k">' + esc(n.kicker) + '</div><div class="t">' + esc(n.title) + '</div>' +
       (n.blurb ? '<div class="x">' + esc(n.blurb) + '</div>' : '') + (n.reward ? '<div class="rw">' + esc(n.reward) + '</div>' : '') +
+      (o.left ? '<div class="left' + (o.late ? ' late' : '') + '">' + esc(o.left) + '</div>' : '') +
       (o.stamp ? '<span class="stamp' + (o.stamp === 'Done' ? ' done' : '') + '">' + esc(o.stamp) + '</span>' : '') +
       (o.seal ? '<span class="wax">' + esc(o.seal) + '</span>' : '') + '</div></div>';
   }
@@ -406,6 +407,13 @@
   function photoHTML(name, imageUrl) {
     if (imageUrl) return '<img src="' + esc(imageUrl) + '" alt="" loading="lazy" draggable="false">';
     return '<div class="noimg">' + esc((String(name || '?').trim()[0] || '?').toUpperCase()) + '</div>';
+  }
+  // In-world days until a due date, as the notice says it.
+  function daysText(n) {
+    if (typeof n !== 'number') return '';
+    if (n === 0) return 'Due today';
+    if (n > 0) return n + (n === 1 ? ' day left' : ' days left');
+    return -n + (n === -1 ? ' day late' : ' days late');
   }
   function sealLetter(title) { return (String(title || '').replace(/^(The|A|An) /i, '').trim()[0] || '·').toUpperCase(); }
 
@@ -631,7 +639,7 @@
   }
 
   window.QuestBoardKit = {
-    boardFrame: boardFrame, placeStyle: placeStyle, noticeHTML: noticeHTML, mapSVG: mapSVG, photoHTML: photoHTML, sealLetter: sealLetter,
+    boardFrame: boardFrame, placeStyle: placeStyle, noticeHTML: noticeHTML, mapSVG: mapSVG, photoHTML: photoHTML, sealLetter: sealLetter, daysText: daysText,
     dust: dust, restLoops: restLoops, drawStrings: drawStrings, wireDrag: wireDrag, dmTab: dmTab, askDown: askDown,
     takeDownAnim: takeDownAnim, dropIn: dropIn, picker: picker, live: live,
     I: I, LOOKS: LOOKS, esc: esc, api: apiCall, reduce: reduce,

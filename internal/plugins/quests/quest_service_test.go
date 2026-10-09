@@ -38,7 +38,7 @@ func newQuestEnv() questEnv {
 	e.ents.add(other, "foreign", "Foreign", false)
 	e.maps.add(camp, "map-1", "Vale")
 	e.maps.add(other, "map-x", "Foreign map")
-	e.svc = NewQuestService(e.repo, e.ents, e.maps)
+	e.svc = NewQuestService(e.repo, e.ents, e.maps, nil)
 	return e
 }
 

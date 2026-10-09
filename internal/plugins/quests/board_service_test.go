@@ -37,7 +37,7 @@ func newBoardEnv() boardEnv {
 	m.add(other, "map-x", "Foreign")
 	types := fakeTypes{camp: {catType: true}, other: {otherType: true}}
 	e.maps = m
-	e.svc = NewBoardService(e.repo, e.quest, e.ents, types, m, fakeNames{"dm": "Dana", "pl": "Pat", "scr": "Sam", "pl2": "Pia"})
+	e.svc = NewBoardService(e.repo, e.quest, e.ents, types, m, fakeNames{"dm": "Dana", "pl": "Pat", "scr": "Sam", "pl2": "Pia"}, nil)
 	return e
 }
 

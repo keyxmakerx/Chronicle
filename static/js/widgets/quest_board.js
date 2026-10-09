@@ -104,7 +104,8 @@
     if (n && (isDm || !L.notice.hidden)) {
       var stamp = d.status === 'done' ? 'Done' : d.status === 'failed' ? 'Failed' : '';
       parts.push(K.noticeHTML(n, { style: K.placeStyle(pos(L.notice, 7, 8, 58, -2.5), i++), attrs: ' data-id="notice" data-piece="notice"',
-        seal: K.sealLetter(n.title), stamp: stamp, cls: L.notice.hidden ? 'veiled' : '' }));
+        seal: K.sealLetter(n.title), stamp: stamp, cls: L.notice.hidden ? 'veiled' : '',
+        left: d.due && !stamp ? K.daysText(d.due.daysLeft) : '', late: d.due && d.due.daysLeft < 0 }));
     }
     if (d.map && (isDm || !L.map.hidden)) {
       parts.push('<div class="note scrap' + (L.map.hidden ? ' veiled' : '') + '" tabindex="0" role="button" aria-label="Open the map: ' + esc(d.map.name) + '" data-id="map" data-piece="map" style="' +
@@ -148,7 +149,8 @@
       line('postedBy', 'div', 'by', n.postedBy, 'Posted by…') + body +
       ((n.reward || isDm) ? '<h4>Reward</h4>' + line('reward', 'p', '', n.reward, 'What the reward is') : '') +
       (steps.length ? '<h4>What must be done</h4><ul class="steps">' + steps.join('') + '</ul>' : '') +
-      '<div class="sfoot">' + line('due', 'span', 'due', n.due, 'When it is due') +
+      '<div class="sfoot">' + (d.due ? '<span class="due">Due ' + esc(d.due.label) + ' <span class="dl">· ' + esc(K.daysText(d.due.daysLeft)) + '</span></span>'
+        : line('due', 'span', 'due', n.due, 'When it is due')) +
       '<span style="display:flex;gap:10px;align-items:center"><button type="button" class="pbtn" data-close>Pin it back</button><span class="seal" aria-hidden="true">' + esc(K.sealLetter(n.title)) + '</span></span></div>' +
       (isDm ? '<div class="dmhint">Double-click any line to change it. Players read this sheet without the hidden steps.</div>' : '');
   }
@@ -224,6 +226,8 @@
       patch.version = S.data.version;
       return K.api(S.cfg.endpoint, 'PUT', patch, S.cfg.csrfToken).then(function (data) {
         S.data.version = data && data.version != null ? data.version : S.data.version;
+        // The label and days left are the server's, worked out on its calendar.
+        if (data && 'dueDate' in patch) { S.data.due = data.due || null; redrawBoard(S); redrawLedger(S); }
       });
     }).catch(function (err) {
       S.gen = (S.gen || 0) + 1;
@@ -241,7 +245,12 @@
     var head = '<select class="lsel" data-status aria-label="Status">' + STATUS.map(function (s) {
       return '<option value="' + s[0] + '"' + (d.status === s[0] ? ' selected' : '') + '>' + s[1] + '</option>';
     }).join('') + '</select>';
-    var due = lrow('<span class="ico">' + I.cal + '</span><span class="grow" data-rename="due" data-max="160" title="Double-click to change">' +
+    // With a campaign calendar the due date is a day on it; without one it
+    // stays the free text it always was.
+    var due = d.calendar ? lrow('<span class="ico">' + I.cal + '</span><button type="button" class="lk grow" data-due-pick style="text-align:left">' +
+      (d.due ? esc('Due ' + d.due.label) : '<em class="ph">Pick a due date on the calendar…</em>') + '</button>' +
+      (d.due ? '<span class="sub">' + esc(K.daysText(d.due.daysLeft)) + '</span>' : ''))
+      : lrow('<span class="ico">' + I.cal + '</span><span class="grow" data-rename="due" data-max="160" title="Double-click to change">' +
       (n.due ? esc(n.due) : '<em class="ph">When is it due?</em>') + '</span>', false, ' data-list="notice" data-i="0"');
     var html = K.ledgerShell({
       title: 'Quest Ledger', head: head, fixed: due, tab: S.tab,
@@ -342,6 +351,7 @@
   // a give from the Armory would. A money reward is split between the ticked
   // characters and each share paid onto their sheet through the Armory's pay,
   // which records it in their money history.
+  // (Due dates are below the hand-out.)
   var AV = ['#8a5a2b', '#3f6e5a', '#5a4a8a', '#8a3f4f', '#3f5f8a', '#6e6a3f'];
   function startGive(S) {
     var bw = S.el.querySelector('.bw');
@@ -393,6 +403,78 @@
     return '<div class="give" aria-hidden="true" role="dialog" aria-label="Hand out rewards"><div class="wh"><b>Hand out rewards</b><span class="sp"></span><span class="only">' + esc(title) + '</span></div>' +
       '<div class="gb">' + rows + '</div><div class="gf"><button type="button" class="mini" data-give-cancel>Cancel</button><button type="button" class="mini pri" data-give-ok>Hand out</button></div></div>';
   }
+  // ---------- Due date ----------
+  // The DM picks a day on the campaign calendar; the server works out the
+  // label and days left against the calendar's today, and keeps a matching
+  // event on the calendar. The count here is only a preview while picking.
+  function openDue(S) {
+    var cal = S.data.calendar, led = S.el.querySelector('.ledger');
+    if (!cal || !led || S.duePick) return;
+    var at = S.data.due || cal.today;
+    var months = cal.months.map(function (m, i) {
+      return '<option value="' + (i + 1) + '"' + (i + 1 === at.month ? ' selected' : '') + '>' + esc(m.name) + '</option>';
+    }).join('');
+    var tmp = document.createElement('div');
+    tmp.innerHTML = '<div class="give due" aria-hidden="true" role="dialog" aria-label="Due date"><div class="wh"><b>Due date</b><span class="sp"></span><span class="only">' + esc(cal.name) + '</span></div>' +
+      '<div class="gb">' + lrow('<span class="grow">Today in the world is ' + esc(cal.today.label) + '.</span>') +
+      '<div class="row when"><select class="wsel" data-due-month aria-label="Month">' + months + '</select><select class="wsel" data-due-day aria-label="Day"></select>' +
+      '<input class="wsel yr" data-due-year type="number" inputmode="numeric" value="' + at.year + '" aria-label="Year"></div>' +
+      '<div class="far" data-due-far></div>' +
+      '<p class="sub dnote">It goes on the calendar as “Due: ' + esc((S.data.notice && S.data.notice.title) || 'this quest') + '”. Players see it there when they can see this quest.</p>' +
+      '</div><div class="gf">' + (S.data.due ? '<button type="button" class="mini" data-due-clear>Clear</button><span class="sp"></span>' : '') +
+      '<button type="button" class="mini" data-due-cancel>Cancel</button><button type="button" class="mini pri" data-due-ok>Set due date</button></div></div>';
+    var g = tmp.firstChild; led.appendChild(g);
+    S.duePick = true;
+    fillDays(S, at.day);
+    K.openLedger(S.el.querySelector('.bw'));
+    requestAnimationFrame(function () { g.classList.add('on'); g.setAttribute('aria-hidden', 'false'); });
+  }
+  function fillDays(S, want) {
+    var g = S.el.querySelector('.due'), cal = S.data.calendar;
+    var y = +g.querySelector('[data-due-year]').value, m = +g.querySelector('[data-due-month]').value;
+    var n = monthDays(cal, m, y), sel = g.querySelector('[data-due-day]'), cur = Math.min(want || +sel.value || 1, n), opts = '';
+    for (var i = 1; i <= n; i++) opts += '<option value="' + i + '"' + (i === cur ? ' selected' : '') + '>' + i + '</option>';
+    sel.innerHTML = opts;
+    showDueDistance(S);
+  }
+  function readDue(S) {
+    var g = S.el.querySelector('.due');
+    return { year: +g.querySelector('[data-due-year]').value, month: +g.querySelector('[data-due-month]').value, day: +g.querySelector('[data-due-day]').value };
+  }
+  function showDueDistance(S) {
+    var g = S.el.querySelector('.due'); if (!g) return;
+    var cal = S.data.calendar, far = g.querySelector('[data-due-far]'), left = daysBetween(cal, cal.today, readDue(S));
+    far.textContent = isFinite(left) ? K.daysText(left) : '';
+    far.classList.toggle('late', left < 0);
+  }
+  // Mirrors the calendar's own day count (leap months included) so the
+  // preview agrees with what the server will say.
+  function isLeap(cal, y) { return cal.leapEvery > 0 && (y - (cal.leapOffset || 0)) % cal.leapEvery === 0; }
+  function monthDays(cal, m, y) { var mo = cal.months[m - 1]; return mo ? mo.days + (isLeap(cal, y) ? mo.leapDays || 0 : 0) : 0; }
+  function daysBetween(cal, a, b) {
+    if (!(Math.abs(a.year - b.year) <= 400)) return NaN;
+    var lo = Math.min(a.year, b.year);
+    function count(d) {
+      var n = 0, y, m;
+      for (y = lo; y < d.year; y++) for (m = 1; m <= cal.months.length; m++) n += monthDays(cal, m, y);
+      for (m = 1; m < d.month; m++) n += monthDays(cal, m, d.year);
+      return n + d.day;
+    }
+    return count(b) - count(a);
+  }
+  function closeDue(S) {
+    var g = S.el.querySelector('.due');
+    S.duePick = false;
+    if (!g) return;
+    g.classList.remove('on'); g.setAttribute('aria-hidden', 'true');
+    setTimeout(function () { g.remove(); }, K.reduce() ? 0 : 400);
+  }
+  function setDue(S, when) {
+    closeDue(S);
+    save(S, { dueDate: when }, '');
+    K.toast(when ? 'Due date set. It is on the calendar too.' : 'Due date cleared, and taken off the calendar.');
+  }
+
   function rewardById(S, id) { return S.data.rewards.filter(function (x) { return x.id === id; })[0]; }
   // share is one character's part of a split, in hundredths, rounded down so
   // the party is never paid more than the reward.
@@ -409,7 +491,7 @@
     });
   }
   function closeGive(S) {
-    var g = S.el.querySelector('.give'), w = S.el.querySelector('.ledger .warn');
+    var g = S.el.querySelector('.give:not(.due)'), w = S.el.querySelector('.ledger .warn');
     if (w) w.remove();
     S.give = null;
     if (!g) return;
@@ -500,7 +582,7 @@
       redraw: function () {}
     });
     var ledgers = K.wireLedgers(el, {
-      busy: function () { return !!S.give; },
+      busy: function () { return !!S.give || !!S.duePick; },
       blocked: function (bw) { giveBlocked(S, bw); },
       onAdd: function (list, text, row) { addTo(S, list, text, row); },
       onRemove: function (list, i) {
@@ -568,6 +650,10 @@
           } });
         return;
       }
+      if (t.closest('[data-due-pick]')) { openDue(S); return; }
+      if (t.closest('[data-due-cancel]')) { closeDue(S); return; }
+      if (t.closest('[data-due-clear]')) { setDue(S, null); return; }
+      if (t.closest('[data-due-ok]')) { setDue(S, readDue(S)); return; }
       if (t.closest('[data-give]')) { startGive(S); return; }
       if (t.closest('[data-give-cancel]')) { closeGive(S); return; }
       if (t.closest('[data-give-ok]')) { handOut(S); return; }
@@ -590,6 +676,7 @@
     });
     el.addEventListener('change', function (e) {
       var t = e.target;
+      if (t.closest('.due')) { fillDays(S); return; }
       if (t.closest('.give')) {
         if (S.give) S.give.dirty = true;
         if (t.name === 'coin') updateShares(S);

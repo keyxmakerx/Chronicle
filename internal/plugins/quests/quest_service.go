@@ -15,17 +15,26 @@ type QuestService interface {
 	Get(ctx context.Context, campaignID, entityID string, v Viewer) (any, error)
 	// Put applies a partial update and returns the DM view. DM team only.
 	Put(ctx context.Context, campaignID, entityID string, v Viewer, p QuestPatch) (*DMQuestView, error)
+	// SyncDueEvent re-derives the visibility of the page's due-date calendar
+	// event after the page's own visibility changed. It touches nothing when
+	// the page has no sheet or no due date.
+	SyncDueEvent(ctx context.Context, campaignID, entityID string) error
+	// RemoveDueEvent deletes the page's due-date calendar event, for a page
+	// that was deleted. The sheet itself is left as it is.
+	RemoveDueEvent(ctx context.Context, campaignID, entityID string) error
 }
 
 type questService struct {
 	repo QuestRepository
 	gate
 	maps MapDirectory
+	// cal may be nil: a campaign without a calendar has no due dates.
+	cal CalendarDirectory
 }
 
-// NewQuestService builds the service.
-func NewQuestService(repo QuestRepository, entities EntityDirectory, maps MapDirectory) QuestService {
-	return &questService{repo: repo, gate: gate{entities: entities}, maps: maps}
+// NewQuestService builds the service. cal may be nil.
+func NewQuestService(repo QuestRepository, entities EntityDirectory, maps MapDirectory, cal CalendarDirectory) QuestService {
+	return &questService{repo: repo, gate: gate{entities: entities}, maps: maps, cal: cal}
 }
 
 // load reads the stored sheet or the defaults for the page.
@@ -114,6 +123,12 @@ func (s *questService) playerView(ctx context.Context, campaignID string, q Ques
 			n.Reward = ""
 		}
 		out.Notice = &n
+		// The due date belongs to the notice, so it hides with it.
+		if q.DueDate != nil {
+			if cal := s.viewCalendar(ctx, campaignID); cal != nil {
+				out.Due = dueView(cal, *q.DueDate)
+			}
+		}
 	}
 	out.ShowTag = q.Notice.Reward != "" && !q.Layout.Tag.Hidden
 	for _, st := range q.Steps {
@@ -178,6 +193,12 @@ func (s *questService) dmView(ctx context.Context, campaignID string, q Quest, v
 		Foes:    make([]FoeView, 0, len(q.Foes)),
 		Links:   make([]LinkView, 0, len(q.Links)),
 	}
+	if cal := s.viewCalendar(ctx, campaignID); cal != nil {
+		out.Calendar = calendarView(cal)
+		if q.DueDate != nil {
+			out.Due = dueView(cal, *q.DueDate)
+		}
+	}
 	for _, r := range q.Rewards {
 		out.Rewards = append(out.Rewards, RewardView{Reward: r, Name: ents[r.EntityID].Name})
 	}
@@ -213,20 +234,29 @@ func (s *questService) Put(ctx context.Context, campaignID, entityID string, v V
 	if want != version {
 		return nil, apperror.NewConflict("this quest was changed by someone else; reload and try again")
 	}
+	prevTitle := q.Notice.Title
 	if err := s.merge(ctx, campaignID, &q, p); err != nil {
+		return nil, err
+	}
+	plan, err := s.planDue(ctx, campaignID, ent, v, &q, p, prevTitle)
+	if err != nil {
 		return nil, err
 	}
 	data, err := json.Marshal(q)
 	if err != nil {
+		s.undoDue(ctx, campaignID, plan)
 		return nil, apperrorInternal(err)
 	}
 	saved, err := s.repo.Save(ctx, campaignID, entityID, data, version, v.UserID)
 	if err != nil {
+		s.undoDue(ctx, campaignID, plan)
 		return nil, apperrorInternal(err)
 	}
 	if !saved {
+		s.undoDue(ctx, campaignID, plan)
 		return nil, apperror.NewConflict("this quest was changed by someone else; reload and try again")
 	}
+	s.finishDue(ctx, campaignID, plan)
 	return s.dmView(ctx, campaignID, q, version+1)
 }
 
