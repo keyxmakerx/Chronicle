@@ -13,12 +13,9 @@
 > This file is a derived summary — regenerate the parts that changed whenever
 > a migration is added.
 
-Chronicle has 121 live tables: 57 core and 64 spread across the nine plugins
-below that have their own `migrations/` directory (counted by replaying every
-`CREATE`/`DROP TABLE` in migration order). Every other plugin (addons, admin,
-ai_workspace, armory, audit, auth, backup, campaigns, designlab, dmscreen,
-entities, media, npcs, restore, settings, smtp) reuses core tables and owns
-none of its own (ADR-028).
+Core tables live in `db/migrations/`. Plugins that own tables have a
+`migrations/` directory under `internal/plugins/<name>/`; every other plugin
+reuses core tables and owns none of its own (ADR-028).
 
 ## Conventions
 
@@ -89,6 +86,7 @@ numbered core migrations after it, tracked once each via `golang-migrate`'s
 | `site_settings` | Global key/value settings | `setting_key` PK |
 | `smtp_settings` | Outbound email config (singleton) | `id` CHECK = 1; `password_encrypted` AES-256-GCM |
 | `user_storage_limits` | Per-user upload/storage overrides | PK `user_id`; `bypass_*` columns for temporary admin-granted bypass |
+| `admin_activity` | Site-wide log of changes made from the admin area, shown on the admin Home page | `actor_user_id` deliberately not a FK, so rows outlive the account; `action`, `target_type`/`target_id`/`target_label`; `detail` JSON |
 
 ### Campaigns & membership
 
@@ -186,9 +184,8 @@ numbered core migrations after it, tracked once each via `golang-migrate`'s
 
 ## Plugin schema
 
-Plugin migrations run after core, in this order (`cmd/server/main.go`):
-bestiary, calendar, maps, sessions, timeline, widgetbindings, systemstate,
-syncapi, packages, foundry_vtt. A plugin's schema failing to migrate degrades that
+Plugin migrations run after core, in the order `registeredPlugins()` lists
+them in `cmd/server/main.go`. A plugin's schema failing to migrate degrades that
 plugin only (`internal/database/plugin_health.go`) — it never blocks boot.
 
 ### bestiary (`internal/plugins/bestiary/migrations/`)
@@ -328,6 +325,18 @@ Foundry module repo for the wire contract.
 | `quest_board_pages` | Board and ledger looks for a place page |
 | `quest_boards` | Boards on a place page; `who` = dm/scribe/all, `sort_order` |
 | `quest_board_items` | Pins: notice/note/page/map/string; `owner_user_id`, `by_dm`, `hidden`, `ref_id` (no FK) |
+
+### armory (`internal/plugins/armory/migrations/`)
+
+| Table | Purpose | Notable columns |
+|---|---|---|
+| `armory_item_shares` | Remembers which view grants on a hidden item came from a holder sharing it with the party, so un-sharing takes back only what sharing added | `PRIMARY KEY (character_id, item_entity_id, user_id)`; `made_grant` = the share added the grant; FKs to `campaigns` and `entities` (`ON DELETE CASCADE`) |
+
+### rolltables (`internal/plugins/rolltables/migrations/`)
+
+| Table | Purpose | Notable columns |
+|---|---|---|
+| `campaign_roll_tables` | One JSON document per campaign holding all its rolling tables, replaced as a unit | `campaign_id` PK, FK→`campaigns` CASCADE; `data` LONGTEXT; `updated_by` |
 
 ## MariaDB-specific notes
 

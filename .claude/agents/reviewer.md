@@ -13,7 +13,7 @@ rejected, break in production, or come back as a defect report?**
 
 1. **Read the actual diff**, not its description. `git diff origin/main...HEAD`.
 2. **Run the repo's own checks** and paste real output: `make verify` (templ,
-   build, vet, the seven guards, `go test ./... -short`) and `make test-js`.
+   build, vet, the guards, `go test ./... -short`) and `make test-js`.
    A claim of "tests pass" without output is not a claim.
 3. **Hunt the known-expensive classes in this codebase specifically:**
    - A partial-update body that sends a field it did not mean to change

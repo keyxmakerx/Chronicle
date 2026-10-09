@@ -6,9 +6,10 @@ Transforms the flat entity list rendered by `SidebarEntityList` into a
 collapsible tree with drag-and-drop reordering and reparenting. This is
 the core interactive component of the sidebar drill panel.
 
-**No page loads it.** The campaign sidebar (`layouts/nav.templ`) has no page
-tree and nothing opens the drill panel; the script, the panel and its
-endpoint remain until the tree moves onto category pages (#784).
+`base.templ` loads it with `sidebar_drill.js`. A category row in the
+campaign sidebar (`layouts/nav.templ`, `data-drill-open`) slides the drill
+panel open, and the panel's fragment carries the entity list this script
+turns into a tree.
 
 ## Architecture
 
@@ -81,7 +82,7 @@ nodes get `.sidebar-selected` class. A floating action bar appears with
 ## Persistence
 
 - **Collapse state**: localStorage `chronicle-tree-collapsed-{campaignId}`
-- **Reorg mode**: body class `sidebar-reorg-active` (set by sidebar_reorg.js)
+- **Reorg mode**: gated on the body class `sidebar-reorg-active` and the `chronicle:reorg-changed` event; no script in the repo sets either at present, so drag handles and multi-select stay off
 
 ## Events
 

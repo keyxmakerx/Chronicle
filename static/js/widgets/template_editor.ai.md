@@ -11,7 +11,7 @@ Hub to design per-category page layouts.
 ## Widget Registration
 
 ```js
-Chronicle.register('template-editor', { init, render, bindSave, destroy });
+Chronicle.register('template-editor', { init, destroy, ... });
 ```
 
 Mounts on: `data-widget="template-editor"`
@@ -20,41 +20,34 @@ Mounts on: `data-widget="template-editor"`
 
 | Attribute | Required | Description |
 |-----------|----------|-------------|
-| `data-endpoint` | Yes | GET/PUT endpoint for layout JSON |
-| `data-layout` | Yes | Initial layout JSON string |
-| `data-fields` | Yes | Entity type field definitions JSON string |
-| `data-entity-type-name` | Yes | Display name of the entity type |
-| `data-csrf-token` | Yes | CSRF token for mutations |
+| `data-endpoint` | Yes | PUT endpoint the layout is saved to |
+| `data-layout` | Yes | Initial layout JSON string (an empty layout becomes the default) |
+| `data-campaign-id` | Yes | Campaign id; used for the block-type and preset requests |
+| `data-fields` | No | Entity type field definitions JSON string |
+| `data-entity-type-name` | No | Display name of the entity type |
+| `data-csrf-token` | No | CSRF token for mutations |
 
 ## Block Types
 
-13 block types, including 4 container types that hold sub-blocks:
+The palette comes from `GET /campaigns/:id/entity-types/block-types?context=template`
+(server registry, filtered by the campaign's addons; dashboard-only blocks are
+excluded). Each entry carries `type`, `label`, `icon`, `description`, `container`,
+and optionally `addon` and `widget_slug`. If the request fails, returns nothing,
+or there is no campaign id, the editor uses a built-in fallback palette:
+title, image, entry (Rich Text), attributes, details, tags, relations, divider,
+shop_inventory, posts, text_block, plus the containers below. The fallback has
+no calendar block.
 
-### Content Blocks
+Container blocks (`two_column`, `three_column`, `tabs`, `section`) hold
+sub-blocks in drop zones; a container never nests inside another container.
+Container data:
 
-| Type | Label | Icon | Description |
-|------|-------|------|-------------|
-| `title` | Title | fa-heading | Entity name and actions |
-| `image` | Image | fa-image | Header image with upload |
-| `entry` | Rich Text | fa-align-left | Main content editor (TipTap) |
-| `attributes` | Attributes | fa-list | Custom field values |
-| `details` | Details | fa-info-circle | Metadata and dates |
-| `tags` | Tags | fa-tags | Tag picker widget |
-| `relations` | Relations | fa-link | Entity relation links |
-| `divider` | Divider | fa-minus | Horizontal separator |
-| `calendar` | Calendar | fa-calendar-days | Entity calendar events |
-
-### Container Blocks
-
-| Type | Label | Icon | Description |
-|------|-------|------|-------------|
-| `two_column` | 2 Columns | fa-columns | Side-by-side columns with width presets |
-| `three_column` | 3 Columns | fa-table-columns | Three equal columns |
-| `tabs` | Tabs | fa-folder | Tabbed content sections |
-| `section` | Section | fa-caret-down | Collapsible accordion |
-
-Container blocks (`two_column`, `three_column`, `tabs`, `section`) can hold other
-blocks inside their slots. They are rendered with sub-block drop zones.
+| Type | Config |
+|------|--------|
+| `two_column` | `left_width`, `right_width` (out of 12), `left`, `right` block arrays |
+| `three_column` | `widths`, `columns` (three block arrays) |
+| `tabs` | `tabs`: `[{ label, blocks }]`; the active tab is a transient `_activeTab` |
+| `section` | `title`, `collapsed`, `blocks` |
 
 ## Layout Presets
 
@@ -134,9 +127,8 @@ Each block has a `config` object with type-specific properties:
 
 - `visibility` — `"everyone"` or `"dm_only"` (all blocks)
 - `minHeight` — Height preset value: `"auto"`, `"sm"`, `"md"`, `"lg"`, `"xl"`
-- Container blocks: `slots` array with sub-block arrays
-- `tabs`: `config.tabs` array with `{ label, blocks }` entries
-- `two_column`: `config.left` (width), sub-blocks in slots
+- Container blocks keep their sub-blocks inside `config` (see Block Types)
+- Keys starting with `_` are transient UI state and are stripped on save (`cleanLayoutForSave`)
 
 ## Architecture
 
@@ -152,24 +144,18 @@ Each block has a `config` object with type-specific properties:
 
 | Method | Description |
 |--------|-------------|
-| `init(el)` | Parse data-* attributes, validate JSON, render |
-| `defaultLayout()` | Generate starter layout (8/4 title+text / image+attrs) |
-| `render()` | Full re-render of palette + canvas |
-| `renderRow(row, ri)` | Single row with columns and controls |
-| `renderBlock(block, path)` | Block with settings panel, drag handle, sub-blocks |
-| `renderContainerSlots(block, path)` | Drop zones for container sub-blocks |
-| `renderSettingsPanel(block, path)` | Visibility, height, type-specific config |
-| `bindDrag()` | Animated drop indicators between blocks |
-| `bindSave()` | Attach save button click handler |
-| `save()` | PUT layout to endpoint |
-| `addRow(widths)` | Add new row with column presets |
-| `deleteRow(ri)` | Remove row |
-| `moveRow(ri, dir)` | Reorder row up/down |
-| `addBlock(path, type)` | Add block at path (row/col or container slot) |
-| `deleteBlock(path)` | Remove block at path |
-| `moveBlock(from, to)` | Drag block between positions |
-| `uid(prefix)` | Generate unique ID with prefix |
-| `destroy()` | Clear innerHTML |
+| `init(el)` | Parse data-* attributes, start loading block types, render |
+| `_loadBlockTypes()` | Fetch the palette from the API, fall back on failure |
+| `defaultLayout()` | Starter layout (8/4 split: title + rich text / image + attributes + details) |
+| `render()` / `renderCanvas()` | Full render of palette + canvas / the canvas only |
+| `renderBlock(...)` | One block with visibility and height selects, drag handle, delete |
+| `renderContainerBlock(...)` | Container block with its config and sub-block drop zones |
+| `bindBlockDrag(...)` | Block drag source |
+| `handleDrop(...)` / `handleSubBlockDrop(...)` | Drop into a column / into a container slot |
+| `addRow` / `changeRowLayout` / `deleteRow` / `moveRow` | Row management with column-width presets |
+| `markDirty()` / `bindSave()` / `save()` | Dirty tracking and `PUT` of `{ layout }` to `data-endpoint` |
+| `cleanLayoutForSave(layout)` | Drops `_`-prefixed transient keys |
+| `showLoadPresetMenu` / `loadPreset` / `saveAsPreset` | Layout presets (below) |
 
 ### Drag-and-Drop
 
@@ -183,19 +169,22 @@ block will be inserted. The system supports:
 
 | Method | Endpoint | Description |
 |--------|----------|-------------|
-| PUT | `data-endpoint` | Save layout JSON (X-CSRF-Token header) |
+| GET | `/campaigns/:id/entity-types/block-types?context=template` | Block palette |
+| PUT | `data-endpoint` | Save `{ layout }` |
+| GET | `/campaigns/:id/layout-presets` | List saved layout presets (Load Preset menu) |
+| POST | `/campaigns/:id/layout-presets` | Save the current layout as a preset |
 
-Layout is loaded from `data-layout` attribute (server-rendered), not fetched via GET.
+The layout is read from `data-layout` (server-rendered), not fetched. Loading a
+preset replaces the canvas after a confirm and still needs a save.
 
 ## Dependencies
 
 - `Chronicle.register()` — Widget lifecycle
-- `Chronicle.notify()` — Toast notifications
-- Fetch API — Save to server
+- `Chronicle.apiFetch()` — Requests with CSRF
 - Font Awesome — Block type and control icons
 - TailwindCSS — Utility classes
 
 ## Known limitations
 
 Container nesting is limited to one level (no containers inside containers).
-Tab configuration uses `prompt()` dialogs rather than a modal.
+Tab labels and preset names use `prompt()` dialogs rather than a modal.

@@ -20,7 +20,6 @@ make lint           # golangci-lint
 make migrate-up     # Apply pending migrations
 make migrate-down   # Rollback last migration
 make migrate-create # New migration (NAME=description)
-make seed           # Seed dev DB with sample data
 make docker-up      # MariaDB + Redis containers (needs Docker daemon)
 make docker-down    # Stop containers
 make clean          # Remove built artifacts

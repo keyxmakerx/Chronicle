@@ -23,13 +23,14 @@ System or Widget (see root `CLAUDE.md` for what each tier is).
 │  └──────────────────────────────────────────────────────┘    │
 │                                                               │
 │  ┌──────────────────────────────────────────────────────┐    │
-│  │  PLUGINS -- Feature Applications (26)                  │    │
+│  │  PLUGINS -- Feature Applications (28)                  │    │
 │  │  auth/  campaigns/  entities/  calendar/  maps/        │    │
 │  │  admin/  addons/  syncapi/  media/  audit/             │    │
 │  │  settings/  timeline/  sessions/  packages/            │    │
 │  │  smtp/  armory/  bestiary/  designlab/  npcs/          │    │
 │  │  ai_workspace/  backup/  foundry_vtt/  restore/        │    │
 │  │  widgetbindings/  dmscreen/  systemstate/              │    │
+│  │  quests/  rolltables/                                  │    │
 │  └──────────────────────────────────────────────────────┘    │
 │                                                               │
 │  ┌──────────────────────────────────────────────────────┐    │
@@ -40,7 +41,7 @@ System or Widget (see root `CLAUDE.md` for what each tier is).
 │  ┌──────────────────────────────────────────────────────┐    │
 │  │  WIDGETS -- Reusable UI Building Blocks                │    │
 │  │  editor/  title/  tags/  attributes/  mentions/        │    │
-│  │  notes/  relations/  posts/  entity_notes/              │    │
+│  │  notes/  relations/  posts/  entity_notes/  sky/        │    │
 │  └──────────────────────────────────────────────────────┘    │
 │                                                               │
 │  ┌──────────────────────────────────────────────────────┐    │
@@ -177,8 +178,7 @@ chronicle/
 │           └── error.templ
 │
 ├── db/
-│   ├── migrations/                   # Core schema baseline (fatal on failure)
-│   └── queries/                      # Raw SQL query files (reference)
+│   └── migrations/                   # Core schema baseline (fatal on failure)
 │
 ├── static/
 │   ├── css/

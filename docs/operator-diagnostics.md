@@ -86,7 +86,7 @@ Field reference:
 |------------------|---------|
 | `id` / `name`    | The loaded system's id and display name. |
 | `loaded_version` | The version the loader resolved — what is *actually being served*, which may differ from the installed version in Admin▸Packages. |
-| `source`         | `bundled` (shipped in the binary's `internal/systems`) or `package` (installed via the package manager). |
+| `source`         | `package` (installed via Admin > Packages) or `bundled` (found in the server's own systems directory at startup rather than installed as a package; usually absent, since systems are external packages). |
 | `dir`            | The on-disk directory the loader serves this system's files from. |
 | `files[]`        | One entry per served file (manifest + every declared widget script + text-renderer file). |
 | `files[].exists` | `false` means the served dir is missing that file — itself diagnostic. |
