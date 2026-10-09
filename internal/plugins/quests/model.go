@@ -137,11 +137,16 @@ type Quest struct {
 	MapID     string   `json:"mapId"`
 	Layout    Layout   `json:"layout"`
 	Looks     Looks    `json:"looks"`
+	// DueDate is a day on the campaign calendar; nil means none. DueEventID
+	// is the calendar event that mirrors it, so a later change can update
+	// that event instead of adding another.
+	DueDate    *DueDay `json:"dueDate,omitempty"`
+	DueEventID string  `json:"dueEventId,omitempty"`
 }
 
 // QuestPatch is the PUT body. Absent key preserves, present replaces; an
-// explicit null clears only mapId (every other field has no "cleared" state
-// and preserves, as patch.Field.Val does). Version is required: it is the
+// explicit null clears mapId and dueDate (every other field has no "cleared"
+// state and preserves, as patch.Field.Val does). Version is required: it is the
 // version the editor loaded.
 type QuestPatch struct {
 	Version   patch.Field[int]         `json:"version"`
@@ -155,6 +160,7 @@ type QuestPatch struct {
 	MapID     patch.Field[string]      `json:"mapId"`
 	Layout    patch.Field[LayoutPatch] `json:"layout"`
 	Looks     patch.Field[LooksPatch]  `json:"looks"`
+	DueDate   patch.Field[DueDay]      `json:"dueDate"`
 }
 
 // --- Quest responses ---
@@ -183,6 +189,29 @@ type MapRef struct {
 	Name string `json:"name"`
 }
 
+// DayView is a calendar day with its label in the calendar's own style.
+type DayView struct {
+	Year  int    `json:"year"`
+	Month int    `json:"month"`
+	Day   int    `json:"day"`
+	Label string `json:"label"`
+}
+
+// DueView is a quest's due date with the days left; negative when late.
+type DueView struct {
+	DayView
+	DaysLeft int `json:"daysLeft"`
+}
+
+// CalendarView is what the DM's due-date picker needs to draw the calendar.
+type CalendarView struct {
+	Name       string          `json:"name"`
+	Today      DayView         `json:"today"`
+	Months     []CalendarMonth `json:"months"`
+	LeapEvery  int             `json:"leapEvery"`
+	LeapOffset int             `json:"leapOffset"`
+}
+
 // DMQuestView is everything, for the DM team.
 type DMQuestView struct {
 	CanEdit   bool         `json:"canEdit"`
@@ -198,6 +227,12 @@ type DMQuestView struct {
 	MapName   string       `json:"mapName"`
 	Layout    Layout       `json:"layout"`
 	Looks     Looks        `json:"looks"`
+	// MapsOn is false when the maps addon is off, so map choices are hidden.
+	MapsOn bool `json:"mapsOn"`
+	// Calendar is null when the campaign has no usable calendar; the DM
+	// view alone carries it. Due is null without a due date or a calendar.
+	Calendar *CalendarView `json:"dueCalendar"`
+	Due      *DueView      `json:"due"`
 }
 
 // PlayerStep is a shown step without its id.
@@ -220,15 +255,34 @@ type PlayerQuestView struct {
 	Layout      Layout       `json:"layout"`
 	Looks       Looks        `json:"looks"`
 	Map         *MapRef      `json:"map"`
+	// Due is null without a due date, or while the DM hides the notice.
+	Due *DueView `json:"due"`
 }
 
 // --- Boards ---
+
+// Home is where a set of boards lives: on one page (EntityID) or on a
+// category's dashboard (TypeID, an entity type). Exactly one is set; the
+// repository refuses anything else, so a mix-up cannot widen a query.
+type Home struct {
+	EntityID string
+	TypeID   int
+}
+
+// PageHome is the home of a place page's boards.
+func PageHome(entityID string) Home { return Home{EntityID: entityID} }
+
+// TypeHome is the home of a category's boards.
+func TypeHome(typeID int) Home { return Home{TypeID: typeID} }
+
+// IsType reports whether the home is a category.
+func (h Home) IsType() bool { return h.TypeID != 0 }
 
 // Board is a stored board.
 type Board struct {
 	ID         string
 	CampaignID string
-	EntityID   string
+	Home       Home
 	Name       string
 	Who        string
 	SortOrder  int
@@ -311,6 +365,9 @@ type ItemView struct {
 	Reward   string `json:"reward,omitempty"`
 	Status   string `json:"status,omitempty"`
 	HasSheet bool   `json:"hasSheet,omitempty"`
+	// DaysLeft is a pointer so that 0 (due today) is not dropped; it is
+	// absent when the quest has no due date.
+	DaysLeft *int `json:"daysLeft,omitempty"`
 
 	// page / map
 	EntityID  string `json:"entityId,omitempty"`
@@ -359,6 +416,8 @@ type BoardsView struct {
 	Me        Me          `json:"me"`
 	Looks     Looks       `json:"looks"`
 	Boards    []BoardView `json:"boards"`
+	// MapsOn is false when the maps addon is off, so map choices are hidden.
+	MapsOn bool `json:"mapsOn"`
 }
 
 // PickerItem is one search hit for the pinning picker; maps carry only id

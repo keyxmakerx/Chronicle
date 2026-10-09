@@ -3267,7 +3267,7 @@
   .sidebar-collapsed .nav-brand-link { flex: none; }
   .sidebar-collapsed .nav-brand-name, .sidebar-collapsed .nav-edit-btn, .sidebar-collapsed .nav-lb,
   .sidebar-collapsed .nav-tr, .sidebar-collapsed .nav-hid, .sidebar-collapsed .nav-ext, .sidebar-collapsed .nav-gh-wrap,
-  .sidebar-collapsed .nav-gh, .sidebar-collapsed .nav-tw, .sidebar-collapsed .nav-subs, .sidebar-collapsed .nav-admin,
+  .sidebar-collapsed .nav-gh, .sidebar-collapsed .nav-tw, .sidebar-collapsed .nav-subs,
   .sidebar-collapsed .nav-mypin,
   .sidebar-collapsed .nav-foot { display: none; }
   .sidebar-collapsed .nav-sb .nav-row, .nav-sb.sidebar-collapsed .nav-row { padding: 0; justify-content: center; }

@@ -562,7 +562,7 @@ func pluginURL(campaignID, slug string) string {
 	case "sessions":
 		return fmt.Sprintf("/campaigns/%s/sessions", campaignID)
 	case "notes":
-		return fmt.Sprintf("/campaigns/%s/entities", campaignID) // Notes are per-entity.
+		return fmt.Sprintf("/campaigns/%s/journal", campaignID)
 	case "armory":
 		return fmt.Sprintf("/campaigns/%s/armory", campaignID)
 	case "sync-api":

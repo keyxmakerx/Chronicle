@@ -122,7 +122,7 @@ templ App(title string) {
 		</div>
 		<!-- Jot notes: the one entry point is the tab bottom-right, which
 		     opens the floating panel of this page's jots. Gated behind the
-		     "notes" addon, off by default. -->
+		     "jot-notes" addon, off by default. -->
 		if notesWidgetVisible(ctx) {
 			@NotesWidget()
 		}
@@ -199,9 +199,7 @@ templ Sidebar() {
 			<!-- Sidebar footer: pin and hide sit here, as in the campaign sidebar,
 			     so the hide arrow and the restore arrow share the bottom-left. -->
 			<div class="h-10 flex items-center gap-0.5 pl-4 pr-1.5 border-t border-gray-700 shrink-0">
-				<div class="flex-1 min-w-0 truncate text-xs text-gray-600 sidebar-hide-collapsed">
-					Chronicle v0.1.0
-				</div>
+				<div class="flex-1"></div>
 				<!-- Pin/unpin button (visible only when expanded) -->
 				<button
 					class="sidebar-pin-btn w-6 h-6 flex items-center justify-center rounded text-gray-500 hover:text-white hover:bg-gray-700 transition-colors"
@@ -1022,11 +1020,11 @@ func isPathPrefix(ctx context.Context, prefix string) bool {
 
 // notesWidgetVisible reports whether the Jot notes tab and panel (mounted by
 // NotesWidget) render for the current request: authenticated, in a campaign,
-// with the "notes" addon enabled. Jots and Journal notes are different rows,
+// with the "jot-notes" addon enabled. Jots and Journal notes are different rows,
 // so the panel can sit on the Journal page without the two editing the same
 // note.
 func notesWidgetVisible(ctx context.Context) bool {
-	return InCampaign(ctx) && IsAuthenticated(ctx) && IsAddonEnabled(ctx, "notes")
+	return InCampaign(ctx) && IsAuthenticated(ctx) && IsAddonEnabled(ctx, "jot-notes")
 }
 
 // isExternalURL returns true if the URL starts with http:// or https://,

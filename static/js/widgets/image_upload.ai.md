@@ -33,7 +33,7 @@ Mounts on: `data-widget="image-upload"`
 
 ## Template Integration
 
-In `entities/show.templ`, `blockImage()` component (lines 227-272):
+In `entities/show.templ`, `blockImage()` component:
 - Entity has image: shows `<img>` with hover overlay containing widget
 - Entity has no image: shows placeholder div with widget
 - Permission: only rendered for Scribe+ role

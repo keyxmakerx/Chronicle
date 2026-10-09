@@ -16,7 +16,7 @@ and troubleshooting a Chronicle instance.
 9. [Restore procedure](#9-restore-procedure)
 10. [Troubleshooting common boot failures](#10-troubleshooting-common-boot-failures)
 11. [Security checklist](#11-security-checklist)
-12. [Out of scope for 0.0.1](#12-out-of-scope-for-001)
+12. [Out of scope](#12-out-of-scope)
 
 ---
 
@@ -25,7 +25,7 @@ and troubleshooting a Chronicle instance.
 ```sh
 git clone https://github.com/keyxmakerx/chronicle.git && cd chronicle
 cp .env.example .env
-# Set SECRET_KEY, DB_PASSWORD, MYSQL_ROOT_PASSWORD, MYSQL_PASSWORD in .env.
+# Set SECRET_KEY, DB_PASSWORD, MYSQL_ROOT_PASSWORD in .env.
 # Generate SECRET_KEY with: openssl rand -base64 32
 docker compose up -d
 docker compose logs -f chronicle  # wait for "health check summary passed=N"
@@ -129,19 +129,19 @@ Every env var Chronicle reads. **Bold = required in production.**
 | **`SECRET_KEY`** | (none — required) | 32+ bytes base64. Generate: `openssl rand -base64 32`. PASETO signing key for sessions; rotating it logs everyone out. |
 | `SESSION_TTL` | `720h` | |
 | `EXTENSIONS_PATH` | `./extensions` | User-installable content extensions. |
-| `MAX_UPLOAD_SIZE` | `10MB` | |
+| `MAX_UPLOAD_SIZE` | `10485760` | Bytes, as a plain integer. A value like `10MB` does not parse and silently falls back to the default. |
 | `MEDIA_PATH` | `./data/media` | Resolves to `/app/data/media` in the container. |
 | `MEDIA_SIGNING_SECRET` | (auto) | Auto-generated if empty; HMAC-SHA256 for signed media URLs. |
 | `MEDIA_SERVE_RATE_LIMIT` | `300` | Requests/min/IP for `GET /media/:id`. Per-IP only works if the row below is right. |
 | `TRUSTED_PROXY_CIDRS` | loopback + private ranges | Comma-separated CIDR blocks or bare addresses whose `X-Real-IP` / `X-Forwarded-For` headers are believed. **Replaces** the default, does not extend it. See "Client IP behind a reverse proxy" below. |
 | `BACKUP_DIR` | `/app/data/backups` | Where backups land. Defaults to the persistent `/app/data` volume so a fresh deploy works without operator setup. Override only if you mount backups on a different path. Setting it explicitly to empty is unsupported (the admin UI will surface a "not configured" error and the in-process pre-migration backup will be skipped). |
 | `BACKUP_RETENTION_DAYS` | `7` | Used by `scripts/backup.sh`. The in-process rotator uses a separate hardcoded 7d for `chronicle_pre_migrate_*` artifacts. |
-| `BACKUP_REQUIRED` | `0` | `1`/`true` makes the in-process pre-migration capture mandatory: any failure (mysqldump missing, dump zero bytes, manifest write fails) aborts startup before migrations apply. Covers both gates — pending core migrations (`MigrateWithBackup`) and pending plugin migrations (`main.go`'s `PendingPluginMigrations` gate). Use in production; the default fail-open (warn + proceed) suits dev setups without `mariadb-client`. |
+| `BACKUP_REQUIRED` | `0` (binary), `1` (docker-compose.yml) | `1`/`true` makes the in-process pre-migration capture mandatory: any failure (mysqldump missing, dump zero bytes, manifest write fails) aborts startup before migrations apply. Covers both gates — pending core migrations (`MigrateWithBackup`) and pending plugin migrations (`main.go`'s `PendingPluginMigrations` gate). Use in production (the compose file already sets it to `1`); the binary's default fail-open (warn + proceed) suits dev setups without `mariadb-client`. |
 | `BACKUP_SCRIPT_PATH` | `/app/scripts/backup.sh` | Used by the admin "Run backup" button. |
 | `RESTORE_SCRIPT_PATH` | `/app/scripts/restore.sh` | Used by the admin restore page. |
 | `CHRONICLE_VERSION` | (empty, except on tag builds) | Read by `GET /api/version` (highest precedence, then the compiled-in VCS revision, then the main module version, then `unknown`), by the `host.build` diagnostic, and stamped into the pre-migration manifest's `chronicle_version=` line. CI sets it as a Docker build arg only for `v*` tag builds; a `main`-branch push leaves it empty since the binary already carries its own commit SHA (`vcs.revision`) that `/api/version` falls through to. Set it yourself only for a human-chosen name. |
 | `MYSQL_ROOT_PASSWORD` | (compose, **required**) | Compose-only; sets the bundled MariaDB's root password on first initialisation only — compose refuses to start without it. An install predating this requirement may still have the old default `rootsecret` unless rotated; see "Rotating the root password" below. |
-| `MYSQL_PASSWORD` | (compose) | Compose-only; must match `DB_PASSWORD`. |
+| `MYSQL_PASSWORD` | (derived) | Not set by hand: docker-compose.yml passes `DB_PASSWORD` to the bundled MariaDB as its user password, so the two always agree. |
 
 ### Rotating the root password
 
@@ -151,7 +151,7 @@ rotate on a running install (the DB port isn't published, so this is
 defence-in-depth, not an open door):
 
 ```
-docker compose exec -T mariadb mariadb -uroot -p"$OLD_ROOT_PASSWORD" \
+docker compose exec -T chronicle-db mariadb -uroot -p"$OLD_ROOT_PASSWORD" \
   -e "ALTER USER 'root'@'localhost' IDENTIFIED BY '<new>'; ALTER USER 'root'@'%' IDENTIFIED BY '<new>'; FLUSH PRIVILEGES;"
 ```
 
@@ -329,7 +329,7 @@ only when their own image changes.
 
 **`migrate-down` safety rule.** Never run `make migrate-down` on live data
 without first running `make backup` and reviewing what the down migration
-does. `000001_baseline.down.sql` wipes all 34 core tables (total data loss).
+does. `000001_baseline.down.sql` wipes every core table (total data loss).
 `000028_public_grant_subject.down.sql` deletes every `subject_type='public'`
 row from `entity_permissions` (unrecoverable without a restore). Backups
 inside the `chronicle-data` volume also do not survive `docker compose down
@@ -434,7 +434,7 @@ docker compose start chronicle
 ```
 
 `RunStartupHealthChecks` validates the restored schema against the running
-image's `ExpectedMigrationVersion`. If the manifest is from a version that
+image's `ExpectedCoreMigrationVersion`. If the manifest is from a version that
 requires a different code revision, chronicle refuses to start — pin a
 matching image tag and try again.
 
@@ -516,7 +516,7 @@ docker compose start chronicle
 docker compose logs -f chronicle
 ```
 
-### Verifying a 0.0.2+ restore
+### Verifying a restore
 
 After restore, confirm the player-character claim data round-tripped:
 pre-restore claims must reappear post-restore. If they don't, either the
@@ -572,14 +572,14 @@ grep-and-find works. Lines with embedded `<...>` are placeholders.
 
 ### `migration <N> in DIRTY state` / `forcing migration version <N>`
 
-The DB is mid-migration. Source: `internal/database/migrate.go`.
-Chronicle auto-recovers: it forces the version back to a clean state and
-retries. If you see this loop repeatedly, the migration itself is the
-problem — go to §7 Scenario A and roll back from `chronicle_pre_migrate_*`.
+A previous migration failed partway. Chronicle fails fast rather than
+forcing the version and retrying (a partly applied migration can be unsafe to
+re-run). Restore the most recent `chronicle_pre_migrate_*` backup (§7
+Scenario A) or repair `schema_migrations` by hand, then redeploy.
 
 ### `database at migration <N> but code requires <M>`
 
-Source: `internal/database/healthcheck.go` `checkMigrationVersion`. The image
+The health check compares the recorded version with the image's. The image
 is too new for the DB or the DB is too new for the image. Just upgraded and
 DB older: expected, wait for migrations to finish (>30s hung → check `docker
 compose logs chronicle-db`). DB newer than code (rolled-back image): restore
@@ -587,14 +587,14 @@ the matching pre-migration backup (§7 Scenario A).
 
 ### `<K> critical column(s) missing`
 
-Source: `internal/database/healthcheck.go` `checkCriticalColumns`. Migrations
+The health check looks for columns the code needs. Migrations
 haven't run, or a column was dropped manually. Run `make migrate-up` from a
 host shell; if the migration itself is failing, check `docker compose logs
 chronicle` for the error and roll back per §7.
 
 ### `pre-migration backup skipped: mysqldump not found`
 
-Source: `internal/database/healthcheck.go` `PreMigrationBackup`. The image is
+The pre-migration backup step needs `mysqldump`. The image is
 missing `mariadb-client`. Pull a current image (`docker compose pull
 chronicle`), or rebuild from source via the override —
 `docker compose -f docker-compose.yml -f docker-compose.build.yml build --no-cache chronicle`.
@@ -623,10 +623,11 @@ set the var. `openssl rand -base64 32 > /tmp/k && grep -v ^SECRET_KEY .env > .en
 
 ### Chronicle's `depends_on` waits forever for `chronicle-db`
 
-The MariaDB container is unhealthy. Top suspect: `MYSQL_PASSWORD` and
-`DB_PASSWORD` don't match. They must be identical (compose's MariaDB
-container creates the user with `MYSQL_PASSWORD`; chronicle authenticates
-with `DB_PASSWORD`). Less common: disk full at the host.
+The MariaDB container is unhealthy. Top suspect: `DB_PASSWORD` was
+changed after the database volume was first created. MariaDB sets the user's
+password only on first initialisation, so Chronicle now authenticates with a
+password the existing database does not have; change the user's password
+inside MariaDB or restore the old value. Less common: disk full at the host.
 
 ### `health check summary passed=K warnings=N failures=M` with `failures>0`
 
@@ -643,7 +644,6 @@ Run through this before exposing Chronicle anywhere reachable.
 - [ ] `DB_PASSWORD` is not `chronicle`, `password`, `secret`, `changeme`,
       `root`, or `admin`. The startup audit rejects these in production.
 - [ ] `MYSQL_ROOT_PASSWORD` is not the default `rootsecret`.
-- [ ] `MYSQL_PASSWORD` matches `DB_PASSWORD` exactly.
 - [ ] `BASE_URL` starts with `https://`. The audit warns on `http://` in
       production because CSRF cookies are then ineffective.
 - [ ] `ENV=production` is set so the audit warnings don't get suppressed.
@@ -656,9 +656,9 @@ Run through this before exposing Chronicle anywhere reachable.
 - [ ] Reverse proxy / Cosmos Cloud is enforcing TLS and not letting raw
       port 8080 leak to the public internet.
 
-## 12. Out of scope for 0.0.1
+## 12. Out of scope
 
-These are deliberate non-goals; expect them in later releases:
+These are deliberate non-goals:
 
 - **Point-in-time recovery / binlog replay.** Backups are nightly
   snapshots, not continuous.
@@ -666,9 +666,7 @@ These are deliberate non-goals; expect them in later releases:
 - **Encrypted-at-rest backup artifacts.** Encrypt the offsite copy if
   needed (`gpg`, age, etc.).
 - **Direct S3 / B2 / GCS shipping from `backup.sh`.** Use rclone in cron.
-- **Automated DR drills.** §9 walks through a manual restore; automate
-  it on your side if you need it scheduled.
-- **Restore from the admin UI.** Restore is a sysadmin operation by
-  design; it's destructive and requires `chronicle` to be stopped.
+- **Scheduled DR drills.** `tools/restore-drill.sh` proves a backup restores
+  (see `docs/RESTORE-DRILL.md`); running it on a schedule is up to you.
 
 If any of those are blockers for your deployment, file an issue.

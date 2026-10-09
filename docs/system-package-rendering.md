@@ -23,17 +23,17 @@ The host (Chronicle core) ships:
   block types like `title`, `image`, `entry`, `attributes`, etc.) —
   this is the fallback when no renderer is registered.
 
-You (the system package) ship:
+You (the system package) ship, in `manifest.json` and your widget scripts:
 
-- A renderer function for each entity-type slug your package
-  cares about.
-- A `Register…` function that wires those renderers into Chronicle's
-  registry at startup.
+- A widget for each entity-type slug (or preset category) your package
+  cares about, plus a `renderers` entry binding the two (see "Declaring
+  renderers in `manifest.json`" below). Packages are manifest-only; they
+  contain no Go.
 - Any data model conventions (which `fields_data` keys, which
-  layouts) the renderer relies on.
-- Optionally: custom block types registered against the existing
-  `BlockRegistry` if you want layout-editor-friendly building blocks
-  rather than a single whole-page renderer.
+  layouts) the widget relies on.
+- Optionally: JS widgets referenced from `ext_widget` blocks if you want
+  layout-editor-friendly building blocks rather than a single whole-page
+  renderer.
 
 The host ships **zero character-specific code**. No `blockStatBlock`,
 no `blockHPBar`, no default character layout JSON. Everything system-
@@ -53,6 +53,7 @@ type EntityShowRenderContext struct {
     ShowAttributes bool
     ShowCalendar   bool
     CSRFToken      string
+    UserID         string // viewing user's id; empty for an anonymous viewer
 }
 
 type EntityShowRenderer func(ctx EntityShowRenderContext) templ.Component
@@ -78,55 +79,25 @@ follow-up rather than have you reach into globals.
 
 ## How registration works
 
-Your system package exposes one function:
+For an installed package, registration is driven by the manifest. At
+startup, and again after every package install or update, the host
+walks each loaded system manifest's `renderers` and registers, for each
+entry, a Go renderer that emits one widget mount point
+(`registerManifestRenderers` in `internal/app/routes.go`). The set is
+built in a fresh registry and then published, so in-flight requests never
+see a half-built state. Packages do not call `Register` themselves.
 
-```go
-// In your system package (e.g. internal/systems/drawsteel/render.go)
-package drawsteel
+The direct `Register(slug, renderer)` call on the registry is for
+Chronicle's own in-tree Go code only. Both paths fill the same
+`EntityShowRendererRegistry`, and "last registration wins" if two target
+the same slug.
 
-import "github.com/keyxmakerx/chronicle/internal/plugins/entities"
+## Registration timing
 
-// RegisterEntityShowRenderers wires drawsteel renderers into the
-// host registry. Called from internal/app/routes.go during startup.
-func RegisterEntityShowRenderers(reg *entities.EntityShowRendererRegistry) {
-    reg.Register("drawsteel-character", renderCharacter)
-    reg.Register("drawsteel-monster", renderMonster)
-}
-
-func renderCharacter(ctx entities.EntityShowRenderContext) templ.Component {
-    // Build and return a templ.Component that renders the character
-    // sheet. Uses ctx.Entity, ctx.Ancestors, etc.
-    return drawSteelCharacterSheet(ctx)
-}
-```
-
-The host wires the call into `internal/app/routes.go` next to the
-existing `BlockRegistry` registrations:
-
-```go
-showRegistry := entities.NewEntityShowRendererRegistry()
-drawsteel.RegisterEntityShowRenderers(showRegistry)
-// dnd5e.RegisterEntityShowRenderers(showRegistry)  // future
-entities.SetGlobalEntityShowRendererRegistry(showRegistry)
-```
-
-Mirror the established `calendar.RegisterCalendarBlock(blockRegistry)`
-pattern. **Do not** register from `init()` — `init()` runs before
-the registry exists, and the explicit-call pattern keeps wiring
-order obvious in `routes.go`.
-
-## Registration timing — V1 lifecycle
-
-- Renderers register at startup, during `RegisterRoutes`, after
-  `BlockRegistry` is built and before the global is set.
-- The HTTP server starts only after registration completes.
-- The registry is **mutable but not live-reloadable in V1**.
-  Installing or disabling a system package requires a restart.
-  Live registry mutation may come later if it becomes a real
-  product need; design your package assuming restart-required.
-- "Last registration wins" — if two registrations target the same
-  slug, the later one replaces the earlier. Order is determined by
-  the order of calls in `routes.go`.
+- Renderers register at startup, after `BlockRegistry` is built and before
+  the global registry is published.
+- Installing or updating a system package rebuilds and publishes a fresh
+  registry without a restart; new renderers apply to the next page view.
 
 ## Failure modes — exactly one
 
@@ -182,7 +153,6 @@ experience, including your system's renderer.
   resource bars, ability cards). System packages own these.
 - **Default character layouts** that ship with the host. Your
   package's renderer is the layout for your slugs.
-- **Live reload of the registry** — restart-required.
 - **Renderer-level config**. Per-entity state lives in
   `fields_data`; per-campaign state lives in campaign settings.
   The renderer takes a slug and a context, no plugin config.
@@ -212,10 +182,8 @@ one of the lighter-weight extension points above probably does.
 
 ## Declaring renderers in `manifest.json`
 
-The Go-side `Register` call described above is the low-level path. If
-all you need is "render this entity type by mounting that widget,"
-you don't have to touch Go at all — declare the binding in your
-package's `manifest.json` and the host wires it up at boot:
+Declare the binding "render this entity type by mounting that widget" in your
+package's `manifest.json` and the host wires it up:
 
 ```json
 {
@@ -311,19 +279,12 @@ anyone who can view the page reads the public half):
 
 ### Lifecycle and overrides
 
-The manifest path uses the same V1 lifecycle as the Go-side path: registration
-happens once, at boot, after `loadSystemsFromPackages` runs and
-before the registry global is published. Installing a new package
-or upgrading one requires a Chronicle restart for the new renderers
-to take effect. There is no live reload.
+Registration happens at boot and again after each package install or update
+(see "Registration timing"); no restart is needed.
 
 If two installed manifests declare a renderer for the same slug,
-the last one to register wins — the underlying registry's
-documented "last write wins" semantics. Admins control which
-packages are installed, so this collision case is rare in practice;
-if you need a deterministic override, use the Go-side `Register`
-path and order the registration calls explicitly in
-`internal/app/routes.go`.
+the last one to register wins. Admins control which packages are
+installed, so this collision case is rare in practice.
 
 ### Binding a renderer by preset category (system-agnostic)
 
@@ -393,18 +354,9 @@ category / claimability) and never references any system by name — every syste
 specific (fields, widget, renderer, the type's name) lives in the package's
 manifest.
 
-### When to use the Go path instead
+### Server-side rendering
 
-The manifest path is the right fit when "this entity type renders
-as that widget" is a complete description of what you want. Use
-the Go-side `Register` API when you need:
-
-- A renderer that does server-side work before producing markup
-  (e.g., loading sibling entities, computing derived values).
-- Conditional dispatch based on the entity's data, not just its
-  slug.
-- A renderer that emits multiple widgets or a non-widget layout.
-- Behavior that overrides another package's manifest renderer.
-
-Both paths share the same `EntityShowRendererRegistry` — choose per
-renderer based on what each one needs.
+A renderer that needs server-side work (loading sibling entities,
+conditional dispatch on entity data) is Chronicle in-tree Go code, not
+something a package can ship; a package's widget fetches what it needs
+from the API instead.

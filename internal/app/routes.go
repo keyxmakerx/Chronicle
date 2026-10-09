@@ -3815,7 +3815,7 @@ func (a *App) RegisterRoutes() {
 		return addonService.IsEnabledForCampaign(ctx, campaignID, syncapi.SyncAPIAddonSlug)
 	}
 	noteHandler.SetJotsGate(func(ctx context.Context, campaignID string) (bool, error) {
-		return addonService.IsEnabledForCampaign(ctx, campaignID, "notes")
+		return addonService.IsEnabledForCampaign(ctx, campaignID, addons.JotNotesAddonSlug)
 	})
 	notesApp := notes.RegisterAppGrantRoutes(e, noteHandler, noteGrantHandler, noteGrants, notesAppGate, campaignService, authService)
 	// The editor's @ page picker, as the player sees pages.
@@ -4074,12 +4074,17 @@ func (a *App) RegisterRoutes() {
 	blockRegistry.Register(entities.BlockMeta{
 		Type: "notice_boards", Label: "Notice boards", Icon: "fa-thumbtack",
 		Description: "Boards players can cycle through, with quest notices, notes, pinned pages and maps",
-		Contexts:    []string{"template"}, Singleton: true,
+		Contexts:    []string{"template", "category"}, Singleton: true,
 	}, func(rc entities.BlockRenderContext) templ.Component {
 		if rc.CC == nil || rc.Entity == nil {
 			return templ.NopComponent
 		}
 		return quests.NoticeBoardsMount(rc.CC.Campaign.ID, rc.Entity.ID, rc.CSRFToken, rc.CC.CanControlWorldState(), int(rc.CC.MemberRole))
+	})
+	// The same block on a category dashboard: its boards belong to the
+	// category, not to a page.
+	entities.RegisterCategoryBlock("notice_boards", func(cc *campaigns.CampaignContext, et *entities.EntityType) templ.Component {
+		return quests.CategoryBoardsMount(cc.Campaign.ID, et.ID, cc.CanControlWorldState(), int(cc.MemberRole))
 	})
 
 	// Timeline plugin blocks (requires "timeline" addon).
@@ -4201,6 +4206,14 @@ func (a *App) RegisterRoutes() {
 		slog.Error("placing page extras failed", slog.String("error", err.Error()))
 	} else if n > 0 {
 		slog.Info("placed page extras into layouts", slog.Int("layouts", n))
+	}
+
+	// One-time: Notes became Journal plus Jot notes, so campaigns that had
+	// Notes on keep both (see jot_notes_split.go). Retried on the next boot.
+	if n, err := splitJotNotesOnce(context.Background(), settingsRepo, addonService); err != nil {
+		slog.Error("splitting jot notes failed", slog.String("error", err.Error()))
+	} else if n > 0 {
+		slog.Info("turned jot notes on where the journal was on", slog.Int("campaigns", n))
 	}
 
 	campaignHandler.SetAuditLogger(&campaignAuditAdapter{svc: auditService})
@@ -4914,7 +4927,10 @@ func (a *App) RegisterRoutes() {
 	wsEventBus := ws.EventBus(syncapi.NewRecordingEventBus(ws.NewEventBus(wsHub), syncChangeRepo))
 	go syncapi.StartChangePruner(a.ShutdownCtx, syncChangeRepo)
 
-	entityService.SetEventPublisher(&entityEventPublisherAdapter{bus: wsEventBus})
+	// The quests due-date events follow a page's visibility, so the entity
+	// events also reach them once the quests service exists (attached below).
+	questEntityEvts := newQuestEntityEvents(&entityEventPublisherAdapter{bus: wsEventBus})
+	entityService.SetEventPublisher(questEntityEvts)
 	relService.SetEventPublisher(&relationEventPublisherAdapter{bus: wsEventBus, shares: stashSvc})
 	stashEvents.bus = wsEventBus
 	entityService.SetSidebarAutoAdder(&sidebarAutoAdderAdapter{campaignService: campaignService})
@@ -4955,12 +4971,18 @@ func (a *App) RegisterRoutes() {
 	// Quest sheets and notice boards. Cross-plugin lookups go through the
 	// adapters in quests_adapters.go.
 	if a.PluginHealth.IsHealthy(quests.PluginSlug) {
-		questEntities := &questEntityAdapter{svc: entityService}
-		questMaps := &questMapAdapter{svc: mapsService}
+		questEntities := &questEntityAdapter{svc: entityService, cards: entities.NewPageCards(a.DB)}
+		questMaps := &questMapAdapter{svc: mapsService, addons: addonService}
 		questRepo := quests.NewQuestRepository(a.DB)
+		questCal := &questCalendarAdapter{svc: calendarService, addons: addonService}
+		questSvc, boardSvc := quests.WithAnnouncer(
+			quests.NewQuestService(questRepo, questEntities, questMaps, questCal),
+			quests.NewBoardService(quests.NewBoardRepository(a.DB), questRepo, questEntities, &questTypeAdapter{svc: entityService}, questMaps, &questMemberNamesAdapter{svc: campaignService}, questCal),
+			questEntities, &questAnnouncerAdapter{bus: wsEventBus})
+		questEntityEvts.attach(questSvc)
 		quests.RegisterRoutes(e, quests.NewHandler(
-			quests.NewQuestService(questRepo, questEntities, questMaps),
-			quests.NewBoardService(quests.NewBoardRepository(a.DB), questRepo, questEntities, questMaps, &questMemberNamesAdapter{svc: campaignService}),
+			questSvc,
+			boardSvc,
 			quests.NewPickerService(questEntities, questMaps, &questCharacterAdapter{
 				dir:   stashDirectory,
 				names: &questMemberNamesAdapter{svc: campaignService},
