@@ -45,6 +45,11 @@ func navAppsFor(campaignID string, enabled map[string]bool, sys layouts.EnabledS
 					break
 				}
 			}
+			for _, a := range d.needs {
+				if !enabled[a] {
+					app.Enabled = false
+				}
+			}
 		}
 		out = append(out, app)
 	}

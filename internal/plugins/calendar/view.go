@@ -12,6 +12,7 @@ import (
 
 	"github.com/keyxmakerx/chronicle/internal/apperror"
 	"github.com/keyxmakerx/chronicle/internal/middleware"
+	"github.com/keyxmakerx/chronicle/internal/plugins/auth"
 	"github.com/keyxmakerx/chronicle/internal/plugins/campaigns"
 )
 
@@ -47,6 +48,9 @@ type CalendarViewData struct {
 	// editing surface (deleting an event) separately from CanEdit's broader
 	// co-Director allowance.
 	ViewerRole int
+	// ViewerID is the viewer's own user id, so the widget can tell their
+	// own row in a list of players (no reminder button on yourself).
+	ViewerID string
 	// Zone is the real-world calendar's own IANA zone, which game-night
 	// times are shown in until a member asks for their own. Members only:
 	// they are the ones shown game nights.
@@ -76,12 +80,12 @@ func (h *Handler) CalendarViewPage(c echo.Context) error {
 		return err
 	}
 
-	return middleware.Render(c, http.StatusOK, CalendarViewPage(cc, calendarViewDataFor(cc, cal, events)))
+	return middleware.Render(c, http.StatusOK, CalendarViewPage(cc, calendarViewDataFor(cc, auth.GetUserID(c), cal, events)))
 }
 
 // calendarViewDataFor is the widget's config for one viewer on the
 // calendar's own page.
-func calendarViewDataFor(cc *campaigns.CampaignContext, cal *Calendar, events []Event) CalendarViewData {
+func calendarViewDataFor(cc *campaigns.CampaignContext, viewerID string, cal *Calendar, events []Event) CalendarViewData {
 	if events == nil {
 		events = []Event{}
 	}
@@ -93,6 +97,7 @@ func calendarViewDataFor(cc *campaigns.CampaignContext, cal *Calendar, events []
 		CanEdit:            cc.MemberRole >= campaigns.RoleOwner || cc.CanAuthorDmOnly(),
 		CanAuthorDmOnly:    cc.CanAuthorDmOnly(),
 		ViewerRole:         int(cc.MemberRole),
+		ViewerID:           viewerID,
 		Zone:               viewerZone(cc, cal),
 	}
 }
@@ -127,5 +132,5 @@ func (h *Handler) CalendarEmbedFragment(c echo.Context) error {
 	if err != nil {
 		return err
 	}
-	return middleware.Render(c, http.StatusOK, CalendarEmbed(calendarViewDataFor(cc, cal, events)))
+	return middleware.Render(c, http.StatusOK, CalendarEmbed(calendarViewDataFor(cc, auth.GetUserID(c), cal, events)))
 }

@@ -369,8 +369,8 @@ func RegisterCoreBlocks(r *BlockRegistry) {
 	}, nil)
 
 	r.Register(BlockMeta{
-		Type: "session_tracker", Label: "Sessions", Icon: "fa-dice-d20",
-		Description: "Upcoming sessions with RSVP",
+		Type: "session_tracker", Label: "Game nights", Icon: "fa-dice-d20",
+		Description: "Upcoming game nights with RSVP",
 		Addon: "sessions", Contexts: []string{"dashboard"},
 		ConfigFields: []ConfigFieldMeta{
 			{Key: "limit", Label: "Sessions to show", Type: "number", Min: IntPtr(1), Max: IntPtr(20), Default: 5},

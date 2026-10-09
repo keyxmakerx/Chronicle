@@ -1161,6 +1161,7 @@ type navAppDef struct {
 	path    string   // campaign-relative page
 	caption string   // a few muted words beside the label
 	addons  []string // the app is on when any of these addons is enabled
+	needs   []string // and only while every one of these is enabled too
 	access  campaigns.NavAccess
 	pinned  bool // starts in Pinned for a campaign that never arranged its sidebar
 	system  bool // the enabled game system's reference; label, icon and path come from it
@@ -1169,13 +1170,13 @@ type navAppDef struct {
 // navAppCatalog lists every app the sidebar can show, in the order a campaign
 // that never arranged its sidebar lists them. Each access level mirrors the
 // app route's own gate, so the sidebar never offers a page that would turn
-// the viewer away; Game nights is gated on the calendar addon because its
-// routes are. Its slug stays "sessions" so sidebars already arranged keep it. Characters is the campaign's cast, party and NPCs together, which is
+// the viewer away; Game nights has its own switch (addon slug "sessions")
+// and also needs the calendar addon, because its routes need both. Its slug stays "sessions" so sidebars already arranged keep it. Characters is the campaign's cast, party and NPCs together, which is
 // why the NPC gallery addon also turns it on.
 var navAppCatalog = []navAppDef{
 	{slug: "notes", label: "Journal", icon: "fa-book-open", path: "/journal", addons: []string{"notes"}, access: campaigns.NavAccessMember, pinned: true},
 	{slug: "calendar", label: "Calendar", icon: "fa-calendar-days", path: "/apps/calendar", addons: []string{calendar.PluginSlug}, access: campaigns.NavAccessMemberOrAdmin, pinned: true},
-	{slug: "sessions", label: "Game nights", icon: "fa-dice-d20", path: "/game-nights", addons: []string{calendar.PluginSlug}, access: campaigns.NavAccessAnyone},
+	{slug: "sessions", label: "Game nights", icon: "fa-dice-d20", path: "/game-nights", addons: []string{"sessions"}, needs: []string{calendar.PluginSlug}, access: campaigns.NavAccessAnyone},
 	{slug: "maps", label: "Maps", icon: "fa-map", path: "/maps", addons: []string{"maps"}, access: campaigns.NavAccessAnyone},
 	{slug: "characters", label: "Characters", icon: "fa-masks-theater", path: "/characters", caption: "Party & NPCs", addons: []string{entities.AddonPlayerCharacterClaiming, "npcs"}, access: campaigns.NavAccessAnyone},
 	{slug: "armory", label: "Armory", icon: "fa-shield-halved", path: "/armory", addons: []string{"armory"}, access: campaigns.NavAccessAnyone},
@@ -3523,6 +3524,15 @@ func (a *App) RegisterRoutes() {
 		SetGameNightsAffectedByAnchorMove(calendar.GameNightsAffectedByAnchorMove)
 	}); ok {
 		wired.SetGameNightsAffectedByAnchorMove(&gameNightsAnchorMoveAdapter{svc: sessionsService})
+	}
+	// Keeps Game nights on for campaigns that already use them; a recorded
+	// owner choice is left alone. Best-effort: logs and never blocks startup.
+	if n, err := sessions.ReconcileAddonEnablement(context.Background(), sessionsService, addonService); err != nil {
+		slog.Error("game nights addon enablement backfill failed; campaigns that already use game nights "+
+			"may not see them until an owner turns on Game nights (Manage → Game & features)",
+			slog.String("error", err.Error()))
+	} else if n > 0 {
+		slog.Info("game nights addon enablement backfill complete", slog.Int("campaigns", n))
 	}
 	sessionsHandler := sessions.NewHandler(sessionsService)
 	sessionsHandler.SetMemberLister(campaignService)
