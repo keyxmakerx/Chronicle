@@ -77,7 +77,18 @@ const (
 	// scribes draw.
 	DrawWhoOwners  = "owners"
 	DrawWhoScribes = "scribes"
+
+	// The hex layer's terrain art, shown to everyone who sees the map.
+	// Detailed is the default and is not stored.
+	HexArtRealistic = "real"
+	HexArtDetailed  = "detailed"
+	HexArtSimple    = "simple"
 )
+
+// IsValidHexArt reports whether a is one of the terrain art styles.
+func IsValidHexArt(a string) bool {
+	return oneOf(a, HexArtRealistic, HexArtDetailed, HexArtSimple)
+}
 
 // Bounds for the numeric settings. Out-of-range input is clamped, not
 // rejected: a slider that overshoots by a pixel should not fail a save.
@@ -116,6 +127,7 @@ type DisplaySettings struct {
 	Grid  *GridDisplay           `json:"grid,omitempty"`
 	Open  *OpenDisplay           `json:"open,omitempty"`
 	Draw  *DrawDisplay           `json:"draw,omitempty"`
+	Hexes *HexesDisplay          `json:"hexes,omitempty"`
 }
 
 // FrameDisplay overrides the campaign frame for one map. An empty Style means
@@ -167,9 +179,20 @@ type DrawDisplay struct {
 	Who string `json:"who,omitempty"`
 }
 
+// HexesDisplay holds the hex layer's settings. PartyWho is enforced on the
+// server (HexService.MoveParty), not only hidden in the UI. "Everyone" is not
+// offered: letting a player move the party would let them uncover land. Art is
+// the terrain style everyone sees; owners set it in Map settings and DM grants
+// from the Paint mode, so this group merges per field (see
+// MergeDisplaySettings): saving one never resets the other.
+type HexesDisplay struct {
+	PartyWho string `json:"party_who,omitempty"`
+	Art      string `json:"art,omitempty"`
+}
+
 // displayGroups is the closed set of top-level keys; anything else in an
 // incoming document is dropped.
-var displayGroups = []string{"frame", "pins", "kinds", "grid", "open", "draw"}
+var displayGroups = []string{"frame", "pins", "kinds", "grid", "open", "draw", "hexes"}
 
 func oneOf(v string, allowed ...string) bool {
 	for _, a := range allowed {
@@ -386,6 +409,30 @@ func normalizeDraw(raw json.RawMessage) (*DrawDisplay, error) {
 	return &d, nil
 }
 
+func normalizeHexes(raw json.RawMessage) (*HexesDisplay, error) {
+	var h HexesDisplay
+	if err := decodeGroup("hexes", raw, &h); err != nil {
+		return nil, err
+	}
+	if h.PartyWho != "" && !oneOf(h.PartyWho, PartyWhoOwners, PartyWhoScribes) {
+		return nil, apperror.NewValidation("who can move the party must be one of: owners, scribes")
+	}
+	if h.Art != "" && !IsValidHexArt(h.Art) {
+		return nil, apperror.NewValidation("terrain art must be one of: real, detailed, simple")
+	}
+	// Scribes and Detailed are the defaults, so they are not stored.
+	if h.PartyWho == PartyWhoScribes {
+		h.PartyWho = ""
+	}
+	if h.Art == HexArtDetailed {
+		h.Art = ""
+	}
+	if h.PartyWho == "" && h.Art == "" {
+		return nil, nil
+	}
+	return &h, nil
+}
+
 // applyGroup validates one incoming group and writes it into ds, or removes it
 // when the group normalises to nothing (every field default). raw is never the
 // literal null here: the caller handles an explicit null as "clear this group".
@@ -404,6 +451,8 @@ func applyGroup(ds *DisplaySettings, name string, raw json.RawMessage) error {
 		ds.Open, err = normalizeOpen(raw)
 	case "draw":
 		ds.Draw, err = normalizeDraw(raw)
+	case "hexes":
+		ds.Hexes, err = normalizeHexes(raw)
 	}
 	return err
 }
@@ -422,13 +471,15 @@ func clearGroup(ds *DisplaySettings, name string) {
 		ds.Open = nil
 	case "draw":
 		ds.Draw = nil
+	case "hexes":
+		ds.Hexes = nil
 	}
 }
 
 // IsEmpty reports whether no group is set, i.e. the stored value should be NULL.
 func (d *DisplaySettings) IsEmpty() bool {
 	return d == nil || (d.Frame == nil && d.Pins == nil && d.Kinds == nil &&
-		d.Grid == nil && d.Open == nil && d.Draw == nil)
+		d.Grid == nil && d.Open == nil && d.Draw == nil && d.Hexes == nil)
 }
 
 // MergeDisplaySettings applies an incoming display_settings document to the
@@ -441,8 +492,12 @@ func (d *DisplaySettings) IsEmpty() bool {
 // Groups, not individual fields, are the unit because the sheet edits a group
 // at a time and sends only the groups the person touched; replacing a whole
 // group is exact, while merging inside one would make "back to the default"
-// impossible to say. Unknown top-level keys are dropped. The result is nil
-// when nothing is left, so the column goes back to NULL.
+// impossible to say. The one exception is "hexes", which merges per field
+// (absent keeps, null or the default clears, a value replaces): its two
+// settings are written from different places by different people, so a save
+// of one must never carry a stale copy of the other. Unknown top-level keys
+// are dropped. The result is nil when nothing is left, so the column goes
+// back to NULL.
 func MergeDisplaySettings(current *DisplaySettings, incoming json.RawMessage) (*DisplaySettings, error) {
 	var doc map[string]json.RawMessage
 	if err := json.Unmarshal(incoming, &doc); err != nil {
@@ -461,6 +516,13 @@ func MergeDisplaySettings(current *DisplaySettings, incoming json.RawMessage) (*
 			clearGroup(&next, name)
 			continue
 		}
+		if name == "hexes" {
+			merged, err := mergeGroupFields(next.Hexes, raw)
+			if err != nil {
+				return nil, apperror.NewValidation("display_settings.hexes is not valid")
+			}
+			raw = merged
+		}
 		if err := applyGroup(&next, name, raw); err != nil {
 			return nil, err
 		}
@@ -469,6 +531,32 @@ func MergeDisplaySettings(current *DisplaySettings, incoming json.RawMessage) (*
 		return nil, nil
 	}
 	return &next, nil
+}
+
+// mergeGroupFields lays the fields of an incoming group over the stored one:
+// a field the incoming object names replaces (null removes it), every other
+// stored field is kept. The result still goes through the group's normaliser.
+func mergeGroupFields(stored any, incoming json.RawMessage) (json.RawMessage, error) {
+	var in map[string]json.RawMessage
+	if err := json.Unmarshal(incoming, &in); err != nil {
+		return nil, err
+	}
+	out := map[string]json.RawMessage{}
+	if b, err := json.Marshal(stored); err == nil {
+		var cur map[string]json.RawMessage
+		_ = json.Unmarshal(b, &cur) // a nil group marshals to null and adds nothing
+		for k, v := range cur {
+			out[k] = v
+		}
+	}
+	for k, v := range in {
+		if strings.TrimSpace(string(v)) == "null" {
+			delete(out, k)
+			continue
+		}
+		out[k] = v
+	}
+	return json.Marshal(out)
 }
 
 // ParseDisplaySettings reads the stored column. A document that fails to parse
@@ -498,6 +586,24 @@ func (m *Map) DrawWho() string {
 	return DrawWhoScribes
 }
 
+// PartyWho returns who may move the party: owners only, or the default of
+// owners and scribes. An owner or DM grant always may.
+func (m *Map) PartyWho() string {
+	if m != nil && m.Display != nil && m.Display.Hexes != nil && m.Display.Hexes.PartyWho == PartyWhoOwners {
+		return PartyWhoOwners
+	}
+	return PartyWhoScribes
+}
+
+// HexArt returns the map's terrain art style, Detailed unless the map picked
+// another.
+func (m *Map) HexArt() string {
+	if m != nil && m.Display != nil && m.Display.Hexes != nil && IsValidHexArt(m.Display.Hexes.Art) {
+		return m.Display.Hexes.Art
+	}
+	return HexArtDetailed
+}
+
 // ResolvedDisplay is the display settings with every default filled in, in the
 // shape the page script reads. Resolving server-side keeps the defaults in one
 // place instead of repeating them in JavaScript.
@@ -521,6 +627,7 @@ type ResolvedDisplay struct {
 	OpenY         float64       `json:"open_y"`
 	OpenZoom      float64       `json:"open_zoom"`
 	DrawWho       string        `json:"draw_who"`
+	PartyWho      string        `json:"party_who"`
 }
 
 // ResolveDisplay fills every default for a map. campaignFrame is the
@@ -534,7 +641,7 @@ func ResolveDisplay(m *Map, campaignFrame string) ResolvedDisplay {
 		Frame: campaignFrame, FrameSource: "campaign", CampaignFrame: campaignFrame,
 		Tint: true, PinStyle: PinStyleDrop, PinSize: PinSizeMedium, PinLabels: PinLabelsHover,
 		GridType: GridNone, GridSize: defaultGridSize, GridStrength: defaultGridStrength,
-		OpenMode: OpenWhole, OpenX: 50, OpenY: 50, OpenZoom: 0, DrawWho: DrawWhoScribes,
+		OpenMode: OpenWhole, OpenX: 50, OpenY: 50, OpenZoom: 0, DrawWho: DrawWhoScribes, PartyWho: PartyWhoScribes,
 	}
 	kinds := make([]KindDisplay, len(KindDefaults))
 	copy(kinds, KindDefaults)
@@ -593,5 +700,6 @@ func ResolveDisplay(m *Map, campaignFrame string) ResolvedDisplay {
 		}
 	}
 	r.DrawWho = m.DrawWho()
+	r.PartyWho = m.PartyWho()
 	return r
 }

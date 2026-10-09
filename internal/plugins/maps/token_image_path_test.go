@@ -103,7 +103,7 @@ func TestUpdateToken_RejectsExternalImagePath(t *testing.T) {
 			}
 			svc := NewDrawingService(repo)
 
-			err := svc.UpdateToken(context.Background(), "tok-1", "map-1",
+			err := svc.UpdateToken(context.Background(), "tok-1", "map-1", true,
 				UpdateTokenInput{ImagePath: patch.Of(tc.imagePath)})
 
 			if tc.wantErr {
@@ -152,7 +152,7 @@ func TestUpdateToken_UnrelatedFieldSucceedsWithPreExistingExternalImagePath(t *t
 	svc := NewDrawingService(repo)
 
 	// image_path is absent from this patch; only IsLocked is sent.
-	err := svc.UpdateToken(context.Background(), "tok-1", "map-1",
+	err := svc.UpdateToken(context.Background(), "tok-1", "map-1", true,
 		UpdateTokenInput{IsLocked: patch.Of(true)})
 
 	if err != nil {

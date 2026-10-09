@@ -32,7 +32,8 @@ func (r *imageRepo) GetDrawing(context.Context, string) (*Drawing, error) {
 	c := *r.stored
 	return &c, nil
 }
-func (r *imageRepo) UpdateDrawing(_ context.Context, d *Drawing) error { r.updated = d; return nil }
+func (r *imageRepo) UpdateDrawing(_ context.Context, d *Drawing) error      { r.updated = d; return nil }
+func (r *imageRepo) ListShadows(context.Context, string) ([]Drawing, error) { return nil, nil }
 
 // fakeMedia knows which media ids belong to which campaign and counts lookups.
 type fakeMedia struct {

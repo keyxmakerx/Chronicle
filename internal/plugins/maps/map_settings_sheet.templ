@@ -132,9 +132,20 @@ templ mapSettingsSheet(data MapViewData) {
 				<label class="mp-f"><span>Strength</span><input type="range" id="ms-grid-strength" min="5" max="80"/></label>
 				<!-- Shown while the grid is hexes; the viewer fills the chips from the map's pictures. -->
 				<div id="ms-hex" hidden>
-					<small>Hexes add a Hexes tool to the map: paint terrain, and name and write notes on hexes.</small>
+					<small>Hexes add a Hexes tool to the map: terrain, fog of war, the party and notes on hexes.</small>
 					<div class="mp-f"><span>Hexes cover</span>
 						<div id="ms-hexcover" class="mp-chips" role="group" aria-label="Hexes cover"></div>
+					</div>
+					<div class="mp-f"><span>Terrain art</span>
+						@sheetChips("hex_art", []sheetChoice{{"real", "Realistic"}, {"detailed", "Detailed"}, {"simple", "Simple"}})
+					</div>
+					<label class="mp-check"><span>Fog of war</span><input type="checkbox" id="ms-fog"/></label>
+					<small>Players see hexes the party hasn’t explored under a moving shadow.</small>
+					<div class="mp-f"><span>Who can move the party</span>
+						@sheetChips("party_who", []sheetChoice{{"owners", "Owners"}, {"scribes", "Owners and scribes"}})
+					</div>
+					<div class="mp-f"><span>Travel</span>
+						<div class="mp-hx-travel">Each hex is <input type="number" class="mp-input" id="ms-mi" min="1" max="1000" step="1" aria-label="Miles per hex"/> miles, the party travels <input type="number" class="mp-input" id="ms-sp" min="1" max="1000" step="1" aria-label="Miles per day"/> a day</div>
 					</div>
 				</div>
 			</section>

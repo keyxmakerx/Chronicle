@@ -84,7 +84,7 @@
       toLatLng: toLatLng,
       // The server signs each picture's URL for this viewer; the bare path is
       // only a fallback for a response from an older server.
-      mediaURL: function (d) { return d.image_url || '/media/' + encodeURIComponent(d.image_id); },
+      mediaURL: function (d) { return d.image_url || (d.image_id ? '/media/' + encodeURIComponent(d.image_id) : ''); },
       // Signed URLs expire, so a failed load asks the server for a new one.
       refreshURL: function (d) {
         return Chronicle.apiFetch('/campaigns/' + campaignID + '/maps/' + mapID + '/drawings/' + d.id)
