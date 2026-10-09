@@ -84,6 +84,10 @@
     --color-accent-rgb:       99 102 241;
     --color-accent-hover-rgb: 79 70 229;
     --color-accent-light-rgb: 165 180 252;
+    /* State colours: yes / maybe / no, saved / warning / error. */
+    --color-ok-rgb:   22 163 74;   /* green-600 */
+    --color-warn-rgb: 217 119 6;   /* amber-600 */
+    --color-bad-rgb:  220 38 38;   /* red-600 */
     --color-sidebar-bg:    #1a1c23;  /* always dark */
 
     /* ──────────────────────────────────────────────────────────────────
@@ -208,6 +212,9 @@
     --color-accent-rgb:       99 102 241;
     --color-accent-hover-rgb: 79 70 229;
     --color-accent-light-rgb: 165 180 252;
+    --color-ok-rgb:   74 222 128;  /* green-400 */
+    --color-warn-rgb: 251 191 36;  /* amber-400 */
+    --color-bad-rgb:  248 113 113; /* red-400 */
     --color-sidebar-bg:    #1a1c23;  /* always dark */
   }
 
