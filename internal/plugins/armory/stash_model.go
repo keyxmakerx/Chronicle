@@ -182,6 +182,14 @@ func (m Move) IsMoneyEdit() bool {
 	return m.Kind == MoveKindMoney && m.From.Kind == EndpointCharacter && m.From == m.To
 }
 
+// IsGive reports whether the row records the GM handing an item to a
+// character: an item row whose two ends are the same character. It was
+// applied the moment it was written and never runs again, so no apply path may
+// debit or credit it a second time.
+func (m Move) IsGive() bool {
+	return m.Kind == MoveKindItem && m.From.Kind == EndpointCharacter && m.From == m.To
+}
+
 // MoveFilter narrows a history query. Zero values mean "no restriction".
 type MoveFilter struct {
 	// Endpoint, when set, keeps moves that touch it on either side.
@@ -239,8 +247,19 @@ type EntityRef struct {
 	// MoneyKey is the character's money field key, empty when its entity type
 	// has no usable numeric money field.
 	MoneyKey string
+	// Restricted is set on an item players cannot all see: private, or with a
+	// custom allow list.
+	Restricted bool
+	// HandoutMapID is the map an item stands for when it is a map handout
+	// (see HandoutStore), else empty.
+	HandoutMapID string
 	// MoneyLabel is that field's display label, empty when it has none.
 	MoneyLabel string
+	// Purse maps each 5e coin (cp, sp, ep, gp, pp) to the sheet field that
+	// holds it. It is set only when the type has numeric gp, sp and cp, so
+	// change can always be given; MoneyKey stays "gp" so stash moves keep treating gp as the
+	// character's money.
+	Purse map[string]string
 }
 
 // MoveLine is a history row with names resolved for display.
@@ -260,6 +279,14 @@ type HeldItem struct {
 	ItemID   string
 	Name     string
 	Quantity int
+	// IsMap marks a map handout, which the panel shows with a map icon.
+	IsMap bool
+	// CanShare gives the line a "Share..." link: the viewer is the holder's
+	// player and not everyone can see the item.
+	CanShare bool
+	// SharedWith names the characters whose players the holder shared the
+	// item with.
+	SharedWith []string
 }
 
 // CharacterPanelView feeds the "Items and money" panel on a character page.
@@ -267,17 +294,23 @@ type CharacterPanelView struct {
 	CampaignID   string
 	Character    EntityRef
 	DowntimeOpen bool
-	Items        []HeldItem
-	HasMoney     bool
-	Money        Cents
-	History      []MoveLine
-	HistoryMore  bool
+	// CanGive is true for Owner visibility, who may hand the character items
+	// and maps.
+	CanGive     bool
+	Items       []HeldItem
+	HasMoney    bool
+	Money       Cents
+	History     []MoveLine
+	HistoryMore bool
 }
 
 // NamedRef is an id with a display name.
 type NamedRef struct {
 	ID   string
 	Name string
+	// Restricted marks an item players cannot all see; giving it adds the
+	// holder's player to who can.
+	Restricted bool
 }
 
 // StashItemView is one item line in a stash with its name resolved.

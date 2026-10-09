@@ -46,7 +46,8 @@ func TestAppsUpdateRow(t *testing.T) {
 			v:    readyView(),
 			want: []string{"Running <span class=\"tabular-nums\">2.8.0</span>", "2.9.0 is ready.", "Update to 2.9.0",
 				"What&rsquo;s new", "https://github.com/x/y/releases/tag/2.9.0", "Use another version&hellip;",
-				`<option value="2.8.0" selected>`, `<option value="2.9.0">`, "Foundry setup guide"},
+				`<option value="2.8.0" selected>`, `<option value="2.9.0">`, "When a new version comes out",
+				`hx-post="/campaigns/c1/foundry-vtt/update/mode"`, "Choosing this moves your world to 2.9.0 now."},
 		},
 		{
 			name:    "no release notes link is omitted",
@@ -63,8 +64,8 @@ func TestAppsUpdateRow(t *testing.T) {
 		{
 			name:    "held by the admin replaces both buttons with one line",
 			v:       held,
-			want:    []string{"The site admin is keeping this campaign on 2.8.0."},
-			notWant: []string{"Update to", "Use another version", "<dialog"},
+			want:    []string{"The site admin is keeping this campaign on 2.8.0, so updates can't be changed here for now."},
+			notWant: []string{"Update to", "Use another version", "<dialog", "When a new version comes out"},
 		},
 	}
 	for _, tc := range cases {
@@ -82,8 +83,8 @@ func TestAppsUpdateRow(t *testing.T) {
 			}
 		})
 	}
-	if got := renderHTML(t, AppsUpdateRow(nil, "tok")); strings.TrimSpace(got) != "" {
-		t.Errorf("no module must render nothing, got %q", got)
+	if got := renderHTML(t, AppsUpdateRow(nil, "tok")); !strings.Contains(got, "isn't installed on this Chronicle site yet") {
+		t.Errorf("no module must say so, got %q", got)
 	}
 }
 
@@ -114,7 +115,7 @@ func TestUpdateConfirmDialogNamesTheShownVersion(t *testing.T) {
 		`name="version" value="2.9.0"`,
 		`hx-post="/campaigns/c1/foundry-vtt/update"`,
 		`hx-target="#fvtt-update-line"`,
-		"Use another version on Apps &amp; game system takes you back",
+		"Use another version on the Foundry page takes you back",
 	} {
 		if !strings.Contains(html, w) {
 			t.Errorf("missing %q in\n%s", w, html)
@@ -142,14 +143,34 @@ func TestCampaignBindingAsksByDefault(t *testing.T) {
 	}
 }
 
-// The setup guide no longer carries a pin selector: the version is chosen on
-// Apps & game system, where an admin hold and the confirmation apply.
+// The install card carries no pin selector and no second copy of the
+// version: both are on the Foundry page's Module version card, where an
+// admin hold and the confirmation apply.
 func TestOwnerTabHasNoPinSelector(t *testing.T) {
 	html := renderHTML(t, OwnerTabFragment(OwnerTabData{CampaignID: "c1", PackageRegistered: true, InstallURL: "https://x", CurrentVersion: "2.8.0"}))
 	if strings.Contains(html, "fvtt-pin-selector") || strings.Contains(html, "Save Pin") {
 		t.Error("the pin selector must be gone")
 	}
-	if !strings.Contains(html, `href="/campaigns/c1/extensions"`) {
-		t.Errorf("the setup guide must point at Apps & game system: %s", html)
+	if strings.Contains(html, "Currently Serving") {
+		t.Errorf("the install card must not repeat the version: %s", html)
+	}
+}
+
+// The update choice marks the campaign's own mode, so the owner can see
+// whether updates are automatic.
+func TestUpdateModeChooserMarksCurrentMode(t *testing.T) {
+	for _, mode := range []string{"approve_first", "automatic", "pinned"} {
+		v := readyView()
+		v.Mode = mode
+		html := renderHTML(t, updateModeChooser(v, "tok"))
+		if n := strings.Count(html, " checked"); n != 1 {
+			t.Errorf("%s: want exactly one checked choice, got %d", mode, n)
+		}
+		if !strings.Contains(html, `value="`+mode+`" checked`) {
+			t.Errorf("%s: the current mode must be checked:\n%s", mode, html)
+		}
+		if !strings.Contains(html, "X-CSRF-Token") {
+			t.Errorf("%s: the choice must carry the CSRF token", mode)
+		}
 	}
 }

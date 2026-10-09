@@ -65,6 +65,8 @@ func RegisterRoutes(e *echo.Echo, h *Handler,
 	// Game nights with every member's answer and note, for the calendar's
 	// day card. Members only: the roster and notes stay inside the table.
 	cg.GET("/sessions/nights", h.ListGameNightsAPI, campaigns.RequireRole(campaigns.RolePlayer))
+	// A night's recap and visible linked pages, for its page in the calendar.
+	cg.GET("/sessions/:sid/page", h.NightPageAPI, campaigns.RequireRole(campaigns.RolePlayer))
 	cg.GET("/sessions/feed-settings", h.GetFeedSettingsAPI, campaigns.RequireRole(campaigns.RolePlayer))
 	cg.PUT("/sessions/feed-settings", h.SetFeedSettingsAPI, campaigns.RequireRole(campaigns.RoleOwner))
 	cg.POST("/sessions/feed/token", h.GetFeedTokenAPI, campaigns.RequireRole(campaigns.RolePlayer))

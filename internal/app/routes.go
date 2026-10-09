@@ -21,6 +21,7 @@ import (
 	"github.com/keyxmakerx/chronicle/internal/changesource"
 	"github.com/keyxmakerx/chronicle/internal/extensions"
 	"github.com/keyxmakerx/chronicle/internal/middleware"
+	"github.com/keyxmakerx/chronicle/internal/patch"
 	"github.com/keyxmakerx/chronicle/internal/permissions"
 	"github.com/keyxmakerx/chronicle/internal/plugins/addons"
 	"github.com/keyxmakerx/chronicle/internal/plugins/admin"
@@ -28,6 +29,7 @@ import (
 	"github.com/keyxmakerx/chronicle/internal/plugins/ai_workspace/aiexport"
 	"github.com/keyxmakerx/chronicle/internal/plugins/ai_workspace/importer"
 	"github.com/keyxmakerx/chronicle/internal/plugins/ai_workspace/prompt"
+	"github.com/keyxmakerx/chronicle/internal/plugins/ai_workspace/records"
 	"github.com/keyxmakerx/chronicle/internal/plugins/armory"
 	"github.com/keyxmakerx/chronicle/internal/plugins/audit"
 	"github.com/keyxmakerx/chronicle/internal/plugins/auth"
@@ -43,7 +45,9 @@ import (
 	"github.com/keyxmakerx/chronicle/internal/plugins/media"
 	"github.com/keyxmakerx/chronicle/internal/plugins/npcs"
 	"github.com/keyxmakerx/chronicle/internal/plugins/packages"
+	"github.com/keyxmakerx/chronicle/internal/plugins/quests"
 	"github.com/keyxmakerx/chronicle/internal/plugins/restore"
+	"github.com/keyxmakerx/chronicle/internal/plugins/rolltables"
 	"github.com/keyxmakerx/chronicle/internal/plugins/sessions"
 	"github.com/keyxmakerx/chronicle/internal/plugins/settings"
 	"github.com/keyxmakerx/chronicle/internal/plugins/smtp"
@@ -379,10 +383,15 @@ type foundryConnectorAdapter struct {
 		FoundryPresence(campaignID string) (*time.Time, bool)
 	}
 	baseURL string
+	// served names the module version the campaign's world is served, so the
+	// Foundry page can say when Foundry still runs an older one. May be nil.
+	served interface {
+		View(ctx context.Context, campaignID string) (*foundry_vtt.OwnerUpdateView, error)
+	}
 }
 
 // foundryConnectKeyName and foundryConnectVTTTag mark keys minted from the
-// Apps & game system page; the tag matches the value the Integrations form's
+// Foundry page; the tag matches the value the Integrations form's
 // Foundry option stores, so these keys group with hand-made Foundry keys.
 const (
 	foundryConnectKeyName = "Foundry connect line"
@@ -433,6 +442,13 @@ func (a *foundryConnectorAdapter) FoundryConnection(ctx context.Context, campaig
 		// after escaping so it stays a literal character.
 		if line, err := campaigns.BuildFoundryConnectLine(a.baseURL, campaignID, conn.KeyPrefix); err == nil {
 			conn.LinePreview = line + "\u2026"
+		}
+	}
+	if a.served != nil {
+		// A failed lookup only hides the version check; the rest of the page
+		// still answers.
+		if v, err := a.served.View(ctx, campaignID); err == nil && v != nil {
+			conn.ServedVersion = v.Running
 		}
 	}
 	return conn, nil
@@ -2427,25 +2443,14 @@ func (a *App) RegisterRoutes() {
 		}
 	}()
 
-	// One-shot boot reconcilers for entity_types, run SERIALLY in a single
-	// goroutine: any two reconcilers that each read a full pre-backfill
-	// snapshot and rewrite the whole layout_json per row would have the
-	// second clobber the first's block on a type missing both. A new
-	// layout_json reconciler must join this chain, not start its own
-	// goroutine. gm_only field-flag sync runs last since it touches a
-	// different column (fields, not layout_json). Each step is idempotent;
-	// a failure is logged and the chain continues.
+	// Boot reconcilers for entity_types fields, run SERIALLY in a single
+	// goroutine. They write only the fields column; the one layout_json
+	// reconciler (placePageExtrasOnce) runs synchronously later in boot, so
+	// no two reconcilers rewrite the same layout. A new layout_json
+	// reconciler must run beside that one, not in a goroutine of its own.
+	// Each step is idempotent; a failure is logged and the chain continues.
 	go func() {
 		ctx := context.Background()
-
-		// Player Notes was only wired into new default layouts, so custom
-		// sub-categories created earlier never showed the block even with
-		// the addon enabled.
-		if n, err := entityService.EnsureEntityNotesBlockInDefaults(ctx); err != nil {
-			slog.Warn("entity_types: player-notes block backfill failed", slog.Any("error", err))
-		} else if n > 0 {
-			slog.Info("entity_types: player-notes block backfill added to layouts", slog.Int("rows", n))
-		}
 
 		// Converge gm_only field flags from installed system manifests onto
 		// existing types so the GM-field egress filter covers characters
@@ -3139,10 +3144,13 @@ func (a *App) RegisterRoutes() {
 		a.Config.BaseURL,
 	)
 	fvttHandler := foundry_vtt.NewHandler(fvttService)
+	// Also read by the Foundry page's version check; nil without packages.
+	var fvttOwnerUpdates foundry_vtt.OwnerUpdates
 	fvttHandler.SetActivityRecorder(adminActivity)
 	if pkgUpdateSvc != nil {
 		// Owners are asked before a new module version reaches their campaign.
-		fvttHandler.SetOwnerUpdates(foundry_vtt.NewOwnerUpdates(pkgUpdateSvc, pkgService))
+		fvttOwnerUpdates = foundry_vtt.NewOwnerUpdates(pkgUpdateSvc, pkgService)
+		fvttHandler.SetOwnerUpdates(fvttOwnerUpdates)
 		pkgHandler.SetOwnerReminder(packageOwnerReminder{fvtt: fvttService})
 	}
 	// The campaign show page lazy-loads /foundry-vtt/show-banner-fragment
@@ -3240,7 +3248,7 @@ func (a *App) RegisterRoutes() {
 	// decision and is left alone. Best-effort: logs and never blocks startup.
 	if n, err := syncapi.ReconcileAddonEnablement(context.Background(), syncService, addonService); err != nil {
 		slog.Error("sync-api addon enablement backfill failed; campaigns that already use the "+
-			"Sync API may be refused until an owner enables Sync API on the campaign's Apps & game system page (Manage → Apps & game system)",
+			"Sync API may be refused until an owner enables Sync API on the campaign's Game & features page (Manage → Game & features)",
 			slog.String("error", err.Error()))
 	} else if n > 0 {
 		slog.Info("sync-api addon enablement backfill complete", slog.Int("campaigns", n))
@@ -3353,7 +3361,8 @@ func (a *App) RegisterRoutes() {
 	// editor's Era look part (calendar_era_look.js, which mounts on that
 	// page's data-widget="calendar_era_look"); calendar_view.js mounts on
 	// data-widget="calendar_view" (the calendar's own page, however it was
-	// reached), calendar_editor.js self-gates on that
+	// reached) and opens calendar_game_night.js's game night editor,
+	// calendar_editor.js self-gates on that
 	// mount's data-can-edit="true" and opens calendar_event_drawer.js's full
 	// event editor and calendar_weather_sheet.js's weather calendar (both
 	// loaded first so they exist when the editor binds; the drawer's
@@ -3368,6 +3377,7 @@ func (a *App) RegisterRoutes() {
 		"/static/js/widgets/calendar_era_blend.js",
 		"/static/js/widgets/calendar_era_look.js",
 		"/static/js/widgets/calendar_view.js",
+		"/static/js/widgets/calendar_game_night.js",
 		"/static/js/widgets/calendar_rule.js",
 		"/static/js/widgets/calendar_event_drawer.js",
 		"/static/js/widgets/calendar_weather_sheet.js",
@@ -3613,6 +3623,16 @@ func (a *App) RegisterRoutes() {
 	// the sync API so the API's stash endpoints can use it; the event bus does
 	// not exist yet, so events bind to it later through stashEvents.
 	stashEvents := &armoryStashEventAdapter{}
+	// Sharing a hidden item needs the armory's own table; if its migration
+	// failed the plugin is degraded and sharing is simply not offered. The
+	// activity log is bound once the audit service exists, further down.
+	var shareStore armory.ShareStore
+	if a.PluginHealth.IsHealthy(armory.AddonSlug) {
+		shareStore = armory.NewShareRepository(a.DB)
+	} else {
+		slog.Warn("armory plugin schema degraded — item sharing is off")
+	}
+	shareAudit := &armoryShareAuditAdapter{}
 	stashRepo := armory.NewStashRepository(a.DB)
 	stashDirectory := &armoryStashDirectoryAdapter{svc: entityService}
 	stashSvc := armory.NewStashService(armory.StashDeps{
@@ -3624,6 +3644,10 @@ func (a *App) RegisterRoutes() {
 		Relations:  &armoryHasItemAdapter{svc: relService},
 		UserNames:  &armoryMemberNamesAdapter{svc: campaignService},
 		Events:     stashEvents,
+		Handouts:   &armoryHandoutAdapter{maps: mapsService, svc: entityService, dir: stashDirectory},
+		Notifier:   &armoryGiveNotifierAdapter{svc: sessionsService},
+		Shares:     shareStore,
+		Auditor:    shareAudit,
 	})
 	// A money change made on a sheet (web, Foundry, extension) leaves a line in
 	// the character's history, like a move would.
@@ -3691,12 +3715,16 @@ func (a *App) RegisterRoutes() {
 	syncHistoryRepo := syncapi.NewSyncHistoryRepository(a.DB)
 	syncHistoryHandler := syncapi.NewSyncHistoryHandler(syncHistoryRepo, campaignService, syncService,
 		syncHistoryEditorAdapter{audit: audit.NewAuditService(audit.NewAuditRepository(a.DB))})
+	// Who is in each campaign's Foundry world, as the GM's client reports it.
+	foundryPlayerRepo := syncapi.NewFoundryPlayerRepository(a.DB)
+	syncHistoryHandler.SetFoundryPlayers(foundryPlayerRepo)
 
 	if a.PluginHealth.IsHealthy("syncapi") {
 		syncapi.RegisterAPIRoutes(e, syncAPIHandler, calendarAPIHandler, mediaAPIHandler, mapAPIHandler, noteAPIHandler, tagAPIHandler, syncMappingHandler, syncChangesHandler, stashAPIHandler, syncService, addonService, authService, campaignService, syncapi.WithSyncHistory(syncHistoryHandler))
 		syncapi.RegisterSyncHistoryPageRoutes(e, syncHistoryHandler, campaignService, authService)
+		syncapi.RegisterFoundryPageRoutes(e, syncHistoryHandler, campaignService, authService)
 		syncapi.RegisterAdminSyncFlowRoute(adminGroup, syncHistoryHandler)
-		go syncapi.StartHistoryPruner(a.ShutdownCtx, syncHistoryRepo)
+		go syncapi.StartHistoryPruner(a.ShutdownCtx, syncHistoryRepo, foundryPlayerRepo)
 	}
 
 	// NPC plugin: gallery/hub view for revealed character entities.
@@ -3793,12 +3821,19 @@ func (a *App) RegisterRoutes() {
 	// The editor's @ page picker, as the player sees pages.
 	notesApp.GET("/entities/search", entityHandler.SearchAPI, campaigns.RequireViewAccess())
 	notesApp.GET("/entities/:eid/preview", entityHandler.PreviewAPI, campaigns.RequireViewAccess())
+	// The Foundry calendar window: the calendar page over the same grant,
+	// each route at its site gate, only while the calendar plugin is healthy.
+	if a.PluginHealth.IsHealthy(calendar.PluginSlug) {
+		calendar.RegisterAppRoutes(notesApp, calendarHandler, addonService)
+		noteGrantHandler.AllowEmbedMode(calendar.PluginSlug)
+	}
 
 	// Relations widget routes already registered above (before REST API v1).
 
 	// Audit plugin: campaign activity logging and history.
 	auditRepo := audit.NewAuditRepository(a.DB)
 	auditService := audit.NewAuditService(auditRepo)
+	shareAudit.svc = auditService
 	auditHandler := audit.NewHandler(auditService)
 	// Guard the entity-history endpoint with campaign ownership + per-entity
 	// visibility, resolved via the entities service (SEC-IDOR-2).
@@ -3880,6 +3915,11 @@ func (a *App) RegisterRoutes() {
 	// This drives validation, rendering, and the template editor palette.
 	blockRegistry := entities.NewBlockRegistry()
 	entities.RegisterCoreBlocks(blockRegistry)
+	blockRegistry.Register(entities.BlockMeta{
+		Type: entities.BlockCharacterItems, Label: "Items & Money", Icon: "fa-sack-dollar",
+		Description: "What a character carries, their money and recent moves",
+		Addon:       armory.AddonSlug, Contexts: []string{"template"},
+	}, entities.RenderCharacterItemsBlock)
 
 	// Widget-binding framework: the dynamic host↔widget-type↔instance
 	// registry + service. Widget types register declaratively; the service
@@ -4018,6 +4058,30 @@ func (a *App) RegisterRoutes() {
 		return renderSkyboxBlock(context.Background(), calendarService, rc)
 	})
 
+	// Quest board and Notice boards: cork-board blocks for quest pages and
+	// place pages. Always available (no addon); the widgets fetch their own
+	// data, so these only emit the mount point.
+	blockRegistry.Register(entities.BlockMeta{
+		Type: "quest_board", Label: "Quest board", Icon: "fa-scroll",
+		Description: "Cork board with the quest's notice, a map scrap and a reward tag, plus a DM-only ledger",
+		Contexts:    []string{"template"}, Singleton: true,
+	}, func(rc entities.BlockRenderContext) templ.Component {
+		if rc.CC == nil || rc.Entity == nil {
+			return templ.NopComponent
+		}
+		return quests.QuestBoardMount(rc.CC.Campaign.ID, rc.Entity.ID, rc.CSRFToken, rc.CC.CanControlWorldState())
+	})
+	blockRegistry.Register(entities.BlockMeta{
+		Type: "notice_boards", Label: "Notice boards", Icon: "fa-thumbtack",
+		Description: "Boards players can cycle through, with quest notices, notes, pinned pages and maps",
+		Contexts:    []string{"template"}, Singleton: true,
+	}, func(rc entities.BlockRenderContext) templ.Component {
+		if rc.CC == nil || rc.Entity == nil {
+			return templ.NopComponent
+		}
+		return quests.NoticeBoardsMount(rc.CC.Campaign.ID, rc.Entity.ID, rc.CSRFToken, rc.CC.CanControlWorldState(), int(rc.CC.MemberRole))
+	})
+
 	// Timeline plugin blocks (requires "timeline" addon).
 	blockRegistry.Register(entities.BlockMeta{
 		Type: "timeline", Label: "Timeline", Icon: "fa-timeline",
@@ -4117,6 +4181,15 @@ func (a *App) RegisterRoutes() {
 	showRegistry := entities.NewEntityShowRendererRegistry()
 	registerManifestRenderers(showRegistry)
 	entities.SetGlobalEntityShowRendererRegistry(showRegistry)
+
+	// One-time: place the page pieces that became blocks into existing
+	// layouts, so no page loses anything (see page_extras.go). Best-effort;
+	// a failure is retried on the next boot.
+	if n, err := placePageExtrasOnce(context.Background(), settingsRepo, campaignService, addonService, entityService); err != nil {
+		slog.Error("placing page extras failed", slog.String("error", err.Error()))
+	} else if n > 0 {
+		slog.Info("placed page extras into layouts", slog.Int("layouts", n))
+	}
 
 	campaignHandler.SetAuditLogger(&campaignAuditAdapter{svc: auditService})
 	campaignHandler.SetAddonLister(&addonListerAdapter{svc: addonService})
@@ -4765,7 +4838,7 @@ func (a *App) RegisterRoutes() {
 	// Real-time bidirectional sync for Foundry VTT and browser clients.
 	wsHub := ws.NewHub()
 	go wsHub.Run()
-	campaignHandler.SetFoundryConnector(&foundryConnectorAdapter{keys: syncService, hub: wsHub, baseURL: a.Config.BaseURL})
+	campaignHandler.SetFoundryConnector(&foundryConnectorAdapter{keys: syncService, hub: wsHub, baseURL: a.Config.BaseURL, served: fvttOwnerUpdates})
 
 	// Late-bind now that wsHub exists — see wsRevokerHolder above. From
 	// here on, every wired revoke path force-disconnects the sockets it
@@ -4853,6 +4926,59 @@ func (a *App) RegisterRoutes() {
 	} else {
 		slog.Warn("systemstate plugin degraded — routes not registered")
 	}
+
+	// Per-campaign rolling tables: the DM team edits them, scribes may roll.
+	rollTablesSvc := rolltables.NewService(rolltables.NewRepository(a.DB))
+	if a.PluginHealth.IsHealthy(rolltables.PluginSlug) {
+		rolltables.RegisterRoutes(e, rolltables.NewHandler(rollTablesSvc), campaignService, authService)
+	} else {
+		slog.Warn("rolltables plugin degraded — routes not registered")
+	}
+
+	// Quest sheets and notice boards. Cross-plugin lookups go through the
+	// adapters in quests_adapters.go.
+	if a.PluginHealth.IsHealthy(quests.PluginSlug) {
+		questEntities := &questEntityAdapter{svc: entityService}
+		questMaps := &questMapAdapter{svc: mapsService}
+		questRepo := quests.NewQuestRepository(a.DB)
+		quests.RegisterRoutes(e, quests.NewHandler(
+			quests.NewQuestService(questRepo, questEntities, questMaps),
+			quests.NewBoardService(quests.NewBoardRepository(a.DB), questRepo, questEntities, questMaps, &questMemberNamesAdapter{svc: campaignService}),
+			quests.NewPickerService(questEntities, questMaps, &questCharacterAdapter{
+				dir:   &armoryStashDirectoryAdapter{svc: entityService},
+				names: &questMemberNamesAdapter{svc: campaignService},
+			}),
+		), campaignService, authService)
+	} else {
+		slog.Warn("quests plugin degraded — routes not registered")
+	}
+
+	// AI Import's record kinds: the features beyond pages it may write.
+	// Wired here, after the rulebook and rolling tables exist; a degraded
+	// plugin's kind is left out, so its blocks are refused at review.
+	aiKinds := []records.Kind{
+		records.EventKind{Svc: calendarService},
+		records.WeatherKind{Svc: calendarService},
+	}
+	aiTables := records.TableKind{Svc: aiRollTablesAdapter{rollTablesSvc}}
+	if a.PluginHealth.IsHealthy(rolltables.PluginSlug) {
+		aiKinds = append(aiKinds, aiTables)
+	}
+	aiKinds = append(aiKinds,
+		records.ShopStockKind(entityService, relService),
+		records.CarriedItemKind(entityService, relService),
+		records.PinKind{Svc: aiMapsAdapter{mapsService}, Entities: entityService},
+		records.NoteKind{Svc: noteSvc, Entities: entityService},
+		records.HouseRuleKind{Book: systemHandler, SystemOf: func(ctx context.Context, campaignID string) string {
+			c, err := campaignService.GetByID(ctx, campaignID)
+			if err != nil {
+				return ""
+			}
+			return c.ParseSettings().SystemID
+		}},
+		records.GeneratorKind{Cal: calendarService, Tables: aiTables},
+	)
+	aiWorkspaceHandler.SetRecords(records.NewRegistry(aiKinds...))
 
 	// Late-bind the entity_notes notifier now that wsEventBus exists.
 	// The service was constructed earlier with a holder.Notify reference;
@@ -5037,6 +5163,105 @@ func (a *mediaUploadAdapter) UploadRaw(ctx context.Context, campaignID, userID s
 		return "", err
 	}
 	return file.Filename, nil
+}
+
+// aiMapsAdapter is the maps service in AI Import's pin types, so the
+// ai_workspace plugin never imports maps.
+type aiMapsAdapter struct{ svc maps.MapService }
+
+func (m aiMapsAdapter) ListMaps(ctx context.Context, campaignID string) ([]records.MapRef, error) {
+	ms, err := m.svc.ListMaps(ctx, campaignID)
+	out := make([]records.MapRef, len(ms))
+	for i, x := range ms {
+		out[i] = records.MapRef{ID: x.ID, CampaignID: x.CampaignID, Name: x.Name}
+	}
+	return out, err
+}
+
+func (m aiMapsAdapter) ListPins(ctx context.Context, campaignID, mapID string, role int, userID string) ([]records.PinRef, error) {
+	ps, err := m.svc.ListMarkers(ctx, campaignID, mapID, role, userID)
+	out := make([]records.PinRef, len(ps))
+	for i, x := range ps {
+		out[i] = records.PinRef{ID: x.ID, Name: x.Name, X: x.X, Y: x.Y}
+	}
+	return out, err
+}
+
+func (m aiMapsAdapter) CreatePin(ctx context.Context, mapID, userID string, in records.PinInput) error {
+	c := maps.CreateMarkerInput{MapID: mapID, Name: in.Name, Icon: in.Icon, Color: in.Color,
+		Visibility: in.Visibility, Description: in.Description, EntityID: in.EntityID, CreatedBy: userID}
+	if in.X != nil {
+		c.X = *in.X
+	}
+	if in.Y != nil {
+		c.Y = *in.Y
+	}
+	if in.Category != "" {
+		c.PinCategory = &in.Category
+	}
+	_, err := m.svc.CreateMarker(ctx, c)
+	return err
+}
+
+func (m aiMapsAdapter) UpdatePin(ctx context.Context, pinID string, in records.PinInput, canAuthorDmOnly bool) error {
+	var u maps.UpdateMarkerInput
+	set := func(f *patch.Field[string], v string) {
+		if v != "" {
+			*f = patch.Of(v)
+		}
+	}
+	set(&u.Name, in.Name)
+	set(&u.Icon, in.Icon)
+	set(&u.Color, in.Color)
+	set(&u.PinCategory, in.Category)
+	set(&u.Visibility, in.Visibility)
+	// nil means "not written": leave the stored value (never FromPtr,
+	// which would clear it).
+	if in.Description != nil {
+		u.Description = patch.Of(*in.Description)
+	}
+	if in.EntityID != nil {
+		u.EntityID = patch.Of(*in.EntityID)
+	}
+	if in.X != nil {
+		u.X = patch.Of(*in.X)
+	}
+	if in.Y != nil {
+		u.Y = patch.Of(*in.Y)
+	}
+	return m.svc.UpdateMarker(ctx, pinID, u, canAuthorDmOnly)
+}
+
+// DeletePin skips the concurrency token: the pin was read from its map in
+// the same request.
+func (m aiMapsAdapter) DeletePin(ctx context.Context, pinID string, canAuthorDmOnly bool, actorID string, role int) error {
+	return m.svc.DeleteMarker(ctx, pinID, nil, canAuthorDmOnly, actorID, role)
+}
+
+// aiRollTablesAdapter is the rolltables service as AI Import's TableDoc,
+// a JSON round trip, so the ai_workspace plugin never imports rolltables.
+type aiRollTablesAdapter struct{ svc rolltables.Service }
+
+func (r aiRollTablesAdapter) Get(ctx context.Context, campaignID string) (records.TableDoc, error) {
+	var out records.TableDoc
+	doc, err := r.svc.Get(ctx, campaignID)
+	if err != nil {
+		return out, err
+	}
+	b, err := json.Marshal(doc)
+	if err != nil {
+		return out, err
+	}
+	return out, json.Unmarshal(b, &out)
+}
+
+func (r aiRollTablesAdapter) Put(ctx context.Context, campaignID string, doc records.TableDoc, userID string) error {
+	b, err := json.Marshal(doc)
+	if err != nil {
+		return err
+	}
+	_, err = r.svc.Put(ctx, campaignID, b, userID)
+	return err
 }
 
 // aiWorkspaceAuditAdapter bridges audit.AuditService to the narrow

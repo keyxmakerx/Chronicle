@@ -119,8 +119,8 @@ func RegisterCoreBlocks(r *BlockRegistry) {
 	})
 
 	r.Register(BlockMeta{
-		Type: "shop_inventory", Label: "Shop Inventory", Icon: "fa-store",
-		Description: "Shop items with prices",
+		Type: "shop_inventory", Label: "Shop", Icon: "fa-store",
+		Description: "A shop players step into to browse and buy",
 		Contexts:    []string{"template"},
 	}, func(ctx BlockRenderContext) templ.Component {
 		return blockShopInventory(ctx.CC, ctx.Entity, ctx.CSRFToken)
@@ -147,6 +147,42 @@ func RegisterCoreBlocks(r *BlockRegistry) {
 	}, func(ctx BlockRenderContext) templ.Component {
 		return blockTransactionLog(ctx.CC, ctx.Entity)
 	})
+
+	// Page pieces that used to be drawn under every layout; see page_extras.go.
+	r.Register(BlockMeta{
+		Type: BlockSubPages, Label: "Sub-pages", Icon: "fa-sitemap",
+		Description: "This page's sub-pages, with a button to add one",
+		Contexts:    []string{"template"},
+	}, func(ctx BlockRenderContext) templ.Component {
+		return blockSubPages(ctx.CC, ctx.Entity)
+	})
+
+	r.Register(BlockMeta{
+		Type: BlockWritingPrompts, Label: "Writing Prompts", Icon: "fa-lightbulb",
+		Description: "Prompts to help write this page (shown to scribes and the owner)",
+		Contexts:    []string{"template"},
+	}, func(ctx BlockRenderContext) templ.Component {
+		return blockWritingPrompts(ctx.CC, ctx.EntityType)
+	})
+
+	r.Register(BlockMeta{
+		Type: BlockBacklinks, Label: "Backlinks", Icon: "fa-link",
+		Description: "Pages that mention this one",
+		Contexts:    []string{"template"},
+	}, func(ctx BlockRenderContext) templ.Component {
+		return blockBacklinksMount(ctx.CC, ctx.Entity)
+	})
+
+	r.Register(BlockMeta{
+		Type: BlockSystemPanels, Label: "Game System Panels", Icon: "fa-dice-d20",
+		Description: "Panels the game system adds to NPC pages",
+		Contexts:    []string{"template"},
+	}, func(ctx BlockRenderContext) templ.Component {
+		return entitySystemPanels(ctx.CC, ctx.Entity)
+	})
+
+	// Items & Money (BlockCharacterItems) is registered by app beside the
+	// page panel it shows, which names the addon that gates it.
 
 	// text_block is shared between dashboard and template contexts.
 	r.Register(BlockMeta{

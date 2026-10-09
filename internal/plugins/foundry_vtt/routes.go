@@ -18,9 +18,6 @@ func RegisterOwnerRoutes(cg *echo.Group, h *Handler, requireOwner echo.Middlewar
 	cg.POST("/foundry-vtt/token/rotate", h.RotateTokenAPI, requireOwner)
 	cg.GET("/foundry-vtt/install-url", h.InstallURLAPI, requireOwner)
 	cg.GET("/foundry-vtt/settings-tab", h.OwnerTabFragmentHandler, requireOwner)
-	// Setup Guides wrapper for the campaign settings integrations tab;
-	// lazy-loaded by campaigns/settings.templ.
-	cg.GET("/foundry-vtt/setup-guide-fragment", h.CampaignSettingsFoundryGuideHandler, requireOwner)
 
 	// Dashboard sync block, lazy-loaded when the dashboard layout
 	// includes a sync_status block. Campaign-member access: the inner
@@ -28,12 +25,14 @@ func RegisterOwnerRoutes(cg *echo.Group, h *Handler, requireOwner echo.Middlewar
 	cg.GET("/foundry-vtt/dashboard-sync-block", h.DashboardSyncBlockHandler)
 
 	// "New module version is ready" line for the campaign home page and the
-	// Foundry row of Apps & game system, with the owner's answers to them.
+	// Module version card of the Foundry page, with the owner's answers to
+	// them and the choice of how new versions arrive.
 	cg.GET("/foundry-vtt/show-banner-fragment", h.CampaignShowBannerHandler, requireOwner)
 	cg.GET("/foundry-vtt/apps-row", h.AppsUpdateRowHandler, requireOwner)
 	cg.POST("/foundry-vtt/update", h.OwnerUpdateHandler, requireOwner)
 	cg.POST("/foundry-vtt/update/later", h.OwnerUpdateLaterHandler, requireOwner)
 	cg.POST("/foundry-vtt/update/switch", h.OwnerUpdateSwitchHandler, requireOwner)
+	cg.POST("/foundry-vtt/update/mode", h.OwnerUpdateModeHandler, requireOwner)
 
 	// "Connected to Foundry" presence pill for the map title,
 	// lazy-loaded by maps/maps.templ. Campaign-member access.

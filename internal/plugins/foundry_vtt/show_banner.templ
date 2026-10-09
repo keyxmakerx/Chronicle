@@ -19,7 +19,7 @@ templ CampaignUpdateBanner(v *OwnerUpdateView, csrfToken string) {
 			if v.Dismissed {
 				<p id={ updateBannerID } class="mb-4 text-xs text-fg-muted">
 					{ v.Package } { v.Ready } is waiting in
-					<a href={ templ.SafeURL(extensionsURL(v.CampaignID)) } class="text-accent hover:underline">Apps &amp; game system</a>
+					<a href={ templ.SafeURL(foundryPageURL(v.CampaignID)) } class="text-accent hover:underline">the Foundry page</a>
 					whenever you&rsquo;re ready. Only you see this.
 				</p>
 			} else {

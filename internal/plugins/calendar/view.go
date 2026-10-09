@@ -10,6 +10,7 @@ import (
 
 	"github.com/labstack/echo/v4"
 
+	"github.com/keyxmakerx/chronicle/internal/apperror"
 	"github.com/keyxmakerx/chronicle/internal/middleware"
 	"github.com/keyxmakerx/chronicle/internal/plugins/campaigns"
 )
@@ -103,4 +104,28 @@ func viewerZone(cc *campaigns.CampaignContext, cal *Calendar) string {
 		return ""
 	}
 	return *cal.RealTimeZone
+}
+
+// CalendarEmbedFragment handles GET /calendars/embed on an allowed app's
+// routes (the Foundry calendar window): the campaign's default calendar,
+// as this member sees it, ready to mount in the window's frame. A campaign
+// with no calendar the member may see gets a short note instead of an
+// error page, since the window is open either way.
+func (h *Handler) CalendarEmbedFragment(c echo.Context) error {
+	cc := campaigns.GetCampaignContext(c)
+	ctx := c.Request().Context()
+	v := viewerFrom(c, cc)
+
+	cal, err := h.svc.GetDefaultCalendarForViewer(ctx, cc.Campaign.ID, v)
+	if err != nil {
+		if apperror.SafeCode(err) == http.StatusNotFound {
+			return middleware.Render(c, http.StatusOK, CalendarEmbedEmpty())
+		}
+		return err
+	}
+	events, err := h.svc.ListEventsForMonth(ctx, cal.ID, cc.Campaign.ID, cal.CurrentYear, cal.CurrentMonth, v)
+	if err != nil {
+		return err
+	}
+	return middleware.Render(c, http.StatusOK, CalendarEmbed(calendarViewDataFor(cc, cal, events)))
 }

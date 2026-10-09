@@ -287,3 +287,32 @@ func bookJSON(c echo.Context, body any) error {
 	c.Response().Header().Set("Cache-Control", "private, no-store")
 	return c.JSON(http.StatusOK, body)
 }
+
+// CampaignBookPackage loads the editable book of the game system a campaign
+// uses, for callers outside an editor request (AI Import). systemID is the
+// campaign's settings value; the lookups match the editor routes', and the
+// caller does its own Director check (bookEditorAllowed's rule).
+func (h *SystemHandler) CampaignBookPackage(campaignID, systemID string) (*BookPackage, BookEditService, error) {
+	if h.bookEdits == nil || systemID == "" {
+		return nil, nil, apperror.NewNotFound("this campaign has no editable rulebook")
+	}
+	mod := FindSystem(systemID)
+	if mod == nil && h.campaignSystems != nil {
+		mod = h.campaignSystems.GetSystem(campaignID)
+	}
+	if mod == nil || len(mod.Info().ID) > maxBookSystemID {
+		return nil, nil, apperror.NewNotFound("this campaign has no editable rulebook")
+	}
+	sysDir := Dir(mod.Info().ID)
+	if sysDir == "" && h.campaignSystems != nil {
+		sysDir = h.campaignSystems.Dir(campaignID)
+	}
+	if !HasBook(sysDir) {
+		return nil, nil, apperror.NewNotFound("this campaign's game system has no rulebook")
+	}
+	pkg, err := LoadBookPackage(sysDir, mod.Info())
+	if err != nil {
+		return nil, nil, apperror.NewBadRequest("The rulebook could not be opened. " + err.Error())
+	}
+	return pkg, h.bookEdits, nil
+}

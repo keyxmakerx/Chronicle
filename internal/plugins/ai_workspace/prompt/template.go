@@ -36,6 +36,11 @@ type templateData struct {
 
 	// Custom instruction (operator's textarea contents).
 	OperatorInstruction string
+
+	// RecordDocs is the "other things" section: one entry per record kind.
+	RecordDocs string
+	// Capabilities is the opening "what you can do" list.
+	Capabilities string
 }
 
 // entityTypeView is the slim shape the template iterates.
@@ -71,7 +76,25 @@ const promptTemplate = `You are helping me extend my TTRPG campaign in Chronicle
 worldbuilding tool. Generate new content that conforms to my world's existing
 structure so I can paste your output back into Chronicle's AI Import flow
 and it will be accepted with minimal review.
+{{ if .Capabilities }}
+## What you can do
 
+Each block you write adds, changes or removes one thing in my campaign. I
+review every change before anything happens, and I confirm each removal
+myself. A block can be:
+
+- a page (a character, place, item and so on)
+{{ .Capabilities }}
+
+## If you need more
+
+Don't guess a format, a name or what is already there. If you need the
+exact format for one of these{{ if .RecordDocs }} beyond what is below{{ end }}, or need to know what already exists
+(a table's entries, a map's pins, the date of an event), reply with only a
+short list that starts with ` + "`" + `NEED:` + "`" + `, for example
+` + "`" + `NEED: format for kind: table; the pins on the Grimvale map` + "`" + `. I will paste it
+back, and then you answer in full.
+{{ end }}
 {{ if .IncludeEntityTypes }}
 ## My campaign's entity types
 
@@ -113,6 +136,18 @@ Valid ` + "`" + `type` + "`" + ` values are the slugs listed above. ` + "`" + `v
 existing tag vocabulary where possible.
 {{ end }}
 
+{{ if .RecordDocs }}
+## Other things you can add, change or remove
+
+Besides pages, a block can change other parts of the campaign. Give it
+` + "`" + `kind:` + "`" + ` (below) and ` + "`" + `action:` + "`" + ` (` + "`" + `create` + "`" + `, ` + "`" + `update` + "`" + ` or ` + "`" + `delete` + "`" + `), matched by
+` + "`" + `name` + "`" + `. I review every change, and confirm each removal myself, before
+anything happens. For a page, ` + "`" + `action: update` + "`" + ` and ` + "`" + `action: delete` + "`" + ` work the
+same way.
+
+{{ .RecordDocs }}
+{{ end }}
+
 {{ if .IncludeSampleEntity }}
 ## Sample entity (one per type, for shape reference)
 
@@ -133,9 +168,10 @@ existing tag vocabulary where possible.
 
 {{ .OperatorInstruction }}
 
-Please output your response as one or more entity blocks in the format above.
-Use front-matter for every entity. Do not include any text outside the entity
-blocks (no preamble, no commentary between entities).
+Please output your response as one or more blocks in the format above.
+Use front-matter for every block. Do not include any text outside the
+blocks (no preamble, no commentary between blocks){{ if .Capabilities }}, unless you are asking
+for more with ` + "`" + `NEED:` + "`" + `{{ end }}.
 `
 
 // tmpl is the parsed template, ready for Execute. Parsed once at

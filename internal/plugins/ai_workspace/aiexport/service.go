@@ -165,7 +165,15 @@ func (s *Service) renderCategory(
 		if err != nil {
 			return "", err
 		}
-		return RenderNotes(ctx, list, opts)
+		// Only the operator's own notes go to an AI tool: a note someone
+		// shared with them is still that person's writing.
+		own := list[:0:0]
+		for _, n := range list {
+			if n.UserID == ownerID {
+				own = append(own, n)
+			}
+		}
+		return RenderNotes(ctx, own, opts)
 
 	case CategoryCalendarEvents:
 		// TODO(#778): this export is read-only. Issue #778 also asks for

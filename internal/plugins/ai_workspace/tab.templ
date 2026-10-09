@@ -1,4 +1,4 @@
-// tab.templ renders the "AI Workspace" tab content in
+// tab.templ renders the "Data & AI" tab content in
 // /campaigns/:id/settings, registered with the campaigns plugin via
 // campaigns.Handler.RegisterSettingsTab(...). The CampaignContext
 // parameter is bound per-request inside campaigns.visibleSettingsTabs
@@ -13,11 +13,13 @@ import (
 	"github.com/keyxmakerx/chronicle/internal/plugins/campaigns"
 )
 
-// SettingsTabBody renders the AI Workspace settings tab: Prompt
-// builder first (operator generates a prompt, pastes into an AI tool,
-// gets content back), then Export, then Import.
+// SettingsTabBody renders the Data & AI settings tab: the campaign's own
+// export and import first, then the Prompt builder (operator generates a
+// prompt, pastes into an AI tool, gets content back), AI Export and AI
+// Import.
 templ SettingsTabBody(cc *campaigns.CampaignContext) {
 	<div class="space-y-6">
+		@campaigns.SettingsDataSection(cc)
 		@onboardingHint(cc)
 		@promptBuilderSection(cc)
 		@aiExportSection(cc)
@@ -258,7 +260,7 @@ templ aiExportSection(cc *campaigns.CampaignContext) {
 				<h3 class="text-sm font-medium text-fg mb-2">Categories</h3>
 				<p class="text-xs text-fg-muted mb-3">
 					All on by default. Uncheck any you don't want in the export.
-					Maps + media not yet supported (binary content).
+					Map images and other media are not included.
 				</p>
 				<div class="grid grid-cols-1 sm:grid-cols-2 gap-2 text-sm">
 					<label class="flex items-center gap-2 cursor-pointer">
@@ -267,7 +269,7 @@ templ aiExportSection(cc *campaigns.CampaignContext) {
 					</label>
 					<label class="flex items-center gap-2 cursor-pointer">
 						<input type="checkbox" name="categories" value="notes" checked class="rounded border-edge text-accent"/>
-						<span>Notes</span>
+						<span>Notes (yours only)</span>
 					</label>
 					<label class="flex items-center gap-2 cursor-pointer">
 						<input type="checkbox" name="categories" value="calendar_events" checked class="rounded border-edge text-accent"/>
@@ -280,6 +282,10 @@ templ aiExportSection(cc *campaigns.CampaignContext) {
 					<label class="flex items-center gap-2 cursor-pointer">
 						<input type="checkbox" name="categories" value="timelines" checked class="rounded border-edge text-accent"/>
 						<span>Timelines</span>
+					</label>
+					<label class="flex items-center gap-2 cursor-pointer sm:col-span-2">
+						<input type="checkbox" name="categories" value="more" checked class="rounded border-edge text-accent"/>
+						<span>Weather, tables, shops, carried items, map pins, house rules</span>
 					</label>
 				</div>
 			</div>

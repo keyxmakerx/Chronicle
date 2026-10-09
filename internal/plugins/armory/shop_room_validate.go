@@ -14,6 +14,8 @@ import (
 
 const (
 	maxShopRoomPieces  = 80
+	maxShopRoomDecor   = 120
+	maxShopRoomSpot    = 63
 	maxShopRoomItems   = 500
 	maxShopRoomLines   = 10
 	maxShopRoomLine    = 200
@@ -39,6 +41,7 @@ var (
 	shopRoomFurnitures  = setOf("sparse", "normal", "packed")
 	shopRoomDecorations = setOf("none", "some", "lots")
 	shopRoomPalettes    = setOf("oak", "ember", "moss", "gilt", "slate", "dusk")
+	shopRoomLooks       = setOf("lit", "paper", "")
 	shopRoomKinds       = setOf("shelf", "rack", "cabinet", "bookcase", "forge", "window", "herbs", "counter", "table", "barrel", "crate", "anvil", "glass", "stall", "rug", "pedestal", "lamp", "sack")
 	shopRoomWalls       = setOf("Y", "X", "")
 	shopRoomColors      = setOf("steel", "iron", "gold", "silver", "red", "green", "teal", "blue", "violet", "leather", "paper", "cloth", "wood", "dark", "bone", "honey", "")
@@ -91,6 +94,7 @@ func (l *ShopRoomLayout) validate() error {
 		{"furniture", l.Furniture, shopRoomFurnitures},
 		{"decorations", l.Decorations, shopRoomDecorations},
 		{"palette", l.Palette, shopRoomPalettes},
+		{"look", l.Look, shopRoomLooks},
 	}
 	for _, e := range enums {
 		if !e.set[e.val] {
@@ -129,6 +133,24 @@ func (l *ShopRoomLayout) validate() error {
 			if !(v >= shopRoomCoordMin && v <= shopRoomCoordMax) {
 				return fmt.Errorf("piece coordinate out of range")
 			}
+		}
+	}
+
+	if len(l.Decor) > maxShopRoomDecor {
+		return fmt.Errorf("too many decorations")
+	}
+	if l.Decor == nil {
+		l.Decor = []ShopRoomDecor{}
+	}
+	for _, d := range l.Decor {
+		if !seen[d.Piece] {
+			return fmt.Errorf("decoration on a missing piece")
+		}
+		if d.Spot < 0 || d.Spot > maxShopRoomSpot {
+			return fmt.Errorf("invalid decoration spot")
+		}
+		if d.Icon == "" || !shopRoomIconSet[d.Icon] {
+			return fmt.Errorf("invalid decoration icon")
 		}
 	}
 

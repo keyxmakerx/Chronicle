@@ -118,7 +118,7 @@ templ CampaignSettingsPage(cc *CampaignContext, transfer *OwnershipTransfer, csr
 				}
 			}`, jsEsc(activeTab), settingsTabIDsJSON(tabs)) }
 		>
-			@layouts.ManageHeader("Settings", "manage:settings")
+			@layouts.ManageHeader("Settings")
 			if errMsg != "" {
 				<div class="alert-error mb-4" role="alert">{ errMsg }</div>
 			}
@@ -329,13 +329,13 @@ templ settingsGeneralTab(cc *CampaignContext, csrfToken string) {
 			</div>
 		</div>
 
-		// The game system picker moved to Apps & game system; this keeps the
+		// The game system picker is on Game & features; this keeps the
 		// old spot from going silent for owners who look here first.
 		<div class="card p-4">
 			<h2 class="text-sm font-semibold text-fg mb-1">Game System</h2>
 			<p class="text-xs text-fg-secondary">
 				Choose it on
-				<a href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/extensions", cc.Campaign.ID)) } class="text-accent hover:underline focus-visible:outline focus-visible:outline-2 focus-visible:outline-accent">Apps &amp; game system</a>.
+				<a href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/extensions", cc.Campaign.ID)) } class="text-accent hover:underline focus-visible:outline focus-visible:outline-2 focus-visible:outline-accent">Game &amp; features</a>.
 			</p>
 		</div>
 		</div>
@@ -392,21 +392,9 @@ templ settingsGeneralTab(cc *CampaignContext, csrfToken string) {
 	</div>
 }
 
-// settingsPeopleLink is the Settings People tab. Members, invites and
-// ownership live on the People page; the tab keeps old ?tab=people links
-// landing somewhere useful instead of duplicating that page.
-templ settingsPeopleLink(cc *CampaignContext) {
-	<div class="card p-6">
-		<p class="text-sm text-fg-body">
-			Members, invites and ownership now live on the
-			<a href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/members", cc.Campaign.ID)) } class="text-accent hover:underline focus-visible:outline focus-visible:outline-2 focus-visible:outline-accent">People page</a>.
-		</p>
-	</div>
-}
-
 // peopleSections renders everything the owner manages about members: the
-// member list (add, role change, remove), the invite link, email
-// invitations, co-DM access and ownership transfer. The People page is its
+// member list (add, role change including Co-DM, remove), the invite link,
+// email invitations and ownership transfer. The People page is its
 // only home; Settings links to it instead of repeating it.
 templ peopleSections(cc *CampaignContext, members []CampaignMember, transfer *OwnershipTransfer, csrfToken, errMsg string, smtpConfigured bool) {
 	<div class="space-y-6">
@@ -472,64 +460,6 @@ templ peopleSections(cc *CampaignContext, members []CampaignMember, transfer *Ow
 			</div>
 		</div>
 
-		// DM Privileges — uses Chronicle.apiFetch for CSRF safety (S1 fix).
-		<div class="card p-6" x-data={ fmt.Sprintf(`{
-			members: [],
-			grants: [],
-			loading: true,
-			saving: false,
-			async init() {
-				const [membersRes, grantsRes] = await Promise.all([
-					Chronicle.apiFetch('/campaigns/%s/members'),
-					Chronicle.apiFetch('/campaigns/%s/dm-grants')
-				]);
-				const allMembers = membersRes.ok ? await membersRes.json() : [];
-				this.members = allMembers.filter(m => m.role !== 3);
-				const grantsData = grantsRes.ok ? await grantsRes.json() : { user_ids: [] };
-				this.grants = grantsData.user_ids || [];
-				this.loading = false;
-			},
-			isGranted(id) { return this.grants.includes(id); },
-			toggle(id) {
-				if (this.isGranted(id)) {
-					this.grants = this.grants.filter(g => g !== id);
-				} else {
-					this.grants.push(id);
-				}
-				this.save();
-			},
-			async save() {
-				this.saving = true;
-				await Chronicle.apiFetch('/campaigns/%s/dm-grants', {
-					method: 'PUT',
-					body: { user_ids: this.grants }
-				});
-				this.saving = false;
-			}
-		}`, cc.Campaign.ID, cc.Campaign.ID, cc.Campaign.ID) }>
-			<h2 class="text-lg font-semibold text-fg mb-2">Co-DM Access</h2>
-			<p class="text-sm text-fg-secondary mb-4">Make a trusted member a <strong>co-DM</strong>: they can see DM-only content and author secrets — without full ownership (no transfer, delete, member management, or calendar structure editing).</p>
-			<div x-show="loading" class="text-sm text-fg-muted"><i class="fa-solid fa-spinner fa-spin"></i> Loading members...</div>
-			<div x-show="!loading">
-				<template x-if="members.length === 0">
-					<p class="text-sm text-fg-muted italic">No non-owner members to grant privileges to.</p>
-				</template>
-				<div class="space-y-2">
-					<template x-for="m in members" :key="m.user_id">
-						<label class="flex items-center gap-3 p-2 rounded hover:bg-surface-alt cursor-pointer transition-colors">
-							<input type="checkbox" class="accent-accent" :checked="isGranted(m.user_id)" @change="toggle(m.user_id)"/>
-							<div class="flex-1 min-w-0">
-								<span class="text-sm font-medium text-fg" x-text="m.display_name || m.email"></span>
-								<span class="text-xs text-fg-muted ml-1" x-text="m.role === 2 ? '(Scribe)' : '(Player)'"></span>
-							</div>
-							<span x-show="isGranted(m.user_id)" class="text-[10px] text-accent font-medium">Co-DM</span>
-						</label>
-					</template>
-				</div>
-				<p x-show="saving" class="text-xs text-fg-muted mt-2"><i class="fa-solid fa-spinner fa-spin"></i> Saving...</p>
-			</div>
-		</div>
-
 		// Transfer ownership.
 		<div class="card p-6">
 			<h2 class="text-lg font-semibold text-fg mb-4">Transfer Ownership</h2>
@@ -556,13 +486,11 @@ templ peopleSections(cc *CampaignContext, members []CampaignMember, transfer *Ow
 	</div>
 }
 
-// settingsIntegrationsTab renders the connection management hub with 6 sections:
-// connection status + API keys (HTMX), VTT guides, sync management, CORS note,
-// and data export/import. API key content is lazy-loaded from syncapi routes
-// so the campaigns handler doesn't need sync service dependencies.
-templ settingsIntegrationsTab(cc *CampaignContext, csrfToken, baseURL string) {
+// settingsAPIKeysTab is the API keys tab: keys for tools other than Foundry,
+// the custom-tool guide and the CORS note. Foundry's connect line and
+// install link are on the Foundry page.
+templ settingsAPIKeysTab(cc *CampaignContext, baseURL string) {
 	<div class="space-y-6">
-		// S1+S2: Connection Status + API Keys (HTMX lazy-loaded from syncapi, owner only).
 		if cc.MemberRole >= RoleOwner {
 			<div id="integrations-keys"
 				hx-get={ fmt.Sprintf("/campaigns/%s/integrations/keys", cc.Campaign.ID) }
@@ -575,97 +503,54 @@ templ settingsIntegrationsTab(cc *CampaignContext, csrfToken, baseURL string) {
 				</div>
 			</div>
 		}
-
-		// S3: VTT Setup Guides (static, Alpine.js disclosure).
-		<div class="card p-4" x-data="{ guide: null }">
-			<h2 class="text-sm font-semibold text-fg mb-3">VTT Setup Guides</h2>
-			<div class="space-y-2">
-				// Per-VTT setup guides live in their owning plugins
-				// and lazy-load via HTMX; campaigns stays VTT-agnostic.
-				// The wrapping card + alpine `guide` state stay generic
-				// so multiple VTTs can share the disclosure UI.
-				if baseURL != "" {
-					<div
-						hx-get={ fmt.Sprintf("/campaigns/%s/foundry-vtt/setup-guide-fragment", cc.Campaign.ID) }
-						hx-trigger="load"
-						hx-swap="outerHTML"
-					>
-						<!-- skeleton: pulsing card-stripe matching the
-						     eventual disclosure row size. T-B3 polish bar. -->
-						<div class="border border-edge rounded-lg overflow-hidden">
-							<div class="flex items-center justify-between w-full px-4 py-2.5">
-								<span class="inline-block w-32 h-4 rounded bg-fg-secondary/10 animate-pulse" aria-hidden="true"></span>
-								<span class="inline-block w-4 h-4 rounded bg-fg-secondary/10 animate-pulse" aria-hidden="true"></span>
-							</div>
-						</div>
-					</div>
-				}
-				// Other / Custom VTT guide.
-				<div class="border border-edge rounded-lg overflow-hidden">
-					<button @click="guide = guide === 'custom' ? null : 'custom'" class="flex items-center justify-between w-full px-4 py-2.5 text-left text-sm hover:bg-surface-alt transition-colors">
-						<span class="font-medium text-fg"><i class="fa-solid fa-code mr-2 text-xs text-fg-muted"></i> Custom / Other VTT</span>
-						<i class="fa-solid fa-chevron-down text-xs text-fg-muted transition-transform" :class="guide === 'custom' && 'rotate-180'"></i>
-					</button>
-					<div x-show="guide === 'custom'" x-collapse>
-						<div class="px-4 pb-4 border-t border-edge pt-3">
-							<p class="text-sm text-fg-secondary">Use the REST API to integrate Chronicle with any tool. Create an API key above, then use the <code class="text-xs bg-surface-alt px-1 py-0.5 rounded">/api/v1/</code> endpoints.</p>
-							if baseURL != "" {
-								<p class="text-xs text-fg-muted mt-2">Server URL: <code class="bg-surface-alt px-1 py-0.5 rounded">{ baseURL }</code></p>
-							}
-						</div>
-					</div>
-				</div>
-			</div>
+		<div class="card p-4 flex flex-wrap items-center gap-3">
+			<p class="text-sm text-fg-secondary flex-1 min-w-0">Foundry's connect line, install link and module version are on the Foundry page.</p>
+			<a href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/foundry", cc.Campaign.ID)) } class="btn-secondary text-xs">Open Foundry</a>
 		</div>
-
-		// S4: Sync Management (HTMX lazy-loaded, reuses existing endpoints, owner only).
-		if cc.MemberRole >= RoleOwner {
-			<div
-				hx-get={ fmt.Sprintf("/campaigns/%s/api-keys/sync-overview", cc.Campaign.ID) }
-				hx-trigger="load"
-				hx-swap="innerHTML"
-			>
-				<div class="card p-4 text-center">
-					<i class="fa-solid fa-spinner fa-spin text-fg-muted text-xs"></i>
-					<p class="text-xs text-fg-muted mt-1">Loading sync status...</p>
-				</div>
-			</div>
-		}
-
-		// S5: CORS Note (static info box).
+		<div class="card p-4">
+			<h2 class="text-sm font-semibold text-fg mb-2"><i class="fa-solid fa-code mr-2 text-xs text-fg-muted"></i>Other tools</h2>
+			<p class="text-sm text-fg-secondary">Use the REST API to connect Chronicle to any tool. Create an API key above, then use the <code class="text-xs bg-surface-alt px-1 py-0.5 rounded">/api/v1/</code> endpoints.</p>
+			if baseURL != "" {
+				<p class="text-xs text-fg-muted mt-2">Server URL: <code class="bg-surface-alt px-1 py-0.5 rounded">{ baseURL }</code></p>
+			}
+		</div>
 		<div class="card p-4 flex items-start gap-3">
 			<i class="fa-solid fa-circle-info text-blue-500 dark:text-blue-400 mt-0.5 shrink-0"></i>
 			<p class="text-xs text-fg-secondary">
-				If your VTT is on a different domain, a site admin needs to whitelist it in the CORS settings.
-			</p>
-		</div>
-
-		// S6: Data Portability.
-		<div class="card p-4">
-			<h2 class="text-sm font-semibold text-fg mb-3">Data Export &amp; Import</h2>
-			<p class="text-xs text-fg-secondary mb-3">Export your campaign as a JSON file, or as a ZIP that adds an archive of your media files, for backup or migration.</p>
-			<div class="flex flex-wrap items-center gap-3">
-				<a href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/export", cc.Campaign.ID)) } class="btn-primary text-sm inline-flex items-center gap-1.5" download>
-					<i class="fa-solid fa-download text-xs"></i> Export JSON
-				</a>
-				<a href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/export?include_media=1", cc.Campaign.ID)) } class="btn-primary text-sm inline-flex items-center gap-1.5" download>
-					<i class="fa-solid fa-file-zipper text-xs"></i> Export ZIP (+ media archive)
-				</a>
-				<a href="/campaigns/import" class="btn-secondary text-sm inline-flex items-center gap-1.5">
-					<i class="fa-solid fa-upload text-xs"></i> Import Campaign
-				</a>
-			</div>
-			<p class="text-[11px] text-fg-muted mt-2">
-				The ZIP contains <code>campaign.json</code> plus a <code>media/</code> folder holding your image
-				files, so nothing is lost from the backup. Importing either file restores
-				<strong>structural data only</strong>: media files are archived for manual restoration and
-				are <strong>not</strong> re-attached on import, so images in a restored campaign will be
-				broken until you restore them by hand. The import tells you how many media files it left
-				behind. The JSON-only export carries media <em>metadata</em> and no bytes at all — use the
-				ZIP if you want a complete backup.
+				If your tool is on a different domain, a site admin needs to whitelist it in the CORS settings.
 			</p>
 		</div>
 	</div>
+}
+
+// SettingsDataSection is the campaign's export and import. It is the
+// built-in Data tab, and the AI plugin's Data & AI tab opens with it.
+templ SettingsDataSection(cc *CampaignContext) {
+	<div class="card p-4">
+		<h2 class="text-sm font-semibold text-fg mb-3">Data Export &amp; Import</h2>
+		<p class="text-xs text-fg-secondary mb-3">Export your campaign as a JSON file, or as a ZIP that adds an archive of your media files, for backup or migration.</p>
+		<div class="flex flex-wrap items-center gap-3">
+			<a href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/export", cc.Campaign.ID)) } class="btn-primary text-sm inline-flex items-center gap-1.5" download>
+				<i class="fa-solid fa-download text-xs"></i> Export JSON
+			</a>
+			<a href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/export?include_media=1", cc.Campaign.ID)) } class="btn-primary text-sm inline-flex items-center gap-1.5" download>
+				<i class="fa-solid fa-file-zipper text-xs"></i> Export ZIP (+ media archive)
+			</a>
+			<a href="/campaigns/import" class="btn-secondary text-sm inline-flex items-center gap-1.5">
+				<i class="fa-solid fa-upload text-xs"></i> Import Campaign
+			</a>
+		</div>
+		<p class="text-[11px] text-fg-muted mt-2">
+			The ZIP contains <code>campaign.json</code> plus a <code>media/</code> folder holding your image
+			files, so nothing is lost from the backup. Importing either file restores
+			<strong>structural data only</strong>: media files are archived for manual restoration and
+			are <strong>not</strong> re-attached on import, so images in a restored campaign will be
+			broken until you restore them by hand. The import tells you how many media files it left
+			behind. The JSON-only export carries media <em>metadata</em> and no bytes at all — use the
+			ZIP if you want a complete backup.
+		</p>
+	</div>
+
 }
 
 // pluginURL returns the main page URL for a given addon slug within a campaign.

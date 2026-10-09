@@ -814,7 +814,9 @@ templ SidebarSessionsRSVP(campaignID string, sessions []Session, userID string, 
 
 // SessionsEmbedFragment renders a compact list of planned sessions for dashboard embedding.
 // Shows session name, date, and RSVP counts. Empty state if no planned sessions.
-templ SessionsEmbedFragment(campaignID string, sessions []Session, userID string) {
+// Each opens its night in the calendar (through GameNightsLink), like the
+// sidebar's list.
+templ SessionsEmbedFragment(campaignID string, sessions []Session, userID string, today string) {
 	if len(sessions) == 0 {
 		<div class="px-4 py-6 text-center">
 			<i class="fa-solid fa-dice-d20 text-xl text-fg-muted mb-2"></i>
@@ -823,7 +825,7 @@ templ SessionsEmbedFragment(campaignID string, sessions []Session, userID string
 	} else {
 		for _, s := range sessions {
 			<a
-				href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/sessions/%s", campaignID, s.ID)) }
+				href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/game-nights?session=%s&date=%s", campaignID, url.QueryEscape(s.ID), url.QueryEscape(sidebarNightDate(s, today)))) }
 				class="flex items-center gap-3 px-4 py-3 hover:bg-surface-alt/50 transition-colors group"
 			>
 				<div class="shrink-0">

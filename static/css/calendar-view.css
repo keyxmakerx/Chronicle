@@ -1910,3 +1910,56 @@
    share the bottom edge; the label steps up above the lines. */
 .cal-v5 .day:has(.avl) .erastart{bottom:26px}
 @media (max-width:600px){.cal-v5 .day:has(.avl) .erastart{bottom:16px}}
+
+/* A private preview of another day's sky: which day, its time, the way back. */
+.cal-v5 .skyday{display:inline-flex;align-items:center;gap:6px;margin-top:8px;padding:5px 10px 5px 8px;border-radius:99px;font:550 12px/1 var(--sans);color:var(--ink2);box-shadow:0 0 0 1px var(--hair)}
+.cal-v5 .skyday:hover{background:var(--lift);color:var(--ink);box-shadow:0 0 0 1px var(--edge)}
+.cal-v5 .skyday:focus-visible{outline:1.5px solid var(--ink);outline-offset:2px}
+.cal-v5 .skyprev{position:absolute;left:12px;top:10px;z-index:1;display:flex;align-items:center;gap:10px;padding:6px 6px 6px 12px;border-radius:99px;background:oklch(0.16 0.02 260 / .62);color:#eef2f8;font:550 12px/1 var(--sans);backdrop-filter:blur(6px);visibility:hidden}
+.cal-v5 .skywrap.open .skyprev:not([hidden]){visibility:visible}
+.cal-v5 .skyprev[hidden]{display:none}
+.cal-v5 .skyprev .spt{width:140px;accent-color:#eef2f8}
+.cal-v5 .skyprev .sph{min-width:38px;font-variant-numeric:tabular-nums}
+.cal-v5 .skyprev .spx{padding:6px 10px;border-radius:99px;background:oklch(1 0 0 / .14);color:#fff;font:600 12px/1 var(--sans)}
+.cal-v5 .skyprev .spx:hover{background:oklch(1 0 0 / .24)}
+.cal-v5 .skyprev .spx:focus-visible{outline:1.5px solid #fff;outline-offset:2px}
+@media (prefers-reduced-motion: no-preference){.cal-v5 .skyprev:not([hidden]){animation:skyprev-in .22s ease-out}}
+@keyframes skyprev-in{from{opacity:0;transform:translateY(4px)}to{opacity:1;transform:none}}
+
+/* The game night editor: the event editor's drawer, for a game night. */
+.cal-v5 .gnwhen{display:grid;grid-template-columns:minmax(0,1.3fr) minmax(0,1fr);gap:8px}
+.cal-v5 .gnnext{margin:0;font:500 11.5px/1.5 var(--sans);color:var(--mut)}
+.cal-v5 .gnnext b{color:var(--ink);font-weight:600}
+.cal-v5 .gnd .err.shake{animation:cal5-wxNag .42s cubic-bezier(.36,.07,.19,.97)}
+/* A night's page: Edit beside the way back, the recap and its linked pages. */
+.cal-v5 .evp .crease [data-gn-edit]{margin-left:auto}
+.cal-v5 .gnrecap .notes{margin:0 0 8px}
+.cal-v5 .gnrecap .fld{margin-bottom:8px}
+.cal-v5 .gnrecap .dnote{margin:0 0 8px}
+.cal-v5 .gnrecap .gperr{margin-bottom:8px}
+.cal-v5 .gnchips{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:8px}
+.cal-v5 .gnchip{display:inline-flex;align-items:center;gap:2px;height:28px;padding:0 4px 0 11px;border-radius:99px;box-shadow:inset 0 0 0 1px var(--edge);background:var(--paper);font:550 12px/1 var(--sans)}
+.cal-v5 .gnchip a{color:var(--ink);text-decoration:none}
+.cal-v5 .gnchip a:hover{text-decoration:underline}
+.cal-v5 .gnchip button{width:22px;height:22px;border-radius:50%;color:var(--mut);font-size:11px}
+.cal-v5 .gnchip button:hover{color:var(--ink);background:var(--hair2)}
+.cal-v5 .gnchip:not(:has(button)){padding-right:11px}
+.cal-v5 .gnfind{display:flex;flex-wrap:wrap;gap:6px}
+.cal-v5 .gnfind input{flex:1 1 100%;height:32px;padding:0 10px;border-radius:9px;border:1px solid var(--edge);background:var(--paper2);font:500 13px/1 var(--sans);color:var(--ink)}
+.cal-v5 .gnfind input:focus{outline:1.5px solid var(--ink);outline-offset:0}
+.cal-v5 .gnfind .lp-res[hidden]{display:none}
+.cal-v5 .gnrecap .lnk, .cal-v5 .gnlinks .lnk{display:inline-flex;align-items:center;gap:6px;padding:0;font:550 12px/1.3 var(--sans);color:var(--ink2)}
+/* "This day" in a day's card: the viewer's own hours, and the one-day change. */
+.cal-v5 .myday{display:flex;flex-wrap:wrap;align-items:baseline;justify-content:space-between;gap:4px 10px;margin:4px 0 6px;font:500 12px/1.4 var(--sans);color:var(--ink2)}
+.cal-v5 .myday b{color:var(--ink);font-weight:600}
+.cal-v5 .myday.edit{flex-direction:column;align-items:stretch;gap:9px;padding:11px 12px 12px;border:1px solid var(--edge);border-radius:12px;background:var(--paper2)}
+.cal-v5 .myday.edit .segs button{height:28px;font-size:11.5px}
+.cal-v5 .myday.edit .fld input{height:30px;background:var(--paper);font-size:12.5px}
+.cal-v5 .myday.edit .gprow{grid-template-columns:minmax(0,1fr) minmax(0,1fr)}
+/* My hours: the same week every week, or two weeks taking turns. */
+.cal-v5 .plalt{margin:4px 0 2px}
+.cal-v5 .plwk{margin:14px 0 6px;font:600 12px/1.3 var(--sans);color:var(--ink)}
+/* The era ribbon's segments are also .rseg; its bar must not cover the
+   planner's tab and paint buttons and swallow their presses. */
+.cal-v5 .rseg.fvtabs, .cal-v5 .rseg.pltools{height:auto}
+.cal-v5 .rseg.fvtabs::before, .cal-v5 .rseg.pltools::before{content:none}

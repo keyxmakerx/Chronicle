@@ -1,6 +1,6 @@
 package campaigns
 
-// foundry_connect_test.go pins the Foundry row on the Apps & game system page:
+// foundry_connect_test.go pins the connection row on the owner's Foundry page:
 // the connect-line wire format, the status wording and 24-hour cut-off, and
 // the credential handling of the two routes (owner-only mint, never a raw key
 // on a GET).
@@ -256,11 +256,11 @@ func TestNewFoundryConnectLine_NoConnectorOrError(t *testing.T) {
 	})
 }
 
-func TestExtensionsHub_GETNeverContainsRawKey(t *testing.T) {
+func TestFoundryPage_GETNeverContainsRawKey(t *testing.T) {
 	fc := &fakeFoundryConnector{}
 	e := newFoundryRouteFixture(RoleOwner, fc)
 	rec := httptest.NewRecorder()
-	e.ServeHTTP(rec, foundryRequest(http.MethodGet, "/campaigns/camp-1/extensions"))
+	e.ServeHTTP(rec, foundryRequest(http.MethodGet, "/campaigns/camp-1/foundry"))
 
 	if rec.Code != http.StatusOK {
 		t.Fatalf("status = %d, want 200", rec.Code)
@@ -285,13 +285,26 @@ func TestExtensionsHub_GETNeverContainsRawKey(t *testing.T) {
 	}
 }
 
-func TestExtensionsHub_NoConnectorKeepsSettingsLink(t *testing.T) {
+func TestFoundryPage_NoConnectorSaysUnavailable(t *testing.T) {
 	e := newFoundryRouteFixture(RoleOwner, nil)
 	rec := httptest.NewRecorder()
-	e.ServeHTTP(rec, foundryRequest(http.MethodGet, "/campaigns/camp-1/extensions"))
+	e.ServeHTTP(rec, foundryRequest(http.MethodGet, "/campaigns/camp-1/foundry"))
 	body := rec.Body.String()
-	if !strings.Contains(body, "Connection keys and sync status.") || strings.Contains(body, "data-foundry-row") {
-		t.Error("without a connector the row should be the plain Set up link")
+	if !strings.Contains(body, "Foundry sync is not available") || strings.Contains(body, "data-foundry-row") {
+		t.Error("without a connector the page should say Foundry sync is unavailable and show no row")
+	}
+}
+
+// The Foundry page is the owner's: a Scribe or Player is refused, not shown
+// the connect line's start or what Foundry reports.
+func TestFoundryPage_OwnerOnly(t *testing.T) {
+	for _, role := range []Role{RoleScribe, RolePlayer} {
+		e := newFoundryRouteFixture(role, &fakeFoundryConnector{})
+		rec := httptest.NewRecorder()
+		e.ServeHTTP(rec, foundryRequest(http.MethodGet, "/campaigns/camp-1/foundry"))
+		if rec.Code != http.StatusForbidden {
+			t.Errorf("role %v: status = %d, want 403", role, rec.Code)
+		}
 	}
 }
 

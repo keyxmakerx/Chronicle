@@ -12,6 +12,7 @@ package armory
 import (
 	"context"
 	"errors"
+	"fmt"
 	"log/slog"
 	"math"
 	"sort"
@@ -22,12 +23,12 @@ import (
 )
 
 const (
-	noCoinFieldMessage = "This sheet has no coin field"
-	// Wealth (Draw Steel) is a standing, not a purse; how shops use it is
-	// still being decided, so it is never spent like coins.
-	wealthMessage        = "Wealth isn’t spent like coins"
+	noCoinFieldMessage   = "This sheet has no coin field"
 	priceWentUpMessage   = "The price went up since you asked."
 	notEnoughCoinMessage = "Not enough coin"
+	// needsWealthFormat takes the dearest unit price in cents, which prints
+	// as the Wealth figure ("Needs Wealth 4").
+	needsWealthFormat    = "Needs Wealth %s"
 	mixedCurrencyMessage = "Items are priced in different currencies"
 )
 
@@ -104,18 +105,59 @@ func (s *shopBuyService) Buyers(ctx context.Context, campaignID, shopEntityID st
 	}
 	view := &BuyersView{DowntimeOpen: open, CanBuyNow: open || a.IsOwner(), Buyers: []Buyer{}}
 	for i := range refs {
-		b := Buyer{ID: refs[i].ID, Name: refs[i].Name, MoneyKey: refs[i].MoneyKey}
-		if refs[i].MoneyKey != "" {
-			// A sheet whose coin field isn't a number reads as "no figure"
-			// rather than failing the whole list.
-			if c, err := s.stash.characterMoney(ctx, &refs[i]); err == nil {
-				v := centsToFloat(c)
-				b.Money = &v
-			}
-		}
-		view.Buyers = append(view.Buyers, b)
+		view.Buyers = append(view.Buyers, s.describeBuyer(ctx, &refs[i]))
 	}
 	return view, nil
+}
+
+// describeBuyer reads one character's purchasing power. A sheet whose coin
+// field isn't a number reads as "no figure" rather than failing the whole list.
+func (s *shopBuyService) describeBuyer(ctx context.Context, ref *EntityRef) Buyer {
+	b := Buyer{ID: ref.ID, Name: ref.Name, MoneyKey: ref.MoneyKey, Kind: buyKind(ref)}
+	if ref.MoneyKey == "" {
+		return b
+	}
+	if b.Kind == BuyKindPurse {
+		counts, err := s.stash.purseCounts(ctx, ref)
+		if err != nil {
+			return b
+		}
+		b.Purse = make(map[string]float64, len(counts))
+		for coin, n := range counts {
+			b.Purse[coin] = float64(n)
+		}
+		cp := purseValueCp(counts)
+		v := float64(cp) / 100
+		b.Money, b.MoneyCp = &v, &cp
+		return b
+	}
+	c, err := s.stash.characterMoney(ctx, ref)
+	if err != nil {
+		return b
+	}
+	v := centsToFloat(c)
+	b.Money = &v
+	if ref.MoneyKey == "gp" {
+		// gp-cents are copper, so a gold-only sheet compares against the same
+		// copper figure a purse does.
+		cp := int64(c)
+		b.MoneyCp = &cp
+	}
+	return b
+}
+
+// buyKind says how a character pays: Wealth is a threshold, several coin
+// fields are a purse, anything else is one number.
+func buyKind(ref *EntityRef) string {
+	switch {
+	case ref.MoneyKey == "":
+		return ""
+	case ref.MoneyKey == "wealth":
+		return BuyKindWealth
+	case ref.MoneyKey == "gp" && len(ref.Purse) > 0:
+		return BuyKindPurse
+	}
+	return BuyKindCoins
 }
 
 // candidates are the characters the caller may buy for: the Owner every
@@ -240,15 +282,39 @@ func (s *shopBuyService) Buy(ctx context.Context, campaignID, shopEntityID strin
 	return s.applyBasket(ctx, campaignID, shopEntityID, a, buyer, in, nil)
 }
 
-// checkBuyerSheet refuses a character that has no coins to spend.
+// checkBuyerSheet refuses a character that has nothing to pay with. Wealth
+// counts: a Draw Steel hero buys by having enough of it.
 func checkBuyerSheet(buyer *EntityRef) error {
 	if buyer.MoneyKey == "" {
 		return apperror.NewBadRequest(noCoinFieldMessage)
 	}
-	if buyer.MoneyKey == "wealth" {
-		return apperror.NewBadRequest(wealthMessage)
-	}
 	return nil
+}
+
+// chargeCents is what a gp (or other single-field) sheet pays for a basket
+// totalled in the listing currency. On a gp sheet a 5e coin currency is
+// converted through copper, because gp-cents are copper; any other currency or
+// money field is charged at face value, as before.
+func chargeCents(buyer *EntityRef, total Cents, currency string) Cents {
+	if buyer.MoneyKey != "gp" {
+		return total
+	}
+	if cp, ok := toCp(total, currency); ok {
+		return Cents(cp)
+	}
+	return total
+}
+
+// highestUnit is the dearest single price in the basket: the Wealth a hero
+// needs, since Wealth gates a purchase rather than paying for it.
+func highestUnit(lines []buyLine) Cents {
+	var top Cents
+	for _, l := range lines {
+		if l.unit > top {
+			top = l.unit
+		}
+	}
+	return top
 }
 
 // applyBasket prices the basket from the listings, then charges, takes stock
@@ -266,12 +332,43 @@ func (s *shopBuyService) applyBasket(ctx context.Context, campaignID, shopEntity
 		return nil, apperror.NewConflict(priceWentUpMessage)
 	}
 	// Read the coins under the lock so two baskets can't both spend them.
-	have, err := s.stash.characterMoney(ctx, buyer)
-	if err != nil {
-		return nil, err
-	}
-	if have < total {
-		return nil, apperror.NewBadRequest(notEnoughCoinMessage)
+	kind := buyKind(buyer)
+	var (
+		have, charge Cents            // single-number sheets: balance and amount due
+		deltas       map[string]int64 // purse sheets: net coin changes
+		change       map[string]int64
+		purseNow     map[string]int64
+	)
+	switch kind {
+	case BuyKindWealth:
+		// Wealth is a threshold: the dearest unit price must not exceed it.
+		wealth, err := s.stash.characterMoney(ctx, buyer)
+		if err != nil {
+			return nil, err
+		}
+		if need := highestUnit(lines); wealth < need {
+			return nil, apperror.NewBadRequest(fmt.Sprintf(needsWealthFormat, need))
+		}
+		have = wealth
+	case BuyKindPurse:
+		var err error
+		if purseNow, err = s.stash.purseCounts(ctx, buyer); err != nil {
+			return nil, err
+		}
+		priceCp := int64(chargeCents(buyer, total, currency))
+		var ok bool
+		if deltas, change, ok = payFromPurse(purseNow, priceCp); !ok {
+			return nil, apperror.NewBadRequest(notEnoughCoinMessage)
+		}
+	default:
+		var err error
+		if have, err = s.stash.characterMoney(ctx, buyer); err != nil {
+			return nil, err
+		}
+		charge = chargeCents(buyer, total, currency)
+		if have < charge {
+			return nil, apperror.NewBadRequest(notEnoughCoinMessage)
+		}
 	}
 
 	// From here on the basket is applied even if the client disconnects: a
@@ -323,21 +420,59 @@ func (s *shopBuyService) applyBasket(ctx context.Context, campaignID, shopEntity
 		}
 	}
 
-	ok, err := s.stash.adjustCharacterMoney(mctx, buyer, -total)
-	if err != nil {
-		rollback()
-		return nil, asAppError(err)
-	}
-	if !ok {
-		rollback()
-		return nil, apperror.NewBadRequest(notEnoughCoinMessage)
-	}
-	undo = append(undo, func() {
-		if _, err := s.stash.adjustCharacterMoney(mctx, buyer, total); err != nil {
-			slog.Error("shop buy: RESTORE FAILED, character is short",
-				slog.String("character_id", buyer.ID), slog.String("campaign_id", campaignID), slog.Any("error", err))
+	switch kind {
+	case BuyKindWealth:
+		// Nothing is taken and nothing needs undoing.
+	case BuyKindPurse:
+		ok, err := s.stash.adjustPurse(mctx, buyer, deltas)
+		if err != nil {
+			rollback()
+			return nil, asAppError(err)
 		}
-	})
+		if !ok {
+			rollback()
+			return nil, apperror.NewBadRequest(notEnoughCoinMessage)
+		}
+		undo = append(undo, func() {
+			inverse := make(map[string]int64, len(deltas))
+			for coin, d := range deltas {
+				inverse[coin] = -d
+			}
+			ok, err := s.stash.adjustPurse(mctx, buyer, inverse)
+			if err == nil && !ok {
+				// The change was spent or edited away meanwhile, so taking it
+				// back would go below zero. Return the coins paid at least:
+				// the buyer is never out of pocket for a failed purchase.
+				refund := make(map[string]int64, len(inverse))
+				for coin, d := range inverse {
+					if d > 0 {
+						refund[coin] = d
+					}
+				}
+				ok, err = s.stash.adjustPurse(mctx, buyer, refund)
+			}
+			if err != nil || !ok {
+				slog.Error("shop buy: RESTORE FAILED, character's purse is short",
+					slog.String("character_id", buyer.ID), slog.String("campaign_id", campaignID), slog.Any("error", err))
+			}
+		})
+	default:
+		ok, err := s.stash.adjustCharacterMoney(mctx, buyer, -charge)
+		if err != nil {
+			rollback()
+			return nil, asAppError(err)
+		}
+		if !ok {
+			rollback()
+			return nil, apperror.NewBadRequest(notEnoughCoinMessage)
+		}
+		undo = append(undo, func() {
+			if _, err := s.stash.adjustCharacterMoney(mctx, buyer, charge); err != nil {
+				slog.Error("shop buy: RESTORE FAILED, character is short",
+					slog.String("character_id", buyer.ID), slog.String("campaign_id", campaignID), slog.Any("error", err))
+			}
+		})
+	}
 
 	for i := range lines {
 		l := lines[i]
@@ -369,7 +504,23 @@ func (s *shopBuyService) applyBasket(ctx context.Context, campaignID, shopEntity
 		}
 	}
 
-	spent, left := centsToFloat(total), centsToFloat(have-total)
+	switch kind {
+	case BuyKindWealth:
+		left := centsToFloat(have)
+		return &BuyResult{Status: BuyStatusBought, MoneyLeft: &left}, nil
+	case BuyKindPurse:
+		after := make(map[string]int64, len(purseNow))
+		for coin, n := range purseNow {
+			after[coin] = n + deltas[coin]
+		}
+		spent, left := centsToFloat(total), float64(purseValueCp(after))/100
+		res := &BuyResult{Status: BuyStatusBought, Spent: &spent, Currency: currency, MoneyLeft: &left, PurseLeft: formatPurse(after)}
+		if len(change) > 0 {
+			res.Change = formatPurse(change)
+		}
+		return res, nil
+	}
+	spent, left := centsToFloat(total), centsToFloat(have-charge)
 	return &BuyResult{Status: BuyStatusBought, Spent: &spent, Currency: currency, MoneyLeft: &left}, nil
 }
 

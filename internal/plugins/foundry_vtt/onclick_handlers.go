@@ -127,9 +127,9 @@ func rotateTokenOnClick(campaignID string) templ.ComponentScript {
 	cid := jsStr(campaignID)
 	body := fmt.Sprintf(
 		`(function(){`+
-			`if(!window.confirm('Rotate the install token? Every player will need to reinstall with the new URL.'))return;`+
+			`if(!window.confirm('Rotate the install URL? The one saved in Foundry stops working until you reinstall the module there with the new URL. Players are not affected.'))return;`+
 			`Chronicle.apiFetch('/campaigns/'+encodeURIComponent(%s)+'/foundry-vtt/token/rotate',{method:'POST'})`+
-			`.then(function(){window.Chronicle.notify('Token rotated. All players will need to reinstall.','success');setTimeout(function(){window.location.reload();},600);})`+
+			`.then(function(){window.Chronicle.notify('Install URL rotated. Reinstall the module in Foundry with the new URL.','success');setTimeout(function(){window.location.reload();},600);})`+
 			`.catch(function(err){window.Chronicle.notify('Rotate failed: '+((err&&err.message)||''),'error');});`+
 			`})()`,
 		cid)

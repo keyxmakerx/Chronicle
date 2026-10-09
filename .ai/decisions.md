@@ -905,7 +905,7 @@ Also under this ADR: the partial-update contract test only recognised structs na
 
 ## ADR-057: One visibility glance, shown to those who can change it, edited only in edit mode
 
-**Status:** Accepted; amended to Option B — editing opens from the glance icon (click, Owner only) as the widget's existing right-edge slide-in card, rather than a hover popover. Hover stays the read-only key; the edit form's old inline mount is retired.
+**Status:** Accepted; amended to Option B — editing opens from the glance icon (click, Owner only) as the widget's existing right-edge slide-in card, rather than a hover popover. Hover stays the read-only key; the edit form's old inline mount is retired. Amended again (#1077): the page's glance stands at the top-right of the page, on the breadcrumb line, as a labelled control; the Owner clicks it and the editor unfolds from it as a popover. Clicking outside closes it only when nothing is unsaved.
 
 **Context:** An operator asked for one visibility icon near the entity name that the DM team can glance at and click through to edit, replacing four separate implementations of the same three-glyph vocabulary (`fa-globe`/`fa-lock`/`fa-shield-halved`) — one of which (the "Details" card) showed even to Players, hard-coded a color no theme defines, and one of which (the "Permissions" row) was the editor bolted onto the read page. Two defects were found alongside: a Co-DM could not open a DM-only entity, because most `CheckEntityAccess` call sites passed raw `MemberRole` instead of `VisibilityRole()` (which promotes a DM grant to Owner); and a Scribe editing a DM-only entity was shown a wrong, default "Permissions · Everyone" because the widget swallowed a 403 on load and rendered its init defaults.
 
@@ -977,3 +977,17 @@ Also under this ADR: the partial-update contract test only recognised structs na
 **Consequences:**
 - A new query against `entities` must exclude trashed rows, or a deleted page reappears in it. The Trash has no "delete forever" yet; the purge is the only hard delete.
 - A trashed page still holds its slug, so a new page with the same name gets a suffixed slug.
+
+---
+
+## ADR-061: In the armory a DM grant acts as the Owner
+
+**Status:** Accepted; operator ruling 2026-09-13 (#633).
+
+**Context:** `VisibilityRole()` promotes a member the owner has given DM access to Owner, and is documented as a visibility rule. The armory's stash and shop handlers pass that promoted role into their services, so the grant also decides who may answer stash and purchase requests, open or close downtime and buy for any character. The operator ruled that such a member may buy on a player's behalf, not only see.
+
+**Decision:** Armory handlers build their `Actor` from `VisibilityRole()`. Inside the armory, `Actor.IsOwner()` is true for the Owner and for members with DM access; Scribes stay below it. Other plugins keep `VisibilityRole()` for visibility only and use their own named checks (`CanControlWorldState`, `CanAuthorDmOnly`) for actions.
+
+**Consequences:**
+- Taking away a DM grant also takes away these armory actions on the next request.
+- A new armory action that must be the Owner alone needs its own check on `MemberRole`; `IsOwner()` will not tell them apart.

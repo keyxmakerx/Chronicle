@@ -171,6 +171,7 @@ func (h *StashAPIHandler) Move(c echo.Context) error {
 	if err != nil {
 		return err
 	}
+	noteSyncActor(c, body.ActingUserID)
 	return c.JSON(http.StatusOK, out)
 }
 
@@ -232,6 +233,7 @@ func (h *StashAPIHandler) answer(c echo.Context, fn func(ctx context.Context, ca
 	if err != nil {
 		return err
 	}
+	noteSyncActor(c, body.ActingUserID)
 	return c.JSON(http.StatusOK, out)
 }
 
@@ -266,5 +268,6 @@ func (h *StashAPIHandler) SetDowntime(c echo.Context) error {
 	if err != nil {
 		return err
 	}
+	noteSyncActor(c, body.ActingUserID)
 	return c.JSON(http.StatusOK, out)
 }

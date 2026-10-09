@@ -1,5 +1,5 @@
 // integrations_keys.templ renders HTMX fragments for the campaign Settings >
-// Integrations tab. Lazy-loaded by the settings page so the campaigns handler
+// API keys tab. Lazy-loaded by the settings page so the campaigns handler
 // doesn't need to import syncapi types.
 
 package syncapi
@@ -11,7 +11,7 @@ import (
 )
 
 // IntegrationsKeysFragmentTempl renders the full keys section: connection status,
-// key cards, and the create form. Loaded via HTMX into the Integrations tab.
+// key cards, and the create form. Loaded via HTMX into the API keys tab.
 templ IntegrationsKeysFragmentTempl(campaignID string, keys []APIKey, stats *APIStats, csrfToken, baseURL string) {
 	<div class="space-y-6">
 		// Connection Status — per-key health at a glance.
@@ -153,7 +153,7 @@ templ IntegrationsKeysFragmentTempl(campaignID string, keys []APIKey, stats *API
 	</div>
 }
 
-// integrationsKeyCard renders a compact key card for the Integrations tab.
+// integrationsKeyCard renders a compact key card for the API keys tab.
 templ integrationsKeyCard(campaignID string, k APIKey, csrfToken string) {
 	<div class="flex items-center justify-between p-3 rounded-lg bg-surface-alt">
 		<div class="flex items-center gap-3 flex-1 min-w-0">

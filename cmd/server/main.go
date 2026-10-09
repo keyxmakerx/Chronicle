@@ -17,11 +17,14 @@ import (
 	"github.com/keyxmakerx/chronicle/internal/app"
 	"github.com/keyxmakerx/chronicle/internal/config"
 	"github.com/keyxmakerx/chronicle/internal/database"
+	"github.com/keyxmakerx/chronicle/internal/plugins/armory"
 	"github.com/keyxmakerx/chronicle/internal/plugins/bestiary"
 	"github.com/keyxmakerx/chronicle/internal/plugins/calendar"
 	"github.com/keyxmakerx/chronicle/internal/plugins/foundry_vtt"
 	"github.com/keyxmakerx/chronicle/internal/plugins/maps"
 	"github.com/keyxmakerx/chronicle/internal/plugins/packages"
+	"github.com/keyxmakerx/chronicle/internal/plugins/quests"
+	"github.com/keyxmakerx/chronicle/internal/plugins/rolltables"
 	"github.com/keyxmakerx/chronicle/internal/plugins/sessions"
 	"github.com/keyxmakerx/chronicle/internal/plugins/syncapi"
 	"github.com/keyxmakerx/chronicle/internal/plugins/systemstate"
@@ -304,6 +307,15 @@ func registeredPlugins() []database.PluginSchema {
 		// systemstate: per-page game-system state. Its foreign keys point at
 		// core tables only, which have migrated before any plugin runs.
 		{Slug: systemstate.PluginSlug, MigrationsFS: mustSub(systemstate.MigrationsFS, database.PluginMigrationsSubdir)},
+		// rolltables: one per-campaign document; its only foreign key points at
+		// the core campaigns table.
+		{Slug: rolltables.PluginSlug, MigrationsFS: mustSub(rolltables.MigrationsFS, database.PluginMigrationsSubdir)},
+		// armory: its own tables beyond the core ones (item shares). Foreign
+		// keys point at core campaigns and entities only.
+		{Slug: armory.AddonSlug, MigrationsFS: mustSub(armory.MigrationsFS, database.PluginMigrationsSubdir)},
+		// quests: foreign keys point at core tables (entities, campaigns) and at
+		// its own boards table; no reference to any other plugin's tables.
+		{Slug: quests.PluginSlug, MigrationsFS: mustSub(quests.MigrationsFS, database.PluginMigrationsSubdir)},
 		{Slug: "syncapi", MigrationsFS: mustSub(syncapi.MigrationsFS, database.PluginMigrationsSubdir)},
 		{Slug: "packages", MigrationsFS: mustSub(packages.MigrationsFS, database.PluginMigrationsSubdir)},
 		// foundry_vtt's migration 001 renames foundry_module_campaign_tokens

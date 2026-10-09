@@ -3,11 +3,13 @@ package smtp
 import (
 	"context"
 	"crypto/tls"
+	"errors"
 	"fmt"
 	"log/slog"
 	"net"
 	"net/mail"
 	gosmtp "net/smtp"
+	"strconv"
 	"strings"
 	"time"
 
@@ -39,6 +41,13 @@ type SMTPService interface {
 	SendTestEmail(ctx context.Context, to string) error
 }
 
+// dialTimeout bounds the TCP (and implicit TLS) connect; sessionTimeout bounds
+// the whole SMTP conversation after it. Vars so tests can shorten them.
+var (
+	dialTimeout    = 10 * time.Second
+	sessionTimeout = 30 * time.Second
+)
+
 // smtpService implements SMTPService.
 type smtpService struct {
 	repo   SMTPRepository
@@ -64,60 +73,21 @@ func (s *smtpService) IsConfigured(ctx context.Context) bool {
 	return row.Enabled && row.Host != ""
 }
 
-// SendMail sends an email using the stored SMTP settings. Decrypts the
-// password at send time -- never caches plaintext credentials.
+// SendMail sends a plain-text email using the stored SMTP settings.
 func (s *smtpService) SendMail(ctx context.Context, to []string, subject, body string) error {
-	row, err := s.repo.Get(ctx)
-	if err != nil {
-		return apperror.NewInternal(fmt.Errorf("loading smtp settings: %w", err))
-	}
-	if !row.Enabled || row.Host == "" {
-		return apperror.NewBadRequest("SMTP is not configured")
-	}
-
-	// Decrypt password at send time.
-	var password string
-	if len(row.PasswordEncrypted) > 0 {
-		plaintext, err := decrypt(row.PasswordEncrypted, s.secret)
-		if err != nil {
-			return apperror.NewInternal(fmt.Errorf("decrypting smtp password: %w", err))
-		}
-		password = string(plaintext)
-	}
-
-	from := mail.Address{Name: row.FromName, Address: row.FromAddress}
-
-	// Strip newlines from subject to prevent SMTP header injection.
-	safeSubject := strings.NewReplacer("\r", "", "\n", "").Replace(subject)
-
-	// Build RFC 2822 message.
-	var msg strings.Builder
-	fmt.Fprintf(&msg, "From: %s\r\n", from.String())
-	fmt.Fprintf(&msg, "To: %s\r\n", strings.Join(to, ", "))
-	fmt.Fprintf(&msg, "Subject: %s\r\n", safeSubject)
-	fmt.Fprintf(&msg, "Date: %s\r\n", time.Now().UTC().Format(time.RFC1123Z))
-	msg.WriteString("MIME-Version: 1.0\r\n")
-	msg.WriteString("Content-Type: text/plain; charset=UTF-8\r\n")
-	msg.WriteString("\r\n")
-	msg.WriteString(body)
-
-	addr := fmt.Sprintf("%s:%d", row.Host, row.Port)
-
-	// Send based on encryption mode.
-	switch row.Encryption {
-	case "ssl":
-		return s.sendSSL(addr, row.Host, row.Username, password, from.Address, to, msg.String())
-	case "none":
-		return s.sendPlain(addr, row.Host, row.Username, password, from.Address, to, msg.String())
-	default: // "starttls"
-		return s.sendStartTLS(addr, row.Host, row.Username, password, from.Address, to, msg.String())
-	}
+	return s.send(ctx, to, subject, body, "")
 }
 
 // SendHTMLMail sends a multipart/alternative email with both plain text and HTML
 // variants. Email clients that support HTML will render the rich version;
 // text-only clients fall back to the plain text.
 func (s *smtpService) SendHTMLMail(ctx context.Context, to []string, subject, plainBody, htmlBody string) error {
+	return s.send(ctx, to, subject, plainBody, htmlBody)
+}
+
+// send loads the settings, decrypts the password at send time (plaintext
+// credentials are never cached) and delivers one message.
+func (s *smtpService) send(ctx context.Context, to []string, subject, plainBody, htmlBody string) error {
 	row, err := s.repo.Get(ctx)
 	if err != nil {
 		return apperror.NewInternal(fmt.Errorf("loading smtp settings: %w", err))
@@ -125,130 +95,111 @@ func (s *smtpService) SendHTMLMail(ctx context.Context, to []string, subject, pl
 	if !row.Enabled || row.Host == "" {
 		return apperror.NewBadRequest("SMTP is not configured")
 	}
-
-	var password string
-	if len(row.PasswordEncrypted) > 0 {
-		plaintext, err := decrypt(row.PasswordEncrypted, s.secret)
-		if err != nil {
-			return apperror.NewInternal(fmt.Errorf("decrypting smtp password: %w", err))
-		}
-		password = string(plaintext)
+	password, err := s.password(row)
+	if err != nil {
+		return err
 	}
 
 	from := mail.Address{Name: row.FromName, Address: row.FromAddress}
-	safeSubject := strings.NewReplacer("\r", "", "\n", "").Replace(subject)
+	msg, err := buildMessage(from, to, subject, plainBody, htmlBody, time.Now())
+	if err != nil {
+		return apperror.NewInternal(err)
+	}
 
-	// MIME boundary for multipart/alternative.
-	boundary := fmt.Sprintf("chronicle_%d", time.Now().UnixNano())
+	client, err := dial(row)
+	if err != nil {
+		return err
+	}
+	defer client.Close()
+	if err := authenticate(client, row, password); err != nil {
+		return err
+	}
+	return sendMessage(client, from.Address, to, msg)
+}
 
-	var msg strings.Builder
-	fmt.Fprintf(&msg, "From: %s\r\n", from.String())
-	fmt.Fprintf(&msg, "To: %s\r\n", strings.Join(to, ", "))
-	fmt.Fprintf(&msg, "Subject: %s\r\n", safeSubject)
-	fmt.Fprintf(&msg, "Date: %s\r\n", time.Now().UTC().Format(time.RFC1123Z))
-	msg.WriteString("MIME-Version: 1.0\r\n")
-	fmt.Fprintf(&msg, "Content-Type: multipart/alternative; boundary=\"%s\"\r\n", boundary)
-	msg.WriteString("\r\n")
+// password decrypts the stored SMTP password; empty when none is set.
+func (s *smtpService) password(row *smtpRow) (string, error) {
+	if len(row.PasswordEncrypted) == 0 {
+		return "", nil
+	}
+	plaintext, err := decrypt(row.PasswordEncrypted, s.secret)
+	if err != nil {
+		return "", apperror.NewInternal(fmt.Errorf("decrypting smtp password: %w", err))
+	}
+	return string(plaintext), nil
+}
 
-	// Plain text part.
-	fmt.Fprintf(&msg, "--%s\r\n", boundary)
-	msg.WriteString("Content-Type: text/plain; charset=UTF-8\r\n")
-	msg.WriteString("Content-Transfer-Encoding: 7bit\r\n")
-	msg.WriteString("\r\n")
-	msg.WriteString(plainBody)
-	msg.WriteString("\r\n\r\n")
+// dial connects and completes the handshake for the configured encryption.
+// "none" still upgrades when the server offers STARTTLS, as net/smtp.SendMail
+// does. The whole session runs under one deadline so a port and encryption
+// that don't match (STARTTLS against an implicit-TLS port waits for a
+// greeting that never comes) fail with an error instead of hanging.
+func dial(row *smtpRow) (*gosmtp.Client, error) {
+	addr := net.JoinHostPort(row.Host, strconv.Itoa(row.Port))
+	dialer := &net.Dialer{Timeout: dialTimeout}
+	tlsConfig := &tls.Config{ServerName: row.Host, MinVersion: tls.VersionTLS12}
 
-	// HTML part.
-	fmt.Fprintf(&msg, "--%s\r\n", boundary)
-	msg.WriteString("Content-Type: text/html; charset=UTF-8\r\n")
-	msg.WriteString("Content-Transfer-Encoding: 7bit\r\n")
-	msg.WriteString("\r\n")
-	msg.WriteString(htmlBody)
-	msg.WriteString("\r\n\r\n")
+	var conn net.Conn
+	var err error
+	if row.Encryption == "ssl" {
+		conn, err = tls.DialWithDialer(dialer, "tcp", addr, tlsConfig)
+	} else {
+		conn, err = dialer.Dial("tcp", addr)
+	}
+	if err != nil {
+		return nil, fmt.Errorf("connecting to %s: %w", addr, err)
+	}
+	if err := conn.SetDeadline(time.Now().Add(sessionTimeout)); err != nil {
+		conn.Close()
+		return nil, fmt.Errorf("connecting to %s: %w", addr, err)
+	}
 
-	// Close boundary.
-	fmt.Fprintf(&msg, "--%s--\r\n", boundary)
-
-	addr := fmt.Sprintf("%s:%d", row.Host, row.Port)
+	client, err := gosmtp.NewClient(conn, row.Host)
+	if err != nil {
+		conn.Close()
+		if isTimeout(err) {
+			return nil, fmt.Errorf("no SMTP greeting from %s (check the port matches the encryption: 465 is SSL/TLS, 587 is STARTTLS): %w", addr, err)
+		}
+		return nil, fmt.Errorf("SMTP handshake with %s: %w", addr, err)
+	}
 
 	switch row.Encryption {
 	case "ssl":
-		return s.sendSSL(addr, row.Host, row.Username, password, from.Address, to, msg.String())
 	case "none":
-		return s.sendPlain(addr, row.Host, row.Username, password, from.Address, to, msg.String())
-	default:
-		return s.sendStartTLS(addr, row.Host, row.Username, password, from.Address, to, msg.String())
-	}
-}
-
-// sendStartTLS sends email using STARTTLS (port 587 typical).
-func (s *smtpService) sendStartTLS(addr, host, username, password, from string, to []string, msg string) error {
-	conn, err := net.DialTimeout("tcp", addr, 10*time.Second)
-	if err != nil {
-		return fmt.Errorf("connecting to %s: %w", addr, err)
-	}
-	defer conn.Close()
-
-	client, err := gosmtp.NewClient(conn, host)
-	if err != nil {
-		return fmt.Errorf("creating smtp client: %w", err)
-	}
-	defer client.Close()
-
-	tlsConfig := &tls.Config{ServerName: host, MinVersion: tls.VersionTLS12}
-	if err := client.StartTLS(tlsConfig); err != nil {
-		return fmt.Errorf("starting TLS: %w", err)
-	}
-
-	if username != "" {
-		auth := gosmtp.PlainAuth("", username, password, host)
-		if err := client.Auth(auth); err != nil {
-			return fmt.Errorf("authenticating: %w", err)
+		if ok, _ := client.Extension("STARTTLS"); ok {
+			if err := client.StartTLS(tlsConfig); err != nil {
+				client.Close()
+				return nil, fmt.Errorf("starting TLS: %w", err)
+			}
+		}
+	default: // "starttls"
+		if err := client.StartTLS(tlsConfig); err != nil {
+			client.Close()
+			return nil, fmt.Errorf("starting TLS: %w", err)
 		}
 	}
-
-	return s.sendMessage(client, from, to, msg)
+	return client, nil
 }
 
-// sendSSL sends email using implicit SSL/TLS (port 465 typical).
-func (s *smtpService) sendSSL(addr, host, username, password, from string, to []string, msg string) error {
-	tlsConfig := &tls.Config{ServerName: host, MinVersion: tls.VersionTLS12}
-	conn, err := tls.DialWithDialer(&net.Dialer{Timeout: 10 * time.Second}, "tcp", addr, tlsConfig)
-	if err != nil {
-		return fmt.Errorf("connecting to %s (SSL): %w", addr, err)
+// authenticate logs in when a username is set. net/smtp refuses to send a
+// password over an unencrypted connection, which only "none" can reach.
+func authenticate(client *gosmtp.Client, row *smtpRow, password string) error {
+	if row.Username == "" {
+		return nil
 	}
-	defer conn.Close()
-
-	client, err := gosmtp.NewClient(conn, host)
-	if err != nil {
-		return fmt.Errorf("creating smtp client: %w", err)
-	}
-	defer client.Close()
-
-	if username != "" {
-		auth := gosmtp.PlainAuth("", username, password, host)
-		if err := client.Auth(auth); err != nil {
-			return fmt.Errorf("authenticating: %w", err)
-		}
-	}
-
-	return s.sendMessage(client, from, to, msg)
-}
-
-// sendPlain sends email without encryption.
-func (s *smtpService) sendPlain(addr, host, username, password, from string, to []string, msg string) error {
-	var auth gosmtp.Auth
-	if username != "" {
-		auth = gosmtp.PlainAuth("", username, password, host)
-	}
-	if err := gosmtp.SendMail(addr, auth, from, to, []byte(msg)); err != nil {
-		return fmt.Errorf("sending mail: %w", err)
+	if err := client.Auth(gosmtp.PlainAuth("", row.Username, password, row.Host)); err != nil {
+		return fmt.Errorf("authenticating: %w", err)
 	}
 	return nil
 }
 
+func isTimeout(err error) bool {
+	var ne net.Error
+	return errors.As(err, &ne) && ne.Timeout()
+}
+
 // sendMessage handles MAIL FROM, RCPT TO, DATA for an existing SMTP client.
-func (s *smtpService) sendMessage(client *gosmtp.Client, from string, to []string, msg string) error {
+func sendMessage(client *gosmtp.Client, from string, to []string, msg string) error {
 	if err := client.Mail(from); err != nil {
 		return fmt.Errorf("MAIL FROM: %w", err)
 	}
@@ -309,9 +260,14 @@ func (s *smtpService) UpdateSettings(ctx context.Context, req UpdateSMTPRequest)
 	}
 
 	// Restrict SMTP port to standard mail ports.
+	// An empty port box falls back to 587; any other unlisted port is refused
+	// out loud rather than silently replaced.
+	if row.Port == 0 {
+		row.Port = 587
+	}
 	validPorts := map[int]bool{25: true, 465: true, 587: true, 2525: true}
 	if !validPorts[row.Port] {
-		row.Port = 587
+		return apperror.NewBadRequest(fmt.Sprintf("port %d is not allowed; use 587 (STARTTLS), 465 (SSL/TLS), 25 or 2525", row.Port))
 	}
 	if row.FromName == "" {
 		row.FromName = "Chronicle"
@@ -361,8 +317,8 @@ func (s *smtpService) UpdateSettings(ctx context.Context, req UpdateSMTPRequest)
 	return nil
 }
 
-// TestConnection verifies SMTP connectivity by establishing a connection
-// and performing the EHLO handshake.
+// TestConnection verifies SMTP connectivity: connect, encryption and login,
+// the same path a real send takes.
 func (s *smtpService) TestConnection(ctx context.Context) error {
 	row, err := s.repo.Get(ctx)
 	if err != nil {
@@ -371,98 +327,22 @@ func (s *smtpService) TestConnection(ctx context.Context) error {
 	if row.Host == "" {
 		return apperror.NewBadRequest("SMTP host is not configured")
 	}
-
-	addr := fmt.Sprintf("%s:%d", row.Host, row.Port)
-
-	// Decrypt password for authentication test.
-	var password string
-	if len(row.PasswordEncrypted) > 0 {
-		plaintext, err := decrypt(row.PasswordEncrypted, s.secret)
-		if err != nil {
-			return apperror.NewInternal(fmt.Errorf("decrypting smtp password: %w", err))
-		}
-		password = string(plaintext)
-	}
-
-	switch row.Encryption {
-	case "ssl":
-		return s.testSSL(addr, row.Host, row.Username, password)
-	default: // "starttls" or "none"
-		return s.testStartTLS(addr, row.Host, row.Username, password, row.Encryption == "starttls")
-	}
-}
-
-// testStartTLS tests connectivity with optional STARTTLS.
-func (s *smtpService) testStartTLS(addr, host, username, password string, useTLS bool) error {
-	slog.Info("smtp test: connecting", slog.String("addr", addr), slog.Bool("starttls", useTLS))
-
-	conn, err := net.DialTimeout("tcp", addr, 10*time.Second)
+	password, err := s.password(row)
 	if err != nil {
-		slog.Warn("smtp test: TCP connect failed", slog.String("addr", addr), slog.Any("error", err))
-		return apperror.NewBadRequest(fmt.Sprintf("Could not connect to %s. Verify the host and port are correct and that the server is reachable.", addr))
+		return err
 	}
-	defer conn.Close()
 
-	slog.Info("smtp test: TCP connected, starting SMTP handshake")
-	client, err := gosmtp.NewClient(conn, host)
+	client, err := dial(row)
 	if err != nil {
-		slog.Warn("smtp test: SMTP handshake failed", slog.Any("error", err))
-		return apperror.NewBadRequest(fmt.Sprintf("Connected to %s but SMTP handshake failed: %v. Verify this is an SMTP server.", addr, err))
+		slog.Warn("smtp test: connect failed", slog.String("host", row.Host), slog.Int("port", row.Port), slog.Any("error", err))
+		return apperror.NewBadRequest(explainSendError(err))
 	}
 	defer client.Close()
-
-	if useTLS {
-		slog.Info("smtp test: starting TLS upgrade")
-		tlsConfig := &tls.Config{ServerName: host, MinVersion: tls.VersionTLS12}
-		if err := client.StartTLS(tlsConfig); err != nil {
-			slog.Warn("smtp test: STARTTLS failed", slog.Any("error", err))
-			return apperror.NewBadRequest(fmt.Sprintf("STARTTLS failed on port %s: %v. Try switching to SSL/TLS (port 465) or None if your server doesn't support STARTTLS.", addr, err))
-		}
+	if err := authenticate(client, row, password); err != nil {
+		slog.Warn("smtp test: authentication failed", slog.String("username", row.Username), slog.Any("error", err))
+		return apperror.NewBadRequest(explainSendError(err))
 	}
-
-	if username != "" {
-		slog.Info("smtp test: authenticating", slog.String("username", username))
-		auth := gosmtp.PlainAuth("", username, password, host)
-		if err := client.Auth(auth); err != nil {
-			slog.Warn("smtp test: authentication failed", slog.String("username", username), slog.Any("error", err))
-			return apperror.NewBadRequest(fmt.Sprintf("Authentication failed: %v. Verify your username and password. Some providers require app-specific passwords.", err))
-		}
-	}
-
-	slog.Info("smtp test: connection successful")
-	return client.Quit()
-}
-
-// testSSL tests connectivity with implicit SSL/TLS.
-func (s *smtpService) testSSL(addr, host, username, password string) error {
-	slog.Info("smtp test: connecting with SSL", slog.String("addr", addr))
-
-	tlsConfig := &tls.Config{ServerName: host, MinVersion: tls.VersionTLS12}
-	conn, err := tls.DialWithDialer(&net.Dialer{Timeout: 10 * time.Second}, "tcp", addr, tlsConfig)
-	if err != nil {
-		slog.Warn("smtp test: SSL connect failed", slog.String("addr", addr), slog.Any("error", err))
-		return apperror.NewBadRequest(fmt.Sprintf("SSL connection to %s failed: %v. Try STARTTLS (port 587) if your server doesn't support implicit SSL.", addr, err))
-	}
-	defer conn.Close()
-
-	slog.Info("smtp test: SSL connected, starting SMTP handshake")
-	client, err := gosmtp.NewClient(conn, host)
-	if err != nil {
-		slog.Warn("smtp test: SMTP handshake failed over SSL", slog.Any("error", err))
-		return apperror.NewBadRequest(fmt.Sprintf("SSL connected to %s but SMTP handshake failed: %v. Verify this is an SMTP server on this port.", addr, err))
-	}
-	defer client.Close()
-
-	if username != "" {
-		slog.Info("smtp test: authenticating", slog.String("username", username))
-		auth := gosmtp.PlainAuth("", username, password, host)
-		if err := client.Auth(auth); err != nil {
-			slog.Warn("smtp test: authentication failed", slog.String("username", username), slog.Any("error", err))
-			return apperror.NewBadRequest(fmt.Sprintf("Authentication failed: %v. Verify your username and password. Some providers require app-specific passwords.", err))
-		}
-	}
-
-	slog.Info("smtp test: SSL connection successful")
+	slog.Info("smtp test: connection successful", slog.String("host", row.Host), slog.Int("port", row.Port))
 	return client.Quit()
 }
 
@@ -481,22 +361,36 @@ func (s *smtpService) SendTestEmail(ctx context.Context, to string) error {
 		time.Now().UTC().Format(time.RFC1123Z))
 
 	if err := s.SendMail(ctx, []string{to}, subject, body); err != nil {
-		// Wrap the raw SMTP error with actionable guidance.
-		errMsg := err.Error()
-		if strings.Contains(errMsg, "STARTTLS") || strings.Contains(errMsg, "TLS") {
-			return apperror.NewBadRequest(fmt.Sprintf("TLS error: %s. Try switching to SSL (port 465) or check your server's TLS requirements.", errMsg))
+		var appErr *apperror.AppError
+		if errors.As(err, &appErr) {
+			return err
 		}
-		if strings.Contains(errMsg, "authenticating") || strings.Contains(errMsg, "AUTH") {
-			return apperror.NewBadRequest(fmt.Sprintf("Authentication failed: %s. Verify your username and password.", errMsg))
-		}
-		if strings.Contains(errMsg, "connecting") || strings.Contains(errMsg, "dial") {
-			return apperror.NewBadRequest(fmt.Sprintf("Connection failed: %s. Verify the host and port are correct.", errMsg))
-		}
-		return apperror.NewBadRequest(fmt.Sprintf("Failed to send test email: %s", errMsg))
+		slog.Warn("smtp test email failed", slog.Any("error", err))
+		return apperror.NewBadRequest(explainSendError(err))
 	}
 
 	slog.Info("test email sent successfully", slog.String("to", to))
 	return nil
+}
+
+// explainSendError turns a transport error into an admin-facing message that
+// keeps the server's own words and adds the likely fix.
+func explainSendError(err error) string {
+	msg := err.Error()
+	switch {
+	case strings.Contains(msg, "no SMTP greeting"):
+		return msg + "."
+	case strings.Contains(msg, "unencrypted connection"):
+		return "The server does not offer encryption, so Chronicle won't send your password to it. Pick STARTTLS or SSL/TLS."
+	case strings.Contains(msg, "authenticating"):
+		return "Authentication failed: " + msg + ". Verify your username and password. Some providers require an app-specific password."
+	case strings.Contains(msg, "TLS"):
+		return "TLS error: " + msg + ". Try SSL/TLS with port 465, or STARTTLS with port 587."
+	case strings.Contains(msg, "connecting to"):
+		return "Connection failed: " + msg + ". Verify the host and port and that the server is reachable from Chronicle."
+	default:
+		return "Failed to send: " + msg
+	}
 }
 
 // validateSMTPHost rejects SMTP hosts that resolve to private/reserved IP

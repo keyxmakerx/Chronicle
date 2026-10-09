@@ -154,6 +154,7 @@ func (s *stashService) dropEmptyCarried(ctx context.Context, campaignID, charact
 	if q, _ := parseCarried(rel.Metadata); q != 0 {
 		return
 	}
+	s.releaseShares(ctx, campaignID, characterID, itemID)
 	if err := s.Relations.Delete(ctx, rel.ID); err != nil {
 		// Harmless: a 0-quantity line is hidden from the panel and re-used by
 		// the next credit.
@@ -200,6 +201,9 @@ func (s *stashService) adjustCarried(ctx context.Context, campaignID, characterI
 		if next == 0 && !keepZero {
 			if err := s.Relations.Delete(ctx, rel.ID); err != nil {
 				return false, err
+			}
+			if delta < 0 {
+				s.releaseShares(ctx, campaignID, characterID, itemID)
 			}
 			return true, nil
 		}
@@ -294,6 +298,60 @@ func (s *stashService) adjustCharacterMoney(ctx context.Context, ref *EntityRef,
 	return true, nil
 }
 
+// purseCounts reads the character's whole-coin counts for every coin the sheet
+// has. A fractional coin count (2.5 gp) is floored: payment works in whole
+// coins and adjustPurse keeps the fraction when it writes.
+func (s *stashService) purseCounts(ctx context.Context, ref *EntityRef) (map[string]int64, error) {
+	counts, _, err := s.readPurse(ctx, ref)
+	return counts, err
+}
+
+// readPurse returns the whole-coin counts and the raw cents behind them.
+func (s *stashService) readPurse(ctx context.Context, ref *EntityRef) (counts map[string]int64, cents map[string]Cents, err error) {
+	if s.Fields == nil || len(ref.Purse) == 0 {
+		return nil, nil, apperror.NewBadRequest(noMoneyMessage)
+	}
+	fields, err := s.Fields.GetEntityFields(ctx, ref.ID)
+	if err != nil {
+		return nil, nil, err
+	}
+	counts, cents, err = coinCounts(ref.Purse, fields)
+	if err != nil {
+		return nil, nil, apperror.NewBadRequest("That character's coins aren't numbers, so they can't be spent.")
+	}
+	return counts, cents, nil
+}
+
+// adjustPurse adds deltas (whole coins, negative spends) to the character's coin
+// fields. It re-reads the purse and refuses, writing nothing, if any coin would
+// go below zero. Every changed coin is written in one field update so a purse
+// is never left half-changed.
+func (s *stashService) adjustPurse(ctx context.Context, ref *EntityRef, deltas map[string]int64) (bool, error) {
+	_, cents, err := s.readPurse(ctx, ref)
+	if err != nil {
+		return false, err
+	}
+	write := make(map[string]any, len(deltas))
+	for coin, d := range deltas {
+		key, ok := ref.Purse[coin]
+		if !ok {
+			return false, nil
+		}
+		next := cents[coin] + Cents(d)*100
+		if next < 0 {
+			return false, nil
+		}
+		write[key] = float64(next) / 100
+	}
+	if len(write) == 0 {
+		return true, nil
+	}
+	if err := s.Fields.UpdateEntityFields(ctx, ref.ID, write); err != nil {
+		return false, err
+	}
+	return true, nil
+}
+
 // --- holdings, debit and credit ---
 
 // holds reports whether the source currently has enough for m.
@@ -375,6 +433,12 @@ func (s *stashService) credit(ctx context.Context, m *Move, end Endpoint, ref *E
 // the campaign lock. It never applies a move in part: if the destination can't
 // take it, the source is restored and the move is reported failed.
 func (s *stashService) run(ctx context.Context, m *Move, refs moveRefs) (status, reason string) {
+	// A give is written as already applied. Running it would take the item
+	// off the character and put it straight back, and fail when they no
+	// longer hold it, so it is refused rather than replayed.
+	if m.IsGive() {
+		return MoveFailed, giveReplayReason
+	}
 	ok, err := s.debit(ctx, m, m.From, refs.from)
 	if err != nil {
 		slog.Error("stash move: debit failed", slog.Int64("move_id", m.ID), slog.Any("error", err))

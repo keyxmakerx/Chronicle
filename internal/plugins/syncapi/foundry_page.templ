@@ -1,0 +1,143 @@
+// foundry_page.templ — the owner's Foundry page cards this plugin owns: the
+// Players in Foundry table, the People page's "In Foundry" cells and the
+// Recent problems list. The page itself is the campaigns plugin's.
+
+package syncapi
+
+import (
+	"fmt"
+	"time"
+)
+
+// FoundryPlayersFragment is the Players in Foundry card body.
+templ FoundryPlayersFragment(v FoundryPlayersView) {
+	<div data-foundry-players>
+		if v.ReportedAt == nil {
+			<p class="px-4 py-3 text-sm text-fg-secondary">
+				Foundry hasn't sent its player list yet. Your world sends it once it runs the newest Chronicle Sync module; until then the Members tab of the Chronicle Sync window in Foundry shows who is linked.
+			</p>
+		} else {
+			<div class="overflow-x-auto">
+				<table class="w-full text-sm">
+					<thead>
+						<tr class="border-b border-edge text-left text-xs uppercase tracking-wide text-fg-secondary">
+							<th class="px-4 py-2 font-medium">Person</th>
+							<th class="px-4 py-2 font-medium">Last action through your world</th>
+							<th class="px-4 py-2 font-medium">Status</th>
+						</tr>
+					</thead>
+					<tbody class="divide-y divide-edge">
+						for _, r := range v.Rows {
+							@foundryPlayerRow(r, v.Now)
+						}
+					</tbody>
+				</table>
+			</div>
+			<p class="px-4 py-2 text-xs text-fg-muted border-t border-edge">
+				As Foundry reported it { relativeTime(*v.ReportedAt) }. It updates while your world is open.
+			</p>
+		}
+	</div>
+}
+
+templ foundryPlayerRow(r PlayerRow, now time.Time) {
+	<tr data-player-status={ string(r.Status) }>
+		<td class="px-4 py-3 align-top">
+			if r.MemberName != "" {
+				<p class="font-medium text-fg">{ r.MemberName }</p>
+				<p class="text-xs text-fg-secondary">
+					{ r.MemberRole }
+					if r.FoundryName != "" {
+						&middot; Foundry: { r.FoundryName }
+					}
+				</p>
+			} else {
+				<p class="font-medium text-fg">{ r.FoundryName }</p>
+				<p class="text-xs text-fg-secondary">Foundry user</p>
+			}
+		</td>
+		<td class="px-4 py-3 align-top text-fg-secondary">
+			if r.LastChangeAt != nil {
+				{ relativeTime(*r.LastChangeAt) }
+			} else {
+				<span class="text-fg-muted">none yet</span>
+			}
+			if r.Online {
+				<span class="block text-xs text-emerald-700 dark:text-emerald-400">in the world now</span>
+			}
+		</td>
+		<td class="px-4 py-3 align-top">
+			@playerStatusChip(r.Status)
+			if r.Why != "" {
+				<details class="mt-2 text-xs">
+					<summary class="cursor-pointer text-accent">Why?</summary>
+					<div class="mt-1 rounded-md border border-edge bg-surface-alt/50 p-2 text-fg-secondary">
+						<p>{ r.Why }</p>
+						if len(r.Fix) > 0 {
+							<p class="mt-2 font-medium text-fg">What to do</p>
+							<ol class="list-decimal list-inside space-y-0.5">
+								for _, f := range r.Fix {
+									<li>{ f }</li>
+								}
+							</ol>
+						}
+					</div>
+				</details>
+			}
+		</td>
+	</tr>
+}
+
+// playerStatusChip is the coloured status word, shared with the People page.
+templ playerStatusChip(s PlayerStatus) {
+	switch s {
+		case PlayerWorking:
+			<span class="inline-block rounded-full bg-emerald-500/15 px-2 py-0.5 text-xs font-medium text-emerald-700 dark:text-emerald-400">Working</span>
+		case PlayerRefused:
+			<span class="inline-block rounded-full bg-amber-500/15 px-2 py-0.5 text-xs font-medium text-amber-700 dark:text-amber-400">Change refused</span>
+		case PlayerUnlinked:
+			<span class="inline-block rounded-full bg-red-500/15 px-2 py-0.5 text-xs font-medium text-red-700 dark:text-red-400">Not linked</span>
+		default:
+			<span class="inline-block rounded-full bg-surface-alt px-2 py-0.5 text-xs font-medium text-fg-muted">No Foundry user</span>
+	}
+}
+
+// FoundryMemberStatusOOB fills each "In Foundry" cell on the People page by
+// id. A member Foundry has never mentioned keeps the cell's placeholder
+// replaced with a dash, so nothing is left loading.
+templ FoundryMemberStatusOOB(v FoundryPlayersView) {
+	for _, r := range v.Rows {
+		if r.MemberUserID != "" {
+			<span id={ "foundry-status-" + r.MemberUserID } hx-swap-oob="true">
+				if v.ReportedAt == nil {
+					<span class="text-xs text-fg-muted">&mdash;</span>
+				} else {
+					@playerStatusChip(r.Status)
+				}
+			</span>
+		}
+	}
+}
+
+// FoundryProblemsFragment lists the latest failed syncs.
+templ FoundryProblemsFragment(campaignID string, events []SyncEvent, now time.Time) {
+	<div data-foundry-problems>
+		if len(events) == 0 {
+			<p class="px-4 py-3 text-sm text-fg-secondary">No failed syncs recently.</p>
+		} else {
+			<ul class="divide-y divide-edge">
+				for _, ev := range events {
+					<li class="flex flex-wrap items-start gap-x-3 gap-y-1 px-4 py-3 text-sm">
+						<span class="w-5 h-5 rounded-full bg-red-500/15 text-red-700 dark:text-red-400 text-xs font-bold flex items-center justify-center shrink-0" aria-hidden="true">!</span>
+						<div class="min-w-0 flex-1">
+							<p class="font-medium text-fg">{ historyName(problemEvent(ev)) }: { problemEvent(ev).Action }</p>
+							<p class="text-xs text-fg-secondary">{ problemLine(problemEvent(ev)) }</p>
+						</div>
+						<span class="text-xs text-fg-muted whitespace-nowrap">{ relativeTime(ev.OccurredAt) }</span>
+						<a href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/sync-history/flow/%d", campaignID, ev.ID)) } class="btn-secondary text-xs">Show the steps</a>
+					</li>
+				}
+			</ul>
+		}
+	</div>
+}

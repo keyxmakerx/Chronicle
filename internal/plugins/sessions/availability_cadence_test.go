@@ -457,3 +457,23 @@ func TestNudge_IsAllowedToTheOwnerAndToACoDM(t *testing.T) {
 		t.Fatal("a co-DM was refused; IsDmGranted is not being consulted")
 	}
 }
+
+// The calendar's My hours painter names the two weeks itself
+// (cadenceWeeks in calendar_view.js), so it must count them as the server
+// does. These dates are the ones test/js/calendar_game_nights.test.mjs pins
+// on the JavaScript side.
+func TestCadence_MatchesTheCalendarPainter(t *testing.T) {
+	tests := []struct {
+		day  timeutil.CivilDate
+		want int
+	}{
+		{cd(2026, time.October, 4), CadenceWeekB},
+		{cd(2026, time.October, 10), CadenceWeekB},
+		{cd(2026, time.October, 11), CadenceWeekA},
+	}
+	for _, tt := range tests {
+		if got := WeekCadenceFor(tt.day); got != tt.want {
+			t.Errorf("WeekCadenceFor(%v) = %d, want %d", tt.day, got, tt.want)
+		}
+	}
+}

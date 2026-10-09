@@ -55,19 +55,24 @@ type NightTally struct {
 // event page. A repeating session yields one GameNight per night, each with
 // its own answers.
 type GameNight struct {
-	SessionID      string        `json:"sessionId"`
-	Name           string        `json:"name"`
-	Summary        string        `json:"summary,omitempty"`
-	Date           string        `json:"date"`
-	Time           string        `json:"time,omitempty"`
-	TZ             string        `json:"tz,omitempty"`
-	Recurring      bool          `json:"recurring"`
-	RecurrenceType string        `json:"recurrenceType,omitempty"`
-	OrganizerID    string        `json:"organizerId"`
-	OrganizerName  string        `json:"organizerName,omitempty"`
-	Past           bool          `json:"past"`
-	Tally          NightTally    `json:"tally"`
-	Roster         []NightAnswer `json:"roster"`
+	SessionID      string `json:"sessionId"`
+	Name           string `json:"name"`
+	Summary        string `json:"summary,omitempty"`
+	Date           string `json:"date"`
+	Time           string `json:"time,omitempty"`
+	TZ             string `json:"tz,omitempty"`
+	Recurring      bool   `json:"recurring"`
+	RecurrenceType string `json:"recurrenceType,omitempty"`
+	// The series as stored, so the calendar's editor can show and change it:
+	// the first night, every-N-weeks for a custom repeat, and the last date.
+	SeriesDate         string        `json:"seriesDate,omitempty"`
+	RecurrenceInterval int           `json:"recurrenceInterval,omitempty"`
+	RecurrenceEndDate  string        `json:"recurrenceEndDate,omitempty"`
+	OrganizerID        string        `json:"organizerId"`
+	OrganizerName      string        `json:"organizerName,omitempty"`
+	Past               bool          `json:"past"`
+	Tally              NightTally    `json:"tally"`
+	Roster             []NightAnswer `json:"roster"`
 	// Viewer-specific: filled by ForViewer, never by the service.
 	Mine       *NightAnswer `json:"mine"`
 	CanExclude bool         `json:"canExclude"`
@@ -252,19 +257,22 @@ func (s *sessionService) ListGameNights(ctx context.Context, campaignID, from, t
 			}
 			roster, tally := buildNightRoster(members, rows)
 			out = append(out, GameNight{
-				SessionID:      sess.ID,
-				Name:           sess.Name,
-				Summary:        strPtrVal(sess.Summary),
-				Date:           d,
-				Time:           strPtrVal(sess.ScheduledTime),
-				TZ:             strPtrVal(sess.ScheduledTZ),
-				Recurring:      sess.IsRecurring,
-				RecurrenceType: strPtrVal(sess.RecurrenceType),
-				OrganizerID:    sess.CreatedBy,
-				OrganizerName:  sess.CreatorName,
-				Past:           d < today,
-				Tally:          tally,
-				Roster:         roster,
+				SessionID:          sess.ID,
+				Name:               sess.Name,
+				Summary:            strPtrVal(sess.Summary),
+				Date:               d,
+				Time:               strPtrVal(sess.ScheduledTime),
+				TZ:                 strPtrVal(sess.ScheduledTZ),
+				Recurring:          sess.IsRecurring,
+				RecurrenceType:     strPtrVal(sess.RecurrenceType),
+				SeriesDate:         strPtrVal(sess.ScheduledDate),
+				RecurrenceInterval: sess.RecurrenceInterval,
+				RecurrenceEndDate:  strPtrVal(sess.RecurrenceEndDate),
+				OrganizerID:        sess.CreatedBy,
+				OrganizerName:      sess.CreatorName,
+				Past:               d < today,
+				Tally:              tally,
+				Roster:             roster,
 			})
 		}
 	}

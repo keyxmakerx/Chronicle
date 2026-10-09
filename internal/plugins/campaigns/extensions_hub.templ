@@ -1,9 +1,9 @@
-// extensions_hub.templ — the owner's "Apps & game system" page.
+// extensions_hub.templ — the owner's "Game & features" page.
 //
 // Served at /campaigns/:id/extensions (the URL predates the rename and
 // stays so bookmarks and the redirects that point here keep working). It
-// replaced the old Features Settings tab and now also holds the game
-// system picker and links to the connection setups.
+// holds the game system picker, the feature toggles and content packs;
+// everything about Foundry is on the Foundry page (foundry_page.templ).
 //
 // Catalog source: PluginHubAddon list from the addons store. Each
 // card is one operator-facing extension; owners get a per-card
@@ -31,25 +31,17 @@ import (
 // `contentPacksCard` is nil if the extensions plugin is not wired in
 // this build; the hub renders cleanly without it (graceful
 // degradation, matches AddonLister/MediaUploader/SMTPChecker shape).
-templ ExtensionsHubPage(cc *CampaignContext, addons []PluginHubAddon, csrfToken, systemOptionsJSON string, hasAIWorkspace bool, contentPacksCard templ.Component, foundry FoundryRowData) {
-	@layouts.App(cc.Campaign.Name + " - Apps & game system") {
+templ ExtensionsHubPage(cc *CampaignContext, addons []PluginHubAddon, csrfToken, systemOptionsJSON string, contentPacksCard templ.Component) {
+	@layouts.App(cc.Campaign.Name + " - Game & features") {
 		<div class="max-w-5xl mx-auto px-4 py-6" data-extensions-hub>
-			@layouts.ManageHeader("Apps & game system", "manage:extensions")
+			@layouts.ManageHeader("Game & features")
 			<div class="mb-6">
 				@gameSystemCard(cc, systemOptionsJSON)
 			</div>
-			// The Foundry module's version row loads from the plugin that owns it
-			// (this page stays VTT-agnostic) and renders nothing when there is no
-			// module to update. Owner-only, like the rest of this page.
-			<span
-				hx-get={ fmt.Sprintf("/campaigns/%s/foundry-vtt/apps-row", cc.Campaign.ID) }
-				hx-trigger="load"
-				hx-swap="outerHTML"
-			></span>
 			<div class="mb-3">
-				<h2 class="text-base font-semibold text-fg">Apps</h2>
+				<h2 class="text-base font-semibold text-fg">Features</h2>
 				<p class="text-sm text-fg-muted">
-					Turn apps on or off for this campaign. Turning one off keeps its data.
+					Turn parts of Chronicle on or off for this campaign. Turning one off hides it; nothing is deleted.
 				</p>
 			</div>
 			// Hub catalog — HTMX-refreshed in place after a toggle so
@@ -74,7 +66,6 @@ templ ExtensionsHubPage(cc *CampaignContext, addons []PluginHubAddon, csrfToken,
 			// card hx-gets the extension's settings page here; the GET returns a
 			// self-opening modal (ExtensionSettingsOverlay). Empty until opened.
 			<div id="extension-setup-modal"></div>
-			@connectionsCard(cc, hasAIWorkspace, foundry, csrfToken)
 			// Content Packs card — installable content from the admin
 			// install surface. Lifts the existing extensions plugin
 			// fragment so the per-pack enable/disable POSTs at
@@ -98,39 +89,15 @@ templ ExtensionsHubPage(cc *CampaignContext, addons []PluginHubAddon, csrfToken,
 					</div>
 				</div>
 			}
+			if addonEnabled(addons, "sync-api") {
+				<section class="card p-4 mt-6 flex flex-wrap items-center gap-3" data-foundry-moved>
+					<span class="w-8 h-8 rounded-lg bg-accent/10 text-accent text-sm font-bold flex items-center justify-center shrink-0" aria-hidden="true">F</span>
+					<p class="text-sm text-fg-secondary flex-1 min-w-0">Foundry setup, sync and its module version are on their own page.</p>
+					<a href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/foundry", cc.Campaign.ID)) } class="btn-secondary text-xs">Open Foundry</a>
+				</section>
+			}
 		</div>
 	}
-}
-
-// connectionsCard holds the Foundry row (status and one-paste connect line)
-// and a link to the AI helper. Full key management and the AI setup still live
-// under Settings; linking keeps this page free of a second copy of those forms.
-templ connectionsCard(cc *CampaignContext, hasAIWorkspace bool, foundry FoundryRowData, csrfToken string) {
-	<section class="card p-4 mt-6" aria-labelledby="connections-heading" data-connections-card>
-		<h2 id="connections-heading" class="text-base font-semibold text-fg mb-3">Connections</h2>
-		<ul class="divide-y divide-edge-light">
-			if foundry.Wired {
-				@foundryConnectRow(cc, foundry, csrfToken)
-			} else {
-				<li class="flex flex-wrap items-center justify-between gap-x-3 gap-y-2 py-2">
-					<div class="min-w-0">
-						<p class="text-sm font-medium text-fg">Foundry VTT</p>
-						<p class="text-xs text-fg-muted">Connection keys and sync status.</p>
-					</div>
-					<a href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/settings?tab=integrations", cc.Campaign.ID)) } class="btn-secondary text-xs">Set up</a>
-				</li>
-			}
-			if hasAIWorkspace {
-				<li class="flex flex-wrap items-center justify-between gap-x-3 gap-y-2 py-2">
-					<div class="min-w-0">
-						<p class="text-sm font-medium text-fg">AI helper</p>
-						<p class="text-xs text-fg-muted">Copy a prompt for your own AI and bring its pages back in.</p>
-					</div>
-					<a href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/settings?tab=ai-workspace", cc.Campaign.ID)) } class="btn-secondary text-xs">Open</a>
-				</li>
-			}
-		</ul>
-	</section>
 }
 
 // foundryConnectRow is the Foundry row: status, module version, the connect
@@ -167,7 +134,7 @@ templ foundryConnectRow(cc *CampaignContext, foundry FoundryRowData, csrfToken s
 					<input type="hidden" name="csrf_token" value={ csrfToken }/>
 					<button type="submit" class="btn-primary text-xs focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent">{ foundry.connectButtonLabel() }</button>
 				</form>
-				<a href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/settings?tab=integrations", cc.Campaign.ID)) } class="btn-secondary text-xs focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent">All keys</a>
+				<a href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/settings?tab=api-keys", cc.Campaign.ID)) } class="btn-secondary text-xs focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent">All keys</a>
 			</div>
 		</div>
 		if foundry.NewLine != "" {
@@ -383,4 +350,14 @@ func extensionEnabledAttr(enabled bool) string {
 		return "true"
 	}
 	return "false"
+}
+
+// addonEnabled reports whether the catalog lists slug as switched on.
+func addonEnabled(addons []PluginHubAddon, slug string) bool {
+	for _, a := range addons {
+		if a.Slug == slug {
+			return a.Enabled
+		}
+	}
+	return false
 }

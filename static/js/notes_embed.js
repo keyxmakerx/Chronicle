@@ -1,12 +1,12 @@
 /**
- * notes_embed.js -- the Journal or Jot notes inside an outside app's frame
- * (the Foundry notebook and jot window).
+ * notes_embed.js -- the Journal or Jot notes, or the calendar, inside an
+ * outside app's frame (the Foundry notebook, jot and calendar windows).
  *
  * The frame has no Chronicle sign-in. Its parent window (only an allowed
  * origin can frame this page) hands it the player's notes grant; from then
  * on Chronicle.apiFetch sends campaign requests to the grant's routes with
  * that token, and the frame fetches and mounts the same Journal or Jot
- * notes the site shows.
+ * notes (or calendar) the site shows.
  *
  * Messages, all {type: ...}:
  *   frame -> parent  chronicle:embed-ready     {mode}      ready for a token
@@ -154,7 +154,10 @@
     var seq = ++loading;
     var q = '?mode=' + encodeURIComponent(mode);
     if (mode === 'jots' && entityId) q += '&entity=' + encodeURIComponent(entityId);
-    Chronicle.apiFetch('/campaigns/' + encodeURIComponent(cid) + '/notes/embed' + q, {
+    // The calendar window shows the calendar plugin's own page over the
+    // same grant; the notes modes show the notes fragment.
+    var path = mode === 'calendar' ? '/calendars/embed' : '/notes/embed' + q;
+    Chronicle.apiFetch('/campaigns/' + encodeURIComponent(cid) + path, {
       headers: { Accept: 'text/html' }
     }).then(function (res) {
       if (res.status === 401 || res.status === 403) {
@@ -163,7 +166,9 @@
           var msg = '';
           try { msg = JSON.parse(t).message || ''; } catch (e) { /* not JSON */ }
           if (res.status === 401) tell({ type: 'chronicle:grant-rejected' });
-          say(msg || 'Chronicle turned this window away. Reconnect from the notebook button.');
+          say(msg || (mode === 'calendar'
+            ? 'Chronicle turned this window away. Close it and open the calendar again to reconnect.'
+            : 'Chronicle turned this window away. Reconnect from the notebook button.'));
         });
       }
       if (!res.ok) throw new Error('embed ' + res.status);

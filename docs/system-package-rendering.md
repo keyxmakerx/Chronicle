@@ -265,9 +265,11 @@ the renderer registry. Every entry must satisfy:
 
 ### Adding a panel to NPC pages (`entity_panels`)
 
-A renderer replaces a page; a panel adds to one. To mount a widget under the
-title of every NPC or monster page in campaigns that have your system enabled,
-declare it in `entity_panels`:
+A renderer replaces a page; a panel adds to one. To offer a widget on NPC or
+monster pages in campaigns that have your system enabled, declare it in
+`entity_panels`. The panels show where the owner places the "Game System
+Panels" block in the page template (and above a renderer's page, which has no
+template); nothing is added to a page the owner has not placed it on:
 
 ```json
 "widgets": [
@@ -283,7 +285,8 @@ declare it in `entity_panels`:
 - `applies_to` must be `"npc"`, the only audience for now. Any other value is
   rejected at install so a typo is loud. "NPC" is the same family as the NPC
   gallery: the character, npc and creature types, system `-character` and
-  `-monster` types and their sub-types, but not the player-character type.
+  `-monster` types and their sub-types, but not the player-character type,
+  and never a page a player has claimed as their character.
 - A manifest declares no more than 10 panels.
 
 The host emits `<div data-widget="…" data-campaign-id="…" data-entity-id="…"

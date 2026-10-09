@@ -36,6 +36,30 @@ func moneyField(fields []entities.FieldDefinition) (key, label string) {
 	return "", ""
 }
 
+// purseFields maps each 5e coin to its sheet field when the type has numeric
+// gp, sp and cp (ep and pp join when present). Any other type has no purse and
+// keeps paying from gp alone.
+func purseFields(fields []entities.FieldDefinition) map[string]string {
+	have := map[string]bool{}
+	for _, f := range fields {
+		if f.Type == "number" {
+			have[f.Key] = true
+		}
+	}
+	// Change is given in gp, sp and cp, so a purse needs all three; without
+	// them the sheet pays from gold alone and keeps fractions there.
+	if !have["gp"] || !have["sp"] || !have["cp"] {
+		return nil
+	}
+	purse := map[string]string{"gp": "gp", "sp": "sp", "cp": "cp"}
+	for _, coin := range []string{"ep", "pp"} {
+		if have[coin] {
+			purse[coin] = coin
+		}
+	}
+	return purse
+}
+
 // stashTypeInfo is what the directory derives from a campaign's entity types.
 type stashTypeInfo struct {
 	expires   time.Time
@@ -43,6 +67,7 @@ type stashTypeInfo struct {
 	item      map[int]bool
 	money     map[int]string
 	moneyName map[int]string
+	purse     map[int]map[string]string
 	charIDs   []int
 	itemIDs   []int
 }
@@ -78,6 +103,7 @@ func (a *armoryStashDirectoryAdapter) types(ctx context.Context, campaignID stri
 		item:      map[int]bool{},
 		money:     map[int]string{},
 		moneyName: map[int]string{},
+		purse:     map[int]map[string]string{},
 	}
 	ti.charIDs = characterFamilyTypeIDs(all, true)
 	for _, id := range ti.charIDs {
@@ -89,6 +115,9 @@ func (a *armoryStashDirectoryAdapter) types(ctx context.Context, campaignID stri
 	}
 	for _, et := range all {
 		ti.money[et.ID], ti.moneyName[et.ID] = moneyField(et.Fields)
+		if p := purseFields(et.Fields); p != nil {
+			ti.purse[et.ID] = p
+		}
 	}
 	a.mu.Lock()
 	if a.cache == nil {
@@ -104,13 +133,23 @@ func (a *armoryStashDirectoryAdapter) ref(ti *stashTypeInfo, e *entities.Entity)
 		ID: e.ID, Name: e.Name, TypeID: e.EntityTypeID,
 		IsCharacter: ti.character[e.EntityTypeID],
 		IsItem:      ti.item[e.EntityTypeID],
+		// A custom allow list also hides the item from some players.
+		Restricted: e.IsPrivate || e.Visibility == entities.VisibilityCustom,
 	}
 	if e.OwnerUserID != nil {
 		r.OwnerUserID = *e.OwnerUserID
 	}
+	if r.IsItem {
+		if mid, ok := e.FieldsData[handoutMarkerField].(string); ok {
+			r.HandoutMapID = mid
+		}
+	}
 	if r.IsCharacter {
 		r.MoneyKey = ti.money[e.EntityTypeID]
 		r.MoneyLabel = ti.moneyName[e.EntityTypeID]
+		if r.MoneyKey == "gp" {
+			r.Purse = ti.purse[e.EntityTypeID]
+		}
 	}
 	return r
 }

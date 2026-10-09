@@ -17,10 +17,11 @@ type entityTypeLister interface {
 // newSystemPanelResolver builds the resolver the entity show page consults: it
 // picks the campaign's enabled system, keeps the manifest panels whose audience
 // matches the page, and applies the NPC-family rule shared with the NPC gallery
-// (npcTypeIDs). The entities plugin only sees the finished list, so it never
-// learns about systems or manifests.
+// (npcTypeIDs). A page a player has claimed is their character, never an NPC,
+// even when its type also holds NPCs. The entities plugin only sees the
+// finished list, so it never learns about systems or manifests.
 func newSystemPanelResolver(sys enabledSystemResolver, types entityTypeLister) entities.SystemPanelResolver {
-	return func(ctx context.Context, campaignID string, et *entities.EntityType) []entities.SystemPanel {
+	return func(ctx context.Context, campaignID string, et *entities.EntityType, claimed bool) []entities.SystemPanel {
 		if et == nil {
 			return nil
 		}
@@ -37,7 +38,7 @@ func newSystemPanelResolver(sys enabledSystemResolver, types entityTypeLister) e
 		npcPage := false
 		npcChecked := false
 		for _, p := range manifest.EntityPanels {
-			if p.AppliesTo != systems.EntityPanelAppliesNPC {
+			if p.AppliesTo != systems.EntityPanelAppliesNPC || claimed {
 				continue
 			}
 			if !npcChecked {

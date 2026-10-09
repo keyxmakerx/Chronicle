@@ -48,18 +48,20 @@ func TestSystemPanelResolver(t *testing.T) {
 		name     string
 		sys      systems.System
 		typeID   int
+		claimed  bool
 		typesErr error
 		want     []entities.SystemPanel
 	}{
-		{"npc type, system with panel", fakeSystem{withPanel}, 1, nil,
+		{"npc type, system with panel", fakeSystem{withPanel}, 1, false, nil,
 			[]entities.SystemPanel{{Widget: "negotiation", SystemID: "drawsteel"}}},
-		{"system monster type", fakeSystem{withPanel}, 3, nil,
+		{"system monster type", fakeSystem{withPanel}, 3, false, nil,
 			[]entities.SystemPanel{{Widget: "negotiation", SystemID: "drawsteel"}}},
-		{"location is not an npc", fakeSystem{withPanel}, 2, nil, nil},
-		{"player character is not an npc", fakeSystem{withPanel}, 4, nil, nil},
-		{"system without panels", fakeSystem{noPanel}, 1, nil, nil},
-		{"no system enabled", nil, 1, nil, nil},
-		{"type lookup fails", fakeSystem{withPanel}, 1, errors.New("db down"), nil},
+		{"location is not an npc", fakeSystem{withPanel}, 2, false, nil, nil},
+		{"player character is not an npc", fakeSystem{withPanel}, 4, false, nil, nil},
+		{"system without panels", fakeSystem{noPanel}, 1, false, nil, nil},
+		{"no system enabled", nil, 1, false, nil, nil},
+		{"claimed sheet of an npc type is a player character", fakeSystem{withPanel}, 1, true, nil, nil},
+		{"type lookup fails", fakeSystem{withPanel}, 1, false, errors.New("db down"), nil},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -70,7 +72,7 @@ func TestSystemPanelResolver(t *testing.T) {
 					et = &types[i]
 				}
 			}
-			got := resolve(context.Background(), "camp-1", et)
+			got := resolve(context.Background(), "camp-1", et, tt.claimed)
 			if len(got) != len(tt.want) {
 				t.Fatalf("panels = %+v, want %+v", got, tt.want)
 			}

@@ -61,15 +61,30 @@ func TestEntitySystemPanels_Mount(t *testing.T) {
 	}
 }
 
-// The title block carries the panel, so a page using the layout gets it.
-func TestBlockTitle_RendersSystemPanels(t *testing.T) {
+// The panels are a block of their own: the title no longer carries them, and
+// the Game System Panels block mounts them where the layout places it.
+func TestSystemPanels_RenderOnlyAsTheirOwnBlock(t *testing.T) {
 	cc := &campaigns.CampaignContext{Campaign: &campaigns.Campaign{ID: "c1"}, MemberRole: campaigns.RoleOwner}
 	ctx := withSystemPanels(context.Background(), []SystemPanel{{Widget: "negotiation", SystemID: "drawsteel"}})
-	var sb strings.Builder
-	if err := blockTitle(cc, &Entity{ID: "e1", Name: "Varra"}, "csrf").Render(ctx, &sb); err != nil {
+	ent := &Entity{ID: "e1", Name: "Varra"}
+
+	var title strings.Builder
+	if err := blockTitle(cc, ent, "csrf").Render(ctx, &title); err != nil {
 		t.Fatal(err)
 	}
-	if !strings.Contains(sb.String(), `data-widget="negotiation"`) {
-		t.Errorf("title block lacks the panel mount: %s", sb.String())
+	if strings.Contains(title.String(), `data-widget="negotiation"`) {
+		t.Errorf("title block must not mount the panels on its own: %s", title.String())
+	}
+
+	reg := NewBlockRegistry()
+	RegisterCoreBlocks(reg)
+	SetGlobalBlockRegistry(reg)
+	t.Cleanup(func() { SetGlobalBlockRegistry(nil) })
+	var block strings.Builder
+	if err := RenderBlock(ctx, TemplateBlock{ID: "b", Type: BlockSystemPanels}, cc, ent, &EntityType{ID: 7}, "csrf").Render(ctx, &block); err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(block.String(), `data-widget="negotiation"`) {
+		t.Errorf("Game System Panels block lacks the panel mount: %s", block.String())
 	}
 }

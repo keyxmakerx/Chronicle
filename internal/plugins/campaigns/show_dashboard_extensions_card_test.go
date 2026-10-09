@@ -27,8 +27,8 @@ func TestOwnerDashboard_ExtensionsCard(t *testing.T) {
 	if !strings.Contains(html, `href="/campaigns/camp-1/extensions"`) {
 		t.Errorf("dashboard's fourth card must link to the Extensions hub; got:\n%s", html)
 	}
-	if !strings.Contains(html, ">Apps &amp; game system</h3>") {
-		t.Errorf("dashboard card must be labeled Apps & game system; got:\n%s", html)
+	if !strings.Contains(html, ">Game &amp; features</h3>") {
+		t.Errorf("dashboard card must be labeled Game & features; got:\n%s", html)
 	}
 	if strings.Contains(html, ">Features</h3>") {
 		t.Errorf("dashboard must not keep the stale Features label; got:\n%s", html)

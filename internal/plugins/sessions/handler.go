@@ -262,6 +262,7 @@ type updateSessionRequest struct {
 	RecurrenceInterval  patch.Field[int]    `json:"recurrence_interval"`
 	RecurrenceDayOfWeek patch.Field[int]    `json:"recurrence_day_of_week"`
 	RecurrenceEndDate   patch.Field[string] `json:"recurrence_end_date"`
+	ScheduledTZ         patch.Field[string] `json:"scheduled_tz"`
 }
 
 // toInput maps the wire request onto the service input. Pure field carriage —
@@ -1042,7 +1043,7 @@ func (h *Handler) EmbedSessions(c echo.Context) error {
 	}
 
 	return middleware.Render(c, http.StatusOK,
-		SessionsEmbedFragment(cc.Campaign.ID, planned, userID))
+		SessionsEmbedFragment(cc.Campaign.ID, planned, userID, gameNightsToday()))
 }
 
 // --- Helpers ---

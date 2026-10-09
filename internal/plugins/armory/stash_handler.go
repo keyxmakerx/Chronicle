@@ -6,9 +6,11 @@ package armory
 
 import (
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"strconv"
 	"strings"
+	"unicode/utf16"
 
 	"github.com/labstack/echo/v4"
 
@@ -51,10 +53,29 @@ func done(c echo.Context, cc *campaigns.CampaignContext, message string) error {
 	if message != "" {
 		trigger["chronicle:notify"] = map[string]string{"message": message, "type": "success"}
 	}
-	b, _ := json.Marshal(trigger)
-	c.Response().Header().Set("HX-Trigger", string(b))
+	c.Response().Header().Set("HX-Trigger", triggerJSON(trigger))
 	c.Response().Header().Set("HX-Reswap", "none")
 	return c.NoContent(http.StatusNoContent)
+}
+
+// triggerJSON encodes an HX-Trigger header value with every non-ASCII
+// character escaped (\u00d7 for ×). Browsers read header bytes as Latin-1, so
+// an item name or "×" sent raw would arrive garbled in the toast.
+func triggerJSON(v any) string {
+	b, _ := json.Marshal(v)
+	var sb strings.Builder
+	for _, r := range string(b) {
+		switch {
+		case r < 0x80:
+			sb.WriteRune(r)
+		case r <= 0xFFFF:
+			fmt.Fprintf(&sb, `\u%04x`, r)
+		default:
+			hi, lo := utf16.EncodeRune(r)
+			fmt.Fprintf(&sb, `\u%04x\u%04x`, hi, lo)
+		}
+	}
+	return sb.String()
 }
 
 // Page renders GET /campaigns/:id/armory/stashes.
@@ -231,6 +252,103 @@ func (h *StashHandler) MoveDialog(c echo.Context) error {
 	return middleware.Render(c, http.StatusOK, MoveDialog(view, middleware.GetCSRFToken(c)))
 }
 
+// GiveDialog handles GET /armory/give: the Give box. ?character= fixes the
+// recipient (the character page's box), ?item= fixes the item (the Armory
+// card's box); ?list=items&q= answers the box's search with the list alone.
+func (h *StashHandler) GiveDialog(c echo.Context) error {
+	cc, a, err := caller(c)
+	if err != nil {
+		return err
+	}
+	view, err := h.svc.GiveDialog(c.Request().Context(), cc.Campaign.ID, a, c.QueryParam("character"), c.QueryParam("item"), c.QueryParam("q"))
+	if err != nil {
+		return err
+	}
+	switch {
+	case view.Item != nil:
+		return middleware.Render(c, http.StatusOK, GiveCardBox(view))
+	case c.QueryParam("list") == "items":
+		return middleware.Render(c, http.StatusOK, GiveItemChoices(view))
+	}
+	return middleware.Render(c, http.StatusOK, GiveBox(view))
+}
+
+// Give handles POST /armory/give. Besides the usual reload signal it answers
+// with armory-given, which the Give box reads for its toast and to flash the
+// line the item landed on.
+func (h *StashHandler) Give(c echo.Context) error {
+	cc, a, err := caller(c)
+	if err != nil {
+		return err
+	}
+	// A blank "how many" means one; a map has none.
+	qty := 1
+	if v := strings.TrimSpace(c.FormValue("quantity")); v != "" {
+		if qty, err = strconv.Atoi(v); err != nil {
+			return apperror.NewBadRequest(giveQuantityMessage)
+		}
+	}
+	out, err := h.svc.Give(c.Request().Context(), cc.Campaign.ID, a, GiveInput{
+		CharacterID: c.FormValue("character_id"),
+		ItemID:      c.FormValue("item_id"),
+		MapID:       c.FormValue("map_id"),
+		Quantity:    qty,
+	})
+	if err != nil {
+		return err
+	}
+	if !middleware.IsHTMX(c) {
+		return c.Redirect(http.StatusSeeOther, stashesURL(cc.Campaign.ID))
+	}
+	msg := fmt.Sprintf("Gave %s %d × %s", out.CharacterName, out.Move.Quantity, out.ItemName)
+	c.Response().Header().Set("HX-Trigger", triggerJSON(map[string]any{
+		"armory-moved": true,
+		"armory-given": map[string]string{"message": msg, "itemId": out.Move.ItemEntityID, "characterId": out.Move.To.ID},
+	}))
+	c.Response().Header().Set("HX-Reswap", "none")
+	return c.NoContent(http.StatusNoContent)
+}
+
+// ShareBox handles GET /armory/characters/:eid/items/:iid/share: the box
+// that lets the holder's player choose who else can see a hidden item.
+func (h *StashHandler) ShareBox(c echo.Context) error {
+	cc, a, err := caller(c)
+	if err != nil {
+		return err
+	}
+	view, err := h.svc.ShareBox(c.Request().Context(), cc.Campaign.ID, a, c.Param("eid"), c.Param("iid"))
+	if err != nil {
+		return err
+	}
+	return middleware.Render(c, http.StatusOK, ShareBox(view))
+}
+
+// Share handles POST /armory/characters/:eid/items/:iid/share. The body is
+// the full set of players ("user"), so an unticked box is a take-back.
+func (h *StashHandler) Share(c echo.Context) error {
+	cc, a, err := caller(c)
+	if err != nil {
+		return err
+	}
+	form, err := c.FormParams()
+	if err != nil {
+		return apperror.NewBadRequest("invalid form")
+	}
+	out, err := h.svc.Share(c.Request().Context(), cc.Campaign.ID, a, c.Param("eid"), c.Param("iid"), form["user"])
+	if err != nil {
+		return err
+	}
+	if !middleware.IsHTMX(c) {
+		return c.Redirect(http.StatusSeeOther, stashesURL(cc.Campaign.ID))
+	}
+	c.Response().Header().Set("HX-Trigger", triggerJSON(map[string]any{
+		"armory-moved":  true,
+		"armory-shared": map[string]string{"message": sharedMessage(out), "itemId": c.Param("iid")},
+	}))
+	c.Response().Header().Set("HX-Reswap", "none")
+	return c.NoContent(http.StatusNoContent)
+}
+
 // parseDestination splits the "kind:id" value of the To select.
 func parseDestination(v string) Endpoint {
 	kind, id, _ := strings.Cut(v, ":")
@@ -317,11 +435,10 @@ func doneWithTone(c echo.Context, cc *campaigns.CampaignContext, message, tone s
 	if !middleware.IsHTMX(c) {
 		return c.Redirect(http.StatusSeeOther, stashesURL(cc.Campaign.ID))
 	}
-	b, _ := json.Marshal(map[string]any{
+	c.Response().Header().Set("HX-Trigger", triggerJSON(map[string]any{
 		"armory-moved":     true,
 		"chronicle:notify": map[string]string{"message": message, "type": tone},
-	})
-	c.Response().Header().Set("HX-Trigger", string(b))
+	}))
 	c.Response().Header().Set("HX-Reswap", "none")
 	return c.NoContent(http.StatusNoContent)
 }
