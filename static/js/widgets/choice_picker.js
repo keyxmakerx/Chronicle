@@ -37,6 +37,24 @@
 
   var OPEN = '__chronicleChoiceFold';
 
+  // The saved line is text from the system's data or the user's own typing,
+  // so it goes in with textContent, never through an HTML toast.
+  function toast(msg) {
+    var old = document.querySelector('.ag-toast');
+    if (old) old.remove();
+    var t = document.createElement('div');
+    t.className = 'ag-toast';
+    t.setAttribute('role', 'status');
+    var i = document.createElement('i');
+    i.className = 'fa-solid fa-circle-check';
+    var span = document.createElement('span');
+    span.textContent = msg;
+    t.appendChild(i);
+    t.appendChild(span);
+    document.body.appendChild(t);
+    setTimeout(function () { t.remove(); }, 3200);
+  }
+
   function esc(s) {
     return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) {
       return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c];
@@ -249,7 +267,7 @@
       save.disabled = true;
       save.textContent = 'Saving…';
       saveField(opts, v).then(function () {
-        if (window.Chronicle && Chronicle.notify) Chronicle.notify('Saved ' + label + ': ' + v, 'success');
+        toast('Saved ' + label + ': ' + v);
         close({ value: v });
       }).catch(function () {
         save.disabled = false;
