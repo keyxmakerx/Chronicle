@@ -3495,9 +3495,8 @@ func (a *App) RegisterRoutes() {
 	}); ok {
 		wired.SetGameNightsAffectedByAnchorMove(&gameNightsAnchorMoveAdapter{svc: sessionsService})
 	}
-	// Game nights got a switch of their own, off for new campaigns; this
-	// keeps it on for campaigns that already use them. An owner's recorded
-	// choice is left alone. Best-effort: logs and never blocks startup.
+	// Keeps Game nights on for campaigns that already use them; a recorded
+	// owner choice is left alone. Best-effort: logs and never blocks startup.
 	if n, err := sessions.ReconcileAddonEnablement(context.Background(), sessionsService, addonService); err != nil {
 		slog.Error("game nights addon enablement backfill failed; campaigns that already use game nights "+
 			"may not see them until an owner turns on Game nights (Manage → Game & features)",

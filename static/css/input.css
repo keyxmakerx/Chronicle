@@ -3269,7 +3269,7 @@
   .sidebar-collapsed .nav-tr, .sidebar-collapsed .nav-hid, .sidebar-collapsed .nav-ext, .sidebar-collapsed .nav-gh-wrap,
   .sidebar-collapsed .nav-gh, .sidebar-collapsed .nav-tw, .sidebar-collapsed .nav-subs, .sidebar-collapsed .nav-admin,
   .sidebar-collapsed .nav-mypin,
-  .sidebar-collapsed .nav-foot, .sidebar-collapsed #sidebar-sessions-rsvp { display: none; }
+  .sidebar-collapsed .nav-foot { display: none; }
   .sidebar-collapsed .nav-sb .nav-row, .nav-sb.sidebar-collapsed .nav-row { padding: 0; justify-content: center; }
 
   /* The owner's edit mode (sidebar_editor.js): a handle, a pin and an eye on
