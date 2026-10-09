@@ -41,22 +41,32 @@ templ claimBanner(cc *campaigns.CampaignContext, entity *Entity, entityType *Ent
 			</p>
 		</div>
 	} else if claimingEnabled && entityType != nil && isClaimableType(entityType) {
-		// Unclaimed + claimable + addon on: offer the claim action.
-		<div class="mb-4 rounded-md border border-accent/30 bg-accent/5 px-4 py-3 flex items-center gap-3" data-claim-state="unclaimed">
-			<i class="fa-solid fa-user-shield text-accent"></i>
-			<div class="flex-1 min-w-0">
-				<p class="text-sm text-fg">This character is unclaimed.</p>
-				<p class="text-xs text-fg-muted">Claim it to surface on your "My Characters" page.</p>
+		// Unclaimed + claimable + addon on: offer the claim action. The form
+		// still posts on its own; the handler only adds the working, success
+		// and failure states in place.
+		<div class="mb-4" data-claim-wrap>
+			<div class="rounded-md border border-accent/30 bg-accent/5 px-4 py-3 flex items-center gap-3" data-claim-state="unclaimed">
+				<i class="fa-solid fa-user-shield text-accent"></i>
+				<div class="flex-1 min-w-0">
+					<p class="text-sm text-fg">This character is unclaimed.</p>
+					<p class="text-xs text-fg-muted">Claim it to surface on your "My Characters" page.</p>
+				</div>
+				<form
+					method="POST"
+					action={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/entities/%s/claim", cc.Campaign.ID, entity.ID)) }
+					hx-post={ fmt.Sprintf("/campaigns/%s/entities/%s/claim", cc.Campaign.ID, entity.ID) }
+					hx-swap="none"
+					onsubmit={ claimSubmitCall }
+				>
+					<input type="hidden" name="csrf_token" value={ csrfToken }/>
+					<button type="submit" class="btn-primary text-sm"><i class="fa-solid fa-user-shield"></i><span>Claim character</span></button>
+				</form>
 			</div>
-			<form
-				method="POST"
-				action={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/entities/%s/claim", cc.Campaign.ID, entity.ID)) }
-				hx-post={ fmt.Sprintf("/campaigns/%s/entities/%s/claim", cc.Campaign.ID, entity.ID) }
-				hx-swap="none"
-			>
-				<input type="hidden" name="csrf_token" value={ csrfToken }/>
-				<button type="submit" class="btn-primary text-sm">Claim character</button>
-			</form>
+			<div class="ag-warn" role="alert" data-claim-warn style="margin:8px 0 0">
+				<i class="fa-solid fa-triangle-exclamation"></i>
+				<span data-claim-msg></span>
+				<button type="button" onclick={ claimRetryCall }>Try again</button>
+			</div>
 		</div>
 	}
 }

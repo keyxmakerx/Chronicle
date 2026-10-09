@@ -4916,7 +4916,7 @@ html[data-view-motion="calm"] *:not(.czp *), html[data-view-motion="calm"] *:not
    picture's Change chip. */
 .fx-spin { width: 13px; height: 13px; flex: none; border-radius: 999px; border: 2px solid rgba(255, 255, 255, .45); border-top-color: #fff; animation: fx-spin .7s linear infinite; }
 @keyframes fx-spin { to { transform: rotate(360deg); } }
-.ag-box [data-move-go], .fx-claim .btn-primary { display: inline-flex; align-items: center; gap: 7px; }
+.ag-box [data-move-go], [data-claim-wrap] .btn-primary { display: inline-flex; align-items: center; gap: 7px; }
 .fx-dest-h { padding: 6px 10px 3px; font-size: 10.5px; font-weight: 700; letter-spacing: .07em; text-transform: uppercase; color: var(--color-text-muted); border-top: 1px solid var(--color-border); }
 .ag-list .fx-dest-h:first-child { border-top: 0; }
 .fx-pill { display: inline-flex; align-items: center; gap: 6px; height: 24px; padding: 0 10px; border-radius: 999px; font-size: 12px; font-weight: 600; white-space: nowrap; background: var(--color-bg-tertiary); color: var(--color-text-secondary); }
