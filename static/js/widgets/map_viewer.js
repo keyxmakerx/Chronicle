@@ -1046,6 +1046,9 @@
 	var hexAnchor = null;
 	// The layer's saved fog switch; the settings sheet stages a change in D.hex_fog.
 	var hexFog = false;
+	// The layer's saved travel figures; the settings sheet stages changes in
+	// D.hex_miles and D.hex_speed.
+	var hexMiles = 6, hexSpeed = 24;
 	// The live hex connection's state (see startHexSocket); declared up here
 	// because syncHexes can run before the connection code below does.
 	var hexSocket = null, hexSocketTries = 0, hexSocketTimer = null, hexSocketLost = false;
@@ -1305,6 +1308,9 @@
 			renderHexCover();
 			var fogBox = $id('ms-fog');
 			if (fogBox) fogBox.checked = Object.prototype.hasOwnProperty.call(D, 'hex_fog') ? !!D.hex_fog : hexFog;
+			var miBox = $id('ms-mi'), spBox = $id('ms-sp');
+			if (miBox && document.activeElement !== miBox) miBox.value = Object.prototype.hasOwnProperty.call(D, 'hex_miles') ? D.hex_miles : hexMiles;
+			if (spBox && document.activeElement !== spBox) spBox.value = Object.prototype.hasOwnProperty.call(D, 'hex_speed') ? D.hex_speed : hexSpeed;
 			$id('ms-frame-pick').hidden = D.frame_source !== 'map';
 			$id('ms-frame-note').hidden = D.frame_source === 'map';
 			sInputs.tint.checked = !!D.tint;
@@ -1356,6 +1362,20 @@
 		// Fog of war is a layer setting, saved with the sheet and previewed live.
 		var fogSwitch = $id('ms-fog');
 		if (fogSwitch) fogSwitch.addEventListener('change', function() { D.hex_fog = this.checked; applyDisplay(); });
+		// Travel figures are staged like the fog switch and saved with the sheet.
+		// Whatever is typed that is not a whole number from 1 to 1000 is ignored
+		// until the box is left, when it snaps back to the last good figure.
+		[['ms-mi', 'hex_miles'], ['ms-sp', 'hex_speed']].forEach(function(f) {
+			var box = $id(f[0]);
+			if (!box) return;
+			box.addEventListener('input', function() {
+				var n = parseInt(this.value, 10);
+				if (n >= 1) D[f[1]] = Math.min(1000, n);
+			});
+			box.addEventListener('change', function() {
+				this.value = Object.prototype.hasOwnProperty.call(D, f[1]) ? D[f[1]] : (f[1] === 'hex_miles' ? hexMiles : hexSpeed);
+			});
+		});
 		window.__mpSyncFog = function() { if (!sheet.hidden) syncSheet(); };
 		cleanups.push(function() { window.__mpSyncFog = null; });
 		sInputs.gridSize.addEventListener('input', function() {
@@ -1473,10 +1493,16 @@
 				if (resp.ok && anchorChanges) {
 					if (!await apiPut(hexBase + '/layer', { anchor_drawing_id: D.hex_anchor })) { btn.disabled = false; return; }
 				}
-				// Only the fog switch travels: the layer's cover is not touched here.
-				var fogChanges = D.grid_type === 'hex' && Object.prototype.hasOwnProperty.call(D, 'hex_fog') && D.hex_fog !== hexFog;
-				if (resp.ok && fogChanges) {
-					if (!await apiPut(hexBase + '/layer', { fog_enabled: D.hex_fog })) { btn.disabled = false; return; }
+				// Only what changed travels: the layer's cover is not touched here,
+				// and a fog change leaves the travel figures alone and the reverse.
+				var layerBody = {};
+				if (D.grid_type === 'hex') {
+					if (Object.prototype.hasOwnProperty.call(D, 'hex_fog') && D.hex_fog !== hexFog) layerBody.fog_enabled = D.hex_fog;
+					if (Object.prototype.hasOwnProperty.call(D, 'hex_miles') && D.hex_miles !== hexMiles) layerBody.miles_per_hex = D.hex_miles;
+					if (Object.prototype.hasOwnProperty.call(D, 'hex_speed') && D.hex_speed !== hexSpeed) layerBody.miles_per_day = D.hex_speed;
+				}
+				if (resp.ok && Object.keys(layerBody).length) {
+					if (!await apiPut(hexBase + '/layer', layerBody)) { btn.disabled = false; return; }
 				}
 				if (resp.ok) { reloadView(); return; }
 				var data = await resp.json().catch(function() { return {}; });
@@ -1877,6 +1903,7 @@
 		hexCover: hexCover,
 		onHexAnchor: function(id) { hexAnchor = id; hexCoverNotify(); },
 		onHexFog: function(on) { hexFog = !!on; if (window.__mpSyncFog) window.__mpSyncFog(); },
+		onHexTravel: function(perHex, perDay) { hexMiles = perHex; hexSpeed = perDay; if (window.__mpSyncFog) window.__mpSyncFog(); },
 		getMapImage: function() { return mapImageURL; },
 		setMapImage: setMapImage,
 		onHexLines: function(on) { hexLinesOwned = !!on; drawGrid(); },

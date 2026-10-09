@@ -61,6 +61,16 @@ const (
 	MaxHexCellsPerMap = 40000
 )
 
+// Travel figures for the trip planner. The columns are SMALLINT UNSIGNED; the
+// ceiling keeps a typo from making every trip read as zero days, and the floor
+// keeps the day maths from dividing by zero.
+const (
+	DefaultMilesPerHex = 6
+	DefaultMilesPerDay = 24
+	MinTravelMiles     = 1
+	MaxTravelMiles     = 1000
+)
+
 // HexLayer is the per-map hex settings row. A map without a row has an
 // implicit layer at version 0 (see DefaultHexLayer); the row appears on the
 // first write. Fields past the cells are carried now so later slices (fog,
@@ -79,7 +89,7 @@ type HexLayer struct {
 
 // DefaultHexLayer is the layer of a map nobody has painted yet.
 func DefaultHexLayer(mapID string) HexLayer {
-	return HexLayer{MapID: mapID, MilesPerHex: 6, MilesPerDay: 24}
+	return HexLayer{MapID: mapID, MilesPerHex: DefaultMilesPerHex, MilesPerDay: DefaultMilesPerDay}
 }
 
 // HexCell is one painted or annotated hex. Only hexes someone has touched have

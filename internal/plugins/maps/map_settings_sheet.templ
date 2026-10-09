@@ -141,6 +141,9 @@ templ mapSettingsSheet(data MapViewData) {
 					<div class="mp-f"><span>Who can move the party</span>
 						@sheetChips("party_who", []sheetChoice{{"owners", "Owners"}, {"scribes", "Owners and scribes"}})
 					</div>
+					<div class="mp-f"><span>Travel</span>
+						<div class="mp-hx-travel">Each hex is <input type="number" class="mp-input" id="ms-mi" min="1" max="1000" step="1" aria-label="Miles per hex"/> miles, the party travels <input type="number" class="mp-input" id="ms-sp" min="1" max="1000" step="1" aria-label="Miles per day"/> a day</div>
+					</div>
 				</div>
 			</section>
 			<section>

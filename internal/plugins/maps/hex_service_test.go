@@ -25,6 +25,7 @@ type fakeHexRepo struct {
 	by         string
 	count      int // overrides CountCells when non-zero
 	anchorSets int // SetAnchor calls
+	travelSets int // SetTravel calls
 
 	// Fog and party writes.
 	exploredWrites [][]HexKey // keys of each SetExplored call

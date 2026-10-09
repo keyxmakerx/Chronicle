@@ -343,7 +343,13 @@ templ MapEditorBody(cc *campaigns.CampaignContext, data MapViewData, mapContaine
 		.mp-hexpanel .mp-hx-card b { font-size: 14px; }
 		.mp-hexpanel .mp-hx-card .mp-input { width: 100%; }
 		.mp-hexpanel .mp-hx-card span { white-space: pre-wrap; overflow-wrap: anywhere; }
+		.mp-hexpanel .mp-hx-trip { background: var(--mp-accent-soft); border-radius: 8px; padding: 8px 10px; color: var(--color-text-primary); }
+		.mp-hexpanel .mp-hx-trip b { display: block; font-size: 15px; }
+		.mp-hexpanel .mp-hx-row { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+		.mp-hexpanel .mp-hx-row input[type="number"] { width: 64px; }
 		@keyframes mp-hx-panel { from { opacity: 0; transform: translateY(-6px); } }
+		.mp-hx-fade { animation: mp-hx-fade 0.5s ease both; }
+		@keyframes mp-hx-fade { from { opacity: 0; } }
 		.mp-hx-in { animation: mp-hx-in 0.48s cubic-bezier(0.2, 0.9, 0.3, 1.18) both; transform-box: fill-box; transform-origin: 50% 62%; }
 		.mp-hx-out { animation: mp-hx-out 0.36s ease-in both; transform-box: fill-box; transform-origin: 50% 62%; }
 		@keyframes mp-hx-in { from { opacity: 0; transform: scale(0.5); } to { opacity: 1; transform: none; } }
@@ -352,7 +358,7 @@ templ MapEditorBody(cc *campaigns.CampaignContext, data MapViewData, mapContaine
 			.mp-hexpanel { left: 12px; right: 12px; width: auto; top: auto; bottom: 64px; max-height: 46%; }
 		}
 		@media (prefers-reduced-motion: reduce) {
-			.mp-hexpanel, .mp-hx-in, .mp-hx-out { animation: none !important; }
+			.mp-hexpanel, .mp-hx-in, .mp-hx-out, .mp-hx-fade { animation: none !important; }
 		}
 
 		#map-wrap {
@@ -491,6 +497,8 @@ templ MapEditorBody(cc *campaigns.CampaignContext, data MapViewData, mapContaine
 		.mp-kind { display: flex; align-items: center; gap: 8px; }
 		.mp-kind input[type=color] { width: 28px; height: 26px; padding: 0; border: 0; background: none; flex: none; }
 		.mp-kind .mp-input { flex: 1; min-width: 0; }
+		.mp-hx-travel { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+		.mp-hx-travel .mp-input { width: 64px; }
 		.mp-preview { width: 100%; max-height: 140px; object-fit: contain; border-radius: 6px; background: var(--color-bg-tertiary); }
 		.mp-file { font-size: 11.5px; padding: 3px; }
 		.mp-danger { align-self: flex-start; border: 0; background: none; padding: 4px 6px; border-radius: 6px; font-size: 12px; color: #dc2626; }

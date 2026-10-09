@@ -3,6 +3,7 @@ package maps
 import (
 	"context"
 	"errors"
+	"fmt"
 	"net/http"
 	"time"
 	"unicode"
@@ -37,10 +38,14 @@ type UpdateHexCellInput struct {
 
 // UpdateHexLayerInput is a partial change to the layer row: an absent field
 // keeps, an explicit null clears, a present value replaces. Null on the anchor
-// means "the whole map"; null on fog_enabled means off.
+// means "the whole map"; null on fog_enabled means off; null on a travel figure
+// restores its default. A value outside MinTravelMiles..MaxTravelMiles is
+// refused.
 type UpdateHexLayerInput struct {
 	AnchorDrawingID patch.Field[string]
 	FogEnabled      patch.Field[bool]
+	MilesPerHex     patch.Field[int]
+	MilesPerDay     patch.Field[int]
 }
 
 // HexLayerView is what a viewer receives: the layer and only the cells their
@@ -108,6 +113,8 @@ type HexLayerWriteResult struct {
 	Version         uint64  `json:"version"`
 	AnchorDrawingID *string `json:"anchor_drawing_id"`
 	FogEnabled      bool    `json:"fog_enabled"`
+	MilesPerHex     int     `json:"miles_per_hex"`
+	MilesPerDay     int     `json:"miles_per_day"`
 }
 
 // HexFogCell names one hex in a reveal or hide request.
@@ -322,8 +329,18 @@ func (s *hexService) UpdateLayer(ctx context.Context, campaignID, mapID string, 
 	if !actor.IsDM {
 		return nil, apperror.NewForbidden("only the owner or a DM can change the hex layer")
 	}
-	if !in.AnchorDrawingID.Present() && !in.FogEnabled.Present() {
+	if !in.AnchorDrawingID.Present() && !in.FogEnabled.Present() && !in.MilesPerHex.Present() && !in.MilesPerDay.Present() {
 		return nil, apperror.NewBadRequest("nothing to change")
+	}
+	// Checked before anything is written, so a bad figure cannot leave a body
+	// that also moved the anchor half applied.
+	perHex, err := travelFigure(in.MilesPerHex, DefaultMilesPerHex, "miles per hex")
+	if err != nil {
+		return nil, err
+	}
+	perDay, err := travelFigure(in.MilesPerDay, DefaultMilesPerDay, "miles per day")
+	if err != nil {
+		return nil, err
 	}
 	res := &HexLayerWriteResult{}
 	if in.AnchorDrawingID.Present() {
@@ -355,13 +372,37 @@ func (s *hexService) UpdateLayer(ctx context.Context, campaignID, mapID string, 
 		}
 		res.Version = version
 	}
+	if perHex != nil || perDay != nil {
+		version, err := s.repo.SetTravel(ctx, mapID, perHex, perDay)
+		if err != nil {
+			return nil, err
+		}
+		res.Version = version
+	}
 	layer, err := s.layerOrDefault(ctx, mapID)
 	if err != nil {
 		return nil, err
 	}
 	res.AnchorDrawingID, res.FogEnabled = layer.AnchorDrawingID, layer.FogEnabled
+	res.MilesPerHex, res.MilesPerDay = layer.MilesPerHex, layer.MilesPerDay
 	s.afterWrite(campaignID, mapID, res.Version, nil, true)
 	return res, nil
+}
+
+// travelFigure turns a travel field into the value to store: nil keeps the
+// column, null restores the default, a number must be a sensible distance.
+func travelFigure(f patch.Field[int], def int, what string) (*int, error) {
+	if !f.Present() {
+		return nil, nil
+	}
+	if f.IsNull() {
+		return &def, nil
+	}
+	v, _ := f.Get()
+	if v < MinTravelMiles || v > MaxTravelMiles {
+		return nil, apperror.NewBadRequest(fmt.Sprintf("%s must be between %d and %d", what, MinTravelMiles, MaxTravelMiles))
+	}
+	return &v, nil
 }
 
 // resolveAnchor validates a requested anchor: null is the whole map, an id must

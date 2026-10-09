@@ -34,6 +34,19 @@ func (r *fakeHexRepo) SetFog(_ context.Context, mapID string, enabled bool) (uin
 	return r.layer.Version, nil
 }
 
+func (r *fakeHexRepo) SetTravel(_ context.Context, mapID string, perHex, perDay *int) (uint64, error) {
+	r.ensureLayer(mapID)
+	if perHex != nil {
+		r.layer.MilesPerHex = *perHex
+	}
+	if perDay != nil {
+		r.layer.MilesPerDay = *perDay
+	}
+	r.layer.Version++
+	r.travelSets++
+	return r.layer.Version, nil
+}
+
 func (r *fakeHexRepo) SetExplored(_ context.Context, mapID, _ string, keys []HexKey, explored bool) (uint64, error) {
 	r.ensureLayer(mapID)
 	r.layer.Version++

@@ -64,6 +64,30 @@ func TestHexFogRepository_Integration(t *testing.T) {
 		}
 	})
 
+	t.Run("travel writes only the figure named", func(t *testing.T) {
+		mapID := newMap()
+		nine, thirty := 9, 30
+		v, err := repo.SetTravel(ctx, mapID, &nine, nil)
+		if err != nil || v != 1 {
+			t.Fatalf("SetTravel = %d, %v; want version 1 on a new row", v, err)
+		}
+		l, _ := repo.GetLayer(ctx, mapID)
+		if l.MilesPerHex != 9 || l.MilesPerDay != DefaultMilesPerDay {
+			t.Errorf("layer = %+v; want 9 per hex and the default per day", l)
+		}
+		if _, err := repo.SetFog(ctx, mapID, true); err != nil {
+			t.Fatal(err)
+		}
+		v, err = repo.SetTravel(ctx, mapID, nil, &thirty)
+		if err != nil || v != 3 {
+			t.Fatalf("SetTravel = %d, %v; want version 3", v, err)
+		}
+		l, _ = repo.GetLayer(ctx, mapID)
+		if l.MilesPerHex != 9 || l.MilesPerDay != 30 || !l.FogEnabled {
+			t.Errorf("layer = %+v; want 9 / 30 with fog kept", l)
+		}
+	})
+
 	t.Run("reveal, hide and list explored", func(t *testing.T) {
 		mapID := newMap()
 		// A painted hex keeps its row when hidden; a bare explored one loses it.

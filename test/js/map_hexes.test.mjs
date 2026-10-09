@@ -390,3 +390,109 @@ test('the map picture: the server copy for viewers below DM level while fog is o
   ];
   for (const [o, want] of cases) assert.equal(H.wantsPlayerCopy(o), want, JSON.stringify(o));
 });
+
+// ---- Trips ----
+
+const hx = (col, row) => ({ col, row });
+
+test('tripPath: the line runs party to destination, and is empty with nothing to plan', () => {
+  const p = H.tripPath(hx(0, 0), hx(4, 0));
+  assert.deepEqual(p.map((h) => [h.col, h.row]), [[0, 0], [1, 0], [2, 0], [3, 0], [4, 0]]);
+  // Every step moves to a neighbour, whatever the direction.
+  const long = H.tripPath(hx(2, 1), hx(9, 8));
+  assert.deepEqual(long[0], hx(2, 1));
+  assert.deepEqual(long[long.length - 1], hx(9, 8));
+  for (let i = 1; i < long.length; i++) assert.equal(H.distance(long[i - 1], long[i]), 1);
+  assert.equal(long.length, H.distance(hx(2, 1), hx(9, 8)) + 1);
+  const cases = [[null, hx(1, 1)], [hx(1, 1), null], [hx(3, 3), hx(3, 3)], [undefined, undefined]];
+  for (const [a, b] of cases) assert.deepEqual(H.tripPath(a, b), []);
+});
+
+test('travelDays: rounded to halves, never zero for a trip that goes somewhere', () => {
+  const cases = [
+    [0, 24, 0], [-5, 24, 0],
+    [6, 24, 0.5],       // a quarter day rounds to half
+    [1, 24, 0.5],       // a short hop is still half a day
+    [24, 24, 1], [36, 24, 1.5], [29, 24, 1], [30, 24, 1.5],
+    [100, 24, 4], [120, 24, 5], [180, 24, 7.5],
+    [60, 0, 60],        // a missing speed counts as one mile a day, never divides by zero
+  ];
+  for (const [miles, perDay, want] of cases) assert.equal(H.travelDays(miles, perDay), want, `${miles}/${perDay}`);
+});
+
+test('clampTravel: whole numbers from 1 to 1000, a fallback for junk', () => {
+  const cases = [[6, 6], ['12', 12], [0, 1], [-4, 1], [1000, 1000], [1001, 1000], [7.9, 7], [1e9, 1000]];
+  for (const [v, want] of cases) assert.equal(H.clampTravel(v, 99), want, String(v));
+  for (const v of ['', 'abc', NaN, Infinity, undefined]) assert.equal(H.clampTravel(v, 99), 99, String(v));
+});
+
+test('tripTerrain: the top three kinds along the path, the start hex left out', () => {
+  const path = [hx(0, 0), hx(1, 0), hx(2, 0), hx(3, 0), hx(4, 0), hx(5, 0), hx(6, 0), hx(7, 0)];
+  const cells = {
+    '0,0': { terrain: 'town' },       // the start: must not count
+    '1,0': { terrain: 'forest' }, '2,0': { terrain: 'forest' }, '3,0': { terrain: 'forest' },
+    '4,0': { terrain: 'mountain' }, '5,0': { terrain: 'mountain' },
+    '6,0': { terrain: 'water' },
+    // 7,0 has no cell at all
+  };
+  assert.deepEqual(H.tripTerrain(path, cells, null), ['forest', 'mountains', 'water']);
+  // Ties keep the order the path meets them in.
+  assert.deepEqual(H.tripTerrain([hx(0, 0), hx(1, 0), hx(2, 0), hx(3, 0)], { '1,0': { terrain: 'swamp' }, '2,0': { terrain: 'hills' } }, null), ['swamp', 'hills', 'open country']);
+  // Town reads as "places", as the palette names it; a hex with no terrain is open country.
+  assert.deepEqual(H.tripTerrain([hx(0, 0), hx(1, 0), hx(2, 0)], { '1,0': { terrain: 'town' }, '2,0': { name: 'x' } }, null), ['places', 'open country']);
+  assert.deepEqual(H.tripTerrain([hx(0, 0)], cells, null), []);
+});
+
+test('tripTerrain: land the viewer was not shown reads as unexplored and its cell is never read', () => {
+  const path = [hx(0, 0), hx(1, 0), hx(2, 0), hx(3, 0)];
+  const read = new Set();
+  const spy = (k, terrain) => ({ get terrain() { read.add(k); return terrain; } });
+  const cells = { '1,0': spy('1,0', 'forest'), '2,0': spy('2,0', 'mountain'), '3,0': spy('3,0', 'water') };
+  const explored = { '0,0': true, '1,0': true };
+  assert.deepEqual(H.tripTerrain(path, cells, explored), ['unexplored land', 'forest']);
+  assert.deepEqual([...read], ['1,0'], 'only the explored hex\'s cell may be looked at');
+  // Nothing explored along the way: the whole route is one unknown.
+  assert.deepEqual(H.tripTerrain(path, cells, {}), ['unexplored land']);
+  // A viewer who sees everything (explored null) reads the terrain.
+  assert.deepEqual(H.tripTerrain(path, cells, null), ['forest', 'mountains', 'water']);
+});
+
+test('tripSummary: the readout text', () => {
+  const path = H.tripPath(hx(0, 0), hx(4, 0));
+  const cells = { '1,0': { terrain: 'plains' }, '2,0': { terrain: 'plains' }, '3,0': { terrain: 'hills' }, '4,0': { terrain: 'forest' } };
+  const s = H.tripSummary(path, { milesPerHex: 6, milesPerDay: 24, cells, explored: null });
+  assert.equal(s.head, '4 hexes · 24 miles');
+  assert.equal(s.about, 'About 1 day on foot');
+  assert.deepEqual(s.through, ['plains', 'hills', 'forest']);
+  const far = H.tripSummary(H.tripPath(hx(0, 0), hx(10, 0)), { milesPerHex: 6, milesPerDay: 24, cells: {}, explored: null });
+  assert.equal(far.head, '10 hexes · 60 miles');
+  assert.equal(far.about, 'About 2.5 days on foot');
+  const one = H.tripSummary(H.tripPath(hx(0, 0), hx(1, 0)), { milesPerHex: 6, milesPerDay: 24, cells: {}, explored: null });
+  assert.equal(one.head, '1 hex · 6 miles');
+  assert.equal(one.about, 'About 0.5 days on foot');
+  // The owner's figures drive it.
+  const quick = H.tripSummary(path, { milesPerHex: 12, milesPerDay: 48, cells, explored: null });
+  assert.equal(quick.head, '4 hexes · 48 miles');
+  assert.equal(quick.about, 'About 1 day on foot');
+  assert.equal(H.tripSummary([], { milesPerHex: 6, milesPerDay: 24 }), null);
+  assert.equal(H.tripSummary([hx(0, 0)], { milesPerHex: 6, milesPerDay: 24 }), null);
+  // A fogged viewer's route is described without the hidden terrain.
+  const fogged = H.tripSummary(path, { milesPerHex: 6, milesPerDay: 24, cells, explored: { '0,0': true, '1,0': true } });
+  assert.deepEqual(fogged.through, ['unexplored land', 'plains']);
+});
+
+test('the plan is stored per person and map, and a bad stored value is dropped', () => {
+  assert.equal(H.tripStorageKey('u1', 'm1'), 'chronicle.maptrip.u1.m1');
+  assert.equal(H.tripStorageKey('', 'm1'), 'chronicle.maptrip.anon.m1');
+  assert.notEqual(H.tripStorageKey('u1', 'm1'), H.tripStorageKey('u2', 'm1'));
+  assert.notEqual(H.tripStorageKey('u1', 'm1'), H.tripStorageKey('u1', 'm2'));
+  assert.deepEqual(H.parseTrip('{"col":3,"row":9}'), { col: 3, row: 9 });
+  const bad = [null, '', 'x', '[]', '{}', '{"col":-1,"row":0}', '{"col":1.5,"row":0}', '{"col":400,"row":0}', '{"col":"1","row":0}', '{"col":1}'];
+  for (const raw of bad) assert.equal(H.parseTrip(raw), null, String(raw));
+});
+
+test('the default travel figures match the server\'s columns', () => {
+  assert.equal(H.DEFAULT_MILES_PER_HEX, 6);
+  assert.equal(H.DEFAULT_MILES_PER_DAY, 24);
+  assert.equal(H.MAX_TRAVEL_MILES, 1000);
+});

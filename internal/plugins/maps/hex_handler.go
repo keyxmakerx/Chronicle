@@ -79,7 +79,8 @@ func (h *HexHandler) PatchHexCells(c echo.Context) error {
 
 // PutHexLayer changes the layer row. The body is partial: an absent
 // anchor_drawing_id keeps, null means the whole map, an id pins the hexes to
-// that picture; an absent fog_enabled keeps, null or false turns fog off.
+// that picture; an absent fog_enabled keeps, null or false turns fog off; an
+// absent miles_per_hex or miles_per_day keeps, null restores the default.
 // PUT /campaigns/:id/maps/:mid/hexes/layer
 func (h *HexHandler) PutHexLayer(c echo.Context) error {
 	cc := campaigns.GetCampaignContext(c)
@@ -89,6 +90,8 @@ func (h *HexHandler) PutHexLayer(c echo.Context) error {
 	var req struct {
 		AnchorDrawingID patch.Field[string] `json:"anchor_drawing_id"`
 		FogEnabled      patch.Field[bool]   `json:"fog_enabled"`
+		MilesPerHex     patch.Field[int]    `json:"miles_per_hex"`
+		MilesPerDay     patch.Field[int]    `json:"miles_per_day"`
 	}
 	if err := c.Bind(&req); err != nil {
 		return apperror.NewBadRequest("invalid request body")
@@ -97,7 +100,10 @@ func (h *HexHandler) PutHexLayer(c echo.Context) error {
 		UserID: getUserID(c),
 		Role:   int(cc.MemberRole),
 		IsDM:   cc.CanAuthorDmOnly(),
-	}, UpdateHexLayerInput{AnchorDrawingID: req.AnchorDrawingID, FogEnabled: req.FogEnabled})
+	}, UpdateHexLayerInput{
+		AnchorDrawingID: req.AnchorDrawingID, FogEnabled: req.FogEnabled,
+		MilesPerHex: req.MilesPerHex, MilesPerDay: req.MilesPerDay,
+	})
 	if err != nil {
 		return err
 	}

@@ -28,7 +28,7 @@
  * Data comes from, and is saved to, the REST API:
  *   GET   /campaigns/:id/maps/:mid/hexes          layer + the cells this viewer may see
  *   PATCH /campaigns/:id/maps/:mid/hexes/cells    { cells: [{col,row,terrain?,name?,notes?}] }
- *   PUT   /campaigns/:id/maps/:mid/hexes/layer    { anchor_drawing_id?, fog_enabled? } (owner or DM; the viewer sends it)
+ *   PUT   /campaigns/:id/maps/:mid/hexes/layer    { anchor_drawing_id?, fog_enabled?, miles_per_hex?, miles_per_day? } (owner or DM; the viewer sends it)
  *   POST  /campaigns/:id/maps/:mid/hexes/fog      { cells: [{col,row}], explored } or { reset: true } (DM)
  *   PUT   /campaigns/:id/maps/:mid/hexes/party    { col, row } -> { version, path }
  * PATCH is partial: a stroke sends only terrain, an edit of a name sends only
@@ -42,6 +42,13 @@
  * never darken) for players and faintly hatched for the DM. The server tells
  * every client "hex.changed" with a version (and, when safe, the party's path);
  * the client refetches the filtered read, never trusting the event for data.
+ *
+ * Trips. Plan a trip is open to everyone who can see the layer. The destination
+ * is the viewer's own: it lives in localStorage, per person and map, and is
+ * never sent anywhere, so a plan cannot tell the table where someone is
+ * heading. The readout uses only what the filtered read already sent; land a
+ * fogged viewer has not been shown reads as "unexplored land". Only the miles
+ * per hex and per day travel to the server (owner or DM).
  */
 (function () {
   'use strict';
@@ -93,6 +100,9 @@
   var FX_MS = 480;
   var FLUSH_MS = 250;
   var TEXT_FLUSH_MS = 700;
+  // How long a new trip line eases in, and the stagger between its hexes.
+  var TRIP_EASE_MS = 900;
+  var TRIP_STAGGER_MS = 40;
 
   // ---- Pure maths ----
 
@@ -429,6 +439,93 @@
     return (!!o.fogOn && !o.anchored) || !!o.startedWithCopy;
   }
 
+  // ---- Trips (pure) ----
+
+  var DEFAULT_MILES_PER_HEX = 6;
+  var DEFAULT_MILES_PER_DAY = 24;
+  // The server's bounds on both travel figures (MinTravelMiles..MaxTravelMiles in hex.go).
+  var MAX_TRAVEL_MILES = 1000;
+  var TRIP_UNEXPLORED = 'unexplored land';
+  var TRIP_OPEN = 'open country';
+  var TRIP_KINDS = 3;
+
+  var TERRAIN_NAME = {};
+  TERRAINS.forEach(function (t) { TERRAIN_NAME[t[0]] = t[1].toLowerCase(); });
+
+  // clampTravel turns what was typed into a whole number the server accepts,
+  // or the fallback when it is not a number at all.
+  function clampTravel(v, fallback) {
+    if (v === '' || v === null || v === undefined) return fallback;
+    var n = Math.floor(Number(v));
+    if (!isFinite(n)) return fallback;
+    return Math.max(1, Math.min(MAX_TRAVEL_MILES, n));
+  }
+
+  // tripPath is the straight hex line from the party to the destination,
+  // both ends included, or an empty list when there is nothing to plan: no
+  // party, no destination, or a destination under the party's feet.
+  function tripPath(from, to) {
+    if (!from || !to || (from.col === to.col && from.row === to.row)) return [];
+    return hexLine(from, to);
+  }
+
+  // travelDays is the trip's length in days, rounded to halves. A trip that
+  // goes anywhere is at least half a day, so a short hop never reads "0 days".
+  function travelDays(miles, perDay) {
+    if (!(miles > 0)) return 0;
+    return Math.max(0.5, Math.round(miles / Math.max(1, perDay) * 2) / 2);
+  }
+
+  // tripTerrain lists the terrain kinds along a path, most frequent first and
+  // at most TRIP_KINDS of them. The start hex is left out: the party is
+  // already standing on it. When explored is given (a viewer the fog hides
+  // land from) a hex outside it reads as unexplored land and its cell is never
+  // looked at, so a stray cell cannot leak what the viewer was not shown.
+  function tripTerrain(path, cells, explored) {
+    var count = {}, order = [];
+    path.slice(1).forEach(function (h) {
+      var k = key(h.col, h.row), name;
+      if (explored && !explored[k]) name = TRIP_UNEXPLORED;
+      else {
+        var c = cells && cells[k];
+        name = (c && c.terrain && TERRAIN_NAME[c.terrain]) || TRIP_OPEN;
+      }
+      if (!count[name]) { count[name] = 0; order.push(name); }
+      count[name]++;
+    });
+    return order.sort(function (a, b) { return count[b] - count[a]; }).slice(0, TRIP_KINDS);
+  }
+
+  // tripSummary is the readout for a path: o carries the miles per hex and per
+  // day, the cells and, for a fogged viewer, the explored set. Null when the
+  // path goes nowhere.
+  function tripSummary(path, o) {
+    if (!path || path.length < 2) return null;
+    var n = path.length - 1;
+    var miles = n * o.milesPerHex;
+    var days = travelDays(miles, o.milesPerDay);
+    return {
+      hexes: n, miles: miles, days: days,
+      head: n + (n === 1 ? ' hex' : ' hexes') + ' · ' + miles + ' miles',
+      about: 'About ' + days + (days === 1 ? ' day' : ' days') + ' on foot',
+      through: tripTerrain(path, o.cells, o.explored)
+    };
+  }
+
+  // The plan is kept in this browser only, one per person and map, so it is
+  // private by construction.
+  function tripStorageKey(userID, mapID) { return 'chronicle.maptrip.' + (userID || 'anon') + '.' + mapID; }
+
+  // parseTrip reads a stored destination back, or null for anything that is
+  // not a hex inside the largest possible field.
+  function parseTrip(raw) {
+    var v;
+    try { v = JSON.parse(raw); } catch (e) { return null; }
+    if (!v || typeof v !== 'object') return null;
+    var ok = function (n) { return typeof n === 'number' && isFinite(n) && Math.floor(n) === n && n >= 0 && n < MAX_HEX_AXIS; };
+    return ok(v.col) && ok(v.row) ? { col: v.col, row: v.row } : null;
+  }
+
   function esc(s) {
     return String(s).replace(/[&<>"']/g, function (c) {
       return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c];
@@ -445,7 +542,10 @@
       STEP_MS: STEP_MS, neighbors: neighbors, unexploredKeys: unexploredKeys, fogPolygons: fogPolygons,
       walkPoint: walkPoint, revealSchedule: revealSchedule, fogBatches: fogBatches,
       partyMoverAllowed: partyMoverAllowed, isStale: isStale, playerImageURL: playerImageURL,
-      wantsPlayerCopy: wantsPlayerCopy
+      wantsPlayerCopy: wantsPlayerCopy,
+      DEFAULT_MILES_PER_HEX: DEFAULT_MILES_PER_HEX, DEFAULT_MILES_PER_DAY: DEFAULT_MILES_PER_DAY, MAX_TRAVEL_MILES: MAX_TRAVEL_MILES,
+      clampTravel: clampTravel, tripPath: tripPath, travelDays: travelDays, tripTerrain: tripTerrain, tripSummary: tripSummary,
+      tripStorageKey: tripStorageKey, parseTrip: parseTrip
     };
   }
   if (typeof window === 'undefined') return;
@@ -518,6 +618,11 @@
     var pendingSaves = 0;
     var remoteWaiting = false;
     var hatchDirty = true;
+    var dest = null;          // { col, row }: where this viewer plans to take the party; never sent to the server
+    var tripT = 0;            // Date.now() when the destination was set, for the ease-in
+    var milesPerHex = DEFAULT_MILES_PER_HEX;   // the layer's saved travel figures
+    var milesPerDay = DEFAULT_MILES_PER_DAY;
+    var travelQ = null;       // { miles_per_hex?, miles_per_day? } waiting to be saved
     var gHatch, gParty, partyTok, fieldD = '';
     var shadow = null, smokeSet = false;
     var startedWithCopy = null, initialImage = null, copyVer = null;
@@ -537,6 +642,84 @@
     function fogOn() {
       var D = display();
       return Object.prototype.hasOwnProperty.call(D, 'hex_fog') ? !!D.hex_fog : fogLayerOn;
+    }
+
+    // ---- The trip plan ----
+
+    function tripKey() { return tripStorageKey(ctx.userID, ctx.mapID); }
+
+    function loadDest() {
+      try { dest = parseTrip(window.localStorage.getItem(tripKey())); } catch (e) { dest = null; }
+    }
+
+    function saveDest() {
+      try {
+        if (dest) window.localStorage.setItem(tripKey(), JSON.stringify({ col: dest.col, row: dest.row }));
+        else window.localStorage.removeItem(tripKey());
+      } catch (e) { /* private mode: the plan just lasts until the page closes */ }
+    }
+
+    // travel is the figures the trip uses: the owner's unsaved choice in the
+    // settings sheet while it is open, else what the layer holds.
+    function travel() {
+      var D = display();
+      return {
+        perHex: Object.prototype.hasOwnProperty.call(D, 'hex_miles') ? D.hex_miles : milesPerHex,
+        perDay: Object.prototype.hasOwnProperty.call(D, 'hex_speed') ? D.hex_speed : milesPerDay
+      };
+    }
+
+    // tripFrom is where the party stands as far as this viewer may know: never
+    // a hex the fog keeps from them.
+    function tripFrom() { return partyShown() ? party : null; }
+
+    // tripLine is the planned hex line, or nothing when there is no plan or the
+    // destination no longer lies in the field.
+    function tripLine() {
+      if (!geo || !dest || dest.col >= geo.cols || dest.row >= geo.rows) return [];
+      return tripPath(tripFrom(), dest);
+    }
+
+    function setDest(h) {
+      var same = party && h.col === party.col && h.row === party.row;
+      var next = same ? null : { col: h.col, row: h.row };
+      if ((next && dest && next.col === dest.col && next.row === dest.row) || (!next && !dest)) return;
+      dest = next;
+      tripT = Date.now();
+      saveDest();
+      renderSoon();
+      renderPanel();
+    }
+
+    // clearArrived drops a plan the party has reached.
+    function clearArrived() {
+      if (dest && party && dest.col === party.col && dest.row === party.row) { dest = null; saveDest(); }
+    }
+
+    // renderTrip draws the planned hexes and the dashed line through their
+    // centres into the top group, easing in when the destination is new.
+    function renderTrip() {
+      if (!active || mode !== 'trip') return;
+      var line = tripLine();
+      if (line.length < 2) return;
+      var ease = !reduced() && Date.now() - tripT < TRIP_EASE_MS;
+      var pts = [];
+      line.forEach(function (h, i) {
+        var c = center(geo, h.col, h.row);
+        pts.push(c[0].toFixed(1) + ',' + c[1].toFixed(1));
+        var p = svgEl('path', {
+          d: hexD(c[0], c[1], geo.r), fill: '#f59e0b', 'fill-opacity': '.12', stroke: '#f59e0b',
+          'stroke-width': '2.5', 'vector-effect': 'non-scaling-stroke'
+        });
+        if (ease) { p.setAttribute('class', 'mp-hx-fade'); p.style.animationDelay = (i * TRIP_STAGGER_MS) + 'ms'; }
+        gTop.appendChild(p);
+      });
+      var pl = svgEl('polyline', {
+        points: pts.join(' '), fill: 'none', stroke: '#b45309', 'stroke-width': '2.5', 'stroke-dasharray': '6 4',
+        'stroke-linecap': 'round', 'vector-effect': 'non-scaling-stroke'
+      });
+      if (ease) pl.setAttribute('class', 'mp-hx-fade');
+      gTop.appendChild(pl);
     }
 
     // ---- Overlay ----
@@ -663,6 +846,7 @@
         tx.textContent = c2.name;
         gTop.appendChild(tx);
       });
+      renderTrip();
       if (selected && active) {
         var sp = selected.split(',');
         var sc = center(geo, +sp[0], +sp[1]);
@@ -855,7 +1039,10 @@
       }
       var last = path[path.length - 1];
       party = { col: last.col, row: last.row };
+      clearArrived();
       walk(path);
+      renderSoon();
+      renderPanel();
     }
 
     function moveParty(h) {
@@ -943,6 +1130,14 @@
         pendingSaves++;
         saving = saving.then(function () { return send(body); }).then(settled);
       });
+      // Travel figures name only the field that was typed in, so saving one
+      // can never reset the other.
+      if (travelQ) {
+        var tq = travelQ;
+        travelQ = null;
+        pendingSaves++;
+        saving = saving.then(function () { return sendTravel(tq); }).then(settled);
+      }
       // Reveals and hides go the same way, one request per 500 hexes.
       if (fogQ) {
         var q = fogQ;
@@ -959,7 +1154,7 @@
     // were unsaved is read now, so it cannot overwrite what is on screen.
     function settled() {
       pendingSaves = Math.max(0, pendingSaves - 1);
-      if (pendingSaves === 0 && remoteWaiting && !stroke && !flushTimer && !fogQ && !Object.keys(queue).length) {
+      if (pendingSaves === 0 && remoteWaiting && !stroke && !flushTimer && !fogQ && !travelQ && !Object.keys(queue).length) {
         remoteWaiting = false;
         load();
       }
@@ -1034,6 +1229,10 @@
         var L2 = data.layer || {};
         fogLayerOn = !!L2.fog_enabled;
         party = (L2.party_col != null && L2.party_row != null) ? { col: L2.party_col, row: L2.party_row } : null;
+        clearArrived();
+        milesPerHex = clampTravel(L2.miles_per_hex, DEFAULT_MILES_PER_HEX);
+        milesPerDay = clampTravel(L2.miles_per_day, DEFAULT_MILES_PER_DAY);
+        if (ctx.onHexTravel) ctx.onHexTravel(milesPerHex, milesPerDay);
         if (ctx.onHexFog) ctx.onHexFog(fogLayerOn);
         hatchDirty = true;
         anchorId = (data.layer && data.layer.anchor_drawing_id) || null;
@@ -1119,6 +1318,12 @@
         if (ph) moveParty(ph);
         return;
       }
+      if (mode === 'trip') {
+        // Nothing to plan from until the party is on a hex this viewer knows.
+        var th = tripFrom() ? hexAtMap(layout, e.latlng.lng, mapH - e.latlng.lat) : null;
+        if (th) setDest(th);
+        return;
+      }
       if (mode !== 'look') return;
       var h = hexAtMap(layout, e.latlng.lng, mapH - e.latlng.lat);
       if (!h) return;
@@ -1153,6 +1358,7 @@
       if (canWrite) m.push(['paint', 'Paint']);
       if (canFog) m.push(['fog', 'Fog']);
       if (canParty) m.push(['party', 'Party']);
+      m.push(['trip', 'Plan a trip']);
       return m;
     }
 
@@ -1177,6 +1383,13 @@
         h += '<button type="button" class="mp-chip" id="mp-hx-reset">Cover everything again</button>';
       }
       if (mode === 'party') h += '<p>Click a hex to move the party. The hexes around them are revealed for everyone.</p>';
+      if (mode === 'trip') {
+        h += '<div id="mp-hx-tripout"></div>';
+        if (canFog) {
+          h += '<div class="mp-hx-row">Each hex is <input type="number" class="mp-input" id="mp-hx-mi" min="1" max="' + MAX_TRAVEL_MILES + '" step="1" value="' + travel().perHex + '" aria-label="Miles per hex"> miles</div>' +
+            '<div class="mp-hx-row">The party travels <input type="number" class="mp-input" id="mp-hx-sp" min="1" max="' + MAX_TRAVEL_MILES + '" step="1" value="' + travel().perDay + '" aria-label="Miles per day"> miles a day</div>';
+        }
+      }
       if (mode === 'look') {
         if (selected) h += '<div class="mp-hx-card" id="mp-hx-card"></div>';
         else h += '<p>Click a hex to see ' + (canWrite ? 'or write what’s there.' : 'what the party knows about it.') + '</p>';
@@ -1200,6 +1413,59 @@
       var reset = document.getElementById('mp-hx-reset');
       if (reset) reset.onclick = resetFog;
       if (mode === 'look' && selected) fillCard();
+      if (mode === 'trip') { fillTrip(); bindTravel('mp-hx-mi', 'miles_per_hex'); bindTravel('mp-hx-sp', 'miles_per_day'); }
+    }
+
+    // fillTrip writes the readout. It is its own element so typing a travel
+    // figure can update it without rebuilding the input being typed in.
+    function fillTrip() {
+      var out = document.getElementById('mp-hx-tripout');
+      if (!out) return;
+      if (!tripFrom()) { out.innerHTML = '<p>The party isn’t on the map yet, so there is nowhere to plan from.</p>'; return; }
+      var line = tripLine();
+      if (line.length < 2) { out.innerHTML = '<p>Click where the party wants to go.</p>'; return; }
+      var t = travel();
+      // A viewer the fog hides land from may name only what they have been shown.
+      var sum = tripSummary(line, {
+        milesPerHex: t.perHex, milesPerDay: t.perDay, cells: cells,
+        explored: fogOn() && !seesAll ? exploredSet() : null
+      });
+      out.innerHTML = '<div class="mp-hx-trip"><b>' + esc(sum.head) + '</b>' + esc(sum.about) + '. Passes through ' + esc(sum.through.join(', ')) + '.</div>' +
+        '<p>Only you see this plan.</p>';
+    }
+
+    // bindTravel wires one of the owner's travel inputs: the readout follows
+    // every keystroke, the save waits for a pause, and leaving the box puts
+    // back a valid figure if the text was not one.
+    function bindTravel(id, field) {
+      var el = document.getElementById(id);
+      if (!el) return;
+      el.oninput = function () {
+        var n = parseInt(el.value, 10);
+        if (!(n >= 1)) return;
+        n = clampTravel(n, 1);
+        var D = display();
+        if (field === 'miles_per_hex') { milesPerHex = n; delete D.hex_miles; } else { milesPerDay = n; delete D.hex_speed; }
+        travelQ = travelQ || {};
+        travelQ[field] = n;
+        if (ctx.onHexTravel) ctx.onHexTravel(milesPerHex, milesPerDay);
+        scheduleFlush(TEXT_FLUSH_MS);
+        fillTrip();
+      };
+      el.onchange = function () { el.value = field === 'miles_per_hex' ? travel().perHex : travel().perDay; };
+    }
+
+    function sendTravel(body) {
+      return Chronicle.apiFetch(base + '/layer', { method: 'PUT', body: body }).then(function (res) {
+        if (res.ok) return res.json().then(function (r) { if (r && r.version) { own[r.version] = true; version = Math.max(version, r.version); } });
+        return res.json().catch(function () { return {}; }).then(function (err) {
+          Chronicle.notify(err.message || 'Could not save the travel figures', 'error');
+          return load();
+        });
+      }).catch(function () {
+        Chronicle.notify('Could not save the travel figures', 'error');
+        return load();
+      });
     }
 
     // resetFog covers every hex again, after asking: it undoes all exploring.
@@ -1293,7 +1559,7 @@
       if (ctx.setHint && active) {
         ctx.setHint({
           paint: 'Click or drag to paint terrain', fog: 'Click or drag to reveal or cover hexes',
-          party: 'Click a hex to move the party'
+          party: 'Click a hex to move the party', trip: 'Click where the party wants to go'
         }[mode] || 'Click a hex to see it');
       }
     }
@@ -1431,7 +1697,7 @@
       if (!msg || String(msg.map_id) !== String(ctx.mapID) || !loaded) return;
       if (isStale(loadedVersion, msg.version, own)) return;
       if (msg.party_path && msg.party_path.length) applyParty(msg.party_path, msg.version);
-      if (stroke || flushTimer || fogQ || pendingSaves || Object.keys(queue).length) { remoteWaiting = true; return; }
+      if (stroke || flushTimer || fogQ || travelQ || pendingSaves || Object.keys(queue).length) { remoteWaiting = true; return; }
       load();
     }
 
@@ -1463,7 +1729,7 @@
       onChanged: onChanged,
       // resync reads the layer again, after the live connection was lost and
       // events may have been missed.
-      resync: function () { if (loaded && !stroke && !flushTimer && !fogQ && !pendingSaves) load(); },
+      resync: function () { if (loaded && !stroke && !flushTimer && !fogQ && !travelQ && !pendingSaves) load(); },
       // shadowReady is called once the shadow module is loaded, which may be
       // after this module started: the smoke can then be set up.
       shadowReady: function () { if (layerOn) fogView(); },
@@ -1492,6 +1758,7 @@
       }
     };
     ctx.hexes = handle;
+    loadDest();
     refresh();
     return handle;
   }

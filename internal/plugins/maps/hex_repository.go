@@ -51,6 +51,10 @@ type HexRepository interface {
 	// SetFog turns fog of war on or off, creating the layer row on first use,
 	// bumps the version and returns it. Only the fog column is touched.
 	SetFog(ctx context.Context, mapID string, enabled bool) (uint64, error)
+	// SetTravel changes the miles per hex and per day, creating the layer row
+	// on first use, bumps the version and returns it. A nil figure keeps its
+	// column, so changing one never writes the other.
+	SetTravel(ctx context.Context, mapID string, perHex, perDay *int) (uint64, error)
 	// SetExplored marks hexes explored or unexplored and bumps the version, in
 	// one transaction. Hiding a hex that carries nothing else removes its row so
 	// it stops counting against the map's cell cap.
@@ -314,6 +318,34 @@ func (r *hexRepo) SetFog(ctx context.Context, mapID string, enabled bool) (uint6
 		INSERT INTO map_hex_layers (map_id, fog_enabled, version) VALUES (?, ?, 1)
 		ON DUPLICATE KEY UPDATE fog_enabled = VALUES(fog_enabled), version = version + 1`,
 		mapID, enabled); err != nil {
+		return 0, apperror.NewInternal(err)
+	}
+	v, err := layerVersion(ctx, tx, mapID)
+	if err != nil {
+		return 0, err
+	}
+	if err := tx.Commit(); err != nil {
+		return 0, apperror.NewInternal(err)
+	}
+	return v, nil
+}
+
+func (r *hexRepo) SetTravel(ctx context.Context, mapID string, perHex, perDay *int) (uint64, error) {
+	tx, err := r.db.BeginTx(ctx, nil)
+	if err != nil {
+		return 0, apperror.NewInternal(err)
+	}
+	defer func() { _ = tx.Rollback() }()
+	// A first write creates the row with the column defaults for whichever
+	// figure was not named; later writes keep the stored value for it.
+	if _, err := tx.ExecContext(ctx, `
+		INSERT INTO map_hex_layers (map_id, miles_per_hex, miles_per_day, version)
+		VALUES (?, COALESCE(?, ?), COALESCE(?, ?), 1)
+		ON DUPLICATE KEY UPDATE
+			miles_per_hex = COALESCE(?, miles_per_hex),
+			miles_per_day = COALESCE(?, miles_per_day),
+			version = version + 1`,
+		mapID, perHex, DefaultMilesPerHex, perDay, DefaultMilesPerDay, perHex, perDay); err != nil {
 		return 0, apperror.NewInternal(err)
 	}
 	v, err := layerVersion(ctx, tx, mapID)
