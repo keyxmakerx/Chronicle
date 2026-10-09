@@ -1121,24 +1121,33 @@ func (s *campaignService) UpdateDmGrants(ctx context.Context, campaignID string,
 		return apperror.NewNotFound("campaign not found")
 	}
 
+	settings := campaign.ParseSettings()
+	alreadyGranted := make(map[string]bool, len(settings.DmGrantIDs))
+	for _, id := range settings.DmGrantIDs {
+		alreadyGranted[id] = true
+	}
+
 	// Validate and dedup before storing. Membership gates whether a grant is
 	// HONOURED (middleware.go), but an unvalidated write is still the way to
 	// get an id into the list that should never have been there — a grant
-	// held by a non-member.
+	// held by a non-member. An id already on the list that is no longer a
+	// member (a deleted account) is dropped rather than refused, or one stale
+	// id would block every later change, removals included.
 	seen := make(map[string]bool, len(userIDs))
 	clean := make([]string, 0, len(userIDs))
 	for _, id := range userIDs {
 		if id == "" || seen[id] {
 			continue
 		}
+		seen[id] = true
 		if _, err := s.repo.FindMember(ctx, campaignID, id); err != nil {
+			if alreadyGranted[id] {
+				continue
+			}
 			return apperror.NewBadRequest("cannot grant dm_only visibility to a non-member")
 		}
-		seen[id] = true
 		clean = append(clean, id)
 	}
-
-	settings := campaign.ParseSettings()
 
 	// Diffed against the old list before it's overwritten, so anyone
 	// losing the grant can have their live socket dropped below.

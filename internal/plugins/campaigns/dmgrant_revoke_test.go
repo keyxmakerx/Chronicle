@@ -334,3 +334,62 @@ func TestUpdateDmGrants_MissingCampaignIs404(t *testing.T) {
 		t.Errorf("error = %q, want a not-found", err.Error())
 	}
 }
+
+// TestUpdateDmGrants_StaleID: a grant left behind by a deleted account must
+// not block later changes. The stale id is dropped, whether or not the new
+// list still names it; a non-member that was never granted is still refused.
+func TestUpdateDmGrants_StaleID(t *testing.T) {
+	tests := []struct {
+		name    string
+		write   []string
+		wantErr bool
+		want    []string
+	}{
+		{"removing the live grant, stale id resent", []string{"u-gone"}, false, []string{}},
+		{"stale id resent with a live one", []string{"u-gone", "u-member"}, false, []string{"u-member"}},
+		{"new non-member still refused", []string{"u-outsider"}, true, nil},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			var wrote string
+			repo := &mockCampaignRepo{
+				findByIDFn: func(context.Context, string) (*Campaign, error) {
+					return campaignWithGrants(t, false, "u-gone", "u-member"), nil
+				},
+				findMemberFn: func(_ context.Context, _, userID string) (*CampaignMember, error) {
+					if userID == "u-member" {
+						return &CampaignMember{CampaignID: "camp-1", UserID: userID, Role: RoleScribe}, nil
+					}
+					return nil, apperror.NewNotFound("not a member")
+				},
+				updateSettingsFn: func(_ context.Context, _, settingsJSON string) error {
+					wrote = settingsJSON
+					return nil
+				},
+			}
+			svc := &campaignService{repo: repo}
+			err := svc.UpdateDmGrants(context.Background(), "camp-1", tt.write)
+			if tt.wantErr {
+				if err == nil {
+					t.Fatal("want an error")
+				}
+				return
+			}
+			if err != nil {
+				t.Fatalf("UpdateDmGrants: %v", err)
+			}
+			var got CampaignSettings
+			if err := json.Unmarshal([]byte(wrote), &got); err != nil {
+				t.Fatalf("unmarshal: %v", err)
+			}
+			if len(got.DmGrantIDs) != len(tt.want) {
+				t.Fatalf("dm_grant_ids = %v, want %v", got.DmGrantIDs, tt.want)
+			}
+			for i := range tt.want {
+				if got.DmGrantIDs[i] != tt.want[i] {
+					t.Fatalf("dm_grant_ids = %v, want %v", got.DmGrantIDs, tt.want)
+				}
+			}
+		})
+	}
+}
