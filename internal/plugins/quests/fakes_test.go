@@ -173,6 +173,17 @@ func (f *fakeBoardRepo) ListBoards(_ context.Context, cid string, eid Home) ([]B
 	sort.SliceStable(out, func(i, j int) bool { return out[i].SortOrder < out[j].SortOrder })
 	return out, nil
 }
+func (f *fakeBoardRepo) ListHomes(_ context.Context, cid string) ([]Home, error) {
+	seen := map[Home]bool{}
+	var out []Home
+	for _, b := range f.boards {
+		if b.CampaignID == cid && !seen[b.Home] {
+			seen[b.Home] = true
+			out = append(out, b.Home)
+		}
+	}
+	return out, nil
+}
 func (f *fakeBoardRepo) GetBoard(_ context.Context, cid string, eid Home, bid string) (*Board, error) {
 	for _, b := range f.boards {
 		if b.ID == bid && b.CampaignID == cid && b.Home == eid {

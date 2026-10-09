@@ -3704,6 +3704,9 @@ func (a *App) RegisterRoutes() {
 		&syncStashAPIAdapter{api: stashAPI},
 		"armory",
 	)
+	// Quests for the Foundry module; the quest services attach below, once
+	// the quests plugin is built.
+	questAPI := &syncQuestAPIAdapter{stash: stashSvc, actors: stashAPI}
 
 	// REST API v1: versioned endpoints for external clients (Foundry VTT, etc.).
 	// Authenticates via API keys, not browser sessions.
@@ -3760,7 +3763,7 @@ func (a *App) RegisterRoutes() {
 	syncHistoryHandler.SetFoundryPlayers(foundryPlayerRepo)
 
 	if a.PluginHealth.IsHealthy("syncapi") {
-		syncapi.RegisterAPIRoutes(e, syncAPIHandler, calendarAPIHandler, mediaAPIHandler, mapAPIHandler, noteAPIHandler, tagAPIHandler, syncMappingHandler, syncChangesHandler, stashAPIHandler, syncService, addonService, authService, campaignService, syncapi.WithSyncHistory(syncHistoryHandler))
+		syncapi.RegisterAPIRoutes(e, syncAPIHandler, calendarAPIHandler, mediaAPIHandler, mapAPIHandler, noteAPIHandler, tagAPIHandler, syncMappingHandler, syncChangesHandler, stashAPIHandler, syncService, addonService, authService, campaignService, syncapi.WithSyncHistory(syncHistoryHandler), syncapi.WithQuests(syncapi.NewQuestAPIHandler(questAPI, campaignService, "armory")))
 		syncapi.RegisterSyncHistoryPageRoutes(e, syncHistoryHandler, campaignService, authService)
 		syncapi.RegisterFoundryPageRoutes(e, syncHistoryHandler, campaignService, authService)
 		syncapi.RegisterAdminSyncFlowRoute(adminGroup, syncHistoryHandler)
@@ -5011,14 +5014,12 @@ func (a *App) RegisterRoutes() {
 			quests.NewBoardService(quests.NewBoardRepository(a.DB), questRepo, questEntities, &questTypeAdapter{svc: entityService}, questMaps, &questMemberNamesAdapter{svc: campaignService}, questCal),
 			questEntities, &questAnnouncerAdapter{bus: wsEventBus})
 		questEntityEvts.attach(questSvc)
-		quests.RegisterRoutes(e, quests.NewHandler(
-			questSvc,
-			boardSvc,
-			quests.NewPickerService(questEntities, questMaps, &questCharacterAdapter{
-				dir:   &armoryStashDirectoryAdapter{svc: entityService},
-				names: &questMemberNamesAdapter{svc: campaignService},
-			}),
-		), campaignService, authService)
+		questPicker := quests.NewPickerService(questEntities, questMaps, &questCharacterAdapter{
+			dir:   &armoryStashDirectoryAdapter{svc: entityService},
+			names: &questMemberNamesAdapter{svc: campaignService},
+		})
+		questAPI.attach(questSvc, boardSvc, questPicker)
+		quests.RegisterRoutes(e, quests.NewHandler(questSvc, boardSvc, questPicker), campaignService, authService)
 	} else {
 		slog.Warn("quests plugin degraded — routes not registered")
 	}

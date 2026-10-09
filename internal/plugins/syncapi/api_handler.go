@@ -56,6 +56,7 @@ type APIHandler struct {
 	dmScreen             DMScreenProvider
 	systemState          SystemStateReader
 	history              *SyncHistoryHandler
+	quests               *QuestAPIHandler
 }
 
 // TagGrantLister resolves an entity's tag-derived visibility grants so the

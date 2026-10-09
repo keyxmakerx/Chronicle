@@ -278,6 +278,23 @@ func TypeHome(typeID int) Home { return Home{TypeID: typeID} }
 // IsType reports whether the home is a category.
 func (h Home) IsType() bool { return h.TypeID != 0 }
 
+// PlainPlayer is a member with the player role and no named-player rules:
+// what every player may see. Callers that show one view to a whole table
+// (the Foundry module's player copy) read as this viewer, so a page shown to
+// named players only stays out, the same rule live updates follow.
+func PlainPlayer() Viewer {
+	return Viewer{MemberRole: permissions.RolePlayer, VisibilityRole: permissions.RolePlayer}
+}
+
+// HomeView names one place that has boards. Kind is "category" or "page";
+// ID is the entity type id as a string for a category. Name is the page's
+// title; a category's name comes from the caller's own type list.
+type HomeView struct {
+	Kind string `json:"kind"`
+	ID   string `json:"id"`
+	Name string `json:"name,omitempty"`
+}
+
 // Board is a stored board.
 type Board struct {
 	ID         string

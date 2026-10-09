@@ -712,3 +712,43 @@ func TestBoardsMapsAddonOff(t *testing.T) {
 		t.Fatalf("map pin with addon off: %v", err)
 	}
 }
+
+func TestHomesListsOnlyWhatTheViewerMayOpen(t *testing.T) {
+	e := newBoardEnv()
+	ctx := context.Background()
+	for _, h := range []Home{pageHome, PageHome("page-secret"), TypeHome(catType)} {
+		if _, err := e.svc.CreateBoard(ctx, camp, h, dm, "Board", WhoDM); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if _, err := e.svc.CreateBoard(ctx, other, PageHome("tavern2"), dm, "Board", WhoDM); err != nil {
+		t.Fatal(err)
+	}
+	tests := []struct {
+		name string
+		v    Viewer
+		want string
+	}{
+		{"dm sees every home, categories first", dm, "category:7 page:Hidden Villain page:Tavern"},
+		{"plain player loses the hidden page", PlainPlayer(), "category:7 page:Tavern"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			homes, err := e.svc.Homes(ctx, camp, tt.v)
+			if err != nil {
+				t.Fatal(err)
+			}
+			var got []string
+			for _, h := range homes {
+				if h.Kind == "category" {
+					got = append(got, "category:"+h.ID)
+				} else {
+					got = append(got, "page:"+h.Name)
+				}
+			}
+			if s := strings.Join(got, " "); s != tt.want {
+				t.Errorf("got %q want %q", s, tt.want)
+			}
+		})
+	}
+}

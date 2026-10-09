@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"log/slog"
 	"math"
+	"sort"
+	"strconv"
 	"strings"
 	"unicode"
 	"unicode/utf8"
@@ -27,6 +29,9 @@ const (
 type BoardService interface {
 	// View returns the home's boards as v may see them.
 	View(ctx context.Context, campaignID string, h Home, v Viewer) (*BoardsView, error)
+	// Homes lists the places with boards that v may open: categories first,
+	// then pages by name.
+	Homes(ctx context.Context, campaignID string, v Viewer) ([]HomeView, error)
 
 	CreateBoard(ctx context.Context, campaignID string, h Home, v Viewer, name, who string) (*BoardView, error)
 	PatchBoard(ctx context.Context, campaignID string, h Home, boardID string, v Viewer, p BoardPatch) (*BoardSummary, error)
@@ -122,6 +127,48 @@ func cleanBoardName(s string) (string, error) {
 
 func (s *boardService) summary(b *Board, v Viewer) BoardSummary {
 	return BoardSummary{ID: b.ID, Name: b.Name, Who: b.Who, CanChange: canChange(b, v)}
+}
+
+func (s *boardService) Homes(ctx context.Context, campaignID string, v Viewer) ([]HomeView, error) {
+	homes, err := s.repo.ListHomes(ctx, campaignID)
+	if err != nil {
+		return nil, apperrorInternal(err)
+	}
+	var typeIDs []int
+	var pageIDs []string
+	for _, h := range homes {
+		switch {
+		case h.IsType() && h.EntityID == "":
+			typeIDs = append(typeIDs, h.TypeID)
+		case !h.IsType() && h.EntityID != "":
+			pageIDs = append(pageIDs, h.EntityID)
+		}
+	}
+	sort.Ints(typeIDs)
+	out := make([]HomeView, 0, len(homes))
+	for _, id := range typeIDs {
+		out = append(out, HomeView{Kind: "category", ID: strconv.Itoa(id)})
+	}
+	if len(pageIDs) == 0 {
+		return out, nil
+	}
+	infos, ok, err := s.viewable(ctx, campaignID, v, pageIDs)
+	if err != nil {
+		return nil, err
+	}
+	var pages []HomeView
+	for _, id := range pageIDs {
+		if ok[id] {
+			pages = append(pages, HomeView{Kind: "page", ID: id, Name: infos[id].Name})
+		}
+	}
+	sort.Slice(pages, func(i, j int) bool {
+		if pages[i].Name != pages[j].Name {
+			return strings.ToLower(pages[i].Name) < strings.ToLower(pages[j].Name)
+		}
+		return pages[i].ID < pages[j].ID
+	})
+	return append(out, pages...), nil
 }
 
 func (s *boardService) View(ctx context.Context, campaignID string, h Home, v Viewer) (*BoardsView, error) {
