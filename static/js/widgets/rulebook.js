@@ -723,7 +723,11 @@
 
   // A links block is a row of "turn to" buttons, each opening a chapter.
   Rulebook.prototype.linksHTML = function (b) {
-    var t = this.data.terms, items = arr(b.items).filter(function (it) { return isObj(it) && SLUG_RE.test(str(it.chapter)); });
+    // Once the page list is built, a link to a chapter this view does not
+    // show (a Director previewing Player view) is left out, not left dead.
+    var self = this, t = this.data.terms, items = arr(b.items).filter(function (it) {
+      return isObj(it) && SLUG_RE.test(str(it.chapter)) && (!self.items.length || self.firstItemOf(it.chapter) >= 0);
+    });
     if (!items.length) return '';
     return '<nav class="rb-links" aria-label="' + esc(str(b.title) || 'Turn to') + '">' +
       (str(b.title) ? '<b class="rb-links-hd">' + esc(b.title) + '</b>' : '') +
