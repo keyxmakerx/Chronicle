@@ -43,7 +43,7 @@ claimed.
    applies. Grants are **additive only** — they can widen visibility (e.g.
    reveal a `dm_only` entity to one player via a tag grant) but never narrow
    it. `maps`, `map_markers`, `map_drawings`, `timelines`, `timeline_events`,
-   `timeline_event_links`, `entity_notes` and (dormant, see below)
+   `timeline_event_links`, `entity_notes` and
    `calendar_events` carry their own `visibility` enum plus a
    `visibility_rules` JSON `{allowed_users: [], denied_users: []}` for
    per-object overrides.
@@ -267,8 +267,8 @@ once V5 ships.
 
 | Table | Purpose | Notable columns |
 |---|---|---|
-| `timelines` | A visual timeline (per campaign, optionally tied to a calendar) | `calendar_id` FK→`calendars` SET NULL, cleared for existing rows by the timeline plugin's own CALV5 migration; the UI still offers a calendar picker but `calendars` is empty until V5, so it has nothing to link; `visibility`/`visibility_rules`; `zoom_default` |
-| `timeline_event_links` | Links a calendar event onto a timeline | FK→`calendar_events` CASCADE — table is kept but empty, since `calendar_events` is an empty stub; `display_order`, `visibility_override`, `label`/`color_override` |
+| `timelines` | A visual timeline (per campaign, optionally tied to a calendar) | `calendar_id` FK→`calendars` SET NULL (the create form's calendar picker lists the campaign's calendars; creation checks the calendar is in the same campaign); `visibility`/`visibility_rules`; `zoom_default` |
+| `timeline_event_links` | Links a calendar event onto a timeline | FK→`calendar_events` CASCADE; `display_order`, `visibility_override`, `label`/`color_override` |
 | `timeline_entity_groups` / `timeline_entity_group_members` | Named entity groupings shown on a timeline | plain parent + junction |
 | `timeline_events` | Standalone timeline events (not calendar-linked) | `year`/`month`/`day` (+ `end_*`); `entity_id` FK SET NULL; `visibility`/`visibility_rules`; `is_recurring`+`recurrence_type` |
 | `timeline_event_connections` | Drawn connector lines between two events/links | `source_id`/`target_id` + `source_type`/`target_type` (`event` or `link`, not FK-typed — polymorphic); `style` (solid/dashed/dotted/arrow) |

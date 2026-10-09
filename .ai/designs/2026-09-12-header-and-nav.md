@@ -32,8 +32,8 @@ a mini calendar) wait for the calendar rebuild.
 ## Step 0 — re-baseline (one agent, read-only, before any code)
 For each of D1–D19 and each dispatch: does the file/line it names still
 exist, and does the design still apply? Three drifts are already known:
-- **D-"living sky" background mode:** the sky engine was deleted with the
-  calendar (2026-08-21). **Defer to the skypane standalone project.** Nothing
+- **D-"living sky" background mode:** the sky engine now lives in
+  `internal/widgets/sky` and `static/js/widgets/sky_*.js`. **Defer to the skypane standalone project.** Nothing
   in H1–H3 may depend on it.
 - **Compact-calendar and weather widgets:** the calendar plugin is domain-
   only until V5. **Their registry slots are declared; their bodies wait.**
