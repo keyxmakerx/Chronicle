@@ -188,7 +188,7 @@ templ entityBlock(block TemplateBlock, cc *campaigns.CampaignContext, entity *En
 	// Skip attributes block when the addon is disabled for this campaign.
 	if block.Type == "attributes" && !showAttributes {
 		// Attributes addon disabled — skip this block.
-	} else if blockVisibility(block) == "dm_only" && cc.MemberRole < campaigns.RoleOwner {
+	} else if blockVisibility(block) == "dm_only" && cc.VisibilityRole() < int(campaigns.RoleOwner) {
 		// Hidden from this user.
 	} else if blockMinHeightStyle(block) != "" {
 		<div style={ blockMinHeightStyle(block) }>
