@@ -4990,3 +4990,45 @@ html[data-view-motion="calm"] *:not(.czp *), html[data-view-motion="calm"] *:not
 .ph-save.is-ok .ph-ok { display: inline-block; }
 @keyframes ph-spin { to { transform: rotate(360deg); } }
 @media (prefers-reduced-motion: reduce) { .ph-save.is-loading .ph-spin { animation-duration: 2.4s; } }
+
+/* Header of a page a game-system renderer owns: name, star, claim marker and
+   actions (Edit name and History in view, the rest under the more menu; on a
+   phone every action goes under it). static/js/widgets/page_header.js drives it. */
+.ph-title { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px 12px; margin-bottom: 14px; }
+.ph-title-l { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 10px; min-width: 0; }
+.ph-title h1 { margin: 0; line-height: 1.15; }
+.ph-pill { display: inline-flex; align-items: center; gap: 6px; height: 24px; padding: 0 10px; border-radius: 999px; font-size: 12px; font-weight: 600; white-space: nowrap; background: var(--color-bg-tertiary); color: var(--color-text-secondary); }
+.ph-pill.is-claim { background: rgb(var(--color-accent-rgb) / .12); color: var(--color-accent); }
+.ph-pill.is-yours { background: rgba(16, 185, 129, .14); color: #047857; }
+.dark .ph-pill.is-yours { color: #34d399; }
+.ph-claim { display: inline-flex; align-items: center; gap: 8px; }
+.ph-claim .btn-primary { display: inline-flex; align-items: center; gap: 7px; }
+.ph-claim .btn-primary.is-loading i { animation: ph-spin .7s linear infinite; }
+.ph-acts { display: flex; align-items: center; gap: 4px; position: relative; }
+.ph-more-menu { position: absolute; right: 0; top: calc(100% + 6px); z-index: 45; width: 250px; padding: 6px; border-radius: 12px; border: 1px solid var(--color-border); background: var(--color-card-bg); box-shadow: 0 18px 40px -16px rgba(0, 0, 0, .35); animation: ag-pop var(--dur-standard, 200ms) var(--ease-out, ease-out) both; transform-origin: 90% 0; }
+.ph-more-menu[hidden] { display: none; }
+.ph-more-menu form { margin: 0; }
+.ph-more-menu .ph-item { display: flex; width: 100%; align-items: center; gap: 9px; padding: 8px 9px; border: 0; border-radius: 8px; background: transparent; color: var(--color-text-primary); font: inherit; font-size: 13px; text-align: left; cursor: pointer; }
+.ph-more-menu .ph-item:hover { background: var(--color-bg-tertiary); }
+.ph-more-menu .ph-item i { width: 14px; margin: 0; color: var(--color-text-muted); }
+.ph-more-menu .ph-item.danger, .ph-more-menu .ph-item.danger i { color: #dc2626; }
+.dark .ph-more-menu .ph-item.danger, .dark .ph-more-menu .ph-item.danger i { color: #f87171; }
+.ph-more-menu .ph-only-phone { display: none; }
+.ph-more-menu hr { border: 0; border-top: 1px solid var(--color-border); margin: 4px 2px; }
+.ph-confirm { padding: 8px 9px 6px; }
+.ph-confirm[hidden] { display: none; }
+.ph-confirm p { margin: 0 0 2px; font-size: 13px; font-weight: 600; color: var(--color-text-primary); }
+.ph-confirm small { display: block; font-size: 12px; color: var(--color-text-muted); margin-bottom: 8px; }
+.ph-confirm .ph-row { display: flex; gap: 6px; justify-content: flex-end; }
+.ph-danger-btn { border: 0; border-radius: 8px; padding: 6px 12px; background: #dc2626; color: #fff; font: inherit; font-size: 13px; font-weight: 600; cursor: pointer; }
+.ph-danger-btn:hover { background: #b91c1c; }
+.ph-below { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; margin-top: 16px; }
+.ph-below:empty { display: none; }
+@media (max-width: 1023.98px) { .ph-below { grid-template-columns: minmax(0, 1fr); } }
+@media (min-width: 640px) { .ph-phone-only { display: none; } }
+@media (max-width: 639.98px) {
+  .ph-acts .ph-wide { display: none; }
+  .ph-more-menu .ph-only-phone { display: flex; }
+}
+@media (prefers-reduced-motion: reduce) { .ph-more-menu, .ph-claim .btn-primary.is-loading i { animation: none !important; } }
+.nav-rm .ph-more-menu { animation: none !important; }

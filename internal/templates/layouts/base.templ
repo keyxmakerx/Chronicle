@@ -202,6 +202,9 @@ templ Base(title string) {
 		<!-- Edit name fold on entity pages (Chronicle.PageHeader). -->
 		<script src={ AssetURL("/static/js/widgets/page_name_fold.js") } defer></script>
 
+		<!-- Header of a game-system-rendered page: more menu, Delete confirm, Claim. -->
+		<script src={ AssetURL("/static/js/widgets/page_header.js") } defer></script>
+
 		<!-- Transaction log widget (shop purchase/sale/gift/restock history).
 		     Mount is the `transaction_log` entity block; reads the armory
 		     plugin's /armory/shops/:eid/transactions endpoint. -->

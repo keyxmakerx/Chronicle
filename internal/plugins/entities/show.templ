@@ -60,7 +60,13 @@ templ EntityShowPage(cc *campaigns.CampaignContext, entity *Entity, entityType *
 			     "Claimed by <player>" when owned, the actionable claim banner
 			     when unclaimed + claimable + the addon is enabled, nothing
 			     otherwise. ClaimEntity enforces the same rules server-side. -->
-			@claimBanner(cc, entity, entityType, claimingEnabled, ownerName, csrfToken)
+			if hasEntityShowRenderer(entityType) {
+				// A system-rendered page has no title block, so the header
+				// (name, claim marker, actions) is drawn here instead.
+				@systemPageHeader(cc, entity, entityType, claimingEnabled, ownerName, csrfToken, userID)
+			} else {
+				@claimBanner(cc, entity, entityType, claimingEnabled, ownerName, csrfToken)
+			}
 			<!-- Slug-keyed system-package renderer (CH4). When a system
 			     package has registered a renderer for this entity_type
 			     slug, that renderer owns the page contents in place of
@@ -84,7 +90,7 @@ templ EntityShowPage(cc *campaigns.CampaignContext, entity *Entity, entityType *
 				@comp
 				// It has no layout to place the page pieces in, so they are
 				// drawn here as before they became blocks.
-				@blockSubPages(cc, entity)
+				@systemPageBelow(cc, entity, entityType, csrfToken)
 				@blockPosts(cc, entity, csrfToken)
 				@blockWritingPrompts(cc, entityType)
 				@blockBacklinksMount(cc, entity)
