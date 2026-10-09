@@ -4258,6 +4258,18 @@ html[data-motion="off"] *:not(.czp *), html[data-motion="off"] *:not(.czp *)::be
 }
 
 /* ============================================================ */
+/* AI tool (internal/plugins/ai_workspace): the lookup answer grows open
+   under the paste box. The reduced-motion guards above settle it at once. */
+.ai-grow {
+  transform-origin: top center;
+  animation: ai-grow var(--dur-standard) var(--ease-out) both;
+}
+@keyframes ai-grow {
+  from { opacity: 0; transform: scaleY(0.94); }
+  to   { opacity: 1; transform: none; }
+}
+
+/* ============================================================ */
 /* DM Screen (internal/plugins/dmscreen, static/js/widgets/dm_screen.js).
    A full-window overlay; the panel is three parchment leaves joined by
    hinges, like a paper GM screen. The opening is driven from JS with the

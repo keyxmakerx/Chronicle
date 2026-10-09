@@ -5077,6 +5077,13 @@ func (a *App) RegisterRoutes() {
 		records.WeatherKind{Svc: calendarService},
 	}
 	aiTables := records.TableKind{Svc: aiRollTablesAdapter{rollTablesSvc}}
+	aiHouseRules := records.HouseRuleKind{Book: systemHandler, SystemOf: func(ctx context.Context, campaignID string) string {
+		c, err := campaignService.GetByID(ctx, campaignID)
+		if err != nil {
+			return ""
+		}
+		return c.ParseSettings().SystemID
+	}}
 	if a.PluginHealth.IsHealthy(rolltables.PluginSlug) {
 		aiKinds = append(aiKinds, aiTables)
 	}
@@ -5085,16 +5092,22 @@ func (a *App) RegisterRoutes() {
 		records.CarriedItemKind(entityService, relService),
 		records.PinKind{Svc: aiMapsAdapter{mapsService}, Entities: entityService},
 		records.NoteKind{Svc: noteSvc, Entities: entityService},
-		records.HouseRuleKind{Book: systemHandler, SystemOf: func(ctx context.Context, campaignID string) string {
-			c, err := campaignService.GetByID(ctx, campaignID)
-			if err != nil {
-				return ""
-			}
-			return c.ParseSettings().SystemID
-		}},
+		aiHouseRules,
 		records.GeneratorKind{Cal: calendarService, Tables: aiTables},
 	)
 	aiWorkspaceHandler.SetRecords(records.NewRegistry(aiKinds...))
+
+	// The read-only lookups an AI may ask for. Game-system entries wait on
+	// the character pick-list service (TODO(#1170)).
+	aiLookups := &records.Lookups{
+		Cal: calendarService, Maps: aiMapsAdapter{mapsService}, Pages: entityService,
+		Rels: relService, Notes: noteSvc, Rules: &aiHouseRules,
+		Party: &aiPartyAdapter{screen: dmScreenSvc, nights: sessionsService, members: campaignService},
+	}
+	if a.PluginHealth.IsHealthy(rolltables.PluginSlug) {
+		aiLookups.Tables = aiTables.Svc
+	}
+	aiWorkspaceHandler.SetLookups(aiLookups)
 
 	// Late-bind the entity_notes notifier now that wsEventBus exists.
 	// The service was constructed earlier with a holder.Notify reference;

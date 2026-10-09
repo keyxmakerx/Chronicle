@@ -16,7 +16,8 @@ import (
 // and generator kinds use. Every call is campaign-scoped by the service.
 type CalendarAPI interface {
 	GetDefaultCalendarForViewer(ctx context.Context, campaignID string, v permissions.Viewer) (*calendar.Calendar, error)
-	ListAllEventsForCalendar(ctx context.Context, calendarID, campaignID string, v permissions.Viewer) ([]calendar.Event, error)
+	ListEventsForCalendar(ctx context.Context, campaignID, calendarID string, role int) ([]calendar.Event, error)
+	ListEventsForMonth(ctx context.Context, calendarID, campaignID string, year, month int, v permissions.Viewer) ([]calendar.Event, error)
 	CreateEvent(ctx context.Context, calendarID, campaignID string, input calendar.CreateEventInput) (*calendar.Event, error)
 	UpdateEvent(ctx context.Context, eventID, calendarID, campaignID string, input calendar.UpdateEventInput, v permissions.Viewer) error
 	DeleteEvent(ctx context.Context, eventID, calendarID, campaignID string, v permissions.Viewer) error
@@ -103,7 +104,8 @@ func (EventKind) Doc() string {
 
 // find returns the event this record names; a date narrows same-named events.
 func (k EventKind) find(ctx context.Context, campaignID string, a Actor, cal *calendar.Calendar, r Record) (*calendar.Event, error) {
-	evs, err := k.Svc.ListAllEventsForCalendar(ctx, cal.ID, campaignID, a.Viewer())
+	// Role-filtered, so the operator matches only events they can see.
+	evs, err := k.Svc.ListEventsForCalendar(ctx, campaignID, cal.ID, a.Role)
 	if err != nil {
 		return nil, apperror.NewBadRequest("could not read the calendar's events")
 	}

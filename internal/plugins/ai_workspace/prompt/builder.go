@@ -99,6 +99,12 @@ type Input struct {
 	// RecordDocs describes the non-page kinds (records.Registry.Docs);
 	// "" leaves the section out.
 	RecordDocs string
+	// Lookups describes lookup blocks (records.LookupDoc); "" leaves the
+	// older NEED:-only wording.
+	Lookups string
+	// PageIndex is the page names per type (records.Lookups.PageIndex),
+	// read in the chosen privacy mode; every prompt carries it.
+	PageIndex string
 	// RecordContext lists today's records (records.Registry.ExportAll),
 	// added to the world context when content is included.
 	RecordContext string
@@ -126,6 +132,8 @@ func (s *Service) Build(
 		OperatorInstruction:       strings.TrimSpace(in.OperatorInstruction),
 		RecordDocs:                strings.TrimSpace(in.RecordDocs),
 		Capabilities:              strings.TrimSpace(in.Capabilities),
+		Lookups:                   strings.TrimSpace(in.Lookups),
+		PageIndex:                 strings.TrimSpace(in.PageIndex),
 	}
 
 	if in.IncludeEntityTypes || in.IncludeCategoriesInUse {

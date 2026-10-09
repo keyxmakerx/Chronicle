@@ -61,6 +61,10 @@ type Handler struct {
 	// records writes the non-page blocks (calendar events, tables, pins…).
 	// Optional — nil leaves such blocks reported as not supported.
 	records *records.Registry
+
+	// lookups answers an AI's read-only `kind: lookup` blocks. Optional —
+	// nil answers each one with "can't be looked up on this server".
+	lookups *records.Lookups
 }
 
 // AuditLogger is the narrow contract the plugin needs for audit
@@ -113,6 +117,11 @@ func (h *Handler) SetRecords(r *records.Registry) {
 	h.records = r
 }
 
+// SetLookups wires the read-only lookups.
+func (h *Handler) SetLookups(l *records.Lookups) {
+	h.lookups = l
+}
+
 // actorFor is the operator as the record kinds see them.
 func actorFor(c echo.Context, cc *campaigns.CampaignContext) records.Actor {
 	return records.Actor{UserID: auth.GetUserID(c), Role: cc.VisibilityRole()}
@@ -140,6 +149,60 @@ func splitImport(all []importer.ParsedPage) (pages, recs []importer.ParsedPage) 
 		}
 	}
 	return pages, recs
+}
+
+// splitLookups takes out the `kind: lookup` blocks, which are answered
+// instead of reviewed.
+func splitLookups(all []importer.ParsedPage) (rest, lookups []importer.ParsedPage) {
+	for _, p := range all {
+		if strings.EqualFold(strings.TrimSpace(p.FrontMatter.Kind), records.KindLookup) && p.Status != importer.StatusParseError {
+			lookups = append(lookups, p)
+		} else {
+			rest = append(rest, p)
+		}
+	}
+	return rest, lookups
+}
+
+// answerLookups reads what the AI asked for, as the chosen privacy mode
+// allows (Safe by default), and renders the answer panel. Nothing is
+// written; the other pasted blocks are left out and counted.
+func (h *Handler) answerLookups(c echo.Context, cc *campaigns.CampaignContext, source string, blocks []importer.ParsedPage, skipped int) error {
+	privacy := parsePrivacy(c.FormValue("lookup_privacy"))
+	recs := make([]records.Record, len(blocks))
+	for i, p := range blocks {
+		recs[i] = toRecord(i, p)
+	}
+	l := h.lookups
+	if l == nil {
+		l = &records.Lookups{}
+	}
+	answers := l.Answer(c.Request().Context(), cc.Campaign.ID, exportActor(c, cc, privacy), recs)
+	md := records.Markdown(answers)
+	if h.audit != nil {
+		// Counts only — never what was asked or answered.
+		failed := 0
+		for _, a := range answers {
+			if a.Error != "" {
+				failed++
+			}
+		}
+		h.audit.LogCampaignEvent(c.Request().Context(), cc.Campaign.ID, "campaign.ai_lookup.answered",
+			map[string]any{
+				"lookups":           len(answers),
+				"unanswered":        failed,
+				"privacy":           privacy.String(),
+				"answer_byte_count": len(md),
+			})
+	}
+	return middleware.Render(c, http.StatusOK, LookupAnswer(LookupView{
+		CampaignID: cc.Campaign.ID,
+		Answers:    answers,
+		Markdown:   md,
+		Privacy:    privacy.String(),
+		Source:     source,
+		Skipped:    skipped,
+	}))
 }
 
 // toRecord builds a records.Record from a parsed block.
@@ -220,7 +283,11 @@ func (h *Handler) ParseImport(c echo.Context) error {
 		return apperror.NewBadRequest("Nothing to import — paste markdown into the textarea or drop one or more .md files.")
 	}
 
-	pages, recs := splitImport(importer.Parse(body))
+	parsed, lookups := splitLookups(importer.Parse(body))
+	if len(lookups) > 0 {
+		return h.answerLookups(c, cc, body, lookups, len(parsed))
+	}
+	pages, recs := splitImport(parsed)
 	recRows := h.planRecords(c, cc, recs)
 	cls, err := importer.NewClassifier(h.importLookup, cc.Campaign.ID).
 		ClassifyAll(c.Request().Context(), pages)
@@ -584,6 +651,10 @@ func (h *Handler) GeneratePrompt(c echo.Context) error {
 	}
 	if in.ContentMode == "" {
 		in.ContentMode = "none"
+	}
+	if h.lookups != nil {
+		in.Lookups = records.LookupDoc()
+		in.PageIndex = h.lookups.PageIndex(c.Request().Context(), cc.Campaign.ID, exportActor(c, cc, in.Privacy))
 	}
 	if h.records != nil {
 		in.Capabilities = h.records.Capabilities()

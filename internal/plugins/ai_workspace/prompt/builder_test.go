@@ -361,3 +361,23 @@ func TestBuild_Capabilities(t *testing.T) {
 		}
 	}
 }
+
+// TestBuild_Lookups pins how the AI asks Chronicle for what exists: lookup
+// blocks with the list of what they can ask, and the page index.
+func TestBuild_Lookups(t *testing.T) {
+	svc := NewService(nil, nil, &stubExporter{})
+	got, err := svc.Build(context.Background(), "Ashfall", "owner-1", "camp-1", Input{
+		ContentMode: "none", OperatorInstruction: "x",
+		Capabilities: "- `kind: note`: my own notes only\n",
+		Lookups:      "- `what: players`: each player's character right now.\n",
+		PageIndex:    "- **Characters** (1): Ser Aldric\n",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, s := range []string{"kind: lookup", "`what: players`", "## What already exists", "Ser Aldric", "lookup blocks or `NEED:`"} {
+		if !strings.Contains(got, s) {
+			t.Errorf("prompt lacks %q", s)
+		}
+	}
+}
