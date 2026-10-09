@@ -15,6 +15,7 @@ import (
 	"time"
 
 	"github.com/a-h/templ"
+	"github.com/google/uuid"
 	"github.com/labstack/echo/v4"
 
 	"github.com/keyxmakerx/chronicle/internal/apperror"
@@ -83,8 +84,13 @@ func (a *bestiaryUserFetcherAdapter) GetUserPublicInfo(ctx context.Context, user
 		ID:          user.ID,
 		DisplayName: user.DisplayName,
 	}
+	// avatar_path holds a media id, not a URL. The bestiary pages are signed-in
+	// only, and the media route serves an avatar to any signed-in session
+	// without a signature, so the plain thumbnail path is enough here.
 	if user.AvatarPath != nil {
-		info.AvatarURL = *user.AvatarPath
+		if id, err := uuid.Parse(*user.AvatarPath); err == nil {
+			info.AvatarURL = "/media/" + id.String() + "/thumb/300"
+		}
 	}
 	return info, nil
 }
@@ -3669,6 +3675,9 @@ func (a *App) RegisterRoutes() {
 	// Authenticates via API keys, not browser sessions.
 	syncAPIHandler := syncapi.NewAPIHandler(syncService, entityService, campaignService, relService)
 	syncAPIHandler.SetAddonLister(&addonListerAPIAdapter{svc: addonService})
+	if urlSigner != nil {
+		syncAPIHandler.SetURLSigner(urlSigner)
+	}
 	// Expose tag-derived grants on the permissions endpoint for Foundry
 	// ownership sync, reusing the entities glance adapter.
 	syncAPIHandler.SetTagGrantLister(tagFetcherAdapter)

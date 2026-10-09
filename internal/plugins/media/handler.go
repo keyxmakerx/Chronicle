@@ -400,6 +400,23 @@ func (h *Handler) viewerSeesUnderShadow(c echo.Context, file *MediaFile, isThumb
 	return h.signer.VerifyAPIKeyLink(file.ID, expires, sig)
 }
 
+// avatarLinkAllowed is true for a cookieless request for an avatar thumbnail
+// whose link was signed for a campaign (SignAvatarThumb) that the avatar's
+// uploader is a member of. The signature proves the sync API minted it for
+// that campaign; the membership check keeps a link from outliving the
+// member's place in it. Every other case, including every non-avatar file,
+// is refused by the caller.
+func (h *Handler) avatarLinkAllowed(c echo.Context, file *MediaFile, isThumb bool, thumbSize string) bool {
+	if !isThumb || h.signer == nil || h.memberChecker == nil || file.UploadedBy == "" {
+		return false
+	}
+	campaignID := c.QueryParam(AvatarCampaignParam)
+	if !h.signer.VerifyAvatarThumbLink(file.ID, thumbSize, campaignID, c.QueryParam("expires"), c.QueryParam("sig")) {
+		return false
+	}
+	return h.memberChecker.IsCampaignMember(campaignID, file.UploadedBy)
+}
+
 // checkBaseMediaAccess is signed URL verification and private/public campaign
 // access control; checkMediaAccess adds the map picture rule on top.
 func (h *Handler) checkBaseMediaAccess(c echo.Context, file *MediaFile, isThumb bool, thumbSize string) error {
@@ -416,8 +433,10 @@ func (h *Handler) checkBaseMediaAccess(c echo.Context, file *MediaFile, isThumb 
 		switch file.UsageType {
 		case UsageAvatar:
 			// A profile picture is visible to any signed-in user, but not
-			// to an anonymous visitor.
-			if auth.GetUserID(c) == "" {
+			// to an anonymous visitor, except through a thumbnail link the
+			// sync API minted for a campaign its owner belongs to (the
+			// Foundry module cannot send a session cookie).
+			if auth.GetUserID(c) == "" && !h.avatarLinkAllowed(c, file, isThumb, thumbSize) {
 				return apperror.NewNotFound("media file not found")
 			}
 			return nil
