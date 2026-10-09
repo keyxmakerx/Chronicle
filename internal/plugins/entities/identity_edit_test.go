@@ -28,6 +28,11 @@ func (s *identityStubSvc) GetByID(_ context.Context, _ string) (*Entity, error) 
 	return &e, nil
 }
 
+// The type marks "background" GM-only, so the allowlist alone is not enough.
+func (s *identityStubSvc) GetEntityTypeByID(_ context.Context, _ int) (*EntityType, error) {
+	return &EntityType{Fields: []FieldDefinition{{Key: "ancestry"}, {Key: "background", GMOnly: true}}}, nil
+}
+
 func (s *identityStubSvc) MergeFields(_ context.Context, _ string, p map[string]any) error {
 	s.merged = p
 	s.writeCount++
@@ -88,7 +93,12 @@ func TestUpdateFieldsAPI_ClaimedOwnerIdentityOnly(t *testing.T) {
 	}{
 		{"owner allowed for allowlisted key", campaigns.RolePlayer, owner, "c1", `{"fields_patch":{"ancestry":"Dwarf"}}`, 200, true},
 		{"owner allowed for every allowlisted key at once", campaigns.RolePlayer, owner, "c1",
-			`{"fields_patch":{"ancestry":"a","culture":"b","career":"c","kit":"d","race":"e","species":"f","heritage":"g","background":"h"}}`, 200, true},
+			`{"fields_patch":{"ancestry":"a","culture":"b","career":"c","kit":"d","race":"e","species":"f","heritage":"g"}}`, 200, true},
+		{"owner denied an allowlisted key the type marks GM-only", campaigns.RolePlayer, owner, "c1", `{"fields_patch":{"background":"x"}}`, 403, false},
+		{"owner denied a non-text value", campaigns.RolePlayer, owner, "c1", `{"fields_patch":{"ancestry":{"a":1}}}`, 400, false},
+		{"owner denied a number", campaigns.RolePlayer, owner, "c1", `{"fields_patch":{"kit":5}}`, 400, false},
+		{"owner denied an overlong value", campaigns.RolePlayer, owner, "c1", `{"fields_patch":{"kit":"` + strings.Repeat("x", 201) + `"}}`, 400, false},
+		{"scribe may set a GM-only key", campaigns.RoleScribe, "user-scribe", "c1", `{"fields_patch":{"background":"x"}}`, 200, true},
 		{"owner may clear an allowlisted key", campaigns.RolePlayer, owner, "c1", `{"fields_patch":{"kit":null}}`, 200, true},
 		{"owner denied a non-allowlisted key", campaigns.RolePlayer, owner, "c1", `{"fields_patch":{"might":5}}`, 403, false},
 		{"owner denied when one key is outside the list", campaigns.RolePlayer, owner, "c1", `{"fields_patch":{"ancestry":"Elf","stamina":99}}`, 403, false},

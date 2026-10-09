@@ -3,6 +3,7 @@ package entities
 import (
 	"encoding/json"
 	"sort"
+	"unicode/utf8"
 
 	"github.com/keyxmakerx/chronicle/internal/apperror"
 	"github.com/keyxmakerx/chronicle/internal/plugins/campaigns"
@@ -12,6 +13,10 @@ import (
 // a page the fields and metadata routes otherwise reserve for Scribes: their
 // own claimed character's identity. Everything outside this file still needs
 // Scribe, so widening the door means editing the constants below, nowhere else.
+
+// maxOwnerIdentityValue bounds an identity value a player writes: a name such
+// as "Dragon Knight", never a document.
+const maxOwnerIdentityValue = 200
 
 // ownerIdentityFieldKeys are the only field keys a claimed owner may change.
 // They describe who the character is (ancestry, upbringing, calling), never
@@ -56,8 +61,10 @@ func CanEditIdentity(role campaigns.Role, entity *Entity, userID string) bool {
 // untouched. A claimed owner may send only fields_patch whose every key is in
 // ownerIdentityFieldKeys; fields_data replaces the whole map, so it is never
 // allowed to a Player, and one disallowed key rejects the whole request rather
-// than being silently dropped.
-func authorizeFieldsWrite(role campaigns.Role, entity *Entity, userID, campaignID string, hasFieldsData bool, patch map[string]any) error {
+// than being silently dropped. A key the type marks GM-only is refused even if
+// allowlisted, since the owner may not see it, and each value must be a short
+// string or null so the narrow path cannot store anything else.
+func authorizeFieldsWrite(role campaigns.Role, entity *Entity, userID, campaignID string, hasFieldsData bool, patch map[string]any, typeFields []FieldDefinition) error {
 	if role >= campaigns.RoleScribe {
 		return nil
 	}
@@ -67,9 +74,24 @@ func authorizeFieldsWrite(role campaigns.Role, entity *Entity, userID, campaignI
 	if hasFieldsData || len(patch) == 0 {
 		return apperror.NewForbidden("you can only change your character's identity fields")
 	}
-	for k := range patch {
-		if !ownerIdentityFieldKeys[k] {
+	gmOnly := map[string]bool{}
+	for i := range typeFields {
+		if typeFields[i].GMOnly {
+			gmOnly[typeFields[i].Key] = true
+		}
+	}
+	for k, v := range patch {
+		if !ownerIdentityFieldKeys[k] || gmOnly[k] {
 			return apperror.NewForbidden("you can only change your character's identity fields")
+		}
+		switch val := v.(type) {
+		case nil:
+		case string:
+			if utf8.RuneCountInString(val) > maxOwnerIdentityValue {
+				return apperror.NewBadRequest("that value is too long")
+			}
+		default:
+			return apperror.NewBadRequest("identity fields take text")
 		}
 	}
 	return nil

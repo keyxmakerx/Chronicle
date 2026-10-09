@@ -2033,8 +2033,16 @@ func (h *Handler) UpdateFieldsAPI(c echo.Context) error {
 
 	// The route admits Players so a claimed owner can reach the identity
 	// allowlist; every other Player is refused here, before any write.
+	var typeFields []FieldDefinition
+	if cc.MemberRole < campaigns.RoleScribe {
+		et, err := h.service.GetEntityTypeByID(c.Request().Context(), entity.EntityTypeID)
+		if err != nil {
+			return err
+		}
+		typeFields = et.Fields
+	}
 	if err := authorizeFieldsWrite(cc.MemberRole, entity, auth.GetUserID(c), cc.Campaign.ID,
-		body.FieldsPatch == nil, fieldsPatch); err != nil {
+		body.FieldsPatch == nil, fieldsPatch, typeFields); err != nil {
 		return err
 	}
 
