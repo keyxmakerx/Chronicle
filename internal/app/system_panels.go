@@ -9,18 +9,19 @@ import (
 	"github.com/keyxmakerx/chronicle/internal/systems"
 )
 
-// entityTypeLister is the one entities capability the panel resolver needs.
-type entityTypeLister interface {
-	GetEntityTypes(ctx context.Context, campaignID string) ([]entities.EntityType, error)
+// npcTypeLister is the one capability the panel resolver needs: the page
+// types the owner listed as NPCs.
+type npcTypeLister interface {
+	NPCTypeIDs(ctx context.Context, campaignID string) ([]int, error)
 }
 
 // newSystemPanelResolver builds the resolver the entity show page consults: it
 // picks the campaign's enabled system, keeps the manifest panels whose audience
 // matches the page, and applies the NPC-family rule shared with the NPC gallery
-// (npcTypeIDs). A page a player has claimed is their character, never an NPC,
+// (the owner's NPC page types). A page a player has claimed is their character, never an NPC,
 // even when its type also holds NPCs. The entities plugin only sees the
 // finished list, so it never learns about systems or manifests.
-func newSystemPanelResolver(sys enabledSystemResolver, types entityTypeLister) entities.SystemPanelResolver {
+func newSystemPanelResolver(sys enabledSystemResolver, types npcTypeLister) entities.SystemPanelResolver {
 	return func(ctx context.Context, campaignID string, et *entities.EntityType, claimed bool) []entities.SystemPanel {
 		if et == nil {
 			return nil
@@ -43,14 +44,14 @@ func newSystemPanelResolver(sys enabledSystemResolver, types entityTypeLister) e
 			}
 			if !npcChecked {
 				npcChecked = true
-				all, err := types.GetEntityTypes(ctx, campaignID)
+				all, err := types.NPCTypeIDs(ctx, campaignID)
 				if err != nil {
 					// A page view must not fail over an optional panel.
 					slog.Warn("system panels: entity types unavailable",
 						slog.String("campaign_id", campaignID), slog.Any("error", err))
 					return nil
 				}
-				npcPage = slices.Contains(npcTypeIDs(all), et.ID)
+				npcPage = slices.Contains(all, et.ID)
 			}
 			if npcPage {
 				panels = append(panels, entities.SystemPanel{Widget: p.Widget, SystemID: manifest.ID})

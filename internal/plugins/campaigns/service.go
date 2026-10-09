@@ -143,6 +143,14 @@ type CampaignService interface {
 	SetContentTemplateSeeder(seeder ContentTemplateSeeder)
 	SetWorldbuildingPromptSeeder(seeder WorldbuildingPromptSeeder)
 	SetLayoutPresetSeeder(seeder LayoutPresetSeeder)
+
+	// SetCharacterListSeeder sets what records a new campaign's character and
+	// NPC page types. Late-bound and nil-safe.
+	SetCharacterListSeeder(seeder CharacterListSeeder)
+
+	// UpdateCharacterLists stores the page types the campaign lists as
+	// characters and as NPCs. Callers validate the IDs; this only persists.
+	UpdateCharacterLists(ctx context.Context, campaignID string, characterTypeIDs, npcTypeIDs []int) error
 	SetMediaCleaner(cleaner MediaCleaner)
 	SetHookDispatcher(dispatcher CampaignHookDispatcher)
 
@@ -216,6 +224,7 @@ type campaignService struct {
 	templateSeeder   ContentTemplateSeeder  // Seeds default content templates on campaign creation. May be nil.
 	promptSeeder     WorldbuildingPromptSeeder // Seeds default worldbuilding prompts on campaign creation. May be nil.
 	layoutSeeder     LayoutPresetSeeder     // Seeds default layout presets on campaign creation. May be nil.
+	characterSeeder  CharacterListSeeder    // Records the character/NPC page types on campaign creation. May be nil.
 	mediaCleaner     MediaCleaner           // Cleans up media files on campaign delete. May be nil.
 	hookDispatcher   CampaignHookDispatcher // Dispatches WASM lifecycle events. May be nil.
 	connRevoker      ConnectionRevoker      // Drops live sockets when access is lowered. May be nil until wiring reaches it.
@@ -261,6 +270,38 @@ func (s *campaignService) SetWorldbuildingPromptSeeder(seeder WorldbuildingPromp
 // Called after all plugins are wired to avoid initialization order issues.
 func (s *campaignService) SetLayoutPresetSeeder(seeder LayoutPresetSeeder) {
 	s.layoutSeeder = seeder
+}
+
+// SetCharacterListSeeder sets the seeder for the character and NPC page types.
+func (s *campaignService) SetCharacterListSeeder(seeder CharacterListSeeder) {
+	s.characterSeeder = seeder
+}
+
+// UpdateCharacterLists replaces both lists in the settings JSON, leaving every
+// other setting as it was. A nil slice is stored as an empty list so the
+// campaign counts as having chosen.
+func (s *campaignService) UpdateCharacterLists(ctx context.Context, campaignID string, characterTypeIDs, npcTypeIDs []int) error {
+	campaign, err := s.repo.FindByID(ctx, campaignID)
+	if err != nil {
+		return err
+	}
+	if campaign == nil {
+		return apperror.NewNotFound("campaign not found")
+	}
+	if characterTypeIDs == nil {
+		characterTypeIDs = []int{}
+	}
+	if npcTypeIDs == nil {
+		npcTypeIDs = []int{}
+	}
+	settings := campaign.ParseSettings()
+	settings.CharacterTypeIDs = &characterTypeIDs
+	settings.NPCTypeIDs = &npcTypeIDs
+	settingsJSON, err := json.Marshal(settings)
+	if err != nil {
+		return apperror.NewInternal(fmt.Errorf("marshaling settings: %w", err))
+	}
+	return s.repo.UpdateSettings(ctx, campaignID, string(settingsJSON))
 }
 
 // SetMediaCleaner sets the media cleaner for campaign deletion cleanup.
@@ -453,6 +494,17 @@ func (s *campaignService) Create(ctx context.Context, userID string, input Creat
 	if s.layoutSeeder != nil {
 		if err := s.layoutSeeder.SeedDefaults(ctx, campaign.ID); err != nil {
 			slog.Warn("failed to seed default layout presets",
+				slog.String("campaign_id", campaign.ID),
+				slog.Any("error", err),
+			)
+		}
+	}
+
+	// Record which page types the new campaign lists as characters and NPCs,
+	// now that its entity types exist.
+	if s.characterSeeder != nil {
+		if err := s.characterSeeder.Seed(ctx, campaign.ID); err != nil {
+			slog.Warn("failed to seed character lists",
 				slog.String("campaign_id", campaign.ID),
 				slog.Any("error", err),
 			)

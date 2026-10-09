@@ -190,15 +190,16 @@ func (a *dmPartyAdapter) Heroes(ctx context.Context, campaignID string, v dmscre
 // dmHiddenAdapter lists hidden NPCs and creatures and reveals them.
 type dmHiddenAdapter struct {
 	entities entities.EntityService
+	lists    entities.CharacterListReader
 }
 
 func (a *dmHiddenAdapter) HiddenCharacters(ctx context.Context, campaignID string, v dmscreen.Viewer, limit int) ([]dmscreen.Hidden, error) {
-	types, err := a.entities.GetEntityTypes(ctx, campaignID)
+	npcTypes, err := a.lists.NPCTypeIDs(ctx, campaignID)
 	if err != nil {
 		return nil, err
 	}
 	var hidden []entities.Entity
-	for _, typeID := range npcTypeIDs(types) {
+	for _, typeID := range npcTypes {
 		list, _, err := a.entities.List(ctx, campaignID, typeID, v.Role, v.UserID, entities.ListOptions{Page: 1, PerPage: 50, Sort: "updated"})
 		if err != nil {
 			return nil, err
@@ -231,11 +232,11 @@ func (a *dmHiddenAdapter) Reveal(ctx context.Context, entityID, campaignID strin
 	if e.CampaignID != campaignID {
 		return "", apperror.NewNotFound("entity not found")
 	}
-	types, err := a.entities.GetEntityTypes(ctx, campaignID)
+	npcTypes, err := a.lists.NPCTypeIDs(ctx, campaignID)
 	if err != nil {
 		return "", err
 	}
-	if !slices.Contains(npcTypeIDs(types), e.EntityTypeID) {
+	if !slices.Contains(npcTypes, e.EntityTypeID) {
 		return "", apperror.NewNotFound("entity not found")
 	}
 	if !e.IsPrivate {

@@ -113,6 +113,7 @@ GET	/:cat/:item	internal/systems/routes.go
 GET	/:cat/:item/tooltip	internal/systems/routes.go
 GET	/:extID	internal/extensions/routes.go
 GET	/:extID/preview	internal/extensions/routes.go
+GET	/:fieldKey	internal/systems/character_choices_handler.go
 GET	/:id/moderation-log	internal/plugins/bestiary/routes.go
 GET	/:id/usage	internal/plugins/packages/routes.go
 GET	/:id/versions	internal/plugins/packages/routes.go
@@ -588,6 +589,7 @@ POST	/campaigns/import	internal/plugins/campaigns/routes.go
 POST	/cancel-transfer	internal/plugins/campaigns/routes.go
 POST	/category-boards/:tid/boards	internal/plugins/quests/routes.go
 POST	/category-boards/:tid/boards/:bid/items	internal/plugins/quests/routes.go
+POST	/characters/lists	internal/plugins/entities/routes.go
 POST	/content-templates	internal/plugins/entities/content_template_routes.go
 POST	/database/migrations/apply	internal/plugins/admin/routes.go
 POST	/diagnostics/workspace/parse	internal/plugins/admin/routes.go

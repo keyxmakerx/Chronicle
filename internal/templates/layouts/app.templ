@@ -619,9 +619,12 @@ func safeExternalURL(url string) templ.SafeURL {
 }
 
 // Topbar renders the top navigation bar with campaign selector, customizable
-// content area, search, notes, and user menu.
+// content area, search, notes, and user menu. It sits at z-20 so its menus
+// paint over page content that makes its own stacking context (the
+// call-to-action strip keeps a transform), while staying under the mobile
+// sidebar (z-30/z-40).
 templ Topbar() {
-	<header id="app-topbar" class={ "h-14 bg-surface border-b border-edge flex items-center px-3 md:px-5 shrink-0 gap-2 relative isolate", templ.KV("cz-hdr-light", topbarWantsLightWords(ctx)) }>
+	<header id="app-topbar" class={ "h-14 bg-surface border-b border-edge flex items-center px-3 md:px-5 shrink-0 gap-2 relative isolate z-20", templ.KV("cz-hdr-light", topbarWantsLightWords(ctx)) }>
 		// #topbar-bg is always rendered, even empty, so a save on the Customize
 		// page can swap in the new background without a reload: the header
 		// sits outside #main-content and boosted navigation never redraws it.
@@ -890,7 +893,7 @@ templ Topbar() {
 					<div
 						data-notif-panel
 						hidden
-						class="absolute right-0 top-full mt-1 w-80 max-h-[70vh] overflow-y-auto bg-surface rounded-lg shadow-lg border border-edge z-50"
+						class="fixed left-3 right-3 top-14 sm:absolute sm:left-auto sm:right-0 sm:top-full sm:w-80 mt-1 max-h-[70vh] overflow-y-auto bg-surface rounded-lg shadow-lg border border-edge z-50"
 					>
 						<div class="flex items-center justify-between px-3 py-2 border-b border-edge">
 							<span class="text-sm font-semibold text-fg">Notifications</span>
@@ -916,27 +919,31 @@ templ Topbar() {
 				</div>
 			}
 			if IsAuthenticated(ctx) {
-				<!-- User dropdown (avatar + account/logout) -->
-				<div x-data="{ open: false }" class="relative">
+				<!-- User dropdown (picture + account/logout). The click-outside sits on the
+				     wrapper, not the button, so a click inside the picture box keeps the menu open. -->
+				<div
+					x-data="{ open: false }"
+					@click.outside="open = false"
+					@keydown.escape.window="open = false"
+					x-effect="if (!open && window.Chronicle && Chronicle.PictureBox) Chronicle.PictureBox.shut()"
+					class="relative"
+				>
 					<button
+						type="button"
+						id="user-menu-btn"
 						@click="open = !open"
-						@click.outside="open = false"
+						aria-haspopup="true"
+						x-bind:aria-expanded="open"
+						aria-label="Your account menu"
 						class="flex items-center gap-1.5 px-1.5 py-1 rounded-lg hover:bg-surface-alt transition-colors"
 					>
-						<div class="w-7 h-7 rounded-full bg-accent-fill flex items-center justify-center overflow-hidden">
-							if avatarPath := GetUserAvatarPath(ctx); avatarPath != "" {
-								<img src={ MediaThumbURL(ctx, avatarPath, "300") } class="w-full h-full object-cover" alt=""/>
-							} else {
-								<span class="text-[10px] font-semibold text-on-accent">
-									{ userInitials(ctx) }
-								</span>
-							}
-						</div>
+						@UserAvatar("w-7 h-7 text-[10px]", "pk-top-av")
 						<svg class="w-3 h-3 text-fg-muted hidden sm:block" fill="none" stroke="currentColor" viewBox="0 0 24 24">
 							<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path>
 						</svg>
 					</button>
 					<div
+						id="user-menu-panel"
 						x-show="open"
 						x-cloak
 						x-transition:enter="transition ease-out duration-100"
@@ -945,12 +952,9 @@ templ Topbar() {
 						x-transition:leave="transition ease-in duration-75"
 						x-transition:leave-start="opacity-100 scale-100"
 						x-transition:leave-end="opacity-0 scale-95"
-						class="absolute right-0 top-full mt-1 w-48 bg-surface rounded-lg shadow-lg border border-edge z-50 py-1"
+						class="absolute right-0 top-full mt-1 w-72 max-w-[calc(100vw-1rem)] bg-surface rounded-lg shadow-lg border border-edge z-50 py-1"
 					>
-						<div class="px-3 py-2 border-b border-edge">
-							<div class="text-sm font-medium text-fg truncate">{ GetUserName(ctx) }</div>
-							<div class="text-xs text-fg-muted truncate">{ GetUserEmail(ctx) }</div>
-						</div>
+						@UserPictureBox()
 						<a href="/account" class="dropdown-item" @click="open = false">
 							<i class="fa-solid fa-gear text-xs w-4"></i> Account Settings
 						</a>
@@ -1356,15 +1360,7 @@ func topbarStyleIsImage(ctx context.Context) bool {
 // userInitials returns the first two initials of the user's display name
 // for the avatar placeholder.
 func userInitials(ctx context.Context) string {
-	name := GetUserName(ctx)
-	if name == "" {
-		return "?"
-	}
-	parts := strings.Fields(name)
-	if len(parts) == 1 {
-		return strings.ToUpper(name[:1])
-	}
-	return strings.ToUpper(string(parts[0][0]) + string(parts[len(parts)-1][0]))
+	return Initials(GetUserName(ctx))
 }
 
 // NotesWidget renders the mount point for the floating notes panel.

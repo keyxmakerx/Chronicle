@@ -108,9 +108,7 @@ func TestResolveNavState_CurrentRow(t *testing.T) {
 		{"a hint for a category without a row falls back to the path", navStateCase{role: 1, path: "/campaigns/c1/entities/42",
 			hint: &NavHint{TypeID: 99, PageName: "Lost"}}, "all", ""},
 		{"a link never takes the ring", navStateCase{role: 1, path: "/campaigns/c1/maps/tunnel"}, "app:maps", ""},
-		{"a player's own characters", navStateCase{role: 1, path: "/campaigns/c1/me"}, "me", ""},
-		{"an owner has no My Characters row", navStateCase{role: 3, path: "/campaigns/c1/me"}, "", ""},
-		{"an owner viewing as a player does", navStateCase{role: 3, player: true, path: "/campaigns/c1/me"}, "me", ""},
+		{"the old My Characters page has no row", navStateCase{role: 1, path: "/campaigns/c1/me"}, "", ""},
 		{"the owner's Manage pages", navStateCase{role: 3, path: "/campaigns/c1/settings/general"}, "manage:settings", ""},
 		{"a player has none of the owner's Manage rows", navStateCase{role: 1, path: "/campaigns/c1/settings"}, "", ""},
 		{"the owner's People page", navStateCase{role: 3, path: "/campaigns/c1/members"}, "manage:members", ""},
@@ -284,8 +282,8 @@ func TestCampaignNavList_ManageAndEditingAreTheOwners(t *testing.T) {
 	if strings.Contains(visitor, `data-nav-section="manage"`) {
 		t.Errorf("a visitor who is not a member gets no Manage")
 	}
-	if !strings.Contains(player, `data-nav-key="me"`) {
-		t.Errorf("a player's sidebar is missing My Characters")
+	if strings.Contains(player, `data-nav-key="me"`) {
+		t.Errorf("a player's sidebar must not have a My Characters row; the Characters page holds Yours")
 	}
 
 	ownerCtx := SetNavEdit(navStateCase{role: 3, path: "/campaigns/c1"}.ctx(), &NavEditView{})
@@ -296,7 +294,7 @@ func TestCampaignNavList_ManageAndEditingAreTheOwners(t *testing.T) {
 		}
 	}
 	if strings.Contains(owner, `data-nav-key="me"`) {
-		t.Errorf("the owner's sidebar must not have My Characters")
+		t.Errorf("the owner's sidebar must not have a My Characters row")
 	}
 
 	var brand bytes.Buffer

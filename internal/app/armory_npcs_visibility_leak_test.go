@@ -129,7 +129,7 @@ func TestNPCGallery_CustomVisibilityLeak(t *testing.T) {
 	entityService := fx.entityService()
 	npcRepo := npcs.NewNPCRepository(db)
 	visFilter := &entityVisibilityFilterAdapter{svc: entityService}
-	npcSvc := npcs.NewNPCService(npcRepo, &npcEntityTypeFinderAdapter{svc: entityService}, visFilter)
+	npcSvc := npcs.NewNPCService(npcRepo, &npcEntityTypeFinderAdapter{lists: fixedTypeLists{npc: []int{charTypeID}}}, visFilter)
 
 	// Only Owner bypasses a custom-visibility entity's permissions; a Scribe
 	// needs a grant like anyone else, as entities.TestVisibilityFilter pins.
