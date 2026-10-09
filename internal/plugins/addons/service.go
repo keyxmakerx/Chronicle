@@ -248,7 +248,7 @@ type addonDef struct {
 var builtinAddons = []addonDef{
 	// Plugins (feature apps).
 	{Slug: "calendar", Name: "Calendar", Description: "Custom fantasy calendar with configurable months, weekdays, moons, seasons, and events. Link events to entities for timeline tracking.", Version: "0.1.0", Category: CategoryPlugin, Status: StatusActive, Icon: "fa-calendar-days", Author: "Chronicle"},
-	{Slug: "maps", Name: "Interactive Maps", Description: "Leaflet.js map viewer with entity pins and layer support", Version: "0.1.0", Category: CategoryPlugin, Status: StatusActive, Icon: "fa-map", Author: "Chronicle"},
+	{Slug: "maps", Name: "Interactive Maps", Description: "Maps of your world with pins that link to pages, and layers you can show or hide.", Version: "0.1.0", Category: CategoryPlugin, Status: StatusActive, Icon: "fa-map", Author: "Chronicle"},
 	{Slug: "media-gallery", Name: "Media Gallery", Description: "Campaign media management — browse and organize images.", Version: "0.1.0", Category: CategoryPlugin, Status: StatusActive, Icon: "fa-images", Author: "Chronicle"},
 	{Slug: "timeline", Name: "Timeline", Description: "Interactive visual timelines with zoom levels, entity grouping, and calendar integration.", Version: "0.1.0", Category: CategoryPlugin, Status: StatusActive, Icon: "fa-timeline", Author: "Chronicle"},
 	{Slug: "sessions", Name: "Sessions", Description: "Shows an upcoming-sessions dashboard widget with RSVP. Session scheduling and pages live under the Calendar addon.", Version: "0.1.0", Category: CategoryPlugin, Status: StatusActive, Icon: "fa-calendar-check", Author: "Chronicle"},
@@ -260,7 +260,9 @@ var builtinAddons = []addonDef{
 	{Slug: "sync-api", Name: "Sync API", Description: "Secure REST API for external tool integration (Foundry VTT, Roll20, etc.)", Version: "0.1.0", Category: CategoryIntegration, Status: StatusActive, Icon: "fa-arrows-rotate", Author: "Chronicle"},
 
 	// Widgets.
-	{Slug: "notes", Name: "Notes", Description: "Floating notebook panel for personal and shared campaign notes. Includes checklists, color coding, version history, and edit locking.", Version: "0.1.0", Category: CategoryWidget, Status: StatusActive, Icon: "fa-book", Author: "Chronicle"},
+	// The slug stays "notes" so campaigns that had it on keep their Journal.
+	{Slug: "notes", Name: "Journal", Description: "A Journal in the sidebar for personal and shared campaign notes, with checklists, colours, version history and edit locking.", Version: "0.1.0", Category: CategoryWidget, Status: StatusActive, Icon: "fa-book-open", Author: "Chronicle"},
+	{Slug: JotNotesAddonSlug, Name: "Jot notes", Description: "A tab at the bottom right of every page that opens quick notes about that page.", Version: "0.1.0", Category: CategoryWidget, Status: StatusActive, Icon: "fa-note-sticky", Author: "Chronicle"},
 	{Slug: "attributes", Name: "Attributes", Description: "Custom attribute fields on entity pages (e.g. race, alignment, HP). When disabled, attribute panels are hidden.", Version: "0.1.0", Category: CategoryWidget, Status: StatusActive, Icon: "fa-sliders", Author: "Chronicle"},
 
 	{Slug: "player-notes", Name: "Player Notes", Description: "Per-user notes on entity pages with private / DM-only / shared / custom audiences. Real-time updates over WebSocket.", Version: "0.1.0", Category: CategoryWidget, Status: StatusActive, Icon: "fa-sticky-note", Author: "Chronicle"},
@@ -269,6 +271,10 @@ var builtinAddons = []addonDef{
 	{Slug: "family-tree", Name: "Family Tree", Description: "Visual family/org tree diagram from entity relations", Version: "0.1.0", Category: CategoryWidget, Status: StatusPlanned, Icon: "fa-sitemap", Author: "Chronicle"},
 	{Slug: "dice-roller", Name: "Dice Roller", Description: "In-app dice rolling with formula support and history", Version: "0.1.0", Category: CategoryWidget, Status: StatusPlanned, Icon: "fa-dice-d20", Author: "Chronicle"},
 }
+
+// JotNotesAddonSlug is the switch for the floating Jot notes tab, separate
+// from the Journal ("notes") so each switch turns on one thing you see.
+const JotNotesAddonSlug = "jot-notes"
 
 // installedAddons is derived from builtinAddons for quick lookup.
 var installedAddons map[string]bool

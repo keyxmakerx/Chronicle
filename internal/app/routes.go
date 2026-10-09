@@ -3815,7 +3815,7 @@ func (a *App) RegisterRoutes() {
 		return addonService.IsEnabledForCampaign(ctx, campaignID, syncapi.SyncAPIAddonSlug)
 	}
 	noteHandler.SetJotsGate(func(ctx context.Context, campaignID string) (bool, error) {
-		return addonService.IsEnabledForCampaign(ctx, campaignID, "notes")
+		return addonService.IsEnabledForCampaign(ctx, campaignID, addons.JotNotesAddonSlug)
 	})
 	notesApp := notes.RegisterAppGrantRoutes(e, noteHandler, noteGrantHandler, noteGrants, notesAppGate, campaignService, authService)
 	// The editor's @ page picker, as the player sees pages.
@@ -4189,6 +4189,14 @@ func (a *App) RegisterRoutes() {
 		slog.Error("placing page extras failed", slog.String("error", err.Error()))
 	} else if n > 0 {
 		slog.Info("placed page extras into layouts", slog.Int("layouts", n))
+	}
+
+	// One-time: Notes became Journal plus Jot notes, so campaigns that had
+	// Notes on keep both (see jot_notes_split.go). Retried on the next boot.
+	if n, err := splitJotNotesOnce(context.Background(), settingsRepo, addonService); err != nil {
+		slog.Error("splitting jot notes failed", slog.String("error", err.Error()))
+	} else if n > 0 {
+		slog.Info("turned jot notes on where the journal was on", slog.Int("campaigns", n))
 	}
 
 	campaignHandler.SetAuditLogger(&campaignAuditAdapter{svc: auditService})
