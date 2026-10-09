@@ -1225,11 +1225,11 @@
       this.weatherByYear = {}; // year -> {'m_d': reading}, filled by fetchWeatherYear
       this.nightsByMonth = {}; // 'y_m' -> game nights, filled by fetchNights
       this._gnPages = {}; // session id -> its recap and linked pages
-      // Game nights are real-world dates: a real-world calendar shows them
-      // on their own day, a world calendar beside its today (realAnchor);
-      // only members see who is coming.
+      // Game nights are real-world dates, so only a real-world calendar
+      // shows them; a world calendar keeps to the story. Only members see
+      // who is coming.
       this._anchor = realAnchor(this.cal);
-      this.showNights = this.gameNights && this.role >= 1 && (CalDate.usesRealTime(this.cal) || !!this._anchor);
+      this.showNights = this.gameNights && this.role >= 1 && CalDate.usesRealTime(this.cal);
       this.calZone = cfgEl.dataset.zone || ''; // the real-world calendar's zone, members only
       this._gnZoneMode = readZoneMode();
       // Who's free: members' painted hours (the sessions plugin's overlay),
@@ -3387,7 +3387,7 @@
           '<label class="fld"><span>Year</span><input type="number" name="year" inputmode="numeric" value="' + esc(String(c.current_year)) + '"></label></div>' +
           '<div class="strow2"><label class="fld"><span>Hour</span><input type="number" name="hour" inputmode="numeric" min="0" max="' + (this._hoursPerDay() - 1) + '" value="' + (c.current_hour || 0) + '"></label>' +
           '<label class="fld"><span>Minute</span><input type="number" name="minute" inputmode="numeric" min="0" max="' + (this._minutesPerHour() - 1) + '" value="' + (c.current_minute || 0) + '"></label></div>' +
-          '<p class="stn">Players see the new date at once. Game nights move with it, since they sit beside the world’s today.</p>' +
+          '<p class="stn">Players see the new date at once.</p>' +
           '<p class="sterr" role="alert" hidden></p>' +
           '<div class="sta"><button type="submit" class="btn sm primary">Set today</button><button type="button" class="btn sm quiet" data-close>Cancel</button></div>' +
         '</form>';
