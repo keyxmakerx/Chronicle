@@ -36,6 +36,12 @@ tags:
       the key's Owner role. Only a caller who is themselves Owner or co-DM may
       name someone else (anyone else gets 403), so naming a player only narrows
       what the call may do.
+  - name: Quests
+    description: >
+      Quest boards and quest sheets, for the campaign owner or a co-DM only.
+      `audience=players` on a read answers as a plain player sees it; the
+      Foundry module uses it to show players the board. Paying and giving
+      need the Armory addon.
 
 paths:
   # --- Campaigns ---
@@ -2295,6 +2301,169 @@ paths:
           $ref: "#/components/responses/BadRequest"
         "403":
           $ref: "#/components/responses/Forbidden"
+
+  /campaigns/{campaignId}/quests/homes:
+    get:
+      tags: [Quests]
+      summary: Places with boards, categories first ({kind, id, name?} each)
+      operationId: listQuestHomes
+      parameters:
+        - $ref: "#/components/parameters/campaignId"
+        - name: audience
+          in: query
+          schema: {type: string, enum: [players]}
+      responses:
+        "200":
+          description: A bare array
+          content:
+            application/json:
+              schema: {type: object}
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+  /campaigns/{campaignId}/quests/boards:
+    get:
+      tags: [Quests]
+      summary: One place's boards; name exactly one of category or page
+      operationId: getQuestBoards
+      parameters:
+        - $ref: "#/components/parameters/campaignId"
+        - name: category
+          in: query
+          schema: {type: string}
+        - name: page
+          in: query
+          schema: {type: string}
+        - name: audience
+          in: query
+          schema: {type: string, enum: [players]}
+      responses:
+        "200":
+          description: The boards and the items the viewer may see
+          content:
+            application/json:
+              schema: {type: object}
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+  /campaigns/{campaignId}/quests/party:
+    get:
+      tags: [Quests]
+      summary: Characters rewards can go to
+      operationId: listQuestParty
+      parameters:
+        - $ref: "#/components/parameters/campaignId"
+      responses:
+        "200":
+          description: A bare array of {id, name, player?, imageUrl?}
+          content:
+            application/json:
+              schema: {type: object}
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+  /campaigns/{campaignId}/quests/{entityId}:
+    get:
+      tags: [Quests]
+      summary: One quest sheet, the DM's view or the players' view
+      operationId: getQuest
+      parameters:
+        - $ref: "#/components/parameters/campaignId"
+        - $ref: "#/components/parameters/entityId"
+        - name: audience
+          in: query
+          schema: {type: string, enum: [players]}
+      responses:
+        "200":
+          description: The sheet
+          content:
+            application/json:
+              schema: {type: object}
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+    put:
+      tags: [Quests]
+      summary: Save a partial change; version required, absent fields kept, steps sent whole
+      operationId: putQuest
+      parameters:
+        - $ref: "#/components/parameters/campaignId"
+        - $ref: "#/components/parameters/entityId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [version]
+              properties:
+                version: {type: integer}
+      responses:
+        "200":
+          description: The DM's view after the change
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "409":
+          description: The version is stale; read again
+  /campaigns/{campaignId}/quests/pay:
+    post:
+      tags: [Quests]
+      summary: Add coins to one character's sheet (the sheet's main unit, two decimals)
+      operationId: questPay
+      parameters:
+        - $ref: "#/components/parameters/campaignId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [characterId, amount]
+              properties:
+                characterId: {type: string}
+                amount: {type: number}
+                reason: {type: string}
+      responses:
+        "200":
+          description: The payment
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+  /campaigns/{campaignId}/quests/give:
+    post:
+      tags: [Quests]
+      summary: Give one reward item to one character
+      operationId: questGive
+      parameters:
+        - $ref: "#/components/parameters/campaignId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [characterId, itemId]
+              properties:
+                characterId: {type: string}
+                itemId: {type: string}
+      responses:
+        "200":
+          description: {itemName, characterName}
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
 
 components:
   securitySchemes:
