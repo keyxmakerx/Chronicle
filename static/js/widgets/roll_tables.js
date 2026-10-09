@@ -5,13 +5,17 @@
  * editor node in editor_rolltable.js mounts mountBlock); a calendar day card
  * gets "Roll one" (calendar_view.js mounts mountDay). Rolls come from
  * ChronicleGen.tables (chronicle_gen.js, loaded on first use): its starter
- * tables plus the campaign's own, kept at /campaigns/:id/roll-tables.
- * Starter tables are never edited in place; a copy becomes the campaign's
- * own, so an update can improve the starters without overwriting changes.
+ * tables, the library of openly licensed tables
+ * (static/roll-tables/library.json, built and licence-checked by
+ * tools/build-roll-table-library.mjs), and the campaign's own, kept at
+ * /campaigns/:id/roll-tables. Starter and library tables are never edited in
+ * place; a copy becomes the campaign's own and keeps the table's credit, so an
+ * update can improve them without overwriting changes.
  *
  * Chronicle.RollTables:
  *   .engine()                    promise of ChronicleGen
  *   .mine(campaignId)            promise of the campaign's own tables ([] when none or not allowed)
+ *   .library()                   promise of the library document (null when it couldn't load)
  *   .save(campaignId, tables)    replace the campaign's own tables
  *   .roll(G, mine, id, opts)     one result {name, brief, kind, moon}; opts {calendar, date}
  *   .mountBlock(host, opts)      the page roller (see mountBlock)
@@ -26,6 +30,9 @@
   var SELF = document.currentScript;
   var ENGINE_V = /^\/static\/js\/widgets\/chronicle_gen\.js\?v=([A-Za-z0-9._-]{1,80})$/.exec((SELF && SELF.getAttribute('data-engine-src')) || '');
   var ENGINE_SRC = ENGINE_PATH + (ENGINE_V ? '?v=' + encodeURIComponent(ENGINE_V[1]) : '');
+  var LIB_PATH = '/static/roll-tables/library.json';
+  var LIB_V = /^\/static\/roll-tables\/library\.json\?v=([A-Za-z0-9._-]{1,80})$/.exec((SELF && SELF.getAttribute('data-library-src')) || '');
+  var LIB_SRC = LIB_PATH + (LIB_V ? '?v=' + encodeURIComponent(LIB_V[1]) : '');
   var ID_RE = /^[a-z][a-z0-9-]{0,63}$/;
   var NAMES = { 'names-people': 'People', 'names-places': 'Places' };
   // Pages have no calendar of their own; with this one, entries that need a
@@ -52,6 +59,25 @@
     return enginePromise;
   }
 
+  /* The library is extra: when it can't load, the starters still roll, and the
+     next roller tries again. */
+  var LIB = null, libPromise = null;
+  function useLibrary(doc) {
+    LIB = doc && Array.isArray(doc.tables) ? doc : null;
+    baseCache = null;
+    return LIB;
+  }
+  function library() {
+    if (LIB) return Promise.resolve(LIB);
+    if (libPromise) return libPromise;
+    libPromise = fetch(LIB_SRC, { credentials: 'same-origin' }).then(function (r) {
+      if (!r.ok) throw new Error('library ' + r.status);
+      return r.json();
+    }).then(useLibrary).catch(function () { libPromise = null; return null; });
+    return libPromise;
+  }
+  function libTables() { return LIB ? LIB.tables : []; }
+
   var mineCache = {};
   function base(campaignId) { return '/campaigns/' + encodeURIComponent(campaignId) + '/roll-tables'; }
   function mine(campaignId) {
@@ -77,17 +103,29 @@
   }
 
   function own(list, id) { for (var i = 0; i < list.length; i++) if (list[i].id === id) return list[i]; return null; }
-  function starter(G, id) { var t = G._internal.STARTER_TABLES.tables; for (var i = 0; i < t.length; i++) if (t[i].id === id) return t[i]; return null; }
+  function starter(G, id) {
+    var t = G._internal.STARTER_TABLES.tables, l = libTables(), i;
+    for (i = 0; i < t.length; i++) if (t[i].id === id) return t[i];
+    for (i = 0; i < l.length; i++) if (l[i].id === id) return l[i];
+    return null;
+  }
+  function inLibrary(id) { return libTables().some(function (t) { return t.id === id; }); }
+  /* The starters and the library as one set, so any of them can roll on another. */
+  var baseCache = null;
+  function baseSet(G) {
+    if (!baseCache) baseCache = { format: G.tables.format, version: 1, id: 'built-in', name: 'Built-in tables', tables: G._internal.STARTER_TABLES.tables.concat(libTables()) };
+    return baseCache;
+  }
   function tableName(G, list, id) {
     if (NAMES[id]) return NAMES[id];
     var t = own(list, id) || starter(G, id);
     return t ? t.name : 'A table that was deleted';
   }
 
-  /* The campaign's tables join the starters in one set, so their {braces}
-     can roll on a starter table ({trade}, {building}) as the starters do. */
+  /* The campaign's tables join the built-in ones in one set, so their {braces}
+     can roll on a starter or library table ({trade}, {is-action}). */
   function setWith(G, list) {
-    var tables = G._internal.STARTER_TABLES.tables.slice();
+    var tables = baseSet(G).tables.slice();
     list.forEach(function (t) {
       tables.push({ id: t.id, name: t.name, output: { kind: 'quest' }, entries: t.entries.map(function (e) {
         return { weight: e.weight == null ? 1 : e.weight, name: e.name, brief: e.brief || e.name };
@@ -106,7 +144,7 @@
       var v = pool[Math.floor(Math.random() * pool.length)];
       return { name: typeof v === 'string' ? v : v.name, brief: null };
     }
-    var setRef = own(list, id) ? setWith(G, list) : 'starter';
+    var setRef = own(list, id) ? setWith(G, list) : inLibrary(id) ? baseSet(G) : 'starter';
     var r;
     try {
       r = G.tables.roll(setRef, id, { calendar: opts.calendar || PAGE_CAL, date: opts.date, seed: G.randomSeed(), n: seq++ });
@@ -134,12 +172,19 @@
     })();
   }
 
-  /* The picker's groups: the campaign's own first, then the starters by use. */
+  /* The picker's groups: the campaign's own first, then the starters by use,
+     then the library by source. A library group carries its source's credit. */
   function catalog(G, list) {
-    var happen = [], words = [], customs = [];
+    var happen = [], words = [], customs = [], lib = [], byGroup = {};
     G._internal.STARTER_TABLES.tables.forEach(function (t) {
       var o = { id: t.id, name: t.name, n: t.entries.length };
       if (/^customs-/.test(t.id)) customs.push(o); else if (t.output) happen.push(o); else words.push(o);
+    });
+    libTables().forEach(function (t) {
+      var g = t.group || 'More tables';
+      // The group's credit is its source's; a page number belongs to one table.
+      if (!byGroup[g]) { byGroup[g] = []; lib.push([g, byGroup[g], t.credit ? Object.assign({}, t.credit, { page: '' }) : null]); }
+      byGroup[g].push({ id: t.id, name: t.name, n: t.entries.length, lib: true });
     });
     return [
       ['Your tables', list.map(function (t) { return { id: t.id, name: t.name, n: t.entries.length }; })],
@@ -147,7 +192,33 @@
       ['Names', [{ id: 'names-people', name: 'People', names: true }, { id: 'names-places', name: 'Places', names: true }]],
       ['Words', words],
       ['Customs and festivals', customs]
-    ];
+    ].concat(lib);
+  }
+
+  /* A table's credit: where it comes from, who made it and its licence. Copies
+     carry it too, and both say "adapted" because Chronicle reformats the text. */
+  function safeURL(u) { return /^https:\/\/[^\s"'<>]+$/.test(String(u || '')) ? u : ''; }
+  function linkTo(u, text) {
+    return safeURL(u) ? '<a href="' + esc(u) + '" target="_blank" rel="noopener noreferrer">' + esc(text) + '</a>' : esc(text);
+  }
+  function creditLine(c) {
+    if (!c || !c.source) return '';
+    return 'Adapted from ' + linkTo(c.url, c.source) + (c.author ? ' by ' + esc(c.author) : '') + (c.page ? ', page ' + esc(c.page) : '') +
+      (c.licence ? ' · ' + linkTo(c.licenceUrl, c.licence) : '');
+  }
+  function creditHTML(c) {
+    var line = creditLine(c);
+    if (!line) return '';
+    return '<div class="rt-credit"><i class="fa-solid fa-scroll" aria-hidden="true"></i><div><span>' + line + '</span>' +
+      (c.notice ? '<small>' + esc(c.notice) + '</small>' : '') + '</div></div>';
+  }
+  function creditOf(G, list, id) { var t = own(list, id) || starter(G, id); return t && t.credit ? t.credit : null; }
+  /* A printed die's ranges ("01–05"), for library tables whose weights add up to it. */
+  function ranges(t, es) {
+    var m = t && /^d(\d+)$/.exec(t.dice || ''), die = m ? +m[1] : 0, at = 1, w = die > 9 ? 2 : 1;
+    if (!die || es.reduce(function (n, e) { return n + e.weight; }, 0) !== die) return null;
+    var pad = function (n) { n = String(n); while (n.length < w) n = '0' + n; return n; };
+    return es.map(function (e) { var lo = at, hi = at + e.weight - 1; at = hi + 1; return lo === hi ? pad(lo) : pad(lo) + '–' + pad(hi); });
   }
 
   function entriesFor(G, list, id) {
@@ -166,7 +237,10 @@
     if (!taken(id)) return id;
     for (var n = 2; ; n++) if (!taken(id + '-' + n)) return id + '-' + n;
   }
-  function weightLabel(w) { return w >= 3 ? 'Very often' : w >= 2 ? 'Often' : 'Rare'; }
+  function weightLabel(w) { return [1, 2, 3].indexOf(w) < 0 && w > 0 && w === Math.round(w) ? '×' + w : w >= 3 ? 'Very often' : w >= 2 ? 'Often' : 'Rare'; }
+  /* A copied library table keeps its published odds: a weight beyond the three
+     plain choices stays on offer as its own "×n" choice. */
+  function weightChoices(w) { return [1, 2, 3].indexOf(w) < 0 && w > 3 && w <= 100 && w === Math.round(w) ? [1, 2, 3, w] : [1, 2, 3]; }
   function braces(s) { return esc(s).replace(/\{([A-Za-z][\w-]*)(\|[a-z]+)?\}/g, '<span class="rt-brace">{$1}</span>'); }
 
   /**
@@ -192,7 +266,12 @@
       return r;
     }
     function isOwn() { return !!own(S.list, S.table); }
-    function srcLabel() { return isOwn() ? 'Your table' : NAMES[S.table] ? 'Names' : 'Starter table'; }
+    function srcLabel() {
+      if (isOwn()) return 'Your table';
+      if (NAMES[S.table]) return 'Names';
+      var c = inLibrary(S.table) && creditOf(S.G, S.list, S.table);
+      return c ? esc(c.source) : 'Starter table';
+    }
     function rowHTML(r, i) {
       return '<div class="rt-row' + (r.pin ? ' is-pinned' : '') + '" data-i="' + i + '"><div class="rt-txt" data-box>' + cell(r) + '</div>' +
         '<button type="button" class="rt-btn" data-pin aria-pressed="' + !!r.pin + '" title="' + (r.pin ? 'Unpin, so it rolls again' : 'Pin: keep this one') + '" aria-label="' + (r.pin ? 'Unpin ' : 'Pin ') + esc(r.name) + '"><i class="fa-solid fa-thumbtack"></i></button>' +
@@ -244,7 +323,8 @@
       catalog(S.G, S.list).forEach(function (g) {
         var items = g[1].filter(function (t) { return !q || t.name.toLowerCase().indexOf(q) >= 0; });
         if (!items.length && !(g[0] === 'Your tables' && !q)) return;
-        h += '<h6>' + g[0] + '</h6>';
+        h += '<h6>' + esc(g[0]) + '</h6>';
+        if (g[2]) h += '<p class="rt-pick-credit">' + creditLine(g[2]) + '</p>';
         if (!items.length) h += '<p class="rt-note rt-pick-empty">None yet. Copy a starter table, or start a new one.</p>';
         h += items.map(function (t) {
           return '<button type="button" role="option" data-t="' + esc(t.id) + '" aria-selected="' + (t.id === S.table) + '">' + esc(t.name) + '<small>' + (t.names ? 'from the name generator' : t.n + ' lines') + '</small></button>';
@@ -261,18 +341,22 @@
     function drawEditor(instant) {
       var ed = B.querySelector('[data-ed]'), mineT = !!S.draft;
       var es = mineT ? S.draft.entries : entriesFor(S.G, S.list, S.table);
+      var rs = mineT ? null : ranges(starter(S.G, S.table), es);
       var h = '';
       if (!mineT) {
         h += '<div class="rt-banner"><i class="fa-solid fa-lock" aria-hidden="true"></i><span>Starter tables stay as they are, so updates can improve them. Make a copy to change this one.</span><button type="button" class="rt-main" data-copy><i class="fa-solid fa-copy" aria-hidden="true"></i>Make a copy</button></div>';
+        h += creditHTML(creditOf(S.G, S.list, S.table));
       } else {
         h += '<label class="rt-name">Table name <input data-tname maxlength="120" value="' + esc(S.draft.name) + '"></label>';
+        h += creditHTML(S.draft.credit);
       }
       h += '<div class="rt-ents">' + es.map(function (e, i) {
         if (!mineT) {
-          return '<div class="rt-ent is-locked"><span class="rt-w">' + weightLabel(e.weight) + '</span><div><div class="rt-en">' + braces(e.name) + '</div>' + (e.brief ? '<div class="rt-eb">' + braces(e.brief) + '</div>' : '') + '</div><span></span></div>';
+          return '<div class="rt-ent is-locked"><span class="rt-w">' + (rs ? rs[i] : weightLabel(e.weight)) + '</span><div><div class="rt-en">' + braces(e.name) + '</div>' + (e.brief ? '<div class="rt-eb">' + braces(e.brief) + '</div>' : '') + '</div><span></span></div>';
         }
-        return '<div class="rt-ent" data-e="' + i + '"><select aria-label="How often" data-w>' + [1, 2, 3].map(function (w) {
-          return '<option value="' + w + '"' + (Math.min(3, Math.max(1, Math.round(e.weight))) === w ? ' selected' : '') + '>' + weightLabel(w) + '</option>';
+        var ws = weightChoices(e.weight), sel = ws.indexOf(e.weight) >= 0 ? e.weight : Math.min(3, Math.max(1, Math.round(e.weight)));
+        return '<div class="rt-ent" data-e="' + i + '"><select aria-label="How often" data-w>' + ws.map(function (w) {
+          return '<option value="' + w + '"' + (w === sel ? ' selected' : '') + '>' + weightLabel(w) + '</option>';
         }).join('') + '</select><div><input data-n maxlength="200" aria-label="Name" placeholder="What happens, in a few words" value="' + esc(e.name) + '"><textarea data-b maxlength="1000" rows="1" aria-label="More detail" placeholder="One line a DM can use as it stands">' + esc(e.brief) + '</textarea></div>' +
           '<button type="button" class="rt-btn" data-del title="Remove this line" aria-label="Remove this line"><i class="fa-solid fa-trash-can"></i></button></div>';
       }).join('') + '</div>';
@@ -319,7 +403,9 @@
       d.entries = d.entries.filter(function (e) { return e.name.trim(); }).map(function (e) { return { name: e.name.trim(), brief: e.brief.trim(), weight: e.weight }; });
       if (!d.name) { notify('Give the table a name first.', 'error'); return; }
       if (!d.entries.length) { notify('Add at least one line first.', 'error'); return; }
-      var next = S.list.filter(function (t) { return t.id !== d.id; }).concat([{ id: d.id, name: d.name, entries: d.entries }]);
+      var keep = { id: d.id, name: d.name, entries: d.entries };
+      if (d.credit) keep.credit = d.credit;
+      var next = S.list.filter(function (t) { return t.id !== d.id; }).concat([keep]);
       S.saving = true; drawEditor(true);
       save(opts.campaignId, next).then(function (saved) {
         S.saving = false; S.list = saved; S.table = d.id; S.dirty = false;
@@ -350,12 +436,12 @@
         if (S.editing) { if (S.dirty) nag(); else closeEditor(); return; }
         S.editing = true;
         var o = own(S.list, S.table);
-        S.draft = o ? { id: o.id, name: o.name, entries: entriesFor(S.G, S.list, o.id) } : null;
+        S.draft = o ? { id: o.id, name: o.name, entries: entriesFor(S.G, S.list, o.id), credit: o.credit || null } : null;
         draw(); drawEditor(false);
         return;
       }
       if (t.hasAttribute('data-copy')) {
-        S.draft = { id: freeId(S.G, S.list, S.table + '-copy'), name: tableName(S.G, S.list, S.table) + ' (copy)', entries: entriesFor(S.G, S.list, S.table) };
+        S.draft = { id: freeId(S.G, S.list, S.table + '-copy'), name: tableName(S.G, S.list, S.table) + ' (copy)', entries: entriesFor(S.G, S.list, S.table), credit: creditOf(S.G, S.list, S.table) };
         S.dirty = true; draw();
         return;
       }
@@ -392,7 +478,7 @@
     }
     document.addEventListener('mousedown', outside);
 
-    Promise.all([engine(), mine(opts.campaignId)]).then(function (res) {
+    Promise.all([engine(), mine(opts.campaignId), library()]).then(function (res) {
       S.G = res[0]; S.list = res[1];
       if (!NAMES[S.table] && !own(S.list, S.table) && !starter(S.G, S.table)) S.table = 'rumours';
       rollAll(true);
@@ -429,7 +515,8 @@
       var chips = DAY_CHIPS.slice();
       if (S.more) catalog(S.G, S.list).forEach(function (g) {
         if (g[0] === 'Names') return;
-        g[1].forEach(function (t) { if (!chips.some(function (c) { return c[0] === t.id; })) chips.push([t.id, t.name]); });
+        // The library's tables stay in the page roller's picker, where they can be searched.
+        g[1].forEach(function (t) { if (!t.lib && !chips.some(function (c) { return c[0] === t.id; })) chips.push([t.id, t.name]); });
       });
       return chips;
     }
@@ -508,6 +595,7 @@
   window.Chronicle = window.Chronicle || {};
   window.Chronicle.RollTables = {
     engine: engine, mine: mine, save: save, roll: roll, mountBlock: mountBlock, mountDay: mountDay,
-    _internal: { catalog: catalog, entriesFor: entriesFor, freeId: freeId, esc: esc, reel: reel, reduced: reduced, notify: notify, own: own, starter: starter, tableName: tableName, NAMES: NAMES, ID_RE: ID_RE, setWith: setWith }
+    library: library,
+    _internal: { catalog: catalog, entriesFor: entriesFor, freeId: freeId, esc: esc, reel: reel, reduced: reduced, notify: notify, own: own, starter: starter, tableName: tableName, NAMES: NAMES, ID_RE: ID_RE, setWith: setWith, useLibrary: useLibrary, creditLine: creditLine, creditHTML: creditHTML, ranges: ranges, weightChoices: weightChoices }
   };
 })();

@@ -4731,6 +4731,11 @@ html[data-view-motion="calm"] *:not(.czp *), html[data-view-motion="calm"] *:not
 .rt-block .rt-pick small { margin-left: auto; color: var(--rt-mut); font-size: 11.5px; }
 .rt-block .rt-pick hr { border: 0; border-top: 1px solid var(--rt-edge); margin: 6px 0; }
 .rt-block .rt-pick-empty { padding: 4px 8px; }
+.rt-block .rt-pick-credit { margin: 0 8px 4px; font-size: 11.5px; color: var(--rt-mut); }
+.rt-block .rt-pick-credit a, .rt-block .rt-credit a { color: inherit; text-decoration: underline; text-underline-offset: 2px; }
+.rt-block .rt-credit { display: flex; gap: 9px; align-items: flex-start; margin: 4px 12px 6px; padding: 2px 11px; font-size: 12.5px; color: var(--rt-ink2); }
+.rt-block .rt-credit i { color: var(--rt-mut); padding-top: 3px; }
+.rt-block .rt-credit small { display: block; margin-top: 3px; font-size: 11.5px; line-height: 1.4; color: var(--rt-mut); }
 .rt-block .rt-ed { overflow: hidden; transition: height .32s cubic-bezier(.3, .9, .4, 1); }
 .rt-block .rt-banner { margin: 10px 12px 4px; padding: 9px 11px; border-radius: 9px; background: var(--rt-fill); font-size: 13px; display: flex; gap: 10px; align-items: center; }
 .rt-block .rt-name { display: flex; gap: 8px; align-items: center; margin: 10px 12px 4px; font-size: 12px; color: var(--rt-mut); }
