@@ -153,13 +153,15 @@ templ systemPageBelow(cc *campaigns.CampaignContext, entity *Entity, entityType 
 	</div>
 }
 
-// systemImageMount is the hidden image-upload mount a system widget's Change
-// picture button reaches through the chronicle:change-image event. Only
-// Scribes and up get one: the image route is Scribe-only.
+// systemImageMount is the image-upload mount a system widget's Change
+// picture button reaches through the chronicle:change-image event. It takes
+// no space but is not display:none, so the upload's progress strip and error
+// bar still show, pinned to the bottom of the screen. Only Scribes and up get
+// one: the image route is Scribe-only.
 templ systemImageMount(cc *campaigns.CampaignContext, entity *Entity, csrfToken string) {
 	if cc.MemberRole >= campaigns.RoleScribe {
 		<div
-			class="hidden"
+			class="ph-image-mount"
 			data-widget="image-upload"
 			data-image-upload-for={ entity.ID }
 			data-endpoint={ fmt.Sprintf("/campaigns/%s/entities/%s/image", cc.Campaign.ID, entity.ID) }

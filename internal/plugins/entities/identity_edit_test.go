@@ -21,6 +21,11 @@ type identityStubSvc struct {
 	replaced   bool
 	updateIn   *UpdateEntityInput
 	writeCount int
+	hidden     bool // the caller can no longer view the page
+}
+
+func (s *identityStubSvc) CheckEntityAccess(_ context.Context, _ string, _ int, _ string) (*EffectivePermission, error) {
+	return &EffectivePermission{CanView: !s.hidden}, nil
 }
 
 func (s *identityStubSvc) GetByID(_ context.Context, _ string) (*Entity, error) {
@@ -156,6 +161,29 @@ func TestUpdateMetadataAPI_ClaimedOwnerRenameOnly(t *testing.T) {
 			wantStatus(t, err, tc.wantStatus)
 			if (svc.writeCount > 0) != tc.wantWrite {
 				t.Fatalf("write reached = %v, want %v", svc.writeCount > 0, tc.wantWrite)
+			}
+		})
+	}
+}
+
+// A GM can hide a claimed character from its player; the claim must not
+// keep a write path open to a page the player can no longer see.
+func TestIdentityWrites_RefusedOnHiddenPage(t *testing.T) {
+	owner := "user-owner"
+	calls := []struct {
+		name    string
+		handler func(*Handler, echo.Context) error
+		body    string
+	}{
+		{"fields", (*Handler).UpdateFieldsAPI, `{"fields_patch":{"ancestry":"Dwarf"}}`},
+		{"rename", (*Handler).UpdateMetadataAPI, `{"name":"New"}`},
+	}
+	for _, tc := range calls {
+		t.Run(tc.name, func(t *testing.T) {
+			svc := &identityStubSvc{entity: &Entity{ID: "e1", CampaignID: "c1", Name: "Hero", OwnerUserID: &owner}, hidden: true}
+			wantStatus(t, runIdentityCall(t, svc, tc.handler, campaigns.RolePlayer, owner, "c1", tc.body), 404)
+			if svc.writeCount != 0 {
+				t.Fatal("write reached a hidden page")
 			}
 		})
 	}

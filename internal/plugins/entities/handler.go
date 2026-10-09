@@ -2049,6 +2049,9 @@ func (h *Handler) UpdateFieldsAPI(c echo.Context) error {
 		body.FieldsPatch == nil, fieldsPatch, typeFields); err != nil {
 		return err
 	}
+	if err := h.requirePlayerCanView(c, cc, entity); err != nil {
+		return err
+	}
 
 	var saveErr error
 	if body.FieldsPatch != nil {
@@ -2379,6 +2382,9 @@ func (h *Handler) UpdateMetadataAPI(c echo.Context) error {
 		return apperror.NewBadRequest("invalid JSON body")
 	}
 	if err := authorizeMetadataWrite(cc.MemberRole, entity, auth.GetUserID(c), cc.Campaign.ID, rawBody); err != nil {
+		return err
+	}
+	if err := h.requirePlayerCanView(c, cc, entity); err != nil {
 		return err
 	}
 	if err := json.Unmarshal(rawBody, &req); err != nil {
@@ -3968,4 +3974,18 @@ func (h *Handler) AssignMap(c echo.Context) error {
 
 	h.logAudit(c, cc.Campaign.ID, audit.ActionEntityUpdated, entityID, "map assigned")
 	return c.JSON(http.StatusOK, updated)
+}
+
+// requirePlayerCanView keeps a claimed owner's identity write to pages they
+// can still open: a GM can hide a claimed character from its player, and the
+// claim alone must not outlive that.
+func (h *Handler) requirePlayerCanView(c echo.Context, cc *campaigns.CampaignContext, entity *Entity) error {
+	if cc.MemberRole >= campaigns.RoleScribe {
+		return nil
+	}
+	access, err := h.service.CheckEntityAccess(c.Request().Context(), entity.ID, int(cc.VisibilityRole()), auth.GetUserID(c))
+	if err != nil || !access.CanView {
+		return apperror.NewNotFound("entity not found")
+	}
+	return nil
 }
