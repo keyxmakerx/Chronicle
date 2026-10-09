@@ -93,11 +93,12 @@ func TestUpdateFieldsAPI_ClaimedOwnerIdentityOnly(t *testing.T) {
 	}{
 		{"owner allowed for allowlisted key", campaigns.RolePlayer, owner, "c1", `{"fields_patch":{"ancestry":"Dwarf"}}`, 200, true},
 		{"owner allowed for every allowlisted key at once", campaigns.RolePlayer, owner, "c1",
-			`{"fields_patch":{"ancestry":"a","culture":"b","career":"c","kit":"d","race":"e","species":"f","heritage":"g"}}`, 200, true},
+			`{"fields_patch":{"ancestry":"a","culture":"b","career":"c","kit":"d","race":"e","species":"f"}}`, 200, true},
 		{"owner denied an allowlisted key the type marks GM-only", campaigns.RolePlayer, owner, "c1", `{"fields_patch":{"background":"x"}}`, 403, false},
 		{"owner denied a non-text value", campaigns.RolePlayer, owner, "c1", `{"fields_patch":{"ancestry":{"a":1}}}`, 400, false},
 		{"owner denied a number", campaigns.RolePlayer, owner, "c1", `{"fields_patch":{"kit":5}}`, 400, false},
 		{"owner denied an overlong value", campaigns.RolePlayer, owner, "c1", `{"fields_patch":{"kit":"` + strings.Repeat("x", 201) + `"}}`, 400, false},
+		{"owner denied a key a page override marks GM-only", campaigns.RolePlayer, owner, "c1", `{"fields_patch":{"heritage":"x"}}`, 403, false},
 		{"scribe may set a GM-only key", campaigns.RoleScribe, "user-scribe", "c1", `{"fields_patch":{"background":"x"}}`, 200, true},
 		{"owner may clear an allowlisted key", campaigns.RolePlayer, owner, "c1", `{"fields_patch":{"kit":null}}`, 200, true},
 		{"owner denied a non-allowlisted key", campaigns.RolePlayer, owner, "c1", `{"fields_patch":{"might":5}}`, 403, false},
@@ -114,7 +115,8 @@ func TestUpdateFieldsAPI_ClaimedOwnerIdentityOnly(t *testing.T) {
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			svc := &identityStubSvc{entity: &Entity{ID: "e1", CampaignID: "c1", Name: "Hero", OwnerUserID: &owner}}
+			svc := &identityStubSvc{entity: &Entity{ID: "e1", CampaignID: "c1", Name: "Hero", OwnerUserID: &owner,
+				FieldOverrides: &FieldOverrides{Added: []FieldDefinition{{Key: "heritage", GMOnly: true}}}}}
 			err := runIdentityCall(t, svc, (*Handler).UpdateFieldsAPI, tc.role, tc.userID, tc.campaignID, tc.body)
 			wantStatus(t, err, tc.wantStatus)
 			if (svc.writeCount > 0) != tc.wantWrite {

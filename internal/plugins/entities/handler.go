@@ -2039,7 +2039,11 @@ func (h *Handler) UpdateFieldsAPI(c echo.Context) error {
 		if err != nil {
 			return err
 		}
-		typeFields = et.Fields
+		// A field a GM added to just this page can be GM-only too.
+		typeFields = append([]FieldDefinition{}, et.Fields...)
+		if entity.FieldOverrides != nil {
+			typeFields = append(typeFields, entity.FieldOverrides.Added...)
+		}
 	}
 	if err := authorizeFieldsWrite(cc.MemberRole, entity, auth.GetUserID(c), cc.Campaign.ID,
 		body.FieldsPatch == nil, fieldsPatch, typeFields); err != nil {
