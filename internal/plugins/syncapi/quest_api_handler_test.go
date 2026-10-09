@@ -126,7 +126,7 @@ func TestQuestAPIHandler(t *testing.T) {
 			if !tt.noKey {
 				c.Set(apiKeyContextKey, &APIKey{ID: 1, CampaignID: "camp-1", UserID: "u1"})
 			}
-			status := rec.Code
+			var status int
 			if err := tt.run(h)(c); err != nil {
 				status = apperror.SafeCode(err)
 			} else {
