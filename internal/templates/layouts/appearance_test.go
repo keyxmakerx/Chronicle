@@ -59,7 +59,7 @@ func TestAppearanceAttrs(t *testing.T) {
 			Elevation: "flat", TypeScale: "roomy", ReduceMotion: true, HoverCard: "night"},
 			map[string]string{"data-cz-nav": "comet", "data-cz-strength": "lively", "data-cz-pagename": "hidden",
 				"data-cz-btn": "glow", "data-cz-elev": "flat", "data-cz-scale": "roomy", "data-cz-reduce": "1",
-				"data-cz-hover": "night"}},
+				"data-cz-hover": "night", "data-motion": "calm"}},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {

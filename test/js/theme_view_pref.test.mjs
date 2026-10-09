@@ -99,6 +99,38 @@ test('applyViewPref motion: nav-rm follows Calmer but never drops the owner swit
   assert.equal(b.classes.has('nav-rm'), true);
 });
 
+test('applyViewPref motion: data-motion is calm or off, never above the owner', () => {
+  const a = load({ attrs: { 'data-view-theme': 'device' } });
+  a.C.applyViewPref('motion', 'off');
+  assert.equal(a.attrs['data-view-motion'], 'calm');
+  assert.equal(a.attrs['data-motion'], 'off');
+  assert.equal(a.classes.has('nav-rm'), true);
+  a.C.applyViewPref('motion', 'calm');
+  assert.equal(a.attrs['data-motion'], 'calm');
+  a.C.applyViewPref('motion', 'owner');
+  assert.equal(a.attrs['data-motion'], undefined);
+
+  const b = load({ attrs: { 'data-view-theme': 'device', 'data-cz-reduce': '1' } });
+  b.C.applyViewPref('motion', 'owner');
+  assert.equal(b.attrs['data-motion'], 'calm');
+});
+
+test('syncMotion after a Customize save keeps a person\'s Off', () => {
+  const a = load({ attrs: { 'data-view-theme': 'device', 'data-view-motion': 'calm', 'data-motion': 'off' } });
+  a.C.syncMotion();
+  assert.equal(a.attrs['data-motion'], 'off');
+  a.attrs['data-cz-reduce'] = '1';
+  a.C.syncMotion();
+  assert.equal(a.attrs['data-motion'], 'off');
+});
+
+test('syncMotion: a device asking for reduced motion is always off', () => {
+  // The stub's matchMedia answers every query, so this is also "reduce".
+  const a = load({ attrs: { 'data-view-theme': 'device' }, prefersDark: true });
+  a.C.applyViewPref('motion', 'owner');
+  assert.equal(a.attrs['data-motion'], 'off');
+});
+
 test('applyViewPref theme: device follows the OS, explicit wins', () => {
   const a = load({ attrs: { 'data-view-theme': 'light' }, prefersDark: true });
   a.C.applyViewPref('theme', 'device');

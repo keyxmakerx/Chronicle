@@ -23,9 +23,10 @@ templ Base(title string) {
 
 		<!-- Theme: apply dark class + inline background-color before first paint to prevent flash.
 		     A signed-in person's account choice (data-view-theme) wins over this browser's saved theme;
-		     "device" follows the OS. Either reduce switch (the campaign's or the person's own) sets nav-rm. -->
+		     "device" follows the OS. Either reduce switch (the campaign's or the person's own) sets nav-rm;
+		     a device asking for reduced motion lowers data-motion to off. -->
 		<script>
-			(function(){try{var h=document.documentElement;var v=h.getAttribute('data-view-theme');var t=(v==='light'||v==='dark')?v:(v==='device'?null:localStorage.getItem('chronicle-theme'));var d=t==='dark'||(t!=='light'&&window.matchMedia('(prefers-color-scheme:dark)').matches);if(d){h.classList.add('dark');h.style.backgroundColor='#111827'}else{h.style.backgroundColor='#f9fafb'}if(h.hasAttribute('data-cz-reduce')||h.getAttribute('data-view-motion')==='calm')h.classList.add('nav-rm')}catch(e){}})();
+			(function(){try{var h=document.documentElement;var v=h.getAttribute('data-view-theme');var t=(v==='light'||v==='dark')?v:(v==='device'?null:localStorage.getItem('chronicle-theme'));var d=t==='dark'||(t!=='light'&&window.matchMedia('(prefers-color-scheme:dark)').matches);if(d){h.classList.add('dark');h.style.backgroundColor='#111827'}else{h.style.backgroundColor='#f9fafb'}if(window.matchMedia('(prefers-reduced-motion:reduce)').matches)h.setAttribute('data-motion','off');if(h.hasAttribute('data-cz-reduce')||h.getAttribute('data-view-motion')==='calm')h.classList.add('nav-rm')}catch(e){}})();
 		</script>
 
 		<!-- Hide Alpine.js elements until initialized; hide body until all CSS loads (FOUC prevention). -->
