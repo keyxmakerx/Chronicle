@@ -112,7 +112,9 @@ place, and Off shows the end state.
 - **Paper is for things that exist in the world**: hover cards, character
   sheets and the creator, the Handbook and rule cards, stat blocks, handouts,
   quest notes and the DM Screen's pinned cards. They build on the shared
-  paper tokens and classes, never their own colours.
+  paper tokens and classes in `static/css/paper.css`, never their own
+  colours. The owner's Customize › Depth sets how far paper lifts; Flat drops
+  the tucked sheet behind it.
 - **The tools stay plain**: both sidebars, the header, ordinary pages, lists,
   the calendar grid, maps, game nights, settings, Customize, admin, dialogs
   and forms use the theme tokens below.
