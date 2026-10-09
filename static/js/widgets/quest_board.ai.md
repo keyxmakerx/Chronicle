@@ -49,7 +49,9 @@ which also links `static/css/quest_board.css` and the period fonts.
   first if something was picked.
 - Every ledger list has add (Enter), rename (double-click or F2), remove (×
   then "Remove?") and drag-to-reorder by the grip.
-- Money rewards are shown split between the ticked characters; Chronicle has
-  no coin payout, so the DM writes the shares on the sheets.
+- Hand out splits a money reward between the ticked characters and pays each
+  share through `POST /armory/pay`; items go through `POST /armory/give`. Steps
+  run one at a time and finished ones are remembered, so pressing Hand out
+  again after a failure never pays or gives twice.
 - Looping animations slow to rest through `MotionRest`, and stop under
   reduced motion.
