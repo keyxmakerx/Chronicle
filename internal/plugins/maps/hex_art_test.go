@@ -287,7 +287,9 @@ func TestMapService_SetHexArt(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			var saved *Map
 			repo := &mockMapRepo{
-				getMapFn:    func(context.Context, string) (*Map, error) { return &Map{ID: "map-1", Name: "Isle", Display: tc.current}, nil },
+				getMapFn: func(context.Context, string) (*Map, error) {
+					return &Map{ID: "map-1", Name: "Isle", Display: tc.current}, nil
+				},
 				updateMapFn: func(_ context.Context, m *Map) error { saved = m; return nil },
 			}
 			err := NewMapService(repo).(*mapService).SetHexArt(context.Background(), "map-1", tc.art)

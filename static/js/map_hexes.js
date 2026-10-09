@@ -941,8 +941,10 @@
       var padX = Math.round(size.x * ART_PAD), padY = Math.round(size.y * ART_PAD);
       var tl = map.containerPointToLayerPoint([-padX, -padY]);
       var cssW = size.x + 2 * padX, cssH = size.y + 2 * padY;
-      var a = map.latLngToLayerPoint(L.latLng(mapH, 0)), b = map.latLngToLayerPoint(L.latLng(mapH, 1));
-      var k = b.x - a.x, xf = layout.xf;
+      // project, not latLngToLayerPoint: that one rounds to whole pixels, which
+      // would make one map unit always one pixel at every zoom.
+      var z = map.getZoom(), p0 = map.project(L.latLng(mapH, 0), z), p1 = map.project(L.latLng(mapH, mapW), z);
+      var a = p0.subtract(map.getPixelOrigin()), k = (p1.x - p0.x) / mapW, xf = layout.xf;
       return {
         tl: tl, cssW: cssW, cssH: cssH, dpr: dpr, s: xf.s * k * dpr,
         ox: (a.x + xf.x * k - tl.x) * dpr, oy: (a.y + xf.y * k - tl.y) * dpr,
