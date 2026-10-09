@@ -346,7 +346,8 @@
       { id:'colours', name:'Colours', icon:'i-palette', desc:'The site’s own colour, the two colours your pages use, and the tones behind them.' },
       { id:'type', name:'Type', icon:'i-type', desc:'The fonts for text and headings, and how large everything reads.' },
       { id:'buttons', name:'Buttons', icon:'i-cursor', desc:'The shape of buttons and how they move when you point at them and press.' },
-      { id:'motion', name:'Motion and depth', icon:'i-depth', desc:'How far cards lift, how quickly things move, and a calmer option for everyone.' }
+      { id:'motion', name:'Motion and depth', icon:'i-depth', desc:'How far cards lift, how quickly things move, and a calmer option for everyone.' },
+      { id:'hover', name:'Hover cards', icon:'i-note', desc:'The card that opens when someone points at a linked page or a rule word. One look for the whole campaign.' }
     ];
     var SEC_KEYS = {
       brand:['brand.name', 'brand.logo', 'brand.welcome', 'brand.backdrop'],
@@ -356,7 +357,8 @@
       colours:['colours.accent', 'colours.s1', 'colours.s2', 'colours.page', 'colours.contrast'],
       type:['type.body', 'type.heading', 'type.scale'],
       buttons:['buttons.style'],
-      motion:['motion.elevation', 'motion.speed', 'motion.reduceAll']
+      motion:['motion.elevation', 'motion.speed', 'motion.reduceAll'],
+      hover:['hover.look']
     };
 
     /* ---------- Sample pictures, painted once so the page needs no files ---------- */
@@ -413,6 +415,7 @@
       ['logo', 'backdrop'].forEach(function(k){ if (!d.brand[k]) d.brand[k] = 'none'; });
       if (!d.header.image) d.header.image = 'none';
       if (!d.sidebar.banner) d.sidebar.banner = 'none';
+      if (!d.hover) d.hover = { look:'paper' };
       d.header.links = (d.header.links || []).map(function(l){ return { label:l.label || '', url:l.url || '', icon:l.icon || '' }; });
       while (d.header.links.length < LINK_ROWS) d.header.links.push({ label:'', url:'', icon:'' });
       return d;
@@ -606,6 +609,23 @@
           '<span class="tn">' + esc(b[1]) + '<span class="tck">' + IC('i-check') + '</span></span><span class="tk">' + esc(b[2]) + '</span></span></label>';
       }).join('');
     }
+    // Each tile is a real hover card (hovercard.js markup, paper.css looks),
+    // so what the owner picks is exactly what readers see.
+    var HOVER_LOOKS = [
+      ['paper', 'Paper', 'A page from the book. Stays paper in dark mode.'],
+      ['plain', 'Plain', 'Your site’s own colours and fonts, light and dark.'],
+      ['night', 'Night', 'The book’s dark page, with gold.'],
+      ['compact', 'Compact', 'Just the name and a line or two.']
+    ];
+    function tilesHover(){
+      var hc = window.Chronicle && Chronicle.hovercard;
+      var sample = hc ? hc.html({ kind:'Condition', title:'Grabbed', text:'A grabbed creature’s speed is 0. The grabber can move the grabbed creature with them when they move.', foot:CAMPAIGN }) : '';
+      return HOVER_LOOKS.map(function(h){
+        return '<label class="tile hc-tile"><input type="radio" name="t-hover" value="' + h[0] + '" data-k="hover.look"><span class="tb">' +
+          (sample ? '<span class="hc-sample" aria-hidden="true"><span class="chc" data-look="' + h[0] + '"><span class="chc__in">' + sample + '</span></span></span>' : '') +
+          '<span class="tn">' + esc(h[1]) + '<span class="tck">' + IC('i-check') + '</span></span><span class="tk">' + esc(h[2]) + '</span></span></label>';
+      }).join('');
+    }
     function tilesElev(){
       return Object.keys(ELEVATION).map(function(id){
         var E = ELEVATION[id], k = { flat:'Cards sit on the page, with an outline on hover.', standard:'A soft shadow; cards lift a little on hover.', dramatic:'Deep shadows; cards rise clearly off the page.' }[id];
@@ -701,6 +721,9 @@
           '<p class="hint">Point at the cards and buttons in the preview to feel it.</p>') +
         fld('m-red', 'For everyone', null, '<label class="switch"><input type="checkbox" id="m-reduce" data-k="motion.reduceAll"><span class="trk"><span class="knob"></span></span>' +
           '<span class="sw-t"><b>Reduce motion for everyone in this campaign</b>Things fade instead of moving, the header holds still and the menu highlight stays still.</span></label>'));
+      if (id === 'hover') return (
+        fld('h-look', 'Look', 'Every hover card in the campaign', '<div class="tiles two" role="radiogroup" aria-labelledby="h-look-l">' + tilesHover() + '</div>' +
+          '<p class="hint">Point at a linked page or a rule word anywhere in the campaign to see it. What a card shows comes from each page’s own settings.</p>'));
       return '';
     }
     function buildUI(){
@@ -1385,7 +1408,7 @@
           dir:drift ? 'to-' + h.dir : '', image:bg === 'image' ? pic(h.image) : '', scrim:h.scrim,
           widgets:h.widgets.slice(), links:h.links.filter(function(l){ return l.label.trim() || l.url.trim(); }), text:h.text },
         colours:{ accent:d.colours.accent, s1:d.colours.s1 || '', s2:d.colours.s2 || '', page:d.colours.page, contrast:d.colours.contrast },
-        nav:clone(d.nav), type:clone(d.type), buttons:clone(d.buttons), motion:clone(d.motion),
+        nav:clone(d.nav), type:clone(d.type), buttons:clone(d.buttons), motion:clone(d.motion), hover:clone(d.hover),
         // The companion of each choice is sent only while that choice is
         // selected, so nothing stale is stored.
         sidebar:{ colour:d.colours.sidebar, own:d.colours.sidebar === 'own' ? sb.own : '', corner:sb.corner,

@@ -66,6 +66,9 @@ type customizeDraft struct {
 		Speed     string `json:"speed"`
 		ReduceAll bool   `json:"reduceAll"`
 	} `json:"motion"`
+	Hover struct {
+		Look string `json:"look"`
+	} `json:"hover"`
 }
 
 // customizeState is everything the Customize page starts from.
@@ -216,6 +219,7 @@ func buildCustomizeState(ctx context.Context, cc *CampaignContext) customizeStat
 	d.Motion.Elevation = orDefault(a.Elevation, AppearanceElevations)
 	d.Motion.Speed = orDefault(a.MotionSpeed, AppearanceSpeeds)
 	d.Motion.ReduceAll = a.ReduceMotion
+	d.Hover.Look = orDefault(a.HoverCard, AppearanceHoverCards)
 	return st
 }
 

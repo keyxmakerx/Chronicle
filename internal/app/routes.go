@@ -4671,6 +4671,7 @@ func (a *App) RegisterRoutes() {
 					SidebarColour: ap.SidebarColour, SidebarOwn: ap.SidebarOwn,
 					SidebarCorner: ap.SidebarCorner, SidebarSubtitle: ap.SidebarSubtitle, SidebarBanner: ap.SidebarBanner,
 					PeekGlow: ap.PeekGlow, PeekGlowColour: ap.PeekGlowColour,
+					HoverCard: ap.HoverCard,
 				}
 				ctx = layouts.SetAppearance(ctx, ad)
 			}

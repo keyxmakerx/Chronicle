@@ -33,11 +33,13 @@ templ Base(title string) {
 
 		<!-- Tailwind CSS (generated) -->
 		<link rel="stylesheet" href={ AssetURL("/static/css/app.css") }/>
+		<!-- Shared paper look and the hover card (hovercard.js) -->
+		<link rel="stylesheet" href={ AssetURL("/static/css/paper.css") }/>
 
 		<!-- Fonts -->
 		<link rel="preconnect" href="https://fonts.googleapis.com"/>
 		<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
-		<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet"/>
+		<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Spectral:wght@500;700&display=swap" rel="stylesheet"/>
 
 		<!-- Font Awesome (icons for entity types, UI) -->
 		<link rel="preconnect" href="https://cdnjs.cloudflare.com" crossorigin/>
@@ -157,7 +159,8 @@ templ Base(title string) {
 		<!-- Tag picker widget (entity tag management) -->
 		<script src={ AssetURL("/static/js/widgets/tag_picker.js") } defer></script>
 
-		<!-- Entity tooltip widget (hover preview popover for entity links) -->
+		<!-- The one hover card, then the linked-page previews that use it -->
+		<script src={ AssetURL("/static/js/hovercard.js") } defer></script>
 		<script src={ AssetURL("/static/js/widgets/entity_tooltip.js") } defer></script>
 		<!-- Bulk entity selection and actions -->
 		<script src={ AssetURL("/static/js/widgets/bulk_actions.js") } defer></script>

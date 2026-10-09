@@ -41,6 +41,18 @@ folding, counts in a pill sized to its number.
 - **Hover is for a peek**: a preview of who or what, appearing where the
   pointer is (the sidebar peek, availability bars). A click then opens the
   full panel.
+- **Content previews use the one hover card**, `Chronicle.hovercard`
+  (`static/js/hovercard.js`): linked pages, rule words, creatures, game-system
+  entries. A caller describes the content; the card owns behaviour and look,
+  so no feature draws its own tooltip. It opens after the pointer rests
+  250 ms and stays while the pointer is on it; keyboard focus opens it and
+  Escape closes it, returning focus; one card at a time, kept inside the
+  window. A click on a link still follows it (a long press pins it on
+  touch); a click on a rule word pins the card with a close button.
+- **The hover card's look is the owner's choice** (Customize › Hover cards:
+  Paper, Plain, Night, Compact; Paper by default). Paper stays paper in dark
+  mode, and its tokens and classes (`static/css/paper.css`) are the shared
+  paper look for every paper-styled page.
 - **Panels open with an animation inside their own widget**: they grow out of
   the thing clicked, not slide in from the window edge or from under another
   element.
