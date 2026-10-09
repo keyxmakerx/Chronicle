@@ -157,3 +157,22 @@ func (a *questCharacterAdapter) ListCharacters(ctx context.Context, campaignID s
 	}
 	return out, nil
 }
+
+// questTypeAdapter implements quests.TypeDirectory over the entities service.
+type questTypeAdapter struct {
+	svc entities.EntityService
+}
+
+// TypeInCampaign treats a missing type and one of another campaign alike, as
+// not found, so a foreign category id cannot be probed through the boards.
+func (a *questTypeAdapter) TypeInCampaign(ctx context.Context, campaignID string, typeID int) (bool, error) {
+	et, err := a.svc.GetEntityTypeByID(ctx, typeID)
+	if err != nil {
+		var appErr *apperror.AppError
+		if errors.As(err, &appErr) && appErr.Code == http.StatusNotFound {
+			return false, nil
+		}
+		return false, err
+	}
+	return et.CampaignID == campaignID, nil
+}

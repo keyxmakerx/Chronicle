@@ -30,6 +30,7 @@ comparison, not for this one).
 | `data-campaign-id` | Yes | Campaign UUID |
 | `data-csrf-token` | Yes | CSRF token |
 | `data-context` | Yes | `"dashboard"` or `"template"` -- controls block type filtering |
+| `data-scope` | No | `"category"` on a category dashboard: the palette is fetched with `context=category` (every dashboard block plus blocks listing `category`) |
 | `data-features` | No | Comma-separated feature flags (see below) |
 | `data-layout` | No | Initial layout JSON; if absent, fetched via GET from endpoint |
 | `data-block-types` | No | Override palette block types JSON array |
@@ -48,7 +49,7 @@ comparison, not for this one).
 
 ## Block Types
 Block types are fetched from `/campaigns/:id/entity-types/block-types?context=X`
-where X is "dashboard" or "template". The API returns `BlockMeta` objects with
+where X is "dashboard", "template" or "category". The API returns `BlockMeta` objects with
 `config_fields` arrays that define the config dialog schema.
 
 Falls back to built-in `DEFAULT_BLOCK_TYPES` if the API is unavailable.

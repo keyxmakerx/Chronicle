@@ -11,7 +11,7 @@
  * buttons honest.
  *
  * Mount: <div data-widget="notice_boards" data-endpoint data-campaign-id
- * data-entity-id data-csrf-token data-can-manage data-member-role>. Shared
+ * data-entity-id (page mount only) data-csrf-token data-can-manage data-member-role>. Shared
  * parts: quest_board_kit.js; styles: static/css/quest_board.css.
  */
 (function () {

@@ -224,11 +224,28 @@ type PlayerQuestView struct {
 
 // --- Boards ---
 
+// Home is where a set of boards lives: on one page (EntityID) or on a
+// category's dashboard (TypeID, an entity type). Exactly one is set; the
+// repository refuses anything else, so a mix-up cannot widen a query.
+type Home struct {
+	EntityID string
+	TypeID   int
+}
+
+// PageHome is the home of a place page's boards.
+func PageHome(entityID string) Home { return Home{EntityID: entityID} }
+
+// TypeHome is the home of a category's boards.
+func TypeHome(typeID int) Home { return Home{TypeID: typeID} }
+
+// IsType reports whether the home is a category.
+func (h Home) IsType() bool { return h.TypeID != 0 }
+
 // Board is a stored board.
 type Board struct {
 	ID         string
 	CampaignID string
-	EntityID   string
+	Home       Home
 	Name       string
 	Who        string
 	SortOrder  int

@@ -5,7 +5,7 @@
 The two cork-board blocks of the quests plugin. **Quest board** sits on a
 quest page: the notice players read, the map scrap, the reward tag, and the
 DM's Quest Ledger (steps, rewards, foes, links, looks). **Notice boards** sits
-on a place page (a tavern): one or more boards where the DM posts quest
+on a place page (a tavern) or on a category dashboard (the same boards, keyed to the category): one or more boards where the DM posts quest
 notices and players pin pages, maps, notes and string between them, with the
 DM's Board Ledger (boards, quests, players, looks).
 
@@ -23,9 +23,9 @@ which also links `static/css/quest_board.css` and the period fonts.
 
 | Attribute | Meaning |
 |---|---|
-| `data-endpoint` | `/campaigns/:id/quests/:eid` or `/campaigns/:id/notice-boards/:eid` |
+| `data-endpoint` | `/campaigns/:id/quests/:eid`, `/campaigns/:id/notice-boards/:eid` or `/campaigns/:id/category-boards/:tid`; every sub-URL is built from it |
 | `data-campaign-id` | Base for picker, map, page and Armory URLs |
-| `data-csrf-token` | Sent on every write |
+| `data-csrf-token` | Sent on every write; the category mount omits it and `Chronicle.apiFetch` uses the page token |
 | `data-can-edit` / `data-can-manage` | Draw the DM controls; the routes enforce the real rules |
 | `data-member-role` | Notice boards only: which add-menu entries to draw |
 

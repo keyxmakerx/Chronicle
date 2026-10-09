@@ -137,36 +137,36 @@ func (f *fakeQuestRepo) Save(_ context.Context, campaignID, id string, data []by
 }
 
 type fakeBoardRepo struct {
-	looks  map[string]Looks
+	looks  map[Home]Looks
 	boards []Board
 	items  []Item
 }
 
-func newFakeBoardRepo() *fakeBoardRepo { return &fakeBoardRepo{looks: map[string]Looks{}} }
+func newFakeBoardRepo() *fakeBoardRepo { return &fakeBoardRepo{looks: map[Home]Looks{}} }
 
-func (f *fakeBoardRepo) GetLooks(_ context.Context, _, eid string) (Looks, error) {
+func (f *fakeBoardRepo) GetLooks(_ context.Context, _ string, eid Home) (Looks, error) {
 	if l, ok := f.looks[eid]; ok {
 		return l, nil
 	}
 	return Looks{Board: LookLit, Ledger: LookLit}, nil
 }
-func (f *fakeBoardRepo) SetLooks(_ context.Context, _, eid string, l Looks) error {
+func (f *fakeBoardRepo) SetLooks(_ context.Context, _ string, eid Home, l Looks) error {
 	f.looks[eid] = l
 	return nil
 }
-func (f *fakeBoardRepo) ListBoards(_ context.Context, cid, eid string) ([]Board, error) {
+func (f *fakeBoardRepo) ListBoards(_ context.Context, cid string, eid Home) ([]Board, error) {
 	var out []Board
 	for _, b := range f.boards {
-		if b.CampaignID == cid && b.EntityID == eid {
+		if b.CampaignID == cid && b.Home == eid {
 			out = append(out, b)
 		}
 	}
 	sort.SliceStable(out, func(i, j int) bool { return out[i].SortOrder < out[j].SortOrder })
 	return out, nil
 }
-func (f *fakeBoardRepo) GetBoard(_ context.Context, cid, eid, bid string) (*Board, error) {
+func (f *fakeBoardRepo) GetBoard(_ context.Context, cid string, eid Home, bid string) (*Board, error) {
 	for _, b := range f.boards {
-		if b.ID == bid && b.CampaignID == cid && b.EntityID == eid {
+		if b.ID == bid && b.CampaignID == cid && b.Home == eid {
 			c := b
 			return &c, nil
 		}
@@ -185,7 +185,7 @@ func (f *fakeBoardRepo) UpdateBoard(_ context.Context, b Board) error {
 	}
 	return nil
 }
-func (f *fakeBoardRepo) DeleteBoard(_ context.Context, _, _, bid string) error {
+func (f *fakeBoardRepo) DeleteBoard(_ context.Context, _ string, _ Home, bid string) error {
 	var keep []Board
 	for _, b := range f.boards {
 		if b.ID != bid {
@@ -195,7 +195,7 @@ func (f *fakeBoardRepo) DeleteBoard(_ context.Context, _, _, bid string) error {
 	f.boards = keep
 	return nil
 }
-func (f *fakeBoardRepo) SetOrder(_ context.Context, _, _ string, ids []string) error {
+func (f *fakeBoardRepo) SetOrder(_ context.Context, _ string, _ Home, ids []string) error {
 	for i, id := range ids {
 		for j := range f.boards {
 			if f.boards[j].ID == id {
@@ -275,4 +275,11 @@ func parseLooksPatch(t interface{ Fatal(...any) }, body string) LooksPatch {
 		t.Fatal(err)
 	}
 	return p
+}
+
+// fakeTypes maps a campaign to the category ids it owns.
+type fakeTypes map[string]map[int]bool
+
+func (f fakeTypes) TypeInCampaign(_ context.Context, campaignID string, typeID int) (bool, error) {
+	return f[campaignID][typeID], nil
 }

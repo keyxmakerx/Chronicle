@@ -4074,12 +4074,17 @@ func (a *App) RegisterRoutes() {
 	blockRegistry.Register(entities.BlockMeta{
 		Type: "notice_boards", Label: "Notice boards", Icon: "fa-thumbtack",
 		Description: "Boards players can cycle through, with quest notices, notes, pinned pages and maps",
-		Contexts:    []string{"template"}, Singleton: true,
+		Contexts:    []string{"template", "category"}, Singleton: true,
 	}, func(rc entities.BlockRenderContext) templ.Component {
 		if rc.CC == nil || rc.Entity == nil {
 			return templ.NopComponent
 		}
 		return quests.NoticeBoardsMount(rc.CC.Campaign.ID, rc.Entity.ID, rc.CSRFToken, rc.CC.CanControlWorldState(), int(rc.CC.MemberRole))
+	})
+	// The same block on a category dashboard: its boards belong to the
+	// category, not to a page.
+	entities.RegisterCategoryBlock("notice_boards", func(cc *campaigns.CampaignContext, et *entities.EntityType) templ.Component {
+		return quests.CategoryBoardsMount(cc.Campaign.ID, et.ID, cc.CanControlWorldState(), int(cc.MemberRole))
 	})
 
 	// Timeline plugin blocks (requires "timeline" addon).
@@ -4943,7 +4948,7 @@ func (a *App) RegisterRoutes() {
 		questRepo := quests.NewQuestRepository(a.DB)
 		quests.RegisterRoutes(e, quests.NewHandler(
 			quests.NewQuestService(questRepo, questEntities, questMaps),
-			quests.NewBoardService(quests.NewBoardRepository(a.DB), questRepo, questEntities, questMaps, &questMemberNamesAdapter{svc: campaignService}),
+			quests.NewBoardService(quests.NewBoardRepository(a.DB), questRepo, questEntities, &questTypeAdapter{svc: entityService}, questMaps, &questMemberNamesAdapter{svc: campaignService}),
 			quests.NewPickerService(questEntities, questMaps, &questCharacterAdapter{
 				dir:   &armoryStashDirectoryAdapter{svc: entityService},
 				names: &questMemberNamesAdapter{svc: campaignService},

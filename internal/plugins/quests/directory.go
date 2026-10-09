@@ -60,3 +60,10 @@ type MapDirectory interface {
 type MemberNames interface {
 	DisplayNames(ctx context.Context, campaignID string, userIDs []string) (map[string]string, error)
 }
+
+// TypeDirectory answers whether a category (entity type) belongs to a campaign,
+// so a category id from another campaign can never be used as a board home.
+type TypeDirectory interface {
+	// TypeInCampaign is false for a missing type and for one of another campaign.
+	TypeInCampaign(ctx context.Context, campaignID string, typeID int) (bool, error)
+}

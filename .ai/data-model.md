@@ -326,7 +326,8 @@ Foundry module repo for the wire contract.
 |-------|---------|
 | `quests` | One JSON sheet per page (`entity_id` PK), `version` for edit conflicts |
 | `quest_board_pages` | Board and ledger looks for a place page |
-| `quest_boards` | Boards on a place page; `who` = dm/scribe/all, `sort_order` |
+| `quest_board_type_looks` | Board and ledger looks for a category (entity type); FK cascade |
+| `quest_boards` | Boards on a place page or a category: exactly one of `entity_id` / `entity_type_id` is set; `who` = dm/scribe/all, `sort_order` |
 | `quest_board_items` | Pins: notice/note/page/map/string; `owner_user_id`, `by_dm`, `hidden`, `ref_id` (no FK) |
 
 ## MariaDB-specific notes
