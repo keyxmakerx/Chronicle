@@ -79,6 +79,16 @@ jobs:
         # the diff (fetch-depth: 0 above).
         run: ./tools/check-plugin-isolation.sh
 
+      - name: Comment clutter guard self-tests
+        run: ./tools/test-comment-clutter.sh
+
+      - name: Comment clutter guard
+        # Diff-scoped FAIL: new comments may not carry tracking IDs, archive
+        # paths, file:line pointers or dates (.ai/conventions.md, Comment
+        # Conventions). Existing comments are grandfathered. Needs full git
+        # history (fetch-depth: 0 above).
+        run: ./tools/check-comment-clutter.sh
+
       - name: Migration immutability guard
         # Migrations are APPEND-ONLY. Fails the PR if it deletes or modifies a
         # migration file already on the base branch: a live DB may have
@@ -276,7 +286,9 @@ jobs:
                       TestQuestRepositoryIntegration_SaveGetVersioning \
                       TestQuestRepositoryIntegration_DocumentRoundTripAndGetMany \
                       TestBoardRepositoryIntegration_LooksAndBoards \
-                      TestBoardRepositoryIntegration_Items; do
+                      TestBoardRepositoryIntegration_Items \
+                      TestBoardRepositoryIntegration_TypeHomes \
+                      TestPageCards_Integration; do
             grep -q -- "--- PASS: $want" dbtests.log || {
               echo "::error::$want did not PASS — it was skipped or never ran."
               exit 1
@@ -292,7 +304,11 @@ jobs:
 
       - uses: actions/setup-go@v7
         with:
-          go-version: '1.27'
+          # Exact patch, not '1.27': the golangci-lint binary pinned below
+          # cannot read the standard library's export data from a newer Go
+          # patch release, so a runner picking up a new patch breaks every PR.
+          # Move this together with the golangci-lint pin and go.mod.
+          go-version: '1.27.1'
 
       - name: Install templ
         # Pin to the runtime version in go.mod. The generator and the

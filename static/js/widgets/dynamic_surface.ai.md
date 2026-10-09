@@ -3,7 +3,7 @@
 A frame-owned, system-agnostic toolkit for building dynamic sheets: a motion-preset
 library, an overlay stack, an expand/collapse box primitive, a shared data provider,
 a mini→full launch, and a schema-driven mount. Vanilla browser JS, loaded after
-`boot.js` via `base.templ`. **No node runtime**; verified with esbuild + the browser.
+`boot.js` via `base.templ`. Users: `character_surface.js` and `surface_demo.js`.
 
 ## API — `Chronicle.surface`
 
@@ -50,9 +50,7 @@ so they're theme-aware. A System names which fits each card; it never writes ani
 - Box view-state (expanded/collapsed) persists in localStorage when `id` is set.
 
 ## Verification
-Browser JS; **esbuild** transform-validated (es2015); the `templ`+`go build` wiring is green.
-`app.css`/`*_templ.go` are gitignored, rebuilt at deploy. **Look-and-feel is browser-verified by the
-operator** — no node/jsdom test harness (project is node-free apart from build tooling).
+Browser JS. `make test-js` (`node --test test/js/*.test.mjs`) has no tests for this widget; look-and-feel is checked in the browser.
 
 ## Open work
 

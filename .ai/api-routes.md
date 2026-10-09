@@ -7,7 +7,7 @@
 <!-- Update: When auth tiers or route groups change.                         -->
 <!-- ====================================================================== -->
 
-Chronicle registers 658 Echo routes across the web UI, the admin panel, and
+Chronicle registers its Echo routes across the web UI, the admin panel, and
 the REST API. This file does not enumerate them — a hand-maintained table
 drifts from the code within weeks. Instead:
 

@@ -59,8 +59,8 @@
   --arcT:oklch(.5 .15 295); --arcS:oklch(.6 .14 295 / .55); --tsB:.46; --tsS:.4; --tsL:.97; --mring:oklch(.24 .02 265 / .14);
   --eclT:oklch(.46 .07 50); --eclS:oklch(.5 .07 50 / .5); --hvtT:oklch(.52 .12 75); --hvtS:oklch(.66 .13 78 / .6);
   --gold:oklch(.50 .10 75); --goldBg:oklch(.86 .085 85 / .4); --goldRing:oklch(.62 .10 80 / .5);
-  /* Who's free: a player's free hours, and the band where everyone is free. */
-  --free:oklch(.56 .11 152); --freeTrack:oklch(.5 .01 265 / .14); --freeBand:oklch(.62 .11 152 / .18);
+  /* Who's free: a player's free hours, the hours they marked as their best, and the band where everyone is free. */
+  --free:oklch(.56 .11 152); --freeTrack:oklch(.5 .01 265 / .14); --freeBand:oklch(.62 .11 152 / .18); --best:oklch(.68 .15 70); --off:oklch(.58 .17 25);
 }
 @media (prefers-color-scheme:dark){:root:not([data-theme="light"]){color-scheme:dark;
     --page:oklch(.16 .008 265); --ink:oklch(.94 .006 265); --ink2:oklch(.82 .008 265); --mut:oklch(.68 .01 265);
@@ -78,7 +78,7 @@
     --arcT:oklch(.8 .12 295); --arcS:oklch(.7 .13 295 / .5); --tsB:.34; --tsS:.8; --tsL:.93; --mring:oklch(.94 .01 265 / .12);
     --eclT:oklch(.76 .07 52); --eclS:oklch(.68 .07 52 / .5); --hvtT:oklch(.84 .12 80); --hvtS:oklch(.76 .12 80 / .5);
     --gold:oklch(.84 .10 85); --goldBg:oklch(.70 .10 85 / .15); --goldRing:oklch(.78 .10 85 / .38);
-    --free:oklch(.74 .12 152); --freeTrack:oklch(.94 .01 265 / .1); --freeBand:oklch(.74 .12 152 / .16);}
+    --free:oklch(.74 .12 152); --freeTrack:oklch(.94 .01 265 / .1); --freeBand:oklch(.74 .12 152 / .16); --best:oklch(.82 .13 78); --off:oklch(.72 .15 25);}
 
 }
 :root[data-theme="dark"]{color-scheme:dark;
@@ -97,7 +97,7 @@
   --arcT:oklch(.8 .12 295); --arcS:oklch(.7 .13 295 / .5); --tsB:.34; --tsS:.8; --tsL:.93; --mring:oklch(.94 .01 265 / .12);
   --eclT:oklch(.76 .07 52); --eclS:oklch(.68 .07 52 / .5); --hvtT:oklch(.84 .12 80); --hvtS:oklch(.76 .12 80 / .5);
   --gold:oklch(.84 .10 85); --goldBg:oklch(.70 .10 85 / .15); --goldRing:oklch(.78 .10 85 / .38);
-    --free:oklch(.74 .12 152); --freeTrack:oklch(.94 .01 265 / .1); --freeBand:oklch(.74 .12 152 / .16);}
+    --free:oklch(.74 .12 152); --freeTrack:oklch(.94 .01 265 / .1); --freeBand:oklch(.74 .12 152 / .16); --best:oklch(.82 .13 78); --off:oklch(.72 .15 25);}
 .cal-v5 *, .cal-v5 *::before, .cal-v5 *::after{box-sizing:border-box}
 .cal-v5 html, .cal-v5 body{margin:0}
 .cal-v5 body{background:var(--page);color:var(--ink);font:14px/1.45 var(--sans);-webkit-font-smoothing:antialiased;overflow-x:hidden}
@@ -244,6 +244,18 @@
 .cal-v5 .todaypill .sb:hover{background:var(--hair);color:var(--ink)}
 .cal-v5 .todaypill .sb .i{width:14px;height:14px}
 .cal-v5 .todaypill .td.bump{animation:cal5-bump .45s var(--spring)}
+.cal-v5 .todaypill .tdset{height:26px;padding:0 8px;border-radius:8px;font:600 12.5px/1 var(--sans);color:var(--ink)}
+.cal-v5 .todaypill .tdset:hover{background:var(--hair)}
+.cal-v5 .todaypill .tdset:focus-visible, .cal-v5 .todaypill .sb:focus-visible{outline:1.5px solid var(--ink);outline-offset:1px}
+.cal-v5 .todaypill .tt{margin-left:7px;font-weight:500;color:var(--mut)}
+.cal-v5 .settoday{display:flex;flex-direction:column;gap:10px;padding:12px 14px 14px}
+.cal-v5 .settoday .strow3{display:grid;grid-template-columns:minmax(0,1.5fr) minmax(0,.7fr) minmax(0,1fr);gap:8px}
+.cal-v5 .settoday .strow2{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px;max-width:66%}
+.cal-v5 .settoday .fld input, .cal-v5 .settoday .fld select{height:32px;font-size:13px}
+.cal-v5 .settoday .stn{margin:0;font:500 11.5px/1.45 var(--sans);color:var(--mut)}
+.cal-v5 .settoday .sterr{margin:0;font:550 12px/1.4 var(--sans);color:var(--bldT)}
+.cal-v5 .settoday .sta{display:flex;gap:8px}
+.cal-v5 .settoday .sterr.shake{animation:cal5-wxNag .4s ease}
 @keyframes cal5-bump{from{opacity:.2;transform:translateY(5px)}to{opacity:1;transform:none}}
 .cal-v5 .dow{display:grid;grid-template-columns:repeat(var(--cols),minmax(0,1fr));padding:8px var(--gx) 0}
 .cal-v5 .dow span{padding:0 10px 9px;font:650 9.5px/1 var(--sans);letter-spacing:.13em;text-transform:uppercase;color:var(--mut);white-space:nowrap;overflow:hidden}
@@ -448,6 +460,9 @@
 .cal-v5 .seg3 button:hover{color:var(--ink)}
 .cal-v5 .seg3 button[aria-pressed="true"]{background:var(--ink);color:var(--paper);border-color:transparent}
 .cal-v5 .rcount{margin-top:7px;font:500 11px/1.4 var(--sans);color:var(--mut)}
+.cal-v5 .rsvp.glance{padding:8px 11px 9px}
+.cal-v5 .rsvp.glance .rcount{margin:0;font-size:11.5px;color:var(--ink2)}
+.cal-v5 .rsvp.glance .plwho{margin-top:7px}
 .cal-v5 .roster{list-style:none;margin:10px 0 0;padding:0;display:flex;flex-direction:column;gap:7px}
 .cal-v5 .roster li{display:flex;align-items:flex-start;gap:8px;font:500 12px/1.35 var(--sans);color:var(--ink2)}
 .cal-v5 .roster .who{flex:1;min-width:0;padding-top:3px}
@@ -505,7 +520,11 @@
 .cal-v5 .nudge button{width:20px;height:20px;border-radius:6px;display:grid;place-items:center;color:var(--ink2);box-shadow:inset 0 0 0 1px var(--edge)}
 .cal-v5 .nudge button:hover{background:var(--hair2);color:var(--ink)}
 .cal-v5 .nudge .i{width:11px;height:11px}
-@keyframes cal5-foldDown{from{opacity:0;transform:perspective(600px) rotateX(-65deg)}to{opacity:1;transform:none}}
+/* A fold-out drops open from its top edge. The reveal is a clip measured in the fold-out's own height, so a tall list
+   opens as cleanly as a row of chips; the slight lean gives it the paper's turn without throwing a tall one at the
+   reader, as a steep fixed-depth turn did. The clip reaches past the sides so a fold-out's shadow is never cut. */
+@keyframes cal5-foldDown{from{opacity:0;clip-path:inset(-40px -40px 100% -40px);transform:perspective(1400px) rotateX(-12deg)}
+  to{opacity:1;clip-path:inset(-40px -40px -40px -40px);transform:none}}
 .cal-v5 .kinds{display:flex;flex-wrap:wrap;gap:5px;margin:8px 0 2px 30px;padding:8px;border-radius:10px;background:var(--paper2);transform-origin:top;animation:cal5-foldDown .34s var(--spring) both}
 .cal-v5 .kinds button{display:inline-flex;align-items:center;gap:6px;height:27px;padding:0 10px;border-radius:99px;font:550 11.5px/1 var(--sans);color:var(--ink2);box-shadow:inset 0 0 0 1px var(--edge);background:var(--paper)}
 .cal-v5 .kinds button:hover{color:var(--ink)}
@@ -1797,6 +1816,8 @@
 .cal-v5 .avl.many .ln{height:2px}
 .cal-v5 .ln{position:relative;display:block;flex:none;border-radius:2px;background:var(--freeTrack)}
 .cal-v5 .ln b{position:absolute;top:0;bottom:0;border-radius:inherit;background:var(--free)}
+.cal-v5 .ln b.p{background:var(--best)}
+.cal-v5 .ln.off{background:repeating-linear-gradient(90deg,var(--off) 0 5px,transparent 5px 9px)}
 .cal-v5 .avl .fband{position:absolute;top:-2px;bottom:-2px;border-radius:3px;background:var(--freeBand)}
 .cal-v5 .gfree{list-style:none;margin:6px 0 0;padding:0;font:500 11.5px/1.45 var(--sans);color:var(--ink2)}
 .cal-v5 .gfree li{display:flex;justify-content:space-between;gap:10px}
@@ -1809,7 +1830,15 @@
 .cal-v5 .flines .bandwrap{position:absolute;top:0;bottom:0;left:72px;right:0}
 .cal-v5 .flines .band2{position:absolute;top:0;bottom:0;border-radius:6px;background:var(--freeBand)}
 .cal-v5 .fticks{display:flex;justify-content:space-between;margin:2px 0 0 72px;font:500 9.5px/1 var(--sans);color:var(--mut)}
-.cal-v5 .fsum{margin:8px 0 6px;font:550 12px/1.4 var(--sans);color:var(--ink)}
+.cal-v5 .fsum{margin:2px 0 4px;font:550 12.5px/1.4 var(--sans);color:var(--ink)}
+.cal-v5 .flegend{display:flex;flex-wrap:wrap;gap:4px 14px;margin:8px 0 10px 72px;font:500 10.5px/1.2 var(--sans);color:var(--mut)}
+.cal-v5 .flegend span{display:inline-flex;align-items:center;gap:5px}
+.cal-v5 .flegend i{display:block;width:12px;height:5px;border-radius:3px}
+.cal-v5 .flegend .f{background:var(--free)}
+.cal-v5 .flegend .b{background:var(--best)}
+.cal-v5 .flegend .e{height:9px;background:var(--freeBand)}
+.cal-v5 .flegend .o{background:repeating-linear-gradient(90deg,var(--off) 0 3px,transparent 3px 5px)}
+.cal-v5 .fmine>.lnk{margin-left:-6px}
 .cal-v5 .fmine{margin-top:4px}
 /* The Who's free view: the moon view's panel, holding Best times, the players and their hours, and the way to the
    full planner. */
@@ -1823,10 +1852,34 @@
 .cal-v5 .fvbody .slots li:first-child{border-top:0}
 .cal-v5 .fvbody .slots li span{font:500 12.5px/1.4 var(--sans);color:var(--ink2);min-width:0}
 .cal-v5 .fvbody .slots li b{color:var(--ink);font-weight:600}
+.cal-v5 .fvwk{margin:8px 0 0;padding:8px 10px;border-radius:9px;background:var(--paper2);font:500 12px/1.45 var(--sans);color:var(--ink2)}
+.cal-v5 .fvwk b{color:var(--ink);font-weight:600}
 .cal-v5 .fvbody small{display:block;font:500 11.5px/1.35 var(--sans);color:var(--mut)}
-.cal-v5 .fvroster li{display:flex;justify-content:space-between;gap:10px;padding:5px 0;font:500 12.5px/1.3 var(--sans);color:var(--ink)}
+.cal-v5 .fvroster li{display:flex;align-items:center;gap:10px;min-height:32px;padding:2px 0;font:500 12.5px/1.3 var(--sans);color:var(--ink)}
+.cal-v5 .fvroster .nm{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .cal-v5 .fvroster .ok{color:var(--mut)}
 .cal-v5 .fvroster .wait{color:var(--ink2);font-weight:600}
+.cal-v5 .fvroster .fvbell{width:28px;height:28px;flex:none;font-size:11.5px;color:var(--ink2)}
+.cal-v5 .fvroster .fvbell:disabled{color:var(--free);cursor:default}
+.cal-v5 .fvroster .fvme{width:28px;flex:none;text-align:center;font:550 10.5px/1 var(--sans);color:var(--mut)}
+.cal-v5 .fvask{margin-top:10px;padding-top:10px;border-top:1px solid var(--hair)}
+.cal-v5 .fvask p{margin:0 0 8px;font:500 12px/1.45 var(--sans);color:var(--ink2)}
+.cal-v5 .fvask p b{color:var(--ink);font-weight:650}
+.cal-v5 .fvaskb{display:flex;flex-wrap:wrap;gap:6px}
+.cal-v5 .fvdue{display:flex;align-items:baseline;gap:7px;margin:0 0 10px;padding:8px 10px;border-radius:9px;background:var(--goldBg);font:550 12px/1.45 var(--sans);color:var(--ink)}
+.cal-v5 .fvdue i{color:var(--gold)}
+.cal-v5 .fvmb{display:flex;flex-wrap:wrap;gap:6px}
+.cal-v5 .fvaway{margin-top:14px}
+.cal-v5 .fvaway h5{margin:0 0 6px;font:650 9.5px/1 var(--sans);letter-spacing:.14em;text-transform:uppercase;color:var(--mut)}
+.cal-v5 .fvawl{list-style:none;margin:0 0 8px;padding:0}
+.cal-v5 .fvawl li{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:5px 0;border-top:1px solid var(--hair);font:550 12.5px/1.3 var(--sans);color:var(--ink)}
+.cal-v5 .fvawl li:first-child{border-top:0}
+.cal-v5 .fvaway .fnote{margin:0 0 8px}
+.cal-v5 .fvawf{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px;padding:10px;border-radius:10px;background:var(--paper2);box-shadow:inset 0 0 0 1px var(--hair);transform-origin:top;animation:cal5-foldDown .34s var(--spring) both}
+.cal-v5 .fvawf .fld input{height:32px;background:var(--paper);font-size:12.5px}
+.cal-v5 .fvawf .gperr, .cal-v5 .fvawa{grid-column:1/-1}
+.cal-v5 .fvawa{display:flex;gap:6px}
+.cal-v5 .gperr.shake{animation:cal5-wxNag .42s cubic-bezier(.36,.07,.19,.97)}
 .cal-v5 .fvbody .fnote{margin:8px 0 0;display:flex;flex-wrap:wrap;align-items:center;gap:6px 10px;font:500 11.5px/1.4 var(--sans);color:var(--mut)}
 .cal-v5 .fvsw{display:inline-flex;align-items:center;gap:8px;font:550 12.5px/1.2 var(--sans);color:var(--ink);cursor:pointer}
 .cal-v5 .fvsw input{width:16px;height:16px;accent-color:var(--free)}
@@ -1874,7 +1927,7 @@
 .cal-v5 .pltools button{display:inline-flex;align-items:center;gap:6px}
 .cal-v5 .pltools .plsw{display:inline-block;width:10px;height:10px;padding:0;border-radius:3px;background:var(--freeTrack)}
 .cal-v5 .pltools .plsw.available{background:var(--free)}
-.cal-v5 .pltools .plsw.preferred{background:var(--free);box-shadow:0 0 0 1.5px var(--gold)}
+.cal-v5 .pltools .plsw.preferred{background:var(--best)}
 .cal-v5 .plgrid{display:flex;flex-direction:column;gap:3px;user-select:none;touch-action:none}
 .cal-v5 .plgh{display:grid;grid-template-columns:40px repeat(4,1fr);font:500 9.5px/1 var(--sans);color:var(--mut)}
 .cal-v5 .plrow{display:flex;align-items:center;gap:6px}
@@ -1883,7 +1936,7 @@
 .cal-v5 .plc{height:22px;padding:0;border-radius:3px;background:var(--freeTrack);cursor:pointer}
 .cal-v5 .plc:nth-child(6n+1){margin-left:1px}
 .cal-v5 .plc[data-st="available"]{background:var(--free)}
-.cal-v5 .plc[data-st="preferred"]{background:var(--free);box-shadow:inset 0 0 0 2px var(--gold)}
+.cal-v5 .plc[data-st="preferred"]{background:var(--best)}
 .cal-v5 .plc:hover{outline:1.5px solid var(--ink);outline-offset:-1px}
 .cal-v5 .plc:focus-visible{outline:2px solid var(--ink);outline-offset:0}
 .cal-v5 .plsave{display:flex;align-items:center;gap:12px;margin-top:12px}
@@ -1957,9 +2010,9 @@
 .cal-v5 .myday.edit .fld input{height:30px;background:var(--paper);font-size:12.5px}
 .cal-v5 .myday.edit .gprow{grid-template-columns:minmax(0,1fr) minmax(0,1fr)}
 /* My hours: the same week every week, or two weeks taking turns. */
-.cal-v5 .plalt{margin:4px 0 2px}
+.cal-v5 .plalt{display:flex;width:max-content;margin:4px 0 2px}
 .cal-v5 .plwk{margin:14px 0 6px;font:600 12px/1.3 var(--sans);color:var(--ink)}
 /* The era ribbon's segments are also .rseg; its bar must not cover the
    planner's tab and paint buttons and swallow their presses. */
-.cal-v5 .rseg.fvtabs, .cal-v5 .rseg.pltools{height:auto}
-.cal-v5 .rseg.fvtabs::before, .cal-v5 .rseg.pltools::before{content:none}
+.cal-v5 .rseg.fvtabs, .cal-v5 .rseg.pltools, .cal-v5 .rseg.plalt{height:auto}
+.cal-v5 .rseg.fvtabs::before, .cal-v5 .rseg.pltools::before, .cal-v5 .rseg.plalt::before{content:none}

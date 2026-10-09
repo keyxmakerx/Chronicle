@@ -22,7 +22,11 @@ import (
 // authorized at its route, and the operator's health check (see each call
 // site's comment for why it's trusted).
 var systemViewerAllowlist = map[string]bool{
-	"internal/app/export_adapters.go":                   true,
+	"internal/app/export_adapters.go": true,
+	// A quest's due-date event is the DM's own record, written after the
+	// quests route has checked DM access; it must see and author dm_only
+	// events whatever the acting user's per-user rules.
+	"internal/app/quests_adapters.go":                   true,
 	"internal/plugins/timeline/timeline_widget_type.go": true,
 	// The operator's calendar health diagnostic counts rows for the server
 	// admin; no campaign member's view is behind it.

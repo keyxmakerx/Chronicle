@@ -2793,7 +2793,7 @@ func (h *Handler) DeleteEntityType(c echo.Context) error {
 
 // BlockTypesAPI returns the available block types for the layout editor,
 // filtered by which addons are enabled for the current campaign and
-// optionally by editor context (?context=dashboard|template).
+// optionally by editor context (?context=dashboard|template|category).
 // GET /campaigns/:id/entity-types/block-types
 func (h *Handler) BlockTypesAPI(c echo.Context) error {
 	cc := campaigns.GetCampaignContext(c)
@@ -2805,7 +2805,7 @@ func (h *Handler) BlockTypesAPI(c echo.Context) error {
 		return c.JSON(http.StatusOK, []BlockMeta{})
 	}
 
-	editorCtx := c.QueryParam("context") // "dashboard", "template", or "" (all)
+	editorCtx := c.QueryParam("context") // "dashboard", "template", "category", or "" (all)
 	types := h.blockRegistry.TypesForCampaignAndContext(c.Request().Context(), cc.Campaign.ID, h.addonSvc, editorCtx)
 
 	// Append extension widget blocks from enabled extensions (template context only).

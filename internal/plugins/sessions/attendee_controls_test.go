@@ -48,7 +48,7 @@ func TestAttendeeList_LateJoinerGetsRSVPControls(t *testing.T) {
 			"they cannot answer, and there is no other route that would let them")
 	}
 	// Nothing may be pre-highlighted: they have not answered.
-	if strings.Contains(html, "ring-green-300") {
+	if strings.Contains(html, "ring-ok/40") {
 		t.Error("the newcomer's Going button is rendered as already-chosen")
 	}
 }
@@ -67,7 +67,7 @@ func TestAttendeeList_ExistingAttendeeKeepsTheirHighlight(t *testing.T) {
 	if !hasRSVPButtons(html) {
 		t.Fatal("an invited member lost their RSVP controls")
 	}
-	if !strings.Contains(html, "ring-green-300") {
+	if !strings.Contains(html, "ring-ok/40") {
 		t.Error("the member's stored 'accepted' answer is no longer highlighted")
 	}
 }

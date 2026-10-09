@@ -2467,7 +2467,7 @@ func (s *entityService) UpdateCategoryDashboardLayout(ctx context.Context, id in
 			}
 			blockCount += len(col.Blocks)
 			for _, block := range col.Blocks {
-				if !campaigns.ValidBlockTypes[block.Type] {
+				if !campaigns.ValidBlockTypes[block.Type] && !IsExtraCategoryBlock(block.Type) {
 					return apperror.NewBadRequest(fmt.Sprintf("invalid block type: %s", block.Type))
 				}
 			}

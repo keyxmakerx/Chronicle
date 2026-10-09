@@ -303,7 +303,7 @@ Use the Go SDK mock for integration testing of host function calls.
 
 ### Campaign (Scribe+ role required)
 - `GET /campaigns/:id/extensions/wasm/plugins` — list campaign WASM plugins
-- `POST /campaigns/:id/extensions/wasm/call/:extID/:slug` — call plugin function
+- `POST /campaigns/:id/extensions/wasm/:extID/:slug/call` — call plugin function
 
 Call endpoint body:
 ```json

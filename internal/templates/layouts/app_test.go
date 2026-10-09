@@ -20,7 +20,9 @@ func ctxForNotes(authed bool, campaignID string, notesEnabled bool, activePath s
 	ctx := context.Background()
 	ctx = SetIsAuthenticated(ctx, authed)
 	ctx = SetCampaignID(ctx, campaignID)
-	ctx = SetEnabledAddons(ctx, map[string]bool{"notes": notesEnabled})
+	// The Journal is on throughout, so these cases also show its switch is
+	// not the Jot notes one.
+	ctx = SetEnabledAddons(ctx, map[string]bool{"notes": true, "jot-notes": notesEnabled})
 	ctx = SetActivePath(ctx, activePath)
 	return ctx
 }

@@ -343,17 +343,24 @@ func (r *campaignRepository) UpdateSettings(ctx context.Context, campaignID, set
 	if err != nil {
 		return fmt.Errorf("updating settings: %w", err)
 	}
-	// MariaDB counts only rows it changed, so writing the same settings twice
-	// in one second affects nothing; that is a no-op, not a missing campaign.
-	if rows, _ := result.RowsAffected(); rows == 0 {
-		var one int
-		err := r.db.QueryRowContext(ctx, `SELECT 1 FROM campaigns WHERE id = ?`, campaignID).Scan(&one)
-		if errors.Is(err, sql.ErrNoRows) {
-			return apperror.NewNotFound("campaign not found")
-		}
-		if err != nil {
-			return fmt.Errorf("checking campaign: %w", err)
-		}
+	return r.changedOrExists(ctx, result, campaignID)
+}
+
+// changedOrExists turns an UPDATE that touched no row into "campaign not
+// found" only when the campaign really is missing. MariaDB counts only rows
+// it changed, so writing the value already stored within the same second
+// affects nothing; that is a no-op, not a missing campaign.
+func (r *campaignRepository) changedOrExists(ctx context.Context, result sql.Result, campaignID string) error {
+	if rows, _ := result.RowsAffected(); rows > 0 {
+		return nil
+	}
+	var one int
+	err := r.db.QueryRowContext(ctx, `SELECT 1 FROM campaigns WHERE id = ?`, campaignID).Scan(&one)
+	if errors.Is(err, sql.ErrNoRows) {
+		return apperror.NewNotFound("campaign not found")
+	}
+	if err != nil {
+		return fmt.Errorf("checking campaign: %w", err)
 	}
 	return nil
 }
@@ -367,11 +374,7 @@ func (r *campaignRepository) UpdateSidebarConfig(ctx context.Context, campaignID
 	if err != nil {
 		return fmt.Errorf("updating sidebar config: %w", err)
 	}
-	rows, _ := result.RowsAffected()
-	if rows == 0 {
-		return apperror.NewNotFound("campaign not found")
-	}
-	return nil
+	return r.changedOrExists(ctx, result, campaignID)
 }
 
 // UpdateDashboardLayout updates only the dashboard_layout JSON for a campaign.
@@ -384,11 +387,7 @@ func (r *campaignRepository) UpdateDashboardLayout(ctx context.Context, campaign
 	if err != nil {
 		return fmt.Errorf("updating dashboard layout: %w", err)
 	}
-	rows, _ := result.RowsAffected()
-	if rows == 0 {
-		return apperror.NewNotFound("campaign not found")
-	}
-	return nil
+	return r.changedOrExists(ctx, result, campaignID)
 }
 
 // UpdateOwnerDashboardLayout updates only the owner_dashboard_layout JSON for a campaign.

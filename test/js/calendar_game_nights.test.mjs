@@ -1,8 +1,8 @@
 // calendar_game_nights.test.mjs — pins how calendar_view.js shows game
 // nights and takes answers: silence reads as "no answer yet" (never a no),
 // each night of a series answers for its own date, stored text is escaped,
-// only the organiser or owner gets the "count me" switch, an anchored world
-// calendar places nights on the right world day, times read in the
+// only the organiser or owner gets the "count me" switch, a world calendar
+// places tonight's night on its own today, times read in the
 // calendar's zone with the viewer's one press away, and a game-night link
 // opens the right night.
 
@@ -41,7 +41,7 @@ function load(o = {}) {
   };
   vm.createContext(sandbox);
   vm.runInContext(src, sandbox);
-  return { def: defs.calendar_view, calls, Chronicle: sandbox.Chronicle };
+  return { def: defs.calendar_view, calls, Chronicle: sandbox.Chronicle, exp: sandbox.module.exports };
 }
 
 // A view with just enough state for the game-night methods; the DOM bits
@@ -167,49 +167,61 @@ test('a time set in a zone carries its label', () => {
   const { def } = load();
   const v = view(def, []);
   assert.equal(v._gnTime(night({ time: '' })), '');
-  assert.equal(v._gnTime(night()), '19:00');
-  assert.match(v._gnTime(night({ tz: 'America/Chicago' })), /^19:00 (CDT|GMT-5)$/);
+  assert.equal(v._gnTime(night()), '7pm');
+  assert.match(v._gnTime(night({ tz: 'America/Chicago' })), /^7pm (CDT|GMT-5)$/);
 });
 
-// Harptos-like: twelve 30-day months. World 1492-5-8 is real 2026-10-08.
+// Harptos-like: twelve 30-day months, its today 1492-5-8. The real today
+// in these tests is 2026-10-08.
+const REAL_TODAY = Date.UTC(2026, 9, 8, 12);
 function harptos(over) {
   return Object.assign({
     mode: 'fantasy', months: Array.from({ length: 12 }, (_, i) => ({ name: 'M' + (i + 1), days: 30 })),
-    anchor_year: 1492, anchor_month: 5, anchor_day: 8, anchor_real_date: '2026-10-08T00:00:00Z',
+    current_year: 1492, current_month: 5, current_day: 8,
   }, over || {});
 }
 
-function anchoredView(def, Chronicle, nights) {
+function anchoredView(def, Chronicle, nights, over) {
   const v = view(def, []);
-  v.cal = harptos();
-  v._anchor = Chronicle.calendarRealAnchor(v.cal);
+  v.cal = harptos(over);
+  v._anchor = Chronicle.calendarRealAnchor(v.cal, REAL_TODAY);
   v.view = { y: 1492, m: 5 };
   v.nightsByMonth = { '1492_5': nights };
   return v;
 }
 
-test('an anchored world calendar places a night on its world day', () => {
+test('a world calendar places a night beside its own today', () => {
   const { def, Chronicle } = load();
   const v = anchoredView(def, Chronicle, [night()]);
   assert.equal(v._realIso(1492, 5, 8), '2026-10-08');
   assert.equal(v._realIso(1492, 6, 1), '2026-10-31');
+  assert.equal(v._todayIso(), '2026-10-08');
   assert.equal(v.nightsOnDay(1492, 5, 8).length, 1);
   assert.equal(v.nightsOnDay(1492, 5, 9).length, 0);
-  assert.match(v._gnBoxHTML(night()), /Real date: Thu Oct 8 · 19:00/);
+  assert.match(v._gnBoxHTML(night()), /Real date: Thu Oct 8 · 7pm/);
 });
 
-test('without a whole anchor, a world calendar has no real dates', () => {
+test('moving the world’s date moves tonight’s night with it', () => {
+  const { def, Chronicle } = load();
+  // The story jumped ahead to 1492-7-20; tonight is still 2026-10-08.
+  const v = anchoredView(def, Chronicle, [], { current_month: 7, current_day: 20 });
+  assert.equal(v._realIso(1492, 7, 20), '2026-10-08');
+  assert.equal(v._realIso(1492, 7, 27), '2026-10-15');
+  assert.equal(v._realIso(1492, 5, 8), '2026-07-28');
+});
+
+test('a world calendar with no date, or a real-world one, has no anchor', () => {
   const { Chronicle } = load();
-  assert.equal(Chronicle.calendarRealAnchor(harptos({ anchor_day: null })), null);
-  assert.equal(Chronicle.calendarRealAnchor({ mode: 'reallife', tracks_real_time: true }), null);
+  assert.equal(Chronicle.calendarRealAnchor(harptos({ current_day: 0 }), REAL_TODAY), null);
+  assert.equal(Chronicle.calendarRealAnchor({ mode: 'reallife', tracks_real_time: true }, REAL_TODAY), null);
   const { def } = load();
   const v = view(def, [night()]);
-  v.cal = harptos({ anchor_real_date: null });
+  v.cal = harptos();
   v._anchor = null;
   assert.equal(v._realIso(1492, 5, 8), '');
 });
 
-test('an anchored month asks for the real days it covers', async () => {
+test('a world month asks for the real days it covers', async () => {
   const { def, calls, Chronicle } = load();
   const v = anchoredView(def, Chronicle, []);
   v.nightsByMonth = {};
@@ -223,14 +235,14 @@ test('times read in the calendar zone, with your own one press away', () => {
   const v = view(def, []);
   v.calZone = 'America/Chicago';
   const n = night({ tz: 'America/Chicago' });
-  assert.equal(v._gnTime(n), '19:00 CDT');
+  assert.equal(v._gnTime(n), '7pm CDT');
   assert.match(v._gnZoneHTML(n), /The calendar’s time/);
   assert.match(v._gnZoneHTML(n), /Show in my time \(PDT\)/);
   v._gnSetZoneMode('mine');
-  assert.equal(v._gnTime(n), '17:00 PDT');
+  assert.equal(v._gnTime(n), '5pm PDT');
   assert.match(v._gnZoneHTML(n), /Your time.*Show the calendar’s time/);
   // A night set with no zone of its own is read in the calendar's.
-  assert.equal(v._gnTime(night({ tz: '' })), '17:00 PDT');
+  assert.equal(v._gnTime(night({ tz: '' })), '5pm PDT');
 });
 
 test('no switch when your zone reads the same as the calendar', () => {
@@ -245,7 +257,7 @@ test('a night that falls on another day in your zone says which', () => {
   const v = view(def, []);
   v.calZone = 'America/Chicago';
   v._gnZoneMode = 'mine';
-  assert.match(v._gnTime(night({ tz: 'America/Chicago' })), /^Fri 02:00 /);
+  assert.match(v._gnTime(night({ tz: 'America/Chicago' })), /^Fri 2am /);
 });
 
 test('a game-night link names the night, or asks for the next one', () => {
@@ -380,6 +392,66 @@ test('Best times picks the strongest three-hour slot, with who is missing', () =
   assert.match(html, /data-best-plan="2026-10-08" data-plan-at="19"/, 'Plan it plans inside the calendar');
 });
 
+// A month of free hours filed straight into the view: who is free on each
+// date, as [start hour, end hour] per player.
+function fileMonth(v, byDate) {
+  const people = ['ana', 'bo', 'cy'];
+  Object.keys(byDate).forEach((iso) => {
+    const hours = Array(24).fill(0);
+    const members = people.map((id) => {
+      const r = byDate[iso][id];
+      if (r) for (let h = r[0]; h < r[1]; h++) hours[h]++;
+      return { userId: id, name: id[0].toUpperCase() + id.slice(1), answered: true, segs: r ? [[r[0] * 60, r[1] * 60, false]] : [] };
+    });
+    v.freeByDate[iso] = { total: 3, detail: true, hours, members };
+  });
+}
+
+test('Best times counts a window only up to a game night’s length', () => {
+  const { def } = load();
+  const v = freeView(def);
+  const eve = [18, 22], day = [9, 17];
+  // Mon Oct 5: everyone free all working day. Sat Oct 10 and 17: everyone
+  // free for the evening, every week. The long Monday used to win on length.
+  fileMonth(v, {
+    '2026-10-05': { ana: day, bo: day, cy: day },
+    '2026-10-12': { ana: day, bo: day },
+    '2026-10-10': { ana: eve, bo: eve, cy: eve },
+    '2026-10-17': { ana: eve, bo: eve, cy: eve },
+  });
+  const best = JSON.parse(JSON.stringify(v.bestTimes(2026, 10).map((b) => b.iso)));
+  assert.deepEqual(best, ['2026-10-10', '2026-10-17', '2026-10-05'], 'the every-week Saturdays outrank one long Monday');
+});
+
+test('a weekday that is best overall says who it loses on which dates', () => {
+  const { def } = load();
+  const v = freeView(def);
+  const eve = [18, 22];
+  // Saturdays: Cy plays every other week. Thursdays: everyone, once.
+  fileMonth(v, {
+    '2026-10-10': { ana: eve, bo: eve, cy: eve },
+    '2026-10-17': { ana: eve, bo: eve },
+    '2026-10-24': { ana: eve, bo: eve, cy: eve },
+    '2026-10-31': { ana: eve, bo: eve },
+    '2026-10-08': { ana: eve, bo: eve, cy: eve },
+  });
+  const wk = v.bestWeekday(2026, 10);
+  assert.equal(wk.weekday, 'Saturday');
+  assert.deepEqual(JSON.parse(JSON.stringify(wk.away)), [{ name: 'Cy', dates: ['Oct 17', 'Oct 31'] }]);
+  v._freeRoster = () => [{ userId: 'ana', name: 'Ana', answered: true }];
+  assert.match(v._fvDirectorHTML(2026, 10, 'October'), /<b>Saturdays<\/b> are best overall, 6pm to 10pm\. Cy is away Oct 17 and Oct 31\./);
+});
+
+test('a run marked as a best time keeps its own colour in the lines', () => {
+  const { def } = load();
+  const ov = overlay();
+  ov.members[1].lanes = [{ day: 3, start: 1080, end: 1200, state: 'available' }, { day: 3, start: 1200, end: 1320, state: 'preferred' }];
+  const v = freeView(def, ov);
+  const html = v._freeCellHTML(2026, 10, 8);
+  assert.match(html, /<b class="p" style="left:83\.33%;width:8\.33%">/);
+  assert.match(v._freeGlanceHTML('2026-10-08'), /Julie<\/span><span>6pm to 8pm, 8pm to 10pm \(best\)/);
+});
+
 test('the Director plans a game night inside the day’s card', () => {
   const { def } = load();
   const v = freeView(def, overlay());
@@ -405,7 +477,7 @@ test('the Director’s Who’s free view lists the players, a reminder and the f
   const html = v._fvDirectorHTML(2026, 10, 'October');
   assert.match(html, /Jack<\/span><span class="ok">Hours given/);
   assert.match(html, /Dee<\/span><span class="wait">No hours yet/);
-  assert.match(html, /1 player hasn’t painted hours yet\. <button type="button" class="btn sm" data-best-nudge>/);
+  assert.match(html, /data-best-nudge><i class="fa-solid fa-bell"><\/i> Remind the 1 without hours/);
   assert.match(html, /<input type="checkbox" data-fv-lines checked>/, 'the lines switch, on');
   assert.match(html, /data-fv-planner="team">.*Open the full planner/, 'the full planner, inside the calendar');
 });
@@ -474,7 +546,7 @@ test('the full planner shows the week day by day, the month’s nights with who 
   assert.match(html, /Julie<\/span><span class="ln"><b style="left:75\.00%;width:16\.67%">/);
   assert.match(html, /Game nights in M10/);
   assert.match(html, /1 going · 0 maybe · 0 can’t · 2 no answer/);
-  assert.match(html, /<span class="plw y">Kael<\/span>/);
+  assert.match(html, /<span class="plw y" title="Kael: going">Kael<\/span>/);
   assert.match(html, /Best times in M10/);
   assert.doesNotMatch(html, /Open the full planner/, 'the drawer does not link to itself');
 });
@@ -577,4 +649,93 @@ test('a recap with formatting is never edited as plain text in the calendar', ()
   assert.doesNotMatch(v._gnExtraHTML('rich'), /data-gn-recap-input/, 'even when asked, the textarea never opens on it');
   v.role = 1;
   assert.doesNotMatch(v._gnExtraHTML('plain'), /data-gn-recap="edit"/, 'players read the recap only');
+});
+
+test('the Director can remind any one player, never themselves', () => {
+  const { def } = load();
+  const v = freeView(def, overlay());
+  v.userId = 'jack';
+  const html = v._fvDirectorHTML(2026, 10, 'October');
+  assert.doesNotMatch(html, /data-remind="jack"/, 'no bell for yourself');
+  assert.match(html, /Jack<\/span><span class="ok">Hours given<\/span><span class="fvme">You/);
+  assert.match(html, /data-remind="julie"/);
+  assert.match(html, /data-remind="dee"/, 'a player with no hours can be reminded too');
+  v._reminded = { julie: true };
+  assert.match(v._fvDirectorHTML(2026, 10, 'October'), /data-remind="julie" disabled aria-label="Reminded Julie"/);
+});
+
+test('after an ask, the roster shows who confirmed since', () => {
+  const { def } = load();
+  const v = freeView(def, overlay());
+  v.userId = 'jack';
+  v.answers = { askedAt: '2026-10-01T12:00:00Z', members: [
+    { userId: 'julie', answeredAt: '2026-10-02T09:00:00Z' },
+    { userId: 'bryn', answeredAt: '2026-09-20T09:00:00Z' },
+  ] };
+  const html = v._fvDirectorHTML(2026, 10, 'October');
+  assert.match(html, /Julie<\/span><span class="ok">Confirmed/);
+  assert.match(html, /Bryn<\/span><span class="wait">Not confirmed yet/);
+  assert.match(html, /Dee<\/span><span class="wait">No hours yet/);
+  assert.match(html, /<b>1 of 3<\/b> confirmed since you asked/, 'the asker is not counted');
+  assert.match(html, /data-ask-confirm>.*Ask again/);
+});
+
+test('a player is asked to confirm only while an ask is newer than their answer', () => {
+  const { def } = load();
+  const v = freeView(def, overlay({ includeDetail: false, members: [] }));
+  v.freeDirector = false; v.role = 1;
+  v.answers = { askedAt: '2026-10-01T12:00:00Z' };
+  v.mine = { answered: true, answeredAt: '2026-09-01T00:00:00Z', blocks: [] };
+  assert.equal(v._confirmDue(), true);
+  assert.match(v._fvPlayerHTML(2026, 10), /data-confirm-mine>.*My times are still right/);
+  v.mine.answeredAt = '2026-10-02T00:00:00Z';
+  assert.equal(v._confirmDue(), false);
+  v.mine = { answered: false, blocks: [] };
+  assert.equal(v._confirmDue(), false, 'no hours yet: asked to give them, not confirm');
+});
+
+test('whole days off read back as away stretches; shaped days do not', () => {
+  const { exp } = load();
+  const off = (d) => ({ onDate: d, startMinute: 0, endMinute: 1440, state: 'unavailable' });
+  const got = exp.awayStretches([
+    off('2026-10-03'), off('2026-10-04'), off('2026-10-05'),
+    off('2026-10-09'),
+    { onDate: '2026-10-12', startMinute: 1080, endMinute: 1320, state: 'available' },
+    off('2026-09-20'),
+  ], '2026-10-01');
+  assert.deepEqual(JSON.parse(JSON.stringify(got)), [
+    { from: '2026-10-03', to: '2026-10-05' },
+    { from: '2026-10-09', to: '2026-10-09' },
+  ]);
+});
+
+test('only the owner of a world calendar gets Set today, and it checks the form', () => {
+  const { def } = load();
+  const v = freeView(def);
+  v.apiBase = '/campaigns/c1/calendar';
+  assert.equal(v._canSetToday(), false, 'a real-world calendar follows the clock');
+  v.cal = { mode: 'fantasy', current_year: 1200, current_month: 2, current_day: 5, hours_per_day: 24, minutes_per_hour: 60,
+    months: [{ name: 'Frost', days: 30 }, { name: 'Thaw', days: 28 }] };
+  assert.equal(v._canSetToday(), true);
+  v.role = 2;
+  assert.equal(v._canSetToday(), false, 'below owner: read only');
+  const form = (o) => ({ elements: Object.fromEntries(Object.entries(Object.assign({ year: '1200', month: '2', day: '5', hour: '20', minute: '0' }, o)).map(([k, x]) => [k, { value: x }])) });
+  assert.deepEqual(JSON.parse(JSON.stringify(v._readTodayForm(form()))), { y: 1200, m: 2, d: 5, h: 20, mi: 0 });
+  assert.match(v._readTodayForm(form({ day: '29' })).error, /28 days/);
+  assert.match(v._readTodayForm(form({ hour: '24' })).error, /0 to 23/);
+  assert.match(v._readTodayForm(form({ year: 'soon' })).error, /every box/);
+});
+
+test('the DM sees a day a player marked off although usually free', () => {
+  const { def } = load();
+  const base = overlay();
+  // Dee marked Thursday (column 3) off; their usual hours would cover it.
+  const ov = overlay({ members: base.members.map((m) => (m.userId === 'dee' ? { ...m, hasAnswered: true, offDays: [3] } : m)) });
+  const v = freeView(def, ov);
+  v._todayIso = () => '2026-10-01';
+  const wing = v._freeWingHTML({ y: 2026, m: 10, d: 8 });
+  assert.match(wing, /Dee<\/span><span class="ln off"><\/span><span class="sr">Dee: off this day, usually free/);
+  assert.match(wing, /<i class="o"><\/i>Off, usually free/, 'the key explains the broken line');
+  assert.match(v._freeCellHTML(2026, 10, 8), /<span class="ln off"><\/span>/, 'on the month too');
+  assert.doesNotMatch(v._freeWingHTML({ y: 2026, m: 10, d: 9 }), /ln off|Off, usually free/, 'only on that day');
 });

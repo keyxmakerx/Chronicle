@@ -172,6 +172,8 @@ Never: the story of how a bug was found, "before this fix"/"this used to", task 
 
 Avoid: restating the code (`// Set name to the request name`), unexplained commented-out code, and comments stating the obvious (`// Delete deletes a campaign`).
 
+`tools/check-comment-clutter.sh` (CI) fails a branch whose new comments carry an old tracking ID, a `cordinator/` path, "this PR", a `file:line` pointer, a pointer to `.ai/todo.md`, or a date outside tests. Existing comments are grandfathered; a line that truly needs one ends with `clutter-ok`.
+
 **TODO format** names the tracking issue (open one first if none exists): `// TODO(#613): stop echoing untouched fields back on update`, or cross-repo `// TODO(keyxmakerx/Chronicle-Foundry-Module#95): ...`.
 
 ## Schema, Migrations and Permissions
@@ -233,7 +235,7 @@ This repo is **not plain-`gofmt`-clean** (many committed files predate or differ
 
 ## CI tenet-enforcement guards
 
-Each guard runs in `.github/workflows/ci.yml`, enforcing a binding tenet (T-B1 security, T-B2 plugin isolation, T-O2/T-O3 verification) from `cordinator/decisions/2026-05-21-core-tenets.md`.
+`make verify` runs the full local CI sequence, guards included; `.github/workflows/ci.yml` and the `verify` target in the `Makefile` are the source of truth for the list. The guards enforce the binding tenets (T-B1 security, T-B2 plugin isolation, T-O2/T-O3 verification) from `cordinator/decisions/2026-05-21-core-tenets.md`. The table below covers the ones that need explanation.
 
 | Guard | File | Mode | Enforces |
 |---|---|---|---|
@@ -242,7 +244,7 @@ Each guard runs in `.github/workflows/ci.yml`, enforcing a binding tenet (T-B1 s
 | Wire-contract conformance | `internal/wire/wire_contract_test.go` + `routes_snapshot.txt` | FAIL (snapshot) | T-O2: every Echo route registration is in the curated snapshot |
 | Foundry public rate-limit pin | `internal/wire/foundry_public_ratelimit_test.go` | FAIL | T-B1: two AST assertions pin the Foundry public manifest rate-limit wiring (`g.Use(rateLimit)` in `foundry_vtt.RegisterPublicRoutes`) and call site (`middleware.RateLimit(...)` in `app.RegisterRoutes`) |
 | Sanitize-on-write invariant | `internal/sanitize/invariant_test.go` + snapshot | FAIL (snapshot + invariant) | T-B1: every `internal/plugins/*/service.go` (+ widgets) declaring HTML-typed inputs must call `sanitize.HTML` |
-| Decision-citations | `tools/check-decision-citations.sh` | WARN (exit 0) | T-O3: every `cordinator/decisions/*.md` is referenced by code, a PR, or another decision |
+| Decision-citations | `tools/check-decision-citations.sh` | WARN (exit 0, `continue-on-error`) | T-O3: warns about a `cordinator/decisions/*.md` that nothing references; with no Cordinator checkout it has nothing to check |
 
 ### Pre-merge rules that no guard checks
 
@@ -250,7 +252,7 @@ Check these by hand: a PR adding an `hx-get` fragment endpoint lists every consu
 
 ### Extending the guards
 
-- **Wire-contract snapshot:** on an intentional route add/remove/change, run `UPDATE_ROUTES_SNAPSHOT=1 go test ./internal/wire/...` and commit the regenerated `internal/wire/routes_snapshot.txt`, explaining the change (especially for the four auth surfaces below). Limitations: the snapshot captures `(method, path, file)` via static AST extraction — it doesn't resolve group prefixes (an `e.Group("/admin")` rename), classify the auth surface, capture programmatic registration (loops/builders), or catch per-route middleware removal in general (#697 is the open work), except where a focused AST assertion pins one invariant by hand, as `internal/wire/foundry_public_ratelimit_test.go` does for the Foundry rate limit — copy its shape for a new one: locate the function wiring the middleware and assert its `*.Use(...)` call, then the call site supplying the argument and assert it names the middleware.
+- **Wire-contract snapshot:** on an intentional route add/remove/change, run `UPDATE_ROUTES_SNAPSHOT=1 go test ./internal/wire/...` and commit the regenerated `internal/wire/routes_snapshot.txt`, explaining the change (especially for the auth surfaces below). Limitations: the snapshot captures `(method, path, file)` via static AST extraction — it doesn't resolve group prefixes (an `e.Group("/admin")` rename), classify the auth surface, capture programmatic registration (loops/builders), or catch per-route middleware removal in general (#697 is the open work), except where a focused AST assertion pins one invariant by hand, as `internal/wire/foundry_public_ratelimit_test.go` does for the Foundry rate limit — copy its shape for a new one: locate the function wiring the middleware and assert its `*.Use(...)` call, then the call site supplying the argument and assert it names the middleware.
 - **Plugin-isolation guard:** targets `foundry-vtt` strings only today; other plugin names aren't checked. Joins its tokens from fragments at runtime so it can scan its own tree without false-positiving on itself.
 - **Sanitize-invariant snapshot:** on a new plugin's `service.go`, or added/removed HTML-typed inputs, run `UPDATE_SANITIZE_SNAPSHOT=1 go test ./internal/sanitize/...` and commit the regenerated snapshot; cite the audit in the PR if it's a new sanitize surface.
 
@@ -291,7 +293,7 @@ Campaign middleware proves the caller belongs to the campaign in the URL. It pro
 - **"Every caller" means every path to the rule, not every grep hit.** When a change or audit says it covers every caller of a gate, search for the behaviour (which pages and lists reach the same visibility rule, including through helpers such as child lists, graph and dashboard queries) as well as for the gate's name. A list built from one function's name misses the paths that reach the rule another way.
 - Never synthesise an identity for an anonymous request (no `"anonymous"` user, no per-IP key) — a shared anonymous identity is a shared write target.
 
-### Auth surfaces — four canonical shapes
+### Auth surfaces — five canonical shapes
 
 Conflating these is the risk this table and the wire-contract test guard against.
 
@@ -300,7 +302,7 @@ Conflating these is the risk this table and the wire-contract test guard against
 | **Session-cookie (web UI)** | `internal/app/routes.go` (campaigns, entities, maps, plugin UI routes) | `auth.RequireAuth(authSvc)` + `campaigns.RequireCampaignAccess(campaignSvc)` | Browser users, `chronicle_session` cookie |
 | **Per-campaign-token (legacy public API)** | `foundry_vtt/routes.go::RegisterPublicRoutes` | Per-campaign signed manifest token (`foundry_vtt/token.go`) | Foundry module manifest + download fetch |
 | **Session-OR-Bearer (syncapi JSON)** | `syncapi/routes.go::RegisterAPIRoutes` `v1` group | `RequireAuthOrAPIKey` + `RateLimit` + `RequireJSONContentType` (state-changing methods get 415 without `Content-Type: application/json`) | Foundry sync REST API + in-app widgets |
-| **Session-OR-Bearer (syncapi multipart)** | same file, `v1Multipart` group | `RequireAuthOrAPIKey` + `RateLimit` (skips `RequireJSONContentType`) | `POST /api/v1/campaigns/:id/media`, the only multipart endpoint under `/api/v1/*` (D-C3.1 sub-group-skip pattern) |
+| **Session-OR-Bearer (syncapi multipart)** | same file, `v1Multipart` group | `RequireAuthOrAPIKey` + `RateLimit` (skips `RequireJSONContentType`) | `POST /api/v1/campaigns/:id/media`, the only multipart endpoint under `/api/v1/*` (a sub-group that skips the JSON content-type check) |
 | **Admin-session (site admin UI)** | `internal/app/routes.go` (admin group) | `auth.RequireAuth` + `auth.RequireSiteAdmin` + optional `auth.RequireReauth` | Site admin browser users |
 
 **Regression-prevention:** the wire-contract conformance test pins every Echo route registration, but only `(method, path, file)` — not per-route middleware (see "Extending the guards" above).
@@ -334,7 +336,7 @@ Every SQL DDL statement interpolating a table/column name MUST pass it through `
 quoted, err := database.SafeIdent(tableName)
 ```
 
-Only live caller today: `internal/extensions/migration_runner.go::DropExtensionTables`. Future DDL identifier interpolation MUST use this helper, even for "trusted" input (e.g. from `SHOW TABLES`).
+Callers include `internal/extensions/migration_runner.go::DropExtensionTables` and `internal/database/icon_reconcile.go`. Future DDL identifier interpolation MUST use this helper, even for "trusted" input (e.g. from `SHOW TABLES`).
 
 Debug logs must never emit a raw email (log access becomes an enumeration oracle) — hash via `internal/plugins/auth/loghash.go::hashEmail()` (SHA-256 hex prefix), pinned by `loghash_test.go`.
 
@@ -378,7 +380,7 @@ Tailwind's JIT only emits classes found in source files, so classes added at run
 
 ## Plugin registration + per-plugin static assets
 
-Per `cordinator/decisions/2026-05-23-plugin-registration.md`, plugins self-describe via a `PluginRegistration` value (slug, optional `embed.FS` for migrations, optional `embed.FS` for static assets, optional smoke test); the registry is `internal/app/plugins.go`, populated by each plugin's `registration.go`.
+Per `cordinator/decisions/2026-05-23-plugin-registration.md`, plugins self-describe via a `PluginRegistration` value (slug, optional `embed.FS` for migrations, optional `embed.FS` for static assets, optional smoke test); the registry is `internal/app/plugins.go`. Only `ai_workspace`, `foundry_vtt` and `smtp` have a `registration.go`; the other plugins register in `registeredPlugins()` in `cmd/server/main.go`.
 
 Per `cordinator/decisions/2026-05-25-plugin-static-assets.md`, each plugin's static assets (JS/CSS under `static/`) embed via `embed.FS` and mount through the registry — no app-level static-route enumeration. Not every plugin has migrated; check a plugin's `registration.go` for a `StaticFS` entry.
 

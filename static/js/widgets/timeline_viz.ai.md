@@ -2,9 +2,10 @@
 
 ## Purpose
 
-D3.js-powered interactive SVG timeline chart for visualizing events across time.
-Supports zoom/pan, event clustering at high zoom, era bars, range events, category
-icons, detail panel, and a minimap overview strip.
+D3.js-powered interactive SVG timeline: a zoomable spine ruler, event markers
+with clustering, range bars, era bands, a mini-map, entity swim-lanes,
+search/filter, connections between events, and double-click to create an event
+at a date. Source: `static/js/widgets/timeline_viz.js`.
 
 ## Widget Registration
 
@@ -12,63 +13,62 @@ icons, detail panel, and a minimap overview strip.
 Chronicle.register('timeline-viz', { init, destroy });
 ```
 
-Mounts on: `data-widget="timeline-viz"`
+Mounts on `data-widget="timeline-viz"` (timeline page `timeline.templ`, and the
+embed/dashboard blocks in `blocks.templ`). Needs D3 v7; the widget loads
+`/static/vendor/d3.min.js` itself when D3 is missing.
 
 ## Configuration (data-* attributes)
 
-| Attribute | Required | Description |
-|-----------|----------|-------------|
-| `data-events-endpoint` | Yes | JSON endpoint returning timeline events |
-| `data-eras-endpoint` | No | JSON endpoint returning calendar eras |
-| `data-editable` | No | "true" enables edit controls |
-| `data-csrf-token` | No | CSRF token for mutations |
+| Attribute | Used | Description |
+|-----------|------|-------------|
+| `data-api-url` | Yes (required) | `GET` endpoint returning the timeline data (`/campaigns/:id/timelines/:tid/data`) |
+| `data-timeline-color` | Yes | Accent colour for the timeline (default indigo) |
+| `data-campaign-id`, `data-timeline-id` | Passed by mounts | Parsed into the config but not read by the widget |
+| `data-height`, `data-compact` | Passed by the embed blocks | Parsed into the config but not read by the widget |
+
+## Data
+
+The response holds `timeline`, `groups` (swim-lane membership by `entity_id`),
+`eras`, `connections` and `events`. Eras come from `data.eras`; there is no
+separate eras endpoint. Events with a missing or NaN `event_year` are dropped;
+a missing month or day defaults to 1.
 
 ## Architecture
 
-### Rendering Pipeline
+### Rendering pipeline
 
-1. `_render()` — Main entry: creates SVG, sets up scales, calls sub-renderers
-2. `_drawGrid()` — Alternating column bands + major/minor grid lines
-3. `_drawRuler()` — Center spine horizontal ruler with 3-tier ticks
-4. `_drawEraBands()` — Compact 16px bars at top of SVG with truncated labels
-5. `_drawEvents()` — Event dots/icons positioned on timeline, click for detail
-6. `_drawRangeEvents()` — Horizontal colored bars for multi-day events
-7. `_drawMinimap()` — 36px overview strip below SVG with viewport indicator
+`_render()` builds the SVG and calls, in order: `_drawEraBands()`, `_drawGrid()`,
+`_drawRulerTicks()` (three tiers of ticks on the spine), `_drawEvents()`,
+`_drawConnections()`, `_drawMinimap()`. `_onZoom()` redraws the ruler, grid, era
+bands, events (when the zoom level changes) and connections.
 
-### Zoom System
+### Zoom
 
-- 5 zoom levels: `era`, `century`, `decade`, `year`, `month`
-- Zoom buttons (+/-) in toolbar
-- Click-to-jump on minimap
-- At era/century zoom: events cluster into count badges
+Six levels: `era`, `century`, `decade`, `year`, `month`, `day`, picked from the
+d3-zoom scale factor against `zoomThresholds`. The toolbar has zoom in/out, fit,
+a level button per level, a "go to year" box, and the mini-map jumps on click.
 
-### Event Clustering
+### Events
 
-At high zoom levels (`era`, `century`), overlapping events collapse into circular
-count badges showing the number of events in that region. Click to zoom in.
-
-### Category Icons
-
-Events with a category display the category's Font Awesome icon instead of a
-plain dot. Icon mapping from event's `category` field.
-
-### Detail Panel
-
-Clicking an event opens a slide-in panel showing: title, date, category, linked
-entity, description. Edit/delete buttons for Scribe+ role.
+- At `era` and `century` zoom, nearby events collapse into count badges
+  (`timeline-cluster-badge` with a `timeline-cluster-label`); click zooms in.
+- A range event also draws `timeline-event-range-bar` and
+  `timeline-event-range-end`. Events with a category show its icon in place of
+  the dot.
+- Hover shows a tooltip; click opens the detail panel.
+- Swim-lanes group events by entity (`_buildLanes`, `_assignLanes`).
+- The toolbar filter box highlights matching events (`_applySearchFilter`).
+- Double-clicking empty space fills the date fields of `#standalone-event-modal`
+  (when the page has it) and opens it.
 
 ## CSS Classes
 
-- `.timeline-viz-svg` — Main SVG container
-- `.timeline-era-band` — Era background bar (opacity 0.25, rounded corners)
-- `.timeline-era-label` — Era text label (monospace, 10px)
-- `.timeline-event-dot` — Individual event marker
-- `.timeline-range-bar` — Range event horizontal bar
-- `.timeline-cluster` — Clustered event count badge
+`.timeline-viz-svg`, `.timeline-era-band` / `.timeline-era-label`,
+`.timeline-event` (group) with `.timeline-event-dot`, `.timeline-cluster-badge`,
+`.timeline-connection-line`, `.timeline-minimap-viewport`; toolbar and panel use
+the `.timeline-viz-*` prefix.
 
 ## Dependencies
 
-- D3.js (loaded via vendored `d3.min.js` or CDN)
-- Timeline plugin provides the events data API
-- `data-eras-endpoint` (era bands) is optional and currently unwired: the
-  calendar plugin has no routes until the V5 rebuild (#741)
+- D3.js v7
+- Timeline plugin provides the data API

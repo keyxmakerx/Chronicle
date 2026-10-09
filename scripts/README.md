@@ -49,7 +49,7 @@ Same script; reads its env contract directly. Requires `mysqldump`,
 | `backup.sh` | Snapshot the DB + media to timestamped artifacts under `$BACKUP_DIR`, with a SHA-256 manifest. Rotates older than `$BACKUP_RETENTION_DAYS`. |
 | `restore.sh` | Restore a paired backup set from a manifest. Multiple safety gates; requires explicit confirmation. |
 
-Both scripts support `--check` (validate environment only, exit 0/non-0).
+`backup.sh --check` validates the environment only (exit 0/non-0).
 Use it in CI or on a fresh stack to verify the runbook before you need it.
 
 See `docs/deployment.md` for the full operator runbook, including cron

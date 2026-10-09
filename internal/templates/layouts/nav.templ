@@ -111,11 +111,6 @@ templ campaignNavCategories() {
 				if len(NavManageRows(ctx)) > 0 {
 					@navManage()
 				}
-				if GetIsAdmin(ctx) {
-					<div class="nav-admin">
-						@AdminSidebarNav()
-					</div>
-				}
 			</div>
 		</nav>
 		<div
@@ -421,6 +416,15 @@ templ campaignNavFooter() {
 		<span aria-hidden="true">·</span>
 		<a href="/" hx-boost="false">Discover</a>
 		<span class="nav-foot-gap"></span>
+		// A site admin's way to the admin pages: in the footer, so it stays
+		// in reach while a category's page list covers the sections above,
+		// and the full admin menu stays on the admin pages. A full load, so
+		// the sidebar switches too.
+		if GetIsAdmin(ctx) {
+			<a href="/admin" class="nav-ibtn nav-ibtn-sm" hx-boost="false" title="Site admin" aria-label="Site admin">
+				<i class="fa-solid fa-gauge" aria-hidden="true"></i>
+			</a>
+		}
 		if NavCanEdit(ctx) {
 			<button
 				type="button"

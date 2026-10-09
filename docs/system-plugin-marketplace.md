@@ -90,7 +90,7 @@ Character presets can include `foundry_path` for automatic VTT sync:
 
 ### Data Files
 
-Each category has a corresponding `data/<slug>.json` file:
+Each category has a corresponding `data/<slug>.json` file. Each item is keyed by `id` or `slug` (the loader fills `id` from `slug` when `id` is empty):
 
 ```json
 [
@@ -183,13 +183,13 @@ System packages can provide custom JS widgets:
   {
     "slug": "stat-block",
     "name": "Stat Block",
-    "file": "widgets/stat-block.js",
+    "script_file": "widgets/stat-block.js",
     "mount": "entity-sidebar"
   }
 ]
 ```
 
-Widgets are served from `/campaigns/:id/systems/:mod/widgets/:slug` and auto-mounted by `boot.js` via `data-widget` attributes.
+`script_file` is the canonical key (`file` is accepted as an alias). Widgets are served from `/campaigns/:id/systems/:mod/widgets/:slug` and auto-mounted by `boot.js` via `data-widget` attributes.
 
 ## 6. Card Popup / Stat Block System
 
@@ -247,10 +247,17 @@ For systems that need computed fields, validation rules, or dice rolling, WASM e
 - Memory limits and execution timeouts enforced per plugin
 
 ### Capabilities Available
-- `chronicle_log` — Log events
-- `get_entity` — Read entity data
-- `create_event` — Create timeline events
-- `kv_get` / `kv_set` — Key-value store for plugin state
+Each capability unlocks a group of host functions:
+- `log` — `chronicle_log`
+- `entity_read` — `get_entity`, `search_entities`, `list_entity_types`
+- `entity_write` — `update_entity_fields`
+- `calendar_read` — `get_calendar`, `list_events`
+- `calendar_write` — `create_event`
+- `tag_read` — `list_tags`, `get_entity_tags`
+- `tag_write` — `set_entity_tags`
+- `relation_write` — `create_relation`
+- `kv_store` — `kv_get`, `kv_set`, `kv_delete` (per-plugin storage)
+- `message` — `send_message` (plugin-to-plugin)
 
 ### Use Cases
 - Auto-calculate derived stats (AC, spell save DC, carry capacity)
@@ -264,7 +271,7 @@ For systems that need computed fields, validation rules, or dice rolling, WASM e
   "wasm_plugins": [{
     "slug": "ac-calculator",
     "file": "plugins/ac-calculator.wasm",
-    "capabilities": ["get_entity", "chronicle_log"],
+    "capabilities": ["entity_read", "log"],
     "memory_limit_mb": 16,
     "timeout_secs": 5
   }]

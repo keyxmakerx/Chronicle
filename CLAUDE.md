@@ -20,7 +20,6 @@ make lint           # golangci-lint
 make migrate-up     # Apply pending migrations
 make migrate-down   # Rollback last migration
 make migrate-create # New migration (NAME=description)
-make seed           # Seed dev DB with sample data
 make docker-up      # MariaDB + Redis containers (needs Docker daemon)
 make docker-down    # Stop containers
 make clean          # Remove built artifacts
@@ -47,6 +46,7 @@ See `.ai/architecture.md` for the full document.
 - **Repositories:** own SQL, one per aggregate root, hand-written.
 - **Cross-boundary:** plugins reach each other only via service interfaces, never direct repo access; systems are read-only; widgets talk via DOM events + API endpoints.
 - **Templ:** one file per component; layouts in `internal/templates/layouts/`.
+- **UI:** every visible change follows `.ai/ui-standard.md`.
 - **Errors:** domain types from `internal/apperror/`, never raw DB errors.
 - **Tests:** table-driven; interfaces at every service/repo boundary.
 - **Naming:** `snake_case.go` files, `PascalCase` exported Go types, `camelCase` JSON.
