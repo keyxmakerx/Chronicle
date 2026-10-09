@@ -115,14 +115,53 @@ func (s *mapService) pictureStatusOf(ctx context.Context, campaignID, mediaID st
 		if err != nil {
 			return closed, fmt.Errorf("list shadow areas: %w", err)
 		}
-		st.shadowed = len(areas) > 0
+		fog, err := s.pictureFog(ctx, m.ID)
+		if err != nil {
+			return closed, fmt.Errorf("read hex fog: %w", err)
+		}
+		// Fog on a whole-map layer withholds the original just as a shadow does.
+		st.shadowed = len(areas) > 0 || fog != nil
+	}
+	if !st.shadowed {
+		withheld, err := s.fogWithholdsMedia(ctx, list, mediaID)
+		if err != nil {
+			return closed, fmt.Errorf("read hex fog pictures: %w", err)
+		}
+		if withheld {
+			st = pictureStatus{isMapPicture: true, shadowed: true}
+		}
 	}
 	s.pictureCache.put(campaignID, mediaID, st, gen)
 	return st, nil
 }
 
+// fogWithholdsMedia reports whether the file is a picture drawing on any of
+// the campaign's maps whose image the hex fog withholds. Such a file is
+// treated as a shadowed map picture: refused to viewers below CanSeeDmOnly and
+// given no link on the sync media API. With the fog wired but this check not,
+// it fails closed.
+func (s *mapService) fogWithholdsMedia(ctx context.Context, list []Map, mediaID string) (bool, error) {
+	if s.hexFog == nil {
+		return false, nil
+	}
+	if s.fogMedia == nil {
+		return true, fmt.Errorf("fog media lookup not wired")
+	}
+	for _, m := range list {
+		withheld, err := s.fogMedia.FogWithholdsMedia(ctx, m.ID, mediaID)
+		if err != nil {
+			return true, err
+		}
+		if withheld {
+			return true, nil
+		}
+	}
+	return false, nil
+}
+
 // IsShadowedMapImage implements the media plugin's MapImageGuard: is the file
-// the picture of any map in the campaign that has a shadow. It is true on error
+// the picture of any map in the campaign that has a shadow or whole-map fog, or
+// a picture drawing whose file the hex fog withholds. It is true on error
 // so a caller that ignores the error still refuses.
 func (s *mapService) IsShadowedMapImage(ctx context.Context, campaignID, mediaID string) (bool, error) {
 	st, err := s.pictureStatusOf(ctx, campaignID, mediaID)

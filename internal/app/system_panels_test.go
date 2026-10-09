@@ -19,13 +19,13 @@ type fakeEnabled struct{ sys systems.System }
 
 func (f fakeEnabled) EnabledSystem(context.Context, string) systems.System { return f.sys }
 
-type fakeTypes struct {
-	types []entities.EntityType
-	err   error
+type fakeNPCTypes struct {
+	ids []int
+	err error
 }
 
-func (f fakeTypes) GetEntityTypes(context.Context, string) ([]entities.EntityType, error) {
-	return f.types, f.err
+func (f fakeNPCTypes) NPCTypeIDs(context.Context, string) ([]int, error) {
+	return f.ids, f.err
 }
 
 func TestSystemPanelResolver(t *testing.T) {
@@ -56,7 +56,7 @@ func TestSystemPanelResolver(t *testing.T) {
 			[]entities.SystemPanel{{Widget: "negotiation", SystemID: "drawsteel"}}},
 		{"system monster type", fakeSystem{withPanel}, 3, false, nil,
 			[]entities.SystemPanel{{Widget: "negotiation", SystemID: "drawsteel"}}},
-		{"location is not an npc", fakeSystem{withPanel}, 2, false, nil, nil},
+		{"a type the owner did not list as NPCs is not an npc", fakeSystem{withPanel}, 2, false, nil, nil},
 		{"player character is not an npc", fakeSystem{withPanel}, 4, false, nil, nil},
 		{"system without panels", fakeSystem{noPanel}, 1, false, nil, nil},
 		{"no system enabled", nil, 1, false, nil, nil},
@@ -65,7 +65,7 @@ func TestSystemPanelResolver(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			resolve := newSystemPanelResolver(fakeEnabled{tt.sys}, fakeTypes{types, tt.typesErr})
+			resolve := newSystemPanelResolver(fakeEnabled{tt.sys}, fakeNPCTypes{[]int{1, 3}, tt.typesErr})
 			var et *entities.EntityType
 			for i := range types {
 				if types[i].ID == tt.typeID {

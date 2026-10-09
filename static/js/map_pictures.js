@@ -554,7 +554,11 @@
           }, function () { outer.classList.add('mp-pic-missing'); });
         });
         img.addEventListener('load', function () { outer.classList.remove('mp-pic-missing'); });
-        img.src = opts.mediaURL(this._d);
+        // A picture whose file the server withheld (the one a fogged layer is
+        // pinned to) has no address: show the grey placeholder, ask for nothing.
+        var src = opts.mediaURL(this._d);
+        if (src) img.src = src;
+        else outer.classList.add('mp-pic-missing');
         inner.appendChild(img);
         var frame = el('div', 'mp-pic-frame');
         var box = el('div', 'mp-pic-box');

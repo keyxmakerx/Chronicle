@@ -10,6 +10,7 @@ import (
 	"errors"
 	"fmt"
 	"io/fs"
+	"net/url"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -153,6 +154,41 @@ func (s *URLSigner) VerifyThumbAPIKeyLink(fileID, size, expiresStr, signature st
 		return false
 	}
 	return hmac.Equal([]byte(signature), []byte(s.computeThumbSignature(fileID, size, ViewerAPIKey, expires)))
+}
+
+// ViewerAPIKeyCampaign is the viewer identity of a campaign-less avatar link
+// minted for a sync API key of campaignID. Unlike the single ViewerAPIKey
+// sentinel it names the campaign, because an avatar belongs to no campaign
+// and the only thing that may justify serving it to a cookieless caller is
+// that the avatar's owner is a member of the key's campaign.
+func ViewerAPIKeyCampaign(campaignID string) string {
+	return "apikey-campaign:" + campaignID
+}
+
+// AvatarCampaignParam carries the campaign a SignAvatarThumb link was minted
+// for. It sits outside the signature's input only as a lookup key: Verify
+// recomputes the signature over it, so a tampered value fails.
+const AvatarCampaignParam = "campaign"
+
+// SignAvatarThumb signs a thumbnail URL of a campaign-less avatar for a sync
+// API key of campaignID. Thumbnails only: the sync module needs a small
+// picture, and the original is never offered this way.
+func (s *URLSigner) SignAvatarThumb(fileID, size, campaignID string, ttl time.Duration) string {
+	expires := time.Now().Add(ttl).Unix()
+	sig := s.computeThumbSignature(fileID, size, ViewerAPIKeyCampaign(campaignID), expires)
+	return fmt.Sprintf("/media/%s/thumb/%s?expires=%d&sig=%s&%s=%s",
+		fileID, size, expires, sig, AvatarCampaignParam, url.QueryEscape(campaignID))
+}
+
+// VerifyAvatarThumbLink reports whether the signature was minted by
+// SignAvatarThumb for exactly this file, size and campaign. It accepts no
+// other viewer binding, so a session or plain API-key link never passes.
+func (s *URLSigner) VerifyAvatarThumbLink(fileID, size, campaignID, expiresStr, signature string) bool {
+	expires, err := strconv.ParseInt(expiresStr, 10, 64)
+	if err != nil || time.Now().Unix() > expires || campaignID == "" {
+		return false
+	}
+	return hmac.Equal([]byte(signature), []byte(s.computeThumbSignature(fileID, size, ViewerAPIKeyCampaign(campaignID), expires)))
 }
 
 // computeSignature creates an HMAC-SHA256 hex digest over

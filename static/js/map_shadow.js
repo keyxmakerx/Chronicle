@@ -11,6 +11,11 @@
  * strength's rectangles, so overlapping shadows never stack into a darker,
  * blockier patch. DMs get one faint element per rectangle (outline, label).
  *
+ * Unexplored hexes (fog of war) join the same hint-level smoke: the hex layer
+ * registers a painter with setHexFog and its shapes go into the same mask as
+ * the shadow rectangles. attach is a per-map singleton, so the drawing tools
+ * and the hex layer share one smoke and one motion loop.
+ *
  * Motion rule: one requestAnimationFrame loop drives the drift. It eases to a
  * stop (about a second) when the tab is hidden or after IDLE_MS without input,
  * eases back on the next input or when the tab is visible again, and never
@@ -236,7 +241,9 @@
   // paintMask returns a data URL whose alpha is the union of `include` boxes
   // minus `exclude` boxes, blurred once as a whole (percent boxes, canvas
   // sized to the map's aspect ratio).
-  function paintMask(include, exclude, aspect) {
+  // extra, when given, paints more included shapes (the fogged hexes) in the
+  // canvas's own pixels, before the excluded boxes are cut out.
+  function paintMask(include, exclude, aspect, extra) {
     var cw = 512, ch = Math.max(8, Math.round(512 / aspect));
     if (aspect < 1) { ch = 512; cw = Math.max(8, Math.round(512 * aspect)); }
     var src = document.createElement('canvas');
@@ -250,6 +257,7 @@
     }
     g.fillStyle = '#000';
     rects(include);
+    if (extra) extra(g, cw, ch);
     g.globalCompositeOperation = 'destination-out';
     rects(exclude);
     var out = document.createElement('canvas');
@@ -263,11 +271,40 @@
 
   /**
    * attach prepares a viewer mount. opts.toLatLng maps {x,y} percentages to a
-   * Leaflet point. Returns { add(drawing, staff), motion, destroy() }; add
-   * returns a layer for the caller to put in its drawing group.
+   * Leaflet point. Returns { add(drawing, staff), setHexFog(fn), refreshHexFog(),
+   * motion, destroy() }; add returns a layer for the caller to put in its
+   * drawing group. A map has one smoke: later callers share it, and it goes
+   * away when the last of them destroys its handle.
    */
   function attach(map, opts) {
-    opts = opts || {};
+    var shared = map.__mpShadow;
+    if (shared) { shared.refs++; return handleOf(map, shared); }
+    shared = build(map, opts || {});
+    shared.refs = 1;
+    map.__mpShadow = shared;
+    return handleOf(map, shared);
+  }
+
+  // Each caller gets its own handle so that one destroy() never takes the smoke
+  // from the other; a second destroy() from the same caller does nothing.
+  function handleOf(map, shared) {
+    var released = false;
+    return {
+      add: shared.add,
+      motion: shared.motion,
+      setHexFog: shared.setHexFog,
+      refreshHexFog: shared.refreshHexFog,
+      destroy: function () {
+        if (released) return;
+        released = true;
+        if (--shared.refs > 0) return;
+        if (map.__mpShadow === shared) map.__mpShadow = null;
+        shared.teardown();
+      }
+    };
+  }
+
+  function build(map, opts) {
     var toLatLng = opts.toLatLng;
     addStyle();
     defineLayers();
@@ -321,6 +358,8 @@
     var entries = [];
     var layers = {};
     var pending = false;
+    // hexFog paints the unexplored hexes into the hint mask: fn(ctx2d, w, h).
+    var hexFog = null;
     function repaint() {
       pending = false;
       var hint = entries.filter(function (e) { return e.level === 'hint'; }).map(function (e) { return e.box; });
@@ -331,10 +370,11 @@
       Object.keys(sets).forEach(function (lvl) {
         var inc = sets[lvl][0];
         var layer = layers[lvl];
-        if (!inc.length) { if (layer && map.hasLayer(layer)) map.removeLayer(layer); return; }
+        var extra = lvl === 'hint' ? hexFog : null;
+        if (!inc.length && !extra) { if (layer && map.hasLayer(layer)) map.removeLayer(layer); return; }
         if (!layer) layer = layers[lvl] = new UnionLayer('', whole, { pane: 'mpShadow', interactive: false, level: lvl });
         if (!map.hasLayer(layer)) layer.addTo(map);
-        var m = paintMask(inc, sets[lvl][1], aspect);
+        var m = paintMask(inc, sets[lvl][1], aspect, extra);
         var el = layer.getElement();
         if (m && el) {
           var v = 'url(' + m + ')';
@@ -360,6 +400,18 @@
     }
 
     return {
+      refs: 0,
+      // setHexFog registers (or, with null, removes) the painter of the fogged
+      // hexes. While one is set the smoke counts as active, so it drifts.
+      setHexFog: function (fn) {
+        var had = !!hexFog;
+        hexFog = typeof fn === 'function' ? fn : null;
+        if (hexFog && !had) { count++; motion.start(); }
+        if (!hexFog && had) count = Math.max(0, count - 1);
+        schedule();
+      },
+      // refreshHexFog repaints after the explored set changed.
+      refreshHexFog: function () { if (hexFog) schedule(); },
       add: function (d, staff) {
         var box = boxFromPoints(d.points);
         if (!box || !AreaLayer || !toLatLng) return null;
@@ -373,7 +425,7 @@
         return track(new AreaLayer('', bounds, { pane: 'mpShadowStaff', interactive: true }));
       },
       motion: motion,
-      destroy: function () {
+      teardown: function () {
         motion.destroy();
         ['pointermove', 'pointerdown', 'wheel'].forEach(function (n) { container.removeEventListener(n, onInput); });
         document.removeEventListener('keydown', onInput);

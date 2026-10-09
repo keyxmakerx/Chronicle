@@ -69,7 +69,7 @@ func TestPlacePageExtrasOnce(t *testing.T) {
 	}
 	addons := fakeExtrasAddons{armory: map[string]bool{"c1": true}}
 
-	n, err := placePageExtrasOnce(context.Background(), st, fakeExtrasCampaigns{ids: []string{"c1", "c2"}}, addons, ents)
+	n, err := placePageExtrasOnce(context.Background(), st, fakeExtrasCampaigns{ids: []string{"c1", "c2"}}, addons, ents, fixedTypeLists{npc: []int{1, 2}, char: []int{1, 2}})
 	if err != nil || n != 2 {
 		t.Fatalf("first run: n=%d err=%v, want 2 layouts and no error", n, err)
 	}
@@ -88,7 +88,7 @@ func TestPlacePageExtrasOnce(t *testing.T) {
 
 	// A second boot changes nothing, so a block the owner removed stays removed.
 	ents.plans = map[string]map[int]entities.PageExtrasPlan{}
-	if n, err := placePageExtrasOnce(context.Background(), st, fakeExtrasCampaigns{ids: []string{"c1"}}, addons, ents); err != nil || n != 0 || len(ents.plans) != 0 {
+	if n, err := placePageExtrasOnce(context.Background(), st, fakeExtrasCampaigns{ids: []string{"c1"}}, addons, ents, fixedTypeLists{npc: []int{1, 2}, char: []int{1, 2}}); err != nil || n != 0 || len(ents.plans) != 0 {
 		t.Errorf("second run: n=%d err=%v plans=%v, want a no-op", n, err, ents.plans)
 	}
 }

@@ -13,6 +13,7 @@ import (
 // the DM Screen.
 type npcSpotlightResolver struct {
 	entities entities.EntityService
+	lists    entities.CharacterListReader
 }
 
 // NPCName returns the page's name and true for an NPC page in this
@@ -22,11 +23,11 @@ func (a *npcSpotlightResolver) NPCName(ctx context.Context, campaignID, entityID
 	if err != nil || e.CampaignID != campaignID {
 		return "", false, nil
 	}
-	types, err := a.entities.GetEntityTypes(ctx, campaignID)
+	npcTypes, err := a.lists.NPCTypeIDs(ctx, campaignID)
 	if err != nil {
 		return "", false, err
 	}
-	if !slices.Contains(npcTypeIDs(types), e.EntityTypeID) {
+	if !slices.Contains(npcTypes, e.EntityTypeID) {
 		return "", false, nil
 	}
 	return e.Name, true, nil

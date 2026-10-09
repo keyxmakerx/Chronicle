@@ -65,6 +65,9 @@ type guardDrawingSvc struct {
 func (guardDrawingSvc) ListDrawings(_ context.Context, _ string, _ int, _ string) ([]Drawing, error) {
 	return []Drawing{}, nil
 }
+func (guardDrawingSvc) WithholdImages(_ context.Context, _ string, _ int, ds []Drawing) ([]Drawing, error) {
+	return ds, nil
+}
 func (guardDrawingSvc) ListTokens(_ context.Context, _ string, _ int) ([]Token, error) {
 	return []Token{}, nil
 }

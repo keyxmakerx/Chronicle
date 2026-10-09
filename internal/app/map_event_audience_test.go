@@ -68,7 +68,7 @@ func TestPublishMarkerEvent_ComputesAudienceFromVisibilityRules(t *testing.T) {
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			bus := &captureBus{}
-			a := &mapEventPublisherAdapter{bus: bus, shadows: fixedShadowLookup{}}
+			a := &mapEventPublisherAdapter{bus: bus, shadows: fixedShadowLookup{}, fog: fixedFogLookup{}}
 			a.PublishMarkerEvent("updated", "camp-1", tc.marker)
 
 			if bus.last == nil {
@@ -130,7 +130,7 @@ func TestPublishDrawingEvent_ComputesAudienceFromVisibilityRules(t *testing.T) {
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			bus := &captureBus{}
-			a := &mapEventPublisherAdapter{bus: bus, shadows: fixedShadowLookup{}}
+			a := &mapEventPublisherAdapter{bus: bus, shadows: fixedShadowLookup{}, fog: fixedFogLookup{}}
 			a.PublishDrawingEvent("updated", "camp-1", tc.drawing)
 
 			if bus.last == nil {
@@ -156,7 +156,7 @@ func TestPublishDrawingEvent_ComputesAudienceFromVisibilityRules(t *testing.T) {
 // AllowedUsers/DeniedUsers list.
 func TestPublishTokenEvent_NeverCarriesAudienceLists(t *testing.T) {
 	bus := &captureBus{}
-	a := &mapEventPublisherAdapter{bus: bus, shadows: fixedShadowLookup{}}
+	a := &mapEventPublisherAdapter{bus: bus, shadows: fixedShadowLookup{}, fog: fixedFogLookup{}}
 	a.PublishTokenEvent("updated", "camp-1", &maps.Token{ID: "t1", IsHidden: true})
 
 	if bus.last == nil {

@@ -12,7 +12,7 @@ import (
 // internal/plugins/auth/view_prefs.go).
 type ViewPrefsData struct {
 	Theme    string // device | light | dark
-	Motion   string // owner | calm
+	Motion   string // owner | calm | off
 	TextSize string // standard | larger | largest
 	Contrast string // standard | high
 }
@@ -46,7 +46,9 @@ func ViewPrefAttrs(ctx context.Context) templ.Attributes {
 		return attrs
 	}
 	attrs["data-view-theme"] = oneOf(p.Theme, "device", "light", "dark")
-	if oneOf(p.Motion, "owner", "calm") == "calm" {
+	// Calm and Off both write "calm": it is the "this person wants less
+	// motion" flag scripts check. How much less is data-motion (MotionLevel).
+	if oneOf(p.Motion, "owner", "calm", "off") != "owner" {
 		attrs["data-view-motion"] = "calm"
 	}
 	if t := oneOf(p.TextSize, "standard", "larger", "largest"); t != "standard" {

@@ -10,12 +10,14 @@ import (
 	"sync"
 	"time"
 
+	"github.com/google/uuid"
 	"github.com/labstack/echo/v4"
 
 	"github.com/keyxmakerx/chronicle/internal/apperror"
 	"github.com/keyxmakerx/chronicle/internal/patch"
 	"github.com/keyxmakerx/chronicle/internal/plugins/campaigns"
 	"github.com/keyxmakerx/chronicle/internal/plugins/entities"
+	"github.com/keyxmakerx/chronicle/internal/plugins/media"
 	"github.com/keyxmakerx/chronicle/internal/systems"
 	"github.com/keyxmakerx/chronicle/internal/widgets/relations"
 )
@@ -57,6 +59,7 @@ type APIHandler struct {
 	systemState          SystemStateReader
 	history              *SyncHistoryHandler
 	quests               *QuestAPIHandler
+	signer               *media.URLSigner
 }
 
 // TagGrantLister resolves an entity's tag-derived visibility grants so the
@@ -259,7 +262,60 @@ func (h *APIHandler) ListMembers(c echo.Context) error {
 		slog.Error("api: list members failed", slog.Any("error", err))
 		return apperror.NewInternal(fmt.Errorf("failed to list members"))
 	}
-	return c.JSON(http.StatusOK, members)
+	out := make([]apiMemberResponse, 0, len(members))
+	for i := range members {
+		out = append(out, h.toAPIMember(campaignID, &members[i]))
+	}
+	return c.JSON(http.StatusOK, out)
+}
+
+// SetURLSigner enables signed avatar links in the members response. Without
+// it members carry no avatar_url.
+func (h *APIHandler) SetURLSigner(signer *media.URLSigner) {
+	h.signer = signer
+}
+
+// avatarThumbSize is the thumbnail a member's picture is offered at: plenty
+// for a Foundry user avatar and the size the web top bar already uses.
+const avatarThumbSize = "300"
+
+// apiMemberResponse is the members wire shape. It is its own struct, not the
+// campaigns model, so a field added to CampaignMember (such as the account
+// email) never reaches an API key's holder without a decision here.
+type apiMemberResponse struct {
+	CampaignID        string         `json:"campaign_id"`
+	UserID            string         `json:"user_id"`
+	Role              campaigns.Role `json:"role"`
+	CharacterEntityID *string        `json:"character_entity_id,omitempty"`
+	JoinedAt          time.Time      `json:"joined_at"`
+	DisplayName       string         `json:"display_name,omitempty"`
+	CharacterName     *string        `json:"character_name,omitempty"`
+	// AvatarURL is a short-lived signed thumbnail link, absent when the member
+	// has no picture or no signer is configured.
+	AvatarURL string `json:"avatar_url,omitempty"`
+}
+
+// toAPIMember maps a member to the wire shape, signing the picture link for
+// the requesting key's campaign: an avatar has no campaign of its own, so the
+// media route admits the link only while its owner is a member of this one.
+func (h *APIHandler) toAPIMember(campaignID string, m *campaigns.CampaignMember) apiMemberResponse {
+	resp := apiMemberResponse{
+		CampaignID:        m.CampaignID,
+		UserID:            m.UserID,
+		Role:              m.Role,
+		CharacterEntityID: m.CharacterEntityID,
+		JoinedAt:          m.JoinedAt,
+		DisplayName:       m.DisplayName,
+		CharacterName:     m.CharacterName,
+	}
+	// Only a bare media id is signed; a legacy path value would not name a
+	// file, and a bad value must not become a link.
+	if h.signer != nil && m.AvatarPath != nil {
+		if id, err := uuid.Parse(*m.AvatarPath); err == nil {
+			resp.AvatarURL = h.signer.SignAvatarThumb(id.String(), avatarThumbSize, campaignID, media.SignedURLTTL)
+		}
+	}
+	return resp
 }
 
 // --- Entity Types ---

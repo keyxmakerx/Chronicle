@@ -210,7 +210,14 @@ func renderEntity(
 	// before the converter (enforced by htmlToMarkdown). A conversion
 	// failure skips just this field (bodyOrSkip) rather than aborting the
 	// whole export.
-	body, err := htmlToMarkdown(e.EntryHTML)
+	// Safe mode is a player's view, so GM-only spans and pictures in the
+	// page text go too, as they do for players on the page itself.
+	entry := e.EntryHTML
+	if opts.Privacy == PrivacyModeSafe && entry != nil {
+		stripped := sanitize.StripSecretsHTML(*entry)
+		entry = &stripped
+	}
+	body, err := htmlToMarkdown(entry)
 	body = bodyOrSkip("entity body", e.Name, body, err)
 	if body != "" {
 		b.WriteString(body)

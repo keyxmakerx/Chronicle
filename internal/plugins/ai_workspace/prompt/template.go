@@ -41,6 +41,11 @@ type templateData struct {
 	RecordDocs string
 	// Capabilities is the opening "what you can do" list.
 	Capabilities string
+	// Lookups lists what a lookup block can ask for; "" keeps the older
+	// NEED:-only wording.
+	Lookups string
+	// PageIndex is the compact list of page names per type.
+	PageIndex string
 }
 
 // entityTypeView is the slim shape the template iterates.
@@ -88,12 +93,41 @@ myself. A block can be:
 
 ## If you need more
 
-Don't guess a format, a name or what is already there. If you need the
+Don't guess a format, a name or what is already there.{{ if .Lookups }} Ask Chronicle
+instead: reply with only lookup blocks, and I will paste back the answer. A
+lookup only reads; it never changes anything. For example:
+
+` + "```" + `
+---
+kind: lookup
+what: events
+from: <month> 1 <year>
+to: <month> 30 <year>
+---
+---
+kind: lookup
+what: players
+---
+` + "```" + `
+
+A lookup can ask for:
+
+{{ .Lookups }}
+If you need the exact format for one of the kinds above{{ if .RecordDocs }} beyond what is below{{ end }},
+reply with a short list that starts with ` + "`" + `NEED:` + "`" + `, for example
+` + "`" + `NEED: format for kind: table` + "`" + `.{{ else }} If you need the
 exact format for one of these{{ if .RecordDocs }} beyond what is below{{ end }}, or need to know what already exists
 (a table's entries, a map's pins, the date of an event), reply with only a
 short list that starts with ` + "`" + `NEED:` + "`" + `, for example
 ` + "`" + `NEED: format for kind: table; the pins on the Grimvale map` + "`" + `. I will paste it
-back, and then you answer in full.
+back, and then you answer in full.{{ end }}
+{{ end }}
+{{ if .PageIndex }}
+## What already exists
+
+The pages in my campaign, by type. Ask a ` + "`" + `what: page` + "`" + ` lookup to read one.
+
+{{ .PageIndex }}
 {{ end }}
 {{ if .IncludeEntityTypes }}
 ## My campaign's entity types
@@ -171,7 +205,7 @@ same way.
 Please output your response as one or more blocks in the format above.
 Use front-matter for every block. Do not include any text outside the
 blocks (no preamble, no commentary between blocks){{ if .Capabilities }}, unless you are asking
-for more with ` + "`" + `NEED:` + "`" + `{{ end }}.
+for more with {{ if .Lookups }}lookup blocks or {{ end }}` + "`" + `NEED:` + "`" + `{{ end }}.
 `
 
 // tmpl is the parsed template, ready for Execute. Parsed once at

@@ -44,6 +44,10 @@ type AppearanceData struct {
 	// PeekGlow is "own" for a glow colour of its own; "" follows the accent.
 	PeekGlow       string
 	PeekGlowColour string
+
+	// HoverCard is the hover card look ("plain", "night" or "compact");
+	// "" is Paper, which paper.css and hovercard.js use without an attribute.
+	HoverCard string
 }
 
 const keyAppearance ctxKey = "layout_appearance"
@@ -66,6 +70,9 @@ func AppearanceAttrs(ctx context.Context) templ.Attributes {
 	// attributes (data-view-*), never folded into the campaign's data-cz-*.
 	attrs := ViewPrefAttrs(ctx)
 	a := GetAppearance(ctx)
+	if m := MotionLevel(ctx); m != "full" {
+		attrs["data-motion"] = m
+	}
 	if a == nil {
 		return attrs
 	}
@@ -80,6 +87,7 @@ func AppearanceAttrs(ctx context.Context) templ.Attributes {
 	set("data-cz-btn", a.ButtonStyle)
 	set("data-cz-elev", a.Elevation)
 	set("data-cz-scale", a.TypeScale)
+	set("data-cz-hover", a.HoverCard)
 	if a.HeadingFont != "" && a.HeadingFont != "same" {
 		attrs["data-cz-heading"] = a.HeadingFont
 	}
@@ -95,6 +103,28 @@ func AppearanceAttrs(ctx context.Context) templ.Attributes {
 		attrs["data-cz-corner"] = a.SidebarCorner
 	}
 	return attrs
+}
+
+// MotionLevel is how much this viewer's pages move, written to <html> as
+// data-motion when it isn't "full" (absent means full, so the plain look
+// adds no attributes): "off" when they picked
+// Off in My view, "calm" when they picked Calm or the owner made the campaign
+// calm, else "full". A person can lower the owner's level, never raise it.
+// The first-paint script in base.templ lowers it to "off" for a device that
+// asks for reduced motion.
+func MotionLevel(ctx context.Context) string {
+	if p := GetViewPrefs(ctx); p != nil {
+		switch p.Motion {
+		case "off":
+			return "off"
+		case "calm":
+			return "calm"
+		}
+	}
+	if a := GetAppearance(ctx); a != nil && a.ReduceMotion {
+		return "calm"
+	}
+	return "full"
 }
 
 // NavCorner is what the menu's top-left corner shows: its kind ("plain",
@@ -225,10 +255,11 @@ var czElevation = map[string]struct {
 		[2]string{"0 22px 44px -14px rgb(0 0 0 / .38), 0 6px 14px -6px rgb(0 0 0 / .18)", "0 24px 48px -14px rgb(0 0 0 / .85), 0 6px 14px -6px rgb(0 0 0 / .5)"}},
 }
 
-// czSpeeds retime Chronicle's chrome durations (micro, standard, large).
-var czSpeeds = map[string]struct{ micro, std, large int }{
-	"snappy":    {80, 130, 180},
-	"leisurely": {200, 330, 460},
+// czSpeeds retime Chronicle's chrome durations (micro, standard, large) and
+// the paper moves (slide-out, page turn).
+var czSpeeds = map[string]struct{ micro, std, large, slide, turn int }{
+	"snappy":    {80, 130, 180, 240, 380},
+	"leisurely": {200, 330, 460, 520, 760},
 }
 
 // czHeadingFaces is each heading face's weight, letter-spacing and size
@@ -348,7 +379,7 @@ func AppearanceCSS(ctx context.Context) string {
 	}
 
 	if s, ok := czSpeeds[a.MotionSpeed]; ok {
-		fmt.Fprintf(&root, "--dur-micro:%dms;--dur-standard:%dms;--dur-large:%dms;", s.micro, s.std, s.large)
+		fmt.Fprintf(&root, "--dur-micro:%dms;--dur-standard:%dms;--dur-large:%dms;--dur-slide:%dms;--dur-turn:%dms;", s.micro, s.std, s.large, s.slide, s.turn)
 	}
 
 	if stack, ok := czFontStacks[a.BodyFont]; ok && a.BodyFont != "inter" {

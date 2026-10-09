@@ -2,7 +2,8 @@
 // vectors produced by the approved mockup's own functions (the same vectors the
 // Go tests use), path building (one path however many hexes), the request
 // batching the server's cap needs, and the partial-update merge that keeps a
-// paint stroke from touching a name.
+// paint stroke from touching a name; and the terrain art's pure parts in
+// map_hex_art.js (pieces, folders, zoom steps, the tile cache).
 
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
@@ -12,9 +13,10 @@ import path from 'node:path';
 import vm from 'node:vm';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
-const src = readFileSync(path.join(here, '..', '..', 'static', 'js', 'map_hexes.js'), 'utf8');
+const jsDir = path.join(here, '..', '..', 'static', 'js');
 
-function load() {
+function load(file = 'map_hexes.js') {
+  const src = readFileSync(path.join(jsDir, file), 'utf8');
   const saved = { window: globalThis.window, document: globalThis.document, module: globalThis.module };
   delete globalThis.window;
   delete globalThis.document;
@@ -27,6 +29,7 @@ function load() {
   return api;
 }
 const H = load();
+const A = load('map_hex_art.js');
 const near = (a, b, eps = 1e-9) => assert.ok(Math.abs(a - b) < eps, `${a} !~ ${b}`);
 
 test('geometry matches the mockup: gridSize 60 over 1000 x 700', () => {
@@ -257,4 +260,365 @@ test('an anchored field is capped at 400 hexes an axis and never empty', () => {
 
 test('the transform string carries position and scale', () => {
   assert.equal(H.xfAttr({ x: 10, y: 20, s: 0.5 }), 'translate(10 20) scale(0.5)');
+});
+
+// ---- Fog of war and the party ----
+
+const keyOf = (c) => `${c.col},${c.row}`;
+
+test('neighbors: six hexes, odd rows shifted right, and the relation is symmetric', () => {
+  const sets = (col, row) => H.neighbors(col, row).map(keyOf).sort();
+  assert.deepEqual(sets(2, 2), ['1,1', '1,2', '1,3', '2,1', '2,3', '3,2']);
+  assert.deepEqual(sets(2, 3), ['1,3', '2,2', '2,4', '3,2', '3,3', '3,4']);
+  for (const [col, row] of [[5, 5], [4, 4], [0, 0], [3, 1]]) {
+    for (const n of H.neighbors(col, row)) {
+      assert.ok(H.neighbors(n.col, n.row).map(keyOf).includes(`${col},${row}`), `${col},${row} not a neighbour of ${keyOf(n)}`);
+      assert.equal(H.distance({ col, row }, n), 1);
+    }
+  }
+});
+
+test('unexploredKeys: everything in the field the explored set lacks', () => {
+  const g = { cols: 3, rows: 2 };
+  assert.equal(H.unexploredKeys(g, {}).length, 6);
+  const left = H.unexploredKeys(g, { '0,0': true, '2,1': true }).map(keyOf);
+  assert.deepEqual(left, ['1,0', '2,0', '0,1', '1,1']);
+  assert.deepEqual(H.unexploredKeys(g, { '0,0': true, '1,0': true, '2,0': true, '0,1': true, '1,1': true, '2,1': true }), []);
+  assert.deepEqual(H.unexploredKeys({ cols: 0, rows: 0 }, {}), []);
+});
+
+test('fogPolygons: six corners per hex, through the transform and canvas scale', () => {
+  const g = { r: 10, w: Math.sqrt(3) * 10, ox: 0, oy: 0, cols: 2, rows: 1 };
+  const polys = H.fogPolygons(g, { x: 100, y: 50, s: 2 }, [{ col: 1, row: 0 }], 0.5, 0.25);
+  assert.equal(polys.length, 1);
+  assert.equal(polys[0].length, 12);
+  // Hex (1,0) is centred at x = w; its top corner is r above that.
+  near(polys[0][0], (100 + g.w * 2) * 0.5);
+  near(polys[0][1], (50 + (0 - 10) * 2) * 0.25);
+  assert.deepEqual(H.fogPolygons(g, { x: 0, y: 0, s: 1 }, [], 1, 1), []);
+});
+
+test('walkPoint: eased hex by hex, a hop between, arrives exactly', () => {
+  const pts = [[0, 0], [100, 0], [100, 100]];
+  const start = H.walkPoint(pts, 0, 170, 12);
+  assert.deepEqual([start.x, start.y, start.done], [0, 0, false]);
+  const mid = H.walkPoint(pts, 85, 170, 12);
+  near(mid.x, 50); near(mid.y, -12); assert.equal(mid.done, false);
+  const second = H.walkPoint(pts, 170 + 85, 170, 12);
+  near(second.x, 100); near(second.y, 50 - 12);
+  // Eased: a quarter of the way through a step is less than a quarter across.
+  assert.ok(H.walkPoint(pts, 170 / 4, 170, 0).x < 25);
+  for (const t of [340, 341, 10000]) {
+    const end = H.walkPoint(pts, t, 170, 12);
+    assert.deepEqual([end.x, end.y, end.done], [100, 100, true]);
+  }
+  // Before the start and a single point do not fail.
+  assert.equal(H.walkPoint(pts, -50, 170, 12).x, 0);
+  assert.deepEqual(H.walkPoint([[7, 9]], 500, 170, 12), { x: 7, y: 9, done: true });
+});
+
+test('revealSchedule: the hexes around each path hex, once, when the token gets there', () => {
+  const g = { cols: 20, rows: 20 };
+  const path = H.hexLine({ col: 5, row: 5 }, { col: 8, row: 5 });
+  assert.equal(path.length, 4);
+  const sched = H.revealSchedule(path, 170, g);
+  const keys = sched.map(keyOf);
+  assert.equal(new Set(keys).size, keys.length, 'a hex is scheduled once');
+  // Each path hex and every neighbour of one is in the zone, nothing else.
+  const want = new Set();
+  for (const p of path) { want.add(keyOf(p)); H.neighbors(p.col, p.row).forEach((n) => want.add(keyOf(n))); }
+  assert.deepEqual([...keys].sort(), [...want].sort());
+  const at = Object.fromEntries(sched.map((s) => [keyOf(s), s.at]));
+  assert.equal(at['5,5'], 85);
+  // The last hex is already inside the zone of the one before it; only the land beyond waits for the final step.
+  assert.equal(at['8,5'], 2 * 170 + 85);
+  assert.equal(at['9,5'], 3 * 170 + 85);
+  // A hex near the start comes out with the start, not later.
+  assert.equal(at[keyOf(H.neighbors(5, 5)[0])], 85);
+  // Clipped to the field at its corner.
+  const corner = H.revealSchedule([{ col: 0, row: 0 }], 170, { cols: 3, rows: 3 });
+  assert.ok(corner.every((c) => c.col >= 0 && c.row >= 0 && c.col < 3 && c.row < 3));
+  assert.equal(corner.length, 3);
+  // First placement: one hex, revealed at once.
+  assert.equal(H.revealSchedule([{ col: 4, row: 4 }], 170, g)[0].at, 85);
+});
+
+test('fogBatches: the server\'s cap of 500, one direction per request', () => {
+  assert.equal(H.BATCH_MAX, 500);
+  const cells = Array.from({ length: 1201 }, (_, i) => ({ col: i, row: 0, terrain: 'x' }));
+  for (const explored of [true, false]) {
+    const out = H.fogBatches(cells, explored);
+    assert.deepEqual(out.map((b) => b.cells.length), [500, 500, 201]);
+    assert.ok(out.every((b) => b.explored === explored));
+    // Only the position travels: a reveal never carries terrain or names.
+    assert.deepEqual(Object.keys(out[0].cells[0]).sort(), ['col', 'row']);
+  }
+  assert.deepEqual(H.fogBatches([], true), []);
+  assert.equal(H.fogBatches(cells.slice(0, 500), true).length, 1);
+  assert.equal(H.fogBatches(cells.slice(0, 501), true).length, 2);
+});
+
+test('partyMoverAllowed mirrors the server: DM always, scribe unless owners-only, player never', () => {
+  const cases = [
+    [{ isDM: true, isScribe: true, partyWho: 'owners' }, true],
+    [{ isDM: true, isScribe: false, partyWho: 'owners' }, true],
+    [{ isDM: false, isScribe: true, partyWho: 'scribes' }, true],
+    [{ isDM: false, isScribe: true, partyWho: undefined }, true],
+    [{ isDM: false, isScribe: true, partyWho: 'owners' }, false],
+    [{ isDM: false, isScribe: false, partyWho: 'scribes' }, false],
+    [{ isDM: false, isScribe: false, partyWho: 'owners' }, false],
+  ];
+  for (const [o, want] of cases) assert.equal(H.partyMoverAllowed(o), want, JSON.stringify(o));
+});
+
+test('isStale: old versions and this client\'s own echoes are ignored, anything newer is read', () => {
+  assert.equal(H.isStale(10, 10, {}), true);
+  assert.equal(H.isStale(10, 9, {}), true);
+  assert.equal(H.isStale(10, 11, {}), false);
+  assert.equal(H.isStale(10, 12, { 12: true }), true);
+  assert.equal(H.isStale(10, 13, { 12: true }), false);
+  // No usable version: read to be safe.
+  for (const v of [undefined, null, 0, 'x']) assert.equal(H.isStale(10, v, {}), false);
+});
+
+test('the map picture: the server copy for viewers below DM level while fog is on', () => {
+  assert.equal(H.playerImageURL('c1', 'm1', 7), '/campaigns/c1/maps/m1/player-image?v=7');
+  const cases = [
+    [{ dmViewer: true, fogOn: true, anchored: false, startedWithCopy: true }, false],
+    [{ dmViewer: false, fogOn: true, anchored: false, startedWithCopy: false }, true],
+    [{ dmViewer: false, fogOn: true, anchored: true, startedWithCopy: false }, false],
+    [{ dmViewer: false, fogOn: false, anchored: false, startedWithCopy: false }, false],
+    // A page served the copy keeps it when fog goes off: the original's address is unknown.
+    [{ dmViewer: false, fogOn: false, anchored: false, startedWithCopy: true }, true],
+  ];
+  for (const [o, want] of cases) assert.equal(H.wantsPlayerCopy(o), want, JSON.stringify(o));
+});
+
+// ---- Trips ----
+
+const hx = (col, row) => ({ col, row });
+
+test('tripPath: the line runs party to destination, and is empty with nothing to plan', () => {
+  const p = H.tripPath(hx(0, 0), hx(4, 0));
+  assert.deepEqual(p.map((h) => [h.col, h.row]), [[0, 0], [1, 0], [2, 0], [3, 0], [4, 0]]);
+  // Every step moves to a neighbour, whatever the direction.
+  const long = H.tripPath(hx(2, 1), hx(9, 8));
+  assert.deepEqual(long[0], hx(2, 1));
+  assert.deepEqual(long[long.length - 1], hx(9, 8));
+  for (let i = 1; i < long.length; i++) assert.equal(H.distance(long[i - 1], long[i]), 1);
+  assert.equal(long.length, H.distance(hx(2, 1), hx(9, 8)) + 1);
+  const cases = [[null, hx(1, 1)], [hx(1, 1), null], [hx(3, 3), hx(3, 3)], [undefined, undefined]];
+  for (const [a, b] of cases) assert.deepEqual(H.tripPath(a, b), []);
+});
+
+test('travelDays: rounded to halves, never zero for a trip that goes somewhere', () => {
+  const cases = [
+    [0, 24, 0], [-5, 24, 0],
+    [6, 24, 0.5],       // a quarter day rounds to half
+    [1, 24, 0.5],       // a short hop is still half a day
+    [24, 24, 1], [36, 24, 1.5], [29, 24, 1], [30, 24, 1.5],
+    [100, 24, 4], [120, 24, 5], [180, 24, 7.5],
+    [60, 0, 60],        // a missing speed counts as one mile a day, never divides by zero
+  ];
+  for (const [miles, perDay, want] of cases) assert.equal(H.travelDays(miles, perDay), want, `${miles}/${perDay}`);
+});
+
+test('clampTravel: whole numbers from 1 to 1000, a fallback for junk', () => {
+  const cases = [[6, 6], ['12', 12], [0, 1], [-4, 1], [1000, 1000], [1001, 1000], [7.9, 7], [1e9, 1000]];
+  for (const [v, want] of cases) assert.equal(H.clampTravel(v, 99), want, String(v));
+  for (const v of ['', 'abc', NaN, Infinity, undefined]) assert.equal(H.clampTravel(v, 99), 99, String(v));
+});
+
+test('tripTerrain: the top three kinds along the path, the start hex left out', () => {
+  const path = [hx(0, 0), hx(1, 0), hx(2, 0), hx(3, 0), hx(4, 0), hx(5, 0), hx(6, 0), hx(7, 0)];
+  const cells = {
+    '0,0': { terrain: 'town' },       // the start: must not count
+    '1,0': { terrain: 'forest' }, '2,0': { terrain: 'forest' }, '3,0': { terrain: 'forest' },
+    '4,0': { terrain: 'mountain' }, '5,0': { terrain: 'mountain' },
+    '6,0': { terrain: 'water' },
+    // 7,0 has no cell at all
+  };
+  assert.deepEqual(H.tripTerrain(path, cells, null), ['forest', 'mountains', 'water']);
+  // Ties keep the order the path meets them in.
+  assert.deepEqual(H.tripTerrain([hx(0, 0), hx(1, 0), hx(2, 0), hx(3, 0)], { '1,0': { terrain: 'swamp' }, '2,0': { terrain: 'hills' } }, null), ['swamp', 'hills', 'open country']);
+  // Town reads as "places", as the palette names it; a hex with no terrain is open country.
+  assert.deepEqual(H.tripTerrain([hx(0, 0), hx(1, 0), hx(2, 0)], { '1,0': { terrain: 'town' }, '2,0': { name: 'x' } }, null), ['places', 'open country']);
+  assert.deepEqual(H.tripTerrain([hx(0, 0)], cells, null), []);
+});
+
+test('tripTerrain: land the viewer was not shown reads as unexplored and its cell is never read', () => {
+  const path = [hx(0, 0), hx(1, 0), hx(2, 0), hx(3, 0)];
+  const read = new Set();
+  const spy = (k, terrain) => ({ get terrain() { read.add(k); return terrain; } });
+  const cells = { '1,0': spy('1,0', 'forest'), '2,0': spy('2,0', 'mountain'), '3,0': spy('3,0', 'water') };
+  const explored = { '0,0': true, '1,0': true };
+  assert.deepEqual(H.tripTerrain(path, cells, explored), ['unexplored land', 'forest']);
+  assert.deepEqual([...read], ['1,0'], 'only the explored hex\'s cell may be looked at');
+  // Nothing explored along the way: the whole route is one unknown.
+  assert.deepEqual(H.tripTerrain(path, cells, {}), ['unexplored land']);
+  // A viewer who sees everything (explored null) reads the terrain.
+  assert.deepEqual(H.tripTerrain(path, cells, null), ['forest', 'mountains', 'water']);
+});
+
+test('tripSummary: the readout text', () => {
+  const path = H.tripPath(hx(0, 0), hx(4, 0));
+  const cells = { '1,0': { terrain: 'plains' }, '2,0': { terrain: 'plains' }, '3,0': { terrain: 'hills' }, '4,0': { terrain: 'forest' } };
+  const s = H.tripSummary(path, { milesPerHex: 6, milesPerDay: 24, cells, explored: null });
+  assert.equal(s.head, '4 hexes · 24 miles');
+  assert.equal(s.about, 'About 1 day on foot');
+  assert.deepEqual(s.through, ['plains', 'hills', 'forest']);
+  const far = H.tripSummary(H.tripPath(hx(0, 0), hx(10, 0)), { milesPerHex: 6, milesPerDay: 24, cells: {}, explored: null });
+  assert.equal(far.head, '10 hexes · 60 miles');
+  assert.equal(far.about, 'About 2.5 days on foot');
+  const one = H.tripSummary(H.tripPath(hx(0, 0), hx(1, 0)), { milesPerHex: 6, milesPerDay: 24, cells: {}, explored: null });
+  assert.equal(one.head, '1 hex · 6 miles');
+  assert.equal(one.about, 'About 0.5 days on foot');
+  // The owner's figures drive it.
+  const quick = H.tripSummary(path, { milesPerHex: 12, milesPerDay: 48, cells, explored: null });
+  assert.equal(quick.head, '4 hexes · 48 miles');
+  assert.equal(quick.about, 'About 1 day on foot');
+  assert.equal(H.tripSummary([], { milesPerHex: 6, milesPerDay: 24 }), null);
+  assert.equal(H.tripSummary([hx(0, 0)], { milesPerHex: 6, milesPerDay: 24 }), null);
+  // A fogged viewer's route is described without the hidden terrain.
+  const fogged = H.tripSummary(path, { milesPerHex: 6, milesPerDay: 24, cells, explored: { '0,0': true, '1,0': true } });
+  assert.deepEqual(fogged.through, ['unexplored land', 'plains']);
+});
+
+test('the plan is stored per person and map, and a bad stored value is dropped', () => {
+  assert.equal(H.tripStorageKey('u1', 'm1'), 'chronicle.maptrip.u1.m1');
+  assert.equal(H.tripStorageKey('', 'm1'), 'chronicle.maptrip.anon.m1');
+  assert.notEqual(H.tripStorageKey('u1', 'm1'), H.tripStorageKey('u2', 'm1'));
+  assert.notEqual(H.tripStorageKey('u1', 'm1'), H.tripStorageKey('u1', 'm2'));
+  assert.deepEqual(H.parseTrip('{"col":3,"row":9}'), { col: 3, row: 9 });
+  const bad = [null, '', 'x', '[]', '{}', '{"col":-1,"row":0}', '{"col":1.5,"row":0}', '{"col":400,"row":0}', '{"col":"1","row":0}', '{"col":1}'];
+  for (const raw of bad) assert.equal(H.parseTrip(raw), null, String(raw));
+});
+
+test('the default travel figures match the server\'s columns', () => {
+  assert.equal(H.DEFAULT_MILES_PER_HEX, 6);
+  assert.equal(H.DEFAULT_MILES_PER_DAY, 24);
+  assert.equal(H.MAX_TRAVEL_MILES, 1000);
+});
+
+// ---- Terrain art and pieces ----
+
+test('artOf keeps the three styles and reads anything else as Detailed', () => {
+  const cases = [['real', 'real'], ['detailed', 'detailed'], ['simple', 'simple'], ['illustrated', 'detailed'], ['', 'detailed'], [undefined, 'detailed'], [null, 'detailed'], ['REAL', 'detailed']];
+  for (const [in_, want] of cases) assert.equal(H.artOf(in_), want, String(in_));
+  assert.equal(H.DEFAULT_ART, 'detailed');
+});
+
+test('paintEntry carries a piece only for a terrain that has pieces', () => {
+  const cases = [
+    { t: 'forest', p: 3, has: true, want: { terrain: 'forest', piece: 3 } },
+    { t: 'forest', p: 0, has: true, want: { terrain: 'forest', piece: 0 } },
+    { t: 'forest', p: null, has: true, want: { terrain: 'forest', piece: null } },
+    { t: 'road', p: 3, has: false, want: { terrain: 'road', piece: null } },
+    { t: '', p: 3, has: true, want: { terrain: null, piece: null } },
+    { t: null, p: null, has: false, want: { terrain: null, piece: null } },
+  ];
+  for (const c of cases) assert.deepEqual(H.paintEntry(c.t, c.p, c.has), c.want, JSON.stringify(c));
+});
+
+test('mergeEntry keeps a piece beside a later name, and a later stroke replaces it', () => {
+  const stroke = H.mergeEntry({ col: 1, row: 1 }, { terrain: 'forest', piece: 4 });
+  assert.deepEqual(H.mergeEntry(stroke, { name: 'Wood' }), { col: 1, row: 1, terrain: 'forest', piece: 4, name: 'Wood' });
+  assert.deepEqual(H.mergeEntry(stroke, { terrain: 'road', piece: null }), { col: 1, row: 1, terrain: 'road', piece: null });
+  assert.deepEqual(H.mergeEntry({ col: 0, row: 0 }, { name: 'x' }), { col: 0, row: 0, name: 'x' });
+});
+
+test('lowerRaised sees only raised land below, and treats unsent hexes as flat', () => {
+  const k = (c, r) => c + ',' + r;
+  const cells = { [k(0, 1)]: { terrain: 'forest' }, [k(1, 1)]: { terrain: 'water' }, [k(2, 3)]: { terrain: 'road' }, [k(3, 3)]: { terrain: 'hills' } };
+  const cases = [
+    { col: 1, row: 0, want: { bl: true, br: false } },  // even row: (0,1) and (1,1)
+    { col: 2, row: 2, want: { bl: false, br: false } }, // even row: (1,3) unsent, (2,3) road
+    { col: 2, row: 1, want: { bl: false, br: false } }, // odd row: (2,2), (3,2) unsent
+    { col: 2, row: 3, want: { bl: false, br: false } },
+    { col: 3, row: 2, want: { bl: false, br: true } },  // even row: (2,3) road, (3,3) hills
+  ];
+  for (const c of cases) assert.deepEqual(H.lowerRaised(cells, c.col, c.row), c.want, JSON.stringify(c));
+});
+
+test('artRange covers only hexes whose art can reach the view, clamped to the field', () => {
+  const g = H.geometry(60, 1000, 700);
+  const all = H.artRange(g, -1e6, -1e6, 1e6, 1e6, H.ART_REACH.real);
+  assert.deepEqual([all.c0, all.r0, all.c1, all.r1], [0, 0, g.cols - 1, g.rows - 1]);
+  const small = H.artRange(g, 400, 300, 450, 350, H.ART_REACH.detailed);
+  assert.ok(small.c0 > 0 && small.c1 < g.cols - 1 && small.r0 > 0 && small.r1 < g.rows - 1);
+  // A tall Realistic peak below the view can still reach into it.
+  const real = H.artRange(g, 400, 300, 450, 350, H.ART_REACH.real);
+  assert.ok(real.r1 > small.r1);
+  assert.equal(H.artRange({ r: 0, cols: 1, rows: 1 }, 0, 0, 1, 1, H.ART_REACH.real), null);
+});
+
+test('pieceOf keeps a chosen piece and gives Mix a stable piece in range', () => {
+  assert.equal(A.pieceOf('forest', 'any', 7), 7);
+  assert.equal(A.pieceOf('forest', 'any', 0), 0);
+  const seen = new Set();
+  for (let i = 0; i < 400; i++) {
+    const seed = 'h' + i + ',' + (i * 7 % 13);
+    const v = A.pieceOf('forest', seed, null);
+    assert.ok(Number.isInteger(v) && v >= 0 && v < 12, String(v));
+    assert.equal(A.pieceOf('forest', seed, undefined), v, 'same seed, same piece');
+    seen.add(v);
+  }
+  assert.ok(seen.size >= 10, 'Mix spreads over the pieces');
+});
+
+test('every terrain with pieces has twelve, and its folders hold each exactly once', () => {
+  const terrains = Object.keys(A.PIECES);
+  assert.deepEqual(terrains.sort(), ['desert', 'forest', 'hills', 'mountain', 'plains', 'snow', 'swamp', 'town', 'water']);
+  for (const t of terrains) {
+    assert.equal(A.PIECES[t].length, 12, t); // the server's HexPiecesPerTerrain
+    const all = A.PFOLD[t].flatMap((f) => f[1]).sort((a, b) => a - b);
+    assert.deepEqual(all, [...Array(12).keys()], t);
+    for (let v = 0; v < 12; v++) assert.ok(A.PFOLD[t][A.folderOf(t, v)][1].includes(v), t + v);
+  }
+  assert.equal(A.terrainHasPieces('road'), false);
+  assert.equal(A.folderOf('forest', null), -1);
+  assert.equal(A.folderOf('road', 1), -1);
+});
+
+test('zoomBucket steps by half powers of two inside its bounds', () => {
+  const cases = [[0, 12], [-3, 12], [NaN, 12], [5, 12], [16, 16], [17, 22.63], [23, 32], [33, 45.25], [64, 64], [500, 64]];
+  for (const [px, want] of cases) assert.equal(A.zoomBucket(px, 12, 64), want, String(px));
+  assert.equal(A.zoomBucket(150, 12, 192), 181.02);
+});
+
+test('TileCache drops the least recently used past either cap', () => {
+  const c = new A.TileCache(3, 1000);
+  c.set('a', 1, 100); c.set('b', 2, 100); c.set('c', 3, 100);
+  c.get('a');
+  c.set('d', 4, 100);
+  assert.equal(c.size, 3);
+  assert.equal(c.has('b'), false, 'b was least recently used');
+  assert.equal(c.get('a'), 1);
+  c.set('e', 5, 900);
+  assert.ok(c.px <= 1000, 'pixel cap holds');
+  assert.equal(c.has('e'), true);
+  // One tile bigger than the cap is kept on its own rather than thrashing.
+  c.set('huge', 6, 5000);
+  assert.equal(c.size, 1);
+  c.set('huge', 7, 10);
+  assert.equal(c.px, 10, 'replacing a key replaces its pixels');
+  c.clear();
+  assert.equal(c.size, 0);
+  assert.equal(c.px, 0);
+});
+
+test('detailed variants are stable and in range', () => {
+  for (let i = 0; i < 200; i++) {
+    const v = A.detailedVariant('3,' + i);
+    assert.ok(Number.isInteger(v) && v >= 0 && v < A.DETAILED_VARIANTS);
+    assert.equal(A.detailedVariant('3,' + i), v);
+  }
+  assert.equal(A.detailedSeed('forest', 4), 'dforest4');
+});
+
+test('Detailed art is plain SVG that names its own shading', () => {
+  const svg = A.detailedArt('forest', 0, 0, 26, 'dforest1', 'u');
+  assert.match(svg, /url\(#ugforest\)/);
+  assert.ok(!/undefined|NaN/.test(svg));
+  assert.match(A.detailedDefs('u'), /id="ugforest"/);
 });

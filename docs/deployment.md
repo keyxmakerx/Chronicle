@@ -530,8 +530,8 @@ docker compose exec -T chronicle-db sh -c \
 ```
 
 End-to-end: log in as a player whose owned character predates the backup,
-open `My Characters` (`GET /campaigns/:id/me`), and confirm the character
-card appears. A missing card means the claim
+open the Characters page (`GET /campaigns/:id/characters`), and confirm the
+character card appears under Yours. A missing card for a claim made on 0.0.2 means the claim
 postdates the dump — not a restore bug.
 
 ### Common restore arguments

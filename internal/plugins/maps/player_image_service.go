@@ -82,6 +82,21 @@ func (s *mapService) shadowedAreas(ctx context.Context, mapID string) ([]ShadowA
 	return s.shadows.ShadowAreas(ctx, mapID)
 }
 
+// pictureFog returns the fog that covers the map's own picture, or nil: no
+// fog, a layer pinned to a picture drawing (that drawing's file is the secret
+// there, not the background), or nothing wired. A failed lookup is an error,
+// never "no fog".
+func (s *mapService) pictureFog(ctx context.Context, mapID string) (*FogMask, error) {
+	if s.hexFog == nil {
+		return nil, nil
+	}
+	fog, err := s.hexFog.FogMask(ctx, mapID)
+	if err != nil || !fog.CoversMapPicture() {
+		return nil, err
+	}
+	return fog, nil
+}
+
 // ForViewer implements MapService. For a viewer who is not owner/DM-equivalent
 // and a map that has a shadow, it returns a copy with the original image id
 // removed and the player copy's address in its place; otherwise m itself. A
@@ -94,12 +109,16 @@ func (s *mapService) ForViewer(ctx context.Context, m *Map, role int) (*Map, err
 	if err != nil {
 		return nil, fmt.Errorf("list shadow areas: %w", err)
 	}
-	if len(areas) == 0 {
+	fog, err := s.pictureFog(ctx, m.ID)
+	if err != nil {
+		return nil, fmt.Errorf("read hex fog: %w", err)
+	}
+	if len(areas) == 0 && fog == nil {
 		return m, nil
 	}
 	cp := *m
 	cp.ImageID = nil
-	cp.PlayerImageURL = playerImageURL(m.CampaignID, m.ID, playerImageKey(*m.ImageID, m.ID, areas))
+	cp.PlayerImageURL = playerImageURL(m.CampaignID, m.ID, playerImageKeyFog(*m.ImageID, m.ID, areas, fog))
 	return &cp, nil
 }
 
@@ -113,10 +132,14 @@ func (s *mapService) PlayerImageVersion(ctx context.Context, m *Map) (string, er
 	if err != nil {
 		return "", fmt.Errorf("list shadow areas: %w", err)
 	}
-	if len(areas) == 0 {
+	fog, err := s.pictureFog(ctx, m.ID)
+	if err != nil {
+		return "", fmt.Errorf("read hex fog: %w", err)
+	}
+	if len(areas) == 0 && fog == nil {
 		return "", nil
 	}
-	return playerImageKey(*m.ImageID, m.ID, areas)[:16], nil
+	return playerImageKeyFog(*m.ImageID, m.ID, areas, fog)[:16], nil
 }
 
 // ForViewerList is ForViewer over a list.
@@ -149,7 +172,11 @@ func (s *mapService) PlayerImage(ctx context.Context, m *Map) ([]byte, error) {
 	if err != nil {
 		return nil, fmt.Errorf("list shadow areas: %w", err)
 	}
-	key := playerImageKey(*m.ImageID, m.ID, areas)
+	fog, err := s.pictureFog(ctx, m.ID)
+	if err != nil {
+		return nil, fmt.Errorf("read hex fog: %w", err)
+	}
+	key := playerImageKeyFog(*m.ImageID, m.ID, areas, fog)
 	path := s.playerImagePath(m.ID, key)
 	if data := readCached(path); data != nil {
 		return data, nil
@@ -181,7 +208,7 @@ func (s *mapService) PlayerImage(ctx context.Context, m *Map) ([]byte, error) {
 	if err != nil {
 		return nil, apperror.NewInternal(fmt.Errorf("decode map picture: %w", err))
 	}
-	data, err := encodePlayerImage(renderPlayerImage(src, areas, playerImageMaxSide))
+	data, err := encodePlayerImage(renderPlayerImageFog(src, areas, fog, playerImageMaxSide))
 	if err != nil {
 		return nil, apperror.NewInternal(fmt.Errorf("encode player image: %w", err))
 	}

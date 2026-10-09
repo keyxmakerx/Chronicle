@@ -1,0 +1,116 @@
+// lookup_answer.templ renders the answer to an AI's lookups: a read-only
+// panel under the paste box with one chip per lookup, a privacy choice that
+// re-asks, and the markdown to copy back to the AI.
+
+package ai_workspace
+
+import (
+	"fmt"
+
+	"github.com/keyxmakerx/chronicle/internal/plugins/ai_workspace/records"
+)
+
+// LookupView is what the answer panel draws.
+type LookupView struct {
+	CampaignID string
+	Answers    []records.LookupAnswer
+	Markdown   string
+	// Privacy is the mode the answer was read in: safe, permitted or everything.
+	Privacy string
+	// Source is the pasted text, posted again when the privacy changes.
+	Source string
+	// Skipped counts pasted blocks that were not lookups; they are left out.
+	Skipped int
+}
+
+func lookupCountLine(d LookupView) string {
+	n := fmt.Sprintf("%d lookups", len(d.Answers))
+	if len(d.Answers) == 1 {
+		n = "1 lookup"
+	}
+	return n + ". Only reads; nothing in your campaign changes. Paste this back to your AI."
+}
+
+// LookupAnswer is the answer panel. The Copy button reuses the ai-export
+// widget's clipboard wiring.
+templ LookupAnswer(d LookupView) {
+	<div
+		id="ai-lookup-answer"
+		role="region"
+		aria-labelledby="ai-lookup-heading"
+		class="card p-4 mt-4 ai-grow"
+		data-widget="ai-export"
+		x-data="{ copied: false }"
+	>
+		<div class="flex items-center justify-between gap-3 mb-1">
+			<h3 id="ai-lookup-heading" class="text-base font-semibold text-fg">Answer for your AI</h3>
+			<div class="flex items-center gap-3">
+				<a
+					href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/settings?tab=ai-workspace", d.CampaignID)) }
+					class="text-xs text-fg-muted hover:text-fg"
+					title="Close the answer and start over"
+				>
+					<i class="fa-solid fa-rotate-left mr-1" aria-hidden="true"></i> Cancel
+				</a>
+				<button
+					type="button"
+					class="btn-primary text-xs px-3 py-1.5"
+					data-ai-export-copy
+					@click="copied = true; setTimeout(() => copied = false, 2000)"
+				>
+					<span x-show="!copied"><i class="fa-solid fa-copy mr-1" aria-hidden="true"></i> Copy answer</span>
+					<span x-show="copied" x-cloak><i class="fa-solid fa-check mr-1" aria-hidden="true"></i> Copied</span>
+				</button>
+			</div>
+		</div>
+		<p class="text-xs text-fg-muted mb-3">{ lookupCountLine(d) }</p>
+		if d.Skipped > 0 {
+			<p class="text-xs text-fg-muted mb-3">
+				<i class="fa-solid fa-circle-info mr-1" aria-hidden="true"></i>
+				{ fmt.Sprintf("%d other %s left out. Paste changes on their own to review them.", d.Skipped, pluralize("block was", "blocks were", d.Skipped)) }
+			</p>
+		}
+		<div class="flex flex-wrap items-center gap-2 mb-3 text-xs">
+			for _, a := range d.Answers {
+				if a.Error != "" {
+					<span class="px-2 py-0.5 rounded-full border border-edge text-fg-secondary" title={ a.Error }>
+						<i class="fa-solid fa-triangle-exclamation mr-1 text-amber-600 dark:text-amber-400" aria-hidden="true"></i>{ a.Chip }<span class="sr-only">: not answered, { a.Error }</span>
+					</span>
+				} else {
+					<span class="px-2 py-0.5 rounded-full border border-edge text-fg-secondary">
+						<i class="fa-solid fa-magnifying-glass mr-1 text-fg-muted" aria-hidden="true"></i>{ a.Chip }
+					</span>
+				}
+			}
+			<form
+				hx-post={ fmt.Sprintf("/campaigns/%s/ai-workspace/import/parse", d.CampaignID) }
+				hx-target="#ai-import-review-host"
+				hx-swap="innerHTML"
+				hx-trigger="change"
+				class="ml-auto"
+			>
+				<textarea name="markdown_paste" hidden aria-hidden="true">{ d.Source }</textarea>
+				<label class="flex items-center gap-2 text-fg-muted">
+					Privacy
+					<select name="lookup_privacy" class="input text-xs py-1">
+						@privacyOption("safe", "Safe", d.Privacy)
+						@privacyOption("permitted", "Permitted", d.Privacy)
+						@privacyOption("everything", "Everything", d.Privacy)
+					</select>
+				</label>
+			</form>
+		</div>
+		<pre
+			data-ai-export-body
+			class="select-all whitespace-pre-wrap break-words text-xs font-mono text-fg leading-relaxed bg-surface-alt p-4 rounded border border-edge max-h-[60vh] overflow-auto"
+		>{ d.Markdown }</pre>
+	</div>
+}
+
+templ privacyOption(value, label, current string) {
+	if value == current {
+		<option value={ value } selected>{ label }</option>
+	} else {
+		<option value={ value }>{ label }</option>
+	}
+}

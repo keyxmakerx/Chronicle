@@ -18,7 +18,7 @@ type recordingEventPublisher struct {
 	isHidden bool
 }
 
-func (p *recordingEventPublisher) PublishTokenPositionEvent(_, _ string, _, _ float64, isHidden bool) {
+func (p *recordingEventPublisher) PublishTokenPositionEvent(_, _, _ string, _, _ float64, isHidden bool) {
 	p.called = true
 	p.isHidden = isHidden
 }
@@ -42,7 +42,7 @@ func TestUpdateTokenPosition_PublishesHiddenFlag(t *testing.T) {
 			svc := NewDrawingService(repo)
 			svc.SetEventPublisher(pub)
 
-			err := svc.UpdateTokenPosition(context.Background(), "tok-1", "map-1", UpdateTokenPositionInput{X: 10, Y: 20})
+			err := svc.UpdateTokenPosition(context.Background(), "tok-1", "map-1", true, UpdateTokenPositionInput{X: 10, Y: 20})
 			if err != nil {
 				t.Fatalf("unexpected error: %v", err)
 			}
