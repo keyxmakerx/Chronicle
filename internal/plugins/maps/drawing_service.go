@@ -533,6 +533,52 @@ func (s *drawingService) ShadowAreas(ctx context.Context, mapID string) ([]Shado
 	return areas, nil
 }
 
+// DrawingVisibleTo reports whether a viewer may read d by the rule ListDrawings
+// applies in SQL: DM-equivalents see everything; anyone else never a dm_only
+// drawing, nor one whose visibility_rules leave them out. Shadows are a
+// separate check (IsDrawingShadowed).
+func DrawingVisibleTo(d *Drawing, role int, userID string) bool {
+	if d == nil {
+		return false
+	}
+	if permissions.CanSeeDmOnly(role) {
+		return true
+	}
+	return d.Visibility != "dm_only" && visibilityRulesAdmit(d.VisibilityRules, userID)
+}
+
+// MarkerVisibleTo is DrawingVisibleTo for a marker: ListMarkers applies the
+// same dm_only and visibility_rules predicate.
+func MarkerVisibleTo(m *Marker, role int, userID string) bool {
+	if m == nil {
+		return false
+	}
+	if permissions.CanSeeDmOnly(role) {
+		return true
+	}
+	return m.Visibility != "dm_only" && visibilityRulesAdmit(m.VisibilityRules, userID)
+}
+
+// TokenVisibleTo reports whether a viewer may read t by ListTokens' rule: a
+// hidden token is for DM-equivalents only.
+func TokenVisibleTo(t *Token, role int) bool {
+	return t != nil && (!t.IsHidden || permissions.CanSeeDmOnly(role))
+}
+
+// visibilityRulesAdmit applies stored visibility_rules for a non-owner viewer.
+// Rules that do not parse admit no one, so a damaged row hides rather than
+// shows.
+func visibilityRulesAdmit(raw *string, userID string) bool {
+	if raw == nil {
+		return true
+	}
+	var rules VisibilityRules
+	if err := json.Unmarshal([]byte(*raw), &rules); err != nil {
+		return false
+	}
+	return rules.Allows(userID)
+}
+
 // IsDrawingShadowed reports whether a viewer of this role must not receive d.
 func (s *drawingService) IsDrawingShadowed(ctx context.Context, d *Drawing, role int) (bool, error) {
 	if d == nil || !shadowHidingApplies(role) {

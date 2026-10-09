@@ -992,6 +992,13 @@ func (a *wsNotesGrantAdapter) AuthenticateNotesGrantForWS(ctx context.Context, t
 // relations.RelationEventPublisher interface.
 type relationEventPublisherAdapter struct {
 	bus ws.EventBus
+	// shares, when set, re-checks the row's source character's item shares
+	// after a relation is deleted or its metadata changes, so a share never
+	// outlives the holding. Runs detached: the armory's own moves call this
+	// while holding the campaign lock the check takes.
+	shares interface {
+		ReleaseLetGoShares(ctx context.Context, campaignID, characterID string)
+	}
 }
 
 // PublishRelationEvent translates a relation row write into a WebSocket
@@ -1017,6 +1024,15 @@ func (a *relationEventPublisherAdapter) PublishRelationEvent(eventType string, r
 	msg := ws.NewMessage(msgType, rel.CampaignID, rel.SourceEntityID, rel)
 	msg.RequiresDM = true
 	a.bus.Publish(msg)
+
+	if a.shares != nil && eventType != relations.RelationEventCreated {
+		campaignID, characterID := rel.CampaignID, rel.SourceEntityID
+		go func() {
+			ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+			defer cancel()
+			a.shares.ReleaseLetGoShares(ctx, campaignID, characterID)
+		}()
+	}
 }
 
 // entityEventPublisherAdapter bridges the websocket.EventBus to the
@@ -2428,6 +2444,20 @@ func (a *App) RegisterRoutes() {
 	entityPermRepo := entities.NewEntityPermissionRepository(a.DB)
 	entityService := entities.NewEntityService(entityRepo, entityTypeRepo, entityPermRepo)
 
+	// Pages saved before search_text stopped indexing GM-only content still
+	// carry it until edited; recompute those rows. Idempotent, so it is a
+	// no-op on later boots; detached so a large campaign can't stall startup.
+	go func() {
+		n, err := entities.ReindexSecretSearchText(a.ShutdownCtx, entityRepo)
+		if err != nil {
+			slog.Warn("entities: search_text reindex stopped", slog.Any("error", err), slog.Int("rewritten", n))
+			return
+		}
+		if n > 0 {
+			slog.Info("entities: search_text reindexed", slog.Int("rewritten", n))
+		}
+	}()
+
 	// One-shot heal of legacy auto-pluralize defaults that produced
 	// "Mapss"-style values (name="Maps", plural="Mapss"). Idempotent;
 	// failures are logged but never block boot. Runs in a goroutine
@@ -3810,6 +3840,13 @@ func (a *App) RegisterRoutes() {
 			slog.Error("revoking notes app grants failed", slog.String("user_id", userID), slog.Any("error", err))
 		}
 	})
+	// Removing a player from a campaign ends their grants there, so a later
+	// re-invite starts with none.
+	campaigns.OnMemberRemoved(campaignService, func(ctx context.Context, campaignID, userID string) {
+		if err := noteGrants.RevokeAllInCampaign(ctx, campaignID, userID); err != nil {
+			slog.Error("revoking notes app grants on removal failed", slog.String("campaign_id", campaignID), slog.String("user_id", userID), slog.Any("error", err))
+		}
+	})
 	// The campaign's Sync API switch governs outside apps, the notebook too.
 	notesAppGate := func(ctx context.Context, campaignID string) (bool, error) {
 		return addonService.IsEnabledForCampaign(ctx, campaignID, syncapi.SyncAPIAddonSlug)
@@ -4898,7 +4935,7 @@ func (a *App) RegisterRoutes() {
 	go syncapi.StartChangePruner(a.ShutdownCtx, syncChangeRepo)
 
 	entityService.SetEventPublisher(&entityEventPublisherAdapter{bus: wsEventBus})
-	relService.SetEventPublisher(&relationEventPublisherAdapter{bus: wsEventBus})
+	relService.SetEventPublisher(&relationEventPublisherAdapter{bus: wsEventBus, shares: stashSvc})
 	stashEvents.bus = wsEventBus
 	entityService.SetSidebarAutoAdder(&sidebarAutoAdderAdapter{campaignService: campaignService})
 	noteSvc.SetEventPublisher(&noteEventPublisherAdapter{bus: wsEventBus})
