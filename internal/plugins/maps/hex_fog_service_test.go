@@ -130,7 +130,7 @@ func TestMoveParty_PathRevealsRadiusOneAlongTheLine(t *testing.T) {
 	svc, repo, events, _ := fogFixture(PartyWhoScribes)
 	repo.layer = &HexLayer{MapID: "map-1", PartyCol: intp(2), PartyRow: intp(2), MilesPerHex: 6, MilesPerDay: 24}
 	to := HexKey{8, 6}
-	res, err := svc.MoveParty(context.Background(), "camp-1", "map-1", actorOwner, HexFogCell{to.Col, to.Row})
+	res, err := svc.MoveParty(context.Background(), "camp-1", "map-1", actorOwner, HexFogCell(to))
 	if err != nil {
 		t.Fatal(err)
 	}

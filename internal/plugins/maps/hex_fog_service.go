@@ -46,7 +46,7 @@ func (s *hexService) RevealFog(ctx context.Context, campaignID, mapID string, ac
 		if !validHexCoord(c.Col, c.Row) {
 			return nil, apperror.NewBadRequest("hex position is outside the map")
 		}
-		k := HexKey{Col: c.Col, Row: c.Row}
+		k := HexKey(c)
 		if !seen[k] {
 			seen[k] = true
 			keys = append(keys, k)
@@ -149,7 +149,7 @@ func (s *hexService) MoveParty(ctx context.Context, campaignID, mapID string, ac
 	if !validHexCoord(to.Col, to.Row) {
 		return nil, apperror.NewBadRequest("hex position is outside the map")
 	}
-	target := HexKey{Col: to.Col, Row: to.Row}
+	target := HexKey(to)
 
 	for attempt := 0; ; attempt++ {
 		res, err := s.tryMoveParty(ctx, campaignID, mapID, actor, target)
