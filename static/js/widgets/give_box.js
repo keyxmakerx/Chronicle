@@ -179,6 +179,19 @@
     var box = boxOf(input); if (!box) return;
     var st = mine(box); if (st) st.dirty = true;
     warnOff(box);
+    clearErr(box);
+    hint(box);
+  }
+
+  // The Move box's amber error bar describes the last attempt, so any change
+  // to the choice or the amount clears it. Typing an amount is not an unsent
+  // choice by itself: only a picked destination makes the box dirty.
+  function clearErr(box) {
+    var e = box.querySelector('.ag-warn[data-err]'); if (e) e.classList.remove('is-on');
+  }
+  function edited(input) {
+    var box = boxOf(input); if (!box) return;
+    clearErr(box);
     hint(box);
   }
 
@@ -221,7 +234,7 @@
     var i = box.querySelector('#ag-q'); if (!i) return;
     var max = +i.getAttribute('max') || 1000000;
     i.value = Math.min(max, clampQty(clampQty(i.value) + (+btn.getAttribute('data-q') || 0)));
-    pick(i);
+    edited(i);
   }
 
   function cancel() { close(true); }
@@ -273,7 +286,12 @@
         var now = document.getElementById(panelId);
         if (!now || now === old) return;
         stop();
-        flash(now, itemId, holders);
+        var row = flash(now, itemId, holders);
+        // The reload replaced the control that had focus; hand it to the line
+        // that changed, or the panel's first Move button.
+        var target = (row && (row.querySelector('[data-move]') || row)) || now.querySelector('[data-move]') || now;
+        if (target.tabIndex < 0 && !target.hasAttribute('tabindex')) target.setAttribute('tabindex', '-1');
+        target.focus({ preventScroll: true });
       };
       document.body.addEventListener('htmx:afterSettle', on);
       setTimeout(stop, 5000);
@@ -286,13 +304,16 @@
   // stash holding the same item is left alone.
   function flash(section, key, holders) {
     var rows = section.querySelectorAll(key === 'money' ? '[data-money-row]' : '[data-item-id]');
+    var first = null;
     for (var i = 0; i < rows.length; i++) {
       var row = rows[i];
       if (key !== 'money' && row.getAttribute('data-item-id') !== key) continue;
       if (holders && holders.indexOf(row.getAttribute('data-holder')) < 0) continue;
       row.classList.add('ag-landed');
-      if (!holders) return;
+      if (!holders) return row;
+      if (!first) first = row;
     }
+    return first;
   }
 
   // open toggles a box that folds out of the character panel: the Give box
@@ -521,7 +542,7 @@
 
   window.Chronicle = window.Chronicle || {};
   window.Chronicle.GiveBox = {
-    open: open, move: move, card: card, tab: tab, pick: pick, step: step,
+    open: open, move: move, edited: edited, card: card, tab: tab, pick: pick, step: step,
     search: search, cancel: cancel, discard: discard, give: give, tick: tick, save: save,
     _internal: { clampQty: clampQty, esc: esc, close: close, toast: toast }
   };

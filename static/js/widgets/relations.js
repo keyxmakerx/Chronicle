@@ -45,19 +45,19 @@ Chronicle.register('relations', {
         '.rel-delete { opacity: 0; padding: 4px; cursor: pointer; color: var(--color-text-muted, #9ca3af); border: none; background: none; border-radius: 4px; transition: opacity 0.15s, color 0.15s; }',
         '.rel-item:hover .rel-delete, .rel-delete:focus-visible { opacity: 1; }',
         '.rel-delete:hover { color: var(--color-danger, #ef4444); }',
-        '.rel-add-btn { display: inline-flex; align-items: center; gap: 6px; padding: 6px 14px; font-size: 13px; font-weight: 500; color: var(--color-accent-hover, #4f46e5); background: none; border: 1px dashed rgb(var(--color-accent-rgb, 99 102 241) / 4); border-radius: 8px; cursor: pointer; transition: border-color 0.15s, background 0.15s; }',
-        '.rel-add-btn:hover { background: rgb(var(--color-accent-rgb, 99 102 241) / 08); border-color: var(--color-accent-light, #a5b4fc); }',
+        '.rel-add-btn { display: inline-flex; align-items: center; gap: 6px; padding: 6px 14px; font-size: 13px; font-weight: 500; color: var(--color-accent-hover, #4f46e5); background: none; border: 1px dashed rgb(var(--color-accent-rgb, 99 102 241) / 0.4); border-radius: 8px; cursor: pointer; transition: border-color 0.15s, background 0.15s; }',
+        '.rel-add-btn:hover { background: rgb(var(--color-accent-rgb, 99 102 241) / 0.08); border-color: var(--color-accent-light, #a5b4fc); }',
         '.rel-modal { margin-top: 8px; border: 1px solid var(--color-border, #e5e7eb); border-radius: 8px; background: var(--color-card-bg, white); box-shadow: 0 4px 12px rgba(0,0,0,0.1); padding: 12px; }',
         '.rel-search { width: 100%; padding: 8px 10px; font-size: 13px; border: 1px solid var(--color-border, #e5e7eb); border-radius: 6px; outline: none; background: transparent; color: inherit; }',
-        '.rel-search:focus { border-color: var(--color-accent, #6366f1); box-shadow: 0 0 0 2px rgb(var(--color-accent-rgb, 99 102 241) / 15); }',
+        '.rel-search:focus { border-color: var(--color-accent, #6366f1); box-shadow: 0 0 0 2px rgb(var(--color-accent-rgb, 99 102 241) / 0.15); }',
         '.rel-results { max-height: 160px; overflow-y: auto; margin-top: 6px; }',
         '.rel-result { display: flex; align-items: center; gap: 8px; padding: 6px 8px; border-radius: 6px; cursor: pointer; font-size: 13px; color: var(--color-text-body, #374151); }',
         '.rel-result:hover { background: var(--color-bg-tertiary, #f3f4f6); }',
-        '.rel-result.selected { background: rgb(var(--color-accent-rgb, 99 102 241) / 1); border: 1px solid rgb(var(--color-accent-rgb, 99 102 241) / 4); }',
+        '.rel-result.selected { background: rgb(var(--color-accent-rgb, 99 102 241) / 0.1); border: 1px solid rgb(var(--color-accent-rgb, 99 102 241) / 0.4); }',
         '.rel-result-icon { width: 24px; height: 24px; border-radius: 50%; display: flex; align-items: center; justify-content: center; flex-shrink: 0; }',
         '.rel-result-icon i { font-size: 10px; color: white; }',
         '.rel-type-select { width: 100%; padding: 8px 10px; font-size: 13px; border: 1px solid var(--color-border, #e5e7eb); border-radius: 6px; outline: none; background: var(--color-card-bg, transparent); color: inherit; margin-top: 8px; }',
-        '.rel-type-select:focus { border-color: var(--color-accent, #6366f1); box-shadow: 0 0 0 2px rgb(var(--color-accent-rgb, 99 102 241) / 15); }',
+        '.rel-type-select:focus { border-color: var(--color-accent, #6366f1); box-shadow: 0 0 0 2px rgb(var(--color-accent-rgb, 99 102 241) / 0.15); }',
         '.rel-custom-row { display: flex; gap: 6px; margin-top: 6px; }',
         '.rel-custom-row input { flex: 1; padding: 6px 8px; font-size: 12px; border: 1px solid var(--color-border, #e5e7eb); border-radius: 6px; outline: none; background: transparent; color: inherit; }',
         '.rel-actions { display: flex; gap: 6px; margin-top: 10px; justify-content: flex-end; }',
@@ -600,6 +600,10 @@ Chronicle.register('relations', {
           deleteRelation(rel.id).then(function (ok) {
             if (ok) {
               Chronicle.notify('Removed the relation to ' + name + '.', 'success');
+              // The row (and its buttons) is gone after the reload; keep focus
+              // in the widget rather than letting it fall to the page.
+              var add = el.querySelector('.rel-add-btn');
+              if (add) add.focus();
               return;
             }
             setAsk('Could not remove it.', 'Try again', true);

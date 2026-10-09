@@ -21,7 +21,7 @@ function load() {
 test('every call a box control makes exists', () => {
   const G = load();
   // The methods giveBoxCall, giveOpenOnClick, moveOpenOnClick and collectionMenuOnClick name.
-  for (const m of ['open', 'card', 'tab', 'pick', 'search', 'step', 'cancel', 'discard', 'give', 'move', 'tick', 'save']) {
+  for (const m of ['open', 'card', 'tab', 'pick', 'search', 'step', 'cancel', 'discard', 'give', 'move', 'edited', 'tick', 'save']) {
     assert.equal(typeof G[m], 'function', m);
   }
 });

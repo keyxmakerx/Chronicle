@@ -54,8 +54,6 @@ templ claimBanner(cc *campaigns.CampaignContext, entity *Entity, entityType *Ent
 				<form
 					method="POST"
 					action={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/entities/%s/claim", cc.Campaign.ID, entity.ID)) }
-					hx-post={ fmt.Sprintf("/campaigns/%s/entities/%s/claim", cc.Campaign.ID, entity.ID) }
-					hx-swap="none"
 					onsubmit={ claimSubmitCall }
 				>
 					<input type="hidden" name="csrf_token" value={ csrfToken }/>

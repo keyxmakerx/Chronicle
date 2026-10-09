@@ -70,7 +70,7 @@ templ MoveDialog(v *MoveDialogView, csrfToken string) {
 								<span class="ag-lbl" id="ag-q-l">How many</span>
 								<span class="ag-step">
 									<button type="button" data-q="-1" aria-label="One fewer" onclick={ giveBoxCall("step") }><i class="fa-solid fa-minus"></i></button>
-									<input id="ag-q" type="number" min="1" max={ fmt.Sprintf("%d", v.Max) } value="1" aria-labelledby="ag-q-l" oninput={ giveBoxCall("pick") } onkeydown={ moveEnter() }/>
+									<input id="ag-q" type="number" min="1" max={ fmt.Sprintf("%d", v.Max) } value="1" aria-labelledby="ag-q-l" oninput={ giveBoxCall("edited") } onkeydown={ moveEnter() }/>
 									<button type="button" data-q="1" aria-label="One more" onclick={ giveBoxCall("step") }><i class="fa-solid fa-plus"></i></button>
 								</span>
 								<span class="ag-lbl">of { fmt.Sprintf("%d", v.Max) }</span>
@@ -88,7 +88,7 @@ templ MoveDialog(v *MoveDialogView, csrfToken string) {
 								autocomplete="off"
 								class="input text-sm"
 								style="width:120px"
-								oninput={ giveBoxCall("pick") }
+								oninput={ giveBoxCall("edited") }
 								onkeydown={ moveEnter() }
 							/>
 							<span class="ag-lbl">{ v.MaxMoney.String() } available</span>

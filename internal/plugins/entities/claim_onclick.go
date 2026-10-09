@@ -21,7 +21,7 @@ const claimSubmitJS = `(function(form,e){e.preventDefault();` +
 	`function fail(m){btn.disabled=false;btn.innerHTML=label;` +
 	`warn.querySelector('[data-claim-msg]').textContent=m||'Couldn’t claim this character. Nothing changed.';` +
 	`void warn.offsetWidth;warn.classList.add('is-on');}` +
-	`Chronicle.apiFetch(form.getAttribute('hx-post'),{method:'POST',body:new FormData(form),headers:{'HX-Request':'true'}}).then(function(r){` +
+	`Chronicle.apiFetch(form.getAttribute('action'),{method:'POST',body:new FormData(form),headers:{'HX-Request':'true'}}).then(function(r){` +
 	`if(!r.ok)return r.json().then(function(j){fail(j&&j.message);},function(){fail();});` +
 	`box.className='mb-4 rounded-md border border-edge bg-surface-alt px-4 py-2.5 flex items-center gap-3 ag-landed';` +
 	`box.setAttribute('data-claim-state','claimed');` +
