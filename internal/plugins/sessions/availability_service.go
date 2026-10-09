@@ -745,3 +745,12 @@ func mondayOf(d timeutil.CivilDate) timeutil.CivilDate {
 	offset := (int(d.Weekday()) - int(time.Monday) + 7) % 7
 	return d.AddDays(-offset)
 }
+
+// ListCampaignIDsUsingGameNights is every campaign with game-night data.
+func (s *sessionService) ListCampaignIDsUsingGameNights(ctx context.Context) ([]string, error) {
+	ids, err := s.repo.ListCampaignIDsUsingGameNights(ctx)
+	if err != nil {
+		return nil, apperror.NewInternal(fmt.Errorf("listing campaigns using game nights: %w", err))
+	}
+	return ids, nil
+}

@@ -1204,6 +1204,9 @@
       this.canAuthorDmOnly = config.canAuthorDmOnly === true;
       this.role = typeof config.role === 'number' ? config.role : parseInt(config.role, 10) || 0;
       this.userId = config.userId || '';
+      // Game nights have their own switch; with it off the calendar shows
+      // no nights, RSVP or free hours, since those routes are closed.
+      this.gameNights = config.gameNights === true;
       this.apiBase = config.apiBase;
       this.engineSrc = config.engineSrc; // chronicle_gen.js, loaded only when an editor paints weather
 
@@ -1222,7 +1225,7 @@
       // on their own day, a world calendar beside its today (realAnchor);
       // only members see who is coming.
       this._anchor = realAnchor(this.cal);
-      this.showNights = this.role >= 1 && (CalDate.usesRealTime(this.cal) || !!this._anchor);
+      this.showNights = this.gameNights && this.role >= 1 && (CalDate.usesRealTime(this.cal) || !!this._anchor);
       this.calZone = cfgEl.dataset.zone || ''; // the real-world calendar's zone, members only
       this._gnZoneMode = readZoneMode();
       // Who's free: members' painted hours (the sessions plugin's overlay),

@@ -172,6 +172,9 @@ type SessionService interface {
 	PingMemberAvailability(ctx context.Context, campaignID, askerID, askerName, targetID, link string, members []overlayMemberInput) (*NudgeResult, error)
 	AskAllToConfirm(ctx context.Context, campaignID, askerID, askerName, link string, members []overlayMemberInput) (*NudgeResult, []string, error)
 	LastConfirmAsk(ctx context.Context, campaignID string) (time.Time, error)
+	// ListCampaignIDsUsingGameNights is every campaign with game-night data,
+	// for the addon reconciler.
+	ListCampaignIDsUsingGameNights(ctx context.Context) ([]string, error)
 	ConfirmMyAvailability(ctx context.Context, campaignID, userID string) error
 	MarkMeAway(ctx context.Context, campaignID, userID string, req AwayRequest) error
 	ClearMeAway(ctx context.Context, campaignID, userID string, req AwayRequest) error

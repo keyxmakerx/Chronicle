@@ -30,7 +30,8 @@ func ownerOrCoDirector() echo.MiddlewareFunc {
 }
 
 // RegisterRoutes sets up all session-related routes.
-// Sessions require the calendar addon since sessions are integrated into the calendar.
+// Game nights have their own addon switch (slug "sessions") and also need the
+// calendar addon, since nights and hours are shown in the calendar.
 func RegisterRoutes(e *echo.Echo, h *Handler,
 	campaignSvc campaigns.CampaignService, authSvc auth.AuthService, addonSvc addons.AddonService) {
 
@@ -39,6 +40,7 @@ func RegisterRoutes(e *echo.Echo, h *Handler,
 		auth.RequireAuth(authSvc),
 		campaigns.RequireCampaignAccess(campaignSvc),
 		addons.RequireAddon(addonSvc, "calendar"),
+		addons.RequireAddon(addonSvc, SessionsAddonSlug),
 	)
 	cg.POST("/sessions", h.CreateSession, campaigns.RequireRole(campaigns.RoleScribe))
 	// Move (schedule-changing edits) and delete run a game night, so a
@@ -118,6 +120,7 @@ func RegisterRoutes(e *echo.Echo, h *Handler,
 		auth.OptionalAuth(authSvc),
 		campaigns.AllowPublicCampaignAccess(campaignSvc),
 		addons.RequireAddon(addonSvc, "calendar"),
+		addons.RequireAddon(addonSvc, SessionsAddonSlug),
 	)
 	pub.GET("/sessions", h.ListSessions, campaigns.RequireViewAccess())
 	pub.GET("/sessions/:sid", h.ShowSession, campaigns.RequireViewAccess())

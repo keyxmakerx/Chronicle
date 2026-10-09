@@ -139,6 +139,10 @@ type SessionRepository interface {
 	// notification of ntype to anyone; the zero time when never.
 	LatestCampaignNotificationAt(ctx context.Context, campaignID, ntype string) (time.Time, error)
 	ListNotifications(ctx context.Context, userID string, limit int) ([]Notification, error)
+
+	// ListCampaignIDsUsingGameNights is every campaign that has planned a
+	// session, painted hours or opened a proposal.
+	ListCampaignIDsUsingGameNights(ctx context.Context) ([]string, error)
 	CountUnreadNotifications(ctx context.Context, userID string) (int, error)
 	MarkNotificationRead(ctx context.Context, userID, notificationID string) error
 	MarkAllNotificationsRead(ctx context.Context, userID string) error
@@ -680,4 +684,26 @@ func (r *sessionRepository) MarkRSVPTokenUsed(ctx context.Context, tokenStr stri
 		return ErrRSVPTokenSpent
 	}
 	return nil
+}
+
+// ListCampaignIDsUsingGameNights is every campaign that has a session (even
+// a deleted one), painted hours or a proposal.
+func (r *sessionRepository) ListCampaignIDsUsingGameNights(ctx context.Context) ([]string, error) {
+	rows, err := r.db.QueryContext(ctx, `
+		SELECT campaign_id FROM sessions
+		UNION SELECT campaign_id FROM member_availability
+		UNION SELECT campaign_id FROM slot_proposals`)
+	if err != nil {
+		return nil, fmt.Errorf("listing campaigns using game nights: %w", err)
+	}
+	defer func() { _ = rows.Close() }()
+	var ids []string
+	for rows.Next() {
+		var id string
+		if err := rows.Scan(&id); err != nil {
+			return nil, fmt.Errorf("scanning campaign id: %w", err)
+		}
+		ids = append(ids, id)
+	}
+	return ids, rows.Err()
 }
