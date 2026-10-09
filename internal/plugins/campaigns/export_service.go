@@ -423,9 +423,9 @@ func (s *ExportImportService) Export(ctx context.Context, campaignID string) (*C
 // entity types + entities + tags + relations, groups, calendar, timelines,
 // sessions, maps, notes, posts. Addons come first because they gate what
 // may be created: the Player Character category is refused while its addon
-// is off, which used to drop every player character from a restore. Media
-// comes before everything that points at a picture, so those references
-// can be rewritten to the restored files. media is the ZIP's files, or nil
+// is off, so restoring it first keeps the player characters. Media comes
+// before everything that points at a picture, so those references can be
+// rewritten to the restored files. media is the ZIP's files, or nil
 // for a JSON upload.
 //
 // Import is best-effort: a single bad row must not abandon a half-built
@@ -574,7 +574,6 @@ func (s *ExportImportService) Import(ctx context.Context, userID string, data *C
 			report.Fail("posts", "post", "", apperror.SafeMessage(err))
 		}
 	}
-
 
 	if report.HasFailures() {
 		slog.Warn("campaign import completed with losses",
