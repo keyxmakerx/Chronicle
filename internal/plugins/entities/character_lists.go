@@ -2,6 +2,7 @@ package entities
 
 import (
 	"context"
+	"log/slog"
 	"sort"
 	"strings"
 
@@ -13,7 +14,9 @@ import (
 // (The Party, stashes, quests) and as NPCs (the NPC gallery, DM Screen, system
 // panels). The owner picks the types; nothing here guesses from names at
 // request time. The one guess left is seedCharacterLists, used once to fill a
-// campaign that never chose, so existing campaigns keep what they showed.
+// campaign that never chose, so existing campaigns keep what they showed. It
+// runs on first read as well as at boot and creation, because a campaign can
+// arrive without the lists later (an import, a seed that failed).
 
 // CharacterListKind names one of the two lists.
 type CharacterListKind string
@@ -120,7 +123,7 @@ func (s *CharacterListService) changed(campaignID string) {
 }
 
 // Chosen returns the explicit lists with IDs of deleted types dropped. A
-// campaign that never chose reads as empty lists, not as a guess.
+// campaign that never chose is seeded first (seedOnRead).
 func (s *CharacterListService) Chosen(ctx context.Context, campaignID string) (CharacterLists, error) {
 	types, err := s.types.GetEntityTypes(ctx, campaignID)
 	if err != nil {
@@ -130,9 +133,12 @@ func (s *CharacterListService) Chosen(ctx context.Context, campaignID string) (C
 }
 
 func (s *CharacterListService) chosenFrom(ctx context.Context, campaignID string, types []EntityType) (CharacterLists, error) {
-	stored, _, err := s.store.Get(ctx, campaignID)
+	stored, ok, err := s.store.Get(ctx, campaignID)
 	if err != nil {
 		return CharacterLists{}, err
+	}
+	if !ok {
+		stored = s.seedOnRead(ctx, campaignID, types)
 	}
 	exists := make(map[int]bool, len(types))
 	for _, t := range types {
@@ -260,7 +266,29 @@ func (s *CharacterListService) Seed(ctx context.Context, campaignID string) erro
 		return err
 	}
 	chars, npcs := seedCharacterLists(types)
+	if len(chars) == 0 && len(npcs) == 0 {
+		// Nothing to record yet (no types, or none that look like
+		// characters); leaving the lists unset lets a later read seed them
+		// once the campaign has its types.
+		return nil
+	}
 	return s.save(ctx, campaignID, CharacterLists{CharacterTypeIDs: chars, NPCTypeIDs: npcs})
+}
+
+// seedOnRead fills a campaign that never chose, the first time its lists are
+// read. A failed save still answers with the seed, so the page is right now
+// and the save is tried again on the next read.
+func (s *CharacterListService) seedOnRead(ctx context.Context, campaignID string, types []EntityType) CharacterLists {
+	chars, npcs := seedCharacterLists(types)
+	lists := CharacterLists{CharacterTypeIDs: chars, NPCTypeIDs: npcs}
+	if len(chars) == 0 && len(npcs) == 0 {
+		return lists
+	}
+	if err := s.save(ctx, campaignID, lists); err != nil {
+		slog.Warn("saving seeded character lists failed",
+			slog.String("campaign_id", campaignID), slog.String("error", err.Error()))
+	}
+	return lists
 }
 
 // Editor builds a band's controls: the chosen types as chips and every other

@@ -158,7 +158,8 @@ func listFixture() (*CharacterListService, *fakeListStore, *[]string) {
 		},
 		counts: map[int]int{1: 4, 3: 1},
 	}
-	store := &fakeListStore{}
+	// Chosen-but-empty: these tests exercise explicit choices, not seeding.
+	store := &fakeListStore{ok: true}
 	svc := NewCharacterListService(types, store)
 	var changed []string
 	svc.SetChangeHook(func(id string) { changed = append(changed, id) })
@@ -169,7 +170,7 @@ func TestCharacterListService_AddRemove(t *testing.T) {
 	ctx := context.Background()
 	svc, store, changed := listFixture()
 
-	// Reads before any choice show nothing: no guess at request time.
+	// Empty chosen lists show nothing: no guess at request time.
 	if ids, err := svc.NPCTypeIDs(ctx, "c1"); err != nil || len(ids) != 0 {
 		t.Fatalf("unchosen NPC list = %v, %v; want empty", ids, err)
 	}
@@ -259,6 +260,7 @@ func TestCharacterListService_PrunesDeletedTypes(t *testing.T) {
 func TestCharacterListService_Seed(t *testing.T) {
 	ctx := context.Background()
 	svc, store, _ := listFixture()
+	store.ok = false
 
 	if err := svc.Seed(ctx, "c1"); err != nil {
 		t.Fatal(err)
@@ -299,5 +301,28 @@ func TestCharacterListService_Editor(t *testing.T) {
 	}
 	if !ed.Options[1].IsSub || !reflect.DeepEqual(ed.Options[0].With, []string{"Villain"}) || ed.Options[0].Count != 4 {
 		t.Errorf("options detail = %+v", ed.Options)
+	}
+}
+
+func TestCharacterListService_SeedsOnFirstRead(t *testing.T) {
+	ctx := context.Background()
+	svc, store, _ := listFixture()
+	// A campaign that arrived without lists (an import, a failed seed).
+	store.lists, store.ok, store.saves = CharacterLists{}, false, 0
+
+	chars, err := svc.CharacterTypeIDs(ctx, "c1")
+	if err != nil || len(chars) == 0 {
+		t.Fatalf("first read = %v, %v; want the seeded characters", chars, err)
+	}
+	if !store.ok || store.saves != 1 {
+		t.Fatalf("seed saved = %v (%d saves); want one save", store.ok, store.saves)
+	}
+	if _, err := svc.NPCTypeIDs(ctx, "c1"); err != nil || store.saves != 1 {
+		t.Fatalf("second read saved again (%d saves), %v", store.saves, err)
+	}
+	for _, id := range store.lists.NPCTypeIDs {
+		if id == 3 {
+			t.Errorf("seed listed the creature type as an NPC type")
+		}
 	}
 }
