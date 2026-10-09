@@ -21,7 +21,6 @@ func renderHeader(t *testing.T, role campaigns.Role, userID string, entity *Enti
 	return buf.String()
 }
 
-
 func TestHeaderClaimState(t *testing.T) {
 	owner := "u-robin"
 	claimed := &Entity{OwnerUserID: &owner}

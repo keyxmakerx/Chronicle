@@ -49,7 +49,7 @@ func TestMakeWidgetMountRenderer_PageAttributes(t *testing.T) {
 			}
 			buf := &bytesBufferLike{}
 			err := renderer(EntityShowRenderContext{
-				CC: &campaigns.CampaignContext{Campaign: &campaigns.Campaign{ID: "c1"}, MemberRole: tc.role},
+				CC:     &campaigns.CampaignContext{Campaign: &campaigns.Campaign{ID: "c1"}, MemberRole: tc.role},
 				Entity: tc.entity, UserID: tc.userID, OwnerName: tc.owner,
 			}).Render(ctx, buf)
 			if err != nil {
