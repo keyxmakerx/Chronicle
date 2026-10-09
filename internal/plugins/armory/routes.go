@@ -90,6 +90,9 @@ func RegisterRoutes(e *echo.Echo, h *Handler, th *TransactionHandler, ih *Instan
 	// visibility enforced in the service.
 	cg.GET("/armory/give", sh.GiveDialog, campaigns.RequireRole(campaigns.RolePlayer))
 	cg.POST("/armory/give", sh.Give, campaigns.RequireRole(campaigns.RolePlayer))
+	// Paying coins onto a character's sheet (quest rewards): Owner
+	// visibility enforced in the service, as for a give.
+	cg.POST("/armory/pay", sh.Pay, campaigns.RequireRole(campaigns.RolePlayer))
 	cg.POST("/armory/moves", sh.Move, campaigns.RequireRole(campaigns.RolePlayer))
 	cg.POST("/armory/moves/:mid/approve", sh.Approve, campaigns.RequireRole(campaigns.RolePlayer))
 	cg.POST("/armory/moves/:mid/decline", sh.Decline, campaigns.RequireRole(campaigns.RolePlayer))

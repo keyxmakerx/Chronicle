@@ -121,6 +121,8 @@ type StashService interface {
 	GiveDialog(ctx context.Context, campaignID string, a Actor, characterID, itemID, query string) (*GiveDialogView, error)
 	// Give hands a character an Armory item or a map. Owner visibility only.
 	Give(ctx context.Context, campaignID string, a Actor, in GiveInput) (*GiveOutcome, error)
+	// Pay adds coins to a character's sheet. Owner visibility only.
+	Pay(ctx context.Context, campaignID string, a Actor, in PayInput) (*PayOutcome, error)
 
 	// ShareBox feeds the "Who else can see <item>?" box for an item the
 	// character holds. The holder's player or Owner visibility only.

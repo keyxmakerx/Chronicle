@@ -308,14 +308,15 @@
   // ---------- Hand out rewards ----------
   // Each linked item reward goes through the Armory's own give, so the item
   // lands on the sheet, its history and the player's notification exactly as
-  // a give from the Armory would. Chronicle has no way to pay coins yet, so a
-  // money reward shows each share for the DM to write on the sheets.
+  // a give from the Armory would. A money reward is split between the ticked
+  // characters and each share paid onto their sheet through the Armory's pay,
+  // which records it in their money history.
   var AV = ['#8a5a2b', '#3f6e5a', '#5a4a8a', '#8a3f4f', '#3f5f8a', '#6e6a3f'];
   function startGive(S) {
     var bw = S.el.querySelector('.bw');
     if (S.give) { K.openLedger(bw); return; }
     S.tab = 'rewards'; redrawLedger(S); K.openLedger(bw);
-    S.give = { dirty: false, party: null };
+    S.give = { dirty: false, party: null, done: {} };
     K.api(pickerUrl(S) + '?kind=character', 'GET').then(function (party) {
       if (!S.give) return;
       S.give.party = party || [];
@@ -339,10 +340,13 @@
         '<span class="av" style="background:' + AV[i % AV.length] + '">' + esc((p.name || '?').charAt(0).toUpperCase()) + '</span></label>';
     }).join('');
     money.forEach(function (r) {
+      if (r.amount == null) {
+        rows += lrow('<span class="grow">' + esc(r.text) + '</span><span class="sub">give it an amount to pay it</span>');
+        return;
+      }
       rows += lrow('<span class="grow">Split ' + esc(r.text) + ' between</span>');
-      if (party.length) rows += lrow('<span class="chips">' + chips + '</span><span class="sp"></span><span class="sub" data-share="' + esc(r.id) + '"></span>');
+      if (party.length) rows += lrow('<span class="chips" data-split="' + esc(r.id) + '">' + chips + '</span><span class="sp"></span><span class="sub" data-share="' + esc(r.id) + '"></span>');
     });
-    if (money.length && party.length) rows += lrow('<span class="sub grow">Coins go on the sheets by hand for now.</span>');
     var opts = '<option value="">Nobody</option>' + party.map(function (p, i) {
       return '<option value="' + i + '"' + (i === 0 ? ' selected' : '') + '>' + esc(p.name) + '</option>';
     }).join('');
@@ -358,14 +362,19 @@
     return '<div class="give" aria-hidden="true" role="dialog" aria-label="Hand out rewards"><div class="wh"><b>Hand out rewards</b><span class="sp"></span><span class="only">' + esc(title) + '</span></div>' +
       '<div class="gb">' + rows + '</div><div class="gf"><button type="button" class="mini" data-give-cancel>Cancel</button><button type="button" class="mini pri" data-give-ok>Hand out</button></div></div>';
   }
+  function rewardById(S, id) { return S.data.rewards.filter(function (x) { return x.id === id; })[0]; }
+  // share is one character's part of a split, in hundredths, rounded down so
+  // the party is never paid more than the reward.
+  function share(amount, n) { return n ? Math.floor(Math.round(amount * 100) / n) : 0; }
+  function fmtShare(h) { return h % 100 ? (h / 100).toFixed(2) : String(h / 100); }
   function updateShares(S) {
     var g = S.el.querySelector('.give'); if (!g) return;
-    var money = S.data.rewards.filter(function (r) { return r.kind === 'money'; });
-    g.querySelectorAll('[data-share]').forEach(function (sp, k) {
-      var r = money[k], boxes = sp.closest('.row').querySelectorAll('input[name=coin]'), n = 0;
-      boxes.forEach(function (b) { if (b.checked) n++; });
-      if (!n) { sp.textContent = 'nobody picked'; return; }
-      sp.textContent = r && r.amount != null ? Math.floor(r.amount / n) + ' each' : n + (n === 1 ? ' share' : ' shares');
+    g.querySelectorAll('[data-share]').forEach(function (sp) {
+      var r = rewardById(S, sp.dataset.share), n = 0;
+      sp.closest('.row').querySelectorAll('input[name=coin]').forEach(function (b) { if (b.checked) n++; });
+      if (!r || !n) { sp.textContent = 'nobody picked'; return; }
+      var h = share(r.amount, n);
+      sp.textContent = h ? fmtShare(h) + ' each' : 'too little to split';
     });
   }
   function closeGive(S) {
@@ -397,40 +406,53 @@
       return res.json().catch(function () { return {}; }).then(function (b) { throw new Error(b.message || 'The Armory refused that give.'); });
     });
   }
+  function payOne(S, characterId, hundredths, reason) {
+    var fd = new FormData();
+    fd.append('character_id', characterId); fd.append('amount', (hundredths / 100).toFixed(2)); fd.append('reason', reason);
+    return K.api(S.campaignUrl + '/armory/pay', 'POST', fd, S.cfg.csrfToken);
+  }
+  // A whole hand-out is a list of steps, run one at a time. A step that went
+  // through is remembered, so a retry after a refusal never pays or gives
+  // anything twice.
   function handOut(S) {
     var g = S.el.querySelector('.give'); if (!g || !S.give || S.give.sending) return;
-    var party = S.give.party || [], gives = [];
+    var party = S.give.party || [], steps = [], done = S.give.done;
+    var title = (S.data.notice && S.data.notice.title) || '';
+    var reason = title ? 'as a reward for ' + title : 'as a quest reward';
+    g.querySelectorAll('[data-split]').forEach(function (row) {
+      var r = rewardById(S, row.dataset.split); if (!r || r.amount == null) return;
+      var picked = Array.prototype.filter.call(row.querySelectorAll('input[name=coin]'), function (b) { return b.checked; });
+      var h = share(r.amount, picked.length); if (!h) return;
+      picked.forEach(function (b) {
+        var p = party[+b.value]; if (!p) return;
+        steps.push({ key: 'pay:' + r.id + ':' + p.id, label: fmtShare(h) + ' to ' + p.name, run: function () { return payOne(S, p.id, h, reason); } });
+      });
+    });
     g.querySelectorAll('[data-give-to]').forEach(function (sel) {
       if (sel.value === '') return;
-      var r = S.data.rewards.filter(function (x) { return x.id === sel.dataset.giveTo; })[0], p = party[+sel.value];
-      if (r && r.entityId && p) gives.push({ item: r.entityId, to: p.id, text: r.text, name: p.name });
+      var r = rewardById(S, sel.dataset.giveTo), p = party[+sel.value];
+      if (r && r.entityId && p) steps.push({ key: 'give:' + r.id + ':' + p.id, label: r.text + ' to ' + p.name, run: function () { return giveOne(S, r.entityId, p.id); } });
     });
     var markDone = !!(g.querySelector('[data-give-done]') || {}).checked;
     S.give.sending = true;
     var ok = g.querySelector('[data-give-ok]'); ok.disabled = true;
     var given = [];
-    // One at a time, so a refusal names the reward it stopped at and the ones
-    // before it are not given twice on a retry.
-    var chain = gives.reduce(function (p, gv) {
-      return p.then(function () { return giveOne(S, gv.item, gv.to).then(function () { given.push(gv); }); });
+    var chain = steps.reduce(function (p, st) {
+      return p.then(function () {
+        if (done[st.key]) return;
+        return st.run().then(function () { done[st.key] = true; given.push(st); });
+      });
     }, Promise.resolve());
     chain.then(function () {
       var patch = { handedOut: true }; S.data.handedOut = true;
       if (markDone) { patch.status = 'done'; S.data.status = 'done'; }
       closeGive(S);
       save(S, patch, markDone ? 'both' : 'ledger');
-      K.toast(given.length ? 'Handed out: ' + given.map(function (x) { return x.text + ' to ' + x.name; }).join(', ') + '.' : 'Rewards marked as handed out.');
+      K.toast(given.length ? 'Handed out: ' + given.map(function (x) { return x.label; }).join(', ') + '.' : 'Rewards marked as handed out.');
     }).catch(function (err) {
       if (S.give) S.give.sending = false;
       ok.disabled = false;
-      // Rewards already given are taken off the panel so a retry skips them.
-      given.forEach(function (gv) {
-        g.querySelectorAll('[data-give-to]').forEach(function (s2) {
-          var r = S.data.rewards.filter(function (x) { return x.id === s2.dataset.giveTo; })[0];
-          if (r && r.entityId === gv.item && party[+s2.value] && party[+s2.value].id === gv.to) s2.value = '';
-        });
-      });
-      K.toast(err.message);
+      K.toast((given.length ? 'Handed out ' + given.length + ', then stopped: ' : '') + err.message + ' Press Hand out again to finish; nothing is given twice.');
     });
   }
 
