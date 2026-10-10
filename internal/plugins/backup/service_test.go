@@ -8,6 +8,7 @@ import (
 	"context"
 	"os"
 	"path/filepath"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -68,6 +69,29 @@ func TestRunBackup_Success(t *testing.T) {
 	}
 	if last := svc.LastRun(); last == nil || !last.Succeeded() {
 		t.Errorf("LastRun should reflect the successful run")
+	}
+}
+
+// TestRunBackupKeeping_PassesRetention pins the arguments the scheduled run
+// hands the script: --retention N only when N is positive.
+func TestRunBackupKeeping_PassesRetention(t *testing.T) {
+	tests := []struct {
+		keep int
+		want string
+	}{
+		{10, "args=--retention 10"},
+		{0, "args="},
+	}
+	for _, tt := range tests {
+		script := writeShim(t, `echo "args=$*"`, 0)
+		svc := NewService(Config{ScriptPath: script, Timeout: 5 * time.Second})
+		r, err := svc.RunBackupKeeping(context.Background(), tt.keep)
+		if err != nil {
+			t.Fatalf("RunBackupKeeping(%d): %v", tt.keep, err)
+		}
+		if got := strings.TrimSpace(r.Stdout); got != tt.want {
+			t.Errorf("keep %d: script saw %q, want %q", tt.keep, got, tt.want)
+		}
 	}
 }
 

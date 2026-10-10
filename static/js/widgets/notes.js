@@ -1037,7 +1037,8 @@ Chronicle.register('notes', {
           html += '<button class="note-add-check-item" data-block="' + bIdx + '"><i class="fa-solid fa-plus text-[9px]"></i> Add item</button>';
           html += '</div>';
         });
-        html += '<div class="note-add-block"><button class="note-add-tasks" type="button" title="Checklist" aria-label="Checklist"><i class="fa-solid fa-list-check"></i></button></div>';
+        html += '<div class="note-add-block"><button class="note-add-tasks" type="button" title="Checklist" aria-label="Checklist"><i class="fa-solid fa-list-check"></i></button>' +
+          (Chronicle.EditorImage ? '<button class="note-add-picture" type="button" title="Picture" aria-label="Picture"><i class="fa-solid fa-image"></i></button>' : '') + '</div>';
       } else {
         // Display mode: the rich text, then any checklist blocks.
         if (note.entryHtml) {
@@ -1308,6 +1309,16 @@ Chronicle.register('notes', {
         });
       });
 
+      // A picture in the rich text. Pasting or dropping one works too.
+      notesList.querySelectorAll('.note-add-picture').forEach(function (btn) {
+        btn.addEventListener('mousedown', function (e) { e.preventDefault(); });
+        btn.addEventListener('click', function (e) {
+          e.stopPropagation();
+          var ed = miniEditors[state.editingId];
+          if (ed && Chronicle.EditorImage) Chronicle.EditorImage.pickAndInsert(ed, campaignId);
+        });
+      });
+
       // Journal references open in the Journal.
       notesList.querySelectorAll('a.note-link').forEach(function (a) {
         a.addEventListener('click', function () { flushAutosave(); });
@@ -1517,6 +1528,9 @@ Chronicle.register('notes', {
       ];
       if (Chronicle.NoteLink) extensions.push(Chronicle.NoteLink.configure({ campaignId: campaignId, onOpen: openInJournal }));
       if (TipTap.TaskList && TipTap.TaskItem) extensions.push(TipTap.TaskList, TipTap.TaskItem.configure({ nested: true }));
+      // Pictures are in the schema for everyone, so a note holding one loads.
+      if (Chronicle.EditorImage) extensions.push(Chronicle.EditorImage.extension);
+      var pictureProps = Chronicle.EditorImage ? Chronicle.EditorImage.pasteDropProps(function () { return editor; }, campaignId) : {};
 
       wikiExt = Chronicle.WikiLinkExtension ? Chronicle.WikiLinkExtension({ campaignId: campaignId, notes: linkCandidates }) : null;
       mentionExt = Chronicle.MentionExtension ? Chronicle.MentionExtension({ campaignId: campaignId }) : null;
@@ -1534,7 +1548,9 @@ Chronicle.register('notes', {
             if (wikiExt && wikiExt.onKeyDown(null, event)) return true;
             if (mentionExt && mentionExt.onKeyDown(null, event)) return true;
             return false;
-          }
+          },
+          handlePaste: pictureProps.handlePaste,
+          handleDrop: pictureProps.handleDrop
         },
         // Autosave: debounce on content changes, flush when the editor
         // loses focus (e.g. the user clicks elsewhere before the timer).
@@ -1544,6 +1560,7 @@ Chronicle.register('notes', {
       });
 
       miniEditors[state.editingId] = editor;
+      if (Chronicle.EditorImage) Chronicle.EditorImage.useNotePictures(editor, campaignId);
       if (wikiExt) wikiExt.onCreate(editor);
       if (mentionExt) mentionExt.onCreate(editor);
       // New edit session: start clean so a stale flag from a prior note

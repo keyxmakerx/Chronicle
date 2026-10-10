@@ -56,6 +56,10 @@ func usageLabel(t string) string {
 		return "Avatars"
 	case "backdrop":
 		return "Backdrops"
+	case "note_image":
+		return "Note pictures"
+	case "page_file":
+		return "Page files"
 	default:
 		return t
 	}
@@ -72,6 +76,10 @@ func usageIcon(t string) string {
 		return "fa-user-circle"
 	case "backdrop":
 		return "fa-panorama"
+	case "note_image":
+		return "fa-image"
+	case "page_file":
+		return "fa-file-lines"
 	default:
 		return "fa-file"
 	}
@@ -203,7 +211,7 @@ templ storageFilesTab(data StoragePageData) {
 							<tr class="hover:bg-surface-alt transition-colors">
 								<td class="px-4 py-2.5">
 									<div class="flex items-center gap-2">
-										if f.IsImage() {
+										if f.IsImage() && !f.IsBound() {
 											<img
 												src={ layouts.MediaThumbURL(ctx, f.ID, "300") }
 												alt={ f.OriginalName }
@@ -233,13 +241,15 @@ templ storageFilesTab(data StoragePageData) {
 								<td class="px-4 py-2.5 text-sm text-fg-muted hidden md:table-cell">{ f.CreatedAt.Format("Jan 2") }</td>
 								<td class="px-4 py-2.5 text-right">
 									<div class="flex items-center justify-end gap-2">
-										<a
-											href={ templ.SafeURL(layouts.MediaURL(ctx, f.ID)) }
-											target="_blank"
-											class="text-sm text-accent hover:text-accent-hover transition-colors"
-										>
-											View
-										</a>
+										if !f.IsBound() {
+											<a
+												href={ templ.SafeURL(layouts.MediaURL(ctx, f.ID)) }
+												target="_blank"
+												class="text-sm text-accent hover:text-accent-hover transition-colors"
+											>
+												View
+											</a>
+										}
 										<button
 											hx-delete={ fmt.Sprintf("/admin/media/%s", f.ID) }
 											hx-confirm={ fmt.Sprintf("Delete '%s'? This cannot be undone.", f.OriginalName) }

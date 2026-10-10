@@ -48,6 +48,11 @@ type NoteService interface {
 	// to the jot's page, and records it on the jot (jots.go).
 	SendToJournal(ctx context.Context, campaignID string, v permissions.Viewer, jotID, pageName string) (*SendResult, error)
 
+	// ViewerReadsMedia reports whether v can read a note bound to the note
+	// picture mediaID in campaignID (bound by the uploader's own save). The
+	// media plugin asks this to decide who may open a picture in notes.
+	ViewerReadsMedia(ctx context.Context, campaignID, mediaID string, v permissions.Viewer) (bool, error)
+
 	// ListSharedByCampaign returns every shared note in the campaign across
 	// all owners. Unlike the three list methods above it applies no per-user
 	// visibility filter, so it is owner-gated data: campaign export is the
@@ -148,6 +153,12 @@ func NewNoteService(repo NoteRepository) NoteService {
 // NewNoteServiceWithAttachments creates a note service with attachment support.
 func NewNoteServiceWithAttachments(repo NoteRepository, attRepo AttachmentRepository) *noteService {
 	return &noteService{repo: repo, attRepo: attRepo, events: NoopNoteEventPublisher{}}
+}
+
+// ViewerReadsMedia delegates to the repository, which holds the one SQL form
+// of the note visibility rule.
+func (s *noteService) ViewerReadsMedia(ctx context.Context, campaignID, mediaID string, v permissions.Viewer) (bool, error) {
+	return s.repo.ViewerReadsMedia(ctx, campaignID, mediaID, v)
 }
 
 // SetEventPublisher sets the event publisher for real-time sync.
@@ -322,7 +333,7 @@ func (s *noteService) Update(ctx context.Context, id string, editor permissions.
 
 	note.LastEditedBy = &userID
 
-	if err := s.repo.Update(ctx, note); err != nil {
+	if err := s.repo.UpdateWithPictures(ctx, note, userID, true); err != nil {
 		return nil, err
 	}
 	updated, err := s.repo.FindByID(ctx, note.ID)
@@ -594,7 +605,9 @@ func (s *noteService) RestoreVersion(ctx context.Context, noteID, versionID, use
 	}
 	note.LastEditedBy = &userID
 
-	if err := s.repo.Update(ctx, note); err != nil {
+	// A restore brings back text written at another time, so it binds nothing
+	// new; it can only drop bindings for pictures the restored text lacks.
+	if err := s.repo.UpdateWithPictures(ctx, note, userID, false); err != nil {
 		return nil, err
 	}
 	restored, err := s.repo.FindByID(ctx, note.ID)

@@ -109,6 +109,32 @@ var MimeToExtension = map[string]string{
 	"audio/ogg":  ".ogg",
 	"audio/wav":  ".wav",
 	"audio/webm": ".webm",
+	// Page files only; AllowedMimeTypes does not list them, so no other
+	// upload route can store one.
+	mimePDF:  ".pdf",
+	mimeText: ".txt",
+	mimeMD:   ".md",
+	mimeDocx: ".docx",
+	mimeXlsx: ".xlsx",
+	mimeOdt:  ".odt",
+	mimeZip:  ".zip",
+}
+
+// IsNotePicture reports whether the file is a picture that lives in notes.
+func (f *MediaFile) IsNotePicture() bool {
+	return f.UsageType == UsageNoteImage
+}
+
+// IsPageFile reports whether the file is attached to a page.
+func (f *MediaFile) IsPageFile() bool {
+	return f.UsageType == UsagePageFile
+}
+
+// IsBound reports whether the file's readers come only from what it is bound to
+// (a note, or a page), so every route that treats media as campaign-wide
+// content must pass it by.
+func (f *MediaFile) IsBound() bool {
+	return f.IsNotePicture() || f.IsPageFile()
 }
 
 // IsImage returns true if the file is an image based on MIME type.
@@ -130,6 +156,18 @@ const (
 	UsageEntityImage = "entity_image"
 	UsageAvatar      = "avatar"
 	UsageBackdrop    = "backdrop"
+
+	// UsageNoteImage is a picture written into a note. Its readers are
+	// decided by who can read a note holding it, never by the entity-page
+	// rule, so it is kept out of every campaign-wide listing, lookup and
+	// dedup that the page rule relies on.
+	UsageNoteImage = "note_image"
+
+	// UsagePageFile is a file attached to a page (a handout, a PDF). It is
+	// opened only through the page it is bound to in page_files, and always as
+	// a download, so like a note picture it stays out of every campaign-wide
+	// listing, lookup and dedup.
+	UsagePageFile = "page_file"
 )
 
 // MediaRef is a lightweight reference from an entity to a media file.

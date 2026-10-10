@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"time"
 
 	"github.com/keyxmakerx/chronicle/internal/apperror"
 )
@@ -57,6 +58,12 @@ type MediaRepository interface {
 	// Used for storage quota enforcement at upload time.
 	GetCampaignUsage(ctx context.Context, campaignID string) (totalBytes int64, fileCount int, err error)
 
+	// GetUserNoteImageUsage returns the bytes and file count of the note
+	// pictures a user uploaded into a campaign, bound to a note or not. Bound
+	// ones are never swept and the owner cannot list them, so this is the only
+	// place their total is bounded.
+	GetUserNoteImageUsage(ctx context.Context, campaignID, userID string) (totalBytes int64, fileCount int, err error)
+
 	// GetUserCampaignlessUsage returns the total bytes and file count for a
 	// user's uploads that carry no campaign_id (avatars, and any
 	// /media/upload posted with a blank campaign_id). Used for storage
@@ -76,6 +83,19 @@ type MediaRepository interface {
 	// ListFilesByCampaign returns all media files for a campaign without
 	// pagination. Used for bulk cleanup during campaign deletion.
 	ListFilesByCampaign(ctx context.Context, campaignID string) ([]MediaFile, error)
+
+	// ListUnboundNotePictures returns the ids of note pictures created before
+	// olderThan that no note is bound to and no saved note version still names:
+	// uploaded and never saved into a note, or left behind when their note was
+	// deleted or edited. A version still naming one is kept so a restore after
+	// an accidental delete finds its picture.
+	ListUnboundNotePictures(ctx context.Context, olderThan time.Time) ([]string, error)
+
+	// ListUnboundPageFiles returns the ids of page files created before
+	// olderThan that no page holds: uploaded and never bound, or left behind
+	// when their page was purged (the binding row goes with the page, the file
+	// does not).
+	ListUnboundPageFiles(ctx context.Context, olderThan time.Time) ([]string, error)
 }
 
 // mediaRepository implements MediaRepository with MariaDB queries.
@@ -164,7 +184,11 @@ func (r *mediaRepository) FindByID(ctx context.Context, id string) (*MediaFile, 
 //
 // Scoped to a single campaign on purpose — cross-campaign dedup is
 // off, so each campaign's media space stays isolated for clean
-// export / cascade-delete behavior.
+// export / cascade-delete behavior. Note pictures never match: a picture one
+// player put in a private note must not be handed to another uploader of the
+// same bytes, nor adopted by a page whose readers the note rule does not know. Page
+// files never match either: a file attached to a GM-only handout must not be
+// handed to someone who uploads the same bytes elsewhere.
 func (r *mediaRepository) FindByContentHash(ctx context.Context, campaignID, hash string) (*MediaFile, error) {
 	if campaignID == "" || hash == "" {
 		return nil, nil
@@ -174,13 +198,13 @@ func (r *mediaRepository) FindByContentHash(ctx context.Context, campaignID, has
 	                 c.is_public
 	          FROM media_files m
 	          LEFT JOIN campaigns c ON m.campaign_id = c.id
-	          WHERE m.campaign_id = ? AND m.content_hash = ?
+	          WHERE m.campaign_id = ? AND m.content_hash = ? AND m.usage_type NOT IN (?, ?)
 	          LIMIT 1`
 
 	file := &MediaFile{}
 	var thumbJSON string
 	var contentHash sql.NullString
-	err := r.db.QueryRowContext(ctx, query, campaignID, hash).Scan(
+	err := r.db.QueryRowContext(ctx, query, campaignID, hash, UsageNoteImage, UsagePageFile).Scan(
 		&file.ID, &file.CampaignID, &file.UploadedBy,
 		&file.Filename, &file.OriginalName, &file.MimeType,
 		&file.FileSize, &contentHash, &file.UsageType, &thumbJSON,
@@ -273,11 +297,14 @@ func (r *mediaRepository) Delete(ctx context.Context, id string) error {
 	return nil
 }
 
-// ListByCampaign returns media files for a campaign with pagination.
+// ListByCampaign returns media files for a campaign with pagination. Note
+// pictures and page files are left out: this feeds the media browser, the
+// picker, the sync API and the campaign export, none of which may name a file
+// that only its note's or page's readers can open.
 func (r *mediaRepository) ListByCampaign(ctx context.Context, campaignID string, limit, offset int) ([]MediaFile, int, error) {
 	var total int
 	err := r.db.QueryRowContext(ctx,
-		`SELECT COUNT(*) FROM media_files WHERE campaign_id = ?`, campaignID,
+		`SELECT COUNT(*) FROM media_files WHERE campaign_id = ? AND usage_type NOT IN (?, ?)`, campaignID, UsageNoteImage, UsagePageFile,
 	).Scan(&total)
 	if err != nil {
 		return nil, 0, fmt.Errorf("counting media files: %w", err)
@@ -285,10 +312,10 @@ func (r *mediaRepository) ListByCampaign(ctx context.Context, campaignID string,
 
 	query := `SELECT id, campaign_id, uploaded_by, filename, original_name,
 	                 mime_type, file_size, content_hash, usage_type, thumbnail_paths, created_at
-	          FROM media_files WHERE campaign_id = ?
+	          FROM media_files WHERE campaign_id = ? AND usage_type NOT IN (?, ?)
 	          ORDER BY created_at DESC LIMIT ? OFFSET ?`
 
-	rows, err := r.db.QueryContext(ctx, query, campaignID, limit, offset)
+	rows, err := r.db.QueryContext(ctx, query, campaignID, UsageNoteImage, UsagePageFile, limit, offset)
 	if err != nil {
 		return nil, 0, fmt.Errorf("listing media files: %w", err)
 	}
@@ -365,8 +392,14 @@ func (r *mediaRepository) ListAll(ctx context.Context, limit, offset int) ([]Adm
 		return nil, 0, fmt.Errorf("counting all media files: %w", err)
 	}
 
-	query := `SELECT m.id, m.campaign_id, m.uploaded_by, m.filename, m.original_name,
-	                 m.mime_type, m.file_size, m.usage_type, m.thumbnail_paths, m.created_at,
+	// A note picture keeps its row for disk accounting, but its file name and
+	// thumbnails are the note's business: the page shows neither, so a site
+	// admin sees a size and an owner, not a private picture's name or image.
+	query := `SELECT m.id, m.campaign_id, m.uploaded_by, m.filename,
+	                 CASE WHEN m.usage_type = 'note_image' THEN 'Note picture' ELSE m.original_name END,
+	                 m.mime_type, m.file_size, m.usage_type,
+	                 CASE WHEN m.usage_type = 'note_image' THEN '{}' ELSE m.thumbnail_paths END,
+	                 m.created_at,
 	                 COALESCE(u.display_name, 'Unknown')
 	          FROM media_files m
 	          LEFT JOIN users u ON m.uploaded_by = u.id
@@ -412,6 +445,23 @@ func (r *mediaRepository) GetCampaignUsage(ctx context.Context, campaignID strin
 	).Scan(&fileCount, &totalBytes)
 	if err != nil {
 		return 0, 0, fmt.Errorf("querying campaign storage usage: %w", err)
+	}
+	return totalBytes, fileCount, nil
+}
+
+// GetUserNoteImageUsage counts one uploader's note pictures in one campaign.
+// Every row counts, bound or not, so a member cannot dodge the cap by saving
+// each picture into a note.
+func (r *mediaRepository) GetUserNoteImageUsage(ctx context.Context, campaignID, userID string) (int64, int, error) {
+	var totalBytes int64
+	var fileCount int
+	err := r.db.QueryRowContext(ctx,
+		`SELECT COUNT(*), COALESCE(SUM(file_size), 0) FROM media_files
+		 WHERE campaign_id = ? AND uploaded_by = ? AND usage_type = ?`,
+		campaignID, userID, UsageNoteImage,
+	).Scan(&fileCount, &totalBytes)
+	if err != nil {
+		return 0, 0, fmt.Errorf("querying note picture usage: %w", err)
 	}
 	return totalBytes, fileCount, nil
 }
@@ -554,4 +604,53 @@ func (r *mediaRepository) ListFilesByCampaign(ctx context.Context, campaignID st
 		files = append(files, f)
 	}
 	return files, rows.Err()
+}
+
+// ListUnboundNotePictures finds note pictures nothing holds any more; see the
+// interface. It reads note_pictures and note_versions, core tables the notes
+// widget fills; the version check is a substring match on a fixed-shape id, so
+// it needs no wildcard escaping.
+func (r *mediaRepository) ListUnboundNotePictures(ctx context.Context, olderThan time.Time) ([]string, error) {
+	rows, err := r.db.QueryContext(ctx,
+		`SELECT m.id FROM media_files m
+		 WHERE m.usage_type = ? AND m.created_at < ?
+		   AND NOT EXISTS (SELECT 1 FROM note_pictures p WHERE p.media_id = m.id)
+		   AND NOT EXISTS (SELECT 1 FROM note_versions v WHERE LOCATE(m.id, v.entry_html) > 0)
+		 LIMIT 500`, UsageNoteImage, olderThan)
+	if err != nil {
+		return nil, fmt.Errorf("listing unbound note pictures: %w", err)
+	}
+	defer rows.Close()
+	var ids []string
+	for rows.Next() {
+		var id string
+		if err := rows.Scan(&id); err != nil {
+			return nil, fmt.Errorf("scanning unbound note picture: %w", err)
+		}
+		ids = append(ids, id)
+	}
+	return ids, rows.Err()
+}
+
+// ListUnboundPageFiles finds page files no page holds any more; see the
+// interface.
+func (r *mediaRepository) ListUnboundPageFiles(ctx context.Context, olderThan time.Time) ([]string, error) {
+	rows, err := r.db.QueryContext(ctx,
+		`SELECT m.id FROM media_files m
+		 WHERE m.usage_type = ? AND m.created_at < ?
+		   AND NOT EXISTS (SELECT 1 FROM page_files p WHERE p.media_id = m.id)
+		 LIMIT 500`, UsagePageFile, olderThan)
+	if err != nil {
+		return nil, fmt.Errorf("listing unbound page files: %w", err)
+	}
+	defer rows.Close()
+	var ids []string
+	for rows.Next() {
+		var id string
+		if err := rows.Scan(&id); err != nil {
+			return nil, fmt.Errorf("scanning unbound page file: %w", err)
+		}
+		ids = append(ids, id)
+	}
+	return ids, rows.Err()
 }

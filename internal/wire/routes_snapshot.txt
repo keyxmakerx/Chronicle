@@ -49,6 +49,7 @@ DELETE	/entities/:eid/relations/:rid	internal/widgets/relations/routes.go
 DELETE	/entities/:entityID	internal/plugins/syncapi/routes.go
 DELETE	/entity-types/:etid	internal/plugins/entities/routes.go
 DELETE	/entity-types/:etid/dashboard-layout	internal/plugins/entities/routes.go
+DELETE	/files/:fid	internal/plugins/media/routes.go
 DELETE	/groups/:gid	internal/plugins/campaigns/routes.go
 DELETE	/groups/:gid/members/:uid	internal/plugins/campaigns/routes.go
 DELETE	/invites/:inviteId	internal/plugins/campaigns/routes.go
@@ -275,6 +276,7 @@ GET	/entities/:eid/history	internal/plugins/audit/routes.go
 GET	/entities/:eid/history	internal/plugins/entities/page_safety_handler.go
 GET	/entities/:eid/notes	internal/widgets/entity_notes/routes.go
 GET	/entities/:eid/notes/:nid	internal/widgets/entity_notes/routes.go
+GET	/entities/:eid/peek	internal/plugins/entities/routes.go
 GET	/entities/:eid/permissions	internal/plugins/entities/routes.go
 GET	/entities/:eid/player-notes	internal/plugins/entities/routes.go
 GET	/entities/:eid/posts	internal/widgets/posts/routes.go
@@ -314,6 +316,8 @@ GET	/extensions/health	internal/app/routes.go
 GET	/favorite-ids	internal/plugins/entities/routes.go
 GET	/favorites	internal/plugins/bestiary/routes.go
 GET	/favorites	internal/plugins/entities/routes.go
+GET	/files	internal/plugins/media/routes.go
+GET	/files/:fid/download	internal/plugins/media/routes.go
 GET	/files/:name	internal/plugins/backup/routes.go
 GET	/flagged	internal/plugins/bestiary/routes.go
 GET	/forgot-password	internal/plugins/auth/routes.go
@@ -633,6 +637,7 @@ POST	/entity-types	internal/plugins/syncapi/routes.go
 POST	/extensions/:slug/settings/apply	internal/plugins/addons/routes.go
 POST	/extensions/:slug/settings/dismiss	internal/plugins/addons/routes.go
 POST	/extensions/foundry/connect-line	internal/plugins/campaigns/routes.go
+POST	/files	internal/plugins/media/routes.go
 POST	/files/:name/link	internal/plugins/backup/routes.go
 POST	/forgot-password	internal/plugins/auth/routes.go
 POST	/foundry-vtt/npc-spotlight/:eid	internal/plugins/foundry_vtt/routes.go
@@ -678,6 +683,7 @@ POST	/notes/:noteId/versions/:vid/restore	internal/widgets/notes/routes.go
 POST	/notes/allow-app	internal/widgets/notes/routes.go
 POST	/notes/bulk	internal/widgets/notes/routes.go
 POST	/notes/media-links	internal/widgets/notes/routes.go
+POST	/notes/pictures	internal/widgets/notes/routes.go
 POST	/notice-boards/:eid/boards	internal/plugins/quests/routes.go
 POST	/notice-boards/:eid/boards/:bid/items	internal/plugins/quests/routes.go
 POST	/notifications/:nid/read	internal/plugins/sessions/routes.go
@@ -700,6 +706,7 @@ POST	/rsvp/:token/suggest	internal/plugins/sessions/routes.go
 POST	/run	internal/plugins/backup/routes.go
 POST	/run	internal/plugins/restore/routes.go
 POST	/saved-filters	internal/plugins/entities/routes.go
+POST	/schedule	internal/plugins/backup/routes.go
 POST	/security/registration	internal/plugins/admin/routes.go
 POST	/security/users/:id/force-logout	internal/plugins/admin/routes.go
 POST	/sessions	internal/plugins/sessions/routes.go
@@ -757,6 +764,7 @@ PUT	/:id/retention	internal/plugins/packages/routes.go
 PUT	/:id/version	internal/plugins/packages/routes.go
 PUT	/account/display-name	internal/plugins/auth/routes.go
 PUT	/account/email	internal/plugins/auth/routes.go
+PUT	/account/notifications	internal/plugins/auth/routes.go
 PUT	/account/password	internal/plugins/auth/routes.go
 PUT	/account/timezone	internal/plugins/auth/routes.go
 PUT	/account/view-prefs	internal/plugins/auth/routes.go
@@ -838,6 +846,7 @@ PUT	/entity-types/:etid/layout	internal/plugins/entities/routes.go
 PUT	/entity-types/:etid/reorder	internal/plugins/entities/routes.go
 PUT	/entity-types/:typeID	internal/plugins/syncapi/routes.go
 PUT	/event-tier-definitions	internal/plugins/campaigns/routes.go
+PUT	/files/:fid/visibility	internal/plugins/media/routes.go
 PUT	/groups/:gid	internal/plugins/campaigns/routes.go
 PUT	/layout-presets/:pid	internal/plugins/entities/layout_preset_routes.go
 PUT	/maps/:mapID/drawings/:drawingID	internal/plugins/syncapi/routes.go

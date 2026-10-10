@@ -14,6 +14,7 @@ import (
 
 	"github.com/keyxmakerx/chronicle/internal/apperror"
 	"github.com/keyxmakerx/chronicle/internal/middleware"
+	"github.com/keyxmakerx/chronicle/internal/notifyprefs"
 	"github.com/keyxmakerx/chronicle/internal/patch"
 	"github.com/keyxmakerx/chronicle/internal/plugins/auth"
 	"github.com/keyxmakerx/chronicle/internal/plugins/campaigns"
@@ -38,6 +39,29 @@ type Handler struct {
 	// campaignReader is the one-read source of the co-DM grant set the overlay
 	// roster's role column needs. Nil-safe.
 	campaignReader CampaignReader
+	// recipients drops people who switched an email off. Nil sends to all.
+	recipients RecipientFilter
+}
+
+// SetRecipientFilter wires people's notification choices into the emails.
+func (h *Handler) SetRecipientFilter(f RecipientFilter) {
+	h.recipients = f
+}
+
+// emailWanted reports whether this member still wants this kind of email.
+func (h *Handler) emailWanted(ctx context.Context, userID, category string) bool {
+	if h.recipients == nil || userID == "" {
+		return true
+	}
+	return len(h.recipients.AllowedRecipients(ctx, []string{userID}, category, notifyprefs.Email)) == 1
+}
+
+// prefsFooter is the line every email a person can switch off ends with,
+// pointing at the Notifications section of their account page.
+func (h *Handler) prefsFooter() (plain, htmlLine string) {
+	link := h.baseURL + "/account#notifications"
+	return "\nChoose which emails you get: " + link + "\n",
+		fmt.Sprintf(`<p style="text-align:center;color:#999;font-size:12px;margin-top:16px"><a href="%s" style="color:#999">Choose which emails you get</a></p>`, link)
 }
 
 // NewHandler creates a new sessions Handler.
@@ -569,8 +593,9 @@ func (h *Handler) UnlinkEntityAPI(c echo.Context) error {
 // sendRSVPEmails sends RSVP invitation emails to all campaign members.
 // Runs in a goroutine to avoid blocking the HTTP response.
 func (h *Handler) sendRSVPEmails(ctx context.Context, session *Session, campaignName string, members []campaigns.CampaignMember) {
+	footPlain, footHTML := h.prefsFooter()
 	for _, m := range members {
-		if m.Email == "" {
+		if m.Email == "" || !h.emailWanted(ctx, m.UserID, notifyprefs.GameNightInvites) {
 			continue
 		}
 
@@ -602,7 +627,7 @@ Decline: %s
 Suggest another time: %s
 
 These links expire in 7 days.
-`, session.Name, campaignName, dateStr, acceptURL, declineURL, suggestURL)
+`, session.Name, campaignName, dateStr, acceptURL, declineURL, suggestURL) + footPlain
 
 		htmlBody := fmt.Sprintf(`<!DOCTYPE html><html><head><meta charset="utf-8"></head><body style="font-family:system-ui,-apple-system,sans-serif;max-width:480px;margin:0 auto;padding:20px;color:#333">
 <div style="text-align:center;margin-bottom:24px">
@@ -621,11 +646,12 @@ These links expire in 7 days.
 </div>
 <p style="text-align:center;margin:0 0 24px"><a href="%s" style="color:#6366f1;font-size:13px">Suggest another time</a></p>
 <p style="text-align:center;color:#999;font-size:12px">These links expire in 7 days.</p>
+%s
 </body></html>`,
 			// Escape the operator-authored session name + campaign name so they
 			// can't inject markup into the email. dateStr is our own formatted
 			// label; URLs are hex tokens — both safe.
-			html.EscapeString(session.Name), html.EscapeString(campaignName), dateStr, acceptURL, declineURL, suggestURL)
+			html.EscapeString(session.Name), html.EscapeString(campaignName), dateStr, acceptURL, declineURL, suggestURL, footHTML)
 
 		if err := h.mailer.SendHTMLMail(ctx, []string{m.Email}, subject, plainBody, htmlBody); err != nil {
 			slog.Warn("failed to send rsvp email",

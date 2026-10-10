@@ -276,6 +276,7 @@ templ MapEditorBody(cc *campaigns.CampaignContext, data MapViewData, mapContaine
 		data-annotations-src={ layouts.AssetURL("/static/js/map_annotations.js") }
 		data-hex-art-src={ layouts.AssetURL("/static/js/map_hex_art.js") }
 		data-hexes-src={ layouts.AssetURL("/static/js/map_hexes.js") }
+		data-live-src={ layouts.AssetURL("/static/js/map_live.js") }
 		data-map-id={ data.Map.ID }
 		data-image-id={ derefStr(data.Map.ImageID) }
 		data-image-url={ mapImageSrc(ctx, data.Map) }

@@ -56,6 +56,15 @@ type EntityVisibilityFilter interface {
 	FilterViewableEntityIDs(ctx context.Context, campaignID string, entityIDs []string, role int, userID string) (map[string]bool, error)
 }
 
+// NoteMediaAccess answers the one question that decides who may open a note
+// picture: can this person read a note in the campaign whose body holds the
+// file? Implemented over the notes service in app/routes.go so media never
+// reads note tables or repeats the notes visibility rule. Nil is a valid
+// (unwired) value -- checkNoteImageAccess then admits only the uploader.
+type NoteMediaAccess interface {
+	CanReadNoteMedia(ctx context.Context, campaignID, mediaID string, role int, userID string) (bool, error)
+}
+
 // MapImageGuard says whether a media file is the background of a map that has a
 // shadowed area. Implemented by the maps plugin (media never reads map data),
 // because the original picture of such a map must not reach anyone who is not
@@ -84,6 +93,8 @@ type Handler struct {
 	// mapImages is consulted after every other access check. Nil means no maps
 	// plugin is wired (tests); production wiring is pinned by a test in app.
 	mapImages MapImageGuard
+	// noteMedia decides note pictures; see NoteMediaAccess.
+	noteMedia NoteMediaAccess
 	// cache is optional (nil in tests and any deploy without Redis wired).
 	// A miss or error falls through to computing the decision fresh — the
 	// cache can only make ADR-058's access check slower, never laxer.
@@ -119,6 +130,17 @@ func (h *Handler) SetEntityVisibilityFilter(f EntityVisibilityFilter) {
 // app/routes.go.
 func (h *Handler) SetMapImageGuard(g MapImageGuard) {
 	h.mapImages = g
+}
+
+// SetNoteMediaAccess wires the note-reader rule for note pictures.
+func (h *Handler) SetNoteMediaAccess(n NoteMediaAccess) {
+	h.noteMedia = n
+}
+
+// NoteMediaAccessWired reports whether the rule is set, so the app's wiring
+// test can pin that production wires it.
+func (h *Handler) NoteMediaAccessWired() bool {
+	return h.noteMedia != nil
 }
 
 // MapImageGuardWired reports whether the guard is set, so the app's wiring test
@@ -223,6 +245,13 @@ func (h *Handler) Upload(c echo.Context) error {
 	if input.UsageType == "" {
 		input.UsageType = UsageAttachment
 	}
+	// Note pictures come only from the notes upload route, which lets players
+	// in and records nothing a Scribe could browse; page files only from the
+	// page's Files route, which binds them to the page. Taking either type
+	// from a form field here would let anyone mint files outside those rules.
+	if input.UsageType == UsageNoteImage || input.UsageType == UsagePageFile {
+		return apperror.NewBadRequest("unsupported usage type")
+	}
 
 	mediaFile, err := h.service.Upload(c.Request().Context(), input)
 	if err != nil {
@@ -295,6 +324,12 @@ func (h *Handler) Serve(c echo.Context) error {
 		return err
 	}
 
+	// A page file is opened only by its page's download route, as an
+	// attachment; no signature, session or role makes this route serve one.
+	if file.IsPageFile() {
+		return apperror.NewNotFound("media file not found")
+	}
+
 	// Enforce access control.
 	if err := h.checkMediaAccess(c, file, false, ""); err != nil {
 		return err
@@ -325,6 +360,10 @@ func (h *Handler) ServeThumbnail(c echo.Context) error {
 		return err
 	}
 
+	if file.IsPageFile() {
+		return apperror.NewNotFound("media file not found")
+	}
+
 	// Enforce access control (includes size in signature check).
 	if err := h.checkMediaAccess(c, file, true, size); err != nil {
 		return err
@@ -352,6 +391,11 @@ func currentViewerIdentity(c echo.Context) string {
 // campaign access control, then the shadowed-map-picture rule. Returns nil if
 // access is allowed, or an error to return to the client.
 func (h *Handler) checkMediaAccess(c echo.Context, file *MediaFile, isThumb bool, thumbSize string) error {
+	// Backstop for the serve handlers' own refusal: whatever else is true, a
+	// page file is never decided by the rules below.
+	if file.IsPageFile() {
+		return apperror.NewNotFound("media file not found")
+	}
 	if err := h.checkBaseMediaAccess(c, file, isThumb, thumbSize); err != nil {
 		return err
 	}
@@ -502,6 +546,25 @@ func (h *Handler) checkBaseMediaAccess(c echo.Context, file *MediaFile, isThumb 
 	if !signatureValid {
 		userID := auth.GetUserID(c)
 
+		// A note picture is decided by its notes alone, ahead of the admin
+		// bypass: notes are private even from the people who run the site,
+		// and a refusal is the same 404 as any other.
+		if file.IsNotePicture() {
+			allowed, err := h.checkNoteImageAccess(c.Request().Context(), file, userID)
+			if err != nil {
+				slog.Error("media: note picture access check failed; denying access",
+					slog.String("file_id", file.ID),
+					slog.String("campaign_id", *file.CampaignID),
+					slog.Any("error", err),
+				)
+				return apperror.NewNotFound("media file not found")
+			}
+			if !allowed {
+				return apperror.NewNotFound("media file not found")
+			}
+			return nil
+		}
+
 		// Site admins bypass every check below. This ADR narrows what a
 		// campaign member (or anonymous visitor) may reach, not an admin.
 		if session := auth.GetSession(c); session != nil && session.IsAdmin {
@@ -556,6 +619,36 @@ func (h *Handler) checkBaseMediaAccess(c echo.Context, file *MediaFile, isThumb 
 	}
 
 	return nil
+}
+
+// checkNoteImageAccess is the rule for a picture that lives in notes: only a
+// current campaign member who can read at least one note the uploader bound
+// the picture to by saving it there, or the uploader (so it shows before the
+// note is first saved). An id pasted into anyone else's note binds nothing.
+// The uploader must still be a member. It never consults the pages that
+// reference the file and never falls back to plain membership, so a picture used only in someone's private note is
+// closed to the rest of the table. Fails closed: an unwired rule admits only
+// the uploader.
+func (h *Handler) checkNoteImageAccess(ctx context.Context, file *MediaFile, userID string) (bool, error) {
+	if userID == "" || file.CampaignID == nil || h.memberChecker == nil {
+		return false, nil
+	}
+	campaignID := *file.CampaignID
+	if !h.memberChecker.IsCampaignMember(campaignID, userID) {
+		return false, nil
+	}
+	if file.UploadedBy == userID {
+		return true, nil
+	}
+	if h.noteMedia == nil {
+		return false, nil
+	}
+	// The uploader must still be a member: a picture whose uploader has left
+	// stops loading for everyone else, since the note rule is anchored on them.
+	if !h.memberChecker.IsCampaignMember(campaignID, file.UploadedBy) {
+		return false, nil
+	}
+	return h.noteMedia.CanReadNoteMedia(ctx, campaignID, file.ID, h.viewerVisibilityRole(campaignID, userID), userID)
 }
 
 // mediaAccessCacheTTL bounds how long an ADR-058 entity-scoped access
@@ -749,6 +842,10 @@ func (h *Handler) setSecurityHeaders(c echo.Context, file *MediaFile) {
 
 	// Cache control based on campaign privacy.
 	switch {
+	case file.IsNotePicture():
+		// Readers change as the note's sharing does, and a public campaign's
+		// notes are no more public than a private one's: never cacheable.
+		resp.Header().Set("Cache-Control", "private, no-store, max-age=0")
 	case file.CampaignIsPublic != nil && !*file.CampaignIsPublic:
 		// Private campaign media must not be cached by shared proxies.
 		resp.Header().Set("Cache-Control", "private, no-store, max-age=0")
@@ -796,13 +893,14 @@ func (h *Handler) Info(c echo.Context) error {
 		return err
 	}
 
-	// Ownership check: only uploader or admin can see file info.
+	// Ownership check: only uploader or admin can see file info. A page file
+	// has its page's rule and nothing here, so it answers like a missing file.
 	session := auth.GetSession(c)
-	if file.UploadedBy != userID && (session == nil || !session.IsAdmin) {
+	if file.IsPageFile() || (file.UploadedBy != userID && (session == nil || !session.IsAdmin)) {
 		return apperror.NewNotFound("media file not found")
 	}
 
-	return c.JSON(http.StatusOK, map[string]any{
+	info := map[string]any{
 		"id":            file.ID,
 		"original_name": file.OriginalName,
 		"mime_type":     file.MimeType,
@@ -810,7 +908,15 @@ func (h *Handler) Info(c echo.Context) error {
 		"usage_type":    file.UsageType,
 		"created_at":    file.CreatedAt.Format(time.RFC3339),
 		"thumbnails":    file.ThumbnailPaths,
-	})
+	}
+	// A note picture's name and stored paths belong to the person who pasted it;
+	// an admin reading someone's picture gets no more than the admin storage
+	// page shows.
+	if file.IsNotePicture() && file.UploadedBy != userID {
+		delete(info, "original_name")
+		delete(info, "thumbnails")
+	}
+	return c.JSON(http.StatusOK, info)
 }
 
 // Delete removes a media file (DELETE /media/:fileID).
@@ -827,9 +933,10 @@ func (h *Handler) Delete(c echo.Context) error {
 		return err
 	}
 
-	// Ownership check.
+	// Ownership check. A page file is removed from its page by someone who can
+	// still edit that page, never by its uploader alone.
 	session := auth.GetSession(c)
-	if file.UploadedBy != userID && (session == nil || !session.IsAdmin) {
+	if file.IsPageFile() || (file.UploadedBy != userID && (session == nil || !session.IsAdmin)) {
 		return apperror.NewNotFound("media file not found")
 	}
 

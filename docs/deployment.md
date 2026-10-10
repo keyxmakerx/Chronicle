@@ -469,6 +469,15 @@ chronicle-data volume). Each run produces:
 managed by a separate Go-side rotator and are never touched by the
 script.
 
+### Daily backup from the admin page
+
+Site admin › Backups & restore › Daily backup runs `backup.sh` inside the
+server once a day at the chosen hour (server time) and keeps the chosen
+number of days. A failed run shows on that page and emails active site
+admins when email is set up. It writes into the same `$BACKUP_DIR`, so an
+offsite copy still needs one of the options below. Use it or the host
+cron job, not both.
+
 ### Cron example (daily at 03:00, host crontab)
 
 ```cron
@@ -649,7 +658,7 @@ Run through this before exposing Chronicle anywhere reachable.
 - [ ] `ENV=production` is set so the audit warnings don't get suppressed.
 - [ ] `DB_TLS_MODE=required` if the DB is on a different host. Optional
       if DB and chronicle are on the same Docker bridge.
-- [ ] Daily `make backup` cron job + offsite copy of `$BACKUP_DIR`
+- [ ] Daily backup (admin page or `make backup` cron job) + offsite copy of `$BACKUP_DIR`
       working and tested.
 - [ ] First registered user is the legitimate site admin, not a test
       account left over from setup.

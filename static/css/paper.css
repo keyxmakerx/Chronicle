@@ -129,6 +129,8 @@
 .chc__foot { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding-top: 7px; font: 500 12.5px/1.4 var(--paper-ui-font); }
 .chc__link { font-weight: 600; text-decoration: none; margin-left: auto; }
 .chc__link:hover { text-decoration: underline; }
+.chc__peek { font: inherit; font-weight: 600; background: none; border: 0; padding: 0; cursor: pointer; color: inherit; }
+.chc__peek:hover { text-decoration: underline; }
 .chc__x { display: none; position: absolute; top: 6px; right: 6px; width: 24px; height: 24px; border: 0; border-radius: 6px; background: none; color: inherit; opacity: 0.7; cursor: pointer; font-size: 16px; line-height: 1; }
 .chc__x:hover { opacity: 1; }
 .chc--pinned .chc__x { display: block; }

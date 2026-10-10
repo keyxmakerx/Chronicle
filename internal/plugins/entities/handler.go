@@ -8,7 +8,6 @@ import (
 	"log/slog"
 	"net/http"
 	"net/url"
-	"regexp"
 	"sort"
 	"strconv"
 	"strings"
@@ -1880,9 +1879,23 @@ func (h *Handler) GetPlayerNotes(c echo.Context) error {
 		return apperror.NewNotFound("entity not found")
 	}
 
+	notes, notesHTML := entity.PlayerNotes, entity.PlayerNotesHTML
+	if cc.MemberRole < campaigns.RoleScribe {
+		// Player notes are meant for players, but the API accepts any editor
+		// content, so GM-only parts are removed the same way as for the entry.
+		if notes != nil {
+			stripped := sanitize.StripSecretsJSON(*notes)
+			notes = &stripped
+		}
+		if notesHTML != nil {
+			stripped := sanitize.StripSecretsHTML(*notesHTML)
+			notesHTML = &stripped
+		}
+	}
+
 	return c.JSON(http.StatusOK, map[string]any{
-		"player_notes":      entity.PlayerNotes,
-		"player_notes_html": entity.PlayerNotesHTML,
+		"player_notes":      notes,
+		"player_notes_html": notesHTML,
 	})
 }
 
@@ -2201,9 +2214,6 @@ func (h *Handler) UpdateCoverImageAPI(c echo.Context) error {
 
 // --- Preview API ---
 
-// htmlTagPattern matches HTML tags for stripping in entry excerpts.
-var htmlTagPattern = regexp.MustCompile(`<[^>]*>`)
-
 // PreviewAPI returns entity data for tooltip/popover display, respecting the
 // entity's popup_config to control which sections are included.
 // GET /campaigns/:id/entities/:eid/preview
@@ -2243,21 +2253,9 @@ func (h *Handler) PreviewAPI(c echo.Context) error {
 
 	cfg := entity.EffectivePopupConfig()
 
-	// Build an excerpt from entry_html: strip HTML tags, truncate to ~150 chars.
 	var entryExcerpt string
-	if cfg.ShowEntry && entity.EntryHTML != nil && *entity.EntryHTML != "" {
-		plain := htmlTagPattern.ReplaceAllString(*entity.EntryHTML, "")
-		plain = strings.Join(strings.Fields(plain), " ") // Normalize whitespace.
-		if len(plain) > 150 {
-			// Truncate at word boundary.
-			truncated := plain[:150]
-			if idx := strings.LastIndex(truncated, " "); idx > 100 {
-				truncated = truncated[:idx]
-			}
-			entryExcerpt = truncated + "..."
-		} else {
-			entryExcerpt = plain
-		}
+	if cfg.ShowEntry && entity.EntryHTML != nil {
+		entryExcerpt = previewExcerpt(*entity.EntryHTML, cc.MemberRole >= campaigns.RoleScribe)
 	}
 
 	// Resolve image path when popup config allows it.

@@ -281,26 +281,47 @@
       Chronicle.notify('Could not load the drawings on this map', 'error');
     }
 
-    function loadDrawings() {
-      Chronicle.apiFetch('/campaigns/' + campaignID + '/maps/' + mapID + '/drawings')
+    // fetchDrawings rejects on any failure, so a caller can keep what is on
+    // screen; the list is already filtered for this viewer by the server.
+    function fetchDrawings() {
+      return Chronicle.apiFetch('/campaigns/' + campaignID + '/maps/' + mapID + '/drawings')
         .then(function (res) {
           if (!res.ok) throw new Error('HTTP ' + res.status);
           return res.json();
         })
         .then(function (drawings) {
           if (!drawings || !Array.isArray(drawings)) throw new Error('unexpected response');
-          drawingLayer.clearLayers();
-          layersByID = {};
-          picReg = {};
-          picLive = {};
-          drawingCount = 0;
-          drawings.forEach(function (d) { renderDrawing(d); });
-          picReady = true;
-          picNotify('list');
-          notifyCount();
-        })
-        .catch(loadFailed);
+          return drawings;
+        });
     }
+
+    // applyDrawings replaces every drawing on the map with the given list.
+    function applyDrawings(drawings) {
+      drawingLayer.clearLayers();
+      layersByID = {};
+      picReg = {};
+      picLive = {};
+      drawingCount = 0;
+      drawings.forEach(function (d) { renderDrawing(d); });
+      picReady = true;
+      picNotify('list');
+      notifyCount();
+    }
+
+    function loadDrawings() {
+      fetchDrawings().then(applyDrawings).catch(loadFailed);
+    }
+
+    // A live refresh must not rebuild the layer under a tool in use: a shape
+    // half drawn, a picture selected for moving, cropping or resizing.
+    function drawingsBusy() {
+      return !!(activeTool || currentShape || currentPoints.length ||
+        (pictures && pictures.selectedId()));
+    }
+
+    // What the viewer's live refresh (map_live.js) drives for drawings,
+    // pictures and shadows, which all come from the one list.
+    ctx.liveDrawings = { fetch: fetchDrawings, apply: applyDrawings, busy: drawingsBusy };
 
     // --- Rendering ---
 

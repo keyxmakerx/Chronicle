@@ -22,6 +22,7 @@ import (
 	"github.com/keyxmakerx/chronicle/internal/changesource"
 	"github.com/keyxmakerx/chronicle/internal/extensions"
 	"github.com/keyxmakerx/chronicle/internal/middleware"
+	"github.com/keyxmakerx/chronicle/internal/notifyprefs"
 	"github.com/keyxmakerx/chronicle/internal/patch"
 	"github.com/keyxmakerx/chronicle/internal/permissions"
 	"github.com/keyxmakerx/chronicle/internal/plugins/addons"
@@ -540,6 +541,11 @@ func (a *backdropUploaderAdapter) OwnsFile(ctx context.Context, campaignID, file
 			return false, nil
 		}
 		return false, err
+	}
+	// A note picture or page file is readable only through what holds it; a
+	// campaign backdrop must not adopt one by its stored name.
+	if mf.IsBound() {
+		return false, nil
 	}
 	return mf.Filename == filename && mf.CampaignID != nil && *mf.CampaignID == campaignID, nil
 }
@@ -1352,6 +1358,11 @@ type mapEventPublisherAdapter struct {
 	// published to DM-equivalent clients only. Nil fails closed: with no way to
 	// tell, every pin and drawing event is restricted.
 	shadows maps.ShadowLookup
+	// frames reads a map's frame, to place a turned picture against shadows.
+	// Nil leaves the frame unknown, which withholds every turned picture.
+	frames interface {
+		MapFrame(ctx context.Context, mapID string) maps.MapFrame
+	}
 	// fog resolves a map's unexplored hexes so a pin or drawing wholly inside
 	// them is published to DM-equivalent clients only. Nil fails closed, like
 	// shadows.
@@ -1366,7 +1377,7 @@ type mapEventPublisherAdapter struct {
 // and the whole picture under unexplored hexes.
 func wireHexFog(mapsService maps.MapService, drawingService maps.DrawingService, events *mapEventPublisherAdapter, hexService maps.HexService) {
 	mapsService.SetHexFogLookup(hexService)
-	mapsService.SetFogMediaLookup(drawingService)
+	mapsService.SetPictureFileLookup(drawingService)
 	drawingService.SetHexFogLookup(hexService)
 	events.fog = hexService
 	hexService.SetEventPublisher(events)
@@ -1420,7 +1431,7 @@ func (a *mapImageSourceAdapter) ReadImage(ctx context.Context, campaignID, media
 	if err != nil {
 		return nil, err
 	}
-	if file.CampaignID == nil || *file.CampaignID != campaignID || !file.IsImage() {
+	if file.CampaignID == nil || *file.CampaignID != campaignID || !file.IsImage() || file.IsBound() {
 		return nil, apperror.NewNotFound("media file not found")
 	}
 	data, err := os.ReadFile(a.svc.FilePath(file))
@@ -1432,7 +1443,7 @@ func (a *mapImageSourceAdapter) ReadImage(ctx context.Context, campaignID, media
 
 // newMapEventPublisher builds the WebSocket publisher with its shadow lookup.
 func newMapEventPublisher(bus ws.EventBus, drawingService maps.DrawingService) *mapEventPublisherAdapter {
-	return &mapEventPublisherAdapter{bus: bus, shadows: drawingService}
+	return &mapEventPublisherAdapter{bus: bus, shadows: drawingService, frames: drawingService}
 }
 
 // underShadow reports whether an event about a pin or drawing on mapID must be
@@ -1495,6 +1506,42 @@ func (a *mapEventPublisherAdapter) PublishHexChanged(campaignID, mapID string, v
 	a.bus.Publish(ws.NewMessage(ws.MsgHexChanged, campaignID, mapID, payload))
 }
 
+// Kinds carried by PublishItemsChanged; the viewer maps each to a refetch.
+const (
+	mapItemsMarkers  = "markers"
+	mapItemsDrawings = "drawings"
+	mapItemsShadows  = "shadows"
+)
+
+// publishItemsChanged announces that something of one kind changed on a map.
+// It carries ids only: the viewer refetches through the role-filtered reads,
+// so DM-only, shadow and hex-fog rules stay decided in one place and nothing
+// secret rides this message. By default it goes to every client of the
+// campaign; creating or deleting a DM-only or rule-restricted pin or drawing
+// passes that item's audience (dmOnly, rules) so players are not told that a
+// hidden thing appeared or vanished. Updates and shadows stay open: a shadow
+// changes what players see, and an update may move an item into view. No
+// token notice exists: tokens have no layer on the web viewer, and a notice
+// per hidden drag would leak movement. It is
+// sent just before the per-item event (which stays audience-gated) because the
+// per-item event is not enough for a page to stay right: it cannot say what a
+// shadow or the fog now covers or uncovers.
+func (a *mapEventPublisherAdapter) publishItemsChanged(campaignID, mapID, kind string, dmOnly bool, rules *maps.VisibilityRules) {
+	if campaignID == "" || mapID == "" || a.bus == nil {
+		return
+	}
+	msg := ws.NewMessage(ws.MsgMapItemsChanged, campaignID, mapID, map[string]any{
+		"map_id": mapID,
+		"kind":   kind,
+	})
+	msg.RequiresDM = dmOnly
+	if rules != nil {
+		msg.AllowedUsers = rules.AllowedUsers
+		msg.DeniedUsers = rules.DeniedUsers
+	}
+	a.bus.Publish(msg)
+}
+
 // publishWithAudience wraps ws.NewMessage with the audience derived from
 // the source row: the binary RequiresDM (dm_only) flag, plus — for
 // markers and drawings, which carry per-user visibility_rules — the
@@ -1532,13 +1579,33 @@ func (a *mapEventPublisherAdapter) PublishDrawingEvent(eventType string, campaig
 	default:
 		return
 	}
-	// The picture a fogged hex layer is pinned to is DM-only on the wire too:
-	// its event carries the file id, which is the secret under the fog.
+	// A picture whose file the fog or a shadow withholds is DM-only on the
+	// wire too: its event carries the file id, which is the secret.
+	var frame maps.MapFrame
+	if a.frames != nil && maps.PictureIsTurned(drawing) {
+		ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+		frame = a.frames.MapFrame(ctx, drawing.MapID)
+		cancel()
+	}
 	dmOnly := drawing.Visibility == "dm_only" ||
 		(drawing.DrawingType != maps.DrawingTypeShadow &&
-			(a.underShadow(drawing.MapID, func(areas []maps.ShadowArea) bool { return maps.DrawingUnderShadow(areas, drawing) }) ||
+			(a.underShadow(drawing.MapID, func(areas []maps.ShadowArea) bool {
+				return maps.DrawingUnderShadow(areas, drawing) || maps.ShadowWithholdsImageOf(areas, drawing, frame)
+			}) ||
 				a.underFog(drawing.MapID, func(f *maps.FogMask) bool { return f.HidesDrawing(drawing) || f.WithholdsImageOf(drawing) })))
-	a.publishWithAudience(msgType, campaignID, drawing.ID, drawing, dmOnly, maps.ParseVisibilityRules(drawing.VisibilityRules))
+	// Shadows have their own kind so a viewer can tell that pins under or
+	// uncovered by them need a refetch too; pictures count as drawings.
+	kind := mapItemsDrawings
+	if drawing.DrawingType == maps.DrawingTypeShadow {
+		kind = mapItemsShadows
+	}
+	rules := maps.ParseVisibilityRules(drawing.VisibilityRules)
+	if kind == mapItemsShadows || eventType == "updated" {
+		a.publishItemsChanged(campaignID, drawing.MapID, kind, false, nil)
+	} else {
+		a.publishItemsChanged(campaignID, drawing.MapID, kind, dmOnly, rules)
+	}
+	a.publishWithAudience(msgType, campaignID, drawing.ID, drawing, dmOnly, rules)
 }
 
 // PublishTokenEvent translates map token domain events into WebSocket messages.
@@ -1653,7 +1720,13 @@ func (a *mapEventPublisherAdapter) PublishMarkerEvent(eventType string, campaign
 	dmOnly := marker.IsDMOnly() ||
 		a.underShadow(marker.MapID, func(areas []maps.ShadowArea) bool { return maps.MarkerUnderShadow(areas, marker) }) ||
 		a.underFog(marker.MapID, func(f *maps.FogMask) bool { return f.HidesMarker(marker) })
-	a.publishWithAudience(msgType, campaignID, marker.ID, marker, dmOnly, maps.ParseVisibilityRules(marker.VisibilityRules))
+	rules := maps.ParseVisibilityRules(marker.VisibilityRules)
+	if eventType == "updated" {
+		a.publishItemsChanged(campaignID, marker.MapID, mapItemsMarkers, false, nil)
+	} else {
+		a.publishItemsChanged(campaignID, marker.MapID, mapItemsMarkers, dmOnly, rules)
+	}
+	a.publishWithAudience(msgType, campaignID, marker.ID, marker, dmOnly, rules)
 }
 
 // (The campaigns show page lazy-loads the Foundry banner via
@@ -1725,6 +1798,11 @@ func (a *foundryCampaignOwnerLookupAdapter) GetCampaignOwnerEmail(ctx context.Co
 	user, err := a.authSvc.GetUser(ctx, c.CreatedBy)
 	if err != nil || user == nil {
 		return "", "", err
+	}
+	// An owner who switched module-update emails off gets no address, which
+	// the notify path already reads as "skip the email, keep the banner".
+	if len(a.authSvc.AllowedRecipients(ctx, []string{user.ID}, notifyprefs.ModuleUpdates, notifyprefs.Email)) == 0 {
+		return "", "", nil
 	}
 	display := user.DisplayName
 	if display == "" {
@@ -2215,7 +2293,7 @@ func (a *entityMediaVerifierAdapter) MediaExistsInCampaign(ctx context.Context, 
 		}
 		return false, err
 	}
-	if f == nil {
+	if f == nil || f.IsBound() {
 		return false, nil
 	}
 	return f.CampaignID != nil && *f.CampaignID == campaignID, nil
@@ -2241,7 +2319,7 @@ func (a *mapMediaVerifierAdapter) ImageInCampaign(ctx context.Context, mediaID, 
 		}
 		return false, err
 	}
-	if f == nil || f.CampaignID == nil || *f.CampaignID != campaignID {
+	if f == nil || f.IsBound() || f.CampaignID == nil || *f.CampaignID != campaignID {
 		return false, nil
 	}
 	return strings.HasPrefix(f.MimeType, "image/"), nil
@@ -2803,7 +2881,11 @@ func (a *App) RegisterRoutes() {
 	backupHandler := backup.NewHandler(backupSvc)
 	backupHandler.SetActivityRecorder(adminActivity)
 	backupHandler.SetDownloadAuth(signingSecret, auth.GetUserID)
+	backupHandler.SetScheduleStore(settingsRepo)
 	backup.RegisterRoutes(adminGroup, backupHandler, auth.RequireReauth(authService))
+
+	// Daily backup, when the owner turns it on under Admin > Backup.
+	go backup.NewScheduler(backupSvc, settingsRepo, backupFailureMailer{users: authRepo, mail: smtpService}).Run(a.ShutdownCtx)
 
 	// Admin Restore plugin: lists backup manifests in BACKUP_DIR and
 	// shells out to scripts/restore.sh under a typed-RESTORE
@@ -2891,6 +2973,12 @@ func (a *App) RegisterRoutes() {
 
 	// Campaign media browser routes (gated behind media-gallery addon).
 	media.RegisterCampaignRoutes(e, mediaHandler, campaignService, authService, addonService)
+
+	// Files attached to a page. Who may see, add or remove one is the page's
+	// own rule, asked of the entities service, never of text that mentions it.
+	pageFileService := media.NewPageFileService(media.NewPageFileRepository(a.DB), mediaService, &pageAccessAdapter{svc: entityService})
+	pageFileHandler := media.NewPageFileHandler(pageFileService, mediaService)
+	media.RegisterPageFileRoutes(e, pageFileHandler, campaignService, authService, resolveMaxUpload, a.Config.Upload.ServeRateLimit)
 
 	// Wire addon count into admin dashboard for the Extensions stat card.
 	adminHandler.SetAddonCounter(addonService)
@@ -3165,6 +3253,7 @@ func (a *App) RegisterRoutes() {
 	// Wire security event logging into the media handler so uploads, deletes,
 	// and quota failures are recorded in the admin security dashboard.
 	mediaHandler.SetSecurityLogger(securityService)
+	pageFileHandler.SetSecurityLogger(securityService)
 
 	// foundry_vtt sub-plugin: the Foundry-VTT-specific extension to the
 	// generic packages plugin. Owns every Foundry-specific behavior:
@@ -3566,6 +3655,10 @@ func (a *App) RegisterRoutes() {
 	sessionsHandler := sessions.NewHandler(sessionsService)
 	sessionsHandler.SetMemberLister(campaignService)
 	sessionsHandler.SetMailSender(smtpService, a.Config.BaseURL)
+	// People's notification choices (Account settings) filter the bell and
+	// the game-night emails.
+	sessionsHandler.SetRecipientFilter(authService)
+	sessions.ConfigureRecipientFilter(sessionsService, authService)
 	// Game-night links open the real-world calendar; with the calendar plugin
 	// down they keep going to the Sessions page.
 	if a.PluginHealth.IsHealthy(calendar.PluginSlug) {
@@ -3866,6 +3959,10 @@ func (a *App) RegisterRoutes() {
 	noteHandler := notes.NewHandler(noteSvc)
 	noteHandler.SetAttachmentService(noteSvc)
 	noteHandler.SetMediaUploader(&mediaUploadAdapter{svc: mediaService})
+	noteHandler.SetPictureUploader(&mediaUploadAdapter{svc: mediaService})
+	// Who may open a picture in a note is decided by who can read the notes
+	// holding it, asked of the notes service rather than its tables.
+	mediaHandler.SetNoteMediaAccess(&noteMediaAccessAdapter{svc: noteSvc})
 	noteHandler.SetMemberLister(campaignService)
 	noteHandler.SetCharacterLister(&journalCharacterAdapter{svc: entityService})
 	notePages := &notesPagesAdapter{svc: entityService}
@@ -5152,6 +5249,13 @@ func (a *App) RegisterRoutes() {
 		}
 		return m.DrawWho(), nil
 	})
+	drawingService.SetMapFrameLookup(func(ctx context.Context, mapID string) (int, int, error) {
+		m, err := mapsService.GetMap(ctx, mapID)
+		if err != nil {
+			return 0, 0, err
+		}
+		return m.ImageWidth, m.ImageHeight, nil
+	})
 	drawingService.SetMediaVerifier(&mapMediaVerifierAdapter{svc: mediaService})
 	mapsService.SetEventPublisher(mapEvents)
 	wireHexFog(mapsService, drawingService, mapEvents, hexService)
@@ -5312,6 +5416,56 @@ func (a *mediaUploadAdapter) UploadRaw(ctx context.Context, campaignID, userID s
 		return "", err
 	}
 	return file.Filename, nil
+}
+
+// UploadPicture stores a picture written into a note and returns its media id.
+func (a *mediaUploadAdapter) UploadPicture(ctx context.Context, campaignID, userID string, fileBytes []byte, originalName, mimeType string) (string, error) {
+	file, err := a.svc.Upload(ctx, media.UploadInput{
+		CampaignID:   campaignID,
+		UploadedBy:   userID,
+		OriginalName: originalName,
+		MimeType:     mimeType,
+		FileSize:     int64(len(fileBytes)),
+		UsageType:    media.UsageNoteImage,
+		FileBytes:    fileBytes,
+	})
+	if err != nil {
+		return "", err
+	}
+	return file.ID, nil
+}
+
+// noteMediaAccessAdapter answers the media plugin's note-picture question
+// over the notes service, so media never touches note tables.
+type noteMediaAccessAdapter struct {
+	svc notes.NoteService
+}
+
+func (a *noteMediaAccessAdapter) CanReadNoteMedia(ctx context.Context, campaignID, mediaID string, role int, userID string) (bool, error) {
+	return a.svc.ViewerReadsMedia(ctx, campaignID, mediaID, permissions.RequestViewer(role, userID))
+}
+
+// pageAccessAdapter answers the media plugin's page-file question over the
+// entities service, so media never reads entity tables or repeats the page
+// visibility rule.
+type pageAccessAdapter struct {
+	svc entities.EntityService
+}
+
+// PageAccess says whether the viewer can see the page (which is false for a
+// page that is missing, in another campaign, in the Trash, or hidden from
+// them) and whether they can edit it. Editing is only asked of a page already
+// found visible, because CheckEntityAccess alone does not scope to a campaign.
+func (a *pageAccessAdapter) PageAccess(ctx context.Context, campaignID, entityID string, role int, userID string) (media.PageAccess, error) {
+	viewable, err := a.svc.FilterViewableEntityIDs(ctx, campaignID, []string{entityID}, role, userID)
+	if err != nil || !viewable[entityID] {
+		return media.PageAccess{}, err
+	}
+	ep, err := a.svc.CheckEntityAccess(ctx, entityID, role, userID)
+	if err != nil {
+		return media.PageAccess{}, err
+	}
+	return media.PageAccess{CanView: true, CanEdit: ep.CanEdit}, nil
 }
 
 // aiMapsAdapter is the maps service in AI Import's pin types, so the

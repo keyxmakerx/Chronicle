@@ -176,7 +176,7 @@ func TestUpdateTokenPosition_EventNamesTheMap(t *testing.T) {
 	}
 }
 
-func TestFogWithholdsMedia(t *testing.T) {
+func TestWithholdsPictureFile(t *testing.T) {
 	img := "media-1"
 	for _, tc := range []struct {
 		name   string
@@ -195,7 +195,7 @@ func TestFogWithholdsMedia(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			svc := NewDrawingService(&fogWriteRepo{d: tc.d})
 			svc.SetHexFogLookup(tc.lookup)
-			got, err := svc.FogWithholdsMedia(context.Background(), "map-1", tc.media)
+			got, err := svc.WithholdsPictureFile(context.Background(), "map-1", tc.media)
 			if got != tc.want || (err != nil) != tc.err {
 				t.Errorf("got %v, %v; want %v, err=%v", got, err, tc.want, tc.err)
 			}

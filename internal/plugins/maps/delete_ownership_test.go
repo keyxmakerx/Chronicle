@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"github.com/keyxmakerx/chronicle/internal/permissions"
+	"github.com/keyxmakerx/chronicle/internal/plugins/auth"
 	"github.com/keyxmakerx/chronicle/internal/plugins/campaigns"
 )
 
@@ -115,10 +116,6 @@ func TestDeleteDrawing_DmOnlyOfOthersIsNotFoundForScribe(t *testing.T) {
 	}
 }
 
-type fakeSession struct{ id string }
-
-func (f fakeSession) GetUserID() string { return f.id }
-
 // TestDeleteMarkerAPI_ScribeOwnVsOther runs the real handler: a scribe's
 // session user id and campaign role must reach the service rule.
 func TestDeleteMarkerAPI_ScribeOwnVsOther(t *testing.T) {
@@ -147,7 +144,7 @@ func TestDeleteMarkerAPI_ScribeOwnVsOther(t *testing.T) {
 			c.SetParamValues("camp-1", "map-1", "mk-public")
 			c.Set("campaign_context", dmWriteCampaignCtx(campaigns.RoleScribe, false))
 			if tc.userID != "" {
-				c.Set("session", fakeSession{tc.userID})
+				auth.SetSession(c, &auth.Session{UserID: tc.userID})
 			}
 			err := h.DeleteMarkerAPI(c)
 			if tc.wantCode == 0 {
