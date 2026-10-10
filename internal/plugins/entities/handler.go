@@ -3471,10 +3471,9 @@ func (h *Handler) invalidateCachePattern(ctx context.Context, pattern string) {
 
 // --- Player Character Experience (CH2 + CH3) ---
 
-// MyCharacters renders the per-campaign "My Characters" landing page for
-// the current player. Lists every entity in this campaign owned by the
-// caller, ordered most-recently-updated first. Card grid links into the
-// standard entity show page.
+// MyCharacters answers the old "My Characters" address. A player's own
+// characters are the Yours band on the Characters page, so old links and
+// bookmarks go there.
 //
 // Route: GET /campaigns/:id/me  (Player+ role required by the route group).
 func (h *Handler) MyCharacters(c echo.Context) error {
@@ -3482,16 +3481,7 @@ func (h *Handler) MyCharacters(c echo.Context) error {
 	if cc == nil {
 		return apperror.NewMissingContext()
 	}
-	userID := auth.GetUserID(c)
-	if userID == "" {
-		return apperror.NewUnauthorized("authentication required")
-	}
-
-	chars, err := h.service.ListByOwner(c.Request().Context(), cc.Campaign.ID, userID)
-	if err != nil {
-		return err
-	}
-	return middleware.Render(c, http.StatusOK, MyCharactersPage(cc, chars))
+	return c.Redirect(http.StatusSeeOther, fmt.Sprintf("/campaigns/%s/characters", cc.Campaign.ID))
 }
 
 // CastTagSlug is the conventional tag a GM applies to an NPC to feature it in
@@ -3824,7 +3814,7 @@ func (h *Handler) ClaimEntity(c echo.Context) error {
 	// ACL guard: a player may only claim a character they can actually see.
 	// The claim button only renders on entities the player can view, but a
 	// hand-rolled POST with a known UUID would otherwise let a player claim
-	// (and, via the non-visibility-filtered "My Characters" list, learn the
+	// (and, via the non-visibility-filtered Yours band, learn the
 	// name of) a hidden character. Use the real member role, promoted via
 	// cc.VisibilityRole() the same way Show does — a Co-DM must be able to
 	// claim a dm_only character exactly as they can open its Show page — not
