@@ -26,14 +26,6 @@ type CalendarAPI interface {
 	ClearDayWeather(ctx context.Context, calendarID, campaignID string, dates []calendar.DayDate) error
 }
 
-func defaultCalendar(ctx context.Context, svc CalendarAPI, campaignID string, a Actor) (*calendar.Calendar, error) {
-	cal, err := svc.GetDefaultCalendarForViewer(ctx, campaignID, a.Viewer())
-	if err != nil || cal == nil {
-		return nil, apperror.NewBadRequest("this campaign has no calendar yet")
-	}
-	return cal, nil
-}
-
 // readDate reads year/month/day keys (with a prefix such as "end_"). Month
 // may be a number or one of the calendar's month names.
 func readDate(cal *calendar.Calendar, r Record, prefix string) (y, m, d int, present bool, err error) {
@@ -104,6 +96,9 @@ func (EventKind) Doc() string {
 
 // find returns the event this record names; a date narrows same-named events.
 func (k EventKind) find(ctx context.Context, campaignID string, a Actor, cal *calendar.Calendar, r Record) (*calendar.Event, error) {
+	if cal.ID == "" {
+		return nil, nil // a calendar this import has yet to make holds no events
+	}
 	// Role-filtered, so the operator matches only events they can see.
 	evs, err := k.Svc.ListEventsForCalendar(ctx, campaignID, cal.ID, a.Role)
 	if err != nil {
@@ -331,6 +326,9 @@ func (k WeatherKind) Plan(ctx context.Context, campaignID string, a Actor, r Rec
 // day, which the owner may not expect from an import. A failed read just
 // means no warning; the write itself is unaffected.
 func (k WeatherKind) dayWarning(ctx context.Context, campaignID string, a Actor, cal *calendar.Calendar, y, m, d int, clearing bool) []string {
+	if cal.ID == "" {
+		return nil
+	}
 	days, err := k.Svc.ListDayWeather(ctx, cal.ID, campaignID, y, m, a.Viewer())
 	if err != nil {
 		return nil

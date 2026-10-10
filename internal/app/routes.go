@@ -5228,6 +5228,7 @@ func (a *App) RegisterRoutes() {
 	// Wired here, after the rulebook and rolling tables exist; a degraded
 	// plugin's kind is left out, so its blocks are refused at review.
 	aiKinds := []records.Kind{
+		records.CalendarKind{Svc: calendarService},
 		records.EventKind{Svc: calendarService},
 		records.WeatherKind{Svc: calendarService},
 	}

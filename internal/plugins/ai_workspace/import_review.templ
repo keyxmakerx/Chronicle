@@ -9,6 +9,7 @@ package ai_workspace
 import (
 	"fmt"
 	"strconv"
+	"strings"
 
 	"github.com/keyxmakerx/chronicle/internal/plugins/ai_workspace/importer"
 	"github.com/keyxmakerx/chronicle/internal/plugins/campaigns"
@@ -42,7 +43,13 @@ type ReviewSummary struct {
 	Conflicts  int
 	NewCategories int
 	ParseErrors int
+	// Blocked counts records the review refused (a missing calendar, a
+	// bad key), kept apart from blocks whose markdown would not parse.
+	Blocked int
 }
+
+// skipped is every row the import leaves out whatever the operator ticks.
+func (s ReviewSummary) skipped() int { return s.ParseErrors + s.Blocked }
 
 // ImportReview renders the review fragment + the bulk-defaults bar
 // + the Submit button. HTMX swaps this into #ai-import-review-host.
@@ -101,6 +108,9 @@ templ ImportReview(d ImportReviewData) {
 			{ fmt.Sprintf("%d %s", d.SummaryCounts.Conflicts, pluralize("conflict", "conflicts", d.SummaryCounts.Conflicts)) } ·
 			{ fmt.Sprintf("%d new %s", d.SummaryCounts.NewCategories, pluralize("category", "categories", d.SummaryCounts.NewCategories)) } ·
 			{ fmt.Sprintf("%d parse %s", d.SummaryCounts.ParseErrors, pluralize("error", "errors", d.SummaryCounts.ParseErrors)) }
+			if d.SummaryCounts.Blocked > 0 {
+				· { fmt.Sprintf("%d can't be imported yet", d.SummaryCounts.Blocked) }
+			}
 		</div>
 
 		if len(d.Pages) > 0 {
@@ -124,7 +134,7 @@ templ ImportReview(d ImportReviewData) {
 			// creates entities (per-row autonomy) and any confirmed
 			// new categories, then swaps in the import_result
 			// fragment.
-			if d.SummaryCounts.ParseErrors > 0 {
+			if d.SummaryCounts.skipped() > 0 {
 				<button
 					id="ai-import-submit"
 					type="submit"
@@ -149,9 +159,9 @@ templ ImportReview(d ImportReviewData) {
 			<span id="ai-import-committing" class="htmx-indicator text-xs text-fg-muted" role="status" aria-live="polite">
 				<i class="fa-solid fa-spinner fa-spin mr-1" aria-hidden="true"></i> Committing...
 			</span>
-			if d.SummaryCounts.ParseErrors > 0 {
+			if d.SummaryCounts.skipped() > 0 {
 				<span id="ai-import-parse-errors-note" class="text-xs text-fg-muted">
-					{ fmt.Sprintf("(%d parse-error %s will be skipped)", d.SummaryCounts.ParseErrors, pluralize("row", "rows", d.SummaryCounts.ParseErrors)) }
+					{ skippedNote(d.SummaryCounts) }
 				</span>
 			}
 		</div>
@@ -208,6 +218,19 @@ templ ImportReview(d ImportReviewData) {
 }
 
 // pluralize returns singular when n==1, plural otherwise.
+// skippedNote says which rows the import leaves out and why, so a block
+// waiting on a calendar is not reported as markdown that failed to parse.
+func skippedNote(s ReviewSummary) string {
+	var parts []string
+	if s.ParseErrors > 0 {
+		parts = append(parts, fmt.Sprintf("%d parse-error %s", s.ParseErrors, pluralize("row", "rows", s.ParseErrors)))
+	}
+	if s.Blocked > 0 {
+		parts = append(parts, fmt.Sprintf("%d %s that can't be imported yet", s.Blocked, pluralize("row", "rows", s.Blocked)))
+	}
+	return "(" + strings.Join(parts, " and ") + " will be skipped)"
+}
+
 func pluralize(singular, plural string, n int) string {
 	if n == 1 {
 		return singular
