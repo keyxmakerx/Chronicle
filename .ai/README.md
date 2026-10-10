@@ -22,7 +22,7 @@ which code comments still cite; Cordinator is otherwise a frozen archive.
 | `glossary.md` | TTRPG and Chronicle terminology |
 | `troubleshooting.md` | Non-obvious problems and their fixes, including the test-environment ones |
 | `plugin-development.md` | Building WASM extensions |
-| `designs/` | Designs. `2026-09-12-build-order.md` and `2026-09-12-header-and-nav.md` are approved and mostly unbuilt; their Apps drawer is superseded by the sidebar signed on #739 (Pinned + folding sections). `2026-09-13-media-renovation.md` is the media plan; its open decisions are tracked in #733. |
+| `designs/` | `2026-09-13-media-renovation.md` is the media plan; its slices and open decisions are tracked in #733. The header and navigation plans are built and their issues closed (#739); the header's last parts are #881 and #959. |
 
 `status.md` and `todo.md` are pointers to the issues now. Finished plans,
 audits and old designs were deleted; git history keeps them.
