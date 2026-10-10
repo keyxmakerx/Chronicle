@@ -5,8 +5,8 @@ import (
 	"errors"
 	"testing"
 
-	"github.com/keyxmakerx/chronicle/internal/patch"
 	"github.com/keyxmakerx/chronicle/internal/apperror"
+	"github.com/keyxmakerx/chronicle/internal/patch"
 	"github.com/keyxmakerx/chronicle/internal/sanitize"
 )
 
@@ -25,6 +25,7 @@ type mockMapRepo struct {
 	deleteMarkerFn func(ctx context.Context, id string) error
 	listMarkersFn  func(ctx context.Context, mapID string, role int) ([]Marker, error)
 	listedUserID   string // the viewer id the last ListMarkers call filtered for
+	linkSources    []string
 
 	campaignFrame    string
 	getFrameErr      error
@@ -118,6 +119,10 @@ func (m *mockMapRepo) ListMarkers(ctx context.Context, mapID string, role int, u
 		return m.listMarkersFn(ctx, mapID, role)
 	}
 	return nil, nil
+}
+
+func (m *mockMapRepo) ListLinkSourceMaps(context.Context, string) ([]string, error) {
+	return m.linkSources, nil
 }
 
 // --- Test Helpers ---
