@@ -3514,6 +3514,18 @@ components:
         entity_id:
           type: string
           nullable: true
+        linked_map_id:
+          type: string
+          description: >-
+            The map this pin opens: another map of the same campaign, never the
+            pin's own. Omitted when the pin opens nothing. On create and update
+            it is partial like every marker field: absent keeps it, null or ""
+            clears it, a value replaces it. A missing map and another
+            campaign's map are refused with the same 422.
+        linked_map_name:
+          type: string
+          readOnly: true
+          description: Name of the linked map, for display. Omitted with linked_map_id.
         visibility:
           type: string
         created_by:
