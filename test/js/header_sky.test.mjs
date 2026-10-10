@@ -1,7 +1,7 @@
-// header_sky.test.mjs — the header's Sky background (#959):
+// header_sky.test.mjs — the header's Sky background:
 // static/js/widgets/header_sky.js, drawing with SkyPane.Scene from sky_pane.js.
 //
-// Pins what the signed design promises: it reads the campaign's own calendar
+// Pins what the header's Sky background promises: it reads the campaign's own calendar
 // and that day's events and weather, fills the header, shows only once drawn,
 // holds still under reduced motion, stops asking for frames at rest and
 // starts again on wake, and leaves the still night showing when it cannot
