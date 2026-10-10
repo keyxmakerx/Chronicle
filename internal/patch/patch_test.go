@@ -167,3 +167,31 @@ func TestField_BadJSONErrors(t *testing.T) {
 		t.Fatal("want a decode error for a type mismatch inside Field")
 	}
 }
+
+func TestHasRawValue(t *testing.T) {
+	type body struct {
+		Doc json.RawMessage `json:"doc"`
+	}
+	tests := []struct {
+		name string
+		json string
+		want bool
+	}{
+		{"absent key", `{}`, false},
+		{"explicit null", `{"doc":null}`, false},
+		{"object", `{"doc":{"a":1}}`, true},
+		{"array", `{"doc":[]}`, true},
+		{"string", `{"doc":"x"}`, true},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			var b body
+			if err := json.Unmarshal([]byte(tt.json), &b); err != nil {
+				t.Fatalf("unmarshal: %v", err)
+			}
+			if got := HasRawValue(b.Doc); got != tt.want {
+				t.Errorf("HasRawValue(%q) = %v, want %v", b.Doc, got, tt.want)
+			}
+		})
+	}
+}

@@ -4,6 +4,8 @@ import (
 	"context"
 	"encoding/json"
 	"time"
+
+	"github.com/keyxmakerx/chronicle/internal/patch"
 )
 
 // --- Visibility constants ---
@@ -137,12 +139,15 @@ type CreatePublicationInput struct {
 }
 
 // UpdatePublicationInput is the validated input for updating a publication.
+// It is a PARTIAL update: an absent key preserves, an explicit null clears a
+// nullable column (description, flavor text) and preserves a required one
+// (name, statblock, tags).
 type UpdatePublicationInput struct {
-	Name          *string         `json:"name,omitempty"`
-	Description   *string         `json:"description,omitempty"`
-	FlavorText    *string         `json:"flavor_text,omitempty"`
-	Tags          json.RawMessage `json:"tags,omitempty"`
-	StatblockJSON json.RawMessage `json:"statblock_json,omitempty"`
+	Name          patch.Field[string] `json:"name"`
+	Description   patch.Field[string] `json:"description"`
+	FlavorText    patch.Field[string] `json:"flavor_text"`
+	Tags          json.RawMessage     `json:"tags,omitempty"`
+	StatblockJSON json.RawMessage     `json:"statblock_json,omitempty"`
 }
 
 // ChangeVisibilityInput is the validated input for changing publication visibility.
@@ -178,10 +183,10 @@ type PublicationSummary struct {
 // PublicationListResult is a paginated list of publication summaries.
 type PublicationListResult struct {
 	Results    []PublicationSummary `json:"results"`
-	Total      int                 `json:"total"`
-	Page       int                 `json:"page"`
-	PerPage    int                 `json:"per_page"`
-	TotalPages int                 `json:"total_pages"`
+	Total      int                  `json:"total"`
+	Page       int                  `json:"page"`
+	PerPage    int                  `json:"per_page"`
+	TotalPages int                  `json:"total_pages"`
 }
 
 // ReviewListResult is a paginated list of ratings with review text.
