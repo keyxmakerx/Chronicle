@@ -2,7 +2,10 @@ package app
 
 import (
 	"errors"
+	"os"
+	"path/filepath"
 	"reflect"
+	"strings"
 	"testing"
 
 	"github.com/keyxmakerx/chronicle/internal/plugins/foundry_vtt"
@@ -110,6 +113,7 @@ func TestBuildWidgetManifest(t *testing.T) {
 	hash := func(p string) string { return p + "?v=h" }
 	tests := []struct {
 		name    string
+		core    []PluginWidget
 		regs    []PluginRegistration
 		want    map[string][]string
 		wantErr bool
@@ -147,10 +151,31 @@ func TestBuildWidgetManifest(t *testing.T) {
 			want:    map[string][]string{"ok": {"/static/plugins/a/js/ok.js?v=h"}},
 			wantErr: true,
 		},
+		{
+			name: "core widgets use site paths, in order",
+			core: []PluginWidget{{Name: "journal", Scripts: []string{"/static/js/widgets/journal_list.js", "/static/js/widgets/journal.js"}}},
+			want: map[string][]string{"journal": {"/static/js/widgets/journal_list.js?v=h", "/static/js/widgets/journal.js?v=h"}},
+		},
+		{
+			name: "a core script that isn't a site path is left out",
+			core: []PluginWidget{
+				{Name: "bad", Scripts: []string{"/static/js/a.js", "js/b.js"}},
+				{Name: "ok", Scripts: []string{"/static/js/ok.js"}},
+			},
+			want:    map[string][]string{"ok": {"/static/js/ok.js?v=h"}},
+			wantErr: true,
+		},
+		{
+			name:    "core keeps a name a plugin also claims",
+			core:    []PluginWidget{{Name: "w", Scripts: []string{"/static/js/w.js"}}},
+			regs:    []PluginRegistration{{Slug: "a", Widgets: []PluginWidget{{Name: "w", Scripts: []string{"js/w.js"}}}}},
+			want:    map[string][]string{"w": {"/static/js/w.js?v=h"}},
+			wantErr: true,
+		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got, err := buildWidgetManifest(tt.regs, hash)
+			got, err := buildWidgetManifest(tt.core, tt.regs, hash)
 			if (err != nil) != tt.wantErr {
 				t.Fatalf("err = %v, wantErr %v", err, tt.wantErr)
 			}
@@ -158,5 +183,26 @@ func TestBuildWidgetManifest(t *testing.T) {
 				t.Errorf("manifest = %v, want %v", got, tt.want)
 			}
 		})
+	}
+}
+
+// TestCoreWidgetsLoad checks the shipped core widget list against the files
+// it names: each script exists, and the last one registers the widget, so a
+// rename can't leave a mount silently empty.
+func TestCoreWidgetsLoad(t *testing.T) {
+	if _, err := buildWidgetManifest(coreWidgets, nil, func(p string) string { return p }); err != nil {
+		t.Fatalf("core widget list: %v", err)
+	}
+	for _, w := range coreWidgets {
+		for i, s := range w.Scripts {
+			src, err := os.ReadFile(filepath.Join("..", "..", strings.TrimPrefix(s, "/")))
+			if err != nil {
+				t.Errorf("%s: %v", w.Name, err)
+				continue
+			}
+			if i == len(w.Scripts)-1 && !strings.Contains(string(src), "Chronicle.register('"+w.Name+"'") {
+				t.Errorf("%s: %s does not call Chronicle.register('%s', …)", w.Name, s, w.Name)
+			}
+		}
 	}
 }

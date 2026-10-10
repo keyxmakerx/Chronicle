@@ -45,7 +45,7 @@ sidebar active link highlighting, and shared utilities.
 | `Chronicle.apiFetch(url, opts)` | Fetch wrapper with CSRF header injection. Inside an outside app's frame (`Chronicle.embed` set by `notes_embed.js`) a `/campaigns/...` URL is rewritten to `/api/notes-app/campaigns/...` with the embed's bearer token |
 | `Chronicle.embed` | Set by `notes_embed.js` in an outside app's frame: `{ token, go }`; absent on the site |
 | `Chronicle.go(url)` | Navigates to a Chronicle address; in an embed frame `Chronicle.embed.go` decides (page in a new tab, Journal note in the app's notebook) |
-| `Chronicle.openJournalNote(id)` | Set by the Journal widget while mounted; opens a note in it and returns whether it did |
+| `Chronicle.openJournalNote(id)` | Set by the Journal widget while mounted; opens a note in it and returns whether it did. The Journal loads on sight, so it fires `chronicle:journal-ready` (window) once mounted for callers holding a note |
 | `Chronicle.isReauthResponse(xhr)` | True for a 403 carrying `HX-Trigger: reauth-required` (the password re-confirm flow) |
 
 ## DOM Events

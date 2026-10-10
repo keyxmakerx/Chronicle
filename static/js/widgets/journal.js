@@ -2835,6 +2835,9 @@
       document.addEventListener('keydown', j.onDocKey);
       document.addEventListener('pointerdown', j.onDocPointer);
       document.addEventListener('visibilitychange', j.onVisibility);
+      // This script loads on sight, so a note asked for before it arrived
+      // (the notebook frame) is opened by whoever was holding it.
+      window.dispatchEvent(new CustomEvent('chronicle:journal-ready'));
     },
     destroy: function (el) {
       var j = el._journal;
