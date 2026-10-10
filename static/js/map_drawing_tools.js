@@ -2,17 +2,19 @@
  * map_drawing_tools.js -- Chronicle Map Drawing Tools
  *
  * Renders saved drawings for everyone and, for Scribe+, provides the drawing
- * tools (freehand, rectangle, polygon, ellipse, text, shadow) and pictures on Leaflet's native APIs
- * (no Leaflet.Draw dependency). It owns no UI: the map page's floating tool rail
+ * tools (freehand, arrow, rectangle, ellipse, polygon, highlighter, numbered
+ * step, speech bubble, text, shadow) and pictures on Leaflet's native APIs
+ * (no Leaflet.Draw dependency). The four annotations are drawn, and the in-map
+ * text editor and delete confirm built, by map_annotations.js. It owns no UI: the map page's floating tool rail
  * drives it through `window.chronicleMap.draw`, so there is one control surface.
  *
  * Expects a global `window.chronicleMap` object set by the map show page:
  *   { map, campaignID, mapID, imageW, imageH, isScribe,
  *     onDrawingsChange(count), onUndoChange(count) }
  * and publishes `window.chronicleMap.draw` =
- *   { start(shape), cancel(), setStyle({color,width}), setShadowStrength(alpha), undo(),
+ *   { start(shape), cancel(), setStyle({color,width,picked}), setShadowStrength(alpha), undo(),
  *     setVisible(bool), count(), addPicture({id}), pictureSelectMode(bool),
- *     escape(), deleteSelected() }
+ *     escape(), deleteSelected(), nextStep() }
  * and `window.chronicleMap.pictures` (when the picture module is present), which
  * the hex layer reads: { ready(), get(id), list(), subscribe(fn), straighten(id) }.
  *
@@ -78,6 +80,11 @@
       if (kind === 'geo') picLive[id] = points; else delete picLive[id];
       picNotify(kind, id);
     }
+    // mayChange mirrors the server: owners and DM access change or delete any
+    // drawing, a scribe only the ones they made.
+    function mayChange(d) {
+      return !!(ctx.isOwner || ctx.canDmOnly || (ctx.userID && d && d.created_by === ctx.userID));
+    }
     var pictures = window.ChronicleMapPictures ? window.ChronicleMapPictures.attach(map, {
       mapW: w,
       mapH: h,
@@ -91,12 +98,10 @@
           .then(function (res) { return res.ok ? res.json() : null; })
           .then(function (fresh) { return fresh && fresh.image_url ? fresh.image_url : ''; });
       },
-      canEdit: !!isScribe,
-      // The server's delete rule: owners and DM access any picture, a scribe
-      // the ones they added.
-      canDelete: function (d) {
-        return !!(ctx.isOwner || ctx.canDmOnly || (ctx.userID && d.created_by === ctx.userID));
-      },
+      // The server's rule for changing and deleting alike: owners and DM
+      // access any picture, a scribe the ones they added.
+      canEdit: function (d) { return !!isScribe && mayChange(d); },
+      canDelete: mayChange,
       onPatch: patchDrawing,
       onDelete: confirmDelete,
       onChange: pictureChanged,
@@ -147,6 +152,14 @@
     var currentShape = null;
     var drawColor = '#2563eb';
     var drawWidth = 4;
+    // Whether the person picked a colour; until they do, the highlighter is
+    // the classic yellow rather than the rail's default blue.
+    var colorPicked = false;
+    var HIGHLIGHT_DEFAULT = '#facc15';
+    // Step numbers being saved, counted as on the map so quick clicks never
+    // reuse a number.
+    var pendingSteps = [];
+    var Ann = window.ChronicleMapAnnotations || null;
     // Layers by drawing id, and the ids created in THIS page session in order.
     // Undo only ever walks the session stack, so it can never reach back and
     // delete a drawing someone else made earlier.
@@ -186,6 +199,7 @@
         visibility: 'everyone'
       };
       if (opts.text_content) body.text_content = opts.text_content;
+      if (opts.font_size) body.font_size = opts.font_size;
       if (opts.image_id) body.image_id = opts.image_id;
       if (opts.sort_order) body.sort_order = opts.sort_order;
 
@@ -202,6 +216,11 @@
           });
         }
         return res.json();
+      }).catch(function () {
+        // A dropped connection resolves to null like a refusal, so every tool
+        // clears its preview and a step gives back its number.
+        Chronicle.notify('Failed to save drawing', 'error');
+        return null;
       });
     }
 
@@ -223,17 +242,27 @@
       });
     }
 
-    // The same confirm the right-click delete uses; the server still decides
-    // who may delete.
-    function confirmDelete(id) {
-      if (!confirm('Delete this drawing?')) return;
-      deleteDrawing(id).then(function (res) {
-        if (res && res.ok) {
-          forget(id);
-          notifyCount();
-          return;
+    // The same in-map confirm the right-click delete uses, beside the drawing
+    // when there is a point to put it at; the server still decides who may
+    // delete.
+    function confirmDelete(id, latlng) {
+      if (!Ann) return;
+      Ann.confirmAt({
+        map: map,
+        latlng: latlng || null,
+        title: 'Delete drawing',
+        message: 'Delete this drawing? It cannot be brought back, except with Undo right after you drew it.',
+        confirmLabel: 'Delete',
+        onConfirm: function () {
+          deleteDrawing(id).then(function (res) {
+            if (res && res.ok) {
+              forget(id);
+              notifyCount();
+              return;
+            }
+            Chronicle.notify(res && res.status === 403 ? 'You can only delete drawings you created' : 'Could not delete that drawing', 'error');
+          });
         }
-        Chronicle.notify(res && res.status === 403 ? 'Only owners can delete drawings' : 'Could not delete that drawing', 'error');
       });
     }
 
@@ -252,30 +281,53 @@
       Chronicle.notify('Could not load the drawings on this map', 'error');
     }
 
-    function loadDrawings() {
-      Chronicle.apiFetch('/campaigns/' + campaignID + '/maps/' + mapID + '/drawings')
+    // fetchDrawings rejects on any failure, so a caller can keep what is on
+    // screen; the list is already filtered for this viewer by the server.
+    function fetchDrawings() {
+      return Chronicle.apiFetch('/campaigns/' + campaignID + '/maps/' + mapID + '/drawings')
         .then(function (res) {
           if (!res.ok) throw new Error('HTTP ' + res.status);
           return res.json();
         })
         .then(function (drawings) {
           if (!drawings || !Array.isArray(drawings)) throw new Error('unexpected response');
-          drawingLayer.clearLayers();
-          layersByID = {};
-          picReg = {};
-          picLive = {};
-          drawingCount = 0;
-          drawings.forEach(function (d) { renderDrawing(d); });
-          picReady = true;
-          picNotify('list');
-          notifyCount();
-        })
-        .catch(loadFailed);
+          return drawings;
+        });
     }
+
+    // applyDrawings replaces every drawing on the map with the given list.
+    function applyDrawings(drawings) {
+      drawingLayer.clearLayers();
+      layersByID = {};
+      picReg = {};
+      picLive = {};
+      drawingCount = 0;
+      drawings.forEach(function (d) { renderDrawing(d); });
+      picReady = true;
+      picNotify('list');
+      notifyCount();
+    }
+
+    function loadDrawings() {
+      fetchDrawings().then(applyDrawings).catch(loadFailed);
+    }
+
+    // A live refresh must not rebuild the layer under a tool in use: a shape
+    // half drawn, a picture selected for moving, cropping or resizing.
+    function drawingsBusy() {
+      return !!(activeTool || currentShape || currentPoints.length ||
+        (pictures && pictures.selectedId()));
+    }
+
+    // What the viewer's live refresh (map_live.js) drives for drawings,
+    // pictures and shadows, which all come from the one list.
+    ctx.liveDrawings = { fetch: fetchDrawings, apply: applyDrawings, busy: drawingsBusy };
 
     // --- Rendering ---
 
-    function renderDrawing(d) {
+    // animate is true only for a drawing this person just made, so it arrives
+    // with the quick ease; loaded and re-rendered drawings simply appear.
+    function renderDrawing(d, animate) {
       var points = d.points || [];
       if (!points.length && d.drawing_type !== 'text') return;
 
@@ -335,6 +387,12 @@
             });
           }
           break;
+        case 'arrow':
+        case 'highlight':
+        case 'step':
+        case 'callout':
+          if (Ann) layer = Ann.render(d, { map: map, toLatLng: toLatLng, animate: !!animate });
+          break;
         default: // freehand / line
           if (latlngs.length >= 2) {
             layer = L.polyline(latlngs, opts);
@@ -345,20 +403,23 @@
         layer._drawingID = d.id;
         layer._drawingData = d;
 
-        // Right-click to delete (Scribe+ sees the prompt; the server still
+        // Right-click to delete (Scribe+ sees the confirm; the server still
         // decides who may delete).
         if (isScribe) {
           layer.on('contextmenu', function (e) {
             L.DomEvent.stopPropagation(e);
-            if (confirm('Delete this drawing?')) {
-              deleteDrawing(d.id).then(function (res) {
-                if (res && res.ok) {
-                  forget(d.id);
-                  notifyCount();
-                }
-              });
-            }
+            if (e.originalEvent) e.originalEvent.preventDefault();
+            confirmDelete(d.id, e.latlng);
           });
+          // Double-click a label or bubble to change its words, where the
+          // server would let this person change it.
+          if ((d.drawing_type === 'text' || d.drawing_type === 'callout') && mayChange(d)) {
+            layer.on('dblclick', function (e) {
+              L.DomEvent.stopPropagation(e);
+              if (e.originalEvent) L.DomEvent.preventDefault(e.originalEvent);
+              editWords(d);
+            });
+          }
         }
 
         layersByID[d.id] = layer;
@@ -384,7 +445,7 @@
     // A freshly saved drawing: render it and remember it for undo.
     function addSaved(d) {
       if (!d) return;
-      renderDrawing(d);
+      renderDrawing(d, true);
       if (picReg[d.id]) picNotify('list', d.id);
       sessionStack.push(d.id);
       notifyCount();
@@ -408,6 +469,51 @@
         if (!d) return;
         addSaved(d);
         pictures.select(d.id);
+      });
+    }
+
+    // The drawings on the map now, for step numbering.
+    function drawingsOnMap() {
+      var out = Object.keys(layersByID).map(function (id) { return layersByID[id]._drawingData; });
+      pendingSteps.forEach(function (n) { out.push({ drawing_type: 'step', text_content: String(n) }); });
+      return out;
+    }
+    function nextStep() { return Ann ? Ann.nextStepNumber(drawingsOnMap()) : 1; }
+
+    // replaceDrawing re-renders a drawing after its saved fields changed.
+    function replaceDrawing(d) {
+      var old = layersByID[d.id];
+      if (old) {
+        drawingLayer.removeLayer(old);
+        delete layersByID[d.id];
+        drawingCount = Math.max(0, drawingCount - 1);
+      }
+      renderDrawing(d, false);
+      notifyCount();
+    }
+
+    // editWords opens the in-map editor on a label or bubble and saves only
+    // the text (the endpoint is a partial update).
+    function editWords(d) {
+      if (!Ann) return;
+      var bubble = d.drawing_type === 'callout';
+      var pts = d.points || [];
+      Ann.editText({
+        map: map,
+        latlng: pts.length ? toLatLng(pts[0]) : null,
+        title: bubble ? 'Speech bubble' : 'Label',
+        value: d.text_content || '',
+        multiline: bubble,
+        submitLabel: 'Save',
+        onSubmit: function (text) {
+          if (text === d.text_content) return true;
+          return patchDrawing(d.id, { text_content: text }).then(function (ok) {
+            if (!ok) return false;
+            d.text_content = text;
+            replaceDrawing(d);
+            return true;
+          });
+        }
       });
     }
 
@@ -645,16 +751,149 @@
       map._drawCleanup = cleanup;
     }
 
-    function startText() {
-      setTool('text');
+    // Label and speech bubble: click where it goes, then type in the in-map
+    // editor beside that point.
+    function startWords(kind) {
+      setTool(kind);
+      var bubble = kind === 'callout';
+      var editor = null;
 
       function onClick(e) {
-        if (activeTool !== 'text') return cleanup();
-        var text = prompt('Enter text annotation:');
-        if (!text || !text.trim()) return;
+        if (activeTool !== kind) return cleanup();
+        if (!Ann) return;
         var pt = toPercent(e.latlng);
-        saveDrawing('text', [pt], { text_content: text.trim() }).then(function (d) {
+        editor = Ann.editText({
+          map: map,
+          latlng: e.latlng,
+          title: bubble ? 'Speech bubble' : 'Label',
+          placeholder: bubble ? 'Write something' : 'Here be dragons',
+          multiline: bubble,
+          submitLabel: bubble ? 'Add bubble' : 'Add label',
+          onSubmit: function (text) {
+            return saveDrawing(kind, [pt], { text_content: text, stroke_width: bubble ? 2 : undefined }).then(function (d) {
+              if (!d) return false;
+              addSaved(d);
+              return true;
+            });
+          }
+        });
+      }
+
+      function cleanup() {
+        map.off('click', onClick);
+        if (editor) { editor.close(); editor = null; }
+      }
+
+      map.on('click', onClick);
+      map._drawCleanup = cleanup;
+    }
+
+    // Arrow: one press-drag-release from the tail to the tip.
+    function startArrow() {
+      setTool('arrow');
+      var startLL = null;
+      var preview = null;
+
+      function onDown(e) {
+        if (activeTool !== 'arrow') return cleanup();
+        startLL = e.latlng;
+        preview = L.polyline([startLL, startLL], { color: drawColor, weight: drawWidth, opacity: 0.7, dashArray: '6,6', interactive: false }).addTo(map);
+        map.dragging.disable();
+      }
+
+      function onMove(e) {
+        if (preview && startLL) preview.setLatLngs([startLL, e.latlng]);
+      }
+
+      function onUp(e) {
+        if (!startLL) return;
+        var a = startLL;
+        startLL = null;
+        map.dragging.enable();
+        if (preview) { map.removeLayer(preview); preview = null; }
+        // A click or a twitch is not an arrow.
+        if (map.latLngToContainerPoint(a).distanceTo(map.latLngToContainerPoint(e.latlng)) < 8) return;
+        saveDrawing('arrow', [toPercent(a), toPercent(e.latlng)]).then(addSaved);
+      }
+
+      function cleanup() {
+        map.off('mousedown', onDown);
+        map.off('mousemove', onMove);
+        map.off('mouseup', onUp);
+        map.dragging.enable();
+        if (preview) { map.removeLayer(preview); preview = null; }
+        startLL = null;
+      }
+
+      map.on('mousedown', onDown);
+      map.on('mousemove', onMove);
+      map.on('mouseup', onUp);
+      map._drawCleanup = cleanup;
+    }
+
+    // Highlighter: a broad translucent freehand stroke.
+    function startHighlight() {
+      setTool('highlight');
+      var pts = [];
+      var preview = null;
+      var color = HIGHLIGHT_DEFAULT;
+      var width = 18;
+
+      function onDown(e) {
+        if (activeTool !== 'highlight') return cleanup();
+        color = colorPicked ? drawColor : HIGHLIGHT_DEFAULT;
+        width = Ann ? Ann.highlightWidth(drawWidth) : 18;
+        pts = [toPercent(e.latlng)];
+        preview = L.polyline([e.latlng], { color: color, weight: width, opacity: 0.35, lineCap: 'round', lineJoin: 'round', interactive: false }).addTo(map);
+        map.dragging.disable();
+      }
+
+      function onMove(e) {
+        if (!preview) return;
+        pts.push(toPercent(e.latlng));
+        preview.addLatLng(e.latlng);
+      }
+
+      function onUp() {
+        if (!preview) return;
+        map.dragging.enable();
+        var stroke = Ann ? Ann.fitStroke(pts) : pts;
+        var shown = preview;
+        preview = null;
+        if (stroke.length < 2) { map.removeLayer(shown); return; }
+        saveDrawing('highlight', stroke, { stroke_color: color, stroke_width: width, fill_alpha: 0.35 }).then(function (d) {
+          map.removeLayer(shown);
           addSaved(d);
+        });
+      }
+
+      function cleanup() {
+        map.off('mousedown', onDown);
+        map.off('mousemove', onMove);
+        map.off('mouseup', onUp);
+        map.dragging.enable();
+        if (preview) { map.removeLayer(preview); preview = null; }
+      }
+
+      map.on('mousedown', onDown);
+      map.on('mousemove', onMove);
+      map.on('mouseup', onUp);
+      map._drawCleanup = cleanup;
+    }
+
+    // Numbered step: each click places the next number, counting on from the
+    // highest step on the map.
+    function startStep() {
+      setTool('step');
+
+      function onClick(e) {
+        if (activeTool !== 'step') return cleanup();
+        var n = nextStep();
+        pendingSteps.push(n);
+        saveDrawing('step', [toPercent(e.latlng)], { text_content: String(n), stroke_width: 2 }).then(function (d) {
+          pendingSteps.splice(pendingSteps.indexOf(n), 1);
+          addSaved(d);
+          if (activeTool === 'step' && Ann && typeof ctx.setHint === 'function') ctx.setHint(Ann.stepHint(nextStep()));
         });
       }
 
@@ -676,6 +915,7 @@
       }
       activeTool = tool;
       map.getContainer().style.cursor = tool ? 'crosshair' : '';
+      if (Ann) Ann.closePopover();
     }
 
     function cancelTool() {
@@ -689,8 +929,12 @@
       rectangle: startRectangle,
       ellipse: startCircle,
       polygon: startPolygon,
-      text: startText,
-      shadow: startShadow
+      text: function () { startWords('text'); },
+      shadow: startShadow,
+      arrow: startArrow,
+      highlight: startHighlight,
+      step: startStep,
+      callout: function () { startWords('callout'); }
     };
 
     ctx.draw = {
@@ -702,6 +946,7 @@
       setStyle: function (st) {
         if (st.color) drawColor = st.color;
         if (st.width) drawWidth = st.width;
+        if (st.picked !== undefined) colorPicked = !!st.picked;
       },
       setShadowStrength: function (a) { shadowStrength = a >= 0.7 ? 0.85 : 0.5; },
       undo: undoLast,
@@ -716,7 +961,9 @@
       // Esc: true when it only deselected a picture (or left cropping).
       escape: function () { return pictures ? pictures.escape() : false; },
       // Delete key: true when a picture was selected (the confirm follows).
-      deleteSelected: function () { return pictures ? pictures.deleteSelected() : false; }
+      deleteSelected: function () { return pictures ? pictures.deleteSelected() : false; },
+      // The number the step tool places next, for the hint.
+      nextStep: nextStep
     };
 
     // --- Init ---

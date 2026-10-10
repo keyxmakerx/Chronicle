@@ -5,7 +5,10 @@
 package app
 
 import (
+	"errors"
+	"fmt"
 	"io/fs"
+	"strings"
 
 	"github.com/keyxmakerx/chronicle/internal/templates/layouts"
 )
@@ -30,6 +33,22 @@ type PluginRegistration struct {
 	// "static") at the registration site so the URL doesn't double the
 	// "static" dir. nil = no static assets.
 	StaticFS fs.FS
+
+	// Widgets are this plugin's on-sight scripts: boot.js fetches a widget's
+	// scripts the first time its data-widget mount appears on a page, so a
+	// page without the widget, or a campaign with its add-on switched off,
+	// never downloads them (ADR-063). nil = nothing loaded on sight.
+	Widgets []PluginWidget
+}
+
+// PluginWidget names one data-widget mount and the scripts that implement
+// it, in load order: helpers first, the script that calls
+// Chronicle.register(Name, …) last. A path starting with "/" is a site path
+// (shared code under /static/); any other path is relative to the plugin's
+// own StaticFS mount.
+type PluginWidget struct {
+	Name    string
+	Scripts []string
 }
 
 // registerPlugin appends a registration entry to the App's registry.
@@ -67,4 +86,38 @@ func (a *App) mountPluginStatic() {
 		layouts.RegisterAssetFS(prefix+"/", p.StaticFS)
 		a.Echo.StaticFS(prefix, p.StaticFS)
 	}
+}
+
+// buildWidgetManifest flattens the registry's on-sight widgets into the
+// widget-name → script-URLs map the layout hands to boot.js. assetURL turns
+// a site path into its served URL (layouts.AssetURL, which adds the content
+// hash). A widget with no name or scripts, or a name a second plugin also
+// claims, is a wiring mistake: it is left out and reported, and every other
+// widget still loads.
+func buildWidgetManifest(regs []PluginRegistration, assetURL func(string) string) (map[string][]string, error) {
+	out := map[string][]string{}
+	owner := map[string]string{}
+	var errs []error
+	for _, p := range regs {
+		for _, w := range p.Widgets {
+			if w.Name == "" || len(w.Scripts) == 0 {
+				errs = append(errs, fmt.Errorf("plugin %q: widget %q needs a name and at least one script", p.Slug, w.Name))
+				continue
+			}
+			if prev, dup := owner[w.Name]; dup {
+				errs = append(errs, fmt.Errorf("widget %q is registered by both %q and %q; keeping %q", w.Name, prev, p.Slug, prev))
+				continue
+			}
+			owner[w.Name] = p.Slug
+			urls := make([]string, 0, len(w.Scripts))
+			for _, s := range w.Scripts {
+				if !strings.HasPrefix(s, "/") {
+					s = pluginStaticPrefix(p.Slug) + "/" + s
+				}
+				urls = append(urls, assetURL(s))
+			}
+			out[w.Name] = urls
+		}
+	}
+	return out, errors.Join(errs...)
 }

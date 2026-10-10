@@ -24,6 +24,7 @@ type mockMapRepo struct {
 	updateMarkerFn func(ctx context.Context, mk *Marker) error
 	deleteMarkerFn func(ctx context.Context, id string) error
 	listMarkersFn  func(ctx context.Context, mapID string, role int) ([]Marker, error)
+	listedUserID   string // the viewer id the last ListMarkers call filtered for
 
 	campaignFrame    string
 	getFrameErr      error
@@ -112,6 +113,7 @@ func (m *mockMapRepo) DeleteMarker(ctx context.Context, id string) error {
 }
 
 func (m *mockMapRepo) ListMarkers(ctx context.Context, mapID string, role int, userID string) ([]Marker, error) {
+	m.listedUserID = userID
 	if m.listMarkersFn != nil {
 		return m.listMarkersFn(ctx, mapID, role)
 	}

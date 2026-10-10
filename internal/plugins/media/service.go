@@ -191,9 +191,24 @@ func (s *mediaService) Upload(ctx context.Context, input UploadInput) (*MediaFil
 	}
 	defer s.sem.release(input.UploadedBy)
 
-	// Validate MIME type.
-	if !AllowedMimeTypes[input.MimeType] {
+	// Validate MIME type. A page file has its own, wider list (documents), which
+	// is never consulted for any other usage type, so an upload route that does
+	// not know about page files cannot store a PDF or an archive.
+	if input.UsageType == UsagePageFile {
+		if input.CampaignID == "" {
+			return nil, apperror.NewBadRequest("a page file must belong to a campaign")
+		}
+		if !PageFileMimeTypes[input.MimeType] {
+			return nil, apperror.NewBadRequest("unsupported file type: " + input.MimeType)
+		}
+	} else if !AllowedMimeTypes[input.MimeType] {
 		return nil, apperror.NewBadRequest("unsupported file type: " + input.MimeType)
+	}
+
+	// A note picture is served only to readers of a note that holds it, so it
+	// needs a campaign to scope that to, and must be a picture.
+	if input.UsageType == UsageNoteImage && (input.CampaignID == "" || !strings.HasPrefix(input.MimeType, "image/")) {
+		return nil, apperror.NewBadRequest("a note picture must be an image in a campaign")
 	}
 
 	// Per-campaign dedup: hash the original bytes (before sanitization
@@ -206,7 +221,10 @@ func (s *mediaService) Upload(ctx context.Context, input UploadInput) (*MediaFil
 	if len(input.FileBytes) > 0 {
 		sum := sha256.Sum256(input.FileBytes)
 		contentHash = hex.EncodeToString(sum[:])
-		if input.CampaignID != "" {
+		// Note pictures and page files are never merged: each upload is its own
+		// file, so who may open it never depends on who else uploaded the same
+		// bytes.
+		if input.CampaignID != "" && input.UsageType != UsageNoteImage && input.UsageType != UsagePageFile {
 			if existing, err := s.repo.FindByContentHash(ctx, input.CampaignID, contentHash); err != nil {
 				// Non-fatal — continue with a fresh upload rather than
 				// blocking the user on a transient DB hiccup.
@@ -282,8 +300,21 @@ func (s *mediaService) Upload(ctx context.Context, input UploadInput) (*MediaFil
 		}
 	}
 
-	// Validate magic bytes match declared MIME type.
-	if !validateMagicBytes(input.FileBytes, input.MimeType) {
+	// Runs with or without a limiter: the cap is what keeps one member from
+	// holding the campaign's space in pictures nobody else can remove.
+	if input.UsageType == UsageNoteImage {
+		if err := s.checkNotePictureCap(ctx, input); err != nil {
+			return nil, err
+		}
+	}
+
+	// Validate that the content is what the type says. A page file also
+	// refuses programs, with its own words.
+	if input.UsageType == UsagePageFile {
+		if err := validatePageFileContent(input.FileBytes, input.MimeType); err != nil {
+			return nil, apperror.NewBadRequest(err.Error())
+		}
+	} else if !validateMagicBytes(input.FileBytes, input.MimeType) {
 		return nil, apperror.NewBadRequest("file content does not match declared type")
 	}
 
@@ -360,7 +391,8 @@ func (s *mediaService) Upload(ctx context.Context, input UploadInput) (*MediaFil
 	}
 
 	// Generate thumbnails for images (using sanitized bytes).
-	if file.IsImage() && input.MimeType != "image/gif" {
+	// A page file is only downloaded, so it gets no thumbnails to store.
+	if file.IsImage() && input.MimeType != "image/gif" && !file.IsPageFile() {
 		thumbSizes := map[string]int{"300": 300, "800": 800}
 		for sizeLabel, maxDim := range thumbSizes {
 			thumbFilename, err := s.generateThumbnail(input.FileBytes, dir, id, ext, maxDim)
@@ -507,6 +539,52 @@ func (s *mediaService) checkQuotas(ctx context.Context, input UploadInput) error
 		return apperror.NewBadRequest("campaign file count limit reached")
 	}
 
+	return nil
+}
+
+// Per-uploader share of a campaign for note pictures. Players can add these
+// without a Scribe role and only the notes that hold them can remove them, so
+// one member's total is bounded to leave room for everyone else.
+const (
+	// maxNotePictureBytesPerUser is the ceiling; a smaller campaign quota
+	// lowers it to a quarter of that quota.
+	maxNotePictureBytesPerUser int64 = 100 * 1024 * 1024
+	maxNotePicturesPerUser           = 200
+)
+
+// notePictureByteCap is the byte cap for one uploader: the smaller of the
+// ceiling and a quarter of the campaign's storage quota (0 = unlimited quota,
+// so the ceiling alone).
+func notePictureByteCap(campaignMaxStorage int64) int64 {
+	limit := maxNotePictureBytesPerUser
+	if campaignMaxStorage > 0 && campaignMaxStorage/4 < limit {
+		limit = campaignMaxStorage / 4
+	}
+	return limit
+}
+
+// errNotePictureSpace is what the editor shows; it says what to do, not which
+// number was hit.
+const errNotePictureSpace = "You've used your space for note pictures in this campaign. Remove some pictures from your notes to add more."
+
+// checkNotePictureCap refuses a note picture once the uploader holds their
+// share of the campaign. Unlike checkQuotas it fails closed when usage cannot
+// be read: this is the only bound on the pictures the owner cannot remove.
+func (s *mediaService) checkNotePictureCap(ctx context.Context, input UploadInput) error {
+	var campaignMax int64
+	if s.limiter != nil {
+		// A failed lookup leaves the fixed ceiling in force.
+		if _, maxStorage, _, err := s.limiter.GetEffectiveLimits(ctx, input.UploadedBy, input.CampaignID); err == nil {
+			campaignMax = maxStorage
+		}
+	}
+	usedBytes, count, err := s.repo.GetUserNoteImageUsage(ctx, input.CampaignID, input.UploadedBy)
+	if err != nil {
+		return apperror.NewInternal(err)
+	}
+	if usedBytes+input.FileSize > notePictureByteCap(campaignMax) || count+1 > maxNotePicturesPerUser {
+		return apperror.NewBadRequest(errNotePictureSpace)
+	}
 	return nil
 }
 
@@ -666,8 +744,10 @@ func (s *mediaService) DeleteCampaignMedia(ctx context.Context, campaignID, medi
 		return err
 	}
 
-	// Verify the file belongs to this campaign.
-	if file.CampaignID == nil || *file.CampaignID != campaignID {
+	// Verify the file belongs to this campaign. A note picture or a page
+	// file is not the campaign owner's to remove here: it belongs to the note or
+	// page that holds it.
+	if file.CampaignID == nil || *file.CampaignID != campaignID || file.IsBound() {
 		return apperror.NewNotFound("media file not found")
 	}
 
@@ -705,10 +785,51 @@ func (s *mediaService) DeleteCampaignFiles(ctx context.Context, campaignID strin
 	return deleted, nil
 }
 
+// notePictureGrace is how long an unbound note picture is kept, so a picture
+// uploaded into a note still being written is not collected under its author.
+const notePictureGrace = 24 * time.Hour
+
+// pageFileGrace is how long an unbound page file is kept: an upload is bound a
+// moment after it is stored, so an hour is far more than enough.
+const pageFileGrace = time.Hour
+
 // CleanupOrphans walks the media directory, checks each file against the
 // database, and deletes any files not tracked. This handles the case where
 // an upload crashes between writing the file and saving the DB record.
 func (s *mediaService) CleanupOrphans(ctx context.Context) (int, error) {
+	// Note pictures no note is bound to were abandoned (never saved into a
+	// note, or their note is gone); keeping them would let players fill the
+	// campaign's quota with files nobody can reach. The delay covers a note
+	// not yet saved. A listing error only skips this step.
+	removedPictures := 0
+	if ids, err := s.repo.ListUnboundNotePictures(ctx, time.Now().UTC().Add(-notePictureGrace)); err != nil {
+		slog.Warn("orphan cleanup: could not list unbound note pictures", slog.Any("error", err))
+	} else {
+		for _, id := range ids {
+			if err := s.Delete(ctx, id); err != nil {
+				slog.Warn("orphan cleanup: could not delete unbound note picture", slog.String("file_id", id), slog.Any("error", err))
+				continue
+			}
+			removedPictures++
+		}
+	}
+
+	// Page files whose page is gone (purged from the Trash) or that were never
+	// bound would otherwise sit in the campaign's quota with nobody able to
+	// reach them. The short delay covers an upload being bound right now.
+	removedPageFiles := 0
+	if ids, err := s.repo.ListUnboundPageFiles(ctx, time.Now().UTC().Add(-pageFileGrace)); err != nil {
+		slog.Warn("orphan cleanup: could not list unbound page files", slog.Any("error", err))
+	} else {
+		for _, id := range ids {
+			if err := s.Delete(ctx, id); err != nil {
+				slog.Warn("orphan cleanup: could not delete unbound page file", slog.String("file_id", id), slog.Any("error", err))
+				continue
+			}
+			removedPageFiles++
+		}
+	}
+
 	knownFiles, err := s.repo.ListAllFilenames(ctx)
 	if err != nil {
 		return 0, fmt.Errorf("listing known files: %w", err)
@@ -771,8 +892,8 @@ func (s *mediaService) CleanupOrphans(ctx context.Context) (int, error) {
 		return removed, fmt.Errorf("walking media directory: %w", err)
 	}
 
-	slog.Info("orphan cleanup completed", slog.Int("removed", removed))
-	return removed, nil
+	slog.Info("orphan cleanup completed", slog.Int("removed", removed), slog.Int("note_pictures", removedPictures), slog.Int("page_files", removedPageFiles))
+	return removed + removedPictures + removedPageFiles, nil
 }
 
 // maxImageDimension is the maximum width or height in pixels for uploaded images.

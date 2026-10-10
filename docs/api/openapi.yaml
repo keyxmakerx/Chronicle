@@ -3542,7 +3542,13 @@ components:
           nullable: true
         drawing_type:
           type: string
-          enum: [freehand, rectangle, ellipse, polygon, text]
+          enum: [freehand, rectangle, ellipse, polygon, text, shadow, image, arrow, highlight, step, callout]
+          description: >-
+            arrow: points [tail, tip]. highlight: a stroke; fill_alpha is its
+            opacity (0.1-0.7). step: one point; text_content is the number,
+            1-999. callout: one point (where the tail points); text_content is
+            the bubble text, at most 500 characters. Annotation colours are
+            hex (#rgb or #rrggbb). Clients that do not draw a type should skip it.
         points:
           type: array
           description: Array of {x, y} coordinate pairs
@@ -3593,7 +3599,13 @@ components:
           nullable: true
         drawing_type:
           type: string
-          enum: [freehand, rectangle, ellipse, polygon, text]
+          enum: [freehand, rectangle, ellipse, polygon, text, shadow, image, arrow, highlight, step, callout]
+          description: >-
+            arrow: points [tail, tip]. highlight: a stroke; fill_alpha is its
+            opacity (0.1-0.7). step: one point; text_content is the number,
+            1-999. callout: one point (where the tail points); text_content is
+            the bubble text, at most 500 characters. Annotation colours are
+            hex (#rgb or #rrggbb). Clients that do not draw a type should skip it.
         points:
           type: array
           items:

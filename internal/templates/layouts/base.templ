@@ -26,8 +26,11 @@ templ Base(title string) {
 		     "device" follows the OS. Either reduce switch (the campaign's or the person's own) sets nav-rm;
 		     a device asking for reduced motion lowers data-motion to off. -->
 		<script>
-			(function(){try{var h=document.documentElement;var v=h.getAttribute('data-view-theme');var t=(v==='light'||v==='dark')?v:(v==='device'?null:localStorage.getItem('chronicle-theme'));var d=t==='dark'||(t!=='light'&&window.matchMedia('(prefers-color-scheme:dark)').matches);if(d){h.classList.add('dark');h.style.backgroundColor='#111827'}else{h.style.backgroundColor='#f9fafb'}if(window.matchMedia('(prefers-reduced-motion:reduce)').matches)h.setAttribute('data-motion','off');if(h.hasAttribute('data-cz-reduce')||h.getAttribute('data-view-motion')==='calm')h.classList.add('nav-rm')}catch(e){}})();
+			(function(){try{var h=document.documentElement;var v=h.getAttribute('data-view-theme');var t=(v==='light'||v==='dark')?v:(v==='device'?null:localStorage.getItem('chronicle-theme'));var a=h.hasAttribute('data-site-admin');var d=a||t==='dark'||(t!=='light'&&window.matchMedia('(prefers-color-scheme:dark)').matches);if(d){h.classList.add('dark');h.style.backgroundColor=a?'#0b0e14':'#111827'}else{h.style.backgroundColor='#f9fafb'}if(window.matchMedia('(prefers-reduced-motion:reduce)').matches)h.setAttribute('data-motion','off');if(h.hasAttribute('data-cz-reduce')||h.getAttribute('data-view-motion')==='calm')h.classList.add('nav-rm')}catch(e){}})();
 		</script>
+
+		<!-- Site admin's way in and out: the new page asks for its transition before the first paint. -->
+		<script src={ AssetURL("/static/js/site_admin_reveal.js") }></script>
 
 		<!-- Hide Alpine.js elements until initialized; hide body until all CSS loads (FOUC prevention). -->
 		<style>[x-cloak]{display:none!important}body{opacity:0}</style>
@@ -36,6 +39,9 @@ templ Base(title string) {
 		<link rel="stylesheet" href={ AssetURL("/static/css/app.css") }/>
 		<!-- Shared paper look and the hover card (hovercard.js) -->
 		<link rel="stylesheet" href={ AssetURL("/static/css/paper.css") }/>
+		<!-- A game system's character sheet: its twelve styles and their motion. Scoped to [data-sheet], inert elsewhere. -->
+		<link rel="stylesheet" href={ AssetURL("/static/css/sheet_styles.css") }/>
+		<link rel="stylesheet" href={ AssetURL("/static/css/sheet_motion.css") }/>
 
 		<!-- Fonts -->
 		<link rel="preconnect" href="https://fonts.googleapis.com"/>
@@ -81,6 +87,10 @@ templ Base(title string) {
 		     data-widget elements. Must load before Alpine so Chronicle utilities
 		     are available when Alpine processes x-data expressions. -->
 		<script src={ AssetURL("/static/js/boot.js") } defer></script>
+		<!-- On-sight widget scripts: boot.js fetches these when a widget's
+		     mount first appears (ADR-063). Inert JSON outside #main-content,
+		     so boosted navigation keeps it. -->
+		@templ.JSONScript("chronicle-widget-scripts", GetWidgetScripts(ctx))
 
 		<!-- Dynamic-surface motion engine: the frame's transition-preset library
 		     (Chronicle.surface.play / .transitions). Loads after boot.js so the
@@ -113,6 +123,8 @@ templ Base(title string) {
 		<script src={ AssetURL("/static/js/sidebar_nav.js") } defer></script>
 		<!-- Unified sidebar edit mode: pencil-triggered inline editing -->
 		<script src={ AssetURL("/static/js/sidebar_editor.js") } defer></script>
+		<!-- A sidebar row's menu: right-click, long press, dots, Shift+F10 -->
+		<script src={ AssetURL("/static/js/sidebar_row_menu.js") } defer></script>
 		<!-- Hidden sidebar: peek open from the window's left edge -->
 		<script src={ AssetURL("/static/js/sidebar_peek.js") } defer></script>
 
@@ -165,8 +177,11 @@ templ Base(title string) {
 		<script src={ AssetURL("/static/js/widgets/tag_picker.js") } defer></script>
 
 		<!-- The one hover card, then the linked-page previews that use it -->
+		<script src={ AssetURL("/static/js/peek_address.js") } defer></script>
 		<script src={ AssetURL("/static/js/hovercard.js") } defer></script>
 		<script src={ AssetURL("/static/js/widgets/entity_tooltip.js") } defer></script>
+		<!-- Page peek: Shift-click or the peek icon on a page link opens it in a side panel -->
+		<script src={ AssetURL("/static/js/peek_panel.js") } defer></script>
 		<!-- Bulk entity selection and actions -->
 		<script src={ AssetURL("/static/js/widgets/bulk_actions.js") } defer></script>
 
@@ -261,6 +276,9 @@ templ Base(title string) {
 		     together when they come back. Loaded before anything that loops. -->
 		<script src={ AssetURL("/static/js/motion_rest.js") } defer></script>
 
+		<!-- The character sheet's motion engine (sheet_motion.js): styles a [data-sheet] root and moves its panels, folds and changed values. Does nothing on a page without one. -->
+		<script src={ AssetURL("/static/js/sheet_motion.js") } defer></script>
+
 		<!-- Sky pane widget (issue #763): the "skybox" dashboard/template
 		     block's ambient sky — moons, stars, weather, celestial events.
 		     Eight files, loaded in the dependency order each one's own header
@@ -289,9 +307,6 @@ templ Base(title string) {
 		<!-- Dashboard layouts use the unified layout-editor widget (loaded
 		     further down). -->
 
-		<!-- Timeline D3 visualization widget (interactive SVG chart) -->
-		<script src={ AssetURL("/static/js/widgets/timeline_viz.js") } defer></script>
-
 		<!-- Plugin-contributed body scripts (injected at startup; calendar widget
 		     is the canonical first entry — avoids hardcoding plugin paths here).
 		     Emitted IN SLICE ORDER and deferred, so a contributor that depends on
@@ -304,9 +319,9 @@ templ Base(title string) {
 			<script src={ AssetURL(scriptURL) } defer></script>
 		}
 
-		<!-- Timeline widget (interactive timeline preview for dashboard embeds) -->
-		<script src={ AssetURL("/static/js/widgets/timeline_widget.js") } defer></script>
-
+		<!-- Map annotations (arrows, highlighter, steps, bubbles), shared by the
+		     map widget below and the map viewer -->
+		<script src={ AssetURL("/static/js/map_annotations.js") } defer></script>
 		<!-- Map widget (embedded Leaflet map viewer for dashboard embeds) -->
 		<script src={ AssetURL("/static/js/widgets/map_widget.js") } defer></script>
 
@@ -333,6 +348,9 @@ templ Base(title string) {
 
 		<!-- The header's moving background, on the shared rest clock -->
 		<script src={ AssetURL("/static/js/widgets/header_motion.js") } defer></script>
+
+		<!-- The header's Sky background; draws with the sky scripts above -->
+		<script src={ AssetURL("/static/js/widgets/header_sky.js") } defer></script>
 
 		<!-- Live map viewer (the map page's viewer; also what the focus view mounts) -->
 		<script src={ AssetURL("/static/js/widgets/map_viewer.js") } defer></script>

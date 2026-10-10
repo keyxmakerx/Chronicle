@@ -8,8 +8,8 @@ events; full viewing and editing stay on the timeline page.
 
 ## Mount
 
-`data-widget="timeline-widget"`, loaded by a `<script defer>` tag in
-`layouts/base.templ`. Mounted from `plugins/timeline/blocks.templ` (when no
+`data-widget="timeline-widget"`. The timeline plugin's `Widgets`
+registration loads it on sight (ADR-063). Mounted from `plugins/timeline/blocks.templ` (when no
 timeline is bound), `plugins/entities/category_blocks.templ` and
 `plugins/campaigns/dashboard_blocks.templ`.
 

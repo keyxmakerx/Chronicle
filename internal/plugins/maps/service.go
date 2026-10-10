@@ -121,17 +121,17 @@ type MapService interface {
 	// SetHexFogLookup is on the interface for the same reason: without it every
 	// player would see every pin and the whole picture under unexplored hexes.
 	SetHexFogLookup(l HexFogLookup)
-	// SetFogMediaLookup wires the check that a file is a picture drawing the
-	// fog withholds. With a fog lookup wired and this one not, the media guard
-	// refuses every campaign file rather than serve one under the fog.
-	SetFogMediaLookup(l FogMediaLookup)
+	// SetPictureFileLookup wires the check that a file is a picture drawing the
+	// fog or a shadow withholds. With a fog lookup wired and this one not, the
+	// media guard refuses every campaign file rather than serve one under the fog.
+	SetPictureFileLookup(l PictureFileLookup)
 }
 
-// FogMediaLookup reports whether a file is a picture on a map whose image the
-// hex fog withholds from viewers below CanSeeDmOnly. Implemented by the
-// drawing service.
-type FogMediaLookup interface {
-	FogWithholdsMedia(ctx context.Context, mapID, mediaID string) (bool, error)
+// PictureFileLookup reports whether a file is a picture on a map whose image the
+// hex fog or a shadow withholds from viewers below CanSeeDmOnly. Implemented by
+// the drawing service.
+type PictureFileLookup interface {
+	WithholdsPictureFile(ctx context.Context, mapID, mediaID string) (bool, error)
 }
 
 // EntityVisibilityGate resolves which of a set of entity IDs a viewer (role +
@@ -159,7 +159,7 @@ type mapService struct {
 	entityGate     EntityVisibilityGate
 	shadows        ShadowLookup
 	hexFog         HexFogLookup
-	fogMedia       FogMediaLookup
+	pictureFiles   PictureFileLookup
 	images         MediaImageSource
 	imageCacheDir  string
 	pictureCache   *pictureStatusCache
@@ -214,9 +214,9 @@ func (s *mapService) SetHexFogLookup(l HexFogLookup) {
 	s.pictureCache.invalidate("")
 }
 
-// SetFogMediaLookup implements MapService.
-func (s *mapService) SetFogMediaLookup(l FogMediaLookup) {
-	s.fogMedia = l
+// SetPictureFileLookup implements MapService.
+func (s *mapService) SetPictureFileLookup(l PictureFileLookup) {
+	s.pictureFiles = l
 	s.pictureCache.invalidate("")
 }
 

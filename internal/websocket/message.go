@@ -49,6 +49,15 @@ const (
 // change-feed type: the filtered read is the source of truth.
 const MsgHexChanged MessageType = "hex.changed"
 
+// MsgMapItemsChanged tells map viewers that a map's pins, drawings, tokens or
+// shadows changed. The payload is {map_id, kind} with kind one of "markers",
+// "drawings", "tokens" or "shadows", and never any item content: a viewer
+// refetches the role-filtered read, so a player only ever learns what their
+// own refetch returns. It goes to every client of the campaign, like
+// hex.changed, because it tells a viewer who may not see the item nothing. Not
+// a change-feed type: the filtered read is the source of truth.
+const MsgMapItemsChanged MessageType = "map.items.changed"
+
 // Calendar sync messages.
 const (
 	MsgCalendarEventCreated     MessageType = "calendar.event.created"

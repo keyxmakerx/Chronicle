@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/keyxmakerx/chronicle/internal/apperror"
@@ -34,6 +35,15 @@ type UserRepository interface {
 	// they have chosen nothing).
 	GetViewPrefs(ctx context.Context, userID string) ([]byte, error)
 	SetViewPrefs(ctx context.Context, userID string, prefs []byte) error
+	GetNotifyPrefs(ctx context.Context, userID string) ([]byte, error)
+	SetNotifyPrefs(ctx context.Context, userID string, prefs []byte) error
+	// ListNotifyPrefs returns the stored notify_prefs JSON of each listed
+	// user that has any; users with none are absent from the map.
+	ListNotifyPrefs(ctx context.Context, userIDs []string) (map[string][]byte, error)
+	// AnonymizeUser empties a deleted account's row: personal fields
+	// cleared, a placeholder email and name, an unusable password,
+	// disabled and stamped deleted_at. Its reset tokens are removed.
+	AnonymizeUser(ctx context.Context, userID, email, displayName, passwordHash string) error
 
 	// ListLegacyAvatarPaths returns userID -> avatar_path for every user
 	// whose avatar_path still starts with prefix. Used only by the boot
@@ -244,17 +254,19 @@ func (r *userRepository) UpdateIsAdmin(ctx context.Context, id string, isAdmin b
 
 // UpdateIsDisabled sets or clears the is_disabled flag for a user. Disabled
 // users cannot log in and their active sessions are invalidated separately.
+// A deleted account stays disabled: enabling it would list an empty row as
+// an ordinary user.
 func (r *userRepository) UpdateIsDisabled(ctx context.Context, id string, isDisabled bool) error {
-	query := `UPDATE users SET is_disabled = ? WHERE id = ?`
+	query := `UPDATE users SET is_disabled = ? WHERE id = ? AND (? OR deleted_at IS NULL)`
 
-	result, err := r.db.ExecContext(ctx, query, isDisabled, id)
+	result, err := r.db.ExecContext(ctx, query, isDisabled, id, isDisabled)
 	if err != nil {
 		return fmt.Errorf("updating is_disabled: %w", err)
 	}
 
 	n, _ := result.RowsAffected()
 	if n == 0 {
-		return apperror.NewNotFound("user not found")
+		return apperror.NewNotFound("user not found or the account was deleted")
 	}
 
 	return nil
@@ -269,11 +281,11 @@ func (r *userRepository) CountUsers(ctx context.Context) (int, error) {
 	return count, nil
 }
 
-// CountAdmins returns the number of users with is_admin = true.
-// Used to prevent removing the last admin.
+// CountAdmins returns the number of admins who can still sign in. Used to
+// prevent removing the last admin; a disabled admin can't stand in for one.
 func (r *userRepository) CountAdmins(ctx context.Context) (int, error) {
 	var count int
-	if err := r.db.QueryRowContext(ctx, `SELECT COUNT(*) FROM users WHERE is_admin = true`).Scan(&count); err != nil {
+	if err := r.db.QueryRowContext(ctx, `SELECT COUNT(*) FROM users WHERE is_admin = true AND is_disabled = FALSE`).Scan(&count); err != nil {
 		return 0, fmt.Errorf("counting admins: %w", err)
 	}
 	return count, nil
@@ -318,6 +330,78 @@ func (r *userRepository) SetViewPrefs(ctx context.Context, userID string, prefs 
 	// (MySQL reports changed rows), so existence is not inferred from it.
 	if _, err := r.db.ExecContext(ctx, `UPDATE users SET view_prefs = ? WHERE id = ?`, string(prefs), userID); err != nil {
 		return fmt.Errorf("updating view prefs: %w", err)
+	}
+	return nil
+}
+
+// GetNotifyPrefs returns the raw notify_prefs JSON for a user, or nil when unset.
+func (r *userRepository) GetNotifyPrefs(ctx context.Context, userID string) ([]byte, error) {
+	var raw []byte
+	err := r.db.QueryRowContext(ctx, `SELECT notify_prefs FROM users WHERE id = ?`, userID).Scan(&raw)
+	if errors.Is(err, sql.ErrNoRows) {
+		return nil, apperror.NewNotFound("user not found")
+	}
+	if err != nil {
+		return nil, fmt.Errorf("reading notify prefs: %w", err)
+	}
+	return raw, nil
+}
+
+// SetNotifyPrefs stores the validated notify_prefs JSON for a user.
+func (r *userRepository) SetNotifyPrefs(ctx context.Context, userID string, prefs []byte) error {
+	if _, err := r.db.ExecContext(ctx, `UPDATE users SET notify_prefs = ? WHERE id = ?`, string(prefs), userID); err != nil {
+		return fmt.Errorf("updating notify prefs: %w", err)
+	}
+	return nil
+}
+
+// ListNotifyPrefs reads notify_prefs for many users in one query.
+func (r *userRepository) ListNotifyPrefs(ctx context.Context, userIDs []string) (map[string][]byte, error) {
+	out := map[string][]byte{}
+	if len(userIDs) == 0 {
+		return out, nil
+	}
+	ph := strings.TrimSuffix(strings.Repeat("?,", len(userIDs)), ",")
+	args := make([]any, len(userIDs))
+	for i, id := range userIDs {
+		args[i] = id
+	}
+	rows, err := r.db.QueryContext(ctx,
+		`SELECT id, notify_prefs FROM users WHERE notify_prefs IS NOT NULL AND id IN (`+ph+`)`, args...)
+	if err != nil {
+		return nil, fmt.Errorf("listing notify prefs: %w", err)
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var id string
+		var raw []byte
+		if err := rows.Scan(&id, &raw); err != nil {
+			return nil, fmt.Errorf("scanning notify prefs: %w", err)
+		}
+		out[id] = raw
+	}
+	return out, rows.Err()
+}
+
+// AnonymizeUser empties a deleted account's row in one statement, then
+// removes its password reset tokens.
+func (r *userRepository) AnonymizeUser(ctx context.Context, userID, email, displayName, passwordHash string) error {
+	res, err := r.db.ExecContext(ctx,
+		`UPDATE users SET email = ?, display_name = ?, password_hash = ?,
+		        avatar_path = NULL, is_admin = FALSE, totp_secret = NULL, totp_enabled = FALSE,
+		        timezone = NULL, pending_email = NULL, email_verify_token = NULL, email_verify_expires = NULL,
+		        admin_nav_pins = NULL, view_prefs = NULL, notify_prefs = NULL,
+		        is_disabled = TRUE, deleted_at = NOW()
+		  WHERE id = ? AND deleted_at IS NULL`,
+		email, displayName, passwordHash, userID)
+	if err != nil {
+		return fmt.Errorf("anonymizing user: %w", err)
+	}
+	if n, _ := res.RowsAffected(); n == 0 {
+		return apperror.NewNotFound("user not found")
+	}
+	if _, err := r.db.ExecContext(ctx, `DELETE FROM password_reset_tokens WHERE user_id = ?`, userID); err != nil {
+		return fmt.Errorf("removing reset tokens: %w", err)
 	}
 	return nil
 }

@@ -16,6 +16,7 @@ import (
 
 	"github.com/keyxmakerx/chronicle/internal/apperror"
 	"github.com/keyxmakerx/chronicle/internal/middleware"
+	"github.com/keyxmakerx/chronicle/internal/notifyprefs"
 	"github.com/keyxmakerx/chronicle/internal/timeutil"
 )
 
@@ -96,6 +97,9 @@ func (h *Handler) LoginForm(c echo.Context) error {
 	var successMsg string
 	if c.QueryParam("reset") == "success" {
 		successMsg = "Your password has been reset. You can now sign in."
+	}
+	if c.QueryParam("deleted") == "1" {
+		successMsg = "Your account has been deleted."
 	}
 
 	// Auto-recovery banner: the CSRF middleware bounces a stale/missing-token
@@ -579,7 +583,57 @@ func (h *Handler) AccountPage(c echo.Context) error {
 		slog.Warn("reading view prefs", slog.String("user_id", userID), slog.Any("error", err))
 	}
 
-	return middleware.Render(c, http.StatusOK, AccountPage(user, csrfToken, timezones, prefs))
+	notify, err := h.service.GetNotifyPrefs(c.Request().Context(), userID)
+	if err != nil {
+		slog.Warn("reading notification choices", slog.String("user_id", userID), slog.Any("error", err))
+	}
+
+	owned, err := h.service.OwnedCampaigns(c.Request().Context(), userID)
+	if err != nil {
+		slog.Warn("listing owned campaigns", slog.String("user_id", userID), slog.Any("error", err))
+	}
+
+	return middleware.Render(c, http.StatusOK, AccountPage(user, csrfToken, timezones, prefs, notify, owned))
+}
+
+// DeleteAccountAPI deletes the signed-in person's own account
+// (POST /account/delete) after checking their password and the typed
+// confirmation, then signs this browser out.
+func (h *Handler) DeleteAccountAPI(c echo.Context) error {
+	userID := GetUserID(c)
+	if userID == "" {
+		return apperror.NewUnauthorized("not authenticated")
+	}
+	var req DeleteAccountInput
+	if err := json.NewDecoder(c.Request().Body).Decode(&req); err != nil {
+		return apperror.NewBadRequest("invalid request body")
+	}
+	if err := h.service.DeleteOwnAccount(c.Request().Context(), userID, req); err != nil {
+		return err
+	}
+	h.logSecurityEvent(c.Request().Context(), "account.deleted", userID, "", c.RealIP(), c.Request().UserAgent(), nil)
+	clearSessionCookie(c)
+	return c.JSON(http.StatusOK, map[string]string{"redirect": "/login?deleted=1"})
+}
+
+// UpdateNotifyPrefsAPI saves the signed-in person's notification choices
+// (PUT /account/notifications). The body is partial: only the switches sent change.
+func (h *Handler) UpdateNotifyPrefsAPI(c echo.Context) error {
+	userID := GetUserID(c)
+	if userID == "" {
+		return apperror.NewUnauthorized("not authenticated")
+	}
+
+	var req notifyprefs.Update
+	if err := json.NewDecoder(c.Request().Body).Decode(&req); err != nil {
+		return apperror.NewBadRequest("invalid request body")
+	}
+
+	prefs, err := h.service.UpdateNotifyPrefs(c.Request().Context(), userID, req)
+	if err != nil {
+		return err
+	}
+	return c.JSON(http.StatusOK, prefs)
 }
 
 // UpdateViewPrefsAPI saves the signed-in person's own viewing choices

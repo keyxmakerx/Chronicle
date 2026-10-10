@@ -32,6 +32,9 @@ func (s *stubService) RunBackup(ctx context.Context) (*RunResult, error) {
 	}
 	return nil, nil
 }
+func (s *stubService) RunBackupKeeping(ctx context.Context, _ int) (*RunResult, error) {
+	return s.RunBackup(ctx)
+}
 func (s *stubService) ListBackups() ([]Artifact, error) { return s.artifacts, s.listErr }
 func (s *stubService) LastRun() *RunResult              { return s.last }
 func (s *stubService) IsRunning() bool                  { return s.running }

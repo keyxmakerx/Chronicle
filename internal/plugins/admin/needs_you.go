@@ -23,6 +23,11 @@ type NeedsItem struct {
 	rank int
 }
 
+// Urgent is whether the item is a fault (something failed, the database is
+// behind, a security alert) rather than a chore; Home shows faults in red,
+// ahead of the amber chores.
+func (it NeedsItem) Urgent() bool { return it.rank <= 3 }
+
 // needsInput is everything the list is derived from, gathered by the handler.
 // Keeping the derivation a pure function lets the ordering be table-tested.
 type needsInput struct {

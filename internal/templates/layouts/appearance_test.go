@@ -191,6 +191,7 @@ func TestTopbarWantsLightWords(t *testing.T) {
 		{"default header", nil, false},
 		{"empty mode", &TopbarStyleData{}, false},
 		{"image", &TopbarStyleData{Mode: "image", ImagePath: "a.png"}, true},
+		{"sky", &TopbarStyleData{Mode: "sky"}, true},
 		{"dark solid", &TopbarStyleData{Mode: "solid", Color: "#0f172a"}, true},
 		{"light solid", &TopbarStyleData{Mode: "solid", Color: "#f4eddd"}, false},
 		{"dark gradient", &TopbarStyleData{Mode: "gradient", GradientFrom: "#0f172a", GradientTo: "#1e1b4b"}, true},
@@ -433,6 +434,32 @@ func TestAppearanceCSSPeekGlow(t *testing.T) {
 	}
 }
 
+// Elevations whose shadows use the accent get the campaign's own channels in
+// both themes, resting and hover alike, and never the ACC placeholder.
+func TestAppearanceCSSElevationAccent(t *testing.T) {
+	cases := []struct {
+		name, elevation, want string
+	}{
+		{"ambient tints resting shadows", "ambient", "--elev-resting:0 1px 2px rgb(16 24 40 / .05), 0 6px 18px -8px rgb(16 185 129 / .28);"},
+		{"ambient tints hover shadows", "ambient", "0 0 0 1px rgb(16 185 129 / .12);--cz-lift:3px;"},
+		{"ambient tints dark shadows", "ambient", "0 8px 20px -8px rgb(16 185 129 / .32);"},
+		{"flat outlines in the accent", "flat", "--elev-hover:0 0 0 1.5px rgb(16 185 129 / .35);"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			ctx := SetAccentColor(context.Background(), "#10b981")
+			ctx = SetAppearance(ctx, &AppearanceData{Elevation: tc.elevation})
+			css := AppearanceCSS(ctx)
+			if !strings.Contains(css, tc.want) {
+				t.Errorf("css %q missing %q", css, tc.want)
+			}
+			if strings.Contains(css, "ACC") {
+				t.Errorf("placeholder left in %q", css)
+			}
+		})
+	}
+}
+
 func TestNavCorner(t *testing.T) {
 	cases := []struct {
 		name                   string
@@ -661,6 +688,9 @@ func TestTopbarWidgetShown_LiveWidgets(t *testing.T) {
 		{"weather empty (no reading today)", &TopbarLiveData{Date: "x"}, "weather", false},
 		{"moon empty (no moons)", &TopbarLiveData{Date: "x"}, "moon", false},
 		{"session empty (no upcoming night)", &TopbarLiveData{Date: "x"}, "session", false},
+		{"era with data", &TopbarLiveData{Era: "Age of Ash"}, "era", true},
+		{"era empty (today in no era)", &TopbarLiveData{Date: "x"}, "era", false},
+		{"no live data, era", nil, "era", false},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -703,6 +733,8 @@ func TestTopbarRendersLiveWidgets(t *testing.T) {
 			nil, []string{"DATE-MARKER", "topbar-tray", "fa-calendar-days", "fa-moon"}, ""},
 		{"empty widgets do not count toward +N", []string{"date", "weather", "session"}, &TopbarLiveData{Date: "DATE-MARKER"},
 			[]string{"DATE-MARKER"}, []string{"WEATHER-MARKER", "NIGHT-MARKER"}, ""},
+		{"the era draws its name", []string{"era"}, &TopbarLiveData{Era: "ERA-MARKER"},
+			[]string{"ERA-MARKER", "fa-hourglass-half"}, []string{"DATE-MARKER"}, ""},
 		{"a partial set counts only what drew", []string{"date", "weather", "moon"}, &TopbarLiveData{Date: "DATE-MARKER", Weather: "WEATHER-MARKER"},
 			[]string{"DATE-MARKER", "WEATHER-MARKER"}, []string{"fa-moon"}, "+1"},
 	}

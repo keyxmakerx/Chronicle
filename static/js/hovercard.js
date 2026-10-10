@@ -36,6 +36,7 @@
   var card = null, inner = null;
   var current = null;   // trigger the card belongs to
   var pinned = false;
+  var restoringFocus = false; // set while Escape hands focus back to the trigger
   var openTimer = 0, closeTimer = 0;
   var token = 0;        // guards against a slow contentFn answering for an old trigger
 
@@ -53,7 +54,7 @@
   // Only same-site or http(s) links may be followed from a card.
   function safeHref(h) {
     h = String(h || '');
-    return /^(\/(?!\/)|https?:\/\/|#)/i.test(h) ? h : '';
+    return /^(\/(?![\/\\])|https?:\/\/|#)/i.test(h) ? h : '';
   }
 
   function html(c, idPrefix) {
@@ -74,8 +75,13 @@
     if (c.text) h += '<p class="chc__text">' + esc(c.text) + '</p>';
     if (c.loading) h += '<p class="chc__loading">Loading…</p>';
     var href = c.link && safeHref(c.link.href);
-    if (c.foot || href) {
-      h += '<div class="chc__foot">' + (c.foot ? '<span>' + esc(c.foot) + '</span>' : '') +
+    // c.peek: a same-site peek address. Phones have no hover or Shift, so the
+    // card (opened by a long press there) is where they reach the side panel.
+    // The address rides in a data attribute so the inline handler needs no escaping.
+    var peek = c.peek && C.peekAddress ? C.peekAddress(c.peek) : '';
+    var peekBtn = peek ? '<button type="button" class="chc__peek" data-peek="' + esc(peek) + '" onclick="(function(b){if(window.Chronicle&amp;&amp;Chronicle.peek){Chronicle.peek.open(b.getAttribute(\'data-peek\'));Chronicle.hovercard.close();}})(this)">Peek</button>' : '';
+    if (c.foot || href || peekBtn) {
+      h += '<div class="chc__foot">' + (c.foot ? '<span>' + esc(c.foot) + '</span>' : '') + peekBtn +
         (href ? '<a class="chc__link" href="' + esc(href) + '">' + esc(c.link.label || 'Open') + ' &rarr;</a>' : '') + '</div>';
     }
     return h;
@@ -102,7 +108,7 @@
       if (e.target.closest('.chc__x')) {
         var t = current;
         close();
-        if (t && t.focus) t.focus();
+        restoringFocus = true; if (t && t.focus) t.focus(); restoringFocus = false;
       }
     });
     return card;
@@ -212,6 +218,7 @@
       if (t === current) soonClose();
     }
     function onFocusIn(e) {
+      if (restoringFocus) return;
       var t = find(e);
       if (within(t) && !(pinned && current) && t !== current) show(t, contentFn, false);
     }
@@ -267,8 +274,14 @@
   document.addEventListener('keydown', function (e) {
     if (e.key === 'Escape' && current) {
       var t = current;
+      // This Escape belongs to the card; a peek panel open beside it waits
+      // for the next one.
+      e.preventDefault();
       close();
+      // Returning focus must not open the card again.
+      restoringFocus = true;
       if (t.focus) t.focus();
+      restoringFocus = false;
     }
   });
   window.addEventListener('scroll', function () {

@@ -80,7 +80,7 @@ numbered core migrations after it, tracked once each via `golang-migrate`'s
 
 | Table | Purpose | Notable columns |
 |---|---|---|
-| `users` | Accounts | `email` UNIQUE; `password_hash` (argon2id); `totp_secret`/`totp_enabled`; `is_admin`, `is_disabled`; `pending_email`/`email_verify_token` (email-change flow); `admin_nav_pins`, `view_prefs` JSON (the person's own pins and My view choices) |
+| `users` | Accounts | `email` UNIQUE; `password_hash` (argon2id); `totp_secret`/`totp_enabled`; `is_admin`, `is_disabled`; `pending_email`/`email_verify_token` (email-change flow); `admin_nav_pins`, `view_prefs` JSON (the person's own pins and My view choices); `notify_prefs` JSON (which messages reach them on the bell and by email, `internal/notifyprefs`); `deleted_at` (set when the person deleted their own account: the row stays, emptied, disabled and named "Former member", because content references it) |
 | `password_reset_tokens` | Forgot-password flow | `token_hash` UNIQUE; FK→`users` CASCADE; 1h expiry |
 | `security_events` | Site-wide security audit log | `event_type`, `user_id`/`actor_id` nullable; `details` JSON; indexed by type/user/ip/actor + `created_at` |
 | `site_settings` | Global key/value settings | `setting_key` PK |
@@ -180,6 +180,7 @@ numbered core migrations after it, tracked once each via `golang-migrate`'s
 | Table | Purpose | Notable columns |
 |---|---|---|
 | `media_files` | Uploaded file metadata | `content_hash` (sha256, per-campaign dedup — `INDEX(campaign_id, content_hash)`); `thumbnail_paths` JSON; `usage_type` |
+| `page_files` | Which page a `page_file` media file is attached to (migration 46) | `media_id` PK FK→`media_files` CASCADE; `entity_id` FK→`entities` CASCADE; `campaign_id`; `gm_only` |
 | `addons` | Registry of installable features (systems/widgets/integrations/plugins) | `slug` UNIQUE; `category` enum; `status` enum(`active`,`planned`,`deprecated`); seeded by the baseline migration so the registry exists even if a plugin's own schema migration fails |
 | `campaign_addons` | Per-campaign addon enablement | `UNIQUE(campaign_id, addon_id)`; `config_json` (the `"setup"` key holds extension-settings wizard state, ADR-043) |
 | `extensions` | Installed WASM extension manifests | `ext_id` UNIQUE; `manifest` JSON |
@@ -240,7 +241,7 @@ plugin does with them: `internal/plugins/calendar/.ai.md`.
 | `map_campaign_settings` | Campaign-wide default map frame | `campaign_id` PK, FK→`campaigns` CASCADE; `frame_style` (no row = `atlas`) |
 | `map_markers` | Pins on a map | `x`/`y` percentage 0–100; `entity_id` FK→`entities` SET NULL; `pin_category`; `visibility`/`visibility_rules`; `foundry_id` |
 | `map_layers` | Ordered drawing/token/fog layers | `layer_type`; `is_visible`/`is_locked`/`opacity` |
-| `map_drawings` | Freehand/shape/text/shadow annotations and pictures on a layer | `points` JSON; `visibility`/`visibility_rules`; `foundry_id`; `image_id` (picture's media file, no FK), `crop` JSON, `sort_order` (migration 008, pictures only) |
+| `map_drawings` | Freehand/shape/text/shadow drawings, arrows, highlighter strokes, numbered steps, speech bubbles and pictures on a layer | `points` JSON; `visibility`/`visibility_rules`; `foundry_id`; `image_id` (picture's media file, no FK), `crop` JSON, `sort_order` (migration 008, pictures only) |
 | `map_tokens` | Positioned tokens (often an entity's avatar) | `entity_id` FK SET NULL; `bar1/2_value/max`, `aura_*`, `light_*`, `vision_enabled/range` (Foundry-parity fields); `status_effects`/`flags` JSON; `foundry_id` |
 | `map_fog` | Explored/unexplored fog-of-war polygons | `points` JSON; `is_explored` |
 | `map_hex_layers` | A map's hex layer (at most one per map, on when `display_settings` grid type is hex) | PK `map_id` FK→`maps` CASCADE; `anchor_drawing_id` (a picture on the map, no FK); `fog_enabled`; `party_col`/`party_row`; `miles_per_hex`, `miles_per_day`; `version` |

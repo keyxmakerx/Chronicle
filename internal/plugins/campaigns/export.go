@@ -172,20 +172,17 @@ type ExportCalendarData struct {
 	// must carry the GM's actual configuration rather than falling back to
 	// the un-set/off defaults.
 	//
-	// TracksRealTime/RealTimeZone are deliberately NOT carried here:
-	// RealTimeZone trips this repo's scheduler-data egress guard
-	// (sessions.TestScheduler_AbsentFromCampaignExport, RC-12.5), which
-	// fails on any exported field whose name contains "timezone" — a
-	// calendar's real-time anchor is GM-configured world data, not a
-	// specific member's own location the way the guard's usual target
-	// (session availability) is, but a GM who anchors a calendar to their
-	// own convenient zone still has that zone leave in the backup, and the
-	// guard's own doc comment says a new zone-carrying field must
-	// consciously EXTEND that pin, not be routed around it — a security
-	// sign-off call for a human reviewer.
+	// TracksRealTime/RealTimeZone keep a calendar that follows real time
+	// doing so after a restore. The zone is the one the GM picked for their
+	// world, not a member's own; it is the one named exception to the
+	// scheduler-data export guard (sessions.TestScheduler_AbsentFromCampaignExport).
+	// Absent in older backups, which restore the calendar not following
+	// real time.
 	Hemisphere         *string `json:"hemisphere,omitempty"`
 	ForecastsEnabled   bool    `json:"forecasts_enabled,omitempty"`
 	MonthStartsNewWeek bool    `json:"month_starts_new_week,omitempty"`
+	TracksRealTime     bool    `json:"tracks_real_time,omitempty"`
+	RealTimeZone       *string `json:"real_time_zone,omitempty"`
 	// EraLook is the calendar's era colours setting; nil in a backup from
 	// before it existed, which keeps the defaults on restore.
 	EraLook  *ExportCalendarEraLook  `json:"era_look,omitempty"`

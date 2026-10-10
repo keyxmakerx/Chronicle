@@ -7,12 +7,13 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"github.com/keyxmakerx/chronicle/internal/notifyprefs"
 	"github.com/keyxmakerx/chronicle/internal/templates/layouts"
 	"github.com/keyxmakerx/chronicle/internal/timeutil"
 )
 
 // AccountPage renders the full account settings page.
-templ AccountPage(user *User, csrfToken string, timezones []timeutil.Zone, prefs ViewPrefs) {
+templ AccountPage(user *User, csrfToken string, timezones []timeutil.Zone, prefs ViewPrefs, notify notifyprefs.Prefs, owned []OwnedCampaignRef) {
 	@layouts.App("Account Settings") {
 		<div class="max-w-2xl mx-auto">
 			<div class="mb-6">
@@ -172,7 +173,7 @@ templ AccountPage(user *User, csrfToken string, timezones []timeutil.Zone, prefs
 				</p>
 			</div>
 			<!-- Timezone Setting -->
-			<div class="card p-6" x-data={ timezoneData(user) }>
+			<div class="card p-6 mb-6" x-data={ timezoneData(user) }>
 				<h2 class="text-lg font-semibold text-fg mb-1">Timezone</h2>
 				<p class="text-sm text-fg-secondary mb-4">
 					Used by real-life calendars to display dates and times in your local timezone.
@@ -209,8 +210,223 @@ templ AccountPage(user *User, csrfToken string, timezones []timeutil.Zone, prefs
 					</button>
 				</div>
 			</div>
+			@notifyPrefsCard(notify)
+			@deleteAccountCard(owned)
 		</div>
 	}
+}
+
+// notifyPrefsCard is the Notifications section: one row per kind of message,
+// a switch per way it can arrive, and a dash where Chronicle never sends it
+// that way. Each switch saves on its own.
+templ notifyPrefsCard(notify notifyprefs.Prefs) {
+	<div class="card p-6 mb-6" x-data={ notifyPrefsData(notify) } id="notifications">
+		<h2 class="text-lg font-semibold text-fg mb-1">Notifications</h2>
+		<p class="text-sm text-fg-secondary mb-4">Choose what reaches you and how. The bell is the list at the top of every page. A dash means Chronicle doesn't send that one that way.</p>
+		<div class="overflow-x-auto">
+			<table class="w-full text-sm">
+				<thead>
+					<tr class="text-xs uppercase tracking-wide text-fg-muted">
+						<th class="text-left font-semibold py-1.5">When</th>
+						<th class="font-semibold py-1.5 w-16">Bell</th>
+						<th class="font-semibold py-1.5 w-16">Email</th>
+					</tr>
+				</thead>
+				<tbody>
+					for i, c := range notifyprefs.Catalog {
+						if i == 0 || notifyprefs.Catalog[i-1].Group != c.Group {
+							<tr><td colspan="3" class="pt-4 pb-1 font-semibold text-fg">{ c.Group }</td></tr>
+						}
+						<tr class="border-t border-edge">
+							<td class="py-2 pr-2 align-top">
+								<span class="text-fg-body">{ c.Label }</span>
+								if c.Detail != "" {
+									<span class="block text-xs text-fg-muted">{ c.Detail }</span>
+								}
+							</td>
+							@notifySwitchCell(c, notifyprefs.Bell)
+							@notifySwitchCell(c, notifyprefs.Email)
+						</tr>
+					}
+					<tr><td colspan="3" class="pt-4 pb-1 font-semibold text-fg">Always sent</td></tr>
+					<tr class="border-t border-edge">
+						<td class="py-2 pr-2 align-top">
+							<span class="text-fg-body">Password resets, email changes, campaign invitations and hand-overs</span>
+							<span class="block text-xs text-fg-muted">These keep your account safe, so they can't be switched off</span>
+						</td>
+						<td class="py-2 text-center"><i class="fa-solid fa-lock text-fg-muted" aria-label="Always on"></i></td>
+						<td class="py-2 text-center"><i class="fa-solid fa-lock text-fg-muted" aria-label="Always on"></i></td>
+					</tr>
+				</tbody>
+			</table>
+		</div>
+		<div class="flex items-start gap-3 mt-4 pt-4 border-t border-edge">
+			<button
+				type="button"
+				class="toggle shrink-0 mt-0.5"
+				role="switch"
+				aria-labelledby="notify-pause-label"
+				x-bind:aria-checked="p.pauseEmail.toString()"
+				@click="pause(!p.pauseEmail)"
+			><span class="toggle-knob"></span></button>
+			<div>
+				<p class="text-sm font-medium text-fg" id="notify-pause-label">Pause all email</p>
+				<p class="text-xs text-fg-muted">Bell entries still arrive, and your choices above come back when you switch this off.</p>
+			</div>
+		</div>
+		<p class="text-xs mt-4 min-h-4" aria-live="polite">
+			<span x-show="status === 'saved'" class="text-fg-muted">Saved to your account</span>
+			<span x-show="status === 'saving'" class="text-fg-muted">Saving...</span>
+			<span x-show="status === 'error'" class="text-red-500" x-text="error"></span>
+		</p>
+	</div>
+}
+
+// deleteAccountCard is the Delete account section. It opens in place, lists
+// the campaigns that must be handed over or deleted first, and only enables
+// the button once none are left and the password and DELETE are typed. The
+// server checks all of it again.
+templ deleteAccountCard(owned []OwnedCampaignRef) {
+	<div class="card p-6 border-red-500/40" x-data={ deleteAccountData(len(owned)) } id="delete-account">
+		<h2 class="text-lg font-semibold text-red-600 dark:text-red-400 mb-1">Delete account</h2>
+		<div x-show="!open">
+			<p class="text-sm text-fg-secondary">Removes your account, your private notes and your link to your characters. This can't be undone.</p>
+			<div class="flex justify-end pt-3 mt-3 border-t border-edge">
+				<button type="button" class="btn-secondary text-sm text-red-600 dark:text-red-400" @click="open = true">Delete my account…</button>
+			</div>
+		</div>
+		<div x-show="open" x-cloak x-transition.opacity class="space-y-4 mt-2">
+			if len(owned) > 0 {
+				<div class="rounded-lg border border-amber-500/40 bg-amber-50 dark:bg-amber-900/20 p-3 text-sm text-fg">
+					<p class="font-medium">First, hand over or delete the campaigns you own.</p>
+					<p class="text-fg-secondary">Every campaign needs an owner, so Chronicle won't leave them without one.</p>
+					<ul class="mt-2 divide-y divide-edge rounded-md border border-edge bg-surface">
+						for _, o := range owned {
+							<li class="flex flex-wrap items-center gap-2 px-3 py-2">
+								<span class="flex-1 min-w-0">
+									<span class="block font-medium text-fg truncate">{ o.Name }</span>
+									<span class="block text-xs text-fg-muted">{ memberCountLabel(o.MemberCount) }</span>
+								</span>
+								if o.MemberCount > 1 {
+									<a class="btn-secondary text-sm" href={ templ.SafeURL("/campaigns/" + o.ID + "/transfer") }>Hand over…</a>
+								}
+								<a class="btn-secondary text-sm" href={ templ.SafeURL("/campaigns/" + o.ID + "/settings") }>Delete…</a>
+							</li>
+						}
+					</ul>
+				</div>
+			}
+			<div class="text-sm text-fg-secondary">
+				<p class="mb-1">What happens:</p>
+				<ul class="list-disc pl-5 space-y-0.5">
+					<li>Pages and posts you wrote in other people's campaigns stay, signed "Former member".</li>
+					<li>Your private notes and your link to your characters are removed. The characters stay with their campaign.</li>
+					<li>You're taken out of every campaign and every DM access list, and signed out everywhere.</li>
+				</ul>
+			</div>
+			<div>
+				<label class="block text-sm font-medium text-fg-body mb-1" for="delete-password">Your password</label>
+				<input type="password" id="delete-password" x-model="password" class="input w-full" autocomplete="current-password"/>
+			</div>
+			<div>
+				<label class="block text-sm font-medium text-fg-body mb-1" for="delete-confirm">Type DELETE to confirm</label>
+				<input type="text" id="delete-confirm" x-model="confirm" class="input w-full" autocomplete="off" spellcheck="false"/>
+			</div>
+			<div class="flex flex-wrap items-center justify-end gap-2 pt-2 border-t border-edge">
+				<span class="text-xs mr-auto" x-bind:class="error ? 'text-red-500' : 'text-fg-muted'" x-text="error || hint()" aria-live="polite"></span>
+				<button type="button" class="btn-secondary text-sm" @click="open = false; password = ''; confirm = ''; error = ''">Keep my account</button>
+				<button type="button" class="btn-danger text-sm" x-bind:disabled="!ready() || busy" @click="submit()">
+					<span x-show="!busy">Delete account</span>
+					<span x-show="busy">Deleting...</span>
+				</button>
+			</div>
+		</div>
+	</div>
+}
+
+func memberCountLabel(n int) string {
+	if n <= 1 {
+		return "Just you"
+	}
+	return fmt.Sprintf("%d members", n)
+}
+
+// deleteAccountData is the Alpine state for the Delete account section.
+func deleteAccountData(owned int) string {
+	return fmt.Sprintf(`{
+		open: false, password: '', confirm: '', busy: false, error: '', owned: %d,
+		ready() { return this.owned === 0 && this.password.length > 0 && this.confirm.trim() === 'DELETE'; },
+		hint() {
+			if (this.owned > 0) return 'Hand over or delete your ' + this.owned + (this.owned === 1 ? ' campaign' : ' campaigns') + ' first.';
+			return this.ready() ? 'This signs you out everywhere.' : 'Type your password and DELETE to continue.';
+		},
+		submit() {
+			this.busy = true; this.error = '';
+			Chronicle.apiFetch('/account/delete', { method: 'POST', body: { password: this.password, confirm: this.confirm } })
+			.then(r => r.json().catch(() => ({})).then(d => {
+				if (!r.ok) throw new Error(d.message || 'Could not delete your account');
+				window.location.href = d.redirect || '/login?deleted=1';
+			}))
+			.catch(e => { this.error = e.message; this.busy = false; });
+		}
+	}`, owned)
+}
+
+// notifySwitchCell draws one switch, or a dash when the category never
+// sends on that channel. Email switches dim while email is paused.
+templ notifySwitchCell(c notifyprefs.Category, ch notifyprefs.Channel) {
+	<td class="py-2 text-center align-top">
+		if c.Has(ch) {
+			<button
+				type="button"
+				class="toggle"
+				role="switch"
+				aria-label={ fmt.Sprintf("%s: %s", notifyChannelName(ch), c.Label) }
+				x-bind:aria-checked={ fmt.Sprintf("p.choices[%q][%q].toString()", c.Key, ch) }
+				if ch == notifyprefs.Email {
+					x-bind:class="p.pauseEmail ? 'opacity-50' : ''"
+				}
+				@click={ fmt.Sprintf("set(%q, %q)", c.Key, ch) }
+			><span class="toggle-knob"></span></button>
+		} else {
+			<span class="text-fg-muted" title={ fmt.Sprintf("Chronicle doesn't send this one by %s", notifyChannelName(ch)) }>—</span>
+		}
+	</td>
+}
+
+func notifyChannelName(ch notifyprefs.Channel) string {
+	if ch == notifyprefs.Email {
+		return "email"
+	}
+	return "bell"
+}
+
+// notifyPrefsData returns the Alpine state for the Notifications section.
+// A failed save puts the switch back, so the page never shows a choice the
+// account doesn't hold.
+func notifyPrefsData(p notifyprefs.Prefs) string {
+	cur, _ := json.Marshal(p)
+	return fmt.Sprintf(`{
+		p: %s,
+		status: '',
+		error: '',
+		send(body, undo) {
+			this.status = 'saving'; this.error = '';
+			Chronicle.apiFetch('/account/notifications', { method: 'PUT', body: body })
+			.then(r => { if (!r.ok) throw new Error('Could not save that choice'); this.status = 'saved'; })
+			.catch(e => { undo(); this.status = 'error'; this.error = e.message; });
+		},
+		set(key, ch) {
+			var next = !this.p.choices[key][ch];
+			this.p.choices[key][ch] = next;
+			var body = { choices: {} }; body.choices[key] = {}; body.choices[key][ch] = next;
+			this.send(body, () => { this.p.choices[key][ch] = !next; });
+		},
+		pause(v) {
+			this.p.pauseEmail = v;
+			this.send({ pauseEmail: v }, () => { this.p.pauseEmail = !v; });
+		}
+	}`, cur)
 }
 
 // avatarData returns the Alpine.js x-data JSON for the avatar uploader.

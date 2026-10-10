@@ -68,7 +68,7 @@ func TestFogHiddenWrites_DrawingsAndTokens(t *testing.T) {
 		write func(DrawingService) error
 	}{
 		{"update drawing", false, func(s DrawingService) error {
-			return s.UpdateDrawing(context.Background(), "d", "map-1", permissions.RoleScribe, false, UpdateDrawingInput{})
+			return s.UpdateDrawing(context.Background(), "d", "map-1", "", permissions.RoleScribe, false, UpdateDrawingInput{})
 		}},
 		{"delete drawing", false, func(s DrawingService) error {
 			return s.DeleteDrawing(context.Background(), "d", "map-1", nil, "u", permissions.RoleScribe, false)
@@ -80,7 +80,7 @@ func TestFogHiddenWrites_DrawingsAndTokens(t *testing.T) {
 			return s.UpdateTokenPosition(context.Background(), "t", "map-1", false, UpdateTokenPositionInput{X: patch.Of(float64(1)), Y: patch.Of(float64(1))})
 		}},
 		{"DM updates drawing", true, func(s DrawingService) error {
-			return s.UpdateDrawing(context.Background(), "d", "map-1", permissions.RoleOwner, true, UpdateDrawingInput{})
+			return s.UpdateDrawing(context.Background(), "d", "map-1", "", permissions.RoleOwner, true, UpdateDrawingInput{})
 		}},
 		{"DM moves token", true, func(s DrawingService) error {
 			return s.UpdateTokenPosition(context.Background(), "t", "map-1", true, UpdateTokenPositionInput{X: patch.Of(float64(1)), Y: patch.Of(float64(1))})
@@ -176,7 +176,7 @@ func TestUpdateTokenPosition_EventNamesTheMap(t *testing.T) {
 	}
 }
 
-func TestFogWithholdsMedia(t *testing.T) {
+func TestWithholdsPictureFile(t *testing.T) {
 	img := "media-1"
 	for _, tc := range []struct {
 		name   string
@@ -195,7 +195,7 @@ func TestFogWithholdsMedia(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			svc := NewDrawingService(&fogWriteRepo{d: tc.d})
 			svc.SetHexFogLookup(tc.lookup)
-			got, err := svc.FogWithholdsMedia(context.Background(), "map-1", tc.media)
+			got, err := svc.WithholdsPictureFile(context.Background(), "map-1", tc.media)
 			if got != tc.want || (err != nil) != tc.err {
 				t.Errorf("got %v, %v; want %v, err=%v", got, err, tc.want, tc.err)
 			}

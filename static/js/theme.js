@@ -23,6 +23,8 @@
   /** Put the theme on <html> and the toggle icons without saving anywhere. */
   function paintTheme(theme) {
     var html = document.documentElement;
+    // Site admin is always dark: a saved choice still applies everywhere else.
+    if (html.hasAttribute('data-site-admin')) theme = 'dark';
     if (theme === 'dark') {
       html.classList.add('dark');
     } else {

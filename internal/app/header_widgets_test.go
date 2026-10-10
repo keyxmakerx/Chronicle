@@ -146,6 +146,46 @@ func TestBuildTopbarLive(t *testing.T) {
 	}
 }
 
+func TestHeaderEraName(t *testing.T) {
+	end := 1199
+	cases := []struct {
+		name string
+		eras []calendar.Era
+		want string
+	}{
+		{"no eras", nil, ""},
+		{"today inside an ongoing era", []calendar.Era{{Name: " Age of Ash ", StartYear: 1100, StartMonth: 1, StartDay: 1}}, "Age of Ash"},
+		{"the era that ended is skipped", []calendar.Era{
+			{Name: "Old Kingdom", StartYear: 900, StartMonth: 1, StartDay: 1, EndYear: &end},
+			{Name: "Age of Ash", StartYear: 1200, StartMonth: 1, StartDay: 1},
+		}, "Age of Ash"},
+		{"an era that has not begun is not today's", []calendar.Era{{Name: "Dawn", StartYear: 1203, StartMonth: 1, StartDay: 15}}, ""},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			c := testCalendar()
+			c.Eras = tc.eras
+			if got := headerEraName(c); got != tc.want {
+				t.Errorf("got %q, want %q", got, tc.want)
+			}
+		})
+	}
+}
+
+func TestBuildTopbarLive_Era(t *testing.T) {
+	c := testCalendar()
+	c.Eras = []calendar.Era{{Name: "Age of Ash", StartYear: 1100, StartMonth: 1, StartDay: 1}}
+	got := buildTopbarLive(context.Background(), &fakeHeaderCalendar{cal: c}, &fakeHeaderNights{},
+		headerLiveRequest{Widgets: []string{"era"}, Calendar: true})
+	if got == nil || got.Era != "Age of Ash" || got.Date != "" || len(got.Moons) != 0 {
+		t.Fatalf("got %+v, want only the era", got)
+	}
+	if got := buildTopbarLive(context.Background(), &fakeHeaderCalendar{cal: testCalendar()}, &fakeHeaderNights{},
+		headerLiveRequest{Widgets: []string{"era"}, Calendar: true}); got != nil {
+		t.Fatalf("today in no era: got %+v, want nil", got)
+	}
+}
+
 func TestHeaderNightLabel(t *testing.T) {
 	// Saturday 2026-10-03 12:00 UTC.
 	now := time.Date(2026, 10, 3, 12, 0, 0, 0, time.UTC)
@@ -196,5 +236,28 @@ func TestHeaderWeatherLabel(t *testing.T) {
 				t.Errorf("got %q, want %q", got, tc.want)
 			}
 		})
+	}
+}
+
+func TestHeaderSkyCalendarID(t *testing.T) {
+	cases := []struct {
+		name string
+		cal  *fakeHeaderCalendar
+		want string
+	}{
+		{"the default calendar", &fakeHeaderCalendar{cal: testCalendar()}, "cal1"},
+		{"none, or not this viewer's", &fakeHeaderCalendar{calErr: apperror.NewNotFound("calendar not found")}, ""},
+		{"a failed read", &fakeHeaderCalendar{calErr: errors.New("db down")}, ""},
+		{"no calendar and no error", &fakeHeaderCalendar{}, ""},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := headerSkyCalendarID(context.Background(), tc.cal, "camp1", permissions.Viewer{}); got != tc.want {
+				t.Errorf("got %q, want %q", got, tc.want)
+			}
+		})
+	}
+	if got := headerSkyCalendarID(context.Background(), nil, "camp1", permissions.Viewer{}); got != "" {
+		t.Errorf("no calendar service: got %q", got)
 	}
 }

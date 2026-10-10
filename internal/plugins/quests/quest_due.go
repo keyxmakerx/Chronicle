@@ -105,7 +105,7 @@ type duePlan struct {
 // line. Everything that can refuse the save (an invalid date, no calendar, a
 // calendar write failing) happens here, before the sheet is written, so a
 // refused save changes neither the sheet nor the calendar.
-func (s *questService) planDue(ctx context.Context, campaignID string, ent EntityInfo, v Viewer, q *Quest, p QuestPatch, prevTitle string) (duePlan, error) {
+func (s *questService) planDue(ctx context.Context, campaignID string, ent EntityInfo, v Viewer, q *Quest, p QuestPatch, prevTitle string, prevHidden bool) (duePlan, error) {
 	var plan duePlan
 	var cal QuestCalendar
 	switch {
@@ -127,8 +127,9 @@ func (s *questService) planDue(ctx context.Context, campaignID string, ent Entit
 			return plan, err
 		}
 		q.DueDate, cal = &d, c
-	case q.DueDate != nil && q.Notice.Title != prevTitle:
-		// The event carries the notice title, so a rename follows it.
+	case q.DueDate != nil && (q.Notice.Title != prevTitle || q.Layout.Notice.Hidden != prevHidden):
+		// The event carries the notice title, so a rename follows it, and
+		// hiding or showing the notice hides or shows the event with it.
 		c, err := calendarOf(ctx, s.cal, campaignID)
 		if err != nil {
 			return plan, apperrorInternal(err)
@@ -144,7 +145,7 @@ func (s *questService) planDue(ctx context.Context, campaignID string, ent Entit
 	}
 	id, err := s.cal.SaveDueEvent(ctx, campaignID, cal, q.DueEventID, DueEvent{
 		EntityID: ent.ID, Title: eventTitle(q.Notice.Title, ent.Name), Day: *q.DueDate,
-		DMOnly: !open, CreatedBy: v.UserID,
+		DMOnly: dueEventDMOnly(open, *q), CreatedBy: v.UserID,
 	})
 	if err != nil {
 		return plan, apperrorInternal(err)
@@ -193,28 +194,35 @@ func (s *questService) deleteDueEvent(ctx context.Context, campaignID, eventID s
 	return s.cal.DeleteDueEvent(ctx, campaignID, cal, eventID)
 }
 
-// dueEventOf reads the id of the page's due event; "" when the page has no
-// sheet, no due date or no event. One repository read.
-func (s *questService) dueEventOf(ctx context.Context, campaignID, entityID string) (string, error) {
+// dueEventDMOnly reports whether the due event is for the DM only: players
+// cannot open the page, or the DM hid the notice the due date belongs to (the
+// player view of the sheet drops the due date with the notice).
+func dueEventDMOnly(playersCanOpen bool, q Quest) bool {
+	return !playersCanOpen || q.Layout.Notice.Hidden
+}
+
+// dueEventOf reads the page's sheet and the id of its due event; the id is ""
+// when the page has no sheet, no due date or no event. One repository read.
+func (s *questService) dueEventOf(ctx context.Context, campaignID, entityID string) (string, Quest, error) {
+	var q Quest
 	data, _, found, err := s.repo.Get(ctx, campaignID, entityID)
 	if err != nil {
-		return "", apperrorInternal(err)
+		return "", q, apperrorInternal(err)
 	}
 	if !found {
-		return "", nil
+		return "", q, nil
 	}
-	var q Quest
 	if err := jsonUnmarshal(data, &q); err != nil {
-		return "", apperrorInternal(err)
+		return "", q, apperrorInternal(err)
 	}
 	if q.DueDate == nil {
-		return "", nil
+		return "", q, nil
 	}
-	return q.DueEventID, nil
+	return q.DueEventID, q, nil
 }
 
 func (s *questService) SyncDueEvent(ctx context.Context, campaignID, entityID string) error {
-	id, err := s.dueEventOf(ctx, campaignID, entityID)
+	id, q, err := s.dueEventOf(ctx, campaignID, entityID)
 	if err != nil || id == "" {
 		return err
 	}
@@ -226,14 +234,14 @@ func (s *questService) SyncDueEvent(ctx context.Context, campaignID, entityID st
 	if err != nil {
 		return apperrorInternal(err)
 	}
-	if err := s.cal.SetDueEventVisibility(ctx, campaignID, cal, id, !open); err != nil {
+	if err := s.cal.SetDueEventVisibility(ctx, campaignID, cal, id, dueEventDMOnly(open, q)); err != nil {
 		return apperrorInternal(err)
 	}
 	return nil
 }
 
 func (s *questService) RemoveDueEvent(ctx context.Context, campaignID, entityID string) error {
-	id, err := s.dueEventOf(ctx, campaignID, entityID)
+	id, _, err := s.dueEventOf(ctx, campaignID, entityID)
 	if err != nil || id == "" {
 		return err
 	}

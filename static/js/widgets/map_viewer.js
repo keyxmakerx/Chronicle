@@ -56,6 +56,19 @@
     if (window.ChronicleMapPictures) return Promise.resolve();
     return loadScript(cfg.picturesSrc).catch(function () { /* pictures simply do not render */ });
   }
+  // Arrows, the highlighter, numbered steps and speech bubbles, plus the
+  // in-map text editor and delete confirm. Optional: without it those four are
+  // not drawn.
+  function ensureAnnotations(cfg) {
+    if (window.ChronicleMapAnnotations || !cfg.annotationsSrc) return Promise.resolve();
+    return loadScript(cfg.annotationsSrc).catch(function () { /* annotations simply do not render */ });
+  }
+  // The live-refresh core is optional too: without it the page simply keeps
+  // showing what it loaded until it is reloaded.
+  function ensureLive(cfg) {
+    if (window.ChronicleMapLive) return Promise.resolve();
+    return loadScript(cfg.liveSrc).catch(function () { /* live refresh simply stays off */ });
+  }
   function ensureDrawing(cfg) {
     if (window.ChronicleMapDrawing) return Promise.resolve();
     return loadScript(cfg.drawSrc).catch(function () { /* drawings simply do not render */ });
@@ -214,6 +227,9 @@
 
 	// Track placed Leaflet markers by ID for removal/update.
 	var leafletMarkers = {};
+	// The live-refresh scheduler (map_live.js), created once the viewer context
+	// exists; null when the module is missing.
+	var live = null;
 
 	// Escape helpers to prevent XSS when building HTML strings from
 	// user-supplied marker data (name, description, icon, color).
@@ -359,6 +375,7 @@
 		lm.on('click', function() { openCard(mk, 'read'); });
 
 		if (isScribe) {
+			lm.on('dragstart', function() { draggingMarkerID = mk.id; });
 			lm.on('dragend', function(e) {
 				var pos = e.target.getLatLng();
 				var newX = (pos.lng / w) * 100;
@@ -368,7 +385,12 @@
 				newY = Math.max(0, Math.min(100, newY));
 				mk.x = newX;
 				mk.y = newY;
-				updateMarkerPosition(mk);
+				// Hold the guard until the save settles, so a refetch cannot
+				// snap the pin back to the old spot mid-save.
+				updateMarkerPosition(mk).then(function() {
+					draggingMarkerID = null;
+					releaseMarkerGuard();
+				});
 			});
 		}
 
@@ -390,6 +412,61 @@
 		renderPanel();
 	}
 
+	// ---- Live pin refresh ----
+	// A live refresh hands back the pins this viewer may see (the server has
+	// applied DM-only, shadow and hex-fog rules). Pins are matched by id and
+	// changed in place, because the click and drag handlers hold the objects.
+	function markerGuarded(id) { return id === editingMarkerID || id === draggingMarkerID; }
+	function fetchMarkers() {
+		return Chronicle.apiFetch('/campaigns/' + campaignID + '/maps/' + mapID + '/markers')
+			.then(function(resp) {
+				if (!resp.ok) throw new Error('HTTP ' + resp.status);
+				return resp.json();
+			});
+	}
+	function reconcileMarkers(list) {
+		var seen = {};
+		var byID = {};
+		markers.forEach(function(mk) { byID[mk.id] = mk; });
+		list.forEach(function(next) {
+			if (!next || !next.id) return;
+			seen[next.id] = true;
+			var cur = byID[next.id];
+			if (!cur) {
+				markers.push(next);
+				addMarkerToMap(next);
+				syncMarkerVisibility(next);
+				return;
+			}
+			if (markerGuarded(cur.id)) { markersStale = true; return; }
+			if (JSON.stringify(cur) === JSON.stringify(next)) return;
+			Object.keys(cur).forEach(function(k) { delete cur[k]; });
+			Object.keys(next).forEach(function(k) { cur[k] = next[k]; });
+			var lm = leafletMarkers[cur.id];
+			if (lm) {
+				lm.setLatLng(pinLatLng(cur.x, cur.y));
+				lm.setIcon(markerIcon(cur));
+				bindLabel(lm, cur);
+			}
+			syncMarkerVisibility(cur);
+		});
+		markers.slice().forEach(function(mk) {
+			if (seen[mk.id]) return;
+			if (markerGuarded(mk.id)) { markersStale = true; return; }
+			var lm = leafletMarkers[mk.id];
+			if (lm) { (clusterGroup || map).removeLayer(lm); delete leafletMarkers[mk.id]; }
+			var at = markers.indexOf(mk);
+			if (at >= 0) markers.splice(at, 1);
+		});
+		renderPanel();
+	}
+	// When the edit or drag that held a refresh back ends, catch up.
+	function releaseMarkerGuard() {
+		if (!markersStale) return;
+		markersStale = false;
+		if (live) live.notify('markers');
+	}
+
 	// ---- Small DOM builder for cards: user text only ever goes through
 	// textContent, so nothing a person typed can become markup. ----
 	function el(tag, cls, text) {
@@ -408,6 +485,13 @@
 	// ---- Pin cards (Leaflet popups restyled as cards) ----
 	var draft = null;      // a pin being placed, not yet saved
 	var draftPopup = null;
+	// The pin whose edit card is open, and the pin being dragged. A live refresh
+	// leaves exactly these alone so it cannot overwrite what the person is
+	// typing or moving.
+	var editPopup = null;
+	var editingMarkerID = null;
+	var draggingMarkerID = null;
+	var markersStale = false;
 
 	function cardOptions() {
 		return { className: 'mp-card-popup', minWidth: 230, maxWidth: 270, autoPanPadding: L.point(70, 70), closeOnClick: true };
@@ -428,7 +512,10 @@
 	function openCard(mk, mode) {
 		removeDraft();
 		var node = mode === 'edit' ? editCard(mk, null) : readCard(mk);
-		showPopup(popupAnchor(mk.x, mk.y), node);
+		var pop = showPopup(popupAnchor(mk.x, mk.y), node);
+		// Opening replaces any earlier card, whose popupclose has already run.
+		editPopup = mode === 'edit' ? pop : null;
+		editingMarkerID = mode === 'edit' ? mk.id : null;
 		var first = node.querySelector('input');
 		if (first && mode === 'edit') { first.focus(); first.select(); }
 	}
@@ -557,9 +644,16 @@
 				});
 				return resp.json().then(function(mk) {
 					removeDraft();
-					markers.push(mk);
+					// A live refetch can land before this response and already
+					// draw the pin; reuse it rather than drawing it twice.
+					var drawn = markers.filter(function(m) { return m.id === mk.id; })[0];
+					if (drawn) {
+						mk = drawn;
+					} else {
+						markers.push(mk);
+						addMarkerToMap(mk);
+					}
 					if (kind) kindOn[kind] = true;
-					addMarkerToMap(mk);
 					syncMarkerVisibility(mk);
 					renderPanel();
 					openCard(mk, 'read');
@@ -601,7 +695,8 @@
 				});
 				var lm = leafletMarkers[mk.id];
 				if (lm) { (clusterGroup || map).removeLayer(lm); delete leafletMarkers[mk.id]; }
-				markers.splice(markers.indexOf(mk), 1);
+				var at = markers.indexOf(mk);
+				if (at >= 0) markers.splice(at, 1);
 				map.closePopup();
 				renderPanel();
 			})
@@ -632,6 +727,11 @@
 	}
 	map.on('popupclose', function(e) {
 		if (draft && e.popup === draftPopup) removeDraft();
+		if (editPopup && e.popup === editPopup) {
+			editPopup = null;
+			editingMarkerID = null;
+			releaseMarkerGuard();
+		}
 	});
 
 	// ---- Fly to a pin and open its card (search results, pin list) ----
@@ -663,15 +763,29 @@
 	var drawShape = 'freehand';
 	var drawColor = '#2563eb';
 	var drawWidth = 4;
-	var SHAPE_ICON = { freehand: 'fa-pen', rectangle: 'fa-vector-square', ellipse: 'fa-circle', polygon: 'fa-draw-polygon', text: 'fa-font' };
+	// Until a colour is picked the highlighter stays yellow (the drawing module
+	// reads this through setStyle).
+	var colorPicked = false;
 	var SHADOW_HINT = 'Drag a box over what players should not make out';
 	var SHAPE_HINT = {
 		freehand: 'Drag to draw a line',
+		arrow: 'Drag from the tail to the tip',
 		rectangle: 'Click one corner, then the opposite corner',
 		ellipse: 'Click the centre, then click the edge',
 		polygon: 'Click each corner, double-click to finish',
+		highlight: 'Drag over what matters',
+		callout: 'Click where the speech bubble goes',
 		text: 'Click where the label goes'
 	};
+	// The step hint names the number the next click places.
+	function shapeHint(shape) {
+		if (shape === 'step') {
+			var A = window.ChronicleMapAnnotations;
+			var n = draw() && draw().nextStep ? draw().nextStep() : 1;
+			return A ? A.stepHint(n) : 'Click to place a numbered step';
+		}
+		return SHAPE_HINT[shape];
+	}
 	function draw() { return window.chronicleMap && window.chronicleMap.draw; }
 
 	// Zoom: 100% is the whole map fitted to the view, so the number means
@@ -758,8 +872,16 @@
 		document.querySelectorAll('[data-tool]').forEach(function(b) {
 			b.setAttribute('aria-pressed', b.dataset.tool === tool ? 'true' : 'false');
 		});
-		var db = document.querySelector('[data-tool="draw"] i');
-		if (db) db.className = 'fa-solid ' + SHAPE_ICON[drawShape];
+		// The Draw button wears the chosen shape's icon, copied from the picker.
+		var db = document.querySelector('[data-tool="draw"]');
+		var src = document.querySelector('[data-shape="' + drawShape + '"]');
+		var srcIcon = src && src.querySelector('i, svg');
+		var dbIcon = db && db.querySelector('i, svg');
+		if (srcIcon && dbIcon && dbIcon.getAttribute('data-shape-icon') !== drawShape) {
+			var copy = srcIcon.cloneNode(true);
+			copy.setAttribute('data-shape-icon', drawShape);
+			db.replaceChild(copy, dbIcon);
+		}
 		document.querySelectorAll('[data-shape]').forEach(function(b) {
 			b.setAttribute('aria-pressed', (tool === 'draw' && b.dataset.shape === drawShape) ? 'true' : 'false');
 		});
@@ -777,7 +899,7 @@
 		if (t !== 'draw' && t !== 'shadow' && draw()) draw().cancel();
 		tool = t;
 		if (t === 'pin') setHint('Click the map to drop a pin');
-		else if (t === 'draw') setHint(SHAPE_HINT[drawShape]);
+		else if (t === 'draw') setHint(shapeHint(drawShape));
 		else if (t === 'shadow') setHint(SHADOW_HINT);
 		else if (t !== 'hex') setHint('');
 		syncRail();
@@ -790,9 +912,9 @@
 		drawShape = shape;
 		tool = 'draw';
 		if (viewerCtx && viewerCtx.hexes) viewerCtx.hexes.setActive(false);
-		draw().setStyle({ color: drawColor, width: drawWidth });
+		draw().setStyle({ color: drawColor, width: drawWidth, picked: colorPicked });
 		draw().start(shape);
-		setHint(SHAPE_HINT[shape]);
+		setHint(shapeHint(shape));
 		syncRail();
 	}
 
@@ -855,7 +977,8 @@
 		flyStyle.querySelectorAll('[data-color]').forEach(function(b) {
 			b.addEventListener('click', function() {
 				drawColor = b.dataset.color;
-				if (draw()) draw().setStyle({ color: drawColor });
+				colorPicked = true;
+				if (draw()) draw().setStyle({ color: drawColor, picked: true });
 				syncStyle();
 			});
 		});
@@ -1019,9 +1142,9 @@
 	function hexesOn() { return !!(viewerCtx && viewerCtx.hexes && viewerCtx.hexes.isOn()); }
 	function syncHexes() {
 		if (destroyed || !viewerCtx) return;
-		if (viewerCtx.hexes) { if (D.grid_type === 'hex') startHexSocket(); viewerCtx.hexes.refresh(); return; }
+		if (viewerCtx.hexes) { if (D.grid_type === 'hex') startLiveSocket(); viewerCtx.hexes.refresh(); return; }
 		if (D.grid_type !== 'hex' || hexesLoading) return;
-		startHexSocket();
+		startLiveSocket();
 		hexesLoading = true;
 		// The terrain art is optional: without it every map draws Simple.
 		var art = cfg.dataset.hexArtSrc ? loadScript(cfg.dataset.hexArtSrc).catch(function() {}) : Promise.resolve();
@@ -1053,9 +1176,9 @@
 	var hexMiles = 6, hexSpeed = 24;
 	// The map's saved terrain art; the settings sheet stages a change in D.hex_art.
 	var hexArt = 'detailed';
-	// The live hex connection's state (see startHexSocket); declared up here
+	// The live hex connection's state (see startLiveSocket); declared up here
 	// because syncHexes can run before the connection code below does.
-	var hexSocket = null, hexSocketTries = 0, hexSocketTimer = null, hexSocketLost = false;
+	var liveSocket = null, liveSocketTries = 0, liveSocketTimer = null, liveSocketLost = false;
 	var hexCoverSubs = [];
 	var savedMapName = '';
 	// About ten hexes across a picture, whatever its size.
@@ -1927,44 +2050,67 @@
 	viewerCtx = window.chronicleMap;
 	syncHexes();
 
-	// ---- Live hex changes ----
+	// ---- Live changes ----
 	// The server announces every hex write as "hex.changed" with a version (and,
-	// when it is safe for this viewer, the party's path). It never carries hex
-	// contents: the hex module refetches the read filtered for this viewer.
+	// when it is safe for this viewer, the party's path), and every pin, drawing,
+	// shadow or token write as "map.items.changed" with a map id and a kind.
+	// Neither carries content: the viewer refetches the read filtered for it, so
+	// what a person learns is what their own read returns.
 	// Without a socket the map still works; changes then show on reload.
-	function startHexSocket() {
-		if (destroyed || hexSocket || hexSocketTimer || typeof window.WebSocket !== 'function') return;
+	live = window.ChronicleMapLive ? window.ChronicleMapLive.create({
+		kinds: {
+			markers: { fetch: fetchMarkers, apply: reconcileMarkers, busy: function() { return false; } },
+			drawings: {
+				fetch: function() { return viewerCtx && viewerCtx.liveDrawings ? viewerCtx.liveDrawings.fetch() : Promise.reject(new Error('no drawing layer')); },
+				apply: function(list) { if (viewerCtx && viewerCtx.liveDrawings) viewerCtx.liveDrawings.apply(list); },
+				busy: function() { return !!(viewerCtx && viewerCtx.liveDrawings && viewerCtx.liveDrawings.busy()); }
+			}
+		}
+	}) : null;
+	cleanups.push(function() { if (live) live.destroy(); });
+	function startLiveSocket() {
+		if (destroyed || liveSocket || liveSocketTimer || typeof window.WebSocket !== 'function') return;
 		try {
 			var proto = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-			hexSocket = new WebSocket(proto + '//' + window.location.host + '/ws?campaign=' + encodeURIComponent(campaignID));
-			hexSocket.addEventListener('open', function() {
-				hexSocketTries = 0;
+			liveSocket = new WebSocket(proto + '//' + window.location.host + '/ws?campaign=' + encodeURIComponent(campaignID));
+			liveSocket.addEventListener('open', function() {
+				liveSocketTries = 0;
 				// Events missed while disconnected: read the layer again.
-				if (hexSocketLost && viewerCtx && viewerCtx.hexes && viewerCtx.hexes.resync) viewerCtx.hexes.resync();
-				hexSocketLost = false;
+				if (liveSocketLost) {
+					if (viewerCtx && viewerCtx.hexes && viewerCtx.hexes.resync) viewerCtx.hexes.resync();
+					if (live) { live.notify('markers'); live.notify('drawings'); }
+				}
+				liveSocketLost = false;
 			});
-			hexSocket.addEventListener('message', function(ev) {
+			liveSocket.addEventListener('message', function(ev) {
 				var msg;
 				try { msg = JSON.parse(ev.data); } catch (e) { return; }
-				if (!msg || msg.type !== 'hex.changed' || msg.campaignId !== campaignID) return;
-				if (viewerCtx && viewerCtx.hexes && viewerCtx.hexes.onChanged) viewerCtx.hexes.onChanged(msg.payload);
-			});
-			hexSocket.addEventListener('close', function() {
-				hexSocket = null;
-				hexSocketLost = true;
-				// A quiet, bounded retry: a proxy that never upgrades must not be hammered.
-				if (!destroyed && hexSocketTries < 8) {
-					hexSocketTries++;
-					hexSocketTimer = setTimeout(function() { hexSocketTimer = null; startHexSocket(); }, Math.min(30000, 2000 * hexSocketTries));
+				if (!msg || msg.campaignId !== campaignID) return;
+				if (msg.type === 'hex.changed') {
+					if (viewerCtx && viewerCtx.hexes && viewerCtx.hexes.onChanged) viewerCtx.hexes.onChanged(msg.payload);
+				} else if (msg.type === 'map.items.changed') {
+					// Only this map's notices count; the socket carries the whole campaign.
+					if (live && msg.payload && msg.payload.map_id === mapID) {
+						window.ChronicleMapLive.kindsFor(msg.payload.kind).forEach(function(k) { live.notify(k); });
+					}
 				}
 			});
-			hexSocket.addEventListener('error', function(e) { if (e && e.preventDefault) e.preventDefault(); });
+			liveSocket.addEventListener('close', function() {
+				liveSocket = null;
+				liveSocketLost = true;
+				// A quiet, bounded retry: a proxy that never upgrades must not be hammered.
+				if (!destroyed && liveSocketTries < 8) {
+					liveSocketTries++;
+					liveSocketTimer = setTimeout(function() { liveSocketTimer = null; startLiveSocket(); }, Math.min(30000, 2000 * liveSocketTries) + Math.random() * 1000);
+				}
+			});
+			liveSocket.addEventListener('error', function(e) { if (e && e.preventDefault) e.preventDefault(); });
 		} catch (e) { /* live updates are a nicety */ }
 	}
-	if (D.grid_type === 'hex') startHexSocket();
+	startLiveSocket();
 	cleanups.push(function() {
-		clearTimeout(hexSocketTimer);
-		if (hexSocket) { var ws = hexSocket; hexSocket = null; try { ws.close(); } catch (e) { /* already closed */ } }
+		clearTimeout(liveSocketTimer);
+		if (liveSocket) { var ws = liveSocket; liveSocket = null; try { ws.close(); } catch (e) { /* already closed */ } }
 	});
 
 	// Tear down a mount so a host that re-creates the viewer (the focus view,
@@ -1996,6 +2142,7 @@
     if (cfgEl.__mapViewer) return cfgEl.__mapViewer;
     var d = cfgEl.dataset;
     var p = ensureLeaflet({ leafletSrc: d.leafletSrc, clusterSrc: d.clusterSrc })
+      .then(function () { return ensureLive({ liveSrc: d.liveSrc }); })
       .then(function () {
         if (cfgEl.__mapViewerDestroyed) return null;
         var handle = mountViewer(cfgEl, opts);
@@ -2004,6 +2151,8 @@
           // The hex layer may have started first; its fog smoke needs this module.
           if (handle.ctx && handle.ctx.hexes && handle.ctx.hexes.shadowReady) handle.ctx.hexes.shadowReady();
           return ensurePictures({ picturesSrc: d.picturesSrc });
+        }).then(function () {
+          return ensureAnnotations({ annotationsSrc: d.annotationsSrc });
         }).then(function () {
           return ensureDrawing({ drawSrc: d.drawSrc });
         }).then(function () {

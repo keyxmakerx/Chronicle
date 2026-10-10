@@ -250,13 +250,16 @@
       ['lift', 'Lift', 'Rises to meet the pointer and settles when pressed. Rounded corners.'],
       ['press', 'Press', 'A tactile key: it sinks onto its base when pressed.'],
       ['glow', 'Glow', 'A pill that gathers a soft light around itself on hover.'],
-      ['ink', 'Ink', 'Crisp square corners. Ink spreads from wherever you press.']
+      ['ink', 'Ink', 'Crisp square corners. Ink spreads from wherever you press.'],
+      ['keystone', 'Keystone', 'Soft, raised and rounded. Presses deep with an inner shadow and lets go slowly.']
     ];
-    var BTN_RADIUS = { lift:'8px', press:'6px', glow:'999px', ink:'3px' };
+    var BTN_RADIUS = { lift:'8px', press:'6px', glow:'999px', ink:'3px', keystone:'12px' };
     var ELEVATION = {
       flat:     { name:'Flat', lift:0, rest:{ light:'none', dark:'none' }, hover:{ light:'0 0 0 1.5px rgb(ACC / .35)', dark:'0 0 0 1.5px rgb(ACC / .45)' } },
       standard: { name:'Standard', lift:2, rest:{ light:'0 1px 2px 0 rgb(0 0 0 / .05)', dark:'0 1px 2px 0 rgb(0 0 0 / .3)' }, hover:{ light:'0 6px 16px -4px rgb(0 0 0 / .12), 0 2px 6px -2px rgb(0 0 0 / .08)', dark:'0 8px 20px -6px rgb(0 0 0 / .5), 0 2px 6px -2px rgb(0 0 0 / .35)' } },
-      dramatic: { name:'Dramatic', lift:4, rest:{ light:'0 2px 6px -1px rgb(0 0 0 / .10), 0 10px 22px -12px rgb(0 0 0 / .28)', dark:'0 2px 6px -1px rgb(0 0 0 / .4), 0 12px 26px -12px rgb(0 0 0 / .7)' }, hover:{ light:'0 22px 44px -14px rgb(0 0 0 / .38), 0 6px 14px -6px rgb(0 0 0 / .18)', dark:'0 24px 48px -14px rgb(0 0 0 / .85), 0 6px 14px -6px rgb(0 0 0 / .5)' } }
+      dramatic: { name:'Dramatic', lift:4, rest:{ light:'0 2px 6px -1px rgb(0 0 0 / .10), 0 10px 22px -12px rgb(0 0 0 / .28)', dark:'0 2px 6px -1px rgb(0 0 0 / .4), 0 12px 26px -12px rgb(0 0 0 / .7)' }, hover:{ light:'0 22px 44px -14px rgb(0 0 0 / .38), 0 6px 14px -6px rgb(0 0 0 / .18)', dark:'0 24px 48px -14px rgb(0 0 0 / .85), 0 6px 14px -6px rgb(0 0 0 / .5)' } },
+      // Ambient tints its shadows with the accent; keep in step with czElevation.
+      ambient:  { name:'Ambient', lift:3, rest:{ light:'0 1px 2px rgb(16 24 40 / .05), 0 6px 18px -8px rgb(ACC / .28)', dark:'0 1px 2px rgb(0 0 0 / .4), 0 8px 20px -8px rgb(ACC / .32)' }, hover:{ light:'0 2px 4px rgb(16 24 40 / .06), 0 18px 36px -12px rgb(ACC / .42), 0 0 0 1px rgb(ACC / .12)', dark:'0 2px 4px rgb(0 0 0 / .45), 0 20px 40px -12px rgb(ACC / .5), 0 0 0 1px rgb(ACC / .2)' } }
     };
     var SPEEDS = {
       snappy:    { name:'Snappy', d:110, d2:170, ease:'cubic-bezier(.3,.9,.3,1)' },
@@ -324,9 +327,10 @@
       date:    { name:'In-world date', desc:'Today in your world, from the calendar' },
       weather: { name:'Weather', desc:'Today’s weather from the calendar' },
       moon:    { name:'Moon', desc:'Tonight’s moon phase' },
+      era:     { name:'Era', desc:'The age your world is in, from the calendar' },
       session: { name:'Next game night', desc:'Counts down to the next session' }
     };
-    var WIDGET_ORDER = ['links', 'text', 'note', 'search', 'date', 'weather', 'moon', 'session'];
+    var WIDGET_ORDER = ['links', 'text', 'note', 'search', 'date', 'weather', 'moon', 'era', 'session'];
     // Sample text the preview shows for the data-backed widgets; the live
     // header reads the real calendar and sessions, and a widget with nothing
     // to show there simply does not appear.
@@ -334,9 +338,13 @@
       date:    ['Date', '14 Frostfall 1203'],
       weather: ['Weather', 'Clear, 4°'],
       moon:    ['Moon', 'Selûne waxing crescent'],
+      era:     ['Era', 'Age of Ash'],
       session: ['Next', 'Fri 7 pm']
     };
-    var LATER = ['Era'];
+    // The sky header's calendar, and the still night it is drawn over (the
+    // same colours as the real header's, topbarSkyNight).
+    var SKY = { calendarId:ROOT.getAttribute('data-sky-calendar') || '' };
+    var SKY_NIGHT = 'linear-gradient(to bottom, #04061a, #141d45 65%, #2a3768)';
     var WIDGET_SLOTS = 4;
 
     var SECTIONS = [
@@ -469,7 +477,7 @@
     }
     // The header picks light or dark words from its own background.
     function headerLook(d, T){
-      var h = d.header, mode = h.bg === 'sky' ? 'solid' : h.bg;
+      var h = d.header, mode = h.bg;
       function col(c){ return c === 'page' ? T.card : c; }
       function words(cols){
         var w = Math.min.apply(null, cols.map(function(c){ return contrast(c, '#ffffff'); }));
@@ -479,6 +487,7 @@
       var bg, light, rep = 'none';
       if (mode === 'solid'){ bg = col(h.solid); light = words([bg]); }
       else if (mode === 'image'){ bg = '#0b0f1a'; light = true; }
+      else if (mode === 'sky'){ bg = SKY_NIGHT; light = true; }
       else {
         var a = col(h.from), b = col(h.to);
         bg = 'linear-gradient(' + HDR_DIRS[h.dir][0] + ', ' + a + ', ' + b + ')';
@@ -511,7 +520,7 @@
         '--p-sb':sb.bg, '--p-sb-text':sb.text, '--p-sb-text-2':sb.text2, '--p-sb-text-3':sb.text3, '--p-sb-hi':'#ffffff', '--p-sb-line':'rgb(255 255 255 / .07)', '--p-sb-accent':sbAcc,
         '--p-font':B[2], '--p-font-h':same_ ? B[2] : H[2], '--p-hw':same_ ? '700' : String(H[4]), '--p-hw-b':same_ ? '700' : String(H[4]), '--p-hls':H[6],
         '--p-fs':fs + 'px', '--p-h1':(fs * 1.8 * hz).toFixed(2) + 'px', '--p-h2':(fs * 1.38 * hz).toFixed(2) + 'px', '--p-h3':(fs * 1.16 * hz).toFixed(2) + 'px',
-        '--p-elev-rest':E.rest[theme], '--p-elev-hover':E.hover[theme].replace(/ACC/g, rgbCh(acc)), '--p-lift':E.lift + 'px',
+        '--p-elev-rest':E.rest[theme].replace(/ACC/g, rgbCh(acc)), '--p-elev-hover':E.hover[theme].replace(/ACC/g, rgbCh(acc)), '--p-lift':E.lift + 'px',
         '--p-dur':S.d + 'ms', '--p-dur2':S.d2 + 'ms', '--p-ease':S.ease, '--p-shadow-rgb':theme === 'dark' ? '0 0 0' : '15 23 42',
         '--p-br':BTN_RADIUS[d.buttons.style],
         '--p-tint-a':lively ? '.26' : '.15', '--p-rail-w':lively ? '3px' : '2px', '--p-edge-w':lively ? '2px' : '1px', '--p-trace-a':lively ? '1' : '.85', '--p-band-a':lively ? '.28' : '.16',
@@ -629,7 +638,7 @@
     }
     function tilesElev(){
       return Object.keys(ELEVATION).map(function(id){
-        var E = ELEVATION[id], k = { flat:'Cards sit on the page, with an outline on hover.', standard:'A soft shadow; cards lift a little on hover.', dramatic:'Deep shadows; cards rise clearly off the page.' }[id];
+        var E = ELEVATION[id], k = { flat:'Cards sit on the page, with an outline on hover.', standard:'A soft shadow; cards lift a little on hover.', dramatic:'Deep shadows; cards rise clearly off the page.', ambient:'Shadows tinted with your accent and a faint light from the top corner.' }[id];
         return '<label class="tile el"><input type="radio" name="t-elev" value="' + id + '" data-k="motion.elevation"><span class="tb">' +
           '<span class="el-s pv" aria-hidden="true"><i data-elev-sample="' + id + '"></i></span><span class="tn">' + E.name + '<span class="tck">' + IC('i-check') + '</span></span><span class="tk">' + k + '</span></span></label>';
       }).join('');
@@ -660,20 +669,21 @@
         fld('brand-backdrop', 'Backdrop', 'Behind the welcome', imgSlot('brand.backdrop', '', 'Upload', 'A soft shade keeps the welcome message readable over any picture. Up to 4 MB.')));
       if (id === 'header') return (
         fld('h-bg', 'Background', null,
-          opts('h-bg', 'header.bg', 'h-bg-l', HDR_MODES.map(function(m){ return m[0] === 'sky' ? [m[0], m[1], null, true, 'hint:sky', 'Coming soon'] : [m[0], m[1]]; })) +
+          opts('h-bg', 'header.bg', 'h-bg-l', HDR_MODES.map(function(m){ return [m[0], m[1]]; })) +
           '<div class="ctl" id="h-solid"><span class="hint" id="h-solid-l">Colour</span>' + swatches('hsolid', 'h-solid-l') + '</div>' +
           '<div class="ctl" id="h-grad"><span class="hint" id="h-from-l">From</span>' + swatches('hfrom', 'h-from-l') + '<span class="hint" id="h-to-l">To</span>' + swatches('hto', 'h-to-l') +
             '<span class="hint" id="h-dir-l">Direction</span>' + opts('h-dir', 'header.dir', 'h-dir-l', Object.keys(HDR_DIRS).map(function(k){ return [k, HDR_DIRS[k][1]]; })) +
             '<p class="hint" id="h-anim-h">The two colours drift slowly from side to side. They slow to a stop when nobody is using the page, and hold still for anyone who asks for less motion.</p></div>' +
           '<div class="ctl" id="h-img">' + imgSlot('header.image', '', 'Replace', 'Still or animated, 1.5 MB at most. The shade keeps the header’s words readable.') +
             '<span class="hint" id="h-scrim-l">Shade</span>' + opts('h-scrim', 'header.scrim', 'h-scrim-l', Object.keys(SCRIMS).map(function(k){ return [k, SCRIMS[k][1]]; })) + '</div>' +
+          '<div class="ctl" id="h-sky"><p class="hint">The animated sky from your calendar, the same one that sits over the month. It follows the world’s date, time of day and weather by itself, so there is nothing to set. Slow devices get the basic sky.</p>' +
+            (SKY.calendarId ? '' : '<p class="note"><svg class="i" aria-hidden="true"><use href="#cz-i-info"/></svg><span>Your campaign has no calendar yet, so the header shows a still night sky until it has one.</span></p>') + '</div>' +
           '<p class="hint">Words and buttons switch to white on dark backgrounds and pictures by themselves.</p>') +
         fld('h-height', 'Height', 'How tall the bar is', opts('h-height', 'header.height', 'h-height-l', HDR_HEIGHTS) +
           '<p class="hint">Slim is today’s bar. Tall gives pictures and moving colour more room.</p>') +
         fld('h-w', 'Widgets', 'Up to ' + WIDGET_SLOTS, '<p class="hint" id="w-full" aria-live="polite"></p><div class="wl" id="wl" aria-labelledby="h-w-l"></div>' +
           '<p class="hint">On a phone the bar shows the first widget and a +N button that opens the rest.</p>' +
-          '<div class="tape-note"><span class="tape" aria-hidden="true"></span><p><b>Under construction.</b> These are on their way. The date, weather and moon widgets above only ever show today in your world, never days ahead, and stay out of the bar when your calendar has nothing for today.</p>' +
-          '<div class="later-row"><span class="w-later">Sky background</span>' + LATER.map(function(n){ return '<span class="w-later">' + esc(n) + '</span>'; }).join('') + '</div></div>'));
+          '<p class="hint">The date, weather and moon widgets only ever show today in your world, never days ahead, and stay out of the bar when your calendar has nothing for today.</p>'));
       if (id === 'sidebar') return (
         fld('sb-col', 'Colour', 'The menu stays dark', menuColourOpts() +
           '<div class="ctl" id="sb-own"><span class="hint" id="sb-own-l">Your colour</span>' + swatches('sbown', 'sb-own-l') + '<p class="note" id="sb-own-note" hidden><svg class="i" aria-hidden="true"><use href="#cz-i-info"/></svg><span></span></p></div>' +
@@ -772,7 +782,8 @@
         '<div class="s-subs">' + ssub('regions', 'Regions', 6) + ssub('cities', 'Cities', 14, true) + ssub('dungeons', 'Dungeons', 11) + '</div>' +
         srow('factions', 'i-banner', 'Factions', 18, '#fbbf24') + srow('items', 'i-gem', 'Items', 53, '#a78bfa') + srow('lore', 'i-scroll', 'Lore', 29, '#34d399') +
         '</div></div>';
-      var hdr = '<div class="s-hdr"><div class="s-hdr-bg"><div class="s-hdr-drift" id="d-drift"></div><div class="s-hdr-img" id="d-himg"></div><div class="s-hdr-scrim"></div></div>' +
+      var hdr = '<div class="s-hdr"><div class="s-hdr-bg"><div class="s-hdr-drift" id="d-drift"></div><div class="s-hdr-img" id="d-himg"></div><div class="s-hdr-scrim"></div>' +
+        '<div class="s-hdr-sky" id="d-sky"><canvas></canvas></div><div class="s-hdr-skyscrim"></div></div>' +
         '<div class="s-path" id="d-path"></div><div class="s-rail" id="d-rail"></div><div class="s-tools" id="d-tools"></div></div>';
       var dash = '<div class="s-page" data-page="dash"><div class="d-banner" id="d-banner"><div class="d-img" id="d-img"></div><div class="d-scrim"></div><p class="d-welcome" id="d-welcome"></p></div>' +
         '<div class="d-title"><div class="h1" id="d-title"></div><div class="d-act">' + pbtn('pri', 'New page') + pbtn('sec', 'Invite players') + '</div></div>' +
@@ -835,7 +846,6 @@
     }
     function railHTML(d){
       var h = d.header.widgets.map(function(w){
-        if (w === 'era') return '<div class="rw"><span class="k">Era</span><span class="v">Age of Ash</span></div>';
         if (w === 'links') return '<div class="rw"><span class="k">Links</span><span class="v">' + esc(d.header.links.map(function(l){ return l.label.trim(); }).filter(Boolean).join(' · ') || 'No links yet') + '</span></div>';
         if (w === 'text') return '<div class="rw q"><span class="k">Note</span><span class="v">' + esc(d.header.text.trim() || 'Nothing written yet') + '</span></div>';
         if (w === 'search') return '<div class="rw srch">' + IC('i-search') + '<span>Search ' + esc(CAMPAIGN) + '…</span></div>';
@@ -856,7 +866,7 @@
       pv.dataset.navChosen = d.nav.style;
       pv.dataset.strength = d.nav.strength;
       pv.dataset.btn = d.buttons.style;
-      pv.dataset.hdr = d.header.bg === 'sky' ? 'solid' : d.header.bg;
+      pv.dataset.hdr = d.header.bg;
       pv.dataset.hdrh = d.header.height;
       pv.dataset.corner = d.sidebar.corner;
       pv.dataset.reduce = reduce ? '1' : '0';
@@ -923,6 +933,7 @@
       $('#h-grad').hidden = bg !== 'gradient' && bg !== 'moving';
       $('#h-anim-h').hidden = bg !== 'moving';
       $('#h-img').hidden = bg !== 'image';
+      $('#h-sky').hidden = bg !== 'sky';
       var lg = logoHTML(d), lt = $('#brand-logo-t');
       if (!imgURL(d.brand.logo)){ lt.className = 'thumb sq'; setHTML(lt, IC('i-image')); lt.style.backgroundImage = ''; lt._bg = ''; }
       else { lt.className = 'thumb sq'; setHTML(lt, '<span class="' + lg[0] + '" style="width:44px;height:44px;border-radius:9px">' + lg[1] + '</span>'); }
@@ -1074,12 +1085,27 @@
       $$('#preview .hl').forEach(function(hl){ hlMotion(hl, !reduce && !hl.closest('.zp.off') && hl.offsetParent !== null); });
       $$('.nt-s .hl').forEach(function(hl){ var vis = hl.offsetParent !== null; hlMotion(hl, vis && !reducedDevice() && !!hl.closest('.nav-tile.play'), vis && !reducedDevice()); });
       driftSync();
+      skySync();
     }
 
     /* ---------- The moving header, in the example ----------
        The same slide the real header makes (header_motion.js), on the shared
        MotionRest clock, so it rests when nobody is using the page. */
     var drift = null;
+    /* ---------- The sky header, in the example ----------
+       The campaign's own sky (header_sky.js) when it has a calendar; the
+       still night colours behind it otherwise. Held still under either
+       reduce choice, as the real header is. */
+    var sky = null;
+    function skyStop(){ if (sky){ if (sky.run) sky.run.destroy(); sky = null; } $('#d-sky').classList.remove('is-ready'); }
+    function skySync(){
+      var want = draft.header.bg === 'sky' && !!SKY.calendarId && !!(window.Chronicle && Chronicle.headerSky);
+      if (!want){ skyStop(); return; }
+      var still = reduceAll();
+      if (sky && sky.still === still) return;
+      skyStop();
+      sky = { run:Chronicle.headerSky.mount($('#d-sky'), { campaignId:CID, calendarId:SKY.calendarId, still:still }), still:still };
+    }
     function driftStop(){ if (drift){ if (drift.run) drift.run.destroy(); drift = null; } }
     function driftSync(){
       var el = $('#d-drift'), vertical = draft.header.dir === 'b';
@@ -1298,7 +1324,6 @@
       }
       if (t === 'btn'){ var b = BTN_STYLES.filter(function(x){ return x[0] === p[1]; })[0]; return '<b>' + esc(b[1]) + '</b><span>' + esc(b[2]) + '</span>'; }
       if (t === 'menu'){ var mc = MENU_COLOURS.filter(function(x){ return x[0] === p[1]; })[0]; return '<b>' + esc(mc[1]) + '</b><span>' + esc(mc[2]) + '</span>'; }
-      if (t === 'hint') return '<b>Sky</b><span>Coming soon: the living sky over your world as it is in the story right now.</span>';
       return '';
     }
     function hcCtl(el){ return el.matches('input, button') ? el : ($('input, button', el) || el); }
@@ -1810,6 +1835,7 @@
       if (mo) mo.disconnect();
       ringAnims.forEach(function (a) { a.forEach(function (x) { x.cancel(); }); });
       driftStop();
+      skyStop();
       clearTimeout(toastT); clearTimeout(hcTimer);
       cancelAnimationFrame(fzRaf); clearTimeout(discardT);
       playTimers.forEach(clearTimeout);

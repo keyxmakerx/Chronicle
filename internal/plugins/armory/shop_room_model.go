@@ -1,5 +1,7 @@
 package armory
 
+import "encoding/json"
+
 // maxShopRoomBytes caps the request body. A full 80-piece, 500-item layout is
 // well under this; the cap only stops a client from parking arbitrary data in
 // the row.
@@ -18,13 +20,48 @@ type ShopRoomLayout struct {
 	Palette     string `json:"palette"`
 	// Look is how the room is drawn: "lit" (the isometric room) or "paper" (a
 	// pop-up book). Empty, from layouts saved before there was a choice, is lit.
-	Look     string                      `json:"look"`
+	Look string `json:"look"`
+	// Mood themes the room's furniture and atmosphere. Empty, from layouts
+	// saved before moods existed, is no mood.
+	Mood string `json:"mood"`
+	// Effects tunes the atmosphere. Nil, from older layouts, means the widget's
+	// defaults; a pointer keeps "never set" distinct from "all zero".
+	Effects  *ShopRoomEffects            `json:"effects"`
 	Seeds    ShopRoomSeeds               `json:"seeds"`
 	Pieces   []ShopRoomPiece             `json:"pieces"`
 	Decor    []ShopRoomDecor             `json:"decor"`
 	Items    map[string]ShopRoomItemLook `json:"items"`
 	Portrait *ShopRoomPortrait           `json:"portrait"`
 	Lines    []string                    `json:"lines"`
+}
+
+// ShopRoomEffects is the room's atmosphere. The int fields are percentages of
+// the default look (100 = unchanged), so a GM can dim or boost each one.
+type ShopRoomEffects struct {
+	Shadows  int  `json:"shadows"`
+	Warmth   int  `json:"warmth"`
+	Window   int  `json:"window"`
+	Haze     int  `json:"haze"`
+	Vignette int  `json:"vignette"`
+	Dust     bool `json:"dust"`
+	Flicker  bool `json:"flicker"`
+	Embers   bool `json:"embers"`
+	Smoke    bool `json:"smoke"`
+	// Weather and Time are "" for none/default.
+	Weather string `json:"weather"`
+	Time    string `json:"time"`
+}
+
+// UnmarshalJSON starts from the default look, so a field the body leaves out
+// keeps its default instead of becoming zero (no shadows, no dust).
+func (e *ShopRoomEffects) UnmarshalJSON(b []byte) error {
+	type plain ShopRoomEffects
+	v := plain{Shadows: 100, Warmth: 100, Window: 100, Haze: 100, Vignette: 100, Dust: true, Flicker: true, Embers: true}
+	if err := json.Unmarshal(b, &v); err != nil {
+		return err
+	}
+	*e = ShopRoomEffects(v)
+	return nil
 }
 
 // ShopRoomSeeds drive the widget's deterministic procedural layout, so a

@@ -25,8 +25,8 @@ type Appearance struct {
 	BodyFont     string `json:"body_font,omitempty"`     // Text face id (AppearanceBodyFonts).
 	HeadingFont  string `json:"heading_font,omitempty"`  // Heading face id (AppearanceHeadingFonts); "same" follows the text.
 	TypeScale    string `json:"type_scale,omitempty"`    // "compact", "standard" or "roomy".
-	ButtonStyle  string `json:"button_style,omitempty"`  // "lift", "press", "glow" or "ink".
-	Elevation    string `json:"elevation,omitempty"`     // "flat", "standard" or "dramatic".
+	ButtonStyle  string `json:"button_style,omitempty"`  // "lift", "press", "glow", "ink" or "keystone".
+	Elevation    string `json:"elevation,omitempty"`     // "flat", "standard", "dramatic" or "ambient".
 	MotionSpeed  string `json:"motion_speed,omitempty"`  // "snappy", "standard" or "leisurely".
 	ReduceMotion bool   `json:"reduce_motion,omitempty"` // Calmer motion for every member of the campaign.
 
@@ -53,11 +53,11 @@ var (
 	AppearanceBodyFonts    = []string{"inter", "sourcesans", "atkinson", "literata", "sourceserif", "lora", "alegreya", "merriweather"}
 	AppearanceHeadingFonts = []string{"same", "cinzel", "marcellus", "imfell", "cormorant", "fraunces", "playfair", "josefin", "chakra"}
 	AppearanceTypeScales   = []string{"standard", "compact", "roomy"}
-	AppearanceButtonStyles = []string{"lift", "press", "glow", "ink"}
-	AppearanceElevations   = []string{"standard", "flat", "dramatic"}
+	AppearanceButtonStyles = []string{"lift", "press", "glow", "ink", "keystone"}
+	AppearanceElevations   = []string{"standard", "flat", "dramatic", "ambient"}
 	AppearanceSpeeds       = []string{"standard", "snappy", "leisurely"}
 	AppearanceScrims       = []string{"medium", "light", "strong"}
-	AppearanceWidgets      = []string{"links", "text", "note", "search", "date", "weather", "moon", "session"}
+	AppearanceWidgets      = []string{"links", "text", "note", "search", "date", "weather", "moon", "era", "session"}
 	AppearanceSidebars     = []string{"charcoal", "ink", "tinted", "own"}
 	AppearanceCorners      = []string{"plain", "subtitle", "banner"}
 	AppearanceGlows        = []string{"accent", "own"}
@@ -274,6 +274,9 @@ func applyAppearance(s *CampaignSettings, in AppearanceInput) (*string, error) {
 		default:
 			return fail(apperror.NewBadRequest("invalid gradient direction"))
 		}
+	case "sky":
+		// The sky draws itself from the campaign's calendar; nothing to set.
+		style.Mode = "sky"
 	case "image":
 		style.Mode = "image"
 		if style.ImagePath, err = pictureName("header", h.Image); err != nil {

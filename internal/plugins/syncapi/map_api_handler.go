@@ -376,7 +376,13 @@ func (h *MapAPIHandler) UpdateDrawing(c echo.Context) error {
 		return apperror.NewBadRequest("invalid request body")
 	}
 
-	err := h.drawingSvc.UpdateDrawing(c.Request().Context(), drawingID, c.Param("mapID"), h.resolveRole(c), h.canAuthorDmOnly(c), maps.UpdateDrawingInput{
+	// A scribe key changes only drawings its user created, as for delete; the
+	// service enforces it from the key owner's id.
+	actorID := ""
+	if key := GetAPIKey(c); key != nil {
+		actorID = key.UserID
+	}
+	err := h.drawingSvc.UpdateDrawing(c.Request().Context(), drawingID, c.Param("mapID"), actorID, h.resolveRole(c), h.canAuthorDmOnly(c), maps.UpdateDrawingInput{
 		Points:            req.Points,
 		StrokeColor:       req.StrokeColor,
 		StrokeWidth:       req.StrokeWidth,

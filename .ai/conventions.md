@@ -195,6 +195,7 @@ Avoid: restating the code (`// Set name to the request name`), unexplained comme
 9. **Append-only / immutability**: NEVER delete, edit, or renumber a migration any live database may have applied — golang-migrate needs a file for every version up to the DB's recorded one; removing one crash-loops boot (ADR-044/045). `tools/check-migration-immutability.sh` (CI) fails a PR that deletes or edits an existing migration file.
 10. **Schema-only**: a one-time DATA correction belongs in an IDEMPOTENT reconciler — an `EnsureX`/`MergeX` service method run from a boot backfill, an addon-enable hook, or an owner-triggered `SetupProvider` (see `app/setup_pc.go` + `entities.MergeDuplicatePlayerCharacterType`) — never a migration.
 11. **Boot runtime contract** (`database.MigrateWithBackup`, ADR-045): the pre-migration backup runs only when a migration is pending; a DB AHEAD of the build logs a warning and boots anyway; a DIRTY DB fails fast with restore guidance; `fatalBoot` backs off (`BOOT_FAIL_BACKOFF`, 45s). Keep `ExpectedCoreMigrationVersion` (`migrate_state.go`) equal to the highest migration — `TestExpectedCoreMigrationVersion_MatchesMax` enforces it.
+12. **Unique numbers**: one version number per directory. `tools/check-migration-numbers.sh` (CI) fails a PR whose migration shares a number with one in its tree or on the base branch's tip. When two open PRs take the same number, the second to merge renumbers its own (unapplied) files and `ExpectedCoreMigrationVersion`, and re-runs CI.
 
 ### Permission Model
 
@@ -383,6 +384,8 @@ Tailwind's JIT only emits classes found in source files, so classes added at run
 Per `cordinator/decisions/2026-05-23-plugin-registration.md`, plugins self-describe via a `PluginRegistration` value (slug, optional `embed.FS` for migrations, optional `embed.FS` for static assets, optional smoke test); the registry is `internal/app/plugins.go`. Only `ai_workspace`, `foundry_vtt` and `smtp` have a `registration.go`; the other plugins register in `registeredPlugins()` in `cmd/server/main.go`.
 
 Per `cordinator/decisions/2026-05-25-plugin-static-assets.md`, each plugin's static assets (JS/CSS under `static/`) embed via `embed.FS` and mount through the registry — no app-level static-route enumeration. Not every plugin has migrated; check a plugin's `registration.go` for a `StaticFS` entry.
+
+A plugin's widget scripts load on sight (ADR-063): list them in `PluginRegistration.Widgets` as `{Name: "<data-widget name>", Scripts: []string{"js/helper.js", "js/widget.js"}}`, registering script last. `boot.js` fetches them the first time that mount appears on a page, including after boosted navigation. Don't add a feature script to `base.templ`; that list is for the shell and for scripts Alpine needs before it starts.
 
 ## Static asset URLs go through `layouts.AssetURL`
 

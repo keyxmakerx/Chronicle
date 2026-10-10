@@ -22,8 +22,15 @@ const (
 	maxEntryProps       = 20
 	maxEntryPropKey     = 40
 	maxEntryPropString  = 200
-	maxEntryPropsBytes  = 4096
-	maxEntrySlug        = 64
+	maxEntryPropsBytes  = 32768
+	// A detail may also be a list of named items (traits, features), as a
+	// package's own entries carry, so the creator can show and sell them.
+	maxEntryLists     = 6
+	maxEntryListItems = 40
+	maxEntryItemName  = 100
+	maxEntryItemText  = 2000
+	maxEntryItemCost  = 20
+	maxEntrySlug      = 64
 )
 
 var entryPropKeyPattern = regexp.MustCompile(`^[A-Za-z][A-Za-z0-9_]*$`)
@@ -342,13 +349,16 @@ func normalizeEntry(e *SystemEntry) error {
 // package (AI import's review step).
 func ValidateEntryProperties(p map[string]any) error { return validateEntryProperties(p) }
 
-// validateEntryProperties accepts a flat object of strings, numbers and
-// booleans, so a consumer never has to walk nested data and the Go-syntax
-// garbage the reference browser prints for non-scalars cannot appear.
+// validateEntryProperties accepts strings, numbers and booleans, plus a few
+// lists of named items shaped exactly like a package entry's (name, and
+// optionally a whole-number cost and a plain-text description), which is all
+// the hero creator and pick lists read. Nothing deeper is allowed, so a
+// consumer never walks arbitrary nested data.
 func validateEntryProperties(p map[string]any) error {
 	if len(p) > maxEntryProps {
 		return apperror.NewValidation(fmt.Sprintf("At most %d details are allowed.", maxEntryProps))
 	}
+	lists := 0
 	for k, v := range p {
 		if !entryPropKeyPattern.MatchString(k) || len(k) > maxEntryPropKey {
 			return apperror.NewValidation("Detail names must start with a letter and use only letters, digits and underscores.")
@@ -359,8 +369,15 @@ func validateEntryProperties(p map[string]any) error {
 				return apperror.NewValidation(fmt.Sprintf("The detail %q is longer than %d characters.", k, maxEntryPropString))
 			}
 		case bool, float64, int, int64:
+		case []any:
+			if lists++; lists > maxEntryLists {
+				return apperror.NewValidation(fmt.Sprintf("At most %d lists are allowed.", maxEntryLists))
+			}
+			if err := validateEntryList(k, t); err != nil {
+				return err
+			}
 		default:
-			return apperror.NewValidation(fmt.Sprintf("The detail %q must be text, a number or yes/no.", k))
+			return apperror.NewValidation(fmt.Sprintf("The detail %q must be text, a number, yes/no or a list of named items.", k))
 		}
 	}
 	raw, err := json.Marshal(p)
@@ -368,6 +385,61 @@ func validateEntryProperties(p map[string]any) error {
 		return apperror.NewValidation("The details are too large.")
 	}
 	return nil
+}
+
+// validateEntryList checks one list of named items.
+func validateEntryList(key string, items []any) error {
+	if len(items) == 0 || len(items) > maxEntryListItems {
+		return apperror.NewValidation(fmt.Sprintf("The list %q needs 1 to %d items.", key, maxEntryListItems))
+	}
+	seen := map[string]bool{}
+	for _, raw := range items {
+		it, ok := raw.(map[string]any)
+		if !ok {
+			return apperror.NewValidation(fmt.Sprintf("Each item in %q needs a name.", key))
+		}
+		name, _ := it["name"].(string)
+		name = strings.TrimSpace(name)
+		if name == "" || utf8.RuneCountInString(name) > maxEntryItemName {
+			return apperror.NewValidation(fmt.Sprintf("Each item in %q needs a name of at most %d characters.", key, maxEntryItemName))
+		}
+		if seen[strings.ToLower(name)] {
+			return apperror.NewValidation(fmt.Sprintf("%q is in %q twice.", name, key))
+		}
+		seen[strings.ToLower(name)] = true
+		for ik, iv := range it {
+			switch ik {
+			case "name":
+			case "cost":
+				if c, ok := wholeNumber(iv); !ok || c < 0 || c > maxEntryItemCost {
+					return apperror.NewValidation(fmt.Sprintf("%q needs a whole-number cost from 0 to %d.", name, maxEntryItemCost))
+				}
+			case "description":
+				d, ok := iv.(string)
+				if !ok || utf8.RuneCountInString(d) > maxEntryItemText {
+					return apperror.NewValidation(fmt.Sprintf("The text of %q can be at most %d characters.", name, maxEntryItemText))
+				}
+			default:
+				return apperror.NewValidation(fmt.Sprintf("Items in %q can only have a name, cost and description.", key))
+			}
+		}
+	}
+	return nil
+}
+
+// wholeNumber reads a cost from JSON (float64) or YAML (int) input.
+func wholeNumber(v any) (int, bool) {
+	switch n := v.(type) {
+	case int:
+		return n, true
+	case int64:
+		return int(n), true
+	case float64:
+		if n == float64(int(n)) {
+			return int(n), true
+		}
+	}
+	return 0, false
 }
 
 var slugUnsafe = regexp.MustCompile(`[^a-z0-9]+`)
