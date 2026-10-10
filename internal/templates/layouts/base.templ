@@ -173,9 +173,6 @@ templ Base(title string) {
 		<!-- Entity type config widget (unified sidebar + layout + color) -->
 		<script src={ AssetURL("/static/js/widgets/entity_type_config.js") } defer></script>
 
-		<!-- Template editor widget (drag-and-drop page builder) -->
-		<script src={ AssetURL("/static/js/widgets/template_editor.js") } defer></script>
-
 		<!-- Tag picker widget (entity tag management) -->
 		<script src={ AssetURL("/static/js/widgets/tag_picker.js") } defer></script>
 
@@ -185,12 +182,6 @@ templ Base(title string) {
 		<script src={ AssetURL("/static/js/widgets/entity_tooltip.js") } defer></script>
 		<!-- Page peek: Shift-click or the peek icon on a page link opens it in a side panel -->
 		<script src={ AssetURL("/static/js/peek_panel.js") } defer></script>
-		<!-- Bulk entity selection and actions -->
-		<script src={ AssetURL("/static/js/widgets/bulk_actions.js") } defer></script>
-
-		<!-- AI-Export modal copy-to-clipboard (C-AI-EXPORT-V1 PR-B) -->
-		<script src={ AssetURL("/static/js/widgets/ai_export.js") } defer></script>
-
 		<!-- AI-Workspace Import — drag/drop multi-file markdown importer (V1-D) -->
 		<script src={ AssetURL("/static/js/widgets/markdown_importer.js") } defer></script>
 
@@ -237,16 +228,6 @@ templ Base(title string) {
 		     every entity page. -->
 		<script src={ AssetURL("/static/js/widgets/aliases.js") } defer></script>
 
-		<!-- Impact tree widget ("Impact Overview" diagram on the custom-system
-		     upload preview). Mount is internal/systems/preview.templ, which is
-		     an HTMX fragment — so the tag belongs here and not in that templ:
-		     boot.js sets htmx.config.allowScriptTags = false, and a script in a
-		     swapped fragment is stripped (see tools/check-page-scripts.sh). -->
-		<script src={ AssetURL("/static/js/widgets/impact_tree.js") } defer></script>
-
-		<!-- Entity type editor widget (inline edit for entity type management) -->
-		<script src={ AssetURL("/static/js/widgets/entity_type_editor.js") } defer></script>
-
 		<!-- Choice picker: Chronicle.pickChoice, shared by the attributes widget
 		     and system widgets (loads first so both can call it) -->
 		<script src={ AssetURL("/static/js/widgets/choice_picker.js") } defer></script>
@@ -266,9 +247,6 @@ templ Base(title string) {
 		     widget owns only the browser timezone and the dismissal. -->
 		<script src={ AssetURL("/static/js/widgets/callout.js") } defer></script>
 		<script src={ AssetURL("/static/js/widgets/vault_import.js") } defer></script>
-
-		<!-- Entity manager widget (sortable, filterable entity list block) -->
-		<script src={ AssetURL("/static/js/widgets/entity_manager.js") } defer></script>
 
 		<!-- The rest clock every looping animation reads its time from, so they
 		     all ease to a standstill when the viewer steps away and wake
@@ -303,9 +281,6 @@ templ Base(title string) {
 		<script src={ AssetURL("/static/js/sidebar_tree.js") } defer></script>
 		<script src={ AssetURL("/static/js/sidebar_tag_filter.js") } defer></script>
 
-		<!-- Dashboard layouts use the unified layout-editor widget (loaded
-		     further down). -->
-
 		<!-- Plugin-contributed body scripts (injected at startup; calendar widget
 		     is the canonical first entry — avoids hardcoding plugin paths here).
 		     Emitted IN SLICE ORDER and deferred, so a contributor that depends on
@@ -323,18 +298,6 @@ templ Base(title string) {
 
 		<!-- The header's Sky background; draws with the sky scripts above -->
 		<script src={ AssetURL("/static/js/widgets/header_sky.js") } defer></script>
-
-		<!-- Admin > Site look: the live preview layered on the plain form -->
-		<script src={ AssetURL("/static/js/widgets/site_look.js") } defer></script>
-
-		<!-- Customize look editor (campaign look, one Save for every setting) -->
-		<script src={ AssetURL("/static/js/widgets/customize_look.js") } defer></script>
-
-		<!-- Unified layout editor widget -->
-		<script src={ AssetURL("/static/js/widgets/layout_editor.js") } defer></script>
-
-		<!-- Layout Studio widget (orchestrates layout-editor contexts) -->
-		<script src={ AssetURL("/static/js/widgets/layout_studio.js") } defer></script>
 
 		<!-- Content template picker (entity create form + editor insert) -->
 		<script src={ AssetURL("/static/js/template_picker.js") } defer></script>

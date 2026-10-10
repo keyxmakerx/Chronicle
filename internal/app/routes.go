@@ -5415,6 +5415,16 @@ var coreWidgets = []PluginWidget{
 	{Name: "db-explorer", Scripts: []string{"/static/js/widgets/db_explorer.js"}},
 	{Name: "entity-posts", Scripts: []string{"/static/js/widgets/entity_posts.js"}},
 	{Name: "entity-notes", Scripts: []string{"/static/js/widgets/entity_notes.js"}},
+	{Name: "entity_manager", Scripts: []string{"/static/js/widgets/entity_manager.js"}},
+	{Name: "bulk-actions", Scripts: []string{"/static/js/widgets/bulk_actions.js"}},
+	{Name: "ai-export", Scripts: []string{"/static/js/widgets/ai_export.js"}},
+	{Name: "impact_tree", Scripts: []string{"/static/js/widgets/impact_tree.js"}},
+	{Name: "entity-type-editor", Scripts: []string{"/static/js/widgets/entity_type_editor.js"}},
+	{Name: "template-editor", Scripts: []string{"/static/js/widgets/template_editor.js"}},
+	{Name: "layout-editor", Scripts: []string{"/static/js/widgets/layout_editor.js"}},
+	{Name: "layout-studio", Scripts: []string{"/static/js/widgets/layout_studio.js"}},
+	{Name: "customize-look", Scripts: []string{"/static/js/widgets/customize_look.js"}},
+	{Name: "site-look", Scripts: []string{"/static/js/widgets/site_look.js"}},
 }
 
 // journalCharacterAdapter adapts EntityService to notes.CharacterLister: the
