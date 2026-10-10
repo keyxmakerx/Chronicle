@@ -1495,6 +1495,31 @@ func (a *mapEventPublisherAdapter) PublishHexChanged(campaignID, mapID string, v
 	a.bus.Publish(ws.NewMessage(ws.MsgHexChanged, campaignID, mapID, payload))
 }
 
+// Kinds carried by PublishItemsChanged; the viewer maps each to a refetch.
+const (
+	mapItemsMarkers  = "markers"
+	mapItemsDrawings = "drawings"
+	mapItemsTokens   = "tokens"
+	mapItemsShadows  = "shadows"
+)
+
+// publishItemsChanged announces that something of one kind changed on a map.
+// It carries ids only and goes to every client of the campaign: the viewer
+// refetches through the role-filtered reads, so DM-only, shadow and hex-fog
+// rules stay decided in one place and nothing secret rides this message. It is
+// sent just before the per-item event (which stays audience-gated) because the
+// per-item event is not enough for a page to stay right: it cannot say what a
+// shadow or the fog now covers or uncovers.
+func (a *mapEventPublisherAdapter) publishItemsChanged(campaignID, mapID, kind string) {
+	if campaignID == "" || mapID == "" || a.bus == nil {
+		return
+	}
+	a.bus.Publish(ws.NewMessage(ws.MsgMapItemsChanged, campaignID, mapID, map[string]any{
+		"map_id": mapID,
+		"kind":   kind,
+	}))
+}
+
 // publishWithAudience wraps ws.NewMessage with the audience derived from
 // the source row: the binary RequiresDM (dm_only) flag, plus — for
 // markers and drawings, which carry per-user visibility_rules — the
@@ -1538,6 +1563,13 @@ func (a *mapEventPublisherAdapter) PublishDrawingEvent(eventType string, campaig
 		(drawing.DrawingType != maps.DrawingTypeShadow &&
 			(a.underShadow(drawing.MapID, func(areas []maps.ShadowArea) bool { return maps.DrawingUnderShadow(areas, drawing) }) ||
 				a.underFog(drawing.MapID, func(f *maps.FogMask) bool { return f.HidesDrawing(drawing) || f.WithholdsImageOf(drawing) })))
+	// Shadows have their own kind so a viewer can tell that pins under or
+	// uncovered by them need a refetch too; pictures count as drawings.
+	kind := mapItemsDrawings
+	if drawing.DrawingType == maps.DrawingTypeShadow {
+		kind = mapItemsShadows
+	}
+	a.publishItemsChanged(campaignID, drawing.MapID, kind)
 	a.publishWithAudience(msgType, campaignID, drawing.ID, drawing, dmOnly, maps.ParseVisibilityRules(drawing.VisibilityRules))
 }
 
@@ -1561,6 +1593,7 @@ func (a *mapEventPublisherAdapter) PublishTokenEvent(eventType string, campaignI
 		return
 	}
 	dmOnly := token.IsHidden || a.underFog(token.MapID, func(f *maps.FogMask) bool { return f.HidesToken(token) })
+	a.publishItemsChanged(campaignID, token.MapID, mapItemsTokens)
 	a.publishWithAudience(msgType, campaignID, token.ID, token, dmOnly, nil)
 }
 
@@ -1573,6 +1606,7 @@ func (a *mapEventPublisherAdapter) PublishTokenPositionEvent(campaignID, mapID, 
 		return
 	}
 	dmOnly := isHidden || a.underFog(mapID, func(f *maps.FogMask) bool { return f.HidesPoint(x, y) })
+	a.publishItemsChanged(campaignID, mapID, mapItemsTokens)
 	a.publishWithAudience(ws.MsgTokenMoved, campaignID, tokenID, map[string]float64{
 		"x": x,
 		"y": y,
@@ -1653,6 +1687,7 @@ func (a *mapEventPublisherAdapter) PublishMarkerEvent(eventType string, campaign
 	dmOnly := marker.IsDMOnly() ||
 		a.underShadow(marker.MapID, func(areas []maps.ShadowArea) bool { return maps.MarkerUnderShadow(areas, marker) }) ||
 		a.underFog(marker.MapID, func(f *maps.FogMask) bool { return f.HidesMarker(marker) })
+	a.publishItemsChanged(campaignID, marker.MapID, mapItemsMarkers)
 	a.publishWithAudience(msgType, campaignID, marker.ID, marker, dmOnly, maps.ParseVisibilityRules(marker.VisibilityRules))
 }
 
